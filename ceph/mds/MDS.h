@@ -121,6 +121,8 @@ class MDS : public Dispatcher {
 								   CInode *cur);
   MClientReply *handle_client_touch(MClientRequest *req,
 									CInode *cur);
+  void handle_client_touch_2(MClientRequest *req,
+							 CInode *cur);
 
 
   int do_stat(MClientRequest *m);

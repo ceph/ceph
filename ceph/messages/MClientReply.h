@@ -47,6 +47,7 @@ class MClientReply : public Message {
 	  dir_contents = 0;
 	}
   }
+  virtual char *get_type_name() { return "creply"; }
 
   void add_dir_item(c_inode_info *c) {
 	if (!dir_contents)
@@ -54,8 +55,17 @@ class MClientReply : public Message {
 	dir_contents->push_back(c);
   }
 
-  void set_trace_dist(vector<CInode*>& tr, 
-					  vector<string>& trace_dn,
+  void set_trace_dist(CInode *in, int whoami) {
+	while (in) {
+	  c_inode_info *info = new c_inode_info;
+	  info->inode = in->inode;
+	  in->get_dist_spec(info->dist, whoami);
+	  trace.insert(trace.begin(), info);
+
+	  in = in->get_parent_inode();
+	}
+  }
+  /*vector<CInode*>& tr, 
 					  int authority) {
 	vector<CInode*>::iterator it = tr.begin();
 	int p = 0;
@@ -66,14 +76,11 @@ class MClientReply : public Message {
 
 	  in->get_dist_spec(i->dist, authority);
 
-	  if (p) 
-		i->ref_dn = trace_dn[p-1];
-	  else
-		i->ref_dn = ""; // root
 	  p++;
 	  trace.push_back(i);
 	}
   }
+  */
 };
 
 #endif

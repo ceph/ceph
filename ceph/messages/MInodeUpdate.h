@@ -16,6 +16,7 @@ class MInodeUpdate : public Message {
 	this->inode = inode;
 	this->cached_by = cached_by;
   }
+  virtual char *get_type_name() { return "iup"; }
 };
 
 #endif

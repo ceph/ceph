@@ -39,6 +39,7 @@ class MDiscover : public Message {
   ~MDiscover() {
 	if (want) { delete want; want = 0; }
   }
+  virtual char *get_type_name() { return "disc"; }
 
   void add_bit(MDiscoverRec_t b) {
 	trace.push_back(b);

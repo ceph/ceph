@@ -23,7 +23,7 @@ Client::Client(int id, Messenger *m)
   root = 0;
   tid = 0;
 
-  cache_lru.lru_set_max(5000);
+  cache_lru.lru_set_max(1000);
   cache_lru.lru_set_midpoint(.5);
 
   max_requests = 10000;
@@ -81,14 +81,14 @@ void Client::assim_reply(MClientReply *r)
 		cur = root = new ClNode();
 	  }
 	} else {
-	  if (cur->lookup(r->trace[i]->ref_dn) == NULL) {
+	  if (cur->lookup(last_req_dn[i]) == NULL) {
 		ClNode *n = new ClNode();
-		cur->link( r->trace[i]->ref_dn, n );
+		cur->link( last_req_dn[i], n );
 		cur->isdir = true;  // clearly!
 		cache_lru.lru_insert_top( n );
 		cur = n;
 	  } else {
-		cur = cur->lookup( r->trace[i]->ref_dn );
+		cur = cur->lookup( last_req_dn[i] );
 		cache_lru.lru_touch(cur);
 	  }
 	}
@@ -160,7 +160,7 @@ void Client::issue_request()
 	while (!cwd->isdir) 
 	  cwd = cwd->parent;
 	
-	if (rand() % 10 > cwd->depth()) {
+	if (rand() % 10 > 1+(cwd->depth()/2)) {
 	  // descend
 	  if (cwd->havedircontents) {
 		if (debug > 3)
@@ -182,7 +182,8 @@ void Client::issue_request()
 		cwd = cwd->parent;
 	}
 
-	cwd->full_path(p);
+	last_req_dn.clear();
+	cwd->full_path(p,last_req_dn);
   } 
 
   if (!op) {
@@ -228,9 +229,12 @@ void Client::send_request(string& p, int op)
 		if (debug > 3) cout << " don't have it. " << endl;
 		break;
 	  }
+
+	  if (!cur->dist.empty()) {
+		int r = rand() % cur->dist.size();
+		mds = cur->dist[r];  
+	  }
 	}
-	int r = rand() % cur->dist.size();
-	mds = cur->dist[r];  
   } else {
 	// we need the root inode
 	mds = 0;

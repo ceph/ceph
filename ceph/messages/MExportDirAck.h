@@ -10,7 +10,8 @@ class MExportDirAck : public Message {
   MExportDirAck(MExportDir *req) :
 	Message(MSG_MDS_EXPORTDIRACK) {
 	ino = req->ino;
-  }
+  }  
+  virtual char *get_type_name() { return "expack"; }
   
 };
 

@@ -6,39 +6,35 @@
 #include <string>
 using namespace std;
 
+#define EVENT_STRING       1
+#define EVENT_INODEUPDATE  2
+
 // generic log event
 class LogEvent {
  protected:
-  string event;
-
+  int type;
   char *serial;
 
  public:
-  LogEvent(string e) {
-	event = e;
-  }
-  LogEvent(char *e) {
-	event = e;
+  LogEvent(int t) {
+	type = t;
   }
   ~LogEvent() {
 	if (serial) { delete serial; serial = 0; }
   }
   
-  // note: LogEvent owns serialized buffer
-  virtual int serialize(char **buf, size_t *len) {
-	*len = event.length()+1+4+4;  // pad with NULL term
-	*buf = new char[*len];
-	*((__uint32_t*)*buf) = *len;
-	*((__uint32_t*)*buf +1) = 1; //EVENT_STRING;
-	memcpy(*buf+8, event.c_str(), *len-8);
-	return 0;
-  }
+  int get_type() { return type; }
 
-  virtual bool obsolete() {
+  // note: LogEvent owns serialized buffer
+  // leave 8 leading bytes free for size/type header,
+  // filled in by writer.
+  virtual int serialize(char **buf, size_t *len) = 0;
+
+  virtual bool obsolete(MDS *m) {
 	return true;
   }
 
-  virtual void retire(Context *c) {
+  virtual void retire(MDS *m, Context *c) {
 	c->finish(0);
 	delete c;
   }

@@ -15,6 +15,7 @@ class MOSDReadReply : public MBuffer {
 	this->oid = r->oid;
 	this->offset = r->offset;
   }
+  virtual char *get_type_name() { return "oreadr"; }
 };
 
 #endif

@@ -20,6 +20,7 @@ class MDirUpdate : public Message {
 	this->dir_rep = dir_rep;
 	this->dir_rep_by = dir_rep_by;
   }
+  virtual char *get_type_name() { return "dup"; }
 };
 
 #endif

@@ -15,6 +15,8 @@
 #include "messages/MInodeUpdate.h"
 #include "messages/MDirUpdate.h"
 
+#include "messages/MInodeExpire.h"
+
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
 #include "messages/MInodeSyncRelease.h"
@@ -25,7 +27,27 @@
 #include <string>
 using namespace std;
 
+MDCache::MDCache(MDS *m)
+{
+  mds = m;
+  root = NULL;
+  opening_root = false;
+  lru = new LRU();
+  lru->lru_set_max(2500);
+}
 
+MDCache::~MDCache() 
+{
+  if (lru) { delete lru; lru = NULL; }
+}
+
+
+// 
+
+bool MDCache::shutdown()
+{
+  //if (root) clear_dir(root);
+}
 
 
 // MDCache
@@ -62,12 +84,20 @@ bool MDCache::trim(__int32_t max) {
   }
 
   while (lru->lru_get_size() > max) {
-	CInode *o = (CInode*)lru->lru_expire();
-	if (!o) return false;
+	CInode *in = (CInode*)lru->lru_expire();
+	if (!in) return false;
 
-	remove_inode(o);
-	delete o;
-	
+	// notify authority?
+	int auth = in->authority(mds->get_cluster());
+	if (auth != mds->get_nodeid()) {
+	  mds->messenger->send_message(new MInodeExpire(in->inode.ino),
+								   MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}	
+
+	// remove it
+	remove_inode(in);
+	delete in;
   }
 
   return true;
@@ -332,6 +362,10 @@ int MDCache::proc_message(Message *m)
 	handle_dir_update((MDirUpdate*)m);
 	break;
 
+  case MSG_MDS_INODEEXPIRE:
+	handle_inode_expire((MInodeExpire*)m);
+	break;
+
 
 	// sync
 	/*
@@ -371,7 +405,6 @@ int MDCache::proc_message(Message *m)
 
 int MDCache::path_traverse(string& path, 
 						   vector<CInode*>& trace, 
-						   vector<string>& trace_dn, 
 						   Message *req,
 						   int onfail)
 {
@@ -478,7 +511,6 @@ int MDCache::path_traverse(string& path,
 	  return -ENOTDIR;
 	}
 	
-	trace_dn.push_back(dname);
 	trace.push_back(cur);
 	//read_wait(cur, req);  // wait for read access
   }
@@ -532,9 +564,8 @@ int MDCache::handle_discover(MDiscover *dis)
 	
 	// traverse to start point
 	vector<CInode*> trav;
-	vector<string>  trav_dn;
 
-	int r = path_traverse(dis->basepath, trav, trav_dn, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
+	int r = path_traverse(dis->basepath, trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
 	if (r != 0) throw "wtf";
 	
 	CInode *cur = trav[trav.size()-1];
@@ -597,9 +628,8 @@ int MDCache::handle_discover(MDiscover *dis)
 
 	// get to starting point
 	vector<CInode*> trav;
-	vector<string>  trav_dn;
 	string current_base = dis->current_base();
-	int r = path_traverse(current_base, trav, trav_dn, dis, MDS_TRAVERSE_FORWARD);
+	int r = path_traverse(current_base, trav, dis, MDS_TRAVERSE_FORWARD);
 	if (r > 0) return 0;  // forwarded, i hope!
 
 	CInode *cur = trav[trav.size()-1];
@@ -650,8 +680,10 @@ int MDCache::handle_discover(MDiscover *dis)
 		  dis->add_bit(bit);
 		  
 		  // remember who is caching this!
+		  if (next->cached_by.empty()) 
+			next->get();
 		  next->cached_by.insert( dis->asker );
-
+		  
 		  cur = next; // continue!
 		} else {
 		  // fwd to authority
@@ -705,7 +737,12 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 {
   CInode *in = get_inode(m->inode.ino);
   if (!in) {
-	cout << "mds" << mds->get_nodeid() << " inode_update on " << m->inode.ino << ", don't have it" << endl;
+	cout << "mds" << mds->get_nodeid() << " inode_update on " << m->inode.ino << ", don't have it, sending expire" << endl;
+
+	mds->messenger->send_message(new MInodeExpire(m->inode.ino),
+								 m->get_source(), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+	
 	delete m;
 	return;
   }
@@ -720,11 +757,40 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   delete m;
 }
 
-int MDCache::send_dir_updates(CDir *dir)
+void MDCache::handle_inode_expire(MInodeExpire *m)
+{
+  CInode *in = get_inode(m->ino);
+  if (!in) {
+	cout << "mds" << mds->get_nodeid() << " inode_expire on " << m->ino << ", don't have it, ignoring" << endl;
+	delete m;
+	return;
+  }
+
+  int auth = in->authority(mds->get_cluster());
+  if (auth != mds->get_nodeid()) {
+	cout << "mds" << mds->get_nodeid() << " inode_expire on " << m->ino << ", not mine" << endl;
+	delete m;
+	return;
+  }
+
+  // remove
+  cout << "mds" << mds->get_nodeid() << " inode_expire on " << m->ino << " from mds" << m->get_source() << endl;
+
+  in->cached_by.erase(m->get_source());
+  if (in->cached_by.empty())
+	in->put();
+  
+  delete m;
+}
+
+
+int MDCache::send_dir_updates(CDir *dir, int except)
 {
   int whoami = mds->get_nodeid();
   set<int>::iterator it;
   for (it = dir->inode->cached_by.begin(); it != dir->inode->cached_by.end(); it++) {
+	if (*it == whoami) continue;
+	if (*it == except) continue;
 	cout << "mds" << whoami << " sending dir_update on " << dir->inode->inode.ino << " to " << *it << endl;
 	mds->messenger->send_message(new MDirUpdate(dir->inode->inode.ino,
 												dir->dir_auth,
@@ -898,9 +964,8 @@ void MDCache::handle_export_dir(MExportDir *m)
   cout << "mds" << mds->get_nodeid() << " import_dir " << m->path << endl;
 
   vector<CInode*> trav;
-  vector<string>  trav_dn;
   
-  int r = path_traverse(m->path, trav, trav_dn, m, MDS_TRAVERSE_DISCOVER);   // FIXME BUG
+  int r = path_traverse(m->path, trav, m, MDS_TRAVERSE_DISCOVER);   // FIXME BUG
   if (r > 0)
 	return;  // did something
 
@@ -923,7 +988,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 							   MDS_PORT_CACHE);
 
   // tell everyone the news
-  send_dir_updates(in->dir);
+  send_dir_updates(in->dir, m->get_source());
 
   // done
   delete m;

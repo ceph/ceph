@@ -21,6 +21,7 @@ class MExportDir : public Message {
 	this->ino = in->inode.ino;
 	in->make_path(path);
   }
+  virtual char *get_type_name() { return "exp"; }
 };
 
 #endif

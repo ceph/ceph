@@ -17,6 +17,7 @@ class MOSDWrite : public MBuffer {
 	this->flags = flags;
 	//cout << "message(t) serialized " << serialized << endl;
   }
+  virtual char *get_type_name() { return "owrite"; }
 };
 
 #endif

@@ -1,5 +1,6 @@
 
 #include "MDLog.h"
+#include "MDS.h"
 #include "LogStream.h"
 #include "LogEvent.h"
 
@@ -12,9 +13,10 @@ MDLog::MDLog(MDS *m)
 {
   mds = m;
   num_events = 0;
+  max_events = 0;
   trim_reading = false;
-  reader = new LogStream(mds, 666, 666);
-  writer = new LogStream(mds, 666, 666);
+  reader = new LogStream(mds, 666, mds->get_nodeid());
+  writer = new LogStream(mds, 666, mds->get_nodeid());
 }
 
 
@@ -30,6 +32,9 @@ int MDLog::submit_entry( LogEvent *e,
 {
   // write it
   writer->append(e, c);
+
+  // trim
+  trim(NULL);
 }
 
 
@@ -84,11 +89,11 @@ int MDLog::trim_2_didread(LogEvent *le)
   trim_reading = false;
   
   // we just read an event.
-  if (le->obsolete() == true) {
+  if (le->obsolete(mds) == true) {
 	trim_3_didretire(le);    // we can discard this event and be done.
   } else {
 	trimming.push_back(le);	 // add to limbo list
-	le->retire(new C_MDL_Trim(this, le, 3)); 	// retire entry
+	le->retire(mds, new C_MDL_Trim(this, le, 3)); 	// retire entry
   }
 
   // read another event?      FIXME: max_trimming maybe?  would need to restructure this again.

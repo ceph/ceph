@@ -58,7 +58,9 @@ int play() {
 	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
 	osd[i]->init();
   }
-
+  OSD *logosd = new OSD(666, new FakeMessenger(MSG_ADDR_OSD(666)));
+  logosd->init();
+  
   // create clients
   Client *client[NUMCLIENTS];
   for (int i=0; i<NUMCLIENTS; i++) {
@@ -73,7 +75,7 @@ int play() {
   mds[0]->messenger->send_message(new MPing(10), 1, MDS_PORT_MAIN, MDS_PORT_MAIN);
 
   //for (int i=0; i<NUMCLIENTS; i++) 
-  for (int i=0; i<1; i++) 
+	for (int i=0; i<1; i++) 
 	client[i]->issue_request();
 
   // loop

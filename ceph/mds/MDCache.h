@@ -20,6 +20,7 @@ class MExportDirAck;
 class MDiscover;
 class MInodeUpdate;
 class MDirUpdate;
+class MInodeExpire;
 class MInodeSyncStart;
 class MInodeSyncAck;
 class MInodeSyncRelease;
@@ -40,15 +41,8 @@ class MDCache {
 
 
  public:
-  MDCache(MDS *m) {
-	mds = m;
-	root = NULL;
-	opening_root = false;
-	lru = new LRU();
-  }
-  ~MDCache() {
-	if (lru) { delete lru; lru = NULL; }
-  }
+  MDCache(MDS *m);
+  ~MDCache();
   
 
   // accessors
@@ -65,9 +59,8 @@ class MDCache {
 	lru->lru_set_max(max);
   }
   bool trim(__int32_t max = -1);   // trim cache
-  bool clear() {                  // clear cache
-	return trim(0);  
-  }
+
+  bool shutdown();                    // clear cache (ie at shutodwn)
 
   // have_inode?
   bool have_inode( inodeno_t ino ) {
@@ -91,7 +84,10 @@ class MDCache {
 
 
   int open_root(Context *c);
-  int path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req, int onfail);
+  int path_traverse(string& path, 
+					vector<CInode*>& trace, 
+					Message *req, 
+					int onfail);
 
   // messages
   int proc_message(Message *m);
@@ -106,8 +102,10 @@ class MDCache {
   int send_inode_updates(CInode *in);
   void handle_inode_update(MInodeUpdate *m);
 
-  int send_dir_updates(CDir *in);
+  int send_dir_updates(CDir *in, int except=-1);
   void handle_dir_update(MDirUpdate *m);
+
+  void handle_inode_expire(MInodeExpire *m);
 
   void handle_inode_sync_start(MInodeSyncStart *m);
   void handle_inode_sync_ack(MInodeSyncAck *m);

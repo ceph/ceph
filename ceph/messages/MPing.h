@@ -10,6 +10,7 @@ class MPing : public Message {
   MPing(int n) : Message(MSG_PING) {
 	ttl = n;
   }
+  virtual char *get_type_name() { return "ping"; }
 };
 
 #endif

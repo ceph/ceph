@@ -17,6 +17,8 @@ class MClientRequest : public Message {
 	this->op = op;
 	this->client = client;
   }
+  virtual char *get_type_name() { return "creq"; }
+
 };
 
 #endif

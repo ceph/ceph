@@ -1,7 +1,11 @@
 
 #include "include/FakeMessenger.h"
 #include "mds/MDS.h"
+#include "include/LogType.h"
+#include "include/Logger.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <map>
 #include <ext/hash_map>
 
@@ -11,7 +15,8 @@ using namespace std;
 // global queue.
 
 hash_map<int, FakeMessenger*> directory;
-
+hash_map<int, Logger*>        loggers;
+LogType *logtype;
 
 // lame main looper
 
@@ -25,9 +30,9 @@ int fakemessenger_do_loop()
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
-		cout << "---- do_loop dispatching t " << m->get_type() << 
-		  " from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() << " ----" <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << endl;
+		cout << "---- do_loop dispatching '" << m->get_type_name() << 
+		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ----" << endl;
 		
 		didone = true;
 		it->second->dispatch(m);
@@ -54,6 +59,19 @@ FakeMessenger::FakeMessenger(long me)
 {
   whoami = me;
   directory[ whoami ] = this;
+
+  string name;
+  name = "m.";
+  name += MSG_ADDR_TYPE(whoami);
+  int w = MSG_ADDR_NUM(whoami);
+  if (w >= 1000) name += ('0' + ((w/1000)%10));
+  if (w >= 100) name += ('0' + ((w/100)%10));
+  if (w >= 10) name += ('0' + ((w/10)%10));
+  name += ('0' + ((w/1)%10));
+  if (!logtype) 
+	logtype = new LogType(); 
+  Logger *l = new Logger(name, logtype);
+  loggers[ whoami ] = l;
 }
 
 
@@ -75,8 +93,20 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 
   // deliver
   try {
+	// stats
+	loggers[whoami]->inc("+send",1);
+	loggers[dest]->inc("-recv",1);
+
+	char s[20];
+	sprintf(s,"+%s", m->get_type_name());
+	loggers[whoami]->inc(s);
+	sprintf(s,"-%s", m->get_type_name());
+	loggers[dest]->inc(s);
+
+	// queue
 	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);
+
   }
   catch (...) {
 	cout << "no destination " << dest << endl;

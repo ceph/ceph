@@ -49,13 +49,14 @@ class ClNode : public LRUObject {
 	}
   }
 
-  void full_path(string& p) {
+  void full_path(string& p, vector<string>& vec) {
 	if (parent)
-	  parent->full_path(p);
+	  parent->full_path(p, vec);
 	if (p.length()) {
 	  p.append("/");
-	}
+	} 
 	p.append(ref_name);
+	vec.push_back(ref_name);
   }
 
   void link(string name, ClNode* node) {

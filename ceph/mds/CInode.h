@@ -37,6 +37,7 @@ class CInode : LRUObject {
 
  protected:
   int              ref;            // reference count (???????)
+  __uint32_t       version;
 
   // parent dentries in cache
   int              nparents;  
@@ -73,6 +74,9 @@ class CInode : LRUObject {
   CInode();
   ~CInode();
 
+  
+  CInode *get_parent_inode();
+  
 	
   // fun
   bool is_dir() { return inode.isdir; }
@@ -84,6 +88,7 @@ class CInode : LRUObject {
 	state = (state & ~CINODE_MASK_SYNC) | m;
   }
 
+  __uint32_t get_version() { return version; }
   
   // dist cache
   int authority(MDCluster *mdc);

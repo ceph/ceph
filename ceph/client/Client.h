@@ -23,6 +23,8 @@ class Client : public Dispatcher {
 
   long tid, max_requests;
 
+  vector<string> last_req_dn;
+
  public:
   Client(int id, Messenger *m);
   ~Client();

@@ -28,6 +28,12 @@ CInode::~CInode() {
   if (dir) { delete dir; dir = 0; }
 }
 
+CInode *CInode::get_parent_inode() 
+{
+  if (parent) 
+	return parent->dir->inode;
+  return NULL;
+}
 
 void CInode::make_path(string& s)
 {

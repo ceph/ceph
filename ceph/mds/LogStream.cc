@@ -3,6 +3,9 @@
 #include "MDS.h"
 #include "LogEvent.h"
 
+#include "events/EString.h"
+#include "events/EInodeUpdate.h"
+
 #include <iostream>
 using namespace std;
 
@@ -16,12 +19,15 @@ int LogStream::append(LogEvent *e, Context *c)
   size_t buflen;
   e->serialize(&buf, &buflen);
 
+  *((__uint32_t*)buf) = e->get_type();
+  *((__uint32_t*)buf+1) = buflen;
+
   // advance ptr for later
   append_pos += buflen;
 
   // submit write
   mds->osd_write(osd, oid,
-				 buflen, append_pos,
+				 buflen, append_pos-buflen,
 				 buf,
 				 0,
 				 c);
@@ -79,11 +85,17 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	unsigned off = cur_pos-buf_start;
 	__uint32_t type = *((__uint32_t*)(buf+off));
 	switch (type) {
-	case 1:  // string
+
+	case EVENT_STRING:  // string
 	  cout << "it's a string event" << endl;
-	  *le = new LogEvent(buf + off + 8);
+	  *le = new EString(buf + off + 8);
 	  break;
 	  
+	case EVENT_INODEUPDATE:
+	  cout << "read inodeupdate event" << endl;
+	  *le = new EInodeUpdate(buf + off + 8);
+	  break;
+
 	default:
 	  cout << "uh oh, unknown event type " << type << endl;
 	}

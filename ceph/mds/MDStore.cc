@@ -83,7 +83,9 @@ bool MDStore::fetch_dir( CInode *in,
 
 bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 {
-  cout << "fetch_dir_2" << endl;
+  string dirname;
+  dir->make_path(dirname);
+  cout << "fetch_dir_2 on " << dirname << endl;
 
   // make sure we have a CDir
   if (dir->dir == NULL) {
@@ -133,6 +135,8 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
   }
   
   dir->dir->state_set(CDIR_MASK_COMPLETE);
+
+  mds->mdcache->trim();
 
   // finish
   list<Context*> finished;

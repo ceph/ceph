@@ -19,6 +19,8 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
+#include "events/EInodeUpdate.h"
+
 #include <list>
 
 #include <iostream>
@@ -42,6 +44,8 @@ MDS::MDS(MDCluster *mdc, Messenger *m) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
+  mdlog->set_max_events(10);
+
   osd_last_tid = 0;
 }
 MDS::~MDS() {
@@ -62,7 +66,7 @@ int MDS::init()
 int MDS::shutdown()
 {
   // shut down cache
-  mdcache->clear();
+  mdcache->shutdown();
   
   // shut down messenger
   messenger->shutdown();
@@ -166,9 +170,8 @@ int MDS::handle_client_request(MClientRequest *req)
 
   
   vector<CInode*> trace;
-  vector<string>  trace_dn;
   
-  int r = mdcache->path_traverse(req->path, trace, trace_dn, req, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(req->path, trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
 
   CInode *cur = trace[trace.size()-1];
@@ -193,10 +196,9 @@ int MDS::handle_client_request(MClientRequest *req)
 	throw "eek";
   }
 
-  if (reply) {
-	reply->set_trace_dist(trace, 
-						  trace_dn,
-						  whoami);
+  if (reply) {  
+	// this is convenience, for quick events.  
+	// anything delayed has to reply on its own.
 
 	// reply
 	messenger->send_message(reply,
@@ -220,6 +222,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " stat " << endl;
   MClientReply *reply = new MClientReply(req);
   reply->result = 0;
+  reply->set_trace_dist( cur, whoami );
 
   // FIXME: put inode info in reply...
 
@@ -229,6 +232,21 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
 }
 
 
+class C_MDS_TouchFinish : public Context {
+public:
+  CInode *in;
+  MClientRequest *req;
+  MDS *mds;
+  C_MDS_TouchFinish(MDS *mds, MClientRequest *req, CInode *cur) {
+	this->mds = mds;
+	this->in = cur;
+	this->req = req;
+  }
+  virtual void finish(int result) {
+	mds->handle_client_touch_2(req, in);
+  }
+};
+
 MClientReply *MDS::handle_client_touch(MClientRequest *req,
 									   CInode *cur)
 {
@@ -237,14 +255,19 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
   if (auth == whoami) {
 	
 	// do update
-	// *** FIXME ***
+	cur->inode.mtime++; // whatever
 
 	// tell replicas
 	mdcache->send_inode_updates(cur);
 
-	// reply
-	cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " touch " << endl;
-	return new MClientReply(req);
+	// pin
+	cur->get();
+
+	// log it
+	cout << "mds" << whoami << " log for client" << req->client << '.' << req->tid << " touch" << endl;
+	mdlog->submit_entry(new EInodeUpdate(cur),
+						new C_MDS_TouchFinish(this, req, cur));
+	return 0;
   } else {
 
 	// forward
@@ -254,6 +277,25 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 							MDS_PORT_SERVER);
 	return 0;
   }
+}
+
+						   
+void MDS::handle_client_touch_2(MClientRequest *req,
+								CInode *cur)
+{
+  cur->put();  // unpin
+  
+  // reply
+  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " touch" << endl;
+  MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist( cur, whoami );
+  
+  messenger->send_message(reply,
+						  MSG_ADDR_CLIENT(req->client), 0,
+						  MDS_PORT_SERVER);
+  
+  // done
+  delete req;
 }
 
 
@@ -299,6 +341,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  }
 	  
 	  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " readdir " << numfiles << " files" << endl;
+	  reply->set_trace_dist( cur, whoami );
 	  return reply;
 	} else {
 	  // fetch

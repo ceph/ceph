@@ -19,6 +19,7 @@
 
 #define MSG_MDS_INODEUPDATE  120
 #define MSG_MDS_DIRUPDATE    121
+#define MSG_MDS_INODEEXPIRE  122
 
 #define MSG_MDS_EXPORTDIR    150
 #define MSG_MDS_EXPORTDIRACK 151
@@ -37,6 +38,7 @@
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
 
 #include <iostream>
+#include <stdlib.h>
 using namespace std;
 
 
@@ -51,6 +53,8 @@ class Message {
 
   long source, dest;
   int source_port, dest_port;
+  
+  char tname[20];
 
  public:
   Message() { 
@@ -65,6 +69,7 @@ class Message {
 	source_port = dest_port = -1;
 	source = dest = -1;
 	type = t;
+	sprintf(tname, "%d", type);
   }
   ~Message() {
 	if (serialized) { delete serialized; serialized = 0; }
@@ -73,6 +78,7 @@ class Message {
   // type
   int get_type() { return type; }
   void set_type(int t) { type = t; }
+  virtual char *get_type_name() { return tname; }
 
   // source/dest
   long get_dest() { return dest; }

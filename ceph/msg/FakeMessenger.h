@@ -22,7 +22,6 @@ class FakeMessenger : public Messenger {
 
   virtual int loop();
 
-
 };
 
 

@@ -16,6 +16,7 @@ class MOSDRead : public Message {
 	this->len = len;
 	this->offset = offset;
   }
+  virtual char *get_type_name() { return "oread"; }
 };
 
 #endif
