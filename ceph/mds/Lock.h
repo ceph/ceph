@@ -15,8 +15,9 @@ using namespace std;
 
 // async lock
 #define LOCK_ASYNC    5
-#define LOCK_RESYNC   6  // to sync
-#define LOCK_RESYNC2  7  // to lock
+#define LOCK_GSYNC    6  // gather to sync
+#define LOCK_GLOCK    7  // gather to lock
+#define LOCK_GASYNC   8  // gather to async
 
 
 // -- basic lock
@@ -39,6 +40,10 @@ class BasicLock {
 	gather_set = i;
   }
   
+  bool is_stable() {
+	return (state == LOCK_SYNC) || (state == LOCK_LOCK);
+  }
+
   bool can_read(bool auth) {
 	if (auth)
 	  return (state == LOCK_SYNC) || (state == LOCK_PRELOCK) || (state == LOCK_LOCK);
@@ -58,9 +63,8 @@ class BasicLock {
   bool can_write_soon(bool auth) {
 	return auth && (state == LOCK_PRELOCK);
   }
-  bool is_stable() {
-	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);
-  }
+
+  friend class MDCache;
 };
 
 inline ostream& operator<<(ostream& out, BasicLock& l) {
@@ -71,8 +75,9 @@ inline ostream& operator<<(ostream& out, BasicLock& l) {
 	"deleting",
 	"deleted",
 	"async",
-	"resync",
-	"resync2"
+	"gsync",
+	"glock",
+	"gasync"
   }; 
 
   out << "Lock(" << __lock_states[l.get_state()];
@@ -99,16 +104,28 @@ class AsyncLock : public BasicLock {
   AsyncLock() : BasicLock() {
 	assert(state == 0);
   }
+  bool is_stable() {
+	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);
+  }
+
+  bool can_read(bool auth) {
+	if (auth)
+	  return (state == LOCK_SYNC) || (state == LOCK_PRELOCK) 
+		|| (state == LOCK_LOCK) || (state == LOCK_GASYNC);
+	if (!auth)
+	  return (state == LOCK_SYNC);
+  }
   bool can_read_soon(bool auth) {
 	if (auth)
 	  return (state == LOCK_GSYNC) || (state == LOCK_GLOCK);
 	else
 	  return (state == LOCK_GSYNC);
   }
+
   bool can_write(bool auth) {
 	if (auth) 
-	  return (state == LOCK_LOCK) 
-		|| (state == LOCK_ASYNC) || (state == LOCK_RESYNC) || (state == LOCK_RESYNC2);
+	  return (state == LOCK_LOCK) || (state == LOCK_ASYNC) || 
+		(state == LOCK_GLOCK) || (state == LOCK_GSYNC);
 	if (!auth)
 	  return (state == LOCK_ASYNC);
   }
@@ -118,10 +135,8 @@ class AsyncLock : public BasicLock {
 	else
 	  return (state == LOCK_GASYNC);
   }
-  bool is_stable() {
-	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);
-  }
-};
 
+  friend class MDCache;
+};
 
 #endif
