@@ -7,7 +7,7 @@
 using namespace std;
 
 class MDS;
-class CInode;
+class CDir;
 class Context;
 class Message;
 

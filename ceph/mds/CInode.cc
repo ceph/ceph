@@ -73,14 +73,14 @@ CDir *CInode::get_or_open_dir(MDS *mds)
 
   // only auth can open dir alone.
   assert(is_auth());
-  set_dir( new CDir(this, mds) );
+  set_dir( new CDir(this, mds, true) );
+  dir->dir_auth = -1;
   return dir;
 }
 
 CDir *CInode::set_dir(CDir *newdir)
 {
   assert(dir == 0);
-  get(CINODE_PIN_DIR);
   dir = newdir;
   return dir;
 }
@@ -204,6 +204,7 @@ when:
 
 */
 
+/*
 crope CInode::encode_export_state()
 {
   crope r;
@@ -245,6 +246,7 @@ crope CInode::encode_export_state()
 
   return r;
 }
+*/
 
 crope CInode::encode_basic_state()
 {

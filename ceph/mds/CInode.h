@@ -122,7 +122,11 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: traverse_path
     // triggers: handle_disocver_reply
 
-#define CINODE_WAIT_ANY           0xffff
+#define CINODE_WAIT_EXPORTWARNING  16384
+    // waiters: handle_export_dir_warning
+    // triggers: handle_export_dir_notify
+
+#define CINODE_WAIT_ANY           0xffffff
 
 
 // state

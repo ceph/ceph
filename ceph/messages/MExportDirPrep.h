@@ -14,9 +14,11 @@ class MExportDirPrep : public Message {
      dirs map includes base dir (ino)
   */
   list<inodeno_t>                exports;
+
   list<CInodeDiscover*>          inodes;
   map<inodeno_t,inodeno_t>       inode_dirino;
   map<inodeno_t,string>          inode_dentry;
+
   map<inodeno_t,CDirDiscover*>   dirs;
 
   bool b_did_assim;
@@ -52,10 +54,10 @@ class MExportDirPrep : public Message {
          iit != inodes.end();
          iit++)
       delete *iit;
-    for (list<CDirDiscover*>::iterator dit = dirs.begin();
-         dit != inodes.end();
+    for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
+         dit != dirs.end();
          dit++) 
-      delete *dit;
+      delete dit->second;
   }
 
 
@@ -70,11 +72,11 @@ class MExportDirPrep : public Message {
   }
   void add_inode(inodeno_t dirino, string& dentry, CInodeDiscover *in) {
     inodes.push_front(in);
-    inode_dirino.insert(pair<inodeno_t, inodeno_t>(in->ino(), dirino));
-    inode_dentry.insert(pair<inodeno_t, string>(in->ino(), dentry));
+    inode_dirino.insert(pair<inodeno_t, inodeno_t>(in->get_ino(), dirino));
+    inode_dentry.insert(pair<inodeno_t, string>(in->get_ino(), dentry));
   }
-  void add_dir(CDir *dir) {
-    dirs.insert(pair<inodeno_t, CDirDiscover*>(dir->ino(), dir));
+  void add_dir(CDirDiscover *dir) {
+    dirs.insert(pair<inodeno_t, CDirDiscover*>(dir->get_ino(), dir));
   }
 
 
@@ -82,17 +84,38 @@ class MExportDirPrep : public Message {
 	s.copy(0, sizeof(ino), (char*)&ino);
     int off = sizeof(ino);
     
+	// exports
+	int ne;
+	s.copy(off, sizeof(int), (char*)&ne);
+	off += sizeof(int);
+    for (int i=0; i<ne; i++) {
+	  inodeno_t ino;
+	  s.copy(off, sizeof(ino), (char*)&ino);
+	  off += sizeof(ino);
+	  exports.push_back(ino);
+    }
+
     // inodes
     int ni;
     s.copy(off, sizeof(int), (char*)&ni);
     off += sizeof(int);
     for (int i=0; i<ni; i++) {
+	  // inode
       CInodeDiscover *in = new CInodeDiscover;
       off = in->_unrope(s, off);
       inodes.push_back(in);
+	  
+	  // dentry
+	  string d = s.c_str() + off;
+	  off += d.length() + 1;
+	  inode_dentry.insert(pair<inodeno_t, string>(in->get_ino(), d));
+	  
+	  // dir ino
+	  inodeno_t dino;
+	  s.copy(off, sizeof(dino), (char*)&dino);
+	  off += sizeof(dino);
+	  inode_dirino.insert(pair<inodeno_t,inodeno_t>(in->get_ino(),dino));
     }
-
-    // dentries
 
     // dirs
     int nd;
@@ -101,7 +124,7 @@ class MExportDirPrep : public Message {
     for (int i=0; i<nd; i++) {
       CDirDiscover *dir = new CDirDiscover;
       off = dir->_unrope(s, off);
-      dirs.insert(pair<inodeno_t,CDirDiscover*>(dir->ino(), dir));
+      dirs.insert(pair<inodeno_t,CDirDiscover*>(dir->get_ino(), dir));
     }
 	return off;
   }
@@ -110,21 +133,40 @@ class MExportDirPrep : public Message {
 	crope s;
 	s.append((char*)&ino, sizeof(ino));
 
+	// exports
+    int ne = exports.size();
+    s.append((char*)&ne, sizeof(int));
+    for (list<inodeno_t>::iterator it = exports.begin();
+         it != exports.end();
+         it++) {
+	  inodeno_t ino = *it;
+      s.append((char*)&ino, sizeof(ino));
+	}
+
     // inodes
     int ni = inodes.size();
     s.append((char*)&ni, sizeof(int));
     for (list<CInodeDiscover*>::iterator iit = inodes.begin();
          iit != inodes.end();
-         iit++) 
+         iit++) {
       s.append((*iit)->_rope());
+	  
+	  // dentry
+	  s.append(inode_dentry[(*iit)->get_ino()].c_str());
+	  s.append((char)0);
+
+	  // dir ino
+	  inodeno_t ino = inode_dirino[(*iit)->get_ino()];
+	  s.append((char*)&ino, sizeof(ino));
+	}
 
     // dirs
     int nd = dirs.size();
     s.append((char*)&nd, sizeof(int));
-    for (list<CDirDiscover*>::iterator dit = dirs.begin();
-         dit != inodes.end();
+    for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
+         dit != dirs.end();
          dit++)
-      s.append((*dit)->_rope());
+      s.append(dit->second->_rope());
 
 	return s;
   }

@@ -137,8 +137,9 @@ public:
 
 	if (r >= 0) {
 	  CInode *in = mds->mdcache->get_inode(ino);
+	  assert(in && in->dir);
 	  if (in) {
-		mds->mdstore->commit_dir(in, c);
+		mds->mdstore->commit_dir(in->dir, c);
 		return;
 	  }
 	}
@@ -155,20 +156,20 @@ public:
 class MDCommitDirContext : public Context {
  protected:
   MDStore *ms;
-  CInode *in;
+  CDir *dir;
   __uint64_t version;
 
  public:
   crope buffer;
 
-  MDCommitDirContext(MDStore *ms, CInode *in) : Context() {
+  MDCommitDirContext(MDStore *ms, CDir *dir) : Context() {
 	this->ms = ms;
-	this->in = in;
-	version = in->dir->get_version();
+	this->dir = dir;
+	version = dir->get_version();
   }
   
   void finish(int result) {
-	ms->commit_dir_2( result, in, version );
+	ms->commit_dir_2( result, dir, version );
   }
 };
 
@@ -176,14 +177,16 @@ class MDCommitDirContext : public Context {
 class MDFetchForCommitContext : public Context {
 protected:
   MDStore *ms;
-  CInode *in;
+  CDir *dir;
   Context *co;
 public:
-  MDFetchForCommitContext(MDStore *m, CInode *i, Context *c) {
-	ms = m; in = i; co = c;
+  MDFetchForCommitContext(MDStore *m, CDir *dir, Context *c) {
+	ms = m; 
+	this->dir = dir;
+	co = c;
   }
   void finish(int result) {
-	ms->commit_dir( in, co );
+	ms->commit_dir( dir, co );
   }
 };
 
@@ -245,33 +248,21 @@ bool MDStore::commit_dir( CDir *dir,
 }
 
 bool MDStore::commit_dir_2( int result,
-							CInode *in,
+							CDir *dir,
 							__uint64_t committed_version)
 {
-  dout(5) << "commit_dir_2 " << *in << " committed " << committed_version << ", current version " << in->dir->get_version() << endl;
+  dout(5) << "commit_dir_2 " << *dir << " committed " << committed_version << ", current version " << dir->get_version() << endl;
 
-  assert(committed_version == in->dir->get_committing_version());
+  assert(committed_version == dir->get_committing_version());
   
   // is the dir now clean?
-  if (committed_version == in->dir->get_version())
-	in->dir->mark_clean();
+  if (committed_version == dir->get_version())
+	dir->mark_clean();
  
-  in->dir->state_clear(CDIR_STATE_COMMITTING);
+  dir->state_clear(CDIR_STATE_COMMITTING);
 
   // finish
-  list<Context*> finished;
-  in->dir->take_waiting(CDIR_WAIT_COMMITTED,
-						finished);
-  
-  for (list<Context*>::iterator it = finished.begin();
-	   it != finished.end();
-	   it++) {
-	Context *c = *it;
-	if (c) {
-	  c->finish(result);
-	  delete c;
-	}
-  }
+  dir->finish_waiting(CDIR_WAIT_COMMITTED);
 }
 
 
@@ -304,7 +295,7 @@ public:
 };
 
 
-void MDStore::do_commit_dir( CDir *dir,,
+void MDStore::do_commit_dir( CDir *dir,
 							 Context *c,
 							 int hashcode)
 {
@@ -340,8 +331,8 @@ void MDStore::do_commit_dir( CDir *dir,,
 	
 	// put inode in this dir version
 	if (it->second->get_inode()->is_dirty()) {
-	  it->second->get_inode()->float_parent_dir_version(in->dir->get_version());
-	  dout(12) << " dirty inode " << in->get_parent_dir_version() << " " << *(it->second->get_inode()) << endl;
+	  it->second->get_inode()->float_parent_dir_version( dir->get_version() );
+	  dout(12) << " dirty inode " << *it->second->get_inode() << " now " << it->second->get_inode()->get_parent_dir_version() << endl;
 	}
 	
 	num++;
@@ -493,18 +484,18 @@ void MDStore::do_fetch_dir_2( int result,
 	return;
   } 
 
-  // make sure we have a CDir
-  if (idir->dir == NULL) idir->dir = new CDir(idir, mds->get_nodeid());
-	
-  if (!idir->dir->is_auth()) {
+  if (!idir->dir_is_auth()) {
 	dout(7) << *mds << "do_fetch_dir_2 on " << *idir << ", but i'm not auth" << endl;
 	c->finish(-1);
 	delete c;
 	return;
   } 
+
+  // make sure we have a CDir
+  CDir *dir = idir->get_or_open_dir(mds);
   
   // do it
-  dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *idir << endl;
+  dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
   
   // parse buffer contents into cache
   const char *buf = buffer.c_str();
@@ -550,7 +541,7 @@ void MDStore::do_fetch_dir_2( int result,
 	  
 	  // add and link
 	  mds->mdcache->add_inode( in );
-	  mds->mdcache->link_inode( idir, dname, in );
+	  mds->mdcache->link_inode( dir, dname, in );
 	  
 	  dout(10) << "readdir got " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
 	}

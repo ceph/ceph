@@ -12,7 +12,7 @@
 
 
 md_config_t g_conf = {
-  num_mds: 23,
+  num_mds: 3,
   num_osd: 10,
   num_client: 100,
 
@@ -21,7 +21,7 @@ md_config_t g_conf = {
   client_cache_size: 100,
   client_cache_mid: .5,
   client_requests: 1500,
-  client_deterministic: false,
+  client_deterministic: true,
   
   log_messages: true,
   log_interval: 10.0,

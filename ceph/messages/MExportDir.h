@@ -33,8 +33,8 @@ class MExportDir : public Message {
   double get_ipop() { return ipop; }
   int get_ndirs() { return ndirs; }
   crope& get_state() { return state; }
-  list<inodeno_t>& get_exports() { returne exports; }
-
+  list<inodeno_t>& get_exports() { return exports; }
+  
   void add_dir(crope& dir) {
 	state.append( dir );
 	ndirs++;
@@ -55,7 +55,7 @@ class MExportDir : public Message {
   bool any_prediscovers() {
 	return !hashed_prediscover.empty();
   }
-
+  
   // this should really be a custom iterator if we want
   // clean encapsulation
   map<inodeno_t, set<string> >::iterator prediscover_begin() {

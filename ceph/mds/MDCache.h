@@ -17,6 +17,8 @@
 
 class MDS;
 class Message;
+class MExportDirDiscover;
+class MExportDirDiscoverAck;
 class MExportDirPrep;
 class MExportDirPrepAck;
 class MExportDirWarning;
@@ -187,16 +189,15 @@ class MDCache {
   }
 
   // exporter
-  void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
-  void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CDir *dir,
 				  int mds);
-  MExportDirPrep *export_dir_prep(CDir *dir, 
-								  int dest);
   void export_dir_dropsync(CDir *dir);
-  void export_dir_frozen(CDir *dir,
-						 int dest, 
-						 double pop);
+  void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
+  void export_dir_frozen(CDir *dir, int dest);
+  void handle_export_dir_prep_ack(MExportDirPrepAck *m);
+  void export_dir_go(CDir *dir,
+					 int dest,
+					 double pop);
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
 					   CDir *basedir,

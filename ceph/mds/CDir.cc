@@ -29,6 +29,18 @@ ostream& operator<<(ostream& out, CDir& dir)
   } else {
 	out << " rep a=" << dir.authority() << " n=" << dir.get_replica_nonce();
   }
+
+  if (dir.is_pinned()) {
+    out << " pins";
+    for(set<int>::iterator it = dir.get_ref_set().begin();
+        it != dir.get_ref_set().end();
+        it++)
+      if (*it < CDIR_NUM_PINS)
+        out << " " << cdir_pin_names[*it];
+      else
+        out << " " << *it;
+  }
+
   return out << "]";
 }
 
@@ -45,6 +57,8 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
   state = CDIR_STATE_INITIAL;
   version = 0;
   committing_version = 0;
+
+  ref = 0;
 
   // auth
   assert(in->is_dir());

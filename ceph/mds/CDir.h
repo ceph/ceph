@@ -56,6 +56,7 @@ class Context;
 #define CDIR_STATE_SYNCBYAUTH    524288
 #define CDIR_STATE_WAITONUNSYNC 1048576
 
+#define CDIR_STATE_AUTHMOVING   2097152  // dir replica bystander
 
 
 // these state bits are preserved by an import/export
@@ -93,8 +94,9 @@ class Context;
 #define CDIR_PIN_AUTHPIN   8
 
 #define CDIR_PIN_IMPORTING 9
+#define CDIR_PIN_IMPORTINGEXPORT 10
 
-#define CDIR_NUM_PINS      10
+#define CDIR_NUM_PINS      11
 static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "child",
   "opened",
@@ -105,7 +107,8 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "freeze",
   "proxy",
   "authpin",
-  "importing"
+  "importing",
+  "importingexport"
 };
 
 
@@ -138,7 +141,9 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
 #define CDIR_WAIT_EXPORTWARNING 8192    // on bystander.
     // watiers: handle_export_dir_notify
     // triggers: handle_export_dir_warning
-
+#define CDIR_WAIT_EXPORTPREPACK 16384
+    // waiter   export_dir
+    // trigger  handel_export_dir_prep_ack
 
 #define CDIR_WAIT_SYNC          128
 #define CDIR_WAIT_UNSYNC        256
@@ -359,6 +364,8 @@ class CDir {
   bool is_pinned_by(int by) {
 	return ref_set.count(by);
   }
+  bool is_pinned() { return ref > 0; }
+  set<int> get_ref_set() { return ref_set; }
 
 
   
@@ -439,7 +446,7 @@ class CDirDiscover {
   set<int>  rep_by;
 
  public:
-  CDirDiscover();
+  CDirDiscover() {}
   CDirDiscover(CDir *dir, int nonce) {
     ino = dir->ino();
     this->nonce = nonce;
@@ -458,6 +465,7 @@ class CDirDiscover {
 	dir->dir_rep_by = rep_by;
   }
 
+  inodeno_t get_ino() { return ino; }
 
   
   crope _rope() {
@@ -532,6 +540,7 @@ class CDirExport {
   set<int>     rep_by;
 
  public:
+  CDirExport() {}
   CDirExport(CDir *dir) {
     st.ino = dir->ino();
     st.nitems = dir->nitems;
