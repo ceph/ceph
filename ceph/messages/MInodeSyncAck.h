@@ -6,12 +6,10 @@
 class MInodeSyncAck : public Message {
  public:
   inodeno_t ino;
-  bool haveit;
 
-  MInodeSyncAck(inodeno_t ino, bool haveit = true) :
+  MInodeSyncAck(inodeno_t ino) :
 	Message(MSG_MDS_INODESYNCACK) {
 	this->ino = ino;
-	this->haveit = haveit;
   }
 };
 

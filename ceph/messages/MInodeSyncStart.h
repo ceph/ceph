@@ -6,12 +6,11 @@
 class MInodeSyncStart : public Message {
  public:
   inodeno_t ino;
-  int authority;
 
-  MInodeSyncStart(inodeno_t ino, int auth) :
+  MInodeSyncStart(inodeno_t ino, int asker) :
 	Message(MSG_MDS_INODESYNCSTART) {
 	this->ino = ino;
-	this->authority = auth;
+	this->asker = asker;
   }
 };
 

@@ -56,5 +56,14 @@ class mds_load_t {
 };
 
 
+inline ostream& operator<<(ostream& out, set<int>& iset) {
+  for (set<int>::iterator it = iset.begin();
+	   it != iset.end();
+	   it++) {
+	if (it != iset.begin()) out << ",";
+	out << *it;
+  }
+  return out;
+}
 
 #endif

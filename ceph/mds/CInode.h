@@ -48,10 +48,34 @@ using namespace std;
 #define CINODE_PIN_DHARDPIN  30000
 #define CINODE_PIN_DIRTY     50000
 
+#define CINODE_PIN_LOCKING   70000
+
 // directory authority types
 //  >= is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_HASH     -2
+
+// sync => coherent soft metadata (size, mtime, etc.)
+// lock => coherent hard metadata (owner, mode, etc. affecting namespace)
+#define CINODE_DIST_PRESYNC         1   // mtime, size, etc.
+#define CINODE_DIST_SYNCBYME        2
+#define CINODE_DIST_SYNCBYTHEM      4
+
+#define CINODE_DIST_PRELOCK         8   // file mode, owner, etc.
+#define CINODE_DIST_LOCKBYME       16
+#define CINODE_DIST_LOCKBYTHEM     32
+#define CINODE_DIST_SOFTASYNC      64  // replica can soft write w/o sync
+
+/*
+soft:
+ auth, normal:    readable,       sync->writeable
+ repl, normal:    readable,       fw write to auth
+ auth, softtoken: sync->readable, writeable
+ repl, softtoken: sync->readable, writeable
+
+hard:
+ 
+*/
 
 class Context;
 class CDentry;
@@ -62,7 +86,6 @@ class Message;
 class CInode;
 
 ostream& operator<<(ostream& out, CInode& in);
-ostream& operator<<(ostream& out, set<int>& iset);
 
 
 // cached inode wrapper
@@ -93,6 +116,12 @@ class CInode : LRUObject {
   /* NOTE: on replicas, this doubles as replicated_by, but the
 	 cached_by_* access methods below should NOT be used in those
 	 cases, as the semantics are different! */
+  set<int>         soft_tokens;  // replicas who can to soft update the inode
+  /* ..and thus may have a newer mtime, size, etc.! .. w/o sync
+	 for authority: set of nodes; self is assumed, but not included
+	 for replica:   undefined */
+  unsigned         dist_state;
+
 
   // open file state
   // sets of client ids!
@@ -101,8 +130,8 @@ class CInode : LRUObject {
 
  private:
   // waiters
-  list<Context*>   waiting_for_write;
-  list<Context*>   waiting_for_read;
+  list<Context*>   waiting_for_sync;
+  list<Context*>   waiting_for_lock;
 
   // lock nesting
   int hard_pinned;
@@ -194,6 +223,17 @@ class CInode : LRUObject {
 	return cached_by;
   }
 
+  // locking
+  bool is_sync() { return dist_state & (CINODE_DIST_SYNCBYME|
+										CINODE_DIST_SYNCBYTHEM); }
+  bool is_syncbyme() { return dist_state & CINODE_DIST_SYNCBYME; }
+  bool is_syncbythem() { return dist_state & CINODE_DIST_SYNCBYTHEM; }
+  bool is_presync() { return dist_state & CINODE_DIST_PRESYNC; }
+  bool is_softasync() { return dist_state & CINODE_DIST_SOFTASYNC; }
+
+  bool is_lock() { return dist_state & CINODE_DIST_LOCKED; }
+  bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
+
   // open
   bool is_open() {
 	if (open_read.empty() &&
@@ -260,10 +300,10 @@ class CInode : LRUObject {
   void add_hard_pin_waiter(Context *c);
 
 
-  void add_write_waiter(Context *c);
-  void take_write_waiting(list<Context*>& ls);
-  void add_read_waiter(Context *c);
-  void take_read_waiting(list<Context*>& ls);
+  void add_sync_waiter(Context *c);
+  void take_sync_waiting(list<Context*>& ls);
+  void add_lock_waiter(Context *c);
+  void take_lock_waiting(list<Context*>& ls);
 
   // --- reference counting
   void put(int by) {

@@ -387,110 +387,10 @@ CInode *MDCache::get_containing_export(CInode *in)
 }
 
 
-// SYNC
-
-/*
-
-this all sucks
 
 
 
 
-int MDCache::read_start(CInode *in, Message *m)
-{
-  // dist writes not implemented.
-
-  return read_wait(in, m);
-}
-
-int MDCache::read_wait(CInode *in, Message *m)
-{
-  if (in->authority(mds->get_cluster()) == mds->get_nodeid())
-	return 0;   // all good for me
-  
-  if (in->get_sync() & CINODE_SYNC_LOCK) {
-	// wait!
-	dout(7) << "read_wait waiting for read lock" << endl;
-	in->add_read_waiter(new C_MDS_RetryMessage(mds, m));
-  }
-  return 0;
-}
-
-int MDCache::read_finish(CInode *in)
-{
-  return 0;  // nothing
-}
-
-
-
-
-
-int MDCache::write_start(CInode *in, Message *m)
-{
-  if (in->get_sync() == CINODE_SYNC_LOCK)
-	return 0;   // we're locked!
-
-  int auth = in->authority(mds->get_cluster());
-  int whoami = mds->get_nodeid();
-
-  if (auth == whoami) {
-	// we are the authority.
-
-	if (!in->cached_by_anyone()) {
-	  // it's just us!
-	  in->sync_set(CINODE_SYNC_LOCK);
-	  in->get();
-	  return 0;   
-	}
-
-	// ok, we need to get the lock.
-	
-	// queue waiter
-	in->add_write_waiter(new C_MDS_RetryMessage(mds, m));
-	
-	if (in->get_sync() != CINODE_SYNC_START) {
-	  
-	  // send sync_start
-	  set<int>::iterator it;
-	  for (it = in->cached_by_begin(); it != in->cached_by_end(); it++) {
-		mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, auth),
-									 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
-	  }
-	  
-	  in->sync_waiting_for_ack = in->cached_by;
-	  in->sync_set(CINODE_SYNC_START);
-	  in->get();	// pin
-	}
-  } else {
-   
-	assert(auth != whoami);
-
-  }
-
-  return 1;
-}
-
-int MDCache::write_finish(CInode *in)
-{
-  assert(in->get_sync() == CINODE_SYNC_LOCK);
-
-  in->sync_set(0);   // clear sync state
-  in->put();         // unpin
-
-  // 
-  if (in->cached_by_anyone()) {
-	// release
-	set<int>::iterator it;
-	for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
-	  mds->messenger->send_message(new MInodeSyncRelease(in->inode.ino),
-								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
-	}
-  }
-}
-
-*/
 
 
 
@@ -1086,6 +986,215 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 
 // SYNC
+// locks --------------------
+
+/* soft sync locks: mtime, size, etc. 
+ */
+
+bool MDCache::read_soft_start(CInode *in, Message *m)
+{
+  // do i have sync?
+  if (in->is_syncbyme()) return true;
+
+  if (in->auth) {
+	// i am authority
+	if (!in->is_softasync() &&
+		!in->is_syncbythem()) return true; // we're fine
+	
+	// wait for sync regardless
+	dout(5) << "read_soft_start " << *in << " is softasync|syncbythem, waiting on sync" << endl;
+	in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
+
+	if (!in->is_presync() &&    // aren't already syncstarting
+		!in->is_syncbythem())   // and aren't synced by someone else
+	  sync_start(in);
+
+	return false;
+  } else {
+	// i am replica
+	if (in->is_softasync()) {
+	  // forward
+	  dout(5) << "read_soft_start " << *in << " is softasync, fw to auth " << auth << endl;
+	  int auth = in->authority(mds->get_cluster());
+	  assert(auth != mds->get_nodeid());
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(auth), m->get_dest_port(),
+								   MDS_PORT_MDCACHE);
+	  return false;
+	} 
+	if (in->is_syncbythem()) {
+	  dout(5) << "read_soft_start " << *in << " is syncbythem, waiting on sync " << endl;
+	  in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
+	  return false;
+	}
+
+	// replica is clean.
+	assert(in->is_clean());
+	return true;
+  }
+}
+
+int MDCache::read_soft_finish(CInode *in)
+{
+  return 0;  // do nothing, actually?  FIXME
+}
+
+
+bool MDCache::write_soft_start(CInode *in, Message *m)
+{
+  // do i have sync?
+  if (in->is_syncbyme()) return true;
+  
+  if (in->auth) {
+	// i am authority
+	if (!in->cached_by_anyone()) return true;    // i am alone
+	if (in->is_softasync() &&
+		!in->is_syncbythem()) return true;       // soft updates, and not synced by them
+
+	// sync
+	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, waiting on sync " << endl;
+	in->add_sync_waiter(new C_MDS_Retrymessage(mds, m));
+
+	if (!in->is_presync())
+	  sync_start(in); // start sync
+  } else {
+	// i am replica
+	if (in->is_softasync() &&
+		!in->is_syncbythem()) return true;       // soft updates, and not synced by someone else
+	
+	// forward to auth
+	int auth = in->authority(mds->get_cluster());
+	assert(auth != mds->get_nodeid());
+	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, fw to auth " << auth << endl;
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(auth), m->get_dest_port(),
+								 m->get_dest_port());
+  }
+  return false;
+}
+
+int write_soft_finish(CInode *in)
+{
+  return 0;  // do nothing, actually?
+}
+
+void sync_start(CInode *in)
+{
+  assert(in->is_auth());
+  assert(!in->is_presync());
+  assert(!in->is_sync());
+
+  // wait for all replicas
+  in->sync_waiting_for_ack = in->cached_by;
+  in->dist_state &= CINODE_DIST_PRESYNC;
+
+  // send messages
+  dout(5) << "sync_start on " << *in << ", waiting for " << in->sync_waiting_for_ack << endl;
+  for (set<int>::iterator it = in->cached_by_begin(); 
+	   it != in->cached_by_end(); 
+	   it++) {
+	mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, mds->get_nodeid()),
+								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+  }
+}
+
+void sync_finish(CInode *in)
+{
+  assert(in->is_syncbyme());
+  assert(in->is_auth());
+
+  in->dist_state -= CINODE_DIST_SYNCBYME;
+  
+  dout(5) << "sync_finish on " << *in << ", messages to " << in->get_cached_by() << endl;
+  for (set<int>::iterator it = in->cached_by_begin(); 
+	   it != in->cached_by_end(); 
+	   it++) {
+	mds->messenger->send_message(new MInodeSyncFinish(in),
+								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+  }
+}
+
+
+
+/* hard locks: owner, mode 
+ */
+
+
+
+/*
+
+
+int MDCache::write_start(CInode *in, Message *m)
+{
+  if (in->get_sync() == CINODE_SYNC_LOCK)
+	return 0;   // we're locked!
+
+  int auth = in->authority(mds->get_cluster());
+  int whoami = mds->get_nodeid();
+
+  if (auth == whoami) {
+	// we are the authority.
+
+	if (!in->cached_by_anyone()) {
+	  // it's just us!
+	  in->sync_set(CINODE_SYNC_LOCK);
+	  in->get();
+	  return 0;   
+	}
+
+	// ok, we need to get the lock.
+	
+	// queue waiter
+	in->add_write_waiter(new C_MDS_RetryMessage(mds, m));
+	
+	if (in->get_sync() != CINODE_SYNC_START) {
+	  
+	  // send sync_start
+	  set<int>::iterator it;
+	  for (it = in->cached_by_begin(); it != in->cached_by_end(); it++) {
+		mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, auth),
+									 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+									 MDS_PORT_CACHE);
+	  }
+	  
+	  in->sync_waiting_for_ack = in->cached_by;
+	  in->sync_set(CINODE_SYNC_START);
+	  in->get();	// pin
+	}
+  } else {
+   
+	assert(auth != whoami);
+
+  }
+
+  return 1;
+}
+
+int MDCache::write_finish(CInode *in)
+{
+  assert(in->get_sync() == CINODE_SYNC_LOCK);
+
+  in->sync_set(0);   // clear sync state
+  in->put();         // unpin
+
+  // 
+  if (in->cached_by_anyone()) {
+	// release
+	set<int>::iterator it;
+	for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
+	  mds->messenger->send_message(new MInodeSyncRelease(in->inode.ino),
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+  }
+}
+
+*/
+
+
+
 
 /*
 
@@ -1434,8 +1543,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 
   // waiters
   list<Context*> waiting;
-  idir->take_write_waiting(waiting);
-  idir->take_read_waiting(waiting);
+  idir->take_lock_waiting(waiting);    // FIXME
+  idir->take_sync_waiting(waiting);
   fin->assim_waitlist(waiting);
 
 

@@ -11,18 +11,6 @@
 #include <string>
 
 
-ostream& operator<<(ostream& out, set<int>& iset)
-{
-  bool first = true;
-  for (set<int>::iterator it = iset.begin();
-	   it != iset.end();
-	   it++) {
-	if (!first) out << ",";
-	first = false;
-	out << *it;
-  }
-  return out;
-}
 
 
 // ====== CInode =======
@@ -39,7 +27,8 @@ CInode::CInode() : LRUObject() {
   hard_pinned = 0;
   nested_hard_pinned = 0;
   //  state = 0;
-
+  dist_state = 0;
+  
   version = 0;
 
   auth = true;  // by default.
@@ -163,28 +152,28 @@ bool CInode::is_frozen()
   return false;
 }
 
-void CInode::add_write_waiter(Context *c) {
-  if (waiting_for_write.size() == 0)
+void CInode::add_lock_waiter(Context *c) {
+  if (waiting_for_lock.size() == 0)
 	get(CINODE_PIN_WWAIT);
-  waiting_for_write.push_back(c);
+  waiting_for_lock.push_back(c);
 }
-void CInode::take_write_waiting(list<Context*>& ls)
+void CInode::take_lock_waiting(list<Context*>& ls)
 {
-  if (waiting_for_write.size())
+  if (waiting_for_lock.size())
 	put(CINODE_PIN_WWAIT);
-  ls.splice(ls.end(), waiting_for_write);  
+  ls.splice(ls.end(), waiting_for_lock);  
 }
 
-void CInode::add_read_waiter(Context *c) {
-  if (waiting_for_read.size() == 0)
+void CInode::add_sync_waiter(Context *c) {
+  if (waiting_for_sync.size() == 0)
 	get(CINODE_PIN_RWAIT);
-  waiting_for_read.push_back(c);
+  waiting_for_sync.push_back(c);
 }
-void CInode::take_read_waiting(list<Context*>& ls)
+void CInode::take_sync_waiting(list<Context*>& ls)
 {
-  if (waiting_for_read.size())
+  if (waiting_for_sync.size())
 	put(CINODE_PIN_RWAIT);
-  ls.splice(ls.end(), waiting_for_read);
+  ls.splice(ls.end(), waiting_for_sync);
 }
 
 
