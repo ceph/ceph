@@ -1106,13 +1106,28 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	  return;
 	}
 
-	// make sure we can lock dest
-	
+	// lock dest?
+	if (!oldin->is_lockbyme() &&
+		write_hard_start(oldin, req) == false) {
+	  // wait
+	  dout(7) << "dest/overwrite " << *oldin << " locking, waiting" << endl;
+	  return;
+	}
   }
 
-  // make sure we can lock source
+  // lock source?
+  if (!from->is_lockbymeprelock() ||
+	  !from->is_lockbyme()) {
+	// wait
+	dout(7) << "from " << *from << " locking, waiting" << endl;
+	from->add_waiter(CINODE_WAIT_LOCK,
+					 new C_MDS_RetryMessage(this, req));
+	return;
+  }
 
-
+  // lock
+  from->
+  
 
   
   
