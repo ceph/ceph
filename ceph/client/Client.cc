@@ -335,12 +335,12 @@ void Client::issue_request()
 	if (cwd) {  // stat root if we don't have it.
 	  if (r < 10)
 		op = MDS_OP_TOUCH;
-	  else if (r < 11) 
+	  else if (false && r < 11) 
 		op = MDS_OP_CHMOD;
 	  else if (r < 20 && !is_open(cwd) && !cwd->isdir) 
 		op = MDS_OP_OPENRD;
-	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
-		op = MDS_OP_OPENRD;//WR;
+	  else if (false && r < 30 && !is_open(cwd) && !cwd->isdir)
+		op = MDS_OP_OPENWR;
 	  else if (r < 41 + open_files.size() && open_files.size() > 0) {
 		// close file
 		return close_a_file();

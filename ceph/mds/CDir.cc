@@ -161,7 +161,7 @@ void CDir::add_waiter(int tag,
 void CDir::add_waiter(int tag, Context *c) {
   // hierarchical?
   if (tag & CDIR_WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
-	if (is_freeze_root()) {
+	if (state_test(CDIR_STATE_FROZEN|CDIR_STATE_FREEZING)) {
 	  // it's us, pin here.  (fall thru)
 	} else {
 	  // pin parent!
@@ -174,7 +174,7 @@ void CDir::add_waiter(int tag, Context *c) {
   if (waiting.empty())
 	inode->get(CINODE_PIN_DIRWAIT);
   waiting.insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter " << tag << " " << c << " on " << *inode << endl;
+  dout(10) << "add_waiter " << tag << " " << c << " on dir " << *inode << endl;
 }
 
 
@@ -188,10 +188,12 @@ void CDir::take_waiting(int mask,
   while (it != waiting_on_dentry[dentry].end()) {
 	if (it->first & mask) {
 	  ls.push_back(it->second);
-	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << endl;
+	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
 	  waiting_on_dentry[dentry].erase(it++);
-	} else 
+	} else {
+	  dout(10) << "take_waiting dentry " << dentry << " SKIPPING mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
 	  it++;
+	}
   }
 
   // did we clear dentry?
@@ -203,6 +205,7 @@ void CDir::take_waiting(int mask,
 	inode->put(CINODE_PIN_DIRWAITDN);
 }
 
+/* NOTE: this checks dentry waiters too */
 void CDir::take_waiting(int mask,
 						list<Context*>& ls)
 {
@@ -221,10 +224,12 @@ void CDir::take_waiting(int mask,
 	while (it != waiting.end()) {
 	  if (it->first & mask) {
 		ls.push_back(it->second);
+		dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
 		waiting.erase(it++);
-		dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << endl;
-	  } else 
+	  } else {
+		dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on dir " << *inode<< endl;
 		it++;
+	  }
 	}
 	
 	if (waiting.empty())

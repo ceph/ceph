@@ -80,10 +80,21 @@ using namespace std;
 
 // wait reasons
 #define CINODE_WAIT_SYNC           128
+    // waiters: read_soft_start, write_soft_start
+    // trigger: handle_inode_sync_ack
 #define CINODE_WAIT_UNSYNC         256
+    // waiters: read_soft_start, write_soft_start
+    // trigger: handle_inode_sync_release
 #define CINODE_WAIT_LOCK           512
+    // waiters: write_hard_start
+    // trigger: handle_inode_lock_ack
 #define CINODE_WAIT_UNLOCK        1024
+    // waiters: read_hard_try
+    // trigger: handle_inode_lock_release
 #define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
+    // waiters: write_hard_start, read_soft_start, write_soft_start  (mdcache)
+    //          handle_client_chmod, handle_client_touch             (mds)
+    // trigger: (see CDIR_WAIT_UNFREEZE)
 #define CINODE_WAIT_ANY           0xffff
 
 class Context;

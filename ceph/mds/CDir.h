@@ -51,16 +51,30 @@ class Context;
 
 // wait reasons
 #define CDIR_WAIT_DENTRY         1  // wait for item to be in cache
+     // waiters: path_traverse
+     // trigger: handle_discover, fetch_dir_2
 #define CDIR_WAIT_COMPLETE       2  // wait for complete dir contents
+     // waiters: fetch_dir, commit_dir
+     // trigger: fetch_dir_2
 #define CDIR_WAIT_FREEZEABLE     4  // hard_pins removed
+     // waiters: freeze, freeze_finish
+     // trigger: auth_unpin, adjust_nested_auth_pins
 #define CDIR_WAIT_UNFREEZE       8  // unfreeze
+     // waiters: path_traverse, handle_discover, handle_inode_update,
+     //           export_dir_frozen                                   (mdcache)
+     //          handle_client_readdir                                (mds)
+     // trigger: unfreeze
 #define CDIR_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
-#define CDIR_WAIT_EXPORTACK     16  // export finished
+    // waiters: commit_dir                                           (mdstore)
+    // trigger: (see CDIR_WAIT_UNFREEZE)
 #define CDIR_WAIT_COMMITTED     32  // did commit (who uses this?**)
+    // waiters: commit_dir (if already committing)
+    // trigger: commit_dir_2
 
 #define CDIR_WAIT_ANY   (0xffff)
 
-#define CDIR_WAIT_ATFREEZEROOT   (CDIR_WAIT_AUTHPINNABLE|CDIR_WAIT_UNFREEZE|CDIR_WAIT_AUTHPINNABLE)
+#define CDIR_WAIT_ATFREEZEROOT  (CDIR_WAIT_AUTHPINNABLE|\  // hmm, same same
+                                 CDIR_WAIT_UNFREEZE)
 
 
 // CDir

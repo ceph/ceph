@@ -68,10 +68,14 @@ int main(int argc, char **argv) {
   //fakemessenger_do_loop();
 
   // 
-  cout << "---- check ----" << endl;
-  for (int i=0; i<NUMMDS; i++) 
-	mds[i]->mdcache->shutdown_pass();
-  
+  if (argc > 1 && 
+	  strcmp(argv[1], "nocheck") == 0) {
+	cout << "---- nocheck" << endl;
+  } else {
+	cout << "---- check ----" << endl;
+	for (int i=0; i<NUMMDS; i++) 
+	  mds[i]->mdcache->shutdown_pass();
+  }
   
   // cleanup
   cout << "cleanup" << endl;

@@ -1134,13 +1134,18 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	return false;
   }
 
-  in->add_waiter(CINODE_WAIT_SYNC,
-				 new C_MDS_RetryMessage(mds, m));
-
   if (in->is_auth()) {
+	// wait for sync
+	in->add_waiter(CINODE_WAIT_SYNC,
+				   new C_MDS_RetryMessage(mds, m));
+
 	if (!in->is_presync())
 	  sync_start(in);
   } else {
+	// wait for unsync
+	in->add_waiter(CINODE_WAIT_UNSYNC,
+				   new C_MDS_RetryMessage(mds, m));
+
 	assert(in->is_syncbythem());
 
 	if (!in->is_waitonunsync())
@@ -1211,13 +1216,18 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	return false;
   }
 
-  in->add_waiter(CINODE_WAIT_SYNC, 
-				 new C_MDS_RetryMessage(mds, m));
-  
   if (in->is_auth()) {
+	// wait for sync
+	in->add_waiter(CINODE_WAIT_SYNC, 
+				   new C_MDS_RetryMessage(mds, m));
+
 	if (!in->is_presync())
 	  sync_start(in);
   } else {
+	// wait for unsync
+	in->add_waiter(CINODE_WAIT_UNSYNC, 
+				   new C_MDS_RetryMessage(mds, m));
+
 	assert(in->is_syncbythem());
 	assert(in->is_softasync());
 	
@@ -1473,7 +1483,7 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
 
 	// finish
 	list<Context*> finished;
-	in->take_waiting(CINODE_WAIT_SYNC, finished);
+	in->take_waiting(CINODE_WAIT_UNSYNC, finished);
 	for (list<Context*>::iterator it = finished.begin(); 
 		 it != finished.end(); 
 		 it++) {

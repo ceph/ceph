@@ -175,6 +175,7 @@ void CInode::add_waiter(int tag, Context *c) {
   if (waiting.size() == 0)
 	get(CINODE_PIN_LOCKWAIT);
   waiting.insert(pair<int,Context*>(tag,c));
+  dout(10) << "add_waiter " << tag << " " << c << " on inode " << *this << endl;
 }
 
 void CInode::take_waiting(int mask, list<Context*>& ls)
@@ -185,10 +186,12 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
   while (it != waiting.end()) {
 	if (it->first & mask) {
 	  ls.push_back(it->second);
+	  dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on inode " << *this << endl;
 	  waiting.erase(it++);
-	  dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << endl;
-	} else 
+	} else {
+	  dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on inode " << *this << endl;
 	  it++;
+	}
   }
 
   if (waiting.empty())

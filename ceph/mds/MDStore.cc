@@ -277,7 +277,7 @@ bool MDStore::commit_dir( CInode *in,
   if (in->dir->state_test(CDIR_STATE_COMMITTING)) {
 	// already mid-commit!
 	dout(7) << "commit_dir " << *in << " already mid-commit" << endl;
-	in->dir->add_waiter(CDIR_WAIT_COMPLETE, c);   // FIXME this isprobably a bad idea?
+	in->dir->add_waiter(CDIR_WAIT_COMMITTED, c);   
 	return false;
   }
 
