@@ -162,11 +162,13 @@ class MDS : public Dispatcher {
   MClientReply *handle_client_touch(MClientRequest *req,
 									CInode *cur);
   void handle_client_touch_2(MClientRequest *req,
+							 MClientReply *reply,
 							 CInode *cur);
   
   MClientReply *handle_client_chmod(MClientRequest *req,
 									CInode *cur);
   void handle_client_chmod_2(MClientRequest *req,
+							 MClientReply *reply,
 							 CInode *cur);
 
   MClientReply *handle_client_openrd(MClientRequest *req,

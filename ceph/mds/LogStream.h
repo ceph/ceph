@@ -42,6 +42,7 @@ class LogStream {
 
   // WARNING: non-reentrant; single reader only
   int read_next(LogEvent **le, Context *c, int step=1);
+  void did_read_bit(crope& next_bit, LogEvent **le, Context *c) ;
 
   int append(LogEvent *e, Context *c);  // append at cur_pos, mind you!
 };

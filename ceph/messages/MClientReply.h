@@ -13,6 +13,7 @@ typedef struct {
   inode_t inode;
   set<int> dist;
   string ref_dn;    // referring dentry (blank if root)
+  bool is_sync;
 } c_inode_info;
 
 typedef struct {
@@ -68,6 +69,7 @@ class MClientReply : public Message {
   crope rope_info(c_inode_info *ci) {
 	crope s;
 	s.append((char*)&ci->inode, sizeof(inode_t));
+	s.append((char*)&ci->is_sync, sizeof(bool));
 
 	int n = ci->dist.size();
 	s.append((char*)&n, sizeof(int));
@@ -85,6 +87,8 @@ class MClientReply : public Message {
   int unrope_info(c_inode_info *ci, crope s) {
 	s.copy(0, sizeof(inode_t), (char*)(&ci->inode));
 	int off = sizeof(inode_t);
+	s.copy(off, sizeof(bool), (char*)(&ci->is_sync));
+	off += sizeof(bool);
 
 	int l;
 	s.copy(off, sizeof(int), (char*)&l);
@@ -149,6 +153,7 @@ class MClientReply : public Message {
 	while (in) {
 	  c_inode_info *info = new c_inode_info;
 	  info->inode = in->inode;
+	  info->is_sync = in->is_sync() || in->is_presync();
 	  in->get_dist_spec(info->dist, whoami);
 	  trace.insert(trace.begin(), info);
 

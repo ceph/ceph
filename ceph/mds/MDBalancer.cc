@@ -201,15 +201,15 @@ void MDBalancer::do_rebalance()
   }
 
   // make a sorted list of my imports
-  map<double,CInode*>    import_pop_map;
-  multimap<int,CInode*>  import_from_map;
-  for (set<CInode*>::iterator it = mds->mdcache->imports.begin();
+  map<double,CDir*>    import_pop_map;
+  multimap<int,CDir*>  import_from_map;
+  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
-	import_pop_map.insert(pair<double,CInode*>((*it)->get_popularity(), *it));
+	import_pop_map.insert(pair<double,CDir*>((*it)->get_popularity(), *it));
 	int from = (*it)->authority(mds->get_cluster());
 	dout(5) << "map i imported " << **it << " from " << from << endl;
-	import_from_map.insert(pair<int,CInode*>(from, *it));
+	import_from_map.insert(pair<int,CDir*>(from, *it));
   }
   
   // do my exports!
@@ -228,15 +228,15 @@ void MDBalancer::do_rebalance()
 	// search imports from target
 	if (import_from_map.count(target)) {
 	  dout(5) << " aha, looking through imports from target mds" << target << endl;
-	  pair<multimap<int,CInode*>::iterator, multimap<int,CInode*>::iterator> p =
+	  pair<multimap<int,CDir*>::iterator, multimap<int,CDir*>::iterator> p =
 		p = import_from_map.equal_range(target);
 	  while (p.first != p.second) {
-		CInode *in = (*p.first).second;
-		dout(5) << "considering " << *in << " from " << (*p.first).first << endl;
-		multimap<int,CInode*>::iterator plast = p.first++;
+		CDir *dir = (*p.first).second;
+		dout(5) << "considering " << *dir << " from " << (*p.first).first << endl;
+		multimap<int,CDir*>::iterator plast = p.first++;
 		
-		if (in->is_root()) continue;
-		double pop = in->get_popularity();
+		if (dir->inode->is_root()) continue;
+		double pop = dir->inode->get_popularity();
 		assert(in->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
 
 		if (pop <= amount) {

@@ -183,6 +183,11 @@ void Client::done() {
 
 void Client::assim_reply(MClientReply *r)
 {
+  if (r->get_result() < 0) {
+	dout(12) << "error" << endl;
+	return;
+  }
+
 
   // closed a file?
   if (r->get_op() == MDS_OP_CLOSE) {
@@ -198,27 +203,36 @@ void Client::assim_reply(MClientReply *r)
 	  open_files_sync.erase(it);
 	}
 	ClNode *node = get_node(r->get_ino());
+	assert(node);
 	node->put();
+	if (node->dangling) {
+	  dout(12) << "removing dangling node " << node->ino << endl;
+	  remove_node(node);
+	}
 	return;
   }
 
   if (r->get_op() == MDS_OP_UNLINK) {
-	if (r->get_result() < 0) {
-	  dout(7) << "unlink error" << endl;
-	} else {
-	  ClNode *node = cwd;
-	  assert(node->ino == r->get_ino());
+	ClNode *node = cwd;
+	if (node->ino == r->get_ino()) {
 	  cwd = cwd->parent;
 	  if (node) {
-		node->detach();
-		remove_node(node);	  
+		detach_node(node);
+		if (is_open(node)) {
+		  dout(12) << "dangling unlinked open node " << node->ino << endl;
+		  node->dangling = true;
+		} else {
+		  dout(12) << "removing unlinked node " << node->ino << endl;
+		  remove_node(node);	  
+		}
 	  }
+	} else {
+	  dout(12) << "oops, i unlinked somethign that moved.  whatever." << endl;
 	}
 	return;
   }
 
   // normal crap
-
   ClNode *cur = root;
 
   vector<c_inode_info*> trace = r->get_trace();
@@ -230,21 +244,47 @@ void Client::assim_reply(MClientReply *r)
 		cur = root = new ClNode();
 	  }
 	} else {
-	  if (cur->lookup(last_req_dn[i]) == NULL) {
-		ClNode *n = new ClNode();
-		n->ino = trace[i]->inode.ino;
-		cur->link( last_req_dn[i], n );
-		add_node(n);
-		if (i < last_req_dn.size()-1) cur->isdir = true;  // clearly!
-		cache_lru.lru_insert_top( n );
-		cur = n;
-	  } else {
-		cur = cur->lookup( last_req_dn[i] );
-		//assert(cur->ino == trace[i]->inode.ino);
-		cur->ino = trace[i]->inode.ino;
-		cache_lru.lru_touch(cur);
+	  ClNode *next = cur->lookup( last_req_dn[i] );
+	  
+	  if (next) {
+		if (next->ino == trace[i]->inode.ino) {
+		  cache_lru.lru_touch(next);
+		  dout(12) << " had dentry " << last_req_dn[i] << " with correct ino " << next->ino << endl;
+		} else {
+		  dout(12) << " had dentry " << last_req_dn[i] << " with WRONG ino " << next->ino << endl;
+		  detach_node(next);
+		  if (is_open(next)) {
+			next->dangling = true;
+		  } else {
+			dout(12) << "removing changed dentry node " << next->ino << endl;;
+			remove_node(next);
+		  }
+		  next = NULL;
+		}
 	  }
+
+	  if (!next) {
+		next = get_node(trace[i]->inode.ino);
+		if (next) {
+		  dout(12) << " had ino " << next->ino << " at wrong position, moving" << endl;
+		  next->detach();
+		  cur->link( last_req_dn[i], next );
+		}
+	  }
+	  
+	  if (!next) {
+		next = new ClNode();
+		next->ino = trace[i]->inode.ino;
+		cur->link( last_req_dn[i], next );
+		add_node(next);
+		if (i < last_req_dn.size()-1) cur->isdir = true;  // clearly!
+		cache_lru.lru_insert_top( next );
+		dout(12) << " new dentry+node with ino " << next->ino << endl;
+	  }
+
+	  cur = next;
 	}
+
 	for (set<int>::iterator it = trace[i]->dist.begin(); it != trace[i]->dist.end(); it++)
 	  cur->dist.push_back(*it);
 	cur->isdir = trace[i]->inode.isdir;
@@ -259,10 +299,20 @@ void Client::assim_reply(MClientReply *r)
 	for (it = r->get_dir_contents().begin(); 
 		 it != r->get_dir_contents().end(); 
 		 it++) {
-	  if (cur->lookup((*it)->ref_dn)) 
-		continue;  // skip if we already have it
+	  ClNode *n = cur->lookup((*it)->ref_dn);
+	  if (n) {
+		if (n->ino == (*it)->inode.ino)
+		  continue;  // skip if we already have it
+		
+		// wrong ino!
+		detach_node(n);
+		if (is_open(n))
+		  n->dangling = true;
+		else
+		  remove_node(n);
+	  }
 
-	  ClNode *n = new ClNode();
+	  n = new ClNode();
 	  n->ino = (*it)->inode.ino;
 	  n->isdir = (*it)->inode.isdir;
 
@@ -281,8 +331,13 @@ void Client::assim_reply(MClientReply *r)
   if (r->get_op() == MDS_OP_OPENRD ||
 	  r->get_op() == MDS_OP_OPENWR ||
 	  r->get_op() == MDS_OP_OPENWRC) {
-	dout(12) << "opened inode " << r->get_ino() << " " << r->get_path() << endl;
-	open_files.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
+	if (trace[trace.size()-1]->is_sync) {
+	  dout(10) << "opened inode SYNC " << r->get_ino() << " " << r->get_path() << endl;
+	  open_files_sync.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
+	} else {
+	  dout(10) << "opened inode " << r->get_ino() << " " << r->get_path() << endl;
+	  open_files.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
+	}
 	ClNode *node = get_node(r->get_ino());
 	assert(node);
 	node->get();
@@ -303,9 +358,9 @@ void Client::trim_cache()
 	if (!i) 
 	  break;  // out of things to expire!
 	
-	i->detach();
+	dout(12) << "expiring inode " << i->ino << endl;
+	detach_node(i);
 	remove_node(i);
-	delete i;
 	expired++;
   }
   if (g_conf.debug > 11)
@@ -319,17 +374,29 @@ void Client::issue_request()
 {
   int op = 0;
 
-  if (!cwd) cwd = root;
+  if (!cwd) {
+	dout(12) << "no cwd, starting at root" << endl;
+	cwd = root;
+  }
   string p = "";
   if (cwd) {
+
+	string curp;
+	vector<string> blahcrap;
+	cwd->full_path(curp,blahcrap);
+	dout(12) << "cwd = " << curp << endl;
 	
 	// back out to a dir
 	while (!cwd->isdir) 
 	  cwd = cwd->parent;
+
+	curp = "";
+	cwd->full_path(curp,blahcrap);
+	dout(12) << "back to dir: cwd = " << curp << endl;
 	
 	if (rand() % 20 > 1+cwd->depth()) {
 	  // descend
-	  if (cwd->havedircontents) {
+	  if (cwd->havedircontents && cwd->children.size() && (rand()%10 > 1)) {
 		dout(12) << "descending" << endl;
 		// descend
 		int n = rand() % cwd->children.size();
@@ -347,6 +414,10 @@ void Client::issue_request()
 	  if (cwd->parent)
 		cwd = cwd->parent;
 	}
+
+	curp = "";
+	cwd->full_path(curp,blahcrap);
+	dout(12) << "end: cwd = " << curp << endl;
 
 	last_req_dn.clear();
 	cwd->full_path(p,last_req_dn);
@@ -415,10 +486,11 @@ void Client::close_a_file()
 
   MClientRequest *req = new MClientRequest(tid++, MDS_OP_CLOSE, whoami);
   req->set_ino(it->first);
+  assert(get_node(it->first));
 
   int mds = it->second;
 
-  dout(9) << "sending close " << *req << " to mds" << mds << endl;
+  dout(9) << "sending close " << *req << " on " << it->first << " to mds" << mds << endl;
   messenger->send_message(req,
 						  MSG_ADDR_MDS(mds), MDS_PORT_SERVER,
 						  0);

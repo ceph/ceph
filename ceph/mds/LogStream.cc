@@ -21,6 +21,9 @@ int LogStream::append(LogEvent *e, Context *c)
   // serialize
   crope buffer = e->get_serialized();
   size_t buflen = buffer.length();
+
+  dout(10) << "append event type " << e->get_type() << " size " << buflen << " at log offset " << append_pos << endl;
+
   
   // advance ptr for later
   append_pos += buffer.length();
@@ -37,6 +40,7 @@ int LogStream::append(LogEvent *e, Context *c)
 
 // reading
 
+/*
 class C_LS_ReadNext : public Context {
   LogStream *ls;
   LogEvent **le;
@@ -51,29 +55,64 @@ public:
 	ls->read_next(le,c,2);
   }
 };
+*/
+
+class C_LS_ReadChunk : public Context {
+public:
+  crope next_bit;
+  LogStream *ls;
+  LogEvent **le;
+  Context *c;
+  C_LS_ReadChunk(LogStream *ls, LogEvent **le, Context *c) {
+	this->ls = ls;
+	this->le = le;
+	this->c = c;
+  }
+  void finish(int result) {
+	ls->did_read_bit(next_bit, le, c);
+  }
+};
+
+void LogStream::did_read_bit(crope& next_bit, LogEvent **le, Context *c) 
+{
+  // add to our buffer
+  buffer.append(next_bit);
+  reading_block = false;
+  
+  // throw off beginning part
+  if (buffer.length() > g_conf.mdlog_read_inc*2) {
+	int trim = buffer.length() - g_conf.mdlog_read_inc*2;
+	buf_start += trim;
+	buffer = buffer.substr(trim, buffer.length() - trim);
+	dout(10) << "did_read_bit adjusting buf_start now +" << trim << " = " << buf_start << " len " << buffer.length() << endl;
+  }
+  
+  // continue at step 2
+  read_next(le, c, 2);
+}
 
 int LogStream::read_next(LogEvent **le, Context *c, int step) 
 {
   if (step == 1) {
 	// does buffer have what we want?
-	if (buf_start > cur_pos ||
-		buf_start+buffer.length() < cur_pos+4) {
+	//if (buf_start > cur_pos ||
+	//buf_start+buffer.length() < cur_pos+4) {
+	if (buf_start+buffer.length() < cur_pos+ g_conf.mdlog_read_inc/2) {
 
 	  // make sure block is being read
 	  if (reading_block) {
-		dout(5) << "read_next already reading log head from disk, offset " << cur_pos << endl;
+		dout(10) << "read_next already reading log head from disk, offset " << cur_pos << endl;
 		assert(0);  
-		//waiting_for_read_block.push_back(new C_LS_ReadNext(this, le, c));
 	  } else {
-		dout(5) << "read_next reading log head from disk, offset " << cur_pos << endl;
+		off_t start = buf_start+buffer.length();
+		dout(10) << "read_next reading log head from disk, offset " << start << " len " << g_conf.mdlog_read_inc << endl;
 		// nope.  read a chunk
-		buf_start = cur_pos;
-		buffer.clear();
+		C_LS_ReadChunk *readc = new C_LS_ReadChunk(this, le, c);
 		reading_block = true;
 		mds->osd_read(osd, oid,
-					  g_conf.mdlog_read_inc, cur_pos,
-					  &buffer, 
-					  new C_LS_ReadNext(this, le, c));
+					  g_conf.mdlog_read_inc, start,
+					  &readc->next_bit,
+					  readc);
 	  }
 	  return 0;
 	}
@@ -91,7 +130,7 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	buffer.copy(off+sizeof(__uint32_t), sizeof(__uint32_t), (char*)&length);
 	off += sizeof(type) + sizeof(length);
 
-	dout(5) << "read_next got event type " << type << " size " << length << " at log offset " << cur_pos << endl;
+	dout(10) << "read_next got event type " << type << " size " << length << " at log offset " << cur_pos << endl;
 	cur_pos += sizeof(type) + sizeof(length) + length;
 
 	switch (type) {
@@ -107,6 +146,8 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	case EVENT_INODEUNLINK:
 	  *le = new EInodeUnlink(buffer.substr(off,length));
 	  break;
+
+	  
 
 	default:
 	  dout(1) << "uh oh, unknown event type " << type << endl;

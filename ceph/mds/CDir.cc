@@ -53,6 +53,12 @@ inodeno_t CDir::ino() {
 }
 
 
+CDir *CDir::get_parent_dir()
+{
+  return inode->get_parent_dir();
+}
+
+
 void CDir::hit(int type) 
 {
   assert(type >= 0 && type < MDS_NPOP);
@@ -192,6 +198,7 @@ void CDir::add_waiter(int tag, Context *c) {
 	  // it's us, pin here.  (fall thru)
 	} else {
 	  // pin parent!
+	  dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, dir " << *inode << " is not root, trying parent" << endl;
 	  inode->parent->dir->add_waiter(tag, c);
 	  return;
 	}

@@ -44,8 +44,7 @@ using namespace std;
 
 #define CINODE_PIN_UNLINKING 10022
 
-#define CINODE_PIN_LOCKWAIT  10030   // waiter
-#define CINODE_PIN_SYNCWAIT  10031   // "
+#define CINODE_PIN_WAITER    10030   // waiter
 #define CINODE_PIN_DIRWAIT   10032   // "
 #define CINODE_PIN_DIRWAITDN 10033   // "
 
@@ -182,7 +181,6 @@ class CInode : LRUObject {
   multiset<int>         open_read;
   multiset<int>         open_write;
 
-  multiset<int>         client_wait_for_sync;
   MInodeSyncStart      *pending_sync_request;
 
  private:
@@ -206,6 +204,7 @@ class CInode : LRUObject {
   bool is_dir() { return inode.isdir; }
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_auth() { return auth; }
+  bool is_replica() { return !auth; }
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDir *get_parent_dir();

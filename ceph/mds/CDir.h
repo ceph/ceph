@@ -147,6 +147,7 @@ class CDir {
 
   // -- accessors --
   CInode *get_inode() { return inode; }
+  CDir *get_parent_dir();
   inodeno_t ino();
 
   CDir_map_t::iterator begin() { return items.begin(); }

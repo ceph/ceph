@@ -2,22 +2,34 @@
 => grep for FIXME :)
 
 
-- log MDS actions
-  - imports/exports
-  - hash/unhash
-
-- possible import/export issue: /usr freezing, /usr/local imports (and completes).. weirdness?
-
-- possible/probable bug: lock supposedly => sync, but an inode lock_start doesn't do a client sync.  so far the way it's used makes this okay, but...
+BUGS?
+- proper state diagram for sync, presync, etc. on REPLICAS, and relationshipo to client access?
 
 
-- fix client cache stuff so that it can handle a dynamic file system!
+ISSUES
+- log
+  - overall logging strategy.  
+    - currently (?): do everything immediately, reply when logged.
+  - the log grows indefinitely
 
+
+
+FIX
+
+- hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
+
+- soft and hard metadata should be fully independent?
+  - hard lock (owner/mode) is relative to namespace
+  - soft sync (mtime/size) is relative to inode (even when dangling)
 
 
 CLEANUP
 - make mdcache import/export stuff take CDir instead of CInode
+- cout << *dir
 - client
+
+DOCUMENT
+
 
 TEST
 - test unlink
@@ -34,6 +46,10 @@ IMPLEMENT
 - mkdir
 - rename
 
+- log MDS actions
+  - imports/exports
+  - hash/unhash
+
 - smarter balancing
   - popularity calculation and management is inconsistent, wrong.
   - does it work?
@@ -42,4 +58,3 @@ IMPLEMENT
 - dump active config in run output somewhere
 
 - anchors and hard links
-

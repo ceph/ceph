@@ -68,11 +68,11 @@ class MDCache {
   list<Context*>     waiting_for_root;
 
   // imports and exports
-  set<CInode*>       imports;                // includes root (on mds0)
-  set<CInode*>       exports;
-  multimap<CInode*,CInode*>  nested_exports; // nested exports of (imports|root)
+  set<CDir*>             imports;                // includes root (on mds0)
+  set<CDir*>             exports;
+  multimap<CDir*,CDir*>  nested_exports;   // nested exports of (imports|root)
   
-  multimap<CDir*, int>       unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
+  multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
         // maps frozen_dir_ino's to waiting-for-discover ino's.
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
@@ -119,8 +119,8 @@ class MDCache {
 	return NULL;
   }
 
-  CInode *get_containing_import(CInode *in);
-  CInode *get_containing_export(CInode *in);
+  CDir *get_containing_import(CDir *in);
+  CDir *get_containing_export(CDir *in);
 
 
   // adding/removing
@@ -159,10 +159,11 @@ class MDCache {
 
   // -- import/export --
   bool is_import(CDir *dir) {
-	return imports.count(dir->inode);
+	assert(dir->is_import() == imports.count(dir));
+	return dir->is_import();
   }
   bool is_export(CDir *dir) {
-	return exports.count(dir->inode);
+	return exports.count(dir);
   }
   // exporter
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);

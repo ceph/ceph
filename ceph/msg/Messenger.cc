@@ -42,6 +42,9 @@ using namespace std;
 #include "messages/MInodeLockAck.h"
 #include "messages/MInodeLockRelease.h"
 
+#include "messages/MInodeUnlink.h"
+#include "messages/MInodeUnlinkAck.h"
+
 Message *
 decode_message(crope& ser)
 {
@@ -147,6 +150,13 @@ decode_message(crope& ser)
 	break;
   case MSG_MDS_INODELOCKRELEASE:
 	m = new MInodeLockRelease();
+	break;
+
+  case MSG_MDS_INODEUNLINK:
+	m = new MInodeUnlink();
+	break;
+  case MSG_MDS_INODEUNLINKACK:
+	m = new MInodeUnlinkAck();
 	break;
 
 

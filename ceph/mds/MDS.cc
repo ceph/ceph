@@ -357,6 +357,20 @@ int MDS::handle_client_request(MClientRequest *req)
   vector<CInode*> trace;
   int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
+  if (r == -ENOENT ||
+	  r == -ENOTDIR ||
+	  r == -EISDIR) {
+	// error! 
+	dout(10) << "error, replying" << endl;
+	MClientReply *reply = new MClientReply(req, r);
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	
+	// discard request
+	delete req;
+	return 0;
+  }
 
   logger->inc("chit");
 
@@ -443,13 +457,15 @@ public:
   CInode *in;
   MClientRequest *req;
   MDS *mds;
-  C_MDS_TouchFinish(MDS *mds, MClientRequest *req, CInode *cur) {
+  MClientReply *reply;
+  C_MDS_TouchFinish(MDS *mds, MClientRequest *req, CInode *cur, MClientReply *reply) {
 	this->mds = mds;
 	this->in = cur;
 	this->req = req;
+	this->reply = reply;
   }
   virtual void finish(int result) {
-	mds->handle_client_touch_2(req, in);
+	mds->handle_client_touch_2(req, reply, in);
   }
 };
 
@@ -477,23 +493,26 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
   // tell replicas
   // actually, no!  it's synced by me, or async.  they'll get told upon release.  
   //mdcache->send_inode_updates(cur);
-  
+
+  // init reply
+  MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist( cur, whoami );
+  reply->set_result(0);
+
   // log it
   dout(10) << "log for " << *req << " touch " << cur->inode.touched << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
-					  new C_MDS_TouchFinish(this, req, cur));
+					  new C_MDS_TouchFinish(this, req, cur, reply));
   return 0;
 }
 
 						   
 void MDS::handle_client_touch_2(MClientRequest *req,
+								MClientReply *reply,
 								CInode *cur)
 {
   // reply
   dout(10) << "reply to " << *req << " touch" << endl;
-  MClientReply *reply = new MClientReply(req);
-  reply->set_trace_dist( cur, whoami );
-  reply->set_result(0);
   
   messenger->send_message(reply,
 						  MSG_ADDR_CLIENT(req->get_client()), 0,
@@ -519,13 +538,15 @@ public:
   CInode *in;
   MClientRequest *req;
   MDS *mds;
-  C_MDS_ChmodFinish(MDS *mds, MClientRequest *req, CInode *cur) {
+  MClientReply *reply;
+  C_MDS_ChmodFinish(MDS *mds, MClientRequest *req, CInode *cur, MClientReply *reply) {
 	this->mds = mds;
 	this->in = cur;
 	this->req = req;
+	this->reply = reply;
   }
   virtual void finish(int result) {
-	mds->handle_client_chmod_2(req, in);
+	mds->handle_client_chmod_2(req, reply, in);
   }
 };
 
@@ -551,22 +572,27 @@ MClientReply *MDS::handle_client_chmod(MClientRequest *req,
   cur->inode.touched++; // blah
   cur->mark_dirty();
 
+  // start reply
+  MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist( cur, whoami );
+  reply->set_result(0);
+
+  mdcache->write_hard_finish(cur);
+
   // log it
   dout(10) << "log for " << *req << " chmod" << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
-					  new C_MDS_ChmodFinish(this, req, cur));
+					  new C_MDS_ChmodFinish(this, req, cur, reply));
   return 0;
 }
 
 
 void MDS::handle_client_chmod_2(MClientRequest *req,
+								MClientReply *reply,
 								CInode *cur)
 {
   // reply
   dout(10) << "handle_client_chmod_2 reply to " << *req << " chmod " << endl;
-  MClientReply *reply = new MClientReply(req);
-  reply->set_trace_dist( cur, whoami );
-  reply->set_result(0);
   
   messenger->send_message(reply,
 						  MSG_ADDR_CLIENT(req->get_client()), 0,
@@ -582,7 +608,6 @@ void MDS::handle_client_chmod_2(MClientRequest *req,
   
   // unpin
   cur->auth_unpin();
-  mdcache->write_hard_finish(cur);
 }
 
 
@@ -870,6 +895,19 @@ void MDS::handle_client_unlink(MClientRequest *req,
   }
 
   dout(7) << "handle_client_unlink on " << *in << endl;
+
+  // can't be presync/lock
+  if (in->is_presync()) {
+	in->add_waiter(CINODE_WAIT_SYNC,
+				   new C_MDS_RetryMessage(this, req));
+	return;
+  }
+  if (in->is_prelock()) {
+	in->add_waiter(CINODE_WAIT_LOCK,
+				   new C_MDS_RetryMessage(this, req));
+	return;
+  }
+
   mdcache->inode_unlink(in, 
 						new C_MDS_UnlinkInode(this,in,req));
 }

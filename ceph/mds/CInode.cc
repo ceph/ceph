@@ -28,10 +28,10 @@ CInode::CInode() : LRUObject() {
   dir_auth = CDIR_AUTH_PARENT;
   dir = NULL;  // create CDir as needed
 
-  state = 0;
   auth_pins = 0;
   nested_auth_pins = 0;
-  //  state = 0;
+
+  state = 0;
   dist_state = 0;
   lock_active_count = 0;
   
@@ -232,7 +232,7 @@ void CInode::add_waiter(int tag, Context *c) {
   
   // this inode.
   if (waiting.size() == 0)
-	get(CINODE_PIN_LOCKWAIT);
+	get(CINODE_PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on inode " << *this << endl;
 }
@@ -254,7 +254,7 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
   }
 
   if (waiting.empty())
-	put(CINODE_PIN_LOCKWAIT);
+	put(CINODE_PIN_WAITER);
 }
 
 

@@ -23,10 +23,12 @@ class ClNode : public LRUObject {
   hash_map<string, ClNode*> children;
   vector<int> dist;
 
+  bool dangling;
 
   ClNode() {
 	parent = 0;
 	isdir = havedircontents = false;
+	dangling = false;
   }
   
   int depth() {
@@ -46,6 +48,7 @@ class ClNode : public LRUObject {
   void detach() {
 	if (parent) {
 	  parent->unlink(ref_name);
+	  parent = NULL;
 	}
   }
 

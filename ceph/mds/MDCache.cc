@@ -143,6 +143,11 @@ void MDCache::unlink_inode(CInode *in)
   // detach from parents
   if (in->nparents == 1) {
 	CDentry *dn = in->parent;
+
+	// unlink auth_pin count
+	dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
+
+	// detach
 	dn->dir->remove_child(dn);
 	in->remove_parent(dn);
 	delete dn;
@@ -192,7 +197,7 @@ bool MDCache::trim(__int32_t max) {
 	  idir->dir->state_clear(CDIR_STATE_COMPLETE);
 
 	  // reexport?
-	  if (imports.count(idir) &&                // import
+	  if (imports.count(idir->dir) &&                // import
 		  idir->dir->get_size() == 0 &&         // no children
 		  !idir->is_root() &&                   // not root
 		  !(idir->dir->is_freezing() || idir->dir->is_frozen())  // FIXME: can_auth_pin?
@@ -312,13 +317,13 @@ bool MDCache::shutdown_pass()
 	for (set<CInode*>::iterator it = imports.begin();
 		 it != imports.end();
 		 ) {
-	  CInode *im = *it;
+	  CDir *im = *it;
 	  it++;
-	  if (im->is_root()) continue;
-	  if (im->dir->is_frozen() || im->dir->is_freezing()) continue;
+	  if (im->inode->is_root()) continue;
+	  if (im->is_frozen() || im->is_freezing()) continue;
 	  
 	  dout(7) << "sending " << *im << " back to mds0" << endl;
-	  export_dir(im,0);
+	  export_dir(im->inode,0);
 	}
   } else {
 	// shut down root?
@@ -327,7 +332,7 @@ bool MDCache::shutdown_pass()
 	  dout(7) << "wahoo, all i have left is root!" << endl;
 	  
 	  // un-import.
-	  imports.erase(root);
+	  imports.erase(root->dir);
 	  root->dir->state_clear(CDIR_STATE_IMPORT);
 	  root->put(CINODE_PIN_IMPORT);
 
@@ -336,7 +341,7 @@ bool MDCache::shutdown_pass()
 	  
 	  if (root->ref != 0) {
 		dout(1) << "ugh, bad shutdown!" << endl;
-		imports.insert(root);
+		imports.insert(root->dir);
 		root->dir->state_set(CDIR_STATE_IMPORT);
 		root->get(CINODE_PIN_IMPORT);
 	  } else 
@@ -417,7 +422,7 @@ int MDCache::open_root(Context *c)
 	set_root( root );
 
 	// root is technically an import (from a vacuum)
-	imports.insert( root );
+	imports.insert( root->dir );
 	root->dir->state_set(CDIR_STATE_IMPORT);
 	root->get(CINODE_PIN_IMPORT);
 
@@ -447,28 +452,28 @@ int MDCache::open_root(Context *c)
 }
 
 
-CInode *MDCache::get_containing_import(CInode *in)
+CDir *MDCache::get_containing_import(CDir *in)
 {
-  CInode *imp = in;  // might be *in
+  CDir *imp = in;  // might be *in
 
   // find the underlying import!
   while (imp && 
-		 imports.count(imp) == 0) {
-	imp = imp->get_parent_inode();
+		 !imp->is_import()) {
+	imp = imp->get_parent_dir();
   }
 
   assert(imp);
   return imp;
 }
 
-CInode *MDCache::get_containing_export(CInode *in)
+CDir *MDCache::get_containing_export(CDir *in)
 {
-  CInode *ex = in;  // might be *in
+  CDir *ex = in;  // might be *in
 
   // find the underlying import!
   while (ex &&                        // white not at root,
 		 exports.count(ex) == 0) {    // we didn't find an export,
-	ex = ex->get_parent_inode();
+	ex = ex->get_parent_dir();
   }
 
   return ex;
@@ -503,6 +508,14 @@ int MDCache::proc_message(Message *m)
 
   case MSG_MDS_INODEEXPIRE:
 	handle_inode_expire((MInodeExpire*)m);
+	break;
+
+
+  case MSG_MDS_INODEUNLINK:
+	handle_inode_unlink((MInodeUnlink*)m);
+	break;
+  case MSG_MDS_INODEUNLINKACK:
+	handle_inode_unlink_ack((MInodeUnlinkAck*)m);
 	break;
 
 
@@ -772,7 +785,7 @@ int MDCache::handle_discover(MDiscover *dis)
 
 	dout(7) << "handle_discover got result" << endl;
 	  
-	int r = path_traverse(dis->get_basepath(), trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG??
+	int r = path_traverse(dis->get_basepath(), trav, dis, MDS_TRAVERSE_FAIL);   // FIXME BUG??
 	if (r < 0) {
 	  dout(1) << "handle_discover result, but not in cache any more.  dropping." << endl;
 	  delete dis;
@@ -1213,6 +1226,8 @@ public:
 void MDCache::inode_unlink(CInode *in, Context *c)
 {
   assert(in->is_auth());
+  assert(!in->is_presync());
+  assert(!in->is_prelock());
   
   // drop any sync, lock on inode
   if (in->is_syncbyme()) inode_sync_release(in);
@@ -1231,6 +1246,7 @@ void MDCache::inode_unlink(CInode *in, Context *c)
   // unlink
   unlink_inode( in );
   in->state_set(CINODE_STATE_DANGLING);
+  in->mark_clean();   // don't care anymore!
 
   // tell replicas
   if (in->is_cached_by_anyone()) {
@@ -1272,7 +1288,25 @@ void MDCache::inode_unlink_finish(CInode *in)
 
 void MDCache::handle_inode_unlink(MInodeUnlink *m)
 {
-  assert(0); // write me
+  CInode *in = get_inode(m->get_ino());
+  if (!in) {
+	dout(7) << "handle_inode_unlink don't have ino " << m->get_ino() << endl;
+	mds->messenger->send_message(new MInodeUnlinkAck(m->get_ino(), false),
+								 m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	delete m;
+	return;
+  }
+  
+  dout(7) << "handle_inode_unlink on " << *in << endl;
+
+  // unlink
+  unlink_inode( in );
+  in->state_set(CINODE_STATE_DANGLING);
+
+  mds->messenger->send_message(new MInodeUnlinkAck(m->get_ino()),
+							   m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  delete m;
+  return;
 }
 
 void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
@@ -1387,7 +1421,8 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	  // i am auth: i need sync
 	  if (in->is_syncbyme()) goto yes;
 	  if (in->is_lockbyme()) goto yes;   // lock => sync
-	  if (!in->is_cached_by_anyone()) goto yes;  // i'm alone
+	  if (!in->is_cached_by_anyone() &&
+		  !in->is_open_write()) goto yes;  // i'm alone
 	} else {
 	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
@@ -1491,7 +1526,8 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	  // i am auth: i need sync
 	  if (in->is_syncbyme()) goto yes;
 	  if (in->is_lockbyme()) goto yes;   // lock => sync
-	  if (!in->is_cached_by_anyone()) goto yes;  // i'm alone
+	  if (!in->is_cached_by_anyone() &&
+		  !in->is_open_write()) goto yes;  // i'm alone
 	} else {
 	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
@@ -1583,13 +1619,13 @@ void MDCache::inode_sync_wait(CInode *in)
 void MDCache::inode_sync_start(CInode *in)
 {
   // wait for all replicas
-  dout(5) << "inode_sync_start on " << *in << ", waiting for " << in->cached_by << endl;
+  dout(5) << "inode_sync_start on " << *in << ", waiting for " << in->cached_by << " " << in->get_open_write()<< endl;
 
   assert(in->is_auth());
   assert(!in->is_presync());
   assert(!in->is_sync());
 
-  in->sync_waiting_for_ack = in->cached_by;
+  in->sync_waiting_for_ack.clear();
   in->dist_state |= CINODE_DIST_PRESYNC;
   in->get(CINODE_PIN_PRESYNC);
   in->auth_pin();
@@ -1600,22 +1636,34 @@ void MDCache::inode_sync_start(CInode *in)
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
+	in->sync_waiting_for_ack.insert(MSG_ADDR_MDS(*it));
 	mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, mds->get_nodeid()),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
+
+  // sync clients
+  for (multiset<int>::iterator it = in->get_open_write().begin();
+	   it != in->get_open_write().end();
+	   it++) {
+	in->sync_waiting_for_ack.insert(MSG_ADDR_CLIENT(*it));
+	mds->messenger->send_message(new MInodeSyncStart(in->ino(), mds->get_nodeid()),
+								 MSG_ADDR_CLIENT(*it), 0,
+								 MDS_PORT_CACHE);
+  }
+
 }
 
 void MDCache::inode_sync_release(CInode *in)
 {
-  dout(5) << "inode_sync_release on " << *in << ", messages to " << in->get_cached_by() << endl;
+  dout(5) << "inode_sync_release on " << *in << ", messages to " << in->get_cached_by() << " " << in->get_open_write() << endl;
   
   assert(in->is_syncbyme());
   assert(in->is_auth());
 
-  in->auth_unpin();
   in->dist_state &= ~CINODE_DIST_SYNCBYME;
 
+  // release replicas
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
@@ -1623,6 +1671,17 @@ void MDCache::inode_sync_release(CInode *in)
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
+  
+  // release writers
+  for (multiset<int>::iterator it = in->get_open_write().begin();
+	   it != in->get_open_write().end();
+	   it++) {
+	mds->messenger->send_message(new MInodeSyncRelease(in),
+								 MSG_ADDR_CLIENT(*it), 0,
+								 MDS_PORT_CACHE);
+  }
+
+  in->auth_unpin();
 }
 
 
@@ -1646,15 +1705,19 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   // we shouldn't be authoritative...
   assert(!in->is_auth());
   
+  // lock it
+  in->dist_state |= CINODE_DIST_SYNCBYAUTH;
+
   // open for write by clients?
   if (in->is_open_write()) {
 	dout(7) << "handle_sync_start " << *in << " syncing write clients " << in->get_open_write() << endl;
 	
 	// sync clients
-	in->client_wait_for_sync = in->open_write;
+	in->sync_waiting_for_ack.clear();
 	for (multiset<int>::iterator it = in->get_open_write().begin();
 		 it != in->get_open_write().end();
 		 it++) {
+	  in->sync_waiting_for_ack.insert(MSG_ADDR_CLIENT(*it));
 	  mds->messenger->send_message(new MInodeSyncStart(in->ino(), mds->get_nodeid()),
 								   MSG_ADDR_CLIENT(*it), 0,
 								   MDS_PORT_CACHE);
@@ -1672,10 +1735,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback)
 {
   dout(7) << "inode_sync_ack " << *in << endl;
-  
-  // lock it
-  in->dist_state |= CINODE_DIST_SYNCBYAUTH;
-  
+    
   // send ack
   mds->messenger->send_message(new MInodeSyncAck(in->ino(), true, wantback),
 							   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
@@ -1689,32 +1749,19 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
   CInode *in = get_inode(m->get_ino());
   assert(in);
 
-  if (MSG_ADDR_ISCLIENT(m->get_source())) {
-	int client = MSG_ADDR_NUM(m->get_source());
-	dout(7) << "handle_sync_ack from client " << client << " on " << *in << endl;
-	
-	assert(in->client_wait_for_sync.count(client) == 1);
-	in->client_wait_for_sync.erase(in->client_wait_for_sync.find(client));
-	if (in->client_wait_for_sync.empty()) {
-	  inode_sync_ack(in, in->pending_sync_request, true);  // wantback!
-	  in->pending_sync_request = 0;
-	} else {
-	  dout(7) << "handle_sync_ack still need clients " << in->client_wait_for_sync << endl;
-	}
+  dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << endl;
 
-	delete m;
-	return;
+  if (in->is_auth()) {
+	assert(in->is_presync());
+  } else {
+	assert(in->is_syncbyauth());
+	assert(in->pending_sync_request);
   }
-
-  dout(7) << "handle_sync_ack " << *in << endl;
-
-  assert(in->is_auth());
-  assert(in->dist_state & CINODE_DIST_PRESYNC);
 
   // remove it from waiting list
   in->sync_waiting_for_ack.erase(m->get_source());
   
-  if (!m->did_have()) {
+  if (MSG_ADDR_ISCLIENT(m->get_source()) && !m->did_have()) {
 	// erase from cached_by too!
 	in->cached_by_remove(m->get_source());
   }
@@ -1731,6 +1778,15 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	
 	// yay!
 	dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << ", last one" << endl;
+
+	if (!in->is_auth()) {
+	  // replica, sync ack back to auth
+	  assert(in->pending_sync_request);
+	  inode_sync_ack(in, in->pending_sync_request, true);
+	  in->pending_sync_request = 0;
+	  delete m;
+	  return;
+	}
 
 	in->dist_state &= ~CINODE_DIST_PRESYNC;
 	in->dist_state |= CINODE_DIST_SYNCBYME;
@@ -1751,21 +1807,24 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	}
 
 	// release sync right away?
-	if (in->is_freezing()) {
-	  dout(7) << "handle_sync_ack freezing " << *in << ", dropping sync immediately" << endl;
-	  inode_sync_release(in);
-	} 
-	else if (in->sync_replicawantback) {
-	  dout(7) << "handle_sync_ack replica wantback, releasing sync immediately" << endl;
-	  inode_sync_release(in);
-	}
-	else if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
-			 (!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
-	  dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
-	  inode_sync_release(in);
-	} 
-	else 
-	  dout(7) << "handle_sync_ack sticky sync is on, keeping sync for now" << endl;
+	if (in->is_syncbyme()) {
+	  if (in->is_freezing()) {
+		dout(7) << "handle_sync_ack freezing " << *in << ", dropping sync immediately" << endl;
+		inode_sync_release(in);
+	  } 
+	  else if (in->sync_replicawantback) {
+		dout(7) << "handle_sync_ack replica wantback, releasing sync immediately" << endl;
+		inode_sync_release(in);
+	  }
+	  else if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
+			   (!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
+		dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
+		inode_sync_release(in);
+	  } 
+	  else 
+		dout(7) << "handle_sync_ack sticky sync is on, keeping sync for now" << endl;
+	} else 
+	  dout(7) << "handle_sync_ack don't have sync anymore, something must have just released it?" << endl;
   }
 
   delete m; // done
@@ -1839,17 +1898,20 @@ void MDCache::handle_inode_sync_recall(MInodeSyncRecall *m)
 	delete m;  // done
 	return;
   }
-  
-  if (!in->is_syncbyme()) {
-	dout(7) << "handle_sync_recall " << m->get_ino() << ", not flagged as sync, dropping" << endl;
-	delete m;  // done
-	return;
-  }
-  
-  dout(7) << "handle_sync_recall " << *in << ", releasing" << endl;
+
   assert(in->is_auth());
   
-  inode_sync_release(in);
+  if (in->is_syncbyme()) {
+	dout(7) << "handle_sync_recall " << *in << ", releasing" << endl;
+	inode_sync_release(in);
+  }
+  else if (in->is_presync()) {
+	dout(7) << "handle_sync_recall " << *in << " is presync, flagging" << endl;
+	in->sync_replicawantback = true;
+  }
+  else {
+	dout(7) << "handle_sync_recall " << m->get_ino() << ", not flagged as sync or presync, dropping" << endl;
+  }
   
   // done
   delete m;
@@ -1935,6 +1997,7 @@ bool MDCache::write_hard_start(CInode *in,
   }
 
  success:
+  dout(5) << "write_hard_start " << *in << endl;
   in->lock_active_count++;
   assert(in->lock_active_count > 0);
   mds->balancer->hit_inode(in, MDS_POP_HARDWR);
@@ -1991,7 +2054,6 @@ void MDCache::inode_lock_release(CInode *in)
   assert(in->is_lockbyme());
   assert(in->is_auth());
 
-  in->auth_unpin();
   in->dist_state &= ~CINODE_DIST_LOCKBYME;
 
   for (set<int>::iterator it = in->cached_by_begin(); 
@@ -2001,6 +2063,8 @@ void MDCache::inode_lock_release(CInode *in)
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
+
+  in->auth_unpin();
 }
 
 void MDCache::inode_lock_wait(CInode *in)
@@ -2394,18 +2458,18 @@ void MDCache::export_dir_frozen(CInode *in,
 
   
   // update imports/exports
-  CInode *containing_import = get_containing_import(in);
-  if (containing_import == in) {
+  CDir *containing_import = get_containing_import(in->dir);
+  if (containing_import == in->dir) {
 	dout(7) << " i'm rexporting a previous import" << endl;
-	imports.erase(in);
+	imports.erase(in->dir);
 	in->dir->state_clear(CDIR_STATE_IMPORT);
 	in->put(CINODE_PIN_IMPORT);                  // unpin, no longer an import
 
 	// discard nested exports (that we're handing off
-	pair<multimap<CInode*,CInode*>::iterator, multimap<CInode*,CInode*>::iterator> p =
-	  nested_exports.equal_range(in);
+	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
+	  nested_exports.equal_range(in->dir);
 	while (p.first != p.second) {
-	  CInode *nested = (*p.first).second;
+	  CDir *nested = (*p.first).second;
 
 	  // nested beneath our new export *in; remove!
 	  dout(7) << " export " << *nested << " was nested beneath us; removing from export list(s)" << endl;
@@ -2416,20 +2480,20 @@ void MDCache::export_dir_frozen(CInode *in,
 
   } else {
 	dout(7) << " i'm a subdir nested under import " << *containing_import << endl;
-	exports.insert(in);
-	nested_exports.insert(pair<CInode*,CInode*>(containing_import, in));
+	exports.insert(in->dir);
+	nested_exports.insert(pair<CDir*,CDir*>(containing_import, in->dir));
 
 	in->get(CINODE_PIN_EXPORT);                  // i must keep it pinned
 	
 	// discard nested exports (that we're handing off)
-	pair<multimap<CInode*,CInode*>::iterator, multimap<CInode*,CInode*>::iterator> p =
+	pair<multimap<CDIr*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
 	  nested_exports.equal_range(containing_import);
 	while (p.first != p.second) {
-	  CInode *nested = (*p.first).second;
+	  CDir *nested = (*p.first).second;
 	  multimap<CInode*,CInode*>::iterator prev = p.first;
 	  p.first++;
 
-	  CInode *containing_export = get_containing_export(nested->get_parent_inode());
+	  CDir *containing_export = get_containing_export(nested->get_parent_dir());
 	  if (!containing_export) continue;
 	  if (nested == in) continue;  // ignore myself
 
@@ -2550,8 +2614,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 		subdirs.push_back(in);  // it's ours, recurse.
 	  } else {
 		dout(7) << " encountered nested export " << *in << " dir_auth " << in->dir_auth << "; removing from exports" << endl;
-		assert(exports.count(in) == 1); 
-		exports.erase(in);                    // discard nested export   (nested_exports updated above)
+		assert(exports.count(in->dir) == 1); 
+		exports.erase(in->dir);                    // discard nested export   (nested_exports updated above)
 		in->put(CINODE_PIN_EXPORT);
 	  }
 	} 
@@ -2740,33 +2804,35 @@ public:
 void MDCache::handle_export_dir(MExportDir *m)
 {
   CInode *in = get_inode(m->get_ino());
+  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
+  CDir *dir = in->dir;
+
   int oldauth = m->get_source();
   assert(in);
   
-  dout(7) << "handle_export_dir, import_dir " << *in << endl;
+  dout(7) << "handle_export_dir, import_dir " << *dir << endl;
 
   show_imports();
 
   mds->logger->inc("im");
 
-  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
 
-  assert(in->dir->is_auth() == false);
+  assert(dir->is_auth() == false);
 
   // note new authority (locally)
   in->dir_auth = mds->get_nodeid();
 
-  CInode *containing_import;
-  if (exports.count(in)) {
+  CDir *containing_import;
+  if (exports.count(dir)) {
 	// reimporting
 	dout(7) << " i'm reimporting this dir!" << endl;
-	exports.erase(in);
+	exports.erase(dir);
 
 	in->put(CINODE_PIN_EXPORT);                // unpin, no longer an export
 
-	containing_import = get_containing_import(in);  
+	containing_import = get_containing_import(dir);  
 	dout(7) << "  it is nested under import " << *containing_import << endl;
-	for (pair< multimap<CInode*,CInode*>::iterator, multimap<CInode*,CInode*>::iterator > p =
+	for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p =
 		   nested_exports.equal_range( containing_import );
 		 p.first != p.second;
 		 p.first++) {
@@ -2777,11 +2843,11 @@ void MDCache::handle_export_dir(MExportDir *m)
 	}
   } else {
 	// new import
-	imports.insert(in);
-	in->dir->state_set(CDIR_STATE_IMPORT);
+	imports.insert(dir);
+	dir->state_set(CDIR_STATE_IMPORT);
 	in->get(CINODE_PIN_IMPORT);                // must keep it pinned
 
-	containing_import = in;  // imported exports nested under *in
+	containing_import = dir;  // imported exports nested under *in
   }
 
   // i shouldn't be waiting for any ReplicateHashedAck's yet
@@ -2857,9 +2923,6 @@ void MDCache::handle_export_dir_finish(CInode *in)
   show_imports();
   mds->logger->set("nex", exports.size());
   mds->logger->set("nim", imports.size());
-
-
-
 
 
   // finish contexts
@@ -3076,33 +3139,33 @@ void MDCache::import_dir_block(pchar& p,
 	  if (in->dir_auth == mds->get_nodeid()) {
 		// adjust the import
 		dout(7) << " importing nested export " << *in << " to ME!  how fortuitous" << endl;
-		imports.erase(in);
+		imports.erase(in->dir);
 		in->dir->state_clear(CDIR_STATE_IMPORT);
 
 		mds->logger->inc("immyex");
 
 		// move nested exports under containing_import
-		for (pair<multimap<CInode*,CInode*>::iterator, multimap<CInode*,CInode*>::iterator> p =
+		for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
 			   nested_exports.equal_range(in);
 			 p.first != p.second;
 			 p.first++) {
 		  CInode *nested = (*p.first).second;
 		  dout(7) << "     moving nested export " << nested << " under " << containing_import << endl;
-		  nested_exports.insert(pair<CInode*,CInode*>(containing_import, nested));
+		  nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
 		}
 
 		// de-list under old import
-		nested_exports.erase(in);	
+		nested_exports.erase(in->dir);	
 
 		in->dir_auth = CDIR_AUTH_PARENT;
 		in->put(CINODE_PIN_IMPORT);       // imports are pinned, no longer import
 	  } else {
 		
-		dout(7) << " importing nested export " << *in << " to " << in->dir_auth << endl;
+		dout(7) << " importing nested export " << *in->dir << " to " << in->dir_auth << endl;
 		// add this export
 		in->get(CINODE_PIN_EXPORT);           // all exports are pinned
-		exports.insert(in);
-		nested_exports.insert(pair<CInode*,CInode*>(containing_import, in));
+		exports.insert(in->dir);
+		nested_exports.insert(pair<CDir*,CDir*>(containing_import, in->dir));
 		mds->logger->inc("imex");
 	  }
 
@@ -3821,15 +3884,21 @@ void MDCache::show_imports()
   for (set<CInode*>::iterator it = imports.begin();
 	   it != imports.end();
 	   it++) {
+	CDir *dir = *it;
 	dout(7) << "  + import " << **it << endl;
+	assert( dir->is_import() );
 	
-	for (pair< multimap<CInode*,CInode*>::iterator, multimap<CInode*,CInode*>::iterator > p = 
+	for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p = 
 		   nested_exports.equal_range( *it );
 		 p.first != p.second;
 		 p.first++) {
 	  CInode *exp = (*p.first).second;
 	  dout(7) << "      - ex " << *exp << " to " << exp->dir_auth << endl;
-	  assert( get_containing_import(exp) == *it );
+	  if ( get_containing_import(exp) != *it ) {
+		dout(7) << "uh oh, containing import is " << get_containing_import(exp) << endl;
+		dout(7) << "uh oh, containing import is " << *get_containing_import(exp) << endl;
+		assert( get_containing_import(exp) == *it );
+	  }
 
 	  if (ecopy.count(exp) != 1) {
 		dout(7) << " nested_export " << *exp << " not in exports" << endl;

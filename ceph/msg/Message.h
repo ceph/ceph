@@ -63,7 +63,7 @@
 #define MSG_ADDR_OSD(x)     (g_conf.num_mds+(x))
 #define MSG_ADDR_CLIENT(x)  (g_conf.num_mds+g_conf.num_osd+(x))
 
-#define MSG_ADDR_ISCLIENT(x)  ((x) > g_conf.num_mds+g_conf.num_osd)
+#define MSG_ADDR_ISCLIENT(x)  ((x) >= g_conf.num_mds+g_conf.num_osd)
 
 #define MSG_ADDR_TYPE(x)    ((x)<g_conf.num_mds ? "mds":((x)<(g_conf.num_mds+g_conf.num_osd) ? "osd":"client"))
 #define MSG_ADDR_NUM(x)    ((x)<g_conf.num_mds ? (x) : \

@@ -50,10 +50,18 @@ class Client : public Dispatcher {
 	return it->second;
   }
   void add_node(ClNode *n) {
+	assert(node_map.count(n->ino) == 0);
 	node_map.insert(pair<inodeno_t,ClNode*>(n->ino, n));
   }
   void remove_node(ClNode *n) {
+	if (cwd == n) cwd = root;
 	node_map.erase(n->ino);
+	cache_lru.lru_remove(n);
+	delete n;
+  }
+  void detach_node(ClNode *n) {
+	if (cwd == n) cwd = root;
+	n->detach();
   }
 
   void done();
