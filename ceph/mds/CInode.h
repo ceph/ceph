@@ -124,6 +124,9 @@ class CInode : LRUObject {
 	 for replica:   undefined */
   unsigned         dist_state;
   set<int>         sync_waiting_for_ack;
+  list<Context*>   waiting_for_sync;
+  list<Context*>   waiting_for_lock;
+  int              soft_sync_count;
 
   // open file state
   // sets of client ids!
@@ -132,8 +135,6 @@ class CInode : LRUObject {
 
  private:
   // waiters
-  list<Context*>   waiting_for_sync;
-  list<Context*>   waiting_for_lock;
 
   // lock nesting
   int hard_pinned;

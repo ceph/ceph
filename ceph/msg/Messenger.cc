@@ -34,6 +34,9 @@ using namespace std;
 #include "messages/MInodeUpdate.h"
 #include "messages/MInodeExpire.h"
 
+#include "messages/MInodeSyncStart.h"
+#include "messages/MInodeSyncAck.h"
+#include "messages/MInodeSyncRelease.h"
 
 Message *
 decode_message(crope& ser)
@@ -117,6 +120,16 @@ decode_message(crope& ser)
 
   case MSG_MDS_INODEEXPIRE:
 	m = new MInodeExpire();
+	break;
+
+  case MSG_MDS_INODESYNCSTART:
+	m = new MInodeSyncStart();
+	break;
+  case MSG_MDS_INODESYNCACK:
+	m = new MInodeSyncAck();
+	break;
+  case MSG_MDS_INODESYNCRELEASE:
+	m = new MInodeSyncRelease();
 	break;
 
 	// -- simple messages without payload --

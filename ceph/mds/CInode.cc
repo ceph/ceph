@@ -28,6 +28,7 @@ CInode::CInode() : LRUObject() {
   nested_hard_pinned = 0;
   //  state = 0;
   dist_state = 0;
+  soft_sync_count = 0;
   
   version = 0;
 
@@ -222,12 +223,16 @@ int CInode::authority(MDCluster *cl) {
 int CInode::dir_authority(MDCluster *mdc) 
 {
   // explicit
-  if (dir_auth >= 0)
+  if (dir_auth >= 0) {
+	cout << "dir_auth explicit at " << *this << endl;
 	return dir_auth;
+  }
 
   // parent
-  if (dir_auth == CDIR_AUTH_PARENT)
+  if (dir_auth == CDIR_AUTH_PARENT) {
+	cout << "dir_auth parent at " << *this << endl;
 	return authority(mdc);
+  }
 
   // hashed
   assert(0);  //  throw "hashed not implemented";

@@ -1,6 +1,6 @@
 // random crap
 
-#define NUMMDS 1
+#define NUMMDS 10
 #define NUMOSD 10
 
 #define CLIENT_CACHE      100
@@ -15,8 +15,8 @@
 
 #define FAKE_CLOCK
 
-#define NUMCLIENT             1
-#define CLIENT_REQUESTS       500000
+#define NUMCLIENT             100
+#define CLIENT_REQUESTS       5000
 
 #define DEBUG_LEVEL 10
 
@@ -26,7 +26,8 @@
 #define AVG_PER_INODE_SIZE    400
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
-#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 100 )
+//#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 100 )
+#define MDS_CACHE_SIZE 25000  // 
 
 #define MDS_CACHE_MIDPOINT    .8
 

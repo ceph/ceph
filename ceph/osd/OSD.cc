@@ -169,7 +169,7 @@ void OSD::write(MOSDWrite *m)
 	dout(1) << "err opening " << f << " " << errno << endl;
 	
 	reply = new MOSDWriteReply(m, -1);
-	assert(0);
+	assert(2+2==5);
 
   } else {
 	// lock

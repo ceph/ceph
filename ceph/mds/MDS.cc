@@ -381,8 +381,8 @@ int MDS::handle_client_request(MClientRequest *req)
 MClientReply *MDS::handle_client_stat(MClientRequest *req,
 									  CInode *cur)
 {
-  //if (mdcache->read_start(cur, req))
-  //return 0;   // ugh
+  if (!mdcache->read_soft_start(cur, req))
+	return 0;  // sync
 
   dout(10) << "reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
   MClientReply *reply = new MClientReply(req);
@@ -390,7 +390,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
 
   // FIXME: put inode info in reply...
 
-  //mdcache->read_finish(cur);
+  mdcache->read_soft_finish(cur);
 
   logger->inc("ostat");
   stat_read.hit();
@@ -428,8 +428,9 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	  return 0;
 	}
 	
-	// lock
-	cur->hard_pin();
+	// write
+	if (!mdcache->write_soft_start(cur, req))
+	  return 0;  // sync
 
 	// do update
 	cur->inode.mtime++; // whatever
@@ -478,7 +479,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
   delete req;
 
   // unpin
-  cur->hard_unpin(); 
+  mdcache->write_soft_finish(cur);
 }
 
 
@@ -497,7 +498,8 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   if (dirauth == whoami) {
 	
 	if (!cur->dir) cur->dir = new CDir(cur, true);
-  
+	assert(cur->dir->is_auth());
+	
 	// frozen?
 	if (cur->dir->is_frozen()) {
 	  // doh!
@@ -507,9 +509,11 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	}
   
 	if (cur->dir->is_complete()) {
-	  // yay, replly
+	  // yay, reply
 	  MClientReply *reply = new MClientReply(req);
 	  
+	  // FIXME: need to sync all inodes in this dir.  blech!
+
 	  // build dir contents
 	  CDir_map_t::iterator it;
 	  int numfiles = 0;
@@ -540,6 +544,8 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  return 0;
 	}
   } else {
+	if (cur->dir) assert(!cur->dir->is_auth());
+
 	if (dirauth < 0) {
 	  assert(dirauth >= 0);
 	} else {

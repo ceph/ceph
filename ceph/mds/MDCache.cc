@@ -27,7 +27,7 @@
 
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
-#include "messages/MInodeSyncFinish.h"
+#include "messages/MInodeSyncRelease.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -873,12 +873,12 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 
   // ugly hack to avoid corrupting weird behavior of dir_auth
   int old_dir_auth = in->dir_auth;
+  bool wasours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
   in->decode_basic_state(m->get_payload());
-  if (!in->dir->is_auth() &&    // not ours (we know)
-	  in->dir_auth == mds->get_nodeid()) {
-	in->dir_auth = old_dir_auth;  // ignore dir_auth, we know its not ours.
-  }
-
+  bool isours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
+  if (wasours != isours)
+	in->dir_auth = old_dir_auth;  // ignore dir_auth, it's clearly bogus
+  
   // done
   delete m;
 }
@@ -991,6 +991,13 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 bool MDCache::read_soft_start(CInode *in, Message *m)
 {
+  if (!in->can_hard_pin()) {
+	dout(5) << "read_soft_start " << *in << " waiting to hard_pin" << endl;
+	in->add_hard_pin_waiter(new C_MDS_RetryMessage(mds,m));
+	return false;
+  }
+  in->hard_pin();
+
   // do i have sync?
   if (in->is_syncbyme()) return true;
 
@@ -1003,11 +1010,13 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	dout(5) << "read_soft_start " << *in << " is softasync|syncbythem, waiting on sync" << endl;
 	in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
 
-	if (!in->is_presync() &&    // aren't already syncstarting
-		!in->is_syncbythem())   // and aren't synced by someone else
+	//if (!in->is_presync() &&    // aren't already syncstarting
+	//!in->is_syncbythem())   // and aren't synced by someone else
+
+	if (!in->is_presync())
 	  sync_start(in);
 
-	return false;
+	goto nope;
   } else {
 	// i am replica
 	if (in->is_softasync()) {
@@ -1018,28 +1027,47 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	  mds->messenger->send_message(m,
 								   MSG_ADDR_MDS(auth), m->get_dest_port(),
 								   MDS_PORT_CACHE);
-	  return false;
+	  goto nope;
 	} 
 	if (in->is_syncbythem()) {
 	  dout(5) << "read_soft_start " << *in << " is syncbythem, waiting on sync " << endl;
 	  in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
-	  return false;
+	  goto nope;
 	}
 
 	// replica is clean.
 	assert(in->is_clean());
 	return true;
   }
+
+ nope:
+  in->hard_unpin();
+  return false;
 }
 
 int MDCache::read_soft_finish(CInode *in)
 {
+  in->hard_unpin();
+  dout(5) << "read_soft_finish " << *in << " soft_sync_count " << in->soft_sync_count << endl;
+
+  /*if (in->is_syncbyme() &&
+	  in->soft_sync_count == 0) {
+	sync_finish(in);
+	}*/
+  
   return 0;  // do nothing, actually?  FIXME
 }
 
 
 bool MDCache::write_soft_start(CInode *in, Message *m)
 {
+  if (!in->can_hard_pin()) {
+	dout(5) << "write_soft_start " << *in << " waiting to hard_pin" << endl;
+	in->add_hard_pin_waiter(new C_MDS_RetryMessage(mds,m));
+	return false;
+  }
+  in->hard_pin();
+	
   // do i have sync?
   if (in->is_syncbyme()) return true;
   
@@ -1052,9 +1080,11 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	// sync
 	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, waiting on sync " << endl;
 	in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
-	
+
 	if (!in->is_presync())
-	  sync_start(in); // start sync
+	  sync_start(in);
+
+	goto nope;
   } else {
 	// i am replica
 	if (in->is_softasync() &&
@@ -1067,14 +1097,29 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	mds->messenger->send_message(m,
 								 MSG_ADDR_MDS(auth), m->get_dest_port(),
 								 m->get_dest_port());
+
+	goto nope;
   }
+
+ nope:
+  in->hard_unpin();   // only pin first time
   return false;
 }
 
+
 int MDCache::write_soft_finish(CInode *in)
 {
+  in->hard_unpin();
+  dout(5) << "write_soft_finish " << *in << " soft_sync_count " << in->soft_sync_count << endl;
+  
+  /*if (in->is_syncbyme() &&
+	  in->soft_sync_count == 0) {
+	sync_finish(in);
+	}*/
+
   return 0;  // do nothing, actually?
 }
+
 
 void MDCache::sync_start(CInode *in)
 {
@@ -1084,8 +1129,9 @@ void MDCache::sync_start(CInode *in)
 
   // wait for all replicas
   in->sync_waiting_for_ack = in->cached_by;
-  in->dist_state &= CINODE_DIST_PRESYNC;
+  in->dist_state |= CINODE_DIST_PRESYNC;
   in->get(CINODE_PIN_PRESYNC);
+  in->hard_pin();
 
   // send messages
   dout(5) << "sync_start on " << *in << ", waiting for " << in->sync_waiting_for_ack << endl;
@@ -1103,14 +1149,15 @@ void MDCache::sync_finish(CInode *in)
   assert(in->is_syncbyme());
   assert(in->is_auth());
 
-  in->dist_state -= CINODE_DIST_SYNCBYME;
+  in->hard_unpin();
+  in->dist_state &= ~CINODE_DIST_SYNCBYME;
   in->put(CINODE_PIN_SYNCBYME);
 
   dout(5) << "sync_finish on " << *in << ", messages to " << in->get_cached_by() << endl;
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
-	mds->messenger->send_message(new MInodeSyncFinish(in),
+	mds->messenger->send_message(new MInodeSyncRelease(in),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
@@ -1127,7 +1174,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   if (!in) {
 	// don't have it anymore!
 	dout(7) << "handle_sync_start " << m->get_ino() << ": don't have it anymore, nak" << endl;
-	mds->messenger->send_message(new MInodeExpire(m->get_ino(), mds->get_nodeid(), true),
+	mds->messenger->send_message(new MInodeSyncAck(m->get_ino(), false),
 								 MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	delete m; // done
@@ -1141,7 +1188,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   
   // lock it
   in->get(CINODE_PIN_SYNCBYTHEM);
-  in->dist_state &= CINODE_DIST_SYNCBYTHEM;
+  in->dist_state |= CINODE_DIST_SYNCBYTHEM;
   
   // send ack
   mds->messenger->send_message(new MInodeSyncAck(in->ino()),
@@ -1154,13 +1201,19 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 {
   CInode *in = get_inode(m->get_ino());
+  dout(7) << "handle_sync_ack " << *in << endl;
   assert(in);
   assert(in->is_auth());
   assert(in->dist_state & CINODE_DIST_PRESYNC);
 
   // remove it from waiting list
   in->sync_waiting_for_ack.erase(m->get_source());
-	
+  
+  if (!m->did_have()) {
+	// erase from cached_by too!
+	in->cached_by_remove(m->get_source());
+  }
+
   if (in->sync_waiting_for_ack.size()) {
 
 	// more coming
@@ -1171,8 +1224,8 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	// yay!
 	dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << ", last one" << endl;
 
-	in->dist_state -= CINODE_DIST_PRESYNC;
-	in->dist_state &= CINODE_DIST_SYNCBYME;
+	in->dist_state &= ~CINODE_DIST_PRESYNC;
+	in->dist_state |= CINODE_DIST_SYNCBYME;
 	in->get(CINODE_PIN_SYNCBYME);
 	in->put(CINODE_PIN_PRESYNC);
 
@@ -1208,12 +1261,17 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
 	delete m;  // done
 	return;
   }
-
-  assert(in->is_syncbythem());
-  assert(!in->is_auth());
+  
+  if (!in->is_syncbythem()) {
+	dout(7) << "handle_sync_release " << m->get_ino() << ", not flagged as sync, dropping" << endl;
+	delete m;  // done
+	return;
+  }
   
   dout(7) << "handle_sync_release " << *in << endl;
+  assert(!in->is_auth());
   
+ 
   in->put(CINODE_PIN_SYNCBYTHEM);
   in->dist_state -= CINODE_DIST_SYNCBYTHEM;
   
@@ -1526,6 +1584,9 @@ void MDCache::export_dir_frozen(CInode *in,
 
   // note new authority (locally)
   in->dir_auth = dest;
+  if (in->parent &&
+	  in->get_parent_inode()->dir_auth == in->dir_auth)
+	in->dir_auth = CDIR_AUTH_PARENT;
 
   // build export message
   MExportDir *req = new MExportDir(in, pop);  // include pop
@@ -1577,6 +1638,9 @@ void MDCache::export_dir_walk(MExportDir *req,
   assert(idir->dir->auth == true);
   idir->dir->auth = false;
 
+  // discard most dir state
+  idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+
   // waiters
   list<Context*> waiting;
   idir->take_lock_waiting(waiting);    // FIXME
@@ -1612,7 +1676,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 
 	if (in->is_dir()) {
 	  istate.dir_auth = in->dir_auth;
-	  assert(in->dir_auth != mds->get_nodeid());   // should be -1
+	  assert(in->dir_auth != mds->get_nodeid());   // should be -1 or dest
 
 	  if (in->dir_auth == -1) {
 		subdirs.push_back(in);  // it's ours, recurse.
@@ -1669,8 +1733,7 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
   dout(7) << "export_dir_ack " << *in << endl;
   
   // remove the metadata from the cache
-  if (in->dir) 
-	export_dir_purge( in, newauth );
+  //no, borken! if (in->dir) export_dir_purge( in, newauth );
 
   // unfreeze
   dout(7) << "export_dir_ack " << *in << ", unfreezing" << endl;
@@ -1688,8 +1751,18 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
 {
   dout(7) << "export_dir_purge on " << *idir << endl;
 
+  assert(0);
+
+  /**
+
+  BROKEN:  in order for this to work we need to know what the bounds (re-exports were) at 
+  the time of the original export, so that we can only deal with those entries; however, we
+  don't know what those items are because we deleted them from exports lists earlier.
+
+  **/
+
   // discard most dir state
-  idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+  //idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
   
   assert(idir->dir->auth == false);
 
@@ -2047,7 +2120,11 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 
   assert(in->dir_auth != mds->get_nodeid());  // not already mine, or weirdness
 
+  bool wasmine = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
   in->dir_auth = m->get_new_auth();
+  bool ismine  = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
+  assert(wasmine == ismine);
+
   send_inode_updates(in);
   
   // done
