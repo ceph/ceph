@@ -48,6 +48,21 @@ class Context;
 #define CDIR_REP_NONE      0
 #define CDIR_REP_LIST      2
 
+
+// wait reasons
+#define CDIR_WAIT_DENTRY         1  // wait for item to be in cache
+#define CDIR_WAIT_COMPLETE       2  // wait for complete dir contents
+#define CDIR_WAIT_FREEZEABLE     4  // hard_pins removed
+#define CDIR_WAIT_UNFREEZE       8  // unfreeze
+#define CDIR_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
+#define CDIR_WAIT_EXPORTACK     16  // export finished
+#define CDIR_WAIT_COMMITTED     32  // did commit (who uses this?**)
+
+#define CDIR_WAIT_ANY   (0xffff)
+
+#define CDIR_WAIT_ATFREEZEROOT   (CDIR_WAIT_AUTHPINNABLE|CDIR_WAIT_UNFREEZE|CDIR_WAIT_AUTHPINNABLE)
+
+
 // CDir
 typedef map<string, CDentry*> CDir_map_t;
 
@@ -62,8 +77,9 @@ class CDir {
   __uint64_t       version;
 
   // waiters
-  list<Context*>   waiting_on_all;  // eg readdir
-  hash_map< string, list<Context*> > waiting_on_dentry;
+  multimap<int, Context*> waiting;  // tag -> context
+  hash_map< string, multimap<int, Context*> >
+	                      waiting_on_dentry;
 
   // cache  (defined for authority; hints for replicas)
   int              dir_rep;
@@ -72,9 +88,9 @@ class CDir {
   bool             auth;            // true if i'm the auth
 
   // lock nesting, freeze
-  int        hard_pinned;
-  int        nested_hard_pinned;
-  list<Context*>  waiting_to_freeze;      // wannabe freezer, NOT waiting for *this to thaw
+  int        auth_pins;
+  int        nested_auth_pins;
+  //list<Context*>  waiting_to_freeze;      // wannabe freezer, NOT waiting for *this to thaw
 
   DecayCounter popularity;
 
@@ -93,8 +109,8 @@ class CDir {
 	state = CDIR_STATE_INITIAL;
 	version = 0;
 
-	hard_pinned = 0;
-	nested_hard_pinned = 0;
+	auth_pins = 0;
+	nested_auth_pins = 0;
 
 	dir_rep = CDIR_REP_NONE;
   }
@@ -169,26 +185,25 @@ class CDir {
 
 
   // waiters  
-  void add_waiter(Context *c);
-  void add_waiter(string& dentry,
+  void add_waiter(int tag, Context *c);
+  void add_waiter(int tag,
+				  string& dentry,
 				  Context *c);
-  void take_waiting(list<Context*>& ls);  // all waiting
-  void take_waiting(string& dentry,
-					list<Context*>& ls);  
+  void take_waiting(int mask, list<Context*>& ls);  // all waiting
+  void take_waiting(int mask, const string& dentry, list<Context*>& ls);  
 
   bool is_frozen();
   bool is_freezing();
   void freeze(Context *c);
-  void freeze_finish();
+  void freeze_finish(list<Context*>& waiting);
   void unfreeze();
-  void add_freeze_waiter(Context *c);
+  //void add_freeze_waiter(Context *c);
 
-  int is_hard_pinned() { return hard_pinned; }
-  int adjust_nested_hard_pinned(int a);
-  bool can_hard_pin() { return !(is_frozen() || is_freezing()); }
-  void add_hard_pin_waiter(Context *c);
-  void hard_pin();
-  void hard_unpin();
+  int is_auth_pinned() { return auth_pins; }
+  int adjust_nested_auth_pins(int a);
+  bool can_auth_pin() { return !(is_frozen() || is_freezing()); }
+  void auth_pin();
+  void auth_unpin();
 
 
 

@@ -440,9 +440,10 @@ public:
 MClientReply *MDS::handle_client_touch(MClientRequest *req,
 									   CInode *cur)
 {
-  if (!cur->can_hard_pin()) {
+  if (!cur->can_auth_pin()) {
 	// wait
-	cur->add_hard_pin_waiter(new C_MDS_RetryMessage(this, req));
+	cur->add_waiter(CINODE_WAIT_AUTHPINNABLE,
+					new C_MDS_RetryMessage(this, req));
 	return 0;
   }
 	
@@ -450,7 +451,7 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
   if (!mdcache->write_soft_start(cur, req))
 	return 0;  // fw or (wait for) sync
 
-  cur->hard_pin();
+  cur->auth_pin();
   
   // do update
   cur->inode.mtime++; // whatever
@@ -491,7 +492,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
   delete req;
 
   // unpin
-  cur->hard_unpin();
+  cur->auth_unpin();
   mdcache->write_soft_finish(cur);
 }
 
@@ -516,9 +517,10 @@ public:
 MClientReply *MDS::handle_client_chmod(MClientRequest *req,
 									   CInode *cur)
 {
-  if (!cur->can_hard_pin()) {
+  if (!cur->can_auth_pin()) {
 	// wait
-	cur->add_hard_pin_waiter(new C_MDS_RetryMessage(this, req));
+	cur->add_waiter(CINODE_WAIT_AUTHPINNABLE,
+					new C_MDS_RetryMessage(this, req));
 	return 0;
   }
 	
@@ -526,7 +528,7 @@ MClientReply *MDS::handle_client_chmod(MClientRequest *req,
   if (!mdcache->write_hard_start(cur, req))
 	return 0;  // fw or (wait for) lock
 
-  cur->hard_pin();
+  cur->auth_pin();
   
   // do update
   cur->inode.mtime++; // whatever
@@ -536,7 +538,7 @@ MClientReply *MDS::handle_client_chmod(MClientRequest *req,
   // log it
   dout(10) << "log for " << *req << " chmod" << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
-					  new C_MDS_TouchFinish(this, req, cur));
+					  new C_MDS_ChmodFinish(this, req, cur));
   return 0;
 }
 
@@ -545,7 +547,7 @@ void MDS::handle_client_chmod_2(MClientRequest *req,
 								CInode *cur)
 {
   // reply
-  dout(10) << "reply to " << *req << " touch" << endl;
+  dout(10) << "handle_client_chmod_2 reply to " << *req << " chmod " << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
@@ -563,7 +565,7 @@ void MDS::handle_client_chmod_2(MClientRequest *req,
   delete req;
   
   // unpin
-  cur->hard_unpin();
+  cur->auth_unpin();
   mdcache->write_hard_finish(cur);
 }
 
@@ -593,7 +595,8 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	if (cur->dir->is_frozen()) {
 	  // doh!
 	  dout(10) << " dir is frozen, waiting" << endl;
-	  cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(this, req));
+	  cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
+						   new C_MDS_RetryMessage(this, req));
 	  return 0;
 	}
   

@@ -67,4 +67,14 @@ inline ostream& operator<<(ostream& out, set<int>& iset) {
   return out;
 }
 
+inline ostream& operator<<(ostream& out, multiset<int>& iset) {
+  for (multiset<int>::iterator it = iset.begin();
+	   it != iset.end();
+	   it++) {
+	if (it != iset.begin()) out << ",";
+	out << *it;
+  }
+  return out;
+}
+
 #endif

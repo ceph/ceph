@@ -27,12 +27,14 @@ CInode::CInode() : LRUObject() {
   dir_auth = CDIR_AUTH_PARENT;
   dir = NULL;  // create CDir as needed
 
-  hard_pinned = 0;
-  nested_hard_pinned = 0;
+  auth_pins = 0;
+  nested_auth_pins = 0;
   //  state = 0;
   dist_state = 0;
   lock_active_count = 0;
   
+  pending_sync_request = 0;
+
   version = 0;
 
   auth = true;  // by default.
@@ -155,61 +157,66 @@ bool CInode::is_frozen()
   return false;
 }
 
-void CInode::add_lock_waiter(Context *c) {
-  if (waiting_for_lock.size() == 0)
-	get(CINODE_PIN_WWAIT);
-  waiting_for_lock.push_back(c);
+void CInode::add_waiter(int tag, Context *c) {
+  // waiting on hierarchy?
+  if (tag & CDIR_WAIT_ATFREEZEROOT) {
+	parent->dir->add_waiter(tag, c);
+	return;
+  }
+  
+  // this inode.
+  if (waiting.size() == 0)
+	get(CINODE_PIN_LOCKWAIT);
+  waiting.insert(pair<int,Context*>(tag,c));
 }
-void CInode::take_lock_waiting(list<Context*>& ls)
+
+void CInode::take_waiting(int mask, list<Context*>& ls)
 {
-  if (waiting_for_lock.size())
-	put(CINODE_PIN_WWAIT);
-  ls.splice(ls.end(), waiting_for_lock);  
+  if (waiting.empty()) return;
+  
+  multimap<int,Context*>::iterator it = waiting.begin();
+  while (it != waiting.end()) {
+	if (it->first & mask) {
+	  ls.push_back(it->second);
+	  waiting.erase(it++);
+	  dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << endl;
+	} else 
+	  it++;
+  }
+
+  if (waiting.empty())
+	put(CINODE_PIN_LOCKWAIT);
 }
 
-void CInode::add_sync_waiter(Context *c) {
-  if (waiting_for_sync.size() == 0)
-	get(CINODE_PIN_RWAIT);
-  waiting_for_sync.push_back(c);
-}
-void CInode::take_sync_waiting(list<Context*>& ls)
-{
-  if (waiting_for_sync.size())
-	put(CINODE_PIN_RWAIT);
-  ls.splice(ls.end(), waiting_for_sync);
-}
 
 
-// locking 
-int CInode::adjust_nested_hard_pinned(int a) {
-  nested_hard_pinned += a;
+// auth_pins
+int CInode::adjust_nested_auth_pins(int a) {
+  nested_auth_pins += a;
   if (parent) 
-	parent->dir->adjust_nested_hard_pinned(a);
+	parent->dir->adjust_nested_auth_pins(a);
 }
 
-bool CInode::can_hard_pin() {
+bool CInode::can_auth_pin() {
   if (parent)
-	return parent->dir->can_hard_pin();
+	return parent->dir->can_auth_pin();
   return true;
 }
 
-void CInode::hard_pin() {
-  get(CINODE_PIN_IHARDPIN + hard_pinned);
-  hard_pinned++;
+void CInode::auth_pin() {
+  get(CINODE_PIN_IAUTHPIN + auth_pins);
+  auth_pins++;
   if (parent)
-	parent->dir->adjust_nested_hard_pinned( 1 );
+	parent->dir->adjust_nested_auth_pins( 1 );
 }
 
-void CInode::hard_unpin() {
-  hard_pinned--;
-  put(CINODE_PIN_IHARDPIN + hard_pinned);
+void CInode::auth_unpin() {
+  auth_pins--;
+  put(CINODE_PIN_IAUTHPIN + auth_pins);
   if (parent)
-	parent->dir->adjust_nested_hard_pinned( -1 );
+	parent->dir->adjust_nested_auth_pins( -1 );
 }
 
-void CInode::add_hard_pin_waiter(Context *c) {
-  parent->dir->add_hard_pin_waiter(c);
-}
 
 
 

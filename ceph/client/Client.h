@@ -3,6 +3,7 @@
 
 #include "../include/Dispatcher.h"
 #include "../include/lru.h"
+#include "ClNode.h"
 
 #include <map>
 using namespace std;
@@ -23,11 +24,14 @@ class Client : public Dispatcher {
   int whoami;
 
   multimap<inodeno_t, int> open_files;
+  multimap<inodeno_t, int> open_files_sync;
   bool did_close_all;
 
   LRU    cache_lru;
   ClNode *root;
   ClNode *cwd;
+
+  map<inodeno_t,ClNode*>  node_map;
 
   long tid, max_requests;
 
@@ -40,6 +44,17 @@ class Client : public Dispatcher {
   int init();
   int shutdown();
 
+  ClNode *get_node(inodeno_t ino) {
+	map<inodeno_t,ClNode*>::iterator it = node_map.find(ino);
+	return it->second;
+  }
+  void add_node(ClNode *n) {
+	node_map.insert(pair<inodeno_t,ClNode*>(n->ino, n));
+  }
+  void remove_node(ClNode *n) {
+	node_map.erase(n->ino);
+  }
+
   void done();
 
   virtual void dispatch(Message *m);
@@ -50,6 +65,10 @@ class Client : public Dispatcher {
   virtual void send_request(string& p, int op);
   void close_a_file();
   bool is_open(ClNode *n);
+  bool is_sync(ClNode *n);
+
+  void handle_sync_start(class MInodeSyncStart *m);
+  void handle_sync_release(class MInodeSyncRelease *m);
 
   virtual void trim_cache();
 };

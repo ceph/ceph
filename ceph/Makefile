@@ -31,7 +31,8 @@ OBJS=osd/OSD.o\
  client/Client.o\
  mds/MDCluster.o\
  config.o
-TARGETS=test import mpitest
+
+TARGETS=test import pmds
 
 all: depend ${TARGETS}
 
@@ -43,8 +44,8 @@ test: test.cc FakeMessenger.o pmds.o
 import: pmds.o FakeMessenger.o import.cc
 	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o import.cc ${LEAKTRACER} -o import
 
-mpitest: mpitest.cc MPIMessenger.cc pmds.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc MPIMessenger.cc pmds.o  -o mpitest
+pmds: mpitest.cc MPIMessenger.cc pmds.o
+	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc MPIMessenger.cc pmds.o  -o pmds
 
 
 clean:

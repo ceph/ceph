@@ -12,6 +12,10 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
+#include "messages/MInodeSyncStart.h"
+#include "messages/MInodeSyncAck.h"
+#include "messages/MInodeSyncRelease.h"
+
 #include <stdlib.h>
 
 #include "include/config.h"
@@ -68,6 +72,8 @@ int Client::shutdown()
 void Client::dispatch(Message *m) 
 {
   switch (m->get_type()) {
+
+	// basic stuff
   case MSG_CLIENT_REPLY:
 	dout(9) << "got reply" << endl;
 	assim_reply((MClientReply*)m);
@@ -79,10 +85,76 @@ void Client::dispatch(Message *m)
 	}
 	break;
 
+
+	// sync
+  case MSG_MDS_INODESYNCSTART:
+	handle_sync_start((MInodeSyncStart*)m);
+	break;
+
+  case MSG_MDS_INODESYNCRELEASE:
+	handle_sync_release((MInodeSyncRelease*)m);
+	break;
+
   default:
 	dout(1) << "got unknown message " << m->get_type() << endl;
   }
 
+  delete m;
+}
+
+void Client::handle_sync_start(MInodeSyncStart *m)
+{
+  ClNode *node = get_node(m->get_ino());
+  assert(node);
+
+  dout(1) << "sync_start on " << node->ino << endl;
+  
+  assert(is_open(node));
+  
+  // move from open_files to open_files_sync
+  assert(open_files.count(m->get_ino()) > 0);
+  
+  int mds = MSG_ADDR_NUM(m->get_source());
+  multimap<inodeno_t,int>::iterator it;
+  for (it = open_files.find(node->ino);
+	   it->second != mds;
+	   it++) ;
+  assert(it->second == mds);
+  open_files.erase(it);
+  open_files_sync.insert(pair<inodeno_t,int>(node->ino, mds));
+
+  // reply
+  messenger->send_message(new MInodeSyncAck(node->ino),
+						  m->get_source(), m->get_source_port(),
+						  0);
+  
+  // done
+  delete m;
+}
+
+void Client::handle_sync_release(MInodeSyncRelease *m)
+{
+  ClNode *node = get_node(m->get_ino());
+  assert(node);
+  assert(is_sync(node));
+
+  dout(1) << "sync_release on " << node->ino << endl;
+
+  assert(is_sync(node));
+
+    // move from open_files_sync back to open_files
+  assert(open_files_sync.count(node->ino) > 0);
+  
+  int mds = MSG_ADDR_NUM(m->get_source());
+  multimap<inodeno_t,int>::iterator it;
+  for (it = open_files_sync.find(node->ino);
+	   it->second != mds;
+	   it++) ;
+  assert(it->second == mds);
+  open_files_sync.erase(it);
+  open_files.insert(pair<inodeno_t,int>(node->ino, mds));
+
+  // done
   delete m;
 }
 	
@@ -121,6 +193,8 @@ void Client::assim_reply(MClientReply *r)
   if (r->get_op() == MDS_OP_CLOSE) {
 	dout(12) << "closed inode " << r->get_ino() << " " << r->get_path() << endl;
 	open_files.erase(open_files.find(r->get_ino()));
+	ClNode *node = get_node(r->get_ino());
+	node->put();
 	return;
   }
 
@@ -140,6 +214,7 @@ void Client::assim_reply(MClientReply *r)
 	  if (cur->lookup(last_req_dn[i]) == NULL) {
 		ClNode *n = new ClNode();
 		cur->link( last_req_dn[i], n );
+		add_node(n);
 		cur->isdir = true;  // clearly!
 		cache_lru.lru_insert_top( n );
 		cur = n;
@@ -174,6 +249,7 @@ void Client::assim_reply(MClientReply *r)
 		cur->dist.push_back(*i);
 
 	  cur->link( (*it)->ref_dn, n );
+	  add_node(n);
 	  cache_lru.lru_insert_mid( n );
 
 	  dout(12) << "client got dir item " << (*it)->ref_dn << endl;
@@ -185,6 +261,8 @@ void Client::assim_reply(MClientReply *r)
 	  r->get_op() == MDS_OP_OPENWR) {
 	dout(12) << "opened inode " << r->get_ino() << " " << r->get_path() << endl;
 	open_files.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
+	ClNode *node = get_node(r->get_ino());
+	node->get();
   }
 
 
@@ -203,6 +281,7 @@ void Client::trim_cache()
 	  break;  // out of things to expire!
 	
 	i->detach();
+	remove_node(i);
 	delete i;
 	expired++;
   }
@@ -252,20 +331,21 @@ void Client::issue_request()
 
   if (!op) {
 	int r = rand() % 100;
-	if (r < 10)
-	  op = MDS_OP_TOUCH;
-	else if (r < 11) 
-	  op = MDS_OP_CHMOD;
-	else if (r < 20 && !is_open(cwd)) 
-	  op = MDS_OP_OPENRD;
-	else if (r < 30 && !is_open(cwd))
-	  op = MDS_OP_OPENWR;
-	else if (r < 41 + open_files.size() && open_files.size() > 0) {
-	  // close file
-	  return close_a_file();
-	} 
-	else   
-	  op = MDS_OP_STAT;
+	op = MDS_OP_STAT;
+	if (cwd) {  // stat root if we don't have it.
+	  if (r < 10)
+		op = MDS_OP_TOUCH;
+	  else if (r < 11) 
+		op = MDS_OP_CHMOD;
+	  else if (r < 20 && !is_open(cwd) && !cwd->isdir) 
+		op = MDS_OP_OPENRD;
+	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
+		op = MDS_OP_OPENRD;//WR;
+	  else if (r < 41 + open_files.size() && open_files.size() > 0) {
+		// close file
+		return close_a_file();
+	  } 
+	}
   }
 
   send_request(p, op);  // root, if !cwd
@@ -274,7 +354,14 @@ void Client::issue_request()
 
 bool Client::is_open(ClNode *c) 
 {
-  if (open_files.count(c->ino))
+  if (open_files.count(c->ino) ||
+	  open_files_sync.count(c->ino))
+	return true;
+  return false;
+}
+bool Client::is_sync(ClNode *c) 
+{
+  if (open_files_sync.count(c->ino))
 	return true;
   return false;
 }
@@ -282,7 +369,8 @@ bool Client::is_open(ClNode *c)
 void Client::close_a_file()
 {
   multimap<inodeno_t,int>::iterator it = open_files.begin();
-  for (int r = rand() % open_files.size(); r > 0; r--) it++;
+  for (int r = rand() % (open_files.size()); r > 0; r--) 
+	it++;
 
   MClientRequest *req = new MClientRequest(tid++, MDS_OP_CLOSE, whoami);
   req->set_ino(it->first);

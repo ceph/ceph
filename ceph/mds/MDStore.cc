@@ -59,7 +59,7 @@ bool MDStore::fetch_dir( CInode *in,
 {
   dout(7) << "fetch_dir " << in->inode.ino << " context is " << c << endl;
   if (c) 
-	in->dir->add_waiter(c);
+	in->dir->add_waiter(CDIR_WAIT_COMPLETE, c);
 
   assert(in->dir->is_auth());
 
@@ -174,7 +174,7 @@ bool MDStore::fetch_dir_2( int result,
  
   // finish
   list<Context*> finished;
-  idir->dir->take_waiting(finished);
+  idir->dir->take_waiting(CDIR_WAIT_COMPLETE|CDIR_WAIT_DENTRY, finished);
   
   list<Context*>::iterator it = finished.begin();	
   while (it != finished.end()) {
@@ -277,15 +277,15 @@ bool MDStore::commit_dir( CInode *in,
   if (in->dir->state_test(CDIR_STATE_COMMITTING)) {
 	// already mid-commit!
 	dout(7) << "commit_dir " << *in << " already mid-commit" << endl;
-	in->dir->add_waiter(c);   // FIXME this isprobably a bad idea?
+	in->dir->add_waiter(CDIR_WAIT_COMPLETE, c);   // FIXME this isprobably a bad idea?
 	return false;
   }
 
-  if (!in->dir->can_hard_pin()) {
+  if (!in->dir->can_auth_pin()) {
 	// something must be frozen up the hiearchy!
-	dout(7) << "commit_dir " << *in << " can't hard_pin, waiting" << endl;
-	in->dir->add_hard_pin_waiter( new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
-	return false;
+	dout(7) << "commit_dir " << *in << " can't auth_pin, waiting" << endl;
+	in->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+						new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
   }
 
 
@@ -327,7 +327,7 @@ bool MDStore::commit_dir( CInode *in,
   }
   
   // pin inode
-  in->dir->hard_pin();
+  in->dir->auth_pin();
   in->dir->state_set(CDIR_STATE_COMMITTING);
 
   // submit to osd
@@ -370,12 +370,13 @@ bool MDStore::commit_dir_2( int result,
   }
 
   // unpin
-  in->dir->hard_unpin();
+  in->dir->auth_unpin();
 
   // finish
   list<Context*> finished;
   finished.push_back(c);
-  in->dir->take_waiting(finished);
+  in->dir->take_waiting(CDIR_WAIT_COMMITTED,
+						finished);
 
   if (result >= 0) result = 0;
 

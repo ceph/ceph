@@ -149,97 +149,129 @@ int CDir::decode_basic_state(crope r, int off)
 
 // wiating
 
-void CDir::add_waiter(string& dentry,
+void CDir::add_waiter(int tag,
+					  string& dentry,
 					  Context *c) {
   if (waiting_on_dentry.size() == 0)
 	inode->get(CINODE_PIN_DIRWAITDN);
-  waiting_on_dentry[ dentry ].push_back(c);
+  waiting_on_dentry[ dentry ].insert(pair<int,Context*>(tag,c));
+  dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *inode << endl;
 }
 
-void CDir::add_waiter(Context *c) {
-  if (waiting_on_all.size() == 0)
+void CDir::add_waiter(int tag, Context *c) {
+  // hierarchical?
+  if (tag & CDIR_WAIT_ATFREEZEROOT) {  
+	if (is_freeze_root()) {
+	  // it's us, pin here.  (fall thru)
+	} else {
+	  // pin parent!
+	  inode->parent->dir->add_waiter(tag, c);
+	  return;
+	}
+  }
+
+  // this dir.
+  if (waiting.empty())
 	inode->get(CINODE_PIN_DIRWAIT);
-  waiting_on_all.push_back(c);
+  waiting.insert(pair<int,Context*>(tag,c));
+  dout(10) << "add_waiter " << tag << " " << c << " on " << *inode << endl;
 }
 
 
-void CDir::take_waiting(string& dentry,
+void CDir::take_waiting(int mask, 
+						const string& dentry,
 						list<Context*>& ls)
 {
-  if (waiting_on_dentry.count(dentry) > 0) {
-	// there are waiters on this dentry
-	ls.splice(ls.end(), waiting_on_dentry[ dentry ]);
-	waiting_on_dentry.erase(dentry);
-
-	// last one?
-	if (waiting_on_dentry.size() == 0) 
-	  inode->put(CINODE_PIN_DIRWAITDN);
+  if (waiting_on_dentry.empty()) return;
+  
+  multimap<int,Context*>::iterator it = waiting_on_dentry[dentry].begin();
+  while (it != waiting_on_dentry[dentry].end()) {
+	if (it->first & mask) {
+	  ls.push_back(it->second);
+	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << endl;
+	  waiting_on_dentry[dentry].erase(it++);
+	} else 
+	  it++;
   }
-  assert(waiting_on_dentry.count(dentry) == 0);
+
+  // did we clear dentry?
+  if (waiting_on_dentry[dentry].empty())
+	waiting_on_dentry.erase(dentry);
+  
+  // ...whole map?
+  if (waiting_on_dentry.size() == 0) 
+	inode->put(CINODE_PIN_DIRWAITDN);
 }
 
-void CDir::take_waiting(list<Context*>& ls)
+void CDir::take_waiting(int mask,
+						list<Context*>& ls)
 {
-  // any dentry waiters?  (we're taking them all)
-  if (waiting_on_dentry.size())
-	inode->put(CINODE_PIN_DIRWAITDN);
-
-  hash_map<string, list<Context*> >::iterator it = 
-	it = waiting_on_dentry.begin(); 
-  while (it != waiting_on_dentry.end()) {
-	ls.splice(ls.end(), it->second);
-	waiting_on_dentry.erase((it++)->first);
+  if (waiting_on_dentry.size()) {
+	// try each dentry
+	hash_map<string, multimap<int,Context*> >::iterator it = 
+	  it = waiting_on_dentry.begin(); 
+	while (it != waiting_on_dentry.end()) {
+	  take_waiting(mask, it->first, ls);
+	}
   }
-  assert(waiting_on_dentry.size() == 0);
-
-  // waiting on all
-  if (waiting_on_all.size()) 
-	inode->put(CINODE_PIN_DIRWAIT);
-
-  ls.splice(ls.end(), waiting_on_all);
-  assert(waiting_on_all.size() == 0);
+  
+  // waiting
+  if (!waiting.empty()) {
+	multimap<int,Context*>::iterator it = waiting.begin();
+	while (it != waiting.end()) {
+	  if (it->first & mask) {
+		ls.push_back(it->second);
+		waiting.erase(it++);
+		dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << endl;
+	  } else 
+		it++;
+	}
+	
+	if (waiting.empty())
+	  inode->put(CINODE_PIN_DIRWAIT);
+  }
 }
 
 
 // locking and freezing
 
 
-void CDir::add_hard_pin_waiter(Context *c) {
-  if (state_test(CDIR_STATE_FROZEN)) 
-	add_waiter(c);
-  else
-	inode->parent->dir->add_hard_pin_waiter(c);
+void CDir::auth_pin() {
+  inode->get(CINODE_PIN_DAUTHPIN + auth_pins);
+  auth_pins++;
+  dout(7) << "auth_unpin on " << *inode << " count now " << auth_pins << endl;
+  inode->adjust_nested_auth_pins( 1 );
 }
-	
+
+void CDir::auth_unpin() {
+  auth_pins--;
+  inode->put(CINODE_PIN_DAUTHPIN + auth_pins);
+  assert(auth_pins >= 0);
+  dout(7) << "auth_unpin on " << *inode << " count now " << auth_pins << endl;
+
+  // pending freeze?
+  if (auth_pins + nested_auth_pins == 0) {
+	list<Context*> waiting_to_freeze;
+	take_waiting(CDIR_WAIT_FREEZEABLE, waiting_to_freeze);
+	if (waiting_to_freeze.size())
+	  freeze_finish(waiting_to_freeze);
+  }
   
-void CDir::hard_pin() {
-  inode->get(CINODE_PIN_DHARDPIN + hard_pinned);
-  hard_pinned++;
-  inode->adjust_nested_hard_pinned( 1 );
+  inode->adjust_nested_auth_pins( -1 );
 }
 
-void CDir::hard_unpin() {
-  hard_pinned--;
-  inode->put(CINODE_PIN_DHARDPIN + hard_pinned);
-  assert(hard_pinned >= 0);
+int CDir::adjust_nested_auth_pins(int a) {
+  nested_auth_pins += a;
 
   // pending freeze?
-  if (waiting_to_freeze.size() &&
-	  hard_pinned + nested_hard_pinned == 0)
-	freeze_finish();
-
-  inode->adjust_nested_hard_pinned( -1 );
-}
-
-int CDir::adjust_nested_hard_pinned(int a) {
-  nested_hard_pinned += a;
-
-  // pending freeze?
-  if (waiting_to_freeze.size() &&
-	  hard_pinned + nested_hard_pinned == 0)
-	freeze_finish();
-
-  inode->adjust_nested_hard_pinned(a);
+  if (auth_pins + nested_auth_pins == 0) {
+	list<Context*> waiting_to_freeze;
+	take_waiting(CDIR_WAIT_FREEZEABLE, waiting_to_freeze);
+	if (waiting_to_freeze.size())
+	  freeze_finish(waiting_to_freeze);
+  }
+  
+  inode->adjust_nested_auth_pins(a);
 }
 
 
@@ -262,6 +294,7 @@ bool CDir::is_freezing()
   return false;
 }
 
+/*
 void CDir::add_freeze_waiter(Context *c)
 {
   // wait on freeze root
@@ -269,18 +302,19 @@ void CDir::add_freeze_waiter(Context *c)
   while (!t->is_freeze_root()) {
 	t = t->inode->parent->dir;
   }
-  t->add_waiter(c);
+  t->add_waiter(CDIR_WAIT_UNFREEZE, c);
 }
+*/
 
 void CDir::freeze(Context *c)
 {
   assert((state_test(CDIR_STATE_FROZEN|CDIR_STATE_FREEZING)) == 0);
 
-  if (hard_pinned + nested_hard_pinned == 0) {
+  if (auth_pins + nested_auth_pins == 0) {
 	dout(10) << "freeze " << *inode << endl;
 
 	state_set(CDIR_STATE_FROZEN);
-	inode->hard_pin();  // hard_pin for duration of freeze
+	inode->auth_pin();  // auth_pin for duration of freeze
   
 	// easy, we're frozen
 	c->finish(0);
@@ -289,23 +323,35 @@ void CDir::freeze(Context *c)
   } else {
 	state_set(CDIR_STATE_FREEZING);
 	dout(10) << "freeze + wait " << *inode << endl;
-	// need to wait for pins to expire
-	waiting_to_freeze.push_back(c);
+
+	// need to wait for auth pins to expire
+	add_waiter(CDIR_WAIT_FREEZEABLE, c);
   }
 }
 
-void CDir::freeze_finish()
+void CDir::freeze_finish(list<Context*>& waiters)
 {
   dout(10) << "freeze_finish " << *inode << endl;
 
-  inode->hard_pin();  // hard_pin for duration of freeze
+  inode->auth_pin();  // auth_pin for duration of freeze
 
-  Context *c = waiting_to_freeze.front();
-  waiting_to_freeze.pop_front();
-  if (waiting_to_freeze.empty())
-	state_clear(CDIR_STATE_FREEZING);
+  // froze!
+  Context *c = waiters.front();
+  waiters.pop_front();
   state_set(CDIR_STATE_FROZEN);
 
+  // others trying?
+  if (waiters.empty()) {
+	state_clear(CDIR_STATE_FREEZING);  // that was the only freezer!
+  } else {
+	// make the others wait again
+	while (!waiters.empty()) {
+	  add_waiter(CDIR_WAIT_FREEZEABLE, waiters.front());
+	  waiters.pop_front();
+	}
+  }
+
+  // continue to frozen land
   if (c) {
 	c->finish(0);
 	delete c;
@@ -316,10 +362,13 @@ void CDir::unfreeze()  // thaw?
 {
   dout(10) << "unfreeze " << *inode << endl;
   state_clear(CDIR_STATE_FROZEN);
-  inode->hard_unpin();
+
+  // unpin  (may => FREEZEABLE)   FIXME: is this order good?
+  inode->auth_unpin();
   
+  // waiters
   list<Context*> finished;
-  take_waiting(finished);
+  take_waiting(CDIR_WAIT_UNFREEZE, finished);
 
   list<Context*>::iterator it;
   for (it = finished.begin(); it != finished.end(); it++) {
@@ -327,6 +376,7 @@ void CDir::unfreeze()  // thaw?
 	c->finish(0);
 	delete c;
   }
+
 }
 
 

@@ -14,6 +14,7 @@
 #include <list>
 #include <vector>
 #include <set>
+#include <map>
 #include <ext/rope>
 #include <iostream>
 using namespace std;
@@ -29,6 +30,7 @@ using namespace std;
 #define CINODE_MASK_IMPORT    16
 #define CINODE_MASK_EXPORT    32
 
+
 // pins for state, keeping an item in cache
 #define CINODE_PIN_CHILD     10000
 #define CINODE_PIN_CACHED    10001
@@ -39,13 +41,13 @@ using namespace std;
 #define CINODE_PIN_OPENRD    10020  
 #define CINODE_PIN_OPENWR    10021
 
-#define CINODE_PIN_WWAIT     10010   // waiter
-#define CINODE_PIN_RWAIT     10011   // "
+#define CINODE_PIN_LOCKWAIT  10010   // waiter
+#define CINODE_PIN_SYNCWAIT  10011   // "
 #define CINODE_PIN_DIRWAIT   10012   // "
 #define CINODE_PIN_DIRWAITDN 10013   // "
 
-#define CINODE_PIN_IHARDPIN  20000
-#define CINODE_PIN_DHARDPIN  30000     
+#define CINODE_PIN_IAUTHPIN  20000
+#define CINODE_PIN_DAUTHPIN  30000
 #define CINODE_PIN_DIRTY     50000     // must flush
 
 //#define CINODE_PIN_SYNCBYME     70000
@@ -75,6 +77,15 @@ using namespace std;
 #define CINODE_DIST_LOCKBYAUTH    256 // i am not auth
 #define CINODE_DIST_WAITONUNLOCK  512
 
+
+// wait reasons
+#define CINODE_WAIT_SYNC           128
+#define CINODE_WAIT_UNSYNC         256
+#define CINODE_WAIT_LOCK           512
+#define CINODE_WAIT_UNLOCK        1024
+#define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
+#define CINODE_WAIT_ANY           0xffff
+
 class Context;
 class CDentry;
 class CDir;
@@ -82,6 +93,8 @@ class MDS;
 class MDCluster;
 class Message;
 class CInode;
+
+class MInodeSyncStart;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -120,10 +133,11 @@ class CInode : LRUObject {
 	 for replica:   undefined */
   unsigned         dist_state;
   set<int>         sync_waiting_for_ack;
-  list<Context*>   waiting_for_sync;
   set<int>         lock_waiting_for_ack;
-  list<Context*>   waiting_for_lock;
   int              lock_active_count;  // count for in progress or waiting locks
+
+  // waiters
+  multimap<int,Context*>  waiting;
 
 
   // open file state
@@ -131,12 +145,15 @@ class CInode : LRUObject {
   multiset<int>         open_read;
   multiset<int>         open_write;
 
+  multiset<int>         client_wait_for_sync;
+  MInodeSyncStart      *pending_sync_request;
+
  private:
   // waiters
 
   // lock nesting
-  int hard_pinned;
-  int nested_hard_pinned;
+  int auth_pins;
+  int nested_auth_pins;
 
  public:
   DecayCounter popularity;
@@ -225,6 +242,10 @@ class CInode : LRUObject {
 	return cached_by;
   }
 
+  // waiting
+  void add_waiter(int tag, Context *c);
+  void take_waiting(int tag, list<Context*>& ls);
+
   // locking
   bool is_sync() { return dist_state & (CINODE_DIST_SYNCBYME|
 										CINODE_DIST_SYNCBYTHEM); }
@@ -234,21 +255,19 @@ class CInode : LRUObject {
   bool is_softasync() { return dist_state & CINODE_DIST_SOFTASYNC; }
   bool is_waitonunsync() { return dist_state & CINODE_DIST_WAITONUNSYNC; }
 
-  void add_sync_waiter(Context *c);
-  void take_sync_waiting(list<Context*>& ls);
-
   bool is_lockbyme() { return dist_state & CINODE_DIST_LOCKBYME; }
   bool is_lockbyauth() { return dist_state & CINODE_DIST_LOCKBYAUTH; }
   bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
   bool is_waitonunlock() { return dist_state & CINODE_DIST_WAITONUNLOCK; }
 
-  void add_lock_waiter(Context *c);
-  void take_lock_waiting(list<Context*>& ls);
-
   // open
   bool is_open() {
 	if (open_read.empty() &&
 		open_write.empty()) return false;
+	return true;
+  }
+  bool is_open_write() {
+	if (open_write.empty()) return false;
 	return true;
   }
   void open_read_add(int c) {
@@ -281,6 +300,12 @@ class CInode : LRUObject {
 	else return false;
 	return true;
   }
+  multiset<int>& get_open_write() {
+	return open_write;
+  }
+  multiset<int>& get_open_read() {
+	return open_read;
+  }
 
 
 
@@ -309,14 +334,13 @@ class CInode : LRUObject {
   int dir_authority(MDCluster *mdc);
 
   // locking
-  int is_hard_pinned() { 
-	return hard_pinned;
+  int is_auth_pinned() { 
+	return auth_pins;
   }
-  int adjust_nested_hard_pinned(int a);
-  bool can_hard_pin();
-  void hard_pin();
-  void hard_unpin();
-  void add_hard_pin_waiter(Context *c);
+  int adjust_nested_auth_pins(int a);
+  bool can_auth_pin();
+  void auth_pin();
+  void auth_unpin();
 
 
   // --- reference counting

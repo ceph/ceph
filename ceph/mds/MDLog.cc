@@ -136,7 +136,7 @@ int MDLog::trim(Context *c)
 void MDLog::trim_readnext()
 {
   if (trim_reading) {
-	dout(10) << "trim_readnext already reading." << endl;
+	//dout(10) << "trim_readnext already reading." << endl;
 	return;
   }
 
@@ -160,6 +160,7 @@ int MDLog::trim_2_didread(LogEvent *le)
 	trim_3_didretire(le);    // we can discard this event and be done.
 	logger->inc("obs");
   } else {
+	dout(10) << "retire " << le << " ";
 	trimming.push_back(le);	 // add to limbo list
 	le->retire(mds, new C_MDL_Trim(this, le, 3)); 	// retire entry
 	logger->inc("retire");
@@ -175,7 +176,7 @@ int MDLog::trim_2_didread(LogEvent *le)
 
 int MDLog::trim_3_didretire(LogEvent *le)
 {
-  dout(10) << "trim_2_didretire " << le << endl;
+  //dout(10) << "trim_2_didretire " << le << endl;
 
   // done with this le.
   if (le) {
@@ -194,7 +195,7 @@ int MDLog::trim_3_didretire(LogEvent *le)
   if (trimming.size() == 0 &&       // none mid-retire,
 	  trim_reading == false) {      // and not mid-read
 	
-	dout(5) << "trim done, log size now " << num_events << endl;
+	dout(5) << "retired " << le << ", trim done, log size now " << num_events << endl;
 
 	// we're done.
 	list<Context*> finished = trim_waiters;
@@ -208,6 +209,8 @@ int MDLog::trim_3_didretire(LogEvent *le)
 		delete c;
 	  }
 	}
+  } else {
+	dout(5) << "retired " << le << ", still trimming, log size now " << num_events << endl;
   }
 }
 

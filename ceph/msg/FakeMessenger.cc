@@ -17,7 +17,7 @@
 using namespace std;
 
 
-//#define SERIALIZE
+#define SERIALIZE
 
 
 #include "include/config.h"
