@@ -40,6 +40,32 @@ using namespace std;
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".cache "
 
+/*
+
+INODES:
+
+ two types of inode metadata:
+  hard - uid/gid, mode
+  soft - m/c/atime, size
+
+ correspondingly, two types of locks:
+  lock - freezes hard metadata.. path traversals stop etc.  (??)
+  sync - freezes soft metadata.. no reads/writes can proceed.  (eg no stat)
+
+ replication consistency modes:
+  auth only - n/a
+
+  hard+soft - hard and soft are defined on all replicas.
+              all reads proceed (in absense of sync lock)
+              writes require sync lock; possibly fw to auth
+   -> normal behavior.
+
+  hard      - hard only, soft is undefined
+              reads require a sync
+              writes proceed if field updates are monotonic (e.g. size, m/c/atime)
+   -> 'softasync'
+
+*/
 
 
 MDCache::MDCache(MDS *m)
@@ -995,150 +1021,146 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 bool MDCache::read_soft_start(CInode *in, Message *m)
 {
-  if (!in->can_hard_pin()) {
-	dout(5) << "read_soft_start " << *in << " waiting to hard_pin" << endl;
-	in->add_hard_pin_waiter(new C_MDS_RetryMessage(mds,m));
-	return false;
-  }
-  in->hard_pin();
+  // what soft sync mode?
 
-  // do i have sync?
-  if (in->is_syncbyme()) return true;
+  if (in->is_softasync()) {
+	// softasync: hard consistency only
 
-  if (in->auth) {
-	// i am authority
-	if (!in->is_softasync() &&
-		!in->is_syncbythem()) return true; // we're fine
-	
-	// wait for sync regardless
-	dout(5) << "read_soft_start " << *in << " is softasync|syncbythem, waiting on sync" << endl;
-	in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
-
-	//if (!in->is_presync() &&    // aren't already syncstarting
-	//!in->is_syncbythem())   // and aren't synced by someone else
-
-	if (!in->is_presync())
-	  sync_start(in);
-
-	goto nope;
-  } else {
-	// i am replica
-	if (in->is_softasync()) {
-	  // forward
+	if (in->is_auth()) {
+	  // i am auth: i need sync
+	  if (in->is_syncbyme()) return true;
+	} else {
+	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
 	  dout(5) << "read_soft_start " << *in << " is softasync, fw to auth " << auth << endl;
 	  assert(auth != mds->get_nodeid());
 	  mds->messenger->send_message(m,
 								   MSG_ADDR_MDS(auth), m->get_dest_port(),
 								   MDS_PORT_CACHE);
-	  goto nope;
-	} 
-	if (in->is_syncbythem()) {
-	  dout(5) << "read_soft_start " << *in << " is syncbythem, waiting on sync " << endl;
-	  in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
-	  goto nope;
+	  return false;	  
 	}
+  } else {
+	// normal: soft+hard consistency
 
-	// replica is clean.
-	assert(in->is_clean());
-	return true;
+	if (in->is_syncbythem()) {
+	  // wait for sync
+	} else {
+	  // i'm consistent 
+	  return true;
+	}
   }
 
- nope:
-  in->hard_unpin();
+  // we need sync
+  if (in->is_syncbythem() && !in->is_softasync()) 
+    dout(5) << "read_soft_start " << *in << " is !softasync+syncbythem, waiting on sync" << endl;
+  else if (in->is_softasync() && in->is_auth())
+    dout(5) << "read_soft_start " << *in << " is softasync+auth, waiting on sync" << endl;
+  else 
+	assert(2+2==5);
+
+  if (!in->can_hard_pin()) {
+	dout(5) << "read_soft_start " << *in << " waiting to hard_pin" << endl;
+	in->add_hard_pin_waiter(new C_MDS_RetryMessage(mds,m));
+	return false;
+  }
+
+  in->hard_pin();
+  in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
+
+  if (!in->is_presync())
+	sync_start(in);
+  
   return false;
 }
 
+
 int MDCache::read_soft_finish(CInode *in)
 {
-  in->hard_unpin();
-  dout(5) << "read_soft_finish " << *in << " soft_sync_count " << in->soft_sync_count << endl;
-
-  /*if (in->is_syncbyme() &&
-	  in->soft_sync_count == 0) {
-	sync_finish(in);
-	}*/
-  
-  return 0;  // do nothing, actually?  FIXME
+  dout(5) << "read_soft_finish " << *in << endl;   // " soft_sync_count " << in->soft_sync_count << endl;
+  return 0;  // do nothing, actually..
 }
 
 
 bool MDCache::write_soft_start(CInode *in, Message *m)
 {
+  // what soft sync mode?
+
+  if (in->is_softasync()) {
+	// softasync: hard consistency only
+
+	if (in->is_syncbythem()) {
+	  // wait for sync release
+	} else {
+	  // i'm inconsistent; write away!
+	  return true;
+	}
+
+  } else {
+	// normal: soft+hard consistency
+	
+	if (in->is_auth()) {
+	  // i am auth: i need sync
+	  if (in->is_syncbyme()) return true;
+	} else {
+	  // i am replica: fw to auth
+	  int auth = in->authority(mds->get_cluster());
+	  dout(5) << "write_soft_start " << *in << " is !softasync, fw to auth " << auth << endl;
+	  assert(auth != mds->get_nodeid());
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(auth), m->get_dest_port(),
+								   MDS_PORT_CACHE);
+	  return false;	  
+	}
+  }
+
+  // we need sync
+  if (in->is_syncbythem() && in->is_softasync()) 
+    dout(5) << "write_soft_start " << *in << " is syncbythem+softasync, waiting on sync" << endl;
+  else if (!in->is_softasync() && in->is_auth())
+    dout(5) << "write_soft_start " << *in << " is !softasync+auth, waiting on sync" << endl;
+  else 
+	assert(2+2==5);
+
   if (!in->can_hard_pin()) {
 	dout(5) << "write_soft_start " << *in << " waiting to hard_pin" << endl;
 	in->add_hard_pin_waiter(new C_MDS_RetryMessage(mds,m));
 	return false;
   }
+
   in->hard_pin();
-	
-  // do i have sync?
-  if (in->is_syncbyme()) return true;
+  in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
   
-  if (in->auth) {
-	// i am authority
-	if (!in->is_cached_by_anyone()) return true;    // i am alone
-	if (in->is_softasync() &&
-		!in->is_syncbythem()) return true;       // soft updates, and not synced by them
-	
-	// sync
-	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, waiting on sync " << endl;
-	in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
-
-	if (!in->is_presync())
-	  sync_start(in);
-
-	goto nope;
-  } else {
-	// i am replica
-	if (in->is_softasync() &&
-		!in->is_syncbythem()) return true;       // soft updates, and not synced by someone else
-	
-	// forward to auth
-	int auth = in->authority(mds->get_cluster());
-	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, fw to auth " << auth << endl;
-	assert(auth != mds->get_nodeid());
-	mds->messenger->send_message(m,
-								 MSG_ADDR_MDS(auth), m->get_dest_port(),
-								 m->get_dest_port());
-
-	goto nope;
-  }
-
- nope:
-  in->hard_unpin();   // only pin first time
+  if (!in->is_presync())
+	sync_start(in);
+  
   return false;
 }
 
 
 int MDCache::write_soft_finish(CInode *in)
 {
-  in->hard_unpin();
-  dout(5) << "write_soft_finish " << *in << " soft_sync_count " << in->soft_sync_count << endl;
-  
-  /*if (in->is_syncbyme() &&
-	  in->soft_sync_count == 0) {
-	sync_finish(in);
-	}*/
-
-  return 0;  // do nothing, actually?
+  dout(5) << "write_soft_finish " << *in << endl;  //" soft_sync_count " << in->soft_sync_count << endl;
+  return 0;  // do nothing, actually..
 }
 
 
+// sync interface
+
 void MDCache::sync_start(CInode *in)
 {
+  // wait for all replicas
+  dout(5) << "sync_start on " << *in << ", waiting for " << in->get_cached_by() << endl;
+
   assert(in->is_auth());
   assert(!in->is_presync());
   assert(!in->is_sync());
 
-  // wait for all replicas
   in->sync_waiting_for_ack = in->cached_by;
   in->dist_state |= CINODE_DIST_PRESYNC;
   in->get(CINODE_PIN_PRESYNC);
   in->hard_pin();
 
   // send messages
-  dout(5) << "sync_start on " << *in << ", waiting for " << in->sync_waiting_for_ack << endl;
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
@@ -1150,6 +1172,8 @@ void MDCache::sync_start(CInode *in)
 
 void MDCache::sync_finish(CInode *in)
 {
+  dout(5) << "sync_finish on " << *in << ", messages to " << in->get_cached_by() << endl;
+  
   assert(in->is_syncbyme());
   assert(in->is_auth());
 
@@ -1157,7 +1181,6 @@ void MDCache::sync_finish(CInode *in)
   in->dist_state &= ~CINODE_DIST_SYNCBYME;
   in->put(CINODE_PIN_SYNCBYME);
 
-  dout(5) << "sync_finish on " << *in << ", messages to " << in->get_cached_by() << endl;
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
@@ -1370,13 +1393,6 @@ int MDCache::write_finish(CInode *in)
 
 
 
-/*
-
-this all sucks
-
-
-
-*/
 
 
 // IMPORT/EXPORT
