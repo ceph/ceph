@@ -1970,7 +1970,7 @@ void MDCache::show_cache()
 
 
 // hack
-void MDCache::hack_add_file(string& fn, CInode *in) {
+vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
   
   // root?
   if (fn == "/") {
@@ -1979,7 +1979,9 @@ void MDCache::hack_add_file(string& fn, CInode *in) {
 	  add_inode( in );
 	  //dout(7) << " added root " << root << endl;
 	}
-	return;
+	vector<CInode*> trace;
+	trace.push_back(root);
+	return trace;
   } 
 
 
@@ -1991,7 +1993,7 @@ void MDCache::hack_add_file(string& fn, CInode *in) {
   //dout(7) << "dirpart '" << dirpart << "' filepart '" << file << "' inode " << in << endl;
   
   CInode *idir = hack_get_file(dirpart);
-  if (idir == NULL) return;
+  assert(idir);
 
   //dout(7) << " got dir " << idir << endl;
 
@@ -2005,8 +2007,16 @@ void MDCache::hack_add_file(string& fn, CInode *in) {
   link_inode( idir, file, in );
 
   // trim
-  trim();
+  //trim();
 
+  vector<CInode*> trace;
+  trace.push_back(idir);
+  trace.push_back(in);
+  while (idir->parent) {
+	idir = idir->parent->dir->inode;
+	trace.insert(trace.begin(),idir);
+  }
+  return trace;
 }
 
 CInode* MDCache::hack_get_file(string& fn) {

@@ -36,6 +36,9 @@ using namespace std;
 #define CINODE_PIN_EXPORT    10003
 #define CINODE_PIN_FREEZE    10004
 
+#define CINODE_PIN_OPENRD    10005
+#define CINODE_PIN_OPENWR    10006
+
 #define CINODE_PIN_WWAIT     10010
 #define CINODE_PIN_RWAIT     10011
 #define CINODE_PIN_DIRWAIT   10012
@@ -91,7 +94,10 @@ class CInode : LRUObject {
 	 cached_by_* access methods below should NOT be used in those
 	 cases, as the semantics are different! */
 
-  // 
+  // open file state
+  // sets of client ids!
+  set<int>         open_read;
+  set<int>         open_write;
 
  private:
   // waiters
@@ -187,6 +193,37 @@ class CInode : LRUObject {
   set<int>& get_cached_by() {
 	return cached_by;
   }
+
+  // open
+  bool is_open() {
+	if (open_read.empty() &&
+		open_write.empty()) return false;
+	return true;
+  }
+  void open_read_add(int c) {
+	if (open_read.empty())
+	  get(CINODE_PIN_OPENRD);
+	open_read.insert(c);
+  }
+  void open_read_remove(int c) {
+	if (open_read.count(c) == 1 &&
+		open_read.size() == 1) 
+	  put(CINODE_PIN_OPENRD);
+	open_read.erase(c);
+  }
+  void open_write_add(int c) {
+	if (open_write.empty())
+	  get(CINODE_PIN_OPENWR);
+	open_write.insert(c);
+  }
+  void open_write_remove(int c) {
+	if (open_write.count(c) == 1 &&
+		open_write.size() == 1) 
+	  put(CINODE_PIN_OPENWR);
+	open_write.erase(c);
+  }
+
+
 
   // state
   /*

@@ -626,7 +626,9 @@ int MDS::osd_read_finish(Message *rawm)
   osd_reads.erase( m->get_tid() );
   Context *c = p->context;
 
-  *(p->buffer) = m->get_buffer();
+  p->buffer->clear();
+  p->buffer->append( m->get_buffer() );
+  p->buffer = 0;
   long result = m->get_len();
 
   delete p;   // del pendingOsdRead_t

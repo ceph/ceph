@@ -39,7 +39,9 @@ typedef const char* pchar;
 class MDCache {
  protected:
   CInode                       *root;        // root inode
+ public:
   LRU                          *lru;         // lru for expiring items
+ protected:
   inode_map_t                   inode_map;   // map of inodes by ino             
   MDS *mds;
 
@@ -158,7 +160,7 @@ class MDCache {
 
   // crap fns
   CInode* hack_get_file(string& fn);
-  void hack_add_file(string& fn, CInode* in);
+  vector<CInode*> hack_add_file(string& fn, CInode* in);
 
   void dump() {
 	if (root) root->dump();

@@ -13,6 +13,7 @@ typedef struct {
 class MOSDReadReply : public Message {
   MOSDReadReply_st st;
   crope buffer;
+  crope buffertest;
 
  public:
   size_t get_len() { return st.len; }
@@ -26,8 +27,10 @@ class MOSDReadReply : public Message {
 	this->st.tid = r->st.tid;
 	this->st.oid = r->st.oid;
 	this->st.offset = r->st.offset;
-	if (buf)
+	if (buf) {
 	  buffer.append( buf, len );
+	  //	  buffertest.append( buffer );
+	}
 	this->st.len = len;
   }
 
