@@ -17,7 +17,7 @@
 using namespace std;
 
 
-#define SERIALIZE
+//#define SERIALIZE
 
 
 #include "include/config.h"
@@ -49,22 +49,22 @@ int fakemessenger_do_loop()
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			 << endl;
 		
-#ifdef SERIALIZE
-		int t = m->get_type();
-		if (true
-			|| t == MSG_CLIENT_REQUEST
-			|| t == MSG_CLIENT_REPLY
-			|| t == MSG_MDS_DISCOVER
-			) {
-		  // serialize
-		  crope buffer = m->get_serialized();
-		  delete m;
-		  
-		  // decode
-		  m = decode_message(buffer);
-		  assert(m);
+		if (g_conf.fakemessenger_serialize) {
+		  int t = m->get_type();
+		  if (true
+			  || t == MSG_CLIENT_REQUEST
+			  || t == MSG_CLIENT_REPLY
+			  || t == MSG_MDS_DISCOVER
+			  ) {
+			// serialize
+			crope buffer = m->get_serialized();
+			delete m;
+			
+			// decode
+			m = decode_message(buffer);
+			assert(m);
+		  }
 		}
-#endif
 		
 		didone = true;
 		it->second->dispatch(m);

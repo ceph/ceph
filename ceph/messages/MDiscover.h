@@ -14,6 +14,7 @@ class MDiscover : public Message {
   int             asker;
   inodeno_t       base_ino;          // 0 -> none, want root
   bool            want_base_dir;
+  bool            want_root_inode;
   
   filepath        want;   // ... [/]need/this/stuff
 
@@ -28,7 +29,8 @@ class MDiscover : public Message {
   MDiscover(int asker, 
 			inodeno_t base_ino,
 			filepath& want,
-			bool want_base_dir = true) :
+			bool want_base_dir = true,
+			bool want_root_inode = false) :
 	Message(MSG_MDS_DISCOVER) {
 	this->asker = asker;
 	this->base_ino = base_ino;

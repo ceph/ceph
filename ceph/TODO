@@ -22,30 +22,6 @@ ISSUES
 - is lock > freeze a bad plan?  what happens when we need to lock multiple spots
   in the hierarchy.. will that cause deadlock?
 
-issues with new model:
-1- A has /usr, B has /usr/local, C has nothing.  
-   A exports /usr to C.  
-   while export is in transit, B exports /usr/local to D.  
-   A and C get the notify, A updates its dir_auth, but C doesn't have /usr/local in cache and ignores the notify, ending up with A's old dir_auth for /usr/local (B instead of D).
- solution: 
-   freeze first. 
-   then send export_dir_prep, prep with discover info for all nested exports.
-   -> the notify won't be lost, since _both_ the source and dest have interesting inodes in cache.
-   -> dir_auth of source is ignored for all but scope-of-export purposes.
-- need to modularize, clean up all discover-related methods/structurs.
-
-/2- A has /usr/local.  B, C have nothing.
-/   B discovers /usr/local.  disocver results are in transit.
-/   A exports /usr/local to C.
-/   C sends notify to A, B. 
-/   B ignores dir_auth update because discover hasn't arrived yet.
-/   B receives discover.  with incorrect dir_auth for /usr/local/.  
-/      1. B is not authority, so maybe inaccuracy of dir_auth is unimportant?
-/      2. 
-/  -> source sends export_warning to all nodes; they don't process the notify until they've seen the matching warning first.  forces exporter -> bystander channel to be flushed.
-
-nononono
-
 
 
 FIX

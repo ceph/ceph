@@ -87,7 +87,8 @@ class MDiscoverReply : public Message {
 
 
   // ...
-  virtual int decode_payload(crope r, int off = 0) {
+  virtual int decode_payload(crope r) {
+	int off = 0;
 	r.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
     r.copy(off, sizeof(bool), (char*)&no_base_dir);
@@ -103,9 +104,7 @@ class MDiscoverReply : public Message {
       dirs[i] = new CDirDiscover();
       off = dirs[i]->_unrope(r, off);
     }
-
-    // filepath
-    off = path._unrope(r, off);
+	dout(10) << n << " dirs out" << endl;
 
     // inodes
     r.copy(off, sizeof(int), (char*)&n);
@@ -114,6 +113,12 @@ class MDiscoverReply : public Message {
       inodes[i] = new CInodeDiscover();
       off = inodes[i]->_unrope(r, off);
     }
+	dout(10) << n << " inodes out" << endl;
+
+    // filepath
+    off = path._unrope(r, off);
+	dout(10) << path.depth() << " dentries out" << endl;
+
     return off;
   }
   virtual crope get_payload() {
@@ -122,20 +127,27 @@ class MDiscoverReply : public Message {
 	r.append((char*)&no_base_dir, sizeof(bool));
 	r.append((char*)&no_base_dentry, sizeof(bool));
 
+	// dirs
     int n = dirs.size();
     r.append((char*)&n, sizeof(int));
     for (vector<CDirDiscover*>::iterator it = dirs.begin();
          it != dirs.end();
          it++) 
       r.append((*it)->_rope());
+	dout(10) << n << " dirs in" << endl;
     
-    r.append(path._rope());
-
+	// inodes
     n = inodes.size();
+    r.append((char*)&n, sizeof(int));
     for (vector<CInodeDiscover*>::iterator it = inodes.begin();
          it != inodes.end();
          it++) 
       r.append((*it)->_rope());
+	dout(10) << n << " inodes in" << endl;
+
+	// path
+    r.append(path._rope());
+	dout(10) << path.depth() << " dentries in" << endl;
     
     return r;
   }

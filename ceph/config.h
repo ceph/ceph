@@ -21,6 +21,7 @@ struct md_config_t {
   int mdlog_read_inc;
   
   bool fake_clock;
+  bool fakemessenger_serialize;
 
   int debug;
 

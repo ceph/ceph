@@ -440,7 +440,8 @@ int MDCache::open_root(Context *c)
 	  filepath want;
 	  MDiscover *req = new MDiscover(whoami,
 									 0,
-									 want);
+									 want,
+									 false);  // there _is_ no base dir for the root inode
 	  mds->messenger->send_message(req,
 								   MSG_ADDR_MDS(0), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
@@ -772,6 +773,7 @@ void MDCache::handle_discover(MDiscover *dis)
     reply = new MDiscoverReply(0);
     reply->add_inode( new CInodeDiscover( root, 
 										  root->cached_by_add( dis->get_asker() ) ) );
+	dout(10) << "added root " << *root << endl;
 
     dir = root->dir;
     
@@ -802,7 +804,8 @@ void MDCache::handle_discover(MDiscover *dis)
   assert(reply);
   assert(dir);
   
-  // add content.
+  // add content
+  // do some fidgeting to include a dir if they asked for the base dir, or just root.
   for (int i = 0; i < dis->get_want().depth() || dis->get_want().depth() == 0; i++) {
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
@@ -824,9 +827,9 @@ void MDCache::handle_discover(MDiscover *dis)
 	  }
 	  */
 
-      dout(7) << "adding dir " << *dir << endl;
       reply->add_dir( new CDirDiscover( dir, 
 										dir->open_by_add( dis->get_asker() ) ) );
+      dout(7) << "added dir " << *dir << endl;
     }
     if (dis->get_want().depth() == 0) break;
     
@@ -844,10 +847,10 @@ void MDCache::handle_discover(MDiscover *dis)
         assert(next->is_auth());
 
         // add dentry + inode
-        dout(7) << "adding dentry " << dn << " + " << *next << endl;
         reply->add_dentry( dis->get_dentry(i) );
         reply->add_inode( new CInodeDiscover(next, 
 											 next->cached_by_add(dis->get_asker())) );
+        dout(7) << "added dentry " << dn << " + " << *next << endl;
     } else {
       // don't have it?
       if (dir->is_complete()) {
@@ -897,11 +900,13 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 {
   // starting point
   CInode *cur;
+  list<Context*> finished;
   
   if (m->has_root()) {
 	// nowhere!
-	dout(7) << "handle_discover_reply root + " << m->get_path() << endl;
+	dout(7) << "handle_discover_reply root + " << m->get_path() << " " << m->get_num_inodes() << " inodes" << endl;
 	assert(!root);
+	finished.swap(waiting_for_root);
   } else {
 	// grab inode
 	cur = get_inode(m->get_base_ino());
@@ -912,11 +917,9 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	  return;
 	}
 	
-	dout(7) << "handle_discover_reply " << *cur << " + " << m->get_path() << endl;
+	dout(7) << "handle_discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
   }
   
-  list<Context*> finished;
-
   for (int i=0; i<m->get_num_inodes(); i++) {
 	// dir
 	if (i || m->has_base_dir()) {
@@ -4342,9 +4345,9 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
   //dout(7) << " got dir " << idir << endl;
 
   if (idir->dir == NULL) {
-	dout(4) << " making " << dirpart << " into a dir" << endl;
+	dout(4) << " making " << *idir << " into a dir" << endl;
 	idir->inode.isdir = true;
-	idir->dir = new CDir(idir, mds);
+	idir->get_or_open_dir(mds);
   }
   
   add_inode( in );

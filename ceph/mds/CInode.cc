@@ -129,7 +129,7 @@ ostream& operator<<(ostream& out, CInode& in)
 	assert(in.get_replica_nonce() >= 0);
   }
   if (in.is_pinned()) {
-    out << "pins";
+    out << " |";
     for(set<int>::iterator it = in.get_ref_set().begin();
         it != in.get_ref_set().end();
         it++)

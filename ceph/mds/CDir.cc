@@ -31,7 +31,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   }
 
   if (dir.is_pinned()) {
-    out << " pins";
+    out << " |";
     for(set<int>::iterator it = dir.get_ref_set().begin();
         it != dir.get_ref_set().end();
         it++)

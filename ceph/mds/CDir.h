@@ -43,7 +43,7 @@ class Context;
 #define CDIR_STATE_FETCHING    256   // currenting fetching
 
 #define CDIR_STATE_IMPORT     1024   // flag set if this is an import.
-#define CDIR_STATE_EXPORT     2-48
+#define CDIR_STATE_EXPORT     2048
 #define CDIR_STATE_AUTH       4096   // auth for this dir (hashing doesn't count)
 #define CDIR_STATE_PROXY      8192
 
@@ -218,7 +218,7 @@ class CDir {
   friend class CDirExport;
 
  public:
-  CDir(CInode *in, MDS *mds, bool auth=false);
+  CDir(CInode *in, MDS *mds, bool auth);
 
 
 
