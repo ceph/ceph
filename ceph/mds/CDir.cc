@@ -73,7 +73,7 @@ CDentry* CDir::lookup(string& n) {
 int CDir::dentry_authority(string& dn, MDCluster *mdc)
 {
   if (inode->dir_auth == CDIR_AUTH_PARENT) {
-	cout << "dir_auth parent at " << *inode << endl;
+	dout(11) << "dir_auth parent at " << *inode << endl;
 	return inode->authority( mdc );       // same as my inode
   }
   if (inode->dir_auth == CDIR_AUTH_HASH) {
@@ -82,7 +82,7 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
   }
 
   // it's explicit for this whole dir
-  cout << "dir_auth explicit " << inode->dir_auth << " at " << *inode << endl;
+  dout(11) << "dir_auth explicit " << inode->dir_auth << " at " << *inode << endl;
   return inode->dir_auth;
 }
 

@@ -2075,8 +2075,8 @@ void MDCache::import_dir_block(pchar& p,
 		mds->logger->inc("imex");
 	  }
 
-	} else
-	  in->dir_auth = CDIR_AUTH_PARENT;
+	}
+    //} else in->dir_auth = CDIR_AUTH_PARENT;
   }
  
 }

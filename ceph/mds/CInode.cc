@@ -10,6 +10,8 @@
 
 #include <string>
 
+#include "include/config.h"
+#define dout(x)  if (x <= DEBUG_LEVEL) cout << "cinode:"
 
 
 
@@ -224,13 +226,13 @@ int CInode::dir_authority(MDCluster *mdc)
 {
   // explicit
   if (dir_auth >= 0) {
-	cout << "dir_auth explicit " << dir_auth << " at " << *this << endl;
+	dout(11) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
 	return dir_auth;
   }
 
   // parent
   if (dir_auth == CDIR_AUTH_PARENT) {
-	cout << "dir_auth parent at " << *this << endl;
+	dout(11) << "dir_auth parent at " << *this << endl;
 	return authority(mdc);
   }
 

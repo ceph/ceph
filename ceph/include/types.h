@@ -5,6 +5,7 @@
 #include <ext/hash_map>
 #include <string>
 #include <set>
+#include <iostream>
 using namespace std;
 
 
