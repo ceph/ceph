@@ -53,8 +53,11 @@ class Context;
 // these state bits are preserved by an import/export
 // ...except if the directory is hashed, in which case none of them are!
 #define CDIR_MASK_STATE_EXPORTED    (CDIR_STATE_COMPLETE\
-                                    |CDIR_STATE_DIRTY)
-#define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED)
+                                    |CDIR_STATE_DIRTY)  
+#define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT) // see import_dir_block()
+#define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
+                                    |CDIR_STATE_FROZENTREE\
+                                    |CDIR_STATE_FROZENDIR)
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -205,6 +208,8 @@ class CDir {
   }
   int get_rep_count(MDCluster *mdc);
   
+  void update_auth(int whoami);
+
 
   // -- dirtyness --
   __uint64_t get_version() { return version; }
@@ -247,6 +252,7 @@ class CDir {
 				  Context *c);
   void take_waiting(int mask, list<Context*>& ls);  // all waiting
   void take_waiting(int mask, const string& dentry, list<Context*>& ls);  
+  void finish_waiting(int mask, int result = 0);
 
 
   // -- auth pins --

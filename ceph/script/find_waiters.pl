@@ -8,14 +8,20 @@ my $line = 0;
 while (<>) {
 	$line++;
 	if (/add_waiter/) {
-		my ($c,$what) = /(0x\w+) on (.*\[\S+)/;
+		my ($c) = /(0x\w+)/;
+		my ($what) = / on (.*\])/;
 #		print "add_waiter $c $what\n";
-		$waiting{$c} = $what;
+		$waiting{$c} = $what
+			if $what && !$waiting{$c};
 		$hist{$c} .= "$line: $_";
 		unless (grep {$_ eq $c} @waiting) {
 			push( @waiting, $c );
 		}
 	}
+	#if (/finish_waiting/) {
+	#	my ($c) = /(0x\w+)/;
+	#	$hist{$c} .= "$line: $_";
+	#}
 	if (/take_waiting/) {
 		if (/SKIPPING/) {
 			my ($c) = /SKIPPING (0x\w+)/;

@@ -91,6 +91,7 @@ using namespace std;
 #define CINODE_WAIT_LOCK           512
     // waiters: write_hard_start
     // trigger: handle_inode_lock_ack
+    // SPECIALNESS: lock_active_count indicates waiter, active lock count.
 #define CINODE_WAIT_UNLOCK        1024
     // waiters: read_hard_try
     // trigger: handle_inode_lock_release
@@ -172,6 +173,8 @@ class CInode : LRUObject {
 
   set<int>         unlink_waiting_for_ack;
 
+  int              dangling_auth;         // explicit auth when dangling.
+
   // waiters
   multimap<int,Context*>  waiting;
 
@@ -204,12 +207,14 @@ class CInode : LRUObject {
   bool is_dir() { return inode.isdir; }
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_auth() { return auth; }
+  void set_auth(bool auth);
   bool is_replica() { return !auth; }
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
+  CDir *get_dir(int whoami);
   
   bool dir_is_hashed() { 
 	if (inode.isdir == INODE_DIR_HASHED) return true;
@@ -316,6 +321,7 @@ class CInode : LRUObject {
   // -- waiting --
   void add_waiter(int tag, Context *c);
   void take_waiting(int tag, list<Context*>& ls);
+  void finish_waiting(int mask, int result = 0);
 
 
   // -- sync, lock --

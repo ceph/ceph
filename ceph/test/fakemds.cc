@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
   // 
   if (argc > 1 && 
 	  strcmp(argv[1], "nocheck") == 0) {
-	cout << "---- nocheck" << endl;
+	cerr << "---- nocheck" << endl;
   } else {
 	cout << "---- check ----" << endl;
 	for (int i=0; i<NUMMDS; i++) 

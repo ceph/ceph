@@ -472,13 +472,6 @@ public:
 MClientReply *MDS::handle_client_touch(MClientRequest *req,
 									   CInode *cur)
 {
-  if (!cur->can_auth_pin()) {
-	// wait
-	cur->add_waiter(CINODE_WAIT_AUTHPINNABLE,
-					new C_MDS_RetryMessage(this, req));
-	return 0;
-  }
-	
   // write
   if (!mdcache->write_soft_start(cur, req))
 	return 0;  // fw or (wait for) sync
@@ -554,13 +547,6 @@ public:
 MClientReply *MDS::handle_client_chmod(MClientRequest *req,
 									   CInode *cur)
 {
-  if (!cur->can_auth_pin()) {
-	// wait
-	cur->add_waiter(CINODE_WAIT_AUTHPINNABLE,
-					new C_MDS_RetryMessage(this, req));
-	return 0;
-  }
-	
   // write
   if (!mdcache->write_hard_start(cur, req))
 	return 0;  // fw or (wait for) lock
@@ -672,7 +658,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  return reply;
 	} else {
 	  // fetch
-	  dout(10) << " incomplete dir contents for readdir on " << *cur << ", fetching" << endl;
+	  dout(10) << " incomplete dir contents for readdir on " << *cur->dir << ", fetching" << endl;
 	  mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
 	  return 0;
 	}

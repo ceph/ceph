@@ -125,7 +125,7 @@ void Client::handle_sync_start(MInodeSyncStart *m)
   open_files_sync.insert(pair<inodeno_t,int>(node->ino, mds));
 
   // reply
-  messenger->send_message(new MInodeSyncAck(node->ino),
+  messenger->send_message(new MInodeSyncAck(node->ino, true, true),   // wantback
 						  m->get_source(), m->get_source_port(),
 						  0);
 }
@@ -155,12 +155,16 @@ void Client::handle_sync_release(MInodeSyncRelease *m)
 	
 
 void Client::done() {
-  if (open_files.size()) {
+  if (open_files.size() + open_files_sync.size()) {
 	if (!did_close_all) {
 	  dout(1) << "closing all open files" << endl;
 	  for (multimap<inodeno_t,int>::iterator it = open_files.begin();
-		   it != open_files.end();
+		   it != open_files_sync.end();
 		   it++) {
+		if (it == open_files.end()) {
+		  it = open_files_sync.begin();
+		  if (it == open_files_sync.end()) break;
+		}
 		dout(10) << "  closing " << it->first << " to " << it->second << endl;
 		MClientRequest *req = new MClientRequest(tid++, MDS_OP_CLOSE, whoami);
 		req->set_ino(it->first);

@@ -236,6 +236,7 @@ void MDBalancer::do_rebalance()
 		multimap<int,CDir*>::iterator plast = p.first++;
 		
 		if (dir->inode->is_root()) continue;
+		if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
 		double pop = dir->get_popularity();
 		assert(dir->inode->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
 		

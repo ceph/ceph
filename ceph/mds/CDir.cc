@@ -33,6 +33,7 @@ CDir::CDir(CInode *in, int whoami)
   nauthitems = 0;
   state = CDIR_STATE_INITIAL;
   version = 0;
+  committing_version = 0;
 
   // auth
   assert(in->is_dir());
@@ -75,6 +76,14 @@ int CDir::get_rep_count(MDCluster *mdc)
 	return mdc->get_num_mds();
   assert(2+2==5);
 }
+
+void CDir::update_auth(int whoami) {
+  if (inode->dir_is_auth(whoami) && !is_auth())
+	state_set(CDIR_STATE_AUTH);
+  if (!inode->dir_is_auth(whoami) && is_auth())
+	state_clear(CDIR_STATE_AUTH);
+}
+
 
 void CDir::add_child(CDentry *d) 
 {
@@ -125,12 +134,12 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
   }
 
   if (inode->dir_auth == CDIR_AUTH_PARENT) {
-	dout(11) << "dir_auth parent at " << *inode << endl;
+	dout(11) << "dir_auth parent at " << *this << endl;
 	return inode->authority( mdc );       // same as my inode
   }
 
   // it's explicit for this whole dir
-  dout(11) << "dir_auth explicit " << inode->dir_auth << " at " << *inode << endl;
+  dout(11) << "dir_auth explicit " << inode->dir_auth << " at " << *this << endl;
   return inode->dir_auth;
 }
 
@@ -188,7 +197,7 @@ void CDir::add_waiter(int tag,
   if (waiting_on_dentry.size() == 0)
 	inode->get(CINODE_PIN_DIRWAITDN);
   waiting_on_dentry[ dentry ].insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *inode << endl;
+  dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *this << endl;
 }
 
 void CDir::add_waiter(int tag, Context *c) {
@@ -198,7 +207,7 @@ void CDir::add_waiter(int tag, Context *c) {
 	  // it's us, pin here.  (fall thru)
 	} else {
 	  // pin parent!
-	  dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, dir " << *inode << " is not root, trying parent" << endl;
+	  dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, " << *this << " is not root, trying parent" << endl;
 	  inode->parent->dir->add_waiter(tag, c);
 	  return;
 	}
@@ -208,7 +217,7 @@ void CDir::add_waiter(int tag, Context *c) {
   if (waiting.empty())
 	inode->get(CINODE_PIN_DIRWAIT);
   waiting.insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter " << tag << " " << c << " on dir " << *inode << endl;
+  dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
 }
 
 
@@ -222,10 +231,10 @@ void CDir::take_waiting(int mask,
   while (it != waiting_on_dentry[dentry].end()) {
 	if (it->first & mask) {
 	  ls.push_back(it->second);
-	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
+	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
 	  waiting_on_dentry[dentry].erase(it++);
 	} else {
-	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on dir " << *inode << endl;
+	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this << endl;
 	  it++;
 	}
   }
@@ -258,10 +267,10 @@ void CDir::take_waiting(int mask,
 	while (it != waiting.end()) {
 	  if (it->first & mask) {
 		ls.push_back(it->second);
-		dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
+		dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
 		waiting.erase(it++);
 	  } else {
-		dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on dir " << *inode<< endl;
+		dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on" << *this<< endl;
 		it++;
 	  }
 	}
@@ -271,6 +280,22 @@ void CDir::take_waiting(int mask,
   }
 }
 
+
+void CDir::finish_waiting(int mask, int result) 
+{
+  dout(11) << "finish_waiting mask " << mask << " result " << result << " on " << *this << endl;
+
+  list<Context*> finished;
+  take_waiting(mask, finished);
+  for (list<Context*>::iterator it = finished.begin();
+	   it != finished.end();
+	   it++) {
+	Context *c = *it;
+	dout(11) << "finishing " << c << endl;
+	c->finish(result);
+	delete c;
+  }
+}
 
 
 // dirty/clean
@@ -334,7 +359,7 @@ void CDir::adjust_nested_auth_pins(int inc)
 	// dir
 	dir->nested_auth_pins += inc;
 	
-	dout(11) << "adjust_nested_auth_pins on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
+	dout(10) << "adjust_nested_auth_pins on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
 	
 	// pending freeze?
 	if (dir->auth_pins + dir->nested_auth_pins == 0) 
@@ -359,18 +384,7 @@ void CDir::on_freezeable()
 	 particularly graceful, and might cause problems if the first one
 	 needs to know about other waiters.... FIXME? */
   
-  list<Context*> waiting_to_freeze;
-  take_waiting(CDIR_WAIT_FREEZEABLE, waiting_to_freeze);
-
-  for (list<Context*>::iterator it =  waiting_to_freeze.begin();
-	   it != waiting_to_freeze.end();
-	   it++) {
-	Context *c = *it;
-	if (c) {
-	  c->finish(0);
-	  delete c;
-	}
-  }
+  finish_waiting(CDIR_WAIT_FREEZEABLE);
 }
 
 
@@ -446,15 +460,7 @@ void CDir::unfreeze_tree()
   inode->auth_unpin();
 
   // waiters?
-  list<Context*> finished;
-  take_waiting(CDIR_WAIT_UNFREEZE, finished);
-  
-  list<Context*>::iterator it;
-  for (it = finished.begin(); it != finished.end(); it++) {
-	Context *c = *it;
-	c->finish(0);
-	delete c;
-  }
+  finish_waiting(CDIR_WAIT_UNFREEZE);
 }
 
 bool CDir::is_freezing_tree()
@@ -557,15 +563,7 @@ void CDir::unfreeze_dir()
   inode->auth_unpin();
 
   // waiters?
-  list<Context*> finished;
-  take_waiting(CDIR_WAIT_UNFREEZE, finished);
-  
-  list<Context*>::iterator it;
-  for (it = finished.begin(); it != finished.end(); it++) {
-	Context *c = *it;
-	c->finish(0);
-	delete c;
-  }
+  finish_waiting(CDIR_WAIT_UNFREEZE);
 }
 
 

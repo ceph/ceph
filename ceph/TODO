@@ -12,10 +12,13 @@ ISSUES
     - currently (?): do everything immediately, reply when logged.
   - the log grows indefinitely
 
+- is lock > freeze a bad plan?  what happens when we need to lock multiple spots
+  in the hierarchy.. will that cause deadlock?
+
+- is it practical for replicas to not know who the authority is?
 
 
 FIX
-
 - hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
 
 - soft and hard metadata should be fully independent?
@@ -24,9 +27,8 @@ FIX
 
 
 CLEANUP
-- make mdcache import/export stuff take CDir instead of CInode
-- cout << *dir
 - client
+
 
 DOCUMENT
 

@@ -59,6 +59,27 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
+CDir *CInode::get_dir(int whoami)
+{
+  assert(is_dir());
+  if (!dir) 
+	dir = new CDir(this, whoami);
+  return dir;
+}
+
+void CInode::set_auth(bool a) 
+{
+  if (!is_dangling() && !is_root() && 
+	  auth != a) {
+	CDir *dir = get_parent_dir();
+	if (auth && !a) 
+	  dir->nauthitems--;
+	else
+	  dir->nauthitems++;
+  }
+  auth = a;
+}
+
 
 
 void CInode::make_path(string& s)
@@ -80,7 +101,7 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  return out << "[" << in.inode.ino << " " << path << " " << &in << "]";
+  return out << "[inode " << in.inode.ino << " " << path << " " << &in << "]";
 }
 
 
@@ -234,7 +255,14 @@ void CInode::add_waiter(int tag, Context *c) {
   if (waiting.size() == 0)
 	get(CINODE_PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
-  dout(10) << "add_waiter " << tag << " " << c << " on inode " << *this << endl;
+  dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
+
+  // specialness?
+  if (tag == CINODE_WAIT_LOCK) {
+	lock_active_count++;
+	dout(10) << "add_waiter context " << c << " inc lock_active_count now " << lock_active_count << " on " << *this << endl;
+  }
+  
 }
 
 void CInode::take_waiting(int mask, list<Context*>& ls)
@@ -245,10 +273,11 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
   while (it != waiting.end()) {
 	if (it->first & mask) {
 	  ls.push_back(it->second);
-	  dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on inode " << *this << endl;
+	  dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
+
 	  waiting.erase(it++);
 	} else {
-	  dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on inode " << *this << endl;
+	  dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this << endl;
 	  it++;
 	}
   }
@@ -257,6 +286,29 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
 	put(CINODE_PIN_WAITER);
 }
 
+void CInode::finish_waiting(int mask, int result) 
+{
+  dout(11) << "finish_waiting mask " << mask << " result " << result << " on " << *this << endl;
+  
+  list<Context*> finished;
+  take_waiting(mask, finished);
+  for (list<Context*>::iterator it = finished.begin();
+	   it != finished.end();
+	   it++) {
+	Context *c = *it;
+
+	// HACK ugly
+	if (mask == CINODE_WAIT_LOCK) {
+	  assert(lock_active_count > 0);
+	  lock_active_count--;
+	  dout(10) << "finish_waiting context " << c << " dec lock_active_count now " << lock_active_count << " on " << *this << endl;
+	}
+
+	dout(11) << "finish_waiting finishing " << c << endl;
+	c->finish(result);
+	delete c;
+  }
+}
 
 
 // auth_pins
@@ -287,8 +339,11 @@ void CInode::auth_unpin() {
 // authority
 
 int CInode::authority(MDCluster *cl) {
-  if (parent == NULL)
+  if (is_dangling()) 
+	return dangling_auth;   // explicit
+  if (is_root())
 	return 0;  // i am root
+  assert(parent);
   return parent->dir->dentry_authority( parent->name, cl );
 }
 
