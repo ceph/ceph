@@ -206,12 +206,17 @@ decode_message(crope& ser)
 	assert(0);
   }
   
-  // decode
-  m->decode_envelope(ser.substr(0, MSG_ENVELOPE_LEN));
-  if (ser.length() > MSG_ENVELOPE_LEN)
-	m->decode_payload(ser.substr(MSG_ENVELOPE_LEN,
-								 ser.length() - MSG_ENVELOPE_LEN));
-  
+  // decode envelope
+  crope env = ser.substr(0, MSG_ENVELOPE_LEN);
+  m->decode_envelope(env);
+
+  // payload
+  if (ser.length() > MSG_ENVELOPE_LEN) {
+	crope payload = ser.substr(MSG_ENVELOPE_LEN,
+							   ser.length() - MSG_ENVELOPE_LEN);
+	m->decode_payload(payload);
+  }
+
   // done!
   return m;
 }

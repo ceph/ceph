@@ -19,15 +19,13 @@ class MDirSyncStart : public Message {
   }
   virtual char *get_type_name() { return "DSySt"; }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0,sizeof(inodeno_t), (char*)&ino);
 	s.copy(sizeof(inodeno_t), sizeof(int), (char*)&asker);
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(inodeno_t));
 	s.append((char*)&asker, sizeof(int));
-	return s;
   }
 
 };

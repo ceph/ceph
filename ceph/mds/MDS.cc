@@ -9,6 +9,8 @@
 #include "MDLog.h"
 #include "MDCluster.h"
 #include "MDBalancer.h"
+#include "IdAllocator.h"
+
 
 #include "include/filepath.h"
 
@@ -97,6 +99,9 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   name += ('0' + ((w/1)%10));
 
   logger = new Logger(name, (LogType*)&mds_logtype);
+
+  // alloc
+  idalloc = new IdAllocator(this);
 }
 
 MDS::~MDS() {
@@ -108,6 +113,8 @@ MDS::~MDS() {
   if (logger) { delete logger; logger = 0; }
 
   if (messenger) { delete messenger; messenger = NULL; }
+
+  if (idalloc) { delete idalloc; idalloc = NULL; }
 }
 
 

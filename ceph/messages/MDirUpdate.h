@@ -29,18 +29,16 @@ class MDirUpdate : public Message {
   }
   virtual char *get_type_name() { return "dup"; }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(st), (char*)&st);
 	for (int i=0; i<st.ndir_rep_by; i++) {
 	  int k;
 	  s.copy(sizeof(st) + i*sizeof(int), sizeof(int), (char*)&k);
 	  dir_rep_by.insert(k);
 	}
-	return 0;
   }
 
-  virtual crope get_payload() {
-	crope r;
+  virtual void encode_payload(crope& r) {
 	st.ndir_rep_by = dir_rep_by.size();
 	r.append((char*)&st, sizeof(st));
 	for (set<int>::iterator it = dir_rep_by.begin();
@@ -49,7 +47,6 @@ class MDirUpdate : public Message {
 	  int i = *it;
 	  r.append((char*)&i, sizeof(int));
 	}
-	return r;
   }
 };
 

@@ -41,22 +41,19 @@ class MClientRequest : public Message {
   string& get_arg() { return arg; }
   
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(st), (char*)&st);
 	path.set_path( s.c_str() + sizeof(st) );
 	int off = sizeof(st) + path.length() + 1;
 	arg = s.c_str() + off;	
-	return 0;
   }
 
-  virtual crope get_payload() {
-	crope r;
+  virtual void encode_payload(crope& r) {
 	r.append((char*)&st, sizeof(st));
 	r.append(path.c_str());
 	r.append((char)0);
 	r.append(arg.c_str());
 	r.append((char)0);
-	return r;
   }
 };
 

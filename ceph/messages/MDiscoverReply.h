@@ -102,7 +102,7 @@ class MDiscoverReply : public Message {
 
 
   // ...
-  virtual int decode_payload(crope r) {
+  virtual void decode_payload(crope& r) {
 	int off = 0;
 	r.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
@@ -139,11 +139,8 @@ class MDiscoverReply : public Message {
     // filepath
     off = path._unrope(r, off);
 	dout(12) << path.depth() << " dentries out" << endl;
-
-    return off;
   }
-  virtual crope get_payload() {
-	crope r;
+  virtual void encode_payload(crope& r) {
 	r.append((char*)&base_ino, sizeof(base_ino));
 	r.append((char*)&no_base_dir, sizeof(bool));
 	r.append((char*)&no_base_dentry, sizeof(bool));
@@ -173,8 +170,6 @@ class MDiscoverReply : public Message {
 	// path
     r.append(path._rope());
 	dout(12) << path.depth() << " dentries in" << endl;
-    
-    return r;
   }
 
 };

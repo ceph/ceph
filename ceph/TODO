@@ -1,4 +1,22 @@
 
+
+- qsync
+- high level locker functions
+- expand Lock
+  - can_*_soon(), is_stable()...
+- add waiters for stable states (to match is_stable())
+
+- freeze interaction.....  test!
+  - freeze state diagram
+
+/- generalize inoallocator
+- add client file handles.
+  - fh modes:  RD, RDWR, WR ... append?  :/
+  - fh states: SYNC, ASYNC, ...????
+
+
+
+
 => grep for FIXME :)
 
 

@@ -25,7 +25,7 @@ class MCacheExpire : public Message {
 	dirs.insert(pair<inodeno_t,int>(ino,nonce));
   }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	int off = 0;
 	int n;
 
@@ -57,7 +57,6 @@ class MCacheExpire : public Message {
 	  off += sizeof(int);
 	  dirs.insert(pair<inodeno_t, int>(ino,nonce));
 	}
-	return off;
   }
   
   void rope_map(crope& s, map<inodeno_t,int>& mp) {
@@ -73,12 +72,10 @@ class MCacheExpire : public Message {
 	}	
   }
 
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&from, sizeof(from));
 	rope_map(s, inodes);
 	rope_map(s, dirs);
-	return s;
   }
 };
 

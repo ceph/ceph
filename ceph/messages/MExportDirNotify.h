@@ -38,7 +38,7 @@ class MExportDirNotify : public Message {
 	this->exports = ex;
   }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	int off = 0;
 	s.copy(off, sizeof(int), (char*)&new_auth);
 	off += sizeof(int);
@@ -68,8 +68,7 @@ class MExportDirNotify : public Message {
 	  off += sizeof(inodeno_t);
 	}
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&new_auth, sizeof(int));
 	s.append((char*)&old_auth, sizeof(int));
 	s.append((char*)&ino, sizeof(ino));
@@ -93,7 +92,6 @@ class MExportDirNotify : public Message {
 	  inodeno_t ino = *it;
 	  s.append((char*)&ino, sizeof(ino));
 	}
-	return s;
   }
 };
 

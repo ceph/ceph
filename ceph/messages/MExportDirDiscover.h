@@ -22,19 +22,16 @@ class MExportDirDiscover : public Message {
   virtual char *get_type_name() { return "ExDis"; }
 
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(ino), (char*)&ino);
 	path = s.c_str() + sizeof(ino);
     int off = sizeof(ino) + path.length() + 1;
-    return off;
   }
 
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
 	s.append(path.c_str());
 	s.append((char)0);
-	return s;
   }
 };
 

@@ -50,7 +50,6 @@ class MDirSyncAck;
 class MDirSyncRelease;
 class MRenameLocalFile;
 class C_MDS_ExportFinish;
-class InoAllocator;
 
 class MHashDir;
 class MHashDirAck;
@@ -70,7 +69,6 @@ class MDCache {
   CInode                       *root;        // root inode
   LRU                          *lru;         // lru for expiring items
   inode_map_t                   inode_map;   // map of inodes by ino            
-  InoAllocator                 *inoalloc;
  
   MDS *mds;
 
@@ -82,6 +80,7 @@ class MDCache {
   set<CDir*>             exports;
   multimap<CDir*,CDir*>  nested_exports;   // nested exports of (imports|root)
   
+  // hashing madness
   multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
         // maps frozen_dir_ino's to waiting-for-discover ino's.

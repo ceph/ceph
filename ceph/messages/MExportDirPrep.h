@@ -81,7 +81,7 @@ class MExportDirPrep : public Message {
   }
 
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(ino), (char*)&ino);
     int off = sizeof(ino);
     
@@ -127,11 +127,9 @@ class MExportDirPrep : public Message {
       off = dir->_unrope(s, off);
       dirs.insert(pair<inodeno_t,CDirDiscover*>(dir->get_ino(), dir));
     }
-	return off;
   }
 
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
 
 	// exports
@@ -168,8 +166,6 @@ class MExportDirPrep : public Message {
          dit != dirs.end();
          dit++)
       s.append(dit->second->_rope());
-
-	return s;
   }
 };
 

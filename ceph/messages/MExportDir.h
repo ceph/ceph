@@ -66,7 +66,7 @@ class MExportDir : public Message {
   }
   */
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(ino), (char*)&ino);
 	s.copy(sizeof(ino), sizeof(ipop), (char*)&ipop);
 	s.copy(sizeof(ino)+sizeof(ipop), sizeof(ndirs), (char*)&ndirs);
@@ -86,10 +86,8 @@ class MExportDir : public Message {
 
 	// dir data
 	state = s.substr(off, s.length() - off);
-	return 0;
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
 	s.append((char*)&ipop, sizeof(ipop));
 	s.append((char*)&ndirs, sizeof(ndirs));
@@ -107,7 +105,6 @@ class MExportDir : public Message {
 	
 	// dir data
 	s.append(state);
-	return s;
   }
 
 };

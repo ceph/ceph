@@ -45,9 +45,21 @@ class BasicLock {
 	if (!auth)
 	  return (state == LOCK_SYNC);
   }
+  bool can_read_soon(bool auth) {
+	if (auth) 
+	  return false;
+	if (!auth)
+	  return false;
+  }
   
   bool can_write(bool auth) {
 	return auth && state == LOCK_LOCK;
+  }
+  bool can_write_soon(bool auth) {
+	return auth && (state == LOCK_PRELOCK);
+  }
+  bool is_stable() {
+	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);
   }
 };
 
@@ -87,12 +99,27 @@ class AsyncLock : public BasicLock {
   AsyncLock() : BasicLock() {
 	assert(state == 0);
   }
+  bool can_read_soon(bool auth) {
+	if (auth)
+	  return (state == LOCK_GSYNC) || (state == LOCK_GLOCK);
+	else
+	  return (state == LOCK_GSYNC);
+  }
   bool can_write(bool auth) {
 	if (auth) 
 	  return (state == LOCK_LOCK) 
 		|| (state == LOCK_ASYNC) || (state == LOCK_RESYNC) || (state == LOCK_RESYNC2);
 	if (!auth)
 	  return (state == LOCK_ASYNC);
+  }
+  bool can_write_soon(bool auth) {
+	if (auth)
+	  return (state == LOCK_PRELOCK) || (state == LOCK_GASYNC);
+	else
+	  return (state == LOCK_GASYNC);
+  }
+  bool is_stable() {
+	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);
   }
 };
 

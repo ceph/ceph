@@ -105,7 +105,7 @@ class MClientReply : public Message {
   }
 
   // serialization
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	crope::iterator sp = s.mutable_begin();
 	s.copy(0, sizeof(st), (char*)&st);
 	path = s.c_str() + sizeof(st);
@@ -125,11 +125,10 @@ class MClientReply : public Message {
 	  }
 	}
   }
-  virtual crope get_payload() {
+  virtual void encode_payload(crope& r) {
 	st.dir_size = dir_contents.size();
 	st.trace_depth = trace.size();
 	
-	crope r;
 	r.append((char*)&st, sizeof(st));
 	if (path.length()) r.append(path.c_str());
 	r.append((char)0);
@@ -140,8 +139,6 @@ class MClientReply : public Message {
 
 	for (it = dir_contents.begin(); it != dir_contents.end(); it++) 
 	  r.append(rope_info(*it));
-
-	return r;
   }
 
   // builders

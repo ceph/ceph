@@ -73,6 +73,10 @@
 
 #include "config.h"
 
+
+// address types
+typedef int  msg_addr_t;
+
 /* sandwich mds's, then osd's, then clients */
 #define MSG_ADDR_MDS(x)     (x)
 #define MSG_ADDR_OSD(x)     (g_conf.num_mds+(x))
@@ -104,7 +108,7 @@ class Message {
  protected:
   // envelope  (make sure you update MSG_ENVELOPE_LEN above if you change this)
   int type;
-  long source, dest;
+  msg_addr_t source, dest;
   int source_port, dest_port;
   
   // any payload is in an overloaded child class
@@ -136,48 +140,48 @@ class Message {
   virtual char *get_type_name() { return tname; }
 
   // source/dest
-  long get_dest() { return dest; }
-  void set_dest(long a, int p) { dest = a; dest_port = p; }
+  msg_addr_t get_dest() { return dest; }
+  void set_dest(msg_addr_t a, int p) { dest = a; dest_port = p; }
   int get_dest_port() { return dest_port; }
   
-
-  long get_source() { return source; }
-  void set_source(long a, int p) { source = a; source_port = p; }
+  
+  msg_addr_t get_source() { return source; }
+  void set_source(msg_addr_t a, int p) { source = a; source_port = p; }
   int get_source_port() { return source_port; }
 
-  crope get_envelope() {
-	crope e;
+  void encode_envelope(crope& e) {
 	e.append((char*)&type, sizeof(int));
-	e.append((char*)&source, sizeof(long));
+	e.append((char*)&source, sizeof(msg_addr_t));
 	e.append((char*)&source_port, sizeof(int));
-	e.append((char*)&dest, sizeof(long));
+	e.append((char*)&dest, sizeof(msg_addr_t));
 	e.append((char*)&dest_port, sizeof(int));
-	return e;
   }
-  int decode_envelope(crope s) {
-	s.copy(0, sizeof(int), (char*)&type);
-	s.copy(sizeof(int), sizeof(long), (char*)&source);
-	s.copy(sizeof(int)+sizeof(long), sizeof(int), (char*)&source_port);
-	s.copy(2*sizeof(int)+sizeof(long), sizeof(long), (char*)&dest);
-	s.copy(2*sizeof(int)+2*sizeof(long), sizeof(int), (char*)&dest_port);
-	return 0;
+  void decode_envelope(crope s) {
+	int off = 0;
+	s.copy(off, sizeof(int), (char*)&type);
+	off += sizeof(int);
+	s.copy(off, sizeof(msg_addr_t), (char*)&source);
+	off += sizeof(msg_addr_t);
+	s.copy(off, sizeof(int), (char*)&source_port);
+	off += sizeof(int);
+	s.copy(off, sizeof(long), (char*)&dest);
+	off += sizeof(long);
+	s.copy(off, sizeof(int), (char*)&dest_port);
+	off += sizeof(int);
   }
   
   // PAYLOAD ----
-  virtual crope get_payload() { 
-	return crope();   // blank message body, by default.
+  virtual void encode_payload(crope& s) { 
+	// no payload by default
   }
-  virtual int decode_payload(crope s) {
-	return 0;       // no default, nothing to decode
+  virtual void decode_payload(crope& s) {
+	// no default, nothing to decode
   }
  
   // BOTH ----
-  crope get_serialized() {
-	crope both;
-	both.append(get_envelope());
-	assert(both.length() == MSG_ENVELOPE_LEN);
-	both.append(get_payload());
-	return both;
+  void encode(crope& both) {
+	encode_envelope(both);
+	encode_payload(both);
   }
 };
 

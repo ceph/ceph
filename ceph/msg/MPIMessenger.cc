@@ -179,7 +179,7 @@ int MPIMessenger::shutdown()
   remove_dispatcher();
 }
 
-int MPIMessenger::send_message(Message *m, long dest, int port, int fromport)
+int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
   // set envelope
   m->set_source(whoami, fromport);
@@ -187,7 +187,8 @@ int MPIMessenger::send_message(Message *m, long dest, int port, int fromport)
 
   // send!
   int trank = MPI_DEST_TO_RANK(dest,mpi_world_size);
-  crope r = m->get_serialized();
+  crope r;
+  m->encode(r);
   int size = r.length();
 
   if (trank == mpi_rank) {	

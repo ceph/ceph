@@ -51,6 +51,7 @@ using namespace std;
 #define MDS_TRAVERSE_FAIL     3
 
 
+class IdAllocator;
 
 class MDCluster;
 class CInode;
@@ -87,6 +88,10 @@ class MDS : public Dispatcher {
   bool         shutting_down;
   set<int>     did_shut_down;
   bool         shut_down;
+
+  // ino's and fh's
+  class IdAllocator  *idalloc;
+  
   
   // import/export
   list<CInode*>      import_list;

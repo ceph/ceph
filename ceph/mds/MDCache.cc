@@ -61,7 +61,7 @@
 
 #include "messages/MRenameLocalFile.h"
 
-#include "InoAllocator.h"
+#include "IdAllocator.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -83,14 +83,11 @@ MDCache::MDCache(MDS *m)
   lru = new LRU();
   lru->lru_set_max(g_conf.mdcache_size);
   lru->lru_set_midpoint(g_conf.mdcache_mid);
-
-  inoalloc = new InoAllocator(mds);
 }
 
 MDCache::~MDCache() 
 {
   if (lru) { delete lru; lru = NULL; }
-  if (inoalloc) { delete inoalloc; inoalloc = NULL; }
 }
 
 
@@ -116,7 +113,7 @@ CInode *MDCache::create_inode()
   memset(&in->inode, 0, sizeof(inode_t));
   
   // assign ino
-  in->inode.ino = inoalloc->get_ino();
+  in->inode.ino = mds->idalloc->get_id(ID_INO);
 
   add_inode(in);  // add
   return in;
@@ -124,7 +121,7 @@ CInode *MDCache::create_inode()
 
 void MDCache::destroy_inode(CInode *in)
 {
-  inoalloc->reclaim_ino(in->ino());
+  mds->idalloc->reclaim_id(ID_INO, in->ino());
   remove_inode(in);
 }
 

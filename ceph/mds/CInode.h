@@ -196,9 +196,9 @@ class CInode : LRUObject {
 	 cached_by_* access methods below should NOT be used in those
 	 cases, as the semantics are different! */
   /* NOTE: if replica is_cacheproxy(), cached_by is still defined! */
-  map<int,int>     cached_by_nonce;  // nonce issued to each replica
-  int              replica_nonce;    // defined on replica
-  set<int>         soft_tokens;  // replicas who can soft update the inode
+  map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
+  int              replica_nonce;    // [replica] defined on replica
+  set<int>         soft_tokens;      // replicas who can soft update the inode     XXX FIXME
   /* ..and thus may have a newer mtime, size, etc.! .. w/o sync
 	 for authority: set of nodes; self is assumed, but not included
 	 for replica:   undefined */

@@ -1,5 +1,6 @@
 
 #include "include/config.h"
+using namespace std;
 
 
 #include "include/FakeMessenger.h"
@@ -14,7 +15,6 @@
 #include <ext/hash_map>
 #include <cassert>
 #include <iostream>
-using namespace std;
 
 
 //#define SERIALIZE
@@ -57,7 +57,8 @@ int fakemessenger_do_loop()
 			  || t == MSG_MDS_DISCOVER
 			  ) {
 			// serialize
-			crope buffer = m->get_serialized();
+			crope buffer;
+			m->encode(buffer);
 			delete m;
 			
 			// decode
@@ -126,7 +127,7 @@ int FakeMessenger::shutdown()
 }
 
 
-int FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
+int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
   m->set_source(whoami, fromport);
   m->set_dest(dest, port);

@@ -22,18 +22,15 @@ class MDirSyncAck : public Message {
   }
   virtual char *get_type_name() { return "DSyAck"; }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0,sizeof(inodeno_t), (char*)&ino);
 	s.copy(sizeof(inodeno_t), sizeof(have), (char*)&have);
 	s.copy(sizeof(inodeno_t)+sizeof(have), sizeof(wantback), (char*)&wantback);
-	return 0;
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
 	s.append((char*)&have, sizeof(have));
 	s.append((char*)&wantback, sizeof(wantback));
-	return s;
   }
 };
 
