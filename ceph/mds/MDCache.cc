@@ -3256,9 +3256,9 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
     CInode *in = get_inode(*it);
     if (in->dir) {
 	  if (!in->dir->state_test(CDIR_STATE_IMPORTINGEXPORT)) {
+		dout(10) << "  pinning nested export " << *in->dir << endl;
 		in->dir->get(CDIR_PIN_IMPORTINGEXPORT);
 		in->dir->state_set(CDIR_STATE_IMPORTINGEXPORT);
-		dout(10) << "  pinning nested export " << *in->dir << endl;
 	  } else {
 		dout(10) << "  already pinned nested export " << *in << endl;
 	  }

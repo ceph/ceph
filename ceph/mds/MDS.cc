@@ -1021,7 +1021,7 @@ void MDS::handle_client_rename(MClientRequest *req,
   // find the destination.
   // discover, etc. on the way.. get just it on the local node.
   filepath dirpath = cur->get_arg(); 
-  // ** FIXME ** relative destination path???
+  // ** FIXME? relative destination path???
   vector<CInode*> trace;
   int r = mdcache->path_traverse(dirpath, trace, req, MDS_TRAVERSE_DISCOVER);
 
