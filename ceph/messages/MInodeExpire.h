@@ -34,6 +34,7 @@ class MInodeExpire : public Message {
   virtual crope get_payload() {
 	crope s;
 	s.append((char*)&st,sizeof(st));
+	return s;
   }
 };
 

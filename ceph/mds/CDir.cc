@@ -80,6 +80,53 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
 }
 
 
+
+// state
+
+
+
+crope CDir::encode_basic_state()
+{
+  crope r;
+
+  // dir rep
+  r.append((char*)&dir_rep, sizeof(int));
+  
+  // dir_rep_by
+  int n = dir_rep_by.size();
+  r.append((char*)&n, sizeof(int));
+  for (set<int>::iterator it = dir_rep_by.begin(); 
+	   it != dir_rep_by.end();
+	   it++) {
+	int j = *it;
+	r.append((char*)&j, sizeof(j));
+  }
+  
+  return r;
+}
+ 
+int CDir::decode_basic_state(crope r, int off)
+{
+  // dir_rep
+  r.copy(off, sizeof(int), (char*)&dir_rep);
+  off += sizeof(int);
+
+  // dir_rep_by
+  int n;
+  r.copy(off, sizeof(int), (char*)&n);
+  off += sizeof(int);
+  for (int i=0; i<n; i++) {
+	int j;
+	r.copy(off, sizeof(int), (char*)&j);
+	dir_rep_by.insert(j);
+	off += sizeof(int);
+  }
+
+  return off;
+}
+
+
+
 // wiating
 
 void CDir::add_waiter(string& dentry,
@@ -138,7 +185,7 @@ void CDir::take_waiting(list<Context*>& ls)
 
 
 void CDir::add_hard_pin_waiter(Context *c) {
-  if (state & CDIR_MASK_FROZEN) 
+  if (state_test(CDIR_STATE_FROZEN)) 
 	add_waiter(c);
   else
 	inode->parent->dir->add_hard_pin_waiter(c);
@@ -188,7 +235,7 @@ bool CDir::is_frozen()
 
 bool CDir::is_freezing() 
 {
-  if (state & CDIR_MASK_FREEZING)
+  if (state_test(CDIR_STATE_FREEZING))
 	return true;
   if (inode->parent)
 	return inode->parent->dir->is_freezing();
@@ -207,12 +254,12 @@ void CDir::add_freeze_waiter(Context *c)
 
 void CDir::freeze(Context *c)
 {
-  assert((state & (CDIR_MASK_FROZEN|CDIR_MASK_FREEZING)) == 0);
+  assert((state_test(CDIR_STATE_FROZEN|CDIR_STATE_FREEZING)) == 0);
 
   if (hard_pinned + nested_hard_pinned == 0) {
 	cout << "freeze " << *inode << endl;
 
-	state_set(CDIR_MASK_FROZEN);
+	state_set(CDIR_STATE_FROZEN);
 	inode->hard_pin();  // hard_pin for duration of freeze
   
 	// easy, we're frozen
@@ -220,7 +267,7 @@ void CDir::freeze(Context *c)
 	delete c;
 
   } else {
-	state_set(CDIR_MASK_FREEZING);
+	state_set(CDIR_STATE_FREEZING);
 	cout << "freeze + wait " << *inode << endl;
 	// need to wait for pins to expire
 	waiting_to_freeze.push_back(c);
@@ -236,8 +283,8 @@ void CDir::freeze_finish()
   Context *c = waiting_to_freeze.front();
   waiting_to_freeze.pop_front();
   if (waiting_to_freeze.empty())
-	state_clear(CDIR_MASK_FREEZING);
-  state_set(CDIR_MASK_FROZEN);
+	state_clear(CDIR_STATE_FREEZING);
+  state_set(CDIR_STATE_FROZEN);
 
   if (c) {
 	c->finish(0);
@@ -248,7 +295,7 @@ void CDir::freeze_finish()
 void CDir::unfreeze()  // thaw?
 {
   cout << "unfreeze " << *inode << endl;
-  state_clear(CDIR_MASK_FROZEN);
+  state_clear(CDIR_STATE_FROZEN);
   inode->hard_unpin();
   
   list<Context*> finished;
@@ -280,9 +327,9 @@ void CDir::dump(int depth) {
 	iter++;
   }
 
-  if (!(state & CDIR_MASK_COMPLETE))
+  if (!(state_test(CDIR_STATE_COMPLETE)))
 	cout << ind << "..." << endl;
-  if (state & CDIR_MASK_DIRTY)
+  if (state_test(CDIR_STATE_DIRTY))
 	cout << ind << "[dirty]" << endl;
 
 }

@@ -40,7 +40,7 @@ CInode::CInode() : LRUObject() {
   nested_hard_pinned = 0;
   //  state = 0;
 
-  mid_fetch = false;	
+  auth = true;  // by default.
 }
 
 CInode::~CInode() {
@@ -82,6 +82,79 @@ void CInode::hit()
   if (parent)
 	parent->dir->hit();
 }
+
+
+void CInode::mark_dirty() {
+  if (!ref_set.count(CINODE_PIN_DIRTY)) 
+	get(CINODE_PIN_DIRTY);
+
+  if (parent) {
+	// dir is now dirty (if it wasn't already)
+	parent->dir->mark_dirty();
+
+	if (parent->dir->get_version() >= version) 
+	  version = parent->dir->get_version(); // we're as dirty as the dir
+	else {
+	  version++;
+	  parent->dir->float_version(version);  // dir is at least as dirty as us.
+	}
+  } else
+	version++;  // i'm root.
+}
+
+
+// state 
+
+crope CInode::encode_basic_state()
+{
+  crope r;
+
+  // inode
+  r.append((char*)&inode, sizeof(inode));
+  
+  // cached_by
+  int n = cached_by.size();
+  r.append((char*)&n, sizeof(int));
+  for (set<int>::iterator it = cached_by.begin(); 
+	   it != cached_by.end();
+	   it++) {
+	int j = *it;
+	r.append((char*)&j, sizeof(j));
+  }
+
+  // dir_auth
+  r.append((char*)&dir_auth, sizeof(int));
+  
+  return r;
+}
+ 
+int CInode::decode_basic_state(crope r, int off)
+{
+  // inode
+  r.copy(0,sizeof(inode_t), (char*)&inode);
+  off += sizeof(inode_t);
+	
+  // cached_by --- although really this is rep_by,
+  //               since we're non-authoritative
+  int n;
+  r.copy(off, sizeof(int), (char*)&n);
+  off += sizeof(int);
+  cached_by.clear();
+  for (int i=0; i<n; i++) {
+	int j;
+	r.copy(off, sizeof(int), (char*)&j);
+	cached_by.insert(j);
+	off += sizeof(int);
+  }
+
+  // dir_auth
+  r.copy(off, sizeof(int), (char*)&dir_auth);
+  off += sizeof(int);
+
+  return off;
+}
+
+
 
 
 // waiting

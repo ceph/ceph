@@ -13,6 +13,7 @@
 #include <list>
 #include <vector>
 #include <set>
+#include <ext/rope>
 #include <iostream>
 using namespace std;
 
@@ -68,10 +69,9 @@ class CInode : LRUObject {
   int              dir_auth;  // authority for child dir
 
  protected:
-  int              ref;            // reference count (???????)
+  int              ref;            // reference count
   set<int>         ref_set;
-  __uint32_t       version;
-
+  __uint64_t       version;
 
   // parent dentries in cache
   int              nparents;  
@@ -81,13 +81,14 @@ class CInode : LRUObject {
   // dcache lru
   CInode *lru_next, *lru_prev;
 
-  // used by MDStore
-  bool             mid_fetch;
-
   // distributed caching
-  set<int>         cached_by;  // mds's that cache me.  not well defined on replicas.
-  //unsigned         state;
-  //set<int>         sync_waiting_for_ack;
+  bool             auth;       // safety check; true if this is authoritative.
+  set<int>         cached_by;  // mds's that cache me.  
+  /* NOTE: on replicas, this doubles as replicated_by, but the
+	 cached_by_* access methods below should NOT be used in those
+	 cases, as the semantics are different! */
+
+  // 
 
  private:
   // waiters
@@ -101,32 +102,35 @@ class CInode : LRUObject {
  public:
   DecayCounter popularity;
   
-
   friend class MDCache;
   friend class CDir;
-  friend class MDStore;
-  friend class MDS;
-  friend class MDiscover;
 
  public:
   CInode();
   ~CInode();
-
   
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
   
   // fun
   bool is_dir() { return inode.isdir; }
-  void make_path(string& s);
   bool is_root() { return (bool)(!parent); }
-  
+  bool is_auth() { return auth; }
+  inodeno_t ino() { return inode.ino; }
+
+  void make_path(string& s);
+
   void hit();
 
-  void mark_dirty() {
-	if (!ref_set.count(CINODE_PIN_DIRTY)) 
-	  get(CINODE_PIN_DIRTY);
+
+  // dirtyness
+  __uint64_t get_version() { return version; }
+  void float_version(__uint64_t ge) {
+	if (version < ge)
+	  version = ge;
   }
+  //void touch_version();  // mark dirty instead.
+  void mark_dirty();
   void mark_clean() {
 	if (ref_set.count(CINODE_PIN_DIRTY)) 
 	  put(CINODE_PIN_DIRTY);
@@ -134,8 +138,48 @@ class CInode : LRUObject {
   bool is_dirty() {
 	return ref_set.count(CINODE_PIN_DIRTY);
   }
+  bool is_clean() {
+	return !ref_set.count(CINODE_PIN_DIRTY);
+  }
 
-  inodeno_t ino() { return inode.ino; }
+
+  // state
+  crope encode_basic_state();
+  int decode_basic_state(crope r, int off=0);
+
+  // cached_by  -- to be used ONLY when we're authoritative!
+  bool is_cached_by_anyone() {
+	return !cached_by.empty();
+  }
+  bool is_cached_by(int mds) {
+	return cached_by.count(mds);
+  }
+  void cached_by_add(int mds) {
+	if (is_cached_by(mds)) return;
+	if (cached_by.empty()) 
+	  get(CINODE_PIN_CACHED);
+	cached_by.insert(mds);
+  }
+  void cached_by_remove(int mds) {
+	if (!is_cached_by(mds)) return;
+	cached_by.erase(mds);
+	if (cached_by.empty())
+	  put(CINODE_PIN_CACHED);	  
+  }
+  void cached_by_clear() {
+	if (cached_by.size())
+	  put(CINODE_PIN_CACHED);
+	cached_by.clear();
+  }
+  set<int>::iterator cached_by_begin() {
+	return cached_by.begin();
+  }
+  set<int>::iterator cached_by_end() {
+	return cached_by.end();
+  }
+  set<int>& get_cached_by() {
+	return cached_by;
+  }
 
   // state
   /*
@@ -156,7 +200,6 @@ class CInode : LRUObject {
   }
   */
 
-  __uint32_t get_version() { return version; }
   
   // dist cache
   int authority(MDCluster *mdc);
@@ -201,6 +244,9 @@ class CInode : LRUObject {
 	ref++;
 	ref_set.insert(by);
 	cout << " get " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+  }
+  bool is_pinned_by(int by) {
+	return ref_set.count(by);
   }
 
   // --- hierarchy stuff

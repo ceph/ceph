@@ -12,9 +12,9 @@ using namespace std;
 struct MDiscoverRec_t {
   inode_t    inode;
   set<int>   cached_by;
+  int        dir_auth;
 
   // dir stuff
-  int        dir_auth;
   int        dir_rep;
   set<int>   dir_rep_by;
 
@@ -159,7 +159,7 @@ class MDiscover : public Message {
 	MDiscoverRec_t bit;
 
 	bit.inode = in->inode;
-	bit.cached_by = in->cached_by;
+	bit.cached_by = in->get_cached_by();
 	bit.cached_by.insert( auth );  // obviously the authority has it too
 	bit.dir_auth = in->dir_auth;
 	if (in->is_dir() && in->dir) {

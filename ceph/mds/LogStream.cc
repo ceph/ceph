@@ -57,8 +57,12 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	// does buffer have what we want?
 	if (buf_start > cur_pos ||
 		buf_start+buffer.length() < cur_pos+4) {
+
+	  // make sure block is being read
 	  if (reading_block) {
 		dout(5) << "read_next already reading log head from disk, offset " << cur_pos << endl;
+		assert(0);  
+		//waiting_for_read_block.push_back(new C_LS_ReadNext(this, le, c));
 	  } else {
 		dout(5) << "read_next reading log head from disk, offset " << cur_pos << endl;
 		// nope.  read a chunk
@@ -109,5 +113,21 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	  c->finish(0);
 	  delete c;
 	}
+
+	/*
+	// any other waiters too!
+	list<Context*> finished = waiting_for_read_block;
+	waiting_for_read_block.clear();
+	for (list<Context*>::iterator it = finished.begin();
+		 it != finished.end();
+		 it++) {
+	  Context *c = *it;
+	  if (c) {
+		c->finish(0);
+		delete c;
+	  }
+	}
+	*/
+	
   }
 }

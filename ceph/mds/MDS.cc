@@ -416,7 +416,7 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	// do update
 	cur->inode.mtime++; // whatever
 	cur->inode.touched++;
-	cur->version++;
+	cur->mark_dirty();
 
 	// tell replicas
 	mdcache->send_inode_updates(cur);

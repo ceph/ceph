@@ -135,6 +135,11 @@ int MDLog::trim(Context *c)
 
 void MDLog::trim_readnext()
 {
+  if (trim_reading) {
+	dout(10) << "trim_readnext already reading." << endl;
+	return;
+  }
+
   dout(10) << "trim_readnext" << endl;
   trim_reading = true;
   C_MDL_Trim *readfin = new C_MDL_Trim(this);

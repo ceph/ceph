@@ -8,6 +8,46 @@
 #include "../MDCache.h"
 #include "../MDStore.h"
 
+/* so we can verify the inode is in fact flushed to disk
+   after a commit_dir finishes (the commit could have started before 
+   and been in progress when we asked. */
+class C_EIU_VerifyInodeUpdate : public Context {
+  MDS *mds;
+  inodeno_t ino;
+  __uint64_t version;
+  Context *fin;
+
+ public:
+  C_EIU_VerifyInodeUpdate(MDS *mds, inodeno_t ino, __uint64_t version, Context *fin) {
+	this->mds = mds;
+	this->ino = ino;
+	this->version = version;
+	this->fin = fin;
+  }
+  virtual void finish(int r) {
+	CInode *in = mds->mdcache->get_inode(ino);
+	if (in) {
+	  // make sure it's clean, or a different version.
+	  if (in->is_dirty() &&
+		  in->get_version() == version) {
+		cout << "ARGH, did EInodeUpdate commit but inode is still dirty" << endl;
+		// damnit
+		mds->mdstore->commit_dir(in->get_parent_inode(),
+								 new C_EIU_VerifyInodeUpdate(mds,
+															 in->ino(),
+															 in->get_version(),
+															 fin));
+		return;
+	  }
+	}
+	// we're fine.
+	if (fin) {
+	  fin->finish(0);
+	  delete fin;
+	}
+  }
+};
+
 class EInodeUpdate : public LogEvent {
  protected:
   inode_t inode;
@@ -55,7 +95,10 @@ class EInodeUpdate : public LogEvent {
 	  // okay!
 	  cout << "commiting containing dir for " << inode.ino << endl;
 	  mds->mdstore->commit_dir(parent,
-							   c);
+							   new C_EIU_VerifyInodeUpdate(mds,
+														   in->ino(),
+														   in->get_version(),
+														   c));
 	} else {
 	  // oh, i'm the root inode
 	  cout << "don't know how to commit the root inode" << endl;

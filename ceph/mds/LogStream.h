@@ -17,6 +17,8 @@ class LogStream {
   object_t oid;
 
   bool reading_block;
+  //list<Context*> waiting_for_read_block;
+
   crope buffer;
   off_t buf_start;
  public:

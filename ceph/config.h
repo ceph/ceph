@@ -1,3 +1,4 @@
+// random crap
 
 #define NUMMDS 30
 #define NUMOSD 10
@@ -12,10 +13,10 @@
 #define MAX_TRIMMING          16    // max events to be retiring simultaneously
 #define LOGSTREAM_READ_INC  4096    // make this bigger than biggest event
 
-//#define FAKE_CLOCK
+#define FAKE_CLOCK
 
-#define NUMCLIENT             100
-#define CLIENT_REQUESTS       1000
+#define NUMCLIENT             1000
+#define CLIENT_REQUESTS       100
 
 #define DEBUG_LEVEL 10
 

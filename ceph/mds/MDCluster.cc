@@ -6,6 +6,9 @@
 #include <iostream>
 using namespace std;
 
+#include <sys/types.h>
+#include <unistd.h>
+
 MDCluster::MDCluster(int num_mds, int num_osd)
 {
   this->num_mds = num_mds;
@@ -63,5 +66,5 @@ int MDCluster::get_log_osd(int mds)
 
 object_t MDCluster::get_log_oid(int mds)
 {
-  return 1000 + mds;
+  return ((object_t)1000*(object_t)getpid()) + (object_t)mds;
 }

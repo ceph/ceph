@@ -57,16 +57,18 @@ class MDFetchDirContext : public Context {
 bool MDStore::fetch_dir( CInode *in,
 						 Context *c )
 {
+  assert(in->is_auth());
+
   dout(7) << "fetch_dir " << in->inode.ino << " context is " << c << endl;
   if (c) 
 	in->dir->add_waiter(c);
 
   // already fetching?
-  if (in->mid_fetch) {
+  if (in->dir->state_test(CDIR_STATE_FETCHING)) {
 	dout(7) << "already fetching " << in->inode.ino << "; waiting" << endl;
 	return true;
   }
-  in->mid_fetch = true;
+  in->dir->set_state(CDIR_STATE_FETCHING);
 
   // create return context
   MDFetchDirContext *fin = new MDFetchDirContext( this, in->ino() );
@@ -165,14 +167,14 @@ bool MDStore::fetch_dir_2( int result,
 	}
 
 	// dir is now complete
-	idir->dir->state_set(CDIR_MASK_COMPLETE);
+	idir->dir->state_set(CDIR_STATE_COMPLETE);
   }
 
  
   // finish
   list<Context*> finished;
   idir->dir->take_waiting(finished);
-  idir->mid_fetch = false;
+  idir->dir->state_cleaer(CDIR_STATE_FETCHING);
   
   list<Context*>::iterator it = finished.begin();	
   while (it != finished.end()) {
@@ -269,6 +271,8 @@ public:
 bool MDStore::commit_dir( CInode *in,
 						  Context *c )
 {
+  assert(in->is_auth());
+
   // already committing?
   if (in->dir->get_state() & CDIR_MASK_MID_COMMIT) {
 	// already mid-commit!
@@ -342,9 +346,19 @@ bool MDStore::commit_dir_2( int result,
 
   // is the dir now clean?
   if (committed_version == in->dir->get_version()) {
-	in->dir->state_clear(CDIR_MASK_DIRTY);   // clear dirty bit
+	mark_clean();
   }
   in->dir->state_clear(CDIR_MASK_MID_COMMIT);
+
+  // mark inodes clean too (if we committed them!)
+  for (CDir_map_t::iterator it = in->dir->begin();
+	   it != in->dir->end();
+	   it++) {
+	if (it->second->get_version() <= committed_version) {
+	  assert(it->second->is_dirty());
+	  it->second->mark_clean();
+	}
+  }
 
   // unpin
   in->dir->hard_unpin();

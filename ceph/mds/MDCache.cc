@@ -134,7 +134,7 @@ bool MDCache::trim(__int32_t max) {
 
 	if (idir) {
 	  // dir incomplete!
-	  idir->dir->state_clear(CDIR_MASK_COMPLETE);
+	  idir->dir->state_clear(CDIR_STATE_COMPLETE);
 
 	  // reexport?
 	  if (imports.count(idir) &&                // import
@@ -183,6 +183,32 @@ bool MDCache::shutdown_pass()
   } else {
 	dout(7) << "log is empty; flushing cache" << endl;
 	trim(0);
+
+	if (mds->get_nodeid() == 0) {
+	  // unpin inodes on shut down nodes.
+	  // NOTE: this happens when they expire during an export; expires reference inodes, and can thus
+	  // be missed.
+	  bool didsomething = false;
+	  for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
+		   it != inode_map.end();
+		   it++) {
+		CInode *in = it->second;
+		if (in->is_auth() &&
+			in->is_cached_by_anyone()) {
+		  for (set<int>::iterator by = in->cached_by.begin();
+			   by != in->cached_by.end();
+			   by++) {
+			if (mds->is_shut_down(*by)) {
+			  in->cached_by_remove(*by);
+			  didsomething = true;
+			}
+		  }
+		}
+	  }
+	  if (didsomething)
+		trim(0);
+	}
+
   }
 
   dout(7) << "cache size now " << lru->lru_get_size() << endl;
@@ -292,6 +318,10 @@ int MDCache::link_inode( CInode *parent, string& dname, CInode *in )
 
   // add to dir
   parent->dir->add_child(dn);
+
+  // fix up versions
+  parent->dir->float_version(inode->get_version());  // unlikely
+  in->float_version(in->get_version());              // likely
 
   return 0;
 }
@@ -465,7 +495,7 @@ int MDCache::write_start(CInode *in, Message *m)
   if (auth == whoami) {
 	// we are the authority.
 
-	if (in->cached_by.size() == 0) {
+	if (!in->cached_by_anyone()) {
 	  // it's just us!
 	  in->sync_set(CINODE_SYNC_LOCK);
 	  in->get();
@@ -481,7 +511,7 @@ int MDCache::write_start(CInode *in, Message *m)
 	  
 	  // send sync_start
 	  set<int>::iterator it;
-	  for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
+	  for (it = in->cached_by_begin(); it != in->cached_by_end(); it++) {
 		mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, auth),
 									 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 									 MDS_PORT_CACHE);
@@ -508,7 +538,7 @@ int MDCache::write_finish(CInode *in)
   in->put();         // unpin
 
   // 
-  if (in->cached_by.size()) {
+  if (in->cached_by_anyone()) {
 	// release
 	set<int>::iterator it;
 	for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
@@ -747,7 +777,8 @@ int MDCache::handle_discover(MDiscover *dis)
 	  root->dir = new CDir(root);
 	  root->dir->dir_rep = trace[0].dir_rep;
 	  root->dir->dir_rep_by = trace[0].dir_rep_by;
-	  
+	  root->auth = false;
+
 	  set_root( root );
 
 	  opening_root = false;
@@ -812,6 +843,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		  in->dir->dir_rep = trace[i].dir_rep;
 		  in->dir->dir_rep_by = trace[i].dir_rep_by;
 		}
+		in->auth = false;
 		
 		// link in
 		add_inode( in );
@@ -864,9 +896,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	  CInode *root = get_root();
 	  dis->add_bit( root, 0 );
 
-	  if (root->cached_by.empty())
-		root->get(CINODE_PIN_CACHED);
-	  root->cached_by.insert( dis->get_asker() );
+	  root->cached_by_add(dis->get_asker());
 	}
 
 	// add bits
@@ -899,9 +929,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		  dis->add_bit( next, whoami );
 		  
 		  // remember who is caching this!
-		  if (next->cached_by.empty()) 
-			next->get(CINODE_PIN_CACHED);
-		  next->cached_by.insert( dis->get_asker() );
+		  next->cached_by_add( dis->get_asker() );
 		  
 		  cur = next; // continue!
 		} else {
@@ -951,13 +979,12 @@ int MDCache::handle_discover(MDiscover *dis)
 
 int MDCache::send_inode_updates(CInode *in)
 {
-  set<int>::iterator it;
-  for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
+  for (set<int>::iterator it = in->cached_by_begin(); 
+	   it != in->cached_by_end(); 
+	   it++) {
 	dout(7) << "sending inode_update on " << *in << " to " << *it << endl;
 	assert(*it != mds->get_nodeid());
-	mds->messenger->send_message(new MInodeUpdate(in->inode,
-												  in->cached_by,
-												  in->dir_auth),
+	mds->messenger->send_message(new MInodeUpdate(in),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
@@ -968,11 +995,11 @@ int MDCache::send_inode_updates(CInode *in)
 
 void MDCache::handle_inode_update(MInodeUpdate *m)
 {
-  CInode *in = get_inode(m->get_inode().ino);
+  CInode *in = get_inode(m->get_ino());
   if (!in) {
-	dout(7) << "got inode_update on " << m->get_inode().ino << ", don't have it, sending expire" << endl;
+	dout(7) << "got inode_update on " << m->get_ino() << ", don't have it, sending expire" << endl;
 
-	mds->messenger->send_message(new MInodeExpire(m->get_inode().ino, mds->get_nodeid(), true),
+	mds->messenger->send_message(new MInodeExpire(m->get_ino(), mds->get_nodeid(), true),
 								 m->get_source(), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	
@@ -989,9 +1016,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   // update!
   dout(7) << "got inode_update on " << *in << endl;
 
-  in->inode = m->get_inode();
-  in->cached_by = m->get_cached_by();
-  in->dir_auth = m->get_dir_auth();
+  in->decode_basic_state(m->get_payload());
 
   // done
   delete m;
@@ -1016,15 +1041,13 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
   }
 
   // remove from our cached_by
-  if (!in->cached_by.count(from)) {
+  if (!in->is_cached_by(from)) {
 	dout(7) << "got inode_expire on " << *in << " from mds" << from << ", but they're not in cached_by "<< in->cached_by << endl;
 	goto out;
   }
 
   dout(7) << "got inode_expire on " << *in << " from mds" << from << " cached_by now " << in->cached_by << endl;
-  in->cached_by.erase(from);
-  if (in->cached_by.empty()) 
-	in->put(CINODE_PIN_CACHED);
+  in->cached_by_remove(from);
 
 
   // done
@@ -1057,9 +1080,12 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
 
 int MDCache::send_dir_updates(CDir *dir, int except)
 {
+  
+  // FIXME
+
   int whoami = mds->get_nodeid();
-  for (set<int>::iterator it = dir->inode->cached_by.begin(); 
-	   it != dir->inode->cached_by.end(); 
+  for (set<int>::iterator it = dir->inode->cached_by_begin(); 
+	   it != dir->inode->cached_by_end(); 
 	   it++) {
 	if (*it == whoami) continue;
 	if (*it == except) continue;
@@ -1487,6 +1513,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	} else 
 	  istate.dir_auth = -1;
 
+	// cached_by
 	dir_rope.append( (char*)&istate, sizeof(istate) );
 
 	for (set<int>::iterator it = in->cached_by.begin();
@@ -1496,12 +1523,11 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  dir_rope.append( (char*)&i, sizeof(int) );
 	}
 
-	// unpin cached_by
-	if (!in->cached_by.empty()) {
-	  in->cached_by.clear();      // only get to do this once, because we're newly non-authoritative.
-	  in->put(CINODE_PIN_CACHED); // non-authorities are not allowed to pin this!
-	}
+	// clear/unpin cached_by (we're no longer the authority)
+	in->cached_by_clear();
 
+	assert(in->auth == true);
+	in->auth = false;
 
 	// other state too!.. open files, etc...
 
@@ -1549,6 +1575,10 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
 {
   dout(7) << "export_dir_purge on " << *idir << endl;
 
+  // discard most dir state
+  idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+  
+  // contents:
   CDir_map_t::iterator it = idir->dir->begin();
   while (it != idir->dir->end()) {
 	CInode *in = it->second->inode;
@@ -1557,9 +1587,6 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
 	if (in->is_dir() && in->dir) 
 	  export_dir_purge(in, newauth);
 	
-	// dir incomplete!
-	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
-
 	dout(7) << "sending inode_expire to mds" << newauth << " on " << *in << endl;
 	mds->messenger->send_message(new MInodeExpire(in->inode.ino, mds->get_nodeid()),
 								 MSG_ADDR_MDS(newauth), MDS_PORT_CACHE,
@@ -1672,9 +1699,6 @@ void MDCache::handle_export_dir(MExportDir *m)
   if (in->authority(mds->get_cluster()) == in->dir_auth)
 	in->dir_auth = CDIR_AUTH_PARENT;
 
-  // ignore "frozen" state of the main dir; it's from the authority
-  in->dir->state_clear(CDIR_MASK_FROZEN);
-
   double newpop = m->get_ipop() - in->popularity.get();
   dout(7) << " imported popularity jump by " << newpop << endl;
   if (newpop > 0) {  // duh
@@ -1747,7 +1771,7 @@ void MDCache::import_dir_block(pchar& p,
   if (!idir->dir) idir->dir = new CDir(idir);
 
   idir->dir->version = dstate->version;
-  idir->dir->state = dstate->state;
+  idir->dir->state = dstate->state & CDIR_MASK_STATE_EXPORTED;  // we only import certain state
   idir->dir->dir_rep = dstate->dir_rep;
   idir->dir->popularity = dstate->popularity;
   
@@ -1782,6 +1806,9 @@ void MDCache::import_dir_block(pchar& p,
 	} else {
 	  dout(7) << "   import_dir_block already had " << *in << endl;
 	  in->inode = istate->inode;
+
+	  assert(in->auth == false);
+	  in->auth = true;
 	}
 	
 	// update inode state with authoritative info
@@ -1793,17 +1820,14 @@ void MDCache::import_dir_block(pchar& p,
 	
 	p += sizeof(*istate);
 	
-	in->cached_by.clear();
+	in->cached_by.clear();  // HACK i'm cheating...
 	for (int nby = istate->ncached_by; nby>0; nby--) {
 	  if (*((int*)p) != mds->get_nodeid()) 
-		in->cached_by.insert( *((int*)p) );
+		in->cached_by_add( *((int*)p) );
 	  p += sizeof(int);
 	}
 
-	in->cached_by.insert(oldauth);             // old auth still has it too!
-
-	if (in->cached_by.size())
-	  in->get(CINODE_PIN_CACHED);              // pin bc of cached_by
+	in->cached_by_add(oldauth);             // old auth still has it too!
 
 	// other state? ... ?
 

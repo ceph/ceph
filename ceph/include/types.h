@@ -31,7 +31,7 @@ typedef __uint64_t inodeno_t;   // ino
 typedef __uint64_t mdloc_t;     // dir locator?
 
 struct inode_t {
-  inodeno_t ino;
+  inodeno_t ino;   // NOTE: this must come first
 
   __uint32_t touched;
   __uint64_t size;

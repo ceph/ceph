@@ -6,15 +6,15 @@
 
 #include "include/DecayCounter.h"
 
-#include <map>
-#include <ext/hash_map>
-#include <string>
-
 #include <iostream>
 #include <cassert>
 
+#include <ext/rope>
 #include <list>
 #include <set>
+#include <map>
+#include <ext/hash_map>
+#include <string>
 using namespace std;
 
 class CInode;
@@ -24,13 +24,19 @@ class MDCluster;
 class Context;
 
 // state bits
-#define CDIR_MASK_COMPLETE      1   // the complete contents are in cache
-#define CDIR_MASK_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
-#define CDIR_MASK_DIRTY         4   // has been modified since last commit
-#define CDIR_MASK_MID_COMMIT    8   // mid-commit
+#define CDIR_STATE_COMPLETE      1   // the complete contents are in cache
+#define CDIR_STATE_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
+#define CDIR_STATE_DIRTY         4   // has been modified since last commit
+#define CDIR_STATE_MID_COMMIT    8   // mid-commit
 
-#define CDIR_MASK_FROZEN       16   // root of a freeze
-#define CDIR_MASK_FREEZING     32   // in process of freezing
+#define CDIR_STATE_FROZEN       16   // root of a freeze
+#define CDIR_STATE_FREEZING     32   // in process of freezing
+#define CDIR_STATE_FETCHING     64   // currenting fetching
+
+// these state bits are preserved by an import/export
+#define CDIR_MASK_STATE_EXPORTED  (CDIR_STATE_COMPLETE\
+                             |CDIR_STATE_DIRTY)
+#define CDIR_MASK_STATE_EXPORT_KEPT 0
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -108,13 +114,38 @@ class CDir {
   void reset_state(unsigned s) { state = s; }
   void state_clear(unsigned mask) {	state &= ~mask; }
   void state_set(unsigned mask) { state |= mask; }
+  unsigned state_test(unsigned mask) { state & mask; }
 
-  bool is_complete() { return state & CDIR_MASK_COMPLETE; }
-  bool is_freeze_root() { return state & CDIR_MASK_FROZEN; }
-  
+  bool is_complete() { return state & CDIR_STATE_COMPLETE; }
+  bool is_freeze_root() { return state & CDIR_STATE_FROZEN; }
+
+  // dirtyness
+  // invariant: if clean, my version >= all inode versions
+  __uint64_t get_version() {
+	return version;
+  }
+  //void touch_version() { version++; }
+  void float_version(__uint64_t ge) {
+	if (version < ge)
+	  version = ge;
+  }
+  void mark_dirty() {
+	if (!state_test(CDIR_STATE_DIRTY)) {
+	  version++;
+	  state_set(CDIR_STATE_DIRTY);
+	}
+  }
+  void mark_clean() {
+	state_clear(CDIR_STATE_DIRTY);
+  }
+  bool is_clean() {
+	return !state_test(CDIR_STATE_DIRTY);
+  }
   
   void hit();
 
+  crope encode_basic_state();
+  int decode_basic_state(crope r, int off=0);
 
 
   // waiters  
@@ -141,13 +172,6 @@ class CDir {
 
 
 
-  // version
-  __uint64_t get_version() {
-	return version;
-  }
-  void touch_version() {
-	version++;
-  }
 
   CInode *get_inode() { return inode; }
 

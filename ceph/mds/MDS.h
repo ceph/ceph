@@ -121,7 +121,11 @@ class MDS : public Dispatcher {
   mds_load_t get_load();
 
   bool is_shutting_down() { return shutting_down; }
-  bool is_shut_down() { return shut_down; }
+  bool is_shut_down(int who=-1) { 
+	if (who<0)
+	  return shut_down; 
+	return did_shut_down.count(who);
+  }
 
   int init();
   int shutdown_start();
