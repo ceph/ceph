@@ -136,7 +136,7 @@ int MDS::handle_client_request(MClientRequest *req)
 {
   cout << "mds" << whoami << " got client request from " << req->get_source() << ", op " << req->op << endl;
 
-
+  
   
 }
 
@@ -264,7 +264,7 @@ int MDS::osd_write_finish(Message *rawm)
   long result = m->len;
   delete m;
 
-  cout << "mds: finishing osd_write" << endl;
+  cout << "mds" << whoami << " finishing osd_write" << endl;
 
   if (c) {
 	c->finish(result);

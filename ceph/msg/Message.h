@@ -46,7 +46,10 @@ class Message {
 	source = dest = -1;
   };
   Message(int t) {
-	Message();
+	serialized = 0;
+	serial_len = 0;
+	source_port = dest_port = -1;
+	source = dest = -1;
 	type = t;
   }
   ~Message() {
