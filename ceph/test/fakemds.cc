@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 
+#include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
 #include "client/Client.h"
@@ -11,7 +12,7 @@
 #include "mds/MDCache.h"
 #include "mds/MDStore.h"
 
-#include "FakeMessenger.h"
+#include "include/FakeMessenger.h"
 
 #include "messages/MPing.h"
 
@@ -30,7 +31,7 @@ int play();
 
 int main(char **argv, int argc) {
   cout << "hi there" << endl;
-
+  
   try {
 	play();
   }
@@ -44,9 +45,10 @@ int play() {
 
   // init
   // create mds
+  MDCluster *mdc = new MDCluster();
   MDS *mds[10];
   for (int i=0; i<NUMMDSS; i++) {
-	mds[i] = new MDS(0, 1, new FakeMessenger(MSG_ADDR_MDS(i)));
+	mds[i] = new MDS(mdc, new FakeMessenger(MSG_ADDR_MDS(i)));
 	mds[i]->open_root(NULL);
 	mds[i]->init();
   }
@@ -105,6 +107,7 @@ int play() {
 	  cout << "problems shutting down client " << i << endl;
 	}
   }
+  delete mdc;
   cout << "done." << endl;
   return 0;
 }

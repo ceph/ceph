@@ -15,6 +15,7 @@
 #define MSG_CLIENT_REPLY    21
 
 #define MSG_MDS_HEARTBEAT   30
+#define MSG_MDS_DISCOVER    31
 
 
 #define MSG_ADDR_MDS(x)     (x)

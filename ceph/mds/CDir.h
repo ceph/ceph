@@ -15,6 +15,7 @@ using namespace std;
 class CInode;
 class CDentry;
 class MDS;
+class MDCluster;
 
 
 // state bits
@@ -26,6 +27,11 @@ class MDS;
 // common states
 #define CDIR_STATE_CLEAN   0
 #define CDIR_STATE_INITIAL 0   // ?
+
+// distributions
+#define CDIR_DIST_PARENT   -1   // default
+#define CDIR_DIST_HASH     -2
+
 
 // CDir
 typedef map<string, CDentry*> CDir_map_t;
@@ -61,6 +67,9 @@ class CDir {
   void state_set(unsigned mask) {
 	state |= mask;
   }
+  bool is_complete() {
+	return state & CDIR_MASK_COMPLETE;
+  }
 
   // version
   __uint64_t get_version() {
@@ -69,6 +78,13 @@ class CDir {
   void touch_version() {
 	version++;
   }
+
+  CInode *get_inode() { return inode; }
+
+  // distributed cache
+  int dentry_authority(string& d, MDCluster *mdc);
+  
+
 
   // for storing..
   size_t serial_size() {

@@ -10,8 +10,7 @@ using namespace std;
 class CInode;
 
 typedef struct {
-  inodeno_t ino;
-  bool isdir;
+  inode_t inode;
   bit_vector dist;
   string ref_dn;    // referring dentry (blank if root)
 } c_inode_info;
@@ -20,6 +19,7 @@ class MClientReply : public Message {
  public:
   long tid;
   int op;
+  int result;  // error code
 
   // reply data
   string path;
@@ -51,9 +51,8 @@ class MClientReply : public Message {
 	while (it != tr.end()) {
 	  CInode *in = *(it++);
 	  c_inode_info *i = new c_inode_info;
-	  i->ino = in->inode.ino;
+	  i->inode = in->inode;
 	  i->dist = in->get_dist_spec(mds);
-	  i->isdir = in->is_dir();
 	  if (p) 
 		i->ref_dn = trace_dn[p-1];
 	  else

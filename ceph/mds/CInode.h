@@ -9,13 +9,15 @@
 
 #include <list>
 #include <vector>
+#include <set>
 using namespace std;
 
 
+class Context;
 class CDentry;
 class CDir;
 class MDS;
-class Context;
+class MDCluster;
 
 // cached inode wrapper
 class CInode : LRUObject {
@@ -32,15 +34,20 @@ class CInode : LRUObject {
 
   // parent dentries in cache
   int              nparents;  
-  CDentry         *parent;            // if 1 parent (usually)
+  CDentry         *parent;     // if 1 parent (usually)
   vector<CDentry*> parents;    // if > 1
 
   // dcache lru
   CInode *lru_next, *lru_prev;
 
-
-  // import/export
-  bool is_import, is_export;
+  // distributed caching
+  int              dir_dist;
+  bit_vector       dir_rep;
+  set<int>         cached_by;  // mds's that cache me
+  bool             is_import, is_export;
+  hash_map< string, list<Context*> >
+                   waiting_for_discover;
+  
 
   // accounting
   DecayCounter popularity;
@@ -49,6 +56,7 @@ class CInode : LRUObject {
   friend class DentryCache;
   friend class CDir;
   friend class MDStore;
+  friend class MDS;
 
  public:
   CInode();
@@ -58,6 +66,16 @@ class CInode : LRUObject {
   // fun
   bool is_dir() {
 	return inode.isdir;
+  }
+
+
+  // dist cache
+  int authority(MDCluster *mdc);
+
+
+  void wait_on_discover(string& dentry,
+						Context *c) {
+	waiting_for_discover[ dentry ].push_back(c);
   }
 
 
@@ -74,7 +92,7 @@ class CInode : LRUObject {
 	  lru_pin();
 	ref++;
   }
-  
+
   // --- hierarchy stuff
   void add_parent(CDentry *p);
 

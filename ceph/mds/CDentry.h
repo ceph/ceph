@@ -17,6 +17,7 @@ class CDentry {
 
   friend class DentryCache;
   friend class MDS;
+  friend class CInode;
 
  public:
   // cons

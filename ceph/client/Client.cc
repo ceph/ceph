@@ -91,25 +91,29 @@ void Client::assim_reply(MClientReply *r)
 		cache_lru.lru_touch(cur);
 	  }
 	}
-	cur->ino = r->trace[i]->ino;
+	cur->ino = r->trace[i]->inode.ino;
 	cur->dist = r->trace[i]->dist;
-	cur->isdir = r->trace[i]->isdir;
+	cur->isdir = r->trace[i]->inode.isdir;
   }
 
 
   // add dir contents
   if (r->op == MDS_OP_READDIR) {
 	cur->havedircontents = true;
+
 	vector<c_inode_info*>::iterator it;
 	for (it = r->dir_contents.begin(); it != r->dir_contents.end(); it++) {
 	  if (cur->lookup((*it)->ref_dn)) 
 		continue;  // skip if we already have it
+
 	  ClNode *n = new ClNode();
-	  n->ino = (*it)->ino;
+	  n->ino = (*it)->inode.ino;
+	  n->isdir = (*it)->inode.isdir;
 	  n->dist = (*it)->dist;
-	  n->isdir = (*it)->isdir;
+
 	  cur->link( (*it)->ref_dn, n );
 	  cache_lru.lru_insert_mid( n );
+
 	  if (debug > 3)
 		cout << "client got dir item " << (*it)->ref_dn << endl;
 	}
@@ -183,7 +187,7 @@ void Client::issue_request()
 void Client::send_request(string& p, int op) 
 {
 
-  MClientRequest *req = new MClientRequest(tid++, op);
+  MClientRequest *req = new MClientRequest(tid++, op, whoami);
   req->ino = 1;
   req->path = p;
 

@@ -31,7 +31,7 @@ using namespace std;
 #define MDS_OP_LINK    123
 
 
-
+class MDCluster;
 class CInode;
 class DentryCache;
 class MDStore;
@@ -51,16 +51,22 @@ typedef struct {
 
 
 
+void split_path(string& path, 
+				vector<string>& bits);
+
 
 class MDS : public Dispatcher {
  protected:
   int          whoami;
-  int          num_nodes;
+
+  MDCluster    *mdcluster;
 
   // import/export
   list<CInode*>      import_list;
   list<CInode*>      export_list;
   
+  bool               opening_root;
+  vector<Context*>   waiting_for_root;
 
   // osd interface
   __uint64_t         osd_last_tid;
@@ -82,7 +88,7 @@ class MDS : public Dispatcher {
 
   
  public:
-  MDS(int id, int num, Messenger *m);
+  MDS(MDCluster *mdc, Messenger *m);
   ~MDS();
 
   int get_nodeid() {
@@ -99,11 +105,13 @@ class MDS : public Dispatcher {
   bool open_root_2(int result, Context *c);
 
 
+  int handle_discover(class MDiscover *m);
+
   // client fun
   int handle_client_request(MClientRequest *m);
 
   int do_stat(MClientRequest *m);
-  int path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req);
+  int path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req, int onfail);
 
 
 

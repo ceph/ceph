@@ -4,7 +4,7 @@
 #include "CInode.h"
 #include "MDStore.h"
 #include "MDS.h"
-
+#include "MDCluster.h"
 
 // CDir
 
@@ -40,6 +40,21 @@ CDentry* CDir::lookup(string n) {
   //cout << "  lookup got " << iter->second << endl;
   return iter->second;
 }
+
+
+int CDir::dentry_authority(string& dn, MDCluster *mdc)
+{
+  if (inode->dir_dist == CDIR_DIST_PARENT) {
+	return inode->authority( mdc );       // same as me
+  }
+  if (inode->dir_dist == CDIR_DIST_HASH) {
+	return mdc->hash_dentry( this, dn );  // hashed
+  }
+
+  // explicit for this whole dir
+  return inode->dir_dist;
+}
+
 
 
 void CDir::dump(int depth) {

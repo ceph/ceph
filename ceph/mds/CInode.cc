@@ -1,6 +1,8 @@
 
 #include "CInode.h"
 #include "CDir.h"
+#include "CDentry.h"
+
 #include "MDS.h"
 #include <string>
 
@@ -11,10 +13,10 @@ CInode::CInode() : LRUObject() {
   parent = NULL;
   nparents = 0;
   
+  dir_dist = CDIR_DIST_PARENT;
   is_import = is_export = false;
   
   dir = NULL;
-  
   lru_next = lru_prev = NULL;
   
   mid_fetch = false;	
@@ -23,6 +25,13 @@ CInode::CInode() : LRUObject() {
 CInode::~CInode() {
   if (dir) { delete dir; dir = 0; }
 }
+
+
+int CInode::authority(MDCluster *cl) {
+  return parent->dir->dentry_authority( parent->name, cl );
+}
+
+
 
 void CInode::add_parent(CDentry *p) {
   nparents++;
@@ -48,6 +57,7 @@ bit_vector CInode::get_dist_spec(MDS *mds)
 
   return ds;
 }
+
 
 
 void CInode::dump(int dep)
