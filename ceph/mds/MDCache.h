@@ -157,6 +157,8 @@ class MDCache {
   bool write_soft_start(CInode *in, Message *m);
   int write_soft_finish(CInode *in);
   void sync_start(CInode *in);
+  void sync_finish(CInode *in);
+
 
   // hard locks  
   bool read_hard_start(CInode *in, Message *m);

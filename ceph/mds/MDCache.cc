@@ -27,7 +27,7 @@
 
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
-#include "messages/MInodeSyncRelease.h"
+#include "messages/MInodeSyncFinish.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -419,7 +419,6 @@ int MDCache::proc_message(Message *m)
 
 
 	// sync
-	/*
   case MSG_MDS_INODESYNCSTART:
 	handle_inode_sync_start((MInodeSyncStart*)m);
 	break;
@@ -431,7 +430,6 @@ int MDCache::proc_message(Message *m)
   case MSG_MDS_INODESYNCRELEASE:
 	handle_inode_sync_release((MInodeSyncRelease*)m);
 	break;
-	*/
 	
 	// import
   case MSG_MDS_EXPORTDIRPREP:
@@ -1014,12 +1012,12 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	// i am replica
 	if (in->is_softasync()) {
 	  // forward
-	  dout(5) << "read_soft_start " << *in << " is softasync, fw to auth " << auth << endl;
 	  int auth = in->authority(mds->get_cluster());
+	  dout(5) << "read_soft_start " << *in << " is softasync, fw to auth " << auth << endl;
 	  assert(auth != mds->get_nodeid());
 	  mds->messenger->send_message(m,
 								   MSG_ADDR_MDS(auth), m->get_dest_port(),
-								   MDS_PORT_MDCACHE);
+								   MDS_PORT_CACHE);
 	  return false;
 	} 
 	if (in->is_syncbythem()) {
@@ -1047,14 +1045,14 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
   
   if (in->auth) {
 	// i am authority
-	if (!in->cached_by_anyone()) return true;    // i am alone
+	if (!in->is_cached_by_anyone()) return true;    // i am alone
 	if (in->is_softasync() &&
 		!in->is_syncbythem()) return true;       // soft updates, and not synced by them
-
+	
 	// sync
 	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, waiting on sync " << endl;
-	in->add_sync_waiter(new C_MDS_Retrymessage(mds, m));
-
+	in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
+	
 	if (!in->is_presync())
 	  sync_start(in); // start sync
   } else {
@@ -1064,8 +1062,8 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	
 	// forward to auth
 	int auth = in->authority(mds->get_cluster());
-	assert(auth != mds->get_nodeid());
 	dout(5) << "write_soft_start " << *in << " is !softasync|syncbythem, fw to auth " << auth << endl;
+	assert(auth != mds->get_nodeid());
 	mds->messenger->send_message(m,
 								 MSG_ADDR_MDS(auth), m->get_dest_port(),
 								 m->get_dest_port());
@@ -1073,12 +1071,12 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
   return false;
 }
 
-int write_soft_finish(CInode *in)
+int MDCache::write_soft_finish(CInode *in)
 {
   return 0;  // do nothing, actually?
 }
 
-void sync_start(CInode *in)
+void MDCache::sync_start(CInode *in)
 {
   assert(in->is_auth());
   assert(!in->is_presync());
@@ -1100,7 +1098,7 @@ void sync_start(CInode *in)
   }
 }
 
-void sync_finish(CInode *in)
+void MDCache::sync_finish(CInode *in)
 {
   assert(in->is_syncbyme());
   assert(in->is_auth());
@@ -1125,29 +1123,29 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   // assume asker == authority for now.
   
   // authority is requesting a lock
-  CInode *in = get_inode(m->ino);
+  CInode *in = get_inode(m->get_ino());
   if (!in) {
 	// don't have it anymore!
-	dout(7) << "handle_sync_start " << in->inode.ino << ": don't have it anymore, nak" << endl;
-	mds->messenger->send_message(new MInodeExpire(m->ino, mds->get_nodeid(), true),
-								 MSG_ADDR_MDS(m->asker), MDS_PORT_CACHE,
+	dout(7) << "handle_sync_start " << m->get_ino() << ": don't have it anymore, nak" << endl;
+	mds->messenger->send_message(new MInodeExpire(m->get_ino(), mds->get_nodeid(), true),
+								 MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	delete m; // done
 	return;
   }
-
+  
   // we shouldn't be authoritative...
   assert(!in->is_auth());
-
+  
   dout(7) << "handle_sync_start " << *in << ", sending ack" << endl;
   
   // lock it
   in->get(CINODE_PIN_SYNCBYTHEM);
-  in->dist_state &= CINODE_DIST_SYNCTHEM;
+  in->dist_state &= CINODE_DIST_SYNCBYTHEM;
   
   // send ack
-  mds->messenger->send_message(new MInodeSyncAck(m->ino),
-							   MSG_ADDR_MDS(m->asker), MDS_PORT_CACHE,
+  mds->messenger->send_message(new MInodeSyncAck(in->ino()),
+							   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
 
   delete m;  // done
@@ -1155,7 +1153,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 
 void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 {
-  CInode *in = get_inode(m->ino);
+  CInode *in = get_inode(m->get_ino());
   assert(in);
   assert(in->is_auth());
   assert(in->dist_state & CINODE_DIST_PRESYNC);
@@ -1166,12 +1164,12 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
   if (in->sync_waiting_for_ack.size()) {
 
 	// more coming
-	dout(7) << "handle_sync_ack " << m->ino << " from " << m->get_source() << ", still waiting for " << in->sync_waiting_for_ack << endl;
+	dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << ", still waiting for " << in->sync_waiting_for_ack << endl;
 	
   } else {
 	
 	// yay!
-	dout(7) << "handle_sync_ack " << m->ino << " from " << m->get_source() << ", last one" << endl;
+	dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << ", last one" << endl;
 
 	in->dist_state -= CINODE_DIST_PRESYNC;
 	in->dist_state &= CINODE_DIST_SYNCBYME;
@@ -1180,9 +1178,9 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 
 	// do waiters!
 	list<Context*> finished;
-	in->take_sync_waiters(finished);
+	in->take_sync_waiting(finished);
 
-	for (it = list<Context*>::iterator it = finished.begin();
+	for (list<Context*>::iterator it = finished.begin();
 		 it != finished.end();
 		 it++) {
 	  Context *c = *it;
@@ -1203,10 +1201,10 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 
 void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
 {
-  CInode *in = get_inode(m->ino);
+  CInode *in = get_inode(m->get_ino());
 
   if (!in) {
-	dout(7) << "handle_sync_release " << m->ino << ", don't have it anymore" << endl;
+	dout(7) << "handle_sync_release " << m->get_ino() << ", don't have it, dropping" << endl;
 	delete m;  // done
 	return;
   }
@@ -1214,7 +1212,7 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
   assert(in->is_syncbythem());
   assert(!in->is_auth());
   
-  dout(7) << "handle_sync_release " << m->ino << endl;
+  dout(7) << "handle_sync_release " << *in << endl;
   
   in->put(CINODE_PIN_SYNCBYTHEM);
   in->dist_state -= CINODE_DIST_SYNCBYTHEM;

@@ -123,7 +123,7 @@ class CInode : LRUObject {
 	 for authority: set of nodes; self is assumed, but not included
 	 for replica:   undefined */
   unsigned         dist_state;
-
+  set<int>         sync_waiting_for_ack;
 
   // open file state
   // sets of client ids!
@@ -157,6 +157,7 @@ class CInode : LRUObject {
   bool is_root() { return (bool)(!parent); }
   bool is_auth() { return auth; }
   inodeno_t ino() { return inode.ino; }
+  inode_t& get_inode() { return inode; }
 
   void make_path(string& s);
 
@@ -233,8 +234,14 @@ class CInode : LRUObject {
   bool is_presync() { return dist_state & CINODE_DIST_PRESYNC; }
   bool is_softasync() { return dist_state & CINODE_DIST_SOFTASYNC; }
 
-  bool is_lock() { return dist_state & CINODE_DIST_LOCKED; }
-  bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
+  void add_sync_waiter(Context *c);
+  void take_sync_waiting(list<Context*>& ls);
+  void add_lock_waiter(Context *c);
+  void take_lock_waiting(list<Context*>& ls);
+
+
+  //bool is_lock() { return dist_state & CINODE_DIST_LOCKED; }
+  //bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
 
   // open
   bool is_open() {
@@ -301,11 +308,6 @@ class CInode : LRUObject {
   void hard_unpin();
   void add_hard_pin_waiter(Context *c);
 
-
-  void add_sync_waiter(Context *c);
-  void take_sync_waiting(list<Context*>& ls);
-  void add_lock_waiter(Context *c);
-  void take_lock_waiting(list<Context*>& ls);
 
   // --- reference counting
   void put(int by) {
