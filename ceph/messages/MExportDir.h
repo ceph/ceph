@@ -6,40 +6,18 @@
 #include <ext/rope>
 using namespace std;
 
-typedef struct {
-  inode_t        inode;
-  __uint64_t     version;
-  DecayCounter   popularity;
-  //int            ref;         // hmm, fyi for debugging?
-  int            dir_auth;
-
-  bool           dirty;       // dirty inode?
-  bool           is_softasync;
-
-  int            ncached_by;  // ints follow
-} Inode_Export_State_t;
-
-typedef struct {
-  inodeno_t      ino;
-  __uint64_t     nitems;
-  __uint64_t     version;
-  int            dir_auth;
-  int            dir_rep;
-  unsigned       state;
-  DecayCounter   popularity;
-  int            ndir_rep_by;
-  // ints follow
-} Dir_Export_State_t;
-  
 
 class MExportDir : public Message {
   inodeno_t ino;
   double ipop;
+  
   int    ndirs;
   crope  state;
   
+  list<inodeno_t> exports;
+
   // hashed pre-discovers
-  map<inodeno_t, set<string> > hashed_prediscover;
+  //map<inodeno_t, set<string> > hashed_prediscover;
 
  public:  
   MExportDir() {}
@@ -55,12 +33,17 @@ class MExportDir : public Message {
   double get_ipop() { return ipop; }
   int get_ndirs() { return ndirs; }
   crope& get_state() { return state; }
+  list<inodeno_t>& get_exports() { returne exports; }
 
   void add_dir(crope& dir) {
 	state.append( dir );
 	ndirs++;
   }
-  void add_prediscover(inodeno_t dirino, const string& dentry) {
+  void add_export(CDir *dir) { exports.push_back(dir->ino()); }
+
+  // prediscover crap
+  /*
+    void add_prediscover(inodeno_t dirino, const string& dentry) {
 	hashed_prediscover[dirino].insert(dentry);
   }
   void remove_prediscover(inodeno_t dirino, const string& dentry) {
@@ -81,6 +64,7 @@ class MExportDir : public Message {
   map<inodeno_t, set<string> >::iterator prediscover_end() {
 	return hashed_prediscover.end();
   }
+  */
 
   virtual int decode_payload(crope s) {
 	s.copy(0, sizeof(ino), (char*)&ino);
@@ -88,7 +72,19 @@ class MExportDir : public Message {
 	s.copy(sizeof(ino)+sizeof(ipop), sizeof(ndirs), (char*)&ndirs);
 	int off = sizeof(ino)+sizeof(ipop)+sizeof(ndirs);
 
+    // exports
+    int nex;
+    s.copy(off, sizeof(nex), (char*)&nex);
+    off += sizeof(nex);
+	for (int i=0; i<ndirs; i++) {
+	  inodeno_t dirino;
+	  s.copy(off, sizeof(dirino), (char*)&dirino);
+	  off += sizeof(dirino);
+      exports.push_back(dirino);
+	}
+
 	// prediscover
+    /*
 	int ndirs;
 	s.copy(off, sizeof(ndirs), (char*)&ndirs);
 	off += sizeof(ndirs);
@@ -105,6 +101,7 @@ class MExportDir : public Message {
 		hashed_prediscover[dirino].insert(dn);
 	  }
 	}
+    */
 
 	// dir data
 	state = s.substr(off, s.length() - off);
@@ -116,7 +113,12 @@ class MExportDir : public Message {
 	s.append((char*)&ipop, sizeof(ipop));
 	s.append((char*)&ndirs, sizeof(ndirs));
 
+    // exports
+    int nex = exports.size();
+    s.append((char*)&nex, sizeof(int));
+    
 	// prediscover
+    /*
 	int ndirs = hashed_prediscover.size();
 	s.append((char*)&ndirs, sizeof(ndirs));
 	for (map<inodeno_t, set<string> >::iterator it = hashed_prediscover.begin();
@@ -131,6 +133,7 @@ class MExportDir : public Message {
 		s.append((char)0);
 	  }
 	}
+    */
 	
 	// dir data
 	s.append(state);

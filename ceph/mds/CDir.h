@@ -92,7 +92,9 @@ class Context;
 
 #define CDIR_PIN_AUTHPIN   8
 
-#define CDIR_NUM_PINS      9
+#define CDIR_PIN_IMPORTING 9
+
+#define CDIR_NUM_PINS      10
 static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "child",
   "opened",
@@ -102,7 +104,8 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "export",
   "freeze",
   "proxy",
-  "authpin"
+  "authpin",
+  "importing"
 };
 
 

@@ -187,6 +187,7 @@ class MDCache {
   }
 
   // exporter
+  void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CDir *dir,
 				  int mds);
@@ -205,11 +206,13 @@ class MDCache {
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
   // importer
-  CInode *import_dentry_inode(CDir *dir, 
+  /*CInode *import_dentry_inode(CDir *dir, 
 							  pchar& p, 
 							  int from, 
 							  CDir *import_root=0,
 							  int *would_be_dir_auth = 0); // need for normal import
+  */
+  void handle_export_dir_discover(MExportDirDiscover *m);
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   void import_dir_finish(CDir *dir);
@@ -217,7 +220,6 @@ class MDCache {
   void import_dir_block(crope& r,
 						int& off,
 						int oldauth,
-						CDir *containing_import, 
 						CDir *import_root,
 						list<inodeno_t>& imported_subdirs);
   void got_hashed_replica(CDir *import,

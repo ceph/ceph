@@ -45,7 +45,18 @@ using namespace std;
 
 #define CINODE_PIN_AUTHPIN   8
 
-#define CINODE_NUM_PINS       9
+#define CINODE_PIN_IMPORTING  9   // multipurpose, for importing
+
+//#define CINODE_PIN_SYNCBYME     70000
+//#define CINODE_PIN_SYNCBYAUTH   70001
+#define CINODE_PIN_PRESYNC      10   // waiter
+#define CINODE_PIN_WAITONUNSYNC 11   // waiter
+
+#define CINODE_PIN_PRELOCK      12
+#define CINODE_PIN_WAITONUNLOCK 13
+
+
+#define CINODE_NUM_PINS       14
 static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "dir",
   "cached",
@@ -55,18 +66,16 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "openrd",
   "openwr",
   "unlinking",
-  "authpin"
+  "authpin",
+  "importing",
+  "presync",
+  "waitonunsync",
+  "prelock",
+  "waitonunlock"
 };
 
 
 
-//#define CINODE_PIN_SYNCBYME     70000
-//#define CINODE_PIN_SYNCBYAUTH   70001
-#define CINODE_PIN_PRESYNC      70002   // waiter
-#define CINODE_PIN_WAITONUNSYNC 70003   // waiter
-
-#define CINODE_PIN_PRELOCK      70004
-#define CINODE_PIN_WAITONUNLOCK 70005
 
 
 // sync => coherent soft metadata (size, mtime, etc.)
@@ -574,6 +583,8 @@ public:
 	cached_by = in->cached_by;
 	cached_by_nonce = in->cached_by_nonce; 
   }
+  
+  inodeno_t get_ino() { return st.inode.ino; }
 
   int update_inode(CInode *in) {
 	in->inode = st.inode;
