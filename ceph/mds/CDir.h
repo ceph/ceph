@@ -29,6 +29,8 @@ class Context;
 #define CDIR_AUTH_PARENT   -1   // default
 
 
+#define CDIR_NONCE_EXPORT   1
+
 
 // state bits
 #define CDIR_STATE_COMPLETE      1   // the complete contents are in cache
@@ -63,10 +65,12 @@ class Context;
 // ...except if the directory is hashed, in which case none of them are!
 #define CDIR_MASK_STATE_EXPORTED    (CDIR_STATE_COMPLETE\
                                     |CDIR_STATE_DIRTY)  
-#define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT) // see import_dir_block()
+#define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT\
+                                    |CDIR_STATE_EXPORT)
 #define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
                                     |CDIR_STATE_FROZENTREE\
-                                    |CDIR_STATE_FROZENDIR)
+                                    |CDIR_STATE_FROZENDIR\
+                                    |CDIR_STATE_EXPORT)
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -290,6 +294,19 @@ class CDir {
     open_by_nonce.insert(pair<int,int>(mds,1));   // first! serial of 1.
     return 1;   // default nonce
   }
+  void open_by_remove(int mds) {
+	if (!is_open_by(mds)) return;
+	open_by.erase(mds);
+	open_by_nonce.erase(mds);
+	if (open_by.empty())
+	  put(CDIR_PIN_OPENED);	  
+  }
+  void open_by_clear() {
+	if (open_by.size())
+	  put(CDIR_PIN_OPENED);
+	open_by.clear();
+    open_by_nonce.clear();
+  }
 
   
 
@@ -298,15 +315,15 @@ class CDir {
   unsigned get_state() { return state; }
   void reset_state(unsigned s) { 
 	state = s; 
-	dout(10) << *this << " state reset" << endl;
+	dout(10) << " cdir:" << *this << " state reset" << endl;
   }
   void state_clear(unsigned mask) {	
 	state &= ~mask; 
-	dout(10) << *this << " state -" << mask << " = " << state << endl;
+	dout(10) << " cdir:" << *this << " state -" << mask << " = " << state << endl;
   }
   void state_set(unsigned mask) { 
 	state |= mask; 
-	dout(10) << *this << " state +" << mask << " = " << state << endl;
+	dout(10) << " cdir:" << *this << " state +" << mask << " = " << state << endl;
   }
   unsigned state_test(unsigned mask) { return state & mask; }
 
@@ -378,6 +395,8 @@ class CDir {
 
   
   // -- waiters --
+  bool waiting_for(int tag);
+  bool waiting_for(int tag, string& dn);
   void add_waiter(int tag, Context *c);
   void add_waiter(int tag,
 				  const string& dentry,
@@ -556,6 +575,7 @@ class CDirExport {
   }
 
   inodeno_t get_ino() { return st.ino; }
+  __uint64_t get_nitems() { return st.nitems; }
 
   void update_dir(CDir *dir) {
 	assert(dir->ino() == st.ino);
@@ -571,6 +591,8 @@ class CDirExport {
 	dir->dir_rep_by = rep_by;
 	dir->open_by = open_by;
 	dir->open_by_nonce = open_by_nonce;
+	if (!open_by.empty())
+	  dir->get(CDIR_PIN_OPENED);
   }
 
 

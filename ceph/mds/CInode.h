@@ -122,7 +122,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: traverse_path
     // triggers: handle_disocver_reply
 
-#define CINODE_WAIT_EXPORTWARNING  16384
+//#define CINODE_WAIT_EXPORTWARNING  16384
     // waiters: handle_export_dir_warning
     // triggers: handle_export_dir_notify
 
@@ -356,6 +356,7 @@ class CInode : LRUObject {
 
 
   // -- waiting --
+  bool waiting_for(int tag);
   void add_waiter(int tag, Context *c);
   void take_waiting(int tag, list<Context*>& ls);
   void finish_waiting(int mask, int result = 0);
@@ -511,9 +512,9 @@ class CInodeDiscover {
   CInodeDiscover(CInode *in, int nonce) {
 	inode = in->inode;
 	replica_nonce = nonce;
-	is_syncbyauth = in->is_syncbyauth() || in->is_presync();
+	is_syncbyauth = in->is_syncbyme() || in->is_presync();
 	is_softasync = in->is_softasync();
-	is_lockbyauth = in->is_lockbyauth() || in->is_prelock();
+	is_lockbyauth = in->is_lockbyme() || in->is_prelock();
   }
 
   inodeno_t get_ino() { return inode.ino; }
@@ -521,8 +522,6 @@ class CInodeDiscover {
   int update_inode(CInode *in) {
 	in->inode = inode;
 
-	in->set_auth(false);
-	assert(!in->is_auth());
 	in->replica_nonce = replica_nonce;
 	
 	if (is_syncbyauth) in->dist_state |= CINODE_DIST_SYNCBYAUTH;
@@ -605,6 +604,8 @@ public:
 	in->cached_by.clear();
 	in->cached_by = cached_by;
 	in->cached_by_nonce = cached_by_nonce;
+	if (!cached_by.empty()) 
+	  in->get(CINODE_PIN_CACHED);
   }
 
   crope _rope() {

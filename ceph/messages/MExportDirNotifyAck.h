@@ -16,7 +16,7 @@ class MExportDirNotifyAck : public Message {
 	Message(MSG_MDS_EXPORTDIRNOTIFYACK) {
 	this->ino = ino;
   }
-  virtual char *get_type_name() { return "exnota"; }
+  virtual char *get_type_name() { return "ExNotA"; }
 
   virtual int decode_payload(crope s) {
 	s.copy(0, sizeof(ino), (char*)&ino);

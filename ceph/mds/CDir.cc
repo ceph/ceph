@@ -12,7 +12,7 @@
 
 #include "include/config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "cdir:"
+#define dout(x)  if (x <= g_conf.debug) cout << " cdir:"
 
 
 ostream& operator<<(ostream& out, CDir& dir)
@@ -27,7 +27,7 @@ ostream& operator<<(ostream& out, CDir& dir)
 	if (dir.is_open_by_anyone())
 	  out << "+" << dir.get_open_by();
   } else {
-	out << " rep a=" << dir.authority() << " n=" << dir.get_replica_nonce();
+	out << " rep@" << dir.authority();// << " n=" << dir.get_replica_nonce();
   }
 
   if (dir.is_pinned()) {
@@ -220,6 +220,18 @@ int CDir::decode_basic_state(crope r, int off)
 
 
 // wiating
+
+bool CDir::waiting_for(int tag)
+{
+  return waiting.count(tag) > 0;
+}
+
+bool CDir::waiting_for(int tag, string& dn)
+{
+  if (!waiting_on_dentry.count(dn)) 
+	return false;
+  return waiting_on_dentry[dn].count(tag) > 0;
+}
 
 void CDir::add_waiter(int tag,
 					  const string& dentry,
@@ -425,12 +437,12 @@ int CDir::dentry_authority(const string& dn )
   }
   
   if (dir_auth == CDIR_AUTH_PARENT) {
-	dout(11) << "dir_auth = parent at " << *this << endl;
+	dout(15) << "dir_auth = parent at " << *this << endl;
 	return inode->authority();       // same as my inode
   }
 
   // it's explicit for this whole dir
-  dout(11) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
+  dout(15) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
   return dir_auth;
 }
 

@@ -27,7 +27,7 @@ class MExportDirNotify : public Message {
 	this->old_auth = old_auth;
 	this->new_auth = new_auth;
   }
-  virtual char *get_type_name() { return "exnot"; }
+  virtual char *get_type_name() { return "ExNot"; }
   
   void copy_subdirs(list<inodeno_t>& s) {
 	this->subdirs = s;

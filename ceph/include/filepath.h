@@ -109,7 +109,7 @@ class filepath {
     for (int i=0; i<n; i++) {
       string s = r.c_str() + off;
       off += s.length() + 1;
-      bits.push_back(s);
+	  add_dentry(s);
     }
     return off;
   }

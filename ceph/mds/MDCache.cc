@@ -579,6 +579,9 @@ int MDCache::proc_message(Message *m)
 	break;	
 
 	// export 3rd party (inode authority)
+  case MSG_MDS_EXPORTDIRWARNING:
+	handle_export_dir_warning((MExportDirWarning*)m);
+	break;
   case MSG_MDS_EXPORTDIRNOTIFY:
 	handle_export_dir_notify((MExportDirNotify*)m);
 	break;
@@ -640,13 +643,18 @@ int MDCache::path_traverse(filepath& path,
 	  } else {
 		// discover dir from/via inode auth
 		assert(!cur->is_auth());
-		filepath want = path.subpath(depth);
-		mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
-												   cur->ino(),
-												   want,
-												   true),  // need this dir too
-									 MSG_ADDR_MDS(cur->authority()), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
+		if (cur->waiting_for(CINODE_WAIT_DIR)) {
+		  dout(10) << " need dir for " << *cur << ", already doing discover" << endl;
+		} else {
+		  filepath want = path.subpath(depth);
+		  dout(10) << " need dir for " << *cur << ", doing discover, want " << want.get_path() << endl;
+		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
+													 cur->ino(),
+													 want,
+													 true),  // need this dir too
+									   MSG_ADDR_MDS(cur->authority()), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		}
 		cur->add_waiter(CINODE_WAIT_DIR, 
 						new C_MDS_RetryMessage(mds, req));
 		return 1;
@@ -710,25 +718,29 @@ int MDCache::path_traverse(filepath& path,
 	  
 	  if (onfail == MDS_TRAVERSE_DISCOVER) {
 		// discover
+
 		filepath want = path.subpath(depth);
+		if (cur->dir->waiting_for(CDIR_WAIT_DENTRY, path[depth])) {
+		  dout(7) << " already waiting for discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
+		} else {
+		  dout(7) << " discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
+		  
+		  lru->lru_touch(cur);  // touch discoveree
 		
-		dout(7) << " discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
-		
-		lru->lru_touch(cur);  // touch discoveree
-		
-		mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
-												   cur->ino(),
-												   want,
-												   false),
-									 MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
+		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
+													 cur->ino(),
+													 want,
+													 false),
+									   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		  mds->logger->inc("dis");
+		}
 		
 		// delay processing of current request
 		cur->dir->add_waiter(CDIR_WAIT_DENTRY, 
 							 path[depth], 
 							 new C_MDS_RetryMessage(mds, req));
 		
-		mds->logger->inc("dis");
 		mds->logger->inc("cmiss");
 		return 1;
 	  } 
@@ -765,7 +777,7 @@ void MDCache::handle_discover(MDiscover *dis)
 {
   int whoami = mds->get_nodeid();
   
-  CDir *dir = 0;
+  CInode *cur = 0;
   MDiscoverReply *reply = 0;
 
   // get started.
@@ -782,34 +794,37 @@ void MDCache::handle_discover(MDiscover *dis)
 										  root->cached_by_add( dis->get_asker() ) ) );
 	dout(10) << "added root " << *root << endl;
 
-    dir = root->dir;
+    cur = root;
     
   } else {
     // there's a base inode
-    CInode *in = get_inode(dis->get_base_ino());
-    assert(in);
+    cur = get_inode(dis->get_base_ino());
+    assert(cur);
     
-    dout(7) << "handle_discover from mds" << dis->get_asker() << " has " << *in << " wants " << dis->get_want().get_path() << endl;
+    dout(7) << "handle_discover from mds" << dis->get_asker() << " has " << *cur << " wants " << dis->get_want().get_path() << endl;
     
-    assert(in->is_dir());
+    assert(cur->is_dir());
     
-    dir = in->get_or_open_dir(mds);
-    assert(dir);
+    cur->get_or_open_dir(mds);
+    assert(cur);
 
-    if (dir->is_proxy() && !dir->is_hashed()) {
+	dout(10) << "dir is " << *cur->dir << endl;
+
+    if (cur->dir->is_proxy() ||
+		cur->is_auth() && !cur->dir->is_auth()) {
       // fwd to dir auth
-      dout(7) << "i am proxy, fwd to dir_auth " << dir->authority() << endl;
+      dout(7) << "fwd to dir auth " << cur->dir->authority() << endl;
       mds->messenger->send_message( dis,
-                                    MSG_ADDR_MDS( dir->authority() ), MDS_PORT_CACHE, MDS_PORT_CACHE );
+                                    MSG_ADDR_MDS( cur->dir->authority() ), MDS_PORT_CACHE, MDS_PORT_CACHE );
       return;
     }
 
     // create reply
-    reply = new MDiscoverReply(in->ino());
+    reply = new MDiscoverReply(cur->ino());
   }
 
   assert(reply);
-  assert(dir);
+  assert(cur);
   
   // add content
   // do some fidgeting to include a dir if they asked for the base dir, or just root.
@@ -819,11 +834,13 @@ void MDCache::handle_discover(MDiscover *dis)
       dout(7) << "they don't want the base dir" << endl;
     } else {
       // add dir
-      if (!dir->is_auth()) {
-        dout(7) << *dir << " auth is " << dir->authority() << ", i'm done" << endl;
+      if (!cur->dir_is_auth()) {
+		dout(7) << *cur << " dir auth is someone else, i'm done" << endl;
         break;
       }
-
+	  
+	  cur->get_or_open_dir(mds);
+	  
 	  // frozen?
 	  /* hmmm do we care, actually?
 	  if (dir->is_frozen()) {
@@ -834,21 +851,21 @@ void MDCache::handle_discover(MDiscover *dis)
 	  }
 	  */
 
-      reply->add_dir( new CDirDiscover( dir, 
-										dir->open_by_add( dis->get_asker() ) ) );
-      dout(7) << "added dir " << *dir << endl;
+      reply->add_dir( new CDirDiscover( cur->dir, 
+										cur->dir->open_by_add( dis->get_asker() ) ) );
+      dout(7) << "added dir " << *cur->dir << endl;
     }
     if (dis->get_want().depth() == 0) break;
     
     // lookup dentry
-    int dentry_auth = dir->dentry_authority( dis->get_dentry(i) );
+    int dentry_auth = cur->dir->dentry_authority( dis->get_dentry(i) );
     if (dentry_auth != mds->get_nodeid()) {
-      dout(7) << *dir << "dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
+      dout(7) << *cur->dir << "dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
       break;      // that's it for us!
     }
 
     // get inode
-    CDentry *dn = dir->lookup( dis->get_dentry(i) );
+    CDentry *dn = cur->dir->lookup( dis->get_dentry(i) );
     if (dn) {
 		CInode *next = dn->inode;
         assert(next->is_auth());
@@ -858,9 +875,12 @@ void MDCache::handle_discover(MDiscover *dis)
         reply->add_inode( new CInodeDiscover(next, 
 											 next->cached_by_add(dis->get_asker())) );
         dout(7) << "added dentry " << dn << " + " << *next << endl;
+
+		// descend
+		cur = next;
     } else {
       // don't have it?
-      if (dir->is_complete()) {
+      if (cur->dir->is_complete()) {
         // ...
 		// i shoudl return an error falg in the reply... FIXME
         assert(0);  // for now
@@ -868,8 +888,8 @@ void MDCache::handle_discover(MDiscover *dis)
         delete reply;
 
         // readdir
-        dout(7) << "mds" << whoami << " incomplete dir contents for " << *dir << ", fetching" << endl;
-        mds->mdstore->fetch_dir(dir, new C_MDS_RetryMessage(mds, dis));
+        dout(7) << "mds" << whoami << " incomplete dir contents for " << *cur->dir << ", fetching" << endl;
+        mds->mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(mds, dis));
         return;
       }
     }
@@ -877,15 +897,18 @@ void MDCache::handle_discover(MDiscover *dis)
        
   // how did we do.
   if (reply->is_empty()) {
+
+	assert(0); // what's going on here!
+
     // discard empty reply
     delete reply;
 
     // forward?
-    if (dir->is_proxy()) {
+    if (cur->is_auth() && !cur->dir->is_auth()) {
       // fwd to auth
-      dout(7) << "i am dir proxy, fwd to auth " << dir->authority() << endl;
+      dout(7) << "i am inode but not dir auth, fwd " << cur->dir->authority() << endl;
       mds->messenger->send_message( dis,
-                                    MSG_ADDR_MDS( dir->authority() ), MDS_PORT_CACHE, MDS_PORT_CACHE );
+                                    MSG_ADDR_MDS( cur->dir->authority() ), MDS_PORT_CACHE, MDS_PORT_CACHE );
       return;
     }
 
@@ -928,6 +951,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
   
   for (int i=0; i<m->get_num_inodes(); i++) {
+	dout(7) << "i = " << i << " ino is " << m->get_ino(i) << endl;
+
 	// dir
 	if (i || m->has_base_dir()) {
 	  if (cur->dir) {
@@ -939,7 +964,10 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		// add it (_replica_)
 		cur->set_dir( new CDir(cur, mds, false) );
 		m->get_dir(i).update_dir(cur->dir);
-		dout(7) << "added " << *cur->dir;
+		dout(7) << "added " << *cur->dir << endl;
+
+		// get waiters
+		cur->take_waiting(CINODE_WAIT_DIR, finished);
 	  }
 	}	
 
@@ -961,9 +989,15 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
 	} else {
 	  // add inode
+	  in = get_inode( m->get_inode(i).get_ino() );
+	  if (in) {
+		dout(7) << " WTF, i have this inode: " << *in << " butit's not link via dentry " << m->get_dentry(i) << " ???" << endl;
+		assert(0);
+	  }
+
 	  in = new CInode(false);
 
-	  m->get_inode(0).update_inode(in);
+	  m->get_inode(i).update_inode(in);
 	  
 	  if (!i && m->has_root()) {
 		// root
@@ -1099,6 +1133,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 
 
 
+
 void MDCache::handle_inode_expire(MInodeExpire *m)
 {
   CInode *in = get_inode(m->get_ino());
@@ -1110,17 +1145,7 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
   }
   
   if (!in->is_auth()) {
-	// check proxy maps
-	int newauth = ino_proxy_auth(in->ino(), m->get_from());
-	dout(7) << "got inode_expire on " << *in << ", proxy set sez new auth is " << newauth << endl;
-	assert(newauth >= 0);     // we should know the new authority!
-	assert(in->is_frozen());  // i should be frozen right now!
-	assert(in->state_test(CINODE_STATE_PROXY));
-	
-	// forward
-	mds->messenger->send_message(m,
-								 MSG_ADDR_MDS(newauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
-	mds->logger->inc("iupfw");
+	do_ino_proxy(in, m);
 	return;
   }
 
@@ -1688,6 +1713,8 @@ void MDCache::update_replica_auth(CInode *in, int realauth)
 }
 */
 
+
+
 int MDCache::ino_proxy_auth(inodeno_t ino, int frommds) 
 {
   // check proxy sets for this ino
@@ -1707,6 +1734,39 @@ int MDCache::ino_proxy_auth(inodeno_t ino, int frommds)
   }
   return -1;   // no proxy
 }
+
+void MDCache::do_ino_proxy(CInode *in, Message *m)
+{
+  // check proxy maps
+  int newauth = ino_proxy_auth(in->ino(), m->get_source());
+  dout(7) << "inode " << *in << " proxy, new auth is " << newauth << endl;
+  assert(newauth >= 0);     // we should know the new authority!
+  assert(in->is_frozen());  // i should be frozen right now!
+  assert(in->state_test(CINODE_STATE_PROXY));
+  
+  // forward
+  mds->messenger->send_message(m,
+							   MSG_ADDR_MDS(newauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  return;
+}
+
+/*
+void MDCache::do_dir_proxy(CDir *dir, Message *m)
+{
+  // check proxy maps
+  int newauth = ino_proxy_auth(in->ino(), m->get_from());
+  dout(7) << "inode " << *in << " proxy, new auth is " << newauth << endl;
+  assert(newauth >= 0);     // we should know the new authority!
+  assert(in->is_frozen());  // i should be frozen right now!
+  assert(in->state_test(CINODE_STATE_PROXY));
+  
+  // forward
+  mds->messenger->send_message(m,
+							   MSG_ADDR_MDS(newauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  return;
+}
+*/
+
 
 
 
@@ -1728,6 +1788,8 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 	return;
   }
   
+  dout(10) << "handle_sync_start " << *in << endl;
+
   // we shouldn't be authoritative...
   assert(!in->is_auth());
   
@@ -1863,8 +1925,8 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
   }
   
   if (!in->is_syncbyauth()) {
-	dout(7) << "handle_sync_release " << m->get_ino() << ", not flagged as sync, dropping" << endl;
-	assert(0);
+	dout(7) << "handle_sync_release " << *in << ", not flagged as sync" << endl;
+	assert(0);  // this shouldn't happen.
 	delete m;  // done
 	return;
   }
@@ -2279,6 +2341,44 @@ void handle_dir_sync_start(MDirSyncStart *m)
 
 // IMPORT/EXPORT
 
+void MDCache::find_nested_exports(CDir *dir, list<CDir*>& ls)
+{
+  CDir *import = get_containing_import(dir);
+
+  if (import == dir) {
+	// yay, my job is easy!
+	for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
+		   nested_exports.equal_range( import );
+		 p.first != p.second;
+		 p.first++) {
+	  CDir *nested = (*p.first).second;
+	  ls.push_back(nested);
+	  dout(10) << "find_nested_exports " << *dir << " " << *nested << endl;
+	}
+	return;
+  }
+
+  // ok, my job is annoying.
+  for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
+		 nested_exports.equal_range( import );
+	   p.first != p.second;
+	   p.first++) {
+	CDir *nested = (*p.first).second;
+
+	// trace back to import, or dir
+	CDir *cur = nested->get_parent_dir();
+	while (!cur->is_import()) {
+	  if (cur == dir) {
+		ls.push_back(nested);
+		dout(10) << "find_nested_exports " << *dir << " " << *nested << endl;
+		break;
+	  } else {
+		cur = cur->get_parent_dir();
+	  }
+	} 
+  }
+}
+
 class C_MDS_ExportFreeze : public Context {
   MDS *mds;
   CDir *ex;   // dir i'm exporting
@@ -2479,7 +2579,9 @@ void MDCache::export_dir_frozen(CDir *dir,
 								int dest)
 {
   // subtree is now frozen!
-  dout(7) << "export_dir " << *dir << " to " << dest << ", frozen+discover_ack" << endl;
+  dout(7) << "export_dir_frozen on " << *dir << " to " << dest << endl;
+
+  show_imports();
 
   MExportDirPrep *prep = new MExportDirPrep(dir->inode);
 
@@ -2493,18 +2595,19 @@ void MDCache::export_dir_frozen(CDir *dir,
   prep->add_dir( new CDirDiscover(dir, dir->open_by_add(dest)) );
   
   // also include traces to all nested exports.
-  for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p = 
-		 nested_exports.equal_range( dir );
-	   p.first != p.second;
-	   p.first++) {
-	CDir *exp = (*p.first).second;
+  list<CDir*> my_nested;
+  find_nested_exports(dir, my_nested);
+  for (list<CDir*>::iterator it = my_nested.begin();
+	   it != my_nested.end();
+	   it++) {
+	CDir *exp = *it;
     
 	dout(7) << " including nested export " << *exp << " in prep" << endl;
 
 	prep->add_export( exp->ino() );
 
     // trace to dir
-    CDir *cur;
+    CDir *cur = exp;
     while (cur != dir) {
       // don't repeat ourselves
       if (inodes_added.count(cur->ino())) break;   // did already!
@@ -2519,7 +2622,8 @@ void MDCache::export_dir_frozen(CDir *dir,
 					   new CInodeDiscover(cur->inode, cur->inode->cached_by_add(dest)) );
       dout(10) << "  added " << *cur->inode << endl;
       
-      // include dir? note: this'll include everything except the nested exports
+      // include dir? note: this'll include everything except the nested exports themselves, 
+	  // since someone else is obviously auth.
       if (cur->is_auth()) {
         prep->add_dir( new CDirDiscover(cur, cur->open_by_add(dest)) );  // yay!
         dout(10) << "  added " << *cur << endl;
@@ -2558,8 +2662,14 @@ void MDCache::export_dir_go(CDir *dir,
 
   show_imports();
 
+
+  // build export message
+  MExportDir *req = new MExportDir(dir->inode, pop);  // include pop
+
+
   // update imports/exports
   CDir *containing_import = get_containing_import(dir);
+
   if (containing_import == dir) {
 	dout(7) << " i'm rexporting a previous import" << endl;
 	imports.erase(dir);
@@ -2571,6 +2681,7 @@ void MDCache::export_dir_go(CDir *dir,
 	  nested_exports.equal_range(dir);
 	while (p.first != p.second) {
 	  CDir *nested = (*p.first).second;
+	  req->add_export(nested);
 
 	  // nested beneath our new export *in; remove!
 	  dout(7) << " export " << *nested << " was nested beneath us; removing from export list(s)" << endl;
@@ -2584,6 +2695,7 @@ void MDCache::export_dir_go(CDir *dir,
 	exports.insert(dir);
 	nested_exports.insert(pair<CDir*,CDir*>(containing_import, dir));
 	
+	dir->state_set(CDIR_STATE_EXPORT);
 	dir->get(CDIR_PIN_EXPORT);                  // i must keep it pinned
 	
 	// discard nested exports (that we're handing off)
@@ -2591,6 +2703,7 @@ void MDCache::export_dir_go(CDir *dir,
 	  nested_exports.equal_range(containing_import);
 	while (p.first != p.second) {
 	  CDir *nested = (*p.first).second;
+
 	  multimap<CDir*,CDir*>::iterator prev = p.first;
 	  p.first++;
 	  
@@ -2604,6 +2717,8 @@ void MDCache::export_dir_go(CDir *dir,
 		dout(7) << " export " << *nested << " was nested beneath us; removing from nested_exports" << endl;
 		// exports.erase(nested); _walk does this
 		nested_exports.erase(prev);  // note this increments before call to erase
+
+		req->add_export(nested);
 	  } else {
 		dout(12) << " export " << *nested << " is under other export " << *containing_export << ", which is unrelated" << endl;
 		assert(get_containing_import(containing_export) != containing_import);
@@ -2617,12 +2732,24 @@ void MDCache::export_dir_go(CDir *dir,
   else
 	dir->dir_auth = dest;
 
-  // build export message
-  MExportDir *req = new MExportDir(dir->inode, pop);  // include pop
-  
-  // fill with relevant cache data
-  C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, dir, dest);
+  // make list of nodes i expect an export_dir_notify_ack from
+  //  (everyone w/ this dir open, but me!)
+  assert(export_notify_ack_waiting[dir].empty());
+  for (set<int>::iterator it = dir->open_by.begin();
+	   it != dir->open_by.end();
+	   it++) {
+	if (*it == mds->get_nodeid()) continue;
+	export_notify_ack_waiting[dir].insert( *it );
 
+	// send warning
+	dout(10) << " sending export_dir_warning to mds" << *it << endl;
+	mds->messenger->send_message(new MExportDirWarning( dir->ino() ),
+								 MSG_ADDR_MDS( *it ), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  }
+  assert(export_notify_ack_waiting[dir].count( dest ));
+
+  // fill export message with cache data
+  C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, dir, dest);
   export_dir_walk( req, 
 				   fin, 
 				   dir,   // base
@@ -2637,15 +2764,7 @@ void MDCache::export_dir_go(CDir *dir,
   // queue up the finisher
   dir->add_waiter( CDIR_WAIT_UNFREEZE, fin );
 
-  // make list of nodes i expect an export_dir_notify_ack from
-  // (all w/ this dir open, but me!)
-  assert(export_notify_ack_waiting[dir].empty());
-  for (set<int>::iterator it = dir->open_by.begin();
-	   it != dir->open_by.end();
-	   it++) {
-	if (*it == mds->get_nodeid()) continue;
-	export_notify_ack_waiting[dir].insert( *it );
-  }
+  show_imports();
 }
 
 
@@ -2664,9 +2783,13 @@ void MDCache::export_dir_walk(MExportDir *req,
   CDirExport dstate(dir);
   dir_rope.append( dstate._rope() );
   
+  // release open_by 
+  dir->open_by_clear();
+
   // mark
   assert(dir->is_auth());
   dir->state_clear(CDIR_STATE_AUTH);
+  dir->replica_nonce = CDIR_NONCE_EXPORT;
   
   // discard most dir state
   dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
@@ -2674,12 +2797,17 @@ void MDCache::export_dir_walk(MExportDir *req,
   // proxy
   dir->state_set(CDIR_STATE_PROXY);
   dir->get(CDIR_PIN_PROXY);
+  export_proxy_dirinos[basedir].insert(dir->ino());
 
+  if (!dir->is_clean())
+	dir->mark_clean();
+  
   // suck up all waiters
   list<Context*> waiting;
   dir->take_waiting(CINODE_WAIT_ANY, waiting);    // FIXME ?? actually this is okay?
   fin->assim_waitlist(waiting);
   
+
   // inodes
   list<CDir*> subdirs;
 
@@ -2711,6 +2839,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 		  dout(7) << " encountered nested export " << *in->dir << " dir_auth " << in->dir->dir_auth << "; removing from exports" << endl;
 		  assert(exports.count(in->dir) == 1); 
 		  exports.erase(in->dir);                    // discard nested export   (nested_exports updated above)
+
+		  in->dir->state_clear(CDIR_STATE_EXPORT);
 		  in->dir->put(CDIR_PIN_EXPORT);
 		  
 		  // simplify dir_auth?
@@ -2731,7 +2861,6 @@ void MDCache::export_dir_walk(MExportDir *req,
 	// mark auth
 	assert(in->is_auth());
 	in->set_auth(false);
-
 	in->replica_nonce = CINODE_EXPORT_NONCE;
 
 	// add to proxy
@@ -2847,12 +2976,13 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
 {
   assert(m->get_source() != mds->get_nodeid());
 
+  dout(7) << "handle_export_dir_discover on " << m->get_path() << endl;
+
   // must discover it!
   vector<CInode*> trav;
   filepath fpath(m->get_path());
   int r = path_traverse(fpath, trav, m, MDS_TRAVERSE_DISCOVER);   
   if (r > 0) {
-	dout(7) << "handle_export_dir_discover on " << m->get_path() << ", doing discover" << endl;
 	return;  // fw or delay
   }
   
@@ -2900,7 +3030,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   // move pin to dir
   idir->put(CINODE_PIN_IMPORTING);
   dir->get(CDIR_PIN_IMPORTING);  
-  
+
   // assimilate contents?
   if (!m->did_assim()) {
     m->mark_assim();  // only do this the first time!
@@ -3035,43 +3165,6 @@ void MDCache::handle_export_dir(MExportDir *m)
   dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
-  /* do this at prep stage?????
-  // prediscovers?
-  if (m->any_prediscovers()) {
-	dout(7) << "handle_export_dir checking prediscovers" << endl;
-	int needed = 0;
-	for (map<inodeno_t, set<string> >::iterator it = m->prediscover_begin();
-		 it != m->prediscover_end();
-		 it++) {
-	  CInode *in = get_inode(it->first);
-	  assert(in);
-	  assert(in->dir);
-	  string dirpath;
-	  in->make_path(dirpath);	  
-	  for (set<string>::iterator dit = it->second.begin();
-		   dit != it->second.end();
-		   dit++) {
-		// do i have it?
-		if (in->dir->lookup(*dit)) {
-		  dout(7) << "had " << *dit << endl;
-		} else {
-		  int dauth = in->dir->dentry_authority(*dit, mds->get_cluster());
-		  vector<string> *want = new vector<string>;
-		  want->push_back(*dit);
-		  dout(7) << "discovering " << dirpath << "/" << *dit << " from " << dauth << endl;
-		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(), dirpath, want),
-									   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
-									   MDS_PORT_CACHE);
-		  in->dir->add_waiter(CDIR_WAIT_DENTRY,
-							  *dit,
-							  new C_MDS_ImportPrediscover(mds, m, in->ino(), *dit));
-		  needed++;
-		}
-	  }
-	}
-	if (needed > 0) return;
-  }
-  */
 
 
   show_imports();
@@ -3090,6 +3183,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 	dout(7) << " i'm reimporting " << *dir << endl;
 	exports.erase(dir);
 
+	dir->state_clear(CDIR_STATE_EXPORT);
 	dir->put(CDIR_PIN_EXPORT);                // unpin, no longer an export
 	
 	containing_import = get_containing_import(dir);  
@@ -3126,6 +3220,8 @@ void MDCache::handle_export_dir(MExportDir *m)
     assert(exi && exi->dir);
 	CDir *ex = exi->dir;
 
+	dout(7) << " nested export " << *ex << endl;
+
 	// remove our pin
 	ex->put(CDIR_PIN_IMPORTINGEXPORT);
 
@@ -3157,6 +3253,7 @@ void MDCache::handle_export_dir(MExportDir *m)
       dout(7) << " importing export " << *ex << endl;
 
       // add it
+	  ex->state_set(CDIR_STATE_EXPORT);
       ex->get(CDIR_PIN_EXPORT);           // all exports are pinned
       exports.insert(ex);
       nested_exports.insert(pair<CDir*,CDir*>(containing_import, ex));
@@ -3168,9 +3265,10 @@ void MDCache::handle_export_dir(MExportDir *m)
 
   // add this crap to my cache
   list<inodeno_t> imported_subdirs;
+  crope dir_state = m->get_state();
   int off = 0;
   for (int i = 0; i < m->get_ndirs(); i++) {
-	import_dir_block(m->get_state(), 
+	import_dir_block(dir_state, 
 					 off,
 					 oldauth, 
 					 dir,                 // import root
@@ -3192,6 +3290,10 @@ void MDCache::handle_export_dir(MExportDir *m)
 	  else break;
 	}
   }
+
+
+  // auth_pin until we get export finish msg back
+  dir->auth_pin();
 
 
   // send notify's etc.
@@ -3266,141 +3368,6 @@ void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 
 
 
-/*
-CInode *MDCache::import_dentry_inode(CDir *dir,
-									 pchar& p,
-									 int from,
-									 CDir *import_root,
-									 int *would_be_dir_auth)
-{
-  // we have three cases:
-  assert((dir->is_auth() && !dir->is_hashing()) ||  // auth importing (may be hashed or normal)
-		 (!dir->is_auth() && dir->is_hashing()) ||  // nonauth hashing (not yet hashed)
-		 (dir->is_auth() && dir->is_unhashing()));  // auth reassimilating (currently hashed)
-  
-  // dentry
-  string dname = p;
-  p += dname.length()+1;
-  
-  // inode
-  Inode_Export_State_t *istate = (Inode_Export_State_t*)p;
-  p += sizeof(*istate);
-
-  CInode *in = get_inode(istate->inode.ino);
-  bool importing = true;
-  bool had_inode = false;
-  if (!in) {
-	in = new CInode;
-	in->inode = istate->inode;
-  } else 
-	had_inode = true;
-  
-  // auth wonkiness
-  if (dir->is_unhashing()) {
-	// auth reassimilating
-	in->inode = istate->inode;
-	in->set_auth(true);
-  } 
-  else if (dir->is_hashed()) {
-	// import on hashed dir
-	assert(in->is_dir());
-	if (in->authority() == mds->get_nodeid())
-	  in->set_auth(true);
-	else 
-	  in->set_auth(false);
-	importing = false;
-  } 
-  else {
-	// normal import
-	in->inode = istate->inode;
-	in->set_auth(true);
-  }
-
-  // now that auth is defined we can link
-  if (!had_inode) {
-	// add
-	add_inode(in);
-	link_inode(dir, dname, in);	
-	dout(7) << "   import_dentry_inode adding " << *in << " istate.dir_auth " << istate->dir_auth << endl;
-  } else {
-	dout(7) << "   import_dentry_inode already had " << *in << " istate.dir_auth " << istate->dir_auth << endl;
-  }
-
-  // assimilate new auth state?
-  if (importing) {
-
-	*would_be_dir_auth = istate->dir_auth;
-	
-	// hashing fyi
-	if (in->dir_is_hashed()) {
-	  dout(7) << "   imported hashed dir " << *in->dir << endl;
-	  assert(!in->dir || in->dir->is_hashed());
-	} else
-	  assert(!in->dir || !in->dir->is_hashed());
-
-	// update inode state with authoritative info
-	in->version = istate->version;
-	in->popularity[0] = istate->popularity;   // FIXME rest of vector?
-
-	// cached_by
-	in->cached_by.clear(); 
-	for (int nby = istate->ncached_by; nby>0; nby--) {
-      int node = *((int*)p);
-	  p += sizeof(int);
-      int nonce = *((int*)p);
-      p += sizeof(int);
-
-	  if (node != mds->get_nodeid()) 
-		in->cached_by_add( node, nonce );
-	}
-	
-	in->cached_by_add(from, CINODE_EXPORT_NONCE);             // old auth still has it too.
-  
-	// dist state: new authority inherits softasync state only; sync/lock are dropped for import/export
-	in->dist_state = 0;
-	if (istate->is_softasync)
-	  in->dist_state |= CINODE_DIST_SOFTASYNC;
-  
-	// other state? ***
-
-    // dirty?
-	if (istate->dirty) {
-	  in->mark_dirty();
-	  
-	  dout(10) << "logging dirty import " << *in << endl;
-	  mds->mdlog->submit_entry(new EInodeUpdate(in),
-							   NULL);   // FIXME pay attention to completion?
-	}
-  } else {
-	// this is a directory; i am importing a hashed dir
-	assert(in->is_dir());
-	assert(dir->is_hashed());
-
-	dout(10) << "    import_dir_auth !importing.  hashed dir." << endl;
-
-	int auth = in->authority();
-
-	if (in->is_auth()) {
-	  assert(in->is_cached_by(from));
-	  assert(auth == mds->get_nodeid());
-	} else {
-	  if (auth == from) {
-		// do nothing.  from added us to their cached_by.
-	  } else {
-		if (had_inode) {
-		  dout(7) << "   imported collateral dir " << *in->dir << " auth " << auth << ", had it" << endl;
-		} else {
-		  dout(7) << "   imported collateral dir " << *in->dir << " auth " << auth << ", discovering it" << endl;
-		  assert(0);  // maybe it gto expired already?
-		}
-	  }
-	}
-  }
-  
-  return in;
-}
-*/
-
 void MDCache::import_dir_block(crope& r,
 							   int& off,
 							   int oldauth,
@@ -3428,7 +3395,12 @@ void MDCache::import_dir_block(crope& r,
   // mark  (may already be marked from get_or_open_dir() above)
   if (!dir->is_auth())
 	dir->state_set(CDIR_STATE_AUTH);
-  
+
+  // open_by
+  assert(!dir->is_open_by(oldauth));
+  dir->open_by_add(oldauth);
+  if (dir->is_open_by(mds->get_nodeid()))
+	dir->open_by_remove(mds->get_nodeid());
 
   // take all waiters on this dir
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
@@ -3440,16 +3412,19 @@ void MDCache::import_dir_block(crope& r,
 	   it++) 
 	import_root->add_waiter(CDIR_WAIT_IMPORTED, *it);
 
+  dout(15) << "doing contents" << endl;
 
   // contents
-  for (long nitems = dir->nitems; nitems>0; nitems--) {
+  for (long nitems = dstate.get_nitems(); nitems>0; nitems--) {
     // dentry
     string dname = r.c_str() + off;
     off += dname.length()+1;
-    
+    dout(15) << "dname is " << dname << endl;
+
     // inode
     CInodeExport istate;
     off = istate._unrope(r, off);
+    dout(15) << "got a cinodeexport " << endl;
     
     bool added = false;
     CInode *in = get_inode(istate.get_ino());
@@ -3462,9 +3437,6 @@ void MDCache::import_dir_block(crope& r,
     istate.update_inode(in);
     in->set_auth(true);
 
-    if (!in->is_cached_by(oldauth))
-      in->cached_by_add( oldauth, CINODE_EXPORT_NONCE );
-
     if (added) {
       add_inode(in);
       link_inode(dir, dname, in);
@@ -3472,6 +3444,12 @@ void MDCache::import_dir_block(crope& r,
     } else {
       dout(10) << "  had " << *in << endl;
     }
+
+	// cached_by
+    assert(!in->is_cached_by(oldauth));
+	in->cached_by_add( oldauth, CINODE_EXPORT_NONCE );
+	if (in->is_cached_by(mds->get_nodeid()))
+	  in->cached_by_remove(mds->get_nodeid());
 
     // other
     if (in->is_dirty()) {
@@ -3542,7 +3520,7 @@ void MDCache::got_hashed_replica(CDir *import,
 void MDCache::handle_export_dir_warning(MExportDirWarning *m)
 {
   CInode *in = get_inode(m->get_ino());
-  if (!in) {
+  if (!in || !in->dir) {
 	// add to stray warning list
 	stray_export_warnings.insert( m->get_ino() );
 	
@@ -3564,14 +3542,14 @@ void MDCache::handle_export_dir_warning(MExportDirWarning *m)
 	return;
   } 
   
-  dout(7) << "handle_export_dir_warning on " << *in << endl;
+  dout(7) << "handle_export_dir_warning on " << *in->dir << endl;
   assert(!(in->dir && in->dir->is_auth()));  // clearly not my dir
   
   // flag inode state.
-  in->state_set(CINODE_STATE_EXPORTING);
+  in->dir->state_set(CDIR_STATE_AUTHMOVING);
   
   // kick it now if the notify is already waiting.
-  in->finish_waiting(CINODE_WAIT_EXPORTWARNING);
+  in->dir->finish_waiting(CDIR_WAIT_EXPORTWARNING);
 
   // done
   delete m;
@@ -3632,16 +3610,15 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 		   it++) {
 		CInode *idir = get_inode(*it);
 		if (!idir) continue;  // don't have it, don't care
-		CDir *dir = idir->dir;
-		if (!dir) continue;
-		dout(10) << "handle_export_dir_notify checking subdir " << *dir << " is auth " << dir->dir_auth << endl;
-		assert(dir != dir);	  // base shouldn't be in subdir list
-		if (dir->dir_auth != CDIR_AUTH_PARENT) {
-		  dout(7) << "*** weird value for dir_auth " << dir->dir_auth << " on " << *dir << ", should have been -1 probably??? ******************" << endl;
+		if (!idir->dir) continue;
+		dout(10) << "handle_export_dir_notify checking subdir " << *idir->dir << " is auth " << idir->dir->dir_auth << endl;
+		assert(idir->dir != dir);	  // base shouldn't be in subdir list
+		if (idir->dir->dir_auth != CDIR_AUTH_PARENT) {
+		  dout(7) << "*** weird value for dir_auth " << idir->dir->dir_auth << " on " << *idir->dir << ", should have been -1 probably??? ******************" << endl;
 		  assert(0);  // bad news!
 		  //dir->dir_auth = -1;
 		}
-		assert(dir->authority() == m->get_new_auth());
+		assert(idir->dir->authority() == m->get_new_auth());
 	  }
 	}
   }
@@ -4278,7 +4255,7 @@ void MDCache::show_imports()
 		 p.first++) {
 	  CDir *exp = (*p.first).second;
 	  dout(7) << "      - ex " << *exp << " to " << exp->dir_auth << endl;
-	  assert( dir->is_export() );
+	  assert( exp->is_export() );
 
 	  if ( get_containing_import(exp) != *it ) {
 		dout(7) << "uh oh, containing import is " << get_containing_import(exp) << endl;

@@ -178,6 +178,8 @@ class MDCache {
   // -- misc auth --
   void update_replica_auth(CInode *in, int realauth);
   int ino_proxy_auth(inodeno_t ino, int frommds);
+  void do_ino_proxy(CInode *in, Message *m);
+
 
   // -- import/export --
   bool is_import(CDir *dir) {
@@ -187,6 +189,7 @@ class MDCache {
   bool is_export(CDir *dir) {
 	return exports.count(dir);
   }
+  void find_nested_exports(CDir *dir, list<CDir*>& ls);
 
   // exporter
   void export_dir(CDir *dir,

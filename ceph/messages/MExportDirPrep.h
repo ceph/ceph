@@ -43,7 +43,9 @@ class MExportDirPrep : public Message {
   bool did_assim() { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
 
-  MExportDirPrep() {}
+  MExportDirPrep() {
+	b_did_assim = false;
+  }
   MExportDirPrep(CInode *in) : 
 	Message(MSG_MDS_EXPORTDIRPREP) {
 	ino = in->ino();

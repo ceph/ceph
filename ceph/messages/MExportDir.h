@@ -75,7 +75,7 @@ class MExportDir : public Message {
     // exports
     int nex;
     s.copy(off, sizeof(nex), (char*)&nex);
-    off += sizeof(nex);
+    off += sizeof(int);
 	dout(12) << nex << " nested exports out" << endl;
 	for (int i=0; i<nex; i++) {
 	  inodeno_t dirino;
@@ -83,26 +83,6 @@ class MExportDir : public Message {
 	  off += sizeof(dirino);
       exports.push_back(dirino);
 	}
-
-	// prediscover
-    /*
-	int ndirs;
-	s.copy(off, sizeof(ndirs), (char*)&ndirs);
-	off += sizeof(ndirs);
-	for (int i=0; i<ndirs; i++) {
-	  inodeno_t dirino;
-	  int nden;
-	  s.copy(off, sizeof(dirino), (char*)&dirino);
-	  off += sizeof(dirino);
-	  s.copy(off, sizeof(nden), (char*)&nden);
-	  off += sizeof(nden);
-	  for (int j=0; j<nden; j++) {
-		string dn = s.substr(off, s.length()-off).c_str();
-		off += dn.length() + 1;
-		hashed_prediscover[dirino].insert(dn);
-	  }
-	}
-    */
 
 	// dir data
 	state = s.substr(off, s.length() - off);
@@ -124,24 +104,6 @@ class MExportDir : public Message {
 	  inodeno_t ino = *it;
 	  s.append((char*)&ino, sizeof(ino));
 	}
-
-	// prediscover
-    /*
-	int ndirs = hashed_prediscover.size();
-	s.append((char*)&ndirs, sizeof(ndirs));
-	for (map<inodeno_t, set<string> >::iterator it = hashed_prediscover.begin();
-		 it != hashed_prediscover.end();
-		 it++) {
-	  int nden = it->second.size();
-	  s.append((char*)&nden, sizeof(nden));
-	  for (set<string>::iterator dit = it->second.begin();
-		   dit != it->second.end();
-		   dit++) {
-		s.append((*dit).c_str());
-		s.append((char)0);
-	  }
-	}
-    */
 	
 	// dir data
 	s.append(state);
