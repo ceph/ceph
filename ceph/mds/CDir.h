@@ -46,9 +46,9 @@ class Context;
 
 // these state bits are preserved by an import/export
 // ...except if the directory is hashed, in which case none of them are!
-#define CDIR_MASK_STATE_EXPORTED  (CDIR_STATE_COMPLETE\
-                                   |CDIR_STATE_DIRTY)
-#define CDIR_MASK_STATE_EXPORT_KEPT 0
+#define CDIR_MASK_STATE_EXPORTED    (CDIR_STATE_COMPLETE\
+                                    |CDIR_STATE_DIRTY)
+#define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED)
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -81,6 +81,9 @@ class Context;
 #define CDIR_WAIT_COMMITTED     32  // did commit (who uses this?**)
     // waiters: commit_dir (if already committing)
     // trigger: commit_dir_2
+#define CDIR_WAIT_IMPORTED      64  // import finish
+    // waiters: import_dir_block
+    // triggers: handle_export_dir_finish
 
 #define CDIR_WAIT_ANY   (0xffff)
 
@@ -166,6 +169,8 @@ class CDir {
   bool is_complete() { return state & CDIR_STATE_COMPLETE; }
   bool is_auth() { return state & CDIR_STATE_AUTH; }
   bool is_hashed() { return state & CDIR_STATE_HASHED; }
+  bool is_hashing() { return state & CDIR_STATE_HASHING; }
+  bool is_unhashing() { return state & CDIR_STATE_UNHASHING; }
   bool is_import() { return state & CDIR_STATE_IMPORT; }
 
   bool is_rep() { 

@@ -62,7 +62,7 @@ using namespace std;
 // directory authority types
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
-#define CDIR_AUTH_HASH     -2
+//#define CDIR_AUTH_HASH     -2  <--- no such thing anymore!
 
 // sync => coherent soft metadata (size, mtime, etc.)
 // lock => coherent hard metadata (owner, mode, etc. affecting namespace)
@@ -96,6 +96,11 @@ using namespace std;
     // waiters: write_hard_start, read_soft_start, write_soft_start  (mdcache)
     //          handle_client_chmod, handle_client_touch             (mds)
     // trigger: (see CDIR_WAIT_UNFREEZE)
+#define CINODE_WAIT_GETREPLICA    2048  // update/replicate individual inode
+    // waiters: import_dentry_inode
+    // trigger: handle_inode_replicate_ack
+
+
 #define CINODE_WAIT_ANY           0xffff
 
 

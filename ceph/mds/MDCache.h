@@ -21,6 +21,8 @@ class MExportDir;
 class MExportDirAck;
 class MExportDirNotify;
 class MDiscover;
+class MInodeGetReplica;
+class MInodeGetReplicaAck;
 class MInodeUpdate;
 class MDirUpdate;
 class MInodeExpire;
@@ -66,6 +68,10 @@ class MDCache {
   multimap<CInode*,CInode*>  nested_exports; // nested exports of (imports|root)
   
   multimap<CDir*, int>       unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
+  multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
+        // maps frozen_dir_ino's to waiting-for-discover ino's.
+  multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
+        // maps import_root_ino's to frozen dir ino's (with pending discovers)
   
   friend class MDBalancer;
 
@@ -130,7 +136,12 @@ class MDCache {
   
   // == messages ==
   int proc_message(Message *m);
+
+  // -- replicas --
   int handle_discover(MDiscover *dis);
+  void handle_inode_get_replica(MInodeGetReplica *m);
+  void handle_inode_get_replica_ack(MInodeGetReplicaAck *m);  
+
 
   // -- import/export --
   bool is_import(CDir *dir) {
@@ -149,17 +160,26 @@ class MDCache {
 						 double pop);
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
-					   CInode *idir);
+					   CInode *idir,
+					   int newauth);
   void export_dir_purge(CInode *idir, int newauth);
   void handle_export_dir_ack(MExportDirAck *m);
   
   // importer
+  CInode *import_dentry_inode(CDir *dir, 
+							  pchar& p, 
+							  int from, 
+							  CInode *import_root=0); // need for normal import
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
+  void handle_export_dir_finish(CInode *in);
   void import_dir_block(pchar& p, 
 						CInode *containing_import, 
 						int oldauth,
-						list<Context*>& waiting_on_imported);
+						CInode *import_root);
+  void got_hashed_replica(CInode *in,
+						  inodeno_t dir_ino,
+						  inodeno_t replica_ino);
 
   // dir authority bystander
   void handle_export_dir_notify(MExportDirNotify *m);
@@ -186,7 +206,6 @@ class MDCache {
   void handle_unhash_dir_finish(CDir *dir, int auth);
 
   void drop_sync_in_dir(CDir *dir);
-  CInode *import_dentry_inode(CDir *dir, pchar& p, int from);
 
   // -- updates --
   int send_inode_updates(CInode *in);

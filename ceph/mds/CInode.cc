@@ -294,9 +294,6 @@ int CInode::dir_authority(MDCluster *mdc)
 	dout(11) << "dir_auth parent at " << *this << endl;
 	return authority(mdc);
   }
-
-  // hashed
-  return CDIR_AUTH_HASH;
 }
 
 

@@ -108,12 +108,13 @@ CDentry* CDir::lookup(string& n) {
 
 int CDir::dentry_authority(string& dn, MDCluster *mdc)
 {
+  if (inode->dir_is_hashed()) {
+	return mdc->hash_dentry( inode->ino(), dn );  // hashed
+  }
+
   if (inode->dir_auth == CDIR_AUTH_PARENT) {
 	dout(11) << "dir_auth parent at " << *inode << endl;
 	return inode->authority( mdc );       // same as my inode
-  }
-  if (inode->dir_auth == CDIR_AUTH_HASH) {
-	return mdc->hash_dentry( inode->ino(), dn );  // hashed
   }
 
   // it's explicit for this whole dir
