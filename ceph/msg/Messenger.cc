@@ -38,6 +38,7 @@ using namespace std;
 #include "messages/MInodeUpdate.h"
 #include "messages/MInodeExpire.h"
 #include "messages/MDirExpire.h"
+#include "messages/MCacheExpire.h"
 
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
@@ -143,6 +144,10 @@ decode_message(crope& ser)
 
   case MSG_MDS_HEARTBEAT:
 	m = new MHeartbeat();
+	break;
+
+  case MSG_MDS_CACHEEXPIRE:
+	m = new MCacheExpire();
 	break;
 
   case MSG_MDS_INODEUPDATE:

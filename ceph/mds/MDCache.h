@@ -31,9 +31,8 @@ class MDiscoverReply;
 class MInodeGetReplica;
 class MInodeGetReplicaAck;
 class MInodeUpdate;
-class MInodeExpire;
+class MCacheExpire;
 class MDirUpdate;
-class MDirExpire;
 class MInodeUnlink;
 class MInodeUnlinkAck;
 class MInodeSyncStart;
@@ -267,8 +266,7 @@ class MDCache {
   int send_dir_updates(CDir *in, int except=-1);
   void handle_dir_update(MDirUpdate *m);
 
-  void handle_inode_expire(MInodeExpire *m);
-  void handle_dir_expire(MDirExpire *m);
+  void handle_cache_expire(MCacheExpire *m);
 
 
   // -- lock and sync : inodes --

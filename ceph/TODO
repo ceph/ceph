@@ -8,14 +8,14 @@ BUGS?
 
 ISSUES
 
-- group inode, dir expires in trim().
+/- group inode, dir expires in trim().
 
 - discover
  - soft: authority selectively repicates, or sets a 'forward' flag in reply
  - hard: authority always replicates (eg. discover for export)
  - forward flag (see soft)
  - error flag   (if file not found, etc.)
- ?what was i talking about? - make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
+ - [what was i talking about?] make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
 
 
 

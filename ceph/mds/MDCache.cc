@@ -38,8 +38,7 @@
 #include "messages/MInodeUpdate.h"
 #include "messages/MDirUpdate.h"
 
-#include "messages/MInodeExpire.h"
-#include "messages/MDirExpire.h"
+#include "messages/MCacheExpire.h"
 
 #include "messages/MInodeUnlink.h"
 #include "messages/MInodeUnlinkAck.h"
@@ -149,12 +148,13 @@ void MDCache::unlink_inode(CInode *in)
   if (in->nparents == 1) {
 	CDentry *dn = in->parent;
 
-	// unlink auth_pin count
-	dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
-
 	// explicitly define auth
 	in->dangling_auth = in->authority();
 	dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
+
+	// unlink auth_pin count
+	if (in->auth_pins + in->nested_auth_pins)
+	  dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
 
 	// detach
 	dn->dir->remove_child(dn);
@@ -179,30 +179,31 @@ bool MDCache::trim(__int32_t max) {
 	if (!max) return false;
   }
 
+  map<int, MCacheExpire*> expiremap;
+
   while (lru->lru_get_size() > max) {
 	CInode *in = (CInode*)lru->lru_expire();
-	if (!in) return false;
+	if (!in) break; //return false;
 
 	if (in->dir) {
 	  // notify dir authority?
 	  int auth = in->dir->authority();
 	  if (auth != mds->get_nodeid()) {
-		dout(7) << "sending dir_expire to mds" << auth << " on " << *in->dir << endl;
-		mds->messenger->send_message(new MDirExpire(in->ino(), mds->get_nodeid(), in->dir->replica_nonce),
-									 MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
+		dout(7) << "sending expire to mds" << auth << " on   " << *in->dir << endl;
+		if (expiremap.count(auth) == 0) expiremap[auth] = new MCacheExpire(mds->get_nodeid());
+		expiremap[auth]->add_dir(in->ino(), in->dir->replica_nonce);
 	  }
 	}
 
 	// notify inode authority?
-	int auth = in->authority();
-	if (auth != mds->get_nodeid()) {
-	  dout(7) << "sending inode_expire to mds" << auth << " on " << *in << endl;
-	  mds->messenger->send_message(new MInodeExpire(in->ino(), mds->get_nodeid(), in->replica_nonce),
-								   MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
-	}	
-
+	{
+	  int auth = in->authority();
+	  if (auth != mds->get_nodeid()) {
+		dout(7) << "sending expire to mds" << auth << " on " << *in << endl;
+		if (expiremap.count(auth) == 0) expiremap[auth] = new MCacheExpire(mds->get_nodeid());
+		expiremap[auth]->add_inode(in->ino(), in->replica_nonce);
+	  }	
+	}
 	CInode *diri = NULL;
 	if (in->parent)
 	  diri = in->parent->dir->inode;
@@ -240,7 +241,17 @@ bool MDCache::trim(__int32_t max) {
 	  }
 	} 
   }
-  
+
+  // send expires
+  for (map<int, MCacheExpire*>::iterator it = expiremap.begin();
+	   it != expiremap.end();
+	   it++) {
+	dout(7) << "sending cache_expire to " << it->first << endl;
+	mds->messenger->send_message(it->second,
+								 MSG_ADDR_MDS(it->first), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  }
+
+
   return true;
 }
 
@@ -504,6 +515,11 @@ int MDCache::proc_message(Message *m)
 	handle_dir_update((MDirUpdate*)m);
 	break;
 
+  case MSG_MDS_CACHEEXPIRE:
+	handle_cache_expire((MCacheExpire*)m);
+	break;
+
+	/*
   case MSG_MDS_INODEEXPIRE:
 	handle_inode_expire((MInodeExpire*)m);
 	break;
@@ -511,7 +527,7 @@ int MDCache::proc_message(Message *m)
   case MSG_MDS_DIREXPIRE:
 	handle_dir_expire((MDirExpire*)m);
 	break;
-
+	*/
 
   case MSG_MDS_INODEUNLINK:
 	handle_inode_unlink((MInodeUnlink*)m);
@@ -775,7 +791,6 @@ void MDCache::handle_discover(MDiscover *dis)
   // from me to me?
   if (dis->get_asker() == whoami) {
     dout(7) << "discover for " << dis->get_want().get_path() << " bounced back to me, dropping." << endl;
-	assert(0); // drop on other end!
 	delete dis;
 	return;
   }
@@ -1135,8 +1150,11 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   inodeno_t ino = m->get_ino();
   CInode *in = get_inode(m->get_ino());
   if (!in) {
+	//dout(7) << "inode_update on " << m->get_ino() << ", don't have it, ignoring" << endl;
 	dout(7) << "inode_update on " << m->get_ino() << ", don't have it, sending expire" << endl;
-	mds->messenger->send_message(new MInodeExpire(m->get_ino(), mds->get_nodeid(), m->get_nonce()),
+	MCacheExpire *expire = new MCacheExpire(mds->get_nodeid());
+	expire->add_inode(m->get_ino(), m->get_nonce());
+	mds->messenger->send_message(expire,
 								 m->get_source(), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	goto out;
@@ -1160,68 +1178,106 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 
 
 
-void MDCache::handle_inode_expire(MInodeExpire *m)
+void MDCache::handle_cache_expire(MCacheExpire *m)
 {
-  CInode *in = get_inode(m->get_ino());
   int from = m->get_from();
+  map<int, MCacheExpire*> proxymap;
   
-  if (!in) {
-	dout(7) << "inode_expire on " << m->get_ino() << " from " << from << ", don't have it" << endl;
-	assert(in);  // OOPS  i should be authority, or recent authority (and thus frozen).
-  }  
-  if (!in->is_auth()) {
-	do_ino_proxy(in, m);
-	return;
+  if (m->get_from() == m->get_source()) {
+	dout(7) << "cache_expire from " << from << endl;
+  } else {
+	dout(7) << "cache_expire from " << from << " via " << m->get_source() << endl;
   }
 
-  // check nonce
-  if (m->get_nonce() == in->get_cached_by_nonce(from)) {
-	// remove from our cached_by
-	dout(7) << "inode_expire on " << *in << " from mds" << from << " cached_by was " << in->cached_by << endl;
-	in->cached_by_remove(from);
-  } 
-  else {
-	// this is an old nonce, ignore expire.
-	dout(7) << "inode_expire on " << *in << " from mds" << from << " with old nonce " << m->get_nonce() << " (current " << in->get_cached_by_nonce(from) << "), dropping" << endl;
-	assert(in->get_cached_by_nonce(from) > m->get_nonce());
+  // inodes
+  for (map<inodeno_t,int>::iterator it = m->get_inodes().begin();
+	   it != m->get_inodes().end();
+	   it++) {
+	CInode *in = get_inode(it->first);
+	int nonce = it->second;
+	
+	if (!in) {
+	  dout(7) << "inode_expire on " << it->first << " from " << from << ", don't have it" << endl;
+	  assert(in);  // OOPS  i should be authority, or recent authority (and thus frozen).
+	}  
+	if (!in->is_auth()) {
+	  int newauth = ino_proxy_auth(in->ino(), 
+								   from,
+								   export_proxy_inos);
+	  dout(7) << "proxy inode expire on " << *in << " to " << newauth << endl;
+	  in->is_proxy();
+	  assert(newauth >= 0);
+	  assert(in->state_test(CINODE_STATE_PROXY));
+	  if (proxymap.count(newauth) == 0) proxymap[newauth] = new MCacheExpire(from);
+	  proxymap[newauth]->add_inode(it->first, it->second);
+	  continue;
+	}
+	
+	// check nonce
+	if (nonce == in->get_cached_by_nonce(from)) {
+	  // remove from our cached_by
+	  dout(7) << "inode_expire on " << *in << " from mds" << from << " cached_by was " << in->cached_by << endl;
+	  in->cached_by_remove(from);
+	} 
+	else {
+	  // this is an old nonce, ignore expire.
+	  dout(7) << "inode_expire on " << *in << " from mds" << from << " with old nonce " << nonce << " (current " << in->get_cached_by_nonce(from) << "), dropping" << endl;
+	  assert(in->get_cached_by_nonce(from) > nonce);
+	}
+  }
+
+  // dirs
+  for (map<inodeno_t,int>::iterator it = m->get_dirs().begin();
+	   it != m->get_dirs().end();
+	   it++) {
+	CInode *diri = get_inode(it->first);
+	CDir *dir = diri->dir;
+	int nonce = it->second;
+	
+	if (!dir) {
+	  dout(7) << "dir_expire on " << it->first << " from " << from << ", don't have it" << endl;
+	  assert(dir);  // OOPS  i should be authority, or recent authority (and thus frozen).
+	}  
+	if (!dir->is_auth()) {
+	  int newauth = ino_proxy_auth(dir->ino(), 
+								   from,
+								   export_proxy_dirinos);
+	  dout(7) << "proxy dir expire on " << *dir << " to " << newauth << endl;
+	  assert(dir->is_proxy());
+	  assert(newauth >= 0);
+	  assert(dir->state_test(CDIR_STATE_PROXY));
+	  if (proxymap.count(newauth) == 0) proxymap[newauth] = new MCacheExpire(from);
+	  proxymap[newauth]->add_dir(it->first, it->second);
+	  continue;
+	}
+	
+	// check nonce
+	if (nonce == dir->get_open_by_nonce(from)) {
+	  // remove from our cached_by
+	  dout(7) << "dir_expire on " << *dir << " from mds" << from << " open_by was " << dir->open_by << endl;
+	  dir->open_by_remove(from);
+	} 
+	else {
+	  // this is an old nonce, ignore expire.
+	  dout(7) << "dir_expire on " << *dir << " from mds" << from << " with old nonce " << nonce << " (current " << dir->get_open_by_nonce(from) << "), dropping" << endl;
+	  assert(dir->get_open_by_nonce(from) > nonce);
+	}
+  }
+
+  // send proxy forwards
+  for (map<int, MCacheExpire*>::iterator it = proxymap.begin();
+	   it != proxymap.end();
+	   it++) {
+	dout(7) << "sending proxy forward to " << it->first << endl;
+	mds->messenger->send_message(it->second,
+								 MSG_ADDR_MDS(it->first), MDS_PORT_CACHE, MDS_PORT_CACHE);
   }
 
   // done
   delete m;
 }
 
-void MDCache::handle_dir_expire(MDirExpire *m)
-{
-  CInode *diri = get_inode(m->get_ino());
-  assert(diri);
-  CDir *dir = diri->dir;
-  
-  int from = m->get_from();
-  
-  if (!dir) {
-	dout(7) << "dir_expire on " << m->get_ino() << " from " << from << ", don't have it" << endl;
-	assert(dir);  // OOPS  i should be authority, or recent authority (and thus frozen).
-  }  
-  if (!dir->is_auth()) {
-	do_dir_proxy(dir, m);
-	return;
-  }
 
-  // check nonce
-  if (m->get_nonce() == dir->get_open_by_nonce(from)) {
-	// remove from our cached_by
-	dout(7) << "dir_expire on " << *dir << " from mds" << from << " open_by was " << dir->open_by << endl;
-	dir->open_by_remove(from);
-  } 
-  else {
-	// this is an old nonce, ignore expire.
-	dout(7) << "dir_expire on " << *dir << " from mds" << from << " with old nonce " << m->get_nonce() << " (current " << dir->get_open_by_nonce(from) << "), dropping" << endl;
-	assert(dir->get_open_by_nonce(from) > m->get_nonce());
-  }
-
-  // done
-  delete m;
-}
 
 
 int MDCache::send_dir_updates(CDir *dir, int except)
@@ -1258,6 +1314,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
   // update!
   if (!in->dir) {
 	dout(7) << "dropping dir_update on " << m->get_ino() << ", ->dir is null" << endl;	
+	// FIXME ? send expire?
 	goto out;
   } 
 
@@ -2657,6 +2714,9 @@ void MDCache::export_dir_frozen(CDir *dir,
 
 	prep->add_export( exp->ino() );
 
+	/* first assemble each trace, in trace order, and put in message */
+	list<CInode*> inode_trace;  
+
     // trace to dir
     CDir *cur = exp;
     while (cur != dir) {
@@ -2668,10 +2728,8 @@ void MDCache::export_dir_frozen(CDir *dir,
 
       // inode?
       assert(cur->inode->is_auth());
-      prep->add_inode( parent_dir->ino(),
-					   cur->inode->parent->name,
-					   new CInodeDiscover(cur->inode, cur->inode->cached_by_add(dest)) );
-      dout(10) << "  added " << *cur->inode << endl;
+	  inode_trace.push_front(cur->inode);
+      dout(10) << "  will add " << *cur->inode << endl;
       
       // include dir? note: this'll include everything except the nested exports themselves, 
 	  // since someone else is obviously auth.
@@ -2682,6 +2740,17 @@ void MDCache::export_dir_frozen(CDir *dir,
       
       cur = parent_dir;      
     }
+
+	for (list<CInode*>::iterator it = inode_trace.begin();
+		 it != inode_trace.end();
+		 it++) {
+	  CInode *in = *it;
+      dout(10) << "  added " << *in << endl;
+      prep->add_inode( in->parent->dir->ino(),
+					   in->parent->name,
+					   new CInodeDiscover(in, in->cached_by_add(dest)) );
+	}
+
   }
   
   // send it!
@@ -3194,6 +3263,10 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   }
   if (waiting_for) {
     dout(7) << " waiting for " << waiting_for << " nested export dir opens" << endl;
+
+	// finish any waiters we already sucked up
+	finish_contexts(finished, 0);
+
     return;
   }
 

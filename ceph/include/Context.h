@@ -32,7 +32,7 @@ class Context {
 inline void finish_contexts(list<Context*>& finished, 
 							int result = 0)
 {
-  dout(2) << finished.size() << " contexts to finish" << endl;
+  if (finished.size()) dout(2) << finished.size() << " contexts to finish" << endl;
   for (list<Context*>::iterator it = finished.begin(); 
 	   it != finished.end(); 
 	   it++) {

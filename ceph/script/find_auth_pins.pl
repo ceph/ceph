@@ -6,6 +6,14 @@ my $l = 1;
 my @pins;
 while (<>) {
 
+	#cdir:adjust_nested_auth_pins on [dir 163 /foo/ rep@13 | child] count now 0 + 1
+
+	if (/adjust_nested_auth_pins/) {
+		my ($what) = /\[(\w+ \d+) /;
+		$hist{$what} .= "$l: $_"
+			if defined $pin{$what};
+	}
+
 	# cinode:auth_pin on inode [1000000002625 /gnu/blah_client_created. 0x89b7700] count now 1 + 0
 
 	if (/auth_pin /) {

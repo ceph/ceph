@@ -12,7 +12,7 @@
 
 #include "include/config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << " cdir:"
+#define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << "        cdir: "
 
 
 ostream& operator<<(ostream& out, CDir& dir)

@@ -138,7 +138,7 @@ public:
 	if (r >= 0) {
 	  CInode *in = mds->mdcache->get_inode(ino);
 	  assert(in && in->dir);
-	  if (in) {
+	  if (in && in->dir && in->dir->is_auth()) {
 		mds->mdstore->commit_dir(in->dir, c);
 		return;
 	  }
