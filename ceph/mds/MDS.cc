@@ -46,8 +46,8 @@ void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 
 
 // cons/des
-MDS::MDS(MDCluster *mdc, Messenger *m) {
-  whoami = mdc->add_mds(this);
+MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
+  this->whoami = whoami;
   mdcluster = mdc;
 
   messenger = m;
@@ -137,7 +137,7 @@ void MDS::proc_message(Message *m)
 	
   default:
 	cout << "mds" << whoami << " main unknown message " << m->get_type() << endl;
-	throw "asdf";
+	assert(0);
   }
 
 }
@@ -236,7 +236,7 @@ int MDS::handle_client_request(MClientRequest *req)
 
   default:
 	cout << "mds" << whoami << " unknown mop " << req->op << endl;
-	throw "eek";
+	assert(0);
   }
 
   if (reply) {  
@@ -417,7 +417,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	}
   } else {
 	if (dirauth < 0) {
-	  throw "not implemented";
+	  assert(dirauth >= 0);
 	} else {
 	  // forward to authority
 	  cout << "mds" << whoami << " forwarding readdir to authority " << dirauth << endl;

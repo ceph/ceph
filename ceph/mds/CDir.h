@@ -92,7 +92,14 @@ class CDir {
 
 
   size_t get_size() { 
-	assert(nitems == items.size());
+	if (nitems != items.size()) {
+	  for (CDir_map_t::iterator it = items.begin();
+		   it != items.end();
+		   it++)
+		cout << "item " << (*it).first << endl;
+	  cout << "nitems " << nitems << endl;
+	  assert(nitems == items.size());
+	}
 	return nitems; 
   }
 

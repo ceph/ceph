@@ -1,6 +1,8 @@
 #include <sys/types.h>
 #include "include/Clock.h"
 
+#include "include/config.h"
+
 #ifndef NULL
 #define NULL 0
 #endif
@@ -19,15 +21,16 @@ Clock::Clock() {
 double g_now = 0.0;
 
 double Clock::gettime() {
-  g_now += .0001;
-  return g_now;
 
-  /*
+#ifdef FAKE_CLOCK
+  g_now += .000001;
+  return g_now;
+#else
   // get actual time
   gettimeofday(&curtime,NULL);
 
   return curtime.tv_sec + curtime.tv_usec/1000000.0;
-  */
+#endif
 }
 
 void Clock::settime(double t) {

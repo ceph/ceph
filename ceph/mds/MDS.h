@@ -103,7 +103,7 @@ class MDS : public Dispatcher {
 
   
  public:
-  MDS(MDCluster *mdc, Messenger *m);
+  MDS(MDCluster *mdc, int whoami, Messenger *m);
   ~MDS();
 
   int get_nodeid() { return whoami; }

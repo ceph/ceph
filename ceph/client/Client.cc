@@ -4,6 +4,7 @@
 #include "include/Message.h"
 
 #include "mds/MDS.h"
+#include "mds/MDCluster.h"
 
 #include "Client.h"
 #include "ClNode.h"
@@ -13,20 +14,24 @@
 
 #include <stdlib.h>
 
+#include "include/config.h"
+
 #define debug 1
 
-Client::Client(int id, Messenger *m, long req)
+Client::Client(MDCluster *mdc, int id, Messenger *m, long req)
 {
+  mdcluster = mdc;
   whoami = id;
   messenger = m;
+
+  max_requests = req;
+
   cwd = 0;
   root = 0;
   tid = 0;
 
-  cache_lru.lru_set_max(1000);
-  cache_lru.lru_set_midpoint(.5);
-
-  max_requests = req;
+  cache_lru.lru_set_max(CLIENT_CACHE);
+  cache_lru.lru_set_midpoint(CLIENT_CACHE_MID);
 }
 
 Client::~Client()
@@ -239,8 +244,6 @@ void Client::send_request(string& p, int op)
 	// we need the root inode
 	mds = 0;
   }
-
-  //mds = rand() % 10;
 
   if (debug > 0)
 	cout << "client" << whoami << " req " << req->tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;

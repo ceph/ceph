@@ -9,6 +9,7 @@
 
 #include "include/Message.h"
 
+#include <cassert>
 #include <iostream>
 using namespace std;
 
@@ -19,7 +20,7 @@ void MDStore::proc_message(Message *m)
 
   default:
 	cout << "mds" << mds->get_nodeid() << " store unknown message " << m->get_type() << endl;
-	throw "asdf";
+	assert(0);
   }
 }
 
@@ -71,8 +72,8 @@ bool MDStore::fetch_dir( CInode *in,
   MDFetchDirContext *fin = new MDFetchDirContext( this, in->ino() );
 
   // issue osd read
-  int osd = in->inode.ino % 10;
-  object_t oid = in->inode.ino;
+  int osd = mds->mdcluster->get_meta_osd(in->inode.ino);
+  object_t oid = mds->mdcluster->get_meta_oid(in->inode.ino);
   
   mds->osd_read( osd, oid, 
 				 0, 0,
@@ -88,7 +89,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
 	return false;
   } 
 
-  cout << "fetch_dir_2 on " << *idir << " ref " << idir->ref << " has " << idir->dir->get_size();
+  cout << "fetch_dir_2 on " << *idir << " ref " << idir->ref << " has " << idir->dir->get_size() << endl;
   
   // make sure we have a CDir
   if (idir->dir == NULL) idir->dir = new CDir(idir);
@@ -97,7 +98,11 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
   __uint32_t num = *((__uint32_t*)buf);
   cout << "  " << num << " items" << endl;
   size_t p = 4;
-  while (p < buflen && num > 0) {
+  int parsed = 0;
+  while (parsed < num) {
+	assert(p < buflen && num > 0);
+	parsed++;
+	
 	// dentry
 	string dname = buf+p;
 	p += dname.length() + 1;
@@ -106,23 +111,22 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
 	// just a hard link?
 	if (*(buf+p) == 'L') {
 	  // yup.  we don't do that yet.
-	  throw "not implemented";
+	  assert(0);
 	} else {
 	  p++;
+
+	  inode_t *inode = (inode_t*)(buf+p);
+	  p += sizeof(inode_t);
+  	  
+	  if (mds->mdcache->have_inode(inode->ino)) {
+		CInode *in = mds->mdcache->get_inode(inode->ino);
+		cout << " readdir got (but i already had) " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
+		continue;
+	  }
 	  
 	  // inode
 	  CInode *in = new CInode();
-	  memcpy(&in->inode, buf+p, sizeof(inode_t));
-	  p += sizeof(inode_t);
-	  
-	  if (mds->mdcache->have_inode(in->inode.ino)) {
-		cout << " readdir got (but i already had) " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
-		
-		inodeno_t ino = in->inode.ino;
-		delete in;
-		in = mds->mdcache->get_inode(ino);
-		continue;
-	  }
+	  memcpy(&in->inode, inode, sizeof(inode_t));
 	  
 	  // add and link
 	  mds->mdcache->add_inode( in );
@@ -143,7 +147,6 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
 	  */
 	  
 	}
-	num--;
   }
   
   idir->dir->state_set(CDIR_MASK_COMPLETE);
@@ -308,8 +311,8 @@ bool MDStore::commit_dir( CInode *in,
   in->dir->state_set(CDIR_MASK_MID_COMMIT);
 
   // submit to osd
-  int osd = in->inode.ino % 10;
-  object_t oid = in->inode.ino;
+  int osd = mds->mdcluster->get_meta_osd(in->inode.ino);
+  object_t oid = mds->mdcluster->get_meta_oid(in->inode.ino);
   
   mds->osd_write( osd, oid, 
 				  off, 0,

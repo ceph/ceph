@@ -1,6 +1,8 @@
 #ifndef __MDCLUSTER_H
 #define __MDCLUSTER_H
 
+#include "include/types.h"
+
 #include <string>
 #include <vector>
 using namespace std;
@@ -10,16 +12,31 @@ class MDS;
 
 class MDCluster {
  protected:
-  vector<MDS*> mds;
+  int          num_mds;
+
+  int          num_osd;
+  int          osd_meta_begin;  // 0
+  int          osd_meta_end;    // 10
+  int          osd_log_begin;   
+  int          osd_log_end;   
   
-  
+  void map_osds();
+
  public:
-  MDCluster();
-  ~MDCluster();
+  MDCluster(int num_mds, int num_osd);
   
-  int get_size() { return mds.size(); }
-  int add_mds(MDS *m);
+  int get_num_mds() { return num_mds; }
+  
+  //int get_size() { return mds.size(); }
+  //int add_mds(MDS *m);
+
   int hash_dentry( CDir *dir, string& dn );  
+
+  int get_meta_osd(inodeno_t ino);
+  object_t get_meta_oid(inodeno_t ino);
+  
+  int get_log_osd(int mds);
+  object_t get_log_oid(int mds);
 
 };
 

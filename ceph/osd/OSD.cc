@@ -97,7 +97,9 @@ void OSD::read(MOSDRead *r)
   if (fd < 0) {
 
 	// send reply (failure)
+	cout << "read open FAILED on " << get_filename(whoami, r->oid) << " errno " << errno << endl;
 	reply = new MOSDReadReply(r, NULL, -1);
+	assert(0);
 
   } else {
 
@@ -113,6 +115,7 @@ void OSD::read(MOSDRead *r)
 	char *buf = new char[r->len];
 	
 	long got = ::read(fd, buf, r->len);
+	flock(fd, LOCK_UN);
 	close(fd);
 	
 	// send reply
@@ -142,6 +145,7 @@ void OSD::write(MOSDWrite *m)
 	cout << "err opening " << f << " " << errno << endl;
 	
 	reply = new MOSDWriteReply(m, -1);
+	assert(0);
 
   } else {
 	// lock
@@ -154,6 +158,7 @@ void OSD::write(MOSDWrite *m)
 	if (m->offset)
 	  lseek(fd, m->offset, SEEK_SET);
 	long wrote = ::write(fd, m->buf, m->len);
+	flock(fd, LOCK_UN);
 	close(fd);
 
 	// reply

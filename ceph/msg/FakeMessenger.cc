@@ -1,4 +1,7 @@
 
+#include "include/config.h"
+
+
 #include "include/FakeMessenger.h"
 #include "mds/MDS.h"
 #include "include/LogType.h"
@@ -14,7 +17,7 @@ using namespace std;
 
 // global queue.
 
-hash_map<int, FakeMessenger*> directory;
+map<int, FakeMessenger*> directory;
 hash_map<int, Logger*>        loggers;
 LogType *logtype;
 
@@ -26,7 +29,9 @@ int fakemessenger_do_loop()
   while (1) {
 	bool didone = false;
 	
-	hash_map<int, FakeMessenger*>::iterator it = directory.begin();
+	cout << "do_loop top" << endl;
+
+	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
@@ -93,6 +98,7 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 
   // deliver
   try {
+#ifdef LOG_MESSAGES
 	// stats
 	loggers[whoami]->inc("+send",1);
 	loggers[dest]->inc("-recv",1);
@@ -102,6 +108,7 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 	loggers[whoami]->inc(s);
 	sprintf(s,"-%s", m->get_type_name());
 	loggers[dest]->inc(s);
+#endif
 
 	// queue
 	FakeMessenger *dm = directory[dest];
@@ -110,6 +117,7 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
   }
   catch (...) {
 	cout << "no destination " << dest << endl;
+	assert(0);
   }
 }
 

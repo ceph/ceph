@@ -51,7 +51,7 @@ int MDBalancer::proc_message(Message *m)
 	
   default:
 	cout << "mds" << mds->get_nodeid() << " balancer unknown message " << m->get_type() << endl;
-	throw "asdf";
+	assert(0);
 	break;
   }
 
@@ -87,7 +87,7 @@ void MDBalancer::send_heartbeat()
 
   cout << "mds" << mds->get_nodeid() << " sending heartbeat " << beat_epoch << " " << load << endl;
   
-  int size = mds->get_cluster()->get_size();
+  int size = mds->get_cluster()->get_num_mds();
   for (int i = 0; i<size; i++) {
 	if (i == mds->get_nodeid()) continue;
 	mds->messenger->send_message(new MHeartbeat(load, beat_epoch),
@@ -117,7 +117,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   mds_load[ m->get_source() ] = m->load;
   //cout << "  load is " << load << " have " << mds_load.size() << endl;
   
-  int cluster_size = mds->get_cluster()->get_size();
+  int cluster_size = mds->get_cluster()->get_num_mds();
   if (mds_load.size() == cluster_size) 
 	do_rebalance();
   
@@ -126,7 +126,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
 void MDBalancer::do_rebalance()
 {
-  int cluster_size = mds->get_cluster()->get_size();
+  int cluster_size = mds->get_cluster()->get_num_mds();
   int whoami = mds->get_nodeid();
 
   cout << "mds" << whoami << " do_rebalance: cluster loads are" << endl;

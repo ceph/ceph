@@ -2,6 +2,7 @@
 #include "CDentry.h"
 #include "CDir.h"
 
+#include <cassert>
 
 // CDentry
 
@@ -10,12 +11,12 @@ void CDentry::remove() {
 }
 
 CDentry::CDentry(const CDentry& m) {
-  throw 1; //std::cerr << "copy cons called, implement me" << endl;
+  assert(0); //std::cerr << "copy cons called, implement me" << endl;
 }
 
 // =
 const CDentry& CDentry::operator= (const CDentry& right) {
-  throw 1;//std::cerr << "copy op called, implement me" << endl;
+  assert(0); //std::cerr << "copy op called, implement me" << endl;
 }
 
   // comparisons

@@ -70,7 +70,7 @@ bool MDCache::remove_inode(CInode *o)
 	delete dn;
   } 
   else if (o->nparents > 1) {
-	throw "implement me";  
+	assert(o->nparents <= 1);
   }
 
   // remove from map
@@ -354,8 +354,8 @@ int MDCache::write_start(CInode *in, Message *m)
 	  in->get();	// pin
 	}
   } else {
-
-	throw "not implemented";
+   
+	assert(auth != whoami);
 
   }
 
@@ -442,7 +442,7 @@ int MDCache::proc_message(Message *m)
 	
   default:
 	cout << "mds" << mds->get_nodeid() << " cache unknown message " << m->get_type() << endl;
-	throw "asdf";
+	assert(0);
 	break;
   }
 
@@ -618,7 +618,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	cout << "mds" << mds->get_nodeid() << " handle_discover got result" << endl;
 	  
 	int r = path_traverse(dis->basepath, trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
-	if (r != 0) throw "wtf";
+	assert(r == 0);
 	
 	CInode *cur = trav[trav.size()-1];
 	CInode *start = cur;
@@ -705,7 +705,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	while (!dis->done()) {
 	  if (!cur->is_dir()) {
 		cout << "woah, discover on non dir " << dis->current_need() << endl;
-		throw "implement me";
+		assert(cur->is_dir());
 	  }
 
 	  if (!cur->dir) cur->dir = new CDir(cur);
@@ -749,7 +749,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		// don't have it.
 		if (cur->dir->is_complete()) {
 		  // file not found.
-		  throw "implement me";
+		  assert(!cur->dir->is_complete());
 		} else {
 		  // readdir
 		  cout << "mds" << whoami << " incomplete dir contents for " << *cur << ", fetching" << endl;
@@ -1058,7 +1058,7 @@ void MDCache::export_dir(CInode *in,
 
   if (!in->parent) {
 	cout << "i won't export root" << endl;
-	throw "asdf";
+	assert(in->parent);
 	return;
   }
 

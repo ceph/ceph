@@ -11,9 +11,11 @@ class DentryCache;
 class CInode;
 class ClNode;
 class MClientReply;
+class MDCluster;
 
 class Client : public Dispatcher {
  protected:
+  MDCluster *mdcluster;
   Messenger *messenger;
   int whoami;
 
@@ -26,7 +28,7 @@ class Client : public Dispatcher {
   vector<string> last_req_dn;
 
  public:
-  Client(int id, Messenger *m, long req);
+  Client(MDCluster *mdc, int id, Messenger *m, long req);
   ~Client();
   
   int init();

@@ -31,6 +31,7 @@ void CDir::hit()
 void CDir::add_child(CDentry *d) 
 {
   assert(nitems == items.size());
+  assert(items.count(d->name) == 0);
 
   //cout << "adding " << d->name << " to " << this << endl;
   items[d->name] = d;

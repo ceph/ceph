@@ -1,6 +1,7 @@
 
 #include "MDLog.h"
 #include "MDS.h"
+#include "MDCluster.h"
 #include "LogStream.h"
 #include "LogEvent.h"
 
@@ -21,8 +22,12 @@ MDLog::MDLog(MDS *m)
   num_events = 0;
   max_events = 0;
   trim_reading = false;
-  reader = new LogStream(mds, 666, mds->get_nodeid());
-  writer = new LogStream(mds, 666, mds->get_nodeid());
+  reader = new LogStream(mds, 
+						 mds->get_cluster()->get_log_osd(mds->get_nodeid()),
+						 mds->get_cluster()->get_log_oid(mds->get_nodeid()));
+  writer = new LogStream(mds,
+						 mds->get_cluster()->get_log_osd(mds->get_nodeid()),
+						 mds->get_cluster()->get_log_oid(mds->get_nodeid()));
 
   if (!mdlog_logtype) 
 	mdlog_logtype = new LogType();

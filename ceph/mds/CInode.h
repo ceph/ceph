@@ -166,10 +166,10 @@ class CInode : LRUObject {
 
   // --- reference counting
   void put(int by) {
-	assert(ref > 0);
-	if (ref_set.count(by) != 1) {
+	if (ref > 0 || ref_set.count(by) != 1) {
 	  cout << "bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 1);
+	  assert(ref > 0);
 	}
 	ref--;
 	ref_set.erase(by);

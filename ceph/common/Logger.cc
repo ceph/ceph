@@ -7,12 +7,14 @@
 #include <iostream>
 #include "include/Clock.h"
 
+#include "include/config.h"
+
 
 Logger::Logger(string& fn, LogType *type)
 {
   filename = "out/";
   filename += fn;
-  interval = 1.0;
+  interval = LOGGER_INTERVAL;
   start = last_logged = g_clock.gettime();  // time 0!
   wrote_header = -1;
   open = false;
@@ -70,6 +72,8 @@ void Logger::flush(bool force)
   while (now >= last_logged + interval || force) {
 	last_logged += interval;
 	force = false;
+
+	//cout << "logger " << this << " advancing from " << last_logged << " now " << now << endl;
 
 	if (!open) {
 	  out.open(filename.c_str(), ofstream::out);
