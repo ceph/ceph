@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <list>
 
-#include "dcache.h"
+#include "MDCache.h"
 #include "MDStore.h"
 //#include "MDLog.h"
 //#include "MDBalancer.h"
@@ -19,32 +19,36 @@ class MDS {
   int          nodeid;
   int          num_nodes;
 
-  // cache
-  DentryCache *mdcache;
-
   // import/export
   list<CInode*>      import_list;
   list<CInode*>      export_list;
   
 
+  friend class MDStore;
+
+ public:
   // sub systems
-  MDStore    *mdstore;
+  DentryCache  *mdcache;    // cache
+  MDStore      *mdstore;    // storage interface
   //MDLog      *logger;
   //MDBalancer *balancer;
  
   Messenger  *messenger;
 
 
-  friend class MDStore;
+
   
  public:
   MDS(int id, int num) {
 	nodeid = id;
 	num_nodes = num;
-	mdcache = NULL;
+
+	mdcache = new DentryCache();
+	mdstore = new MDStore();
   }
   ~MDS() {
 	if (mdcache) { delete mdcache; mdcache = NULL; }
+	if (mdstore) { delete mdstore; mdstore = NULL; }
   }
 
   void proc_message(Message *m);

@@ -5,6 +5,7 @@
 #include <iostream>
 using namespace std;
 
+
 class LRUObject {
  protected:
   LRUObject *lru_next, *lru_prev;
@@ -39,11 +40,15 @@ class LRU {
   __uint32_t lru_max;   // max items
 
  public:
-  LRU(int max) {
+  LRU() {
 	lru_ntop = lru_nbot = lru_num = 0;
 	lru_tophead = lru_toptail = NULL;
 	lru_bothead = lru_bottail = NULL;
 	lru_midpoint = .9;
+	lru_max = 0;
+  }
+  LRU(int max) {
+	LRU();
 	lru_max = max;
   }
 
@@ -52,6 +57,10 @@ class LRU {
   }
 
   __uint32_t lru_get_max() {
+	return lru_max;
+  }
+  __uint32_t set_max(__uint32_t m) {
+	lru_max = m;
 	return lru_max;
   }
 
@@ -92,6 +101,8 @@ class LRU {
 
   // adjust top/bot balance, as necessary
   void lru_adjust() {
+	if (!lru_max) return;
+
 	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_max);
 	while (lru_ntop > topwant) {
 	  // remove from tail of top, stick at head of bot

@@ -11,6 +11,7 @@ using namespace std;
 
 // == fetch_dir
 
+
 class MDFetchDirContext : public Context {
  protected:
   MDStore *ms;
@@ -27,6 +28,9 @@ class MDFetchDirContext : public Context {
 	this->c = c;
 	buf = 0;
 	buflen = 0;
+  }
+  ~MDFetchDirContext() {
+	if (buf) { delete buf; buf = 0; }
   }
   
   void finish(int result) {
@@ -46,11 +50,10 @@ bool MDStore::fetch_dir( CInode *in,
   int osd = in->inode.ino % 10;
   object_t oid = in->inode.ino;
   
-  osd_read( osd, oid, 
-			0, 0, 
-			(void**)&fin->buf,
-			&fin->buflen,
-			fin );
+  osd_read_all( osd, oid, 
+				(void**)&fin->buf,
+				&fin->buflen,
+				fin );
 #else
   // fake dir read
   
@@ -92,12 +95,98 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 
   // ok!
   c->finish(0);
+  delete c;
 }
+
+
+
+
+
+
+
+
+// ----------------------------
+// commit_dir
+
+class MDCommitDirContext : public Context {
+ protected:
+  MDStore *ms;
+  CInode *in;
+  Context *c;
+
+ public:
+  char *buf;
+  size_t buflen;
+
+  MDCommitDirContext(MDStore *ms, CInode *in, Context *c) : Context() {
+	this->ms = ms;
+	this->in = in;
+	this->c = c;
+	buf = 0;
+	buflen = 0;
+  }
+  MDCommitDirContext() {
+	if (buf) { delete buf; buf = 0; }
+  }
+  
+  void finish(int result) {
+	ms->commit_dir_2( result, in, c );
+  }
+};
+
 
 
 bool MDStore::commit_dir( CInode *in,
 						  Context *c )
 {
+  MDCommitDirContext *fin = new MDCommitDirContext(this, in, c);
   
+  // buffer
+  fin->buflen = in->dir->serial_size();
+  fin->buf = new char[fin->buflen];
+  size_t off = 0;
+  
+  // fill
+  CDir_map_t::iterator it = in->dir->begin();
+  while (it != in->dir->end()) {
+	// name
+	memcpy(fin->buf + off, it->first.c_str(), it->first.length() + 1);
+	off += it->first.length() + 1;
+	
+	// marker
+	fin->buf[off++] = 'I';  // inode
 
+	// inode
+	memcpy(fin->buf + off, &it->second->get_inode()->inode, sizeof(inode_t));
+	off += sizeof(inode_t);
+
+	it++;	
+  }
+  
+  // pin inode
+  in->get();
+
+  // submit to osd
+  int osd = in->inode.ino % 10;
+  object_t oid = in->inode.ino;
+  
+  osd_write( osd, oid, 
+			 off, 0,
+			 fin->buf,
+			 fin );
+}
+
+
+bool MDStore::commit_dir_2( int result,
+							CInode *in,
+							Context *c )
+{
+  // unpin inode
+  in->put();
+
+  // finish
+  if (c) {
+	c->finish(result);
+	delete c;
+  }
 }

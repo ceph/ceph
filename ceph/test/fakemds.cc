@@ -4,7 +4,7 @@
 #include <string>
 
 #include "include/mds.h"
-#include "include/dcache.h"
+#include "include/MDCache.h"
 
 
 using namespace std;
@@ -15,7 +15,8 @@ __uint64_t ino = 1;
 // this parses find output
 
 DentryCache *readfiles() {
-  DentryCache *dc = new DentryCache(new CInode());
+  DentryCache *dc = new DentryCache();
+  dc->set_root(new CInode());
 
   string fn;
   int offs = -1;
@@ -44,13 +45,17 @@ DentryCache *readfiles() {
 int main(char **argv, int argc) {
   cout << "hi there" << endl;
 
-  DentryCache *dc = readfiles();
-  dc->dump();
+  g_mds = new MDS(0, 1);
+  g_mds->mdcache = readfiles();
+  
+  g_mds->mdcache->dump();
+  
+  g_mds->mdcache->dump_to_disk();
 
-  if (dc->clear()) {
+  if (g_mds->mdcache->clear()) {
 	cout << "clean shutdown" << endl;
-	dc->dump();
-	delete dc;
+	g_mds->mdcache->dump();
+	delete g_mds;
   } else {
 	throw "can't empty cache";
   }
