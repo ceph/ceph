@@ -30,6 +30,10 @@
 #include "messages/MInodeSyncRelease.h"
 #include "messages/MInodeSyncRecall.h"
 
+#include "messages/MInodeLockStart.h"
+#include "messages/MInodeLockAck.h"
+#include "messages/MInodeLockRelease.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <iostream>
@@ -213,16 +217,18 @@ bool MDCache::shutdown_pass()
 	dout(7) << "log is empty; flushing cache" << endl;
 	trim(0);
 
-	if (mds->get_nodeid() == 0) {
-	  // unpin inodes on shut down nodes.
-	  // NOTE: this happens when they expire during an export; expires reference inodes, and can thus
-	  // be missed.
-	  bool didsomething = false;
-	  for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
-		   it != inode_map.end();
-		   it++) {
-		CInode *in = it->second;
-		if (in->is_auth() &&
+	// walk cache
+	bool didsomething = false;
+	for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
+		 it != inode_map.end();
+		 it++) {
+	  CInode *in = it->second;
+	  if (in->is_auth()) {
+		// cached_by
+		// unpin inodes on shut down nodes.
+		// NOTE: this happens when they expire during an export; expires reference inodes, and can thus
+		// be missed.
+		if (mds->get_nodeid() == 0 &&
 			in->is_cached_by_anyone()) {
 		  for (set<int>::iterator by = in->cached_by.begin();
 			   by != in->cached_by.end();
@@ -235,11 +241,16 @@ bool MDCache::shutdown_pass()
 			}
 		  }
 		}
+		
+		// sync_release
+		if (in->is_syncbyme()) {
+		  sync_release(in);
+		}
 	  }
-	  if (didsomething)
-		trim(0);
 	}
-
+	if (didsomething)
+	  trim(0);
+	
   }
 
   dout(7) << "cache size now " << lru->lru_get_size() << endl;
@@ -302,7 +313,7 @@ bool MDCache::shutdown_pass()
 	  mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
 								   MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
 	} else {
-	  mds->handle_shutdown_finish(new Message(MSG_MDS_SHUTDOWNFINISH));
+	  mds->handle_shutdown_finish(NULL);
 	}
 	return true;
   } else {
@@ -453,19 +464,29 @@ int MDCache::proc_message(Message *m)
   case MSG_MDS_INODESYNCSTART:
 	handle_inode_sync_start((MInodeSyncStart*)m);
 	break;
-
   case MSG_MDS_INODESYNCACK:
 	handle_inode_sync_ack((MInodeSyncAck*)m);
 	break;
-
   case MSG_MDS_INODESYNCRELEASE:
 	handle_inode_sync_release((MInodeSyncRelease*)m);
 	break;
-
   case MSG_MDS_INODESYNCRECALL:
 	handle_inode_sync_recall((MInodeSyncRecall*)m);
 	break;
 	
+	// lock
+  case MSG_MDS_INODELOCKSTART:
+	handle_inode_lock_start((MInodeLockStart*)m);
+	break;
+  case MSG_MDS_INODELOCKACK:
+	handle_inode_lock_ack((MInodeLockAck*)m);
+	break;
+  case MSG_MDS_INODELOCKRELEASE:
+	handle_inode_lock_release((MInodeLockRelease*)m);
+	break;
+	
+
+
 	// import
   case MSG_MDS_EXPORTDIRPREP:
 	handle_export_dir_prep((MExportDirPrep*)m);
@@ -1022,8 +1043,9 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 
 
-// SYNC
-// locks --------------------
+
+
+// locks ----------------------------------------------------------------
 
 /* soft sync locks: mtime, size, etc. 
  */
@@ -1222,16 +1244,16 @@ void MDCache::sync_start(CInode *in)
   }
 }
 
-void MDCache::sync_finish(CInode *in)
+void MDCache::sync_release(CInode *in)
 {
-  dout(5) << "sync_finish on " << *in << ", messages to " << in->get_cached_by() << endl;
+  dout(5) << "sync_release on " << *in << ", messages to " << in->get_cached_by() << endl;
   
   assert(in->is_syncbyme());
   assert(in->is_auth());
 
   in->hard_unpin();
   in->dist_state &= ~CINODE_DIST_SYNCBYME;
-  in->put(CINODE_PIN_SYNCBYME);
+  //in->put(CINODE_PIN_SYNCBYME);
 
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
@@ -1266,7 +1288,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   dout(7) << "handle_sync_start " << *in << ", sending ack" << endl;
   
   // lock it
-  in->get(CINODE_PIN_SYNCBYTHEM);
+  //in->get(CINODE_PIN_SYNCBYTHEM);
   in->dist_state |= CINODE_DIST_SYNCBYTHEM;
   
   // send ack
@@ -1305,7 +1327,7 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 
 	in->dist_state &= ~CINODE_DIST_PRESYNC;
 	in->dist_state |= CINODE_DIST_SYNCBYME;
-	in->get(CINODE_PIN_SYNCBYME);
+	//in->get(CINODE_PIN_SYNCBYME);
 	in->put(CINODE_PIN_PRESYNC);
 
 	// do waiters!
@@ -1326,7 +1348,7 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
 		(!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
 	  dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
-	  sync_finish(in);
+	  sync_release(in);
 	}
   }
 
@@ -1354,7 +1376,7 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
   assert(!in->is_auth());
   
   // release state
-  in->put(CINODE_PIN_SYNCBYTHEM);
+  //in->put(CINODE_PIN_SYNCBYTHEM);
   in->dist_state &= ~CINODE_DIST_SYNCBYTHEM;
 
   // waiters?
@@ -1399,7 +1421,7 @@ void MDCache::handle_inode_sync_recall(MInodeSyncRecall *m)
   dout(7) << "handle_sync_recall " << *in << ", releasing" << endl;
   assert(in->is_auth());
   
-  sync_finish(in);
+  sync_release(in);
   
   // done
   delete m;
@@ -1408,83 +1430,76 @@ void MDCache::handle_inode_sync_recall(MInodeSyncRecall *m)
 
 
 
-
-
-
 /* hard locks: owner, mode 
  */
 
-
-
-/*
-
-
-int MDCache::write_start(CInode *in, Message *m)
+bool MDCache::write_hard_start(CInode *in, 
+							  Message *m)
 {
-  if (in->get_sync() == CINODE_SYNC_LOCK)
-	return 0;   // we're locked!
-
-  int auth = in->authority(mds->get_cluster());
-  int whoami = mds->get_nodeid();
-
-  if (auth == whoami) {
-	// we are the authority.
-
-	if (!in->cached_by_anyone()) {
-	  // it's just us!
-	  in->sync_set(CINODE_SYNC_LOCK);
-	  in->get();
-	  return 0;   
-	}
-
-	// ok, we need to get the lock.
+  if (in->is_auth()) {
+	// auth
+	if (in->is_lockbyme()) return true;
+	if (!in->is_cached_by_anyone()) return true;  // i'm alone
 	
-	// queue waiter
-	in->add_write_waiter(new C_MDS_RetryMessage(mds, m));
-	
-	if (in->get_sync() != CINODE_SYNC_START) {
-	  
-	  // send sync_start
-	  set<int>::iterator it;
-	  for (it = in->cached_by_begin(); it != in->cached_by_end(); it++) {
-		mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, auth),
-									 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
-	  }
-	  
-	  in->sync_waiting_for_ack = in->cached_by;
-	  in->sync_set(CINODE_SYNC_START);
-	  in->get();	// pin
+	// need lock
+	if (!in->can_hard_pin()) {
+	  dout(5) << "write_hard_start " << *in << " waiting to hard_pin" << endl;
+	  in->add_hard_pin_waiter(new C_MDS_RetryMessage(mds, m));
+	  return false;
 	}
+	
+	in->add_lock_waiter(new C_MDS_RetryMessage(mds, m));
+
+	if (!in->is_prelock())
+	  inode_lock_start(in);
+	
+	return false;
   } else {
-   
-	assert(auth != whoami);
-
+	// replica
+	// fw to auth
+	int auth = in->authority(mds->get_cluster());
+	dout(5) << "write_hard_start " << *in << " on replica, fw to auth " << auth << endl;
+	assert(auth != mds->get_nodeid());
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(auth), m->get_dest_port(),
+								 MDS_PORT_CACHE);
+	return false;
   }
-
-  return 1;
 }
 
-int MDCache::write_finish(CInode *in)
+void MDCache::write_hard_finish(CInode *in)
 {
-  assert(in->get_sync() == CINODE_SYNC_LOCK);
-
-  in->sync_set(0);   // clear sync state
-  in->put();         // unpin
-
-  // 
-  if (in->cached_by_anyone()) {
-	// release
-	set<int>::iterator it;
-	for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
-	  mds->messenger->send_message(new MInodeSyncRelease(in->inode.ino),
-								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
-	}
-  }
+  dout(5) << "write_hard_finish " << *in << endl;
 }
 
-*/
+
+void MDCache::inode_lock_start(CInode *in)
+{
+  
+}
+
+
+void MDCache::inode_lock_release(CInode *in)
+{
+  
+}
+
+void MDCache::handle_inode_lock_start(MInodeLockStart *m)
+{
+
+}
+
+
+void MDCache::handle_inode_lock_ack(MInodeLockAck *m)
+{
+
+}
+
+
+void MDCache::handle_inode_lock_release(MInodeLockRelease *m)
+{
+
+}
 
 
 

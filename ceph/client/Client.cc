@@ -254,11 +254,13 @@ void Client::issue_request()
 	int r = rand() % 100;
 	if (r < 10)
 	  op = MDS_OP_TOUCH;
+	else if (r < 11) 
+	  op = MDS_OP_CHMOD;
 	else if (r < 20 && !is_open(cwd)) 
 	  op = MDS_OP_OPENRD;
 	else if (r < 30 && !is_open(cwd))
 	  op = MDS_OP_OPENWR;
-	else if (r < 40 + open_files.size() && open_files.size() > 0) {
+	else if (r < 41 + open_files.size() && open_files.size() > 0) {
 	  // close file
 	  return close_a_file();
 	} 

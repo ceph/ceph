@@ -18,7 +18,7 @@ md_config_t g_conf = {
   
   client_cache_size: 100,
   client_cache_mid: .5,
-  client_requests: 500,
+  client_requests: 5000,
   
   log_messages: true,
   log_interval: 10.0,
@@ -32,7 +32,7 @@ md_config_t g_conf = {
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,
-  mdcache_sticky_sync_normal: false,
+  mdcache_sticky_sync_normal: true,
   mdcache_sticky_sync_softasync: false,
 
   mdbal_replicate_threshold: 500,

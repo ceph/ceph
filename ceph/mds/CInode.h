@@ -36,22 +36,22 @@ using namespace std;
 #define CINODE_PIN_EXPORT    10003
 #define CINODE_PIN_FREEZE    10004
 
-#define CINODE_PIN_OPENRD    10005
-#define CINODE_PIN_OPENWR    10006
+#define CINODE_PIN_OPENRD    10020  
+#define CINODE_PIN_OPENWR    10021
 
-#define CINODE_PIN_WWAIT     10010
-#define CINODE_PIN_RWAIT     10011
-#define CINODE_PIN_DIRWAIT   10012
-#define CINODE_PIN_DIRWAITDN 10013
+#define CINODE_PIN_WWAIT     10010   // waiter
+#define CINODE_PIN_RWAIT     10011   // "
+#define CINODE_PIN_DIRWAIT   10012   // "
+#define CINODE_PIN_DIRWAITDN 10013   // "
 
 #define CINODE_PIN_IHARDPIN  20000
-#define CINODE_PIN_DHARDPIN  30000
-#define CINODE_PIN_DIRTY     50000
+#define CINODE_PIN_DHARDPIN  30000     
+#define CINODE_PIN_DIRTY     50000     // must flush
 
-#define CINODE_PIN_SYNCBYME     70000
-#define CINODE_PIN_SYNCBYTHEM   70001
-#define CINODE_PIN_PRESYNC      70002
-#define CINODE_PIN_WAITONUNSYNC 70003
+//#define CINODE_PIN_SYNCBYME     70000
+//#define CINODE_PIN_SYNCBYTHEM   70001
+#define CINODE_PIN_PRESYNC      70002   // waiter
+#define CINODE_PIN_WAITONUNSYNC 70003   // waiter
 
 // directory authority types
 //  >= is the auth mds
@@ -65,21 +65,12 @@ using namespace std;
 #define CINODE_DIST_SYNCBYTHEM      4
 #define CINODE_DIST_WAITONUNSYNC    8
 
+#define CINODE_DIST_SOFTASYNC      16  // replica can soft write w/o sync
+
 #define CINODE_DIST_PRELOCK        64   // file mode, owner, etc.
-#define CINODE_DIST_LOCKBYME      128
-#define CINODE_DIST_LOCKBYTHEM    256
-#define CINODE_DIST_SOFTASYNC     512  // replica can soft write w/o sync
+#define CINODE_DIST_LOCKBYME      128 // i am auth
+#define CINODE_DIST_LOCKBYTHEM    256 // i am not auth
 
-/*
-soft:
- auth, normal:    readable,       sync->writeable
- repl, normal:    readable,       fw write to auth
- auth, softtoken: sync->readable, writeable
- repl, softtoken: sync->readable, writeable
-
-hard:
- 
-*/
 
 class Context;
 class CDentry;
@@ -240,12 +231,13 @@ class CInode : LRUObject {
 
   void add_sync_waiter(Context *c);
   void take_sync_waiting(list<Context*>& ls);
+
+  bool is_lockbyme() { return dist_state & CINODE_DIST_LOCKBYME; }
+  bool is_lockbythem() { return dist_state & CINODE_DIST_LOCKBYTHEM; }
+  bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
+
   void add_lock_waiter(Context *c);
   void take_lock_waiting(list<Context*>& ls);
-
-
-  //bool is_lock() { return dist_state & CINODE_DIST_LOCKED; }
-  //bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
 
   // open
   bool is_open() {

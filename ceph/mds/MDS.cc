@@ -145,10 +145,14 @@ void MDS::handle_shutdown_start(Message *m)
 
 void MDS::handle_shutdown_finish(Message *m)
 {
-  dout(2) << "handle_shutdown_finish from " << m->get_source() << endl;
-  did_shut_down.insert(m->get_source());
+  int mds = whoami;
+  if (m) 
+	mds = m->get_source();
+						 
+  dout(2) << "handle_shutdown_finish from " << mds << endl;
+  did_shut_down.insert(mds);
   dout(2) << " shut down so far: " << did_shut_down << endl;
-
+  
   if (did_shut_down.size() == mdcluster->get_num_mds()) {
 	shutting_down = false;
 	messenger->done();
@@ -360,7 +364,11 @@ int MDS::handle_client_request(MClientRequest *req)
 	break;
 
   case MDS_OP_TOUCH:
+  case MDS_OP_CHMOD:
 	reply = handle_client_touch(req, cur);
+	break;
+
+	//reply = handle_client_chmod(req, cur);
 	break;
 
   case MDS_OP_OPENRD:
