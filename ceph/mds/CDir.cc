@@ -21,17 +21,29 @@ void CDir::hit()
 {
   popularity.hit();
 
-  // hit parent inodes
-  CInode *in = inode;
-  while (in) {
-	in->popularity.hit();
-	if (in->parent)
-	  in = in->parent->dir->inode;
-	else
-	  break;
+  if (0) {
+	// hit parent inodes
+	CInode *in = inode;
+	while (in) {
+	  in->popularity.hit();
+	  if (in->parent)
+		in = in->parent->dir->inode;
+	  else
+		break;
+	}
   }
 }
 
+int CDir::get_rep_count(MDCluster *mdc) 
+{
+  if (dir_rep == CDIR_REP_NONE) 
+	return 1;
+  if (dir_rep == CDIR_REP_LIST) 
+	return 1 + dir_rep_by.size();
+  if (dir_rep == CDIR_REP_ALL) 
+	return mdc->get_num_mds();
+  assert(2+2==5);
+}
 
 void CDir::add_child(CDentry *d) 
 {

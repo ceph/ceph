@@ -325,7 +325,7 @@ int MDCache::open_root(Context *c)
 
 	root->dir = new CDir(root, true);
 	root->dir_auth = 0;  // me!
-	root->dir->dir_rep = CDIR_REP_ALL;
+	root->dir->dir_rep = CDIR_REP_NONE;
 
 	set_root( root );
 

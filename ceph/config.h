@@ -22,6 +22,9 @@ struct md_config_t {
 
   int mdcache_size;
   float mdcache_mid;
+
+  float mdbal_replicate_threshold;
+  float mdbal_unreplicate_threshold;
   
 };
 

@@ -388,3 +388,54 @@ void MDBalancer::find_exports(CInode *idir,
 
 
 }
+
+
+
+
+void MDBalancer::hit_inode(CInode *in)
+{
+  // inode
+  in->popularity.hit();
+
+  CInode *p = in->get_parent_inode();
+  if (p)
+	hit_dir(p->dir);
+}
+	
+void MDBalancer::hit_dir(CDir *dir) 
+{
+  CInode *in = dir->inode;
+
+  while (dir) {
+	dir->popularity.hit();
+	float dir_pop = dir->popularity.get();
+
+	if (dir->auth) {
+	  if (!dir->is_rep() &&
+		  dir_pop >= g_conf.mdbal_replicate_threshold) {
+		// replicate
+		dout(5) << "replicating dir " << *in << " pop " << dir_pop << endl;
+		
+		dir->dir_rep = CDIR_REP_ALL;
+		mds->mdcache->send_dir_updates(dir);
+	  }
+	  
+	  if (dir->is_rep() &&
+		  dir_pop < g_conf.mdbal_unreplicate_threshold) {
+		// unreplicate
+		dout(5) << "unreplicating dir " << *in << " pop " << dir_pop << endl;
+		
+		dir->dir_rep = CDIR_REP_NONE;
+		mds->mdcache->send_dir_updates(dir);
+	  }
+	}
+	
+	// next!
+	in->popularity.hit();   // hit inode too.
+
+	in = in->get_parent_inode();
+	if (!in) break;
+	dir = in->dir;
+  }
+
+}

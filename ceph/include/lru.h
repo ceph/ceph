@@ -4,6 +4,7 @@
 
 #include <iostream>
 using namespace std;
+#include "include/config.h"
 
 
 class LRUObject {

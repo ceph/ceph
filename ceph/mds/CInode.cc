@@ -74,8 +74,7 @@ void CInode::hit()
   popularity.hit();
 
   // hit my containing directory, too
-  if (parent)
-	parent->dir->hit();
+  //if (parent) parent->dir->hit();
 }
 
 

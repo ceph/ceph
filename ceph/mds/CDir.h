@@ -126,6 +126,13 @@ class CDir {
   
   bool is_auth() { return auth; }
 
+  bool is_rep() { 
+	if (dir_rep == CDIR_REP_NONE) return false;
+	return true;
+  }
+  int get_rep_count(MDCluster *mdc);
+  
+
   // dirtyness
   // invariant: if clean, my version >= all inode versions
   __uint64_t get_version() {

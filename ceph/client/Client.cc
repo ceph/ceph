@@ -184,7 +184,7 @@ void Client::issue_request()
 	while (!cwd->isdir) 
 	  cwd = cwd->parent;
 	
-	if (rand() % 10 > 1+(cwd->depth()/2)) {
+	if (rand() % 20 > 1+cwd->depth()) {
 	  // descend
 	  if (cwd->havedircontents) {
 		dout(12) << "descending" << endl;

@@ -39,6 +39,9 @@ class MDBalancer {
 					list<CInode*>& exports, 
 					double& have);
 
+  void hit_inode(class CInode *in);
+  void hit_dir(class CDir *dir);
+
 };
 
 

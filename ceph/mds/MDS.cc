@@ -338,7 +338,7 @@ int MDS::handle_client_request(MClientRequest *req)
 
   CInode *cur = trace[trace.size()-1];
   
-  cur->hit();   // bump popularity
+  balancer->hit_inode(cur);   // bump popularity
 
   MClientReply *reply = 0;
 
