@@ -7,40 +7,52 @@
 #include <list>
 
 #include "dcache.h"
-
+#include "MDStore.h"
+//#include "MDLog.h"
+//#include "MDBalancer.h"
 
 
 // 
 
-class CMDS {
+class MDS {
  protected:
   int          nodeid;
   int          num_nodes;
 
   // cache
-  DentryCache *dc;
+  DentryCache *mdcache;
 
   // import/export
   list<CInode*>      import_list;
   list<CInode*>      export_list;
   
-  // message queues
- 
 
+  // sub systems
+  MDStore    *mdstore;
+  //MDLog      *logger;
+  //MDBalancer *balancer;
+ 
+  Messenger  *messenger;
+
+
+  friend class MDStore;
   
  public:
-  CMDS(int id, int num) {
+  MDS(int id, int num) {
 	nodeid = id;
 	num_nodes = num;
-	dc = NULL;
+	mdcache = NULL;
   }
-  ~CMDS() {
-	if (dc) { delete dc; dc = NULL; }
+  ~MDS() {
+	if (mdcache) { delete mdcache; mdcache = NULL; }
   }
+
+  void proc_message(Message *m);
+
 };
 
 
-
+extern MDS *g_mds;
 
 
 #endif

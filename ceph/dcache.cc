@@ -2,6 +2,7 @@
 #include "include/mds.h"
 #include "include/dcache.h"
 
+#include <errno.h>
 #include <iostream>
 #include <string>
 using namespace std;
@@ -130,10 +131,11 @@ void CDir::dump(int depth) {
 
 // DentryCache
 
-bool DentryCache::add_inode(CInode *o) 
+bool DentryCache::add_inode(CInode *in) 
 {
-
-
+  // add to lru, inode map
+  lru->lru_insert_mid(in);
+  inode_map[ in->inode.ino ] = in;
 }
 
 bool DentryCache::remove_inode(CInode *o) 
@@ -145,7 +147,7 @@ bool DentryCache::remove_inode(CInode *o)
 	delete dn;
   } 
   else if (o->nparents > 1) {
-	throw 1;
+	throw "implement me";  
   }
 
   // remove from map
@@ -202,6 +204,23 @@ CInode* DentryCache::get_file(string& fn) {
 }
 
 
+int DentryCache::link_inode( CInode *parent, string& dname, CInode *in ) 
+{
+  if (!parent->dir) {
+	return -ENOTDIR;  // not a dir
+  }
+
+  // create dentry
+  CDentry* dn = new CDentry(dname, in);
+  in->add_parent(dn);
+
+  // add to dir
+  parent->dir->add_child(dn);
+
+  return 0;
+}
+
+
 void DentryCache::add_file(string& fn, CInode *in) {
   
   // root?
@@ -230,12 +249,8 @@ void DentryCache::add_file(string& fn, CInode *in) {
 	idir->dir = new CDir(idir);
   }
   
-  CDentry* dn = new CDentry(file, in);
-  in->add_parent(dn);
-  idir->dir->add_child(dn);
-  lru->lru_insert_top(in);
-  inode_map[ in->inode.ino ] = in;
-  cout << " map size now " << inode_map.size() << endl;
+  add_inode( in );
+  link_inode( idir, file, in );
 
   // trim
   trim();

@@ -22,15 +22,15 @@ class CDir;
 // cached inode wrapper
 class CInode : LRUObject {
  public:
-  inode_t  inode;     // the inode itself
+  inode_t          inode;     // the inode itself
  protected:
-  CDir    *dir;       // directory entries, if we're a directory
+  CDir            *dir;       // directory entries, if we're a directory
 
-  int             ref;            // reference count (???????)
+  int              ref;            // reference count (???????)
 
   // parent dentries in cache
-  int             nparents;  
-  CDentry        *parent;            // if 1 parent (usually)
+  int              nparents;  
+  CDentry         *parent;            // if 1 parent (usually)
   vector<CDentry*> parents;    // if > 1
 
   // dcache lru
@@ -81,6 +81,13 @@ class CInode : LRUObject {
   // --- hierarchy stuff
   void add_parent(CDentry *p);
 
+
+  mdloc_t get_mdloc() {
+	return inode.ino;       // use inode #
+  }
+
+
+  // dbg
   void dump(int d = 0);
 };
 
@@ -158,11 +165,13 @@ class CDir {
 
 // DCache
 
+typedef hash_map<inodeno_t, CInode*> inode_map_t;
+
 class DentryCache {
  protected:
   CInode                       *root;        // root inode
   LRU                          *lru;         // lru for expiring items
-  hash_map<inodeno_t, CInode*> inode_map;   // map of inodes by ino             
+  inode_map_t                   inode_map;   // map of inodes by ino             
 
  public:
   DentryCache() {
@@ -188,8 +197,27 @@ class DentryCache {
 	return trim(0);  
   }
 
+  // have_inode?
+  bool have_inode( inodeno_t ino ) {
+	inode_map_t::iterator it = inode_map.find(ino);
+	if (it == inode_map.end()) return false;
+	return true;
+  }
+
+  // return inode* or null
+  CInode* get_inode( inodeno_t ino ) {
+	if (have_inode(ino))
+	  return inode_map[ ino ];
+	return NULL;
+  }
+
+  // adding/removing
   bool remove_inode(CInode *ino);
   bool add_inode(CInode *ino);
+
+  int link_inode( CInode *parent, string& dname, CInode *inode );
+
+
 
   // crap fns
   CInode* get_file(string& fn);

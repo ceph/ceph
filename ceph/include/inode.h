@@ -14,7 +14,9 @@ template<> struct hash<unsigned long long> {
 };
 }
 
-typedef __uint64_t inodeno_t;
+typedef __uint64_t inodeno_t;   // ino
+
+typedef __uint64_t mdloc_t;     // dir locator?
 
 struct inode_t {
   inodeno_t ino;
