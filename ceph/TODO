@@ -16,15 +16,18 @@ ISSUES
   in the hierarchy.. will that cause deadlock?
 
 - is it practical for replicas to not know who the authority is?
+  - maybe pin old authorities with CACHEPROXY, send a notify to replicas,
+    unpin when they're all received.  cached_by would be defined during
+    this period.  would reduce to 1 message (with big dir+inode list)
+    per mds per export...  and make inode_expire, etc. much less lame.
 
 /- better authority knowledge of replicas, especially with
 /  - sync
 /  - lock
+  - ??
 
 
 FIX
-- hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
-
 - soft and hard metadata should be fully independent?
   - hard lock (owner/mode) is relative to namespace
   - soft sync (mtime/size) is relative to inode (even when dangling)
@@ -38,9 +41,10 @@ DOCUMENT
 
 
 TEST
-- test unlink
 - test hash/unhash operation
-- test nauthitems
+- hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
+- test nauthitems (wrt hashing?)
+
 
 IMPLEMENT
 - dir sync

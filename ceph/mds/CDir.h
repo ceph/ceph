@@ -184,7 +184,7 @@ class CDir {
   // -- manipulation --
   void add_child(CDentry *d);
   void remove_child(CDentry *d);
-  CDentry* lookup(string& n);
+  CDentry* lookup(const string& n);
 
 
 
@@ -248,11 +248,13 @@ class CDir {
   // -- waiters --
   void add_waiter(int tag, Context *c);
   void add_waiter(int tag,
-				  string& dentry,
+				  const string& dentry,
 				  Context *c);
-  void take_waiting(int mask, list<Context*>& ls);  // all waiting
-  void take_waiting(int mask, const string& dentry, list<Context*>& ls);  
-  void finish_waiting(int mask, int result = 0);
+  void take_waiting(int mask, list<Context*>& ls);  // includes dentry waiters
+  void take_waiting(int mask, 
+					const string& dentry, 
+					list<Context*>& ls);  
+  void finish_waiting(int mask, int result = 0);    // ditto
 
 
   // -- auth pins --
@@ -292,7 +294,7 @@ class CDir {
   }
 
   // -- authority -- 
-  int dentry_authority(string& d, MDCluster *mdc);
+  int dentry_authority(const string& d, MDCluster *mdc);
 
 
   // debuggin bs

@@ -1061,12 +1061,12 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 	mds->messenger->send_message(new MInodeExpire(m->get_ino(), mds->get_nodeid(), true),
 								 m->get_source(), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
-	goto done;
+	goto out;
   }
 
   if (in->is_auth()) {
 	dout(7) << "got inode_update on " << *in << ", but i'm the authority!" << endl;
-	goto done;
+	goto out;
   }
   
   // update!
@@ -1077,16 +1077,18 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   update_replica_auth(in, m->get_source());
 
   // ugly hack to avoid corrupting weird behavior of dir_auth
-  int old_dir_auth = in->dir_auth;
-  bool wasours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
-  in->decode_basic_state(m->get_payload());
-  bool isours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
-  if (wasours != isours)
-	in->dir_auth = old_dir_auth;  // ignore dir_auth, it's clearly bogus
-  
-  dout(7) << "dir_auth for " << *in << " now " << in->dir_auth << " old " << old_dir_auth << " was/is " << wasours << " " << isours << endl;
+  {
+	int old_dir_auth = in->dir_auth;
+	bool wasours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
+	in->decode_basic_state(m->get_payload());
+	bool isours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
+	if (wasours != isours)
+	  in->dir_auth = old_dir_auth;  // ignore dir_auth, it's clearly bogus
+	
+	dout(7) << "dir_auth for " << *in << " now " << in->dir_auth << " old " << old_dir_auth << " was/is " << wasours << " " << isours << endl;
+  }
 
-done:
+ out:
   // done
   delete m;
 }
@@ -2763,7 +2765,7 @@ public:
   MExportDir *m;
   inodeno_t dir_ino;
   string dentry;
-  C_MDS_ImportPrediscover(MDS *mds, MExportDir *m, inodeno_t dir_ino, string& dentry) {
+  C_MDS_ImportPrediscover(MDS *mds, MExportDir *m, inodeno_t dir_ino, const string& dentry) {
 	this->mds = mds;
 	this->m = m;
 	this->dir_ino = dir_ino;
@@ -2772,7 +2774,7 @@ public:
   virtual void finish(int r) {
 	assert(r == 0);  // should never fail!
 	
-	m->remove_prediscover(dirino, dentry);
+	m->remove_prediscover(dir_ino, dentry);
 	
 	if (!m->any_prediscovers()) 
 	  mds->mdcache->handle_export_dir(m);
@@ -2798,30 +2800,30 @@ void MDCache::handle_export_dir(MExportDir *m)
 	dout(7) << "handle_export_dir checking prediscovers" << endl;
 	int needed = 0;
 	for (map<inodeno_t, set<string> >::iterator it = m->prediscover_begin();
-		 it != m->prediscover->end();
+		 it != m->prediscover_end();
 		 it++) {
 	  CInode *in = get_inode(it->first);
 	  assert(in);
 	  assert(in->dir);
 	  string dirpath;
 	  in->make_path(dirpath);	  
-	  for (set<string>::iterator it = it->second.begin();
-		   it != it->second.end();
-		   it++) {
+	  for (set<string>::iterator dit = it->second.begin();
+		   dit != it->second.end();
+		   dit++) {
 		// do i have it?
-		if (in->dir->lookup(*it)) {
-		  dout(7) << "had " << *it << endl;
+		if (in->dir->lookup(*dit)) {
+		  dout(7) << "had " << *dit << endl;
 		} else {
-		  int dauth = in->dir->dentry_authority(*it, mds->get_cluster());
+		  int dauth = in->dir->dentry_authority(*dit, mds->get_cluster());
 		  vector<string> *want = new vector<string>;
-		  want->push_back(*it);
-		  dout(7) << "discovering " << dirpath << "/" << *it << " from " << dauth << endl;
+		  want->push_back(*dit);
+		  dout(7) << "discovering " << dirpath << "/" << *dit << " from " << dauth << endl;
 		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(), dirpath, want),
 									   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
 									   MDS_PORT_CACHE);
 		  in->dir->add_waiter(CDIR_WAIT_DENTRY,
-							  *it,
-							  new C_MDS_ImportPrediscover(mds, m, in->ino(), *it));
+							  *dit,
+							  new C_MDS_ImportPrediscover(mds, m, in->ino(), *dit));
 		  needed++;
 		}
 	  }

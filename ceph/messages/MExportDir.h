@@ -39,7 +39,7 @@ class MExportDir : public Message {
   crope  state;
   
   // hashed pre-discovers
-  map<inodeno_t, set<string>> hashed_prediscover;
+  map<inodeno_t, set<string> > hashed_prediscover;
 
  public:  
   MExportDir() {}
@@ -60,29 +60,26 @@ class MExportDir : public Message {
 	state.append( dir );
 	ndirs++;
   }
-  void add_prediscover(inodeno_t dirino, string& dentry) {
+  void add_prediscover(inodeno_t dirino, const string& dentry) {
 	hashed_prediscover[dirino].insert(dentry);
   }
-  void remove_prediscover(inodeno_t dirino, string& dentry) {
+  void remove_prediscover(inodeno_t dirino, const string& dentry) {
 	assert(hashed_prediscover.count(dirino));
-	hashed_prediscover[dirino].remove(dentry);
+	hashed_prediscover[dirino].erase(dentry);
 	if (hashed_prediscover[dirino].empty())
-	  hashed_prediscover.remove(dirino);
+	  hashed_prediscover.erase(dirino);
   }
   bool any_prediscovers() {
 	return !hashed_prediscover.empty();
   }
-  map<inodeno_t, set<string> >::iterator predeiscover_begin() {
+
+  // this should really be a custom iterator if we want
+  // clean encapsulation
+  map<inodeno_t, set<string> >::iterator prediscover_begin() {
 	return hashed_prediscover.begin();
   }
-  map<inodeno_t, set<string> >::iterator predeiscover_end() {
+  map<inodeno_t, set<string> >::iterator prediscover_end() {
 	return hashed_prediscover.end();
-  }
-  set<string>::iterator prediscover_begin(inodeno_t dirino) {
-	return hashed_prediscover[dirino].begin();
-  }
-  set<string>::iterator prediscover_end(inodeno_t dirino) {
-	return hashed_prediscover[dirino].end();
   }
 
   virtual int decode_payload(crope s) {
@@ -93,8 +90,8 @@ class MExportDir : public Message {
 
 	// prediscover
 	int ndirs;
-	s.copy(off, sizeof(n), (char*)&n);
-	off += sizeof(n);
+	s.copy(off, sizeof(ndirs), (char*)&ndirs);
+	off += sizeof(ndirs);
 	for (int i=0; i<ndirs; i++) {
 	  inodeno_t dirino;
 	  int nden;
@@ -130,7 +127,7 @@ class MExportDir : public Message {
 	  for (set<string>::iterator dit = it->second.begin();
 		   dit != it->second.end();
 		   dit++) {
-		s.append(*dit);
+		s.append((*dit).c_str());
 		s.append((char)0);
 	  }
 	}

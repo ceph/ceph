@@ -119,7 +119,7 @@ void CDir::remove_child(CDentry *d) {
 }
 
 
-CDentry* CDir::lookup(string& n) {
+CDentry* CDir::lookup(const string& n) {
   //cout << " lookup " << n << " in " << this << endl;
   map<string,CDentry*>::iterator iter = items.find(n);
   if (iter == items.end()) return NULL;
@@ -129,7 +129,7 @@ CDentry* CDir::lookup(string& n) {
 }
 
 
-int CDir::dentry_authority(string& dn, MDCluster *mdc)
+int CDir::dentry_authority(const string& dn, MDCluster *mdc)
 {
   if (inode->dir_is_hashed()) {
 	return mdc->hash_dentry( inode->ino(), dn );  // hashed
@@ -194,7 +194,7 @@ int CDir::decode_basic_state(crope r, int off)
 // wiating
 
 void CDir::add_waiter(int tag,
-					  string& dentry,
+					  const string& dentry,
 					  Context *c) {
   if (waiting_on_dentry.size() == 0)
 	inode->get(CINODE_PIN_DIRWAITDN);
