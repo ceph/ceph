@@ -41,7 +41,7 @@ test: test.cc FakeMessenger.o pmds.o
 	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o ${LEAKTRACER} test.cc -o test
 
 import: pmds.o FakeMessenger.o import.cc
-	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o import.cc -o import
+	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o import.cc ${LEAKTRACER} -o import
 
 mpitest: mpitest.cc MPIMessenger.cc pmds.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc MPIMessenger.cc pmds.o  -o mpitest

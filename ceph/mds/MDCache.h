@@ -75,6 +75,7 @@ class MDCache {
   size_t set_cache_size(size_t max) {
 	lru->lru_set_max(max);
   }
+  size_t get_cache_size() { lru->lru_get_size(); }
   bool trim(__int32_t max = -1);   // trim cache
   bool shutdown_pass();
 
