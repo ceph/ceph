@@ -206,7 +206,7 @@ void MDBalancer::do_rebalance()
   for (set<CInode*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
-	import_pop_map.insert(pair<double,CInode*>((*it)->popularity.get(), *it));
+	import_pop_map.insert(pair<double,CInode*>((*it)->get_popularity(), *it));
 	int from = (*it)->authority(mds->get_cluster());
 	dout(5) << "map i imported " << **it << " from " << from << endl;
 	import_from_map.insert(pair<int,CInode*>(from, *it));
@@ -236,7 +236,7 @@ void MDBalancer::do_rebalance()
 		multimap<int,CInode*>::iterator plast = p.first++;
 		
 		if (in->is_root()) continue;
-		double pop = in->popularity.get();
+		double pop = in->get_popularity();
 		assert(in->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
 
 		if (pop <= amount) {
@@ -285,7 +285,7 @@ void MDBalancer::do_rebalance()
 	}
 	
 	for (list<CInode*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity.get() << endl;
+	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->get_popularity() << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
@@ -328,7 +328,7 @@ void MDBalancer::find_exports(CInode *idir,
 	//if (in->dir->is_freezetree_root()) continue;  
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
 
-	double pop = in->popularity.get();
+	double pop = in->get_popularity();
 
 	//cout << "   in " << in->inode.ino << " " << pop << endl;
 
@@ -393,46 +393,49 @@ void MDBalancer::find_exports(CInode *idir,
 
 
 
-void MDBalancer::hit_inode(CInode *in)
+void MDBalancer::hit_inode(CInode *in, int type)
 {
   // inode
-  in->popularity.hit();
+  in->hit(type);
 
   CInode *p = in->get_parent_inode();
   if (p)
-	hit_dir(p->dir);
+	hit_dir(p->dir, type);
 }
 	
-void MDBalancer::hit_dir(CDir *dir) 
+void MDBalancer::hit_dir(CDir *dir, int type) 
 {
   CInode *in = dir->inode;
 
   while (dir) {
-	dir->popularity.hit();
-	float dir_pop = dir->popularity.get();
+	dir->hit(type);
 
-	if (dir->is_auth()) {
-	  if (!dir->is_rep() &&
-		  dir_pop >= g_conf.mdbal_replicate_threshold) {
-		// replicate
-		dout(5) << "replicating dir " << *in << " pop " << dir_pop << endl;
-		
-		dir->dir_rep = CDIR_REP_ALL;
-		mds->mdcache->send_dir_updates(dir);
-	  }
+	if (type == 0) {
+	  float dir_pop = dir->get_popularity();
 	  
-	  if (dir->is_rep() &&
-		  dir_pop < g_conf.mdbal_unreplicate_threshold) {
-		// unreplicate
-		dout(5) << "unreplicating dir " << *in << " pop " << dir_pop << endl;
+	  if (dir->is_auth()) {
+		if (!dir->is_rep() &&
+			dir_pop >= g_conf.mdbal_replicate_threshold) {
+		  // replicate
+		  dout(5) << "replicating dir " << *in << " pop " << dir_pop << endl;
+		  
+		  dir->dir_rep = CDIR_REP_ALL;
+		  mds->mdcache->send_dir_updates(dir);
+		}
 		
-		dir->dir_rep = CDIR_REP_NONE;
-		mds->mdcache->send_dir_updates(dir);
+		if (dir->is_rep() &&
+			dir_pop < g_conf.mdbal_unreplicate_threshold) {
+		  // unreplicate
+		  dout(5) << "unreplicating dir " << *in << " pop " << dir_pop << endl;
+		  
+		  dir->dir_rep = CDIR_REP_NONE;
+		  mds->mdcache->send_dir_updates(dir);
+		}
 	  }
 	}
-	
+
 	// next!
-	in->popularity.hit();   // hit inode too.
+	in->hit(type);   // hit inode too.
 
 	in = in->get_parent_inode();
 	if (!in) break;

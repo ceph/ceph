@@ -17,6 +17,7 @@
 #include "messages/MInodeSyncRelease.h"
 
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "include/config.h"
 #undef dout
@@ -186,7 +187,16 @@ void Client::assim_reply(MClientReply *r)
   // closed a file?
   if (r->get_op() == MDS_OP_CLOSE) {
 	dout(12) << "closed inode " << r->get_ino() << " " << r->get_path() << endl;
-	open_files.erase(open_files.find(r->get_ino()));
+
+	// note that the file might be sync (if our close and the sync crossed paths!)
+	multimap<inodeno_t, int>::iterator it = open_files.find(r->get_ino());
+	if (it != open_files.end()) {
+	  open_files.erase(it);
+	} else {
+	  it = open_files_sync.find(r->get_ino());
+	  assert(it != open_files_sync.end());
+	  open_files_sync.erase(it);
+	}
 	ClNode *node = get_node(r->get_ino());
 	node->put();
 	return;
@@ -207,17 +217,18 @@ void Client::assim_reply(MClientReply *r)
 	} else {
 	  if (cur->lookup(last_req_dn[i]) == NULL) {
 		ClNode *n = new ClNode();
+		n->ino = trace[i]->inode.ino;
 		cur->link( last_req_dn[i], n );
 		add_node(n);
-		cur->isdir = true;  // clearly!
+		if (i < last_req_dn.size()-1) cur->isdir = true;  // clearly!
 		cache_lru.lru_insert_top( n );
 		cur = n;
 	  } else {
 		cur = cur->lookup( last_req_dn[i] );
+		assert(cur->ino == trace[i]->inode.ino);
 		cache_lru.lru_touch(cur);
 	  }
 	}
-	cur->ino = trace[i]->inode.ino;
 	for (set<int>::iterator it = trace[i]->dist.begin(); it != trace[i]->dist.end(); it++)
 	  cur->dist.push_back(*it);
 	cur->isdir = trace[i]->inode.isdir;
@@ -252,10 +263,12 @@ void Client::assim_reply(MClientReply *r)
 
   // opened a file?
   if (r->get_op() == MDS_OP_OPENRD ||
-	  r->get_op() == MDS_OP_OPENWR) {
+	  r->get_op() == MDS_OP_OPENWR ||
+	  r->get_op() == MDS_OP_OPENWRC) {
 	dout(12) << "opened inode " << r->get_ino() << " " << r->get_path() << endl;
 	open_files.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
 	ClNode *node = get_node(r->get_ino());
+	assert(node);
 	node->get();
   }
 
@@ -335,10 +348,20 @@ void Client::issue_request()
 		op = MDS_OP_OPENRD;
 	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
 		op = MDS_OP_OPENWR;
-	  else if (false && r < 31 && cwd->isdir) {
+	  else if (r < 31 && cwd->isdir) {
 		op = MDS_OP_OPENWRC;
-		p += "/";
-		p += "blah_client_created";
+		string dn = "blah_client_created.";
+		char pid[10];
+		sprintf(pid,"%d",getpid());
+		//dn += pid;
+		if (cwd->lookup(dn))
+		  op = MDS_OP_STAT; // nevermind
+		else {
+		  // do wrc!
+		  p += "/";
+		  p += dn;
+		  last_req_dn.push_back(dn);
+		}
 	  }
 	  else if (r < 41 + open_files.size() && open_files.size() > 0) {
 		// close file

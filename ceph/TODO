@@ -1,0 +1,25 @@
+
+=> grep for FIXME :)
+
+
+- log MDS actions
+  - imports/exports
+  - hash/unhash
+
+- possible import/export issue: /usr freezing, /usr/local imports (and completes).. weirdness?
+
+- softasync mode
+- unlink
+- rmdir
+- mkdir
+- rename
+
+- test hash/unhash operation
+
+- smarter balancing
+  - popularity calculation and management is inconsistent, wrong.
+  - does it work?
+
+- instrumentation!
+
+- anchors and hard links

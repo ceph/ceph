@@ -28,12 +28,12 @@ using namespace std;
 
 
 // md ops
-#define MDS_OP_STAT    100
-#define MDS_OP_READDIR 101
+#define MDS_OP_STAT    100  //
+#define MDS_OP_READDIR 101  //
 
-#define MDS_OP_OPENRD  111
-#define MDS_OP_OPENWR  112
-#define MDS_OP_OPENWRC 113
+#define MDS_OP_OPENRD  111  //
+#define MDS_OP_OPENWR  112  //
+#define MDS_OP_OPENWRC 113  //
 #define MDS_OP_CLOSE   119
 
 #define MDS_OP_TOUCH   200  // utime, actually
@@ -42,6 +42,9 @@ using namespace std;
 #define MDS_OP_RENAME  211
 #define MDS_OP_UNLINK  212
 #define MDS_OP_LINK    213
+
+#define MDS_OP_MKDIR   220
+#define MDS_OP_RMDIR   221
 
 #define MDS_TRAVERSE_FORWARD  1
 #define MDS_TRAVERSE_DISCOVER 2
@@ -173,6 +176,11 @@ class MDS : public Dispatcher {
   void handle_client_openwrc(MClientRequest *req);
   void handle_client_close(MClientRequest *req);
 
+  void handle_client_unlink(MClientRequest *req,
+							CInode *cur);
+
+  void handle_client_mkdir(MClientRequest *req);
+  void handle_client_rmdir(MClientRequest *req);
 
 
   int do_stat(MClientRequest *m);

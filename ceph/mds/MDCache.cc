@@ -6,6 +6,7 @@
 #include "MDS.h"
 #include "MDCluster.h"
 #include "MDLog.h"
+#include "MDBalancer.h"
 
 #include "include/filepath.h"
 
@@ -116,6 +117,7 @@ bool MDCache::add_inode(CInode *in)
   // add to lru, inode map
   assert(inode_map.size() == lru->lru_get_size());
   lru->lru_insert_mid(in);
+  assert(inode_map.count(in->ino()) == 0);  // should be no dup inos!
   inode_map[ in->ino() ] = in;
   assert(inode_map.size() == lru->lru_get_size());
 }
@@ -1261,9 +1263,9 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 
 	if (in->is_auth()) {
 	  // i am auth: i need sync
-	  if (in->is_syncbyme()) return true;
-	  if (in->is_lockbyme()) return true;   // lock => sync
-	  if (!in->is_cached_by_anyone()) return true;  // i'm alone
+	  if (in->is_syncbyme()) goto yes;
+	  if (in->is_lockbyme()) goto yes;   // lock => sync
+	  if (!in->is_cached_by_anyone()) goto yes;  // i'm alone
 	} else {
 	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
@@ -1281,7 +1283,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	  // wait for sync
 	} else {
 	  // i'm consistent 
-	  return true;
+	  goto yes;
 	}
   }
 
@@ -1319,6 +1321,11 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
   }
   
   return false;
+
+ yes:
+  mds->balancer->hit_inode(in, MDS_POP_SOFTRD);
+  mds->balancer->hit_inode(in, MDS_POP_ANY);
+  return true;
 }
 
 
@@ -1352,7 +1359,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	  // wait for sync release
 	} else {
 	  // i'm inconsistent; write away!
-	  return true;
+	  goto yes;
 	}
 
   } else {
@@ -1360,9 +1367,9 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	
 	if (in->is_auth()) {
 	  // i am auth: i need sync
-	  if (in->is_syncbyme()) return true;
-	  if (in->is_lockbyme()) return true;   // lock => sync
-	  if (!in->is_cached_by_anyone()) return true;  // i'm alone
+	  if (in->is_syncbyme()) goto yes;
+	  if (in->is_lockbyme()) goto yes;   // lock => sync
+	  if (!in->is_cached_by_anyone()) goto yes;  // i'm alone
 	} else {
 	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
@@ -1410,6 +1417,11 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
   }
   
   return false;
+
+ yes:
+  mds->balancer->hit_inode(in, MDS_POP_SOFTWR);
+  mds->balancer->hit_inode(in, MDS_POP_ANY);
+  return true;
 }
 
 
@@ -1734,7 +1746,7 @@ bool MDCache::read_hard_try(CInode *in,
   
   if (in->is_auth()) {
 	// auth
-	return true;      // fine
+	goto yes;      // fine
   } else {
 	// replica
 	if (in->is_lockbyauth()) {
@@ -1746,9 +1758,14 @@ bool MDCache::read_hard_try(CInode *in,
 	  return false;
 	} else {
 	  // not locked.
-	  return true;
+	  goto yes;
 	}
   }
+
+ yes:
+  mds->balancer->hit_inode(in, MDS_POP_HARDRD);
+  mds->balancer->hit_inode(in, MDS_POP_ANY);
+  return true;
 }
 
 
@@ -1798,6 +1815,9 @@ bool MDCache::write_hard_start(CInode *in,
  success:
   in->lock_active_count++;
   assert(in->lock_active_count > 0);
+  mds->balancer->hit_inode(in, MDS_POP_HARDWR);
+  mds->balancer->hit_inode(in, MDS_POP_ANY);
+  return true;
 }
 
 void MDCache::write_hard_finish(CInode *in)
@@ -2125,10 +2145,10 @@ void MDCache::export_dir(CInode *in,
   mds->logger->inc("ex");
 
   // take away popularity (and pass it on to the context, MExportDir request later)
-  double pop = in->popularity.get();
+  double pop = in->popularity[0].get();  // FIXME rest of vector?
   CInode *t = in;
   while (t) {
-	t->popularity.adjust(-pop);
+	t->popularity[0].adjust(-pop);
 	if (t->parent)
 	  t = t->parent->dir->inode;
 	else 
@@ -2288,7 +2308,7 @@ void MDCache::export_dir_walk(MExportDir *req,
   dstate.state = idir->dir->state;
   dstate.dir_rep = idir->dir->dir_rep;
   dstate.ndir_rep_by = idir->dir->dir_rep_by.size();
-  dstate.popularity = idir->dir->popularity;
+  dstate.popularity = idir->dir->popularity[0];  // FIXME: rest of vector?
   dir_rope.append( (char*)&dstate, sizeof(dstate) );
   
   for (set<int>::iterator it = idir->dir->dir_rep_by.begin();
@@ -2594,12 +2614,14 @@ void MDCache::handle_export_dir(MExportDir *m)
   if (in->authority(mds->get_cluster()) == in->dir_auth)
 	in->dir_auth = CDIR_AUTH_PARENT;
 
-  double newpop = m->get_ipop() - in->popularity.get();
+  // adjust popularity
+  // FIXME what about rest of pop vector?  also, i think this is wrong.
+  double newpop = m->get_ipop() - in->popularity[0].get();
   dout(7) << " imported popularity jump by " << newpop << endl;
   if (newpop > 0) {  // duh
 	CInode *t = in;
 	while (t) {
-	  t->popularity.adjust(newpop);
+	  t->popularity[0].adjust(newpop);
 	  if (t->parent) 
 		t = t->parent->dir->inode;
 	  else break;
@@ -2744,7 +2766,7 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
 
 	// update inode state with authoritative info
 	in->version = istate->version;
-	in->popularity = istate->popularity;
+	in->popularity[0] = istate->popularity;   // FIXME rest of vector?
 
 	// cached_by
 	in->cached_by.clear(); 
@@ -2837,7 +2859,7 @@ void MDCache::import_dir_block(pchar& p,
 	idir->dir->state = dstate->state & CDIR_MASK_STATE_EXPORTED;  // we only import certain state
   }
   idir->dir->dir_rep = dstate->dir_rep;
-  idir->dir->popularity = dstate->popularity;
+  idir->dir->popularity[0] = dstate->popularity;  // FIXME rest of vector?
   
   assert(!idir->dir->is_auth());
   idir->dir->state_set(CDIR_STATE_AUTH);

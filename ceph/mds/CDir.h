@@ -120,12 +120,12 @@ class CDir {
   int        auth_pins;
   int        nested_auth_pins;
 
-  DecayCounter popularity;
+  DecayCounter popularity[MDS_NPOP];
 
   friend class CInode;
   friend class MDCache;
-  friend class MDBalancer;
   friend class MDiscover;
+  friend class MDBalancer;
 
  public:
   CDir(CInode *in, int whoami);
@@ -149,6 +149,10 @@ class CDir {
 	}
 #endif
 	return nitems; 
+  }
+
+  float get_popularity() {
+	return popularity[0].get();
   }
   
 
@@ -198,7 +202,7 @@ class CDir {
 
 
   // -- popularity --
-  void hit();
+  void hit(int dir);
 
 
   // -- state --

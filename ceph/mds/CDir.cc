@@ -40,21 +40,10 @@ CDir::CDir(CInode *in, int whoami)
 
 
 
-void CDir::hit() 
+void CDir::hit(int type) 
 {
-  popularity.hit();
-
-  if (0) {
-	// hit parent inodes
-	CInode *in = inode;
-	while (in) {
-	  in->popularity.hit();
-	  if (in->parent)
-		in = in->parent->dir->inode;
-	  else
-		break;
-	}
-  }
+  assert(type >= 0 && type < MDS_NPOP);
+  popularity[type].hit();
 }
 
 int CDir::get_rep_count(MDCluster *mdc) 

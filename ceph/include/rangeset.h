@@ -97,7 +97,7 @@ class rangeset
   inodeno_t _size;
 
 public:
-  rangeset() {}
+  rangeset() { _size = 0; }
   typedef rangeset_iterator<T> iterator;
 
   iterator begin() {

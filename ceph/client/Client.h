@@ -46,6 +46,7 @@ class Client : public Dispatcher {
 
   ClNode *get_node(inodeno_t ino) {
 	map<inodeno_t,ClNode*>::iterator it = node_map.find(ino);
+	if (it == node_map.end()) return NULL;
 	return it->second;
   }
   void add_node(ClNode *n) {

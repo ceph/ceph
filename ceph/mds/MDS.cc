@@ -184,7 +184,7 @@ mds_load_t MDS::get_load()
 {
   mds_load_t l;
   if (mdcache->get_root()) 
-	l.root_pop = mdcache->get_root()->popularity.get();
+	l.root_pop = mdcache->get_root()->get_popularity();
   else
 	l.root_pop = 0;
   l.req_rate = stat_req.get();
@@ -359,7 +359,7 @@ int MDS::handle_client_request(MClientRequest *req)
 
   CInode *cur = trace[trace.size()-1];
   
-  balancer->hit_inode(cur);   // bump popularity
+  balancer->hit_inode(cur, MDS_POP_ANY);   // bump popularity
 
   MClientReply *reply = 0;
 
@@ -385,6 +385,10 @@ int MDS::handle_client_request(MClientRequest *req)
 	break;
   case MDS_OP_OPENWR:
 	reply = handle_client_openwr(req, cur);
+	break;
+
+  case MDS_OP_UNLINK:
+	handle_client_unlink(req, cur);
 	break;
 
   default:
@@ -415,7 +419,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   if (!mdcache->read_soft_start(cur, req))
 	return 0;  // sync
 
-  dout(10) << "reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
+  dout(10) << "reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->get_popularity() << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
 
@@ -766,10 +770,10 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 	  // on the last bit?
 	  filepath path = req->get_path();
 	  int depth = path.depth();
-	  if (trace.size() == depth-1) {
+	  if (trace.size() == depth) { // everything but the file
 		// create dentry, file!
 		CInode *idir = trace[trace.size()-1];
-		assert(idir->dir->is_auth());  // path_traverse should have fwd if not!
+		assert(idir->dir->is_auth() || idir->dir->is_hashed());  // path_traverse should have fwd if not!
 		string dname = path.last_bit();
 
 		dout(7) << "handle_client_openwrc -ENOENT on target file, creating " << dname << endl;
@@ -786,7 +790,7 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 
 		// log it
 		dout(10) << "log for " << *req << " create " << in->ino() << endl;
-		mdlog->submit_entry(new EInodeUpdate(in),
+		mdlog->submit_entry(new EInodeUpdate(in),                    // FIXME should be differnet log entry
 							new C_MDS_RetryMessage(this, req));
 		return;
 	  } else {
@@ -808,7 +812,7 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 
   logger->inc("chit");
   CInode *cur = trace[trace.size()-1];
-  balancer->hit_inode(cur);   // bump popularity
+  balancer->hit_inode(cur, MDS_POP_ANY);   // bump popularity
   
   MClientReply *reply = handle_client_openwr(req,cur);
   
@@ -824,26 +828,30 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 
 
 
-/*
-void split_path(string& path, 
-				vector<string>& bits)
+void MDS::handle_client_unlink(MClientRequest *req, 
+							   CInode *cur)
 {
-  int off = 0;
-  while (off < path.length()) {
-	// skip trailing/duplicate slash(es)
-	int nextslash = path.find('/', off);
-	if (nextslash == off) {
-	  off++;
-	  continue;
-	}
-	if (nextslash < 0) 
-	  nextslash = path.length();  // no more slashes
-
-	bits.push_back( path.substr(off,nextslash-off) );
-	off = nextslash+1;
+  assert(!cur->is_dir());
+  
+  // am i auth?
+  if (!cur->is_auth()) {
+	// not auth; forward!
+	int auth = cur->authority(get_cluster());
+	dout(7) << "handle_client_unlink not auth for " << *cur << ", fwd to " << auth << endl;
+	messenger->send_message(req,
+							MSG_ADDR_MDS(auth), MDS_PORT_SERVER, MDS_PORT_SERVER);
+	return;
   }
+
+  // hard lock!
+  
+  
+
+
+ done:
+  // done
+  delete req;
 }
-*/
 
 
 
@@ -860,7 +868,7 @@ void split_path(string& path,
 
 
 
-// OSD fun
+// OSD fun ------------------------
 
 int 
 MDS::osd_read(int osd, 

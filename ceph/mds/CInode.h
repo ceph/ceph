@@ -182,8 +182,7 @@ class CInode : LRUObject {
   int auth_pins;
   int nested_auth_pins;
 
- public:
-  DecayCounter popularity;
+  DecayCounter popularity[MDS_NPOP];
   
   friend class MDCache;
   friend class CDir;
@@ -216,10 +215,14 @@ class CInode : LRUObject {
 	return false;
   }
 
+  float get_popularity() {
+	return popularity[0].get();
+  }
+
 
   // -- misc -- 
   void make_path(string& s);
-  void hit();                // popularity
+  void hit(int type);                // popularity
 
 
   // -- state --

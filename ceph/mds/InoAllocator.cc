@@ -15,7 +15,7 @@
 char ifn[100];
 
 char *InoAllocator::get_filename() {
-  sprintf(ifn,"osddate/ino.%d", mds->get_nodeid());
+  sprintf(ifn,"osddata/ino.%d", mds->get_nodeid());
   return ifn;
 }
 
@@ -25,6 +25,7 @@ void InoAllocator::save()
   fd = open(get_filename(), O_CREAT|O_WRONLY);
   if (fd >= 0) {
 	int mapsize = free.map_size();
+	fchmod(fd, 0644);
 	write(fd, (char*)&mapsize, sizeof(mapsize));
 
 	for (map<inodeno_t,inodeno_t>::iterator it = free.map_begin();
@@ -58,7 +59,7 @@ void InoAllocator::load()
   }
   else {
 	// use generic range
-	free.map_insert(1000000000000 * mds->get_nodeid(),
-					1000000000000 * (mds->get_nodeid()+1));
+	free.map_insert(1000000000000 * (mds->get_nodeid()+1),
+					1000000000000 * (mds->get_nodeid()+2) - 1);
   }
 }

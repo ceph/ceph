@@ -1,0 +1,13 @@
+pmds = parallel metadata server/system
+
+'test' is a standalone proccess that runs all clients, OSDs, and MDSs in 
+a single process with a basic message passer (FakeMessenger).  Useful
+for debugging.
+
+'pmds' uses MPI for communication.  A few requirements:
+  - Each MDS and OSD gets its own node.  Clients are divided over whatever
+    is left over.  So make sure you tell MPI to give you at least 
+    num_mds+num_osd+1 processes (num_mds etc defined in config.cc).
+
+
+This is all GPL.

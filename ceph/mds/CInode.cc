@@ -73,9 +73,10 @@ ostream& operator<<(ostream& out, CInode& in)
 }
 
 
-void CInode::hit()
+void CInode::hit(int type)
 {
-  popularity.hit();
+  assert(type >= 0 && type < MDS_NPOP);
+  popularity[type].hit();
 
   // hit my containing directory, too
   //if (parent) parent->dir->hit();
@@ -113,7 +114,7 @@ crope CInode::encode_export_state()
 
   istate.inode = inode;
   istate.version = version;
-  istate.popularity = popularity;
+  istate.popularity = popularity[0]; // FIXME all pop values?
   //istate.ref = in->ref;
   istate.ncached_by = cached_by.size();
   

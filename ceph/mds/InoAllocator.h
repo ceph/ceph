@@ -20,8 +20,11 @@ class InoAllocator {
   //~InoAllocator();
 
   inodeno_t get_ino() {
+	free.dump();
 	inodeno_t ino = free.first();
 	free.erase(ino);
+	cout << "ino is " << ino << endl;
+	free.dump();
 	save();
 	return ino;
   }

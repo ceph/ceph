@@ -27,7 +27,7 @@ md_config_t g_conf = {
   mdlog_max_trimming: 16,
   mdlog_read_inc: 4096,
 
-  fake_clock: false,
+  fake_clock: true,
 
   debug: 10,
 
