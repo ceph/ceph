@@ -21,6 +21,10 @@ MDS
   - fh states: SYNC, ASYNC, ...????
 
 
+- symlinks!
+  - stored in the inode.. how?
+  - make MDStore.cc smartr
+  - consolidate inode.isdir and inode.type?
 
 
 => grep for FIXME :)
