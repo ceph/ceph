@@ -11,7 +11,8 @@ class MDS;
 class MDCluster {
  protected:
   vector<MDS*> mds;
-
+  
+  
  public:
   MDCluster();
   ~MDCluster();

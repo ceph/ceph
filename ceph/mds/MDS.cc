@@ -1,6 +1,7 @@
 
 #include "include/types.h"
 #include "include/Messenger.h"
+#include "include/Clock.h"
 
 #include "MDS.h"
 #include "MDCache.h"
@@ -88,6 +89,20 @@ int MDS::shutdown()
 
 
 
+mds_load_t MDS::get_load()
+{
+  mds_load_t l;
+  if (mdcache->get_root()) 
+	l.root_pop = mdcache->get_root()->popularity.get();
+  else
+	l.root_pop = 0;
+  l.req_rate = stat_req.get();
+  l.rd_rate = stat_read.get();
+  l.wr_rate = stat_write.get();
+  return l;
+}
+
+
 
 void MDS::proc_message(Message *m) 
 {
@@ -119,6 +134,7 @@ void MDS::proc_message(Message *m)
 	cout << "mds" << whoami << " main unknown message " << m->get_type() << endl;
 	throw "asdf";
   }
+
 }
 
 
@@ -136,14 +152,15 @@ void MDS::dispatch(Message *m)
 	break;
 
 	/*
-  case MSG_SUBSYS_MDLOG:
+  case MSG_PORT_MDLOG:
 	mymds->logger->proc_message(m);
 	break;
-	
-  case MSG_SUBSYS_BALANCER:
-	mymds->balancer->proc_message(m);
-	break;
 	*/
+	
+  case MDS_PORT_BALANCER:
+	balancer->proc_message(m);
+	break;
+	
 
   case MDS_PORT_MAIN:
   case MDS_PORT_SERVER:
@@ -153,6 +170,14 @@ void MDS::dispatch(Message *m)
   default:
 	cout << "MDS dispatch unkown message port" << m->get_dest_port() << endl;
   }
+
+  if (whoami == 0 &&
+	  g_clock.gettime() >= last_heartbeat + 5.0) {
+	cout << " now is " << g_clock.gettime() << endl;
+	last_heartbeat = g_clock.gettime();
+	balancer->send_heartbeat();
+  }
+
 }
 
 
@@ -188,6 +213,8 @@ int MDS::handle_client_request(MClientRequest *req)
 
   CInode *cur = trace[trace.size()-1];
   
+  cur->hit();   // bump popularity
+
   MClientReply *reply = 0;
 
   switch(req->op) {
@@ -212,6 +239,7 @@ int MDS::handle_client_request(MClientRequest *req)
 	// this is convenience, for quick events.  
 	// anything delayed has to reply on its own.
 
+
 	// reply
 	messenger->send_message(reply,
 							MSG_ADDR_CLIENT(req->client), 0,
@@ -231,7 +259,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   //if (mdcache->read_start(cur, req))
   //return 0;   // ugh
 
-  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " stat " << cur->inode.touched << endl;
+  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
   MClientReply *reply = new MClientReply(req);
   reply->result = 0;
   reply->set_trace_dist( cur, whoami );
@@ -240,6 +268,8 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
 
   //mdcache->read_finish(cur);
 
+  stat_read.hit();
+  stat_req.hit();
   return reply;
 }
 
@@ -311,7 +341,11 @@ void MDS::handle_client_touch_2(MClientRequest *req,
   messenger->send_message(reply,
 						  MSG_ADDR_CLIENT(req->client), 0,
 						  MDS_PORT_SERVER);
-  
+
+
+  stat_write.hit();
+  stat_req.hit();
+
   // done
   delete req;
 
@@ -363,6 +397,10 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  
 	  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " readdir " << numfiles << " files" << endl;
 	  reply->set_trace_dist( cur, whoami );
+
+	  stat_read.hit();
+	  stat_req.hit();
+
 	  return reply;
 	} else {
 	  // fetch

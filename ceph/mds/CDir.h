@@ -3,6 +3,9 @@
 #define __CDIR_H
 
 #include "include/types.h"
+
+#include "include/DecayCounter.h"
+
 #include <map>
 #include <ext/hash_map>
 #include <string>
@@ -69,7 +72,7 @@ class CDir {
   int        nested_hard_pinned;
   Context    *waiting_on_freeze;      // freezer
 
-
+  DecayCounter popularity;
 
   friend class CInode;
   friend class MDCache;
@@ -101,6 +104,9 @@ class CDir {
   bool is_complete() { return state & CDIR_MASK_COMPLETE; }
   bool is_freeze_root() { return state & CDIR_MASK_FROZEN; }
   
+  
+  void hit();
+
 
 
   // waiters  

@@ -11,7 +11,24 @@
 
 // CDir
 
-void CDir::add_child(CDentry *d) {
+void CDir::hit() 
+{
+  popularity.hit();
+
+  // hit parent inodes
+  CInode *in = inode;
+  while (in) {
+	in->popularity.hit();
+	if (in->parent)
+	  in = in->parent->dir->inode;
+	else
+	  break;
+  }
+}
+
+
+void CDir::add_child(CDentry *d) 
+{
   //cout << "adding " << d->name << " to " << this << endl;
   items[d->name] = d;
   d->dir = this;

@@ -18,8 +18,7 @@ CInode::CInode() : LRUObject() {
   nparents = 0;
   lru_next = lru_prev = NULL;
   
-  dir = NULL;
-  state = 0;
+  dir = NULL;  // create CDir as needed
 
   hard_pinned = 0;
   nested_hard_pinned = 0;
@@ -47,6 +46,17 @@ void CInode::make_path(string& s)
   } else 
 	s = "";  // root
 }
+
+
+void CInode::hit()
+{
+  popularity.hit();
+
+  // hit my containing directory, too
+  if (parent)
+	parent->dir->hit();
+}
+
 
 // waiting
 

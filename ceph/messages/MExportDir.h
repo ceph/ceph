@@ -21,11 +21,13 @@ typedef struct {
 } Inode_Export_State_t;
 
 typedef struct {
+  inodeno_t      ino;
   __uint64_t     nitems;
   __uint64_t     version;
   int            dir_auth;
   int            dir_rep;
   unsigned       state;
+  DecayCounter   popularity;
   int            ndir_rep_by;
   // ints follow
 } Dir_Export_State_t;
@@ -40,10 +42,8 @@ class MExportDir : public Message {
   string path;
   inodeno_t ino;
 
-  crope  rope;
-
-  char   *buf;
-  int    bufend; 
+  int    ndirs;
+  crope  state;
   
 
   // ...?
@@ -52,32 +52,13 @@ class MExportDir : public Message {
 	Message(MSG_MDS_EXPORTDIR) {
 	this->ino = in->inode.ino;
 	in->make_path(path);
-	rope = new crope;
-	buf = 0;
-	bufend = 0;
+	ndirs = 0;
   }
   virtual char *get_type_name() { return "exp"; }
 
-  char *get_end_ptr(int want = BUFSLOP) {
-	if (bufend >= BUFLEN - want) {
-	  rope->append(buf, bufend);
-	  buf = 0;
-	}
-	if (!buf) {
-	  buf = new char[BUFLEN];
-	  bufend = 0;
-	}
-	return buf + bufend;
-  }
-  void set_end_ptr(char *p) {
-	bufend = p - buf;
-  }
-  
-  crope *get_rope() {
-	if (bufend && buf) {
-	  crope->append(buf, bufend);
-	  buf = 0;
-	}
+  void add_dir(crope& dir) {
+	state.append( dir );
+	ndirs++;
   }
 
 };

@@ -63,7 +63,7 @@ class CInode : LRUObject {
   int hard_pinned;
   int nested_hard_pinned;
 
-
+ public:
   DecayCounter popularity;
   
 
@@ -79,10 +79,11 @@ class CInode : LRUObject {
   
   CInode *get_parent_inode();
   
-	
   // fun
   bool is_dir() { return inode.isdir; }
   void make_path(string& s);
+
+  void hit();
 
   // sync
   /*

@@ -5,7 +5,6 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
-#include "MDBalancer.h"
 #include "MDCluster.h"
 
 #include "include/Message.h"

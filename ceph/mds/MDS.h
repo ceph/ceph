@@ -9,17 +9,18 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "include/Dispatcher.h"
-
+#include "include/DecayCounter.h"
 
 typedef __uint64_t object_t;
 
 using namespace std;
 
 
-#define MDS_PORT_MAIN   1
-#define MDS_PORT_SERVER 5
-#define MDS_PORT_CACHE  10
-#define MDS_PORT_STORE  11
+#define MDS_PORT_MAIN     1
+#define MDS_PORT_SERVER   5
+#define MDS_PORT_CACHE    10
+#define MDS_PORT_STORE    11
+#define MDS_PORT_BALANCER 20
 
 
 // md ops
@@ -83,6 +84,11 @@ class MDS : public Dispatcher {
 
   friend class MDStore;
 
+  // stats
+  DecayCounter stat_req;
+  DecayCounter stat_read;
+  DecayCounter stat_write;
+  
  public:
   // sub systems
   MDCache      *mdcache;    // cache
@@ -90,8 +96,9 @@ class MDS : public Dispatcher {
   Messenger    *messenger;    // message processing
   MDLog        *mdlog;
   MDBalancer   *balancer;
- 
 
+ protected:
+  double       last_heartbeat;
 
   
  public:
@@ -100,6 +107,8 @@ class MDS : public Dispatcher {
 
   int get_nodeid() { return whoami; }
   MDCluster *get_cluster() { return mdcluster; }
+
+  mds_load_t get_load();
 
   int init();
   int shutdown();

@@ -39,4 +39,17 @@ struct inode_t {
 
 typedef __uint64_t object_t;
 
+class mds_load_t {
+ public:
+  double root_pop;
+  double req_rate, rd_rate, wr_rate;
+  double cache_hit_rate;
+  
+  mds_load_t() : 
+	root_pop(0), req_rate(0), rd_rate(0), wr_rate(0), cache_hit_rate(0) { }
+	
+};
+
+
+
 #endif

@@ -45,6 +45,7 @@ class DecayCounter {
 	  val = val * exp(el * k);
 	  last_decay = tnow;
 	}
+	if (val < .01) val = 0;
   }
 
   double get() {

@@ -95,9 +95,14 @@ bool MDCache::trim(__int32_t max) {
 								   MDS_PORT_CACHE);
 	}	
 
+
+	// dir incomplete!
+	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
+
 	// remove it
 	remove_inode(in);
 	delete in;
+	
   }
 
   return true;
@@ -964,13 +969,15 @@ public:
 	ls.clear();
   }
   void assim_waitlist(hash_map< string, list<Context*> >& cmap) {
-	for (hash_map< string, list<Context*> >::iterator it = cmap.begin();
-		 it != cmap.end();
-		 it++) {
-	  if (it->second->can_redelegate()) 
-		will_redelegate.push_back(it->second);
-	  else
-		will_fail.push_back(it->second);
+	for (hash_map< string, list<Context*> >::iterator hit = cmap.begin();
+		 hit != cmap.end();
+		 hit++) {
+	  for (list<Context*>::iterator lit = hit->second.begin(); lit != hit->second.end(); lit++) {
+		if ((*lit)->can_redelegate()) 
+		  will_redelegate.push_back(*lit);
+		else
+		  will_fail.push_back(*lit);
+	  }
 	}
 	cmap.clear();
   }
@@ -1004,6 +1011,9 @@ void MDCache::export_dir(CInode *in,
   string path;
   in->make_path(path);
   cout << "mds" << mds->get_nodeid() << " export_dir " << path << " to " << dest << ", freezing" << endl;
+
+  // pin
+  in->get();  // this is an export point, we must keep it!
 
   // freeze the subtree
   in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest));
@@ -1042,20 +1052,25 @@ void MDCache::export_dir_walk(MExportDir *req,
   cout << "export_dir_walk on " << idir->inode.ino << endl;
 
   // dir 
-  Dir_Export_State_t *p = req->get_end_ptr();
-  p->nitems = idir->dir->nitems;
-  p->version = idir->dir->version;
-  p->state = idir->dir->state;
-  p->dir_auth = idir->dir->dir_auth;
-  p->dir_rep = idir->dir->dir_rep;
-  p->ndir_rep_by = idir->dir->dir_rep_by.size();
+  crope dir_rope;
 
-  int *cp = p + 1;
+  Dir_Export_State_t dstate;
+  dstate.ino = idir->inode.ino;
+  dstate.nitems = idir->dir->nitems;
+  dstate.version = idir->dir->version;
+  dstate.state = idir->dir->state;
+  dstate.dir_auth = idir->dir->dir_auth;
+  dstate.dir_rep = idir->dir->dir_rep;
+  dstate.ndir_rep_by = idir->dir->dir_rep_by.size();
+  dstate.popularity = idir->dir->popularity;
+  dir_rope.append( (char*)&dstate, sizeof(dstate) );
+  
   for (set<int>::iterator it = idir->dir->dir_rep_by.begin();
 	   it != idir->dir->dir_rep_by.end();
-	   it++, cp++)
-	*cp = *it;
-  req->set_end_ptr(cp);
+	   it++) {
+	int i = *it;
+	dir_rope.append( (char*)&i, sizeof(int) );
+  }
 
   // waiters
   fin->assim_waitlist(idir->waiting_for_write);
@@ -1073,20 +1088,24 @@ void MDCache::export_dir_walk(MExportDir *req,
 	if (in->is_dir()) 
 	  subdirs.push_back(in);
 
-	// add inode
-	Inode_Export_State_t *p = req->get_end_ptr();
-	p->inode = in->inode;
-	p->version = in->versin;
-	p->popularity = in->popularity;
-	p->ref = in->ref;
-	p->ncached_by = in->cached_by.size();
+	// dentry
+	dir_rope.append( it->first.c_str(), it->first.length()+1 );
 	
-	char *cp = p + 1;
+	// add inode
+	Inode_Export_State_t istate;
+	istate.inode = in->inode;
+	istate.version = in->version;
+	istate.popularity = in->popularity;
+	istate.ref = in->ref;
+	istate.ncached_by = in->cached_by.size();
+	dir_rope.append( (char*)&istate, sizeof(istate) );
+	
 	for (set<int>::iterator it = in->cached_by.begin();
 		 it != in->cached_by.end();
-		 it++, cp++)
-	  *cp = *it;
-	req->set_end_ptr(cp);
+		 it++) {
+	  int i = *it;
+	  dir_rope.append( (char*)&i, sizeof(int) );
+	}
 
 	// other state too!.. open files, etc...
 
@@ -1096,6 +1115,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 	fin->assim_waitlist(idir->dir->waiting_on_all);
 	fin->assim_waitlist(idir->dir->waiting_on_dentry);
   }
+
+  req->add_dir( dir_rope );
   
   // subdirs
   for (list<CInode*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
@@ -1112,16 +1133,37 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
   in->make_path(path);
   cout << "mds" << mds->get_nodeid() << " export_dir_ack " << path << endl;
   
-  in->get();   // pin it
-
   // remove the metadata from the cache
-  // ...
+  export_dir_purge( in );
 
   // unfreeze
   in->dir->unfreeze();
 
   // done
   delete m;
+}
+
+
+// called by handle_expirt_dir_ack
+void MDCache::export_dir_purge(CInode *idir)
+{
+  cout << "export_dir_purge on " << idir->inode.ino << endl;
+
+  CDir_map_t::iterator it;
+  for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
+	CInode *in = it->second->inode;
+	
+	if (in->is_dir()) 
+	  export_dir_purge(in);
+
+	// dir incomplete!
+	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
+
+	remove_inode(in);
+	delete in;
+  }
+
+  cout << "export_dir_purge on " << idir->inode.ino << " done" << endl;
 }
 
 
@@ -1142,10 +1184,15 @@ void MDCache::handle_export_dir(MExportDir *m)
   // it's mine, now!
   in->dir->dir_auth = mds->get_nodeid();
 
-
-  // add this crap to my cache
-
   
+  // add this crap to my cache
+  const char *p = m->state.c_str();
+  for (int i = 0; i < m->ndirs; i++) 
+	import_dir_block(p);
+  
+  // ignore "frozen" state of the main dir; it's from the authority
+  in->dir->state_clear(CDIR_MASK_FROZEN);
+
   // send ack
   cout << "mds" << mds->get_nodeid() << " sending ack back to " << m->get_source() << endl;
   MExportDirAck *ack = new MExportDirAck(m);
@@ -1158,6 +1205,55 @@ void MDCache::handle_export_dir(MExportDir *m)
 
   // done
   delete m;
+}
+
+void MDCache::import_dir_block(pchar& p)
+{
+  // set up dir
+  Dir_Export_State_t *dstate = (Dir_Export_State_t*)p;
+  CInode *idir = get_inode(dstate->ino);
+  assert(idir);
+
+  if (!idir->dir) idir->dir = new CDir(idir);
+
+  idir->dir->version = dstate->version;
+  idir->dir->state = dstate->state;
+  idir->dir->dir_auth = dstate->dir_auth;
+  idir->dir->dir_rep = dstate->dir_rep;
+  idir->dir->popularity = dstate->popularity;
+  
+  p += sizeof(*dstate);
+  for (int nrep = dstate->ndir_rep_by; nrep > 0; nrep--) {
+	idir->dir->dir_rep_by.insert( *((int*)p) );
+	p += sizeof(int);
+  }
+
+  // contents
+  for (long nitems = dstate->nitems; nitems>0; nitems--) {
+	// dentry
+	string dname = p;
+	p += dname.length()+1;
+
+	// inode
+	Inode_Export_State_t *istate = (Inode_Export_State_t*)p;
+	CInode *in = new CInode;
+	in->inode = istate->inode;
+	in->version = istate->version;
+	in->popularity = istate->popularity;
+	
+	p += sizeof(*istate);
+	for (int nby = istate->ncached_by; nby>0; nby--) {
+	  in->cached_by.insert( *((int*)p) );
+	  p += sizeof(int);
+	}
+
+	// ... ?
+
+	// add
+	add_inode(in);
+	link_inode(idir, dname, in);	
+  }
+ 
 }
 
 

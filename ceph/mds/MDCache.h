@@ -30,6 +30,8 @@ class C_MDS_ExportFinish;
 
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
 
+typedef const char* pchar;
+
 class MDCache {
  protected:
   CInode                       *root;        // root inode
@@ -94,9 +96,8 @@ class MDCache {
   int proc_message(Message *m);
 
   int handle_discover(MDiscover *dis);
+  
   void handle_export_dir_ack(MExportDirAck *m);
-  void handle_export_dir(MExportDir *m);
-
   void export_dir(CInode *in,
 				  int mds);
   void export_dir_frozen(CInode *in,
@@ -104,6 +105,10 @@ class MDCache {
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
 					   CInode *idir);
+  void export_dir_purge(CInode *idir);
+  
+  void handle_export_dir(MExportDir *m);
+  void import_dir_block(pchar& p);
 
   int send_inode_updates(CInode *in);
   void handle_inode_update(MInodeUpdate *m);
