@@ -48,7 +48,9 @@ using namespace std;
 #define CINODE_PIN_DHARDPIN  30000
 #define CINODE_PIN_DIRTY     50000
 
-#define CINODE_PIN_LOCKING   70000
+#define CINODE_PIN_SYNCBYME   70000
+#define CINODE_PIN_SYNCBYTHEM 70001
+#define CINODE_PIN_PRESYNC    70002
 
 // directory authority types
 //  >= is the auth mds

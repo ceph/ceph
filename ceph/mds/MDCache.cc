@@ -1087,6 +1087,7 @@ void sync_start(CInode *in)
   // wait for all replicas
   in->sync_waiting_for_ack = in->cached_by;
   in->dist_state &= CINODE_DIST_PRESYNC;
+  in->get(CINODE_PIN_PRESYNC);
 
   // send messages
   dout(5) << "sync_start on " << *in << ", waiting for " << in->sync_waiting_for_ack << endl;
@@ -1105,7 +1106,8 @@ void sync_finish(CInode *in)
   assert(in->is_auth());
 
   in->dist_state -= CINODE_DIST_SYNCBYME;
-  
+  in->put(CINODE_PIN_SYNCBYME);
+
   dout(5) << "sync_finish on " << *in << ", messages to " << in->get_cached_by() << endl;
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
@@ -1116,6 +1118,118 @@ void sync_finish(CInode *in)
   }
 }
 
+
+// messages
+void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
+{
+  // assume asker == authority for now.
+  
+  // authority is requesting a lock
+  CInode *in = get_inode(m->ino);
+  if (!in) {
+	// don't have it anymore!
+	dout(7) << "handle_sync_start " << in->inode.ino << ": don't have it anymore, nak" << endl;
+	mds->messenger->send_message(new MInodeExpire(m->ino, mds->get_nodeid(), true),
+								 MSG_ADDR_MDS(m->asker), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+	delete m; // done
+	return;
+  }
+
+  // we shouldn't be authoritative...
+  assert(!in->is_auth());
+
+  dout(7) << "handle_sync_start " << *in << ", sending ack" << endl;
+  
+  // lock it
+  in->get(CINODE_PIN_SYNCBYTHEM);
+  in->dist_state &= CINODE_DIST_SYNCTHEM;
+  
+  // send ack
+  mds->messenger->send_message(new MInodeSyncAck(m->ino),
+							   MSG_ADDR_MDS(m->asker), MDS_PORT_CACHE,
+							   MDS_PORT_CACHE);
+
+  delete m;  // done
+}
+
+void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
+{
+  CInode *in = get_inode(m->ino);
+  assert(in);
+  assert(in->is_auth());
+  assert(in->dist_state & CINODE_DIST_PRESYNC);
+
+  // remove it from waiting list
+  in->sync_waiting_for_ack.erase(m->get_source());
+	
+  if (in->sync_waiting_for_ack.size()) {
+
+	// more coming
+	dout(7) << "handle_sync_ack " << m->ino << " from " << m->get_source() << ", still waiting for " << in->sync_waiting_for_ack << endl;
+	
+  } else {
+	
+	// yay!
+	dout(7) << "handle_sync_ack " << m->ino << " from " << m->get_source() << ", last one" << endl;
+
+	in->dist_state -= CINODE_DIST_PRESYNC;
+	in->dist_state &= CINODE_DIST_SYNCBYME;
+	in->get(CINODE_PIN_SYNCBYME);
+	in->put(CINODE_PIN_PRESYNC);
+
+	// do waiters!
+	list<Context*> finished;
+	in->take_sync_waiters(finished);
+
+	for (it = list<Context*>::iterator it = finished.begin();
+		 it != finished.end();
+		 it++) {
+	  Context *c = *it;
+	  if (c) {
+		c->finish(0);
+		delete c;
+	  }
+	}
+
+	// release sync
+	dout(7) << "handle_sync_ack did waiters, releasing." << endl;
+	sync_finish(in);
+  }
+
+  delete m; // done
+}
+
+
+void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
+{
+  CInode *in = get_inode(m->ino);
+
+  if (!in) {
+	dout(7) << "handle_sync_release " << m->ino << ", don't have it anymore" << endl;
+	delete m;  // done
+	return;
+  }
+
+  assert(in->is_syncbythem());
+  assert(!in->is_auth());
+  
+  dout(7) << "handle_sync_release " << m->ino << endl;
+  
+  in->put(CINODE_PIN_SYNCBYTHEM);
+  in->dist_state -= CINODE_DIST_SYNCBYTHEM;
+  
+  // finish
+  list<Context*> finished;
+  in->take_sync_waiting(finished);
+  for (list<Context*>::iterator it = finished.begin(); 
+	   it != finished.end(); 
+	   it++) {
+	Context *c = *it;
+	c->finish(0);
+	delete c;
+  }
+}
 
 
 /* hard locks: owner, mode 
@@ -1201,82 +1315,6 @@ int MDCache::write_finish(CInode *in)
 this all sucks
 
 
-void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
-{
-  // authority is requesting a lock
-  CInode *in = get_inode(m->ino);
-  if (!in) {
-	// don't have it anymore!
-	dout(7) << "sync_start " << in->inode.ino << ": don't have it anymore, nak" << endl;
-	mds->messenger->send_message(new MInodeSyncAck(m->ino, false),
-								 m->authority, MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-	return;
-  }
-
-  // we shouldn't be authoritative...
-  assert(m->authority != mds->get_nodeid());
-
-  dout(7) << "sync_start " << *in << ", sending ack" << endl;
-
-  // lock it
-  in->get();
-  in->sync_set(CINODE_SYNC_LOCK);
-  
-  // send ack
-  mds->messenger->send_message(new MInodeSyncAck(m->ino),
-  MSG_ADDR_MDS(m->authority), MDS_PORT_CACHE,
-  MDS_PORT_CACHE);
-  }
-
-void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
-{
-  CInode *in = get_inode(m->ino);
-  assert(in);
-  assert(in->get_sync() == CINODE_SYNC_START);
-
-  // remove it from waiting list
-  in->sync_waiting_for_ack.erase(m->get_source());
-	
-  if (in->sync_waiting_for_ack.size()) {
-
-	// more coming
-	dout(7) << "sync_ack " << m->ino << " from " << m->get_source() << ", waiting for more" << endl;
-
-  } else {
-
-	// yay!
-	dout(7) << "sync_ack " << m->ino << " from " << m->get_source() << ", last one" << endl;
-
-	in->sync_set(CINODE_SYNC_LOCK);
-  }
-}
-
-
-void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
-{
-  CInode *in = get_inode(m->ino);
-
-  if (!in) {
-	dout(7) << "sync_release " << m->ino << ", don't have it anymore" << endl;
-	return;
-  }
-
-  assert(in->get_sync() == CINODE_SYNC_LOCK);
-  
-  dout(7) << "sync_release " << m->ino << endl;
-  in->sync_set(0);
-  
-  // finish
-  list<Context*> finished;
-  in->take_write_waiting(finished);
-  list<Context*>::iterator it;
-  for (it = finished.begin(); it != finished.end(); it++) {
-	Context *c = *it;
-	c->finish(0);
-	delete c;
-  }
-}
 
 */
 
