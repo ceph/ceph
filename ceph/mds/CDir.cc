@@ -160,7 +160,7 @@ void CDir::add_waiter(int tag,
 
 void CDir::add_waiter(int tag, Context *c) {
   // hierarchical?
-  if (tag & CDIR_WAIT_ATFREEZEROOT) {  
+  if (tag & CDIR_WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
 	if (is_freeze_root()) {
 	  // it's us, pin here.  (fall thru)
 	} else {

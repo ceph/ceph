@@ -180,7 +180,7 @@ class CInode : LRUObject {
   void hit();
 
   bool is_frozen();
-
+  bool is_freezing();
 
   // dirtyness
   __uint64_t get_version() { return version; }

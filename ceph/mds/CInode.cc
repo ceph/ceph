@@ -157,9 +157,16 @@ bool CInode::is_frozen()
   return false;
 }
 
+bool CInode::is_freezing()
+{
+  if (parent && parent->dir->is_freezing())
+	return true;
+  return false;
+}
+
 void CInode::add_waiter(int tag, Context *c) {
   // waiting on hierarchy?
-  if (tag & CDIR_WAIT_ATFREEZEROOT) {
+  if (tag & CDIR_WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
 	parent->dir->add_waiter(tag, c);
 	return;
   }
