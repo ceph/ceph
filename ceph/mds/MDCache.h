@@ -45,6 +45,7 @@ class MInodeLockRelease;
 class MDirSyncStart;
 class MDirSyncAck;
 class MDirSyncRelease;
+class MRenameLocalFile;
 class C_MDS_ExportFinish;
 class InoAllocator;
 
@@ -155,6 +156,14 @@ class MDCache {
 					Message *req, 
 					int onfail);
 
+  void rename_file(CInode *from, 
+				   CDir *destdir,
+				   string name);
+  void rename_dir(CInode *from, 
+				  CDir *destdir,
+				  string name);
+
+
   
   // == messages ==
   int proc_message(Message *m);
@@ -173,6 +182,10 @@ class MDCache {
 
   void handle_inode_unlink(MInodeUnlink *m);
   void handle_inode_unlink_ack(MInodeUnlinkAck *m);
+
+  void file_rename(CInode *in, CDir *destdir, string& name, CInode *oldin, Context *c);
+  void file_rename_finish(CInode *in, CDir *destdir, CInode *oldin, Context *c);
+  
 
 
   // -- misc auth --

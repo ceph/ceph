@@ -30,6 +30,7 @@ class MClientRequest : public Message {
 
   void set_path(string& p) { path.set_path(p); }
   void set_ino(inodeno_t ino) { st.ino = ino; }
+  void set_arg(string& arg) { this->arg = arg; }
 
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
@@ -37,12 +38,13 @@ class MClientRequest : public Message {
   inodeno_t get_ino() { return st.ino; }
   string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
+  string& get_arg() { return arg; }
   
 
   virtual int decode_payload(crope s) {
 	s.copy(0, sizeof(st), (char*)&st);
 	path.set_path( s.c_str() + sizeof(st) );
-	int off = sizeof(st) + path.length() + 0;
+	int off = sizeof(st) + path.length() + 1;
 	arg = s.c_str() + off;	
 	return 0;
   }

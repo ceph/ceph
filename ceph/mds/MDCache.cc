@@ -57,6 +57,8 @@
 #include "messages/MDirSyncRelease.h"
 //#include "messages/MDirSyncRecall.h"
 
+#include "messages/MRenameLocalFile.h"
+
 #include "InoAllocator.h"
 
 #include <assert.h>
@@ -703,7 +705,7 @@ int MDCache::path_traverse(filepath& path,
 	
 	// don't have it.
 	int dauth = cur->dir->dentry_authority( path[depth] );
-	dout(12) << " dentry " << path[depth] << " dauth is " << dauth << endl;
+	dout(12) << " miss dentry " << path[depth] << " dauth is " << dauth << endl;
 	
 
 	if (dauth == whoami) {
@@ -779,6 +781,86 @@ int MDCache::path_traverse(filepath& path,
 }
 
 
+
+
+// rename crap
+
+void MDCache::rename_file(CInode *from, 
+						 CDir *destdir,
+						 string name)
+{
+  assert(destdir->lookup(name) == 0);
+  
+  // unlink, re-link
+  unlink_inode(from);
+  link_inode( destdir, name, from );
+}
+
+
+void MDCache::rename_dir(CInode *from, 
+						 CDir *destdir,
+						 string name)
+{
+  CDir *old_parent_dir = from->get_parent_dir();
+
+  assert(destdir->lookup(name) == 0);
+  
+  // unlink, re-link
+  unlink_inode(from);
+  link_inode( destdir, name, from );
+
+  // fix nested exports?
+  CDir *containing_import = get_containing_import( destdir );
+  
+  if (from->dir->is_import()) {
+	// all my exports now belong to new containing_import
+	dout(7) << "moving exports of renamed import " << *from << " to " << *containing_import << endl;
+	
+	for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
+		   nested_exports.equal_range(from->dir);
+		 p.first != p.second;
+		 p.first++) {
+	  CDir *nested = (*p.first).second;
+	  dout(7) << "  moving " << *nested << endl;
+	  nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
+	}
+	
+	// i'm not an import anymore
+	nested_exports.erase( from->dir );
+	imports.erase( from->dir );
+	from->dir->state_clear(CDIR_STATE_IMPORT);
+	from->dir->put(CDIR_PIN_IMPORT);
+
+  } else {
+	// check for exports under me
+	CDir *old_containing = get_containing_import( old_parent_dir );
+	for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
+		   nested_exports.equal_range(old_containing);
+		 p.first != p.second;
+		 ) {
+	  CDir *nested = (*p.first).second;
+	  
+	  // NOTE/FIXME/WARNING: possible concurrent modification weirdness!
+
+	  // trace back to import, or dir
+	  CDir *cur = nested->get_parent_dir();
+	  while (!cur->is_import()) {
+		if (cur == from->dir) {
+		  dout(7) << "  moving " << *nested << endl;
+		  nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
+		  nested_exports.erase( p.first++ );  // tricky
+		  break;
+		} else {
+		  cur = cur->get_parent_dir();
+		  p.first++;
+		}
+	  }
+	}
+  }
+
+  show_imports();
+
+}
 
 
 // REPLICAS
@@ -919,7 +1001,7 @@ void MDCache::handle_discover(MDiscover *dis)
       if (cur->dir->is_complete()) {
         // set error flag in reply
         dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " not found in " << *cur->dir << ", returning error" << endl;
-		reply->set_flag_error();
+		reply->set_flag_error( dis->get_dentry(i) );
 		break;
       } else {
         delete reply;
@@ -992,6 +1074,21 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	
 	dout(7) << "discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
   }
+
+  if (m->is_flag_error()) {
+	// error!
+	assert(cur->is_dir());
+	if (cur->dir) {
+	  dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
+	  cur->dir->take_waiting(CDIR_WAIT_DENTRY,
+							 m->get_error_dentry(),
+							 finished);
+	} else {
+	  dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
+	  cur->take_waiting(CINODE_WAIT_DIR, finished);
+	}
+  }
+
   
   // start this loop even if we have no inodes, but just the base_dir
   int plus_root_dir = (m->get_num_inodes() == 1 && m->has_root()) ? 1:0;     //ugly, sorry, see handle_discover
@@ -1454,6 +1551,117 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
 
 
 
+// renaming!
+
+
+class C_MDC_RenameLocalFile : public Context {
+  MDCache *mdc;
+  CInode *from, *oldin;
+  CDir *destdir;
+  Context *c;
+public:
+  C_MDC_RenameLocalFile(MDCache *mdc,
+						CInode *from,
+						CDir *destdir,
+						CInode *oldin,
+						Context *c) {
+	this->mdc = mdc;
+	this->from = from;
+	this->destdir = destdir;
+	this->oldin = oldin;
+	this->c = c;
+  }
+  void finish(int r) {
+	mdc->file_rename_finish(from, destdir, oldin, c);
+  }
+};
+
+
+
+void MDCache::file_rename(CInode *from, CDir *destdir, string& name, CInode *oldin, Context *c)
+{
+  assert(from->is_auth());
+  assert(!from->is_cached_by_anyone() || from->is_lockbyme());
+  assert(!oldin || !oldin->is_cached_by_anyone() || oldin->is_lockbyme());
+  
+  // log it
+  from->mark_unsafe();
+  //  mds->mdlog->submit_entry(new EInodeUnlink(in, in->get_parent_dir()),
+  //						   new C_MDC_InodeLog(this,in));
+  
+  // mark dirty
+  from->mark_dirty();
+
+  // rename locally
+  if (oldin) {
+	unlink_inode(oldin);
+	oldin->mark_clean();
+	oldin->state_set(CINODE_STATE_DANGLING);
+  }
+  rename_file(from, destdir, name);  
+  
+
+  // tell replicas?
+  from->rename_waiting_for_ack = from->cached_by;
+  if (oldin) {
+	for (set<int>::iterator it = oldin->cached_by_begin();
+		 it != oldin->cached_by_end();
+		 it++)
+	  from->rename_waiting_for_ack.insert( *it );
+  }
+  
+  if (!from->rename_waiting_for_ack.empty()) {
+	from->state_set(CINODE_STATE_RENAMING);
+	oldin->state_set(CINODE_STATE_RENAMINGTO);
+	
+	// send notify
+	for (set<int>::iterator it = from->rename_waiting_for_ack.begin();
+		 it != from->rename_waiting_for_ack.end();
+		 it++) {
+	  dout(7) << "rename_file sending rename to " << *it << endl;
+  
+	  mds->messenger->send_message(new MRenameLocalFile(from->ino(),
+														destdir->ino(),
+														name,
+														oldin ? oldin->ino():0),
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	}
+
+	// waiter
+	from->add_waiter(CINODE_WAIT_RENAME, 
+					 new C_MDC_RenameLocalFile(this, from, destdir, oldin, c));
+  }
+  else {
+	// done
+	file_rename_finish(from, destdir, oldin, c);
+  }
+  
+}
+
+void MDCache::file_rename_finish(CInode *from, CDir *destdir, CInode *oldin, Context *c)
+{
+  dout(7) << "file_rename_finish on " << *from << endl;
+
+  // drop locks?
+  from->state_clear(CINODE_STATE_RENAMING);
+  write_hard_finish(from);
+  
+  if (oldin) {
+	write_hard_finish(oldin);
+	oldin->state_clear(CINODE_STATE_RENAMINGTO);
+  }
+
+  // finish
+  c->finish(0);
+  delete c;
+}
+
+
+
+
+
+
+
 
 
 // locks ----------------------------------------------------------------
@@ -1765,9 +1973,11 @@ void MDCache::inode_sync_start(CInode *in)
   }
 
   // sync clients
+  int last = -1;
   for (multiset<int>::iterator it = in->get_open_write().begin();
 	   it != in->get_open_write().end();
 	   it++) {
+	if (*it == last) continue;  last = *it;   // only 1 per client (even if open multiple times)
 	in->sync_waiting_for_ack.insert(MSG_ADDR_CLIENT(*it));
 	mds->messenger->send_message(new MInodeSyncStart(in->ino(), mds->get_nodeid()),
 								 MSG_ADDR_CLIENT(*it), 0,

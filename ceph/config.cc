@@ -33,7 +33,7 @@ md_config_t g_conf = {
   fake_clock: true,
   fakemessenger_serialize: true,
 
-  debug: 10,
+  debug: 13,
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,
@@ -44,7 +44,7 @@ md_config_t g_conf = {
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,
 
-  mds_heartbeat_op_interval: 200,
+  mds_heartbeat_op_interval: 20000,
   mds_verify_export_dirauth: true
 };
 

@@ -54,6 +54,7 @@ using namespace std;
 
 class MDCluster;
 class CInode;
+class CDir;
 class MDCache;
 class MDStore;
 class MDLog;
@@ -146,6 +147,8 @@ class MDS : public Dispatcher {
   bool open_root(Context *c);
   bool open_root_2(int result, Context *c);
 
+  void reply_request(MClientRequest *req, int r = 0);
+
 
   void handle_ping(class MPing *m);
   void handle_client_done(Message *m);
@@ -187,8 +190,8 @@ class MDS : public Dispatcher {
   void handle_client_rmdir(MClientRequest *req, CInode *cur);
 
   void handle_client_rename(MClientRequest *req, CInode *cur);
-  void handle_client_rename_mvlocal(MClientRequest *req, CInode *cur);
-  void handle_client_rename_mvremote(MClientRequest *req, CInode *cur);
+  void handle_client_rename_file(MClientRequest *req, CInode *cur, CDir *destdir, string& name);
+  void handle_client_rename_dir(MClientRequest *req, CInode *cur, CDir *destdir, string& name);
 
 
   int do_stat(MClientRequest *m);

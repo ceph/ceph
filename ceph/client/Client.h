@@ -50,8 +50,8 @@ class Client : public Dispatcher {
 	return it->second;
   }
   void add_node(ClNode *n) {
-	assert(node_map.count(n->ino) == 0);
-	node_map.insert(pair<inodeno_t,ClNode*>(n->ino, n));
+	if (node_map.count(n->ino) == 0)
+	  node_map.insert(pair<inodeno_t,ClNode*>(n->ino, n));
   }
   void remove_node(ClNode *n) {
 	if (cwd == n) cwd = root;
@@ -71,7 +71,7 @@ class Client : public Dispatcher {
   virtual void assim_reply(MClientReply*);
   virtual void issue_request();
 
-  virtual void send_request(string& p, int op);
+  virtual void send_request(string& p, int op, string& arg);
   void close_a_file();
   bool is_open(ClNode *n);
   bool is_sync(ClNode *n);

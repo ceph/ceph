@@ -27,6 +27,7 @@ class ClNode : public LRUObject {
 
   ClNode() {
 	parent = 0;
+	refs = 0;
 	isdir = havedircontents = false;
 	dangling = false;
   }
@@ -38,11 +39,16 @@ class ClNode : public LRUObject {
 	  return 1 + parent->depth();
   }
   
+  int refs;  // reference count
+
   void get() {
+	refs++;
 	lru_expireable = false;
   }
   void put() {
-	lru_expireable = true;
+	refs--;
+	assert(refs >= 0);
+	if (!refs) lru_expireable = true;
   }
 
   void detach() {

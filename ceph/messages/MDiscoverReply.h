@@ -22,6 +22,7 @@ class MDiscoverReply : public Message {
   bool         no_base_dentry;
   bool        flag_forward;
   bool        flag_error;
+  string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
 
   // ... + dir + dentry + inode
   // inode [ + ... ], base_ino = 0 : discover base_ino=0, start w/ root ino
@@ -49,6 +50,7 @@ class MDiscoverReply : public Message {
 
   bool is_flag_forward() { return flag_forward; }
   bool is_flag_error() { return flag_error; }
+  string& get_error_dentry() { return error_dentry; }
 
   // these index _arguments_ are aligned to the inodes.
   CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
@@ -96,7 +98,7 @@ class MDiscoverReply : public Message {
   }
 
   void set_flag_forward() { flag_forward = true; }
-  void set_flag_error() { flag_error = true; }
+  void set_flag_error(string& dn) { flag_error = true; error_dentry = dn; }
 
 
   // ...
@@ -112,6 +114,8 @@ class MDiscoverReply : public Message {
     off += sizeof(bool);
     r.copy(off, sizeof(bool), (char*)&flag_error);
     off += sizeof(bool);
+	error_dentry = r.c_str() + off;
+	off += error_dentry.length() + 1;
     
     // dirs
     int n;
@@ -145,6 +149,8 @@ class MDiscoverReply : public Message {
 	r.append((char*)&no_base_dentry, sizeof(bool));
 	r.append((char*)&flag_forward, sizeof(bool));
 	r.append((char*)&flag_forward, sizeof(bool));
+	r.append((char*)error_dentry.c_str());
+	r.append((char)0);
 
 	// dirs
     int n = dirs.size();

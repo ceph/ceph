@@ -322,6 +322,17 @@ void MDS::handle_ping(MPing *m)
 }
 
 
+void MDS::reply_request(MClientRequest *req, int r)
+{	
+  // send error
+  messenger->send_message(new MClientReply(req, r),
+						  MSG_ADDR_CLIENT(req->get_client()), 0,
+						  MDS_PORT_SERVER);
+  
+  // discard request
+  delete req;
+}
+
 int MDS::handle_client_request(MClientRequest *req)
 {
   dout(10) << "req " << *req << endl;
@@ -365,14 +376,8 @@ int MDS::handle_client_request(MClientRequest *req)
 	  r == -ENOTDIR ||
 	  r == -EISDIR) {
 	// error! 
-	dout(10) << "error, replying" << endl;
-	MClientReply *reply = new MClientReply(req, r);
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	
-	// discard request
-	delete req;
+	dout(10) << " path traverse error " << r << ", replying" << endl;
+	reply_request(req, r);
 	return 0;
   }
 
@@ -829,11 +834,7 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 	
 	// send error response
 	dout(7) << "handle_client_openwrc error " << r << " replying to client" << endl;
-	MClientReply *reply = new MClientReply(req, r);
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	delete req;
+	reply_request(req, r);
 	return;
   }
 
@@ -879,9 +880,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
   // regular files only
   if (in->is_dir()) {
 	dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << endl;
-	messenger->send_message(new MClientReply(req, -EISDIR),
-							MSG_ADDR_CLIENT(req->get_client()), 0, MDS_PORT_SERVER);
-	delete req;
+	reply_request(req, -EISDIR);
 	return;
   }
   
@@ -942,13 +941,7 @@ void MDS::handle_client_mkdir(MClientRequest *req)
   if (r > 0) return;  // forwarded
   if (r < 0) {
 	dout(10) << "error, replying" << endl;
-	MClientReply *reply = new MClientReply(req, r);
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	
-	// discard request
-	delete req;
+	reply_request(req, r);
 	return;
   }
 
@@ -962,13 +955,7 @@ void MDS::handle_client_mkdir(MClientRequest *req)
   if (dir->lookup(name) != 0) {
 	// name already exists
 	dout(10) << "name " << name << " exists in " << *dir << endl;
-	MClientReply *reply = new MClientReply(req, -EEXIST);
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	
-
-	delete req;
+	reply_request(req, -EEXIST);
 	return;
   }
 
@@ -986,13 +973,12 @@ void MDS::handle_client_mkdir(MClientRequest *req)
 					  new C_MDS_RetryMessage(this, req));
 
   // reply
-  MClientReply *reply = new MClientReply(req);
-  messenger->send_message(reply,
-						  MSG_ADDR_CLIENT(req->get_client()), 0,
-						  MDS_PORT_SERVER);
-  delete req;
+  reply_request(req, 0);
   return;
 }
+
+
+
 
 
 /*
@@ -1009,86 +995,138 @@ void MDS::handle_client_rename(MClientRequest *req,
 	// forward
 	dout(10) << "handle_client_rename " << *cur << "  not auth, forwarding" << endl;
 	int auth = cur->authority();
-	assert(auth != mdcluster->get_nodeid());
+	assert(auth != get_nodeid());
 	messenger->send_message(req,
 							MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
 							MDS_PORT_SERVER);
 	return;
   }
 
-  dout(10) << "handle_client_rename " << *cur << " to " << cur->get_arg() << endl;
+  dout(10) << "handle_client_rename " << *cur << " to " << req->get_arg() << endl;
 
   // find the destination.
   // discover, etc. on the way.. get just it on the local node.
-  filepath dirpath = cur->get_arg(); 
-  // ** FIXME? relative destination path???
+  filepath destpath = req->get_arg(); 
+  // FIXME? relative destination path???
   vector<CInode*> trace;
-  int r = mdcache->path_traverse(dirpath, trace, req, MDS_TRAVERSE_DISCOVER);
-
+  int r = mdcache->path_traverse(destpath, trace, req, MDS_TRAVERSE_DISCOVER);
+  dout(12) << " r = " << r << " trace size " << trace.size() << "  destpath depth " << destpath.depth() << endl;
   string name;
   CDir *destdir = 0;
 
   // what is the dest?  (dir or file or complete filename)
-  if (trace.size() == dirpath.depth()) {
+  // note: trace includes root, destpath doesn't (include leading /)
+  if (trace.size() == destpath.depth()+1) {
 	CInode *d = trace[trace.size()-1];
 	if (d->is_dir()) {
 	  // mv some/thing /to/some/dir 
 	  destdir = d->get_or_open_dir(this);  // /to/some/dir
-	  name = cur->get_file_path().last();  // thing
+	  name = req->get_filepath().last_bit();  // thing
 	} else {
 	  // mv some/thing /to/some/existing_filename
-	  destdir = trace[trace.size()-2]->get_or_open_dir();  // /to/some
-	  name = dirpath.last();                               // existing_filename
+	  destdir = trace[trace.size()-2]->get_or_open_dir(this);  // /to/some
+	  name = destpath.last_bit();                               // existing_filename
 	}
   }
-  else if (trace.size() == dirpath.depth() - 1) {
+  else if (trace.size() == destpath.depth()) {
 	CInode *d = trace[trace.size()-1];
 	if (d->is_dir()) {
 	  // mv some/thing /to/some/place_that_dne
 	  destdir = d->get_or_open_dir(this);   // /to/some
-	  name = cur->get_file_path().last();   // place_that_dne
+	  name = destpath.last_bit();   // place_that_dne
 	}
   }
   else {
-	assert(trace.size() < dirpath.depth()-1);
+	assert(trace.size() < destpath.depth());
 	// check traverse return value
 	if (r > 0) return;  // discover, readdir, etc.
-	assert(r < 0);  // musta been an error
+	assert(r < 0 || trace.size() <= 1);  // musta been an error
 
 	// error out
-	dout(7) << "rename " << *cur << " dest " << dirpath << " dne" << end;
-	MClientReply *reply = new MClientReply(req, -ENODEST);
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	delete req;
+	dout(7) << " rename dest " << destpath << " dne" << endl;
+	reply_request(req, -EINVAL);
 	return;
   }
 
   // local or remote?
   assert(cur->is_auth());
   int dauth = destdir->dentry_authority(name);
-  if (dauth != mdcluster->get_nodeid()) {
+  if (dauth != get_nodeid()) {
 	dout(7) << "rename has remote dest " << dauth << endl;
 
 	// implement me
-	assert(0);
-	return 0;
+	//assert(0);
+
+	// *** IMPLEMENT ME ***
+
+	dout(7) << "rename " << *cur << " NOT IMPLEMENTED" << endl;
+	reply_request(req, -EINVAL);
+	return;
   }
 
   // file or dir?
   if (cur->is_dir()) {
-	handle_client_rename_dir(req,cur);
+	//handle_client_rename_dir(req,cur);
+	reply_request(req, -EINVAL);  // *** IMPLEMENT ME ****
+	
   } else {
-	handle_client_rename_file(req,cur);
+	handle_client_rename_file(req, cur, destdir, name);
   }
 }
+
+
+/*
+
+locking
+
+if (!locked && flag=renaming)
+(maybe) if (!locked && flag=renamingto)
+
+
+
+basic protocol with replicas:
+
+> Lock    (possibly x2?)
+< LockAck (possibly x2?)
+> Rename
+   src ino
+   dst dir
+   either dst ino (is unlinked)
+       or dst name
+< RenameAck
+   (implicitly unlocks, unlinks, etc.)
+
+*/
+
+
+class C_MDS_RenameFinish : public Context{
+  MDS *mds;
+  MClientRequest *req;
+public:
+  C_MDS_RenameFinish(MDS *mds, MClientRequest *req) {
+	this->mds = mds;
+	this->req = req;
+  }
+  virtual void finish(int r) {
+	MClientReply *reply = new MClientReply(req, r);
+	
+	// include trace?
+	
+	mds->messenger->send_message(reply,
+								 MSG_ADDR_CLIENT(req->get_client()), 0,
+								 MDS_PORT_SERVER);
+	delete req;
+  }
+};
+
 
 void MDS::handle_client_rename_file(MClientRequest *req,
 									CInode *from,
 									CDir *destdir,
-									string name)
+									string& name)
 {
+  bool must_wait_for_lock = false;
+  
   // does destination exist?  (is this an overwrite?)
   CDentry *dn = destdir->lookup(name);
   CInode *oldin = 0;
@@ -1098,76 +1136,107 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	if (oldin->is_dir()) {
 	  // fail!
 	  dout(7) << "dest exists and is dir" << endl;
-	  MClientReply *reply = new MClientReply(req, -EISDIR);
-	  messenger->send_message(reply,
-							  MSG_ADDR_CLIENT(req->get_client()), 0,
-							  MDS_PORT_SERVER);
-	  delete req;
+	  reply_request(req, -EISDIR);
 	  return;
 	}
 
+	dout(7) << "dest " << name << " exists " << *oldin << endl;
+
 	// lock dest?
-	if (!oldin->test_state(CINODE_STATE_RENAMINGTO)) {
-	  if (write_hard_start(oldin, req) == false) {
-		// wait
-		dout(7) << "dest/overwrite " << *oldin << " locking, waiting" << endl;
+	if (!oldin->state_test(CINODE_STATE_RENAMINGTO)) {
+	  // can't be presync/lock
+	  if (oldin->is_presync() || oldin->is_prelock()) {
+		dout(7) << "dest/overwrite " << *oldin << " presync/prelock, waiting" << endl;
+		oldin->add_waiter(oldin->is_presync() ? CINODE_WAIT_SYNC:CINODE_WAIT_LOCK,
+						  new C_MDS_RetryMessage(this, req));
 		return;
 	  }
 
-	  oldin->set_state(CINODE_STATE_RENAMINGTO); // only lock once!
-	  cout << "locked destinode " << *oldin << endl;
+	  if (mdcache->write_hard_start(oldin, req) == false) {
+		// wait
+		dout(7) << "dest/overwrite " << *oldin << " locking, waiting" << endl;
+		must_wait_for_lock = true;
+	  } else {
+		oldin->state_set(CINODE_STATE_RENAMINGTO); // only lock once!
+		cout << "locked destinode " << *oldin << endl;
+	  }
 	} else {
-	  cout << "already locked destinode " << *oldin << endl;
+	  if (oldin->is_prelock())
+		must_wait_for_lock = true;
+	  else
+		cout << "already locked destinode " << *oldin << endl;
 	}
   }
 
   // lock source?
-  if (!from->test_state(CINODE_STATE_RENAMING)) {
-	if (write_hard_state(from, req) == false) {
-	  // wait
-	  dout(7) << "from " << *from << " locking, waiting" << endl;
-	  from->add_waiter(CINODE_WAIT_LOCK,
-					   new C_MDS_RetryMessage(this, req));
+  if (!from->state_test(CINODE_STATE_RENAMING)) {
+	// can't be presync/lock
+	if (from->is_presync() || from->is_prelock()) {
+	  dout(7) << "dest/overwrite " << *from << " presync/prelock, waiting" << endl;
+	  from->add_waiter(from->is_presync() ? CINODE_WAIT_SYNC:CINODE_WAIT_LOCK,
+						new C_MDS_RetryMessage(this, req));
 	  return;
 	}
 
-	from->set_state(CINODE_STATE_RENAMING); // only lock once
-	cout << "locked srcinode " << *from << endl;
-  } else {
-	cout << "already locked srcinode " << *from << endl;
-  }
-
-  // ...
-  if (from->is_cached_by_anyone()) {
-	
-  } else {
-	// src not replicated
-	if (oldin && oldin->is_cached_by_anyone()) {
-	  // dst replicated
-	  
+	if (mdcache->write_hard_start(from, req) == false) {
+	  // wait
+	  dout(7) << "from " << *from << " locking, waiting" << endl;
+	  must_wait_for_lock = true;
 	} else {
-	  // dst not replicated, or dne
-	  // local rename, easy!
-	  cout << "local rename" << endl;
-
-	  if (oldin) {
-		// unlink old guy first
-		inode_unlink( oldin, NULL ); // waiter unnec; this is imm
-		                             // bc oldin not replicated
-		// *FIXME use waiter, combine w/ dst replicated case ******
-	  }
-	  mdcache->rename_file(from, destdir, name);
+	  from->state_set(CINODE_STATE_RENAMING); // only lock once
+	  cout << "locked srcinode " << *from << endl;
 	}
+  } else {
+	if (from->is_prelock())
+	  must_wait_for_lock = true;
+	else
+	  cout << "already locked srcinode " << *from << endl;
   }
+
+  if (must_wait_for_lock)
+	return;
+
+  // ok go!
+  mdcache->file_rename(from, destdir, name, oldin, 
+					   new C_MDS_RenameFinish(this, req));
 }
 
+
+/*
 void MDS::handle_client_rename_dir(MClientRequest *req,
 									CInode *from,
 									CDir *destdir,
 									string name)
 {
-}
 
+  // ...
+
+
+  // make sure dest isn't nested under src
+  CDir *td = destdir;
+  while (td) {
+	if (from->dir == td) {
+	  // error out
+	  dout(7) << " dest " << *destdir << " nested under src " << *from << endl;
+	  reply_request(req, -EINVAL);
+	  return;
+	}
+	td = td->get_parent_dir();
+  }
+  
+
+
+  // ..
+
+  // ok do it
+  mdcache->rename_dir(from, destdir, name);
+
+
+
+  
+
+}
+*/
 
 
 // WRITE ME

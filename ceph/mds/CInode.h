@@ -126,6 +126,10 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: handle_export_dir_warning
     // triggers: handle_export_dir_notify
 
+#define CINODE_WAIT_RENAME        32768
+    // waiters: file_rename
+    // triggers: file_rename_finish
+
 #define CINODE_WAIT_ANY           0xffffff
 
 
@@ -137,6 +141,9 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_STATE_UNLINKING  16
 #define CINODE_STATE_PROXY      32   // can't expire yet
 #define CINODE_STATE_EXPORTING  64   // on nonauth bystander.
+
+#define CINODE_STATE_RENAMING   128  // moving me
+#define CINODE_STATE_RENAMINGTO 256  // rename target (will be unlinked)
 
 
 // misc
@@ -199,8 +206,10 @@ class CInode : LRUObject {
   bool             sync_replicawantback;  // avoids sticky sync
 
   set<int>         unlink_waiting_for_ack;
+  set<int>         rename_waiting_for_ack;
 
   int              dangling_auth;         // explicit auth when dangling.
+
 
   // waiters
   multimap<int,Context*>  waiting;

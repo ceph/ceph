@@ -76,7 +76,6 @@ void Client::dispatch(Message *m)
 
 	// basic stuff
   case MSG_CLIENT_REPLY:
-	dout(9) << "got reply" << endl;
 	assim_reply((MClientReply*)m);
 
 	if (tid < max_requests)
@@ -187,10 +186,11 @@ void Client::done() {
 
 void Client::assim_reply(MClientReply *r)
 {
-  if (r->get_result() < 0) {
-	dout(12) << "error" << endl;
+  if (r->get_result() != 0) {
+	dout(12) << "error " << r->get_result() << endl;
 	return;
   }
+  dout(10) << "success" << endl;
 
 
   // closed a file?
@@ -363,6 +363,7 @@ void Client::trim_cache()
 	  break;  // out of things to expire!
 	
 	dout(12) << "expiring inode " << i->ino << endl;
+	assert(i->refs == 0);
 	detach_node(i);
 	remove_node(i);
 	expired++;
@@ -427,6 +428,7 @@ void Client::issue_request()
 	cwd->full_path(p,last_req_dn);
   } 
   
+  string arg;
   if (!op) {
 	int r = rand() % 100;
 	op = MDS_OP_STAT;
@@ -461,6 +463,17 @@ void Client::issue_request()
 	  else if (!g_conf.client_deterministic &&
 			   r < 35 && !cwd->isdir)
 		op = MDS_OP_UNLINK;
+	  else if (!g_conf.client_deterministic &&
+			   r < 100 && !cwd->isdir) {
+		op = MDS_OP_RENAME;
+		char s[100];
+		sprintf(s,"rename.%d", rand() % 50);
+		string ss = s;
+		filepath p1 = p;
+		filepath p2 = p1.subpath(p1.length() - 1);
+		p2.add_dentry(ss);
+		arg = p2.get_path();
+	  }
 	  else if (false && !g_conf.client_deterministic &&
 			   r < 37 && cwd->isdir) {
 		op = MDS_OP_MKDIR;
@@ -484,7 +497,7 @@ void Client::issue_request()
 	}
   }
 
-  send_request(p, op);  // root, if !cwd
+  send_request(p, op, arg);  // root, if !cwd
 }
 
 
@@ -520,12 +533,13 @@ void Client::close_a_file()
 						  0);
 }
 
-void Client::send_request(string& path, int op) 
+void Client::send_request(string& path, int op, string& arg) 
 {
 
   MClientRequest *req = new MClientRequest(tid++, op, whoami);
   req->set_ino(1);
   req->set_path(path);
+  req->set_arg(arg);
 
   // direct it
   int mds = 0;
