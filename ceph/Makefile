@@ -3,10 +3,10 @@ CC=g++
 CFLAGS=-D __gnu_cxx=std -g
 
 SRCS=*.cc
-OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o mds.o osd.o Messenger.o FakeMessenger.o
+OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o mds.o osd.o Messenger.o FakeMessenger.o LogStream.o MDLog.o
+TARGETS=test import
 
-
-all: depend test import
+all: depend ${TARGETS}
 
 
 test: test.cc pmds.o
@@ -15,6 +15,8 @@ test: test.cc pmds.o
 import: pmds.o import.cc
 	${CC} ${CFLAGS} pmds.o import.cc -o import
 
+clean:
+	rm *.o ${TARGETS}
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $<

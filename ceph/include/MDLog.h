@@ -1,10 +1,9 @@
-
 #ifndef __MDLOG_H
 #define __MDLOG_H
 
 /*
 
-Things that go in the MDS log:
+hmm, some things that go in the MDS log:
 
 
 prepare + commit versions of many of these?
@@ -22,18 +21,47 @@ prepare + commit versions of many of these?
 
 */
 
+#include "Context.h"
+
+#include <list>
+
+using namespace std;
+
+class LogStream;
+class LogEvent;
 
 class MDLog {
  protected:
-
   
+  size_t num_events; // in events
+  size_t max_events;
+
+  LogStream *reader;
+  LogStream *writer;
+  
+  list<LogEvent*> trimming;  // events currently being trimmed
   
  public:
+  MDLog();
+  ~MDLog();
   
-  void submit_entry( MDLogEntry *e,
+  void set_max_events(size_t max) {
+	max_events = max;
+  }
+  size_t get_max_events() {
+	return max_events;
+  }
+  size_t get_num_events() {
+	return num_events;
+  }
+
+  int submit_entry( LogEvent *e,
 					 Context *c );
   
-  void trim();
+  int trim(Context *c);
+  int trim_2(LogEvent *e, Context *c);
 
 
 };
+
+#endif

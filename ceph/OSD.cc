@@ -76,15 +76,15 @@ int osd_read_all(int osd, object_t oid, void **bufptr, size_t *buflen, Context *
 
 // -- osd_write
 
-int osd_write(int osd, object_t oid, size_t len, size_t offset, void *buf, Context *c)
+int osd_write(int osd, object_t oid, size_t len, size_t offset, void *buf, int flags, Context *c)
 {
   // fake it
   char *f = get_filename(osd,oid);
-  int fd = open(f, O_WRONLY|O_CREAT);
+  int fd = open(f, O_RDWR|O_CREAT|flags);
   if (fd < 0 && errno == 2) {  // create dir and retry
 	mkdir(get_dir(osd), 0755);
 	cout << "mkdir errno " << errno << " on " << get_dir(osd) << endl;
-	fd = open(f, O_WRONLY|O_CREAT);
+	fd = open(f, O_RDWR|O_CREAT|flags);
   }
   if (fd < 0) {
 	cout << "err opening " << f << " " << errno << endl;

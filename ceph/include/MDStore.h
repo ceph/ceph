@@ -26,7 +26,11 @@ bool fetch_inode( mdloc_t where,
   */
   bool fetch_dir( CInode *in,
 				  Context *c );
-  bool fetch_dir_2( int result, char *buf, size_t buflen, CInode *in, Context *c );
+  bool fetch_dir_2( int result, 
+					char *buf, 
+					size_t buflen, 
+					CInode *in, 
+					Context *c );
   
   
   
@@ -34,7 +38,8 @@ bool fetch_inode( mdloc_t where,
 				   Context *c );
   bool commit_dir_2( int result,
 					 CInode *in,
-					 Context *c );
+					 Context *c,
+					 __uint64_t committed_version );
   
   
   // process a message

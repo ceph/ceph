@@ -1,0 +1,10 @@
+
+
+
+class LogStream {
+
+
+  off_t seek(off_t offset);
+  LogEvent *read_next();
+
+};

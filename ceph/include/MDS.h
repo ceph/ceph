@@ -10,21 +10,12 @@
 
 
 class CInode;
-
-//#include "MDCache.h"
 class DentryCache;
-
-
-//#include "MDStore.h"
 class MDStore;
-
-
-//#include "Messenger.h"
+class MDLog;
 class Messenger;
 class Message;
 
-//#include "MDLog.h"
-//#include "MDBalancer.h"
 
 using namespace std;
 
@@ -46,10 +37,10 @@ class MDS {
   // sub systems
   DentryCache  *mdcache;    // cache
   MDStore      *mdstore;    // storage interface
-  Messenger  *messenger;    // message processing
+  Messenger    *messenger;    // message processing
 
-  //MDLog      *logger;
-  //MDBalancer *balancer;
+  MDLog        *logger;
+  //MDBalancer   *balancer;
  
 
 

@@ -55,8 +55,10 @@ void CDir::dump(int depth) {
 	iter++;
   }
 
-  if (!complete) 
+  if (!(state & CDIR_MASK_COMPLETE))
 	cout << ind << "..." << endl;
+  if (state & CDIR_MASK_DIRTY)
+	cout << ind << "[dirty]" << endl;
 
 }
 
