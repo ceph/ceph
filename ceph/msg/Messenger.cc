@@ -21,6 +21,19 @@ using namespace std;
 #include "messages/MClientReply.h"
 
 #include "messages/MDirUpdate.h"
+#include "messages/MDiscover.h"
+
+#include "messages/MExportDir.h"
+#include "messages/MExportDirAck.h"
+#include "messages/MExportDirNotify.h"
+#include "messages/MExportDirPrep.h"
+#include "messages/MExportDirPrepAck.h"
+
+#include "messages/MHeartbeat.h"
+
+#include "messages/MInodeUpdate.h"
+#include "messages/MInodeExpire.h"
+
 
 Message *
 Messenger::decode(crope& ser)
@@ -70,8 +83,48 @@ Messenger::decode(crope& ser)
 	m = new MDirUpdate();
 	break;
 
-	
+  case MSG_MDS_DISCOVER:
+	m = new MDiscover();
+	break;
+
+  case MSG_MDS_EXPORTDIR:
+	m = new MExportDir();
+	break;
+
+  case MSG_MDS_EXPORTDIRACK:
+	m = new MExportDirAck();
+	break;
+
+  case MSG_MDS_EXPORTDIRNOTIFY:
+	m = new MExportDirNotify();
+	break;
+
+  case MSG_MDS_EXPORTDIRPREP:
+	m = new MExportDirPrep();
+	break;
+
+  case MSG_MDS_EXPORTDIRPREPACK:
+	m = new MExportDirPrepAck();
+	break;
+
+  case MSG_MDS_HEARTBEAT:
+	m = new MHeartbeat();
+	break;
+
+  case MSG_MDS_INODEUPDATE:
+	m = new MInodeUpdate();
+	break;
+
+  case MSG_MDS_INODEEXPIRE:
+	m = new MInodeExpire();
+	break;
+
 	// -- simple messages without payload --
+
+  case MSG_MDS_SHUTDOWNSTART:
+  case MSG_MDS_SHUTDOWNFINISH:
+	m = new Message(type);
+	break;
 
   default:
 	dout(1) << "can't decode unknown message type " << type << endl;

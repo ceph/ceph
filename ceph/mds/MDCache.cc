@@ -133,6 +133,8 @@ bool MDCache::trim(__int32_t max) {
 	if (idir) {
 	  // dir incomplete!
 	  idir->dir->state_clear(CDIR_MASK_COMPLETE);
+
+	  // reexport?
 	  if (imports.count(idir) &&                // import
 		  idir->dir->get_size() == 0 && // no children
 		  !idir->is_root() &&                   // not root
@@ -143,9 +145,11 @@ bool MDCache::trim(__int32_t max) {
 		// comment this out ot wreak havoc?
 		if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
 
-		// it's an empty import!
-		dout(7) << "trimmed parent dir is an import; rexporting to " << dest << endl;
-		export_dir( idir, dest );
+		if (dest != mds->get_nodeid()) {
+		  // it's an empty import!
+		  dout(7) << "trimmed parent dir is an import; rexporting to " << dest << endl;
+		  export_dir( idir, dest );
+		}
 	  }
 	} else {
 	  dout(7) << " that was root!" << endl;
@@ -165,6 +169,8 @@ bool MDCache::shutdown_pass()
   //assert(mds->is_shutting_down());
   if (mds->is_shut_down()) {
 	cout << " already shut down" << endl;
+	show_cache();
+	show_imports();
 	return true;
   }
 
@@ -210,8 +216,7 @@ bool MDCache::shutdown_pass()
 								 0, MDS_PORT_MAIN, MDS_PORT_MAIN);
 	return true;
   } else {
-	show_cache();
-	show_imports();
+
   }
   return false;
 }
@@ -320,6 +325,7 @@ int MDCache::open_root(Context *c)
 	// make it up (FIXME)
 	root->inode.mode = 0755;
 	root->inode.size = 0;
+	root->inode.touched = 0;
 
 	root->dir = new CDir(root);
 	root->dir_auth = 0;  // me!
@@ -644,7 +650,7 @@ int MDCache::path_traverse(string& path,
 
 		  if (onfail == MDS_TRAVERSE_DISCOVER) {
 			// discover
-			dout(7) << "mds" << whoami << " discover on " << have_clean << " for " << dname << "..., to mds" << dauth << endl;
+			dout(7) << " discover on " << *cur << " for " << dname << "..., to mds" << dauth << endl;
 
 			// assemble+send request
 			vector<string> *want = new vector<string>;
@@ -666,7 +672,7 @@ int MDCache::path_traverse(string& path,
 		  } 
 		  if (onfail == MDS_TRAVERSE_FORWARD) {
 			// forward
-			dout(7) << "mds" << whoami << " not authoritative for " << dname << ", fwd to mds" << dauth << endl;
+			dout(7) << " not authoritative for " << dname << ", fwd to mds" << dauth << endl;
 			mds->messenger->send_message(req,
 										 MSG_ADDR_MDS(dauth), req->get_dest_port(),
 										 req->get_dest_port());
@@ -811,7 +817,11 @@ int MDCache::handle_discover(MDiscover *dis)
 	
 	// this is a request
 	if (!root) {
-	  open_root(new C_MDS_RetryMessage(mds, dis));
+	  //open_root(new C_MDS_RetryMessage(mds, dis));
+	  dout(7) << "don't have root, just sending to mds0" << endl;
+	  mds->messenger->send_message(dis,
+								   MSG_ADDR_MDS(0), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
 	  return 0;
 	}
 
@@ -843,7 +853,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	  if (!cur->dir) cur->dir = new CDir(cur);
 	  
 	  if (cur->dir->is_frozen()) {
-		dout(7) << "mds" << whoami << " dir " << *cur << " is frozen, waiting" << endl;
+		dout(7) << " dir " << *cur << " is frozen, waiting" << endl;
 		cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(mds, dis));
 		return 0;
 	  }
@@ -932,11 +942,11 @@ int MDCache::send_inode_updates(CInode *in)
 
 void MDCache::handle_inode_update(MInodeUpdate *m)
 {
-  CInode *in = get_inode(m->inode.ino);
+  CInode *in = get_inode(m->get_inode().ino);
   if (!in) {
-	dout(7) << "got inode_update on " << m->inode.ino << ", don't have it, sending expire" << endl;
+	dout(7) << "got inode_update on " << m->get_inode().ino << ", don't have it, sending expire" << endl;
 
-	mds->messenger->send_message(new MInodeExpire(m->inode.ino, mds->get_nodeid(), true),
+	mds->messenger->send_message(new MInodeExpire(m->get_inode().ino, mds->get_nodeid(), true),
 								 m->get_source(), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	
@@ -953,9 +963,9 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   // update!
   dout(7) << "got inode_update on " << *in << endl;
 
-  in->inode = m->inode;
-  in->cached_by = m->cached_by;
-  in->dir_auth = m->dir_auth;
+  in->inode = m->get_inode();
+  in->cached_by = m->get_cached_by();
+  in->dir_auth = m->get_dir_auth();
 
   // done
   delete m;
@@ -963,12 +973,12 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 
 void MDCache::handle_inode_expire(MInodeExpire *m)
 {
-  CInode *in = get_inode(m->ino);
-  int from = m->from;
+  CInode *in = get_inode(m->get_ino());
+  int from = m->get_from();
   int auth;
 
   if (!in) {
-	dout(7) << "got inode_expire on " << m->ino << " from " << m->from << ", don't have it" << endl;
+	dout(7) << "got inode_expire on " << m->get_ino() << " from " << from << ", don't have it" << endl;
 	  
 	goto forward;
   }
@@ -998,15 +1008,18 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
 
   // ---------
  forward:
-  if (m->soft) {
-	dout(7) << "got (soft) inode_expire on " << m->ino << " from " << m->from << ", dropping" << endl;
+  if (m->is_soft()) {
+	dout(7) << "got (soft) inode_expire on " << m->get_ino() << " from " << from << ", dropping" << endl;
 	goto out;
   }
 
-  if (m->hops > mds->get_cluster()->get_num_mds()) {
-	assert(0);
+  if (m->get_hops() > mds->get_cluster()->get_num_mds()) {
+	dout(5) << "dropping on floor." << endl;
+	//assert(0);
+	goto out;
   } else {
-	dout(7) << "got inode_expire on " << m->ino << " from mds" << from << ", fwding on, hops so far " << m->hops++ << endl;
+	dout(7) << "got inode_expire on " << m->get_ino() << " from mds" << from << ", fwding on, hops so far " << m->get_hops() << endl;
+	m->add_hop();
 	int next = mds->get_nodeid() + 1;
 	if (next >= mds->get_cluster()->get_num_mds()) next = 0;
 	mds->messenger->send_message(m,
@@ -1206,7 +1219,7 @@ public:
 
 
   virtual void finish(int r) {
-	if (r == 0) { // success
+	if (r >= 0) { // success
 	  // redelegate
 	  list<Context*>::iterator it;
 	  for (it = will_redelegate.begin(); it != will_redelegate.end(); it++) {
@@ -1272,7 +1285,7 @@ void MDCache::export_dir(CInode *in,
 
 void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
 {
-  CInode *in = get_inode(m->ino);
+  CInode *in = get_inode(m->get_ino());
   assert(in);
 
   dout(7) << "export_dir_prep_ack " << *in << ", releasing hard_pin" << endl;
@@ -1410,6 +1423,8 @@ void MDCache::export_dir_walk(MExportDir *req,
   for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
 	CInode *in = it->second->inode;
 
+	in->version++;  // so log entries are ignored, etc.
+
 	// dentry
 	dir_rope.append( it->first.c_str(), it->first.length()+1 );
 
@@ -1420,6 +1435,12 @@ void MDCache::export_dir_walk(MExportDir *req,
 	istate.popularity = in->popularity;
 	//istate.ref = in->ref;
 	istate.ncached_by = in->cached_by.size();
+
+	if (in->is_dirty()) {
+	  istate.dirty = true;
+	  in->mark_clean();
+	} else 
+	  istate.dirty = false;
 
 	if (in->is_dir()) {
 	  istate.dir_auth = in->dir_auth;
@@ -1473,7 +1494,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 void MDCache::handle_export_dir_ack(MExportDirAck *m)
 {
   // exported!
-  CInode *in = mds->mdcache->get_inode(m->ino);
+  CInode *in = mds->mdcache->get_inode(m->get_ino());
   int newauth = m->get_source();
 
   dout(7) << "export_dir_ack " << *in << endl;
@@ -1537,14 +1558,14 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
 
 void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 {
-  dout(7) << "handle_export_dir_prep on " << m->path << endl;
+  dout(7) << "handle_export_dir_prep on " << m->get_path() << endl;
 
   assert(m->get_source() != mds->get_nodeid());
 
   // must discover it!
   vector<CInode*> trav;
 
-  int r = path_traverse(m->path, trav, m, MDS_TRAVERSE_DISCOVER);   
+  int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_DISCOVER);   
   if (r > 0)
 	return;  // did something
   
@@ -1566,7 +1587,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 
 void MDCache::handle_export_dir(MExportDir *m)
 {
-  CInode *in = get_inode(m->ino);
+  CInode *in = get_inode(m->get_ino());
   int oldauth = m->get_source();
   assert(in);
   
@@ -1575,8 +1596,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   show_imports();
 
   mds->logger->inc("im");
-  in->dir->hard_unpin();  
-  in->get(CINODE_PIN_IMPORTING);  // pin for the (non-blocking) import process only.
+  //in->get(CINODE_PIN_IMPORTING);  // pin for the (non-blocking) import process only.
 
   if (!in->dir) in->dir = new CDir(in);
 
@@ -1611,10 +1631,12 @@ void MDCache::handle_export_dir(MExportDir *m)
 	containing_import = in;  // imported exports nested under *in
   }
 
+  list<Context*> waiting_on_imported;  // waiters (discovers usually) on dirs i'm importing
+
   // add this crap to my cache
-  const char *p = m->state.c_str();
-  for (int i = 0; i < m->ndirs; i++) 
-	import_dir_block(p, containing_import, oldauth);
+  const char *p = m->get_state().c_str();
+  for (int i = 0; i < m->get_ndirs(); i++) 
+	import_dir_block(p, containing_import, oldauth, waiting_on_imported);
   
   // can i simplify dir_auth?
   if (in->authority(mds->get_cluster()) == in->dir_auth)
@@ -1623,7 +1645,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   // ignore "frozen" state of the main dir; it's from the authority
   in->dir->state_clear(CDIR_MASK_FROZEN);
 
-  double newpop = m->ipop - in->popularity.get();
+  double newpop = m->get_ipop() - in->popularity.get();
   dout(7) << " imported popularity jump by " << newpop << endl;
   if (newpop > 0) {  // duh
 	CInode *t = in;
@@ -1656,17 +1678,35 @@ void MDCache::handle_export_dir(MExportDir *m)
 
   }
 
-  in->put(CINODE_PIN_IMPORTING);   // import done, unpin.
-  
+  //in->put(CINODE_PIN_IMPORTING);   // import done, unpin.
+  in->dir->hard_unpin();  
+
+  dout(5) << "done with import!" << endl;
   show_imports();
   mds->logger->set("nex", exports.size());
   mds->logger->set("nim", imports.size());
 
   // done
   delete m;
+
+
+  // finish contexts
+  dout(5) << "finishing any waiters on imported data" << endl;
+  for (list<Context*>::iterator it = waiting_on_imported.begin();
+	   it != waiting_on_imported.end();
+	   it++) {
+	Context *c = *it;
+	if (c) {
+	  c->finish(0);
+	  delete c;
+	}
+  }
 }
 
-void MDCache::import_dir_block(pchar& p, CInode *containing_import, int oldauth)
+void MDCache::import_dir_block(pchar& p, 
+							   CInode *containing_import, 
+							   int oldauth,
+							   list<Context*>& waiting_on_imported)
 {
   // set up dir
   Dir_Export_State_t *dstate = (Dir_Export_State_t*)p;
@@ -1686,6 +1726,11 @@ void MDCache::import_dir_block(pchar& p, CInode *containing_import, int oldauth)
 	idir->dir->dir_rep_by.insert( *((int*)p) );
 	p += sizeof(int);
   }
+
+  // take all waiters on this dir
+  // NOTE: a pass of imported data is guaranteed to get all of my waitiers because
+  // a replica's presense in my cache implies/forces it's presense in authority's.
+  idir->dir->take_waiting(waiting_on_imported);  
 
   // contents
   for (long nitems = dstate->nitems; nitems>0; nitems--) {
@@ -1712,6 +1757,9 @@ void MDCache::import_dir_block(pchar& p, CInode *containing_import, int oldauth)
 	// update inode state with authoritative info
 	in->version = istate->version;
 	in->popularity = istate->popularity;
+
+	if (istate->dirty)
+	  in->mark_dirty();
 	
 	p += sizeof(*istate);
 	
@@ -1775,10 +1823,23 @@ void MDCache::import_dir_block(pchar& p, CInode *containing_import, int oldauth)
 
 void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 {
-  dout(7) << "handle_export_dir_notify on " << m->path << " new_auth " << m->new_auth << endl;
+  dout(7) << "handle_export_dir_notify on " << m->get_path() << " new_auth " << m->get_new_auth() << endl;
   
+  if (mds->is_shut_down() ||
+	  root == NULL) {
+	if (mds->get_nodeid() != 0) {
+	  dout(5) << "i don't even have root; sending to mds0" << endl;
+	  mds->messenger->send_message(m,
+								   0, MDS_PORT_CACHE, MDS_PORT_CACHE);
+	} else {
+	  dout(5) << "wtf, i'm shut down. " << endl;
+	  delete m;
+	}
+	return;
+  }
+
   vector<CInode*> trav;
-  int r = path_traverse(m->path, trav, m, MDS_TRAVERSE_FORWARD);  
+  int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_FORWARD);  
   if (r != 0) {
 	dout(7) << " fwd or freeze or something" << endl;
 	return;
@@ -1797,9 +1858,11 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
   }
 
   // yay, we're the authority
-  dout(7) << "handle_export_dir_notify on " << *in << " new_auth " << m->new_auth << " updated, telling replicas" << endl;
+  dout(7) << "handle_export_dir_notify on " << *in << " new_auth " << m->get_new_auth() << " updated, telling replicas" << endl;
 
-  in->dir_auth = m->new_auth;
+  assert(in->dir_auth != mds->get_nodeid());  // not already mine, or weirdness
+
+  in->dir_auth = m->get_new_auth();
   send_inode_updates(in);
   
   // done

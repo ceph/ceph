@@ -44,6 +44,7 @@ class MClientRequest : public Message {
 	crope r;
 	r.append((char*)&st, sizeof(st));
 	r.append(path.c_str());
+	r.append((char)0);
 	return r;
   }
 };
@@ -53,7 +54,7 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
 	  << "." << req.get_tid() 
 	  << ":" << req.get_op();
   if (req.get_path().length()) 
-	out << "@" << req.get_path();
+	out << "_" << req.get_path();
   return out;
 }
 

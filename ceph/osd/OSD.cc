@@ -79,10 +79,17 @@ void OSD::dispatch(Message *m)
 
 
 char fn[100];
+char fn2[100];
 char *get_filename(int osd, object_t oid) 
 {
   sprintf(fn, "%s/%d/%d", osd_base_path, osd, oid);
   return fn;
+
+}
+char *get_filename2(int osd, object_t oid) 
+{
+  sprintf(fn2, "%s/%d/%d.tmp", osd_base_path, osd, oid);
+  return fn2;
 }
 
 char dir[100];
@@ -133,7 +140,7 @@ void OSD::read(MOSDRead *r)
 	reply = new MOSDReadReply(r, buf, got);
 
 	// free buffer
-	delete buf;
+	delete[] buf;
   }
 
   // send it
@@ -147,7 +154,11 @@ void OSD::write(MOSDWrite *m)
 {
   MOSDWriteReply *reply;
   
-  char *f = get_filename(whoami, m->get_oid());
+  char *f;
+  if (m->get_offset() == 0)
+	f = get_filename2(whoami, m->get_oid());   // HACK HACK
+  else 
+	f = get_filename(whoami, m->get_oid());
   int fd = open(f, O_RDWR|O_CREAT|m->get_flags());
   if (fd < 0 && errno == 2) {  // create dir and retry
 	mkdir(get_dir(whoami), 0755);
@@ -176,6 +187,11 @@ void OSD::write(MOSDWrite *m)
 
 	// reply
 	reply = new MOSDWriteReply(m, wrote);
+  }
+
+  if (m->get_offset() == 0) {
+	char *n = get_filename(whoami, m->get_oid());
+	//cout << f << " to " << n << " rename sez " << rename(f, n) << endl;	
   }
 
   // clean up

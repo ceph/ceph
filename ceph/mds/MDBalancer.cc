@@ -102,7 +102,7 @@ void MDBalancer::send_heartbeat()
 
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  dout(5) << "mds" << mds->get_nodeid() << " got heartbeat " << m->beat << " from " << m->get_source() << " " << m->load << endl;
+  dout(5) << " got heartbeat " << m->get_beat() << " from " << m->get_source() << " " << m->get_load() << endl;
   
   if (!mds->mdcache->get_root()) {
 	dout(10) << "no root on handle" << endl;
@@ -112,13 +112,13 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   
   if (m->get_source() == 0) {
 	dout(10) << " from mds0, new epoch" << endl;
-	beat_epoch = m->beat;
+	beat_epoch = m->get_beat();
 	send_heartbeat();
 
 	mds->mdcache->show_imports();
   }
   
-  mds_load[ m->get_source() ] = m->load;
+  mds_load[ m->get_source() ] = m->get_load();
   //cout << "  load is " << load << " have " << mds_load.size() << endl;
   
   int cluster_size = mds->get_cluster()->get_num_mds();

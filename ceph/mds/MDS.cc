@@ -117,7 +117,6 @@ int MDS::init()
 int MDS::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
-  shutting_down = true;
   for (int i=0; i<mdcluster->get_num_mds(); i++) {
 	if (i == whoami) continue;
 	dout(1) << "sending MShutdownStart to mds" << i << endl;
@@ -126,15 +125,22 @@ int MDS::shutdown_start()
 							MDS_PORT_MAIN);
   }
 
-  mdcache->shutdown_pass();
+  handle_shutdown_start(NULL);
 }
 
 
 void MDS::handle_shutdown_start(Message *m)
 {
   dout(1) << " handle_shutdown_start" << endl;
+
+  // set flag
   shutting_down = true;
-  delete m;
+  
+  // flush log
+  mdlog->set_max_events(0);
+  mdlog->trim(NULL);
+
+  if (m) delete m;
 }
 
 void MDS::handle_shutdown_finish(Message *m)
@@ -290,16 +296,16 @@ void MDS::handle_ping(MPing *m)
 
 int MDS::handle_client_request(MClientRequest *req)
 {
-  dout(10) << " req " << *req << endl;
+  dout(10) << "req " << *req << endl;
 
   if (is_shutting_down()) {
-	dout(5) << "mds" << whoami << " shutting down, discarding client request." << endl;
+	dout(5) << " shutting down, discarding client request." << endl;
 	delete req;
 	return 0;
   }
   
   if (!mdcache->get_root()) {
-	dout(5) << " need open root" << endl;
+	dout(5) << "need to open root" << endl;
 	open_root(new C_MDS_RetryMessage(this, req));
 	return 0;
   }
@@ -360,7 +366,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   //if (mdcache->read_start(cur, req))
   //return 0;   // ugh
 
-  dout(10) << " reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
+  dout(10) << "reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
 
@@ -416,14 +422,14 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	mdcache->send_inode_updates(cur);
 
 	// log it
-	dout(10) << " log for " << *req << " touch " << cur->inode.touched << endl;
+	dout(10) << "log for " << *req << " touch " << cur->inode.touched << endl;
 	mdlog->submit_entry(new EInodeUpdate(cur),
 						new C_MDS_TouchFinish(this, req, cur));
 	return 0;
   } else {
 
 	// forward
-	dout(10) << " forwarding touch to authority " << auth << endl;
+	dout(10) << "forwarding touch to authority " << auth << endl;
 	messenger->send_message(req,
 							MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
 							MDS_PORT_SERVER);
@@ -436,7 +442,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 								CInode *cur)
 {
   // reply
-  dout(10) << "mds" << whoami << " reply to " << *req << " touch" << endl;
+  dout(10) << "reply to " << *req << " touch" << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
@@ -500,7 +506,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 		numfiles++;
 	  }
 	  
-	  dout(10) << " reply to " << *req << " readdir " << numfiles << " files" << endl;
+	  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
 	  reply->set_trace_dist( cur, whoami );
 	  reply->set_result(0);
 

@@ -2,13 +2,14 @@
 #define __MDISCOVER_H
 
 #include "include/Message.h"
+#include "mds/CDir.h"
 
 #include <vector>
 #include <string>
 using namespace std;
 
 
-typedef struct {
+struct MDiscoverRec_t {
   inode_t    inode;
   set<int>   cached_by;
 
@@ -16,7 +17,65 @@ typedef struct {
   int        dir_auth;
   int        dir_rep;
   set<int>   dir_rep_by;
-} MDiscoverRec_t;
+
+  crope _rope() {
+	crope r;
+	r.append((char*)&inode, sizeof(inode));
+
+	int n = cached_by.size();
+	r.append((char*)&n, sizeof(int));
+	for (set<int>::iterator it = cached_by.begin(); 
+		 it != cached_by.end();
+		 it++) {
+	  int j = *it;
+	  r.append((char*)&j, sizeof(j));
+	}
+
+	r.append((char*)&dir_auth, sizeof(int));
+	r.append((char*)&dir_rep, sizeof(int));
+	
+	n = dir_rep_by.size();
+	r.append((char*)&n, sizeof(int));
+	for (set<int>::iterator it = dir_rep_by.begin(); 
+		 it != dir_rep_by.end();
+		 it++) {
+	  int j = *it;
+	  r.append((char*)&j, sizeof(j));
+	}
+	
+	return r;
+  }
+
+  int _unrope(crope s) {
+	s.copy(0,sizeof(inode_t), (char*)&inode);
+	int off = sizeof(inode_t);
+	
+	int n;
+	s.copy(off, sizeof(int), (char*)&n);
+	off += sizeof(int);
+	for (int i=0; i<n; i++) {
+	  int j;
+	  s.copy(off, sizeof(int), (char*)&j);
+	  cached_by.insert(j);
+	  off += sizeof(int);
+	}
+
+	s.copy(off, sizeof(int), (char*)&dir_auth);
+	off += sizeof(int);
+	s.copy(off, sizeof(int), (char*)&dir_rep);
+	off += sizeof(int);
+
+	s.copy(off, sizeof(int), (char*)&n);
+	off += sizeof(int);
+	for (int i=0; i<n; i++) {
+	  int j;
+	  s.copy(off, sizeof(int), (char*)&j);
+	  dir_rep_by.insert(j);
+	  off += sizeof(int);
+	}
+	return off;
+  }  
+} ;
 
 
 class MDiscover : public Message {
@@ -67,25 +126,28 @@ class MDiscover : public Message {
 	off += sizeof(int);
 	for (int i=0; i<ntrace; i++) {
 	  MDiscoverRec_t dr;
-	  r.copy(off, sizeof(dr), (char*)&dr);
-	  off += sizeof(dr);
+	  off += dr._unrope(r.substr(off, r.length()));
+	  trace.push_back(dr);
 	}
   }
   virtual crope get_payload() {
 	crope r;
 	r.append((char*)&asker, sizeof(asker));
 	r.append(basepath.c_str());
+	r.append((char)0);
 
 	if (!want) want = new vector<string>;
 	int num_want = want->size();
 	r.append((char*)&num_want,sizeof(int));
-	for (int i=0; i<num_want; i++)
+	for (int i=0; i<num_want; i++) {
 	  r.append((*want)[i].c_str());
+	  r.append((char)0);
+	}
 	
 	int ntrace = trace.size();
 	r.append((char*)&ntrace, sizeof(int));
 	for (int i=0; i<ntrace; i++)
-	  r.append((char*)&trace[i], sizeof(MDiscoverRec_t));
+	  r.append(trace[i]._rope());
 	
 	return r;
   }
@@ -118,7 +180,7 @@ class MDiscover : public Message {
   }
 
   string current_need() {
-	if (want == NULL)
+	if (just_root())
 	  return string("");  // just root
 
 	string a = current_base();

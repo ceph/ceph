@@ -81,6 +81,7 @@ class Message {
 	decode_envelope(s);
 	// no payload in default message
   }
+  virtual ~Message() {}
 
   // ENVELOPE ----
 

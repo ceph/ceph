@@ -9,6 +9,9 @@
 #include <iostream>
 using namespace std;
 
+#include "include/config.h"
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".logstream "
+#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
 
 // writing
 
@@ -33,8 +36,6 @@ int LogStream::append(LogEvent *e, Context *c)
 
 // reading
 
-#define READ_INC  1024    // make this bigger than biggest event
-
 class C_LS_ReadNext : public Context {
   LogStream *ls;
   LogEvent **le;
@@ -56,13 +57,19 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	// does buffer have what we want?
 	if (buf_start > cur_pos ||
 		buf_start+buffer.length() < cur_pos+4) {
-	  // nope.  read a chunk
-	  buf_start = cur_pos;
-	  buffer.clear();
-	  mds->osd_read(osd, oid,
-					READ_INC, cur_pos,
-					&buffer, 
-					new C_LS_ReadNext(this, le, c));
+	  if (reading_block) {
+		dout(5) << "read_next already reading log head from disk, offset " << cur_pos << endl;
+	  } else {
+		dout(5) << "read_next reading log head from disk, offset " << cur_pos << endl;
+		// nope.  read a chunk
+		buf_start = cur_pos;
+		buffer.clear();
+		reading_block = true;
+		mds->osd_read(osd, oid,
+					  LOGSTREAM_READ_INC, cur_pos,
+					  &buffer, 
+					  new C_LS_ReadNext(this, le, c));
+	  }
 	  return 0;
 	}
 	step = 2;
@@ -70,26 +77,30 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 
 
   if (step == 2) {
+	reading_block = false;
+
 	// decode event
 	unsigned off = cur_pos-buf_start;
 	__uint32_t type, length;
 	buffer.copy(off, sizeof(__uint32_t), (char*)&type);
 	buffer.copy(off+sizeof(__uint32_t), sizeof(__uint32_t), (char*)&length);
-				
+	off += sizeof(type) + sizeof(length);
+
+	dout(5) << "read_next got event type " << type << " size " << length << " at log offset " << cur_pos << endl;
+	cur_pos += sizeof(type) + sizeof(length) + length;
+
 	switch (type) {
 	  
 	case EVENT_STRING:  // string
-	  cout << "it's a string event" << endl;
 	  *le = new EString(buffer.substr(off,length));
 	  break;
 	  
 	case EVENT_INODEUPDATE:
-	  cout << "read inodeupdate event" << endl;
 	  *le = new EInodeUpdate(buffer.substr(off,length));
 	  break;
 
 	default:
-	  cout << "uh oh, unknown event type " << type << endl;
+	  dout(1) << "uh oh, unknown event type " << type << endl;
 	  assert(0);
 	}
 	

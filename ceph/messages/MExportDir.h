@@ -18,6 +18,8 @@ typedef struct {
   //int            ref;         // hmm, fyi for debugging?
   int            dir_auth;
 
+  bool           dirty;       // dirty inode?
+
   int            ncached_by;  // ints follow
 } Inode_Export_State_t;
 
@@ -39,16 +41,13 @@ typedef struct {
 
 
 class MExportDir : public Message {
- public:
   inodeno_t ino;
   double ipop;
-
   int    ndirs;
   crope  state;
   
-
-  // ...?
-
+ public:  
+  MExportDir() {}
   MExportDir(CInode *in, double pop) : 
 	Message(MSG_MDS_EXPORTDIR) {
 	this->ino = in->inode.ino;
@@ -57,9 +56,31 @@ class MExportDir : public Message {
   }
   virtual char *get_type_name() { return "Ex"; }
 
+  inodeno_t get_ino() { return ino; }
+  double get_ipop() { return ipop; }
+  int get_ndirs() { return ndirs; }
+  crope& get_state() { return state; }
+
   void add_dir(crope& dir) {
 	state.append( dir );
 	ndirs++;
+  }
+
+  virtual int decode_payload(crope s) {
+	s.copy(0, sizeof(ino), (char*)&ino);
+	s.copy(sizeof(ino), sizeof(ipop), (char*)&ipop);
+	s.copy(sizeof(ino)+sizeof(ipop), sizeof(ndirs), (char*)&ndirs);
+	int off = sizeof(ino)+sizeof(ipop)+sizeof(ndirs);
+	state = s.substr(off, s.length() - off);
+	return 0;
+  }
+  virtual crope get_payload() {
+	crope s;
+	s.append((char*)&ino, sizeof(ino));
+	s.append((char*)&ipop, sizeof(ipop));
+	s.append((char*)&ndirs, sizeof(ndirs));
+	s.append(state);
+	return s;
   }
 
 };

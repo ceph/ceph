@@ -269,6 +269,7 @@ bool MDStore::commit_dir( CInode *in,
   if (in->dir->get_state() & CDIR_MASK_MID_COMMIT) {
 	// already mid-commit!
 	dout(7) << "dir already mid-commit" << endl;
+	in->dir->add_waiter(c);   // FIXME this isprobably a bad idea?
 	return false;
   }
 
@@ -333,6 +334,8 @@ bool MDStore::commit_dir_2( int result,
 							Context *c,
 							__uint64_t committed_version)
 {
+  dout(5) << "commit_dir_2" << endl;
+
   // is the dir now clean?
   if (committed_version == in->dir->get_version()) {
 	in->dir->state_clear(CDIR_MASK_DIRTY);   // clear dirty bit
@@ -342,10 +345,26 @@ bool MDStore::commit_dir_2( int result,
   // unpin
   in->dir->hard_unpin();
 
-  // finish
-  if (c) {
-	c->finish(result);
-	delete c;
-  }
+  // mark contents clean
+  for (CDir_map_t::iterator it = in->dir->begin();
+	   it != in->dir->end();
+	   it++) 
+	it->second->get_inode()->mark_clean();
 
+  // finish
+  list<Context*> finished;
+  finished.push_back(c);
+  in->dir->take_waiting(finished);
+
+  if (result >= 0) result = 0;
+
+  for (list<Context*>::iterator it = finished.begin();
+	   it != finished.end();
+	   it++) {
+	Context *c = *it;
+	if (c) {
+	  c->finish(result);
+	  delete c;
+	}
+  }
 }

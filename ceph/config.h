@@ -1,5 +1,5 @@
 
-#define NUMMDS 3
+#define NUMMDS 30
 #define NUMOSD 10
 
 #define CLIENT_CACHE      100
@@ -9,9 +9,13 @@
 
 #define LOGGER_INTERVAL 10.0
 
+#define MAX_TRIMMING          16    // max events to be retiring simultaneously
+#define LOGSTREAM_READ_INC  4096    // make this bigger than biggest event
+
 //#define FAKE_CLOCK
 
-#define NUMCLIENT 80
-#define CLIENT_REQUESTS 500
+#define NUMCLIENT             1
+#define CLIENT_REQUESTS       1000
 
 #define DEBUG_LEVEL 10
+

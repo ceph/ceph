@@ -129,7 +129,10 @@ class MDCache {
   // importer
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
-  void import_dir_block(pchar& p, CInode *containing_import, int oldauth);
+  void import_dir_block(pchar& p, 
+						CInode *containing_import, 
+						int oldauth,
+						list<Context*>& waiting_on_imported);
 
   // dir authoirty bystander
   void handle_export_dir_notify(MExportDirNotify *m);

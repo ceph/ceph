@@ -52,7 +52,7 @@ class MClientReply : public Message {
 	st.trace_depth = 0;
 	st.dir_size = 0;
   }
-  ~MClientReply() {
+  virtual ~MClientReply() {
 	vector<c_inode_info*>::iterator it;
 	
 	for (it = trace.begin(); it != trace.end(); it++) 
@@ -63,25 +63,60 @@ class MClientReply : public Message {
   }
   virtual char *get_type_name() { return "creply"; }
 
+  
+  crope rope_info(c_inode_info *ci) {
+	crope s;
+	s.append((char*)&ci->inode, sizeof(inode_t));
+
+	int n = ci->dist.size();
+	s.append((char*)&n, sizeof(int));
+	for (set<int>::iterator it = ci->dist.begin();
+		 it != ci->dist.end();
+		 it++) {
+	  int j = *it;
+	  s.append((char*)&j,sizeof(int));
+	}
+
+	s.append(ci->ref_dn.c_str());
+	s.append((char)0);
+	return s;
+  }
+  int unrope_info(c_inode_info *ci, crope s) {
+	s.copy(0, sizeof(inode_t), (char*)(&ci->inode));
+	int off = sizeof(inode_t);
+
+	int l;
+	s.copy(off, sizeof(int), (char*)&l);
+	off += sizeof(int);
+	for (int i=0; i<l; i++) {
+	  int j;
+	  s.copy(off, sizeof(int), (char*)&j);
+	  off += sizeof(int);
+	  ci->dist.insert(j);
+	}
+
+	ci->ref_dn = s.c_str() + off;
+	return off + ci->ref_dn.length() + 1;
+  }
+
   // serialization
   virtual int decode_payload(crope s) {
+	crope::iterator sp = s.mutable_begin();
 	s.copy(0, sizeof(st), (char*)&st);
 	path = s.c_str() + sizeof(st);
-	size_t off = sizeof(st) + path.length() + 1;
+	sp += sizeof(st) + path.length() + 1;
 	
 	for (int i=0; i<st.trace_depth; i++) {
 	  c_inode_info *ci = new c_inode_info;
-	  s.copy(off, sizeof(c_inode_info), (char*)ci);
+	  sp += unrope_info(ci, s.substr(sp, s.end()));
 	  trace.push_back(ci);
-	  off += sizeof(c_inode_info);
 	}
 
 	if (st.dir_size) {
 	  for (int i=0; i<st.dir_size; i++) {
 		c_inode_info *ci = new c_inode_info;
-		s.copy(off, sizeof(c_inode_info), (char*)ci);
+		sp += unrope_info(ci, s.substr(sp, s.end()));
 		dir_contents.push_back(ci);
-		off += sizeof(c_inode_info);
 	  }
 	}
   }
@@ -91,14 +126,15 @@ class MClientReply : public Message {
 	
 	crope r;
 	r.append((char*)&st, sizeof(st));
-	r.append(path.c_str());
+	if (path.length()) r.append(path.c_str());
+	r.append((char)0);
 	
 	vector<c_inode_info*>::iterator it;
 	for (it = trace.begin(); it != trace.end(); it++) 
-	  r.append((char*)*it, sizeof(c_inode_info));
+	  r.append(rope_info(*it));
 
 	for (it = dir_contents.begin(); it != dir_contents.end(); it++) 
-	  r.append((char*)*it, sizeof(c_inode_info));
+	  r.append(rope_info(*it));
 
 	return r;
   }

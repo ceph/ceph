@@ -17,7 +17,12 @@
 using namespace std;
 
 
-//#define SERIALIZE
+#define SERIALIZE
+
+
+#include "include/config.h"
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout
+#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
 
 
 // global queue.
@@ -30,20 +35,37 @@ LogType fakemsg_logtype;
 
 int fakemessenger_do_loop()
 {
-  cout << "do_loop begin." << endl;
+  dout(1) << "do_loop begin." << endl;
   while (1) {
 	bool didone = false;
 	
-	cout << "do_loop top" << endl;
+	dout(11) << "do_loop top" << endl;
 
 	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
-		cout << "---- do_loop dispatching '" << m->get_type_name() << 
+		dout(3) << "---- do_loop dispatching '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			 << endl;
+		
+#ifdef SERIALIZE
+		int t = m->get_type();
+		if (true
+			|| t == MSG_CLIENT_REQUEST
+			|| t == MSG_CLIENT_REPLY
+			|| t == MSG_MDS_DISCOVER
+			) {
+		  // serialize
+		  crope buffer = m->get_serialized();
+		  delete m;
+		  
+		  // decode
+		  m = it->second->decode(buffer);
+		  assert(m);
+		}
+#endif
 		
 		didone = true;
 		it->second->dispatch(m);
@@ -54,7 +76,7 @@ int fakemessenger_do_loop()
 	if (!didone)
 	  break;
   }
-  cout << "do_loop end (no more messages)." << endl;
+  dout(1) << "do_loop end (no more messages)." << endl;
 }
 
 
@@ -110,16 +132,6 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
   m->set_source(whoami, fromport);
   m->set_dest(dest, port);
 
-#ifdef SERIALIZE
-  // serialize
-  crope buffer = m->get_serialized();
-  delete m;
-
-  // decode
-  m = decode(buffer);
-  assert(m);
-#endif
-
   // deliver
   try {
 #ifdef LOG_MESSAGES
@@ -138,7 +150,7 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);
 
-	cout << "sending " << m << endl;
+	dout(10) << "sending " << m << endl;
 	
   }
   catch (...) {

@@ -32,13 +32,15 @@ using namespace std;
 #define CINODE_PIN_IMPORT    10002
 #define CINODE_PIN_EXPORT    10003
 #define CINODE_PIN_FREEZE    10004
-#define CINODE_PIN_IMPORTING 10005
+
 #define CINODE_PIN_WWAIT     10010
 #define CINODE_PIN_RWAIT     10011
 #define CINODE_PIN_DIRWAIT   10012
 #define CINODE_PIN_DIRWAITDN 10013
+
 #define CINODE_PIN_IHARDPIN   20000
 #define CINODE_PIN_DHARDPIN   30000
+#define CINODE_PIN_DIRTY     50000
 
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_HASH     -2
@@ -120,6 +122,18 @@ class CInode : LRUObject {
   bool is_root() { return (bool)(!parent); }
   
   void hit();
+
+  void mark_dirty() {
+	if (!ref_set.count(CINODE_PIN_DIRTY)) 
+	  get(CINODE_PIN_DIRTY);
+  }
+  void mark_clean() {
+	if (ref_set.count(CINODE_PIN_DIRTY)) 
+	  put(CINODE_PIN_DIRTY);
+  }	
+  bool is_dirty() {
+	return ref_set.count(CINODE_PIN_DIRTY);
+  }
 
   inodeno_t ino() { return inode.ino; }
 

@@ -16,6 +16,7 @@ class LogStream {
   int osd;
   object_t oid;
 
+  bool reading_block;
   crope buffer;
   off_t buf_start;
  public:
@@ -26,6 +27,7 @@ class LogStream {
 	cur_pos = 0;
 	append_pos = 0; // fixme
 	buf_start = 0;
+	reading_block = false;
   }
 
   off_t seek(off_t offset) {

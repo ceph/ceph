@@ -5,15 +5,13 @@
 #include "LogStream.h"
 #include "LogEvent.h"
 
-#define MAX_TRIMMING   4    // max events to be retiring simultaneously
-
 #include "include/LogType.h"
 #include "include/Logger.h"
 #include "include/Message.h"
 
 LogType mdlog_logtype;
 
-
+#include "include/config.h"
 #define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".log "
 #define  dout2(l)    if (1<=DEBUG_LEVEL) cout
 
@@ -71,6 +69,8 @@ public:
 int MDLog::submit_entry( LogEvent *e,
 						 Context *c ) 
 {
+  dout(5) << "submit_entry" << endl;
+
   // write it
   writer->append(e, new C_MDL_SubmitEntry(this, e, c));
   logger->inc("add");
@@ -79,6 +79,8 @@ int MDLog::submit_entry( LogEvent *e,
 int MDLog::submit_entry_2( LogEvent *e,
 						   Context *c ) 
 {
+  dout(5) << "submit_entry done, log size " << num_events << endl;
+
   // written!
   num_events++;
   delete e;
@@ -115,6 +117,8 @@ public:
 int MDLog::trim(Context *c)
 {
   if (num_events - trimming.size() > max_events) {
+	dout(5) << "trimming.  num_events " << num_events << ", trimming " << trimming.size() << " max " << max_events << endl;
+
 	// add this waiter
 	if (c) trim_waiters.push_back(c);
 	
@@ -131,6 +135,7 @@ int MDLog::trim(Context *c)
 
 void MDLog::trim_readnext()
 {
+  dout(10) << "trim_readnext" << endl;
   trim_reading = true;
   C_MDL_Trim *readfin = new C_MDL_Trim(this);
   reader->read_next(&readfin->le, readfin);
@@ -141,6 +146,8 @@ void MDLog::trim_readnext()
 // trim_2 : just read an event
 int MDLog::trim_2_didread(LogEvent *le)
 {
+  dout(10) << "trim_2_didread " << le << endl;
+
   trim_reading = false;
   
   // we just read an event.
@@ -163,6 +170,8 @@ int MDLog::trim_2_didread(LogEvent *le)
 
 int MDLog::trim_3_didretire(LogEvent *le)
 {
+  dout(10) << "trim_2_didretire " << le << endl;
+
   // done with this le.
   if (le) {
 	num_events--;
@@ -180,6 +189,8 @@ int MDLog::trim_3_didretire(LogEvent *le)
   if (trimming.size() == 0 &&       // none mid-retire,
 	  trim_reading == false) {      // and not mid-read
 	
+	dout(5) << "trim done, log size now " << num_events << endl;
+
 	// we're done.
 	list<Context*> finished = trim_waiters;
 	trim_waiters.clear();
