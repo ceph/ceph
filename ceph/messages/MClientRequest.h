@@ -16,6 +16,7 @@ typedef struct {
 class MClientRequest : public Message {
   MClientRequest_st st;
   filepath path;
+  string arg;
 
  public:
   MClientRequest() {}
@@ -41,6 +42,8 @@ class MClientRequest : public Message {
   virtual int decode_payload(crope s) {
 	s.copy(0, sizeof(st), (char*)&st);
 	path.set_path( s.c_str() + sizeof(st) );
+	int off = sizeof(st) + path.length() + 0;
+	arg = s.c_str() + off;	
 	return 0;
   }
 
@@ -48,6 +51,8 @@ class MClientRequest : public Message {
 	crope r;
 	r.append((char*)&st, sizeof(st));
 	r.append(path.c_str());
+	r.append((char)0);
+	r.append(arg.c_str());
 	r.append((char)0);
 	return r;
   }

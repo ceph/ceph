@@ -48,6 +48,10 @@ class filepath {
   string& get_path() {
 	return path;
   }
+  int length() {
+	return path.length();
+  }
+
   const char *c_str() {
 	return path.c_str();
   }

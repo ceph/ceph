@@ -417,11 +417,12 @@ int MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_RMDIR:
 	handle_client_rmdir(req, cur);
 	break;
+	*/
 
   case MDS_OP_RENAME:
 	handle_client_rename(req, cur);
 	break;
-	*/
+	
 
   default:
 	dout(1) << " unknown mop " << req->get_op() << endl;
@@ -991,6 +992,137 @@ void MDS::handle_client_mkdir(MClientRequest *req)
 						  MDS_PORT_SERVER);
   delete req;
   return;
+}
+
+
+/*
+
+
+
+ */
+
+void MDS::handle_client_rename(MClientRequest *req,
+							   CInode *cur)
+{
+  // make sure i'm auth on source
+  if (!cur->is_auth()) {
+	// forward
+	dout(10) << "handle_client_rename " << *cur << "  not auth, forwarding" << endl;
+	int auth = cur->authority();
+	assert(auth != mdcluster->get_nodeid());
+	messenger->send_message(req,
+							MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
+							MDS_PORT_SERVER);
+	return;
+  }
+
+  dout(10) << "handle_client_rename " << *cur << " to " << cur->get_arg() << endl;
+
+  // find the destination.
+  // discover, etc. on the way.. get just it on the local node.
+  filepath dirpath = cur->get_arg(); 
+  // ** FIXME ** relative destination path???
+  vector<CInode*> trace;
+  int r = mdcache->path_traverse(dirpath, trace, req, MDS_TRAVERSE_DISCOVER);
+
+  string name;
+  CDir *destdir = 0;
+
+  // what is the dest?  (dir or file or complete filename)
+  if (trace.size() == dirpath.depth()) {
+	CInode *d = trace[trace.size()-1];
+	if (d->is_dir()) {
+	  // mv some/thing /to/some/dir 
+	  destdir = d->get_or_open_dir(this);  // /to/some/dir
+	  name = cur->get_file_path().last();  // thing
+	} else {
+	  // mv some/thing /to/some/existing_filename
+	  destdir = trace[trace.size()-2]->get_or_open_dir();  // /to/some
+	  name = dirpath.last();                               // existing_filename
+	}
+  }
+  else if (trace.size() == dirpath.depth() - 1) {
+	CInode *d = trace[trace.size()-1];
+	if (d->is_dir()) {
+	  // mv some/thing /to/some/place_that_dne
+	  destdir = d->get_or_open_dir(this);   // /to/some
+	  name = cur->get_file_path().last();   // place_that_dne
+	}
+  }
+  else {
+	assert(trace.size() < dirpath.depth()-1);
+	// check traverse return value
+	if (r > 0) return;  // discover, readdir, etc.
+	assert(r < 0);  // musta been an error
+
+	// error out
+	dout(7) << "rename " << *cur << " dest " << dirpath << " dne" << end;
+	MClientReply *reply = new MClientReply(req, -ENODEST);
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	delete req;
+	return;
+  }
+
+  // local or remote?
+  assert(cur->is_auth());
+  int dauth = destdir->dentry_authority(name);
+  if (dauth != mdcluster->get_nodeid()) {
+	dout(7) << "rename has remote dest " << dauth << endl;
+
+	// implement me
+	assert(0);
+	return 0;
+  }
+
+  // file or dir?
+  if (cur->is_dir()) {
+	handle_client_rename_dir(req,cur);
+  } else {
+	handle_client_rename_file(req,cur);
+  }
+}
+
+void MDS::handle_client_rename_file(MClientRequest *req,
+									CInode *from,
+									CDir *destdir,
+									string name)
+{
+  // does destination exist?  (is this an overwrite?)
+  CDentry *dn = destdir->lookup(name);
+  CInode *oldin = 0;
+  if (dn) {
+	oldin = dn->get_inode();
+	// make sure it's also a file!
+	if (oldin->is_dir()) {
+	  // fail!
+	  dout(7) << "dest exists and is dir" << endl;
+	  MClientReply *reply = new MClientReply(req, -EISDIR);
+	  messenger->send_message(reply,
+							  MSG_ADDR_CLIENT(req->get_client()), 0,
+							  MDS_PORT_SERVER);
+	  delete req;
+	  return;
+	}
+
+	// make sure we can lock dest
+	
+  }
+
+  // make sure we can lock source
+
+
+
+  
+  
+}
+
+void MDS::handle_client_rename_dir(MClientRequest *req,
+									CInode *from,
+									CDir *destdir,
+									string name)
+{
 }
 
 
