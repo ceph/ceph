@@ -12,7 +12,7 @@ using namespace std;
 #include "include/config.h"
 
 
-#define HASHDIR_OID_MULT (0x100 * 0x100000000) // 40 bits (~1 trillion)
+#define HASHDIR_OID_MULT (0x100 * 0x100000000LL) // 40 bits (~1 trillion)
 
 
 MDCluster::MDCluster(int num_mds, int num_osd)
