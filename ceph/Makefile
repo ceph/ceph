@@ -27,7 +27,7 @@ OBJS=osd/OSD.o\
  mds/MDStore.o\
  clock.o\
  mds/LogStream.o\
- mds/InoAllocator.o\
+ mds/IdAllocator.o\
  mds/MDLog.o\
  client/Client.o\
  mds/MDCluster.o\

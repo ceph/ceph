@@ -30,17 +30,17 @@ void IdAllocator::save()
 	write(fd, (char*)&ntypes, sizeof(ntypes));
 	
 	// over types
-	for (map<char, map<idno_t,idno_t> >::iterator ty = free.begin();
+	for (map<char, rangeset<idno_t> >::iterator ty = free.begin();
 		 ty != free.end(); 
 		 ty++) {
-	  char type = *ty;
+	  char type = ty->first;
 	  write(fd, &type, 1);
 	  
 	  int mapsize = free[type].map_size();
 	  write(fd, (char*)&mapsize, sizeof(mapsize));
 	  
 	  // over entries
-	  for (map<idno_t,idno_t>::iterator it = free[type]..map_begin();
+	  for (map<idno_t,idno_t>::iterator it = free[type].map_begin();
 		   it != free[type].map_end();
 		   it++) {
 		idno_t a = it->first;
