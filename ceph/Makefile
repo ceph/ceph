@@ -4,8 +4,11 @@ CC=g++
 CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=
 
-MPICC=./mpicc
-MPILIBS=  #-lelan -lmpi  ${LIBS}
+MPICC=g++
+#kMPICC=./mpiCC
+#MPICC=mpiCC
+MPICFLAGS=${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
+MPILIBS= -lelan -lmpi  ${LIBS}
 
 LEAKTRACER=
 LEAKTRACER=$(HOME)/lib/LeakTracer.o
@@ -25,7 +28,7 @@ import: pmds.o FakeMessenger.o import.cc
 	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o import.cc -o import
 
 mpitest: mpitest.cc MPIMessenger.cc pmds.o
-	${MPICC} ${CFLAGS} ${MPILIBS} mpitest.cc MPIMessenger.cc pmds.o  -o mpitest
+	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc MPIMessenger.cc pmds.o  -o mpitest
 
 
 clean:
