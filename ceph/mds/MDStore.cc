@@ -7,7 +7,7 @@
 #include "CDentry.h"
 #include "MDCluster.h"
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 #include <cassert>
 #include <iostream>

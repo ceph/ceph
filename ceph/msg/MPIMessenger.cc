@@ -1,8 +1,8 @@
 
 #include "include/config.h"
 
-#include "include/MPIMessenger.h"
-#include "include/Message.h"
+#include "MPIMessenger.h"
+#include "Message.h"
 
 #include <iostream>
 #include <cassert>

@@ -2,8 +2,10 @@
 #include <ext/rope>
 #include "include/types.h"
 #include "include/config.h"
-#include "include/Message.h"
-#include "include/Messenger.h"
+
+#include "Message.h"
+#include "Messenger.h"
+
 #include <cassert>
 #include <iostream>
 using namespace std;

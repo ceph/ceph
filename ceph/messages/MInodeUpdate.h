@@ -1,7 +1,7 @@
 #ifndef __MINODEUPDATE_H
 #define __MINODEUPDATE_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 #include <set>
 using namespace std;

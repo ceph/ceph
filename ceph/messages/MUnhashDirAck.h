@@ -1,7 +1,7 @@
 #ifndef __MUNHASHDIRACK_H
 #define __MUNHASHDIRACK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 #include <ext/rope>
 using namespace std;

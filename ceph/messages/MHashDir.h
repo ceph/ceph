@@ -1,7 +1,7 @@
 #ifndef __MHASHDIR_H
 #define __MHASHDIR_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 #include <ext/rope>
 using namespace std;

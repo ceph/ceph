@@ -1,7 +1,8 @@
 
 #include "include/types.h"
-#include "include/Messenger.h"
-#include "include/Message.h"
+
+#include "msg/Messenger.h"
+#include "msg/Message.h"
 
 #include "mds/MDS.h"
 #include "mds/MDCluster.h"

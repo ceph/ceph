@@ -1,7 +1,7 @@
 #ifndef __MDISCOVERREPLY_H
 #define __MDISCOVERREPLY_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "mds/CDir.h"
 #include "mds/CInode.h"
 #include "include/filepath.h"

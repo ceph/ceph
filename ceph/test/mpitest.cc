@@ -12,7 +12,7 @@
 #include "mds/MDCache.h"
 #include "mds/MDStore.h"
 
-#include "include/MPIMessenger.h"
+#include "msg/MPIMessenger.h"
 
 #include "messages/MPing.h"
 

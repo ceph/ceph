@@ -1,7 +1,7 @@
 #ifndef __MINODESYNCRELEASE_H
 #define __MINODESYNCRELEASE_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MInodeSyncRelease : public Message {
   inode_t inode;

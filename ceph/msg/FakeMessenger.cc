@@ -3,11 +3,11 @@
 using namespace std;
 
 
-#include "include/FakeMessenger.h"
+#include "Message.h"
+#include "FakeMessenger.h"
 #include "mds/MDS.h"
 #include "include/LogType.h"
 #include "include/Logger.h"
-#include "include/Message.h"
 
 #include <stdio.h>
 #include <stdlib.h>

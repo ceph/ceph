@@ -1,7 +1,7 @@
 #ifndef __MOSDWRITE_H
 #define __MOSDWRITE_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 typedef struct {
   long tid;

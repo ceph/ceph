@@ -1,8 +1,8 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
-#include "../include/Dispatcher.h"
-#include "../include/lru.h"
+#include "msg/Dispatcher.h"
+#include "include/lru.h"
 #include "ClNode.h"
 
 #include <map>

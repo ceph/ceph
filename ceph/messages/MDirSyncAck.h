@@ -1,7 +1,7 @@
 #ifndef __MDIRSYNCACK_H
 #define __MDIRSYNCACK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MDirSyncAck : public Message {
   inodeno_t ino;

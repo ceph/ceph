@@ -8,8 +8,7 @@
 #include "MDCache.h"
 
 #include "messages/MHeartbeat.h"
-
-#include "include/Messenger.h"
+#include "msg/Messenger.h"
 #include "include/Context.h"
 
 #include <vector>

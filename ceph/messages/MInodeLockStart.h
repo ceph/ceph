@@ -1,7 +1,7 @@
 #ifndef __MINODELOCKSTART_H
 #define __MINODELOCKSTART_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MInodeLockStart : public Message {
   inodeno_t ino;

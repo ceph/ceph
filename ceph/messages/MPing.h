@@ -2,7 +2,7 @@
 #ifndef __MPING_H
 #define __MPING_H
 
-#include "../include/Message.h"
+#include "msg/Message.h"
 
 class MPing : public Message {
  public:

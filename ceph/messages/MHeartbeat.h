@@ -1,8 +1,8 @@
 #ifndef __MHEARTBEAT_H
 #define __MHEARTBEAT_H
 
-#include "include/Message.h"
 #include "include/types.h"
+#include "msg/Message.h"
 
 class MHeartbeat : public Message {
   mds_load_t load;

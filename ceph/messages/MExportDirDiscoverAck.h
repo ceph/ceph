@@ -1,7 +1,7 @@
 #ifndef __MEXPORTDIRDISCOVERACK_H
 #define __MEXPORTDIRDISCOVERACK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "mds/CInode.h"
 #include "include/types.h"
 

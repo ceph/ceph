@@ -1,7 +1,7 @@
 #ifndef __MOSDREAD_H
 #define __MOSDREAD_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 typedef struct {
   long tid;

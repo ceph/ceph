@@ -1,7 +1,7 @@
 #ifndef __MDISCOVER_H
 #define __MDISCOVER_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "mds/CDir.h"
 #include "include/filepath.h"
 

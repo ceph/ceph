@@ -1,7 +1,7 @@
 #ifndef __MEXPORTDIRWARNING_H
 #define __MEXPORTDIRWARNING_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "mds/CInode.h"
 #include "include/types.h"
 

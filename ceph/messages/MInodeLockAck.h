@@ -1,7 +1,7 @@
 #ifndef __MINODELOCKACK_H
 #define __MINODELOCKACK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MInodeLockAck : public Message {
   inodeno_t ino;

@@ -1,7 +1,7 @@
 #ifndef __MEXPORTDIRPREPACK_H
 #define __MEXPORTDIRPREPACK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "include/types.h"
 
 class MExportDirPrepAck : public Message {

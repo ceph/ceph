@@ -10,8 +10,8 @@
 
 #include "include/filepath.h"
 
-#include "include/Message.h"
-#include "include/Messenger.h"
+#include "msg/Message.h"
+#include "msg/Messenger.h"
 
 #include "events/EInodeUpdate.h"
 #include "events/EInodeUnlink.h"

@@ -8,7 +8,7 @@
 
 #include "include/LogType.h"
 #include "include/Logger.h"
-#include "include/Message.h"
+#include "msg/Message.h"
 
 LogType mdlog_logtype;
 

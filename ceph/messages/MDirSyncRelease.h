@@ -1,7 +1,7 @@
 #ifndef __MDIRSYNCRELEASE_H
 #define __MDIRSYNCRELEASE_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MDirSyncRelease : public Message {
   inodeno_t ino;

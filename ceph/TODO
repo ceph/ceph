@@ -1,5 +1,11 @@
 
 
+CLIENT
+- structure.. multithreaded until messenger
+
+
+
+MDS
 - qsync
 - high level locker functions
 - expand Lock

@@ -1,7 +1,7 @@
 #ifndef __MEXPORTDIRPREP_H
 #define __MEXPORTDIRPREP_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "mds/CInode.h"
 #include "include/types.h"
 

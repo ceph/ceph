@@ -71,7 +71,7 @@
 #define MSG_MDS_SHUTDOWNSTART  900
 #define MSG_MDS_SHUTDOWNFINISH 901
 
-#include "config.h"
+//#include "config.h"
 
 
 // address types

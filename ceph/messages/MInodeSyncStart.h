@@ -1,7 +1,7 @@
 #ifndef __MINODESYNCSTART_H
 #define __MINODESYNCSTART_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MInodeSyncStart : public Message {
   inodeno_t ino;

@@ -1,10 +1,11 @@
 
 
 #include "include/types.h"
-#include "include/Messenger.h"
-#include "include/Message.h"
 
 #include "OSD.h"
+
+#include "msg/Messenger.h"
+#include "msg/Message.h"
 
 #include "messages/MOSDRead.h"
 #include "messages/MOSDReadReply.h"

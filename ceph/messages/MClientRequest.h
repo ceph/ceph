@@ -1,7 +1,7 @@
 #ifndef __MCLIENTREQUEST_H
 #define __MCLIENTREQUEST_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/MDS.h"
 

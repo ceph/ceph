@@ -1,7 +1,7 @@
 #ifndef __MINODESYNCRECALL_H
 #define __MINODESYNCRECALL_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 class MInodeSyncRecall : public Message {
   inodeno_t ino;

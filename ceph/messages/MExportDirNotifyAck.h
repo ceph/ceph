@@ -1,7 +1,7 @@
 #ifndef __MEXPORTDIRNOTIFYACK_H
 #define __MEXPORTDIRNOTIFYACK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 #include <string>
 using namespace std;
 

@@ -4,15 +4,15 @@
 #include <iostream>
 #include <string>
 
-#include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
 #include "client/Client.h"
 
+#include "mds/MDCluster.h"
 #include "mds/MDCache.h"
 #include "mds/MDStore.h"
 
-#include "include/FakeMessenger.h"
+#include "msg/FakeMessenger.h"
 
 #include "messages/MPing.h"
 

@@ -9,9 +9,9 @@
 #include <ostream>
 #include <ext/rope>
 
+#include "msg/Dispatcher.h"
 #include "include/types.h"
 #include "include/Context.h"
-#include "include/Dispatcher.h"
 #include "include/DecayCounter.h"
 #include "include/Logger.h"
 

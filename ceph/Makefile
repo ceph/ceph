@@ -16,8 +16,7 @@ LEAKTRACER=
 
 SRCS=*.cc */*.cc
 OBJS=osd/OSD.o\
- Messenger.o\
- Logger.o\
+ msg/Messenger.o\
  mds/MDBalancer.o\
  mds/MDS.o\
  mds/CDentry.o\
@@ -25,12 +24,13 @@ OBJS=osd/OSD.o\
  mds/CInode.o\
  mds/MDCache.o\
  mds/MDStore.o\
- clock.o\
  mds/LogStream.o\
  mds/IdAllocator.o\
  mds/MDLog.o\
- client/Client.o\
  mds/MDCluster.o\
+ client/Client.o\
+ Logger.o\
+ clock.o\
  config.o
 
 TARGETS=test import pmds
@@ -38,15 +38,15 @@ TARGETS=test import pmds
 all: depend ${TARGETS}
 
 
-test: test.cc FakeMessenger.o pmds.o
+test: test.cc msg/FakeMessenger.o pmds.o
 	test ! -e leak.out || rm leak.out
-	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o ${LEAKTRACER} test.cc -o test
+	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o ${LEAKTRACER} test.cc -o test
 
-import: pmds.o FakeMessenger.o import.cc
-	${CC} ${CFLAGS} ${LIBS} pmds.o FakeMessenger.o import.cc ${LEAKTRACER} -o import
+import: pmds.o msg/FakeMessenger.o import.cc
+	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o import.cc ${LEAKTRACER} -o import
 
-pmds: mpitest.cc MPIMessenger.cc pmds.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc MPIMessenger.cc pmds.o  -o pmds
+pmds: mpitest.cc msg/MPIMessenger.cc pmds.o
+	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc msg/MPIMessenger.cc pmds.o  -o pmds
 
 
 clean:

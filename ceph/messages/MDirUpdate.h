@@ -1,7 +1,7 @@
 #ifndef __MDIRUPDATE_H
 #define __MDIRUPDATE_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 typedef struct {
   inodeno_t ino;

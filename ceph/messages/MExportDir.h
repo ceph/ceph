@@ -1,7 +1,7 @@
 #ifndef __MEXPORTDIR_H
 #define __MEXPORTDIR_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 #include <ext/rope>
 using namespace std;

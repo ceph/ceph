@@ -1,7 +1,7 @@
 #ifndef __MLOCK_H
 #define __MLOCK_H
 
-#include "include/Message.h"
+#include "msg/Message.h"
 
 #define LOCK_OTYPE_INO    1
 #define LOCK_OTYPE_DIRINO 2
