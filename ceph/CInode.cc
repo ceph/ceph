@@ -1,6 +1,7 @@
 
 #include "include/CInode.h"
 #include "include/CDir.h"
+#include "include/MDS.h"
 #include <string>
 
 // ====== CInode =======
@@ -19,6 +20,21 @@ void CInode::add_parent(CDentry *p) {
   } else                     // additional
 	parents.push_back(p);
 }
+
+bit_vector CInode::get_dist_spec(MDS *mds)
+{
+  bit_vector ds;
+
+  // FIXME make me smarter
+
+  // just us.
+  if (ds.size() <= mds->get_nodeid())
+	ds.resize( mds->get_nodeid()+1 );
+  ds[ mds->get_nodeid() ] = true;
+
+  return ds;
+}
+
 
 void CInode::dump(int dep)
 {

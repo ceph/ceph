@@ -15,16 +15,14 @@ class MDFetchDirContext : public Context {
  protected:
   MDStore *ms;
   CInode *in;
-  Context *c;
 
  public:
   char *buf;
   size_t buflen;
 
-  MDFetchDirContext(MDStore *ms, CInode *in, Context *c) : Context() {
+  MDFetchDirContext(MDStore *ms, CInode *in) : Context() {
 	this->ms = ms;
 	this->in = in;
-	this->c = c;
 	buf = 0;
 	buflen = 0;
   }
@@ -33,7 +31,7 @@ class MDFetchDirContext : public Context {
   }
   
   void finish(int result) {
-	ms->fetch_dir_2( result, buf, buflen, in, c );
+	ms->fetch_dir_2( result, buf, buflen, in );
   }
 };
 
@@ -41,8 +39,19 @@ class MDFetchDirContext : public Context {
 bool MDStore::fetch_dir( CInode *in,
 						 Context *c )
 {
+  cout << "fetch_dir " << in->inode.ino << endl;
+  if (c) 
+	in->waiting_for_fetch.push_back(c);
+
+  // already fetching?
+  if (in->mid_fetch) {
+	cout << "already fetching " << in->inode.ino << "; waiting" << endl;
+	return true;
+  }
+  in->mid_fetch = true;
+
   // create return context
-  MDFetchDirContext *fin = new MDFetchDirContext( this, in, c );
+  MDFetchDirContext *fin = new MDFetchDirContext( this, in );
 
   // issue osd read
   int osd = in->inode.ino % 10;
@@ -54,9 +63,14 @@ bool MDStore::fetch_dir( CInode *in,
 				 fin );
 }
 
-bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Context *c)
+bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 {
   cout << "fetch_dir_2" << endl;
+
+  // make sure we have a CDir
+  if (dir->dir == NULL) {
+	dir->dir = new CDir(dir);
+  }
 
   // parse buffer contents into cache
   __uint32_t num = *((__uint32_t*)buf);
@@ -79,7 +93,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 	  memcpy(&in->inode, buf+p, sizeof(inode_t));
 	  p += sizeof(inode_t);
 	  
-	  cout << " got " << in->inode.ino << " " << dname << endl;
+	  cout << " got " << in->inode.ino << " " << dname << " isdir " << in->inode.isdir << endl;
 	  if (mds->mdcache->have_inode(in->inode.ino)) 
 		throw "inode already exists!  uh oh\n";
 		
@@ -89,11 +103,21 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 	}
 	num--;
   }
+  
+  dir->dir->state_set(CDIR_MASK_COMPLETE);
 
-  // ok!
-  if (c) {
-	c->finish(0);
-	delete c;
+  // finish
+  list<Context*> finished = dir->waiting_for_fetch;
+  dir->waiting_for_fetch.clear();
+  dir->mid_fetch = false;
+
+  list<Context*>::iterator it = finished.begin();	
+  while (it != finished.end()) {
+	Context *c = *(it++);
+	if (c) {
+	  c->finish(0);
+	  delete c;
+	}
   }
 }
 

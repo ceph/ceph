@@ -10,6 +10,14 @@ namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
 	size_t operator()(unsigned long long __x) const { return __x; }
   };
+  
+  template<> struct hash< std::string >
+  {
+    size_t operator()( const std::string& x ) const
+    {
+      return hash< char >()( (x.c_str())[0] );
+    }
+  };
 }
 
 
@@ -25,6 +33,7 @@ struct inode_t {
   uid_t uid;
   gid_t gid;
   time_t atime, mtime, ctime;
+  bool isdir;
 };
 
 typedef __uint64_t object_t;

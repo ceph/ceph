@@ -16,6 +16,7 @@ class CDentry {
   CDir           *dir;
 
   friend class DentryCache;
+  friend class MDS;
 
  public:
   // cons

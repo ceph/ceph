@@ -14,6 +14,7 @@
 #include "messages/MOSDWriteReply.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MClientReply.h"
 
 #include <list>
 
@@ -59,6 +60,22 @@ int MDS::shutdown()
   return 0;
 }
 
+
+
+class C_MDS_RetryMessage : public Context {
+  Message *m;
+  MDS *mds;
+public:
+  C_MDS_RetryMessage(MDS *mds, Message *m) {
+	this->m = m;
+	this->mds = mds;
+  }
+  virtual void finish(int r) {
+	mds->proc_message(m);
+  }
+};
+
+
 void MDS::proc_message(Message *m) 
 {
 
@@ -82,7 +99,7 @@ void MDS::proc_message(Message *m)
 
 	// OSD I/O
   case MSG_OSD_READREPLY:
-	cout << "mds" << whoami << " read reply!" << endl;
+	cout << "mds" << whoami << " osd_read reply" << endl;
 	osd_read_finish(m);
 	break;
 
@@ -132,16 +149,80 @@ void MDS::dispatch(Message *m)
 
 // Client fun
 
+
+
 int MDS::handle_client_request(MClientRequest *req)
 {
   cout << "mds" << whoami << " got client request from " << req->get_source() << ", op " << req->op << endl;
 
   
+  vector<CInode*> trace;
+  vector<string>  trace_dn;
+
+  int r = path_traverse(req->path, trace, trace_dn, req);
+  if (r < 0) return 0;  // delayed	
   
+  MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist(trace, 
+						trace_dn,
+						this);
+  messenger->send_message(reply,
+						  req->get_source(), req->get_source_port(),
+						  MDS_PORT_SERVER);
 }
 
 
+int MDS::path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req)
+{
+  // break path into bits.
+  trace.clear();
+  CInode *cur = mdcache->get_root();
+  trace.push_back(cur);
 
+  int off = 0;
+  while (off < path.length()) {
+	// skip trailing/duplicate slash(es)
+	int nextslash = path.find('/', off);
+	if (nextslash == off) {
+	  off++;
+	  continue;
+	}
+	if (nextslash < 0) 
+	  nextslash = path.length();  // no more slashes
+
+	string dname = path.substr(off,nextslash-off);
+	cout << "path segment is " << dname << endl;
+
+
+	// lookup dentry
+	if (cur->is_dir()) {
+	  if (cur->dir) {
+		CDentry *dn = cur->dir->lookup(dname);
+		if (dn && dn->inode) {
+		  cur = dn->inode;       // keep going!
+		} else {
+		  // not found?
+		  // **
+		}
+	  } else {
+		// not loaded
+		cout << "mds" << whoami << " no dir contents for " << cur->inode.ino << ", fetching" << endl;
+		mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
+		return -1;
+		// **
+	  }
+	} else {
+	  cout << cur->inode.ino << " not a dir " << cur->inode.isdir << endl;
+	  return 0;
+	}
+	
+	trace_dn.push_back(dname);
+	trace.push_back(cur);
+	off = nextslash+1;
+  }
+
+  return 0;
+}
 
 
 
@@ -298,6 +379,7 @@ bool MDS::open_root(Context *c)
 	// i am root
 	CInode *root = new CInode();
 	root->inode.ino = 1;
+	root->inode.isdir = true;
 
 	// make it up (FIXME)
 	root->inode.mode = 0755;

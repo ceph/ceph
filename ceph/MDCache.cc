@@ -131,8 +131,9 @@ void DentryCache::add_file(string& fn, CInode *in) {
   //cout << " got dir " << idir << endl;
 
   if (idir->dir == NULL) {
-	//cerr << " making " << dirpart << " into a dir" << endl;
-	idir->dir = new CDir(idir);
+	cerr << " making " << dirpart << " into a dir" << endl;
+	idir->dir = new CDir(idir); 
+	idir->inode.isdir = true;
   }
   
   add_inode( in );

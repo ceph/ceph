@@ -20,7 +20,7 @@ class MDS;
 // state bits
 #define CDIR_MASK_COMPLETE      1   // the complete contents are in cache
 #define CDIR_MASK_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
-#define CDIR_MASK_DIRTY         4   // has been modified since last fetch/commit
+#define CDIR_MASK_DIRTY         4   // has been modified since last commit
 #define CDIR_MASK_MID_COMMIT    8   // mid-commit
 
 // common states

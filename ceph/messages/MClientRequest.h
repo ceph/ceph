@@ -11,9 +11,9 @@ class MClientRequest : public Message {
   inodeno_t ino;
   string path;
 
-  MClientRequest(long tid, int mop) : Message(MSG_CLIENT_REQUEST) {
+  MClientRequest(long tid, int op) : Message(MSG_CLIENT_REQUEST) {
 	this->tid = tid;
-	this->op = mop;
+	this->op = op;
   }
 };
 

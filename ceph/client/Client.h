@@ -1,22 +1,25 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
-#include "Dispatcher.h"
+#include "../include/Dispatcher.h"
+#include "../include/lru.h"
 
 class Messenger;
 class Message;
 
 class DentryCache;
 class CInode;
+class ClNode;
+class MClientReply;
 
 class Client : public Dispatcher {
  protected:
   Messenger *messenger;
   int whoami;
 
-  DentryCache *mdcache;
-
-  CInode      *cwd;
+  LRU    cache_lru;
+  ClNode *root;
+  ClNode *cwd;
 
   long tid;
 
@@ -29,6 +32,7 @@ class Client : public Dispatcher {
 
   virtual void dispatch(Message *m);
 
+  virtual void assim_reply(MClientReply*);
   virtual void issue_request();
 
 };

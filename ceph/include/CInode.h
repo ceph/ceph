@@ -5,10 +5,17 @@
 #include "types.h"
 #include "lru.h"
 #include "DecayCounter.h"
+#include <sys/stat.h>
+
+#include <list>
+#include <vector>
+using namespace std;
+
 
 class CDentry;
 class CDir;
 class MDS;
+class Context;
 
 // cached inode wrapper
 class CInode : LRUObject {
@@ -19,6 +26,10 @@ class CInode : LRUObject {
  protected:
   int              ref;            // reference count (???????)
 
+  // used by MDStore
+  bool             mid_fetch;
+  list<Context*>   waiting_for_fetch;
+
   // parent dentries in cache
   int              nparents;  
   CDentry         *parent;            // if 1 parent (usually)
@@ -26,6 +37,7 @@ class CInode : LRUObject {
 
   // dcache lru
   CInode *lru_next, *lru_prev;
+
 
   // import/export
   bool is_import, is_export;
@@ -36,6 +48,7 @@ class CInode : LRUObject {
 
   friend class DentryCache;
   friend class CDir;
+  friend class MDStore;
 
  public:
   CInode() : LRUObject() {
@@ -54,6 +67,11 @@ class CInode : LRUObject {
   ~CInode();
 
 	
+  // fun
+  bool is_dir() {
+	return inode.isdir;
+  }
+
 
   // --- reference counting
   void put() {
@@ -76,6 +94,8 @@ class CInode : LRUObject {
   mdloc_t get_mdloc() {
 	return inode.ino;       // use inode #
   }
+
+  bit_vector get_dist_spec(MDS *mds);
 
 
   // dbg

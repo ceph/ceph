@@ -40,7 +40,7 @@ class Messenger;
 class Message;
 class MClientRequest;
 
-// 
+// types
 
 typedef struct {
   char **bufptr;
@@ -48,6 +48,8 @@ typedef struct {
   char *buf;
   Context *context;
 } PendingOSDRead_t;
+
+
 
 
 class MDS : public Dispatcher {
@@ -101,6 +103,7 @@ class MDS : public Dispatcher {
   int handle_client_request(MClientRequest *m);
 
   int do_stat(MClientRequest *m);
+  int path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req);
 
 
 

@@ -6,7 +6,7 @@
 
 #include "include/MDS.h"
 #include "include/OSD.h"
-#include "include/Client.h"
+#include "client/Client.h"
 
 #include "include/MDCache.h"
 #include "include/MDStore.h"
