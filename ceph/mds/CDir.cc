@@ -82,16 +82,14 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
 // wiating
 
 void CDir::add_waiter(string& dentry,
-								Context *c) {
-  if (waiting_on_dentry.size() +
-	  waiting_on_all.size() == 0)
-	inode->get(CINODE_PIN_DIRWAIT);
+					  Context *c) {
+  if (waiting_on_dentry.size() == 0)
+	inode->get(CINODE_PIN_DIRWAITDN);
   waiting_on_dentry[ dentry ].push_back(c);
 }
 
 void CDir::add_waiter(Context *c) {
-  if (waiting_on_dentry.size() +
-	  waiting_on_all.size() == 0)
+  if (waiting_on_all.size() == 0)
 	inode->get(CINODE_PIN_DIRWAIT);
   waiting_on_all.push_back(c);
 }
@@ -100,25 +98,38 @@ void CDir::add_waiter(Context *c) {
 void CDir::take_waiting(string& dentry,
 						list<Context*>& ls)
 {
-  if (waiting_on_dentry.size() +
-	  waiting_on_all.size())
-	inode->put(CINODE_PIN_DIRWAIT);
-  if (waiting_on_dentry.count(dentry) > 0)
+  if (waiting_on_dentry.count(dentry) > 0) {
+	// there are waiters on this dentry
 	ls.splice(ls.end(), waiting_on_dentry[ dentry ]);
+	waiting_on_dentry.erase(dentry);
+
+	// last one?
+	if (waiting_on_dentry.size() == 0) 
+	  inode->put(CINODE_PIN_DIRWAITDN);
+  }
+  assert(waiting_on_dentry.size() == 0);
 }
 
 void CDir::take_waiting(list<Context*>& ls)
 {
-  if (waiting_on_dentry.size() +
-	  waiting_on_all.size())
-	inode->put(CINODE_PIN_DIRWAIT);
-  
-  ls.splice(ls.end(), waiting_on_all);
-  
-  // all dentry waiters
-  hash_map<string, list<Context*> >::iterator it;
-  for (it = waiting_on_dentry.begin(); it != waiting_on_dentry.end(); it++) 
+  // any dentry waiters?  (we're taking them all)
+  if (waiting_on_dentry.size())
+	inode->put(CINODE_PIN_DIRWAITDN);
+
+  hash_map<string, list<Context*> >::iterator it = 
+	it = waiting_on_dentry.begin(); 
+  while (it != waiting_on_dentry.end()) {
 	ls.splice(ls.end(), it->second);
+	waiting_on_dentry.erase((it++)->first);
+  }
+  assert(waiting_on_dentry.size() == 0);
+
+  // waiting on all
+  if (waiting_on_all.size()) 
+	inode->put(CINODE_PIN_DIRWAIT);
+
+  ls.splice(ls.end(), waiting_on_all);
+  assert(waiting_on_all.size() == 0);
 }
 
 

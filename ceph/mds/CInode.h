@@ -36,6 +36,7 @@ using namespace std;
 #define CINODE_PIN_WWAIT     10010
 #define CINODE_PIN_RWAIT     10011
 #define CINODE_PIN_DIRWAIT   10012
+#define CINODE_PIN_DIRWAITDN 10013
 #define CINODE_PIN_IHARDPIN   20000
 #define CINODE_PIN_DHARDPIN   30000
 
@@ -166,7 +167,10 @@ class CInode : LRUObject {
   // --- reference counting
   void put(int by) {
 	assert(ref > 0);
-	assert(ref_set.count(by) == 1);
+	if (ref_set.count(by) != 1) {
+	  cout << "bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	  assert(ref_set.count(by) == 1);
+	}
 	ref--;
 	ref_set.erase(by);
 	if (ref == 0)

@@ -667,6 +667,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	delete dis;
 
 	// finish off waiting items
+	cout << " i have " << finished.size() << " contexts to finish" << endl;
 	list<Context*>::iterator it;
 	for (it = finished.begin(); it != finished.end(); it++) {
 	  Context *c = *it;
@@ -1248,8 +1249,9 @@ void MDCache::export_dir_walk(MExportDir *req,
 	// ***  
 
 	// waiters
-	fin->assim_waitlist(idir->dir->waiting_on_all);
-	fin->assim_waitlist(idir->dir->waiting_on_dentry);
+	list<Context*> waiters;
+	idir->dir->take_waiting(waiters);
+	fin->assim_waitlist(waiters);
   }
 
   req->add_dir( dir_rope );
