@@ -74,6 +74,9 @@ bool MDCache::remove_inode(CInode *o)
   // remove from map
   inode_map.erase(o->inode.ino);
 
+  // remove from lru
+  lru->lru_remove(o);
+
   return true;
 }
 
@@ -100,6 +103,7 @@ bool MDCache::trim(__int32_t max) {
 	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
 
 	// remove it
+	cout << "mds" << mds->get_nodeid() << " deleting " << in->inode.ino << " " << in << endl;
 	remove_inode(in);
 	delete in;
 	
@@ -787,7 +791,8 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
   // remove
   cout << "mds" << mds->get_nodeid() << " inode_expire on " << m->ino << " from mds" << m->get_source() << endl;
 
-  in->cached_by.erase(m->get_source());
+  if (in->cached_by.count(m->get_source()))
+	in->cached_by.erase(m->get_source());
   if (in->cached_by.empty())
 	in->put();
   
@@ -930,15 +935,17 @@ class C_MDS_ExportFreeze : public Context {
   MDS *mds;
   CInode *in;   // inode of dir i'm exporting
   int dest;
+  double pop;
 
 public:
-  C_MDS_ExportFreeze(MDS *mds, CInode *in, int dest) {
+  C_MDS_ExportFreeze(MDS *mds, CInode *in, int dest, double pop) {
 	this->mds = mds;
 	this->in = in;
 	this->dest = dest;
+	this->pop = pop;
   }
   virtual void finish(int r) {
-	mds->mdcache->export_dir_frozen(in,dest);
+	mds->mdcache->export_dir_frozen(in, dest, pop);
   }
 };
 
@@ -1012,15 +1019,29 @@ void MDCache::export_dir(CInode *in,
   in->make_path(path);
   cout << "mds" << mds->get_nodeid() << " export_dir " << path << " to " << dest << ", freezing" << endl;
 
-  // pin
-  in->get();  // this is an export point, we must keep it!
+  if (in->dir->is_frozen()) {
+	cout << " can't export, frozen!" << endl;
+	return;
+  }
+
+  // take away popularity (and pass it on to the context, MExportDir request later)
+  double pop = in->popularity.get();
+  CInode *t = in;
+  while (t) {
+	t->popularity.adjust(-pop);
+	if (t->parent)
+	  t = t->parent->dir->inode;
+	else 
+	  break;
+  }
 
   // freeze the subtree
-  in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest));
+  in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest, pop));
 }
 
 void MDCache::export_dir_frozen(CInode *in,
-								int dest)
+								int dest,
+								double pop)
 {
   // subtree is now frozen!
   string path;
@@ -1029,8 +1050,19 @@ void MDCache::export_dir_frozen(CInode *in,
 
   // give it away
   in->dir->dir_auth = dest;
+  if (imports.count(in)) {
+	cout << " i'm rexporting this previous import" << endl;
+	imports.remove(in);
+  } else {
+	exports.insert(in);
+	in.get();           // and must keep it pinned
+  }
+  
+  
+  // FIXME ****** look for subdirs exported to same target, and merge!
 
-  MExportDir *req = new MExportDir(in);
+
+  MExportDir *req = new MExportDir(in, pop);  // include pop
   
   // fill with relevant cache data
   C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, in);
@@ -1048,6 +1080,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 							  CInode *idir)
 {
   assert(idir->is_dir());
+  if (!idir->dir)
+	return;  // we don't ahve anything, obviously
 
   cout << "export_dir_walk on " << idir->inode.ino << endl;
 
@@ -1120,7 +1154,7 @@ void MDCache::export_dir_walk(MExportDir *req,
   
   // subdirs
   for (list<CInode*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
-	export_dir_walk(req, fin, idir);
+	export_dir_walk(req, fin, *it);
 }
 
 
@@ -1134,7 +1168,8 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
   cout << "mds" << mds->get_nodeid() << " export_dir_ack " << path << endl;
   
   // remove the metadata from the cache
-  export_dir_purge( in );
+  if (in->dir) 
+	export_dir_purge( in );
 
   // unfreeze
   in->dir->unfreeze();
@@ -1153,18 +1188,23 @@ void MDCache::export_dir_purge(CInode *idir)
   for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
 	CInode *in = it->second->inode;
 	
-	if (in->is_dir()) 
+	if (in->is_dir() && in->dir) 
 	  export_dir_purge(in);
 
 	// dir incomplete!
 	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
 
+	cout << "mds" << mds->get_nodeid() << " deleting " << in->inode.ino << " " << in << endl;
 	remove_inode(in);
 	delete in;
   }
 
   cout << "export_dir_purge on " << idir->inode.ino << " done" << endl;
 }
+
+
+
+//  IMPORTS
 
 
 void MDCache::handle_export_dir(MExportDir *m)
@@ -1184,7 +1224,20 @@ void MDCache::handle_export_dir(MExportDir *m)
   // it's mine, now!
   in->dir->dir_auth = mds->get_nodeid();
 
-  
+  if (exports.count(in)) {
+	// reimporting
+	cout << " i'm reimporting this dir!" << endl;
+	exports.remove(in);
+  } else {
+	// new import
+	imports.insert(in);
+	in.get();            // must keep it pinned
+  }
+
+
+  // **** FIXME **** look for subdirs that i reimported, and merge.
+
+
   // add this crap to my cache
   const char *p = m->state.c_str();
   for (int i = 0; i < m->ndirs; i++) 
@@ -1192,6 +1245,18 @@ void MDCache::handle_export_dir(MExportDir *m)
   
   // ignore "frozen" state of the main dir; it's from the authority
   in->dir->state_clear(CDIR_MASK_FROZEN);
+
+  double newpop = m->ipop - in->popularity.get();
+  cout << " imported popularity jump by " << newpop << endl;
+  if (newpop > 0) {  // duh
+	CInode *t = in;
+	while (t) {
+	  t->popularity.adjust(newpop);
+	  if (t->parent) 
+		t = t->parent->dir->inode;
+	  else break;
+	}
+  }
 
   // send ack
   cout << "mds" << mds->get_nodeid() << " sending ack back to " << m->get_source() << endl;

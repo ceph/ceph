@@ -76,6 +76,7 @@ class CDir {
 
   friend class CInode;
   friend class MDCache;
+  friend class MDBalancer;
 
  public:
   CDir(CInode *in) {

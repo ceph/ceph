@@ -98,7 +98,8 @@ class MDS : public Dispatcher {
   MDBalancer   *balancer;
 
  protected:
-  double       last_heartbeat;
+  __uint64_t   stat_ops;
+  __uint64_t   last_heartbeat;
 
   
  public:

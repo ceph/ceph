@@ -41,6 +41,7 @@ class MExportDir : public Message {
  public:
   string path;
   inodeno_t ino;
+  double ipop;
 
   int    ndirs;
   crope  state;
@@ -48,10 +49,11 @@ class MExportDir : public Message {
 
   // ...?
 
-  MExportDir(CInode *in) : 
+  MExportDir(CInode *in, double pop) : 
 	Message(MSG_MDS_EXPORTDIR) {
 	this->ino = in->inode.ino;
 	in->make_path(path);
+	ipop = pop;
 	ndirs = 0;
   }
   virtual char *get_type_name() { return "exp"; }

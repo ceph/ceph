@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <ext/hash_map>
 
 #include "../include/types.h"
@@ -42,6 +43,10 @@ class MDCache {
   bool               opening_root;
   list<Context*>     waiting_for_root;
 
+  set<CInode*>       imports;
+  set<CInode*>       exports;
+
+  friend class MDBalancer;
 
  public:
   MDCache(MDS *m);
@@ -56,6 +61,7 @@ class MDCache {
 	root = r;
 	add_inode(root);
   }
+
 
   // fn
   size_t set_cache_size(size_t max) {
@@ -101,7 +107,8 @@ class MDCache {
   void export_dir(CInode *in,
 				  int mds);
   void export_dir_frozen(CInode *in,
-						 int dest);
+						 int dest, 
+						 double pop);
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
 					   CInode *idir);

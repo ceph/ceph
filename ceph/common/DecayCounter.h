@@ -22,6 +22,11 @@ class DecayCounter {
 	set_halflife(hl);
 	reset();
   }
+  
+  void adjust(double a) {
+	decay();
+	val += a;
+  }
 
   void set_halflife(double hl) {
 	half_life = hl;

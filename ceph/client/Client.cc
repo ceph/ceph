@@ -26,7 +26,7 @@ Client::Client(int id, Messenger *m)
   cache_lru.lru_set_max(1000);
   cache_lru.lru_set_midpoint(.5);
 
-  max_requests = 10000;
+  max_requests = 100000;
 }
 
 Client::~Client()

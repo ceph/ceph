@@ -113,15 +113,24 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 	  p += sizeof(inode_t);
 	  
 	  cout << " got " << in->inode.ino << " " << dname << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
-	  if (mds->mdcache->have_inode(in->inode.ino)) 
-		throw "inode already exists!  uh oh\n";
+
+	  if (mds->mdcache->have_inode(in->inode.ino)) {
+		cout << " already had inode, skipping!" << endl;
+		
+		inodeno_t ino = in->inode.ino;
+		delete in;
+		in = mds->mdcache->get_inode(ino);
+		continue;
+	  }
 		
 	  // add and link
 	  mds->mdcache->add_inode( in );
 	  mds->mdcache->link_inode( dir, dname, in );
 
 	  // HACK
-	  if (dir->inode.ino == 1 && mds->get_nodeid() == 0 && in->is_dir()) {
+	  if (
+		  0 &&
+		  dir->inode.ino == 1 && mds->get_nodeid() == 0 && in->is_dir()) {
 		int d = rand() % mds->mdcluster->get_size();
 		if (d > 0) {
 		  cout << "hack: exporting dir" << endl;

@@ -59,6 +59,8 @@ MDS::MDS(MDCluster *mdc, Messenger *m) {
 
   mdlog->set_max_events(100);
 
+  stat_ops = 0;
+  last_heartbeat = 0;
   osd_last_tid = 0;
 }
 MDS::~MDS() {
@@ -172,9 +174,8 @@ void MDS::dispatch(Message *m)
   }
 
   if (whoami == 0 &&
-	  g_clock.gettime() >= last_heartbeat + 5.0) {
-	cout << " now is " << g_clock.gettime() << endl;
-	last_heartbeat = g_clock.gettime();
+	  stat_ops >= last_heartbeat + 3000) {
+	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
   }
 
@@ -270,6 +271,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
 
   stat_read.hit();
   stat_req.hit();
+  stat_ops++;
   return reply;
 }
 
@@ -345,6 +347,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 
   stat_write.hit();
   stat_req.hit();
+  stat_ops++;
 
   // done
   delete req;
@@ -400,11 +403,12 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 
 	  stat_read.hit();
 	  stat_req.hit();
+	  stat_ops++;
 
 	  return reply;
 	} else {
 	  // fetch
-	  cout << "mds" << whoami << " no dir contents for readdir on " << cur->inode.ino << ", fetching" << endl;
+	  cout << "mds" << whoami << " incomplete dir contents for readdir on " << cur->inode.ino << ", fetching" << endl;
 	  mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
 	  return 0;
 	}

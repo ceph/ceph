@@ -36,7 +36,11 @@ class EInodeUpdate : public LogEvent {
   virtual bool obsolete(MDS *mds) {
 	// am i obsolete?
 	CInode *in = mds->mdcache->get_inode(inode.ino);
-	assert(in);
+	//assert(in);
+	if (!in) {
+	  cout << "inode " << inode.ino << " not in cache, must have exported" << endl;
+	  return true;
+	}
 	if (in->get_version() != version)
 	  return true;  // i'm obsolete!
 	return false;  
