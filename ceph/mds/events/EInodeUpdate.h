@@ -27,9 +27,10 @@ class C_EIU_VerifyInodeUpdate : public Context {
   virtual void finish(int r) {
 	CInode *in = mds->mdcache->get_inode(ino);
 	if (in) {
-	  // make sure it's clean, or a different version.
-	  if (in->is_dirty() &&
-		  in->get_version() == version) {
+	  // if it's mine, dirty, and the same version, commit
+	  if (in->authority(mds->get_cluster()) == mds->get_nodeid() &&  // mine
+		  in->is_dirty() &&                         // dirty
+		  in->get_version() == version) {           // same version that i have to deal with
 		cout << "ARGH, did EInodeUpdate commit but inode is still dirty" << endl;
 		// damnit
 		mds->mdstore->commit_dir(in->get_parent_inode(),
@@ -80,8 +81,10 @@ class EInodeUpdate : public LogEvent {
 	  cout << "inode " << inode.ino << " not in cache, must have exported" << endl;
 	  return true;
 	}
+	if (in->authority(mds->get_cluster()) != mds->get_nodeid())
+	  return true;  // not my inode anymore!
 	if (in->get_version() != version)
-	  return true;  // i'm obsolete!
+	  return true;  // i'm obsolete!  (another log entry follows)
 	return false;  
   }
 

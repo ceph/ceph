@@ -274,14 +274,14 @@ bool MDStore::commit_dir( CInode *in,
   // already committing?
   if (in->dir->state_test(CDIR_STATE_COMMITTING)) {
 	// already mid-commit!
-	dout(7) << "commit_dir dir " << *in << " already mid-commit" << endl;
+	dout(7) << "commit_dir " << *in << " already mid-commit" << endl;
 	in->dir->add_waiter(c);   // FIXME this isprobably a bad idea?
 	return false;
   }
 
   if (!in->dir->can_hard_pin()) {
 	// something must be frozen up the hiearchy!
-	dout(7) << "commit_dir dir " << *in << " can't hard_pin, waiting" << endl;
+	dout(7) << "commit_dir " << *in << " can't hard_pin, waiting" << endl;
 	in->dir->add_hard_pin_waiter( new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
 	return false;
   }
@@ -289,14 +289,14 @@ bool MDStore::commit_dir( CInode *in,
 
   // is it complete?
   if (!in->dir->is_complete()) {
-	dout(7) << "commit_dir dir " << *in << " not complete, fetching first" << endl;
+	dout(7) << "commit_dir " << *in << " not complete, fetching first" << endl;
 	// fetch dir first
 	Context *fin = new MDFetchForCommitContext(this, in, c);
 	fetch_dir(in, fin);
 	return false;
   }
 
-  dout(7) << "commit_dir dir " << *in << endl;
+  dout(7) << "commit_dir " << *in << endl;
 
   // get continuation ready
   MDCommitDirContext *fin = new MDCommitDirContext(this, in, c);
@@ -361,9 +361,9 @@ bool MDStore::commit_dir_2( int result,
 	CInode *in = it->second->get_inode();
 	if (in->get_parent_dir_version() == committed_version) {
 	  in->mark_clean();     // might not but could be dirty
-	  dout(5) << "inode " << *(in) << " now clean" << endl;
+	  dout(5) << " now clean " << *(in) << endl;
 	} else {
-	  dout(5) << "inode " << *(in) << " still dirty after a commit" << endl;
+	  dout(5) << " still dirty " << *(in) << endl;
 	}
   }
 

@@ -40,6 +40,8 @@ CInode::CInode() : LRUObject() {
   nested_hard_pinned = 0;
   //  state = 0;
 
+  version = 0;
+
   auth = true;  // by default.
 }
 
