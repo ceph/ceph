@@ -20,7 +20,9 @@ class MDiscoverReply : public Message {
   inodeno_t    base_ino;
   bool         no_base_dir;
   bool         no_base_dentry;
-  
+  bool        flag_forward;
+  bool        flag_error;
+
   // ... + dir + dentry + inode
   // inode [ + ... ], base_ino = 0 : discover base_ino=0, start w/ root ino
   // dentry + inode [ + ... ]      : discover want_base_dir=false
@@ -45,6 +47,9 @@ class MDiscoverReply : public Message {
   }
   string& get_path() { return path.get_path(); }
 
+  bool is_flag_forward() { return flag_forward; }
+  bool is_flag_error() { return flag_error; }
+
   // these index _arguments_ are aligned to the inodes.
   CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
   string& get_dentry(int n) { return path[n - no_base_dentry]; }
@@ -56,7 +61,7 @@ class MDiscoverReply : public Message {
   MDiscoverReply(inodeno_t base_ino) :
 	Message(MSG_MDS_DISCOVERREPLY) {
 	this->base_ino = base_ino;
-	no_base_dir = no_base_dentry = false;
+	flag_forward = flag_error = no_base_dir = no_base_dentry = false;
   }
   ~MDiscoverReply() {
 	for (vector<CDirDiscover*>::iterator it = dirs.begin();
@@ -72,7 +77,7 @@ class MDiscoverReply : public Message {
   
   // builders
   bool is_empty() {
-    return dirs.empty() && inodes.empty();
+    return dirs.empty() && inodes.empty() && !flag_forward && !flag_error;
   }
   void set_path(filepath& dp) { path = dp; }
   void add_dentry(string& dn) { 
@@ -90,6 +95,9 @@ class MDiscoverReply : public Message {
     dirs.push_back( dir );
   }
 
+  void set_flag_forward() { flag_forward = true; }
+  void set_flag_error() { flag_error = true; }
+
 
   // ...
   virtual int decode_payload(crope r) {
@@ -99,6 +107,10 @@ class MDiscoverReply : public Message {
     r.copy(off, sizeof(bool), (char*)&no_base_dir);
     off += sizeof(bool);
     r.copy(off, sizeof(bool), (char*)&no_base_dentry);
+    off += sizeof(bool);
+    r.copy(off, sizeof(bool), (char*)&flag_forward);
+    off += sizeof(bool);
+    r.copy(off, sizeof(bool), (char*)&flag_error);
     off += sizeof(bool);
     
     // dirs
@@ -131,6 +143,8 @@ class MDiscoverReply : public Message {
 	r.append((char*)&base_ino, sizeof(base_ino));
 	r.append((char*)&no_base_dir, sizeof(bool));
 	r.append((char*)&no_base_dentry, sizeof(bool));
+	r.append((char*)&flag_forward, sizeof(bool));
+	r.append((char*)&flag_forward, sizeof(bool));
 
 	// dirs
     int n = dirs.size();

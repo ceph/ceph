@@ -8,28 +8,30 @@ BUGS?
 
 ISSUES
 
-- analyze behavior of import vs freeze/export of parent dir?
-
 - group inode, dir expires in trim().
 
 - discover
- - soft
- - make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
- - error flag
+ - soft: authority selectively repicates, or sets a 'forward' flag in reply
+ - hard: authority always replicates (eg. discover for export)
+ - forward flag (see soft)
+ - error flag   (if file not found, etc.)
+ ?what was i talking about? - make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
 
+
+
+- is lock > freeze a bad plan?  what happens when we need to lock multiple spots
+  in the hierarchy.. will that cause deadlock?
 
 - log
   - overall logging strategy.  
     - currently (?): do everything immediately, reply when logged.
   - the log grows indefinitely
 
-- is lock > freeze a bad plan?  what happens when we need to lock multiple spots
-  in the hierarchy.. will that cause deadlock?
 
 
 
 FIX
-- soft and hard metadata should be fully independent?
+- soft and hard metadata should be fully/more independent?
   - hard lock (owner/mode) is relative to namespace
   - soft sync (mtime/size) is relative to inode (even when dangling)
 

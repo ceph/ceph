@@ -326,7 +326,8 @@ bool MDCache::shutdown_pass()
 
   // shut down root?
   if (lru->lru_get_size() == 1) {
-	if (root->dir && 
+	if (root && 
+		root->dir && 
 		root->dir->is_import() &&
 		root->dir->get_ref() == 1) {  // 1 is the import!
 	  // un-import
@@ -337,7 +338,7 @@ bool MDCache::shutdown_pass()
 	  trim(0);
 	}
 
-	if (root->is_pinned_by(CINODE_PIN_DIRTY)) {
+	if (root && root->is_pinned_by(CINODE_PIN_DIRTY)) {
 	  dout(7) << "clearing root dirty flag" << endl;
 	  root->put(CINODE_PIN_DIRTY);
 	  trim(0);
@@ -807,6 +808,15 @@ void MDCache::handle_discover(MDiscover *dis)
     
     assert(cur->is_dir());
     
+	// crazyness?
+	if (!cur->dir && !cur->is_auth()) {
+	  int iauth = cur->authority();
+	  dout(7) << "no dir and not inode auth; fwd to auth " << iauth << endl;
+	  mds->messenger->send_message( dis,
+									MSG_ADDR_MDS( iauth ), MDS_PORT_CACHE, MDS_PORT_CACHE );
+	  return;
+	}
+
     cur->get_or_open_dir(mds);
     assert(cur);
 
@@ -892,9 +902,10 @@ void MDCache::handle_discover(MDiscover *dis)
     } else {
       // don't have it?
       if (cur->dir->is_complete()) {
-        // ...
-		// i shoudl return an error falg in the reply... FIXME
-        assert(0);  // for now
+        // set error flag in reply
+        dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " not found in " << *cur->dir << ", returning error" << endl;
+		reply->set_flag_error();
+		break;
       } else {
         delete reply;
 
