@@ -22,6 +22,10 @@
 #include "messages/MExportDirAck.h"
 #include "messages/MExportDirNotify.h"
 
+#include "messages/MHashDir.h"
+#include "messages/MUnhashDir.h"
+#include "messages/MUnhashDirAck.h"
+
 #include "messages/MInodeUpdate.h"
 #include "messages/MDirUpdate.h"
 
@@ -2096,7 +2100,7 @@ void MDCache::export_dir_dropsync(CInode *idir)
 	if (in->is_syncbyme()) sync_release(in);
 
 	if (in->is_dir() &&
-		in->dir_auth == -1 &&      // mine
+		in->dir_auth == CDIR_AUTH_PARENT &&      // mine
 		in->nested_auth_pins > 0)  // might be sync
 	  export_dir_dropsync(in);
   }
@@ -2260,28 +2264,14 @@ void MDCache::export_dir_walk(MExportDir *req,
 	dir_rope.append( it->first.c_str(), it->first.length()+1 );
 
 	// add inode
-	Inode_Export_State_t istate;
-	istate.inode = in->inode;
-	istate.version = in->version;
-	istate.popularity = in->popularity;
-	//istate.ref = in->ref;
-	istate.ncached_by = in->cached_by.size();
+	dir_rope.append( in->encode_export_state() );
 
-	istate.is_softasync = in->is_softasync();
-	assert(!in->is_syncbyme());
-	assert(!in->is_lockbyme());
-
-	if (in->is_dirty()) {
-	  istate.dirty = true;
-	  in->mark_clean();
-	} else 
-	  istate.dirty = false;
+	if (in->is_dirty())  in->mark_clean();
 
 	if (in->is_dir()) {
-	  istate.dir_auth = in->dir_auth;
-	  assert(in->dir_auth != mds->get_nodeid());   // should be -1
+	  assert(in->dir_auth != mds->get_nodeid());   // should be -1?
 
-	  if (in->dir_auth == -1) {
+	  if (in->dir_auth == CDIR_AUTH_PARENT) {
 		subdirs.push_back(in);  // it's ours, recurse.
 	  } else {
 		dout(7) << " encountered nested export " << *in << " dir_auth " << in->dir_auth << "; removing from exports" << endl;
@@ -2289,18 +2279,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 		exports.erase(in);                    // discard nested export   (nested_exports updated above)
 		in->put(CINODE_PIN_EXPORT);
 	  }
-	} else 
-	  istate.dir_auth = -1;
-
-	// cached_by
-	dir_rope.append( (char*)&istate, sizeof(istate) );
-
-	for (set<int>::iterator it = in->cached_by.begin();
-		 it != in->cached_by.end();
-		 it++) {
-	  int i = *it;
-	  dir_rope.append( (char*)&i, sizeof(int) );
-	}
+	} 
 
 	// clear/unpin cached_by (we're no longer the authority)
 	in->cached_by_clear();
@@ -2337,6 +2316,9 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
   
   // remove the metadata from the cache
   //no, borken! if (in->dir) export_dir_purge( in, newauth );
+
+
+  // FIXME log it
 
   // unfreeze
   dout(7) << "export_dir_ack " << *in << ", unfreezing" << endl;
@@ -2538,6 +2520,9 @@ void MDCache::handle_export_dir(MExportDir *m)
   delete m;
 
 
+  // FIXME LOG IT
+
+
   // finish contexts
   dout(5) << "finishing any waiters on imported data" << endl;
   for (list<Context*>::iterator it = waiting_on_imported.begin();
@@ -2550,6 +2535,74 @@ void MDCache::handle_export_dir(MExportDir *m)
 	}
   }
 }
+
+CInode *MDCache::import_dentry_inode(CDir *dir,
+								   pchar& p,
+								   int from)
+{
+  // dentry
+  string dname = p;
+  p += dname.length()+1;
+  
+  // inode
+  Inode_Export_State_t *istate = (Inode_Export_State_t*)p;
+  p += sizeof(*istate);
+
+  CInode *in = get_inode(istate->inode.ino);
+  if (!in) {
+	in = new CInode;
+	in->inode = istate->inode;
+	in->auth = true;
+	
+	// add
+	add_inode(in);
+	link_inode(dir->inode, dname, in);	
+	dout(7) << "   import_dentry_inode adding " << *in << " istate.dir_auth " << istate->dir_auth << endl;
+  } else {
+	dout(7) << "   import_dentry_inode already had " << *in << " istate.dir_auth " << istate->dir_auth << endl;
+	in->inode = istate->inode;
+	
+	assert(in->auth == false);
+	in->auth = true;
+  }
+
+  // update inode state with authoritative info
+  in->version = istate->version;
+  in->popularity = istate->popularity;
+
+  in->dir_auth = istate->dir_auth;
+  
+  // cached_by
+  in->cached_by.clear(); 
+  for (int nby = istate->ncached_by; nby>0; nby--) {
+	if (*((int*)p) != mds->get_nodeid()) 
+	  in->cached_by_add( *((int*)p) );
+	p += sizeof(int);
+  }
+  
+  in->cached_by_add(from);             // old auth still has it too!
+  
+  // dist state: new authority inherits softasync state only; sync/lock are dropped for import/export
+  in->dist_state = 0;
+  if (istate->is_softasync)
+	in->dist_state |= CINODE_DIST_SOFTASYNC;
+  
+  
+  // other state? ... ?
+
+  
+  // dirty?
+  if (istate->dirty) {
+	in->mark_dirty();
+	
+	dout(10) << "logging dirty import " << *in << endl;
+	mds->mdlog->submit_entry(new EInodeUpdate(in),
+							 NULL);   // FIXME
+  }
+  
+  return in;
+}
+
 
 void MDCache::import_dir_block(pchar& p, 
 							   CInode *containing_import, 
@@ -2586,65 +2639,10 @@ void MDCache::import_dir_block(pchar& p,
 
   // contents
   for (long nitems = dstate->nitems; nitems>0; nitems--) {
-	// dentry
-	string dname = p;
-	p += dname.length()+1;
-
-	// inode
-	Inode_Export_State_t *istate = (Inode_Export_State_t*)p;
-	CInode *in = get_inode(istate->inode.ino);
-	if (!in) {
-	  in = new CInode;
-	  in->inode = istate->inode;
-
-	  // add
-	  add_inode(in);
-	  link_inode(idir, dname, in);	
-	  dout(7) << "   import_dir_block adding " << *in << " istate.dir_auth " << istate->dir_auth << endl;
-	} else {
-	  dout(7) << "   import_dir_block already had " << *in << " istate.dir_auth " << istate->dir_auth << endl;
-	  in->inode = istate->inode;
-
-	  assert(in->auth == false);
-	  in->auth = true;
-	}
-
-	// update inode state with authoritative info
-	in->version = istate->version;
-	in->popularity = istate->popularity;
-
-	p += sizeof(*istate);
+	CInode *in = import_dentry_inode(idir->dir, p, oldauth);
 	
-	in->cached_by.clear();  // HACK i'm cheating...
-	for (int nby = istate->ncached_by; nby>0; nby--) {
-	  if (*((int*)p) != mds->get_nodeid()) 
-		in->cached_by_add( *((int*)p) );
-	  p += sizeof(int);
-	}
-
-	in->cached_by_add(oldauth);             // old auth still has it too!
-
-	// dist state: new authority inherits softasync state only; sync/lock are dropped for import/export
-	in->dist_state = 0;
-	if (istate->is_softasync)
-	  in->dist_state |= CINODE_DIST_SOFTASYNC;
-	
-
-	// other state? ... ?
-
-	
-	// dirty?
-	if (istate->dirty) {
-	  in->mark_dirty();
-	  
-	  dout(10) << "logging dirty import " << *in << endl;
-	  mds->mdlog->submit_entry(new EInodeUpdate(in),
-							   NULL);   // FIXME
-	}
-
-
 	// was this an export?
-	if (istate->dir_auth >= 0) {
+	if (in->dir_auth >= 0) {
 	  
 	  // to us?
 	  if (in->dir_auth == mds->get_nodeid()) {
@@ -2671,9 +2669,8 @@ void MDCache::import_dir_block(pchar& p,
 		in->dir_auth = CDIR_AUTH_PARENT;
 		in->put(CINODE_PIN_IMPORT);       // imports are pinned, no longer import
 	  } else {
-		dout(7) << " importing nested export " << *in << " to " << istate->dir_auth << endl;
+		dout(7) << " importing nested export " << *in << " to " << in->dir_auth << endl;
 		// add this export
-		in->dir_auth = istate->dir_auth;
 		in->get(CINODE_PIN_EXPORT);           // all exports are pinned
 		exports.insert(in);
 		nested_exports.insert(pair<CInode*,CInode*>(containing_import, in));
@@ -2743,6 +2740,558 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
   delete m;
 }
 
+
+
+
+
+// HASH on auth
+
+void MDCache::drop_sync_in_dir(CDir *dir)
+{
+  for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
+	CInode *in = it->second->inode;
+	if (in->is_auth() && 
+		in->is_syncbyme()) {
+	  dout(7) << "dropping sticky(?) sync on " << *in << endl;
+	  sync_release(in);
+	}
+  }
+}
+
+
+class C_MDS_HashFreeze : public Context {
+public:
+  MDS *mds;
+  CDir *dir;
+  C_MDS_HashFreeze(MDS *mds, CDir *dir) {
+	this->mds = mds;
+	this->dir = dir;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->hash_dir_finish(dir);
+  }
+};
+
+class C_MDS_HashComplete : public Context {
+public:
+  MDS *mds;
+  CDir *dir;
+  C_MDS_HashComplete(MDS *mds, CDir *dir) {
+	this->mds = mds;
+	this->dir = dir;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->hash_dir_complete(dir);
+  }
+};
+
+void MDCache::hash_dir(CDir *dir)
+{
+  assert(!dir->state_test(CDIR_STATE_HASHING));
+  assert(!dir->state_test(CDIR_STATE_HASHED));
+  assert(dir->is_auth());
+  
+  if (dir->is_frozen() ||
+	  dir->is_freezing()) {
+	dout(7) << " can't hash, freezing|frozen." << endl;
+	return;
+  }
+  
+  dout(7) << "hash_dir " << *dir->inode << endl;
+
+  // fix state
+  dir->state_set(CDIR_STATE_HASHING);
+  dir->auth_pin();
+
+  // start freeze
+  dir->freeze_dir(new C_MDS_HashFreeze(mds, dir));
+
+  // make complete
+  if (!dir->is_complete()) {
+	dout(7) << "hash_dir dir " << *dir->inode << " not complete, fetching" << endl;
+	mds->mdstore->fetch_dir(dir->inode,
+							new C_MDS_HashComplete(mds, dir));
+  } else
+	hash_dir_complete(dir);
+
+  // drop any sync or lock if sticky
+  if (g_conf.mdcache_sticky_sync_normal ||
+	  g_conf.mdcache_sticky_sync_softasync) 
+	drop_sync_in_dir(dir);
+}
+
+void MDCache::hash_dir_complete(CDir *dir)
+{
+  assert(dir->state_test(CDIR_STATE_HASHING));
+  assert(!dir->state_test(CDIR_STATE_HASHED));
+  assert(dir->is_auth());
+
+  // mark dirty to pin in cache
+  for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
+	CInode *in = it->second->inode;
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->ino(), it->first );
+	if (dentryhashcode == mds->get_nodeid()) 
+	  in->mark_dirty();
+  }
+  
+  hash_dir_finish(dir);
+}
+
+void MDCache::hash_dir_finish(CDir *dir)
+{
+  assert(dir->state_test(CDIR_STATE_HASHING));
+  assert(!dir->state_test(CDIR_STATE_HASHED));
+  assert(dir->is_auth());
+  
+  if (!dir->is_frozen_dir()) {
+	dout(7) << "hash_dir_finish !frozen yet " << *dir->inode << endl;
+	return;
+  }
+  if (!dir->is_complete()) {
+	dout(7) << "hash_dir_finish !complete, waiting still " << *dir->inode << endl;
+	return;  
+  }
+
+  dout(7) << "hash_dir_finish dir " << *dir->inode << endl;
+  
+  // get messages to other nodes ready
+  vector<MHashDir*> msgs;
+  string path;
+  dir->inode->make_path(path);
+  for (int i=0; i<mds->get_cluster()->get_num_mds(); i++) {
+	msgs.push_back(new MHashDir(path));
+  }
+  
+  // divy up contents
+  for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
+	CInode *in = it->second->inode;
+	
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->ino(), it->first );
+	if (dentryhashcode == mds->get_nodeid())
+	  continue;      // still mine!
+
+	// giving it away.
+	in->version++;   // so log entries are ignored, etc.
+	
+	// mark my children explicitly mine
+	if (in->dir_auth == CDIR_AUTH_PARENT)
+	  in->dir_auth = mds->get_nodeid();
+	
+	// add dentry and inode to message
+	msgs[dentryhashcode]->dir_rope.append( it->first.c_str(), it->first.length()+1 );
+	msgs[dentryhashcode]->dir_rope.append( in->encode_export_state() );
+	
+	// fix up my state
+	if (in->is_dirty()) in->mark_clean();
+	in->cached_by_clear();
+	
+	assert(in->auth == true);
+	in->auth = false;
+
+	// there should be no waiters.
+  }
+
+  // send them
+  for (int i=0; i<mds->get_cluster()->get_num_mds(); i++) {
+	mds->messenger->send_message(msgs[i],
+								 MSG_ADDR_MDS(i), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  }
+
+  // inode state
+  dir->inode->inode.isdir = INODE_DIR_HASHED;
+  if (dir->inode->is_auth())
+	dir->inode->mark_dirty();
+
+  // dir state
+  dir->state_set(CDIR_STATE_HASHED);
+  dir->state_clear(CDIR_STATE_HASHING);
+  dir->mark_dirty();
+
+  // FIXME: log!
+
+  // unfreeze
+  dir->unfreeze_dir();
+}
+
+/*
+hmm, not going to need to do this for now!
+
+void handle_hash_dir_ack(MHashDirAck *m)
+{
+  CInode *in = 
+  
+  // done
+  delete m;
+}
+*/
+
+void MDCache::handle_hash_dir(MHashDir *m)
+{
+  // traverse to node
+  vector<CInode*> trav;
+  int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_DISCOVER);   
+  if (r > 0) return;  // fw or delay
+
+  CInode *idir = trav[trav.size()-1];
+  if (!idir->dir) idir->dir = new CDir(idir, mds->get_nodeid());
+
+  dout(7) << "handle_hash_dir dir " << *idir << endl;
+
+  assert(!idir->dir->is_auth());
+  assert(!idir->dir->is_hashed());
+
+  // dir state
+  idir->dir->state_set(CDIR_STATE_HASHED);
+ 
+  // inode state
+  idir->inode.isdir = INODE_DIR_HASHED;
+  if (idir->is_auth()) 
+	idir->mark_dirty();
+
+  // assimilate contents
+  int oldauth = m->get_source();
+  const char *p = m->dir_rope.c_str();
+  const char *pend = p + m->dir_rope.length();
+  while (p < pend) {
+	CInode *in = import_dentry_inode(idir->dir, p, oldauth);
+	in->mark_dirty();  // pin in cache
+  }
+  
+  // dir is complete
+  idir->dir->mark_complete();
+  idir->dir->mark_dirty();
+
+  // FIXME: log
+
+  // done.
+  delete m;
+}
+
+
+
+
+// UNHASHING
+
+class C_MDS_UnhashFreeze : public Context {
+public:
+  MDS *mds;
+  CDir *dir;
+  C_MDS_UnhashFreeze(MDS *mds, CDir *dir) {
+	this->mds = mds;
+	this->dir = dir;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->unhash_dir_finish(dir);
+  }
+};
+
+class C_MDS_UnhashComplete : public Context {
+public:
+  MDS *mds;
+  CDir *dir;
+  C_MDS_UnhashComplete(MDS *mds, CDir *dir) {
+	this->mds = mds;
+	this->dir = dir;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->unhash_dir_complete(dir);
+  }
+};
+
+
+void MDCache::unhash_dir(CDir *dir)
+{
+  assert(dir->state_test(CDIR_STATE_HASHED));
+  assert(!dir->state_test(CDIR_STATE_UNHASHING));
+  assert(dir->is_auth());
+  
+  if (dir->is_frozen() ||
+	  dir->is_freezing()) {
+	dout(7) << " can't un_hash, freezing|frozen." << endl;
+	return;
+  }
+  
+  dout(7) << "unhash_dir " << *dir->inode << endl;
+
+  // fix state
+  dir->state_set(CDIR_STATE_UNHASHING);
+
+  // freeze
+  dir->freeze_dir(new C_MDS_UnhashFreeze(mds, dir));
+
+  // request unhash from other nodes
+  string path;
+  dir->inode->make_path(path);
+  for (int i=0; i<mds->get_cluster()->get_num_mds(); i++) {
+	if (i == mds->get_nodeid()) continue;
+	mds->messenger->send_message(new MUnhashDir(path),
+								 MSG_ADDR_MDS(i), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	unhash_waiting.insert(pair<CDir*,int>(dir,i));
+  }
+  
+  // make complete
+  if (!dir->is_complete()) {
+	dout(7) << "hash_dir dir " << *dir->inode << " not complete, fetching" << endl;
+	mds->mdstore->fetch_dir(dir->inode,
+							new C_MDS_UnhashComplete(mds, dir));
+  } else
+	unhash_dir_complete(dir);
+
+  // drop any sync or lock if sticky
+  if (g_conf.mdcache_sticky_sync_normal ||
+	  g_conf.mdcache_sticky_sync_softasync)
+	drop_sync_in_dir(dir);
+}
+
+ 
+void MDCache::unhash_dir_complete(CDir *dir)
+{
+  // mark all my inodes dirty (to avoid a race)
+  for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
+	CInode *in = it->second->inode;
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->ino(), it->first );
+	if (dentryhashcode == mds->get_nodeid()) 
+	  in->mark_dirty();
+  }
+  
+  unhash_dir_finish(dir);
+}
+
+
+void MDCache::unhash_dir_finish(CDir *dir)
+{
+  if (!dir->is_frozen_dir()) {
+	dout(7) << "unhash_dir_finish still waiting for freeze on " << *dir->inode << endl;
+	return;
+  }
+  if (!dir->is_complete()) {
+	dout(7) << "unhash_dir_finish still waiting for complete on " << *dir->inode << endl;
+	return;
+  }
+  if (unhash_waiting.count(dir) > 0) {
+	dout(7) << "unhash_dir_finish still waiting for all acks on " << *dir->inode << endl;
+	return;
+  }
+  
+  dout(7) << "unhash_dir_finish dir " << dir->inode << endl;
+  
+  // dir state
+  dir->state_clear(CDIR_STATE_HASHED);
+  dir->state_clear(CDIR_STATE_UNHASHING);
+  dir->mark_dirty();
+  dir->mark_complete();
+  
+  // inode state
+  dir->inode->inode.isdir = INODE_DIR_NORMAL;
+  dir->inode->mark_dirty();
+
+  // unfreeze!
+  dir->unfreeze_dir();
+}
+
+
+void MDCache::handle_unhash_dir_ack(MUnhashDirAck *m)
+{
+  CInode *idir = get_inode(m->get_ino());
+  assert(idir && idir->dir);
+  assert(idir->dir->is_auth());
+  assert(idir->dir->is_hashed());
+  assert(idir->dir->state_test(CDIR_STATE_UNHASHING));
+
+  dout(7) << "handle_unhash_dir_ack dir " << *idir << endl;
+  
+  // assimilate contents
+  int oldauth = m->get_source();
+  const char *p = m->dir_rope.c_str();
+  const char *pend = p + m->dir_rope.length();
+  while (p < pend) {
+	CInode *in = import_dentry_inode(idir->dir, p, oldauth);
+	in->mark_dirty();   // pin in cache
+  }
+
+  // remove from waiting list
+  multimap<CDir*,int>::iterator it = unhash_waiting.find(idir->dir);
+  while (it->second != oldauth) {
+	it++;
+	assert(it->first == idir->dir);
+  }
+  unhash_waiting.erase(it);
+
+  unhash_dir_finish(idir->dir);  // try to finish
+
+  // done.
+  delete m; 
+}
+
+
+// unhash on non-auth
+
+class C_MDS_HandleUnhashFreeze : public Context {
+public:
+  MDS *mds;
+  CDir *dir;
+  int auth;
+  C_MDS_HandleUnhashFreeze(MDS *mds, CDir *dir, int auth) {
+	this->mds = mds;
+	this->dir = dir;
+	this->auth = auth;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->handle_unhash_dir_finish(dir, auth);
+  }
+};
+
+class C_MDS_HandleUnhashComplete : public Context {
+public:
+  MDS *mds;
+  CDir *dir;
+  int auth;
+  C_MDS_HandleUnhashComplete(MDS *mds, CDir *dir, int auth) {
+	this->mds = mds;
+	this->dir = dir;
+	this->auth = auth;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->handle_unhash_dir_complete(dir, auth);
+  }
+};
+
+
+void MDCache::handle_unhash_dir(MUnhashDir *m)
+{
+  // traverse to node
+  vector<CInode*> trav;
+  int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_DISCOVER);   
+  if (r > 0) return;  // fw or delay
+
+  CInode *idir = trav[trav.size()-1];
+  if (!idir->dir) idir->dir = new CDir(idir, mds->get_nodeid());
+  CDir *dir = idir->dir;
+
+  dout(7) << "handle_unhash_dir " << *idir << endl;
+  
+  assert(dir->state_test(CDIR_STATE_HASHED));
+  
+  int auth = m->get_source();
+
+  // fix state
+  dir->state_set(CDIR_STATE_UNHASHING);
+
+  // freeze
+  dir->freeze_dir(new C_MDS_HandleUnhashFreeze(mds, dir, auth));
+
+  // make complete
+  if (!dir->is_complete()) {
+	dout(7) << "handle_unhash_dir dir " << *dir->inode << " not complete, fetching" << endl;
+	mds->mdstore->fetch_dir(dir->inode,
+							new C_MDS_HandleUnhashComplete(mds, dir, auth));
+  } else
+	handle_unhash_dir_complete(dir, auth);
+
+  // drop any sync or lock if sticky
+  if (g_conf.mdcache_sticky_sync_normal ||
+	  g_conf.mdcache_sticky_sync_softasync) 
+	drop_sync_in_dir(dir);
+
+  // done with message
+  delete m;
+}
+
+
+void MDCache::handle_unhash_dir_complete(CDir *dir, int auth)
+{
+  // mark all my inodes dirty (to avoid a race)
+  for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
+	CInode *in = it->second->inode;
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->ino(), it->first );
+	if (dentryhashcode == mds->get_nodeid()) 
+	  in->mark_dirty();
+  }
+  
+  handle_unhash_dir_finish(dir, auth);
+}
+
+void MDCache::handle_unhash_dir_finish(CDir *dir, int auth)
+{
+  assert(dir->state_test(CDIR_STATE_UNHASHING));
+  assert(dir->state_test(CDIR_STATE_HASHED));
+
+  if (!dir->is_complete()) {
+	dout(7) << "still waiting for complete on " << *dir->inode << endl;
+	return;
+  }
+  if (!dir->is_frozen_dir()) {
+	dout(7) << "still waiting for frozen_dir on " << *dir->inode << endl;
+	return;
+  }
+
+  assert(dir->is_frozen_dir());
+  assert(dir->is_complete());
+
+  dout(7) << "handle_unhash_dir_finish " << *dir->inode << endl;
+  // okay, we are complete and frozen.
+  
+  // get message to auth ready
+  MUnhashDirAck *msg = new MUnhashDirAck(dir->inode->ino());
+  
+  // include contents
+  for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
+	CInode *in = it->second->inode;
+	
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->ino(), it->first );
+	
+	if (dentryhashcode != mds->get_nodeid())
+	  continue;      // not mine
+
+	// give it away.
+	in->version++;   // so log entries are ignored, etc.
+	
+	// add dentry and inode to message
+	msg->dir_rope.append( it->first.c_str(), it->first.length()+1 );
+	msg->dir_rope.append( in->encode_export_state() );
+	
+	if (in->dir_auth == auth)
+	  in->dir_auth = CDIR_AUTH_PARENT;
+
+	// fix up my state
+	if (in->is_dirty()) in->mark_clean();
+	in->cached_by_clear();
+	
+	assert(in->auth == true);
+	in->auth = false;
+
+	// there should be no waiters.
+  }
+
+  // send back to auth
+  mds->messenger->send_message(msg,
+							   MSG_ADDR_MDS(auth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+
+  // inode state
+  dir->inode->inode.isdir = INODE_DIR_NORMAL;
+  if (dir->inode->is_auth())
+	dir->inode->mark_dirty();
+
+  // dir state
+  dir->state_clear(CDIR_STATE_HASHED);
+  dir->state_clear(CDIR_STATE_UNHASHING);
+  dir->mark_clean();  // it's not mine.
+
+  // FIXME log
+  
+  // unfreeze
+  dir->unfreeze_dir();
+}
+
+
+
+
+
+
+
+
+
+// debug crap
 
 
 void MDCache::show_imports()

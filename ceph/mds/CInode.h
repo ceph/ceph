@@ -223,10 +223,11 @@ class CInode : LRUObject {
   void state_set(unsigned mask) { state |= mask; }
   unsigned state_test(unsigned mask) { return state & mask; }
 
-
   // -- state encoding --
   crope encode_basic_state();
   int decode_basic_state(crope r, int off=0);
+
+  crope encode_export_state();
 
 
   

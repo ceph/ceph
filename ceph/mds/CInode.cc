@@ -7,6 +7,7 @@
 #include "include/Message.h"
 
 #include "messages/MInodeSyncStart.h"
+#include "messages/MExportDir.h"
 
 #include <string>
 
@@ -104,6 +105,44 @@ void CInode::mark_dirty() {
 
 
 // state 
+
+crope CInode::encode_export_state()
+{
+  crope r;
+  Inode_Export_State_t istate;
+
+  istate.inode = inode;
+  istate.version = version;
+  istate.popularity = popularity;
+  //istate.ref = in->ref;
+  istate.ncached_by = cached_by.size();
+  
+  istate.is_softasync = is_softasync();
+  assert(!is_syncbyme());
+  assert(!is_lockbyme());
+  
+  if (is_dirty())
+	istate.dirty = true;
+  else istate.dirty = false;
+
+  if (is_dir()) 
+	istate.dir_auth = dir_auth;
+  else
+	istate.dir_auth = -1;
+
+  // append to rope
+  r.append( (char*)&istate, sizeof(istate) );
+  
+  // cached_by
+  for (set<int>::iterator it = cached_by.begin();
+	   it != cached_by.end();
+	   it++) {
+	int i = *it;
+	r.append( (char*)&i, sizeof(int) );
+  }
+
+  return r;
+}
 
 crope CInode::encode_basic_state()
 {

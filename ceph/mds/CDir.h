@@ -38,13 +38,16 @@ class Context;
 #define CDIR_STATE_FETCHING    256   // currenting fetching
 
 #define CDIR_STATE_IMPORT     1024   // flag set if this is an import.
-#define CDIR_STATE_AUTH       2048   // auth for all (OR PART) of this dir
-#define CDIR_STATE_HASHED     4096   // true if hashed
+#define CDIR_STATE_AUTH       2048   // auth for this dir (hashing doesn't count)
+#define CDIR_STATE_HASHED     4096   // if hashed.  only hashed+auth on auth node.
+
+#define CDIR_STATE_HASHING    8192
+#define CDIR_STATE_UNHASHING 16384
 
 // these state bits are preserved by an import/export
+// ...except if the directory is hashed, in which case none of them are!
 #define CDIR_MASK_STATE_EXPORTED  (CDIR_STATE_COMPLETE\
-                                   |CDIR_STATE_DIRTY\
-                                   |CDIR_STATE_HASHED)
+                                   |CDIR_STATE_DIRTY)
 #define CDIR_MASK_STATE_EXPORT_KEPT 0
 
 // common states

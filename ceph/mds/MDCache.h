@@ -34,6 +34,12 @@ class MInodeLockRelease;
 class C_MDS_ExportFinish;
 class InoAllocator;
 
+class MHashDir;
+class MHashDirAck;
+class MUnhashDir;
+class MUnhashDirAck;
+
+
 // DCache
 
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
@@ -58,6 +64,9 @@ class MDCache {
   set<CInode*>       imports;                // includes root (on mds0)
   set<CInode*>       exports;
   multimap<CInode*,CInode*>  nested_exports; // nested exports of (imports|root)
+  
+  multimap<CDir*, int>       unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
+  
   friend class MDBalancer;
 
  public:
@@ -156,32 +165,28 @@ class MDCache {
   void handle_export_dir_notify(MExportDirNotify *m);
 
 
-  /*
-  // -- freezing --
-  void freeze_tree(CDir *dir, Context *c);
-  void freeze_tree_finish(CDir *dir, Context *c);
-  void unfreeze_tree(CDir *dir);
+  // -- hashed directories --
+  // hash on auth
+  void hash_dir(CDir *dir);
+  void hash_dir_complete(CDir *dir);
+  void hash_dir_finish(CDir *dir);
 
-  void freeze_dir(CInode *in, Context *c);
-  void freeze_dir_finish(CInode *in, list<Context*>& waiting);
-  void unfreeze_dir(Cinode *in);
+  // hash on non-auth
+  void handle_hash_dir(MHashDir *m);
 
-  bool is_freezing(CDir *dir) {
-	return is_freezing_tree(dir) || is_freezing_dir(dir);
-  }
-  bool is_freezing_tree(CDir *dir);
-  bool is_freezing_dir(CDir *dir) {
-	return freezing_dirs.count(dir);
-  }
+  // unhash on auth
+  void unhash_dir(CDir *dir);
+  void unhash_dir_complete(CDir *dir);
+  void handle_unhash_dir_ack(MUnhashDirAck *m);
+  void unhash_dir_finish(CDir *dir);
 
-  bool is_frozen(CDir *dir) {
-	return is_frozen_dir(dir) || is_frozen_tree(dir);
-  }
-  bool is_frozen_tree(CDir *dir);
-  bool is_frozen_dir(CDir *dir) {
-	return frozen_dirs.count(dir);
-  }
-  */
+  // unhash on non-auth
+  void handle_unhash_dir(MUnhashDir *m);
+  void handle_unhash_dir_complete(CDir *dir, int auth);
+  void handle_unhash_dir_finish(CDir *dir, int auth);
+
+  void drop_sync_in_dir(CDir *dir);
+  CInode *import_dentry_inode(CDir *dir, pchar& p, int from);
 
   // -- updates --
   int send_inode_updates(CInode *in);

@@ -51,6 +51,17 @@ struct inode_t {
 
 typedef __uint64_t object_t;
 
+
+// -- load balancing stuff --
+
+// popularity
+#define MDS_POP_ANY     0
+#define MDS_POP_SOFTRD  1
+#define MDS_POP_SOFTWR  2
+#define MDS_POP_HARDRD  3
+#define MDS_POP_HARDWR  4
+#define MDS_NPOP        5
+
 class mds_load_t {
  public:
   double root_pop;

@@ -4,12 +4,7 @@
 #include "include/Message.h"
 
 #include <ext/rope>
-
-#include <vector>
 using namespace std;
-
-//typedef struct {
-//} MExportDirRec_t;
 
 typedef struct {
   inode_t        inode;
@@ -36,10 +31,6 @@ typedef struct {
   // ints follow
 } Dir_Export_State_t;
   
-
-#define BUFLEN   100000  // 100k
-#define BUFSLOP   10000  // 10k before we make a new buf!
-
 
 class MExportDir : public Message {
   inodeno_t ino;

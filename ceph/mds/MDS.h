@@ -47,6 +47,8 @@ using namespace std;
 #define MDS_TRAVERSE_DISCOVER 2
 #define MDS_TRAVERSE_FAIL     3
 
+
+
 class MDCluster;
 class CInode;
 class MDCache;
