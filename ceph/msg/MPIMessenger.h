@@ -12,7 +12,7 @@ class MPIMessenger : public Messenger {
   
  public:
   MPIMessenger(long me);
-  ~MPIMessenger();
+  //~MPIMessenger();
 
   virtual int init(Dispatcher *dis);
   virtual int shutdown();
