@@ -4,7 +4,7 @@
 #include <iostream>
 #include <string>
 
-#include "include/mds.h"
+#include "include/MDS.h"
 #include "include/MDCache.h"
 #include "include/MDStore.h"
 #include "include/FakeMessenger.h"

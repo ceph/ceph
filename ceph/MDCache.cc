@@ -3,7 +3,7 @@
 #include "include/MDStore.h"
 #include "include/CInode.h"
 #include "include/CDir.h"
-#include "include/mds.h"
+#include "include/MDS.h"
 
 #include <errno.h>
 #include <iostream>

@@ -1,6 +1,6 @@
 
 #include "include/FakeMessenger.h"
-#include "include/mds.h"
+#include "include/MDS.h"
 
 #include <map>
 #include <ext/hash_map>
