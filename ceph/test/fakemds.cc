@@ -61,10 +61,14 @@ int main(char **argv, int argc) {
   // loop
   fakemessenger_do_loop();
 
+  mds[0]->shutdown_start();
+
+  fakemessenger_do_loop();
+
   // cleanup
   cout << "cleanup" << endl;
   for (int i=0; i<NUMMDS; i++) {
-	if (mds[i]->shutdown() == 0) {
+	if (mds[i]->shutdown_final() == 0) {
 	  //cout << "clean shutdown of mds " << i << endl;
 	  delete mds[i];
 	} else {

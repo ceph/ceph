@@ -27,7 +27,7 @@ class LogStream {
 	buf = 0;
   }
   ~LogStream() {
-	if (buf) { delete buf; buf = 0; }
+	if (buf) { delete[] buf; buf = 0; }
   }
 
   off_t seek(off_t offset) {

@@ -48,6 +48,13 @@ int Client::init()
 int Client::shutdown()
 {
   messenger->shutdown();
+
+  cache_lru.lru_set_max(0);
+  trim_cache();
+  if (root) {  // not in lru
+	delete root;
+	root = 0;
+  }
   return 0;
 }
 
@@ -101,6 +108,9 @@ void Client::assim_reply(MClientReply *r)
 	for (set<int>::iterator it = r->trace[i]->dist.begin(); it != r->trace[i]->dist.end(); it++)
 	  cur->dist.push_back(*it);
 	cur->isdir = r->trace[i]->inode.isdir;
+
+	// free c_inode_info
+	delete r->trace[i];
   }
 
 
@@ -110,8 +120,10 @@ void Client::assim_reply(MClientReply *r)
 
 	vector<c_inode_info*>::iterator it;
 	for (it = r->dir_contents->begin(); it != r->dir_contents->end(); it++) {
-	  if (cur->lookup((*it)->ref_dn)) 
+	  if (cur->lookup((*it)->ref_dn)) {
+		delete *it;
 		continue;  // skip if we already have it
+	  }
 
 	  ClNode *n = new ClNode();
 	  n->ino = (*it)->inode.ino;
@@ -125,7 +137,13 @@ void Client::assim_reply(MClientReply *r)
 
 	  if (debug > 3)
 		cout << "client got dir item " << (*it)->ref_dn << endl;
+
+	  // free the c_inode_info
+	  delete *it;
 	}
+
+	// free dir_contents vector
+	delete r->dir_contents;
   }
 
   cwd = cur;

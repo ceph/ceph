@@ -5,6 +5,7 @@
 #include <list>
 #include <ext/hash_map>
 #include <vector>
+#include <set>
 
 #include "include/types.h"
 #include "include/Context.h"
@@ -73,6 +74,9 @@ class MDS : public Dispatcher {
 
   MDCluster    *mdcluster;
 
+  bool         shutting_down;
+  set<int>     did_shut_down;
+  
   // import/export
   list<CInode*>      import_list;
   list<CInode*>      export_list;
@@ -111,8 +115,11 @@ class MDS : public Dispatcher {
 
   mds_load_t get_load();
 
+  bool is_shutting_down() { return shutting_down; }
+
   int init();
-  int shutdown();
+  int shutdown_start();
+  int shutdown_final();
 
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
@@ -122,6 +129,8 @@ class MDS : public Dispatcher {
 
 
   void handle_ping(class MPing *m);
+  void handle_shutdown_start(Message *m);
+  void handle_shutdown_finish(Message *m);
 
   int handle_client_request(MClientRequest *m);
   

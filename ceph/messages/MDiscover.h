@@ -75,7 +75,7 @@ class MDiscover : public Message {
 	return a;
   }
 
-  string next_dentry() {
+  string& next_dentry() {
 	return (*want)[trace.size()];
   }
 

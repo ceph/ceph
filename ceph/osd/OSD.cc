@@ -170,6 +170,8 @@ void OSD::write(MOSDWrite *m)
   cout << "sending reply" << endl;
   messenger->send_message(reply, m->get_source(), m->get_source_port());
 
-  delete m->buf;
+  // free buffer
+  delete[] m->buf;
+  m->buf = 0;
 }
 

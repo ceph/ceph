@@ -121,6 +121,8 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   if (mds_load.size() == cluster_size) 
 	do_rebalance();
   
+  // done
+  delete m;
 }
 
 

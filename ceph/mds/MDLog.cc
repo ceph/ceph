@@ -11,7 +11,7 @@
 #include "include/Logger.h"
 #include "include/Message.h"
 
-LogType *mdlog_logtype = 0;
+LogType mdlog_logtype;
 
 
 // cons/des
@@ -29,9 +29,6 @@ MDLog::MDLog(MDS *m)
 						 mds->get_cluster()->get_log_osd(mds->get_nodeid()),
 						 mds->get_cluster()->get_log_oid(mds->get_nodeid()));
 
-  if (!mdlog_logtype) 
-	mdlog_logtype = new LogType();
-
   string name;
   name = "log.mds";
   int w = mds->get_nodeid();
@@ -39,7 +36,7 @@ MDLog::MDLog(MDS *m)
   if (w >= 100) name += ('0' + ((w/100)%10));
   if (w >= 10) name += ('0' + ((w/10)%10));
   name += ('0' + ((w/1)%10));
-  logger = new Logger(name, mdlog_logtype);
+  logger = new Logger(name, (LogType*)&mdlog_logtype);
 }
 
 
@@ -47,6 +44,7 @@ MDLog::~MDLog()
 {
   if (reader) { delete reader; reader = 0; }
   if (writer) { delete writer; writer = 0; }
+  if (logger) { delete logger; logger = 0; }
 }
 
 

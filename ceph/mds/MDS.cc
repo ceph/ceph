@@ -59,6 +59,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   mdlog->set_max_events(100);
 
+  shutting_down = false;
+
   stat_ops = 0;
   last_heartbeat = 0;
   osd_last_tid = 0;
@@ -66,9 +68,10 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdstore) { delete mdstore; mdstore = NULL; }
-  if (messenger) { delete messenger; messenger = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
+
+  if (messenger) { delete messenger; messenger = NULL; }
 }
 
 
@@ -78,7 +81,45 @@ int MDS::init()
   messenger->init(this);
 }
 
-int MDS::shutdown()
+
+int MDS::shutdown_start()
+{
+  cout << "mds" << whoami << " shutdown_start" << endl;
+  shutting_down = true;
+  for (int i=0; i<mdcluster->get_num_mds(); i++) {
+	if (i == whoami) continue;
+	cout << "mds" << whoami << " sending MShutdownStart to mds" << i << endl;
+	messenger->send_message(new Message(MSG_MDS_SHUTDOWNSTART),
+							i, MDS_PORT_MAIN,
+							MDS_PORT_MAIN);
+  }
+
+  mdcache->shutdown_pass();
+}
+
+
+void MDS::handle_shutdown_start(Message *m)
+{
+  cout << "mds" << whoami << " handle_shutdown_start" << endl;
+  shutting_down = true;
+  delete m;
+}
+
+void MDS::handle_shutdown_finish(Message *m)
+{
+  cout << "mds" << whoami << " handle_shutdown_finish from " << m->get_source() << endl;
+  did_shut_down.insert(m->get_source());
+  cout << "mds" << whoami << " shut down so far: " << did_shut_down << endl;
+  delete m;
+
+  if (did_shut_down.size() == mdcluster->get_num_mds()) {
+	shutting_down = false;
+  }
+}
+
+
+
+int MDS::shutdown_final()
 {
   // shut down cache
   mdcache->shutdown();
@@ -117,6 +158,15 @@ void MDS::proc_message(Message *m)
 	handle_ping((MPing*)m);
 	break;
 
+	
+	// MDS
+  case MSG_MDS_SHUTDOWNSTART:
+	handle_shutdown_start(m);
+	break;
+
+  case MSG_MDS_SHUTDOWNFINISH:
+	handle_shutdown_finish(m);
+	break;
 
 	// CLIENTS ===========
   case MSG_CLIENT_REQUEST:
@@ -182,6 +232,11 @@ void MDS::dispatch(Message *m)
 	balancer->send_heartbeat();
   }
 
+  if (shutting_down) {
+	if (mdcache->shutdown_pass())
+	  shutting_down = false;
+  }
+
 }
 
 
@@ -202,6 +257,12 @@ void MDS::handle_ping(MPing *m)
 int MDS::handle_client_request(MClientRequest *req)
 {
   cout << "mds" << whoami << " req client" << req->client << '.' << req->tid << " op " << req->op << " on " << req->path <<  endl;
+
+  if (is_shutting_down()) {
+	cout << "mds" << whoami << " shutting down, discarding client request." << endl;
+	delete req;
+	return 0;
+  }
   
   if (!mdcache->get_root()) {
 	cout << "mds" << whoami << " need open root" << endl;
@@ -524,17 +585,18 @@ int MDS::osd_read_finish(Message *rawm)
 
 	if (p->buf) { // user buffer
 	  memcpy(p->buf, m->buf, m->len);  // copy
-	  delete m->buf;                   // free message buf
+	  delete[] m->buf;                 // free message buf
 	} else {      // new buffer
 	  *p->bufptr = m->buf;     // steal message's buffer
 	}
 	m->buf = 0;
   }
 
+  // del pendingOsdRead_t
   delete p;
 
   long result = m->len;
-  delete m;
+  delete m;  // del message
 
   if (c) {
 	c->finish(result);

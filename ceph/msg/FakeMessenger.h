@@ -11,10 +11,13 @@
 class FakeMessenger : public Messenger {
  protected:
   int whoami;
+
+  class Logger *logger;
   
  public:
   FakeMessenger(long me);
-  
+  ~FakeMessenger();
+
   virtual int init(Dispatcher *dis);
   virtual int shutdown();
   virtual bool send_message(Message *m, long dest, int port=0, int fromport=0);

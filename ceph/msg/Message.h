@@ -29,6 +29,9 @@
 #define MSG_MDS_INODESYNCACK     161
 #define MSG_MDS_INODESYNCRELEASE 162
 
+#define MSG_MDS_SHUTDOWNSTART  900
+#define MSG_MDS_SHUTDOWNFINISH 901
+
 
 #define MSG_ADDR_MDS(x)     (x)
 #define MSG_ADDR_OSD(x)     (0x800 + x)

@@ -19,7 +19,7 @@ using namespace std;
 
 map<int, FakeMessenger*> directory;
 hash_map<int, Logger*>        loggers;
-LogType *logtype;
+LogType fakemsg_logtype;
 
 // lame main looper
 
@@ -73,10 +73,18 @@ FakeMessenger::FakeMessenger(long me)
   if (w >= 100) name += ('0' + ((w/100)%10));
   if (w >= 10) name += ('0' + ((w/10)%10));
   name += ('0' + ((w/1)%10));
-  if (!logtype) 
-	logtype = new LogType(); 
-  Logger *l = new Logger(name, logtype);
-  loggers[ whoami ] = l;
+
+  logger = new Logger(name, (LogType*)&fakemsg_logtype);
+  loggers[ whoami ] = logger;
+}
+
+FakeMessenger::~FakeMessenger()
+{
+  cout << " FAKEMESSEGER DES" << endl;
+  shutdown();
+  cout << " logger is " << logger << endl;
+
+  delete logger;
 }
 
 
@@ -88,8 +96,10 @@ int FakeMessenger::init(Dispatcher *d)
 int FakeMessenger::shutdown()
 {
   directory.erase(whoami);
+
   remove_dispatcher();
 }
+
 
 bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 {

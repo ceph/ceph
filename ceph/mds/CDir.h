@@ -170,7 +170,7 @@ class CDir {
   // manipulation
   void add_child(CDentry *d);
   void remove_child(CDentry *d);
-  CDentry* lookup(string n);
+  CDentry* lookup(string& n);
 
   // debuggin
   void dump(int d = 0);

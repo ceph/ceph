@@ -30,7 +30,7 @@ class LogEvent {
 	serial_buf = 0;
   }
   ~LogEvent() {
-	if (serial_buf) { delete serial_buf; serial_buf = 0; }
+	if (serial_buf) { delete[] serial_buf; serial_buf = 0; }
   }
   
   int get_type() { return type; }

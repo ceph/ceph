@@ -56,7 +56,7 @@ void CDir::remove_child(CDentry *d) {
 }
 
 
-CDentry* CDir::lookup(string n) {
+CDentry* CDir::lookup(string& n) {
   //cout << " lookup " << n << " in " << this << endl;
   map<string,CDentry*>::iterator iter = items.find(n);
   if (iter == items.end()) return NULL;

@@ -166,7 +166,7 @@ class CInode : LRUObject {
 
   // --- reference counting
   void put(int by) {
-	if (ref > 0 || ref_set.count(by) != 1) {
+	if (ref == 0 || ref_set.count(by) != 1) {
 	  cout << "bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 1);
 	  assert(ref > 0);
@@ -180,7 +180,10 @@ class CInode : LRUObject {
   void get(int by) {
 	if (ref == 0)
 	  lru_pin();
-	assert(ref_set.count(by) == 0);
+	if (ref_set.count(by)) {
+	  cout << "bad get " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	  assert(ref_set.count(by) == 0);
+	}
 	ref++;
 	ref_set.insert(by);
 	cout << "get " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
@@ -188,6 +191,7 @@ class CInode : LRUObject {
 
   // --- hierarchy stuff
   void add_parent(CDentry *p);
+  void remove_parent(CDentry *p);
 
   mdloc_t get_mdloc() {
 	return inode.ino;       // use inode #

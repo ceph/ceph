@@ -105,7 +105,7 @@ void CInode::add_read_waiter(Context *c) {
 }
 void CInode::take_read_waiting(list<Context*>& ls)
 {
-  if (waiting_for_write.size())
+  if (waiting_for_read.size())
 	put(CINODE_PIN_RWAIT);
   ls.splice(ls.end(), waiting_for_read);
 }
@@ -182,6 +182,22 @@ void CInode::add_parent(CDentry *p) {
 	parents.push_back(p);
 }
 
+void CInode::remove_parent(CDentry *p) {
+  nparents--;
+  if (nparents == 0) {         // first
+	assert(parent == p);
+	parent = 0;
+  }
+  else if (nparents == 1) {  // second, switch back from the vector
+	parent = parents.front();
+	if (parent == p)
+	  parent = parents.back();
+	assert(parent != p);
+	parents.clear();
+  } else {
+	assert(0); // implement me
+  }
+}
 
 
 

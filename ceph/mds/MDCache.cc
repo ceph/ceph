@@ -48,7 +48,12 @@ MDCache::~MDCache()
 
 bool MDCache::shutdown()
 {
-  //if (root) clear_dir(root);
+  if (root) {
+	inode_map.erase(root->inode.ino);
+	lru->lru_remove(root);
+	delete root;
+	root = 0;
+  }
 }
 
 
@@ -67,10 +72,13 @@ bool MDCache::remove_inode(CInode *o)
   if (o->nparents == 1) {
 	CDentry *dn = o->parent;
 	dn->dir->remove_child(dn);
+	o->remove_parent(dn);
 	delete dn;
   } 
   else if (o->nparents > 1) {
 	assert(o->nparents <= 1);
+  } else {
+	assert(o->parent == 0);  // root?
   }
 
   // remove from map
@@ -95,23 +103,49 @@ bool MDCache::trim(__int32_t max) {
 	// notify authority?
 	int auth = in->authority(mds->get_cluster());
 	if (auth != mds->get_nodeid()) {
+	  cout << "mds" << mds->get_nodeid() << " sending inode_expire to mds" << auth << " on " << *in << endl;
 	  mds->messenger->send_message(new MInodeExpire(in->inode.ino),
 								   MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
 	}	
 
-
-	// dir incomplete!
-	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
+	CInode *idir = in->parent->dir->inode;
 
 	// remove it
 	cout << "mds" << mds->get_nodeid() << " trim deleting " << *in << " " << in << endl;
 	remove_inode(in);
 	delete in;
-	
-  }
 
+	// dir incomplete!
+	idir->dir->state_clear(CDIR_MASK_COMPLETE);
+	if (imports.count(idir) && !idir->is_root()) {
+	  // it's an import!
+	  cout << "mds" << mds->get_nodeid() << " trimmed parent dir is an import; rexporting" << endl;
+	  export_dir( idir, idir->authority(mds->get_cluster()) );
+	}
+  }
+  
   return true;
+}
+
+
+bool MDCache::shutdown_pass()
+{
+  cout << "mds" << mds->get_nodeid() << " shutdown_pass" << endl;
+  assert(mds->is_shutting_down());
+
+  // make a pass on the cache
+  trim(1);
+
+  cout << "mds" << mds->get_nodeid() << " cache size now " << lru->lru_get_size() << endl;
+
+  if (lru->lru_get_size() <= 1) {
+	cout << "mds" << mds->get_nodeid() << " done, sending shutdown_finish" << endl;
+	mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
+								 0, MDS_PORT_MAIN, MDS_PORT_MAIN);
+	return true;
+  }
+  return false;
 }
 
 
@@ -151,6 +185,8 @@ int MDCache::link_inode( CInode *parent, string& dname, CInode *in )
   if (!parent->dir) {
 	return -ENOTDIR;  // not a dir
   }
+
+  assert(parent->dir->lookup(dname) == 0);
 
   // create dentry
   CDentry* dn = new CDentry(dname, in);
@@ -654,7 +690,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		// link in
 		add_inode( in );
 		link_inode( cur, (*dis->want)[i], in );
-		cout << " adding " << *in << endl;
+		cout << " discover assimilating " << *in << endl;
 	  }
 	  
 	  cur->dir->take_waiting((*dis->want)[i],
@@ -1164,6 +1200,8 @@ void MDCache::export_dir_frozen(CInode *in,
 							   MSG_ADDR_MDS(dest), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
 
+  // queue finisher
+  in->dir->add_waiter( fin );  // is this right?
 }
 
 void MDCache::export_dir_walk(MExportDir *req,
@@ -1464,9 +1502,9 @@ void MDCache::import_dir_block(pchar& p, CInode *containing_import)
 	  // add
 	  add_inode(in);
 	  link_inode(idir, dname, in);	
-	  cout << "   adding " << *in << endl;
+	  cout << "   import_dir_block adding " << *in << endl;
 	} else {
-	  cout << "   already had " << *in << endl;
+	  cout << "   import_dir_block already had " << *in << endl;
 	  in->inode = istate->inode;
 	}
 	

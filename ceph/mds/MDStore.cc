@@ -149,10 +149,14 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
 	}
   }
   
+  // free buffer
+  delete[] buf;
+  
+  // dir is now complete
   idir->dir->state_set(CDIR_MASK_COMPLETE);
   
+  // trim cache?
   mds->mdcache->trim();
-  
   
   // finish
   list<Context*> finished;

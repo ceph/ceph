@@ -3,6 +3,9 @@ CC=g++
 CFLAGS=-D __gnu_cxx=std -g -I.
 LIBS=
 
+LEAKTRACER=
+LEAKTRACER=/g/g13/weil2/src/LeakTracer/LeakTracer.o
+
 SRCS=*.cc */*.cc
 OBJS=Logger.o mds/MDBalancer.o mds/MDS.o mds/CDentry.o mds/CDir.o mds/CInode.o mds/MDCache.o mds/MDStore.o clock.o FakeMessenger.o mds/LogStream.o mds/MDLog.o osd/OSD.o client/Client.o mds/MDCluster.o
 TARGETS=test import
@@ -11,7 +14,8 @@ all: depend ${TARGETS}
 
 
 test: test.cc pmds.o
-	${CC} ${CFLAGS} ${LIBS} pmds.o test.cc -o test
+	test ! -e leak.out || rm leak.out
+	${CC} ${CFLAGS} ${LIBS} pmds.o ${LEAKTRACER} test.cc -o test
 
 import: pmds.o import.cc
 	${CC} ${CFLAGS} ${LIBS} pmds.o import.cc -o import
