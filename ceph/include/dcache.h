@@ -7,33 +7,42 @@
 #include <vector>
 #include <map>
 
+#include "lru.h"
+
 using namespace std;
 
 class CDentry;
 class CDir;
 
 // cached inode wrapper
-class CInode {
+class CInode : LRUObject {
  protected:
   inode_t  inode;     // the inode itself
- public:
-  CDir    *dentries;  // directory entries, if we're a directory
- protected:
+  CDir    *dir;       // directory entries, if we're a directory
 
   int             ref;            // reference count (???????)
 
+  // parent dentries in cache
   int             nparents;  
   CDentry        *parent;            // if 1 parent (usually)
   vector<CDentry*> parents;    // if > 1
 
+  // dcache lru
+  CInode *lru_next, *lru_prev;
+
+  friend class DCache;
+
  public:
-  CInode() {
+  CInode() : LRUObject() {
 	ref = 0;
 
 	parent = NULL;
 	nparents = 0;
 
-	dentries = NULL;
+	dir = NULL;
+
+	lru_next = lru_prev = NULL;
+
   }
 
   // --- reference counting
@@ -41,8 +50,12 @@ class CInode {
 	if (ref == 0) 
 	  throw 1;
 	ref--;
+	if (ref == 0)
+	  lru_unpin();
   }
   void get() {
+	if (ref == 0)
+	  lru_pin();
 	ref++;
   }
   
@@ -62,6 +75,8 @@ class CDentry {
   CInode         *inode;
   CDir           *dir;
 
+  friend class DCache;
+
  public:
   // cons
   CDentry() {
@@ -72,6 +87,7 @@ class CDentry {
 	name = n;
 	inode = in;
   }
+  
 
   // copy cons
   CDentry(const CDentry& m);
@@ -93,6 +109,7 @@ class CDentry {
 };
 
 
+// CDir
 
 class CDir {
  protected:
@@ -114,9 +131,43 @@ class CDir {
   CDentry* lookup(string n);
 
   void dump(int d = 0);
+
 };
 
 
+
+
+// DCache
+
+class DentryCache {
+ protected:
+  CInode *root;
+
+  LRU            *lru;
+
+
+ public:
+  DentryCache() {
+	root = NULL;
+	lru = new LRU();
+  }
+  DentryCache(CInode *r) {
+	root = r;
+	lru = new LRU();
+  }
+  ~DentryCache() {
+	if (lru) { delete lru; lru = NULL; }
+  }
+  
+  // accessors
+  CInode *get_root() {
+	return root;
+  }
+
+  // fns
+  CInode* get_file(string& fn);
+  void add_file(string& fn, CInode* in);
+};
 
 
 #endif
