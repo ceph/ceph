@@ -1,5 +1,5 @@
-#ifndef __INOALLOCATOR_H
-#define __INOALLOCATOR_H
+#ifndef __IDALLOCATOR_H
+#define __IDALLOCATOR_H
 
 #include "include/types.h"
 #include "rangeset.h"
@@ -9,12 +9,12 @@ class MDS;
 #define ID_INO    1  // inode
 #define ID_FH     2  // file handle
 
-typedef __uint64_t id_t
+typedef __uint64_t idno_t;
 
 class IdAllocator {
   MDS *mds;
 
-  map< char, rangeset<id_t> > free;  // type -> rangeset
+  map< char, rangeset<idno_t> > free;  // type -> rangeset
   
  public:
   IdAllocator();
@@ -25,17 +25,17 @@ class IdAllocator {
   //~InoAllocator();
 
   
-  id_t get_id(char type) {
+  idno_t get_id(char type) {
 	free[type].dump();
-	id_t ino = free[type].first();
-	free[type].erase(ino);
-	cout << "id type " << type << " is " << ino << endl;
+	idno_t id = free[type].first();
+	free[type].erase(id);
+	cout << "id type " << type << " is " << id << endl;
 	free[type].dump();
 	save();
 	return id;
   }
-  void reclaim_id(char type, id_t ino) {
-	free[type].insert(ino);
+  void reclaim_id(char type, idno_t id) {
+	free[type].insert(id);
 	save();
   }
 

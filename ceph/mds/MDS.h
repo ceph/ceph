@@ -90,7 +90,9 @@ class MDS : public Dispatcher {
   bool         shut_down;
 
   // ino's and fh's
+  public:
   class IdAllocator  *idalloc;
+  protected:
   
   
   // import/export

@@ -1,5 +1,5 @@
 
-#include "InoAllocator.h"
+#include "IdAllocator.h"
 #include "MDS.h"
 
 #include <cassert>
@@ -30,7 +30,7 @@ void IdAllocator::save()
 	write(fd, (char*)&ntypes, sizeof(ntypes));
 	
 	// over types
-	for (map<char, map<id_t,id_t> >::iterator ty = free.begin();
+	for (map<char, map<idno_t,idno_t> >::iterator ty = free.begin();
 		 ty != free.end(); 
 		 ty++) {
 	  char type = *ty;
@@ -40,11 +40,11 @@ void IdAllocator::save()
 	  write(fd, (char*)&mapsize, sizeof(mapsize));
 	  
 	  // over entries
-	  for (map<id_t,id_t>::iterator it = free[type]..map_begin();
+	  for (map<idno_t,idno_t>::iterator it = free[type]..map_begin();
 		   it != free[type].map_end();
 		   it++) {
-		id_t a = it->first;
-		id_t b = it->second;
+		idno_t a = it->first;
+		idno_t b = it->second;
 		write(fd, &a, sizeof(a));
 		write(fd, &b, sizeof(b));
 	  }
@@ -70,7 +70,7 @@ void IdAllocator::load()
 	  int mapsize = 0;
 	  read(fd, &mapsize, sizeof(mapsize));
 	  for (int i=0; i<mapsize; i++) {
-		id_t a,b;
+		idno_t a,b;
 		read(fd, &a, sizeof(a));
 		read(fd, &b, sizeof(b));
 		free[type].map_insert(a,b);
