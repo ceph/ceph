@@ -21,7 +21,7 @@ class ClNode : public LRUObject {
   ClNode *parent;  
 
   hash_map<string, ClNode*> children;
-  bit_vector dist;
+  vector<int> dist;
 
 
   ClNode() {

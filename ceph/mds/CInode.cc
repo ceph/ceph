@@ -4,6 +4,10 @@
 #include "CDentry.h"
 
 #include "MDS.h"
+#include "include/Message.h"
+
+#include "messages/MInodeSyncStart.h"
+
 #include <string>
 
 // ====== CInode =======
@@ -15,6 +19,7 @@ CInode::CInode() : LRUObject() {
   lru_next = lru_prev = NULL;
   
   dir = NULL;
+  state = 0;
 
   mid_fetch = false;	
 }
@@ -35,17 +40,21 @@ void CInode::make_path(string& s)
 }
 
 // waiting
-void CInode::add_inode_waiter(Context *c) {
-  waiting_on_inode.push_back(c);
+
+void CInode::add_write_waiter(Context *c) {
+  waiting_for_write.push_back(c);
+}
+void CInode::take_write_waiting(list<Context*>& ls)
+{
+  ls.splice(ls.end(), waiting_for_write);
 }
 
-
-void CInode::take_inode_waiting(list<Context*>& ls)
+void CInode::add_read_waiter(Context *c) {
+  waiting_for_read.push_back(c);
+}
+void CInode::take_read_waiting(list<Context*>& ls)
 {
-  ls.splice(ls.end(), waiting_on_inode);
-
-  if (dir) 
-	dir->take_waiting(ls);
+  ls.splice(ls.end(), waiting_for_read);
 }
 
 
@@ -72,19 +81,6 @@ void CInode::add_parent(CDentry *p) {
 	parents.push_back(p);
 }
 
-bit_vector CInode::get_dist_spec(MDS *mds)
-{
-  bit_vector ds;
-
-  // FIXME make me smarter
-
-  // just us.
-  if (ds.size() <= mds->get_nodeid())
-	ds.resize( mds->get_nodeid()+1 );
-  ds[ mds->get_nodeid() ] = true;
-
-  return ds;
-}
 
 
 

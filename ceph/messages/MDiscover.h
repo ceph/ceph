@@ -10,9 +10,12 @@ using namespace std;
 
 typedef struct {
   inode_t    inode;
-  int        dir_dist;
+  set<int>   cached_by;
+
+  // dir stuff
+  int        dir_auth;
   int        dir_rep;
-  vector<int>  dir_rep_vec;
+  set<int>   dir_rep_by;
 } MDiscoverRec_t;
 
 
@@ -56,25 +59,28 @@ class MDiscover : public Message {
 
 	string a = current_base();
 	a += "/";
-	a += current_dentry();
+	a += next_dentry();
 	return a;
   }
 
-  string current_dentry() {
+  string next_dentry() {
 	return (*want)[trace.size()];
   }
 
-
+  bool want_root() {
+	if (want == NULL) return true;
+	return false;
+  }
   
   bool done() {
+	// just root?
 	if (want == NULL) {
-	  if (trace.size() < 1)
-		return false;  // no root
+	  if (trace.size() < 1) return false; 
 	  return true;
 	}
 
-	if (trace.size() == want->size())
-	  return true;
+	// normal
+	if (trace.size() == want->size()) return true;
 	return false;
   }
 };

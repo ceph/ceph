@@ -26,7 +26,7 @@ Client::Client(int id, Messenger *m)
   cache_lru.lru_set_max(5000);
   cache_lru.lru_set_midpoint(.5);
 
-  max_requests = 1000;
+  max_requests = 10000;
 }
 
 Client::~Client()
@@ -57,7 +57,6 @@ void Client::dispatch(Message *m)
 	if (debug > 1)
 	  cout << "client" << whoami << " got reply" << endl;
 	assim_reply((MClientReply*)m);
-	delete m;
 
 	if (tid < max_requests)
 	  issue_request();	
@@ -66,6 +65,8 @@ void Client::dispatch(Message *m)
   default:
 	cout << "client" << whoami << " got unknown message " << m->get_type() << endl;
   }
+
+  delete m;
 }
 	
 
@@ -73,7 +74,7 @@ void Client::assim_reply(MClientReply *r)
 {
   ClNode *cur = root;
 
-  // add items to cache
+  // update trace items in cache
   for (int i=0; i<r->trace.size(); i++) {
 	if (i == 0) {
 	  if (!root) {
@@ -92,7 +93,8 @@ void Client::assim_reply(MClientReply *r)
 	  }
 	}
 	cur->ino = r->trace[i]->inode.ino;
-	cur->dist = r->trace[i]->dist;
+	for (set<int>::iterator it = r->trace[i]->dist.begin(); it != r->trace[i]->dist.end(); it++)
+	  cur->dist.push_back(*it);
 	cur->isdir = r->trace[i]->inode.isdir;
   }
 
@@ -102,14 +104,16 @@ void Client::assim_reply(MClientReply *r)
 	cur->havedircontents = true;
 
 	vector<c_inode_info*>::iterator it;
-	for (it = r->dir_contents.begin(); it != r->dir_contents.end(); it++) {
+	for (it = r->dir_contents->begin(); it != r->dir_contents->end(); it++) {
 	  if (cur->lookup((*it)->ref_dn)) 
 		continue;  // skip if we already have it
 
 	  ClNode *n = new ClNode();
 	  n->ino = (*it)->inode.ino;
 	  n->isdir = (*it)->inode.isdir;
-	  n->dist = (*it)->dist;
+
+	  for (set<int>::iterator i = (*it)->dist.begin(); i != (*it)->dist.end(); i++)
+		cur->dist.push_back(*i);
 
 	  cur->link( (*it)->ref_dn, n );
 	  cache_lru.lru_insert_mid( n );
@@ -146,7 +150,7 @@ void Client::trim_cache()
 
 void Client::issue_request()
 {
-  int op = MDS_OP_STAT;
+  int op = 0;
 
   if (!cwd) cwd = root;
   string p = "";
@@ -180,6 +184,13 @@ void Client::issue_request()
 
 	cwd->full_path(p);
   } 
+
+  if (!op) {
+	if (rand() % 10 > 8)
+	  op = MDS_OP_TOUCH;
+	else
+	  op = MDS_OP_STAT;
+  }
 
   send_request(p, op);  // root, if !cwd
 }
@@ -215,17 +226,11 @@ void Client::send_request(string& p, int op)
 		off = nextslash+1;
 	  } else {
 		if (debug > 3) cout << " don't have it. " << endl;
-		int b = cur->dist.size();
-		//cout << " b is " << b << endl;
-		for (int i=0; i<b; i++) {
-		  if (cur->dist[i]) {
-			mds = i;
-			break;
-		  }
-		}
 		break;
 	  }
 	}
+	//int r = rand() % cur->dist.size();
+	//mds = cur->dist[r];  
   } else {
 	// we need the root inode
 	mds = 0;

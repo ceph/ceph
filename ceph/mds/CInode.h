@@ -15,11 +15,19 @@
 using namespace std;
 
 
+#define CINODE_SYNC_START     1  // starting sync
+#define CINODE_SYNC_LOCK      2  // am synced
+#define CINODE_SYNC_FINISH    4  // finishing
+
+#define CINODE_MASK_SYNC      (CINODE_SYNC_START|CINODE_SYNC_LOCK|CINODE_SYNC_FINISH)
+
+
 class Context;
 class CDentry;
 class CDir;
 class MDS;
 class MDCluster;
+class Message;
 
 // cached inode wrapper
 class CInode : LRUObject {
@@ -42,10 +50,13 @@ class CInode : LRUObject {
   bool             mid_fetch;
 
   // distributed caching
-  set<int>         cached_by;  // mds's that cache me
+  set<int>         cached_by;  // mds's that cache me.  not well defined on replicas.
+  int              state;
+  set<int>         sync_waiting_for_ack;
 
   // waiters
-  list<Context*>   waiting_on_inode;
+  list<Context*>   waiting_for_write;
+  list<Context*>   waiting_for_read;
 
   
 
@@ -53,7 +64,7 @@ class CInode : LRUObject {
   DecayCounter popularity;
   
 
-  friend class DentryCache;
+  friend class MDCache;
   friend class CDir;
   friend class MDStore;
   friend class MDS;
@@ -64,17 +75,24 @@ class CInode : LRUObject {
 
 	
   // fun
-  bool is_dir() {
-	return inode.isdir;
-  }
+  bool is_dir() { return inode.isdir; }
   void make_path(string& s);
+
+  // sync
+  int get_sync() { return state & CINODE_MASK_SYNC; }
+  int sync_set(int m) { 
+	state = (state & ~CINODE_MASK_SYNC) | m;
+  }
+
   
   // dist cache
   int authority(MDCluster *mdc);
 
 
-  void add_inode_waiter(Context *c);
-  void take_inode_waiting(list<Context*>& ls);      // these are destructive
+  void add_write_waiter(Context *c);
+  void take_write_waiting(list<Context*>& ls);
+  void add_read_waiter(Context *c);
+  void take_read_waiting(list<Context*>& ls);
 
   // --- reference counting
   void put() {
@@ -97,7 +115,10 @@ class CInode : LRUObject {
 	return inode.ino;       // use inode #
   }
 
-  bit_vector get_dist_spec(MDS *mds);
+  void get_dist_spec(set<int>& ls, int auth) {
+	ls = cached_by;
+	ls.insert(ls.begin(), auth);
+  }
 
 
   // dbg

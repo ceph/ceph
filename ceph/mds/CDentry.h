@@ -15,7 +15,7 @@ class CDentry {
   CInode         *inode;
   CDir           *dir;
 
-  friend class DentryCache;
+  friend class MDCache;
   friend class MDS;
   friend class CInode;
 

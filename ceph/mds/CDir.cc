@@ -46,30 +46,30 @@ CDentry* CDir::lookup(string n) {
 
 int CDir::dentry_authority(string& dn, MDCluster *mdc)
 {
-  if (dir_dist == CDIR_DIST_PARENT) {
+  if (dir_auth == CDIR_AUTH_PARENT) {
 	return inode->authority( mdc );       // same as my inode
   }
-  if (dir_dist == CDIR_DIST_HASH) {
+  if (dir_auth == CDIR_AUTH_HASH) {
 	return mdc->hash_dentry( this, dn );  // hashed
   }
 
   // explicit for this whole dir
-  return dir_dist;
+  return dir_auth;
 }
 
 int CDir::dir_authority(MDCluster *mdc) 
 {
   // explicit
-  if (dir_dist >= 0)
-	return dir_dist;
+  if (dir_auth >= 0)
+	return dir_auth;
 
   // parent
-  if (dir_dist == CDIR_DIST_PARENT)
+  if (dir_auth == CDIR_AUTH_PARENT)
 	return inode->authority(mdc);
 
   // hashed
   throw "hashed not implemented";
-  return CDIR_DIST_HASH;
+  return CDIR_AUTH_HASH;
 }
 
 

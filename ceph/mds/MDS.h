@@ -4,6 +4,7 @@
 
 #include <list>
 #include <ext/hash_map>
+#include <vector>
 
 #include "include/types.h"
 #include "include/Context.h"
@@ -17,7 +18,9 @@ using namespace std;
 
 #define MDS_PORT_MAIN   1
 #define MDS_PORT_SERVER 5
-#define MDS_PORT_STORE  10
+#define MDS_PORT_CACHE  10
+#define MDS_PORT_STORE  11
+
 
 // md ops
 #define MDS_OP_STAT    100
@@ -26,9 +29,11 @@ using namespace std;
 #define MDS_OP_OPEN    111
 #define MDS_OP_CLOSE   112
 
-#define MDS_OP_RENAME  121
-#define MDS_OP_UNLINK  122
-#define MDS_OP_LINK    123
+#define MDS_OP_TOUCH   200
+
+#define MDS_OP_RENAME  211
+#define MDS_OP_UNLINK  212
+#define MDS_OP_LINK    213
 
 #define MDS_TRAVERSE_FORWARD  1
 #define MDS_TRAVERSE_DISCOVER 2
@@ -36,12 +41,13 @@ using namespace std;
 
 class MDCluster;
 class CInode;
-class DentryCache;
+class MDCache;
 class MDStore;
 class MDLog;
 class Messenger;
 class Message;
 class MClientRequest;
+class MClientReply;
 class MDBalancer;
 
 // types
@@ -52,6 +58,7 @@ typedef struct {
   char *buf;
   Context *context;
 } PendingOSDRead_t;
+
 
 
 
@@ -69,9 +76,6 @@ class MDS : public Dispatcher {
   list<CInode*>      import_list;
   list<CInode*>      export_list;
   
-  bool               opening_root;
-  list<Context*>     waiting_for_root;
-
   // osd interface
   __uint64_t         osd_last_tid;
   hash_map<__uint64_t,PendingOSDRead_t*>  osd_reads;
@@ -81,7 +85,7 @@ class MDS : public Dispatcher {
 
  public:
   // sub systems
-  DentryCache  *mdcache;    // cache
+  MDCache      *mdcache;    // cache
   MDStore      *mdstore;    // storage interface
   Messenger    *messenger;    // message processing
   MDLog        *mdlog;
@@ -94,9 +98,8 @@ class MDS : public Dispatcher {
   MDS(MDCluster *mdc, Messenger *m);
   ~MDS();
 
-  int get_nodeid() {
-	return whoami;
-  }
+  int get_nodeid() { return whoami; }
+  MDCluster *get_cluster() { return mdcluster; }
 
   int init();
   int shutdown();
@@ -108,13 +111,19 @@ class MDS : public Dispatcher {
   bool open_root_2(int result, Context *c);
 
 
-  int handle_discover(class MDiscover *m);
+  void handle_ping(class MPing *m);
 
-  // client fun
   int handle_client_request(MClientRequest *m);
+  
+  MClientReply *handle_client_readdir(MClientRequest *req,
+									  CInode *cur);
+  MClientReply *handle_client_stat(MClientRequest *req,
+								   CInode *cur);
+  MClientReply *handle_client_touch(MClientRequest *req,
+									CInode *cur);
+
 
   int do_stat(MClientRequest *m);
-  int path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req, int onfail);
 
 
 
@@ -129,6 +138,21 @@ class MDS : public Dispatcher {
 
 
 };
+
+
+class C_MDS_RetryMessage : public Context {
+  Message *m;
+  MDS *mds;
+public:
+  C_MDS_RetryMessage(MDS *mds, Message *m) {
+	this->m = m;
+	this->mds = mds;
+  }
+  virtual void finish(int r) {
+	mds->dispatch(m);
+  }
+};
+
 
 
 //extern MDS *g_mds;

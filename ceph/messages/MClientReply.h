@@ -11,7 +11,7 @@ class CInode;
 
 typedef struct {
   inode_t inode;
-  bit_vector dist;
+  set<int> dist;
   string ref_dn;    // referring dentry (blank if root)
 } c_inode_info;
 
@@ -24,35 +24,48 @@ class MClientReply : public Message {
   // reply data
   string path;
   vector<c_inode_info*> trace;
-  vector<c_inode_info*> dir_contents;
+  vector<c_inode_info*> *dir_contents;
 
-  MClientReply(MClientRequest *req) : 
+  MClientReply(MClientRequest *req, int result = 0) : 
 	Message(MSG_CLIENT_REPLY) {
 	this->tid = req->tid;
 	this->op = req->op;
 	this->path = req->path;
+	this->result = result;
+	dir_contents = 0;
   }
   ~MClientReply() {
-	vector<c_inode_info*>::iterator it;
+	if (dir_contents) {
+	  vector<c_inode_info*>::iterator it;
+	  
+	  for (it = trace.begin(); it != trace.end(); it++) 
+		delete *it;
+	  
+	  for (it = dir_contents->begin(); it != dir_contents->end(); it++) 
+		delete *it;
+	  delete dir_contents;
+	  dir_contents = 0;
+	}
+  }
 
-	for (it = trace.begin(); it != trace.end(); it++) {
-	  delete *it;
-	}
-	for (it = dir_contents.begin(); it != dir_contents.end(); it++) {
-	  delete *it;
-	}
+  void add_dir_item(c_inode_info *c) {
+	if (!dir_contents)
+	  dir_contents = new vector<c_inode_info*>;
+	dir_contents->push_back(c);
   }
 
   void set_trace_dist(vector<CInode*>& tr, 
 					  vector<string>& trace_dn,
-					  MDS *mds) {
+					  int authority) {
 	vector<CInode*>::iterator it = tr.begin();
 	int p = 0;
 	while (it != tr.end()) {
 	  CInode *in = *(it++);
 	  c_inode_info *i = new c_inode_info;
 	  i->inode = in->inode;
-	  i->dist = in->get_dist_spec(mds);
+
+	  in->get_dist_spec(i->dist, authority);
+
 	  if (p) 
 		i->ref_dn = trace_dn[p-1];
 	  else

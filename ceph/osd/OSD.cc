@@ -63,6 +63,8 @@ void OSD::dispatch(Message *m)
   default:
 	cout << "osd " << whoami << " got unknown message " << m->get_type() << endl;
   }
+
+  delete m;
 }
 
 
@@ -116,7 +118,6 @@ void OSD::read(MOSDRead *r)
 
   // send it
   messenger->send_message(reply, r->get_source(), r->get_source_port());
-  delete r;
 }
 
 
@@ -157,6 +158,5 @@ void OSD::write(MOSDWrite *m)
   messenger->send_message(reply, m->get_source(), m->get_source_port());
 
   delete m->buf;
-  delete m;
 }
 

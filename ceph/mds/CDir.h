@@ -10,6 +10,7 @@
 #include <iostream>
 
 #include <list>
+#include <set>
 using namespace std;
 
 class CInode;
@@ -31,8 +32,8 @@ class Context;
 #define CDIR_STATE_INITIAL 0   // ?
 
 // distributions
-#define CDIR_DIST_PARENT   -1   // default
-#define CDIR_DIST_HASH     -2
+#define CDIR_AUTH_PARENT   -1   // default
+#define CDIR_AUTH_HASH     -2
 
 #define CDIR_REP_ALL       1
 #define CDIR_REP_NONE      0
@@ -56,14 +57,13 @@ class CDir {
   hash_map< string, list<Context*> > waiting_on_dentry;
 
   // cache
-  int              dir_dist;
+  int              dir_auth;
   int              dir_rep;
-  vector<int>      dir_rep_vec;  // if dir_rep == CDIR_REP_LIST
+  set<int>         dir_rep_by;  // if dir_rep == CDIR_REP_LIST
   bool             is_import, is_export;
 
-  friend class MDS;
-  friend class MDBalancer;
   friend class CInode;
+  friend class MDCache;
 
  public:
   CDir(CInode *in) {
@@ -74,7 +74,7 @@ class CDir {
 	state = CDIR_STATE_INITIAL;
 	version = 0;
 
-	dir_dist = CDIR_DIST_PARENT;
+	dir_auth = CDIR_AUTH_PARENT;
 	dir_rep = CDIR_REP_NONE;
   }
 

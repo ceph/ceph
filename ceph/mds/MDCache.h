@@ -14,26 +14,43 @@
 
 
 class MDS;
+class Message;
+class MExportDir;
+class MExportDirAck;
+class MDiscover;
+class MInodeUpdate;
+class MDirUpdate;
+class MInodeSyncStart;
+class MInodeSyncAck;
+class MInodeSyncRelease;
 
 // DCache
 
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
 
-class DentryCache {
+class MDCache {
  protected:
   CInode                       *root;        // root inode
   LRU                          *lru;         // lru for expiring items
   inode_map_t                   inode_map;   // map of inodes by ino             
+  MDS *mds;
+
+  bool               opening_root;
+  list<Context*>     waiting_for_root;
+
 
  public:
-  DentryCache() {
+  MDCache(MDS *m) {
+	mds = m;
 	root = NULL;
+	opening_root = false;
 	lru = new LRU();
   }
-  ~DentryCache() {
+  ~MDCache() {
 	if (lru) { delete lru; lru = NULL; }
   }
   
+
   // accessors
   CInode *get_root() {
 	return root;
@@ -73,6 +90,35 @@ class DentryCache {
   int link_inode( CInode *parent, string& dname, CInode *inode );
 
 
+  int open_root(Context *c);
+  int path_traverse(string& path, vector<CInode*>& trace, vector<string>& trace_dn, Message *req, int onfail);
+
+  // messages
+  int proc_message(Message *m);
+
+  int handle_discover(MDiscover *dis);
+  void handle_export_dir_ack(MExportDirAck *m);
+  void handle_export_dir(MExportDir *m);
+
+  void export_dir(CInode *in,
+				  int mds);
+
+  int send_inode_updates(CInode *in);
+  void handle_inode_update(MInodeUpdate *m);
+
+  int send_dir_updates(CDir *in);
+  void handle_dir_update(MDirUpdate *m);
+
+  void handle_inode_sync_start(MInodeSyncStart *m);
+  void handle_inode_sync_ack(MInodeSyncAck *m);
+  void handle_inode_sync_release(MInodeSyncRelease *m);
+
+  int read_start(CInode *in, Message *m);
+  int read_wait(CInode *in, Message *m);
+  int read_finish(CInode *in);
+  int write_start(CInode *in, Message *m);
+  int write_finish(CInode *in);
+			  
 
   // crap fns
   CInode* get_file(string& fn);

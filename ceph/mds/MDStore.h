@@ -43,7 +43,7 @@ bool fetch_inode( mdloc_t where,
   
   
   // process a message
-  bool proc_message( Message *m ) { }
+  void proc_message( Message *m );
   
 };
 

@@ -25,6 +25,9 @@ clean:
 pmds.o: ${OBJS}
 	ld -i -o pmds.o ${OBJS} 
 
+.depend:
+	touch .depend
+
 depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null

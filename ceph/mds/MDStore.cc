@@ -8,8 +8,21 @@
 #include "MDBalancer.h"
 #include "MDCluster.h"
 
+#include "include/Message.h"
+
 #include <iostream>
 using namespace std;
+
+
+void MDStore::proc_message(Message *m)
+{
+  switch (m->get_type()) {
+
+  default:
+	cout << "mds" << mds->get_nodeid() << " store unknown message " << m->get_type() << endl;
+	throw "asdf";
+  }
+}
 
 
 
@@ -111,7 +124,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 		int d = rand() % mds->mdcluster->get_size();
 		if (d > 0) {
 		  cout << "hack: exporting dir" << endl;
-		  mds->balancer->export_dir( in, d);
+		  mds->mdcache->export_dir( in, d);
 		}
 	  }
 
