@@ -11,5 +11,7 @@
 
 //#define FAKE_CLOCK
 
-#define NUMCLIENT 800
-#define CLIENT_REQUESTS 1000
+#define NUMCLIENT 80
+#define CLIENT_REQUESTS 30
+
+#define DEBUG_LEVEL 10

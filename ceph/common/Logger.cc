@@ -12,7 +12,7 @@
 
 Logger::Logger(string& fn, LogType *type)
 {
-  filename = "out/";
+  filename = "log/";
   filename += fn;
   interval = LOGGER_INTERVAL;
   start = last_logged = g_clock.gettime();  // time 0!

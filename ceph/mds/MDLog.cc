@@ -14,6 +14,9 @@
 LogType mdlog_logtype;
 
 
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".log "
+#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+
 // cons/des
 
 MDLog::MDLog(MDS *m) 

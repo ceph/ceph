@@ -1,4 +1,5 @@
 
+
 #include "MDBalancer.h"
 #include "MDS.h"
 #include "MDCluster.h"
@@ -15,6 +16,9 @@
 #include <map>
 using namespace std;
 
+#include "include/config.h"
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".bal "
+#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
@@ -50,7 +54,7 @@ int MDBalancer::proc_message(Message *m)
 	break;
 	
   default:
-	cout << "mds" << mds->get_nodeid() << " balancer unknown message " << m->get_type() << endl;
+	dout(1) << " balancer unknown message " << m->get_type() << endl;
 	assert(0);
 	break;
   }
@@ -73,7 +77,7 @@ public:
 void MDBalancer::send_heartbeat()
 {
   if (!mds->mdcache->get_root()) {
-	cout << "no root on send_heartbeat" << endl;
+	dout(5) << "no root on send_heartbeat" << endl;
 	mds->open_root(new C_Bal_SendHeartbeat(mds));
 	return;
   }
@@ -85,7 +89,7 @@ void MDBalancer::send_heartbeat()
   mds_load_t load = mds->get_load();
   mds_load[ mds->get_nodeid() ] = load;
 
-  cout << "mds" << mds->get_nodeid() << " sending heartbeat " << beat_epoch << " " << load << endl;
+  dout(5) << "mds" << mds->get_nodeid() << " sending heartbeat " << beat_epoch << " " << load << endl;
   
   int size = mds->get_cluster()->get_num_mds();
   for (int i = 0; i<size; i++) {
@@ -98,16 +102,16 @@ void MDBalancer::send_heartbeat()
 
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  cout << "mds" << mds->get_nodeid() << " got heartbeat " << m->beat << " from " << m->get_source() << " " << m->load << endl;
+  dout(5) << "mds" << mds->get_nodeid() << " got heartbeat " << m->beat << " from " << m->get_source() << " " << m->load << endl;
   
   if (!mds->mdcache->get_root()) {
-	cout << "no root on handle" << endl;
+	dout(10) << "no root on handle" << endl;
 	mds->open_root(new C_MDS_RetryMessage(mds, m));
 	return;
   }
   
   if (m->get_source() == 0) {
-	cout << " from mds0, new epoch" << endl;
+	dout(10) << " from mds0, new epoch" << endl;
 	beat_epoch = m->beat;
 	send_heartbeat();
 
@@ -131,18 +135,18 @@ void MDBalancer::do_rebalance()
   int cluster_size = mds->get_cluster()->get_num_mds();
   int whoami = mds->get_nodeid();
 
-  cout << "mds" << whoami << " do_rebalance: cluster loads are" << endl;
+  dout(5) << " do_rebalance: cluster loads are" << endl;
 
   mds_load_t total_load;
   multimap<double,int> load_map;
   for (int i=0; i<cluster_size; i++) {
-	cout << "  mds" << i << " load " << mds_load[i] << endl;
+	dout(5) << "  mds" << i << " load " << mds_load[i] << endl;
 	total_load += mds_load[i];
 
 	load_map.insert(pair<double,int>( mds_load[i].root_pop, i ));
   }
 
-  cout << "  total load " << total_load << endl;
+  dout(5) << "  total load " << total_load << endl;
   
   double my_load = mds_load[whoami].root_pop;
   mds_load_t target_load = total_load / (double)cluster_size;
@@ -150,12 +154,12 @@ void MDBalancer::do_rebalance()
   cout << "  target load " << target_load << endl;
   
   if (my_load < target_load.root_pop) {
-	cout << "  i am underloaded, doing nothing." << endl;
+	dout(5) << "  i am underloaded, doing nothing." << endl;
 	mds->mdcache->show_imports();
 	return;
   }  
 
-  cout << "  i am overloaded" << endl;
+  dout(5) << "  i am overloaded" << endl;
   
 
   // determine load transfer mapping
@@ -172,7 +176,7 @@ void MDBalancer::do_rebalance()
 		maxim < 0) break;
 
 	if (maxim < maxex) {  // import takes it all
-	  cout << " - " << (*exporter).second << " exports " << maxim << " to " << (*importer).second << endl;
+	  dout(5) << " - " << (*exporter).second << " exports " << maxim << " to " << (*importer).second << endl;
 	  if ((*exporter).second == whoami)
 		my_targets.insert(pair<int,double>((*importer).second, maxim));
 	  exported += maxim;
@@ -180,7 +184,7 @@ void MDBalancer::do_rebalance()
 	  imported = 0;
 	} 
 	else if (maxim > maxex) {         // export all
-	  cout << " - " << (*exporter).second << " exports " << maxex << " to " << (*importer).second << endl;
+	  dout(5) << " - " << (*exporter).second << " exports " << maxex << " to " << (*importer).second << endl;
 	  if ((*exporter).second == whoami)
 		my_targets.insert(pair<int,double>((*importer).second, maxex));
 	  imported += maxex;
@@ -188,7 +192,7 @@ void MDBalancer::do_rebalance()
 	  exported = 0;
 	} else {
 	  // wow, perfect match!
-	  cout << " - " << (*exporter).second << " exports " << maxex << " to " << (*importer).second << endl;
+	  dout(5) << " - " << (*exporter).second << " exports " << maxex << " to " << (*importer).second << endl;
 	  if ((*exporter).second == whoami)
 		my_targets.insert(pair<int,double>((*importer).second, maxex));
 	  imported = exported = 0;
@@ -204,7 +208,7 @@ void MDBalancer::do_rebalance()
 	   it++) {
 	import_pop_map.insert(pair<double,CInode*>((*it)->popularity.get(), *it));
 	int from = (*it)->authority(mds->get_cluster());
-	cout << "map i imported " << **it << " from " << from << endl;
+	dout(5) << "map i imported " << **it << " from " << from << endl;
 	import_from_map.insert(pair<int,CInode*>(from, *it));
   }
   
@@ -217,18 +221,18 @@ void MDBalancer::do_rebalance()
 
 	if (amount < MIN_OFFLOAD) continue;
 
-	cout << "mds" << whoami << " sending " << amount << " to " << target << endl;
+	dout(5) << " sending " << amount << " to " << target << endl;
 	
 	mds->mdcache->show_imports();
 
 	// search imports from target
 	if (import_from_map.count(target)) {
-	  cout << " aha, looking through imports from target mds" << target << endl;
+	  dout(5) << " aha, looking through imports from target mds" << target << endl;
 	  pair<multimap<int,CInode*>::iterator, multimap<int,CInode*>::iterator> p =
 		p = import_from_map.equal_range(target);
 	  while (p.first != p.second) {
 		CInode *in = (*p.first).second;
-		cout << "considering " << *in << " from " << (*p.first).first << endl;
+		dout(5) << "considering " << *in << " from " << (*p.first).first << endl;
 		multimap<int,CInode*>::iterator plast = p.first++;
 		
 		if (in->is_root()) continue;
@@ -236,13 +240,13 @@ void MDBalancer::do_rebalance()
 		assert(in->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
 
 		if (pop <= amount) {
-		  cout << "reexporting " << *in << " pop " << pop << " back to " << target << endl;
+		  dout(5) << "reexporting " << *in << " pop " << pop << " back to " << target << endl;
 		  mds->mdcache->export_dir(in, target);
 		  amount -= pop;
 		  import_from_map.erase(plast);
 		  import_pop_map.erase(pop);
 		} else {
-		  cout << "can't reexport " << *in << ", too big " << pop << endl;
+		  dout(5) << "can't reexport " << *in << ", too big " << pop << endl;
 		}
 		if (amount < MIN_OFFLOAD) break;
 	  }
@@ -259,7 +263,7 @@ void MDBalancer::do_rebalance()
 	  double pop = (*import).first;
 	  if (pop < amount ||
 		  pop < MIN_REEXPORT) {
-		cout << "reexporting " << *imp << " pop " << pop << endl;
+		dout(5) << "reexporting " << *imp << " pop " << pop << endl;
 		amount -= pop;
 		mds->mdcache->export_dir(imp, imp->authority(mds->get_cluster()));
 	  }
@@ -281,12 +285,12 @@ void MDBalancer::do_rebalance()
 	}
 	
 	for (list<CInode*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  cout << " exporting fragment " << **it << " pop " << (*it)->popularity.get() << endl;
+	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity.get() << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
 
-  cout << "rebalance done" << endl;
+  dout(5) << "rebalance done" << endl;
   mds->mdcache->show_imports();
   
 }
@@ -311,7 +315,7 @@ void MDBalancer::find_exports(CInode *idir,
   list<CInode*> bigger;
   multimap<double, CInode*> smaller;
 
-  cout << " find_exports in " << *idir << " need " << need << " (" << needmin << " - " << needmax << ")" << endl;
+  dout(7) << " find_exports in " << *idir << " need " << need << " (" << needmin << " - " << needmax << ")" << endl;
 
   for (CDir_map_t::iterator it = idir->dir->begin();
 	   it != idir->dir->end();
@@ -351,7 +355,7 @@ void MDBalancer::find_exports(CInode *idir,
 	if ((*it).first < midchunk)
 	  break;  // try later
 
-	cout << " taking smaller " << *(*it).second << endl;
+	dout(7) << " taking smaller " << *(*it).second << endl;
 
 	exports.push_back((*it).second);
 	have += (*it).first;
@@ -363,7 +367,7 @@ void MDBalancer::find_exports(CInode *idir,
   for (list<CInode*>::iterator it = bigger.begin();
 	   it != bigger.end();
 	   it++) {
-	cout << " descending into " << **it << endl;
+	dout(7) << " descending into " << **it << endl;
 	find_exports(*it, amount, exports, have);
 	if (have > needmin)
 	  return;
@@ -374,7 +378,7 @@ void MDBalancer::find_exports(CInode *idir,
 	   it != smaller.rend();
 	   it++) {
 
-	cout << " taking (much) smaller " << *(*it).second << endl;
+	dout(7) << " taking (much) smaller " << *(*it).second << endl;
 
 	exports.push_back((*it).second);
 	have += (*it).first;

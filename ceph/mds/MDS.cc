@@ -10,6 +10,10 @@
 #include "MDCluster.h"
 #include "MDBalancer.h"
 
+
+#include "include/Logger.h"
+#include "include/LogType.h"
+
 #include "messages/MPing.h"
 
 #include "messages/MOSDRead.h"
@@ -28,6 +32,14 @@
 using namespace std;
 
 
+LogType mds_logtype;
+
+#include "include/config.h"
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << whoami << " "
+#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+#define  dout3(l,mds)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << " "
+
+
 
 ostream& operator<<(ostream& out, MDS& mds)
 {
@@ -37,7 +49,7 @@ ostream& operator<<(ostream& out, MDS& mds)
 void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 {
   // forward message to new mds
-  cout << "mds" << mds->get_nodeid() << " redelegating by forwarding message to mds" << newmds << endl;
+  dout3(5,mds) << "redelegating context " << this << " by forwarding message " << m << " to mds" << newmds << endl;
 
   mds->messenger->send_message(m,
 							   newmds, m->get_dest_port(),
@@ -70,12 +82,26 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   stat_ops = 0;
   last_heartbeat = 0;
   osd_last_tid = 0;
+
+  // log
+  string name;
+  name = "mds";
+  int w = MSG_ADDR_NUM(whoami);
+  if (w >= 1000) name += ('0' + ((w/1000)%10));
+  if (w >= 100) name += ('0' + ((w/100)%10));
+  if (w >= 10) name += ('0' + ((w/10)%10));
+  name += ('0' + ((w/1)%10));
+
+  logger = new Logger(name, (LogType*)&mds_logtype);
 }
+
 MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdstore) { delete mdstore; mdstore = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
+
+  if (logger) { delete logger; logger = 0; }
 
   if (messenger) { delete messenger; messenger = NULL; }
 }
@@ -90,11 +116,11 @@ int MDS::init()
 
 int MDS::shutdown_start()
 {
-  cout << "mds" << whoami << " shutdown_start" << endl;
+  dout(1) << "shutdown_start" << endl;
   shutting_down = true;
   for (int i=0; i<mdcluster->get_num_mds(); i++) {
 	if (i == whoami) continue;
-	cout << "mds" << whoami << " sending MShutdownStart to mds" << i << endl;
+	dout(1) << "sending MShutdownStart to mds" << i << endl;
 	messenger->send_message(new Message(MSG_MDS_SHUTDOWNSTART),
 							i, MDS_PORT_MAIN,
 							MDS_PORT_MAIN);
@@ -106,16 +132,16 @@ int MDS::shutdown_start()
 
 void MDS::handle_shutdown_start(Message *m)
 {
-  cout << "mds" << whoami << " handle_shutdown_start" << endl;
+  dout(1) << " handle_shutdown_start" << endl;
   shutting_down = true;
   delete m;
 }
 
 void MDS::handle_shutdown_finish(Message *m)
 {
-  cout << "mds" << whoami << " handle_shutdown_finish from " << m->get_source() << endl;
+  dout(2) << "handle_shutdown_finish from " << m->get_source() << endl;
   did_shut_down.insert(m->get_source());
-  cout << "mds" << whoami << " shut down so far: " << did_shut_down << endl;
+  dout(2) << " shut down so far: " << did_shut_down << endl;
 
   if (did_shut_down.size() == mdcluster->get_num_mds()) {
 	shutting_down = false;
@@ -184,17 +210,15 @@ void MDS::proc_message(Message *m)
 
 	// OSD ===============
   case MSG_OSD_READREPLY:
-	cout << "mds" << whoami << " osd_read reply" << endl;
 	osd_read_finish(m);
 	break;
 
   case MSG_OSD_WRITEREPLY:
-	cout << "mds" << whoami << " write reply!" << endl;
 	osd_write_finish(m);
 	break;
 	
   default:
-	cout << "mds" << whoami << " main unknown message " << m->get_type() << endl;
+	dout(1) << " main unknown message " << m->get_type() << endl;
 	assert(0);
   }
 
@@ -231,7 +255,7 @@ void MDS::dispatch(Message *m)
 	break;
 
   default:
-	cout << "MDS dispatch unkown message port" << m->get_dest_port() << endl;
+	dout(1) << "MDS dispatch unkown message port" << m->get_dest_port() << endl;
   }
 
   if (whoami == 0 &&
@@ -252,7 +276,7 @@ void MDS::dispatch(Message *m)
 
 void MDS::handle_ping(MPing *m)
 {
-  cout << "mds" << whoami << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with ttl " << m->ttl << endl;
+  dout(10) << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with ttl " << m->ttl << endl;
   if (m->ttl > 0) {
 	//cout << "mds" << whoami << " responding to " << m->get_source() << endl;
 	messenger->send_message(new MPing(m->ttl - 1),
@@ -266,16 +290,16 @@ void MDS::handle_ping(MPing *m)
 
 int MDS::handle_client_request(MClientRequest *req)
 {
-  cout << "mds" << whoami << " req client" << req->client << '.' << req->tid << " op " << req->op << " on " << req->path <<  endl;
+  dout(10) << " req client" << req->client << '.' << req->tid << " op " << req->op << " on " << req->path <<  endl;
 
   if (is_shutting_down()) {
-	cout << "mds" << whoami << " shutting down, discarding client request." << endl;
+	dout(5) << "mds" << whoami << " shutting down, discarding client request." << endl;
 	delete req;
 	return 0;
   }
   
   if (!mdcache->get_root()) {
-	cout << "mds" << whoami << " need open root" << endl;
+	dout(5) << " need open root" << endl;
 	open_root(new C_MDS_RetryMessage(this, req));
 	return 0;
   }
@@ -285,6 +309,8 @@ int MDS::handle_client_request(MClientRequest *req)
   
   int r = mdcache->path_traverse(req->path, trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
+
+  logger->inc("chit");
 
   CInode *cur = trace[trace.size()-1];
   
@@ -306,7 +332,7 @@ int MDS::handle_client_request(MClientRequest *req)
 	break;
 
   default:
-	cout << "mds" << whoami << " unknown mop " << req->op << endl;
+	dout(1) << " unknown mop " << req->op << endl;
 	assert(0);
   }
 
@@ -334,7 +360,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   //if (mdcache->read_start(cur, req))
   //return 0;   // ugh
 
-  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
+  dout(10) << " reply to client" << req->client << '.' << req->tid << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
   MClientReply *reply = new MClientReply(req);
   reply->result = 0;
   reply->set_trace_dist( cur, whoami );
@@ -343,6 +369,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
 
   //mdcache->read_finish(cur);
 
+  logger->inc("ostat");
   stat_read.hit();
   stat_req.hit();
   stat_ops++;
@@ -390,14 +417,14 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	mdcache->send_inode_updates(cur);
 
 	// log it
-	cout << "mds" << whoami << " log for client" << req->client << '.' << req->tid << " touch " << cur->inode.touched << endl;
+	dout(10) << " log for client" << req->client << '.' << req->tid << " touch " << cur->inode.touched << endl;
 	mdlog->submit_entry(new EInodeUpdate(cur),
 						new C_MDS_TouchFinish(this, req, cur));
 	return 0;
   } else {
 
 	// forward
-	cout << "mds" << whoami << " forwarding touch to authority " << auth << endl;
+	dout(10) << " forwarding touch to authority " << auth << endl;
 	messenger->send_message(req,
 							MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
 							MDS_PORT_SERVER);
@@ -410,7 +437,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 								CInode *cur)
 {
   // reply
-  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " touch" << endl;
+  dout(10) << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " touch" << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
   
@@ -419,6 +446,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 						  MDS_PORT_SERVER);
 
 
+  logger->inc("otouch");
   stat_write.hit();
   stat_req.hit();
   stat_ops++;
@@ -437,7 +465,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   // it's a directory, right?
   if (!cur->is_dir()) {
 	// not a dir
-	cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " readdir -ENOTDIR" << endl;
+	dout(10) << "reply to client" << req->client << '.' << req->tid << " readdir -ENOTDIR" << endl;
 	return new MClientReply(req, -ENOTDIR);
   }
 	
@@ -446,7 +474,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   // frozen?
   if (cur->dir->is_frozen()) {
 	// doh!
-	cout << "mds" << whoami << " dir is frozen, waiting" << endl;
+	dout(10) << " dir is frozen, waiting" << endl;
 	cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(this, req));
 	return 0;
   }
@@ -472,9 +500,10 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 		numfiles++;
 	  }
 	  
-	  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " readdir " << numfiles << " files" << endl;
+	  dout(10) << " reply to client" << req->client << '.' << req->tid << " readdir " << numfiles << " files" << endl;
 	  reply->set_trace_dist( cur, whoami );
 
+	  logger->inc("ordir");
 	  stat_read.hit();
 	  stat_req.hit();
 	  stat_ops++;
@@ -482,7 +511,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  return reply;
 	} else {
 	  // fetch
-	  cout << "mds" << whoami << " incomplete dir contents for readdir on " << *cur << ", fetching" << endl;
+	  dout(10) << " incomplete dir contents for readdir on " << *cur << ", fetching" << endl;
 	  mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
 	  return 0;
 	}
@@ -491,7 +520,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  assert(dirauth >= 0);
 	} else {
 	  // forward to authority
-	  cout << "mds" << whoami << " forwarding readdir to authority " << dirauth << endl;
+	  dout(10) << " forwarding readdir to authority " << dirauth << endl;
 	  messenger->send_message(req,
 							  MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
 							  MDS_PORT_SERVER);
@@ -630,7 +659,7 @@ int MDS::osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, 
 							   len, offset,
 							   nbuf, flags);
   osd_writes[ osd_last_tid ] = c;
-  cout << "mds: sending MOSDWrite " << m->get_type() << endl;
+  dout(10) << "sending MOSDWrite " << m->get_type() << endl;
   messenger->send_message(m,
 						  MSG_ADDR_OSD(osd),
 						  0, MDS_PORT_MAIN);
@@ -647,7 +676,7 @@ int MDS::osd_write_finish(Message *rawm)
   long result = m->len;
   delete m;
 
-  cout << "mds" << whoami << " finishing osd_write" << endl;
+  dout(10) << " finishing osd_write" << endl;
 
   if (c) {
 	c->finish(result);

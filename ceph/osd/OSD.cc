@@ -20,6 +20,10 @@
 #include <iostream>
 #include <cassert>
 
+#include "include/config.h"
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "osd" << whoami << " "
+#define  dout2(l)   if (1<=DEBUG_LEVEL) cout
+
 char *osd_base_path = "./osddata";
 
 // cons/des
@@ -63,7 +67,7 @@ void OSD::dispatch(Message *m)
 	break;
 
   default:
-	cout << "osd " << whoami << " got unknown message " << m->get_type() << endl;
+	dout(1) << " got unknown message " << m->get_type() << endl;
   }
 
   delete m;
@@ -94,11 +98,12 @@ void OSD::read(MOSDRead *r)
 {
   MOSDReadReply *reply;
 
-  int fd = open(get_filename(whoami, r->oid), O_RDONLY);
+  char *f = get_filename(whoami, r->oid);
+  int fd = open(f, O_RDONLY);
   if (fd < 0) {
 
 	// send reply (failure)
-	cout << "read open FAILED on " << get_filename(whoami, r->oid) << " errno " << errno << endl;
+	dout(1) << "read open FAILED on " << get_filename(whoami, r->oid) << " errno " << errno << endl;
 	reply = new MOSDReadReply(r, NULL, -1);
 	assert(0);
 
@@ -119,6 +124,8 @@ void OSD::read(MOSDRead *r)
 	flock(fd, LOCK_UN);
 	close(fd);
 	
+	dout(10) << "osd_read " << r->len << " bytes to " << f << endl;
+
 	// send reply
 	reply = new MOSDReadReply(r, buf, got);
 
@@ -139,11 +146,11 @@ void OSD::write(MOSDWrite *m)
   int fd = open(f, O_RDWR|O_CREAT|m->flags);
   if (fd < 0 && errno == 2) {  // create dir and retry
 	mkdir(get_dir(whoami), 0755);
-	cout << "mkdir errno " << errno << " on " << get_dir(whoami) << endl;
+	dout(11) << "mkdir errno " << errno << " on " << get_dir(whoami) << endl;
 	fd = open(f, O_RDWR|O_CREAT|m->flags);
   }
   if (fd < 0) {
-	cout << "err opening " << f << " " << errno << endl;
+	dout(1) << "err opening " << f << " " << errno << endl;
 	
 	reply = new MOSDWriteReply(m, -1);
 	assert(0);
@@ -154,7 +161,7 @@ void OSD::write(MOSDWrite *m)
 
     fchmod(fd, 0664);
 	
-	cout << "osd_write " << m->len << " bytes to " << f << endl;
+	dout(10) << "osd_write " << m->len << " bytes to " << f << endl;
 	
 	if (m->offset)
 	  lseek(fd, m->offset, SEEK_SET);
@@ -167,7 +174,6 @@ void OSD::write(MOSDWrite *m)
   }
 
   // clean up
-  cout << "sending reply" << endl;
   messenger->send_message(reply, m->get_source(), m->get_source_port());
 
   // free buffer

@@ -15,8 +15,9 @@
 #include <stdlib.h>
 
 #include "include/config.h"
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "client" << whoami << " "
+#define  dout2(l)   if (1<=DEBUG_LEVEL) cout
 
-#define debug 1
 
 Client::Client(MDCluster *mdc, int id, Messenger *m, long req)
 {
@@ -66,8 +67,7 @@ void Client::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case MSG_CLIENT_REPLY:
-	if (debug > 1)
-	  cout << "client" << whoami << " got reply" << endl;
+	dout(9) << "got reply" << endl;
 	assim_reply((MClientReply*)m);
 
 	if (tid < max_requests)
@@ -75,7 +75,7 @@ void Client::dispatch(Message *m)
 	break;
 
   default:
-	cout << "client" << whoami << " got unknown message " << m->get_type() << endl;
+	dout(1) << "got unknown message " << m->get_type() << endl;
   }
 
   delete m;
@@ -135,8 +135,7 @@ void Client::assim_reply(MClientReply *r)
 	  cur->link( (*it)->ref_dn, n );
 	  cache_lru.lru_insert_mid( n );
 
-	  if (debug > 3)
-		cout << "client got dir item " << (*it)->ref_dn << endl;
+	  dout(12) << "client got dir item " << (*it)->ref_dn << endl;
 
 	  // free the c_inode_info
 	  delete *it;
@@ -164,10 +163,10 @@ void Client::trim_cache()
 	delete i;
 	expired++;
   }
-  if (debug > 1)
+  if (DEBUG_LEVEL > 11)
 	cache_lru.lru_status();
-  if (expired && debug > 2) 
-	cout << "EXPIRED " << expired << " items" << endl;
+  if (expired) 
+	dout(12) << "EXPIRED " << expired << " items" << endl;
 }
 
 
@@ -186,8 +185,7 @@ void Client::issue_request()
 	if (rand() % 10 > 1+(cwd->depth()/2)) {
 	  // descend
 	  if (cwd->havedircontents) {
-		if (debug > 3)
-		  cout << "descending" << endl;
+		dout(12) << "descending" << endl;
 		// descend
 		int n = rand() % cwd->children.size();
 		hash_map<string, ClNode*>::iterator it = cwd->children.begin();
@@ -195,12 +193,12 @@ void Client::issue_request()
 		cwd = (*it).second;
 	  } else {
 		// readdir
-		if (debug > 3) cout << "readdir" << endl;
+		dout(12) << "readdir" << endl;
 		op = MDS_OP_READDIR;
 	  }
 	} else {
 	  // ascend
-	  if (debug > 3) cout << "ascending" << endl;
+	  dout(12) << "ascending" << endl;
 	  if (cwd->parent)
 		cwd = cwd->parent;
 	}
@@ -249,7 +247,7 @@ void Client::send_request(string& p, int op)
 		cur = n;
 		off = nextslash+1;
 	  } else {
-		if (debug > 3) cout << " don't have it. " << endl;
+		dout(12) << " don't have it. " << endl;
 		break;
 	  }
 
@@ -263,8 +261,7 @@ void Client::send_request(string& p, int op)
 	mds = 0;
   }
 
-  if (debug > 0)
-	cout << "client" << whoami << " req " << req->tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;
+  dout(9) << "client" << whoami << " req " << req->tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;
   messenger->send_message(req,
 						  MSG_ADDR_MDS(mds), MDS_PORT_SERVER,
 						  0);

@@ -37,7 +37,7 @@ int fakemessenger_do_loop()
 	  if (m) {
 		cout << "---- do_loop dispatching '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " //<< m 
+		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			 << endl;
 		
 		didone = true;
@@ -123,7 +123,7 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);
 
-	//cout << "sending " << m << endl;
+	cout << "sending " << m << endl;
 	
   }
   catch (...) {

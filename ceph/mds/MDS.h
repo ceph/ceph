@@ -12,6 +12,7 @@
 #include "include/Context.h"
 #include "include/Dispatcher.h"
 #include "include/DecayCounter.h"
+#include "include/Logger.h"
 
 typedef __uint64_t object_t;
 
@@ -95,6 +96,7 @@ class MDS : public Dispatcher {
   DecayCounter stat_read;
   DecayCounter stat_write;
   
+
  public:
   // sub systems
   MDCache      *mdcache;    // cache
@@ -102,6 +104,8 @@ class MDS : public Dispatcher {
   Messenger    *messenger;    // message processing
   MDLog        *mdlog;
   MDBalancer   *balancer;
+
+  Logger       *logger;
 
  protected:
   __uint64_t   stat_ops;
