@@ -207,7 +207,7 @@ void MDBalancer::do_rebalance()
 	   it != mds->mdcache->imports.end();
 	   it++) {
 	import_pop_map.insert(pair<double,CDir*>((*it)->get_popularity(), *it));
-	int from = (*it)->inode->authority(mds->get_cluster());
+	int from = (*it)->inode->authority();
 	dout(5) << "map i imported " << **it << " from " << from << endl;
 	import_from_map.insert(pair<int,CDir*>(from, *it));
   }
@@ -238,7 +238,7 @@ void MDBalancer::do_rebalance()
 		if (dir->inode->is_root()) continue;
 		if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
 		double pop = dir->get_popularity();
-		assert(dir->inode->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
+		assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
 		
 		if (pop <= amount) {
 		  dout(5) << "reexporting " << *dir << " pop " << pop << " back to " << target << endl;
@@ -266,7 +266,7 @@ void MDBalancer::do_rebalance()
 		  pop < MIN_REEXPORT) {
 		dout(5) << "reexporting " << *imp << " pop " << pop << endl;
 		amount -= pop;
-		mds->mdcache->export_dir(imp, imp->inode->authority(mds->get_cluster()));
+		mds->mdcache->export_dir(imp, imp->inode->authority());
 	  }
 	  if (amount < MIN_OFFLOAD) break;
 	}

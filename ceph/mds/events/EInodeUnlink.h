@@ -14,24 +14,24 @@
    and been in progress when we asked. */
 class C_EIU_VerifyDirCommit : public Context {
   MDS *mds;
-  CInode *idir;
+  CDir *dir;
   Context *fin;
   __uint64_t version;
 
  public:
-  C_EIU_VerifyDirCommit(MDS *mds, CInode *idir, __uint64_t version, Context *fin) {
+  C_EIU_VerifyDirCommit(MDS *mds, CDir *dir, __uint64_t version, Context *fin) {
 	this->mds = mds;
-	this->idir = idir;
+	this->dir = dir;
 	this->version = version;
 	this->fin = fin;
   }
   virtual void finish(int r) {
 
-	if (idir->dir->get_version() <= version) {
+	if (dir->get_version() <= version) {
 	  // still dirty
-	  mds->mdstore->commit_dir(idir,
+	  mds->mdstore->commit_dir(dir,
 							   new C_EIU_VerifyDirCommit(mds,
-														 idir,
+														 dir,
 														 version,
 														 fin));
 	  return;
@@ -88,16 +88,16 @@ class EInodeUnlink : public LogEvent {
 
   virtual void retire(MDS *mds, Context *c) {
 	// commit my containing directory
-	CInode *idir = mds->mdcache->get_inode(dir_ino);
-	assert(idir);
+	CDir *dir = mds->mdcache->get_inode(dir_ino)->dir;
+	assert(dir);
 	CInode *in = mds->mdcache->get_inode(ino);
 	assert(in);
 	
 	// okay!
-	dout(7) << "commiting containing dir " << *idir << " which has unlinked inode " << *in << endl;
-	mds->mdstore->commit_dir(idir,
+	dout(7) << "commiting containing dir " << *dir << " which has unlinked inode " << *in << endl;
+	mds->mdstore->commit_dir(dir,
 							 new C_EIU_VerifyDirCommit(mds,
-													   idir,
+													   dir,
 													   in->get_parent_dir_version(),
 													   c));
   }

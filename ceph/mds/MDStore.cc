@@ -52,30 +52,30 @@ class MDFetchDirContext : public Context {
 };
 
 
-bool MDStore::fetch_dir( CInode *in,
+bool MDStore::fetch_dir( CDir *dir,
 						 Context *c )
 {
-  dout(7) << "fetch_dir " << in->inode.ino << " context is " << c << endl;
+  dout(7) << "fetch_dir " << *dir << " context is " << c << endl;
   if (c) 
-	in->dir->add_waiter(CDIR_WAIT_COMPLETE, c);
+	dir->add_waiter(CDIR_WAIT_COMPLETE, c);
 
-  assert(in->dir->is_auth());
+  assert(dir->is_auth());
 
   // already fetching?
-  if (in->dir->state_test(CDIR_STATE_FETCHING)) {
-	dout(7) << "already fetching " << in->inode.ino << "; waiting" << endl;
+  if (dir->state_test(CDIR_STATE_FETCHING)) {
+	dout(7) << "already fetching " << *dir << "; waiting" << endl;
 	return true;
   }
   
-  in->dir->state_set(CDIR_STATE_FETCHING);
+  dir->state_set(CDIR_STATE_FETCHING);
 
   // create return context
-  MDFetchDirContext *fin = new MDFetchDirContext( this, in->ino() );
-
-  if (in->dir_is_hashed()) 
-	do_fetch_dir( in, fin, mds->get_nodeid());   // hashed
+  MDFetchDirContext *fin = new MDFetchDirContext( this, dir->ino() );
+  
+  if (dir->is_hashed()) 
+	do_fetch_dir( dir, fin, mds->get_nodeid());   // hashed
   else 
-	do_fetch_dir( in, fin );  // normal
+	do_fetch_dir( dir, fin );  // normal
 }
 
 bool MDStore::fetch_dir_2( int result, 
@@ -189,58 +189,58 @@ public:
 
 
 
-bool MDStore::commit_dir( CInode *in,
+bool MDStore::commit_dir( CDir *dir,
 						  Context *c )
 {
-  assert(in->dir->is_auth() ||
-		 in->dir->is_hashed());
+  assert(dir->is_auth() ||
+		 dir->is_hashed());
   
   // already committing?
-  if (in->dir->state_test(CDIR_STATE_COMMITTING)) {
+  if (dir->state_test(CDIR_STATE_COMMITTING)) {
 	// already mid-commit!
-	dout(7) << "commit_dir " << *in << " already mid-commit" << endl;
-	in->dir->add_waiter(CDIR_WAIT_COMMITTED, c);   
+	dout(7) << "commit_dir " << *dir << " already mid-commit" << endl;
+	dir->add_waiter(CDIR_WAIT_COMMITTED, c);   
 	return false;
   }
 
-  if (!in->dir->can_auth_pin()) {
+  if (!dir->can_auth_pin()) {
 	// something must be frozen up the hiearchy!
-	dout(7) << "commit_dir " << *in << " can't auth_pin, waiting" << endl;
-	in->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
-						new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
+	dout(7) << "commit_dir " << *dir << " can't auth_pin, waiting" << endl;
+	dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+					new C_MDS_CommitDirDelay(mds, dir->ino(), c) );
 	return false;
   }
 
 
   // is it complete?
-  if (!in->dir->is_complete()) {
-	dout(7) << "commit_dir " << *in << " not complete, fetching first" << endl;
+  if (!dir->is_complete()) {
+	dout(7) << "commit_dir " << *dir << " not complete, fetching first" << endl;
 	// fetch dir first
-	Context *fin = new MDFetchForCommitContext(this, in, c);
-	fetch_dir(in, fin);
+	Context *fin = new MDFetchForCommitContext(this, dir, c);
+	fetch_dir(dir, fin);
 	return false;
   }
 
 
   // ok go
-  dout(7) << "commit_dir " << *in << " version " << in->dir->get_version() << endl;
+  dout(7) << "commit_dir " << *dir << " version " << dir->get_version() << endl;
 
   // add waiter
-  if (c) in->dir->add_waiter(CDIR_WAIT_COMMITTED, c);
+  if (c) dir->add_waiter(CDIR_WAIT_COMMITTED, c);
 
   // get continuation ready
-  MDCommitDirContext *fin = new MDCommitDirContext(this, in);
+  MDCommitDirContext *fin = new MDCommitDirContext(this, dir);
   
   // state
-  in->dir->state_set(CDIR_STATE_COMMITTING);
-  in->dir->set_committing_version(); 
+  dir->state_set(CDIR_STATE_COMMITTING);
+  dir->set_committing_version(); 
 
-  if (in->dir_is_hashed()) {
+  if (dir->is_hashed()) {
 	// hashed
-	do_commit_dir( in, fin, mds->get_nodeid() );
+	do_commit_dir( dir, fin, mds->get_nodeid() );
   } else {
 	// non-hashed
-    do_commit_dir( in, fin );
+    do_commit_dir( dir, fin );
   }
 }
 
@@ -282,7 +282,7 @@ bool MDStore::commit_dir_2( int result,
 class MDDoCommitDirContext : public Context {
  protected:
   MDStore *ms;
-  CInode *in;
+  CDir *dir;
   Context *c;
   int hashcode;
   __uint64_t version;
@@ -290,42 +290,42 @@ class MDDoCommitDirContext : public Context {
 public:
   crope buffer;
   
-  MDDoCommitDirContext(MDStore *ms, CInode *in, Context *c, int w) : Context() {
+  MDDoCommitDirContext(MDStore *ms, CDir *dir, Context *c, int w) : Context() {
 	this->ms = ms;
-	this->in = in;
+	this->dir = dir;
 	this->c = c;
 	this->hashcode = w;
-	version = in->dir->get_version();
+	version = dir->get_version();
   }
   
   void finish(int result) {
-	ms->do_commit_dir_2( result, in, c, version, hashcode );
+	ms->do_commit_dir_2( result, dir, c, version, hashcode );
   }
 };
 
 
-void MDStore::do_commit_dir( CInode *in,
+void MDStore::do_commit_dir( CDir *dir,,
 							 Context *c,
 							 int hashcode)
 {
-  assert(in->dir->is_auth());
+  assert(dir->is_auth());
   
-  dout(11) << "do_commit_dir hashcode " << hashcode << " dir " << *in << " version " << in->dir->get_version() << endl;
+  dout(11) << "do_commit_dir hashcode " << hashcode << " " << *dir << " version " << dir->get_version() << endl;
   
   // get continuation ready
-  MDDoCommitDirContext *fin = new MDDoCommitDirContext(this, in, c, hashcode);
+  MDDoCommitDirContext *fin = new MDDoCommitDirContext(this, dir, c, hashcode);
   
   // fill buffer
   __uint32_t num = 0;
   
   crope dirdata;
   
-  for (CDir_map_t::iterator it = in->dir->begin();
-	   it != in->dir->end();
+  for (CDir_map_t::iterator it = dir->begin();
+	   it != dir->end();
 	   it++) {
 	
 	if (hashcode >= 0) {
-	  int dentryhashcode = mds->get_cluster()->hash_dentry( in->ino(), it->first );
+	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	  if (dentryhashcode != hashcode) continue;
 	}
 
@@ -341,7 +341,7 @@ void MDStore::do_commit_dir( CInode *in,
 	// put inode in this dir version
 	if (it->second->get_inode()->is_dirty()) {
 	  it->second->get_inode()->float_parent_dir_version(in->dir->get_version());
-	  dout(12) << " dirty inode " << in->get_parent_dir_version() << " " << *(in) << endl;
+	  dout(12) << " dirty inode " << in->get_parent_dir_version() << " " << *(it->second->get_inode()) << endl;
 	}
 	
 	num++;
@@ -352,19 +352,19 @@ void MDStore::do_commit_dir( CInode *in,
   fin->buffer.append(dirdata);
   
   // pin inode
-  in->dir->auth_pin();
+  dir->auth_pin();
   
   // submit to osd
   int osd;
   object_t oid;
   if (hashcode >= 0) {
 	// hashed
-	osd = mds->mdcluster->get_hashdir_meta_osd(in->inode.ino, hashcode);
-	oid = mds->mdcluster->get_hashdir_meta_oid(in->inode.ino, hashcode);
+	osd = mds->mdcluster->get_hashdir_meta_osd(dir->ino(), hashcode);
+	oid = mds->mdcluster->get_hashdir_meta_oid(dir->ino(), hashcode);
   } else {
 	// normal
-	osd = mds->mdcluster->get_meta_osd(in->inode.ino);
-	oid = mds->mdcluster->get_meta_oid(in->inode.ino);
+	osd = mds->mdcluster->get_meta_osd(dir->ino());
+	oid = mds->mdcluster->get_meta_oid(dir->ino());
   }
   
   mds->osd_write( osd, oid, 
@@ -376,16 +376,16 @@ void MDStore::do_commit_dir( CInode *in,
 
 
 void MDStore::do_commit_dir_2( int result,
-							   CInode *in,
+							   CDir *dir,
 							   Context *c,
 							   __uint64_t committed_version,
 							   int hashcode )
 {
-  dout(11) << "do_commit_dir_2 hashcode " << hashcode << " dir " << *in << endl;
+  dout(11) << "do_commit_dir_2 hashcode " << hashcode << " " << *dir << endl;
   
   // mark inodes clean too (if we committed them!)
-  for (CDir_map_t::iterator it = in->dir->begin();
-	   it != in->dir->end();
+  for (CDir_map_t::iterator it = dir->begin();
+	   it != dir->end();
 	   it++) {
 	CInode *in = it->second->get_inode();
 	
@@ -409,7 +409,7 @@ void MDStore::do_commit_dir_2( int result,
   }
   
   // unpin
-  in->dir->auth_unpin();
+  dir->auth_unpin();
 
   // finish
   if (c) {
@@ -450,27 +450,27 @@ class MDDoFetchDirContext : public Context {
 };
 
 
-void MDStore::do_fetch_dir( CInode *in,
+void MDStore::do_fetch_dir( CDir *dir,
 							Context *c, 
 							int hashcode)
 {
 
-  dout(11) << "fetch_hashed_dir hashcode " << hashcode << " dir " << in->inode.ino << " context is " << c << endl;
+  dout(11) << "fetch_hashed_dir hashcode " << hashcode << " " << *dir << " context is " << c << endl;
   
   // create return context
-  MDDoFetchDirContext *fin = new MDDoFetchDirContext( this, in->ino(), c, hashcode );
+  MDDoFetchDirContext *fin = new MDDoFetchDirContext( this, dir->ino(), c, hashcode );
 
   // issue osd read
   int osd;
   object_t oid;
   if (hashcode >= 0) {
 	// hashed
-	osd = mds->mdcluster->get_hashdir_meta_osd(in->inode.ino, hashcode);
-	oid = mds->mdcluster->get_hashdir_meta_oid(in->inode.ino, hashcode);
+	osd = mds->mdcluster->get_hashdir_meta_osd(dir->ino(), hashcode);
+	oid = mds->mdcluster->get_hashdir_meta_oid(dir->ino(), hashcode);
   } else {
 	// normal
-	osd = mds->mdcluster->get_meta_osd(in->inode.ino);
-	oid = mds->mdcluster->get_meta_oid(in->inode.ino);
+	osd = mds->mdcluster->get_meta_osd(dir->ino());
+	oid = mds->mdcluster->get_meta_oid(dir->ino());
   }
   
   mds->osd_read( osd, oid, 

@@ -15,7 +15,7 @@ class MDiscover : public Message {
   inodeno_t       base_ino;          // 0 -> none, want root
   bool            want_base_dir;
   
-  dirpath         want;   // ... [/]need/this/stuff
+  filepath        want;   // ... [/]need/this/stuff
 
  public:
   int       get_asker() { return asker; }

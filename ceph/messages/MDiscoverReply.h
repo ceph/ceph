@@ -20,9 +20,9 @@ class MDiscoverReply : public Message {
   // inode [ + ... ], base_ino = 0 : discover base_ino=0, start w/ root ino
   // dentry + inode [ + ... ]      : discover want_base_dir=false
   // (dir + dentry + inode) +      : discover want_base_dir=true
-  vector<CDirDiscover>   dirs;      // not inode-aligned if no_base_dir = true.
-  filepath               path;      // not inode-aligned in no_base_dentry = true
-  vector<CInodeDiscover> inodes;
+  vector<CDirDiscover*>   dirs;      // not inode-aligned if no_base_dir = true.
+  filepath                path;      // not inode-aligned in no_base_dentry = true
+  vector<CInodeDiscover*> inodes;
 
  public:
   // accessors
@@ -38,11 +38,13 @@ class MDiscoverReply : public Message {
     }
 	return false;
   }
+  string& get_path() { return path.get_path(); }
 
   // these index _arguments_ are aligned to the inodes.
-  CDirDiscover* get_dir(int n) { return dirs[n + no_base_dir]; }
+  CDirDiscover& get_dir(int n) { return *(dirs[n + no_base_dir]); }
   string& get_dentry(int n) { return path[n + no_base_dentry]; }
-  CInodeDiscover* get_inode(int n) { return inodes[n]; }
+  CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
+  inodeno_t get_ino(int n) { return inodes[n]->get_ino(); }
 
   // cons
   MDiscoverReply() {}
@@ -50,6 +52,16 @@ class MDiscoverReply : public Message {
 	Message(MSG_MDS_DISCOVERREPLY) {
 	this->base_ino = base_ino;
 	no_base_dir = no_base_dentry = false;
+  }
+  ~MDiscoverReply() {
+	for (vector<CDirDiscover*>::iterator it = dirs.begin();
+         it != dirs.end();
+         it++) 
+	  delete *it;
+    for (vector<CInodeDiscover*>::iterator it = inodes.begin();
+         it != inodes.end();
+         it++) 
+	  delete *it;
   }
   virtual char *get_type_name() { return "DisR"; }
   
@@ -63,14 +75,14 @@ class MDiscoverReply : public Message {
     path.add_dentry(dn);
   }
 
-  void add_inode(CInodeDiscover& din) {
+  void add_inode(CInodeDiscover* din) {
 	if (inodes.empty() && dirs.empty()) no_base_dir = true;
-	if (inodes.empty() && dentries.empty()) no_base_dentry = true;
-    inodes.add( din );
+	if (inodes.empty() && path.depth() == 0) no_base_dentry = true;
+    inodes.push_back( din );
   }
 
-  void add_dir(CDirDiscover& dir) {
-    dirs.add( dir );
+  void add_dir(CDirDiscover* dir) {
+    dirs.push_back( dir );
   }
 
 
@@ -88,8 +100,8 @@ class MDiscoverReply : public Message {
     r.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
-      dirs[i] = CDirDiscover();
-      off = dirs[i]._unrope(r, off);
+      dirs[i] = new CDirDiscover();
+      off = dirs[i]->_unrope(r, off);
     }
 
     // filepath
@@ -99,8 +111,8 @@ class MDiscoverReply : public Message {
     r.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
-      inodes[i] = CInodeDiscover();
-      off = inodes[i]._unrope(r, off);
+      inodes[i] = new CInodeDiscover();
+      off = inodes[i]->_unrope(r, off);
     }
     return off;
   }
@@ -112,18 +124,18 @@ class MDiscoverReply : public Message {
 
     int n = dirs.size();
     r.append((char*)&n, sizeof(int));
-    for (vector<CDirDiscover>::iterator it = dirs.begin();
+    for (vector<CDirDiscover*>::iterator it = dirs.begin();
          it != dirs.end();
          it++) 
-      r.append((*it)._rope());
+      r.append((*it)->_rope());
     
     r.append(path._rope());
 
     n = inodes.size();
-    for (vector<CInodeDiscover>::iterator it = dirs.begin();
-         it != dirs.end();
+    for (vector<CInodeDiscover*>::iterator it = inodes.begin();
+         it != inodes.end();
          it++) 
-      r.append((*it)._rope());
+      r.append((*it)->_rope());
     
     return r;
   }

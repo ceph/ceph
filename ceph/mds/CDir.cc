@@ -105,7 +105,7 @@ void CDir::add_child(CDentry *d)
   //namesize += d->name.length();
   
   if (nitems == 1)
-	inode->get(CINODE_PIN_CHILD);       // pin parent
+	get(CDIR_PIN_CHILD);       // pin parent
 }
 
 void CDir::remove_child(CDentry *d) {
@@ -118,7 +118,7 @@ void CDir::remove_child(CDentry *d) {
   //namesize -= d->name.length();
 
   if (nitems == 0)
-	inode->put(CINODE_PIN_CHILD);       // release parent.
+	put(CDIR_PIN_CHILD);       // release parent.
 }
 
 
@@ -211,7 +211,7 @@ void CDir::add_waiter(int tag,
 					  const string& dentry,
 					  Context *c) {
   if (waiting_on_dentry.size() == 0)
-	inode->get(CINODE_PIN_DIRWAITDN);
+	get(CDIR_PIN_WAITER);
   waiting_on_dentry[ dentry ].insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *this << endl;
 }
@@ -231,7 +231,7 @@ void CDir::add_waiter(int tag, Context *c) {
 
   // this dir.
   if (waiting.empty())
-	inode->get(CINODE_PIN_DIRWAIT);
+	get(CDIR_PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
 }
@@ -261,7 +261,7 @@ void CDir::take_waiting(int mask,
   
   // ...whole map?
   if (waiting_on_dentry.size() == 0) 
-	inode->put(CINODE_PIN_DIRWAITDN);
+	put(CDIR_PIN_WAITER);
 }
 
 /* NOTE: this checks dentry waiters too */
@@ -292,7 +292,7 @@ void CDir::take_waiting(int mask,
 	}
 	
 	if (waiting.empty())
-	  inode->put(CINODE_PIN_DIRWAIT);
+	  put(CDIR_PIN_WAITER);
   }
 }
 
@@ -342,7 +342,7 @@ void CDir::mark_clean()
 
 // ref counts
 
-void CDir::get(int by) {
+void CDir::put(int by) {
   // bad?
   if (ref == 0 || ref_set.count(by) != 1) {
 	dout(7) << *this << " bad put by " << by << " was " << ref << " (" << ref_set << ")" << endl;
@@ -374,7 +374,7 @@ void CDir::get(int by) {
   ref++;
   ref_set.insert(by);
   
-  dout(7) << *this " get by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+  dout(7) << *this << " get by " << by << " now " << ref << " (" << ref_set << ")" << endl;
 }
 
 
@@ -439,7 +439,7 @@ void CDir::auth_pin() {
 void CDir::auth_unpin() {
   auth_pins--;
   if (auth_pins == 0)
-    put(CINODE_PIN_DAUTHPIN);
+    put(CDIR_PIN_AUTHPIN);
   assert(auth_pins >= 0);
 
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
@@ -714,5 +714,5 @@ void CDir::dump_to_disk(MDS *mds)
   }
 
   dout(10) << "dump2disk: writing dir " << inode->inode.ino << endl;
-  mds->mdstore->commit_dir(inode, NULL);
+  mds->mdstore->commit_dir(inode->dir, NULL);
 }

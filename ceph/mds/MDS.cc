@@ -355,7 +355,7 @@ int MDS::handle_client_request(MClientRequest *req)
   // operations that require existing files
 
   vector<CInode*> trace;
-  int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(req->get_filepath(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
   if (r == -ENOENT ||
 	  r == -ENOTDIR ||
@@ -612,10 +612,9 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   }
 
   // make sure i'm authoritative!
-  int dirauth = cur->dir_authority(mdcluster);          // FIXME hashed, etc.
-  if (dirauth == whoami) {
+  if (cur->dir_is_auth()) {
 	
-	if (!cur->dir) cur->dir = new CDir(cur, whoami);
+	cur->get_or_open_dir(this);
 	assert(cur->dir->is_auth());
 	
 	// frozen?
@@ -659,22 +658,22 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	} else {
 	  // fetch
 	  dout(10) << " incomplete dir contents for readdir on " << *cur->dir << ", fetching" << endl;
-	  mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
+	  mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(this, req));
 	  return 0;
 	}
   } else {
-	if (cur->dir) assert(!cur->dir->is_auth());
+	int dirauth = cur->authority();
+	if (cur->dir)
+	  dirauth = cur->dir->authority();
+	assert(dirauth >= 0);
+	assert(dirauth != whoami);
 
-	if (dirauth < 0) {
-	  assert(dirauth >= 0);
-	} else {
-	  // forward to authority
-	  dout(10) << " forwarding readdir to authority " << dirauth << endl;
-	  messenger->send_message(req,
-							  MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
-							  MDS_PORT_SERVER);
-	  //mdcache->show_imports();
-	}
+	// forward to authority
+	dout(10) << " forwarding readdir to authority " << dirauth << endl;
+	messenger->send_message(req,
+							MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
+							MDS_PORT_SERVER);
+	//mdcache->show_imports();
 	return 0;
   }
 }
@@ -730,7 +729,7 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 {
   if (!cur->is_auth()) {
 	if (!cur->is_softasync()) {
-	  int auth = cur->authority(get_cluster());
+	  int auth = cur->authority();
 	  assert(auth != whoami);
 	  dout(10) << "open (write) [replica] " << *cur << " on replica, fw to auth " << auth << endl;
 	  
@@ -774,7 +773,7 @@ void MDS::handle_client_openwrc(MClientRequest *req)
   
   // see if file exists
   vector<CInode*> trace;
-  int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(req->get_filepath(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;  // delayed
 
   if (r < 0) {
@@ -793,12 +792,12 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 		dout(7) << "handle_client_openwrc -ENOENT on target file, creating " << dname << endl;
 
 		// verify i am authoritative for this dentry (should have fwd if not)
-		int auth = idir->dir->dentry_authority(dname, get_cluster());
+		int auth = idir->dir->dentry_authority(dname);
 		assert(auth == whoami);
 
 		// create inode and link
 		CInode *in = mdcache->create_inode();
-		mdcache->link_inode( idir, dname, in );
+		mdcache->link_inode( idir->dir, dname, in );
 
 		in->mark_dirty();
 
@@ -873,7 +872,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
   // am i auth?
   if (!in->is_auth()) {
 	// not auth; forward!
-	int auth = in->authority(get_cluster());
+	int auth = in->authority();
 	dout(7) << "handle_client_unlink not auth for " << *in << ", fwd to " << auth << endl;
 	messenger->send_message(req,
 							MSG_ADDR_MDS(auth), MDS_PORT_SERVER, MDS_PORT_SERVER);

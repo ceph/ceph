@@ -18,15 +18,14 @@
 
 
 // ====== CInode =======
-CInode::CInode() : LRUObject() {
+CInode::CInode(bool auth) : LRUObject() {
   ref = 0;
   
   parent = NULL;
   nparents = 0;
   lru_next = lru_prev = NULL;
   
-  dir_auth = CDIR_AUTH_PARENT;
-  dir = NULL;  // create CDir as needed
+  dir = NULL;     // CDir opened separately
 
   auth_pins = 0;
   nested_auth_pins = 0;
@@ -39,7 +38,7 @@ CInode::CInode() : LRUObject() {
 
   version = 0;
 
-  auth = true;  // by default.
+  this->auth = auth;  // by default.
 }
 
 CInode::~CInode() {
@@ -59,6 +58,13 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
+bool CInode::dir_is_auth() {
+  if (dir)
+	return dir->is_auth();
+  else
+	return is_auth();
+}
+
 CDir *CInode::get_or_open_dir(MDS *mds)
 {
   assert(is_dir());
@@ -67,7 +73,15 @@ CDir *CInode::get_or_open_dir(MDS *mds)
 
   // only auth can open dir alone.
   assert(is_auth());
-  dir = new CDir(this, mds);
+  set_dir( new CDir(this, mds) );
+  return dir;
+}
+
+CDir *CInode::set_dir(CDir *newdir)
+{
+  assert(dir == 0);
+  get(CINODE_PIN_DIR);
+  dir = newdir;
   return dir;
 }
 
@@ -119,7 +133,7 @@ ostream& operator<<(ostream& out, CInode& in)
     for(set<int>::iterator it = in.get_ref_set().begin();
         it != in.get_ref_set().end();
         it++)
-      if (*it < CINODE_PIN_NUM)
+      if (*it < CINODE_NUM_PINS)
         out << " " << cinode_pin_names[*it];
       else
         out << " " << *it;
@@ -209,10 +223,10 @@ crope CInode::encode_export_state()
 	istate.dirty = true;
   else istate.dirty = false;
 
-  if (is_dir()) 
-	istate.dir_auth = dir_auth;
-  else
-	istate.dir_auth = -1;
+  //if (is_dir()) 
+  //istate.dir_auth = dir_auth;
+  //else
+  //	istate.dir_auth = -1;
 
   // append to rope
   r.append( (char*)&istate, sizeof(istate) );

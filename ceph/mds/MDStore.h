@@ -22,28 +22,28 @@ class MDStore {
   }
 
   // basic interface (normal or unhashed)
-  bool fetch_dir( CInode *in,
+  bool fetch_dir( CDir *dir,
 				  Context *c );
   bool fetch_dir_2( int result, 
 					inodeno_t ino );
   
-  bool commit_dir( CInode *in,
+  bool commit_dir( CDir *dir,
 				   Context *c );
   bool commit_dir_2( int result,
-					 CInode *in,
+					 CDir *dir,
 					 __uint64_t committed_version );
   
   // low level committer
-  void do_commit_dir( CInode *in,
+  void do_commit_dir( CDir *dir,
 					  Context *c,
 					  int hashcode = -1);
   void do_commit_dir_2( int result,
-						CInode *in,
+						CDir *dir,
 						Context *c,
 						__uint64_t version,
 						int hashcode );
   
-  void do_fetch_dir( CInode *in,
+  void do_fetch_dir( CDir *dir,
 					 Context *c,
 					 int hashcode = -1);
   void do_fetch_dir_2( int result, 

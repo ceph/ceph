@@ -8,7 +8,8 @@
 #include <set>
 #include <ext/hash_map>
 
-#include "../include/types.h"
+#include "include/types.h"
+#include "include/filepath.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
@@ -24,6 +25,7 @@ class MExportDirNotify;
 class MExportDirNotifyAck;
 class MExportDirFinish;
 class MDiscover;
+class MDiscoverReply;
 class MInodeGetReplica;
 class MInodeGetReplicaAck;
 class MInodeUpdate;
@@ -67,7 +69,6 @@ class MDCache {
   MDS *mds;
 
   // root
-  bool               opening_root;
   list<Context*>     waiting_for_root;
 
   // imports and exports
@@ -82,7 +83,11 @@ class MDCache {
         // maps import_root_ino's to frozen dir ino's (with pending discovers)
 
   map<CDir*,set<int> >   export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
-  map<CDir*,set<inodeno_t> > export_proxy_inos;
+  map<CDir*, set<inodeno_t> > export_proxy_inos;
+  map<CDir*, set<inodeno_t> > export_proxy_dirinos;
+
+  set<inodeno_t>         stray_export_warnings; // warnings for export dirs i don't have open
+  map<inodeno_t, MExportDirNotify*> stray_export_notifies;
 
   // inoproxysets
   //list<InoProxySet*>      ino_proxy_sets;
@@ -139,11 +144,11 @@ class MDCache {
   void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
 
-  int link_inode( CInode *parent, string& dname, CInode *inode );
+  int link_inode( CDir *dir, string& dname, CInode *inode );
   void unlink_inode( CInode *inode );
 
   int open_root(Context *c);
-  int path_traverse(string& path, 
+  int path_traverse(filepath& path, 
 					vector<CInode*>& trace, 
 					Message *req, 
 					int onfail);
@@ -153,7 +158,8 @@ class MDCache {
   int proc_message(Message *m);
 
   // -- replicas --
-  int handle_discover(MDiscover *dis);
+  void handle_discover(MDiscover *dis);
+  void handle_discover_reply(MDiscoverReply *m);
   void handle_inode_get_replica(MInodeGetReplica *m);
   void handle_inode_get_replica_ack(MInodeGetReplicaAck *m);  
 
@@ -203,14 +209,15 @@ class MDCache {
 							  pchar& p, 
 							  int from, 
 							  CDir *import_root=0,
-							  int *would_be_dir_auth); // need for normal import
+							  int *would_be_dir_auth = 0); // need for normal import
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   void import_dir_finish(CDir *dir);
   void handle_export_dir_finish(MExportDirFinish *m);
-  void import_dir_block(pchar& p, 
-						CDir *containing_import, 
+  void import_dir_block(crope& r,
+						int& off,
 						int oldauth,
+						CDir *containing_import, 
 						CDir *import_root,
 						list<inodeno_t>& imported_subdirs);
   void got_hashed_replica(CDir *import,

@@ -2,6 +2,7 @@
 #define __MCLIENTREQUEST_H
 
 #include "include/Message.h"
+#include "include/filepath.h"
 #include "mds/MDS.h"
 
 typedef struct {
@@ -14,7 +15,7 @@ typedef struct {
 
 class MClientRequest : public Message {
   MClientRequest_st st;
-  string path;
+  filepath path;
 
  public:
   MClientRequest() {}
@@ -26,18 +27,20 @@ class MClientRequest : public Message {
   }
   virtual char *get_type_name() { return "creq"; }
 
-  void set_path(string& p) { path = p; }
+  void set_path(string& p) { path.set_path(p); }
   void set_ino(inodeno_t ino) { st.ino = ino; }
 
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
   int get_client() { return st.client; }
   inodeno_t get_ino() { return st.ino; }
-  string& get_path() { return path; }
+  string& get_path() { return path.get_path(); }
+  filepath& get_filepath() { return path; }
+  
 
   virtual int decode_payload(crope s) {
 	s.copy(0, sizeof(st), (char*)&st);
-	path = s.c_str() + sizeof(st);
+	path.set_path( s.c_str() + sizeof(st) );
 	return 0;
   }
 

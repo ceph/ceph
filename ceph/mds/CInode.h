@@ -109,6 +109,10 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: inode_unlink 
     // triggers: inode_unlink_finish
 
+#define CINODE_WAIT_DIR           8192
+    // waiters: traverse_path
+    // triggers: handle_disocver_reply
+
 #define CINODE_WAIT_ANY           0xffff
 
 
@@ -206,9 +210,11 @@ class CInode : LRUObject {
   
   friend class MDCache;
   friend class CDir;
+  friend class CInodeExport;
+  friend class CInodeDiscover;
 
  public:
-  CInode();
+  CInode(bool auth=true);
   ~CInode();
   
 
@@ -228,18 +234,14 @@ class CInode : LRUObject {
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
   
-  CDir *get_or_open_dir();
+  CDir *get_or_open_dir(MDS *mds);
+  CDir *set_dir(CDir *newdir);
   
   bool dir_is_hashed() { 
 	if (inode.isdir == INODE_DIR_HASHED) return true;
 	return false; 
   }
-  bool dir_is_auth() {
-	if (dir)
-	  return dir->is_auth();
-	else
-	  return is_auth();
-  }
+  bool dir_is_auth();
 
   float get_popularity() {
 	return popularity[0].get();
@@ -491,6 +493,7 @@ class CInodeDiscover {
   bool       is_softasync;
   bool       is_lockbyauth;
 
+ public:
   CInodeDiscover() {}
   CInodeDiscover(CInode *in, int nonce) {
 	inode = in->inode;
@@ -498,6 +501,20 @@ class CInodeDiscover {
 	is_syncbyauth = in->is_syncbyauth() || in->is_presync();
 	is_softasync = in->is_softasync();
 	is_lockbyauth = in->is_lockbyauth() || in->is_prelock();
+  }
+
+  inodeno_t get_ino() { return inode.ino; }
+
+  int update_inode(CInode *in) {
+	in->inode = inode;
+
+	in->set_auth(false);
+	assert(!in->is_auth());
+	in->replica_nonce = replica_nonce;
+	
+	if (is_syncbyauth) in->dist_state |= CINODE_DIST_SYNCBYAUTH;
+	if (is_softasync)  in->dist_state |= CINODE_DIST_SOFTASYNC;
+	if (is_lockbyauth) in->dist_state |= CINODE_DIST_LOCKBYAUTH;
   }
   
   crope _rope() {
@@ -533,11 +550,12 @@ typedef struct {
   inode_t        inode;
   __uint64_t     version;
   DecayCounter   popularity;
-  bool           dirty;       // dirty inode?
+  bool           is_dirty;       // dirty inode?
   bool           is_softasync;
 
   int            ncached_by;  // int pairs follow
 } CInodeExport_st;
+
 
 class CInodeExport {
 
@@ -545,15 +563,33 @@ class CInodeExport {
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
 
+public:
   CInodeExport() {}
   CInodeExport(CInode *in) {
 	st.inode = in->inode;
 	st.version = in->get_version();
 	st.popularity = in->get_popularity();
-	st.dirty = in->is_dirty();
+	st.is_dirty = in->is_dirty();
 	st.is_softasync = in->is_softasync();
-	cached_by = in->get_cached_by();
-	cached_by_nonce = in->get_cached_by_nonce(); 
+	cached_by = in->cached_by;
+	cached_by_nonce = in->cached_by_nonce; 
+  }
+
+  int update_inode(CInode *in) {
+	in->inode = st.inode;
+
+	in->version = st.version;
+	in->popularity[0] = st.popularity;
+
+	if (st.is_dirty)
+	  in->mark_dirty();
+
+	if (st.is_softasync)
+	  in->dist_state |= CINODE_DIST_SOFTASYNC;
+
+	in->cached_by.clear();
+	in->cached_by = cached_by;
+	in->cached_by_nonce = cached_by_nonce;
   }
 
   crope _rope() {
@@ -577,7 +613,7 @@ class CInodeExport {
   int _unrope(crope s, int off = 0) {
     s.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
-
+	
     for (int i=0; i<st.ncached_by; i++) {
       int m,n;
       s.copy(off, sizeof(int), (char*)&m);

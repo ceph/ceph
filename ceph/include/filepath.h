@@ -2,6 +2,7 @@
 #define __FILEPATH_H
 
 #include <iostream>
+#include <ext/rope>
 using namespace std;
 
 class filepath {
@@ -29,12 +30,41 @@ class filepath {
  public:
   filepath() {}
   filepath(string& s) {
+	set_path(s);
+  }
+  filepath(char* s) {
+	set_path(s);
+  }
+
+  void set_path(string& s) {
 	path = s;
 	parse();
   }
-  filepath(char* s) {
+  void set_path(const char *s) {
 	path = s;
 	parse();
+  }
+
+  string& get_path() {
+	return path;
+  }
+  const char *c_str() {
+	return path.c_str();
+  }
+
+
+  filepath subpath(int s) {
+	filepath t;
+	for (int i=s; i<bits.size(); i++) {
+	  t.add_dentry(bits[i]);
+	}
+	return t;
+  }
+  void add_dentry(string& s) {
+	bits.push_back(s);
+	if (path.length())
+	  path += "/";
+	path += s;
   }
 
   void clear() {
@@ -57,9 +87,6 @@ class filepath {
     return bits.size() == 0;
   }
 
-  string& get_path() {
-	return path;
-  }
   
   crope _rope() {
     crope r;
@@ -68,13 +95,13 @@ class filepath {
     for (vector<string>::iterator it = bits.begin();
          it != bits.end();
          it++) { 
-      r.append(*it);
+      r.append((*it).c_str());
       r.append((char)0);
     }
     return r;
   }
 
-  int _unrope(crope& r, int off = 0) {
+  int _unrope(crope r, int off = 0) {
     clear();
     char n;
     r.copy(off, sizeof(char), (char*)&n);
@@ -82,7 +109,7 @@ class filepath {
     for (int i=0; i<n; i++) {
       string s = r.c_str() + off;
       off += s.length() + 1;
-      bits.add(s);
+      bits.push_back(s);
     }
     return off;
   }

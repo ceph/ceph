@@ -93,7 +93,7 @@ class Context;
 #define CDIR_PIN_AUTHPIN   8
 
 #define CDIR_NUM_PINS      9
-static char cdir_pin_names[CDIR_NUM_PINS] = {
+static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "child",
   "opened",
   "hashed",
@@ -210,7 +210,7 @@ class CDir {
   friend class CDirExport;
 
  public:
-  CDir(CInode *in, MDS *mds);
+  CDir(CInode *in, MDS *mds, bool auth=false);
 
 
 
@@ -269,7 +269,20 @@ class CDir {
 
   int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
   
-  
+  int open_by_add(int mds) {
+	if (is_open_by(mds)) {    // already had it?
+      // new nonce (+1)
+      map<int,int>::iterator it = open_by_nonce.find(mds);
+      open_by_nonce.insert(pair<int,int>(mds,it->second + 1));
+      return it->second + 1;
+    }
+	if (open_by.empty()) 
+	  get(CDIR_PIN_OPENED);
+	open_by.insert(mds);
+    open_by_nonce.insert(pair<int,int>(mds,1));   // first! serial of 1.
+    return 1;   // default nonce
+  }
+
   
 
 
@@ -419,14 +432,30 @@ class CDirDiscover {
   inodeno_t ino;
   int       nonce;
   int       dir_auth;
+  int       dir_rep;
   set<int>  rep_by;
 
+ public:
+  CDirDiscover();
   CDirDiscover(CDir *dir, int nonce) {
     ino = dir->ino();
     this->nonce = nonce;
     dir_auth = dir->dir_auth;
+	dir_rep = dir->dir_rep;
     rep_by = dir->dir_rep_by;
   }
+
+  void update_dir(CDir *dir) {
+	assert(dir->ino() == ino);
+	assert(!dir->is_auth());
+
+	dir->replica_nonce = nonce;
+	dir->dir_auth = dir_auth;
+	dir->dir_rep = dir_rep;
+	dir->dir_rep_by = rep_by;
+  }
+
+
   
   crope _rope() {
 	crope r;
@@ -434,6 +463,7 @@ class CDirDiscover {
     r.append((char*)&ino, sizeof(ino));
     r.append((char*)&nonce, sizeof(nonce));
     r.append((char*)&dir_auth, sizeof(dir_auth));
+    r.append((char*)&dir_rep, sizeof(dir_rep));
 
     int nrep_by = rep_by.size();
     r.append((char*)&nrep_by, sizeof(nrep_by));
@@ -456,6 +486,8 @@ class CDirDiscover {
     off += sizeof(nonce);
     s.copy(off, sizeof(dir_auth), (char*)&dir_auth);
     off += sizeof(dir_auth);
+    s.copy(off, sizeof(dir_rep), (char*)&dir_rep);
+    off += sizeof(dir_rep);
 
     int nrep_by;
     s.copy(off, sizeof(int), (char*)&nrep_by);
@@ -491,23 +523,44 @@ typedef struct {
 } CDirExport_st;
 
 class CDirExport {
-
   CDirExport_st st;
+  set<int>     open_by;
   map<int,int> open_by_nonce;
   set<int>     rep_by;
 
+ public:
   CDirExport(CDir *dir) {
     st.ino = dir->ino();
     st.nitems = dir->nitems;
     st.version = dir->version;
     st.state = dir->state;
-    st.popularity = dir->popularity;
+    st.popularity = dir->popularity[0];        // FIXME FIXME
     st.dir_auth = dir->dir_auth;
     st.dir_rep = dir->dir_rep;
 
     rep_by = dir->dir_rep_by;
+	open_by = dir->open_by;
     open_by_nonce = dir->open_by_nonce;
   }
+
+  inodeno_t get_ino() { return st.ino; }
+
+  void update_dir(CDir *dir) {
+	assert(dir->ino() == st.ino);
+
+	dir->nitems = st.nitems;
+	dir->version = st.version;
+	dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
+	  (st.state & CDIR_MASK_STATE_EXPORTED);
+	dir->popularity[0] = st.popularity;
+	dir->dir_auth = st.dir_auth;
+	dir->dir_rep = st.dir_rep;
+
+	dir->dir_rep_by = rep_by;
+	dir->open_by = open_by;
+	dir->open_by_nonce = open_by_nonce;
+  }
+
 
   crope _rope() {
 	crope r;
@@ -548,6 +601,7 @@ class CDirExport {
       off += sizeof(int);
       s.copy(off, sizeof(int), (char*)&n);
       off += sizeof(int);
+	  open_by.insert(m);
       open_by_nonce.insert(pair<int,int>(m,n));
     }
     

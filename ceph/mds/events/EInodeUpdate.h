@@ -29,12 +29,12 @@ class C_EIU_VerifyInodeUpdate : public Context {
 	CInode *in = mds->mdcache->get_inode(ino);
 	if (in) {
 	  // if it's mine, dirty, and the same version, commit
-	  if (in->authority(mds->get_cluster()) == mds->get_nodeid() &&  // mine
+	  if (in->authority() == mds->get_nodeid() &&  // mine
 		  in->is_dirty() &&                         // dirty
 		  in->get_version() == version) {           // same version that i have to deal with
 		dout(7) << "ARGH, did EInodeUpdate commit but inode " << *in << " is still dirty" << endl;
 		// damnit
-		mds->mdstore->commit_dir(in->get_parent_inode(),
+		mds->mdstore->commit_dir(in->get_parent_dir(),
 								 new C_EIU_VerifyInodeUpdate(mds,
 															 in->ino(),
 															 in->get_version(),
@@ -98,7 +98,7 @@ class EInodeUpdate : public LogEvent {
 	// commit my containing directory
 	CInode *in = mds->mdcache->get_inode(inode.ino);
 	assert(in);
-	CInode *parent = in->get_parent_inode();
+	CDir *parent = in->get_parent_dir();
 
 	if (parent) {
 	  // okay!

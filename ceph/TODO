@@ -7,6 +7,13 @@ BUGS?
 
 
 ISSUES
+
+- discover
+ - soft
+ - make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
+ - error flag
+
+
 - log
   - overall logging strategy.  
     - currently (?): do everything immediately, reply when logged.

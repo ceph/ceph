@@ -21,6 +21,7 @@ using namespace std;
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
+#include "messages/MDiscoverReply.h"
 
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
@@ -34,6 +35,7 @@ using namespace std;
 
 #include "messages/MInodeUpdate.h"
 #include "messages/MInodeExpire.h"
+#include "messages/MDirExpire.h"
 
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
@@ -98,6 +100,9 @@ decode_message(crope& ser)
   case MSG_MDS_DISCOVER:
 	m = new MDiscover();
 	break;
+  case MSG_MDS_DISCOVERREPLY:
+	m = new MDiscoverReply();
+	break;
 
   case MSG_MDS_EXPORTDIR:
 	m = new MExportDir();
@@ -124,7 +129,7 @@ decode_message(crope& ser)
 	break;
 
   case MSG_MDS_EXPORTDIRWARNING:
-	m = new MExportDirPrepWarning();
+	m = new MExportDirWarning();
 	break;
 
   case MSG_MDS_HEARTBEAT:
@@ -137,6 +142,10 @@ decode_message(crope& ser)
 
   case MSG_MDS_INODEEXPIRE:
 	m = new MInodeExpire();
+	break;
+
+  case MSG_MDS_DIREXPIRE:
+	m = new MDirExpire();
 	break;
 
   case MSG_MDS_INODESYNCSTART:
