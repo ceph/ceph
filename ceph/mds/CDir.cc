@@ -19,7 +19,9 @@ ostream& operator<<(ostream& out, CDir& dir)
 {
   string path;
   dir.get_inode()->make_path(path);
-  return out << "[dir " << dir.ino() << " " << path << "/]";
+  out << "[dir " << dir.ino() << " " << path;
+  if (dir.is_import()) out << " IMPORT";
+  return out << "/]";
 }
 
 

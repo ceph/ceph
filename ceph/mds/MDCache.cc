@@ -2753,7 +2753,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   CDir *dir = idir->dir;
 
   int oldauth = m->get_source();
-  dout(7) << "handle_export_dir, import_dir " << *dir << " from " << oldauth << endl;
+  dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
   show_imports();
@@ -2791,6 +2791,8 @@ void MDCache::handle_export_dir(MExportDir *m)
 	dir->inode->get(CINODE_PIN_IMPORT);                // must keep it pinned
 	
 	containing_import = dir;  // imported exports nested under *in
+
+	dout(7) << " new import at " << *dir << endl;
   }
 
   // i shouldn't be waiting for any ReplicateHashedAck's yet
@@ -3206,7 +3208,7 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
   // yay, we're the authority
   dout(7) << "handle_export_dir_notify on " << *in << " new_auth " << m->get_new_auth() << " updated, telling replicas" << endl;
 
-  assert(in->dir_auth != mds->get_nodeid() || in->is_hashed());  // shouldn't explicitly refer to self
+  assert(in->dir_auth != mds->get_nodeid() || in->dir_is_hashed());  // shouldn't explicitly refer to self
 
   bool wasmine = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
   if (wasmine) {
