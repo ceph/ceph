@@ -80,17 +80,30 @@ class Context;
 
 // pins
 
-#define CDIR_PIN_CHILD     20000
-#define CDIR_PIN_OPENED    20001  // open by another node
-#define CDIR_PIN_HASHED    20002  // hashed
-#define CDIR_PIN_WAITER    20003  // waiter(s)
+#define CDIR_PIN_CHILD     0
+#define CDIR_PIN_OPENED    1  // open by another node
+#define CDIR_PIN_HASHED    2  // hashed
+#define CDIR_PIN_WAITER    3  // waiter(s)
 
-#define CDIR_PIN_IMPORT    20010  
-#define CDIR_PIN_EXPORT    20011
-#define CDIR_PIN_FREEZE    20012
-#define CDIR_PIN_PROXY     20013  // auth just changed.
+#define CDIR_PIN_IMPORT    4
+#define CDIR_PIN_EXPORT    5
+#define CDIR_PIN_FREEZE    6
+#define CDIR_PIN_PROXY     7  // auth just changed.
 
-#define CDIR_PIN_AUTHPIN   30000
+#define CDIR_PIN_AUTHPIN   8
+
+#define CDIR_NUM_PINS      9
+static char cdir_pin_names[CDIR_NUM_PINS] = {
+  "child",
+  "opened",
+  "hashed",
+  "waiter",
+  "import",
+  "export",
+  "freeze",
+  "proxy",
+  "authpin"
+};
 
 
 
@@ -192,6 +205,9 @@ class CDir {
   friend class MDCache;
   friend class MDiscover;
   friend class MDBalancer;
+
+  friend class CDirDiscover;
+  friend class CDirExport;
 
  public:
   CDir(CInode *in, MDS *mds);
@@ -391,6 +407,161 @@ class CDir {
   // debuggin bs
   void dump(int d = 0);
   void dump_to_disk(MDS *m);
+};
+
+
+
+// -- encoded state --
+
+// discover
+
+class CDirDiscover {
+  inodeno_t ino;
+  int       nonce;
+  int       dir_auth;
+  set<int>  rep_by;
+
+  CDirDiscover(CDir *dir, int nonce) {
+    ino = dir->ino();
+    this->nonce = nonce;
+    dir_auth = dir->dir_auth;
+    rep_by = dir->dir_rep_by;
+  }
+  
+  crope _rope() {
+	crope r;
+
+    r.append((char*)&ino, sizeof(ino));
+    r.append((char*)&nonce, sizeof(nonce));
+    r.append((char*)&dir_auth, sizeof(dir_auth));
+
+    int nrep_by = rep_by.size();
+    r.append((char*)&nrep_by, sizeof(nrep_by));
+    
+    // rep_by
+    for (set<int>::iterator it = rep_by.begin();
+         it != rep_by.end();
+         it++) {
+      int m = *it;
+      r.append((char*)&m, sizeof(int));
+    }
+    
+	return r;
+  }
+
+  int _unrope(crope s, int off = 0) {
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    s.copy(off, sizeof(nonce), (char*)&nonce);
+    off += sizeof(nonce);
+    s.copy(off, sizeof(dir_auth), (char*)&dir_auth);
+    off += sizeof(dir_auth);
+
+    int nrep_by;
+    s.copy(off, sizeof(int), (char*)&nrep_by);
+    off += sizeof(int);
+    
+    // open_by
+    for (int i=0; i<nrep_by; i++) {
+      int m;
+      s.copy(off, sizeof(int), (char*)&m);
+      off += sizeof(int);
+      rep_by.insert(m);
+    }
+
+    return off;
+  }
+
+};
+
+
+// export
+
+typedef struct {
+  inodeno_t      ino;
+  __uint64_t     nitems;
+  __uint64_t     version;
+  unsigned       state;
+  DecayCounter   popularity;
+  int            dir_auth;
+  int            dir_rep;
+  int            nopen_by;
+  int            nrep_by;
+  // ints follow
+} CDirExport_st;
+
+class CDirExport {
+
+  CDirExport_st st;
+  map<int,int> open_by_nonce;
+  set<int>     rep_by;
+
+  CDirExport(CDir *dir) {
+    st.ino = dir->ino();
+    st.nitems = dir->nitems;
+    st.version = dir->version;
+    st.state = dir->state;
+    st.popularity = dir->popularity;
+    st.dir_auth = dir->dir_auth;
+    st.dir_rep = dir->dir_rep;
+
+    rep_by = dir->dir_rep_by;
+    open_by_nonce = dir->open_by_nonce;
+  }
+
+  crope _rope() {
+	crope r;
+
+    st.nrep_by = rep_by.size();
+    st.nopen_by = open_by_nonce.size();
+    r.append((char*)&st, sizeof(st));
+    
+    // open_by
+    for (map<int,int>::iterator it = open_by_nonce.begin();
+         it != open_by_nonce.end();
+         it++) {
+      int m = it->first;
+      r.append((char*)&m, sizeof(int));
+      int n = it->second;
+      r.append((char*)&n, sizeof(int));
+    }
+
+    // rep_by
+    for (set<int>::iterator it = rep_by.begin();
+         it != rep_by.end();
+         it++) {
+      int m = *it;
+      r.append((char*)&m, sizeof(int));
+    }
+   
+	return r;
+  }
+
+  int _unrope(crope s, int off = 0) {
+    s.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
+
+    // open_by
+    for (int i=0; i<st.nopen_by; i++) {
+      int m,n;
+      s.copy(off, sizeof(int), (char*)&m);
+      off += sizeof(int);
+      s.copy(off, sizeof(int), (char*)&n);
+      off += sizeof(int);
+      open_by_nonce.insert(pair<int,int>(m,n));
+    }
+    
+    // rep_by
+    for (int i=0; i<st.nrep_by; i++) {
+      int m;
+      s.copy(off, sizeof(int), (char*)&m);
+      off += sizeof(int);
+      rep_by.insert(m);
+    }
+
+    return off;
+  }
+
 };
 
 

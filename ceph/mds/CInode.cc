@@ -110,6 +110,16 @@ ostream& operator<<(ostream& out, CInode& in)
 	out << "rep a=" << in.authority() << " n=" << in.get_replica_nonce();
 	assert(in.get_replica_nonce() >= 0);
   }
+  if (in.is_pinned()) {
+    out << "pins";
+    for(set<int>::iterator it = in.get_ref_set().begin();
+        it != in.get_ref_set().end();
+        it++)
+      if (*it < CINODE_PIN_NUM)
+        out << " " << cinode_pin_names[*it];
+      else
+        out << " " << *it;
+  }
   out << "]";
   return out;
 }
@@ -359,17 +369,23 @@ bool CInode::can_auth_pin() {
 }
 
 void CInode::auth_pin() {
-  get(CINODE_PIN_AUTHPIN + auth_pins);
+  if (auth_pins == 0)
+    get(CINODE_PIN_AUTHPIN);
   auth_pins++;
+
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+
   if (parent)
 	parent->dir->adjust_nested_auth_pins( 1 );
 }
 
 void CInode::auth_unpin() {
   auth_pins--;
+  if (auth_pins == 0)
+    put(CINODE_PIN_AUTHPIN);
+
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
-  put(CINODE_PIN_AUTHPIN + auth_pins);
+
   if (parent)
 	parent->dir->adjust_nested_auth_pins( -1 );
 }

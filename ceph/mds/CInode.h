@@ -33,17 +33,31 @@ using namespace std;
 */
 
 // pins for keeping an item in cache (and debugging)
-#define CINODE_PIN_DIR       10000
-#define CINODE_PIN_CACHED    10001
-#define CINODE_PIN_DIRTY     10002   // must flush
-#define CINODE_PIN_PROXY     10004   // can't expire yet
-#define CINODE_PIN_WAITER    10005   // waiter
+#define CINODE_PIN_DIR       0
+#define CINODE_PIN_CACHED    1
+#define CINODE_PIN_DIRTY     2   // must flush
+#define CINODE_PIN_PROXY     3   // can't expire yet
+#define CINODE_PIN_WAITER    4   // waiter
 
-#define CINODE_PIN_OPENRD    10020  
-#define CINODE_PIN_OPENWR    10021
-#define CINODE_PIN_UNLINKING 10022
+#define CINODE_PIN_OPENRD    5
+#define CINODE_PIN_OPENWR    6
+#define CINODE_PIN_UNLINKING 7
 
-#define CINODE_PIN_AUTHPIN   30000
+#define CINODE_PIN_AUTHPIN   8
+
+#define CINODE_NUM_PINS       9
+static char *cinode_pin_names[CINODE_NUM_PINS] = {
+  "dir",
+  "cached",
+  "dirty",
+  "proxy",
+  "waiter",
+  "openrd",
+  "openwr",
+  "unlinking",
+  "authpin"
+};
+
 
 
 //#define CINODE_PIN_SYNCBYME     70000
@@ -283,6 +297,7 @@ class CInode : LRUObject {
   // -- cached_by -- to be used ONLY when we're authoritative or cacheproxy
   bool is_cached_by_anyone() { return !cached_by.empty(); }
   bool is_cached_by(int mds) { return cached_by.count(mds); }
+  int num_cached_by() { return cached_by.size(); }
   // cached_by_add returns a nonce
   int cached_by_add(int mds) {
 	if (is_cached_by(mds)) {    // already had it?
@@ -414,6 +429,8 @@ class CInode : LRUObject {
 
 
   // -- reference counting --
+  bool is_pinned() { return ref > 0; }
+  set<int>& get_ref_set() { return ref_set; }
   void put(int by) {
 	if (ref == 0 || ref_set.count(by) != 1) {
 	  dout(7) << " bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
@@ -462,7 +479,9 @@ class CInode : LRUObject {
 
 
 
-// encoded state
+// -- encoded state
+
+// discover
 
 class CInodeDiscover {
   
@@ -472,7 +491,7 @@ class CInodeDiscover {
   bool       is_softasync;
   bool       is_lockbyauth;
 
-
+  CInodeDiscover() {}
   CInodeDiscover(CInode *in) {
 	inode = in->inode;
 	replica_nonce = in->get_replica_nonce();
@@ -492,7 +511,7 @@ class CInodeDiscover {
   }
 
   int _unrope(crope s, int off = 0) {
-	s.copy(0,sizeof(inode_t), (char*)&inode);
+	s.copy(off,sizeof(inode_t), (char*)&inode);
 	off += sizeof(inode_t);
 	s.copy(off, sizeof(int), (char*)&replica_nonce);
 	off += sizeof(int);
@@ -508,6 +527,8 @@ class CInodeDiscover {
 };
 
 
+// export
+
 typedef struct {
   inode_t        inode;
   __uint64_t     version;
@@ -518,13 +539,13 @@ typedef struct {
   int            ncached_by;  // int pairs follow
 } CInodeExport_st;
 
-
 class CInodeExport {
 
   CInodeExport_st st;
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
 
+  CInodeExport() {}
   CInodeExport(CInode *in) {
 	st.inode = in->inode;
 	st.version = in->get_version();
@@ -535,17 +556,39 @@ class CInodeExport {
 	cached_by_nonce = in->get_cached_by_nonce(); 
   }
 
-
   crope _rope() {
 	crope r;
-
+    st.ncached_by = cached_by.size();
+    r.append((char*)&st, sizeof(st));
+    
+    // cached_by + nonce
+    for (map<int,int>::iterator it = cached_by_nonce.begin();
+         it != cached_by_nonce.end();
+         it++) {
+      int m = it->first;
+      r.append((char*)&m, sizeof(int));
+      int n = it->second;
+      r.append((char*)&n, sizeof(int));
+    }
+    
 	return r;
   }
+
   int _unrope(crope s, int off = 0) {
+    s.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
 
+    for (int i=0; i<st.ncached_by; i++) {
+      int m,n;
+      s.copy(off, sizeof(int), (char*)&m);
+      off += sizeof(int);
+      s.copy(off, sizeof(int), (char*)&n);
+      off += sizeof(int);
+      cached_by.insert(m);
+      cached_by_nonce.insert(pair<int,int>(m,n));
+    }
+    return off;
   }
-
-
 };
 
 

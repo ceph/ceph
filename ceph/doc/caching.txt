@@ -1,0 +1,71 @@
+
+
+AUTHORITY
+
+The authority maintains a list of what nodes cache each inode.
+Additionally, each replica is assigned a serial (normally 0) to
+disambiguate multiple replicas of the same item (see below).
+
+  set<int> cached_by;
+  map<int, int> cached_by_serial;
+
+The cached_by set _always_ includes all nodes that cache the
+partcuarly inode, but may additionally include nodes that used to
+cache it but no longer do.  In those cases, an expire message should
+be in transit.
+
+
+REPLICA
+
+The replica maintains a notion of who it believes is the authority for
+each replicated inode.  There are two possibilities:
+
+ - Ordinarily, this notion is correct.  
+ - If the part of the file system in question was recently exported to
+   a new MDS, the inodes old authority is acting as a CACHEPROXY,
+   and will forward relevant messages on to the authority.
+
+When a repica is expired from cache, and expire is sent to the
+authority.  The expire incudes the serial number issued when the
+replica was originally created.
+
+
+Exports are tricky:
+
+- The old authority suddenly becomes a replica.  It's serial is well
+  defined.  It also becomes a CACHEPROXY, which means its cached_by
+  remains defined (with an alternate meaning!).  While a proxy, the
+  node will forward relevant messages from the replica to the
+  authority (but not the other way around--the authority knows all
+  replicas).  
+
+- Once the export is acked, the old authority sends a
+  message to the replica notifying it of the new authority.  As soon
+  as all replicas acknowedge receipt of this notice, the old authority
+  can cease CACHEPROXY responsibilities and become a regular replica.
+  At this point it's cached_by is no longer defined.
+
+
+
+
+
+
+
+- Replicas always know who the authority for the inode is, OR they
+  know prior owner acting as a CACHEPROXY.  (They don't know which it
+  is.)
+
+Because the authority always knows who caches an item, it can
+confidently send updates to replicas for locking, invalidating, etc.
+
+
+Expiration:
+
+When a replica is expired from cache, an expire is sent to the
+authority.  If the receiving node is the authority, it simply removes
+the node from the cached_by list.
+
+If the receiving node is not the replica, it is acting as a CACHEPROXY
+(because it recently exported the data).
+
+

@@ -146,6 +146,7 @@ what DIR state is encoded when
 
 - dir open / discover
  nonce
+ dir_auth
  dir_rep/by
 
 - dir update
@@ -423,8 +424,10 @@ int CDir::dentry_authority(const string& dn )
 // auth pins
 
 void CDir::auth_pin() {
-  get(CDIR_PIN_AUTHPIN + auth_pins);
+  if (auth_pins == 0)
+    get(CDIR_PIN_AUTHPIN);
   auth_pins++;
+
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
   inode->nested_auth_pins++;
@@ -434,8 +437,10 @@ void CDir::auth_pin() {
 
 void CDir::auth_unpin() {
   auth_pins--;
-  put(CINODE_PIN_DAUTHPIN + auth_pins);
+  if (auth_pins == 0)
+    put(CINODE_PIN_DAUTHPIN);
   assert(auth_pins >= 0);
+
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
   // pending freeze?
