@@ -1,9 +1,9 @@
 
-#include "include/CDir.h"
-#include "include/CDentry.h"
-#include "include/CInode.h"
-#include "include/MDStore.h"
-#include "include/MDS.h"
+#include "CDir.h"
+#include "CDentry.h"
+#include "CInode.h"
+#include "MDStore.h"
+#include "MDS.h"
 
 
 // CDir

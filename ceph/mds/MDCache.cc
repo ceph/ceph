@@ -1,9 +1,9 @@
 
-#include "include/MDCache.h"
-#include "include/MDStore.h"
-#include "include/CInode.h"
-#include "include/CDir.h"
-#include "include/MDS.h"
+#include "MDCache.h"
+#include "MDStore.h"
+#include "CInode.h"
+#include "CDir.h"
+#include "MDS.h"
 
 #include <errno.h>
 #include <iostream>
@@ -46,7 +46,7 @@ bool DentryCache::trim(__int32_t max) {
 	if (!max) return false;
   }
 
-  while (lru->lru_get_num() > max) {
+  while (lru->lru_get_size() > max) {
 	CInode *o = (CInode*)lru->lru_expire();
 	if (!o) return false;
 

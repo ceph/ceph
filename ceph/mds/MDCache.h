@@ -7,7 +7,7 @@
 #include <map>
 #include <ext/hash_map>
 
-#include "types.h"
+#include "../include/types.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
@@ -45,7 +45,7 @@ class DentryCache {
 
   // fn
   size_t set_cache_size(size_t max) {
-	lru->set_max(max);
+	lru->lru_set_max(max);
   }
   bool trim(__int32_t max = -1);   // trim cache
   bool clear() {                  // clear cache

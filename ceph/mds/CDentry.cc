@@ -1,6 +1,6 @@
 
-#include "include/CDentry.h"
-#include "include/CDir.h"
+#include "CDentry.h"
+#include "CDir.h"
 
 
 // CDentry

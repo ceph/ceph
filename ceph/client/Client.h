@@ -21,7 +21,7 @@ class Client : public Dispatcher {
   ClNode *root;
   ClNode *cwd;
 
-  long tid;
+  long tid, max_requests;
 
  public:
   Client(int id, Messenger *m);
@@ -35,7 +35,9 @@ class Client : public Dispatcher {
   virtual void assim_reply(MClientReply*);
   virtual void issue_request();
 
-  virtual void send_request(string& p);
+  virtual void send_request(string& p, int op);
+
+  virtual void trim_cache();
 };
 
 

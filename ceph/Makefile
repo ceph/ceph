@@ -1,9 +1,9 @@
 
 CC=g++
-CFLAGS=-D __gnu_cxx=std -g
+CFLAGS=-D __gnu_cxx=std -g -Iinclude -I.
 
 SRCS=*.cc */*.cc
-OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o MDS.o FakeMessenger.o LogStream.o MDLog.o OSD.o client/Client.o 
+OBJS=mds/CDentry.o mds/CDir.o mds/CInode.o mds/MDCache.o mds/MDStore.o clock.o mds/MDS.o FakeMessenger.o mds/LogStream.o mds/MDLog.o osd/OSD.o client/Client.o 
 TARGETS=test import
 
 all: depend ${TARGETS}
@@ -16,7 +16,7 @@ import: pmds.o import.cc
 	${CC} ${CFLAGS} pmds.o import.cc -o import
 
 clean:
-	rm *.o ${TARGETS}
+	rm *.o */*.o ${TARGETS}
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@

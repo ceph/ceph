@@ -11,8 +11,12 @@ using namespace std;
 class ClNode : public LRUObject {
  protected:
  public:
-  inodeno_t ino;
 
+  // if didstat, the following are defined
+  inodeno_t ino;
+  bool isdir;
+  bool havedircontents;
+  
   string ref_name;
   ClNode *parent;  
 
@@ -22,6 +26,14 @@ class ClNode : public LRUObject {
 
   ClNode() {
 	parent = 0;
+	isdir = havedircontents = false;
+  }
+  
+  int depth() {
+	if (parent == 0)
+	  return 1;
+	else
+	  return 1 + parent->depth();
   }
   
   void get() {
@@ -57,6 +69,7 @@ class ClNode : public LRUObject {
 	children.erase(name);
 	if (children.size() == 0)
 	  put();
+	havedircontents = false;
   }
 
   ClNode *lookup(string name) {

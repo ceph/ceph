@@ -1,7 +1,7 @@
 
-#include "include/LogStream.h"
-#include "include/MDS.h"
-#include "include/LogEvent.h"
+#include "LogStream.h"
+#include "MDS.h"
+#include "LogEvent.h"
 
 #include <iostream>
 using namespace std;

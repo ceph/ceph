@@ -2,7 +2,7 @@
 #ifndef __CDIR_H
 #define __CDIR_H
 
-#include "types.h"
+#include "include/types.h"
 #include <map>
 #include <ext/hash_map>
 #include <string>

@@ -1,8 +1,7 @@
 #ifndef __MOSDREAD_H
 #define __MOSDREAD_H
 
-#include "../include/Message.h"
-#include "../include/OSD.h"
+#include "Message.h"
 
 class MOSDRead : public Message {
  public:

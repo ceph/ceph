@@ -1,7 +1,6 @@
 
-#include "include/MDStore.h"
-#include "assert.h"
-#include "include/MDS.h"
+#include "MDStore.h"
+#include "MDS.h"
 
 #include <iostream>
 using namespace std;

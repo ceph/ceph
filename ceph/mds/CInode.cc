@@ -1,10 +1,24 @@
 
-#include "include/CInode.h"
-#include "include/CDir.h"
-#include "include/MDS.h"
+#include "CInode.h"
+#include "CDir.h"
+#include "MDS.h"
 #include <string>
 
 // ====== CInode =======
+CInode::CInode() : LRUObject() {
+  ref = 0;
+  
+  parent = NULL;
+  nparents = 0;
+  
+  is_import = is_export = false;
+  
+  dir = NULL;
+  
+  lru_next = lru_prev = NULL;
+  
+  mid_fetch = false;	
+}
 
 CInode::~CInode() {
   if (dir) { delete dir; dir = 0; }

@@ -52,17 +52,16 @@ class LRU {
 	lru_max = max;
   }
 
-  __uint32_t lru_get_num() {
+  __uint32_t lru_get_size() {
 	return lru_num;
   }
 
   __uint32_t lru_get_max() {
 	return lru_max;
   }
-  __uint32_t set_max(__uint32_t m) {
-	lru_max = m;
-	return lru_max;
-  }
+  void lru_set_max(__uint32_t m) { lru_max = m; }
+  void lru_set_midpoint(float f) { lru_midpoint = f; }
+  
 
   // insert at top of lru
   void lru_insert_top(LRUObject *o) {

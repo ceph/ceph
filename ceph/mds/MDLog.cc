@@ -1,7 +1,7 @@
 
-#include "include/MDLog.h"
-#include "include/LogStream.h"
-#include "include/LogEvent.h"
+#include "MDLog.h"
+#include "LogStream.h"
+#include "LogEvent.h"
 
 #define MAX_TRIMMING   4    // max events to be retiring simultaneously
 

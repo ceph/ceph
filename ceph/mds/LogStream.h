@@ -1,8 +1,8 @@
 #ifndef __LOGSTREAM_H
 #define __LOGSTREAM_H
 
-#include "types.h"
-#include "Context.h"
+#include "../include/types.h"
+#include "../include/Context.h"
 
 class LogEvent;
 class MDS;

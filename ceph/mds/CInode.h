@@ -2,9 +2,9 @@
 #ifndef __CINODE_H
 #define __CINODE_H
 
-#include "types.h"
-#include "lru.h"
-#include "DecayCounter.h"
+#include "../include/types.h"
+#include "../include/lru.h"
+#include "../include/DecayCounter.h"
 #include <sys/stat.h>
 
 #include <list>
@@ -51,19 +51,7 @@ class CInode : LRUObject {
   friend class MDStore;
 
  public:
-  CInode() : LRUObject() {
-	ref = 0;
-
-	parent = NULL;
-	nparents = 0;
-
-	is_import = is_export = false;
-
-	dir = NULL;
-
-	lru_next = lru_prev = NULL;
-
-  }
+  CInode();
   ~CInode();
 
 	

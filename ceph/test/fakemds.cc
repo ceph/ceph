@@ -4,13 +4,14 @@
 #include <iostream>
 #include <string>
 
-#include "include/MDS.h"
-#include "include/OSD.h"
+#include "mds/MDS.h"
+#include "osd/OSD.h"
 #include "client/Client.h"
 
-#include "include/MDCache.h"
-#include "include/MDStore.h"
-#include "include/FakeMessenger.h"
+#include "mds/MDCache.h"
+#include "mds/MDStore.h"
+
+#include "FakeMessenger.h"
 
 #include "messages/MPing.h"
 
@@ -71,7 +72,9 @@ int play() {
 
   // send an initial message...?
   mds[0]->messenger->send_message(new MPing(10), 1, MDS_PORT_MAIN, MDS_PORT_MAIN);
-  client[0]->issue_request();
+
+  for (int i=0; i<NUMCLIENTS; i++) 
+	client[i]->issue_request();
 
   // loop
   fakemessenger_do_loop();

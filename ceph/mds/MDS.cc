@@ -1,10 +1,11 @@
 
-#include "include/types.h"
-#include "include/MDS.h"
-#include "include/MDCache.h"
-#include "include/Messenger.h"
-#include "include/MDStore.h"
-#include "include/MDLog.h"
+#include "types.h"
+#include "Messenger.h"
+
+#include "MDS.h"
+#include "MDCache.h"
+#include "MDStore.h"
+#include "MDLog.h"
 
 #include "messages/MPing.h"
 
@@ -82,7 +83,7 @@ void MDS::proc_message(Message *m)
   switch (m->get_type()) {
 	// MISC
   case MSG_PING:
-	cout << "mds" << whoami << " received ping from " << m->get_source() << " with ttl " << ((MPing*)m)->ttl << endl;
+	cout << "mds" << whoami << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with ttl " << ((MPing*)m)->ttl << endl;
 	if (((MPing*)m)->ttl > 0) {
 	  //cout << "mds" << whoami << " responding to " << m->get_source() << endl;
 	  messenger->send_message(new MPing(((MPing*)m)->ttl-1), 
@@ -153,7 +154,7 @@ void MDS::dispatch(Message *m)
 
 int MDS::handle_client_request(MClientRequest *req)
 {
-  cout << "mds" << whoami << " got client request from " << req->get_source() << ", op " << req->op << endl;
+  cout << "mds" << whoami << " req from " << MSG_ADDR_NICE(req->get_source()) << " op " << req->op << " on " << req->path <<  endl;
 
   
   vector<CInode*> trace;
@@ -161,11 +162,47 @@ int MDS::handle_client_request(MClientRequest *req)
 
   int r = path_traverse(req->path, trace, trace_dn, req);
   if (r < 0) return 0;  // delayed	
+
+  vector<c_inode_info*> dir_contents;
   
+  CInode *cur = trace[trace.size()-1];
+  
+  // need contents too?
+  if (req->op == MDS_OP_READDIR) {
+	if (cur->is_dir()) {
+	  if (cur->dir) {
+		// build dir contents
+		CDir_map_t::iterator it = cur->dir->begin();
+		while (it != cur->dir->end()) {
+		  CInode *in = it->second->inode;
+		  c_inode_info *i = new c_inode_info;
+		  i->ino = in->inode.ino;
+		  i->dist = in->get_dist_spec(this);
+		  i->isdir = in->is_dir();
+		  i->ref_dn = it->first;
+		  dir_contents.push_back(i);
+		  it++;
+		}
+	  } else {
+		// readdir!
+		cout << "mds" << whoami << " no dir contents for readdir on " << cur->inode.ino << ", fetching" << endl;
+		mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
+		return 0;
+	  }
+	} else {
+	  cout << "readdir on non-dir" << endl;
+	}
+
+  }
+
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist(trace, 
 						trace_dn,
 						this);
+
+  if (dir_contents.size())
+	reply->dir_contents = dir_contents;
+
   messenger->send_message(reply,
 						  req->get_source(), req->get_source_port(),
 						  MDS_PORT_SERVER);
