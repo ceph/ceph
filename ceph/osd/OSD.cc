@@ -191,7 +191,7 @@ void OSD::write(MOSDWrite *m)
 
   if (m->get_offset() == 0) {
 	char *n = get_filename(whoami, m->get_oid());
-	//cout << f << " to " << n << " rename sez " << rename(f, n) << endl;	
+	cout << f << " to " << n << " rename sez " << rename(f, n) << endl;	
   }
 
   // clean up
