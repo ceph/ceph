@@ -55,7 +55,7 @@ class MExportDir : public Message {
 	ipop = pop;
 	ndirs = 0;
   }
-  virtual char *get_type_name() { return "exp"; }
+  virtual char *get_type_name() { return "Ex"; }
 
   void add_dir(crope& dir) {
 	state.append( dir );

@@ -11,7 +11,7 @@ class MExportDirAck : public Message {
 	Message(MSG_MDS_EXPORTDIRACK) {
 	ino = req->ino;
   }  
-  virtual char *get_type_name() { return "expack"; }
+  virtual char *get_type_name() { return "ExAck"; }
   
 };
 

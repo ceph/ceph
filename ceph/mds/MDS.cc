@@ -29,6 +29,11 @@ using namespace std;
 
 
 
+ostream& operator<<(ostream& out, MDS& mds)
+{
+  out << "mds" << mds.get_nodeid() << " ";
+}
+
 void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 {
   // forward message to new mds
@@ -60,6 +65,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdlog->set_max_events(100);
 
   shutting_down = false;
+  shut_down = false;
 
   stat_ops = 0;
   last_heartbeat = 0;
@@ -110,11 +116,13 @@ void MDS::handle_shutdown_finish(Message *m)
   cout << "mds" << whoami << " handle_shutdown_finish from " << m->get_source() << endl;
   did_shut_down.insert(m->get_source());
   cout << "mds" << whoami << " shut down so far: " << did_shut_down << endl;
-  delete m;
 
   if (did_shut_down.size() == mdcluster->get_num_mds()) {
 	shutting_down = false;
   }
+
+  // done
+  delete m;
 }
 
 
@@ -232,9 +240,11 @@ void MDS::dispatch(Message *m)
 	balancer->send_heartbeat();
   }
 
-  if (shutting_down) {
-	if (mdcache->shutdown_pass())
+  if (shutting_down && !shut_down) {
+	if (mdcache->shutdown_pass()) {
 	  shutting_down = false;
+	  shut_down = true;
+	}
   }
 
 }

@@ -11,5 +11,5 @@
 
 //#define FAKE_CLOCK
 
-#define NUMCLIENT 10
+#define NUMCLIENT 800
 #define CLIENT_REQUESTS 1000

@@ -19,7 +19,7 @@ class Messenger {
  public:
   Messenger() {
   }
-  ~Messenger() {
+  virtual ~Messenger() {
 	remove_dispatcher();
   }
   

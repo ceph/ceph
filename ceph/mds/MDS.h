@@ -6,6 +6,7 @@
 #include <ext/hash_map>
 #include <vector>
 #include <set>
+#include <ostream>
 
 #include "include/types.h"
 #include "include/Context.h"
@@ -62,7 +63,7 @@ typedef struct {
 } PendingOSDRead_t;
 
 
-
+class MDS;
 
 void split_path(string& path, 
 				vector<string>& bits);
@@ -76,6 +77,7 @@ class MDS : public Dispatcher {
 
   bool         shutting_down;
   set<int>     did_shut_down;
+  bool         shut_down;
   
   // import/export
   list<CInode*>      import_list;
@@ -116,6 +118,7 @@ class MDS : public Dispatcher {
   mds_load_t get_load();
 
   bool is_shutting_down() { return shutting_down; }
+  bool is_shut_down() { return shut_down; }
 
   int init();
   int shutdown_start();
@@ -181,6 +184,8 @@ public:
   virtual void redelegate(MDS *mds, int newmds);
 };
 
+
+ostream& operator<<(ostream& out, MDS& mds);
 
 
 //extern MDS *g_mds;
