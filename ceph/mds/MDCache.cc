@@ -951,6 +951,31 @@ public:
 	this->in = in;
   }
 
+  // suck up and categorize waitlists 
+  void assim_waitlist(list<Context*>& ls) {
+	for (list<Context*>::iterator it = ls.begin();
+		 it != ls.end();
+		 it++) {
+	  if ((*it)->can_redelegate()) 
+		will_redelegate.push_back(*it);
+	  else
+		will_fail.push_back(*it);
+	}
+	ls.clear();
+  }
+  void assim_waitlist(hash_map< string, list<Context*> >& cmap) {
+	for (hash_map< string, list<Context*> >::iterator it = cmap.begin();
+		 it != cmap.end();
+		 it++) {
+	  if (it->second->can_redelegate()) 
+		will_redelegate.push_back(it->second);
+	  else
+		will_fail.push_back(it->second);
+	}
+	cmap.clear();
+  }
+
+
   virtual void finish(int r) {
 	if (r == 0) { // success
 	  // redelegate
@@ -1013,8 +1038,32 @@ void MDCache::export_dir_walk(MExportDir *req,
 							  CInode *idir)
 {
   assert(idir->is_dir());
-  
-  list<CInode*> dirs;
+
+  cout << "export_dir_walk on " << idir->inode.ino << endl;
+
+  // dir 
+  Dir_Export_State_t *p = req->get_end_ptr();
+  p->nitems = idir->dir->nitems;
+  p->version = idir->dir->version;
+  p->state = idir->dir->state;
+  p->dir_auth = idir->dir->dir_auth;
+  p->dir_rep = idir->dir->dir_rep;
+  p->ndir_rep_by = idir->dir->dir_rep_by.size();
+
+  int *cp = p + 1;
+  for (set<int>::iterator it = idir->dir->dir_rep_by.begin();
+	   it != idir->dir->dir_rep_by.end();
+	   it++, cp++)
+	*cp = *it;
+  req->set_end_ptr(cp);
+
+  // waiters
+  fin->assim_waitlist(idir->waiting_for_write);
+  fin->assim_waitlist(idir->waiting_for_read);
+
+
+  // inodes
+  list<CInode*> subdirs;
 
   CDir_map_t::iterator it;
   for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
@@ -1022,13 +1071,35 @@ void MDCache::export_dir_walk(MExportDir *req,
 	
 	// dir?
 	if (in->is_dir()) 
-	  dirs.push_back(in);
+	  subdirs.push_back(in);
 
-	// add
-		
+	// add inode
+	Inode_Export_State_t *p = req->get_end_ptr();
+	p->inode = in->inode;
+	p->version = in->versin;
+	p->popularity = in->popularity;
+	p->ref = in->ref;
+	p->ncached_by = in->cached_by.size();
 	
+	char *cp = p + 1;
+	for (set<int>::iterator it = in->cached_by.begin();
+		 it != in->cached_by.end();
+		 it++, cp++)
+	  *cp = *it;
+	req->set_end_ptr(cp);
+
+	// other state too!.. open files, etc...
+
+	// ***  
+
+	// waiters
+	fin->assim_waitlist(idir->dir->waiting_on_all);
+	fin->assim_waitlist(idir->dir->waiting_on_dentry);
   }
   
+  // subdirs
+  for (list<CInode*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
+	export_dir_walk(req, fin, idir);
 }
 
 

@@ -52,8 +52,8 @@ class CInode : LRUObject {
 
   // distributed caching
   set<int>         cached_by;  // mds's that cache me.  not well defined on replicas.
-  int              state;
-  set<int>         sync_waiting_for_ack;
+  //int              state;
+  //set<int>         sync_waiting_for_ack;
 
   // waiters
   list<Context*>   waiting_for_write;
@@ -85,10 +85,12 @@ class CInode : LRUObject {
   void make_path(string& s);
 
   // sync
-  int get_sync() { return state & CINODE_MASK_SYNC; }
+  /*
+	int get_sync() { return state & CINODE_MASK_SYNC; }
   int sync_set(int m) { 
 	state = (state & ~CINODE_MASK_SYNC) | m;
   }
+  */
 
   __uint32_t get_version() { return version; }
   
