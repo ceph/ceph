@@ -10,8 +10,8 @@
 using namespace std;
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".logstream "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".logstream "
 
 // writing
 
@@ -70,7 +70,7 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 		buffer.clear();
 		reading_block = true;
 		mds->osd_read(osd, oid,
-					  LOGSTREAM_READ_INC, cur_pos,
+					  g_conf.mdlog_read_inc, cur_pos,
 					  &buffer, 
 					  new C_LS_ReadNext(this, le, c));
 	  }

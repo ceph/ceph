@@ -32,8 +32,7 @@ class C_EIU_VerifyInodeUpdate : public Context {
 	  if (in->authority(mds->get_cluster()) == mds->get_nodeid() &&  // mine
 		  in->is_dirty() &&                         // dirty
 		  in->get_version() == version) {           // same version that i have to deal with
-		if (DEBUG_LEVEL > 7)
-		  cout << "ARGH, did EInodeUpdate commit but inode " << *in << " is still dirty" << endl;
+		dout(7) << "ARGH, did EInodeUpdate commit but inode " << *in << " is still dirty" << endl;
 		// damnit
 		mds->mdstore->commit_dir(in->get_parent_inode(),
 								 new C_EIU_VerifyInodeUpdate(mds,
@@ -80,8 +79,7 @@ class EInodeUpdate : public LogEvent {
 	CInode *in = mds->mdcache->get_inode(inode.ino);
 	//assert(in);
 	if (!in) {
-	  if (DEBUG_LEVEL > 7)
-		cout << "inode " << inode.ino << " not in cache, must have exported" << endl;
+	  dout(7) << "inode " << inode.ino << " not in cache, must have exported" << endl;
 	  return true;
 	}
 	if (in->authority(mds->get_cluster()) != mds->get_nodeid())
@@ -99,8 +97,7 @@ class EInodeUpdate : public LogEvent {
 
 	if (parent) {
 	  // okay!
-	  if (DEBUG_LEVEL > 7)
-		cout << "commiting containing dir for " << *in << ", which is " << *parent << endl;
+	  dout(7) << "commiting containing dir for " << *in << ", which is " << *parent << endl;
 	  mds->mdstore->commit_dir(parent,
 							   new C_EIU_VerifyInodeUpdate(mds,
 														   in->ino(),
@@ -108,8 +105,7 @@ class EInodeUpdate : public LogEvent {
 														   c));
 	} else {
 	  // oh, i'm the root inode
-	  if (DEBUG_LEVEL > 7)
-		cout << "don't know how to commit the root inode" << endl;
+	  dout(7) << "don't know how to commit the root inode" << endl;
 	  if (c) {
 		c->finish(0);
 		delete c;

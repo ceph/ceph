@@ -8,7 +8,6 @@
 #include <iostream>
 using namespace std;
 
-#define dout(l)  if (l <= DEBUG_LEVEL) cout
 
 
 #include "messages/MPing.h"

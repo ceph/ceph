@@ -23,6 +23,9 @@ __uint64_t ino = 1;
 
 
 #include "include/config.h"
+#define NUMMDS g_conf.num_mds
+#define NUMOSD g_conf.num_osd
+#define NUMCLIENT g_conf.num_client
 
 // this parses find output
 int play();
@@ -55,7 +58,7 @@ int main(int argc, char **argv) {
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	client[i] = new Client(mdc, i, new MPIMessenger(MSG_ADDR_CLIENT(i)), CLIENT_REQUESTS);
+	client[i] = new Client(mdc, i, new MPIMessenger(MSG_ADDR_CLIENT(i)), g_conf.client_requests);
 	client[i]->init();
   }
   

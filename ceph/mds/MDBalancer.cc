@@ -17,8 +17,8 @@
 using namespace std;
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".bal "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport

@@ -35,9 +35,9 @@ using namespace std;
 LogType mds_logtype;
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << whoami << " "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
-#define  dout3(l,mds)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << " "
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << whoami << " "
+#define  dout3(l,mds)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << " "
 
 
 
@@ -289,7 +289,7 @@ void MDS::handle_client_done(Message *m)
   int n = MSG_ADDR_NUM(m->get_source());
   dout(3) << "client" << n << " done" << endl;
   done_clients.insert(n);
-  if (done_clients.size() == NUMCLIENT) {
+  if (done_clients.size() == g_conf.num_client) {
 	dout(3) << "all clients done, initiating shutdown" << endl;
 	shutdown_start();
   }

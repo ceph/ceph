@@ -39,13 +39,13 @@
 
 /* sandwich mds's, then osd's, then clients */
 #define MSG_ADDR_MDS(x)     (x)
-#define MSG_ADDR_OSD(x)     (NUMMDS+(x))
-#define MSG_ADDR_CLIENT(x)  (NUMMDS+NUMOSD+(x))
+#define MSG_ADDR_OSD(x)     (g_conf.num_mds+(x))
+#define MSG_ADDR_CLIENT(x)  (g_conf.num_mds+g_conf.num_osd+(x))
 
-#define MSG_ADDR_TYPE(x)    ((x)<NUMMDS ? "mds":((x)<(NUMMDS+NUMOSD) ? "osd":"client"))
-#define MSG_ADDR_NUM(x)    ((x)<NUMMDS ? (x) : \
-							((x)<(NUMMDS+NUMOSD) ? ((x)-NUMMDS) : \
-							 ((x)-(NUMMDS+NUMOSD))))
+#define MSG_ADDR_TYPE(x)    ((x)<g_conf.num_mds ? "mds":((x)<(g_conf.num_mds+g_conf.num_osd) ? "osd":"client"))
+#define MSG_ADDR_NUM(x)    ((x)<g_conf.num_mds ? (x) : \
+							((x)<(g_conf.num_mds+g_conf.num_osd) ? ((x)-g_conf.num_mds) : \
+							 ((x)-(g_conf.num_mds+g_conf.num_osd))))
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
 
 #include <iostream>

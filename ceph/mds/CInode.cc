@@ -11,7 +11,8 @@
 #include <string>
 
 #include "include/config.h"
-#define dout(x)  if (x <= DEBUG_LEVEL) cout << "cinode:"
+#undef dout
+#define dout(x)  if (x <= g_conf.debug) cout << "cinode:"
 
 
 

@@ -21,8 +21,6 @@ using namespace std;
 
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
 
 
 // global queue.

@@ -14,7 +14,7 @@ Logger::Logger(string& fn, LogType *type)
 {
   filename = "log/";
   filename += fn;
-  interval = LOGGER_INTERVAL;
+  interval = g_conf.log_interval;
   start = last_logged = g_clock.gettime();  // time 0!
   wrote_header = -1;
   open = false;

@@ -4,6 +4,13 @@
 #include "Messenger.h"
 #include "Dispatcher.h"
 
+#define NUMMDS g_conf.num_mds
+#define NUMOSD g_conf.num_osd
+#define MPI_DEST_TO_RANK(dest,world)    ((dest)<(NUMMDS+NUMOSD) ? \
+										 (dest) : \
+										 ((NUMMDS+NUMOSD)+(((dest)-NUMMDS-NUMOSD) % (world-NUMMDS-NUMOSD))))
+
+
 class MPIMessenger : public Messenger {
  protected:
   int whoami;

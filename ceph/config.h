@@ -1,38 +1,33 @@
-// random crap
+#ifndef __CONFIG_H
+#define __CONFIG_H
 
-#define NUMMDS 10
-#define NUMOSD 10
+struct md_config_t {
+  int num_mds;
+  int num_osd;
+  int num_client;
 
-#define CLIENT_CACHE      100
-#define CLIENT_CACHE_MID  .5
+  int client_cache_size;
+  float client_cache_mid;
+  unsigned client_requests;
 
-#define LOG_MESSAGES
+  bool log_messages;
+  float log_interval;
+  
+  int mdlog_max_trimming;
+  int mdlog_read_inc;
+  
+  bool fake_clock;
 
-#define LOGGER_INTERVAL 10.0
+  int debug;
 
-#define MAX_TRIMMING          16    // max events to be retiring simultaneously
-#define LOGSTREAM_READ_INC  4096    // make this bigger than biggest event
+  int mdcache_size;
+  float mdcache_mid;
+  
+};
 
-#define FAKE_CLOCK
+extern md_config_t g_conf;	 
 
-#define NUMCLIENT             100
-#define CLIENT_REQUESTS       5000
+#define dout(x)  if ((x) <= g_conf.debug) cout
+#define dout2(x) if ((x) <= g_conf.debug) cout
 
-#define DEBUG_LEVEL 10
-
-//#define MDS_CACHE_SIZE        4*10000   -> <20mb
-//#define MDS_CACHE_SIZE        80000         62mb
-
-#define AVG_PER_INODE_SIZE    400
-#define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
-
-//#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 100 )
-#define MDS_CACHE_SIZE 25000  // 
-
-#define MDS_CACHE_MIDPOINT    .8
-
-
-#define MPI_DEST_TO_RANK(dest,world)    ((dest)<(NUMMDS+NUMOSD) ? \
-										 (dest) : \
-										 ((NUMMDS+NUMOSD)+(((dest)-NUMMDS-NUMOSD) % (world-NUMMDS-NUMOSD))))
-	 
+#endif

@@ -26,8 +26,8 @@ int mpi_rank;
 bool mpi_done = false;
 
 
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "[MPI " << mpi_rank << "/" << mpi_world_size << "] "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world_size << "] "
 
 
 int mpimessenger_init(int& argc, char**& argv)
@@ -44,7 +44,7 @@ int mpimessenger_init(int& argc, char**& argv)
 
   dout(1) << "init: i am " << hostname << " pid " << pid << endl;
   
-  assert(mpi_world_size > NUMOSD+NUMMDS);
+  assert(mpi_world_size > g_conf.num_osd+g_conf.num_mds);
 
   return mpi_rank;
 }

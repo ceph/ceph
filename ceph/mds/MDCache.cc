@@ -37,8 +37,8 @@
 using namespace std;
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".cache "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".cache "
 
 
 
@@ -48,8 +48,8 @@ MDCache::MDCache(MDS *m)
   root = NULL;
   opening_root = false;
   lru = new LRU();
-  lru->lru_set_max(MDS_CACHE_SIZE);
-  lru->lru_set_midpoint(MDS_CACHE_MIDPOINT);
+  lru->lru_set_max(g_conf.mdcache_size);
+  lru->lru_set_midpoint(g_conf.mdcache_mid);
 }
 
 MDCache::~MDCache() 

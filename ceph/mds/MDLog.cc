@@ -12,8 +12,8 @@
 LogType mdlog_logtype;
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mds" << mds->get_nodeid() << ".log "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 
@@ -167,7 +167,7 @@ int MDLog::trim_2_didread(LogEvent *le)
 
   // read another event?      FIXME: max_trimming maybe?  would need to restructure this again.
   if (num_events - trimming.size() > max_events &&
-	  trimming.size() < MAX_TRIMMING) {
+	  trimming.size() < g_conf.mdlog_max_trimming) {
 	trim_readnext();
   }
 }

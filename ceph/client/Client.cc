@@ -15,8 +15,8 @@
 #include <stdlib.h>
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "client" << whoami << " "
-#define  dout2(l)   if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "client" << whoami << " "
 
 
 Client::Client(MDCluster *mdc, int id, Messenger *m, long req)
@@ -31,8 +31,8 @@ Client::Client(MDCluster *mdc, int id, Messenger *m, long req)
   root = 0;
   tid = 0;
 
-  cache_lru.lru_set_max(CLIENT_CACHE);
-  cache_lru.lru_set_midpoint(CLIENT_CACHE_MID);
+  cache_lru.lru_set_max(g_conf.client_cache_size);
+  cache_lru.lru_set_midpoint(g_conf.client_cache_mid);
 }
 
 Client::~Client()
@@ -165,7 +165,7 @@ void Client::trim_cache()
 	delete i;
 	expired++;
   }
-  if (DEBUG_LEVEL > 11)
+  if (g_conf.debug > 11)
 	cache_lru.lru_status();
   if (expired) 
 	dout(12) << "EXPIRED " << expired << " items" << endl;

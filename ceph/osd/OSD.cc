@@ -21,8 +21,8 @@
 #include <cassert>
 
 #include "include/config.h"
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "osd" << whoami << " "
-#define  dout2(l)   if (1<=DEBUG_LEVEL) cout
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << " "
 
 char *osd_base_path = "./osddata";
 
