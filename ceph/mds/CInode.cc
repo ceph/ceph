@@ -224,7 +224,7 @@ int CInode::dir_authority(MDCluster *mdc)
 {
   // explicit
   if (dir_auth >= 0) {
-	cout << "dir_auth explicit at " << *this << endl;
+	cout << "dir_auth explicit " << dir_auth << " at " << *this << endl;
 	return dir_auth;
   }
 

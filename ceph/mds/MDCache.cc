@@ -1526,7 +1526,7 @@ void MDCache::export_dir_frozen(CInode *in,
   // subtree is now frozen!
   dout(7) << "export_dir " << *in << " to " << dest << ", frozen+prep_ack" << endl;
 
-  //show_imports();
+  show_imports();
 
   
   // update imports/exports
@@ -1545,6 +1545,7 @@ void MDCache::export_dir_frozen(CInode *in,
 
 	  // nested beneath our new export *in; remove!
 	  dout(7) << " export " << *nested << " was nested beneath us; removing from export list(s)" << endl;
+	  assert(exports.count(nested) == 1);
 	  //exports.erase(nested);  _walk does this
 	  nested_exports.erase(p.first++);   // note this increments before call to erase
 	}
@@ -1676,12 +1677,12 @@ void MDCache::export_dir_walk(MExportDir *req,
 
 	if (in->is_dir()) {
 	  istate.dir_auth = in->dir_auth;
-	  assert(in->dir_auth != mds->get_nodeid());   // should be -1 or dest
+	  assert(in->dir_auth != mds->get_nodeid());   // should be -1
 
 	  if (in->dir_auth == -1) {
 		subdirs.push_back(in);  // it's ours, recurse.
 	  } else {
-		dout(7) << " encountered nested export " << *in << "; removing from exports" << endl;
+		dout(7) << " encountered nested export " << *in << " dir_auth " << in->dir_auth << "; removing from exports" << endl;
 		assert(exports.count(in) == 1); 
 		exports.erase(in);                    // discard nested export   (nested_exports updated above)
 		in->put(CINODE_PIN_EXPORT);
@@ -2006,7 +2007,7 @@ void MDCache::import_dir_block(pchar& p,
 	  assert(in->auth == false);
 	  in->auth = true;
 	}
-	
+
 	// update inode state with authoritative info
 	in->version = istate->version;
 	in->popularity = istate->popularity;
@@ -2070,7 +2071,8 @@ void MDCache::import_dir_block(pchar& p,
 		mds->logger->inc("imex");
 	  }
 
-	}
+	} else
+	  in->dir_auth = CDIR_AUTH_PARENT;
   }
  
 }

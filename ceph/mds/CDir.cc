@@ -82,7 +82,7 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
   }
 
   // it's explicit for this whole dir
-  cout << "dir_auth explicit at " << *inode << endl;
+  cout << "dir_auth explicit " << inode->dir_auth << " at " << *inode << endl;
   return inode->dir_auth;
 }
 
