@@ -4,6 +4,8 @@
 
 #include <list>
 #include <assert.h>
+#include "config.h"
+#include <iostream>
 
 class MDS;
 
@@ -27,5 +29,18 @@ class Context {
 };
 
 
+inline void finish_contexts(list<Context*>& finished, 
+							int result = 0)
+{
+  dout(2) << finished.size() << " contexts to finish" << endl;
+  for (list<Context*>::iterator it = finished.begin(); 
+	   it != finished.end(); 
+	   it++) {
+	Context *c = *it;
+	dout(2) << "---- " << c << endl;
+	c->finish(result);
+	delete c;
+  }
+}
 
 #endif

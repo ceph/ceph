@@ -33,6 +33,13 @@ int play();
 int main(int argc, char **argv) {
   cerr << "hi there" << endl;
   
+  if (argc > 1) {
+	int d = atoi(argv[1]);
+	if (d > 0)
+	  g_conf.debug = d;
+	cerr << " debug level " << d << endl;
+  }
+
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   
   // create mds

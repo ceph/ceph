@@ -12,7 +12,7 @@
 
 
 md_config_t g_conf = {
-  num_mds: 4,
+  num_mds: 33,
   num_osd: 10,
   num_client: 100,
 
@@ -20,8 +20,8 @@ md_config_t g_conf = {
 
   client_cache_size: 100,
   client_cache_mid: .5,
-  client_requests: 1500,
-  client_deterministic: true,
+  client_requests: 100,
+  client_deterministic: false,
   
   log_messages: true,
   log_interval: 10.0,
@@ -33,7 +33,7 @@ md_config_t g_conf = {
   fake_clock: true,
   fakemessenger_serialize: true,
 
-  debug: 12,
+  debug: 10,
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,
@@ -44,7 +44,7 @@ md_config_t g_conf = {
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,
 
-  mds_heartbeat_op_interval: 500,
+  mds_heartbeat_op_interval: 50,
   mds_verify_export_dirauth: true
 };
 

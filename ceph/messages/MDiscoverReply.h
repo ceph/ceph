@@ -10,6 +10,11 @@
 #include <string>
 using namespace std;
 
+// normal: d+inode + (dir + d+inode)*
+// root:   inode + dir
+// dir dis: dir
+
+
 
 class MDiscoverReply : public Message {
   inodeno_t    base_ino;
@@ -41,8 +46,8 @@ class MDiscoverReply : public Message {
   string& get_path() { return path.get_path(); }
 
   // these index _arguments_ are aligned to the inodes.
-  CDirDiscover& get_dir(int n) { return *(dirs[n + no_base_dir]); }
-  string& get_dentry(int n) { return path[n + no_base_dentry]; }
+  CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
+  string& get_dentry(int n) { return path[n - no_base_dentry]; }
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
   inodeno_t get_ino(int n) { return inodes[n]->get_ino(); }
 
@@ -88,7 +93,6 @@ class MDiscoverReply : public Message {
 
   // ...
   virtual int decode_payload(crope r) {
-	dout(10) << "**********" << endl;
 	int off = 0;
 	r.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);

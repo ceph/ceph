@@ -10,6 +10,8 @@ ISSUES
 
 - analyze behavior of import vs freeze/export of parent dir?
 
+- group inode, dir expires in trim().
+
 - discover
  - soft
  - make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply

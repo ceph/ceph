@@ -16,6 +16,49 @@
 
 
 
+ostream& operator<<(ostream& out, CInode& in)
+{
+  string path;
+  in.make_path(path);
+  out << "[inode " << in.inode.ino << " " << path << " ";
+  if (in.is_auth()) {
+	out << "auth";
+	if (in.is_cached_by_anyone())
+	  out << "+" << in.get_cached_by();
+  } else {
+	out << "rep@" << in.authority();
+	if (in.get_replica_nonce() > 1)
+	  out << "." << in.get_replica_nonce();
+	assert(in.get_replica_nonce() >= 0);
+  }
+
+  if (in.is_syncbyauth()) out << " syncbyauth";
+  if (in.is_syncbyme()) out << " syncbyme";
+  if (in.is_presync()) out << " presync";
+  if (in.is_softasync()) out << " softasync";
+  if (in.is_waitonunsync()) out << " waitonunsync";
+
+  if (in.is_lockbyauth()) out << " lockbyauth";
+  if (in.is_lockbyme()) out << " lockbyme";
+  if (in.is_prelock()) out << " prelock";
+  if (in.is_waitonunlock()) out << " waitonunluck";
+
+
+  if (in.is_pinned()) {
+    out << " |";
+    for(set<int>::iterator it = in.get_ref_set().begin();
+        it != in.get_ref_set().end();
+        it++)
+      if (*it < CINODE_NUM_PINS)
+        out << " " << cinode_pin_names[*it];
+      else
+        out << " " << *it;
+  }
+  out << "]";
+  return out;
+}
+
+
 // ====== CInode =======
 CInode::CInode(bool auth) : LRUObject() {
   ref = 0;
@@ -86,7 +129,6 @@ CDir *CInode::set_dir(CDir *newdir)
 
 void CInode::set_auth(bool a) 
 {
-  /* FIXME 
   if (!is_dangling() && !is_root() && 
 	  auth != a) {
 	CDir *dir = get_parent_dir();
@@ -95,7 +137,6 @@ void CInode::set_auth(bool a)
 	else
 	  dir->nauthitems++;
   }
-  */
   auth = a;
 }
 
@@ -116,45 +157,6 @@ void CInode::make_path(string& s)
   }
 }
 
-ostream& operator<<(ostream& out, CInode& in)
-{
-  string path;
-  in.make_path(path);
-  out << "[inode " << in.inode.ino << " " << path << " ";
-  if (in.is_auth()) {
-	out << "auth";
-	if (in.is_cached_by_anyone())
-	  out << "+" << in.get_cached_by();
-  } else {
-	out << "rep@" << in.authority();// << " n=" << in.get_replica_nonce();
-	assert(in.get_replica_nonce() >= 0);
-  }
-
-  if (in.is_syncbyauth()) out << " syncbyauth";
-  if (in.is_syncbyme()) out << " syncbyme";
-  if (in.is_presync()) out << " presync";
-  if (in.is_softasync()) out << " softasync";
-  if (in.is_waitonunsync()) out << " waitonunsync";
-
-  if (in.is_lockbyauth()) out << " lockbyauth";
-  if (in.is_lockbyme()) out << " lockbyme";
-  if (in.is_prelock()) out << " prelock";
-  if (in.is_waitonunlock()) out << " waitonunluck";
-
-
-  if (in.is_pinned()) {
-    out << " |";
-    for(set<int>::iterator it = in.get_ref_set().begin();
-        it != in.get_ref_set().end();
-        it++)
-      if (*it < CINODE_NUM_PINS)
-        out << " " << cinode_pin_names[*it];
-      else
-        out << " " << *it;
-  }
-  out << "]";
-  return out;
-}
 
 
 void CInode::hit(int type)

@@ -27,7 +27,9 @@ ostream& operator<<(ostream& out, CDir& dir)
 	if (dir.is_open_by_anyone())
 	  out << "+" << dir.get_open_by();
   } else {
-	out << " rep@" << dir.authority();// << " n=" << dir.get_replica_nonce();
+	out << " rep@" << dir.authority();
+	if (dir.get_replica_nonce() > 1)
+	  out << "." << dir.get_replica_nonce();
   }
 
   if (dir.is_pinned()) {
@@ -312,7 +314,7 @@ void CDir::take_waiting(int mask,
 		dout(10) << "take_waiting mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
 		waiting.erase(it++);
 	  } else {
-		dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on" << *this<< endl;
+		dout(10) << "take_waiting mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this<< endl;
 		it++;
 	  }
 	}
@@ -329,14 +331,7 @@ void CDir::finish_waiting(int mask, int result)
 
   list<Context*> finished;
   take_waiting(mask, finished);
-  for (list<Context*>::iterator it = finished.begin();
-	   it != finished.end();
-	   it++) {
-	Context *c = *it;
-	dout(11) << "finishing " << c << endl;
-	c->finish(result);
-	delete c;
-  }
+  finish_contexts(finished, result);
 }
 
 
@@ -371,7 +366,7 @@ void CDir::mark_clean()
 void CDir::put(int by) {
   // bad?
   if (ref == 0 || ref_set.count(by) != 1) {
-	dout(7) << *this << " bad put by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	dout(7) << *this << " bad put by " << by << " " << cdir_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
 	assert(ref_set.count(by) == 1);
 	assert(ref > 0);
   }
@@ -383,7 +378,7 @@ void CDir::put(int by) {
   if (ref == 0)
 	inode->put(CINODE_PIN_DIR);
 
-  dout(7) << *this << " put by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+  dout(7) << *this << " put by " << by << " " << cdir_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
 }
 
 void CDir::get(int by) {
@@ -393,14 +388,14 @@ void CDir::get(int by) {
 
   // bad?
   if (ref_set.count(by)) {
-	dout(7) << *this << " bad get by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	dout(7) << *this << " bad get by " << by << " " << cdir_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
 	assert(ref_set.count(by) == 0);
   }
   
   ref++;
   ref_set.insert(by);
   
-  dout(7) << *this << " get by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+  dout(7) << *this << " get by " << by << " " << cdir_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
 }
 
 

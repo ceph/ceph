@@ -31,8 +31,9 @@ class MDiscoverReply;
 class MInodeGetReplica;
 class MInodeGetReplicaAck;
 class MInodeUpdate;
-class MDirUpdate;
 class MInodeExpire;
+class MDirUpdate;
+class MDirExpire;
 class MInodeUnlink;
 class MInodeUnlinkAck;
 class MInodeSyncStart;
@@ -84,7 +85,7 @@ class MDCache {
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
         // maps import_root_ino's to frozen dir ino's (with pending discovers)
 
-  map<CDir*,set<int> >   export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
+  map<CDir*, set<int> >   export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
   map<CDir*, set<inodeno_t> > export_proxy_inos;
   map<CDir*, set<inodeno_t> > export_proxy_dirinos;
 
@@ -176,9 +177,11 @@ class MDCache {
 
 
   // -- misc auth --
-  void update_replica_auth(CInode *in, int realauth);
-  int ino_proxy_auth(inodeno_t ino, int frommds);
+  int ino_proxy_auth(inodeno_t ino, 
+					 int frommds,
+					 map<CDir*, set<inodeno_t> >& inomap);
   void do_ino_proxy(CInode *in, Message *m);
+  void do_dir_proxy(CDir *dir, Message *m);
 
 
   // -- import/export --
@@ -265,6 +268,7 @@ class MDCache {
   void handle_dir_update(MDirUpdate *m);
 
   void handle_inode_expire(MInodeExpire *m);
+  void handle_dir_expire(MDirExpire *m);
 
 
   // -- lock and sync : inodes --

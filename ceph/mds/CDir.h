@@ -33,32 +33,33 @@ class Context;
 
 
 // state bits
-#define CDIR_STATE_COMPLETE      1   // the complete contents are in cache
-#define CDIR_STATE_DIRTY         4   // has been modified since last commit
+#define CDIR_STATE_COMPLETE      (1<<0)   // the complete contents are in cache
+#define CDIR_STATE_DIRTY         (1<<1)   // has been modified since last commit
 
-#define CDIR_STATE_FROZENTREE    8   // root of tree (bounded by exports)
-#define CDIR_STATE_FREEZINGTREE 16   // in process of freezing 
-#define CDIR_STATE_FROZENDIR    32
-#define CDIR_STATE_FREEZINGDIR  64
+#define CDIR_STATE_FROZENTREE    (1<<2)   // root of tree (bounded by exports)
+#define CDIR_STATE_FREEZINGTREE  (1<<3)   // in process of freezing 
+#define CDIR_STATE_FROZENDIR     (1<<4)
+#define CDIR_STATE_FREEZINGDIR   (1<<5)
 
-#define CDIR_STATE_COMMITTING  128   // mid-commit
-#define CDIR_STATE_FETCHING    256   // currenting fetching
+#define CDIR_STATE_COMMITTING    (1<<6)   // mid-commit
+#define CDIR_STATE_FETCHING      (1<<7)   // currenting fetching
 
-#define CDIR_STATE_IMPORT     1024   // flag set if this is an import.
-#define CDIR_STATE_EXPORT     2048
-#define CDIR_STATE_AUTH       4096   // auth for this dir (hashing doesn't count)
-#define CDIR_STATE_PROXY      8192
+#define CDIR_STATE_IMPORT        (1<<8)   // flag set if this is an import.
+#define CDIR_STATE_EXPORT        (1<<9)
+#define CDIR_STATE_AUTH          (1<<10)   // auth for this dir (hashing doesn't count)
+#define CDIR_STATE_PROXY         (1<<11)
 
-#define CDIR_STATE_HASHED    16384   // if hashed.  only hashed+auth on auth node.
-#define CDIR_STATE_HASHING   32768
-#define CDIR_STATE_UNHASHING 65536
+#define CDIR_STATE_HASHED        (1<<12)   // if hashed.  only hashed+auth on auth node.
+#define CDIR_STATE_HASHING       (1<<13)
+#define CDIR_STATE_UNHASHING     (1<<14)
 
-#define CDIR_STATE_SYNCBYME      131072
-#define CDIR_STATE_PRESYNC       262144
-#define CDIR_STATE_SYNCBYAUTH    524288
-#define CDIR_STATE_WAITONUNSYNC 1048576
+#define CDIR_STATE_SYNCBYME         (1<<15)
+#define CDIR_STATE_PRESYNC          (1<<16) 
+#define CDIR_STATE_SYNCBYAUTH       (1<<17) 
+#define CDIR_STATE_WAITONUNSYNC     (1<<18)
 
-#define CDIR_STATE_AUTHMOVING   2097152  // dir replica bystander
+#define CDIR_STATE_AUTHMOVING       (1<<19)  // dir replica bystander
+#define CDIR_STATE_IMPORTINGEXPORT  (1<<20)
 
 
 // these state bits are preserved by an import/export
@@ -66,7 +67,8 @@ class Context;
 #define CDIR_MASK_STATE_EXPORTED    (CDIR_STATE_COMPLETE\
                                     |CDIR_STATE_DIRTY)  
 #define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT\
-                                    |CDIR_STATE_EXPORT)
+                                    |CDIR_STATE_EXPORT\
+                                    |CDIR_STATE_IMPORTINGEXPORT)
 #define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
                                     |CDIR_STATE_FROZENTREE\
                                     |CDIR_STATE_FROZENDIR\
@@ -282,20 +284,24 @@ class CDir {
   int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
   
   int open_by_add(int mds) {
+	int nonce = 1;
+	
 	if (is_open_by(mds)) {    // already had it?
-      // new nonce (+1)
-      map<int,int>::iterator it = open_by_nonce.find(mds);
-      open_by_nonce.insert(pair<int,int>(mds,it->second + 1));
-      return it->second + 1;
-    }
-	if (open_by.empty()) 
-	  get(CDIR_PIN_OPENED);
-	open_by.insert(mds);
-    open_by_nonce.insert(pair<int,int>(mds,1));   // first! serial of 1.
-    return 1;   // default nonce
+      nonce = get_open_by_nonce(mds) + 1; // new nonce (+1)
+	  dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
+	  open_by_nonce.erase(mds);
+    } else {
+	  if (open_by.empty()) 
+		get(CDIR_PIN_OPENED);
+	  open_by.insert(mds);
+	}
+	open_by_nonce.insert(pair<int,int>(mds,nonce));   // first! serial of 1.
+    return nonce;   // default nonce
   }
   void open_by_remove(int mds) {
-	if (!is_open_by(mds)) return;
+	//if (!is_open_by(mds)) return;
+	assert(is_open_by(mds));
+
 	open_by.erase(mds);
 	open_by_nonce.erase(mds);
 	if (open_by.empty())
@@ -382,6 +388,7 @@ class CDir {
 	return ref_set.count(by);
   }
   bool is_pinned() { return ref > 0; }
+  int get_ref() { return ref; }
   set<int>& get_ref_set() { return ref_set; }
 
 
@@ -590,6 +597,7 @@ class CDirExport {
 
 	dir->dir_rep_by = rep_by;
 	dir->open_by = open_by;
+	dout(12) << "open_by in export is " << open_by << ", dir now " << dir->open_by << endl;
 	dir->open_by_nonce = open_by_nonce;
 	if (!open_by.empty())
 	  dir->get(CDIR_PIN_OPENED);

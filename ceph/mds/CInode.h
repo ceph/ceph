@@ -138,6 +138,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_STATE_PROXY      32   // can't expire yet
 #define CINODE_STATE_EXPORTING  64   // on nonauth bystander.
 
+
 // misc
 #define CINODE_EXPORT_NONCE      1 // nonce given to replicas created by export
 #define CINODE_HASHREPLICA_NONCE 1 // hashed inodes that are duped ???FIXME???
@@ -315,17 +316,18 @@ class CInode : LRUObject {
   int num_cached_by() { return cached_by.size(); }
   // cached_by_add returns a nonce
   int cached_by_add(int mds) {
+	int nonce = 1;
 	if (is_cached_by(mds)) {    // already had it?
-      // new nonce (+1)
-      map<int,int>::iterator it = cached_by_nonce.find(mds);
-      cached_by_nonce.insert(pair<int,int>(mds,it->second + 1));
-      return it->second + 1;
-    }
-	if (cached_by.empty()) 
-	  get(CINODE_PIN_CACHED);
-	cached_by.insert(mds);
-    cached_by_nonce.insert(pair<int,int>(mds,1));   // first! serial of 1.
-    return 1;   // default nonce
+	  nonce = get_cached_by_nonce(mds) + 1;   // new nonce (+1)
+	  dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
+	  cached_by_nonce.erase(mds);
+    } else {
+	  if (cached_by.empty()) 
+		get(CINODE_PIN_CACHED);
+	  cached_by.insert(mds);
+	}
+    cached_by_nonce.insert(pair<int,int>(mds,nonce));   // first! serial of 1.
+    return nonce;   // default nonce
   }
   void cached_by_add(int mds, int nonce) {
 	if (cached_by.empty()) 
@@ -338,7 +340,9 @@ class CInode : LRUObject {
     return it->second;
   }
   void cached_by_remove(int mds) {
-	if (!is_cached_by(mds)) return;
+	//if (!is_cached_by(mds)) return;
+	assert(is_cached_by(mds));
+
 	cached_by.erase(mds);
 	cached_by_nonce.erase(mds);
 	if (cached_by.empty())
@@ -449,7 +453,7 @@ class CInode : LRUObject {
   set<int>& get_ref_set() { return ref_set; }
   void put(int by) {
 	if (ref == 0 || ref_set.count(by) != 1) {
-	  dout(7) << " bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	  dout(7) << " bad put " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 1);
 	  assert(ref > 0);
 	}
@@ -457,18 +461,18 @@ class CInode : LRUObject {
 	ref_set.erase(by);
 	if (ref == 0)
 	  lru_unpin();
-	dout(7) << " put " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+	dout(7) << " put " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
   }
   void get(int by) {
 	if (ref == 0)
 	  lru_pin();
 	if (ref_set.count(by)) {
-	  dout(7) << " bad get " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	  dout(7) << " bad get " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 0);
 	}
 	ref++;
 	ref_set.insert(by);
-	dout(7) << " get " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+	dout(7) << " get " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
   }
   bool is_pinned_by(int by) {
 	return ref_set.count(by);

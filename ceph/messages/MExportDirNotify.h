@@ -10,12 +10,14 @@ class MExportDirNotify : public Message {
   int       old_auth;
   inodeno_t ino;
   
+  list<inodeno_t> exports;  // bounds; these dirs are _not_ included (tho the inodes are)
   list<inodeno_t> subdirs;
 
  public:
   inodeno_t get_ino() { return ino; }
   int get_new_auth() { return new_auth; }
   int get_old_auth() { return old_auth; }
+  list<inodeno_t>& get_exports() { return exports; }
   list<inodeno_t>::iterator subdirs_begin() { return subdirs.begin(); }
   list<inodeno_t>::iterator subdirs_end() { return subdirs.end(); }
   int num_subdirs() { return subdirs.size(); }
@@ -32,6 +34,9 @@ class MExportDirNotify : public Message {
   void copy_subdirs(list<inodeno_t>& s) {
 	this->subdirs = s;
   }
+  void copy_exports(list<inodeno_t>& ex) {
+	this->exports = ex;
+  }
 
   virtual int decode_payload(crope s) {
 	int off = 0;
@@ -42,11 +47,24 @@ class MExportDirNotify : public Message {
 	s.copy(off, sizeof(ino), (char*)&ino);
 	off += sizeof(ino);
 
+	// notify
+	int n;
+	s.copy(off, sizeof(int), (char*)&n);
+	off += sizeof(int);
+	for (int i=0; i<n; i++) {
+	  inodeno_t ino;
+	  s.copy(off, sizeof(ino), (char*)&ino);
+	  exports.push_back(ino);
+	  off += sizeof(inodeno_t);
+	}
+	
 	// subdirs
-	while (off < s.length()) {
-	  inodeno_t i;
-	  s.copy(off, sizeof(i), (char*)&i);
-	  subdirs.push_back(i);
+	s.copy(off, sizeof(int), (char*)&n);
+	off += sizeof(int);
+	for (int i=0; i<n; i++) {
+	  inodeno_t ino;
+	  s.copy(off, sizeof(ino), (char*)&ino);
+	  subdirs.push_back(ino);
 	  off += sizeof(inodeno_t);
 	}
   }
@@ -56,7 +74,19 @@ class MExportDirNotify : public Message {
 	s.append((char*)&old_auth, sizeof(int));
 	s.append((char*)&ino, sizeof(ino));
 
+	// notify
+	int n = exports.size();
+	s.append((char*)&n, sizeof(int));
+	for (list<inodeno_t>::iterator it = exports.begin();
+		 it != exports.end();
+		 it++) {
+	  inodeno_t ino = *it;
+	  s.append((char*)&ino, sizeof(ino));
+	}
+
 	// subdirs
+	n = subdirs.size();
+	s.append((char*)&n, sizeof(int));
 	for (list<inodeno_t>::iterator it = subdirs.begin();
 		 it != subdirs.end();
 		 it++) {
