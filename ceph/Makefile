@@ -15,7 +15,22 @@ LEAKTRACER=
 LEAKTRACER=$(HOME)/lib/LeakTracer.o
 
 SRCS=*.cc */*.cc
-OBJS=config.o osd/OSD.o Messenger.o Logger.o mds/MDBalancer.o mds/MDS.o mds/CDentry.o mds/CDir.o mds/CInode.o mds/MDCache.o mds/MDStore.o clock.o mds/LogStream.o mds/MDLog.o client/Client.o mds/MDCluster.o
+OBJS=osd/OSD.o\
+ Messenger.o\
+ Logger.o\
+ mds/MDBalancer.o\
+ mds/MDS.o\
+ mds/CDentry.o\
+ mds/CDir.o\
+ mds/CInode.o\
+ mds/MDCache.o\
+ mds/MDStore.o\
+ clock.o\
+ mds/LogStream.o\
+ mds/MDLog.o\
+ client/Client.o\
+ mds/MDCluster.o\
+ config.o
 TARGETS=test import mpitest
 
 all: depend ${TARGETS}

@@ -93,6 +93,16 @@ void Client::done() {
 
 void Client::assim_reply(MClientReply *r)
 {
+
+  // closed a file?
+  if (r->get_op() == MDS_OP_CLOSE) {
+	dout(12) << "closed inode " << r->get_ino() << " " << r->get_path() << endl;
+	open_files.erase(r->get_ino());
+	return;
+  }
+
+  // normal crap
+
   ClNode *cur = root;
 
   vector<c_inode_info*> trace = r->get_trace();
@@ -146,6 +156,13 @@ void Client::assim_reply(MClientReply *r)
 	  dout(12) << "client got dir item " << (*it)->ref_dn << endl;
 	}
   }
+
+  // opened a file?
+  if (r->get_op() == MDS_OP_OPENRD) {
+	dout(12) << "opened inode " << r->get_ino() << " " << r->get_path() << endl;
+	open_files.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
+  }
+
 
   cwd = cur;
 
@@ -210,13 +227,39 @@ void Client::issue_request()
   } 
 
   if (!op) {
-	if (rand() % 10 > 8)
+	int r = rand() % 100;
+	if (r < 10)
 	  op = MDS_OP_TOUCH;
-	else
+	else if (r < 20) 
+	  op = MDS_OP_OPENWR;
+	else if (r < 30)
+	  op = MDS_OP_OPENWR;
+	else if (r < 40 + open_files.size() && open_files.size() > 0) {
+	  // close file
+	  return close_a_file();
+	} 
+	else   
 	  op = MDS_OP_STAT;
   }
 
   send_request(p, op);  // root, if !cwd
+}
+
+
+void Client::close_a_file()
+{
+  multimap<inodeno_t,int>::iterator it = open_files.begin();
+  for (int r = rand() % open_files.size(); r > 0; r--) it++;
+
+  MClientRequest *req = new MClientRequest(tid++, MDS_OP_CLOSE, whoami);
+  req->set_ino(it->first);
+
+  int mds = it->second;
+
+  dout(9) << "sending close " << *req << " to mds" << mds << endl;
+  messenger->send_message(req,
+						  MSG_ADDR_MDS(mds), MDS_PORT_SERVER,
+						  0);
 }
 
 void Client::send_request(string& path, int op) 

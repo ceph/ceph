@@ -31,8 +31,9 @@ using namespace std;
 #define MDS_OP_STAT    100
 #define MDS_OP_READDIR 101
 
-#define MDS_OP_OPEN    111
-#define MDS_OP_CLOSE   112
+#define MDS_OP_OPENRD  111
+#define MDS_OP_OPENWR  112
+#define MDS_OP_CLOSE   113
 
 #define MDS_OP_TOUCH   200
 
@@ -154,6 +155,14 @@ class MDS : public Dispatcher {
 									CInode *cur);
   void handle_client_touch_2(MClientRequest *req,
 							 CInode *cur);
+
+  MClientReply *handle_client_openrd(MClientRequest *req,
+									 CInode *cur);
+  MClientReply *handle_client_openwr(MClientRequest *req,
+									 CInode *cur);
+  MClientReply *handle_client_close(MClientRequest *req,
+									CInode *cur);
+
 
 
   int do_stat(MClientRequest *m);

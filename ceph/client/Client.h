@@ -4,6 +4,9 @@
 #include "../include/Dispatcher.h"
 #include "../include/lru.h"
 
+#include <map>
+using namespace std;
+
 class Messenger;
 class Message;
 
@@ -18,6 +21,8 @@ class Client : public Dispatcher {
   MDCluster *mdcluster;
   Messenger *messenger;
   int whoami;
+
+  multimap<inodeno_t, int> open_files;
 
   LRU    cache_lru;
   ClNode *root;
@@ -42,6 +47,7 @@ class Client : public Dispatcher {
   virtual void issue_request();
 
   virtual void send_request(string& p, int op);
+  void close_a_file();
 
   virtual void trim_cache();
 };

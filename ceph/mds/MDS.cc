@@ -355,6 +355,16 @@ int MDS::handle_client_request(MClientRequest *req)
 	reply = handle_client_touch(req, cur);
 	break;
 
+  case MDS_OP_OPENRD:
+	reply = handle_client_openrd(req, cur);
+	break;
+  case MDS_OP_OPENWR:
+	reply = handle_client_openwr(req, cur);
+	break;
+  case MDS_OP_CLOSE:
+	reply = handle_client_close(req, cur);
+	break;
+
   default:
 	dout(1) << " unknown mop " << req->get_op() << endl;
 	assert(0);
@@ -362,8 +372,7 @@ int MDS::handle_client_request(MClientRequest *req)
 
   if (reply) {  
 	// this is convenience, for quick events.  
-	// anything delayed has to reply on its own.
-
+	// anything delayed has to reply and delete the request on its own.
 
 	// reply
 	messenger->send_message(reply,
@@ -560,6 +569,72 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   }
 }
 
+
+MClientReply *MDS::handle_client_openrd(MClientRequest *req,
+										CInode *cur)
+{
+  dout(10) << "open (read) on " << *cur << endl;
+  
+  // hmm, check permissions or something.
+ 
+  // add reader
+  cur->open_read_add(MSG_ADDR_NUM(req->get_source()));
+
+  // reply
+  MClientReply *reply = new MClientReply(req);
+  return reply;
+}
+
+MClientReply *MDS::handle_client_close(MClientRequest *req,
+									   CInode *cur)
+{
+  dout(10) << "close on " << *cur << endl;
+  
+  // hmm, check permissions or something.
+  
+  // verify on read or write list
+  int client = MSG_ADDR_NUM(req->get_source());
+  if (!cur->open_remove(client)) {
+	dout(1) << "close on unopen file " << *cur << endl;
+	assert(2+2==5);
+  }
+  
+  // reply
+  MClientReply *reply = new MClientReply(req);
+  return reply;
+}
+
+
+MClientReply *MDS::handle_client_openwr(MClientRequest *req,
+										CInode *cur)
+{
+  if (cur->is_auth()) {
+	dout(10) << "open (write) [auth] " << *cur << endl;
+  } else {
+	if (!cur->is_softasync()) {
+	  int auth = cur->authority(get_cluster());
+	  assert(auth != whoami);
+	  dout(10) << "open (write) [replica] " << *cur << " on replica, fw to auth " << auth << endl;
+	  
+	  messenger->send_message(req,
+							  MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
+							  MDS_PORT_SERVER);
+	  return 0;
+	}
+
+	dout(10) << "open (write) [replica shared write] " << *cur << endl;
+	assert(0);
+  }
+
+  // hmm, check permissions!
+  
+  // add to writer list.
+  cur->open_write_add(MSG_ADDR_NUM(req->get_source()));
+	  
+  // reply
+  MClientReply *reply = new MClientReply(req);
+  return reply;
+}
 
 
 

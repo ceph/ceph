@@ -130,8 +130,8 @@ class CInode : LRUObject {
 
   // open file state
   // sets of client ids!
-  set<int>         open_read;
-  set<int>         open_write;
+  multiset<int>         open_read;
+  multiset<int>         open_write;
 
  private:
   // waiters
@@ -271,6 +271,14 @@ class CInode : LRUObject {
 		open_write.size() == 1) 
 	  put(CINODE_PIN_OPENWR);
 	open_write.erase(c);
+  }
+  bool open_remove(int c) {
+	if (open_read.count(c))
+	  open_read_remove(c);
+	else if (open_write.count(c))
+	  open_write_remove(c);
+	else return false;
+	return true;
   }
 
 

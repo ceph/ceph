@@ -34,6 +34,7 @@ class MClientReply : public Message {
  public:
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
+  inodeno_t get_ino() { return trace[trace.size()-1]->inode.ino; }
   int get_result() { return st.result; }
   const string& get_path() { return path; }
   const vector<c_inode_info*>& get_trace() { return trace; }
