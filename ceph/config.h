@@ -14,8 +14,10 @@
 
 //#define FAKE_CLOCK
 
-#define NUMCLIENT             1
+#define NUMCLIENT             100
 #define CLIENT_REQUESTS       1000
 
 #define DEBUG_LEVEL 10
 
+#define MDS_CACHE_SIZE        2500
+#define MDS_CACHE_MIDPOINT    .8

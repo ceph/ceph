@@ -166,9 +166,6 @@ bool MDStore::fetch_dir_2( int result,
 
 	// dir is now complete
 	idir->dir->state_set(CDIR_MASK_COMPLETE);
-	
-	// trim cache?
-	mds->mdcache->trim();
   }
 
  
@@ -186,6 +183,9 @@ bool MDStore::fetch_dir_2( int result,
 	  delete c;
 	}
   }
+
+  // trim cache?
+  mds->mdcache->trim();
 }
 
 
@@ -209,16 +209,20 @@ public:
 	this->ino = ino;
   }
   virtual void finish(int r) {
-	CInode *in = mds->mdcache->get_inode(ino);
-	if (in) {
-	  mds->mdstore->commit_dir(in, c);
-	} else {
-	  // must have exported ors omethign!
-	  dout(7) << "can't retry commit dir on " << ino << ", must have exported?" << endl;
-	  if (c) {
- 		c->finish(-1);
-		delete c;
+
+	if (r >= 0) {
+	  CInode *in = mds->mdcache->get_inode(ino);
+	  if (in) {
+		mds->mdstore->commit_dir(in, c);
+		return;
 	  }
+	}
+	
+	// must have exported ors omethign!
+	dout(7) << "can't retry commit dir on " << ino << ", must have exported?" << endl;
+	if (c) {
+	  c->finish(-1);
+	  delete c;
 	}
   }
 };

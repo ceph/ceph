@@ -5,6 +5,7 @@
 #include "CDir.h"
 #include "MDS.h"
 #include "MDCluster.h"
+#include "MDLog.h"
 
 #include "include/Message.h"
 #include "include/Messenger.h"
@@ -45,7 +46,8 @@ MDCache::MDCache(MDS *m)
   root = NULL;
   opening_root = false;
   lru = new LRU();
-  lru->lru_set_max(2500);
+  lru->lru_set_max(MDS_CACHE_SIZE);
+  lru->lru_set_midpoint(MDS_CACHE_MIDPOINT);
 }
 
 MDCache::~MDCache() 
@@ -175,7 +177,13 @@ bool MDCache::shutdown_pass()
   }
 
   // make a pass on the cache
-  trim(0);
+  
+  if (mds->mdlog->get_num_events()) {
+	dout(7) << "waiting for log to flush" << endl;
+  } else {
+	dout(7) << "log is empty; flushing cache" << endl;
+	trim(0);
+  }
 
   dout(7) << "cache size now " << lru->lru_get_size() << endl;
 
@@ -205,18 +213,35 @@ bool MDCache::shutdown_pass()
 	  dout(7) << "sending " << *im << " back to mds0" << endl;
 	  export_dir(im,0);
 	}
+  } else {
+	// shut down root
+	if (lru->lru_get_size() == 1) {
+	  // all i have left is root.. wtf?
+	  dout(7) << "wahoo, all i have left is root!" << endl;
+	  
+	  // un-import.
+	  imports.erase(root);
+	  root->put(CINODE_PIN_IMPORT);
+	  
+	  // trim it
+	  trim(0);
+	  
+	  show_cache();
+	  show_imports();
+	}
   }
 	
   // and?
-
   assert(inode_map.size() == lru->lru_get_size());
-  if (lru->lru_get_size() <= 0) {
-	dout(7) << "done, sending shutdown_finish" << endl;
-	mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
-								 0, MDS_PORT_MAIN, MDS_PORT_MAIN);
+  if (lru->lru_get_size() == 0) {
+	if (mds->get_nodeid() != 0) {
+	  dout(7) << "done, sending shutdown_finish" << endl;
+	  mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
+								   0, MDS_PORT_MAIN, MDS_PORT_MAIN);
+	}
 	return true;
   } else {
-
+	dout(7) << "there's still stuff in the cache." << endl;
   }
   return false;
 }
@@ -335,6 +360,7 @@ int MDCache::open_root(Context *c)
 
 	// root is technically an import (from a vacuum)
 	imports.insert( root );
+	root->get(CINODE_PIN_IMPORT);
 
 	if (c) {
 	  c->finish(0);
@@ -1228,10 +1254,14 @@ public:
 	  }
 
 	  // fail
+	  // this happens with: 
+	  // - commit_dir
+	  // - ?
 	  for (it = will_fail.begin(); it != will_fail.end(); it++) {
-		assert(false);
-		(*it)->finish(-1);  // fail
-		delete *it;   // delete context
+		Context *c = *it;
+		//assert(false);
+		c->finish(-1);  // fail
+		delete c;   // delete context
 	  }	  
 	} else {
 	  assert(false); // now what?
