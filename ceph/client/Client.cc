@@ -27,6 +27,8 @@ Client::Client(MDCluster *mdc, int id, Messenger *m, long req)
 
   max_requests = req;
 
+  did_close_all = false;
+
   cwd = 0;
   root = 0;
   tid = 0;
@@ -86,9 +88,30 @@ void Client::dispatch(Message *m)
 	
 
 void Client::done() {
-  dout(1) << "done, sending msg to mds0" << endl;
-  messenger->send_message(new Message(MSG_CLIENT_DONE),
-						  MSG_ADDR_MDS(0), MDS_PORT_MAIN, 0);
+  if (open_files.size()) {
+	if (!did_close_all) {
+	  dout(1) << "closing all open files" << endl;
+	  for (multimap<inodeno_t,int>::iterator it = open_files.begin();
+		   it != open_files.end();
+		   it++) {
+		dout(10) << "  closing " << it->first << " to " << it->second << endl;
+		MClientRequest *req = new MClientRequest(tid++, MDS_OP_CLOSE, whoami);
+		req->set_ino(it->first);
+		dout(9) << "sending " << *req << " to mds" << it->second << endl;
+		messenger->send_message(req,
+								MSG_ADDR_MDS(it->second), MDS_PORT_SERVER,
+								0);
+	  }
+	  did_close_all = true;
+	} else 
+	  dout(10) << "waiting for files to close, there are " << open_files.size() << " more" << endl;
+  }
+
+  else {
+	dout(1) << "done, all files closed, sending msg to mds0" << endl;
+	messenger->send_message(new Message(MSG_CLIENT_DONE),
+							MSG_ADDR_MDS(0), MDS_PORT_MAIN, 0);
+  }
 }
 
 void Client::assim_reply(MClientReply *r)
@@ -97,7 +120,7 @@ void Client::assim_reply(MClientReply *r)
   // closed a file?
   if (r->get_op() == MDS_OP_CLOSE) {
 	dout(12) << "closed inode " << r->get_ino() << " " << r->get_path() << endl;
-	open_files.erase(r->get_ino());
+	open_files.erase(open_files.find(r->get_ino()));
 	return;
   }
 
@@ -158,7 +181,8 @@ void Client::assim_reply(MClientReply *r)
   }
 
   // opened a file?
-  if (r->get_op() == MDS_OP_OPENRD) {
+  if (r->get_op() == MDS_OP_OPENRD ||
+	  r->get_op() == MDS_OP_OPENWR) {
 	dout(12) << "opened inode " << r->get_ino() << " " << r->get_path() << endl;
 	open_files.insert(pair<inodeno_t,int>(r->get_ino(), r->get_source()));
   }
@@ -231,7 +255,7 @@ void Client::issue_request()
 	if (r < 10)
 	  op = MDS_OP_TOUCH;
 	else if (r < 20) 
-	  op = MDS_OP_OPENWR;
+	  op = MDS_OP_OPENRD;
 	else if (r < 30)
 	  op = MDS_OP_OPENWR;
 	else if (r < 40 + open_files.size() && open_files.size() > 0) {

@@ -48,9 +48,10 @@ using namespace std;
 #define CINODE_PIN_DHARDPIN  30000
 #define CINODE_PIN_DIRTY     50000
 
-#define CINODE_PIN_SYNCBYME   70000
-#define CINODE_PIN_SYNCBYTHEM 70001
-#define CINODE_PIN_PRESYNC    70002
+#define CINODE_PIN_SYNCBYME     70000
+#define CINODE_PIN_SYNCBYTHEM   70001
+#define CINODE_PIN_PRESYNC      70002
+#define CINODE_PIN_WAITONUNSYNC 70003
 
 // directory authority types
 //  >= is the auth mds
@@ -62,11 +63,12 @@ using namespace std;
 #define CINODE_DIST_PRESYNC         1   // mtime, size, etc.
 #define CINODE_DIST_SYNCBYME        2
 #define CINODE_DIST_SYNCBYTHEM      4
+#define CINODE_DIST_WAITONUNSYNC    8
 
-#define CINODE_DIST_PRELOCK         8   // file mode, owner, etc.
-#define CINODE_DIST_LOCKBYME       16
-#define CINODE_DIST_LOCKBYTHEM     32
-#define CINODE_DIST_SOFTASYNC      64  // replica can soft write w/o sync
+#define CINODE_DIST_PRELOCK        64   // file mode, owner, etc.
+#define CINODE_DIST_LOCKBYME      128
+#define CINODE_DIST_LOCKBYTHEM    256
+#define CINODE_DIST_SOFTASYNC     512  // replica can soft write w/o sync
 
 /*
 soft:
@@ -234,6 +236,7 @@ class CInode : LRUObject {
   bool is_syncbythem() { return dist_state & CINODE_DIST_SYNCBYTHEM; }
   bool is_presync() { return dist_state & CINODE_DIST_PRESYNC; }
   bool is_softasync() { return dist_state & CINODE_DIST_SOFTASYNC; }
+  bool is_waitonunsync() { return dist_state & CINODE_DIST_WAITONUNSYNC; }
 
   void add_sync_waiter(Context *c);
   void take_sync_waiting(list<Context*>& ls);
@@ -259,7 +262,7 @@ class CInode : LRUObject {
 	if (open_read.count(c) == 1 &&
 		open_read.size() == 1) 
 	  put(CINODE_PIN_OPENRD);
-	open_read.erase(c);
+	open_read.erase(open_read.find(c));
   }
   void open_write_add(int c) {
 	if (open_write.empty())
@@ -270,7 +273,7 @@ class CInode : LRUObject {
 	if (open_write.count(c) == 1 &&
 		open_write.size() == 1) 
 	  put(CINODE_PIN_OPENWR);
-	open_write.erase(c);
+	open_write.erase(open_write.find(c));
   }
   bool open_remove(int c) {
 	if (open_read.count(c))

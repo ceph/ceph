@@ -22,11 +22,13 @@ class MInodeSyncAck : public Message {
   virtual int decode_payload(crope s) {
 	s.copy(0,sizeof(inodeno_t), (char*)&ino);
 	s.copy(sizeof(inodeno_t), sizeof(have), (char*)&have);
+	return 0;
   }
   virtual crope get_payload() {
 	crope s;
 	s.append((char*)&ino, sizeof(ino));
 	s.append((char*)&have, sizeof(have));
+	return s;
   }
 };
 

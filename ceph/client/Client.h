@@ -23,6 +23,7 @@ class Client : public Dispatcher {
   int whoami;
 
   multimap<inodeno_t, int> open_files;
+  bool did_close_all;
 
   LRU    cache_lru;
   ClNode *root;

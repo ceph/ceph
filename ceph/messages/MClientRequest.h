@@ -61,11 +61,17 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
 	out << "stat"; break;
   case MDS_OP_READDIR: 
 	out << "readdir"; break;
+  case MDS_OP_OPENRD: 
+	out << "openrd"; break;
+  case MDS_OP_OPENWR: 
+	out << "openwr"; break;
+  case MDS_OP_CLOSE: 
+	out << "close"; break;
   default: 
 	out << req.get_op();
   }
   if (req.get_path().length()) 
-	out << "_" << req.get_path();
+	out << "=" << req.get_path();
   return out;
 }
 

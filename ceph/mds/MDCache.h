@@ -28,6 +28,7 @@ class MInodeExpire;
 class MInodeSyncStart;
 class MInodeSyncAck;
 class MInodeSyncRelease;
+class MInodeSyncRecall;
 class C_MDS_ExportFinish;
 
 // DCache
@@ -147,18 +148,20 @@ class MDCache {
 
   void handle_inode_expire(MInodeExpire *m);
 
-  void handle_inode_sync_start(MInodeSyncStart *m);
-  void handle_inode_sync_ack(MInodeSyncAck *m);
-  void handle_inode_sync_release(MInodeSyncRelease *m);
-
   // soft sync locks
   bool read_soft_start(CInode *in, Message *m);
   int read_soft_finish(CInode *in);
   bool write_soft_start(CInode *in, Message *m);
   int write_soft_finish(CInode *in);
+
   void sync_start(CInode *in);
   void sync_finish(CInode *in);
+  void sync_wait(CInode *in);
 
+  void handle_inode_sync_start(MInodeSyncStart *m);
+  void handle_inode_sync_ack(MInodeSyncAck *m);
+  void handle_inode_sync_release(MInodeSyncRelease *m);
+  void handle_inode_sync_recall(MInodeSyncRecall *m);
 
   // hard locks  
   bool read_hard_start(CInode *in, Message *m);

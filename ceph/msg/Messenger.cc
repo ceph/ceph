@@ -36,6 +36,7 @@ using namespace std;
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
 #include "messages/MInodeSyncRelease.h"
+#include "messages/MInodeSyncRecall.h"
 
 Message *
 decode_message(crope& ser)
@@ -129,6 +130,9 @@ decode_message(crope& ser)
 	break;
   case MSG_MDS_INODESYNCRELEASE:
 	m = new MInodeSyncRelease();
+	break;
+  case MSG_MDS_INODESYNCRECALL:
+	m = new MInodeSyncRecall();
 	break;
 
 	// -- simple messages without payload --

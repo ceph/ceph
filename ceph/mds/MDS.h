@@ -160,8 +160,7 @@ class MDS : public Dispatcher {
 									 CInode *cur);
   MClientReply *handle_client_openwr(MClientRequest *req,
 									 CInode *cur);
-  MClientReply *handle_client_close(MClientRequest *req,
-									CInode *cur);
+  void handle_client_close(MClientRequest *req);
 
 
 

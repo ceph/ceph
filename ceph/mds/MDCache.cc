@@ -28,6 +28,7 @@
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
 #include "messages/MInodeSyncRelease.h"
+#include "messages/MInodeSyncRecall.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -281,8 +282,12 @@ bool MDCache::shutdown_pass()
 	  if (root->is_pinned_by(CINODE_PIN_DIRTY))   // no root storage yet.
 		root->put(CINODE_PIN_DIRTY);
 	  
-	  // trim it
-	  trim(0);
+	  if (root->ref != 0) {
+		dout(1) << "ugh, bad shutdown!" << endl;
+		imports.insert(root);
+		root->get(CINODE_PIN_IMPORT);
+	  } else 
+		trim(0);	  // trim it
 	  
 	  show_cache();
 	  show_imports();
@@ -301,7 +306,7 @@ bool MDCache::shutdown_pass()
 	}
 	return true;
   } else {
-	dout(7) << "there's still stuff in the cache." << endl;
+	dout(7) << "there's still stuff in the cache: " << lru->lru_get_size() << endl;
   }
   return false;
 }
@@ -455,6 +460,10 @@ int MDCache::proc_message(Message *m)
 
   case MSG_MDS_INODESYNCRELEASE:
 	handle_inode_sync_release((MInodeSyncRelease*)m);
+	break;
+
+  case MSG_MDS_INODESYNCRECALL:
+	handle_inode_sync_recall((MInodeSyncRecall*)m);
 	break;
 	
 	// import
@@ -1021,6 +1030,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 bool MDCache::read_soft_start(CInode *in, Message *m)
 {
+  dout(5) << "read_soft_start " << *in << endl;
+
   // what soft sync mode?
 
   if (in->is_softasync()) {
@@ -1029,6 +1040,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	if (in->is_auth()) {
 	  // i am auth: i need sync
 	  if (in->is_syncbyme()) return true;
+	  if (!in->is_cached_by_anyone()) return true;  // i'm alone
 	} else {
 	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
@@ -1052,7 +1064,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 
   // we need sync
   if (in->is_syncbythem() && !in->is_softasync()) 
-    dout(5) << "read_soft_start " << *in << " is !softasync+syncbythem, waiting on sync" << endl;
+    dout(5) << "read_soft_start " << *in << " is normal+replica+syncbyauth" << endl;
   else if (in->is_softasync() && in->is_auth())
     dout(5) << "read_soft_start " << *in << " is softasync+auth, waiting on sync" << endl;
   else 
@@ -1064,11 +1076,17 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	return false;
   }
 
-  in->hard_pin();
   in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
 
-  if (!in->is_presync())
-	sync_start(in);
+  if (in->is_auth()) {
+	if (!in->is_presync())
+	  sync_start(in);
+  } else {
+	assert(in->is_syncbythem());
+
+	if (!in->is_waitonunsync())
+	  sync_wait(in);
+  }
   
   return false;
 }
@@ -1083,6 +1101,7 @@ int MDCache::read_soft_finish(CInode *in)
 
 bool MDCache::write_soft_start(CInode *in, Message *m)
 {
+  dout(5) << "write_soft_start " << *in << endl;
   // what soft sync mode?
 
   if (in->is_softasync()) {
@@ -1101,6 +1120,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	if (in->is_auth()) {
 	  // i am auth: i need sync
 	  if (in->is_syncbyme()) return true;
+	  if (!in->is_cached_by_anyone()) return true;  // i'm alone
 	} else {
 	  // i am replica: fw to auth
 	  int auth = in->authority(mds->get_cluster());
@@ -1114,10 +1134,10 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
   }
 
   // we need sync
-  if (in->is_syncbythem() && in->is_softasync()) 
-    dout(5) << "write_soft_start " << *in << " is syncbythem+softasync, waiting on sync" << endl;
-  else if (!in->is_softasync() && in->is_auth())
-    dout(5) << "write_soft_start " << *in << " is !softasync+auth, waiting on sync" << endl;
+  if (in->is_syncbythem() && in->is_softasync() && !in->is_auth()) {
+    dout(5) << "write_soft_start " << *in << " is softasync+replica+syncbyauth" << endl;
+  } else if (!in->is_softasync() && in->is_auth())
+    dout(5) << "write_soft_start " << *in << " is normal+auth, waiting on sync" << endl;
   else 
 	assert(2+2==5);
 
@@ -1127,11 +1147,18 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	return false;
   }
 
-  in->hard_pin();
   in->add_sync_waiter(new C_MDS_RetryMessage(mds, m));
   
-  if (!in->is_presync())
-	sync_start(in);
+  if (in->is_auth()) {
+	if (!in->is_presync())
+	  sync_start(in);
+  } else {
+	assert(in->is_syncbythem());
+	assert(in->is_softasync());
+	
+	if (!in->is_waitonunsync())
+	  sync_wait(in);
+  }
   
   return false;
 }
@@ -1146,10 +1173,35 @@ int MDCache::write_soft_finish(CInode *in)
 
 // sync interface
 
+void MDCache::sync_wait(CInode *in)
+{
+  assert(!in->is_auth());
+  
+  int auth = in->authority(mds->get_cluster());
+  dout(5) << "sync_wait on " << *in << ", auth " << auth << endl;
+  
+  assert(in->is_syncbythem());
+  assert(!in->is_waitonunsync());
+  
+  in->dist_state |= CINODE_DIST_WAITONUNSYNC;
+  in->get(CINODE_PIN_WAITONUNSYNC);
+  in->hard_pin();
+  
+  if ((in->is_softasync() && g_conf.mdcache_sticky_sync_softasync) ||
+	  (!in->is_softasync() && g_conf.mdcache_sticky_sync_normal)) {
+	// actually recall; if !sticky, auth will immediately release.
+	dout(5) << "sync_wait on " << *in << " sticky, recalling from auth" << endl;
+	mds->messenger->send_message(new MInodeSyncRecall(in->inode.ino),
+								 MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+  }
+}
+
+
 void MDCache::sync_start(CInode *in)
 {
   // wait for all replicas
-  dout(5) << "sync_start on " << *in << ", waiting for " << in->get_cached_by() << endl;
+  dout(5) << "sync_start on " << *in << ", waiting for " << in->cached_by << endl;
 
   assert(in->is_auth());
   assert(!in->is_presync());
@@ -1270,9 +1322,12 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	  }
 	}
 
-	// release sync
-	dout(7) << "handle_sync_ack did waiters, releasing." << endl;
-	sync_finish(in);
+	// release sync?
+	if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
+		(!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
+	  dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
+	  sync_finish(in);
+	}
   }
 
   delete m; // done
@@ -1298,21 +1353,62 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
   dout(7) << "handle_sync_release " << *in << endl;
   assert(!in->is_auth());
   
- 
+  // release state
   in->put(CINODE_PIN_SYNCBYTHEM);
-  in->dist_state -= CINODE_DIST_SYNCBYTHEM;
-  
-  // finish
-  list<Context*> finished;
-  in->take_sync_waiting(finished);
-  for (list<Context*>::iterator it = finished.begin(); 
-	   it != finished.end(); 
-	   it++) {
-	Context *c = *it;
-	c->finish(0);
-	delete c;
+  in->dist_state &= ~CINODE_DIST_SYNCBYTHEM;
+
+  // waiters?
+  if (in->is_waitonunsync()) {
+	in->put(CINODE_PIN_WAITONUNSYNC);
+	in->dist_state &= ~CINODE_DIST_WAITONUNSYNC;
+	in->hard_unpin();
+
+	// finish
+	list<Context*> finished;
+	in->take_sync_waiting(finished);
+	for (list<Context*>::iterator it = finished.begin(); 
+		 it != finished.end(); 
+		 it++) {
+	  Context *c = *it;
+	  c->finish(0);
+	  delete c;
+	}
   }
+  
+  // done
+  delete m;
 }
+
+
+void MDCache::handle_inode_sync_recall(MInodeSyncRecall *m)
+{
+  CInode *in = get_inode(m->get_ino());
+
+  if (!in) {
+	dout(7) << "handle_sync_recall " << m->get_ino() << ", don't have it, dropping" << endl;
+	delete m;  // done
+	return;
+  }
+  
+  if (!in->is_syncbyme()) {
+	dout(7) << "handle_sync_recall " << m->get_ino() << ", not flagged as sync, dropping" << endl;
+	delete m;  // done
+	return;
+  }
+  
+  dout(7) << "handle_sync_recall " << *in << ", releasing" << endl;
+  assert(in->is_auth());
+  
+  sync_finish(in);
+  
+  // done
+  delete m;
+}
+
+
+
+
+
 
 
 /* hard locks: owner, mode 

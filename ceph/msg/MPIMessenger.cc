@@ -8,6 +8,7 @@
 #include <cassert>
 #include <ext/hash_map>
 using namespace std;
+#include <unistd.h>
 
 #include "mpi.h"
 

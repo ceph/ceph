@@ -22,10 +22,13 @@ struct md_config_t {
 
   int mdcache_size;
   float mdcache_mid;
+  bool mdcache_sticky_sync_normal;
+  bool mdcache_sticky_sync_softasync;
 
   float mdbal_replicate_threshold;
   float mdbal_unreplicate_threshold;
-  
+
+  int mds_heartbeat_op_interval;
 };
 
 extern md_config_t g_conf;	 

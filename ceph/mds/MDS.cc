@@ -269,7 +269,7 @@ void MDS::dispatch(Message *m)
   }
 
   if (whoami == 0 &&
-	  stat_ops >= last_heartbeat + 3000) {
+	  stat_ops >= last_heartbeat + g_conf.mds_heartbeat_op_interval) {
 	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
   }
@@ -329,6 +329,14 @@ int MDS::handle_client_request(MClientRequest *req)
   }
 
   
+  // some client ops are on ino, not path
+  switch (req->get_op()) {
+  case MDS_OP_CLOSE:
+	handle_client_close(req);
+	return 0;
+  }
+
+  
   vector<CInode*> trace;
   
   int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
@@ -360,9 +368,6 @@ int MDS::handle_client_request(MClientRequest *req)
 	break;
   case MDS_OP_OPENWR:
 	reply = handle_client_openwr(req, cur);
-	break;
-  case MDS_OP_CLOSE:
-	reply = handle_client_close(req, cur);
 	break;
 
   default:
@@ -441,13 +446,16 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	if (!mdcache->write_soft_start(cur, req))
 	  return 0;  // sync
 
+	cur->hard_pin();
+
 	// do update
 	cur->inode.mtime++; // whatever
 	cur->inode.touched++;
 	cur->mark_dirty();
 
 	// tell replicas
-	mdcache->send_inode_updates(cur);
+	// actually, no!  it's synced by me, or async.  they'll get told upon release.  
+	//mdcache->send_inode_updates(cur);
 
 	// log it
 	dout(10) << "log for " << *req << " touch " << cur->inode.touched << endl;
@@ -483,6 +491,8 @@ void MDS::handle_client_touch_2(MClientRequest *req,
   stat_write.hit();
   stat_req.hit();
   stat_ops++;
+
+  cur->hard_unpin();
 
   // done
   delete req;
@@ -582,12 +592,15 @@ MClientReply *MDS::handle_client_openrd(MClientRequest *req,
 
   // reply
   MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist( cur, whoami );
   return reply;
 }
 
-MClientReply *MDS::handle_client_close(MClientRequest *req,
-									   CInode *cur)
+void MDS::handle_client_close(MClientRequest *req) 
 {
+  CInode *cur = mdcache->get_inode(req->get_ino());
+  assert(cur);
+
   dout(10) << "close on " << *cur << endl;
   
   // hmm, check permissions or something.
@@ -601,7 +614,13 @@ MClientReply *MDS::handle_client_close(MClientRequest *req,
   
   // reply
   MClientReply *reply = new MClientReply(req);
-  return reply;
+  reply->set_trace_dist( cur, whoami );
+
+  messenger->send_message(reply,
+						  req->get_source(), 0, MDS_PORT_SERVER);
+
+  // done
+  delete req;
 }
 
 
@@ -633,6 +652,7 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 	  
   // reply
   MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist( cur, whoami );
   return reply;
 }
 
