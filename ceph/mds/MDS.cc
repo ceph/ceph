@@ -7,6 +7,7 @@
 #include "MDStore.h"
 #include "MDLog.h"
 #include "MDCluster.h"
+#include "MDBalancer.h"
 
 #include "messages/MPing.h"
 
@@ -19,6 +20,8 @@
 #include "messages/MClientReply.h"
 
 #include "messages/MDiscover.h"
+#include "messages/MExportDir.h"
+#include "messages/MExportDirAck.h"
 
 #include <list>
 
@@ -26,9 +29,6 @@
 using namespace std;
 
 
-#define TRAVERSE_FORWARD  1
-#define TRAVERSE_DISCOVER 2
-#define TRAVERSE_FAIL     3
 
 // extern 
 //MDS *g_mds;
@@ -44,6 +44,7 @@ MDS::MDS(MDCluster *mdc, Messenger *m) {
   mdcache = new DentryCache();
   mdstore = new MDStore(this);
   mdlog = new MDLog(this);
+  balancer = new MDBalancer(this);
 
   opening_root = false;
   osd_last_tid = 0;
@@ -53,6 +54,7 @@ MDS::~MDS() {
   if (mdstore) { delete mdstore; mdstore = NULL; }
   if (messenger) { delete messenger; messenger = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
+  if (balancer) { delete balancer; balancer = NULL; }
 }
 
 
@@ -105,19 +107,30 @@ void MDS::proc_message(Message *m)
 	break;
 
 
-	// MDS
+	// MDS ===============
   case MSG_MDS_DISCOVER:
 	handle_discover((MDiscover*)m);
 	break;
 
+	
+	// import
+  case MSG_MDS_EXPORTDIR:
+	balancer->import_dir((MExportDir*)m);
+	break;
 
-	// CLIENTS
+	// export ack
+  case MSG_MDS_EXPORTDIRACK:
+	balancer->export_dir_ack((MExportDirAck*)m);
+	break;
+
+
+	// CLIENTS ===========
   case MSG_CLIENT_REQUEST:
 	handle_client_request((MClientRequest*)m);
 	break;
 
 
-	// OSD I/O
+	// OSD ===============
   case MSG_OSD_READREPLY:
 	cout << "mds" << whoami << " osd_read reply" << endl;
 	osd_read_finish(m);
@@ -171,15 +184,31 @@ int MDS::handle_discover(MDiscover *dis)
   if (dis->asker == whoami) {
 	// this is a result
 	
-	if (dis->want->size() == 0) {
+	if (dis->want == 0) {
 	  cout << "got root" << endl;
-
+	  
 	  CInode *root = new CInode();
 	  root->inode = dis->trace[0].inode;
-	  root->dir_dist = dis->trace[0].dir_dist;
-	  root->dir_rep = dis->trace[0].dir_rep;
-
+	  root->dir = new CDir(root);
+	  root->dir->dir_dist = dis->trace[0].dir_dist;
+	  root->dir->dir_rep = dis->trace[0].dir_rep;
+	  root->dir->dir_rep_vec = dis->trace[0].dir_rep_vec;
+	  
 	  mdcache->set_root( root );
+
+	  opening_root = false;
+
+	  // finish off.
+	  list<Context*> finished;
+	  finished.splice(finished.end(), waiting_for_root);
+
+	  list<Context*>::iterator it;
+	  for (it = finished.begin(); it != finished.end(); it++) {
+		Context *c = *it;
+		c->finish(0);
+		delete c;
+	  }
+
 	  return 0;
 	}
 	
@@ -187,7 +216,7 @@ int MDS::handle_discover(MDiscover *dis)
 	vector<CInode*> trav;
 	vector<string>  trav_dn;
 
-	int r = path_traverse(dis->basepath, trav, trav_dn, NULL, TRAVERSE_FAIL);
+	int r = path_traverse(dis->basepath, trav, trav_dn, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
 	if (r != 0) throw "wtf";
 	
 	CInode *cur = trav[trav.size()-1];
@@ -195,23 +224,40 @@ int MDS::handle_discover(MDiscover *dis)
 
 	cur->put(); // unpin
 
-	// add duplicated inodes
-	for (int i=0; i<dis->trace.size(); i++) {
-	  CInode *in = new CInode();
-	  in->inode = dis->trace[i].inode;
-	  in->dir_dist = dis->trace[i].dir_dist;
-	  in->dir_rep = dis->trace[i].dir_rep;
-	  
-	  mdcache->add_inode( in );
-	  mdcache->link_inode( cur, (*dis->want)[i], in );
+	list<Context*> finished;
 
+	// add duplicated dentry+inodes
+	for (int i=0; i<dis->trace.size(); i++) {
+
+	  if (!cur->dir) cur->dir = new CDir(cur);  // ugly
+
+	  CInode *in;
+	  CDentry *dn = cur->dir->lookup( (*dis->want)[i] );
+	  if (dn) {
+		// already had it?  (parallel discovers?)
+		cout << "huh, already had " << (*dis->want)[i] << endl;
+		in = dn->inode;
+	  } else {
+		in = new CInode();
+		in->inode = dis->trace[i].inode;
+		if (in->is_dir()) {
+		  in->dir = new CDir(in);
+		  in->dir->dir_dist = dis->trace[i].dir_dist;
+		  in->dir->dir_rep = dis->trace[i].dir_rep;
+		  in->dir->dir_rep_vec = dis->trace[i].dir_rep_vec;
+		}
+		
+		mdcache->add_inode( in );
+		mdcache->link_inode( cur, (*dis->want)[i], in );
+	  }
+	  
+	  cur->dir->take_waiting((*dis->want)[i],
+							 finished);
+	  
 	  cur = in;
 	}
 
 	// finish off waiting items
-	list<Context*> finished;
-	finished.splice(finished.begin(),
-					start->waiting_for_discover[ (*dis->want)[0] ]);
 	list<Context*>::iterator it;
 	for (it = finished.begin(); it != finished.end(); it++) {
 	  Context *c = *it;
@@ -222,32 +268,39 @@ int MDS::handle_discover(MDiscover *dis)
   } else {
 	// this is a request
 
+
 	while (!dis->done()) {
+
+	  // FIXME: this might be avoid using path_traverse altogether!
+	  
 	  // go for the next bit
 	  string path = dis->current_need();
 
 	  cout << "mds" << whoami << " dis " << path << " for " << dis->asker << endl;
 	
-	  // traverse to start point
+	  // traverse to the bit we want
 	  vector<CInode*> trav;
 	  vector<string>  trav_dn;
 
-	  int r = path_traverse(dis->basepath, trav, trav_dn, dis, TRAVERSE_FORWARD);
+	  int r = path_traverse(path, trav, trav_dn, dis, MDS_TRAVERSE_FORWARD);
 	  if (r > 0) return 0;
 	  
 	  // add it
 	  CInode *got = trav[trav.size()-1];
 	  MDiscoverRec_t bit;
 	  bit.inode = got->inode;
-	  bit.dir_dist = got->dir_dist;
-	  bit.dir_rep = got->dir_rep;
+	  if (got->is_dir()) {
+		bit.dir_dist = got->dir->dir_dist;
+		bit.dir_rep = got->dir->dir_rep;
+		bit.dir_rep_vec = got->dir->dir_rep_vec;
+	  }
 	  dis->add_bit(bit);
 	}
 
 	// send result!
 	cout << "mds" << whoami << " finished discovery, sending back to " << dis->asker << endl;
 	messenger->send_message(dis,
-							MSG_ADDR_CLIENT(dis->asker), MDS_PORT_SERVER,
+							MSG_ADDR_MDS(dis->asker), MDS_PORT_SERVER,
 							MDS_PORT_SERVER);
   }
 
@@ -260,13 +313,19 @@ int MDS::handle_discover(MDiscover *dis)
 
 int MDS::handle_client_request(MClientRequest *req)
 {
-  cout << "mds" << whoami << " req " << MSG_ADDR_NICE(req->get_source()) << '.' << req->tid << " op " << req->op << " on " << req->path <<  endl;
+  cout << "mds" << whoami << " req client" << req->client << '.' << req->tid << " op " << req->op << " on " << req->path <<  endl;
+
+  if (!mdcache->get_root()) {
+	cout << "mds" << whoami << " need open root" << endl;
+	open_root(new C_MDS_RetryMessage(this, req));
+	return 0;
+  }
 
   
   vector<CInode*> trace;
   vector<string>  trace_dn;
 
-  int r = path_traverse(req->path, trace, trace_dn, req, TRAVERSE_FORWARD);
+  int r = path_traverse(req->path, trace, trace_dn, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
 
   CInode *cur = trace[trace.size()-1];
@@ -276,21 +335,48 @@ int MDS::handle_client_request(MClientRequest *req)
  
   if (req->op == MDS_OP_READDIR) {
 	if (cur->is_dir()) {
-	  if (cur->dir) {
-		// build dir contents
-		CDir_map_t::iterator it;
-		for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
-		  CInode *in = it->second->inode;
-		  c_inode_info *i = new c_inode_info;
-		  i->inode = in->inode;
-		  i->dist = in->get_dist_spec(this);
-		  i->ref_dn = it->first;
-		  dir_contents.push_back(i);
+
+	  if (!cur->dir) cur->dir = new CDir(cur);
+
+	  // frozen?
+	  if (cur->dir->is_frozen()) {
+		// doh!
+		cout << "mds" << whoami << " dir is frozen, waiting" << endl;
+		cur->dir->add_waiter(new C_MDS_RetryMessage(this, req));
+		return 1;
+	  }
+
+	  // make sure i'm authoritative!
+	  int dirauth = cur->dir->dir_authority(mdcluster);          // FIXME hashed, etc.
+	  if (dirauth == whoami) {
+
+		if (cur->dir->is_complete()) {
+		  // build dir contents
+		  CDir_map_t::iterator it;
+		  for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
+			CInode *in = it->second->inode;
+			c_inode_info *i = new c_inode_info;
+			i->inode = in->inode;
+			i->dist = in->get_dist_spec(this);
+			i->ref_dn = it->first;
+			dir_contents.push_back(i);
+		  }
+		} else {
+		  // fetch
+		  cout << "mds" << whoami << " no dir contents for readdir on " << cur->inode.ino << ", fetching" << endl;
+		  mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
+		  return 0;
 		}
 	  } else {
-		// fetch
-		cout << "mds" << whoami << " no dir contents for readdir on " << cur->inode.ino << ", fetching" << endl;
-		mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
+		if (dirauth < 0) {
+		  throw "not implemented";
+		} else {
+		  // forward to authority
+		  cout << "mds" << whoami << " forwarding readdir to authority " << dirauth << endl;
+		  messenger->send_message(req,
+								  MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
+								  MDS_PORT_SERVER);
+		}
 		return 0;
 	  }
 	} else {
@@ -343,9 +429,16 @@ int MDS::path_traverse(string& path,
 					   Message *req,
 					   int onfail)
 {
+  CInode *cur = mdcache->get_root();
+  if (cur == NULL) {
+	cout << "mds" << whoami << " i don't have root" << endl;
+	if (req) 
+	  open_root(new C_MDS_RetryMessage(this, req));
+	return 1;
+  }
+
   // break path into bits.
   trace.clear();
-  CInode *cur = mdcache->get_root();
   trace.push_back(cur);
 
   string have_clean;
@@ -361,6 +454,15 @@ int MDS::path_traverse(string& path,
 	if (cur->is_dir()) {
 	  if (!cur->dir)
 		cur->dir = new CDir(cur);
+
+	  // frozen?
+	  if (cur->dir->is_frozen()) {
+		// doh!
+		cout << "mds" << whoami << " dir is frozen, waiting" << endl;
+		cur->dir->add_waiter(new C_MDS_RetryMessage(this, req));
+		return 1;
+	  }
+
 
 	  CDentry *dn = cur->dir->lookup(dname);
 	  if (dn && dn->inode) {
@@ -386,7 +488,7 @@ int MDS::path_traverse(string& path,
 		} else {
 		  // not mine.
 
-		  if (onfail == TRAVERSE_DISCOVER) {
+		  if (onfail == MDS_TRAVERSE_DISCOVER) {
 			// discover
 			cout << "mds" << whoami << " discover on " << have_clean << " for " << dname << "..., to mds" << dauth << endl;
 
@@ -397,24 +499,24 @@ int MDS::path_traverse(string& path,
 
 			cur->get();  // pin discoveree
 
-			MDiscover *dis = new MDiscover(whoami, have_clean, want);
-			messenger->send_message(req,
+			messenger->send_message(new MDiscover(whoami, have_clean, want),
 									MSG_ADDR_MDS(dauth), MDS_PORT_SERVER,
 									MDS_PORT_SERVER);
 			
 			// delay processing of current request
-			cur->wait_on_discover(dname, new C_MDS_RetryMessage(this, req));
+			cur->dir->add_waiter(dname, new C_MDS_RetryMessage(this, req));
 
 			return 1;
 		  } 
-		  if (onfail == TRAVERSE_FORWARD) {
+		  if (onfail == MDS_TRAVERSE_FORWARD) {
 			// forward
 			cout << "mds" << whoami << " not authoritative for " << dname << ", fwd to mds" << dauth << endl;
 			messenger->send_message(req,
 									MSG_ADDR_MDS(dauth), MDS_PORT_SERVER,
 									MDS_PORT_SERVER);
+			return 1;
 		  }	
-		  if (onfail == TRAVERSE_FAIL) {
+		  if (onfail == MDS_TRAVERSE_FAIL) {
 			return -1;
 		  }
 		}
@@ -578,7 +680,9 @@ bool MDS::open_root(Context *c)
 	root->inode.mode = 0755;
 	root->inode.size = 0;
 
-	root->dir_dist = 0;  // 0's
+	root->dir = new CDir(root);
+	root->dir->dir_dist = 0;  // me!
+	root->dir->dir_rep = CDIR_REP_ALL;
 
 	mdcache->set_root( root );
 
@@ -595,10 +699,10 @@ bool MDS::open_root(Context *c)
 	  opening_root = true;
 
 	  MDiscover *req = new MDiscover(whoami,
-								   string(""),
-								   new vector<string>);
+									 string(""),
+									 NULL);
 	  messenger->send_message(req,
-							  0, MDS_PORT_SERVER,
+							  MSG_ADDR_MDS(0), MDS_PORT_SERVER,
 							  MDS_PORT_MAIN);
 	}
   }

@@ -30,6 +30,9 @@ using namespace std;
 #define MDS_OP_UNLINK  122
 #define MDS_OP_LINK    123
 
+#define MDS_TRAVERSE_FORWARD  1
+#define MDS_TRAVERSE_DISCOVER 2
+#define MDS_TRAVERSE_FAIL     3
 
 class MDCluster;
 class CInode;
@@ -39,6 +42,7 @@ class MDLog;
 class Messenger;
 class Message;
 class MClientRequest;
+class MDBalancer;
 
 // types
 
@@ -66,7 +70,7 @@ class MDS : public Dispatcher {
   list<CInode*>      export_list;
   
   bool               opening_root;
-  vector<Context*>   waiting_for_root;
+  list<Context*>     waiting_for_root;
 
   // osd interface
   __uint64_t         osd_last_tid;
@@ -81,8 +85,7 @@ class MDS : public Dispatcher {
   MDStore      *mdstore;    // storage interface
   Messenger    *messenger;    // message processing
   MDLog        *mdlog;
-
-  //MDBalancer   *balancer;
+  MDBalancer   *balancer;
  
 
 

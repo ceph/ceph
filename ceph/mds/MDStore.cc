@@ -5,6 +5,8 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
+#include "MDBalancer.h"
+#include "MDCluster.h"
 
 #include <iostream>
 using namespace std;
@@ -44,7 +46,7 @@ bool MDStore::fetch_dir( CInode *in,
 {
   cout << "fetch_dir " << in->inode.ino << endl;
   if (c) 
-	in->waiting_for_fetch.push_back(c);
+	in->dir->add_waiter(c);
 
   // already fetching?
   if (in->mid_fetch) {
@@ -103,6 +105,16 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 	  // add and link
 	  mds->mdcache->add_inode( in );
 	  mds->mdcache->link_inode( dir, dname, in );
+
+	  // HACK
+	  if (dir->inode.ino == 1 && mds->get_nodeid() == 0 && in->is_dir()) {
+		int d = rand() % mds->mdcluster->get_size();
+		if (d > 0) {
+		  cout << "hack: exporting dir" << endl;
+		  mds->balancer->export_dir( in, d);
+		}
+	  }
+
 	}
 	num--;
   }
@@ -110,8 +122,8 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
   dir->dir->state_set(CDIR_MASK_COMPLETE);
 
   // finish
-  list<Context*> finished = dir->waiting_for_fetch;
-  dir->waiting_for_fetch.clear();
+  list<Context*> finished;
+  dir->dir->take_waiting(finished);
   dir->mid_fetch = false;
 
   list<Context*>::iterator it = finished.begin();	

@@ -49,7 +49,6 @@ int play() {
   MDS *mds[10];
   for (int i=0; i<NUMMDSS; i++) {
 	mds[i] = new MDS(mdc, new FakeMessenger(MSG_ADDR_MDS(i)));
-	mds[i]->open_root(NULL);
 	mds[i]->init();
   }
 
@@ -69,13 +68,12 @@ int play() {
 
   cout << "sending test ping, load" << endl;
 
-  // fetch root on mds0
-  mds[0]->mdstore->fetch_dir( mds[0]->mdcache->get_root(), NULL );
 
   // send an initial message...?
   mds[0]->messenger->send_message(new MPing(10), 1, MDS_PORT_MAIN, MDS_PORT_MAIN);
 
-  for (int i=0; i<NUMCLIENTS; i++) 
+  //for (int i=0; i<NUMCLIENTS; i++) 
+  for (int i=0; i<1; i++) 
 	client[i]->issue_request();
 
   // loop

@@ -11,7 +11,8 @@ using namespace std;
 typedef struct {
   inode_t    inode;
   int        dir_dist;
-  bit_vector dir_rep;
+  int        dir_rep;
+  vector<int>  dir_rep_vec;
 } MDiscoverRec_t;
 
 
@@ -50,6 +51,9 @@ class MDiscover : public Message {
   }
 
   string current_need() {
+	if (want == NULL)
+	  return string("");  // just root
+
 	string a = current_base();
 	a += "/";
 	a += current_dentry();
@@ -63,6 +67,12 @@ class MDiscover : public Message {
 
   
   bool done() {
+	if (want == NULL) {
+	  if (trace.size() < 1)
+		return false;  // no root
+	  return true;
+	}
+
 	if (trace.size() == want->size())
 	  return true;
 	return false;

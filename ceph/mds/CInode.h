@@ -2,10 +2,12 @@
 #ifndef __CINODE_H
 #define __CINODE_H
 
-#include "../include/types.h"
-#include "../include/lru.h"
-#include "../include/DecayCounter.h"
+#include "include/types.h"
+#include "include/lru.h"
+#include "include/DecayCounter.h"
 #include <sys/stat.h>
+
+#include "CDentry.h"
 
 #include <list>
 #include <vector>
@@ -28,10 +30,6 @@ class CInode : LRUObject {
  protected:
   int              ref;            // reference count (???????)
 
-  // used by MDStore
-  bool             mid_fetch;
-  list<Context*>   waiting_for_fetch;
-
   // parent dentries in cache
   int              nparents;  
   CDentry         *parent;     // if 1 parent (usually)
@@ -40,13 +38,15 @@ class CInode : LRUObject {
   // dcache lru
   CInode *lru_next, *lru_prev;
 
+  // used by MDStore
+  bool             mid_fetch;
+
   // distributed caching
-  int              dir_dist;
-  bit_vector       dir_rep;
   set<int>         cached_by;  // mds's that cache me
-  bool             is_import, is_export;
-  hash_map< string, list<Context*> >
-                   waiting_for_discover;
+
+  // waiters
+  list<Context*>   waiting_on_inode;
+
   
 
   // accounting
@@ -67,17 +67,14 @@ class CInode : LRUObject {
   bool is_dir() {
 	return inode.isdir;
   }
-
-
+  void make_path(string& s);
+  
   // dist cache
   int authority(MDCluster *mdc);
 
 
-  void wait_on_discover(string& dentry,
-						Context *c) {
-	waiting_for_discover[ dentry ].push_back(c);
-  }
-
+  void add_inode_waiter(Context *c);
+  void take_inode_waiting(list<Context*>& ls);      // these are destructive
 
   // --- reference counting
   void put() {
@@ -95,7 +92,6 @@ class CInode : LRUObject {
 
   // --- hierarchy stuff
   void add_parent(CDentry *p);
-
 
   mdloc_t get_mdloc() {
 	return inode.ino;       // use inode #

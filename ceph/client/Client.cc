@@ -231,8 +231,10 @@ void Client::send_request(string& p, int op)
 	mds = 0;
   }
 
+  mds = rand() % 10;
+
   if (debug > 0)
-	cout << "client" << whoami << " req " << tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;
+	cout << "client" << whoami << " req " << req->tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;
   messenger->send_message(req,
 						  MSG_ADDR_MDS(mds), MDS_PORT_SERVER,
 						  0);

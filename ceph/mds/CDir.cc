@@ -6,6 +6,8 @@
 #include "MDS.h"
 #include "MDCluster.h"
 
+#include "include/Context.h"
+
 // CDir
 
 void CDir::add_child(CDentry *d) {
@@ -44,17 +46,90 @@ CDentry* CDir::lookup(string n) {
 
 int CDir::dentry_authority(string& dn, MDCluster *mdc)
 {
-  if (inode->dir_dist == CDIR_DIST_PARENT) {
-	return inode->authority( mdc );       // same as me
+  if (dir_dist == CDIR_DIST_PARENT) {
+	return inode->authority( mdc );       // same as my inode
   }
-  if (inode->dir_dist == CDIR_DIST_HASH) {
+  if (dir_dist == CDIR_DIST_HASH) {
 	return mdc->hash_dentry( this, dn );  // hashed
   }
 
   // explicit for this whole dir
-  return inode->dir_dist;
+  return dir_dist;
 }
 
+int CDir::dir_authority(MDCluster *mdc) 
+{
+  // explicit
+  if (dir_dist >= 0)
+	return dir_dist;
+
+  // parent
+  if (dir_dist == CDIR_DIST_PARENT)
+	return inode->authority(mdc);
+
+  // hashed
+  throw "hashed not implemented";
+  return CDIR_DIST_HASH;
+}
+
+
+// wiating
+
+void CDir::add_waiter(string& dentry,
+								Context *c) {
+  waiting_on_dentry[ dentry ].push_back(c);
+}
+
+void CDir::add_waiter(Context *c) {
+  waiting_on_all.push_back(c);
+}
+
+
+void CDir::take_waiting(string& dentry,
+						list<Context*>& ls)
+{
+  if (waiting_on_dentry.count(dentry) > 0)
+	ls.splice(ls.end(), waiting_on_dentry[ dentry ]);
+}
+
+void CDir::take_waiting(list<Context*>& ls)
+{
+  ls.splice(ls.end(), waiting_on_all);
+
+  // all dentry waiters
+  hash_map<string, list<Context*> >::iterator it;
+  for (it = waiting_on_dentry.begin(); it != waiting_on_dentry.end(); it++) 
+	ls.splice(ls.end(), it->second);
+}
+
+
+// freezing
+
+void CDir::freeze()
+{
+  state_set(CDIR_MASK_FROZEN);
+  inode->get();
+}
+
+void CDir::unfreeze()  // thaw?
+{
+  state_clear(CDIR_MASK_FROZEN);
+  inode->put();
+  
+  list<Context*> finished;
+  take_waiting(finished);
+
+  list<Context*>::iterator it;
+  for (it = finished.begin(); it != finished.end(); it++) {
+	Context *c = *it;
+	c->finish(0);
+	delete c;
+  }
+}
+
+
+
+// debug shite
 
 
 void CDir::dump(int depth) {

@@ -6,16 +6,19 @@
 #define MSG_FWD        2
 #define MSG_DISCOVER   3
 
-#define MSG_OSD_READ        10
-#define MSG_OSD_READREPLY   11
-#define MSG_OSD_WRITE       12
-#define MSG_OSD_WRITEREPLY  13
+#define MSG_OSD_READ         10
+#define MSG_OSD_READREPLY    11
+#define MSG_OSD_WRITE        12
+#define MSG_OSD_WRITEREPLY   13
 
-#define MSG_CLIENT_REQUEST  20
-#define MSG_CLIENT_REPLY    21
+#define MSG_CLIENT_REQUEST   20
+#define MSG_CLIENT_REPLY     21
 
-#define MSG_MDS_HEARTBEAT   30
-#define MSG_MDS_DISCOVER    31
+#define MSG_MDS_HEARTBEAT    30
+#define MSG_MDS_DISCOVER     31
+
+#define MSG_MDS_EXPORTDIR    35
+#define MSG_MDS_EXPORTDIRACK 36
 
 
 #define MSG_ADDR_MDS(x)     (x)
