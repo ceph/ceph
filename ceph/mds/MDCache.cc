@@ -441,10 +441,10 @@ int MDCache::path_traverse(string& path,
 		cur->dir = new CDir(cur);
 
 	  // frozen?
-	  if (cur->dir->is_frozen()) {
+	  if (cur->dir->is_freeze_root()) {
 		// doh!
 		cout << "mds" << whoami << " dir is frozen, waiting" << endl;
-		cur->dir->add_waiter(new C_MDS_RetryMessage(mds, req));
+		cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(mds, req));
 		return 1;
 	  }
 
@@ -657,6 +657,12 @@ int MDCache::handle_discover(MDiscover *dis)
 	  }
 
 	  if (!cur->dir) cur->dir = new CDir(cur);
+	  
+	  if (cur->dir->is_frozen()) {
+		cout << "mds" << whoami << " dir is frozen, waiting" << endl;
+		cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(mds, dis));
+		return 0;
+	  }
 
 	  // lookup next bit
 	  CDentry *dn = cur->dir->lookup(dis->next_dentry());
@@ -915,6 +921,56 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
 
 // IMPORT/EXPORT
 
+class C_MDS_ExportFreeze : public Context {
+  MDS *mds;
+  CInode *in;   // inode of dir i'm exporting
+  int dest;
+
+public:
+  C_MDS_ExportFreeze(MDS *mds, CInode *in, int dest) {
+	this->mds = mds;
+	this->in = in;
+	this->dest = dest;
+  }
+  virtual void finish(int r) {
+	mds->mdcache->export_dir_frozen(in,dest);
+  }
+};
+
+class C_MDS_ExportFinish : public Context {
+  MDS *mds;
+  CInode *in;   // inode of dir i'm exporting
+
+public:
+  // contexts for waiting operations on the affected subtree
+  list<Context*> will_redelegate;
+  list<Context*> will_fail;
+
+  C_MDS_ExportFinish(MDS *mds, CInode *in) {
+	this->mds = mds;
+	this->in = in;
+  }
+
+  virtual void finish(int r) {
+	if (r == 0) { // success
+	  // redelegate
+	  list<Context*>::iterator it;
+	  for (it = will_redelegate.begin(); it != will_redelegate.end(); it++) {
+		(*it)->redelegate(mds, in->dir->dir_authority(mds->get_cluster()));
+	  }
+
+	  // fail
+	  for (it = will_fail.begin(); it != will_fail.end(); it++) {
+		assert(false);
+		(*it)->finish(-1);  // fail
+	  }	  
+	} else {
+	  assert(false); // now what?
+	}
+  }
+};
+
+
 void MDCache::export_dir(CInode *in,
 							int dest)
 {
@@ -922,18 +978,57 @@ void MDCache::export_dir(CInode *in,
 
   string path;
   in->make_path(path);
-  cout << "mds" << mds->get_nodeid() << " export_dir " << path << " to " << dest << endl;
+  cout << "mds" << mds->get_nodeid() << " export_dir " << path << " to " << dest << ", freezing" << endl;
 
-  // freeze
-  in->dir->freeze();
+  // freeze the subtree
+  in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest));
+}
 
+void MDCache::export_dir_frozen(CInode *in,
+								int dest)
+{
+  // subtree is now frozen!
+  string path;
+  in->make_path(path);
+  cout << "mds" << mds->get_nodeid() << " export_dir " << path << " to " << dest << ", frozen" << endl;
+
+  // give it away
   in->dir->dir_auth = dest;
 
   MExportDir *req = new MExportDir(in);
   
+  // fill with relevant cache data
+  C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, in);
+
+  export_dir_walk( req, fin, in );
+
   mds->messenger->send_message(req,
 							   MSG_ADDR_MDS(dest), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
+
+}
+
+void MDCache::export_dir_walk(MExportDir *req,
+							  C_MDS_ExportFinish *fin,
+							  CInode *idir)
+{
+  assert(idir->is_dir());
+  
+  list<CInode*> dirs;
+
+  CDir_map_t::iterator it;
+  for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
+	CInode *in = it->second->inode;
+	
+	// dir?
+	if (in->is_dir()) 
+	  dirs.push_back(in);
+
+	// add
+		
+	
+  }
+  
 }
 
 

@@ -17,7 +17,7 @@ class Logger {
   double start;
   double last_logged;
   double interval;
-  bool wrote_header;
+  int wrote_header;
 
   string filename;
 

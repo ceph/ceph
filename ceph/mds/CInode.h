@@ -59,9 +59,11 @@ class CInode : LRUObject {
   list<Context*>   waiting_for_write;
   list<Context*>   waiting_for_read;
 
-  
+  // lock nesting
+  int hard_pinned;
+  int nested_hard_pinned;
 
-  // accounting
+
   DecayCounter popularity;
   
 
@@ -92,6 +94,16 @@ class CInode : LRUObject {
   
   // dist cache
   int authority(MDCluster *mdc);
+
+
+  int is_hard_pinned() { 
+	return hard_pinned;
+  }
+  int adjust_nested_hard_pinned(int a);
+  bool can_hard_pin();
+  void hard_pin();
+  void hard_unpin();
+  void add_hard_pin_waiter(Context *c);
 
 
   void add_write_waiter(Context *c);

@@ -24,6 +24,7 @@ class MInodeExpire;
 class MInodeSyncStart;
 class MInodeSyncAck;
 class MInodeSyncRelease;
+class C_MDS_ExportFinish;
 
 // DCache
 
@@ -98,6 +99,11 @@ class MDCache {
 
   void export_dir(CInode *in,
 				  int mds);
+  void export_dir_frozen(CInode *in,
+						 int dest);
+  void export_dir_walk(MExportDir *req,
+					   class C_MDS_ExportFinish *fin,
+					   CInode *idir);
 
   int send_inode_updates(CInode *in);
   void handle_inode_update(MInodeUpdate *m);

@@ -3,8 +3,9 @@
 #define __CONTEXT_H
 
 #include <list>
+#include <assert.h>
 
-
+class MDS;
 
 // Context, for retaining context of a message being processed..
 // pure abstract!
@@ -16,13 +17,13 @@ class Context {
   virtual void finish(int r) = 0;
   //virtual void fail(int r) = 0;
 
-  void lazy_finish(int r) {
-	result = r;
-	//context_lazy_finished->push_back(this);
-
-	// FIXME
-
+  virtual bool can_redelegate() {
+	return false;
   }
+  virtual void redelegate(MDS *mds, int newmds) { 
+	assert(false);
+  }
+  
 };
 
 

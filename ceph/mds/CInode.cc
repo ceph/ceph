@@ -21,6 +21,9 @@ CInode::CInode() : LRUObject() {
   dir = NULL;
   state = 0;
 
+  hard_pinned = 0;
+  nested_hard_pinned = 0;
+
   mid_fetch = false;	
 }
 
@@ -61,6 +64,38 @@ void CInode::add_read_waiter(Context *c) {
 void CInode::take_read_waiting(list<Context*>& ls)
 {
   ls.splice(ls.end(), waiting_for_read);
+}
+
+
+// locking 
+int CInode::adjust_nested_hard_pinned(int a) {
+  nested_hard_pinned += a;
+  if (parent) 
+	parent->dir->adjust_nested_hard_pinned(a);
+}
+
+bool CInode::can_hard_pin() {
+  if (parent)
+	return parent->dir->can_hard_pin();
+  return true;
+}
+
+void CInode::hard_pin() {
+  get();
+  hard_pinned++;
+  if (parent)
+	parent->dir->adjust_nested_hard_pinned( 1 );
+}
+
+void CInode::hard_unpin() {
+  put();
+  hard_pinned--;
+  if (parent)
+	parent->dir->adjust_nested_hard_pinned( -1 );
+}
+
+void CInode::add_hard_pin_waiter(Context *c) {
+  parent->dir->add_hard_pin_waiter(c);
 }
 
 

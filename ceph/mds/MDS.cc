@@ -28,6 +28,18 @@ using namespace std;
 
 
 
+void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
+{
+  // forward message to new mds
+  cout << "mds" << mds->get_nodeid() << " redelegating by forwarding message to mds" << newmds << endl;
+
+  mds->messenger->send_message(m,
+							   newmds, m->get_dest_port(),
+							   MDS_PORT_MAIN);  // mostly meaningless
+}
+
+
+
 // extern 
 //MDS *g_mds;
 
@@ -254,6 +266,15 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 
   if (auth == whoami) {
 	
+	if (!cur->can_hard_pin()) {
+	  // wait
+	  cur->add_hard_pin_waiter(new C_MDS_RetryMessage(this, req));
+	  return 0;
+	}
+	
+	// lock
+	cur->hard_pin();
+
 	// do update
 	cur->inode.mtime++; // whatever
 	cur->inode.touched++;
@@ -261,9 +282,6 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 
 	// tell replicas
 	mdcache->send_inode_updates(cur);
-
-	// pin
-	cur->get();
 
 	// log it
 	cout << "mds" << whoami << " log for client" << req->client << '.' << req->tid << " touch " << cur->inode.touched << endl;
@@ -285,8 +303,6 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 void MDS::handle_client_touch_2(MClientRequest *req,
 								CInode *cur)
 {
-  cur->put();  // unpin
-  
   // reply
   cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " touch" << endl;
   MClientReply *reply = new MClientReply(req);
@@ -298,6 +314,9 @@ void MDS::handle_client_touch_2(MClientRequest *req,
   
   // done
   delete req;
+
+  // unpin
+  cur->hard_unpin(); 
 }
 
 
@@ -317,7 +336,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   if (cur->dir->is_frozen()) {
 	// doh!
 	cout << "mds" << whoami << " dir is frozen, waiting" << endl;
-	cur->dir->add_waiter(new C_MDS_RetryMessage(this, req));
+	cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(this, req));
 	return 0;
   }
   

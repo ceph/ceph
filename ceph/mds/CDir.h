@@ -25,7 +25,8 @@ class Context;
 #define CDIR_MASK_DIRTY         4   // has been modified since last commit
 #define CDIR_MASK_MID_COMMIT    8   // mid-commit
 
-#define CDIR_MASK_FROZEN       16   // all ops suspended (for import/export)?
+#define CDIR_MASK_FROZEN       16   // root of a freeze
+#define CDIR_MASK_FREEZING     32   // in process of freezing
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -59,8 +60,16 @@ class CDir {
   // cache
   int              dir_auth;
   int              dir_rep;
-  set<int>         dir_rep_by;  // if dir_rep == CDIR_REP_LIST
+  set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
   bool             is_import, is_export;
+
+
+  // lock nesting, freeze
+  int        hard_pinned;
+  int        nested_hard_pinned;
+  Context    *waiting_on_freeze;      // freezer
+
+
 
   friend class CInode;
   friend class MDCache;
@@ -74,6 +83,10 @@ class CDir {
 	state = CDIR_STATE_INITIAL;
 	version = 0;
 
+	hard_pinned = 0;
+	nested_hard_pinned = 0;
+	waiting_on_freeze = NULL;
+
 	dir_auth = CDIR_AUTH_PARENT;
 	dir_rep = CDIR_REP_NONE;
   }
@@ -86,7 +99,8 @@ class CDir {
   void state_set(unsigned mask) { state |= mask; }
 
   bool is_complete() { return state & CDIR_MASK_COMPLETE; }
-  bool is_frozen() { return state & CDIR_MASK_FROZEN; }
+  bool is_freeze_root() { return state & CDIR_MASK_FROZEN; }
+  
 
 
   // waiters  
@@ -97,8 +111,20 @@ class CDir {
   void take_waiting(string& dentry,
 					list<Context*>& ls);  
 
-  void freeze();
+  bool is_frozen();
+  void freeze(Context *c);
+  void freeze_finish();
   void unfreeze();
+  void add_freeze_waiter(Context *c);
+
+  int is_hard_pinned() { return hard_pinned; }
+  int adjust_nested_hard_pinned(int a);
+  bool can_hard_pin() { return !is_frozen(); }
+  void add_hard_pin_waiter(Context *c);
+  void hard_pin();
+  void hard_unpin();
+
+
 
   // version
   __uint64_t get_version() {

@@ -13,9 +13,14 @@ class LogType {
   vector<string>   inc_keys;
   vector<string>   set_keys;
 
+  int version;
+
   friend class Logger;
 
  public:
+  LogType() {
+	version = 1;
+  }
   void add_inc(char *s) {
 	string name = s;
 	add_inc(name);
@@ -24,6 +29,7 @@ class LogType {
     if (have_key(key)) return;
 	keys.push_back(key);
 	inc_keys.push_back(key);
+	version++;
   }
   void add_set(char *s) {
 	string name = s;
@@ -33,6 +39,7 @@ class LogType {
 	if (have_key(key)) return;
 	keys.push_back(key);
 	set_keys.push_back(key);
+	version++;
   }
   bool have_key(char *s) {
 	string n = s;

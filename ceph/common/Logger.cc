@@ -12,7 +12,7 @@ Logger::Logger(string& fn, LogType *type)
   filename += fn;
   interval = 1.0;
   start = last_logged = g_clock.gettime();  // time 0!
-  wrote_header = false;
+  wrote_header = -1;
   open = false;
   this->type = type;
 }
@@ -76,13 +76,13 @@ void Logger::flush(bool force)
 	}
 
 	// header?
-	if (!wrote_header) {
+	if (wrote_header != type->version) {
 	  out << "#";
 	  for (vector<string>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
 		out << "\t" << *it;
 	  }
 	  out << endl;
-	  wrote_header = true;
+	  wrote_header = type->version;
 	}
 
 	// write line to log

@@ -9,6 +9,11 @@ using namespace std;
 //typedef struct {
 //} MExportDirRec_t;
 
+typedef struct {
+  inode_t inode;
+  //list<client_t> open_by;
+} Inode_Export_State_t;
+
 class MExportDir : public Message {
  public:
   string path;

@@ -8,6 +8,7 @@
 
 #include "include/Context.h"
 
+
 // CDir
 
 void CDir::add_child(CDentry *d) {
@@ -103,12 +104,96 @@ void CDir::take_waiting(list<Context*>& ls)
 }
 
 
-// freezing
+// locking and freezing
 
-void CDir::freeze()
+
+void CDir::add_hard_pin_waiter(Context *c) {
+  if (state & CDIR_MASK_FROZEN) 
+	add_waiter(c);
+  else
+	inode->parent->dir->add_hard_pin_waiter(c);
+}
+	
+  
+void CDir::hard_pin() {
+  inode->get();
+  hard_pinned++;
+  inode->adjust_nested_hard_pinned( 1 );
+}
+
+void CDir::hard_unpin() {
+  inode->put();
+  hard_pinned--;
+  inode->adjust_nested_hard_pinned( -1 );
+
+  // pending freeze?
+  if (hard_pinned + nested_hard_pinned == 0 &&
+	  waiting_on_freeze)
+	freeze_finish();
+}
+
+int CDir::adjust_nested_hard_pinned(int a) {
+  nested_hard_pinned += a;
+  inode->adjust_nested_hard_pinned(a);
+
+  // pending freeze?
+  if (hard_pinned + nested_hard_pinned == 0 &&
+	  waiting_on_freeze)
+	freeze_finish();
+}
+
+
+
+bool CDir::is_frozen() 
 {
+  if (is_freeze_root())
+	return true;
+  if (inode->parent)
+	return inode->parent->dir->is_freeze_root();
+  return false;
+}
+
+void CDir::add_freeze_waiter(Context *c)
+{
+  // wait on freeze root
+  CDir *t = this;
+  while (!t->is_freeze_root()) {
+	t = t->inode->parent->dir;
+  }
+  t->add_waiter(c);
+}
+
+void CDir::freeze(Context *c)
+{
+  cout << " state " << state << endl;
+  assert((state & (CDIR_MASK_FROZEN|CDIR_MASK_FREEZING)) == 0);
+
   state_set(CDIR_MASK_FROZEN);
   inode->get();
+
+  if (nested_hard_pinned == 0) {
+
+	// easy, we're frozen
+	c->finish(0);
+	delete c;
+
+  } else {
+	// need to wait for pins to expire
+	state_set(CDIR_MASK_FREEZING);
+	waiting_on_freeze = c;
+  }
+}
+
+void CDir::freeze_finish()
+{
+  Context *c = waiting_on_freeze;
+  waiting_on_freeze = NULL;
+  state_clear(CDIR_MASK_FREEZING);
+
+  if (c) {
+	c->finish(0);
+	delete c;
+  }
 }
 
 void CDir::unfreeze()  // thaw?

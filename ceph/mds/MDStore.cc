@@ -163,6 +163,31 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 // ----------------------------
 // commit_dir
 
+class C_MDS_CommitDirDelay : public Context {
+public:
+  MDS *mds;
+  inodeno_t ino;
+  Context *c;
+  C_MDS_CommitDirDelay( MDS *mds, inodeno_t ino, Context *c) {
+	this->mds = mds;
+	this->c = c;
+	this->ino = ino;
+  }
+  virtual void finish(int r) {
+	CInode *in = mds->mdcache->get_inode(ino);
+	if (in) {
+	  mds->mdstore->commit_dir(in, c);
+	} else {
+	  // must have exported ors omethign!
+	  cout << "can't retry commit dir on " << ino << ", must have exported?" << endl;
+	  if (c) {
+ 		c->finish(-1);
+		delete c;
+	  }
+	}
+  }
+};
+
 class MDCommitDirContext : public Context {
  protected:
   MDStore *ms;
@@ -218,6 +243,13 @@ bool MDStore::commit_dir( CInode *in,
 	return false;
   }
 
+  if (!in->dir->can_hard_pin()) {
+	// something must be frozen up the hiearchy!
+	in->dir->add_hard_pin_waiter( new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
+	return false;
+  }
+
+
   // is it complete?
   if (in->dir->get_state() & CDIR_MASK_COMPLETE == 0) {
 	cout << "dir not complete, fetching first" << endl;
@@ -226,6 +258,9 @@ bool MDStore::commit_dir( CInode *in,
 	fetch_dir(in, fin);
 	return false;
   }
+
+
+
 
   // get continuation ready
   MDCommitDirContext *fin = new MDCommitDirContext(this, in, c);
@@ -256,7 +291,7 @@ bool MDStore::commit_dir( CInode *in,
   *((__uint32_t*)fin->buf) = num;
   
   // pin inode
-  in->get();
+  in->dir->hard_pin();
   in->dir->state_set(CDIR_MASK_MID_COMMIT);
 
   // submit to osd
@@ -283,12 +318,13 @@ bool MDStore::commit_dir_2( int result,
   }
   in->dir->state_clear(CDIR_MASK_MID_COMMIT);
 
-  // unpin inode
-  in->put();
+  // unpin
+  in->hard_unpin();
 
   // finish
   if (c) {
 	c->finish(result);
 	delete c;
   }
+
 }

@@ -153,6 +153,12 @@ public:
   virtual void finish(int r) {
 	mds->dispatch(m);
   }
+  
+  virtual bool can_redelegate() {
+	return true;
+  }
+  
+  virtual void redelegate(MDS *mds, int newmds);
 };
 
 

@@ -16,7 +16,7 @@ class MOSDWriteReply : public Message {
 	this->oid = r->oid;
 	this->offset = r->offset;
   }
-  virtual char *get_type_name() { return "owriter"; }
+  virtual char *get_type_name() { return "owrr"; }
 };
 
 #endif
