@@ -2555,6 +2555,8 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 	  root = in;
 	  add_inode( in );
 	  //dout(7) << " added root " << root << endl;
+	} else {
+	  root->inode.ino = in->inode.ino;  // bleh
 	}
 	vector<CInode*> trace;
 	trace.push_back(root);

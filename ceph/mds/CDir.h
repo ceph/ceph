@@ -155,6 +155,9 @@ class CDir {
   void mark_clean() {
 	state_clear(CDIR_STATE_DIRTY);
   }
+  void mark_complete() {
+	state_set(CDIR_STATE_COMPLETE);
+  }
   bool is_clean() {
 	return !state_test(CDIR_STATE_DIRTY);
   }
