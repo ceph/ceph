@@ -2798,6 +2798,7 @@ void MDCache::export_dir_go(CDir *dir,
 	dir->put(CDIR_PIN_IMPORT);                  // unpin, no longer an import
 	
 	// discard nested exports (that we're handing off
+	// NOTE: possible concurrent modification bug?
 	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
 	  nested_exports.equal_range(dir);
 	while (p.first != p.second) {
@@ -2820,6 +2821,7 @@ void MDCache::export_dir_go(CDir *dir,
 	dir->get(CDIR_PIN_EXPORT);                  // i must keep it pinned
 	
 	// discard nested exports (that we're handing off)
+	// NOTE: possible concurrent modification bug?
 	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
 	  nested_exports.equal_range(containing_import);
 	while (p.first != p.second) {
@@ -3396,14 +3398,20 @@ void MDCache::handle_export_dir(MExportDir *m)
       mds->logger->inc("immyex");
 
       // move nested exports under containing_import
+	  list<CDir*> to_move;
       for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
              nested_exports.equal_range(ex);
            p.first != p.second;
            p.first++) {
         CDir *nested = (*p.first).second;
-        dout(7) << "     moving nested export " << nested << " under " << containing_import << endl;
-        nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
+        dout(7) << "     moving nested export " << *nested << " under " << *containing_import << endl;
+		to_move.push_back(nested);
       }
+	  for (list<CDir*>::iterator it = to_move.begin();
+		   it != to_move.end();
+		   it++) {
+        nested_exports.insert(pair<CDir*,CDir*>(containing_import, *it));
+	  }
 
       // de-list under old import
       nested_exports.erase(ex);	

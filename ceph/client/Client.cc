@@ -461,6 +461,24 @@ void Client::issue_request()
 	  else if (!g_conf.client_deterministic &&
 			   r < 35 && !cwd->isdir)
 		op = MDS_OP_UNLINK;
+	  else if (false && !g_conf.client_deterministic &&
+			   r < 37 && cwd->isdir) {
+		op = MDS_OP_MKDIR;
+		string dn = "client_dir.";
+		char num[10];
+		sprintf(num,"%d",rand()%100);
+		dn += num;
+
+		dout(10) << "trying mkdir on " << p << " / " << dn << endl;
+		if (cwd->lookup(dn))
+		  op = MDS_OP_STAT; // nevermind, exists
+		else {
+		  // do it
+		  p += "/";
+		  p += dn;
+		  last_req_dn.push_back(dn);
+		}
+	  }
 	  else if (r < 41 + open_files.size() && open_files.size() > 0)
 		return close_a_file();  // close file
 	}

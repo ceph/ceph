@@ -51,18 +51,20 @@ DOCUMENT
 
 
 TEST
-- test hash/unhash operation
-- hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
-- test nauthitems (wrt hashing?)
+- hashing
+ - test hash/unhash operation
+ - hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.
+ - test nauthitems (wrt hashing?)
 
 
 IMPLEMENT
 
-- hash + unhash!
 - rmdir
 - mkdir
 - rename
 - truncate
+
+- hash + unhash!
 
 - dir sync
  - stat of a dir should return dir size????

@@ -184,7 +184,11 @@ class MDS : public Dispatcher {
 							  CInode *cur);
 
   void handle_client_mkdir(MClientRequest *req);
-  void handle_client_rmdir(MClientRequest *req);
+  void handle_client_rmdir(MClientRequest *req, CInode *cur);
+
+  void handle_client_rename(MClientRequest *req, CInode *cur);
+  void handle_client_rename_mvlocal(MClientRequest *req, CInode *cur);
+  void handle_client_rename_mvremote(MClientRequest *req, CInode *cur);
 
 
   int do_stat(MClientRequest *m);

@@ -349,6 +349,10 @@ int MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_OPENWRC:
 	handle_client_openwrc(req);
 	return 0;
+
+  case MDS_OP_MKDIR:
+	handle_client_mkdir(req);
+	return 0;
   }
 
   
@@ -400,6 +404,7 @@ int MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_OPENRD:
 	reply = handle_client_openrd(req, cur);
 	break;
+
   case MDS_OP_OPENWR:
 	reply = handle_client_openwr(req, cur);
 	break;
@@ -407,6 +412,16 @@ int MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_UNLINK:
 	handle_client_unlink(req, cur);
 	break;
+
+	/*
+  case MDS_OP_RMDIR:
+	handle_client_rmdir(req, cur);
+	break;
+
+  case MDS_OP_RENAME:
+	handle_client_rename(req, cur);
+	break;
+	*/
 
   default:
 	dout(1) << " unknown mop " << req->get_op() << endl;
@@ -915,9 +930,119 @@ void MDS::handle_client_unlink_2(MClientRequest *req,
 }
 
 
+void MDS::handle_client_mkdir(MClientRequest *req) 
+{
+  // get containing directory
+  filepath dirpath = req->get_filepath().subpath(req->get_filepath().depth());
+  string name = req->get_filepath().last_bit();
+
+  vector<CInode*> trace;
+  int r = mdcache->path_traverse(dirpath, trace, req, MDS_TRAVERSE_FORWARD);
+  if (r > 0) return;  // forwarded
+  if (r < 0) {
+	dout(10) << "error, replying" << endl;
+	MClientReply *reply = new MClientReply(req, r);
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	
+	// discard request
+	delete req;
+	return;
+  }
+
+  // ok!
+  CInode *diri = trace[trace.size()-1];
+  assert(diri->is_dir());
+  assert(diri->dir_is_auth());
+  CDir *dir = diri->get_or_open_dir(this);
+  
+  // make sure name doesn't already exist
+  if (dir->lookup(name) != 0) {
+	// name already exists
+	dout(10) << "name " << name << " exists in " << *dir << endl;
+	MClientReply *reply = new MClientReply(req, -EEXIST);
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	
+
+	delete req;
+	return;
+  }
+
+  // create!
+  CInode *newi = mdcache->create_inode();
+  mdcache->link_inode(dir, name, newi);
+  
+  newi->inode.isdir = 1;
+
+  newi->mark_dirty();
+
+  // log it
+  dout(10) << "log for " << *req << " create " << newi->ino() << endl;
+  mdlog->submit_entry(new EInodeUpdate(newi),                    // FIXME should be differnet log entry
+					  new C_MDS_RetryMessage(this, req));
+
+  // reply
+  MClientReply *reply = new MClientReply(req);
+  messenger->send_message(reply,
+						  MSG_ADDR_CLIENT(req->get_client()), 0,
+						  MDS_PORT_SERVER);
+  delete req;
+  return;
+}
 
 
 
+// WRITE ME
+
+
+/*
+void MDS::handle_client_rmdir(MClientRequest *req,
+							  CInode *cur)
+{
+  assert(cur->is_auth());
+  assert(cur->is_dir());
+  
+  if (cur->dir_is_auth()) {
+	// ok good, i have the dir and the inode.  
+	CDir *dir = cur->get_or_open_dir(this);
+	
+	// empty?
+	if (dir->get_size() > 0) {
+	  // not empty
+	  MClientReply *reply = new MClientReply(req, -ENOTEMPTY);
+	  return reply;
+	} else {
+	  if (!dir->is_complete()) {
+		// fetch
+		mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(this, req));
+		return 0;
+	  }
+	  
+	  // else... complete and empty!
+	}
+	assert(dir->is_complete());
+	assert(dir->get_size() == 0);
+
+	// close any dups?
+	if (dir->is_open_by_anyone()) {
+	  // ***
+	}
+
+	// remove
+		
+	
+  } else {
+	// ugh: reimport, but only if empty, etc.
+	
+  }
+
+  
+}
+
+*/
 
 
 
