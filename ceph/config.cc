@@ -28,7 +28,7 @@ md_config_t g_conf = {
 
   fake_clock: true,
 
-  debug: 1,
+  debug: 10,
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,

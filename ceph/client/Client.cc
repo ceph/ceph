@@ -254,9 +254,9 @@ void Client::issue_request()
 	int r = rand() % 100;
 	if (r < 10)
 	  op = MDS_OP_TOUCH;
-	else if (r < 20) 
+	else if (r < 20 && !is_open(cwd)) 
 	  op = MDS_OP_OPENRD;
-	else if (r < 30)
+	else if (r < 30 && !is_open(cwd))
 	  op = MDS_OP_OPENWR;
 	else if (r < 40 + open_files.size() && open_files.size() > 0) {
 	  // close file
@@ -269,6 +269,13 @@ void Client::issue_request()
   send_request(p, op);  // root, if !cwd
 }
 
+
+bool Client::is_open(ClNode *c) 
+{
+  if (open_files.count(c->ino))
+	return true;
+  return false;
+}
 
 void Client::close_a_file()
 {

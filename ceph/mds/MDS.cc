@@ -588,7 +588,8 @@ MClientReply *MDS::handle_client_openrd(MClientRequest *req,
   // hmm, check permissions or something.
  
   // add reader
-  cur->open_read_add(MSG_ADDR_NUM(req->get_source()));
+  int client = req->get_client();
+  cur->open_read_add(client);
 
   // reply
   MClientReply *reply = new MClientReply(req);
@@ -606,7 +607,7 @@ void MDS::handle_client_close(MClientRequest *req)
   // hmm, check permissions or something.
   
   // verify on read or write list
-  int client = MSG_ADDR_NUM(req->get_source());
+  int client = req->get_client();
   if (!cur->open_remove(client)) {
 	dout(1) << "close on unopen file " << *cur << endl;
 	assert(2+2==5);
@@ -627,9 +628,7 @@ void MDS::handle_client_close(MClientRequest *req)
 MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 										CInode *cur)
 {
-  if (cur->is_auth()) {
-	dout(10) << "open (write) [auth] " << *cur << endl;
-  } else {
+  if (!cur->is_auth()) {
 	if (!cur->is_softasync()) {
 	  int auth = cur->authority(get_cluster());
 	  assert(auth != whoami);
@@ -645,10 +644,13 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 	assert(0);
   }
 
+  dout(10) << "open (write) [auth] " << *cur << endl;
+
   // hmm, check permissions!
   
   // add to writer list.
-  cur->open_write_add(MSG_ADDR_NUM(req->get_source()));
+  int client = req->get_client();
+  cur->open_write_add(client);
 	  
   // reply
   MClientReply *reply = new MClientReply(req);

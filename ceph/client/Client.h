@@ -49,6 +49,7 @@ class Client : public Dispatcher {
 
   virtual void send_request(string& p, int op);
   void close_a_file();
+  bool is_open(ClNode *n);
 
   virtual void trim_cache();
 };
