@@ -182,7 +182,7 @@ class CDir {
 
   int is_hard_pinned() { return hard_pinned; }
   int adjust_nested_hard_pinned(int a);
-  bool can_hard_pin() { return !is_frozen(); }  // and is_freezing??
+  bool can_hard_pin() { return !(is_frozen() || is_freezing()); }
   void add_hard_pin_waiter(Context *c);
   void hard_pin();
   void hard_unpin();

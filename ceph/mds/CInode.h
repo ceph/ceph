@@ -53,6 +53,9 @@ using namespace std;
 #define CINODE_PIN_PRESYNC      70002   // waiter
 #define CINODE_PIN_WAITONUNSYNC 70003   // waiter
 
+#define CINODE_PIN_PRELOCK      70004
+#define CINODE_PIN_WAITONUNLOCK 70005
+
 // directory authority types
 //  >= is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
@@ -69,8 +72,8 @@ using namespace std;
 
 #define CINODE_DIST_PRELOCK        64   // file mode, owner, etc.
 #define CINODE_DIST_LOCKBYME      128 // i am auth
-#define CINODE_DIST_LOCKBYTHEM    256 // i am not auth
-
+#define CINODE_DIST_LOCKBYAUTH    256 // i am not auth
+#define CINODE_DIST_WAITONUNLOCK  512
 
 class Context;
 class CDentry;
@@ -118,8 +121,10 @@ class CInode : LRUObject {
   unsigned         dist_state;
   set<int>         sync_waiting_for_ack;
   list<Context*>   waiting_for_sync;
+  set<int>         lock_waiting_for_ack;
   list<Context*>   waiting_for_lock;
-  int              soft_sync_count;
+  int              lock_active_count;  // count for in progress or waiting locks
+
 
   // open file state
   // sets of client ids!
@@ -233,8 +238,9 @@ class CInode : LRUObject {
   void take_sync_waiting(list<Context*>& ls);
 
   bool is_lockbyme() { return dist_state & CINODE_DIST_LOCKBYME; }
-  bool is_lockbythem() { return dist_state & CINODE_DIST_LOCKBYTHEM; }
+  bool is_lockbyauth() { return dist_state & CINODE_DIST_LOCKBYAUTH; }
   bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
+  bool is_waitonunlock() { return dist_state & CINODE_DIST_WAITONUNLOCK; }
 
   void add_lock_waiter(Context *c);
   void take_lock_waiting(list<Context*>& ls);

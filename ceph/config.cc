@@ -34,6 +34,7 @@ md_config_t g_conf = {
   mdcache_mid: .8,
   mdcache_sticky_sync_normal: true,
   mdcache_sticky_sync_softasync: false,
+  mdcache_sticky_lock: false,   // sticky probably a bad idea
 
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,

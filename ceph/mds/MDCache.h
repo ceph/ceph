@@ -168,15 +168,13 @@ class MDCache {
   void handle_inode_sync_recall(MInodeSyncRecall *m);
 
   // hard locks  
-  bool read_hard_start(CInode *in, Message *m);
-  int waitfor_lock(CInode *in, Message *m);
-  int read_hard_finish(CInode *in);
-
+  bool read_hard_try(CInode *in, Message *m);
   bool write_hard_start(CInode *in, Message *m);
   void write_hard_finish(CInode *in);
 
   void inode_lock_start(CInode *in);
   void inode_lock_release(CInode *in);
+  void inode_lock_wait(CInode *in);
 
   void handle_inode_lock_start(MInodeLockStart *m);
   void handle_inode_lock_ack(MInodeLockAck *m);

@@ -24,6 +24,7 @@ struct md_config_t {
   float mdcache_mid;
   bool mdcache_sticky_sync_normal;
   bool mdcache_sticky_sync_softasync;
+  bool mdcache_sticky_lock;
 
   float mdbal_replicate_threshold;
   float mdbal_unreplicate_threshold;

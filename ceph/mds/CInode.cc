@@ -31,7 +31,7 @@ CInode::CInode() : LRUObject() {
   nested_hard_pinned = 0;
   //  state = 0;
   dist_state = 0;
-  soft_sync_count = 0;
+  lock_active_count = 0;
   
   version = 0;
 

@@ -364,11 +364,11 @@ int MDS::handle_client_request(MClientRequest *req)
 	break;
 
   case MDS_OP_TOUCH:
-  case MDS_OP_CHMOD:
 	reply = handle_client_touch(req, cur);
 	break;
 
-	//reply = handle_client_chmod(req, cur);
+  case MDS_OP_CHMOD:
+	reply = handle_client_chmod(req, cur);
 	break;
 
   case MDS_OP_OPENRD:
@@ -440,45 +440,32 @@ public:
 MClientReply *MDS::handle_client_touch(MClientRequest *req,
 									   CInode *cur)
 {
-  int auth = cur->authority(mdcluster);
-
-  if (auth == whoami) {
-	
-	if (!cur->can_hard_pin()) {
-	  // wait
-	  cur->add_hard_pin_waiter(new C_MDS_RetryMessage(this, req));
-	  return 0;
-	}
-	
-	// write
-	if (!mdcache->write_soft_start(cur, req))
-	  return 0;  // sync
-
-	cur->hard_pin();
-
-	// do update
-	cur->inode.mtime++; // whatever
-	cur->inode.touched++;
-	cur->mark_dirty();
-
-	// tell replicas
-	// actually, no!  it's synced by me, or async.  they'll get told upon release.  
-	//mdcache->send_inode_updates(cur);
-
-	// log it
-	dout(10) << "log for " << *req << " touch " << cur->inode.touched << endl;
-	mdlog->submit_entry(new EInodeUpdate(cur),
-						new C_MDS_TouchFinish(this, req, cur));
-	return 0;
-  } else {
-
-	// forward
-	dout(10) << "forwarding touch to authority " << auth << endl;
-	messenger->send_message(req,
-							MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
-							MDS_PORT_SERVER);
+  if (!cur->can_hard_pin()) {
+	// wait
+	cur->add_hard_pin_waiter(new C_MDS_RetryMessage(this, req));
 	return 0;
   }
+	
+  // write
+  if (!mdcache->write_soft_start(cur, req))
+	return 0;  // fw or (wait for) sync
+
+  cur->hard_pin();
+  
+  // do update
+  cur->inode.mtime++; // whatever
+  cur->inode.touched++;
+  cur->mark_dirty();
+  
+  // tell replicas
+  // actually, no!  it's synced by me, or async.  they'll get told upon release.  
+  //mdcache->send_inode_updates(cur);
+  
+  // log it
+  dout(10) << "log for " << *req << " touch " << cur->inode.touched << endl;
+  mdlog->submit_entry(new EInodeUpdate(cur),
+					  new C_MDS_TouchFinish(this, req, cur));
+  return 0;
 }
 
 						   
@@ -500,19 +487,94 @@ void MDS::handle_client_touch_2(MClientRequest *req,
   stat_req.hit();
   stat_ops++;
 
-  cur->hard_unpin();
-
   // done
   delete req;
 
   // unpin
+  cur->hard_unpin();
   mdcache->write_soft_finish(cur);
 }
+
+
+
+class C_MDS_ChmodFinish : public Context {
+public:
+  CInode *in;
+  MClientRequest *req;
+  MDS *mds;
+  C_MDS_ChmodFinish(MDS *mds, MClientRequest *req, CInode *cur) {
+	this->mds = mds;
+	this->in = cur;
+	this->req = req;
+  }
+  virtual void finish(int result) {
+	mds->handle_client_chmod_2(req, in);
+  }
+};
+
+
+MClientReply *MDS::handle_client_chmod(MClientRequest *req,
+									   CInode *cur)
+{
+  if (!cur->can_hard_pin()) {
+	// wait
+	cur->add_hard_pin_waiter(new C_MDS_RetryMessage(this, req));
+	return 0;
+  }
+	
+  // write
+  if (!mdcache->write_hard_start(cur, req))
+	return 0;  // fw or (wait for) lock
+
+  cur->hard_pin();
+  
+  // do update
+  cur->inode.mtime++; // whatever
+  cur->inode.touched++; // blah
+  cur->mark_dirty();
+
+  // log it
+  dout(10) << "log for " << *req << " chmod" << endl;
+  mdlog->submit_entry(new EInodeUpdate(cur),
+					  new C_MDS_TouchFinish(this, req, cur));
+  return 0;
+}
+
+
+void MDS::handle_client_chmod_2(MClientRequest *req,
+								CInode *cur)
+{
+  // reply
+  dout(10) << "reply to " << *req << " touch" << endl;
+  MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist( cur, whoami );
+  reply->set_result(0);
+  
+  messenger->send_message(reply,
+						  MSG_ADDR_CLIENT(req->get_client()), 0,
+						  MDS_PORT_SERVER);
+  
+  logger->inc("otouch");
+  stat_write.hit();
+  stat_req.hit();
+  stat_ops++;
+
+  // done
+  delete req;
+  
+  // unpin
+  cur->hard_unpin();
+  mdcache->write_hard_finish(cur);
+}
+
 
 
 MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 										 CInode *cur)
 {
+  if (!mdcache->read_hard_try(cur,req))
+	return NULL;
+
   // it's a directory, right?
   if (!cur->is_dir()) {
 	// not a dir
