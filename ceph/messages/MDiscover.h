@@ -41,8 +41,19 @@ class MDiscover : public Message {
   }
   virtual char *get_type_name() { return "disc"; }
 
-  void add_bit(MDiscoverRec_t b) {
-	trace.push_back(b);
+  void add_bit(CInode *in, int auth) {
+	MDiscoverRec_t bit;
+
+	bit.inode = in->inode;
+	bit.cached_by = in->cached_by;
+	bit.cached_by.insert( auth );  // obviously the authority has it too
+	bit.dir_auth = in->dir_auth;
+	if (in->is_dir() && in->dir) {
+	  bit.dir_rep = in->dir->dir_rep;
+	  bit.dir_rep_by = in->dir->dir_rep_by;
+	}
+
+	trace.push_back(bit);
   }
 
   string current_base() {

@@ -30,7 +30,7 @@ bool fetch_inode( mdloc_t where,
   bool fetch_dir_2( int result, 
 					char *buf, 
 					size_t buflen, 
-					CInode *in );
+					inodeno_t ino );
   
   
   

@@ -8,6 +8,7 @@
 
 #include "include/Context.h"
 
+#include <cassert>
 
 // CDir
 
@@ -29,6 +30,8 @@ void CDir::hit()
 
 void CDir::add_child(CDentry *d) 
 {
+  assert(nitems == items.size());
+
   //cout << "adding " << d->name << " to " << this << endl;
   items[d->name] = d;
   d->dir = this;
@@ -37,7 +40,7 @@ void CDir::add_child(CDentry *d)
   namesize += d->name.length();
   
   if (nitems == 1)
-	inode->get();       // pin parent
+	inode->get(CINODE_PIN_CHILD);       // pin parent
 }
 
 void CDir::remove_child(CDentry *d) {
@@ -48,7 +51,7 @@ void CDir::remove_child(CDentry *d) {
   namesize -= d->name.length();
 
   if (nitems == 0)
-	inode->put();       // release parent.
+	inode->put(CINODE_PIN_CHILD);       // release parent.
 }
 
 
@@ -64,30 +67,15 @@ CDentry* CDir::lookup(string n) {
 
 int CDir::dentry_authority(string& dn, MDCluster *mdc)
 {
-  if (dir_auth == CDIR_AUTH_PARENT) {
+  if (inode->dir_auth == CDIR_AUTH_PARENT) {
 	return inode->authority( mdc );       // same as my inode
   }
-  if (dir_auth == CDIR_AUTH_HASH) {
+  if (inode->dir_auth == CDIR_AUTH_HASH) {
 	return mdc->hash_dentry( this, dn );  // hashed
   }
 
-  // explicit for this whole dir
-  return dir_auth;
-}
-
-int CDir::dir_authority(MDCluster *mdc) 
-{
-  // explicit
-  if (dir_auth >= 0)
-	return dir_auth;
-
-  // parent
-  if (dir_auth == CDIR_AUTH_PARENT)
-	return inode->authority(mdc);
-
-  // hashed
-  throw "hashed not implemented";
-  return CDIR_AUTH_HASH;
+  // it's explicit for this whole dir
+  return inode->dir_auth;
 }
 
 
@@ -95,10 +83,16 @@ int CDir::dir_authority(MDCluster *mdc)
 
 void CDir::add_waiter(string& dentry,
 								Context *c) {
+  if (waiting_on_dentry.size() +
+	  waiting_on_all.size() == 0)
+	inode->get(CINODE_PIN_DIRWAIT);
   waiting_on_dentry[ dentry ].push_back(c);
 }
 
 void CDir::add_waiter(Context *c) {
+  if (waiting_on_dentry.size() +
+	  waiting_on_all.size() == 0)
+	inode->get(CINODE_PIN_DIRWAIT);
   waiting_on_all.push_back(c);
 }
 
@@ -106,14 +100,21 @@ void CDir::add_waiter(Context *c) {
 void CDir::take_waiting(string& dentry,
 						list<Context*>& ls)
 {
+  if (waiting_on_dentry.size() +
+	  waiting_on_all.size())
+	inode->put(CINODE_PIN_DIRWAIT);
   if (waiting_on_dentry.count(dentry) > 0)
 	ls.splice(ls.end(), waiting_on_dentry[ dentry ]);
 }
 
 void CDir::take_waiting(list<Context*>& ls)
 {
+  if (waiting_on_dentry.size() +
+	  waiting_on_all.size())
+	inode->put(CINODE_PIN_DIRWAIT);
+  
   ls.splice(ls.end(), waiting_on_all);
-
+  
   // all dentry waiters
   hash_map<string, list<Context*> >::iterator it;
   for (it = waiting_on_dentry.begin(); it != waiting_on_dentry.end(); it++) 
@@ -133,30 +134,32 @@ void CDir::add_hard_pin_waiter(Context *c) {
 	
   
 void CDir::hard_pin() {
-  inode->get();
+  inode->get(CINODE_PIN_DHARDPIN + hard_pinned);
   hard_pinned++;
   inode->adjust_nested_hard_pinned( 1 );
 }
 
 void CDir::hard_unpin() {
-  inode->put();
   hard_pinned--;
-  inode->adjust_nested_hard_pinned( -1 );
+  inode->put(CINODE_PIN_DHARDPIN + hard_pinned);
 
   // pending freeze?
   if (waiting_to_freeze.size() &&
 	  hard_pinned + nested_hard_pinned == 0)
 	freeze_finish();
+
+  inode->adjust_nested_hard_pinned( -1 );
 }
 
 int CDir::adjust_nested_hard_pinned(int a) {
   nested_hard_pinned += a;
-  inode->adjust_nested_hard_pinned(a);
 
   // pending freeze?
   if (waiting_to_freeze.size() &&
 	  hard_pinned + nested_hard_pinned == 0)
 	freeze_finish();
+
+  inode->adjust_nested_hard_pinned(a);
 }
 
 
@@ -167,6 +170,15 @@ bool CDir::is_frozen()
 	return true;
   if (inode->parent)
 	return inode->parent->dir->is_freeze_root();
+  return false;
+}
+
+bool CDir::is_freezing() 
+{
+  if (state & CDIR_MASK_FREEZING)
+	return true;
+  if (inode->parent)
+	return inode->parent->dir->is_freezing();
   return false;
 }
 
@@ -210,7 +222,8 @@ void CDir::freeze_finish()
 
   Context *c = waiting_to_freeze.front();
   waiting_to_freeze.pop_front();
-  state_clear(CDIR_MASK_FREEZING);
+  if (waiting_to_freeze.empty())
+	state_clear(CDIR_MASK_FREEZING);
   state_set(CDIR_MASK_FROZEN);
 
   if (c) {

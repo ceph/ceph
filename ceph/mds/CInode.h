@@ -9,6 +9,7 @@
 
 #include "CDentry.h"
 
+#include <cassert>
 #include <list>
 #include <vector>
 #include <set>
@@ -26,6 +27,21 @@ using namespace std;
 #define CINODE_MASK_EXPORT    32
 
 
+#define CINODE_PIN_CHILD     10000
+#define CINODE_PIN_CACHED    10001
+#define CINODE_PIN_IMPORT    10002
+#define CINODE_PIN_EXPORT    10003
+#define CINODE_PIN_FREEZE    10004
+#define CINODE_PIN_IMPORTING 10005
+#define CINODE_PIN_WWAIT     10010
+#define CINODE_PIN_RWAIT     10011
+#define CINODE_PIN_DIRWAIT   10012
+#define CINODE_PIN_IHARDPIN   20000
+#define CINODE_PIN_DHARDPIN   30000
+
+#define CDIR_AUTH_PARENT   -1   // default
+#define CDIR_AUTH_HASH     -2
+
 class Context;
 class CDentry;
 class CDir;
@@ -37,17 +53,22 @@ class Message;
 
 class CInode;
 ostream& operator<<(ostream& out, CInode& in);
+ostream& operator<<(ostream& out, set<int>& iset);
 
 
 // cached inode wrapper
 class CInode : LRUObject {
  public:
   inode_t          inode;     // the inode itself
+
   CDir            *dir;       // directory entries, if we're a directory
+  int              dir_auth;  // authority for child dir
 
  protected:
   int              ref;            // reference count (???????)
+  set<int>         ref_set;
   __uint32_t       version;
+
 
   // parent dentries in cache
   int              nparents;  
@@ -65,6 +86,7 @@ class CInode : LRUObject {
   //unsigned         state;
   //set<int>         sync_waiting_for_ack;
 
+ private:
   // waiters
   list<Context*>   waiting_for_write;
   list<Context*>   waiting_for_read;
@@ -81,6 +103,7 @@ class CInode : LRUObject {
   friend class CDir;
   friend class MDStore;
   friend class MDS;
+  friend class MDiscover;
 
  public:
   CInode();
@@ -122,6 +145,7 @@ class CInode : LRUObject {
   
   // dist cache
   int authority(MDCluster *mdc);
+  int dir_authority(MDCluster *mdc);
 
 
   int is_hard_pinned() { 
@@ -140,19 +164,22 @@ class CInode : LRUObject {
   void take_read_waiting(list<Context*>& ls);
 
   // --- reference counting
-  void put() {
-	if (ref == 0) 
-	  throw 1;
+  void put(int by) {
+	assert(ref > 0);
+	assert(ref_set.count(by) == 1);
 	ref--;
+	ref_set.erase(by);
 	if (ref == 0)
 	  lru_unpin();
-	cout << "put " << *this << " now " << ref << endl;
+	cout << "put " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
   }
-  void get() {
+  void get(int by) {
 	if (ref == 0)
 	  lru_pin();
+	assert(ref_set.count(by) == 0);
 	ref++;
-	cout << "get " << *this << " now " << ref << endl;
+	ref_set.insert(by);
+	cout << "get " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
   }
 
   // --- hierarchy stuff

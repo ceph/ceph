@@ -18,6 +18,7 @@ class MDS;
 class Message;
 class MExportDir;
 class MExportDirAck;
+class MExportDirNotify;
 class MDiscover;
 class MInodeUpdate;
 class MDirUpdate;
@@ -108,8 +109,8 @@ class MDCache {
   int proc_message(Message *m);
 
   int handle_discover(MDiscover *dis);
-  
-  void handle_export_dir_ack(MExportDirAck *m);
+
+  // exporter
   void export_dir(CInode *in,
 				  int mds);
   void export_dir_frozen(CInode *in,
@@ -119,9 +120,14 @@ class MDCache {
 					   class C_MDS_ExportFinish *fin,
 					   CInode *idir);
   void export_dir_purge(CInode *idir);
+  void handle_export_dir_ack(MExportDirAck *m);
   
+  // importer
   void handle_export_dir(MExportDir *m);
   void import_dir_block(pchar& p, CInode *containing_import);
+
+  // dir authoirty bystander
+  void handle_export_dir_notify(MExportDirNotify *m);
 
   int send_inode_updates(CInode *in);
   void handle_inode_update(MInodeUpdate *m);

@@ -108,6 +108,9 @@ mds_load_t MDS::get_load()
 
 void MDS::proc_message(Message *m) 
 {
+  
+  //if (whoami == 8)	mdcache->show_imports();
+
   switch (m->get_type()) {
 	// MISC
   case MSG_PING:
@@ -378,7 +381,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   }
   
   // make sure i'm authoritative!
-  int dirauth = cur->dir->dir_authority(mdcluster);          // FIXME hashed, etc.
+  int dirauth = cur->dir_authority(mdcluster);          // FIXME hashed, etc.
   if (dirauth == whoami) {
 	
 	if (cur->dir->is_complete()) {
@@ -408,7 +411,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  return reply;
 	} else {
 	  // fetch
-	  cout << "mds" << whoami << " incomplete dir contents for readdir on " << cur->inode.ino << ", fetching" << endl;
+	  cout << "mds" << whoami << " incomplete dir contents for readdir on " << *cur << ", fetching" << endl;
 	  mdstore->fetch_dir(cur, new C_MDS_RetryMessage(this, req));
 	  return 0;
 	}
@@ -421,6 +424,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  messenger->send_message(req,
 							  MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
 							  MDS_PORT_SERVER);
+	  mdcache->show_imports();
 	}
 	return 0;
   }

@@ -11,6 +11,7 @@
 #include <string>
 
 #include <iostream>
+#include <cassert>
 
 #include <list>
 #include <set>
@@ -36,8 +37,6 @@ class Context;
 #define CDIR_STATE_INITIAL 0   // ?
 
 // distributions
-#define CDIR_AUTH_PARENT   -1   // default
-#define CDIR_AUTH_HASH     -2
 
 #define CDIR_REP_ALL       1
 #define CDIR_REP_NONE      0
@@ -60,12 +59,9 @@ class CDir {
   list<Context*>   waiting_on_all;  // eg readdir
   hash_map< string, list<Context*> > waiting_on_dentry;
 
-  // cache
-  int              dir_auth;
+  // cache  (defined for authority; hints for replicas)
   int              dir_rep;
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
-  //bool             is_import, is_export;
-
 
   // lock nesting, freeze
   int        hard_pinned;
@@ -77,6 +73,7 @@ class CDir {
   friend class CInode;
   friend class MDCache;
   friend class MDBalancer;
+  friend class MDiscover;
 
  public:
   CDir(CInode *in) {
@@ -90,10 +87,14 @@ class CDir {
 	hard_pinned = 0;
 	nested_hard_pinned = 0;
 
-	dir_auth = CDIR_AUTH_PARENT;
 	dir_rep = CDIR_REP_NONE;
   }
 
+
+  size_t get_size() { 
+	assert(nitems == items.size());
+	return nitems; 
+  }
 
   // state
   unsigned get_state() { return state; }
@@ -118,6 +119,7 @@ class CDir {
 					list<Context*>& ls);  
 
   bool is_frozen();
+  bool is_freezing();
   void freeze(Context *c);
   void freeze_finish();
   void unfreeze();
@@ -144,7 +146,6 @@ class CDir {
 
   // distributed cache
   int dentry_authority(string& d, MDCluster *mdc);
-  int dir_authority(MDCluster *mdc);
 
 
   // for storing..

@@ -10,6 +10,21 @@
 
 #include <string>
 
+
+ostream& operator<<(ostream& out, set<int>& iset)
+{
+  bool first = true;
+  for (set<int>::iterator it = iset.begin();
+	   it != iset.end();
+	   it++) {
+	if (!first) out << ",";
+	first = false;
+	out << *it;
+  }
+  return out;
+}
+
+
 // ====== CInode =======
 CInode::CInode() : LRUObject() {
   ref = 0;
@@ -18,6 +33,7 @@ CInode::CInode() : LRUObject() {
   nparents = 0;
   lru_next = lru_prev = NULL;
   
+  dir_auth = CDIR_AUTH_PARENT;
   dir = NULL;  // create CDir as needed
 
   hard_pinned = 0;
@@ -54,7 +70,7 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  return out << "[" << in.inode.ino << "]" << path;
+  return out << "[" << in.inode.ino << "]" << path << " " << &in;
 }
 
 
@@ -71,18 +87,26 @@ void CInode::hit()
 // waiting
 
 void CInode::add_write_waiter(Context *c) {
+  if (waiting_for_write.size() == 0)
+	get(CINODE_PIN_WWAIT);
   waiting_for_write.push_back(c);
 }
 void CInode::take_write_waiting(list<Context*>& ls)
 {
-  ls.splice(ls.end(), waiting_for_write);
+  if (waiting_for_write.size())
+	put(CINODE_PIN_WWAIT);
+  ls.splice(ls.end(), waiting_for_write);  
 }
 
 void CInode::add_read_waiter(Context *c) {
+  if (waiting_for_read.size() == 0)
+	get(CINODE_PIN_RWAIT);
   waiting_for_read.push_back(c);
 }
 void CInode::take_read_waiting(list<Context*>& ls)
 {
+  if (waiting_for_write.size())
+	put(CINODE_PIN_RWAIT);
   ls.splice(ls.end(), waiting_for_read);
 }
 
@@ -101,15 +125,15 @@ bool CInode::can_hard_pin() {
 }
 
 void CInode::hard_pin() {
-  get();
+  get(CINODE_PIN_IHARDPIN + hard_pinned);
   hard_pinned++;
   if (parent)
 	parent->dir->adjust_nested_hard_pinned( 1 );
 }
 
 void CInode::hard_unpin() {
-  put();
   hard_pinned--;
+  put(CINODE_PIN_IHARDPIN + hard_pinned);
   if (parent)
 	parent->dir->adjust_nested_hard_pinned( -1 );
 }
@@ -126,6 +150,22 @@ int CInode::authority(MDCluster *cl) {
   if (parent == NULL)
 	return 0;  // i am root
   return parent->dir->dentry_authority( parent->name, cl );
+}
+
+
+int CInode::dir_authority(MDCluster *mdc) 
+{
+  // explicit
+  if (dir_auth >= 0)
+	return dir_auth;
+
+  // parent
+  if (dir_auth == CDIR_AUTH_PARENT)
+	return authority(mdc);
+
+  // hashed
+  assert(0);  //  throw "hashed not implemented";
+  return CDIR_AUTH_HASH;
 }
 
 

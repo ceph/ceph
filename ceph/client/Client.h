@@ -26,7 +26,7 @@ class Client : public Dispatcher {
   vector<string> last_req_dn;
 
  public:
-  Client(int id, Messenger *m);
+  Client(int id, Messenger *m, long req);
   ~Client();
   
   int init();

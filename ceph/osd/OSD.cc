@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <iostream>
 
 char *osd_base_path = "./osddata";
@@ -100,6 +101,9 @@ void OSD::read(MOSDRead *r)
 
   } else {
 
+	// lock
+	flock(fd, LOCK_EX);
+
 	if (r->len == 0) { 	              // read whole thing
 	  r->len = lseek(fd, 0, SEEK_END);  // get size
 	  lseek(fd, 0, SEEK_SET);           // back to beginning
@@ -140,6 +144,9 @@ void OSD::write(MOSDWrite *m)
 	reply = new MOSDWriteReply(m, -1);
 
   } else {
+	// lock
+	flock(fd, LOCK_EX);
+
     fchmod(fd, 0664);
 	
 	cout << "osd_write " << m->len << " bytes to " << f << endl;

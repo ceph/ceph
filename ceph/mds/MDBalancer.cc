@@ -110,6 +110,8 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 	cout << " from mds0, new epoch" << endl;
 	beat_epoch = m->beat;
 	send_heartbeat();
+
+	mds->mdcache->show_imports();
   }
   
   mds_load[ m->get_source() ] = m->load;
@@ -220,21 +222,22 @@ void MDBalancer::do_rebalance()
 	// search imports from target
 	if (import_from_map.count(target)) {
 	  cout << " aha, looking through imports from target mds" << target << endl;
-	  pair<multimap<int,CInode*>::iterator, multimap<int,CInode*>::iterator> p;
-	  for (p = import_from_map.equal_range(target);
-		   p.first != p.second;
-		   p.first++) {
+	  pair<multimap<int,CInode*>::iterator, multimap<int,CInode*>::iterator> p =
+		p = import_from_map.equal_range(target);
+	  while (p.first != p.second) {
 		CInode *in = (*p.first).second;
+		cout << "considering " << *in << " from " << (*p.first).first << endl;
+		multimap<int,CInode*>::iterator plast = p.first++;
+		
 		if (in->is_root()) continue;
 		double pop = in->popularity.get();
-		cout << "considering " << *in << " from " << (*p.first).first << endl;
 		assert(in->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
 
 		if (pop <= amount) {
 		  cout << "reexporting " << *in << " pop " << pop << " back to " << target << endl;
 		  mds->mdcache->export_dir(in, target);
 		  amount -= pop;
-		  import_from_map.erase(target);
+		  import_from_map.erase(plast);
 		  import_pop_map.erase(pop);
 		} else {
 		  cout << "can't reexport " << *in << ", too big " << pop << endl;

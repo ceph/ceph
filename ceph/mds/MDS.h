@@ -157,6 +157,7 @@ class C_MDS_RetryMessage : public Context {
   MDS *mds;
 public:
   C_MDS_RetryMessage(MDS *mds, Message *m) {
+	assert(m);
 	this->m = m;
 	this->mds = mds;
   }

@@ -10,11 +10,13 @@ class MInodeUpdate : public Message {
  public:
   inode_t  inode;
   set<int> cached_by;
+  int      dir_auth;
 
-  MInodeUpdate(inode_t& inode, set<int>cached_by) :
+  MInodeUpdate(inode_t& inode, set<int>cached_by, int dir_auth) :
 	Message(MSG_MDS_INODEUPDATE) {
 	this->inode = inode;
 	this->cached_by = cached_by;
+	this->dir_auth = dir_auth;
   }
   virtual char *get_type_name() { return "iup"; }
 };

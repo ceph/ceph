@@ -31,15 +31,15 @@ void MDStore::proc_message(Message *m)
 class MDFetchDirContext : public Context {
  protected:
   MDStore *ms;
-  CInode *in;
+  inodeno_t ino;
 
  public:
   char *buf;
   size_t buflen;
 
-  MDFetchDirContext(MDStore *ms, CInode *in) : Context() {
+  MDFetchDirContext(MDStore *ms, inodeno_t ino) : Context() {
 	this->ms = ms;
-	this->in = in;
+	this->ino = ino;
 	buf = 0;
 	buflen = 0;
   }
@@ -48,7 +48,7 @@ class MDFetchDirContext : public Context {
   }
   
   void finish(int result) {
-	ms->fetch_dir_2( result, buf, buflen, in );
+	ms->fetch_dir_2( result, buf, buflen, ino );
   }
 };
 
@@ -68,7 +68,7 @@ bool MDStore::fetch_dir( CInode *in,
   in->mid_fetch = true;
 
   // create return context
-  MDFetchDirContext *fin = new MDFetchDirContext( this, in );
+  MDFetchDirContext *fin = new MDFetchDirContext( this, in->ino() );
 
   // issue osd read
   int osd = in->inode.ino % 10;
@@ -80,15 +80,19 @@ bool MDStore::fetch_dir( CInode *in,
 				 fin );
 }
 
-bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
+bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
 {
-  cout << "fetch_dir_2 on " << *dir << endl;
+  CInode *idir = mds->mdcache->get_inode(ino);
+  if (!idir) {
+	cout << "fetch_dir_2 on ino " << ino << " but no longer in our cache!" << endl;
+	return false;
+  } 
 
+  cout << "fetch_dir_2 on " << *idir << " ref " << idir->ref << " has " << idir->dir->get_size();
+  
   // make sure we have a CDir
-  if (dir->dir == NULL) {
-	dir->dir = new CDir(dir);
-  }
-
+  if (idir->dir == NULL) idir->dir = new CDir(idir);
+	
   // parse buffer contents into cache
   __uint32_t num = *((__uint32_t*)buf);
   cout << "  " << num << " items" << endl;
@@ -98,58 +102,60 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 	string dname = buf+p;
 	p += dname.length() + 1;
 	//cout << "parse filename " << dname << endl;
-
+	
 	// just a hard link?
 	if (*(buf+p) == 'L') {
 	  // yup.  we don't do that yet.
 	  throw "not implemented";
 	} else {
 	  p++;
-
+	  
 	  // inode
 	  CInode *in = new CInode();
 	  memcpy(&in->inode, buf+p, sizeof(inode_t));
 	  p += sizeof(inode_t);
 	  
-	  cout << " got " << in->inode.ino << " " << dname << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
-
 	  if (mds->mdcache->have_inode(in->inode.ino)) {
-		cout << " already had inode, skipping!" << endl;
+		cout << " readdir got (but i already had) " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
 		
 		inodeno_t ino = in->inode.ino;
 		delete in;
 		in = mds->mdcache->get_inode(ino);
 		continue;
 	  }
-		
+	  
 	  // add and link
 	  mds->mdcache->add_inode( in );
-	  mds->mdcache->link_inode( dir, dname, in );
-
+	  mds->mdcache->link_inode( idir, dname, in );
+	  
+	  cout << " readdir got " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
+	  
+	  
 	  // HACK
-	  if (
-		  0 &&
-		  dir->inode.ino == 1 && mds->get_nodeid() == 0 && in->is_dir()) {
+	  /*
+	  if (idir->inode.ino == 1 && mds->get_nodeid() == 0 && in->is_dir()) {
 		int d = rand() % mds->mdcluster->get_size();
 		if (d > 0) {
 		  cout << "hack: exporting dir" << endl;
 		  mds->mdcache->export_dir( in, d);
 		}
 	  }
-
+	  */
+	  
 	}
 	num--;
   }
   
-  dir->dir->state_set(CDIR_MASK_COMPLETE);
-
+  idir->dir->state_set(CDIR_MASK_COMPLETE);
+  
   mds->mdcache->trim();
-
+  
+  
   // finish
   list<Context*> finished;
-  dir->dir->take_waiting(finished);
-  dir->mid_fetch = false;
-
+  idir->dir->take_waiting(finished);
+  idir->mid_fetch = false;
+  
   list<Context*>::iterator it = finished.begin();	
   while (it != finished.end()) {
 	Context *c = *(it++);
@@ -326,7 +332,7 @@ bool MDStore::commit_dir_2( int result,
   in->dir->state_clear(CDIR_MASK_MID_COMMIT);
 
   // unpin
-  in->hard_unpin();
+  in->dir->hard_unpin();
 
   // finish
   if (c) {

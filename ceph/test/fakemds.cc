@@ -25,6 +25,7 @@ __uint64_t ino = 1;
 #define NUMOSDS 10
 #define NUMCLIENTS 10
 
+#define CLIENT_REQUESTS 10000
 
 // this parses find output
 int play();
@@ -64,7 +65,7 @@ int play() {
   // create clients
   Client *client[NUMCLIENTS];
   for (int i=0; i<NUMCLIENTS; i++) {
-	client[i] = new Client(i, new FakeMessenger(MSG_ADDR_CLIENT(i)));
+	client[i] = new Client(i, new FakeMessenger(MSG_ADDR_CLIENT(i)), CLIENT_REQUESTS);
 	client[i]->init();
   }
 
@@ -74,8 +75,8 @@ int play() {
   // send an initial message...?
   mds[0]->messenger->send_message(new MPing(10), 1, MDS_PORT_MAIN, MDS_PORT_MAIN);
 
-  //for (int i=0; i<NUMCLIENTS; i++) 
-	for (int i=0; i<1; i++) 
+  for (int i=0; i<NUMCLIENTS; i++) 
+	//for (int i=0; i<1; i++) 
 	client[i]->issue_request();
 
   // loop
