@@ -11,7 +11,7 @@
 #include <fcntl.h>
 #include <iostream>
 
-char *osd_base_path = "/home/weil/tmp/osd";
+char *osd_base_path = "./osd";
 
 // -- osd_read
 

@@ -57,8 +57,11 @@ class MDS {
 
   
  public:
-  MDS(int id, int num);
+  MDS(int id, int num, Messenger *m);
   ~MDS();
+
+  int init();
+  void shutdown();
 
   void proc_message(Message *m);
 

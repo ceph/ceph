@@ -14,13 +14,13 @@ MDS *g_mds;
 
 
 // cons/des
-MDS::MDS(int id, int num) {
+MDS::MDS(int id, int num, Messenger *m) {
   nodeid = id;
   num_nodes = num;
   
   mdcache = new DentryCache();
   mdstore = new MDStore();
-  messenger = new Messenger();
+  messenger = m;
 }
 MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
@@ -28,6 +28,16 @@ MDS::~MDS() {
   if (messenger) { delete messenger; messenger = NULL; }
 }
 
+
+int MDS::init()
+{
+  messenger->init(nodeid);
+}
+
+void MDS::shutdown()
+{
+  messenger->shutdown();
+}
 
 void MDS::proc_message(Message *m) 
 {

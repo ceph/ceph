@@ -3,7 +3,7 @@ CC=g++
 CFLAGS=-D __gnu_cxx=std -g
 
 SRCS=*.cc
-OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o mds.o osd.o Messenger.o
+OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o mds.o osd.o Messenger.o FakeMessenger.o
 
 
 all: depend test import

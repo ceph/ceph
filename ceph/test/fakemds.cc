@@ -7,6 +7,7 @@
 #include "include/mds.h"
 #include "include/MDCache.h"
 #include "include/MDStore.h"
+#include "include/FakeMessenger.h"
 
 using namespace std;
 
@@ -61,14 +62,16 @@ int main(char **argv, int argc) {
   cout << "hi there" << endl;
 
   // init
-  g_mds = new MDS(0, 1);
+  g_mds = new MDS(0, 1, new FakeMessenger());
   g_mds->open_root(NULL);
 
   g_mds->mdstore->fetch_dir( g_mds->mdcache->get_root(), NULL );
 
 
+  // send an initial message...?
+
   // loop
-  //  g_mds->messenger->loop();
+  fakemessenger_do_loop();
 
 
   // cleanup
