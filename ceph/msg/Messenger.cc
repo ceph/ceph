@@ -24,6 +24,7 @@ using namespace std;
 
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
+#include "messages/MExportDirWarning.h"
 #include "messages/MExportDir.h"
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
@@ -120,6 +121,10 @@ decode_message(crope& ser)
 
   case MSG_MDS_EXPORTDIRPREPACK:
 	m = new MExportDirPrepAck();
+	break;
+
+  case MSG_MDS_EXPORTDIRWARNING:
+	m = new MExportDirPrepWarning();
 	break;
 
   case MSG_MDS_HEARTBEAT:

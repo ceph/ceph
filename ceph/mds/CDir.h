@@ -24,9 +24,14 @@ class MDCluster;
 class Context;
 
 
+// directory authority types
+//  >= 0 is the auth mds
+#define CDIR_AUTH_PARENT   -1   // default
+
+
+
 // state bits
 #define CDIR_STATE_COMPLETE      1   // the complete contents are in cache
-//#define CDIR_STATE_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
 #define CDIR_STATE_DIRTY         4   // has been modified since last commit
 
 #define CDIR_STATE_FROZENTREE    8   // root of tree (bounded by exports)
@@ -38,16 +43,19 @@ class Context;
 #define CDIR_STATE_FETCHING    256   // currenting fetching
 
 #define CDIR_STATE_IMPORT     1024   // flag set if this is an import.
-#define CDIR_STATE_AUTH       2048   // auth for this dir (hashing doesn't count)
-#define CDIR_STATE_HASHED     4096   // if hashed.  only hashed+auth on auth node.
+#define CDIR_STATE_EXPORT     2-48
+#define CDIR_STATE_AUTH       4096   // auth for this dir (hashing doesn't count)
+#define CDIR_STATE_PROXY      8192
 
-#define CDIR_STATE_HASHING    8192
-#define CDIR_STATE_UNHASHING 16384
+#define CDIR_STATE_HASHED    16384   // if hashed.  only hashed+auth on auth node.
+#define CDIR_STATE_HASHING   32768
+#define CDIR_STATE_UNHASHING 65536
 
-#define CDIR_STATE_SYNCBYME      32768
-#define CDIR_STATE_PRESYNC       65536
-#define CDIR_STATE_SYNCBYAUTH   131072
-#define CDIR_STATE_WAITONUNSYNC 262144
+#define CDIR_STATE_SYNCBYME      131072
+#define CDIR_STATE_PRESYNC       262144
+#define CDIR_STATE_SYNCBYAUTH    524288
+#define CDIR_STATE_WAITONUNSYNC 1048576
+
 
 
 // these state bits are preserved by an import/export
@@ -67,6 +75,23 @@ class Context;
 #define CDIR_REP_ALL       1
 #define CDIR_REP_NONE      0
 #define CDIR_REP_LIST      2
+
+
+
+// pins
+
+#define CDIR_PIN_CHILD     20000
+#define CDIR_PIN_OPENED    20001  // open by another node
+#define CDIR_PIN_HASHED    20002  // hashed
+#define CDIR_PIN_WAITER    20003  // waiter(s)
+
+#define CDIR_PIN_IMPORT    20010  
+#define CDIR_PIN_EXPORT    20011
+#define CDIR_PIN_FREEZE    20012
+#define CDIR_PIN_PROXY     20013  // auth just changed.
+
+#define CDIR_PIN_AUTHPIN   30000
+
 
 
 // wait reasons
@@ -94,6 +119,11 @@ class Context;
     // waiters: import_dir_block
     // triggers: handle_export_dir_finish
 
+#define CDIR_WAIT_EXPORTWARNING 8192    // on bystander.
+    // watiers: handle_export_dir_notify
+    // triggers: handle_export_dir_warning
+
+
 #define CDIR_WAIT_SYNC          128
 #define CDIR_WAIT_UNSYNC        256
 
@@ -114,28 +144,44 @@ class CDir {
   CInode          *inode;
 
  protected:
+  // contents
   CDir_map_t       items;              // use map; ordered list
   size_t           nitems;
   size_t           nauthitems;
   //size_t           namesize;
+
+  // state
   unsigned         state;
   __uint64_t       version;
   __uint64_t       committing_version;
+
+  // authority, replicas
+  set<int>         open_by;        // nodes that have me open
+  map<int,int>     open_by_nonce;
+  int              replica_nonce;
+  int              dir_auth;       
+
+  // reference countin/pins
+  int              ref;       // reference count
+  set<int>         ref_set;
+
+  // lock nesting, freeze
+  int        auth_pins;
+  int        nested_auth_pins;
+
+  // context
+  MDS              *mds;
+
 
   // waiters
   multimap<int, Context*> waiting;  // tag -> context
   hash_map< string, multimap<int, Context*> >
 	                      waiting_on_dentry;
 
-  // cache  (defined for authority; hints for replicas)
+  // cache control  (defined for authority; hints for replicas)
   int              dir_rep;
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
 
-  //bool             auth;            // true if i'm the auth
-
-  // lock nesting, freeze
-  int        auth_pins;
-  int        nested_auth_pins;
 
   // sync (for hashed dirs)
   set<int>   sync_waiting_for_ack;
@@ -148,7 +194,7 @@ class CDir {
   friend class MDBalancer;
 
  public:
-  CDir(CInode *in, int whoami);
+  CDir(CInode *in, MDS *mds);
 
 
 
@@ -191,6 +237,26 @@ class CDir {
 
 
 
+  // -- authority --
+  int authority();
+  int dentry_authority(const string& d);
+
+  bool is_open_by_anyone() { return !open_by.empty(); }
+  bool is_open_by(int mds) { return open_by.count(mds); }
+  int get_open_by_nonce(int mds) {
+	map<int,int>::iterator it = open_by_nonce.find(mds);
+	return it->second;
+  }
+  set<int>::iterator open_by_begin() { return open_by.begin(); }
+  set<int>::iterator open_by_end() { return open_by.end(); }
+  set<int>& get_open_by() { return open_by; }
+
+  int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
+  
+  
+  
+
+
   // -- state --
   unsigned get_state() { return state; }
   void reset_state(unsigned s) { 
@@ -208,11 +274,16 @@ class CDir {
   unsigned state_test(unsigned mask) { return state & mask; }
 
   bool is_complete() { return state & CDIR_STATE_COMPLETE; }
+  bool is_dirty() { return state_test(CDIR_STATE_DIRTY); }
+
   bool is_auth() { return state & CDIR_STATE_AUTH; }
+  bool is_proxy() { return state & CDIR_STATE_PROXY; }
+  bool is_import() { return state & CDIR_STATE_IMPORT; }
+  bool is_export() { return state & CDIR_STATE_EXPORT; }
+
   bool is_hashed() { return state & CDIR_STATE_HASHED; }
   bool is_hashing() { return state & CDIR_STATE_HASHING; }
   bool is_unhashing() { return state & CDIR_STATE_UNHASHING; }
-  bool is_import() { return state & CDIR_STATE_IMPORT; }
 
   bool is_rep() { 
 	if (dir_rep == CDIR_REP_NONE) return false;
@@ -247,6 +318,16 @@ class CDir {
   // -- encoded state --
   crope encode_basic_state();
   int decode_basic_state(crope r, int off=0);
+
+
+
+  // -- reference counting --
+  void put(int by);
+  void get(int by);
+  bool is_pinned_by(int by) {
+	return ref_set.count(by);
+  }
+
 
   
   // -- sync --
@@ -305,8 +386,6 @@ class CDir {
 	return false;
   }
 
-  // -- authority -- 
-  int dentry_authority(const string& d, MDCluster *mdc);
 
 
   // debuggin bs

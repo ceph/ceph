@@ -33,26 +33,18 @@ using namespace std;
 */
 
 // pins for keeping an item in cache (and debugging)
-#define CINODE_PIN_CHILD     10000
+#define CINODE_PIN_DIR       10000
 #define CINODE_PIN_CACHED    10001
-#define CINODE_PIN_IMPORT    10002
-#define CINODE_PIN_EXPORT    10003
-#define CINODE_PIN_FREEZE    10004
-
-#define CINODE_PIN_PROXY     10005
+#define CINODE_PIN_DIRTY     10002   // must flush
+#define CINODE_PIN_PROXY     10004   // can't expire yet
+#define CINODE_PIN_WAITER    10005   // waiter
 
 #define CINODE_PIN_OPENRD    10020  
 #define CINODE_PIN_OPENWR    10021
-
 #define CINODE_PIN_UNLINKING 10022
 
-#define CINODE_PIN_WAITER    10030   // waiter
-#define CINODE_PIN_DIRWAIT   10032   // "
-#define CINODE_PIN_DIRWAITDN 10033   // "
+#define CINODE_PIN_AUTHPIN   30000
 
-#define CINODE_PIN_IAUTHPIN  20000
-#define CINODE_PIN_DAUTHPIN  30000
-#define CINODE_PIN_DIRTY     50000     // must flush
 
 //#define CINODE_PIN_SYNCBYME     70000
 //#define CINODE_PIN_SYNCBYAUTH   70001
@@ -62,10 +54,6 @@ using namespace std;
 #define CINODE_PIN_PRELOCK      70004
 #define CINODE_PIN_WAITONUNLOCK 70005
 
-
-// directory authority types
-//  >= 0 is the auth mds
-#define CDIR_AUTH_PARENT   -1   // default
 
 // sync => coherent soft metadata (size, mtime, etc.)
 // lock => coherent hard metadata (owner, mode, etc. affecting namespace)
@@ -116,7 +104,8 @@ using namespace std;
 #define CINODE_STATE_UNSAFE      4   // not logged yet
 #define CINODE_STATE_DANGLING    8   // delete me when i expire; i have no dentry
 #define CINODE_STATE_UNLINKING  16
-#define CINODE_STATE_PROXY      32
+#define CINODE_STATE_PROXY      32   // can't expire yet
+#define CINODE_STATE_EXPORTING  64   // on nonauth bystander.
 
 // misc
 #define CINODE_EXPORT_NONCE      1  // nonce given to replicas created by export
@@ -141,8 +130,7 @@ class CInode : LRUObject {
  public:
   inode_t          inode;     // the inode itself
 
-  CDir            *dir;       // directory entries, if we're a directory
-  int              dir_auth;  // authority for child dir
+  CDir            *dir;       // directory, if we have it opened.
 
  protected:
   int              ref;       // reference count
@@ -215,29 +203,28 @@ class CInode : LRUObject {
   bool is_dir() { return inode.isdir; }
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_proxy() { return state & CINODE_STATE_PROXY; }
+
   bool is_auth() { return auth; }
   void set_auth(bool auth);
   bool is_replica() { return !auth; }
-  int get_replica_nonce() { return replica_nonce; }
+  int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
+
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
-  CDir *get_dir(int whoami);
+  //CDir *get_dir(int whoami);
   
   bool dir_is_hashed() { 
 	if (inode.isdir == INODE_DIR_HASHED) return true;
 	return false; 
   }
-  bool dir_is_auth(int whoami) {
-	if (dir_auth == CDIR_AUTH_PARENT)
+  bool dir_is_auth() {
+	if (dir)
+	  return dir->is_auth();
+	else
 	  return is_auth();
-	else if (dir_auth >= 0)
-	  return (dir_auth == whoami);
-	else if (dir_is_hashed()) 
-	  return true;  // hashed.
-	return false;
   }
 
   float get_popularity() {
@@ -407,8 +394,8 @@ class CInode : LRUObject {
 
 
   // -- authority --
-  int authority(MDCluster *mdc);
-  int dir_authority(MDCluster *mdc);
+  int authority();
+  //int dir_authority(MDCluster *mdc); 
 
 
   // -- auth pins --
@@ -470,6 +457,97 @@ class CInode : LRUObject {
   void dump(int d = 0);
   void dump_to_disk(MDS *m);
 };
+
+
+
+
+
+// encoded state
+
+class CInodeDiscover {
+  
+  inode_t    inode;
+  int        replica_nonce;
+  bool       is_syncbyauth;
+  bool       is_softasync;
+  bool       is_lockbyauth;
+
+
+  CInodeDiscover(CInode *in) {
+	inode = in->inode;
+	replica_nonce = in->get_replica_nonce();
+	is_syncbyauth = in->is_syncbyauth();
+	is_softasync = in->is_softasync();
+	is_lockbyauth = in->is_lockbyauth();
+  }
+  
+  crope _rope() {
+	crope r;
+	r.append((char*)&inode, sizeof(inode));
+	r.append((char*)&replica_nonce, sizeof(replica_nonce));
+	r.append((char*)&is_syncbyauth, sizeof(bool));
+	r.append((char*)&is_softasync, sizeof(bool));
+	r.append((char*)&is_lockbyauth, sizeof(bool));
+	return r;
+  }
+
+  int _unrope(crope s, int off = 0) {
+	s.copy(0,sizeof(inode_t), (char*)&inode);
+	off += sizeof(inode_t);
+	s.copy(off, sizeof(int), (char*)&replica_nonce);
+	off += sizeof(int);
+	s.copy(off, sizeof(bool), (char*)&is_syncbyauth);
+	off += sizeof(bool);
+	s.copy(off, sizeof(bool), (char*)&is_softasync);
+	off += sizeof(bool);
+	s.copy(off, sizeof(bool), (char*)&is_lockbyauth);
+	off += sizeof(bool);
+	return off;
+  }  
+
+};
+
+
+typedef struct {
+  inode_t        inode;
+  __uint64_t     version;
+  DecayCounter   popularity;
+  bool           dirty;       // dirty inode?
+  bool           is_softasync;
+
+  int            ncached_by;  // int pairs follow
+} CInodeExport_st;
+
+
+class CInodeExport {
+
+  CInodeExport_st st;
+  set<int>      cached_by;
+  map<int,int>  cached_by_nonce;
+
+  CInodeExport(CInode *in) {
+	st.inode = in->inode;
+	st.version = in->get_version();
+	st.popularity = in->get_popularity();
+	st.dirty = in->is_dirty();
+	st.is_softasync = in->is_softasync();
+	cached_by = in->get_cached_by();
+	cached_by_nonce = in->get_cached_by_nonce(); 
+  }
+
+
+  crope _rope() {
+	crope r;
+
+	return r;
+  }
+  int _unrope(crope s, int off = 0) {
+
+  }
+
+
+};
+
 
 
 

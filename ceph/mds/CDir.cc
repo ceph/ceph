@@ -20,15 +20,22 @@ ostream& operator<<(ostream& out, CDir& dir)
   string path;
   dir.get_inode()->make_path(path);
   out << "[dir " << dir.ino() << " " << path << "/";
-  if (dir.is_import()) out << " IMPORT";
-  if (dir.is_auth()) out << " auth";
+  if (dir.is_import()) out << " import";
+  if (dir.is_export()) out << " export";
+  if (dir.is_auth()) {
+	out << " auth";
+	if (dir.is_open_by_anyone())
+	  out << "+" << dir.get_open_by();
+  } else {
+	out << " rep a=" << dir.authority() << " n=" << dir.get_replica_nonce();
+  }
   return out << "]";
 }
 
 
 // CDir
 
-CDir::CDir(CInode *in, int whoami) 
+CDir::CDir(CInode *in, MDS *mds, bool auth)
 {
   inode = in;
   
@@ -40,7 +47,7 @@ CDir::CDir(CInode *in, int whoami)
 
   // auth
   assert(in->is_dir());
-  if (in->dir_is_auth(whoami)) 
+  if (auth) 
 	state |= CDIR_STATE_AUTH;
   if (in->dir_is_hashed()) 
 	state |= CDIR_STATE_HASHED;
@@ -80,12 +87,6 @@ int CDir::get_rep_count(MDCluster *mdc)
   assert(2+2==5);
 }
 
-void CDir::update_auth(int whoami) {
-  if (inode->dir_is_auth(whoami) && !is_auth())
-	state_set(CDIR_STATE_AUTH);
-  if (!inode->dir_is_auth(whoami) && is_auth())
-	state_clear(CDIR_STATE_AUTH);
-}
 
 
 void CDir::add_child(CDentry *d) 
@@ -130,25 +131,35 @@ CDentry* CDir::lookup(const string& n) {
 }
 
 
-int CDir::dentry_authority(const string& dn, MDCluster *mdc)
-{
-  if (inode->dir_is_hashed()) {
-	return mdc->hash_dentry( inode->ino(), dn );  // hashed
-  }
 
-  if (inode->dir_auth == CDIR_AUTH_PARENT) {
-	dout(11) << "dir_auth parent at " << *this << endl;
-	return inode->authority( mdc );       // same as my inode
-  }
 
-  // it's explicit for this whole dir
-  dout(11) << "dir_auth explicit " << inode->dir_auth << " at " << *this << endl;
-  return inode->dir_auth;
-}
+
+
 
 
 
 // state encoding
+
+/*
+
+what DIR state is encoded when
+
+- dir open / discover
+ nonce
+ dir_rep/by
+
+- dir update
+ dir_rep/by
+
+- export
+ dir_rep/by
+ nitems
+ version
+ state
+ popularity
+
+
+*/
 
 crope CDir::encode_basic_state()
 {
@@ -327,10 +338,92 @@ void CDir::mark_clean()
 
 
 
+// ref counts
+
+void CDir::get(int by) {
+  // bad?
+  if (ref == 0 || ref_set.count(by) != 1) {
+	dout(7) << *this << " bad put by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	assert(ref_set.count(by) == 1);
+	assert(ref > 0);
+  }
+
+  ref--;
+  ref_set.erase(by);
+
+  // inode
+  if (ref == 0)
+	inode->put(CINODE_PIN_DIR);
+
+  dout(7) << *this << " put by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+}
+
+void CDir::get(int by) {
+  // inode
+  if (ref == 0)
+	inode->get(CINODE_PIN_DIR);
+
+  // bad?
+  if (ref_set.count(by)) {
+	dout(7) << *this << " bad get by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	assert(ref_set.count(by) == 0);
+  }
+  
+  ref++;
+  ref_set.insert(by);
+  
+  dout(7) << *this " get by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+}
+
+
+
+// authority
+
+/*
+void CDir::update_auth(int whoami) {
+  if (inode->dir_is_auth(whoami) && !is_auth())
+	state_set(CDIR_STATE_AUTH);
+  if (!inode->dir_is_auth(whoami) && is_auth())
+	state_clear(CDIR_STATE_AUTH);
+}
+*/
+
+int CDir::authority() 
+{
+  if (dir_auth >= 0)
+	return dir_auth;
+
+  CDir *parent = inode->get_parent_dir();
+  if (parent)
+	return parent->authority();
+
+  // root on 0.
+  assert(inode->is_root());
+  return 0;
+}
+
+int CDir::dentry_authority(const string& dn )
+{
+  if (is_hashed()) {
+	return mds->get_cluster()->hash_dentry( inode->ino(), dn );  // hashed
+  }
+  
+  if (dir_auth == CDIR_AUTH_PARENT) {
+	dout(11) << "dir_auth = parent at " << *this << endl;
+	return inode->authority();       // same as my inode
+  }
+
+  // it's explicit for this whole dir
+  dout(11) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
+  return dir_auth;
+}
+
+
+
 // auth pins
 
 void CDir::auth_pin() {
-  inode->get(CINODE_PIN_DAUTHPIN + auth_pins);
+  get(CDIR_PIN_AUTHPIN + auth_pins);
   auth_pins++;
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
@@ -341,7 +434,7 @@ void CDir::auth_pin() {
 
 void CDir::auth_unpin() {
   auth_pins--;
-  inode->put(CINODE_PIN_DAUTHPIN + auth_pins);
+  put(CINODE_PIN_DAUTHPIN + auth_pins);
   assert(auth_pins >= 0);
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   

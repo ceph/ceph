@@ -18,6 +18,7 @@ class MDS;
 class Message;
 class MExportDirPrep;
 class MExportDirPrepAck;
+class MExportDirWarning;
 class MExportDir;
 class MExportDirNotify;
 class MExportDirNotifyAck;
@@ -183,6 +184,8 @@ class MDCache {
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CDir *dir,
 				  int mds);
+  MExportDirPrep *export_dir_prep(CDir *dir, 
+								  int dest);
   void export_dir_dropsync(CDir *dir);
   void export_dir_frozen(CDir *dir,
 						 int dest, 
@@ -199,7 +202,8 @@ class MDCache {
   CInode *import_dentry_inode(CDir *dir, 
 							  pchar& p, 
 							  int from, 
-							  CDir *import_root=0); // need for normal import
+							  CDir *import_root=0,
+							  int *would_be_dir_auth); // need for normal import
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   void import_dir_finish(CDir *dir);
@@ -214,6 +218,7 @@ class MDCache {
 						  inodeno_t replica_ino);
 
   // bystander
+  void handle_export_dir_warning(MExportDirWarning *m);
   void handle_export_dir_notify(MExportDirNotify *m);
 
 

@@ -22,6 +22,7 @@
 
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
+#include "messages/MExportDirWarning.h"
 #include "messages/MExportDir.h"
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
@@ -729,6 +730,7 @@ int MDCache::path_traverse(string& pathname,
 int MDCache::handle_discover(MDiscover *dis) 
 {
   int whoami = mds->get_nodeid();
+
 
   if (dis->get_asker() == whoami) {
 	// this is a result
@@ -1708,8 +1710,8 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   // we shouldn't be authoritative...
   assert(!in->is_auth());
   
-  // make sure we know who _is_ authoritative!  :)
-  //badbad update_replica_auth(in, m->get_asker());
+  // sanity check: make sure we know who _is_ authoritative! 
+  assert(m->get_asker() == in->authority(mds->get_cluster()));
 
   // lock it
   in->dist_state |= CINODE_DIST_SYNCBYAUTH;
@@ -1740,7 +1742,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 
 void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback)
 {
-  dout(7) << "inode_sync_ack " << *in << endl;
+  dout(7) << "sending inode_sync_ack " << *in << endl;
     
   // send ack
   mds->messenger->send_message(new MInodeSyncAck(in->ino(), true, wantback),
@@ -2097,8 +2099,8 @@ void MDCache::handle_inode_lock_start(MInodeLockStart *m)
   // lock it
   in->dist_state |= CINODE_DIST_LOCKBYAUTH;
 
-  // make sure we know who _is_ authoritative!  :)
-  //badbad update_replica_auth(in, m->get_asker());
+  // sanity check: make sure we know who _is_ authoritative! 
+  assert(m->get_asker() == in->authority(mds->get_cluster()));
   
   // send ack
   mds->messenger->send_message(new MInodeLockAck(in->ino()),
@@ -2363,7 +2365,7 @@ void MDCache::export_dir(CDir *dir,
 
   // send ExportDirPrep (ask target)
   dout(7) << "export_dir " << *dir << " to " << dest << ", sending ExportDirPrep" << endl;
-  mds->messenger->send_message(new MExportDirPrep(dir->inode),
+  mds->messenger->send_message(export_dir_prep(dir),
 							   dest, MDS_PORT_CACHE, MDS_PORT_CACHE);
   dir->auth_pin();   // pin dir, to hang up our freeze
   mds->logger->inc("ex");
@@ -2391,19 +2393,51 @@ void MDCache::export_dir(CDir *dir,
   // NOTE: we don't need to worry about hard locks; those aren't sticky (yet?).
 }
 
+
+MExportDirPrep*
+MDCache::export_dir_prep(CDir *dir, 
+						 int dest)
+{
+  MExportDirPrep *prep = new MExportDirPrep(dir->inode);
+
+  // include spanning tree for all nested exports.
+  // these need to be on the destination _before_ the final export so that
+  // dir_auth updates on any nexted exports are properly absorbed.
+
+  for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p = 
+		 nested_exports.equal_range( dir );
+	   p.first != p.second;
+	   p.first++) {
+	CDir *exp = (*p.first).second;
+
+	dout(7) << "including nested export " << *exp << " in prep" << endl;
+
+
+  }
+  
+  return prep;
+}
+
+
+
+
 void MDCache::export_dir_dropsync(CDir *dir)
 {
+  dout(7) << "export_dir_dropsync in " << *dir << endl;
+
   CDir_map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
 	CInode *in = it->second->inode;
 
-	dout(7) << "about to export: dropping sticky(?) sync on " << *in << endl;
-	if (in->is_syncbyme()) inode_sync_release(in);
+	if (in->is_syncbyme()) {
+	  dout(7) << "about to export: dropping sticky(?) sync on " << *in << endl;
+	  inode_sync_release(in);
+	}
 
 	if (in->is_dir() &&
-		in->dir_auth == CDIR_AUTH_PARENT &&      // mine
-		in->nested_auth_pins > 0 &&  // might be sync
-		in->dir)                     // we have anything at all
+		in->dir &&                        // open
+		!in->dir->is_export() &&          // mine
+		in->dir->nested_auth_pins > 0)    // might be sync
 	  export_dir_dropsync(in->dir);
   }
 }
@@ -2414,10 +2448,12 @@ void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
 {
   CInode *in = get_inode(m->get_ino());
   assert(in);
+  CDir *dir = in->dir;
+  assert(dir);
 
-  dout(7) << "export_dir_prep_ack " << *in << ", releasing auth_pin" << endl;
+  dout(7) << "export_dir_prep_ack " << *dir << ", releasing auth_pin" << endl;
   
-  in->dir->auth_unpin();   // unpin to allow freeze to complete
+  dir->auth_unpin();   // unpin to allow freeze to complete
 
   // done
   delete m;
@@ -2440,7 +2476,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 	dout(7) << " i'm rexporting a previous import" << endl;
 	imports.erase(dir);
 	dir->state_clear(CDIR_STATE_IMPORT);
-	dir->inode->put(CINODE_PIN_IMPORT);                  // unpin, no longer an import
+	dir->put(CINODE_PIN_IMPORT);                  // unpin, no longer an import
 	
 	// discard nested exports (that we're handing off
 	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
@@ -2460,7 +2496,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 	exports.insert(dir);
 	nested_exports.insert(pair<CDir*,CDir*>(containing_import, dir));
 	
-	dir->inode->get(CINODE_PIN_EXPORT);                  // i must keep it pinned
+	dir->get(CINODE_PIN_EXPORT);                  // i must keep it pinned
 	
 	// discard nested exports (that we're handing off)
 	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
@@ -2488,10 +2524,10 @@ void MDCache::export_dir_frozen(CDir *dir,
   }
 
   // note new authority (locally)
-  if (dir->inode->authority(mds->get_cluster()) == dest)
-	dir->inode->dir_auth = CDIR_AUTH_PARENT;
+  if (dir->inode->authority() == dest)
+	dir->dir_auth = CDIR_AUTH_PARENT;
   else
-	dir->inode->dir_auth = dest;
+	dir->dir_auth = dest;
 
   
   // build export message
@@ -2560,7 +2596,7 @@ void MDCache::export_dir_walk(MExportDir *req,
   // discard most dir state
   dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
 
-  // waiters
+  // suck up all waiters
   list<Context*> waiting;
   dir->take_waiting(CINODE_WAIT_ANY, waiting);    // FIXME ?? actually this is okay?
   fin->assim_waitlist(waiting);
@@ -2590,8 +2626,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	}
 	
 	if (in->is_dir()) { 
-	  assert(in->dir_auth != mds->get_nodeid() || in->dir_is_hashed()); // shouldn't refer to us explicitly!
-	  
+
 	  // sanity check
 	  if (in->dir_is_hashed()) {
 		dout(7) << " encountered hashed dir " << *in->dir << endl;
@@ -2600,17 +2635,28 @@ void MDCache::export_dir_walk(MExportDir *req,
 		assert(!in->dir || !in->dir->is_hashed());
 	  
 	  // recurse?
-	  if (in->dir_is_auth(mds->get_nodeid())) {
-		if (in->dir)
-		  subdirs.push_back(in->dir);  // it's ours, recurse.
-	  } else {
-		dout(7) << " encountered nested export " << *in << " dir_auth " << in->dir_auth << "; removing from exports" << endl;
-		assert(exports.count(in->dir) == 1); 
-		exports.erase(in->dir);                    // discard nested export   (nested_exports updated above)
-		in->put(CINODE_PIN_EXPORT);
-	  }
-	} 
+	  if (in->dir) {
 
+		if (in->dir->is_auth()) {
+		  // nested subdir
+		  assert(in->dir->dir_auth == CDIR_AUTH_PARENT);
+		  subdirs.push_back(in->dir);  // it's ours, recurse.
+		  
+		} else {
+		  // nested export
+		  assert(in->dir->dir_auth >= 0);
+		  dout(7) << " encountered nested export " << *in->dir << " dir_auth " << in->dir->dir_auth << "; removing from exports" << endl;
+		  assert(exports.count(in->dir) == 1); 
+		  exports.erase(in->dir);                    // discard nested export   (nested_exports updated above)
+		  in->dir->put(CDIR_PIN_EXPORT);
+		  
+		  // simplify dir_auth?
+		  if (in->dir->dir_auth == newauth)
+			in->dir->dir_auth = -1;
+		}
+	  } 
+	}
+	
 	// we don't export inodes if hashed
 	if (dir->is_hashed()) {
 	  // but we do replicate my dirs on new auth
@@ -2627,7 +2673,6 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  }
 	} else {
 	  // we're export this inode; fix inode state
-
 	  dout(7) << "export_dir_walk exporting " << *in << endl;
 
 	  if (in->is_dirty()) in->mark_clean();
@@ -2664,13 +2709,14 @@ void MDCache::export_dir_walk(MExportDir *req,
 
 
 /*
- * i should get a export_dir_notify_ack from every other mds, including the new auth (an ack)
+ * i should get an export_dir_notify_ack from every mds that had me open, including the new auth (an ack)
  */
 void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 {
   CInode *idir = get_inode(m->get_ino());
   CDir *dir = idir->get_dir(mds->get_nodeid());
   assert(dir);
+  assert(dir->is_frozen_tree_root());  // i'm exporting!
 
   // remove from waiting list
   int from = m->get_source();
@@ -2679,10 +2725,12 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 
   // done?
   if (!export_notify_ack_waiting[dir].empty()) {
-	dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from << ", still waiting for " << export_notify_ack_waiting[dir] << endl;
-
+	dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
+			<< ", still waiting for " << export_notify_ack_waiting[dir] << endl;
+	
   } else {
-	dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from << ", last one!" << endl;
+	dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
+			<< ", last one!" << endl;
 
 	// ok, we're finished!
 	export_notify_ack_waiting.erase(dir);
@@ -2695,12 +2743,13 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 	  in->put(CINODE_PIN_PROXY);
 	  in->state_clear(CINODE_STATE_PROXY);
 	}
-
 	export_proxy_inos.erase(dir);
 
+	// finish export
 	export_dir_finish(dir);
   }
 }
+
 
 /*
  * once i get all teh notify_acks i can finish
@@ -2710,7 +2759,7 @@ void MDCache::export_dir_finish(CDir *dir)
   // exported!
   
   // FIXME log it
-
+  
   // send finish to new auth
   mds->messenger->send_message(new MExportDirFinish(dir->ino()),
 							   MSG_ADDR_MDS(dir->inode->dir_authority(mds->get_cluster())),
@@ -2721,7 +2770,6 @@ void MDCache::export_dir_finish(CDir *dir)
   dir->unfreeze_tree();
   
   show_imports();
-
 }
 
 
@@ -2751,13 +2799,25 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   
   // okay
   CInode *in = trav[trav.size()-1];
-  CDir *dir = in->get_dir(mds->get_nodeid());
+
+  CDir *dir = in->dir;
+  if (!dir) {
+	// *** open dir w/ info in prep message
+	assert(dir);  
+  }
   
   dout(7) << "handle_export_dir_prep on " << *dir << endl;
   assert(dir->is_auth() == false);
 
   dir->auth_pin();     // auth_pin until we get the data
-  
+
+
+  // *** assimilate traces for nested exports
+
+  // *** open all export dirs
+
+
+  // ok!
   dout(7) << "sending export_dir_prep_ack on " << *dir << endl;
   mds->messenger->send_message(new MExportDirPrepAck(dir->ino()),
 							   m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
@@ -2801,13 +2861,14 @@ void MDCache::handle_export_dir(MExportDir *m)
 {
   CInode *idir = get_inode(m->get_ino());
   assert(idir);
-  if (!idir->dir) idir->dir = new CDir(idir, mds->get_nodeid());
   CDir *dir = idir->dir;
+  assert(dir);
 
   int oldauth = m->get_source();
   dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
+  /* do this at prep stage?????
   // prediscovers?
   if (m->any_prediscovers()) {
 	dout(7) << "handle_export_dir checking prediscovers" << endl;
@@ -2843,6 +2904,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 	}
 	if (needed > 0) return;
   }
+  */
 
 
   show_imports();
@@ -2850,17 +2912,18 @@ void MDCache::handle_export_dir(MExportDir *m)
   
   // note new authority (locally) in inode
   if (dir->inode->is_auth())
-	dir->inode->dir_auth = CDIR_AUTH_PARENT;
+	dir->dir_auth = CDIR_AUTH_PARENT;
   else
-	dir->inode->dir_auth = mds->get_nodeid();
-  
+	dir->dir_auth = mds->get_nodeid();
+
+  // update imports/exports
   CDir *containing_import;
   if (exports.count(dir)) {
 	// reimporting
-	dout(7) << " i'm reimporting this dir!" << endl;
+	dout(7) << " i'm reimporting " << *dir << endl;
 	exports.erase(dir);
 
-	dir->inode->put(CINODE_PIN_EXPORT);                // unpin, no longer an export
+	dir->put(CDIR_PIN_EXPORT);                // unpin, no longer an export
 	
 	containing_import = get_containing_import(dir);  
 	dout(7) << "  it is nested under import " << *containing_import << endl;
@@ -2877,15 +2940,17 @@ void MDCache::handle_export_dir(MExportDir *m)
 	// new import
 	imports.insert(dir);
 	dir->state_set(CDIR_STATE_IMPORT);
-	dir->inode->get(CINODE_PIN_IMPORT);                // must keep it pinned
+	dir->get(CDIR_PIN_IMPORT);                // must keep it pinned
 	
 	containing_import = dir;  // imported exports nested under *in
 
 	dout(7) << " new import at " << *dir << endl;
   }
 
+  /* FIXME Hashing crap
   // i shouldn't be waiting for any ReplicateHashedAck's yet
   assert(import_hashed_replicate_waiting.count(m->get_ino()) == 0);
+  */
 
   list<inodeno_t> imported_subdirs;
 
@@ -2920,14 +2985,18 @@ void MDCache::handle_export_dir(MExportDir *m)
 							   MDS_PORT_CACHE);
 
   dout(7) << "sending notify to others" << endl;
-  for (int i=0; i<mds->get_cluster()->get_num_mds(); i++) {
-	if (i == mds->get_nodeid()) continue;
-	if (i == m->get_source()) continue;
+  for (set<int>::iterator it = open_by.begin();
+	   it != open_by.end();
+	   it++) {
+	assert( *it != mds->get_nodeid() );
+	if ( *it == m->get_source() ) continue;  // not to old auth.
+
 	MExportDirNotify *notify = new MExportDirNotify(dir->ino(), m->get_source(), mds->get_nodeid());
 	if (g_conf.mds_verify_export_dirauth)
 	  notify->copy_subdirs(imported_subdirs);   // copy subdir list (debug)
+
 	mds->messenger->send_message(notify,
-								 MSG_ADDR_MDS(i), MDS_PORT_CACHE,
+								 MSG_ADDR_MDS( *it ), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
   
@@ -2958,7 +3027,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 {
   CInode *idir = get_inode(m->get_ino());
-  CDir *dir = idir->dir; //get_dir(mds->get_nodeid());
+  CDir *dir = idir->dir;
   assert(dir);
 
   dout(7) << "handle_export_dir_finish on " << *dir << endl;
@@ -2985,7 +3054,8 @@ void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 CInode *MDCache::import_dentry_inode(CDir *dir,
 									 pchar& p,
 									 int from,
-									 CDir *import_root)
+									 CDir *import_root,
+									 int *would_be_dir_auth)
 {
   // we have three cases:
   assert((dir->is_auth() && !dir->is_hashing()) ||  // auth importing (may be hashed or normal)
@@ -3043,20 +3113,7 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
   // assimilate new auth state?
   if (importing) {
 
-	// dir_auth (for dirs underneath me)
-	// (as long as I know it's not wrong:)
-	if (istate->dir_auth == mds->get_nodeid() && in->dir && !in->dir->is_auth()) {
-	  dout(7) << "   import_dentry_inode ignoring " << *in << " dir_auth " << istate->dir_auth << " because i know the dir isn't mine" << endl;
-	} else if (istate->dir_auth >= 0 && in->dir && in->dir->is_auth()) {
-	  dout(7) << "   import_dentry_inode ignoring " << *in << " dir_auth " << istate->dir_auth << " because i know the dir is mine" << endl;
-	} else {
-	  dout(12) << "   taking dir_auth of " << istate->dir_auth << " (was " << in->dir_auth << ")" << endl;
-	  in->dir_auth = istate->dir_auth;
-	}
-
-	// set dir auth flag
-	if (in->dir) 
-	  in->dir->update_auth(mds->get_nodeid());
+	*would_be_dir_auth = istate->dir_auth;
 	
 	// hashing fyi
 	if (in->dir_is_hashed()) {
@@ -3175,18 +3232,19 @@ void MDCache::import_dir_block(pchar& p,
 
   // contents
   for (long nitems = dstate->nitems; nitems>0; nitems--) {
-	CInode *in = import_dentry_inode(dir, p, oldauth, import_root);
+	int would_be_dir_auth;
+	CInode *in = import_dentry_inode(dir, p, oldauth, import_root, &would_be_dir_auth);
 
 	if (!in->is_dir()) continue;
-
-	if (in->dir_auth == CDIR_AUTH_PARENT) {
+	
+	if (would_be_dir_auth == CDIR_AUTH_PARENT) {
 	  // imported a subdir that's still ours.
 	  dout(10) << "imported_subdir is " << *in << endl;
 	  imported_subdirs.push_back(in->ino());
 	} else {
 	  // we imported an export.
-	  assert(in->dir_auth >= 0);
-
+	  assert(would_be_dir_auth >= 0);
+	  
 	  in->get_dir(mds->get_nodeid());
 
 	  // to us?
@@ -3284,13 +3342,48 @@ void MDCache::got_hashed_replica(CDir *import,
 
 // authority bystander
 
+void MDCache::handle_export_dir_warning(MExportDirWarning *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  if (!in) {
+	dout(7) << "handle_export_dir_warning on " << m->get_ino() << ", don't have it" << endl;
+	delete m;
+	return;
+  } 
+  
+  dout(7) << "handle_export_dir_warning on " << *in << endl;
+  assert(!in->dir_is_auth(mds->get_nodeid()));  // clearly not my dir
+  
+  // flag inode state.
+  in->state_set(CINODE_STATE_EXPORTING);
+  
+  // kick it now if the notify is already waiting.
+  in->finish_waiting(CINODE_WAIT_EXPORTWARNING);
+
+  // done
+  delete m;
+}
+
+
 void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 {
   CInode *in = get_inode(m->get_ino());
   if (!in) {
 	dout(7) << "handle_export_dir_notify on " << m->get_ino() << ", don't have it" << endl;
   } else {
+	// have i heard about it from the exporter yet?
+	if (!in->state_test(CINODE_STATE_EXPORTING)) {
+	  dout(7) << "handle_export_dir_notify on " << *in << " haven't seen warning from old auth yet, waiting" << endl;
+	  in->add_waiter(CINODE_WAIT_EXPORTWARNING,
+					 new C_MDS_RetryMessage(mds, m));
+	  return;
+	}
+
+	// ok!
     dout(7) << "handle_export_dir_notify on " << *in << " new_auth " << m->get_new_auth() << endl;
+
+	// fix state.
+	in->state_clear(CINODE_STATE_EXPORTING);  // exported!
   
 	// update dir_auth
 	if (in->authority(mds->get_cluster()) == m->get_new_auth()) {
@@ -3312,12 +3405,12 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 		   it++) {
 		CInode *idir = get_inode(*it);
 		if (!idir) continue;  // don't have it, don't care
-		dout(10) << "handle_export_dir_notify checking subdir " << *idir << " is auth " << m->get_new_auth() << endl;
+		dout(10) << "handle_export_dir_notify checking subdir " << *idir << " is auth " << idir->dir_auth << endl;
 		assert(idir != in);	  // base shouldn't be in subdir list
 		if (idir->dir_auth != CDIR_AUTH_PARENT) {
 		  dout(7) << "*** weird value for dir_auth " << idir->dir_auth << " on " << *idir << ", should have been -1 probably??? ******************" << endl;
+		  assert(0);  // bad news!
 		  idir->dir_auth = -1;
-		  assert(0);  // bad news i think
 		}
 		assert(idir->dir_authority(mds->get_cluster()) == m->get_new_auth());
 	  }
@@ -3947,6 +4040,8 @@ void MDCache::show_imports()
 		 p.first++) {
 	  CDir *exp = (*p.first).second;
 	  dout(7) << "      - ex " << *exp << " to " << exp->inode->dir_auth << endl;
+	  assert( dir->is_export() );
+
 	  if ( get_containing_import(exp) != *it ) {
 		dout(7) << "uh oh, containing import is " << get_containing_import(exp) << endl;
 		dout(7) << "uh oh, containing import is " << *get_containing_import(exp) << endl;

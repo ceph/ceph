@@ -9,6 +9,8 @@ class MExportDirPrep : public Message {
   inodeno_t ino;
   string path;
 
+  // nested export discover payload
+
  public:
   inodeno_t get_ino() { return ino; }
   string& get_path() { return path; }

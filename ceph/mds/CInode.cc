@@ -107,7 +107,7 @@ ostream& operator<<(ostream& out, CInode& in)
 	if (in.is_cached_by_anyone())
 	  out << "+" << in.get_cached_by();
   } else {
-	out << "rep " << in.get_replica_nonce();
+	out << "rep a=" << in.authority() << " n=" << in.get_replica_nonce();
 	assert(in.get_replica_nonce() >= 0);
   }
   out << "]";
@@ -148,6 +148,33 @@ void CInode::mark_dirty() {
 
 
 // state 
+
+/*
+
+let's talk about what INODE state is encoded when.
+
+when:
+- after sync, lock
+   .inode
+- inode updates 
+   .inode
+/   cached_by?
+- discover
+   .inode
+/   cached_by?
+   nonce
+   sync/etc. state
+- export
+   .inode
+   version
+   pop
+   cached_by + cached_by_nonce
+   sync/etc state
+   dirty
+   
+
+
+*/
 
 crope CInode::encode_export_state()
 {
@@ -332,17 +359,17 @@ bool CInode::can_auth_pin() {
 }
 
 void CInode::auth_pin() {
-  get(CINODE_PIN_IAUTHPIN + auth_pins);
+  get(CINODE_PIN_AUTHPIN + auth_pins);
   auth_pins++;
-  dout(7) << "auth_pin on inode " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   if (parent)
 	parent->dir->adjust_nested_auth_pins( 1 );
 }
 
 void CInode::auth_unpin() {
   auth_pins--;
-  dout(7) << "auth_unpin on inode " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
-  put(CINODE_PIN_IAUTHPIN + auth_pins);
+  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  put(CINODE_PIN_AUTHPIN + auth_pins);
   if (parent)
 	parent->dir->adjust_nested_auth_pins( -1 );
 }
@@ -351,16 +378,17 @@ void CInode::auth_unpin() {
 
 // authority
 
-int CInode::authority(MDCluster *cl) {
+int CInode::authority() {
   if (is_dangling()) 
 	return dangling_auth;   // explicit
   if (is_root())
 	return 0;  // i am root
   assert(parent);
-  return parent->dir->dentry_authority( parent->name, cl );
+  return parent->dir->dentry_authority( parent->name );
 }
 
 
+/*
 int CInode::dir_authority(MDCluster *mdc) 
 {
   // explicit
@@ -375,7 +403,7 @@ int CInode::dir_authority(MDCluster *mdc)
 	return authority(mdc);
   }
 }
-
+*/
 
 
 
