@@ -57,8 +57,6 @@ class MDFetchDirContext : public Context {
 bool MDStore::fetch_dir( CInode *in,
 						 Context *c )
 {
-  assert(in->is_auth());
-
   dout(7) << "fetch_dir " << in->inode.ino << " context is " << c << endl;
   if (c) 
 	in->dir->add_waiter(c);
@@ -68,7 +66,8 @@ bool MDStore::fetch_dir( CInode *in,
 	dout(7) << "already fetching " << in->inode.ino << "; waiting" << endl;
 	return true;
   }
-  in->dir->set_state(CDIR_STATE_FETCHING);
+	
+  in->dir->state_set(CDIR_STATE_FETCHING);
 
   // create return context
   MDFetchDirContext *fin = new MDFetchDirContext( this, in->ino() );
@@ -102,10 +101,10 @@ bool MDStore::fetch_dir_2( int result,
 
 	// do it
 
-	dout(7) << *mds << "fetch_dir_2 on " << *idir << " ref " << idir->ref << " has " << idir->dir->get_size() << endl;
+	dout(7) << *mds << "fetch_dir_2 on " << *idir << " has " << idir->dir->get_size() << endl;
 	
 	// make sure we have a CDir
-	if (idir->dir == NULL) idir->dir = new CDir(idir);
+	if (idir->dir == NULL) idir->dir = new CDir(idir, true);
 	
 	// parse buffer contents into cache
 	const char *buf = buffer.c_str();
@@ -150,8 +149,6 @@ bool MDStore::fetch_dir_2( int result,
 		
 		dout(7) << "readdir got " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
 		
-		in->cached_by.clear();
-	  
 		// HACK
 		/*
 		  if (idir->inode.ino == 1 && mds->get_nodeid() == 0 && in->is_dir()) {
@@ -170,11 +167,12 @@ bool MDStore::fetch_dir_2( int result,
 	idir->dir->state_set(CDIR_STATE_COMPLETE);
   }
 
+  idir->dir->state_clear(CDIR_STATE_FETCHING);
+
  
   // finish
   list<Context*> finished;
   idir->dir->take_waiting(finished);
-  idir->dir->state_cleaer(CDIR_STATE_FETCHING);
   
   list<Context*>::iterator it = finished.begin();	
   while (it != finished.end()) {
@@ -274,29 +272,31 @@ bool MDStore::commit_dir( CInode *in,
   assert(in->is_auth());
 
   // already committing?
-  if (in->dir->get_state() & CDIR_MASK_MID_COMMIT) {
+  if (in->dir->state_test(CDIR_STATE_COMMITTING)) {
 	// already mid-commit!
-	dout(7) << "dir already mid-commit" << endl;
+	dout(7) << "commit_dir dir " << *in << " already mid-commit" << endl;
 	in->dir->add_waiter(c);   // FIXME this isprobably a bad idea?
 	return false;
   }
 
   if (!in->dir->can_hard_pin()) {
 	// something must be frozen up the hiearchy!
+	dout(7) << "commit_dir dir " << *in << " can't hard_pin, waiting" << endl;
 	in->dir->add_hard_pin_waiter( new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
 	return false;
   }
 
 
   // is it complete?
-  if (in->dir->get_state() & CDIR_MASK_COMPLETE == 0) {
-	dout(7) << "dir not complete, fetching first" << endl;
+  if (!in->dir->is_complete()) {
+	dout(7) << "commit_dir dir " << *in << " not complete, fetching first" << endl;
 	// fetch dir first
 	Context *fin = new MDFetchForCommitContext(this, in, c);
 	fetch_dir(in, fin);
 	return false;
   }
 
+  dout(7) << "commit_dir dir " << *in << endl;
 
   // get continuation ready
   MDCommitDirContext *fin = new MDCommitDirContext(this, in, c);
@@ -317,12 +317,16 @@ bool MDStore::commit_dir( CInode *in,
 	// inode
 	fin->buffer.append( (char*) &it->second->get_inode()->inode, sizeof(inode_t));
 
+	// put inode in this dir version
+	if (it->second->get_inode()->is_dirty())
+	  it->second->get_inode()->float_parent_dir_version(in->dir->get_version());
+	
 	num++;
   }
   
   // pin inode
   in->dir->hard_pin();
-  in->dir->state_set(CDIR_MASK_MID_COMMIT);
+  in->dir->state_set(CDIR_STATE_COMMITTING);
 
   // submit to osd
   int osd = mds->mdcluster->get_meta_osd(in->inode.ino);
@@ -342,32 +346,29 @@ bool MDStore::commit_dir_2( int result,
 							Context *c,
 							__uint64_t committed_version)
 {
-  dout(5) << "commit_dir_2" << endl;
+  dout(5) << "commit_dir_2 " << *in << endl;
 
   // is the dir now clean?
-  if (committed_version == in->dir->get_version()) {
-	mark_clean();
-  }
-  in->dir->state_clear(CDIR_MASK_MID_COMMIT);
+  if (committed_version == in->dir->get_version())
+	in->dir->mark_clean();
+ 
+  in->dir->state_clear(CDIR_STATE_COMMITTING);
 
   // mark inodes clean too (if we committed them!)
   for (CDir_map_t::iterator it = in->dir->begin();
 	   it != in->dir->end();
 	   it++) {
-	if (it->second->get_version() <= committed_version) {
-	  assert(it->second->is_dirty());
-	  it->second->mark_clean();
+	CInode *in = it->second->get_inode();
+	if (in->get_parent_dir_version() == committed_version) {
+	  in->mark_clean();     // might not but could be dirty
+	  dout(5) << "inode " << *(in) << " now clean" << endl;
+	} else {
+	  dout(5) << "inode " << *(in) << " still dirty after a commit" << endl;
 	}
   }
 
   // unpin
   in->dir->hard_unpin();
-
-  // mark contents clean
-  for (CDir_map_t::iterator it = in->dir->begin();
-	   it != in->dir->end();
-	   it++) 
-	it->second->get_inode()->mark_clean();
 
   // finish
   list<Context*> finished;

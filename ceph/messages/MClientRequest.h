@@ -2,6 +2,7 @@
 #define __MCLIENTREQUEST_H
 
 #include "include/Message.h"
+#include "mds/MDS.h"
 
 typedef struct {
   long tid;
@@ -52,7 +53,17 @@ class MClientRequest : public Message {
 inline ostream& operator<<(ostream& out, MClientRequest& req) {
   out << "client" << req.get_client() 
 	  << "." << req.get_tid() 
-	  << ":" << req.get_op();
+	  << ":";
+  switch(req.get_op()) {
+  case MDS_OP_TOUCH: 
+	out << "touch"; break;
+  case MDS_OP_STAT: 
+	out << "stat"; break;
+  case MDS_OP_READDIR: 
+	out << "readdir"; break;
+  default: 
+	out << req.get_op();
+  }
   if (req.get_path().length()) 
 	out << "_" << req.get_path();
   return out;

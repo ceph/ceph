@@ -25,25 +25,25 @@ class Context;
 
 // state bits
 #define CDIR_STATE_COMPLETE      1   // the complete contents are in cache
-#define CDIR_STATE_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
+//#define CDIR_STATE_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
 #define CDIR_STATE_DIRTY         4   // has been modified since last commit
-#define CDIR_STATE_MID_COMMIT    8   // mid-commit
 
-#define CDIR_STATE_FROZEN       16   // root of a freeze
-#define CDIR_STATE_FREEZING     32   // in process of freezing
+#define CDIR_STATE_FROZEN        8   // root of a freeze
+#define CDIR_STATE_FREEZING     16   // in process of freezing
+
+#define CDIR_STATE_COMMITTING   32   // mid-commit
 #define CDIR_STATE_FETCHING     64   // currenting fetching
 
 // these state bits are preserved by an import/export
 #define CDIR_MASK_STATE_EXPORTED  (CDIR_STATE_COMPLETE\
-                             |CDIR_STATE_DIRTY)
+                                   |CDIR_STATE_DIRTY)
 #define CDIR_MASK_STATE_EXPORT_KEPT 0
 
 // common states
 #define CDIR_STATE_CLEAN   0
-#define CDIR_STATE_INITIAL 0   // ?
+#define CDIR_STATE_INITIAL 0  
 
-// distributions
-
+// directory replication
 #define CDIR_REP_ALL       1
 #define CDIR_REP_NONE      0
 #define CDIR_REP_LIST      2
@@ -69,6 +69,8 @@ class CDir {
   int              dir_rep;
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
 
+  bool             auth;            // true if i'm the auth
+
   // lock nesting, freeze
   int        hard_pinned;
   int        nested_hard_pinned;
@@ -82,9 +84,10 @@ class CDir {
   friend class MDiscover;
 
  public:
-  CDir(CInode *in) {
+  CDir(CInode *in, bool auth) {
 	inode = in;
-
+	this->auth = auth;
+	
 	nitems = 0;
 	namesize = 0;
 	state = CDIR_STATE_INITIAL;
@@ -98,6 +101,7 @@ class CDir {
 
 
   size_t get_size() { 
+#if DEBUG_LEVEL>10
 	if (nitems != items.size()) {
 	  for (CDir_map_t::iterator it = items.begin();
 		   it != items.end();
@@ -106,6 +110,7 @@ class CDir {
 	  cout << "nitems " << nitems << endl;
 	  assert(nitems == items.size());
 	}
+#endif
 	return nitems; 
   }
 
@@ -114,10 +119,12 @@ class CDir {
   void reset_state(unsigned s) { state = s; }
   void state_clear(unsigned mask) {	state &= ~mask; }
   void state_set(unsigned mask) { state |= mask; }
-  unsigned state_test(unsigned mask) { state & mask; }
+  unsigned state_test(unsigned mask) { return state & mask; }
 
   bool is_complete() { return state & CDIR_STATE_COMPLETE; }
   bool is_freeze_root() { return state & CDIR_STATE_FROZEN; }
+  
+  bool is_auth() { return auth; }
 
   // dirtyness
   // invariant: if clean, my version >= all inode versions
@@ -133,6 +140,9 @@ class CDir {
 	if (!state_test(CDIR_STATE_DIRTY)) {
 	  version++;
 	  state_set(CDIR_STATE_DIRTY);
+	} 
+	else if (state_test(CDIR_STATE_COMMITTING)) {
+	  version++;  // dirtier than committing version!
 	}
   }
   void mark_clean() {

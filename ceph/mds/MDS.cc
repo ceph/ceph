@@ -451,7 +451,6 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 						  MSG_ADDR_CLIENT(req->get_client()), 0,
 						  MDS_PORT_SERVER);
 
-
   logger->inc("otouch");
   stat_write.hit();
   stat_req.hit();
@@ -474,21 +473,21 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	dout(10) << "reply to " << *req << " readdir -ENOTDIR" << endl;
 	return new MClientReply(req, -ENOTDIR);
   }
-	
-  if (!cur->dir) cur->dir = new CDir(cur);
-  
-  // frozen?
-  if (cur->dir->is_frozen()) {
-	// doh!
-	dout(10) << " dir is frozen, waiting" << endl;
-	cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(this, req));
-	return 0;
-  }
-  
+
   // make sure i'm authoritative!
   int dirauth = cur->dir_authority(mdcluster);          // FIXME hashed, etc.
   if (dirauth == whoami) {
 	
+	if (!cur->dir) cur->dir = new CDir(cur, true);
+  
+	// frozen?
+	if (cur->dir->is_frozen()) {
+	  // doh!
+	  dout(10) << " dir is frozen, waiting" << endl;
+	  cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(this, req));
+	  return 0;
+	}
+  
 	if (cur->dir->is_complete()) {
 	  // yay, replly
 	  MClientReply *reply = new MClientReply(req);

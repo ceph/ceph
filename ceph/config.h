@@ -22,3 +22,6 @@
 
 #define MDS_CACHE_SIZE        2500
 #define MDS_CACHE_MIDPOINT    .8
+
+
+#define MPI_DEST_TO_RANK(dest,world)    ((dest) % (world))

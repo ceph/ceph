@@ -11,7 +11,8 @@ class MInodeUpdate : public Message {
 
  public:
   inodeno_t get_ino() { 
-	inodeno_t ino = inode_basic_state.copy(0, sizeof(inodeno_t), (char*)&ino);
+	inodeno_t ino;
+	inode_basic_state.copy(0, sizeof(inodeno_t), (char*)&ino);
 	return ino;
   }
   

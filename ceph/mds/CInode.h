@@ -18,6 +18,7 @@
 using namespace std;
 
 
+// crap
 #define CINODE_SYNC_START     1  // starting sync
 #define CINODE_SYNC_LOCK      2  // am synced
 #define CINODE_SYNC_FINISH    4  // finishing
@@ -27,7 +28,7 @@ using namespace std;
 #define CINODE_MASK_IMPORT    16
 #define CINODE_MASK_EXPORT    32
 
-
+// pins for state, keeping an item in cache
 #define CINODE_PIN_CHILD     10000
 #define CINODE_PIN_CACHED    10001
 #define CINODE_PIN_IMPORT    10002
@@ -39,10 +40,12 @@ using namespace std;
 #define CINODE_PIN_DIRWAIT   10012
 #define CINODE_PIN_DIRWAITDN 10013
 
-#define CINODE_PIN_IHARDPIN   20000
-#define CINODE_PIN_DHARDPIN   30000
+#define CINODE_PIN_IHARDPIN  20000
+#define CINODE_PIN_DHARDPIN  30000
 #define CINODE_PIN_DIRTY     50000
 
+// directory authority types
+//  >= is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_HASH     -2
 
@@ -52,10 +55,8 @@ class CDir;
 class MDS;
 class MDCluster;
 class Message;
-
-
-
 class CInode;
+
 ostream& operator<<(ostream& out, CInode& in);
 ostream& operator<<(ostream& out, set<int>& iset);
 
@@ -69,9 +70,10 @@ class CInode : LRUObject {
   int              dir_auth;  // authority for child dir
 
  protected:
-  int              ref;            // reference count
+  int              ref;       // reference count
   set<int>         ref_set;
   __uint64_t       version;
+  __uint64_t       parent_dir_version;  // dir version when last touched.
 
   // parent dentries in cache
   int              nparents;  
@@ -125,10 +127,6 @@ class CInode : LRUObject {
 
   // dirtyness
   __uint64_t get_version() { return version; }
-  void float_version(__uint64_t ge) {
-	if (version < ge)
-	  version = ge;
-  }
   //void touch_version();  // mark dirty instead.
   void mark_dirty();
   void mark_clean() {
@@ -140,6 +138,12 @@ class CInode : LRUObject {
   }
   bool is_clean() {
 	return !ref_set.count(CINODE_PIN_DIRTY);
+  }
+
+  __uint64_t get_parent_dir_version() { return parent_dir_version; }
+  void float_parent_dir_version(__uint64_t ge) {
+	if (parent_dir_version < ge)
+	  parent_dir_version = ge;
   }
 
 

@@ -157,8 +157,8 @@ class MDCache {
 			  
 
   // crap fns
-  CInode* get_file(string& fn);
-  void add_file(string& fn, CInode* in);
+  CInode* hack_get_file(string& fn);
+  void hack_add_file(string& fn, CInode* in);
 
   void dump() {
 	if (root) root->dump();

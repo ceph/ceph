@@ -85,21 +85,17 @@ void CInode::hit()
 
 
 void CInode::mark_dirty() {
+  // mark me
+  version++;
   if (!ref_set.count(CINODE_PIN_DIRTY)) 
 	get(CINODE_PIN_DIRTY);
-
+  
   if (parent) {
 	// dir is now dirty (if it wasn't already)
 	parent->dir->mark_dirty();
-
-	if (parent->dir->get_version() >= version) 
-	  version = parent->dir->get_version(); // we're as dirty as the dir
-	else {
-	  version++;
-	  parent->dir->float_version(version);  // dir is at least as dirty as us.
-	}
-  } else
-	version++;  // i'm root.
+	
+	parent_dir_version = parent->dir->get_version();
+  }
 }
 
 

@@ -49,8 +49,6 @@ class Messenger {
 	return 0;
   }
 
-  Message *decode(crope& rope);
-
 
   // queue
   Message *get_message() {
@@ -78,5 +76,10 @@ class Messenger {
 
 
 };
+
+
+extern Message *decode_message(crope& rope);
+
+
 
 #endif

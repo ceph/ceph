@@ -36,7 +36,7 @@ using namespace std;
 
 
 Message *
-Messenger::decode(crope& ser)
+decode_message(crope& ser)
 {
   int type;
 

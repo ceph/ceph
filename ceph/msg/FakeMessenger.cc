@@ -62,7 +62,7 @@ int fakemessenger_do_loop()
 		  delete m;
 		  
 		  // decode
-		  m = it->second->decode(buffer);
+		  m = decode_message(buffer);
 		  assert(m);
 		}
 #endif

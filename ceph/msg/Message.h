@@ -32,13 +32,16 @@
 #define MSG_MDS_SHUTDOWNSTART  900
 #define MSG_MDS_SHUTDOWNFINISH 901
 
+#include "config.h"
 
 #define MSG_ADDR_MDS(x)     (x)
-#define MSG_ADDR_OSD(x)     (0x800 + x)
-#define MSG_ADDR_CLIENT(x)  (0x1000 + x)
+#define MSG_ADDR_OSD(x)     (NUMMDS+(x))
+#define MSG_ADDR_CLIENT(x)  (NUMMDS+NUMOSD+(x))
 
-#define MSG_ADDR_TYPE(x)    (x < 0x800 ? "mds":(x < 0x1000 ? "osd":"client"))
-#define MSG_ADDR_NUM(x)    (x < 0x800 ? x:(x < 0x1000 ? (x-0x800):(x-0x1000)))
+#define MSG_ADDR_TYPE(x)    ((x)<NUMMDS ? "mds":((x)<(NUMMDS+NUMOSD) ? "osd":"client"))
+#define MSG_ADDR_NUM(x)    ((x)<NUMMDS ? (x) : \ 
+							((x)<(NUMMDS+NUMOSD) ? ((x)-NUMMDS) : \
+							 ((x)-(NUMMDS+NUMOSD))))
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
 
 #include <iostream>
