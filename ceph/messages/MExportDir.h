@@ -38,6 +38,9 @@ class MExportDir : public Message {
   int    ndirs;
   crope  state;
   
+  // hashed pre-discovers
+  map<inodeno_t, set<string>> hashed_prediscover;
+
  public:  
   MExportDir() {}
   MExportDir(CInode *in, double pop) : 
@@ -57,12 +60,56 @@ class MExportDir : public Message {
 	state.append( dir );
 	ndirs++;
   }
+  void add_prediscover(inodeno_t dirino, string& dentry) {
+	hashed_prediscover[dirino].insert(dentry);
+  }
+  void remove_prediscover(inodeno_t dirino, string& dentry) {
+	assert(hashed_prediscover.count(dirino));
+	hashed_prediscover[dirino].remove(dentry);
+	if (hashed_prediscover[dirino].empty())
+	  hashed_prediscover.remove(dirino);
+  }
+  bool any_prediscovers() {
+	return !hashed_prediscover.empty();
+  }
+  map<inodeno_t, set<string> >::iterator predeiscover_begin() {
+	return hashed_prediscover.begin();
+  }
+  map<inodeno_t, set<string> >::iterator predeiscover_end() {
+	return hashed_prediscover.end();
+  }
+  set<string>::iterator prediscover_begin(inodeno_t dirino) {
+	return hashed_prediscover[dirino].begin();
+  }
+  set<string>::iterator prediscover_end(inodeno_t dirino) {
+	return hashed_prediscover[dirino].end();
+  }
 
   virtual int decode_payload(crope s) {
 	s.copy(0, sizeof(ino), (char*)&ino);
 	s.copy(sizeof(ino), sizeof(ipop), (char*)&ipop);
 	s.copy(sizeof(ino)+sizeof(ipop), sizeof(ndirs), (char*)&ndirs);
 	int off = sizeof(ino)+sizeof(ipop)+sizeof(ndirs);
+
+	// prediscover
+	int ndirs;
+	s.copy(off, sizeof(n), (char*)&n);
+	off += sizeof(n);
+	for (int i=0; i<ndirs; i++) {
+	  inodeno_t dirino;
+	  int nden;
+	  s.copy(off, sizeof(dirino), (char*)&dirino);
+	  off += sizeof(dirino);
+	  s.copy(off, sizeof(nden), (char*)&nden);
+	  off += sizeof(nden);
+	  for (int j=0; j<nden; j++) {
+		string dn = s.substr(off, s.length()-off).c_str();
+		off += dn.length() + 1;
+		hashed_prediscover[dirino].insert(dn);
+	  }
+	}
+
+	// dir data
 	state = s.substr(off, s.length() - off);
 	return 0;
   }
@@ -71,6 +118,24 @@ class MExportDir : public Message {
 	s.append((char*)&ino, sizeof(ino));
 	s.append((char*)&ipop, sizeof(ipop));
 	s.append((char*)&ndirs, sizeof(ndirs));
+
+	// prediscover
+	int ndirs = hashed_prediscover.size();
+	s.append((char*)&ndirs, sizeof(ndirs));
+	for (map<inodeno_t, set<string> >::iterator it = hashed_prediscover.begin();
+		 it != hashed_prediscover.end();
+		 it++) {
+	  int nden = it->second.size();
+	  s.append((char*)&nden, sizeof(nden));
+	  for (set<string>::iterator dit = it->second.begin();
+		   dit != it->second.end();
+		   dit++) {
+		s.append(*dit);
+		s.append((char)0);
+	  }
+	}
+	
+	// dir data
 	s.append(state);
 	return s;
   }

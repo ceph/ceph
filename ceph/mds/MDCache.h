@@ -157,6 +157,10 @@ class MDCache {
   void handle_inode_unlink_ack(MInodeUnlinkAck *m);
 
 
+  // -- misc auth --
+  void update_replica_auth(CInode *in, int realauth);
+
+
   // -- import/export --
   bool is_import(CDir *dir) {
 	assert(dir->is_import() == imports.count(dir));
@@ -165,6 +169,7 @@ class MDCache {
   bool is_export(CDir *dir) {
 	return exports.count(dir);
   }
+
   // exporter
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CDir *dir,

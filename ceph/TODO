@@ -17,10 +17,10 @@ ISSUES
 
 - is it practical for replicas to not know who the authority is?
 
-- better authority knowledge of replicas, especially with
-  - sync
-  - lock
-  ??
+/- better authority knowledge of replicas, especially with
+/  - sync
+/  - lock
+
 
 FIX
 - hash+export: encode list of replicated dir inodes so they can be discovered before import is procesed.

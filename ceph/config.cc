@@ -42,6 +42,6 @@ md_config_t g_conf = {
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,
 
-  mds_heartbeat_op_interval: 5000
+  mds_heartbeat_op_interval: 500
 };
 

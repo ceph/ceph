@@ -1036,6 +1036,7 @@ void MDCache::handle_inode_get_replica_ack(MInodeGetReplicaAck *m)
 
 int MDCache::send_inode_updates(CInode *in)
 {
+  assert(in->is_auth());
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
@@ -1060,19 +1061,20 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 	mds->messenger->send_message(new MInodeExpire(m->get_ino(), mds->get_nodeid(), true),
 								 m->get_source(), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
-	delete m;
-	return;
+	goto done;
   }
 
   if (in->is_auth()) {
 	dout(7) << "got inode_update on " << *in << ", but i'm the authority!" << endl;
-	delete m;
-	return;
+	goto done;
   }
   
   // update!
   dout(7) << "got inode_update on " << *in << endl;
   dout(7) << "dir_auth for " << *in << " was " << in->dir_auth << endl;
+
+  // update our notion of who is authoritative for this inode.
+  update_replica_auth(in, m->get_source());
 
   // ugly hack to avoid corrupting weird behavior of dir_auth
   int old_dir_auth = in->dir_auth;
@@ -1084,9 +1086,12 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   
   dout(7) << "dir_auth for " << *in << " now " << in->dir_auth << " old " << old_dir_auth << " was/is " << wasours << " " << isours << endl;
 
+done:
   // done
   delete m;
 }
+
+
 
 void MDCache::handle_inode_expire(MInodeExpire *m)
 {
@@ -1113,7 +1118,6 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
 
   dout(7) << "got inode_expire on " << *in << " from mds" << from << " cached_by now " << in->cached_by << endl;
   in->cached_by_remove(from);
-
 
   // done
  out:
@@ -1146,7 +1150,7 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
 int MDCache::send_dir_updates(CDir *dir, int except)
 {
   
-  // FIXME
+  // FIXME   ?
 
   int whoami = mds->get_nodeid();
   for (set<int>::iterator it = dir->inode->cached_by_begin(); 
@@ -1154,8 +1158,8 @@ int MDCache::send_dir_updates(CDir *dir, int except)
 	   it++) {
 	if (*it == whoami) continue;
 	if (*it == except) continue;
-	dout(7) << "mds" << whoami << " sending dir_update on " << *(dir->inode) << " to " << *it << endl;
-	mds->messenger->send_message(new MDirUpdate(dir->inode->inode.ino,
+	dout(7) << "sending dir_update on " << *dir << " to " << *it << endl;
+	mds->messenger->send_message(new MDirUpdate(dir->ino(),
 												dir->dir_rep,
 												dir->dir_rep_by),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
@@ -1164,6 +1168,7 @@ int MDCache::send_dir_updates(CDir *dir, int except)
 
   return 0;
 }
+
 
 void MDCache::handle_dir_update(MDirUpdate *m)
 {
@@ -1308,6 +1313,9 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
 	in->put(CINODE_PIN_UNLINKING);
 	inode_unlink_finish(in);
   }
+
+  // done
+  delete m;
 }
 
 
@@ -1665,6 +1673,24 @@ void MDCache::inode_sync_release(CInode *in)
 }
 
 
+void MDCache::update_replica_auth(CInode *in, int realauth)
+{
+  int myauth = in->authority(mds->get_cluster());
+  if (myauth != realauth) {
+	dout(7) << "update_replica_auth " << *in << " real auth is " << realauth << " not " << myauth << ", fiddling dir_auth" << endl;
+	CDir *dir = in->get_parent_dir();
+	assert(!dir->is_hashed());
+	assert(!dir->is_auth());
+	
+	// let's just change ownership of this dir.
+	assert(!dir->inode->is_auth());    // i would already have correct info if dir inode were mine
+	dir->inode->dir_auth = realauth;
+	assert(in->authority(mds->get_cluster()) == realauth);    // double check our work.
+	assert(!dir->is_auth());                                  // make sure i'm still not auth for the dir.
+  }
+}
+
+
 // messages
 void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 {
@@ -1685,6 +1711,9 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   // we shouldn't be authoritative...
   assert(!in->is_auth());
   
+  // make sure we know who _is_ authoritative!  :)
+  update_replica_auth(in, m->get_asker());
+
   // lock it
   in->dist_state |= CINODE_DIST_SYNCBYAUTH;
 
@@ -2068,6 +2097,9 @@ void MDCache::handle_inode_lock_start(MInodeLockStart *m)
   
   // lock it
   in->dist_state |= CINODE_DIST_LOCKBYAUTH;
+
+  // make sure we know who _is_ authoritative!  :)
+  update_replica_auth(in, m->get_asker());
   
   // send ack
   mds->messenger->send_message(new MInodeLockAck(in->ino()),
@@ -2534,8 +2566,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 		in->dir_auth == CDIR_AUTH_PARENT)
 	  in->dir_auth = mds->get_nodeid();
 	
-	// if hashed, only include dirs
-	if (in->is_dir() || !dir->is_hashed()) {
+	// if hashed, only include dirs i'm authoritative for
+	if (!dir->is_hashed() || (in->is_dir() && in->is_auth())) {
 	  // dentry
 	  dir_rope.append( it->first.c_str(), it->first.length()+1 );
 	  
@@ -2545,15 +2577,16 @@ void MDCache::export_dir_walk(MExportDir *req,
 	
 	if (in->is_dir()) {
 	  assert(in->dir_auth != mds->get_nodeid() || in->dir_is_hashed()); // shouldn't refer to us explicitly!
-
+	  
+	  // sanity check
 	  if (in->dir_is_hashed()) {
 		dout(7) << " encountered hashed dir " << *in->dir << endl;
 		assert(!in->dir || in->dir->is_hashed());
 	  } else 
 		assert(!in->dir || !in->dir->is_hashed());
 	  
-	  if (in->dir_auth == CDIR_AUTH_PARENT ||
-		  (in->dir_is_hashed() && in->dir_auth == mds->get_nodeid())) {
+	  // recurse?
+	  if (in->dir_is_auth(mds->get_nodeid())) {
 		if (in->dir)
 		  subdirs.push_back(in->dir);  // it's ours, recurse.
 	  } else {
@@ -2566,15 +2599,16 @@ void MDCache::export_dir_walk(MExportDir *req,
 
 	// we don't export inodes if hashed
 	if (dir->is_hashed()) {
-	  // but we do replicate all dirs on new auth
+	  // but we do replicate my dirs on new auth
 	  if (in->is_dir()) {
 		if (in->is_auth()) {
-		  // it's mine, easy enough: new auth will replicate my inode
+		  // it's mine, easy enough: new auth will replicate my inode (i included it above)
 		  if (!in->is_cached_by(newauth))
 			in->cached_by_add( newauth );
 		} 
 		else {
-		  // hmm, i'm a replica.  they'll need to contact auth themselves if they don't already have it!
+		  // i'm a replica.  the recipient had better discover this dir.
+		  req->add_prediscover(dir->ino(), it->first);
 		}
 	  }
 	} else {
@@ -2586,7 +2620,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  in->cached_by_clear();
 	  
 	  // mark auth
-	  assert(in->auth == true);
+	  assert(in->is_auth());
 	  in->set_auth(false);
 	  
 	  // *** other state too?
@@ -2720,28 +2754,31 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 
 
 
-/* this guy waits for the discover to finish.  if it's the last one on the dir,
- * it unfreezes it.  if it's the last frozen hashed dir, it triggers the above.
+/* this guy waits for the pre-import discovers on hashed directory dir inodes to finish.
+ * if it's the last one on the dir, it reprocessed the import.
  */
-/*
-class C_MDS_ImportHashedReplica : public Context {
+class C_MDS_ImportPrediscover : public Context {
 public:
   MDS *mds;
   MExportDir *m;
-  CDir *import;
-  inodeno_t dir_ino, replica_ino;
-  C_MDS_ImportHashedReplica(MDS *mds, CDir *import, inodeno_t dir_ino, inodeno_t replica_ino) {
+  inodeno_t dir_ino;
+  string dentry;
+  C_MDS_ImportPrediscover(MDS *mds, MExportDir *m, inodeno_t dir_ino, string& dentry) {
 	this->mds = mds;
-	this->import = import;
+	this->m = m;
 	this->dir_ino = dir_ino;
-	this->replica_ino = replica_ino;
+	this->dentry = dentry;
   }
   virtual void finish(int r) {
 	assert(r == 0);  // should never fail!
-	mds->mdcache->got_hashed_replica(import, dir_ino, replica_ino);
+	
+	m->remove_prediscover(dirino, dentry);
+	
+	if (!m->any_prediscovers()) 
+	  mds->mdcache->handle_export_dir(m);
   }
 };
-*/
+
 
 
 
@@ -2755,6 +2792,43 @@ void MDCache::handle_export_dir(MExportDir *m)
   int oldauth = m->get_source();
   dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
+
+  // prediscovers?
+  if (m->any_prediscovers()) {
+	dout(7) << "handle_export_dir checking prediscovers" << endl;
+	int needed = 0;
+	for (map<inodeno_t, set<string> >::iterator it = m->prediscover_begin();
+		 it != m->prediscover->end();
+		 it++) {
+	  CInode *in = get_inode(it->first);
+	  assert(in);
+	  assert(in->dir);
+	  string dirpath;
+	  in->make_path(dirpath);	  
+	  for (set<string>::iterator it = it->second.begin();
+		   it != it->second.end();
+		   it++) {
+		// do i have it?
+		if (in->dir->lookup(*it)) {
+		  dout(7) << "had " << *it << endl;
+		} else {
+		  int dauth = in->dir->dentry_authority(*it, mds->get_cluster());
+		  vector<string> *want = new vector<string>;
+		  want->push_back(*it);
+		  dout(7) << "discovering " << dirpath << "/" << *it << " from " << dauth << endl;
+		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(), dirpath, want),
+									   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		  in->dir->add_waiter(CDIR_WAIT_DENTRY,
+							  *it,
+							  new C_MDS_ImportPrediscover(mds, m, in->ino(), *it));
+		  needed++;
+		}
+	  }
+	}
+	if (needed > 0) return;
+  }
+
 
   show_imports();
   mds->logger->inc("im");
@@ -2993,24 +3067,7 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
 		  dout(7) << "   imported collateral dir " << *in->dir << " auth " << auth << ", had it" << endl;
 		} else {
 		  dout(7) << "   imported collateral dir " << *in->dir << " auth " << auth << ", discovering it" << endl;
-
-		  // send InodeGetReplica
-		  int dauth = dir->dentry_authority(dname, mds->get_cluster());
-		  mds->messenger->send_message(new MInodeGetReplica(in->ino()),
-									   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
-		  
-		  // freeze dir, note waiting status
-		  if (import_hashed_replicate_waiting.count(dir->inode->ino()) == 0) {
-			// first for this dir.. freeze and add to freeze list!
-			import_hashed_frozen_waiting.insert(pair<inodeno_t,inodeno_t>(import_root->ino(), dir->inode->ino()));
-			dir->freeze_dir(NULL);  // shouldn't hang, since we're newly authoritative.
-		  }
-		  import_hashed_replicate_waiting.insert(pair<inodeno_t,inodeno_t>(dir->inode->ino(), in->ino()));
-		  
-		  // add waiter
-		  //FIXME
-		  //in->add_waiter(CINODE_WAIT_GETREPLICA, 
-		  //new C_MDS_ImportHashedReplica(mds, in, dir->ino(), in->ino()));
+		  assert(0);  // maybe it gto expired already?
 		}
 	  }
 	}

@@ -49,6 +49,8 @@ struct inode_t {
 #define INODE_DIR_HASHED 2
 
 
+#define MAX_DENTRY_LEN 255
+
 typedef __uint64_t object_t;
 
 
