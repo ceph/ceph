@@ -299,7 +299,7 @@ bool MDStore::commit_dir( CInode *in,
 	return false;
   }
 
-  dout(7) << "commit_dir " << *in << endl;
+  dout(7) << "commit_dir " << *in << " version " << in->dir->get_version() << endl;
 
   // get continuation ready
   MDCommitDirContext *fin = new MDCommitDirContext(this, in, c);
@@ -321,15 +321,20 @@ bool MDStore::commit_dir( CInode *in,
 	fin->buffer.append( (char*) &it->second->get_inode()->inode, sizeof(inode_t));
 
 	// put inode in this dir version
-	if (it->second->get_inode()->is_dirty())
+	if (it->second->get_inode()->is_dirty()) {
 	  it->second->get_inode()->float_parent_dir_version(in->dir->get_version());
+	  dout(5) << " dirty inode " << in->get_parent_dir_version() << " " << *(in) << endl;
+	}
 	
 	num++;
   }
   
   // pin inode
   in->dir->auth_pin();
+
+  // state
   in->dir->state_set(CDIR_STATE_COMMITTING);
+  in->dir->set_committing_version(); 
 
   // submit to osd
   int osd = mds->mdcluster->get_meta_osd(in->inode.ino);
@@ -349,8 +354,10 @@ bool MDStore::commit_dir_2( int result,
 							Context *c,
 							__uint64_t committed_version)
 {
-  dout(5) << "commit_dir_2 " << *in << endl;
+  dout(5) << "commit_dir_2 " << *in << " committed " << committed_version << ", current version " << in->dir->get_version() << endl;
 
+  assert(committed_version == in->dir->get_committing_version());
+  
   // is the dir now clean?
   if (committed_version == in->dir->get_version())
 	in->dir->mark_clean();
@@ -362,11 +369,17 @@ bool MDStore::commit_dir_2( int result,
 	   it != in->dir->end();
 	   it++) {
 	CInode *in = it->second->get_inode();
-	if (in->get_parent_dir_version() == committed_version) {
+	if (committed_version > in->get_parent_dir_version()) {
+	  dout(5) << " dir " << committed_version << " > inode " << in->get_parent_dir_version() << " still clean " << *(in) << endl;
+	  assert(!in->is_dirty());
+	}
+	else if (in->get_parent_dir_version() == committed_version) {
+	  dout(5) << " dir " << committed_version << " == inode " << in->get_parent_dir_version() << " now clean " << *(in) << endl;
 	  in->mark_clean();     // might not but could be dirty
-	  dout(5) << " now clean " << *(in) << endl;
 	} else {
-	  dout(5) << " still dirty " << *(in) << endl;
+	  dout(5) << " dir " << committed_version << " < inode " << in->get_parent_dir_version() << " still dirty " << *(in) << endl;
+	  assert(committed_version < in->get_parent_dir_version());
+	  assert(in->is_dirty());
 	}
   }
 

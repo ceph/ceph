@@ -74,7 +74,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  mdlog->set_max_events(100);
+  mdlog->set_max_events(g_conf.mdlog_max_len);
 
   shutting_down = false;
   shut_down = false;
@@ -335,16 +335,22 @@ int MDS::handle_client_request(MClientRequest *req)
   }
 
   
-  // some client ops are on ino, not path
+  // operations on ino's or possibly non-existing files
+
   switch (req->get_op()) {
   case MDS_OP_CLOSE:
 	handle_client_close(req);
 	return 0;
+
+  case MDS_OP_OPENWRC:
+	handle_client_openwrc(req);
+	return 0;
   }
 
   
+  // operations that require existing files
+
   vector<CInode*> trace;
-  
   int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
 
@@ -648,7 +654,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 	  messenger->send_message(req,
 							  MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
 							  MDS_PORT_SERVER);
-	  mdcache->show_imports();
+	  //mdcache->show_imports();
 	}
 	return 0;
   }
@@ -732,6 +738,76 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
   reply->set_trace_dist( cur, whoami );
   return reply;
 }
+
+
+int path_depth(string& p)
+{
+  int d = 0;
+  for (const char *c = p.c_str(); *c; c++)
+	if (*c == '/') d++;
+  return d;
+}
+
+void MDS::handle_client_openwrc(MClientRequest *req)
+{
+  
+  // see if file exists
+  vector<CInode*> trace;
+  int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
+  if (r > 0) return;  // delayed
+
+  if (r < 0) {
+	// problems:
+	
+	if (r == -ENOENT) {
+	  // on the last bit?
+	  int depth = path_depth(req->get_path());
+	  if (trace.size() == depth-1) {
+		dout(7) << "handle_client_openwrc -ENOENT on target file" << endl;
+
+		// create dentry, file!
+		CInode *idir = trace[trace.size()-1];
+		assert(idir->dir->is_auth());  // path_traverse should have fwd if not!
+
+		// lock dir?		
+
+		// IMPLEMENT ME.
+		assert(0); 
+
+		return;
+	  } else {
+		dout(7) << "handle_client_openwrc -ENOENT on containing dir; fail!" << endl;
+	  }
+	}
+	
+	// send error response
+	dout(7) << "handle_client_openwrc error " << r << " replying to client" << endl;
+	MClientReply *reply = new MClientReply(req, r);
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	delete req;
+	return;
+  }
+
+  // file exists!  do it.
+
+  logger->inc("chit");
+  CInode *cur = trace[trace.size()-1];
+  balancer->hit_inode(cur);   // bump popularity
+  
+  MClientReply *reply = handle_client_openwr(req,cur);
+  
+  if (reply) {
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	
+	// discard request
+	delete req;
+  }
+}
+
 
 
 

@@ -135,7 +135,7 @@ bool MDCache::trim(__int32_t max) {
 	  idir = in->parent->dir->inode;
 
 	// remove it
-	dout(7) << "trim deleting " << *in << " " << in << endl;
+	dout(12) << "trim deleting " << *in << " " << in << endl;
 	remove_inode(in);
 	delete in;
 
@@ -156,7 +156,7 @@ bool MDCache::trim(__int32_t max) {
 
 		if (dest != mds->get_nodeid()) {
 		  // it's an empty import!
-		  dout(7) << "trimmed parent dir is an import; rexporting to " << dest << endl;
+		  dout(7) << "trimmed parent dir is a (now empty) import; rexporting to " << dest << endl;
 		  export_dir( idir, dest );
 		}
 	  }
@@ -280,13 +280,16 @@ bool MDCache::shutdown_pass()
 	  
 	  // un-import.
 	  imports.erase(root);
+	  root->dir->state_clear(CDIR_STATE_IMPORT);
 	  root->put(CINODE_PIN_IMPORT);
+
 	  if (root->is_pinned_by(CINODE_PIN_DIRTY))   // no root storage yet.
 		root->put(CINODE_PIN_DIRTY);
 	  
 	  if (root->ref != 0) {
 		dout(1) << "ugh, bad shutdown!" << endl;
 		imports.insert(root);
+		root->dir->state_set(CDIR_STATE_IMPORT);
 		root->get(CINODE_PIN_IMPORT);
 	  } else 
 		trim(0);	  // trim it
@@ -364,6 +367,7 @@ int MDCache::open_root(Context *c)
 
 	// root is technically an import (from a vacuum)
 	imports.insert( root );
+	root->dir->state_set(CDIR_STATE_IMPORT);
 	root->get(CINODE_PIN_IMPORT);
 
 	if (c) {
@@ -512,7 +516,13 @@ int MDCache::proc_message(Message *m)
 }
 
 
-
+/* path_traverse
+ *
+ * return values:
+ *   <0 : traverse error (ENOTDIR, ENOENT)
+ *    0 : success
+ *   >0 : delayed or forwarded
+ */
 int MDCache::path_traverse(string& path, 
 						   vector<CInode*>& trace, 
 						   Message *req,
@@ -551,9 +561,10 @@ int MDCache::path_traverse(string& path,
 		cur->dir = new CDir( cur, (whoami == cur->dir_authority(mds->get_cluster())) );
 	  
 	  // frozen?
-	  if (cur->dir->is_freeze_root()) {
+	  if (cur->dir->is_frozen_tree_root() ||
+		  cur->dir->is_frozen_dir()) {
 		// doh!
-		// FIXME: traverse is allowed!  
+		// FIXME: traverse is allowed?
 		dout(7) << " dir " << *cur << " is frozen, waiting" << endl;
 		cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
 							 new C_MDS_RetryMessage(mds, req));
@@ -633,7 +644,7 @@ int MDCache::path_traverse(string& path,
 			return 1;
 		  }	
 		  if (onfail == MDS_TRAVERSE_FAIL) {
-			return -1;
+			return -1;  // -ENOENT, but only because i'm not the authority
 		  }
 		}
 	  }
@@ -646,6 +657,7 @@ int MDCache::path_traverse(string& path,
 	//read_wait(cur, req);  // wait for read access
   }
 
+  // success.
   return 0;
 }
 
@@ -704,7 +716,7 @@ int MDCache::handle_discover(MDiscover *dis)
 
 	dout(7) << "handle_discover got result" << endl;
 	  
-	int r = path_traverse(dis->get_basepath(), trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
+	int r = path_traverse(dis->get_basepath(), trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG??
 	if (r < 0) {
 	  dout(1) << "handle_discover result, but not in cache any more.  dropping." << endl;
 	  delete dis;
@@ -753,7 +765,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		  in->dir = new CDir(in, false);   // can't be ours (an import) or it'd be in our cache.
 		  in->dir->dir_rep = trace[i].dir_rep;
 		  in->dir->dir_rep_by = trace[i].dir_rep_by;
-		  assert(in->dir->auth == false);
+		  assert(!in->dir->is_auth());
 		}
 		in->auth = false;
 
@@ -1869,7 +1881,7 @@ void MDCache::handle_inode_lock_release(MInodeLockRelease *m)
   if (in->is_waitonunlock()) {
 	in->put(CINODE_PIN_WAITONUNLOCK);
 	in->dist_state &= ~CINODE_DIST_WAITONUNLOCK;
-
+	
 	// finish
 	list<Context*> finished;
 	in->take_waiting(CINODE_WAIT_UNLOCK, finished);
@@ -1885,6 +1897,10 @@ void MDCache::handle_inode_lock_release(MInodeLockRelease *m)
   // done
   delete m;
 }
+
+
+
+
 
 
 
@@ -1955,7 +1971,7 @@ public:
 
 
   virtual void finish(int r) {
-	if (r >= 0) { // success
+	if (r >= 0) { 
 	  // redelegate
 	  list<Context*>::iterator it;
 	  for (it = will_redelegate.begin(); it != will_redelegate.end(); it++) {
@@ -2020,7 +2036,7 @@ void MDCache::export_dir(CInode *in,
 
   // freeze the subtree
   //dout(7) << "export_dir " << *in << " to " << dest << ", freezing" << endl;
-  in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest, pop));
+  in->dir->freeze_tree(new C_MDS_ExportFreeze(mds, in, dest, pop));
 
   // drop any sync or lock if sticky
   if (g_conf.mdcache_sticky_sync_normal ||
@@ -2079,7 +2095,7 @@ void MDCache::export_dir_frozen(CInode *in,
   if (containing_import == in) {
 	dout(7) << " i'm rexporting a previous import" << endl;
 	imports.erase(in);
-
+	in->dir->state_clear(CDIR_STATE_IMPORT);
 	in->put(CINODE_PIN_IMPORT);                  // unpin, no longer an import
 
 	// discard nested exports (that we're handing off
@@ -2181,8 +2197,8 @@ void MDCache::export_dir_walk(MExportDir *req,
   }
 
   // mark
-  assert(idir->dir->auth == true);
-  idir->dir->auth = false;
+  assert(idir->dir->is_auth());
+  idir->dir->state_clear(CDIR_STATE_AUTH);
 
   // discard most dir state
   idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
@@ -2286,7 +2302,7 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
 
   // unfreeze
   dout(7) << "export_dir_ack " << *in << ", unfreezing" << endl;
-  in->dir->unfreeze();
+  in->dir->unfreeze_tree();
 
   show_imports();
 
@@ -2313,7 +2329,7 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
   // discard most dir state
   //idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
   
-  assert(idir->dir->auth == false);
+  assert(!idir->dir->is_auth());
 
   // contents:
   CDir_map_t::iterator it = idir->dir->begin();
@@ -2362,8 +2378,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   vector<CInode*> trav;
 
   int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_DISCOVER);   
-  if (r > 0)
-	return;  // did something
+  if (r > 0) return;  // fw or delay
   
   // okay
   CInode *in = trav[trav.size()-1];
@@ -2424,7 +2439,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   } else {
 	// new import
 	imports.insert(in);
-
+	in->dir->state_set(CDIR_STATE_IMPORT);
 	in->get(CINODE_PIN_IMPORT);                // must keep it pinned
 
 	containing_import = in;  // imported exports nested under *in
@@ -2517,8 +2532,8 @@ void MDCache::import_dir_block(pchar& p,
   idir->dir->dir_rep = dstate->dir_rep;
   idir->dir->popularity = dstate->popularity;
   
-  assert(idir->dir->auth == false);
-  idir->dir->auth = true;
+  assert(!idir->dir->is_auth());
+  idir->dir->state_set(CDIR_STATE_AUTH);
   
   p += sizeof(*dstate);
   for (int nrep = dstate->ndir_rep_by; nrep > 0; nrep--) {
@@ -2599,6 +2614,8 @@ void MDCache::import_dir_block(pchar& p,
 		// adjust the import
 		dout(7) << " importing nested export " << *in << " to ME!  how fortuitous" << endl;
 		imports.erase(in);
+		in->dir->state_clear(CDIR_STATE_IMPORT);
+
 		mds->logger->inc("immyex");
 
 		// move nested exports under containing_import
@@ -2655,10 +2672,11 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 
   vector<CInode*> trav;
   int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_FORWARD);  
-  if (r != 0) {
-	dout(7) << " fwd or freeze or something" << endl;
+  if (r > 0) {
+	dout(7) << " fwd or delay" << endl;
 	return;
   }
+  assert(r == 0);  // FIXME: what if ENOENT, etc.?  
   
   CInode *in = trav[ trav.size()-1 ];
 

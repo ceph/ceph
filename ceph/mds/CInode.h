@@ -191,14 +191,14 @@ class CInode : LRUObject {
 
   void hit();
 
-  bool is_frozen();
-  bool is_freezing();
 
+  
   // dirtyness
   __uint64_t get_version() { return version; }
   //void touch_version();  // mark dirty instead.
   void mark_dirty();
   void mark_clean() {
+	dout(10) << "mark_clean " << *this << endl;
 	if (ref_set.count(CINODE_PIN_DIRTY)) 
 	  put(CINODE_PIN_DIRTY);
   }	
@@ -341,11 +341,12 @@ class CInode : LRUObject {
   */
 
   
-  // dist cache
+  // -- authority --
   int authority(MDCluster *mdc);
   int dir_authority(MDCluster *mdc);
 
-  // locking
+
+  // -- auth pins --
   int is_auth_pinned() { 
 	return auth_pins;
   }
@@ -353,6 +354,11 @@ class CInode : LRUObject {
   bool can_auth_pin();
   void auth_pin();
   void auth_unpin();
+
+
+  // -- freeze --
+  bool is_frozen();
+  bool is_freezing();
 
 
   // --- reference counting

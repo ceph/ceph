@@ -23,20 +23,28 @@ class MDS;
 class MDCluster;
 class Context;
 
+
 // state bits
 #define CDIR_STATE_COMPLETE      1   // the complete contents are in cache
 //#define CDIR_STATE_COMPLETE_LOCK 2   // complete contents are in cache, and locked that way!  (not yet implemented)
 #define CDIR_STATE_DIRTY         4   // has been modified since last commit
 
-#define CDIR_STATE_FROZEN        8   // root of a freeze
-#define CDIR_STATE_FREEZING     16   // in process of freezing
+#define CDIR_STATE_FROZENTREE    8   // root of tree (bounded by exports)
+#define CDIR_STATE_FREEZINGTREE 16   // in process of freezing 
+#define CDIR_STATE_FROZENDIR    32
+#define CDIR_STATE_FREEZINGDIR  64
 
-#define CDIR_STATE_COMMITTING   32   // mid-commit
-#define CDIR_STATE_FETCHING     64   // currenting fetching
+#define CDIR_STATE_COMMITTING  128   // mid-commit
+#define CDIR_STATE_FETCHING    256   // currenting fetching
+
+#define CDIR_STATE_IMPORT     1024   // flag set if this is an import.
+#define CDIR_STATE_AUTH       2048   // auth for all (OR PART) of this dir
+#define CDIR_STATE_HASHED     4096   // true if hashed
 
 // these state bits are preserved by an import/export
 #define CDIR_MASK_STATE_EXPORTED  (CDIR_STATE_COMPLETE\
-                                   |CDIR_STATE_DIRTY)
+                                   |CDIR_STATE_DIRTY\
+                                   |CDIR_STATE_HASHED)
 #define CDIR_MASK_STATE_EXPORT_KEPT 0
 
 // common states
@@ -89,6 +97,7 @@ class CDir {
   size_t           namesize;
   unsigned         state;
   __uint64_t       version;
+  __uint64_t       committing_version;
 
   // waiters
   multimap<int, Context*> waiting;  // tag -> context
@@ -99,12 +108,11 @@ class CDir {
   int              dir_rep;
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
 
-  bool             auth;            // true if i'm the auth
+  //bool             auth;            // true if i'm the auth
 
   // lock nesting, freeze
   int        auth_pins;
   int        nested_auth_pins;
-  //list<Context*>  waiting_to_freeze;      // wannabe freezer, NOT waiting for *this to thaw
 
   DecayCounter popularity;
 
@@ -116,12 +124,14 @@ class CDir {
  public:
   CDir(CInode *in, bool auth) {
 	inode = in;
-	this->auth = auth;
 	
 	nitems = 0;
 	namesize = 0;
 	state = CDIR_STATE_INITIAL;
 	version = 0;
+
+	if (auth)
+	  state |= CDIR_STATE_AUTH;
 
 	auth_pins = 0;
 	nested_auth_pins = 0;
@@ -129,7 +139,11 @@ class CDir {
 	dir_rep = CDIR_REP_NONE;
   }
 
-
+  // -- accessors --
+  CInode *get_inode() { return inode; }
+  // contents
+  CDir_map_t::iterator begin() { return items.begin(); }
+  CDir_map_t::iterator end() { return items.end(); }
   size_t get_size() { 
 #if DEBUG_LEVEL>10
 	if (nitems != items.size()) {
@@ -143,8 +157,16 @@ class CDir {
 #endif
 	return nitems; 
   }
+  
 
-  // state
+  // -- manipulation --
+  void add_child(CDentry *d);
+  void remove_child(CDentry *d);
+  CDentry* lookup(string& n);
+
+
+
+  // -- state --
   unsigned get_state() { return state; }
   void reset_state(unsigned s) { state = s; }
   void state_clear(unsigned mask) {	state &= ~mask; }
@@ -152,9 +174,9 @@ class CDir {
   unsigned state_test(unsigned mask) { return state & mask; }
 
   bool is_complete() { return state & CDIR_STATE_COMPLETE; }
-  bool is_freeze_root() { return state & CDIR_STATE_FROZEN; }
-  
-  bool is_auth() { return auth; }
+  bool is_auth() { return state & CDIR_STATE_AUTH; }
+  bool is_hashed() { return state & CDIR_STATE_HASHED; }
+  bool is_import() { return state & CDIR_STATE_IMPORT; }
 
   bool is_rep() { 
 	if (dir_rep == CDIR_REP_NONE) return false;
@@ -163,42 +185,33 @@ class CDir {
   int get_rep_count(MDCluster *mdc);
   
 
-  // dirtyness
-  // invariant: if clean, my version >= all inode versions
-  __uint64_t get_version() {
-	return version;
-  }
-  //void touch_version() { version++; }
+  // -- dirtyness --
+  __uint64_t get_version() { return version; }
   void float_version(__uint64_t ge) {
 	if (version < ge)
 	  version = ge;
   }
-  void mark_dirty() {
-	if (!state_test(CDIR_STATE_DIRTY)) {
-	  version++;
-	  state_set(CDIR_STATE_DIRTY);
-	} 
-	else if (state_test(CDIR_STATE_COMMITTING)) {
-	  version++;  // dirtier than committing version!
-	}
+  __uint64_t get_committing_version() { 
+	return committing_version;
   }
-  void mark_clean() {
-	state_clear(CDIR_STATE_DIRTY);
-  }
-  void mark_complete() {
-	state_set(CDIR_STATE_COMPLETE);
-  }
-  bool is_clean() {
-	return !state_test(CDIR_STATE_DIRTY);
-  }
-  
+  // as in, we're committing the current version.
+  void set_committing_version() { committing_version = version; }
+  void mark_dirty();
+  void mark_clean();
+  void mark_complete() { state_set(CDIR_STATE_COMPLETE); }
+  bool is_clean() { return !state_test(CDIR_STATE_DIRTY); }
+
+
+  // -- popularity --
   void hit();
 
+
+  // -- state --
   crope encode_basic_state();
   int decode_basic_state(crope r, int off=0);
 
 
-  // waiters  
+  // -- waiters --
   void add_waiter(int tag, Context *c);
   void add_waiter(int tag,
 				  string& dentry,
@@ -206,46 +219,40 @@ class CDir {
   void take_waiting(int mask, list<Context*>& ls);  // all waiting
   void take_waiting(int mask, const string& dentry, list<Context*>& ls);  
 
-  bool is_frozen();
-  bool is_freezing();
-  void freeze(Context *c);
-  void freeze_finish(list<Context*>& waiting);
-  void unfreeze();
-  //void add_freeze_waiter(Context *c);
 
-  int is_auth_pinned() { return auth_pins; }
-  int adjust_nested_auth_pins(int a);
+  // -- auth pins --
   bool can_auth_pin() { return !(is_frozen() || is_freezing()); }
+  int is_auth_pinned() { return auth_pins; }
   void auth_pin();
   void auth_unpin();
+  void adjust_nested_auth_pins(int inc);
+  void on_freezeable();
 
+  // -- freezing --
+  void freeze_tree(Context *c);
+  void freeze_tree_finish(Context *c);
+  void unfreeze_tree();
 
+  bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
+  bool is_freezing_tree();
+  bool is_freezing_tree_root() { return state & CDIR_STATE_FREEZINGTREE; }
+  bool is_freezing_dir() { return state & CDIR_STATE_FREEZINGDIR; }
 
+  bool is_frozen() { return is_frozen_dir() || is_frozen_tree(); }
+  bool is_frozen_tree();
+  bool is_frozen_tree_root() { return state & CDIR_STATE_FROZENTREE; }
+  bool is_frozen_dir() { return state & CDIR_STATE_FROZENDIR; }
+  
+  bool is_freezeable() {
+	if (auth_pins == 0 && nested_auth_pins == 0) return true;
+	return false;
+  }
 
-  CInode *get_inode() { return inode; }
-
-  // distributed cache
+  // -- authority -- 
   int dentry_authority(string& d, MDCluster *mdc);
 
 
-  // for storing..
-  size_t serial_size() {
-	return nitems * (10+sizeof(inode_t)) + namesize;
-  }
-  
-  CDir_map_t::iterator begin() {
-	return items.begin();
-  }
-  CDir_map_t::iterator end() {
-	return items.end();
-  }
-  
-  // manipulation
-  void add_child(CDentry *d);
-  void remove_child(CDentry *d);
-  CDentry* lookup(string& n);
-
-  // debuggin
+  // debuggin bs
   void dump(int d = 0);
   void dump_to_disk(MDS *m);
 };

@@ -42,21 +42,20 @@ typedef const char* pchar;
 
 class MDCache {
  protected:
+  // the cache
   CInode                       *root;        // root inode
- public:
   LRU                          *lru;         // lru for expiring items
- protected:
   inode_map_t                   inode_map;   // map of inodes by ino             
   MDS *mds;
 
+  // root
   bool               opening_root;
   list<Context*>     waiting_for_root;
 
+  // imports and exports
   set<CInode*>       imports;                // includes root (on mds0)
   set<CInode*>       exports;
   multimap<CInode*,CInode*>  nested_exports; // nested exports of (imports|root)
-
-
   friend class MDBalancer;
 
  public:
@@ -65,13 +64,12 @@ class MDCache {
   
 
   // accessors
-  CInode *get_root() {
-	return root;
-  }
+  CInode *get_root() { return root; }
   void set_root(CInode *r) {
 	root = r;
 	add_inode(root);
   }
+  LRU *get_lru() { return lru; }
 
 
   // fn
@@ -116,11 +114,18 @@ class MDCache {
 					Message *req, 
 					int onfail);
 
-  // messages
+  
+  // == messages ==
   int proc_message(Message *m);
-
   int handle_discover(MDiscover *dis);
 
+  // -- import/export --
+  bool is_import(CDir *dir) {
+	return imports.count(dir->inode);
+  }
+  bool is_export(CDir *dir) {
+	return exports.count(dir->inode);
+  }
   // exporter
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CInode *in,
@@ -143,9 +148,38 @@ class MDCache {
 						int oldauth,
 						list<Context*>& waiting_on_imported);
 
-  // dir authoirty bystander
+  // dir authority bystander
   void handle_export_dir_notify(MExportDirNotify *m);
 
+
+  /*
+  // -- freezing --
+  void freeze_tree(CDir *dir, Context *c);
+  void freeze_tree_finish(CDir *dir, Context *c);
+  void unfreeze_tree(CDir *dir);
+
+  void freeze_dir(CInode *in, Context *c);
+  void freeze_dir_finish(CInode *in, list<Context*>& waiting);
+  void unfreeze_dir(Cinode *in);
+
+  bool is_freezing(CDir *dir) {
+	return is_freezing_tree(dir) || is_freezing_dir(dir);
+  }
+  bool is_freezing_tree(CDir *dir);
+  bool is_freezing_dir(CDir *dir) {
+	return freezing_dirs.count(dir);
+  }
+
+  bool is_frozen(CDir *dir) {
+	return is_frozen_dir(dir) || is_frozen_tree(dir);
+  }
+  bool is_frozen_tree(CDir *dir);
+  bool is_frozen_dir(CDir *dir) {
+	return frozen_dirs.count(dir);
+  }
+  */
+
+  // -- updates --
   int send_inode_updates(CInode *in);
   void handle_inode_update(MInodeUpdate *m);
 
@@ -154,6 +188,8 @@ class MDCache {
 
   void handle_inode_expire(MInodeExpire *m);
 
+
+  // -- lock and sync --
   // soft sync locks
   bool read_soft_start(CInode *in, Message *m);
   int read_soft_finish(CInode *in);
@@ -185,7 +221,9 @@ class MDCache {
   void handle_inode_lock_release(MInodeLockRelease *m);
 			  
 
-  // crap fns
+
+
+  // == crap fns ==
   CInode* hack_get_file(string& fn);
   vector<CInode*> hack_add_file(string& fn, CInode* in);
 

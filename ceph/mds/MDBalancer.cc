@@ -325,7 +325,8 @@ void MDBalancer::find_exports(CInode *idir,
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;  // clearly not popular
 	if (mds->mdcache->exports.count(in)) continue;  
-	if (in->dir->is_freeze_root()) continue;  // can't export this right now!
+	//if (in->dir->is_freezetree_root()) continue;  
+	if (in->dir->is_frozen()) continue;  // can't export this right now!
 
 	double pop = in->popularity.get();
 
@@ -410,7 +411,7 @@ void MDBalancer::hit_dir(CDir *dir)
 	dir->popularity.hit();
 	float dir_pop = dir->popularity.get();
 
-	if (dir->auth) {
+	if (dir->is_auth()) {
 	  if (!dir->is_rep() &&
 		  dir_pop >= g_conf.mdbal_replicate_threshold) {
 		// replicate

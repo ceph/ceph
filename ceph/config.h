@@ -13,6 +13,7 @@ struct md_config_t {
   bool log_messages;
   float log_interval;
   
+  int mdlog_max_len;
   int mdlog_max_trimming;
   int mdlog_read_inc;
   

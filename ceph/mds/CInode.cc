@@ -81,15 +81,20 @@ void CInode::hit()
 
 
 void CInode::mark_dirty() {
-  // mark me
+  
+  dout(10) << "mark_dirty " << *this << endl;
+
+  // touch my private version
   version++;
   if (!ref_set.count(CINODE_PIN_DIRTY)) 
 	get(CINODE_PIN_DIRTY);
   
+  // relative to parent dir:
   if (parent) {
 	// dir is now dirty (if it wasn't already)
 	parent->dir->mark_dirty();
 	
+	// i now live in that (potentially newly dirty) version
 	parent_dir_version = parent->dir->get_version();
   }
 }
@@ -201,13 +206,6 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
 
 
 // auth_pins
-int CInode::adjust_nested_auth_pins(int a) {
-  nested_auth_pins += a;
-  dout(11) << "adjust_nested_auth_pins on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
-  if (parent) 
-	parent->dir->adjust_nested_auth_pins(a);
-}
-
 bool CInode::can_auth_pin() {
   if (parent)
 	return parent->dir->can_auth_pin();
@@ -229,7 +227,6 @@ void CInode::auth_unpin() {
   if (parent)
 	parent->dir->adjust_nested_auth_pins( -1 );
 }
-
 
 
 

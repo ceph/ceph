@@ -33,7 +33,8 @@ using namespace std;
 
 #define MDS_OP_OPENRD  111
 #define MDS_OP_OPENWR  112
-#define MDS_OP_CLOSE   113
+#define MDS_OP_OPENWRC 113
+#define MDS_OP_CLOSE   119
 
 #define MDS_OP_TOUCH   200  // utime, actually
 #define MDS_OP_CHMOD   201  // chmod
@@ -167,6 +168,7 @@ class MDS : public Dispatcher {
 									 CInode *cur);
   MClientReply *handle_client_openwr(MClientRequest *req,
 									 CInode *cur);
+  void handle_client_openwrc(MClientRequest *req);
   void handle_client_close(MClientRequest *req);
 
 
