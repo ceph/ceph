@@ -1,41 +1,60 @@
-#ifndef __MDISCOVER_H
-#define __MDISCOVER_H
+#ifndef __MDISCOVERREPLY_H
+#define __MDISCOVERREPLY_H
 
 #include "include/Message.h"
 #include "mds/CDir.h"
-#include "include/filepath.h"
 
 #include <vector>
 #include <string>
 using namespace std;
 
 
-class MDiscover : public Message {
-  int             asker;
-  inodeno_t       base_ino;          // 0 -> none, want root
-  bool            want_base_dir;
+class MDiscoverReply : public Message {
+  inodeno_t    base_ino;
+  bool         no_base_dir;
+  bool         no_base_dentry;
   
-  dirpath         want;   // ... [/]need/this/stuff
+  // ... + dir + dentry + inode
+  // inode [ + ... ], base_ino = 0 : discover base_ino=0, start w/ root ino
+  // dentry + inode [ + ... ]      : discover want_base_dir=false
+  // (dir + dentry + inode) +      : discover want_base_dir=true
+  vector<CDirDiscover*>   dirs;      // first one bogus if no_base_dir = true.
+  vector<string>          dentries;  // first one bogus if no_base_dentry = true
+  vector<CInodeDiscover*> inodes;
 
  public:
-  int get_asker() { return asker; }
+  // accessors
   inodeno_t get_base_ino() { return base_ino; }
-  filepath& get_want() { return want; }
-  string&  get_dentry(int n) { return want[n]; }
+  bool      is_base_dir() { return !no_base_dir; }
+  bool      is_base_dentry() { return !no_base_dentry; }
+  int       get_num_inodes() { return inodes.size(); }
 
-  MDiscover() { }
-  MDiscover(int asker, 
-			inodeno_t base_ino,
-			filepath& want,
-			bool want_base_dir = true) :
-	Message(MSG_MDS_DISCOVER) {
-	this->asker = asker;
+  CDirDiscover* get_dir(int n) { return dirs[n]; }
+  string& get_dentry(int n) { return dentries[n]; }
+  CInodeDiscover* get_inode(int n) { return inodes[n]; }
+
+  // cons
+  MDiscoverReply() {}
+  MDiscoverReply(inodeno_t base_ino) :
+	Message(MSG_MDS_DISCOVERREPLY) {
 	this->base_ino = base_ino;
-	this->want = want;
-	this-.want_base_dir = want_base_dir;
+	no_base_dir = no_base_dentry = false;
   }
-  virtual char *get_type_name() { return "Dis"; }
-
+  virtual char *get_type_name() { return "DisR"; }
+  
+  // builders
+  void add_dir(CDirDiscover *dir) { dirs.push_back(dir); }
+  void add_dentry(string& dn) { 
+	if (dirs.empty() && dentries.empty()) no_base_dir = true;
+	dentries.push_back(dn); 
+  }
+  void add_inode(CInodeDiscover *in) { 
+	if (inodes.empty() && dirs.empty()) no_base_dir = true;
+	if (inodes.empty() && dentries.empty()) no_base_dentry = true;
+	inodes.push_back(in); 
+  }
+  
+  // ...
   virtual int decode_payload(crope r) {
 	r.copy(0, sizeof(asker), (char*)&asker);
 	basepath = r.c_str() + sizeof(asker);
@@ -87,8 +106,6 @@ class MDiscover : public Message {
 
   void add_bit(CInode *in, int auth, int nonce) {
 	MDiscoverRec_t bit;
-
-	assert(nonce >= 0);
 
 	bit.inode = in->inode;
 	bit.cached_by = in->get_cached_by();
