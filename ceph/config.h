@@ -1,5 +1,5 @@
 
-#define NUMMDS 10
+#define NUMMDS 3
 #define NUMOSD 10
 
 #define CLIENT_CACHE      100
@@ -12,6 +12,6 @@
 //#define FAKE_CLOCK
 
 #define NUMCLIENT 80
-#define CLIENT_REQUESTS 30
+#define CLIENT_REQUESTS 500
 
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 10

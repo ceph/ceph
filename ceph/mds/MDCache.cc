@@ -159,6 +159,8 @@ bool MDCache::trim(__int32_t max) {
 
 bool MDCache::shutdown_pass()
 {
+  static bool did_inode_updates = false;
+
   dout(7) << "shutdown_pass" << endl;
   //assert(mds->is_shutting_down());
   if (mds->is_shut_down()) {
@@ -170,6 +172,19 @@ bool MDCache::shutdown_pass()
   trim(0);
 
   dout(7) << "cache size now " << lru->lru_get_size() << endl;
+
+  // send inode_expire's on all potentially cache pinned items
+  if (0 &&
+	  !did_inode_updates) {
+	did_inode_updates = true;
+
+	for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
+		 it != inode_map.end();
+		 it++) {
+	  if (it->second->ref_set.count(CINODE_PIN_CACHED)) 
+		send_inode_updates(it->second);  // send an update to discover who dropped the ball
+	}
+  }
 
   // send imports to 0!
   if (mds->get_nodeid() != 0) {
@@ -685,20 +700,21 @@ int MDCache::handle_discover(MDiscover *dis)
 {
   int whoami = mds->get_nodeid();
 
-  if (dis->asker == whoami) {
+  if (dis->get_asker() == whoami) {
 	// this is a result
+	vector<MDiscoverRec_t> trace = dis->get_trace();
 	
-	if (dis->want == 0) {
+	if (dis->just_root()) {
 	  dout(7) << "handle_discover got root" << endl;
 	  
 	  CInode *root = new CInode();
-	  root->inode = dis->trace[0].inode;
-	  root->cached_by = dis->trace[0].cached_by;
+	  root->inode = trace[0].inode;
+	  root->cached_by = trace[0].cached_by;
 	  root->cached_by.insert(whoami);   // obviously i have it too
-	  root->dir_auth = dis->trace[0].dir_auth;
+	  root->dir_auth = trace[0].dir_auth;
 	  root->dir = new CDir(root);
-	  root->dir->dir_rep = dis->trace[0].dir_rep;
-	  root->dir->dir_rep_by = dis->trace[0].dir_rep_by;
+	  root->dir->dir_rep = trace[0].dir_rep;
+	  root->dir->dir_rep_by = trace[0].dir_rep_by;
 	  
 	  set_root( root );
 
@@ -726,7 +742,7 @@ int MDCache::handle_discover(MDiscover *dis)
 
 	dout(7) << "handle_discover got result" << endl;
 	  
-	int r = path_traverse(dis->basepath, trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
+	int r = path_traverse(dis->get_basepath(), trav, NULL, MDS_TRAVERSE_FAIL);   // FIXME BUG
 	if (r < 0) {
 	  dout(1) << "handle_discover result, but not in cache any more.  dropping." << endl;
 	  delete dis;
@@ -736,41 +752,42 @@ int MDCache::handle_discover(MDiscover *dis)
 	CInode *cur = trav[trav.size()-1];
 	CInode *start = cur;
 
+	vector<string> *wanted = dis->get_want();
 
 	list<Context*> finished;
 
 	// add duplicated dentry+inodes
-	for (int i=0; i<dis->trace.size(); i++) {
+	for (int i=0; i<trace.size(); i++) {
 
 	  if (!cur->dir) cur->dir = new CDir(cur);  // ugly
 
 	  CInode *in;
-	  CDentry *dn = cur->dir->lookup( (*dis->want)[i] );
+	  CDentry *dn = cur->dir->lookup( (*wanted)[i] );
 	  if (dn) {
 		// already had it?  (parallel discovers?)
-		dout(7) << "huh, already had " << (*dis->want)[i] << endl;
+		dout(7) << "huh, already had " << (*wanted)[i] << endl;
 		in = dn->inode;
 	  } else {
 		in = new CInode();
 
 		// assim discover info
-		in->inode = dis->trace[i].inode;
-		in->cached_by = dis->trace[i].cached_by;
+		in->inode = trace[i].inode;
+		in->cached_by = trace[i].cached_by;
 		in->cached_by.insert(whoami);    // obviously i have it too
-		in->dir_auth = dis->trace[i].dir_auth;
+		in->dir_auth = trace[i].dir_auth;
 		if (in->is_dir()) {
 		  in->dir = new CDir(in);
-		  in->dir->dir_rep = dis->trace[i].dir_rep;
-		  in->dir->dir_rep_by = dis->trace[i].dir_rep_by;
+		  in->dir->dir_rep = trace[i].dir_rep;
+		  in->dir->dir_rep_by = trace[i].dir_rep_by;
 		}
 		
 		// link in
 		add_inode( in );
-		link_inode( cur, (*dis->want)[i], in );
+		link_inode( cur, (*wanted)[i], in );
 		dout(7) << " discover assimilating " << *in << endl;
 	  }
 	  
-	  cur->dir->take_waiting((*dis->want)[i],
+	  cur->dir->take_waiting((*wanted)[i],
 							 finished);
 	  
 	  cur = in;
@@ -790,7 +807,7 @@ int MDCache::handle_discover(MDiscover *dis)
 
   } else {
 	
-	dout(7) << "handle_discover from mds" << dis->asker << " current_need() " << dis->current_need() << endl;
+	dout(7) << "handle_discover from mds" << dis->get_asker() << " current_need() " << dis->current_need() << endl;
 	
 	// this is a request
 	if (!root) {
@@ -803,17 +820,17 @@ int MDCache::handle_discover(MDiscover *dis)
 	string current_base = dis->current_base();
 	int r = path_traverse(current_base, trav, dis, MDS_TRAVERSE_FORWARD);
 	if (r > 0) return 0;  // forwarded, i hope!
-
+	
 	CInode *cur = trav[trav.size()-1];
-
+	
 	// just root?
-	if (dis->want_root()) {
+	if (dis->just_root()) {
 	  CInode *root = get_root();
 	  dis->add_bit( root, 0 );
 
 	  if (root->cached_by.empty())
 		root->get(CINODE_PIN_CACHED);
-	  root->cached_by.insert( dis->asker );
+	  root->cached_by.insert( dis->get_asker() );
 	}
 
 	// add bits
@@ -840,7 +857,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		// is it mine?
 		int auth = next->authority(mds->get_cluster());
 		if (auth == whoami) {
-		  dout(7) << "discover adding bit " << *next << " for mds" << dis->asker << endl;
+		  dout(7) << "discover adding bit " << *next << " for mds" << dis->get_asker() << endl;
 
 		  // add it
 		  dis->add_bit( next, whoami );
@@ -848,7 +865,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		  // remember who is caching this!
 		  if (next->cached_by.empty()) 
 			next->get(CINODE_PIN_CACHED);
-		  next->cached_by.insert( dis->asker );
+		  next->cached_by.insert( dis->get_asker() );
 		  
 		  cur = next; // continue!
 		} else {
@@ -885,9 +902,9 @@ int MDCache::handle_discover(MDiscover *dis)
 	}
 	
 	// success, send result
-	dout(7) << "mds" << whoami << " finished discovery, sending back to " << dis->asker << endl;
+	dout(7) << "mds" << whoami << " finished discovery, sending back to " << dis->get_asker() << endl;
 	mds->messenger->send_message(dis,
-								 MSG_ADDR_MDS(dis->asker), MDS_PORT_CACHE,
+								 MSG_ADDR_MDS(dis->get_asker()), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	return 0;
   }
