@@ -13,6 +13,9 @@ struct MDiscoverRec_t {
   inode_t    inode;
   set<int>   cached_by;
   int        dir_auth;
+  bool       is_syncbyauth;
+  bool       is_softasync;
+  bool       is_lockbyauth;
 
   // dir stuff
   int        dir_rep;
@@ -32,6 +35,9 @@ struct MDiscoverRec_t {
 	}
 
 	r.append((char*)&dir_auth, sizeof(int));
+	r.append((char*)&is_syncbyauth, sizeof(bool));
+	r.append((char*)&is_softasync, sizeof(bool));
+	r.append((char*)&is_lockbyauth, sizeof(bool));
 	r.append((char*)&dir_rep, sizeof(int));
 	
 	n = dir_rep_by.size();
@@ -62,6 +68,12 @@ struct MDiscoverRec_t {
 
 	s.copy(off, sizeof(int), (char*)&dir_auth);
 	off += sizeof(int);
+	s.copy(off, sizeof(bool), (char*)&is_syncbyauth);
+	off += sizeof(bool);
+	s.copy(off, sizeof(bool), (char*)&is_softasync);
+	off += sizeof(bool);
+	s.copy(off, sizeof(bool), (char*)&is_lockbyauth);
+	off += sizeof(bool);
 	s.copy(off, sizeof(int), (char*)&dir_rep);
 	off += sizeof(int);
 
@@ -162,6 +174,12 @@ class MDiscover : public Message {
 	bit.cached_by = in->get_cached_by();
 	bit.cached_by.insert( auth );  // obviously the authority has it too
 	bit.dir_auth = in->dir_auth;
+
+	// send sync/lock state
+	bit.is_syncbyauth = in->is_syncbyme() || in->is_presync();
+	bit.is_softasync = in->is_softasync();
+	bit.is_lockbyauth = in->is_lockbyme() || in->is_prelock();
+
 	if (in->is_dir() && in->dir) {
 	  bit.dir_rep = in->dir->dir_rep;
 	  bit.dir_rep_by = in->dir->dir_rep_by;

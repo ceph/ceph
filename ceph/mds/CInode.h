@@ -51,7 +51,7 @@ using namespace std;
 #define CINODE_PIN_DIRTY     50000     // must flush
 
 //#define CINODE_PIN_SYNCBYME     70000
-//#define CINODE_PIN_SYNCBYTHEM   70001
+//#define CINODE_PIN_SYNCBYAUTH   70001
 #define CINODE_PIN_PRESYNC      70002   // waiter
 #define CINODE_PIN_WAITONUNSYNC 70003   // waiter
 
@@ -67,7 +67,7 @@ using namespace std;
 // lock => coherent hard metadata (owner, mode, etc. affecting namespace)
 #define CINODE_DIST_PRESYNC         1   // mtime, size, etc.
 #define CINODE_DIST_SYNCBYME        2
-#define CINODE_DIST_SYNCBYTHEM      4
+#define CINODE_DIST_SYNCBYAUTH      4
 #define CINODE_DIST_WAITONUNSYNC    8
 
 #define CINODE_DIST_SOFTASYNC      16  // replica can soft write w/o sync
@@ -259,9 +259,9 @@ class CInode : LRUObject {
 
   // locking
   bool is_sync() { return dist_state & (CINODE_DIST_SYNCBYME|
-										CINODE_DIST_SYNCBYTHEM); }
+										CINODE_DIST_SYNCBYAUTH); }
   bool is_syncbyme() { return dist_state & CINODE_DIST_SYNCBYME; }
-  bool is_syncbythem() { return dist_state & CINODE_DIST_SYNCBYTHEM; }
+  bool is_syncbyauth() { return dist_state & CINODE_DIST_SYNCBYAUTH; }
   bool is_presync() { return dist_state & CINODE_DIST_PRESYNC; }
   bool is_softasync() { return dist_state & CINODE_DIST_SOFTASYNC; }
   bool is_waitonunsync() { return dist_state & CINODE_DIST_WAITONUNSYNC; }

@@ -673,6 +673,10 @@ int MDCache::handle_discover(MDiscover *dis)
 	  root->dir->dir_rep = trace[0].dir_rep;
 	  root->dir->dir_rep_by = trace[0].dir_rep_by;
 	  root->auth = false;
+	  
+	  if (trace[0].is_syncbyauth) root->dist_state |= CINODE_DIST_SYNCBYAUTH;
+	  if (trace[0].is_softasync) root->dist_state |= CINODE_DIST_SOFTASYNC;
+	  if (trace[0].is_lockbyauth) root->dist_state |= CINODE_DIST_LOCKBYAUTH;
 
 	  set_root( root );
 
@@ -752,6 +756,10 @@ int MDCache::handle_discover(MDiscover *dis)
 		  assert(in->dir->auth == false);
 		}
 		in->auth = false;
+
+		if (trace[i].is_syncbyauth) in->dist_state |= CINODE_DIST_SYNCBYAUTH;
+		if (trace[i].is_softasync) in->dist_state |= CINODE_DIST_SOFTASYNC;
+		if (trace[i].is_lockbyauth) in->dist_state |= CINODE_DIST_LOCKBYAUTH;
 		
 		// link in
 		add_inode( in );
@@ -809,6 +817,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	}
 
 	// add bits
+	bool have_added = false;
 	while (!dis->done()) {
 	  if (!cur->is_dir()) {
 		dout(7) << "woah, discover on non dir " << dis->current_need() << endl;
@@ -822,10 +831,14 @@ int MDCache::handle_discover(MDiscover *dis)
 	  int dentry_auth = cur->dir->dentry_authority(next_dentry, mds->get_cluster());
 	  
 	  if (dentry_auth != whoami) {
-		// fwd to authority
-		mds->messenger->send_message(dis,
-									 MSG_ADDR_MDS(dentry_auth), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
+		if (have_added) // fwd (partial) results back to asker
+		  mds->messenger->send_message(dis,	
+									   MSG_ADDR_MDS(dis->get_asker()), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		else  		// fwd to authority
+		  mds->messenger->send_message(dis,
+									   MSG_ADDR_MDS(dentry_auth), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
 		return 0;
 	  }
 
@@ -848,6 +861,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		
 		// add it
 		dis->add_bit( next, whoami );
+		have_added = true;
 		
 		// remember who is caching this!
 		next->cached_by_add( dis->get_asker() );
@@ -1126,7 +1140,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
   } else {
 	// normal: soft+hard consistency
 
-	if (in->is_syncbythem()) {
+	if (in->is_syncbyauth()) {
 	  // wait for sync
 	} else {
 	  // i'm consistent 
@@ -1135,7 +1149,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
   }
 
   // we need sync
-  if (in->is_syncbythem() && !in->is_softasync()) 
+  if (in->is_syncbyauth() && !in->is_softasync()) 
     dout(5) << "read_soft_start " << *in << " is normal+replica+syncbyauth" << endl;
   else if (in->is_softasync() && in->is_auth())
     dout(5) << "read_soft_start " << *in << " is softasync+auth, waiting on sync" << endl;
@@ -1161,7 +1175,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	in->add_waiter(CINODE_WAIT_UNSYNC,
 				   new C_MDS_RetryMessage(mds, m));
 
-	assert(in->is_syncbythem());
+	assert(in->is_syncbyauth());
 
 	if (!in->is_waitonunsync())
 	  sync_wait(in);
@@ -1189,7 +1203,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
   if (in->is_softasync()) {
 	// softasync: hard consistency only
 
-	if (in->is_syncbythem()) {
+	if (in->is_syncbyauth()) {
 	  // wait for sync release
 	} else {
 	  // i'm inconsistent; write away!
@@ -1217,7 +1231,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
   }
 
   // we need sync
-  if (in->is_syncbythem() && in->is_softasync() && !in->is_auth()) {
+  if (in->is_syncbyauth() && in->is_softasync() && !in->is_auth()) {
     dout(5) << "write_soft_start " << *in << " is softasync+replica+syncbyauth" << endl;
   } else if (!in->is_softasync() && in->is_auth())
     dout(5) << "write_soft_start " << *in << " is normal+auth, waiting on sync" << endl;
@@ -1243,7 +1257,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	in->add_waiter(CINODE_WAIT_UNSYNC, 
 				   new C_MDS_RetryMessage(mds, m));
 
-	assert(in->is_syncbythem());
+	assert(in->is_syncbyauth());
 	assert(in->is_softasync());
 	
 	if (!in->is_waitonunsync())
@@ -1270,7 +1284,7 @@ void MDCache::sync_wait(CInode *in)
   int auth = in->authority(mds->get_cluster());
   dout(5) << "sync_wait on " << *in << ", auth " << auth << endl;
   
-  assert(in->is_syncbythem());
+  assert(in->is_syncbyauth());
   assert(!in->is_waitonunsync());
   
   in->dist_state |= CINODE_DIST_WAITONUNSYNC;
@@ -1320,7 +1334,6 @@ void MDCache::sync_release(CInode *in)
 
   in->auth_unpin();
   in->dist_state &= ~CINODE_DIST_SYNCBYME;
-  //in->put(CINODE_PIN_SYNCBYME);
 
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
@@ -1380,8 +1393,7 @@ void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m)
   dout(7) << "inode_sync_ack " << *in << endl;
   
   // lock it
-  //in->get(CINODE_PIN_SYNCBYTHEM);
-  in->dist_state |= CINODE_DIST_SYNCBYTHEM;
+  in->dist_state |= CINODE_DIST_SYNCBYAUTH;
   
   // send ack
   mds->messenger->send_message(new MInodeSyncAck(in->ino()),
@@ -1438,7 +1450,6 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 
 	in->dist_state &= ~CINODE_DIST_PRESYNC;
 	in->dist_state |= CINODE_DIST_SYNCBYME;
-	//in->get(CINODE_PIN_SYNCBYME);
 	in->put(CINODE_PIN_PRESYNC);
 
 	// do waiters!
@@ -1477,7 +1488,7 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
 	return;
   }
   
-  if (!in->is_syncbythem()) {
+  if (!in->is_syncbyauth()) {
 	dout(7) << "handle_sync_release " << m->get_ino() << ", not flagged as sync, dropping" << endl;
 	assert(0);
 	delete m;  // done
@@ -1488,8 +1499,7 @@ void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
   assert(!in->is_auth());
   
   // release state
-  //in->put(CINODE_PIN_SYNCBYTHEM);
-  in->dist_state &= ~CINODE_DIST_SYNCBYTHEM;
+  in->dist_state &= ~CINODE_DIST_SYNCBYAUTH;
 
   // waiters?
   if (in->is_waitonunsync()) {
@@ -1713,7 +1723,6 @@ void MDCache::handle_inode_lock_start(MInodeLockStart *m)
   dout(7) << "handle_lock_start " << *in << ", sending ack" << endl;
   
   // lock it
-  //in->get(CINODE_PIN_LOCKBYAUTH);
   in->dist_state |= CINODE_DIST_LOCKBYAUTH;
   
   // send ack
@@ -1755,7 +1764,6 @@ void MDCache::handle_inode_lock_ack(MInodeLockAck *m)
 
 	in->dist_state &= ~CINODE_DIST_PRELOCK;
 	in->dist_state |= CINODE_DIST_LOCKBYME;
-	//in->get(CINODE_PIN_LOCKBYME);
 	in->put(CINODE_PIN_PRELOCK);
 
 	// do waiters!
@@ -1799,7 +1807,6 @@ void MDCache::handle_inode_lock_release(MInodeLockRelease *m)
   assert(!in->is_auth());
   
   // release state
-  //in->put(CINODE_PIN_SYNCBYTHEM);
   in->dist_state &= ~CINODE_DIST_LOCKBYAUTH;
 
   // waiters?
