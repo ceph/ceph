@@ -229,14 +229,14 @@ void Client::send_request(string& p, int op)
 		break;
 	  }
 	}
-	//int r = rand() % cur->dist.size();
-	//mds = cur->dist[r];  
+	int r = rand() % cur->dist.size();
+	mds = cur->dist[r];  
   } else {
 	// we need the root inode
 	mds = 0;
   }
 
-  mds = rand() % 10;
+  //mds = rand() % 10;
 
   if (debug > 0)
 	cout << "client" << whoami << " req " << req->tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;
