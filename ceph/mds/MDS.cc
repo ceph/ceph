@@ -1107,30 +1107,58 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	}
 
 	// lock dest?
-	if (!oldin->is_lockbyme() &&
-		write_hard_start(oldin, req) == false) {
-	  // wait
-	  dout(7) << "dest/overwrite " << *oldin << " locking, waiting" << endl;
-	  return;
+	if (!oldin->test_state(CINODE_STATE_RENAMINGTO)) {
+	  if (write_hard_start(oldin, req) == false) {
+		// wait
+		dout(7) << "dest/overwrite " << *oldin << " locking, waiting" << endl;
+		return;
+	  }
+
+	  oldin->set_state(CINODE_STATE_RENAMINGTO); // only lock once!
+	  cout << "locked destinode " << *oldin << endl;
+	} else {
+	  cout << "already locked destinode " << *oldin << endl;
 	}
   }
 
   // lock source?
-  if (!from->is_lockbymeprelock() ||
-	  !from->is_lockbyme()) {
-	// wait
-	dout(7) << "from " << *from << " locking, waiting" << endl;
-	from->add_waiter(CINODE_WAIT_LOCK,
-					 new C_MDS_RetryMessage(this, req));
-	return;
+  if (!from->test_state(CINODE_STATE_RENAMING)) {
+	if (write_hard_state(from, req) == false) {
+	  // wait
+	  dout(7) << "from " << *from << " locking, waiting" << endl;
+	  from->add_waiter(CINODE_WAIT_LOCK,
+					   new C_MDS_RetryMessage(this, req));
+	  return;
+	}
+
+	from->set_state(CINODE_STATE_RENAMING); // only lock once
+	cout << "locked srcinode " << *from << endl;
+  } else {
+	cout << "already locked srcinode " << *from << endl;
   }
 
-  // lock
-  from->
-  
+  // ...
+  if (from->is_cached_by_anyone()) {
+	
+  } else {
+	// src not replicated
+	if (oldin && oldin->is_cached_by_anyone()) {
+	  // dst replicated
+	  
+	} else {
+	  // dst not replicated, or dne
+	  // local rename, easy!
+	  cout << "local rename" << endl;
 
-  
-  
+	  if (oldin) {
+		// unlink old guy first
+		inode_unlink( oldin, NULL ); // waiter unnec; this is imm
+		                             // bc oldin not replicated
+		// *FIXME use waiter, combine w/ dst replicated case ******
+	  }
+	  mdcache->rename_file(from, destdir, name);
+	}
+  }
 }
 
 void MDS::handle_client_rename_dir(MClientRequest *req,
