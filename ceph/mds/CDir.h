@@ -104,9 +104,10 @@ class Context;
 typedef map<string, CDentry*> CDir_map_t;
 
 class CDir {
- protected:
+ public:
   CInode          *inode;
 
+ protected:
   CDir_map_t       items;              // use map; ordered list
   size_t           nitems;
   size_t           nauthitems;

@@ -203,14 +203,14 @@ bool MDCache::trim(__int32_t max) {
 		  !(idir->dir->is_freezing() || idir->dir->is_frozen())  // FIXME: can_auth_pin?
 		  ) {
 		int dest = idir->authority(mds->get_cluster());
-
+		
 		// comment this out ot wreak havoc?
 		if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
 
 		if (dest != mds->get_nodeid()) {
 		  // it's an empty import!
 		  dout(7) << "trimmed parent dir is a (now empty) import; rexporting to " << dest << endl;
-		  export_dir( idir, dest );
+		  export_dir( idir->dir, dest );
 		}
 	  }
 	} else {
@@ -314,7 +314,7 @@ bool MDCache::shutdown_pass()
 
   // send imports to 0!
   if (mds->get_nodeid() != 0) {
-	for (set<CInode*>::iterator it = imports.begin();
+	for (set<CDir*>::iterator it = imports.begin();
 		 it != imports.end();
 		 ) {
 	  CDir *im = *it;
@@ -323,7 +323,7 @@ bool MDCache::shutdown_pass()
 	  if (im->is_frozen() || im->is_freezing()) continue;
 	  
 	  dout(7) << "sending " << *im << " back to mds0" << endl;
-	  export_dir(im->inode,0);
+	  export_dir(im,0);
 	}
   } else {
 	// shut down root?
@@ -2278,34 +2278,34 @@ void handle_dir_sync_start(MDirSyncStart *m)
 
 class C_MDS_ExportFreeze : public Context {
   MDS *mds;
-  CInode *in;   // inode of dir i'm exporting
+  CDir *ex;   // dir i'm exporting
   int dest;
   double pop;
 
 public:
-  C_MDS_ExportFreeze(MDS *mds, CInode *in, int dest, double pop) {
+  C_MDS_ExportFreeze(MDS *mds, CDir *ex, int dest, double pop) {
 	this->mds = mds;
-	this->in = in;
+	this->ex = ex;
 	this->dest = dest;
 	this->pop = pop;
   }
   virtual void finish(int r) {
-	mds->mdcache->export_dir_frozen(in, dest, pop);
+	mds->mdcache->export_dir_frozen(ex, dest, pop);
   }
 };
 
 class C_MDS_ExportFinish : public Context {
   MDS *mds;
-  CInode *in;   // inode of dir i'm exporting
+  CDir *ex;   // dir i'm exporting
 
 public:
   // contexts for waiting operations on the affected subtree
   list<Context*> will_redelegate;
   list<Context*> will_fail;
 
-  C_MDS_ExportFinish(MDS *mds, CInode *in) {
+  C_MDS_ExportFinish(MDS *mds, CDir *ex) {
 	this->mds = mds;
-	this->in = in;
+	this->ex = ex;
   }
 
   // suck up and categorize waitlists 
@@ -2342,7 +2342,7 @@ public:
 	  // redelegate
 	  list<Context*>::iterator it;
 	  for (it = will_redelegate.begin(); it != will_redelegate.end(); it++) {
-		(*it)->redelegate(mds, in->dir_authority(mds->get_cluster()));
+		(*it)->redelegate(mds, ex->inode->dir_authority(mds->get_cluster()));
 		delete *it;  // delete context
 	  }
 
@@ -2364,35 +2364,33 @@ public:
 };
 
 
-void MDCache::export_dir(CInode *in,
+void MDCache::export_dir(CDir *dir,
 						 int dest)
 {
   assert(dest != mds->get_nodeid());
 
-  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
-
-  if (in->is_root()) {
+  if (dir->inode->is_root()) {
 	dout(7) << "i won't export root" << endl;
 	assert(0);
 	return;
   }
 
-  if (in->dir->is_frozen() ||
-	  in->dir->is_freezing()) {
+  if (dir->is_frozen() ||
+	  dir->is_freezing()) {
 	dout(7) << " can't export, freezing|frozen.  wait for other exports to finish first." << endl;
 	return;
   }
 
   // send ExportDirPrep (ask target)
-  dout(7) << "export_dir " << *in << " to " << dest << ", sending ExportDirPrep" << endl;
-  mds->messenger->send_message(new MExportDirPrep(in),
+  dout(7) << "export_dir " << *dir << " to " << dest << ", sending ExportDirPrep" << endl;
+  mds->messenger->send_message(new MExportDirPrep(dir->inode),
 							   dest, MDS_PORT_CACHE, MDS_PORT_CACHE);
-  in->dir->auth_pin();   // pin dir, to hang up our freeze
+  dir->auth_pin();   // pin dir, to hang up our freeze
   mds->logger->inc("ex");
 
   // take away popularity (and pass it on to the context, MExportDir request later)
-  double pop = in->popularity[0].get();  // FIXME rest of vector?
-  CInode *t = in;
+  double pop = dir->inode->popularity[0].get();  // FIXME rest of vector?
+  CInode *t = dir->inode;
   while (t) {
 	t->popularity[0].adjust(-pop);
 	if (t->parent)
@@ -2403,22 +2401,18 @@ void MDCache::export_dir(CInode *in,
 
   // freeze the subtree
   //dout(7) << "export_dir " << *in << " to " << dest << ", freezing" << endl;
-  in->dir->freeze_tree(new C_MDS_ExportFreeze(mds, in, dest, pop));
-
+  dir->freeze_tree(new C_MDS_ExportFreeze(mds, dir, dest, pop));
+  
   // drop any sync or lock if sticky
   if (g_conf.mdcache_sticky_sync_normal ||
 	  g_conf.mdcache_sticky_sync_softasync)
-	export_dir_dropsync(in);
+	export_dir_dropsync(dir);
 }
 
-void MDCache::export_dir_dropsync(CInode *idir)
+void MDCache::export_dir_dropsync(CDir *dir)
 {
-  assert(idir->is_dir());
-  if (!idir->dir)
-	return;  // we don't ahve anything, obviously
-
   CDir_map_t::iterator it;
-  for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
+  for (it = dir->begin(); it != dir->end(); it++) {
 	CInode *in = it->second->inode;
 
 	dout(7) << "about to export: dropping sticky(?) sync on " << *in << endl;
@@ -2426,8 +2420,9 @@ void MDCache::export_dir_dropsync(CInode *idir)
 
 	if (in->is_dir() &&
 		in->dir_auth == CDIR_AUTH_PARENT &&      // mine
-		in->nested_auth_pins > 0)  // might be sync
-	  export_dir_dropsync(in);
+		in->nested_auth_pins > 0 &&  // might be sync
+		in->dir)                     // we have anything at all
+	  export_dir_dropsync(in->dir);
   }
 }
 
@@ -2447,27 +2442,27 @@ void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
 }
 
 
-void MDCache::export_dir_frozen(CInode *in,
+void MDCache::export_dir_frozen(CDir *dir,
 								int dest,
 								double pop)
 {
   // subtree is now frozen!
-  dout(7) << "export_dir " << *in << " to " << dest << ", frozen+prep_ack" << endl;
+  dout(7) << "export_dir " << *dir << " to " << dest << ", frozen+prep_ack" << endl;
 
   show_imports();
 
   
   // update imports/exports
-  CDir *containing_import = get_containing_import(in->dir);
-  if (containing_import == in->dir) {
+  CDir *containing_import = get_containing_import(dir);
+  if (containing_import == dir) {
 	dout(7) << " i'm rexporting a previous import" << endl;
-	imports.erase(in->dir);
-	in->dir->state_clear(CDIR_STATE_IMPORT);
-	in->put(CINODE_PIN_IMPORT);                  // unpin, no longer an import
-
+	imports.erase(dir);
+	dir->state_clear(CDIR_STATE_IMPORT);
+	dir->inode->put(CINODE_PIN_IMPORT);                  // unpin, no longer an import
+	
 	// discard nested exports (that we're handing off
 	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-	  nested_exports.equal_range(in->dir);
+	  nested_exports.equal_range(dir);
 	while (p.first != p.second) {
 	  CDir *nested = (*p.first).second;
 
@@ -2477,27 +2472,28 @@ void MDCache::export_dir_frozen(CInode *in,
 	  //exports.erase(nested);  _walk does this
 	  nested_exports.erase(p.first++);   // note this increments before call to erase
 	}
-
+	
   } else {
 	dout(7) << " i'm a subdir nested under import " << *containing_import << endl;
-	exports.insert(in->dir);
-	nested_exports.insert(pair<CDir*,CDir*>(containing_import, in->dir));
-
-	in->get(CINODE_PIN_EXPORT);                  // i must keep it pinned
+	exports.insert(dir);
+	nested_exports.insert(pair<CDir*,CDir*>(containing_import, dir));
+	
+	dir->inode->get(CINODE_PIN_EXPORT);                  // i must keep it pinned
 	
 	// discard nested exports (that we're handing off)
-	pair<multimap<CDIr*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
+	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
 	  nested_exports.equal_range(containing_import);
 	while (p.first != p.second) {
 	  CDir *nested = (*p.first).second;
-	  multimap<CInode*,CInode*>::iterator prev = p.first;
+	  multimap<CDir*,CDir*>::iterator prev = p.first;
 	  p.first++;
-
+	  
+	  // container of parent; otherwise we get ourselves.
 	  CDir *containing_export = get_containing_export(nested->get_parent_dir());
 	  if (!containing_export) continue;
-	  if (nested == in) continue;  // ignore myself
+	  if (nested == dir) continue;  // ignore myself
 
-	  if (containing_export == in) {
+	  if (containing_export == dir) {
 		// nested beneath our new export *in; remove!
 		dout(7) << " export " << *nested << " was nested beneath us; removing from nested_exports" << endl;
 		// exports.erase(nested); _walk does this
@@ -2506,93 +2502,91 @@ void MDCache::export_dir_frozen(CInode *in,
 		dout(7) << " huh, other export " << *nested << " is under export " << *containing_export << ", which is odd" << endl;
 		assert(0);
 	  }
-
+	  
 	}
-
+	
   }
 
   // note new authority (locally)
-  in->dir_auth = dest;
-  if (in->parent &&
-	  in->get_parent_inode()->dir_auth == in->dir_auth)
-	in->dir_auth = CDIR_AUTH_PARENT;
+  dir->inode->dir_auth = dest;
 
+  // simplify, we're exporting to same as parent
+  if (dir->inode->get_parent_inode() &&
+	  dir->inode->get_parent_inode()->dir_auth == dir->inode->dir_auth)
+	dir->inode->dir_auth = CDIR_AUTH_PARENT;
+  
   // build export message
-  MExportDir *req = new MExportDir(in, pop);  // include pop
+  MExportDir *req = new MExportDir(dir->inode, pop);  // include pop
   
   // fill with relevant cache data
-  C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, in);
-
-  export_dir_walk( req, fin, in, dest );
+  C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, dir);
+  
+  export_dir_walk( req, fin, dir, dest );
 
   mds->messenger->send_message(req,
 							   MSG_ADDR_MDS(dest), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
 
   // queue finisher
-  in->dir->add_waiter( CDIR_WAIT_UNFREEZE, fin );
+  dir->add_waiter( CDIR_WAIT_UNFREEZE, fin );
 }
 
 void MDCache::export_dir_walk(MExportDir *req,
 							  C_MDS_ExportFinish *fin,
-							  CInode *idir,
+							  CDir *dir,
 							  int newauth)
 {
-  assert(idir->is_dir());
-  if (!idir->dir)
-	return;  // we don't ahve anything, obviously
-
-  dout(7) << "export_dir_walk on " << *idir << " " << idir->dir->nitems << " items" << endl;
-
+  dout(7) << "export_dir_walk on " << *dir << " " << dir->nitems << " items" << endl;
+  
   // dir 
   crope dir_rope;
-
+  
   Dir_Export_State_t dstate;
-  dstate.ino = idir->inode.ino;
-  dstate.nitems = idir->dir->nitems;
-  dstate.version = idir->dir->version;
-  dstate.state = idir->dir->state;
-  dstate.dir_rep = idir->dir->dir_rep;
-  dstate.ndir_rep_by = idir->dir->dir_rep_by.size();
-  dstate.popularity = idir->dir->popularity[0];  // FIXME: rest of vector?
+  dstate.ino = dir->ino();
+  dstate.nitems = dir->nitems;
+  dstate.version = dir->version;
+  dstate.state = dir->state;
+  dstate.dir_rep = dir->dir_rep;
+  dstate.ndir_rep_by = dir->dir_rep_by.size();
+  dstate.popularity = dir->popularity[0];  // FIXME: rest of vector?
   dir_rope.append( (char*)&dstate, sizeof(dstate) );
   
-  for (set<int>::iterator it = idir->dir->dir_rep_by.begin();
-	   it != idir->dir->dir_rep_by.end();
+  for (set<int>::iterator it = dir->dir_rep_by.begin();
+	   it != dir->dir_rep_by.end();
 	   it++) {
 	int i = *it;
 	dir_rope.append( (char*)&i, sizeof(int) );
   }
 
   // mark
-  assert(idir->dir->is_auth());
-  idir->dir->state_clear(CDIR_STATE_AUTH);
+  assert(dir->is_auth());
+  dir->state_clear(CDIR_STATE_AUTH);
 
   // discard most dir state
-  idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
+  dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
 
   // waiters
   list<Context*> waiting;
-  idir->dir->take_waiting(CINODE_WAIT_ANY, waiting);    // FIXME ?? actually this is okay?
+  dir->take_waiting(CINODE_WAIT_ANY, waiting);    // FIXME ?? actually this is okay?
   fin->assim_waitlist(waiting);
 
 
   // inodes
-  list<CInode*> subdirs;
+  list<CDir*> subdirs;
 
   CDir_map_t::iterator it;
-  for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
+  for (it = dir->begin(); it != dir->end(); it++) {
 	CInode *in = it->second->inode;
-
+	
 	in->version++;  // so log entries are ignored, etc.
-
+	
 	// idir hashed?  make dir_auth explicit
-	if (idir->dir->is_hashed() &&
+	if (dir->is_hashed() &&
 		in->dir_auth == CDIR_AUTH_PARENT)
 	  in->dir_auth = mds->get_nodeid();
 	
 	// if hashed, only include dirs
-	if (in->is_dir() || !idir->dir->is_hashed()) {
+	if (in->is_dir() || !dir->is_hashed()) {
 	  // dentry
 	  dir_rope.append( it->first.c_str(), it->first.length()+1 );
 	  
@@ -2611,7 +2605,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  
 	  if (in->dir_auth == CDIR_AUTH_PARENT ||
 		  (in->dir_is_hashed() && in->dir_auth == mds->get_nodeid())) {
-		subdirs.push_back(in);  // it's ours, recurse.
+		if (in->dir)
+		  subdirs.push_back(in->dir);  // it's ours, recurse.
 	  } else {
 		dout(7) << " encountered nested export " << *in << " dir_auth " << in->dir_auth << "; removing from exports" << endl;
 		assert(exports.count(in->dir) == 1); 
@@ -2621,7 +2616,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	} 
 
 	// we don't export inodes if hashed
-	if (idir->dir->is_hashed()) {
+	if (dir->is_hashed()) {
 	  // but we do replicate all dirs on new auth
 	  if (in->is_dir()) {
 		if (in->is_auth()) {
@@ -2649,7 +2644,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  
 	  // waiters
 	  list<Context*> waiters;
-	  idir->dir->take_waiting(CDIR_WAIT_ANY, waiters);
+	  dir->take_waiting(CDIR_WAIT_ANY, waiters);
 	  fin->assim_waitlist(waiters);
 	}
   }
@@ -2657,7 +2652,7 @@ void MDCache::export_dir_walk(MExportDir *req,
   req->add_dir( dir_rope );
   
   // subdirs
-  for (list<CInode*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
+  for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
 	export_dir_walk(req, fin, *it, newauth);
 }
 
@@ -2666,9 +2661,10 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
 {
   // exported!
   CInode *in = mds->mdcache->get_inode(m->get_ino());
+  CDir *dir = in->dir;
   int newauth = m->get_source();
 
-  dout(7) << "export_dir_ack " << *in << endl;
+  dout(7) << "export_dir_ack " << *dir << endl;
   
   // remove the metadata from the cache
   //no, borken! if (in->dir) export_dir_purge( in, newauth );
@@ -2677,21 +2673,21 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
   // FIXME log it
 
   // unfreeze
-  dout(7) << "export_dir_ack " << *in << ", unfreezing" << endl;
-  in->dir->unfreeze_tree();
-
+  dout(7) << "export_dir_ack " << *dir << ", unfreezing" << endl;
+  dir->unfreeze_tree();
+  
   show_imports();
-
+  
   // done
   delete m;
 }
 
 
 // called by handle_expirt_dir_ack
-void MDCache::export_dir_purge(CInode *idir, int newauth)
+void MDCache::export_dir_purge(CDir *dir, int newauth)
 {
-  dout(7) << "export_dir_purge on " << *idir << endl;
-
+  dout(7) << "export_dir_purge on " << *dir << endl;
+  
   assert(0);
   /**
 
@@ -2705,19 +2701,19 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
 
   // discard most dir state
   //idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
-  
-  assert(!idir->dir->is_auth());
+
+  assert(!dir->is_auth());
 
   // contents:
-  CDir_map_t::iterator it = idir->dir->begin();
-  while (it != idir->dir->end()) {
+  CDir_map_t::iterator it = dir->begin();
+  while (it != dir->end()) {
 	CInode *in = it->second->inode;
 	it++;
 	
 	assert(in->auth == false);
 	
 	if (in->is_dir() && in->dir) 
-	  export_dir_purge(in, newauth);
+	  export_dir_purge(in->dir, newauth);
 	
 	dout(7) << "sending inode_expire to mds" << newauth << " on " << *in << endl;
 	mds->messenger->send_message(new MInodeExpire(in->inode.ino, mds->get_nodeid()),
@@ -2734,7 +2730,7 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
 	}
   }
 
-  dout(7) << "export_dir_purge on " << *idir << " done" << endl;
+  dout(7) << "export_dir_purge on " << *dir << " done" << endl;
 }
 
 
@@ -2753,21 +2749,20 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 
   // must discover it!
   vector<CInode*> trav;
-
   int r = path_traverse(m->get_path(), trav, m, MDS_TRAVERSE_DISCOVER);   
   if (r > 0) return;  // fw or delay
   
   // okay
   CInode *in = trav[trav.size()-1];
-
   if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
-  assert(in->dir->is_auth() == false);
+  CDir *dir = in->dir;
 
-  in->dir->auth_pin();     // auth_pin until we get the data
+  assert(dir->is_auth() == false);
+
+  dir->auth_pin();     // auth_pin until we get the data
   
-  dout(7) << "sending export_dir_prep_ack on " << *in << endl;
-  
-  mds->messenger->send_message(new MExportDirPrepAck(in->ino()),
+  dout(7) << "sending export_dir_prep_ack on " << *dir << endl;
+  mds->messenger->send_message(new MExportDirPrepAck(dir->ino()),
 							   m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
   
   // done 
@@ -2780,63 +2775,60 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 /* this guy waits for the discover to finish.  if it's the last one on the dir,
  * it unfreezes it.  if it's the last frozen hashed dir, it triggers the above.
  */
+/*
 class C_MDS_ImportHashedReplica : public Context {
 public:
   MDS *mds;
   MExportDir *m;
-  CInode *in;
+  CDir *import;
   inodeno_t dir_ino, replica_ino;
-  C_MDS_ImportHashedReplica(MDS *mds, CInode *in, inodeno_t dir_ino, inodeno_t replica_ino) {
+  C_MDS_ImportHashedReplica(MDS *mds, CDir *import, inodeno_t dir_ino, inodeno_t replica_ino) {
 	this->mds = mds;
-	this->in = in;
+	this->import = import;
 	this->dir_ino = dir_ino;
 	this->replica_ino = replica_ino;
   }
   virtual void finish(int r) {
 	assert(r == 0);  // should never fail!
-	mds->mdcache->got_hashed_replica(in, dir_ino, replica_ino);
+	mds->mdcache->got_hashed_replica(import, dir_ino, replica_ino);
   }
 };
-
+*/
 
 
 
 void MDCache::handle_export_dir(MExportDir *m)
 {
-  CInode *in = get_inode(m->get_ino());
-  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
-  CDir *dir = in->dir;
+  CInode *idir = get_inode(m->get_ino());
+  assert(idir);
+  if (!idir->dir) idir->dir = new CDir(idir, mds->get_nodeid());
+  CDir *dir = idir->dir;
 
   int oldauth = m->get_source();
-  assert(in);
-  
-  dout(7) << "handle_export_dir, import_dir " << *dir << endl;
-
-  show_imports();
-
-  mds->logger->inc("im");
-
-
+  dout(7) << "handle_export_dir, import_dir " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
+  show_imports();
+  mds->logger->inc("im");
+  
   // note new authority (locally)
-  in->dir_auth = mds->get_nodeid();
-
+  dir->inode->dir_auth = mds->get_nodeid();
+  
   CDir *containing_import;
   if (exports.count(dir)) {
 	// reimporting
 	dout(7) << " i'm reimporting this dir!" << endl;
 	exports.erase(dir);
 
-	in->put(CINODE_PIN_EXPORT);                // unpin, no longer an export
-
+	dir->inode->put(CINODE_PIN_EXPORT);                // unpin, no longer an export
+	
 	containing_import = get_containing_import(dir);  
 	dout(7) << "  it is nested under import " << *containing_import << endl;
 	for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p =
 		   nested_exports.equal_range( containing_import );
 		 p.first != p.second;
 		 p.first++) {
-	  if ((*p.first).second == in) {
+	  if ((*p.first).second == dir) {
 		nested_exports.erase(p.first);
 		break;
 	  }
@@ -2845,8 +2837,8 @@ void MDCache::handle_export_dir(MExportDir *m)
 	// new import
 	imports.insert(dir);
 	dir->state_set(CDIR_STATE_IMPORT);
-	in->get(CINODE_PIN_IMPORT);                // must keep it pinned
-
+	dir->inode->get(CINODE_PIN_IMPORT);                // must keep it pinned
+	
 	containing_import = dir;  // imported exports nested under *in
   }
 
@@ -2856,18 +2848,18 @@ void MDCache::handle_export_dir(MExportDir *m)
   // add this crap to my cache
   const char *p = m->get_state().c_str();
   for (int i = 0; i < m->get_ndirs(); i++) 
-	import_dir_block(p, containing_import, oldauth, in);
+	import_dir_block(p, containing_import, oldauth, dir);
   
   // can i simplify dir_auth?
-  if (in->authority(mds->get_cluster()) == in->dir_auth)
-	in->dir_auth = CDIR_AUTH_PARENT;
-
+  if (idir->authority(mds->get_cluster()) == idir->dir_auth)
+	idir->dir_auth = CDIR_AUTH_PARENT;
+  
   // adjust popularity
   // FIXME what about rest of pop vector?  also, i think this is wrong.
-  double newpop = m->get_ipop() - in->popularity[0].get();
+  double newpop = m->get_ipop() - idir->popularity[0].get();
   dout(7) << " imported popularity jump by " << newpop << endl;
   if (newpop > 0) {  // duh
-	CInode *t = in;
+	CInode *t = idir;
 	while (t) {
 	  t->popularity[0].adjust(newpop);
 	  if (t->parent) 
@@ -2882,7 +2874,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   mds->messenger->send_message(ack,
 							   m->get_source(), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
-
+  
   // done
   delete m;
 
@@ -2895,31 +2887,31 @@ void MDCache::handle_export_dir(MExportDir *m)
 	// it'll happen later!, when i get my inodegetreplicaack's back
   } else {
 	// finish now
-	handle_export_dir_finish(in);
+	handle_export_dir_finish(dir);
   }
 }
 
 
-void MDCache::handle_export_dir_finish(CInode *in)
+void MDCache::handle_export_dir_finish(CDir *dir)
 {
-  assert(in->dir->is_auth());
+  assert(dir->is_auth());
   
   // spread the word!
-  if (in->authority(mds->get_cluster()) == mds->get_nodeid()) {
+  if (dir->inode->authority(mds->get_cluster()) == mds->get_nodeid()) {
 	// i am the authority
-	send_inode_updates(in);
+	send_inode_updates(dir->inode);
   } else {
 	// tell the authority; they'll spread the word.
 	string path;
-	in->make_path(path);
-	mds->messenger->send_message(new MExportDirNotify(path, in->dir_auth),
-								 MSG_ADDR_MDS(in->authority(mds->get_cluster())), MDS_PORT_CACHE,
+	dir->inode->make_path(path);
+	mds->messenger->send_message(new MExportDirNotify(path, dir->inode->dir_auth),
+								 MSG_ADDR_MDS(dir->inode->authority(mds->get_cluster())), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
 
-  in->dir->auth_unpin();  
-
-  dout(5) << "done with import!" << endl;
+  dir->auth_unpin();  
+  
+  dout(5) << "done with import of " << *dir << endl;
   show_imports();
   mds->logger->set("nex", exports.size());
   mds->logger->set("nim", imports.size());
@@ -2928,7 +2920,7 @@ void MDCache::handle_export_dir_finish(CInode *in)
   // finish contexts
   dout(5) << "finishing any waiters on imported data" << endl;
   list<Context*> finished;
-  in->dir->take_waiting(CDIR_WAIT_IMPORTED, finished);
+  dir->take_waiting(CDIR_WAIT_IMPORTED, finished);
   for (list<Context*>::iterator it = finished.begin();
 	   it != finished.end();
 	   it++) {
@@ -2944,7 +2936,7 @@ void MDCache::handle_export_dir_finish(CInode *in)
 CInode *MDCache::import_dentry_inode(CDir *dir,
 									 pchar& p,
 									 int from,
-									 CInode *import_root)
+									 CDir *import_root)
 {
   // we have three cases:
   assert((dir->is_auth() && !dir->is_hashing()) ||  // auth importing (may be hashed or normal)
@@ -3073,8 +3065,9 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
 		  import_hashed_replicate_waiting.insert(pair<inodeno_t,inodeno_t>(dir->inode->ino(), in->ino()));
 		  
 		  // add waiter
-		  in->add_waiter(CINODE_WAIT_GETREPLICA, 
-						 new C_MDS_ImportHashedReplica(mds, in, dir->inode->ino(), in->ino()));
+		  //FIXME
+		  //in->add_waiter(CINODE_WAIT_GETREPLICA, 
+		  //new C_MDS_ImportHashedReplica(mds, in, dir->ino(), in->ino()));
 		}
 	  }
 	}
@@ -3085,9 +3078,9 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
 
 
 void MDCache::import_dir_block(pchar& p, 
-							   CInode *containing_import, 
+							   CDir *containing_import, 
 							   int oldauth,
-							   CInode *import_root)
+							   CDir *import_root)
 {
   // set up dir
   Dir_Export_State_t *dstate = (Dir_Export_State_t*)p;
@@ -3096,24 +3089,26 @@ void MDCache::import_dir_block(pchar& p,
   assert(idir);
 
   if (!idir->dir) idir->dir = new CDir(idir, mds->get_nodeid());
+  CDir *dir = idir->dir;
 
-  idir->dir->version = dstate->version;
+
+  dir->version = dstate->version;
   if (idir->dir_is_hashed()) {
 	// hashed
-	assert(idir->dir->is_hashed());  // i should already know!
+	assert(dir->is_hashed());  // i should already know!
   } else {
 	// normal
-	idir->dir->state = dstate->state & CDIR_MASK_STATE_EXPORTED;  // we only import certain state
+	dir->state = dstate->state & CDIR_MASK_STATE_EXPORTED;  // we only import certain state
   }
-  idir->dir->dir_rep = dstate->dir_rep;
-  idir->dir->popularity[0] = dstate->popularity;  // FIXME rest of vector?
+  dir->dir_rep = dstate->dir_rep;
+  dir->popularity[0] = dstate->popularity;  // FIXME rest of vector?
   
-  assert(!idir->dir->is_auth());
-  idir->dir->state_set(CDIR_STATE_AUTH);
+  assert(!dir->is_auth());
+  dir->state_set(CDIR_STATE_AUTH);
   
   p += sizeof(*dstate);
   for (int nrep = dstate->ndir_rep_by; nrep > 0; nrep--) {
-	idir->dir->dir_rep_by.insert( *((int*)p) );
+	dir->dir_rep_by.insert( *((int*)p) );
 	p += sizeof(int);
   }
 
@@ -3121,16 +3116,16 @@ void MDCache::import_dir_block(pchar& p,
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
   // a replica's presense in my cache implies/forces it's presense in authority's.
   list<Context*>waiters;
-  idir->dir->take_waiting(CDIR_WAIT_ANY, waiters);
+  dir->take_waiting(CDIR_WAIT_ANY, waiters);
   for (list<Context*>::iterator it = waiters.begin();
 	   it != waiters.end();
 	   it++) 
-	import_root->dir->add_waiter(CDIR_WAIT_IMPORTED, *it);
+	import_root->add_waiter(CDIR_WAIT_IMPORTED, *it);
 
 
   // contents
   for (long nitems = dstate->nitems; nitems>0; nitems--) {
-	CInode *in = import_dentry_inode(idir->dir, p, oldauth, import_root);
+	CInode *in = import_dentry_inode(dir, p, oldauth, import_root);
 	
 	// was this an export?
 	if (in->dir_auth >= 0) {
@@ -3146,10 +3141,10 @@ void MDCache::import_dir_block(pchar& p,
 
 		// move nested exports under containing_import
 		for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-			   nested_exports.equal_range(in);
+			   nested_exports.equal_range(in->dir);
 			 p.first != p.second;
 			 p.first++) {
-		  CInode *nested = (*p.first).second;
+		  CDir *nested = (*p.first).second;
 		  dout(7) << "     moving nested export " << nested << " under " << containing_import << endl;
 		  nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
 		}
@@ -3170,18 +3165,17 @@ void MDCache::import_dir_block(pchar& p,
 	  }
 
 	}
-    //} else in->dir_auth = CDIR_AUTH_PARENT;
   }
  
 }
 
 
-void MDCache::got_hashed_replica(CInode *in,
+void MDCache::got_hashed_replica(CDir *import,
 								 inodeno_t dir_ino,
 								 inodeno_t replica_ino)
 {
 
-  dout(7) << "got_hashed_replica for import " << *in << " ino " << replica_ino << " in dir " << dir_ino << endl;
+  dout(7) << "got_hashed_replica for import " << *import << " ino " << replica_ino << " in dir " << dir_ino << endl;
   
   // remove from import_hashed_replicate_waiting.
   for (multimap<inodeno_t,inodeno_t>::iterator it = import_hashed_replicate_waiting.find(dir_ino);
@@ -3204,20 +3198,20 @@ void MDCache::got_hashed_replica(CInode *in,
   idir->dir->unfreeze_dir();
   
   // remove from import_hashed_frozen_waiting
-  for (multimap<inodeno_t,inodeno_t>::iterator it = import_hashed_frozen_waiting.find(in->ino());
+  for (multimap<inodeno_t,inodeno_t>::iterator it = import_hashed_frozen_waiting.find(import->ino());
 	   it != import_hashed_frozen_waiting.end();
 	   it++) {
 	if (it->second == dir_ino) {
 	  import_hashed_frozen_waiting.erase(it);
 	  break;
 	} else 
-	  assert(it->first == in->ino()); // it better be here!
+	  assert(it->first == import->ino()); // it better be here!
   }
   
   // last one for this import?
-  if (import_hashed_frozen_waiting.count(in->ino()) == 0) {
+  if (import_hashed_frozen_waiting.count(import->ino()) == 0) {
 	// all done, we can finish import!
-	mds->mdcache->handle_export_dir_finish(in);
+	mds->mdcache->handle_export_dir_finish(import);
   }
 }
 
@@ -3879,9 +3873,9 @@ void MDCache::show_imports()
   }
   dout(7) << "imports/exports:" << endl;
 
-  set<CInode*> ecopy = exports;
+  set<CDir*> ecopy = exports;
 
-  for (set<CInode*>::iterator it = imports.begin();
+  for (set<CDir*>::iterator it = imports.begin();
 	   it != imports.end();
 	   it++) {
 	CDir *dir = *it;
@@ -3892,8 +3886,8 @@ void MDCache::show_imports()
 		   nested_exports.equal_range( *it );
 		 p.first != p.second;
 		 p.first++) {
-	  CInode *exp = (*p.first).second;
-	  dout(7) << "      - ex " << *exp << " to " << exp->dir_auth << endl;
+	  CDir *exp = (*p.first).second;
+	  dout(7) << "      - ex " << *exp << " to " << exp->inode->dir_auth << endl;
 	  if ( get_containing_import(exp) != *it ) {
 		dout(7) << "uh oh, containing import is " << get_containing_import(exp) << endl;
 		dout(7) << "uh oh, containing import is " << *get_containing_import(exp) << endl;
@@ -3909,7 +3903,7 @@ void MDCache::show_imports()
   }
 
   if (ecopy.size()) {
-	for (set<CInode*>::iterator it = ecopy.begin();
+	for (set<CDir*>::iterator it = ecopy.begin();
 		 it != ecopy.end();
 		 it++) 
 	  dout(7) << " stray item in exports: " << **it << endl;

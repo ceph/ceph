@@ -19,7 +19,7 @@ ostream& operator<<(ostream& out, CDir& dir)
 {
   string path;
   dir.get_inode()->make_path(path);
-  out << "[dir " << dir.ino() << " " << path << "/]";
+  return out << "[dir " << dir.ino() << " " << path << "/]";
 }
 
 
@@ -280,20 +280,20 @@ void CDir::mark_dirty()
   if (!state_test(CDIR_STATE_DIRTY)) {
 	version++;
 	state_set(CDIR_STATE_DIRTY);
-	dout(10) << "mark_dirty dir " << *inode << " new version " << version << endl;
+	dout(10) << "mark_dirty " << *this << " new version " << version << endl;
   } 
   else if (state_test(CDIR_STATE_COMMITTING) &&
 		   committing_version == version) {
 	version++;  // now dirtier than committing version!
-	dout(10) << "mark_dirty (committing) dir " << *inode << " new version " << version << "/" << committing_version <<  endl;
+	dout(10) << "mark_dirty (committing) " << *this << " new version " << version << "/" << committing_version <<  endl;
   } else {
-	dout(10) << "mark_dirty (dirty) dir " << *inode << " version " << version << endl;
+	dout(10) << "mark_dirty (dirty) " << *this << " version " << version << endl;
   }
 }
 
 void CDir::mark_clean()
 {
-  dout(10) << "mark_clean dir " << *inode << " version " << version << endl;
+  dout(10) << "mark_clean " << *this << " version " << version << endl;
   state_clear(CDIR_STATE_DIRTY);
 }
 
@@ -304,7 +304,7 @@ void CDir::mark_clean()
 void CDir::auth_pin() {
   inode->get(CINODE_PIN_DAUTHPIN + auth_pins);
   auth_pins++;
-  dout(7) << "auth_pin on dir " << *inode << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
   inode->nested_auth_pins++;
   if (inode->parent)
@@ -315,7 +315,7 @@ void CDir::auth_unpin() {
   auth_pins--;
   inode->put(CINODE_PIN_DAUTHPIN + auth_pins);
   assert(auth_pins >= 0);
-  dout(7) << "auth_unpin on dir " << *inode << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   
   // pending freeze?
   if (auth_pins + nested_auth_pins == 0)
@@ -334,7 +334,7 @@ void CDir::adjust_nested_auth_pins(int inc)
 	// dir
 	dir->nested_auth_pins += inc;
 	
-	dout(11) << "adjust_nested_auth_pins on dir " << *dir->inode << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
+	dout(11) << "adjust_nested_auth_pins on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
 	
 	// pending freeze?
 	if (dir->auth_pins + dir->nested_auth_pins == 0) 
@@ -395,7 +395,7 @@ void CDir::freeze_tree(Context *c)
   assert(!is_freezing());
   
   if (is_freezeable()) {
-	dout(10) << "freeze_tree " << *inode << endl;
+	dout(10) << "freeze_tree " << *this << endl;
 	
 	state_set(CDIR_STATE_FROZENTREE);
 	inode->auth_pin();  // auth_pin for duration of freeze
@@ -406,7 +406,7 @@ void CDir::freeze_tree(Context *c)
 	
   } else {
 	state_set(CDIR_STATE_FREEZINGTREE);
-	dout(10) << "freeze_tree + wait " << *inode << endl;
+	dout(10) << "freeze_tree + wait " << *this << endl;
 	
 	// need to wait for auth pins to expire
 	add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
@@ -418,13 +418,13 @@ void CDir::freeze_tree_finish(Context *c)
   // freezeable now?
   if (!is_freezeable()) {
 	// wait again!
-	dout(10) << "freeze_tree_finish still waiting " << *inode << endl;
+	dout(10) << "freeze_tree_finish still waiting " << *this << endl;
 	state_set(CDIR_STATE_FREEZINGTREE);
 	add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
 	return;
   }
 
-  dout(10) << "freeze_tree_finish " << *inode << endl;
+  dout(10) << "freeze_tree_finish " << *this << endl;
   state_set(CDIR_STATE_FROZENTREE);
   state_clear(CDIR_STATE_FREEZINGTREE);   // actually, this may get set again by next context?
 
@@ -439,7 +439,7 @@ void CDir::freeze_tree_finish(Context *c)
 
 void CDir::unfreeze_tree()
 {
-  dout(10) << "unfreeze_tree " << *inode << endl;
+  dout(10) << "unfreeze_tree " << *this << endl;
   state_clear(CDIR_STATE_FROZENTREE);
   
   // unpin  (may => FREEZEABLE)   FIXME: is this order good?
@@ -506,7 +506,7 @@ void CDir::freeze_dir(Context *c)
   assert(!is_freezing());
   
   if (is_freezeable_dir()) {
-	dout(10) << "freeze_dir " << *inode << endl;
+	dout(10) << "freeze_dir " << *this << endl;
 	
 	state_set(CDIR_STATE_FROZENDIR);
 	inode->auth_pin();  // auth_pin for duration of freeze
@@ -517,7 +517,7 @@ void CDir::freeze_dir(Context *c)
 	
   } else {
 	state_set(CDIR_STATE_FREEZINGDIR);
-	dout(10) << "freeze_dir + wait " << *inode << endl;
+	dout(10) << "freeze_dir + wait " << *this << endl;
 	
 	// need to wait for auth pins to expire
 	add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
@@ -529,13 +529,13 @@ void CDir::freeze_dir_finish(Context *c)
   // freezeable now?
   if (!is_freezeable_dir()) {
 	// wait again!
-	dout(10) << "freeze_dir_finish still waiting " << *inode << endl;
+	dout(10) << "freeze_dir_finish still waiting " << *this << endl;
 	state_set(CDIR_STATE_FREEZINGDIR);
 	add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
 	return;
   }
 
-  dout(10) << "freeze_dir_finish " << *inode << endl;
+  dout(10) << "freeze_dir_finish " << *this << endl;
   state_set(CDIR_STATE_FROZENDIR);
   state_clear(CDIR_STATE_FREEZINGDIR);   // actually, this may get set again by next context?
   
@@ -550,7 +550,7 @@ void CDir::freeze_dir_finish(Context *c)
 
 void CDir::unfreeze_dir()
 {
-  dout(10) << "unfreeze_dir " << *inode << endl;
+  dout(10) << "unfreeze_dir " << *this << endl;
   state_clear(CDIR_STATE_FROZENDIR);
   
   // unpin  (may => FREEZEABLE)   FIXME: is this order good?

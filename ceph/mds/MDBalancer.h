@@ -13,6 +13,7 @@ class Message;
 class MHeartbeat;
 class CInode;
 class Context;
+class CDir;
 
 class MDBalancer {
  protected:
@@ -34,9 +35,9 @@ class MDBalancer {
   void handle_heartbeat(MHeartbeat *m);
 
   void do_rebalance();
-  void find_exports(CInode *idir, 
+  void find_exports(CDir *dir, 
 					double amount, 
-					list<CInode*>& exports, 
+					list<CDir*>& exports, 
 					double& have);
 
   void hit_inode(class CInode *in, int type);
