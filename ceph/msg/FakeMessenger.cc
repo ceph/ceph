@@ -25,7 +25,7 @@ int fakemessenger_do_loop()
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
-		cout << "do_loop dispatching t " << m->get_type() << " for " << m->get_dest() << ':' << m->get_dest_port() << " from " << m->get_source() << ':' << m->get_source_port() << endl;
+		cout << "---- do_loop dispatching t " << m->get_type() << " for " << m->get_dest() << ':' << m->get_dest_port() << " from " << m->get_source() << ':' << m->get_source_port() << " ----" << endl;
 		didone = true;
 		it->second->dispatch(m);
 	  }

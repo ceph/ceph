@@ -3,7 +3,7 @@ CC=g++
 CFLAGS=-D __gnu_cxx=std -g
 
 SRCS=*.cc
-OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o MDS.o FakeMessenger.o LogStream.o MDLog.o OSD.o
+OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o MDS.o FakeMessenger.o LogStream.o MDLog.o OSD.o Client.o
 TARGETS=test import
 
 all: depend ${TARGETS}

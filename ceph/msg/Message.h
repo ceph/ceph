@@ -11,10 +11,10 @@
 #define MSG_OSD_WRITE       12
 #define MSG_OSD_WRITEREPLY  13
 
-#define MSG_SUBSYS_SERVER   1
-#define MSG_SUBSYS_BALANCER 2
-#define MSG_SUBSYS_MDSTORE  3
-#define MSG_SUBSYS_MDLOG    4
+#define MSG_CLIENT_REQUEST  20
+#define MSG_CLIENT_REPLY    21
+
+#define MSG_MDS_HEARTBEAT   30
 
 
 #define MSG_ADDR_MDS(x)     (x)

@@ -6,6 +6,8 @@
 
 #include "include/MDS.h"
 #include "include/OSD.h"
+#include "include/Client.h"
+
 #include "include/MDCache.h"
 #include "include/MDStore.h"
 #include "include/FakeMessenger.h"
@@ -15,6 +17,11 @@
 using namespace std;
 
 __uint64_t ino = 1;
+
+
+#define NUMMDSS 10
+#define NUMOSDS 10
+#define NUMCLIENTS 10
 
 
 // this parses find output
@@ -32,12 +39,12 @@ int main(char **argv, int argc) {
 }
 
 int play() {
-  cout << "hello" << endl;
+  cout << "creating stuff" << endl;
 
   // init
   // create mds
   MDS *mds[10];
-  for (int i=0; i<10; i++) {
+  for (int i=0; i<NUMMDSS; i++) {
 	mds[i] = new MDS(0, 1, new FakeMessenger(MSG_ADDR_MDS(i)));
 	mds[i]->open_root(NULL);
 	mds[i]->init();
@@ -45,34 +52,54 @@ int play() {
 
   // create osds
   OSD *osd[10];
-  for (int i=0; i<10; i++) {
+  for (int i=0; i<NUMOSDS; i++) {
 	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
 	osd[i]->init();
   }
+
+  // create clients
+  Client *client[NUMCLIENTS];
+  for (int i=0; i<NUMCLIENTS; i++) {
+	client[i] = new Client(i, new FakeMessenger(MSG_ADDR_CLIENT(i)));
+	client[i]->init();
+  }
+
+  cout << "sending test ping, load" << endl;
 
   // fetch root on mds0
   mds[0]->mdstore->fetch_dir( mds[0]->mdcache->get_root(), NULL );
 
   // send an initial message...?
   mds[0]->messenger->send_message(new MPing(10), 1, MDS_PORT_MAIN, MDS_PORT_MAIN);
+  client[0]->issue_request();
 
   // loop
   fakemessenger_do_loop();
 
   // cleanup
-  for (int i=0; i<10; i++) {
+  cout << "cleanup" << endl;
+  for (int i=0; i<NUMMDSS; i++) {
 	if (mds[i]->shutdown() == 0) {
 	  //cout << "clean shutdown of mds " << i << endl;
 	  delete mds[i];
 	} else {
 	  cout << "problems shutting down mds " << i << endl;
 	}
-
+  }
+  for (int i=0; i<NUMOSDS; i++) {
 	if (osd[i]->shutdown() == 0) { 
 	  //cout << "clean shutdown of osd " << i << endl;
 	  delete osd[i];
 	} else {
 	  cout << "problems shutting down osd " << i << endl;
+	}
+  }
+  for (int i=0; i<NUMCLIENTS; i++) {
+	if (client[i]->shutdown() == 0) { 
+	  //cout << "clean shutdown of client " << i << endl;
+	  delete client[i];
+	} else {
+	  cout << "problems shutting down client " << i << endl;
 	}
   }
   cout << "done." << endl;

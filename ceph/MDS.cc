@@ -7,10 +7,13 @@
 #include "include/MDLog.h"
 
 #include "messages/MPing.h"
+
 #include "messages/MOSDRead.h"
 #include "messages/MOSDWrite.h"
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWriteReply.h"
+
+#include "messages/MClientRequest.h"
 
 #include <list>
 
@@ -23,7 +26,7 @@ using namespace std;
 
 // cons/des
 MDS::MDS(int id, int num, Messenger *m) {
-  nodeid = id;
+  whoami = id;
   num_nodes = num;
   
   mdcache = new DentryCache();
@@ -58,12 +61,13 @@ int MDS::shutdown()
 
 void MDS::proc_message(Message *m) 
 {
-  cout << "mds::proc_message has " << m->get_type() << endl;
+
   switch (m->get_type()) {
+	// MISC
   case MSG_PING:
-	cout << nodeid << " received ping from " << m->get_source() << " with ttl " << ((MPing*)m)->ttl << endl;
+	cout << "mds" << whoami << " received ping from " << m->get_source() << " with ttl " << ((MPing*)m)->ttl << endl;
 	if (((MPing*)m)->ttl > 0) {
-	  cout << nodeid << " responding to " << m->get_source() << endl;
+	  //cout << "mds" << whoami << " responding to " << m->get_source() << endl;
 	  messenger->send_message(new MPing(((MPing*)m)->ttl-1), 
 							  m->get_source(), m->get_source_port(),
 							  MDS_PORT_MAIN);
@@ -71,20 +75,24 @@ void MDS::proc_message(Message *m)
 	break;
 
 
+	// CLIENTS
+  case MSG_CLIENT_REQUEST:
+	handle_client_request((MClientRequest*)m);
+	break;
 
 	// OSD I/O
   case MSG_OSD_READREPLY:
-	cout << "read reply!" << endl;
+	cout << "mds" << whoami << " read reply!" << endl;
 	osd_read_finish(m);
 	break;
 
   case MSG_OSD_WRITEREPLY:
-	cout << "write reply!" << endl;
+	cout << "mds" << whoami << " write reply!" << endl;
 	osd_write_finish(m);
 	break;
 	
   default:
-	cout << "implement MDS::proc_message" << endl;
+	cout << "mds" << whoami << " unknown message " << m->get_type() << endl;
   }
 
 }
@@ -109,6 +117,7 @@ void MDS::dispatch(Message *m)
 	*/
 
   case MDS_PORT_MAIN:
+  case MDS_PORT_SERVER:
 	proc_message(m);
 	break;
 
@@ -119,6 +128,36 @@ void MDS::dispatch(Message *m)
 
 
 
+
+
+// Client fun
+
+int MDS::handle_client_request(MClientRequest *req)
+{
+  cout << "mds" << whoami << " got client request from " << req->get_source() << ", op " << req->op << endl;
+
+
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// OSD fun
 
 int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufptr, size_t *read, Context *c)
 {
@@ -255,7 +294,7 @@ public:
 bool MDS::open_root(Context *c)
 {
   // open root inode
-  if (nodeid == 0) { 
+  if (whoami == 0) { 
 	// i am root
 	CInode *root = new CInode();
 	root->inode.ino = 1;

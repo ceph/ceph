@@ -9,21 +9,36 @@
 #include "Context.h"
 #include "Dispatcher.h"
 
-class CInode;
-class DentryCache;
-class MDStore;
-class MDLog;
-class Messenger;
-class Message;
 
 typedef __uint64_t object_t;
 
 using namespace std;
 
 
-#define MDS_PORT_MAIN  1
-#define MDS_PORT_STORE 10
+#define MDS_PORT_MAIN   1
+#define MDS_PORT_SERVER 5
+#define MDS_PORT_STORE  10
 
+// md ops
+#define MDS_OP_STAT    100
+#define MDS_OP_READDIR 101
+
+#define MDS_OP_OPEN    111
+#define MDS_OP_CLOSE   112
+
+#define MDS_OP_RENAME  121
+#define MDS_OP_UNLINK  122
+#define MDS_OP_LINK    123
+
+
+
+class CInode;
+class DentryCache;
+class MDStore;
+class MDLog;
+class Messenger;
+class Message;
+class MClientRequest;
 
 // 
 
@@ -37,7 +52,7 @@ typedef struct {
 
 class MDS : public Dispatcher {
  protected:
-  int          nodeid;
+  int          whoami;
   int          num_nodes;
 
   // import/export
@@ -69,7 +84,7 @@ class MDS : public Dispatcher {
   ~MDS();
 
   int get_nodeid() {
-	return nodeid;
+	return whoami;
   }
 
   int init();
@@ -80,6 +95,14 @@ class MDS : public Dispatcher {
 
   bool open_root(Context *c);
   bool open_root_2(int result, Context *c);
+
+
+  // client fun
+  int handle_client_request(MClientRequest *m);
+
+  int do_stat(MClientRequest *m);
+
+
 
   // osd fun
   int osd_read(int osd, object_t oid, size_t len, size_t offset, char *bufptr, size_t *bytesread, Context *c);
