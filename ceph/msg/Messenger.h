@@ -26,8 +26,10 @@ class Messenger {
   void set_dispatcher(Dispatcher *d) {
 	dispatcher = d;
   }
-  void remove_dispatcher() {
-	if (dispatcher) { delete dispatcher; dispatcher = 0; }
+  Dispatcher *remove_dispatcher() {
+	Dispatcher *t = dispatcher;
+	dispatcher = 0;
+	return t;
   }
 
   // ...

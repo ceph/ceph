@@ -73,7 +73,7 @@ class MDS : public Dispatcher {
   }
 
   int init();
-  void shutdown();
+  int shutdown();
 
   void proc_message(Message *m);
   virtual void dispatch(Message *m);

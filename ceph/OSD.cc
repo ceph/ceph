@@ -32,9 +32,16 @@ OSD::~OSD()
   if (messenger) { delete messenger; messenger = 0; }
 }
 
-void OSD::init()
+int OSD::init()
 {
   messenger->set_dispatcher(this);
+  return 0;
+}
+
+int OSD::shutdown()
+{
+  messenger->shutdown();
+  return 0;
 }
 
 
@@ -90,12 +97,12 @@ void OSD::read(MOSDRead *r)
 
   } else {
 
-	// read part of the object
-	lseek(fd, r->offset, SEEK_SET);
-	
 	if (r->len == 0) { 	              // read whole thing
 	  r->len = lseek(fd, 0, SEEK_END);  // get size
-	}
+	  lseek(fd, 0, SEEK_SET);           // back to beginning
+	} else
+	  lseek(fd, r->offset, SEEK_SET);   // seek	
+
 	char *buf = new char[r->len];
 	
 	long got = ::read(fd, buf, r->len);
@@ -139,13 +146,16 @@ void OSD::write(MOSDWrite *m)
 	  lseek(fd, m->offset, SEEK_SET);
 	long wrote = ::write(fd, m->buf, m->len);
 	close(fd);
-	
+
 	// reply
 	reply = new MOSDWriteReply(m, wrote);
   }
 
+  // clean up
   cout << "sending reply" << endl;
   messenger->send_message(reply, m->get_source(), m->get_source_port());
+
+  delete m->buf;
   delete m;
 }
 

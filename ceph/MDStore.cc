@@ -65,7 +65,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 	// dentry
 	string dname = buf+p;
 	p += dname.length() + 1;
-	cout << "parse filename " << dname << endl;
+	//cout << "parse filename " << dname << endl;
 
 	// just a hard link?
 	if (*(buf+p) == 'L') {
@@ -75,14 +75,13 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 	  p++;
 
 	  // inode
-	  inodeno_t ino = ((struct inode_t*)(buf+p+1))->ino;
-	  if (mds->mdcache->have_inode(ino)) 
-		throw "inode already exists!  uh oh\n";
-
-	  // new inode
 	  CInode *in = new CInode();
 	  memcpy(&in->inode, buf+p, sizeof(inode_t));
 	  p += sizeof(inode_t);
+	  
+	  cout << " got " << in->inode.ino << " " << dname << endl;
+	  if (mds->mdcache->have_inode(in->inode.ino)) 
+		throw "inode already exists!  uh oh\n";
 		
 	  // add and link
 	  mds->mdcache->add_inode( in );

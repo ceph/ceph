@@ -7,8 +7,6 @@
 class MOSDReadReply : public MBuffer {
  public:
   long tid;
-  long len;
-  char *buf;
   off_t offset;
   object_t oid;
   MOSDReadReply(MOSDRead *r, char *buf, long len) :

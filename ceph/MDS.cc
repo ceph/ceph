@@ -12,7 +12,6 @@
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWriteReply.h"
 
-
 #include <list>
 
 #include <iostream>
@@ -36,6 +35,7 @@ MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdstore) { delete mdstore; mdstore = NULL; }
   if (messenger) { delete messenger; messenger = NULL; }
+  if (mdlog) { delete mdlog; mdlog = NULL; }
 }
 
 
@@ -45,9 +45,15 @@ int MDS::init()
   messenger->init(this);
 }
 
-void MDS::shutdown()
+int MDS::shutdown()
 {
+  // shut down cache
+  mdcache->clear();
+  
+  // shut down messenger
   messenger->shutdown();
+
+  return 0;
 }
 
 void MDS::proc_message(Message *m) 
@@ -59,7 +65,8 @@ void MDS::proc_message(Message *m)
 	if (((MPing*)m)->ttl > 0) {
 	  cout << nodeid << " responding to " << m->get_source() << endl;
 	  messenger->send_message(new MPing(((MPing*)m)->ttl-1), 
-							  m->get_source(), m->get_source_port());
+							  m->get_source(), m->get_source_port(),
+							  MDS_PORT_MAIN);
 	}
 	break;
 
@@ -166,12 +173,12 @@ int MDS::osd_read_finish(Message *rawm)
 	*p->bytesread = m->len;
 
 	if (p->buf) { // user buffer
-	  memcpy(p->buf, m->buf, m->len);
+	  memcpy(p->buf, m->buf, m->len);  // copy
+	  delete m->buf;                   // free message buf
 	} else {      // new buffer
-	  // steal message's buffer   (this is probably a bad idea?  :/ )
-	  *p->bufptr = m->buf;   
-	  m->buf = 0;
+	  *p->bufptr = m->buf;     // steal message's buffer
 	}
+	m->buf = 0;
   }
 
   delete p;
@@ -192,10 +199,14 @@ int MDS::osd_read_finish(Message *rawm)
 int MDS::osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, int flags, Context *c)
 {
   osd_last_tid++;
+
+  char *nbuf = new char[len];
+  memcpy(nbuf, buf, len);
+
   MOSDWrite *m = new MOSDWrite(osd_last_tid,
 							   oid,
 							   len, offset,
-							   buf, flags);
+							   nbuf, flags);
   osd_writes[ osd_last_tid ] = c;
   cout << "mds: sending MOSDWrite " << m->get_type() << endl;
   messenger->send_message(m,

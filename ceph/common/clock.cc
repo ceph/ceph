@@ -1,5 +1,9 @@
-
+#include <sys/types.h>
 #include "include/Clock.h"
+
+#ifndef NULL
+#define NULL 0
+#endif
 
 // public
 Clock g_clock;

@@ -18,6 +18,12 @@ MDLog::MDLog(MDS *m)
 }
 
 
+MDLog::~MDLog()
+{
+  if (reader) { delete reader; reader = 0; }
+  if (writer) { delete writer; writer = 0; }
+}
+
 
 int MDLog::submit_entry( LogEvent *e,
 						 Context *c ) 

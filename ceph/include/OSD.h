@@ -19,7 +19,8 @@ class OSD : public Dispatcher {
   OSD(int id, Messenger *m);
   ~OSD();
   
-  void init();
+  int init();
+  int shutdown();
 
   virtual void dispatch(Message *m);
 

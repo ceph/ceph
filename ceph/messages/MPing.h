@@ -7,10 +7,8 @@
 class MPing : public Message {
  public:
   int ttl;
-  MPing(int n) {
+  MPing(int n) : Message(MSG_PING) {
 	ttl = n;
-	dest_port = MSG_SUBSYS_SERVER;
-	type = MSG_PING;
   }
 };
 

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "include/MDS.h"
+#include "include/OSD.h"
 #include "include/MDCache.h"
 #include "include/MDStore.h"
 #include "include/FakeMessenger.h"
@@ -17,79 +18,64 @@ __uint64_t ino = 1;
 
 
 // this parses find output
-
-DentryCache *readfiles() {
-  DentryCache *dc = new DentryCache();
-
-  string fn;
-  int offs = -1;
-  while (getline(cin, fn)) {
-	string relfn;
-
-	CInode *in = new CInode();
-
-	if (offs < 0) {
-	  if (fn == "/")
-		offs = 0;
-	  else 
-		offs = fn.length();
-	  //cout << "offs is " << offs << " from " << fn << endl;
-	  relfn = "/";
-	  in->inode.ino = 1;  // root
-	} else 
-	  relfn = fn.substr(offs);
-	
-	// fill out inode
-	struct stat sb;
-	stat(fn.c_str(), &sb);
-
-	in->inode.ino = ino++; //sb.st_ino;
-	in->inode.mode = sb.st_mode;
-	in->inode.size = sb.st_size;
-	in->inode.uid = sb.st_uid;
-	in->inode.gid = sb.st_gid;
-	in->inode.atime = sb.st_atime;
-	in->inode.mtime = sb.st_mtime;
-	in->inode.ctime = sb.st_ctime;
-		
-	// add
-	dc->add_file(relfn, in);
-	cout << "added " << relfn << endl;
-  }
-  
-  return dc;
-}
+int play();
 
 int main(char **argv, int argc) {
   cout << "hi there" << endl;
 
+  try {
+	play();
+  }
+  catch (char *s) {
+	cout << "exception: " << s << endl;
+  }
+}
+
+int play() {
+  cout << "hello" << endl;
+
   // init
-  MDS *mds1 = new MDS(0, 2, new FakeMessenger(MSG_ADDR_MDS(0)));
-  mds1->open_root(NULL);
-  mds1->init();
+  // create mds
+  MDS *mds[10];
+  for (int i=0; i<10; i++) {
+	mds[i] = new MDS(0, 1, new FakeMessenger(MSG_ADDR_MDS(i)));
+	mds[i]->open_root(NULL);
+	mds[i]->init();
+  }
 
-  mds1->mdstore->fetch_dir( mds1->mdcache->get_root(), NULL );
+  // create osds
+  OSD *osd[10];
+  for (int i=0; i<10; i++) {
+	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
+	osd[i]->init();
+  }
 
-  
-  MDS *mds2 = new MDS(1,2,new FakeMessenger(MSG_ADDR_MDS(1)));
-  mds2->init();
+  // fetch root on mds0
+  mds[0]->mdstore->fetch_dir( mds[0]->mdcache->get_root(), NULL );
 
   // send an initial message...?
-  mds1->messenger->send_message(new MPing(10), 1);
+  mds[0]->messenger->send_message(new MPing(10), 1, MDS_PORT_MAIN, MDS_PORT_MAIN);
 
   // loop
   fakemessenger_do_loop();
 
-
   // cleanup
-  if (mds1->mdcache->clear()) {
-	cout << "clean shutdown" << endl;
-	mds1->mdcache->dump();
-	delete mds1;
-  } else {
-	cout << "can't empty cache";
-  }
+  for (int i=0; i<10; i++) {
+	if (mds[i]->shutdown() == 0) {
+	  //cout << "clean shutdown of mds " << i << endl;
+	  delete mds[i];
+	} else {
+	  cout << "problems shutting down mds " << i << endl;
+	}
 
+	if (osd[i]->shutdown() == 0) { 
+	  //cout << "clean shutdown of osd " << i << endl;
+	  delete osd[i];
+	} else {
+	  cout << "problems shutting down osd " << i << endl;
+	}
+  }
+  cout << "done." << endl;
   return 0;
 }
 
