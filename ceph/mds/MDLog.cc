@@ -6,6 +6,12 @@
 
 #define MAX_TRIMMING   4    // max events to be retiring simultaneously
 
+#include "include/LogType.h"
+#include "include/Logger.h"
+#include "include/Message.h"
+
+LogType *mdlog_logtype = 0;
+
 
 // cons/des
 
@@ -17,6 +23,18 @@ MDLog::MDLog(MDS *m)
   trim_reading = false;
   reader = new LogStream(mds, 666, mds->get_nodeid());
   writer = new LogStream(mds, 666, mds->get_nodeid());
+
+  if (!mdlog_logtype) 
+	mdlog_logtype = new LogType();
+
+  string name;
+  name = "log.mds";
+  int w = mds->get_nodeid();
+  if (w >= 1000) name += ('0' + ((w/1000)%10));
+  if (w >= 100) name += ('0' + ((w/100)%10));
+  if (w >= 10) name += ('0' + ((w/10)%10));
+  name += ('0' + ((w/1)%10));
+  logger = new Logger(name, mdlog_logtype);
 }
 
 
@@ -27,16 +45,46 @@ MDLog::~MDLog()
 }
 
 
+class C_MDL_SubmitEntry : public Context {
+protected:
+  MDLog *mdl;
+public:
+  Context *c;
+  LogEvent *le;
+
+  C_MDL_SubmitEntry(MDLog *m, LogEvent *e, Context *c) {
+	mdl = m; 
+	le = e;
+	this->c = c;
+  }
+  void finish(int res) {
+	mdl->submit_entry_2(le,c);
+  }
+};
+
 int MDLog::submit_entry( LogEvent *e,
 						 Context *c ) 
 {
   // write it
-  writer->append(e, c);
-
-  // trim
-  trim(NULL);
+  writer->append(e, new C_MDL_SubmitEntry(this, e, c));
+  logger->inc("add");
 }
 
+int MDLog::submit_entry_2( LogEvent *e,
+						   Context *c ) 
+{
+  // written!
+  num_events++;
+  delete e;
+
+  if (c) {
+	c->finish(0);
+	delete c;
+  }
+  
+  // trim
+  trim(NULL);    // FIXME probably not every time?
+}
 
 class C_MDL_Trim : public Context {
 protected:
@@ -80,6 +128,7 @@ void MDLog::trim_readnext()
   trim_reading = true;
   C_MDL_Trim *readfin = new C_MDL_Trim(this);
   reader->read_next(&readfin->le, readfin);
+  logger->inc("read");
 }
 
 
@@ -91,9 +140,11 @@ int MDLog::trim_2_didread(LogEvent *le)
   // we just read an event.
   if (le->obsolete(mds) == true) {
 	trim_3_didretire(le);    // we can discard this event and be done.
+	logger->inc("obs");
   } else {
 	trimming.push_back(le);	 // add to limbo list
 	le->retire(mds, new C_MDL_Trim(this, le, 3)); 	// retire entry
+	logger->inc("retire");
   }
 
   // read another event?      FIXME: max_trimming maybe?  would need to restructure this again.

@@ -15,16 +15,16 @@ using namespace std;
 int LogStream::append(LogEvent *e, Context *c)
 {
   // serialize
-  char *buf;
-  size_t buflen;
-  e->serialize(&buf, &buflen);
-
+  e->serialize();
+  char *buf = e->get_serial_buf();
+  long buflen = e->get_serial_len();
+  
   *((__uint32_t*)buf) = e->get_type();
   *((__uint32_t*)buf+1) = buflen;
-
+  
   // advance ptr for later
   append_pos += buflen;
-
+  
   // submit write
   mds->osd_write(osd, oid,
 				 buflen, append_pos-buflen,
@@ -50,7 +50,7 @@ public:
 	this->c = c;
   }
   void finish(int result) {
-	ls->read_next(le,c,1);
+	ls->read_next(le,c,2);
   }
 };
 
@@ -60,8 +60,8 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	// alloc buffer?
 	if (!buf) {
 	  buf = new char[READ_INC];
-	  buf_valid = 0;
-	  buf_start = -1;
+	  buf_valid = 0;  // no data yet
+	  buf_start = 0;
 	}
 	
 	// does buffer have what we want?
@@ -76,11 +76,11 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 					new C_LS_ReadNext(this, le, c));
 	  return 0;
 	}
-	step = 1;
+	step = 2;
   }
 
 
-  if (step == 1) {
+  if (step == 2) {
 	// decode event
 	unsigned off = cur_pos-buf_start;
 	__uint32_t type = *((__uint32_t*)(buf+off));

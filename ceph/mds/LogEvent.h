@@ -11,24 +11,36 @@ using namespace std;
 
 // generic log event
 class LogEvent {
+ private:
+  char *serial_buf;
+  long serial_len;
+
  protected:
   int type;
-  char *serial;
 
+  char *alloc_serial_buf(long size) {
+	serial_len = size + 8;
+	serial_buf = new char[serial_len];
+	return serial_buf + 8;
+  }
+  
  public:
   LogEvent(int t) {
 	type = t;
+	serial_buf = 0;
   }
   ~LogEvent() {
-	if (serial) { delete serial; serial = 0; }
+	if (serial_buf) { delete serial_buf; serial_buf = 0; }
   }
   
   int get_type() { return type; }
+  char *get_serial_buf() { return serial_buf; }
+  long get_serial_len() { return serial_len; }
 
   // note: LogEvent owns serialized buffer
   // leave 8 leading bytes free for size/type header,
-  // filled in by writer.
-  virtual int serialize(char **buf, size_t *len) = 0;
+  // filled in by LogStream writer.
+  virtual int serialize() = 0; //char **buf, size_t *len) = 0;
 
   virtual bool obsolete(MDS *m) {
 	return true;

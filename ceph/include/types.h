@@ -28,6 +28,7 @@ typedef __uint64_t mdloc_t;     // dir locator?
 struct inode_t {
   inodeno_t ino;
 
+  __uint32_t touched;
   __uint64_t size;
   __uint32_t mode;
   uid_t uid;

@@ -113,7 +113,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 	  memcpy(&in->inode, buf+p, sizeof(inode_t));
 	  p += sizeof(inode_t);
 	  
-	  cout << " got " << in->inode.ino << " " << dname << " isdir " << in->inode.isdir << endl;
+	  cout << " got " << in->inode.ino << " " << dname << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
 	  if (mds->mdcache->have_inode(in->inode.ino)) 
 		throw "inode already exists!  uh oh\n";
 		

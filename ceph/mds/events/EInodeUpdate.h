@@ -25,11 +25,11 @@ class EInodeUpdate : public LogEvent {
 	inode = *(inode_t*)(buf+sizeof(__uint32_t));
   }
   
-  virtual int serialize(char **buf, size_t *len) {
-	*len = 8 + sizeof(inode_t) + sizeof(version);
-	*buf = new char[*len];
-	memcpy(*buf + 8, &version, sizeof(version));
-	memcpy(*buf + 8 + sizeof(version), &inode, sizeof(inode_t));
+  virtual int serialize() {
+	int len = sizeof(inode_t) + sizeof(version);
+	char *buf = alloc_serial_buf(len);
+	memcpy(buf, &version, sizeof(version));
+	memcpy(buf + sizeof(version), &inode, sizeof(inode_t));
 	return 0;
   }
 	

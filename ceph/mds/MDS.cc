@@ -44,7 +44,7 @@ MDS::MDS(MDCluster *mdc, Messenger *m) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  mdlog->set_max_events(10);
+  mdlog->set_max_events(100);
 
   osd_last_tid = 0;
 }
@@ -219,7 +219,7 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   //if (mdcache->read_start(cur, req))
   //return 0;   // ugh
 
-  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " stat " << endl;
+  cout << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " stat " << cur->inode.touched << endl;
   MClientReply *reply = new MClientReply(req);
   reply->result = 0;
   reply->set_trace_dist( cur, whoami );
@@ -256,6 +256,8 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	
 	// do update
 	cur->inode.mtime++; // whatever
+	cur->inode.touched++;
+	cur->version++;
 
 	// tell replicas
 	mdcache->send_inode_updates(cur);
@@ -264,7 +266,7 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	cur->get();
 
 	// log it
-	cout << "mds" << whoami << " log for client" << req->client << '.' << req->tid << " touch" << endl;
+	cout << "mds" << whoami << " log for client" << req->client << '.' << req->tid << " touch " << cur->inode.touched << endl;
 	mdlog->submit_entry(new EInodeUpdate(cur),
 						new C_MDS_TouchFinish(this, req, cur));
 	return 0;
