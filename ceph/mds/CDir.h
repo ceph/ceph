@@ -270,6 +270,7 @@ class CDir {
   // -- authority --
   int authority();
   int dentry_authority(const string& d);
+  int get_dir_auth() { return dir_auth; }
 
   bool is_open_by_anyone() { return !open_by.empty(); }
   bool is_open_by(int mds) { return open_by.count(mds); }

@@ -954,8 +954,8 @@ void MDCache::handle_discover(MDiscover *dis)
       return;
     }
 	
-    dout(7) << "i'm not auth or proxy, dropping" << endl;
-	assert(0);
+    dout(7) << "i'm not auth or proxy, dropping (this empty reply).  i bet i just exported." << endl;
+	//assert(0);
     
   } else {
     // send back to asker
@@ -3168,6 +3168,8 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   }
   assert(dir->is_auth() == false);
   
+  show_imports();
+
   // assimilate contents?
   if (!m->did_assim()) {
     m->mark_assim();  // only do this the first time!
@@ -3190,7 +3192,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
         (*it)->update_inode(in);
         dout(10) << " updated " << *in << endl;
       } else {
-        in = new CInode;
+        in = new CInode(false);
         (*it)->update_inode(in);
         
         // link to the containing dir
@@ -3332,6 +3334,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 	dir->dir_auth = CDIR_AUTH_PARENT;
   else
 	dir->dir_auth = mds->get_nodeid();
+  dout(10) << " set dir_auth to " << dir->dir_auth << endl;
 
   // update imports/exports
   CDir *containing_import;
@@ -3548,6 +3551,7 @@ void MDCache::import_dir_block(crope& r,
 
   // assimilate state
   dstate.update_dir( dir );
+  if (diri->is_auth()) dir->dir_auth = CDIR_AUTH_PARENT;   // update_dir may hose dir_auth
 
   // mark  (may already be marked from get_or_open_dir() above)
   if (!dir->is_auth())

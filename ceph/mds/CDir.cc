@@ -43,6 +43,9 @@ ostream& operator<<(ostream& out, CDir& dir)
         out << " " << *it;
   }
 
+  if (dir.get_dir_auth() != CDIR_AUTH_PARENT)
+	out << " dir_auth=" << dir.get_dir_auth();
+
   return out << "]";
 }
 
