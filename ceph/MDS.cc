@@ -52,6 +52,7 @@ void MDS::shutdown()
 
 void MDS::proc_message(Message *m) 
 {
+  cout << "mds::proc_message has " << m->get_type() << endl;
   switch (m->get_type()) {
   case MSG_PING:
 	cout << nodeid << " received ping from " << m->get_source() << " with ttl " << ((MPing*)m)->ttl << endl;
@@ -66,10 +67,12 @@ void MDS::proc_message(Message *m)
 
 	// OSD I/O
   case MSG_OSD_READREPLY:
+	cout << "read reply!" << endl;
 	osd_read_finish(m);
 	break;
 
   case MSG_OSD_WRITEREPLY:
+	cout << "write reply!" << endl;
 	osd_write_finish(m);
 	break;
 	
@@ -84,7 +87,7 @@ void MDS::dispatch(Message *m)
 {
   switch (m->get_dest_port()) {
 	
-  case MSG_SUBSYS_MDSTORE:
+  case MDS_PORT_STORE:
 	mdstore->proc_message(m);
 	break;
 	
@@ -98,9 +101,12 @@ void MDS::dispatch(Message *m)
 	break;
 	*/
 
-  case MSG_SUBSYS_SERVER:
+  case MDS_PORT_MAIN:
 	proc_message(m);
 	break;
+
+  default:
+	cout << "MDS unkown message port" << m->get_dest_port() << endl;
   }
 }
 
@@ -123,7 +129,7 @@ int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufpt
 
   messenger->send_message(m,
 						  MSG_ADDR_OSD(osd),
-						  0);
+						  0, MDS_PORT_MAIN);
 }
 
 
@@ -142,7 +148,7 @@ int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char *buf, s
 
   messenger->send_message(m,
 						  MSG_ADDR_OSD(osd),
-						  0);
+						  0, MDS_PORT_MAIN);
 }
 
 
@@ -191,10 +197,10 @@ int MDS::osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, 
 							   len, offset,
 							   buf, flags);
   osd_writes[ osd_last_tid ] = c;
-  cout << "sending MOSDWrite " << m->get_type() << endl;
+  cout << "mds: sending MOSDWrite " << m->get_type() << endl;
   messenger->send_message(m,
 						  MSG_ADDR_OSD(osd),
-						  0);
+						  0, MDS_PORT_MAIN);
 }
 
 
@@ -207,6 +213,8 @@ int MDS::osd_write_finish(Message *rawm)
 
   long result = m->len;
   delete m;
+
+  cout << "mds: finishing osd_write" << endl;
 
   if (c) {
 	c->finish(result);

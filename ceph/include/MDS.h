@@ -20,6 +20,11 @@ typedef __uint64_t object_t;
 
 using namespace std;
 
+
+#define MDS_PORT_MAIN  1
+#define MDS_PORT_STORE 10
+
+
 // 
 
 typedef struct {
