@@ -154,6 +154,7 @@ void CDir::hard_pin() {
 void CDir::hard_unpin() {
   hard_pinned--;
   inode->put(CINODE_PIN_DHARDPIN + hard_pinned);
+  assert(hard_pinned >= 0);
 
   // pending freeze?
   if (waiting_to_freeze.size() &&
@@ -208,7 +209,7 @@ void CDir::freeze(Context *c)
 {
   assert((state & (CDIR_MASK_FROZEN|CDIR_MASK_FREEZING)) == 0);
 
-  if (nested_hard_pinned == 0) {
+  if (hard_pinned + nested_hard_pinned == 0) {
 	cout << "freeze " << *inode << endl;
 
 	state_set(CDIR_MASK_FROZEN);

@@ -40,7 +40,6 @@ typedef struct {
 
 class MExportDir : public Message {
  public:
-  string path;
   inodeno_t ino;
   double ipop;
 
@@ -53,7 +52,6 @@ class MExportDir : public Message {
   MExportDir(CInode *in, double pop) : 
 	Message(MSG_MDS_EXPORTDIR) {
 	this->ino = in->inode.ino;
-	in->make_path(path);
 	ipop = pop;
 	ndirs = 0;
   }

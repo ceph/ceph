@@ -16,6 +16,8 @@
 
 class MDS;
 class Message;
+class MExportDirPrep;
+class MExportDirPrepAck;
 class MExportDir;
 class MExportDirAck;
 class MExportDirNotify;
@@ -112,6 +114,7 @@ class MDCache {
   int handle_discover(MDiscover *dis);
 
   // exporter
+  void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CInode *in,
 				  int mds);
   void export_dir_frozen(CInode *in,
@@ -120,12 +123,13 @@ class MDCache {
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
 					   CInode *idir);
-  void export_dir_purge(CInode *idir);
+  void export_dir_purge(CInode *idir, int newauth);
   void handle_export_dir_ack(MExportDirAck *m);
   
   // importer
+  void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
-  void import_dir_block(pchar& p, CInode *containing_import);
+  void import_dir_block(pchar& p, CInode *containing_import, int oldauth);
 
   // dir authoirty bystander
   void handle_export_dir_notify(MExportDirNotify *m);
@@ -158,6 +162,7 @@ class MDCache {
   }
 
   void show_imports();
+  void show_cache();
 
   void dump_to_disk(MDS *m) {
 	if (root) root->dump_to_disk(m);

@@ -78,7 +78,7 @@ void Logger::flush(bool force)
 	if (!open) {
 	  out.open(filename.c_str(), ofstream::out);
 	  open = true;
-	  cout << "opening log file " << filename << endl;
+	  //cout << "opening log file " << filename << endl;
 	}
 
 	// header?

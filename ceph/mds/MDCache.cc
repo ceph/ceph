@@ -4,11 +4,15 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "MDS.h"
+#include "MDCluster.h"
 
 #include "include/Message.h"
 #include "include/Messenger.h"
 
 #include "messages/MDiscover.h"
+
+#include "messages/MExportDirPrep.h"
+#include "messages/MExportDirPrepAck.h"
 #include "messages/MExportDir.h"
 #include "messages/MExportDirAck.h"
 #include "messages/MExportDirNotify.h"
@@ -48,11 +52,10 @@ MDCache::~MDCache()
 
 bool MDCache::shutdown()
 {
-  if (root) {
-	inode_map.erase(root->inode.ino);
-	lru->lru_remove(root);
-	delete root;
-	root = 0;
+  if (lru->lru_get_size() > 0) {
+	cout << "WARNING: mdcache shutodwn with non-empty cache" << endl;
+	show_cache();
+	show_imports();
   }
 }
 
@@ -62,8 +65,10 @@ bool MDCache::shutdown()
 bool MDCache::add_inode(CInode *in) 
 {
   // add to lru, inode map
+  assert(inode_map.size() == lru->lru_get_size());
   lru->lru_insert_mid(in);
   inode_map[ in->inode.ino ] = in;
+  assert(inode_map.size() == lru->lru_get_size());
 }
 
 bool MDCache::remove_inode(CInode *o) 
@@ -78,7 +83,8 @@ bool MDCache::remove_inode(CInode *o)
   else if (o->nparents > 1) {
 	assert(o->nparents <= 1);
   } else {
-	assert(o->parent == 0);  // root?
+	assert(o->nparents == 0);  // root.
+	assert(o->parent == NULL);
   }
 
   // remove from map
@@ -104,24 +110,39 @@ bool MDCache::trim(__int32_t max) {
 	int auth = in->authority(mds->get_cluster());
 	if (auth != mds->get_nodeid()) {
 	  cout << "mds" << mds->get_nodeid() << " sending inode_expire to mds" << auth << " on " << *in << endl;
-	  mds->messenger->send_message(new MInodeExpire(in->inode.ino),
+	  mds->messenger->send_message(new MInodeExpire(in->inode.ino, mds->get_nodeid()),
 								   MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
 	}	
 
-	CInode *idir = in->parent->dir->inode;
+	CInode *idir = NULL;
+	if (in->parent)
+	  idir = in->parent->dir->inode;
 
 	// remove it
 	cout << "mds" << mds->get_nodeid() << " trim deleting " << *in << " " << in << endl;
 	remove_inode(in);
 	delete in;
 
-	// dir incomplete!
-	idir->dir->state_clear(CDIR_MASK_COMPLETE);
-	if (imports.count(idir) && !idir->is_root()) {
-	  // it's an import!
-	  cout << "mds" << mds->get_nodeid() << " trimmed parent dir is an import; rexporting" << endl;
-	  export_dir( idir, idir->authority(mds->get_cluster()) );
+	if (idir) {
+	  // dir incomplete!
+	  idir->dir->state_clear(CDIR_MASK_COMPLETE);
+	  if (imports.count(idir) &&                // import
+		  idir->dir->get_size() == 0 && // no children
+		  !idir->is_root() &&                   // not root
+		  !(idir->dir->is_freezing() || idir->dir->is_frozen())
+		  ) {
+		int dest = idir->authority(mds->get_cluster());
+
+		//if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
+
+		// it's an empty import!
+		cout << "mds" << mds->get_nodeid() << " trimmed parent dir is an import; rexporting to " << dest << endl;
+		export_dir( idir, dest );
+	  }
+	} else {
+	  cout << " that was root!" << endl;
+	  root = NULL;
 	}
   }
   
@@ -132,18 +153,39 @@ bool MDCache::trim(__int32_t max) {
 bool MDCache::shutdown_pass()
 {
   cout << "mds" << mds->get_nodeid() << " shutdown_pass" << endl;
-  assert(mds->is_shutting_down());
+  //assert(mds->is_shutting_down());
 
   // make a pass on the cache
-  trim(1);
+  trim(0);
 
   cout << "mds" << mds->get_nodeid() << " cache size now " << lru->lru_get_size() << endl;
 
-  if (lru->lru_get_size() <= 1) {
+  // send imports to 0!
+  if (mds->get_nodeid() != 0) {
+	for (set<CInode*>::iterator it = imports.begin();
+		 it != imports.end();
+		 ) {
+	  CInode *im = *it;
+	  it++;
+	  if (im->is_root()) continue;
+	  if (im->dir->is_frozen() || im->dir->is_freezing()) continue;
+	  
+	  cout << "sending " << *im << " back to mds0" << endl;
+	  export_dir(im,0);
+	}
+  }
+	
+  // and?
+
+  assert(inode_map.size() == lru->lru_get_size());
+  if (lru->lru_get_size() <= 0) {
 	cout << "mds" << mds->get_nodeid() << " done, sending shutdown_finish" << endl;
 	mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
 								 0, MDS_PORT_MAIN, MDS_PORT_MAIN);
 	return true;
+  } else {
+	show_cache();
+	show_imports();
   }
   return false;
 }
@@ -461,16 +503,24 @@ int MDCache::proc_message(Message *m)
 	*/
 	
 	// import
+  case MSG_MDS_EXPORTDIRPREP:
+	handle_export_dir_prep((MExportDirPrep*)m);
+	break;
+
   case MSG_MDS_EXPORTDIR:
 	handle_export_dir((MExportDir*)m);
 	break;
 
-	// export ack
+	// export 
+  case MSG_MDS_EXPORTDIRPREPACK:
+	handle_export_dir_prep_ack((MExportDirPrepAck*)m);
+	break;
+	
   case MSG_MDS_EXPORTDIRACK:
 	handle_export_dir_ack((MExportDirAck*)m);
 	break;
-
-	// export notify
+	
+	// export 3rd party (inode authority)
   case MSG_MDS_EXPORTDIRNOTIFY:
 	handle_export_dir_notify((MExportDirNotify*)m);
 	break;
@@ -734,6 +784,8 @@ int MDCache::handle_discover(MDiscover *dis)
 	  CInode *root = get_root();
 	  dis->add_bit( root, 0 );
 
+	  if (root->cached_by.empty())
+		root->get(CINODE_PIN_CACHED);
 	  root->cached_by.insert( dis->asker );
 	}
 
@@ -747,7 +799,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	  if (!cur->dir) cur->dir = new CDir(cur);
 	  
 	  if (cur->dir->is_frozen()) {
-		cout << "mds" << whoami << " dir is frozen, waiting" << endl;
+		cout << "mds" << whoami << " dir " << *cur << " is frozen, waiting" << endl;
 		cur->dir->add_freeze_waiter(new C_MDS_RetryMessage(mds, dis));
 		return 0;
 	  }
@@ -778,20 +830,28 @@ int MDCache::handle_discover(MDiscover *dis)
 		  return 0;
 		}
 	  } else {
+		// don't have dentry.
 
-		// ?? might we not be the authority? ??
-		assert(cur->authority(mds->get_cluster()) == whoami);
-
-		// don't have it.
-		if (cur->dir->is_complete()) {
-		  // file not found.
-		  assert(!cur->dir->is_complete());
+		// are we auth for this dir?
+		int dirauth = cur->dir_authority(mds->get_cluster());
+		if (dirauth == whoami) {
+		  if (cur->dir->is_complete()) {
+			// file not found.
+			assert(!cur->dir->is_complete());
+		  } else {
+			// readdir
+			cout << "mds" << whoami << " incomplete dir contents for " << *cur << ", fetching" << endl;
+			mds->mdstore->fetch_dir(cur, new C_MDS_RetryMessage(mds, dis));
+			return 0;
+		  }
 		} else {
-		  // readdir
-		  cout << "mds" << whoami << " incomplete dir contents for " << *cur << ", fetching" << endl;
-		  mds->mdstore->fetch_dir(cur, new C_MDS_RetryMessage(mds, dis));
+ 		  // fwd to authority
+		  mds->messenger->send_message(dis,
+									   MSG_ADDR_MDS(dirauth), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
 		  return 0;
 		}
+
 	  }
 	}
 	
@@ -812,6 +872,7 @@ int MDCache::send_inode_updates(CInode *in)
   set<int>::iterator it;
   for (it = in->cached_by.begin(); it != in->cached_by.end(); it++) {
 	cout << "mds" << mds->get_nodeid() << " sending inode_update on " << *in << " to " << *it << endl;
+	assert(*it != mds->get_nodeid());
 	mds->messenger->send_message(new MInodeUpdate(in->inode,
 												  in->cached_by,
 												  in->dir_auth),
@@ -829,7 +890,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   if (!in) {
 	cout << "mds" << mds->get_nodeid() << " inode_update on " << m->inode.ino << ", don't have it, sending expire" << endl;
 
-	mds->messenger->send_message(new MInodeExpire(m->inode.ino),
+	mds->messenger->send_message(new MInodeExpire(m->inode.ino, mds->get_nodeid()),
 								 m->get_source(), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
 	
@@ -837,6 +898,12 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 	return;
   }
 
+  if (in->authority(mds->get_cluster()) == mds->get_nodeid()) {
+	cout << "mds" << mds->get_nodeid() << " inode_update on " << *in << ", but i'm the authority!" << endl;
+	delete m;
+	return;
+  }
+  
   // update!
   cout << "mds" << mds->get_nodeid() << " inode_update on " << *in << endl;
 
@@ -851,30 +918,46 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 void MDCache::handle_inode_expire(MInodeExpire *m)
 {
   CInode *in = get_inode(m->ino);
+  int from = m->from;
+  int auth;
+
   if (!in) {
-	cout << "mds" << mds->get_nodeid() << " inode_expire on " << m->ino << ", don't have it, ignoring" << endl;
-	delete m;
-	return;
+	cout << "mds" << mds->get_nodeid() << " inode_expire on " << m->ino << ", don't have it, fwd hops " << m->hops++ << endl;
+	goto forward;
   }
 
-  int auth = in->authority(mds->get_cluster());
+  auth = in->authority(mds->get_cluster());
   if (auth != mds->get_nodeid()) {
 	cout << "mds" << mds->get_nodeid() << " inode_expire on " << *in << ", not mine" << endl;
-	delete m;
+	goto forward;
+  }
+
+  // remove from our cached_by
+  if (!in->cached_by.count(from)) {
+	cout << "mds" << mds->get_nodeid() << " inode_expire on " << *in << " from mds" << from << ", but they're not in cached_by "<< in->cached_by << endl;
 	return;
   }
 
-  // remove
-  if (in->cached_by.count(m->get_source())) {
-	cout << "mds" << mds->get_nodeid() << " inode_expire on " << *in << " from mds" << m->get_source() << endl;
-	in->cached_by.erase(m->get_source());
-	if (in->cached_by.empty()) 
-	  in->put(CINODE_PIN_CACHED);
-  } else {
-	cout << "mds" << mds->get_nodeid() << " inode_expire on " << *in << " from mds" << m->get_source() << ", but they're not in cached_by"<< endl;
-  }
-  
+  cout << "mds" << mds->get_nodeid() << " inode_expire on " << *in << " from mds" << from << " cached_by now " << in->cached_by << endl;
+  in->cached_by.erase(from);
+  if (in->cached_by.empty()) 
+	in->put(CINODE_PIN_CACHED);
+
+  // done
   delete m;
+  return;
+
+  // ---------
+forward:
+  if (m->hops > mds->get_cluster()->get_num_mds()) {
+	assert(0);
+  } else {
+	cout << "mds" << mds->get_nodeid() << " inode_expire on " << *in << " from mds" << from << ", fwding on, hops so far " << m->hops++ << endl;
+	int next = mds->get_nodeid() + 1;
+	if (next >= mds->get_cluster()->get_num_mds()) next = 0;
+	mds->messenger->send_message(m,
+								 next, MDS_PORT_CACHE, MDS_PORT_CACHE);
+  }
 }
 
 
@@ -1088,8 +1171,10 @@ public:
 
 
 void MDCache::export_dir(CInode *in,
-							int dest)
+						 int dest)
 {
+  assert(dest != mds->get_nodeid());
+
   if (!in->dir) in->dir = new CDir(in);
 
   if (!in->parent) {
@@ -1098,13 +1183,17 @@ void MDCache::export_dir(CInode *in,
 	return;
   }
 
-  cout << "mds" << mds->get_nodeid() << " export_dir " << *in << " to " << dest << ", freezing" << endl;
-
   if (in->dir->is_frozen() ||
 	  in->dir->is_freezing()) {
 	cout << " can't export, freezing|frozen.  wait for other exports to finish first." << endl;
 	return;
   }
+
+  // send ExportDirPrep (ask target)
+  cout << "mds" << mds->get_nodeid() << " export_dir " << *in << " to " << dest << ", sending ExportDirPrep" << endl;
+  mds->messenger->send_message(new MExportDirPrep(in),
+							   dest, MDS_PORT_CACHE, MDS_PORT_CACHE);
+  in->dir->hard_pin();   // pin dir, to hang up our freeze
 
   // take away popularity (and pass it on to the context, MExportDir request later)
   double pop = in->popularity.get();
@@ -1118,7 +1207,19 @@ void MDCache::export_dir(CInode *in,
   }
 
   // freeze the subtree
+  //cout << "mds" << mds->get_nodeid() << " export_dir " << *in << " to " << dest << ", freezing" << endl;
   in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest, pop));
+}
+
+
+void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
+{
+  CInode *in = get_inode(m->ino);
+  assert(in);
+
+  cout << "mds" << mds->get_nodeid() << " export_dir_prep_ack " << *in << ", releasing hard_pin" << endl;
+  
+  in->dir->hard_unpin();   // unpin to allow freeze to complete
 }
 
 
@@ -1127,7 +1228,7 @@ void MDCache::export_dir_frozen(CInode *in,
 								double pop)
 {
   // subtree is now frozen!
-  cout << "mds" << mds->get_nodeid() << " export_dir " << *in << " to " << dest << ", frozen" << endl;
+  cout << "mds" << mds->get_nodeid() << " export_dir " << *in << " to " << dest << ", frozen+prep_ack" << endl;
 
   //show_imports();
 
@@ -1250,7 +1351,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 
 	// dentry
 	dir_rope.append( it->first.c_str(), it->first.length()+1 );
-	
+
 	// add inode
 	Inode_Export_State_t istate;
 	istate.inode = in->inode;
@@ -1275,13 +1376,20 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  istate.dir_auth = -1;
 
 	dir_rope.append( (char*)&istate, sizeof(istate) );
-	
+
 	for (set<int>::iterator it = in->cached_by.begin();
 		 it != in->cached_by.end();
 		 it++) {
 	  int i = *it;
 	  dir_rope.append( (char*)&i, sizeof(int) );
 	}
+
+	// unpin cached_by
+	if (!in->cached_by.empty()) {
+	  in->cached_by.clear();      // only get to do this once, because we're newly non-authoritative.
+	  in->put(CINODE_PIN_CACHED); // non-authorities are not allowed to pin this!
+	}
+
 
 	// other state too!.. open files, etc...
 
@@ -1305,15 +1413,16 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
 {
   // exported!
   CInode *in = mds->mdcache->get_inode(m->ino);
+  int newauth = m->get_source();
 
   cout << "mds" << mds->get_nodeid() << " export_dir_ack " << *in << endl;
   
   // remove the metadata from the cache
   if (in->dir) 
-	export_dir_purge( in );
+	export_dir_purge( in, newauth );
 
   // unfreeze
-  cout << "mds" << mds->get_nodeid() << " export_dir_ack " << *in << " unfrozen" << endl;
+  cout << "mds" << mds->get_nodeid() << " export_dir_ack " << *in << ", unfreezing" << endl;
   in->dir->unfreeze();
 
   show_imports();
@@ -1324,7 +1433,7 @@ void MDCache::handle_export_dir_ack(MExportDirAck *m)
 
 
 // called by handle_expirt_dir_ack
-void MDCache::export_dir_purge(CInode *idir)
+void MDCache::export_dir_purge(CInode *idir, int newauth)
 {
   cout << "export_dir_purge on " << *idir << endl;
 
@@ -1334,16 +1443,16 @@ void MDCache::export_dir_purge(CInode *idir)
 	it++;
 	
 	if (in->is_dir() && in->dir) 
-	  export_dir_purge(in);
+	  export_dir_purge(in, newauth);
 	
 	// dir incomplete!
 	in->parent->dir->state_clear(CDIR_MASK_COMPLETE);
 
-	if (!in->cached_by.empty()) {
-	  in->cached_by.clear();      // only get to do this once, because we're newly non-authoritative.
-	  in->put(CINODE_PIN_CACHED);  
-	}
-
+	cout << "mds" << mds->get_nodeid() << " sending inode_expire to mds" << newauth << " on " << *in << endl;
+	mds->messenger->send_message(new MInodeExpire(in->inode.ino, mds->get_nodeid()),
+								 MSG_ADDR_MDS(newauth), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+	
 	if (in->lru_expireable) {
 	  lru->lru_remove(in);
 	  cout << "mds" << mds->get_nodeid() << " export_dir_purge deleting " << *in << " " << in << endl;
@@ -1360,24 +1469,52 @@ void MDCache::export_dir_purge(CInode *idir)
 
 
 
+
+
+
 //  IMPORTS
 
+void MDCache::handle_export_dir_prep(MExportDirPrep *m)
+{
+  cout << "mds" << mds->get_nodeid() << " handle_export_dir_prep on " << m->path << endl;
+
+  assert(m->get_source() != mds->get_nodeid());
+
+  // must discover it!
+  vector<CInode*> trav;
+
+  int r = path_traverse(m->path, trav, m, MDS_TRAVERSE_DISCOVER);   
+  if (r > 0)
+	return;  // did something
+  
+  // okay
+  CInode *in = trav[trav.size()-1];
+
+  if (!in->dir) in->dir = new CDir(in);
+
+  in->dir->hard_pin();     // hard_pin until we get the data
+  
+  cout << "mds" << mds->get_nodeid() << " sending export_dir_prep_ack on " << *in << endl;
+  
+  mds->messenger->send_message(new MExportDirPrepAck(in->ino()),
+							   m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  
+  // done 
+  delete m;
+}
 
 void MDCache::handle_export_dir(MExportDir *m)
 {
-  cout << "mds" << mds->get_nodeid() << " import_dir " << m->path << endl;
+  CInode *in = get_inode(m->ino);
+  int oldauth = m->get_source();
+  assert(in);
+  
+  cout << "mds" << mds->get_nodeid() << " handle_export_dir, import_dir " << *in << endl;
 
   show_imports();
 
-  vector<CInode*> trav;
-  
-  int r = path_traverse(m->path, trav, m, MDS_TRAVERSE_DISCOVER);   // FIXME BUG
-  if (r > 0)
-	return;  // did something
-
-  CInode *in = trav[trav.size()-1];
-  
-  in->get(CINODE_PIN_IMPORTING);  // pin for the import process only.
+  in->dir->hard_unpin();  
+  in->get(CINODE_PIN_IMPORTING);  // pin for the (non-blocking) import process only.
 
   if (!in->dir) in->dir = new CDir(in);
 
@@ -1415,7 +1552,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   // add this crap to my cache
   const char *p = m->state.c_str();
   for (int i = 0; i < m->ndirs; i++) 
-	import_dir_block(p, containing_import);
+	import_dir_block(p, containing_import, oldauth);
   
   // can i simplify dir_auth?
   if (in->authority(mds->get_cluster()) == in->dir_auth)
@@ -1465,7 +1602,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   delete m;
 }
 
-void MDCache::import_dir_block(pchar& p, CInode *containing_import)
+void MDCache::import_dir_block(pchar& p, CInode *containing_import, int oldauth)
 {
   // set up dir
   Dir_Export_State_t *dstate = (Dir_Export_State_t*)p;
@@ -1516,9 +1653,13 @@ void MDCache::import_dir_block(pchar& p, CInode *containing_import)
 	
 	in->cached_by.clear();
 	for (int nby = istate->ncached_by; nby>0; nby--) {
-	  in->cached_by.insert( *((int*)p) );
+	  if (*((int*)p) != mds->get_nodeid()) 
+		in->cached_by.insert( *((int*)p) );
 	  p += sizeof(int);
 	}
+
+	in->cached_by.insert(oldauth);             // old auth still has it too!
+
 	if (in->cached_by.size())
 	  in->get(CINODE_PIN_CACHED);              // pin bc of cached_by
 
@@ -1641,4 +1782,19 @@ void MDCache::show_imports()
   }
   
 
+}
+
+
+void MDCache::show_cache()
+{
+  for (inode_map_t::iterator it = inode_map.begin();
+	   it != inode_map.end();
+	   it++) {
+	cout << "mds" << mds->get_nodeid() << " cache " << *((*it).second);
+	if ((*it).second->ref) 
+	  cout << " pin " << (*it).second->ref_set;
+	if ((*it).second->cached_by.size())
+	  cout << " cache_by " << (*it).second->cached_by;
+	cout << endl;
+  }
 }

@@ -65,6 +65,12 @@ int main(char **argv, int argc) {
 
   fakemessenger_do_loop();
 
+  // 
+  cout << "---- check ----" << endl;
+  for (int i=0; i<NUMMDS; i++) 
+	mds[i]->mdcache->shutdown_pass();
+  
+  
   // cleanup
   cout << "cleanup" << endl;
   for (int i=0; i<NUMMDS; i++) {
