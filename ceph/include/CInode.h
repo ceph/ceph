@@ -2,7 +2,7 @@
 #ifndef __CINODE_H
 #define __CINODE_H
 
-#include "inode.h"
+#include "types.h"
 #include "lru.h"
 #include "DecayCounter.h"
 

@@ -1,18 +1,17 @@
-
-#ifndef __INODE_H
-#define __INODE_H
+#ifndef __MDS_TYPES_H
+#define __MDS_TYPES_H
 
 #include <sys/types.h>
-
 #include <ext/hash_map>
 
 // raw inode
 
 namespace __gnu_cxx {
-template<> struct hash<unsigned long long> {
-  size_t operator()(unsigned long long __x) const { return __x; }
-};
+  template<> struct hash<unsigned long long> {
+	size_t operator()(unsigned long long __x) const { return __x; }
+  };
 }
+
 
 typedef __uint64_t inodeno_t;   // ino
 
@@ -27,5 +26,7 @@ struct inode_t {
   gid_t gid;
   time_t atime, mtime, ctime;
 };
+
+typedef __uint64_t object_t;
 
 #endif

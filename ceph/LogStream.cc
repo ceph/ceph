@@ -1,6 +1,6 @@
 
 #include "include/LogStream.h"
-#include "include/osd.h"
+#include "include/MDS.h"
 #include "include/LogEvent.h"
 
 #include <iostream>
@@ -20,11 +20,11 @@ int LogStream::append(LogEvent *e, Context *c)
   append_pos += buflen;
 
   // submit write
-  osd_write(osd, oid,
-			buflen, append_pos,
-			buf,
-			0,
-			c);
+  mds->osd_write(osd, oid,
+				 buflen, append_pos,
+				 buf,
+				 0,
+				 c);
   return 0;
 }
 
@@ -33,12 +33,12 @@ int LogStream::append(LogEvent *e, Context *c)
 
 #define READ_INC  1024    // make this bigger than biggest event
 
-class C_LSReadNext : public Context {
+class C_LS_ReadNext : public Context {
   LogStream *ls;
   LogEvent **le;
   Context *c;
 public:
-  C_LSReadNext(LogStream *ls, LogEvent **le, Context *c) {
+  C_LS_ReadNext(LogStream *ls, LogEvent **le, Context *c) {
 	this->ls = ls;
 	this->le = le;
 	this->c = c;
@@ -54,18 +54,20 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	// alloc buffer?
 	if (!buf) {
 	  buf = new char[READ_INC];
-	  buflen = READ_INC;
+	  buf_valid = 0;
 	  buf_start = -1;
 	}
 	
 	// does buffer have what we want?
 	if (buf_start > cur_pos ||
-		buf_start+buflen < cur_pos+4) {
+		buf_start+buf_valid < cur_pos+4) {
 	  // nope.  re-read a chunk
 	  buf_start = cur_pos;
-	  osd_read(osd, oid,
-			   READ_INC, cur_pos,
-			   buf, new C_LSReadNext(this, le, c));
+	  mds->osd_read(osd, oid,
+					READ_INC, cur_pos,
+					buf, 
+					&buf_valid,
+					new C_LS_ReadNext(this, le, c));
 	  return 0;
 	}
 	step = 1;

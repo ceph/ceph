@@ -1,7 +1,6 @@
 
 #include "include/MDStore.h"
 #include "assert.h"
-#include "include/osd.h"
 #include "include/mds.h"
 
 #include <iostream>
@@ -45,20 +44,14 @@ bool MDStore::fetch_dir( CInode *in,
   // create return context
   MDFetchDirContext *fin = new MDFetchDirContext( this, in, c );
 
-#if 1
   // issue osd read
   int osd = in->inode.ino % 10;
   object_t oid = in->inode.ino;
   
-  osd_read_all( osd, oid, 
-				(void**)&fin->buf,
-				&fin->buflen,
-				fin );
-#else
-  // fake dir read
-  
-
-#endif
+  mds->osd_read( osd, oid, 
+				 0, 0,
+				 &fin->buf, &fin->buflen,
+				 fin );
 }
 
 bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Context *c)
@@ -215,11 +208,11 @@ bool MDStore::commit_dir( CInode *in,
   int osd = in->inode.ino % 10;
   object_t oid = in->inode.ino;
   
-  osd_write( osd, oid, 
-			 off, 0,
-			 fin->buf,
-			 0,
-			 fin );
+  mds->osd_write( osd, oid, 
+				  off, 0,
+				  fin->buf,
+				  0,
+				  fin );
   return true;
 }
 

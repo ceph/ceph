@@ -29,20 +29,23 @@ using namespace std;
 
 class LogStream;
 class LogEvent;
+class MDS;
 
 class MDLog {
  protected:
-  
+  MDS *mds;
   size_t num_events; // in events
   size_t max_events;
 
   LogStream *reader;
   LogStream *writer;
   
-  list<LogEvent*> trimming;  // events currently being trimmed
+  list<LogEvent*> trimming;     // events currently being trimmed
+  list<Context*>  trim_waiters; // contexts waiting for trim
+  bool            trim_reading;
   
  public:
-  MDLog();
+  MDLog(MDS *m);
   ~MDLog();
   
   void set_max_events(size_t max) {
@@ -58,8 +61,10 @@ class MDLog {
   int submit_entry( LogEvent *e,
 					 Context *c );
   
-  int trim(Context *c);
-  int trim_2(LogEvent *e, Context *c);
+  int trim(Context *c);                // want to trim
+  void trim_readnext();                // read next event
+  int trim_2_didread(LogEvent *e);     // read log event
+  int trim_3_didretire(LogEvent *e);   // finished retiring log event
 
 
 };

@@ -25,9 +25,9 @@ int fakemessenger_do_loop()
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
-		cout << "do_loop doing message for " << it->first << endl;
+		cout << "do_loop dispatching t " << m->get_type() << " for " << m->get_dest() << ':' << m->get_dest_port() << " from " << m->get_source() << ':' << m->get_source_port() << endl;
 		didone = true;
-		it->second->dispatch_message(m);
+		it->second->dispatch(m);
 	  }
 	  it++;
 	}
@@ -47,26 +47,30 @@ int FakeMessenger::loop()
   fakemessenger_do_loop();
 }
 
-FakeMessenger::FakeMessenger() 
+FakeMessenger::FakeMessenger(long me)
 {
+  whoami = me;
+  directory[ whoami ] = this;
 }
 
 
-int FakeMessenger::init(MDS *mds)
+int FakeMessenger::init(Dispatcher *d)
 {
-  mymds = mds;
-  whoami = mds->get_nodeid();
-  directory[ whoami ] = this;
+  set_dispatcher(d);
 }
 
 int FakeMessenger::shutdown()
 {
   directory.erase(whoami);
+  remove_dispatcher();
 }
 
-bool FakeMessenger::send_message(Message *m, int dest)
+bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 {
-  m->set_from(whoami);
+  m->set_source(whoami, fromport);
+  m->set_dest(dest, port);
+
+  // deliver
   try {
 	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);

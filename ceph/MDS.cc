@@ -1,12 +1,19 @@
 
-#include <list>
-
-#include "include/mds.h"
-#include "include/Messenger.h"
+#include "include/types.h"
+#include "include/MDS.h"
 #include "include/MDCache.h"
+#include "include/Messenger.h"
 #include "include/MDStore.h"
+#include "include/MDLog.h"
 
 #include "messages/MPing.h"
+#include "messages/MOSDRead.h"
+#include "messages/MOSDWrite.h"
+#include "messages/MOSDReadReply.h"
+#include "messages/MOSDWriteReply.h"
+
+
+#include <list>
 
 #include <iostream>
 using namespace std;
@@ -23,6 +30,7 @@ MDS::MDS(int id, int num, Messenger *m) {
   mdcache = new DentryCache();
   mdstore = new MDStore(this);
   messenger = m;
+  mdlog = new MDLog(this);
 }
 MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
@@ -33,6 +41,7 @@ MDS::~MDS() {
 
 int MDS::init()
 {
+  // init messenger
   messenger->init(this);
 }
 
@@ -45,17 +54,164 @@ void MDS::proc_message(Message *m)
 {
   switch (m->get_type()) {
   case MSG_PING:
-	cout << nodeid << " received ping from " << m->get_from() << " with count " << ((MPing*)m)->num << endl;
-	if (((MPing*)m)->num > 0) {
-	  cout << nodeid << " responding to " << m->get_from() << endl;
-	  messenger->send_message(new MPing(((MPing*)m)->num-1), m->get_from());
+	cout << nodeid << " received ping from " << m->get_source() << " with ttl " << ((MPing*)m)->ttl << endl;
+	if (((MPing*)m)->ttl > 0) {
+	  cout << nodeid << " responding to " << m->get_source() << endl;
+	  messenger->send_message(new MPing(((MPing*)m)->ttl-1), 
+							  m->get_source(), m->get_source_port());
 	}
 	break;
 
+
+
+	// OSD I/O
+  case MSG_OSD_READREPLY:
+	osd_read_finish(m);
+	break;
+
+  case MSG_OSD_WRITEREPLY:
+	osd_write_finish(m);
+	break;
+	
   default:
 	cout << "implement MDS::proc_message" << endl;
   }
 
+}
+
+
+void MDS::dispatch(Message *m)
+{
+  switch (m->get_dest_port()) {
+	
+  case MSG_SUBSYS_MDSTORE:
+	mdstore->proc_message(m);
+	break;
+	
+	/*
+  case MSG_SUBSYS_MDLOG:
+	mymds->logger->proc_message(m);
+	break;
+	
+  case MSG_SUBSYS_BALANCER:
+	mymds->balancer->proc_message(m);
+	break;
+	*/
+
+  case MSG_SUBSYS_SERVER:
+	proc_message(m);
+	break;
+  }
+}
+
+
+
+
+int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufptr, size_t *read, Context *c)
+{
+  osd_last_tid++;
+  MOSDRead *m = new MOSDRead(osd_last_tid,
+							 oid,
+							 len, offset);
+  
+  PendingOSDRead_t *p = new PendingOSDRead_t;
+  p->bufptr = bufptr;
+  p->buf = 0;
+  p->bytesread = read;
+  p->context = c;
+  osd_reads[osd_last_tid] = p;
+
+  messenger->send_message(m,
+						  MSG_ADDR_OSD(osd),
+						  0);
+}
+
+
+int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char *buf, size_t *bytesread, Context *c)
+{
+  osd_last_tid++;
+  MOSDRead *m = new MOSDRead(osd_last_tid,
+							 oid,
+							 len, offset);
+
+  PendingOSDRead_t *p = new PendingOSDRead_t;
+  p->buf = buf;
+  p->bytesread = bytesread;
+  p->context = c;
+  osd_reads[osd_last_tid] = p;
+
+  messenger->send_message(m,
+						  MSG_ADDR_OSD(osd),
+						  0);
+}
+
+
+int MDS::osd_read_finish(Message *rawm) 
+{
+  MOSDReadReply *m = (MOSDReadReply*)rawm;
+  
+  // get pio
+  PendingOSDRead_t *p = osd_reads[ m->tid ];
+  osd_reads.erase( m->tid );
+  Context *c = p->context;
+
+  if (m->len >= 0) {
+	// success!  
+	*p->bytesread = m->len;
+
+	if (p->buf) { // user buffer
+	  memcpy(p->buf, m->buf, m->len);
+	} else {      // new buffer
+	  // steal message's buffer   (this is probably a bad idea?  :/ )
+	  *p->bufptr = m->buf;   
+	  m->buf = 0;
+	}
+  }
+
+  delete p;
+
+  long result = m->len;
+  delete m;
+
+  if (c) {
+	c->finish(result);
+	delete c;
+  }
+}
+
+
+
+// -- osd_write
+
+int MDS::osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, int flags, Context *c)
+{
+  osd_last_tid++;
+  MOSDWrite *m = new MOSDWrite(osd_last_tid,
+							   oid,
+							   len, offset,
+							   buf, flags);
+  osd_writes[ osd_last_tid ] = c;
+  cout << "sending MOSDWrite " << m->get_type() << endl;
+  messenger->send_message(m,
+						  MSG_ADDR_OSD(osd),
+						  0);
+}
+
+
+int MDS::osd_write_finish(Message *rawm)
+{
+  MOSDWriteReply *m = (MOSDWriteReply *)rawm;
+
+  Context *c = osd_writes[ m->tid ];
+  osd_writes.erase(m->tid);
+
+  long result = m->len;
+  delete m;
+
+  if (c) {
+	c->finish(result);
+	delete c;
+  }
 }
 
 

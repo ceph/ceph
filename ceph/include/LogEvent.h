@@ -33,6 +33,15 @@ class LogEvent {
 	memcpy(*buf+8, event.c_str(), *len-8);
 	return 0;
   }
+
+  virtual bool obsolete() {
+	return true;
+  }
+
+  virtual void retire(Context *c) {
+	c->finish(0);
+	delete c;
+  }
 };
 
 #endif

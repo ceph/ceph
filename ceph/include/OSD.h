@@ -2,17 +2,29 @@
 #ifndef __OSD_H
 #define __OSD_H
 
-#include "Context.h"
+#include "Dispatcher.h"
 
-typedef size_t object_t;
+class Messenger;
+class MOSDRead;
+class MOSDWrite;
+class Message;
 
-// functions
-int osd_read(int osd, object_t oid, size_t len, size_t offset, void *buf, Context *c);
-int osd_read_all(int osd, object_t oid, void **bufptr, size_t *buflen, Context *c);
 
-int osd_write(int osd, object_t oid, size_t len, size_t offset, void *buf, int flags, Context *c);
+class OSD : public Dispatcher {
+ protected:
+  Messenger *messenger;
+  int whoami;
 
-int osd_remove(int osd, object_t oid, Context *c);
+ public:
+  OSD(int id, Messenger *m);
+  ~OSD();
+  
+  void init();
 
+  virtual void dispatch(Message *m);
+
+  void read(MOSDRead *m);
+  void write(MOSDWrite *m);
+};
 
 #endif

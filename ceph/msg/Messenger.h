@@ -6,22 +6,34 @@
 using namespace std;
 
 #include "Message.h"
+#include "Dispatcher.h"
 
 class MDS;
 
 class Messenger {
  protected:
+  Dispatcher     *dispatcher;
   list<Message*> incoming;
   MDS            *mymds;
 
  public:
-  Messenger() {}
-  ~Messenger() {}
+  Messenger() {
+  }
+  ~Messenger() {
+	remove_dispatcher();
+  }
+  
+  void set_dispatcher(Dispatcher *d) {
+	dispatcher = d;
+  }
+  void remove_dispatcher() {
+	if (dispatcher) { delete dispatcher; dispatcher = 0; }
+  }
 
   // ...
-  virtual int init(MDS *m) = 0;
+  virtual int init(Dispatcher *d) = 0;
   virtual int shutdown() = 0;
-  virtual bool send_message(Message *m, int dest) = 0;
+  virtual bool send_message(Message *m, long dest, int port=0, int fromport=0) = 0;
   virtual int wait_message(time_t seconds) = 0;
   
   virtual int loop() {
@@ -30,7 +42,7 @@ class Messenger {
 		break;
 	  Message *m = get_message();
 	  if (!m) continue;
-	  dispatch_message(m);
+	  dispatcher->dispatch(m);
 	}
 	return 0;
   }
@@ -55,9 +67,9 @@ class Messenger {
   }
 
 
-
-  // asdf
-  void dispatch_message(Message *m);
+  void dispatch(Message *m) {
+	dispatcher->dispatch(m);
+  }
 
 };
 

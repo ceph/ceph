@@ -1,8 +1,14 @@
 
 
-#include "include/mds.h"
-#include "include/osd.h"
-#include "include/Context.h"
+#include "include/types.h"
+#include "include/OSD.h"
+#include "include/Messenger.h"
+#include "include/Message.h"
+
+#include "messages/MOSDRead.h"
+#include "messages/MOSDReadReply.h"
+#include "messages/MOSDWrite.h"
+#include "messages/MOSDWriteReply.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -11,9 +17,50 @@
 #include <fcntl.h>
 #include <iostream>
 
-char *osd_base_path = "./osd";
+char *osd_base_path = "./osddata";
+
+// cons/des
+
+OSD::OSD(int id, Messenger *m) 
+{
+  whoami = id;
+  messenger = m;
+}
+
+OSD::~OSD()
+{
+  if (messenger) { delete messenger; messenger = 0; }
+}
+
+void OSD::init()
+{
+  messenger->set_dispatcher(this);
+}
+
+
+
+// dispatch
+
+void OSD::dispatch(Message *m) 
+{
+  switch (m->get_type()) {
+  case MSG_OSD_READ:
+	read((MOSDRead*)m);
+	break;
+
+  case MSG_OSD_WRITE:
+	write((MOSDWrite*)m);
+	break;
+
+  default:
+	cout << "osd " << whoami << " got unknown message " << m->get_type() << endl;
+  }
+}
+
 
 // -- osd_read
+
+
 
 char fn[100];
 char *get_filename(int osd, object_t oid) 
@@ -31,78 +78,74 @@ char *get_dir(int osd)
 
 
 
-int osd_read(int osd, object_t oid, size_t len, size_t offset, void *buf, Context *c)
+void OSD::read(MOSDRead *r)
 {
-  // fake it.
-  int fd = open(get_filename(osd,oid), O_RDONLY);
+  MOSDReadReply *reply;
+
+  int fd = open(get_filename(whoami, r->oid), O_RDONLY);
   if (fd < 0) {
-	c->finish(-ENOENT);
-	return 0;
+
+	// send reply (failure)
+	reply = new MOSDReadReply(r, NULL, -1);
+
+  } else {
+
+	// read part of the object
+	lseek(fd, r->offset, SEEK_SET);
+	
+	if (r->len == 0) { 	              // read whole thing
+	  r->len = lseek(fd, 0, SEEK_END);  // get size
+	}
+	char *buf = new char[r->len];
+	
+	long got = ::read(fd, buf, r->len);
+	close(fd);
+	
+	// send reply
+	reply = new MOSDReadReply(r, buf, got);
+
   }
-  
-  // read part of the object
-  lseek(fd, offset, SEEK_SET);
-  read(fd, buf, len);
-  close(fd);
 
-  c->finish(0);
-  delete c;
+  // send it
+  messenger->send_message(reply, r->get_source(), r->get_source_port());
+  delete r;
 }
-
-
-
-int osd_read_all(int osd, object_t oid, void **bufptr, size_t *buflen, Context *c)
-{
-  // fake it.
-  int fd = open(get_filename(osd,oid), O_RDONLY);
-  if (fd < 0) {
-	c->finish(-ENOENT);
-	return 0;
-  }
-  
-  // read entire object
-  *buflen = lseek(fd, 0, SEEK_END);
-  *bufptr = new char[*buflen];
-  
-  lseek(fd, 0, SEEK_SET);
-  read(fd, *bufptr, *buflen);
-  close(fd);
-
-  c->finish(0);
-  delete c;
-}
-
 
 
 // -- osd_write
 
-int osd_write(int osd, object_t oid, size_t len, size_t offset, void *buf, int flags, Context *c)
+void OSD::write(MOSDWrite *m)
 {
-  // fake it
-  char *f = get_filename(osd,oid);
-  int fd = open(f, O_RDWR|O_CREAT|flags);
+  MOSDWriteReply *reply;
+  
+  char *f = get_filename(whoami, m->oid);
+  int fd = open(f, O_RDWR|O_CREAT|m->flags);
   if (fd < 0 && errno == 2) {  // create dir and retry
-	mkdir(get_dir(osd), 0755);
-	cout << "mkdir errno " << errno << " on " << get_dir(osd) << endl;
-	fd = open(f, O_RDWR|O_CREAT|flags);
+	mkdir(get_dir(whoami), 0755);
+	cout << "mkdir errno " << errno << " on " << get_dir(whoami) << endl;
+	fd = open(f, O_RDWR|O_CREAT|m->flags);
   }
   if (fd < 0) {
 	cout << "err opening " << f << " " << errno << endl;
-	c->finish(-ENOENT);
-	return 0;
+	
+	reply = new MOSDWriteReply(m, -1);
+
+  } else {
+    fchmod(fd, 0664);
+	
+	cout << "osd_write " << m->len << " bytes to " << f << endl;
+	
+	if (m->offset)
+	  lseek(fd, m->offset, SEEK_SET);
+	long wrote = ::write(fd, m->buf, m->len);
+	close(fd);
+	
+	// reply
+	reply = new MOSDWriteReply(m, wrote);
   }
-  
-  fchmod(fd, 0664);
-  
-  cout << "osd_write " << len << " bytes to " << f << endl;
 
-  if (offset)
-	lseek(fd, offset, SEEK_SET);
-  write(fd, (char*)buf+offset, len);
-  close(fd);
- 
-
-  c->finish(0);
-  delete c;
+  cout << "sending reply" << endl;
+  messenger->send_message(reply, m->get_source(), m->get_source_port());
+  delete m;
 }
 

@@ -6,13 +6,24 @@
 #define MSG_FWD        2
 #define MSG_DISCOVER   3
 
+#define MSG_OSD_READ        10
+#define MSG_OSD_READREPLY   11
+#define MSG_OSD_WRITE       12
+#define MSG_OSD_WRITEREPLY  13
+
 #define MSG_SUBSYS_SERVER   1
 #define MSG_SUBSYS_BALANCER 2
 #define MSG_SUBSYS_MDSTORE  3
 #define MSG_SUBSYS_MDLOG    4
 
 
+#define MSG_ADDR_MDS(x)     (x)
+#define MSG_ADDR_OSD(x)     (0x800 + x)
+#define MSG_ADDR_CLIENT(x)  (0x1000 + x)
 
+
+#include <iostream>
+using namespace std;
 
 
 // abstract Message class
@@ -21,37 +32,40 @@ class Message {
  protected:
   char *serialized;
   unsigned long serial_len;
-  int type;
-  int subsys;
 
-  int from, dest;
+  int type;
+
+  long source, dest;
+  int source_port, dest_port;
 
  public:
   Message() { 
 	serialized = 0;
 	serial_len = 0;
+	source_port = dest_port = -1;
+	source = dest = -1;
   };
+  Message(int t) {
+	Message();
+	type = t;
+  }
   ~Message() {
 	if (serialized) { delete serialized; serialized = 0; }
   };
 
   // type
-  int get_type() {
-	return type;
-  }
-  int get_subsys() {
-	return subsys;
-  }
-  int destination() {
-	return dest;
-  }
-  int get_from() {
-	return from;
-  }
-  int set_from(int f) {
-	from = f;
-	return f;
-  }
+  int get_type() { return type; }
+  void set_type(int t) { type = t; }
+
+  // source/dest
+  long get_dest() { return dest; }
+  void set_dest(long a, int p) { dest = a; dest_port = p; }
+  int get_dest_port() { return dest_port; }
+  
+
+  long get_source() { return source; }
+  void set_source(long a, int p) { source = a; source_port = p; }
+  int get_source_port() { return source_port; }
   
   // serialization
   virtual unsigned long serialize() { }   // = 0;

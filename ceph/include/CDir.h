@@ -2,14 +2,13 @@
 #ifndef __CDIR_H
 #define __CDIR_H
 
-#include <sys/types.h>
+#include "types.h"
 #include <map>
 #include <ext/hash_map>
 #include <string>
 
 #include <iostream>
 
-#include "inode.h"
 
 using namespace std;
 

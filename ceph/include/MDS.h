@@ -2,12 +2,12 @@
 #ifndef __MDS_H
 #define __MDS_H
 
-
-#include <sys/types.h>
 #include <list>
+#include <ext/hash_map>
 
+#include "types.h"
 #include "Context.h"
-
+#include "Dispatcher.h"
 
 class CInode;
 class DentryCache;
@@ -16,12 +16,21 @@ class MDLog;
 class Messenger;
 class Message;
 
+typedef __uint64_t object_t;
 
 using namespace std;
 
 // 
 
-class MDS {
+typedef struct {
+  char **bufptr;
+  size_t *bytesread;
+  char *buf;
+  Context *context;
+} PendingOSDRead_t;
+
+
+class MDS : public Dispatcher {
  protected:
   int          nodeid;
   int          num_nodes;
@@ -31,6 +40,11 @@ class MDS {
   list<CInode*>      export_list;
   
 
+  // osd interface
+  __uint64_t         osd_last_tid;
+  hash_map<__uint64_t,PendingOSDRead_t*>  osd_reads;
+  hash_map<__uint64_t,Context*> osd_writes;   
+
   friend class MDStore;
 
  public:
@@ -38,12 +52,10 @@ class MDS {
   DentryCache  *mdcache;    // cache
   MDStore      *mdstore;    // storage interface
   Messenger    *messenger;    // message processing
+  MDLog        *mdlog;
 
-  MDLog        *logger;
   //MDBalancer   *balancer;
  
-
-
 
 
   
@@ -59,9 +71,20 @@ class MDS {
   void shutdown();
 
   void proc_message(Message *m);
+  virtual void dispatch(Message *m);
 
   bool open_root(Context *c);
   bool open_root_2(int result, Context *c);
+
+  // osd fun
+  int osd_read(int osd, object_t oid, size_t len, size_t offset, char *bufptr, size_t *bytesread, Context *c);
+  int osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufptr, size_t *bytesread, Context *c);
+  int osd_read_finish(Message *m);
+
+  int osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, int flags, Context *c);
+  int osd_write_finish(Message *m);
+
+
 
 };
 

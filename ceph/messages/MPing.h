@@ -6,10 +6,10 @@
 
 class MPing : public Message {
  public:
-  int num;
+  int ttl;
   MPing(int n) {
-	num = n;
-	subsys = MSG_SUBSYS_SERVER;
+	ttl = n;
+	dest_port = MSG_SUBSYS_SERVER;
 	type = MSG_PING;
   }
 };

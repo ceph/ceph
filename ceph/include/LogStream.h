@@ -1,24 +1,25 @@
 #ifndef __LOGSTREAM_H
 #define __LOGSTREAM_H
 
-#include <sys/types.h>
-#include "osd.h"
+#include "types.h"
 #include "Context.h"
 
 class LogEvent;
+class MDS;
 
 class LogStream {
  protected:
+  MDS *mds;
   off_t cur_pos, append_pos;
   int osd;
   object_t oid;
 
   char *buf;
-  size_t buflen;
   off_t buf_start;
-
+  size_t buf_valid;
  public:
-  LogStream(int osd, object_t oid) {
+  LogStream(MDS *mds, int osd, object_t oid) {
+	this->mds = mds;
 	this->osd = osd;
 	this->oid = oid;
 	cur_pos = 0;

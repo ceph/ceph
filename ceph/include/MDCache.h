@@ -2,13 +2,12 @@
 #ifndef __MDCACHE_H
 #define __MDCACHE_H
 
-#include <sys/types.h>
 #include <string>
 #include <vector>
 #include <map>
-
 #include <ext/hash_map>
 
+#include "types.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"

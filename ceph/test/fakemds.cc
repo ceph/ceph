@@ -64,14 +64,14 @@ int main(char **argv, int argc) {
   cout << "hi there" << endl;
 
   // init
-  MDS *mds1 = new MDS(0, 2, new FakeMessenger());
+  MDS *mds1 = new MDS(0, 2, new FakeMessenger(MSG_ADDR_MDS(0)));
   mds1->open_root(NULL);
   mds1->init();
 
   mds1->mdstore->fetch_dir( mds1->mdcache->get_root(), NULL );
 
   
-  MDS *mds2 = new MDS(1,2,new FakeMessenger());
+  MDS *mds2 = new MDS(1,2,new FakeMessenger(MSG_ADDR_MDS(1)));
   mds2->init();
 
   // send an initial message...?
