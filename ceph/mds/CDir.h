@@ -73,8 +73,8 @@ class Context;
 
 #define CDIR_WAIT_ANY   (0xffff)
 
-#define CDIR_WAIT_ATFREEZEROOT  (CDIR_WAIT_AUTHPINNABLE|\  // hmm, same same
-                                 CDIR_WAIT_UNFREEZE)
+#define CDIR_WAIT_ATFREEZEROOT  (CDIR_WAIT_AUTHPINNABLE|\
+                                 CDIR_WAIT_UNFREEZE)      // hmm, same same
 
 
 // CDir
