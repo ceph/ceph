@@ -1133,8 +1133,9 @@ void MDCache::export_dir_frozen(CInode *in,
 
 	  CInode *containing_export = get_containing_export(nested->get_parent_inode());
 	  if (!containing_export) continue;
+	  if (nested == in) continue;  // ignore myself
 
-	  if (containing_export == in && nested != in) {
+	  if (containing_export == in) {
 		// nested beneath our new export *in; remove!
 		cout << " export " << *nested << " was nested beneath us; removing from nested_exports" << endl;
 		// exports.erase(nested); _walk does this

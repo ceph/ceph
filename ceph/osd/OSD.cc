@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <iostream>
+#include <cassert>
 
 char *osd_base_path = "./osddata";
 
