@@ -3000,6 +3000,7 @@ int main(int argc, const char **argv)
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
   string bench_pattern = "seq";
   bool diff_whole_object = false;
+  bool input_feature = false;
 
   std::string val, parse_err;
   std::ostringstream err;
@@ -3100,6 +3101,7 @@ int main(int argc, const char **argv)
       resize_allow_shrink = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--image-feature", (char *)NULL)) {
       uint64_t feature;
+      input_feature = true;
       if (!decode_feature(val.c_str(), &feature)) {
         cerr << "rbd: invalid image feature: " << val << std::endl;
         return EXIT_FAILURE;
@@ -3109,6 +3111,7 @@ int main(int argc, const char **argv)
       cerr << "rbd: using --image-features for specifying the rbd image format is"
 	   << " deprecated, use --image-feature instead" << std::endl;
       features = strict_strtol(val.c_str(), 10, &parse_err);
+      input_feature = true;
       if (!parse_err.empty()) {
 	cerr << "rbd: error parsing --image-features: " << parse_err
              << std::endl;
@@ -3619,6 +3622,10 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_CREATE:
+    if (input_feature && (format == 1)){
+      cerr << "feature not allowed with format 1; use --image-format 2" << std::endl;
+      return EINVAL;
+    }
     r = do_create(rbd, io_ctx, imgname, size, &order, format, features,
 		  stripe_unit, stripe_count);
     if (r < 0) {
