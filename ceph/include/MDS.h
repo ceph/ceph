@@ -6,11 +6,27 @@
 #include <sys/types.h>
 #include <list>
 
-#include "MDCache.h"
-#include "MDStore.h"
+#include "Context.h"
+
+
+class CInode;
+
+//#include "MDCache.h"
+class DentryCache;
+
+
+//#include "MDStore.h"
+class MDStore;
+
+
+//#include "Messenger.h"
+class Messenger;
+class Message;
+
 //#include "MDLog.h"
 //#include "MDBalancer.h"
 
+using namespace std;
 
 // 
 
@@ -30,28 +46,24 @@ class MDS {
   // sub systems
   DentryCache  *mdcache;    // cache
   MDStore      *mdstore;    // storage interface
+  Messenger  *messenger;    // message processing
+
   //MDLog      *logger;
   //MDBalancer *balancer;
  
-  Messenger  *messenger;
+
 
 
 
   
  public:
-  MDS(int id, int num) {
-	nodeid = id;
-	num_nodes = num;
-
-	mdcache = new DentryCache();
-	mdstore = new MDStore();
-  }
-  ~MDS() {
-	if (mdcache) { delete mdcache; mdcache = NULL; }
-	if (mdstore) { delete mdstore; mdstore = NULL; }
-  }
+  MDS(int id, int num);
+  ~MDS();
 
   void proc_message(Message *m);
+
+  bool open_root(Context *c);
+  bool open_root_2(int result, Context *c);
 
 };
 

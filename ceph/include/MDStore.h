@@ -32,10 +32,10 @@ bool fetch_inode( mdloc_t where,
   bool commit_dir_2( int result,
 					 CInode *in,
 					 Context *c );
-
+  
   
   // process a message
-  bool proc_message( Message *m );
+  bool proc_message( Message *m ) { }
   
 };
 

@@ -39,6 +39,7 @@ class DentryCache {
   }
   void set_root(CInode *r) {
 	root = r;
+	add_inode(root);
   }
 
   // fn
@@ -65,8 +66,8 @@ class DentryCache {
   }
 
   // adding/removing
-  bool remove_inode(CInode *ino);
-  bool add_inode(CInode *ino);
+  bool remove_inode(CInode *in);
+  bool add_inode(CInode *in);
 
   int link_inode( CInode *parent, string& dname, CInode *inode );
 

@@ -3,10 +3,10 @@ CC=g++
 CFLAGS=-D __gnu_cxx=std -g
 
 SRCS=*.cc
-OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o mds.o osd.o
+OBJS=CDentry.o CDir.o CInode.o MDCache.o MDStore.o clock.o mds.o osd.o Messenger.o
 
 
-all: test import
+all: depend test import
 
 
 test: test.cc pmds.o
@@ -22,9 +22,7 @@ import: pmds.o import.cc
 pmds.o: ${OBJS}
 	ld -i -o pmds.o ${OBJS} 
 
-depend: .depend
-
-.depend: ${SRCS}
+depend:
 	$(RM) .depend
 	makedepend -f- -- $(CFLAGS) -- $(SRCS) > .depend 2>/dev/null
 

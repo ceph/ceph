@@ -1,11 +1,15 @@
 
-#include "include/mds.h"
 #include "include/MDCache.h"
+#include "include/MDStore.h"
+#include "include/CInode.h"
+#include "include/CDir.h"
+#include "include/mds.h"
 
 #include <errno.h>
 #include <iostream>
 #include <string>
 using namespace std;
+
 
 
 
@@ -37,9 +41,10 @@ bool DentryCache::remove_inode(CInode *o)
 }
 
 bool DentryCache::trim(__int32_t max) {
-  if (max < 0) 
+  if (max < 0) {
 	max = lru->lru_get_max();
-  if (!max) return false;   // no max!
+	if (!max) return false;
+  }
 
   while (lru->lru_get_num() > max) {
 	CInode *o = (CInode*)lru->lru_expire();
@@ -79,7 +84,7 @@ CInode* DentryCache::get_file(string& fn) {
   }
 
   //dump();
-  //lru->lru_status();
+  lru->lru_status();
 
   return cur;  
 }
@@ -106,11 +111,11 @@ void DentryCache::add_file(string& fn, CInode *in) {
   
   // root?
   if (fn == "/") {
-	if (!root) 
-	  root = in;
+	root = in;
+	add_inode( in );
 	//cout << " added root " << root << endl;
 	return;
-  }
+  } 
 
 
   // file.
@@ -126,7 +131,7 @@ void DentryCache::add_file(string& fn, CInode *in) {
   //cout << " got dir " << idir << endl;
 
   if (idir->dir == NULL) {
-	//cerr << " making " << fn << " into a dir" << endl;
+	//cerr << " making " << dirpart << " into a dir" << endl;
 	idir->dir = new CDir(idir);
   }
   

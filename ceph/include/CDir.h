@@ -7,6 +7,8 @@
 #include <ext/hash_map>
 #include <string>
 
+#include <iostream>
+
 #include "inode.h"
 
 using namespace std;
@@ -30,7 +32,7 @@ class CDir {
   CDir(CInode *in) {
 	inode = in;
 	nitems = 0;
-	complete = true;
+	complete = false;
   }
 
   size_t serial_size() {

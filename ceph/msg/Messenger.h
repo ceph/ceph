@@ -3,6 +3,7 @@
 #define __MESSENGER_H
 
 #include <list>
+using namespace std;
 
 #include "Message.h"
 
@@ -13,59 +14,48 @@ class Messenger {
   list<Message*> outgoing;
 
  public:
-  Messenger();
-  ~Messenger();
+  Messenger() {}
+  ~Messenger() {}
 
   // ...
   bool send_message(Message *m);
 
-  void dispatch_message(Message *m) {
-	switch (m->get_subsys()) {
 
-	case MSG_SUBSYS_MDSTORE:
-	  g_mds->mdstore->proc_message(m);
-	  break;
-	  
-	case MSG_SUBSYS_MDLOG:
-	  g_mds->logger->proc_message(m);
-	  break;
-
-	case MSG_SUBSYS_BALANCER:
-	  g_mds->balancer->proc_message(m);
-	  break;
-
-	case MSG_SUBSYS_SERVER:
-	  g_mds->proc_message(m);
-	  break;
+  int poll() {
+	while (1) {
+	  if (wait_message(0) < 0)
+		continue;
+	  Message *m = get_message();
+	  if (!m) continue;
+	  dispatch_message(m);
 	}
   }
 
-  void dispatch_context(Context *c) {
-	switch (c->subsys) {
 
-	case MSG_SUBSYS_MDSTORE:
-	  g_mds->mdstore->proc_context(m);
-	  break;
-	  
-	case MSG_SUBSYS_MDLOG:
-	  g_mds->logger->proc_context(m);
-	  break;
-
-	case MSG_SUBSYS_BALANCER:
-	  g_mds->balancer->proc_context(m);
-	  break;
-
-	case MSG_SUBSYS_SERVER:
-	  g_mds->proc_context(m);
-	  break;
-	}
+  // queue
+  int wait_message(time_t seconds) {
+	//	return 0;   // got one!
+	//return -1;  // timeout
   }
-  
+
+  Message *get_message() {
+	if (incoming.size() > 0) {
+	  Message *m = incoming.front();
+	  incoming.pop_front();
+	  return m;
+	}
+	return NULL;
+  }
 
   bool queue_incoming(Message *m) {
 	incoming.push_back(m);
 	return true;
   }
+
+
+
+  // asdf
+  void dispatch_message(Message *m);
 
 };
 

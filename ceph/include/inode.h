@@ -23,6 +23,9 @@ struct inode_t {
 
   __uint64_t size;
   __uint32_t mode;
+  uid_t uid;
+  gid_t gid;
+  time_t atime, mtime, ctime;
 };
 
 #endif

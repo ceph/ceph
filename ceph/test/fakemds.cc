@@ -1,11 +1,12 @@
 
 
+#include <sys/stat.h>
 #include <iostream>
 #include <string>
 
 #include "include/mds.h"
 #include "include/MDCache.h"
-
+#include "include/MDStore.h"
 
 using namespace std;
 
@@ -16,12 +17,13 @@ __uint64_t ino = 1;
 
 DentryCache *readfiles() {
   DentryCache *dc = new DentryCache();
-  dc->set_root(new CInode());
 
   string fn;
   int offs = -1;
   while (getline(cin, fn)) {
 	string relfn;
+
+	CInode *in = new CInode();
 
 	if (offs < 0) {
 	  if (fn == "/")
@@ -30,11 +32,24 @@ DentryCache *readfiles() {
 		offs = fn.length();
 	  //cout << "offs is " << offs << " from " << fn << endl;
 	  relfn = "/";
+	  in->inode.ino = 1;  // root
 	} else 
 	  relfn = fn.substr(offs);
 	
-	CInode *in = new CInode();
-	in->inode.ino = ino++;
+	// fill out inode
+	struct stat sb;
+	stat(fn.c_str(), &sb);
+
+	in->inode.ino = ino++; //sb.st_ino;
+	in->inode.mode = sb.st_mode;
+	in->inode.size = sb.st_size;
+	in->inode.uid = sb.st_uid;
+	in->inode.gid = sb.st_gid;
+	in->inode.atime = sb.st_atime;
+	in->inode.mtime = sb.st_mtime;
+	in->inode.ctime = sb.st_ctime;
+		
+	// add
 	dc->add_file(relfn, in);
 	cout << "added " << relfn << endl;
   }
@@ -45,19 +60,24 @@ DentryCache *readfiles() {
 int main(char **argv, int argc) {
   cout << "hi there" << endl;
 
+  // init
   g_mds = new MDS(0, 1);
-  g_mds->mdcache = readfiles();
-  
-  g_mds->mdcache->dump();
-  
-  g_mds->mdcache->dump_to_disk();
+  g_mds->open_root(NULL);
 
+  g_mds->mdstore->fetch_dir( g_mds->mdcache->get_root(), NULL );
+
+
+  // loop
+  //  g_mds->messenger->loop();
+
+
+  // cleanup
   if (g_mds->mdcache->clear()) {
 	cout << "clean shutdown" << endl;
 	g_mds->mdcache->dump();
 	delete g_mds;
   } else {
-	throw "can't empty cache";
+	cout << "can't empty cache";
   }
 
   return 0;

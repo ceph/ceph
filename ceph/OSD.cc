@@ -94,14 +94,13 @@ int osd_write(int osd, object_t oid, size_t len, size_t offset, void *buf, Conte
   
   fchmod(fd, 0664);
   
-  cout << "ost_write " << len << " bytes to " << f << endl;
+  cout << "osd_write " << len << " bytes to " << f << endl;
 
   if (offset)
 	lseek(fd, offset, SEEK_SET);
   write(fd, (char*)buf+offset, len);
   close(fd);
-
-  
+ 
 
   c->finish(0);
   delete c;

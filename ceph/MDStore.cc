@@ -78,6 +78,8 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 	  // yup.  we don't do that yet.
 	  throw "not implemented";
 	} else {
+	  p++;
+
 	  // inode
 	  inodeno_t ino = ((struct inode_t*)(buf+p+1))->ino;
 	  if (g_mds->mdcache->have_inode(ino)) 
@@ -85,7 +87,8 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 
 	  // new inode
 	  CInode *in = new CInode();
-	  memcpy(&in->inode, buf+p+1, sizeof(inode_t));
+	  memcpy(&in->inode, buf+p, sizeof(inode_t));
+	  p += sizeof(inode_t);
 		
 	  // add and link
 	  g_mds->mdcache->add_inode( in );
@@ -94,8 +97,10 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
   }
 
   // ok!
-  c->finish(0);
-  delete c;
+  if (c) {
+	c->finish(0);
+	delete c;
+  }
 }
 
 
