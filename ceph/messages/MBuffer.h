@@ -1,7 +1,7 @@
 #ifndef __MBUFFER_H
 #define __MBUFFER_H
 
-#include "../include/Message.h"
+#include "include/Message.h"
 
 class MBuffer : public Message {
  public:

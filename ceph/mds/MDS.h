@@ -5,9 +5,9 @@
 #include <list>
 #include <ext/hash_map>
 
-#include "types.h"
-#include "Context.h"
-#include "Dispatcher.h"
+#include "include/types.h"
+#include "include/Context.h"
+#include "include/Dispatcher.h"
 
 
 typedef __uint64_t object_t;

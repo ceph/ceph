@@ -2,11 +2,12 @@
 #ifndef __MDSTORE_H
 #define __MDSTORE_H
 
-#include "MDCache.h"
-#include "Context.h"
-#include "Message.h"
+#include "include/types.h"
 
 class MDS;
+class CInode;
+class Context;
+class Message;
 
 class MDStore {
  protected:

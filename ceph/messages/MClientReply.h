@@ -1,8 +1,8 @@
 #ifndef __MCLIENTREPLY_H
 #define __MCLIENTREPLY_H
 
-#include "Message.h"
-#include "../mds/CInode.h"
+#include "include/Message.h"
+#include "mds/CInode.h"
 
 #include <vector>
 using namespace std;

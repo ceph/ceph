@@ -1,6 +1,6 @@
 
-#include "types.h"
-#include "Messenger.h"
+#include "include/types.h"
+#include "include/Messenger.h"
 
 #include "MDS.h"
 #include "MDCache.h"
@@ -228,7 +228,7 @@ int MDS::path_traverse(string& path, vector<CInode*>& trace, vector<string>& tra
 	  nextslash = path.length();  // no more slashes
 
 	string dname = path.substr(off,nextslash-off);
-	cout << "path segment is " << dname << endl;
+	cout << " path seg " << dname << endl;
 
 
 	// lookup dentry

@@ -1,6 +1,10 @@
 
 #include "MDStore.h"
 #include "MDS.h"
+#include "MDCache.h"
+#include "CInode.h"
+#include "CDir.h"
+#include "CDentry.h"
 
 #include <iostream>
 using namespace std;

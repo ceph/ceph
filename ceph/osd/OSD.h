@@ -2,7 +2,7 @@
 #ifndef __OSD_H
 #define __OSD_H
 
-#include "Dispatcher.h"
+#include "include/Dispatcher.h"
 
 class Messenger;
 class MOSDRead;

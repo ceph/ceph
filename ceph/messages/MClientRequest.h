@@ -1,7 +1,7 @@
 #ifndef __MCLIENTREQUEST_H
 #define __MCLIENTREQUEST_H
 
-#include "../include/Message.h"
+#include "include/Message.h"
 
 class MClientRequest : public Message {
  public:

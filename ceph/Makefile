@@ -1,6 +1,6 @@
 
 CC=g++
-CFLAGS=-D __gnu_cxx=std -g -Iinclude -I.
+CFLAGS=-D __gnu_cxx=std -g -I.
 
 SRCS=*.cc */*.cc
 OBJS=mds/CDentry.o mds/CDir.o mds/CInode.o mds/MDCache.o mds/MDStore.o clock.o mds/MDS.o FakeMessenger.o mds/LogStream.o mds/MDLog.o osd/OSD.o client/Client.o 
