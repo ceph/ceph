@@ -17,8 +17,8 @@ using namespace std;
 
 
 #define MIN_LOAD    50   //  ??
-#define MIN_REEXPORT 25  // will automatically reexport
-#define MIN_OFFLOAD 50   // point at which i stop trying, close enough
+#define MIN_REEXPORT 5  // will automatically reexport
+#define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
 ostream& operator<<( ostream& out, mds_load_t& load )
 {
@@ -147,6 +147,7 @@ void MDBalancer::do_rebalance()
   
   if (my_load < target_load.root_pop) {
 	cout << "  i am underloaded, doing nothing." << endl;
+	mds->mdcache->show_imports();
 	return;
   }  
 
@@ -198,7 +199,9 @@ void MDBalancer::do_rebalance()
 	   it != mds->mdcache->imports.end();
 	   it++) {
 	import_pop_map.insert(pair<double,CInode*>((*it)->popularity.get(), *it));
-	import_from_map.insert(pair<int,CInode*>((*it)->authority(mds->get_cluster()), *it));
+	int from = (*it)->authority(mds->get_cluster());
+	cout << "map i imported " << **it << " from " << from << endl;
+	import_from_map.insert(pair<int,CInode*>(from, *it));
   }
   
   // do my exports!
@@ -212,24 +215,29 @@ void MDBalancer::do_rebalance()
 
 	cout << "mds" << whoami << " sending " << amount << " to " << target << endl;
 	
+	mds->mdcache->show_imports();
+
 	// search imports from target
 	if (import_from_map.count(target)) {
-	  cout << " aha, looking through imports from target " << endl;
+	  cout << " aha, looking through imports from target mds" << target << endl;
 	  pair<multimap<int,CInode*>::iterator, multimap<int,CInode*>::iterator> p;
-	  for (p = import_from_map.equal_range(import_from_map.begin(), import_from_map.end(), target);
+	  for (p = import_from_map.equal_range(target);
 		   p.first != p.second;
 		   p.first++) {
 		CInode *in = (*p.first).second;
+		if (in->is_root()) continue;
 		double pop = in->popularity.get();
-		assert(in->authority(mds->get_cluster()) == target);
+		cout << "considering " << *in << " from " << (*p.first).first << endl;
+		assert(in->authority(mds->get_cluster()) == target);  // cuz that's how i put it in the map, dummy
+
 		if (pop <= amount) {
-		  cout << "reexporting " << in->inode.ino << " pop " << pop << " back to " << target << endl;
+		  cout << "reexporting " << *in << " pop " << pop << " back to " << target << endl;
 		  mds->mdcache->export_dir(in, target);
 		  amount -= pop;
 		  import_from_map.erase(target);
 		  import_pop_map.erase(pop);
 		} else {
-		  cout << "can't reexport " << in->inode.ino << ", too big " << pop << endl;
+		  cout << "can't reexport " << *in << ", too big " << pop << endl;
 		}
 		if (amount < MIN_OFFLOAD) break;
 	  }
@@ -240,12 +248,15 @@ void MDBalancer::do_rebalance()
 	for (map<double,CInode*>::iterator import = import_pop_map.begin();
 		 import != import_pop_map.end();
 		 import++) {
+	  CInode *imp = (*import).second;
+	  if (imp->is_root()) continue;
+	  
 	  double pop = (*import).first;
 	  if (pop < amount ||
 		  pop < MIN_REEXPORT) {
-		cout << "reexporting " << ((*import).second)->inode.ino << " pop " << pop << endl;
+		cout << "reexporting " << *imp << " pop " << pop << endl;
 		amount -= pop;
-		mds->mdcache->export_dir((*import).second, ((*import).second)->authority(mds->get_cluster()));
+		mds->mdcache->export_dir(imp, imp->authority(mds->get_cluster()));
 	  }
 	  if (amount < MIN_OFFLOAD) break;
 	}
@@ -253,8 +264,6 @@ void MDBalancer::do_rebalance()
 
 	// okay, search for fragments of my workload
 	set<CInode*> candidates = mds->mdcache->imports;
-	if (whoami == 0)
-	  candidates.insert(mds->mdcache->get_root());
 
 	list<CInode*> exports;
 	double have = 0;
@@ -267,12 +276,13 @@ void MDBalancer::do_rebalance()
 	}
 	
 	for (list<CInode*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  string name = "";
-	  (*it)->make_path(name);
-	  cout << " exporting fragment " << name << " pop " << (*it)->popularity.get() << endl;
+	  cout << " exporting fragment " << **it << " pop " << (*it)->popularity.get() << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
+
+  cout << "rebalance done" << endl;
+  mds->mdcache->show_imports();
   
 }
 
@@ -296,7 +306,7 @@ void MDBalancer::find_exports(CInode *idir,
   list<CInode*> bigger;
   multimap<double, CInode*> smaller;
 
-  cout << " need " << need << " (" << needmin << " - " << needmax << endl;
+  cout << " find_exports in " << *idir << " need " << need << " (" << needmin << " - " << needmax << ")" << endl;
 
   for (CDir_map_t::iterator it = idir->dir->begin();
 	   it != idir->dir->end();
@@ -305,7 +315,7 @@ void MDBalancer::find_exports(CInode *idir,
 
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;  // clearly not popular
-	if (in->dir->dir_auth != CDIR_AUTH_PARENT) continue;   
+	if (mds->mdcache->exports.count(in)) continue;  
 	if (in->dir->is_freeze_root()) continue;  // can't export this right now!
 
 	double pop = in->popularity.get();
@@ -336,7 +346,7 @@ void MDBalancer::find_exports(CInode *idir,
 	if ((*it).first < midchunk)
 	  break;  // try later
 
-	cout << " taking smaller " << (*it).first << endl;
+	cout << " taking smaller " << *(*it).second << endl;
 
 	exports.push_back((*it).second);
 	have += (*it).first;
@@ -348,7 +358,7 @@ void MDBalancer::find_exports(CInode *idir,
   for (list<CInode*>::iterator it = bigger.begin();
 	   it != bigger.end();
 	   it++) {
-	cout << " descending into " << (*it)->inode.ino << endl;
+	cout << " descending into " << **it << endl;
 	find_exports(*it, amount, exports, have);
 	if (have > needmin)
 	  return;
@@ -359,7 +369,7 @@ void MDBalancer::find_exports(CInode *idir,
 	   it != smaller.rend();
 	   it++) {
 
-	cout << " taking (much) smaller " << (*it).first << endl;
+	cout << " taking (much) smaller " << *(*it).second << endl;
 
 	exports.push_back((*it).second);
 	have += (*it).first;

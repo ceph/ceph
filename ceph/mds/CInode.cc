@@ -22,6 +22,7 @@ CInode::CInode() : LRUObject() {
 
   hard_pinned = 0;
   nested_hard_pinned = 0;
+  //  state = 0;
 
   mid_fetch = false;	
 }
@@ -37,6 +38,8 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
+
+
 void CInode::make_path(string& s)
 {
   if (parent) {
@@ -45,6 +48,13 @@ void CInode::make_path(string& s)
 	s += parent->name;
   } else 
 	s = "";  // root
+}
+
+ostream& operator<<(ostream& out, CInode& in)
+{
+  string path;
+  in.make_path(path);
+  return out << "[" << in.inode.ino << "]" << path;
 }
 
 

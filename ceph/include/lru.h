@@ -10,6 +10,7 @@ class LRUObject {
  protected:
   LRUObject *lru_next, *lru_prev;
   bool lru_in_top;
+  bool lru_in_lru;
   bool lru_expireable;
 
  public:
@@ -76,6 +77,7 @@ class LRU {
 	lru_tophead = o;
 	lru_ntop++;
 	lru_num++;
+	o->lru_in_lru = true;
 
 	lru_adjust();
   }
@@ -93,6 +95,7 @@ class LRU {
 	lru_bothead = o;
 	lru_nbot++;
 	lru_num++;
+	o->lru_in_lru = true;
   }
 
 
@@ -113,6 +116,9 @@ class LRU {
 
   // remove an item
   LRUObject *lru_remove(LRUObject *o) {
+	// not in list
+	if (!o->lru_in_lru) return o;
+
 	if (o->lru_in_top) {
 	  //cout << "removing " << o << " from top" << endl;
 	  // top
@@ -140,6 +146,7 @@ class LRU {
 	}
 	lru_num--;
 	o->lru_next = o->lru_prev = NULL;
+	o->lru_in_lru = false;
 	return o;
   }
 

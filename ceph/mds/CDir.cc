@@ -144,8 +144,8 @@ void CDir::hard_unpin() {
   inode->adjust_nested_hard_pinned( -1 );
 
   // pending freeze?
-  if (hard_pinned + nested_hard_pinned == 0 &&
-	  waiting_on_freeze)
+  if (waiting_to_freeze.size() &&
+	  hard_pinned + nested_hard_pinned == 0)
 	freeze_finish();
 }
 
@@ -154,8 +154,8 @@ int CDir::adjust_nested_hard_pinned(int a) {
   inode->adjust_nested_hard_pinned(a);
 
   // pending freeze?
-  if (hard_pinned + nested_hard_pinned == 0 &&
-	  waiting_on_freeze)
+  if (waiting_to_freeze.size() &&
+	  hard_pinned + nested_hard_pinned == 0)
 	freeze_finish();
 }
 
@@ -182,30 +182,36 @@ void CDir::add_freeze_waiter(Context *c)
 
 void CDir::freeze(Context *c)
 {
-  cout << " state " << state << endl;
   assert((state & (CDIR_MASK_FROZEN|CDIR_MASK_FREEZING)) == 0);
 
-  state_set(CDIR_MASK_FROZEN);
-  inode->get();
-
   if (nested_hard_pinned == 0) {
+	cout << "freeze " << *inode << endl;
 
+	state_set(CDIR_MASK_FROZEN);
+	inode->hard_pin();  // hard_pin for duration of freeze
+  
 	// easy, we're frozen
 	c->finish(0);
 	delete c;
 
   } else {
-	// need to wait for pins to expire
 	state_set(CDIR_MASK_FREEZING);
-	waiting_on_freeze = c;
+	cout << "freeze + wait " << *inode << endl;
+	// need to wait for pins to expire
+	waiting_to_freeze.push_back(c);
   }
 }
 
 void CDir::freeze_finish()
 {
-  Context *c = waiting_on_freeze;
-  waiting_on_freeze = NULL;
+  cout << "freeze_finish " << *inode << endl;
+
+  inode->hard_pin();  // hard_pin for duration of freeze
+
+  Context *c = waiting_to_freeze.front();
+  waiting_to_freeze.pop_front();
   state_clear(CDIR_MASK_FREEZING);
+  state_set(CDIR_MASK_FROZEN);
 
   if (c) {
 	c->finish(0);
@@ -215,8 +221,9 @@ void CDir::freeze_finish()
 
 void CDir::unfreeze()  // thaw?
 {
+  cout << "unfreeze " << *inode << endl;
   state_clear(CDIR_MASK_FROZEN);
-  inode->put();
+  inode->hard_unpin();
   
   list<Context*> finished;
   take_waiting(finished);

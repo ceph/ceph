@@ -12,6 +12,7 @@
 #include <list>
 #include <vector>
 #include <set>
+#include <iostream>
 using namespace std;
 
 
@@ -21,6 +22,9 @@ using namespace std;
 
 #define CINODE_MASK_SYNC      (CINODE_SYNC_START|CINODE_SYNC_LOCK|CINODE_SYNC_FINISH)
 
+#define CINODE_MASK_IMPORT    16
+#define CINODE_MASK_EXPORT    32
+
 
 class Context;
 class CDentry;
@@ -28,6 +32,12 @@ class CDir;
 class MDS;
 class MDCluster;
 class Message;
+
+
+
+class CInode;
+ostream& operator<<(ostream& out, CInode& in);
+
 
 // cached inode wrapper
 class CInode : LRUObject {
@@ -52,7 +62,7 @@ class CInode : LRUObject {
 
   // distributed caching
   set<int>         cached_by;  // mds's that cache me.  not well defined on replicas.
-  //int              state;
+  //unsigned         state;
   //set<int>         sync_waiting_for_ack;
 
   // waiters
@@ -78,12 +88,27 @@ class CInode : LRUObject {
 
   
   CInode *get_parent_inode();
+  CInode *get_realm_root();   // import, hash, or root
   
   // fun
   bool is_dir() { return inode.isdir; }
   void make_path(string& s);
-
+  bool is_root() { return (bool)(!parent); }
+  
   void hit();
+
+  inodeno_t ino() { return inode.ino; }
+
+  // state
+  /*
+  unsigned get_state() { return state; }
+  void reset_state(unsigned s) { state = s; }
+  void state_clear(unsigned mask) {	state &= ~mask; }
+  void state_set(unsigned mask) { state |= mask; }
+
+  bool is_export() { return state & CINODE_MASK_EXPORT; }
+  bool is_import() { return state & CINODE_MASK_IMPORT; }
+  */
 
   // sync
   /*
@@ -121,11 +146,13 @@ class CInode : LRUObject {
 	ref--;
 	if (ref == 0)
 	  lru_unpin();
+	cout << "put " << *this << " now " << ref << endl;
   }
   void get() {
 	if (ref == 0)
 	  lru_pin();
 	ref++;
+	cout << "get " << *this << " now " << ref << endl;
   }
 
   // --- hierarchy stuff

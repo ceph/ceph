@@ -64,13 +64,13 @@ class CDir {
   int              dir_auth;
   int              dir_rep;
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
-  bool             is_import, is_export;
+  //bool             is_import, is_export;
 
 
   // lock nesting, freeze
   int        hard_pinned;
   int        nested_hard_pinned;
-  Context    *waiting_on_freeze;      // freezer
+  list<Context*>  waiting_to_freeze;      // wannabe freezer, NOT waiting for *this to thaw
 
   DecayCounter popularity;
 
@@ -89,7 +89,6 @@ class CDir {
 
 	hard_pinned = 0;
 	nested_hard_pinned = 0;
-	waiting_on_freeze = NULL;
 
 	dir_auth = CDIR_AUTH_PARENT;
 	dir_rep = CDIR_REP_NONE;

@@ -3,6 +3,7 @@
 #define __DECAYCOUNTER_H
 
 #include <math.h>
+#include "include/Clock.h"
 
 class DecayCounter {
  protected:
@@ -34,8 +35,7 @@ class DecayCounter {
   }
 
   double getnow() {
-	// ??
-	return 1.0;
+	return g_clock.gettime();
   }
 
   void reset() {
@@ -46,7 +46,7 @@ class DecayCounter {
   void decay() {
 	double tnow = getnow();
 	double el = tnow - last_decay;
-	if (el > .1) {
+	if (el > .5) {
 	  val = val * exp(el * k);
 	  last_decay = tnow;
 	}

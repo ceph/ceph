@@ -82,9 +82,7 @@ bool MDStore::fetch_dir( CInode *in,
 
 bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 {
-  string dirname;
-  dir->make_path(dirname);
-  cout << "fetch_dir_2 on " << dirname << endl;
+  cout << "fetch_dir_2 on " << *dir << endl;
 
   // make sure we have a CDir
   if (dir->dir == NULL) {
@@ -93,6 +91,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir)
 
   // parse buffer contents into cache
   __uint32_t num = *((__uint32_t*)buf);
+  cout << "  " << num << " items" << endl;
   size_t p = 4;
   while (p < buflen && num > 0) {
 	// dentry

@@ -43,8 +43,10 @@ class MDCache {
   bool               opening_root;
   list<Context*>     waiting_for_root;
 
-  set<CInode*>       imports;
+  set<CInode*>       imports;                // includes root (on mds0)
   set<CInode*>       exports;
+  multimap<CInode*,CInode*>  nested_exports; // nested exports of (imports|root)
+
 
   friend class MDBalancer;
 
@@ -85,6 +87,10 @@ class MDCache {
 	return NULL;
   }
 
+  CInode *get_containing_import(CInode *in);
+  CInode *get_containing_export(CInode *in);
+
+
   // adding/removing
   bool remove_inode(CInode *in);
   bool add_inode(CInode *in);
@@ -115,7 +121,7 @@ class MDCache {
   void export_dir_purge(CInode *idir);
   
   void handle_export_dir(MExportDir *m);
-  void import_dir_block(pchar& p);
+  void import_dir_block(pchar& p, CInode *containing_import);
 
   int send_inode_updates(CInode *in);
   void handle_inode_update(MInodeUpdate *m);
@@ -143,6 +149,8 @@ class MDCache {
   void dump() {
 	if (root) root->dump();
   }
+
+  void show_imports();
 
   void dump_to_disk(MDS *m) {
 	if (root) root->dump_to_disk(m);

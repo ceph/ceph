@@ -15,7 +15,8 @@ typedef struct {
   inode_t        inode;
   __uint64_t     version;
   DecayCounter   popularity;
-  int            ref;  // fyi for debugging?
+  //int            ref;         // hmm, fyi for debugging?
+  int            dir_auth;
 
   int            ncached_by;  // ints follow
 } Inode_Export_State_t;
