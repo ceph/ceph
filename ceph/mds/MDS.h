@@ -178,6 +178,8 @@ class MDS : public Dispatcher {
 
   void handle_client_unlink(MClientRequest *req,
 							CInode *cur);
+  void handle_client_unlink_2(MClientRequest *req, 
+							  CInode *cur);
 
   void handle_client_mkdir(MClientRequest *req);
   void handle_client_rmdir(MClientRequest *req);

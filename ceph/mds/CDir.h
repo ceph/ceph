@@ -44,6 +44,12 @@ class Context;
 #define CDIR_STATE_HASHING    8192
 #define CDIR_STATE_UNHASHING 16384
 
+#define CDIR_STATE_SYNCBYME      32768
+#define CDIR_STATE_PRESYNC       65536
+#define CDIR_STATE_SYNCBYAUTH   131072
+#define CDIR_STATE_WAITONUNSYNC 262144
+
+
 // these state bits are preserved by an import/export
 // ...except if the directory is hashed, in which case none of them are!
 #define CDIR_MASK_STATE_EXPORTED    (CDIR_STATE_COMPLETE\
@@ -85,6 +91,9 @@ class Context;
     // waiters: import_dir_block
     // triggers: handle_export_dir_finish
 
+#define CDIR_WAIT_SYNC          128
+#define CDIR_WAIT_UNSYNC        256
+
 #define CDIR_WAIT_ANY   (0xffff)
 
 #define CDIR_WAIT_ATFREEZEROOT  (CDIR_WAIT_AUTHPINNABLE|\
@@ -99,7 +108,8 @@ class CDir {
   CInode          *inode;
 
   CDir_map_t       items;              // use map; ordered list
-  __uint64_t       nitems;
+  size_t           nitems;
+  size_t           nauthitems;
   //size_t           namesize;
   unsigned         state;
   __uint64_t       version;
@@ -120,6 +130,9 @@ class CDir {
   int        auth_pins;
   int        nested_auth_pins;
 
+  // sync (for hashed dirs)
+  set<int>   sync_waiting_for_ack;
+
   DecayCounter popularity[MDS_NPOP];
 
   friend class CInode;
@@ -134,6 +147,7 @@ class CDir {
 
   // -- accessors --
   CInode *get_inode() { return inode; }
+  inodeno_t ino();
 
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
@@ -148,7 +162,13 @@ class CDir {
 	  assert(nitems == items.size());
 	}
 #endif
+	if ( is_auth() && !is_hashed()) assert(nauthitems == nitems);
+	if (!is_auth() && !is_hashed()) assert(nauthitems == 0);
 	return nitems; 
+  }
+  size_t get_auth_size() { 
+	assert(nauthitems <= nitems);
+	return nauthitems; 
   }
 
   float get_popularity() {
@@ -205,11 +225,19 @@ class CDir {
   void hit(int dir);
 
 
-  // -- state --
+  // -- encoded state --
   crope encode_basic_state();
   int decode_basic_state(crope r, int off=0);
 
+  
+  // -- sync --
+  bool is_sync() { return is_syncbyme() || is_syncbyauth(); }
+  bool is_syncbyme() { return state & CDIR_STATE_SYNCBYME; }
+  bool is_syncbyauth() { return state & CDIR_STATE_SYNCBYAUTH; }
+  bool is_presync() { return state & CDIR_STATE_PRESYNC; }
+  bool is_waitonnsync() { return state & CDIR_STATE_WAITONUNSYNC; }
 
+  
   // -- waiters --
   void add_waiter(int tag, Context *c);
   void add_waiter(int tag,
@@ -264,5 +292,7 @@ class CDir {
   void dump_to_disk(MDS *m);
 };
 
+
+ostream& operator<<(ostream& out, CDir& dir);
 
 #endif

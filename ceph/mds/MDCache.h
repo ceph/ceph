@@ -26,6 +26,8 @@ class MInodeGetReplicaAck;
 class MInodeUpdate;
 class MDirUpdate;
 class MInodeExpire;
+class MInodeUnlink;
+class MInodeUnlinkAck;
 class MInodeSyncStart;
 class MInodeSyncAck;
 class MInodeSyncRelease;
@@ -33,6 +35,9 @@ class MInodeSyncRecall;
 class MInodeLockStart;
 class MInodeLockAck;
 class MInodeLockRelease;
+class MDirSyncStart;
+class MDirSyncAck;
+class MDirSyncRelease;
 class C_MDS_ExportFinish;
 class InoAllocator;
 
@@ -119,13 +124,13 @@ class MDCache {
 
 
   // adding/removing
-  bool remove_inode(CInode *in);
-  bool add_inode(CInode *in);
   CInode *create_inode();
+  void add_inode(CInode *in);
+  void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
 
   int link_inode( CInode *parent, string& dname, CInode *inode );
-
+  void unlink_inode( CInode *inode );
 
   int open_root(Context *c);
   int path_traverse(string& path, 
@@ -141,6 +146,15 @@ class MDCache {
   int handle_discover(MDiscover *dis);
   void handle_inode_get_replica(MInodeGetReplica *m);
   void handle_inode_get_replica_ack(MInodeGetReplicaAck *m);  
+
+
+  // -- namespace --
+  // these handle logging, cache sync themselves.
+  void inode_unlink(CInode *in, Context *c);
+  void inode_unlink_finish(CInode *in);
+
+  void handle_inode_unlink(MInodeUnlink *m);
+  void handle_inode_unlink_ack(MInodeUnlinkAck *m);
 
 
   // -- import/export --
@@ -217,16 +231,16 @@ class MDCache {
   void handle_inode_expire(MInodeExpire *m);
 
 
-  // -- lock and sync --
+  // -- lock and sync : inodes --
   // soft sync locks
   bool read_soft_start(CInode *in, Message *m);
   int read_soft_finish(CInode *in);
   bool write_soft_start(CInode *in, Message *m);
   int write_soft_finish(CInode *in);
 
-  void sync_start(CInode *in);
-  void sync_release(CInode *in);
-  void sync_wait(CInode *in);
+  void inode_sync_start(CInode *in);
+  void inode_sync_release(CInode *in);
+  void inode_sync_wait(CInode *in);
 
   void handle_inode_sync_start(MInodeSyncStart *m);
   void handle_inode_sync_ack(MInodeSyncAck *m);
@@ -249,6 +263,14 @@ class MDCache {
   void handle_inode_lock_release(MInodeLockRelease *m);
 			  
 
+  // -- sync : dirs --
+  void dir_sync_start(CDir *dir);
+  void dir_sync_release(CDir *dir);
+  void dir_sync_wait(CDir *dir);
+
+  void handle_dir_sync_start(MDirSyncStart *m);
+  void handle_dir_sync_ack(MDirSyncAck *m);
+  void handle_dir_sync_release(MDirSyncRelease *m);
 
 
   // == crap fns ==

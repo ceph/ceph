@@ -41,6 +41,16 @@ class MDCluster {
   int get_log_osd(int mds);
   object_t get_log_oid(int mds);
 
+
+  set<int> mds_set;
+
+  set<int>& get_mds_set() {
+	if (mds_set.empty())
+	  for (int i=0; i<num_mds; i++)
+		mds_set.insert(i);
+	return mds_set;
+  }
+
 };
 
 #endif

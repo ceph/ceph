@@ -69,6 +69,8 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
 	out << "openwr"; break;
   case MDS_OP_OPENWRC: 
 	out << "openwrc"; break;
+  case MDS_OP_UNLINK:
+	out << "unlink"; break;
   case MDS_OP_CLOSE: 
 	out << "close"; break;
   default: 

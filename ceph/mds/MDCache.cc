@@ -14,6 +14,7 @@
 #include "include/Messenger.h"
 
 #include "events/EInodeUpdate.h"
+#include "events/EInodeUnlink.h"
 
 #include "messages/MDiscover.h"
 #include "messages/MInodeGetReplica.h"
@@ -34,6 +35,9 @@
 
 #include "messages/MInodeExpire.h"
 
+#include "messages/MInodeUnlink.h"
+#include "messages/MInodeUnlinkAck.h"
+
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
 #include "messages/MInodeSyncRelease.h"
@@ -42,6 +46,11 @@
 #include "messages/MInodeLockStart.h"
 #include "messages/MInodeLockAck.h"
 #include "messages/MInodeLockRelease.h"
+
+#include "messages/MDirSyncStart.h"
+#include "messages/MDirSyncAck.h"
+#include "messages/MDirSyncRelease.h"
+//#include "messages/MDirSyncRecall.h"
 
 #include "InoAllocator.h"
 
@@ -112,7 +121,7 @@ void MDCache::destroy_inode(CInode *in)
 }
 
 
-bool MDCache::add_inode(CInode *in) 
+void MDCache::add_inode(CInode *in) 
 {
   // add to lru, inode map
   assert(inode_map.size() == lru->lru_get_size());
@@ -122,30 +131,33 @@ bool MDCache::add_inode(CInode *in)
   assert(inode_map.size() == lru->lru_get_size());
 }
 
-bool MDCache::remove_inode(CInode *o) 
+void MDCache::remove_inode(CInode *o) 
+{  
+  unlink_inode(o);              // unlink
+  inode_map.erase(o->ino());    // remove from map
+  lru->lru_remove(o);           // remove from lru
+}
+
+void MDCache::unlink_inode(CInode *in)
 {
   // detach from parents
-  if (o->nparents == 1) {
-	CDentry *dn = o->parent;
+  if (in->nparents == 1) {
+	CDentry *dn = in->parent;
 	dn->dir->remove_child(dn);
-	o->remove_parent(dn);
+	in->remove_parent(dn);
 	delete dn;
+	in->nparents = 0;
+	in->parent = NULL;
   } 
-  else if (o->nparents > 1) {
-	assert(o->nparents <= 1);
+  else if (in->nparents > 1) {
+	assert(in->nparents <= 1);  // not implemented
   } else {
-	assert(o->nparents == 0);  // root.
-	assert(o->parent == NULL);
+	assert(in->nparents == 0);  // root or dangling.
+	assert(in->parent == NULL);
   }
-
-  // remove from map
-  inode_map.erase(o->ino());
-
-  // remove from lru
-  lru->lru_remove(o);
-
-  return true;
 }
+
+
 
 bool MDCache::trim(__int32_t max) {
   if (max < 0) {
@@ -217,7 +229,7 @@ void MDCache::shutdown_start()
 	   it++) {
 	CInode *in = it->second;
 	if (in->is_auth()) {
-	  if (in->is_syncbyme()) sync_release(in);
+	  if (in->is_syncbyme()) inode_sync_release(in);
 	  if (in->is_lockbyme()) inode_lock_release(in);
 	}
   }
@@ -399,6 +411,8 @@ int MDCache::open_root(Context *c)
 	assert(root->dir->is_auth());
 	root->dir_auth = 0;  // me!
 	root->dir->dir_rep = CDIR_REP_NONE;
+
+	root->state_set(CINODE_STATE_ROOT);
 
 	set_root( root );
 
@@ -726,6 +740,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	  root->dir->dir_rep = trace[0].dir_rep;
 	  root->dir->dir_rep_by = trace[0].dir_rep_by;
 	  root->auth = false;
+	  root->state_set(CINODE_STATE_ROOT);
 	  
 	  if (trace[0].is_syncbyauth) root->dist_state |= CINODE_DIST_SYNCBYAUTH;
 	  if (trace[0].is_softasync) root->dist_state |= CINODE_DIST_SOFTASYNC;
@@ -1178,6 +1193,113 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 
 
+
+// NAMESPACE FUN
+
+class C_MDC_InodeLog : public Context {
+public:
+  MDCache *mdc;
+  CInode *in;
+  C_MDC_InodeLog(MDCache *mdc, CInode *in) {
+	this->mdc = mdc;
+	this->in = in;
+  }
+  virtual void finish(int r) {
+	in->mark_safe();
+	mdc->inode_unlink_finish(in);
+  }
+};
+
+void MDCache::inode_unlink(CInode *in, Context *c)
+{
+  assert(in->is_auth());
+  
+  // drop any sync, lock on inode
+  if (in->is_syncbyme()) inode_sync_release(in);
+  assert(!in->is_sync());
+  if (in->is_lockbyme()) inode_lock_release(in);
+  assert(!in->is_lockbyme());
+
+  // add the waiter
+  in->add_waiter(CINODE_WAIT_UNLINK, c);
+  
+  // log it
+  in->mark_unsafe();
+  mds->mdlog->submit_entry(new EInodeUnlink(in, in->get_parent_dir()),
+						   new C_MDC_InodeLog(this,in));
+  
+  // unlink
+  unlink_inode( in );
+  in->state_set(CINODE_STATE_DANGLING);
+
+  // tell replicas
+  if (in->is_cached_by_anyone()) {
+	for (set<int>::iterator it = in->cached_by_begin();
+		 it != in->cached_by_end();
+		 it++) {
+	  dout(7) << "handle_client_unlink sending unlinkreplica to " << *it << endl;
+  
+	  mds->messenger->send_message(new MInodeUnlink(in->ino()),
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	}
+
+	in->get(CINODE_PIN_UNLINKING);
+	in->state_set(CINODE_STATE_UNLINKING);
+	in->unlink_waiting_for_ack = in->cached_by;
+  }
+}
+
+
+void MDCache::inode_unlink_finish(CInode *in)
+{
+  if (in->is_unsafe() ||
+	  in->is_unlinking()) {
+	dout(7) << "inode_unlink_finish stll waiting on " << *in << endl;
+	return;
+  }
+
+  // done! finish
+  list<Context*> finished;
+  in->take_waiting(CINODE_WAIT_UNLINK, finished);
+  for (list<Context*>::iterator it = finished.begin();
+	   it != finished.end();
+	   it++) {
+	Context *c = *it;
+	c->finish(0);
+	delete c;
+  }
+}
+
+void MDCache::handle_inode_unlink(MInodeUnlink *m)
+{
+  assert(0); // write me
+}
+
+void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  assert(in);
+  assert(in->is_auth());
+  assert(in->is_unlinking());
+  
+  int from = m->get_source();
+  dout(7) << "handle_inode_unlink_ack from " << from << " on " << *in << endl;
+
+  assert(in->unlink_waiting_for_ack.count(from));
+  in->unlink_waiting_for_ack.erase(from);
+  
+  if (in->unlink_waiting_for_ack.empty()) {
+	// done unlinking!
+	in->state_clear(CINODE_STATE_UNLINKING);
+	in->put(CINODE_PIN_UNLINKING);
+	inode_unlink_finish(in);
+  }
+}
+
+
+
+
+
 // locks ----------------------------------------------------------------
 
 /*
@@ -1308,7 +1430,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 				   new C_MDS_RetryMessage(mds, m));
 
 	if (!in->is_presync())
-	  sync_start(in);
+	  inode_sync_start(in);
   } else {
 	// wait for unsync
 	in->add_waiter(CINODE_WAIT_UNSYNC,
@@ -1317,7 +1439,7 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 	assert(in->is_syncbyauth());
 
 	if (!in->is_waitonunsync())
-	  sync_wait(in);
+	  inode_sync_wait(in);
   }
   
   return false;
@@ -1403,7 +1525,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 				   new C_MDS_RetryMessage(mds, m));
 
 	if (!in->is_presync())
-	  sync_start(in);
+	  inode_sync_start(in);
   } else {
 	// wait for unsync
 	in->add_waiter(CINODE_WAIT_UNSYNC, 
@@ -1413,7 +1535,7 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 	assert(in->is_softasync());
 	
 	if (!in->is_waitonunsync())
-	  sync_wait(in);
+	  inode_sync_wait(in);
   }
   
   return false;
@@ -1434,12 +1556,12 @@ int MDCache::write_soft_finish(CInode *in)
 
 // sync interface
 
-void MDCache::sync_wait(CInode *in)
+void MDCache::inode_sync_wait(CInode *in)
 {
   assert(!in->is_auth());
   
   int auth = in->authority(mds->get_cluster());
-  dout(5) << "sync_wait on " << *in << ", auth " << auth << endl;
+  dout(5) << "inode_sync_wait on " << *in << ", auth " << auth << endl;
   
   assert(in->is_syncbyauth());
   assert(!in->is_waitonunsync());
@@ -1450,7 +1572,7 @@ void MDCache::sync_wait(CInode *in)
   if ((in->is_softasync() && g_conf.mdcache_sticky_sync_softasync) ||
 	  (!in->is_softasync() && g_conf.mdcache_sticky_sync_normal)) {
 	// actually recall; if !sticky, auth will immediately release.
-	dout(5) << "sync_wait on " << *in << " sticky, recalling from auth" << endl;
+	dout(5) << "inode_sync_wait on " << *in << " sticky, recalling from auth" << endl;
 	mds->messenger->send_message(new MInodeSyncRecall(in->inode.ino),
 								 MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
@@ -1458,10 +1580,10 @@ void MDCache::sync_wait(CInode *in)
 }
 
 
-void MDCache::sync_start(CInode *in)
+void MDCache::inode_sync_start(CInode *in)
 {
   // wait for all replicas
-  dout(5) << "sync_start on " << *in << ", waiting for " << in->cached_by << endl;
+  dout(5) << "inode_sync_start on " << *in << ", waiting for " << in->cached_by << endl;
 
   assert(in->is_auth());
   assert(!in->is_presync());
@@ -1484,9 +1606,9 @@ void MDCache::sync_start(CInode *in)
   }
 }
 
-void MDCache::sync_release(CInode *in)
+void MDCache::inode_sync_release(CInode *in)
 {
-  dout(5) << "sync_release on " << *in << ", messages to " << in->get_cached_by() << endl;
+  dout(5) << "inode_sync_release on " << *in << ", messages to " << in->get_cached_by() << endl;
   
   assert(in->is_syncbyme());
   assert(in->is_auth());
@@ -1631,16 +1753,16 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	// release sync right away?
 	if (in->is_freezing()) {
 	  dout(7) << "handle_sync_ack freezing " << *in << ", dropping sync immediately" << endl;
-	  sync_release(in);
+	  inode_sync_release(in);
 	} 
 	else if (in->sync_replicawantback) {
 	  dout(7) << "handle_sync_ack replica wantback, releasing sync immediately" << endl;
-	  sync_release(in);
+	  inode_sync_release(in);
 	}
 	else if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
 			 (!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
 	  dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
-	  sync_release(in);
+	  inode_sync_release(in);
 	} 
 	else 
 	  dout(7) << "handle_sync_ack sticky sync is on, keeping sync for now" << endl;
@@ -1727,7 +1849,7 @@ void MDCache::handle_inode_sync_recall(MInodeSyncRecall *m)
   dout(7) << "handle_sync_recall " << *in << ", releasing" << endl;
   assert(in->is_auth());
   
-  sync_release(in);
+  inode_sync_release(in);
   
   // done
   delete m;
@@ -2024,6 +2146,66 @@ void MDCache::handle_inode_lock_release(MInodeLockRelease *m)
 
 
 
+// DIR SYNC
+
+/*
+
+ dir sync
+
+ - this are used when a directory is HASHED only.  namely,
+   - to stat the dir inode we need an accurate directory size  (????)
+   - for a readdir 
+
+*/
+
+void MDCache::dir_sync_start(CDir *dir)
+{
+  // wait for all replicas
+  dout(5) << "sync_start on " << *dir << endl;
+
+  assert(dir->is_hashed());
+  assert(dir->is_auth());
+  assert(!dir->is_presync());
+  assert(!dir->is_sync());
+
+  dir->sync_waiting_for_ack = mds->get_cluster()->get_mds_set();
+  dir->state_set(CDIR_STATE_PRESYNC);
+  dir->auth_pin();
+  
+  //dir->sync_replicawantback = false;
+
+  // send messages
+  for (set<int>::iterator it = dir->sync_waiting_for_ack.begin();
+	   it != dir->sync_waiting_for_ack.end();
+	   it++) {
+	mds->messenger->send_message(new MDirSyncStart(dir->ino(), mds->get_nodeid()),
+								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+  }
+}
+
+
+void MDCache::dir_sync_release(CDir *dir)
+{
+
+
+}
+
+void MDCache::dir_sync_wait(CDir *dir)
+{
+
+}
+
+
+void handle_dir_sync_start(MDirSyncStart *m)
+{
+}
+
+
+
+
+
+
 
 
 
@@ -2125,9 +2307,9 @@ void MDCache::export_dir(CInode *in,
 
   if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
 
-  if (!in->parent) {
+  if (in->is_root()) {
 	dout(7) << "i won't export root" << endl;
-	assert(in->parent);
+	assert(0);
 	return;
   }
 
@@ -2176,7 +2358,7 @@ void MDCache::export_dir_dropsync(CInode *idir)
 	CInode *in = it->second->inode;
 
 	dout(7) << "about to export: dropping sticky(?) sync on " << *in << endl;
-	if (in->is_syncbyme()) sync_release(in);
+	if (in->is_syncbyme()) inode_sync_release(in);
 
 	if (in->is_dir() &&
 		in->dir_auth == CDIR_AUTH_PARENT &&      // mine
@@ -2327,7 +2509,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 
   // waiters
   list<Context*> waiting;
-  idir->take_waiting(CINODE_WAIT_ANY, waiting);    // FIXME
+  idir->dir->take_waiting(CINODE_WAIT_ANY, waiting);    // FIXME ?? actually this is okay?
   fin->assim_waitlist(waiting);
 
 
@@ -2720,16 +2902,9 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
   if (!in) {
 	in = new CInode;
 	in->inode = istate->inode;
-
-	// add
-	add_inode(in);
-	link_inode(dir->inode, dname, in);	
-	dout(7) << "   import_dentry_inode adding " << *in << " istate.dir_auth " << istate->dir_auth << endl;
-  } else {
-	dout(7) << "   import_dentry_inode already had " << *in << " istate.dir_auth " << istate->dir_auth << endl;
+  } else 
 	had_inode = true;
-  }
-
+  
   // auth wonkiness
   if (dir->is_unhashing()) {
 	// auth reassimilating
@@ -2750,7 +2925,16 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
 	in->inode = istate->inode;
 	in->auth = true;
   }
-  
+
+  // now that auth is defined we can link
+  if (!had_inode) {
+	// add
+	add_inode(in);
+	link_inode(dir->inode, dname, in);	
+	dout(7) << "   import_dentry_inode adding " << *in << " istate.dir_auth " << istate->dir_auth << endl;
+  } else {
+	dout(7) << "   import_dentry_inode already had " << *in << " istate.dir_auth " << istate->dir_auth << endl;
+  }
 
   // assimilate new auth state?
   if (importing) {
@@ -3079,7 +3263,7 @@ void MDCache::drop_sync_in_dir(CDir *dir)
 	if (in->is_auth() && 
 		in->is_syncbyme()) {
 	  dout(7) << "dropping sticky(?) sync on " << *in << endl;
-	  sync_release(in);
+	  inode_sync_release(in);
 	}
   }
 }
@@ -3714,15 +3898,12 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 
   if (idir->dir == NULL) {
 	dout(4) << " making " << dirpart << " into a dir" << endl;
-	idir->dir = new CDir(idir, mds->get_nodeid()); 
 	idir->inode.isdir = true;
+	idir->dir = new CDir(idir, mds->get_nodeid()); 
   }
   
   add_inode( in );
   link_inode( idir, file, in );
-
-  // trim
-  //trim();
 
   vector<CInode*> trace;
   trace.push_back(idir);

@@ -5,6 +5,7 @@
 
 #include "events/EString.h"
 #include "events/EInodeUpdate.h"
+#include "events/EInodeUnlink.h"
 
 #include <iostream>
 using namespace std;
@@ -101,6 +102,10 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	  
 	case EVENT_INODEUPDATE:
 	  *le = new EInodeUpdate(buffer.substr(off,length));
+	  break;
+
+	case EVENT_INODEUNLINK:
+	  *le = new EInodeUnlink(buffer.substr(off,length));
 	  break;
 
 	default:

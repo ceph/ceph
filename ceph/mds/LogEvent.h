@@ -9,6 +9,7 @@ using namespace std;
 
 #define EVENT_STRING       1
 #define EVENT_INODEUPDATE  2
+#define EVENT_INODEUNLINK  3
 
 // generic log event
 class LogEvent {

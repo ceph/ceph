@@ -80,17 +80,25 @@ void OSD::dispatch(Message *m)
 
 char fn[100];
 char fn2[100];
-char *get_filename(int osd, object_t oid) 
+char *get_filename_nopid(int osd, object_t oid) 
 {
   sprintf(fn, "%s/%d/%d", osd_base_path, osd, oid);
   return fn;
-
+}
+char *get_filename(int osd, object_t oid) 
+{
+  if (!g_conf.osd_cow)
+	return get_filename_nopid(osd,oid);
+  
+  sprintf(fn, "%s/%d/%d.%d", osd_base_path, osd, oid, getpid());
+  return fn;
 }
 char *get_filename2(int osd, object_t oid) 
 {
   sprintf(fn2, "%s/%d/%d.tmp", osd_base_path, osd, oid);
   return fn2;
 }
+
 
 char dir[100];
 char *get_dir(int osd)
@@ -109,13 +117,19 @@ void OSD::read(MOSDRead *r)
   int fd = open(f, O_RDONLY);
   if (fd < 0) {
 
-	// send reply (failure)
-	dout(1) << "read open FAILED on " << get_filename(whoami, r->get_oid()) << " errno " << errno << endl;
-	reply = new MOSDReadReply(r, NULL, -1);
-	assert(0);
-
-  } else {
-
+	// try with no pid, in case we're cow
+	char *f = get_filename_nopid(whoami, r->get_oid());
+	int fd = open(f, O_RDONLY);
+	
+	if (fd < 0) {
+	  // send reply (failure)
+	  dout(1) << "read open FAILED on " << get_filename(whoami, r->get_oid()) << " errno " << errno << endl;
+	  reply = new MOSDReadReply(r, NULL, -1);
+	  assert(0);
+	}
+  }
+  
+  if (fd >= 0) {
 	// lock
 	flock(fd, LOCK_EX);
 

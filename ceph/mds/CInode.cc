@@ -46,6 +46,12 @@ CInode::~CInode() {
   if (dir) { delete dir; dir = 0; }
 }
 
+CDir *CInode::get_parent_dir()
+{
+  if (parent)
+	return parent->dir;
+  return NULL;
+}
 CInode *CInode::get_parent_inode() 
 {
   if (parent) 
@@ -61,8 +67,13 @@ void CInode::make_path(string& s)
 	parent->dir->inode->make_path(s);
 	s += "/";
 	s += parent->name;
-  } else 
+  } 
+  else if (is_root()) {
 	s = "";  // root
+  } 
+  else {
+	s = "(dangling)";  // dangling
+  }
 }
 
 ostream& operator<<(ostream& out, CInode& in)
@@ -89,7 +100,7 @@ void CInode::mark_dirty() {
 
   // touch my private version
   version++;
-  if (!state & CINODE_STATE_DIRTY) {
+  if (!(state & CINODE_STATE_DIRTY)) {
 	state |= CINODE_STATE_DIRTY;
 	get(CINODE_PIN_DIRTY);
   }

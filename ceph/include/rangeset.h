@@ -223,7 +223,6 @@ public:
 		 it++) {
 	  cout << " " << it->first << "-" << it->second << endl;
 	}
-	cout << endl;
   }
 
 };

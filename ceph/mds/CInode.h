@@ -42,10 +42,12 @@ using namespace std;
 #define CINODE_PIN_OPENRD    10020  
 #define CINODE_PIN_OPENWR    10021
 
-#define CINODE_PIN_LOCKWAIT  10010   // waiter
-#define CINODE_PIN_SYNCWAIT  10011   // "
-#define CINODE_PIN_DIRWAIT   10012   // "
-#define CINODE_PIN_DIRWAITDN 10013   // "
+#define CINODE_PIN_UNLINKING 10022
+
+#define CINODE_PIN_LOCKWAIT  10030   // waiter
+#define CINODE_PIN_SYNCWAIT  10031   // "
+#define CINODE_PIN_DIRWAIT   10032   // "
+#define CINODE_PIN_DIRWAITDN 10033   // "
 
 #define CINODE_PIN_IAUTHPIN  20000
 #define CINODE_PIN_DAUTHPIN  30000
@@ -58,6 +60,7 @@ using namespace std;
 
 #define CINODE_PIN_PRELOCK      70004
 #define CINODE_PIN_WAITONUNLOCK 70005
+
 
 // directory authority types
 //  >= 0 is the auth mds
@@ -99,14 +102,19 @@ using namespace std;
 #define CINODE_WAIT_GETREPLICA    2048  // update/replicate individual inode
     // waiters: import_dentry_inode
     // trigger: handle_inode_replicate_ack
-
+#define CINODE_WAIT_UNLINK        4096
+    // waiters: inode_unlink 
+    // triggers: inode_unlink_finish
 
 #define CINODE_WAIT_ANY           0xffff
 
 
 // state
-#define CINODE_STATE_DIRTY       1
-#define CINODE_STATE_UNLINKED   16  // delete me when my fh's close
+#define CINODE_STATE_ROOT        1
+#define CINODE_STATE_DIRTY       2
+#define CINODE_STATE_UNSAFE      4   // not logged yet
+#define CINODE_STATE_DANGLING    8   // delete me when i expire; i have no dentry
+#define CINODE_STATE_UNLINKING  16
 
 
 
@@ -163,6 +171,8 @@ class CInode : LRUObject {
   int              lock_active_count;  // count for in progress or waiting locks
   bool             sync_replicawantback;  // avoids sticky sync
 
+  set<int>         unlink_waiting_for_ack;
+
   // waiters
   multimap<int,Context*>  waiting;
 
@@ -194,10 +204,11 @@ class CInode : LRUObject {
 
   // -- accessors --
   bool is_dir() { return inode.isdir; }
-  bool is_root() { return (bool)(!parent); }
+  bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_auth() { return auth; }
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
+  CDir *get_parent_dir();
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
   
@@ -231,6 +242,13 @@ class CInode : LRUObject {
   void state_set(unsigned mask) { state |= mask; }
   unsigned state_test(unsigned mask) { return state & mask; }
 
+  bool is_unsafe() { return state & CINODE_STATE_UNSAFE; }
+  bool is_dangling() { return state & CINODE_STATE_DANGLING; }
+  bool is_unlinking() { return state & CINODE_STATE_UNLINKING; }
+
+  void mark_unsafe() { state |= CINODE_STATE_UNSAFE; }
+  void mark_safe() { state &= ~CINODE_STATE_UNSAFE; }
+
   // -- state encoding --
   crope encode_basic_state();
   int decode_basic_state(crope r, int off=0);
@@ -247,12 +265,8 @@ class CInode : LRUObject {
 	  parent_dir_version = ge;
   }
   
-  bool is_dirty() {
-	return state & CINODE_STATE_DIRTY;
-  }
-  bool is_clean() {
-	return state & CINODE_STATE_DIRTY;
-  }
+  bool is_dirty() { return state & CINODE_STATE_DIRTY; }
+  bool is_clean() { return !is_dirty(); }
   
   void mark_dirty();
   void mark_clean() {

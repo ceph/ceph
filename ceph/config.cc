@@ -15,10 +15,12 @@ md_config_t g_conf = {
   num_mds: 4,
   num_osd: 10,
   num_client: 100,
-  
+
+  osd_cow: false, // crashy? true,  
+
   client_cache_size: 100,
   client_cache_mid: .5,
-  client_requests: 5000,
+  client_requests: 2000,
   
   log_messages: true,
   log_interval: 10.0,

@@ -202,6 +202,21 @@ void Client::assim_reply(MClientReply *r)
 	return;
   }
 
+  if (r->get_op() == MDS_OP_UNLINK) {
+	if (r->get_result() < 0) {
+	  dout(7) << "unlink error" << endl;
+	} else {
+	  ClNode *node = cwd;
+	  assert(node->ino == r->get_ino());
+	  cwd = cwd->parent;
+	  if (node) {
+		node->detach();
+		remove_node(node);	  
+	  }
+	}
+	return;
+  }
+
   // normal crap
 
   ClNode *cur = root;
@@ -225,7 +240,8 @@ void Client::assim_reply(MClientReply *r)
 		cur = n;
 	  } else {
 		cur = cur->lookup( last_req_dn[i] );
-		assert(cur->ino == trace[i]->inode.ino);
+		//assert(cur->ino == trace[i]->inode.ino);
+		cur->ino = trace[i]->inode.ino;
 		cache_lru.lru_touch(cur);
 	  }
 	}
@@ -348,7 +364,7 @@ void Client::issue_request()
 		op = MDS_OP_OPENRD;
 	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
 		op = MDS_OP_OPENWR;
-	  else if (r < 31 && cwd->isdir) {
+	  else if (r < 34 && cwd->isdir) {
 		op = MDS_OP_OPENWRC;
 		string dn = "blah_client_created.";
 		char pid[10];
@@ -362,6 +378,9 @@ void Client::issue_request()
 		  p += dn;
 		  last_req_dn.push_back(dn);
 		}
+	  }
+	  else if (r < 35 && !cwd->isdir) {
+		op = MDS_OP_UNLINK;
 	  }
 	  else if (r < 41 + open_files.size() && open_files.size() > 0) {
 		// close file

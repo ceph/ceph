@@ -15,6 +15,14 @@
 #define dout(x)  if (x <= g_conf.debug) cout << "cdir:"
 
 
+ostream& operator<<(ostream& out, CDir& dir)
+{
+  string path;
+  dir.get_inode()->make_path(path);
+  out << "[dir " << dir.ino() << " " << path << "/]";
+}
+
+
 // CDir
 
 CDir::CDir(CInode *in, int whoami) 
@@ -22,6 +30,7 @@ CDir::CDir(CInode *in, int whoami)
   inode = in;
   
   nitems = 0;
+  nauthitems = 0;
   state = CDIR_STATE_INITIAL;
   version = 0;
 
@@ -38,6 +47,10 @@ CDir::CDir(CInode *in, int whoami)
   dir_rep = CDIR_REP_NONE;
 }
 
+
+inodeno_t CDir::ino() {
+  return inode->ino();
+}
 
 
 void CDir::hit(int type) 
@@ -67,6 +80,8 @@ void CDir::add_child(CDentry *d)
   d->dir = this;
   
   nitems++;
+  if (d->inode->is_auth())
+	nauthitems++;
   //namesize += d->name.length();
   
   if (nitems == 1)
@@ -78,6 +93,8 @@ void CDir::remove_child(CDentry *d) {
   items.erase(iter);
 
   nitems--;
+  if (d->inode->is_auth())
+	nauthitems--;
   //namesize -= d->name.length();
 
   if (nitems == 0)

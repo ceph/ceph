@@ -42,7 +42,7 @@ struct inode_t {
   uid_t uid;
   gid_t gid;
   time_t atime, mtime, ctime;
-  char isdir; // normal = 1, hashed = 2, file = 0
+  unsigned short isdir; // normal = 1, hashed = 2, file = 0
 };
 
 #define INODE_DIR_NORMAL 1

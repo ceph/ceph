@@ -8,18 +8,38 @@
 
 - possible import/export issue: /usr freezing, /usr/local imports (and completes).. weirdness?
 
+- possible/probable bug: lock supposedly => sync, but an inode lock_start doesn't do a client sync.  so far the way it's used makes this okay, but...
+
+
+- fix client cache stuff so that it can handle a dynamic file system!
+
+
+
+CLEANUP
+- make mdcache import/export stuff take CDir instead of CInode
+- client
+
+TEST
+- test unlink
+- test hash/unhash operation
+- test nauthitems
+
+IMPLEMENT
+- dir sync
+ - stat of a dir should return dir size?
+ - readdir of hashed dir
+
 - softasync mode
-- unlink
 - rmdir
 - mkdir
 - rename
-
-- test hash/unhash operation
 
 - smarter balancing
   - popularity calculation and management is inconsistent, wrong.
   - does it work?
 
 - instrumentation!
+- dump active config in run output somewhere
 
 - anchors and hard links
+

@@ -6,6 +6,8 @@ struct md_config_t {
   int num_osd;
   int num_client;
 
+  bool osd_cow;
+
   int client_cache_size;
   float client_cache_mid;
   unsigned client_requests;

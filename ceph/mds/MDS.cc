@@ -25,7 +25,10 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
+#include "messages/MInodeUnlink.h"
+
 #include "events/EInodeUpdate.h"
+#include "events/EInodeUnlink.h"
 
 #include <list>
 
@@ -828,33 +831,65 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 
 
 
+
+class C_MDS_UnlinkInode : public Context {
+public:
+  MDS *mds;
+  CInode *in;
+  MClientRequest *req;
+  C_MDS_UnlinkInode(MDS *mds, CInode *in, MClientRequest *req) {
+	this->mds = mds;
+	this->in = in;
+	this->req = req;
+  }
+  virtual void finish(int r) {
+	mds->handle_client_unlink_2(req, in);
+  }
+};
+
 void MDS::handle_client_unlink(MClientRequest *req, 
-							   CInode *cur)
+							   CInode *in)
 {
-  assert(!cur->is_dir());
+  // regular files only
+  if (in->is_dir()) {
+	dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << endl;
+	messenger->send_message(new MClientReply(req, -EISDIR),
+							MSG_ADDR_CLIENT(req->get_client()), 0, MDS_PORT_SERVER);
+	delete req;
+	return;
+  }
   
   // am i auth?
-  if (!cur->is_auth()) {
+  if (!in->is_auth()) {
 	// not auth; forward!
-	int auth = cur->authority(get_cluster());
-	dout(7) << "handle_client_unlink not auth for " << *cur << ", fwd to " << auth << endl;
+	int auth = in->authority(get_cluster());
+	dout(7) << "handle_client_unlink not auth for " << *in << ", fwd to " << auth << endl;
 	messenger->send_message(req,
 							MSG_ADDR_MDS(auth), MDS_PORT_SERVER, MDS_PORT_SERVER);
 	return;
   }
 
-  // hard lock!
-  
-  
-
-
- done:
-  // done
-  delete req;
+  dout(7) << "handle_client_unlink on " << *in << endl;
+  mdcache->inode_unlink(in, 
+						new C_MDS_UnlinkInode(this,in,req));
 }
 
 
 
+void MDS::handle_client_unlink_2(MClientRequest *req,
+								 CInode *in)
+{
+  dout(7) << "handle_client_unlink_2 done unlinking inode " << *in << endl;
+  
+  // reply
+  MClientReply *reply = new MClientReply(req);
+  reply->set_trace_dist(in, whoami);
+  messenger->send_message(reply,
+						  MSG_ADDR_CLIENT(req->get_client()), 0, MDS_PORT_SERVER);
+
+  // done
+  delete req;
+}
 
 
 
