@@ -3,6 +3,11 @@
 
 #include <sys/types.h>
 #include <ext/hash_map>
+#include <string>
+
+using namespace std;
+
+
 
 // raw inode
 

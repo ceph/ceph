@@ -1,4 +1,6 @@
 
+#include <string>
+
 #include "include/LogType.h"
 #include "include/Logger.h"
 

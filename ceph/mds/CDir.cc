@@ -107,7 +107,7 @@ void CDir::take_waiting(string& dentry,
 	if (waiting_on_dentry.size() == 0) 
 	  inode->put(CINODE_PIN_DIRWAITDN);
   }
-  assert(waiting_on_dentry.size() == 0);
+  assert(waiting_on_dentry.count(dentry) == 0);
 }
 
 void CDir::take_waiting(list<Context*>& ls)
