@@ -42,6 +42,9 @@ class MInodeSyncRecall;
 class MInodeLockStart;
 class MInodeLockAck;
 class MInodeLockRelease;
+
+class MLock;
+
 class MDirSyncStart;
 class MDirSyncAck;
 class MDirSyncRelease;
@@ -313,6 +316,8 @@ class MDCache {
   void handle_inode_lock_ack(MInodeLockAck *m);
   void handle_inode_lock_release(MInodeLockRelease *m);
 			  
+  void handle_lock(MLock *m);
+
 
   // -- sync : dirs --
   void dir_sync_start(CDir *dir);

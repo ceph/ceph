@@ -51,7 +51,7 @@ class BasicLock {
   }
 };
 
-ostream& operator<<(ostream& out, BasicLock& l) {
+inline ostream& operator<<(ostream& out, BasicLock& l) {
   static char* __lock_states[] = {
 	"sync",
 	"prelock",

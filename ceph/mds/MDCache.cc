@@ -43,6 +43,8 @@
 #include "messages/MInodeUnlink.h"
 #include "messages/MInodeUnlinkAck.h"
 
+#include "messages/MLock.h"
+
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
 #include "messages/MInodeSyncRelease.h"
@@ -1736,9 +1738,7 @@ INODES:
     - truncate ... need to stop writers for the atomic truncate operation
       - need a full lock
 
-
-
-
+ ????
 
 
 ALSO:
@@ -1747,10 +1747,43 @@ ALSO:
   denlock  - dentry lock    (prior to unlink, rename)
 
      
+*/
 
 
+/*
+void MDCache::handle_lock(MLock *m)
+{
+  // action type
+  switch (m->get_otype()) {
+  case LOCK_OTYPE_INO:
+	CInode *in = get_inode(m->get_ino());
+	
+	break;
 
-OLD CRAP:
+  case LOCK_OTYPE_DIRINO:
+	CInode *in = get_inode(m->get_ino());
+	CDir *dir = in->dir;
+	break;
+	
+	
+  case LOCK_OTYPE_DN:
+	CInode *in = get_inode(m->get_ino());
+	CDir *dir = in->dir;
+	CDentry = dir->lookup(m->get_dn());
+	
+	break;
+  } 
+  
+}
+
+*/
+
+
+/*
+
+OLD LOCK CRAP
+
+
  (old):
   sync -  soft metadata.. no reads/writes can proceed.  (eg no stat)
   lock -  hard(+soft) metadata.. path traversals stop etc.  (??)
@@ -1798,6 +1831,9 @@ NAMESPACE:
 
  
 */
+
+
+
 
 
 /* soft sync locks: mtime, size, etc. 
