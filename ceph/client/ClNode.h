@@ -37,6 +37,15 @@ class ClNode : public LRUObject {
 	}
   }
 
+  void full_path(string& p) {
+	if (parent)
+	  parent->full_path(p);
+	if (p.length()) {
+	  p.append("/");
+	}
+	p.append(ref_name);
+  }
+
   void link(string name, ClNode* node) {
 	if (children.size() == 0) 
 	  get();

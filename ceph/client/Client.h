@@ -35,6 +35,7 @@ class Client : public Dispatcher {
   virtual void assim_reply(MClientReply*);
   virtual void issue_request();
 
+  virtual void send_request(string& p);
 };
 
 
