@@ -37,6 +37,11 @@ class filepath {
 	parse();
   }
 
+  void clear() {
+    path = "";
+    bits.clear();
+  }
+
   string& operator[](int i) {
 	return bits[i];
   }
@@ -48,10 +53,40 @@ class filepath {
   int depth() {
 	return bits.size();
   }
+  bool empty() {
+    return bits.size() == 0;
+  }
 
   string& get_path() {
 	return path;
   }
+  
+  crope _rope() {
+    crope r;
+    char n = bits.size();
+    r.append((char*)&n, sizeof(char));
+    for (vector<string>::iterator it = bits.begin();
+         it != bits.end();
+         it++) { 
+      r.append(*it);
+      r.append((char)0);
+    }
+    return r;
+  }
+
+  int _unrope(crope& r, int off = 0) {
+    clear();
+    char n;
+    r.copy(off, sizeof(char), (char*)&n);
+    off += sizeof(char);
+    for (int i=0; i<n; i++) {
+      string s = r.c_str() + off;
+      off += s.length() + 1;
+      bits.add(s);
+    }
+    return off;
+  }
+
 };
 
 inline ostream& operator<<(ostream& out, filepath& path)

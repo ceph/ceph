@@ -59,11 +59,15 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-CDir *CInode::get_dir(int whoami)
+CDir *CInode::get_or_open_dir(MDS *mds)
 {
   assert(is_dir());
-  if (!dir) 
-	dir = new CDir(this, whoami);
+
+  if (dir) return dir;
+
+  // only auth can open dir alone.
+  assert(is_auth());
+  dir = new CDir(this, mds);
   return dir;
 }
 

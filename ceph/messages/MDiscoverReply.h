@@ -3,6 +3,8 @@
 
 #include "include/Message.h"
 #include "mds/CDir.h"
+#include "mds/CInode.h"
+#include "include/filepath.h"
 
 #include <vector>
 #include <string>
@@ -18,19 +20,28 @@ class MDiscoverReply : public Message {
   // inode [ + ... ], base_ino = 0 : discover base_ino=0, start w/ root ino
   // dentry + inode [ + ... ]      : discover want_base_dir=false
   // (dir + dentry + inode) +      : discover want_base_dir=true
-  vector<CDirDiscover*>   dirs;      // first one bogus if no_base_dir = true.
-  vector<string>          dentries;  // first one bogus if no_base_dentry = true
-  vector<CInodeDiscover*> inodes;
+  vector<CDirDiscover>   dirs;      // not inode-aligned if no_base_dir = true.
+  filepath               path;      // not inode-aligned in no_base_dentry = true
+  vector<CInodeDiscover> inodes;
 
  public:
   // accessors
   inodeno_t get_base_ino() { return base_ino; }
-  bool      is_base_dir() { return !no_base_dir; }
-  bool      is_base_dentry() { return !no_base_dentry; }
   int       get_num_inodes() { return inodes.size(); }
 
-  CDirDiscover* get_dir(int n) { return dirs[n]; }
-  string& get_dentry(int n) { return dentries[n]; }
+  bool      has_base_dir() { return !no_base_dir; }
+  bool      has_base_dentry() { return !no_base_dentry; }
+  bool has_root() {
+    if (base_ino == 0) {
+      assert(no_base_dir && no_base_dentry);
+      return true;
+    }
+	return false;
+  }
+
+  // these index _arguments_ are aligned to the inodes.
+  CDirDiscover* get_dir(int n) { return dirs[n + no_base_dir]; }
+  string& get_dentry(int n) { return path[n + no_base_dentry]; }
   CInodeDiscover* get_inode(int n) { return inodes[n]; }
 
   // cons
@@ -43,127 +54,80 @@ class MDiscoverReply : public Message {
   virtual char *get_type_name() { return "DisR"; }
   
   // builders
-  void add_dir(CDirDiscover *dir) { dirs.push_back(dir); }
-  void add_dentry(string& dn) { 
-	if (dirs.empty() && dentries.empty()) no_base_dir = true;
-	dentries.push_back(dn); 
+  bool is_empty() {
+    return dirs.empty() && inodes.empty();
   }
-  void add_inode(CInodeDiscover *in) { 
+  void set_path(filepath& dp) { path = dp; }
+  void add_dentry(string& dn) { 
+	if (dirs.empty()) no_base_dir = true;
+    path.add_dentry(dn);
+  }
+
+  void add_inode(CInodeDiscover& din) {
 	if (inodes.empty() && dirs.empty()) no_base_dir = true;
 	if (inodes.empty() && dentries.empty()) no_base_dentry = true;
-	inodes.push_back(in); 
+    inodes.add( din );
   }
-  
+
+  void add_dir(CDirDiscover& dir) {
+    dirs.add( dir );
+  }
+
+
   // ...
-  virtual int decode_payload(crope r) {
-	r.copy(0, sizeof(asker), (char*)&asker);
-	basepath = r.c_str() + sizeof(asker);
-	unsigned off = sizeof(asker) + basepath.length() + 1;
-	
-	want = new vector<string>;
-	int num_want;
-	r.copy(off, sizeof(int), (char*)&num_want);
-	off += sizeof(int);
-	for (int i=0; i<num_want; i++) {
-	  string w = r.c_str() + off;
-	  off += w.length() + 1;
-	  want->push_back(w);
-	}
-	
-	int ntrace;
-	r.copy(off, sizeof(int), (char*)&ntrace);
-	off += sizeof(int);
-	for (int i=0; i<ntrace; i++) {
-	  MDiscoverRec_t dr;
-	  off += dr._unrope(r.substr(off, r.length()));
-	  trace.push_back(dr);
-	}
+  virtual int decode_payload(crope r, int off = 0) {
+	r.copy(off, sizeof(base_ino), (char*)&base_ino);
+    off += sizeof(base_ino);
+    r.copy(off, sizeof(bool), (char*)&no_base_dir);
+    off += sizeof(bool);
+    r.copy(off, sizeof(bool), (char*)&no_base_dentry);
+    off += sizeof(bool);
+    
+    // dirs
+    int n;
+    r.copy(off, sizeof(int), (char*)&n);
+    off += sizeof(int);
+    for (int i=0; i<n; i++) {
+      dirs[i] = CDirDiscover();
+      off = dirs[i]._unrope(r, off);
+    }
+
+    // filepath
+    off = path._unrope(r, off);
+
+    // inodes
+    r.copy(off, sizeof(int), (char*)&n);
+    off += sizeof(int);
+    for (int i=0; i<n; i++) {
+      inodes[i] = CInodeDiscover();
+      off = inodes[i]._unrope(r, off);
+    }
+    return off;
   }
   virtual crope get_payload() {
 	crope r;
-	r.append((char*)&asker, sizeof(asker));
-	r.append(basepath.c_str());
-	r.append((char)0);
+	r.append((char*)&base_ino, sizeof(base_ino));
+	r.append((char*)&no_base_dir, sizeof(bool));
+	r.append((char*)&no_base_dentry, sizeof(bool));
 
-	if (!want) want = new vector<string>;
-	int num_want = want->size();
-	r.append((char*)&num_want,sizeof(int));
-	for (int i=0; i<num_want; i++) {
-	  r.append((*want)[i].c_str());
-	  r.append((char)0);
-	}
-	
-	int ntrace = trace.size();
-	r.append((char*)&ntrace, sizeof(int));
-	for (int i=0; i<ntrace; i++)
-	  r.append(trace[i]._rope());
-	
-	return r;
+    int n = dirs.size();
+    r.append((char*)&n, sizeof(int));
+    for (vector<CDirDiscover>::iterator it = dirs.begin();
+         it != dirs.end();
+         it++) 
+      r.append((*it)._rope());
+    
+    r.append(path._rope());
+
+    n = inodes.size();
+    for (vector<CInodeDiscover>::iterator it = dirs.begin();
+         it != dirs.end();
+         it++) 
+      r.append((*it)._rope());
+    
+    return r;
   }
 
-  
-  // ---
-
-  void add_bit(CInode *in, int auth, int nonce) {
-	MDiscoverRec_t bit;
-
-	bit.inode = in->inode;
-	bit.cached_by = in->get_cached_by();
-	bit.cached_by.insert( auth );  // obviously the authority has it too
-	bit.dir_auth = in->dir_auth;
-	bit.replica_nonce = nonce;
-
-	// send sync/lock state
-	bit.is_syncbyauth = in->is_syncbyme() || in->is_presync();
-	bit.is_softasync = in->is_softasync();
-	bit.is_lockbyauth = in->is_lockbyme() || in->is_prelock();
-
-	if (in->is_dir() && in->dir) {
-	  bit.dir_rep = in->dir->dir_rep;
-	  bit.dir_rep_by = in->dir->dir_rep_by;
-	}
-
-	trace.push_back(bit);
-  }
-
-  string current_base() {
-	string c = basepath;
-	for (int i=0; i<trace.size(); i++) {
-	  c += "/";
-	  c += (*want)[i];
-	}
-	return c;
-  }
-
-  string current_need() {
-	if (just_root())
-	  return string("");  // just root
-
-	string a = current_base();
-	a += "/";
-	a += next_dentry();
-	return a;
-  }
-
-  string& next_dentry() {
-	return (*want)[trace.size()];
-  }
-
-  bool just_root() {
-	if (want == NULL ||
-		want->size() == 0) return true;
-	return false;
-  }
-  
-  bool done() {
-	// just root?
-	if (just_root() &&
-		trace.size() > 0) return true;
-
-	// normal
-	if (trace.size() == want->size()) return true;
-	return false;
-  }
 };
 
 #endif

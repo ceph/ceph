@@ -38,6 +38,7 @@ ostream& operator<<(ostream& out, CDir& dir)
 CDir::CDir(CInode *in, MDS *mds, bool auth)
 {
   inode = in;
+  this->mds = mds;
   
   nitems = 0;
   nauthitems = 0;

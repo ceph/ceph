@@ -730,9 +730,134 @@ int MDCache::path_traverse(string& pathname,
 int MDCache::handle_discover(MDiscover *dis) 
 {
   int whoami = mds->get_nodeid();
+  
+  CDir *dir = 0;
+  MDiscoverReply *reply = 0;
+
+  // get started.
+  if (dis->get_base_ino() == 0) {
+    // wants root
+    dout(7) << "handle_discover from mds" << dis->get_asker() << " wants root + " << m->get_want().get_path() << endl;
+
+    assert(mds->get_nodeid() == 0);
+    assert(root->is_auth());
+
+    // add root
+    reply = new MDiscoverReply(0);
+    reply->add_inode( CInodeDiscover( root, 
+                                      root->cached_by_add( m->get_asker() ) ) );
+
+    dir = root->dir;
+    
+  } else {
+    // there's a base inode
+    CInode *in = get_inode(dis->get_base_ino());
+    assert(in);
+    
+    dout(7) << "handle_discover from mds" << dis->get_asker() << " has " << *in << " wants " << m->get_want().get_path() << endl;
+    
+    assert(in->is_dir());
+    
+    dir = in->get_or_open_dir(mds);
+    assert(dir);
+
+    if (dir->is_proxy() && !dir->is_hashed()) {
+      // fwd to dir auth
+      dout(7) << "i am proxy, fwd to dir_auth " << dir->authority() << endl;
+      mds->messenger->send_message( m,
+                                    MSG_ADDR_MDS( dir->authority() ), MDS_PORT_CACHE, MDS_PORT_CACHE );
+      return;
+    }
+
+    // create reply
+    reply = new MDiscoverReply(in->ino());
+  }
+
+  assert(reply);
+  assert(dir);
+  
+  // add content.
+  for (int i = 0; i < dis->get_want().depth(); i++) {
+    // add dir
+    if (reply->is_empty() && !dis->wants_base_dir()) {
+      dout(7) << "they don't want the base dir" << endl;
+    } else {
+      // add dir
+      if (!dir->is_auth()) {
+        dout(7) << *dir << " auth is " << dir->authority() << ", i'm done" << endl;
+        break;
+      }
+      dout(7) << "adding dir " << *dir << endl;
+      reply.add_dir( CDirDiscover( dir, 
+                                   dir->open_by_add( m->get_asker() ) ) );
+    }
+    
+    // lookup dentry
+    int dentry_auth = dir->dentry_authority( dis->get_dentry(i) );
+    if (dentry_auth != mds->get_nodeid()) {
+      dout(7) << *dir << "dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
+      break;      // that's it for us!
+    }
+
+    // get inode
+    CDentry *dn = dir->lookup( dis->get_dentry(i) );
+    if (dn) {
+		CInode *next = dn->inode;
+        assert(next->is_auth());
+
+        // add dentry + inode
+        dout(7) << "adding dentry " << dn << " + " << *next << endl;
+        reply->add_dentry( dis->get_dentry(i) );
+        reply->add_inode( CInodeDiscover(next, 
+                                         next->cached_by_add(dis->get_asker())) );
+    } else {
+      // don't have it?
+      if (cur->dir->is_complete()) {
+        // ...
+        assert(0);  // for now
+      } else {
+        delete reply;
+
+        // readdir
+        dout(7) << "mds" << whoami << " incomplete dir contents for " << *dir << ", fetching" << endl;
+        mds->mdstore->fetch_dir(dir, new C_MDS_RetryMessage(mds, dis));
+        return 0;
+      }
+    }
+  }
+       
+  // how did we do.
+  if (reply.is_empty()) {
+    // discard empty reply
+    delete reply;
+
+    // forward?
+    if (dir->is_proxy()) {
+      // fwd to auth
+      dout(7) << "i am dir proxy, fwd to auth " << dir->authority() << endl;
+      mds->messenger->send_message( m,
+                                    MSG_ADDR_MDS( dir->authority() ), MDS_PORT_CACHE, MDS_PORT_CACHE );
+      return;
+    }
+
+    dout(7) << "i'm not auth or proxy, dropping" << endl;
+    
+  } else {
+    // send back to asker
+    dout(7) << "sending result back to asker " << m->get_asker() << endl;
+    mds->messenger->send_message(reply,
+                                 m->get_asker(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  }
+
+  // done.
+  delete dis;
+}
 
 
-  if (dis->get_asker() == whoami) {
+int MDCache::handle_discover_reply(MDiscoverReply *dis) 
+{
+
+
 	// this is a result
 	vector<MDiscoverRec_t> trace = dis->get_trace();
 	
@@ -878,111 +1003,9 @@ int MDCache::handle_discover(MDiscover *dis)
 	  delete c;				
 	}	
 
-  } else {
-	
-	dout(7) << "handle_discover from mds" << dis->get_asker() << " current_need() " << dis->current_need() << endl;
-	
-	// this is a request
-	if (!root) {
-	  //open_root(new C_MDS_RetryMessage(mds, dis));
-	  dout(7) << "don't have root, just sending to mds0" << endl;
-	  mds->messenger->send_message(dis,
-								   MSG_ADDR_MDS(0), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
-	  return 0;
-	}
-
-	// get to starting point
-	vector<CInode*> trav;
-	string current_base = dis->current_base();
-	int r = path_traverse(current_base, trav, dis, MDS_TRAVERSE_FORWARD);
-	if (r > 0) return 0;  // forwarded, i hope!
-	
-	CInode *cur = trav[trav.size()-1];
-	
-	// just root?
-	if (dis->just_root()) {
-	  CInode *root = get_root();
-	  dis->add_bit( root, 0, CINODE_ROOT_NONCE );
-	  root->cached_by_add(dis->get_asker(), CINODE_ROOT_NONCE);
-	}
-
-	// add bits
-	bool have_added = false;
-	while (!dis->done()) {
-	  if (!cur->is_dir()) {
-		dout(7) << "woah, discover on non dir " << dis->current_need() << endl;
-		assert(cur->is_dir());
-	  }
-
-	  if (!cur->dir) cur->dir = new CDir(cur, whoami);
-	  
-	  string next_dentry = dis->next_dentry();
-	  int dentry_auth = cur->dir->dentry_authority(next_dentry, mds->get_cluster());
-	  
-	  if (dentry_auth != whoami) {
-		if (have_added) // fwd (partial) results back to asker
-		  mds->messenger->send_message(dis,	
-									   MSG_ADDR_MDS(dis->get_asker()), MDS_PORT_CACHE,
-									   MDS_PORT_CACHE);
-		else  		// fwd to authority
-		  mds->messenger->send_message(dis,
-									   MSG_ADDR_MDS(dentry_auth), MDS_PORT_CACHE,
-									   MDS_PORT_CACHE);
-		return 0;
-	  }
-
-	  // ok, i'm the authority for this dentry!
-
-	  // if frozen: i can't add replica because i'm no longer auth
-	  if (cur->dir->is_frozen()) {
-		dout(7) << *cur->dir << " is frozen, waiting" << endl;
-		cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
-							 new C_MDS_RetryMessage(mds, dis));
-		return 0;
-	  }
-
-	  // lookup next bit
-	  CDentry *dn = cur->dir->lookup(dis->next_dentry());
-	  if (dn) {	
-		// yay!  
-		CInode *next = dn->inode;
-
-		dout(7) << "discover adding bit " << *next << " for mds" << dis->get_asker() << endl;
-		
-		// remember who is caching this!
-		int nonce = next->cached_by_add( dis->get_asker() );
-		
-		// add it
-		dis->add_bit( next, whoami, nonce );
-		have_added = true;
-		
-		cur = next; // continue!
-	  } else {
-		// don't have dentry.
-
-		// are we auth for this dir?
-		if (cur->dir->is_complete()) {
-		  // file not found.
-		  assert(!cur->dir->is_complete());
-		} else {
-		  // readdir
-		  dout(7) << "mds" << whoami << " incomplete dir contents for " << *cur << ", fetching" << endl;
-		  mds->mdstore->fetch_dir(cur, new C_MDS_RetryMessage(mds, dis));
-		  return 0;
-		}
-	  }
-	}
-	
-	// success, send result
-	dout(7) << "mds" << whoami << " finished discovery, sending back to " << dis->get_asker() << endl;
-	mds->messenger->send_message(dis,
-								 MSG_ADDR_MDS(dis->get_asker()), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-	return 0;
-  }
 
 }
+
 
 
 

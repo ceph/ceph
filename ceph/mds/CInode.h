@@ -122,9 +122,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_STATE_EXPORTING  64   // on nonauth bystander.
 
 // misc
-#define CINODE_EXPORT_NONCE      1  // nonce given to replicas created by export
-#define CINODE_ROOT_NONCE        1  // nonce given to replicas of root
-#define CINODE_HASHREPLICA_NONCE 1  // hashed inodes that are duped
+#define CINODE_EXPORT_NONCE      1 // nonce given to replicas created by export
+#define CINODE_HASHREPLICA_NONCE 1 // hashed inodes that are duped ???FIXME???
 
 class Context;
 class CDentry;
@@ -228,7 +227,8 @@ class CInode : LRUObject {
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
-  //CDir *get_dir(int whoami);
+  
+  CDir *get_or_open_dir();
   
   bool dir_is_hashed() { 
 	if (inode.isdir == INODE_DIR_HASHED) return true;
@@ -492,12 +492,12 @@ class CInodeDiscover {
   bool       is_lockbyauth;
 
   CInodeDiscover() {}
-  CInodeDiscover(CInode *in) {
+  CInodeDiscover(CInode *in, int nonce) {
 	inode = in->inode;
-	replica_nonce = in->get_replica_nonce();
-	is_syncbyauth = in->is_syncbyauth();
+	replica_nonce = nonce;
+	is_syncbyauth = in->is_syncbyauth() || in->is_presync();
 	is_softasync = in->is_softasync();
-	is_lockbyauth = in->is_lockbyauth();
+	is_lockbyauth = in->is_lockbyauth() || in->is_prelock();
   }
   
   crope _rope() {
