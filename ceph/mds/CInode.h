@@ -21,6 +21,7 @@ using namespace std;
 
 
 // crap
+/*
 #define CINODE_SYNC_START     1  // starting sync
 #define CINODE_SYNC_LOCK      2  // am synced
 #define CINODE_SYNC_FINISH    4  // finishing
@@ -29,9 +30,9 @@ using namespace std;
 
 #define CINODE_MASK_IMPORT    16
 #define CINODE_MASK_EXPORT    32
+*/
 
-
-// pins for state, keeping an item in cache
+// pins for keeping an item in cache (and debugging)
 #define CINODE_PIN_CHILD     10000
 #define CINODE_PIN_CACHED    10001
 #define CINODE_PIN_IMPORT    10002
@@ -59,7 +60,7 @@ using namespace std;
 #define CINODE_PIN_WAITONUNLOCK 70005
 
 // directory authority types
-//  >= is the auth mds
+//  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_HASH     -2
 
@@ -100,6 +101,7 @@ using namespace std;
 
 // state
 #define CINODE_STATE_DIRTY       1
+#define CINODE_STATE_UNLINKED   16  // delete me when my fh's close
 
 
 
@@ -185,19 +187,34 @@ class CInode : LRUObject {
   CInode();
   ~CInode();
   
-  CInode *get_parent_inode();
-  CInode *get_realm_root();   // import, hash, or root
-  
-  // fun
+
+  // -- accessors --
   bool is_dir() { return inode.isdir; }
   bool is_root() { return (bool)(!parent); }
   bool is_auth() { return auth; }
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
+  CInode *get_parent_inode();
+  CInode *get_realm_root();   // import, hash, or root
+  
+  bool dir_is_hashed() { 
+	if (inode.isdir == INODE_DIR_HASHED) return true;
+	return false; 
+  }
+  bool dir_is_auth(int whoami) {
+	if (dir_auth == CDIR_AUTH_PARENT)
+	  return is_auth();
+	else if (dir_auth >= 0)
+	  return (dir_auth == whoami);
+	else if (dir_is_hashed()) 
+	  return true;  // hashed.
+	return false;
+  }
 
+
+  // -- misc -- 
   void make_path(string& s);
-
-  void hit();
+  void hit();                // popularity
 
 
   // -- state --
@@ -207,10 +224,27 @@ class CInode : LRUObject {
   unsigned state_test(unsigned mask) { return state & mask; }
 
 
+  // -- state encoding --
+  crope encode_basic_state();
+  int decode_basic_state(crope r, int off=0);
+
+
   
-  // dirtyness
+  // -- dirtyness --
   __uint64_t get_version() { return version; }
-  //void touch_version();  // mark dirty instead.
+  __uint64_t get_parent_dir_version() { return parent_dir_version; }
+  void float_parent_dir_version(__uint64_t ge) {
+	if (parent_dir_version < ge)
+	  parent_dir_version = ge;
+  }
+  
+  bool is_dirty() {
+	return state & CINODE_STATE_DIRTY;
+  }
+  bool is_clean() {
+	return state & CINODE_STATE_DIRTY;
+  }
+  
   void mark_dirty();
   void mark_clean() {
 	dout(10) << "mark_clean " << *this << endl;
@@ -219,25 +253,10 @@ class CInode : LRUObject {
 	  put(CINODE_PIN_DIRTY);
 	}
   }	
-  bool is_dirty() {
-	return state & CINODE_STATE_DIRTY;
-  }
-  bool is_clean() {
-	return state & CINODE_STATE_DIRTY;
-  }
-
-  __uint64_t get_parent_dir_version() { return parent_dir_version; }
-  void float_parent_dir_version(__uint64_t ge) {
-	if (parent_dir_version < ge)
-	  parent_dir_version = ge;
-  }
 
 
-  // state
-  crope encode_basic_state();
-  int decode_basic_state(crope r, int off=0);
 
-  // cached_by  -- to be used ONLY when we're authoritative!
+  // -- cached_by -- to be used ONLY when we're authoritative!
   bool is_cached_by_anyone() {
 	return !cached_by.empty();
   }
@@ -271,11 +290,13 @@ class CInode : LRUObject {
 	return cached_by;
   }
 
-  // waiting
+
+  // -- waiting --
   void add_waiter(int tag, Context *c);
   void take_waiting(int tag, list<Context*>& ls);
 
-  // locking
+
+  // -- sync, lock --
   bool is_sync() { return dist_state & (CINODE_DIST_SYNCBYME|
 										CINODE_DIST_SYNCBYAUTH); }
   bool is_syncbyme() { return dist_state & CINODE_DIST_SYNCBYME; }
@@ -289,7 +310,7 @@ class CInode : LRUObject {
   bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
   bool is_waitonunlock() { return dist_state & CINODE_DIST_WAITONUNLOCK; }
 
-  // open
+  // -- open files --
   bool is_open() {
 	if (open_read.empty() &&
 		open_write.empty()) return false;
@@ -337,17 +358,6 @@ class CInode : LRUObject {
   }
 
 
-
-
-  // sync
-  /*
-	int get_sync() { return state & CINODE_MASK_SYNC; }
-  int sync_set(int m) { 
-	state = (state & ~CINODE_MASK_SYNC) | m;
-  }
-  */
-
-  
   // -- authority --
   int authority(MDCluster *mdc);
   int dir_authority(MDCluster *mdc);
@@ -368,7 +378,7 @@ class CInode : LRUObject {
   bool is_freezing();
 
 
-  // --- reference counting
+  // -- reference counting --
   void put(int by) {
 	if (ref == 0 || ref_set.count(by) != 1) {
 	  dout(7) << " bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
@@ -396,7 +406,7 @@ class CInode : LRUObject {
 	return ref_set.count(by);
   }
 
-  // --- hierarchy stuff
+  // -- hierarchy stuff --
   void add_parent(CDentry *p);
   void remove_parent(CDentry *p);
 

@@ -106,7 +106,7 @@ bool MDStore::fetch_dir_2( int result,
 	dout(7) << *mds << "fetch_dir_2 on " << *idir << " has " << idir->dir->get_size() << endl;
 	
 	// make sure we have a CDir
-	if (idir->dir == NULL) idir->dir = new CDir(idir, true);
+	if (idir->dir == NULL) idir->dir = new CDir(idir, mds->get_nodeid());
 	
 	// parse buffer contents into cache
 	const char *buf = buffer.c_str();

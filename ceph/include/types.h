@@ -10,7 +10,7 @@ using namespace std;
 
 
 
-// raw inode
+// -- stl crap --
 
 namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
@@ -27,6 +27,8 @@ namespace __gnu_cxx {
 }
 
 
+// -- raw inode --
+
 typedef __uint64_t inodeno_t;   // ino
 
 typedef __uint64_t mdloc_t;     // dir locator?
@@ -40,8 +42,12 @@ struct inode_t {
   uid_t uid;
   gid_t gid;
   time_t atime, mtime, ctime;
-  bool isdir;
+  char isdir; // normal = 1, hashed = 2, file = 0
 };
+
+#define INODE_DIR_NORMAL 1
+#define INODE_DIR_HASHED 2
+
 
 typedef __uint64_t object_t;
 
@@ -56,6 +62,9 @@ class mds_load_t {
 	
 };
 
+
+
+// -- io helpers --
 
 inline ostream& operator<<(ostream& out, set<int>& iset) {
   for (set<int>::iterator it = iset.begin();

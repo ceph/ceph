@@ -22,11 +22,6 @@ class MDStore {
   }
 
   // i/o
-  /*
-bool fetch_inode( mdloc_t where,
-					inodeno_t ino,
-					Context *c );
-  */
   bool fetch_dir( CInode *in,
 				  Context *c );
   bool fetch_dir_2( int result, 

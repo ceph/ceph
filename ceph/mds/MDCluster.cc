@@ -9,6 +9,9 @@ using namespace std;
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "include/config.h"
+
+
 MDCluster::MDCluster(int num_mds, int num_osd)
 {
   this->num_mds = num_mds;
@@ -30,24 +33,31 @@ void MDCluster::map_osds()
   osd_meta_begin = osd_log_end;
   osd_meta_end = num_osd;
 
-  cout << "mdcluster: " << num_mds << " mds, " << num_osd << " osd" << endl;
-  cout << "mdcluster:  logs on " << (osd_log_end-osd_log_begin) << " osd [" << osd_log_begin << ", " << osd_log_end << ")" << endl;
-  cout << "mdcluster:  metadata on " << (osd_meta_end-osd_meta_begin) << " osd [" << osd_meta_begin << ", " << osd_meta_end << ")" << endl;
+  dout(10) << "mdcluster: " << num_mds << " mds, " << num_osd << " osd" << endl;
+  dout(10) << "mdcluster:  logs on " << (osd_log_end-osd_log_begin) << " osd [" << osd_log_begin << ", " << osd_log_end << ")" << endl;
+  dout(10) << "mdcluster:  metadata on " << (osd_meta_end-osd_meta_begin) << " osd [" << osd_meta_begin << ", " << osd_meta_end << ")" << endl;
 }
 
 
 
-int MDCluster::hash_dentry( CDir *dir, string& dn )
+/* hash a directory inode, dentry to a mds server
+ */
+int MDCluster::hash_dentry( inodeno_t dirino, string& dn )
 {
-  unsigned r = dir->get_inode()->inode.ino;
+  unsigned r = dirino;
   
   for (unsigned i=0; i<dn.length(); i++)
 	r += (dn[r] ^ i);
   
-  return osd_meta_begin + (r % (osd_meta_end - osd_meta_begin));
+  r %= num_mds;
+
+  dout(12) << "hash_dentry(" << dirino << ", " << dn << ") -> " << r;
+  return r;
 }
 
 
+/* map an inode to an osd
+ */
 int MDCluster::get_meta_osd(inodeno_t ino)
 {
   return osd_meta_begin + (ino % (osd_meta_end - osd_meta_begin));
@@ -59,6 +69,8 @@ object_t MDCluster::get_meta_oid(inodeno_t ino)
 }
 
 
+/* map an mds log to an osd
+ */
 int MDCluster::get_log_osd(int mds)
 {
   return osd_log_begin + (mds % (osd_log_end - osd_log_begin));

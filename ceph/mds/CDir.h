@@ -94,7 +94,7 @@ class CDir {
 
   CDir_map_t       items;              // use map; ordered list
   __uint64_t       nitems;
-  size_t           namesize;
+  //size_t           namesize;
   unsigned         state;
   __uint64_t       version;
   __uint64_t       committing_version;
@@ -122,26 +122,13 @@ class CDir {
   friend class MDiscover;
 
  public:
-  CDir(CInode *in, bool auth) {
-	inode = in;
-	
-	nitems = 0;
-	namesize = 0;
-	state = CDIR_STATE_INITIAL;
-	version = 0;
+  CDir(CInode *in, int whoami);
 
-	if (auth)
-	  state |= CDIR_STATE_AUTH;
 
-	auth_pins = 0;
-	nested_auth_pins = 0;
-
-	dir_rep = CDIR_REP_NONE;
-  }
 
   // -- accessors --
   CInode *get_inode() { return inode; }
-  // contents
+
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
   size_t get_size() { 
@@ -233,6 +220,10 @@ class CDir {
   void freeze_tree_finish(Context *c);
   void unfreeze_tree();
 
+  void freeze_dir(Context *c);
+  void freeze_dir_finish(Context *c);
+  void unfreeze_dir();
+
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
   bool is_freezing_tree();
   bool is_freezing_tree_root() { return state & CDIR_STATE_FREEZINGTREE; }
@@ -245,6 +236,10 @@ class CDir {
   
   bool is_freezeable() {
 	if (auth_pins == 0 && nested_auth_pins == 0) return true;
+	return false;
+  }
+  bool is_freezeable_dir() {
+	if (auth_pins == 0) return true;
 	return false;
   }
 

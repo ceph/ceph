@@ -30,7 +30,7 @@ class MDCluster {
   //int get_size() { return mds.size(); }
   //int add_mds(MDS *m);
 
-  int hash_dentry( CDir *dir, string& dn );  
+  int hash_dentry( inodeno_t dirino, string& dn );  
 
   int get_meta_osd(inodeno_t ino);
   object_t get_meta_oid(inodeno_t ino);

@@ -10,6 +10,7 @@
 #include "MDCluster.h"
 #include "MDBalancer.h"
 
+#include "include/filepath.h"
 
 #include "include/Logger.h"
 #include "include/LogType.h"
@@ -596,7 +597,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   int dirauth = cur->dir_authority(mdcluster);          // FIXME hashed, etc.
   if (dirauth == whoami) {
 	
-	if (!cur->dir) cur->dir = new CDir(cur, true);
+	if (!cur->dir) cur->dir = new CDir(cur, whoami);
 	assert(cur->dir->is_auth());
 	
 	// frozen?
@@ -740,6 +741,7 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 }
 
 
+/*
 int path_depth(string& p)
 {
   int d = 0;
@@ -747,6 +749,7 @@ int path_depth(string& p)
 	if (*c == '/') d++;
   return d;
 }
+*/
 
 void MDS::handle_client_openwrc(MClientRequest *req)
 {
@@ -761,16 +764,28 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 	
 	if (r == -ENOENT) {
 	  // on the last bit?
-	  int depth = path_depth(req->get_path());
+	  filepath path = req->get_path();
+	  int depth = path.depth();
 	  if (trace.size() == depth-1) {
 		dout(7) << "handle_client_openwrc -ENOENT on target file" << endl;
 
 		// create dentry, file!
 		CInode *idir = trace[trace.size()-1];
 		assert(idir->dir->is_auth());  // path_traverse should have fwd if not!
+		string dname = path.last_bit();
 
-		// lock dir?		
+		// verify i am authoritative for this dentry (should have fwd if not)
+		int auth = idir->dir->dentry_authority(dname, get_cluster());
+		assert(auth == whoami);
 
+		// create inode and link
+		CInode *in = mdcache->create_inode();
+		mdcache->link_inode( idir, dname, in );
+
+
+		// link
+		
+		
 		// IMPLEMENT ME.
 		assert(0); 
 
@@ -810,7 +825,7 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 
 
 
-
+/*
 void split_path(string& path, 
 				vector<string>& bits)
 {
@@ -829,7 +844,7 @@ void split_path(string& path,
 	off = nextslash+1;
   }
 }
-
+*/
 
 
 

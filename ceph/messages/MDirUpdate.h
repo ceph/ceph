@@ -36,6 +36,7 @@ class MDirUpdate : public Message {
 	  s.copy(sizeof(st) + i*sizeof(int), sizeof(int), (char*)&k);
 	  dir_rep_by.insert(k);
 	}
+	return 0;
   }
 
   virtual crope get_payload() {
@@ -48,6 +49,7 @@ class MDirUpdate : public Message {
 	  int i = *it;
 	  r.append((char*)&i, sizeof(int));
 	}
+	return r;
   }
 };
 

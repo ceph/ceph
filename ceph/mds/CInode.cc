@@ -257,7 +257,6 @@ int CInode::dir_authority(MDCluster *mdc)
   }
 
   // hashed
-  assert(0);  //  throw "hashed not implemented";
   return CDIR_AUTH_HASH;
 }
 

@@ -17,6 +17,29 @@
 
 // CDir
 
+CDir::CDir(CInode *in, int whoami) 
+{
+  inode = in;
+  
+  nitems = 0;
+  state = CDIR_STATE_INITIAL;
+  version = 0;
+
+  // auth
+  assert(in->is_dir());
+  if (in->dir_is_auth(whoami)) 
+	state |= CDIR_STATE_AUTH;
+  if (in->dir_is_hashed()) 
+	state |= CDIR_STATE_HASHED;
+  
+  auth_pins = 0;
+  nested_auth_pins = 0;
+  
+  dir_rep = CDIR_REP_NONE;
+}
+
+
+
 void CDir::hit() 
 {
   popularity.hit();
@@ -55,7 +78,7 @@ void CDir::add_child(CDentry *d)
   d->dir = this;
   
   nitems++;
-  namesize += d->name.length();
+  //namesize += d->name.length();
   
   if (nitems == 1)
 	inode->get(CINODE_PIN_CHILD);       // pin parent
@@ -66,7 +89,7 @@ void CDir::remove_child(CDentry *d) {
   items.erase(iter);
 
   nitems--;
-  namesize -= d->name.length();
+  //namesize -= d->name.length();
 
   if (nitems == 0)
 	inode->put(CINODE_PIN_CHILD);       // release parent.
@@ -90,8 +113,7 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
 	return inode->authority( mdc );       // same as my inode
   }
   if (inode->dir_auth == CDIR_AUTH_HASH) {
-	assert(0);
-	return mdc->hash_dentry( this, dn );  // hashed
+	return mdc->hash_dentry( inode->ino(), dn );  // hashed
   }
 
   // it's explicit for this whole dir
@@ -446,6 +468,98 @@ bool CDir::is_frozen_tree()
 	  return false;  // root on replica
   }
 }
+
+
+
+// FREEZE DIR
+
+class C_MDS_FreezeDir : public Context {
+  CDir *dir;
+  Context *con;
+public:
+  C_MDS_FreezeDir(CDir *dir, Context *c) {
+	this->dir = dir;
+	this->con = c;
+  }
+  virtual void finish(int r) {
+	dir->freeze_dir_finish(con);
+  }
+};
+
+void CDir::freeze_dir(Context *c)
+{
+  assert(!is_frozen());
+  assert(!is_freezing());
+  
+  if (is_freezeable_dir()) {
+	dout(10) << "freeze_dir " << *inode << endl;
+	
+	state_set(CDIR_STATE_FROZENDIR);
+	inode->auth_pin();  // auth_pin for duration of freeze
+	
+	// easy, we're frozen
+	c->finish(0);
+	delete c;
+	
+  } else {
+	state_set(CDIR_STATE_FREEZINGDIR);
+	dout(10) << "freeze_dir + wait " << *inode << endl;
+	
+	// need to wait for auth pins to expire
+	add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
+  } 
+}
+
+void CDir::freeze_dir_finish(Context *c)
+{
+  // freezeable now?
+  if (!is_freezeable_dir()) {
+	// wait again!
+	dout(10) << "freeze_dir_finish still waiting " << *inode << endl;
+	state_set(CDIR_STATE_FREEZINGDIR);
+	add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
+	return;
+  }
+
+  dout(10) << "freeze_dir_finish " << *inode << endl;
+  state_set(CDIR_STATE_FROZENDIR);
+  state_clear(CDIR_STATE_FREEZINGDIR);   // actually, this may get set again by next context?
+  
+  inode->auth_pin();  // auth_pin for duration of freeze
+  
+  // continue to frozen land
+  if (c) {
+	c->finish(0);
+	delete c;
+  }
+}
+
+void CDir::unfreeze_dir()
+{
+  dout(10) << "unfreeze_dir " << *inode << endl;
+  state_clear(CDIR_STATE_FROZENDIR);
+  
+  // unpin  (may => FREEZEABLE)   FIXME: is this order good?
+  inode->auth_unpin();
+
+  // waiters?
+  list<Context*> finished;
+  take_waiting(CDIR_WAIT_UNFREEZE, finished);
+  
+  list<Context*>::iterator it;
+  for (it = finished.begin(); it != finished.end(); it++) {
+	Context *c = *it;
+	c->finish(0);
+	delete c;
+  }
+}
+
+
+
+
+
+
+
 
 
 

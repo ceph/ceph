@@ -13,7 +13,6 @@
 #include "CDentry.h"
 #include "CDir.h"
 
-
 class MDS;
 class Message;
 class MExportDirPrep;
@@ -33,6 +32,7 @@ class MInodeLockStart;
 class MInodeLockAck;
 class MInodeLockRelease;
 class C_MDS_ExportFinish;
+class InoAllocator;
 
 // DCache
 
@@ -45,7 +45,9 @@ class MDCache {
   // the cache
   CInode                       *root;        // root inode
   LRU                          *lru;         // lru for expiring items
-  inode_map_t                   inode_map;   // map of inodes by ino             
+  inode_map_t                   inode_map;   // map of inodes by ino            
+  InoAllocator                 *inoalloc;
+ 
   MDS *mds;
 
   // root
@@ -104,6 +106,8 @@ class MDCache {
   // adding/removing
   bool remove_inode(CInode *in);
   bool add_inode(CInode *in);
+  CInode *create_inode();
+  void destroy_inode(CInode *in);
 
   int link_inode( CInode *parent, string& dname, CInode *inode );
 

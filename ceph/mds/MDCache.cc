@@ -7,6 +7,8 @@
 #include "MDCluster.h"
 #include "MDLog.h"
 
+#include "include/filepath.h"
+
 #include "include/Message.h"
 #include "include/Messenger.h"
 
@@ -34,6 +36,8 @@
 #include "messages/MInodeLockAck.h"
 #include "messages/MInodeLockRelease.h"
 
+#include "InoAllocator.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <iostream>
@@ -55,11 +59,14 @@ MDCache::MDCache(MDS *m)
   lru = new LRU();
   lru->lru_set_max(g_conf.mdcache_size);
   lru->lru_set_midpoint(g_conf.mdcache_mid);
+
+  inoalloc = new InoAllocator(mds);
 }
 
 MDCache::~MDCache() 
 {
   if (lru) { delete lru; lru = NULL; }
+  if (inoalloc) { delete inoalloc; inoalloc = NULL; }
 }
 
 
@@ -76,6 +83,27 @@ bool MDCache::shutdown()
 
 
 // MDCache
+
+CInode *MDCache::create_inode()
+{
+  CInode *in = new CInode;
+
+  // zero
+  memset(&in->inode, 0, sizeof(inode_t));
+  
+  // assign ino
+  in->inode.ino = inoalloc->get_ino();
+
+  add_inode(in);  // add
+  return in;
+}
+
+void MDCache::destroy_inode(CInode *in)
+{
+  inoalloc->reclaim_ino(in->ino());
+  remove_inode(in);
+}
+
 
 bool MDCache::add_inode(CInode *in) 
 {
@@ -359,7 +387,8 @@ int MDCache::open_root(Context *c)
 	root->inode.size = 0;
 	root->inode.touched = 0;
 
-	root->dir = new CDir(root, true);
+	root->dir = new CDir(root, whoami);
+	assert(root->dir->is_auth());
 	root->dir_auth = 0;  // me!
 	root->dir->dir_rep = CDIR_REP_NONE;
 
@@ -523,7 +552,7 @@ int MDCache::proc_message(Message *m)
  *    0 : success
  *   >0 : delayed or forwarded
  */
-int MDCache::path_traverse(string& path, 
+int MDCache::path_traverse(string& pathname, 
 						   vector<CInode*>& trace, 
 						   Message *req,
 						   int onfail)
@@ -548,17 +577,16 @@ int MDCache::path_traverse(string& path,
 
   string have_clean;
 
-  vector<string> path_bits;
-  split_path(path, path_bits);
+  filepath path = pathname;
 
-  for (int depth = 0; depth < path_bits.size(); depth++) {
-	string dname = path_bits[depth];
+  for (int depth = 0; depth < path.depth(); depth++) {
+	string dname = path[depth];
 	//dout(7) << " path seg " << dname << endl;
 
 	// lookup dentry
 	if (cur->is_dir()) {
 	  if (!cur->dir)
-		cur->dir = new CDir( cur, (whoami == cur->dir_authority(mds->get_cluster())) );
+		cur->dir = new CDir( cur, whoami );
 	  
 	  // frozen?
 	  if (cur->dir->is_frozen_tree_root() ||
@@ -616,8 +644,8 @@ int MDCache::path_traverse(string& path,
 
 			// assemble+send request
 			vector<string> *want = new vector<string>;
-			for (int i=depth; i<path_bits.size(); i++)
-			  want->push_back(path_bits[i]);
+			for (int i=depth; i<path.depth(); i++)
+			  want->push_back(path[i]);
 
 			lru->lru_touch(cur);  // touch discoveree
 
@@ -681,7 +709,8 @@ int MDCache::handle_discover(MDiscover *dis)
 	  root->cached_by = trace[0].cached_by;
 	  root->cached_by.insert(whoami);   // obviously i have it too
 	  root->dir_auth = trace[0].dir_auth;
-	  root->dir = new CDir(root, false); // not auth
+	  root->dir = new CDir(root, whoami); // not auth
+	  assert(!root->dir->is_auth());
 	  root->dir->dir_rep = trace[0].dir_rep;
 	  root->dir->dir_rep_by = trace[0].dir_rep_by;
 	  root->auth = false;
@@ -733,7 +762,7 @@ int MDCache::handle_discover(MDiscover *dis)
 	// add duplicated dentry+inodes
 	for (int i=0; i<trace.size(); i++) {
 
-	  if (!cur->dir) cur->dir = new CDir(cur, (whoami == cur->dir_authority(mds->get_cluster())) );  // ugly
+	  if (!cur->dir) cur->dir = new CDir(cur, whoami);
 
 	  CInode *in;
 	  CDentry *dn = cur->dir->lookup( (*wanted)[i] );
@@ -762,7 +791,8 @@ int MDCache::handle_discover(MDiscover *dis)
 		in->cached_by.insert(whoami);    // obviously i have it too
 		in->dir_auth = trace[i].dir_auth;
 		if (in->is_dir()) {
-		  in->dir = new CDir(in, false);   // can't be ours (an import) or it'd be in our cache.
+		  in->dir = new CDir(in, whoami);   // can't be ours (an import) or it'd be in our cache.
+		  assert(!in->dir->is_auth());
 		  in->dir->dir_rep = trace[i].dir_rep;
 		  in->dir->dir_rep_by = trace[i].dir_rep_by;
 		  assert(!in->dir->is_auth());
@@ -836,8 +866,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		assert(cur->is_dir());
 	  }
 
-	  if (!cur->dir) cur->dir = new CDir(cur,
-										 whoami == cur->dir_authority(mds->get_cluster()));
+	  if (!cur->dir) cur->dir = new CDir(cur, whoami);
 	  
 	  string next_dentry = dis->next_dentry();
 	  int dentry_auth = cur->dir->dentry_authority(next_dentry, mds->get_cluster());
@@ -1057,18 +1086,22 @@ void MDCache::handle_dir_update(MDirUpdate *m)
   CInode *in = get_inode(m->get_ino());
   if (!in) {
 	dout(7) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
-	delete m;
-	return;
+	goto out;
   }
 
   // update!
+  if (!in->dir) {
+	dout(7) << "dropping dir_update on " << m->get_ino() << ", ->dir is null" << endl;	
+	goto out;
+  } 
+
   dout(7) << "dir_update on " << m->get_ino() << endl;
   
-  if (!in->dir) in->dir = new CDir(in);
   in->dir->dir_rep = m->get_dir_rep();
   in->dir->dir_rep_by = m->get_dir_rep_by();
 
   // done
+ out:
   delete m;
 }
 
@@ -1088,8 +1121,9 @@ INODES:
   soft - m/c/atime, size
 
  correspondingly, two types of locks:
-  lock -  hard metadata.. path traversals stop etc.  (??)
   sync -  soft metadata.. no reads/writes can proceed.  (eg no stat)
+  lock -  hard(+soft) metadata.. path traversals stop etc.  (??)
+
 
  replication consistency modes:
   hard+soft - hard and soft are defined on all replicas.
@@ -2003,7 +2037,7 @@ void MDCache::export_dir(CInode *in,
 {
   assert(dest != mds->get_nodeid());
 
-  if (!in->dir) in->dir = new CDir(in, true);
+  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
 
   if (!in->parent) {
 	dout(7) << "i won't export root" << endl;
@@ -2318,12 +2352,13 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
   dout(7) << "export_dir_purge on " << *idir << endl;
 
   assert(0);
-
   /**
 
   BROKEN:  in order for this to work we need to know what the bounds (re-exports were) at 
   the time of the original export, so that we can only deal with those entries; however, we
   don't know what those items are because we deleted them from exports lists earlier.
+
+  so, we don't explicitly purge.  instead, exported items expire from the cache normally.
 
   **/
 
@@ -2384,7 +2419,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   // okay
   CInode *in = trav[trav.size()-1];
 
-  if (!in->dir) in->dir = new CDir(in, false);
+  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
   assert(in->dir->is_auth() == false);
 
   in->dir->auth_pin();     // auth_pin until we get the data
@@ -2410,7 +2445,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 
   mds->logger->inc("im");
 
-  if (!in->dir) in->dir = new CDir(in, false);
+  if (!in->dir) in->dir = new CDir(in, mds->get_nodeid());
 
   assert(in->dir->is_auth() == false);
 
@@ -2524,7 +2559,7 @@ void MDCache::import_dir_block(pchar& p,
   CInode *idir = get_inode(dstate->ino);
   assert(idir);
 
-  if (!idir->dir) idir->dir = new CDir(idir, false);
+  if (!idir->dir) idir->dir = new CDir(idir, mds->get_nodeid());
 
   idir->dir->version = dstate->version;
   idir->dir->state = dstate->state & CDIR_MASK_STATE_EXPORTED;  // we only import certain state
@@ -2797,7 +2832,7 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 
   if (idir->dir == NULL) {
 	dout(4) << " making " << dirpart << " into a dir" << endl;
-	idir->dir = new CDir(idir, true); 
+	idir->dir = new CDir(idir, mds->get_nodeid()); 
 	idir->inode.isdir = true;
   }
   
