@@ -24,4 +24,7 @@
 #define MDS_CACHE_MIDPOINT    .8
 
 
-#define MPI_DEST_TO_RANK(dest,world)    ((dest) % (world))
+#define MPI_DEST_TO_RANK(dest,world)    ((dest)<(NUMMDS+NUMOSD) ? \
+										 (dest) : \
+										 ((NUMMDS+NUMOSD)+(((dest)-NUMMDS-NUMOSD) % (world-NUMMDS-NUMOSD))))
+	 

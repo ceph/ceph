@@ -35,7 +35,7 @@ class Messenger {
   // ...
   virtual int init(Dispatcher *d) = 0;
   virtual int shutdown() = 0;
-  virtual bool send_message(Message *m, long dest, int port=0, int fromport=0) = 0;
+  virtual int send_message(Message *m, long dest, int port=0, int fromport=0) = 0;
   virtual int wait_message(time_t seconds) = 0;
   
   virtual int loop() {

@@ -9,7 +9,7 @@
 #include <ext/hash_map>
 using namespace std;
 
-#include "mpi.h"
+#include "mpi++.h"
 
 #include "include/LogType.h"
 #include "include/Logger.h"
@@ -27,50 +27,54 @@ hash_map<int, Message*>       incoming;
 int mpi_world_size;
 int mpi_rank;
 
-int mpimessenger_init(int *pargc, char ***pargv)
+int mpimessenger_init(int& argc, char**& argv)
 {
-  dout(1) << "MPI_Initialize" << endl;
-  MPI::Init(pargc, pargv);
-  MPI::Comm_size(MPI_COMM_WORLD, &mpi_world_size); 
-  MPI::Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  dout(1) << "MPI_Init" << endl;
+  MPI::Init(argc, argv);
+  mpi_world_size = MPI::COMM_WORLD.Get_size();
+  mpi_rank = MPI::COMM_WORLD.Get_rank();
 
   dout(1) << "i am " << mpi_rank << " of " << mpi_world_size << endl;
+  
+  assert(mpi_world_size > NUMOSD+NUMMDS);
 
   return mpi_rank;
 }
 
+int mpimessenger_world()
+{
+  return mpi_world_size;
+}
+
+
 int mpimessenger_loop()
 {
   while (1) {
-	// check queue
-	//while (
-
 	// check mpi
 	dout(1) << "waiting for message" << endl;
 
 	// get size
 	MPI::Status status;
 	int msize;
-	MPI::Recv(&msize, 
-			  1,
-			  MPI_INT, 
-			  MPI_ANY_SOURCE, 
-			  MPI_ANY_TAG, 
-			  MPI_COMM_WORLD, 
-			  &status); // receives greeting from each process
+	MPI::COMM_WORLD.Recv(&msize, 
+						 1,
+						 MPI_INT, 
+						 MPI_ANY_SOURCE, 
+						 MPI_ANY_TAG, 
+						 status); // receives greeting from each process
 
-	int tag = status.tag;
-	dout(1) << "incoming size " << msize << " tag " << tag << endl;
+	int tag = status.Get_tag();
+	int source = status.Get_source();
+	dout(1) << "incoming size " << msize << " tag " << tag << " from rank " << source << endl;
 
 	// get message
 	char *buf = new char[msize];
-	MPI::Recv(buf, 
-			  msize,
-			  MPI_CHAR, 
-			  status->MPI_SOURCE, 
-			  status->MPI_TAG, 
-			  MPI_COMM_WORLD, 
-			  &status); // receives greeting from each process
+	MPI::COMM_WORLD.Recv(buf, 
+						 msize,
+						 MPI_CHAR, 
+						 status.Get_source(),
+						 tag,
+						 status); // receives greeting from each process
 
 	crope r(buf, msize);
 	delete[] buf;
@@ -105,7 +109,6 @@ MPIMessenger::MPIMessenger(long me)
 {
   whoami = me;
   directory[ me ] = this;
-  amessenger = this;        // whatever, just need an instance.
 
   // logger
   string name;
@@ -117,7 +120,7 @@ MPIMessenger::MPIMessenger(long me)
   if (w >= 10) name += ('0' + ((w/10)%10));
   name += ('0' + ((w/1)%10));
 
-  logger = new Logger(name, (LogType*)&fakemsg_logtype);
+  logger = new Logger(name, (LogType*)&mpimsg_logtype);
   loggers[ whoami ] = logger;
 }
 
@@ -129,37 +132,38 @@ int MPIMessenger::init(Dispatcher *d)
 
 int MPIMessenger::shutdown()
 {
-  directory.erase(me);
+  directory.erase(whoami);
   remove_dispatcher();
 }
 
-bool MPIMessenger::send_message(Message *m, long dest, int port, int fromport)
+int MPIMessenger::send_message(Message *m, long dest, int port, int fromport)
 {
-  int trank = MPI_DEST_TO_RANK(dest);
+  int trank = MPI_DEST_TO_RANK(dest,mpi_world_size);
   crope r = m->get_serialized();
   int size = r.length();
 
-  
   if (trank == mpi_rank) {	
+
 	dout(3) << "queueing message locally for (tag) " << dest << " at my rank " << trank << " size " << size << endl;
-	incoming.insert(dest, m);
+	//incoming.insert(dest, m);
+	// no implemented
+	assert(0);
+
   } else {
 	dout(3) << "sending message via MPI for (tag) " << dest << " to rank " << trank << " size " << size << endl;
 
-	MPI::Send(&r,
-			  1,
-			  MPI_INT,
-			  trank,
-			  dest,
-			  MPI_COMM_WORLD);
+	MPI::COMM_WORLD.Send(&r,
+						 1,
+						 MPI_INT,
+						 trank,
+						 dest);
 	
-	char *buf = r.c_str();
-	MPI::Send(buf,
-			  size,
-			  MPI_CHAR,
-			  trank,
-			  dest,
-			  MPI_COMM_WORLD);
+	const char *buf = r.c_str();
+	MPI::COMM_WORLD.Send(buf,
+						 size,
+						 MPI_CHAR,
+						 trank,
+						 dest);
   }
 }
 int MPIMessenger::wait_message(time_t seconds)

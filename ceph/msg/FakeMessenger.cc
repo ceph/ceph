@@ -127,7 +127,7 @@ int FakeMessenger::shutdown()
 }
 
 
-bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
+int FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 {
   m->set_source(whoami, fromport);
   m->set_dest(dest, port);

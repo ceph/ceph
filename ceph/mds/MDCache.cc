@@ -10,6 +10,8 @@
 #include "include/Message.h"
 #include "include/Messenger.h"
 
+#include "events/EInodeUpdate.h"
+
 #include "messages/MDiscover.h"
 
 #include "messages/MExportDirPrep.h"
@@ -197,9 +199,11 @@ bool MDCache::shutdown_pass()
 			in->is_cached_by_anyone()) {
 		  for (set<int>::iterator by = in->cached_by.begin();
 			   by != in->cached_by.end();
-			   by++) {
-			if (mds->is_shut_down(*by)) {
-			  in->cached_by_remove(*by);
+			   ) {
+			int who = *by;
+			by++;
+			if (mds->is_shut_down(who)) {
+			  in->cached_by_remove(who);
 			  didsomething = true;
 			}
 		  }
@@ -248,6 +252,8 @@ bool MDCache::shutdown_pass()
 	  // un-import.
 	  imports.erase(root);
 	  root->put(CINODE_PIN_IMPORT);
+	  if (root->is_pinned_by(CINODE_PIN_DIRTY))   // no root storage yet.
+		root->put(CINODE_PIN_DIRTY);
 	  
 	  // trim it
 	  trim(0);
@@ -1785,9 +1791,6 @@ void MDCache::import_dir_block(pchar& p,
 	in->version = istate->version;
 	in->popularity = istate->popularity;
 
-	if (istate->dirty)
-	  in->mark_dirty();
-	
 	p += sizeof(*istate);
 	
 	in->cached_by.clear();  // HACK i'm cheating...
@@ -1800,6 +1803,17 @@ void MDCache::import_dir_block(pchar& p,
 	in->cached_by_add(oldauth);             // old auth still has it too!
 
 	// other state? ... ?
+
+	
+	// dirty?
+	if (istate->dirty) {
+	  in->mark_dirty();
+	  
+	  dout(10) << "logging dirty import " << *in << endl;
+	  mds->mdlog->submit_entry(new EInodeUpdate(in),
+							   NULL);   // FIXME
+	}
+
 
 	// was this an export?
 	if (istate->dir_auth >= 0) {
