@@ -2338,7 +2338,7 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
   //dout(7) << " got dir " << idir << endl;
 
   if (idir->dir == NULL) {
-	cerr << " making " << dirpart << " into a dir" << endl;
+	dout(4) << " making " << dirpart << " into a dir" << endl;
 	idir->dir = new CDir(idir, true); 
 	idir->inode.isdir = true;
   }
