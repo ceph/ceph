@@ -23,6 +23,8 @@ using namespace std;
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
 
+#include "messages/MExportDirDiscover.h"
+#include "messages/MExportDirDiscoverAck.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
 #include "messages/MExportDirWarning.h"
@@ -102,6 +104,13 @@ decode_message(crope& ser)
 	break;
   case MSG_MDS_DISCOVERREPLY:
 	m = new MDiscoverReply();
+	break;
+
+  case MSG_MDS_EXPORTDIRDISCOVER:
+	m = new MExportDirDiscover();
+	break;
+  case MSG_MDS_EXPORTDIRDISCOVERACK:
+	m = new MExportDirDiscoverAck();
 	break;
 
   case MSG_MDS_EXPORTDIR:

@@ -365,7 +365,7 @@ class CDir {
 	return ref_set.count(by);
   }
   bool is_pinned() { return ref > 0; }
-  set<int> get_ref_set() { return ref_set; }
+  set<int>& get_ref_set() { return ref_set; }
 
 
   
@@ -560,7 +560,7 @@ class CDirExport {
   void update_dir(CDir *dir) {
 	assert(dir->ino() == st.ino);
 
-	dir->nitems = st.nitems;
+	//dir->nitems = st.nitems;
 	dir->version = st.version;
 	dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
 	  (st.state & CDIR_MASK_STATE_EXPORTED);

@@ -554,6 +554,9 @@ int MDCache::proc_message(Message *m)
 
 
 	// import
+  case MSG_MDS_EXPORTDIRDISCOVER:
+	handle_export_dir_discover((MExportDirDiscover*)m);
+	break;
   case MSG_MDS_EXPORTDIRPREP:
 	handle_export_dir_prep((MExportDirPrep*)m);
 	break;
@@ -565,6 +568,9 @@ int MDCache::proc_message(Message *m)
 	break;
 
 	// export 
+  case MSG_MDS_EXPORTDIRDISCOVERACK:
+	handle_export_dir_discover_ack((MExportDirDiscoverAck*)m);
+	break;
   case MSG_MDS_EXPORTDIRPREPACK:
 	handle_export_dir_prep_ack((MExportDirPrepAck*)m);
 	break;
@@ -630,6 +636,7 @@ int MDCache::path_traverse(filepath& path,
 	if (!cur->dir) {
 	  if (cur->dir_is_auth()) {
 		cur->get_or_open_dir(mds);
+		assert(cur->dir);
 	  } else {
 		// discover dir from/via inode auth
 		assert(!cur->is_auth());
@@ -637,12 +644,12 @@ int MDCache::path_traverse(filepath& path,
 		mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
 												   cur->ino(),
 												   want,
-												   true),
+												   true),  // need this dir too
 									 MSG_ADDR_MDS(cur->authority()), MDS_PORT_CACHE,
 									 MDS_PORT_CACHE);
-		cur->dir->add_waiter(CINODE_WAIT_DIR, 
-							 path[depth], 
-							 new C_MDS_RetryMessage(mds, req));
+		cur->add_waiter(CINODE_WAIT_DIR, 
+						new C_MDS_RetryMessage(mds, req));
+		return 1;
 	  }
 	}
 	

@@ -76,7 +76,8 @@ class MExportDir : public Message {
     int nex;
     s.copy(off, sizeof(nex), (char*)&nex);
     off += sizeof(nex);
-	for (int i=0; i<ndirs; i++) {
+	dout(12) << nex << " nested exports out" << endl;
+	for (int i=0; i<nex; i++) {
 	  inodeno_t dirino;
 	  s.copy(off, sizeof(dirino), (char*)&dirino);
 	  off += sizeof(dirino);
@@ -115,8 +116,15 @@ class MExportDir : public Message {
 
     // exports
     int nex = exports.size();
+	dout(12) << nex << " nested exports in" << endl;
     s.append((char*)&nex, sizeof(int));
-    
+	for (list<inodeno_t>::iterator it = exports.begin();
+		 it != exports.end();
+		 it++) {
+	  inodeno_t ino = *it;
+	  s.append((char*)&ino, sizeof(ino));
+	}
+
 	// prediscover
     /*
 	int ndirs = hashed_prediscover.size();
