@@ -12,6 +12,9 @@ using namespace std;
 #include "include/config.h"
 
 
+#define HASHDIR_OID_MULT (0x100 * 0x100000000) // 40 bits (~1 trillion)
+
+
 MDCluster::MDCluster(int num_mds, int num_osd)
 {
   this->num_mds = num_mds;
@@ -42,7 +45,7 @@ void MDCluster::map_osds()
 
 /* hash a directory inode, dentry to a mds server
  */
-int MDCluster::hash_dentry( inodeno_t dirino, string& dn )
+int MDCluster::hash_dentry( inodeno_t dirino, const string& dn )
 {
   unsigned r = dirino;
   
@@ -56,7 +59,7 @@ int MDCluster::hash_dentry( inodeno_t dirino, string& dn )
 }
 
 
-/* map an inode to an osd
+/* map a directory inode to an osd
  */
 int MDCluster::get_meta_osd(inodeno_t ino)
 {
@@ -67,6 +70,21 @@ object_t MDCluster::get_meta_oid(inodeno_t ino)
 {
   return ino;
 }
+
+
+/* map a hashed diretory inode and mds to an osd
+ */
+
+int MDCluster::get_hashdir_meta_osd(inodeno_t ino, int mds)
+{
+  return osd_meta_begin + ((ino+mds) % (osd_meta_end - osd_meta_begin));
+}
+
+object_t MDCluster::get_hashdir_meta_oid(inodeno_t ino, int mds)
+{
+  return ino + (HASHDIR_OID_MULT*mds);
+}
+
 
 
 /* map an mds log to an osd

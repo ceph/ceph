@@ -790,6 +790,9 @@ int MDCache::handle_discover(MDiscover *dis)
 		in->cached_by = trace[i].cached_by;
 		in->cached_by.insert(whoami);    // obviously i have it too
 		in->dir_auth = trace[i].dir_auth;
+
+		in->auth = false;
+
 		if (in->is_dir()) {
 		  in->dir = new CDir(in, whoami);   // can't be ours (an import) or it'd be in our cache.
 		  assert(!in->dir->is_auth());
@@ -797,7 +800,6 @@ int MDCache::handle_discover(MDiscover *dis)
 		  in->dir->dir_rep_by = trace[i].dir_rep_by;
 		  assert(!in->dir->is_auth());
 		}
-		in->auth = false;
 
 		if (trace[i].is_syncbyauth) in->dist_state |= CINODE_DIST_SYNCBYAUTH;
 		if (trace[i].is_softasync) in->dist_state |= CINODE_DIST_SOFTASYNC;
@@ -806,6 +808,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		// link in
 		add_inode( in );
 		link_inode( cur, (*wanted)[i], in );
+
 		dout(7) << " discover assimilating " << *in << endl;
 	  }
 	  

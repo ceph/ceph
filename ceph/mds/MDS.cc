@@ -767,12 +767,12 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 	  filepath path = req->get_path();
 	  int depth = path.depth();
 	  if (trace.size() == depth-1) {
-		dout(7) << "handle_client_openwrc -ENOENT on target file" << endl;
-
 		// create dentry, file!
 		CInode *idir = trace[trace.size()-1];
 		assert(idir->dir->is_auth());  // path_traverse should have fwd if not!
 		string dname = path.last_bit();
+
+		dout(7) << "handle_client_openwrc -ENOENT on target file, creating " << dname << endl;
 
 		// verify i am authoritative for this dentry (should have fwd if not)
 		int auth = idir->dir->dentry_authority(dname, get_cluster());
@@ -782,13 +782,12 @@ void MDS::handle_client_openwrc(MClientRequest *req)
 		CInode *in = mdcache->create_inode();
 		mdcache->link_inode( idir, dname, in );
 
+		in->mark_dirty();
 
-		// link
-		
-		
-		// IMPLEMENT ME.
-		assert(0); 
-
+		// log it
+		dout(10) << "log for " << *req << " create " << in->ino() << endl;
+		mdlog->submit_entry(new EInodeUpdate(in),
+							new C_MDS_RetryMessage(this, req));
 		return;
 	  } else {
 		dout(7) << "handle_client_openwrc -ENOENT on containing dir; fail!" << endl;

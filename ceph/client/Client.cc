@@ -335,6 +335,11 @@ void Client::issue_request()
 		op = MDS_OP_OPENRD;
 	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
 		op = MDS_OP_OPENWR;
+	  else if (false && r < 31 && cwd->isdir) {
+		op = MDS_OP_OPENWRC;
+		p += "/";
+		p += "blah_client_created";
+	  }
 	  else if (r < 41 + open_files.size() && open_files.size() > 0) {
 		// close file
 		return close_a_file();

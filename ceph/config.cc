@@ -18,7 +18,7 @@ md_config_t g_conf = {
   
   client_cache_size: 100,
   client_cache_mid: .5,
-  client_requests: 50000,
+  client_requests: 5000,
   
   log_messages: true,
   log_interval: 10.0,
