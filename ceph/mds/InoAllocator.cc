@@ -59,7 +59,7 @@ void InoAllocator::load()
   }
   else {
 	// use generic range
-	free.map_insert(1000000000000 * (mds->get_nodeid()+1),
-					1000000000000 * (mds->get_nodeid()+2) - 1);
+	free.map_insert((long long)1000000000000 * (mds->get_nodeid()+1),
+					(long long)1000000000000 * (mds->get_nodeid()+2) - 1);
   }
 }

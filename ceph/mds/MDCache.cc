@@ -759,6 +759,8 @@ int MDCache::handle_discover(MDiscover *dis)
 	  root->dir->dir_rep_by = trace[0].dir_rep_by;
 	  root->state_set(CINODE_STATE_ROOT);
 	  root->set_auth(false);
+	  root->replica_nonce = trace[i].replica_nonce;
+	  assert(root->replica_nonce == CINODE_ROOT_NONCE);
 	  
 	  if (trace[0].is_syncbyauth) root->dist_state |= CINODE_DIST_SYNCBYAUTH;
 	  if (trace[0].is_softasync) root->dist_state |= CINODE_DIST_SOFTASYNC;
@@ -841,6 +843,7 @@ int MDCache::handle_discover(MDiscover *dis)
 		in->dir_auth = trace[i].dir_auth;
 
 		in->auth = false;
+		in->replica_nonce = trace[i].replica_nonce;
 
 		if (in->is_dir()) {
 		  in->dir = new CDir(in, whoami);   // can't be ours (an import) or it'd be in our cache.
@@ -905,9 +908,8 @@ int MDCache::handle_discover(MDiscover *dis)
 	// just root?
 	if (dis->just_root()) {
 	  CInode *root = get_root();
-	  dis->add_bit( root, 0 );
-
-	  root->cached_by_add(dis->get_asker());
+	  dis->add_bit( root, 0, CINODE_ROOT_NONCE );
+	  root->cached_by_add(dis->get_asker(), CINODE_ROOT_NONCE);
 	}
 
 	// add bits
@@ -953,12 +955,12 @@ int MDCache::handle_discover(MDiscover *dis)
 
 		dout(7) << "discover adding bit " << *next << " for mds" << dis->get_asker() << endl;
 		
-		// add it
-		dis->add_bit( next, whoami );
-		have_added = true;
-		
 		// remember who is caching this!
-		next->cached_by_add( dis->get_asker() );
+		int nonce = next->cached_by_add( dis->get_asker() );
+		
+		// add it
+		dis->add_bit( next, whoami, nonce );
+		have_added = true;
 		
 		cur = next; // continue!
 	  } else {
@@ -1002,13 +1004,14 @@ void MDCache::handle_inode_get_replica(MInodeGetReplica *m)
   dout(7) << "handle_inode_get_replica from " << m->get_source() << " for " << *in << endl;
 
   // add to cached_by
-  in->cached_by_add(m->get_source());
+  int nonce = in->cached_by_add(m->get_source());
   
   // add bit
-  //****
+  //**** hmm do we put any data in the reply?  not for the limited instances
+  // when is this used?  FIXME?
   
   // reply
-  mds->messenger->send_message(new MInodeGetReplicaAck(in->ino()),
+  mds->messenger->send_message(new MInodeGetReplicaAck(in->ino(), nonce),
 							   MSG_ADDR_MDS(m->get_source()), MDS_PORT_CACHE, MDS_PORT_CACHE);
 
   // done.
@@ -1021,7 +1024,9 @@ void MDCache::handle_inode_get_replica_ack(MInodeGetReplicaAck *m)
   CInode *in = get_inode(m->get_ino());
   assert(in);
 
-  dout(7) << "handle_inode_get_replica_ack from " << m->get_source() << " on " << *in << endl;
+  dout(7) << "handle_inode_get_replica_ack from " << m->get_source() << " on " << *in << " nonce " << m->get_nonce() << endl;
+
+  in->replica_nonce = m->get_nonce();
 
   // waiters
   in->finish_waiting(CINODE_WAIT_GETREPLICA);
@@ -1103,13 +1108,19 @@ void MDCache::handle_inode_expire(MInodeExpire *m)
 
   if (!in) {
 	dout(7) << "got inode_expire on " << m->get_ino() << " from " << from << ", don't have it" << endl;
-	goto forward;
+	assert(in);  // I BETTER!  i shoudl be authority, or cacheproxy.
   }
 
-  auth = in->authority(mds->get_cluster());
-  if (auth != mds->get_nodeid()) {
-	dout(7) << "got inode_expire on " << *in << ", not mine" << endl;
-	goto forward;
+  if (!in->is_auth()) {
+	auth = in->authority(mds->get_cluster());
+	dout(7) << "got inode_expire on " << *in << ", auth is " << auth << endl;
+
+	assert(in->is_cacheproxy());
+	
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(next), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	mds->logger->inc("iupfw");
+	return;
   }
 
   // remove from our cached_by
@@ -2606,7 +2617,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 		if (in->is_auth()) {
 		  // it's mine, easy enough: new auth will replicate my inode (i included it above)
 		  if (!in->is_cached_by(newauth))
-			in->cached_by_add( newauth );
+			in->cached_by_add( newauth, CINODE_HASHREPLICA_NONCE );
 		} 
 		else {
 		  // i'm a replica.  the recipient had better discover this dir.
@@ -3029,12 +3040,16 @@ CInode *MDCache::import_dentry_inode(CDir *dir,
 	// cached_by
 	in->cached_by.clear(); 
 	for (int nby = istate->ncached_by; nby>0; nby--) {
-	  if (*((int*)p) != mds->get_nodeid()) 
-		in->cached_by_add( *((int*)p) );
+      int node = *((int*)p);
 	  p += sizeof(int);
+      int nonce = *((int*)p);
+      p += sizeof(int);
+
+	  if (node != mds->get_nodeid()) 
+		in->cached_by_add( node, nonce );
 	}
 	
-	in->cached_by_add(from);             // old auth still has it too.
+	in->cached_by_add(from, CINODE_EXPORT_NONCE);             // old auth still has it too.
   
 	// dist state: new authority inherits softasync state only; sync/lock are dropped for import/export
 	in->dist_state = 0;

@@ -170,8 +170,12 @@ crope CInode::encode_export_state()
   for (set<int>::iterator it = cached_by.begin();
 	   it != cached_by.end();
 	   it++) {
+    // mds
 	int i = *it;
 	r.append( (char*)&i, sizeof(int) );
+    // nonce
+    int j = cached_by_nonce(i);
+    r.append( (char*)&j, sizeof(int) );
   }
 
   return r;
@@ -190,8 +194,10 @@ crope CInode::encode_basic_state()
   for (set<int>::iterator it = cached_by.begin(); 
 	   it != cached_by.end();
 	   it++) {
-	int j = *it;
-	r.append((char*)&j, sizeof(j));
+	int mds = *it;
+	r.append((char*)&mds, sizeof(mds));
+    int nonce = cached_by_nonce(mds);
+    r.append((char*)&nonce, sizeof(nonce));
   }
 
   // dir_auth
@@ -207,16 +213,20 @@ int CInode::decode_basic_state(crope r, int off)
   off += sizeof(inode_t);
 	
   // cached_by --- although really this is rep_by,
-  //               since we're non-authoritative
+  //               since we're non-authoritative  (?????)
   int n;
   r.copy(off, sizeof(int), (char*)&n);
   off += sizeof(int);
   cached_by.clear();
   for (int i=0; i<n; i++) {
-	int j;
-	r.copy(off, sizeof(int), (char*)&j);
-	cached_by.insert(j);
+    // mds
+	int mds;
+	r.copy(off, sizeof(int), (char*)&mds);
 	off += sizeof(int);
+    int nonce;
+    r.copy(off, sizeof(int), (char*)&nonce);
+    off += sizeof(int);
+    cached_by_add(mds, nonce);
   }
 
   // dir_auth

@@ -48,6 +48,8 @@ using namespace std;
 #define CINODE_PIN_DIRWAIT   10032   // "
 #define CINODE_PIN_DIRWAITDN 10033   // "
 
+#define CINODE_PIN_CACHEPROXY 10050
+
 #define CINODE_PIN_IAUTHPIN  20000
 #define CINODE_PIN_DAUTHPIN  30000
 #define CINODE_PIN_DIRTY     50000     // must flush
@@ -115,8 +117,13 @@ using namespace std;
 #define CINODE_STATE_UNSAFE      4   // not logged yet
 #define CINODE_STATE_DANGLING    8   // delete me when i expire; i have no dentry
 #define CINODE_STATE_UNLINKING  16
+#define CINODE_STATE_CACHEPROXY 32
 
 
+// misc
+#define CINODE_EXPORT_NONCE     1  // nonce given to replicas created by export
+#define CINODE_ROOT_NONCE       1  // nonce given to replicas of root
+#define CINODE_HASHREPICA_NONCE 1  // hashed inodes that are duped
 
 class Context;
 class CDentry;
@@ -155,13 +162,16 @@ class CInode : LRUObject {
   // dcache lru
   CInode *lru_next, *lru_prev;
 
-  // distributed caching
+  // -- distributed caching
   bool             auth;       // safety check; true if this is authoritative.
   set<int>         cached_by;  // mds's that cache me.  
   /* NOTE: on replicas, this doubles as replicated_by, but the
 	 cached_by_* access methods below should NOT be used in those
 	 cases, as the semantics are different! */
-  set<int>         soft_tokens;  // replicas who can to soft update the inode
+  /* NOTE: if replica is_cacheproxy(), cached_by is still defined! */
+  map<int,int>     cached_by_nonce;  // nonce issued to each replica
+  int              replica_nonce;    // defined on replica
+  set<int>         soft_tokens;  // replicas who can soft update the inode
   /* ..and thus may have a newer mtime, size, etc.! .. w/o sync
 	 for authority: set of nodes; self is assumed, but not included
 	 for replica:   undefined */
@@ -283,18 +293,33 @@ class CInode : LRUObject {
 
 
 
-  // -- cached_by -- to be used ONLY when we're authoritative!
-  bool is_cached_by_anyone() {
-	return !cached_by.empty();
-  }
-  bool is_cached_by(int mds) {
-	return cached_by.count(mds);
-  }
-  void cached_by_add(int mds) {
-	if (is_cached_by(mds)) return;
+  // -- cached_by -- to be used ONLY when we're authoritative or cacheproxy
+  bool is_cacheproxy() { return state & CINODE_STATE_CACHEPROXY; }
+  bool is_cached_by_anyone() { return !cached_by.empty(); }
+  bool is_cached_by(int mds) { return cached_by.count(mds); }
+  // cached_by_add returns a nonce
+  int cached_by_add(int mds) {
+	if (is_cached_by(mds)) {    // already had it?
+      // new nonce (+1)
+      map<int,int>::iterator it = cached_by_nonce.find(mds);
+      cached_by_nonce.insert(pair<int,int>(mds,it->second + 1));
+      return it->second + 1;
+    }
 	if (cached_by.empty()) 
 	  get(CINODE_PIN_CACHED);
 	cached_by.insert(mds);
+    cached_by_nonce.insert(pair<int,int>(mds,1));   // first! serial of 1.
+    return 1;   // default nonce
+  }
+  void cached_by_add(int mds, int nonce) {
+	if (cached_by.empty()) 
+	  get(CINODE_PIN_CACHED);
+    cached_by.insert(mds);
+    cached_by_nonce.insert(pair<int,int>(mds,nonce));
+  }
+  int cached_by_nonce(int mds) {
+    map<int,int>::iterator it = cached_by_nonce.find(mds);
+    return it->second;
   }
   void cached_by_remove(int mds) {
 	if (!is_cached_by(mds)) return;
@@ -306,16 +331,11 @@ class CInode : LRUObject {
 	if (cached_by.size())
 	  put(CINODE_PIN_CACHED);
 	cached_by.clear();
+    cached_by_nonce.clear();
   }
-  set<int>::iterator cached_by_begin() {
-	return cached_by.begin();
-  }
-  set<int>::iterator cached_by_end() {
-	return cached_by.end();
-  }
-  set<int>& get_cached_by() {
-	return cached_by;
-  }
+  set<int>::iterator cached_by_begin() { return cached_by.begin(); }
+  set<int>::iterator cached_by_end() { return cached_by.end(); }
+  set<int>& get_cached_by() { return cached_by; }
 
 
   // -- waiting --

@@ -47,7 +47,7 @@ class MUnhashDir;
 class MUnhashDirAck;
 
 
-// DCache
+// MDCache
 
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
 

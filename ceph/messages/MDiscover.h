@@ -16,6 +16,7 @@ struct MDiscoverRec_t {
   bool       is_syncbyauth;
   bool       is_softasync;
   bool       is_lockbyauth;
+  int        replica_nonce;
 
   // dir stuff
   int        dir_rep;
@@ -38,6 +39,7 @@ struct MDiscoverRec_t {
 	r.append((char*)&is_syncbyauth, sizeof(bool));
 	r.append((char*)&is_softasync, sizeof(bool));
 	r.append((char*)&is_lockbyauth, sizeof(bool));
+	r.append((char*)&replica_nonce, sizeof(replica_nonce));
 	r.append((char*)&dir_rep, sizeof(int));
 	
 	n = dir_rep_by.size();
@@ -74,6 +76,8 @@ struct MDiscoverRec_t {
 	off += sizeof(bool);
 	s.copy(off, sizeof(bool), (char*)&is_lockbyauth);
 	off += sizeof(bool);
+	s.copy(off, sizeof(int), (char*)&replica_nonce);
+	off += sizeof(int);
 	s.copy(off, sizeof(int), (char*)&dir_rep);
 	off += sizeof(int);
 
@@ -167,13 +171,14 @@ class MDiscover : public Message {
   
   // ---
 
-  void add_bit(CInode *in, int auth) {
+  void add_bit(CInode *in, int auth, int nonce) {
 	MDiscoverRec_t bit;
 
 	bit.inode = in->inode;
 	bit.cached_by = in->get_cached_by();
 	bit.cached_by.insert( auth );  // obviously the authority has it too
 	bit.dir_auth = in->dir_auth;
+	bit.replica_nonce = nonce;
 
 	// send sync/lock state
 	bit.is_syncbyauth = in->is_syncbyme() || in->is_presync();
