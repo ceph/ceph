@@ -3,6 +3,8 @@
 #define __MDSTORE_H
 
 #include "include/types.h"
+#include <ext/rope>
+using namespace std;
 
 class MDS;
 class CInode;
@@ -28,8 +30,7 @@ bool fetch_inode( mdloc_t where,
   bool fetch_dir( CInode *in,
 				  Context *c );
   bool fetch_dir_2( int result, 
-					char *buf, 
-					size_t buflen, 
+					crope buffer,
 					inodeno_t ino );
   
   

@@ -27,7 +27,7 @@ __uint64_t ino = 1;
 // this parses find output
 int play();
 
-int main(char **argv, int argc) {
+int main(int argc, char **argv) {
   cout << "hi there" << endl;
   
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);

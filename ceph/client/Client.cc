@@ -86,8 +86,10 @@ void Client::assim_reply(MClientReply *r)
 {
   ClNode *cur = root;
 
+  vector<c_inode_info*> trace = r->get_trace();
+
   // update trace items in cache
-  for (int i=0; i<r->trace.size(); i++) {
+  for (int i=0; i<trace.size(); i++) {
 	if (i == 0) {
 	  if (!root) {
 		cur = root = new ClNode();
@@ -104,26 +106,23 @@ void Client::assim_reply(MClientReply *r)
 		cache_lru.lru_touch(cur);
 	  }
 	}
-	cur->ino = r->trace[i]->inode.ino;
-	for (set<int>::iterator it = r->trace[i]->dist.begin(); it != r->trace[i]->dist.end(); it++)
+	cur->ino = trace[i]->inode.ino;
+	for (set<int>::iterator it = trace[i]->dist.begin(); it != trace[i]->dist.end(); it++)
 	  cur->dist.push_back(*it);
-	cur->isdir = r->trace[i]->inode.isdir;
-
-	// free c_inode_info
-	delete r->trace[i];
+	cur->isdir = trace[i]->inode.isdir;
   }
 
 
   // add dir contents
-  if (r->op == MDS_OP_READDIR) {
+  if (r->get_op() == MDS_OP_READDIR) {
 	cur->havedircontents = true;
 
 	vector<c_inode_info*>::iterator it;
-	for (it = r->dir_contents->begin(); it != r->dir_contents->end(); it++) {
-	  if (cur->lookup((*it)->ref_dn)) {
-		delete *it;
+	for (it = r->get_dir_contents().begin(); 
+		 it != r->get_dir_contents().end(); 
+		 it++) {
+	  if (cur->lookup((*it)->ref_dn)) 
 		continue;  // skip if we already have it
-	  }
 
 	  ClNode *n = new ClNode();
 	  n->ino = (*it)->inode.ino;
@@ -136,13 +135,7 @@ void Client::assim_reply(MClientReply *r)
 	  cache_lru.lru_insert_mid( n );
 
 	  dout(12) << "client got dir item " << (*it)->ref_dn << endl;
-
-	  // free the c_inode_info
-	  delete *it;
 	}
-
-	// free dir_contents vector
-	delete r->dir_contents;
   }
 
   cwd = cur;
@@ -217,12 +210,12 @@ void Client::issue_request()
   send_request(p, op);  // root, if !cwd
 }
 
-void Client::send_request(string& p, int op) 
+void Client::send_request(string& path, int op) 
 {
 
   MClientRequest *req = new MClientRequest(tid++, op, whoami);
-  req->ino = 1;
-  req->path = p;
+  req->set_ino(1);
+  req->set_path(path);
 
   // direct it
   int mds = 0;
@@ -230,16 +223,16 @@ void Client::send_request(string& p, int op)
   if (root) {
 	int off = 0;
 	ClNode *cur = root;
-	while (off < req->path.length()) {
-	  int nextslash = req->path.find('/', off);
+	while (off < path.length()) {
+	  int nextslash = path.find('/', off);
 	  if (nextslash == off) {
 		off++;
 		continue;
 	  }
 	  if (nextslash < 0) 
-		nextslash = req->path.length();  // no more slashes
+		nextslash = path.length();  // no more slashes
 	  
-	  string dname = req->path.substr(off,nextslash-off);
+	  string dname = path.substr(off,nextslash-off);
 	  //cout << "//path segment is " << dname << endl;
 	  
 	  ClNode *n = cur->lookup(dname);
@@ -261,7 +254,7 @@ void Client::send_request(string& p, int op)
 	mds = 0;
   }
 
-  dout(9) << "client" << whoami << " req " << req->tid << " op " << req->op << " to mds" << mds << " for " << req->path << endl;
+  dout(9) << "sending " << *req << " to mds" << mds << endl;
   messenger->send_message(req,
 						  MSG_ADDR_MDS(mds), MDS_PORT_SERVER,
 						  0);

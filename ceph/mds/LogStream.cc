@@ -15,20 +15,16 @@ using namespace std;
 int LogStream::append(LogEvent *e, Context *c)
 {
   // serialize
-  e->serialize();
-  char *buf = e->get_serial_buf();
-  long buflen = e->get_serial_len();
-  
-  *((__uint32_t*)buf) = e->get_type();
-  *((__uint32_t*)buf+1) = buflen;
+  crope buffer = e->get_serialized();
+  size_t buflen = buffer.length();
   
   // advance ptr for later
-  append_pos += buflen;
+  append_pos += buffer.length();
   
   // submit write
   mds->osd_write(osd, oid,
 				 buflen, append_pos-buflen,
-				 buf,
+				 buffer,
 				 0,
 				 c);
   return 0;
@@ -57,22 +53,15 @@ public:
 int LogStream::read_next(LogEvent **le, Context *c, int step) 
 {
   if (step == 1) {
-	// alloc buffer?
-	if (!buf) {
-	  buf = new char[READ_INC];
-	  buf_valid = 0;  // no data yet
-	  buf_start = 0;
-	}
-	
 	// does buffer have what we want?
 	if (buf_start > cur_pos ||
-		buf_start+buf_valid < cur_pos+4) {
-	  // nope.  re-read a chunk
+		buf_start+buffer.length() < cur_pos+4) {
+	  // nope.  read a chunk
 	  buf_start = cur_pos;
+	  buffer.clear();
 	  mds->osd_read(osd, oid,
 					READ_INC, cur_pos,
-					buf, 
-					&buf_valid,
+					&buffer, 
 					new C_LS_ReadNext(this, le, c));
 	  return 0;
 	}
@@ -83,21 +72,25 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
   if (step == 2) {
 	// decode event
 	unsigned off = cur_pos-buf_start;
-	__uint32_t type = *((__uint32_t*)(buf+off));
+	__uint32_t type, length;
+	buffer.copy(off, sizeof(__uint32_t), (char*)&type);
+	buffer.copy(off+sizeof(__uint32_t), sizeof(__uint32_t), (char*)&length);
+				
 	switch (type) {
-
+	  
 	case EVENT_STRING:  // string
 	  cout << "it's a string event" << endl;
-	  *le = new EString(buf + off + 8);
+	  *le = new EString(buffer.substr(off,length));
 	  break;
 	  
 	case EVENT_INODEUPDATE:
 	  cout << "read inodeupdate event" << endl;
-	  *le = new EInodeUpdate(buf + off + 8);
+	  *le = new EInodeUpdate(buffer.substr(off,length));
 	  break;
 
 	default:
 	  cout << "uh oh, unknown event type " << type << endl;
+	  assert(0);
 	}
 	
 	// finish

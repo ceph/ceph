@@ -41,21 +41,15 @@ class MDFetchDirContext : public Context {
   inodeno_t ino;
 
  public:
-  char *buf;
-  size_t buflen;
+  crope buffer;
 
   MDFetchDirContext(MDStore *ms, inodeno_t ino) : Context() {
 	this->ms = ms;
 	this->ino = ino;
-	buf = 0;
-	buflen = 0;
-  }
-  ~MDFetchDirContext() {
-	if (buf) { delete buf; buf = 0; }
   }
   
   void finish(int result) {
-	ms->fetch_dir_2( result, buf, buflen, ino );
+	ms->fetch_dir_2( result, buffer, ino );
   }
 };
 
@@ -83,17 +77,17 @@ bool MDStore::fetch_dir( CInode *in,
   
   mds->osd_read( osd, oid, 
 				 0, 0,
-				 &fin->buf, &fin->buflen,
+				 &fin->buffer,
 				 fin );
 }
 
-bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
+bool MDStore::fetch_dir_2( int result, 
+						   crope buffer, 
+						   inodeno_t ino)
 {
   CInode *idir = mds->mdcache->get_inode(ino);
   if (!idir) {
 	dout(7) << *mds << "fetch_dir_2 on ino " << ino << " but no longer in our cache!" << endl;
-
-	delete[] buf; // free buffer
 	return false;
   } 
 
@@ -112,6 +106,9 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
 	if (idir->dir == NULL) idir->dir = new CDir(idir);
 	
 	// parse buffer contents into cache
+	const char *buf = buffer.c_str();
+	long buflen = buffer.length();
+	
 	__uint32_t num = *((__uint32_t*)buf);
 	dout(7) << "  " << num << " items" << endl;
 	size_t p = 4;
@@ -175,9 +172,6 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, inodeno_t ino)
   }
 
  
-  // free buffer
-  delete[] buf;
-  
   // finish
   list<Context*> finished;
   idir->dir->take_waiting(finished);
@@ -237,19 +231,13 @@ class MDCommitDirContext : public Context {
   __uint64_t version;
 
  public:
-  char *buf;
-  size_t buflen;
+  crope buffer;
 
   MDCommitDirContext(MDStore *ms, CInode *in, Context *c) : Context() {
 	this->ms = ms;
 	this->in = in;
 	this->c = c;
-	buf = 0;
-	buflen = 0;
 	version = in->dir->get_version();
-  }
-  MDCommitDirContext() {
-	if (buf) { delete buf; buf = 0; }
   }
   
   void finish(int result) {
@@ -301,35 +289,27 @@ bool MDStore::commit_dir( CInode *in,
   }
 
 
-
-
   // get continuation ready
   MDCommitDirContext *fin = new MDCommitDirContext(this, in, c);
   
-  // buffer
-  fin->buflen = in->dir->serial_size();
-  fin->buf = new char[fin->buflen];
-  __uint32_t num = 0;
-  size_t off = sizeof(num);
+  // fill buffer
+  __uint32_t num = in->dir->get_size();
+  fin->buffer.append((char*)&num, sizeof(__uint32_t));
 
-  // fill
-  CDir_map_t::iterator it = in->dir->begin();
-  while (it != in->dir->end()) {
+  for (CDir_map_t::iterator it = in->dir->begin();
+	   it != in->dir->end();
+	   it++) {
 	// name
-	memcpy(fin->buf + off, it->first.c_str(), it->first.length() + 1);
-	off += it->first.length() + 1;
+	fin->buffer.append( it->first.c_str(), it->first.length() + 1);
 	
 	// marker
-	fin->buf[off++] = 'I';  // inode
+	fin->buffer.append( 'I' ); // inode
 
 	// inode
-	memcpy(fin->buf + off, &it->second->get_inode()->inode, sizeof(inode_t));
-	off += sizeof(inode_t);
+	fin->buffer.append( (char*) &it->second->get_inode()->inode, sizeof(inode_t));
 
-	it++;	
 	num++;
   }
-  *((__uint32_t*)fin->buf) = num;
   
   // pin inode
   in->dir->hard_pin();
@@ -340,9 +320,9 @@ bool MDStore::commit_dir( CInode *in,
   object_t oid = mds->mdcluster->get_meta_oid(in->inode.ino);
   
   mds->osd_write( osd, oid, 
-				  off, 0,
-				  fin->buf,
-				  0,
+				  fin->buffer.length(), 0,
+				  fin->buffer, 
+				  0, // flags
 				  fin );
   return true;
 }

@@ -290,7 +290,7 @@ void MDS::handle_ping(MPing *m)
 
 int MDS::handle_client_request(MClientRequest *req)
 {
-  dout(10) << " req client" << req->client << '.' << req->tid << " op " << req->op << " on " << req->path <<  endl;
+  dout(10) << " req " << *req << endl;
 
   if (is_shutting_down()) {
 	dout(5) << "mds" << whoami << " shutting down, discarding client request." << endl;
@@ -307,7 +307,7 @@ int MDS::handle_client_request(MClientRequest *req)
   
   vector<CInode*> trace;
   
-  int r = mdcache->path_traverse(req->path, trace, req, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(req->get_path(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
 
   logger->inc("chit");
@@ -318,7 +318,7 @@ int MDS::handle_client_request(MClientRequest *req)
 
   MClientReply *reply = 0;
 
-  switch(req->op) {
+  switch(req->get_op()) {
   case MDS_OP_READDIR:
 	reply = handle_client_readdir(req, cur);
 	break;
@@ -332,7 +332,7 @@ int MDS::handle_client_request(MClientRequest *req)
 	break;
 
   default:
-	dout(1) << " unknown mop " << req->op << endl;
+	dout(1) << " unknown mop " << req->get_op() << endl;
 	assert(0);
   }
 
@@ -343,7 +343,7 @@ int MDS::handle_client_request(MClientRequest *req)
 
 	// reply
 	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->client), 0,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
 							MDS_PORT_SERVER);
 	
 	// discard request
@@ -360,9 +360,8 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   //if (mdcache->read_start(cur, req))
   //return 0;   // ugh
 
-  dout(10) << " reply to client" << req->client << '.' << req->tid << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
+  dout(10) << " reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->popularity.get() << endl;
   MClientReply *reply = new MClientReply(req);
-  reply->result = 0;
   reply->set_trace_dist( cur, whoami );
 
   // FIXME: put inode info in reply...
@@ -417,7 +416,7 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 	mdcache->send_inode_updates(cur);
 
 	// log it
-	dout(10) << " log for client" << req->client << '.' << req->tid << " touch " << cur->inode.touched << endl;
+	dout(10) << " log for " << *req << " touch " << cur->inode.touched << endl;
 	mdlog->submit_entry(new EInodeUpdate(cur),
 						new C_MDS_TouchFinish(this, req, cur));
 	return 0;
@@ -437,12 +436,13 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 								CInode *cur)
 {
   // reply
-  dout(10) << "mds" << whoami << " reply to client" << req->client << '.' << req->tid << " touch" << endl;
+  dout(10) << "mds" << whoami << " reply to " << *req << " touch" << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
+  reply->set_result(0);
   
   messenger->send_message(reply,
-						  MSG_ADDR_CLIENT(req->client), 0,
+						  MSG_ADDR_CLIENT(req->get_client()), 0,
 						  MDS_PORT_SERVER);
 
 
@@ -465,7 +465,7 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
   // it's a directory, right?
   if (!cur->is_dir()) {
 	// not a dir
-	dout(10) << "reply to client" << req->client << '.' << req->tid << " readdir -ENOTDIR" << endl;
+	dout(10) << "reply to " << *req << " readdir -ENOTDIR" << endl;
 	return new MClientReply(req, -ENOTDIR);
   }
 	
@@ -500,8 +500,9 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 		numfiles++;
 	  }
 	  
-	  dout(10) << " reply to client" << req->client << '.' << req->tid << " readdir " << numfiles << " files" << endl;
+	  dout(10) << " reply to " << *req << " readdir " << numfiles << " files" << endl;
 	  reply->set_trace_dist( cur, whoami );
+	  reply->set_result(0);
 
 	  logger->inc("ordir");
 	  stat_read.hit();
@@ -570,7 +571,13 @@ void split_path(string& path,
 
 // OSD fun
 
-int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufptr, size_t *read, Context *c)
+int 
+MDS::osd_read(int osd, 
+			  object_t oid, 
+			  size_t len, 
+			  size_t offset, 
+			  crope *buffer, 
+			  Context *c) 
 {
   osd_last_tid++;
   MOSDRead *m = new MOSDRead(osd_last_tid,
@@ -578,9 +585,7 @@ int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufpt
 							 len, offset);
   
   PendingOSDRead_t *p = new PendingOSDRead_t;
-  p->bufptr = bufptr;
-  p->buf = 0;
-  p->bytesread = read;
+  p->buffer = buffer;
   p->context = c;
   osd_reads[osd_last_tid] = p;
 
@@ -588,55 +593,22 @@ int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufpt
 						  MSG_ADDR_OSD(osd),
 						  0, MDS_PORT_MAIN);
 }
-
-
-int MDS::osd_read(int osd, object_t oid, size_t len, size_t offset, char *buf, size_t *bytesread, Context *c)
-{
-  osd_last_tid++;
-  MOSDRead *m = new MOSDRead(osd_last_tid,
-							 oid,
-							 len, offset);
-
-  PendingOSDRead_t *p = new PendingOSDRead_t;
-  p->buf = buf;
-  p->bytesread = bytesread;
-  p->context = c;
-  osd_reads[osd_last_tid] = p;
-
-  messenger->send_message(m,
-						  MSG_ADDR_OSD(osd),
-						  0, MDS_PORT_MAIN);
-}
-
 
 int MDS::osd_read_finish(Message *rawm) 
 {
   MOSDReadReply *m = (MOSDReadReply*)rawm;
   
   // get pio
-  PendingOSDRead_t *p = osd_reads[ m->tid ];
-  osd_reads.erase( m->tid );
+  PendingOSDRead_t *p = osd_reads[ m->get_tid() ];
+  osd_reads.erase( m->get_tid() );
   Context *c = p->context;
 
-  if (m->len >= 0) {
-	// success!  
-	*p->bytesread = m->len;
+  *(p->buffer) = m->get_buffer();
+  long result = m->get_len();
 
-	if (p->buf) { // user buffer
-	  memcpy(p->buf, m->buf, m->len);  // copy
-	  delete[] m->buf;                 // free message buf
-	} else {      // new buffer
-	  *p->bufptr = m->buf;     // steal message's buffer
-	}
-	m->buf = 0;
-  }
-
-  // del pendingOsdRead_t
-  delete p;
-
-  long result = m->len;
-  delete m;  // del message
-
+  delete p;   // del pendingOsdRead_t
+  delete m;   // del message
+  
   if (c) {
 	c->finish(result);
 	delete c;
@@ -646,19 +618,23 @@ int MDS::osd_read_finish(Message *rawm)
 
 
 // -- osd_write
-
-int MDS::osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, int flags, Context *c)
+int 
+MDS::osd_write(int osd, 
+			   object_t oid, 
+			   size_t len, 
+			   size_t offset, 
+			   crope& buffer, 
+			   int flags, 
+			   Context *c)
 {
   osd_last_tid++;
-
-  char *nbuf = new char[len];
-  memcpy(nbuf, buf, len);
 
   MOSDWrite *m = new MOSDWrite(osd_last_tid,
 							   oid,
 							   len, offset,
-							   nbuf, flags);
+							   buffer, flags);
   osd_writes[ osd_last_tid ] = c;
+
   dout(10) << "sending MOSDWrite " << m->get_type() << endl;
   messenger->send_message(m,
 						  MSG_ADDR_OSD(osd),
@@ -670,10 +646,10 @@ int MDS::osd_write_finish(Message *rawm)
 {
   MOSDWriteReply *m = (MOSDWriteReply *)rawm;
 
-  Context *c = osd_writes[ m->tid ];
-  osd_writes.erase(m->tid);
+  Context *c = osd_writes[ m->get_tid() ];
+  osd_writes.erase(m->get_tid());
 
-  long result = m->len;
+  long result = m->get_result();
   delete m;
 
   dout(10) << " finishing osd_write" << endl;

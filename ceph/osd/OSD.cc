@@ -98,12 +98,12 @@ void OSD::read(MOSDRead *r)
 {
   MOSDReadReply *reply;
 
-  char *f = get_filename(whoami, r->oid);
+  char *f = get_filename(whoami, r->get_oid());
   int fd = open(f, O_RDONLY);
   if (fd < 0) {
 
 	// send reply (failure)
-	dout(1) << "read open FAILED on " << get_filename(whoami, r->oid) << " errno " << errno << endl;
+	dout(1) << "read open FAILED on " << get_filename(whoami, r->get_oid()) << " errno " << errno << endl;
 	reply = new MOSDReadReply(r, NULL, -1);
 	assert(0);
 
@@ -112,23 +112,28 @@ void OSD::read(MOSDRead *r)
 	// lock
 	flock(fd, LOCK_EX);
 
-	if (r->len == 0) { 	              // read whole thing
-	  r->len = lseek(fd, 0, SEEK_END);  // get size
+	long len = r->get_len();
+	if (len == 0) { 	              // read whole thing
+	  len = lseek(fd, 0, SEEK_END);  // get size
 	  lseek(fd, 0, SEEK_SET);           // back to beginning
 	} else
-	  lseek(fd, r->offset, SEEK_SET);   // seek	
+	  lseek(fd, r->get_offset(), SEEK_SET);   // seek	
 
-	char *buf = new char[r->len];
-	
-	long got = ::read(fd, buf, r->len);
+	// read into a buffer
+	char *buf = new char[len];
+	long got = ::read(fd, buf, len);
+
+	dout(10) << "osd_read " << got << " / " << len << " bytes to " << f << endl;
+
+	// close
 	flock(fd, LOCK_UN);
 	close(fd);
 	
-	dout(10) << "osd_read " << r->len << " bytes to " << f << endl;
-
 	// send reply
 	reply = new MOSDReadReply(r, buf, got);
 
+	// free buffer
+	delete buf;
   }
 
   // send it
@@ -142,12 +147,12 @@ void OSD::write(MOSDWrite *m)
 {
   MOSDWriteReply *reply;
   
-  char *f = get_filename(whoami, m->oid);
-  int fd = open(f, O_RDWR|O_CREAT|m->flags);
+  char *f = get_filename(whoami, m->get_oid());
+  int fd = open(f, O_RDWR|O_CREAT|m->get_flags());
   if (fd < 0 && errno == 2) {  // create dir and retry
 	mkdir(get_dir(whoami), 0755);
 	dout(11) << "mkdir errno " << errno << " on " << get_dir(whoami) << endl;
-	fd = open(f, O_RDWR|O_CREAT|m->flags);
+	fd = open(f, O_RDWR|O_CREAT|m->get_flags());
   }
   if (fd < 0) {
 	dout(1) << "err opening " << f << " " << errno << endl;
@@ -161,11 +166,11 @@ void OSD::write(MOSDWrite *m)
 
     fchmod(fd, 0664);
 	
-	dout(10) << "osd_write " << m->len << " bytes to " << f << endl;
+	dout(10) << "osd_write " << m->get_len() << " bytes to " << f << endl;
 	
-	if (m->offset)
-	  lseek(fd, m->offset, SEEK_SET);
-	long wrote = ::write(fd, m->buf, m->len);
+	if (m->get_offset())
+	  lseek(fd, m->get_offset(), SEEK_SET);
+	long wrote = ::write(fd, m->get_buf(), m->get_len());
 	flock(fd, LOCK_UN);
 	close(fd);
 
@@ -175,9 +180,5 @@ void OSD::write(MOSDWrite *m)
 
   // clean up
   messenger->send_message(reply, m->get_source(), m->get_source_port());
-
-  // free buffer
-  delete[] m->buf;
-  m->buf = 0;
 }
 

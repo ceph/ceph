@@ -6,14 +6,19 @@
 #include "mds/MDS.h"
 #include "include/LogType.h"
 #include "include/Logger.h"
+#include "include/Message.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
 #include <ext/hash_map>
-
+#include <cassert>
 #include <iostream>
 using namespace std;
+
+
+//#define SERIALIZE
+
 
 // global queue.
 
@@ -104,6 +109,16 @@ bool FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 {
   m->set_source(whoami, fromport);
   m->set_dest(dest, port);
+
+#ifdef SERIALIZE
+  // serialize
+  crope buffer = m->get_serialized();
+  delete m;
+
+  // decode
+  m = decode(buffer);
+  assert(m);
+#endif
 
   // deliver
   try {

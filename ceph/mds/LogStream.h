@@ -1,8 +1,10 @@
 #ifndef __LOGSTREAM_H
 #define __LOGSTREAM_H
 
-#include "../include/types.h"
+#include "include/types.h"
 #include "../include/Context.h"
+#include <ext/rope>
+using namespace std;
 
 class LogEvent;
 class MDS;
@@ -14,9 +16,8 @@ class LogStream {
   int osd;
   object_t oid;
 
-  char *buf;
+  crope buffer;
   off_t buf_start;
-  size_t buf_valid;
  public:
   LogStream(MDS *mds, int osd, object_t oid) {
 	this->mds = mds;
@@ -24,10 +25,7 @@ class LogStream {
 	this->oid = oid;
 	cur_pos = 0;
 	append_pos = 0; // fixme
-	buf = 0;
-  }
-  ~LogStream() {
-	if (buf) { delete[] buf; buf = 0; }
+	buf_start = 0;
   }
 
   off_t seek(off_t offset) {

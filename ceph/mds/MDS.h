@@ -7,6 +7,7 @@
 #include <vector>
 #include <set>
 #include <ostream>
+#include <ext/rope>
 
 #include "include/types.h"
 #include "include/Context.h"
@@ -57,9 +58,7 @@ class MDBalancer;
 // types
 
 typedef struct {
-  char **bufptr;
-  size_t *bytesread;
-  char *buf;
+  crope *buffer;
   Context *context;
 } PendingOSDRead_t;
 
@@ -156,11 +155,21 @@ class MDS : public Dispatcher {
 
 
   // osd fun
-  int osd_read(int osd, object_t oid, size_t len, size_t offset, char *bufptr, size_t *bytesread, Context *c);
-  int osd_read(int osd, object_t oid, size_t len, size_t offset, char **bufptr, size_t *bytesread, Context *c);
+  int osd_read(int osd, 
+			 object_t oid, 
+			 size_t len, 
+			 size_t offset, 
+			 crope *buffer, 
+			 Context *c);
   int osd_read_finish(Message *m);
 
-  int osd_write(int osd, object_t oid, size_t len, size_t offset, char *buf, int flags, Context *c);
+  int osd_write(int osd, 
+				object_t oid, 
+				size_t len, 
+				size_t offset, 
+				crope& buffer, 
+				int flags, 
+				Context *c);
   int osd_write_finish(Message *m);
 
 

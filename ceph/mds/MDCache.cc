@@ -1020,18 +1020,18 @@ int MDCache::send_dir_updates(CDir *dir, int except)
 
 void MDCache::handle_dir_update(MDirUpdate *m)
 {
-  CInode *in = get_inode(m->ino);
+  CInode *in = get_inode(m->get_ino());
   if (!in) {
-	dout(7) << "dir_update on " << m->ino << ", don't have it" << endl;
+	dout(7) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
 	delete m;
 	return;
   }
 
   // update!
-  dout(7) << "dir_update on " << m->ino << endl;
+  dout(7) << "dir_update on " << m->get_ino() << endl;
 
-  in->dir->dir_rep = m->dir_rep;
-  in->dir->dir_rep_by = m->dir_rep_by;
+  in->dir->dir_rep = m->get_dir_rep();
+  in->dir->dir_rep_by = m->get_dir_rep_by();
 
   // done
   delete m;

@@ -19,20 +19,19 @@ class EInodeUpdate : public LogEvent {
 	this->inode = in->inode;
 	version = in->get_version();
   }
-  EInodeUpdate(char *buf) :
+  EInodeUpdate(crope s) :
 	LogEvent(EVENT_INODEUPDATE) {
-	version = *(__uint32_t*)buf;
-	inode = *(inode_t*)(buf+sizeof(__uint32_t));
+	s.copy(0, sizeof(version), (char*)&version);
+	s.copy(sizeof(version), sizeof(inode), (char*)&inode);
   }
   
-  virtual int serialize() {
-	int len = sizeof(inode_t) + sizeof(version);
-	char *buf = alloc_serial_buf(len);
-	memcpy(buf, &version, sizeof(version));
-	memcpy(buf + sizeof(version), &inode, sizeof(inode_t));
-	return 0;
+  virtual crope get_payload() {
+	crope r;
+	r.append((char*)&version, sizeof(version));
+	r.append((char*)&inode, sizeof(inode));
+	return r;
   }
-	
+  
   virtual bool obsolete(MDS *mds) {
 	// am i obsolete?
 	CInode *in = mds->mdcache->get_inode(inode.ino);

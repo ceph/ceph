@@ -3,8 +3,6 @@
 #define __MESSAGE_H
 
 #define MSG_PING       1
-#define MSG_FWD        2
-#define MSG_DISCOVER   3
 
 #define MSG_OSD_READ         10
 #define MSG_OSD_READREPLY    11
@@ -45,41 +43,46 @@
 
 #include <iostream>
 #include <stdlib.h>
+#include <ext/rope>
+#include <cassert>
 using namespace std;
 
 
 // abstract Message class
 
+#define MSG_ENVELOPE_LEN  ((3*sizeof(int)+2*sizeof(long)))
+
 class Message {
+ private:
+  char tname[20];
+  
  protected:
-  char *serialized;
-  unsigned long serial_len;
-
+  // envelope  (make sure you update MSG_ENVELOPE_LEN above if you change this)
   int type;
-
   long source, dest;
   int source_port, dest_port;
   
-  char tname[20];
+  // any payload is in an overloaded child class
+
+  friend class Messenger;
 
  public:
   Message() { 
-	serialized = 0;
-	serial_len = 0;
 	source_port = dest_port = -1;
 	source = dest = -1;
   };
   Message(int t) {
-	serialized = 0;
-	serial_len = 0;
 	source_port = dest_port = -1;
 	source = dest = -1;
 	type = t;
 	sprintf(tname, "%d", type);
   }
-  ~Message() {
-	if (serialized) { delete serialized; serialized = 0; }
-  };
+  Message(crope& s) {
+	decode_envelope(s);
+	// no payload in default message
+  }
+
+  // ENVELOPE ----
 
   // type
   int get_type() { return type; }
@@ -95,17 +98,41 @@ class Message {
   long get_source() { return source; }
   void set_source(long a, int p) { source = a; source_port = p; }
   int get_source_port() { return source_port; }
-  
-  // serialization
-  virtual unsigned long serialize() { }   // = 0;
-  void *get_serialized() {
-	return serialized;
+
+  crope get_envelope() {
+	crope e;
+	e.append((char*)&type, sizeof(int));
+	e.append((char*)&source, sizeof(long));
+	e.append((char*)&source_port, sizeof(int));
+	e.append((char*)&dest, sizeof(long));
+	e.append((char*)&dest_port, sizeof(int));
+	return e;
   }
-  unsigned long get_serialized_len() {
-	return serial_len;
-  }  
+  int decode_envelope(crope s) {
+	s.copy(0, sizeof(int), (char*)&type);
+	s.copy(sizeof(int), sizeof(long), (char*)&source);
+	s.copy(sizeof(int)+sizeof(long), sizeof(int), (char*)&source_port);
+	s.copy(2*sizeof(int)+sizeof(long), sizeof(long), (char*)&dest);
+	s.copy(2*sizeof(int)+2*sizeof(long), sizeof(int), (char*)&dest_port);
+	return 0;
+  }
+  
+  // PAYLOAD ----
+  virtual crope get_payload() { 
+	return crope();   // blank message body, by default.
+  }
+  virtual int decode_payload(crope s) {
+	return 0;       // no default, nothing to decode
+  }
  
-  friend class Messenger;
+  // BOTH ----
+  crope get_serialized() {
+	crope both;
+	both.append(get_envelope());
+	assert(both.length() == MSG_ENVELOPE_LEN);
+	both.append(get_payload());
+	return both;
+  }
 };
 
 

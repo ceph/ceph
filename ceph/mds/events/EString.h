@@ -18,17 +18,14 @@ class EString : public LogEvent {
 	LogEvent(EVENT_STRING) {
 	event = e;
   }
-  EString(char *e) :
+  EString(crope s) :
 	LogEvent(EVENT_STRING) {
-	event = e;
+	event = s.c_str();
   }
   
   // note: LogEvent owns serialized buffer
-  virtual int serialize() {
-	int len = event.length()+1+4+4;
-	char *buf = alloc_serial_buf( len );
-	memcpy(buf, event.c_str(), len);
-	return 0;
+  virtual crope get_payload() {
+	return crope(event.c_str());
   }
 };
 

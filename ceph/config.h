@@ -14,4 +14,4 @@
 #define NUMCLIENT 80
 #define CLIENT_REQUESTS 30
 
-#define DEBUG_LEVEL 10
+#define DEBUG_LEVEL 1
