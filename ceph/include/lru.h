@@ -195,7 +195,7 @@ class LRU {
 
 
   void lru_status() {
-	cout << "lru: " << lru_num << " items, " << lru_ntop << " top, " << lru_nbot << " bot" << endl;
+	dout(10) << "lru: " << lru_num << " items, " << lru_ntop << " top, " << lru_nbot << " bot" << endl;
   }
 
 };
