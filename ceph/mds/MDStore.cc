@@ -61,6 +61,8 @@ bool MDStore::fetch_dir( CInode *in,
   if (c) 
 	in->dir->add_waiter(c);
 
+  assert(in->dir->is_auth());
+
   // already fetching?
   if (in->dir->state_test(CDIR_STATE_FETCHING)) {
 	dout(7) << "already fetching " << in->inode.ino << "; waiting" << endl;
@@ -269,7 +271,7 @@ public:
 bool MDStore::commit_dir( CInode *in,
 						  Context *c )
 {
-  assert(in->is_auth());
+  assert(in->dir->is_auth());
 
   // already committing?
   if (in->dir->state_test(CDIR_STATE_COMMITTING)) {

@@ -72,6 +72,7 @@ int CDir::dentry_authority(string& dn, MDCluster *mdc)
 	return inode->authority( mdc );       // same as my inode
   }
   if (inode->dir_auth == CDIR_AUTH_HASH) {
+	assert(0);
 	return mdc->hash_dentry( this, dn );  // hashed
   }
 

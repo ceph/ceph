@@ -31,7 +31,7 @@ class C_EIU_VerifyInodeUpdate : public Context {
 	  if (in->authority(mds->get_cluster()) == mds->get_nodeid() &&  // mine
 		  in->is_dirty() &&                         // dirty
 		  in->get_version() == version) {           // same version that i have to deal with
-		cout << "ARGH, did EInodeUpdate commit but inode is still dirty" << endl;
+		cout << "ARGH, did EInodeUpdate commit but inode " << *in << " is still dirty" << endl;
 		// damnit
 		mds->mdstore->commit_dir(in->get_parent_inode(),
 								 new C_EIU_VerifyInodeUpdate(mds,
@@ -96,7 +96,7 @@ class EInodeUpdate : public LogEvent {
 
 	if (parent) {
 	  // okay!
-	  cout << "commiting containing dir for " << inode.ino << endl;
+	  cout << "commiting containing dir for " << *in << ", which is " << *parent << endl;
 	  mds->mdstore->commit_dir(parent,
 							   new C_EIU_VerifyInodeUpdate(mds,
 														   in->ino(),

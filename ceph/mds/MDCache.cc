@@ -954,10 +954,24 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 	return;
   }
   
+  if (in->is_frozen()) {
+	dout(7) << "got inode_update on " << *in << ", but i'm frozen, waiting. actually, this is pretty weird." << endl;	
+	CInode *parent = in->get_parent_inode();
+	assert(parent);
+	parent->dir->add_freeze_waiter(new C_MDS_RetryMessage(mds, m));
+	return;
+  }
+
   // update!
   dout(7) << "got inode_update on " << *in << endl;
 
+  // ugly hack to avoid corrupting weird behavior of dir_auth
+  int old_dir_auth = in->dir_auth;
   in->decode_basic_state(m->get_payload());
+  if (!in->dir->is_auth() &&    // not ours (we know)
+	  in->dir_auth == mds->get_nodeid()) {
+	in->dir_auth = old_dir_auth;  // ignore dir_auth, we know its not ours.
+  }
 
   // done
   delete m;
@@ -1524,11 +1538,15 @@ void MDCache::export_dir_purge(CInode *idir, int newauth)
   // discard most dir state
   idir->dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
   
+  assert(idir->dir->auth == false);
+
   // contents:
   CDir_map_t::iterator it = idir->dir->begin();
   while (it != idir->dir->end()) {
 	CInode *in = it->second->inode;
 	it++;
+	
+	assert(in->auth == false);
 	
 	if (in->is_dir() && in->dir) 
 	  export_dir_purge(in, newauth);

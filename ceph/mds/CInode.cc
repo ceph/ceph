@@ -72,7 +72,7 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  return out << "[" << in.inode.ino << "]" << path << " " << &in;
+  return out << "[" << in.inode.ino << " " << path << " " << &in << "]";
 }
 
 
@@ -154,8 +154,14 @@ int CInode::decode_basic_state(crope r, int off)
 
 
 
-
 // waiting
+
+bool CInode::is_frozen()
+{
+  if (parent && parent->dir->is_frozen())
+	return true;
+  return false;
+}
 
 void CInode::add_write_waiter(Context *c) {
   if (waiting_for_write.size() == 0)

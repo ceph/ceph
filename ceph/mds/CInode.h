@@ -124,6 +124,8 @@ class CInode : LRUObject {
 
   void hit();
 
+  bool is_frozen();
+
 
   // dirtyness
   __uint64_t get_version() { return version; }
@@ -209,7 +211,7 @@ class CInode : LRUObject {
   int authority(MDCluster *mdc);
   int dir_authority(MDCluster *mdc);
 
-
+  // locking
   int is_hard_pinned() { 
 	return hard_pinned;
   }
@@ -257,10 +259,8 @@ class CInode : LRUObject {
   void add_parent(CDentry *p);
   void remove_parent(CDentry *p);
 
-  mdloc_t get_mdloc() {
-	return inode.ino;       // use inode #
-  }
 
+  // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
 	ls = cached_by;
 	ls.insert(ls.begin(), auth);
