@@ -8,14 +8,15 @@
 #include <map>
 
 class FakeMessenger : public Messenger {
+ protected:
   int whoami;
   
  public:
   FakeMessenger();
   
-  virtual int init(int whoami);
+  virtual int init(MDS *m);
   virtual int shutdown();
-  virtual bool send_message(Message *m);
+  virtual bool send_message(Message *m, int dest);
   virtual int wait_message(time_t seconds);
 
   virtual int loop();

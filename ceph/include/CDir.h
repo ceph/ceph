@@ -15,6 +15,7 @@ using namespace std;
 
 class CInode;
 class CDentry;
+class MDS;
 
 // CDir
 typedef map<string, CDentry*> CDir_map_t;
@@ -51,7 +52,7 @@ class CDir {
   CDentry* lookup(string n);
 
   void dump(int d = 0);
-  void dump_to_disk();
+  void dump_to_disk(MDS *m);
 };
 
 

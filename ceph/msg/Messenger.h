@@ -7,19 +7,21 @@ using namespace std;
 
 #include "Message.h"
 
+class MDS;
 
 class Messenger {
  protected:
   list<Message*> incoming;
+  MDS            *mymds;
 
  public:
   Messenger() {}
   ~Messenger() {}
 
   // ...
-  virtual int init(int whoami) = 0;
+  virtual int init(MDS *m) = 0;
   virtual int shutdown() = 0;
-  virtual bool send_message(Message *m) = 0;
+  virtual bool send_message(Message *m, int dest) = 0;
   virtual int wait_message(time_t seconds) = 0;
   
   virtual int loop() {

@@ -6,14 +6,17 @@
 #include "Context.h"
 #include "Message.h"
 
+class MDS;
+
 class MDStore {
  protected:
-
+  MDS *mds;
   
 
  public:
-  MDStore() { }
-  ~MDStore() { }
+  MDStore(MDS *m) {
+	mds = m;
+  }
 
   // i/o
   /*

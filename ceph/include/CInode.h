@@ -8,6 +8,7 @@
 
 class CDentry;
 class CDir;
+class MDS;
 
 // cached inode wrapper
 class CInode : LRUObject {
@@ -79,7 +80,7 @@ class CInode : LRUObject {
 
   // dbg
   void dump(int d = 0);
-  void dump_to_disk();
+  void dump_to_disk(MDS *m);
 };
 
 

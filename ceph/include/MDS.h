@@ -60,6 +60,10 @@ class MDS {
   MDS(int id, int num, Messenger *m);
   ~MDS();
 
+  int get_nodeid() {
+	return nodeid;
+  }
+
   int init();
   void shutdown();
 
@@ -71,7 +75,7 @@ class MDS {
 };
 
 
-extern MDS *g_mds;
+//extern MDS *g_mds;
 
 
 #endif

@@ -14,6 +14,8 @@
 #include "CDir.h"
 
 
+class MDS;
+
 // DCache
 
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
@@ -81,8 +83,8 @@ class DentryCache {
 	if (root) root->dump();
   }
 
-  void dump_to_disk() {
-	if (root) root->dump_to_disk();
+  void dump_to_disk(MDS *m) {
+	if (root) root->dump_to_disk(m);
   }
 };
 

@@ -23,7 +23,8 @@ class Message {
   unsigned long serial_len;
   int type;
   int subsys;
-  int dest;
+
+  int from, dest;
 
  public:
   Message() { 
@@ -44,9 +45,16 @@ class Message {
   int destination() {
 	return dest;
   }
+  int get_from() {
+	return from;
+  }
+  int set_from(int f) {
+	from = f;
+	return f;
+  }
   
   // serialization
-  virtual unsigned long serialize() = 0;
+  virtual unsigned long serialize() { }   // = 0;
   void *get_serialized() {
 	return serialized;
   }

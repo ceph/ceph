@@ -29,10 +29,10 @@ void CInode::dump(int dep)
 	dir->dump(dep);
 }
 
-void CInode::dump_to_disk() 
+void CInode::dump_to_disk(MDS *mds) 
 {
   if (dir)
-	dir->dump_to_disk();
+	dir->dump_to_disk(mds);
 }
 
 

@@ -9,6 +9,8 @@
 #include "include/MDStore.h"
 #include "include/FakeMessenger.h"
 
+#include "messages/MPing.h"
+
 using namespace std;
 
 __uint64_t ino = 1;
@@ -62,23 +64,28 @@ int main(char **argv, int argc) {
   cout << "hi there" << endl;
 
   // init
-  g_mds = new MDS(0, 1, new FakeMessenger());
-  g_mds->open_root(NULL);
+  MDS *mds1 = new MDS(0, 2, new FakeMessenger());
+  mds1->open_root(NULL);
+  mds1->init();
 
-  g_mds->mdstore->fetch_dir( g_mds->mdcache->get_root(), NULL );
+  mds1->mdstore->fetch_dir( mds1->mdcache->get_root(), NULL );
 
+  
+  MDS *mds2 = new MDS(1,2,new FakeMessenger());
+  mds2->init();
 
   // send an initial message...?
+  mds1->messenger->send_message(new MPing(10), 1);
 
   // loop
   fakemessenger_do_loop();
 
 
   // cleanup
-  if (g_mds->mdcache->clear()) {
+  if (mds1->mdcache->clear()) {
 	cout << "clean shutdown" << endl;
-	g_mds->mdcache->dump();
-	delete g_mds;
+	mds1->mdcache->dump();
+	delete mds1;
   } else {
 	cout << "can't empty cache";
   }

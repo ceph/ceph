@@ -61,18 +61,17 @@ void CDir::dump(int depth) {
 }
 
 
-void CDir::dump_to_disk()
+void CDir::dump_to_disk(MDS *mds)
 {
   map<string,CDentry*>::iterator iter = items.begin();
   while (iter != items.end()) {
 	CDentry* d = iter->second;
 	char isdir = ' ';
 	if (d->inode->dir != NULL) isdir = '/';
-	cout << "dump2disk: " << d->inode->inode.ino << " " << d->name << isdir << endl;
-	d->inode->dump_to_disk();
+	//cout << "dump2disk: " << d->inode->inode.ino << " " << d->name << isdir << endl;
+	d->inode->dump_to_disk(mds);
 	iter++;
   }
 
-  g_mds->mdstore->commit_dir(inode, NULL);
-
+  mds->mdstore->commit_dir(inode, NULL);
 }

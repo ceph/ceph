@@ -1,5 +1,6 @@
 
 #include "include/FakeMessenger.h"
+#include "include/mds.h"
 
 #include <map>
 #include <ext/hash_map>
@@ -51,9 +52,10 @@ FakeMessenger::FakeMessenger()
 }
 
 
-int FakeMessenger::init(int whoami)
+int FakeMessenger::init(MDS *mds)
 {
-  this->whoami = whoami;
+  mymds = mds;
+  whoami = mds->get_nodeid();
   directory[ whoami ] = this;
 }
 
@@ -62,15 +64,15 @@ int FakeMessenger::shutdown()
   directory.erase(whoami);
 }
 
-bool FakeMessenger::send_message(Message *m)
+bool FakeMessenger::send_message(Message *m, int dest)
 {
-  int d = m->destination();
+  m->set_from(whoami);
   try {
-	FakeMessenger *dm = directory[d];
+	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);
   }
   catch (...) {
-	cout << "no destination " << d << endl;
+	cout << "no destination " << dest << endl;
   }
 }
 

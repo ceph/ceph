@@ -6,11 +6,13 @@
 #include "include/MDCache.h"
 #include "include/MDStore.h"
 
+#include "messages/MPing.h"
+
 #include <iostream>
 using namespace std;
 
 // extern 
-MDS *g_mds;
+//MDS *g_mds;
 
 
 // cons/des
@@ -19,7 +21,7 @@ MDS::MDS(int id, int num, Messenger *m) {
   num_nodes = num;
   
   mdcache = new DentryCache();
-  mdstore = new MDStore();
+  mdstore = new MDStore(this);
   messenger = m;
 }
 MDS::~MDS() {
@@ -31,7 +33,7 @@ MDS::~MDS() {
 
 int MDS::init()
 {
-  messenger->init(nodeid);
+  messenger->init(this);
 }
 
 void MDS::shutdown()
@@ -41,7 +43,19 @@ void MDS::shutdown()
 
 void MDS::proc_message(Message *m) 
 {
-  cout << "implement MDS::proc_message" << endl;
+  switch (m->get_type()) {
+  case MSG_PING:
+	cout << nodeid << " received ping from " << m->get_from() << " with count " << ((MPing*)m)->num << endl;
+	if (((MPing*)m)->num > 0) {
+	  cout << nodeid << " responding to " << m->get_from() << endl;
+	  messenger->send_message(new MPing(((MPing*)m)->num-1), m->get_from());
+	}
+	break;
+
+  default:
+	cout << "implement MDS::proc_message" << endl;
+  }
+
 }
 
 
@@ -52,12 +66,14 @@ void MDS::proc_message(Message *m)
 class OpenRootContext : public Context {
 protected:
   Context *c;
+  MDS *mds;
 public:
-  OpenRootContext(Context *c) {
+  OpenRootContext(MDS *m, Context *c) {
+	mds = m;
 	this->c = c;
   }
   void finish(int result) {
-	g_mds->open_root_2(result, c);
+	mds->open_root_2(result, c);
   }
 };
 

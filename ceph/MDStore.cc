@@ -82,7 +82,7 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 
 	  // inode
 	  inodeno_t ino = ((struct inode_t*)(buf+p+1))->ino;
-	  if (g_mds->mdcache->have_inode(ino)) 
+	  if (mds->mdcache->have_inode(ino)) 
 		throw "inode already exists!  uh oh\n";
 
 	  // new inode
@@ -91,8 +91,8 @@ bool MDStore::fetch_dir_2( int result, char *buf, size_t buflen, CInode *dir, Co
 	  p += sizeof(inode_t);
 		
 	  // add and link
-	  g_mds->mdcache->add_inode( in );
-	  g_mds->mdcache->link_inode( dir, dname, in );
+	  mds->mdcache->add_inode( in );
+	  mds->mdcache->link_inode( dir, dname, in );
 	}
   }
 
