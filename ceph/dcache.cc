@@ -8,6 +8,9 @@ using namespace std;
 
 // ====== CInode =======
 
+CInode::~CInode() {
+  if (dir) { delete dir; dir = 0; }
+}
 
 void CInode::add_parent(CDentry *p) {
   nparents++;
@@ -107,7 +110,9 @@ void CDir::dump(int depth) {
   map<string,CDentry*>::iterator iter = items.begin();
   while (iter != items.end()) {
 	CDentry* d = iter->second;
-	cout << ind << d->name << endl;
+	char isdir = ' ';
+	if (d->inode->dir != NULL) isdir = '/';
+	cout << ind << d->inode->inode.ino << " " << d->name << isdir << endl;
 	d->inode->dump(depth+1);
 	iter++;
   }
@@ -124,6 +129,47 @@ void CDir::dump(int depth) {
 
 
 // DentryCache
+
+bool DentryCache::add_inode(CInode *o) 
+{
+
+
+}
+
+bool DentryCache::remove_inode(CInode *o) 
+{
+  // detach from parents
+  if (o->nparents == 1) {
+	CDentry *dn = o->parent;
+	dn->dir->remove_child(dn);
+	delete dn;
+  } 
+  else if (o->nparents > 1) {
+	throw 1;
+  }
+
+  // remove from map
+  inode_map.erase(o->inode.ino);
+
+  return true;
+}
+
+bool DentryCache::trim(__int32_t max) {
+  if (max < 0) 
+	max = lru->lru_get_max();
+
+  while (lru->lru_get_num() > max) {
+	CInode *o = (CInode*)lru->lru_expire();
+	if (!o) return false;
+
+	remove_inode(o);
+	delete o;
+	
+  }
+
+  return true;
+}
+
 
 CInode* DentryCache::get_file(string& fn) {
   int off = 1;
@@ -148,6 +194,9 @@ CInode* DentryCache::get_file(string& fn) {
 	cur = den->inode;
 	off = slash+1;	
   }
+
+  dump();
+  lru->lru_status();
 
   return cur;  
 }
@@ -184,4 +233,11 @@ void DentryCache::add_file(string& fn, CInode *in) {
   CDentry* dn = new CDentry(file, in);
   in->add_parent(dn);
   idir->dir->add_child(dn);
+  lru->lru_insert_top(in);
+  inode_map[ in->inode.ino ] = in;
+  cout << " map size now " << inode_map.size() << endl;
+
+  // trim
+  trim();
+
 }

@@ -2,21 +2,11 @@
 #ifndef __MDS_H
 #define __MDS_H
 
+
 #include <sys/types.h>
-
-// raw inode
-struct inode_t {
-  __uint64_t ino;
-
-  __uint64_t size;
-  __uint32_t mode;
-};
-
-
-
+#include "dcache.h"
 
 // 
-class CInode;
 
 class CMDS {
  protected:
@@ -24,13 +14,17 @@ class CMDS {
   int          num_nodes;
 
   // cache
-  CInode      *root;
+  DentryCache *dc;
   
   
  public:
-  CMDS() {
-
-	root = NULL;
+  CMDS(int id, int num) {
+	nodeid = id;
+	num_nodes = num;
+	dc = NULL;
+  }
+  ~CMDS() {
+	if (dc) { delete dc; dc = NULL; }
   }
 };
 

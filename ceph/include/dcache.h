@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 
+#include "inode.h"
 #include "lru.h"
 
 using namespace std;
@@ -16,8 +17,9 @@ class CDir;
 
 // cached inode wrapper
 class CInode : LRUObject {
- protected:
+ public:
   inode_t  inode;     // the inode itself
+ protected:
   CDir    *dir;       // directory entries, if we're a directory
 
   int             ref;            // reference count (???????)
@@ -30,7 +32,8 @@ class CInode : LRUObject {
   // dcache lru
   CInode *lru_next, *lru_prev;
 
-  friend class DCache;
+  friend class DentryCache;
+  friend class CDir;
 
  public:
   CInode() : LRUObject() {
@@ -44,6 +47,9 @@ class CInode : LRUObject {
 	lru_next = lru_prev = NULL;
 
   }
+  ~CInode();
+
+	
 
   // --- reference counting
   void put() {
@@ -75,7 +81,7 @@ class CDentry {
   CInode         *inode;
   CDir           *dir;
 
-  friend class DCache;
+  friend class DentryCache;
 
  public:
   // cons
@@ -115,7 +121,7 @@ class CDir {
  protected:
   CInode          *inode;
 
-  map<string, CDentry*> items;
+  map<string, CDentry*> items;              // use map; ordered list
   __uint64_t       nitems;
   bool             complete;
 
@@ -141,19 +147,18 @@ class CDir {
 
 class DentryCache {
  protected:
-  CInode *root;
-
-  LRU            *lru;
-
+  CInode                       *root;        // root inode
+  LRU                          *lru;         // lru for expiring items
+  hash_map<__uint64_t, CInode*> inode_map;   // map of inodes by ino
 
  public:
   DentryCache() {
 	root = NULL;
-	lru = new LRU();
+	lru = new LRU(25);
   }
   DentryCache(CInode *r) {
 	root = r;
-	lru = new LRU();
+	lru = new LRU(25);
   }
   ~DentryCache() {
 	if (lru) { delete lru; lru = NULL; }
@@ -164,9 +169,22 @@ class DentryCache {
 	return root;
   }
 
-  // fns
+  // fn
+  bool trim(__int32_t max = -1);   // trim cache
+  bool clear() {                  // clear cache
+	return trim(0);  
+  }
+
+  bool remove_inode(CInode *ino);
+  bool add_inode(CInode *ino);
+
+  // crap fns
   CInode* get_file(string& fn);
   void add_file(string& fn, CInode* in);
+
+  void dump() {
+	if (root) root->dump();
+  }
 };
 
 

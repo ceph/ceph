@@ -2,6 +2,8 @@
 #ifndef __LRU_H
 #define __LRU_H
 
+#include <iostream>
+using namespace std;
 
 class LRUObject {
  protected:
@@ -34,13 +36,23 @@ class LRU {
   LRUObject *lru_tophead, *lru_toptail, *lru_bothead, *lru_bottail;
   __uint32_t lru_ntop, lru_nbot, lru_num;
   double lru_midpoint;
+  __uint32_t lru_max;   // max items
 
  public:
-  LRU() {
+  LRU(int max) {
 	lru_ntop = lru_nbot = lru_num = 0;
 	lru_tophead = lru_toptail = NULL;
 	lru_bothead = lru_bottail = NULL;
 	lru_midpoint = .9;
+	lru_max = max;
+  }
+
+  __uint32_t lru_get_num() {
+	return lru_num;
+  }
+
+  __uint32_t lru_get_max() {
+	return lru_max;
   }
 
   // insert at top of lru
@@ -53,7 +65,9 @@ class LRU {
 	} else {
 	  lru_toptail = o;
 	}
+	lru_tophead = o;
 	lru_ntop++;
+	lru_num++;
 
 	lru_adjust();
   }
@@ -68,7 +82,9 @@ class LRU {
 	} else {
 	  lru_bottail = o;
 	}
+	lru_bothead = o;
 	lru_nbot++;
+	lru_num++;
   }
 
 
@@ -76,7 +92,7 @@ class LRU {
 
   // adjust top/bot balance, as necessary
   void lru_adjust() {
-	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_num);
+	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_max);
 	while (lru_ntop > topwant) {
 	  // remove from tail of top, stick at head of bot
 	  // FIXME: this could be way more efficient by moving a whole chain of items.
@@ -88,6 +104,7 @@ class LRU {
   // remove an item
   LRUObject *lru_remove(LRUObject *o) {
 	if (o->lru_in_top) {
+	  //cout << "removing " << o << " from top" << endl;
 	  // top
 	  if (o->lru_next)
 		o->lru_next->lru_prev = o->lru_prev;
@@ -99,6 +116,7 @@ class LRU {
 		lru_tophead = o->lru_next;
 	  lru_ntop--;
 	} else {
+	  //cout << "removing " << o << " from bot" << endl;
 	  // bot
 	  if (o->lru_next)
 		o->lru_next->lru_prev = o->lru_prev;
@@ -110,6 +128,7 @@ class LRU {
 		lru_bothead = o->lru_next;
 	  lru_nbot--;
 	}
+	lru_num--;
 	o->lru_next = o->lru_prev = NULL;
 	return o;
   }
@@ -132,22 +151,24 @@ class LRU {
 
 
   // expire -- expire a single item
-  LRUObject *expire() {
+  LRUObject *lru_expire() {
 	LRUObject *p;
 
 	// look through tail of bot
 	p = lru_bottail;
 	while (p) {
 	  if (p->lru_expireable) 
-		return lru_remove( lru_bottail );
+		return lru_remove( p );
+	  //cout << "p " << p << " no expireable" << endl;
 	  p = p->lru_prev;
 	}
 
 	// ok, try head then
-	p = lru_headtail;
+	p = lru_toptail;
 	while (p) {
 	  if (p->lru_expireable) 
-		return lru_remove( lru_bottail );
+		return lru_remove( p );
+	  //cout << "p " << p << " no expireable" << endl;
 	  p = p->lru_prev;
 	}
 	
@@ -155,6 +176,10 @@ class LRU {
 	return NULL;
   }
 
+
+  void lru_status() {
+	cout << "lru: " << lru_num << " items, " << lru_ntop << " top, " << lru_nbot << " bot" << endl;
+  }
 
 };
 
