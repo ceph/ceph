@@ -145,9 +145,9 @@ bool MDCache::trim(__int32_t max) {
 
 	  // reexport?
 	  if (imports.count(idir) &&                // import
-		  idir->dir->get_size() == 0 && // no children
+		  idir->dir->get_size() == 0 &&         // no children
 		  !idir->is_root() &&                   // not root
-		  !(idir->dir->is_freezing() || idir->dir->is_frozen())
+		  !(idir->dir->is_freezing() || idir->dir->is_frozen())  // FIXME: can_auth_pin?
 		  ) {
 		int dest = idir->authority(mds->get_cluster());
 
@@ -844,6 +844,7 @@ int MDCache::handle_discover(MDiscover *dis)
 
 	  // ok, i'm the authority for this dentry!
 
+	  // if frozen: i can't add replica because i'm no longer auth
 	  if (cur->dir->is_frozen()) {
 		dout(7) << " dir " << *cur << " is frozen, waiting" << endl;
 		cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
@@ -934,6 +935,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   
   if (in->is_frozen()) {
 	dout(7) << "got inode_update on " << *in << ", but i'm frozen, waiting. actually, this is pretty weird." << endl;	
+	assert(0);
 	CInode *parent = in->get_parent_inode();
 	assert(parent);
 	parent->dir->add_waiter(CDIR_WAIT_UNFREEZE,
@@ -1073,8 +1075,8 @@ INODES:
   soft - m/c/atime, size
 
  correspondingly, two types of locks:
-  lock - freezes hard metadata.. path traversals stop etc.  (??)
-  sync - freezes soft metadata.. no reads/writes can proceed.  (eg no stat)
+  lock -  hard metadata.. path traversals stop etc.  (??)
+  sync -  soft metadata.. no reads/writes can proceed.  (eg no stat)
 
  replication consistency modes:
   hard+soft - hard and soft are defined on all replicas.
@@ -1101,6 +1103,19 @@ INODES:
      a hard lock implies/subsumes a soft sync  (read_soft_start() returns true if a lock is held)
 
 
+ relationship with frozen directories:
+
+   read_hard_try - can proceed, because any hard changes require a lock, which requires an active
+      authority, which implies things are unfrozen.
+   write_hard_start - waits (has to; only auth can initiate)
+   read_soft_start  - ???? waits for now.  (FIXME: if !softasync & !syncbyauth)
+   write_soft_start - ???? waits for now.  (FIXME: if (softasync & !syncbyauth))
+
+   if sticky is on, an export_dir will drop any sync or lock so that the freeze will 
+   proceed (otherwise, deadlock!).  likewise, a sync will not stick if is_freezing().
+   
+
+
 NAMESPACE:
 
  
@@ -1114,6 +1129,15 @@ bool MDCache::read_soft_start(CInode *in, Message *m)
 {
   if (!read_hard_try(in, m))
 	return false;
+
+  // if frozen: i can't proceed (for now, see above)
+  if (in->is_frozen()) {
+	dout(7) << "read_soft_start " << *in << " is frozen, waiting" << endl;
+	in->add_waiter(CDIR_WAIT_UNFREEZE,
+				   new C_MDS_RetryMessage(mds, m));
+	return false;
+  }
+
 
   dout(5) << "read_soft_start " << *in << endl;
 
@@ -1196,6 +1220,14 @@ bool MDCache::write_soft_start(CInode *in, Message *m)
 {
   if (!read_hard_try(in, m))
 	return false;
+
+  // if frozen: i can't proceed (for now, see above)
+  if (in->is_frozen()) {
+	dout(7) << "read_soft_start " << *in << " is frozen, waiting" << endl;
+	in->add_waiter(CDIR_WAIT_UNFREEZE,
+				   new C_MDS_RetryMessage(mds, m));
+	return false;
+  }
 
   dout(5) << "write_soft_start " << *in << endl;
   // what soft sync mode?
@@ -1314,6 +1346,8 @@ void MDCache::sync_start(CInode *in)
   in->dist_state |= CINODE_DIST_PRESYNC;
   in->get(CINODE_PIN_PRESYNC);
   in->auth_pin();
+  
+  in->sync_replicawantback = false;
 
   // send messages
   for (set<int>::iterator it = in->cached_by_begin(); 
@@ -1374,7 +1408,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
 	for (multiset<int>::iterator it = in->get_open_write().begin();
 		 it != in->get_open_write().end();
 		 it++) {
-	  mds->messenger->send_message(new MInodeSyncAck(in->ino()),
+	  mds->messenger->send_message(new MInodeSyncStart(in->ino(), mds->get_nodeid()),
 								   MSG_ADDR_CLIENT(*it), 0,
 								   MDS_PORT_CACHE);
 	}
@@ -1388,7 +1422,7 @@ void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
   }
 }
 
-void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m)
+void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback)
 {
   dout(7) << "inode_sync_ack " << *in << endl;
   
@@ -1396,7 +1430,7 @@ void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m)
   in->dist_state |= CINODE_DIST_SYNCBYAUTH;
   
   // send ack
-  mds->messenger->send_message(new MInodeSyncAck(in->ino()),
+  mds->messenger->send_message(new MInodeSyncAck(in->ino(), true, wantback),
 							   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
 
@@ -1415,7 +1449,7 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	assert(in->client_wait_for_sync.count(client) == 1);
 	in->client_wait_for_sync.erase(in->client_wait_for_sync.find(client));
 	if (in->client_wait_for_sync.empty()) {
-	  inode_sync_ack(in, in->pending_sync_request);
+	  inode_sync_ack(in, in->pending_sync_request, true);  // wantback!
 	  in->pending_sync_request = 0;
 	} else {
 	  dout(7) << "handle_sync_ack still need clients " << in->client_wait_for_sync << endl;
@@ -1437,6 +1471,9 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	// erase from cached_by too!
 	in->cached_by_remove(m->get_source());
   }
+
+  if (m->replica_wantsback())
+	in->sync_replicawantback = true;
 
   if (in->sync_waiting_for_ack.size()) {
 
@@ -1466,12 +1503,22 @@ void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
 	  }
 	}
 
-	// release sync?
-	if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
-		(!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
-	  dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
+	// release sync right away?
+	if (in->is_freezing()) {
+	  dout(7) << "handle_sync_ack freezing " << *in << ", dropping sync immediately" << endl;
+	  sync_release(in);
+	} 
+	else if (in->sync_replicawantback) {
+	  dout(7) << "handle_sync_ack replica wantback, releasing sync immediately" << endl;
 	  sync_release(in);
 	}
+	else if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
+			 (!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
+	  dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
+	  sync_release(in);
+	} 
+	else 
+	  dout(7) << "handle_sync_ack sticky sync is on, keeping sync for now" << endl;
   }
 
   delete m; // done
@@ -1593,8 +1640,17 @@ bool MDCache::read_hard_try(CInode *in,
 
 
 bool MDCache::write_hard_start(CInode *in, 
-							  Message *m)
+							   Message *m)
 {
+  // if frozen: i can't proceed; only auth can initiate lock
+  if (in->is_frozen()) {
+	dout(7) << "write_hard_start " << *in << " is frozen, waiting" << endl;
+	in->add_waiter(CDIR_WAIT_UNFREEZE,
+				   new C_MDS_RetryMessage(mds, m));
+	return false;
+  }
+
+
   if (in->is_auth()) {
 	// auth
 	if (in->is_lockbyme()) goto success;
@@ -1965,7 +2021,33 @@ void MDCache::export_dir(CInode *in,
   // freeze the subtree
   //dout(7) << "export_dir " << *in << " to " << dest << ", freezing" << endl;
   in->dir->freeze(new C_MDS_ExportFreeze(mds, in, dest, pop));
+
+  // drop any sync or lock if sticky
+  if (g_conf.mdcache_sticky_sync_normal ||
+	  g_conf.mdcache_sticky_sync_softasync)
+	export_dir_dropsync(in);
 }
+
+void MDCache::export_dir_dropsync(CInode *idir)
+{
+  assert(idir->is_dir());
+  if (!idir->dir)
+	return;  // we don't ahve anything, obviously
+
+  CDir_map_t::iterator it;
+  for (it = idir->dir->begin(); it != idir->dir->end(); it++) {
+	CInode *in = it->second->inode;
+
+	dout(7) << "about to export: dropping sticky(?) sync on " << *in << endl;
+	if (in->is_syncbyme()) sync_release(in);
+
+	if (in->is_dir() &&
+		in->dir_auth == -1 &&      // mine
+		in->nested_auth_pins > 0)  // might be sync
+	  export_dir_dropsync(in);
+  }
+}
+
 
 
 void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
@@ -2130,6 +2212,10 @@ void MDCache::export_dir_walk(MExportDir *req,
 	istate.popularity = in->popularity;
 	//istate.ref = in->ref;
 	istate.ncached_by = in->cached_by.size();
+
+	istate.is_softasync = in->is_softasync();
+	assert(!in->is_syncbyme());
+	assert(!in->is_lockbyme());
 
 	if (in->is_dirty()) {
 	  istate.dirty = true;
@@ -2485,6 +2571,12 @@ void MDCache::import_dir_block(pchar& p,
 	}
 
 	in->cached_by_add(oldauth);             // old auth still has it too!
+
+	// dist state: new authority inherits softasync state only; sync/lock are dropped for import/export
+	in->dist_state = 0;
+	if (istate->is_softasync)
+	  in->dist_state |= CINODE_DIST_SOFTASYNC;
+	
 
 	// other state? ... ?
 

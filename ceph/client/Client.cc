@@ -127,9 +127,6 @@ void Client::handle_sync_start(MInodeSyncStart *m)
   messenger->send_message(new MInodeSyncAck(node->ino),
 						  m->get_source(), m->get_source_port(),
 						  0);
-  
-  // done
-  delete m;
 }
 
 void Client::handle_sync_release(MInodeSyncRelease *m)
@@ -153,9 +150,6 @@ void Client::handle_sync_release(MInodeSyncRelease *m)
   assert(it->second == mds);
   open_files_sync.erase(it);
   open_files.insert(pair<inodeno_t,int>(node->ino, mds));
-
-  // done
-  delete m;
 }
 	
 
@@ -339,7 +333,7 @@ void Client::issue_request()
 		op = MDS_OP_CHMOD;
 	  else if (r < 20 && !is_open(cwd) && !cwd->isdir) 
 		op = MDS_OP_OPENRD;
-	  else if (false && r < 30 && !is_open(cwd) && !cwd->isdir)
+	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
 		op = MDS_OP_OPENWR;
 	  else if (r < 41 + open_files.size() && open_files.size() > 0) {
 		// close file

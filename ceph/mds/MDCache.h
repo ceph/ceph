@@ -125,6 +125,7 @@ class MDCache {
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir(CInode *in,
 				  int mds);
+  void export_dir_dropsync(CInode *in);
   void export_dir_frozen(CInode *in,
 						 int dest, 
 						 double pop);
@@ -168,7 +169,7 @@ class MDCache {
   void handle_inode_sync_release(MInodeSyncRelease *m);
   void handle_inode_sync_recall(MInodeSyncRecall *m);
 
-  void inode_sync_ack(CInode *in, MInodeSyncStart *m);
+  void inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback=false);
 
   // hard locks  
   bool read_hard_try(CInode *in, Message *m);

@@ -146,6 +146,7 @@ class CInode : LRUObject {
   set<int>         sync_waiting_for_ack;
   set<int>         lock_waiting_for_ack;
   int              lock_active_count;  // count for in progress or waiting locks
+  bool             sync_replicawantback;  // avoids sticky sync
 
   // waiters
   multimap<int,Context*>  waiting;

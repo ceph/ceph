@@ -19,6 +19,7 @@ typedef struct {
   int            dir_auth;
 
   bool           dirty;       // dirty inode?
+  bool           is_softasync;
 
   int            ncached_by;  // ints follow
 } Inode_Export_State_t;
