@@ -871,6 +871,8 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   // update!
   dout(7) << "got inode_update on " << *in << endl;
 
+  dout(7) << "dir_auth for " << *in << " was " << in->dir_auth << endl;
+
   // ugly hack to avoid corrupting weird behavior of dir_auth
   int old_dir_auth = in->dir_auth;
   bool wasours = in->dir_authority(mds->get_cluster()) == mds->get_nodeid();
@@ -879,6 +881,8 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   if (wasours != isours)
 	in->dir_auth = old_dir_auth;  // ignore dir_auth, it's clearly bogus
   
+  dout(7) << "dir_auth for " << *in << " now " << in->dir_auth << " old " << old_dir_auth << " was/is " << wasours << " " << isours << endl;
+
   // done
   delete m;
 }
@@ -1999,9 +2003,9 @@ void MDCache::import_dir_block(pchar& p,
 	  // add
 	  add_inode(in);
 	  link_inode(idir, dname, in);	
-	  dout(7) << "   import_dir_block adding " << *in << endl;
+	  dout(7) << "   import_dir_block adding " << *in << " istate.dir_auth " << istate->dir_auth << endl;
 	} else {
-	  dout(7) << "   import_dir_block already had " << *in << endl;
+	  dout(7) << "   import_dir_block already had " << *in << " istate.dir_auth " << istate->dir_auth << endl;
 	  in->inode = istate->inode;
 
 	  assert(in->auth == false);
