@@ -4,7 +4,11 @@
 
 
 #include <sys/types.h>
+#include <ext/hash_set>
+
 #include "dcache.h"
+
+
 
 // 
 
@@ -15,7 +19,14 @@ class CMDS {
 
   // cache
   DentryCache *dc;
+
+  // import/export
+  hash_set<CInode*>  import_list;
+  hash_set<CInode*>  export_list;
   
+  // message queues
+ 
+
   
  public:
   CMDS(int id, int num) {

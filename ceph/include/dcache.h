@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <ext/hash_map>
 
 #include "inode.h"
 #include "lru.h"
