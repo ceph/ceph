@@ -170,6 +170,27 @@ bool MDCache::trim(__int32_t max) {
 }
 
 
+void MDCache::shutdown_start()
+{
+  dout(1) << "unsync, unlock everything" << endl;
+
+  // walk cache
+  bool didsomething = false;
+  for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
+	   it != inode_map.end();
+	   it++) {
+	CInode *in = it->second;
+	if (in->is_auth()) {
+	  if (in->is_syncbyme()) sync_release(in);
+	  if (in->is_lockbyme()) inode_lock_release(in);
+	}
+  }
+
+  // make sure sticky sync is off
+  g_conf.mdcache_sticky_sync_normal = false;
+
+}
+
 bool MDCache::shutdown_pass()
 {
   static bool did_inode_updates = false;
@@ -187,52 +208,46 @@ bool MDCache::shutdown_pass()
   
   if (mds->mdlog->get_num_events()) {
 	dout(7) << "waiting for log to flush" << endl;
-  } else {
-	dout(7) << "log is empty; flushing cache" << endl;
-	trim(0);
+	return false;
+  } 
 
-	dout(7) << "walking remaining cache for loose ends" << endl;	
-	// walk cache
-	bool didsomething = false;
-	for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
-		 it != inode_map.end();
-		 it++) {
-	  CInode *in = it->second;
-	  if (in->is_auth()) {
-		// cached_by
-		// unpin inodes on shut down nodes.
-		// NOTE: this happens when they expire during an export; expires reference inodes, and can thus
-		// be missed.
-		if (mds->get_nodeid() == 0 &&
-			in->is_cached_by_anyone()) {
-		  for (set<int>::iterator by = in->cached_by.begin();
-			   by != in->cached_by.end();
-			   ) {
-			int who = *by;
-			by++;
-			if (mds->is_shut_down(who)) {
-			  in->cached_by_remove(who);
-			  didsomething = true;
-			}
+  dout(7) << "log is empty; flushing cache" << endl;
+  trim(0);
+  
+  // walk cache
+  dout(7) << "walking remaining cache for items cached_by shut down nodes" << endl;
+  bool didsomething = false;
+  for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
+	   it != inode_map.end();
+	   it++) {
+	CInode *in = it->second;
+	if (in->is_auth()) {
+	  // cached_by
+	  // unpin inodes on shut down nodes.
+	  // NOTE: this happens when they expire during an export; expires reference inodes, and can thus
+	  // be missed.
+	  if (mds->get_nodeid() == 0 &&
+		  in->is_cached_by_anyone()) {
+		for (set<int>::iterator by = in->cached_by.begin();
+			 by != in->cached_by.end();
+			 ) {
+		  int who = *by;
+		  by++;
+		  if (mds->is_shut_down(who)) {
+			in->cached_by_remove(who);
+			didsomething = true;
 		  }
 		}
-		
-		// sync, lock release
-		if (in->is_syncbyme()) 
-		  sync_release(in);
-		if (in->is_lockbyme()) 
-		  inode_lock_release(in);
 	  }
 	}
-	if (didsomething)
-	  trim(0);
-	
   }
-
+  if (didsomething)
+	trim(0);
+  
   dout(7) << "cache size now " << lru->lru_get_size() << endl;
 
   // send inode_expire's on all potentially cache pinned items
-  if (0 &&
+  if (false &&
 	  !did_inode_updates) {
 	did_inode_updates = true;
 
@@ -258,7 +273,7 @@ bool MDCache::shutdown_pass()
 	  export_dir(im,0);
 	}
   } else {
-	// shut down root
+	// shut down root?
 	if (lru->lru_get_size() == 1) {
 	  // all i have left is root.. wtf?
 	  dout(7) << "wahoo, all i have left is root!" << endl;

@@ -203,6 +203,7 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
 // auth_pins
 int CInode::adjust_nested_auth_pins(int a) {
   nested_auth_pins += a;
+  dout(11) << "adjust_nested_auth_pins on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   if (parent) 
 	parent->dir->adjust_nested_auth_pins(a);
 }
@@ -216,12 +217,14 @@ bool CInode::can_auth_pin() {
 void CInode::auth_pin() {
   get(CINODE_PIN_IAUTHPIN + auth_pins);
   auth_pins++;
+  dout(7) << "auth_pin on inode " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   if (parent)
 	parent->dir->adjust_nested_auth_pins( 1 );
 }
 
 void CInode::auth_unpin() {
   auth_pins--;
+  dout(7) << "auth_unpin on inode " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   put(CINODE_PIN_IAUTHPIN + auth_pins);
   if (parent)
 	parent->dir->adjust_nested_auth_pins( -1 );

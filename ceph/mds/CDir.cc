@@ -191,7 +191,7 @@ void CDir::take_waiting(int mask,
 	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
 	  waiting_on_dentry[dentry].erase(it++);
 	} else {
-	  dout(10) << "take_waiting dentry " << dentry << " SKIPPING mask " << mask << " took " << it->second << " tag " << it->first << " on dir " << *inode << endl;
+	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on dir " << *inode << endl;
 	  it++;
 	}
   }
@@ -214,7 +214,7 @@ void CDir::take_waiting(int mask,
 	hash_map<string, multimap<int,Context*> >::iterator it = 
 	  it = waiting_on_dentry.begin(); 
 	while (it != waiting_on_dentry.end()) {
-	  take_waiting(mask, it->first, ls);
+	  take_waiting(mask, (it++)->first, ls);   // not post-inc
 	}
   }
   
@@ -244,7 +244,7 @@ void CDir::take_waiting(int mask,
 void CDir::auth_pin() {
   inode->get(CINODE_PIN_DAUTHPIN + auth_pins);
   auth_pins++;
-  dout(7) << "auth_unpin on " << *inode << " count now " << auth_pins << endl;
+  dout(7) << "auth_pin on dir " << *inode << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   inode->adjust_nested_auth_pins( 1 );
 }
 
@@ -252,7 +252,7 @@ void CDir::auth_unpin() {
   auth_pins--;
   inode->put(CINODE_PIN_DAUTHPIN + auth_pins);
   assert(auth_pins >= 0);
-  dout(7) << "auth_unpin on " << *inode << " count now " << auth_pins << endl;
+  dout(7) << "auth_unpin on dir " << *inode << " count now " << auth_pins << " + " << nested_auth_pins << endl;
 
   // pending freeze?
   if (auth_pins + nested_auth_pins == 0) {
@@ -267,6 +267,8 @@ void CDir::auth_unpin() {
 
 int CDir::adjust_nested_auth_pins(int a) {
   nested_auth_pins += a;
+
+  dout(11) << "adjust_nested_auth_pins on dir " << *inode << " count now " << auth_pins << " + " << nested_auth_pins << endl;
 
   // pending freeze?
   if (auth_pins + nested_auth_pins == 0) {

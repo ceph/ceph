@@ -80,8 +80,9 @@ class MDCache {
   }
   size_t get_cache_size() { lru->lru_get_size(); }
   bool trim(__int32_t max = -1);   // trim cache
-  bool shutdown_pass();
 
+  void shutdown_start();
+  bool shutdown_pass();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
   // have_inode?

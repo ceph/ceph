@@ -335,7 +335,7 @@ void Client::issue_request()
 	if (cwd) {  // stat root if we don't have it.
 	  if (r < 10)
 		op = MDS_OP_TOUCH;
-	  else if (false && r < 11) 
+	  else if (r < 11) 
 		op = MDS_OP_CHMOD;
 	  else if (r < 20 && !is_open(cwd) && !cwd->isdir) 
 		op = MDS_OP_OPENRD;

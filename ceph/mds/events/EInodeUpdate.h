@@ -82,10 +82,15 @@ class EInodeUpdate : public LogEvent {
 	  dout(7) << "inode " << inode.ino << " not in cache, must have exported" << endl;
 	  return true;
 	}
-	if (in->authority(mds->get_cluster()) != mds->get_nodeid())
+	if (!in->is_auth())
 	  return true;  // not my inode anymore!
 	if (in->get_version() != version)
 	  return true;  // i'm obsolete!  (another log entry follows)
+
+	// frozen -> exporting -> obsolete    (FOR NOW?)
+	if (in->is_frozen())
+	  return true; 
+
 	return false;  
   }
 

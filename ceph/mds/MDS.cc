@@ -135,6 +135,8 @@ void MDS::handle_shutdown_start(Message *m)
 
   // set flag
   shutting_down = true;
+
+  mdcache->shutdown_start();
   
   // flush log
   mdlog->set_max_events(0);

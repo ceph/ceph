@@ -31,7 +31,7 @@ __uint64_t ino = 1;
 int play();
 
 int main(int argc, char **argv) {
-  cout << "hi there" << endl;
+  cerr << "hi there" << endl;
   
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   

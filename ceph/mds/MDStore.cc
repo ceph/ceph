@@ -286,6 +286,7 @@ bool MDStore::commit_dir( CInode *in,
 	dout(7) << "commit_dir " << *in << " can't auth_pin, waiting" << endl;
 	in->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
 						new C_MDS_CommitDirDelay(mds, in->inode.ino, c) );
+	return false;
   }
 
 
