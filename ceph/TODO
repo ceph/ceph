@@ -29,17 +29,25 @@ ISSUES
 
 
 
-
 FIX
 - soft and hard metadata should be fully/more independent?
   - hard lock (owner/mode) is relative to namespace
   - soft sync (mtime/size) is relative to inode (even when dangling)
 
+
 CLEANUP
 - client
 
+- waiters after export... fix will_fail, will_delegate nonsense
+ - should a subset of these waiters be triggered immediately after
+   export, since discover-based contexts will just be forwarded to the
+   new auth?
+
 
 DOCUMENT
+- cache, distributed cache structure and invariants
+- export process
+- hash/unhash process
 
 
 TEST
@@ -49,24 +57,29 @@ TEST
 
 
 IMPLEMENT
-- dir sync
- - stat of a dir should return dir size?
- - readdir of hashed dir
 
-- softasync mode
+- hash + unhash!
 - rmdir
 - mkdir
 - rename
+- truncate
+
+- dir sync
+ - stat of a dir should return dir size????
+ - readdir of hashed dir
+
+- softasync mode
 
 - log MDS actions
   - imports/exports
   - hash/unhash
 
 - smarter balancing
-  - popularity calculation and management is inconsistent, wrong.
+  - popularity calculation and management is inconsistent/wrong.
   - does it work?
 
 - instrumentation!
 - dump active config in run output somewhere
 
-- anchors and hard links
+- anchors
+- hard links

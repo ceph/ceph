@@ -14,7 +14,7 @@
 md_config_t g_conf = {
   num_mds: 33,
   num_osd: 10,
-  num_client: 100,
+  num_client: 1000,
 
   osd_cow: false, // crashy? true,  
 
@@ -44,7 +44,7 @@ md_config_t g_conf = {
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,
 
-  mds_heartbeat_op_interval: 50,
+  mds_heartbeat_op_interval: 500,
   mds_verify_export_dirauth: true
 };
 

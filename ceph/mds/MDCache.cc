@@ -2562,10 +2562,11 @@ public:
   virtual void finish(int r) {
 	if (r >= 0) { 
 
-	  // THIS IS ALL STUPID:
 	  finish_contexts(will_fail);
 	  finish_contexts(will_redelegate);
 	  return;
+
+	  // THIS IS ALL STUPID: (???)
 	  /*
 	  // redelegate
 	  list<Context*>::iterator it;
@@ -3033,7 +3034,10 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 	// ok, we're finished!
 	export_notify_ack_waiting.erase(dir);
 
-	// unpin proxies!
+	// finish export  (unfreeze, trigger finish context, etc.)
+	export_dir_finish(dir);
+
+	// unpin proxies
 	// inodes
 	for (set<inodeno_t>::iterator it = export_proxy_inos[dir].begin();
 		 it != export_proxy_inos[dir].end();
@@ -3054,8 +3058,6 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 	}
 	export_proxy_dirinos.erase(dir);
 
-	// finish export
-	export_dir_finish(dir);
   }
 }
 
@@ -3263,20 +3265,15 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   }
   if (waiting_for) {
     dout(7) << " waiting for " << waiting_for << " nested export dir opens" << endl;
-
-	// finish any waiters we already sucked up
-	finish_contexts(finished, 0);
-
-    return;
+  } else {
+	// ok!
+	dout(7) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
+	mds->messenger->send_message(new MExportDirPrepAck(dir->ino()),
+								 m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	
+	// done 
+	delete m;
   }
-
-  // ok!
-  dout(7) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
-  mds->messenger->send_message(new MExportDirPrepAck(dir->ino()),
-							   m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
-  
-  // done 
-  delete m;
 
   // finish waiters
   finish_contexts(finished, 0);
