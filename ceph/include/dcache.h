@@ -6,10 +6,13 @@
 #include <string>
 #include <vector>
 #include <map>
+
 #include <ext/hash_map>
+
 
 #include "inode.h"
 #include "lru.h"
+#include "DecayCounter.h"
 
 using namespace std;
 
@@ -33,6 +36,13 @@ class CInode : LRUObject {
   // dcache lru
   CInode *lru_next, *lru_prev;
 
+  // import/export
+  bool is_import, is_export;
+
+  // accounting
+  DecayCounter popularity;
+  
+
   friend class DentryCache;
   friend class CDir;
 
@@ -42,6 +52,8 @@ class CInode : LRUObject {
 
 	parent = NULL;
 	nparents = 0;
+
+	is_import = is_export = false;
 
 	dir = NULL;
 
@@ -150,7 +162,7 @@ class DentryCache {
  protected:
   CInode                       *root;        // root inode
   LRU                          *lru;         // lru for expiring items
-  hash_map<__uint64_t, CInode*> inode_map;   // map of inodes by ino
+  hash_map<inodeno_t, CInode*> inode_map;   // map of inodes by ino             
 
  public:
   DentryCache() {

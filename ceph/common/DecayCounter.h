@@ -14,6 +14,10 @@ class DecayCounter {
   double last_decay;       // time of last decay
 
  public:
+  DecayCounter() {
+	set_halflife( 10.0 );
+	reset();
+  }
   DecayCounter(double hl) {
 	set_halflife(hl);
 	reset();
@@ -24,7 +28,7 @@ class DecayCounter {
 	k = log(.5) / hl;
   }
 
-  double now() {
+  double getnow() {
 	// ??
 	return 1.0;
   }
@@ -35,11 +39,11 @@ class DecayCounter {
   }
 
   void decay() {
-	double now = now();
-	double el = now - last_decay;
+	double tnow = getnow();
+	double el = tnow - last_decay;
 	if (el > .1) {
 	  val = val * exp(el * k);
-	  last_decay = now;
+	  last_decay = tnow;
 	}
   }
 
@@ -57,4 +61,4 @@ class DecayCounter {
 };
 
 
-#end;f
+#endif
