@@ -149,7 +149,7 @@ int FakeMessenger::send_message(Message *m, long dest, int port, int fromport)
 	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);
 
-	dout(10) << "sending " << m << endl;
+	dout(10) << "sending " << m << " to " << dest << endl;
 	
   }
   catch (...) {

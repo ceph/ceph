@@ -39,6 +39,8 @@ using namespace std;
 #define CINODE_PIN_EXPORT    10003
 #define CINODE_PIN_FREEZE    10004
 
+#define CINODE_PIN_PROXY     10005
+
 #define CINODE_PIN_OPENRD    10020  
 #define CINODE_PIN_OPENWR    10021
 
@@ -47,8 +49,6 @@ using namespace std;
 #define CINODE_PIN_WAITER    10030   // waiter
 #define CINODE_PIN_DIRWAIT   10032   // "
 #define CINODE_PIN_DIRWAITDN 10033   // "
-
-#define CINODE_PIN_CACHEPROXY 10050
 
 #define CINODE_PIN_IAUTHPIN  20000
 #define CINODE_PIN_DAUTHPIN  30000
@@ -66,7 +66,6 @@ using namespace std;
 // directory authority types
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
-//#define CDIR_AUTH_HASH     -2  <--- no such thing anymore!
 
 // sync => coherent soft metadata (size, mtime, etc.)
 // lock => coherent hard metadata (owner, mode, etc. affecting namespace)
@@ -117,13 +116,12 @@ using namespace std;
 #define CINODE_STATE_UNSAFE      4   // not logged yet
 #define CINODE_STATE_DANGLING    8   // delete me when i expire; i have no dentry
 #define CINODE_STATE_UNLINKING  16
-#define CINODE_STATE_CACHEPROXY 32
-
+#define CINODE_STATE_PROXY      32
 
 // misc
-#define CINODE_EXPORT_NONCE     1  // nonce given to replicas created by export
-#define CINODE_ROOT_NONCE       1  // nonce given to replicas of root
-#define CINODE_HASHREPICA_NONCE 1  // hashed inodes that are duped
+#define CINODE_EXPORT_NONCE      1  // nonce given to replicas created by export
+#define CINODE_ROOT_NONCE        1  // nonce given to replicas of root
+#define CINODE_HASHREPLICA_NONCE 1  // hashed inodes that are duped
 
 class Context;
 class CDentry;
@@ -216,9 +214,11 @@ class CInode : LRUObject {
   // -- accessors --
   bool is_dir() { return inode.isdir; }
   bool is_root() { return state & CINODE_STATE_ROOT; }
+  bool is_proxy() { return state & CINODE_STATE_PROXY; }
   bool is_auth() { return auth; }
   void set_auth(bool auth);
   bool is_replica() { return !auth; }
+  int get_replica_nonce() { return replica_nonce; }
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDir *get_parent_dir();
@@ -284,7 +284,7 @@ class CInode : LRUObject {
   
   void mark_dirty();
   void mark_clean() {
-	dout(10) << "mark_clean " << *this << endl;
+	dout(10) << " mark_clean " << *this << endl;
 	if (state & CINODE_STATE_DIRTY) {
 	  state &= ~CINODE_STATE_DIRTY;
 	  put(CINODE_PIN_DIRTY);
@@ -294,7 +294,6 @@ class CInode : LRUObject {
 
 
   // -- cached_by -- to be used ONLY when we're authoritative or cacheproxy
-  bool is_cacheproxy() { return state & CINODE_STATE_CACHEPROXY; }
   bool is_cached_by_anyone() { return !cached_by.empty(); }
   bool is_cached_by(int mds) { return cached_by.count(mds); }
   // cached_by_add returns a nonce
@@ -317,13 +316,14 @@ class CInode : LRUObject {
     cached_by.insert(mds);
     cached_by_nonce.insert(pair<int,int>(mds,nonce));
   }
-  int cached_by_nonce(int mds) {
+  int get_cached_by_nonce(int mds) {
     map<int,int>::iterator it = cached_by_nonce.find(mds);
     return it->second;
   }
   void cached_by_remove(int mds) {
 	if (!is_cached_by(mds)) return;
 	cached_by.erase(mds);
+	cached_by_nonce.erase(mds);
 	if (cached_by.empty())
 	  put(CINODE_PIN_CACHED);	  
   }

@@ -22,11 +22,7 @@ ISSUES
     per mds per export...  and make inode_expire, etc. much less lame.
 
 /- better authority knowledge of replicas, especially with
-/  - sync
-/  - lock
-  - ??
-
-- better authority knowledge of replicas, especially with
+test:
   - sync: recall is borken!
   - lock
   ??
@@ -35,8 +31,6 @@ FIX
 - soft and hard metadata should be fully independent?
   - hard lock (owner/mode) is relative to namespace
   - soft sync (mtime/size) is relative to inode (even when dangling)
-
-- fix sync replica auth knowledge.. recall doesn't work!
 
 CLEANUP
 - client

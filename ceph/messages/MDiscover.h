@@ -36,10 +36,10 @@ struct MDiscoverRec_t {
 	}
 
 	r.append((char*)&dir_auth, sizeof(int));
+	r.append((char*)&replica_nonce, sizeof(replica_nonce));
 	r.append((char*)&is_syncbyauth, sizeof(bool));
 	r.append((char*)&is_softasync, sizeof(bool));
 	r.append((char*)&is_lockbyauth, sizeof(bool));
-	r.append((char*)&replica_nonce, sizeof(replica_nonce));
 	r.append((char*)&dir_rep, sizeof(int));
 	
 	n = dir_rep_by.size();
@@ -70,14 +70,14 @@ struct MDiscoverRec_t {
 
 	s.copy(off, sizeof(int), (char*)&dir_auth);
 	off += sizeof(int);
+	s.copy(off, sizeof(int), (char*)&replica_nonce);
+	off += sizeof(int);
 	s.copy(off, sizeof(bool), (char*)&is_syncbyauth);
 	off += sizeof(bool);
 	s.copy(off, sizeof(bool), (char*)&is_softasync);
 	off += sizeof(bool);
 	s.copy(off, sizeof(bool), (char*)&is_lockbyauth);
 	off += sizeof(bool);
-	s.copy(off, sizeof(int), (char*)&replica_nonce);
-	off += sizeof(int);
 	s.copy(off, sizeof(int), (char*)&dir_rep);
 	off += sizeof(int);
 
@@ -173,6 +173,8 @@ class MDiscover : public Message {
 
   void add_bit(CInode *in, int auth, int nonce) {
 	MDiscoverRec_t bit;
+
+	assert(nonce >= 0);
 
 	bit.inode = in->inode;
 	bit.cached_by = in->get_cached_by();

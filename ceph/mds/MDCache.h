@@ -12,14 +12,16 @@
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
+//#include "InoProxySet.h"
 
 class MDS;
 class Message;
 class MExportDirPrep;
 class MExportDirPrepAck;
 class MExportDir;
-class MExportDirAck;
 class MExportDirNotify;
+class MExportDirNotifyAck;
+class MExportDirFinish;
 class MDiscover;
 class MInodeGetReplica;
 class MInodeGetReplicaAck;
@@ -77,6 +79,13 @@ class MDCache {
         // maps frozen_dir_ino's to waiting-for-discover ino's.
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
         // maps import_root_ino's to frozen dir ino's (with pending discovers)
+
+  map<CDir*,set<int> >   export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
+  map<CDir*,set<inodeno_t> > export_proxy_inos;
+
+  // inoproxysets
+  //list<InoProxySet*>      ino_proxy_sets;
+
   
   friend class MDBalancer;
 
@@ -159,7 +168,7 @@ class MDCache {
 
   // -- misc auth --
   void update_replica_auth(CInode *in, int realauth);
-
+  int ino_proxy_auth(inodeno_t ino, int frommds);
 
   // -- import/export --
   bool is_import(CDir *dir) {
@@ -180,10 +189,11 @@ class MDCache {
 						 double pop);
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
+					   CDir *basedir,
 					   CDir *dir,
 					   int newauth);
-  void export_dir_purge(CDir *dir, int newauth);
-  void handle_export_dir_ack(MExportDirAck *m);
+  void export_dir_finish(CDir *dir);
+  void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
   // importer
   CInode *import_dentry_inode(CDir *dir, 
@@ -192,16 +202,18 @@ class MDCache {
 							  CDir *import_root=0); // need for normal import
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
-  void handle_export_dir_finish(CDir *dir);
+  void import_dir_finish(CDir *dir);
+  void handle_export_dir_finish(MExportDirFinish *m);
   void import_dir_block(pchar& p, 
 						CDir *containing_import, 
 						int oldauth,
-						CDir *import_root);
+						CDir *import_root,
+						list<inodeno_t>& imported_subdirs);
   void got_hashed_replica(CDir *import,
 						  inodeno_t dir_ino,
 						  inodeno_t replica_ino);
 
-  // dir authority bystander
+  // bystander
   void handle_export_dir_notify(MExportDirNotify *m);
 
 

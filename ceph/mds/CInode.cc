@@ -101,7 +101,17 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  return out << "[inode " << in.inode.ino << " " << path << " " << &in << "]";
+  out << "[inode " << in.inode.ino << " " << path << " ";
+  if (in.is_auth()) {
+	out << "auth";
+	if (in.is_cached_by_anyone())
+	  out << "+" << in.get_cached_by();
+  } else {
+	out << "rep " << in.get_replica_nonce();
+	assert(in.get_replica_nonce() >= 0);
+  }
+  out << "]";
+  return out;
 }
 
 
@@ -174,7 +184,7 @@ crope CInode::encode_export_state()
 	int i = *it;
 	r.append( (char*)&i, sizeof(int) );
     // nonce
-    int j = cached_by_nonce(i);
+    int j = get_cached_by_nonce(i);
     r.append( (char*)&j, sizeof(int) );
   }
 
@@ -196,13 +206,10 @@ crope CInode::encode_basic_state()
 	   it++) {
 	int mds = *it;
 	r.append((char*)&mds, sizeof(mds));
-    int nonce = cached_by_nonce(mds);
+    int nonce = get_cached_by_nonce(mds);
     r.append((char*)&nonce, sizeof(nonce));
   }
 
-  // dir_auth
-  r.append((char*)&dir_auth, sizeof(int));
-  
   return r;
 }
  
@@ -228,10 +235,6 @@ int CInode::decode_basic_state(crope r, int off)
     off += sizeof(int);
     cached_by_add(mds, nonce);
   }
-
-  // dir_auth
-  r.copy(off, sizeof(int), (char*)&dir_auth);
-  off += sizeof(int);
 
   return off;
 }

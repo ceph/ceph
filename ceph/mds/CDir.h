@@ -3,7 +3,7 @@
 #define __CDIR_H
 
 #include "include/types.h"
-
+#include "include/config.h"
 #include "include/DecayCounter.h"
 
 #include <iostream>
@@ -103,6 +103,9 @@ class Context;
                                  CDIR_WAIT_UNFREEZE)      // hmm, same same
 
 
+ostream& operator<<(ostream& out, class CDir& dir);
+
+
 // CDir
 typedef map<string, CDentry*> CDir_map_t;
 
@@ -190,9 +193,18 @@ class CDir {
 
   // -- state --
   unsigned get_state() { return state; }
-  void reset_state(unsigned s) { state = s; }
-  void state_clear(unsigned mask) {	state &= ~mask; }
-  void state_set(unsigned mask) { state |= mask; }
+  void reset_state(unsigned s) { 
+	state = s; 
+	dout(10) << *this << " state reset" << endl;
+  }
+  void state_clear(unsigned mask) {	
+	state &= ~mask; 
+	dout(10) << *this << " state -" << mask << " = " << state << endl;
+  }
+  void state_set(unsigned mask) { 
+	state |= mask; 
+	dout(10) << *this << " state +" << mask << " = " << state << endl;
+  }
   unsigned state_test(unsigned mask) { return state & mask; }
 
   bool is_complete() { return state & CDIR_STATE_COMPLETE; }
@@ -303,6 +315,5 @@ class CDir {
 };
 
 
-ostream& operator<<(ostream& out, CDir& dir);
 
 #endif

@@ -11,6 +11,7 @@ struct md_config_t {
   int client_cache_size;
   float client_cache_mid;
   unsigned client_requests;
+  bool client_deterministic;
 
   bool log_messages;
   float log_interval;
@@ -33,6 +34,7 @@ struct md_config_t {
   float mdbal_unreplicate_threshold;
 
   int mds_heartbeat_op_interval;
+  bool mds_verify_export_dirauth;
 };
 
 extern md_config_t g_conf;	 

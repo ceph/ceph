@@ -22,11 +22,12 @@ using namespace std;
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
 
-#include "messages/MExportDir.h"
-#include "messages/MExportDirAck.h"
-#include "messages/MExportDirNotify.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
+#include "messages/MExportDir.h"
+#include "messages/MExportDirNotify.h"
+#include "messages/MExportDirNotifyAck.h"
+#include "messages/MExportDirFinish.h"
 
 #include "messages/MHeartbeat.h"
 
@@ -101,12 +102,16 @@ decode_message(crope& ser)
 	m = new MExportDir();
 	break;
 
-  case MSG_MDS_EXPORTDIRACK:
-	m = new MExportDirAck();
+  case MSG_MDS_EXPORTDIRFINISH:
+	m = new MExportDirFinish();
 	break;
 
   case MSG_MDS_EXPORTDIRNOTIFY:
 	m = new MExportDirNotify();
+	break;
+
+  case MSG_MDS_EXPORTDIRNOTIFYACK:
+	m = new MExportDirNotifyAck();
 	break;
 
   case MSG_MDS_EXPORTDIRPREP:

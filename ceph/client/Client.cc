@@ -439,12 +439,16 @@ void Client::issue_request()
 		op = MDS_OP_OPENRD;
 	  else if (r < 30 && !is_open(cwd) && !cwd->isdir)
 		op = MDS_OP_OPENWR;
-	  else if (r < 34 && cwd->isdir) {
+	  else if (!g_conf.client_deterministic &&
+			   r < 34 && cwd->isdir) {
 		op = MDS_OP_OPENWRC;
 		string dn = "blah_client_created.";
 		char pid[10];
 		sprintf(pid,"%d",getpid());
-		dn += pid;
+		
+		if (!g_conf.client_deterministic)
+		  dn += pid;
+
 		if (cwd->lookup(dn))
 		  op = MDS_OP_STAT; // nevermind
 		else {
@@ -454,7 +458,8 @@ void Client::issue_request()
 		  last_req_dn.push_back(dn);
 		}
 	  }
-	  else if (r < 35 && !cwd->isdir)
+	  else if (!g_conf.client_deterministic &&
+			   r < 35 && !cwd->isdir)
 		op = MDS_OP_UNLINK;
 	  else if (r < 41 + open_files.size() && open_files.size() > 0)
 		return close_a_file();  // close file
