@@ -2,6 +2,7 @@
 #ifndef __CINODE_H
 #define __CINODE_H
 
+#include "include/config.h"
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/DecayCounter.h"
@@ -230,7 +231,8 @@ class CInode : LRUObject {
   // --- reference counting
   void put(int by) {
 	if (ref == 0 || ref_set.count(by) != 1) {
-	  cout << " bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	  if (DEBUG_LEVEL > 7)
+		cout << " bad put " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 1);
 	  assert(ref > 0);
 	}
@@ -238,18 +240,21 @@ class CInode : LRUObject {
 	ref_set.erase(by);
 	if (ref == 0)
 	  lru_unpin();
-	cout << " put " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+	if (DEBUG_LEVEL > 7)
+	  cout << " put " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
   }
   void get(int by) {
 	if (ref == 0)
 	  lru_pin();
 	if (ref_set.count(by)) {
-	  cout << " bad get " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
+	  if (DEBUG_LEVEL > 7)
+		cout << " bad get " << *this << " by " << by << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 0);
 	}
 	ref++;
 	ref_set.insert(by);
-	cout << " get " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
+	if (DEBUG_LEVEL > 7)
+	  cout << " get " << *this << " by " << by << " now " << ref << " (" << ref_set << ")" << endl;
   }
   bool is_pinned_by(int by) {
 	return ref_set.count(by);

@@ -28,7 +28,7 @@ __uint64_t ino = 1;
 int play();
 
 int main(int argc, char **argv) {
-  cout << "hi there" << endl;
+  cout << "mpitest starting" << endl;
 
   int myrank = mpimessenger_init(argc, argv);
   int world = mpimessenger_world();

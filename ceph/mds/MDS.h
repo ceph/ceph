@@ -95,6 +95,7 @@ class MDS : public Dispatcher {
   DecayCounter stat_read;
   DecayCounter stat_write;
   
+  set<int>     done_clients;
 
  public:
   // sub systems
@@ -139,6 +140,7 @@ class MDS : public Dispatcher {
 
 
   void handle_ping(class MPing *m);
+  void handle_client_done(Message *m);
   void handle_shutdown_start(Message *m);
   void handle_shutdown_finish(Message *m);
 

@@ -72,6 +72,9 @@ void Client::dispatch(Message *m)
 
 	if (tid < max_requests)
 	  issue_request();	
+	else {
+	  done();
+	}
 	break;
 
   default:
@@ -81,6 +84,12 @@ void Client::dispatch(Message *m)
   delete m;
 }
 	
+
+void Client::done() {
+  dout(1) << "done, sending msg to mds0" << endl;
+  messenger->send_message(new Message(MSG_CLIENT_DONE),
+						  MSG_ADDR_MDS(0), MDS_PORT_MAIN, 0);
+}
 
 void Client::assim_reply(MClientReply *r)
 {

@@ -1,5 +1,5 @@
-
 CC=g++
+#CC=distcc g++
 #CC=mpiCC
 CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=
@@ -15,7 +15,7 @@ LEAKTRACER=$(HOME)/lib/LeakTracer.o
 
 SRCS=*.cc */*.cc
 OBJS=osd/OSD.o Messenger.o Logger.o mds/MDBalancer.o mds/MDS.o mds/CDentry.o mds/CDir.o mds/CInode.o mds/MDCache.o mds/MDStore.o clock.o mds/LogStream.o mds/MDLog.o client/Client.o mds/MDCluster.o
-TARGETS=test import
+TARGETS=test import mpitest
 
 all: depend ${TARGETS}
 

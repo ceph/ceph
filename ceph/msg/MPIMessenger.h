@@ -18,6 +18,7 @@ class MPIMessenger : public Messenger {
   virtual int shutdown();
   virtual int send_message(Message *m, long dest, int port=0, int fromport=0);
   virtual int wait_message(time_t seconds);
+  virtual void done();
 
   virtual int loop();
 };

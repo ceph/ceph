@@ -123,6 +123,7 @@ decode_message(crope& ser)
 
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
+  case MSG_CLIENT_DONE:
 	m = new Message(type);
 	break;
 

@@ -61,9 +61,8 @@ int main(int argc, char **argv) {
   // loop
   fakemessenger_do_loop();
 
-  mds[0]->shutdown_start();
-
-  fakemessenger_do_loop();
+  //mds[0]->shutdown_start();
+  //fakemessenger_do_loop();
 
   // 
   cout << "---- check ----" << endl;

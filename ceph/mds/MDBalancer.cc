@@ -151,7 +151,7 @@ void MDBalancer::do_rebalance()
   double my_load = mds_load[whoami].root_pop;
   mds_load_t target_load = total_load / (double)cluster_size;
 
-  cout << "  target load " << target_load << endl;
+  dout(5) << "  target load " << target_load << endl;
   
   if (my_load < target_load.root_pop) {
 	dout(5) << "  i am underloaded, doing nothing." << endl;

@@ -130,7 +130,7 @@ void OSD::read(MOSDRead *r)
 	char *buf = new char[len];
 	long got = ::read(fd, buf, len);
 
-	dout(10) << "osd_read " << got << " / " << len << " bytes to " << f << endl;
+	dout(10) << "osd_read " << got << " / " << len << " bytes from " << f << endl;
 
 	// close
 	flock(fd, LOCK_UN);
@@ -177,7 +177,7 @@ void OSD::write(MOSDWrite *m)
 
     fchmod(fd, 0664);
 	
-	dout(10) << "osd_write " << m->get_len() << " bytes to " << f << endl;
+	dout(10) << "osd_write " << m->get_len() << " bytes at offset " << m->get_offset() << " to " << f << endl;
 	
 	if (m->get_offset())
 	  lseek(fd, m->get_offset(), SEEK_SET);
@@ -191,7 +191,8 @@ void OSD::write(MOSDWrite *m)
 
   if (m->get_offset() == 0) {
 	char *n = get_filename(whoami, m->get_oid());
-	cout << f << " to " << n << " rename sez " << rename(f, n) << endl;	
+	int r = rename(f,n);
+	dout(11) << f << " to " << n << " rename sez " << r << endl;	
   }
 
   // clean up

@@ -20,23 +20,29 @@ hash_map<int, MPIMessenger*>  directory;
 
 hash_map<int, Message*>       incoming;
 
-#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "mpi "
-#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
-
-
 int mpi_world_size;
 int mpi_rank;
 
+bool mpi_done = false;
+
+
+#define  dout(l)    if (l<=DEBUG_LEVEL) cout << "[MPI " << mpi_rank << "/" << mpi_world_size << "] "
+#define  dout2(l)    if (1<=DEBUG_LEVEL) cout
+
+
 int mpimessenger_init(int& argc, char**& argv)
 {
-  dout(1) << "MPI_Init" << endl;
   //MPI::Init(argc, argv);
   MPI_Init(&argc, &argv);
 
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_world_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
-  dout(1) << "i am " << mpi_rank << " of " << mpi_world_size << endl;
+  char hostname[100];
+  gethostname(hostname,100);
+  int pid = getpid();
+
+  dout(1) << "init: i am " << hostname << " pid " << pid << endl;
   
   assert(mpi_world_size > NUMOSD+NUMMDS);
 
@@ -51,14 +57,14 @@ int mpimessenger_world()
 
 int mpimessenger_loop()
 {
-  while (1) {
+  while (!mpi_done) {
 	// check mpi
-	dout(1) << "waiting for message" << endl;
+	dout(12) << "waiting for message" << endl;
 
 	// get size
 	//MPI::Status status;
 	MPI_Status status;
-	int msize;
+	int msize = 0;
 	//MPI::COMM_WORLD.Recv(&msize, 
 	MPI_Recv(&msize, 
 			 1,
@@ -68,9 +74,15 @@ int mpimessenger_loop()
 			 MPI_COMM_WORLD,
 			 &status); // receives greeting from each process
 
+	if (msize == -1) {
+	  dout(1) << "got -1 terminate signal" << endl;
+	  mpi_done = true;
+	  break;
+	}
+
 	int tag = status.MPI_TAG;
 	int source = status.MPI_SOURCE;
-	dout(1) << "incoming size " << msize << " tag " << tag << " from rank " << source << endl;
+	dout(12) << "incoming size " << msize << " tag " << tag << " from rank " << source << endl;
 
 	// get message
 	char *buf = new char[msize];
@@ -103,6 +115,9 @@ int mpimessenger_loop()
 	  break;
 	}
   }
+
+  dout(1) << "waiting for all to finish" << endl;
+  MPI_Barrier (MPI_COMM_WORLD);
 }
 
 int mpimessenger_shutdown()
@@ -111,6 +126,26 @@ int mpimessenger_shutdown()
   MPI_Finalize();
 }
 
+
+void MPIMessenger::done() 
+{
+  dout(1) << "done()" << endl;
+  mpi_done = true;
+  
+  // tell everyone
+  for (int i=0; i<mpi_world_size; i++) {
+	if (i == mpi_rank) continue;
+	int m = -1;
+	
+	dout(12) << "done() telling rank " << i << endl;
+	MPI_Send(&m,
+			 1,
+			 MPI_INT,
+			 i,
+			 0, 
+			 MPI_COMM_WORLD);
+  }
+}
 
 MPIMessenger::MPIMessenger(long me)
 {
@@ -145,6 +180,11 @@ int MPIMessenger::shutdown()
 
 int MPIMessenger::send_message(Message *m, long dest, int port, int fromport)
 {
+  // set envelope
+  m->set_source(whoami, fromport);
+  m->set_dest(dest, port);
+
+  // send!
   int trank = MPI_DEST_TO_RANK(dest,mpi_world_size);
   crope r = m->get_serialized();
   int size = r.length();
@@ -156,27 +196,28 @@ int MPIMessenger::send_message(Message *m, long dest, int port, int fromport)
 	// no implemented
 	assert(0);
 
-  } else {
-	dout(3) << "sending message via MPI for (tag) " << dest << " to rank " << trank << " size " << size << endl;
+  } 
 
-	//MPI::COMM_WORLD.Send(&r,
-	MPI_Send(&r,
-						 1,
-						 MPI_INT,
-						 trank,
-						 dest, 
-			 MPI_COMM_WORLD);
-	
-	char *buf = (char*)r.c_str();
-	//MPI::COMM_WORLD.Send(buf,
-	MPI_Send(buf,
-			 size,
-			 MPI_CHAR,
-			 trank,
-			 dest,
-			 MPI_COMM_WORLD);
-  }
+  dout(10) << "sending message via MPI for (tag) " << dest << " to rank " << trank << " size " << size << endl;
+  
+  //MPI::COMM_WORLD.Send(&r,
+  MPI_Send(&size,
+		   1,
+		   MPI_INT,
+		   trank,
+		   dest, 
+		   MPI_COMM_WORLD);
+  
+  char *buf = (char*)r.c_str();
+  //MPI::COMM_WORLD.Send(buf,
+  MPI_Send(buf,
+		   size,
+		   MPI_CHAR,
+		   trank,
+		   dest,
+		   MPI_COMM_WORLD);
 }
+
 int MPIMessenger::wait_message(time_t seconds)
 {
 }

@@ -10,6 +10,10 @@
 
 #include <cassert>
 
+#include "include/config.h"
+#define dout(x)  if (x <= DEBUG_LEVEL) cout << "cdir:"
+
+
 // CDir
 
 void CDir::hit() 
@@ -258,7 +262,7 @@ void CDir::freeze(Context *c)
   assert((state_test(CDIR_STATE_FROZEN|CDIR_STATE_FREEZING)) == 0);
 
   if (hard_pinned + nested_hard_pinned == 0) {
-	cout << "freeze " << *inode << endl;
+	dout(10) << "freeze " << *inode << endl;
 
 	state_set(CDIR_STATE_FROZEN);
 	inode->hard_pin();  // hard_pin for duration of freeze
@@ -269,7 +273,7 @@ void CDir::freeze(Context *c)
 
   } else {
 	state_set(CDIR_STATE_FREEZING);
-	cout << "freeze + wait " << *inode << endl;
+	dout(10) << "freeze + wait " << *inode << endl;
 	// need to wait for pins to expire
 	waiting_to_freeze.push_back(c);
   }
@@ -277,7 +281,7 @@ void CDir::freeze(Context *c)
 
 void CDir::freeze_finish()
 {
-  cout << "freeze_finish " << *inode << endl;
+  dout(10) << "freeze_finish " << *inode << endl;
 
   inode->hard_pin();  // hard_pin for duration of freeze
 
@@ -295,7 +299,7 @@ void CDir::freeze_finish()
 
 void CDir::unfreeze()  // thaw?
 {
-  cout << "unfreeze " << *inode << endl;
+  dout(10) << "unfreeze " << *inode << endl;
   state_clear(CDIR_STATE_FROZEN);
   inode->hard_unpin();
   
@@ -323,15 +327,15 @@ void CDir::dump(int depth) {
 	CDentry* d = iter->second;
 	char isdir = ' ';
 	if (d->inode->dir != NULL) isdir = '/';
-	cout << ind << d->inode->inode.ino << " " << d->name << isdir << endl;
+	dout(10) << ind << d->inode->inode.ino << " " << d->name << isdir << endl;
 	d->inode->dump(depth+1);
 	iter++;
   }
 
   if (!(state_test(CDIR_STATE_COMPLETE)))
-	cout << ind << "..." << endl;
+	dout(10) << ind << "..." << endl;
   if (state_test(CDIR_STATE_DIRTY))
-	cout << ind << "[dirty]" << endl;
+	dout(10) << ind << "[dirty]" << endl;
 
 }
 
@@ -342,12 +346,12 @@ void CDir::dump_to_disk(MDS *mds)
   while (iter != items.end()) {
 	CDentry* d = iter->second;
 	if (d->inode->dir != NULL) {
-	  cout << "dump2disk: " << d->inode->inode.ino << " " << d->name << '/' << endl;
+	  dout(10) << "dump2disk: " << d->inode->inode.ino << " " << d->name << '/' << endl;
 	  d->inode->dump_to_disk(mds);
 	}
 	iter++;
   }
 
-  cout << "dump2disk: writing dir " << inode->inode.ino << endl;
+  dout(10) << "dump2disk: writing dir " << inode->inode.ino << endl;
   mds->mdstore->commit_dir(inode, NULL);
 }

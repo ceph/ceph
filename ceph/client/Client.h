@@ -34,6 +34,8 @@ class Client : public Dispatcher {
   int init();
   int shutdown();
 
+  void done();
+
   virtual void dispatch(Message *m);
 
   virtual void assim_reply(MClientReply*);

@@ -4,6 +4,8 @@
 
 #define MSG_PING       1
 
+#define MSG_FINISH     0
+
 #define MSG_OSD_READ         10
 #define MSG_OSD_READREPLY    11
 #define MSG_OSD_WRITE        12
@@ -11,6 +13,7 @@
 
 #define MSG_CLIENT_REQUEST   20
 #define MSG_CLIENT_REPLY     21
+#define MSG_CLIENT_DONE      22
 
 #define MSG_MDS_HEARTBEAT    100
 #define MSG_MDS_DISCOVER     110

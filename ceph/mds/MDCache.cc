@@ -270,6 +270,8 @@ bool MDCache::shutdown_pass()
 	  dout(7) << "done, sending shutdown_finish" << endl;
 	  mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
 								   MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
+	} else {
+	  mds->handle_shutdown_finish(new Message(MSG_MDS_SHUTDOWNFINISH));
 	}
 	return true;
   } else {

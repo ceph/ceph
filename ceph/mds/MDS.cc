@@ -151,6 +151,7 @@ void MDS::handle_shutdown_finish(Message *m)
 
   if (did_shut_down.size() == mdcluster->get_num_mds()) {
 	shutting_down = false;
+	messenger->done();
   }
 
   // done
@@ -198,6 +199,9 @@ void MDS::proc_message(Message *m)
 	handle_ping((MPing*)m);
 	break;
 
+  case MSG_CLIENT_DONE:
+	handle_client_done(m);
+	break;
 	
 	// MDS
   case MSG_MDS_SHUTDOWNSTART:
@@ -277,6 +281,20 @@ void MDS::dispatch(Message *m)
 	}
   }
 
+}
+
+
+void MDS::handle_client_done(Message *m)
+{
+  int n = MSG_ADDR_NUM(m->get_source());
+  dout(3) << "client" << n << " done" << endl;
+  done_clients.insert(n);
+  if (done_clients.size() == NUMCLIENT) {
+	dout(3) << "all clients done, initiating shutdown" << endl;
+	shutdown_start();
+  }
+
+  delete m;  // done
 }
 
 
