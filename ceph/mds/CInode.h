@@ -97,6 +97,12 @@ using namespace std;
     // trigger: (see CDIR_WAIT_UNFREEZE)
 #define CINODE_WAIT_ANY           0xffff
 
+
+// state
+#define CINODE_STATE_DIRTY       1
+
+
+
 class Context;
 class CDentry;
 class CDir;
@@ -123,6 +129,8 @@ class CInode : LRUObject {
   set<int>         ref_set;
   __uint64_t       version;
   __uint64_t       parent_dir_version;  // dir version when last touched.
+
+  unsigned         state;
 
   // parent dentries in cache
   int              nparents;  
@@ -192,6 +200,13 @@ class CInode : LRUObject {
   void hit();
 
 
+  // -- state --
+  unsigned get_state() { return state; }
+  void state_clear(unsigned mask) {	state &= ~mask; }
+  void state_set(unsigned mask) { state |= mask; }
+  unsigned state_test(unsigned mask) { return state & mask; }
+
+
   
   // dirtyness
   __uint64_t get_version() { return version; }
@@ -199,14 +214,16 @@ class CInode : LRUObject {
   void mark_dirty();
   void mark_clean() {
 	dout(10) << "mark_clean " << *this << endl;
-	if (ref_set.count(CINODE_PIN_DIRTY)) 
+	if (state & CINODE_STATE_DIRTY) {
+	  state &= ~CINODE_STATE_DIRTY;
 	  put(CINODE_PIN_DIRTY);
+	}
   }	
   bool is_dirty() {
-	return ref_set.count(CINODE_PIN_DIRTY);
+	return state & CINODE_STATE_DIRTY;
   }
   bool is_clean() {
-	return !ref_set.count(CINODE_PIN_DIRTY);
+	return state & CINODE_STATE_DIRTY;
   }
 
   __uint64_t get_parent_dir_version() { return parent_dir_version; }
@@ -321,16 +338,6 @@ class CInode : LRUObject {
 
 
 
-  // state
-  /*
-  unsigned get_state() { return state; }
-  void reset_state(unsigned s) { state = s; }
-  void state_clear(unsigned mask) {	state &= ~mask; }
-  void state_set(unsigned mask) { state |= mask; }
-
-  bool is_export() { return state & CINODE_MASK_EXPORT; }
-  bool is_import() { return state & CINODE_MASK_IMPORT; }
-  */
 
   // sync
   /*

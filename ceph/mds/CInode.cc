@@ -27,6 +27,7 @@ CInode::CInode() : LRUObject() {
   dir_auth = CDIR_AUTH_PARENT;
   dir = NULL;  // create CDir as needed
 
+  state = 0;
   auth_pins = 0;
   nested_auth_pins = 0;
   //  state = 0;
@@ -86,8 +87,10 @@ void CInode::mark_dirty() {
 
   // touch my private version
   version++;
-  if (!ref_set.count(CINODE_PIN_DIRTY)) 
+  if (!state & CINODE_STATE_DIRTY) {
+	state |= CINODE_STATE_DIRTY;
 	get(CINODE_PIN_DIRTY);
+  }
   
   // relative to parent dir:
   if (parent) {

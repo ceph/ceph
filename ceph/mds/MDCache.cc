@@ -1063,7 +1063,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
   // update!
   dout(7) << "dir_update on " << m->get_ino() << endl;
-
+  
+  if (!in->dir) in->dir = new CDir(in);
   in->dir->dir_rep = m->get_dir_rep();
   in->dir->dir_rep_by = m->get_dir_rep_by();
 
@@ -2408,7 +2409,6 @@ void MDCache::handle_export_dir(MExportDir *m)
   show_imports();
 
   mds->logger->inc("im");
-  //in->get(CINODE_PIN_IMPORTING);  // pin for the (non-blocking) import process only.
 
   if (!in->dir) in->dir = new CDir(in, false);
 
@@ -2489,7 +2489,6 @@ void MDCache::handle_export_dir(MExportDir *m)
 
   }
 
-  //in->put(CINODE_PIN_IMPORTING);   // import done, unpin.
   in->dir->auth_unpin();  
 
   dout(5) << "done with import!" << endl;
