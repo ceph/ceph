@@ -80,7 +80,8 @@ CInode::CInode(bool auth) : LRUObject() {
 
   version = 0;
 
-  this->auth = auth;  // by default.
+  //this->auth = auth;  // by default.
+  state_set(CINODE_STATE_AUTH);
 }
 
 CInode::~CInode() {
@@ -130,14 +131,16 @@ CDir *CInode::set_dir(CDir *newdir)
 void CInode::set_auth(bool a) 
 {
   if (!is_dangling() && !is_root() && 
-	  auth != a) {
+	  is_auth() != a) {
 	CDir *dir = get_parent_dir();
-	if (auth && !a) 
+	if (is_auth() && !a) 
 	  dir->nauthitems--;
 	else
 	  dir->nauthitems++;
   }
-  auth = a;
+  
+  if (a) state_set(CINODE_STATE_AUTH);
+  else state_clear(CINODE_STATE_AUTH);
 }
 
 

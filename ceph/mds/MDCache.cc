@@ -859,7 +859,6 @@ void MDCache::rename_dir(CInode *from,
   }
 
   show_imports();
-
 }
 
 
@@ -1668,13 +1667,91 @@ void MDCache::file_rename_finish(CInode *from, CDir *destdir, CInode *oldin, Con
 
 /*
 
+LOCKS:
+
+ three states:
+
+   Auth   Replica   State
+    R       R       normal/sync    fw writes to auth
+    RW      -       lock           ping auth for R/W?
+    W       W       async (*)      fw reads to auth  
+  
+    * only defined for soft inode metadata, right?
+
+ we also remember:
+   auth:
+    set<int> replicas 
+    bool req_r, req_w
+    
+   replica:
+    last_sync - stamp of last time we were sync
+
+
+
+   
+
+
 INODES:
 
- two types of inode metadata:
-  hard - uid/gid, mode
-  soft - m/c/atime, size
+= two types of inode metadata:
+   hard  - uid/gid, mode
+   soft  - m/ctime, size
+ ? atime - atime  (*)
 
- correspondingly, two types of locks:
+   * if we want _strict_ atime behavior, atime can be folded into soft.  
+     for lazy atime, should we just leave the atime lock in async state?  XXX
+
+= correspondingly, two types of inode locks:
+   hardlock - hard metadata
+   softlock - soft metadata
+
+   -> These locks are completely orthogonal! 
+
+= metadata ops and how they affect inode metadata:
+        scma=size ctime mtime atime
+   HARD SOFT OP
+  files:
+    R   RRRR stat
+    RW       chmod/chown
+    R    wW  touch   ?ctime
+    R        openr
+           W read    atime
+    R        openw
+    R    w   openwc  ?ctime
+        W W  write   size mtime
+             close 
+  dirs:
+    R      W readdir atime 
+        RRRR  ( + implied stats on files)
+    R   W W  link/unlink/rename/rmdir
+    R   WwW  mkdir         (ctime on new dir, size+mtime on parent dir)
+
+  
+
+= relationship to client (writers):
+
+  - ops in question are
+    - stat ... need reasonable value for mtime (+ atime?)
+      - maybe we want a "quicksync" type operation instead of full lock
+    - truncate ... need to stop writers for the atomic truncate operation
+      - need a full lock
+
+
+
+
+
+
+ALSO:
+
+  dirlock  - no dir changes (prior to unhashing)
+  denlock  - dentry lock    (prior to unlink, rename)
+
+     
+
+
+
+OLD CRAP:
+ (old):
   sync -  soft metadata.. no reads/writes can proceed.  (eg no stat)
   lock -  hard(+soft) metadata.. path traversals stop etc.  (??)
 
@@ -3688,8 +3765,9 @@ void MDCache::handle_export_dir(MExportDir *m)
 
 	MExportDirNotify *notify = new MExportDirNotify(dir->ino(), m->get_source(), mds->get_nodeid());
 	notify->copy_exports(m->get_exports());
+
 	if (g_conf.mds_verify_export_dirauth)
-	  notify->copy_subdirs(imported_subdirs);   // copy subdir list (debug)
+	  notify->copy_subdirs(imported_subdirs);   // copy subdir list (DEBUG)
 
 	mds->messenger->send_message(notify,
 								 MSG_ADDR_MDS( *it ), MDS_PORT_CACHE,
@@ -3973,7 +4051,7 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 	assert(dir->authority() != mds->get_nodeid());
 	assert(!dir->is_auth());
 	
-	// debug: verify subdirs
+	// DEBUG: verify subdirs
 	if (g_conf.mds_verify_export_dirauth) {
 	  
 	  dout(7) << "handle_export_dir_notify on " << *dir << " checking " << m->num_subdirs() << " subdirs" << endl;

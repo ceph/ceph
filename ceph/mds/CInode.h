@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 #include "CDentry.h"
+#include "Lock.h"
 
 #include <cassert>
 #include <list>
@@ -134,16 +135,18 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 
 
 // state
-#define CINODE_STATE_ROOT        1
-#define CINODE_STATE_DIRTY       2
-#define CINODE_STATE_UNSAFE      4   // not logged yet
-#define CINODE_STATE_DANGLING    8   // delete me when i expire; i have no dentry
-#define CINODE_STATE_UNLINKING  16
-#define CINODE_STATE_PROXY      32   // can't expire yet
-#define CINODE_STATE_EXPORTING  64   // on nonauth bystander.
+#define CINODE_STATE_AUTH        (1<<0)
+#define CINODE_STATE_ROOT        (1<<1)
 
-#define CINODE_STATE_RENAMING   128  // moving me
-#define CINODE_STATE_RENAMINGTO 256  // rename target (will be unlinked)
+#define CINODE_STATE_DIRTY       (1<<2)
+#define CINODE_STATE_UNSAFE      (1<<3)   // not logged yet
+#define CINODE_STATE_DANGLING    (1<<4)   // delete me when i expire; i have no dentry
+#define CINODE_STATE_UNLINKING   (1<<5)
+#define CINODE_STATE_PROXY       (1<<6)   // can't expire yet
+#define CINODE_STATE_EXPORTING   (1<<7)   // on nonauth bystander.
+
+#define CINODE_STATE_RENAMING    (1<<8)  // moving me
+#define CINODE_STATE_RENAMINGTO  (1<<9)  // rename target (will be unlinked)
 
 
 // misc
@@ -187,7 +190,7 @@ class CInode : LRUObject {
   CInode *lru_next, *lru_prev;
 
   // -- distributed caching
-  bool             auth;       // safety check; true if this is authoritative.
+  //bool             auth;       // safety check; true if this is authoritative.
   set<int>         cached_by;  // mds's that cache me.  
   /* NOTE: on replicas, this doubles as replicated_by, but the
 	 cached_by_* access methods below should NOT be used in those
@@ -246,9 +249,9 @@ class CInode : LRUObject {
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_proxy() { return state & CINODE_STATE_PROXY; }
 
-  bool is_auth() { return auth; }
+  bool is_auth() { return state & CINODE_STATE_AUTH; }
   void set_auth(bool auth);
-  bool is_replica() { return !auth; }
+  bool is_replica() { return !is_auth(); }
   int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
 
   inodeno_t ino() { return inode.ino; }

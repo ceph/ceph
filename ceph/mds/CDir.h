@@ -33,21 +33,22 @@ class Context;
 
 
 // state bits
-#define CDIR_STATE_COMPLETE      (1<<0)   // the complete contents are in cache
-#define CDIR_STATE_DIRTY         (1<<1)   // has been modified since last commit
+#define CDIR_STATE_AUTH          (1<<0)   // auth for this dir (hashing doesn't count)
+#define CDIR_STATE_PROXY         (1<<1)   // proxy auth
 
-#define CDIR_STATE_FROZENTREE    (1<<2)   // root of tree (bounded by exports)
-#define CDIR_STATE_FREEZINGTREE  (1<<3)   // in process of freezing 
-#define CDIR_STATE_FROZENDIR     (1<<4)
-#define CDIR_STATE_FREEZINGDIR   (1<<5)
+#define CDIR_STATE_COMPLETE      (1<<2)   // the complete contents are in cache
+#define CDIR_STATE_DIRTY         (1<<3)   // has been modified since last commit
 
-#define CDIR_STATE_COMMITTING    (1<<6)   // mid-commit
-#define CDIR_STATE_FETCHING      (1<<7)   // currenting fetching
+#define CDIR_STATE_FROZENTREE    (1<<4)   // root of tree (bounded by exports)
+#define CDIR_STATE_FREEZINGTREE  (1<<5)   // in process of freezing 
+#define CDIR_STATE_FROZENDIR     (1<<6)
+#define CDIR_STATE_FREEZINGDIR   (1<<7)
 
-#define CDIR_STATE_IMPORT        (1<<8)   // flag set if this is an import.
-#define CDIR_STATE_EXPORT        (1<<9)
-#define CDIR_STATE_AUTH          (1<<10)   // auth for this dir (hashing doesn't count)
-#define CDIR_STATE_PROXY         (1<<11)
+#define CDIR_STATE_COMMITTING    (1<<8)   // mid-commit
+#define CDIR_STATE_FETCHING      (1<<9)   // currenting fetching
+
+#define CDIR_STATE_IMPORT        (1<<10)   // flag set if this is an import.
+#define CDIR_STATE_EXPORT        (1<<11)
 
 #define CDIR_STATE_HASHED        (1<<12)   // if hashed.  only hashed+auth on auth node.
 #define CDIR_STATE_HASHING       (1<<13)
