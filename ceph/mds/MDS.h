@@ -3,11 +3,14 @@
 #define __MDS_H
 
 #include <list>
-#include <ext/hash_map>
 #include <vector>
 #include <set>
 #include <ostream>
+using namespace std;
+
+#include <ext/hash_map>
 #include <ext/rope>
+using namespace __gnu_cxx;
 
 #include "msg/Dispatcher.h"
 #include "include/types.h"
@@ -17,7 +20,6 @@
 
 typedef __uint64_t object_t;
 
-using namespace std;
 
 
 #define MDS_PORT_MAIN     1

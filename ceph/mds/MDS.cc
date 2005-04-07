@@ -33,8 +33,9 @@
 #include "events/EInodeUpdate.h"
 #include "events/EInodeUnlink.h"
 
-#include <list>
+#include <errno.h>
 
+#include <list>
 #include <iostream>
 using namespace std;
 

@@ -2,9 +2,10 @@
 #define __LOGSTREAM_H
 
 #include "include/types.h"
-#include "../include/Context.h"
+#include "include/Context.h"
+
 #include <ext/rope>
-using namespace std;
+using namespace __gnu_cxx;
 
 class LogEvent;
 class MDS;

@@ -2,10 +2,12 @@
 #define __LOGGER_H
 
 #include "types.h"
-#include <ext/hash_map>
 #include <string>
 #include <fstream>
 using namespace std;
+
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 class LogType;
 class Logger {

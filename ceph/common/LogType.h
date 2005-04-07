@@ -6,6 +6,7 @@
 #include <string>
 #include <fstream>
 using namespace std;
+using namespace __gnu_cxx;
 
 class LogType {
  protected:

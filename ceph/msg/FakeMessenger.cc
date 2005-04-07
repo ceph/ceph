@@ -1,6 +1,4 @@
 
-#include "include/config.h"
-using namespace std;
 
 
 #include "Message.h"
@@ -9,6 +7,8 @@ using namespace std;
 #include "include/LogType.h"
 #include "include/Logger.h"
 
+#include "include/config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
@@ -16,6 +16,7 @@ using namespace std;
 #include <cassert>
 #include <iostream>
 
+using namespace std;
 
 
 

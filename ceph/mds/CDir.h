@@ -9,13 +9,15 @@
 #include <iostream>
 #include <cassert>
 
-#include <ext/rope>
 #include <list>
 #include <set>
 #include <map>
-#include <ext/hash_map>
 #include <string>
 using namespace std;
+
+#include <ext/rope>
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 class CInode;
 class CDentry;

@@ -2,9 +2,11 @@
 #define __MDBALANCER_H
 
 #include <ostream>
-#include <ext/hash_map>
 #include <list>
 using namespace std;
+
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 #include "include/types.h"
 

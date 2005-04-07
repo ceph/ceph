@@ -3,8 +3,10 @@
 #define __MDSTORE_H
 
 #include "include/types.h"
-#include <ext/rope>
 using namespace std;
+
+#include <ext/rope>
+using namespace __gnu_cxx;
 
 class MDS;
 class CDir;

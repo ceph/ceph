@@ -16,9 +16,11 @@
 #include <vector>
 #include <set>
 #include <map>
-#include <ext/rope>
 #include <iostream>
 using namespace std;
+
+#include <ext/rope>
+using namespace __gnu_cxx;
 
 
 // crap

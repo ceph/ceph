@@ -1,14 +1,11 @@
 
 CC=g++
 #CC=distcc g++
-#CC=mpiCC
-CFLAGS=-g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
+CFLAGS=-g -I.
 #CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=
 
 MPICC=g++
-#kMPICC=./mpiCC
-#MPICC=mpiCC
 MPICFLAGS=${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
 MPILIBS= -lelan -lmpi  ${LIBS}
 

@@ -3,8 +3,11 @@
 
 #include <assert.h>
 #include <set>
-#include <ext/rope>
 using namespace std;
+
+#include <ext/rope>
+using namespace __gnu_cxx;
+
 
 // STATES
 // basic lock

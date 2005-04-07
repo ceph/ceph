@@ -4,6 +4,7 @@
 #include <iostream>
 #include <ext/rope>
 using namespace std;
+using namespace __gnu_cxx;
 
 class filepath {
   string path;

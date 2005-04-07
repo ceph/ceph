@@ -90,11 +90,13 @@ typedef int  msg_addr_t;
 							 ((x)-(g_conf.num_mds+g_conf.num_osd))))
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
 
-#include <iostream>
 #include <stdlib.h>
-#include <ext/rope>
 #include <cassert>
+
+#include <iostream>
 using namespace std;
+
+#include <ext/rope>
 using namespace __gnu_cxx;
 
 

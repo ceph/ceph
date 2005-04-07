@@ -20,6 +20,7 @@
 #include <sys/file.h>
 #include <iostream>
 #include <cassert>
+#include <errno.h>
 
 #include "include/config.h"
 #undef dout
