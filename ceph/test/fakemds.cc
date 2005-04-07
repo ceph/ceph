@@ -6,7 +6,7 @@
 
 #include "mds/MDS.h"
 #include "osd/OSD.h"
-#include "client/Client.h"
+#include "fakeclient/FakeClient.h"
 
 #include "mds/MDCluster.h"
 #include "mds/MDCache.h"
@@ -57,9 +57,9 @@ int main(int argc, char **argv) {
   }
   
   // create clients
-  Client *client[NUMCLIENT];
+  FakeClient *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	client[i] = new Client(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)), g_conf.client_requests);
+	client[i] = new FakeClient(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)), g_conf.client_requests);
 	client[i]->init();
   }
   

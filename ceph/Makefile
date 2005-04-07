@@ -28,7 +28,7 @@ OBJS=osd/OSD.o\
  mds/IdAllocator.o\
  mds/MDLog.o\
  mds/MDCluster.o\
- client/Client.o\
+ fakeclient/FakeClient.o\
  Logger.o\
  clock.o\
  config.o
