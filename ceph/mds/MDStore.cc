@@ -531,7 +531,7 @@ void MDStore::do_fetch_dir_2( int result,
 	  
 	  if (mds->mdcache->have_inode(inode->ino)) {
 		CInode *in = mds->mdcache->get_inode(inode->ino);
-		dout(10) << "readdir got (but i already had) " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
+		dout(10) << "readdir got (but i already had) " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 		continue;
 	  }
 	  
@@ -543,7 +543,7 @@ void MDStore::do_fetch_dir_2( int result,
 	  mds->mdcache->add_inode( in );
 	  mds->mdcache->link_inode( dir, dname, in );
 	  
-	  dout(10) << "readdir got " << *in << " isdir " << in->inode.isdir << " touched " << in->inode.touched<< endl;
+	  dout(10) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
   }
   

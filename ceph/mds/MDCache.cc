@@ -43,8 +43,6 @@
 #include "messages/MInodeUnlink.h"
 #include "messages/MInodeUnlinkAck.h"
 
-#include "messages/MLock.h"
-
 #include "messages/MInodeSyncStart.h"
 #include "messages/MInodeSyncAck.h"
 #include "messages/MInodeSyncRelease.h"
@@ -53,6 +51,8 @@
 #include "messages/MInodeLockStart.h"
 #include "messages/MInodeLockAck.h"
 #include "messages/MInodeLockRelease.h"
+
+#include "messages/MLock.h"
 
 #include "messages/MDirSyncStart.h"
 #include "messages/MDirSyncAck.h"
@@ -73,6 +73,10 @@ using namespace std;
 #include "include/config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".cache "
+
+
+
+
 
 
 
@@ -268,8 +272,8 @@ void MDCache::shutdown_start()
 	   it++) {
 	CInode *in = it->second;
 	if (in->is_auth()) {
-	  if (in->is_syncbyme()) inode_sync_release(in);
-	  if (in->is_lockbyme()) inode_lock_release(in);
+	  //if (in->is_syncbyme()) inode_sync_release(in);
+	  //if (in->is_lockbyme()) inode_lock_release(in);
 	}
   }
 
@@ -305,21 +309,6 @@ bool MDCache::shutdown_pass()
   trim(0);
   
   dout(7) << "cache size now " << lru->lru_get_size() << endl;
-
-  // send inode_expire's on all potentially cache pinned items
-  //no: expires now reliable; leaves will always expire
-  if (false &&
-	  !did_inode_updates) {
-	did_inode_updates = true;
-
-	for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
-		 it != inode_map.end();
-		 it++) {
-	  if (it->second->ref_set.count(CINODE_PIN_CACHED)) 
-		send_inode_updates(it->second);  // send an update to discover who dropped the ball
-	}
-  }
-
   
   // send all imports back to 0.
   if (mds->get_nodeid() != 0) {
@@ -409,12 +398,11 @@ int MDCache::open_root(Context *c)
 	// i am root inode
 	CInode *root = new CInode();
 	root->inode.ino = 1;
-	root->inode.isdir = true;
 
 	// make it up (FIXME)
-	root->inode.mode = 0755;
+	root->inode.mode = 0755 | INODE_MODE_DIR;
 	root->inode.size = 0;
-	root->inode.touched = 0;
+	root->inode.mtime = 0;
 
 	root->state_set(CINODE_STATE_ROOT);
 
@@ -520,15 +508,6 @@ int MDCache::proc_message(Message *m)
 	handle_cache_expire((MCacheExpire*)m);
 	break;
 
-	/*
-  case MSG_MDS_INODEEXPIRE:
-	handle_inode_expire((MInodeExpire*)m);
-	break;
-
-  case MSG_MDS_DIREXPIRE:
-	handle_dir_expire((MDirExpire*)m);
-	break;
-	*/
 
   case MSG_MDS_INODEUNLINK:
 	handle_inode_unlink((MInodeUnlink*)m);
@@ -537,7 +516,7 @@ int MDCache::proc_message(Message *m)
 	handle_inode_unlink_ack((MInodeUnlinkAck*)m);
 	break;
 
-
+	/*
 	// sync
   case MSG_MDS_INODESYNCSTART:
 	handle_inode_sync_start((MInodeSyncStart*)m);
@@ -551,7 +530,8 @@ int MDCache::proc_message(Message *m)
   case MSG_MDS_INODESYNCRECALL:
 	handle_inode_sync_recall((MInodeSyncRecall*)m);
 	break;
-	
+	*/
+	/*
 	// lock
   case MSG_MDS_INODELOCKSTART:
 	handle_inode_lock_start((MInodeLockStart*)m);
@@ -562,8 +542,11 @@ int MDCache::proc_message(Message *m)
   case MSG_MDS_INODELOCKRELEASE:
 	handle_inode_lock_release((MInodeLockRelease*)m);
 	break;
-	
+	*/
 
+  case MSG_MDS_LOCK:
+	handle_lock((MLock*)m);
+	break;
 
 	// import
   case MSG_MDS_EXPORTDIRDISCOVER:
@@ -643,7 +626,7 @@ int MDCache::path_traverse(filepath& path,
 	dout(12) << " path seg " << path[depth] << endl;
 	
 	if (!cur->is_dir()) {
-	  dout(7) << *cur << " not a dir " << cur->inode.isdir << endl;
+	  dout(7) << *cur << " not a dir " << endl;
 	  return -ENOTDIR;
 	}
 
@@ -684,11 +667,12 @@ int MDCache::path_traverse(filepath& path,
 	}
 	
 	// must read hard data to traverse
-	if (!read_hard_try(cur, req))
+	if (!inode_hard_read_start(cur, req))
 	  return 1;
+	inode_hard_read_finish(cur);
 	
 	// check permissions?
-	
+	// XXX
 	
 	// dentry
 	CDentry *dn = cur->dir->lookup(path[depth]);
@@ -916,24 +900,6 @@ void MDCache::handle_discover(MDiscover *dis)
     assert(cur);
 
 	dout(10) << "dir is " << *cur->dir << endl;
-
-	/*
-    if (cur->dir->is_proxy() ||
-		cur->is_auth() && !cur->dir->is_auth()) {
-      // fwd to dir auth
-	  int dirauth = cur->dir->authority();
-	  if (dirauth == dis->get_asker()) {
-		dout(7) << "from (new hopefully) dir auth, dropping on floor." << endl;
-		assert(dis->get_asker() == dis->get_source());
-		delete dis;
-	  } else {
-		dout(7) << "fwd to dir auth " << dirauth << endl;
-		mds->messenger->send_message( dis,
-									  MSG_ADDR_MDS( dirauth ), MDS_PORT_CACHE, MDS_PORT_CACHE );
-	  }
-      return;
-    }
-	*/
 	
     // create reply
     reply = new MDiscoverReply(cur->ino());
@@ -985,6 +951,11 @@ void MDCache::handle_discover(MDiscover *dis)
     if (dn) {
 		CInode *next = dn->inode;
         assert(next->is_auth());
+
+		// relax inode lock before we replicate?
+		if (!next->is_cached_by_anyone()) {
+		  next->replicate_relax_locks();
+		}
 
         // add dentry + inode
         reply->add_dentry( dis->get_dentry(i) );
@@ -1147,6 +1118,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		// root
 		in->state_set(CINODE_STATE_ROOT);
 		set_root( in );
+		dout(7) << " got root: " << *in << endl;
 		
 		finished.splice(finished.end(), waiting_for_root);
 	  } else {
@@ -1313,6 +1285,47 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	  // remove from our cached_by
 	  dout(7) << "inode_expire on " << *in << " from mds" << from << " cached_by was " << in->cached_by << endl;
 	  in->cached_by_remove(from);
+	  
+	  // fix locks
+	  if (in->hardlock.is_gathering(from)) {
+		// ugly hack
+		int ac;
+		switch (in->hardlock.get_state()) {
+		case LOCK_PRELOCK:
+		  ac = LOCK_AC_LOCKNAK;
+		  break;
+		default:
+		  assert(0);
+		}
+		MLock *m = new MLock(ac, from);
+		m->set_ino(in->ino(), LOCK_OTYPE_IHARD);
+		handle_lock_inode_hard(m);
+	  }
+	  if (in->softlock.is_gathering(from)) {
+		// ugly hack
+		int ac;
+		switch (in->hardlock.get_state()) {
+		case LOCK_GSYNC:
+		  ac = LOCK_AC_GSYNCNAK;
+		  break;
+		case LOCK_GLOCK:
+		  ac = LOCK_AC_GLOCKNAK;
+		  break;
+		case LOCK_GASYNC:
+		  ac = LOCK_AC_GASYNCNAK;
+		  break;
+		case LOCK_PRELOCK:
+		  ac = LOCK_AC_LOCKNAK;
+		  break;
+		default:
+		  assert(0);
+		}
+		MLock *m = new MLock(ac, from);
+		m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+		handle_lock_inode_soft(m);
+	  }
+
+
 	} 
 	else {
 	  // this is an old nonce, ignore expire.
@@ -1447,6 +1460,7 @@ public:
 
 void MDCache::inode_unlink(CInode *in, Context *c)
 {
+  /*
   assert(in->is_auth());
   assert(!in->is_presync());
   assert(!in->is_prelock());
@@ -1485,6 +1499,7 @@ void MDCache::inode_unlink(CInode *in, Context *c)
 	in->state_set(CINODE_STATE_UNLINKING);
 	in->unlink_waiting_for_ack = in->cached_by;
   }
+  */
 }
 
 
@@ -1578,6 +1593,7 @@ public:
 
 void MDCache::file_rename(CInode *from, CDir *destdir, string& name, CInode *oldin, Context *c)
 {
+  /*
   assert(from->is_auth());
   assert(!from->is_cached_by_anyone() || from->is_lockbyme());
   assert(!oldin || !oldin->is_cached_by_anyone() || oldin->is_lockbyme());
@@ -1633,7 +1649,7 @@ void MDCache::file_rename(CInode *from, CDir *destdir, string& name, CInode *old
 	// done
 	file_rename_finish(from, destdir, oldin, c);
   }
-  
+  */
 }
 
 void MDCache::file_rename_finish(CInode *from, CDir *destdir, CInode *oldin, Context *c)
@@ -1642,10 +1658,10 @@ void MDCache::file_rename_finish(CInode *from, CDir *destdir, CInode *oldin, Con
 
   // drop locks?
   from->state_clear(CINODE_STATE_RENAMING);
-  write_hard_finish(from);
+  inode_hard_write_finish(from);
   
   if (oldin) {
-	write_hard_finish(oldin);
+	inode_hard_write_finish(oldin);
 	oldin->state_clear(CINODE_STATE_RENAMINGTO);
   }
 
@@ -1694,8 +1710,8 @@ INODES:
 
 = two types of inode metadata:
    hard  - uid/gid, mode
-   soft  - m/ctime, size
- ? atime - atime  (*)
+   soft  - mtime, size
+ ? atime - atime  (*)       <-- we want a lazy update strategy?
 
    * if we want _strict_ atime behavior, atime can be folded into soft.  
      for lazy atime, should we just leave the atime lock in async state?  XXX
@@ -1707,23 +1723,24 @@ INODES:
    -> These locks are completely orthogonal! 
 
 = metadata ops and how they affect inode metadata:
-        scma=size ctime mtime atime
+        sma=size mtime atime
    HARD SOFT OP
   files:
-    R   RRRR stat
-    RW       chmod/chown
-    R    wW  touch   ?ctime
-    R        openr
-           W read    atime
-    R        openw
-    R    w   openwc  ?ctime
-        W W  write   size mtime
-             close 
+    R   RRR stat
+    RW      chmod/chown
+    R    W  touch   ?ctime
+    R       openr
+          W read    atime
+    R       openw
+    Wc      openwc  ?ctime
+        WW  write   size mtime
+            close 
+
   dirs:
-    R      W readdir atime 
-        RRRR  ( + implied stats on files)
-    R   W W  link/unlink/rename/rmdir
-    R   WwW  mkdir         (ctime on new dir, size+mtime on parent dir)
+    R     W readdir atime 
+        RRR  ( + implied stats on files)
+    Rc  WW  mkdir         (ctime on new dir, size+mtime on parent dir)
+    R   WW  link/unlink/rename/rmdir  (size+mtime on dir)
 
   
 
@@ -1735,7 +1752,7 @@ INODES:
     - truncate ... need to stop writers for the atomic truncate operation
       - need a full lock
 
- ????
+
 
 
 ALSO:
@@ -1747,388 +1764,944 @@ ALSO:
 */
 
 
-/*
 void MDCache::handle_lock(MLock *m)
 {
-  // action type
   switch (m->get_otype()) {
-  case LOCK_OTYPE_INO:
-	CInode *in = get_inode(m->get_ino());
-	
-	break;
-
-  case LOCK_OTYPE_DIRINO:
-	CInode *in = get_inode(m->get_ino());
-	CDir *dir = in->dir;
+  case LOCK_OTYPE_IHARD:
+	handle_lock_inode_hard(m);
 	break;
 	
+  case LOCK_OTYPE_ISOFT:
+	handle_lock_inode_soft(m);
+	break;
+	
+  case LOCK_OTYPE_DIR:
+	handle_lock_dir(m);
+	break;
 	
   case LOCK_OTYPE_DN:
-	CInode *in = get_inode(m->get_ino());
-	CDir *dir = in->dir;
-	CDentry = dir->lookup(m->get_dn());
-	
+	handle_lock_dn(m);
 	break;
-  } 
-  
+
+  default:
+	dout(7) << "handle_lock got otype " << m->get_otype() << endl;
+	assert(0);
+	break;
+  }
 }
-
-*/
-
-
-/*
-
-OLD LOCK CRAP
-
-
- (old):
-  sync -  soft metadata.. no reads/writes can proceed.  (eg no stat)
-  lock -  hard(+soft) metadata.. path traversals stop etc.  (??)
-
-
- replication consistency modes:
-  hard+soft - hard and soft are defined on all replicas.
-              all reads proceed (in absense of sync lock)
-              writes require sync lock; possibly fw to auth
-   -> normal behavior.
-
-  hard      - hard only, soft is undefined
-              reads require a sync
-              writes proceed if field updates are monotonic (e.g. size, m/c/atime)
-   -> 'softasync'
-
- types of access by cache users:
-
-   hard   soft
-    R      -    read_hard_try       path traversal
-    R  <=  R    read_soft_start     stat
-    R  <=  W    write_soft_start    touch
-    W  =>  W    write_hard_start    chmod
-
-   note on those implications:
-     read_soft_start() calls read_hard_try()
-     write_soft_start() calls read_hard_try()
-     a hard lock implies/subsumes a soft sync  (read_soft_start() returns true if a lock is held)
-
-
- relationship with frozen directories:
-
-   read_hard_try - can proceed, because any hard changes require a lock, which requires an active
-      authority, which implies things are unfrozen.
-   write_hard_start - waits (has to; only auth can initiate)
-   read_soft_start  - ???? waits for now.  (FIXME: if !softasync & !syncbyauth)
-   write_soft_start - ???? waits for now.  (FIXME: if (softasync & !syncbyauth))
-
-   if sticky is on, an export_dir will drop any sync or lock so that the freeze will 
-   proceed (otherwise, deadlock!).  likewise, a sync will not stick if is_freezing().
-   
-
-
-NAMESPACE:
-
  
-*/
 
+// hard inode metadata
 
-
-
-
-/* soft sync locks: mtime, size, etc. 
- */
-
-bool MDCache::read_soft_start(CInode *in, Message *m)
+bool MDCache::inode_hard_read_start(CInode *in, Message *m)
 {
-  if (!read_hard_try(in, m))
-	return false;
+  dout(7) << "inode_hard_read_start on " << *in << " hardlock=" << in->hardlock << endl;  
 
-  // if frozen: i can't proceed (for now, see above)
-  if (in->is_frozen()) {
-	dout(7) << "read_soft_start " << *in << " is frozen, waiting" << endl;
-	in->add_waiter(CDIR_WAIT_UNFREEZE,
-				   new C_MDS_RetryMessage(mds, m));
-	return false;
+  // can read?  grab ref.
+  if (in->hardlock.can_read(in->is_auth())) {
+	in->hardlock.get_read();
+	return true;
   }
-
-
-  dout(5) << "read_soft_start " << *in << endl;
-
-  // what soft sync mode?
-
-  if (in->is_softasync()) {
-	// softasync: hard consistency only
-
-	if (in->is_auth()) {
-	  // i am auth: i need sync
-	  if (in->is_syncbyme()) goto yes;
-	  if (in->is_lockbyme()) goto yes;   // lock => sync
-	  if (!in->is_cached_by_anyone() &&
-		  !in->is_open_write()) goto yes;  // i'm alone
-	} else {
-	  // i am replica: fw to auth
-	  int auth = in->authority();
-	  dout(5) << "read_soft_start " << *in << " is softasync, fw to auth " << auth << endl;
-	  assert(auth != mds->get_nodeid());
-	  mds->messenger->send_message(m,
-								   MSG_ADDR_MDS(auth), m->get_dest_port(),
-								   MDS_PORT_CACHE);
-	  return false;	  
-	}
-  } else {
-	// normal: soft+hard consistency
-
-	if (in->is_syncbyauth()) {
-	  // wait for sync
-	} else {
-	  // i'm consistent 
-	  goto yes;
-	}
-  }
-
-  // we need sync
-  if (in->is_syncbyauth() && !in->is_softasync()) {
-    dout(5) << "read_soft_start " << *in << " is normal+replica+syncbyauth" << endl;
-  } else if (in->is_softasync() && in->is_auth()) {
-    dout(5) << "read_soft_start " << *in << " is softasync+auth, waiting on sync" << endl;
-  } else 
-	assert(2+2==5);
-
-  if (!in->can_auth_pin()) {
-	dout(5) << "read_soft_start " << *in << " waiting to auth_pin" << endl;
-	in->add_waiter(CINODE_WAIT_AUTHPINNABLE,
-				   new C_MDS_RetryMessage(mds,m));
-	return false;
-  }
+  
+  // can't read, and replicated.
 
   if (in->is_auth()) {
-	// wait for sync
-	in->add_waiter(CINODE_WAIT_SYNC,
-				   new C_MDS_RetryMessage(mds, m));
-
-	if (!in->is_presync())
-	  inode_sync_start(in);
+	// auth
+	assert(0);  // this shouldn't happen.
   } else {
-	// wait for unsync
-	in->add_waiter(CINODE_WAIT_UNSYNC,
-				   new C_MDS_RetryMessage(mds, m));
+	// replica
 
-	assert(in->is_syncbyauth());
-
-	if (!in->is_waitonunsync())
-	  inode_sync_wait(in);
+	// wait!
+	dout(7) << "inode_hard_read_start waiting on " << *in << endl;
+	in->add_waiter(CINODE_WAIT_HARDR, new C_MDS_RetryMessage(mds, m));
   }
   
   return false;
-
- yes:
-  mds->balancer->hit_inode(in, MDS_POP_SOFTRD);
-  mds->balancer->hit_inode(in, MDS_POP_ANY);
-  return true;
 }
 
 
-int MDCache::read_soft_finish(CInode *in)
+void MDCache::inode_hard_read_finish(CInode *in)
 {
-  dout(5) << "read_soft_finish " << *in << endl;   // " soft_sync_count " << in->soft_sync_count << endl;
-  return 0;  // do nothing, actually..
+  // drop ref
+  assert(in->hardlock.can_read(in->is_auth()));
+  in->hardlock.put_read();
+
+  dout(7) << "inode_hard_read_finish on " << *in << ", hardlock=" << in->hardlock << endl;
 }
 
 
-bool MDCache::write_soft_start(CInode *in, Message *m)
+bool MDCache::inode_hard_write_start(CInode *in, Message *m)
 {
-  if (!read_hard_try(in, m))
-	return false;
+  dout(7) << "inode_hard_write_start on " << *in << " hardlock=" << in->hardlock << endl;
 
-  // if frozen: i can't proceed (for now, see above)
-  if (in->is_frozen()) {
-	dout(7) << "read_soft_start " << *in << " is frozen, waiting" << endl;
-	in->add_waiter(CDIR_WAIT_UNFREEZE,
-				   new C_MDS_RetryMessage(mds, m));
-	return false;
+  // if not replicated, i can twiddle lock at will
+  if (in->is_auth() &&
+	  !in->is_cached_by_anyone() &&
+	  in->hardlock.get_state() != LOCK_LOCK) 
+	in->hardlock.set_state(LOCK_LOCK);
+  
+  // can write?  grab ref.
+  if (in->hardlock.can_write(in->is_auth())) {
+	in->hardlock.get_write();
+	return true;
   }
-
-  dout(5) << "write_soft_start " << *in << endl;
-  // what soft sync mode?
-
-  if (in->is_softasync()) {
-	// softasync: hard consistency only
-
-	if (in->is_syncbyauth()) {
-	  // wait for sync release
-	} else {
-	  // i'm inconsistent; write away!
-	  goto yes;
-	}
-
-  } else {
-	// normal: soft+hard consistency
-	
-	if (in->is_auth()) {
-	  // i am auth: i need sync
-	  if (in->is_syncbyme()) goto yes;
-	  if (in->is_lockbyme()) goto yes;   // lock => sync
-	  if (!in->is_cached_by_anyone() &&
-		  !in->is_open_write()) goto yes;  // i'm alone
-	} else {
-	  // i am replica: fw to auth
-	  int auth = in->authority();
-	  dout(5) << "write_soft_start " << *in << " is !softasync, fw to auth " << auth << endl;
-	  assert(auth != mds->get_nodeid());
-	  mds->messenger->send_message(m,
-								   MSG_ADDR_MDS(auth), m->get_dest_port(),
-								   MDS_PORT_CACHE);
-	  return false;	  
-	}
-  }
-
-  // we need sync
-  if (in->is_syncbyauth() && in->is_softasync() && !in->is_auth()) {
-    dout(5) << "write_soft_start " << *in << " is softasync+replica+syncbyauth" << endl;
-  } else if (!in->is_softasync() && in->is_auth()) {
-    dout(5) << "write_soft_start " << *in << " is normal+auth, waiting on sync" << endl;
-  } else 
-	assert(2+2==5);
-
-  if (!in->can_auth_pin()) {
-	dout(5) << "write_soft_start " << *in << " waiting to auth_pin" << endl;
-	in->add_waiter(CINODE_WAIT_AUTHPINNABLE,
-				   new C_MDS_RetryMessage(mds,m));
-	return false;
-  }
-
+  
+  // can't write, replicated.
   if (in->is_auth()) {
-	// wait for sync
-	in->add_waiter(CINODE_WAIT_SYNC, 
-				   new C_MDS_RetryMessage(mds, m));
-
-	if (!in->is_presync())
-	  inode_sync_start(in);
-  } else {
-	// wait for unsync
-	in->add_waiter(CINODE_WAIT_UNSYNC, 
-				   new C_MDS_RetryMessage(mds, m));
-
-	assert(in->is_syncbyauth());
-	assert(in->is_softasync());
+	// auth
+	if (in->hardlock.can_write_soon(in->is_auth())) {
+	  // just wait
+	} else {
+	  // initiate lock
+	  inode_hard_lock(in);
+	}
 	
-	if (!in->is_waitonunsync())
-	  inode_sync_wait(in);
-  }
-  
-  return false;
+	dout(7) << "inode_hard_write_start waiting on " << *in << endl;
+	in->add_waiter(CINODE_WAIT_HARDW, new C_MDS_RetryMessage(mds, m));
 
- yes:
-  mds->balancer->hit_inode(in, MDS_POP_SOFTWR);
-  mds->balancer->hit_inode(in, MDS_POP_ANY);
-  return true;
-}
-
-
-int MDCache::write_soft_finish(CInode *in)
-{
-  dout(5) << "write_soft_finish " << *in << endl;  //" soft_sync_count " << in->soft_sync_count << endl;
-  return 0;  // do nothing, actually..
-}
-
-
-// sync interface
-
-void MDCache::inode_sync_wait(CInode *in)
-{
-  assert(!in->is_auth());
-  
-  int auth = in->authority();
-  dout(5) << "inode_sync_wait on " << *in << ", auth " << auth << endl;
-  
-  assert(in->is_syncbyauth());
-  assert(!in->is_waitonunsync());
-  
-  in->dist_state |= CINODE_DIST_WAITONUNSYNC;
-  in->get(CINODE_PIN_WAITONUNSYNC);
-  
-  if ((in->is_softasync() && g_conf.mdcache_sticky_sync_softasync) ||
-	  (!in->is_softasync() && g_conf.mdcache_sticky_sync_normal)) {
-	// actually recall; if !sticky, auth will immediately release.
-	dout(5) << "inode_sync_wait on " << *in << " sticky, recalling from auth" << endl;
-	mds->messenger->send_message(new MInodeSyncRecall(in->inode.ino),
-								 MSG_ADDR_MDS(auth), MDS_PORT_CACHE,
+	return false;
+  } else {
+	// replica
+	// fw to auth
+	int auth = in->authority();
+	dout(5) << "inode_hard_write_start " << *in << " on replica, fw to auth " << auth << endl;
+	assert(auth != mds->get_nodeid());
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(auth), m->get_dest_port(),
 								 MDS_PORT_CACHE);
+	return false;
   }
 }
 
 
-void MDCache::inode_sync_start(CInode *in)
+void MDCache::inode_hard_write_finish(CInode *in)
 {
-  // wait for all replicas
-  dout(5) << "inode_sync_start on " << *in << ", waiting for " << in->cached_by << " " << in->get_open_write()<< endl;
-
-  assert(in->is_auth());
-  assert(!in->is_presync());
-  assert(!in->is_sync());
-
-  in->sync_waiting_for_ack.clear();
-  in->dist_state |= CINODE_DIST_PRESYNC;
-  in->get(CINODE_PIN_PRESYNC);
-  in->auth_pin();
+  // drop ref
+  assert(in->hardlock.can_write(in->is_auth()));
+  in->hardlock.put_write();
+  dout(7) << "inode_hard_write_finish on " << *in << ", hardlock=" << in->hardlock << endl;
   
-  in->sync_replicawantback = false;
+  // drop lock?
+  if (in->hardlock.get_nwrite() == 0)
+	inode_hard_eval(in);
+}
 
-  // send messages
+
+void MDCache::inode_hard_eval(CInode *in)
+{
+  assert(in->hardlock.get_nwrite() == 0);
+
+  if (in->is_auth() &&
+	  in->is_cached_by_anyone() &&
+	  in->hardlock.is_stable()) {
+	dout(7) << "inode_hard_eval stable, syncing " << *in << ", hardlock=" << in->hardlock << endl;
+	inode_hard_sync(in);
+  }
+}
+
+
+// mid
+
+void MDCache::inode_hard_sync(CInode *in)
+{
+  dout(7) << "inode_hard_sync on " << *in << " hardlock=" << in->hardlock << endl;  
+  assert(in->is_auth());
+  
+  // check state
+  if (in->hardlock.get_state() == LOCK_SYNC)
+	return; // already sync
+  if (in->hardlock.get_state() == LOCK_PRELOCK) 
+	assert(0); // um... hmm!
+  assert(in->hardlock.get_state() == LOCK_LOCK);
+  
+  // hard data
+  crope harddata;
+  in->encode_hard_state(harddata);
+  
+  // bcast to replicas
   for (set<int>::iterator it = in->cached_by_begin(); 
 	   it != in->cached_by_end(); 
 	   it++) {
-	in->sync_waiting_for_ack.insert(MSG_ADDR_MDS(*it));
-	mds->messenger->send_message(new MInodeSyncStart(in->inode.ino, mds->get_nodeid()),
-								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-  }
-
-  // sync clients
-  int last = -1;
-  for (multiset<int>::iterator it = in->get_open_write().begin();
-	   it != in->get_open_write().end();
-	   it++) {
-	if (*it == last) continue;  last = *it;   // only 1 per client (even if open multiple times)
-	in->sync_waiting_for_ack.insert(MSG_ADDR_CLIENT(*it));
-	mds->messenger->send_message(new MInodeSyncStart(in->ino(), mds->get_nodeid()),
-								 MSG_ADDR_CLIENT(*it), 0,
-								 MDS_PORT_CACHE);
-  }
-
-}
-
-void MDCache::inode_sync_release(CInode *in)
-{
-  dout(5) << "inode_sync_release on " << *in << ", messages to " << in->get_cached_by() << " " << in->get_open_write() << endl;
-  
-  assert(in->is_syncbyme());
-  assert(in->is_auth());
-
-  in->dist_state &= ~CINODE_DIST_SYNCBYME;
-
-  // release replicas
-  for (set<int>::iterator it = in->cached_by_begin(); 
-	   it != in->cached_by_end(); 
-	   it++) {
-	mds->messenger->send_message(new MInodeSyncRelease(in),
+	MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
+	m->set_ino(in->ino(), LOCK_OTYPE_IHARD);
+	m->set_data(harddata);
+	mds->messenger->send_message(m,
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
   
-  // release writers
-  for (multiset<int>::iterator it = in->get_open_write().begin();
-	   it != in->get_open_write().end();
+  // change lock
+  in->hardlock.set_state(LOCK_SYNC);
+  
+  // waiters?
+  in->finish_waiting(CINODE_WAIT_HARDSTABLE);
+}
+
+void MDCache::inode_hard_lock(CInode *in)
+{
+  dout(7) << "inode_hard_lock on " << *in << " hardlock=" << in->hardlock << endl;  
+  assert(in->is_auth());
+  
+  // check state
+  if (in->hardlock.get_state() == LOCK_LOCK ||
+	  in->hardlock.get_state() == LOCK_PRELOCK) 
+	return;  // already lock or locking
+  assert(in->hardlock.get_state() == LOCK_SYNC);
+  
+  // bcast to replicas
+  for (set<int>::iterator it = in->cached_by_begin(); 
+	   it != in->cached_by_end(); 
 	   it++) {
-	mds->messenger->send_message(new MInodeSyncRelease(in),
-								 MSG_ADDR_CLIENT(*it), 0,
+	MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
+	m->set_ino(in->ino(), LOCK_OTYPE_IHARD);
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
-
-  in->auth_unpin();
+  
+  // change lock
+  in->hardlock.set_state(LOCK_PRELOCK);
+  in->hardlock.init_gather(in->get_cached_by());
 }
 
 
 
 
+
+// messenger
+
+void MDCache::handle_lock_inode_hard(MLock *m)
+{
+  assert(m->get_otype() == LOCK_OTYPE_IHARD);
+  
+  int from = m->get_asker();
+  CInode *in = get_inode(m->get_ino());
+  
+  if (LOCK_AC_FOR_AUTH(m->get_action())) {
+	// auth
+	assert(in);
+	assert(in->is_auth() || in->is_proxy());
+	dout(7) << "handle_lock_inode_hard " << *in << " hardlock=" << in->hardlock << endl;  
+
+	if (in->is_proxy()) {
+	  // fw
+	  int newauth = ino_proxy_auth(in->ino(), 
+								   from,
+								   export_proxy_inos);
+	  assert(newauth >= 0);
+	  dout(7) << "handle_lock " << m->get_ino() << " from " << from << ": proxy, fw to " << newauth << endl;
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(newauth), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	  return;
+	}
+  } else {
+	// replica
+	if (!in) {
+	  dout(7) << "handle_lock_inode_hard " << m->get_ino() << ": don't have it anymore" << endl;
+	  /*
+	   * do NOT nak.. if we go that route we need ot duplicate all the nonce funkiness
+	     to keep gather_set a proper/correct subset of cached_by.  better to use the existing
+		 cacheexpire mechanism.
+	  */
+	  /*
+		MLock *reply = new MLock(m->get_action() + 3, mds->get_nodeid());
+		reply->set_ino(in->ino(), LOCK_OTYPE_IHARD);
+		mds->messenger->send_message(reply,
+		                             MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+                            		 MDS_PORT_CACHE);
+	  */
+	  delete m;
+	  return;
+	}
+	
+	assert(!in->is_auth());
+  }
+
+  dout(7) << "handle_lock_inode_hard a=" << m->get_action() << " from " << from << " " << *in << " hardlock=" << in->hardlock << endl;  
+ 
+  CLock *lock = &in->hardlock;
+  
+  switch (m->get_action()) {
+	// -- replica --
+  case LOCK_AC_SYNC:
+	assert(lock->get_state() == LOCK_LOCK);
+	
+	{ // assim data
+	  int off = 0;
+	  in->decode_hard_state(m->get_data(), off);
+	}
+	
+	// update lock
+	lock->set_state(LOCK_SYNC);
+	
+	// no need to reply
+	
+	// waiters
+	in->finish_waiting(CINODE_WAIT_HARDR|CINODE_WAIT_HARDSTABLE);
+	break;
+	
+  case LOCK_AC_LOCK:
+	assert(lock->get_state() == LOCK_SYNC);
+	
+	// update lock and reply
+	lock->set_state(LOCK_LOCK);
+	
+	{
+	  MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
+	  reply->set_ino(in->ino(), LOCK_OTYPE_IHARD);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(from), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	break;
+	
+	
+	// -- auth --
+  case LOCK_AC_LOCKNAK:
+	// do NOT remove from cached_by; we don't know the nonce! 
+	// and somewhere out there there's an expire that will take care of it.
+	
+  case LOCK_AC_LOCKACK:
+	assert(lock->state == LOCK_PRELOCK);
+	assert(lock->gather_set.count(from));
+	lock->gather_set.erase(from);
+	
+	if (lock->gather_set.size()) {
+	  dout(7) << "handle_lock_inode_hard " << *in << " from " << from << ", still gathering " << lock->gather_set << endl;
+	} else {
+	  dout(7) << "handle_lock_inode_hard " << *in << " from " << from << ", last one" << endl;
+	  lock->set_state(LOCK_LOCK);
+	  
+	  // waiters
+	  in->hardlock.get_write();
+	  in->finish_waiting(CINODE_WAIT_HARDRWB|CINODE_WAIT_HARDSTABLE);
+	  in->hardlock.put_write();
+	  inode_hard_eval(in);
+	}
+  }  
+  delete m;
+}
+
+
+
+
+// soft inode metadata
+
+bool MDCache::inode_soft_read_start(CInode *in, Message *m)
+{
+  dout(7) << "inode_soft_read_start " << *in << " softlock=" << in->softlock << endl;  
+
+  if (in->is_auth() && 
+	  !in->softlock.can_read(in->is_auth()) &&
+	  !in->is_cached_by_anyone()) {
+	in->softlock.set_state(LOCK_LOCK); // twiddle lock at will
+  }
+
+  // can read?  grab ref.
+  if (in->softlock.can_read(in->is_auth())) {
+	in->softlock.get_read();
+	return true;
+  }
+  
+  // can't read, and replicated.
+  if (in->softlock.can_read_soon(in->is_auth())) {
+	// wait
+	dout(7) << "inode_soft_read_start can_read_soon " << *in << endl;
+  } else {	
+	if (in->is_auth()) {
+	  // auth
+	  // FIXME or qsync?
+	  // sync or lock?
+	  assert(in->softlock.is_stable());  // should be async!
+	  inode_soft_lock(in);     // lock, easier to back off
+	} else {
+	  // replica
+	  if (in->softlock.is_stable()) {
+		// recall?
+		
+		// FIXME XXX
+		
+	  } else {
+		// wait until stable
+		dout(7) << "inode_soft_read_start waiting until stable on " << *in << ", softlock=" << in->softlock << endl;
+		in->add_waiter(CINODE_WAIT_SOFTSTABLE, new C_MDS_RetryMessage(mds, m));
+		return false;
+	  }
+	}
+  }
+
+  // wait
+  dout(7) << "inode_soft_read_start waiting on " << *in << ", softlock=" << in->softlock << endl;
+  in->add_waiter(CINODE_WAIT_SOFTR, new C_MDS_RetryMessage(mds, m));
+		
+  return false;
+}
+
+
+void MDCache::inode_soft_read_finish(CInode *in)
+{
+  // drop ref
+  assert(in->softlock.can_read(in->is_auth()));
+  in->softlock.put_read();
+
+  dout(7) << "inode_soft_read_finish on " << *in << ", softlock=" << in->softlock << endl;
+
+  if (in->softlock.get_nread() == 0)
+	inode_soft_eval(in);
+}
+
+
+bool MDCache::inode_soft_write_start(CInode *in, Message *m)
+{
+  dout(7) << "inode_soft_read_start " << *in << " softlock=" << in->softlock << endl;  
+
+  // if no replicated, i can twiddle lock at will
+  if (in->is_auth() &&
+	  !in->is_cached_by_anyone() &&
+	  in->softlock.get_state() != LOCK_LOCK) 
+	in->softlock.set_state(LOCK_LOCK);
+  
+  // can write?  grab ref.
+  if (in->softlock.can_write(in->is_auth())) {
+	in->softlock.get_write();
+	return true;
+  }
+  
+  // can't write, replicated.
+  if (in->is_auth()) {
+	// auth
+	if (in->softlock.can_write_soon(in->is_auth())) {
+	  // just wait
+	} else {
+	  // initiate lock 
+	  // OR async ....... FIXME
+	  inode_soft_lock(in);
+	}
+	
+	dout(7) << "inode_soft_write_start waiting on " << *in << endl;
+	in->add_waiter(CINODE_WAIT_SOFTW, new C_MDS_RetryMessage(mds, m));
+
+	return false;
+  } else {
+	// replica
+
+	// request ASYNC???
+
+	// fw to auth
+	int auth = in->authority();
+	dout(5) << "inode_soft_write_start " << *in << " on replica, fw to auth " << auth << endl;
+	assert(auth != mds->get_nodeid());
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(auth), m->get_dest_port(),
+								 MDS_PORT_CACHE);
+	return false;
+  }
+ 
+}
+
+
+void MDCache::inode_soft_write_finish(CInode *in)
+{
+  // drop ref
+  assert(in->softlock.can_write(in->is_auth()));
+  in->softlock.put_write();
+  dout(7) << "inode_soft_write_finish on " << *in << ", softlock=" << in->softlock << endl;
+  
+  // drop lock?
+  if (in->softlock.get_nwrite() == 0)
+	inode_soft_eval(in);
+}
+
+
+void MDCache::inode_soft_eval(CInode *in)
+{
+  if (!in->softlock.is_stable()) return;  // do nothing
+  
+  // bump to async?
+  // FIXME XXX
+		 
+  // bump to sync?
+  if (in->is_auth() &&
+	  in->is_cached_by_anyone() &&
+	  in->softlock.get_nwrite() == 0) {
+	dout(7) << "inode_soft_eval stable, syncing " << *in << ", softlock=" << in->softlock << endl;
+	inode_soft_sync(in);
+  }
+}
+
+// mid
+
+bool MDCache::inode_soft_sync(CInode *in)
+{
+  dout(7) << "inode_soft_sync " << *in << " softlock=" << in->softlock << endl;  
+
+  assert(in->is_auth());
+
+  // check state
+  if (in->softlock.get_state() == LOCK_SYNC) return true;
+  if (in->softlock.get_state() == LOCK_GSYNC) return false;
+
+  assert(in->softlock.is_stable());
+  if (in->softlock.get_state() == LOCK_PRELOCK ||
+	  in->softlock.get_state() == LOCK_GLOCK)
+	assert(0);  // hmm!
+  assert(in->softlock.get_state() == LOCK_LOCK ||
+		 in->softlock.get_state() == LOCK_ASYNC);
+
+  if (in->softlock.get_state() == LOCK_LOCK) {
+	// soft data
+	crope softdata;
+	in->encode_soft_state(softdata);
+	
+	// bcast to replicas
+	for (set<int>::iterator it = in->cached_by_begin(); 
+		 it != in->cached_by_end(); 
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
+	  m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  m->set_data(softdata);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	
+	// change lock
+	in->softlock.set_state(LOCK_SYNC);
+
+	return true;
+  }
+
+  else if (in->softlock.get_state() == LOCK_ASYNC) {
+	// bcast to replicas
+	for (set<int>::iterator it = in->cached_by_begin(); 
+		 it != in->cached_by_end(); 
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_GSYNC, mds->get_nodeid());
+	  m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	
+	// change lock
+	in->softlock.set_state(LOCK_GSYNC);
+	in->softlock.init_gather(in->get_cached_by());
+
+	return false;
+  }
+  else 
+	assert(0); // wtf.
+}
+
+
+void MDCache::inode_soft_lock(CInode *in)
+{
+  dout(7) << "inode_soft_lock " << *in << " softlock=" << in->softlock << endl;  
+
+  assert(in->is_auth());
+  
+  // check state
+  if (in->softlock.get_state() == LOCK_LOCK ||
+	  in->softlock.get_state() == LOCK_PRELOCK ||
+	  in->softlock.get_state() == LOCK_GLOCK) 
+	return;  // lock or locking
+  assert(in->softlock.is_stable());
+  if (in->softlock.get_state() == LOCK_GSYNC)
+	assert(0);  // hmm!
+  assert(in->softlock.get_state() == LOCK_SYNC ||
+		 in->softlock.get_state() == LOCK_ASYNC);
+
+  if (in->softlock.get_state() == LOCK_SYNC) {
+	// bcast to replicas
+	for (set<int>::iterator it = in->cached_by_begin(); 
+		 it != in->cached_by_end(); 
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
+	  m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	
+	// change lock
+	in->softlock.set_state(LOCK_PRELOCK);
+	in->softlock.init_gather(in->get_cached_by());
+  }
+
+  else if (in->softlock.get_state() == LOCK_ASYNC) {
+	// bcast to replicas
+	for (set<int>::iterator it = in->cached_by_begin(); 
+		 it != in->cached_by_end(); 
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_GLOCK, mds->get_nodeid());
+	  m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	
+	// change lock
+	in->softlock.set_state(LOCK_GLOCK);
+	in->softlock.init_gather(in->get_cached_by());
+  }
+  else 
+	assert(0); // wtf.
+}
+
+
+void MDCache::inode_soft_async(CInode *in)
+{
+  dout(7) << "inode_soft_async " << *in << " softlock=" << in->softlock << endl;  
+
+  assert(in->is_auth());
+  
+  // check state
+  if (in->softlock.get_state() == LOCK_ASYNC)
+	return;     // async
+  assert(in->softlock.is_stable());
+  if (in->softlock.get_state() == LOCK_GSYNC ||
+	  in->softlock.get_state() == LOCK_GLOCK ||
+	  in->softlock.get_state() == LOCK_PRELOCK)
+	assert(0);  // hmm!
+  assert(in->softlock.get_state() == LOCK_SYNC ||
+		 in->softlock.get_state() == LOCK_LOCK);
+
+  if (in->softlock.get_state() == LOCK_SYNC) {
+	// bcast to replicas
+	for (set<int>::iterator it = in->cached_by_begin(); 
+		 it != in->cached_by_end(); 
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_GASYNC, mds->get_nodeid());
+	  m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	
+	// change lock
+	in->softlock.set_state(LOCK_GASYNC);
+	in->softlock.init_gather(in->get_cached_by());
+  }
+
+  else if (in->softlock.get_state() == LOCK_LOCK) {
+	// data
+	crope softdata;
+	in->encode_soft_state(softdata);
+	
+	// bcast to replicas
+	for (set<int>::iterator it = in->cached_by_begin(); 
+		 it != in->cached_by_end(); 
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_ASYNC, mds->get_nodeid());
+	  m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  m->set_data(softdata);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	
+	// change lock
+	in->softlock.set_state(LOCK_ASYNC);
+  }
+  else 
+	assert(0); // wtf.
+}
+
+
+// messenger
+
+void MDCache::handle_lock_inode_soft(MLock *m)
+{
+  assert(m->get_otype() == LOCK_OTYPE_ISOFT);
+  
+  CInode *in = get_inode(m->get_ino());
+  int from = m->get_asker();
+
+  if (LOCK_AC_FOR_AUTH(m->get_action())) {
+	// auth
+	assert(in);
+	assert(in->is_auth() || in->is_proxy());
+	
+	if (in->is_proxy()) {
+	  // fw
+	  int newauth = ino_proxy_auth(in->ino(), 
+								   from,
+								   export_proxy_inos);
+	  assert(newauth >= 0);
+	  dout(7) << "handle_lock " << m->get_ino() << " from " << from << ": proxy, fw to " << newauth << endl;
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(newauth), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	  return;
+	}
+  } else {
+	// replica
+	if (!in) {
+	  // nack
+	  dout(7) << "handle_lock " << m->get_ino() << ": don't have it anymore" << endl;
+
+	  // DONT NAK
+	  /*
+	  MLock *reply = new MLock(m->get_action() + LOCK_AC_NAKOFFSET, mds->get_nodeid());
+	  reply->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	  */
+	  delete m;
+	  return;
+	}
+	
+	assert(!in->is_auth());
+  }
+
+  dout(7) << "handle_lock_inode_soft a=" << m->get_action() << " from " << from << " " << *in << " softlock=" << in->softlock << endl;  
+  
+  CLock *lock = &in->softlock;
+  
+  switch (m->get_action()) {
+	// -- replica --
+  case LOCK_AC_SYNC:
+	assert(lock->get_state() == LOCK_LOCK ||
+		   lock->get_state() == LOCK_GSYNC);
+	
+	{ // assim data
+	  int off = 0;
+	  in->decode_soft_state(m->get_data(), off);
+	}
+	
+	// update lock
+	lock->set_state(LOCK_SYNC);
+	
+	// no need to reply.
+	
+	// waiters
+	in->softlock.get_read();
+	in->finish_waiting(CINODE_WAIT_SOFTR|CINODE_WAIT_SOFTSTABLE);
+	in->softlock.put_read();
+	inode_soft_eval(in);
+	break;
+	
+  case LOCK_AC_LOCK:
+	assert(lock->get_state() == LOCK_SYNC);
+	
+	// update lock
+	lock->set_state(LOCK_LOCK);
+	
+	// ack
+	{
+	  MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
+	  reply->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(from), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	break;
+	
+  case LOCK_AC_ASYNC:
+	assert(lock->get_state() == LOCK_GASYNC ||
+		   lock->get_state() == LOCK_LOCK);
+	
+	// update lock
+	lock->set_state(LOCK_ASYNC);
+	
+	// waiters
+	in->softlock.get_write();
+	in->finish_waiting(CINODE_WAIT_SOFTW|CINODE_WAIT_SOFTSTABLE);
+	in->softlock.put_write();
+	inode_soft_eval(in);
+	break;
+	
+
+  case LOCK_AC_GASYNC:
+	assert(lock->get_state() == LOCK_SYNC);
+	
+	// update lock
+	lock->set_state(LOCK_GASYNC);
+
+	// ack
+	{
+	  MLock *reply = new MLock(LOCK_AC_GASYNCACK, mds->get_nodeid());
+	  reply->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(from), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	break;
+
+	
+  case LOCK_AC_GSYNC:
+	assert(lock->get_state() == LOCK_ASYNC);
+	
+	// update lock
+	lock->set_state(LOCK_GSYNC);
+	
+	// reply w/ our data
+	{
+	  MLock *reply = new MLock(LOCK_AC_GSYNCACK, mds->get_nodeid());
+	  reply->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  
+	  // payload
+	  crope sd;
+	  in->encode_soft_state(sd);
+	  reply->set_data(sd);
+	
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(from), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	break;
+	
+  case LOCK_AC_GLOCK:
+	assert(lock->get_state() == LOCK_ASYNC);
+	
+	// update lock
+	lock->set_state(LOCK_LOCK);
+	
+	// reply w/ our data
+	{
+	  MLock *reply = new MLock(LOCK_AC_GLOCKACK, mds->get_nodeid());
+	  reply->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	  
+	  // payload
+	  crope sd;
+	  in->encode_soft_state(sd);
+	  reply->set_data(sd);
+	  
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(from), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	break;
+	
+ 
+	
+	// -- auth --
+  case LOCK_AC_LOCKNAK:
+	// do NOT remove from cached_by; we don't know the nonce! 
+	// and somewhere out there there's an expire that will take care of it.
+	
+  case LOCK_AC_LOCKACK:
+	assert(lock->state == LOCK_PRELOCK);
+	assert(lock->gather_set.count(from));
+	lock->gather_set.erase(from);
+	
+	if (lock->gather_set.size()) {
+	  dout(7) << "handle_lock_inode_soft " << *in << " from " << from << ", still gathering " << lock->gather_set << endl;
+	} else {
+	  dout(7) << "handle_lock_inode_soft " << *in << " from " << from << ", last one" << endl;
+	  lock->set_state(LOCK_LOCK);
+	  
+	  // waiters
+	  in->softlock.get_read();
+	  in->softlock.get_write();
+	  in->finish_waiting(CINODE_WAIT_SOFTRWB|CINODE_WAIT_SOFTSTABLE);
+	  in->softlock.put_read();
+	  in->softlock.put_write();
+	  inode_soft_eval(in);
+	}
+	break;
+	
+
+  case LOCK_AC_GLOCKNAK:
+	// do NOT remove from cached_by; we don't know the nonce! 
+	// and somewhere out there there's an expire that will take care of it.
+	
+  case LOCK_AC_GLOCKACK:
+	assert(lock->state == LOCK_GLOCK);
+	assert(lock->gather_set.count(from));
+	lock->gather_set.erase(from);
+	
+	if (m->get_action() == LOCK_AC_GLOCKACK) {
+	  // merge data  (keep largest size, mtime, etc.)
+	  int off;
+	  in->decode_merge_soft_state(m->get_data(), off);
+	}
+
+	if (lock->gather_set.size()) {
+	  dout(7) << "handle_lock_inode_soft " << *in << " from " << from << ", still gathering " << lock->gather_set << endl;
+	} else {
+	  dout(7) << "handle_lock_inode_soft " << *in << " from " << from << ", last one" << endl;
+	  lock->set_state(LOCK_LOCK);
+	  
+	  // waiters
+	  in->softlock.get_read();
+	  in->softlock.get_write();
+	  in->finish_waiting(CINODE_WAIT_SOFTRWB|CINODE_WAIT_SOFTSTABLE);
+	  in->softlock.put_read();
+	  in->softlock.put_write();
+	  inode_soft_eval(in);
+	}
+	break;
+
+	
+  case LOCK_AC_GSYNCNAK:
+	// do NOT remove from cached_by; we don't know the nonce! 
+	// and somewhere out there there's an expire that will take care of it.
+		
+  case LOCK_AC_GSYNCACK:
+	assert(lock->state == LOCK_GSYNC);
+	assert(lock->gather_set.count(from));
+	lock->gather_set.erase(from);
+	
+	if (m->get_action() == LOCK_AC_GSYNCACK) {
+	  // merge data  (keep largest size, mtime, etc.)
+	  int off;
+	  in->decode_merge_soft_state(m->get_data(), off);
+	}
+
+	if (lock->gather_set.size()) {
+	  dout(7) << "handle_lock_inode_soft " << *in << " from " << from << ", still gathering " << lock->gather_set << endl;
+	} else {
+	  dout(7) << "handle_lock_inode_soft " << *in << " from " << from << ", last one" << endl;
+	  lock->set_state(LOCK_SYNC);
+
+	  // bcast data to replicas
+	  crope softdata;
+	  in->encode_soft_state(softdata);
+
+	  for (set<int>::iterator it = in->cached_by_begin(); 
+		   it != in->cached_by_end(); 
+		   it++) {
+		MLock *reply = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
+		reply->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+		reply->set_data(softdata);
+		mds->messenger->send_message(reply,
+									 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+									 MDS_PORT_CACHE);
+	  }
+	  
+	  // waiters
+	  in->softlock.get_read();
+	  in->finish_waiting(CINODE_WAIT_SOFTR|CINODE_WAIT_SOFTSTABLE);
+	  in->softlock.put_read();
+	  inode_soft_eval(in);
+	}
+	break;
+  }  
+  
+  delete m;
+}
+
+
+void MDCache::handle_lock_dir(MLock *m) 
+{
+
+}
+
+void MDCache::handle_lock_dn(MLock *m)
+{
+
+}
+
+
+
+
+
+
+
+// ino proxy
 
 int MDCache::ino_proxy_auth(inodeno_t ino, 
 							int frommds,
@@ -2193,563 +2766,6 @@ void MDCache::do_dir_proxy(CDir *dir, Message *m)
 
 
 
-
-// messages
-void MDCache::handle_inode_sync_start(MInodeSyncStart *m)
-{
-  // assume asker == authority for now.
-  
-  // authority is requesting a lock
-  CInode *in = get_inode(m->get_ino());
-  if (!in) {
-	// don't have it anymore!
-	dout(7) << "handle_sync_start " << m->get_ino() << ": don't have it anymore, nak" << endl;
-	mds->messenger->send_message(new MInodeSyncAck(m->get_ino(), false),
-								 MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-	delete m; // done
-	return;
-  }
-  
-  dout(10) << "handle_sync_start " << *in << endl;
-
-  // we shouldn't be authoritative...
-  assert(!in->is_auth());
-  
-  // sanity check: make sure we know who _is_ authoritative! 
-  assert(m->get_asker() == in->authority());
-
-  // lock it
-  in->dist_state |= CINODE_DIST_SYNCBYAUTH;
-
-  // open for write by clients?
-  if (in->is_open_write()) {
-	dout(7) << "handle_sync_start " << *in << " syncing write clients " << in->get_open_write() << endl;
-	
-	// sync clients
-	in->sync_waiting_for_ack.clear();
-	for (multiset<int>::iterator it = in->get_open_write().begin();
-		 it != in->get_open_write().end();
-		 it++) {
-	  in->sync_waiting_for_ack.insert(MSG_ADDR_CLIENT(*it));
-	  mds->messenger->send_message(new MInodeSyncStart(in->ino(), mds->get_nodeid()),
-								   MSG_ADDR_CLIENT(*it), 0,
-								   MDS_PORT_CACHE);
-	}
-
-	in->pending_sync_request = m;	
-  } else {
-	// no writers, ack.
-	dout(7) << "handle_sync_start " << *in << ", sending ack" << endl;
-  
-	inode_sync_ack(in, m);
-  }
-}
-
-void MDCache::inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback)
-{
-  dout(7) << "sending inode_sync_ack " << *in << endl;
-    
-  // send ack
-  mds->messenger->send_message(new MInodeSyncAck(in->ino(), true, wantback),
-							   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-							   MDS_PORT_CACHE);
-
-  delete m;
-}
-
-void MDCache::handle_inode_sync_ack(MInodeSyncAck *m)
-{
-  CInode *in = get_inode(m->get_ino());
-  assert(in);
-
-  dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << endl;
-
-  if (in->is_auth()) {
-	assert(in->is_presync());
-  } else {
-	assert(in->is_syncbyauth());
-	assert(in->pending_sync_request);
-  }
-
-  // remove it from waiting list
-  in->sync_waiting_for_ack.erase(m->get_source());
-  
-  if (MSG_ADDR_ISCLIENT(m->get_source()) && !m->did_have()) {
-	// erase from cached_by too!
-	in->cached_by_remove(m->get_source());
-  }
-
-  if (m->replica_wantsback())
-	in->sync_replicawantback = true;
-
-  if (in->sync_waiting_for_ack.size()) {
-
-	// more coming
-	dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << ", still waiting for " << in->sync_waiting_for_ack << endl;
-	
-  } else {
-	
-	// yay!
-	dout(7) << "handle_sync_ack " << *in << " from " << m->get_source() << ", last one" << endl;
-
-	if (!in->is_auth()) {
-	  // replica, sync ack back to auth
-	  assert(in->pending_sync_request);
-	  inode_sync_ack(in, in->pending_sync_request, true);
-	  in->pending_sync_request = 0;
-	  delete m;
-	  return;
-	}
-
-	in->dist_state &= ~CINODE_DIST_PRESYNC;
-	in->dist_state |= CINODE_DIST_SYNCBYME;
-	in->put(CINODE_PIN_PRESYNC);
-
-	// do waiters!
-	in->finish_waiting(CINODE_WAIT_SYNC);
-
-
-	// release sync right away?
-	if (in->is_syncbyme()) {
-	  if (in->is_freezing()) {
-		dout(7) << "handle_sync_ack freezing " << *in << ", dropping sync immediately" << endl;
-		inode_sync_release(in);
-	  } 
-	  else if (in->sync_replicawantback) {
-		dout(7) << "handle_sync_ack replica wantback, releasing sync immediately" << endl;
-		inode_sync_release(in);
-	  }
-	  else if ((in->is_softasync() && !g_conf.mdcache_sticky_sync_softasync) ||
-			   (!in->is_softasync() && !g_conf.mdcache_sticky_sync_normal)) {
-		dout(7) << "handle_sync_ack !sticky, releasing sync immediately" << endl;
-		inode_sync_release(in);
-	  } 
-	  else {
-		dout(7) << "handle_sync_ack sticky sync is on, keeping sync for now" << endl;
-	  }
-	} else {
-	  dout(7) << "handle_sync_ack don't have sync anymore, something must have just released it?" << endl;
-	}
-  }
-
-  delete m; // done
-}
-
-
-void MDCache::handle_inode_sync_release(MInodeSyncRelease *m)
-{
-  CInode *in = get_inode(m->get_ino());
-
-  if (!in) {
-	dout(7) << "handle_sync_release " << m->get_ino() << ", don't have it, dropping" << endl;
-	delete m;  // done
-	return;
-  }
-  
-  if (!in->is_syncbyauth()) {
-	dout(7) << "handle_sync_release " << *in << ", not flagged as sync" << endl;
-	assert(0);  // this shouldn't happen.
-	delete m;  // done
-	return;
-  }
-  
-  dout(7) << "handle_sync_release " << *in << endl;
-  assert(!in->is_auth());
-  
-  // release state
-  in->dist_state &= ~CINODE_DIST_SYNCBYAUTH;
-
-  // waiters?
-  if (in->is_waitonunsync()) {
-	in->put(CINODE_PIN_WAITONUNSYNC);
-	in->dist_state &= ~CINODE_DIST_WAITONUNSYNC;
-
-	// finish
-	in->finish_waiting(CINODE_WAIT_UNSYNC);
-  }
-
-  // client readers?
-  if (in->is_open_write()) {
-	dout(7) << "handle_sync_release releasing clients " << in->get_open_write() << endl;
-	for (multiset<int>::iterator it = in->get_open_write().begin();
-		 it != in->get_open_write().end();
-		 it++) {
-	  mds->messenger->send_message(new MInodeSyncRelease(in),
-								   MSG_ADDR_CLIENT(*it), 0,
-								   MDS_PORT_CACHE);
-	}
-  }
-
-  
-  // done
-  delete m;
-}
-
-
-void MDCache::handle_inode_sync_recall(MInodeSyncRecall *m)
-{
-  CInode *in = get_inode(m->get_ino());
-
-  if (!in) {
-	dout(7) << "handle_sync_recall " << m->get_ino() << ", don't have it, wtf" << endl;
-	assert(0); // shouldn't happen
-	delete m;  // done
-	return;
-  }
-  if(!in->is_auth()) {
-	do_ino_proxy(in, m);
-	return;
-  }
-  
-  if (in->is_syncbyme()) {
-	dout(7) << "handle_sync_recall " << *in << ", releasing" << endl;
-	inode_sync_release(in);
-  }
-  else if (in->is_presync()) {
-	dout(7) << "handle_sync_recall " << *in << " is presync, flagging" << endl;
-	in->sync_replicawantback = true;
-  }
-  else {
-	dout(7) << "handle_sync_recall " << m->get_ino() << ", not flagged as sync or presync, dropping" << endl;
-  }
-  
-  // done
-  delete m;
-}
-
-
-
-
-/* hard locks: owner, mode 
- */
-
-bool MDCache::read_hard_try(CInode *in,
-							Message *m)
-{
-  //dout(5) << "read_hard_try " << *in << endl;
-  
-  if (in->is_auth()) {
-	// auth
-	goto yes;      // fine
-  } else {
-	// replica
-	if (in->is_lockbyauth()) {
-	  // locked by auth; wait!
-	  dout(7) << "read_hard_try waiting on " << *in << endl;
-	  in->add_waiter(CINODE_WAIT_UNLOCK, new C_MDS_RetryMessage(mds, m));
-	  if (!in->is_waitonunlock())
-		inode_lock_wait(in);
-	  return false;
-	} else {
-	  // not locked.
-	  goto yes;
-	}
-  }
-
- yes:
-  mds->balancer->hit_inode(in, MDS_POP_HARDRD);
-  mds->balancer->hit_inode(in, MDS_POP_ANY);
-  return true;
-}
-
-
-bool MDCache::write_hard_start(CInode *in, 
-							   Message *m)
-{
-  // if frozen: i can't proceed; only auth can initiate lock
-  if (in->is_frozen()) {
-	dout(7) << "write_hard_start " << *in << " is frozen, waiting" << endl;
-	in->add_waiter(CDIR_WAIT_UNFREEZE,
-				   new C_MDS_RetryMessage(mds, m));
-	return false;
-  }
-
-  // NOTE: if freezing, and locked, we must proceed, to avoid deadlock (where
-  // the freeze is waiting for our lock to be released)
-
-
-  if (in->is_auth()) {
-	// auth
-	if (in->is_lockbyme()) goto success;
-	if (!in->is_cached_by_anyone()) goto success;
-	
-	// need lock
-	if (!in->can_auth_pin()) {
-	  dout(5) << "write_hard_start " << *in << " waiting to auth_pin" << endl;
-	  in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryMessage(mds, m));
-	  return false;
-	}
-	
-	in->add_waiter(CINODE_WAIT_LOCK, new C_MDS_RetryMessage(mds, m));
-	
-	if (!in->is_prelock())
-	  inode_lock_start(in);
-	
-	return false;
-  } else {
-	// replica
-	// fw to auth
-	int auth = in->authority();
-	dout(5) << "write_hard_start " << *in << " on replica, fw to auth " << auth << endl;
-	assert(auth != mds->get_nodeid());
-	mds->messenger->send_message(m,
-								 MSG_ADDR_MDS(auth), m->get_dest_port(),
-								 MDS_PORT_CACHE);
-	return false;
-  }
-
- success:
-  in->lock_active_count++;
-  dout(5) << "write_hard_start " << *in << " count now " << in->lock_active_count << endl;
-  assert(in->lock_active_count > 0);
-
-  mds->balancer->hit_inode(in, MDS_POP_HARDWR);
-  mds->balancer->hit_inode(in, MDS_POP_ANY);
-  return true;
-}
-
-void MDCache::write_hard_finish(CInode *in)
-{
-  in->lock_active_count--;
-  dout(5) << "write_hard_finish " << *in << " count now " << in->lock_active_count << endl;
-  assert(in->lock_active_count >= 0);
-
-  // release lock?
-  if (in->lock_active_count == 0 &&
-	  in->is_lockbyme() &&
-	  !g_conf.mdcache_sticky_lock) {
-	dout(7) << "write_hard_finish " << *in << " !sticky, releasing lock immediately" << endl;
-	inode_lock_release(in);
-  }
-}
-
-
-void MDCache::inode_lock_start(CInode *in)
-{
-  dout(5) << "lock_start on " << *in << ", waiting for " << in->cached_by << endl;
-
-  assert(in->is_auth());
-  assert(!in->is_prelock());
-  assert(!in->is_lockbyme());
-  assert(!in->is_lockbyauth());
-
-  in->lock_waiting_for_ack = in->cached_by;
-  in->dist_state |= CINODE_DIST_PRELOCK;
-  in->get(CINODE_PIN_PRELOCK);
-  in->auth_pin();
-
-  // send messages
-  for (set<int>::iterator it = in->cached_by_begin(); 
-	   it != in->cached_by_end(); 
-	   it++) {
-	mds->messenger->send_message(new MInodeLockStart(in->inode.ino, mds->get_nodeid()),
-								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-  }
-}
-
-
-void MDCache::inode_lock_release(CInode *in)
-{
-  dout(5) << "lock_release on " << *in << ", messages to " << in->get_cached_by() << endl;
-  
-  assert(in->is_lockbyme());
-  assert(in->is_auth());
-
-  in->dist_state &= ~CINODE_DIST_LOCKBYME;
-
-  for (set<int>::iterator it = in->cached_by_begin(); 
-	   it != in->cached_by_end(); 
-	   it++) {
-	mds->messenger->send_message(new MInodeLockRelease(in),
-								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-  }
-
-  in->auth_unpin();
-}
-
-void MDCache::inode_lock_wait(CInode *in)
-{
-  dout(5) << "lock_wait on " << *in << endl;
-  assert(!in->is_auth());
-  assert(in->is_lockbyauth());
-  
-  in->dist_state |= CINODE_DIST_WAITONUNLOCK;
-  in->get(CINODE_PIN_WAITONUNLOCK);
-}
-
-
-void MDCache::handle_inode_lock_start(MInodeLockStart *m)
-{
-  // authority is requesting a lock
-  CInode *in = get_inode(m->get_ino());
-  if (!in) {
-	// don't have it anymore!
-	dout(7) << "handle_lock_start " << m->get_ino() << ": don't have it anymore, nak" << endl;
-	mds->messenger->send_message(new MInodeLockAck(m->get_ino(), false),
-								 MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-	delete m; // done
-	return;
-  }
-  
-  // we shouldn't be authoritative...
-  assert(!in->is_auth());
-  
-  dout(7) << "handle_lock_start " << *in << ", sending ack" << endl;
-  
-  // lock it
-  in->dist_state |= CINODE_DIST_LOCKBYAUTH;
-
-  // sanity check: make sure we know who _is_ authoritative! 
-  assert(m->get_asker() == in->authority());
-  
-  // send ack
-  mds->messenger->send_message(new MInodeLockAck(in->ino()),
-							   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-							   MDS_PORT_CACHE);
-
-  delete m;  // done
-}
-
-
-void MDCache::handle_inode_lock_ack(MInodeLockAck *m)
-{
-  CInode *in = get_inode(m->get_ino());
-  int from = m->get_source();
-  dout(7) << "handle_lock_ack from " << from << " on " << *in << endl;
-
-  assert(in);
-  assert(in->is_auth());
-  assert(in->dist_state & CINODE_DIST_PRELOCK);
-
-  // remove it from waiting list
-  in->lock_waiting_for_ack.erase(from);
-  
-  if (!m->did_have()) {
-	// erase from cached_by too!
-	in->cached_by_remove(from);
-  }
-
-  if (in->lock_waiting_for_ack.size()) {
-
-	// more coming
-	dout(7) << "handle_lock_ack " << *in << " from " << from << ", still waiting for " << in->lock_waiting_for_ack << endl;
-	
-  } else {
-	
-	// yay!
-	dout(7) << "handle_lock_ack " << *in << " from " << from << ", last one" << endl;
-
-	in->dist_state &= ~CINODE_DIST_PRELOCK;
-	in->dist_state |= CINODE_DIST_LOCKBYME;
-	in->put(CINODE_PIN_PRELOCK);
-
-	// do waiters!
-	in->finish_waiting(CINODE_WAIT_LOCK);
-  }
-
-  delete m; // done
-}
-
-
-void MDCache::handle_inode_lock_release(MInodeLockRelease *m)
-{
-  CInode *in = get_inode(m->get_ino());
-
-  if (!in) {
-	dout(7) << "handle_lock_release " << m->get_ino() << ", don't have it, dropping" << endl;
-	delete m;  // done
-	return;
-  }
-  
-  if (!in->is_lockbyauth()) {
-	dout(7) << "handle_lock_release " << m->get_ino() << ", not flagged as locked, wtf" << endl;
-	assert(0);   // i should have it, locked, or not have it at all!
-	delete m;  // done
-	return;
-  }
-  
-  dout(7) << "handle_lock_release " << *in << endl;
-  assert(!in->is_auth());
-  
-  // release state
-  in->dist_state &= ~CINODE_DIST_LOCKBYAUTH;
-
-  // waiters?
-  if (in->is_waitonunlock()) {
-	in->put(CINODE_PIN_WAITONUNLOCK);
-	in->dist_state &= ~CINODE_DIST_WAITONUNLOCK;
-	
-	// finish
-	in->finish_waiting(CINODE_WAIT_UNLOCK);
-  }
-  
-  // done
-  delete m;
-}
-
-
-
-
-
-
-// DIR SYNC
-
-/*
-
- dir sync
-
- - this are used when a directory is HASHED only.  namely,
-   - to stat the dir inode we need an accurate directory size  (????)
-   - for a readdir 
-
-*/
-
-void MDCache::dir_sync_start(CDir *dir)
-{
-  // wait for all replicas
-  dout(5) << "sync_start on " << *dir << endl;
-
-  assert(dir->is_hashed());
-  assert(dir->is_auth());
-  assert(!dir->is_presync());
-  assert(!dir->is_sync());
-
-  dir->sync_waiting_for_ack = mds->get_cluster()->get_mds_set();
-  dir->state_set(CDIR_STATE_PRESYNC);
-  dir->auth_pin();
-  
-  //dir->sync_replicawantback = false;
-
-  // send messages
-  for (set<int>::iterator it = dir->sync_waiting_for_ack.begin();
-	   it != dir->sync_waiting_for_ack.end();
-	   it++) {
-	mds->messenger->send_message(new MDirSyncStart(dir->ino(), mds->get_nodeid()),
-								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								 MDS_PORT_CACHE);
-  }
-}
-
-
-void MDCache::dir_sync_release(CDir *dir)
-{
-
-
-}
-
-void MDCache::dir_sync_wait(CDir *dir)
-{
-
-}
-
-
-void handle_dir_sync_start(MDirSyncStart *m)
-{
-}
 
 
 
@@ -2957,15 +2973,16 @@ void MDCache::export_dir(CDir *dir,
 				  new C_MDS_ExportGo(mds, dir, dest, pop));
   
   // drop any sync or lock if sticky
+  /*
   if (g_conf.mdcache_sticky_sync_normal ||
 	  g_conf.mdcache_sticky_sync_softasync)
 	export_dir_dropsync(dir);
-
+  */
   // NOTE: we don't need to worry about hard locks; those aren't sticky (yet?).
 }
 
 
-void MDCache::export_dir_dropsync(CDir *dir)
+/*void MDCache::export_dir_dropsync(CDir *dir)
 {
   dout(7) << "export_dir_dropsync in " << *dir << endl;
 
@@ -2985,7 +3002,7 @@ void MDCache::export_dir_dropsync(CDir *dir)
 	  export_dir_dropsync(in->dir);
   }
 }
-
+*/
 
 
 void MDCache::handle_export_dir_discover_ack(MExportDirDiscoverAck *m)
@@ -3262,9 +3279,14 @@ void MDCache::export_dir_walk(MExportDir *req,
 	
 	in->version++;  // so log entries are ignored, etc.
 	
-	// dentry
+	// -- dentry
 	dir_rope.append( it->first.c_str(), it->first.length()+1 );
 	
+	// -- inode
+	// relax locks
+	if (!in->is_cached_by_anyone())
+	  in->replicate_relax_locks();
+
 	// add inode
 	CInodeExport istate( in );
 	dir_rope.append( istate._rope() );
@@ -4154,7 +4176,7 @@ void MDCache::handle_export_dir_notify(MExportDirNotify *m)
 
 // HASH on auth
 
-void MDCache::drop_sync_in_dir(CDir *dir)
+/*void MDCache::drop_sync_in_dir(CDir *dir)
 {
   for (CDir_map_t::iterator it = dir->begin(); it != dir->end(); it++) {
 	CInode *in = it->second->inode;
@@ -4165,7 +4187,7 @@ void MDCache::drop_sync_in_dir(CDir *dir)
 	}
   }
 }
-
+*/
 
 class C_MDS_HashFreeze : public Context {
 public:
@@ -4223,9 +4245,11 @@ void MDCache::hash_dir(CDir *dir)
 	hash_dir_complete(dir);
 
   // drop any sync or lock if sticky
+  /*
   if (g_conf.mdcache_sticky_sync_normal ||
 	  g_conf.mdcache_sticky_sync_softasync) 
 	drop_sync_in_dir(dir);
+  */
 }
 
 void MDCache::hash_dir_complete(CDir *dir)
@@ -4499,7 +4523,7 @@ void MDCache::unhash_dir_finish(CDir *dir)
   dir->mark_complete();
   
   // inode state
-  dir->inode->inode.isdir = INODE_DIR_NORMAL;
+  dir->inode->inode.hash_seed = 0;
   dir->inode->mark_dirty();
 
   // unfreeze!
@@ -4792,7 +4816,7 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 	if (!root) {
 	  root = in;
 	  add_inode( in );
-	  //dout(7) << " added root " << root << endl;
+	  dout(7) << " added root " << root << endl;
 	} else {
 	  root->inode.ino = in->inode.ino;  // bleh
 	}
@@ -4816,7 +4840,9 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 
   if (diri->dir == NULL) {
 	dout(4) << " making " << *diri << " into a dir" << endl;
-	diri->inode.isdir = true;
+	diri->inode.mode &= ~INODE_MODE_FILE;
+	diri->inode.mode |= INODE_MODE_DIR;
+	assert(diri->is_dir());
 	diri->get_or_open_dir(mds);
   }
   

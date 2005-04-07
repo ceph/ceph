@@ -36,6 +36,34 @@ struct md_config_t {
 
   int mds_heartbeat_op_interval;
   bool mds_verify_export_dirauth;
+
+  bool client_op_statfs;
+
+  bool client_op_stat;
+  bool client_op_touch;
+  bool client_op_utime;
+  bool client_op_chmod;
+  bool client_op_chown;
+
+  bool client_op_readdir;
+  bool client_op_mknod;
+  bool client_op_link;
+  bool client_op_unlink;
+  bool client_op_rename;
+
+  bool client_op_mkdir;
+  bool client_op_rmdir;
+  bool client_op_symlink;
+
+  bool client_op_openrd;
+  bool client_op_openwr;
+  bool client_op_openwrc;
+  bool client_op_read;
+  bool client_op_write;
+  bool client_op_truncate;
+  bool client_op_fsync;
+  bool client_op_close;
+
 };
 
 extern md_config_t g_conf;	 

@@ -27,24 +27,6 @@ using namespace std;
 #define MDS_PORT_BALANCER 20
 
 
-// md ops
-#define MDS_OP_STAT    100  //
-#define MDS_OP_READDIR 101  //
-
-#define MDS_OP_OPENRD  111  //
-#define MDS_OP_OPENWR  112  //
-#define MDS_OP_OPENWRC 113  //
-#define MDS_OP_CLOSE   119
-
-#define MDS_OP_TOUCH   200  // utime, actually
-#define MDS_OP_CHMOD   201  // chmod
-
-#define MDS_OP_RENAME  211
-#define MDS_OP_UNLINK  212
-#define MDS_OP_LINK    213
-
-#define MDS_OP_MKDIR   220
-#define MDS_OP_RMDIR   221
 
 #define MDS_TRAVERSE_FORWARD  1
 #define MDS_TRAVERSE_DISCOVER 2

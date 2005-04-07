@@ -20,7 +20,7 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  out << "[inode " << in.inode.ino << " " << path << " ";
+  out << "[inode " << in.inode.ino << " ~" << path << " ";
   if (in.is_auth()) {
 	out << "auth";
 	if (in.is_cached_by_anyone())
@@ -32,17 +32,8 @@ ostream& operator<<(ostream& out, CInode& in)
 	assert(in.get_replica_nonce() >= 0);
   }
 
-  if (in.is_syncbyauth()) out << " syncbyauth";
-  if (in.is_syncbyme()) out << " syncbyme";
-  if (in.is_presync()) out << " presync";
-  if (in.is_softasync()) out << " softasync";
-  if (in.is_waitonunsync()) out << " waitonunsync";
-
-  if (in.is_lockbyauth()) out << " lockbyauth";
-  if (in.is_lockbyme()) out << " lockbyme";
-  if (in.is_prelock()) out << " prelock";
-  if (in.is_waitonunlock()) out << " waitonunluck";
-
+  out << " hard=" << in.hardlock;
+  out << " soft=" << in.softlock;
 
   if (in.is_pinned()) {
     out << " |";
@@ -60,7 +51,9 @@ ostream& operator<<(ostream& out, CInode& in)
 
 
 // ====== CInode =======
-CInode::CInode(bool auth) : LRUObject() {
+CInode::CInode(bool auth) : LRUObject(),
+							hardlock(LOCK_TYPE_BASIC),
+							softlock(LOCK_TYPE_ASYNC) {
   ref = 0;
   
   parent = NULL;
@@ -74,14 +67,10 @@ CInode::CInode(bool auth) : LRUObject() {
 
   state = 0;
   dist_state = 0;
-  lock_active_count = 0;
   
-  pending_sync_request = 0;
-
   version = 0;
 
-  //this->auth = auth;  // by default.
-  state_set(CINODE_STATE_AUTH);
+  if (auth) state_set(CINODE_STATE_AUTH);
 }
 
 CInode::~CInode() {
@@ -267,6 +256,66 @@ crope CInode::encode_export_state()
 }
 */
 
+
+// new state encoders
+
+void CInode::encode_soft_state(crope& r) 
+{
+  r.append((char*)&inode.size, sizeof(inode.size));
+  r.append((char*)&inode.mtime, sizeof(inode.mtime));
+  r.append((char*)&inode.atime, sizeof(inode.atime));  // ??
+}
+
+void CInode::decode_soft_state(crope& r, int& off)
+{
+  r.copy(off, sizeof(inode.size), (char*)&inode.size);
+  off += sizeof(inode.size);
+  r.copy(off, sizeof(inode.mtime), (char*)&inode.mtime);
+  off += sizeof(inode.mtime);
+  r.copy(off, sizeof(inode.atime), (char*)&inode.atime);
+  off += sizeof(inode.atime);
+}
+
+void CInode::decode_merge_soft_state(crope& r, int& off)
+{
+  __uint64_t size;
+  r.copy(off, sizeof(size), (char*)&size);
+  off += sizeof(size);
+  if (size > inode.size) inode.size = size;
+
+  time_t t;
+  r.copy(off, sizeof(t), (char*)&t);
+  off += sizeof(t);
+  if (t > inode.mtime) inode.mtime = t;
+
+  r.copy(off, sizeof(t), (char*)&t);
+  off += sizeof(t);
+  if (t > inode.atime) inode.atime = t;
+}
+
+void CInode::encode_hard_state(crope& r)
+{
+  r.append((char*)&inode.mode, sizeof(inode.mode));
+  r.append((char*)&inode.uid, sizeof(inode.uid));
+  r.append((char*)&inode.gid, sizeof(inode.gid));
+  r.append((char*)&inode.ctime, sizeof(inode.ctime));
+}
+
+void CInode::decode_hard_state(crope& r, int& off)
+{
+  r.copy(off, sizeof(inode.mode), (char*)&inode.mode);
+  off += sizeof(inode.mode);
+  r.copy(off, sizeof(inode.uid), (char*)&inode.uid);
+  off += sizeof(inode.uid);
+  r.copy(off, sizeof(inode.gid), (char*)&inode.gid);
+  off += sizeof(inode.gid);
+  r.copy(off, sizeof(inode.ctime), (char*)&inode.ctime);
+  off += sizeof(inode.ctime);
+}
+
+
+// old state encoders
+
 crope CInode::encode_basic_state()
 {
   crope r;
@@ -350,12 +399,6 @@ void CInode::add_waiter(int tag, Context *c) {
 	get(CINODE_PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
-
-  // specialness?
-  if (tag == CINODE_WAIT_LOCK) {
-	lock_active_count++;
-	dout(10) << "add_waiter context " << c << " inc lock_active_count now " << lock_active_count << " on " << *this << endl;
-  }
   
 }
 
@@ -390,13 +433,6 @@ void CInode::finish_waiting(int mask, int result)
 	   it != finished.end();
 	   it++) {
 	Context *c = *it;
-
-	// HACK ugly
-	if (mask == CINODE_WAIT_LOCK) {
-	  assert(lock_active_count > 0);
-	  lock_active_count--;
-	  dout(10) << "finish_waiting context " << c << " dec lock_active_count now " << lock_active_count << " on " << *this << endl;
-	}
 
 	dout(11) << "finish_waiting finishing " << c << endl;
 	c->finish(result);

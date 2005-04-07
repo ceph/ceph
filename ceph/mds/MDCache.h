@@ -10,10 +10,12 @@
 
 #include "include/types.h"
 #include "include/filepath.h"
+
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
-//#include "InoProxySet.h"
+#include "Lock.h"
+
 
 class MDS;
 class Message;
@@ -283,50 +285,82 @@ class MDCache {
 
   void handle_cache_expire(MCacheExpire *m);
 
+  // -- locks --
+  // high level interface
+  bool inode_hard_read_start(CInode *in, Message *m);
+  void inode_hard_read_finish(CInode *in);
+  bool inode_hard_write_start(CInode *in, Message *m);
+  void inode_hard_write_finish(CInode *in);
+  bool inode_soft_read_start(CInode *in, Message *m);
+  void inode_soft_read_finish(CInode *in);
+  bool inode_soft_write_start(CInode *in, Message *m);
+  void inode_soft_write_finish(CInode *in);
 
-  // -- lock and sync : inodes --
-  // soft sync locks
-  bool read_soft_start(CInode *in, Message *m);
-  int read_soft_finish(CInode *in);
-  bool write_soft_start(CInode *in, Message *m);
-  int write_soft_finish(CInode *in);
+  // low level triggers
+  void inode_hard_sync(CInode *in);
+  void inode_hard_lock(CInode *in);
+  bool inode_soft_sync(CInode *in);
+  void inode_soft_lock(CInode *in);
+  void inode_soft_async(CInode *in);
 
-  void inode_sync_start(CInode *in);
-  void inode_sync_release(CInode *in);
-  void inode_sync_wait(CInode *in);
+  void inode_hard_eval(CInode *in);
+  void inode_soft_eval(CInode *in);
 
-  void handle_inode_sync_start(MInodeSyncStart *m);
-  void handle_inode_sync_ack(MInodeSyncAck *m);
-  void handle_inode_sync_release(MInodeSyncRelease *m);
-  void handle_inode_sync_recall(MInodeSyncRecall *m);
-
-  void inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback=false);
-
-  // hard locks  
-  bool read_hard_try(CInode *in, Message *m);
-  bool write_hard_start(CInode *in, Message *m);
-  void write_hard_finish(CInode *in);
-
-  void inode_lock_start(CInode *in);
-  void inode_lock_release(CInode *in);
-  void inode_lock_wait(CInode *in);
-
-  void handle_inode_lock_start(MInodeLockStart *m);
-  void handle_inode_lock_ack(MInodeLockAck *m);
-  void handle_inode_lock_release(MInodeLockRelease *m);
-			  
+  // messengers
   void handle_lock(MLock *m);
+  void handle_lock_inode_hard(MLock *m);
+  void handle_lock_inode_soft(MLock *m);
+
+  void handle_lock_dir(MLock *m);
+  void handle_lock_dn(MLock *m);
+
+
+
+  // -- lock and sync : inodes --  OLD CRAP XXX
+  /*
+    // soft sync locks
+	bool read_soft_start(CInode *in, Message *m);
+	int read_soft_finish(CInode *in);
+	bool write_soft_start(CInode *in, Message *m);
+	int write_soft_finish(CInode *in);
+	
+	void inode_sync_start(CInode *in);
+	void inode_sync_release(CInode *in);
+	void inode_sync_wait(CInode *in);
+	
+	void handle_inode_sync_start(MInodeSyncStart *m);
+	void handle_inode_sync_ack(MInodeSyncAck *m);
+	void handle_inode_sync_release(MInodeSyncRelease *m);
+	void handle_inode_sync_recall(MInodeSyncRecall *m);
+	
+	void inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback=false);
+  */
+  /*
+    // hard locks  
+	bool read_hard_try(CInode *in, Message *m);
+	bool write_hard_start(CInode *in, Message *m);
+	void write_hard_finish(CInode *in);
+	
+	void inode_lock_start(CInode *in);
+	void inode_lock_release(CInode *in);
+	void inode_lock_wait(CInode *in);
+	
+	void handle_inode_lock_start(MInodeLockStart *m);
+	void handle_inode_lock_ack(MInodeLockAck *m);
+	void handle_inode_lock_release(MInodeLockRelease *m);
+  */
 
 
   // -- sync : dirs --
-  void dir_sync_start(CDir *dir);
-  void dir_sync_release(CDir *dir);
-  void dir_sync_wait(CDir *dir);
-
-  void handle_dir_sync_start(MDirSyncStart *m);
-  void handle_dir_sync_ack(MDirSyncAck *m);
-  void handle_dir_sync_release(MDirSyncRelease *m);
-
+  /*
+	void dir_sync_start(CDir *dir);
+	void dir_sync_release(CDir *dir);
+	void dir_sync_wait(CDir *dir);
+	
+	void handle_dir_sync_start(MDirSyncStart *m);
+	void handle_dir_sync_ack(MDirSyncAck *m);
+	void handle_dir_sync_release(MDirSyncRelease *m);
+  */
 
   // == crap fns ==
   CInode* hack_get_file(string& fn);

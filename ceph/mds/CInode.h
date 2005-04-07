@@ -81,33 +81,35 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 
 // sync => coherent soft metadata (size, mtime, etc.)
 // lock => coherent hard metadata (owner, mode, etc. affecting namespace)
-#define CINODE_DIST_PRESYNC         1   // mtime, size, etc.
-#define CINODE_DIST_SYNCBYME        2
-#define CINODE_DIST_SYNCBYAUTH      4
-#define CINODE_DIST_WAITONUNSYNC    8
+//#define CINODE_DIST_PRESYNC         1   // mtime, size, etc.
+//#define CINODE_DIST_SYNCBYME        2
+//#define CINODE_DIST_SYNCBYAUTH      4
+//#define CINODE_DIST_WAITONUNSYNC    8
 
 #define CINODE_DIST_SOFTASYNC      16  // replica can soft write w/o sync
 
-#define CINODE_DIST_PRELOCK        64   // file mode, owner, etc.
-#define CINODE_DIST_LOCKBYME      128 // i am auth
-#define CINODE_DIST_LOCKBYAUTH    256 // i am not auth
-#define CINODE_DIST_WAITONUNLOCK  512
+//#define CINODE_DIST_PRELOCK        64   // file mode, owner, etc.
+//#define CINODE_DIST_LOCKBYME      128 // i am auth
+//#define CINODE_DIST_LOCKBYAUTH    256 // i am not auth
+//#define CINODE_DIST_WAITONUNLOCK  512
 
 
 // wait reasons
-#define CINODE_WAIT_SYNC           128
+//#define CINODE_WAIT_SYNC           128
     // waiters: read_soft_start, write_soft_start
     // trigger: handle_inode_sync_ack
-#define CINODE_WAIT_UNSYNC         256
+//#define CINODE_WAIT_UNSYNC         256
     // waiters: read_soft_start, write_soft_start
     // trigger: handle_inode_sync_release
-#define CINODE_WAIT_LOCK           512
+//#define CINODE_WAIT_LOCK           512
     // waiters: write_hard_start
     // trigger: handle_inode_lock_ack
     // SPECIALNESS: lock_active_count indicates waiter, active lock count.
-#define CINODE_WAIT_UNLOCK        1024
+//#define CINODE_WAIT_UNLOCK        1024
     // waiters: read_hard_try
     // trigger: handle_inode_lock_release
+
+
 #define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
     // waiters: write_hard_start, read_soft_start, write_soft_start  (mdcache)
     //          handle_client_chmod, handle_client_touch             (mds)
@@ -131,7 +133,21 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: file_rename
     // triggers: file_rename_finish
 
-#define CINODE_WAIT_ANY           0xffffff
+#define CINODE_WAIT_HARDR        (1<<17)  // 131072
+#define CINODE_WAIT_HARDW        (1<<18)
+#define CINODE_WAIT_HARDB        (1<<19)
+#define CINODE_WAIT_HARDRWB      (CINODE_WAIT_HARDR|CINODE_WAIT_HARDW|CINODE_WAIT_HARDB)
+#define CINODE_WAIT_HARDSTABLE   (1<<20)
+#define CINODE_WAIT_SOFTR        (1<<21)  // 2097152
+#define CINODE_WAIT_SOFTW        (1<<22)
+#define CINODE_WAIT_SOFTB        (1<<23)
+#define CINODE_WAIT_SOFTRWB      (CINODE_WAIT_SOFTR|CINODE_WAIT_SOFTW|CINODE_WAIT_SOFTB)
+#define CINODE_WAIT_SOFTSTABLE   (1<<24)
+
+
+
+
+#define CINODE_WAIT_ANY           0xffffffff
 
 
 // state
@@ -161,7 +177,7 @@ class MDCluster;
 class Message;
 class CInode;
 
-class MInodeSyncStart;
+//class MInodeSyncStart;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -172,6 +188,11 @@ class CInode : LRUObject {
   inode_t          inode;     // the inode itself
 
   CDir            *dir;       // directory, if we have it opened.
+  string           symlink;   // symlink dest, if symlink
+
+  // inode metadata locks
+  CLock        hardlock;
+  CLock        softlock;
 
  protected:
   int              ref;       // reference count
@@ -186,8 +207,9 @@ class CInode : LRUObject {
   CDentry         *parent;     // if 1 parent (usually)
   vector<CDentry*> parents;    // if > 1
 
+
   // dcache lru
-  CInode *lru_next, *lru_prev;
+  //CInode *lru_next, *lru_prev;
 
   // -- distributed caching
   //bool             auth;       // safety check; true if this is authoritative.
@@ -198,15 +220,16 @@ class CInode : LRUObject {
   /* NOTE: if replica is_cacheproxy(), cached_by is still defined! */
   map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
   int              replica_nonce;    // [replica] defined on replica
+
   set<int>         soft_tokens;      // replicas who can soft update the inode     XXX FIXME
   /* ..and thus may have a newer mtime, size, etc.! .. w/o sync
 	 for authority: set of nodes; self is assumed, but not included
 	 for replica:   undefined */
   unsigned         dist_state;
-  set<int>         sync_waiting_for_ack;
-  set<int>         lock_waiting_for_ack;
-  int              lock_active_count;  // count for in progress or waiting locks
-  bool             sync_replicawantback;  // avoids sticky sync
+  //set<int>         sync_waiting_for_ack;
+  //set<int>         lock_waiting_for_ack;
+  //int              lock_active_count;  // count for in progress or waiting locks
+  //bool             sync_replicawantback;  // avoids sticky sync
 
   set<int>         unlink_waiting_for_ack;
   set<int>         rename_waiting_for_ack;
@@ -223,7 +246,7 @@ class CInode : LRUObject {
   multiset<int>         open_read;
   multiset<int>         open_write;
 
-  MInodeSyncStart      *pending_sync_request;
+  //MInodeSyncStart      *pending_sync_request;
 
  private:
   // waiters
@@ -245,7 +268,10 @@ class CInode : LRUObject {
   
 
   // -- accessors --
-  bool is_dir() { return inode.isdir; }
+  bool is_file()    { return (inode.mode & INODE_MODE_FILE)    ? true:false; }
+  bool is_symlink() { return (inode.mode & INODE_MODE_SYMLINK) ? true:false; }
+  bool is_dir()     { return (inode.mode & INODE_MODE_DIR)     ? true:false; }
+
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_proxy() { return state & CINODE_STATE_PROXY; }
 
@@ -264,7 +290,7 @@ class CInode : LRUObject {
   CDir *set_dir(CDir *newdir);
   
   bool dir_is_hashed() { 
-	if (inode.isdir == INODE_DIR_HASHED) return true;
+	if (inode.hash_seed) return true;
 	return false; 
   }
   bool dir_is_auth();
@@ -298,7 +324,29 @@ class CInode : LRUObject {
 
   crope encode_export_state();
 
+  void encode_soft_state(crope& r);
+  void decode_soft_state(crope& r, int& off);
+  void decode_merge_soft_state(crope& r, int& off);
 
+  void encode_hard_state(crope& r);
+  void decode_hard_state(crope& r, int& off);
+
+  void replicate_relax_locks() {
+	assert(is_auth());
+	assert(!is_cached_by_anyone());
+	dout(10) << " relaxing locks on " << *this << endl;
+
+	if (hardlock.get_state() == LOCK_LOCK &&
+		!hardlock.is_used()) {
+	  dout(10) << " hard now sync " << *this << endl;
+	  hardlock.set_state(LOCK_SYNC);
+	}
+	if (softlock.get_state() == LOCK_LOCK &&
+		!softlock.is_used()) {
+	  softlock.set_state(LOCK_SYNC);
+	  dout(10) << " soft now sync " << *this << endl;
+	}
+  }
   
   // -- dirtyness --
   __uint64_t get_version() { return version; }
@@ -379,6 +427,7 @@ class CInode : LRUObject {
 
 
   // -- sync, lock --
+  /*
   bool is_sync() { return dist_state & (CINODE_DIST_SYNCBYME|
 										CINODE_DIST_SYNCBYAUTH); }
   bool is_syncbyme() { return dist_state & CINODE_DIST_SYNCBYME; }
@@ -391,6 +440,7 @@ class CInode : LRUObject {
   bool is_lockbyauth() { return dist_state & CINODE_DIST_LOCKBYAUTH; }
   bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
   bool is_waitonunlock() { return dist_state & CINODE_DIST_WAITONUNLOCK; }
+  */
 
   // -- open files --
   bool is_open() {
@@ -519,18 +569,17 @@ class CInodeDiscover {
   
   inode_t    inode;
   int        replica_nonce;
-  bool       is_syncbyauth;
-  bool       is_softasync;
-  bool       is_lockbyauth;
+  
+  int        hardlock_state;
+  int        softlock_state;
 
  public:
   CInodeDiscover() {}
   CInodeDiscover(CInode *in, int nonce) {
 	inode = in->inode;
 	replica_nonce = nonce;
-	is_syncbyauth = in->is_syncbyme() || in->is_presync();
-	is_softasync = in->is_softasync();
-	is_lockbyauth = in->is_lockbyme() || in->is_prelock();
+	hardlock_state = in->hardlock.get_replica_state();
+	softlock_state = in->softlock.get_replica_state();
   }
 
   inodeno_t get_ino() { return inode.ino; }
@@ -539,19 +588,16 @@ class CInodeDiscover {
 	in->inode = inode;
 
 	in->replica_nonce = replica_nonce;
-	
-	if (is_syncbyauth) in->dist_state |= CINODE_DIST_SYNCBYAUTH;
-	if (is_softasync)  in->dist_state |= CINODE_DIST_SOFTASYNC;
-	if (is_lockbyauth) in->dist_state |= CINODE_DIST_LOCKBYAUTH;
+	in->hardlock.set_state(hardlock_state);
+	in->softlock.set_state(softlock_state);
   }
   
   crope _rope() {
 	crope r;
 	r.append((char*)&inode, sizeof(inode));
 	r.append((char*)&replica_nonce, sizeof(replica_nonce));
-	r.append((char*)&is_syncbyauth, sizeof(bool));
-	r.append((char*)&is_softasync, sizeof(bool));
-	r.append((char*)&is_lockbyauth, sizeof(bool));
+	r.append((char*)&hardlock_state, sizeof(hardlock_state));
+	r.append((char*)&softlock_state, sizeof(softlock_state));
 	return r;
   }
 
@@ -560,12 +606,10 @@ class CInodeDiscover {
 	off += sizeof(inode_t);
 	s.copy(off, sizeof(int), (char*)&replica_nonce);
 	off += sizeof(int);
-	s.copy(off, sizeof(bool), (char*)&is_syncbyauth);
-	off += sizeof(bool);
-	s.copy(off, sizeof(bool), (char*)&is_softasync);
-	off += sizeof(bool);
-	s.copy(off, sizeof(bool), (char*)&is_lockbyauth);
-	off += sizeof(bool);
+	s.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
+	off += sizeof(hardlock_state);
+	s.copy(off, sizeof(softlock_state), (char*)&softlock_state);
+	off += sizeof(softlock_state);
 	return off;
   }  
 
@@ -579,7 +623,6 @@ typedef struct {
   __uint64_t     version;
   DecayCounter   popularity;
   bool           is_dirty;       // dirty inode?
-  bool           is_softasync;
 
   int            ncached_by;  // int pairs follow
 } CInodeExport_st;
@@ -591,6 +634,8 @@ class CInodeExport {
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
 
+  CLock         hardlock,softlock;
+
 public:
   CInodeExport() {}
   CInodeExport(CInode *in) {
@@ -598,9 +643,10 @@ public:
 	st.version = in->get_version();
 	st.popularity = in->get_popularity();
 	st.is_dirty = in->is_dirty();
-	st.is_softasync = in->is_softasync();
 	cached_by = in->cached_by;
 	cached_by_nonce = in->cached_by_nonce; 
+	hardlock = in->hardlock;
+	softlock = in->softlock;
   }
   
   inodeno_t get_ino() { return st.inode.ino; }
@@ -614,14 +660,14 @@ public:
 	if (st.is_dirty)
 	  in->mark_dirty();
 
-	if (st.is_softasync)
-	  in->dist_state |= CINODE_DIST_SOFTASYNC;
-
 	in->cached_by.clear();
 	in->cached_by = cached_by;
 	in->cached_by_nonce = cached_by_nonce;
 	if (!cached_by.empty()) 
 	  in->get(CINODE_PIN_CACHED);
+
+	in->hardlock = hardlock;
+	in->softlock = softlock;
   }
 
   crope _rope() {
@@ -639,6 +685,8 @@ public:
       r.append((char*)&n, sizeof(int));
     }
     
+	hardlock.encode_state(r);
+	softlock.encode_state(r);
 	return r;
   }
 
@@ -655,6 +703,9 @@ public:
       cached_by.insert(m);
       cached_by_nonce.insert(pair<int,int>(m,n));
     }
+
+	hardlock.decode_state(s, off);
+	softlock.decode_state(s, off);
     return off;
   }
 };

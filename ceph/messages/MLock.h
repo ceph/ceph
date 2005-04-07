@@ -3,23 +3,36 @@
 
 #include "msg/Message.h"
 
-#define LOCK_OTYPE_INO    1
-#define LOCK_OTYPE_DIRINO 2
-#define LOCK_OTYPE_DN     3
+#define LOCK_OTYPE_IHARD  1
+#define LOCK_OTYPE_ISOFT  2
+#define LOCK_OTYPE_DIR    3
+#define LOCK_OTYPE_DN     4
 
-// basic messages
-#define LOCK_AC_LOCK          1
-#define LOCK_AC_LOCKACK       2
-#define LOCK_AC_SYNC          3
-#define LOCK_AC_SYNCACK       4
-#define LOCK_AC_REQSYNC       5
-#define LOCK_AC_DELETE        6
-#define LOCK_AC_DELETEACK     7
+// for replicas
+#define LOCK_AC_SYNC          0
+#define LOCK_AC_ASYNC         1
+#define LOCK_AC_LOCK          2  // nakable
+#define LOCK_AC_GSYNC         3  //  "
+#define LOCK_AC_GLOCK         4  //  "
+#define LOCK_AC_GASYNC        5  //  "
 
-// async messages
-#define LOCK_AC_ASYNC         8
-#define LOCK_AC_ASYNCACK      9
-#define LOCK_AC_REQASYNC     10
+#define LOCK_AC_FOR_REPLICA(a)  ((a) <= 5)
+#define LOCK_AC_FOR_AUTH(a)     ((a) >= 6)
+
+#define LOCK_AC_NAKOFFSET     4  // be careful with numbering!
+
+// for auth
+#define LOCK_AC_LOCKNAK       6
+#define LOCK_AC_GSYNCNAK      7
+#define LOCK_AC_GLOCKNAK      8
+#define LOCK_AC_GASYNCNAK     9
+#define LOCK_AC_LOCKACK      10
+#define LOCK_AC_GSYNCACK     11
+#define LOCK_AC_GLOCKACK     12
+#define LOCK_AC_GASYNCACK    13
+
+
+#define lock_ac_name(x)      
 
 
 class MLock : public Message {
@@ -47,12 +60,12 @@ class MLock : public Message {
   }
   virtual char *get_type_name() { return "ILock"; }
   
-  void set_ino(inodeno_t ino) {
-	otype = LOCK_OTYPE_INO;
+  void set_ino(inodeno_t ino, char ot) {
+	otype = ot;
 	this->ino = ino;
   }
   void set_dirino(inodeno_t dirino) {
-	otype = LOCK_OTYPE_DIRINO;
+	otype = LOCK_OTYPE_DIR;
 	this->ino = ino;
   }
   void set_dn(inodeno_t dirino, string& dn) {
@@ -75,7 +88,7 @@ class MLock : public Message {
 	s.copy(off,sizeof(otype), (char*)&otype);
 	off += sizeof(otype);
 
-	s.copy(off,sizeof(inodeno_t), (char*)&ino);
+	s.copy(off,sizeof(ino), (char*)&ino);
 	off += sizeof(ino);
 	
 	dn = s.c_str() + off;

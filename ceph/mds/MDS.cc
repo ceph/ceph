@@ -462,16 +462,16 @@ int MDS::handle_client_request(MClientRequest *req)
 MClientReply *MDS::handle_client_stat(MClientRequest *req,
 									  CInode *cur)
 {
-  if (!mdcache->read_soft_start(cur, req))
+  if (!mdcache->inode_soft_read_start(cur, req))
 	return 0;  // sync
 
-  dout(10) << "reply to " << *req << " stat " << cur->inode.touched << " pop " << cur->get_popularity() << endl;
+  dout(10) << "reply to " << *req << " stat " << cur->inode.mtime << " pop " << cur->get_popularity() << endl;
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
 
   // FIXME: put inode info in reply...
 
-  mdcache->read_soft_finish(cur);
+  mdcache->inode_soft_read_finish(cur);
 
   logger->inc("ostat");
   stat_read.hit();
@@ -502,14 +502,13 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
 									   CInode *cur)
 {
   // write
-  if (!mdcache->write_soft_start(cur, req))
+  if (!mdcache->inode_soft_write_start(cur, req))
 	return 0;  // fw or (wait for) sync
 
   cur->auth_pin();
   
   // do update
   cur->inode.mtime++; // whatever
-  cur->inode.touched++;
   cur->mark_dirty();
   
   // tell replicas
@@ -522,7 +521,7 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
   reply->set_result(0);
 
   // log it
-  dout(10) << "log for " << *req << " touch " << cur->inode.touched << endl;
+  dout(10) << "log for " << *req << " touch " << cur->inode.mtime << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
 					  new C_MDS_TouchFinish(this, req, cur, reply));
   return 0;
@@ -550,7 +549,7 @@ void MDS::handle_client_touch_2(MClientRequest *req,
 
   // unpin
   cur->auth_unpin();
-  mdcache->write_soft_finish(cur);
+  mdcache->inode_soft_write_finish(cur);
 }
 
 
@@ -577,14 +576,13 @@ MClientReply *MDS::handle_client_chmod(MClientRequest *req,
 									   CInode *cur)
 {
   // write
-  if (!mdcache->write_hard_start(cur, req))
+  if (!mdcache->inode_hard_write_start(cur, req))
 	return 0;  // fw or (wait for) lock
 
   cur->auth_pin();
   
   // do update
   cur->inode.mtime++; // whatever
-  cur->inode.touched++; // blah
   cur->mark_dirty();
 
   // start reply
@@ -592,7 +590,7 @@ MClientReply *MDS::handle_client_chmod(MClientRequest *req,
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
 
-  mdcache->write_hard_finish(cur);
+  mdcache->inode_hard_write_finish(cur);
 
   // log it
   dout(10) << "log for " << *req << " chmod" << endl;
@@ -630,8 +628,10 @@ void MDS::handle_client_chmod_2(MClientRequest *req,
 MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 										 CInode *cur)
 {
-  if (!mdcache->read_hard_try(cur,req))
+  // check perm
+  if (!mdcache->inode_hard_read_start(cur,req))
 	return NULL;
+  mdcache->inode_hard_read_finish(cur);
 
   // it's a directory, right?
   if (!cur->is_dir()) {
@@ -757,7 +757,7 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 										CInode *cur)
 {
   if (!cur->is_auth()) {
-	if (!cur->is_softasync()) {
+	if (cur->softlock.get_mode() == LOCK_MODE_SYNC) {
 	  int auth = cur->authority();
 	  assert(auth != whoami);
 	  dout(10) << "open (write) [replica] " << *cur << " on replica, fw to auth " << auth << endl;
@@ -767,7 +767,7 @@ MClientReply *MDS::handle_client_openwr(MClientRequest *req,
 							  MDS_PORT_SERVER);
 	  return 0;
 	}
-
+	
 	dout(10) << "open (write) [replica shared write] " << *cur << endl;
 	assert(0);
   }
@@ -904,17 +904,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
 
   dout(7) << "handle_client_unlink on " << *in << endl;
 
-  // can't be presync/lock
-  if (in->is_presync()) {
-	in->add_waiter(CINODE_WAIT_SYNC,
-				   new C_MDS_RetryMessage(this, req));
-	return;
-  }
-  if (in->is_prelock()) {
-	in->add_waiter(CINODE_WAIT_LOCK,
-				   new C_MDS_RetryMessage(this, req));
-	return;
-  }
+  // presync, lock?
 
   mdcache->inode_unlink(in, 
 						new C_MDS_UnlinkInode(this,in,req));
@@ -969,9 +959,8 @@ void MDS::handle_client_mkdir(MClientRequest *req)
 
   // create!
   CInode *newi = mdcache->create_inode();
+  newi->inode.mode |= INODE_MODE_DIR;
   mdcache->link_inode(dir, name, newi);
-  
-  newi->inode.isdir = 1;
 
   newi->mark_dirty();
 
@@ -1094,15 +1083,15 @@ if (!locked && flag=renaming)
 
 basic protocol with replicas:
 
-> Lock    (possibly x2?)
-< LockAck (possibly x2?)
-> Rename
-   src ino
-   dst dir
-   either dst ino (is unlinked)
-       or dst name
-< RenameAck
-   (implicitly unlocks, unlinks, etc.)
+ > Lock    (possibly x2?)
+ < LockAck (possibly x2?)
+ > Rename
+    src ino
+    dst dir
+    either dst ino (is unlinked)
+        or dst name
+ < RenameAck
+    (implicitly unlocks, unlinks, etc.)
 
 */
 
@@ -1133,6 +1122,7 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 									CDir *destdir,
 									string& name)
 {
+  /*
   bool must_wait_for_lock = false;
   
   // does destination exist?  (is this an overwrite?)
@@ -1160,7 +1150,7 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 		return;
 	  }
 
-	  if (mdcache->write_hard_start(oldin, req) == false) {
+	  if (mdcache->inode_hard_write_start(oldin, req) == false) {
 		// wait
 		dout(7) << "dest/overwrite " << *oldin << " locking, waiting" << endl;
 		must_wait_for_lock = true;
@@ -1186,7 +1176,7 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	  return;
 	}
 
-	if (mdcache->write_hard_start(from, req) == false) {
+	if (mdcache->inode_hard_write_start(from, req) == false) {
 	  // wait
 	  dout(7) << "from " << *from << " locking, waiting" << endl;
 	  must_wait_for_lock = true;
@@ -1207,6 +1197,8 @@ void MDS::handle_client_rename_file(MClientRequest *req,
   // ok go!
   mdcache->file_rename(from, destdir, name, oldin, 
 					   new C_MDS_RenameFinish(this, req));
+
+  */
 }
 
 

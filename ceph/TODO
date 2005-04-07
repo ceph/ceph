@@ -1,25 +1,35 @@
 
 
+/- lock states
+/ - discover needs to set initial state intelligently
+/ - expire must remove from gather_set
+    - more gracefully than it does now?
+
+
+
+
 CLIENT
 - structure.. multithreaded until messenger
 
+- client sync
 
+- openwr, softasync
+
+- unlink vs soft/hard locks?
 
 MDS
 - qsync
-- high level locker functions
-- expand Lock
-  - can_*_soon(), is_stable()...
-- add waiters for stable states (to match is_stable())
+- lock modes (sync, async)
+ - recalls
 
 - freeze interaction.....  test!
-  - freeze state diagram
+  - freeze state diagram?
 
-/- generalize inoallocator
 - add client file handles.
   - fh modes:  RD, RDWR, WR ... append?  :/
   - fh states: SYNC, ASYNC, ...????
 
+- unlink in terms of dentry lock
 
 - symlinks!
   - stored in the inode.. how?
