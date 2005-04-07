@@ -1,5 +1,8 @@
 
 
+- recall messages
+- state diagram for master?  _eval() functions
+
 /- lock states
 / - discover needs to set initial state intelligently
 / - expire must remove from gather_set

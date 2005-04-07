@@ -2085,8 +2085,9 @@ void MDCache::handle_lock_inode_hard(MLock *m)
 
 
 
-
+// =====================
 // soft inode metadata
+
 
 bool MDCache::inode_soft_read_start(CInode *in, Message *m)
 {
@@ -2231,6 +2232,30 @@ void MDCache::inode_soft_eval(CInode *in)
 }
 
 // mid
+
+void MDCache::inode_soft_mode(CInode *in, int mode)
+{
+  in->set_mode(mode);
+  dout(7) << "inode_soft_mode mode=" << mode << " " << *in << " softlock=" << in->softlock << endl;  
+  
+  // tell replicas
+  for (set<int>::iterator it = in->cached_by_begin(); 
+	   it != in->cached_by_end(); 
+	   it++) {
+	int ac;
+	switch (mode) {
+	case LOCK_MODE_SYNC: ac = LOCK_AC_SYNC_MODE; break;
+	case LOCK_MODE_ASYNC: ac = LOCK_AC_ASYNC_MODE; break;
+	case LOCK_MODE_LOCK: ac = LOCK_AC_LOCK_MODE; break;
+	default: assert(0);
+	}
+	MLock *m = new MLock(ac, mds->get_nodeid());
+	m->set_ino(in->ino(), LOCK_OTYPE_ISOFT);
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								 MDS_PORT_CACHE);
+  }
+}
 
 bool MDCache::inode_soft_sync(CInode *in)
 {
@@ -2462,6 +2487,21 @@ void MDCache::handle_lock_inode_soft(MLock *m)
   
   switch (m->get_action()) {
 	// -- replica --
+  case LOCK_AC_SYNC_MODE:
+	lock->set_mode(LOCK_MODE_SYNC);
+	in->finish_waiting(CINODE_WAIT_SOFTW);
+	break;
+
+  case LOCK_AC_ASYNC_MODE:
+	lock->set_mode(LOCK_MODE_ASYNC);
+	in->finish_waiting(CINODE_WAIT_SOFTR);
+	break;
+
+  case LOCK_AC_LOCK_MODE:
+	lock->set_mode(LOCK_MODE_SYNC);
+	in->finish_waiting(CINODE_WAIT_SOFTWRB);
+	break;
+
   case LOCK_AC_SYNC:
 	assert(lock->get_state() == LOCK_LOCK ||
 		   lock->get_state() == LOCK_GSYNC);
@@ -4842,12 +4882,16 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 	dout(4) << " making " << *diri << " into a dir" << endl;
 	diri->inode.mode &= ~INODE_MODE_FILE;
 	diri->inode.mode |= INODE_MODE_DIR;
-	assert(diri->is_dir());
-	diri->get_or_open_dir(mds);
   }
+
+  assert(diri->is_dir());
+  diri->get_or_open_dir(mds);
   
   add_inode( in );
   link_inode( diri->dir, file, in );
+
+  if (in->is_dir())
+	in->get_or_open_dir(mds);
 
   vector<CInode*> trace;
   trace.push_back(diri);

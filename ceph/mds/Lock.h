@@ -25,7 +25,9 @@ using namespace std;
 #define LOCK_TYPE_ASYNC  1
 
 #define LOCK_MODE_SYNC   0
-#define LOCK_MODE_ASYNC  1
+#define LOCK_MODE_LOCK   1
+#define LOCK_MODE_ASYNC  2
+
 
 // -- basic lock
 
@@ -38,8 +40,11 @@ class CLock {
   set<int> gather_set;  // auth
   int      nread, nwrite;
 
-  bool     req_read, req_write;  // dual meaning: on replicas, whether we've requested; on auth, whether others have requested.
-
+  // dual meaning: 
+  //  on replicas, whether we've requested; 
+  //  on auth, whether others have requested.
+  bool     req_read, req_write;       // FIXME: roll these into state, use a mask, whatever.
+  
  public:
   CLock() {}
   CLock(char t) : 
@@ -57,6 +62,8 @@ class CLock {
 	r.append((char*)&mode, sizeof(mode));
 	r.append((char*)&nread, sizeof(nread));
 	r.append((char*)&nwrite, sizeof(nwrite));
+	r.append((char*)&req_read, sizeof(req_read));
+	r.append((char*)&req_write, sizeof(req_write));
 	int n = gather_set.size();
 	r.append((char*)&n, sizeof(n));	
 	for (set<int>::iterator it = gather_set.begin();
@@ -76,6 +83,10 @@ class CLock {
 	r.copy(off, sizeof(nread), (char*)&nread);
 	off += sizeof(nread);
 	r.copy(off, sizeof(nwrite), (char*)&nwrite);
+	off += sizeof(nwrite);
+	r.copy(off, sizeof(req_read), (char*)&req_read);
+	off += sizeof(nwrite);
+	r.copy(off, sizeof(req_write), (char*)&req_write);
 	off += sizeof(nwrite);
 
 	int n;

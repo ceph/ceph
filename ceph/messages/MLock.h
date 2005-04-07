@@ -11,26 +11,33 @@
 // for replicas
 #define LOCK_AC_SYNC          0
 #define LOCK_AC_ASYNC         1
-#define LOCK_AC_LOCK          2  // nakable
-#define LOCK_AC_GSYNC         3  //  "
-#define LOCK_AC_GLOCK         4  //  "
-#define LOCK_AC_GASYNC        5  //  "
 
-#define LOCK_AC_FOR_REPLICA(a)  ((a) <= 5)
-#define LOCK_AC_FOR_AUTH(a)     ((a) >= 6)
+#define LOCK_AC_SYNC_MODE     2
+#define LOCK_AC_LOCK_MODE     3
+#define LOCK_AC_ASYNC_MODE    4
+
+#define LOCK_AC_LOCK          5  // nakable
+#define LOCK_AC_GSYNC         6  //  "
+#define LOCK_AC_GLOCK         7  //  "
+#define LOCK_AC_GASYNC        8  //  "
+
+
+#define LOCK_AC_FOR_REPLICA(a)  ((a) <= 8)
+#define LOCK_AC_FOR_AUTH(a)     ((a) >= 9)
 
 #define LOCK_AC_NAKOFFSET     4  // be careful with numbering!
 
 // for auth
-#define LOCK_AC_LOCKNAK       6
-#define LOCK_AC_GSYNCNAK      7
-#define LOCK_AC_GLOCKNAK      8
-#define LOCK_AC_GASYNCNAK     9
-#define LOCK_AC_LOCKACK      10
-#define LOCK_AC_GSYNCACK     11
-#define LOCK_AC_GLOCKACK     12
-#define LOCK_AC_GASYNCACK    13
-
+#define LOCK_AC_LOCKNAK       9
+#define LOCK_AC_GSYNCNAK     10
+#define LOCK_AC_GLOCKNAK     11
+#define LOCK_AC_GASYNCNAK    12
+#define LOCK_AC_LOCKACK      13
+#define LOCK_AC_GSYNCACK     14
+#define LOCK_AC_GLOCKACK     15
+#define LOCK_AC_GASYNCACK    16
+#define LOCK_AC_REQREAD      17
+#define LOCK_AC_REQWRITE     18
 
 #define lock_ac_name(x)      
 
