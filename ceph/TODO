@@ -1,6 +1,7 @@
 
 
-- recall messages
+- recall messages?
+- lazy flag?  make a table!
 - state diagram for master?  _eval() functions
 
 /- lock states
@@ -37,7 +38,6 @@ MDS
 - symlinks!
   - stored in the inode.. how?
   - make MDStore.cc smartr
-  - consolidate inode.isdir and inode.type?
 
 
 => grep for FIXME :)

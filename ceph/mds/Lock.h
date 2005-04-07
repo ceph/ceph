@@ -24,9 +24,8 @@ using namespace std;
 #define LOCK_TYPE_BASIC  0
 #define LOCK_TYPE_ASYNC  1
 
-#define LOCK_MODE_SYNC   0
-#define LOCK_MODE_LOCK   1
-#define LOCK_MODE_ASYNC  2
+#define LOCK_MODE_SYNC     0  // return to sync when writes finish (or read requested)
+#define LOCK_MODE_ASYNC    1  // return to async when reads finish (or write requested)
 
 
 // -- basic lock

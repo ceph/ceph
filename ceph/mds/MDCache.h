@@ -296,6 +296,9 @@ class MDCache {
   bool inode_soft_write_start(CInode *in, Message *m);
   void inode_soft_write_finish(CInode *in);
 
+  void inode_hard_mode(CInode *in, int mode);
+  void inode_soft_mode(CInode *in, int mode);
+
   // low level triggers
   void inode_hard_sync(CInode *in);
   void inode_hard_lock(CInode *in);

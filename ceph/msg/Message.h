@@ -95,6 +95,7 @@ typedef int  msg_addr_t;
 #include <ext/rope>
 #include <cassert>
 using namespace std;
+using namespace __gnu_cxx;
 
 
 // abstract Message class

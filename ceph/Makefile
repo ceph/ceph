@@ -2,7 +2,8 @@
 CC=g++
 #CC=distcc g++
 #CC=mpiCC
-CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
+CFLAGS=-g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
+#CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=
 
 MPICC=g++
@@ -40,7 +41,7 @@ all: depend ${TARGETS}
 
 test: test.cc msg/FakeMessenger.o pmds.o
 	test ! -e leak.out || rm leak.out
-	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o ${LEAKTRACER} test.cc -o test
+	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o test.cc ${LEAKTRACER} -o test
 
 import: pmds.o msg/FakeMessenger.o import.cc
 	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o import.cc ${LEAKTRACER} -o import

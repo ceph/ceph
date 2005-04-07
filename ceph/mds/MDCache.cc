@@ -1755,6 +1755,12 @@ INODES:
 
 
 
+
+modes
+
+
+
+
 ALSO:
 
   dirlock  - no dir changes (prior to unhashing)
@@ -2085,6 +2091,7 @@ void MDCache::handle_lock_inode_hard(MLock *m)
 
 
 
+
 // =====================
 // soft inode metadata
 
@@ -2235,7 +2242,7 @@ void MDCache::inode_soft_eval(CInode *in)
 
 void MDCache::inode_soft_mode(CInode *in, int mode)
 {
-  in->set_mode(mode);
+  in->softlock.set_mode(mode);
   dout(7) << "inode_soft_mode mode=" << mode << " " << *in << " softlock=" << in->softlock << endl;  
   
   // tell replicas
@@ -2246,7 +2253,6 @@ void MDCache::inode_soft_mode(CInode *in, int mode)
 	switch (mode) {
 	case LOCK_MODE_SYNC: ac = LOCK_AC_SYNC_MODE; break;
 	case LOCK_MODE_ASYNC: ac = LOCK_AC_ASYNC_MODE; break;
-	case LOCK_MODE_LOCK: ac = LOCK_AC_LOCK_MODE; break;
 	default: assert(0);
 	}
 	MLock *m = new MLock(ac, mds->get_nodeid());
@@ -2497,10 +2503,6 @@ void MDCache::handle_lock_inode_soft(MLock *m)
 	in->finish_waiting(CINODE_WAIT_SOFTR);
 	break;
 
-  case LOCK_AC_LOCK_MODE:
-	lock->set_mode(LOCK_MODE_SYNC);
-	in->finish_waiting(CINODE_WAIT_SOFTWRB);
-	break;
 
   case LOCK_AC_SYNC:
 	assert(lock->get_state() == LOCK_LOCK ||
