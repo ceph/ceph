@@ -29,9 +29,7 @@ using namespace std;
 #define MDS_OP_RMDIR    221
 #define MDS_OP_SYMLINK  222
 
-#define MDS_OP_OPENRD   301
-#define MDS_OP_OPENWR   302
-#define MDS_OP_OPENWRC  303
+#define MDS_OP_OPEN     301
 #define OSD_OP_READ     304
 #define OSD_OP_WRITE    305
 #define MDS_OP_TRUNCATE 306
@@ -40,11 +38,13 @@ using namespace std;
 
 
 
-
-
-
-
 // -- stl crap --
+
+/*
+- this is to make some of the STL types work with 64 bit values, string hash keys, etc.
+- added when i was using an old STL.. maybe try taking these out and see if things 
+  compile now?
+*/
 
 namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
@@ -61,11 +61,13 @@ namespace __gnu_cxx {
 }
 
 
-// -- raw inode --
+// -- inode --
 
 typedef __uint64_t inodeno_t;   // ino
 
-typedef __uint64_t mdloc_t;     // dir locator?
+#define INODE_MODE_FILE     0100000 // S_IFREG
+#define INODE_MODE_SYMLINK  0120000 // S_IFLNK
+#define INODE_MODE_DIR      0040000 // S_IFDIR
 
 struct inode_t {
   // immutable
@@ -85,17 +87,14 @@ struct inode_t {
   unsigned char hash_seed;  // 0 if not hashed.
 };
 
-#define INODE_MODE_FILE     0100000 // S_IFREG
-#define INODE_MODE_SYMLINK  0120000 // S_IFLNK
-#define INODE_MODE_DIR      0040000 // S_IFDIR
 
+// misc other types
+typedef __uint64_t object_t;
+typedef __uint32_t fileh_t;
 
-
-
-
+// dentries
 #define MAX_DENTRY_LEN 255
 
-typedef __uint64_t object_t;
 
 
 // -- load balancing stuff --

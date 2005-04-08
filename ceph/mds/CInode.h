@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 #include "CDentry.h"
+#include "CFile.h"
 #include "Lock.h"
 
 #include <cassert>
@@ -244,9 +245,8 @@ class CInode : LRUObject {
 
 
   // open file state
-  // sets of client ids!
-  multiset<int>         open_read;
-  multiset<int>         open_write;
+  map<fileh_t, CFile*>  fh_read;   // readers
+  map<fileh_t, CFile*>  fh_write;  // writers
 
   //MInodeSyncStart      *pending_sync_request;
 
@@ -446,49 +446,39 @@ class CInode : LRUObject {
 
   // -- open files --
   bool is_open() {
-	if (open_read.empty() &&
-		open_write.empty()) return false;
+	if (fh_read.empty() &&
+		fh_write.empty()) return false;
 	return true;
   }
-  bool is_open_write() {
-	if (open_write.empty()) return false;
-	return true;
+  CFile* get_fh(int fh) {
+	if (fh_read.count(fh)) return fh_read[fh];
+	if (fh_write.count(fh)) return fh_write[fh];
   }
-  void open_read_add(int c) {
-	if (open_read.empty())
-	  get(CINODE_PIN_OPENRD);
-	open_read.insert(c);
+  void add_fh(CFile *f) {
+	if (f->mode == CFILE_MODE_R) {
+	  if (fh_read.empty())
+		get(CINODE_PIN_OPENRD);
+	  fh_read[f->fh] = f;
+	} 
+	else if (f->mode == CFILE_MODE_W) {
+	  if (fh_write.empty())
+		get(CINODE_PIN_OPENWR);
+	  fh_write[f->fh] = f;
+	}
+	else assert(0);
   }
-  void open_read_remove(int c) {
-	if (open_read.count(c) == 1 &&
-		open_read.size() == 1) 
-	  put(CINODE_PIN_OPENRD);
-	open_read.erase(open_read.find(c));
-  }
-  void open_write_add(int c) {
-	if (open_write.empty())
-	  get(CINODE_PIN_OPENWR);
-	open_write.insert(c);
-  }
-  void open_write_remove(int c) {
-	if (open_write.count(c) == 1 &&
-		open_write.size() == 1) 
-	  put(CINODE_PIN_OPENWR);
-	open_write.erase(open_write.find(c));
-  }
-  bool open_remove(int c) {
-	if (open_read.count(c))
-	  open_read_remove(c);
-	else if (open_write.count(c))
-	  open_write_remove(c);
-	else return false;
-	return true;
-  }
-  multiset<int>& get_open_write() {
-	return open_write;
-  }
-  multiset<int>& get_open_read() {
-	return open_read;
+  void remove_fh(CFile *f) {
+	if (f->mode == CFILE_MODE_R) {
+	  assert(fh_read.count(f->fh));
+	  fh_read.erase(fh_read.find(f->fh));
+	  if (fh_read.empty()) put(CINODE_PIN_OPENRD);
+	} 
+	else if (f->mode == CFILE_MODE_W) {
+	  assert(fh_write.count(f->fh));
+	  fh_write.erase(fh_write.find(f->fh));
+	  if (fh_write.empty()) put(CINODE_PIN_OPENWR);
+	}
+	else assert(0);
   }
 
 

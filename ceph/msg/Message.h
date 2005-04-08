@@ -77,6 +77,10 @@
 // address types
 typedef int  msg_addr_t;
 
+// mds's, client's share same (integer) namespace    ??????
+// osd's could be separate.
+
+
 /* sandwich mds's, then osd's, then clients */
 #define MSG_ADDR_MDS(x)     (x)
 #define MSG_ADDR_OSD(x)     (g_conf.num_mds+(x))

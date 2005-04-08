@@ -34,6 +34,7 @@
 #include "events/EInodeUnlink.h"
 
 #include <errno.h>
+#include <fcntl.h>
 
 #include <list>
 #include <iostream>
@@ -366,8 +367,9 @@ int MDS::handle_client_request(MClientRequest *req)
 	handle_client_close(req);
 	return 0;
 
-  case MDS_OP_OPENWRC:
-	handle_client_openwrc(req);
+  case MDS_OP_OPEN:
+	if (req->get_iarg() & O_CREAT)
+	  handle_client_openc(req);
 	return 0;
 
   case MDS_OP_MKDIR:
@@ -415,12 +417,8 @@ int MDS::handle_client_request(MClientRequest *req)
 	reply = handle_client_chmod(req, cur);
 	break;
 
-  case MDS_OP_OPENRD:
-	reply = handle_client_openrd(req, cur);
-	break;
-
-  case MDS_OP_OPENWR:
-	reply = handle_client_openwr(req, cur);
+  case MDS_OP_OPEN:
+	handle_client_open(req, cur);
 	break;
 
   case MDS_OP_UNLINK:
@@ -709,22 +707,6 @@ MClientReply *MDS::handle_client_readdir(MClientRequest *req,
 }
 
 
-MClientReply *MDS::handle_client_openrd(MClientRequest *req,
-										CInode *cur)
-{
-  dout(10) << "open (read) on " << *cur << endl;
-  
-  // hmm, check permissions or something.
- 
-  // add reader
-  int client = req->get_client();
-  cur->open_read_add(client);
-
-  // reply
-  MClientReply *reply = new MClientReply(req);
-  reply->set_trace_dist( cur, whoami );
-  return reply;
-}
 
 void MDS::handle_client_close(MClientRequest *req) 
 {
@@ -733,14 +715,27 @@ void MDS::handle_client_close(MClientRequest *req)
 
   dout(10) << "close on " << *cur << endl;
   
-  // hmm, check permissions or something.
-  
   // verify on read or write list
   int client = req->get_client();
-  if (!cur->open_remove(client)) {
+  int fh = req->get_iarg();
+  CFile *f = cur->get_fh(fh);
+  if (!f) {
 	dout(1) << "close on unopen file " << *cur << endl;
 	assert(2+2==5);
   }
+
+  // update soft metadata
+  assert(cur->softlock.get_mode() == LOCK_MODE_ASYNC);  // otherwise we're toast?
+  if (!mdcache->inode_soft_write_start(cur, req))
+	return;  // wait
+
+  // update size, mtime
+
+  // close it.
+  cur->remove_fh(f);
+
+  // ok we're done
+  mdcache->inode_soft_write_finish(cur); 
   
   // reply
   MClientReply *reply = new MClientReply(req);
@@ -753,116 +748,124 @@ void MDS::handle_client_close(MClientRequest *req)
   delete req;
 }
 
-
-MClientReply *MDS::handle_client_openwr(MClientRequest *req,
-										CInode *cur)
+void MDS::handle_client_open(MClientRequest *req,
+									  CInode *cur)
 {
-  if (!cur->is_auth()) {
-	if (cur->softlock.get_mode() == LOCK_MODE_SYNC) {
-	  int auth = cur->authority();
-	  assert(auth != whoami);
-	  dout(10) << "open (write) [replica] " << *cur << " on replica, fw to auth " << auth << endl;
+  int flags = req->get_iarg();
+  assert(flags & O_CREAT == 0);
+
+  dout(10) << "open " << flags << " on " << *cur << endl;
+
+  int mode;
+  if (flags & O_RDONLY) {
+	mode = CFILE_MODE_R;
+  }
+  else if (flags & O_WRONLY) {
+	mode = CFILE_MODE_W;
+
+	if (!cur->is_auth()) {
+	  if (cur->softlock.get_mode() == LOCK_MODE_SYNC) {
+		int auth = cur->authority();
+		assert(auth != whoami);
+		dout(10) << "open (write) [replica] " << *cur << " on replica, fw to auth " << auth << endl;
+		
+		messenger->send_message(req,
+								MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
+								MDS_PORT_SERVER);
+		return;
+	  }
 	  
-	  messenger->send_message(req,
-							  MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
-							  MDS_PORT_SERVER);
-	  return 0;
+	  dout(10) << "open (write) [replica shared write] " << *cur << endl;
+	  assert(0);
 	}
-	
-	dout(10) << "open (write) [replica shared write] " << *cur << endl;
-	assert(0);
+
+	// only writers on auth, for now.
+	assert(cur->is_auth());
+  }
+  else if (flags & O_RDWR) {
+	assert(0);  // WR not implemented yet  
+  } else {
+	assert(0);  // no mode specified.  this should actually be an error code back to client.
   }
 
-  dout(10) << "open (write) [auth] " << *cur << endl;
+  // hmm, check permissions or something.
 
-  // hmm, check permissions!
+  // create fh
+  CFile *f = new CFile;
+  f->mode = mode;
+  f->client = req->get_client();
+  cur->add_fh(f);
   
-  // add to writer list.
-  int client = req->get_client();
-  cur->open_write_add(client);
-	  
   // reply
-  MClientReply *reply = new MClientReply(req);
+  MClientReply *reply = new MClientReply(req, f->fh);   // fh # is return code
   reply->set_trace_dist( cur, whoami );
-  return reply;
-}
 
-
-/*
-int path_depth(string& p)
-{
-  int d = 0;
-  for (const char *c = p.c_str(); *c; c++)
-	if (*c == '/') d++;
-  return d;
-}
-*/
-
-void MDS::handle_client_openwrc(MClientRequest *req)
-{
+  messenger->send_message(reply,
+						  MSG_ADDR_CLIENT(req->get_client()), 0,
+						  MDS_PORT_SERVER);
   
-  // see if file exists
+  // discard request
+  delete req;
+}
+
+
+
+void MDS::handle_client_openc(MClientRequest *req)
+{
+  // see if file exists  
   vector<CInode*> trace;
   int r = mdcache->path_traverse(req->get_filepath(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;  // delayed
 
-  if (r < 0) {
-	// problems:
-	
-	if (r == -ENOENT) {
-	  // on the last bit?
-	  filepath path = req->get_path();
-	  int depth = path.depth();
-	  if (trace.size() == depth) { // everything but the file
-		// create dentry, file!
-		CInode *idir = trace[trace.size()-1];
-		assert(idir->dir->is_auth() || idir->dir->is_hashed());  // path_traverse should have fwd if not!
-		string dname = path.last_bit();
-
-		dout(7) << "handle_client_openwrc -ENOENT on target file, creating " << dname << endl;
-
-		// verify i am authoritative for this dentry (should have fwd if not)
-		int auth = idir->dir->dentry_authority(dname);
-		assert(auth == whoami);
-
-		// create inode and link
-		CInode *in = mdcache->create_inode();
-		mdcache->link_inode( idir->dir, dname, in );
-
-		in->mark_dirty();
-
-		// log it
-		dout(10) << "log for " << *req << " create " << in->ino() << endl;
-		mdlog->submit_entry(new EInodeUpdate(in),                    // FIXME should be differnet log entry
-							new C_MDS_RetryMessage(this, req));
-		return;
-	  } else {
-		dout(7) << "handle_client_openwrc -ENOENT on containing dir; fail!" << endl;
-	  }
-	}
-	
-	// send error response
-	dout(7) << "handle_client_openwrc error " << r << " replying to client" << endl;
-	reply_request(req, r);
+  if (r == 0) {
+	// it exists, behave normally.
+	CInode *cur = trace[trace.size()-1];
+	handle_client_open(req, cur);
 	return;
   }
 
-  // file exists!  do it.
+  assert (r < 0);
 
-  logger->inc("chit");
-  CInode *cur = trace[trace.size()-1];
-  balancer->hit_inode(cur, MDS_POP_ANY);   // bump popularity
-  
-  MClientReply *reply = handle_client_openwr(req,cur);
-  
-  if (reply) {
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	
-	// discard request
-	delete req;
+  // what happened?
+  if (r == -ENOENT) {
+	// on the last bit?
+	filepath path = req->get_path();
+	int depth = path.depth();
+
+	if (trace.size() != depth) { // everything but the file	
+	  dout(7) << "handle_client_openc -ENOENT on a parent dir; fail!" << endl;
+	} else {
+	  assert(trace.size() == depth);
+	  
+	  // create dentry, file!
+	  CInode *idir = trace[trace.size()-1];
+	  assert(idir->dir->is_auth() || idir->dir->is_hashed());   // path_traverse should have fwd if not!
+	  string dname = path.last_bit();
+	  
+	  dout(7) << "handle_client_openc -ENOENT on target file, creating " << dname << endl;
+	  
+	  // sanity: verify i am authoritative for this dentry (should have fwd if not)
+	  int auth = idir->dir->dentry_authority(dname);
+	  assert(auth == whoami);
+	  
+	  // create inode and link
+	  CInode *in = mdcache->create_inode();
+	  mdcache->link_inode( idir->dir, dname, in );
+	  
+	  in->mark_dirty();
+	  
+	  // log it
+	  dout(10) << "log for " << *req << " create " << in->ino() << endl;
+	  mdlog->submit_entry(new EInodeUpdate(in),                    // FIXME should be differnet log entry
+						  new C_MDS_RetryMessage(this, req));
+	  return;
+	}
   }
+  
+  // send error response
+  dout(7) << "handle_client_openwrc error " << r << " replying to client" << endl;
+  reply_request(req, r);
+  return;
 }
 
 

@@ -68,6 +68,7 @@ void OSD::dispatch(Message *m)
 	write((MOSDWrite*)m);
 	break;
 
+
   default:
 	dout(1) << " got unknown message " << m->get_type() << endl;
   }

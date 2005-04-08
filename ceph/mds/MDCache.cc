@@ -1755,8 +1755,11 @@ INODES:
 
 
 
-
-modes
+= modes
+  - SYNC
+              Rauth  Rreplica  Wauth  Wreplica
+        sync
+        
 
 
 

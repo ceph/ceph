@@ -8,8 +8,10 @@
 
 #include <set>
 #include <map>
-#include <hash_map>
 using namespace std;
+
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 // types for my local metadata cache
 struct Inode {
