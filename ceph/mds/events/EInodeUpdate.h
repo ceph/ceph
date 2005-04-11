@@ -82,6 +82,7 @@ class EInodeUpdate : public LogEvent {
 	  dout(7) << "inode " << inode.ino << " not in cache, must have exported" << endl;
 	  return true;
 	}
+	dout(7) << "EInodeUpdate obsolete? on " << *in << endl;
 	if (!in->is_auth())
 	  return true;  // not my inode anymore!
 	if (in->get_version() != version)
