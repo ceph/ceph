@@ -154,10 +154,14 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
     // waiter   export_dir
     // trigger  handel_export_dir_prep_ack
 
+#define CDIR_WAIT_DNREAD        (1<<20)
+#define CDIR_WAIT_DNLOCK        (1<<21)
+
+
 #define CDIR_WAIT_SYNC          128
 #define CDIR_WAIT_UNSYNC        256
 
-#define CDIR_WAIT_ANY   (0xffff)
+#define CDIR_WAIT_ANY   (0xffffffff)
 
 #define CDIR_WAIT_ATFREEZEROOT  (CDIR_WAIT_AUTHPINNABLE|\
                                  CDIR_WAIT_UNFREEZE)      // hmm, same same
@@ -417,6 +421,7 @@ class CDir {
 					const string& dentry, 
 					list<Context*>& ls);  
   void finish_waiting(int mask, int result = 0);    // ditto
+  void finish_waiting(int mask, string& dn, int result = 0);    // ditto
 
 
   // -- auth pins --

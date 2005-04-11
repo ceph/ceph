@@ -23,6 +23,11 @@ using namespace __gnu_cxx;
 #define LOCK_GLOCK    7  // gather to lock
 #define LOCK_GASYNC   8  // gather to async
 
+// waits (on replica)
+#define LOCK_WLOCKR   9
+#define LOCK_WLOCKW  10
+#define LOCK_WGASYNC 11
+#define LOCK_WGSYNC  12
 
 #define LOCK_TYPE_BASIC  0
 #define LOCK_TYPE_ASYNC  1
@@ -45,7 +50,7 @@ class CLock {
   // dual meaning: 
   //  on replicas, whether we've requested; 
   //  on auth, whether others have requested.
-  bool     req_read, req_write;       // FIXME: roll these into state, use a mask, whatever.
+  //bool     req_read, req_write;       // FIXME: roll these into state, use a mask, whatever.
   
  public:
   CLock() {}
@@ -64,8 +69,8 @@ class CLock {
 	r.append((char*)&mode, sizeof(mode));
 	r.append((char*)&nread, sizeof(nread));
 	r.append((char*)&nwrite, sizeof(nwrite));
-	r.append((char*)&req_read, sizeof(req_read));
-	r.append((char*)&req_write, sizeof(req_write));
+	//r.append((char*)&req_read, sizeof(req_read));
+	//r.append((char*)&req_write, sizeof(req_write));
 	int n = gather_set.size();
 	r.append((char*)&n, sizeof(n));	
 	for (set<int>::iterator it = gather_set.begin();
@@ -86,10 +91,10 @@ class CLock {
 	off += sizeof(nread);
 	r.copy(off, sizeof(nwrite), (char*)&nwrite);
 	off += sizeof(nwrite);
-	r.copy(off, sizeof(req_read), (char*)&req_read);
-	off += sizeof(nwrite);
-	r.copy(off, sizeof(req_write), (char*)&req_write);
-	off += sizeof(nwrite);
+	//r.copy(off, sizeof(req_read), (char*)&req_read);
+	//off += sizeof(req_read);
+	//r.copy(off, sizeof(req_write), (char*)&req_write);
+	//off += sizeof(req_write);
 
 	int n;
 	r.copy(off, sizeof(n), (char*)&n);
@@ -147,10 +152,10 @@ class CLock {
 	return (nwrite+nread)>0 ? true:false;
   }
 
-  bool get_req_read() { return req_read; }
-  bool get_req_write() { return req_write; }
-  void set_req_read(bool b) { req_read = b; }
-  void set_req_write(bool b) { req_write = b; }
+  //bool get_req_read() { return req_read; }
+  //bool get_req_write() { return req_write; }
+  //void set_req_read(bool b) { req_read = b; }
+  //void set_req_write(bool b) { req_write = b; }
 
   // stable
   bool is_stable() {
@@ -158,6 +163,12 @@ class CLock {
   }
 
   // read/write access
+  bool could_read(bool auth) {
+	if (auth)
+	  return false;
+	else
+	  return (state == LOCK_WLOCKR) || (state == LOCK_WGASYNC);
+  }
   bool can_read(bool auth) {
 	if (auth)
 	  return (state == LOCK_SYNC) || (state == LOCK_PRELOCK) 
@@ -172,6 +183,12 @@ class CLock {
 	  return (state == LOCK_GSYNC);
   }
   
+  bool could_write(bool auth) {
+	if (auth)
+	  return false;
+	else
+	  return (state == LOCK_WGSYNC) || (state == LOCK_WLOCKW);
+  }
   bool can_write(bool auth) {
 	if (auth) 
 	  return (state == LOCK_LOCK) || (state == LOCK_ASYNC) || 
@@ -201,7 +218,11 @@ inline ostream& operator<<(ostream& out, CLock& l)
 	"async",
 	"gsync",
 	"glock",
-	"gasync"
+	"gasync",
+	"wlockr",
+	"wlockw",
+	"wgasync",
+	"wgsync"
   }; 
 
   out << "(" << __lock_states[l.get_state()];
@@ -212,6 +233,11 @@ inline ostream& operator<<(ostream& out, CLock& l)
 	out << " " << l.get_nread() << "r";
   if (l.get_nwrite())
 	out << " " << l.get_nwrite() << "w";
+
+  if (l.get_mode() == LOCK_MODE_SYNC)
+	out << " Sm";
+  if (l.get_mode() == LOCK_MODE_ASYNC)
+	out << " Am";
 
   // rw?
   /*

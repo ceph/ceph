@@ -42,9 +42,6 @@ using namespace std;
 #include "messages/MDirExpire.h"
 #include "messages/MCacheExpire.h"
 
-#include "messages/MInodeUnlink.h"
-#include "messages/MInodeUnlinkAck.h"
-
 #include "messages/MLock.h"
 
 Message *
@@ -159,14 +156,6 @@ decode_message(crope& ser)
 
   case MSG_MDS_LOCK:
 	m = new MLock();
-	break;
-
-
-  case MSG_MDS_INODEUNLINK:
-	m = new MInodeUnlink();
-	break;
-  case MSG_MDS_INODEUNLINKACK:
-	m = new MInodeUnlinkAck();
 	break;
 
 

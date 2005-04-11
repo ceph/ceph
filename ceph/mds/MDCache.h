@@ -30,26 +30,13 @@ class MExportDirNotifyAck;
 class MExportDirFinish;
 class MDiscover;
 class MDiscoverReply;
-class MInodeGetReplica;
-class MInodeGetReplicaAck;
-class MInodeUpdate;
+//class MInodeUpdate;
 class MCacheExpire;
 class MDirUpdate;
-class MInodeUnlink;
-class MInodeUnlinkAck;
-class MInodeSyncStart;
-class MInodeSyncAck;
-class MInodeSyncRelease;
-class MInodeSyncRecall;
-class MInodeLockStart;
-class MInodeLockAck;
-class MInodeLockRelease;
-
+class MDentryUnlink;
+class MInodeWriterClosed;
 class MLock;
 
-class MDirSyncStart;
-class MDirSyncAck;
-class MDirSyncRelease;
 class MRenameLocalFile;
 class C_MDS_ExportFinish;
 
@@ -152,7 +139,7 @@ class MDCache {
   void destroy_inode(CInode *in);
 
   int link_inode( CDir *dir, string& dname, CInode *inode );
-  void unlink_inode( CInode *inode );
+  void unlink_dentry( CDentry *dn );
 
   int open_root(Context *c);
   int path_traverse(filepath& path, 
@@ -175,17 +162,13 @@ class MDCache {
   // -- replicas --
   void handle_discover(MDiscover *dis);
   void handle_discover_reply(MDiscoverReply *m);
-  void handle_inode_get_replica(MInodeGetReplica *m);
-  void handle_inode_get_replica_ack(MInodeGetReplicaAck *m);  
 
+  void handle_inode_writer_closed(MInodeWriterClosed *m);
 
   // -- namespace --
   // these handle logging, cache sync themselves.
-  void inode_unlink(CInode *in, Context *c);
-  void inode_unlink_finish(CInode *in);
-
-  void handle_inode_unlink(MInodeUnlink *m);
-  void handle_inode_unlink_ack(MInodeUnlinkAck *m);
+  void dentry_unlink(CDentry *in, Context *c);
+  void handle_dentry_unlink(MDentryUnlink *m);
 
   void file_rename(CInode *in, CDir *destdir, string& name, CInode *oldin, Context *c);
   void file_rename_finish(CInode *in, CDir *destdir, CInode *oldin, Context *c);
@@ -277,8 +260,8 @@ class MDCache {
   void drop_sync_in_dir(CDir *dir);
 
   // -- updates --
-  int send_inode_updates(CInode *in);
-  void handle_inode_update(MInodeUpdate *m);
+  //int send_inode_updates(CInode *in);
+  //void handle_inode_update(MInodeUpdate *m);
 
   int send_dir_updates(CDir *in, int except=-1);
   void handle_dir_update(MDirUpdate *m);
@@ -314,10 +297,14 @@ class MDCache {
   void handle_lock_inode_hard(MLock *m);
   void handle_lock_inode_soft(MLock *m);
 
+
+  // dirs
   void handle_lock_dir(MLock *m);
+
+  // dentry
+  bool dentry_lock(CDentry *dn);
   void handle_lock_dn(MLock *m);
-
-
+  
 
   // -- lock and sync : inodes --  OLD CRAP XXX
   /*

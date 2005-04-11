@@ -45,7 +45,7 @@ using namespace __gnu_cxx;
 
 #define CINODE_PIN_OPENRD    5
 #define CINODE_PIN_OPENWR    6
-#define CINODE_PIN_UNLINKING 7
+//#define CINODE_PIN_UNLINKING 7
 
 #define CINODE_PIN_AUTHPIN   8
 
@@ -53,14 +53,16 @@ using namespace __gnu_cxx;
 
 //#define CINODE_PIN_SYNCBYME     70000
 //#define CINODE_PIN_SYNCBYAUTH   70001
-#define CINODE_PIN_PRESYNC      10   // waiter
-#define CINODE_PIN_WAITONUNSYNC 11   // waiter
+//#define CINODE_PIN_PRESYNC      10   // waiter
+//#define CINODE_PIN_WAITONUNSYNC 11   // waiter
 
-#define CINODE_PIN_PRELOCK      12
-#define CINODE_PIN_WAITONUNLOCK 13
+//#define CINODE_PIN_PRELOCK      12
+//#define CINODE_PIN_WAITONUNLOCK 13
 
+#define CINODE_PIN_DENTRYLOCK   14
 
-#define CINODE_NUM_PINS       14
+#define CINODE_NUM_PINS       15
+
 static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "dir",
   "cached",
@@ -75,7 +77,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "presync",
   "waitonunsync",
   "prelock",
-  "waitonunlock"
+  "waitonunlock",
+  "dentrylock"
 };
 
 
@@ -137,15 +140,18 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // triggers: file_rename_finish
 
 #define CINODE_WAIT_HARDR        (1<<17)  // 131072
-#define CINODE_WAIT_HARDW        (1<<18)
+#define CINODE_WAIT_HARDW        (1<<18)  // 262...
 #define CINODE_WAIT_HARDB        (1<<19)
 #define CINODE_WAIT_HARDRWB      (CINODE_WAIT_HARDR|CINODE_WAIT_HARDW|CINODE_WAIT_HARDB)
 #define CINODE_WAIT_HARDSTABLE   (1<<20)
-#define CINODE_WAIT_SOFTR        (1<<21)  // 2097152
-#define CINODE_WAIT_SOFTW        (1<<22)
-#define CINODE_WAIT_SOFTB        (1<<23)
+#define CINODE_WAIT_HARDNORD     (1<<21)
+#define CINODE_WAIT_SOFTR        (1<<22)  
+#define CINODE_WAIT_SOFTW        (1<<23)
+#define CINODE_WAIT_SOFTB        (1<<24)
 #define CINODE_WAIT_SOFTRWB      (CINODE_WAIT_SOFTR|CINODE_WAIT_SOFTW|CINODE_WAIT_SOFTB)
-#define CINODE_WAIT_SOFTSTABLE   (1<<24)
+#define CINODE_WAIT_SOFTSTABLE   (1<<25)
+#define CINODE_WAIT_SOFTNORD     (1<<26)
+#define CINODE_WAIT_SOFTNOWR     (1<<27)
 
 
 
@@ -247,6 +253,7 @@ class CInode : LRUObject {
   // open file state
   map<fileh_t, CFile*>  fh_read;   // readers
   map<fileh_t, CFile*>  fh_write;  // writers
+  set<int>              replica_writers;  // replicas who are writing
 
   //MInodeSyncStart      *pending_sync_request;
 
@@ -284,6 +291,7 @@ class CInode : LRUObject {
 
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
+  CDentry* get_parent_dn() { return parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
@@ -345,8 +353,13 @@ class CInode : LRUObject {
 	}
 	if (softlock.get_state() == LOCK_LOCK &&
 		!softlock.is_used()) {
-	  softlock.set_state(LOCK_SYNC);
-	  dout(10) << " soft now sync " << *this << endl;
+	  if (softlock.get_mode() == LOCK_MODE_SYNC) {
+		softlock.set_state(LOCK_SYNC);
+		dout(10) << " soft now sync " << *this << endl;
+	  } else {
+		softlock.set_state(LOCK_ASYNC);
+		dout(10) << " soft now async " << *this << endl;
+	  }
 	}
   }
   
@@ -445,14 +458,13 @@ class CInode : LRUObject {
   */
 
   // -- open files --
-  bool is_open() {
-	if (fh_read.empty() &&
-		fh_write.empty()) return false;
-	return true;
-  }
+  bool is_open_write() { return !fh_write.empty(); }
+  bool is_open_read() { return !fh_read.empty(); }
+  bool is_open() { return is_open_write() || is_open_read(); }
   CFile* get_fh(int fh) {
 	if (fh_read.count(fh)) return fh_read[fh];
 	if (fh_write.count(fh)) return fh_write[fh];
+	return 0;
   }
   void add_fh(CFile *f) {
 	if (f->mode == CFILE_MODE_R) {
@@ -465,7 +477,7 @@ class CInode : LRUObject {
 		get(CINODE_PIN_OPENWR);
 	  fh_write[f->fh] = f;
 	}
-	else assert(0);
+	else assert(0);  // implement me
   }
   void remove_fh(CFile *f) {
 	if (f->mode == CFILE_MODE_R) {
@@ -478,8 +490,21 @@ class CInode : LRUObject {
 	  fh_write.erase(fh_write.find(f->fh));
 	  if (fh_write.empty()) put(CINODE_PIN_OPENWR);
 	}
-	else assert(0);
+	else assert(0);  // implement me
   }
+
+  bool is_replica_writer(int m) {
+	return replica_writers.count(m) == 1;
+  }
+  void add_replica_writer(int m) {
+	replica_writers.insert(m);
+  }
+  void remove_replica_writer(int m) {
+	assert(replica_writers.count(m) == 1);
+	replica_writers.erase(m);
+  }
+  int num_replica_writers() { return replica_writers.size(); }
+  void clear_replica_writers() { replica_writers.clear(); }
 
 
   // -- authority --
@@ -617,6 +642,7 @@ typedef struct {
   bool           is_dirty;       // dirty inode?
 
   int            ncached_by;  // int pairs follow
+  int            nreplica_writers;
 } CInodeExport_st;
 
 
@@ -625,6 +651,7 @@ class CInodeExport {
   CInodeExport_st st;
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
+  set<int>      replica_writers;
 
   CLock         hardlock,softlock;
 
@@ -639,6 +666,7 @@ public:
 	cached_by_nonce = in->cached_by_nonce; 
 	hardlock = in->hardlock;
 	softlock = in->softlock;
+	replica_writers = in->replica_writers;
   }
   
   inodeno_t get_ino() { return st.inode.ino; }
@@ -660,11 +688,14 @@ public:
 
 	in->hardlock = hardlock;
 	in->softlock = softlock;
+
+	in->replica_writers = replica_writers;
   }
 
   crope _rope() {
 	crope r;
     st.ncached_by = cached_by.size();
+	st.nreplica_writers = replica_writers.size();
     r.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
@@ -676,6 +707,14 @@ public:
       int n = it->second;
       r.append((char*)&n, sizeof(int));
     }
+
+	// replica_writers
+	for (set<int>::iterator it = replica_writers.begin();
+		 it != replica_writers.end();
+		 it++) {
+	  int m = *it;
+	  r.append((char*)&m, sizeof(m));
+	}	  
     
 	hardlock.encode_state(r);
 	softlock.encode_state(r);
@@ -695,6 +734,12 @@ public:
       cached_by.insert(m);
       cached_by_nonce.insert(pair<int,int>(m,n));
     }
+	for (int i=0; i<st.nreplica_writers; i++) {
+	  int n;
+	  s.copy(off, sizeof(int), (char*)&n);
+      off += sizeof(int);
+	  replica_writers.insert(n);
+	}
 
 	hardlock.decode_state(s, off);
 	softlock.decode_state(s, off);

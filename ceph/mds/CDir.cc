@@ -338,6 +338,15 @@ void CDir::finish_waiting(int mask, int result)
   finish_contexts(finished, result);
 }
 
+void CDir::finish_waiting(int mask, string &dn, int result) 
+{
+  dout(11) << "finish_waiting mask " << mask << " dn " << dn << " result " << result << " on " << *this << endl;
+
+  list<Context*> finished;
+  take_waiting(mask, dn, finished);
+  finish_contexts(finished, result);
+}
+
 
 // dirty/clean
 

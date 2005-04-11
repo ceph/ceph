@@ -1,7 +1,7 @@
 
 CC=g++
 #CC=distcc g++
-CFLAGS=-g -I.
+CFLAGS=-g -I. -pg
 #CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=
 

@@ -24,6 +24,7 @@ struct Dentry {
 // file handle for any open file state
 struct Fh {
   inodeno_t ino;
+  int       mds;  // have to talk to mds we opened with (for now)
   //...
 };
 

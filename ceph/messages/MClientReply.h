@@ -22,6 +22,7 @@ typedef struct {
   int result;  // error code
   int trace_depth;
   int dir_size;
+  int iarg;
 } MClientReply_st;
 
 class MClientReply : public Message {
@@ -37,11 +38,13 @@ class MClientReply : public Message {
   int get_op() { return st.op; }
   inodeno_t get_ino() { return trace[trace.size()-1]->inode.ino; }
   int get_result() { return st.result; }
+  int get_iarg() { return st.iarg; }
   const string& get_path() { return path; }
   const vector<c_inode_info*>& get_trace() { return trace; }
   vector<c_inode_info*>& get_dir_contents() { return dir_contents; }
   
   void set_result(int r) { st.result = r; }
+  void set_iarg(int i) { st.iarg = i; }
   
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 

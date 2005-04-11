@@ -1,5 +1,22 @@
 
-- file readers
+- send all file writers to auth
+  - migrate open file ppl w/ export
+  - simplify replica softlock craziness!
+
+- locks versus import.. big mess!
+  - consider active reader+writer on auth at time of export.  how to relax?
+  - relaxation in general is tricky..
+  - assimilating auth state on importer also tricky.  gather_set weirdness.
+
+- half-assed async for file writers
+ - auth needs to know about replicas with writers...
+   - opens go to auth
+   - auth has set of replica_writers
+   - on close, replica tells auth
+- replace replica_writers open/close bit will full-blown soft_start/soft_finish hooks?
+- need to sync or qsync clients!
+
+- import port soft writer on dir mtime/size...
 
 - recall messages?
 - lazy flag?  make a table!
@@ -10,8 +27,16 @@
 / - expire must remove from gather_set
     - more gracefully than it does now?
 
+- EMkdir event
+  - properly commit dir, dirty inode+dentry
+
+- put size, mtime in client close op.
+- ...and clean up rest of Request/Reply messages!
 
 
+- think about softlock.mode versus shutdown
+- think about global sync (to be used by shutdown)
+  - flush all logs
 
 CLIENT
 - structure.. multithreaded until messenger
@@ -32,13 +57,15 @@ MDS
 
 - add client file handles.
   - fh modes:  RD, RDWR, WR ... append?  :/
-  - fh states: SYNC, ASYNC, ...????
+  - fh states: SYNC, ASYNC... LOCK? 
 
 - unlink in terms of dentry lock
 
 - symlinks!
   - stored in the inode.. how?
   - make MDStore.cc smartr
+
+- dentry version #'s?  smarter commit_dir stuff to handle hard links, link/unlink, rename, etc.
 
 
 => grep for FIXME :)

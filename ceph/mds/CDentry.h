@@ -3,12 +3,16 @@
 #define __CDENTRY_H
 
 #include <string>
+#include <set>
 using namespace std;
 
 class CInode;
 class CDir;
 
-#define CDENTRY_STATE_FROZEN  1
+#define DN_LOCK_SYNC     0
+#define DN_LOCK_PRELOCK  1
+#define DN_LOCK_LOCK     2
+
 
 // dentry
 class CDentry {
@@ -16,7 +20,9 @@ class CDentry {
   string          name;
   CInode         *inode;
   CDir           *dir;
-  int            state;
+
+  int            lockstate;
+  set<int>       gather_set;
 
   friend class MDCache;
   friend class MDS;
@@ -27,17 +33,17 @@ class CDentry {
   CDentry() {
 	inode = NULL;
 	dir = NULL;
-	state = 0;
+	lockstate = DN_LOCK_SYNC;
   }
   CDentry(string& n, CInode *in) {
 	name = n;
 	inode = in;
-	state = 0;
+	lockstate = DN_LOCK_SYNC;
   }
 
-  CInode *get_inode() {
-	return inode;
-  }
+  CInode *get_inode() { return inode; }
+  CDir *get_dir() { return dir; }
+  string& get_name() { return name; }
 
   // copy cons
   CDentry(const CDentry& m);
@@ -52,9 +58,8 @@ class CDentry {
   bool operator<= (const CDentry& right) const;
 
   // -- locking
-  //bool is_frozen() { return is_frozen_dentry() || dir->is_frozen_dir(); }
-  //bool is_frozen_dentry() { return state & CDENTRY_STATE_FROZENDENTRY; }
-  
+  bool can_read()  { return lockstate == DN_LOCK_SYNC; }
+  bool is_locked() { return lockstate == DN_LOCK_LOCK; }
   
   // -- hierarchy
   void remove();

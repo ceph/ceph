@@ -71,7 +71,7 @@ typedef __uint64_t inodeno_t;   // ino
 
 struct inode_t {
   // immutable
-  inodeno_t ino;   // NOTE: this must come first
+  inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
   time_t ctime;
 
   // hard (perm)

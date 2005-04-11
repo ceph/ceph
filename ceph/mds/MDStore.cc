@@ -314,7 +314,8 @@ void MDStore::do_commit_dir( CDir *dir,
   for (CDir_map_t::iterator it = dir->begin();
 	   it != dir->end();
 	   it++) {
-	
+	CInode *in = it->second->get_inode();
+
 	if (hashcode >= 0) {
 	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	  if (dentryhashcode != hashcode) continue;
@@ -324,15 +325,20 @@ void MDStore::do_commit_dir( CDir *dir,
 	dirdata.append( it->first.c_str(), it->first.length() + 1);
 	
 	// marker
-	dirdata.append( 'I' ); // inode
+	dirdata.append( 'I' );         // inode
 	
 	// inode
-	dirdata.append( (char*) &it->second->get_inode()->inode, sizeof(inode_t));
+	dirdata.append( (char*) &in->inode, sizeof(inode_t));
+
+	if (in->is_symlink()) {
+	  // include symlink destination!
+	  dirdata.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+	}
 	
 	// put inode in this dir version
-	if (it->second->get_inode()->is_dirty()) {
-	  it->second->get_inode()->float_parent_dir_version( dir->get_version() );
-	  dout(12) << " dirty inode " << *it->second->get_inode() << " now " << it->second->get_inode()->get_parent_dir_version() << endl;
+	if (in->is_dirty()) {
+	  in->float_parent_dir_version( dir->get_version() );
+	  dout(12) << " dirty inode " << *in << " now " << in->get_parent_dir_version() << endl;
 	}
 	
 	num++;
@@ -539,6 +545,12 @@ void MDStore::do_fetch_dir_2( int result,
 	  CInode *in = new CInode();
 	  memcpy(&in->inode, inode, sizeof(inode_t));
 	  
+	  // symlink?
+	  if (in->is_symlink()) {
+		in->symlink = (char*)(buf+p);
+		p += in->symlink.length() + 1;
+	  }
+
 	  // add and link
 	  mds->mdcache->add_inode( in );
 	  mds->mdcache->link_inode( dir, dname, in );

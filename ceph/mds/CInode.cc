@@ -5,8 +5,6 @@
 
 #include "MDS.h"
 
-#include "msg/Message.h"
-#include "messages/MInodeSyncStart.h"
 
 #include <string>
 

@@ -30,14 +30,15 @@ void IdAllocator::save()
 	write(fd, (char*)&ntypes, sizeof(ntypes));
 	
 	// over types
-	for (map<char, rangeset<idno_t> >::iterator ty = free.begin();
+	for (map<int, rangeset<idno_t> >::iterator ty = free.begin();
 		 ty != free.end(); 
 		 ty++) {
-	  char type = ty->first;
-	  write(fd, &type, 1);
+	  int type = ty->first;
+	  write(fd, (char*)&type, sizeof(type));
 	  
 	  int mapsize = free[type].map_size();
 	  write(fd, (char*)&mapsize, sizeof(mapsize));
+	  cout << "type " << type << " num " << mapsize << endl;
 	  
 	  // over entries
 	  for (map<idno_t,idno_t>::iterator it = free[type].map_begin();
@@ -47,7 +48,9 @@ void IdAllocator::save()
 		idno_t b = it->second;
 		write(fd, &a, sizeof(a));
 		write(fd, &b, sizeof(b));
+		mapsize--;
 	  }
+	  assert(mapsize == 0);
 	}
 	close(fd);
   } else 
@@ -62,27 +65,32 @@ void IdAllocator::load()
   if (fd >= 0) {
 	int ntypes;
 	read(fd, &ntypes, sizeof(ntypes));
+	cout << "ntypes " << ntypes << endl;
 
 	for (int ty = 0; ty < ntypes; ty++) {
-	  char type;
-	  read(fd, &type, 1);
+	  int type;
+	  read(fd, &type, sizeof(type));
 
 	  int mapsize = 0;
 	  read(fd, &mapsize, sizeof(mapsize));
+
+	  cout << "type " << type << " num " << mapsize << endl;
 	  for (int i=0; i<mapsize; i++) {
 		idno_t a,b;
 		read(fd, &a, sizeof(a));
 		read(fd, &b, sizeof(b));
 		free[type].map_insert(a,b);
 	  }
-	  close(fd);
 	}
+	close(fd);
   }
   else {
 	// use generic range
 	free[ID_INO].map_insert((long long)1000000000000LL * (mds->get_nodeid()+1),
 							(long long)1000000000000LL * (mds->get_nodeid()+2) - 1);
-	free[ID_FH].map_insert((long long)1000000000000LL * (mds->get_nodeid()+1),
-						   (long long)1000000000000LL * (mds->get_nodeid()+2) - 1);
+	//free[ID_INO].dump();
+
+	free[ID_FH].map_insert(1, 1<<16);
+	//free[ID_FH].dump();
   }
 }

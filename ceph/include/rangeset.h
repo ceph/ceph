@@ -194,6 +194,13 @@ public:
 	map_iterator it = theset.get_range_for(val);
 	assert(it != theset.ranges.end());
 	
+	// entire range
+	if (val == it->first && val == it->second) {
+	  theset.ranges.erase(it);
+	  _size--;
+	  return;
+	}
+
 	// beginning
 	if (val == it->first) {
 	  theset.ranges.insert(pair<T,T>(val+1, it->second));

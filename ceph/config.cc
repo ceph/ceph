@@ -12,15 +12,15 @@
 
 
 md_config_t g_conf = {
-  num_mds: 33,
+  num_mds: 13,
   num_osd: 10,
-  num_client: 100,
+  num_client: 50,
 
   osd_cow: false, // crashy? true,  
 
   client_cache_size: 100,
   client_cache_mid: .5,
-  client_requests: 1000,
+  client_requests: 100,
   client_deterministic: false,
   
   log_messages: true,
@@ -37,9 +37,6 @@ md_config_t g_conf = {
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,
-  mdcache_sticky_sync_normal: true,
-  mdcache_sticky_sync_softasync: false,
-  mdcache_sticky_lock: false,       // sticky is probably a bad idea!
 
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,
@@ -47,31 +44,31 @@ md_config_t g_conf = {
   mds_heartbeat_op_interval: 2000,
   mds_verify_export_dirauth: true,
 
-  client_op_statfs: false,
+  client_op_statfs:  false,
 
-  client_op_stat: true,
-  client_op_touch: true,
-  client_op_utime: false,
-  client_op_chmod: true,
-  client_op_chown: false,
+  client_op_stat:    true,
+  client_op_touch:   true,
+  client_op_utime:   true,   // untested
+  client_op_chmod:   true,
+  client_op_chown:   true,   // untested
 
   client_op_readdir: true,
-  client_op_mknod: false,
-  client_op_link: false,
-  client_op_unlink: false,
-  client_op_rename: false,
+  client_op_mknod:   true,
+  client_op_link:    false,
+  client_op_unlink:  true,
+  client_op_rename:  false,
 
-  client_op_mkdir: false, 
-  client_op_rmdir: false,
-  client_op_symlink: false,
+  client_op_mkdir:   true, 
+  client_op_rmdir:   false,
+  client_op_symlink: true,
 
-  client_op_openrd: false,
-  client_op_openwr: false,
-  client_op_openwrc: false,
-  client_op_read: false,
-  client_op_write: false,
+  client_op_openrd:   true,
+  client_op_openwr:   true,
+  client_op_openwrc:  true,
+  client_op_read:     false,
+  client_op_write:    false,
   client_op_truncate: false,
-  client_op_fsync: false,
-  client_op_close: false
+  client_op_fsync:    false,
+  client_op_close:    true
 };
 

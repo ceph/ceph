@@ -148,40 +148,43 @@ class MDS : public Dispatcher {
 
   int handle_client_request(MClientRequest *m);
   
-  MClientReply *handle_client_readdir(MClientRequest *req,
-									  CInode *cur);
-  MClientReply *handle_client_stat(MClientRequest *req,
-								   CInode *cur);
-  
-  MClientReply *handle_client_touch(MClientRequest *req,
-									CInode *cur);
-  void handle_client_touch_2(MClientRequest *req,
-							 MClientReply *reply,
-							 CInode *cur);
-  
-  MClientReply *handle_client_chmod(MClientRequest *req,
-									CInode *cur);
-  void handle_client_chmod_2(MClientRequest *req,
-							 MClientReply *reply,
-							 CInode *cur);
+  // fs ops
+  MClientReply *handle_client_fstat(MClientRequest *req);
 
+  // inode ops
+  MClientReply *handle_client_stat(MClientRequest *req, CInode *cur);
+  MClientReply *handle_client_touch(MClientRequest *req, CInode *cur);
+  MClientReply *handle_client_utime(MClientRequest *req, CInode *cur);
+  void handle_client_inode_soft_update_2(MClientRequest *req,
+										 MClientReply *reply,
+										 CInode *cur);
+  MClientReply *handle_client_chmod(MClientRequest *req, CInode *cur);
+  MClientReply *handle_client_chown(MClientRequest *req, CInode *cur);
+  void handle_client_inode_hard_update_2(MClientRequest *req,
+										 MClientReply *reply,
+										 CInode *cur);
+
+  // namespace
+  MClientReply *handle_client_readdir(MClientRequest *req, CInode *cur);
+  void handle_client_mknod(MClientRequest *req);
+  void handle_client_link(MClientRequest *req);
+  void handle_client_unlink(MClientRequest *req, CInode *cur);
+  MClientReply *handle_client_rename(MClientRequest *req, CInode *cur);
+  void handle_client_rename_file(MClientRequest *req, CInode *cur, CDir *destdir, string& name);
+  void handle_client_rename_dir(MClientRequest *req, CInode *cur, CDir *destdir, string& name);
+  void handle_client_mkdir(MClientRequest *req);
+  MClientReply *handle_client_rmdir(MClientRequest *req, CInode *cur);
+  void handle_client_symlink(MClientRequest *req);
+
+  // file
   void handle_client_open(MClientRequest *req,
 						  CInode *cur);
   void handle_client_openc(MClientRequest *req);
   void handle_client_close(MClientRequest *req);
+  void handle_client_truncate(MClientRequest *req);
+  void handle_client_fsync(MClientRequest *req);
 
-  void handle_client_unlink(MClientRequest *req,
-							CInode *cur);
-  void handle_client_unlink_2(MClientRequest *req, 
-							  CInode *cur);
-
-  void handle_client_mkdir(MClientRequest *req);
-  void handle_client_rmdir(MClientRequest *req, CInode *cur);
-
-  void handle_client_rename(MClientRequest *req, CInode *cur);
-  void handle_client_rename_file(MClientRequest *req, CInode *cur, CDir *destdir, string& name);
-  void handle_client_rename_dir(MClientRequest *req, CInode *cur, CDir *destdir, string& name);
-
+  CInode *mknod(MClientRequest *req);  // used by mknod, symlink, mkdir, openc
 
   int do_stat(MClientRequest *m);
 

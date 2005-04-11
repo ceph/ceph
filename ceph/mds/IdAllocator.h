@@ -14,28 +14,34 @@ typedef __uint64_t idno_t;
 class IdAllocator {
   MDS *mds;
 
-  map< char, rangeset<idno_t> > free;  // type -> rangeset
+  map< int, rangeset<idno_t> > free;  // type -> rangeset
   
  public:
   IdAllocator();
   IdAllocator(MDS *mds) {
 	this->mds = mds;
 	load();
+	cout << "idalloc init " << this << endl;
+	free[ID_INO].dump();
+	free[ID_FH].dump();
   }
   //~InoAllocator();
 
   
-  idno_t get_id(char type) {
+  idno_t get_id(int type) {
+	cout << "idalloc " << this << ": type " << type << " dump:" << endl;
 	free[type].dump();
 	idno_t id = free[type].first();
 	free[type].erase(id);
-	cout << "id type " << type << " is " << id << endl;
+	cout << "idalloc " << this << ": getid type " << type << " is " << id << endl;
 	free[type].dump();
 	save();
 	return id;
   }
-  void reclaim_id(char type, idno_t id) {
+  void reclaim_id(int type, idno_t id) {
+	cout << "idalloc " << this << ": reclaim type " << type << " id " << id << endl;
 	free[type].insert(id);
+	free[type].dump();
 	save();
   }
 
