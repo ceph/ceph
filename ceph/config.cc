@@ -14,13 +14,13 @@
 md_config_t g_conf = {
   num_mds: 13,
   num_osd: 10,
-  num_client: 50,
+  num_client: 1,
 
   osd_cow: false, // crashy? true,  
 
   client_cache_size: 100,
   client_cache_mid: .5,
-  client_requests: 100,
+  client_requests: 10000,
   client_deterministic: false,
   
   log_messages: true,
@@ -33,7 +33,7 @@ md_config_t g_conf = {
   fake_clock: true,
   fakemessenger_serialize: false,
 
-  debug: 10,
+  debug: 15,
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,
@@ -55,10 +55,10 @@ md_config_t g_conf = {
   client_op_readdir: true,
   client_op_mknod:   true,
   client_op_link:    false,
-  client_op_unlink:  true,
+  client_op_unlink:  false,
   client_op_rename:  false,
 
-  client_op_mkdir:   true, 
+  client_op_mkdir:   false,//true,  // note: corrupts osddata if we don't shut down & flush logs cleanly
   client_op_rmdir:   false,
   client_op_symlink: true,
 

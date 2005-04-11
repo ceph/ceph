@@ -30,6 +30,8 @@ ostream& operator<<(ostream& out, CInode& in)
 	assert(in.get_replica_nonce() >= 0);
   }
 
+  if (in.is_symlink()) out << " symlink";
+
   out << " hard=" << in.hardlock;
   out << " soft=" << in.softlock;
 
