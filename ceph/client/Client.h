@@ -64,7 +64,7 @@ class Client {
   int symlink(const char *existing, const char *new);
 
   // inode stuff
-  int getattr(const char *path, struct stat *stbuf);
+  int lstat(const char *path, struct stat *stbuf);
   int chmod(const char *path, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);

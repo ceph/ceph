@@ -9,41 +9,7 @@
 #include "../MDCache.h"
 #include "../MDStore.h"
 
-/* so we can verify the dentry is in fact flushed to disk
-   after a commit_dir finishes (the commit could have started before 
-   and been in progress when we asked. */
-class C_EU_VerifyDirCommit : public Context {
-  MDS *mds;
-  CDir *dir;
-  Context *fin;
-  __uint64_t version;
 
- public:
-  C_EU_VerifyDirCommit(MDS *mds, CDir *dir, __uint64_t version, Context *fin) {
-	this->mds = mds;
-	this->dir = dir;
-	this->version = version;
-	this->fin = fin;
-  }
-  virtual void finish(int r) {
-	
-	if ((dir->is_auth() || dir->is_hashed()) &&
-		dir->get_version() <= version) {
-	  // still dirty
-	  mds->mdstore->commit_dir(dir,
-							   new C_EU_VerifyDirCommit(mds,
-														dir,
-														version,
-														fin));
-	  return;
-	}
-	// we're fine.
-	if (fin) {
-	  fin->finish(0);
-	  delete fin;
-	}
-  }
-};
 
 class EUnlink : public LogEvent {
  protected:
@@ -85,7 +51,7 @@ class EUnlink : public LogEvent {
 	if (!idir->dir->is_auth()) return true;
 	if (idir->dir->is_clean()) return true;
 
-	if (idir->dir->get_version() > version) return true;
+	if (idir->dir->get_last_committed_version() >= version) return true;
 	return false;
   }
 
@@ -96,11 +62,7 @@ class EUnlink : public LogEvent {
 	
 	// okay!
 	dout(7) << "commiting dirty (from unlink) dir " << *dir << endl;
-	mds->mdstore->commit_dir(dir,
-							 new C_EU_VerifyDirCommit(mds,
-													  dir,
-													  dir->get_version(),
-													  c));
+	mds->mdstore->commit_dir(dir, version, c);
   }
 };
 

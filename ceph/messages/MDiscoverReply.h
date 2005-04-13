@@ -63,7 +63,8 @@ class MDiscoverReply : public Message {
   MDiscoverReply(inodeno_t base_ino) :
 	Message(MSG_MDS_DISCOVERREPLY) {
 	this->base_ino = base_ino;
-	flag_forward = flag_error = no_base_dir = no_base_dentry = false;
+	flag_forward = flag_error = false;
+	no_base_dir = no_base_dentry = true;
   }
   ~MDiscoverReply() {
 	for (vector<CDirDiscover*>::iterator it = dirs.begin();
@@ -83,17 +84,16 @@ class MDiscoverReply : public Message {
   }
   void set_path(filepath& dp) { path = dp; }
   void add_dentry(string& dn) { 
-	if (dirs.empty()) no_base_dir = true;
+	if (inodes.empty() && path.depth() == 0) no_base_dentry = false;
     path.add_dentry(dn);
   }
 
   void add_inode(CInodeDiscover* din) {
-	if (inodes.empty() && dirs.empty()) no_base_dir = true;
-	if (inodes.empty() && path.depth() == 0) no_base_dentry = true;
     inodes.push_back( din );
   }
 
   void add_dir(CDirDiscover* dir) {
+	if (inodes.empty()) no_base_dir = false;
     dirs.push_back( dir );
   }
 

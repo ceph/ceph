@@ -9,10 +9,11 @@ using namespace std;
 class CInode;
 class CDir;
 
-#define DN_LOCK_SYNC     0
-#define DN_LOCK_PRELOCK  1
-#define DN_LOCK_LOCK     2
+#define DN_LOCK_SYNC      0
+#define DN_LOCK_PREXLOCK  1
+#define DN_LOCK_XLOCK     2
 
+class Message;
 
 // dentry
 class CDentry {
@@ -22,6 +23,7 @@ class CDentry {
   CDir           *dir;
 
   int            lockstate;
+  Message        *xlockedby;
   set<int>       gather_set;
 
   friend class MDCache;
@@ -44,6 +46,8 @@ class CDentry {
   CInode *get_inode() { return inode; }
   CDir *get_dir() { return dir; }
   string& get_name() { return name; }
+  int get_lockstate() { return lockstate; }
+  set<int>& get_gather_set() { return gather_set; }
 
   // copy cons
   CDentry(const CDentry& m);
@@ -59,12 +63,17 @@ class CDentry {
 
   // -- locking
   bool can_read()  { return lockstate == DN_LOCK_SYNC; }
-  bool is_locked() { return lockstate == DN_LOCK_LOCK; }
+  bool is_xlocked() { return lockstate == DN_LOCK_XLOCK; }
+  bool is_xlockedbyother(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
+  bool is_xlockedbyme(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
   
   // -- hierarchy
   void remove();
 
   friend class CDir;
 };
+
+ostream& operator<<(ostream& out, CDentry& dn);
+
 
 #endif

@@ -9,46 +9,7 @@
 #include "../MDCache.h"
 #include "../MDStore.h"
 
-/* so we can verify the inode is in fact flushed to disk
-   after a commit_dir finishes (the commit could have started before 
-   and been in progress when we asked. */
-class C_EIU_VerifyInodeUpdate : public Context {
-  MDS *mds;
-  inodeno_t ino;
-  __uint64_t version;
-  Context *fin;
 
- public:
-  C_EIU_VerifyInodeUpdate(MDS *mds, inodeno_t ino, __uint64_t version, Context *fin) {
-	this->mds = mds;
-	this->ino = ino;
-	this->version = version;
-	this->fin = fin;
-  }
-  virtual void finish(int r) {
-	CInode *in = mds->mdcache->get_inode(ino);
-	if (in) {
-	  // if it's mine, dirty, and the same version, commit
-	  if (in->authority() == mds->get_nodeid() &&  // mine
-		  in->is_dirty() &&                         // dirty
-		  in->get_version() == version) {           // same version that i have to deal with
-		dout(7) << "ARGH, did EInodeUpdate commit but inode " << *in << " is still dirty" << endl;
-		// damnit
-		mds->mdstore->commit_dir(in->get_parent_dir(),
-								 new C_EIU_VerifyInodeUpdate(mds,
-															 in->ino(),
-															 in->get_version(),
-															 fin));
-		return;
-	  }
-	}
-	// we're fine.
-	if (fin) {
-	  fin->finish(0);
-	  delete fin;
-	}
-  }
-};
 
 class EInodeUpdate : public LogEvent {
  protected:
@@ -77,6 +38,7 @@ class EInodeUpdate : public LogEvent {
   virtual bool obsolete(MDS *mds) {
 	// am i obsolete?
 	CInode *in = mds->mdcache->get_inode(inode.ino);
+
 	//assert(in);
 	if (!in) {
 	  dout(7) << "inode " << inode.ino << " not in cache, must have exported" << endl;
@@ -87,6 +49,10 @@ class EInodeUpdate : public LogEvent {
 	  return true;  // not my inode anymore!
 	if (in->get_version() != version)
 	  return true;  // i'm obsolete!  (another log entry follows)
+
+	CDir *parent = in->get_parent_dir();
+	if (!parent) return true;  // root?
+	if (!parent->is_dirty()) return true; // dir is clean!
 
 	// frozen -> exporting -> obsolete    (FOR NOW?)
 	if (in->is_frozen())
@@ -104,11 +70,7 @@ class EInodeUpdate : public LogEvent {
 	if (parent) {
 	  // okay!
 	  dout(7) << "commiting containing dir for " << *in << ", which is " << *parent << endl;
-	  mds->mdstore->commit_dir(parent,
-							   new C_EIU_VerifyInodeUpdate(mds,
-														   in->ino(),
-														   in->get_version(),
-														   c));
+	  mds->mdstore->commit_dir(parent, c);
 	} else {
 	  // oh, i'm the root inode
 	  dout(7) << "don't know how to commit the root inode" << endl;

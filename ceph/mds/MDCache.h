@@ -128,31 +128,44 @@ class MDCache {
 	return NULL;
   }
 
+ protected:
   CDir *get_containing_import(CDir *in);
   CDir *get_containing_export(CDir *in);
 
 
   // adding/removing
+ public:
   CInode *create_inode();
   void add_inode(CInode *in);
+ protected:
   void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
 
+ public:
   int link_inode( CDir *dir, string& dname, CInode *inode );
-  void unlink_dentry( CDentry *dn );
+ protected:
+  void unlink_dentry( CDentry *dn );         // delete dentry
+  void unlink_dentry_inode( CDentry *dn );   // leave dentry intact, just unlink the inode.
 
+ public:
+  void export_empty_import(CDir *dir);
+
+ protected:
+  void rename_file(CDentry *srcdn,
+				   CDir *destdir,
+				   string& destname,
+				   CDentry *destdn);
+  /*void rename_dir(CInode *from, 
+				  CDir *destdir,
+				  string name);
+  */
+
+ public:
   int open_root(Context *c);
   int path_traverse(filepath& path, 
 					vector<CInode*>& trace, 
 					Message *req, 
 					int onfail);
-
-  void rename_file(CInode *from, 
-				   CDir *destdir,
-				   string name);
-  void rename_dir(CInode *from, 
-				  CDir *destdir,
-				  string name);
 
 
   
@@ -170,8 +183,8 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
-  void file_rename(CInode *in, CDir *destdir, string& name, CInode *oldin, Context *c);
-  void file_rename_finish(CInode *in, CDir *destdir, CInode *oldin, Context *c);
+  void file_rename(CDentry *srcdn, CDir *destdir, string& destname, CDentry *destdn, Context *c);
+  void handle_rename_local_file(MRenameLocalFile*m);
   
 
 
@@ -302,7 +315,8 @@ class MDCache {
   void handle_lock_dir(MLock *m);
 
   // dentry
-  bool dentry_lock(CDentry *dn);
+  bool dentry_xlock_start(CDentry *dn, Message *m);
+  void dentry_xlock_finish(CDentry *dn);
   void handle_lock_dn(MLock *m);
   
 

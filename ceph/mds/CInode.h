@@ -170,8 +170,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_STATE_PROXY       (1<<6)   // can't expire yet
 #define CINODE_STATE_EXPORTING   (1<<7)   // on nonauth bystander.
 
-#define CINODE_STATE_RENAMING    (1<<8)  // moving me
-#define CINODE_STATE_RENAMINGTO  (1<<9)  // rename target (will be unlinked)
+//#define CINODE_STATE_RENAMING    (1<<8)  // moving me
+//#define CINODE_STATE_RENAMINGTO  (1<<9)  // rename target (will be unlinked)
 
 
 // misc

@@ -54,6 +54,7 @@ class Messenger {
   // queue
   Message *get_message() {
 	if (incoming.size() > 0) {
+	  cout << incoming.size() << " messages, taking first" << endl;
 	  Message *m = incoming.front();
 	  incoming.pop_front();
 	  return m;

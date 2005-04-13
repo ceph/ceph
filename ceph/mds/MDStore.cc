@@ -99,15 +99,7 @@ bool MDStore::fetch_dir_2( int result,
   list<Context*> finished;
   idir->dir->take_waiting(CDIR_WAIT_COMPLETE|CDIR_WAIT_DENTRY, finished);
   
-  list<Context*>::iterator it = finished.begin();	
-  while (it != finished.end()) {
-	Context *c = *(it++);
-	if (c) {
-	  dout(10) << "readdir finish doing context " << c << endl;
-	  c->finish(0);
-	  delete c;
-	}
-  }
+  finish_contexts(finished);
   
   // trim cache?
   mds->mdcache->trim();
@@ -123,14 +115,19 @@ bool MDStore::fetch_dir_2( int result,
 // ----------------------------
 // commit_dir
 
-class C_MDS_CommitDirDelay : public Context {
+class C_MDS_CommitDirVerify : public Context {
 public:
   MDS *mds;
   inodeno_t ino;
+  __uint64_t version;
   Context *c;
-  C_MDS_CommitDirDelay( MDS *mds, inodeno_t ino, Context *c) {
+  C_MDS_CommitDirVerify( MDS *mds, 
+						inodeno_t ino, 
+						__uint64_t version,
+						Context *c) {
 	this->mds = mds;
 	this->c = c;
+	this->version = version;
 	this->ino = ino;
   }
   virtual void finish(int r) {
@@ -139,8 +136,21 @@ public:
 	  CInode *in = mds->mdcache->get_inode(ino);
 	  assert(in && in->dir);
 	  if (in && in->dir && in->dir->is_auth()) {
-		mds->mdstore->commit_dir(in->dir, c);
-		return;
+		dout(7) << "CommitDirVerify: current version = " << in->dir->get_version() << endl;
+		dout(7) << "CommitDirVerify:  last committed = " << in->dir->get_last_committed_version() << endl;
+   		dout(7) << "CommitDirVerify:        required = " << version << endl;
+		
+		if (in->dir->get_last_committed_version() >= version) {
+		  dout(7) << "my required version is safe, done." << endl;
+		} else { 
+		  dout(7) << "my required version is still not safe, committing again." << endl;
+
+		  // what was requested isn't committed yet.
+		  mds->mdstore->commit_dir(in->dir, 
+								   version,
+								   c);
+		  return;
+		}
 	  }
 	}
 	
@@ -153,7 +163,7 @@ public:
   }
 };
 
-class MDCommitDirContext : public Context {
+class C_MDS_CommitDirFinish : public Context {
  protected:
   MDStore *ms;
   CDir *dir;
@@ -162,10 +172,10 @@ class MDCommitDirContext : public Context {
  public:
   crope buffer;
 
-  MDCommitDirContext(MDStore *ms, CDir *dir) : Context() {
+  C_MDS_CommitDirFinish(MDStore *ms, CDir *dir) : Context() {
 	this->ms = ms;
 	this->dir = dir;
-	version = dir->get_version();
+	this->version = dir->get_version();   // just for sanity check later
   }
   
   void finish(int result) {
@@ -174,25 +184,27 @@ class MDCommitDirContext : public Context {
 };
 
 
-class MDFetchForCommitContext : public Context {
-protected:
-  MDStore *ms;
-  CDir *dir;
-  Context *co;
-public:
-  MDFetchForCommitContext(MDStore *m, CDir *dir, Context *c) {
-	ms = m; 
-	this->dir = dir;
-	co = c;
-  }
-  void finish(int result) {
-	ms->commit_dir( dir, co );
-  }
-};
-
 
 
 bool MDStore::commit_dir( CDir *dir,
+						  Context *c )
+{
+  assert(dir->is_dirty());
+
+  if(!dir->is_dirty()) {
+	dout(7) << "commit_dir not dirty " << *dir << endl;
+	if (c) {
+	  c->finish(0);
+	  delete c;
+	}
+  }
+
+  // commit thru current version
+  commit_dir(dir, dir->get_version(), c);
+}
+
+bool MDStore::commit_dir( CDir *dir,
+						  __uint64_t version,
 						  Context *c )
 {
   assert(dir->is_auth() ||
@@ -201,8 +213,14 @@ bool MDStore::commit_dir( CDir *dir,
   // already committing?
   if (dir->state_test(CDIR_STATE_COMMITTING)) {
 	// already mid-commit!
-	dout(7) << "commit_dir " << *dir << " already mid-commit" << endl;
-	dir->add_waiter(CDIR_WAIT_COMMITTED, c);   
+	dout(7) << "commit_dir " << *dir << " mid-commit of " << dir->get_committing_version() << endl;
+	dout(7) << "  current version = " << dir->get_version() << endl;
+	dout(7) << "requested version = " << version << endl;
+
+	assert(version >= dir->get_last_committed_version());  // why would we request _old_ one?
+
+	dir->add_waiter(CDIR_WAIT_COMMITTED, 
+					new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
 	return false;
   }
 
@@ -210,7 +228,7 @@ bool MDStore::commit_dir( CDir *dir,
 	// something must be frozen up the hiearchy!
 	dout(7) << "commit_dir " << *dir << " can't auth_pin, waiting" << endl;
 	dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
-					new C_MDS_CommitDirDelay(mds, dir->ino(), c) );
+					new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
 	return false;
   }
 
@@ -219,8 +237,8 @@ bool MDStore::commit_dir( CDir *dir,
   if (!dir->is_complete()) {
 	dout(7) << "commit_dir " << *dir << " not complete, fetching first" << endl;
 	// fetch dir first
-	Context *fin = new MDFetchForCommitContext(this, dir, c);
-	fetch_dir(dir, fin);
+	fetch_dir(dir, 
+			  new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
 	return false;
   }
 
@@ -232,7 +250,7 @@ bool MDStore::commit_dir( CDir *dir,
   if (c) dir->add_waiter(CDIR_WAIT_COMMITTED, c);
 
   // get continuation ready
-  MDCommitDirContext *fin = new MDCommitDirContext(this, dir);
+  Context *fin = new C_MDS_CommitDirFinish(this, dir);
   
   // state
   dir->state_set(CDIR_STATE_COMMITTING);
@@ -252,8 +270,10 @@ bool MDStore::commit_dir_2( int result,
 							__uint64_t committed_version)
 {
   dout(5) << "commit_dir_2 " << *dir << " committed " << committed_version << ", current version " << dir->get_version() << endl;
-
   assert(committed_version == dir->get_committing_version());
+
+  // remember which version is now safe
+  dir->set_last_committed_version(committed_version);
   
   // is the dir now clean?
   if (committed_version == dir->get_version())
@@ -535,24 +555,35 @@ void MDStore::do_fetch_dir_2( int result,
 		assert(dentryhashcode == hashcode);
 	  }
 	  
+	  CInode *in = 0;
 	  if (mds->mdcache->have_inode(inode->ino)) {
-		CInode *in = mds->mdcache->get_inode(inode->ino);
+		in = mds->mdcache->get_inode(inode->ino);
 		dout(10) << "readdir got (but i already had) " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
-		continue;
-	  }
+
+		// linked though?
+		CDentry *edn = dir->lookup(dname);  // existing dentry?
+		if (edn) {
+		  assert(edn->get_inode() == in);   // if so, it had better match!
+		  continue;
+		}
+
+		dout(10) << "XXX wasn't linked to this dir, though, linking!" << endl;
+	  } else {
+		// inode
+		in = new CInode();
+		memcpy(&in->inode, inode, sizeof(inode_t));
 	  
-	  // inode
-	  CInode *in = new CInode();
-	  memcpy(&in->inode, inode, sizeof(inode_t));
-	  
-	  // symlink?
-	  if (in->is_symlink()) {
-		in->symlink = (char*)(buf+p);
-		p += in->symlink.length() + 1;
+		// symlink?
+		if (in->is_symlink()) {
+		  in->symlink = (char*)(buf+p);
+		  p += in->symlink.length() + 1;
+		}
+		
+		// add 
+		mds->mdcache->add_inode( in );
 	  }
 
-	  // add and link
-	  mds->mdcache->add_inode( in );
+	  // link
 	  mds->mdcache->link_inode( dir, dname, in );
 	  
 	  dout(10) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;

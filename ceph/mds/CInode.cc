@@ -165,6 +165,15 @@ void CInode::mark_dirty() {
   
   dout(10) << "mark_dirty " << *this << endl;
 
+  /*
+	NOTE: I may already be dirty, but this fn _still_ needs to be called so that
+	the directory is (perhaps newly) dirtied, and so that parent_dir_version is 
+	updated below.
+  */
+  
+  // only auth can get dirty.  "dirty" async data in replicas is relative to (say) softlock state, not dirty flag.
+  assert(is_auth());
+
   // touch my private version
   version++;
   if (!(state & CINODE_STATE_DIRTY)) {
@@ -429,15 +438,7 @@ void CInode::finish_waiting(int mask, int result)
   
   list<Context*> finished;
   take_waiting(mask, finished);
-  for (list<Context*>::iterator it = finished.begin();
-	   it != finished.end();
-	   it++) {
-	Context *c = *it;
-
-	dout(11) << "finish_waiting finishing " << c << endl;
-	c->finish(result);
-	delete c;
-  }
+  finish_contexts(finished);
 }
 
 
@@ -465,6 +466,8 @@ void CInode::auth_unpin() {
     put(CINODE_PIN_AUTHPIN);
 
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+
+  assert(auth_pins >= 0);
 
   if (parent)
 	parent->dir->adjust_nested_auth_pins( -1 );

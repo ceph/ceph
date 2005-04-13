@@ -14,13 +14,13 @@
 md_config_t g_conf = {
   num_mds: 13,
   num_osd: 10,
-  num_client: 1,
+  num_client: 500,
 
   osd_cow: false, // crashy? true,  
 
-  client_cache_size: 100,
+  client_cache_size: 400,
   client_cache_mid: .5,
-  client_requests: 10000,
+  client_requests: 100,
   client_deterministic: false,
   
   log_messages: true,
@@ -33,7 +33,7 @@ md_config_t g_conf = {
   fake_clock: true,
   fakemessenger_serialize: false,
 
-  debug: 15,
+  debug: 10,
 
   mdcache_size: MDS_CACHE_SIZE,
   mdcache_mid: .8,
@@ -44,31 +44,34 @@ md_config_t g_conf = {
   mds_heartbeat_op_interval: 2000,
   mds_verify_export_dirauth: true,
 
-  client_op_statfs:  false,
+  // client ops
+  client_use_random_mds:  true,
 
-  client_op_stat:    true,
-  client_op_touch:   true,
-  client_op_utime:   true,   // untested
-  client_op_chmod:   true,
-  client_op_chown:   true,   // untested
+  client_op_statfs:     false,
 
-  client_op_readdir: true,
-  client_op_mknod:   true,
-  client_op_link:    false,
-  client_op_unlink:  false,
-  client_op_rename:  false,
+  client_op_stat:     100,
+  client_op_touch:    10,
+  client_op_utime:    0,   // untested
+  client_op_chmod:    10,
+  client_op_chown:    10,   // untested
 
-  client_op_mkdir:   false,//true,  // note: corrupts osddata if we don't shut down & flush logs cleanly
-  client_op_rmdir:   false,
-  client_op_symlink: true,
+  client_op_readdir:  10,
+  client_op_mknod:    10,
+  client_op_link:       false,
+  client_op_unlink:   100,
+  client_op_rename:   1000,
 
-  client_op_openrd:   true,
-  client_op_openwr:   true,
-  client_op_openwrc:  true,
-  client_op_read:     false,
-  client_op_write:    false,
-  client_op_truncate: false,
-  client_op_fsync:    false,
-  client_op_close:    true
+  client_op_mkdir:    100,  // note: can easily corrupt store when we crash
+  client_op_rmdir:    100,
+  client_op_symlink:  100,
+
+  client_op_openrd:   10,
+  client_op_openwr:   0,
+  client_op_openwrc:  0,
+  client_op_read:       false,  // osd!
+  client_op_write:      false,  // osd!
+  client_op_truncate:   false,
+  client_op_fsync:      false,
+  client_op_close:    20
 };
 

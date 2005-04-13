@@ -157,6 +157,15 @@ class CLock {
   //void set_req_read(bool b) { req_read = b; }
   //void set_req_write(bool b) { req_write = b; }
 
+  void twiddle_export() {  // was auth, now replica
+	gather_set.clear();
+	if (state == LOCK_PRELOCK ||
+		state == LOCK_GLOCK) state = LOCK_LOCK;
+  }
+  void twiddle_import() {  // was replica, now auth
+	
+  }
+  
   // stable
   bool is_stable() {
 	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);

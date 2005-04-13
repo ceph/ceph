@@ -58,11 +58,16 @@ class filepath {
   }
 
 
-  filepath subpath(int s) {
+  filepath prefixpath(int s) {
 	filepath t;
-	for (int i=s; i<bits.size(); i++) {
+	for (int i=0; i<s; i++)
 	  t.add_dentry(bits[i]);
-	}
+	return t;
+  }
+  filepath postfixpath(int s) {
+	filepath t;
+	for (int i=s; i<bits.size(); i++)
+	  t.add_dentry(bits[i]);
 	return t;
   }
   void add_dentry(string& s) {

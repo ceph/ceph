@@ -36,6 +36,7 @@ class MDiscover : public Message {
 	this->base_ino = base_ino;
 	this->want = want;
 	this->want_base_dir = want_base_dir;
+	this->want_root_inode = want_root_inode;
   }
   virtual char *get_type_name() { return "Dis"; }
 

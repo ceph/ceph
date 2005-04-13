@@ -43,7 +43,7 @@ int fakemessenger_do_loop()
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
-		dout(20) << m << endl;
+		dout(15) << "got " << m << endl;
 		dout(3) << "---- do_loop dispatching '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 

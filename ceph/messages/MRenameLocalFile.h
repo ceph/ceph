@@ -2,53 +2,47 @@
 #define __MRENAMELOCALFILE_H
 
 class MRenameLocalFile : public Message {
-  inodeno_t fromino;
-  // and (
+  inodeno_t srcdirino;
+  string srcname;
   inodeno_t destdirino;
-  string name;
-  //  or
-  inodeno_t oldino;
-  // )
+  string destname;
 
  public:
-  inodeno_t get_fromino() { return fromino; }
+  inodeno_t get_srcdirino() { return srcdirino; }
+  string& get_srcname() { return srcname; }
   inodeno_t get_destdirino() { return destdirino; }
-  inodeno_t get_oldino() { return oldino; }
-  string& get_name() { return name; }
+  string& get_destname() { return destname; }
 
   MRenameLocalFile() {}
-  MRenameLocalFile(inodeno_t fromino,
+  MRenameLocalFile(inodeno_t srcdirino,
+				   string& srcname,
 				   inodeno_t destdirino,
-				   string name,
-				   inodeno_t oldino) :
+				   string& destname) :
 	Message(MSG_MDS_RENAMELOCALFILE) {
-	this->fromino = fromino;
+	this->srcdirino = srcdirino;
+	this->srcname = srcname;
 	this->destdirino = destdirino;
-	this->name = name;
-	this->oldino = oldino;
+	this->destname = destname;
   }
   virtual char *get_type_name() { return "Rlf";}
   
-  virtual int decode_payload(crope s) {
-	int off = 0;
-	s.copy(off, sizeof(fromino), (char*)&fromino);
-	off += sizeof(fromino);
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
+	off += sizeof(srcdirino);
 	s.copy(off, sizeof(destdirino), (char*)&destdirino);
 	off += sizeof(destdirino);
-	s.copy(off, sizeof(oldino), (char*)&oldino);
-	off += sizeof(oldino);
-	name = s.c_str() + off;
-	off += name.length() + 1;
-	return off;
+	srcname = s.c_str() + off;
+	off += srcname.length() + 1;
+	destname = s.c_str() + off;
+	off += destname.length() + 1;
   }
-  virtual crope get_payload() {
-	crope s;
-	s.append((char*)&fromino,sizeof(fromino));
+  virtual void get_payload(crope& s) {
+	s.append((char*)&srcdirino,sizeof(srcdirino));
 	s.append((char*)&destdirino,sizeof(destdirino));
-	s.append((char*)&oldino,sizeof(oldino));
-	s.append((char*)name.c_str());
+	s.append((char*)srcname.c_str());
 	s.append((char)0);
-	return s;
+	s.append((char*)destname.c_str());
+	s.append((char)0);
   }
 };
 

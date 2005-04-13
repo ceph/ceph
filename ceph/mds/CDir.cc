@@ -61,8 +61,10 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
   nitems = 0;
   nauthitems = 0;
   state = CDIR_STATE_INITIAL;
+
   version = 0;
   committing_version = 0;
+  last_committed_version = 0;
 
   ref = 0;
 
@@ -242,7 +244,7 @@ bool CDir::waiting_for(int tag, string& dn)
 void CDir::add_waiter(int tag,
 					  const string& dentry,
 					  Context *c) {
-  if (waiting_on_dentry.size() == 0)
+  if (waiting.empty() && waiting_on_dentry.size() == 0)
 	get(CDIR_PIN_WAITER);
   waiting_on_dentry[ dentry ].insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *this << endl;
@@ -262,7 +264,7 @@ void CDir::add_waiter(int tag, Context *c) {
   }
 
   // this dir.
-  if (waiting.empty())
+  if (waiting.empty() && waiting_on_dentry.size() == 0)
 	get(CDIR_PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
@@ -292,7 +294,7 @@ void CDir::take_waiting(int mask,
 	waiting_on_dentry.erase(dentry);
   
   // ...whole map?
-  if (waiting_on_dentry.size() == 0) 
+  if (waiting_on_dentry.size() == 0 && waiting.empty())
 	put(CDIR_PIN_WAITER);
 }
 
@@ -323,7 +325,7 @@ void CDir::take_waiting(int mask,
 	  }
 	}
 	
-	if (waiting.empty())
+	if (waiting_on_dentry.size() == 0 && waiting.empty())
 	  put(CDIR_PIN_WAITER);
   }
 }
@@ -355,14 +357,14 @@ void CDir::mark_dirty()
   if (!state_test(CDIR_STATE_DIRTY)) {
 	version++;
 	state_set(CDIR_STATE_DIRTY);
-	dout(10) << "mark_dirty " << *this << " new version " << version << endl;
+	dout(10) << "mark_dirty (was clean) " << *this << " new version " << version << endl;
   } 
   else if (state_test(CDIR_STATE_COMMITTING) &&
 		   committing_version == version) {
 	version++;  // now dirtier than committing version!
 	dout(10) << "mark_dirty (committing) " << *this << " new version " << version << "/" << committing_version <<  endl;
   } else {
-	dout(10) << "mark_dirty (dirty) " << *this << " version " << version << endl;
+	dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << endl;
   }
 }
 
@@ -433,9 +435,9 @@ int CDir::authority()
   if (parent)
 	return parent->authority();
 
-  // root on 0.
-  assert(inode->is_root());
-  return 0;
+  // root, or dangling
+  assert(inode->is_root() || inode->is_dangling());  
+  return inode->authority();
 }
 
 int CDir::dentry_authority(const string& dn )
@@ -474,9 +476,9 @@ void CDir::auth_unpin() {
   auth_pins--;
   if (auth_pins == 0)
     put(CDIR_PIN_AUTHPIN);
-  assert(auth_pins >= 0);
 
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
+  assert(auth_pins >= 0);
   
   // pending freeze?
   if (auth_pins + nested_auth_pins == 0)
@@ -496,6 +498,7 @@ void CDir::adjust_nested_auth_pins(int inc)
 	dir->nested_auth_pins += inc;
 	
 	dout(10) << "adjust_nested_auth_pins on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
+	assert(dir->nested_auth_pins >= 0);
 	
 	// pending freeze?
 	if (dir->auth_pins + dir->nested_auth_pins == 0) 

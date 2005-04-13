@@ -35,15 +35,13 @@
 
 //#include "messages/MInodeUpdate.h"
 #include "messages/MDirUpdate.h"
-#include "messages/MInodeWriterClosed.h"
-
 #include "messages/MCacheExpire.h"
 
 #include "messages/MLock.h"
-
 #include "messages/MDentryUnlink.h"
-
 #include "messages/MRenameLocalFile.h"
+
+#include "messages/MInodeWriterClosed.h"
 
 #include "IdAllocator.h"
 
@@ -127,17 +125,51 @@ void MDCache::add_inode(CInode *in)
 void MDCache::remove_inode(CInode *o) 
 { 
   if (o->get_parent_dn()) {
-	unlink_dentry(o->get_parent_dn());  // unlink
+	CDentry *dn = o->get_parent_dn();
+	unlink_dentry(dn);  // unlink
   }
   inode_map.erase(o->ino());    // remove from map
   lru->lru_remove(o);           // remove from lru
 }
 
+
+int MDCache::link_inode( CDir *dir, string& dname, CInode *in ) 
+{
+  assert(dir->lookup(dname) == 0);
+
+  // create dentry
+  CDentry* dn = new CDentry(dname, in);
+  in->add_parent(dn);
+
+  // add to dir
+  dir->add_child(dn);
+
+  // set dir version
+  in->parent_dir_version = dir->get_version();
+
+  // clear dangling
+  in->state_clear(CINODE_STATE_DANGLING);
+  
+  // adjust auth pin count
+  if (in->auth_pins + in->nested_auth_pins)
+	dn->dir->adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
+
+  return 0;
+}
+
 void MDCache::unlink_dentry(CDentry *dn) 
 {
-  // detach
+  // detach inode
+  unlink_dentry_inode(dn);
+
+  // detach dentry
   dn->dir->remove_child(dn);
 
+  delete dn;
+}
+
+void MDCache::unlink_dentry_inode(CDentry *dn)
+{
   // inode?
   if (dn->inode) {
 	CInode *in = dn->inode;
@@ -158,10 +190,10 @@ void MDCache::unlink_dentry(CDentry *dn)
 	assert(in->nparents == 0);
 	assert(in->parent == 0);
 	// FIXME... might need to migrate inode to another dir?   XXX
-  }
 
-  // delete dentry!
-  delete dn;
+	if (in->is_dirty() && in->nparents == 0) 
+	  in->mark_clean();
+  }
 }
 
 /*
@@ -194,6 +226,82 @@ void MDCache::unlink_inode(CInode *in)
   }
 }
 */
+
+void MDCache::rename_file(CDentry *srcdn, 
+						  CDir *destdir, string& destname,
+						  CDentry *destdn)
+{
+  // do rename
+  CDir *srcdir = srcdn->dir;
+  
+  // unlink src
+  CInode *in = srcdn->inode;
+  unlink_dentry(srcdn);
+  
+  // link dest
+  if (destdn) {
+	assert(destdir == destdn->dir);
+	assert(destname == destdn->name);
+	
+	// unlink old inode
+	unlink_dentry(destdn);
+  } 
+
+  // link inode w/ new dentry
+  link_inode( destdir, destname, in );
+  
+}
+
+class C_MDC_EmptyImport : public Context {
+  MDCache *mdc;
+  CDir *dir;
+public:
+  C_MDC_EmptyImport(MDCache *mdc, CDir *dir) {
+	this->mdc = mdc;
+	this->dir = dir;
+  }
+  void finish(int r) {
+	mdc->export_empty_import(dir);
+  }
+};
+
+void MDCache::export_empty_import(CDir *dir)
+{
+  dout(7) << "export_empty_import " << *dir << endl;
+  
+  if (!dir->is_import()) {
+	dout(7) << "not import (anymore?)" << endl;
+	return;
+  }
+  if (dir->inode->is_root()) {
+	dout(7) << "root" << endl;
+	return;
+  }
+
+  if (dir->get_size() > 0) {
+	dout(7) << "not actually empty" << endl;
+	return;
+  }
+
+  // is it really empty?
+  if (!dir->is_complete()) {
+	dout(7) << "not complete, fetching." << endl;
+	mds->mdstore->fetch_dir(dir,
+							new C_MDC_EmptyImport(this,dir));
+	return;
+  }
+
+  int dest = dir->inode->authority();
+
+  // comment this out ot wreak havoc?
+  //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
+  
+  dout(7) << "really empty, exporting to " << dest << endl;
+  assert (dest != mds->get_nodeid());
+  
+  dout(7) << "exporting empty import " << *dir << " to " << dest << endl;
+  export_dir( dir, dest );
+}
 
 
 bool MDCache::trim(__int32_t max) {
@@ -246,22 +354,11 @@ bool MDCache::trim(__int32_t max) {
 	  diri->dir->state_clear(CDIR_STATE_COMPLETE);
 
 	  // reexport?
-	  if (imports.count(diri->dir) &&                // import
+	  if (diri->dir->is_import() &&             // import
 		  diri->dir->get_size() == 0 &&         // no children
-		  !diri->is_root() &&                   // not root
-		  !(diri->dir->is_freezing() || diri->dir->is_frozen())  // FIXME: can_auth_pin?
-		  ) {
-		int dest = diri->authority();
-		
-		// comment this out ot wreak havoc?
-		if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
-
-		if (dest != mds->get_nodeid()) {
-		  // it's an empty import!
-		  dout(7) << "trimmed parent dir is a (now empty) import; rexporting to " << dest << endl;
-		  export_dir( diri->dir, dest );
-		}
-	  }
+		  !diri->is_root())                   // not root
+		export_empty_import(diri->dir);
+	  
 	} 
   }
 
@@ -387,23 +484,6 @@ bool MDCache::shutdown_pass()
 
 
 
-int MDCache::link_inode( CDir *dir, string& dname, CInode *in ) 
-{
-  assert(dir->lookup(dname) == 0);
-
-  // create dentry
-  CDentry* dn = new CDentry(dname, in);
-  in->add_parent(dn);
-
-  // add to dir
-  dir->add_child(dn);
-
-  // set dir version
-  in->parent_dir_version = dir->get_version();
-
-  return 0;
-}
-
 
 
 
@@ -527,6 +607,13 @@ int MDCache::proc_message(Message *m)
 	handle_cache_expire((MCacheExpire*)m);
 	break;
 
+
+	// locking
+  case MSG_MDS_LOCK:
+	handle_lock((MLock*)m);
+	break;
+
+	// cache fun
   case MSG_MDS_INODEWRITERCLOSED:
 	handle_inode_writer_closed((MInodeWriterClosed*)m);
 	break;
@@ -535,38 +622,11 @@ int MDCache::proc_message(Message *m)
 	handle_dentry_unlink((MDentryUnlink*)m);
 	break;
 
-	/*
-	// sync
-  case MSG_MDS_INODESYNCSTART:
-	handle_inode_sync_start((MInodeSyncStart*)m);
-	break;
-  case MSG_MDS_INODESYNCACK:
-	handle_inode_sync_ack((MInodeSyncAck*)m);
-	break;
-  case MSG_MDS_INODESYNCRELEASE:
-	handle_inode_sync_release((MInodeSyncRelease*)m);
-	break;
-  case MSG_MDS_INODESYNCRECALL:
-	handle_inode_sync_recall((MInodeSyncRecall*)m);
-	break;
-	*/
-	/*
-	// lock
-  case MSG_MDS_INODELOCKSTART:
-	handle_inode_lock_start((MInodeLockStart*)m);
-	break;
-  case MSG_MDS_INODELOCKACK:
-	handle_inode_lock_ack((MInodeLockAck*)m);
-	break;
-  case MSG_MDS_INODELOCKRELEASE:
-	handle_inode_lock_release((MInodeLockRelease*)m);
-	break;
-	*/
-
-  case MSG_MDS_LOCK:
-	handle_lock((MLock*)m);
+  case MSG_MDS_RENAMELOCALFILE:
+	handle_rename_local_file((MRenameLocalFile*)m);
 	break;
 
+	
 	// import
   case MSG_MDS_EXPORTDIRDISCOVER:
 	handle_export_dir_discover((MExportDirDiscover*)m);
@@ -660,7 +720,7 @@ int MDCache::path_traverse(filepath& path,
 		if (cur->waiting_for(CINODE_WAIT_DIR)) {
 		  dout(10) << " need dir for " << *cur << ", already doing discover" << endl;
 		} else {
-		  filepath want = path.subpath(depth);
+		  filepath want = path.postfixpath(depth);
 		  dout(10) << " need dir for " << *cur << ", doing discover, want " << want.get_path() << endl;
 		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
 													 cur->ino(),
@@ -697,8 +757,8 @@ int MDCache::path_traverse(filepath& path,
 	CDentry *dn = cur->dir->lookup(path[depth]);
 	if (dn && dn->inode) {
 	  // have it.  locked?
-	  if (!dn->can_read()) {
-		dout(12) << " locked dentry at " << *dn->inode << endl;
+	  if (dn->is_xlockedbyother(req)) {
+		dout(10) << " xlocked dentry at " << *dn->inode << endl;
 		cur->dir->add_waiter(CDIR_WAIT_DNREAD,
 							 path[depth],
 							 new C_MDS_RetryMessage(mds, req));
@@ -716,7 +776,7 @@ int MDCache::path_traverse(filepath& path,
 	
 	// don't have it.
 	int dauth = cur->dir->dentry_authority( path[depth] );
-	dout(12) << " miss dentry " << path[depth] << " dauth is " << dauth << endl;
+	dout(12) << " miss on dentry " << path[depth] << " dauth is " << dauth << endl;
 	
 
 	if (dauth == whoami) {
@@ -725,8 +785,10 @@ int MDCache::path_traverse(filepath& path,
 		// file not found
 		return -ENOENT;
 	  } else {
-		if (onfail == MDS_TRAVERSE_DISCOVER) 
-		  return -1;
+		
+		//wrong?
+		//if (onfail == MDS_TRAVERSE_DISCOVER) 
+		//  return -1;
 		
 		// directory isn't complete; reload
 		dout(7) << " incomplete dir contents for " << *cur << ", fetching" << endl;
@@ -743,7 +805,7 @@ int MDCache::path_traverse(filepath& path,
 	  if (onfail == MDS_TRAVERSE_DISCOVER) {
 		// discover
 
-		filepath want = path.subpath(depth);
+		filepath want = path.postfixpath(depth);
 		if (cur->dir->waiting_for(CDIR_WAIT_DENTRY, path[depth])) {
 		  dout(7) << " already waiting for discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
 		} else {
@@ -892,6 +954,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
   CInode *cur = 0;
   MDiscoverReply *reply = 0;
+  //filepath fullpath;
 
   // get started.
   if (dis->get_base_ino() == 0) {
@@ -900,6 +963,12 @@ void MDCache::handle_discover(MDiscover *dis)
 
     assert(mds->get_nodeid() == 0);
     assert(root->is_auth());
+
+	//fullpath = dis->get_want();
+
+	if (!root->is_cached_by_anyone())
+	  root->replicate_relax_locks();
+
 
     // add root
     reply = new MDiscoverReply(0);
@@ -913,8 +982,19 @@ void MDCache::handle_discover(MDiscover *dis)
     // there's a base inode
     cur = get_inode(dis->get_base_ino());
     assert(cur);
-    
-    dout(7) << "discover from mds" << dis->get_asker() << " has " << *cur << " wants " << dis->get_want().get_path() << endl;
+
+    /*string p;
+	cur->make_path(p);
+	p += "/";
+	p += dis->get_want().get_path();
+	fullpath = p;
+	*/
+
+	if (dis->wants_base_dir()) {
+	  dout(7) << "discover from mds" << dis->get_asker() << " has " << *cur << " wants dir+" << dis->get_want().get_path() << endl;
+	} else {
+	  dout(7) << "discover from mds" << dis->get_asker() << " has " << *cur->dir << " wants " << dis->get_want().get_path() << endl;
+	}
     
     assert(cur->is_dir());
     
@@ -939,6 +1019,18 @@ void MDCache::handle_discover(MDiscover *dis)
   assert(reply);
   assert(cur);
   
+  /*
+  // first traverse and make sure we won't have to do any waiting
+  dout(10) << "traversing full discover path = " << fullpath << endl;
+  vector<CInode*> trav;
+  int r = path_traverse(fullpath, trav, dis, MDS_TRAVERSE_FAIL);
+  if (r > 0) 
+	return;  // fw or delay
+  dout(10) << "traverse finish w/o blocking, continuing" << endl;
+  // ok, now we know we won't block on dentry locks or readdir.
+  */
+
+
   // add content
   // do some fidgeting to include a dir if they asked for the base dir, or just root.
   for (int i = 0; i < dis->get_want().depth() || dis->get_want().depth() == 0; i++) {
@@ -1004,12 +1096,12 @@ void MDCache::handle_discover(MDiscover *dis)
 		reply->set_flag_error( dis->get_dentry(i) );
 		break;
       } else {
-        delete reply;
-
         // readdir
         dout(7) << "mds" << whoami << " incomplete dir contents for " << *cur->dir << ", fetching" << endl;
-        mds->mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(mds, dis));
-        return;
+        mds->mdstore->fetch_dir(cur->dir, NULL); //new C_MDS_RetryMessage(mds, dis));
+
+		// send what we have so far
+        break;
       }
     }
   }
@@ -1025,7 +1117,7 @@ void MDCache::handle_discover(MDiscover *dis)
       // fwd to dir auth
 	  int dirauth = cur->dir->authority();
 	  if (dirauth == dis->get_asker()) {
-		dout(7) << "from (new?) dir auth, dropping (obsolete) discover on floor." << endl;
+		dout(7) << "from (new?) dir auth, dropping (obsolete) discover on floor." << endl;  // XXX FIXME is this right?
 		//assert(dis->get_asker() == dis->get_source());  //might be a weird other loop.  either way, asker has it.
 		delete dis;
 	  } else {
@@ -1075,20 +1167,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	dout(7) << "discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
   }
 
-  if (m->is_flag_error()) {
-	// error!
-	assert(cur->is_dir());
-	if (cur->dir) {
-	  dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
-	  cur->dir->take_waiting(CDIR_WAIT_DENTRY,
-							 m->get_error_dentry(),
-							 finished);
-	} else {
-	  dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
-	  cur->take_waiting(CINODE_WAIT_DIR, finished);
-	}
-  }
-
   
   // start this loop even if we have no inodes, but just the base_dir
   int plus_root_dir = (m->get_num_inodes() == 1 && m->has_root()) ? 1:0;     //ugly, sorry, see handle_discover
@@ -1100,6 +1178,11 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		(i == 1 && m->has_root())) {
 	  if (cur->dir) {
 		// had it
+		/* this is strange, but it happens when:
+		   we discover multiple dentries under a dir.
+		   bc, no flag to indicate a dir discover is underway, (as there is w/ a dentry one).
+		   this is actually good, since (dir aside) they're asking for different information.
+		*/
 		dout(7) << "had " << *cur->dir;
 		m->get_dir(i).update_dir(cur->dir);
 		dout2(7) << ", now " << *cur->dir << endl;
@@ -1107,7 +1190,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		// add it (_replica_)
 		cur->set_dir( new CDir(cur, mds, false) );
 		m->get_dir(i).update_dir(cur->dir);
-		dout(7) << "added " << *cur->dir << endl;
+		dout(7) << "added " << *cur->dir << " nonce " << cur->dir->replica_nonce << endl;
 
 		// get waiters
 		cur->take_waiting(CINODE_WAIT_DIR, finished);
@@ -1115,54 +1198,88 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	}	
 	if (i >= m->get_num_inodes()) break;
 
+	if (m->is_flag_error()) {
+	  // error!
+	  assert(cur->is_dir());
+	  if (cur->dir) {
+		dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
+		cur->dir->take_waiting(CDIR_WAIT_DENTRY,
+							   m->get_error_dentry(),
+							   finished);
+	  } else {
+		dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
+		cur->take_waiting(CINODE_WAIT_DIR, finished);
+	  }
+	  break;
+	}
+
 	dout(7) << "i = " << i << " ino is " << m->get_ino(i) << endl;
 
 	// lookup dentry
 	CInode *in = 0;
+	CDentry *dn = 0;
 	if (i || m->has_base_dentry()) {
-	  CDentry *dn = cur->dir->lookup( m->get_dentry(i) );
+	  dn = cur->dir->lookup( m->get_dentry(i) );
 	  if (dn) in = dn->get_inode();
 	}
 	
 	// inode
-	if (in) {
+	if (dn || in) {
 	  // had it
-	  assert(in == get_inode( m->get_ino(i) ));
-	  
-	  dout(7) << "had " << *in;
-	  m->get_inode(i).update_inode(in);
-	  dout2(7) << ", now " << *in << endl;
+	  /*
+		this should _only_ happen if the dentry was created after we sent our request,
+		which should _only_ happen if a rename took place.  
+		so, DON'T overwrite the dentry, the discover has _old_ info!
+	  */
+	  dout(7) << "had " << *dn << ", hopefully because it got renamed into place?" << endl;
+	  dout(7) << "it is linked to " << *in << ", that better not be what discover gave me?" << endl;
+	  assert(in != get_inode( m->get_ino(i) ));
+	  assert(0);  // just so i can see this happen and make sure it looks right!
+	  break;   // i'm done.
+
+	  //assert(0);  // ?? XXX
+	  //m->get_inode(i).update_inode(in);
+	  //dout2(7) << ", now " << *in << endl;
 
 	} else {
 	  // add inode
 	  in = get_inode( m->get_inode(i).get_ino() );
 	  if (in) {
-		dout(7) << " WTF, i have this inode: " << *in << " butit's not link via dentry " << m->get_dentry(i) << " ???" << endl;
-		assert(0);
-	  }
+		dout(7) << "i have this inode: " << *in << " but it's not linked via dentry " << m->get_dentry(i) << endl;
 
-	  in = new CInode(false);
-
-	  m->get_inode(i).update_inode(in);
-	  
-	  if (!i && m->has_root()) {
-		// root
-		in->state_set(CINODE_STATE_ROOT);
-		set_root( in );
-		dout(7) << " got root: " << *in << endl;
-		
-		finished.splice(finished.end(), waiting_for_root);
-	  } else {
-		// link in
-		add_inode( in );
+		// link
 		link_inode( cur->dir, m->get_dentry(i), in );
 		
+		dout(7) << "XXX linked " << *in << endl;
+
 		cur->dir->take_waiting(CDIR_WAIT_DENTRY,
 							   m->get_dentry(i),
 							   finished);
-	  }
+	  } else {
+		// didn't have it.
+		in = new CInode(false);
+		
+		m->get_inode(i).update_inode(in);
+		
+		if (!i && m->has_root()) {
+		  // root
+		  in->state_set(CINODE_STATE_ROOT);
+		  set_root( in );
+		  dout(7) << " got root: " << *in << endl;
+		  
+		  finished.splice(finished.end(), waiting_for_root);
+		} else {
+		  // link in
+		  add_inode( in );
+		  link_inode( cur->dir, m->get_dentry(i), in );
+		  
+		  cur->dir->take_waiting(CDIR_WAIT_DENTRY,
+								 m->get_dentry(i),
+								 finished);
+		}
 	  
-	  dout(7) << "added " << *in << endl;
+		dout(7) << "added " << *in << " nonce " << in->replica_nonce << endl;
+	  }
 	}
 	  
 	// onward!
@@ -1430,8 +1547,9 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 void MDCache::dentry_unlink(CDentry *dn, Context *c)
 {
   CDir *dir = dn->dir;
+  string dname = dn->name;
 
-  assert(dn->lockstate == DN_LOCK_LOCK);
+  assert(dn->lockstate == DN_LOCK_XLOCK);
 
   // log it
   if (dn->inode) dn->inode->mark_unsafe();   // XXX ??? FIXME
@@ -1451,9 +1569,19 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 
 	// don't need ack.
   }
+
+  // unpin dir / unxlock
+  dentry_xlock_finish(dn);
   
   // unlink
   unlink_dentry( dn );
+
+  // did i empty out an imported dir?
+  if (dir->is_import() && !dir->inode->is_root() && dir->get_size() == 0) 
+	export_empty_import(dir);
+
+  // wake up any waiters
+  dir->finish_waiting(CDIR_WAIT_ANY, dname);
 }
 
 
@@ -1472,10 +1600,15 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
   if (!dn) {
 	dout(7) << "handle_dentry_unlink don't have dentry " << *dir << " dn " << m->get_dn() << endl;
   } else {
-	dout(7) << "handle_dentry_unlink on " << *dir << " dn " << dn->name << endl;
+	dout(7) << "handle_dentry_unlink on " << *dn << endl;
+
+	string dname = dn->name;
 	
 	// unlink
 	unlink_dentry( dn );
+	
+	// wake up
+	dir->finish_waiting(CDIR_WAIT_DNREAD, dname);
   }
 
   delete m;
@@ -1487,7 +1620,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
 // renaming!
 
-
+/*
 class C_MDC_RenameLocalFile : public Context {
   MDCache *mdc;
   CInode *from, *oldin;
@@ -1509,86 +1642,102 @@ public:
 	mdc->file_rename_finish(from, destdir, oldin, c);
   }
 };
+*/
 
-
-
-void MDCache::file_rename(CInode *from, CDir *destdir, string& name, CInode *oldin, Context *c)
+void MDCache::file_rename(CDentry *srcdn, CDir *destdir, string& destname, CDentry *destdn, Context *c)
 {
-  /*
-  assert(from->is_auth());
-  assert(!from->is_cached_by_anyone() || from->is_lockbyme());
-  assert(!oldin || !oldin->is_cached_by_anyone() || oldin->is_lockbyme());
+  assert(srcdn->is_xlocked());  // by me
+
+  CDir *srcdir = srcdn->dir;
+  string srcname = srcdn->name;
+  CInode *in = srcdn->inode;
+
+  // update our cache
+  rename_file(srcdn, destdir, destname, destdn);
+
+  // mark dir(s) dirty
+  in->mark_dirty();      // the moving inode           // FIXME XXX is this right for hard links?
+  srcdir->mark_dirty();  // src dir
   
+  // tell replicas (no need to wait for ack) to do the same, and un-xlock.
+  // make list
+  set<int> who = srcdir->get_open_by();
+  for (set<int>::iterator it = destdir->open_by_begin();
+	   it != destdir->open_by_end();
+	   it++)
+	if (who.count(*it) == 0) who.insert(*it);
+  
+  // tell
+  for (set<int>::iterator it = who.begin();
+	   it != who.end();
+	   it++) {
+	mds->messenger->send_message(new MRenameLocalFile(srcdir->ino(),
+													  srcname,
+													  destdir->ino(),
+													  destname),
+								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  }
+
   // log it
-  from->mark_unsafe();
-  //  mds->mdlog->submit_entry(new EInodeUnlink(in, in->get_parent_dir()),
-  //						   new C_MDC_InodeLog(this,in));
-  
-  // mark dirty
-  from->mark_dirty();
+  // ***
 
-  // rename locally
-  if (oldin) {
-	unlink_inode(oldin);
-	oldin->mark_clean();
-	oldin->state_set(CINODE_STATE_DANGLING);
-  }
-  rename_file(from, destdir, name);  
-  
+  // ok!
 
-  // tell replicas?
-  from->rename_waiting_for_ack = from->cached_by;
-  if (oldin) {
-	for (set<int>::iterator it = oldin->cached_by_begin();
-		 it != oldin->cached_by_end();
-		 it++)
-	  from->rename_waiting_for_ack.insert( *it );
-  }
-  
-  if (!from->rename_waiting_for_ack.empty()) {
-	from->state_set(CINODE_STATE_RENAMING);
-	oldin->state_set(CINODE_STATE_RENAMINGTO);
-	
-	// send notify
-	for (set<int>::iterator it = from->rename_waiting_for_ack.begin();
-		 it != from->rename_waiting_for_ack.end();
-		 it++) {
-	  dout(7) << "rename_file sending rename to " << *it << endl;
-  
-	  mds->messenger->send_message(new MRenameLocalFile(from->ino(),
-														destdir->ino(),
-														name,
-														oldin ? oldin->ino():0),
-								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
-	}
+  // unpin dirs  (from xlocks) ... MESSY FIXME
+  srcdir->auth_unpin();
+  if (destdn) destdir->auth_unpin();
 
-	// waiter
-	from->add_waiter(CINODE_WAIT_RENAME, 
-					 new C_MDC_RenameLocalFile(this, from, destdir, oldin, c));
+  // finish our query off for now.  XXX FIXME (should wait for log?)
+  if (c) {
+	c->finish(0);
+	delete c;
   }
-  else {
-	// done
-	file_rename_finish(from, destdir, oldin, c);
-  }
-  */
+
+  // other waiters
+  srcdir->finish_waiting(CDIR_WAIT_ANY, srcname);
+  destdir->finish_waiting(CDIR_WAIT_DNREAD, destname);
 }
 
-void MDCache::file_rename_finish(CInode *from, CDir *destdir, CInode *oldin, Context *c)
+void MDCache::handle_rename_local_file(MRenameLocalFile*m)
 {
-  dout(7) << "file_rename_finish on " << *from << endl;
-
-  // drop locks?
-  from->state_clear(CINODE_STATE_RENAMING);
-  inode_hard_write_finish(from);
+  dout(7) << "handle_rename_local_file dir " << m->get_srcdirino() << " dn " << m->get_srcname() << " to dir " << m->get_destdirino() << " dname " << m->get_destname() << endl;
   
-  if (oldin) {
-	inode_hard_write_finish(oldin);
-	oldin->state_clear(CINODE_STATE_RENAMINGTO);
-  }
+  // src
+  CInode *srcdiri = get_inode(m->get_srcdirino());
+  CDir *srcdir = 0;
+  if (srcdiri) srcdir = srcdiri->dir;
+  CDentry *srcdn = 0;
+  if (srcdir) srcdn = srcdir->lookup(m->get_srcname());
+  
+  // dest
+  CInode *destdiri = get_inode(m->get_destdirino());
+  CDir *destdir = 0;
+  if (destdiri) destdir = destdiri->dir;
+  CDentry *destdn = 0;
+  if (destdir) destdn = destdir->lookup(m->get_destname());
 
-  // finish
-  c->finish(0);
-  delete c;
+  // have both?
+  if (srcdn && destdir) {
+	dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdir << endl;
+	rename_file(srcdn, destdir, m->get_destname(), destdn);
+	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
+	destdir->finish_waiting(CDIR_WAIT_DNREAD, m->get_destname());
+  }
+  else if (srcdn) {
+	dout(7) << "handle_rename_local_file unlinking src only " << *srcdn << endl;
+	unlink_dentry(srcdn);  // will leave inode dangling.
+	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
+  }
+  else if (destdn) {
+	dout(7) << "handle_rename_local_file unlinking dst only " << *destdn << endl;
+	unlink_dentry(destdn);
+	destdir->finish_waiting(CDIR_WAIT_DNREAD, m->get_destname());
+  } else {
+	dout(7) << "handle_rename_local_file have neither src nor dst" << endl;
+	assert(srcdn == 0 && destdn == 0);
+  }
+  
+  delete m;
 }
 
 
@@ -1759,7 +1908,7 @@ void MDCache::inode_hard_read_finish(CInode *in)
 
   dout(7) << "inode_hard_read_finish on " << *in << endl;
   
-  if (in->hardlock.get_nread() == 0) in->finish_waiting(CINODE_WAIT_HARDNORD);
+  //if (in->hardlock.get_nread() == 0) in->finish_waiting(CINODE_WAIT_HARDNORD);
 }
 
 
@@ -1775,6 +1924,14 @@ bool MDCache::inode_hard_write_start(CInode *in, Message *m)
   
   // can write?  grab ref.
   if (in->hardlock.can_write(in->is_auth())) {
+	assert(in->is_auth());
+	if (!in->can_auth_pin()) {
+	  dout(7) << "inode_hard_write_start waiting for authpinnable on " << *in << endl;
+	  in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryMessage(mds, m));
+	  return false;
+	}
+
+	in->auth_pin();  // ugh, can't condition this on nwrite==0 bc we twiddle that in handle_lock_*
 	in->hardlock.get_write();
 	return true;
   }
@@ -1813,11 +1970,20 @@ void MDCache::inode_hard_write_finish(CInode *in)
   assert(in->hardlock.can_write(in->is_auth()) ||
 		 in->hardlock.could_write(in->is_auth()));
   in->hardlock.put_write();
+  in->auth_unpin();
   dout(7) << "inode_hard_write_finish on " << *in << endl;
   
   // drop lock?
-  if (in->hardlock.get_nwrite() == 0)
+  if (in->hardlock.get_nwrite() == 0) {
+
+	// auto-sync if alone.
+	if (in->is_auth() &&
+		!in->is_cached_by_anyone() &&
+		in->hardlock.get_state() != LOCK_SYNC) 
+	  in->hardlock.set_state(LOCK_SYNC);
+	
 	inode_hard_eval(in);
+  }
 }
 
 
@@ -2011,6 +2177,7 @@ void MDCache::handle_lock_inode_hard(MLock *m)
 	  lock->set_state(LOCK_WLOCKR);
 	  in->add_waiter(CINODE_WAIT_HARDNORD,
 					 new C_MDS_RetryMessage(mds,m));
+	  assert(0);  // does this every happen?  (if so, fix hard_read_finish!)
 	  return;
  	} else {
 
@@ -2858,14 +3025,56 @@ void MDCache::handle_lock_dir(MLock *m)
 
 // DENTRY
 
-bool MDCache::dentry_lock(CDentry *dn)
+bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 {
-  // init
+  dout(7) << "dentry_xlock_start on " << *dn << endl;
+
+  // locked?
+  if (dn->lockstate == DN_LOCK_XLOCK) {
+	if (dn->xlockedby == m) return true;  // locked by me!
+
+	// not by me, wait
+	dout(7) << "dentry " << *dn << " xlock by someone else" << endl;
+	dn->dir->add_waiter(CDIR_WAIT_DNREAD, dn->name,
+						new C_MDS_RetryMessage(mds,m));
+	return false;
+  }
+
+  // prelock?
+  if (dn->lockstate == DN_LOCK_PREXLOCK) {
+	if (dn->xlockedby == m) {
+	  dout(7) << "dentry " << *dn << " prelock by me" << endl;
+	  dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
+						  new C_MDS_RetryMessage(mds,m));
+	} else {
+	  dout(7) << "dentry " << *dn << " prelock by someone else" << endl;
+	  dn->dir->add_waiter(CDIR_WAIT_DNREAD, dn->name,
+						  new C_MDS_RetryMessage(mds,m));
+	}
+	return false;
+  }
+
+
+  // lockable!
   assert(dn->lockstate == DN_LOCK_SYNC);
+
+  // dir pinnable?
+  if (!dn->dir->can_auth_pin()) {
+	dout(7) << "dentry " << *dn << " dir not pinnable, waiting" << endl;
+	dn->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+						new C_MDS_RetryMessage(mds,m));
+	return false;
+  }
+
+  // pin dir!
+  dn->dir->auth_pin();
+  
+  // mine!
+  dn->xlockedby = m;
 
   if (dn->dir->is_open_by_anyone()) {
 	dn->gather_set = dn->dir->get_open_by();
-	dn->lockstate = DN_LOCK_PRELOCK;
+	dn->lockstate = DN_LOCK_PREXLOCK;
 
 	for (set<int>::iterator it = dn->dir->open_by_begin();
 		 it != dn->dir->open_by_end();
@@ -2876,11 +3085,24 @@ bool MDCache::dentry_lock(CDentry *dn)
 								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
 	}
+
+	// wait
+	dout(7) << "handle_client_unlink locking, waitigg for replicas " << endl;
+	dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
+						new C_MDS_RetryMessage(mds, m));
 	return false;
   } else {
-	dn->lockstate = DN_LOCK_LOCK;
+	dn->lockstate = DN_LOCK_XLOCK;
 	return true;
   }
+}
+
+void MDCache::dentry_xlock_finish(CDentry *dn)
+{
+  dout(7) << "dentry_xlock_finish on " << *dn << endl;
+
+  // unpin dir
+  dn->dir->auth_unpin();
 }
 
 /*
@@ -2898,7 +3120,7 @@ void MDCache::handle_lock_dn(MLock *m)
   CDir *dir = diri->dir;           // may be null
   string dname = m->get_dn();
   int from = m->get_asker();
-  CDentry *dn;
+  CDentry *dn = 0;
 
   if (LOCK_AC_FOR_AUTH(m->get_action())) {
 	// auth
@@ -2921,12 +3143,13 @@ void MDCache::handle_lock_dn(MLock *m)
 	assert(dn);
   } else {
 	// replica
-	if (!dir) {
+	if (dir) dn = dir->lookup(dname);
+	if (!dir || !dn) {
 	  // nack
 	  dout(7) << "handle_lock " << m->get_ino() << ": don't have it anymore, NAKing" << endl;
 	  
 	  // NAK
-	  MLock *reply = new MLock(m->get_action() + LOCK_AC_LOCKNAK, mds->get_nodeid());
+	  MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
 	  reply->set_dn(dir->ino(), dname);
 	  mds->messenger->send_message(reply,
 								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
@@ -2936,13 +3159,13 @@ void MDCache::handle_lock_dn(MLock *m)
 	}
   }
 
-  dout(7) << "handle_lock_dn a=" << m->get_action() << " from " << from << " " << *dir << " dn " << dname << " lockstate=" << endl;
+  dout(7) << "handle_lock_dn a=" << m->get_action() << " from " << from << " " << *dn << endl;
   
   switch (m->get_action()) {
 	// -- replica --
   case LOCK_AC_LOCK:
 	assert(dn->lockstate == DN_LOCK_SYNC);
-	dn->lockstate = DN_LOCK_LOCK;
+	dn->lockstate = DN_LOCK_XLOCK;
 
 	// ack
 	{
@@ -2958,7 +3181,7 @@ void MDCache::handle_lock_dn(MLock *m)
 	break;
 
   case LOCK_AC_SYNC:
-	assert(dn->lockstate == DN_LOCK_LOCK);
+	assert(dn->lockstate == DN_LOCK_XLOCK);
 	dn->lockstate = DN_LOCK_SYNC;
 
 	// wake up waiters
@@ -2971,8 +3194,8 @@ void MDCache::handle_lock_dn(MLock *m)
 	assert(dn->gather_set.count(from) == 1);
 	dn->gather_set.erase(from);
 	if (dn->gather_set.size() == 0) {
-	  dout(7) << "handle_lock_dn finish gather, no lock on " << *dir << " dn " << dname << endl;
-	  dn->lockstate = DN_LOCK_LOCK;
+	  dout(7) << "handle_lock_dn finish gather, no lock on " << *dn << endl;
+	  dn->lockstate = DN_LOCK_XLOCK;
 	  dir->finish_waiting(CDIR_WAIT_DNLOCK, dname);
 	}
 	break;
@@ -3618,7 +3841,11 @@ void MDCache::export_dir_walk(MExportDir *req,
 
 	// don't need to know this anymore
 	in->clear_replica_writers();
-	  
+	
+	// twiddle lock states
+	in->softlock.twiddle_export();
+	in->hardlock.twiddle_export();
+  
 	// mark auth
 	assert(in->is_auth());
 	in->set_auth(false);
@@ -3628,7 +3855,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	export_proxy_inos[basedir].insert(in->ino());
 	in->state_set(CINODE_STATE_PROXY);
 	in->get(CINODE_PIN_PROXY);
-	  
+	
 
 	// *** other state too?
 	
@@ -4238,17 +4465,19 @@ void MDCache::import_dir_block(crope& r,
     if (!in) {
       in = new CInode;
       added = true;
-    }
+    } else {
+	  in->set_auth(true);
+	}
 
     // state
     istate.update_inode(in);
 
+	// link
     if (added) {
       add_inode(in);
       link_inode(dir, dname, in);
       dout(10) << "added " << *in << endl;
     } else {
-	  in->set_auth(true);
       dout(10) << "  had " << *in << endl;
 
 	  if (in->is_replica_writer(mds->get_nodeid()))
@@ -4260,6 +4489,22 @@ void MDCache::import_dir_block(crope& r,
 	in->cached_by_add( oldauth, CINODE_EXPORT_NONCE );
 	if (in->is_cached_by(mds->get_nodeid()))
 	  in->cached_by_remove(mds->get_nodeid());
+
+	// lock states
+	/* don't do this
+	if (!in->hardlock.is_stable() && 
+		in->hardlock.is_gathering(mds->get_nodeid())) {
+	  in->hardlock.gather_set.erase(mds->get_nodeid());
+	  if (in->hardlock.gather_set.size() == 0) 
+		inode_hard_eval(in);
+	}
+	if (!in->softlock.is_stable() && 
+		in->softlock.is_gathering(mds->get_nodeid())) {
+	  in->softlock.gather_set.erase(mds->get_nodeid());
+	  if (in->softlock.gather_set.size() == 0) 
+		inode_soft_eval(in);
+	}
+	*/
 
     // other
     if (in->is_dirty()) {

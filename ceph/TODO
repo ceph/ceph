@@ -1,4 +1,24 @@
 
+- rename vs. discover?
+
+- dentry lock state 
+  - vs discover?
+  - vs import/export?
+
+- think about global sync (to be used by shutdown)
+  - flush all logs
+
+- hard links
+
+- simplify inode_hard_read_(start|finish).
+
+- do real permissions checks
+
+- think about dentry deadlock/lost waiters.
+
+
+FILE STUFF
+
 - send all file writers to auth
   - migrate open file ppl w/ export
   - simplify replica softlock craziness!
@@ -22,11 +42,6 @@
 - lazy flag?  make a table!
 - state diagram for master?  _eval() functions
 
-/- lock states
-/ - discover needs to set initial state intelligently
-/ - expire must remove from gather_set
-    - more gracefully than it does now?
-
 - EMkdir event
   - properly commit dir, dirty inode+dentry
 
@@ -35,19 +50,6 @@
 
 
 - think about softlock.mode versus shutdown
-- think about global sync (to be used by shutdown)
-  - flush all logs
-
-CLIENT
-- structure.. multithreaded until messenger
-
-- client sync
-
-- openwr, softasync
-
-- unlink vs soft/hard locks?
-
-MDS
 - qsync
 - lock modes (sync, async)
  - recalls
@@ -59,13 +61,6 @@ MDS
   - fh modes:  RD, RDWR, WR ... append?  :/
   - fh states: SYNC, ASYNC... LOCK? 
 
-- unlink in terms of dentry lock
-
-- symlinks!
-  - stored in the inode.. how?
-  - make MDStore.cc smartr
-
-- dentry version #'s?  smarter commit_dir stuff to handle hard links, link/unlink, rename, etc.
 
 
 => grep for FIXME :)
@@ -86,10 +81,6 @@ ISSUES
  - error flag   (if file not found, etc.)
  - [what was i talking about?] make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
 
-
-
-- is lock > freeze a bad plan?  what happens when we need to lock multiple spots
-  in the hierarchy.. will that cause deadlock?
 
 - log
   - overall logging strategy.  

@@ -90,7 +90,8 @@ void IdAllocator::load()
 							(long long)1000000000000LL * (mds->get_nodeid()+2) - 1);
 	//free[ID_INO].dump();
 
-	free[ID_FH].map_insert(1, 1<<16);
+	free[ID_FH].map_insert(1000000LL * (mds->get_nodeid()+1),
+						   1000000LL * (mds->get_nodeid()+2) - 1);
 	//free[ID_FH].dump();
   }
 }

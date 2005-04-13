@@ -29,11 +29,9 @@ class MDStore {
   bool fetch_dir_2( int result, 
 					inodeno_t ino );
   
-  bool commit_dir( CDir *dir,
-				   Context *c );
-  bool commit_dir_2( int result,
-					 CDir *dir,
-					 __uint64_t committed_version );
+  bool commit_dir( CDir *dir, Context *c );                      // commit current dir version to disk.
+  bool commit_dir( CDir *dir, __uint64_t version, Context *c );  // commit specified version to disk
+  bool commit_dir_2( int result, CDir *dir, __uint64_t committed_version );
   
   // low level committer
   void do_commit_dir( CDir *dir,

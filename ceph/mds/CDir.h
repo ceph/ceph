@@ -188,6 +188,7 @@ class CDir {
   unsigned         state;
   __uint64_t       version;
   __uint64_t       committing_version;
+  __uint64_t       last_committed_version;
 
   // authority, replicas
   set<int>         open_by;        // nodes that have me open
@@ -368,11 +369,11 @@ class CDir {
 	if (version < ge)
 	  version = ge;
   }
-  __uint64_t get_committing_version() { 
-	return committing_version;
-  }
+  __uint64_t get_committing_version() { return committing_version; }
+  __uint64_t get_last_committed_version() { return last_committed_version; }
   // as in, we're committing the current version.
   void set_committing_version() { committing_version = version; }
+  void set_last_committed_version(__uint64_t v) { last_committed_version = v; }
   void mark_dirty();
   void mark_clean();
   void mark_complete() { state_set(CDIR_STATE_COMPLETE); }
