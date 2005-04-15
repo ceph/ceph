@@ -1,4 +1,47 @@
 
+
+OPS
+
+
+on inode			soft	hard
+ stat				r
+ utime				w
+ chmod						w
+ chown						w
+
+ readdir
+
+ open
+ truncate			w
+
+on fh
+ close				w
+ truncate			w
+ fsync				w
+
+
+on dir inode
+ mknod				w
+ link				w
+ unlink				w
+ mkdir				w
+ rmdir				w
+ symlink			w
+
+ openc				w
+
+on 2 dir inodes
+ rename				w*2
+
+
+
+
+- path lock
+ - on export
+- consider C_MDS_RetryOnInode?
+
+/- path_traverse fills vector<CDentry*>
+
 - rename vs. discover?
 
 - dentry lock state 
@@ -66,13 +109,10 @@ FILE STUFF
 => grep for FIXME :)
 
 
-BUGS?
-- proper state diagram for sync, presync, etc. on REPLICAS, and relationshipo to client access?
 
 
 ISSUES
 
-/- group inode, dir expires in trim().
 
 - discover
  - soft: authority selectively repicates, or sets a 'forward' flag in reply
@@ -88,11 +128,6 @@ ISSUES
   - the log grows indefinitely
 
 
-
-FIX
-- soft and hard metadata should be fully/more independent?
-  - hard lock (owner/mode) is relative to namespace
-  - soft sync (mtime/size) is relative to inode (even when dangling)
 
 
 CLEANUP
@@ -119,8 +154,6 @@ TEST
 
 IMPLEMENT
 
-- rmdir
-- mkdir
 - rename
 - truncate
 

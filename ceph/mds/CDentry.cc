@@ -9,6 +9,8 @@
 ostream& operator<<(ostream& out, CDentry& dn)
 {
   out << "[dentry " << dn.get_name();
+  if (dn.is_pinned()) out << " " << dn.num_pins() << " pins";
+  if (dn.get_lockstate() == DN_LOCK_UNPINNING) out << " unpinning";
   if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock g=" << dn.get_gather_set();
   if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock";
   out << " in " << *dn.get_dir() << "]";

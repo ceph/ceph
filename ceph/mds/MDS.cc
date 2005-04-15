@@ -359,9 +359,31 @@ int MDS::handle_client_request(MClientRequest *req)
   }
 
   
-  // operations on fh's, or possibly non-existing files
+  // operations on fh's, or (possibly) non-existing files
 
   switch (req->get_op()) {
+	/*
+  case MDS_OP_FSTAT:
+	reply = handle_client_fstat(req, cur);
+	break;
+	*/
+	
+	// namespace
+  case MDS_OP_MKNOD:
+	handle_client_mknod(req);
+	return 0;
+	/*
+  case MDS_OP_LINK:
+	handle_client_link(req);
+	return 0;
+	*/
+  case MDS_OP_MKDIR:
+	handle_client_mkdir(req);
+	return 0;
+  case MDS_OP_SYMLINK:
+	handle_client_symlink(req);
+	return 0;
+
 	// files
   case MDS_OP_OPEN:
 	if (req->get_iarg() & O_CREAT) {
@@ -381,27 +403,11 @@ int MDS::handle_client_request(MClientRequest *req)
 	handle_client_close(req);
 	return 0;
 
-	// namespace
-  case MDS_OP_MKNOD:
-	handle_client_mknod(req);
-	return 0;
-	/*
-  case MDS_OP_LINK:
-	handle_client_link(req);
-	return 0;
-	*/
-  case MDS_OP_MKDIR:
-	handle_client_mkdir(req);
-	return 0;
-  case MDS_OP_SYMLINK:
-	handle_client_symlink(req);
-	return 0;
   }
 
   
   // operations that require existing files
-
-  vector<CInode*> trace;
+  vector<CDentry*> trace;
   int r = mdcache->path_traverse(req->get_filepath(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // delayed
   if (r == -ENOENT ||
@@ -409,60 +415,64 @@ int MDS::handle_client_request(MClientRequest *req)
 	  r == -EISDIR) {
 	// error! 
 	dout(10) << " path traverse error " << r << ", replying" << endl;
+	cleanup_rename_locks(req);  // HACK ugly fixme
 	reply_request(req, r);
 	return 0;
   }
 
   logger->inc("chit");
-
-  CInode *cur = trace[trace.size()-1];
   
-  balancer->hit_inode(cur, MDS_POP_ANY);   // bump popularity
+  CInode *cur;
+  if (trace.size()) 
+	cur = trace[trace.size()-1]->inode;
+  else
+	cur = mdcache->get_root();
+  
+  handle_client_request_inode(req, cur);
+}
 
-  MClientReply *reply = 0;
 
+int MDS::handle_client_request_inode(MClientRequest *req, CInode *in)
+{
+  vector<CDentry*> trace; // fixme
+
+  balancer->hit_inode(in, MDS_POP_ANY);   // bump popularity
+    
   switch(req->get_op()) {
-	// fs
-	/*
-  case MDS_OP_FSTAT:
-	reply = handle_client_fstat(req, cur);
-	break;
-	*/
-	
 	// inodes
   case MDS_OP_STAT:
-	reply = handle_client_stat(req, cur);
+	handle_client_stat(req, in, trace);
 	break;
   case MDS_OP_TOUCH:
-	reply = handle_client_touch(req, cur);
+	handle_client_touch(req, in, trace);
 	break;
   case MDS_OP_UTIME:
-	reply = handle_client_utime(req, cur);
+	handle_client_utime(req, in, trace);
 	break;
   case MDS_OP_CHMOD:
-	reply = handle_client_chmod(req, cur);
+	handle_client_chmod(req, in, trace);
 	break;
   case MDS_OP_CHOWN:
-	reply = handle_client_chown(req, cur);
+	handle_client_chown(req, in, trace);
 	break;
 
 	// namespace
   case MDS_OP_READDIR:
-	reply = handle_client_readdir(req, cur);
+	handle_client_readdir(req, in, trace);
 	break;
   case MDS_OP_UNLINK:
-	handle_client_unlink(req, cur);
+	handle_client_unlink(req, in, trace);
 	break;
   case MDS_OP_RENAME:
-	handle_client_rename(req, cur);
+	handle_client_rename(req, in, trace);
 	break;
   case MDS_OP_RMDIR:
-	handle_client_unlink(req, cur);
+	handle_client_unlink(req, in, trace);
 	break;
 	
 	// files
   case MDS_OP_OPEN:
-	handle_client_open(req, cur);
+	handle_client_open(req, in);
 	break;
 
 
@@ -471,30 +481,20 @@ int MDS::handle_client_request(MClientRequest *req)
 	assert(0);
   }
 
-  if (reply) {  
-	// this is convenience, for quick events.  
-	// anything delayed has to reply and delete the request on its own.
-
-	// reply
-	messenger->send_message(reply,
-							MSG_ADDR_CLIENT(req->get_client()), 0,
-							MDS_PORT_SERVER);
-	
-	// discard request
-	delete req;
-  }
-  
   return 0;
 }
 
 
+
+
 // STAT
 
-MClientReply *MDS::handle_client_stat(MClientRequest *req,
-									  CInode *cur)
+void MDS::handle_client_stat(MClientRequest *req,
+									  CInode *cur,
+									  vector<CDentry*>& trace)
 {
   if (!mdcache->inode_soft_read_start(cur, req))
-	return 0;  // sync
+	return;  // sync
 
   dout(10) << "reply to " << *req << " stat " << cur->inode.mtime << " pop " << cur->get_popularity() << endl;
   MClientReply *reply = new MClientReply(req);
@@ -508,7 +508,11 @@ MClientReply *MDS::handle_client_stat(MClientRequest *req,
   stat_read.hit();
   stat_req.hit();
   stat_ops++;
-  return reply;
+
+  messenger->send_message(reply,
+						  MSG_ADDR_CLIENT(req->get_client()), 0,
+						  MDS_PORT_SERVER);
+  delete req;
 }
 
 
@@ -559,12 +563,15 @@ void MDS::handle_client_inode_soft_update_2(MClientRequest *req,
 
 // touch
 
-MClientReply *MDS::handle_client_touch(MClientRequest *req,
-									   CInode *cur)
+void MDS::handle_client_touch(MClientRequest *req,
+									   CInode *cur,
+									   vector<CDentry*>& trace)
 {
+  //if (!mdcache->path_pin(trace, req)) return;
+
   // write
   if (!mdcache->inode_soft_write_start(cur, req))
-	return 0;  // fw or (wait for) sync
+	return;  // fw or (wait for) sync
 
   // do update
   cur->inode.mtime++; // whatever
@@ -576,21 +583,26 @@ MClientReply *MDS::handle_client_touch(MClientRequest *req,
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
 
+  //mdcache->path_unpin(trace, req);
+
   // wait for log to finish
   dout(10) << "log for " << *req << " touch " << cur->inode.mtime << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
 					  new C_MDS_InodeSoftUpdateFinish(this, req, cur, reply));
-  return 0;
+  return;
 }
 
 // utime
 
-MClientReply *MDS::handle_client_utime(MClientRequest *req,
-									   CInode *cur)
+void MDS::handle_client_utime(MClientRequest *req,
+									   CInode *cur,
+									   vector<CDentry*>& trace)
 {
+  //if (!mdcache->path_pin(trace, req)) return;
+
   // write
   if (!mdcache->inode_soft_write_start(cur, req))
-	return 0;  // fw or (wait for) sync
+	return;  // fw or (wait for) sync
 
   // do update
   time_t mtime = req->get_targ();
@@ -605,11 +617,13 @@ MClientReply *MDS::handle_client_utime(MClientRequest *req,
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
 
+  //mdcache->path_unpin(trace, req);
+
   // wait for log to finish
   dout(10) << "log for " << *req << " utime " << cur->inode.mtime << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
 					  new C_MDS_InodeSoftUpdateFinish(this, req, cur, reply));
-  return 0;
+  return;
 }
 
 						   
@@ -658,12 +672,15 @@ void MDS::handle_client_inode_hard_update_2(MClientRequest *req,
 
 // chmod
 
-MClientReply *MDS::handle_client_chmod(MClientRequest *req,
-									   CInode *cur)
+void MDS::handle_client_chmod(MClientRequest *req,
+							  CInode *cur,
+							  vector<CDentry*>& trace)
 {
+  //if (!mdcache->path_pin(trace, req)) return;
+
   // write
   if (!mdcache->inode_hard_write_start(cur, req))
-	return 0;  // fw or (wait for) lock
+	return;  // fw or (wait for) lock
 
  
   // check permissions
@@ -679,21 +696,26 @@ MClientReply *MDS::handle_client_chmod(MClientRequest *req,
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
 
+  //mdcache->path_unpin(trace, req);
+
   // wait for log to finish
   dout(10) << "log for " << *req << " chmod" << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
 					  new C_MDS_InodeHardUpdateFinish(this, req, cur, reply));
-  return 0;
+  return;
 }
 
 // chown
 
-MClientReply *MDS::handle_client_chown(MClientRequest *req,
-									   CInode *cur)
+void MDS::handle_client_chown(MClientRequest *req,
+							  CInode *cur,
+							  vector<CDentry*>& trace)
 {
+  //if (!mdcache->path_pin(trace, req)) return;
+
   // write
   if (!mdcache->inode_hard_write_start(cur, req))
-	return 0;  // fw or (wait for) lock
+	return;  // fw or (wait for) lock
 
   // check permissions
 
@@ -709,11 +731,13 @@ MClientReply *MDS::handle_client_chown(MClientRequest *req,
   reply->set_trace_dist( cur, whoami );
   reply->set_result(0);
 
+  //mdcache->path_unpin(trace, req);
+
   // wait for log to finish
   dout(10) << "log for " << *req << " chown" << endl;
   mdlog->submit_entry(new EInodeUpdate(cur),
 					  new C_MDS_InodeHardUpdateFinish(this, req, cur, reply));
-  return 0;
+  return;
 }
 
 
@@ -723,85 +747,97 @@ MClientReply *MDS::handle_client_chown(MClientRequest *req,
 // DIRECTORY and NAMESPACE OPS
 
 
-MClientReply *MDS::handle_client_readdir(MClientRequest *req,
-										 CInode *cur)
+void MDS::handle_client_readdir(MClientRequest *req,
+								CInode *cur,
+								vector<CDentry*>& trace)
 {
-  // check perm
-  if (!mdcache->inode_hard_read_start(cur,req))
-	return NULL;
-  mdcache->inode_hard_read_finish(cur);
-
   // it's a directory, right?
   if (!cur->is_dir()) {
 	// not a dir
 	dout(10) << "reply to " << *req << " readdir -ENOTDIR" << endl;
-	return new MClientReply(req, -ENOTDIR);
+	reply_request(req, -ENOTDIR);
+	return;
   }
 
-  // make sure i'm authoritative!
-  if (cur->dir_is_auth()) {
-	
-	cur->get_or_open_dir(this);
-	assert(cur->dir->is_auth());
-	
-	// frozen?
-	if (cur->dir->is_frozen()) {
-	  // doh!
-	  dout(10) << " dir is frozen, waiting" << endl;
-	  cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
-						   new C_MDS_RetryMessage(this, req));
-	  return 0;
-	}
-  
-	if (cur->dir->is_complete()) {
-	  // yay, reply
-	  MClientReply *reply = new MClientReply(req);
-	  
-	  // FIXME: need to sync all inodes in this dir.  blech!
 
-	  // build dir contents
-	  CDir_map_t::iterator it;
-	  int numfiles = 0;
-	  for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
-		CInode *in = it->second->inode;
-		c_inode_info *i = new c_inode_info;
-		i->inode = in->inode;
-		in->get_dist_spec(i->dist, whoami);
-		i->ref_dn = it->first;
-		reply->add_dir_item(i);
-		numfiles++;
-	  }
-	  
-	  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
-	  reply->set_trace_dist( cur, whoami );
-	  reply->set_result(0);
-
-	  logger->inc("ordir");
-	  stat_read.hit();
-	  stat_req.hit();
-	  stat_ops++;
-
-	  return reply;
-	} else {
-	  // fetch
-	  dout(10) << " incomplete dir contents for readdir on " << *cur->dir << ", fetching" << endl;
-	  mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(this, req));
-	  return 0;
-	}
-  } else {
+  // auth?
+  if (!cur->dir_is_auth()) {
 	int dirauth = cur->authority();
 	if (cur->dir)
 	  dirauth = cur->dir->authority();
 	assert(dirauth >= 0);
 	assert(dirauth != whoami);
-
+	
+	
 	// forward to authority
 	dout(10) << " forwarding readdir to authority " << dirauth << endl;
 	messenger->send_message(req,
 							MSG_ADDR_MDS(dirauth), MDS_PORT_SERVER,
 							MDS_PORT_SERVER);
 	//mdcache->show_imports();
-	return 0;
+	return;
+  }
+  
+  cur->get_or_open_dir(this);
+  assert(cur->dir->is_auth());
+
+  // frozen?
+  if (cur->dir->is_frozen()) {
+	// doh!
+	dout(10) << " dir is frozen, waiting" << endl;
+	cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
+						 new C_MDS_RetryMessage(this, req));
+	return;
+  }
+
+  // ok!
+  //if (!mdcache->path_pin(trace, req)) return;
+
+  // check perm
+  if (!mdcache->inode_hard_read_start(cur,req))
+	return;
+  mdcache->inode_hard_read_finish(cur);
+
+  
+  if (cur->dir->is_complete()) {
+	// yay, reply
+	MClientReply *reply = new MClientReply(req);
+	
+	// FIXME: need to sync all inodes in this dir.  blech!
+	
+	// build dir contents
+	CDir_map_t::iterator it;
+	int numfiles = 0;
+	for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
+	  CInode *in = it->second->inode;
+	  if (!in) continue;  // xlocked pre-rename?
+	  c_inode_info *i = new c_inode_info;
+	  i->inode = in->inode;
+	  in->get_dist_spec(i->dist, whoami);
+	  i->ref_dn = it->first;
+	  reply->add_dir_item(i);
+	  numfiles++;
+	}
+	
+	dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
+	reply->set_trace_dist( cur, whoami );
+	reply->set_result(0);
+	
+	logger->inc("ordir");
+	stat_read.hit();
+	stat_req.hit();
+	stat_ops++;
+	
+	//mdcache->path_unpin(trace, req);
+	
+	messenger->send_message(reply,
+							MSG_ADDR_CLIENT(req->get_client()), 0,
+							MDS_PORT_SERVER);
+	delete req;
+  } else {
+	// fetch
+	dout(10) << " incomplete dir contents for readdir on " << *cur->dir << ", fetching" << endl;
+	mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(this, req));
   }
 }
 
@@ -835,7 +871,7 @@ CInode *MDS::mknod(MClientRequest *req)
   string name = req->get_filepath().last_bit();
   
   // trace to full path...
-  vector<CInode*> trace;
+  vector<CDentry*> trace;
   int r = mdcache->path_traverse(req->get_filepath(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0;  // forwarded or opening
   
@@ -855,11 +891,11 @@ CInode *MDS::mknod(MClientRequest *req)
   
   // did we get to parent?
   dout(10) << "dirpath is " << dirpath << " depth " << dirpath.depth() << endl;
-  dout(10) << "traced to " << *trace[trace.size()-1] << " size " << trace.size() << endl;
-  assert(trace.size() == dirpath.depth()+1);
+  dout(10) << "traced to " << *trace[trace.size()-1]->inode << " depth " << trace.size() << endl;
+  assert(trace.size() == dirpath.depth());
 
   // make sure parent is a dir
-  CInode *diri = trace[trace.size()-1];
+  CInode *diri = trace[trace.size()-1]->inode;
   assert(diri->is_dir());
   CDir *dir = diri->get_or_open_dir(this);
 
@@ -943,7 +979,8 @@ public:
 };
 
 void MDS::handle_client_unlink(MClientRequest *req, 
-							   CInode *in)
+							   CInode *in,
+							   vector<CDentry*>& trace)
 {
   // rmdir or unlink
   bool rmdir = false;
@@ -1064,7 +1101,8 @@ void MDS::handle_client_unlink(MClientRequest *req,
 // RENAME
 
 void MDS::handle_client_rename(MClientRequest *req,
-							   CInode *cur)
+							   CInode *cur,
+							   vector<CDentry*>& asdfasdftrace)
 {
   // src dentry
   CDentry *srcdn = cur->get_parent_dn();     // FIXME for hard links
@@ -1084,6 +1122,7 @@ void MDS::handle_client_rename(MClientRequest *req,
 	dout(10) << "handle_client_rename " << *cur << "  not auth, fwd to " << srcauth << endl;
 	int auth = cur->authority();
 	assert(auth != get_nodeid());
+	cleanup_rename_locks(req);
 	messenger->send_message(req,
 							MSG_ADDR_MDS(auth), MDS_PORT_SERVER,
 							MDS_PORT_SERVER);
@@ -1095,11 +1134,13 @@ void MDS::handle_client_rename(MClientRequest *req,
   // find the destination, normalize
   // discover, etc. on the way... just get it on the local node.
   filepath destpath = req->get_sarg();   
-  vector<CInode*> trace;
+  vector<CDentry*> trace;
   int r = mdcache->path_traverse(destpath, trace, req, MDS_TRAVERSE_DISCOVER);
-  dout(12) << " r = " << r << " trace size " << trace.size() << "  destpath depth " << destpath.depth() << endl;
-  if (r > 0)   // waiting.. discover, or readdir
+  dout(12) << " r = " << r << " trace depth " << trace.size() << "  destpath depth " << destpath.depth() << endl;
+  if (r > 0) {   // waiting.. discover, or readdir
+	cleanup_rename_locks(req);
 	return; 
+  }
 
   CDir*  destdir = 0;
   string destname;
@@ -1107,20 +1148,20 @@ void MDS::handle_client_rename(MClientRequest *req,
   
   // what is the dest?  (dir or file or complete filename)
   // note: trace includes root, destpath doesn't (include leading /)
-  if (trace.size() == destpath.depth()+1) {
-	CInode *d = trace[trace.size()-1];
+  if (trace.size() == destpath.depth()) {
+	CInode *d = trace[trace.size()-1]->inode;
 	if (d->is_dir()) {
 	  // mv /some/thing /to/some/dir 
 	  destdir = d->get_or_open_dir(this);         // /to/some/dir
 	  destname = req->get_filepath().last_bit();  // thing
 	} else {
 	  // mv /some/thing /to/some/existing_filename
-	  destdir = trace[trace.size()-2]->get_or_open_dir(this);       // /to/some
-	  destname = destpath.last_bit();                               // existing_filename
+	  destdir = trace[trace.size()-1]->dir;       // /to/some
+	  destname = destpath.last_bit();             // existing_filename
 	}
   }
-  else if (trace.size() == destpath.depth()) {
-	CInode *d = trace[trace.size()-1];
+  else if (trace.size() == destpath.depth()-1) {
+	CInode *d = trace[trace.size()-1]->inode;
 	if (d->is_dir()) {
 	  // mv /some/thing /to/some/place_that_maybe_dne     (we might be replica)
 	  destdir = d->get_or_open_dir(this);   // /to/some
@@ -1128,13 +1169,13 @@ void MDS::handle_client_rename(MClientRequest *req,
 	}
   }
   else {
-	assert(trace.size() < destpath.depth());
+	assert(trace.size() < destpath.depth()-1);
 	// check traverse return value
 	if (r > 0) 
 	  return;  // discover, readdir, etc.
 
 	// ??
-	assert(r < 0 || trace.size() <= 1);  // musta been an error
+	assert(r < 0 || trace.size() == 0);  // musta been an error
 
 	// error out
 	dout(7) << " rename dest " << destpath << " dne" << endl;
@@ -1184,8 +1225,7 @@ void MDS::handle_client_rename(MClientRequest *req,
 
  fail:
   // make sure we unlock (if we locked);
-  if (srcdn->is_xlockedbyme(req)) 
-	mdcache->dentry_xlock_finish(srcdn);
+  cleanup_rename_locks(req);
   reply_request(req, -EINVAL);
   return;
 }
@@ -1235,6 +1275,31 @@ public:
   }
 };
 
+void MDS::cleanup_rename_locks(MClientRequest *req) 
+{
+  if (!locked_rename_dentries.count(req)) return;
+
+  // unlock
+  CDentry *dn = locked_rename_dentries[req];
+  dout(7) << "cleanup_rename_locks on " << *req << " dentry " << *dn << endl;
+
+  assert(dn->is_xlockedbyme(req));
+  mdcache->dentry_xlock_finish(dn);
+
+  // null?
+  if (dn->inode == NULL) {
+	dn->dir->remove_child(dn);
+  }	
+	
+  locked_rename_dentries.erase(req);
+
+  // finish
+  dn->dir->finish_waiting(CDIR_WAIT_ANY, dn->name);
+
+  if (dn->inode == NULL) 
+	delete dn;
+}
+
 void MDS::handle_client_rename_file(MClientRequest *req,
 									CDentry *srcdn,
 									CDir *destdir,
@@ -1248,41 +1313,77 @@ void MDS::handle_client_rename_file(MClientRequest *req,
   if (destdn) {
 	oldin = destdn->get_inode();
 	
-	// make sure it's also a file!
-	// this can happen, e.g. "mv /some/thing /a/dir" where /a/dir/thing exists and is a dir.
-	if (oldin->is_dir()) {
-	  // fail!
-	  dout(7) << "dest exists and is dir" << endl;
-	  if (srcdn->is_xlockedbyme(req)) mdcache->dentry_xlock_finish(srcdn);
-	  reply_request(req, -EISDIR);
-	  return;
+	if (oldin) {
+	  // make sure it's also a file!
+	  // this can happen, e.g. "mv /some/thing /a/dir" where /a/dir/thing exists and is a dir.
+	  if (oldin->is_dir()) {
+		// fail!
+		dout(7) << "dest exists and is dir" << endl;
+		cleanup_rename_locks(req);
+		reply_request(req, -EISDIR);
+		return;
+	  }
 	}
 
 	dout(7) << "dest exists " << *destdn << endl;
-	dout(7) << "destino is " << *destdn->get_inode() << endl;
+	if (destdn->get_inode()) {
+	  dout(7) << "destino is " << *destdn->get_inode() << endl;
+	} else {
+	  dout(7) << "dest dn is a NULL stub" << endl;
+	}
   } else {
 	dout(7) << "dest dne" << endl;
   }
 
-  // lock src
-  if (!srcdn->is_xlockedbyme(req) &&
-	  !mdcache->dentry_xlock_start(srcdn, req))
-	return;  
 
-  dout(7) << "srcdn is xlock " << *srcdn << endl;
-
-  // dest
-  if (destdn) {
-	// lock dest
-	if (!mdcache->dentry_xlock_start(destdn, req))
-	  return;
-
-	dout(7) << "destdn is xlock " << *srcdn << endl;
+  // pick lock ordering
+  if (req->get_path() < req->get_sarg()) { 
+	// src
+	if (!srcdn->is_xlockedbyme(req) &&
+		!mdcache->dentry_xlock_start(srcdn, req))
+	  return;  
+	dout(7) << "srcdn is xlock " << *srcdn << endl;
+	
+	locked_rename_dentries[req] = srcdn;
+	
+	// dest
+	if (destdn) {
+	  if (!destdn->is_xlockedbyme(req) &&
+		  !mdcache->dentry_xlock_start(destdn, req))
+		return;
+	  dout(7) << "destdn is xlock " << *srcdn << endl;
+	} else {
+	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req);
+	  if (!destdn) return;
+	  dout(7) << "created destdn " << *destdn << endl;
+	}
   } else {
-	// dest dne.
+	// dest
+	if (destdn) {
+	  if (!destdn->is_xlockedbyme(req) &&
+		  !mdcache->dentry_xlock_start(destdn, req))
+		return;
+	  dout(7) << "destdn is xlock " << *srcdn << endl;
+	} else {
+	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req);
+	  if (!destdn) return;
+	  dout(7) << "created destdn " << *destdn << endl;
+	}
+
+	locked_rename_dentries[req] = destdn;
+	
+	// src
+	if (!srcdn->is_xlockedbyme(req) &&
+		!mdcache->dentry_xlock_start(srcdn, req))
+	  return;  
+	dout(7) << "srcdn is xlock " << *srcdn << endl;
   }
 
   // we're a go.
+
+  // forget about my locks!
+  locked_rename_dentries.erase(req);
+  
   mdcache->file_rename( srcdn,
 						destdir, destname, destdn,
 						new C_MDS_RenameFinish(this, req) );
@@ -1331,7 +1432,7 @@ void MDS::handle_client_rename_dir(MClientRequest *req,
 
 // MKDIR
 
-void MDS::handle_client_mkdir(MClientRequest *req) 
+void MDS::handle_client_mkdir(MClientRequest *req)
 {
   // make dentry and inode, link.  
   CInode *newi = mknod(req);
@@ -1366,7 +1467,7 @@ void MDS::handle_client_mkdir(MClientRequest *req)
 
 // SYMLINK
 
-void MDS::handle_client_symlink(MClientRequest *req) 
+void MDS::handle_client_symlink(MClientRequest *req)
 {
   // make dentry and inode, link.  
   CInode *newi = mknod(req);
@@ -1469,13 +1570,13 @@ void MDS::handle_client_openc(MClientRequest *req)
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << endl;
 
   // see if file exists  
-  vector<CInode*> trace;
+  vector<CDentry*> trace;
   int r = mdcache->path_traverse(req->get_filepath(), trace, req, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;  // delayed
 
   if (r == 0) {
 	// it exists, behave normally.
-	CInode *cur = trace[trace.size()-1];
+	CInode *cur = trace[trace.size()-1]->inode;
 	handle_client_open(req, cur);
 	return;
   }

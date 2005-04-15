@@ -319,7 +319,7 @@ void MDBalancer::find_exports(CDir *dir,
 	   it != dir->end();
 	   it++) {
 	CInode *in = it->second->get_inode();
-	
+	if (!in) continue;
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;  // clearly not popular
 	if (mds->mdcache->exports.count(in->dir)) continue;  

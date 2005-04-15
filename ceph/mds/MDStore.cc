@@ -191,7 +191,7 @@ bool MDStore::commit_dir( CDir *dir,
 {
   assert(dir->is_dirty());
 
-  if(!dir->is_dirty()) {
+  if (!dir->is_dirty()) {
 	dout(7) << "commit_dir not dirty " << *dir << endl;
 	if (c) {
 	  c->finish(0);

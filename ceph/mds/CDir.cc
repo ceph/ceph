@@ -117,15 +117,17 @@ void CDir::add_child(CDentry *d)
   assert(nitems == items.size());
   assert(items.count(d->name) == 0);
 
-  //cout << "adding " << d->name << " to " << this << endl;
   items[d->name] = d;
   d->dir = this;
+
+  cout << "add_child " << *d << " to " << *this << endl;
   
   nitems++;
-  if (d->inode->is_auth())
+  if (!d->inode || d->inode->is_auth())
 	nauthitems++;
   //namesize += d->name.length();
   
+
   if (nitems == 1)
 	get(CDIR_PIN_CHILD);       // pin parent
 }
@@ -134,10 +136,14 @@ void CDir::remove_child(CDentry *d) {
   map<string, CDentry*>::iterator iter = items.find(d->name);
   items.erase(iter);
 
+  cout << "remove_child " << *d << endl;
+
   nitems--;
-  if (d->inode->is_auth())
-	nauthitems--;
+  if (is_auth()) {  // FIXME for hashed stuff
+	if (!d->inode || d->inode->is_auth()) nauthitems--;
+  }
   //namesize -= d->name.length();
+
 
   if (nitems == 0)
 	put(CDIR_PIN_CHILD);       // release parent.

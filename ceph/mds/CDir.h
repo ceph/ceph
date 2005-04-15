@@ -156,6 +156,7 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
 
 #define CDIR_WAIT_DNREAD        (1<<20)
 #define CDIR_WAIT_DNLOCK        (1<<21)
+#define CDIR_WAIT_DNUNPINNED    (1<<22)
 
 
 #define CDIR_WAIT_SYNC          128
@@ -244,7 +245,7 @@ class CDir {
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
   size_t get_size() { 
-#if DEBUG_LEVEL>10
+#if DEBUG_LEVEL>100
 	if (nitems != items.size()) {
 	  for (CDir_map_t::iterator it = items.begin();
 		   it != items.end();

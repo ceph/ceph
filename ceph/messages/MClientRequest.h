@@ -24,6 +24,7 @@ class MClientRequest : public Message {
   string sarg;
   string sarg2;
 
+
  public:
   MClientRequest() {}
   MClientRequest(long tid, int op, int client) : Message(MSG_CLIENT_REQUEST) {
@@ -129,6 +130,8 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
   }
   if (req.get_path().length()) 
 	out << "=" << req.get_path();
+  if (req.get_sarg().length())
+	out << " " << req.get_sarg();
   return out;
 }
 

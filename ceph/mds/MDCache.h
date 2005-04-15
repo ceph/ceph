@@ -142,7 +142,8 @@ class MDCache {
   void destroy_inode(CInode *in);
 
  public:
-  int link_inode( CDir *dir, string& dname, CInode *inode );
+  CDentry* link_inode( CDir *dir, string& dname, CInode *inode );
+
  protected:
   void unlink_dentry( CDentry *dn );         // delete dentry
   void unlink_dentry_inode( CDentry *dn );   // leave dentry intact, just unlink the inode.
@@ -163,10 +164,15 @@ class MDCache {
  public:
   int open_root(Context *c);
   int path_traverse(filepath& path, 
-					vector<CInode*>& trace, 
+					vector<CDentry*>& trace, 
 					Message *req, 
 					int onfail);
 
+  set<Message*> has_path_pinned;
+  bool path_pin(vector<CDentry*>& trace,
+				Message *req);
+  void path_unpin(vector<CDentry*>& trace,
+				  Message *req);
 
   
   // == messages ==
@@ -317,6 +323,7 @@ class MDCache {
   // dentry
   bool dentry_xlock_start(CDentry *dn, Message *m);
   void dentry_xlock_finish(CDentry *dn);
+  CDentry* create_xlocked_dentry(CDir *dir, string& name, Message *req);
   void handle_lock_dn(MLock *m);
   
 

@@ -12,6 +12,7 @@ class CDir;
 #define DN_LOCK_SYNC      0
 #define DN_LOCK_PREXLOCK  1
 #define DN_LOCK_XLOCK     2
+#define DN_LOCK_UNPINNING 3  // waiting for pins to go away
 
 class Message;
 
@@ -25,6 +26,7 @@ class CDentry {
   int            lockstate;
   Message        *xlockedby;
   set<int>       gather_set;
+  int            npins;
 
   friend class MDCache;
   friend class MDS;
@@ -36,11 +38,13 @@ class CDentry {
 	inode = NULL;
 	dir = NULL;
 	lockstate = DN_LOCK_SYNC;
+	npins = 0;
   }
   CDentry(string& n, CInode *in) {
 	name = n;
 	inode = in;
 	lockstate = DN_LOCK_SYNC;
+	npins = 0;
   }
 
   CInode *get_inode() { return inode; }
@@ -62,11 +66,21 @@ class CDentry {
   bool operator<= (const CDentry& right) const;
 
   // -- locking
-  bool can_read()  { return lockstate == DN_LOCK_SYNC; }
+  bool can_read()  { return (lockstate == DN_LOCK_SYNC) || (lockstate == DN_LOCK_UNPINNING);  }
   bool is_xlocked() { return lockstate == DN_LOCK_XLOCK; }
   bool is_xlockedbyother(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
   bool is_xlockedbyme(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
+  bool is_prexlockbyother(Message *m) {
+	return (lockstate == DN_LOCK_PREXLOCK) && m != xlockedby;
+  }
   
+  // pins
+  void pin() { npins++; }
+  void unpin() { npins--; assert(npins >= 0); }
+  bool is_pinnable() { return lockstate == DN_LOCK_SYNC; }
+  bool is_pinned() { return npins>0; }
+  int num_pins() { return npins; }
+
   // -- hierarchy
   void remove();
 

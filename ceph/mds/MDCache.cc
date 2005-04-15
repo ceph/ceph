@@ -133,7 +133,7 @@ void MDCache::remove_inode(CInode *o)
 }
 
 
-int MDCache::link_inode( CDir *dir, string& dname, CInode *in ) 
+CDentry* MDCache::link_inode( CDir *dir, string& dname, CInode *in ) 
 {
   assert(dir->lookup(dname) == 0);
 
@@ -154,8 +154,10 @@ int MDCache::link_inode( CDir *dir, string& dname, CInode *in )
   if (in->auth_pins + in->nested_auth_pins)
 	dn->dir->adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
 
-  return 0;
+  return dn;
 }
+
+
 
 void MDCache::unlink_dentry(CDentry *dn) 
 {
@@ -193,6 +195,8 @@ void MDCache::unlink_dentry_inode(CDentry *dn)
 
 	if (in->is_dirty() && in->nparents == 0) 
 	  in->mark_clean();
+
+	dn->inode = 0;
   }
 }
 
@@ -680,7 +684,7 @@ int MDCache::proc_message(Message *m)
  *   >0 : delayed or forwarded
  */
 int MDCache::path_traverse(filepath& path, 
-						   vector<CInode*>& trace, 
+						   vector<CDentry*>& trace, 
 						   Message *req,
 						   int onfail)
 {
@@ -697,7 +701,6 @@ int MDCache::path_traverse(filepath& path,
 
   // start trace
   trace.clear();
-  trace.push_back(cur);
 
   string have_clean;
 
@@ -758,7 +761,7 @@ int MDCache::path_traverse(filepath& path,
 	if (dn && dn->inode) {
 	  // have it.  locked?
 	  if (dn->is_xlockedbyother(req)) {
-		dout(10) << " xlocked dentry at " << *dn->inode << endl;
+		dout(10) << " xlocked dentry at " << *dn << endl;
 		cur->dir->add_waiter(CDIR_WAIT_DNREAD,
 							 path[depth],
 							 new C_MDS_RetryMessage(mds, req));
@@ -766,11 +769,10 @@ int MDCache::path_traverse(filepath& path,
 	  }
 
 	  // keep going.
+	  trace.push_back(dn);
 	  cur = dn->inode;
 	  have_clean += "/";
 	  have_clean += path[depth];
-	  
-	  trace.push_back(cur);
 	  continue;
 	}
 	
@@ -853,6 +855,62 @@ int MDCache::path_traverse(filepath& path,
   return 0;
 }
 
+
+
+bool MDCache::path_pin(vector<CDentry*>& trace,
+					   Message *req)
+{
+  // already pinned path?
+  if (has_path_pinned.count(req)) return true;  
+
+  // verify everything is pinnable
+  for (vector<CDentry*>::iterator it = trace.begin();
+	   it != trace.end();
+	   it++) {
+	CDentry *dn = *it;
+	if (!dn->is_pinnable()) {
+	  // wait
+	  dout(7) << "path_pin can't pin " << *dn << ", waiting" << endl;
+	  dn->dir->add_waiter(CDIR_WAIT_DNREAD,
+						  dn->name,
+						  new C_MDS_RetryMessage(mds, req));
+	  return false;
+	}
+  }
+
+  // pin!
+  for (vector<CDentry*>::iterator it = trace.begin();
+	   it != trace.end();
+	   it++) {
+	(*it)->pin();
+  }
+  has_path_pinned.insert(req);
+
+  return true;
+}
+
+
+void MDCache::path_unpin(vector<CDentry*>& trace,
+						 Message *req)
+{
+  list<Context*> finished;
+
+  for (vector<CDentry*>::iterator it = trace.begin();
+	   it != trace.end();
+	   it++) {
+	CDentry *dn = *it;
+	dn->unpin();
+
+	// did we completely unpin a waiter?
+	if (dn->lockstate == DN_LOCK_UNPINNING && !dn->is_pinned())
+	  dn->dir->take_waiting(CDIR_WAIT_DNUNPINNED, dn->name, finished);
+  }
+  
+  has_path_pinned.erase(req);
+  
+  // finish any contexts
+  if (!finished.empty()) finish_contexts(finished);
+}
 
 
 
@@ -1071,7 +1129,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
     // get inode
     CDentry *dn = cur->dir->lookup( dis->get_dentry(i) );
-    if (dn) {
+    if (dn && dn->inode) {
 		CInode *next = dn->inode;
         assert(next->is_auth());
 
@@ -1167,10 +1225,15 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	dout(7) << "discover_reply " << *cur << " + " << m->get_path() << ", have " << m->get_num_inodes() << " inodes" << endl;
   }
 
+  if (m->is_flag_error()) {
+	dout(7) << " flag error, dentry = " << m->get_error_dentry() << endl;
+  }
+
+
   
   // start this loop even if we have no inodes, but just the base_dir
   int plus_root_dir = (m->get_num_inodes() == 1 && m->has_root()) ? 1:0;     //ugly, sorry, see handle_discover
-  for (int i=0; i<(m->get_num_inodes() + m->has_base_dir() + plus_root_dir); i++) {
+  for (int i=0; i<(m->get_num_inodes() + m->has_base_dir() + plus_root_dir + m->is_flag_error()); i++) {
 	
 	// dir
 	if ((i >  0 && i < m->get_num_inodes()) || 
@@ -1196,7 +1259,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		cur->take_waiting(CINODE_WAIT_DIR, finished);
 	  }
 	}	
-	if (i >= m->get_num_inodes()) break;
 
 	if (m->is_flag_error()) {
 	  // error!
@@ -1212,6 +1274,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	  }
 	  break;
 	}
+
+	if (i >= m->get_num_inodes()) break;
 
 	dout(7) << "i = " << i << " ino is " << m->get_ino(i) << endl;
 
@@ -1232,9 +1296,11 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		so, DON'T overwrite the dentry, the discover has _old_ info!
 	  */
 	  dout(7) << "had " << *dn << ", hopefully because it got renamed into place?" << endl;
-	  dout(7) << "it is linked to " << *in << ", that better not be what discover gave me?" << endl;
-	  assert(in != get_inode( m->get_ino(i) ));
-	  assert(0);  // just so i can see this happen and make sure it looks right!
+	  dout(7) << "it is linked to " << *in << ", probably not be what discover gave me?" << endl;
+	  dout(7) << "discover gave me " << m->get_ino(i) << endl;
+	  // -> if it is the same, pbly my discover got hung up.
+	  //assert(in->ino() != m->get_ino(i) );
+	  //assert(0);  // just so i can see this happen and make sure it looks right!
 	  break;   // i'm done.
 
 	  //assert(0);  // ?? XXX
@@ -1718,10 +1784,14 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
 
   // have both?
   if (srcdn && destdir) {
-	dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdir << endl;
+	if (destdn) {
+	  dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdn << endl;
+	} else {
+	  dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << m->get_destname() << " in " << *destdir << endl;
+	}
 	rename_file(srcdn, destdir, m->get_destname(), destdn);
 	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
-	destdir->finish_waiting(CDIR_WAIT_DNREAD, m->get_destname());
+	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
   }
   else if (srcdn) {
 	dout(7) << "handle_rename_local_file unlinking src only " << *srcdn << endl;
@@ -1731,7 +1801,7 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
   else if (destdn) {
 	dout(7) << "handle_rename_local_file unlinking dst only " << *destdn << endl;
 	unlink_dentry(destdn);
-	destdir->finish_waiting(CDIR_WAIT_DNREAD, m->get_destname());
+	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
   } else {
 	dout(7) << "handle_rename_local_file have neither src nor dst" << endl;
 	assert(srcdn == 0 && destdn == 0);
@@ -3056,12 +3126,22 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 
 
   // lockable!
-  assert(dn->lockstate == DN_LOCK_SYNC);
-
-  // dir pinnable?
+  assert(dn->lockstate == DN_LOCK_SYNC ||
+		 dn->lockstate == DN_LOCK_UNPINNING);
+  
+  // dir auth pinnable?
   if (!dn->dir->can_auth_pin()) {
 	dout(7) << "dentry " << *dn << " dir not pinnable, waiting" << endl;
 	dn->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+						new C_MDS_RetryMessage(mds,m));
+	return false;
+  }
+
+  // path pinned?
+  if (dn->is_pinned()) {
+	dout(7) << "dentry " << *dn << " pinned, waiting" << endl;
+	dn->lockstate = DN_LOCK_UNPINNING;
+	dn->dir->add_waiter(CDIR_WAIT_DNUNPINNED,
 						new C_MDS_RetryMessage(mds,m));
 	return false;
   }
@@ -3100,10 +3180,61 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 void MDCache::dentry_xlock_finish(CDentry *dn)
 {
   dout(7) << "dentry_xlock_finish on " << *dn << endl;
-
+  
+  dn->xlockedby = 0;
+  dn->lockstate = DN_LOCK_SYNC;
+  
+  // tell replicas?
+  if (dn->inode &&    // if NULL, don't bother.
+	  dn->dir->is_open_by_anyone()) {
+	for (set<int>::iterator it = dn->dir->open_by_begin();
+		 it != dn->dir->open_by_end();
+		 it++) {
+	  MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
+	  m->set_dn(dn->dir->ino(), dn->name);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+  }
+  
   // unpin dir
   dn->dir->auth_unpin();
 }
+
+CDentry* MDCache::create_xlocked_dentry(CDir *dir, string& dname, Message *req)
+{
+  assert(dir->lookup(dname) == 0);
+
+  // dir pinnable?
+  if (!dir->can_auth_pin()) {
+	dout(7) << "create_xlocked_dentry dir" << *dir << " not pinnable, waiting" << endl;
+	dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+					new C_MDS_RetryMessage(mds,req));
+	return 0;
+  }
+
+  dout(7) << "create_xlocked_dentry name " << dname << " in " << *dir << endl;
+
+  // pin dir!
+  dir->auth_pin();
+
+  // create dentry
+  CDentry* dn = new CDentry;
+  dn->name = dname;
+
+  // add to dir
+  dir->add_child(dn);
+
+  //lamewayCDentry* dn = link_inode(dir, dname, create_inode());
+
+  // lock
+  dn->lockstate = DN_LOCK_XLOCK;
+  dn->xlockedby = req;
+
+  return dn;
+}
+
 
 /*
 bool MDCache::dentry_sync(CDentry *dn) 
@@ -3145,15 +3276,18 @@ void MDCache::handle_lock_dn(MLock *m)
 	// replica
 	if (dir) dn = dir->lookup(dname);
 	if (!dir || !dn) {
-	  // nack
-	  dout(7) << "handle_lock " << m->get_ino() << ": don't have it anymore, NAKing" << endl;
-	  
-	  // NAK
-	  MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
-	  reply->set_dn(dir->ino(), dname);
-	  mds->messenger->send_message(reply,
-								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
+
+	  if (m->get_action() == LOCK_AC_LOCK) {
+		// nack
+		dout(7) << "handle_lock " << m->get_ino() << ": don't have it anymore, NAKing" << endl;
+		
+		// NAK
+		MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
+		reply->set_dn(dir->ino(), dname);
+		mds->messenger->send_message(reply,
+									 MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+									 MDS_PORT_CACHE);
+	  }
 	  delete m;
 	  return;
 	}
@@ -3167,8 +3301,15 @@ void MDCache::handle_lock_dn(MLock *m)
 	assert(dn->lockstate == DN_LOCK_SYNC);
 	dn->lockstate = DN_LOCK_XLOCK;
 
-	// ack
-	{
+	if (dn->is_pinned()) {
+	  // wait
+	  dout(7) << "dn pinned, waiting " << *dn << endl;
+	  dn->dir->add_waiter(CDIR_WAIT_DNUNPINNED,
+						  dn->name,
+						  new C_MDS_RetryMessage(mds, m));
+	  return;
+	} else {
+	  // ack now
 	  MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
 	  reply->set_dn(diri->ino(), dname);
 	  mds->messenger->send_message(reply,
@@ -3185,7 +3326,7 @@ void MDCache::handle_lock_dn(MLock *m)
 	dn->lockstate = DN_LOCK_SYNC;
 
 	// wake up waiters
-	dir->finish_waiting(CDIR_WAIT_DNREAD, dname);   // will this happen either?
+	dir->finish_waiting(CDIR_WAIT_DNREAD, dname);   // will this happen either?  YES: if a rename lock backs out
 	break;
 
 	// -- auth --
@@ -3194,7 +3335,7 @@ void MDCache::handle_lock_dn(MLock *m)
 	assert(dn->gather_set.count(from) == 1);
 	dn->gather_set.erase(from);
 	if (dn->gather_set.size() == 0) {
-	  dout(7) << "handle_lock_dn finish gather, no lock on " << *dn << endl;
+	  dout(7) << "handle_lock_dn finish gather, now xlock on " << *dn << endl;
 	  dn->lockstate = DN_LOCK_XLOCK;
 	  dir->finish_waiting(CDIR_WAIT_DNLOCK, dname);
 	}
@@ -3203,6 +3344,8 @@ void MDCache::handle_lock_dn(MLock *m)
   default:
 	assert(0);
   }
+
+  delete m;
 }
 
 
@@ -3969,7 +4112,7 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
   dout(7) << "handle_export_dir_discover on " << m->get_path() << endl;
 
   // must discover it!
-  vector<CInode*> trav;
+  vector<CDentry*> trav;
   filepath fpath(m->get_path());
   int r = path_traverse(fpath, trav, m, MDS_TRAVERSE_DISCOVER);   
   if (r > 0) {
@@ -3977,7 +4120,7 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
   }
   
   // yay!
-  CInode *in = trav[trav.size()-1];
+  CInode *in = trav[trav.size()-1]->inode;
   dout(7) << "handle_export_dir_discover on " << *in << endl;
   assert(in->is_dir());
 
