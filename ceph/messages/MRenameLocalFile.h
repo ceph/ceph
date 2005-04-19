@@ -15,9 +15,9 @@ class MRenameLocalFile : public Message {
 
   MRenameLocalFile() {}
   MRenameLocalFile(inodeno_t srcdirino,
-				   string& srcname,
+				   const string& srcname,
 				   inodeno_t destdirino,
-				   string& destname) :
+				   const string& destname) :
 	Message(MSG_MDS_RENAMELOCALFILE) {
 	this->srcdirino = srcdirino;
 	this->srcname = srcname;

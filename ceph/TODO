@@ -1,4 +1,6 @@
 
+- string table
+
 
 OPS
 
@@ -19,7 +21,6 @@ on fh
  truncate			w
  fsync				w
 
-
 on dir inode
  mknod				w
  link				w
@@ -38,9 +39,6 @@ on 2 dir inodes
 
 - path lock
  - on export
-- consider C_MDS_RetryOnInode?
-
-/- path_traverse fills vector<CDentry*>
 
 - rename vs. discover?
 
@@ -49,15 +47,15 @@ on 2 dir inodes
   - vs import/export?
 
 - think about global sync (to be used by shutdown)
-  - flush all logs
+  - flush all dirty data to disk
+  - flush logs
 
 - hard links
 
-- simplify inode_hard_read_(start|finish).
+- symlinks
 
 - do real permissions checks
 
-- think about dentry deadlock/lost waiters.
 
 
 FILE STUFF

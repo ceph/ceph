@@ -120,7 +120,7 @@ void CDir::add_child(CDentry *d)
   items[d->name] = d;
   d->dir = this;
 
-  cout << "add_child " << *d << " to " << *this << endl;
+  dout(12) << "add_child " << *d << " to " << *this << endl;
   
   nitems++;
   if (!d->inode || d->inode->is_auth())
@@ -136,7 +136,7 @@ void CDir::remove_child(CDentry *d) {
   map<string, CDentry*>::iterator iter = items.find(d->name);
   items.erase(iter);
 
-  cout << "remove_child " << *d << endl;
+  dout(12) << "remove_child " << *d << endl;
 
   nitems--;
   if (is_auth()) {  // FIXME for hashed stuff
@@ -240,7 +240,7 @@ bool CDir::waiting_for(int tag)
   return waiting.count(tag) > 0;
 }
 
-bool CDir::waiting_for(int tag, string& dn)
+bool CDir::waiting_for(int tag, const string& dn)
 {
   if (!waiting_on_dentry.count(dn)) 
 	return false;
@@ -346,7 +346,7 @@ void CDir::finish_waiting(int mask, int result)
   finish_contexts(finished, result);
 }
 
-void CDir::finish_waiting(int mask, string &dn, int result) 
+void CDir::finish_waiting(int mask, const string& dn, int result) 
 {
   dout(11) << "finish_waiting mask " << mask << " dn " << dn << " result " << result << " on " << *this << endl;
 

@@ -325,6 +325,7 @@ void MDBalancer::find_exports(CDir *dir,
 	if (mds->mdcache->exports.count(in->dir)) continue;  
 	//if (in->dir->is_freezetree_root()) continue;  
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
+	if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
 	
 	double pop = in->dir->get_popularity();
 

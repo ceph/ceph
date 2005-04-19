@@ -41,6 +41,8 @@
 #include "messages/MDentryUnlink.h"
 #include "messages/MRenameLocalFile.h"
 
+#include "messages/MClientRequest.h"
+
 #include "messages/MInodeWriterClosed.h"
 
 #include "IdAllocator.h"
@@ -133,7 +135,7 @@ void MDCache::remove_inode(CInode *o)
 }
 
 
-CDentry* MDCache::link_inode( CDir *dir, string& dname, CInode *in ) 
+CDentry* MDCache::link_inode( CDir *dir, const string& dname, CInode *in ) 
 {
   assert(dir->lookup(dname) == 0);
 
@@ -232,7 +234,7 @@ void MDCache::unlink_inode(CInode *in)
 */
 
 void MDCache::rename_file(CDentry *srcdn, 
-						  CDir *destdir, string& destname,
+						  CDir *destdir, const string& destname,
 						  CDentry *destdn)
 {
   // do rename
@@ -749,9 +751,8 @@ int MDCache::path_traverse(filepath& path,
 	}
 	
 	// must read hard data to traverse
-	if (!inode_hard_read_start(cur, req))
+	if (!inode_hard_read_try(cur, req))
 	  return 1;
-	inode_hard_read_finish(cur);
 	
 	// check permissions?
 	// XXX
@@ -860,8 +861,7 @@ int MDCache::path_traverse(filepath& path,
 bool MDCache::path_pin(vector<CDentry*>& trace,
 					   Message *req)
 {
-  // already pinned path?
-  if (has_path_pinned.count(req)) return true;  
+  assert(has_path_pinned.count(req) == 0);
 
   // verify everything is pinnable
   for (vector<CDentry*>::iterator it = trace.begin();
@@ -883,6 +883,7 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
 	   it != trace.end();
 	   it++) {
 	(*it)->pin();
+	dout(10) << "path_pinned " << *(*it) << endl;
   }
   has_path_pinned.insert(req);
 
@@ -900,6 +901,7 @@ void MDCache::path_unpin(vector<CDentry*>& trace,
 	   it++) {
 	CDentry *dn = *it;
 	dn->unpin();
+	dout(10) << "path_unpinned " << *dn << endl;
 
 	// did we completely unpin a waiter?
 	if (dn->lockstate == DN_LOCK_UNPINNING && !dn->is_pinned())
@@ -910,6 +912,58 @@ void MDCache::path_unpin(vector<CDentry*>& trace,
   
   // finish any contexts
   if (!finished.empty()) finish_contexts(finished);
+}
+
+
+bool MDCache::request_start(MClientRequest *req,
+							CInode *ref,
+							vector<CDentry*>& trace)
+{
+  dout(7) << "request_start " << *req << endl;
+  assert(active_requests.count(req) == 0);
+
+  // pin path
+  if (!path_pin(trace, req)) return false;
+  
+  // add to map
+  active_requests[req].ref = ref;
+  active_requests[req].trace = trace;
+  
+  return true;
+}
+
+
+void MDCache::request_finish(MClientRequest *req)
+{
+  dout(7) << "request_finish " << *req << endl;
+  assert(active_requests.count(req) == 1);
+
+  // unpin path
+  path_unpin(active_requests[req].trace, req);
+  
+  // unpin and remove from map
+  active_requests.erase(req);
+
+  // delete req
+  delete req;
+}
+
+
+void MDCache::request_forward(MClientRequest *req, int who)
+{
+  dout(7) << "request_forward to " << who << " req " << *req << endl;
+  assert(active_requests.count(req) == 1);
+
+  // unpin path
+  path_unpin(active_requests[req].trace, req);
+  
+  // remove from map
+  active_requests.erase(req);
+
+  // fw
+  mds->messenger->send_message(req,
+							   MSG_ADDR_MDS(who), MDS_PORT_SERVER,
+							   MDS_PORT_SERVER);
 }
 
 
@@ -1710,7 +1764,7 @@ public:
 };
 */
 
-void MDCache::file_rename(CDentry *srcdn, CDir *destdir, string& destname, CDentry *destdn, Context *c)
+void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname, CDentry *destdn, Context *c)
 {
   assert(srcdn->is_xlocked());  // by me
 
@@ -1746,6 +1800,10 @@ void MDCache::file_rename(CDentry *srcdn, CDir *destdir, string& destname, CDent
 
   // log it
   // ***
+
+  // did i empty out an imported dir?
+  if (srcdir->is_import() && !srcdir->inode->is_root() && srcdir->get_size() == 0) 
+	export_empty_import(srcdir);
 
   // ok!
 
@@ -1942,7 +2000,30 @@ void MDCache::handle_lock(MLock *m)
 
 // hard inode metadata
 
-bool MDCache::inode_hard_read_start(CInode *in, Message *m)
+bool MDCache::inode_hard_read_try(CInode *in, Message *m)
+{
+  dout(7) << "inode_hard_read_try on " << *in << endl;  
+
+  // can read?  grab ref.
+  if (in->hardlock.can_read(in->is_auth())) {
+	return true;
+  }
+  
+  if (in->is_auth()) {
+	// auth
+	assert(0);  // this shouldn't happen.
+  } else {
+	// replica
+	
+	// wait!
+	dout(7) << "inode_hard_read_try waiting on " << *in << endl;
+	in->add_waiter(CINODE_WAIT_HARDR, new C_MDS_RetryMessage(mds, m));
+  }
+  
+  return false;
+}
+
+bool MDCache::inode_hard_read_start(CInode *in, MClientRequest *m)
 {
   dout(7) << "inode_hard_read_start  on " << *in << endl;  
 
@@ -1962,7 +2043,7 @@ bool MDCache::inode_hard_read_start(CInode *in, Message *m)
 
 	// wait!
 	dout(7) << "inode_hard_read_start waiting on " << *in << endl;
-	in->add_waiter(CINODE_WAIT_HARDR, new C_MDS_RetryMessage(mds, m));
+	in->add_waiter(CINODE_WAIT_HARDR, new C_MDS_RetryRequest(mds, m, in));
   }
   
   return false;
@@ -1982,7 +2063,7 @@ void MDCache::inode_hard_read_finish(CInode *in)
 }
 
 
-bool MDCache::inode_hard_write_start(CInode *in, Message *m)
+bool MDCache::inode_hard_write_start(CInode *in, MClientRequest *m)
 {
   dout(7) << "inode_hard_write_start  on " << *in << endl;
 
@@ -1997,7 +2078,7 @@ bool MDCache::inode_hard_write_start(CInode *in, Message *m)
 	assert(in->is_auth());
 	if (!in->can_auth_pin()) {
 	  dout(7) << "inode_hard_write_start waiting for authpinnable on " << *in << endl;
-	  in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryMessage(mds, m));
+	  in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
 	  return false;
 	}
 
@@ -2017,7 +2098,7 @@ bool MDCache::inode_hard_write_start(CInode *in, Message *m)
 	}
 	
 	dout(7) << "inode_hard_write_start waiting on " << *in << endl;
-	in->add_waiter(CINODE_WAIT_HARDW, new C_MDS_RetryMessage(mds, m));
+	in->add_waiter(CINODE_WAIT_HARDW, new C_MDS_RetryRequest(mds, m, in));
 
 	return false;
   } else {
@@ -2026,9 +2107,7 @@ bool MDCache::inode_hard_write_start(CInode *in, Message *m)
 	int auth = in->authority();
 	dout(5) << "inode_hard_write_start " << *in << " on replica, fw to auth " << auth << endl;
 	assert(auth != mds->get_nodeid());
-	mds->messenger->send_message(m,
-								 MSG_ADDR_MDS(auth), m->get_dest_port(),
-								 MDS_PORT_CACHE);
+	request_forward(m, auth);
 	return false;
   }
 }
@@ -2292,7 +2371,7 @@ void MDCache::handle_lock_inode_hard(MLock *m)
 // soft inode metadata
 
 
-bool MDCache::inode_soft_read_start(CInode *in, Message *m)
+bool MDCache::inode_soft_read_start(CInode *in, MClientRequest *m)
 {
   dout(7) << "inode_soft_read_start " << *in << " softlock=" << in->softlock << endl;  
 
@@ -2323,7 +2402,7 @@ bool MDCache::inode_soft_read_start(CInode *in, Message *m)
 		inode_soft_lock(in);     // lock, easier to back off
 	  } else {
 		dout(7) << "inode_soft_read_start waiting until stable on " << *in << ", softlock=" << in->softlock << endl;
-		in->add_waiter(CINODE_WAIT_SOFTSTABLE, new C_MDS_RetryMessage(mds, m));
+		in->add_waiter(CINODE_WAIT_SOFTSTABLE, new C_MDS_RetryRequest(mds, m, in));
 		return false;
 	  }
 	} else {
@@ -2334,9 +2413,7 @@ bool MDCache::inode_soft_read_start(CInode *in, Message *m)
 		  int auth = in->authority();
 		  dout(5) << "inode_soft_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
 		  assert(auth != mds->get_nodeid());
-		  mds->messenger->send_message(m,
-									   MSG_ADDR_MDS(auth), m->get_dest_port(),
-									   MDS_PORT_CACHE);
+		  request_forward(m, auth);
 		  return false;
 		} else {
 		  // wait.
@@ -2346,7 +2423,7 @@ bool MDCache::inode_soft_read_start(CInode *in, Message *m)
 	  } else {
 		// wait until stable
 		dout(7) << "inode_soft_read_start waiting until stable on " << *in << ", softlock=" << in->softlock << endl;
-		in->add_waiter(CINODE_WAIT_SOFTSTABLE, new C_MDS_RetryMessage(mds, m));
+		in->add_waiter(CINODE_WAIT_SOFTSTABLE, new C_MDS_RetryRequest(mds, m, in));
 		return false;
 	  }
 	}
@@ -2354,7 +2431,7 @@ bool MDCache::inode_soft_read_start(CInode *in, Message *m)
 
   // wait
   dout(7) << "inode_soft_read_start waiting on " << *in << ", softlock=" << in->softlock << endl;
-  in->add_waiter(CINODE_WAIT_SOFTR, new C_MDS_RetryMessage(mds, m));
+  in->add_waiter(CINODE_WAIT_SOFTR, new C_MDS_RetryRequest(mds, m, in));
 		
   return false;
 }
@@ -2376,7 +2453,7 @@ void MDCache::inode_soft_read_finish(CInode *in)
 }
 
 
-bool MDCache::inode_soft_write_start(CInode *in, Message *m)
+bool MDCache::inode_soft_write_start(CInode *in, MClientRequest *m)
 {
   // if no replicated, i can twiddle lock at will
   if (in->is_auth() &&
@@ -2402,7 +2479,7 @@ bool MDCache::inode_soft_write_start(CInode *in, Message *m)
 	}
 	
 	dout(7) << "inode_soft_write_start on auth, waiting for write on " << *in << endl;
-	in->add_waiter(CINODE_WAIT_SOFTW, new C_MDS_RetryMessage(mds, m));
+	in->add_waiter(CINODE_WAIT_SOFTW, new C_MDS_RetryRequest(mds, m, in));
 
 	return false;
   } else {
@@ -2411,16 +2488,14 @@ bool MDCache::inode_soft_write_start(CInode *in, Message *m)
 	if (in->softlock.get_mode() == LOCK_MODE_ASYNC) {
 	  // wait
 	  dout(5) << "inode_soft_write_start " << *in << " on replica, sync but mode async, waiting " << endl;
-	  in->add_waiter(CINODE_WAIT_SOFTW, new C_MDS_RetryMessage(mds, m));
+	  in->add_waiter(CINODE_WAIT_SOFTW, new C_MDS_RetryRequest(mds, m, in));
 	  return false;
 	} else {
 	  // fw to auth
 	  int auth = in->authority();
 	  dout(5) << "inode_soft_write_start " << *in << " on replica, fw to auth " << auth << endl;
 	  assert(auth != mds->get_nodeid());
-	  mds->messenger->send_message(m,
-								   MSG_ADDR_MDS(auth), m->get_dest_port(),
-								   MDS_PORT_CACHE);
+	  request_forward(m, auth);
 	  return false;
 	}
   }
@@ -3095,7 +3170,7 @@ void MDCache::handle_lock_dir(MLock *m)
 
 // DENTRY
 
-bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
+bool MDCache::dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref)
 {
   dout(7) << "dentry_xlock_start on " << *dn << endl;
 
@@ -3106,7 +3181,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 	// not by me, wait
 	dout(7) << "dentry " << *dn << " xlock by someone else" << endl;
 	dn->dir->add_waiter(CDIR_WAIT_DNREAD, dn->name,
-						new C_MDS_RetryMessage(mds,m));
+						new C_MDS_RetryRequest(mds,m,ref));
 	return false;
   }
 
@@ -3115,11 +3190,11 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 	if (dn->xlockedby == m) {
 	  dout(7) << "dentry " << *dn << " prelock by me" << endl;
 	  dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
-						  new C_MDS_RetryMessage(mds,m));
+						  new C_MDS_RetryRequest(mds,m,ref));
 	} else {
 	  dout(7) << "dentry " << *dn << " prelock by someone else" << endl;
 	  dn->dir->add_waiter(CDIR_WAIT_DNREAD, dn->name,
-						  new C_MDS_RetryMessage(mds,m));
+						  new C_MDS_RetryRequest(mds,m,ref));
 	}
 	return false;
   }
@@ -3133,7 +3208,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
   if (!dn->dir->can_auth_pin()) {
 	dout(7) << "dentry " << *dn << " dir not pinnable, waiting" << endl;
 	dn->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
-						new C_MDS_RetryMessage(mds,m));
+						new C_MDS_RetryRequest(mds,m,ref));
 	return false;
   }
 
@@ -3142,7 +3217,8 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 	dout(7) << "dentry " << *dn << " pinned, waiting" << endl;
 	dn->lockstate = DN_LOCK_UNPINNING;
 	dn->dir->add_waiter(CDIR_WAIT_DNUNPINNED,
-						new C_MDS_RetryMessage(mds,m));
+						dn->name,
+						new C_MDS_RetryRequest(mds,m,ref));
 	return false;
   }
 
@@ -3169,7 +3245,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m)
 	// wait
 	dout(7) << "handle_client_unlink locking, waitigg for replicas " << endl;
 	dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
-						new C_MDS_RetryMessage(mds, m));
+						new C_MDS_RetryRequest(mds, m, ref));
 	return false;
   } else {
 	dn->lockstate = DN_LOCK_XLOCK;
@@ -3202,7 +3278,7 @@ void MDCache::dentry_xlock_finish(CDentry *dn)
   dn->dir->auth_unpin();
 }
 
-CDentry* MDCache::create_xlocked_dentry(CDir *dir, string& dname, Message *req)
+CDentry* MDCache::create_xlocked_dentry(CDir *dir, const string& dname, MClientRequest *req, CInode *ref)
 {
   assert(dir->lookup(dname) == 0);
 
@@ -3210,7 +3286,7 @@ CDentry* MDCache::create_xlocked_dentry(CDir *dir, string& dname, Message *req)
   if (!dir->can_auth_pin()) {
 	dout(7) << "create_xlocked_dentry dir" << *dir << " not pinnable, waiting" << endl;
 	dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
-					new C_MDS_RetryMessage(mds,req));
+					new C_MDS_RetryRequest(mds,req,ref));
 	return 0;
   }
 
@@ -3298,10 +3374,12 @@ void MDCache::handle_lock_dn(MLock *m)
   switch (m->get_action()) {
 	// -- replica --
   case LOCK_AC_LOCK:
-	assert(dn->lockstate == DN_LOCK_SYNC);
-	dn->lockstate = DN_LOCK_XLOCK;
+	assert(dn->lockstate == DN_LOCK_SYNC ||
+		   dn->lockstate == DN_LOCK_UNPINNING);
 
 	if (dn->is_pinned()) {
+	  dn->lockstate = DN_LOCK_UNPINNING;
+
 	  // wait
 	  dout(7) << "dn pinned, waiting " << *dn << endl;
 	  dn->dir->add_waiter(CDIR_WAIT_DNUNPINNED,
@@ -3309,6 +3387,8 @@ void MDCache::handle_lock_dn(MLock *m)
 						  new C_MDS_RetryMessage(mds, m));
 	  return;
 	} else {
+	  dn->lockstate = DN_LOCK_XLOCK;
+	  
 	  // ack now
 	  MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
 	  reply->set_dn(diri->ino(), dname);

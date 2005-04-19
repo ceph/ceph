@@ -40,7 +40,7 @@ class CDentry {
 	lockstate = DN_LOCK_SYNC;
 	npins = 0;
   }
-  CDentry(string& n, CInode *in) {
+  CDentry(const string& n, CInode *in) {
 	name = n;
 	inode = in;
 	lockstate = DN_LOCK_SYNC;
@@ -49,7 +49,7 @@ class CDentry {
 
   CInode *get_inode() { return inode; }
   CDir *get_dir() { return dir; }
-  string& get_name() { return name; }
+  const string& get_name() { return name; }
   int get_lockstate() { return lockstate; }
   set<int>& get_gather_set() { return gather_set; }
 

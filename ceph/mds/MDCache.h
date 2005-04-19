@@ -40,6 +40,8 @@ class MLock;
 class MRenameLocalFile;
 class C_MDS_ExportFinish;
 
+class MClientRequest;
+
 class MHashDir;
 class MHashDirAck;
 class MUnhashDir;
@@ -51,6 +53,12 @@ class MUnhashDirAck;
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
 
 typedef const char* pchar;
+
+typedef struct {
+  CInode *ref;             // reference inode
+  vector<CDentry*> trace;  // path trace
+} active_request_t;
+
 
 class MDCache {
  protected:
@@ -86,6 +94,9 @@ class MDCache {
   // inoproxysets
   //list<InoProxySet*>      ino_proxy_sets;
 
+
+  // active MDS requests
+  map<MClientRequest*, active_request_t>   active_requests;
   
   friend class MDBalancer;
 
@@ -142,7 +153,7 @@ class MDCache {
   void destroy_inode(CInode *in);
 
  public:
-  CDentry* link_inode( CDir *dir, string& dname, CInode *inode );
+  CDentry* link_inode( CDir *dir, const string& dname, CInode *inode );
 
  protected:
   void unlink_dentry( CDentry *dn );         // delete dentry
@@ -154,7 +165,7 @@ class MDCache {
  protected:
   void rename_file(CDentry *srcdn,
 				   CDir *destdir,
-				   string& destname,
+				   const string& destname,
 				   CDentry *destdn);
   /*void rename_dir(CInode *from, 
 				  CDir *destdir,
@@ -175,6 +186,13 @@ class MDCache {
 				  Message *req);
 
   
+  bool request_start(MClientRequest *req,
+					 CInode *ref,
+					 vector<CDentry*>& trace);
+  void request_finish(MClientRequest *req);
+  void request_forward(MClientRequest *req, int mds);
+
+
   // == messages ==
   int proc_message(Message *m);
 
@@ -189,7 +207,7 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
-  void file_rename(CDentry *srcdn, CDir *destdir, string& destname, CDentry *destdn, Context *c);
+  void file_rename(CDentry *srcdn, CDir *destdir, const string& destname, CDentry *destdn, Context *c);
   void handle_rename_local_file(MRenameLocalFile*m);
   
 
@@ -289,13 +307,14 @@ class MDCache {
 
   // -- locks --
   // high level interface
-  bool inode_hard_read_start(CInode *in, Message *m);
+  bool inode_hard_read_try(CInode *in, Message *m);
+  bool inode_hard_read_start(CInode *in, MClientRequest *m);
   void inode_hard_read_finish(CInode *in);
-  bool inode_hard_write_start(CInode *in, Message *m);
+  bool inode_hard_write_start(CInode *in, MClientRequest *m);
   void inode_hard_write_finish(CInode *in);
-  bool inode_soft_read_start(CInode *in, Message *m);
+  bool inode_soft_read_start(CInode *in, MClientRequest *m);
   void inode_soft_read_finish(CInode *in);
-  bool inode_soft_write_start(CInode *in, Message *m);
+  bool inode_soft_write_start(CInode *in, MClientRequest *m);
   void inode_soft_write_finish(CInode *in);
 
   void inode_hard_mode(CInode *in, int mode);
@@ -321,57 +340,11 @@ class MDCache {
   void handle_lock_dir(MLock *m);
 
   // dentry
-  bool dentry_xlock_start(CDentry *dn, Message *m);
+  bool dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref);
   void dentry_xlock_finish(CDentry *dn);
-  CDentry* create_xlocked_dentry(CDir *dir, string& name, Message *req);
+  CDentry* create_xlocked_dentry(CDir *dir, const string& name, MClientRequest *req, CInode *ref);
   void handle_lock_dn(MLock *m);
   
-
-  // -- lock and sync : inodes --  OLD CRAP XXX
-  /*
-    // soft sync locks
-	bool read_soft_start(CInode *in, Message *m);
-	int read_soft_finish(CInode *in);
-	bool write_soft_start(CInode *in, Message *m);
-	int write_soft_finish(CInode *in);
-	
-	void inode_sync_start(CInode *in);
-	void inode_sync_release(CInode *in);
-	void inode_sync_wait(CInode *in);
-	
-	void handle_inode_sync_start(MInodeSyncStart *m);
-	void handle_inode_sync_ack(MInodeSyncAck *m);
-	void handle_inode_sync_release(MInodeSyncRelease *m);
-	void handle_inode_sync_recall(MInodeSyncRecall *m);
-	
-	void inode_sync_ack(CInode *in, MInodeSyncStart *m, bool wantback=false);
-  */
-  /*
-    // hard locks  
-	bool read_hard_try(CInode *in, Message *m);
-	bool write_hard_start(CInode *in, Message *m);
-	void write_hard_finish(CInode *in);
-	
-	void inode_lock_start(CInode *in);
-	void inode_lock_release(CInode *in);
-	void inode_lock_wait(CInode *in);
-	
-	void handle_inode_lock_start(MInodeLockStart *m);
-	void handle_inode_lock_ack(MInodeLockAck *m);
-	void handle_inode_lock_release(MInodeLockRelease *m);
-  */
-
-
-  // -- sync : dirs --
-  /*
-	void dir_sync_start(CDir *dir);
-	void dir_sync_release(CDir *dir);
-	void dir_sync_wait(CDir *dir);
-	
-	void handle_dir_sync_start(MDirSyncStart *m);
-	void handle_dir_sync_ack(MDirSyncAck *m);
-	void handle_dir_sync_release(MDirSyncRelease *m);
-  */
 
   // == crap fns ==
   CInode* hack_get_file(string& fn);

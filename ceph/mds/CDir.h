@@ -413,7 +413,7 @@ class CDir {
   
   // -- waiters --
   bool waiting_for(int tag);
-  bool waiting_for(int tag, string& dn);
+  bool waiting_for(int tag, const string& dn);
   void add_waiter(int tag, Context *c);
   void add_waiter(int tag,
 				  const string& dentry,
@@ -423,7 +423,7 @@ class CDir {
 					const string& dentry, 
 					list<Context*>& ls);  
   void finish_waiting(int mask, int result = 0);    // ditto
-  void finish_waiting(int mask, string& dn, int result = 0);    // ditto
+  void finish_waiting(int mask, const string& dn, int result = 0);    // ditto
 
 
   // -- auth pins --

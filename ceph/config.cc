@@ -14,7 +14,7 @@
 md_config_t g_conf = {
   num_mds: 13,
   num_osd: 10,
-  num_client: 50,
+  num_client: 500,
 
   osd_cow: false, // crashy? true,  
 
@@ -45,25 +45,24 @@ md_config_t g_conf = {
   mds_verify_export_dirauth: true,
 
   // client ops
-  client_use_random_mds:  true,
+  client_use_random_mds:  false,
 
   client_op_statfs:     false,
 
-  client_op_stat:     100,
-  client_op_touch:    10,
-  client_op_utime:    0,   // untested
+  client_op_stat:     10,
+  client_op_utime:    10,   // untested
   client_op_chmod:    10,
   client_op_chown:    10,   // untested
 
   client_op_readdir:  10,
   client_op_mknod:    10,
   client_op_link:       false,
-  client_op_unlink:   100,
-  client_op_rename:   000,
+  client_op_unlink:   10,
+  client_op_rename:   100,
 
-  client_op_mkdir:    100,  // note: can easily corrupt store when we crash
-  client_op_rmdir:    100,
-  client_op_symlink:  100,
+  client_op_mkdir:    10,
+  client_op_rmdir:    10,
+  client_op_symlink:  10,
 
   client_op_openrd:   10,
   client_op_openwr:   0,
