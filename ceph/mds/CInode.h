@@ -601,6 +601,7 @@ class CInodeDiscover {
   }
 
   inodeno_t get_ino() { return inode.ino; }
+  int get_replica_nonce() { return replica_nonce; }
 
   int update_inode(CInode *in) {
 	in->inode = inode;

@@ -75,7 +75,8 @@ class MDCache {
   // imports and exports
   set<CDir*>             imports;                // includes root (on mds0)
   set<CDir*>             exports;
-  multimap<CDir*,CDir*>  nested_exports;   // nested exports of (imports|root)
+  map<CDir*,set<CDir*> > nested_exports;
+  //multimap<CDir*,CDir*>  nested_exports;   // nested exports of (imports|root)
   
   // hashing madness
   multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
@@ -167,10 +168,10 @@ class MDCache {
 				   CDir *destdir,
 				   const string& destname,
 				   CDentry *destdn);
-  /*void rename_dir(CInode *from, 
-				  CDir *destdir,
-				  string name);
-  */
+  void fix_renamed_dir(CDir *srcdir,
+					   CInode *in,
+					   CDir *destdir,
+					   bool authchanged);   // _inode_ auth
 
  public:
   int open_root(Context *c);
@@ -228,7 +229,7 @@ class MDCache {
   bool is_export(CDir *dir) {
 	return exports.count(dir);
   }
-  void find_nested_exports(CDir *dir, list<CDir*>& ls);
+  void find_nested_exports(CDir *dir, set<CDir*>& s);
 
   // exporter
   void export_dir(CDir *dir,

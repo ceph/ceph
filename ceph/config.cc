@@ -41,7 +41,7 @@ md_config_t g_conf = {
   mdbal_replicate_threshold: 500,
   mdbal_unreplicate_threshold: 200,
 
-  mds_heartbeat_op_interval: 2000,
+  mds_heartbeat_op_interval: 200,
   mds_verify_export_dirauth: true,
 
   // client ops
@@ -57,11 +57,11 @@ md_config_t g_conf = {
   client_op_readdir:  10,
   client_op_mknod:    10,
   client_op_link:       false,
-  client_op_unlink:   10,
-  client_op_rename:   100,
+  client_op_unlink:   0,
+  client_op_rename:   00,
 
   client_op_mkdir:    10,
-  client_op_rmdir:    10,
+  client_op_rmdir:    0,
   client_op_symlink:  10,
 
   client_op_openrd:   10,

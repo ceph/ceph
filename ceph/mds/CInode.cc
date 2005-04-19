@@ -21,11 +21,17 @@ ostream& operator<<(ostream& out, CInode& in)
   out << "[inode " << in.inode.ino << " ~" << path << " ";
   if (in.is_auth()) {
 	out << "auth";
-	if (in.is_cached_by_anyone())
-	  out << "+" << in.get_cached_by();
+	if (in.is_cached_by_anyone()) {
+	  //out << "+" << in.get_cached_by();
+	  for (set<int>::iterator it = in.cached_by_begin();
+		   it != in.cached_by_end();
+		   it++) {
+		out << "+" << *it << "." << in.get_cached_by_nonce(*it);
+	  }
+	}
   } else {
 	out << "rep@" << in.authority();
-	if (in.get_replica_nonce() > 1)
+	//if (in.get_replica_nonce() > 1)
 	  out << "." << in.get_replica_nonce();
 	assert(in.get_replica_nonce() >= 0);
   }

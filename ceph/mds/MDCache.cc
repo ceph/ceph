@@ -255,7 +255,173 @@ void MDCache::rename_file(CDentry *srcdn,
 
   // link inode w/ new dentry
   link_inode( destdir, destname, in );
-  
+}
+
+
+/*
+ fix_renamed_dir():
+
+ caller has already:
+   - relinked inode in new location
+   - fixed in->is_auth()
+   - set dir_auth, if appropriate
+
+ caller has not:
+   - touched in->dir
+   - updated import/export tables
+*/
+void MDCache::fix_renamed_dir(CDir *srcdir,
+							  CInode *in,
+							  CDir *destdir,
+							  bool authchanged)   // _inode_ auth
+{
+  dout(7) << "fix_renamed_dir on " << *in->dir << endl;
+
+  if (in->dir->is_auth()) {
+	// dir ours
+	dout(7) << "dir is auth" << endl;
+	assert(!in->dir->is_export());
+
+	if (in->is_auth()) {
+	  // inode now ours
+
+	  if (authchanged) {
+		// inode _was_ replica, now ours
+		dout(7) << "inode was replica, now ours.  removing from import list." << endl;
+		assert(in->dir->is_import());
+		
+		// not import anymore!
+		imports.erase(in->dir);
+		in->dir->state_clear(CDIR_STATE_IMPORT);
+		in->dir->put(CDIR_PIN_IMPORT);
+
+		// move my nested imports to in's containing import
+		CDir *con = get_containing_import(in->dir);
+		assert(con);
+		for (set<CDir*>::iterator p = nested_exports[in->dir].begin();
+			 p != nested_exports[in->dir].end();
+			 p++) {
+		  dout(7) << "moving nested export under new container " << *con << endl;
+		  nested_exports[con].insert(*p);
+		}
+		nested_exports.erase(in->dir);
+		
+	  } else {
+		// inode was ours, still ours.
+		dout(7) << "inode was ours, still ours." << endl;
+		assert(!in->dir->is_import());
+		
+		// move any exports nested beneath me?
+		CDir *newcon = get_containing_import(in->dir);
+		assert(newcon);
+		CDir *oldcon = get_containing_import(srcdir);
+		assert(oldcon);
+		if (newcon != oldcon) {
+		  dout(7) << "moving nested exports under new container" << endl;
+		  set<CDir*> nested;
+		  find_nested_exports(in->dir, nested);
+		  for (set<CDir*>::iterator it = nested.begin();
+			   it != nested.end();
+			   it++) {
+			dout(7) << "moving nested export " << *it << " under new container" << endl;
+			nested_exports[oldcon].erase(*it);
+			nested_exports[newcon].insert(*it);
+		  }
+		}
+	  }
+
+	} else {
+	  // inode now replica
+
+	  if (authchanged) {
+		// inode was replica, still replica
+		dout(7) << "inode was replica, still replica.  doing nothing." << endl;
+		assert(in->dir->is_import());
+
+		// do nothing.
+
+	  } else {
+		// inode was ours, but not anymore
+		dout(7) << "inode was ours, now replica.  adding to import list." << endl;
+
+		// i am now an import
+		imports.insert(in->dir);
+		in->dir->state_set(CDIR_STATE_IMPORT);
+		in->dir->get(CDIR_PIN_IMPORT);
+
+		// find old import
+		CDir *oldcon = get_containing_import(srcdir);
+		assert(oldcon);
+
+		// move nested exports under me
+		set<CDir*> nested;
+		find_nested_exports(in->dir, nested);
+		for (set<CDir*>::iterator it = nested.begin();
+			 it != nested.end();
+			 it++) {
+		  dout(7) << "moving nested export " << *it << " under me" << endl;
+		  nested_exports[oldcon].erase(*it);
+		  nested_exports[in->dir].insert(*it);
+		}
+	  }
+
+	  assert(in->dir->is_import());
+	}
+
+  } else {
+	// dir is not ours
+	dout(7) << "dir is not auth" << endl;
+
+	if (in->is_auth()) {
+	  // inode now ours
+
+	  if (authchanged) {
+		// inode was replica, now ours
+		dout(7) << "inode was replica, now ours.  now an export." << endl;
+		assert(!in->dir->is_export());
+		
+		// now export
+		exports.insert(in->dir);
+		in->dir->state_set(CDIR_STATE_EXPORT);
+		in->dir->get(CDIR_PIN_EXPORT);
+	  } else {
+		// inode was ours, still ours
+		dout(7) << "inode was ours, still ours.  doing nothing." << endl;
+		
+		// do nothing.
+	  }
+
+	  assert(in->dir->is_export());
+	} else {
+	  // inode now replica
+
+	  if (authchanged) {
+		// inode was ours, now replica
+		dout(7) << "inode was ours, now replica.  removing from export list." << endl;
+		assert(in->dir->is_export());
+
+		// remove from export list
+		exports.erase(in->dir);
+		in->dir->state_clear(CDIR_STATE_EXPORT);
+		in->dir->put(CDIR_PIN_EXPORT);
+
+		CDir *oldcon = get_containing_import(srcdir);
+		assert(oldcon);
+		assert(nested_exports[oldcon].count(in->dir) == 1);
+		nested_exports[oldcon].erase(in->dir);
+
+	  } else {
+		// inode was replica, still replica
+		dout(7) << "inode was replica, still replica.  do nothing." << endl;
+
+		// do nothing.
+	  }
+	  
+	  assert(!in->dir->is_export());
+	}  
+  }
+
+  show_imports();
 }
 
 class C_MDC_EmptyImport : public Context {
@@ -551,9 +717,9 @@ int MDCache::open_root(Context *c)
 }
 
 
-CDir *MDCache::get_containing_import(CDir *in)
+CDir *MDCache::get_containing_import(CDir *dir)
 {
-  CDir *imp = in;  // might be *in
+  CDir *imp = dir;  // might be *dir
 
   // find the underlying import!
   while (imp && 
@@ -565,12 +731,12 @@ CDir *MDCache::get_containing_import(CDir *in)
   return imp;
 }
 
-CDir *MDCache::get_containing_export(CDir *in)
+CDir *MDCache::get_containing_export(CDir *dir)
 {
-  CDir *ex = in;  // might be *in
+  CDir *ex = dir;  // might be *dir
 
   // find the underlying import!
-  while (ex &&                        // white not at root,
+  while (ex &&                        // while not at root,
 		 exports.count(ex) == 0) {    // we didn't find an export,
 	ex = ex->get_parent_dir();
   }
@@ -1194,9 +1360,10 @@ void MDCache::handle_discover(MDiscover *dis)
 
         // add dentry + inode
         reply->add_dentry( dis->get_dentry(i) );
-        reply->add_inode( new CInodeDiscover(next, 
-											 next->cached_by_add(dis->get_asker())) );
-        dout(7) << "added dentry " << dn << " + " << *next << endl;
+		int nonce = next->cached_by_add(dis->get_asker());
+		reply->add_inode( new CInodeDiscover(next, 
+											 nonce) );
+		dout(7) << "added dentry " << dn << " + " << *next << " nonce=" << nonce<< endl;
 
 		// descend
 		cur = next;
@@ -1367,6 +1534,10 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	  if (in) {
 		dout(7) << "i have this inode: " << *in << " but it's not linked via dentry " << m->get_dentry(i) << endl;
 
+		// fix nonce
+		dout(7) << " my nonce is " << in->replica_nonce << ", taking from discover, which  has " << m->get_inode(i).get_replica_nonce() << endl;
+		in->replica_nonce = m->get_inode(i).get_replica_nonce();
+
 		// link
 		link_inode( cur->dir, m->get_dentry(i), in );
 		
@@ -1507,7 +1678,12 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	}
 	
 	// check nonce
-	if (nonce == in->get_cached_by_nonce(from)) {
+	if (from == mds->get_nodeid()) {
+	  // my cache_expire, and the export_dir giving auth back to me crossed paths!  
+	  // we can ignore this.  no danger of confusion since the two parties are both me.
+	  dout(7) << "inode_expire on " << *in << " from mds" << from << " .. ME!  ignoring." << endl;
+	} 
+	else if (nonce == in->get_cached_by_nonce(from)) {
 	  // remove from our cached_by
 	  dout(7) << "inode_expire on " << *in << " from mds" << from << " cached_by was " << in->cached_by << endl;
 	  in->cached_by_remove(from);
@@ -1523,8 +1699,6 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 		if (in->softlock.gather_set.size() == 0)
 		  inode_soft_eval(in);
 	  }
-
-
 	} 
 	else {
 	  // this is an old nonce, ignore expire.
@@ -1559,7 +1733,10 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	}
 	
 	// check nonce
-	if (nonce == dir->get_open_by_nonce(from)) {
+	if (from == mds->get_nodeid()) {
+	  dout(7) << "dir_expire on " << *dir << " from mds" << from << " .. ME!  ignoring" << endl;
+	} 
+	else if (nonce == dir->get_open_by_nonce(from)) {
 	  // remove from our cached_by
 	  dout(7) << "dir_expire on " << *dir << " from mds" << from << " open_by was " << dir->open_by << endl;
 	  dir->open_by_remove(from);
@@ -1779,6 +1956,10 @@ void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname,
   in->mark_dirty();      // the moving inode           // FIXME XXX is this right for hard links?
   srcdir->mark_dirty();  // src dir
   
+
+
+
+
   // tell replicas (no need to wait for ack) to do the same, and un-xlock.
   // make list
   set<int> who = srcdir->get_open_by();
@@ -3511,41 +3692,39 @@ void MDCache::do_dir_proxy(CDir *dir, Message *m)
 
 // IMPORT/EXPORT
 
-void MDCache::find_nested_exports(CDir *dir, list<CDir*>& ls)
+void MDCache::find_nested_exports(CDir *dir, set<CDir*>& s)
 {
   CDir *import = get_containing_import(dir);
 
   if (import == dir) {
 	// yay, my job is easy!
-	for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-		   nested_exports.equal_range( import );
-		 p.first != p.second;
-		 p.first++) {
-	  CDir *nested = (*p.first).second;
-	  ls.push_back(nested);
+	for (set<CDir*>::iterator p = nested_exports[import].begin();
+		 p != nested_exports[import].end();
+		 p++) {
+	  CDir *nested = *p;
+	  s.insert(nested);
 	  dout(10) << "find_nested_exports " << *dir << " " << *nested << endl;
 	}
 	return;
   }
 
   // ok, my job is annoying.
-  for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-		 nested_exports.equal_range( import );
-	   p.first != p.second;
-	   p.first++) {
-	CDir *nested = (*p.first).second;
+  for (set<CDir*>::iterator p = nested_exports[import].begin();
+	   p != nested_exports[import].end();
+	   p++) {
+	CDir *nested = *p;
 
 	// trace back to import, or dir
 	CDir *cur = nested->get_parent_dir();
 	while (!cur->is_import()) {
 	  if (cur == dir) {
-		ls.push_back(nested);
+		s.insert(nested);
 		dout(10) << "find_nested_exports " << *dir << " " << *nested << endl;
 		break;
 	  } else {
 		cur = cur->get_parent_dir();
 	  }
-	} 
+	}
   }
 }
 
@@ -3774,9 +3953,9 @@ void MDCache::export_dir_frozen(CDir *dir,
   prep->add_dir( new CDirDiscover(dir, dir->open_by_add(dest)) );
   
   // also include traces to all nested exports.
-  list<CDir*> my_nested;
+  set<CDir*> my_nested;
   find_nested_exports(dir, my_nested);
-  for (list<CDir*>::iterator it = my_nested.begin();
+  for (set<CDir*>::iterator it = my_nested.begin();
 	   it != my_nested.end();
 	   it++) {
 	CDir *exp = *it;
@@ -3869,48 +4048,46 @@ void MDCache::export_dir_go(CDir *dir,
 	
 	// discard nested exports (that we're handing off
 	// NOTE: possible concurrent modification bug?
-	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-	  nested_exports.equal_range(dir);
-	while (p.first != p.second) {
-	  CDir *nested = (*p.first).second;
-	  req->add_export(nested);
+	for (set<CDir*>::iterator p = nested_exports[dir].begin();
+		 p != nested_exports[dir].end();
+		 p++) {
+	  CDir *nested = *p;
 
+	  // add to export message
+	  req->add_export(nested);
+	  
 	  // nested beneath our new export *in; remove!
 	  dout(7) << " export " << *nested << " was nested beneath us; removing from export list(s)" << endl;
 	  assert(exports.count(nested) == 1);
-	  //exports.erase(nested);  _walk does this
-	  nested_exports.erase(p.first++);   // note this increments before call to erase
+	  nested_exports[dir].erase(nested);
 	}
 	
   } else {
 	dout(7) << " i'm a subdir nested under import " << *containing_import << endl;
 	exports.insert(dir);
-	nested_exports.insert(pair<CDir*,CDir*>(containing_import, dir));
+	nested_exports[containing_import].insert(dir);
 	
 	dir->state_set(CDIR_STATE_EXPORT);
 	dir->get(CDIR_PIN_EXPORT);                  // i must keep it pinned
 	
 	// discard nested exports (that we're handing off)
-	// NOTE: possible concurrent modification bug?
-	pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-	  nested_exports.equal_range(containing_import);
-	while (p.first != p.second) {
-	  CDir *nested = (*p.first).second;
-
-	  multimap<CDir*,CDir*>::iterator prev = p.first;
-	  p.first++;
+	for (set<CDir*>::iterator p = nested_exports[containing_import].begin();
+		 p != nested_exports[containing_import].end();
+		 p++) {
+	  CDir *nested = *p;
+	  if (nested == dir) continue;  // ignore myself
 	  
 	  // container of parent; otherwise we get ourselves.
 	  CDir *containing_export = get_containing_export(nested->get_parent_dir());
 	  if (!containing_export) continue;
-	  if (nested == dir) continue;  // ignore myself
 
 	  if (containing_export == dir) {
 		// nested beneath our new export *in; remove!
 		dout(7) << " export " << *nested << " was nested beneath us; removing from nested_exports" << endl;
+		nested_exports[containing_import].erase(nested);
 		// exports.erase(nested); _walk does this
-		nested_exports.erase(prev);  // note this increments before call to erase
 
+		// add to msg
 		req->add_export(nested);
 	  } else {
 		dout(12) << " export " << *nested << " is under other export " << *containing_export << ", which is unrelated" << endl;
@@ -4437,15 +4614,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 	
 	containing_import = get_containing_import(dir);  
 	dout(7) << "  it is nested under import " << *containing_import << endl;
-	for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p =
-		   nested_exports.equal_range( containing_import );
-		 p.first != p.second;
-		 p.first++) {
-	  if ((*p.first).second == dir) {
-		nested_exports.erase(p.first);
-		break;
-	  }
-	}
+	nested_exports[containing_import].erase(dir);
   } else {
 	// new import
 	imports.insert(dir);
@@ -4485,23 +4654,13 @@ void MDCache::handle_export_dir(MExportDir *m)
       mds->logger->inc("immyex");
 
       // move nested exports under containing_import
-	  list<CDir*> to_move;
-      for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-             nested_exports.equal_range(ex);
-           p.first != p.second;
-           p.first++) {
-        CDir *nested = (*p.first).second;
-        dout(7) << "     moving nested export " << *nested << " under " << *containing_import << endl;
-		to_move.push_back(nested);
-      }
-	  for (list<CDir*>::iterator it = to_move.begin();
-		   it != to_move.end();
+	  for (set<CDir*>::iterator it = nested_exports[ex].begin();
+		   it != nested_exports[ex].end();
 		   it++) {
-        nested_exports.insert(pair<CDir*,CDir*>(containing_import, *it));
+        dout(7) << "     moving nested export " << **it << " under " << *containing_import << endl;
+		nested_exports[containing_import].insert(*it);
 	  }
-
-      // de-list under old import
-      nested_exports.erase(ex);	
+      nested_exports.erase(ex);	      // de-list under old import
       
 	  ex->dir_auth = CDIR_AUTH_PARENT;
       ex->put(CDIR_PIN_IMPORT);       // imports are pinned, no longer import
@@ -4513,7 +4672,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 	  ex->state_set(CDIR_STATE_EXPORT);
       ex->get(CDIR_PIN_EXPORT);           // all exports are pinned
       exports.insert(ex);
-      nested_exports.insert(pair<CDir*,CDir*>(containing_import, ex));
+      nested_exports[containing_import].insert(ex);
       mds->logger->inc("imex");
     }
     
@@ -5518,25 +5677,25 @@ void MDCache::show_imports()
   for (set<CDir*>::iterator it = imports.begin();
 	   it != imports.end();
 	   it++) {
-	CDir *dir = *it;
-	dout(7) << "  + import " << *dir << endl;
-	assert( dir->is_import() );
-	assert( dir->is_auth() );
+	CDir *im = *it;
+	dout(7) << "  + import " << *im << endl;
+	assert( im->is_import() );
+	assert( im->is_auth() );
 	
-	for (pair< multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator > p = 
-		   nested_exports.equal_range( *it );
-		 p.first != p.second;
-		 p.first++) {
-	  CDir *exp = (*p.first).second;
+	for (set<CDir*>::iterator p = nested_exports[im].begin();
+		 p != nested_exports[im].end();
+		 p++) {
+	  CDir *exp = *p;
 	  dout(7) << "      - ex " << *exp << " to " << exp->dir_auth << endl;
 	  assert( exp->is_export() );
-
-	  if ( get_containing_import(exp) != *it ) {
+	  assert( !exp->is_auth() );
+	  
+	  if ( get_containing_import(exp) != im ) {
 		dout(7) << "uh oh, containing import is " << get_containing_import(exp) << endl;
 		dout(7) << "uh oh, containing import is " << *get_containing_import(exp) << endl;
-		assert( get_containing_import(exp) == *it );
+		assert( get_containing_import(exp) == im );
 	  }
-
+	  
 	  if (ecopy.count(exp) != 1) {
 		dout(7) << " nested_export " << *exp << " not in exports" << endl;
 		assert(0);
@@ -5544,7 +5703,7 @@ void MDCache::show_imports()
 	  ecopy.erase(exp);
 	}
   }
-
+  
   if (ecopy.size()) {
 	for (set<CDir*>::iterator it = ecopy.begin();
 		 it != ecopy.end();
