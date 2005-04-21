@@ -1,43 +1,14 @@
 
+for deadline:
+- rush stub
+- single thread client bits
+- multithread thinger
+
+
+
 - string table
 
-
-OPS
-
-
-on inode			soft	hard
- stat				r
- utime				w
- chmod						w
- chown						w
-
- readdir
-
- open
- truncate			w
-
-on fh
- close				w
- truncate			w
- fsync				w
-
-on dir inode
- mknod				w
- link				w
- unlink				w
- mkdir				w
- rmdir				w
- symlink			w
-
- openc				w
-
-on 2 dir inodes
- rename				w*2
-
-
-
-
-- path lock
+/- path lock
  - on export
 
 - rename vs. discover?
