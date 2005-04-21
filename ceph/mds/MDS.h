@@ -115,8 +115,6 @@ class MDS : public Dispatcher {
   __uint64_t   stat_ops;
   __uint64_t   last_heartbeat;
   
-  map<Message*, CDentry*> locked_rename_dentries;
-  
  public:
   MDS(MDCluster *mdc, int whoami, Messenger *m);
   ~MDS();

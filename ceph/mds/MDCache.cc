@@ -1143,34 +1143,57 @@ bool MDCache::request_start(MClientRequest *req,
 }
 
 
-void MDCache::request_finish(MClientRequest *req)
+void MDCache::request_cleanup(MClientRequest *req)
 {
-  dout(7) << "request_finish " << *req << endl;
   assert(active_requests.count(req) == 1);
 
-  // unpin path
-  path_unpin(active_requests[req].trace, req);
-  
-  // unpin and remove from map
-  active_requests.erase(req);
+  // leftover xlocks?
+  if (active_request_xlocks.count(req)) {
+	dout(7) << "count " << active_request_xlocks.count(req) << " size " << active_request_xlocks[req].size() << " on req " << *req << endl;
+	dout(7) << " hi mom" << endl;
 
-  // delete req
-  delete req;
-}
+	for (set<CDentry*>::iterator it = active_request_xlocks[req].begin();
+		 it != active_request_xlocks[req].end();
+		 it++) {
+	  CDentry *dn = *it;
+	  
+	  dout(7) << "request_cleanup leftover xlock " << *dn << endl;
+	  
+	  dentry_xlock_finish(dn);
+	  
+	  // null?    FIXME: should dentry_xlock_finish do this?
+	  if (dn->inode == NULL) 
+		dn->dir->remove_child(dn);
+	  
+	  // finish
+	  dn->dir->finish_waiting(CDIR_WAIT_ANY, dn->name);
+	  
+	  if (dn->inode == NULL) 
+		delete dn;
+	}
 
-
-void MDCache::request_forward(MClientRequest *req, int who)
-{
-  dout(7) << "request_forward to " << who << " req " << *req << endl;
-  assert(active_requests.count(req) == 1);
+	active_request_xlocks.erase(req);
+  }
 
   // unpin path
   path_unpin(active_requests[req].trace, req);
   
   // remove from map
   active_requests.erase(req);
+}
 
-  // fw
+void MDCache::request_finish(MClientRequest *req)
+{
+  dout(7) << "request_finish " << *req << endl;
+  request_cleanup(req);
+  delete req;  // delete req
+}
+
+
+void MDCache::request_forward(MClientRequest *req, int who)
+{
+  dout(7) << "request_forward to " << who << " req " << *req << endl;
+  request_cleanup(req);
   mds->messenger->send_message(req,
 							   MSG_ADDR_MDS(who), MDS_PORT_SERVER,
 							   MDS_PORT_SERVER);
@@ -1994,6 +2017,8 @@ void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname,
   string srcname = srcdn->name;
   CInode *in = srcdn->inode;
 
+  Message *req = srcdn->xlockedby;
+
   // update our cache
   rename_file(srcdn, destdir, destname, destdn);
 
@@ -2032,11 +2057,19 @@ void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname,
   if (srcdir->is_import() && !srcdir->inode->is_root() && srcdir->get_size() == 0) 
 	export_empty_import(srcdir);
 
-  // ok!
+  // clean up xlock aftermath... MESSY
 
-  // unpin dirs  (from xlocks) ... MESSY FIXME
+  // unpin dirs  (from xlocks)
   srcdir->auth_unpin();
   if (destdn) destdir->auth_unpin();
+
+  // remove xlocks from req map
+  assert(active_request_xlocks[req].count(srcdn) == 1);
+  active_request_xlocks[req].erase(srcdn);
+  if (destdn) {
+	assert(active_request_xlocks[req].count(destdn) == 1);
+	active_request_xlocks[req].erase(destdn);
+  }
 
   // finish our query off for now.  XXX FIXME (should wait for log?)
   if (c) {
@@ -3489,6 +3522,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, const string& path, MClientRequest
 	return false;
   } else {
 	dn->lockstate = DN_LOCK_XLOCK;
+	active_request_xlocks[dn->xlockedby].insert(dn);
 	return true;
   }
 }
@@ -3497,6 +3531,9 @@ void MDCache::dentry_xlock_finish(CDentry *dn, bool quiet)
 {
   dout(7) << "dentry_xlock_finish on " << *dn << endl;
   
+  assert(active_request_xlocks[dn->xlockedby].count(dn) == 1);
+  active_request_xlocks[dn->xlockedby].erase(dn);
+
   dn->xlockedby = 0;
   dn->lockstate = DN_LOCK_SYNC;
   
@@ -3549,6 +3586,8 @@ CDentry* MDCache::create_xlocked_dentry(CDir *dir, const string& dname, MClientR
   // lock
   dn->lockstate = DN_LOCK_XLOCK;
   dn->xlockedby = req;
+
+  active_request_xlocks[dn->xlockedby].insert(dn);
 
   return dn;
 }
@@ -3655,6 +3694,7 @@ void MDCache::handle_lock_dn(MLock *m)
 	if (dn->gather_set.size() == 0) {
 	  dout(7) << "handle_lock_dn finish gather, now xlock on " << *dn << endl;
 	  dn->lockstate = DN_LOCK_XLOCK;
+	  active_request_xlocks[dn->xlockedby].insert(dn);
 	  dir->finish_waiting(CDIR_WAIT_DNLOCK, dname);
 	}
 	break;

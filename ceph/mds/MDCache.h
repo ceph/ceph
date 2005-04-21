@@ -98,7 +98,9 @@ class MDCache {
 
   // active MDS requests
   map<MClientRequest*, active_request_t>   active_requests;
+  map<Message*, set<CDentry*> >            active_request_xlocks;
   
+
   friend class MDBalancer;
 
  public:
@@ -190,6 +192,7 @@ class MDCache {
   bool request_start(MClientRequest *req,
 					 CInode *ref,
 					 vector<CDentry*>& trace);
+  void request_cleanup(MClientRequest *req);
   void request_finish(MClientRequest *req);
   void request_forward(MClientRequest *req, int mds);
 

@@ -9,7 +9,7 @@ hmm, some things that go in the MDS log:
 prepare + commit versions of many of these?
 
 - inode update
-   entry will include mdloc_t of dir it resides in...
+ ???  entry will include mdloc_t of dir it resides in... 
 
 - directory operation
   unlink,
