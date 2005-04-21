@@ -850,11 +850,38 @@ int MDCache::proc_message(Message *m)
  *   <0 : traverse error (ENOTDIR, ENOENT)
  *    0 : success
  *   >0 : delayed or forwarded
+ *
+ * Notes:
+ *   onfinish context is only needed if you specify MDS_TRAVERSE_DISCOVER _and_
+ *   you aren't absolutely certain that the path actually exists.  If it doesn't,
+ *   the context is needed to pass a (failure) result code.
  */
+
+class C_MDC_TraverseDiscover : public Context {
+  Context *onfinish, *ondelay;
+ public:
+  C_MDC_TraverseDiscover(Context *onfinish, Context *ondelay) {
+	this->ondelay = ondelay;
+	this->onfinish = onfinish;
+  }
+  void finish(int r) {
+	cout << "TraverseDiscover r = " << r << endl;
+	if (r < 0) {            // ENOENT on discover, pass back to caller.
+	  onfinish->finish(r);
+	  delete ondelay;
+	} else {
+	  ondelay->finish(r);   // retry as usual
+	  delete onfinish;
+	}
+  }
+};
+
 int MDCache::path_traverse(filepath& path, 
 						   vector<CDentry*>& trace, 
 						   Message *req,
-						   int onfail)
+						   Context *ondelay,
+						   int onfail,
+						   Context *onfinish)   // use this instead of return value, if specified
 {
   int whoami = mds->get_nodeid();
   
@@ -862,8 +889,8 @@ int MDCache::path_traverse(filepath& path,
   CInode *cur = get_root();
   if (cur == NULL) {
 	dout(7) << "mds" << whoami << " i don't have root" << endl;
-	if (req) 
-	  open_root(new C_MDS_RetryMessage(mds, req));
+	open_root(ondelay);
+	if (onfinish) delete onfinish;
 	return 1;
   }
 
@@ -877,6 +904,8 @@ int MDCache::path_traverse(filepath& path,
 	
 	if (!cur->is_dir()) {
 	  dout(7) << *cur << " not a dir " << endl;
+	  delete ondelay;
+	  if (onfinish) onfinish->finish(-ENOTDIR);
 	  return -ENOTDIR;
 	}
 
@@ -900,8 +929,8 @@ int MDCache::path_traverse(filepath& path,
 									   MSG_ADDR_MDS(cur->authority()), MDS_PORT_CACHE,
 									   MDS_PORT_CACHE);
 		}
-		cur->add_waiter(CINODE_WAIT_DIR, 
-						new C_MDS_RetryMessage(mds, req));
+		cur->add_waiter(CINODE_WAIT_DIR, ondelay);
+		if (onfinish) delete onfinish;
 		return 1;
 	  }
 	}
@@ -911,14 +940,16 @@ int MDCache::path_traverse(filepath& path,
 	  // doh!
 	  // FIXME: traverse is allowed?
 	  dout(7) << *cur->dir << " is frozen, waiting" << endl;
-	  cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
-						   new C_MDS_RetryMessage(mds, req));
+	  cur->dir->add_waiter(CDIR_WAIT_UNFREEZE, ondelay);
+	  if (onfinish) delete onfinish;
 	  return 1;
 	}
 	
 	// must read hard data to traverse
-	if (!inode_hard_read_try(cur, req))
+	if (!inode_hard_read_try(cur, ondelay)) {
+	  if (onfinish) delete onfinish;
 	  return 1;
+	}
 	
 	// check permissions?
 	// XXX
@@ -931,7 +962,8 @@ int MDCache::path_traverse(filepath& path,
 		dout(10) << " xlocked dentry at " << *dn << endl;
 		cur->dir->add_waiter(CDIR_WAIT_DNREAD,
 							 path[depth],
-							 new C_MDS_RetryMessage(mds, req));
+							 ondelay);
+		if (onfinish) delete onfinish;
 		return 1;
 	  }
 
@@ -952,6 +984,8 @@ int MDCache::path_traverse(filepath& path,
 	  // mine.
 	  if (cur->dir->is_complete()) {
 		// file not found
+		delete ondelay;
+		if (onfinish) onfinish->finish(-ENOENT);
 		return -ENOENT;
 	  } else {
 		
@@ -962,11 +996,13 @@ int MDCache::path_traverse(filepath& path,
 		// directory isn't complete; reload
 		dout(7) << " incomplete dir contents for " << *cur << ", fetching" << endl;
 		lru->lru_touch(cur);  // touch readdiree
-		mds->mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(mds, req));
+		mds->mdstore->fetch_dir(cur->dir, ondelay);
 		
 		mds->logger->inc("cmiss");
 		mds->logger->inc("rdir");
-		return 1;		   
+
+		if (onfinish) delete onfinish;
+		return 1;
 	  }
 	} else {
 	  // not mine.
@@ -991,10 +1027,12 @@ int MDCache::path_traverse(filepath& path,
 		  mds->logger->inc("dis");
 		}
 		
-		// delay processing of current request
+		// delay processing of current request.
+		//  delay finish vs ondelay until result of traverse, so that ENOENT can be 
+		//  passed to onfinish if necessary
 		cur->dir->add_waiter(CDIR_WAIT_DENTRY, 
 							 path[depth], 
-							 new C_MDS_RetryMessage(mds, req));
+							 new C_MDC_TraverseDiscover(onfinish, ondelay));
 		
 		mds->logger->inc("cmiss");
 		return 1;
@@ -1008,10 +1046,14 @@ int MDCache::path_traverse(filepath& path,
 		//show_imports();
 		
 		mds->logger->inc("cfw");
-		return 1;
+		if (onfinish) delete onfinish;
+		delete ondelay;
+		return 2;
 	  }	
 	  if (onfail == MDS_TRAVERSE_FAIL) {
-		return -1;  // -ENOENT, but only because i'm not the authority
+		delete ondelay;
+		if (onfinish) onfinish->finish(-ENOENT);  // -ENOENT, but only because i'm not the authority
+		return -ENOENT;  // not necessarily exactly true....
 	  }
 	}
 	
@@ -1019,6 +1061,8 @@ int MDCache::path_traverse(filepath& path,
   }
   
   // success.
+  delete ondelay;
+  if (onfinish) onfinish->finish(0);
   return 0;
 }
 
@@ -1426,7 +1470,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 {
   // starting point
   CInode *cur;
-  list<Context*> finished;
+  list<Context*> finished, error;
   
   if (m->has_root()) {
 	// nowhere!
@@ -1488,10 +1532,10 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
 		cur->dir->take_waiting(CDIR_WAIT_DENTRY,
 							   m->get_error_dentry(),
-							   finished);
+							   error);
 	  } else {
 		dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
-		cur->take_waiting(CINODE_WAIT_DIR, finished);
+		cur->take_waiting(CINODE_WAIT_DIR, error);
 	  }
 	  break;
 	}
@@ -1579,6 +1623,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   // finish
   finish_contexts(finished, 0);
+  finish_contexts(error, -ENOENT);
 
   // done
   delete m;
@@ -1868,7 +1913,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
   }
 
   // unpin dir / unxlock
-  dentry_xlock_finish(dn);
+  dentry_xlock_finish(dn, true); // quiet, no need to bother replicas since they're already unlinking
   
   // unlink
   unlink_dentry( dn );
@@ -1956,8 +2001,9 @@ void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname,
   in->mark_dirty();      // the moving inode           // FIXME XXX is this right for hard links?
   srcdir->mark_dirty();  // src dir
   
-
-
+  // update imports/exports?
+  if (in->is_dir() && in->dir) 
+	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 
 
   // tell replicas (no need to wait for ack) to do the same, and un-xlock.
@@ -2013,7 +2059,7 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
   if (srcdiri) srcdir = srcdiri->dir;
   CDentry *srcdn = 0;
   if (srcdir) srcdn = srcdir->lookup(m->get_srcname());
-  
+
   // dest
   CInode *destdiri = get_inode(m->get_destdirino());
   CDir *destdir = 0;
@@ -2023,26 +2069,38 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
 
   // have both?
   if (srcdn && destdir) {
+	CInode *in = srcdn->inode;
+
 	if (destdn) {
 	  dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdn << endl;
 	} else {
 	  dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << m->get_destname() << " in " << *destdir << endl;
 	}
+	
 	rename_file(srcdn, destdir, m->get_destname(), destdn);
+	
+	// update imports/exports?
+	if (in->is_dir() && in->dir) 
+	  fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
+	
 	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
 	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
   }
+
   else if (srcdn) {
 	dout(7) << "handle_rename_local_file unlinking src only " << *srcdn << endl;
 	unlink_dentry(srcdn);  // will leave inode dangling.
 	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
   }
+
   else if (destdn) {
 	dout(7) << "handle_rename_local_file unlinking dst only " << *destdn << endl;
 	unlink_dentry(destdn);
 	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
-  } else {
-	dout(7) << "handle_rename_local_file have neither src nor dst" << endl;
+  }
+  
+  else {
+	dout(7) << "handle_rename_local_file didn't have srcdn or destdn" << endl;
 	assert(srcdn == 0 && destdn == 0);
   }
   
@@ -2181,7 +2239,7 @@ void MDCache::handle_lock(MLock *m)
 
 // hard inode metadata
 
-bool MDCache::inode_hard_read_try(CInode *in, Message *m)
+bool MDCache::inode_hard_read_try(CInode *in, Context *con)
 {
   dout(7) << "inode_hard_read_try on " << *in << endl;  
 
@@ -2198,7 +2256,7 @@ bool MDCache::inode_hard_read_try(CInode *in, Message *m)
 	
 	// wait!
 	dout(7) << "inode_hard_read_try waiting on " << *in << endl;
-	in->add_waiter(CINODE_WAIT_HARDR, new C_MDS_RetryMessage(mds, m));
+	in->add_waiter(CINODE_WAIT_HARDR, con);
   }
   
   return false;
@@ -3351,7 +3409,7 @@ void MDCache::handle_lock_dir(MLock *m)
 
 // DENTRY
 
-bool MDCache::dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref)
+bool MDCache::dentry_xlock_start(CDentry *dn, const string& path, MClientRequest *m, CInode *ref)
 {
   dout(7) << "dentry_xlock_start on " << *dn << endl;
 
@@ -3418,6 +3476,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref)
 		 it++) {
 	  MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
 	  m->set_dn(dn->dir->ino(), dn->name);
+	  m->set_path(path);
 	  mds->messenger->send_message(m,
 								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
@@ -3434,24 +3493,26 @@ bool MDCache::dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref)
   }
 }
 
-void MDCache::dentry_xlock_finish(CDentry *dn)
+void MDCache::dentry_xlock_finish(CDentry *dn, bool quiet)
 {
   dout(7) << "dentry_xlock_finish on " << *dn << endl;
   
   dn->xlockedby = 0;
   dn->lockstate = DN_LOCK_SYNC;
   
-  // tell replicas?
-  if (dn->inode &&    // if NULL, don't bother.
-	  dn->dir->is_open_by_anyone()) {
-	for (set<int>::iterator it = dn->dir->open_by_begin();
-		 it != dn->dir->open_by_end();
-		 it++) {
-	  MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-	  m->set_dn(dn->dir->ino(), dn->name);
-	  mds->messenger->send_message(m,
-								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
+  if (!quiet) {
+	// tell replicas?
+	if (dn->inode &&    // if NULL, don't bother.
+		dn->dir->is_open_by_anyone()) {
+	  for (set<int>::iterator it = dn->dir->open_by_begin();
+		   it != dn->dir->open_by_end();
+		   it++) {
+		MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
+		m->set_dn(dn->dir->ino(), dn->name);
+		mds->messenger->send_message(m,
+									 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
+									 MDS_PORT_CACHE);
+	  }
 	}
   }
   
@@ -3532,20 +3593,16 @@ void MDCache::handle_lock_dn(MLock *m)
   } else {
 	// replica
 	if (dir) dn = dir->lookup(dname);
-	if (!dir || !dn) {
+	if (!dn) {
+	  dout(7) << "handle_lock_dn don't have " << m->get_ino() << " dname " << dname << endl;
+	  dout(7) << "handle_lock_dn don't have " << m->get_path() << ", discovering" << endl;
 
-	  if (m->get_action() == LOCK_AC_LOCK) {
-		// nack
-		dout(7) << "handle_lock " << m->get_ino() << ": don't have it anymore, NAKing" << endl;
-		
-		// NAK
-		MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
-		reply->set_dn(dir->ino(), dname);
-		mds->messenger->send_message(reply,
-									 MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
-	  }
-	  delete m;
+	  vector<CDentry*> trace;
+	  filepath path = m->get_path();
+	  int r = path_traverse(path, trace, 
+							m, new C_MDS_RetryMessage(mds,m), 
+							MDS_TRAVERSE_DISCOVER);
+	  assert(r>0);
 	  return;
 	}
   }
@@ -4371,10 +4428,10 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
   // must discover it!
   vector<CDentry*> trav;
   filepath fpath(m->get_path());
-  int r = path_traverse(fpath, trav, m, MDS_TRAVERSE_DISCOVER);   
-  if (r > 0) {
-	return;  // fw or delay
-  }
+  int r = path_traverse(fpath, trav, 
+						m, new C_MDS_RetryMessage(mds,m), 
+						MDS_TRAVERSE_DISCOVER);   
+  if (r > 0) return;  // fw or delay
   
   // yay!
   CInode *in = trav[trav.size()-1]->inode;

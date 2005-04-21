@@ -50,6 +50,7 @@ class MLock : public Message {
   inodeno_t ino;    // ino ref, or possibly
   string    dn;     // dentry name
   crope     data;   // and possibly some data
+  string    path;   // possibly a path too (for dentry lock discovers)
 
  public:
   inodeno_t get_ino() { return ino; }
@@ -58,6 +59,7 @@ class MLock : public Message {
   int get_asker() { return asker; }
   int get_action() { return action; }
   int get_otype() { return otype; }
+  string& get_path() { return path; }
 
   MLock() {}
   MLock(int action, int asker) :
@@ -83,6 +85,9 @@ class MLock : public Message {
   void set_data(crope& data) {
 	this->data = data;
   }
+  void set_path(const string& p) {
+	path = p;
+  }
   
   virtual int decode_payload(crope s) {
 	int off = 0;
@@ -101,6 +106,9 @@ class MLock : public Message {
 	dn = s.c_str() + off;
 	off += dn.length() + 1;
 
+	path = s.c_str() + off;
+	off += path.length() + 1;
+
 	int len;
 	s.copy(off, sizeof(len), (char*)&len);
 	off += sizeof(len);
@@ -117,6 +125,7 @@ class MLock : public Message {
 	s.append((char*)&ino, sizeof(inodeno_t));
 
 	s.append((char*)dn.c_str(), dn.length()+1);
+	s.append((char*)path.c_str(), path.length()+1);
 
 	int len = data.length();
 	s.append((char*)len, sizeof(len));

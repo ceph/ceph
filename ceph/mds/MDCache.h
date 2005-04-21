@@ -175,10 +175,10 @@ class MDCache {
 
  public:
   int open_root(Context *c);
-  int path_traverse(filepath& path, 
-					vector<CDentry*>& trace, 
-					Message *req, 
-					int onfail);
+  int path_traverse(filepath& path, vector<CDentry*>& trace, 
+					Message *req, Context *ondelay,
+					int onfail,
+					Context *onfinish=0);
 
   set<Message*> has_path_pinned;
   bool path_pin(vector<CDentry*>& trace,
@@ -308,7 +308,7 @@ class MDCache {
 
   // -- locks --
   // high level interface
-  bool inode_hard_read_try(CInode *in, Message *m);
+  bool inode_hard_read_try(CInode *in, Context *con);
   bool inode_hard_read_start(CInode *in, MClientRequest *m);
   void inode_hard_read_finish(CInode *in);
   bool inode_hard_write_start(CInode *in, MClientRequest *m);
@@ -341,8 +341,8 @@ class MDCache {
   void handle_lock_dir(MLock *m);
 
   // dentry
-  bool dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref);
-  void dentry_xlock_finish(CDentry *dn);
+  bool dentry_xlock_start(CDentry *dn, const string& path, MClientRequest *m, CInode *ref);
+  void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   CDentry* create_xlocked_dentry(CDir *dir, const string& name, MClientRequest *req, CInode *ref);
   void handle_lock_dn(MLock *m);
   

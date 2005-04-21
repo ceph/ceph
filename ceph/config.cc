@@ -14,7 +14,7 @@
 md_config_t g_conf = {
   num_mds: 13,
   num_osd: 10,
-  num_client: 500,
+  num_client: 55,
 
   osd_cow: false, // crashy? true,  
 
@@ -50,6 +50,7 @@ md_config_t g_conf = {
   client_op_statfs:     false,
 
   client_op_stat:     10,
+  client_op_lstat:      false,
   client_op_utime:    10,   // untested
   client_op_chmod:    10,
   client_op_chown:    10,   // untested
@@ -57,11 +58,11 @@ md_config_t g_conf = {
   client_op_readdir:  10,
   client_op_mknod:    10,
   client_op_link:       false,
-  client_op_unlink:   0,
-  client_op_rename:   00,
+  client_op_unlink:   10,
+  client_op_rename:   100,
 
   client_op_mkdir:    10,
-  client_op_rmdir:    0,
+  client_op_rmdir:    10,
   client_op_symlink:  10,
 
   client_op_openrd:   10,

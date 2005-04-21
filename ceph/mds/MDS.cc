@@ -343,32 +343,33 @@ void MDS::reply_request(MClientRequest *req, int r)
 }
 
 
-int MDS::handle_client_request(MClientRequest *req)
+
+void MDS::handle_client_request(MClientRequest *req)
 {
   dout(10) << "req " << *req << endl;
 
   if (is_shutting_down()) {
 	dout(5) << " shutting down, discarding client request." << endl;
 	delete req;
-	return 0;
+	return;
   }
   
   if (!mdcache->get_root()) {
 	dout(5) << "need to open root" << endl;
 	open_root(new C_MDS_RetryMessage(this, req));
-	return 0;
+	return;
   }
 
   // okay, i want
   CInode           *ref = 0;
-  vector<CDentry*> trace;
+  vector<CDentry*> trace;      // might be blank, for fh guys
 
   // operations on fh's or other non-files
   switch (req->get_op()) {
 	/*
   case MDS_OP_FSTAT:
 	reply = handle_client_fstat(req, cur);
-	break;
+	break; ****** fiX ME ***
 	*/
 	
   case MDS_OP_TRUNCATE:
@@ -377,12 +378,12 @@ int MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_CLOSE:
   case MDS_OP_FSYNC:
 	ref = mdcache->get_inode(req->get_ino());
-	break;
   }
-  
-  if (!ref) {
-	filepath refpath = req->get_filepath();
 
+  if (!ref) {
+	// we need to traverse a path
+	filepath refpath = req->get_filepath();
+	
 	// ops on non-existing files --> directory paths
 	switch (req->get_op()) {
 	case MDS_OP_OPEN:
@@ -399,24 +400,28 @@ int MDS::handle_client_request(MClientRequest *req)
 	  refpath = refpath.prefixpath(refpath.depth()-1);
 	  break;
 	}
-	
 	dout(10) << "refpath = " << refpath << endl;
 	
+	Context *ondelay = new C_MDS_RetryMessage(this, req);
+	
 	// do trace
-	int r = mdcache->path_traverse(refpath, trace, req, MDS_TRAVERSE_FORWARD);
-	if (r > 0) return 0;  // delayed
+	int r = mdcache->path_traverse(refpath, trace,
+								   req, ondelay,
+								   MDS_TRAVERSE_FORWARD);
+	
+	if (r > 0) return; // delayed
 	if (r == -ENOENT ||
 		r == -ENOTDIR ||
 		r == -EISDIR) {
 	  // error! 
 	  dout(10) << " path traverse error " << r << ", replying" << endl;
-
+	  
 	  // send error
 	  messenger->send_message(new MClientReply(req, r),
 							  MSG_ADDR_CLIENT(req->get_client()), 0,
 							  MDS_PORT_SERVER);
 	  delete req;
-	  return 0;
+	  return;
 	}
 	
 	if (trace.size()) 
@@ -424,17 +429,15 @@ int MDS::handle_client_request(MClientRequest *req)
 	else
 	  ref = mdcache->get_root();
   }
-
+  
   dout(10) << "ref is " << *ref << endl;
   
   // register
   if (!mdcache->request_start(req, ref, trace))
-	return 0;
-
+	return;
+  
   // process
   dispatch_request(req, ref);
-
-  return 0;
 }
 
 
@@ -463,6 +466,7 @@ void MDS::dispatch_request(MClientRequest *req, CInode *ref)
 
 	// inodes
   case MDS_OP_STAT:
+  case MDS_OP_LSTAT:
 	handle_client_stat(req, ref);
 	break;
   case MDS_OP_UTIME:
@@ -1093,7 +1097,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
   dout(7) << "handle_client_unlink/rmdir on " << *in << endl;
   
   // xlock dentry
-  if (!mdcache->dentry_xlock_start(dn, req, diri))
+  if (!mdcache->dentry_xlock_start(dn, req->get_path(), req, diri))
 	return;
 	
   // it's locked, unlink!
@@ -1104,6 +1108,36 @@ void MDS::handle_client_unlink(MClientRequest *req,
 
 
 // RENAME
+
+class C_MDS_RenameTraverse : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CInode *srcdiri;
+  CDir *srcdir;
+  CDentry *srcdn;
+  filepath destpath;
+public:
+  vector<CDentry*> trace;
+  
+  C_MDS_RenameTraverse(MDS *mds, 
+					   MClientRequest *req, 
+					   CInode *srcdiri,
+					   CDir *srcdir,
+					   CDentry *srcdn,
+					   filepath& destpath) {
+	this->mds = mds;
+	this->req = req;
+	this->srcdiri = srcdiri;
+	this->srcdir = srcdir;
+	this->srcdn = srcdn;
+	this->destpath = destpath;
+  }
+  void finish(int r) {
+	mds->handle_client_rename_2(req, srcdiri, srcdir, srcdn, destpath,
+								trace, r);
+  }
+};
+
 
 void MDS::handle_client_rename(MClientRequest *req,
 							   CInode *srcdiri)
@@ -1123,13 +1157,13 @@ void MDS::handle_client_rename(MClientRequest *req,
   }
   
   string srcname = req->get_filepath().last_bit();
-  dout(7) << "srcname is " << srcname << endl;
+  dout(7) << "handle_client_rename srcname is " << srcname << endl;
 
   // make sure parent is a dir?
   if (!srcdiri->is_dir()) {
-	dout(7) << "not a dir" << endl;
-	reply_request(req, -EINVAL);
+	dout(7) << "srcdiri not a dir " << *srcdiri << endl;
 	cleanup_rename_locks(req);
+	reply_request(req, -EINVAL);
 	return;
   }
 
@@ -1137,8 +1171,8 @@ void MDS::handle_client_rename(MClientRequest *req,
   if (!srcdiri->dir && !srcdiri->is_auth()) {
 	int dirauth = srcdiri->authority();
 	dout(7) << "don't know dir auth, not open, auth is i think " << dirauth << endl;
-	mdcache->request_forward(req, dirauth);
 	cleanup_rename_locks(req);
+	mdcache->request_forward(req, dirauth);
 	return;
   }
   
@@ -1150,8 +1184,8 @@ void MDS::handle_client_rename(MClientRequest *req,
   if (srcauth != get_nodeid()) {
 	// fw
 	dout(7) << "rename on " << req->get_path() << ", dentry " << *srcdir << " dn " << srcname << " not mine, fw to " << srcauth << endl;
-	mdcache->request_forward(req, srcauth);
 	cleanup_rename_locks(req);
+	mdcache->request_forward(req, srcauth);
 	return;
   }
   // ok, done passing buck.
@@ -1161,8 +1195,8 @@ void MDS::handle_client_rename(MClientRequest *req,
   if (!srcdn) {
 	if (srcdir->is_complete()) {
 	  dout(10) << "handle_client_rename src dne " << endl;
-	  reply_request(req, -EEXIST);
 	  cleanup_rename_locks(req);
+	  reply_request(req, -EEXIST);
 	  return;
 	} else {
 	  dout(10) << "readding incomplete dir" << endl;
@@ -1182,23 +1216,39 @@ void MDS::handle_client_rename(MClientRequest *req,
 	return;
   }
 
-  CInode *srci = srcdn->inode;
-  assert(srci);
   
   dout(10) << "handle_client_rename " << *srcdn << " to " << req->get_sarg() << endl;
-  dout(10) << "src inode is " << *srci << endl;
+  dout(10) << "src inode is " << *srcdn->inode << endl;
   
   // find the destination, normalize
   // discover, etc. on the way... just get it on the local node.
   filepath destpath = req->get_sarg();   
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(destpath, trace, req, MDS_TRAVERSE_DISCOVER);
+
+  C_MDS_RenameTraverse *onfinish = new C_MDS_RenameTraverse(this, req, srcdiri, srcdir, srcdn, destpath);
+  Context *ondelay = new C_MDS_RetryRequest(this, req, srcdiri);
+  
+  mdcache->path_traverse(destpath, onfinish->trace, 
+						 req, ondelay,
+						 MDS_TRAVERSE_DISCOVER, 
+						 onfinish);
+}
+
+void MDS::handle_client_rename_2(MClientRequest *req,
+								 CInode *srcdiri,
+								 CDir *srcdir,
+								 CDentry *srcdn,
+								 filepath& destpath,
+								 vector<CDentry*>& trace,
+								 int r)
+{
   dout(12) << " r = " << r << " trace depth " << trace.size() << "  destpath depth " << destpath.depth() << endl;
   if (r > 0) {   // waiting.. discover, or readdir
 	cleanup_rename_locks(req);
 	return; 
   }
 
+  CInode *srci = srcdn->inode;
+  assert(srci);
   CDir*  destdir = 0;
   string destname;
   int destauth = -1;
@@ -1229,8 +1279,8 @@ void MDS::handle_client_rename(MClientRequest *req,
 	  destname = destpath.last_bit();       // place_that_MAYBE_dne
 	} else {
 	  dout(7) << "dest dne" << endl;
-	  reply_request(req, -EINVAL);
 	  cleanup_rename_locks(req);
+	  reply_request(req, -EINVAL);
 	  return;
 	}
   }
@@ -1275,17 +1325,14 @@ void MDS::handle_client_rename(MClientRequest *req,
 	goto fail;
   }
 
-  // file or dir?
   if (srci->is_dir()) {
-
-	//handle_client_rename_dir(req,cur);
-	// *** IMPLEMENT ME ***
-
-	dout(7) << "rename NOT FULLY IMPLEMENTED" << endl;
+	dout(7) << "rename dirs NOT YET IMPLEMENTED" << endl;
 	goto fail;
-  } else {
-	handle_client_rename_file(req, srcdn, destdir, destname);
   }
+
+
+  // file or dir?
+  handle_client_rename_file(req, srcdiri, srcdn, destdir, destname);
 
   return;
 
@@ -1349,24 +1396,26 @@ void MDS::cleanup_rename_locks(MClientRequest *req)
   CDentry *dn = locked_rename_dentries[req];
   dout(7) << "cleanup_rename_locks on " << *req << " dentry " << *dn << endl;
 
-  assert(dn->is_xlockedbyme(req));
-  mdcache->dentry_xlock_finish(dn);
+  if (dn->is_xlockedbyme(req)) {
+	mdcache->dentry_xlock_finish(dn);
 
-  // null?
-  if (dn->inode == NULL) {
-	dn->dir->remove_child(dn);
-  }	
-	
+	// null?
+	if (dn->inode == NULL) {
+	  dn->dir->remove_child(dn);
+	}	
+  
+	// finish
+	dn->dir->finish_waiting(CDIR_WAIT_ANY, dn->name);
+
+	if (dn->inode == NULL) 
+	  delete dn;
+  }
+  
   locked_rename_dentries.erase(req);
-
-  // finish
-  dn->dir->finish_waiting(CDIR_WAIT_ANY, dn->name);
-
-  if (dn->inode == NULL) 
-	delete dn;
 }
 
 void MDS::handle_client_rename_file(MClientRequest *req,
+									CInode *srcdiri,
 									CDentry *srcdn,
 									CDir *destdir,
 									string& destname)
@@ -1406,7 +1455,7 @@ void MDS::handle_client_rename_file(MClientRequest *req,
   if (req->get_path() < req->get_sarg()) { 
 	// src
 	if (!srcdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(srcdn, req, srcdn->inode))
+		!mdcache->dentry_xlock_start(srcdn, req->get_path(), req, srcdiri))
 	  return;  
 	dout(7) << "srcdn is xlock " << *srcdn << endl;
 	
@@ -1415,32 +1464,32 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	// dest
 	if (destdn) {
 	  if (!destdn->is_xlockedbyme(req) &&
-		  !mdcache->dentry_xlock_start(destdn, req, srcdn->inode))
+		  !mdcache->dentry_xlock_start(destdn, req->get_sarg(), req, srcdiri))
 		return;
 	  dout(7) << "destdn is xlock " << *srcdn << endl;
 	} else {
-	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req, srcdn->inode);
+	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req, srcdiri);
 	  if (!destdn) return;
 	  dout(7) << "created destdn " << *destdn << endl;
 	}
   } else {
-	// dest
+	// dest	
 	if (destdn) {
 	  if (!destdn->is_xlockedbyme(req) &&
-		  !mdcache->dentry_xlock_start(destdn, req, srcdn->inode))
+		  !mdcache->dentry_xlock_start(destdn, req->get_sarg(), req, srcdiri))
 		return;
 	  dout(7) << "destdn is xlock " << *srcdn << endl;
 	} else {
-	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req, srcdn->inode);
+	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req, srcdiri);
 	  if (!destdn) return;
 	  dout(7) << "created destdn " << *destdn << endl;
 	}
 
 	locked_rename_dentries[req] = destdn;
-	
+
 	// src
 	if (!srcdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(srcdn, req, srcdn->inode))
+		!mdcache->dentry_xlock_start(srcdn, req->get_path(), req, srcdiri))
 	  return;  
 	dout(7) << "srcdn is xlock " << *srcdn << endl;
   }

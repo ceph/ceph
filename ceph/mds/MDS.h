@@ -36,6 +36,8 @@ typedef __uint64_t object_t;
 #define MDS_TRAVERSE_FAIL     3
 
 
+class filepath;
+
 class IdAllocator;
 
 class MDCluster;
@@ -149,9 +151,10 @@ class MDS : public Dispatcher {
   void handle_shutdown_start(Message *m);
   void handle_shutdown_finish(Message *m);
 
-  int handle_client_request(MClientRequest *m);
-  int handle_client_request_inode(MClientRequest *m,
-								  CInode *in);
+  void handle_client_request(MClientRequest *m);
+  void handle_client_request_2(MClientRequest *req, 
+							   vector<CDentry*>& trace,
+							   int r);
 
   // fs ops
   void handle_client_fstat(MClientRequest *req);
@@ -177,7 +180,14 @@ class MDS : public Dispatcher {
   void handle_client_link(MClientRequest *req, CInode *ref);
   void handle_client_unlink(MClientRequest *req, CInode *ref);
   void handle_client_rename(MClientRequest *req, CInode *ref);
-  void handle_client_rename_file(MClientRequest *req, CDentry *srcdn, CDir *destdir, string& name);
+  void handle_client_rename_2(MClientRequest *req,
+							  CInode *srcdiri,
+							  CDir *srcdir,
+							  CDentry *srcdn,
+							  filepath& destpath,
+							  vector<CDentry*>& trace,
+							  int r);
+  void handle_client_rename_file(MClientRequest *req, CInode *srcdiri, CDentry *srcdn, CDir *destdir, string& name);
   void handle_client_rename_dir (MClientRequest *req, CDentry *srcdn, CDir *destdir, string& name);
   void cleanup_rename_locks(MClientRequest *req);
   void handle_client_mkdir(MClientRequest *req, CInode *ref);

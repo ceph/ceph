@@ -53,14 +53,14 @@ class Inode {
 class Dentry : public LRUObject {
  public:
   string  name;                      // sort of lame
-  Dentry  *dn;
+  Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
   
   void get() { assert(ref == 0); ref++; lru_pin(); }
   void put() { assert(ref == 1); ref--; lru_unpin(); }
   
-  Dentry() : ref(0) { }
+  Dentry() : ref(0), dir(0), inode(0) { }
 };
 
 // file handle for any open file state
@@ -112,6 +112,37 @@ class Client {
   int get_cache_size() { return lru.lru_get_size(); }
   void set_cache_size(int m) { lru.lru_set_max(m); }
 
+  Dentry* link(Dir *dir, string& name, Inode *in) {
+	Dentry *dn = new Dentry;
+	dn->name = name;
+
+	// link to dir
+	dn->dir = dir;
+	dir->dentries[name] = dn;
+
+	// link to inode
+	dn->inode = in;
+	in->get();
+
+	return dn;
+  }
+  void unlink(Dentry *dn) {
+	dn->inode = 0;
+	in->put();
+
+	// unlink from dir
+	dn->dir->dentries.erase(dn->name);
+	if (dn->dir->dentries.empty()) {   // close dir
+	  if (dn->dir->parent_inode->dn)
+		dn->dir->parent_inode->dn->put();
+	  dn->dir->parent_inode->dir = 0;
+	  put_inode(dn->dir->parent_inode);
+	  delete dn->dir;
+	}
+	dn->dir = 0;
+	delete dn;
+  }
+
   // move dentry to top of lru
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 
@@ -121,22 +152,7 @@ class Client {
 	  Dentry *dn = (Dentry*)lru.lru_expire();
 	  if (!dn) break;  // done
 	  
-	  // unlink from inode
-	  dn->inode->dn = 0;
-	  put_inode(dn->inode);
-
-	  // unlink from dir
-	  dn->dir->dentries.erase(dn->name);
-	  if (dn->dir->dentries.size() == 0) {
-		if (dn->dir->parent_inode->dn) {
-		  dn->dir->parent_inode->dn->put();
-		}
-		put_inode(dn->dir->inode);
-		delete dn->dir;
-	  }
-
-	  // hose
-	  delete dn;
+	  unlink(dn);
 	}
   }
   

@@ -39,6 +39,7 @@ struct md_config_t {
   int client_op_statfs;
 
   int client_op_stat;
+  int client_op_lstat;
   int client_op_utime;
   int client_op_chmod;
   int client_op_chown;

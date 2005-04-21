@@ -91,8 +91,8 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
   switch(req.get_op()) {
   case MDS_OP_STAT: 
 	out << "stat"; break;
-  case MDS_OP_TOUCH: 
-	out << "touch"; break;
+  case MDS_OP_LSTAT: 
+	out << "lstat"; break;
   case MDS_OP_UTIME: 
 	out << "utime"; break;
   case MDS_OP_CHMOD: 

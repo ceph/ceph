@@ -13,7 +13,7 @@ using namespace std;
 #define MDS_OP_STATFS   1
 
 #define MDS_OP_STAT     100
-#define MDS_OP_TOUCH    101  // this is made up, not a real POSIX thing
+#define MDS_OP_LSTAT    101
 #define MDS_OP_UTIME    102
 #define MDS_OP_CHMOD    103
 #define MDS_OP_CHOWN    104  
