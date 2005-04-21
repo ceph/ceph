@@ -1149,11 +1149,10 @@ void MDCache::request_cleanup(MClientRequest *req)
 
   // leftover xlocks?
   if (active_request_xlocks.count(req)) {
-	dout(7) << "count " << active_request_xlocks.count(req) << " size " << active_request_xlocks[req].size() << " on req " << *req << endl;
-	dout(7) << " hi mom" << endl;
+	set<CDentry*> dns = active_request_xlocks[req];
 
-	for (set<CDentry*>::iterator it = active_request_xlocks[req].begin();
-		 it != active_request_xlocks[req].end();
+	for (set<CDentry*>::iterator it = dns.begin();
+		 it != dns.end();
 		 it++) {
 	  CDentry *dn = *it;
 	  
@@ -1171,7 +1170,7 @@ void MDCache::request_cleanup(MClientRequest *req)
 	  if (dn->inode == NULL) 
 		delete dn;
 	}
-
+	
 	active_request_xlocks.erase(req);
   }
 
@@ -4169,9 +4168,9 @@ void MDCache::export_dir_go(CDir *dir,
 	
 	// discard nested exports (that we're handing off)
 	for (set<CDir*>::iterator p = nested_exports[containing_import].begin();
-		 p != nested_exports[containing_import].end();
-		 p++) {
+		 p != nested_exports[containing_import].end(); ) {
 	  CDir *nested = *p;
+	  p++;
 	  if (nested == dir) continue;  // ignore myself
 	  
 	  // container of parent; otherwise we get ourselves.
