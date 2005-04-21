@@ -9,6 +9,26 @@ using namespace std;
 
 class CInode;
 
+/***
+ *
+ * MClientReply - container message for MDS reply to a client's MClientRequest
+ *
+ * key fields:
+ *  long tid - transaction id, so the client can match up with pending request
+ *  int result - error code, or fh if it was open
+ *
+ * for most requests:
+ *  trace is a vector of c_inoe_info's tracing from root to the file/dir/whatever
+ *  the operation referred to, so that the client can update it's info about what
+ *  metadata lives on what MDS.
+ *
+ * for readdir replies:
+ *  dir_contents is a vector c_inode_info*'s.  
+ * 
+ * that's mostly it, i think!
+ *
+ */
+
 typedef struct {
   inode_t inode;
   set<int> dist;
@@ -22,7 +42,6 @@ typedef struct {
   int result;  // error code
   int trace_depth;
   int dir_size;
-  int iarg;
 } MClientReply_st;
 
 class MClientReply : public Message {
@@ -38,13 +57,11 @@ class MClientReply : public Message {
   int get_op() { return st.op; }
   inodeno_t get_ino() { return trace[trace.size()-1]->inode.ino; }
   int get_result() { return st.result; }
-  int get_iarg() { return st.iarg; }
   const string& get_path() { return path; }
   const vector<c_inode_info*>& get_trace() { return trace; }
   vector<c_inode_info*>& get_dir_contents() { return dir_contents; }
   
   void set_result(int r) { st.result = r; }
-  void set_iarg(int i) { st.iarg = i; }
   
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 

@@ -5,6 +5,30 @@
 #include "include/filepath.h"
 #include "mds/MDS.h"
 
+/**
+ *
+ * MClientRequest - container for a client METADATA request.  created/sent by clients.  
+ *    can be forwarded around between MDS's.
+ *
+ *   int client - the originating client
+ *   long tid   - transaction id, unique among requests for that client.  probably just a counter!
+ *                -> the MDS passes the Request to the Reply constructor, so this always matches.
+ *  
+ *   int op - the metadata op code.  MDS_OP_RENAME, etc.
+ *   int caller_uid, _gid - guess
+ * 
+ * arguments:  one or more of these are defined, depending on the metadata op:
+ *   filepath path - main file argument (almost everything)
+ *   string   sarg - string argument (if a second arg is needed, e.g. rename, symlink)
+ *   int  iarg     - int arg... file mode for open, fh for close, mode for mkdir, etc.
+ *   int  iarg2    - second int arg... gid for chown (iarg is uid)
+ *   time_t targ, targ2  - time args, used by utime
+ *
+ * That's basically it!
+ *  
+ */
+
+
 typedef struct {
   long tid;
   int client;
@@ -12,7 +36,6 @@ typedef struct {
 
   int caller_uid, caller_gid;
 
-  inodeno_t ino;
   int    iarg, iarg2;
   time_t targ, targ2;
 } MClientRequest_st;
@@ -31,13 +54,11 @@ class MClientRequest : public Message {
 	this->st.tid = tid;
 	this->st.op = op;
 	this->st.client = client;
-	this->st.ino = 0;
 	this->st.iarg = 0;
   }
   virtual char *get_type_name() { return "creq"; }
 
   void set_path(string& p) { path.set_path(p); }
-  void set_ino(inodeno_t ino) { st.ino = ino; }
   void set_caller_uid(int u) { st.caller_uid = u; }
   void set_caller_gid(int g) { st.caller_uid = g; }
   void set_iarg(int i) { st.iarg = i; }
@@ -47,10 +68,9 @@ class MClientRequest : public Message {
   void set_sarg(string& arg) { this->sarg = arg; }
   void set_sarg2(string& arg) { this->sarg2 = arg; }
 
+  int get_client() { return st.client; }
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
-  int get_client() { return st.client; }
-  inodeno_t get_ino() { return st.ino; }
   int get_caller_uid() { return st.caller_uid; }
   int get_caller_gid() { return st.caller_gid; }
   string& get_path() { return path.get_path(); }
