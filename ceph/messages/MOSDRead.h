@@ -3,6 +3,16 @@
 
 #include "msg/Message.h"
 
+/*
+ * OSD read request
+ *
+ * oid - object id
+ * offset, len -- guess
+ *
+ * caveat: if len=0, then the _entire_ object is read.  this is currently
+ *   used by the MDS, and pretty much a dumb idea in general.
+ */
+
 typedef struct {
   long tid;
   size_t len;

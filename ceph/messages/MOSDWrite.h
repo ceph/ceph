@@ -3,6 +3,19 @@
 
 #include "msg/Message.h"
 
+/*
+ * OSD Write
+ *
+ * tid - caller's transaction id
+ * 
+ * oid - object id
+ * offset, len - 
+ *
+ * flags - passed to open().  not used at all.. this should be removed?
+ * 
+ */
+
+
 typedef struct {
   long tid;
   off_t offset;

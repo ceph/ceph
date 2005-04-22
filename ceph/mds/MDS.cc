@@ -373,11 +373,11 @@ void MDS::handle_client_request(MClientRequest *req)
 	*/
 	
   case MDS_OP_TRUNCATE:
-	if (!req->get_ino()) break;   // can be called w/ either ino OR path
+	if (!req->get_iarg()) break;   // can be called w/ either fh OR path
 	
   case MDS_OP_CLOSE:
   case MDS_OP_FSYNC:
-	ref = mdcache->get_inode(req->get_ino());
+	ref = mdcache->get_inode(req->get_iarg());   // FIXME: WRONG, look up fh!
   }
 
   if (!ref) {
@@ -1708,7 +1708,7 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   // reply
   MClientReply *reply = new MClientReply(req);
   reply->set_trace_dist( cur, whoami );
-  reply->set_iarg( req->get_iarg() );
+  //reply->set_iarg( req->get_iarg() );
   messenger->send_message(reply,
 						  req->get_source(), 0, MDS_PORT_SERVER);
 

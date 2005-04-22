@@ -59,7 +59,7 @@ md_config_t g_conf = {
   client_op_mknod:    10,
   client_op_link:       false,
   client_op_unlink:   10,
-  client_op_rename:   100,
+  client_op_rename:   00,
 
   client_op_mkdir:    10,
   client_op_rmdir:    10,

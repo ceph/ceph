@@ -3,6 +3,15 @@
 
 #include "MOSDWrite.h"
 
+/*
+ * OSD WRite Reply
+ *
+ * tid - caller's transaction #
+ * oid - object id
+ * offset, len - ...
+ * result - result code, matchines write() system call: # of bytes written, or error code.
+ */
+
 typedef struct {
   long tid;
   long result;

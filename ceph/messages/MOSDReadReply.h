@@ -3,6 +3,15 @@
 
 #include "MOSDRead.h"
 
+/*
+ * OSD Read Reply
+ *
+ * oid - object id
+ * offset, len - data returned
+ *
+ * len may not match the read request, if the end of object is hit.
+ */
+
 typedef struct {
   long tid;
   off_t offset;
