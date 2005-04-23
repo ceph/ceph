@@ -334,13 +334,22 @@ void MDStore::do_commit_dir( CDir *dir,
   for (CDir_map_t::iterator it = dir->begin();
 	   it != dir->end();
 	   it++) {
-	CInode *in = it->second->get_inode();
+	CDentry *dn = it->second;
 
 	if (hashcode >= 0) {
 	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	  if (dentryhashcode != hashcode) continue;
 	}
 
+	// put dentry in this version
+	if (dn->is_dirty()) {
+	  dn->float_parent_dir_version( dir->get_version() );
+	  dout(12) << " dirty dn " << *dn << " now " << dn->get_parent_dir_version() << endl;
+	}
+	
+	CInode *in = dn->get_inode();
+	if (!in) continue;  // skip negative dentries
+	
 	// name
 	dirdata.append( it->first.c_str(), it->first.length() + 1);
 	
@@ -400,16 +409,40 @@ void MDStore::do_commit_dir_2( int result,
 {
   dout(11) << "do_commit_dir_2 hashcode " << hashcode << " " << *dir << endl;
   
-  // mark inodes clean too (if we committed them!)
+  // mark inodes and dentries clean too (if we committed them!)
   for (CDir_map_t::iterator it = dir->begin();
 	   it != dir->end();
 	   it++) {
-	CInode *in = it->second->get_inode();
+	CDentry *dn = it->second;
 	
 	if (hashcode >= 0) {
-	  int dentryhashcode = mds->get_cluster()->hash_dentry( in->ino(), it->first );
+	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	  if (dentryhashcode != hashcode) continue;
 	}
+
+	// dentry
+	if (committed_version > dn->get_parent_dir_version()) {
+	  dout(5) << " dir " << committed_version << " > dn " << dn->get_parent_dir_version() << " still clean " << *dn << endl;
+	  assert(!dn->is_dirty());
+	}
+	else if (dn->get_parent_dir_version() == committed_version) {
+	  dout(5) << " dir " << committed_version << " == dn " << dn->get_parent_dir_version() << " now clean " << *dn << endl;
+	  dn->mark_clean();     // might not but could be dirty
+	  
+	  // remove, if it's null and unlocked
+	  if (dn->is_null() == 0 && dn->is_sync()) {
+		dout(5) << "   removing clean and null " << *dn << endl;
+		mds->mdcache->remove_dentry(dn);
+	  }
+	} else {
+	  dout(5) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
+	  assert(committed_version < dn->get_parent_dir_version());
+	  assert(dn->is_dirty());
+	}
+
+	// inode  FIXME: if primary link!
+	CInode *in = dn->get_inode();
+	assert(in->is_auth());
 	
 	if (committed_version > in->get_parent_dir_version()) {
 	  dout(5) << " dir " << committed_version << " > inode " << in->get_parent_dir_version() << " still clean " << *(in) << endl;
@@ -540,43 +573,57 @@ void MDStore::do_fetch_dir_2( int result,
 	p += dname.length() + 1;
 	//dout(7) << "parse filename " << dname << endl;
 	
-	// just a hard link?
+	CDentry *dn = dir->lookup(dname);  // existing dentry?
+
+	
 	if (*(buf+p) == 'L') {
-	  // yup.  we don't do that yet.
+	  // hard link, we don't do that yet.
 	  assert(0);
-	} else {
+	} 
+	else if (*(buf+p) == 'I') {
+	  // inode
 	  p++;
 	  
+	  // parse out inode
 	  inode_t *inode = (inode_t*)(buf+p);
 	  p += sizeof(inode_t);
 
+	  string symlink;
+	  if (inode->mode & INODE_MODE_SYMLINK) {
+		symlink = (char*)(buf+p);
+		p += symlink.length() + 1;
+	  }
+
+	  // what to do?
 	  if (hashcode >= 0) {
-		int dentryhashcode = mds->get_cluster()->hash_dentry( inode->ino, dname );
+		int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), dname );
 		assert(dentryhashcode == hashcode);
 	  }
 	  
+	  if (dn) {
+		if (dn->get_inode() == 0) {
+		  // negative dentry?
+		  dout(10) << "readdir had NEG dentry " << dname << endl;
+		} else {
+		  // had dentry
+		  dout(10) << "readdir had dentry " << dname << endl;
+		}
+		continue;
+	  }
+	  
+	  // add inode
 	  CInode *in = 0;
 	  if (mds->mdcache->have_inode(inode->ino)) {
 		in = mds->mdcache->get_inode(inode->ino);
 		dout(10) << "readdir got (but i already had) " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
-
-		// linked though?
-		CDentry *edn = dir->lookup(dname);  // existing dentry?
-		if (edn) {
-		  assert(edn->get_inode() == in);   // if so, it had better match!
-		  continue;
-		}
-
-		dout(10) << "XXX wasn't linked to this dir, though, linking!" << endl;
 	  } else {
 		// inode
 		in = new CInode();
 		memcpy(&in->inode, inode, sizeof(inode_t));
-	  
+		
 		// symlink?
 		if (in->is_symlink()) {
-		  in->symlink = (char*)(buf+p);
-		  p += in->symlink.length() + 1;
+		  in->symlink = symlink;
 		}
 		
 		// add 
@@ -584,8 +631,7 @@ void MDStore::do_fetch_dir_2( int result,
 	  }
 
 	  // link
-	  mds->mdcache->link_inode( dir, dname, in );
-	  
+	  mds->mdcache->add_dentry( dir, dname, in );
 	  dout(10) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
   }

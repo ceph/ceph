@@ -18,6 +18,7 @@
  *   int caller_uid, _gid - guess
  * 
  * arguments:  one or more of these are defined, depending on the metadata op:
+ *   inodeno  ino  - used by close(), along with fh.  not strictly necessary except MDS is currently coded lame.
  *   filepath path - main file argument (almost everything)
  *   string   sarg - string argument (if a second arg is needed, e.g. rename, symlink)
  *   int  iarg     - int arg... file mode for open, fh for close, mode for mkdir, etc.
@@ -35,6 +36,7 @@ typedef struct {
   int op;
 
   int caller_uid, caller_gid;
+  inodeno_t ino;
 
   int    iarg, iarg2;
   time_t targ, targ2;
@@ -61,6 +63,7 @@ class MClientRequest : public Message {
   void set_path(string& p) { path.set_path(p); }
   void set_caller_uid(int u) { st.caller_uid = u; }
   void set_caller_gid(int g) { st.caller_uid = g; }
+  void set_ino(inodeno_t ino) { st.ino = ino; }
   void set_iarg(int i) { st.iarg = i; }
   void set_iarg2(int i) { st.iarg2 = i; }
   void set_targ(time_t& t) { st.targ = t; }
@@ -73,6 +76,7 @@ class MClientRequest : public Message {
   int get_op() { return st.op; }
   int get_caller_uid() { return st.caller_uid; }
   int get_caller_gid() { return st.caller_gid; }
+  inodeno_t get_ino() { return st.ino; }
   string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
   int get_iarg() { return st.iarg; }

@@ -128,43 +128,34 @@ void MDCache::remove_inode(CInode *o)
 { 
   if (o->get_parent_dn()) {
 	CDentry *dn = o->get_parent_dn();
-	unlink_dentry(dn);  // unlink
+	unlink_inode(dn);  // unlink
   }
   inode_map.erase(o->ino());    // remove from map
   lru->lru_remove(o);           // remove from lru
 }
 
 
-CDentry* MDCache::link_inode( CDir *dir, const string& dname, CInode *in ) 
+CDentry* MDCache::add_dentry( CDir *dir, const string& dname, CInode *in ) 
 {
   assert(dir->lookup(dname) == 0);
 
   // create dentry
   CDentry* dn = new CDentry(dname, in);
-  in->add_parent(dn);
 
   // add to dir
   dir->add_child(dn);
 
-  // set dir version
-  in->parent_dir_version = dir->get_version();
-
-  // clear dangling
-  in->state_clear(CINODE_STATE_DANGLING);
+  if (in) link_inode( dn, in );
   
-  // adjust auth pin count
-  if (in->auth_pins + in->nested_auth_pins)
-	dn->dir->adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
-
   return dn;
 }
 
 
 
-void MDCache::unlink_dentry(CDentry *dn) 
+void MDCache::remove_dentry(CDentry *dn) 
 {
-  // detach inode
-  unlink_dentry_inode(dn);
+  // detach inode?
+  if (dn->inode) unlink_inode(dn);
 
   // detach dentry
   dn->dir->remove_child(dn);
@@ -172,89 +163,66 @@ void MDCache::unlink_dentry(CDentry *dn)
   delete dn;
 }
 
-void MDCache::unlink_dentry_inode(CDentry *dn)
+void MDCache::link_inode( CDentry *dn, CInode *in )
 {
-  // inode?
-  if (dn->inode) {
-	CInode *in = dn->inode;
+  in->add_parent(dn);
+  dn->dir->inc_size();  // adjust dir size
+  
+  // set dir version
+  in->parent_dir_version = dn->dir->get_version();
+  
+  // clear dangling
+  in->state_clear(CINODE_STATE_DANGLING);
 
-	// explicitly define auth
-	in->dangling_auth = in->authority();
-	dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
+  // adjust auth pin count
+  if (in->auth_pins + in->nested_auth_pins)
+	dn->dir->adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
 
-	// unlink auth_pin count
-	if (in->auth_pins + in->nested_auth_pins)
-	  dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
-
-	// set dangling flag
-	in->state_set(CINODE_STATE_DANGLING);
-
-	// detach inode
-	in->remove_parent(dn);
-	assert(in->nparents == 0);
-	assert(in->parent == 0);
-	// FIXME... might need to migrate inode to another dir?   XXX
-
-	if (in->is_dirty() && in->nparents == 0) 
-	  in->mark_clean();
-
-	dn->inode = 0;
-  }
 }
 
-/*
-void MDCache::unlink_inode(CInode *in)
+void MDCache::unlink_inode( CDentry *dn )
 {
-  // detach from parents
-  if (in->nparents == 1) {
-	CDentry *dn = in->parent;
-
-	// explicitly define auth
-	in->dangling_auth = in->authority();
-	dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
-
-	// unlink auth_pin count
-	if (in->auth_pins + in->nested_auth_pins)
-	  dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
-
-	// detach
-	dn->dir->remove_child(dn);
-	in->remove_parent(dn);
-	delete dn;
-	in->nparents = 0;
-	in->parent = NULL;
-  } 
-  else if (in->nparents > 1) {
-	assert(in->nparents <= 1);  // not implemented
-  } else {
-	assert(in->nparents == 0);  // root or dangling.
-	assert(in->parent == NULL);
-  }
+  CInode *in = dn->inode;
+  
+  // explicitly define auth
+  in->dangling_auth = in->authority();
+  dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
+  
+  // unlink auth_pin count
+  if (in->auth_pins + in->nested_auth_pins)
+	dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
+  
+  // set dangling flag
+  in->state_set(CINODE_STATE_DANGLING);
+  
+  // detach inode
+  in->remove_parent(dn);
+  assert(in->nparents == 0);
+  assert(in->parent == 0);
+  // FIXME... might need to migrate inode to another dir?   XXX
+  
+  if (in->is_dirty() && in->nparents == 0) 
+	in->mark_clean();
+  
+  dn->dir->dec_size();  // adjust dir size
+  dn->inode = 0;
 }
-*/
+
+
 
 void MDCache::rename_file(CDentry *srcdn, 
-						  CDir *destdir, const string& destname,
 						  CDentry *destdn)
 {
-  // do rename
-  CDir *srcdir = srcdn->dir;
-  
-  // unlink src
   CInode *in = srcdn->inode;
-  unlink_dentry(srcdn);
-  
-  // link dest
-  if (destdn) {
-	assert(destdir == destdn->dir);
-	assert(destname == destdn->name);
-	
-	// unlink old inode
-	unlink_dentry(destdn);
-  } 
 
-  // link inode w/ new dentry
-  link_inode( destdir, destname, in );
+  // unlink src
+  unlink_inode(srcdn);
+  
+  // unlink old inode?
+  if (destdn->inode) unlink_inode(destdn);
+  
+  // link inode w/ dentry
+  link_inode( destdn, in );
 }
 
 
@@ -334,14 +302,7 @@ void MDCache::fix_renamed_dir(CDir *srcdir,
 	  // inode now replica
 
 	  if (authchanged) {
-		// inode was replica, still replica
-		dout(7) << "inode was replica, still replica.  doing nothing." << endl;
-		assert(in->dir->is_import());
-
-		// do nothing.
-
-	  } else {
-		// inode was ours, but not anymore
+		// inode was ours, but now replica
 		dout(7) << "inode was ours, now replica.  adding to import list." << endl;
 
 		// i am now an import
@@ -363,6 +324,12 @@ void MDCache::fix_renamed_dir(CDir *srcdir,
 		  nested_exports[oldcon].erase(*it);
 		  nested_exports[in->dir].insert(*it);
 		}
+	  } else {
+		// inode was replica, still replica
+		dout(7) << "inode was replica, still replica.  doing nothing." << endl;
+		assert(in->dir->is_import());
+
+		// do nothing.
 	  }
 
 	  assert(in->dir->is_import());
@@ -876,6 +843,28 @@ class C_MDC_TraverseDiscover : public Context {
   }
 };
 
+void MDCache::open_remote_dir(CInode *diri,
+							  Context *fin) 
+{
+  dout(10) << "open_remote_dir on " << *diri << endl;
+  
+  assert(diri->is_dir());
+  assert(!diri->dir_is_auth());
+  assert(!diri->is_auth());
+  assert(diri->dir == 0);
+
+  filepath want;  // no dentries, i just want the dir open
+  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
+											 diri->ino(),
+											 want,
+											 true),  // need the dir open
+							   MSG_ADDR_MDS(diri->authority()), MDS_PORT_CACHE,
+							   MDS_PORT_CACHE);
+
+  diri->add_waiter(CINODE_WAIT_DIR, fin);
+}
+
+
 int MDCache::path_traverse(filepath& path, 
 						   vector<CDentry*>& trace, 
 						   Message *req,
@@ -1080,10 +1069,14 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
 	CDentry *dn = *it;
 	if (!dn->is_pinnable()) {
 	  // wait
-	  dout(7) << "path_pin can't pin " << *dn << ", waiting" << endl;
-	  dn->dir->add_waiter(CDIR_WAIT_DNREAD,
-						  dn->name,
-						  new C_MDS_RetryMessage(mds, req));
+	  if (req) {
+		dout(7) << "path_pin can't pin " << *dn << ", waiting" << endl;
+		dn->dir->add_waiter(CDIR_WAIT_DNREAD,
+							dn->name,
+							new C_MDS_RetryMessage(mds, req));
+	  } else {
+		dout(7) << "path_pin can't pin, no waiter, failing." << endl;
+	  }
 	  return false;
 	}
   }
@@ -1095,7 +1088,7 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
 	(*it)->pin();
 	dout(10) << "path_pinned " << *(*it) << endl;
   }
-  has_path_pinned.insert(req);
+  if (req) has_path_pinned.insert(req);
 
   return true;
 }
@@ -1118,10 +1111,23 @@ void MDCache::path_unpin(vector<CDentry*>& trace,
 	  dn->dir->take_waiting(CDIR_WAIT_DNUNPINNED, dn->name, finished);
   }
   
-  has_path_pinned.erase(req);
+  if (req) has_path_pinned.erase(req);
   
   // finish any contexts
   if (!finished.empty()) finish_contexts(finished);
+}
+
+
+void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
+{
+  CInode *parent = in->get_parent_inode();
+  if (parent) {
+	make_trace(trace, parent);
+
+	CDentry *dn = in->get_parent_dn();
+	dout(10) << "make_trace adding " << *dn << endl;
+	trace.push_back(dn);
+  }
 }
 
 
@@ -1129,12 +1135,13 @@ bool MDCache::request_start(MClientRequest *req,
 							CInode *ref,
 							vector<CDentry*>& trace)
 {
-  dout(7) << "request_start " << *req << endl;
   assert(active_requests.count(req) == 0);
 
   // pin path
   if (!path_pin(trace, req)) return false;
   
+  dout(7) << "request_start " << *req << endl;
+
   // add to map
   active_requests[req].ref = ref;
   active_requests[req].trace = trace;
@@ -1186,6 +1193,8 @@ void MDCache::request_finish(MClientRequest *req)
   dout(7) << "request_finish " << *req << endl;
   request_cleanup(req);
   delete req;  // delete req
+  
+  dump();
 }
 
 
@@ -1202,83 +1211,6 @@ void MDCache::request_forward(MClientRequest *req, int who)
 
 // rename crap
 
-/*
-void MDCache::rename_file(CInode *from, 
-						 CDir *destdir,
-						 string name)
-{
-  assert(destdir->lookup(name) == 0);
-  
-  // unlink, re-link
-  unlink_inode(from);
-  link_inode( destdir, name, from );
-}
-
-
-void MDCache::rename_dir(CInode *from, 
-						 CDir *destdir,
-						 string name)
-{
-  CDir *old_parent_dir = from->get_parent_dir();
-
-  assert(destdir->lookup(name) == 0);
-  
-  // unlink, re-link
-  unlink_inode(from);
-  link_inode( destdir, name, from );
-
-  // fix nested exports?
-  CDir *containing_import = get_containing_import( destdir );
-  
-  if (from->dir->is_import()) {
-	// all my exports now belong to new containing_import
-	dout(7) << "moving exports of renamed import " << *from << " to " << *containing_import << endl;
-	
-	for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-		   nested_exports.equal_range(from->dir);
-		 p.first != p.second;
-		 p.first++) {
-	  CDir *nested = (*p.first).second;
-	  dout(7) << "  moving " << *nested << endl;
-	  nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
-	}
-	
-	// i'm not an import anymore
-	nested_exports.erase( from->dir );
-	imports.erase( from->dir );
-	from->dir->state_clear(CDIR_STATE_IMPORT);
-	from->dir->put(CDIR_PIN_IMPORT);
-
-  } else {
-	// check for exports under me
-	CDir *old_containing = get_containing_import( old_parent_dir );
-	for (pair<multimap<CDir*,CDir*>::iterator, multimap<CDir*,CDir*>::iterator> p =
-		   nested_exports.equal_range(old_containing);
-		 p.first != p.second;
-		 ) {
-	  CDir *nested = (*p.first).second;
-	  
-	  // NOTE/FIXME/WARNING: possible concurrent modification weirdness!
-
-	  // trace back to import, or dir
-	  CDir *cur = nested->get_parent_dir();
-	  while (!cur->is_import()) {
-		if (cur == from->dir) {
-		  dout(7) << "  moving " << *nested << endl;
-		  nested_exports.insert(pair<CDir*,CDir*>(containing_import, nested));
-		  nested_exports.erase( p.first++ );  // tricky
-		  break;
-		} else {
-		  cur = cur->get_parent_dir();
-		  p.first++;
-		}
-	  }
-	}
-  }
-
-  show_imports();
-}
-*/
 
 
 
@@ -1415,6 +1347,14 @@ void MDCache::handle_discover(MDiscover *dis)
 
     // get inode
     CDentry *dn = cur->dir->lookup( dis->get_dentry(i) );
+	
+	if (dn && !dn->can_read()) { // xlocked?
+	  dout(7) << "waiting on " << *dn << endl;
+	  cur->dir->add_waiter(CDIR_WAIT_DNREAD,
+						   dn->name,
+						   new C_MDS_RetryMessage(mds, dis));
+	  return;
+	}
     if (dn && dn->inode) {
 		CInode *next = dn->inode;
         assert(next->is_auth());
@@ -1443,10 +1383,12 @@ void MDCache::handle_discover(MDiscover *dis)
       } else {
         // readdir
         dout(7) << "mds" << whoami << " incomplete dir contents for " << *cur->dir << ", fetching" << endl;
-        mds->mdstore->fetch_dir(cur->dir, NULL); //new C_MDS_RetryMessage(mds, dis));
 
-		// send what we have so far
-        break;
+        //mds->mdstore->fetch_dir(cur->dir, NULL); //new C_MDS_RetryMessage(mds, dis));
+        //break; // send what we have so far
+
+        mds->mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(mds, dis));
+        return;
       }
     }
   }
@@ -1575,16 +1517,32 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	}
 	
 	// inode
-	if (dn || in) {
-	  // had it
+	if (dn) {
+	  // had dentry
 	  /*
 		this should _only_ happen if the dentry was created after we sent our request,
 		which should _only_ happen if a rename took place.  
 		so, DON'T overwrite the dentry, the discover has _old_ info!
 	  */
 	  dout(7) << "had " << *dn << ", hopefully because it got renamed into place?" << endl;
-	  dout(7) << "it is linked to " << *in << ", probably not be what discover gave me?" << endl;
-	  dout(7) << "discover gave me " << m->get_ino(i) << endl;
+	  dout(7) << "dentry currently linked to " << *in << endl;
+	  dout(7) << "discover gave me ino " << m->get_ino(i) << endl;
+
+	  if (in->ino() == m->get_ino(i)) {
+		in->replica_nonce = m->get_inode(i).get_replica_nonce();
+		dout(7) << "they match, just updating nonce for " << *in << endl;
+	  } else {
+		// ????
+		CInode *o = get_inode(in->ino());
+		if (o) {
+		  dout(7) << "well, i do have the inode: " << *o << endl;
+		  o->replica_nonce = m->get_inode(i).get_replica_nonce();
+		}
+		
+		// why does this happen:::: FIXME
+		assert(0);
+	  }
+
 	  // -> if it is the same, pbly my discover got hung up.
 	  //assert(in->ino() != m->get_ino(i) );
 	  //assert(0);  // just so i can see this happen and make sure it looks right!
@@ -1605,7 +1563,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		in->replica_nonce = m->get_inode(i).get_replica_nonce();
 
 		// link
-		link_inode( cur->dir, m->get_dentry(i), in );
+		add_dentry( cur->dir, m->get_dentry(i), in );
 		
 		dout(7) << "XXX linked " << *in << endl;
 
@@ -1628,7 +1586,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		} else {
 		  // link in
 		  add_inode( in );
-		  link_inode( cur->dir, m->get_dentry(i), in );
+		  add_dentry( cur->dir, m->get_dentry(i), in );
 		  
 		  cur->dir->take_waiting(CDIR_WAIT_DENTRY,
 								 m->get_dentry(i),
@@ -1934,11 +1892,12 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	// don't need ack.
   }
 
+  // unlink
+  unlink_inode( dn );
+  dn->mark_dirty();
+
   // unpin dir / unxlock
   dentry_xlock_finish(dn, true); // quiet, no need to bother replicas since they're already unlinking
-  
-  // unlink
-  unlink_dentry( dn );
 
   // did i empty out an imported dir?
   if (dir->is_import() && !dir->inode->is_root() && dir->get_size() == 0) 
@@ -1969,7 +1928,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	string dname = dn->name;
 	
 	// unlink
-	unlink_dentry( dn );
+	unlink_inode( dn );
 	
 	// wake up
 	dir->finish_waiting(CDIR_WAIT_DNREAD, dname);
@@ -2008,28 +1967,33 @@ public:
 };
 */
 
-void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname, CDentry *destdn, Context *c)
+void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c)
 {
   assert(srcdn->is_xlocked());  // by me
+  assert(destdn->is_xlocked());  // by me
 
   CDir *srcdir = srcdn->dir;
   string srcname = srcdn->name;
-  CInode *in = srcdn->inode;
 
+  CDir *destdir = destdn->dir;
+  string destname = destdn->name;
+  
+  CInode *in = srcdn->inode;
   Message *req = srcdn->xlockedby;
 
   // update our cache
-  rename_file(srcdn, destdir, destname, destdn);
+  rename_file(srcdn, destdn);
 
-  // mark dir(s) dirty
-  in->mark_dirty();      // the moving inode           // FIXME XXX is this right for hard links?
-  srcdir->mark_dirty();  // src dir
+  // mark dentries dirty
+  srcdn->mark_dirty();
+  destdn->mark_dirty();
   
   // update imports/exports?
   if (in->is_dir() && in->dir) 
 	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
-
-
+  
+  dump();
+  
   // tell replicas (no need to wait for ack) to do the same, and un-xlock.
   // make list
   set<int> who = srcdir->get_open_by();
@@ -2056,19 +2020,9 @@ void MDCache::file_rename(CDentry *srcdn, CDir *destdir, const string& destname,
   if (srcdir->is_import() && !srcdir->inode->is_root() && srcdir->get_size() == 0) 
 	export_empty_import(srcdir);
 
-  // clean up xlock aftermath... MESSY
-
-  // unpin dirs  (from xlocks)
-  srcdir->auth_unpin();
-  if (destdn) destdir->auth_unpin();
-
-  // remove xlocks from req map
-  assert(active_request_xlocks[req].count(srcdn) == 1);
-  active_request_xlocks[req].erase(srcdn);
-  if (destdn) {
-	assert(active_request_xlocks[req].count(destdn) == 1);
-	active_request_xlocks[req].erase(destdn);
-  }
+  // clean up xlocks
+  dentry_xlock_finish(srcdn);
+  dentry_xlock_finish(destdn);
 
   // finish our query off for now.  XXX FIXME (should wait for log?)
   if (c) {
@@ -2103,31 +2057,30 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
   if (srcdn && destdir) {
 	CInode *in = srcdn->inode;
 
-	if (destdn) {
-	  dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdn << endl;
-	} else {
-	  dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << m->get_destname() << " in " << *destdir << endl;
-	}
+	if (!destdn) destdn = add_dentry(destdir, m->get_destname());
+
+	dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdn << endl;
 	
-	rename_file(srcdn, destdir, m->get_destname(), destdn);
+	rename_file(srcdn, destdn);
+	remove_dentry(srcdn);
 	
 	// update imports/exports?
 	if (in->is_dir() && in->dir) 
 	  fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 	
-	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
-	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
+	srcdir->finish_waiting(CDIR_WAIT_ANY, srcdn->name);
+	destdir->finish_waiting(CDIR_WAIT_ANY, destdn->name);
   }
 
   else if (srcdn) {
 	dout(7) << "handle_rename_local_file unlinking src only " << *srcdn << endl;
-	unlink_dentry(srcdn);  // will leave inode dangling.
+	remove_dentry(srcdn);  // will leave inode dangling.
 	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
   }
 
   else if (destdn) {
 	dout(7) << "handle_rename_local_file unlinking dst only " << *destdn << endl;
-	unlink_dentry(destdn);
+	remove_dentry(destdn);
 	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
   }
   
@@ -3515,7 +3468,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, const string& path, MClientRequest
 	}
 
 	// wait
-	dout(7) << "handle_client_unlink locking, waitigg for replicas " << endl;
+	dout(7) << "dentry_xlock_start locking, waitigg for replicas " << endl;
 	dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
 						new C_MDS_RetryRequest(mds, m, ref));
 	return false;
@@ -3574,13 +3527,7 @@ CDentry* MDCache::create_xlocked_dentry(CDir *dir, const string& dname, MClientR
   dir->auth_pin();
 
   // create dentry
-  CDentry* dn = new CDentry;
-  dn->name = dname;
-
-  // add to dir
-  dir->add_child(dn);
-
-  //lamewayCDentry* dn = link_inode(dir, dname, create_inode());
+  CDentry* dn = add_dentry(dir, dname, 0);
 
   // lock
   dn->lockstate = DN_LOCK_XLOCK;
@@ -3633,14 +3580,27 @@ void MDCache::handle_lock_dn(MLock *m)
 	if (dir) dn = dir->lookup(dname);
 	if (!dn) {
 	  dout(7) << "handle_lock_dn don't have " << m->get_ino() << " dname " << dname << endl;
-	  dout(7) << "handle_lock_dn don't have " << m->get_path() << ", discovering" << endl;
-
-	  vector<CDentry*> trace;
-	  filepath path = m->get_path();
-	  int r = path_traverse(path, trace, 
-							m, new C_MDS_RetryMessage(mds,m), 
-							MDS_TRAVERSE_DISCOVER);
-	  assert(r>0);
+	  if (0) {
+		dout(7) << "handle_lock_dn don't have " << m->get_path() << ", discovering" << endl;
+		
+		vector<CDentry*> trace;
+		filepath path = m->get_path();
+		int r = path_traverse(path, trace, 
+							  m, new C_MDS_RetryMessage(mds,m), 
+							  MDS_TRAVERSE_DISCOVER);
+		assert(r>0);
+	  }
+	  if (1) {
+		if (m->get_action() == LOCK_AC_LOCK) {
+		  // NAK
+		  MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
+		  reply->set_dn(dir->ino(), dname);
+		  mds->messenger->send_message(reply,
+									   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		}
+		delete m;
+	  }
 	  return;
 	}
   }
@@ -3952,6 +3912,14 @@ void MDCache::export_dir(CDir *dir,
   if (dir->is_frozen() ||
 	  dir->is_freezing()) {
 	dout(7) << " can't export, freezing|frozen.  wait for other exports to finish first." << endl;
+	return;
+  }
+
+  // pin path?
+  vector<CDentry*> trace;
+  make_trace(trace, dir->inode);
+  if (!path_pin(trace, 0)) {
+	dout(7) << "export_dir couldn't pin path, failing." << endl;
 	return;
   }
 
@@ -4281,14 +4249,30 @@ void MDCache::export_dir_walk(MExportDir *req,
 
   CDir_map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
-	CInode *in = it->second->inode;
-	
-	in->version++;  // so log entries are ignored, etc.
+	CDentry *dn = it->second;
+	CInode *in = dn->inode;
 	
 	// -- dentry
 	dir_rope.append( it->first.c_str(), it->first.length()+1 );
 	
+	if (dn->is_dirty()) 
+	  dir_rope.append((char)'D');  // dirty
+	else 
+	  dir_rope.append((char)'C');  // clean
+
+	// null dentry?
+	if (in == 0) {
+	  dir_rope.append((char)'N');  // null dentry
+	  assert(dn->is_sync());
+	  continue;
+	}
+	  
+
 	// -- inode
+	dir_rope.append((char)'I');    // inode dentry
+
+	in->version++;  // so log entries are ignored, etc.
+	
 	// relax locks
 	if (!in->is_cached_by_anyone())
 	  in->replicate_relax_locks();
@@ -4308,7 +4292,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 		if (in->dir->is_auth()) {
 		  // nested subdir
 		  assert(in->dir->dir_auth == CDIR_AUTH_PARENT);
-		  subdirs.push_back(in->dir);  // it's ours, recurse.
+		  subdirs.push_back(in->dir);  // it's ours, recurse (later)
 		  
 		} else {
 		  // nested export
@@ -4417,6 +4401,17 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 	  CDir *dir = get_inode(*it)->dir;
 	  dir->put(CDIR_PIN_PROXY);
 	  dir->state_clear(CDIR_STATE_PROXY);
+
+	  // hose neg dentries, too, since we're no longer auth
+	  CDir_map_t::iterator it;
+	  for (it = dir->begin(); it != dir->end(); ) {
+		CDentry *dn = it->second;
+		it++;
+		if (dn->is_null()) {
+		  assert(dn->is_sync());
+		  remove_dentry(dn);
+		}
+	  }
 	}
 	export_proxy_dirinos.erase(dir);
 
@@ -4441,7 +4436,13 @@ void MDCache::export_dir_finish(CDir *dir)
   // unfreeze
   dout(7) << "export_dir_finish " << *dir << ", unfreezing" << endl;
   dir->unfreeze_tree();
-  
+
+  // unpin path
+  dout(7) << "export_dir_finish unpinnning path" << endl;
+  vector<CDentry*> trace;
+  make_trace(trace, dir->inode);
+  path_unpin(trace, 0);
+
   show_imports();
 }
 
@@ -4458,6 +4459,22 @@ void MDCache::export_dir_finish(CDir *dir)
 
 //  IMPORTS
 
+class C_MDC_ExportDirDiscover : public Context {
+  MDCache *mdc;
+  MExportDirDiscover *m;
+public:
+  vector<CDentry*> trace;
+  C_MDC_ExportDirDiscover(MDCache *mdc, MExportDirDiscover *m) {
+	this->mdc = mdc;
+	this->m = m;
+  }
+  void finish(int r) {
+	CInode *in = 0;
+	if (r >= 0) in = trace[trace.size()-1]->get_inode();
+	mdc->handle_export_dir_discover_2(m, in, r);
+  }
+};  
+
 void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
 {
   assert(m->get_source() != mds->get_nodeid());
@@ -4465,16 +4482,33 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
   dout(7) << "handle_export_dir_discover on " << m->get_path() << endl;
 
   // must discover it!
-  vector<CDentry*> trav;
+  C_MDC_ExportDirDiscover *onfinish = new C_MDC_ExportDirDiscover(this, m);
   filepath fpath(m->get_path());
-  int r = path_traverse(fpath, trav, 
-						m, new C_MDS_RetryMessage(mds,m), 
-						MDS_TRAVERSE_DISCOVER);   
-  if (r > 0) return;  // fw or delay
-  
+  int r = path_traverse(fpath, onfinish->trace, 
+						m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
+						MDS_TRAVERSE_DISCOVER,
+						onfinish);  // on completion|error
+}
+
+void MDCache::handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r)
+{
   // yay!
-  CInode *in = trav[trav.size()-1]->inode;
-  dout(7) << "handle_export_dir_discover on " << *in << endl;
+  if (in) {
+	dout(7) << "handle_export_dir_discover_2 has " << *in << endl;
+  }
+
+  if (r < 0 || !in->is_dir()) {
+	dout(7) << "handle_export_dir_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << endl;
+
+	assert(0);	// this shouldn't happen if the auth pins his path properly!!!! 
+
+	mds->messenger->send_message(new MExportDirDiscoverAck(m->get_ino(), false),
+								 m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	
+	delete m;
+	return;
+  }
+  
   assert(in->is_dir());
 
   if (in->is_frozen()) {
@@ -4561,7 +4595,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
         CInode *condiri = get_inode( m->get_containing_dirino(in->ino()) );
         assert(condiri && condiri->dir);
         add_inode( in );
-        link_inode( condiri->dir, m->get_dentry(in->ino()), in );
+        add_dentry( condiri->dir, m->get_dentry(in->ino()), in );
         
         dout(10) << "   added " << *in << endl;
       }
@@ -4835,6 +4869,14 @@ void MDCache::handle_export_dir(MExportDir *m)
   show_imports();
 
 
+  // is it empty?
+  if (dir->get_size() == 0 &&
+	  !dir->inode->is_auth()) {
+	// reexport!
+	export_empty_import(dir);
+  }
+
+
   // FIXME LOG IT
 
   /*
@@ -4894,7 +4936,7 @@ void MDCache::import_dir_block(crope& r,
   CDir *dir = diri->get_or_open_dir(mds);
   assert(dir);
  
-  dout(7) << " import_dir_block " << *dir << " have " << dir->nitems << " items, importing " << dstate.get_nitems() << endl;
+  dout(7) << " import_dir_block " << *dir << " have " << dir->nitems << " items, importing " << dstate.get_nden() << " dentries" << endl;
 
   // add to list
   if (dir != import_root)
@@ -4927,68 +4969,86 @@ void MDCache::import_dir_block(crope& r,
   dout(15) << "doing contents" << endl;
 
   // contents
-  for (long nitems = dstate.get_nitems(); nitems>0; nitems--) {
+  for (long nden = dstate.get_nden(); nden>0; nden--) {
     // dentry
     string dname = r.c_str() + off;
     off += dname.length()+1;
     dout(15) << "dname is " << dname << endl;
 
-    // inode
-    CInodeExport istate;
-    off = istate._unrope(r, off);
-    dout(15) << "got a cinodeexport " << endl;
-    
-    bool added = false;
-    CInode *in = get_inode(istate.get_ino());
-    if (!in) {
-      in = new CInode;
-      added = true;
-    } else {
-	  in->set_auth(true);
+	char dirty = *(r.c_str() + off);
+	off++;
+
+	char icode = *(r.c_str() + off);
+	off++;
+
+	CDentry *dn = dir->lookup(dname);
+	if (!dn)
+	  dn = add_dentry(dir, dname);
+
+	if (dirty == 'D') dn->mark_dirty();
+	
+	if (icode == 'N') {
+
+	  // null dentry
+	  
 	}
+	else if (icode == 'I') {
+	  // inode
+	  CInodeExport istate;
+	  off = istate._unrope(r, off);
+	  dout(15) << "got a cinodeexport " << endl;
+	  
+	  bool added = false;
+	  CInode *in = get_inode(istate.get_ino());
+	  if (!in) {
+		in = new CInode;
+		added = true;
+	  } else {
+		in->set_auth(true);
+	  }
+	  
+	  // state
+	  istate.update_inode(in);
+	  
+	  // link
+	  if (added) {
+		add_inode(in);
+		link_inode(dn, in);
+		dout(10) << "added " << *in << endl;
+	  } else {
+		dout(10) << "  had " << *in << endl;
+		
+		if (in->is_replica_writer(mds->get_nodeid()))
+		  in->remove_replica_writer(mds->get_nodeid());
+	  }
+	  
+	  // cached_by
+	  assert(!in->is_cached_by(oldauth));
+	  in->cached_by_add( oldauth, CINODE_EXPORT_NONCE );
+	  if (in->is_cached_by(mds->get_nodeid()))
+		in->cached_by_remove(mds->get_nodeid());
+	  
+	  /* don't do this
+		 if (!in->hardlock.is_stable() && 
+		 in->hardlock.is_gathering(mds->get_nodeid())) {
+		 in->hardlock.gather_set.erase(mds->get_nodeid());
+		 if (in->hardlock.gather_set.size() == 0) 
+		 inode_hard_eval(in);
+		 }
+		 if (!in->softlock.is_stable() && 
+		 in->softlock.is_gathering(mds->get_nodeid())) {
+		 in->softlock.gather_set.erase(mds->get_nodeid());
+		 if (in->softlock.gather_set.size() == 0) 
+		 inode_soft_eval(in);
+		 }
+	  */
 
-    // state
-    istate.update_inode(in);
-
-	// link
-    if (added) {
-      add_inode(in);
-      link_inode(dir, dname, in);
-      dout(10) << "added " << *in << endl;
-    } else {
-      dout(10) << "  had " << *in << endl;
-
-	  if (in->is_replica_writer(mds->get_nodeid()))
-		in->remove_replica_writer(mds->get_nodeid());
-    }
-
-	// cached_by
-    assert(!in->is_cached_by(oldauth));
-	in->cached_by_add( oldauth, CINODE_EXPORT_NONCE );
-	if (in->is_cached_by(mds->get_nodeid()))
-	  in->cached_by_remove(mds->get_nodeid());
-
-	// lock states
-	/* don't do this
-	if (!in->hardlock.is_stable() && 
-		in->hardlock.is_gathering(mds->get_nodeid())) {
-	  in->hardlock.gather_set.erase(mds->get_nodeid());
-	  if (in->hardlock.gather_set.size() == 0) 
-		inode_hard_eval(in);
-	}
-	if (!in->softlock.is_stable() && 
-		in->softlock.is_gathering(mds->get_nodeid())) {
-	  in->softlock.gather_set.erase(mds->get_nodeid());
-	  if (in->softlock.gather_set.size() == 0) 
-		inode_soft_eval(in);
-	}
-	*/
-
-    // other
-    if (in->is_dirty()) {
-      dout(10) << "logging dirty import " << *in << endl;
-	  mds->mdlog->submit_entry(new EInodeUpdate(in),
-							   NULL);   // FIXME pay attention to completion?
+	  // other
+	  if (in->is_dirty()) {
+		dout(10) << "logging dirty import " << *in << endl;
+		mds->mdlog->submit_entry(new EInodeUpdate(in),
+								 NULL);   // FIXME pay attention to completion?
+	  }
     }
     
   }
@@ -5869,7 +5929,7 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
   diri->get_or_open_dir(mds);
   
   add_inode( in );
-  link_inode( diri->dir, file, in );
+  add_dentry( diri->dir, file, in );
 
   if (in->is_dir())
 	in->get_or_open_dir(mds);

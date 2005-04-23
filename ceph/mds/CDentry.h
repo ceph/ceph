@@ -24,6 +24,11 @@ class CDentry {
   CInode         *inode;
   CDir           *dir;
 
+  // state
+  bool             dirty;
+  __uint64_t       parent_dir_version;  // dir version when last touched.
+
+  // locking
   int            lockstate;
   Message        *xlockedby;
   set<int>       gather_set;
@@ -40,12 +45,16 @@ class CDentry {
 	dir = NULL;
 	lockstate = DN_LOCK_SYNC;
 	npins = 0;
+	dirty = 0;
+	parent_dir_version = 0;
   }
   CDentry(const string& n, CInode *in) {
 	name = n;
 	inode = in;
 	lockstate = DN_LOCK_SYNC;
 	npins = 0;
+	dirty = 0;
+	parent_dir_version = 0;
   }
 
   CInode *get_inode() { return inode; }
@@ -53,6 +62,7 @@ class CDentry {
   const string& get_name() { return name; }
   int get_lockstate() { return lockstate; }
   set<int>& get_gather_set() { return gather_set; }
+  bool is_null() { return (inode == 0) ? true:false; }
 
   // copy cons
   CDentry(const CDentry& m);
@@ -66,8 +76,24 @@ class CDentry {
   bool operator>= (const CDentry& right) const;
   bool operator<= (const CDentry& right) const;
 
+  // -- state
+  __uint64_t get_parent_dir_version() { return parent_dir_version; }
+  void float_parent_dir_version(__uint64_t ge) {
+	if (parent_dir_version < ge)
+	  parent_dir_version = ge;
+  }
+  
+  bool is_dirty() { return dirty; }
+  bool is_clean() { return !dirty; }
+
+  void mark_dirty();
+  void mark_clean();
+
+
   // -- locking
+  bool is_sync() { return lockstate == DN_LOCK_SYNC; }
   bool can_read()  { return (lockstate == DN_LOCK_SYNC) || (lockstate == DN_LOCK_UNPINNING);  }
+  bool can_read(Message *m) { return is_xlockedbyme(m) || can_read(); }
   bool is_xlocked() { return lockstate == DN_LOCK_XLOCK; }
   bool is_xlockedbyother(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
   bool is_xlockedbyme(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
@@ -81,9 +107,6 @@ class CDentry {
   bool is_pinnable() { return lockstate == DN_LOCK_SYNC; }
   bool is_pinned() { return npins>0; }
   int num_pins() { return npins; }
-
-  // -- hierarchy
-  void remove();
 
   friend class CDir;
 };

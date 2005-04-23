@@ -114,41 +114,34 @@ int CDir::get_rep_count(MDCluster *mdc)
 
 void CDir::add_child(CDentry *d) 
 {
-  assert(nitems == items.size());
   assert(items.count(d->name) == 0);
 
   items[d->name] = d;
   d->dir = this;
 
   dout(12) << "add_child " << *d << " to " << *this << endl;
-  
-  nitems++;
-  if (!d->inode || d->inode->is_auth())
-	nauthitems++;
-  //namesize += d->name.length();
-  
-
-  if (nitems == 1)
-	get(CDIR_PIN_CHILD);       // pin parent
 }
 
 void CDir::remove_child(CDentry *d) {
-  map<string, CDentry*>::iterator iter = items.find(d->name);
-  items.erase(iter);
-
   dout(12) << "remove_child " << *d << endl;
 
+  assert(items.count(d->name));
+  items.erase(d->name);
+}
+
+void CDir::inc_size(CDentry *dn)
+{
+  nitems++;
+  if (nitems == 1)
+	get(CDIR_PIN_CHILD);       // pin parent
+} 
+
+void CDir::dec_size(CDentry *dn)
+{
   nitems--;
-  if (is_auth()) {  // FIXME for hashed stuff
-	if (!d->inode || d->inode->is_auth()) nauthitems--;
-  }
-  //namesize -= d->name.length();
-
-
   if (nitems == 0)
 	put(CDIR_PIN_CHILD);       // release parent.
 }
-
 
 CDentry* CDir::lookup(const string& n) {
   //cout << " lookup " << n << " in " << this << endl;
@@ -729,10 +722,12 @@ void CDir::dump(int depth) {
   map<string,CDentry*>::iterator iter = items.begin();
   while (iter != items.end()) {
 	CDentry* d = iter->second;
-	char isdir = ' ';
-	if (d->inode->dir != NULL) isdir = '/';
-	dout(10) << ind << d->inode->inode.ino << " " << d->name << isdir << endl;
-	d->inode->dump(depth+1);
+	if (d->inode) {
+	  char isdir = ' ';
+	  if (d->inode->dir != NULL) isdir = '/';
+	  dout(10) << ind << d->inode->inode.ino << " " << d->name << isdir << endl;
+	  d->inode->dump(depth+1);
+	}
 	iter++;
   }
 

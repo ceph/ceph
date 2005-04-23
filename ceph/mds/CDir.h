@@ -245,18 +245,10 @@ class CDir {
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
   size_t get_size() { 
-#if DEBUG_LEVEL>100
-	if (nitems != items.size()) {
-	  for (CDir_map_t::iterator it = items.begin();
-		   it != items.end();
-		   it++)
-		cout << "item " << (*it).first << endl;
-	  cout << "nitems " << nitems << endl;
-	  assert(nitems == items.size());
-	}
-#endif
-	if ( is_auth() && !is_hashed()) assert(nauthitems == nitems);
-	if (!is_auth() && !is_hashed()) assert(nauthitems == 0);
+	
+	//if ( is_auth() && !is_hashed()) assert(nauthitems == nitems);
+	//if (!is_auth() && !is_hashed()) assert(nauthitems == 0);
+	
 	return nitems; 
   }
   size_t get_auth_size() { 
@@ -272,6 +264,8 @@ class CDir {
   // -- manipulation --
   void add_child(CDentry *d);
   void remove_child(CDentry *d);
+  void inc_size(CDentry *dn =0);
+  void dec_size(CDentry *dn =0);
   CDentry* lookup(const string& n);
 
 
@@ -559,7 +553,8 @@ class CDirDiscover {
 
 typedef struct {
   inodeno_t      ino;
-  __uint64_t     nitems;
+  __uint64_t     nitems; // actual real entries
+  __uint64_t     nden;   // num dentries (including null ones)
   __uint64_t     version;
   unsigned       state;
   DecayCounter   popularity;
@@ -581,6 +576,7 @@ class CDirExport {
   CDirExport(CDir *dir) {
     st.ino = dir->ino();
     st.nitems = dir->nitems;
+	st.nden = dir->items.size();
     st.version = dir->version;
     st.state = dir->state;
     st.popularity = dir->popularity[0];        // FIXME FIXME
@@ -593,7 +589,7 @@ class CDirExport {
   }
 
   inodeno_t get_ino() { return st.ino; }
-  __uint64_t get_nitems() { return st.nitems; }
+  __uint64_t get_nden() { return st.nden; }
 
   void update_dir(CDir *dir) {
 	assert(dir->ino() == st.ino);

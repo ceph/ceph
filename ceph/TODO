@@ -1,4 +1,10 @@
 
+
+- export null dentries
+
+
+- fix readdir to only include stat info for items i'm allowed to
+
 for deadline:
 - rush stub
 - single thread client bits
@@ -11,11 +17,8 @@ for deadline:
 /- path lock
  - on export
 
-- rename vs. discover?
-
-- dentry lock state 
-  - vs discover?
-  - vs import/export?
+/- xlock vs. discover?
+- xlock vs import/export?
 
 - think about global sync (to be used by shutdown)
   - flush all dirty data to disk

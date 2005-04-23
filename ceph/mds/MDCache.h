@@ -156,20 +156,18 @@ class MDCache {
   void destroy_inode(CInode *in);
 
  public:
-  CDentry* link_inode( CDir *dir, const string& dname, CInode *inode );
+  CDentry* add_dentry( CDir *dir, const string& dname, CInode *in=0 );
+  void remove_dentry( CDentry *dn );         // delete dentry
 
- protected:
-  void unlink_dentry( CDentry *dn );         // delete dentry
-  void unlink_dentry_inode( CDentry *dn );   // leave dentry intact, just unlink the inode.
+  void link_inode( CDentry *dn, CInode *in );
+  void unlink_inode( CDentry *dn );
+  
 
  public:
   void export_empty_import(CDir *dir);
 
  protected:
-  void rename_file(CDentry *srcdn,
-				   CDir *destdir,
-				   const string& destname,
-				   CDentry *destdn);
+  void rename_file(CDentry *srcdn, CDentry *destdn);
   void fix_renamed_dir(CDir *srcdir,
 					   CInode *in,
 					   CDir *destdir,
@@ -181,13 +179,14 @@ class MDCache {
 					Message *req, Context *ondelay,
 					int onfail,
 					Context *onfinish=0);
+  void open_remote_dir(CInode *diri, Context *fin);
 
   set<Message*> has_path_pinned;
   bool path_pin(vector<CDentry*>& trace,
 				Message *req);
   void path_unpin(vector<CDentry*>& trace,
 				  Message *req);
-
+  void make_trace(vector<CDentry*>& trace, CInode *in);
   
   bool request_start(MClientRequest *req,
 					 CInode *ref,
@@ -211,7 +210,7 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
-  void file_rename(CDentry *srcdn, CDir *destdir, const string& destname, CDentry *destdn, Context *c);
+  void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);
   void handle_rename_local_file(MRenameLocalFile*m);
   
 
@@ -260,6 +259,7 @@ class MDCache {
 							  int *would_be_dir_auth = 0); // need for normal import
   */
   void handle_export_dir_discover(MExportDirDiscover *m);
+  void handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r);
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   void import_dir_finish(CDir *dir);

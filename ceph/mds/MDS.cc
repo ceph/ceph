@@ -377,7 +377,7 @@ void MDS::handle_client_request(MClientRequest *req)
 	
   case MDS_OP_CLOSE:
   case MDS_OP_FSYNC:
-	ref = mdcache->get_inode(req->get_iarg());   // FIXME: WRONG, look up fh!
+	ref = mdcache->get_inode(req->get_ino());   // fixme someday no ino needed?
   }
 
   if (!ref) {
@@ -885,8 +885,8 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   // make sure name doesn't already exist
   CDentry *dn = dir->lookup(name);
   if (dn != 0) {
-	if (dn->is_xlockedbyother(req)) {
-	  dout(10) << "waiting, dentry " << name << " locked in " << *dir << endl;
+	if (!dn->can_read(req)) {
+	  dout(10) << "waiting on (existing!) dentry " << *dn << endl;
 	  dir->add_waiter(CDIR_WAIT_DNREAD, name, new C_MDS_RetryRequest(this, req, diri));
 	  return 0;
 	}
@@ -919,7 +919,7 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->inode.atime = 1;  // now, FIXME
 
   // link
-  mdcache->link_inode(dir, name, newi);
+  mdcache->add_dentry(dir, name, newi);
   
   // dirty
   newi->mark_dirty();
@@ -1003,11 +1003,18 @@ void MDS::handle_client_unlink(MClientRequest *req,
   }
 
   // have it.  locked?
-  if (dn->is_xlockedbyother(req)) {
-	dout(10) << " xlocked dentry at " << *dn << endl;
+  if (!dn->can_read(req)) {
+	dout(10) << " waiting on " << *dn << endl;
 	dir->add_waiter(CDIR_WAIT_DNREAD,
 					name,
 					new C_MDS_RetryRequest(this, req, diri));
+	return;
+  }
+
+  // null?
+  if (dn->is_null()) {
+	dout(10) << " it's null " << *dn << endl;
+	reply_request(req, -ENOENT);
 	return;
   }
 
@@ -1142,6 +1149,8 @@ public:
 void MDS::handle_client_rename(MClientRequest *req,
 							   CInode *srcdiri)
 {
+  dout(7) << "handle_client_rename on " << *req << endl;
+
   // sanity checks
   if (req->get_filepath().depth() == 0) {
 	dout(7) << "can't rename root" << endl;
@@ -1152,6 +1161,13 @@ void MDS::handle_client_rename(MClientRequest *req,
   if (req->get_sarg().compare( 0, req->get_path().length(), req->get_path()) == 0 &&
 	  req->get_sarg().c_str()[ req->get_path().length() ] == '/') {
 	dout(7) << "can't rename to underneath myself" << endl;
+	reply_request(req, -EINVAL);
+	return;
+  }
+
+  // mv blah blah  -- also meaningless
+  if (req->get_sarg() == req->get_path()) {
+	dout(7) << "can't rename something to itself (or into itself)" << endl;
 	reply_request(req, -EINVAL);
 	return;
   }
@@ -1203,8 +1219,8 @@ void MDS::handle_client_rename(MClientRequest *req,
   }
 
   // xlocked?
-  if (srcdn->is_xlockedbyother(req)) {
-	dout(10) << " xlocked src dentry at " << *srcdn << endl;
+  if (!srcdn->can_read(req)) {
+	dout(10) << " waiting on " << *srcdn << endl;
 	srcdir->add_waiter(CDIR_WAIT_DNREAD,
 					   srcname,
 					   new C_MDS_RetryRequest(this, req, srcdiri));
@@ -1236,10 +1252,8 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 								 vector<CDentry*>& trace,
 								 int r)
 {
+  dout(7) << "handle_client_rename_2 on " << *req << endl;
   dout(12) << " r = " << r << " trace depth " << trace.size() << "  destpath depth " << destpath.depth() << endl;
-  if (r > 0) {   // waiting.. discover, or readdir
-	return; 
-  }
 
   CInode *srci = srcdn->inode;
   assert(srci);
@@ -1255,6 +1269,15 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   else 
 	d = mdcache->get_root();
   dout(10) << "i traced to " << *d << ", trace size = " << trace.size() << ", destpath = " << destpath.depth() << endl;
+  
+  // make sure i can open the dir?
+  if (d->is_dir() && !d->dir_is_auth() && !d->dir) {
+	// discover it
+	mdcache->open_remote_dir(d,
+							 new C_MDS_RetryRequest(this, req, srcdiri));
+	return;
+  }
+
   if (trace.size() == destpath.depth()) {
 	if (d->is_dir()) {
 	  // mv /some/thing /to/some/dir 
@@ -1317,11 +1340,13 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 	goto fail;
   }
 
+
+  /*
   if (srci->is_dir()) {
 	dout(7) << "rename dirs NOT YET IMPLEMENTED" << endl;
 	goto fail;
   }
-
+  */
 
   // file or dir?
   handle_client_rename_file(req, srcdiri, srcdn, destdir, destname);
@@ -1427,7 +1452,13 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	  if (oldin->is_dir()) {
 		// fail!
 		dout(7) << "dest exists and is dir" << endl;
-		cleanup_rename_locks(req);
+		reply_request(req, -EISDIR);
+		return;
+	  }
+
+	  if (srcdn->inode->is_dir() &&
+		  !oldin->is_dir()) {
+		dout(7) << "cannot overwrite non-directory with directory" << endl;
 		reply_request(req, -EISDIR);
 		return;
 	  }
@@ -1486,8 +1517,7 @@ void MDS::handle_client_rename_file(MClientRequest *req,
   // we're a go.
 
   // forget about my locks!
-  mdcache->file_rename( srcdn,
-						destdir, destname, destdn,
+  mdcache->file_rename( srcdn, destdn,
 						new C_MDS_RenameFinish(this, req) );
 }
 
@@ -1650,8 +1680,8 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   int fh = req->get_iarg();
   CFile *f = cur->get_fh(fh);
   if (!f) {
-	dout(1) << "close on unopen file " << *cur << endl;
-	assert(2+2==5);
+	dout(1) << "close on unopen fh " << fh << " inode " << *cur << endl;
+	assert(0);
   }
 
   dout(10) << "close on " << *cur << ", fh=" << f->fh << " mode=" << f->mode << endl;

@@ -7,27 +7,31 @@
 
 class MExportDirDiscoverAck : public Message {
   inodeno_t ino;
+  bool success;
 
  public:
   inodeno_t get_ino() { return ino; }
+  bool is_success() { return success; }
 
   MExportDirDiscoverAck() {}
-  MExportDirDiscoverAck(inodeno_t ino) : 
+  MExportDirDiscoverAck(inodeno_t ino, bool success=true) : 
 	Message(MSG_MDS_EXPORTDIRDISCOVERACK) {
 	this->ino = ino;
+	this->success = false;
   }
   virtual char *get_type_name() { return "ExDisA"; }
 
 
-  virtual int decode_payload(crope s) {
-	s.copy(0, sizeof(ino), (char*)&ino);
-    return sizeof(ino);
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(ino), (char*)&ino);
+	off += sizeof(ino);
+	s.copy(off, sizeof(success), (char*)&success);
+	off += sizeof(success);
   }
 
-  virtual crope get_payload() {
-	crope s;
+  virtual void get_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
-	return s;
+	s.append((char*)&success, sizeof(success));
   }
 };
 
