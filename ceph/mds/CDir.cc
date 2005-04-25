@@ -59,7 +59,7 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
   this->mds = mds;
   
   nitems = 0;
-  nauthitems = 0;
+  nnull = 0;
   state = CDIR_STATE_INITIAL;
 
   version = 0;
@@ -114,10 +114,6 @@ int CDir::get_rep_count(MDCluster *mdc)
 
 void CDir::add_child(CDentry *d) 
 {
-  assert(items.count(d->name) == 0);
-
-  items[d->name] = d;
-  d->dir = this;
 
   dout(12) << "add_child " << *d << " to " << *this << endl;
 }
@@ -145,16 +141,130 @@ void CDir::dec_size(CDentry *dn)
 
 CDentry* CDir::lookup(const string& n) {
   //cout << " lookup " << n << " in " << this << endl;
+  
   map<string,CDentry*>::iterator iter = items.find(n);
-  if (iter == items.end()) return NULL;
+  if (iter != items.end()) return iter->second;
 
-  //cout << "  lookup got " << iter->second << endl;
-  return iter->second;
+  return NULL;
 }
 
 
 
 
+
+
+CDentry* CDir::add_dentry( const string& dname, CInode *in ) 
+{
+  assert(lookup(dname) == 0);
+  
+  // create dentry
+  CDentry* dn = new CDentry(dname, in);
+  dn->dir = this;
+  
+  // add to dir
+  assert(items.count(dn->name) == 0);
+  assert(null_items.count(dn->name) == 0);
+
+  items[dn->name] = dn;
+  
+  if (in) {
+	link_inode_work( dn, in );
+  } else {
+	null_items[dn->name] = dn;
+	nnull++;
+  }
+  
+  return dn;
+}
+
+
+
+void CDir::remove_dentry(CDentry *dn) 
+{
+  if (dn->inode) {
+	// detach inode and dentry
+	unlink_inode_work(dn);
+  } else {
+	// remove from null list
+ 	assert(null_items.count(dn->name) == 1);
+	null_items.erase(dn->name);
+	nnull--;
+  }
+  
+  // remove from list
+  assert(items.count(dn->name) == 1);
+  items.erase(dn->name);
+
+  delete dn;
+}
+
+
+void CDir::link_inode( CDentry *dn, CInode *in )
+{
+  link_inode_work(dn,in);
+  
+  // remove from null list
+  assert(null_items.count(dn->name) == 1);
+  null_items.erase(dn->name);
+  nnull--;
+}
+
+void CDir::link_inode_work( CDentry *dn, CInode *in )
+{
+  dn->inode = in;
+  in->add_parent(dn);
+
+  nitems++;  // adjust dir size
+  
+  // set dir version
+  in->parent_dir_version = get_version();
+  
+  // clear dangling
+  in->state_clear(CINODE_STATE_DANGLING);
+
+  // adjust auth pin count
+  if (in->auth_pins + in->nested_auth_pins)
+	adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
+}
+
+void CDir::unlink_inode( CDentry *dn )
+{
+  unlink_inode_work(dn);
+
+  // add to null list
+  assert(null_items.count(dn->name) == 0);
+  null_items[dn->name] = dn;
+  nnull++;
+}
+
+void CDir::unlink_inode_work( CDentry *dn )
+{
+  CInode *in = dn->inode;
+  
+  // explicitly define auth
+  in->dangling_auth = in->authority();
+  dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
+  
+  // unlink auth_pin count
+  if (in->auth_pins + in->nested_auth_pins)
+	adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
+  
+  // set dangling flag
+  in->state_set(CINODE_STATE_DANGLING);
+  
+  // detach inode
+  in->remove_parent(dn);
+  assert(in->nparents == 0);
+  assert(in->parent == 0);
+  // FIXME... might need to migrate inode to another dir?   XXX
+  
+  if (in->is_dirty() && in->nparents == 0) 
+	in->mark_clean();
+  
+  dn->inode = 0;
+
+  nitems--;   // adjust dir size
+}
 
 
 

@@ -919,9 +919,10 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->inode.atime = 1;  // now, FIXME
 
   // link
-  mdcache->add_dentry(dir, name, newi);
+  dn = dir->add_dentry(name, newi);
   
-  // dirty
+  // mark dirty
+  dn->mark_dirty();
   newi->mark_dirty();
   
   // ok!

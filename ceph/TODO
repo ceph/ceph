@@ -1,7 +1,5 @@
 
-
-- export null dentries
-
+/- export null dentries
 
 - fix readdir to only include stat info for items i'm allowed to
 

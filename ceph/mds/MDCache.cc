@@ -127,86 +127,14 @@ void MDCache::add_inode(CInode *in)
 void MDCache::remove_inode(CInode *o) 
 { 
   if (o->get_parent_dn()) {
+	// FIXME: multiple parents?
 	CDentry *dn = o->get_parent_dn();
-	unlink_inode(dn);  // unlink
+	dn->dir->unlink_inode(dn);  // unlink
   }
   inode_map.erase(o->ino());    // remove from map
   lru->lru_remove(o);           // remove from lru
 }
 
-
-CDentry* MDCache::add_dentry( CDir *dir, const string& dname, CInode *in ) 
-{
-  assert(dir->lookup(dname) == 0);
-
-  // create dentry
-  CDentry* dn = new CDentry(dname, in);
-
-  // add to dir
-  dir->add_child(dn);
-
-  if (in) link_inode( dn, in );
-  
-  return dn;
-}
-
-
-
-void MDCache::remove_dentry(CDentry *dn) 
-{
-  // detach inode?
-  if (dn->inode) unlink_inode(dn);
-
-  // detach dentry
-  dn->dir->remove_child(dn);
-
-  delete dn;
-}
-
-void MDCache::link_inode( CDentry *dn, CInode *in )
-{
-  in->add_parent(dn);
-  dn->dir->inc_size();  // adjust dir size
-  
-  // set dir version
-  in->parent_dir_version = dn->dir->get_version();
-  
-  // clear dangling
-  in->state_clear(CINODE_STATE_DANGLING);
-
-  // adjust auth pin count
-  if (in->auth_pins + in->nested_auth_pins)
-	dn->dir->adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
-
-}
-
-void MDCache::unlink_inode( CDentry *dn )
-{
-  CInode *in = dn->inode;
-  
-  // explicitly define auth
-  in->dangling_auth = in->authority();
-  dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
-  
-  // unlink auth_pin count
-  if (in->auth_pins + in->nested_auth_pins)
-	dn->dir->adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
-  
-  // set dangling flag
-  in->state_set(CINODE_STATE_DANGLING);
-  
-  // detach inode
-  in->remove_parent(dn);
-  assert(in->nparents == 0);
-  assert(in->parent == 0);
-  // FIXME... might need to migrate inode to another dir?   XXX
-  
-  if (in->is_dirty() && in->nparents == 0) 
-	in->mark_clean();
-  
-  dn->dir->dec_size();  // adjust dir size
-  dn->inode = 0;
-}
 
 
 
@@ -216,13 +144,13 @@ void MDCache::rename_file(CDentry *srcdn,
   CInode *in = srcdn->inode;
 
   // unlink src
-  unlink_inode(srcdn);
+  srcdn->dir->unlink_inode(srcdn);
   
   // unlink old inode?
-  if (destdn->inode) unlink_inode(destdn);
+  if (destdn->inode) destdn->dir->unlink_inode(destdn);
   
   // link inode w/ dentry
-  link_inode( destdn, in );
+  destdn->dir->link_inode( destdn, in );
 }
 
 
@@ -1194,7 +1122,7 @@ void MDCache::request_finish(MClientRequest *req)
   request_cleanup(req);
   delete req;  // delete req
   
-  dump();
+  //dump();
 }
 
 
@@ -1563,7 +1491,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		in->replica_nonce = m->get_inode(i).get_replica_nonce();
 
 		// link
-		add_dentry( cur->dir, m->get_dentry(i), in );
+		cur->dir->add_dentry( m->get_dentry(i), in );
 		
 		dout(7) << "XXX linked " << *in << endl;
 
@@ -1586,7 +1514,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 		} else {
 		  // link in
 		  add_inode( in );
-		  add_dentry( cur->dir, m->get_dentry(i), in );
+		  cur->dir->add_dentry( m->get_dentry(i), in );
 		  
 		  cur->dir->take_waiting(CDIR_WAIT_DENTRY,
 								 m->get_dentry(i),
@@ -1893,7 +1821,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
   }
 
   // unlink
-  unlink_inode( dn );
+  dn->dir->unlink_inode( dn );
   dn->mark_dirty();
 
   // unpin dir / unxlock
@@ -1928,7 +1856,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	string dname = dn->name;
 	
 	// unlink
-	unlink_inode( dn );
+	dn->dir->remove_dentry(dn);
 	
 	// wake up
 	dir->finish_waiting(CDIR_WAIT_DNREAD, dname);
@@ -2057,12 +1985,12 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
   if (srcdn && destdir) {
 	CInode *in = srcdn->inode;
 
-	if (!destdn) destdn = add_dentry(destdir, m->get_destname());
+	if (!destdn) destdn = destdir->add_dentry(m->get_destname());  // create null dentry
 
 	dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdn << endl;
 	
 	rename_file(srcdn, destdn);
-	remove_dentry(srcdn);
+	srcdir->remove_dentry(srcdn);
 	
 	// update imports/exports?
 	if (in->is_dir() && in->dir) 
@@ -2074,13 +2002,13 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
 
   else if (srcdn) {
 	dout(7) << "handle_rename_local_file unlinking src only " << *srcdn << endl;
-	remove_dentry(srcdn);  // will leave inode dangling.
+	srcdir->remove_dentry(srcdn);  // will leave inode dangling.
 	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
   }
 
   else if (destdn) {
 	dout(7) << "handle_rename_local_file unlinking dst only " << *destdn << endl;
-	remove_dentry(destdn);
+	srcdir->remove_dentry(destdn);
 	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
   }
   
@@ -3526,8 +3454,8 @@ CDentry* MDCache::create_xlocked_dentry(CDir *dir, const string& dname, MClientR
   // pin dir!
   dir->auth_pin();
 
-  // create dentry
-  CDentry* dn = add_dentry(dir, dname, 0);
+  // create null dentry
+  CDentry* dn = dir->add_dentry(dname);
 
   // lock
   dn->lockstate = DN_LOCK_XLOCK;
@@ -4409,7 +4337,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 		it++;
 		if (dn->is_null()) {
 		  assert(dn->is_sync());
-		  remove_dentry(dn);
+		  dir->remove_dentry(dn);
 		}
 	  }
 	}
@@ -4595,7 +4523,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
         CInode *condiri = get_inode( m->get_containing_dirino(in->ino()) );
         assert(condiri && condiri->dir);
         add_inode( in );
-        add_dentry( condiri->dir, m->get_dentry(in->ino()), in );
+        condiri->dir->add_dentry( m->get_dentry(in->ino()), in );
         
         dout(10) << "   added " << *in << endl;
       }
@@ -4983,13 +4911,14 @@ void MDCache::import_dir_block(crope& r,
 
 	CDentry *dn = dir->lookup(dname);
 	if (!dn)
-	  dn = add_dentry(dir, dname);
+	  dn = dir->add_dentry(dname);  // null
 
 	if (dirty == 'D') dn->mark_dirty();
 	
 	if (icode == 'N') {
 
 	  // null dentry
+	  assert(dn->is_null());  
 	  
 	}
 	else if (icode == 'I') {
@@ -5013,7 +4942,7 @@ void MDCache::import_dir_block(crope& r,
 	  // link
 	  if (added) {
 		add_inode(in);
-		link_inode(dn, in);
+		dn->dir->link_inode(dn, in);
 		dout(10) << "added " << *in << endl;
 	  } else {
 		dout(10) << "  had " << *in << endl;
@@ -5929,7 +5858,7 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
   diri->get_or_open_dir(mds);
   
   add_inode( in );
-  add_dentry( diri->dir, file, in );
+  diri->dir->add_dentry( file, in );
 
   if (in->is_dir())
 	in->get_or_open_dir(mds);

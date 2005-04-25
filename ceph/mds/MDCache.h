@@ -156,14 +156,6 @@ class MDCache {
   void destroy_inode(CInode *in);
 
  public:
-  CDentry* add_dentry( CDir *dir, const string& dname, CInode *in=0 );
-  void remove_dentry( CDentry *dn );         // delete dentry
-
-  void link_inode( CDentry *dn, CInode *in );
-  void unlink_inode( CDentry *dn );
-  
-
- public:
   void export_empty_import(CDir *dir);
 
  protected:

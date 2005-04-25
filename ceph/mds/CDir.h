@@ -180,9 +180,11 @@ class CDir {
 
  protected:
   // contents
-  CDir_map_t       items;              // use map; ordered list
-  size_t           nitems;
-  size_t           nauthitems;
+  CDir_map_t       items;              // non-null AND null
+  CDir_map_t       null_items;         // just null
+  size_t           nitems;             // non-null
+  size_t           nnull;              // null
+  //size_t           nauthitems;
   //size_t           namesize;
 
   // state
@@ -251,10 +253,12 @@ class CDir {
 	
 	return nitems; 
   }
+  /*
   size_t get_auth_size() { 
 	assert(nauthitems <= nitems);
 	return nauthitems; 
   }
+  */
 
   float get_popularity() {
 	return popularity[0].get();
@@ -269,8 +273,19 @@ class CDir {
   CDentry* lookup(const string& n);
 
 
+  // dentries and inodes
+ public:
+  CDentry* add_dentry( const string& dname, CInode *in=0 );
+  void remove_dentry( CDentry *dn );         // delete dentry
+  void link_inode( CDentry *dn, CInode *in );
+  void unlink_inode( CDentry *dn );
+ private:
+  void link_inode_work( CDentry *dn, CInode *in );
+  void unlink_inode_work( CDentry *dn );
+
 
   // -- authority --
+ public:
   int authority();
   int dentry_authority(const string& d);
   int get_dir_auth() { return dir_auth; }

@@ -430,9 +430,10 @@ void MDStore::do_commit_dir_2( int result,
 	  dn->mark_clean();     // might not but could be dirty
 	  
 	  // remove, if it's null and unlocked
-	  if (dn->is_null() == 0 && dn->is_sync()) {
+	  if (dn->is_null() && dn->is_sync()) {
 		dout(5) << "   removing clean and null " << *dn << endl;
-		mds->mdcache->remove_dentry(dn);
+		dir->remove_dentry(dn);
+		continue;
 	  }
 	} else {
 	  dout(5) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
@@ -442,6 +443,11 @@ void MDStore::do_commit_dir_2( int result,
 
 	// inode  FIXME: if primary link!
 	CInode *in = dn->get_inode();
+	if (!in) {
+	  assert(!dn->is_sync());
+	  continue;
+	}
+			 
 	assert(in->is_auth());
 	
 	if (committed_version > in->get_parent_dir_version()) {
@@ -631,7 +637,7 @@ void MDStore::do_fetch_dir_2( int result,
 	  }
 
 	  // link
-	  mds->mdcache->add_dentry( dir, dname, in );
+	  dir->add_dentry( dname, in );
 	  dout(10) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
   }

@@ -128,10 +128,12 @@ void CInode::set_auth(bool a)
   if (!is_dangling() && !is_root() && 
 	  is_auth() != a) {
 	CDir *dir = get_parent_dir();
+	/*
 	if (is_auth() && !a) 
 	  dir->nauthitems--;
 	else
 	  dir->nauthitems++;
+	*/
   }
   
   if (a) state_set(CINODE_STATE_AUTH);
