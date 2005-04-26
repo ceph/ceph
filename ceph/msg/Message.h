@@ -51,7 +51,7 @@
 
 #define MSG_MDS_DENTRYUNLINK      200
 
-#define MSG_MDS_RENAMELOCALFILE  300
+#define MSG_MDS_RENAMENOTIFY     300
 
 #define MSG_MDS_LOCK             500
 

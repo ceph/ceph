@@ -39,7 +39,7 @@
 
 #include "messages/MLock.h"
 #include "messages/MDentryUnlink.h"
-#include "messages/MRenameLocalFile.h"
+#include "messages/MRenameNotify.h"
 
 #include "messages/MClientRequest.h"
 
@@ -691,8 +691,8 @@ int MDCache::proc_message(Message *m)
 	handle_dentry_unlink((MDentryUnlink*)m);
 	break;
 
-  case MSG_MDS_RENAMELOCALFILE:
-	handle_rename_local_file((MRenameLocalFile*)m);
+  case MSG_MDS_RENAMENOTIFY:
+	handle_rename_notify((MRenameNotify*)m);
 	break;
 
 	
@@ -1955,10 +1955,10 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   for (set<int>::iterator it = who.begin();
 	   it != who.end();
 	   it++) {
-	mds->messenger->send_message(new MRenameLocalFile(srcdir->ino(),
-													  srcname,
-													  destdir->ino(),
-													  destname),
+	mds->messenger->send_message(new MRenameNotify(srcdir->ino(),
+												   srcname,
+												   destdir->ino(),
+												   destname),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
   }
 
@@ -1984,9 +1984,9 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   destdir->finish_waiting(CDIR_WAIT_DNREAD, destname);
 }
 
-void MDCache::handle_rename_local_file(MRenameLocalFile*m)
+void MDCache::handle_rename_notify(MRenameNotify*m)
 {
-  dout(7) << "handle_rename_local_file dir " << m->get_srcdirino() << " dn " << m->get_srcname() << " to dir " << m->get_destdirino() << " dname " << m->get_destname() << endl;
+  dout(7) << "handle_rename_notify dir " << m->get_srcdirino() << " dn " << m->get_srcname() << " to dir " << m->get_destdirino() << " dname " << m->get_destname() << endl;
   
   // src
   CInode *srcdiri = get_inode(m->get_srcdirino());
@@ -2012,7 +2012,7 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
 	  assert(!srcdn->inode->is_dir());
 	}
 
-	dout(7) << "handle_rename_local_file renaming " << *srcdn << " to " << *destdn << endl;
+	dout(7) << "handle_rename_notify renaming " << *srcdn << " to " << *destdn << endl;
 	
 	rename_file(srcdn, destdn);
 	
@@ -2028,20 +2028,20 @@ void MDCache::handle_rename_local_file(MRenameLocalFile*m)
   }
 
   else if (srcdn) {
-	dout(7) << "handle_rename_local_file unlinking src only " << *srcdn << endl;
+	dout(7) << "handle_rename_notify unlinking src only " << *srcdn << endl;
 	assert(!srcdn->inode->is_dir());
 	srcdir->remove_dentry(srcdn);  // will leave inode dangling.
 	srcdir->finish_waiting(CDIR_WAIT_ANY, m->get_srcname());
   }
 
   else if (destdn) {
-	dout(7) << "handle_rename_local_file unlinking dst only " << *destdn << endl;
+	dout(7) << "handle_rename_notify unlinking dst only " << *destdn << endl;
 	destdir->remove_dentry(destdn);
 	destdir->finish_waiting(CDIR_WAIT_ANY, m->get_destname());
   }
   
   else {
-	dout(7) << "handle_rename_local_file didn't have srcdn or destdn" << endl;
+	dout(7) << "handle_rename_notify didn't have srcdn or destdn" << endl;
 	assert(srcdn == 0 && destdn == 0);
   }
   

@@ -1,7 +1,7 @@
-#ifndef __MRENAMELOCALFILE_H
-#define __MRENAMELOCALFILE_H
+#ifndef __MRENAMENOTIFY_H
+#define __MRENAMENOTIFY_H
 
-class MRenameLocalFile : public Message {
+class MRenameNotify : public Message {
   inodeno_t srcdirino;
   string srcname;
   inodeno_t destdirino;
@@ -13,12 +13,12 @@ class MRenameLocalFile : public Message {
   inodeno_t get_destdirino() { return destdirino; }
   string& get_destname() { return destname; }
 
-  MRenameLocalFile() {}
-  MRenameLocalFile(inodeno_t srcdirino,
-				   const string& srcname,
-				   inodeno_t destdirino,
-				   const string& destname) :
-	Message(MSG_MDS_RENAMELOCALFILE) {
+  MRenameNotify() {}
+  MRenameNotify(inodeno_t srcdirino,
+				const string& srcname,
+				inodeno_t destdirino,
+				const string& destname) :
+	Message(MSG_MDS_RENAMENOTIFY) {
 	this->srcdirino = srcdirino;
 	this->srcname = srcname;
 	this->destdirino = destdirino;

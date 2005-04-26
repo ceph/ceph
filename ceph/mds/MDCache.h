@@ -37,7 +37,7 @@ class MDentryUnlink;
 class MInodeWriterClosed;
 class MLock;
 
-class MRenameLocalFile;
+class MRenameNotify;
 class C_MDS_ExportFinish;
 
 class MClientRequest;
@@ -201,7 +201,7 @@ class MDCache {
   void handle_dentry_unlink(MDentryUnlink *m);
 
   void file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool everyone);
-  void handle_rename_local_file(MRenameLocalFile*m);
+  void handle_rename_notify(MRenameNotify *m);
   
 
 
