@@ -174,8 +174,8 @@ class MDCache {
 					Context *onfinish=0);
   void open_remote_dir(CInode *diri, Context *fin);
 
-  bool path_pin(vector<CDentry*>& trace, Context *c);
-  void path_unpin(vector<CDentry*>& trace);
+  bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
+  void path_unpin(vector<CDentry*>& trace, Message *m);
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
   bool request_start(MClientRequest *req,

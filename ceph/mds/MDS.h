@@ -32,7 +32,7 @@ typedef __uint64_t object_t;
 
 
 #define MDS_TRAVERSE_FORWARD  1
-#define MDS_TRAVERSE_DISCOVER 2
+#define MDS_TRAVERSE_DISCOVER 2    // skips permissions checks etc.
 #define MDS_TRAVERSE_FAIL     3
 
 
@@ -78,15 +78,10 @@ class MDS : public Dispatcher {
   bool         shut_down;
 
   // ino's and fh's
-  public:
+ public:
   class IdAllocator  *idalloc;
-  protected:
-  
-  
-  // import/export
-  list<CInode*>      import_list;
-  list<CInode*>      export_list;
-  
+ protected:
+
   // osd interface
   __uint64_t         osd_last_tid;
   hash_map<__uint64_t,PendingOSDRead_t*>  osd_reads;
@@ -100,6 +95,11 @@ class MDS : public Dispatcher {
   DecayCounter stat_write;
   
   set<int>     done_clients;
+
+
+  
+ public:
+  list<Context*> finished_queue;
 
  public:
   // sub systems
@@ -185,9 +185,11 @@ class MDS : public Dispatcher {
 							  filepath& destpath,
 							  vector<CDentry*>& trace,
 							  int r);
-  void handle_client_rename_file(MClientRequest *req, CInode *srcdiri, CDentry *srcdn, CDir *destdir, string& name);
-  void handle_client_rename_dir (MClientRequest *req, CDentry *srcdn, CDir *destdir, string& name);
-  void cleanup_rename_locks(MClientRequest *req);
+  void handle_client_rename_local(MClientRequest *req, 
+								  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
+								  string& destpath, CDir *destdir, CDentry *destdn, string& name);
+  void handle_client_rename_remote(MClientRequest *req, CInode *srcdiri, CDentry *srcdn, CDir *destdir, string& name);
+
   void handle_client_mkdir(MClientRequest *req, CInode *ref);
   void handle_client_rmdir(MClientRequest *req, CInode *ref);
   void handle_client_symlink(MClientRequest *req, CInode *ref);
@@ -202,6 +204,9 @@ class MDS : public Dispatcher {
   CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
 
 
+  void queue_finished(list<Context*>& ls) {
+	finished_queue.splice( finished_queue.end(), ls );
+  }
 
 
   // osd fun

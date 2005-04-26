@@ -287,12 +287,23 @@ void MDS::dispatch(Message *m)
 	dout(1) << "MDS dispatch unkown message port" << m->get_dest_port() << endl;
   }
 
+  // finish any triggered contexts
+  if (finished_queue.size()) {
+	dout(7) << "mds has " << finished_queue.size() << " queued contexts" << endl;
+	list<Context*> ls;
+	ls.splice(ls.begin(), finished_queue);
+	assert(finished_queue.empty());
+	finish_contexts(ls);
+  }
+
+  // balance?
   if (whoami == 0 &&
 	  stat_ops >= last_heartbeat + g_conf.mds_heartbeat_op_interval) {
 	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
   }
 
+  // shut down?
   if (shutting_down && !shut_down) {
 	if (mdcache->shutdown_pass()) {
 	  shutting_down = false;
@@ -432,7 +443,7 @@ void MDS::handle_client_request(MClientRequest *req)
   
   dout(10) << "ref is " << *ref << endl;
   
-  // rename doesn't pin a path (initially)
+  // rename doesn't pin src path (initially)
   if (req->get_op() == MDS_OP_RENAME) trace.clear();
 
   // register
@@ -453,7 +464,10 @@ void MDS::dispatch_request(MClientRequest *req, CInode *ref)
 	
 	// files
   case MDS_OP_OPEN:
-	handle_client_openc(req, ref);
+	if (req->get_iarg() & O_CREAT) 
+	  handle_client_openc(req, ref);
+	else 
+	  handle_client_open(req, ref);
 	break;
 	/*
   case MDS_OP_TRUNCATE:
@@ -1299,6 +1313,7 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 	  // mv /some/thing /to/some/dir 
 	  destdir = d->get_or_open_dir(this);         // /to/some/dir
 	  destname = req->get_filepath().last_bit();  // thing
+	  destpath.add_dentry(destname);
 	} else {
 	  // mv /some/thing /to/some/existing_filename
 	  destdir = trace[trace.size()-1]->dir;       // /to/some
@@ -1328,50 +1343,71 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 
 	// error out
 	dout(7) << " rename dest " << destpath << " dne" << endl;
-	goto fail;
+	reply_request(req, -EINVAL);
+	return;
   }
 
+  string srcpath = req->get_path();
+  dout(10) << "srcpath " << srcpath << endl;
+  dout(10) << "destpath " << destpath << endl;
 
+  // src == dest?
+  if (srcdn->get_dir() == destdir && srcdn->name == destname) {
+	dout(7) << "rename src=dest, same file " << destauth << endl;
+	reply_request(req, -EINVAL);
+	return;
+  }
+
+  // does destination exist?  (is this an overwrite?)
+  CDentry *destdn = destdir->lookup(destname);
+  CInode  *oldin = 0;
+  if (destdn) {
+	oldin = destdn->get_inode();
+	
+	if (oldin) {
+	  // make sure it's also a file!
+	  // this can happen, e.g. "mv /some/thing /a/dir" where /a/dir/thing exists and is a dir.
+	  if (oldin->is_dir()) {
+		// fail!
+		dout(7) << "dest exists and is dir" << endl;
+		reply_request(req, -EISDIR);
+		return;
+	  }
+
+	  if (srcdn->inode->is_dir() &&
+		  !oldin->is_dir()) {
+		dout(7) << "cannot overwrite non-directory with directory" << endl;
+		reply_request(req, -EISDIR);
+		return;
+	  }
+	}
+
+	dout(7) << "dest exists " << *destdn << endl;
+	if (destdn->get_inode()) {
+	  dout(7) << "destino is " << *destdn->get_inode() << endl;
+	} else {
+	  dout(7) << "dest dn is a NULL stub" << endl;
+	}
+  } else {
+	dout(7) << "dest dn dne (yet)" << endl;
+  }
+  
+
+  // local or remote?
   destauth = destdir->dentry_authority(destname);
   dout(7) << "destname " << destname << " destdir " << *destdir << " auth " << destauth << endl;
   
-
-  if (srcdn->get_dir() == destdir && srcdn->name == destname) {
-	dout(7) << "rename src=dest, same file " << destauth << endl;
-	goto fail;
-  }
-
-
-  // local or remote?
   if (destauth != get_nodeid()) {
 	dout(7) << "rename has remote dest " << destauth << endl;
-	
-	// implement me
-	//assert(0);
-	
-	// *** IMPLEMENT ME ***
-	
-	dout(7) << "rename NOT FULLY IMPLEMENTED" << endl;
-	
-	goto fail;
+	reply_request(req, -EINVAL);
+	//handle_client_rename_remote(req, srcdiri, srcdn, destdir, destname);
+	return;
+  } else {
+	dout(7) << "rename is local" << endl;
+	handle_client_rename_local(req, 
+							   srcpath, srcdiri, srcdn, 
+							   destpath.get_path(), destdir, destdn, destname);
   }
-
-
-  /*
-  if (srci->is_dir()) {
-	dout(7) << "rename dirs NOT YET IMPLEMENTED" << endl;
-	goto fail;
-  }
-  */
-
-  // file or dir?
-  handle_client_rename_file(req, srcdiri, srcdn, destdir, destname);
-
-  return;
-
- fail:
-  // make sure we unlock (if we locked);
-  reply_request(req, -EINVAL);
   return;
 }
 
@@ -1420,76 +1456,17 @@ public:
   }
 };
 
-void MDS::cleanup_rename_locks(MClientRequest *req) 
+
+
+void MDS::handle_client_rename_local(MClientRequest *req,
+									 string& srcpath,
+									 CInode *srcdiri,
+									 CDentry *srcdn,
+									 string& destpath,
+									 CDir *destdir,
+									 CDentry *destdn,
+									 string& destname)
 {
-  /*
-  if (!locked_rename_dentries.count(req)) return;
-
-  // unlock
-  CDentry *dn = locked_rename_dentries[req];
-  dout(7) << "cleanup_rename_locks on " << *req << " dentry " << *dn << endl;
-
-  if (dn->is_xlockedbyme(req)) {
-	mdcache->dentry_xlock_finish(dn);
-
-	// null?
-	if (dn->inode == NULL) {
-	  dn->dir->remove_child(dn);
-	}	
-  
-	// finish
-	dn->dir->finish_waiting(CDIR_WAIT_ANY, dn->name);
-
-	if (dn->inode == NULL) 
-	  delete dn;
-  }
-  
-  locked_rename_dentries.erase(req);
-  */
-}
-
-void MDS::handle_client_rename_file(MClientRequest *req,
-									CInode *srcdiri,
-									CDentry *srcdn,
-									CDir *destdir,
-									string& destname)
-{
-  bool must_wait_for_lock = false;
-  
-  // does destination exist?  (is this an overwrite?)
-  CDentry *destdn = destdir->lookup(destname);
-  CInode  *oldin = 0;
-  if (destdn) {
-	oldin = destdn->get_inode();
-	
-	if (oldin) {
-	  // make sure it's also a file!
-	  // this can happen, e.g. "mv /some/thing /a/dir" where /a/dir/thing exists and is a dir.
-	  if (oldin->is_dir()) {
-		// fail!
-		dout(7) << "dest exists and is dir" << endl;
-		reply_request(req, -EISDIR);
-		return;
-	  }
-
-	  if (srcdn->inode->is_dir() &&
-		  !oldin->is_dir()) {
-		dout(7) << "cannot overwrite non-directory with directory" << endl;
-		reply_request(req, -EISDIR);
-		return;
-	  }
-	}
-
-	dout(7) << "dest exists " << *destdn << endl;
-	if (destdn->get_inode()) {
-	  dout(7) << "destino is " << *destdn->get_inode() << endl;
-	} else {
-	  dout(7) << "dest dn is a NULL stub" << endl;
-	}
-  } else {
-	dout(7) << "dest dne" << endl;
-  }
-
   bool everybody = false;
   if (true || srcdn->inode->is_dir()) {
 	/* overkill warning: lock w/ everyone for simplicity.
@@ -1504,7 +1481,7 @@ void MDS::handle_client_rename_file(MClientRequest *req,
   }
 
   // pick lock ordering
-  if (req->get_path() < req->get_sarg()) { 
+  if (srcpath < destpath) {
 	// src
 	if (!srcdn->is_xlockedbyme(req) &&
 		!mdcache->dentry_xlock_start(srcdn, req, srcdiri, everybody))
@@ -1540,6 +1517,16 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 }
 
 
+void MDS::handle_client_rename_remote(MClientRequest *req,
+									  CInode *srcdiri,
+									  CDentry *srcdn,
+									  CDir *destdir,
+									  string& destname)
+{
+  
+
+
+}
 
 
 

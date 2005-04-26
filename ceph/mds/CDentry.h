@@ -32,7 +32,9 @@ class CDentry {
   int            lockstate;
   Message        *xlockedby;
   set<int>       gather_set;
+  
   int            npins;
+  multiset<Message*> pinset;
 
   friend class MDCache;
   friend class MDS;
@@ -98,6 +100,7 @@ class CDentry {
   bool can_read()  { return (lockstate == DN_LOCK_SYNC) || (lockstate == DN_LOCK_UNPINNING);  }
   bool can_read(Message *m) { return is_xlockedbyme(m) || can_read(); }
   bool is_xlocked() { return lockstate == DN_LOCK_XLOCK; }
+  Message* get_xlockedby() { return xlockedby; } 
   bool is_xlockedbyother(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
   bool is_xlockedbyme(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
   bool is_prexlockbyother(Message *m) {
@@ -105,9 +108,22 @@ class CDentry {
   }
   
   // pins
-  void pin() { npins++; }
-  void unpin() { npins--; assert(npins >= 0); }
-  bool is_pinnable() { return lockstate == DN_LOCK_SYNC; }
+  void pin(Message *m) { 
+	npins++; 
+	pinset.insert(m);
+	assert(pinset.size() == npins);
+  }
+  void unpin(Message *m) { 
+	npins--; 
+	assert(npins >= 0); 
+	assert(pinset.count(m) > 0);
+	pinset.erase(pinset.find(m));
+	assert(pinset.size() == npins);
+  }
+  bool is_pinnable(Message *m) { 
+	return (lockstate == DN_LOCK_SYNC) ||
+	  (lockstate == DN_LOCK_UNPINNING && pinset.count(m)); 
+  }
   bool is_pinned() { return npins>0; }
   int num_pins() { return npins; }
 
