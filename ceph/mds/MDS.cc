@@ -432,6 +432,9 @@ void MDS::handle_client_request(MClientRequest *req)
   
   dout(10) << "ref is " << *ref << endl;
   
+  // rename doesn't pin a path (initially)
+  if (req->get_op() == MDS_OP_RENAME) trace.clear();
+
   // register
   if (!mdcache->request_start(req, ref, trace))
 	return;
@@ -789,8 +792,10 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	CDir_map_t::iterator it;
 	int numfiles = 0;
 	for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
-	  CInode *in = it->second->inode;
-	  if (!in) continue;  // xlocked pre-rename?
+	  //string name = it->first;
+	  CDentry *dn = it->second;
+	  CInode *in = dn->inode;
+	  if (!in) continue;  // null
 	  c_inode_info *i = new c_inode_info;
 	  i->inode = in->inode;
 	  in->get_dist_spec(i->dist, whoami);
@@ -884,21 +889,23 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
 
   // make sure name doesn't already exist
   CDentry *dn = dir->lookup(name);
-  if (dn != 0) {
+  if (dn) {
 	if (!dn->can_read(req)) {
 	  dout(10) << "waiting on (existing!) dentry " << *dn << endl;
 	  dir->add_waiter(CDIR_WAIT_DNREAD, name, new C_MDS_RetryRequest(this, req, diri));
 	  return 0;
 	}
 
-	// name already exists
-	if (okexist) {
-	  dout(10) << "dentry " << name << " exists in " << *dir << endl;
-	  return dn->inode;
-	} else {
-	  dout(10) << "dentry " << name << " exists in " << *dir << endl;
-	  reply_request(req, -EEXIST);
-	  return 0;
+	if (!dn->is_null()) {
+	  // name already exists
+	  if (okexist) {
+		dout(10) << "dentry " << name << " exists in " << *dir << endl;
+		return dn->inode;
+	  } else {
+		dout(10) << "dentry " << name << " exists in " << *dir << endl;
+		reply_request(req, -EEXIST);
+		return 0;
+	  }
 	}
   }
 
@@ -919,7 +926,10 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->inode.atime = 1;  // now, FIXME
 
   // link
-  dn = dir->add_dentry(name, newi);
+  if (!dn) 
+	dn = dir->add_dentry(name, newi);
+  else
+	dir->link_inode(dn, newi);
   
   // mark dirty
   dn->mark_dirty();
@@ -1014,7 +1024,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
 
   // null?
   if (dn->is_null()) {
-	dout(10) << " it's null " << *dn << endl;
+	dout(10) << "unlink on null dn " << *dn << endl;
 	reply_request(req, -ENOENT);
 	return;
   }
@@ -1105,7 +1115,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
   dout(7) << "handle_client_unlink/rmdir on " << *in << endl;
   
   // xlock dentry
-  if (!mdcache->dentry_xlock_start(dn, req->get_path(), req, diri))
+  if (!mdcache->dentry_xlock_start(dn, req, diri))
 	return;
 	
   // it's locked, unlink!
@@ -1206,27 +1216,31 @@ void MDS::handle_client_rename(MClientRequest *req,
 
   // src dentry
   CDentry *srcdn = srcdir->lookup(srcname);     // FIXME for hard links
-  if (!srcdn) {
-	if (srcdir->is_complete()) {
-	  dout(10) << "handle_client_rename src dne " << endl;
-	  reply_request(req, -EEXIST);
-	  return;
-	} else {
-	  dout(10) << "readding incomplete dir" << endl;
-	  mdstore->fetch_dir(srcdir,
-						 new C_MDS_RetryRequest(this, req, srcdiri));
-	  return;
-	}
-  }
 
   // xlocked?
-  if (!srcdn->can_read(req)) {
+  if (srcdn && !srcdn->can_read(req)) {
 	dout(10) << " waiting on " << *srcdn << endl;
 	srcdir->add_waiter(CDIR_WAIT_DNREAD,
 					   srcname,
 					   new C_MDS_RetryRequest(this, req, srcdiri));
 	return;
   }
+  
+  if ((srcdn && !srcdn->inode) ||
+	  (!srcdn && srcdir->is_complete())) {
+	dout(10) << "handle_client_rename src dne " << endl;
+	reply_request(req, -EEXIST);
+	return;
+  }
+  
+  if (!srcdn && !srcdir->is_complete()) {
+	dout(10) << "readding incomplete dir" << endl;
+	mdstore->fetch_dir(srcdir,
+					   new C_MDS_RetryRequest(this, req, srcdiri));
+	return;
+  }
+  assert(srcdn && srcdn->inode);
+
 
   
   dout(10) << "handle_client_rename " << *srcdn << " to " << req->get_sarg() << endl;
@@ -1261,6 +1275,7 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   CDir*  destdir = 0;
   string destname;
   int destauth = -1;
+  bool result;
   
   // what is the dest?  (dir or file or complete filename)
   // note: trace includes root, destpath doesn't (include leading /)
@@ -1475,51 +1490,53 @@ void MDS::handle_client_rename_file(MClientRequest *req,
 	dout(7) << "dest dne" << endl;
   }
 
+  bool everybody = false;
+  if (true || srcdn->inode->is_dir()) {
+	/* overkill warning: lock w/ everyone for simplicity.
+	   i could limit this to cases where something beneath me is exported.
+	   could possibly limit the list.
+	   main constrained is that, regardless of the order i do the xlocks, and whatever
+	   imports/exports might happen in the process, the destdir _must_ exist on any node
+	   importing something beneath me when rename finishes.
+	 */
+	dout(7) << "overkill?  doing xlocks with _all_ nodes" << endl;
+	everybody = true;
+  }
 
   // pick lock ordering
   if (req->get_path() < req->get_sarg()) { 
 	// src
 	if (!srcdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(srcdn, req->get_path(), req, srcdiri))
+		!mdcache->dentry_xlock_start(srcdn, req, srcdiri, everybody))
 	  return;  
 	dout(7) << "srcdn is xlock " << *srcdn << endl;
 	
 	// dest
-	if (destdn) {
-	  if (!destdn->is_xlockedbyme(req) &&
-		  !mdcache->dentry_xlock_start(destdn, req->get_sarg(), req, srcdiri))
-		return;
-	  dout(7) << "destdn is xlock " << *srcdn << endl;
-	} else {
-	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req, srcdiri);
-	  if (!destdn) return;
-	  dout(7) << "created destdn " << *destdn << endl;
-	}
+	if (!destdn) destdn = destdir->add_dentry(destname);
+	if (!destdn->is_xlockedbyme(req) &&
+		!mdcache->dentry_xlock_start(destdn, req, srcdiri, everybody))
+	  return;
+	dout(7) << "destdn is xlock " << *destdn << endl;
   } else {
 	// dest	
-	if (destdn) {
-	  if (!destdn->is_xlockedbyme(req) &&
-		  !mdcache->dentry_xlock_start(destdn, req->get_sarg(), req, srcdiri))
-		return;
-	  dout(7) << "destdn is xlock " << *srcdn << endl;
-	} else {
-	  destdn = mdcache->create_xlocked_dentry(destdir, destname, req, srcdiri);
-	  if (!destdn) return;
-	  dout(7) << "created destdn " << *destdn << endl;
-	}
+	if (!destdn) destdn = destdir->add_dentry(destname);
+	if (!destdn->is_xlockedbyme(req) &&
+		!mdcache->dentry_xlock_start(destdn, req, srcdiri, everybody))
+	  return;
+	dout(7) << "destdn is xlock " << *destdn << endl;
 
 	// src
 	if (!srcdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(srcdn, req->get_path(), req, srcdiri))
+		!mdcache->dentry_xlock_start(srcdn, req, srcdiri, everybody))
 	  return;  
 	dout(7) << "srcdn is xlock " << *srcdn << endl;
   }
 
   // we're a go.
 
-  // forget about my locks!
   mdcache->file_rename( srcdn, destdn,
-						new C_MDS_RenameFinish(this, req) );
+						new C_MDS_RenameFinish(this, req),
+						everybody );
 }
 
 

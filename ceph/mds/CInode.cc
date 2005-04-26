@@ -51,6 +51,7 @@ ostream& operator<<(ostream& out, CInode& in)
       else
         out << " " << *it;
   }
+  out << " " << &in;
   out << "]";
   return out;
 }
@@ -145,9 +146,7 @@ void CInode::set_auth(bool a)
 void CInode::make_path(string& s)
 {
   if (parent) {
-	parent->dir->inode->make_path(s);
-	s += "/";
-	s += parent->name;
+	parent->make_path(s);
   } 
   else if (is_root()) {
 	s = "";  // root

@@ -76,6 +76,9 @@ class CDentry {
   bool operator>= (const CDentry& right) const;
   bool operator<= (const CDentry& right) const;
 
+  // misc
+  void make_path(string& p);
+
   // -- state
   __uint64_t get_parent_dir_version() { return parent_dir_version; }
   void float_parent_dir_version(__uint64_t ge) {

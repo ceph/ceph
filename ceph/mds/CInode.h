@@ -46,7 +46,7 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_OPENRD    5
 #define CINODE_PIN_OPENWR    6
 
-//#define CINODE_PIN_DNLOCK    7  // dentry is in funny lock state.
+#define CINODE_PIN_DNDIRTY   7  // dentry is dirty
 
 #define CINODE_PIN_AUTHPIN   8
 
@@ -72,7 +72,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "waiter",
   "openrd",
   "openwr",
-  "request",
+  "dndirty",
   "authpin",
   "importing",
   "presync",
@@ -566,7 +566,7 @@ class CInode : LRUObject {
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
 	ls = cached_by;
-	ls.insert(ls.begin(), auth);
+	ls.insert(auth);
   }
 
 

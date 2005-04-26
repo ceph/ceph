@@ -253,6 +253,8 @@ class CDir {
 	
 	return nitems; 
   }
+  size_t get_nitems() { return nitems; }
+  size_t get_nnull() { return nnull; }
   /*
   size_t get_auth_size() { 
 	assert(nauthitems <= nitems);
@@ -266,12 +268,7 @@ class CDir {
   
 
   // -- manipulation --
-  void add_child(CDentry *d);
-  void remove_child(CDentry *d);
-  void inc_size(CDentry *dn =0);
-  void dec_size(CDentry *dn =0);
   CDentry* lookup(const string& n);
-
 
   // dentries and inodes
  public:
@@ -283,6 +280,7 @@ class CDir {
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
 
+  void remove_null_dentries();  // on empty, clean dir
 
   // -- authority --
  public:

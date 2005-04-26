@@ -410,13 +410,14 @@ void MDStore::do_commit_dir_2( int result,
   dout(11) << "do_commit_dir_2 hashcode " << hashcode << " " << *dir << endl;
   
   // mark inodes and dentries clean too (if we committed them!)
+  list<CDentry*> null_clean;
   for (CDir_map_t::iterator it = dir->begin();
-	   it != dir->end();
-	   it++) {
+	   it != dir->end(); ) {
 	CDentry *dn = it->second;
+	it++;
 	
 	if (hashcode >= 0) {
-	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
+	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), dn->get_name() );
 	  if (dentryhashcode != hashcode) continue;
 	}
 
@@ -432,7 +433,7 @@ void MDStore::do_commit_dir_2( int result,
 	  // remove, if it's null and unlocked
 	  if (dn->is_null() && dn->is_sync()) {
 		dout(5) << "   removing clean and null " << *dn << endl;
-		dir->remove_dentry(dn);
+		null_clean.push_back(dn);
 		continue;
 	  }
 	} else {
@@ -463,6 +464,12 @@ void MDStore::do_commit_dir_2( int result,
 	  assert(in->is_dirty());
 	}
   }
+
+  // remove null clean dentries
+  for (list<CDentry*>::iterator it = null_clean.begin();
+	   it != null_clean.end();
+	   it++) 
+	dir->remove_dentry(*it);
   
   // unpin
   dir->auth_unpin();

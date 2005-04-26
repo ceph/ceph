@@ -56,7 +56,7 @@ typedef const char* pchar;
 
 typedef struct {
   CInode *ref;             // reference inode
-  vector<CDentry*> trace;  // path trace
+  map< CDentry*, vector<CDentry*> > traces;   // path pins held
 } active_request_t;
 
 
@@ -97,6 +97,7 @@ class MDCache {
 
 
   // active MDS requests
+ public:
   map<MClientRequest*, active_request_t>   active_requests;
   map<Message*, set<CDentry*> >            active_request_xlocks;
   
@@ -173,11 +174,8 @@ class MDCache {
 					Context *onfinish=0);
   void open_remote_dir(CInode *diri, Context *fin);
 
-  set<Message*> has_path_pinned;
-  bool path_pin(vector<CDentry*>& trace,
-				Message *req);
-  void path_unpin(vector<CDentry*>& trace,
-				  Message *req);
+  bool path_pin(vector<CDentry*>& trace, Context *c);
+  void path_unpin(vector<CDentry*>& trace);
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
   bool request_start(MClientRequest *req,
@@ -202,7 +200,7 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
-  void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);
+  void file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool everyone);
   void handle_rename_local_file(MRenameLocalFile*m);
   
 
@@ -336,9 +334,10 @@ class MDCache {
   void handle_lock_dir(MLock *m);
 
   // dentry
-  bool dentry_xlock_start(CDentry *dn, const string& path, MClientRequest *m, CInode *ref);
+  bool dentry_xlock_start(CDentry *dn, 
+						  MClientRequest *m, CInode *ref, 
+						  bool allnodes=false);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
-  CDentry* create_xlocked_dentry(CDir *dir, const string& name, MClientRequest *req, CInode *ref);
   void handle_lock_dn(MLock *m);
   
 

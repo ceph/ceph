@@ -9,8 +9,9 @@ while (<>) {
 	# cinode:auth_pin on inode [1000000002625 /gnu/blah_client_created. 0x89b7700] count now 1 + 0
 
 	if (/path_pinned /) {
-		my ($what) = /\[dentry (\S+) \d+ pins /;
-#		print "add_waiter $c $what\n";
+		my ($dname, $dir) = /\[dentry (\S+) .* in \[dir (\d+) /;
+		$what = "$dname $dir";
+		#print "$l pin $what\n";
 		$pin{$what}++;
 		$hist{$what} .= "$l: $_";
 		push( @pins, $what ) unless grep {$_ eq $what} @pins;
@@ -19,7 +20,9 @@ while (<>) {
 	# cinode:auth_unpin on inode [1000000002625 (dangling) 0x89b7700] count now 0 + 0
 
 	if (/path_unpinned/) {
-		my ($what) = /\[dentry (\S+) /;# / on (.*\])/;
+		my ($dname, $dir) = /\[dentry (\S+) .* in \[dir (\d+) /;
+		$what = "$dname $dir";
+		#print "$l unpin $what\n";
 		$pin{$what}--;
 		$hist{$what} .= "$l: $_";
 		unless ($pin{$what}) {
