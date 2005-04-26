@@ -33,7 +33,7 @@ typedef struct {
   inode_t inode;
   set<int> dist;
   string ref_dn;    // referring dentry (blank if root)
-  bool is_sync;
+  bool is_sync;     
 } c_inode_info;
 
 typedef struct {

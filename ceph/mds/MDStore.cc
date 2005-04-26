@@ -445,7 +445,7 @@ void MDStore::do_commit_dir_2( int result,
 	// inode  FIXME: if primary link!
 	CInode *in = dn->get_inode();
 	if (!in) {
-	  assert(!dn->is_sync());
+	  assert(dn->is_dirty() || !dn->is_sync());
 	  continue;
 	}
 			 

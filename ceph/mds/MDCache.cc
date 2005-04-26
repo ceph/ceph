@@ -1930,8 +1930,6 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   CInode *in = srcdn->inode;
   Message *req = srcdn->xlockedby;
 
-  dump();
-
   // update our cache
   rename_file(srcdn, destdn);
 
@@ -1942,8 +1940,6 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   // update imports/exports?
   if (in->is_dir() && in->dir) 
 	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
-  
-  dump();
   
   // tell replicas (no need to wait for ack) to do the same, and un-xlock.
   // make list
@@ -3505,8 +3501,6 @@ void MDCache::dentry_xlock_finish(CDentry *dn, bool quiet)
   
   // unpin dir
   dn->dir->auth_unpin();
-  
-  dump();
 }
 
 

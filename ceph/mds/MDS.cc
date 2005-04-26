@@ -1491,15 +1491,19 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	// dest
 	if (!destdn) destdn = destdir->add_dentry(destname);
 	if (!destdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(destdn, req, srcdiri, everybody))
+		!mdcache->dentry_xlock_start(destdn, req, srcdiri, everybody)) {
+	  if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
 	  return;
+	}
 	dout(7) << "destdn is xlock " << *destdn << endl;
   } else {
 	// dest	
 	if (!destdn) destdn = destdir->add_dentry(destname);
 	if (!destdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(destdn, req, srcdiri, everybody))
+		!mdcache->dentry_xlock_start(destdn, req, srcdiri, everybody)) {
+	  if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
 	  return;
+	}
 	dout(7) << "destdn is xlock " << *destdn << endl;
 
 	// src
