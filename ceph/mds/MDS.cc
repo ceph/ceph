@@ -1538,36 +1538,30 @@ void MDS::handle_client_rename_local(MClientRequest *req,
   }
 
   // pick lock ordering
-  if (srcpath < destpath) {
-	// src
-	if (!srcdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(srcdn, req, ref, everybody))
-	  return;  
-	dout(7) << "handle_client_rename_local: srcdn is xlock " << *srcdn << endl;
-	
-	// dest
-	if (!destdn) destdn = destdir->add_dentry(destname);
-	if (!destdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(destdn, req, ref, everybody)) {
-	  if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
-	  return;
-	}
-	dout(7) << "handle_client_rename_local: destdn is xlock " << *destdn << endl;
-  } else {
-	// dest	
-	if (!destdn) destdn = destdir->add_dentry(destname);
-	if (!destdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(destdn, req, ref, everybody)) {
-	  if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
-	  return;
-	}
-	dout(7) << "handle_client_rename_local: destdn is xlock " << *destdn << endl;
+  bool dosrc = srcpath < destpath;
+  for (int i=0; i<2; i++) {
+	if (dosrc) {
 
-	// src
-	if (!srcdn->is_xlockedbyme(req) &&
-		!mdcache->dentry_xlock_start(srcdn, req, ref, everybody))
-	  return;  
-	dout(7) << "handle_client_rename_local: srcdn is xlock " << *srcdn << endl;
+	  // src
+	  if (!srcdn->is_xlockedbyme(req) &&
+		  !mdcache->dentry_xlock_start(srcdn, req, ref, everybody))
+		return;  
+	  dout(7) << "handle_client_rename_local: srcdn is xlock " << *srcdn << endl;
+
+	} else {
+
+	  // dest
+	  if (!destdn) destdn = destdir->add_dentry(destname);
+	  if (!destdn->is_xlockedbyme(req) &&
+		  !mdcache->dentry_xlock_start(destdn, req, ref, everybody)) {
+		if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
+		return;
+	  }
+	  dout(7) << "handle_client_rename_local: destdn is xlock " << *destdn << endl;
+
+	}
+	
+	dosrc = !dosrc;
   }
 
   // we're a go.
@@ -1579,13 +1573,24 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 
 
 void MDS::handle_client_rename_remote(MClientRequest *req,
+									  CInode *ref,
+									  string& srcpath,
 									  CInode *srcdiri,
 									  CDentry *srcdn,
+									  string& destpath,
 									  CDir *destdir,
+									  CDentry *destdn,
 									  string& destname)
 {
-  
+  dout(7) << "handle_client_rename_remote: srcdn is " << *srcdn << endl;
+  if (destdn) {
+	dout(7) << "handle_client_rename_remote: destdn is " << *destdn << endl;
+  } else {
+	dout(7) << "handle_client_rename_remote: destdn dne yet" << endl;
+  }
 
+  //bool srcremote = !srcdir->is_auth();
+  //bool destremote = !destdir->is_auth();
 
 }
 

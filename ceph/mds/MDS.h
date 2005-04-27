@@ -189,7 +189,9 @@ class MDS : public Dispatcher {
   void handle_client_rename_local(MClientRequest *req, CInode *ref,
 								  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
 								  string& destpath, CDir *destdir, CDentry *destdn, string& name);
-  void handle_client_rename_remote(MClientRequest *req, CInode *srcdiri, CDentry *srcdn, CDir *destdir, string& name);
+  void handle_client_rename_remote(MClientRequest *req, CInode *ref,
+								  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
+								  string& destpath, CDir *destdir, CDentry *destdn, string& name);
 
   void handle_client_mkdir(MClientRequest *req, CInode *ref);
   void handle_client_rmdir(MClientRequest *req, CInode *ref);

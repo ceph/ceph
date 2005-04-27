@@ -9,8 +9,8 @@ MPICC=g++
 MPICFLAGS=${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
 MPILIBS= -lelan -lmpi  ${LIBS}
 
-LEAKTRACER=
-#LEAKTRACER=$(HOME)/lib/LeakTracer.o
+#LEAKTRACER=
+LEAKTRACER=$(HOME)/lib/LeakTracer.o
 
 SRCS=*.cc */*.cc
 OBJS=osd/OSD.o\

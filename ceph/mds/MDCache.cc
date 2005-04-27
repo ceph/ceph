@@ -569,7 +569,9 @@ int MDCache::open_root(Context *c)
   if (whoami == 0) { 
 	// i am root inode
 	CInode *root = new CInode();
+	memset(&root->inode, 0, sizeof(inode_t));
 	root->inode.ino = 1;
+	root->inode.hash_seed = 0;   // not hashed!
 
 	// make it up (FIXME)
 	root->inode.mode = 0755 | INODE_MODE_DIR;
@@ -770,11 +772,11 @@ class C_MDC_TraverseDiscover : public Context {
 	cout << "TraverseDiscover r = " << r << endl;
 	if (r < 0) {            // ENOENT on discover, pass back to caller.
 	  onfinish->finish(r);
-	  delete ondelay;
 	} else {
 	  ondelay->finish(r);   // retry as usual
-	  delete onfinish;
 	}
+	delete onfinish;
+	delete ondelay;
   }
 };
 
@@ -832,7 +834,10 @@ int MDCache::path_traverse(filepath& path,
 	if (!cur->is_dir()) {
 	  dout(7) << *cur << " not a dir " << endl;
 	  delete ondelay;
-	  if (onfinish) onfinish->finish(-ENOTDIR);
+	  if (onfinish) {
+		onfinish->finish(-ENOTDIR);
+		delete onfinish;
+	  }
 	  return -ENOTDIR;
 	}
 
@@ -912,7 +917,10 @@ int MDCache::path_traverse(filepath& path,
 	  if (cur->dir->is_complete()) {
 		// file not found
 		delete ondelay;
-		if (onfinish) onfinish->finish(-ENOENT);
+		if (onfinish) {
+		  onfinish->finish(-ENOENT);
+		  delete onfinish;
+		}
 		return -ENOENT;
 	  } else {
 		
@@ -979,7 +987,10 @@ int MDCache::path_traverse(filepath& path,
 	  }	
 	  if (onfail == MDS_TRAVERSE_FAIL) {
 		delete ondelay;
-		if (onfinish) onfinish->finish(-ENOENT);  // -ENOENT, but only because i'm not the authority
+		if (onfinish) {
+		  onfinish->finish(-ENOENT);  // -ENOENT, but only because i'm not the authority
+		  delete onfinish;
+		}
 		return -ENOENT;  // not necessarily exactly true....
 	  }
 	}
@@ -989,7 +1000,10 @@ int MDCache::path_traverse(filepath& path,
   
   // success.
   delete ondelay;
-  if (onfinish) onfinish->finish(0);
+  if (onfinish) {
+	onfinish->finish(0);
+	delete onfinish;
+  }
   return 0;
 }
 
@@ -3553,6 +3567,7 @@ void MDCache::handle_lock_dn(MLock *m)
 		assert(r>0);
 	  } else {
 		dout(7) << "safely ignoring." << endl;
+		delete m;
 	  }
 	  if (0) {
 		if (m->get_action() == LOCK_AC_LOCK) {
@@ -4391,6 +4406,8 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 	export_proxy_dirinos.erase(dir);
 
   }
+
+  delete m;
 }
 
 

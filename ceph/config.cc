@@ -20,7 +20,7 @@ md_config_t g_conf = {
 
   client_cache_size: 400,
   client_cache_mid: .5,
-  client_requests: 1000,
+  client_requests: 100,
   client_deterministic: false,
   
   log_messages: true,
@@ -33,7 +33,7 @@ md_config_t g_conf = {
   fake_clock: true,
   fakemessenger_serialize: false,
 
-  debug: 20,
+  debug: 10,
 
   mdcache_size: 500, //MDS_CACHE_SIZE,
   mdcache_mid: .8,
