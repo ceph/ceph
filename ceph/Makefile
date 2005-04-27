@@ -3,14 +3,14 @@ CC=g++
 #CC=distcc g++
 CFLAGS=-g -I. -pg
 #CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
-LIBS=
+LIBS=-lpthread
 
 MPICC=g++
 MPICFLAGS=${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
 MPILIBS= -lelan -lmpi  ${LIBS}
 
-#LEAKTRACER=
-LEAKTRACER=$(HOME)/lib/LeakTracer.o
+LEAKTRACER=
+#LEAKTRACER=$(HOME)/lib/LeakTracer.o
 
 SRCS=*.cc */*.cc
 OBJS=osd/OSD.o\
@@ -45,6 +45,9 @@ import: pmds.o msg/FakeMessenger.o import.cc
 
 pmds: mpitest.cc msg/MPIMessenger.cc pmds.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc msg/MPIMessenger.cc pmds.o  -o pmds
+
+singleclient: pmds.o fakesingleclient.o client/Client.o msg/CheesySerializer.o msg/FakeMessenger.o 
+	${CC} ${CFLAGS} ${LIBS} pmds.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o fakesingleclient.o ${LEAKTRACER} -o singleclient
 
 
 clean:

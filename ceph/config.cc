@@ -49,7 +49,7 @@ md_config_t g_conf = {
 
   client_op_statfs:     false,
 
-  client_op_stat:     10,
+  client_op_stat:     100,
   client_op_lstat:      false,
   client_op_utime:    10,   // untested
   client_op_chmod:    10,

@@ -61,6 +61,7 @@ class MClientRequest : public Message {
   virtual char *get_type_name() { return "creq"; }
 
   void set_path(string& p) { path.set_path(p); }
+  void set_path(const char *p) { path.set_path(p); }
   void set_caller_uid(int u) { st.caller_uid = u; }
   void set_caller_gid(int g) { st.caller_uid = g; }
   void set_ino(inodeno_t ino) { st.ino = ino; }

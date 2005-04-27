@@ -4,6 +4,14 @@ me, soon:
 - test marshalling
 - symlinks
 
+- fix logging model for data safety
+ - inodeupdate
+ - dentryunlink
+ - dentrylink
+ - put path to item in log entry
+
+
+
 
 /- export null dentries
 

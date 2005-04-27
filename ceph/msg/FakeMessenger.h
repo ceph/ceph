@@ -13,7 +13,7 @@ class FakeMessenger : public Messenger {
   int whoami;
 
   class Logger *logger;
-  
+
  public:
   FakeMessenger(long me);
   ~FakeMessenger();
@@ -27,7 +27,10 @@ class FakeMessenger : public Messenger {
 
 };
 
-
 int fakemessenger_do_loop();
+void fakemessenger_startthread();
+void fakemessenger_stopthread();
+
+
 
 #endif

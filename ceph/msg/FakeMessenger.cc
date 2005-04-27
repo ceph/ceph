@@ -19,6 +19,9 @@
 using namespace std;
 
 
+#include "Semaphore.h"
+#include "Mutex.h"
+#include <pthread.h>
 
 #include "include/config.h"
 
@@ -29,11 +32,49 @@ map<int, FakeMessenger*> directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
+
+Semaphore sem;
+Semaphore shutdownsem;
+bool      awake = false;
+bool      shutdown = false;
+pthread_t thread_id;
+
+void *fakemessenger_thread(void *ptr) 
+{
+  dout(1) << "thread start" << endl;
+
+  while (1) {
+	awake = false;
+	sem.Wait();
+
+	if (shutdown) break;
+	fakemessenger_do_loop();
+  }
+
+  dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
+  shutdownsem.Post();
+}
+
+
+void fakemessenger_startthread() {
+  pthread_create(&thread_id, NULL, fakemessenger_thread, 0);
+}
+
+void fakemessenger_stopthread() {
+  shutdown = true;
+  sem.Post();
+  shutdownsem.Wait();
+}
+
+
+
+
 // lame main looper
 
 int fakemessenger_do_loop()
 {
   dout(1) << "do_loop begin." << endl;
+
   while (1) {
 	bool didone = false;
 	
@@ -77,6 +118,7 @@ int fakemessenger_do_loop()
 	  break;
   }
   dout(1) << "do_loop end (no more messages)." << endl;
+  return 0;
 }
 
 
@@ -156,6 +198,13 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   catch (...) {
 	cout << "no destination " << dest << endl;
 	assert(0);
+  }
+
+  // wake up loop?
+  if (!awake) {
+	dout(1) << "waking up fakemessenger" << endl;
+	awake = true;
+	sem.Post();
   }
 }
 

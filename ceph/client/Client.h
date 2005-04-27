@@ -1,11 +1,18 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
+#include "mds/MDCluster.h"
+
 #include "msg/Message.h"
-#include "msgthread.h"
+#include "msg/Dispatcher.h"
+#include "msg/SerialMessenger.h"
+
+//#include "msgthread.h"
 
 #include "include/types.h"
+#include "include/lru.h"
 
+// stl
 #include <set>
 #include <map>
 using namespace std;
@@ -27,22 +34,24 @@ using namespace __gnu_cxx;
 */
 
 class Dentry;
+class Inode;
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
   hash_map< string, Dentry* > dentries;
 
-  Dir(Inode* in) { inode = in; }
+  Dir(Inode* in) { parent_inode = in; }
 };
 
 class Inode {
  public:
-  inodeno_t inode;
+  inode_t   inode;    // the actual inode
   time_t    last_updated;
 
   int       ref;      // ref count. 1 for each dentry, fh or dir that links to me
   Dir       *dir;     // if i'm a dir.
+  Dentry    *dn;      // if i'm linked to a dentry.
 
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
@@ -76,10 +85,11 @@ struct Fh {
 // ========================================================
 // client interface
 
-class Client {
+class Client : public Dispatcher {
  protected:
   MDCluster *mdcluster;
   Messenger *messenger;  
+  SerialMessenger *serial_messenger;
   long tid;
   int whoami;
   bool all_files_closed;
@@ -90,7 +100,7 @@ class Client {
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // file handles
-  map<fh_t, Fh*>         fh_map;
+  map<fileh_t, Fh*>         fh_map;
 
 
   // global semaphore/mutex protecting cache+fh structures
@@ -128,12 +138,18 @@ class Client {
 
 	// link to inode
 	dn->inode = in;
+	in->dn = dn;
 	in->get();
 
+	lru.lru_insert_mid(dn);    // mid or top?
 	return dn;
   }
   void unlink(Dentry *dn) {
+	Inode *in = dn->inode;
+
+	// unlink from inode
 	dn->inode = 0;
+	in->dn = 0;
 	in->put();
 
 	// unlink from dir
@@ -146,6 +162,9 @@ class Client {
 	  delete dn->dir;
 	}
 	dn->dir = 0;
+
+	// delete den
+	lru.lru_remove(dn);
 	delete dn;
   }
 
@@ -166,6 +185,12 @@ class Client {
   Client(MDCluster *mdc, int id, Messenger *m);
   ~Client();
 
+  // messaging
+  void dispatch(Message *m) {
+	cout << "dispatch not implemented" << endl;
+  }
+
+
   // ----------------------
   // fs ops.
   // these shoud (more or less) mirror the actual system calls.
@@ -173,7 +198,7 @@ class Client {
 
   // namespace ops
   //?int getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler);
-  int link(const char *existing, const char *new);
+  int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);
 
@@ -183,7 +208,7 @@ class Client {
 
   // symlinks
   int readlink(const char *path, char *buf, size_t size);
-  int symlink(const char *existing, const char *new);
+  int symlink(const char *existing, const char *newname);
 
   // inode stuff
   int lstat(const char *path, struct stat *stbuf);
@@ -194,10 +219,10 @@ class Client {
   // file ops
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
-  int read(fh_t fh, char *buf, size_t size, off_t offset);
-  int write(fh_t fh, const char *buf, size_t size, off_t offset);
-  int truncate(fh_t fh, off_t size);
-  int fsync(fh_t fh);
+  int read(fileh_t fh, char *buf, size_t size, off_t offset);
+  int write(fileh_t fh, const char *buf, size_t size, off_t offset);
+  int truncate(fileh_t fh, off_t size);
+  int fsync(fileh_t fh);
 
 };
 
