@@ -78,6 +78,12 @@ struct Fh {
 
 class Client {
  protected:
+  MDCluster *mdcluster;
+  Messenger *messenger;  
+  long tid;
+  int whoami;
+  bool all_files_closed;
+  
   // cache
   map<inodeno_t, Inode*> inode_map;
   Inode*                 root;
@@ -157,7 +163,7 @@ class Client {
   }
   
  public:
-  Client();
+  Client(MDCluster *mdc, int id, Messenger *m);
   ~Client();
 
   // ----------------------

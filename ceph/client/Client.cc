@@ -6,16 +6,22 @@
 
 // cons/des
 
-Client::Client()
+Client::Client(MDCluster *mdc, int id, Messenger *m)
 {
+  mdcluster = mdc;
+  whoami = id;
+  messenger = m;
+  all_files_closed = false;
+  tid = 0;
   root = 0;
+
+  set_cache_size(g_conf.client_cache_size);
 }
 
 
 Client::~Client() 
 {
-  
-  
+  if (messenger) { delete messenger; messenger = 0; }
 }
 
 
@@ -23,8 +29,111 @@ Client::~Client()
 // -------------------
 // fs ops
 
-// statfs
+// inode stuff
 
+int Client::lstat(const char *path, struct stat *stbuf)
+// FIXME make sure this implements lstat and not stat
+{
+  MClientRequest *req = new MClientRequest(tid++, MDS_OP_STAT, whoami);
+  MClientReply *reply;
+  inode_t inode;
+  vector<c_inode_info*> *trace;
+
+  req->set_path(string(path)); //FIXME correct construction of string?
+  
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+
+  reply = messenger->sendrecv(req);
+  
+  res = reply->get_result();
+  if (res != 0) return res;
+  
+  //Transfer information from reply to stbuf
+  trace = reply->get_trace();
+  inode = trace[trace.size()-1]->inode;
+  //stbuf->st_dev = 
+  stbuf->st_ino = inode->ino;
+  stbuf->st_mode = inode->mode;
+  //stbuf->st_nlink = 
+  stbuf->st_uid = inode->uid;
+  stbuf->st_gid = inode->gid;
+  stbuf->st_ctime = inode->ctime;
+  stbuf->st_atime = inode->atime;
+  stbuf->st_mtime = inode->mtime;
+  stbuf->st_size = (off_t) inode->size; //FIXME off_t is signed 64 vs size is unsigned 64
+  //stbuf->st_blocks =
+  //stbuf->st_blksize =
+  //stbuf->st_flags =
+  //stbuf->st_gen =
+  
+  // FIXME need to update cache with trace's inode_info
+  return 0;
+}
+
+int Client::chmod(const char *path, mode_t mode)
+{
+  MClientRequest *req = new MClientRequest(tid++, MDS_OP_CHMOD, whoami);
+  MClientReply *reply;
+  
+  req->set_path(string(path)); //FIXME correct construction of string?
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+  
+  req->set_iarg = (int) mode;
+
+  reply = messenger->sendrecv(req);
+  return reply->get_result();
+}
+
+int Client::chown(const char *path, uid_t uid, gid_t gid)
+{
+  MClientRequest *req = new MClientRequest(tid++, MDS_OP_CHOWN, whoami);
+  MClientReply *reply;
+  
+  req->set_path(string(path)); //FIXME correct construction of string?
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+
+  //FIXME enforce caller uid rights?
+   
+  req->set_iarg = (int) uid;
+  req->set_iarg2 = (int) gid;
+
+  reply = messenger->sendrecv(req);
+  return reply->get_result();
+}
+
+int Client::utime(const char *path, struct utimbuf *buf)
+{
+  MClientRequest *req = new MClientRequest(tid++, MDS_OP_UTIME, whoami);
+  MClientReply *reply;
+  
+  req->set_path(string(path)); //FIXME correct construction of string?
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+
+  //FIXME enforce caller uid rights?
+   
+  req->set_targ = utimbuf->modtime;
+  req->set_targ2 = utimbuf->actime;
+
+  reply = messenger->sendrecv(req);
+  return reply->get_result();
+}
+
+
+  
+//readdir usually include inode info for each entry except of locked entries
+
+//
 // getdir
 
 typedef int (*fuse_dirfil_t) (fuse_dirh_t h, const char *name, int type,

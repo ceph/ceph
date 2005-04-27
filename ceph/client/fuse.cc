@@ -44,7 +44,7 @@ static int ceph_readlink(const char *path, char *buf, size_t size)
   int res;
 
   res = client->readlink(path, buf, size - 1);
-  if (res < 0) res;
+  if (res < 0) return res;
   
   buf[res] = '\0';
   return 0;
