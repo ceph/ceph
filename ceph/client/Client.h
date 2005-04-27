@@ -185,6 +185,8 @@ class Client : public Dispatcher {
   Client(MDCluster *mdc, int id, Messenger *m);
   ~Client();
 
+  void init();
+
   // messaging
   void dispatch(Message *m) {
 	cout << "dispatch not implemented" << endl;

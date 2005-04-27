@@ -13,6 +13,12 @@
 #include <utime.h>
 
 
+#include "include/config.h"
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "client" << whoami << " "
+
+
+
 // cons/des
 
 Client::Client(MDCluster *mdc, int id, Messenger *m)
@@ -37,6 +43,10 @@ Client::~Client()
 }
 
 
+void Client::init() {
+  // incoming message go through serializer
+  messenger->set_dispatcher(serial_messenger);
+}
 
 // -------------------
 // fs ops
@@ -55,9 +65,10 @@ int Client::lstat(const char *path, struct stat *stbuf)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
 
-  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0));
+  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   
   int res = reply->get_result();
+  dout(10) << "lstat res is " << res << endl;
   if (res != 0) return res;
   
   //Transfer information from reply to stbuf
@@ -95,7 +106,7 @@ int Client::chmod(const char *path, mode_t mode)
   
   req->set_iarg( (int)mode );
 
-  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0));
+  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   return reply->get_result();
 }
 
@@ -115,7 +126,7 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
   req->set_iarg( (int)uid );
   req->set_iarg2( (int)gid );
 
-  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0));
+  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   return reply->get_result();
 }
 
@@ -135,7 +146,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
   req->set_targ( buf->modtime );
   req->set_targ2( buf->actime );
 
-  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0));
+  reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   return reply->get_result();
 }
 

@@ -46,6 +46,7 @@ void *fakemessenger_thread(void *ptr)
   while (1) {
 	awake = false;
 	sem.Wait();
+	dout(1) << "thread woke up" << endl;
 
 	if (shutdown) break;
 	fakemessenger_do_loop();
@@ -135,6 +136,8 @@ FakeMessenger::FakeMessenger(long me)
   whoami = me;
   directory[ whoami ] = this;
 
+  cout << "fakemessenger " << whoami << " messenger is " << this << endl;
+
   string name;
   name = "m.";
   name += MSG_ADDR_TYPE(whoami);
@@ -202,7 +205,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 
   // wake up loop?
   if (!awake) {
-	dout(1) << "waking up fakemessenger" << endl;
+	dout(1) << "waking up fakemessenger thread" << endl; 
 	awake = true;
 	sem.Post();
   }
