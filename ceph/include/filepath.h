@@ -2,6 +2,7 @@
 #define __FILEPATH_H
 
 #include <iostream>
+#include <string>
 #include <ext/rope>
 using namespace std;
 using namespace __gnu_cxx;

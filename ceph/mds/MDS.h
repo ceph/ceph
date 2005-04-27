@@ -179,13 +179,14 @@ class MDS : public Dispatcher {
   void handle_client_unlink(MClientRequest *req, CInode *ref);
   void handle_client_rename(MClientRequest *req, CInode *ref);
   void handle_client_rename_2(MClientRequest *req,
+							  CInode *ref,
 							  CInode *srcdiri,
 							  CDir *srcdir,
 							  CDentry *srcdn,
 							  filepath& destpath,
 							  vector<CDentry*>& trace,
 							  int r);
-  void handle_client_rename_local(MClientRequest *req, 
+  void handle_client_rename_local(MClientRequest *req, CInode *ref,
 								  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
 								  string& destpath, CDir *destdir, CDentry *destdn, string& name);
   void handle_client_rename_remote(MClientRequest *req, CInode *srcdiri, CDentry *srcdn, CDir *destdir, string& name);
