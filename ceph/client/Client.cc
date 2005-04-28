@@ -260,7 +260,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
 // fyi: typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
 
-int Client::getdir(const char *path, void *fill_handle, dirfillerfunc_t fill_func)
+int Client::getdir(const char *path, map<string,inode_t*> contents) 
 {
 
   // ...
@@ -268,8 +268,9 @@ int Client::getdir(const char *path, void *fill_handle, dirfillerfunc_t fill_fun
 
   // return contents to caller
   /*
-  while (...) {
-	fill_func(fill_handle, dentryname, type, ino);
+  for (...) {
+    
+    contents[dentryname] = inodeptr;   // ptr to inode_t in our cache
   }
   */
   return res;

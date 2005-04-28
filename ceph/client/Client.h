@@ -206,7 +206,7 @@ class Client : public Dispatcher {
   int statfs(const char *path, struct statfs *stbuf);
 
   // namespace ops
-  int getdir(const char *path, void *fill_handle, dirfillerfunc_t fill_func);
+  int getdir(const char *path, map<string,inode_t*> contents);
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);

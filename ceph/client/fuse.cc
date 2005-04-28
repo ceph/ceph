@@ -53,22 +53,23 @@ static int ceph_readlink(const char *path, char *buf, size_t size)
 
 static int ceph_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
 {
-    DIR *dp;
-    struct dirent *de;
-    int res = 0;
+  map<string, inode_t*> contents;
 
-    dp = opendir(path);
-    if(dp == NULL)
-        return -errno;
+  int res = client->readdir(path, contents);
+  
+  if (res < 0) return res;
 
-    while((de = readdir(dp)) != NULL) {
-        res = filler(h, de->d_name, de->d_type, de->d_ino);
-        if(res != 0)
-            break;
-    }
-
-    closedir(dp);
-    return res;
+  // return contents to fuse via callback
+  for (map<string, inodeno_t>::iterator it = contents.begin();
+	   it != contents.end();
+	   it++) {
+	res = filler(h,                                    // fuse's handle
+				 it->first.c_str(),                    // dentry as char*
+				 it->second->mode & INODE_TYPE_MASK,   // mask type bits from mode
+				 it->second->ino);                     // ino.  64->32 bit issue?  FIXME
+	if (res != 0) break;   // fuse has had enough
+  }
+  return res;
 }
 
 static int ceph_mknod(const char *path, mode_t mode, dev_t rdev)
