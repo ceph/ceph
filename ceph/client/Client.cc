@@ -98,7 +98,7 @@ int Client::chmod(const char *path, mode_t mode)
   MClientRequest *req = new MClientRequest(tid++, MDS_OP_CHMOD, whoami);
   MClientReply *reply;
   
-  req->set_path(path); //FIXME correct construction of string?
+  req->set_path(path); 
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -107,6 +107,7 @@ int Client::chmod(const char *path, mode_t mode)
   req->set_iarg( (int)mode );
 
   reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  dout(10) << "chmod result is " << reply->get_result() << endl;
   return reply->get_result();
 }
 
@@ -115,7 +116,7 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
   MClientRequest *req = new MClientRequest(tid++, MDS_OP_CHOWN, whoami);
   MClientReply *reply;
   
-  req->set_path(path); //FIXME correct construction of string?
+  req->set_path(path); 
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -127,6 +128,7 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
   req->set_iarg2( (int)gid );
 
   reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  dout(10) << "chown result is " << reply->get_result() << endl;
   return reply->get_result();
 }
 
@@ -135,7 +137,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
   MClientRequest *req = new MClientRequest(tid++, MDS_OP_UTIME, whoami);
   MClientReply *reply;
   
-  req->set_path(path); //FIXME correct construction of string?
+  req->set_path(path); 
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -147,6 +149,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
   req->set_targ2( buf->actime );
 
   reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  dout(10) << "utime result is " << reply->get_result() << endl;
   return reply->get_result();
 }
 
