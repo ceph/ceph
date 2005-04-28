@@ -5,6 +5,7 @@
 
 #include "Message.h"
 #include "Messenger.h"
+#include "messages/MGenericMessage.h"
 
 #include <cassert>
 #include <iostream>
@@ -34,6 +35,9 @@ using namespace std;
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
+
+#include "messages/MRenameNotify.h"
+#include "messages/MDentryUnlink.h"
 
 #include "messages/MHeartbeat.h"
 
@@ -134,6 +138,14 @@ decode_message(crope& ser)
 	m = new MExportDirWarning();
 	break;
 
+  case MSG_MDS_RENAMENOTIFY:
+	m = new MRenameNotify();
+	break;
+
+  case MSG_MDS_DENTRYUNLINK:
+	m = new MDentryUnlink();
+	break;
+
   case MSG_MDS_HEARTBEAT:
 	m = new MHeartbeat();
 	break;
@@ -164,7 +176,7 @@ decode_message(crope& ser)
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_CLIENT_DONE:
-	m = new Message(type);
+	m = new MGenericMessage(type);
 	break;
 
   default:

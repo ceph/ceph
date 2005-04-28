@@ -258,7 +258,19 @@ int Client::utime(const char *path, struct utimbuf *buf)
 //
 // getdir
 
-/*
-typedef int (*fuse_dirfil_t) (fuse_dirh_t h, const char *name, int type,
-                              ino_t ino);
-*/
+// fyi: typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
+
+int Client::getdir(const char *path, void *fill_handle, dirfillerfunc_t fill_func)
+{
+
+  // ...
+  int res; 
+
+  // return contents to caller
+  /*
+  while (...) {
+	fill_func(fill_handle, dentryname, type, ino);
+  }
+  */
+  return res;
+}

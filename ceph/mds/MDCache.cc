@@ -16,6 +16,7 @@
 #include "events/EInodeUpdate.h"
 #include "events/EUnlink.h"
 
+#include "messages/MGenericMessage.h"
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
 
@@ -541,7 +542,7 @@ bool MDCache::shutdown_pass()
   if (lru->lru_get_size() == 0) {
 	if (mds->get_nodeid() != 0) {
 	  dout(7) << "done, sending shutdown_finish" << endl;
-	  mds->messenger->send_message(new Message(MSG_MDS_SHUTDOWNFINISH),
+	  mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),
 								   MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
 	} else {
 	  mds->handle_shutdown_finish(NULL);
@@ -3943,28 +3944,6 @@ void MDCache::export_dir(CDir *dir,
   // NOTE: we don't need to worry about hard locks; those aren't sticky (yet?).
 }
 
-
-/*void MDCache::export_dir_dropsync(CDir *dir)
-{
-  dout(7) << "export_dir_dropsync in " << *dir << endl;
-
-  CDir_map_t::iterator it;
-  for (it = dir->begin(); it != dir->end(); it++) {
-	CInode *in = it->second->inode;
-
-	if (in->is_auth() && in->is_syncbyme()) {
-	  dout(7) << "about to export: dropping sticky(?) sync on " << *in << endl;
-	  inode_sync_release(in);
-	}
-
-	if (in->is_dir() &&
-		in->dir &&                        // open
-		!in->dir->is_export() &&          // mine
-		in->dir->nested_auth_pins > 0)    // might be sync
-	  export_dir_dropsync(in->dir);
-  }
-}
-*/
 
 
 void MDCache::handle_export_dir_discover_ack(MExportDirDiscoverAck *m)

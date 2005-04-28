@@ -89,7 +89,7 @@ class MLock : public Message {
 	path = p;
   }
   
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	int off = 0;
 	s.copy(off,sizeof(action), (char*)&action);
 	off += sizeof(action);
@@ -115,8 +115,7 @@ class MLock : public Message {
 	data = s.substr(off, len);
 	off += len;
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&action, sizeof(action));
 	s.append((char*)&asker, sizeof(asker));
 
@@ -128,9 +127,8 @@ class MLock : public Message {
 	s.append((char*)path.c_str(), path.length()+1);
 
 	int len = data.length();
-	s.append((char*)len, sizeof(len));
+	s.append((char*)&len, sizeof(len));
 	s.append(data);
-	return s;
   }
 
 };

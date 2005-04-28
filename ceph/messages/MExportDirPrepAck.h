@@ -18,13 +18,11 @@ class MExportDirPrepAck : public Message {
   
   virtual char *get_type_name() { return "ExPAck"; }
 
-  virtual int decode_payload(crope s) {
-	s.copy(0,sizeof(ino),(char*)&ino);
+  virtual void decode_payload(crope& s) {
+	s.copy(0, sizeof(ino), (char*)&ino);
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
-	return s;
   }
 };
 

@@ -19,17 +19,11 @@ class MExportDirWarning : public Message {
 
   virtual char *get_type_name() { return "ExW"; }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(ino), (char*)&ino);
-	return 0;
   }
-
-
-
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
-	return s;
   }
 };
 

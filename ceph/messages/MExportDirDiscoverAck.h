@@ -22,14 +22,15 @@ class MExportDirDiscoverAck : public Message {
   virtual char *get_type_name() { return "ExDisA"; }
 
 
-  virtual void decode_payload(crope& s, int& off) {
+  virtual void decode_payload(crope& s) {
+	int off = 0;
 	s.copy(off, sizeof(ino), (char*)&ino);
 	off += sizeof(ino);
 	s.copy(off, sizeof(success), (char*)&success);
 	off += sizeof(success);
   }
 
-  virtual void get_payload(crope& s) {
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
 	s.append((char*)&success, sizeof(success));
   }

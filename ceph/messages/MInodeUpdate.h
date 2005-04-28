@@ -26,15 +26,13 @@ class MInodeUpdate : public Message {
   }
   virtual char *get_type_name() { return "Iup"; }
 
-  virtual int decode_payload(crope s) {
+  virtual void decode_payload(crope& s) {
 	s.copy(0, sizeof(int), (char*)&nonce);
 	inode_basic_state = s.substr(sizeof(int), s.length()-sizeof(int));
   }
-  virtual crope get_payload() {
-	crope s;
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&nonce, sizeof(int));
 	s.append(inode_basic_state);
-	return s;
   }
 	  
 };

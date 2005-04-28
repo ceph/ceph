@@ -20,7 +20,7 @@ class MDiscoverReply : public Message {
   inodeno_t    base_ino;
   bool         no_base_dir;
   bool         no_base_dentry;
-  bool        flag_forward;
+  //  bool        flag_forward;
   bool        flag_error;
   string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
 
@@ -68,7 +68,7 @@ class MDiscoverReply : public Message {
   string& get_path() { return path.get_path(); }
   bool get_path_xlock(int i) { return path_xlock[i]; }
 
-  bool is_flag_forward() { return flag_forward; }
+  //  bool is_flag_forward() { return flag_forward; }
   bool is_flag_error() { return flag_error; }
   string& get_error_dentry() { return error_dentry; }
 
@@ -84,7 +84,8 @@ class MDiscoverReply : public Message {
   MDiscoverReply(inodeno_t base_ino) :
 	Message(MSG_MDS_DISCOVERREPLY) {
 	this->base_ino = base_ino;
-	flag_forward = flag_error = false;
+	//flag_forward = false;
+	flag_error = false;
 	no_base_dir = no_base_dentry = true;
   }
   ~MDiscoverReply() {
@@ -101,7 +102,10 @@ class MDiscoverReply : public Message {
   
   // builders
   bool is_empty() {
-    return dirs.empty() && path.depth() == 0 && inodes.empty() && !flag_forward && !flag_error;
+    return dirs.empty() && path.depth() == 0 && 
+	  inodes.empty() && 
+	  //!flag_forward &&
+	  !flag_error;
   }
   void set_path(filepath& dp) { path = dp; }
   void add_dentry(string& dn, bool xlock) { 
@@ -119,7 +123,7 @@ class MDiscoverReply : public Message {
     dirs.push_back( dir );
   }
 
-  void set_flag_forward() { flag_forward = true; }
+  //  void set_flag_forward() { flag_forward = true; }
   void set_flag_error(string& dn) { flag_error = true; error_dentry = dn; }
 
 
@@ -132,8 +136,8 @@ class MDiscoverReply : public Message {
     off += sizeof(bool);
     r.copy(off, sizeof(bool), (char*)&no_base_dentry);
     off += sizeof(bool);
-    r.copy(off, sizeof(bool), (char*)&flag_forward);
-    off += sizeof(bool);
+	//    r.copy(off, sizeof(bool), (char*)&flag_forward);
+    //off += sizeof(bool);
     r.copy(off, sizeof(bool), (char*)&flag_error);
     off += sizeof(bool);
 	error_dentry = r.c_str() + off;
@@ -162,7 +166,7 @@ class MDiscoverReply : public Message {
     off = path._unrope(r, off);
 	dout(12) << path.depth() << " dentries out" << endl;
 
-	// xlock
+	// path_xlock
 	r.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
@@ -177,8 +181,9 @@ class MDiscoverReply : public Message {
 	r.append((char*)&base_ino, sizeof(base_ino));
 	r.append((char*)&no_base_dir, sizeof(bool));
 	r.append((char*)&no_base_dentry, sizeof(bool));
-	r.append((char*)&flag_forward, sizeof(bool));
-	r.append((char*)&flag_forward, sizeof(bool));
+	//	r.append((char*)&flag_forward, sizeof(bool));
+	r.append((char*)&flag_error, sizeof(bool));
+
 	r.append((char*)error_dentry.c_str());
 	r.append((char)0);
 
@@ -206,6 +211,7 @@ class MDiscoverReply : public Message {
 
 	// path_xlock
 	n = path_xlock.size();
+	r.append((char*)&n, sizeof(int));
 	for (vector<bool>::iterator it = path_xlock.begin();
 		 it != path_xlock.end();
 		 it++) {

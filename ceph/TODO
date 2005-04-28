@@ -1,8 +1,7 @@
 
 me, soon:
 - foriegn renames
-- test marshalling
-- symlinks
+- symlinks    --> hard!
 
 - fix logging model for data safety
  - inodeupdate
@@ -11,6 +10,8 @@ me, soon:
  - put path to item in log entry
 
 
+fully document export process
+ - including the whole warning business.. wtf is that about?
 
 
 /- export null dentries
@@ -24,11 +25,9 @@ for deadline:
 
 
 
-- string table
+- string table?
 
-/- path lock
- - on export
-
+thing about:
 /- xlock vs. discover?
 - xlock vs import/export?
 

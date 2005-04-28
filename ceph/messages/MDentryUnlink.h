@@ -17,7 +17,8 @@ class MDentryUnlink : public Message {
   }
   virtual char *get_type_name() { return "Dun";}
   
-  virtual void decode_payload(crope& s, int& off) {
+  virtual void decode_payload(crope& s) {
+	int off = 0;
 	s.copy(off, sizeof(dirino), (char*)&dirino);
 	off += sizeof(dirino);
 	dn = s.c_str() + off;

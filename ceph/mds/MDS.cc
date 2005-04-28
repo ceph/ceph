@@ -19,6 +19,7 @@
 #include "include/LogType.h"
 
 #include "messages/MPing.h"
+#include "messages/MGenericMessage.h"
 
 #include "messages/MOSDRead.h"
 #include "messages/MOSDWrite.h"
@@ -133,7 +134,7 @@ int MDS::shutdown_start()
   for (int i=0; i<mdcluster->get_num_mds(); i++) {
 	if (i == whoami) continue;
 	dout(1) << "sending MShutdownStart to mds" << i << endl;
-	messenger->send_message(new Message(MSG_MDS_SHUTDOWNSTART),
+	messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
 							i, MDS_PORT_MAIN,
 							MDS_PORT_MAIN);
   }
@@ -1222,6 +1223,7 @@ void MDS::handle_client_rename(MClientRequest *req,
   string srcname = refpath.last_bit();
   refpath = refpath.prefixpath(refpath.depth()-1);
 
+  dout(7) << "handle_client_rename src traversing to " << refpath << endl;
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(refpath, trace,
 								 req, new C_MDS_RetryRequest(this, req, ref),
@@ -1232,6 +1234,11 @@ void MDS::handle_client_rename(MClientRequest *req,
 	return;
   }
   if (r > 0) return;
+  if (r < 0) {   // dne or something.  got renamed out from under us, probably!
+	dout(7) << "traverse r=" << r << endl;
+	reply_request(req, r);
+	return;
+  }
   
   CInode *srcdiri;
   if (trace.size()) 

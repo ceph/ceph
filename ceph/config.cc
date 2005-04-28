@@ -31,9 +31,9 @@ md_config_t g_conf = {
   mdlog_read_inc: 4096,
 
   fake_clock: true,
-  fakemessenger_serialize: false,
+  fakemessenger_serialize: true,// false,
 
-  debug: 11,
+  debug: 10,
 
   mdcache_size: 500, //MDS_CACHE_SIZE,
   mdcache_mid: .8,
@@ -49,7 +49,7 @@ md_config_t g_conf = {
 
   client_op_statfs:     false,
 
-  client_op_stat:     100,
+  client_op_stat:     10,
   client_op_lstat:      false,
   client_op_utime:    10,   // untested
   client_op_chmod:    10,
@@ -59,7 +59,7 @@ md_config_t g_conf = {
   client_op_mknod:    10,
   client_op_link:       false,
   client_op_unlink:   10,
-  client_op_rename:   100,
+  client_op_rename:   00,
 
   client_op_mkdir:    10,
   client_op_rmdir:    10,

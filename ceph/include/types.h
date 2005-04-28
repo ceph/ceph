@@ -74,14 +74,14 @@ struct inode_t {
   inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
   time_t ctime;
 
-  // hard (perm)
+  // hard (permissions)
   mode_t mode;
   uid_t uid;
   gid_t gid;
 
   // soft
   __uint64_t size;
-  time_t atime, mtime;
+  time_t atime, mtime;      // maybe atime different?  "lazy"?
 
   // special stuff
   unsigned char hash_seed;  // 0 if not hashed.
@@ -89,8 +89,9 @@ struct inode_t {
 
 
 // misc other types
-typedef __uint64_t object_t;
-typedef __uint32_t fileh_t;
+typedef int        repgroup_t;    // replica group
+typedef __uint64_t object_t;      // object id
+typedef __uint32_t fileh_t;       // file handle 
 
 // dentries
 #define MAX_DENTRY_LEN 255

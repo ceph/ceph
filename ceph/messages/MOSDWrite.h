@@ -52,15 +52,17 @@ class MOSDWrite : public Message {
   }
   MOSDWrite() {}
 
-  virtual int decode_payload(crope s) {
-	s.copy(0, sizeof(st), (char*)&st);
-	buffer = s.substr(sizeof(st), s.length() - sizeof(st));
+  virtual void decode_payload(crope& s) {
+	int off = 0;
+	s.copy(off, sizeof(st), (char*)&st);
+	off += sizeof(st);
+	buffer = s.substr(off, st.len);
+	off += st.len;
   }
-  virtual crope get_payload() {
-	crope payload;
-	payload.append((char*)&st,sizeof(st));
-	payload.append(buffer);
-	return payload;
+  virtual void encode_payload(crope& s) {
+	assert(buffer.length() == st.len);
+	s.append((char*)&st,sizeof(st));
+	s.append(buffer);
   }
 
   virtual char *get_type_name() { return "owr"; }

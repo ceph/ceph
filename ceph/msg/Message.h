@@ -97,7 +97,6 @@ using namespace __gnu_cxx;
 
 class Message {
  private:
-  char tname[20];
   
  protected:
   // envelope  (make sure you update MSG_ENVELOPE_LEN above if you change this)
@@ -118,7 +117,6 @@ class Message {
 	source_port = dest_port = -1;
 	source = dest = -1;
 	type = t;
-	sprintf(tname, "%d", type);
   }
   Message(crope& s) {
 	decode_envelope(s);
@@ -131,7 +129,7 @@ class Message {
   // type
   int get_type() { return type; }
   void set_type(int t) { type = t; }
-  virtual char *get_type_name() { return tname; }
+  virtual char *get_type_name() = 0;
 
   // source/dest
   msg_addr_t get_dest() { return dest; }
@@ -165,12 +163,8 @@ class Message {
   }
   
   // PAYLOAD ----
-  virtual void encode_payload(crope& s) { 
-	// no payload by default
-  }
-  virtual void decode_payload(crope& s) {
-	// no default, nothing to decode
-  }
+  virtual void encode_payload(crope& s) = 0; //{ }
+  virtual void decode_payload(crope& s) = 0; //{ }
  
   // BOTH ----
   void encode(crope& both) {

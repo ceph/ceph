@@ -12,12 +12,13 @@ class MPing : public Message {
   }
   MPing() {}
 
-  virtual int decode_payload(crope s) {
-	ttl = *((int*)s.c_str());
+  virtual void decode_payload(crope& s) {
+	s.copy(0, sizeof(ttl), (char*)&ttl);
   }
-  virtual crope get_payload() {
-	return crope((char*)&ttl, sizeof(int));
+  virtual void encode_payload(crope& s) {
+	s.append((char*)&ttl, sizeof(ttl));
   }
+
   virtual char *get_type_name() { return "ping"; }
 };
 

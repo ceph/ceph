@@ -40,12 +40,13 @@ class MOSDRead : public Message {
   }
   MOSDRead() {}
 
-  virtual int decode_payload(crope s) {
-	st = *((MOSDRead_st*)s.c_str());
+  virtual void decode_payload(crope& s) {
+	s.copy(0, sizeof(st), (char*)&st);
   }
-  virtual crope get_payload() {
-	return crope( (char*)&st, sizeof(st) );
+  virtual void encode_payload(crope& s) {
+	s.append((char*)&st, sizeof(st));
   }
+
   virtual char *get_type_name() { return "oread"; }
 };
 

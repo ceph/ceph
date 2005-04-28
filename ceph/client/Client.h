@@ -83,6 +83,11 @@ struct Fh {
 };
 
 
+// func pointer type for returning directory contents.
+// this basically matches the FUSE fill func, sans FUSE's typedefs.
+typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
+
+
 
 // ========================================================
 // client interface
@@ -201,7 +206,7 @@ class Client : public Dispatcher {
   int statfs(const char *path, struct statfs *stbuf);
 
   // namespace ops
-  //?int getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler);
+  int getdir(const char *path, void *fill_handle, dirfillerfunc_t fill_func);
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);

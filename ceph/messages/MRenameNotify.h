@@ -24,9 +24,10 @@ class MRenameNotify : public Message {
 	this->destdirino = destdirino;
 	this->destname = destname;
   }
-  virtual char *get_type_name() { return "Rlf";}
+  virtual char *get_type_name() { return "Rnot";}
   
-  virtual void decode_payload(crope& s, int& off) {
+  virtual void decode_payload(crope& s) {
+	int off = 0;
 	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
 	off += sizeof(srcdirino);
 	s.copy(off, sizeof(destdirino), (char*)&destdirino);
@@ -36,7 +37,7 @@ class MRenameNotify : public Message {
 	destname = s.c_str() + off;
 	off += destname.length() + 1;
   }
-  virtual void get_payload(crope& s) {
+  virtual void encode_payload(crope& s) {
 	s.append((char*)&srcdirino,sizeof(srcdirino));
 	s.append((char*)&destdirino,sizeof(destdirino));
 	s.append((char*)srcname.c_str());
