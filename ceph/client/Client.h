@@ -26,10 +26,11 @@ using namespace __gnu_cxx;
 // types for my local metadata cache
 /* basic structure:
    
- - dentries live in an LRU loop.  they get expired based on last access.
- - inode has ref count for each fh, dir, or dentry that points to it.
- - when inode ref goes to 0, it's expired.
- - when dir is empty, it's removed (and it's inode ref--)
+ - Dentries live in an LRU loop.  they get expired based on last access.
+      see include/lru.h.  items can be bumped to "mid" or "top" of list, etc.
+ - Inode has ref count for each Fh, Dir, or Dentry that points to it.
+ - when Inode ref goes to 0, it's expired.
+ - when Dir is empty, it's removed (and it's Inode ref--)
  
 */
 
@@ -49,7 +50,7 @@ class Inode {
   inode_t   inode;    // the actual inode
   time_t    last_updated;
 
-  int       ref;      // ref count. 1 for each dentry, fh or dir that links to me
+  int       ref;      // ref count. 1 for each dentry, fh or dir that links to me.
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
 
@@ -71,6 +72,7 @@ class Dentry : public LRUObject {
   
   Dentry() : ref(0), dir(0), inode(0) { }
 };
+
 
 // file handle for any open file state
 struct Fh {
