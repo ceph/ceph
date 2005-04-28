@@ -70,6 +70,7 @@ class MClientRequest : public Message {
   void set_targ(time_t& t) { st.targ = t; }
   void set_targ2(time_t& t) { st.targ2 = t; }
   void set_sarg(string& arg) { this->sarg = arg; }
+  void set_sarg(const char *arg) { this->sarg = arg; }
   void set_sarg2(string& arg) { this->sarg2 = arg; }
 
   int get_client() { return st.client; }

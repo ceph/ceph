@@ -133,11 +133,11 @@ int Client::rmdir(const char *path)
 // symlinks
 //int Client::readlink(const char *path, char *buf, size_t size)
   
-int Client::symlink(const char *existing, const char *new)
+int Client::symlink(const char *target, const char *link)
 {
   MClientRequest *req = new MClientRequest(tid++, MDS_OP_SYMLINK, whoami);
-  req->set_path(new);
-  req->set_sarg(existing);
+  req->set_path(link);
+  req->set_sarg(target);
  
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
