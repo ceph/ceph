@@ -3,6 +3,7 @@
 
 #include "msg/Message.h"
 #include "mds/CInode.h"
+#include "mds/CDentry.h"
 
 #include <vector>
 using namespace std;
@@ -170,6 +171,8 @@ class MClientReply : public Message {
 	while (in) {
 	  c_inode_info *info = new c_inode_info;
 	  info->inode = in->inode;
+	  CDentry *dn = in->get_parent_dn();
+	  if (dn) info->ref_dn = dn->get_name();
 	  //info->is_sync = in->is_sync() || in->is_presync();
 	  in->get_dist_spec(info->dist, whoami);
 	  trace.insert(trace.begin(), info);

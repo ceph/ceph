@@ -25,11 +25,13 @@ Client::Client(MDCluster *mdc, int id, Messenger *m)
 {
   mdcluster = mdc;
   whoami = id;
-  messenger = m;
-  serial_messenger = new CheesySerializer(m, this);
+
+  // set up messengers
+  raw_messenger = m;
+  serial_messenger = new CheesySerializer(raw_messenger, this);
+  raw_messenger->set_dispatcher(serial_messenger);
 
   all_files_closed = false;
-  tid = 0;
   root = 0;
 
   set_cache_size(g_conf.client_cache_size);
@@ -38,14 +40,14 @@ Client::Client(MDCluster *mdc, int id, Messenger *m)
 
 Client::~Client() 
 {
-  if (messenger) { delete messenger; messenger = 0; }
   if (serial_messenger) { delete serial_messenger; serial_messenger = 0; }
+  if (raw_messenger) { delete raw_messenger; raw_messenger = 0; }
 }
 
 
 void Client::init() {
   // incoming message go through serializer
-  messenger->set_dispatcher(serial_messenger);
+  //messenger->set_dispatcher(serial_messenger);
 }
 
 // -------------------
@@ -56,7 +58,7 @@ void Client::init() {
 
 int Client::unlink(const char *path)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_UNLINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, whoami);
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -74,7 +76,7 @@ int Client::unlink(const char *path)
 
 int Client::rename(const char *from, const char *to)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_RENAME, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_RENAME, whoami);
   req->set_path(from);
   req->set_sarg(to);
  
@@ -95,7 +97,7 @@ int Client::rename(const char *from, const char *to)
 
 int Client::mkdir(const char *path, mode_t mode)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_MKDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, whoami);
   req->set_path(path);
   req->set_iarg( (int)mode );
  
@@ -114,7 +116,7 @@ int Client::mkdir(const char *path, mode_t mode)
 
 int Client::rmdir(const char *path)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_RMDIR, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, whoami);
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
@@ -135,7 +137,7 @@ int Client::rmdir(const char *path)
   
 int Client::symlink(const char *target, const char *link)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_SYMLINK, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, whoami);
   req->set_path(link);
   req->set_sarg(target);
  
@@ -159,7 +161,7 @@ int Client::symlink(const char *target, const char *link)
 int Client::lstat(const char *path, struct stat *stbuf)
 // FIXME make sure this implements lstat and not stat
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_STAT, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_STAT, whoami);
   req->set_path(path);
   
   // FIXME where does FUSE maintain user information
@@ -196,7 +198,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
 
 int Client::chmod(const char *path, mode_t mode)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_CHMOD, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, whoami);
   req->set_path(path); 
   req->set_iarg( (int)mode );
 
@@ -213,7 +215,7 @@ int Client::chmod(const char *path, mode_t mode)
 
 int Client::chown(const char *path, uid_t uid, gid_t gid)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_CHOWN, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, whoami);
   req->set_path(path); 
   req->set_iarg( (int)uid );
   req->set_iarg2( (int)gid );
@@ -233,7 +235,7 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
 
 int Client::utime(const char *path, struct utimbuf *buf)
 {
-  MClientRequest *req = new MClientRequest(tid++, MDS_OP_UTIME, whoami);
+  MClientRequest *req = new MClientRequest(MDS_OP_UTIME, whoami);
   req->set_path(path); 
   req->set_targ( buf->modtime );
   req->set_targ2( buf->actime );

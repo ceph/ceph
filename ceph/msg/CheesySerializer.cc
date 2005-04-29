@@ -50,7 +50,8 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port, int f
   /* NOTE: since request+replies are matched up on tid's alone, it means that
 	 two nodes using this mechanism can't do calls of each other or else their
 	 tid's might overlap.  
-	 This should be fine.. only the Client uses this so far!
+	 This should be fine. only the Client uses this so far (not MDS).
+	 If OSDs want to use this, though, this must be made smarter!!!
   */
   long tid = ++last_tid;
   m->set_tid(tid);

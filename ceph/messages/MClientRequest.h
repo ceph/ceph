@@ -52,8 +52,7 @@ class MClientRequest : public Message {
 
  public:
   MClientRequest() {}
-  MClientRequest(long tid, int op, int client) : Message(MSG_CLIENT_REQUEST) {
-	set_tid(tid);
+  MClientRequest(int op, int client) : Message(MSG_CLIENT_REQUEST) {
 	this->st.op = op;
 	this->st.client = client;
 	this->st.iarg = 0;

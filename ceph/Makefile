@@ -2,12 +2,15 @@
 CC=g++
 #CC=distcc g++
 CFLAGS=-g -I. -pg -D_FILE_OFFSET_BITS=64
-#CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=-lpthread
 
-MPICC=/usr/local/mpich-1.2.6/bin/mpicxx
-MPICFLAGS=${CFLAGS} -I/usr/local/mpich-1.2.6/include -L/usr/local/mpich-1.2.6/lib
-MPILIBS=-lmpich ${LIBS}
+#
+# i give up, use MPI provided compile scripts, like you're supposed to.
+#
+MPIDIR=/usr/local/mpich-1.2.6
+MPICC=${MPIDIR}/bin/mpicxx
+MPICFLAGS=${CFLAGS} -I${MPIDIR}/include -L${MPIDIR}/lib
+MPILIBS=${LIBS}
 
 LEAKTRACER=
 #LEAKTRACER=$(HOME)/lib/LeakTracer.o

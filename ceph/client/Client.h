@@ -96,9 +96,8 @@ typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inoden
 class Client : public Dispatcher {
  protected:
   MDCluster *mdcluster;
-  Messenger *messenger;  
+  Messenger *raw_messenger;  
   SerialMessenger *serial_messenger;
-  long tid;
   int whoami;
   bool all_files_closed;
   
