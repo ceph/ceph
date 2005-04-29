@@ -6,7 +6,7 @@ CFLAGS=-g -I. -pg -D_FILE_OFFSET_BITS=64
 LIBS=-lpthread
 
 MPICC=g++
-MPICFLAGS=${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
+MPICFLAGS=${CFLAGS} -I/usr/local/mpich-1.2.6/include -L/usr/local/mpich-1.2.6/lib
 MPILIBS= -lelan -lmpi  ${LIBS}
 
 LEAKTRACER=
