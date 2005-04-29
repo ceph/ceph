@@ -6,12 +6,14 @@
     See the file COPYING.
 */
 
-#include <config.h>
 
+// fuse crap
 #ifdef linux
 /* For pread()/pwrite() */
 #define _XOPEN_SOURCE 500
 #endif
+
+#define FUSE_USE_VERSION 22
 
 #include <fuse.h>
 #include <stdio.h>
@@ -21,17 +23,24 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/statfs.h>
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
 
+
+// ceph stuff
+#include "include/types.h"
 #include "Client.h"
 
-// fuse globals
-Client *client;     // ceph client
+// stl
+#include <map>
+using namespace std;
 
 
-// ---
+// globals
+Client *client;     // the ceph client
+
+
+
+
+// ------
 // fuse hooks
 
 static int ceph_getattr(const char *path, struct stat *stbuf)
@@ -55,18 +64,18 @@ static int ceph_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
 {
   map<string, inode_t*> contents;
 
-  int res = client->readdir(path, contents);
+  int res = client->getdir(path, contents);
   
   if (res < 0) return res;
 
   // return contents to fuse via callback
-  for (map<string, inodeno_t>::iterator it = contents.begin();
+  for (map<string, inode_t*>::iterator it = contents.begin();
 	   it != contents.end();
 	   it++) {
 	res = filler(h,                                    // fuse's handle
 				 it->first.c_str(),                    // dentry as char*
 				 it->second->mode & INODE_TYPE_MASK,   // mask type bits from mode
-				 it->second->ino);                     // ino.  64->32 bit issue?  FIXME
+				 it->second->ino);                     // ino.. 64->32 bit issue here? FIXME
 	if (res != 0) break;   // fuse has had enough
   }
   return res;
@@ -114,7 +123,7 @@ static int ceph_chmod(const char *path, mode_t mode)
 
 static int ceph_chown(const char *path, uid_t uid, gid_t gid)
 {
-  return client->lchown(path, uid, gid);
+  return client->chown(path, uid, gid);
 }
 
 static int ceph_truncate(const char *path, off_t size)
@@ -140,7 +149,7 @@ static int ceph_open(const char *path, struct fuse_file_info *fi)
 }
 
 static int ceph_read(const char *path, char *buf, size_t size, off_t offset,
-                    struct fuse_file_info *fi)
+					 struct fuse_file_info *fi)
 {
   return client->read(fi->fh, buf, size, offset);
 }
@@ -180,75 +189,56 @@ static int ceph_fsync(const char *path, int isdatasync,
     return 0;
 }
 
-#ifdef HAVE_SETXATTR
-/* xattr operations are optional and can safely be left unimplemented */
-static int ceph_setxattr(const char *path, const char *name, const char *value,
-                        size_t size, int flags)
-{
-    int res = lsetxattr(path, name, value, size, flags);
-    if(res == -1)
-        return -errno;
-    return 0;
-}
-
-static int ceph_getxattr(const char *path, const char *name, char *value,
-                    size_t size)
-{
-    int res = lgetxattr(path, name, value, size);
-    if(res == -1)
-        return -errno;
-    return res;
-}
-
-static int ceph_listxattr(const char *path, char *list, size_t size)
-{
-    int res = llistxattr(path, list, size);
-    if(res == -1)
-        return -errno;
-    return res;
-}
-
-static int ceph_removexattr(const char *path, const char *name)
-{
-    int res = lremovexattr(path, name);
-    if(res == -1)
-        return -errno;
-    return 0;
-}
-#endif /* HAVE_SETXATTR */
 
 static struct fuse_operations ceph_oper = {
-    .getattr	= ceph_getattr,
-    .readlink	= ceph_readlink,
-    .getdir	= ceph_getdir,
-    .mknod	= ceph_mknod,
-    .mkdir	= ceph_mkdir,
-    .symlink	= ceph_symlink,
-    .unlink	= ceph_unlink,
-    .rmdir	= ceph_rmdir,
-    .rename	= ceph_rename,
-    .link	= ceph_link,
-    .chmod	= ceph_chmod,
-    .chown	= ceph_chown,
-    .truncate	= ceph_truncate,
-    .utime	= ceph_utime,
-    .open	= ceph_open,
-    .read	= ceph_read,
-    .write	= ceph_write,
-    .statfs	= ceph_statfs,
-    .release	= ceph_release,
-    .fsync	= ceph_fsync,
-#ifdef HAVE_SETXATTR
-    .setxattr	= ceph_setxattr,
-    .getxattr	= ceph_getxattr,
-    .listxattr	= ceph_listxattr,
-    .removexattr= ceph_removexattr,
-#endif
+  getattr: ceph_getattr,
+  readlink: ceph_readlink,
+  getdir: ceph_getdir,
+  mknod: ceph_mknod,
+  mkdir: ceph_mkdir,
+  unlink: ceph_unlink,
+  rmdir: ceph_rmdir,
+  symlink: ceph_symlink,
+  rename: ceph_rename,
+  link: ceph_link,
+  chmod: ceph_chmod,
+  chown: ceph_chown,
+  truncate: ceph_truncate,
+  utime: ceph_utime,
+  open: ceph_open,
+  read: ceph_read,
+  write: ceph_write,
+  statfs: ceph_statfs,
+  flush: 0,             // can't skip thigners w/ g++
+  release: ceph_release,
+  fsync: ceph_fsync
 };
 
 int main(int argc, char *argv[])
 {
   // init client
+
+  // **
+
+
+  // set up fuse argc/argv
+  int newargc = 0;
+  char **newargv = (char **) malloc((argc + 10) * sizeof(char *));
+  newargv[newargc++] = argv[0];
   
+  // allow other (all!) users to see my file system
+  // NOTE: echo user_allow_other >> /etc/fuse.conf
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "allow_other";
+  
+  // force into foreground
+  //   -> we can watch stdout this way!!
+  newargv[newargc++] = "-f";
+  
+  // copy rest of cmdline
+  for (int argctr = 1; argctr < argc; argctr++) 
+	newargv[newargc++] = argv[argctr];
+  
+  // go fuse go
   return fuse_main(argc, argv, &ceph_oper);
 }

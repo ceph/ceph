@@ -68,6 +68,7 @@ typedef __uint64_t inodeno_t;   // ino
 #define INODE_MODE_FILE     0100000 // S_IFREG
 #define INODE_MODE_SYMLINK  0120000 // S_IFLNK
 #define INODE_MODE_DIR      0040000 // S_IFDIR
+#define INODE_TYPE_MASK     0170000
 
 struct inode_t {
   // immutable

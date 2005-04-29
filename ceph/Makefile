@@ -1,7 +1,7 @@
 
 CC=g++
 #CC=distcc g++
-CFLAGS=-g -I. -pg
+CFLAGS=-g -I. -pg -D_FILE_OFFSET_BITS=64
 #CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=-lpthread
 
@@ -49,6 +49,8 @@ pmds: mpitest.cc msg/MPIMessenger.cc pmds.o
 singleclient: pmds.o fakesingleclient.o client/Client.o msg/CheesySerializer.o msg/FakeMessenger.o 
 	${CC} ${CFLAGS} ${LIBS} pmds.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o fakesingleclient.o ${LEAKTRACER} -o singleclient
 
+fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o msg/FakeMessenger.o 
+	${CC} ${CFLAGS} ${LIBS} pmds.o client/fuse.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o ${LEAKTRACER} -o fuseclient
 
 clean:
 	rm *.o */*.o ${TARGETS}
