@@ -65,7 +65,6 @@ static int ceph_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
   map<string, inode_t*> contents;
 
   int res = client->getdir(path, contents);
-  
   if (res < 0) return res;
 
   // return contents to fuse via callback
@@ -209,7 +208,7 @@ static struct fuse_operations ceph_oper = {
   read: ceph_read,
   write: ceph_write,
   statfs: ceph_statfs,
-  flush: 0,             // can't skip thigners w/ g++
+  flush: 0,               // can't skip fields w/ g++
   release: ceph_release,
   fsync: ceph_fsync
 };
