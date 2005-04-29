@@ -3,11 +3,12 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
+using namespace std;
 
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
-#include "client/Client.h"
+#include "fakeclient/FakeClient.h"
 
 #include "mds/MDCache.h"
 #include "mds/MDStore.h"
@@ -16,7 +17,6 @@
 
 #include "messages/MPing.h"
 
-using namespace std;
 
 __uint64_t ino = 1;
 
@@ -55,10 +55,10 @@ int main(int argc, char **argv) {
   }
   
   // create clients
-  Client *client[NUMCLIENT];
+  FakeClient *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	client[i] = new Client(mdc, i, new MPIMessenger(MSG_ADDR_CLIENT(i)), g_conf.client_requests);
+	client[i] = new FakeClient(mdc, i, new MPIMessenger(MSG_ADDR_CLIENT(i)), g_conf.client_requests);
 	client[i]->init();
   }
   

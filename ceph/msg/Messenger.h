@@ -23,6 +23,8 @@ class Messenger {
 	remove_dispatcher();
   }
   
+  // adminstrative
+  virtual int init(Dispatcher *d) = 0;
   void set_dispatcher(Dispatcher *d) {
 	dispatcher = d;
   }
@@ -31,14 +33,15 @@ class Messenger {
 	dispatcher = 0;
 	return t;
   }
-
-  // ...
-  virtual int init(Dispatcher *d) = 0;
   virtual int shutdown() = 0;
+  virtual void done() {}
+
+  // message interface
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
   virtual int wait_message(time_t seconds) = 0;
-  virtual void done() {}
-  
+
+  // misc crap
+  /*
   virtual int loop() {
 	while (1) {
 	  if (wait_message(0) < 0)
@@ -49,9 +52,9 @@ class Messenger {
 	}
 	return 0;
   }
+  */
 
-
-  // queue
+  // incoming queue
   Message *get_message() {
 	if (incoming.size() > 0) {
 	  cout << incoming.size() << " messages, taking first" << endl;
@@ -61,7 +64,6 @@ class Messenger {
 	}
 	return NULL;
   }
-
   bool queue_incoming(Message *m) {
 	incoming.push_back(m);
 	return true;
@@ -69,14 +71,9 @@ class Messenger {
   int num_incoming() {
 	return incoming.size();
   }
-
-
   void dispatch(Message *m) {
 	dispatcher->dispatch(m);
   }
-
-
-
 
 };
 

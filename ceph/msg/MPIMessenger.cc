@@ -6,8 +6,10 @@
 
 #include <iostream>
 #include <cassert>
-#include <ext/hash_map>
 using namespace std;
+#include <ext/hash_map>
+using namespace __gnu_cxx;
+
 #include <unistd.h>
 
 #include "mpi.h"

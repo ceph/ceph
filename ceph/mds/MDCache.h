@@ -55,7 +55,7 @@ typedef hash_map<inodeno_t, CInode*> inode_map_t;
 typedef const char* pchar;
 
 typedef struct {
-  CInode *ref;             // reference inode
+  CInode *ref;                                // reference inode
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
 } active_request_t;
 
@@ -98,8 +98,8 @@ class MDCache {
 
   // active MDS requests
  public:
-  map<MClientRequest*, active_request_t>   active_requests;
-  map<Message*, set<CDentry*> >            active_request_xlocks;
+  map<Message*, active_request_t>   active_requests;
+  map<Message*, set<CDentry*> >     active_request_xlocks;
   
 
   friend class MDBalancer;
@@ -178,12 +178,12 @@ class MDCache {
   void path_unpin(vector<CDentry*>& trace, Message *m);
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
-  bool request_start(MClientRequest *req,
+  bool request_start(Message *req,
 					 CInode *ref,
 					 vector<CDentry*>& trace);
-  void request_cleanup(MClientRequest *req);
-  void request_finish(MClientRequest *req);
-  void request_forward(MClientRequest *req, int mds);
+  void request_cleanup(Message *req);
+  void request_finish(Message *req);
+  void request_forward(Message *req, int mds);
 
 
   // == messages ==
@@ -335,7 +335,7 @@ class MDCache {
 
   // dentry
   bool dentry_xlock_start(CDentry *dn, 
-						  MClientRequest *m, CInode *ref, 
+						  Message *m, CInode *ref, 
 						  bool allnodes=false);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   void handle_lock_dn(MLock *m);

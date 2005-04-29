@@ -48,6 +48,19 @@ using namespace std;
 
 #include "messages/MLock.h"
 
+
+ostream& operator<<(ostream& out, Message& m)
+{
+  // some messages define << themselves
+  if (m.get_type() == MSG_CLIENT_REQUEST) return out << *((MClientRequest*)&m);
+
+  // generic
+  return out << "message(type=" << m.get_type() << ")";
+}
+
+
+
+
 Message *
 decode_message(crope& ser)
 {

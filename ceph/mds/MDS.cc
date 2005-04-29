@@ -29,7 +29,9 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
+#include "messages/MLock.h"
 #include "messages/MInodeWriterClosed.h"
+
 
 #include "events/EInodeUpdate.h"
 
@@ -457,8 +459,28 @@ void MDS::handle_client_request(MClientRequest *req)
 
 
 
-void MDS::dispatch_request(MClientRequest *req, CInode *ref)
+void MDS::dispatch_request(Message *m, CInode *ref)
 {
+  MClientRequest *req = 0;
+
+  // MLock or MClientRequest?
+  /* this is a little weird.
+	 client requests and mlocks both initial dentry xlocks, path pins, etc.,
+	 and thus both make use of the context C_MDS_RetryRequest.
+  */
+  switch (m->get_type()) {
+  case MSG_CLIENT_REQUEST:
+	req = (MClientRequest*)m;
+	break;
+  case MSG_MDS_LOCK:
+	mdcache->handle_lock_dn((MLock*)m);
+	break;
+  default:
+	assert(0);  // shouldn't get here
+  }
+
+  // MClientRequest.
+
   // bump popularity
   balancer->hit_inode(ref, MDS_POP_ANY);   
   
@@ -1468,42 +1490,22 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 }
 
 
-/*
-
-locking
-
-if (!locked && flag=renaming)
-(maybe) if (!locked && flag=renamingto)
-
-
-
-basic protocol with replicas:
-
- > Lock    (possibly x2?)
- < LockAck (possibly x2?)
- > Rename
-    src ino
-    dst dir
-    either dst ino (is unlinked)
-        or dst name
- < RenameAck
-    (implicitly unlocks, unlinks, etc.)
-
-*/
 
 class C_MDS_RenameFinish : public Context{
   MDS *mds;
   MClientRequest *req;
+  CInode *renamedi;
 public:
-  C_MDS_RenameFinish(MDS *mds, MClientRequest *req) {
+  C_MDS_RenameFinish(MDS *mds, MClientRequest *req, CInode *renamedi) {
 	this->mds = mds;
 	this->req = req;
+	this->renamedi = renamedi;
   }
   virtual void finish(int r) {
 	MClientReply *reply = new MClientReply(req, r);
 	
-	// include trace?
-	// XXX FIXME?
+	// include trace of renamed inode (so client can update their cache structure)
+	reply->set_trace_dist( renamedi, mds->get_nodeid() );
 
 	mds->messenger->send_message(reply,
 								 MSG_ADDR_CLIENT(req->get_client()), 0,
@@ -1511,8 +1513,6 @@ public:
 	mds->mdcache->request_finish(req);
   }
 };
-
-
 
 void MDS::handle_client_rename_local(MClientRequest *req,
 									 CInode *ref,
@@ -1528,10 +1528,11 @@ void MDS::handle_client_rename_local(MClientRequest *req,
   if (true || srcdn->inode->is_dir()) {
 	/* overkill warning: lock w/ everyone for simplicity.
 	   i could limit this to cases where something beneath me is exported.
-	   could possibly limit the list.
-	   main constrained is that, regardless of the order i do the xlocks, and whatever
+	   could possibly limit the list.    (maybe.)
+	   Underlying constraint is that, regardless of the order i do the xlocks, and whatever
 	   imports/exports might happen in the process, the destdir _must_ exist on any node
-	   importing something beneath me when rename finishes.
+	   importing something beneath me when rename finishes, or else mayhem ensues when
+	   their import is dangling in the cache.
 	 */
 	dout(7) << "handle_client_rename_local: overkill?  doing xlocks with _all_ nodes" << endl;
 	everybody = true;
@@ -1571,10 +1572,9 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	dosrc = !dosrc;
   }
 
-  // we're a go.
-
+  // we're golden (everything is xlocked by use, we rule, etc.)
   mdcache->file_rename( srcdn, destdn,
-						new C_MDS_RenameFinish(this, req),
+						new C_MDS_RenameFinish(this, req, srcdn->inode),
 						everybody );
 }
 

@@ -1,47 +1,87 @@
 
 #include "CheesySerializer.h"
 #include "Message.h"
+#include "Messenger.h"
+
 #include <iostream>
 using namespace std;
 
 
+// ---------
+// incoming messages
+
 void CheesySerializer::dispatch(Message *m)
 {
-  // i better be expecting it
-  assert(waiting_for_reply);
+  long tid = m->get_tid();
 
-  cout << "serializer: dispatch got " << reply << ", waking up waiter" << endl;
-  reply = m;
-  waiter.Post();
+  lock.Lock();
+
+  // was i expecting it?
+  if (call_sem.count(tid)) {
+	// yes, this is a reply to a pending call.
+	cout << "serializer: dispatch got reply for " << tid << " " << m << endl;
+	call_reply[tid] = m;     // set reply
+	call_sem[tid]->Post();
+	lock.Unlock();
+  } else {
+	// no, this is an unsolicited message.
+	lock.Unlock();	
+	cout << "serializer: dispatch got unsolicited message" << m << endl;
+	dispatcher->dispatch(m);
+  }
 }
 
 
+// ---------
+// outgoing messages
+
 void CheesySerializer::send(Message *m, msg_addr_t dest, int port, int fromport)
 {
+  // just pass it on to the messenger
   cout << "serializer: send " << m << endl;
   messenger->send_message(m, dest, port, fromport);
 }
 
 Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port, int fromport)
 {
-  cout << "serializer: sendrecv " << m << endl;
+  Semaphore *sem = new Semaphore();
+
+  // make up a transaction number that is unique (to me!)
+  /* NOTE: since request+replies are matched up on tid's alone, it means that
+	 two nodes using this mechanism can't do calls of each other or else their
+	 tid's might overlap.  
+	 This should be fine.. only the Client uses this so far!
+  */
+  long tid = ++last_tid;
+  m->set_tid(tid);
+
+  cout << "serializer: sendrecv sending " << m << " on tid " << tid << endl;
+
+  // add call records
+  lock.Lock();
+  assert(call_sem.count(tid) == 0);  // tid should be UNIQUE
+  call_sem[tid] = sem;
+  call_reply[tid] = 0;   // no reply yet
+  lock.Unlock();
+
+  // send
   messenger->send_message(m, dest, port, fromport);
-  waiting_for_reply = true;
-  cout << "serializer: sendrecv waiting " << endl;
-  waiter.Wait();
-  cout << "serializer: sendrecv got " << reply << endl;
+  
+  // wait
+  cout << "serializer: sendrecv waiting for reply on tid " << tid << endl;
+  sem->Wait();
+
+  // pick up reply
+  lock.Lock();
+  Message *reply = call_reply[tid];
+  assert(reply);
+  call_reply.erase(tid);   // remove from call map
+  call_sem.erase(tid);
+  lock.Unlock();
+
+  delete sem;
+  
+  cout << "serializer: sendrecv got reply " << reply << " on tid " << tid << endl;
   return reply;
 }
 
-
-// thread crap
-void *cheesyserializer_starter(void *pthis)
-{
-  CheesySerializer *pt = (CheesySerializer*)pthis;
-  pt->message_thread();
-}
-
-void CheesySerializer::message_thread()
-{
-  
-}

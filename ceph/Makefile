@@ -5,9 +5,9 @@ CFLAGS=-g -I. -pg -D_FILE_OFFSET_BITS=64
 #CFLAGS=-D __gnu_cxx=std -g -I.  #-I/usr/lib/mpi/include -L/usr/lib/mpi/lib
 LIBS=-lpthread
 
-MPICC=g++
+MPICC=/usr/local/mpich-1.2.6/bin/mpicxx
 MPICFLAGS=${CFLAGS} -I/usr/local/mpich-1.2.6/include -L/usr/local/mpich-1.2.6/lib
-MPILIBS= -lelan -lmpi  ${LIBS}
+MPILIBS=-lmpich ${LIBS}
 
 LEAKTRACER=
 #LEAKTRACER=$(HOME)/lib/LeakTracer.o
@@ -31,7 +31,7 @@ OBJS=osd/OSD.o\
  clock.o\
  config.o
 
-TARGETS=test import pmds
+TARGETS=test import mpitest
 
 all: depend ${TARGETS}
 
@@ -43,8 +43,8 @@ test: test.cc msg/FakeMessenger.o pmds.o
 import: pmds.o msg/FakeMessenger.o import.cc
 	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o import.cc ${LEAKTRACER} -o import
 
-pmds: mpitest.cc msg/MPIMessenger.cc pmds.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} mpitest.cc msg/MPIMessenger.cc pmds.o  -o pmds
+mpitest: mpitest.o msg/MPIMessenger.cc pmds.o
+	${MPICC} ${CFLAGS} ${MPILIBS} mpitest.o msg/MPIMessenger.cc pmds.o  -o mpitest
 
 singleclient: pmds.o fakesingleclient.o client/Client.o msg/CheesySerializer.o msg/FakeMessenger.o 
 	${CC} ${CFLAGS} ${LIBS} pmds.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o fakesingleclient.o ${LEAKTRACER} -o singleclient

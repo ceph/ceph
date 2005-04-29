@@ -1076,7 +1076,7 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 }
 
 
-bool MDCache::request_start(MClientRequest *req,
+bool MDCache::request_start(Message *req,
 							CInode *ref,
 							vector<CDentry*>& trace)
 {
@@ -1097,7 +1097,7 @@ bool MDCache::request_start(MClientRequest *req,
 }
 
 
-void MDCache::request_cleanup(MClientRequest *req)
+void MDCache::request_cleanup(Message *req)
 {
   assert(active_requests.count(req) == 1);
 
@@ -1137,7 +1137,7 @@ void MDCache::request_cleanup(MClientRequest *req)
   active_requests.erase(req);
 }
 
-void MDCache::request_finish(MClientRequest *req)
+void MDCache::request_finish(Message *req)
 {
   dout(7) << "request_finish " << *req << endl;
   request_cleanup(req);
@@ -1147,7 +1147,7 @@ void MDCache::request_finish(MClientRequest *req)
 }
 
 
-void MDCache::request_forward(MClientRequest *req, int who)
+void MDCache::request_forward(Message *req, int who)
 {
   dout(7) << "request_forward to " << who << " req " << *req << endl;
   request_cleanup(req);
@@ -3372,7 +3372,7 @@ void MDCache::handle_lock_dir(MLock *m)
 
 // DENTRY
 
-bool MDCache::dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref, bool all_nodes)
+bool MDCache::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref, bool all_nodes)
 {
   dout(7) << "dentry_xlock_start on " << *dn << endl;
 
@@ -3477,7 +3477,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, MClientRequest *m, CInode *ref, bo
 	}
 
 	// wait
-	dout(7) << "dentry_xlock_start locking, waitigg for replicas " << endl;
+	dout(7) << "dentry_xlock_start locking, waiting for replicas " << endl;
 	dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
 						new C_MDS_RetryRequest(mds, m, ref));
 	return false;
@@ -3534,22 +3534,39 @@ void MDCache::handle_lock_dn(MLock *m)
 
   if (LOCK_AC_FOR_AUTH(m->get_action())) {
 	// auth
-	assert(diri && dir);
-	int dauth = dir->dentry_authority(dname);
-	assert(dauth == mds->get_nodeid() ||
-		   dir->is_proxy());
-	
-	if (dir->is_proxy()) {
-	  // fw
-	  assert(dauth >= 0);
-	  dout(7) << "handle_lock_dn " << m << " " << m->get_ino() << " dname " << dname << " from " << from << ": proxy, fw to " << dauth << endl;
-	  mds->messenger->send_message(m,
-								   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
-	  return;
+
+	// normally we have it always
+	if (diri && dir) {
+	  int dauth = dir->dentry_authority(dname);
+	  assert(dauth == mds->get_nodeid() ||
+			 dir->is_proxy());
+	  
+	  if (dir->is_proxy()) {
+		// fw
+		assert(dauth >= 0);
+		dout(7) << "handle_lock_dn " << m << " " << m->get_ino() << " dname " << dname << " from " << from << ": proxy, fw to " << dauth << endl;
+		mds->messenger->send_message(m,
+									 MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
+									 MDS_PORT_CACHE);
+		return;
+	  }
+	  
+	  dn = dir->lookup(dname);
 	}
 
-	dn = dir->lookup(dname);
+	// except with.. an xlock request?
+	if (!dn) {
+	  assert(m->get_action() == LOCK_AC_REQXLOCK);
+	  // send nak
+	  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << " dne, nak" << endl;
+	  MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
+	  reply->set_dn(dir->ino(), dname);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	  delete m;
+	  return;
+	}
 	assert(dn);
   } else {
 	// replica
@@ -3645,12 +3662,40 @@ void MDCache::handle_lock_dn(MLock *m)
 	}
 	break;
 
+  case LOCK_AC_REQXLOCK:
+	dout(7) << "handle_lock_dn reqxlock on " << *dn << endl;
+	
+	// start request?
+	if (!active_requests.count(m)) {
+	  vector<CDentry*> trace;
+	  if (!request_start(m, dir->inode, trace))
+		return;  // waiting for pin
+	}
+	
+	// try to xlock!
+	if (!dentry_xlock_start(dn, m, dir->inode, true)) 
+	  return;    // waiting for xlock
+	
+	{
+	  // ACK
+	  MLock *reply = new MLock(LOCK_AC_REQXLOCKACK, mds->get_nodeid());
+	  reply->set_dn(dir->ino(), dname);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	}
+	break;
+
+
   default:
 	assert(0);
   }
 
   delete m;
 }
+
+
+
 
 
 

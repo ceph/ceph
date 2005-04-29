@@ -158,7 +158,7 @@ class MDS : public Dispatcher {
   void handle_client_fstat(MClientRequest *req);
 
   // requests
-  void dispatch_request(MClientRequest *req, CInode *ref);
+  void dispatch_request(Message *m, CInode *ref);
 
   // inode request *req, CInode *ref;
   void handle_client_stat(MClientRequest *req, CInode *ref);
@@ -237,10 +237,10 @@ class MDS : public Dispatcher {
 
 class C_MDS_RetryRequest : public Context {
   MDS *mds;
-  MClientRequest *req;
+  Message *req;   // MClientRequest or MLock
   CInode *ref;
  public:
-  C_MDS_RetryRequest(MDS *mds, MClientRequest *req, CInode *ref) {
+  C_MDS_RetryRequest(MDS *mds, Message *req, CInode *ref) {
 	assert(ref);
 	this->mds = mds;
 	this->req = req;

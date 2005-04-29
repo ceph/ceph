@@ -53,12 +53,16 @@ class MClientRequest : public Message {
  public:
   MClientRequest() {}
   MClientRequest(long tid, int op, int client) : Message(MSG_CLIENT_REQUEST) {
-	this->st.tid = tid;
+	set_tid(tid);
 	this->st.op = op;
 	this->st.client = client;
 	this->st.iarg = 0;
   }
   virtual char *get_type_name() { return "creq"; }
+
+  void set_tid(long tid) {
+	this->st.tid = tid;
+  }
 
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }

@@ -12,9 +12,9 @@
 
 
 md_config_t g_conf = {
-  num_mds: 13,
+  num_mds: 3,
   num_osd: 10,
-  num_client: 55,
+  num_client: 3,
 
   osd_cow: false, // crashy? true,  
 
@@ -59,7 +59,7 @@ md_config_t g_conf = {
   client_op_mknod:    10,
   client_op_link:       false,
   client_op_unlink:   10,
-  client_op_rename:   100,
+  client_op_rename:   00,
 
   client_op_mkdir:    10,
   client_op_rmdir:    10,
