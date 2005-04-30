@@ -12,20 +12,31 @@
 
 #include <semaphore.h>
 #include <errno.h>
+#include <iostream>
+using namespace std;
 
 class Semaphore
 {
   sem_t S;
 
   public:
-  Semaphore( int init = 0 )
-  { sem_init(&S,0,init); }
+  Semaphore( int init = 0 ) { 
+	int r = sem_init(&S,0,init); 
+	//cout << "sem_init = " << r << endl;
+  }
 
-  virtual ~Semaphore()
-  { sem_destroy(&S); }
+  virtual ~Semaphore() { 
+	int r = sem_destroy(&S); 
+	//cout << "sem_destroy = " << r << endl;
+  }
 
-  void Wait() const
-  { sem_wait((sem_t *)&S); }
+  void Wait() const {
+	while (1) {
+	  int r = sem_wait((sem_t *)&S); 
+	  if (r == 0) break;
+	  cout << "sem_wait returned " << r << ", trying again" << endl;
+	}
+  }
 
   int Wait_Try() const
   { return (sem_trywait((sem_t *)&S)?errno:0); }

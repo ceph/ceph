@@ -6,6 +6,11 @@
 #include <iostream>
 using namespace std;
 
+#include "include/config.h"
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "serializer: "
+
+#define DEBUGLVL  13    // debug level of output
 
 // ---------
 // incoming messages
@@ -19,14 +24,15 @@ void CheesySerializer::dispatch(Message *m)
   // was i expecting it?
   if (call_sem.count(tid)) {
 	// yes, this is a reply to a pending call.
-	cout << "serializer: dispatch got reply for " << tid << " " << m << endl;
+	dout(DEBUGLVL) << "dispatch got reply for " << tid << " " << m << endl;
 	call_reply[tid] = m;     // set reply
-	call_sem[tid]->Post();
+	int r = call_sem[tid]->Post();
+	//cout << "post = " << r << endl;
 	lock.Unlock();
   } else {
 	// no, this is an unsolicited message.
 	lock.Unlock();	
-	cout << "serializer: dispatch got unsolicited message" << m << endl;
+	dout(DEBUGLVL) << "dispatch got unsolicited message" << m << endl;
 	dispatcher->dispatch(m);
   }
 }
@@ -38,13 +44,14 @@ void CheesySerializer::dispatch(Message *m)
 void CheesySerializer::send(Message *m, msg_addr_t dest, int port, int fromport)
 {
   // just pass it on to the messenger
-  cout << "serializer: send " << m << endl;
+  dout(DEBUGLVL) << "send " << m << endl;
   messenger->send_message(m, dest, port, fromport);
 }
 
 Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port, int fromport)
 {
-  Semaphore *sem = new Semaphore();
+  static Semaphore stsem;
+  Semaphore *sem = &stsem;//new Semaphore();
 
   // make up a transaction number that is unique (to me!)
   /* NOTE: since request+replies are matched up on tid's alone, it means that
@@ -56,7 +63,7 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port, int f
   long tid = ++last_tid;
   m->set_tid(tid);
 
-  cout << "serializer: sendrecv sending " << m << " on tid " << tid << endl;
+  dout(DEBUGLVL) << "sendrecv sending " << m << " on tid " << tid << endl;
 
   // add call records
   lock.Lock();
@@ -69,8 +76,10 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port, int f
   messenger->send_message(m, dest, port, fromport);
   
   // wait
-  cout << "serializer: sendrecv waiting for reply on tid " << tid << endl;
+  dout(DEBUGLVL) << "sendrecv waiting for reply on tid " << tid << endl;
+  //cout << "wait start, value = " << sem->Value() << endl;
   sem->Wait();
+
 
   // pick up reply
   lock.Lock();
@@ -80,9 +89,9 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port, int f
   call_sem.erase(tid);
   lock.Unlock();
 
-  delete sem;
+  dout(DEBUGLVL) << "sendrecv got reply " << reply << " on tid " << tid << endl;
+  //delete sem;
   
-  cout << "serializer: sendrecv got reply " << reply << " on tid " << tid << endl;
   return reply;
 }
 

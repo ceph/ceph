@@ -49,8 +49,8 @@ import: pmds.o msg/FakeMessenger.o import.cc
 mpitest: mpitest.o msg/MPIMessenger.cc pmds.o
 	${MPICC} ${CFLAGS} ${MPILIBS} mpitest.o msg/MPIMessenger.cc pmds.o  -o mpitest
 
-singleclient: pmds.o fakesingleclient.o client/Client.o msg/CheesySerializer.o msg/FakeMessenger.o 
-	${CC} ${CFLAGS} ${LIBS} pmds.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o fakesingleclient.o ${LEAKTRACER} -o singleclient
+singleclient: pmds.o fakesingleclient.o client/Client.o msg/CheesySerializer.o msg/FakeMessenger.o fsck.o
+	${CC} ${CFLAGS} ${LIBS} pmds.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o fakesingleclient.o fsck.o ${LEAKTRACER} -o singleclient
 
 fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o msg/FakeMessenger.o 
 	${CC} ${CFLAGS} ${LIBS} pmds.o client/fuse.o client/Client.o msg/FakeMessenger.o msg/CheesySerializer.o ${LEAKTRACER} -o fuseclient

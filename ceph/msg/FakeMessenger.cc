@@ -32,7 +32,7 @@ map<int, FakeMessenger*> directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
-
+Mutex lock;
 Semaphore sem;
 Semaphore shutdownsem;
 bool      awake = false;
@@ -81,6 +81,8 @@ int fakemessenger_do_loop()
 	
 	dout(11) << "do_loop top" << endl;
 
+	lock.Lock();
+
 	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
@@ -109,15 +111,24 @@ int fakemessenger_do_loop()
 		  }
 		}
 		
+		lock.Unlock();
+
 		didone = true;
 		it->second->dispatch(m);
+
+		lock.Lock();
 	  }
 	  it++;
 	}
 
+	lock.Unlock();
+
+
 	if (!didone)
 	  break;
   }
+
+
   dout(1) << "do_loop end (no more messages)." << endl;
   return 0;
 }
@@ -177,6 +188,8 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   m->set_source(whoami, fromport);
   m->set_dest(dest, port);
 
+  lock.Lock();
+
   // deliver
   try {
 #ifdef LOG_MESSAGES
@@ -209,6 +222,8 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 	awake = true;
 	sem.Post();
   }
+
+  lock.Unlock();
 }
 
 int FakeMessenger::wait_message(time_t seconds)

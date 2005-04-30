@@ -33,7 +33,7 @@ md_config_t g_conf = {
   fake_clock: true,
   fakemessenger_serialize: true,// false,
 
-  debug: 14,
+  debug: 10,
 
   mdcache_size: 500, //MDS_CACHE_SIZE,
   mdcache_mid: .8,
@@ -56,12 +56,12 @@ md_config_t g_conf = {
   client_op_chown:    10,   // untested
 
   client_op_readdir:  10,
-  client_op_mknod:    10,
+  client_op_mknod:    100,
   client_op_link:       false,
   client_op_unlink:   10,
-  client_op_rename:   100,
+  client_op_rename:   00,
 
-  client_op_mkdir:    10,
+  client_op_mkdir:    100,
   client_op_rmdir:    10,
   client_op_symlink:  10,
 

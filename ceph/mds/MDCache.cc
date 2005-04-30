@@ -770,7 +770,7 @@ class C_MDC_TraverseDiscover : public Context {
 	this->onfinish = onfinish;
   }
   void finish(int r) {
-	cout << "TraverseDiscover r = " << r << endl;
+	//dout(10) << "TraverseDiscover r = " << r << endl;
 	if (r < 0) {            // ENOENT on discover, pass back to caller.
 	  onfinish->finish(r);
 	} else {

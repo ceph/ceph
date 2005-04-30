@@ -8,7 +8,7 @@
 #define NUMOSD g_conf.num_osd
 #define MPI_DEST_TO_RANK(dest,world)    ((dest)<(NUMMDS+NUMOSD) ? \
 										 (dest) : \
-										 ((NUMMDS+NUMOSD)+(((dest)-NUMMDS-NUMOSD) % (world-NUMMDS-NUMOSD))))
+										 ((NUMMDS+NUMOSD)+(((dest)-NUMMDS-NUMOSD) % ((world)-NUMMDS-NUMOSD))))
 
 
 class MPIMessenger : public Messenger {

@@ -154,7 +154,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in )
 	nnull++;
   }
 
-  dout(10) << "add_dentry " << *dn << endl;
+  dout(12) << "add_dentry " << *dn << endl;
 
   // pin?
   if (nnull + nitems == 1) get(CDIR_PIN_CHILD);
@@ -168,7 +168,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in )
 
 void CDir::remove_dentry(CDentry *dn) 
 {
-  dout(10) << "remove_dentry " << *dn << endl;
+  dout(12) << "remove_dentry " << *dn << endl;
 
   if (dn->inode) {
 	// detach inode and dentry
@@ -197,7 +197,7 @@ void CDir::remove_dentry(CDentry *dn)
 void CDir::link_inode( CDentry *dn, CInode *in )
 {
   link_inode_work(dn,in);
-  dout(10) << "link_inode " << *dn << " " << *in << endl;
+  dout(12) << "link_inode " << *dn << " " << *in << endl;
   
   // remove from null list
   assert(null_items.count(dn->name) == 1);
@@ -231,7 +231,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in )
 
 void CDir::unlink_inode( CDentry *dn )
 {
-  dout(10) << "unlink_inode " << *dn << " " << *dn->inode << endl;
+  dout(12) << "unlink_inode " << *dn << " " << *dn->inode << endl;
 
   unlink_inode_work(dn);
 

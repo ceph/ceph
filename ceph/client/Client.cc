@@ -262,18 +262,33 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
 // fyi: typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
 
-int Client::getdir(const char *path, map<string,inode_t*> contents) 
+int Client::getdir(const char *path, map<string,inode_t*>& contents) 
 {
+  MClientRequest *req = new MClientRequest(MDS_OP_READDIR, whoami);
+  req->set_path(path); 
 
-  // ...
-  int res; 
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
 
-  // return contents to caller
-  /*
-  for (...) {
-    
-    contents[dentryname] = inodeptr;   // ptr to inode_t in our cache
+  //FIXME enforce caller uid rights?
+   
+  MClientReply *reply = (MClientReply*)serial_messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  int res = reply->get_result();
+
+  // dir contents to caller!
+  vector<c_inode_info*>::iterator it;
+  for (it = reply->get_dir_contents().begin(); 
+	   it != reply->get_dir_contents().end(); 
+	   it++) {
+	// put in cache
+
+    contents[(*it)->ref_dn] = &(*it)->inode;   // FIXME don't use one from reply!
   }
-  */
+
+  //delete reply;     fix thing above first
   return res;
 }
+
+
+
