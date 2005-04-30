@@ -39,7 +39,7 @@ TARGETS=test import mpitest
 all: depend ${TARGETS}
 
 
-test: test.cc msg/FakeMessenger.o pmds.o
+test: test.cc msg/FakeMessenger.o pmds.o msg/MTMessenger.o msg/support.o
 	test ! -e leak.out || rm leak.out
 	${CC} ${CFLAGS} ${LIBS} pmds.o msg/FakeMessenger.o test.cc ${LEAKTRACER} -o test
 
