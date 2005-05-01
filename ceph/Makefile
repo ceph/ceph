@@ -1,10 +1,10 @@
 
 # mpicxx must be on your path; on Szilard, this means that
 # /usr/local/mpich2-1.0.1/bin must be on your path.
-CC=mpicxx
-MPICC=mpicxx
-CFLAGS=-g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK
-LIBS=-lpthread
+CC = mpicxx
+MPICC = mpicxx
+CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+LIBS = -lpthread
 
 PMDS_OBJS= \
 	osd/OSD.o\
@@ -25,19 +25,17 @@ PMDS_OBJS= \
 	clock.o\
 	config.o
 
-TARGETS=test import mpitest singleclient
+TEST_TARGETS = test mpitest mttest
+TARGETS = import singleclient
 
 all: depend ${TARGETS}
 
+test: depend ${TEST_TARGETS}
 
-test: test.cc msg/FakeMessenger.o pmds.o  msg/MTMessenger.o msg/support.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
 
 import: pmds.o msg/FakeMessenger.o import.cc
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
-
-mpitest: mpitest.o msg/MPIMessenger.cc pmds.o
-	${MPICC} ${CFLAGS} $^ -o $@
 
 singleclient: pmds.o fakesingleclient.o client/Client.o \
 msg/CheesySerializer.o msg/FakeMessenger.o 
@@ -47,14 +45,24 @@ fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o \
 msg/FakeMessenger.o 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
+test: test.cc msg/FakeMessenger.o pmds.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+mpitest: mpitest.o msg/MPIMessenger.cc pmds.o
+	${MPICC} ${CFLAGS} $^ -o $@
+
+mttest: test/mttest.o msg/MTMessenger.o msg/error.o msg/Messenger.o \
+config.o
+	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
+
 clean:
 	rm -f *.o */*.o ${TARGETS}
 
-%.o: %.cc
-	${CC} ${CFLAGS} -c $< -o $@
-
 pmds.o: ${PMDS_OBJS}
 	ld -i -o pmds.o $^
+
+%.o: %.cc
+	${CC} ${CFLAGS} -c $< -o $@
 
 .depend:
 	touch .depend
