@@ -1,6 +1,8 @@
 #ifndef __MCLIENTREQUEST_H
 #define __MCLIENTREQUEST_H
 
+#include <vector>
+
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/MDS.h"
