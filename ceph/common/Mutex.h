@@ -11,12 +11,15 @@
 #define _Mutex_Posix_
 
 #include <pthread.h>
+#include <cassert>
 
 class Mutex
 {
   mutable pthread_mutex_t M;
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
+
+  bool locked;
 
   public:
 
@@ -25,21 +28,33 @@ class Mutex
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&M,&attr);
+    cout << "mutex init = " << pthread_mutex_init(&M,NULL) << endl;
     pthread_mutexattr_destroy(&attr);
+	locked = false;
   }
 
   virtual ~Mutex()
   { pthread_mutex_unlock(&M); pthread_mutex_destroy(&M); }
 
-  int Lock() const
-  { return pthread_mutex_lock(&M); }
+  int Lock()  { 
+	int r = pthread_mutex_lock(&M);
+	cout << pthread_self() << " lock = " << r << endl;
+	assert(!locked);
+	locked = true;
+	return r;
+  }
 
   int Lock_Try() const
   { return pthread_mutex_trylock(&M); }
 
-  int Unlock() const
-  { return pthread_mutex_unlock(&M); }
+  int Unlock() 
+  { 
+	assert(locked);
+	locked = false;
+	int r = pthread_mutex_unlock(&M);
+	cout << pthread_self() << " unlock = " << r << endl;
+	return r;
+  }
 };
 
 #endif // !_Mutex_Posix_

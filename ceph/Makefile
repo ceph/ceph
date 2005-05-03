@@ -66,6 +66,9 @@ mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 mpifuse: mpifuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
+fakefuse: fakefuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
 clean:
 	rm -f *.o */*.o ${TARGETS}
 

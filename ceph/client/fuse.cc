@@ -238,5 +238,5 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // go fuse go
   cout << "ok, calling fuse_main" << endl;
-  return fuse_main(argc, argv, &ceph_oper);
+  return fuse_main(newargc, newargv, &ceph_oper);
 }
