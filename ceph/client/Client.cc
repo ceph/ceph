@@ -182,6 +182,9 @@ int Client::lstat(const char *path, struct stat *stbuf)
   stbuf->st_mode = inode.mode;
   //stbuf->st_nlink = 
   stbuf->st_uid = inode.uid;
+
+  dout(10) << "stat uid is " << stbuf->st_uid << endl;
+
   stbuf->st_gid = inode.gid;
   stbuf->st_ctime = inode.ctime;
   stbuf->st_atime = inode.atime;

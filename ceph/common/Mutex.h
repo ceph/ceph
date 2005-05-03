@@ -26,7 +26,7 @@ class Mutex
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-    cout << this << " mutex init = " << pthread_mutex_init(&M,NULL) << endl;
+    //cout << this << " mutex init = " << pthread_mutex_init(&M,NULL) << endl;
     pthread_mutexattr_destroy(&attr);
   }
 
@@ -35,7 +35,7 @@ class Mutex
 
   int Lock()  { 
 	int r = pthread_mutex_lock(&M);
-	cout << this << " " << pthread_self() << " lock = " << r << endl;
+	//cout << this << " " << pthread_self() << " lock = " << r << endl;
 	return r;
   }
 
@@ -45,7 +45,7 @@ class Mutex
   int Unlock() 
   { 
 	int r = pthread_mutex_unlock(&M);
-	cout << this << " " << pthread_self() << " unlock = " << r << endl;
+	//cout << this << " " << pthread_self() << " unlock = " << r << endl;
 	return r;
   }
 
