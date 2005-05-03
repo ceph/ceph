@@ -19,8 +19,6 @@ class Mutex
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
 
-  bool locked;
-
   public:
 
   Mutex()
@@ -28,9 +26,8 @@ class Mutex
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-    cout << "mutex init = " << pthread_mutex_init(&M,NULL) << endl;
+    cout << this << " mutex init = " << pthread_mutex_init(&M,NULL) << endl;
     pthread_mutexattr_destroy(&attr);
-	locked = false;
   }
 
   virtual ~Mutex()
@@ -38,9 +35,7 @@ class Mutex
 
   int Lock()  { 
 	int r = pthread_mutex_lock(&M);
-	cout << pthread_self() << " lock = " << r << endl;
-	assert(!locked);
-	locked = true;
+	cout << this << " " << pthread_self() << " lock = " << r << endl;
 	return r;
   }
 
@@ -49,12 +44,12 @@ class Mutex
 
   int Unlock() 
   { 
-	assert(locked);
-	locked = false;
 	int r = pthread_mutex_unlock(&M);
-	cout << pthread_self() << " unlock = " << r << endl;
+	cout << this << " " << pthread_self() << " unlock = " << r << endl;
 	return r;
   }
+
+  friend class Cond;
 };
 
 #endif // !_Mutex_Posix_

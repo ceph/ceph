@@ -10,7 +10,7 @@ using namespace std;
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "serializer: "
 
-#define DEBUGLVL  13    // debug level of output
+#define DEBUGLVL  1    // debug level of output
 
 // ---------
 // incoming messages
@@ -22,11 +22,11 @@ void CheesySerializer::dispatch(Message *m)
   lock.Lock();
 
   // was i expecting it?
-  if (call_sem.count(pcid)) {
+  if (call_cond.count(pcid)) {
 	// yes, this is a reply to a pending call.
 	dout(DEBUGLVL) << "dispatch got reply for " << pcid << " " << m << endl;
 	call_reply[pcid] = m;     // set reply
-	int r = call_sem[pcid]->Post();
+	int r = call_cond[pcid]->Signal();
 	//cout << "post = " << r << endl;
 	lock.Unlock();
   } else {
@@ -53,8 +53,7 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
 {
   int fromport = 0;
 
-  static Semaphore stsem;
-  Semaphore *sem = &stsem;//new Semaphore();
+  Cond *cond = new Cond();
 
   // make up a pcid that is unique (to me!)
   /* NOTE: since request+replies are matched up on pcid's alone, it means that
@@ -66,14 +65,14 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
   long pcid = ++last_pcid;
   m->set_pcid(pcid);
 
+  lock.Lock();
+
   dout(DEBUGLVL) << "sendrecv sending " << m << " on pcid " << pcid << endl;
 
   // add call records
-  lock.Lock();
-  assert(call_sem.count(pcid) == 0);  // pcid should be UNIQUE
-  call_sem[pcid] = sem;
+  assert(call_cond.count(pcid) == 0);  // pcid should be UNIQUE
+  call_cond[pcid] = cond;
   call_reply[pcid] = 0;   // no reply yet
-  lock.Unlock();
 
   // send
   messenger->send_message(m, dest, port, fromport);
@@ -81,19 +80,20 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
   // wait
   dout(DEBUGLVL) << "sendrecv waiting for reply on pcid " << pcid << endl;
   //cout << "wait start, value = " << sem->Value() << endl;
-  sem->Wait();
+
+  cond->Wait(lock);
 
 
   // pick up reply
-  lock.Lock();
   Message *reply = call_reply[pcid];
   assert(reply);
   call_reply.erase(pcid);   // remove from call map
-  call_sem.erase(pcid);
-  lock.Unlock();
+  call_cond.erase(pcid);
 
   dout(DEBUGLVL) << "sendrecv got reply " << reply << " on pcid " << pcid << endl;
   //delete sem;
+
+  lock.Unlock();
   
   return reply;
 }

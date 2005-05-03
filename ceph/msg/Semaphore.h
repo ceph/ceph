@@ -1,3 +1,9 @@
+/*
+
+don't use this.. you probably want a pthread Cond instead!
+
+*/
+
 /////////////////////////////////////////////////////////////////////
 //  Written by Phillip Sitbon
 //  Copyright 2003

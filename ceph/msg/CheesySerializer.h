@@ -6,7 +6,7 @@
 
 #include "Messenger.h"
 
-#include "Semaphore.h"
+#include "Cond.h"
 #include "Mutex.h"
 
 #include <map>
@@ -20,7 +20,7 @@ class CheesySerializer : public Messenger,
   Messenger *messenger;        // this is how i communicate
   
   Mutex                  lock;      // protect call_sem, call_reply
-  map<long, Semaphore*>  call_sem;
+  map<long, Cond*>       call_cond;
   map<long, Message*>    call_reply;
   
  public:

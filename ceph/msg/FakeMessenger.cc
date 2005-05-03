@@ -19,7 +19,7 @@
 using namespace std;
 
 
-#include "Semaphore.h"
+#include "Cond.h"
 #include "Mutex.h"
 #include <pthread.h>
 
@@ -33,8 +33,8 @@ hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
 Mutex lock;
-Semaphore sem;
-Semaphore shutdownsem;
+Cond  cond;
+
 bool      awake = false;
 bool      shutdown = false;
 pthread_t thread_id;
@@ -43,17 +43,20 @@ void *fakemessenger_thread(void *ptr)
 {
   dout(1) << "thread start" << endl;
 
+  lock.Lock();
   while (1) {
+	dout(1) << "thread waiting" << endl;
 	awake = false;
-	sem.Wait();
+	cond.Wait(lock);
+	awake = true;
 	dout(1) << "thread woke up" << endl;
-
 	if (shutdown) break;
+
 	fakemessenger_do_loop();
   }
+  lock.Unlock();
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
-  shutdownsem.Post();
 }
 
 
@@ -62,9 +65,15 @@ void fakemessenger_startthread() {
 }
 
 void fakemessenger_stopthread() {
+  cout << "fakemessenger_stopthread setting stop flag" << endl;
+  lock.Lock();  
   shutdown = true;
-  sem.Post();
-  shutdownsem.Wait();
+  lock.Unlock();
+  cond.Signal();
+
+  cout << "fakemessenger_stopthread waiting" << endl;
+  void *ptr;
+  pthread_join(thread_id, &ptr);
 }
 
 
@@ -80,8 +89,6 @@ int fakemessenger_do_loop()
 	bool didone = false;
 	
 	dout(11) << "do_loop top" << endl;
-
-	lock.Lock();
 
 	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
@@ -111,23 +118,19 @@ int fakemessenger_do_loop()
 		  }
 		}
 		
-		lock.Unlock();
-
 		didone = true;
-		it->second->dispatch(m);
 
+		lock.Unlock();
+		it->second->dispatch(m);
 		lock.Lock();
 	  }
 	  it++;
 	}
-
-	lock.Unlock();
-
-
+	
+	
 	if (!didone)
 	  break;
   }
-
 
   dout(1) << "do_loop end (no more messages)." << endl;
   return 0;
@@ -203,14 +206,17 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 	assert(0);
   }
 
+
   // wake up loop?
   if (!awake) {
 	dout(1) << "waking up fakemessenger thread" << endl; 
 	awake = true;
-	sem.Post();
-  }
+	lock.Unlock();
+	cond.Signal();
+  } else
+	lock.Unlock();
 
-  lock.Unlock();
+
 }
 
 
