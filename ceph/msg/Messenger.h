@@ -16,14 +16,11 @@ class Messenger {
   list<Message*> incoming;        // incoming queue
 
  public:
-  /*Messenger() : dispatcher(0) { }
-  virtual ~Messenger() {
-	remove_dispatcher();
-  }
-  */
+  Messenger() : dispatcher(0) { }
   
   // administrative
   void set_dispatcher(Dispatcher *d) { dispatcher = d; }
+
   virtual int shutdown() = 0;
 
   // -- message interface
@@ -31,7 +28,7 @@ class Messenger {
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
 
   // make a procedure call
-  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0) { };
+  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0) = 0;
 
   // wait (block) for a message, or timeout.  Don't return message yet.
   //virtual int wait_message(time_t seconds) = 0;

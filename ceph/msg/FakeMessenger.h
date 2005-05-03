@@ -22,6 +22,9 @@ class FakeMessenger : public Messenger {
 
   // msg interface
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+  
+  // use CheesySerializer for now!
+  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0) { assert(0); };
 };
 
 int fakemessenger_do_loop();

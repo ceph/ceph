@@ -38,6 +38,7 @@ typedef struct {
 } c_inode_info;
 
 typedef struct {
+  long pcid;
   long tid;
   int op;
   int result;  // error code
@@ -54,6 +55,9 @@ class MClientReply : public Message {
   vector<c_inode_info*> dir_contents;
 
  public:
+  void set_pcid(long pcid) { this->st.pcid = pcid; }
+  long get_pcid() { return st.pcid; }
+
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
   inodeno_t get_ino() { return trace[trace.size()-1]->inode.ino; }
@@ -67,6 +71,7 @@ class MClientReply : public Message {
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 
 	Message(MSG_CLIENT_REPLY) {
+	this->st.pcid = req->get_pcid();    // match up procedure call id!!!
 	this->st.tid = req->get_tid();
 	this->st.op = req->get_op();
 	this->path = req->get_path();

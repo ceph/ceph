@@ -96,8 +96,7 @@ typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inoden
 class Client : public Dispatcher {
  protected:
   MDCluster *mdcluster;
-  Messenger *raw_messenger;  
-  SerialMessenger *serial_messenger;
+  Messenger *messenger;  
   int whoami;
   bool all_files_closed;
   
@@ -193,10 +192,12 @@ class Client : public Dispatcher {
   ~Client();
 
   void init();
+  void shutdown();
 
   // messaging
   void dispatch(Message *m) {
 	cout << "dispatch not implemented" << endl;
+	assert(0);
   }
 
 

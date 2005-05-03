@@ -10,7 +10,7 @@
 CC = g++
 MPICC = mpicxx
 CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread
+LIBS = -lpthread -lfuse
 
 MDS_OBJS= \
 	mds/MDBalancer.o\
@@ -57,10 +57,13 @@ msg/FakeMessenger.o ${COMMON_OBJS}
 fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/mds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpitest: mpitest.cc msg/MPIMessenger.o mds/mds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
+mpitest: test/mpitest.o msg/MPIMessenger.cc mds/mds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
 	${MPICC} ${CFLAGS} $^ -o $@
 
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
+	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
+
+mpifuse: mpifuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
 clean:

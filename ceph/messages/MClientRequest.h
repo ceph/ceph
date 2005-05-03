@@ -13,6 +13,7 @@
  *    can be forwarded around between MDS's.
  *
  *   int client - the originating client
+ *   long pcid  - procedure call id, used to match request+response.
  *   long tid   - transaction id, unique among requests for that client.  probably just a counter!
  *                -> the MDS passes the Request to the Reply constructor, so this always matches.
  *  
@@ -33,6 +34,7 @@
 
 
 typedef struct {
+  long pcid;   // procedure call id, to match request+response
   long tid;
   int client;
   int op;
@@ -61,10 +63,12 @@ class MClientRequest : public Message {
   }
   virtual char *get_type_name() { return "creq"; }
 
-  void set_tid(long tid) {
-	this->st.tid = tid;
-  }
+  // keep a pcid (procedure call id) to match up request+reply
+  void set_pcid(long pcid) { this->st.pcid = pcid; }
+  long get_pcid() { return st.pcid; }
 
+  // normal fields
+  void set_tid(long t) { st.tid = t; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
   void set_caller_uid(int u) { st.caller_uid = u; }
@@ -118,6 +122,7 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
   out << &req << " ";
   out << "client" << req.get_client() 
 	  << "." << req.get_tid() 
+	  << ".pcid=" << req.get_pcid() 
 	  << ":";
   switch(req.get_op()) {
   case MDS_OP_STAT: 

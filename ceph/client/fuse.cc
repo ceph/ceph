@@ -213,12 +213,10 @@ static struct fuse_operations ceph_oper = {
   fsync: ceph_fsync
 };
 
-int main(int argc, char *argv[])
+int ceph_fuse_main(Client *c, int argc, char *argv[])
 {
   // init client
-
-  // **
-
+  client = c;
 
   // set up fuse argc/argv
   int newargc = 0;

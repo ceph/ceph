@@ -125,9 +125,9 @@ class Message {
   virtual ~Message() {}
 
 
-  // for rpc-type procedural messages
-  virtual long get_tid() { return 0; }
-  virtual void set_tid(long t) { assert(0); }  // overload me
+  // for rpc-type procedural messages (pcid = procedure call id)
+  virtual long get_pcid() { return 0; }
+  virtual void set_pcid(long t) { assert(0); }  // overload me
 
 
   // ENVELOPE ----
