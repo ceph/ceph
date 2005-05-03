@@ -233,9 +233,10 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   newargv[newargc++] = "-f";
   
   // copy rest of cmdline
-  for (int argctr = 1; argctr < argc; argctr++) 
-	newargv[newargc++] = argv[argctr];
+  //for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
+  newargv[newargc++] = "t";
   
   // go fuse go
+  cout << "ok, calling fuse_main" << endl;
   return fuse_main(argc, argv, &ceph_oper);
 }

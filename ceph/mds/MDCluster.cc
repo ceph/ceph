@@ -36,9 +36,9 @@ void MDCluster::map_osds()
   osd_meta_begin = osd_log_end;
   osd_meta_end = num_osd;
 
-  dout(10) << "mdcluster: " << num_mds << " mds, " << num_osd << " osd" << endl;
-  dout(10) << "mdcluster:  logs on " << (osd_log_end-osd_log_begin) << " osd [" << osd_log_begin << ", " << osd_log_end << ")" << endl;
-  dout(10) << "mdcluster:  metadata on " << (osd_meta_end-osd_meta_begin) << " osd [" << osd_meta_begin << ", " << osd_meta_end << ")" << endl;
+  dout(15) << "mdcluster: " << num_mds << " mds, " << num_osd << " osd" << endl;
+  dout(15) << "mdcluster:  logs on " << (osd_log_end-osd_log_begin) << " osd [" << osd_log_begin << ", " << osd_log_end << ")" << endl;
+  dout(15) << "mdcluster:  metadata on " << (osd_meta_end-osd_meta_begin) << " osd [" << osd_meta_begin << ", " << osd_meta_end << ")" << endl;
 }
 
 

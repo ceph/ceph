@@ -44,7 +44,7 @@ static int nthreads;
 
 // debug
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world << "] "
+#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world << " " << getpid() << "] "
 
 
 
@@ -173,7 +173,7 @@ static int get_thread_tag()
 
 void* mpimessenger_loop(void*)
 {
-  dout(1) << "mpimessenger_loop start" << endl;
+  dout(1) << "mpimessenger_loop start pid " << getpid() << endl;
 
   while (!mpi_done) {
 	// check mpi

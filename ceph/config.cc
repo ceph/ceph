@@ -14,7 +14,7 @@
 md_config_t g_conf = {
   num_mds: 3,
   num_osd: 10,
-  num_client: 3,
+  num_client: 1,
 
   osd_cow: false, // crashy? true,  
 

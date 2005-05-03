@@ -292,4 +292,11 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 }
 
 
-
+// not written yet, but i want to link!
+int Client::readlink(const char *path, char *buf, size_t size) { }
+int Client::mknod(const char *path, mode_t mode) { }
+int Client::link(const char *existing, const char *newname) {}
+int Client::open(const char *path, int mode) {}
+int Client::read(fileh_t fh, char *buf, size_t size, off_t offset) {}
+int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset) {}
+int Client::statfs(const char *path, struct statfs *stbuf) {}
