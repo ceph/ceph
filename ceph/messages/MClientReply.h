@@ -72,6 +72,7 @@ class MClientReply : public Message {
   MClientReply(MClientRequest *req, int result = 0) : 
 	Message(MSG_CLIENT_REPLY) {
 	this->st.pcid = req->get_pcid();    // match up procedure call id!!!
+	cout << "reply pcid is " << this->st.pcid << endl;
 	this->st.tid = req->get_tid();
 	this->st.op = req->get_op();
 	this->path = req->get_path();

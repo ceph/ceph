@@ -88,6 +88,8 @@ Message *mpi_recv(int tag)
 {
   MPI_Status status;
   
+  dout(10) << "mpi_recv waiting for message on tag " << tag << endl;
+
   // get message size
   ASSERT(MPI_Probe(MPI_ANY_SOURCE, 
 				   tag,
@@ -110,6 +112,8 @@ Message *mpi_recv(int tag)
 	dout(10) << "mpi_recv got short recv " << status.count << " bytes" << endl;
 	return 0;
   }
+
+  dout(10) << "mpi_recv got " << status.count << " byte message tag " << status.MPI_TAG << endl;
   
   // unmarshall message
   crope r(buf, status.count);
@@ -132,6 +136,8 @@ int mpi_send(Message *m, int rank, int tag)
   int size = r.length();
   const char *buf = r.c_str();
   
+  dout(10) << "mpi_sending " << size << " byte message to rank " << rank << " tag " << tag << endl;
+
   // sending
   ASSERT(MPI_Send((void*)buf,
 				  size,
@@ -146,24 +152,24 @@ int mpi_send(Message *m, int rank, int tag)
 // get the tag for this thread
 static int get_thread_tag()
 {
-    int tag = (int)pthread_getspecific(tag_key);
-
-    if (tag == 0) {
+  int tag = (int)pthread_getspecific(tag_key);
+  
+  if (tag == 0) {
 	// first time this thread has performed MPI messaging
-
+	
 	if (pthread_mutex_lock(&mutex) < 0)
-	    SYSERROR();
-
+	  SYSERROR();
+	
 	tag = ++nthreads;
-
+	
 	if (pthread_mutex_unlock(&mutex) < 0)
-	    SYSERROR();
-
+	  SYSERROR();
+	
 	if (pthread_setspecific(tag_key, (void*)tag) < 0)
-	    SYSERROR();
-    }
-
-    return tag;
+	  SYSERROR();
+  }
+  
+  return tag;
 }
 
 
@@ -323,7 +329,7 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 
   int rank = MPI_DEST_TO_RANK(dest, mpi_world);
 
-  mpi_send(m, rank, 0);    // tag 0 for regular messages
+  mpi_send(m, rank, m->get_pcid());
 }
 
 Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
@@ -336,8 +342,9 @@ Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
   
   int rank = MPI_DEST_TO_RANK(dest, mpi_world);
   
-  // get a tag
+  // get a tag to uniquely identify this procedure call
   int my_tag = get_thread_tag();
+  m->set_pcid(my_tag);
 
   mpi_send(m, dest, TAG_UNSOLICITED);
 
