@@ -1,14 +1,18 @@
 
 # mpicxx must be on your path; on Szilard, this means that
 # /usr/local/mpich2-1.0.1/bin must be on your path.
-CC = mpicxx
+
+# For now, use g++ most of the time.
+# When compiling MPI stuff, specify myfile.cc instead of myfile.o so that ${MPICC} is 
+# invoked instead of the generic .o rule (or it'll use g++).
+# This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
+# behave just fine...  change ${CC} back to mpicxx if you get paranoid.
+CC = g++
 MPICC = mpicxx
 CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread
 
-PMDS_OBJS= \
-	osd/OSD.o\
-	msg/Messenger.o\
+MDS_OBJS= \
 	mds/MDBalancer.o\
 	mds/MDS.o\
 	mds/CDentry.o\
@@ -19,14 +23,19 @@ PMDS_OBJS= \
 	mds/LogStream.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o\
-	mds/MDCluster.o\
-	fakeclient/FakeClient.o\
+	mds/MDCluster.o
+
+COMMON_OBJS= \
+	msg/Messenger.o\
+	msg/error.o\
 	Logger.o\
 	clock.o\
 	config.o
 
-TEST_TARGETS = test mpitest mttest
+TEST_TARGETS = fakemds mpitest mttest
 TARGETS = import singleclient
+
+SRCS=*.cc */*.cc
 
 all: depend ${TARGETS}
 
@@ -34,32 +43,31 @@ test: depend ${TEST_TARGETS}
 
 
 
-import: pmds.o msg/FakeMessenger.o import.cc
+import: mds/mds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-singleclient: pmds.o fakesingleclient.o client/Client.o \
-msg/CheesySerializer.o msg/FakeMessenger.o 
+singleclient: mds/mds.o osd/OSD.o fakesingleclient.o client/Client.o \
+msg/CheesySerializer.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o \
-msg/FakeMessenger.o 
+msg/FakeMessenger.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-test: test.cc msg/FakeMessenger.o pmds.o
+fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/mds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpitest: mpitest.o msg/MPIMessenger.cc pmds.o
+mpitest: mpitest.cc msg/MPIMessenger.o mds/mds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
 	${MPICC} ${CFLAGS} $^ -o $@
 
-mttest: test/mttest.o msg/MTMessenger.o msg/error.o msg/Messenger.o \
-config.o
+mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
 clean:
 	rm -f *.o */*.o ${TARGETS}
 
-pmds.o: ${PMDS_OBJS}
-	ld -i -o pmds.o $^
+mds/mds.o: ${MDS_OBJS}
+	ld -i -o mds/mds.o $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@

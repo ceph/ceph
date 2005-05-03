@@ -68,8 +68,11 @@ int main(int argc, char **argv) {
 	client[i]->issue_request();
   }
 
-  // loop
-  mpimessenger_loop();
+  // start message loop
+  mpimessenger_start();
+
+  // wait for it to finish
+  mpimessenger_wait();
 
   // 
   cout << "---- check ----" << endl;
@@ -109,8 +112,6 @@ int main(int argc, char **argv) {
   }
   delete mdc;
   
-  mpimessenger_shutdown();
-
   cout << "done." << endl;
   return 0;
 }

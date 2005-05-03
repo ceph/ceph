@@ -13,26 +13,29 @@
 
 class MPIMessenger : public Messenger {
  protected:
-  int whoami;
-
-  class Logger *logger;
+  msg_addr_t myaddr;     // my address
+  //class Logger *logger;  // for logging
   
  public:
-  MPIMessenger(long me);
-  //~MPIMessenger();
+  MPIMessenger(msg_addr_t myaddr);
+  ~MPIMessenger();
 
-  virtual int init(Dispatcher *dis);
+  // init, shutdown MPI and associated event loop thread.
   virtual int shutdown();
-  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
-  virtual int wait_message(time_t seconds);
-  virtual void done();
 
-  virtual int loop();
+  // message interface
+  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0, int fromport=0);
 };
 
-extern int mpimessenger_world();
-extern int mpimessenger_init(int& argc, char**& argv);
-extern int mpimessenger_loop();
-extern int mpimessenger_shutdown();
+/**
+ * these are all ONE per process.
+ */
+extern int mpimessenger_world();   // get world size
+extern int mpimessenger_init(int& argc, char**& argv);   // init mpi
+extern int mpimessenger_start();   // start thread
+extern void mpimessenger_stop();    // stop thread.
+extern void mpimessenger_wait();    // wait for thread to finish.
+
 
 #endif

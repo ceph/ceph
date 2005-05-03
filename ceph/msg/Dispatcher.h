@@ -1,7 +1,7 @@
 #ifndef __DISPATCHER_H
 #define __DISPATCHER_H
 
-class Message;
+#include "Message.h"
 
 class Dispatcher {
  public:

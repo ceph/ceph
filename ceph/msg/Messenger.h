@@ -12,52 +12,40 @@ class MDS;
 
 class Messenger {
  protected:
-  Dispatcher     *dispatcher;
-  list<Message*> incoming;
-  MDS            *mymds;
+  Dispatcher     *dispatcher;     // i deliver incoming messages here.
+  list<Message*> incoming;        // incoming queue
 
  public:
-  Messenger() {
-  }
+  /*Messenger() : dispatcher(0) { }
   virtual ~Messenger() {
 	remove_dispatcher();
   }
-  
-  // adminstrative
-  virtual int init(Dispatcher *d) = 0;
-  void set_dispatcher(Dispatcher *d) {
-	dispatcher = d;
-  }
-  Dispatcher *remove_dispatcher() {
-	Dispatcher *t = dispatcher;
-	dispatcher = 0;
-	return t;
-  }
-  virtual int shutdown() = 0;
-  virtual void done() {}
-
-  // message interface
-  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
-  virtual int wait_message(time_t seconds) = 0;
-
-  // misc crap
-  /*
-  virtual int loop() {
-	while (1) {
-	  if (wait_message(0) < 0)
-		break;
-	  Message *m = get_message();
-	  if (!m) continue;
-	  dispatcher->dispatch(m);
-	}
-	return 0;
-  }
   */
+  
+  // administrative
+  void set_dispatcher(Dispatcher *d) { dispatcher = d; }
+  virtual int shutdown() = 0;
 
-  // incoming queue
+  // -- message interface
+  // send message
+  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
+
+  // make a procedure call
+  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0) { };
+
+  // wait (block) for a message, or timeout.  Don't return message yet.
+  //virtual int wait_message(time_t seconds) = 0;
+
+  // wait (block) for a request from anyone
+  //virtual Message *recv() = 0
+
+  
+
+
+  // -- incoming queue --
+  // (that nothing uses)
   Message *get_message() {
 	if (incoming.size() > 0) {
-	  //cout << incoming.size() << " messages, taking first" << endl;
 	  Message *m = incoming.front();
 	  incoming.pop_front();
 	  return m;

@@ -136,12 +136,6 @@ int fakemessenger_do_loop()
 
 // class
 
-int FakeMessenger::loop() 
-{
-  // this only better be called once or we'll overflow the stack or something dumb.
-  fakemessenger_do_loop();
-}
-
 FakeMessenger::FakeMessenger(long me)
 {
   whoami = me;
@@ -170,16 +164,9 @@ FakeMessenger::~FakeMessenger()
 }
 
 
-int FakeMessenger::init(Dispatcher *d)
-{
-  set_dispatcher(d);
-}
-
 int FakeMessenger::shutdown()
 {
   directory.erase(whoami);
-
-  remove_dispatcher();
 }
 
 
@@ -226,7 +213,4 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   lock.Unlock();
 }
 
-int FakeMessenger::wait_message(time_t seconds)
-{
-  return incoming.size();
-}
+

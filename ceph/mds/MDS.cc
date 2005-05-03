@@ -107,6 +107,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   // alloc
   idalloc = new IdAllocator(this);
+
 }
 
 MDS::~MDS() {
@@ -126,7 +127,7 @@ MDS::~MDS() {
 int MDS::init()
 {
   // init messenger
-  messenger->init(this);
+  messenger->set_dispatcher(this);
 }
 
 
@@ -173,7 +174,7 @@ void MDS::handle_shutdown_finish(Message *m)
   
   if (did_shut_down.size() == mdcluster->get_num_mds()) {
 	shutting_down = false;
-	messenger->done();
+	messenger->shutdown();
   }
 
   // done

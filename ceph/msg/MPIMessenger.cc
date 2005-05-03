@@ -1,5 +1,6 @@
 
 #include "include/config.h"
+#include "include/error.h"
 
 #include "MPIMessenger.h"
 #include "Message.h"
@@ -11,34 +12,51 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include <unistd.h>
+#include <mpi.h>
 
-#include "mpi.h"
+/*
+ * We make a directory, so that we can have multiple Messengers in the
+ * same process (rank).  This is useful for benchmarking and creating lots of 
+ * simulated clients, e.g.
+ */
 
-#include "include/LogType.h"
-#include "include/Logger.h"
-
-LogType mpimsg_logtype;
-hash_map<int, Logger*>        loggers;
 hash_map<int, MPIMessenger*>  directory;
 
-hash_map<int, Message*>       incoming;
-
-int mpi_world_size;
+/* this process */
+int mpi_world;
 int mpi_rank;
+bool mpi_done = false;     // set this flag to stop the event loop
 
-bool mpi_done = false;
 
+// the key used to fetch the tag for the current thread.
+pthread_key_t tag_key;
+pthread_t thread_id = 0;   // thread id of the event loop.  init value == nobody
 
+// our lock for any common data; it's okay to have only the one global mutex
+// because our common data isn't a whole lot.
+static pthread_mutex_t mutex;
+
+// the number of distinct threads we've seen so far; used to generate
+// a unique tag for each thread.
+static int nthreads;
+
+#define TAG_UNSOLICITED 0
+
+// debug
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world_size << "] "
+#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world << "] "
 
+
+
+/*****
+ * MPI global methods for process-wide setup, shutdown.
+ */
 
 int mpimessenger_init(int& argc, char**& argv)
 {
-  //MPI::Init(argc, argv);
   MPI_Init(&argc, &argv);
-
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_world_size);
+  
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_world);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
   char hostname[100];
@@ -47,74 +65,129 @@ int mpimessenger_init(int& argc, char**& argv)
 
   dout(1) << "init: i am " << hostname << " pid " << pid << endl;
   
-  assert(mpi_world_size > g_conf.num_osd+g_conf.num_mds);
+  assert(mpi_world > g_conf.num_osd+g_conf.num_mds);
 
   return mpi_rank;
 }
 
 int mpimessenger_world()
 {
-  return mpi_world_size;
+  return mpi_world;
+}
+
+/***
+ * internal send/recv
+ */
+
+Message *mpi_recv(int tag)
+{
+  MPI_Status status;
+  
+  // get message size
+  ASSERT(MPI_Probe(MPI_ANY_SOURCE, 
+				   tag,
+				   MPI_COMM_WORLD,
+				   &status) == MPI_SUCCESS);
+  
+  // get message; there may be multiple messages on the queue, we
+  // need to be sure to read the one which corresponds to size
+  // obtained above.
+  char *buf = new char[status.count];
+  ASSERT(MPI_Recv(buf,
+				  status.count,
+				  MPI_CHAR, 
+				  status.MPI_SOURCE,
+				  status.MPI_TAG,
+				  MPI_COMM_WORLD,
+				  &status) == MPI_SUCCESS);
+
+  if (status.count < 4) {
+	dout(10) << "mpi_recv got short recv " << status.count << " bytes" << endl;
+	return 0;
+  }
+  
+  // unmarshall message
+  crope r(buf, status.count);
+  delete[] buf;
+  Message *m = decode_message(r);
+  
+  return m;
+}
+
+int mpi_send(Message *m, int rank, int tag)
+{
+  if (rank == mpi_rank) {      
+	dout(3) << "local delivery not implemented" << endl;
+	assert(0);
+  } 
+
+  // marshall
+  crope r;
+  m->encode(r);
+  int size = r.length();
+  const char *buf = r.c_str();
+  
+  // sending
+  ASSERT(MPI_Send((void*)buf,
+				  size,
+				  MPI_CHAR,
+				  rank,
+				  tag,
+				  MPI_COMM_WORLD) == MPI_SUCCESS);
 }
 
 
-int mpimessenger_loop()
+
+// get the tag for this thread
+static int get_thread_tag()
+{
+    int tag = (int)pthread_getspecific(tag_key);
+
+    if (tag == 0) {
+	// first time this thread has performed MPI messaging
+
+	if (pthread_mutex_lock(&mutex) < 0)
+	    SYSERROR();
+
+	tag = ++nthreads;
+
+	if (pthread_mutex_unlock(&mutex) < 0)
+	    SYSERROR();
+
+	if (pthread_setspecific(tag_key, (void*)tag) < 0)
+	    SYSERROR();
+    }
+
+    return tag;
+}
+
+
+
+
+// recv event loop, for unsolicited messages.
+
+void* mpimessenger_loop(void*)
 {
   while (!mpi_done) {
 	// check mpi
-	dout(12) << "waiting for message" << endl;
-
-	// get size
-	//MPI::Status status;
-	MPI_Status status;
-	int msize = 0;
-	//MPI::COMM_WORLD.Recv(&msize, 
-	MPI_Recv(&msize, 
-			 1,
-			 MPI_INT, 
-			 MPI_ANY_SOURCE, 
-			 MPI_ANY_TAG, 
-			 MPI_COMM_WORLD,
-			 &status); // receives greeting from each process
-
-	if (msize == -1) {
-	  dout(1) << "got -1 terminate signal" << endl;
-	  mpi_done = true;
-	  break;
-	}
-
-	int tag = status.MPI_TAG;
-	int source = status.MPI_SOURCE;
-	dout(12) << "incoming size " << msize << " tag " << tag << " from rank " << source << endl;
+	dout(12) << "waiting for (unsolicited) messages" << endl;
 
 	// get message
-	char *buf = new char[msize];
-	//MPI::COMM_WORLD.Recv(buf, 
-	MPI_Recv(buf,
-			 msize,
-			 MPI_CHAR, 
-			 status.MPI_SOURCE,
-			 tag,
-			 MPI_COMM_WORLD,
-			 &status); // receives greeting from each process
-
-	crope r(buf, msize);
-	delete[] buf;
+	Message *m = mpi_recv(TAG_UNSOLICITED);
+	if (!m) continue;  // no message?
 	
-	// decode message
-	Message *m = decode_message(r);
-
-	if (directory.count(tag)) {
-	  Messenger *who = directory[ tag ];
-
-	  dout(3) << "---- do_loop dispatching '" << m->get_type_name() << 
+	int dest = m->get_dest();
+	if (directory.count(dest)) {
+	  Messenger *who = directory[ dest ];
+	  
+	  dout(3) << "---- mpimessenger_loop dispatching '" << m->get_type_name() << 
 		"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			  << endl;
 	  
 	  who->dispatch(m);
 	} else {
-	  dout (1) << "---- i don't know who " << tag << " is." << endl;
+	  dout (1) << "---- i don't know who " << dest << " is." << endl;
 	  break;
 	}
   }
@@ -123,39 +196,64 @@ int mpimessenger_loop()
   MPI_Barrier (MPI_COMM_WORLD);
 }
 
-int mpimessenger_shutdown()
-{
-  dout(1) << "MPI_Finalize" << endl;
-  MPI_Finalize();
-}
 
+// start/stop mpi receiver thread (for unsolicited messages)
 
-void MPIMessenger::done() 
+int mpimessenger_start()
 {
-  dout(1) << "done()" << endl;
-  mpi_done = true;
+  dout(1) << "mpimessenger_start starting thread" << endl;
   
-  // tell everyone
-  for (int i=0; i<mpi_world_size; i++) {
-	if (i == mpi_rank) continue;
-	int m = -1;
-	
-	dout(12) << "done() telling rank " << i << endl;
-	MPI_Send(&m,
-			 1,
-			 MPI_INT,
-			 i,
-			 0, 
-			 MPI_COMM_WORLD);
-  }
+  // start a thread
+  pthread_create(&thread_id, 
+				 NULL, 
+				 mpimessenger_loop, 
+				 0);
 }
 
-MPIMessenger::MPIMessenger(long me)
+void mpimessenger_stop()
 {
-  whoami = me;
-  directory[ me ] = this;
+  dout(1) << "mpimessenger_stop stopping thread" << endl;
+
+  // set finish flag
+  mpi_done = true;
+
+  // wake up the event loop with a bad "message"
+  char stop = 0;               // a byte will do
+  ASSERT(MPI_Send(&stop,
+				  1,
+				  MPI_CHAR,
+				  mpi_rank,
+				  TAG_UNSOLICITED,
+				  MPI_COMM_WORLD) == MPI_SUCCESS);
+  
+  // wait for thread to stop
+  mpimessenger_wait();
+
+  dout(1) << "mpimessenger_stop stopped" << endl;
+}
+
+void mpimessenger_wait()
+{
+  void *returnval;
+  pthread_join(thread_id, &returnval);
+}
+
+
+
+/***********
+ * MPIMessenger implementation
+ */
+
+MPIMessenger::MPIMessenger(long myaddr)// : Messenger()
+{
+  // my address
+  this->myaddr = myaddr;
+
+  // register myself in the messenger directory
+  directory[myaddr] = this;
 
   // logger
+  /*
   string name;
   name = "m.";
   name += MSG_ADDR_TYPE(whoami);
@@ -167,68 +265,65 @@ MPIMessenger::MPIMessenger(long me)
 
   logger = new Logger(name, (LogType*)&mpimsg_logtype);
   loggers[ whoami ] = logger;
+  */
 }
 
-
-int MPIMessenger::init(Dispatcher *d)
+MPIMessenger::~MPIMessenger()
 {
-  set_dispatcher(d);
+  //delete logger;
 }
+
 
 int MPIMessenger::shutdown()
 {
-  directory.erase(whoami);
-  remove_dispatcher();
+  // remove me from the directory
+  directory.erase(myaddr);
+
+  // last one?
+  if (directory.empty()) {
+	pthread_t whoami = pthread_self();
+	if (whoami == thread_id) {
+	  // i am the event loop thread, just set flag!
+	  mpi_done = true;
+	} else {
+	  // i am a different thread, tell the event loop to stop.
+	  mpimessenger_stop();
+	}
+  }
 }
+
+
+
+/***
+ * public messaging interface
+ */
 
 int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
   // set envelope
-  m->set_source(whoami, fromport);
+  m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
 
-  // send!
-  int trank = MPI_DEST_TO_RANK(dest,mpi_world_size);
-  crope r;
-  m->encode(r);
-  int size = r.length();
+  int rank = MPI_DEST_TO_RANK(dest, mpi_world);
 
-  if (trank == mpi_rank) {	
-
-	dout(3) << "queueing message locally for (tag) " << dest << " at my rank " << trank << " size " << size << endl;
-	//incoming.insert(dest, m);
-	// no implemented
-	assert(0);
-
-  } 
-
-  dout(10) << "sending message via MPI for (tag) " << dest << " to rank " << trank << " size " << size << endl;
-  
-  //MPI::COMM_WORLD.Send(&r,
-  MPI_Send(&size,
-		   1,
-		   MPI_INT,
-		   trank,
-		   dest, 
-		   MPI_COMM_WORLD);
-  
-  char *buf = (char*)r.c_str();
-  //MPI::COMM_WORLD.Send(buf,
-  MPI_Send(buf,
-		   size,
-		   MPI_CHAR,
-		   trank,
-		   dest,
-		   MPI_COMM_WORLD);
+  mpi_send(m, rank, 0);    // tag 0 for regular messages
 }
 
-int MPIMessenger::wait_message(time_t seconds)
+Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port, int fromport)
 {
+  // set envelope
+  m->set_source(myaddr, fromport);
+  m->set_dest(dest, port);
+  
+  int rank = MPI_DEST_TO_RANK(dest, mpi_world);
+  
+  // get a tag
+  int my_tag = get_thread_tag();
+
+  mpi_send(m, dest, TAG_UNSOLICITED);
+
+  return mpi_recv(my_tag);
 }
 
-int MPIMessenger::loop() 
-{
-  // this only better be called once or we'll overflow the stack or something dumb.
-  mpimessenger_loop();
-}
+
 
