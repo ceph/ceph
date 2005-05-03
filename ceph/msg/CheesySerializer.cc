@@ -10,7 +10,7 @@ using namespace std;
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "serializer: "
 
-#define DEBUGLVL  13    // debug level of output
+#define DEBUGLVL  1    // debug level of output
 
 // ---------
 // incoming messages

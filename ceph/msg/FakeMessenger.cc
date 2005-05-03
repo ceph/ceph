@@ -52,9 +52,7 @@ void *fakemessenger_thread(void *ptr)
 	dout(1) << "thread woke up" << endl;
 	if (shutdown) break;
 
-	lock.Unlock();
-	fakemessenger_do_loop();
-	lock.Lock();
+	fakemessenger_do_loop_2();
   }
   lock.Unlock();
 
@@ -86,6 +84,14 @@ void fakemessenger_stopthread() {
 int fakemessenger_do_loop()
 {
   lock.Lock();
+  fakemessenger_do_loop_2();
+  lock.Unlock();
+}
+
+
+int fakemessenger_do_loop_2()
+{
+  //lock.Lock();
   dout(1) << "do_loop begin." << endl;
 
   while (1) {
@@ -136,7 +142,7 @@ int fakemessenger_do_loop()
   }
 
   dout(1) << "do_loop end (no more messages)." << endl;
-  lock.Unlock();
+  //lock.Unlock();
   return 0;
 }
 
