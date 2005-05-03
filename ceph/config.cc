@@ -20,7 +20,7 @@ md_config_t g_conf = {
 
   client_cache_size: 400,
   client_cache_mid: .5,
-  client_requests: 100,
+  client_requests: 10,
   client_deterministic: false,
   
   log_messages: true,

@@ -4,7 +4,7 @@
 
 #define MSG_PING       1
 
-#define MSG_FINISH     0
+#define MSG_SHUTDOWN   2
 
 #define MSG_OSD_READ         10
 #define MSG_OSD_READREPLY    11

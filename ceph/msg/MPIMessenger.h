@@ -25,7 +25,7 @@ class MPIMessenger : public Messenger {
 
   // message interface
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
-  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+  virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
 };
 
 /**
@@ -36,6 +36,7 @@ extern int mpimessenger_init(int& argc, char**& argv);   // init mpi
 extern int mpimessenger_start();   // start thread
 extern void mpimessenger_stop();    // stop thread.
 extern void mpimessenger_wait();    // wait for thread to finish.
+extern int mpimessenger_shutdown();   // finalize MPI
 
 
 #endif

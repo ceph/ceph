@@ -188,6 +188,7 @@ decode_message(crope& ser)
 
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
+  case MSG_SHUTDOWN:
   case MSG_CLIENT_DONE:
 	m = new MGenericMessage(type);
 	break;

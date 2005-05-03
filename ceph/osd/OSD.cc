@@ -60,6 +60,11 @@ int OSD::shutdown()
 void OSD::dispatch(Message *m) 
 {
   switch (m->get_type()) {
+  
+  case MSG_SHUTDOWN:
+	shutdown();
+	break;
+	
   case MSG_OSD_READ:
 	read((MOSDRead*)m);
 	break;

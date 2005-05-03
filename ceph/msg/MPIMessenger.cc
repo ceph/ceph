@@ -63,11 +63,16 @@ int mpimessenger_init(int& argc, char**& argv)
   gethostname(hostname,100);
   int pid = getpid();
 
-  dout(1) << "init: i am " << hostname << " pid " << pid << endl;
+  dout(12) << "init: i am " << hostname << " pid " << pid << endl;
   
   assert(mpi_world > g_conf.num_osd+g_conf.num_mds);
 
   return mpi_rank;
+}
+
+int mpimessenger_shutdown() 
+{
+  MPI_Finalize();
 }
 
 int mpimessenger_world()
@@ -117,7 +122,7 @@ Message *mpi_recv(int tag)
 int mpi_send(Message *m, int rank, int tag)
 {
   if (rank == mpi_rank) {      
-	dout(3) << "local delivery not implemented" << endl;
+	dout(1) << "local delivery not implemented" << endl;
 	assert(0);
   } 
 
@@ -168,9 +173,11 @@ static int get_thread_tag()
 
 void* mpimessenger_loop(void*)
 {
+  dout(1) << "mpimessenger_loop start" << endl;
+
   while (!mpi_done) {
 	// check mpi
-	dout(12) << "waiting for (unsolicited) messages" << endl;
+	dout(12) << "mpimessenger_loop waiting for (unsolicited) messages" << endl;
 
 	// get message
 	Message *m = mpi_recv(TAG_UNSOLICITED);
@@ -192,8 +199,9 @@ void* mpimessenger_loop(void*)
 	}
   }
 
-  dout(1) << "waiting for all to finish" << endl;
+  dout(5) << "mpimessenger_loop finish, waiting for all to finish" << endl;
   MPI_Barrier (MPI_COMM_WORLD);
+  dout(5) << "mpimessenger_loop everybody done, exiting loop" << endl;
 }
 
 
@@ -201,7 +209,7 @@ void* mpimessenger_loop(void*)
 
 int mpimessenger_start()
 {
-  dout(1) << "mpimessenger_start starting thread" << endl;
+  dout(5) << "mpimessenger_start starting thread" << endl;
   
   // start a thread
   pthread_create(&thread_id, 
@@ -212,7 +220,12 @@ int mpimessenger_start()
 
 void mpimessenger_stop()
 {
-  dout(1) << "mpimessenger_stop stopping thread" << endl;
+  dout(5) << "mpimessenger_stop stopping thread" << endl;
+
+  if (mpi_done) {
+	dout(1) << "mpimessenger_stop called, but already done!" << endl;
+	assert(!mpi_done);
+  }
 
   // set finish flag
   mpi_done = true;
@@ -228,14 +241,13 @@ void mpimessenger_stop()
   
   // wait for thread to stop
   mpimessenger_wait();
-
-  dout(1) << "mpimessenger_stop stopped" << endl;
 }
 
 void mpimessenger_wait()
 {
   void *returnval;
   pthread_join(thread_id, &returnval);
+  dout(10) << "mpimessenger_wait thread finished." << endl;
 }
 
 
@@ -281,12 +293,17 @@ int MPIMessenger::shutdown()
 
   // last one?
   if (directory.empty()) {
+	dout(10) << "last mpimessenger on rank " << mpi_rank << " shut down" << endl;
 	pthread_t whoami = pthread_self();
+
+	dout(15) << "whoami = " << whoami << ", thread = " << thread_id << endl;
 	if (whoami == thread_id) {
 	  // i am the event loop thread, just set flag!
+	  dout(15) << "  set mpi_done=true" << endl;
 	  mpi_done = true;
 	} else {
 	  // i am a different thread, tell the event loop to stop.
+	  dout(15) << "  calling mpimessenger_stop()" << endl;
 	  mpimessenger_stop();
 	}
   }
@@ -309,8 +326,10 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   mpi_send(m, rank, 0);    // tag 0 for regular messages
 }
 
-Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port, int fromport)
+Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
 {
+  int fromport = 0;
+
   // set envelope
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);

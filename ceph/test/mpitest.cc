@@ -68,51 +68,36 @@ int main(int argc, char **argv) {
 	client[i]->issue_request();
   }
 
-  // start message loop
-  mpimessenger_start();
-
-  // wait for it to finish
-  mpimessenger_wait();
+  mpimessenger_start();     // start message loop
+  mpimessenger_wait();      // wait for thread to finish
+  mpimessenger_shutdown();  // shutdown MPI
 
   // 
+  /*
   cout << "---- check ----" << endl;
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
 	mds[i]->mdcache->shutdown_pass();
   }
-  
+  */
+
   // cleanup
-  cout << "cleanup" << endl;
+  //cout << "cleanup" << endl;
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	if (mds[i]->shutdown_final() == 0) {
-	  //cout << "clean shutdown of mds " << i << endl;
-	  delete mds[i];
-	} else {
-	  cout << "problems shutting down mds " << i << endl;
-	}
+	delete mds[i];
   }
   for (int i=0; i<NUMOSD; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
-	if (osd[i]->shutdown() == 0) { 
-	  //cout << "clean shutdown of osd " << i << endl;
-	  delete osd[i];
-	} else {
-	  cout << "problems shutting down osd " << i << endl;
-	}
+	delete osd[i];
   }
   for (int i=0; i<NUMCLIENT; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	if (client[i]->shutdown() == 0) { 
-	  //cout << "clean shutdown of client " << i << endl;
-	  delete client[i];
-	} else {
-	  cout << "problems shutting down client " << i << endl;
-	}
+	delete client[i];
   }
   delete mdc;
   
-  cout << "done." << endl;
+  //cout << "done." << endl;
   return 0;
 }
 
