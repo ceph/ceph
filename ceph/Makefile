@@ -32,8 +32,8 @@ COMMON_OBJS= \
 	clock.o\
 	config.o
 
-TEST_TARGETS = fakemds mpitest mttest
-TARGETS = import singleclient
+TEST_TARGETS = fakemds mpitest fakefuse
+TARGETS = import singleclient mpifuse
 
 SRCS=*.cc */*.cc
 
@@ -70,7 +70,7 @@ fakefuse: fakefuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/Fake
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 clean:
-	rm -f *.o */*.o ${TARGETS}
+	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 mds/mds.o: ${MDS_OBJS}
 	ld -i -o mds/mds.o $^

@@ -20,8 +20,7 @@ md_config_t g_conf = {
 
   client_cache_size: 400,
   client_cache_mid: .5,
-  client_requests: 10,
-  client_deterministic: false,
+  client_use_random_mds:  false,
   
   log_messages: true,
   log_interval: 10.0,
@@ -35,7 +34,7 @@ md_config_t g_conf = {
 
   debug: 10,
 
-  mdcache_size: 500, //MDS_CACHE_SIZE,
+  mdcache_size: 5000, //MDS_CACHE_SIZE,
   mdcache_mid: .8,
 
   mdbal_replicate_threshold: 500,
@@ -44,34 +43,36 @@ md_config_t g_conf = {
   mds_heartbeat_op_interval: 200,
   mds_verify_export_dirauth: true,
 
-  // client ops
-  client_use_random_mds:  false,
+  // fakeclient
+  num_fakeclient: 10,
+  fakeclient_requests: 10,
+  fakeclient_deterministic: false,
 
-  client_op_statfs:     false,
+  fakeclient_op_statfs:     false,
 
-  client_op_stat:     10,
-  client_op_lstat:      false,
-  client_op_utime:    10,   // untested
-  client_op_chmod:    10,
-  client_op_chown:    10,   // untested
+  fakeclient_op_stat:     10,
+  fakeclient_op_lstat:      false,
+  fakeclient_op_utime:    10,   // untested
+  fakeclient_op_chmod:    10,
+  fakeclient_op_chown:    10,   // untested
 
-  client_op_readdir:  10,
-  client_op_mknod:    100,
-  client_op_link:       false,
-  client_op_unlink:   10,
-  client_op_rename:   00,
+  fakeclient_op_readdir:  10,
+  fakeclient_op_mknod:    100,
+  fakeclient_op_link:       false,
+  fakeclient_op_unlink:   10,
+  fakeclient_op_rename:   100,
 
-  client_op_mkdir:    100,
-  client_op_rmdir:    10,
-  client_op_symlink:  10,
+  fakeclient_op_mkdir:    100,
+  fakeclient_op_rmdir:    10,
+  fakeclient_op_symlink:  10,
 
-  client_op_openrd:   10,
-  client_op_openwr:   0,
-  client_op_openwrc:  0,
-  client_op_read:       false,  // osd!
-  client_op_write:      false,  // osd!
-  client_op_truncate:   false,
-  client_op_fsync:      false,
-  client_op_close:    20
+  fakeclient_op_openrd:   10,
+  fakeclient_op_openwr:   0,
+  fakeclient_op_openwrc:  0,
+  fakeclient_op_read:       false,  // osd!
+  fakeclient_op_write:      false,  // osd!
+  fakeclient_op_truncate:   false,
+  fakeclient_op_fsync:      false,
+  fakeclient_op_close:    20
 };
 

@@ -309,10 +309,22 @@ void MDS::dispatch(Message *m)
   }
 
   // balance?
+  /*
   if (whoami == 0 &&
 	  stat_ops >= last_heartbeat + g_conf.mds_heartbeat_op_interval) {
 	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
+  }
+  */
+  if (whoami == 0 &&
+	  stat_ops == 100) {
+	dout(1) << "FORCING EXPORTS" << endl;
+	// 7 to 1
+	CInode *in = mdcache->get_inode(7457);
+	mdcache->export_dir(in->dir,1);
+	// 6 to 2
+	in = mdcache->get_inode(6259);
+	mdcache->export_dir(in->dir,2);
   }
 
   // shut down?
@@ -370,7 +382,7 @@ void MDS::reply_request(MClientRequest *req, int r)
 
 void MDS::handle_client_request(MClientRequest *req)
 {
-  dout(10) << "req " << *req << endl;
+  dout(4) << "req " << *req << endl;
 
   if (is_shutting_down()) {
 	dout(5) << " shutting down, discarding client request." << endl;
@@ -387,6 +399,8 @@ void MDS::handle_client_request(MClientRequest *req)
   // okay, i want
   CInode           *ref = 0;
   vector<CDentry*> trace;      // might be blank, for fh guys
+
+  bool follow_trailing_symlink = false;
 
   // operations on fh's or other non-files
   switch (req->get_op()) {
@@ -428,8 +442,12 @@ void MDS::handle_client_request(MClientRequest *req)
 	
 	Context *ondelay = new C_MDS_RetryMessage(this, req);
 	
+	if (req->get_op() == MDS_OP_LSTAT) {
+	  follow_trailing_symlink = false;
+	}
+
 	// do trace
-	int r = mdcache->path_traverse(refpath, trace,
+	int r = mdcache->path_traverse(refpath, trace, follow_trailing_symlink,
 								   req, ondelay,
 								   MDS_TRAVERSE_FORWARD);
 	
@@ -1255,9 +1273,9 @@ void MDS::handle_client_rename(MClientRequest *req,
   string srcname = refpath.last_bit();
   refpath = refpath.prefixpath(refpath.depth()-1);
 
-  dout(7) << "handle_client_rename src traversing to " << refpath << endl;
+  dout(7) << "handle_client_rename src traversing to srcdir " << refpath << endl;
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(refpath, trace,
+  int r = mdcache->path_traverse(refpath, trace, true,
 								 req, new C_MDS_RetryRequest(this, req, ref),
 								 MDS_TRAVERSE_FORWARD);
   if (r == 2) {
@@ -1348,7 +1366,7 @@ void MDS::handle_client_rename(MClientRequest *req,
   C_MDS_RenameTraverseDst *onfinish = new C_MDS_RenameTraverseDst(this, req, ref, srcdiri, srcdir, srcdn, destpath);
   Context *ondelay = new C_MDS_RetryRequest(this, req, ref);
   
-  mdcache->path_traverse(destpath, onfinish->trace, 
+  mdcache->path_traverse(destpath, onfinish->trace, false,
 						 req, ondelay,
 						 MDS_TRAVERSE_DISCOVER, 
 						 onfinish);
@@ -1487,8 +1505,8 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   
   if (destauth != get_nodeid()) {
 	dout(7) << "rename has remote dest " << destauth << endl;
+	dout(7) << "FOREIGN RENAME" << endl;
 	reply_request(req, -EINVAL);
-	//handle_client_rename_remote(req, srcdiri, srcdn, destdir, destname);
 	return;
   } else {
 	dout(7) << "rename is local" << endl;
@@ -1548,11 +1566,14 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	everybody = true;
   }
 
-  dout(7) << "handle_client_rename_local: srcdn is " << *srcdn << endl;
+  bool srclocal = srcdn->dir->dentry_authority(srcdn->name) == whoami;
+  bool destlocal = destdir->dentry_authority(destname) == whoami;
+
+  dout(7) << "handle_client_rename_local: src local=" << srclocal << " " << *srcdn << endl;
   if (destdn) {
-	dout(7) << "handle_client_rename_local: destdn is " << *destdn << endl;
+	dout(7) << "handle_client_rename_local: dest local=" << destlocal << " " << *destdn << endl;
   } else {
-	dout(7) << "handle_client_rename_local: destdn dne yet" << endl;
+	dout(7) << "handle_client_rename_local: dest local=" << destlocal << " dn dne yet" << endl;
   }
 
   // pick lock ordering
@@ -1561,19 +1582,33 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	if (dosrc) {
 
 	  // src
-	  if (!srcdn->is_xlockedbyme(req) &&
-		  !mdcache->dentry_xlock_start(srcdn, req, ref, everybody))
-		return;  
+	  if (srclocal) {
+		if (!srcdn->is_xlockedbyme(req) &&
+			!mdcache->dentry_xlock_start(srcdn, req, ref, everybody))
+		  return;  
+	  } else {
+		if (!srcdn || srcdn->xlockedby != req) {
+		  mdcache->dentry_xlock_request(srcdn->dir, srcdn->name, req, new C_MDS_RetryRequest(this, req, ref));
+		  return;
+		}
+	  }
 	  dout(7) << "handle_client_rename_local: srcdn is xlock " << *srcdn << endl;
-
+	  
 	} else {
 
-	  // dest
-	  if (!destdn) destdn = destdir->add_dentry(destname);
-	  if (!destdn->is_xlockedbyme(req) &&
-		  !mdcache->dentry_xlock_start(destdn, req, ref, everybody)) {
-		if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
-		return;
+	  if (destlocal) {
+		// dest
+		if (!destdn) destdn = destdir->add_dentry(destname);
+		if (!destdn->is_xlockedbyme(req) &&
+			!mdcache->dentry_xlock_start(destdn, req, ref, everybody)) {
+		  if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
+		  return;
+		}
+	  } else {
+		if (!destdn || destdn->xlockedby != req) {
+		  mdcache->dentry_xlock_request(destdir, destname, req, new C_MDS_RetryRequest(this, req, ref));
+		  return;
+		}
 	  }
 	  dout(7) << "handle_client_rename_local: destdn is xlock " << *destdn << endl;
 
@@ -1589,27 +1624,6 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 }
 
 
-void MDS::handle_client_rename_remote(MClientRequest *req,
-									  CInode *ref,
-									  string& srcpath,
-									  CInode *srcdiri,
-									  CDentry *srcdn,
-									  string& destpath,
-									  CDir *destdir,
-									  CDentry *destdn,
-									  string& destname)
-{
-  dout(7) << "handle_client_rename_remote: srcdn is " << *srcdn << endl;
-  if (destdn) {
-	dout(7) << "handle_client_rename_remote: destdn is " << *destdn << endl;
-  } else {
-	dout(7) << "handle_client_rename_remote: destdn dne yet" << endl;
-  }
-
-  //bool srcremote = !srcdir->is_auth();
-  //bool destremote = !destdir->is_auth();
-
-}
 
 
 

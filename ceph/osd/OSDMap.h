@@ -33,12 +33,7 @@ class OSDCluster {
   }
 
   // cluster state
-  bool is_failed(int osd) {
-	return failed_disks.count(osd) ? true:false;
-  }
-  bool is_migrating(); /* true if we're in the middle of adding/removing drives and in limbo.
-						  data will be migrating, etc.
-					   */
+  bool is_failed(int osd) { return failed_disks.count(osd) ? true:false; }
 
 
   // mapping facilities
@@ -76,17 +71,6 @@ class OSDCluster {
   }
 
   
-  // cluster modification
-  /* we'll need some provision to represent the current
-	 osd cluster layout versus the new pending layout,
-	 whether we're in a limbo state, etc. */
-  void queue_add_disk_group();      // ...
-  void queue_remove_disk_group();   // ...
-  void start_migration();   // sets migrating=true?
-  void finish_migration();  // ... whatever
-  
-
-
   // serialize, unserialize
   void _rope(crope& r);
   void _unrope(crope& r, int& off);

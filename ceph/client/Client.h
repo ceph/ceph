@@ -54,11 +54,15 @@ class Inode {
   int       ref;      // ref count. 1 for each dentry, fh or dir that links to me.
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
+  string    *symlink; // symlink content, if its a symlink
 
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
 
-  Inode() : ref(0) { }
+  Inode() : ref(0), symlink(0) { }
+  ~Inode() {
+	if (symlink) { delete symlink; symlink = 0; }
+  }
 };
 
 class Dentry : public LRUObject {

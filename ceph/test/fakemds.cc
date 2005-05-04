@@ -25,7 +25,7 @@ __uint64_t ino = 1;
 #include "include/config.h"
 #define NUMMDS g_conf.num_mds
 #define NUMOSD g_conf.num_osd
-#define NUMCLIENT g_conf.num_client
+#define NUMCLIENT g_conf.num_fakeclient
 
 // this parses find output
 int play();
@@ -42,6 +42,8 @@ int main(int argc, char **argv) {
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   
+  // local config settings
+
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
@@ -59,7 +61,7 @@ int main(int argc, char **argv) {
   // create clients
   FakeClient *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	client[i] = new FakeClient(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)), g_conf.client_requests);
+	client[i] = new FakeClient(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)), g_conf.fakeclient_requests);
 	client[i]->init();
   }
   

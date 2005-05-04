@@ -616,10 +616,10 @@ void MDStore::do_fetch_dir_2( int result,
 	  if (dn) {
 		if (dn->get_inode() == 0) {
 		  // negative dentry?
-		  dout(10) << "readdir had NEG dentry " << dname << endl;
+		  dout(12) << "readdir had NEG dentry " << dname << endl;
 		} else {
 		  // had dentry
-		  dout(10) << "readdir had dentry " << dname << endl;
+		  dout(12) << "readdir had dentry " << dname << endl;
 		}
 		continue;
 	  }
@@ -628,7 +628,7 @@ void MDStore::do_fetch_dir_2( int result,
 	  CInode *in = 0;
 	  if (mds->mdcache->have_inode(inode->ino)) {
 		in = mds->mdcache->get_inode(inode->ino);
-		dout(10) << "readdir got (but i already had) " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
+		dout(12) << "readdir got (but i already had) " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	  } else {
 		// inode
 		in = new CInode();
@@ -645,7 +645,7 @@ void MDStore::do_fetch_dir_2( int result,
 
 	  // link
 	  dir->add_dentry( dname, in );
-	  dout(10) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
+	  dout(12) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
   }
   

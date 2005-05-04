@@ -86,6 +86,7 @@ struct inode_t {
 
   // special stuff
   unsigned char hash_seed;  // 0 if not hashed.
+  int nlink;
 };
 
 

@@ -105,6 +105,8 @@ CInode *MDCache::create_inode()
   // assign ino
   in->inode.ino = mds->idalloc->get_id(ID_INO);
 
+  in->inode.nlink = 1;   // FIXME
+
   add_inode(in);  // add
   return in;
 }
@@ -128,7 +130,7 @@ void MDCache::add_inode(CInode *in)
 
 void MDCache::remove_inode(CInode *o) 
 { 
-  dout(10) << "remove_inode " << *o << endl;
+  dout(14) << "remove_inode " << *o << endl;
   if (o->get_parent_dn()) {
 	// FIXME: multiple parents?
 	CDentry *dn = o->get_parent_dn();
@@ -579,6 +581,7 @@ int MDCache::open_root(Context *c)
 	root->inode.size = 0;
 	root->inode.mtime = 0;
 
+	root->inode.nlink = 1;
 	root->state_set(CINODE_STATE_ROOT);
 
 	set_root( root );
@@ -803,14 +806,16 @@ void MDCache::open_remote_dir(CInode *diri,
 }
 
 
-int MDCache::path_traverse(filepath& path, 
+int MDCache::path_traverse(filepath& origpath, 
 						   vector<CDentry*>& trace, 
+						   bool follow_trailing_symlink,
 						   Message *req,
 						   Context *ondelay,
 						   int onfail,
 						   Context *onfinish)   // use this instead of return value, if specified
 {
   int whoami = mds->get_nodeid();
+  set<CInode*> symlinks_resolved;   // keep a list of symlinks we touch to avoid loops
 
   bool noperm = false;
   if (onfail == MDS_TRAVERSE_DISCOVER) noperm = true;
@@ -818,7 +823,7 @@ int MDCache::path_traverse(filepath& path,
   // root
   CInode *cur = get_root();
   if (cur == NULL) {
-	dout(7) << "mds" << whoami << " i don't have root" << endl;
+	dout(7) << "traverse: i don't have root" << endl;
 	open_root(ondelay);
 	if (onfinish) delete onfinish;
 	return 1;
@@ -827,13 +832,15 @@ int MDCache::path_traverse(filepath& path,
   // start trace
   trace.clear();
 
-  string have_clean;
+  // make our own copy, since we'll modify when we hit symlinks
+  filepath path = origpath;  
 
-  for (int depth = 0; depth < path.depth(); depth++) {
-	dout(12) << " path seg " << path[depth] << endl;
+  int depth = 0;
+  while (depth < path.depth()) {
+	dout(12) << "traverse: path seg depth " << depth << " = " << path[depth] << endl;
 	
 	if (!cur->is_dir()) {
-	  dout(7) << *cur << " not a dir " << endl;
+	  dout(7) << "traverse: " << *cur << " not a dir " << endl;
 	  delete ondelay;
 	  if (onfinish) {
 		onfinish->finish(-ENOTDIR);
@@ -851,10 +858,10 @@ int MDCache::path_traverse(filepath& path,
 		// discover dir from/via inode auth
 		assert(!cur->is_auth());
 		if (cur->waiting_for(CINODE_WAIT_DIR)) {
-		  dout(10) << " need dir for " << *cur << ", already doing discover" << endl;
+		  dout(10) << "traverse: need dir for " << *cur << ", already doing discover" << endl;
 		} else {
 		  filepath want = path.postfixpath(depth);
-		  dout(10) << " need dir for " << *cur << ", doing discover, want " << want.get_path() << endl;
+		  dout(10) << "traverse: need dir for " << *cur << ", doing discover, want " << want.get_path() << endl;
 		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
 													 cur->ino(),
 													 want,
@@ -872,13 +879,13 @@ int MDCache::path_traverse(filepath& path,
 	if (cur->dir->is_frozen()) {
 	  // doh!
 	  // FIXME: traverse is allowed?
-	  dout(7) << *cur->dir << " is frozen, waiting" << endl;
+	  dout(7) << "traverse: " << *cur->dir << " is frozen, waiting" << endl;
 	  cur->dir->add_waiter(CDIR_WAIT_UNFREEZE, ondelay);
 	  if (onfinish) delete onfinish;
 	  return 1;
 	}
 	
-	// must read hard data to traverse
+	// must read directory hard data (permissions, x bit) to traverse
 	if (!noperm && !inode_hard_read_try(cur, ondelay)) {
 	  if (onfinish) delete onfinish;
 	  return 1;
@@ -887,12 +894,21 @@ int MDCache::path_traverse(filepath& path,
 	// check permissions?
 	// XXX
 	
+	// ..?
+	if (path[depth] == "..") {
+	  trace.pop_back();
+	  depth++;
+	  cur = cur->get_parent_inode();
+	  dout(10) << "traverse: following .. back to " << *cur << endl;
+	  continue;
+	}
+
 	// dentry
 	CDentry *dn = cur->dir->lookup(path[depth]);
 	if (dn && dn->inode) {
 	  // have it.  locked?
 	  if (!noperm && dn->is_xlockedbyother(req)) {
-		dout(10) << " xlocked dentry at " << *dn << endl;
+		dout(10) << "traverse: xlocked dentry at " << *dn << endl;
 		cur->dir->add_waiter(CDIR_WAIT_DNREAD,
 							 path[depth],
 							 ondelay);
@@ -900,17 +916,49 @@ int MDCache::path_traverse(filepath& path,
 		return 1;
 	  }
 
-	  // keep going.
-	  trace.push_back(dn);
-	  cur = dn->inode;
-	  have_clean += "/";
-	  have_clean += path[depth];
-	  continue;
+	  if (dn->inode->is_symlink() &&
+		  (follow_trailing_symlink || depth < path.depth()-1)) {
+		// symlink, resolve!
+		filepath sym = dn->inode->symlink;
+		dout(10) << "traverse: hit symlink " << *dn->inode << " to " << sym << endl;
+
+		/* wrong:
+		  if (symlinks_resolved.count(dn->inode)) {
+			dout(10) << "already hit this symlink, bailing to avoid a loop" << endl;
+			return -NOENT; // ??
+		  }
+		*/
+
+		// start at root?
+		if (dn->inode->symlink[0] == '/') {
+		  trace.clear();
+		  depth = 0;
+		  path = sym;
+		  continue;
+		}
+
+		// incremental
+		filepath head = path.prefixpath(depth);
+		filepath tail = path.postfixpath(depth+1);
+		dout(10) << "traverse: path head = " << head << endl;
+		dout(10) << "traverse: path tail = " << tail << endl;
+		path = head;
+		path.append(sym);
+		path.append(tail);
+		dout(10) << "traverse: modified path now " << path << " depth " << depth << endl;
+		continue;		
+	  } else {
+		// keep going.
+		trace.push_back(dn);
+		cur = dn->inode;
+		depth++;
+		continue;
+	  }
 	}
 	
 	// don't have it.
 	int dauth = cur->dir->dentry_authority( path[depth] );
-	dout(12) << " miss on dentry " << path[depth] << " dauth is " << dauth << endl;
+	dout(12) << "traverse: miss on dentry " << path[depth] << " dauth " << dauth << " in " << *cur->dir << endl;
 	
 
 	if (dauth == whoami) {
@@ -930,7 +978,7 @@ int MDCache::path_traverse(filepath& path,
 		//  return -1;
 		
 		// directory isn't complete; reload
-		dout(7) << " incomplete dir contents for " << *cur << ", fetching" << endl;
+		dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << endl;
 		lru->lru_touch(cur);  // touch readdiree
 		mds->mdstore->fetch_dir(cur->dir, ondelay);
 		
@@ -948,9 +996,9 @@ int MDCache::path_traverse(filepath& path,
 
 		filepath want = path.postfixpath(depth);
 		if (cur->dir->waiting_for(CDIR_WAIT_DENTRY, path[depth])) {
-		  dout(7) << " already waiting for discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
+		  dout(7) << "traverse: already waiting for discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
 		} else {
-		  dout(7) << " discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
+		  dout(7) << "traverse: discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
 		  
 		  lru->lru_touch(cur);  // touch discoveree
 		
@@ -975,7 +1023,7 @@ int MDCache::path_traverse(filepath& path,
 	  } 
 	  if (onfail == MDS_TRAVERSE_FORWARD) {
 		// forward
-		dout(7) << " not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
+		dout(7) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
 		mds->messenger->send_message(req,
 									 MSG_ADDR_MDS(dauth), req->get_dest_port(),
 									 req->get_dest_port());
@@ -1102,8 +1150,8 @@ void MDCache::request_cleanup(Message *req)
   assert(active_requests.count(req) == 1);
 
   // leftover xlocks?
-  if (active_request_xlocks.count(req)) {
-	set<CDentry*> dns = active_request_xlocks[req];
+  if (active_requests[req].xlocks.size()) {
+	set<CDentry*> dns = active_requests[req].xlocks;
 
 	for (set<CDentry*>::iterator it = dns.begin();
 		 it != dns.end();
@@ -1123,7 +1171,7 @@ void MDCache::request_cleanup(Message *req)
 	  }
 	}
 	
-	active_request_xlocks.erase(req);
+	active_requests[req].xlocks.clear();
   }
 
   // unpin paths
@@ -2034,13 +2082,15 @@ void MDCache::handle_rename_notify(MRenameNotify*m)
 
 	dout(7) << "handle_rename_notify renaming " << *srcdn << " to " << *destdn << endl;
 	
-	rename_file(srcdn, destdn);
+	if (in) {
+	  rename_file(srcdn, destdn);
+	}
 	
 	// remove src dentry
 	srcdn->dir->remove_dentry(srcdn);
 	
 	// update imports/exports?
-	if (in->is_dir() && in->dir) 
+	if (in && in->is_dir() && in->dir) 
 	  fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 	
 	srcdir->take_waiting(CDIR_WAIT_ANY, m->get_srcname(), finished);
@@ -3483,7 +3533,7 @@ bool MDCache::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref, bool all_
 	return false;
   } else {
 	dn->lockstate = DN_LOCK_XLOCK;
-	active_request_xlocks[dn->xlockedby].insert(dn);
+	active_requests[dn->xlockedby].xlocks.insert(dn);
 	return true;
   }
 }
@@ -3492,8 +3542,8 @@ void MDCache::dentry_xlock_finish(CDentry *dn, bool quiet)
 {
   dout(7) << "dentry_xlock_finish on " << *dn << endl;
   
-  assert(active_request_xlocks[dn->xlockedby].count(dn) == 1);
-  active_request_xlocks[dn->xlockedby].erase(dn);
+  assert(active_requests[dn->xlockedby].xlocks.count(dn) == 1);
+  active_requests[dn->xlockedby].xlocks.erase(dn);
 
   dn->xlockedby = 0;
   dn->lockstate = DN_LOCK_SYNC;
@@ -3516,6 +3566,66 @@ void MDCache::dentry_xlock_finish(CDentry *dn, bool quiet)
   
   // unpin dir
   dn->dir->auth_unpin();
+}
+
+/*
+ * onfinish->finish() will be called with 
+ * 0 on successful xlock,
+ * -1 on failure
+ */
+
+class C_MDC_XlockRequest : public Context {
+  MDCache *mdc;
+  CDir *dir;
+  string dname;
+  Message *req;
+  Context *finisher;
+public:
+  C_MDC_XlockRequest(MDCache *mdc, 
+					 CDir *dir, string& dname, 
+					 Message *req,
+					 Context *finisher) {
+	this->mdc = mdc;
+	this->dir = dir;
+	this->dname = dname;
+	this->req = req;
+	this->finisher = finisher;
+  }
+
+  void finish(int r) {
+	if (r == 0) {
+	  CDentry *dn = dir->lookup(dname);
+	  if (dn && dn->xlockedby == 0) {
+		// success
+		dn->xlockedby = req;   // our request was the winner
+
+		// remember!
+		mdc->active_requests[req].foreign_xlocks.insert(dn);
+		return;
+	  }		
+	}
+
+	// retry request (or whatever)
+	finisher->finish(0);
+  }
+};
+
+void MDCache::dentry_xlock_request(CDir *dir, string& dname, Message *req, Context *onfinish)
+{
+  dout(10) << "dentry_xlock_request on dn " << dname << " in " << *dir << endl; 
+  // send request
+  int dauth = dir->dentry_authority(dname);
+  MLock *m = new MLock(LOCK_AC_REQXLOCK, dauth);
+  m->set_dn(dir->ino(), dname);
+  mds->messenger->send_message(m,
+							   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
+							   MDS_PORT_CACHE);
+  
+  // add waiter
+  dir->add_waiter(CDIR_WAIT_DNREQXLOCK, dname, 
+				  new C_MDC_XlockRequest(this, 
+										 dir, dname, req,
+										 onfinish));
 }
 
 
@@ -3542,32 +3652,58 @@ void MDCache::handle_lock_dn(MLock *m)
 			 dir->is_proxy());
 	  
 	  if (dir->is_proxy()) {
-		// fw
+
 		assert(dauth >= 0);
 		dout(7) << "handle_lock_dn " << m << " " << m->get_ino() << " dname " << dname << " from " << from << ": proxy, fw to " << dauth << endl;
-		mds->messenger->send_message(m,
-									 MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
-									 MDS_PORT_CACHE);
+
+		// fw
+		if (active_requests.count(m)) {
+		  // xlock requests are requests, use request_* functions!
+		  assert(m->get_action() == LOCK_AC_REQXLOCK ||
+				 m->get_action() == LOCK_AC_REQXLOCKC);
+		  request_forward(m, dauth);
+		} else {
+		  // not an xlock req (or we just didn't register the request yet)
+		  mds->messenger->send_message(m,
+									   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		}
 		return;
 	  }
 	  
 	  dn = dir->lookup(dname);
+	  assert(dn);
 	}
 
 	// except with.. an xlock request?
 	if (!dn) {
-	  assert(m->get_action() == LOCK_AC_REQXLOCK);
-	  // send nak
-	  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << " dne, nak" << endl;
-	  MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
-	  reply->set_dn(dir->ino(), dname);
-	  mds->messenger->send_message(reply,
-								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
-								   MDS_PORT_CACHE);
-	  delete m;
-	  return;
+	  switch (m->get_action()) {
+
+	  case LOCK_AC_REQXLOCK:
+		// send nak
+		{
+		  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << " dne, nak" << endl;
+		  MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
+		  reply->set_dn(dir->ino(), dname);
+		  mds->messenger->send_message(reply,
+									   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+									   MDS_PORT_CACHE);
+		}
+		 
+		// finish request (if we got that far)
+		if (active_requests.count(m)) request_finish(m);
+
+		delete m;
+		return;
+
+	  case LOCK_AC_REQXLOCKC:
+		dout(7) << "handle_lock_dn reqxlockc on " << dname << " in " << *dir << " dne (yet!)" << endl;
+		break;
+
+	  default:
+		assert(0);
+	  }
 	}
-	assert(dn);
   } else {
 	// replica
 	if (dir) dn = dir->lookup(dname);
@@ -3579,7 +3715,7 @@ void MDCache::handle_lock_dn(MLock *m)
 		
 		vector<CDentry*> trace;
 		filepath path = m->get_path();
-		int r = path_traverse(path, trace, 
+		int r = path_traverse(path, trace, true,
 							  m, new C_MDS_RetryMessage(mds,m), 
 							  MDS_TRAVERSE_DISCOVER);
 		assert(r>0);
@@ -3602,7 +3738,11 @@ void MDCache::handle_lock_dn(MLock *m)
 	}
   }
 
-  dout(7) << "handle_lock_dn a=" << m->get_action() << " from " << from << " " << *dn << endl;
+  if (dn) {
+	dout(7) << "handle_lock_dn a=" << m->get_action() << " from " << from << " " << *dn << endl;
+  } else {
+	dout(7) << "handle_lock_dn a=" << m->get_action() << " from " << from << " " << dname << " in " << *dir << endl;
+  }
   
   switch (m->get_action()) {
 	// -- replica --
@@ -3622,7 +3762,8 @@ void MDCache::handle_lock_dn(MLock *m)
 	  return;
 	} else {
 	  dn->lockstate = DN_LOCK_XLOCK;
-	  
+	  dn->xlockedby = 0;
+
 	  // ack now
 	  MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
 	  reply->set_dn(diri->ino(), dname);
@@ -3649,6 +3790,17 @@ void MDCache::handle_lock_dn(MLock *m)
 	dir->finish_waiting(CDIR_WAIT_DNREAD, dname);   // will this happen either?  YES: if a rename lock backs out
 	break;
 
+  case LOCK_AC_REQXLOCKACK:
+  case LOCK_AC_REQXLOCKNAK:
+	{
+	  list<Context*> finished;
+	  dir->take_waiting(CDIR_WAIT_DNREQXLOCK, m->get_dn(), finished);
+	  finish_contexts(finished, 
+					  (m->get_action() == LOCK_AC_REQXLOCKACK) ? 0:-1);
+	}
+	break;
+
+
 	// -- auth --
   case LOCK_AC_LOCKACK:
   case LOCK_AC_LOCKNAK:
@@ -3657,13 +3809,18 @@ void MDCache::handle_lock_dn(MLock *m)
 	if (dn->gather_set.size() == 0) {
 	  dout(7) << "handle_lock_dn finish gather, now xlock on " << *dn << endl;
 	  dn->lockstate = DN_LOCK_XLOCK;
-	  active_request_xlocks[dn->xlockedby].insert(dn);
+	  active_requests[dn->xlockedby].xlocks.insert(dn);
 	  dir->finish_waiting(CDIR_WAIT_DNLOCK, dname);
 	}
 	break;
 
   case LOCK_AC_REQXLOCK:
-	dout(7) << "handle_lock_dn reqxlock on " << *dn << endl;
+  case LOCK_AC_REQXLOCKC:
+	if (dn) {
+	  dout(7) << "handle_lock_dn reqxlock on " << *dn << endl;
+	} else {
+	  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << endl;	  
+	}
 	
 	// start request?
 	if (!active_requests.count(m)) {
@@ -3673,9 +3830,17 @@ void MDCache::handle_lock_dn(MLock *m)
 	}
 	
 	// try to xlock!
-	if (!dentry_xlock_start(dn, m, dir->inode, true)) 
+	if (!dn) {
+	  assert(m->get_action() == LOCK_AC_REQXLOCKC);
+	  dn = dir->add_dentry(dname);
+	}
+
+	if (!dentry_xlock_start(dn, m, dir->inode, true)) {
+	  // hose null dn if we're waiting on something
+	  if (dn->is_clean() && dn->is_null() && dn->is_sync()) dir->remove_dentry(dn);
 	  return;    // waiting for xlock
-	
+	}
+
 	{
 	  // ACK
 	  MLock *reply = new MLock(LOCK_AC_REQXLOCKACK, mds->get_nodeid());
@@ -4500,7 +4665,7 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
   // must discover it!
   C_MDC_ExportDirDiscover *onfinish = new C_MDC_ExportDirDiscover(this, m);
   filepath fpath(m->get_path());
-  int r = path_traverse(fpath, onfinish->trace, 
+  int r = path_traverse(fpath, onfinish->trace, true,
 						m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
 						MDS_TRAVERSE_DISCOVER,
 						onfinish);  // on completion|error

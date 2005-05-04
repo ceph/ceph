@@ -39,6 +39,7 @@ class CDentry {
   friend class MDCache;
   friend class MDS;
   friend class CInode;
+  friend class C_MDC_XlockRequest;
 
  public:
   // cons

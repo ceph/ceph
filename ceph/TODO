@@ -1,7 +1,7 @@
 
 me, soon:
-- foriegn renames
-- symlinks
+- foreign renames
+/- symlinks
 
 - fix logging model for data safety
  - inodeupdate
@@ -9,21 +9,18 @@ me, soon:
  - dentrylink
  - put path to item in log entry
 
+- readdir
+ - include only lockable inodes
+ - set up waiters for pending xlocks
 
 fully document export process
  - including the whole warning business.. wtf is that about?
 
-
 /- export null dentries
 
-- fix readdir to only include stat info for items i'm allowed to
 
 for deadline:
 - rush stub
-- single thread client bits
-- multithread thinger
-
-
 
 - string table?
 
@@ -36,8 +33,6 @@ thing about:
   - flush logs
 
 - hard links
-
-- symlinks
 
 - do real permissions checks
 

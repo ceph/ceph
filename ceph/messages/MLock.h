@@ -40,8 +40,9 @@
 #define LOCK_AC_REQWRITE     18
 
 #define LOCK_AC_REQXLOCK     20
-#define LOCK_AC_REQXLOCKACK  21
-#define LOCK_AC_REQXLOCKNAK  21
+#define LOCK_AC_REQXLOCKC    21 // create if necessary
+#define LOCK_AC_REQXLOCKACK  22
+#define LOCK_AC_REQXLOCKNAK  23
 
 #define lock_ac_name(x)      
 

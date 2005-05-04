@@ -54,9 +54,16 @@ typedef hash_map<inodeno_t, CInode*> inode_map_t;
 
 typedef const char* pchar;
 
+/** active_request_t
+ * state we track for requests we are currently processing.
+ * mostly information about locks held, so that we can drop them all
+ * the request is finished or forwarded.  see request_*().
+ */
 typedef struct {
   CInode *ref;                                // reference inode
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
+  set< CDentry* >           xlocks;           // xlocks (local)
+  set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
 } active_request_t;
 
 
@@ -92,14 +99,10 @@ class MDCache {
   set<inodeno_t>         stray_export_warnings; // warnings for export dirs i don't have open
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
 
-  // inoproxysets
-  //list<InoProxySet*>      ino_proxy_sets;
 
-
-  // active MDS requests
  public:
+  // active MDS requests
   map<Message*, active_request_t>   active_requests;
-  map<Message*, set<CDentry*> >     active_request_xlocks;
   
 
   friend class MDBalancer;
@@ -168,7 +171,7 @@ class MDCache {
 
  public:
   int open_root(Context *c);
-  int path_traverse(filepath& path, vector<CDentry*>& trace, 
+  int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
 					Message *req, Context *ondelay,
 					int onfail,
 					Context *onfinish=0);
@@ -333,12 +336,15 @@ class MDCache {
   // dirs
   void handle_lock_dir(MLock *m);
 
-  // dentry
+  // dentry locks
   bool dentry_xlock_start(CDentry *dn, 
 						  Message *m, CInode *ref, 
 						  bool allnodes=false);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   void handle_lock_dn(MLock *m);
+  void dentry_xlock_request(CDir *dir, string& dname, 
+							Message *req, Context *onfinish);
+
   
 
   // == crap fns ==

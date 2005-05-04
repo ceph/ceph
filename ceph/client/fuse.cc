@@ -213,6 +213,7 @@ static struct fuse_operations ceph_oper = {
   fsync: ceph_fsync
 };
 
+
 int ceph_fuse_main(Client *c, int argc, char *argv[])
 {
   // init client
@@ -232,7 +233,7 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   //   -> we can watch stdout this way!!
   newargv[newargc++] = "-f";
   
-  // copy rest of cmdline
+  // copy rest of cmdline (hopefully, the mount point!)
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
   
   // go fuse go

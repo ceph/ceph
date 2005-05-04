@@ -1,10 +1,20 @@
 #ifndef __FILEPATH_H
 #define __FILEPATH_H
 
+
+/*
+ * BUG:  /a/b/c is equivalent to a/b/c in dentry-breakdown, but not string.
+ *   -> should it be different?  how?  should this[0] be "", with depth 4?
+ *
+ */
+
+
 #include <iostream>
 #include <string>
-#include <ext/rope>
+#include <vector>
 using namespace std;
+
+#include <ext/rope>
 using namespace __gnu_cxx;
 
 class filepath {
@@ -77,6 +87,11 @@ class filepath {
 	  path += "/";
 	path += s;
   }
+  void append(filepath& a) {
+	for (int i=0; i<a.depth(); i++) 
+	  add_dentry(a[i]);
+  }
+
 
   void clear() {
     path = "";

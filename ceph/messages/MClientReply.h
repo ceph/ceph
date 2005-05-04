@@ -34,6 +34,7 @@ typedef struct {
   inode_t inode;
   set<int> dist;
   string ref_dn;    // referring dentry (blank if root)
+  string symlink;   // symlink content (if symlink)
   bool is_sync;     
 } c_inode_info;
 
@@ -72,7 +73,6 @@ class MClientReply : public Message {
   MClientReply(MClientRequest *req, int result = 0) : 
 	Message(MSG_CLIENT_REPLY) {
 	this->st.pcid = req->get_pcid();    // match up procedure call id!!!
-	cout << "reply pcid is " << this->st.pcid << endl;
 	this->st.tid = req->get_tid();
 	this->st.op = req->get_op();
 	this->path = req->get_path();
@@ -109,6 +109,8 @@ class MClientReply : public Message {
 
 	s.append(ci->ref_dn.c_str());
 	s.append((char)0);
+	s.append(ci->symlink.c_str());
+	s.append((char)0);
 	return s;
   }
   int unrope_info(c_inode_info *ci, crope s) {
@@ -128,7 +130,12 @@ class MClientReply : public Message {
 	}
 
 	ci->ref_dn = s.c_str() + off;
-	return off + ci->ref_dn.length() + 1;
+	off += ci->ref_dn.length() + 1;
+
+	ci->symlink = s.c_str() + off;
+	off += ci->symlink.length() + 1;
+
+	return off;
   }
 
   // serialization
@@ -177,12 +184,21 @@ class MClientReply : public Message {
 	while (in) {
 	  c_inode_info *info = new c_inode_info;
 	  info->inode = in->inode;
+
+	  // symlink content?
+	  if (in->is_symlink()) info->symlink = in->symlink;
+	  
+	  // referring dentry?
 	  CDentry *dn = in->get_parent_dn();
 	  if (dn) info->ref_dn = dn->get_name();
+	  
 	  //info->is_sync = in->is_sync() || in->is_presync();
-	  in->get_dist_spec(info->dist, whoami);
-	  trace.insert(trace.begin(), info);
 
+	  // replicated where?
+	  in->get_dist_spec(info->dist, whoami);
+
+	  // next!
+	  trace.insert(trace.begin(), info);
 	  in = in->get_parent_inode();
 	}
   }

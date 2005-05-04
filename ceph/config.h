@@ -10,8 +10,7 @@ struct md_config_t {
 
   int      client_cache_size;
   float    client_cache_mid;
-  unsigned client_requests;
-  bool     client_deterministic;     // debug flag
+  bool     client_use_random_mds;          // debug flag
 
   bool log_messages;
   float log_interval;
@@ -34,34 +33,37 @@ struct md_config_t {
   int   mds_heartbeat_op_interval;
   bool  mds_verify_export_dirauth;     // debug flag
 
-  bool client_use_random_mds;          // debug flag
+  // fake client
+  int num_fakeclient;
+  unsigned fakeclient_requests;
+  bool     fakeclient_deterministic;     // debug flag
 
-  int client_op_statfs;
+  int fakeclient_op_statfs;
 
-  int client_op_stat;
-  int client_op_lstat;
-  int client_op_utime;
-  int client_op_chmod;
-  int client_op_chown;
+  int fakeclient_op_stat;
+  int fakeclient_op_lstat;
+  int fakeclient_op_utime;
+  int fakeclient_op_chmod;
+  int fakeclient_op_chown;
 
-  int client_op_readdir;
-  int client_op_mknod;
-  int client_op_link;
-  int client_op_unlink;
-  int client_op_rename;
+  int fakeclient_op_readdir;
+  int fakeclient_op_mknod;
+  int fakeclient_op_link;
+  int fakeclient_op_unlink;
+  int fakeclient_op_rename;
 
-  int client_op_mkdir;
-  int client_op_rmdir;
-  int client_op_symlink;
+  int fakeclient_op_mkdir;
+  int fakeclient_op_rmdir;
+  int fakeclient_op_symlink;
 
-  int client_op_openrd;
-  int client_op_openwr;
-  int client_op_openwrc;
-  int client_op_read;
-  int client_op_write;
-  int client_op_truncate;
-  int client_op_fsync;
-  int client_op_close;
+  int fakeclient_op_openrd;
+  int fakeclient_op_openwr;
+  int fakeclient_op_openwrc;
+  int fakeclient_op_read;
+  int fakeclient_op_write;
+  int fakeclient_op_truncate;
+  int fakeclient_op_fsync;
+  int fakeclient_op_close;
 
 };
 
