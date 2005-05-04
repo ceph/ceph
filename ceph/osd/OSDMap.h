@@ -19,18 +19,28 @@
 #define MAX_FILE_SIZE      (FILE_OBJECT_SIZE << OID_BLOCK_BITS)  // 1 PB
 
 
+/** OSDGroup
+ * a group of identical disks added to the OSD cluster
+ */
+class OSDGroup {
+  int         size;     // num disks in this group           (aka num_disks_in_cluster[])
+  int         weight;   // weight (for data migration etc.)  (aka weight_cluster[])
+  vector<int> osds;     // the list of osd addrs
+};
+
+
+/** OSDCluster
+ */
 class OSDCluster {
-  int      num_osds;
-  set<int> failed_disks;   // list of failed disks (osd addr's)
+  __uint64_t version;           // what version of the osd cluster descriptor is this
 
-  __uint64_t version;      // what version of the osd cluster spec is this
+  // RUSH disk groups
+  vector<OSDGroup> disk_groups; // RUSH disk groups
+  set<int> failed_disks;        // list of failed disks
 
-  // state to handle migration to new size.
 
  public:
-  OSDCluster(int size) {
-	this->num_osds = size;
-  }
+  OSDCluster() : version(0) { }
 
   // cluster state
   bool is_failed(int osd) { return failed_disks.count(osd) ? true:false; }
