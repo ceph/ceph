@@ -3610,12 +3610,13 @@ public:
   }
 };
 
-void MDCache::dentry_xlock_request(CDir *dir, string& dname, Message *req, Context *onfinish)
+void MDCache::dentry_xlock_request(CDir *dir, string& dname, bool create,
+								   Message *req, Context *onfinish)
 {
-  dout(10) << "dentry_xlock_request on dn " << dname << " in " << *dir << endl; 
+  dout(10) << "dentry_xlock_request on dn " << dname << " create=" << create << " in " << *dir << endl; 
   // send request
   int dauth = dir->dentry_authority(dname);
-  MLock *m = new MLock(LOCK_AC_REQXLOCK, dauth);
+  MLock *m = new MLock(create ? LOCK_AC_REQXLOCKC:LOCK_AC_REQXLOCK, dauth);
   m->set_dn(dir->ino(), dname);
   mds->messenger->send_message(m,
 							   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE,
@@ -3672,7 +3673,6 @@ void MDCache::handle_lock_dn(MLock *m)
 	  }
 	  
 	  dn = dir->lookup(dname);
-	  assert(dn);
 	}
 
 	// except with.. an xlock request?
@@ -3793,6 +3793,7 @@ void MDCache::handle_lock_dn(MLock *m)
   case LOCK_AC_REQXLOCKACK:
   case LOCK_AC_REQXLOCKNAK:
 	{
+	  dout(10) << "handle_lock_dn got ack/nak on a reqxlock for " << *dn << endl;
 	  list<Context*> finished;
 	  dir->take_waiting(CDIR_WAIT_DNREQXLOCK, m->get_dn(), finished);
 	  finish_contexts(finished, 
@@ -3835,14 +3836,15 @@ void MDCache::handle_lock_dn(MLock *m)
 	  dn = dir->add_dentry(dname);
 	}
 
-	if (!dentry_xlock_start(dn, m, dir->inode, true)) {
-	  // hose null dn if we're waiting on something
-	  if (dn->is_clean() && dn->is_null() && dn->is_sync()) dir->remove_dentry(dn);
-	  return;    // waiting for xlock
-	}
-
-	{
-	  // ACK
+	if (dn->xlockedby != m) {
+	  if (!dentry_xlock_start(dn, m, dir->inode, true)) {
+		// hose null dn if we're waiting on something
+		if (dn->is_clean() && dn->is_null() && dn->is_sync()) dir->remove_dentry(dn);
+		return;    // waiting for xlock
+	  }
+	} else {
+	  // locked by me!  (well, bc of request.)
+	  // ACK xlock request
 	  MLock *reply = new MLock(LOCK_AC_REQXLOCKACK, mds->get_nodeid());
 	  reply->set_dn(dir->ino(), dname);
 	  mds->messenger->send_message(reply,

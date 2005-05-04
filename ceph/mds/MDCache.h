@@ -342,7 +342,7 @@ class MDCache {
 						  bool allnodes=false);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   void handle_lock_dn(MLock *m);
-  void dentry_xlock_request(CDir *dir, string& dname, 
+  void dentry_xlock_request(CDir *dir, string& dname, bool create,
 							Message *req, Context *onfinish);
 
   

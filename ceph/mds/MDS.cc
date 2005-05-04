@@ -316,15 +316,19 @@ void MDS::dispatch(Message *m)
 	balancer->send_heartbeat();
   }
   */
-  if (whoami == 0 &&
-	  stat_ops == 100) {
-	dout(1) << "FORCING EXPORTS" << endl;
+  if (whoami == 0 && false) {
+	static bool didit = false;
+	
 	// 7 to 1
-	CInode *in = mdcache->get_inode(7457);
-	mdcache->export_dir(in->dir,1);
-	// 6 to 2
-	in = mdcache->get_inode(6259);
-	mdcache->export_dir(in->dir,2);
+	CInode *in = mdcache->get_inode(2);
+	if (in && !didit) {
+	  CDir *dir = in->get_or_open_dir(this);
+	  if (dir->is_auth()) {
+		dout(1) << "FORCING EXPORT" << endl;
+		mdcache->export_dir(dir,1);
+		didit = true;
+	  }
+	}
   }
 
   // shut down?
@@ -499,10 +503,12 @@ void MDS::dispatch_request(Message *m, CInode *ref)
   switch (m->get_type()) {
   case MSG_CLIENT_REQUEST:
 	req = (MClientRequest*)m;
-	break;
+	break; // continue below!
+
   case MSG_MDS_LOCK:
 	mdcache->handle_lock_dn((MLock*)m);
-	break;
+	return; // done
+
   default:
 	assert(0);  // shouldn't get here
   }
@@ -1506,14 +1512,14 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   if (destauth != get_nodeid()) {
 	dout(7) << "rename has remote dest " << destauth << endl;
 	dout(7) << "FOREIGN RENAME" << endl;
-	reply_request(req, -EINVAL);
-	return;
+	//return;
   } else {
 	dout(7) << "rename is local" << endl;
-	handle_client_rename_local(req, ref,
-							   srcpath, srcdiri, srcdn, 
-							   destpath.get_path(), destdir, destdn, destname);
   }
+
+  handle_client_rename_local(req, ref,
+							 srcpath, srcdiri, srcdn, 
+							 destpath.get_path(), destdir, destdn, destname);
   return;
 }
 
@@ -1576,7 +1582,8 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	dout(7) << "handle_client_rename_local: dest local=" << destlocal << " dn dne yet" << endl;
   }
 
-  // pick lock ordering
+  /* lock source and dest dentries, in lexicographic order.
+   */
   bool dosrc = srcpath < destpath;
   for (int i=0; i<2; i++) {
 	if (dosrc) {
@@ -1588,7 +1595,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 		  return;  
 	  } else {
 		if (!srcdn || srcdn->xlockedby != req) {
-		  mdcache->dentry_xlock_request(srcdn->dir, srcdn->name, req, new C_MDS_RetryRequest(this, req, ref));
+		  mdcache->dentry_xlock_request(srcdn->dir, srcdn->name, false, req, new C_MDS_RetryRequest(this, req, ref));
 		  return;
 		}
 	  }
@@ -1606,7 +1613,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 		}
 	  } else {
 		if (!destdn || destdn->xlockedby != req) {
-		  mdcache->dentry_xlock_request(destdir, destname, req, new C_MDS_RetryRequest(this, req, ref));
+		  mdcache->dentry_xlock_request(destdir, destname, true, req, new C_MDS_RetryRequest(this, req, ref));
 		  return;
 		}
 	  }
