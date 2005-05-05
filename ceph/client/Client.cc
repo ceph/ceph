@@ -82,11 +82,9 @@ void Client::insert_trace(vector<c_inode_info*> trace)
 	  if (!next) {
 	    if (inode_map.count(trace[i]->inode.ino)) {
 	      Inode *in = inode_map[trace[i]->inode.ino];
-		  next = in->dn;
-	 	  if (next) {
+		  if (in) {
 		    dout(12) << " had ino " << next->inode.ino << " at wrong position, moving" << endl;
-		    if (next->dir)   // only if it was actually attached..
-			  unlink(next);
+			if (in->dn) unlink(in->dn);
 		    next = link(dir, dname, in);
 		  }
 		}
