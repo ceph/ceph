@@ -31,9 +31,10 @@ typedef __uint64_t object_t;
 
 
 
-#define MDS_TRAVERSE_FORWARD  1
-#define MDS_TRAVERSE_DISCOVER 2    // skips permissions checks etc.
-#define MDS_TRAVERSE_FAIL     3
+#define MDS_TRAVERSE_FORWARD       1
+#define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
+#define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
+#define MDS_TRAVERSE_FAIL          4
 
 
 class filepath;

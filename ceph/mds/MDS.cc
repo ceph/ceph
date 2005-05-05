@@ -1372,9 +1372,15 @@ void MDS::handle_client_rename(MClientRequest *req,
   C_MDS_RenameTraverseDst *onfinish = new C_MDS_RenameTraverseDst(this, req, ref, srcdiri, srcdir, srcdn, destpath);
   Context *ondelay = new C_MDS_RetryRequest(this, req, ref);
   
+  /*
+   * use DISCOVERXLOCK mode:
+   *   the dest may not exist, and may be xlocked from a remote host
+   *   we want to succeed if we find the xlocked dentry
+   * ??
+   */
   mdcache->path_traverse(destpath, onfinish->trace, false,
 						 req, ondelay,
-						 MDS_TRAVERSE_DISCOVER, 
+						 MDS_TRAVERSE_DISCOVERXLOCK, 
 						 onfinish);
 }
 

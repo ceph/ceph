@@ -829,7 +829,8 @@ int MDCache::path_traverse(filepath& origpath,
   set<CInode*> symlinks_resolved;   // keep a list of symlinks we touch to avoid loops
 
   bool noperm = false;
-  if (onfail == MDS_TRAVERSE_DISCOVER) noperm = true;
+  if (onfail == MDS_TRAVERSE_DISCOVER ||
+	  onfail == MDS_TRAVERSE_DISCOVERXLOCK) noperm = true;
 
   // root
   CInode *cur = get_root();
@@ -917,8 +918,11 @@ int MDCache::path_traverse(filepath& origpath,
 	// dentry
 	CDentry *dn = cur->dir->lookup(path[depth]);
 
-	// xlocked by me?
-	if (dn && !dn->inode && dn->xlockedby == req) {   // hack?
+	// xlocked and null?
+	if (onfail == MDS_TRAVERSE_DISCOVERXLOCK &&
+		dn && !dn->inode && dn->is_xlockedbyme(req) &&
+		depth == path.depth()-1) {
+	  dout(10) << "traverse: hit null xlocked dentry at tail of traverse, succeeding" << endl;
 	  trace.push_back(dn);
 	  break; // done!
 	}
@@ -1009,7 +1013,8 @@ int MDCache::path_traverse(filepath& origpath,
 	} else {
 	  // not mine.
 	  
-	  if (onfail == MDS_TRAVERSE_DISCOVER) {
+	  if (onfail == MDS_TRAVERSE_DISCOVER ||
+		  onfail == MDS_TRAVERSE_DISCOVERXLOCK) {
 		// discover
 
 		filepath want = path.postfixpath(depth);

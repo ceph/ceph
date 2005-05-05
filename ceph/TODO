@@ -1,6 +1,10 @@
 
 SAGE:
 
+- path_Traverse
+  - fix noperm crap
+  - clean up xlock interaction
+
 - foreign renames
  /- how to limit xlock collateral/chatter!
     - test it!
