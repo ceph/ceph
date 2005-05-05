@@ -25,7 +25,7 @@
 class OSDGroup {
   int         size;     // num disks in this group           (aka num_disks_in_cluster[])
   int         weight;   // weight (for data migration etc.)  (aka weight_cluster[])
-  vector<int> osds;     // the list of osd addrs
+  vector<int> osds;     // the list of actual osd's
 };
 
 
@@ -35,16 +35,24 @@ class OSDCluster {
   __uint64_t version;           // what version of the osd cluster descriptor is this
 
   // RUSH disk groups
-  vector<OSDGroup> disk_groups; // RUSH disk groups
-  set<int> failed_disks;        // list of failed disks
+  vector<OSDGroup> osd_groups;  // RUSH disk groups
+  set<int>         failed_osds; // list of failed disks
 
 
  public:
   OSDCluster() : version(0) { }
 
   // cluster state
-  bool is_failed(int osd) { return failed_disks.count(osd) ? true:false; }
-
+  bool is_failed(int osd) { return failed_osds.count(osd) ? true:false; }
+  
+  int num_osds() {
+	int n = 0;
+	for (vector<OSDGroup>::iterator it = osd_groups.begin();
+		 it != osd_groups.end();
+		 it++) 
+	  n += it->size;
+	return n;
+  }
 
   // mapping facilities
 
@@ -63,7 +71,7 @@ class OSDCluster {
 	osds.clear();
 	for (int i=0; i<num_rep; i++) {
 	  // mask out failed disks
-	  int osd = MSG_ADDR_OSD( (rg+i) % num_osds );
+	  int osd = MSG_ADDR_OSD( (rg+i) % num_osds() );
 	  if (is_failed(osd)) continue;
 	  osds.push_back( osd );
 	}

@@ -37,6 +37,9 @@ using namespace std;
 #include "messages/MExportDirFinish.h"
 
 #include "messages/MRenameNotify.h"
+#include "messages/MRename.h"
+#include "messages/MRenameReq.h"
+#include "messages/MRenameAck.h"
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MHeartbeat.h"
@@ -153,6 +156,15 @@ decode_message(crope& ser)
 
   case MSG_MDS_RENAMENOTIFY:
 	m = new MRenameNotify();
+	break;
+  case MSG_MDS_RENAME:
+	m = new MRename();
+	break;
+  case MSG_MDS_RENAMEREQ:
+	m = new MRenameReq();
+	break;
+  case MSG_MDS_RENAMEACK:
+	m = new MRenameAck();
 	break;
 
   case MSG_MDS_DENTRYUNLINK:

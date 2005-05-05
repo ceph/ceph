@@ -42,11 +42,12 @@ Client::~Client()
 
 
 void Client::init() {
-
+  
 }
 
 void Client::shutdown() {
-
+  dout(1) << "shutdown" << endl;
+  messenger->shutdown();
 }
 
 // -------------------

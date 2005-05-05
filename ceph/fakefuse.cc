@@ -64,6 +64,7 @@ int main(int argc, char **argv) {
 	cout << "starting fuse on pid " << getpid() << endl;
 	ceph_fuse_main(client[i], argc, argv);
 	cout << "fuse finished on pid " << getpid() << endl;
+	client[i]->shutdown();
   }
   
 

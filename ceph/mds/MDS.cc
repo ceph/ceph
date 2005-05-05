@@ -316,7 +316,7 @@ void MDS::dispatch(Message *m)
 	balancer->send_heartbeat();
   }
   */
-  if (whoami == 0 && false) {
+  if (whoami == 0) {
 	static bool didit = false;
 	
 	// 7 to 1
@@ -1560,7 +1560,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 {
   bool everybody = false;
   if (true || srcdn->inode->is_dir()) {
-	/* overkill warning: lock w/ everyone for simplicity.
+	/* overkill warning: lock w/ everyone for simplicity.  FIXME someday!  along with the foreign rename crap!
 	   i could limit this to cases where something beneath me is exported.
 	   could possibly limit the list.    (maybe.)
 	   Underlying constraint is that, regardless of the order i do the xlocks, and whatever
@@ -1624,7 +1624,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	dosrc = !dosrc;
   }
 
-  // we're golden (everything is xlocked by use, we rule, etc.)
+  // we're golden (everything is xlocked by us, we rule, etc.)
   mdcache->file_rename( srcdn, destdn,
 						new C_MDS_RenameFinish(this, req, srcdn->inode),
 						everybody );

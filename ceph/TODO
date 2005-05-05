@@ -1,6 +1,8 @@
 
 me, soon:
 - foreign renames
+  -> what about setting up an inode proxy???
+  - unwind foreign xlocks on failure etc.
 /- symlinks
 
 - fix logging model for data safety

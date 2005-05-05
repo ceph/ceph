@@ -136,9 +136,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: handle_export_dir_warning
     // triggers: handle_export_dir_notify
 
-#define CINODE_WAIT_RENAME        32768
-    // waiters: file_rename
-    // triggers: file_rename_finish
+#define CINODE_WAIT_RENAME       (1<<16)
 
 #define CINODE_WAIT_HARDR        (1<<17)  // 131072
 #define CINODE_WAIT_HARDW        (1<<18)  // 262...

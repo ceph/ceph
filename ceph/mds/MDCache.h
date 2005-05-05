@@ -38,6 +38,10 @@ class MInodeWriterClosed;
 class MLock;
 
 class MRenameNotify;
+class MRename;
+class MRenameReq;
+class MRenameAck;
+
 class C_MDS_ExportFinish;
 
 class MClientRequest;
@@ -71,7 +75,7 @@ class MDCache {
  protected:
   // the cache
   CInode                       *root;        // root inode
-  LRU                          *lru;         // lru for expiring items
+  LRU                           lru;         // lru for expiring items
   inode_map_t                   inode_map;   // map of inodes by ino            
  
   MDS *mds;
@@ -111,32 +115,28 @@ class MDCache {
   MDCache(MDS *m);
   ~MDCache();
   
-
-  // accessors
+  // root inode
   CInode *get_root() { return root; }
   void set_root(CInode *r) {
 	root = r;
 	add_inode(root);
   }
-  LRU *get_lru() { return lru; }
 
-
-  // fn
+  // cache
   size_t set_cache_size(size_t max) {
-	lru->lru_set_max(max);
+	lru.lru_set_max(max);
   }
-  size_t get_cache_size() { lru->lru_get_size(); }
+  size_t get_cache_size() { lru.lru_get_size(); }
   bool trim(__int32_t max = -1);   // trim cache
 
+  // shutdown
   void shutdown_start();
   bool shutdown_pass();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
   // have_inode?
   bool have_inode( inodeno_t ino ) {
-	inode_map_t::iterator it = inode_map.find(ino);
-	if (it == inode_map.end()) return false;
-	return true;
+	return inode_map.count(ino) ? true:false;
   }
 
   // return inode* or null
@@ -145,7 +145,7 @@ class MDCache {
 	  return inode_map[ ino ];
 	return NULL;
   }
-
+  
  protected:
   CDir *get_containing_import(CDir *in);
   CDir *get_containing_export(CDir *in);
@@ -204,7 +204,11 @@ class MDCache {
   void handle_dentry_unlink(MDentryUnlink *m);
 
   void file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool everyone);
-  void handle_rename_notify(MRenameNotify *m);
+  void file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initiator);
+  void handle_rename_notify(MRenameNotify *m);   // -> bystanders (and source, rarely)
+  void handle_rename(MRename *m);                // src -> dest
+  void handle_rename_req(MRenameReq *m);         // init -> src (rarely)
+  void handle_rename_ack(MRenameAck *m);         // dest -> init (almost always)
   
 
 
@@ -244,13 +248,10 @@ class MDCache {
   void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
+  void encode_export_inode(CInode *in, crope& r);
+  
+
   // importer
-  /*CInode *import_dentry_inode(CDir *dir, 
-							  pchar& p, 
-							  int from, 
-							  CDir *import_root=0,
-							  int *would_be_dir_auth = 0); // need for normal import
-  */
   void handle_export_dir_discover(MExportDirDiscover *m);
   void handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r);
   void handle_export_dir_prep(MExportDirPrep *m);
@@ -265,6 +266,8 @@ class MDCache {
   void got_hashed_replica(CDir *import,
 						  inodeno_t dir_ino,
 						  inodeno_t replica_ino);
+
+  void decode_import_inode(CDentry *dn, crope& r, int &off, int oldauth);
 
   // bystander
   void handle_export_dir_warning(MExportDirWarning *m);

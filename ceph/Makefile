@@ -13,12 +13,12 @@ CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT 
 LIBS = -lpthread -lfuse
 
 MDS_OBJS= \
-	mds/MDBalancer.o\
 	mds/MDS.o\
+	mds/MDCache.o\
+	mds/MDBalancer.o\
 	mds/CDentry.o\
 	mds/CDir.o\
 	mds/CInode.o\
-	mds/MDCache.o\
 	mds/MDStore.o\
 	mds/LogStream.o\
 	mds/IdAllocator.o\

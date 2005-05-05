@@ -28,7 +28,7 @@ class CheesySerializer : public Messenger,
 	this->messenger = msg;
 	last_pcid = 1;
   }
-  int shutdown() {}
+  int shutdown();
 
   // incoming messages
   void dispatch(Message *m);

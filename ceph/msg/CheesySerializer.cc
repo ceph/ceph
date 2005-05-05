@@ -86,7 +86,7 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
 
   // pick up reply
   Message *reply = call_reply[pcid];
-  assert(reply);
+  //assert(reply);
   call_reply.erase(pcid);   // remove from call map
   call_cond.erase(pcid);
 
@@ -98,3 +98,20 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
   return reply;
 }
 
+
+// -------------
+
+int CheesySerializer::shutdown()
+{
+  dout(1) << "shutdown" << endl;
+
+  // abort any pending sendrecv's
+  lock.Lock();
+  for (map<long,Cond*>::iterator it = call_cond.begin();
+	   it != call_cond.end();
+	   it++) {
+	dout(1) << "shutdown waking up (hung) pcid " << it->first << endl;
+	it->second->Signal();  // wake up!
+  }	   
+  lock.Unlock();
+}
