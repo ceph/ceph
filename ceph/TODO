@@ -1,22 +1,35 @@
 
-me, soon:
+SAGE:
+
 - foreign renames
-  -> what about setting up an inode proxy???
-  - unwind foreign xlocks on failure etc.
-/- symlinks
+ /- how to limit xlock collateral/chatter!
+    - test it!
+
+ /- what happens to foreign xlock request when things un-xlock?
+ / - unwind foreign xlocks on failure etc.
+ /   - LOCK_AC_UNXLOCK?
+
+  - how do deal with the dn discover on initiator after a foreign xlock on a dn it didn't originally have?
+
+  - what about setting up an inode proxy???
+
 
 - fix logging model for data safety
  - inodeupdate
  - dentryunlink
  - dentrylink
- - put path to item in log entry
+ - inodecreate
+? - inodedestroy
+ - put path to each item in log entry
+ - EMkdir event?
+   ?- properly commit dir, dirty inode+dentry
 
 - readdir
  - include only lockable inodes
  - set up waiters for pending xlocks
 
 fully document export process
- - including the whole warning business.. wtf is that about?
+ - including the whole warning business.. wtf is that about again?
 
 /- export null dentries
 
@@ -38,6 +51,24 @@ thing about:
 
 - do real permissions checks
 
+
+CLIENT TODO
+
+- put size and mtime in client close op?
+- clean up rest of Request/Reply messages?
+- statfs
+- readdir content only optionally includes valid inode info
+- open file modes and/or states (where the state is the effective global combination of all modes)
+  - mode potentially distinct from open mode (i.e. might open RDWR, but only read for a while) ????
+  - RDONLY
+    - read from any replica
+    - field day with buffer cache
+  - RDWR
+    - writes and reads are synchronous
+    - writes to primary replica
+  - WRONLY
+    - field day with buffered/delayed write-back
+    - writes to primary replica?
 
 
 FILE STUFF
@@ -63,13 +94,7 @@ FILE STUFF
 
 - recall messages?
 - lazy flag?  make a table!
-- state diagram for master?  _eval() functions
-
-- EMkdir event
-  - properly commit dir, dirty inode+dentry
-
-- put size, mtime in client close op.
-- ...and clean up rest of Request/Reply messages!
+- state diagram for master?  _eval() functions?
 
 
 - think about softlock.mode versus shutdown
@@ -111,8 +136,6 @@ ISSUES
 
 
 CLEANUP
-- client
-
 - waiters after export... fix will_fail, will_delegate nonsense
  - should a subset of these waiters be triggered immediately after
    export, since discover-based contexts will just be forwarded to the

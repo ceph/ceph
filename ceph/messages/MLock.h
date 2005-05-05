@@ -21,28 +21,30 @@
 #define LOCK_AC_GLOCK         7  //  "
 #define LOCK_AC_GASYNC        8  //  "
 
+#define LOCK_AC_REQXLOCKACK   9
+#define LOCK_AC_REQXLOCKNAK  10
 
-#define LOCK_AC_FOR_REPLICA(a)  ((a) <= 8)
-#define LOCK_AC_FOR_AUTH(a)     ((a) >= 9)
+
+#define LOCK_AC_FOR_REPLICA(a)  ((a) <= 10)
+#define LOCK_AC_FOR_AUTH(a)     ((a) >= 11)
 
 #define LOCK_AC_NAKOFFSET     4  // be careful with numbering!
 
 // for auth
-#define LOCK_AC_LOCKNAK       9
-#define LOCK_AC_GSYNCNAK     10
-#define LOCK_AC_GLOCKNAK     11
-#define LOCK_AC_GASYNCNAK    12
-#define LOCK_AC_LOCKACK      13
-#define LOCK_AC_GSYNCACK     14
-#define LOCK_AC_GLOCKACK     15
-#define LOCK_AC_GASYNCACK    16
-#define LOCK_AC_REQREAD      17
-#define LOCK_AC_REQWRITE     18
+#define LOCK_AC_LOCKNAK      11
+#define LOCK_AC_GSYNCNAK     12
+#define LOCK_AC_GLOCKNAK     13
+#define LOCK_AC_GASYNCNAK    14
+#define LOCK_AC_LOCKACK      15
+#define LOCK_AC_GSYNCACK     16
+#define LOCK_AC_GLOCKACK     17
+#define LOCK_AC_GASYNCACK    18
+#define LOCK_AC_REQREAD      19
+#define LOCK_AC_REQWRITE     20
 
-#define LOCK_AC_REQXLOCK     20
-#define LOCK_AC_REQXLOCKC    21 // create if necessary
-#define LOCK_AC_REQXLOCKACK  22
-#define LOCK_AC_REQXLOCKNAK  23
+#define LOCK_AC_REQXLOCK     21
+#define LOCK_AC_REQXLOCKC    22 // create if necessary
+#define LOCK_AC_UNXLOCK      23
 
 #define lock_ac_name(x)      
 

@@ -316,7 +316,7 @@ void MDS::dispatch(Message *m)
 	balancer->send_heartbeat();
   }
   */
-  if (whoami == 0) {
+  if (false && whoami == 0) {
 	static bool didit = false;
 	
 	// 7 to 1
@@ -1537,13 +1537,16 @@ public:
   }
   virtual void finish(int r) {
 	MClientReply *reply = new MClientReply(req, r);
-	
-	// include trace of renamed inode (so client can update their cache structure)
+
+	// include trace of (hopefully) renamed inode (so client can update their cache structure)
 	reply->set_trace_dist( renamedi, mds->get_nodeid() );
 
 	mds->messenger->send_message(reply,
 								 MSG_ADDR_CLIENT(req->get_client()), 0,
 								 MDS_PORT_SERVER);
+	
+	// note: any of my foreign xlocks will unwind here, by design!
+	// true whether this was a success or failure
 	mds->mdcache->request_finish(req);
   }
 };
@@ -1568,6 +1571,35 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	   importing something beneath me when rename finishes, or else mayhem ensues when
 	   their import is dangling in the cache.
 	 */
+	/*
+	  having made a proper mess of this on the first pass, here is my plan:
+	  
+	  - xlocks of src, dest are done in lex order
+	  - xlock is optional.. if you have the dentry, lock it, if not, don't.
+	  - if you discover an xlocked dentry, you get the xlock.
+
+	  possible trouble:
+	  - you have an import beneath the source, and don't have the dest dir.
+	    - when the actual rename happens, you discover the dest
+		- actually, do this on any open dir, so we don't detach whole swaths
+		  of our cache.
+	  
+	  notes:
+	  - xlocks are initiated from authority, as are discover_replies, so replicas are 
+	    guaranteed to either not have dentry, or to have it xlocked. 
+	  - 
+	  - foreign xlocks are eventually unraveled by the initiator on success or failure.
+
+	  todo to make this work:
+	  - hose bool everybody param crap
+	  /- make handle_lock_dn not discover, clean up cases
+	  /- put dest path in MRenameNotify
+	  /- make rename_notify discover if its a dir
+	  /  - this will catch nested imports too, obviously
+	  /- notify goes to merged list on local rename
+	  /- notify goes to everybody on a foreign rename 
+	  /- handle_notify needs to gracefully ignore spurious notifies
+	*/
 	dout(7) << "handle_client_rename_local: overkill?  doing xlocks with _all_ nodes" << endl;
 	everybody = true;
   }

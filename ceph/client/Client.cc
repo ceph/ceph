@@ -57,7 +57,7 @@ void Client::insert_trace(vector<c_inode_info*> trace)
 	  if (!root) {
 		cur = root = new Inode();
   	    root->inode = trace[i]->inode;
-		inode_map[root->inode->ino] = root;
+		inode_map[root->inode.ino] = root;
 	  }
 	  dout(12) << "insert_trace trace " << i << " root" << endl;
 	} else {
@@ -69,11 +69,11 @@ void Client::insert_trace(vector<c_inode_info*> trace)
 	  dout(12) << "insert_trace trace " << i << " dname " << dname << " ino " << trace[i]->inode.ino << endl;
 	  
 	  if (next) {
-		if (next->inode.ino == trace[i]->inode.ino) {
+		if (next->inode->inode.ino == trace[i]->inode.ino) {
 		  touch_dn(next);
-		  dout(12) << " had dentry " << dname << " with correct ino " << next->inode.ino << endl;
+		  dout(12) << " had dentry " << dname << " with correct ino " << next->inode->inode.ino << endl;
 	    } else {
-		  dout(12) << " had dentry " << dname << " with WRONG ino " << next->inode.ino << endl;
+		  dout(12) << " had dentry " << dname << " with WRONG ino " << next->inode->inode.ino << endl;
 		  unlink(next);
 		  next = NULL;
 	    }
@@ -83,7 +83,7 @@ void Client::insert_trace(vector<c_inode_info*> trace)
 	    if (inode_map.count(trace[i]->inode.ino)) {
 	      Inode *in = inode_map[trace[i]->inode.ino];
 		  if (in) {
-		    dout(12) << " had ino " << next->inode.ino << " at wrong position, moving" << endl;
+		    dout(12) << " had ino " << next->inode->inode.ino << " at wrong position, moving" << endl;
 			if (in->dn) unlink(in->dn);
 		    next = link(dir, dname, in);
 		  }
@@ -92,16 +92,16 @@ void Client::insert_trace(vector<c_inode_info*> trace)
 	  
 	  if (!next) {
 	    next = link(dir, dname, new Inode());
-		next->inode = trace[i]->inode;
-		inode_map[next->inode->ino] = next->inode;
-		dout(12) << " new dentry+node with ino " << next->inode.ino << endl;
+		next->inode->inode = trace[i]->inode;
+		inode_map[next->inode->inode.ino] = next->inode;
+		dout(12) << " new dentry+node with ino " << next->inode->inode.ino << endl;
 	  }
 
 	  cur = next->inode;
 	}
 
-	for (set<int>::iterator it = trace[i]->dist.begin(); it != trace[i]->dist.end(); it++)
-	  cur->mds_contacts.push_back(*it);
+	// take note of latest distribution on mds's
+	cur->mds_contacts = trace[i]->dist;
   }
 }
 

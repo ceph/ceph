@@ -1189,7 +1189,26 @@ void MDCache::request_cleanup(Message *req)
 	  }
 	}
 	
-	active_requests[req].xlocks.clear();
+	assert(active_requests[req].xlocks.empty());  // we just finished finished them
+  }
+
+  // foreign xlocks?
+  if (active_requests[req].xlocks.size()) {
+	set<CDentry*> dns = active_requests[req].foreign_xlocks;
+	active_requests[req].foreign_xlocks.clear();
+	
+	for (set<CDentry*>::iterator it = dns.begin();
+		 it != dns.end();
+		 it++) {
+	  CDentry *dn = *it;
+	  
+	  dout(7) << "request_cleanup sending unxlock for foreign xlock on " << *dn << endl;
+	  int dauth = dn->dir->dentry_authority(dn->name);
+	  MLock *m = new MLock(LOCK_AC_UNXLOCK, mds->get_nodeid());
+	  m->set_dn(dn->dir->ino(), dn->name);
+	  mds->messenger->send_message(m,
+								   MSG_ADDR_MDS(dauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	}
   }
 
   // unpin paths
@@ -2060,24 +2079,23 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   // tell replicas (no need to wait for ack) to do the same, and un-xlock.
   // make list
   set<int> who;
-  if (everyone) {
-	for (int i=0; i<mds->get_cluster()->get_num_mds(); i++)
-	  if (i != mds->get_nodeid()) who.insert(i);	
-  } else {
-	who = srcdir->get_open_by();
-	for (set<int>::iterator it = destdir->open_by_begin();
-		 it != destdir->open_by_end();
-		 it++)
-	  if (who.count(*it) == 0) who.insert(*it);
-  }
+  who = srcdir->get_open_by();
+  for (set<int>::iterator it = destdir->open_by_begin();
+	   it != destdir->open_by_end();
+	   it++)
+	if (who.count(*it) == 0) who.insert(*it);
 
   // tell
+  string destdirpath;
+  destdir->inode->make_path(destdirpath);
+
   for (set<int>::iterator it = who.begin();
 	   it != who.end();
 	   it++) {
 	mds->messenger->send_message(new MRenameNotify(srcdir->ino(),
 												   srcname,
 												   destdir->ino(),
+												   destdirpath,
 												   destname),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
   }
@@ -2135,9 +2153,11 @@ void MDCache::file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initi
   if (in->is_dir() && in->dir) 
 	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 
+  /* let the initiator do this.
   // drop xlock on src
   dentry_xlock_finish(srcdn);
   srcdir->take_waiting(CDIR_WAIT_ANY, srcname, mds->finished_queue);
+  */
 }
 
 void MDCache::handle_rename_req(MRenameReq *m)
@@ -2186,19 +2206,23 @@ void MDCache::handle_rename(MRename *m)
   if (in->is_dir() && in->dir) 
 	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 
-  // send notifies
-  //  including src.  but not me, or initiator.
+  // send notifies to everyone (since it's hard to safely merge open_by from src+dest)
+  // include src.  but not me, or initiator.
   set<int> who;
   for (int i=0; i<mds->get_cluster()->get_num_mds(); i++)
 	if (i != mds->get_nodeid() &&
 		i != m->get_initiator()) who.insert(i);	
   
+  string destdirpath;
+  destdir->inode->make_path(destdirpath);
+
   for (set<int>::iterator it = who.begin();
 	   it != who.end();
 	   it++) {
 	mds->messenger->send_message(new MRenameNotify(srcdir->ino(),
 												   srcdn->name,
 												   destdir->ino(),
+												   destdirpath,
 												   destdn->name),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
   }
@@ -2214,9 +2238,11 @@ void MDCache::handle_rename(MRename *m)
   }
 
 
+  /* let the initiator do this.
   // drop xlock on dst
   dentry_xlock_finish(destdn);
   destdir->take_waiting(CDIR_WAIT_DNREAD, destname, mds->finished_queue);
+  */
 
   delete m;
 }
@@ -2234,6 +2260,7 @@ void MDCache::handle_rename_ack(MRenameAck *m)
 
   // all done!
   in->take_waiting(CINODE_WAIT_RENAME, mds->finished_queue);
+
   delete m;
 }
 
@@ -2285,10 +2312,22 @@ void MDCache::handle_rename_notify(MRenameNotify *m)
   }
 
   else if (srcdn) {
-	dout(7) << "handle_rename_notify unlinking src only " << *srcdn << endl;
-	assert(!srcdn->inode->is_dir());
-	srcdir->remove_dentry(srcdn);  // will leave inode dangling.
-	srcdir->take_waiting(CDIR_WAIT_ANY, m->get_srcname(), finished);
+	if (srcdn->inode && srcdn->inode->dir) {
+	  dout(7) << "handle_rename_notify no dest, but src is an open dir, discovering destdir.  srcdn is " << *srcdn << endl;
+	  
+	  vector<CDentry*> trace;
+	  filepath destdirpath = m->get_destdirpath();
+	  int r = path_traverse(destdirpath, trace, true,
+							m, new C_MDS_RetryMessage(mds, m), 
+							MDS_TRAVERSE_DISCOVER);
+	  assert(r>0);
+	  return;
+	} else {
+	  dout(7) << "handle_rename_notify unlinking src only " << *srcdn << endl;
+	  assert(!srcdn->inode->is_dir());
+	  srcdir->remove_dentry(srcdn);  // will leave inode dangling.
+	  srcdir->take_waiting(CDIR_WAIT_ANY, m->get_srcname(), finished);
+	}
   }
 
   else if (destdn) {
@@ -3729,16 +3768,26 @@ void MDCache::dentry_xlock_finish(CDentry *dn, bool quiet)
 {
   dout(7) << "dentry_xlock_finish on " << *dn << endl;
   
-  assert(active_requests[dn->xlockedby].xlocks.count(dn) == 1);
-  active_requests[dn->xlockedby].xlocks.erase(dn);
+  assert(dn->xlockedby);
+  if (dn->xlockedby == DN_XLOCK_FOREIGN) {
+	dout(7) << "this was a foreign xlock" << endl;
+  } else {
+	// remove from request record
+	assert(active_requests[dn->xlockedby].xlocks.count(dn) == 1);
+	active_requests[dn->xlockedby].xlocks.erase(dn);
+  }
 
   dn->xlockedby = 0;
   dn->lockstate = DN_LOCK_SYNC;
-  
+
+  // unpin parent dir?
+  // -> no?  because we might have xlocked 2 things in this dir.
+  //         instead, we let request_finish clean up the mess.
+    
+  // tell replicas?
   if (!quiet) {
-	// tell replicas?
-	if (//dn->inode &&    // if NULL, don't bother.
-		dn->dir->is_open_by_anyone()) {
+	// tell even if dn is null.
+	if (dn->dir->is_open_by_anyone()) {
 	  for (set<int>::iterator it = dn->dir->open_by_begin();
 		   it != dn->dir->open_by_end();
 		   it++) {
@@ -3868,6 +3917,7 @@ void MDCache::handle_lock_dn(MLock *m)
 
 	// except with.. an xlock request?
 	if (!dn) {
+	  assert(dir);  // we should still have the dir, though!  the requester has the dir open.
 	  switch (m->get_action()) {
 
 	  case LOCK_AC_REQXLOCK:
@@ -3901,8 +3951,9 @@ void MDCache::handle_lock_dn(MLock *m)
 	if (!dn) {
 	  dout(7) << "handle_lock_dn " << m << " don't have " << m->get_ino() << " dname " << dname << endl;
 	  
-	  if (m->get_action() == LOCK_AC_LOCK) {
-		dout(7) << "handle_lock_dn don't have " << m->get_path() << ", discovering" << endl;
+	  if (m->get_action() == LOCK_AC_REQXLOCKACK ||
+		  m->get_action() == LOCK_AC_REQXLOCKNAK) {
+		dout(7) << "handle_lock_dn got reqxlockack/nak, but don't have dn " << m->get_path() << ", discovering" << endl;
 		
 		vector<CDentry*> trace;
 		filepath path = m->get_path();
@@ -3910,23 +3961,36 @@ void MDCache::handle_lock_dn(MLock *m)
 							  m, new C_MDS_RetryMessage(mds,m), 
 							  MDS_TRAVERSE_DISCOVER);
 		assert(r>0);
-	  } else {
-		dout(7) << "safely ignoring." << endl;
-		delete m;
-	  }
-	  if (0) {
-		if (m->get_action() == LOCK_AC_LOCK) {
+		return;
+	  } 
+
+	  if (m->get_action() == LOCK_AC_LOCK) {
+		if (0) { // not anymore
+		  dout(7) << "handle_lock_dn don't have " << m->get_path() << ", discovering" << endl;
+		  
+		  vector<CDentry*> trace;
+		  filepath path = m->get_path();
+		  int r = path_traverse(path, trace, true,
+								m, new C_MDS_RetryMessage(mds,m), 
+								MDS_TRAVERSE_DISCOVER);
+		  assert(r>0);
+		}
+		if (1) {
 		  // NAK
 		  MLock *reply = new MLock(LOCK_AC_LOCKNAK, mds->get_nodeid());
-		  reply->set_dn(dir->ino(), dname);
+		  reply->set_dn(m->get_ino(), dname);
 		  mds->messenger->send_message(reply,
 									   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 									   MDS_PORT_CACHE);
 		}
+	  } else {
+		dout(7) << "safely ignoring." << endl;
 		delete m;
 	  }
 	  return;
 	}
+
+	assert(dn);
   }
 
   if (dn) {
@@ -4034,16 +4098,38 @@ void MDCache::handle_lock_dn(MLock *m)
 		return;    // waiting for xlock
 	  }
 	} else {
-	  // locked by me!  (well, bc of request.)
+	  // successfully xlocked!  on behalf of requestor.
+	  string path;
+	  dn->make_path(path);
+	  
 	  // ACK xlock request
 	  MLock *reply = new MLock(LOCK_AC_REQXLOCKACK, mds->get_nodeid());
 	  reply->set_dn(dir->ino(), dname);
+	  reply->set_path(path);
 	  mds->messenger->send_message(reply,
 								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
+
+	  // disassociate xlock from MLock
+	  active_requests[m].xlocks.clear();
+	  active_requests[m].traces.clear();
+	  dn->xlockedby = DN_XLOCK_FOREIGN;  // not 0, not a valid pointer.
+
+	  // finish request
+	  request_finish(m);
+	  return;
 	}
 	break;
 
+  case LOCK_AC_UNXLOCK:
+	dout(7) << "handle_lock_dn unxlock on " << *dn << endl;
+	{
+	  CDir *dir = dn->dir;
+	  string dname = dn->name;
+	  dentry_xlock_finish(dn);
+	  dir->take_waiting(CDIR_WAIT_ANY, dname, mds->finished_queue);
+	}
+	break;
 
   default:
 	assert(0);
