@@ -42,6 +42,7 @@ md_config_t g_conf = {
 
   mds_heartbeat_op_interval: 200,
   mds_verify_export_dirauth: true,
+  mds_log_before_reply: true,
 
   // fakeclient
   num_fakeclient: 10,

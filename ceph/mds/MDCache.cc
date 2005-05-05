@@ -918,7 +918,7 @@ int MDCache::path_traverse(filepath& origpath,
 	// dentry
 	CDentry *dn = cur->dir->lookup(path[depth]);
 
-	// xlocked and null?
+	// xlocked and null?  ** all wrong, FIXME
 	if (onfail == MDS_TRAVERSE_DISCOVERXLOCK &&
 		dn && !dn->inode && dn->is_xlockedbyme(req) &&
 		depth == path.depth()-1) {

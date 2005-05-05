@@ -32,6 +32,7 @@ struct md_config_t {
 
   int   mds_heartbeat_op_interval;
   bool  mds_verify_export_dirauth;     // debug flag
+  bool  mds_log_before_reply;
 
   // fake client
   int num_fakeclient;

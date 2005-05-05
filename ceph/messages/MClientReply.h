@@ -30,13 +30,82 @@ class CInode;
  *
  */
 
-typedef struct {
+class c_inode_info {
+ public:
   inode_t inode;
-  set<int> dist;
   string ref_dn;    // referring dentry (blank if root)
   string symlink;   // symlink content (if symlink)
-  bool is_sync;     
-} c_inode_info;
+
+  bool inode_soft_valid;  // true if inode info is valid (ie was readable on mds at the time)
+  bool inode_hard_valid;  // true if inode info is valid (ie was readable on mds at the time)
+
+  set<int> dist;    // where am i replicated?
+
+ public:
+  c_inode_info() {}
+  c_inode_info(CInode *in, int whoami, string ref_dn) {
+	// inode
+	this->inode = in->inode;
+	this->inode_soft_valid = in->softlock.can_read(in->is_auth());
+	this->inode_hard_valid = in->hardlock.can_read(in->is_auth());
+	
+	// symlink content?
+	if (in->is_symlink()) this->symlink = in->symlink;
+	  
+	// referring dentry?
+	this->ref_dn = ref_dn;
+	
+	// replicated where?
+	in->get_dist_spec(this->dist, whoami);
+  }
+  
+  void _rope(crope &s) {
+	s.append((char*)&inode, sizeof(inode));
+	s.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
+	s.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
+
+	s.append(ref_dn.c_str());
+	s.append((char)0);
+	s.append(symlink.c_str());
+	s.append((char)0);
+
+	// distn
+	int n = dist.size();
+	s.append((char*)&n, sizeof(int));
+	for (set<int>::iterator it = dist.begin();
+		 it != dist.end();
+		 it++) {
+	  int j = *it;
+	  s.append((char*)&j,sizeof(int));
+	}
+  }
+  
+  void _unrope(crope &s, int& off) {
+	s.copy(off, sizeof(inode), (char*)&inode);
+	off += sizeof(inode);
+	s.copy(off, sizeof(inode_soft_valid), (char*)&inode_soft_valid);
+	off += sizeof(inode_soft_valid);
+	s.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
+	off += sizeof(inode_hard_valid);
+
+	ref_dn = s.c_str() + off;
+	off += ref_dn.length() + 1;
+
+	symlink = s.c_str() + off;
+	off += symlink.length() + 1;
+
+	int l;
+	s.copy(off, sizeof(int), (char*)&l);
+	off += sizeof(int);
+	for (int i=0; i<l; i++) {
+	  int j;
+	  s.copy(off, sizeof(int), (char*)&j);
+	  off += sizeof(int);
+	  dist.insert(j);
+	}
+  }
+} ;
+
 
 typedef struct {
   long pcid;
@@ -92,69 +161,26 @@ class MClientReply : public Message {
   }
   virtual char *get_type_name() { return "creply"; }
 
-  
-  crope rope_info(c_inode_info *ci) {
-	crope s;
-	s.append((char*)&ci->inode, sizeof(inode_t));
-	s.append((char*)&ci->is_sync, sizeof(bool));
-
-	int n = ci->dist.size();
-	s.append((char*)&n, sizeof(int));
-	for (set<int>::iterator it = ci->dist.begin();
-		 it != ci->dist.end();
-		 it++) {
-	  int j = *it;
-	  s.append((char*)&j,sizeof(int));
-	}
-
-	s.append(ci->ref_dn.c_str());
-	s.append((char)0);
-	s.append(ci->symlink.c_str());
-	s.append((char)0);
-	return s;
-  }
-  int unrope_info(c_inode_info *ci, crope s) {
-	s.copy(0, sizeof(inode_t), (char*)(&ci->inode));
-	int off = sizeof(inode_t);
-	s.copy(off, sizeof(bool), (char*)(&ci->is_sync));
-	off += sizeof(bool);
-
-	int l;
-	s.copy(off, sizeof(int), (char*)&l);
-	off += sizeof(int);
-	for (int i=0; i<l; i++) {
-	  int j;
-	  s.copy(off, sizeof(int), (char*)&j);
-	  off += sizeof(int);
-	  ci->dist.insert(j);
-	}
-
-	ci->ref_dn = s.c_str() + off;
-	off += ci->ref_dn.length() + 1;
-
-	ci->symlink = s.c_str() + off;
-	off += ci->symlink.length() + 1;
-
-	return off;
-  }
 
   // serialization
   virtual void decode_payload(crope& s) {
-	crope::iterator sp = s.mutable_begin();
-	s.copy(0, sizeof(st), (char*)&st);
-	path = s.c_str() + sizeof(st);
-	sp += sizeof(st) + path.length() + 1;
+	int off = 0;
+	s.copy(off, sizeof(st), (char*)&st);
+	off += sizeof(st);
+
+	path = s.c_str();
+	off += path.length() + 1;
 	
 	for (int i=0; i<st.trace_depth; i++) {
 	  c_inode_info *ci = new c_inode_info;
-	  sp += unrope_info(ci, s.substr(sp, s.end()));
+	  ci->_unrope(s, off);
 	  trace.push_back(ci);
 	}
 
 	if (st.dir_size) {
 	  for (int i=0; i<st.dir_size; i++) {
 		c_inode_info *ci = new c_inode_info;
-		sp += unrope_info(ci, s.substr(sp, s.end()));
+		ci->_unrope(s, off);
 		dir_contents.push_back(ci);
 	  }
 	}
@@ -164,15 +190,15 @@ class MClientReply : public Message {
 	st.trace_depth = trace.size();
 	
 	r.append((char*)&st, sizeof(st));
-	if (path.length()) r.append(path.c_str());
+	r.append(path.c_str());
 	r.append((char)0);
 	
 	vector<c_inode_info*>::iterator it;
 	for (it = trace.begin(); it != trace.end(); it++) 
-	  r.append(rope_info(*it));
+	  (*it)->_rope(r);
 
 	for (it = dir_contents.begin(); it != dir_contents.end(); it++) 
-	  r.append(rope_info(*it));
+	  (*it)->_rope(r);
   }
 
   // builders
@@ -182,22 +208,13 @@ class MClientReply : public Message {
 
   void set_trace_dist(CInode *in, int whoami) {
 	while (in) {
-	  c_inode_info *info = new c_inode_info;
-	  info->inode = in->inode;
-
-	  // symlink content?
-	  if (in->is_symlink()) info->symlink = in->symlink;
-	  
-	  // referring dentry?
+	  // add this inode to trace, along with referring dentry name
+	  string ref_dn;
 	  CDentry *dn = in->get_parent_dn();
-	  if (dn) info->ref_dn = dn->get_name();
-	  
-	  //info->is_sync = in->is_sync() || in->is_presync();
+	  if (dn) ref_dn = dn->get_name();
 
-	  // replicated where?
-	  in->get_dist_spec(info->dist, whoami);
+	  c_inode_info *info = new c_inode_info(in, whoami, ref_dn);
 
-	  // next!
 	  trace.insert(trace.begin(), info);
 	  in = in->get_parent_inode();
 	}

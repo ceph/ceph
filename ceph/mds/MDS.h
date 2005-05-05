@@ -53,6 +53,7 @@ class Message;
 class MClientRequest;
 class MClientReply;
 class MDBalancer;
+class LogEvent;
 
 // types
 
@@ -142,9 +143,16 @@ class MDS : public Dispatcher {
   bool open_root(Context *c);
   bool open_root_2(int result, Context *c);
 
-  void reply_request(MClientRequest *req, int r = 0);
-
-
+  // generic request helpers
+  void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
+  void reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei);
+  void commit_request(MClientRequest *req,
+					  MClientReply *reply,
+					  CInode *tracei,
+					  LogEvent *event,
+					  LogEvent *event2 = 0);
+  
+  
   void handle_ping(class MPing *m);
   void handle_client_done(Message *m);
   void handle_shutdown_start(Message *m);
