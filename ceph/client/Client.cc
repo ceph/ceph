@@ -2,10 +2,6 @@
 // ceph stuff
 #include "Client.h"
 
-#include "messages/MClientRequest.h"
-#include "messages/MClientReply.h"
-
-
 // unix-ey fs stuff
 #include <sys/types.h>
 #include <utime.h>
@@ -48,6 +44,67 @@ void Client::init() {
 void Client::shutdown() {
   dout(1) << "shutdown" << endl;
   messenger->shutdown();
+}
+
+// insert trace of reply into metadata cache
+
+void Client::insert_trace(vector<c_inode_info*> trace)
+{
+  Inode *cur = root;
+
+  for (int i=0; i<trace.size(); i++) {
+	if (i == 0) {
+	  if (!root) {
+		cur = root = new Inode();
+  	    root->inode = trace[i]->inode;
+		inode_map[root->inode->ino] = root;
+	  }
+	  dout(12) << "insert_trace trace " << i << " root" << endl;
+	} else {
+	  Dir *dir = open_dir( cur );
+	  string dname = trace[i]->ref_dn;
+	  Dentry *next = NULL;
+	  if (dir->dentries.count(dname))
+	    next = dir->dentries[dname];
+	  dout(12) << "insert_trace trace " << i << " dname " << dname << " ino " << trace[i]->inode.ino << endl;
+	  
+	  if (next) {
+		if (next->inode.ino == trace[i]->inode.ino) {
+		  touch_dn(next);
+		  dout(12) << " had dentry " << dname << " with correct ino " << next->inode.ino << endl;
+	    } else {
+		  dout(12) << " had dentry " << dname << " with WRONG ino " << next->inode.ino << endl;
+		  unlink(next);
+		  next = NULL;
+	    }
+	  }
+	  
+	  if (!next) {
+	    if (inode_map.count(trace[i]->inode.ino)) {
+	      Inode *in = inode_map[trace[i]->inode.ino];
+		  next = in->dn;
+	 	  if (next) {
+		    dout(12) << " had ino " << next->inode.ino << " at wrong position, moving" << endl;
+		    if (next->dir)   // only if it was actually attached..
+			  unlink(next);
+		    next = link(dir, dname, in);
+		  }
+		}
+	  }
+	  
+	  if (!next) {
+	    next = link(dir, dname, new Inode());
+		next->inode = trace[i]->inode;
+		inode_map[next->inode->ino] = next->inode;
+		dout(12) << " new dentry+node with ino " << next->inode.ino << endl;
+	  }
+
+	  cur = next->inode;
+	}
+
+	for (set<int>::iterator it = trace[i]->dist.begin(); it != trace[i]->dist.end(); it++)
+	  cur->mds_contacts.push_back(*it);
+  }
 }
 
 // -------------------

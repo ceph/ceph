@@ -8,6 +8,9 @@
 #include "msg/Messenger.h"
 #include "msg/SerialMessenger.h"
 
+#include "messages/MClientRequest.h"
+#include "messages/MClientReply.h"
+
 //#include "msgthread.h"
 
 #include "include/types.h"
@@ -49,6 +52,7 @@ class Dir {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
+  set<int>	mds_contacts;
   time_t    last_updated;
 
   int       ref;      // ref count. 1 for each dentry, fh or dir that links to me.
@@ -154,6 +158,7 @@ class Client : public Dispatcher {
 	lru.lru_insert_mid(dn);    // mid or top?
 	return dn;
   }
+  
   void unlink(Dentry *dn) {
 	Inode *in = dn->inode;
 
@@ -204,6 +209,8 @@ class Client : public Dispatcher {
 	assert(0);
   }
 
+  // metadata cache
+  void insert_trace(vector<c_inode_info*> trace);
 
   // ----------------------
   // fs ops.
