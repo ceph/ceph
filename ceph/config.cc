@@ -20,6 +20,7 @@ md_config_t g_conf = {
 
   client_cache_size: 400,
   client_cache_mid: .5,
+  client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
   
   log_messages: true,

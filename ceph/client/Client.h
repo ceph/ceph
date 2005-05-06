@@ -15,6 +15,7 @@
 
 #include "include/types.h"
 #include "include/lru.h"
+#include "include/filepath.h"
 
 // stl
 #include <set>
@@ -122,6 +123,20 @@ class Client : public Dispatcher {
 
 
   // -- metadata cache stuff
+  // find dentry based on filepath
+  Dentry *lookup(filepath* path) {
+    Inode *cur = root;
+	Dentry *dn;
+	for (int i=0; i<path->bits.size(); i++) {
+	  if (cur->dir.dentries.count(path->bits[i]))
+	    dn = cur->dir.dentries[path->bits[i]];
+	  else
+	    return NULL;
+	  cur = dn->inode;
+	}
+	return dn;
+  }
+		
   // decrease inode ref.  delete if dangling.
   void put_inode(Inode *in) {
 	in->put();
@@ -210,6 +225,7 @@ class Client : public Dispatcher {
   }
 
   // metadata cache
+  Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);
   void insert_trace(vector<c_inode_info*> trace);
 
   // ----------------------

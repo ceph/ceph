@@ -10,6 +10,7 @@ struct md_config_t {
 
   int      client_cache_size;
   float    client_cache_mid;
+  int      client_cache_stat_ttl;
   bool     client_use_random_mds;          // debug flag
 
   bool log_messages;
