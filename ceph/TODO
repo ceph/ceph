@@ -1,6 +1,9 @@
 
 SAGE:
 
+- timer 
+  - integrate with clock?
+
 - path_Traverse
   - fix noperm crap
   - clean up xlock interaction
@@ -17,6 +20,7 @@ SAGE:
 
   - what about setting up an inode proxy???
 
+- symlink loops
 
 - fix logging model for data safety
  - inodeupdate

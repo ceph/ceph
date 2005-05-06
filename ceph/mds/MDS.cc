@@ -85,7 +85,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  mdlog->set_max_events(g_conf.mdlog_max_len);
+  mdlog->set_max_events(g_conf.mds_log_max_len);
 
   shutting_down = false;
   shut_down = false;
@@ -174,7 +174,7 @@ void MDS::handle_shutdown_finish(Message *m)
   
   if (did_shut_down.size() == mdcluster->get_num_mds()) {
 	// MDS's all shut down!
-	
+
 	// shut down osd's
 	for (int i=0; i<g_conf.num_osd; i++) {
 	  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
@@ -183,6 +183,8 @@ void MDS::handle_shutdown_finish(Message *m)
 
 	// shut myself down.
 	shutting_down = false;
+
+	shutdown_final();
   }
 
   // done
@@ -309,13 +311,12 @@ void MDS::dispatch(Message *m)
   }
 
   // balance?
-  /*
   if (whoami == 0 &&
 	  stat_ops >= last_heartbeat + g_conf.mds_heartbeat_op_interval) {
 	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
   }
-  */
+
   if (false && whoami == 0) {
 	static bool didit = false;
 	
@@ -336,7 +337,7 @@ void MDS::dispatch(Message *m)
 	if (mdcache->shutdown_pass()) {
 	  shutting_down = false;
 	  shut_down = true;
-	  shutdown_final();
+	  if (whoami) shutdown_final();
 	}
   }
 
@@ -383,18 +384,24 @@ class C_MDS_CommitRequest : public Context {
   MClientRequest *req;
   MClientReply *reply;
   CInode *tracei;    // inode to include a trace for
+  bool pinned;
   LogEvent *event;
 public:
   C_MDS_CommitRequest(MDS *mds, 
-					 MClientRequest *req, MClientReply *reply, CInode *tracei,
-					 LogEvent *event = 0) {
+					  MClientRequest *req, MClientReply *reply, CInode *tracei,
+					  LogEvent *event = 0,
+					  bool pinned=false) {
 	this->mds = mds;
 	this->req = req;
 	this->tracei = tracei;
+	this->pinned = pinned;
 	this->reply = reply;
 	this->event = event;
   }
   void finish(int r) {
+	// unpin inode?
+	if (tracei && pinned) tracei->inflight_commit_put();
+	
 	if (r == 0) {
 	  // success.  log and reply.
 	  mds->commit_request(req, reply, tracei, event);
@@ -419,6 +426,8 @@ void MDS::reply_request(MClientRequest *req, int r, CInode *tracei)
  * include a trace to tracei
  */
 void MDS::reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei) {
+  dout(10) << "reply_request r=" << reply->get_result() << " " << *req << endl;
+
   // include trace
   if (tracei)
 	reply->set_trace_dist( tracei, whoami );
@@ -430,31 +439,39 @@ void MDS::reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei
 
   // discard request
   mdcache->request_finish(req);
+
+  // stupid stats crap (FIXME)
+  stat_ops++;
 }
 
 /* 
- * commit event(s) to the metadata log, then reply.
- * or, be sloppy and do it concurrently (see g_conf)
+ * commit event(s) to the metadata journal, then reply.
+ * or, be sloppy and do it concurrently (see g_conf.mds_log_before_reply)
  */
 void MDS::commit_request(MClientRequest *req,
 						 MClientReply *reply,
 						 CInode *tracei,
 						 LogEvent *event,
 						 LogEvent *event2) 
-{
+{	  
   if (g_conf.mds_log_before_reply) {
 	// SAFE mode!
 	
 	if (event) {
 	  // log, then reply
+
+	  // pin inode so it doesn't go away!
+	  if (tracei) tracei->inflight_commit_get();
+	  
 	  // pass event2 as event1 (so we chain together!)
 	  /*
 		WARNING: by chaining back to CommitRequest we may get
 		something not quite right if the log commit fails.  what 
 		happens (to the whole system!) then?   ** FIXME **
 	  */
+	  dout(10) << "commit_request submitting log entry" << endl;
 	  mdlog->submit_entry(event, 
-						  new C_MDS_CommitRequest(this, req, reply, tracei, event2));
+						  new C_MDS_CommitRequest(this, req, reply, tracei, event2, true));  // inode is pinned
 	}
 	else {
 	  // just reply, no log entry (anymore).
@@ -707,7 +724,6 @@ void MDS::handle_client_stat(MClientRequest *req,
   logger->inc("ostat");
   stat_read.hit();
   stat_req.hit();
-  stat_ops++;
 
   // reply
   reply_request(req, reply, ref);
@@ -883,8 +899,7 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	
 	// add this item
 	// note: c_inode_info makes note of whether inode data is readable.
-	c_inode_info *i = new c_inode_info(in, whoami, it->first);
-	reply->add_dir_item(i);
+	reply->add_dir_item(new c_inode_info(in, whoami, it->first));
 	numfiles++;
   }
   
@@ -894,7 +909,6 @@ void MDS::handle_client_readdir(MClientRequest *req,
   logger->inc("ordir");
   stat_read.hit();
   stat_req.hit();
-  stat_ops++;
 
   // reply
   reply_request(req, reply, cur);
@@ -1361,7 +1375,7 @@ void MDS::handle_client_rename(MClientRequest *req,
    */
   mdcache->path_traverse(destpath, onfinish->trace, false,
 						 req, ondelay,
-						 MDS_TRAVERSE_DISCOVERXLOCK, 
+						 MDS_TRAVERSE_DISCOVER,  //XLOCK, 
 						 onfinish);
 }
 
@@ -1498,8 +1512,11 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   
   if (destauth != get_nodeid()) {
 	dout(7) << "rename has remote dest " << destauth << endl;
+
 	dout(7) << "FOREIGN RENAME" << endl;
-	//return;
+	reply_request(req, -EINVAL);  // punt for now!
+	return;
+
   } else {
 	dout(7) << "rename is local" << endl;
   }
@@ -1512,31 +1529,6 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 
 
 
-class C_MDS_RenameFinish : public Context{
-  MDS *mds;
-  MClientRequest *req;
-  CInode *renamedi;
-public:
-  C_MDS_RenameFinish(MDS *mds, MClientRequest *req, CInode *renamedi) {
-	this->mds = mds;
-	this->req = req;
-	this->renamedi = renamedi;
-  }
-  virtual void finish(int r) {
-	MClientReply *reply = new MClientReply(req, r);
-
-	// include trace of (hopefully) renamed inode (so client can update their cache structure)
-	reply->set_trace_dist( renamedi, mds->get_nodeid() );
-
-	mds->messenger->send_message(reply,
-								 MSG_ADDR_CLIENT(req->get_client()), 0,
-								 MDS_PORT_SERVER);
-	
-	// note: any of my foreign xlocks will unwind here, by design!
-	// true whether this was a success or failure
-	mds->mdcache->request_finish(req);
-  }
-};
 
 void MDS::handle_client_rename_local(MClientRequest *req,
 									 CInode *ref,
@@ -1648,8 +1640,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
   MClientReply *reply = new MClientReply(req, 0);
   mdcache->file_rename( srcdn, destdn,
 						new C_MDS_CommitRequest(this, req, reply, srcdn->inode,
-												new EInodeUpdate(srcdn->inode)),  // FIXME WRONG EVENT
-						everybody );
+												new EInodeUpdate(srcdn->inode)) );  // FIXME WRONG EVENT
 }
 
 

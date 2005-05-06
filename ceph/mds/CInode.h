@@ -52,6 +52,8 @@ using namespace __gnu_cxx;
 
 #define CINODE_PIN_IMPORTING  9   // multipurpose, for importing
 
+#define CINODE_PIN_REQUEST   10  // request is logging, finishing
+
 //#define CINODE_PIN_SYNCBYME     70000
 //#define CINODE_PIN_SYNCBYAUTH   70001
 //#define CINODE_PIN_PRESYNC      10   // waiter
@@ -136,7 +138,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: handle_export_dir_warning
     // triggers: handle_export_dir_notify
 
-#define CINODE_WAIT_RENAME       (1<<16)
+#define CINODE_WAIT_RENAMEACK    (1<<16)
 
 #define CINODE_WAIT_HARDR        (1<<17)  // 131072
 #define CINODE_WAIT_HARDW        (1<<18)  // 262...
@@ -229,21 +231,12 @@ class CInode : LRUObject {
   map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
   int              replica_nonce;    // [replica] defined on replica
 
-  set<int>         soft_tokens;      // replicas who can soft update the inode     XXX FIXME
-  /* ..and thus may have a newer mtime, size, etc.! .. w/o sync
-	 for authority: set of nodes; self is assumed, but not included
-	 for replica:   undefined */
-  unsigned         dist_state;
-  //set<int>         sync_waiting_for_ack;
-  //set<int>         lock_waiting_for_ack;
-  //int              lock_active_count;  // count for in progress or waiting locks
-  //bool             sync_replicawantback;  // avoids sticky sync
-
-  set<int>         unlink_waiting_for_ack;
+  // this is sort of a mess.
   set<int>         rename_waiting_for_ack;
 
   int              dangling_auth;         // explicit auth when dangling.
 
+  int              num_inflight_commits;
 
   // waiters
   multimap<int,Context*>  waiting;
@@ -527,6 +520,17 @@ class CInode : LRUObject {
 
 
   // -- reference counting --
+
+  void inflight_commit_put() {
+	num_inflight_commits--;
+	if (num_inflight_commits == 0) put(CINODE_PIN_REQUEST);
+  }
+  void inflight_commit_get() {
+	if (num_inflight_commits == 0) get(CINODE_PIN_REQUEST);
+	num_inflight_commits++;
+  }
+
+
   bool is_pinned() { return ref > 0; }
   set<int>& get_ref_set() { return ref_set; }
   void put(int by) {

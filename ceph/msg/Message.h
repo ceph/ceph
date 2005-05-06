@@ -51,10 +51,11 @@
 
 #define MSG_MDS_DENTRYUNLINK      200
 
-#define MSG_MDS_RENAMENOTIFY     300   // sent to bystanders
-#define MSG_MDS_RENAMEREQ        301   // sent from initiator to src auth (rare)
-#define MSG_MDS_RENAME           302   // sent from src to dest, includes inode
-#define MSG_MDS_RENAMEACK        303   // sent from dest to initiator, to xlock_finish
+#define MSG_MDS_RENAMENOTIFY     300   // sent from initiator to bystanders
+#define MSG_MDS_RENAMENOTIFYACK  301   // sent back to initiator
+#define MSG_MDS_RENAMEREQ        302   // sent from initiator to src auth (rare)
+#define MSG_MDS_RENAME           303   // sent from src to dest, includes inode
+#define MSG_MDS_RENAMEACK        304   // sent from dest to initiator, to xlock_finish
 
 #define MSG_MDS_LOCK             500
 

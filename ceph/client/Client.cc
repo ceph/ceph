@@ -59,7 +59,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   
   if (dn) {
 	if (dn->inode->inode.ino == in_info->inode.ino) {
-	  touch_dn(next);
+	  touch_dn(dn);
 	  dout(12) << " had dentry " << dname << " with correct ino " << dn->inode->inode.ino << endl;
 	} else {
 	  dout(12) << " had dentry " << dname << " with WRONG ino " << dn->inode->inode.ino << endl;
@@ -81,9 +81,21 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   
   if (!dn) {
 	dn = link(dir, dname, new Inode());
-	dn->inode->inode = in_info->inode;
 	inode_map[dn->inode->inode.ino] = dn->inode;
 	dout(12) << " new dentry+node with ino " << dn->inode->inode.ino << endl;
+  }
+
+  // OK!
+  assert(dn && dn->inode);
+
+  // actually update info
+  dn->inode->inode = in_info->inode;
+
+  // symlink?
+  if (dn->inode->inode.mode & INODE_MODE_SYMLINK) {
+	if (!dn->inode->symlink) 
+	  dn->inode->symlink = new string;
+	*(dn->inode->symlink) = in_info->symlink;
   }
 
   // take note of latest distribution on mds's
@@ -94,12 +106,12 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 
 // insert trace of reply into metadata cache
 
-void Client::insert_trace(vector<c_inode_info*> trace)
+void Client::insert_trace(const vector<c_inode_info*>& trace)
 {
   Inode *cur = root;
   time_t now = time(NULL);
 
-  if (!trace) return;
+  if (trace.empty()) return;
   
   for (int i=0; i<trace.size(); i++) {
     if (i == 0) {
@@ -143,7 +155,7 @@ int Client::unlink(const char *path)
   if (res == 0) {
 	unlink(lookup(req->get_filepath()));
   }
-  this->insert_trace(reply->get_trace);
+  this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "unlink result is " << res << endl;
   return res;
@@ -164,7 +176,7 @@ int Client::rename(const char *from, const char *to)
    
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
-  this->insert_trace(reply->get_trace);
+  this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "rename result is " << res << endl;
   return res;
@@ -187,7 +199,7 @@ int Client::mkdir(const char *path, mode_t mode)
    
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
-  this->insert_trace(reply->get_trace);
+  this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "mkdir result is " << res << endl;
   return res;
@@ -210,7 +222,7 @@ int Client::rmdir(const char *path)
   if (res == 0) {
 	unlink(lookup(req->get_filepath()));
   }
-  this->insert_trace(reply->get_trace);  
+  this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "rmdir result is " << res << endl;
   return res;
@@ -233,7 +245,7 @@ int Client::symlink(const char *target, const char *link)
    
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
-  this->insert_trace(reply->get_trace);  //FIXME assuming trace of link, not of target
+  this->insert_trace(reply->get_trace());  //FIXME assuming trace of link, not of target
   delete reply;
   dout(10) << "symlink result is " << res << endl;
   return res;
@@ -273,7 +285,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
   // check whether cache content is fresh enough
   Dentry *dn = lookup(req->get_filepath());
   inode_t inode;
-  if (dn && ((time(NULL) - dn->inode.last_updated) <= g_conf.client_cache_stat_ttl)) {
+  if (dn && ((time(NULL) - dn->inode->last_updated) <= g_conf.client_cache_stat_ttl)) {
 	inode = dn->inode->inode;
 	dout(10) << "lstat cache hit" << endl;
   } else {  
@@ -292,6 +304,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	
 	//Update metadata cache
 	this->insert_trace(trace);
+	delete reply;
   }
      
   memset(stbuf, 0, sizeof(struct stat));
@@ -310,22 +323,8 @@ int Client::lstat(const char *path, struct stat *stbuf)
   //stbuf->st_flags =
   //stbuf->st_gen =
 
-  // gross HACK for now.. put an Inode in cache!  
-  // for now i just need to put the symlink content somewhere (so that readlink() will work)
-  //Inode *in = new Inode;
-  //inode_map[inode.ino] = in;   // put in map so subsequent readlink will find it
-  //in->inode = inode;
-
-  // symlink?
-  Inode *in = inode_map[inode.ino];
-  if (in->inode.mode & INODE_MODE_SYMLINK) {
-	if (!in->symlink) in->symlink = new string;
-	*(in->symlink) = trace[trace.size()-1]->symlink;
-  }
-
   dout(1) << "stat sez uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
 
-  delete reply;
   return 0;
 }
 
@@ -344,7 +343,7 @@ int Client::chmod(const char *path, mode_t mode)
   
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
-  this->insert_trace(reply->get_trace);  
+  this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "chmod result is " << res << endl;
   return res;
@@ -366,7 +365,7 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
 
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
-  this->insert_trace(reply->get_trace);  
+  this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "chown result is " << res << endl;
   return res;
@@ -388,7 +387,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
    
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
-  this->insert_trace(reply->get_trace);  
+  this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "utime result is " << res << endl;
   return res;
@@ -425,24 +424,25 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
   // dir contents to cache!
   Dir *dir = open_dir(inode_map[trace[trace.size()-1]->inode.ino]);
   time_t now = time(NULL);
-  vector<c_inode_info*>::iterator it;
-  for (it = reply->get_dir_contents().begin(); 
+  for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 
 	   it != reply->get_dir_contents().end(); 
 	   it++) {
 	// put in cache
 	Inode *in = this->insert_inode_info(dir, *it);
 	in->last_updated = now;
   }
-    
+
+  // FIXME: remove items in cache that weren't in my readdir
+  // ***
+
   // dir contents to caller -- some of them might not have been in reply!
-  hash_map<string, *Dentry>::iterator it;
-  for (it = dir->dentries.begin();
+  for (hash_map<string, Dentry*>::iterator it = dir->dentries.begin();
        it != dir->dentries.end();
 	   it++) {
-    contents[it->first] = it->second->inode->inode;
+    contents[it->first] = &it->second->inode->inode;
   }
 
-  delete reply;     fix thing above first
+  delete reply;     //fix thing above first
   return res;
 }
 

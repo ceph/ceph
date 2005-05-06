@@ -14,7 +14,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.get_lockstate() == DN_LOCK_UNPINNING) out << " unpinning";
   if (dn.is_dirty()) out << " dirty";
   if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock=" << dn.get_xlockedby() << " g=" << dn.get_gather_set();
-  if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock";
+  if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock=" << dn.get_xlockedby();
   out << " inode=" << dn.get_inode();
   out << " " << &dn;
   out << " in " << *dn.get_dir();

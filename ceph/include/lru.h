@@ -2,8 +2,10 @@
 #ifndef __LRU_H
 #define __LRU_H
 
+#include <assert.h>
 #include <iostream>
 using namespace std;
+
 #include "include/config.h"
 
 
@@ -18,6 +20,7 @@ class LRUObject {
   LRUObject() {
 	lru_next = lru_prev = NULL;
 	lru_in_top = false;
+	lru_in_lru = false;
 	lru_expireable = true;
   }
 
@@ -67,6 +70,9 @@ class LRU {
 
   // insert at top of lru
   void lru_insert_top(LRUObject *o) {
+	assert(!o->lru_in_lru);
+	o->lru_in_lru = true;
+
 	o->lru_in_top = true;
 	o->lru_next = lru_tophead;
 	o->lru_prev = NULL;
@@ -78,13 +84,15 @@ class LRU {
 	lru_tophead = o;
 	lru_ntop++;
 	lru_num++;
-	o->lru_in_lru = true;
 
 	lru_adjust();
   }
 
   // insert at mid point in lru
   void lru_insert_mid(LRUObject *o) {
+	assert(!o->lru_in_lru);
+	o->lru_in_lru = true;
+
 	o->lru_in_top = false;
 	o->lru_next = lru_bothead;
 	o->lru_prev = NULL;
@@ -96,7 +104,6 @@ class LRU {
 	lru_bothead = o;
 	lru_nbot++;
 	lru_num++;
-	o->lru_in_lru = true;
   }
 
 
@@ -118,7 +125,8 @@ class LRU {
   // remove an item
   LRUObject *lru_remove(LRUObject *o) {
 	// not in list
-	if (!o->lru_in_lru) return o;
+	//assert(o->lru_in_lru);
+	if (!o->lru_in_lru) return o;  // might have expired and been removed that way.
 
 	if (o->lru_in_top) {
 	  //cout << "removing " << o << " from top" << endl;

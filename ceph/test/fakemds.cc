@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   
   // local config settings
+  g_conf.num_client = g_conf.num_fakeclient;  // to fool mds, hack gross
 
   // create mds
   MDS *mds[NUMMDS];

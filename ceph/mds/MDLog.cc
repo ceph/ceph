@@ -169,7 +169,7 @@ int MDLog::trim_2_didread(LogEvent *le)
 
   // read another event?      FIXME: max_trimming maybe?  would need to restructure this again.
   if (num_events - trimming.size() > max_events &&
-	  trimming.size() < g_conf.mdlog_max_trimming) {
+	  trimming.size() < g_conf.mds_log_max_trimming) {
 	trim_readnext();
   }
 }

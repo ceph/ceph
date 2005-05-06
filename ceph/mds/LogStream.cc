@@ -80,8 +80,8 @@ void LogStream::did_read_bit(crope& next_bit, LogEvent **le, Context *c)
   reading_block = false;
   
   // throw off beginning part
-  if (buffer.length() > g_conf.mdlog_read_inc*2) {
-	int trim = buffer.length() - g_conf.mdlog_read_inc*2;
+  if (buffer.length() > g_conf.mds_log_read_inc*2) {
+	int trim = buffer.length() - g_conf.mds_log_read_inc*2;
 	buf_start += trim;
 	buffer = buffer.substr(trim, buffer.length() - trim);
 	dout(10) << "did_read_bit adjusting buf_start now +" << trim << " = " << buf_start << " len " << buffer.length() << endl;
@@ -97,7 +97,7 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 	// does buffer have what we want?
 	//if (buf_start > cur_pos ||
 	//buf_start+buffer.length() < cur_pos+4) {
-	if (buf_start+buffer.length() < cur_pos+ g_conf.mdlog_read_inc/2) {
+	if (buf_start+buffer.length() < cur_pos+ g_conf.mds_log_read_inc/2) {
 
 	  // make sure block is being read
 	  if (reading_block) {
@@ -105,12 +105,12 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 		assert(0);  
 	  } else {
 		off_t start = buf_start+buffer.length();
-		dout(10) << "read_next reading log head from disk, offset " << start << " len " << g_conf.mdlog_read_inc << endl;
+		dout(10) << "read_next reading log head from disk, offset " << start << " len " << g_conf.mds_log_read_inc << endl;
 		// nope.  read a chunk
 		C_LS_ReadChunk *readc = new C_LS_ReadChunk(this, le, c);
 		reading_block = true;
 		mds->osd_read(osd, oid,
-					  g_conf.mdlog_read_inc, start,
+					  g_conf.mds_log_read_inc, start,
 					  &readc->next_bit,
 					  readc);
 	  }

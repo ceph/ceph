@@ -8,35 +8,39 @@ struct md_config_t {
 
   bool osd_cow;                      // debug flag?
 
-  int      client_cache_size;
-  float    client_cache_mid;
-  int      client_cache_stat_ttl;
-  bool     client_use_random_mds;          // debug flag
-
+  // profiling
   bool log_messages;
   float log_interval;
-  
-  int mdlog_max_len;
-  int mdlog_max_trimming;
-  int mdlog_read_inc;
-  
+
   bool fake_clock;
   bool fakemessenger_serialize;
 
   int  debug;
 
-  int   mdcache_size;
-  float mdcache_mid;
+ 
+  // client
+  int      client_cache_size;
+  float    client_cache_mid;
+  int      client_cache_stat_ttl;
+  bool     client_use_random_mds;          // debug flag
 
-  float mdbal_replicate_threshold;
-  float mdbal_unreplicate_threshold;
+  // mds
+  int mds_log_max_len;
+  int mds_log_max_trimming;
+  int mds_log_read_inc;
+  
+  int   mds_cache_size;
+  float mds_cache_mid;
+
+  float mds_bal_replicate_threshold;
+  float mds_bal_unreplicate_threshold;
 
   int   mds_heartbeat_op_interval;
   bool  mds_verify_export_dirauth;     // debug flag
   bool  mds_log_before_reply;
 
   // fake client
-  int num_fakeclient;
+  int      num_fakeclient;
   unsigned fakeclient_requests;
   bool     fakeclient_deterministic;     // debug flag
 

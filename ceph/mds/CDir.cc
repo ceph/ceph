@@ -277,7 +277,7 @@ void CDir::unlink_inode_work( CDentry *dn )
 }
 
 void CDir::remove_null_dentries() {
-  dout(10) << "remove_null_dentries " << *this << endl;
+  dout(12) << "remove_null_dentries " << *this << endl;
 
   list<CDentry*> dns;
   for (CDir_map_t::iterator it = null_items.begin();

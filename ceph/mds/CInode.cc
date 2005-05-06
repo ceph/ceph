@@ -18,7 +18,7 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  out << "[inode " << in.inode.ino << " ~" << path << " ";
+  out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/ ":" ");
   if (in.is_auth()) {
 	out << "auth";
 	if (in.is_cached_by_anyone()) {
@@ -71,10 +71,9 @@ CInode::CInode(bool auth) : LRUObject(),
 
   auth_pins = 0;
   nested_auth_pins = 0;
+  num_inflight_commits = 0;
 
-  state = 0;
-  dist_state = 0;
-  
+  state = 0;  
   version = 0;
 
   if (auth) state_set(CINODE_STATE_AUTH);

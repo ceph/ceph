@@ -42,6 +42,7 @@
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MRenameNotify.h"
+#include "messages/MRenameNotifyAck.h"
 #include "messages/MRename.h"
 #include "messages/MRenameAck.h"
 #include "messages/MRenameReq.h"
@@ -73,8 +74,8 @@ MDCache::MDCache(MDS *m)
 {
   mds = m;
   root = NULL;
-  lru.lru_set_max(g_conf.mdcache_size);
-  lru.lru_set_midpoint(g_conf.mdcache_mid);
+  lru.lru_set_max(g_conf.mds_cache_size);
+  lru.lru_set_midpoint(g_conf.mds_cache_mid);
 }
 
 MDCache::~MDCache() 
@@ -555,7 +556,7 @@ bool MDCache::shutdown_pass()
   } else {
 	dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << endl;
 	show_cache();
-	dump();
+	//dump();
   }
   return false;
 }
@@ -706,6 +707,9 @@ int MDCache::proc_message(Message *m)
 
   case MSG_MDS_RENAMENOTIFY:
 	handle_rename_notify((MRenameNotify*)m);
+	break;
+  case MSG_MDS_RENAMENOTIFYACK:
+	handle_rename_notify_ack((MRenameNotifyAck*)m);
 	break;
   case MSG_MDS_RENAME:
 	handle_rename((MRename*)m);
@@ -1093,12 +1097,12 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
 	if (!dn->is_pinnable(m)) {
 	  // wait
 	  if (c) {
-		dout(7) << "path_pin can't pin " << *dn << ", waiting" << endl;
+		dout(10) << "path_pin can't pin " << *dn << ", waiting" << endl;
 		dn->dir->add_waiter(CDIR_WAIT_DNREAD,
 							dn->name,
 							c);
 	  } else {
-		dout(7) << "path_pin can't pin, no waiter, failing." << endl;
+		dout(10) << "path_pin can't pin, no waiter, failing." << endl;
 	  }
 	  return false;
 	}
@@ -1109,7 +1113,7 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
 	   it != trace.end();
 	   it++) {
 	(*it)->pin(m);
-	dout(10) << "path_pinned " << *(*it) << endl;
+	dout(11) << "path_pinned " << *(*it) << endl;
   }
 
   delete c;
@@ -1125,11 +1129,16 @@ void MDCache::path_unpin(vector<CDentry*>& trace,
 	   it++) {
 	CDentry *dn = *it;
 	dn->unpin(m);
-	dout(10) << "path_unpinned " << *dn << endl;
+	dout(11) << "path_unpinned " << *dn << endl;
 
 	// did we completely unpin a waiter?
-	if (dn->lockstate == DN_LOCK_UNPINNING && !dn->is_pinned())
-	  dn->dir->take_waiting(CDIR_WAIT_DNUNPINNED, dn->name, mds->finished_queue);
+	if (dn->lockstate == DN_LOCK_UNPINNING && !dn->is_pinned()) {
+	  // return state to sync, in case the unpinner flails
+	  dn->lockstate = DN_LOCK_SYNC;
+
+	  // run finisher right now to give them a fair shot.
+	  dn->dir->finish_waiting(CDIR_WAIT_DNUNPINNED, dn->name);
+	}
   }
 }
 
@@ -1141,7 +1150,7 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 	make_trace(trace, parent);
 
 	CDentry *dn = in->get_parent_dn();
-	dout(10) << "make_trace adding " << *dn << endl;
+	dout(15) << "make_trace adding " << *dn << endl;
 	trace.push_back(dn);
   }
 }
@@ -1353,6 +1362,13 @@ void MDCache::handle_discover(MDiscover *dis)
     if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "they don't want the base dir" << endl;
     } else {
+	  // is it actaully a dir at all?
+	  if (!cur->is_dir()) {
+		dout(7) << "not a dir " << *cur << endl;
+		reply->set_flag_error_dir();
+		break;
+	  }
+
       // add dir
       if (!cur->dir_is_auth()) {
 		dout(7) << *cur << " dir auth is someone else, i'm done" << endl;
@@ -1400,7 +1416,7 @@ void MDCache::handle_discover(MDiscover *dis)
     if (dn) {
 	  if (!dn->inode && dn->is_sync()) {
         dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " null in " << *cur->dir << ", returning error" << endl;
-		reply->set_flag_error( dis->get_dentry(i) );
+		reply->set_flag_error_dn( dis->get_dentry(i) );
 		break;   // don't replicate null but non-locked dentries.
 	  }
 	  
@@ -1432,7 +1448,7 @@ void MDCache::handle_discover(MDiscover *dis)
       if (cur->dir->is_complete()) {
         // set error flag in reply
         dout(7) << "mds" << whoami << " dentry " << dis->get_dentry(i) << " not found in " << *cur->dir << ", returning error" << endl;
-		reply->set_flag_error( dis->get_dentry(i) );
+		reply->set_flag_error_dn( dis->get_dentry(i) );
 		break;
       } else {
         // readdir
@@ -1524,15 +1540,17 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
 
   // fyi
-  if (m->is_flag_error()) dout(7) << " flag error, dentry = " << m->get_error_dentry() << endl;
+  if (m->is_flag_error_dir()) dout(7) << " flag error, dir" << endl;
+  if (m->is_flag_error_dn()) dout(7) << " flag error, dentry = " << m->get_error_dentry() << endl;
+  dout(10) << "depth is " << m->get_depth() << ", has_root = " << m->has_root() << endl;
   
-
   // loop over discover results.
   // indexese follow each ([[dir] dentry] inode) 
   // can start, end with any type.
   
   for (int i=m->has_root(); i<m->get_depth(); i++) {
-	
+	dout(10) << "discover_reply i=" << i << " cur " << *cur << endl;
+
 	// dir
 	if ((i >  0) ||
 		(i == 0 && m->has_base_dir())) {
@@ -1558,7 +1576,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	}	
 
 	// dentry error?
-	if (m->is_flag_error()) {
+	if (i == m->get_depth()-1 && 
+		m->is_flag_error_dn()) {
 	  // error!
 	  assert(cur->is_dir());
 	  if (cur->dir) {
@@ -1640,6 +1659,13 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	
 	// onward!
 	cur = in;
+  }
+
+  // dir error at the end there?
+  if (m->is_flag_error_dir()) {
+	dout(7) << " flag_error on dir " << *cur << endl;
+	assert(!cur->is_dir());
+	cur->take_waiting(CINODE_WAIT_DIR, error);
   }
 
   // finish errors directly
@@ -1997,31 +2023,24 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
 // renaming!
 
-/*
-class C_MDC_RenameLocalFile : public Context {
+class C_MDC_RenameAck : public Context {
   MDCache *mdc;
-  CInode *from, *oldin;
-  CDir *destdir;
+  CDir *srcdir;
+  CInode *in;
   Context *c;
 public:
-  C_MDC_RenameLocalFile(MDCache *mdc,
-						CInode *from,
-						CDir *destdir,
-						CInode *oldin,
-						Context *c) {
+  C_MDC_RenameAck(MDCache *mdc, CDir *srcdir, CInode *in, Context *c) {
 	this->mdc = mdc;
-	this->from = from;
-	this->destdir = destdir;
-	this->oldin = oldin;
+	this->srcdir = srcdir;
+	this->in = in;
 	this->c = c;
   }
   void finish(int r) {
-	mdc->file_rename_finish(from, destdir, oldin, c);
+	mdc->file_rename_finish(srcdir, in, c);
   }
 };
-*/
 
-void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool everyone)
+void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c)
 {
   assert(srcdn->is_xlocked());  // by me
   assert(destdn->is_xlocked());  // by me
@@ -2037,7 +2056,7 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   CInode *in = srcdn->inode;
   Message *req = srcdn->xlockedby;
 
-  // foreign rename?
+  // FOREIGN rename?
   if (srcauth && !destauth) {
 	dout(7) << "file_rename src auth, not dest auth.  sending MRename" << endl;
 	
@@ -2045,7 +2064,7 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
 							mds->get_nodeid());  // i'm the initiator
 
 	// set waiter on the inode (is this the best place?)
-	in->add_waiter(CINODE_WAIT_RENAME, c);
+	in->add_waiter(CINODE_WAIT_RENAMEACK, c);
 	return;
   }
   else if (!srcauth) {
@@ -2062,10 +2081,11 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
 								 MSG_ADDR_MDS(srcauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
 
 	// set waiter on the inode (is this the best place?)
-	in->add_waiter(CINODE_WAIT_RENAME, c);
+	in->add_waiter(CINODE_WAIT_RENAMEACK, c);
 	return;
   } 
 
+  // LOCAL rename
   assert(srcauth && destauth);
   dout(7) << "file_rename src and dest auth, renaming locally (easy!)" << endl;
   
@@ -2075,6 +2095,7 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   // mark dentries dirty
   srcdn->mark_dirty();
   destdn->mark_dirty();
+  in->mark_dirty();
   
   // update imports/exports?
   if (in->is_dir() && in->dir) 
@@ -2083,49 +2104,82 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool ever
   
   // tell replicas (no need to wait for ack) to do the same, and un-xlock.
   // make list
-  set<int> who;
-  who = srcdir->get_open_by();
+  set<int> notify;
+  notify = srcdir->get_open_by();
   for (set<int>::iterator it = destdir->open_by_begin();
 	   it != destdir->open_by_end();
 	   it++)
-	if (who.count(*it) == 0) who.insert(*it);
+	if (notify.count(*it) == 0) notify.insert(*it);
 
-  // tell
-  string destdirpath;
-  destdir->inode->make_path(destdirpath);
+  if (notify.size()) {
+	// tell
+	string destdirpath;
+	destdir->inode->make_path(destdirpath);
+	
+	for (set<int>::iterator it = notify.begin();
+		 it != notify.end();
+		 it++) {
+	  mds->messenger->send_message(new MRenameNotify(in->ino(),
+													 srcdir->ino(),
+													 srcname,
+													 destdir->ino(),
+													 destdirpath,
+													 destname),
+								   MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	}
 
-  for (set<int>::iterator it = who.begin();
-	   it != who.end();
-	   it++) {
-	mds->messenger->send_message(new MRenameNotify(srcdir->ino(),
-												   srcname,
-												   destdir->ino(),
-												   destdirpath,
-												   destname),
-								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	// wait for acks
+	in->rename_waiting_for_ack = notify;
+	in->add_waiter(CINODE_WAIT_RENAMEACK,
+				   new C_MDC_RenameAck(this, srcdir, in, c));
+  } else {
+	file_rename_finish(srcdir, in, c);
   }
+}
 
-  // log it
-  // ***
+
+void MDCache::handle_rename_notify_ack(MRenameNotifyAck *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  assert(in);
+  dout(7) << "handle_rename_notify_ack on " << *in << endl;
+
+  in->rename_waiting_for_ack.erase(m->get_source());
+  if (in->rename_waiting_for_ack.empty()) {
+	// last one!
+	in->finish_waiting(CINODE_WAIT_RENAMEACK, 0);
+  } else {
+	dout(7) << "still waiting for " << in->rename_waiting_for_ack << endl;
+  }
+}
+
+
+void MDCache::file_rename_finish(CDir *srcdir, CInode *in, Context *c)
+{
+  dout(10) << "file_rename_finish on " << *in << endl;
 
   // did i empty out an imported dir?
   if (srcdir->is_import() && !srcdir->inode->is_root() && srcdir->get_size() == 0) 
 	export_empty_import(srcdir);
 
+  /* just let the finished request drop the locks.
+
   // clean up xlocks
   dentry_xlock_finish(srcdn);
   dentry_xlock_finish(destdn);
 
-  // finish our query off for now.  XXX FIXME (should wait for log?)
+  // other waiters
+  srcdir->take_waiting(CDIR_WAIT_ANY, srcname, mds->finished_queue);
+  destdir->take_waiting(CDIR_WAIT_DNREAD, destname, mds->finished_queue);
+  */
+  
+  // finish our caller
   if (c) {
 	c->finish(0);
 	delete c;
   }
-
-  // other waiters
-  srcdir->take_waiting(CDIR_WAIT_ANY, srcname, mds->finished_queue);
-  destdir->take_waiting(CDIR_WAIT_DNREAD, destname, mds->finished_queue);
 }
+
 
 void MDCache::file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initiator)
 {
@@ -2138,13 +2192,17 @@ void MDCache::file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initi
   // (we're basically exporting this inode)
   CInode *in = srcdn->inode;
   assert(in);
+  assert(in->is_auth());
+
+  string srcpath;
+  srcdn->inode->make_path(srcpath);
   
   // encode and export inode state
   crope inode_state;
   encode_export_inode(in, inode_state);
   
   MRename *m = new MRename(initiator,
-						   srcdir->ino(), srcdn->name, destdir->ino(), destdn->name,
+						   srcdir->ino(), srcdn->name, srcpath, destdir->ino(), destdn->name,
 						   inode_state);
   int destauth = destdir->dentry_authority(destdn->name);
   mds->messenger->send_message(m,
@@ -2156,7 +2214,7 @@ void MDCache::file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initi
 	
   // update imports/exports?
   if (in->is_dir() && in->dir) 
-	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
+	fix_renamed_dir(srcdir, in, destdir, true);  // auth changed
 
   /* let the initiator do this.
   // drop xlock on src
@@ -2184,9 +2242,23 @@ void MDCache::handle_rename_req(MRenameReq *m)
 void MDCache::handle_rename(MRename *m)
 {
   CInode *srcdiri = get_inode(m->get_srcdirino());
-  CDir *srcdir = srcdiri->dir;
-  CDentry *srcdn = srcdir->lookup(m->get_srcname());
-  assert(srcdn);
+  CDir *srcdir = 0;
+  if (srcdiri) srcdir = srcdiri->dir;
+  CDentry *srcdn = 0;
+  if (srcdir) srcdn = srcdir->lookup(m->get_srcname());
+  
+  if (!srcdn) {
+	dout(7) << "handle_rename don't have src path " << m->get_srcpath() << ", discovering" << endl;
+
+	vector<CDentry*> trace;
+	filepath srcpath = m->get_srcpath();
+	int r = path_traverse(srcpath, trace, true,
+						  m, new C_MDS_RetryMessage(mds, m), 
+						  MDS_TRAVERSE_DISCOVERXLOCK);             // ??? FIXME
+	assert(r>0);
+	return;
+  }
+  
 
   CInode *destdiri = get_inode(m->get_destdirino());
   CDir *destdir = destdiri->dir;
@@ -2196,46 +2268,32 @@ void MDCache::handle_rename(MRename *m)
 
   dout(7) << "handle_rename " << *srcdn << " to " << *destdn << endl;
 
-  // decode + import inode (into _old_ location to start)
+  if (srcdn->inode) {
+	// rename replica into position
+	rename_file(srcdn, destdn);
+  } else {
+	// unlink dest inode if it's there
+	if (destdn->inode) destdir->unlink_inode(destdn);
+  }
+
+  // decode + import inode (into new location start)
   int off = 0;
-  decode_import_inode(srcdn, m->get_inode_state(), off, m->get_source());
-  
+  decode_import_inode(destdn, m->get_inode_state(), off, m->get_source());
+
   CInode *in = srcdn->inode;
   assert(in);
 
-  // rename it
-  rename_file(srcdn, destdn);
   destdn->mark_dirty();
+  in->mark_dirty();
 
   // update imports/exports?
   if (in->is_dir() && in->dir) 
-	fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
-
-  // send notifies to everyone (since it's hard to safely merge open_by from src+dest)
-  // include src.  but not me, or initiator.
-  set<int> who;
-  for (int i=0; i<mds->get_cluster()->get_num_mds(); i++)
-	if (i != mds->get_nodeid() &&
-		i != m->get_initiator()) who.insert(i);	
-  
-  string destdirpath;
-  destdir->inode->make_path(destdirpath);
-
-  for (set<int>::iterator it = who.begin();
-	   it != who.end();
-	   it++) {
-	mds->messenger->send_message(new MRenameNotify(srcdir->ino(),
-												   srcdn->name,
-												   destdir->ino(),
-												   destdirpath,
-												   destdn->name),
-								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE, MDS_PORT_CACHE);
-  }
+	fix_renamed_dir(srcdir, in, destdir, true);  // auth changed
 
   // ok, tell the initiator
   if (m->get_initiator() == mds->get_nodeid()) {
 	// it's me!
-	in->take_waiting(CINODE_WAIT_RENAME, mds->finished_queue);
+	in->take_waiting(CINODE_WAIT_RENAMEACK, mds->finished_queue);
   } else {
 	MRenameAck *ack = new MRenameAck(srcdir->ino(), srcdn->name, destdir->ino(), destdn->name);
 	mds->messenger->send_message(ack,
@@ -2264,7 +2322,7 @@ void MDCache::handle_rename_ack(MRenameAck *m)
   dout(7) << "handle_rename_ack on " << *in << endl;
 
   // all done!
-  in->take_waiting(CINODE_WAIT_RENAME, mds->finished_queue);
+  in->take_waiting(CINODE_WAIT_RENAMEACK, mds->finished_queue);
 
   delete m;
 }
@@ -2296,49 +2354,61 @@ void MDCache::handle_rename_notify(MRenameNotify *m)
 	if (!destdn) {
 	  destdn = destdir->add_dentry(m->get_destname());  // create null dentry
 	  destdn->lockstate = DN_LOCK_XLOCK;                // that's xlocked!
-	  assert(!srcdn->inode->is_dir());
 	}
 
 	dout(7) << "handle_rename_notify renaming " << *srcdn << " to " << *destdn << endl;
 	
 	if (in) {
 	  rename_file(srcdn, destdn);
+	} else {
+	  dout(7) << " i don't have the inode (just null dentries)" << endl;
 	}
 	
 	// remove src dentry
-	srcdn->dir->remove_dentry(srcdn);
+	//srcdn->dir->remove_dentry(srcdn);
 	
 	// update imports/exports?
 	if (in && in->is_dir() && in->dir) 
 	  fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 	
-	srcdir->take_waiting(CDIR_WAIT_ANY, m->get_srcname(), finished);
-	destdir->take_waiting(CDIR_WAIT_ANY, m->get_destname(), finished);
+	//srcdir->take_waiting(CDIR_WAIT_ANY, m->get_srcname(), finished);
+	//destdir->take_waiting(CDIR_WAIT_ANY, m->get_destname(), finished);
   }
 
   else if (srcdn) {
 	if (srcdn->inode && srcdn->inode->dir) {
-	  dout(7) << "handle_rename_notify no dest, but src is an open dir, discovering destdir.  srcdn is " << *srcdn << endl;
-	  
-	  vector<CDentry*> trace;
-	  filepath destdirpath = m->get_destdirpath();
-	  int r = path_traverse(destdirpath, trace, true,
-							m, new C_MDS_RetryMessage(mds, m), 
-							MDS_TRAVERSE_DISCOVER);
-	  assert(r>0);
+	  dout(7) << "handle_rename_notify no dest, but src is an open dir." << endl;
+	  dout(7) << "srcdn is " << *srcdn << endl;
+
+	  if (destdiri) {
+		dout(7) << "have destdiri, opening dir " << *destdiri << endl;
+		open_remote_dir(destdiri,
+						new C_MDS_RetryMessage(mds,m));
+	  } else {
+		filepath destdirpath = m->get_destdirpath();
+		dout(7) << "don't have destdiri even, doing traverse+discover on " << destdirpath << endl;
+
+		vector<CDentry*> trace;
+		int r = path_traverse(destdirpath, trace, true,
+							  m, new C_MDS_RetryMessage(mds, m), 
+							  MDS_TRAVERSE_DISCOVER);
+		assert(r>0);
+	  }
 	  return;
 	} else {
 	  dout(7) << "handle_rename_notify unlinking src only " << *srcdn << endl;
-	  assert(!srcdn->inode->is_dir());
-	  srcdir->remove_dentry(srcdn);  // will leave inode dangling.
-	  srcdir->take_waiting(CDIR_WAIT_ANY, m->get_srcname(), finished);
+	  if (srcdn->inode) {
+		assert(!srcdn->inode->dir);    // dir shouldn't be open, or we would have discovered dest (above)
+		srcdir->unlink_inode(srcdn);
+	  }
 	}
   }
 
   else if (destdn) {
 	dout(7) << "handle_rename_notify unlinking dst only " << *destdn << endl;
-	destdir->remove_dentry(destdn);
-	destdir->take_waiting(CDIR_WAIT_ANY, m->get_destname(), finished);
+	if (destdn->inode) {
+	  destdir->unlink_inode(destdn);
+	}
   }
   
   else {
@@ -2348,12 +2418,15 @@ void MDCache::handle_rename_notify(MRenameNotify *m)
   
   mds->queue_finished(finished);
 
+
+  // ack
+  dout(10) << "sending RenameNotifyAck back to initiator" << endl;
+  MRenameNotifyAck *ack = new MRenameNotifyAck(m->get_ino());
+  mds->messenger->send_message(ack,
+							   MSG_ADDR_MDS(m->get_source()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  
   delete m;
 }
-
-
-
-
 
 
 
@@ -3848,7 +3921,6 @@ public:
 	}
 
 	// retry request (or whatever)
-	cout << "doing finish on " << finisher << endl;
 	finisher->finish(0);
 	delete finisher;
   }
@@ -4431,8 +4503,8 @@ void MDCache::export_dir(CDir *dir,
   
   // drop any sync or lock if sticky
   /*
-  if (g_conf.mdcache_sticky_sync_normal ||
-	  g_conf.mdcache_sticky_sync_softasync)
+  if (g_conf.mds_cache_sticky_sync_normal ||
+	  g_conf.mds_cache_sticky_sync_softasync)
 	export_dir_dropsync(dir);
   */
   // NOTE: we don't need to worry about hard locks; those aren't sticky (yet?).
@@ -5410,16 +5482,21 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth)
   // state
   istate.update_inode(in);
   
-  // link
+  // add inode?
   if (added) {
 	add_inode(in);
-	dn->dir->link_inode(dn, in);
 	dout(10) << "added " << *in << endl;
   } else {
 	dout(10) << "  had " << *in << endl;
 	
 	if (in->is_replica_writer(mds->get_nodeid()))
 	  in->remove_replica_writer(mds->get_nodeid());
+  }
+  
+  // link to dentry
+  if (dn->inode != in) {
+	assert(!dn->inode);
+	dn->dir->link_inode(dn, in);
   }
   
   // cached_by
@@ -5809,8 +5886,8 @@ void MDCache::hash_dir(CDir *dir)
 
   // drop any sync or lock if sticky
   /*
-  if (g_conf.mdcache_sticky_sync_normal ||
-	  g_conf.mdcache_sticky_sync_softasync) 
+  if (g_conf.mds_cache_sticky_sync_normal ||
+	  g_conf.mds_cache_sticky_sync_softasync) 
 	drop_sync_in_dir(dir);
   */
 }
@@ -6042,8 +6119,8 @@ void MDCache::unhash_dir(CDir *dir)
 	unhash_dir_complete(dir);
 
   // drop any sync or lock if sticky
-  if (g_conf.mdcache_sticky_sync_normal ||
-	  g_conf.mdcache_sticky_sync_softasync)
+  if (g_conf.mds_cache_sticky_sync_normal ||
+	  g_conf.mds_cache_sticky_sync_softasync)
 	drop_sync_in_dir(dir);
 }
 
@@ -6196,8 +6273,8 @@ void MDCache::handle_unhash_dir(MUnhashDir *m)
 	handle_unhash_dir_complete(dir, auth);
 
   // drop any sync or lock if sticky
-  if (g_conf.mdcache_sticky_sync_normal ||
-	  g_conf.mdcache_sticky_sync_softasync) 
+  if (g_conf.mds_cache_sticky_sync_normal ||
+	  g_conf.mds_cache_sticky_sync_softasync) 
 	drop_sync_in_dir(dir);
 
   // done with message

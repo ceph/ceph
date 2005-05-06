@@ -64,9 +64,9 @@ class c_inode_info {
 	s.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
 	s.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
 
-	s.append(ref_dn.c_str());
+	if (ref_dn.length()) s.append(ref_dn.c_str());
 	s.append((char)0);
-	s.append(symlink.c_str());
+	if (symlink.length()) s.append(symlink.c_str());
 	s.append((char)0);
 
 	// distn
@@ -104,7 +104,7 @@ class c_inode_info {
 	  dist.insert(j);
 	}
   }
-} ;
+};
 
 
 typedef struct {
@@ -168,9 +168,9 @@ class MClientReply : public Message {
 	s.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
 
-	path = s.c_str();
+	path = s.c_str() + off;
 	off += path.length() + 1;
-	
+
 	for (int i=0; i<st.trace_depth; i++) {
 	  c_inode_info *ci = new c_inode_info;
 	  ci->_unrope(s, off);
@@ -184,15 +184,15 @@ class MClientReply : public Message {
 		dir_contents.push_back(ci);
 	  }
 	}
+
   }
   virtual void encode_payload(crope& r) {
 	st.dir_size = dir_contents.size();
 	st.trace_depth = trace.size();
 	
 	r.append((char*)&st, sizeof(st));
-	r.append(path.c_str());
-	r.append((char)0);
-	
+	r.append(path.c_str(), path.length()+1);
+
 	vector<c_inode_info*>::iterator it;
 	for (it = trace.begin(); it != trace.end(); it++) 
 	  (*it)->_rope(r);
@@ -213,9 +213,8 @@ class MClientReply : public Message {
 	  CDentry *dn = in->get_parent_dn();
 	  if (dn) ref_dn = dn->get_name();
 
-	  c_inode_info *info = new c_inode_info(in, whoami, ref_dn);
-
-	  trace.insert(trace.begin(), info);
+	  trace.insert(trace.begin(), new c_inode_info(in, whoami, ref_dn));
+	  
 	  in = in->get_parent_inode();
 	}
   }

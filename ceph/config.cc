@@ -18,36 +18,39 @@ md_config_t g_conf = {
 
   osd_cow: false, // crashy? true,  
 
+  // profiling
+  log_messages: true,
+  log_interval: 10.0,
+
+  fake_clock: true,
+  fakemessenger_serialize: true,//false,
+
+  debug: 13,
+  
+  // client
   client_cache_size: 400,
   client_cache_mid: .5,
   client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
   
-  log_messages: true,
-  log_interval: 10.0,
-  
-  mdlog_max_len: 1000,
-  mdlog_max_trimming: 16,
-  mdlog_read_inc: 4096,
+  // mds
+  mds_log_max_len: 1000,
+  mds_log_max_trimming: 16,
+  mds_log_read_inc: 4096,
 
-  fake_clock: true,
-  fakemessenger_serialize: true,// false,
+  mds_cache_size: 5000, //MDS_CACHE_SIZE,
+  mds_cache_mid: .8,
 
-  debug: 10,
-
-  mdcache_size: 5000, //MDS_CACHE_SIZE,
-  mdcache_mid: .8,
-
-  mdbal_replicate_threshold: 500,
-  mdbal_unreplicate_threshold: 200,
+  mds_bal_replicate_threshold: 500,
+  mds_bal_unreplicate_threshold: 200,
 
   mds_heartbeat_op_interval: 200,
   mds_verify_export_dirauth: true,
   mds_log_before_reply: true,
 
-  // fakeclient
-  num_fakeclient: 10,
-  fakeclient_requests: 10,
+  // --- fakeclient
+  num_fakeclient: 1000,
+  fakeclient_requests: 30,
   fakeclient_deterministic: false,
 
   fakeclient_op_statfs:     false,

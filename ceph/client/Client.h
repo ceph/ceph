@@ -59,7 +59,7 @@ class Inode {
   int       ref;      // ref count. 1 for each dentry, fh or dir that links to me.
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
-  string    *symlink; // symlink content, if its a symlink
+  string    *symlink; // symlink content, if it's a symlink
 
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
@@ -198,13 +198,13 @@ class Client : public Dispatcher {
   }
   
   // find dentry based on filepath
-  Dentry *lookup(filepath* path) {
+  Dentry *lookup(filepath& path) {
     Inode *cur = root;
     Dentry *dn;
-    for (int i=0; i<path->depth(); i++) {
+    for (int i=0; i<path.depth(); i++) {
       Dir *dir = open_dir(cur);
       if (dir->dentries.count(path[i]))
-	dn = dir->dentries[path[i]];
+		dn = dir->dentries[path[i]];
       else
 	return NULL;
       cur = dn->inode;
@@ -227,7 +227,7 @@ class Client : public Dispatcher {
 
   // metadata cache
   Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);
-  void insert_trace(vector<c_inode_info*> trace);
+  void insert_trace(const vector<c_inode_info*>& trace);
 
   // ----------------------
   // fs ops.

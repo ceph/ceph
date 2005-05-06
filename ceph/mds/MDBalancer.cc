@@ -414,7 +414,7 @@ void MDBalancer::hit_dir(CDir *dir, int type)
 	  
 	  if (dir->is_auth()) {
 		if (!dir->is_rep() &&
-			dir_pop >= g_conf.mdbal_replicate_threshold) {
+			dir_pop >= g_conf.mds_bal_replicate_threshold) {
 		  // replicate
 		  dout(5) << "replicating dir " << *in << " pop " << dir_pop << endl;
 		  
@@ -423,7 +423,7 @@ void MDBalancer::hit_dir(CDir *dir, int type)
 		}
 		
 		if (dir->is_rep() &&
-			dir_pop < g_conf.mdbal_unreplicate_threshold) {
+			dir_pop < g_conf.mds_bal_unreplicate_threshold) {
 		  // unreplicate
 		  dout(5) << "unreplicating dir " << *in << " pop " << dir_pop << endl;
 		  

@@ -439,7 +439,7 @@ void MDStore::do_commit_dir_2( int result,
 	} else {
 	  dout(5) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
 	  assert(committed_version < dn->get_parent_dir_version());
-	  assert(dn->is_dirty());
+	  assert(dn->is_dirty() || !dn->is_sync());
 	}
 
 	// inode  FIXME: if primary link!

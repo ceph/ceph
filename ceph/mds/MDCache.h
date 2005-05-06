@@ -38,6 +38,7 @@ class MInodeWriterClosed;
 class MLock;
 
 class MRenameNotify;
+class MRenameNotifyAck;
 class MRename;
 class MRenameReq;
 class MRenameAck;
@@ -203,12 +204,14 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
-  void file_rename(CDentry *srcdn, CDentry *destdn, Context *c, bool everyone);
+  void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);
+  void file_rename_finish(CDir *srcdir, CInode *in, Context *c);
   void file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initiator);
-  void handle_rename_notify(MRenameNotify *m);   // -> bystanders (and source, rarely)
-  void handle_rename(MRename *m);                // src -> dest
-  void handle_rename_req(MRenameReq *m);         // init -> src (rarely)
-  void handle_rename_ack(MRenameAck *m);         // dest -> init (almost always)
+  void handle_rename_notify(MRenameNotify *m);        // init -> bystanders
+  void handle_rename_notify_ack(MRenameNotifyAck *m); // bystanders -> init
+  void handle_rename(MRename *m);                     // src -> dest
+  void handle_rename_req(MRenameReq *m);              // init -> src (rarely)
+  void handle_rename_ack(MRenameAck *m);              // dest -> init (almost always)
   
 
 
