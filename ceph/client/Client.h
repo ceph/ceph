@@ -121,22 +121,8 @@ class Client : public Dispatcher {
   // global semaphore/mutex protecting cache+fh structures
   // ??
 
-
   // -- metadata cache stuff
-  // find dentry based on filepath
-  Dentry *lookup(filepath* path) {
-    Inode *cur = root;
-	Dentry *dn;
-	for (int i=0; i<path->bits.size(); i++) {
-	  if (cur->dir.dentries.count(path->bits[i]))
-	    dn = cur->dir.dentries[path->bits[i]];
-	  else
-	    return NULL;
-	  cur = dn->inode;
-	}
-	return dn;
-  }
-		
+
   // decrease inode ref.  delete if dangling.
   void put_inode(Inode *in) {
 	in->put();
@@ -211,6 +197,21 @@ class Client : public Dispatcher {
 	}
   }
   
+  // find dentry based on filepath
+  Dentry *lookup(filepath* path) {
+    Inode *cur = root;
+    Dentry *dn;
+    for (int i=0; i<path->depth(); i++) {
+      Dir *dir = open_dir(cur);
+      if (dir->dentries.count(path[i]))
+	dn = dir->dentries[path[i]];
+      else
+	return NULL;
+      cur = dn->inode;
+    }
+    return dn;
+  }
+		
  public:
   Client(MDCluster *mdc, int id, Messenger *m);
   ~Client();
