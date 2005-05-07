@@ -1,11 +1,11 @@
 
 #include <string>
 
-#include "include/LogType.h"
-#include "include/Logger.h"
+#include "LogType.h"
+#include "Logger.h"
 
 #include <iostream>
-#include "include/Clock.h"
+#include "Clock.h"
 
 #include "include/config.h"
 

@@ -3,7 +3,7 @@
 #define __DECAYCOUNTER_H
 
 #include <math.h>
-#include "include/Clock.h"
+#include "Clock.h"
 
 class DecayCounter {
  protected:

@@ -5,7 +5,7 @@
 #include "include/config.h"
 #include "include/types.h"
 #include "include/lru.h"
-#include "include/DecayCounter.h"
+#include "common/DecayCounter.h"
 #include <sys/stat.h>
 
 #include "CDentry.h"

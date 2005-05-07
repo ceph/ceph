@@ -18,7 +18,7 @@ md_config_t g_conf = {
 
   osd_cow: false, // crashy? true,  
 
-  // profiling
+  // profiling and debugging
   log_messages: true,
   log_interval: 10.0,
 
@@ -27,13 +27,13 @@ md_config_t g_conf = {
 
   debug: 13,
   
-  // client
+  // --- client ---
   client_cache_size: 400,
   client_cache_mid: .5,
   client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
   
-  // mds
+  // --- mds ---
   mds_log_max_len: 1000,
   mds_log_max_trimming: 16,
   mds_log_read_inc: 4096,
@@ -48,9 +48,9 @@ md_config_t g_conf = {
   mds_verify_export_dirauth: true,
   mds_log_before_reply: true,
 
-  // --- fakeclient
+  // --- fakeclient (mds regression testing) ---
   num_fakeclient: 1000,
-  fakeclient_requests: 30,
+  fakeclient_requests: 10,
   fakeclient_deterministic: false,
 
   fakeclient_op_statfs:     false,

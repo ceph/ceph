@@ -1,7 +1,8 @@
 #ifndef __LOGGER_H
 #define __LOGGER_H
 
-#include "types.h"
+#include "include/types.h"
+
 #include <string>
 #include <fstream>
 using namespace std;

@@ -6,8 +6,8 @@
 #include "LogStream.h"
 #include "LogEvent.h"
 
-#include "include/LogType.h"
-#include "include/Logger.h"
+#include "common/LogType.h"
+#include "common/Logger.h"
 #include "msg/Message.h"
 
 LogType mdlog_logtype;

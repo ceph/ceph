@@ -28,8 +28,8 @@ MDS_OBJS= \
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/error.o\
-	Logger.o\
-	clock.o\
+	common/Logger.o\
+	common/clock.o\
 	config.o
 
 TEST_TARGETS = fakemds mpitest fakefuse

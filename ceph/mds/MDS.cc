@@ -1,6 +1,6 @@
 
 #include "include/types.h"
-#include "include/Clock.h"
+#include "common/Clock.h"
 
 #include "msg/Messenger.h"
 
@@ -15,8 +15,8 @@
 
 #include "include/filepath.h"
 
-#include "include/Logger.h"
-#include "include/LogType.h"
+#include "common/Logger.h"
+#include "common/LogType.h"
 
 #include "messages/MPing.h"
 #include "messages/MGenericMessage.h"

@@ -4,8 +4,9 @@
 #include "Message.h"
 #include "FakeMessenger.h"
 #include "mds/MDS.h"
-#include "include/LogType.h"
-#include "include/Logger.h"
+
+#include "common/LogType.h"
+#include "common/Logger.h"
 
 #include "include/config.h"
 

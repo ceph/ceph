@@ -1,5 +1,5 @@
 #include <sys/types.h>
-#include "include/Clock.h"
+#include "Clock.h"
 
 #include "include/config.h"
 

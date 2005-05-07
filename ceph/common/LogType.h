@@ -1,7 +1,8 @@
 #ifndef __LOGTYPE_H
 #define __LOGTYPE_H
 
-#include "types.h"
+#include "include/types.h"
+
 #include <ext/hash_map>
 #include <string>
 #include <fstream>

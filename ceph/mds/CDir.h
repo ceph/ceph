@@ -4,7 +4,7 @@
 
 #include "include/types.h"
 #include "include/config.h"
-#include "include/DecayCounter.h"
+#include "common/DecayCounter.h"
 
 #include <iostream>
 #include <cassert>

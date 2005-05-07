@@ -16,8 +16,8 @@ using namespace __gnu_cxx;
 #include "msg/Dispatcher.h"
 #include "include/types.h"
 #include "include/Context.h"
-#include "include/DecayCounter.h"
-#include "include/Logger.h"
+#include "common/DecayCounter.h"
+#include "common/Logger.h"
 
 typedef __uint64_t object_t;
 

@@ -7,9 +7,9 @@
 #include "CDir.h"
 #include "MDCache.h"
 
-#include "messages/MHeartbeat.h"
-#include "msg/Messenger.h"
 #include "include/Context.h"
+#include "msg/Messenger.h"
+#include "messages/MHeartbeat.h"
 
 #include <vector>
 #include <map>
