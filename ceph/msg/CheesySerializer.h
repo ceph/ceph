@@ -9,6 +9,8 @@
 #include "Cond.h"
 #include "Mutex.h"
 
+#include <assert.h>
+
 #include <map>
 using namespace std;
 
@@ -38,6 +40,10 @@ class CheesySerializer : public Messenger,
 					int port=0, int fromport=0);     // doesn't block
   Message *sendrecv(Message *m, msg_addr_t dest, 
 					int port=0);                     // blocks for matching reply
+
+  void trigger_timer(class Timer *t) {
+	assert(0);
+  }
 };
 
 #endif

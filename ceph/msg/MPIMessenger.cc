@@ -2,6 +2,8 @@
 #include "include/config.h"
 #include "include/error.h"
 
+#include "common/Timer.h"
+
 #include "MPIMessenger.h"
 #include "Message.h"
 
@@ -316,6 +318,14 @@ int MPIMessenger::shutdown()
 }
 
 
+
+/*** events
+ */
+
+void MPIMessenger::trigger_timer(Timer *t)
+{
+  assert(0); //implement me
+}
 
 /***
  * public messaging interface

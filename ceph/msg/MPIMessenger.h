@@ -10,6 +10,7 @@
 										 (dest) : \
 										 ((NUMMDS+NUMOSD)+(((dest)-NUMMDS-NUMOSD) % ((world)-NUMMDS-NUMOSD))))
 
+class Timer;
 
 class MPIMessenger : public Messenger {
  protected:
@@ -26,6 +27,9 @@ class MPIMessenger : public Messenger {
   // message interface
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
+
+  // events
+  virtual void trigger_timer(Timer *t);
 };
 
 /**

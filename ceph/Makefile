@@ -30,10 +30,11 @@ COMMON_OBJS= \
 	msg/error.o\
 	common/Logger.o\
 	common/clock.o\
+	common/Timer.o\
 	config.o
 
-TEST_TARGETS = fakemds mpitest fakefuse
-TARGETS = import singleclient mpifuse
+TEST_TARGETS = fakemds mpitest
+TARGETS = import singleclient mpifuse fakefuse
 
 SRCS=*.cc */*.cc
 

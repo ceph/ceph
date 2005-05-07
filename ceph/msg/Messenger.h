@@ -9,6 +9,7 @@ using namespace std;
 #include "Dispatcher.h"
 
 class MDS;
+class Timer;
 
 class Messenger {
  protected:
@@ -37,6 +38,8 @@ class Messenger {
   //virtual Message *recv() = 0
 
   
+  // events
+  virtual void trigger_timer(Timer *t) = 0;
 
 
   // -- incoming queue --

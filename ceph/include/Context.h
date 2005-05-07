@@ -2,10 +2,12 @@
 #ifndef __CONTEXT_H
 #define __CONTEXT_H
 
-#include <list>
-#include <assert.h>
 #include "config.h"
+
+#include <assert.h>
+#include <list>
 #include <iostream>
+using namespace std;
 
 class MDS;
 

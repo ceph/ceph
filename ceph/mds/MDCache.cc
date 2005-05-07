@@ -1098,7 +1098,7 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
 	  // wait
 	  if (c) {
 		dout(10) << "path_pin can't pin " << *dn << ", waiting" << endl;
-		dn->dir->add_waiter(CDIR_WAIT_DNREAD,
+		dn->dir->add_waiter(CDIR_WAIT_DNPINNABLE,   
 							dn->name,
 							c);
 	  } else {

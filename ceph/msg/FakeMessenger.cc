@@ -5,6 +5,7 @@
 #include "FakeMessenger.h"
 #include "mds/MDS.h"
 
+#include "common/Timer.h"
 #include "common/LogType.h"
 #include "common/Logger.h"
 
@@ -78,7 +79,7 @@ void fakemessenger_stopthread() {
 }
 
 
-
+Timer *pending_timer = 0;
 
 // lame main looper
 
@@ -100,6 +101,16 @@ int fakemessenger_do_loop_2()
 	
 	dout(11) << "do_loop top" << endl;
 
+	// timer?
+	if (pending_timer) {
+	  Timer *t = pending_timer;
+	  pending_timer = 0;
+
+	  dout(5) << "pending timer" << endl;
+	  t->execute_pending();
+	}
+
+	// messages
 	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
@@ -155,6 +166,8 @@ FakeMessenger::FakeMessenger(long me)
   whoami = me;
   directory[ whoami ] = this;
 
+  pending_timer = 0;
+
   cout << "fakemessenger " << whoami << " messenger is " << this << endl;
 
   string name;
@@ -181,6 +194,15 @@ FakeMessenger::~FakeMessenger()
 int FakeMessenger::shutdown()
 {
   directory.erase(whoami);
+}
+
+void FakeMessenger::trigger_timer(Timer *t) 
+{
+  // note timer to call
+  pending_timer = t;
+
+  // wake up thread?
+  cond.Signal();  // why not
 }
 
 

@@ -157,6 +157,7 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
 #define CDIR_WAIT_DNREAD        (1<<20)
 #define CDIR_WAIT_DNLOCK        (1<<21)
 #define CDIR_WAIT_DNUNPINNED    (1<<22)
+#define CDIR_WAIT_DNPINNABLE    (CDIR_WAIT_DNREAD|CDIR_WAIT_DNUNPINNED)
 
 #define CDIR_WAIT_DNREQXLOCK    (1<<23)
 

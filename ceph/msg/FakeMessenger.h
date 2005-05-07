@@ -8,6 +8,8 @@
 #include <list>
 #include <map>
 
+class Timer;
+
 class FakeMessenger : public Messenger {
  protected:
   int whoami;
@@ -25,6 +27,9 @@ class FakeMessenger : public Messenger {
   
   // use CheesySerializer for now!
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0) { assert(0); };
+
+  // events
+  virtual void trigger_timer(Timer *t);
 };
 
 int fakemessenger_do_loop();

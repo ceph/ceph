@@ -50,7 +50,7 @@ md_config_t g_conf = {
 
   // --- fakeclient (mds regression testing) ---
   num_fakeclient: 1000,
-  fakeclient_requests: 10,
+  fakeclient_requests: 100,
   fakeclient_deterministic: false,
 
   fakeclient_op_statfs:     false,
@@ -64,7 +64,7 @@ md_config_t g_conf = {
   fakeclient_op_readdir:  10,
   fakeclient_op_mknod:    100,
   fakeclient_op_link:       false,
-  fakeclient_op_unlink:   10,
+  fakeclient_op_unlink:   100,
   fakeclient_op_rename:   100,
 
   fakeclient_op_mkdir:    100,
