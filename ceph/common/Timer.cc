@@ -13,6 +13,7 @@
 
 #include <signal.h>
 #include <sys/time.h>
+#include <math.h>
 
 Messenger *messenger_to_kick = 0;
 Timer     *static_timer = 0;
