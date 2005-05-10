@@ -1,23 +1,19 @@
 
 SAGE:
 
+- mpimessenger: allow self-addressed messages
+- change export_proxy_*'s to lists (faster)
+
+- fix MExportAck and others to use dir+dentry, not inode
+  (otherwise this all breaks with hard links)
+
 - timer .. integrate with clock?
 
 - path_Traverse
   - fix noperm crap
   - clean up xlock interaction
 
-- foreign renames
- /- how to limit xlock collateral/chatter!
-    - test it!
-
- /- what happens to foreign xlock request when things un-xlock?
- / - unwind foreign xlocks on failure etc.
- /   - LOCK_AC_UNXLOCK?
-
-  - how do deal with the dn discover on initiator after a foreign xlock on a dn it didn't originally have?
-
-  - what about setting up an inode proxy???
+- finish testing foreign renames
 
 - symlink loops
 

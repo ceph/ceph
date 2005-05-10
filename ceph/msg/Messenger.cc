@@ -36,9 +36,11 @@ using namespace std;
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
 
+#include "messages/MRenameWarning.h"
 #include "messages/MRenameNotify.h"
 #include "messages/MRenameNotifyAck.h"
 #include "messages/MRename.h"
+#include "messages/MRenamePrep.h"
 #include "messages/MRenameReq.h"
 #include "messages/MRenameAck.h"
 #include "messages/MDentryUnlink.h"
@@ -155,6 +157,9 @@ decode_message(crope& ser)
 	m = new MExportDirWarning();
 	break;
 
+  case MSG_MDS_RENAMEWARNING:
+	m = new MRenameWarning();
+	break;
   case MSG_MDS_RENAMENOTIFY:
 	m = new MRenameNotify();
 	break;
@@ -163,6 +168,9 @@ decode_message(crope& ser)
 	break;
   case MSG_MDS_RENAME:
 	m = new MRename();
+	break;
+  case MSG_MDS_RENAMEPREP:
+	m = new MRenamePrep();
 	break;
   case MSG_MDS_RENAMEREQ:
 	m = new MRenameReq();

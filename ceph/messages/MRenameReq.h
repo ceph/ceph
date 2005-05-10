@@ -7,6 +7,8 @@ class MRenameReq : public Message {
   string srcname;
   inodeno_t destdirino;
   string destname;
+  string destpath;
+  int destauth;
 
  public:
   int get_initiator() { return initiator; }
@@ -14,19 +16,25 @@ class MRenameReq : public Message {
   string& get_srcname() { return srcname; }
   inodeno_t get_destdirino() { return destdirino; }
   string& get_destname() { return destname; }
+  string& get_destpath() { return destpath; }
+  int get_destauth() { return destauth; }
 
   MRenameReq() {}
   MRenameReq(int initiator,
 			 inodeno_t srcdirino,
 			 const string& srcname,
 			 inodeno_t destdirino,
-			 const string& destname) :
+			 const string& destname,
+			 const string& destpath, 
+			 int destauth) :
 	Message(MSG_MDS_RENAMEREQ) {
 	this->initiator = initiator;
 	this->srcdirino = srcdirino;
 	this->srcname = srcname;
 	this->destdirino = destdirino;
 	this->destname = destname;
+	this->destpath = destpath;
+	this->destauth = destauth;
   }
   virtual char *get_type_name() { return "RnReq";}
 
@@ -38,19 +46,20 @@ class MRenameReq : public Message {
 	off += sizeof(srcdirino);
 	s.copy(off, sizeof(destdirino), (char*)&destdirino);
 	off += sizeof(destdirino);
-	srcname = s.c_str() + off;
-	off += srcname.length() + 1;
-	destname = s.c_str() + off;
-	off += destname.length() + 1;
+	_unrope(srcname, s, off);
+	_unrope(destname, s, off);
+	_unrope(destpath, s, off);
+	s.copy(off, sizeof(destauth), (char*)&destauth);
+	off += sizeof(destauth);
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&initiator,sizeof(initiator));
 	s.append((char*)&srcdirino,sizeof(srcdirino));
 	s.append((char*)&destdirino,sizeof(destdirino));
-	s.append((char*)srcname.c_str());
-	s.append((char)0);
-	s.append((char*)destname.c_str());
-	s.append((char)0);
+	_rope(srcname, s);
+	_rope(destname, s);
+	_rope(destpath, s);
+	s.append((char*)&destauth, sizeof(destauth));
   }
 };
 

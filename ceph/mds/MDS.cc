@@ -311,7 +311,7 @@ void MDS::dispatch(Message *m)
   }
 
   // balance?
-  if (whoami == 0 &&
+  if (true && whoami == 0 &&
 	  stat_ops >= last_heartbeat + g_conf.mds_heartbeat_op_interval) {
 	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
@@ -1280,7 +1280,8 @@ void MDS::handle_client_rename(MClientRequest *req,
 								 req, new C_MDS_RetryRequest(this, req, ref),
 								 MDS_TRAVERSE_FORWARD);
   if (r == 2) {
-	dout(7) << "forwarded, ending request" << endl;
+	dout(7) << "path traverse forwarded, ending request, doing manual request_cleanup" << endl;
+	dout(7) << "(pseudo) request_forward to 9999 req " << *req << endl;
 	mdcache->request_cleanup(req);  // not _finish (deletes) or _forward (path_traverse did that)
 	return;
   }
@@ -1395,7 +1396,6 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   assert(srci);
   CDir*  destdir = 0;
   string destname;
-  int destauth = -1;
   bool result;
   
   // what is the dest?  (dir or file or complete filename)
@@ -1466,7 +1466,7 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 
   // src == dest?
   if (srcdn->get_dir() == destdir && srcdn->name == destname) {
-	dout(7) << "rename src=dest, same file " << destauth << endl;
+	dout(7) << "rename src=dest, same file " << endl;
 	reply_request(req, -EINVAL);
 	return;
   }
@@ -1507,15 +1507,22 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   
 
   // local or remote?
-  destauth = destdir->dentry_authority(destname);
+  int srcauth = srcdir->dentry_authority(srcdn->name);
+  int destauth = destdir->dentry_authority(destname);
   dout(7) << "handle_client_rename_2 destname " << destname << " destdir " << *destdir << " auth " << destauth << endl;
   
-  if (destauth != get_nodeid()) {
+  // 
+  if (srcauth != get_nodeid() || 
+	  destauth != get_nodeid()) {
 	dout(7) << "rename has remote dest " << destauth << endl;
 
 	dout(7) << "FOREIGN RENAME" << endl;
-	reply_request(req, -EINVAL);  // punt for now!
-	return;
+	
+	// punt?
+	if (true && srcdn->inode->is_dir()) {
+	  reply_request(req, -EINVAL);  
+	  return; 
+	}
 
   } else {
 	dout(7) << "rename is local" << endl;
@@ -1541,7 +1548,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 									 string& destname)
 {
   bool everybody = false;
-  if (true || srcdn->inode->is_dir()) {
+  //if (true || srcdn->inode->is_dir()) {
 	/* overkill warning: lock w/ everyone for simplicity.  FIXME someday!  along with the foreign rename crap!
 	   i could limit this to cases where something beneath me is exported.
 	   could possibly limit the list.    (maybe.)
@@ -1579,9 +1586,9 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	  /- notify goes to everybody on a foreign rename 
 	  /- handle_notify needs to gracefully ignore spurious notifies
 	*/
-	dout(7) << "handle_client_rename_local: overkill?  doing xlocks with _all_ nodes" << endl;
-	everybody = true;
-  }
+  //dout(7) << "handle_client_rename_local: overkill?  doing xlocks with _all_ nodes" << endl;
+  //everybody = true;
+  //}
 
   bool srclocal = srcdn->dir->dentry_authority(srcdn->name) == whoami;
   bool destlocal = destdir->dentry_authority(destname) == whoami;
@@ -1602,7 +1609,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	  // src
 	  if (srclocal) {
 		if (!srcdn->is_xlockedbyme(req) &&
-			!mdcache->dentry_xlock_start(srcdn, req, ref, everybody))
+			!mdcache->dentry_xlock_start(srcdn, req, ref))
 		  return;  
 	  } else {
 		if (!srcdn || srcdn->xlockedby != req) {
@@ -1618,7 +1625,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 		// dest
 		if (!destdn) destdn = destdir->add_dentry(destname);
 		if (!destdn->is_xlockedbyme(req) &&
-			!mdcache->dentry_xlock_start(destdn, req, ref, everybody)) {
+			!mdcache->dentry_xlock_start(destdn, req, ref)) {
 		  if (destdn->is_clean() && destdn->is_null() && destdn->is_sync()) destdir->remove_dentry(destdn);
 		  return;
 		}

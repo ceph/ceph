@@ -2,11 +2,16 @@
 #define __MDS_TYPES_H
 
 #include <sys/types.h>
-#include <ext/hash_map>
+#include <assert.h>
+
 #include <string>
 #include <set>
 #include <iostream>
 using namespace std;
+
+#include <ext/rope>
+using namespace __gnu_cxx;
+
 
 
 // md ops
@@ -143,6 +148,48 @@ inline ostream& operator<<(ostream& out, multiset<int>& iset) {
 	out << *it;
   }
   return out;
+}
+
+
+// -- rope helpers --
+
+inline void _rope(string& s, crope& r) 
+{
+  r.append(s.c_str());
+  r.append((char)0);
+}
+inline void _unrope(string& s, crope& r, int& off)
+{
+  s = r.c_str() + off;
+  off += s.length() + 1;
+}
+
+inline void _rope(set<int>& s, crope& r)
+{
+  int n = s.size();
+  r.append((char*)&n, sizeof(n));
+  for (set<int>::iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	int v = *it;
+	r.append((char*)&v, sizeof(v));
+	n--;
+  }
+  assert(n==0);
+}
+inline void _unrope(set<int>& s, crope& r, int& off) 
+{
+  s.clear();
+  int n;
+  r.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+	int v;
+	r.copy(off, sizeof(v), (char*)&v);
+	off += sizeof(v);
+	s.insert(v);
+  }
+  assert(s.size() == n);
 }
 
 #endif

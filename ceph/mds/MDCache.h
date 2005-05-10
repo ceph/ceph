@@ -37,9 +37,11 @@ class MDentryUnlink;
 class MInodeWriterClosed;
 class MLock;
 
+class MRenameWarning;
 class MRenameNotify;
 class MRenameNotifyAck;
 class MRename;
+class MRenamePrep;
 class MRenameReq;
 class MRenameAck;
 
@@ -95,15 +97,19 @@ class MDCache {
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
         // maps frozen_dir_ino's to waiting-for-discover ino's.
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
-        // maps import_root_ino's to frozen dir ino's (with pending discovers)
+  // maps import_root_ino's to frozen dir ino's (with pending discovers)
 
-  map<CDir*, set<int> >   export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
+  // export fun
+  map<CDir*, set<int> >  export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
   map<CDir*, set<inodeno_t> > export_proxy_inos;
   map<CDir*, set<inodeno_t> > export_proxy_dirinos;
 
-  set<inodeno_t>         stray_export_warnings; // warnings for export dirs i don't have open
+  set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
 
+  // rename fun
+  set<inodeno_t>                    stray_rename_warnings; // notifies i haven't seen
+  map<inodeno_t, MRenameNotify*>    stray_rename_notifies;
 
  public:
   // active MDS requests
@@ -168,7 +174,8 @@ class MDCache {
   void fix_renamed_dir(CDir *srcdir,
 					   CInode *in,
 					   CDir *destdir,
-					   bool authchanged);   // _inode_ auth
+					   bool authchanged,   // _inode_ auth changed
+					   int dirauth=-1);    // dirauth (for certain cases)
 
  public:
   int open_root(Context *c);
@@ -187,7 +194,7 @@ class MDCache {
 					 vector<CDentry*>& trace);
   void request_cleanup(Message *req);
   void request_finish(Message *req);
-  void request_forward(Message *req, int mds);
+  void request_forward(Message *req, int mds, int port=0);
 
 
   // == messages ==
@@ -204,14 +211,34 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
+  // initiator
   void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);
-  void file_rename_finish(CDir *srcdir, CInode *in, Context *c);
-  void file_rename_foreign_src(CDentry *srcdn, CDentry *destdn, int initiator);
-  void handle_rename_notify(MRenameNotify *m);        // init -> bystanders
-  void handle_rename_notify_ack(MRenameNotifyAck *m); // bystanders -> init
-  void handle_rename(MRename *m);                     // src -> dest
-  void handle_rename_req(MRenameReq *m);              // init -> src (rarely)
   void handle_rename_ack(MRenameAck *m);              // dest -> init (almost always)
+  void file_rename_finish(CDir *srcdir, CInode *in, Context *c);
+
+  // src
+  void handle_rename_req(MRenameReq *m);              // dest -> src
+  void file_rename_foreign_src(CDentry *srcdn, 
+							   inodeno_t destdirino, string& destname, string& destpath, int destauth, 
+							   int initiator);
+  void file_rename_warn(CInode *in, set<int>& notify);
+  void handle_rename_notify_ack(MRenameNotifyAck *m); // bystanders -> src
+  void file_rename_ack(CInode *in, int initiator);
+
+  // dest
+  void handle_rename_prep(MRenamePrep *m);            // init -> dest
+  void handle_rename(MRename *m);                     // src -> dest
+  void file_rename_notify(CInode *in, 
+						  CDir *srcdir, string& srcname, CDir *destdir, string& destname,
+						  set<int>& notify, int srcauth);
+
+  // bystander
+  void handle_rename_warning(MRenameWarning *m);      // src -> bystanders
+  void handle_rename_notify(MRenameNotify *m);        // dest -> bystanders
+
+
+
+
   
 
 
@@ -232,6 +259,7 @@ class MDCache {
 	return exports.count(dir);
   }
   void find_nested_exports(CDir *dir, set<CDir*>& s);
+  void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 
   // exporter
   void export_dir(CDir *dir,
@@ -344,8 +372,7 @@ class MDCache {
 
   // dentry locks
   bool dentry_xlock_start(CDentry *dn, 
-						  Message *m, CInode *ref, 
-						  bool allnodes=false);
+						  Message *m, CInode *ref);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   void handle_lock_dn(MLock *m);
   void dentry_xlock_request(CDir *dir, string& dname, bool create,

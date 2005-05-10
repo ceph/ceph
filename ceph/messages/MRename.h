@@ -4,7 +4,6 @@
 class MRename : public Message {
   inodeno_t srcdirino;
   string srcname;
-  string srcpath;
   inodeno_t destdirino;
   string destname;
   int initiator;
@@ -15,7 +14,6 @@ class MRename : public Message {
   int get_initiator() { return initiator; }
   inodeno_t get_srcdirino() { return srcdirino; }
   string& get_srcname() { return srcname; }
-  string& get_srcpath() { return srcpath; }
   inodeno_t get_destdirino() { return destdirino; }
   string& get_destname() { return destname; }
   crope& get_inode_state() { return inode_state; }
@@ -24,7 +22,6 @@ class MRename : public Message {
   MRename(int initiator,
 		  inodeno_t srcdirino,
 		  const string& srcname,
-		  const string& srcpath,
 		  inodeno_t destdirino,
 		  const string& destname,
 		  crope& inode_state) :
@@ -32,7 +29,6 @@ class MRename : public Message {
 	this->initiator = initiator;
 	this->srcdirino = srcdirino;
 	this->srcname = srcname;
-	this->srcpath = srcpath;
 	this->destdirino = destdirino;
 	this->destname = destname;
 	this->inode_state = inode_state;
@@ -49,8 +45,6 @@ class MRename : public Message {
 	off += sizeof(destdirino);
 	srcname = s.c_str() + off;
 	off += srcname.length() + 1;
-	srcpath = s.c_str() + off;
-	off += srcpath.length() + 1;
 	destname = s.c_str() + off;
 	off += destname.length() + 1;
 	inode_state = s.substr(off, s.length()-off);
@@ -60,8 +54,6 @@ class MRename : public Message {
 	s.append((char*)&srcdirino,sizeof(srcdirino));
 	s.append((char*)&destdirino,sizeof(destdirino));
 	s.append((char*)srcname.c_str());
-	s.append((char)0);
-	s.append((char*)srcpath.c_str());
 	s.append((char)0);
 	s.append((char*)destname.c_str());
 	s.append((char)0);

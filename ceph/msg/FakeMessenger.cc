@@ -6,6 +6,7 @@
 #include "mds/MDS.h"
 
 #include "common/Timer.h"
+
 #include "common/LogType.h"
 #include "common/Logger.h"
 
@@ -166,6 +167,7 @@ FakeMessenger::FakeMessenger(long me)
   whoami = me;
   directory[ whoami ] = this;
 
+  g_timer.set_messenger(this);
   pending_timer = 0;
 
   cout << "fakemessenger " << whoami << " messenger is " << this << endl;

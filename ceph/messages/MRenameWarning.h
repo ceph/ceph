@@ -1,21 +1,19 @@
-#ifndef __MRENAMEACK_H
-#define __MRENAMEACK_H
+#ifndef __MRENAMEWARNING_H
+#define __MRENAMEWARNING_H
 
-/* FIXME: relateive to dn, not inode */
-
-class MRenameAck : public Message {
+class MRenameWarning : public Message {
   inodeno_t ino;
 
  public:
   inodeno_t get_ino() { return ino; }
 
-  MRenameAck() {}
-  MRenameAck(inodeno_t ino) :
-	Message(MSG_MDS_RENAMEACK) {
+  MRenameWarning() {}
+  MRenameWarning(inodeno_t ino) :
+	Message(MSG_MDS_RENAMEWARNING) {
 	this->ino = ino;
   }
-  virtual char *get_type_name() { return "RnAck";}
-
+  virtual char *get_type_name() { return "RnW";}
+  
   virtual void decode_payload(crope& s) {
 	int off = 0;
 	s.copy(off, sizeof(ino), (char*)&ino);

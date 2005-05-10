@@ -31,13 +31,18 @@ class Timer {
   void cancel_timer();  // make sure i get a callback
 
  public:
-  Timer(Messenger *msg) { messenger = msg; }
+  Timer() : messenger(0) { }
   ~Timer() { 
 	// cancel any wakeup crap
 	cancel_timer();
 
 	// 
   }
+
+  void set_messenger(Messenger *m) {
+	messenger = m;
+  }
+
 
   // schedule events
   void add_event_after(double seconds,
@@ -72,12 +77,8 @@ class Timer {
 };
 
 
-
-
-
-
-
-
+// single global instance
+extern Timer g_timer;
 
 
 

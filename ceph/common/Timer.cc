@@ -15,17 +15,23 @@
 #include <sys/time.h>
 #include <math.h>
 
+// single global instance
+Timer g_timer;
+
+
+/***
+ * signal handler callback fun
+ */
+
 Messenger *messenger_to_kick = 0;
-Timer     *static_timer = 0;
 
 void timer_signal_handler(int sig)
 {
   // kick messenger.
-  if (messenger_to_kick && static_timer) {
-	messenger_to_kick->trigger_timer(static_timer);
+  if (messenger_to_kick) {
+	messenger_to_kick->trigger_timer(&g_timer);
   }
 }
-
 
 void Timer::register_timer()
 {
@@ -36,7 +42,6 @@ void Timer::register_timer()
 	 process (FakeMessenger), we're actually kicking the same event loop anyway.
   */
   // FIXME i shouldn't have to do this every time?
-  static_timer = this;
   messenger_to_kick = messenger;
   
   // install handler
@@ -66,12 +71,15 @@ void Timer::cancel_timer()
 {
   // clear my callback pointers
   messenger_to_kick = 0;
-  static_timer = 0;
   
   // remove my handler.  MESSILY FIXME
   sigaction(SIGALRM, 0, 0);
 }
 
+
+/***
+ * do user callbacks
+ */
 
 void Timer::execute_pending()
 {

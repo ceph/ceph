@@ -413,7 +413,8 @@ void CDir::add_waiter(int tag, Context *c) {
 
 void CDir::take_waiting(int mask, 
 						const string& dentry,
-						list<Context*>& ls)
+						list<Context*>& ls,
+						int num)
 {
   if (waiting_on_dentry.empty()) return;
   
@@ -423,6 +424,11 @@ void CDir::take_waiting(int mask,
 	  ls.push_back(it->second);
 	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " took " << it->second << " tag " << it->first << " on " << *this << endl;
 	  waiting_on_dentry[dentry].erase(it++);
+
+	  if (num) {
+		if (num == 1) break;
+		num--;
+	  }
 	} else {
 	  dout(10) << "take_waiting dentry " << dentry << " mask " << mask << " SKIPPING " << it->second << " tag " << it->first << " on " << *this << endl;
 	  it++;

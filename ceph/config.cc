@@ -12,7 +12,7 @@
 
 
 md_config_t g_conf = {
-  num_mds: 5,
+  num_mds: 3,
   num_osd: 10,
   num_client: 1,
 
@@ -49,7 +49,7 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
 
   // --- fakeclient (mds regression testing) ---
-  num_fakeclient: 1000,
+  num_fakeclient: 100,
   fakeclient_requests: 100,
   fakeclient_deterministic: false,
 
@@ -64,7 +64,7 @@ md_config_t g_conf = {
   fakeclient_op_readdir:  10,
   fakeclient_op_mknod:    100,
   fakeclient_op_link:       false,
-  fakeclient_op_unlink:   100,
+  fakeclient_op_unlink:   10,
   fakeclient_op_rename:   100,
 
   fakeclient_op_mkdir:    100,

@@ -427,7 +427,8 @@ class CDir {
   void take_waiting(int mask, list<Context*>& ls);  // includes dentry waiters
   void take_waiting(int mask, 
 					const string& dentry, 
-					list<Context*>& ls);  
+					list<Context*>& ls,
+					int num=0);  
   void finish_waiting(int mask, int result = 0);    // ditto
   void finish_waiting(int mask, const string& dn, int result = 0);    // ditto
 

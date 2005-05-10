@@ -20,8 +20,8 @@ Clock::Clock() {
 
 double g_now = 0.0;
 
-double Clock::gettime() {
-
+double Clock::gettime() 
+{
   if (g_conf.fake_clock) {
 	g_now += .000001;
 	return g_now;

@@ -138,8 +138,6 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
     // waiters: handle_export_dir_warning
     // triggers: handle_export_dir_notify
 
-#define CINODE_WAIT_RENAMEACK    (1<<16)
-
 #define CINODE_WAIT_HARDR        (1<<17)  // 131072
 #define CINODE_WAIT_HARDW        (1<<18)  // 262...
 #define CINODE_WAIT_HARDB        (1<<19)
@@ -153,6 +151,10 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_WAIT_SOFTSTABLE   (1<<25)
 #define CINODE_WAIT_SOFTNORD     (1<<26)
 #define CINODE_WAIT_SOFTNOWR     (1<<27)
+
+#define CINODE_WAIT_RENAMEACK       (1<<28)
+#define CINODE_WAIT_RENAMENOTIFYACK (1<<29)
+
 
 
 

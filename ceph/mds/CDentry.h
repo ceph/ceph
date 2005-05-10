@@ -49,6 +49,7 @@ class CDentry {
 	inode = NULL;
 	dir = NULL;
 	lockstate = DN_LOCK_SYNC;
+	xlockedby = 0;
 	npins = 0;
 	dirty = 0;
 	parent_dir_version = 0;
@@ -57,6 +58,7 @@ class CDentry {
 	name = n;
 	inode = in;
 	lockstate = DN_LOCK_SYNC;
+	xlockedby = 0;
 	npins = 0;
 	dirty = 0;
 	parent_dir_version = 0;

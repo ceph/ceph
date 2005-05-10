@@ -1,71 +1,70 @@
-#ifndef __MRENAMENOTIFY_H
-#define __MRENAMENOTIFY_H
+#ifndef __MRENAMEPREP_H
+#define __MRENAMEPREP_H
 
-class MRenameNotify : public Message {
-  inodeno_t ino;
+class MRenamePrep : public Message {
   inodeno_t srcdirino;
   string srcname;
+  string srcpath;
   inodeno_t destdirino;
   string destname;
-  string destdirpath;
+  string destpath;
+  int initiator;
   int srcauth;
-  bool warning;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  int get_initiator() { return initiator; }
   inodeno_t get_srcdirino() { return srcdirino; }
   string& get_srcname() { return srcname; }
+  string& get_srcpath() { return srcpath; }
+  int get_srcauth() { return srcauth; }
   inodeno_t get_destdirino() { return destdirino; }
   string& get_destname() { return destname; }
-  string& get_destdirpath() { return destdirpath; }
-  int get_srcauth() { return srcauth; }
-  bool is_warning() { return warning; }
+  string& get_destpath() { return destpath; }
 
-  MRenameNotify() {}
-  MRenameNotify(inodeno_t ino,
-				inodeno_t srcdirino,
-				const string& srcname,
-				inodeno_t destdirino,
-				const string& destdirpath,
-				const string& destname,
-				int srcauth
-				//,			bool warning
-				) :
-	Message(MSG_MDS_RENAMENOTIFY) {
-	this->ino = ino;
+  MRenamePrep() {}
+  MRenamePrep(int initiator,
+			  inodeno_t srcdirino,
+			  const string& srcname,
+			  const string& srcpath,
+			  inodeno_t destdirino,
+			  const string& destname,
+			  const string& destpath,
+			  int srcauth) :
+	Message(MSG_MDS_RENAMEPREP) {
+	this->initiator = initiator;
 	this->srcdirino = srcdirino;
 	this->srcname = srcname;
+	this->srcpath = srcpath;
 	this->destdirino = destdirino;
 	this->destname = destname;
-	this->destdirpath = destdirpath;
+	this->destpath = destpath;
 	this->srcauth = srcauth;
-	this->warning = warning;
   }
-  virtual char *get_type_name() { return "Rnot";}
+  virtual char *get_type_name() { return "RnP";}
   
   virtual void decode_payload(crope& s) {
 	int off = 0;
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
+	s.copy(off, sizeof(initiator), (char*)&initiator);
+	off += sizeof(initiator);
 	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
 	off += sizeof(srcdirino);
 	s.copy(off, sizeof(destdirino), (char*)&destdirino);
 	off += sizeof(destdirino);
 	_unrope(srcname, s, off);
+	_unrope(srcpath, s, off);
 	_unrope(destname, s, off);
-	_unrope(destdirpath, s, off);
+	_unrope(destpath, s, off);
 	s.copy(off, sizeof(srcauth), (char*)&srcauth);
-	s.copy(off, sizeof(warning), (char*)&warning);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&ino,sizeof(ino));
+	s.append((char*)&initiator,sizeof(initiator));
 	s.append((char*)&srcdirino,sizeof(srcdirino));
 	s.append((char*)&destdirino,sizeof(destdirino));
 	_rope(srcname, s);
+	_rope(srcpath, s);
 	_rope(destname, s);
-	_rope(destdirpath, s);
+	_rope(destpath, s);
 	s.append((char*)&srcauth, sizeof(srcauth));
-	s.append((char*)&warning, sizeof(warning));
   }
 };
 
