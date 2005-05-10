@@ -4424,14 +4424,39 @@ void MDCache::handle_lock_dn(MLock *m)
 	}
 	break;
 
-  case LOCK_AC_REQXLOCK:
+
   case LOCK_AC_REQXLOCKC:
+	// make sure it's a _file_, if it exists.
+	if (dn && dn->inode && dn->inode->is_dir()) {
+	  dout(7) << "handle_lock_dn failing, reqxlockc on dir " << *dn->inode << endl;
+	  
+	  // nak
+	  string path;
+	  dn->make_path(path);
+
+	  MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
+	  reply->set_dn(dir->ino(), dname);
+	  reply->set_path(path);
+	  mds->messenger->send_message(reply,
+								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
+								   MDS_PORT_CACHE);
+	  
+	  // done
+	  if (active_requests.count(m)) 
+		request_finish(m);
+	  else
+		delete m;
+	  return;
+	}
+
+  case LOCK_AC_REQXLOCK:
 	if (dn) {
 	  dout(7) << "handle_lock_dn reqxlock on " << *dn << endl;
 	} else {
 	  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << endl;	  
 	}
 	
+
 	// start request?
 	if (!active_requests.count(m)) {
 	  vector<CDentry*> trace;
@@ -4466,16 +4491,7 @@ void MDCache::handle_lock_dn(MLock *m)
 								   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 								   MDS_PORT_CACHE);
 
-	  /* no: keep this around!
-	  dn->xlockedby = DN_XLOCK_FOREIGN;  // not 0, not a valid pointer.
-
-	  // disassociate xlock from MLock
-	  active_requests[m].xlocks.clear();
-	  active_requests[m].traces.clear();
-
-	  // finish request
-	  request_finish(m);
-	  */
+	  // note: keep request around in memory (to hold the xlock/pins on behalf of requester)
 	  return;
 	}
 	break;

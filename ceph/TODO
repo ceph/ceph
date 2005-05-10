@@ -4,8 +4,10 @@ SAGE:
 - mpimessenger: allow self-addressed messages
 - change export_proxy_*'s to lists (faster)
 
+- make balancer export empty dirs
+
 - fix MExportAck and others to use dir+dentry, not inode
-  (otherwise this all breaks with hard links)
+  (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
 
 - timer .. integrate with clock?
 

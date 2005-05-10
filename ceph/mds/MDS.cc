@@ -1144,8 +1144,13 @@ void MDS::handle_client_unlink(MClientRequest *req,
 	  // export sanity check
 	  if (!in->is_auth()) {
 		// i should be exporting this now/soon, since the dir is empty.
-		dout(7) << "handle_client_rmdir dir is auth, but not inode.  i should be exporting!" << endl;
-		assert(in->dir->is_freezing() || in->dir->is_frozen());
+		dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
+		if (!in->dir->is_freezing() && in->dir->is_frozen()) {
+		  assert(in->dir->is_import());
+		  mdcache->export_empty_import(in->dir);		  
+		} else {
+		  dout(7) << "apparently already exporting" << endl;
+		}
 		in->dir->add_waiter(CDIR_WAIT_UNFREEZE,
 							new C_MDS_RetryRequest(this, req, diri));
 		return;
@@ -1519,7 +1524,7 @@ void MDS::handle_client_rename_2(MClientRequest *req,
 	dout(7) << "FOREIGN RENAME" << endl;
 	
 	// punt?
-	if (true && srcdn->inode->is_dir()) {
+	if (false && srcdn->inode->is_dir()) {
 	  reply_request(req, -EINVAL);  
 	  return; 
 	}
@@ -1631,6 +1636,9 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 		}
 	  } else {
 		if (!destdn || destdn->xlockedby != req) {
+		  /* NOTE: require that my xlocked item be a leaf/file, NOT a dir.  in case
+		   * my traverse and determination of dest vs dest/srcfilename was out of date.
+		   */
 		  mdcache->dentry_xlock_request(destdir, destname, true, req, new C_MDS_RetryRequest(this, req, ref));
 		  return;
 		}
@@ -1641,6 +1649,36 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	
 	dosrc = !dosrc;
   }
+
+  
+  // final check: verify if dest exists that src is a file
+
+  // FIXME: is this necessary?
+
+  /*
+  if (destdn->inode) {
+	if (destdn->inode->is_dir()) {
+	  dout(7) << "handle_client_rename_local failing, dest exists and is a dir: " << *destdn->inode << endl;
+	  reply_request(req, -EINVAL);  
+	  return; 
+	}
+	if (srcdn->inode->is_dir()) {
+	  dout(7) << "handle_client_rename_local failing, dest exists and src is a dir: " << *destdn->inode << endl;
+	  reply_request(req, -EINVAL);  
+	  return; 
+	}
+  } else {
+	/* if destdn->inode is null, then we know it's a non-existent dest,
+	   why?  because if it's local, it dne.  and if it's remote, we xlocked with 
+	   REQXLOCKC, which will only allow you to lock a file.
+	*/
+	// so we know dest is a file, or non-existent
+	if (!destlocal) {
+	  
+	}
+  }
+*/
+
 
   // we're golden.
   // everything is xlocked by us, we rule, etc.
