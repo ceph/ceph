@@ -5063,7 +5063,7 @@ void MDCache::export_dir_walk(MExportDir *req,
   // proxy
   dir->state_set(CDIR_STATE_PROXY);
   dir->get(CDIR_PIN_PROXY);
-  export_proxy_dirinos[basedir].insert(dir->ino());
+  export_proxy_dirinos[basedir].push_back(dir->ino());
 
   if (!dir->is_clean())
 	dir->mark_clean();
@@ -5128,7 +5128,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	}
 	
 	// add to proxy
-	export_proxy_inos[basedir].insert(in->ino());
+	export_proxy_inos[basedir].push_back(in->ino());
 	in->state_set(CINODE_STATE_PROXY);
 	in->get(CINODE_PIN_PROXY);
 
@@ -5178,7 +5178,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 
 	// unpin proxies
 	// inodes
-	for (set<inodeno_t>::iterator it = export_proxy_inos[dir].begin();
+	for (list<inodeno_t>::iterator it = export_proxy_inos[dir].begin();
 		 it != export_proxy_inos[dir].end();
 		 it++) {
 	  CInode *in = get_inode(*it);
@@ -5188,7 +5188,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 	export_proxy_inos.erase(dir);
 
 	// dirs
-	for (set<inodeno_t>::iterator it = export_proxy_dirinos[dir].begin();
+	for (list<inodeno_t>::iterator it = export_proxy_dirinos[dir].begin();
 		 it != export_proxy_dirinos[dir].end();
 		 it++) {
 	  CDir *dir = get_inode(*it)->dir;

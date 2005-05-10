@@ -1,10 +1,20 @@
 
 SAGE:
 
-- mpimessenger: allow self-addressed messages
-- change export_proxy_*'s to lists (faster)
+- mount, unmount, distribute osdcluster
 
-- make balancer export empty dirs
+//- mpimessenger: allow self-addressed messages
+//- change export_proxy_*'s to lists (faster)
+
+//- make balancer export empty dirs
+
+/- finish testing foreign renames
+
+- no-cache tests
+
+- basic client read, write.
+
+- symlink loops
 
 - fix MExportAck and others to use dir+dentry, not inode
   (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
@@ -15,9 +25,7 @@ SAGE:
   - fix noperm crap
   - clean up xlock interaction
 
-- finish testing foreign renames
 
-- symlink loops
 
 - fix logging model for data safety
  - inodeupdate

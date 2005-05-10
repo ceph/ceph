@@ -1004,9 +1004,7 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->inode.mode = req->get_iarg();
   newi->inode.uid = req->get_caller_uid();
   newi->inode.gid = req->get_caller_gid();
-  newi->inode.ctime = 1;  // now, FIXME
-  newi->inode.mtime = 1;  // now, FIXME
-  newi->inode.atime = 1;  // now, FIXME
+  newi->inode.ctime = newi->inode.mtime = newi->inode.atime = g_clock.get_unixtime();   // now
 
   // link
   if (!dn) 
@@ -1336,7 +1334,7 @@ void MDS::handle_client_rename(MClientRequest *req,
   // ok, done passing buck.
 
   // src dentry
-  CDentry *srcdn = srcdir->lookup(srcname);     // FIXME for hard links
+  CDentry *srcdn = srcdir->lookup(srcname);
 
   // xlocked?
   if (srcdn && !srcdn->can_read(req)) {
@@ -1655,15 +1653,16 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 
   // FIXME: is this necessary?
 
-  /*
   if (destdn->inode) {
 	if (destdn->inode->is_dir()) {
 	  dout(7) << "handle_client_rename_local failing, dest exists and is a dir: " << *destdn->inode << endl;
+	  assert(0);
 	  reply_request(req, -EINVAL);  
 	  return; 
 	}
 	if (srcdn->inode->is_dir()) {
 	  dout(7) << "handle_client_rename_local failing, dest exists and src is a dir: " << *destdn->inode << endl;
+	  assert(0);
 	  reply_request(req, -EINVAL);  
 	  return; 
 	}
@@ -1673,10 +1672,14 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	// REQXLOCKC, which will only allow you to lock a file.
 	// so we know dest is a file, or non-existent
 	if (!destlocal) {
-	  
+	  if (srcdn->inode->is_dir()) { 
+		// help: maybe the dest exists and is a file?   ..... FIXME
+	  } else {
+		// we're fine, src is file, dest is file|dne
+	  }
 	}
   }
-  */
+  
 
 
   // we're golden.

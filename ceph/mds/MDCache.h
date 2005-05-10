@@ -90,19 +90,11 @@ class MDCache {
   set<CDir*>             imports;                // includes root (on mds0)
   set<CDir*>             exports;
   map<CDir*,set<CDir*> > nested_exports;
-  //multimap<CDir*,CDir*>  nested_exports;   // nested exports of (imports|root)
   
-  // hashing madness
-  multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
-  multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
-        // maps frozen_dir_ino's to waiting-for-discover ino's.
-  multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
-  // maps import_root_ino's to frozen dir ino's (with pending discovers)
-
   // export fun
   map<CDir*, set<int> >  export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
-  map<CDir*, set<inodeno_t> > export_proxy_inos;
-  map<CDir*, set<inodeno_t> > export_proxy_dirinos;
+  map<CDir*, list<inodeno_t> > export_proxy_inos;
+  map<CDir*, list<inodeno_t> > export_proxy_dirinos;
 
   set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
@@ -110,6 +102,15 @@ class MDCache {
   // rename fun
   set<inodeno_t>                    stray_rename_warnings; // notifies i haven't seen
   map<inodeno_t, MRenameNotify*>    stray_rename_notifies;
+
+  // hashing madness
+  multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
+  multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
+        // maps frozen_dir_ino's to waiting-for-discover ino's.
+  multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
+  // maps import_root_ino's to frozen dir ino's (with pending discovers)
+
+
 
  public:
   // active MDS requests

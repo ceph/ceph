@@ -36,6 +36,7 @@ class MDBalancer {
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
 
+  void export_empties();
   void do_rebalance();
   void find_exports(CDir *dir, 
 					double amount, 

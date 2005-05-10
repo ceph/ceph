@@ -141,12 +141,14 @@ int mpi_send(Message *m, int rank, int tag)
   dout(10) << "mpi_sending " << size << " byte message to rank " << rank << " tag " << tag << endl;
 
   // sending
-  ASSERT(MPI_Send((void*)buf,
-				  size,
-				  MPI_CHAR,
-				  rank,
-				  tag,
-				  MPI_COMM_WORLD) == MPI_SUCCESS);
+  MPI_Request req;             // non-blocking, in case we send to ourselves from same thread
+  ASSERT(MPI_Isend((void*)buf,
+				   size,
+				   MPI_CHAR,
+				   rank,
+				   tag,
+				   MPI_COMM_WORLD,
+				   &req) == MPI_SUCCESS);
 }
 
 

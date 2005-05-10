@@ -121,13 +121,30 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   //cout << "  load is " << load << " have " << mds_load.size() << endl;
   
   int cluster_size = mds->get_cluster()->get_num_mds();
-  if (mds_load.size() == cluster_size) 
+  if (mds_load.size() == cluster_size) {
+	// let's go!
+	export_empties();
 	do_rebalance();
+  }
   
   // done
   delete m;
 }
 
+
+void MDBalancer::export_empties() 
+{
+  dout(5) << "export_empties checking for empty imports" << endl;
+
+  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
+	   it != mds->mdcache->imports.end();
+	   it++) {
+	CDir *dir = *it;
+	
+	if (!dir->inode->is_root() && dir->get_size() == 0) 
+	  mds->mdcache->export_empty_import(dir);
+  }
+}
 
 void MDBalancer::do_rebalance()
 {
