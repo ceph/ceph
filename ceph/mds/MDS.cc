@@ -1668,16 +1668,15 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	  return; 
 	}
   } else {
-	/* if destdn->inode is null, then we know it's a non-existent dest,
-	   why?  because if it's local, it dne.  and if it's remote, we xlocked with 
-	   REQXLOCKC, which will only allow you to lock a file.
-	*/
+	// if destdn->inode is null, then we know it's a non-existent dest,
+	// why?  because if it's local, it dne.  and if it's remote, we xlocked with 
+	// REQXLOCKC, which will only allow you to lock a file.
 	// so we know dest is a file, or non-existent
 	if (!destlocal) {
 	  
 	}
   }
-*/
+  */
 
 
   // we're golden.
