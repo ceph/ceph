@@ -22,8 +22,8 @@
 using namespace std;
 
 
-#include "Cond.h"
-#include "Mutex.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 #include <pthread.h>
 
 #include "include/config.h"

@@ -43,8 +43,8 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_PROXY     3   // can't expire yet
 #define CINODE_PIN_WAITER    4   // waiter
 
-#define CINODE_PIN_OPENRD    5
-#define CINODE_PIN_OPENWR    6
+#define CINODE_PIN_OPEN      5  // local fh's
+#define CINODE_PIN_OPENTOK   6  // fh tokens to replicas
 
 #define CINODE_PIN_DNDIRTY   7  // dentry is dirty
 
@@ -53,6 +53,8 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_IMPORTING  9   // multipurpose, for importing
 
 #define CINODE_PIN_REQUEST   10  // request is logging, finishing
+
+#define CINODE_PIN_RENAMESRC 11  // pinned on dest for foreign rename
 
 //#define CINODE_PIN_SYNCBYME     70000
 //#define CINODE_PIN_SYNCBYAUTH   70001
@@ -220,52 +222,43 @@ class CInode : LRUObject {
   vector<CDentry*> parents;    // if > 1
 
 
-  // dcache lru
-  //CInode *lru_next, *lru_prev;
-
   // -- distributed caching
-  //bool             auth;       // safety check; true if this is authoritative.
-  set<int>         cached_by;  // mds's that cache me.  
+  set<int>         cached_by;        // [auth] mds's that cache me.  
   /* NOTE: on replicas, this doubles as replicated_by, but the
 	 cached_by_* access methods below should NOT be used in those
 	 cases, as the semantics are different! */
-  /* NOTE: if replica is_cacheproxy(), cached_by is still defined! */
   map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
   int              replica_nonce;    // [replica] defined on replica
 
   // this is sort of a mess.
   set<int>         rename_waiting_for_ack;
 
-  int              dangling_auth;         // explicit auth when dangling.
+  int              dangling_auth;    // explicit auth, when dangling.
 
-  int              num_inflight_commits;
+  int              num_request_pins;
 
   // waiters
   multimap<int,Context*>  waiting;
 
-
-  // open file state
-  map<fileh_t, CFile*>  fh_read;   // readers
-  map<fileh_t, CFile*>  fh_write;  // writers
-  set<int>              replica_writers;  // replicas who are writing
-
-  //MInodeSyncStart      *pending_sync_request;
+  // open file state (me)
+  map<fileh_t, CFile*>  fh_map;                   // locally opened files
+  int                   nrdonly, nrdwr, nwronly;  // file mode counts
 
  private:
-  // waiters
-
   // lock nesting
   int auth_pins;
   int nested_auth_pins;
 
   DecayCounter popularity[MDS_NPOP];
-  
+
+  // friends
   friend class MDCache;
   friend class CDir;
   friend class CInodeExport;
   friend class CInodeDiscover;
 
  public:
+  // ---------------------------
   CInode(bool auth=true);
   ~CInode();
   
@@ -435,70 +428,33 @@ class CInode : LRUObject {
   void finish_waiting(int mask, int result = 0);
 
 
-  // -- sync, lock --
-  /*
-  bool is_sync() { return dist_state & (CINODE_DIST_SYNCBYME|
-										CINODE_DIST_SYNCBYAUTH); }
-  bool is_syncbyme() { return dist_state & CINODE_DIST_SYNCBYME; }
-  bool is_syncbyauth() { return dist_state & CINODE_DIST_SYNCBYAUTH; }
-  bool is_presync() { return dist_state & CINODE_DIST_PRESYNC; }
-  bool is_softasync() { return dist_state & CINODE_DIST_SOFTASYNC; }
-  bool is_waitonunsync() { return dist_state & CINODE_DIST_WAITONUNSYNC; }
-
-  bool is_lockbyme() { return dist_state & CINODE_DIST_LOCKBYME; }
-  bool is_lockbyauth() { return dist_state & CINODE_DIST_LOCKBYAUTH; }
-  bool is_prelock() { return dist_state & CINODE_DIST_PRELOCK; }
-  bool is_waitonunlock() { return dist_state & CINODE_DIST_WAITONUNLOCK; }
-  */
 
   // -- open files --
-  bool is_open_write() { return !fh_write.empty(); }
-  bool is_open_read() { return !fh_read.empty(); }
+  bool is_open_write() { return nwronly; }
+  bool is_open_read() { return nrdonly; }
   bool is_open() { return is_open_write() || is_open_read(); }
+
+  int get_num_fh() { return fh_map.size(); }
   CFile* get_fh(int fh) {
-	if (fh_read.count(fh)) return fh_read[fh];
-	if (fh_write.count(fh)) return fh_write[fh];
+	if (fh_map.count(fh)) return fh_map[fh];
 	return 0;
   }
   void add_fh(CFile *f) {
-	if (f->mode == CFILE_MODE_R) {
-	  if (fh_read.empty())
-		get(CINODE_PIN_OPENRD);
-	  fh_read[f->fh] = f;
-	} 
-	else if (f->mode == CFILE_MODE_W) {
-	  if (fh_write.empty())
-		get(CINODE_PIN_OPENWR);
-	  fh_write[f->fh] = f;
-	}
-	else assert(0);  // implement me
+	if (f->mode == CFILE_MODE_R) nrdonly++;
+	if (f->mode == CFILE_MODE_W) nwronly++;
+	if (f->mode == CFILE_MODE_RW) nrdwr++;
+	
+	if (fh_map.empty()) get(CINODE_PIN_OPEN);
+	fh_map[f->fh] = f;
   }
   void remove_fh(CFile *f) {
-	if (f->mode == CFILE_MODE_R) {
-	  assert(fh_read.count(f->fh));
-	  fh_read.erase(fh_read.find(f->fh));
-	  if (fh_read.empty()) put(CINODE_PIN_OPENRD);
-	} 
-	else if (f->mode == CFILE_MODE_W) {
-	  assert(fh_write.count(f->fh));
-	  fh_write.erase(fh_write.find(f->fh));
-	  if (fh_write.empty()) put(CINODE_PIN_OPENWR);
-	}
-	else assert(0);  // implement me
-  }
+	if (f->mode == CFILE_MODE_R) nrdonly--;
+	if (f->mode == CFILE_MODE_W) nwronly--;
+	if (f->mode == CFILE_MODE_RW) nrdwr--;
 
-  bool is_replica_writer(int m) {
-	return replica_writers.count(m) == 1;
+	fh_map.erase(f->fh);
+	if (fh_map.empty()) put(CINODE_PIN_OPEN);
   }
-  void add_replica_writer(int m) {
-	replica_writers.insert(m);
-  }
-  void remove_replica_writer(int m) {
-	assert(replica_writers.count(m) == 1);
-	replica_writers.erase(m);
-  }
-  int num_replica_writers() { return replica_writers.size(); }
-  void clear_replica_writers() { replica_writers.clear(); }
 
 
   // -- authority --
@@ -522,14 +478,18 @@ class CInode : LRUObject {
 
 
   // -- reference counting --
-
-  void inflight_commit_put() {
-	num_inflight_commits--;
-	if (num_inflight_commits == 0) put(CINODE_PIN_REQUEST);
+  
+  /* these can be pinned any # of times, and are
+	 linked to an active_request, so they're automatically cleaned
+	 up when a request is finished.  pin at will! */
+  void request_pin_get() {
+	if (num_request_pins == 0) get(CINODE_PIN_REQUEST);
+	num_request_pins++;
   }
-  void inflight_commit_get() {
-	if (num_inflight_commits == 0) get(CINODE_PIN_REQUEST);
-	num_inflight_commits++;
+  void request_pin_put() {
+	num_request_pins--;
+	if (num_request_pins == 0) put(CINODE_PIN_REQUEST);
+	assert(num_request_pins >= 0);
   }
 
 
@@ -648,7 +608,7 @@ typedef struct {
   bool           is_dirty;       // dirty inode?
 
   int            ncached_by;  // int pairs follow
-  int            nreplica_writers;
+  int            num_fh;
 } CInodeExport_st;
 
 
@@ -657,7 +617,7 @@ class CInodeExport {
   CInodeExport_st st;
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
-  set<int>      replica_writers;
+  list<CFile*>  fh_list;
 
   CLock         hardlock,softlock;
 
@@ -672,7 +632,23 @@ public:
 	cached_by_nonce = in->cached_by_nonce; 
 	hardlock = in->hardlock;
 	softlock = in->softlock;
-	replica_writers = in->replica_writers;
+	
+	// suck up fh's from inode
+	st.num_fh = in->fh_map.size();
+	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
+		 it != in->fh_map.end();
+		 it++) {
+	  fh_list.push_back(it->second);
+	}
+	for (list<CFile*>::iterator it = fh_list.begin();
+		 it != fh_list.end();
+		 it++) 
+	  in->remove_fh(*it);
+  }
+  ~CInodeExport() {
+	for (list<CFile*>::iterator it = fh_list.begin();
+		 it != fh_list.end();
+		 it++) delete *it;
   }
   
   inodeno_t get_ino() { return st.inode.ino; }
@@ -695,13 +671,17 @@ public:
 	in->hardlock = hardlock;
 	in->softlock = softlock;
 
-	in->replica_writers = replica_writers;
+	// fh's
+	for (list<CFile*>::iterator it = fh_list.begin();
+		 it != fh_list.end();
+		 it++) {
+	  in->add_fh(*it);
+	}
   }
 
   crope _rope() {
 	crope r;
     st.ncached_by = cached_by.size();
-	st.nreplica_writers = replica_writers.size();
     r.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
@@ -714,16 +694,15 @@ public:
       r.append((char*)&n, sizeof(int));
     }
 
-	// replica_writers
-	for (set<int>::iterator it = replica_writers.begin();
-		 it != replica_writers.end();
-		 it++) {
-	  int m = *it;
-	  r.append((char*)&m, sizeof(m));
-	}	  
-    
 	hardlock.encode_state(r);
 	softlock.encode_state(r);
+
+	// fh
+	for (list<CFile*>::iterator it = fh_list.begin();
+		 it != fh_list.end();
+		 it++) 
+	  r.append((char*)*it, sizeof(CFile));
+
 	return r;
   }
 
@@ -740,15 +719,18 @@ public:
       cached_by.insert(m);
       cached_by_nonce.insert(pair<int,int>(m,n));
     }
-	for (int i=0; i<st.nreplica_writers; i++) {
-	  int n;
-	  s.copy(off, sizeof(int), (char*)&n);
-      off += sizeof(int);
-	  replica_writers.insert(n);
-	}
 
 	hardlock.decode_state(s, off);
 	softlock.decode_state(s, off);
+
+	// fh
+	for (int i=0; i<st.num_fh; i++) {
+	  CFile *fh = new CFile;
+	  s.copy(off, sizeof(CFile), (char*)fh);
+	  off += sizeof(CFile);
+	  fh_list.push_back(fh);
+	}
+
     return off;
   }
 };

@@ -14,6 +14,7 @@
 
 typedef struct {
   long tid;
+  long pcid;
   long result;
   off_t offset;
   object_t oid;
@@ -26,11 +27,16 @@ class MOSDWriteReply : public Message {
   long get_tid() { return st.tid; }
   long get_result() { return st.result; }
   off_t get_offset() { return st.offset; }
-  object_t get_oid() { return st.oid; }
+  object_t get_oid() { return st.oid; }  
+
+  // keep a pcid (procedure call id) to match up request+reply
+  void set_pcid(long pcid) { this->st.pcid = pcid; }
+  long get_pcid() { return st.pcid; }
 
   MOSDWriteReply() {}
   MOSDWriteReply(MOSDWrite *r, long wrote) :
 	Message(MSG_OSD_WRITEREPLY) {
+	this->st.pcid = r->st.pcid;
 	this->st.tid = r->st.tid;
 	this->st.oid = r->st.oid;
 	this->st.offset = r->st.offset;

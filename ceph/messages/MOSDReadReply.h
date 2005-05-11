@@ -14,9 +14,11 @@
 
 typedef struct {
   long tid;
+  long pcid;
   off_t offset;
   object_t oid;  
   size_t len;
+  long result;
 } MOSDReadReply_st;
 
 class MOSDReadReply : public Message {
@@ -25,19 +27,24 @@ class MOSDReadReply : public Message {
 
  public:
   size_t get_len() { return st.len; }
+  int get_result() { return st.result; }
   object_t get_oid() { return st.oid; }
   off_t get_offset() { return st.offset; }
   long get_tid() { return st.tid; }
 
+  // keep a pcid (procedure call id) to match up request+reply
+  void set_pcid(long pcid) { this->st.pcid = pcid; }
+  long get_pcid() { return st.pcid; }
+
   MOSDReadReply() { }
-  MOSDReadReply(MOSDRead *r, char *buf, long len) :
+  MOSDReadReply(MOSDRead *r, char *buf, long result) :
 	Message(MSG_OSD_READREPLY) {
 	this->st.tid = r->st.tid;
+	this->st.pcid = r->st.pcid;
 	this->st.oid = r->st.oid;
 	this->st.offset = r->st.offset;
-	if (buf) 
-	  buffer.append( buf, len );
-	this->st.len = len;
+	this->st.result = result;
+	if (buf && result > 0) buffer.append( buf, result );
   }
 
   crope& get_buffer() {
@@ -51,7 +58,7 @@ class MOSDReadReply : public Message {
 	buffer = s.substr(off, st.len);                
   }
   virtual void encode_payload(crope& payload) {
-	assert(buffer.length() == st.len);
+	st.len = buffer.length();
 	payload.append((char*)&st, sizeof(st));
 	payload.append(buffer);
   }

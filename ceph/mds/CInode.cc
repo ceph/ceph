@@ -71,7 +71,7 @@ CInode::CInode(bool auth) : LRUObject(),
 
   auth_pins = 0;
   nested_auth_pins = 0;
-  num_inflight_commits = 0;
+  num_request_pins = 0;
 
   state = 0;  
   version = 0;

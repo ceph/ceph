@@ -27,6 +27,8 @@
 
 // ceph stuff
 #include "include/types.h"
+#include "include/rangeset.h"
+
 #include "Client.h"
 
 // stl
@@ -37,7 +39,18 @@ using namespace std;
 // globals
 Client *client;     // the ceph client
 
+// fh fun
+rangeset<int>             pfh_set;  // available pseudo_fh's
+map<int, fileh_t>         pfh_map;  // map pseudo-fh -> fh
 
+int get_pseudo_fh() {
+  int fh = pfh_set.first();
+  pfh_set.erase(fh);
+  return fh;
+}
+void put_pseudo_fh(int fh) {
+  pfh_set.insert(fh);
+}
 
 
 // ------
@@ -143,20 +156,25 @@ static int ceph_open(const char *path, struct fuse_file_info *fi)
   res = client->open(path, fi->flags);
   if (res < 0) return res;
   
-  fi->fh = res;
-  return res;   // or 0?
+  int pfh = get_pseudo_fh();
+  pfh_map[pfh] = res;
+  fi->fh = pfh;
+
+  return 0;  // fuse wants 0 onsucess
 }
 
 static int ceph_read(const char *path, char *buf, size_t size, off_t offset,
 					 struct fuse_file_info *fi)
 {
-  return client->read(fi->fh, buf, size, offset);
+  fileh_t fh = pfh_map[fi->fh];
+  return client->read(fh, buf, size, offset);
 }
 
 static int ceph_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi)
 {
-  return client->write(fi->fh, buf, size, offset);
+  fileh_t fh = pfh_map[fi->fh];
+  return client->write(fh, buf, size, offset);
 }
 
 static int ceph_statfs(const char *path, struct statfs *stbuf)
@@ -168,12 +186,12 @@ static int ceph_statfs(const char *path, struct statfs *stbuf)
 
 static int ceph_release(const char *path, struct fuse_file_info *fi)
 {
-    /* Just a stub.  This method is optional and can safely be left
-       unimplemented */
-
-    (void) path;
-    (void) fi;
-    return 0;
+  fileh_t fh = pfh_map[fi->fh];
+  pfh_map.erase(fi->fh);
+  put_pseudo_fh(fi->fh);
+  
+  int r = client->close(fh);  // close the file
+  return r;
 }
 
 static int ceph_fsync(const char *path, int isdatasync,
@@ -218,6 +236,9 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
 {
   // init client
   client = c;
+
+  // init fh allocator
+  pfh_set.map_insert(10,65000);
 
   // set up fuse argc/argv
   int newargc = 0;

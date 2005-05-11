@@ -85,9 +85,9 @@ void IdAllocator::load()
 	close(fd);
   }
   else {
-	// use generic range
-	free[ID_INO].map_insert((long long)1000000000000LL * (mds->get_nodeid()+1),
-							(long long)1000000000000LL * (mds->get_nodeid()+2) - 1);
+	// use generic range FIXME THIS IS CRAP
+	free[ID_INO].map_insert((long long)1000000LL * (mds->get_nodeid()+1),
+							(long long)1000000LL * (mds->get_nodeid()+2) - 1);
 	//free[ID_INO].dump();
 
 	free[ID_FH].map_insert(1000000LL * (mds->get_nodeid()+1),

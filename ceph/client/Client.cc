@@ -8,6 +8,12 @@
 #include <utime.h>
 
 
+#include "messages/MOSDRead.h"
+#include "messages/MOSDReadReply.h"
+#include "messages/MOSDWrite.h"
+#include "messages/MOSDWriteReply.h"
+
+
 #include "include/config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "client" << whoami << " "
@@ -20,6 +26,17 @@ Client::Client(MDCluster *mdc, int id, Messenger *m)
 {
   mdcluster = mdc;
   whoami = id;
+
+  mounted = false;
+
+  // <HACK set up OSDCluster from g_conf>
+  osdcluster = new OSDCluster();
+  OSDGroup osdg;
+  osdg.num_osds = g_conf.num_osd;
+  for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
+  osdg.weight = 100;
+  osdcluster->add_group(osdg);
+  // </HACK>
 
   // set up messengers
   messenger = m;
@@ -72,7 +89,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 	if (inode_map.count(in_info->inode.ino)) {
 	  Inode *in = inode_map[in_info->inode.ino];
 	  if (in) {
-		dout(12) << " had ino " << dn->inode->inode.ino << " at wrong position, moving" << endl;
+		dout(12) << " had ino " << in->inode.ino << " at wrong position, moving" << endl;
 		if (in->dn) unlink(in->dn);
 		dn = link(dir, dname, in);
 	  }
@@ -80,9 +97,10 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   }
   
   if (!dn) {
-	dn = link(dir, dname, new Inode());
-	inode_map[dn->inode->inode.ino] = dn->inode;
-	dout(12) << " new dentry+node with ino " << dn->inode->inode.ino << endl;
+	Inode *in = new Inode;
+	inode_map[in_info->inode.ino] = in;
+	dn = link(dir, dname, in);
+	dout(12) << " new dentry+node with ino " << in_info->inode.ino << endl;
   }
 
   // OK!
@@ -124,13 +142,53 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
 	  root->last_updated = now;
       dout(12) << "insert_trace trace " << i << " root" << endl;
     } else {
-      dout(12) << "insert_trace trace " << i;
+      dout(12) << "insert_trace trace " << i << endl;
       Dir *dir = open_dir( cur );
 	  cur = this->insert_inode_info(dir, trace[i]);
 	  cur->last_updated = now;
     }    
   }
 }
+
+
+
+
+Dentry *Client::lookup(filepath& path)
+{
+  dout(14) << "lookup " << path << endl;
+
+  Inode *cur = root;
+  if (!cur) return NULL;
+
+  Dentry *dn = 0;
+  for (int i=0; i<path.depth(); i++) {
+	dout(14) << " seg " << i << " = " << path[i] << endl;
+	if (cur->inode.mode & INODE_MODE_DIR) {
+	  // dir, we can descend
+	  Dir *dir = open_dir(cur);
+	  if (dir->dentries.count(path[i])) {
+		dn = dir->dentries[path[i]];
+		dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " last_updated " << dn->inode->last_updated<< endl;
+	  } else {
+		dout(14) << " dentry " << path[i] << " dne" << endl;
+		return NULL;
+	  }
+	  cur = dn->inode;
+	  assert(cur);
+	} else {
+	  return NULL;  // not a dir
+	}
+  }
+  
+  if (dn) {
+	dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " last_updated " << dn->inode->last_updated<< endl;
+  }
+
+  return dn;
+}
+
+
+
 
 // -------------------
 // fs ops
@@ -285,9 +343,10 @@ int Client::lstat(const char *path, struct stat *stbuf)
   // check whether cache content is fresh enough
   Dentry *dn = lookup(req->get_filepath());
   inode_t inode;
-  if (dn && ((time(NULL) - dn->inode->last_updated) <= g_conf.client_cache_stat_ttl)) {
+  time_t now = time(NULL);
+  if (dn && ((now - dn->inode->last_updated) <= g_conf.client_cache_stat_ttl)) {
 	inode = dn->inode->inode;
-	dout(10) << "lstat cache hit" << endl;
+	dout(10) << "lstat cache hit, age is " << (now - dn->inode->last_updated) << endl;
   } else {  
 	// FIXME where does FUSE maintain user information
 	req->set_caller_uid(getuid());
@@ -422,7 +481,12 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
   if (res) return res;
 
   // dir contents to cache!
-  Dir *dir = open_dir(inode_map[trace[trace.size()-1]->inode.ino]);
+  inodeno_t ino = trace[trace.size()-1]->inode.ino;
+  Inode *diri = inode_map[ ino ];
+  assert(diri);
+  assert(diri->inode.mode & INODE_MODE_DIR);
+  Dir *dir = open_dir(diri);
+  assert(dir);
   time_t now = time(NULL);
   for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 
 	   it != reply->get_dir_contents().end(); 
@@ -447,11 +511,171 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 }
 
 
+
+
+/****** file i/o **********/
+
+int Client::open(const char *path, int mode) 
+{
+  dout(3) << "open " << path << " mode " << mode << endl;
+  mode = 0;  // HACK file writing on MDS is still weird
+  
+  MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
+  req->set_path(path); 
+  req->set_iarg(mode);
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+  
+  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  assert(reply);
+  dout(3) << "open result = " << reply->get_result() << endl;
+
+  vector<c_inode_info*> trace = reply->get_trace();
+  this->insert_trace(trace);  
+
+  // success?
+  if (reply->get_result() > 0) {
+	dout(3) << "open success, fh is " << reply->get_result() << endl;
+	// yay
+	Fh *fh = new Fh;
+	fh->ino = trace[trace.size()-1]->inode.ino;
+	fh->mds = reply->get_source();
+	fh_map[reply->get_result()] = fh;
+  }
+
+  return reply->get_result();
+}
+
+int Client::close(fileh_t fh)
+{
+  dout(3) << "close " << fh << endl;
+  assert(fh_map.count(fh));
+  
+  MClientRequest *req = new MClientRequest(MDS_OP_CLOSE, whoami);
+  req->set_iarg(fh);
+  req->set_ino(fh_map[fh]->ino);
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+  
+  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  assert(reply);
+  dout(3) << "close " << fh << " result = " << reply->get_result() << endl;
+  
+  fh_map.erase(fh);
+  return reply->get_result();
+}
+
+
+int Client::read(fileh_t fh, char *buf, size_t size, off_t offset) 
+{
+
+  assert(fh_map.count(fh));
+  inodeno_t ino = fh_map[fh]->ino;
+
+  // check current file mode (are we allowed to read, cache, etc.)
+  // ***
+  
+
+  // map to object byte ranges
+  list<OSDExtent> extents;
+  osdcluster->file_to_extents( ino, size, offset, 
+							   1,       // 1 replica for now
+							   extents );
+  
+  // issue reads (serially for now!)
+  size_t left = size;   // sanity check
+  size_t totalread = 0;
+
+  for (list<OSDExtent>::iterator it = extents.begin();
+	   it != extents.end();
+	   it++) {
+	// what where who
+	int osd = it->osds.front();   // only 1 replica for now
+	dout(7) << "reading range from object " << it->oid << " on " << osd << ": len " << it->len << " offset " << it->offset << endl;
+	assert(it->len <= left);
+	
+	// issue read
+	MOSDRead *req = new MOSDRead(0,   // tid
+								 it->oid,
+								 it->len, it->offset);
+	MOSDReadReply *reply = (MOSDReadReply*)messenger->sendrecv(req, MSG_ADDR_OSD(osd));
+	assert(reply);
+
+	// copy data into *buf
+	size_t readlen = reply->get_buffer().length();
+	reply->get_buffer().copy(0, readlen, buf);
+	
+	// move on
+	left -= readlen;
+	buf += readlen;
+	totalread += readlen;
+
+	// short read?
+	if (readlen < it->len) {
+	  dout(7) << "short read, only got " << readlen << " bytes" << endl;
+	  break;   // short read.
+	}
+  }
+
+  return totalread;  
+}
+
+int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset) 
+{
+  assert(fh_map.count(fh));
+  inodeno_t ino = fh_map[fh]->ino;
+
+  // check current file mode (are we allowed to write, buffer, etc.)
+  // ***
+  
+
+  // map to object byte ranges
+  list<OSDExtent> extents;
+  osdcluster->file_to_extents( ino, size, offset, 
+							   1,       // 1 replica for now
+							   extents );
+  
+  // issue writes (serially for now!)
+  size_t totalwritten = 0;
+
+  for (list<OSDExtent>::iterator it = extents.begin();
+	   it != extents.end();
+	   it++) {
+	// what where who
+	int osd = it->osds.front();   // only 1 replica for now
+	dout(7) << "writing range to object " << it->oid << " on " << osd << ": len " << it->len << " offset " << it->offset << endl;
+	
+	// issue write
+	crope buffer(buf, it->len);
+	MOSDWrite *req = new MOSDWrite(0,   // tid
+								   it->oid,
+								   it->len, it->offset,
+								   buffer,
+								   0);   // no flags
+	MOSDWriteReply *reply = (MOSDWriteReply*)messenger->sendrecv(req, MSG_ADDR_OSD(osd));
+	assert(reply);
+
+	// don't tolerate osd crankiness yet
+	assert(it->len == reply->get_result());   // ??
+
+	// move on
+	buf += it->len;
+	totalwritten += it->len;
+  }
+
+  assert(totalwritten == size);
+
+  return totalwritten;  
+}
+
+
+
 // not written yet, but i want to link!
 
 int Client::mknod(const char *path, mode_t mode) { }
 int Client::link(const char *existing, const char *newname) {}
-int Client::open(const char *path, int mode) {}
-int Client::read(fileh_t fh, char *buf, size_t size, off_t offset) {}
-int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset) {}
 int Client::statfs(const char *path, struct statfs *stbuf) {}

@@ -2,6 +2,7 @@
 #define __CLIENT_H
 
 #include "mds/MDCluster.h"
+#include "osd/OSDCluster.h"
 
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
@@ -64,7 +65,7 @@ class Inode {
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
 
-  Inode() : ref(0), symlink(0) { }
+  Inode() : ref(0), dir(0), dn(0), symlink(0) { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
   }
@@ -84,18 +85,25 @@ class Dentry : public LRUObject {
 };
 
 
+
 // file handle for any open file state
+#define FH_STATE_RDONLY   1    // all readers, cache at will  (no write)
+#define FH_STATE_WRONLY   2    // all writers, buffer at will (no read) 
+#define FH_STATE_RDWR     3    // read+write synchronously
+#define FH_STATE_LOCK     4    // no read or write
+
 struct Fh {
   inodeno_t ino;
-  int       mds;  // have to talk to mds we opened with (for now)
-  //...
-  int       lockstate;  // async read, write, locked, etc.
+  int       mds;        // have to talk to mds we opened with (for now)
+
+  int       state;      // async read, write, locked, etc.
+  int       mode;       // my mode (RDONLY, WRONLY, or RDWR)
+
+  time_t    mtime;      // [writers] time of last write
+  size_t    size;       // [writers] largest offset we've writtento
 };
 
 
-// func pointer type for returning directory contents.
-// this basically matches the FUSE fill func, sans FUSE's typedefs.
-typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
 
 
 
@@ -104,10 +112,16 @@ typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inoden
 
 class Client : public Dispatcher {
  protected:
-  MDCluster *mdcluster;
   Messenger *messenger;  
   int whoami;
   bool all_files_closed;
+
+  
+  // cluster descriptors
+  MDCluster             *mdcluster; 
+  OSDCluster            *osdcluster;
+  bool mounted;
+  
   
   // cache
   map<inodeno_t, Inode*> inode_map;
@@ -116,6 +130,7 @@ class Client : public Dispatcher {
 
   // file handles
   map<fileh_t, Fh*>         fh_map;
+
 
 
   // global semaphore/mutex protecting cache+fh structures
@@ -198,19 +213,7 @@ class Client : public Dispatcher {
   }
   
   // find dentry based on filepath
-  Dentry *lookup(filepath& path) {
-    Inode *cur = root;
-    Dentry *dn;
-    for (int i=0; i<path.depth(); i++) {
-      Dir *dir = open_dir(cur);
-      if (dir->dentries.count(path[i]))
-		dn = dir->dentries[path[i]];
-      else
-	return NULL;
-      cur = dn->inode;
-    }
-    return dn;
-  }
+  Dentry *lookup(filepath& path);
 		
  public:
   Client(MDCluster *mdc, int id, Messenger *m);
@@ -257,6 +260,7 @@ class Client : public Dispatcher {
   // file ops
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
+  int close(fileh_t fh);
   int read(fileh_t fh, char *buf, size_t size, off_t offset);
   int write(fileh_t fh, const char *buf, size_t size, off_t offset);
   int truncate(fileh_t fh, off_t size);

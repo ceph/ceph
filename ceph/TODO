@@ -3,29 +3,17 @@ SAGE:
 
 - mount, unmount, distribute osdcluster
 
-//- mpimessenger: allow self-addressed messages
-//- change export_proxy_*'s to lists (faster)
-
-//- make balancer export empty dirs
-
-/- finish testing foreign renames
-
-- no-cache tests
+- scatter/gather parallel rendrecv (for clients)
 
 - basic client read, write.
-
-- symlink loops
 
 - fix MExportAck and others to use dir+dentry, not inode
   (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
 
 - timer .. integrate with clock?
 
-- path_Traverse
-  - fix noperm crap
-  - clean up xlock interaction
-
-
+- path_traverse noperm crap?
+ - clean up xlock interaction
 
 - fix logging model for data safety
  - inodeupdate
@@ -38,25 +26,14 @@ SAGE:
    ?- properly commit dir, dirty inode+dentry
 
 - readdir
- - include only lockable inodes
  - set up waiters for pending xlocks
 
 fully document export process
  - including the whole warning business.. wtf is that about again?
 
-/- export null dentries
-
-
-for deadline:
-- rush stub
-
 - string table?
 
-thing about:
-/- xlock vs. discover?
-- xlock vs import/export?
-
-- think about global sync (to be used by shutdown)
+- global sync (to be used by shutdown)
   - flush all dirty data to disk
   - flush logs
 

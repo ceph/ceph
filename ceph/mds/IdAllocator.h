@@ -2,7 +2,7 @@
 #define __IDALLOCATOR_H
 
 #include "include/types.h"
-#include "rangeset.h"
+#include "include/rangeset.h"
 
 class MDS;
 

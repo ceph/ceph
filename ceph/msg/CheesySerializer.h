@@ -6,8 +6,8 @@
 
 #include "Messenger.h"
 
-#include "Cond.h"
-#include "Mutex.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 
 #include <assert.h>
 

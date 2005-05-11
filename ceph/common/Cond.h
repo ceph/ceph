@@ -2,6 +2,8 @@
 #ifndef _Cond_Posix_
 #define _Cond_Posix_
 
+#include <time.h>
+
 #include "Mutex.h"
 
 #include <pthread.h>
@@ -26,6 +28,17 @@ class Cond
 
   int Wait(Mutex &mutex)  { 
 	int r = pthread_cond_wait(&C, &mutex.M);
+	return r;
+  }
+
+  int Wait(Mutex &mutex,
+		   struct timeval *tv) {
+	// timeval -> timespec
+	struct timespec ts;
+	ts.tv_sec = tv->tv_sec;
+	ts.tv_nsec = tv->tv_usec*1000;
+
+	int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
 	return r;
   }
 

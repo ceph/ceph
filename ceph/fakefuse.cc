@@ -13,6 +13,8 @@ using namespace std;
 #include "client/Client.h"
 #include "client/fuse.h"
 
+#include "common/Timer.h"
+
 #include "msg/FakeMessenger.h"
 #include "msg/CheesySerializer.h"
 
@@ -23,6 +25,21 @@ using namespace std;
 #define NUMCLIENT g_conf.num_client
 
 
+class C_Test : public Context {
+public:
+  void finish(int r) {
+	cout << "C_Test->finish(" << r << ")" << endl;
+  }
+};
+class C_Test2 : public Context {
+public:
+  void finish(int r) {
+	cout << "C_Test2->finish(" << r << ")" << endl;
+	g_timer.add_event_after(2, new C_Test);
+  }
+};
+
+
 
 int main(int argc, char **argv) {
   cout << "fakefuse starting" << endl;
@@ -31,6 +48,9 @@ int main(int argc, char **argv) {
 
   // start messenger thread
   fakemessenger_startthread();
+
+  g_timer.add_event_after(5.0, new C_Test2);
+  g_timer.add_event_after(10.0, new C_Test);
 
 
   // create mds
@@ -67,6 +87,7 @@ int main(int argc, char **argv) {
 	client[i]->shutdown();
   }
   
+
 
   // wait for it to finish
   cout << "DONE -----" << endl;

@@ -18,6 +18,7 @@
 
 typedef struct {
   long tid;
+  long pcid;
   off_t offset;
   object_t oid;
   int flags;
@@ -40,6 +41,10 @@ class MOSDWrite : public Message {
   const char *get_buf() {
 	return buffer.c_str();
   }
+
+  // keep a pcid (procedure call id) to match up request+reply
+  void set_pcid(long pcid) { this->st.pcid = pcid; }
+  long get_pcid() { return st.pcid; }
 
   MOSDWrite(long tid, object_t oid, size_t len, off_t offset, crope& buffer, int flags=0) :
 	Message(MSG_OSD_WRITE) {

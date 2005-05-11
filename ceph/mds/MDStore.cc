@@ -534,6 +534,14 @@ void MDStore::do_fetch_dir( CDir *dir,
 	// normal
 	osd = mds->mdcluster->get_meta_osd(dir->ino());
 	oid = mds->mdcluster->get_meta_oid(dir->ino());
+	
+	/*
+	oid = mds->osdcluster->file_to_object( dir->ino(), 0 );
+	repgroup_t rg = mds->osdcluster->file_to_repgroup( dir->ino() );
+	list<int> osds;
+	mds->osdcluster->repgroup_to_osds(rg, osds, 1);
+	osd = osds[0];
+	*/
   }
   
   mds->osd_read( osd, oid, 

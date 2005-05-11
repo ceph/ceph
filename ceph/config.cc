@@ -22,10 +22,10 @@ md_config_t g_conf = {
   log_messages: true,
   log_interval: 10.0,
 
-  fake_clock: true,
+  fake_clock: false,
   fakemessenger_serialize: true,//false,
 
-  debug: 13,
+  debug: 25,
   
   // --- client ---
   client_cache_size: 400,
@@ -38,7 +38,7 @@ md_config_t g_conf = {
   mds_log_max_trimming: 16,
   mds_log_read_inc: 4096,
 
-  mds_cache_size: 5000, //MDS_CACHE_SIZE,
+  mds_cache_size: 10000, //MDS_CACHE_SIZE,
   mds_cache_mid: .8,
 
   mds_bal_replicate_threshold: 500,

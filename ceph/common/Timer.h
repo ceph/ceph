@@ -4,6 +4,9 @@
 #include "include/Context.h"
 #include "Clock.h"
 
+#include "Mutex.h"
+#include "Cond.h"
+
 #include <map>
 #include <set>
 using namespace std;
@@ -15,61 +18,107 @@ using namespace std;
 
 class Messenger;
 
+typedef pair<time_t, long> timepair_t;  // struct timeval is a PITA
+
 class Timer {
  private:
-  map<double, set<Context*> > event_map;    // time -> (context ...)
-  map<Context*, double>        event_times;  // event -> time
+  map< timepair_t, set<Context*> >  scheduled;    // time -> (context ...)
+  map< timepair_t, set<Context*> >  pending;      // time -> (context ...)  
+  map< Context*, timepair_t >       event_times;  // event -> time
 
   // get time of the next event
-  double next_event_time() {
-	map< double, set<Context*> >::iterator it = event_map.begin();
-	return it->first;
+  Context* get_next_scheduled(timepair_t& when) {
+	if (scheduled.empty()) return 0;
+	map< timepair_t, set<Context*> >::iterator it = scheduled.begin();
+	when = it->first;
+	set<Context*>::iterator sit = it->second.begin();
+	return *sit;
   }
-  
-  Messenger *messenger;
+
+  // get next pending event
+  Context* take_next_pending(timepair_t& when) {
+	if (pending.empty()) return 0;
+	
+	map< timepair_t, set<Context*> >::iterator it = pending.begin();
+	when = it->first;
+
+	// take and remove
+	set<Context*>::iterator sit = it->second.begin();
+	Context *event = *sit;
+	it->second.erase(sit);
+	if (it->second.empty()) pending.erase(it);
+
+	return event;
+  }
+
   void register_timer();  // make sure i get a callback
-  void cancel_timer();  // make sure i get a callback
+  void cancel_timer();    // make sure i get a callback
+
+  pthread_t thread_id;
+  bool      thread_stop;
+  Mutex     lock;
+  Cond      cond;
+ public:
+  void timer_thread();    // waiter thread (that wakes us up)
 
  public:
-  Timer() : messenger(0) { }
+  Timer() { 
+	thread_id = 0;
+	thread_stop = false;
+  }
   ~Timer() { 
-	// cancel any wakeup crap
+	// cancel any wakeup/thread crap
 	cancel_timer();
 
-	// 
+	// clean up pending events
+	// ** FIXME **
   }
 
-  void set_messenger(Messenger *m) {
-	messenger = m;
-  }
+  void set_messenger(Messenger *m);
 
 
   // schedule events
-  void add_event_after(double seconds,
+  void add_event_after(int seconds,
 					   Context *callback) {
-	add_event_at(g_clock.gettime() + seconds, callback);
+	struct timeval tv;
+	g_clock.gettime(&tv);
+	tv.tv_sec += seconds;
+	add_event_at(&tv, callback);
   }
   
-  void add_event_at(double when,
+  void add_event_at(struct timeval *tv,
 					Context *callback) {
 	// insert
-	event_map[when].insert(callback);
-	event_times[callback] = when;
+	timepair_t when = timepair_t(tv->tv_sec,tv->tv_usec);
 
-	// make sure i wake up (soon enough)
+	lock.Lock();
+	scheduled[ when ].insert(callback);
+	event_times[callback] = when;
+	lock.Unlock();
+
+	// make sure i wake up
 	register_timer();
   }
 
+  /*
   bool cancel_event(Context *callback) {
-	if (!event_times.count(callback)) 
+	lock.Lock();
+
+	if (!event_times.count(callback)) {
+	  lock.Unlock();
 	  return false;     // wasn't scheduled.
+	}
 	
-	double when = event_times[callback];
+	timepair_t tp = event_times[callback];
+	
 	event_times.erase(callback);
-	event_map[when].erase(callback);
-	if (event_map[when].empty()) event_map.erase(when);
+	event_map[ tp ].erase(callback);
+	if (event_map[ tp ].empty()) event_map.erase( tp );
+
+	lock.Unlock();
 	return true;
   }
+  */
 
   // execute pending events
   void execute_pending();

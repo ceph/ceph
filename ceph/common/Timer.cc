@@ -1,6 +1,7 @@
 
 
 #include "Timer.h"
+#include "Cond.h"
 
 #include "include/config.h"
 #include "include/Context.h"
@@ -16,65 +17,132 @@
 #include <math.h>
 
 // single global instance
-Timer g_timer;
+Timer      g_timer;
+
+Messenger *messenger_to_kick = 0;
+
+ostream& operator<<(ostream& out, timepair_t& t)
+{
+  return out << t.first << "." << t.second;
+}
+
+
+/**** thread solution *****/
+
+void *timer_thread_entrypoint(void *arg) 
+{
+  Timer *t = (Timer*)arg;
+  t->timer_thread();
+  return 0;
+}
+
+void Timer::timer_thread()
+{
+  lock.Lock();
+  
+  while (!thread_stop) {
+	
+	// now
+	struct timeval nowtv;
+	g_clock.gettime(&nowtv);
+	timepair_t now = timepair_t(nowtv.tv_sec, nowtv.tv_usec);
+
+	// any events due?
+	timepair_t next;
+	Context *event = get_next_scheduled(next);
+	  
+	if (event && now > next) {
+	  // move to pending list
+	  map< timepair_t, set<Context*> >::iterator it = scheduled.begin();
+	  while (it != scheduled.end()) {
+		if (it->first > now) break;
+
+		timepair_t t = it->first;
+		dout(5) << "queuing event(s) scheduled at " << t << endl;
+
+		pending[t] = it->second;
+		it++;
+		scheduled.erase(t);
+	  }
+
+	  dout(5) << "kicking messenger" << endl;
+	  messenger_to_kick->trigger_timer(this);
+	}
+
+	else {
+	  // sleep
+	  if (event) {
+		dout(5) << "sleeping until " << next << endl;
+		struct timeval tv;
+		tv.tv_sec = next.first;
+		tv.tv_usec = next.second;
+		cond.Wait(lock, &tv);  // wait for waker or time
+	  } else {
+		dout(5) << "sleeping" << endl;
+		cond.Wait(lock);         // wait for waker
+	  }
+	}
+  }
+
+  lock.Unlock();
+}
 
 
 /***
  * signal handler callback fun
  */
 
-Messenger *messenger_to_kick = 0;
-
+/*
 void timer_signal_handler(int sig)
 {
+  //cout << "hi ms = " << messenger_to_kick << endl;
+
   // kick messenger.
   if (messenger_to_kick) {
 	messenger_to_kick->trigger_timer(&g_timer);
   }
+
+  //cout << "bye" << endl;
+}
+*/
+
+void Timer::set_messenger(Messenger *m) 
+{
+  dout(10) << "messenger to kick is " << m << endl;
+  messenger_to_kick = m;
 }
 
 void Timer::register_timer()
 {
-  dout(10) << "register_timer installing signal handler" << endl;
-
-  /* only one of these per process.  
-	 should be okay, i think.. in the cases where we have multiple people in the same
-	 process (FakeMessenger), we're actually kicking the same event loop anyway.
-  */
-  // FIXME i shouldn't have to do this every time?
-  messenger_to_kick = messenger;
-  
-  // install handler
-  struct sigaction ac;
-  memset(&ac, sizeof(ac), 0);
-  ac.sa_handler = timer_signal_handler;
-  ///FIXMEac.sa_mask = 0;  // hmm.
-  
-  sigaction(SIGALRM, &ac, NULL);
-
-  // set alarm
-  double now = g_clock.gettime();
-  double delay = next_event_time() - now;
-  double sec;
-  double usec = modf(delay, &sec);
-
-  dout(10) << "setting itimer to go off in " << sec << "s " << usec << "us" << endl;
-  struct itimerval it;
-  it.it_value.tv_sec = (int)sec;
-  it.it_value.tv_usec = (int)(usec * 1000000);
-  it.it_interval.tv_sec = 0;   // don't repeat!
-  it.it_interval.tv_usec = 0;
-  setitimer(ITIMER_REAL, &it, 0);
+  if (thread_id) {
+	dout(10) << "register_timer kicking thread" << endl;
+	cond.Signal();
+  } else {
+	dout(10) << "register_timer starting thread" << endl;
+	pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
+  }
 }
 
 void Timer::cancel_timer()
 {
   // clear my callback pointers
   messenger_to_kick = 0;
+
+  dout(10) << "setting thread_stop flag" << endl;
+  lock.Lock();
+  thread_stop = true;
+  lock.Unlock();
+  cond.Signal();
   
-  // remove my handler.  MESSILY FIXME
-  sigaction(SIGALRM, 0, 0);
+  dout(10) << "waiting for thread to finish" << endl;
+  void *ptr;
+  pthread_join(thread_id, &ptr);
+
+  dout(10) << "thread finished, exit code " << ptr << endl;
 }
+
+
+
 
 
 /***
@@ -83,33 +151,22 @@ void Timer::cancel_timer()
 
 void Timer::execute_pending()
 {
-  double now = g_clock.gettime();
-  dout(12) << "now = " << now << endl;
-  
-  while (event_map.size()) {
-	Context *event = 0;
-	
-	double next = next_event_time();
-	if (next > now) break;
-	
-	{ // scope this so my iterator is destroyed quickly
-	  // grab first
-	  set<Context*>::iterator it = event_map[next].begin();
-	  
-	  event = *it;
-	  assert(event);
-	}
+  lock.Lock();
 
-	// claim and remove from map
-	event_map[next].erase(event);
-	event_times.erase(event);
-	
-	// exec
-	dout(5) << "executing event " << event << " scheduled for " << next << endl;
-	
+  while (pending.size()) {
+	timepair_t when;
+	Context *event = take_next_pending(when);
+
+	lock.Unlock();
+
+	dout(5) << "executing event " << event << " scheduled for " << when << endl;
 	event->finish(0);
 	delete event;
+	
+	lock.Lock();
   }
-  
+
   dout(12) << "no more events for now" << endl;
+
+  lock.Unlock();
 }

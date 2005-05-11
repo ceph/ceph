@@ -68,6 +68,7 @@ typedef const char* pchar;
  */
 typedef struct {
   CInode *ref;                                // reference inode
+  set< CInode* >            request_pins;     // CINODE_PIN_REQUEST's
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
   set< CDentry* >           xlocks;           // xlocks (local)
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
@@ -196,6 +197,8 @@ class MDCache {
   void request_cleanup(Message *req);
   void request_finish(Message *req);
   void request_forward(Message *req, int mds, int port=0);
+  void request_pin_inode(Message *req, CInode *in);
+  void request_pin_dir(Message *req, CDir *dir);
 
 
   // == messages ==

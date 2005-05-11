@@ -15,6 +15,7 @@
 
 typedef struct {
   long tid;
+  long pcid;
   size_t len;
   off_t offset;
   object_t oid;
@@ -31,6 +32,10 @@ class MOSDRead : public Message {
   off_t get_offset() { return st.offset; }
   object_t get_oid() { return st.oid; }
   
+  // keep a pcid (procedure call id) to match up request+reply
+  void set_pcid(long pcid) { this->st.pcid = pcid; }
+  long get_pcid() { return st.pcid; }
+
   MOSDRead(long tid, object_t oid, size_t len, off_t offset) :
 	Message(MSG_OSD_READ) {
 	this->st.tid = tid;

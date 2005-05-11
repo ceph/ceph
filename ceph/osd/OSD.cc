@@ -133,7 +133,7 @@ void OSD::read(MOSDRead *r)
 	  // send reply (failure)
 	  dout(1) << "read open FAILED on " << get_filename(whoami, r->get_oid()) << " errno " << errno << endl;
 	  reply = new MOSDReadReply(r, NULL, -1);
-	  assert(0);
+	  //assert(0);
 	}
   }
   

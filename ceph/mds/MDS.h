@@ -42,6 +42,7 @@ class filepath;
 class IdAllocator;
 
 class MDCluster;
+class OSDCluster;
 class CInode;
 class CDir;
 class CDentry;
@@ -74,6 +75,7 @@ class MDS : public Dispatcher {
   int          whoami;
 
   MDCluster    *mdcluster;
+  OSDCluster   *osdcluster;
 
   bool         shutting_down;
   set<int>     did_shut_down;
@@ -123,6 +125,8 @@ class MDS : public Dispatcher {
 
   int get_nodeid() { return whoami; }
   MDCluster *get_cluster() { return mdcluster; }
+  MDCluster *get_mds_cluster() { return mdcluster; }
+  OSDCluster *get_osd_cluster() { return osdcluster; }
 
   mds_load_t get_load();
 

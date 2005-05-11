@@ -4,6 +4,8 @@
 
 #include "msg/Messenger.h"
 
+#include "osd/OSDCluster.h"
+
 #include "MDS.h"
 #include "MDCache.h"
 #include "MDStore.h"
@@ -84,6 +86,16 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdstore = new MDStore(this);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
+
+
+  // <HACK set up OSDCluster from g_conf>
+  osdcluster = new OSDCluster();
+  OSDGroup osdg;
+  osdg.num_osds = g_conf.num_osd;
+  for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
+  osdg.weight = 100;
+  osdcluster->add_group(osdg);
+  // </HACK>
 
   mdlog->set_max_events(g_conf.mds_log_max_len);
 
@@ -399,9 +411,6 @@ public:
 	this->event = event;
   }
   void finish(int r) {
-	// unpin inode?
-	if (tracei && pinned) tracei->inflight_commit_put();
-	
 	if (r == 0) {
 	  // success.  log and reply.
 	  mds->commit_request(req, reply, tracei, event);
@@ -461,7 +470,7 @@ void MDS::commit_request(MClientRequest *req,
 	  // log, then reply
 
 	  // pin inode so it doesn't go away!
-	  if (tracei) tracei->inflight_commit_get();
+	  if (tracei) mdcache->request_pin_inode(req, tracei);
 	  
 	  // pass event2 as event1 (so we chain together!)
 	  /*
@@ -1004,7 +1013,7 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->inode.mode = req->get_iarg();
   newi->inode.uid = req->get_caller_uid();
   newi->inode.gid = req->get_caller_gid();
-  newi->inode.ctime = newi->inode.mtime = newi->inode.atime = g_clock.get_unixtime();   // now
+  newi->inode.ctime = newi->inode.mtime = newi->inode.atime = g_clock.gettime();   // now
 
   // link
   if (!dn) 
@@ -1363,6 +1372,9 @@ void MDS::handle_client_rename(MClientRequest *req,
 
   dout(10) << "handle_client_rename srcdn is " << *srcdn << endl;
   dout(10) << "handle_client_rename srci is " << *srcdn->inode << endl;
+
+  // pin src in cache (so it won't expire)
+  mdcache->request_pin_inode(req, srcdn->inode);
   
   // find the destination, normalize
   // discover, etc. on the way... just get it on the local node.
@@ -1768,33 +1780,23 @@ void MDS::handle_client_open(MClientRequest *req,
 
   dout(7) << "open " << flags << " on " << *cur << endl;
 
-  int mode;
-  if (flags & O_RDONLY || flags == O_RDONLY) {
-	mode = CFILE_MODE_R;
-  }
-  else if (flags & O_WRONLY) {
+  int mode = CFILE_MODE_R;
+  if (flags & O_WRONLY) 
 	mode = CFILE_MODE_W;
+  else if (flags & O_RDWR) 
+	mode = CFILE_MODE_RW;
 
-	if (!cur->is_auth()) {
-	  int auth = cur->authority();
-	  assert(auth != whoami);
-	  dout(9) << "open (write) [replica] " << *cur << " on replica, fw to auth " << auth << endl;
-	  
-	  mdcache->request_forward(req, auth);
-	  return;
-	}
-
-	// only writers on auth, for now.
-	assert(cur->is_auth());
+  // auth only
+  if (!cur->is_auth()) {
+	int auth = cur->authority();
+	assert(auth != whoami);
+	dout(9) << "open [replica] " << *cur << " on replica, fw to auth " << auth << endl;
 	
-	// switch to async mode!
-	mdcache->inode_soft_mode(cur, LOCK_MODE_ASYNC);   // don't forget to eval softlock state below
+	mdcache->request_forward(req, auth);
+	return;
   }
-  else if (flags & O_RDWR) {
-	assert(0);  // WR not implemented yet  
-  } else {
-	assert(0);  // no mode specified.  this should actually be an error code back to client.
-  }
+  assert(cur->is_auth());
+
 
   // hmm, check permissions or something.
 
@@ -1831,6 +1833,17 @@ void MDS::handle_client_openc(MClientRequest *req, CInode *ref)
 
 void MDS::handle_client_close(MClientRequest *req, CInode *cur) 
 {
+  // auth only
+  if (!cur->is_auth()) {
+	int auth = cur->authority();
+	assert(auth != whoami);
+	dout(9) << "close " << *cur << " on replica, fw to auth " << auth << endl;
+	
+	mdcache->request_forward(req, auth);
+	return;
+  }
+  assert(cur->is_auth());
+
   // verify on read or write list
   int client = req->get_client();
   int fh = req->get_iarg();
@@ -1843,8 +1856,8 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   dout(10) << "close on " << *cur << ", fh=" << f->fh << " mode=" << f->mode << endl;
 
   // update soft metadata
-  if (f->mode != CFILE_MODE_R) {
-	assert(cur->softlock.get_mode() == LOCK_MODE_ASYNC);  // otherwise we're toast?
+  if (f->caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
+	assert(cur->softlock.can_write(true));   // otherwise we're toast???
 	if (!mdcache->inode_soft_write_start(cur, req))
 	  return;  // wait
   }
@@ -1864,18 +1877,9 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   idalloc->reclaim_id(ID_FH, f->fh);
 
   // ok we're done
-  if (f->mode != CFILE_MODE_R) {
-	if (!cur->is_auth() &&
-		!cur->is_open_write()) {
-	  // we were a replica writer!
-	  int a = cur->authority();
-	  dout(7) << "last writer closed, telling " << *cur << " auth " << a << endl;
-	  MInodeWriterClosed *m = new MInodeWriterClosed(cur->ino(), whoami);
-	  messenger->send_message(m,
-							  a, MDS_PORT_CACHE, MDS_PORT_SERVER);
-	}
-
+  if (f->caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
 	dout(7) << "soft write fnish" << endl;
+
 	mdcache->inode_soft_write_finish(cur); 
 	mdcache->inode_soft_eval(cur);
   }
@@ -1930,6 +1934,8 @@ int MDS::osd_read_finish(Message *rawm)
 {
   MOSDReadReply *m = (MOSDReadReply*)rawm;
   
+  assert(m->get_result() >= 0);
+
   // get pio
   PendingOSDRead_t *p = osd_reads[ m->get_tid() ];
   osd_reads.erase( m->get_tid() );

@@ -887,7 +887,7 @@ int MDCache::path_traverse(filepath& origpath,
 						   Context *onfinish)   // use this instead of return value, if specified
 {
   int whoami = mds->get_nodeid();
-  set<CInode*> symlinks_resolved;   // keep a list of symlinks we touch to avoid loops
+  set< pair<CInode*, string> > symlinks_resolved; // keep a list of symlinks we touch to avoid loops
 
   bool noperm = false;
   if (onfail == MDS_TRAVERSE_DISCOVER ||
@@ -1004,30 +1004,33 @@ int MDCache::path_traverse(filepath& origpath,
 		filepath sym = dn->inode->symlink;
 		dout(10) << "traverse: hit symlink " << *dn->inode << " to " << sym << endl;
 
-		/* wrong:
-		  if (symlinks_resolved.count(dn->inode)) {
-			dout(10) << "already hit this symlink, bailing to avoid a loop" << endl;
-			return -NOENT; // ??
-		  }
-		*/
-
-		// start at root?
-		if (dn->inode->symlink[0] == '/') {
-		  trace.clear();
-		  depth = 0;
-		  path = sym;
-		  continue;
-		}
-
-		// incremental
+		// break up path components
+		// /head/symlink/tail
 		filepath head = path.prefixpath(depth);
 		filepath tail = path.postfixpath(depth+1);
 		dout(10) << "traverse: path head = " << head << endl;
 		dout(10) << "traverse: path tail = " << tail << endl;
-		path = head;
-		path.append(sym);
-		path.append(tail);
-		dout(10) << "traverse: modified path now " << path << " depth " << depth << endl;
+		
+		if (symlinks_resolved.count(pair<CInode*,string>(dn->inode, tail.get_path()))) {
+		  dout(10) << "already hit this symlink, bailing to avoid the loop" << endl;
+		  return -ELOOP;
+		}
+		symlinks_resolved.insert(pair<CInode*,string>(dn->inode, tail.get_path()));
+
+		// start at root?
+		if (dn->inode->symlink[0] == '/') {
+		  // absolute
+		  trace.clear();
+		  depth = 0;
+		  path = tail;
+		  dout(10) << "traverse: absolute symlink, path now " << path << " depth " << depth << endl;
+		} else {
+		  // relative
+		  path = head;
+		  path.append(sym);
+		  path.append(tail);
+		  dout(10) << "traverse: relative symlink, path now " << path << " depth " << depth << endl;
+		}
 		continue;		
 	  } else {
 		// keep going.
@@ -1228,8 +1231,20 @@ bool MDCache::request_start(Message *req,
   // add to map
   active_requests[req].ref = ref;
   if (trace.size()) active_requests[req].traces[trace[trace.size()-1]] = trace;
+
+  // request pins
+  request_pin_inode(req, ref);
   
   return true;
+}
+
+
+void MDCache::request_pin_inode(Message *req, CInode *in) 
+{
+  if (active_requests[req].request_pins.count(in) == 0) {
+	in->request_pin_get();
+	active_requests[req].request_pins.insert(in);
+  }
 }
 
 
@@ -1289,6 +1304,13 @@ void MDCache::request_cleanup(Message *req)
 	path_unpin(it->second, req);
   }
   
+  // request pins
+  for (set<CInode*>::iterator it = active_requests[req].request_pins.begin();
+	   it != active_requests[req].request_pins.end();
+	   it++) {
+	(*it)->request_pin_put();
+  }
+
   // remove from map
   active_requests.erase(req);
 }
@@ -1931,7 +1953,6 @@ void MDCache::handle_inode_writer_closed(MInodeWriterClosed *m)
   dout(7) << "handle_inode_wrtier_closed " << *in << " from " << from << endl;
 
   // remove from my set
-  in->remove_replica_writer(m->get_from());
   inode_soft_eval(in);
 
   delete m;
@@ -2461,7 +2482,8 @@ void MDCache::handle_rename_prep(MRenamePrep *m)
 	dout(7) << "handle_rename_prep have dir " << *srcin->dir << endl;	
   }
 
-  // ok!
+  // pin
+  srcin->get(CINODE_PIN_RENAMESRC);
 
   // send rename request
   MRenameReq *req = new MRenameReq(m->get_initiator(),  // i'm the initiator
@@ -2524,6 +2546,9 @@ void MDCache::handle_rename(MRename *m)
   // mark dirty
   destdn->mark_dirty();
   in->mark_dirty();
+
+  // unpin
+  in->put(CINODE_PIN_RENAMESRC);
 
   // ok, send notifies.
   set<int> notify;
@@ -3424,12 +3449,13 @@ void MDCache::inode_soft_eval(CInode *in)
 	// auth
 	
 	// check our mode
+	/*
 	if ((in->is_open_write() || in->num_replica_writers()) &&
 		in->softlock.get_mode() != LOCK_MODE_ASYNC) {
 	  inode_soft_mode(in,LOCK_MODE_ASYNC);
 	}
-	
-	if (!(in->is_open_write() || in->num_replica_writers()) &&
+	*/
+	if (!in->is_open_write() &&
 		in->softlock.get_mode() != LOCK_MODE_SYNC) {
 	  inode_soft_mode(in,LOCK_MODE_SYNC);
 	}
@@ -5003,10 +5029,6 @@ void MDCache::encode_export_inode(CInode *in, crope& state_rope)
   if (!in->is_cached_by_anyone())
 	in->replicate_relax_locks();
   
-  // replica_writers?
-  if (in->is_open_write())
-	in->add_replica_writer(mds->get_nodeid());  // i am now a replica writer!
-  
   // add inode
   CInodeExport istate( in );
   state_rope.append( istate._rope() );
@@ -5018,9 +5040,6 @@ void MDCache::encode_export_inode(CInode *in, crope& state_rope)
   
   // clear/unpin cached_by (we're no longer the authority)
   in->cached_by_clear();
-  
-  // don't need to know this anymore
-  in->clear_replica_writers();
   
   // twiddle lock states
   in->softlock.twiddle_export();
@@ -5743,9 +5762,6 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth)
 	dout(10) << "added " << *in << endl;
   } else {
 	dout(10) << "  had " << *in << endl;
-	
-	if (in->is_replica_writer(mds->get_nodeid()))
-	  in->remove_replica_writer(mds->get_nodeid());
   }
   
   // link to dentry

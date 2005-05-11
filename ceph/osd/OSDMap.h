@@ -8,6 +8,23 @@
  *
  */
 
+#include "include/config.h"
+#include "include/types.h"
+#include "msg/Message.h"
+
+#include <vector>
+#include <list>
+#include <set>
+using namespace std;
+
+#include <ext/rope>
+using namespace __gnu_cxx;
+
+
+/*
+ * some system constants
+ */
+
 #define NUM_REPLICA_GROUPS   1024   // ~1000 i think?
 #define NUM_RUSH_REPLICAS      10   // this should be big enough to cope w/ failing disks.
 
@@ -22,10 +39,21 @@
 /** OSDGroup
  * a group of identical disks added to the OSD cluster
  */
-class OSDGroup {
-  int         size;     // num disks in this group           (aka num_disks_in_cluster[])
+struct OSDGroup {
+  int         num_osds; // num disks in this group           (aka num_disks_in_cluster[])
   int         weight;   // weight (for data migration etc.)  (aka weight_cluster[])
+  size_t      osd_size; // osd size (in MB?).  is this the same as weight?
   vector<int> osds;     // the list of actual osd's
+};
+
+
+/** OSDExtent
+ * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
+ */
+struct OSDExtent {
+  list<int>   osds;
+  object_t    oid;
+  size_t      offset, len;
 };
 
 
@@ -50,20 +78,32 @@ class OSDCluster {
 	for (vector<OSDGroup>::iterator it = osd_groups.begin();
 		 it != osd_groups.end();
 		 it++) 
-	  n += it->size;
+	  n += it->num_osds;
 	return n;
   }
 
-  // mapping facilities
+  int get_num_groups() { return osd_groups.size(); }
+  OSDGroup& get_group(int i) { return osd_groups[i]; }
+  void add_group(OSDGroup& g) { osd_groups.push_back(g); }
 
-  /* map (ino) into a replica group */
-  repgroup_t file_to_repgroup(inodeno_t ino) {
-	// something simple.  ~100 rg's.
-	return ino % NUM_REPLICA_GROUPS;
+  // serialize, unserialize
+  void _rope(crope& r);
+  void _unrope(crope& r, int& off);
+
+
+
+  /****   mapping facilities   ****/
+
+  /* map (ino, blockno) into a replica group */
+  repgroup_t file_to_repgroup(inodeno_t ino, 
+							  size_t blockno) {
+	// something simple
+	return (ino+blockno) % NUM_REPLICA_GROUPS;
   }
 
-  /* map a repgroup to a list of osds.  
-	 this is where we use RUSH! */
+
+  /* map (repgroup) to a list of osds.  
+	 this is where we (will eventually) use RUSH. */
   int repgroup_to_osds(repgroup_t rg,
 					   list<int>& osds,   // list of osd addr's
 					   int num_rep) {     // num replicas
@@ -79,19 +119,48 @@ class OSDCluster {
 	return 0;
   }
 
+
   /* map (ino, block) to an object name
 	 (to be used on any osd in the proper replica group) */
   object_t file_to_object(inodeno_t ino,
 						  size_t    blockno) {  
-	assert(ino < (1<<OID_INO_BITS));       // legal ino can't be too big
-	assert(blockno < (1<<OID_BLOCK_BITS));
+	assert(ino < (1LL<<OID_INO_BITS));       // legal ino can't be too big
+	assert(blockno < (1LL<<OID_BLOCK_BITS));
 	return (ino << OID_INO_BITS) + blockno;
   }
 
   
-  // serialize, unserialize
-  void _rope(crope& r);
-  void _unrope(crope& r, int& off);
+  /* map (ino, offset, len) to a (list of) OSDExtents 
+	 (byte ranges in objects on osds) */
+  void file_to_extents(inodeno_t ino,
+					   size_t len,
+					   size_t offset,
+					   int num_reps,
+					   list<OSDExtent>& extents) {
+	size_t cur = offset;
+	size_t left = len;
+	while (left > 0) {
+	  OSDExtent ex;
+	  
+	  // find oid, osds
+	  size_t blockno = offset / FILE_OBJECT_SIZE;
+	  ex.oid = file_to_object( ino, blockno );
+	  repgroup_t rg = file_to_repgroup(ino, blockno );
+	  repgroup_to_osds( rg, ex.osds, num_reps );
+
+	  // map range into object
+	  ex.offset = offset % FILE_OBJECT_SIZE;
+	  if (left + ex.offset > FILE_OBJECT_SIZE) 
+		ex.len = FILE_OBJECT_SIZE - ex.offset;	 // doesn't fully fit
+	  else
+		ex.len = left;		                     // fits!
+	  left -= ex.len;
+
+	  // add it
+	  extents.push_back(ex);
+	}
+  }
+
 };
 
 

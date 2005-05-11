@@ -10,31 +10,38 @@
 // public
 Clock g_clock;
 
-
 // class definition
 
 // cons
 Clock::Clock() {
-
+  // set offset to now
+  start_offset.tv_sec = 0;
+  start_offset.tv_usec = 0;
+  //gettime(&start_offset);
 }
 
-double g_now = 0.0;
 
-double Clock::gettime() 
+time_t Clock::gettime(struct timeval *ts) 
 {
   if (g_conf.fake_clock) {
-	g_now += .000001;
-	return g_now;
+	faketime.tv_usec += 100;
+	while (faketime.tv_usec > 1000000) {
+	  faketime.tv_sec++;
+	  faketime.tv_usec -= 1000000;
+	}
+	if (ts) 
+	  *ts = faketime;
+	return faketime.tv_sec;
   } else {
 	// get actual time
+	struct timeval curtime;
 	gettimeofday(&curtime,NULL);
 	
-	return curtime.tv_sec + curtime.tv_usec/1000000.0;
+	sub(&curtime, &start_offset);
+
+	if (ts)
+	  *ts = curtime;
+	return curtime.tv_sec;
   }
 }
 
-void Clock::settime(double t) {
-  // do nothing for now.
-  curtime.tv_sec = (unsigned long)t;
-  curtime.tv_usec = (unsigned long)(t - (double)(curtime.tv_sec * 1000000.0));
-}
