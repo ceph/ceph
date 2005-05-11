@@ -25,10 +25,11 @@ using namespace __gnu_cxx;
  * some system constants
  */
 
-#define NUM_REPLICA_GROUPS   1024   // ~1000 i think?
-#define NUM_RUSH_REPLICAS      10   // this should be big enough to cope w/ failing disks.
+#define NUM_REPLICA_GROUPS   (1<<20) // ~1M
+#define NUM_RUSH_REPLICAS        10   // this should be big enough to cope w/ failing disks.
+#define MAX_REPLICAS              3
 
-#define FILE_OBJECT_SIZE   (1<<20)  // 1 MB object size
+#define FILE_OBJECT_SIZE     (1<<20)  // 1 MB object size
 
 #define OID_BLOCK_BITS     30       // 1mb * 1^9 = 1 petabyte files
 #define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
@@ -41,8 +42,8 @@ using namespace __gnu_cxx;
  */
 struct OSDGroup {
   int         num_osds; // num disks in this group           (aka num_disks_in_cluster[])
-  int         weight;   // weight (for data migration etc.)  (aka weight_cluster[])
-  size_t      osd_size; // osd size (in MB?).  is this the same as weight?
+  float       weight;   // weight (for data migration etc.)  (aka weight_cluster[])
+  size_t      osd_size; // osd size (in MB)
   vector<int> osds;     // the list of actual osd's
 };
 
@@ -51,7 +52,7 @@ struct OSDGroup {
  * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
  */
 struct OSDExtent {
-  list<int>   osds;
+  int         osds[MAX_REPLICAS];
   object_t    oid;
   size_t      offset, len;
 };
@@ -97,7 +98,8 @@ class OSDCluster {
   /* map (ino, blockno) into a replica group */
   repgroup_t file_to_repgroup(inodeno_t ino, 
 							  size_t blockno) {
-	// something simple
+	// something simple for now
+	// hash this eventually
 	return (ino+blockno) % NUM_REPLICA_GROUPS;
   }
 
@@ -105,16 +107,12 @@ class OSDCluster {
   /* map (repgroup) to a list of osds.  
 	 this is where we (will eventually) use RUSH. */
   int repgroup_to_osds(repgroup_t rg,
-					   list<int>& osds,   // list of osd addr's
-					   int num_rep) {     // num replicas
+					   int *osds,         // list of osd addr's
+					   int num_rep) {     // num replicas we want
+
 	// do something simple for now
-	osds.clear();
-	for (int i=0; i<num_rep; i++) {
-	  // mask out failed disks
-	  int osd = MSG_ADDR_OSD( (rg+i) % num_osds() );
-	  if (is_failed(osd)) continue;
-	  osds.push_back( osd );
-	}
+	for (int i=0; i<num_rep; i++) 
+	  osds[i] = MSG_ADDR_OSD( (rg+i) % num_osds() );
 
 	return 0;
   }
