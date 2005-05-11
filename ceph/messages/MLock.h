@@ -96,8 +96,7 @@ class MLock : public Message {
 	path = p;
   }
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off,sizeof(action), (char*)&action);
 	off += sizeof(action);
 

@@ -128,25 +128,27 @@ void Timer::cancel_timer()
   // clear my callback pointers
   messenger_to_kick = 0;
 
-  dout(10) << "setting thread_stop flag" << endl;
-  lock.Lock();
-  thread_stop = true;
-  lock.Unlock();
-  cond.Signal();
-  
-  dout(10) << "waiting for thread to finish" << endl;
-  void *ptr;
-  pthread_join(thread_id, &ptr);
-
-  dout(10) << "thread finished, exit code " << ptr << endl;
+  if (thread_id) {
+	dout(10) << "setting thread_stop flag" << endl;
+	lock.Lock();
+	thread_stop = true;
+	lock.Unlock();
+	cond.Signal();
+	
+	dout(10) << "waiting for thread to finish" << endl;
+	void *ptr;
+	pthread_join(thread_id, &ptr);
+	
+	dout(10) << "thread finished, exit code " << ptr << endl;
+  }
 }
-
-
 
 
 
 /***
  * do user callbacks
+ *
+ * this should be called by the Messenger in the proper thread (usually same as incoming messages)
  */
 
 void Timer::execute_pending()

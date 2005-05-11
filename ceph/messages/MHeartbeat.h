@@ -21,9 +21,11 @@ class MHeartbeat : public Message {
 
   virtual char *get_type_name() { return "HB"; }
 
-  virtual void decode_payload(crope& s) {
-	s.copy(0,sizeof(load), (char*)&load);
-	s.copy(sizeof(load), sizeof(beat), (char*)&beat);
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off,sizeof(load), (char*)&load);
+	off += sizeof(load);
+	s.copy(off, sizeof(beat), (char*)&beat);
+	off += sizeof(beat);
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&load, sizeof(load));

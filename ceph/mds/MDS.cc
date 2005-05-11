@@ -540,6 +540,15 @@ void MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_CLOSE:
   case MDS_OP_FSYNC:
 	ref = mdcache->get_inode(req->get_ino());   // fixme someday no ino needed?
+
+	if (!ref) {
+	  int next = whoami + 1;
+	  if (next >= mdcluster->get_num_mds()) next = 0;
+	  dout(10) << "got request on ino we don't have, passing buck to " << next << endl;
+	  messenger->send_message(req, 
+							  MSG_ADDR_MDS(next), MDS_PORT_SERVER, MDS_PORT_SERVER);
+	  return;
+	}
   }
 
   if (!ref) {
@@ -1805,6 +1814,7 @@ void MDS::handle_client_open(MClientRequest *req,
   f->mode = mode;
   f->client = req->get_client();
   f->fh = idalloc->get_id(ID_FH);
+  f->caps = 0; // FIXME
   cur->add_fh(f);
   
   // eval our locking mode?

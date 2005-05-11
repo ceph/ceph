@@ -17,16 +17,14 @@ class MDentryUnlink : public Message {
   }
   virtual char *get_type_name() { return "Dun";}
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(dirino), (char*)&dirino);
 	off += sizeof(dirino);
-	dn = s.c_str() + off;
-	off += dn.length() + 1;
+	_unrope(dn, s, off);
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&dirino,sizeof(dirino));
-	s.append((char*)dn.c_str(), dn.length()+1);
+	_rope(dn, s);
   }
 };
 

@@ -14,8 +14,7 @@ class MRenameNotifyAck : public Message {
   }
   virtual char *get_type_name() { return "RnotA";}
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(ino), (char*)&ino);
 	off += sizeof(ino);
   }

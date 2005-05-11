@@ -38,8 +38,7 @@ class MRenameReq : public Message {
   }
   virtual char *get_type_name() { return "RnReq";}
 
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(initiator), (char*)&initiator);
 	off += sizeof(initiator);
 	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);

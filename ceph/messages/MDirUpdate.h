@@ -6,7 +6,6 @@
 typedef struct {
   inodeno_t ino;
   int dir_rep;
-  int ndir_rep_by;
 } MDirUpdate_st;
 
 class MDirUpdate : public Message {
@@ -29,24 +28,15 @@ class MDirUpdate : public Message {
   }
   virtual char *get_type_name() { return "dup"; }
 
-  virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(st), (char*)&st);
-	for (int i=0; i<st.ndir_rep_by; i++) {
-	  int k;
-	  s.copy(sizeof(st) + i*sizeof(int), sizeof(int), (char*)&k);
-	  dir_rep_by.insert(k);
-	}
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(st), (char*)&st);
+	off += sizeof(st);
+	_unrope(dir_rep_by, s, off);
   }
 
   virtual void encode_payload(crope& r) {
-	st.ndir_rep_by = dir_rep_by.size();
 	r.append((char*)&st, sizeof(st));
-	for (set<int>::iterator it = dir_rep_by.begin();
-		 it != dir_rep_by.end();
-		 it++) {
-	  int i = *it;
-	  r.append((char*)&i, sizeof(int));
-	}
+	_rope(dir_rep_by, r);
   }
 };
 

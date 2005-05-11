@@ -24,8 +24,9 @@ class MInodeExpire : public Message {
   }
   virtual char *get_type_name() { return "InEx";}
   
-  virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(st), (char*)&st);
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(st), (char*)&st);
+	off += sizeof(st);
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&st,sizeof(st));

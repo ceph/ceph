@@ -9,7 +9,6 @@ class MRenameNotify : public Message {
   string destname;
   string destdirpath;
   int srcauth;
-  bool warning;
 
  public:
   inodeno_t get_ino() { return ino; }
@@ -19,7 +18,6 @@ class MRenameNotify : public Message {
   string& get_destname() { return destname; }
   string& get_destdirpath() { return destdirpath; }
   int get_srcauth() { return srcauth; }
-  bool is_warning() { return warning; }
 
   MRenameNotify() {}
   MRenameNotify(inodeno_t ino,
@@ -29,7 +27,6 @@ class MRenameNotify : public Message {
 				const string& destdirpath,
 				const string& destname,
 				int srcauth
-				//,			bool warning
 				) :
 	Message(MSG_MDS_RENAMENOTIFY) {
 	this->ino = ino;
@@ -39,12 +36,10 @@ class MRenameNotify : public Message {
 	this->destname = destname;
 	this->destdirpath = destdirpath;
 	this->srcauth = srcauth;
-	this->warning = warning;
   }
   virtual char *get_type_name() { return "Rnot";}
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(ino), (char*)&ino);
 	off += sizeof(ino);
 	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
@@ -55,7 +50,7 @@ class MRenameNotify : public Message {
 	_unrope(destname, s, off);
 	_unrope(destdirpath, s, off);
 	s.copy(off, sizeof(srcauth), (char*)&srcauth);
-	s.copy(off, sizeof(warning), (char*)&warning);
+	off += sizeof(srcauth);
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&ino,sizeof(ino));
@@ -65,7 +60,6 @@ class MRenameNotify : public Message {
 	_rope(destname, s);
 	_rope(destdirpath, s);
 	s.append((char*)&srcauth, sizeof(srcauth));
-	s.append((char*)&warning, sizeof(warning));
   }
 };
 

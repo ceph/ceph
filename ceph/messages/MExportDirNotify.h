@@ -38,8 +38,7 @@ class MExportDirNotify : public Message {
 	this->exports = ex;
   }
 
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(int), (char*)&new_auth);
 	off += sizeof(int);
 	s.copy(off, sizeof(int), (char*)&old_auth);

@@ -283,7 +283,7 @@ class MDCache {
   void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
-  void encode_export_inode(CInode *in, crope& r);
+  void encode_export_inode(CInode *in, crope& r, int newauth);
   
 
   // importer

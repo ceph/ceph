@@ -26,12 +26,19 @@ class MInodeUpdate : public Message {
   }
   virtual char *get_type_name() { return "Iup"; }
 
-  virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(int), (char*)&nonce);
-	inode_basic_state = s.substr(sizeof(int), s.length()-sizeof(int));
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(int), (char*)&nonce);
+	off += sizeof(int);
+	size_t len;
+	s.copy(off, sizeof(len), (char*)&len);
+	off += sizeof(len);
+	inode_basic_state = s.substr(off, len);
+	off += len;
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&nonce, sizeof(int));
+	size_t len = inode_basic_state.length();
+	s.append((char*)&len, sizeof(len));
 	s.append(inode_basic_state);
   }
 	  

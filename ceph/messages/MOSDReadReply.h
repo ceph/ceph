@@ -51,11 +51,11 @@ class MOSDReadReply : public Message {
 	return buffer;
   }
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
-	buffer = s.substr(off, st.len);                
+	buffer = s.substr(off, st.len);
+	off += st.len;
   }
   virtual void encode_payload(crope& payload) {
 	st.len = buffer.length();

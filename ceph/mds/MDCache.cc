@@ -51,7 +51,7 @@
 
 #include "messages/MClientRequest.h"
 
-#include "messages/MInodeWriterClosed.h"
+#include "messages/MClientInodeAuthUpdate.h"
 
 #include "IdAllocator.h"
 
@@ -748,9 +748,11 @@ int MDCache::proc_message(Message *m)
 	break;
 
 	// cache fun
+	/*
   case MSG_MDS_INODEWRITERCLOSED:
 	handle_inode_writer_closed((MInodeWriterClosed*)m);
 	break;
+	*/
 
   case MSG_MDS_DENTRYUNLINK:
 	handle_dentry_unlink((MDentryUnlink*)m);
@@ -1932,6 +1934,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 }
 
 
+/*
 void MDCache::handle_inode_writer_closed(MInodeWriterClosed *m)
 {
   CInode *in = get_inode(m->get_ino());
@@ -1957,7 +1960,7 @@ void MDCache::handle_inode_writer_closed(MInodeWriterClosed *m)
 
   delete m;
 }
-
+*/
 
 
 int MDCache::send_dir_updates(CDir *dir, int except)
@@ -2328,7 +2331,7 @@ void MDCache::file_rename_foreign_src(CDentry *srcdn,
 
   // encode and export inode state
   crope inode_state;
-  encode_export_inode(in, inode_state);
+  encode_export_inode(in, inode_state, destauth);
 
   // send
   MRename *m = new MRename(initiator,
@@ -4305,6 +4308,7 @@ void MDCache::handle_lock_dn(MLock *m)
 		  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << " dne, nak" << endl;
 		  MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
 		  reply->set_dn(dir->ino(), dname);
+		  reply->set_path(m->get_path());
 		  mds->messenger->send_message(reply,
 									   MSG_ADDR_MDS(m->get_asker()), MDS_PORT_CACHE,
 									   MDS_PORT_CACHE);
@@ -5021,17 +5025,27 @@ void MDCache::export_dir_go(CDir *dir,
  * encode relevant state to be sent over the wire.
  * used by: export_dir_walk, file_rename (if foreign)
  */
-void MDCache::encode_export_inode(CInode *in, crope& state_rope)
+void MDCache::encode_export_inode(CInode *in, crope& state_rope, int new_auth)
 {
-  in->version++;  // so local log entries are ignored, etc.
+  in->version++;  // so local log entries are ignored, etc.  (FIXME ??)
   
+  // tell clients with fh's about new inode auth
+  for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
+	   it != in->fh_map.end();
+	   it++) {
+	CFile *f = it->second;
+	dout(7) << "encode_export_inode " << *in << " telling client " << f->client << " fh " << f->fh << " new auth " << new_auth << endl;
+	mds->messenger->send_message(new MClientInodeAuthUpdate(f->fh, new_auth),
+								 MSG_ADDR_CLIENT(f->client));
+  }
+
   // relax locks
   if (!in->is_cached_by_anyone())
 	in->replicate_relax_locks();
   
   // add inode
   CInodeExport istate( in );
-  state_rope.append( istate._rope() );
+  istate._rope( state_rope );
 
   // we're export this inode; fix inode state
   dout(7) << "encode_export_inode " << *in << endl;
@@ -5066,7 +5080,7 @@ void MDCache::export_dir_walk(MExportDir *req,
   crope dir_rope;
   
   CDirExport dstate(dir);
-  dir_rope.append( dstate._rope() );
+  dstate._rope( dir_rope );
   
   // release open_by 
   dir->open_by_clear();
@@ -5121,7 +5135,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	// -- inode
 	dir_rope.append((char)'I');    // inode dentry
 
-	encode_export_inode(in, dir_rope);  // encode, and (update state for) export
+	encode_export_inode(in, dir_rope, newauth);  // encode, and (update state for) export
 	
 	// directory?
 	if (in->is_dir() && in->dir) { 

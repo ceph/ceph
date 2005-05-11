@@ -35,28 +35,29 @@ class MRename : public Message {
   }
   virtual char *get_type_name() { return "Rn";}
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(initiator), (char*)&initiator);
 	off += sizeof(initiator);
 	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
 	off += sizeof(srcdirino);
 	s.copy(off, sizeof(destdirino), (char*)&destdirino);
 	off += sizeof(destdirino);
-	srcname = s.c_str() + off;
-	off += srcname.length() + 1;
-	destname = s.c_str() + off;
-	off += destname.length() + 1;
-	inode_state = s.substr(off, s.length()-off);
+	_unrope(srcname, s, off);
+	_unrope(destname, s, off);
+	size_t len;
+	s.copy(off, sizeof(len), (char*)&len);
+	off += sizeof(len);
+	inode_state = s.substr(off, len);
+	off += len;
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&initiator,sizeof(initiator));
 	s.append((char*)&srcdirino,sizeof(srcdirino));
 	s.append((char*)&destdirino,sizeof(destdirino));
-	s.append((char*)srcname.c_str());
-	s.append((char)0);
-	s.append((char*)destname.c_str());
-	s.append((char)0);
+	_rope(srcname, s);
+	_rope(destname, s);
+	size_t len = inode_state.length();
+	s.append((char*)&len, sizeof(len));
 	s.append(inode_state);
   }
 };

@@ -21,6 +21,7 @@ using namespace std;
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientInodeAuthUpdate.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -105,9 +106,11 @@ decode_message(crope& ser)
   case MSG_CLIENT_REQUEST:
 	m = new MClientRequest();
 	break;
-
   case MSG_CLIENT_REPLY:
 	m = new MClientReply();
+	break;
+  case MSG_CLIENT_INODEAUTHUPDATE:
+	m = new MClientInodeAuthUpdate();
 	break;
 
 	// mds
@@ -223,14 +226,16 @@ decode_message(crope& ser)
   }
   
   // decode envelope
-  crope env = ser.substr(0, MSG_ENVELOPE_LEN);
-  m->decode_envelope(env);
+  int off = 0;
+  m->decode_envelope(ser, off);
 
   // payload
-  if (ser.length() > MSG_ENVELOPE_LEN) {
-	crope payload = ser.substr(MSG_ENVELOPE_LEN,
-							   ser.length() - MSG_ENVELOPE_LEN);
-	m->decode_payload(payload);
+  if (ser.length() > MSG_ENVELOPE_LEN) 
+	m->decode_payload(ser, off);
+
+  if (off != ser.length()) {
+	dout(1) << "uh oh, decode finish off " << off << " len " << ser.length() << endl;
+	assert(off == ser.length());
   }
 
   // done!

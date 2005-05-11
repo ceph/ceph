@@ -11,9 +11,10 @@
 #define MSG_OSD_WRITE        12
 #define MSG_OSD_WRITEREPLY   13
 
-#define MSG_CLIENT_REQUEST   20
-#define MSG_CLIENT_REPLY     21
-#define MSG_CLIENT_DONE      22
+#define MSG_CLIENT_REQUEST         20
+#define MSG_CLIENT_REPLY           21
+#define MSG_CLIENT_DONE            22
+#define MSG_CLIENT_INODEAUTHUPDATE 23
 
 #define MSG_MDS_HEARTBEAT          100
 #define MSG_MDS_DISCOVER           110
@@ -126,8 +127,9 @@ class Message {
 	type = t;
   }
   Message(crope& s) {
-	decode_envelope(s);
 	// no payload in default message
+	int off = 0;
+	decode_envelope(s, off);
   }
   virtual ~Message() {}
 
@@ -161,8 +163,7 @@ class Message {
 	e.append((char*)&dest, sizeof(msg_addr_t));
 	e.append((char*)&dest_port, sizeof(int));
   }
-  void decode_envelope(crope s) {
-	int off = 0;
+  void decode_envelope(crope& s, int& off) {
 	s.copy(off, sizeof(int), (char*)&type);
 	off += sizeof(int);
 	s.copy(off, sizeof(msg_addr_t), (char*)&source);
@@ -177,7 +178,7 @@ class Message {
   
   // PAYLOAD ----
   virtual void encode_payload(crope& s) = 0; //{ }
-  virtual void decode_payload(crope& s) = 0; //{ }
+  virtual void decode_payload(crope& s, int& off) = 0; //{ }
  
   // BOTH ----
   void encode(crope& both) {

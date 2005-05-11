@@ -114,21 +114,19 @@ class filepath {
   }
 
   
-  crope _rope() {
-    crope r;
+  void _rope(crope& r) {
     char n = bits.size();
     r.append((char*)&n, sizeof(char));
     for (vector<string>::iterator it = bits.begin();
          it != bits.end();
          it++) { 
-      r.append((*it).c_str());
-      r.append((char)0);
+      r.append((*it).c_str(), (*it).length()+1);
     }
-    return r;
   }
 
-  int _unrope(crope r, int off = 0) {
+  void _unrope(crope& r, int& off) {
     clear();
+
     char n;
     r.copy(off, sizeof(char), (char*)&n);
     off += sizeof(char);
@@ -137,7 +135,6 @@ class filepath {
       off += s.length() + 1;
 	  add_dentry(s);
     }
-    return off;
   }
 
 };

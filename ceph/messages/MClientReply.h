@@ -163,8 +163,7 @@ class MClientReply : public Message {
 
 
   // serialization
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
 
@@ -184,7 +183,6 @@ class MClientReply : public Message {
 		dir_contents.push_back(ci);
 	  }
 	}
-
   }
   virtual void encode_payload(crope& r) {
 	st.dir_size = dir_contents.size();

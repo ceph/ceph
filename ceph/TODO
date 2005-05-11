@@ -1,4 +1,6 @@
 
+
+
 SAGE:
 
 - mount, unmount, distribute osdcluster
@@ -9,8 +11,6 @@ SAGE:
 
 - fix MExportAck and others to use dir+dentry, not inode
   (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
-
-- timer .. integrate with clock?
 
 - path_traverse noperm crap?
  - clean up xlock interaction

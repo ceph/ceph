@@ -97,24 +97,19 @@ class MClientRequest : public Message {
   string& get_sarg() { return sarg; }
   string& get_sarg2() { return sarg2; }
 
-  virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(st), (char*)&st);
-	path.set_path( s.c_str() + sizeof(st) );
-	int off = sizeof(st) + path.length() + 1;
-	sarg = s.c_str() + off;	
-	off += sarg.length()+1;
-	sarg2 = s.c_str() + off;
-	off += sarg2.length()+1;
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(st), (char*)&st);
+	off += sizeof(st);
+	path._unrope(s, off);
+	_unrope(sarg, s, off);
+	_unrope(sarg2, s, off);
   }
 
   virtual void encode_payload(crope& r) {
 	r.append((char*)&st, sizeof(st));
-	r.append(path.c_str());
-	r.append((char)0);
-	r.append(sarg.c_str());
-	r.append((char)0);
-	r.append(sarg2.c_str());
-	r.append((char)0);
+	path._rope(r);
+	_rope(sarg, r);
+	_rope(sarg2, r);
   }
 };
 

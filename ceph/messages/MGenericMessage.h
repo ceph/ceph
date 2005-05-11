@@ -12,7 +12,7 @@ class MGenericMessage : public Message {
 
   char *get_type_name() { return tname; }
 
-  virtual void decode_payload(crope& s) {  }
+  virtual void decode_payload(crope& s, int& off) {  }
   virtual void encode_payload(crope& s) {  }
 };
 

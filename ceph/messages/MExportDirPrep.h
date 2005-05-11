@@ -81,9 +81,9 @@ class MExportDirPrep : public Message {
   }
 
 
-  virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(ino), (char*)&ino);
-    int off = sizeof(ino);
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
     
 	// exports
 	int ne;
@@ -148,7 +148,7 @@ class MExportDirPrep : public Message {
     for (list<CInodeDiscover*>::iterator iit = inodes.begin();
          iit != inodes.end();
          iit++) {
-      s.append((*iit)->_rope());
+      (*iit)->_rope(s);
 	  
 	  // dentry
 	  s.append(inode_dentry[(*iit)->get_ino()].c_str());
@@ -165,7 +165,7 @@ class MExportDirPrep : public Message {
     for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
          dit != dirs.end();
          dit++)
-      s.append(dit->second->_rope());
+	  dit->second->_rope(s);
   }
 };
 

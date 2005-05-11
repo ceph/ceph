@@ -42,8 +42,7 @@ class MRenamePrep : public Message {
   }
   virtual char *get_type_name() { return "RnP";}
   
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(initiator), (char*)&initiator);
 	off += sizeof(initiator);
 	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
@@ -55,6 +54,7 @@ class MRenamePrep : public Message {
 	_unrope(destname, s, off);
 	_unrope(destpath, s, off);
 	s.copy(off, sizeof(srcauth), (char*)&srcauth);
+	off += sizeof(srcauth);
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&initiator,sizeof(initiator));

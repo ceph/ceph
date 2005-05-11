@@ -12,7 +12,7 @@ class MPing : public Message {
   }
   MPing() {}
 
-  virtual void decode_payload(crope& s) {
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(0, sizeof(ttl), (char*)&ttl);
   }
   virtual void encode_payload(crope& s) {

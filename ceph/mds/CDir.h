@@ -512,9 +512,7 @@ class CDirDiscover {
   inodeno_t get_ino() { return ino; }
 
   
-  crope _rope() {
-	crope r;
-
+  void _rope(crope& r) {
     r.append((char*)&ino, sizeof(ino));
     r.append((char*)&nonce, sizeof(nonce));
     r.append((char*)&dir_auth, sizeof(dir_auth));
@@ -530,8 +528,6 @@ class CDirDiscover {
       int m = *it;
       r.append((char*)&m, sizeof(int));
     }
-    
-	return r;
   }
 
   int _unrope(crope s, int off = 0) {
@@ -624,9 +620,7 @@ class CDirExport {
   }
 
 
-  crope _rope() {
-	crope r;
-
+  void _rope(crope& r) {
     st.nrep_by = rep_by.size();
     st.nopen_by = open_by_nonce.size();
     r.append((char*)&st, sizeof(st));
@@ -648,8 +642,6 @@ class CDirExport {
       int m = *it;
       r.append((char*)&m, sizeof(int));
     }
-   
-	return r;
   }
 
   int _unrope(crope s, int off = 0) {

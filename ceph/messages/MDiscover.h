@@ -40,21 +40,20 @@ class MDiscover : public Message {
   }
   virtual char *get_type_name() { return "Dis"; }
 
-  virtual void decode_payload(crope& r) {
-    int off = 0;
+  virtual void decode_payload(crope& r, int& off) {
 	r.copy(off, sizeof(asker), (char*)&asker);
     off += sizeof(asker);
     r.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
     r.copy(off, sizeof(bool), (char*)&want_base_dir);
     off += sizeof(bool);
-    want._unrope(r.substr(off, r.length()-off));
+    want._unrope(r, off);
   }
   virtual void encode_payload(crope& r) {
 	r.append((char*)&asker, sizeof(asker));
     r.append((char*)&base_ino, sizeof(base_ino));
     r.append((char*)&want_base_dir, sizeof(want_base_dir));
-    r.append(want._rope());
+    want._rope(r);
   }
 
 };

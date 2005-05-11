@@ -25,8 +25,7 @@ class MCacheExpire : public Message {
 	dirs.insert(pair<inodeno_t,int>(ino,nonce));
   }
 
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	int n;
 
 	s.copy(off, sizeof(from), (char*)&from);

@@ -158,8 +158,7 @@ inline ostream& operator<<(ostream& out, multiset<int>& iset) {
 // string
 inline void _rope(string& s, crope& r) 
 {
-  r.append(s.c_str());
-  r.append((char)0);
+  r.append(s.c_str(), s.length()+1);
 }
 inline void _unrope(string& s, crope& r, int& off)
 {

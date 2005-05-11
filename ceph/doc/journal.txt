@@ -1,0 +1,31 @@
+
+metadata journal/log
+
+
+event types:
+
+chown, chmod, utime
+  InodeUpdate
+
+mknod, mkdir, symlink
+  Mknod  .. new inode + link
+
+unlink, rmdir
+  Unlink
+
+rename
+   Link + Unlink  (foreign)
+or Rename         (local)
+
+link
+  Link   .. link existing inode 
+
+
+
+
+InodeUpdate
+DentryLink
+DentryUnlink
+InodeCreate
+InodeDestroy
+Mkdir?

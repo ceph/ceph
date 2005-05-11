@@ -575,13 +575,11 @@ class CInodeDiscover {
 	in->softlock.set_state(softlock_state);
   }
   
-  crope _rope() {
-	crope r;
+  void _rope(crope& r) {
 	r.append((char*)&inode, sizeof(inode));
 	r.append((char*)&replica_nonce, sizeof(replica_nonce));
 	r.append((char*)&hardlock_state, sizeof(hardlock_state));
 	r.append((char*)&softlock_state, sizeof(softlock_state));
-	return r;
   }
 
   int _unrope(crope s, int off = 0) {
@@ -634,7 +632,6 @@ public:
 	softlock = in->softlock;
 	
 	// suck up fh's from inode
-	st.num_fh = in->fh_map.size();
 	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
 		 it != in->fh_map.end();
 		 it++) {
@@ -677,11 +674,13 @@ public:
 		 it++) {
 	  in->add_fh(*it);
 	}
+	fh_list.clear();
+
   }
 
-  crope _rope() {
-	crope r;
+  void _rope(crope& r) {
     st.ncached_by = cached_by.size();
+	st.num_fh = fh_list.size();
     r.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
@@ -700,10 +699,11 @@ public:
 	// fh
 	for (list<CFile*>::iterator it = fh_list.begin();
 		 it != fh_list.end();
-		 it++) 
+		 it++) {
 	  r.append((char*)*it, sizeof(CFile));
-
-	return r;
+	  CFile *f = *it;
+	  //cout << "f in client " << f->client << " fh " << f->fh << endl;
+	}
   }
 
   int _unrope(crope s, int off = 0) {
@@ -725,10 +725,11 @@ public:
 
 	// fh
 	for (int i=0; i<st.num_fh; i++) {
-	  CFile *fh = new CFile;
-	  s.copy(off, sizeof(CFile), (char*)fh);
+	  CFile *f = new CFile;
+	  s.copy(off, sizeof(CFile), (char*)f);
+	  //cout << "f out client " << f->client << " fh " << f->fh << endl;
 	  off += sizeof(CFile);
-	  fh_list.push_back(fh);
+	  fh_list.push_back(f);
 	}
 
     return off;

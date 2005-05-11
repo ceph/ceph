@@ -41,36 +41,14 @@ class MExportDir : public Message {
   }
   void add_export(CDir *dir) { exports.push_back(dir->ino()); }
 
-  // prediscover crap
-  /*
-    void add_prediscover(inodeno_t dirino, const string& dentry) {
-	hashed_prediscover[dirino].insert(dentry);
-  }
-  void remove_prediscover(inodeno_t dirino, const string& dentry) {
-	assert(hashed_prediscover.count(dirino));
-	hashed_prediscover[dirino].erase(dentry);
-	if (hashed_prediscover[dirino].empty())
-	  hashed_prediscover.erase(dirino);
-  }
-  bool any_prediscovers() {
-	return !hashed_prediscover.empty();
-  }
-  
-  // this should really be a custom iterator if we want
-  // clean encapsulation
-  map<inodeno_t, set<string> >::iterator prediscover_begin() {
-	return hashed_prediscover.begin();
-  }
-  map<inodeno_t, set<string> >::iterator prediscover_end() {
-	return hashed_prediscover.end();
-  }
-  */
 
-  virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(ino), (char*)&ino);
-	s.copy(sizeof(ino), sizeof(ipop), (char*)&ipop);
-	s.copy(sizeof(ino)+sizeof(ipop), sizeof(ndirs), (char*)&ndirs);
-	int off = sizeof(ino)+sizeof(ipop)+sizeof(ndirs);
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(off, sizeof(ino), (char*)&ino);
+	off += sizeof(ino);
+	s.copy(off, sizeof(ipop), (char*)&ipop);
+	off += sizeof(ipop);
+	s.copy(off, sizeof(ndirs), (char*)&ndirs);
+	off += sizeof(ndirs);
 
     // exports
     int nex;
@@ -85,7 +63,11 @@ class MExportDir : public Message {
 	}
 
 	// dir data
-	state = s.substr(off, s.length() - off);
+	size_t len;
+	s.copy(off, sizeof(len), (char*)&len);
+	off += sizeof(len);
+	state = s.substr(off, len);
+	off += len;
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
@@ -104,6 +86,8 @@ class MExportDir : public Message {
 	}
 	
 	// dir data
+	size_t len = state.length();
+	s.append((char*)&len, sizeof(len));
 	s.append(state);
   }
 

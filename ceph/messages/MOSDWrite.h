@@ -46,6 +46,7 @@ class MOSDWrite : public Message {
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid() { return st.pcid; }
 
+  MOSDWrite() {}
   MOSDWrite(long tid, object_t oid, size_t len, off_t offset, crope& buffer, int flags=0) :
 	Message(MSG_OSD_WRITE) {
 	this->st.tid = tid;
@@ -55,17 +56,17 @@ class MOSDWrite : public Message {
 	this->st.len = len;
 	this->buffer = buffer;
   }
-  MOSDWrite() {}
 
-  virtual void decode_payload(crope& s) {
-	int off = 0;
+  virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
+	cout << "decode st.len is " << st.len << endl;
 	buffer = s.substr(off, st.len);
 	off += st.len;
   }
   virtual void encode_payload(crope& s) {
 	assert(buffer.length() == st.len);
+	cout << "encode st.len is " << st.len << endl;
 	s.append((char*)&st,sizeof(st));
 	s.append(buffer);
   }
