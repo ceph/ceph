@@ -11,6 +11,7 @@
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
 #include "messages/MOSDWriteReply.h"
+#include "messages/MOSDOp.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -73,12 +74,33 @@ void OSD::dispatch(Message *m)
 	write((MOSDWrite*)m);
 	break;
 
+  case MSG_OSD_OP:
+	handle_op((MOSDOp*)m);
+	break;
 
   default:
 	dout(1) << " got unknown message " << m->get_type() << endl;
   }
 
   delete m;
+}
+
+
+
+void OSD::handle_op(MOSDOp *op)
+{
+  switch (op->get_op()) {
+  case OSD_OP_DELETE:
+	dout(3) << "delete on " << r->get_oid() << endl;
+	{
+	  char *f = get_filename(whoami, r->get_oid());
+	  unlink(f);
+	}
+	
+	// "ack"
+	messenger->send_messenger(op, op->get_source(), op->get_source_port());
+	break;
+  }
 }
 
 
