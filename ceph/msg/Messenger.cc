@@ -21,6 +21,7 @@ using namespace std;
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientFileCaps.h"
 #include "messages/MClientInodeAuthUpdate.h"
 
 #include "messages/MDirUpdate.h"
@@ -108,6 +109,9 @@ decode_message(crope& ser)
 	break;
   case MSG_CLIENT_REPLY:
 	m = new MClientReply();
+	break;
+  case MSG_CLIENT_FILECAPS:
+	m = new MClientFileCaps();
 	break;
   case MSG_CLIENT_INODEAUTHUPDATE:
 	m = new MClientInodeAuthUpdate();

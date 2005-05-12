@@ -1,19 +1,15 @@
 
 
-
 SAGE:
 
 - mount, unmount, distribute osdcluster
 
-- scatter/gather parallel rendrecv (for clients)
+- scatter/gather parallel rendrecv (for client file i/o)
 
 - basic client read, write.
 
 - fix MExportAck and others to use dir+dentry, not inode
   (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
-
-- path_traverse noperm crap?
- - clean up xlock interaction
 
 - fix logging model for data safety
  - inodeupdate

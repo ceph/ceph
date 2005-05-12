@@ -76,6 +76,8 @@ CInode::CInode(bool auth) : LRUObject(),
   state = 0;  
   version = 0;
 
+  nrdonly = nwronly = nrdwr = 0;
+
   if (auth) state_set(CINODE_STATE_AUTH);
 }
 
@@ -200,76 +202,8 @@ void CInode::mark_dirty() {
 
 // state 
 
-/*
-
-let's talk about what INODE state is encoded when.
-
-when:
-- after sync, lock
-   .inode
-- inode updates 
-   .inode
-/   cached_by?
-- discover
-   .inode
-/   cached_by?
-   nonce
-   sync/etc. state
-- export
-   .inode
-   version
-   pop
-   cached_by + cached_by_nonce
-   sync/etc state
-   dirty
-   
 
 
-*/
-
-/*
-crope CInode::encode_export_state()
-{
-  crope r;
-  Inode_Export_State_t istate;
-
-  istate.inode = inode;
-  istate.version = version;
-  istate.popularity = popularity[0]; // FIXME all pop values?
-  //istate.ref = in->ref;
-  istate.ncached_by = cached_by.size();
-  
-  istate.is_softasync = is_softasync();
-  assert(!is_syncbyme());
-  assert(!is_lockbyme());
-  
-  if (is_dirty())
-	istate.dirty = true;
-  else istate.dirty = false;
-
-  //if (is_dir()) 
-  //istate.dir_auth = dir_auth;
-  //else
-  //	istate.dir_auth = -1;
-
-  // append to rope
-  r.append( (char*)&istate, sizeof(istate) );
-  
-  // cached_by
-  for (set<int>::iterator it = cached_by.begin();
-	   it != cached_by.end();
-	   it++) {
-    // mds
-	int i = *it;
-	r.append( (char*)&i, sizeof(int) );
-    // nonce
-    int j = get_cached_by_nonce(i);
-    r.append( (char*)&j, sizeof(int) );
-  }
-
-  return r;
-}
-*/
 
 
 // new state encoders

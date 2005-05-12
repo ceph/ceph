@@ -914,7 +914,9 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	
 	CInode *in = dn->inode;
 	if (!in) continue;  // null dentry?
-	
+
+	dout(12) << "including inode " << *in << endl;
+
 	// add this item
 	// note: c_inode_info makes note of whether inode data is readable.
 	reply->add_dir_item(new c_inode_info(in, whoami, it->first));
@@ -940,6 +942,10 @@ void MDS::handle_client_mknod(MClientRequest *req, CInode *ref)
   // make dentry and inode, link.  
   CInode *newi = mknod(req, ref);
   if (!newi) return;
+
+  // it's a file!
+  newi->inode.mode &= ~INODE_TYPE_MASK;
+  newi->inode.mode |= INODE_MODE_FILE;
   
   // commit
   commit_request(req, new MClientReply(req, 0), ref,
@@ -1019,7 +1025,6 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
 
   // create!
   CInode *newi = mdcache->create_inode();
-  newi->inode.mode = req->get_iarg();
   newi->inode.uid = req->get_caller_uid();
   newi->inode.gid = req->get_caller_gid();
   newi->inode.ctime = newi->inode.mtime = newi->inode.atime = g_clock.gettime();   // now
@@ -1724,11 +1729,10 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   // make dentry and inode, link.  
   CInode *newi = mknod(req, diri);
   if (!newi) return;
-
-  // set the dir mode
-  newi->inode.mode = req->get_iarg();
   
   // make my new inode a dir.
+  newi->inode.mode = req->get_iarg();
+  newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_DIR;
   
   // init dir to be empty
@@ -1760,6 +1764,7 @@ void MDS::handle_client_symlink(MClientRequest *req, CInode *diri)
   if (!newi) return;
 
   // make my new inode a symlink
+  newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_SYMLINK;
   
   // set target
@@ -1789,11 +1794,25 @@ void MDS::handle_client_open(MClientRequest *req,
 
   dout(7) << "open " << flags << " on " << *cur << endl;
 
-  int mode = CFILE_MODE_R;
+  // is it a file?
+  if (!(cur->inode.mode & INODE_MODE_FILE)) {
+	dout(7) << "not a regular file" << endl;
+	reply_request(req, -EINVAL);                 // FIXME what error do we want?
+	return;
+  }
+
+  // mode!
+  int mode = 0;
   if (flags & O_WRONLY) 
 	mode = CFILE_MODE_W;
   else if (flags & O_RDWR) 
 	mode = CFILE_MODE_RW;
+  else if (flags & O_APPEND)
+	mode = CFILE_MODE_W;
+  else
+	mode = CFILE_MODE_R;
+
+  dout(10) << " flags = " << flags << "  mode = " << mode << endl;
 
   // auth only
   if (!cur->is_auth()) {
@@ -1806,23 +1825,40 @@ void MDS::handle_client_open(MClientRequest *req,
   }
   assert(cur->is_auth());
 
+  // writer?
+  if (mode == CFILE_MODE_W ||
+	  mode == CFILE_MODE_RW) {
+	if (!mdcache->inode_soft_write_start(cur, req)) return;
+  }
+
 
   // hmm, check permissions or something.
+
+
+  // can we issue the caps they want?
+  int caps = mdcache->issue_file_caps(cur, mode,
+									  new C_MDS_RetryRequest(this, req, cur));
+  if (!caps) return; // can't issue (yet), so wait!
 
   // create fh
   CFile *f = new CFile;
   f->mode = mode;
   f->client = req->get_client();
   f->fh = idalloc->get_id(ID_FH);
-  f->caps = 0; // FIXME
+  f->pending_caps = f->confirmed_caps = caps;
+  f->last_sent = f->last_recv = 0;   // none yet!
   cur->add_fh(f);
-  
-  // eval our locking mode?
-  if (cur->is_auth())
-	mdcache->inode_soft_eval(cur);
 
+  dout(12) << "new fh " << f->fh << " gets caps " << caps << endl;
+
+  if (mode == CFILE_MODE_W ||
+	  mode == CFILE_MODE_RW) {
+	mdcache->inode_soft_write_finish(cur);
+  }
+  
   // reply
   MClientReply *reply = new MClientReply(req, f->fh);   // fh # is return code
+  reply->set_file_caps(caps);
   reply_request(req, reply, cur);
 }
 
@@ -1834,6 +1870,9 @@ void MDS::handle_client_openc(MClientRequest *req, CInode *ref)
 
   CInode *in = mknod(req, ref, true);
   if (!in) return;
+
+  in->inode.mode = 0644;              // wtf FIXME
+  in->inode.mode |= INODE_MODE_FILE;
 
   handle_client_open(req, in);
 }
@@ -1866,20 +1905,29 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   dout(10) << "close on " << *cur << ", fh=" << f->fh << " mode=" << f->mode << endl;
 
   // update soft metadata
-  if (f->caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
+  if (f->confirmed_caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
 	assert(cur->softlock.can_write(true));   // otherwise we're toast???
 	if (!mdcache->inode_soft_write_start(cur, req))
 	  return;  // wait
+
+	// update size, mtime
+	time_t mtime = req->get_targ();
+	size_t size = req->get_sizearg();
+	dout(10) << "mtime is " << mtime << " size is " << size << endl;
+	if (mtime > cur->inode.mtime) {
+	  cur->inode.mtime = mtime;
+	  dout(10) << " extended mtime to " << mtime << endl;
+	  cur->mark_dirty();
+	}
+	if (size > cur->inode.size) {
+	  cur->inode.size = size;
+	  dout(10) << " extended size to " << size << endl;
+	  cur->mark_dirty();
+	}
   }
+
+  // atime?  ****
   
-  // update size, mtime
-  // XXX
-
-  /* FIXME ****
-  // mark dirty
-  cur->mark_dirty();        
-  */
-
   // close it.
   cur->remove_fh(f);
 
@@ -1887,12 +1935,14 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   idalloc->reclaim_id(ID_FH, f->fh);
 
   // ok we're done
-  if (f->caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
+  if (f->confirmed_caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
 	dout(7) << "soft write fnish" << endl;
 
 	mdcache->inode_soft_write_finish(cur); 
 	mdcache->inode_soft_eval(cur);
   }
+
+  mdcache->eval_file_caps(cur);
 
   // hose CFile
   delete f;

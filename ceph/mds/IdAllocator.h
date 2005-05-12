@@ -21,29 +21,14 @@ class IdAllocator {
   IdAllocator(MDS *mds) {
 	this->mds = mds;
 	load();
-	cout << "idalloc init " << this << endl;
 	free[ID_INO].dump();
 	free[ID_FH].dump();
   }
   //~InoAllocator();
 
   
-  idno_t get_id(int type) {
-	cout << "idalloc " << this << ": type " << type << " dump:" << endl;
-	free[type].dump();
-	idno_t id = free[type].first();
-	free[type].erase(id);
-	cout << "idalloc " << this << ": getid type " << type << " is " << id << endl;
-	free[type].dump();
-	save();
-	return id;
-  }
-  void reclaim_id(int type, idno_t id) {
-	cout << "idalloc " << this << ": reclaim type " << type << " id " << id << endl;
-	free[type].insert(id);
-	free[type].dump();
-	save();
-  }
+  idno_t get_id(int type);
+  void reclaim_id(int type, idno_t id);
 
   // load/save from disk (hack)
   void load();

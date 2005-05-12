@@ -44,6 +44,8 @@ typedef struct {
 
   int    iarg, iarg2;
   time_t targ, targ2;
+
+  size_t sizearg;
 } MClientRequest_st;
 
 
@@ -81,6 +83,7 @@ class MClientRequest : public Message {
   void set_sarg(string& arg) { this->sarg = arg; }
   void set_sarg(const char *arg) { this->sarg = arg; }
   void set_sarg2(string& arg) { this->sarg2 = arg; }
+  void set_sizearg(size_t s) { st.sizearg = s; }
 
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
@@ -96,6 +99,7 @@ class MClientRequest : public Message {
   time_t get_targ2() { return st.targ2; }
   string& get_sarg() { return sarg; }
   string& get_sarg2() { return sarg2; }
+  size_t get_sizearg() { return st.sizearg; }
 
   virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(st), (char*)&st);

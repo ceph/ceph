@@ -241,9 +241,10 @@ class MDCache {
   void handle_rename_notify(MRenameNotify *m);        // dest -> bystanders
 
 
-
-
-  
+  // -- file i/o --
+  int issue_file_caps(CInode *in, int mode, Context *onwait);
+  void eval_file_caps(CInode *in);
+  void handle_client_file_caps(class MClientFileCaps *m);
 
 
   // -- misc auth --

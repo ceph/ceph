@@ -50,8 +50,7 @@
 #include "messages/MRenamePrep.h"
 
 #include "messages/MClientRequest.h"
-
-#include "messages/MClientInodeAuthUpdate.h"
+#include "messages/MClientFileCaps.h"
 
 #include "IdAllocator.h"
 
@@ -748,11 +747,9 @@ int MDCache::proc_message(Message *m)
 	break;
 
 	// cache fun
-	/*
-  case MSG_MDS_INODEWRITERCLOSED:
-	handle_inode_writer_closed((MInodeWriterClosed*)m);
+  case MSG_CLIENT_FILECAPS:
+	handle_client_file_caps((MClientFileCaps*)m);
 	break;
-	*/
 
   case MSG_MDS_DENTRYUNLINK:
 	handle_dentry_unlink((MDentryUnlink*)m);
@@ -848,10 +845,10 @@ class C_MDC_TraverseDiscover : public Context {
   }
   void finish(int r) {
 	//dout(10) << "TraverseDiscover r = " << r << endl;
-	if (r < 0) {            // ENOENT on discover, pass back to caller.
+	if (r < 0 && onfinish) {   // ENOENT on discover, pass back to caller.
 	  onfinish->finish(r);
 	} else {
-	  ondelay->finish(r);   // retry as usual
+	  ondelay->finish(r);      // retry as usual
 	}
 	delete onfinish;
 	delete ondelay;
@@ -2727,6 +2724,125 @@ void MDCache::handle_rename_notify(MRenameNotify *m)
 
 
 
+
+
+// file i/o -----------------------------------------
+
+
+
+int MDCache::issue_file_caps(CInode *in,
+							 int mode,
+							 Context *onwait)
+{
+  dout(7) << "issue_file_caps for mode " << mode << " on " << *in << endl;
+
+  // my needs
+  int my_want = file_mode_want_caps(mode);
+  int my_conflicts = file_mode_conflict_caps(mode);
+
+  // look at what caps are already issued
+  int issued = 0;
+  int want = my_want;
+  int conflicts = my_conflicts;
+  for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
+	   it != in->fh_map.end();
+	   it++) {
+	issued |= it->second->pending_caps | it->second->confirmed_caps;
+	want |= file_mode_want_caps( it->second->mode );
+	conflicts |= file_mode_conflict_caps( it->second->mode );
+  }
+  dout(10) << "    issued: " << issued << endl;
+  dout(10) << "      want: " << want << endl;
+  dout(10) << " conflicts: " << conflicts << endl;
+  
+  // what's allowed, given this mix?
+  int allowed = want - (want & conflicts);
+  dout(10) << "   allowed: " << allowed << endl;
+
+  // problems?
+  if (issued & conflicts) {
+	dout(7) << " conflict with existing fh's: " << (issued & conflicts) << endl;
+
+	// call back caps!
+	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
+		 it != in->fh_map.end();
+		 it++) {
+	  CFile *f = it->second;
+	  int extra = f->pending_caps - (f->pending_caps & allowed);
+	  dout(7) << "  fh " << f->fh << " on client " << f->client << " has pending " << f->pending_caps << " .. extra is " << extra << endl;
+	  if (extra) {
+		f->pending_caps -= extra;
+		dout(7) << "   sending MClientFileCaps on " << f->fh << " new pending " << f->pending_caps << endl;
+		mds->messenger->send_message(new MClientFileCaps(in, f, true),
+									 MSG_ADDR_CLIENT(f->client), 0, MDS_PORT_CACHE);
+	  }
+	}
+	
+	in->add_waiter(CINODE_WAIT_CAPS, onwait);
+	return 0;
+  }
+
+  // we're okay!
+  int caps = my_want & allowed;
+  dout(7) << " issuing caps " << caps << " (i want " << my_want << ", allowed " << allowed << ")" << endl;
+  assert(caps);
+  return caps;
+}
+
+void MDCache::handle_client_file_caps(MClientFileCaps *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  if (!in || !in->is_auth()) {
+	int next;
+	if (!in) {
+	  dout(7) << "handle_client_file_caps on unknown ino " << m->get_ino() << " passing buck" << endl;
+	  next = mds->get_nodeid() + 1;
+	  if (next >= mds->get_cluster()->get_num_mds()) next = 0;
+	} else {
+	  dout(7) << "handle_client_file_caps not auth on " << *in << endl;
+	  next = in->authority();
+	}
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(next), m->get_dest_port());
+	return;
+  } 
+ 
+  dout(7) << "handle_client_file_caps on " << *in << " fh " << m->get_fh() << " confirmed caps " << m->get_caps() << endl;
+
+  CFile *f = in->get_fh(m->get_fh());
+  assert(f);
+
+  if (m->get_seq() < f->last_recv) {
+	dout(7) << "older than last_recv, dropping" << endl;
+  } else {
+	f->confirmed_caps = m->get_caps();
+	f->last_recv = m->get_seq();
+
+	// reevaluate, waiters
+	eval_file_caps(in);
+  }
+
+  delete m;
+}
+
+
+void MDCache::eval_file_caps(CInode *in)
+{
+  dout(7) << "eval_file_caps " << *in << endl;
+
+  in->finish_waiting(CINODE_WAIT_CAPS, 0);
+  // ***
+}
+
+
+
+
+
+
+
+
+
+
 // locks ----------------------------------------------------------------
 
 /*
@@ -3257,7 +3373,10 @@ bool MDCache::inode_soft_read_start(CInode *in, MClientRequest *m)
 	} else {
 	  // replica
 	  if (in->softlock.is_stable()) {
-		if (in->softlock.get_mode() == LOCK_MODE_ASYNC) {
+
+		// HACK FIXME
+
+		if (true || in->softlock.get_mode() == LOCK_MODE_ASYNC) {
 		  // fw to auth
 		  int auth = in->authority();
 		  dout(5) << "inode_soft_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
@@ -3467,6 +3586,7 @@ void MDCache::inode_soft_eval(CInode *in)
 	if (in->softlock.get_mode() == LOCK_MODE_SYNC) {
 	  // sync mode.  bump state to sync?
 	  if (in->is_cached_by_anyone() &&
+		  //!in->is_open_write() &&               // hack?
 		  in->softlock.get_nwrite() == 0 &&
 		  in->softlock.get_state() != LOCK_SYNC) {
 		dout(7) << "inode_soft_eval stable, syncing " << *in << ", softlock=" << in->softlock << endl;
@@ -5035,7 +5155,7 @@ void MDCache::encode_export_inode(CInode *in, crope& state_rope, int new_auth)
 	   it++) {
 	CFile *f = it->second;
 	dout(7) << "encode_export_inode " << *in << " telling client " << f->client << " fh " << f->fh << " new auth " << new_auth << endl;
-	mds->messenger->send_message(new MClientInodeAuthUpdate(f->fh, new_auth),
+	mds->messenger->send_message(new MClientFileCaps(in, f, false, new_auth),
 								 MSG_ADDR_CLIENT(f->client));
   }
 

@@ -96,11 +96,11 @@ struct Fh {
   inodeno_t ino;
   int       mds;        // have to talk to mds we opened with (for now)
 
-  int       state;      // async read, write, locked, etc.
-  int       mode;       // my mode (RDONLY, WRONLY, or RDWR)
+  int       mode;       // the mode i opened the file with
+  int       caps;       // my capabilities (read, read+cache, write, write+buffer)
 
   time_t    mtime;      // [writers] time of last write
-  size_t    size;       // [writers] largest offset we've writtento
+  size_t    size;       // [writers] largest offset we've written to
 };
 
 
@@ -130,6 +130,7 @@ class Client : public Dispatcher {
 
   // file handles
   map<fileh_t, Fh*>         fh_map;
+  set<fileh_t>              fh_closing;
 
 
 
@@ -223,10 +224,8 @@ class Client : public Dispatcher {
   void shutdown();
 
   // messaging
-  void dispatch(Message *m) {
-	cout << "dispatch not implemented" << endl;
-	assert(0);
-  }
+  void dispatch(Message *m);
+  void handle_file_caps(class MClientFileCaps *m);
 
   // metadata cache
   Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);

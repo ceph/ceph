@@ -112,7 +112,7 @@ class OSDCluster {
 
 	// do something simple for now
 	for (int i=0; i<num_rep; i++) 
-	  osds[i] = MSG_ADDR_OSD( (rg+i) % num_osds() );
+	  osds[i] = (rg+i) % num_osds();
 
 	return 0;
   }

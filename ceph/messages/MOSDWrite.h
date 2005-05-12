@@ -60,13 +60,11 @@ class MOSDWrite : public Message {
   virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
-	cout << "decode st.len is " << st.len << endl;
 	buffer = s.substr(off, st.len);
 	off += st.len;
   }
   virtual void encode_payload(crope& s) {
 	assert(buffer.length() == st.len);
-	cout << "encode st.len is " << st.len << endl;
 	s.append((char*)&st,sizeof(st));
 	s.append(buffer);
   }

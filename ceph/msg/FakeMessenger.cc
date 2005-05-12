@@ -48,11 +48,11 @@ void *fakemessenger_thread(void *ptr)
 
   lock.Lock();
   while (1) {
-	dout(1) << "thread waiting" << endl;
+	dout(20) << "thread waiting" << endl;
 	awake = false;
 	cond.Wait(lock);
 	awake = true;
-	dout(1) << "thread woke up" << endl;
+	dout(20) << "thread woke up" << endl;
 	if (shutdown) break;
 
 	fakemessenger_do_loop_2();
@@ -95,12 +95,12 @@ int fakemessenger_do_loop()
 int fakemessenger_do_loop_2()
 {
   //lock.Lock();
-  dout(1) << "do_loop begin." << endl;
+  dout(18) << "do_loop begin." << endl;
 
   while (1) {
 	bool didone = false;
 	
-	dout(11) << "do_loop top" << endl;
+	dout(18) << "do_loop top" << endl;
 
 	// timer?
 	if (pending_timer) {
@@ -116,8 +116,8 @@ int fakemessenger_do_loop_2()
 	while (it != directory.end()) {
 	  Message *m = it->second->get_message();
 	  if (m) {
-		dout(15) << "got " << m << endl;
-		dout(3) << "---- do_loop dispatching '" << m->get_type_name() << 
+		dout(18) << "got " << m << endl;
+		dout(5) << "---- do_loop dispatching '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			 << endl;
@@ -154,7 +154,7 @@ int fakemessenger_do_loop_2()
 	  break;
   }
 
-  dout(1) << "do_loop end (no more messages)." << endl;
+  dout(18) << "do_loop end (no more messages)." << endl;
   //lock.Unlock();
   return 0;
 }

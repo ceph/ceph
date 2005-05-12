@@ -1,4 +1,10 @@
 
+#include "include/config.h"
+#undef dout
+#define dout(x)  if (x <= g_conf.debug) cout << "idalloc:"
+
+#define DBLEVEL  20
+
 #include "IdAllocator.h"
 #include "MDS.h"
 
@@ -13,6 +19,30 @@
 #include <cassert>
 
 char ifn[100];
+
+
+idno_t IdAllocator::get_id(int type) 
+{
+  dout(DBLEVEL) << "idalloc " << this << ": type " << type << " dump:" << endl;
+  //free[type].dump();
+  idno_t id = free[type].first();
+  free[type].erase(id);
+  dout(DBLEVEL) << "idalloc " << this << ": getid type " << type << " is " << id << endl;
+  //free[type].dump();
+  save();
+  return id;
+}
+
+void IdAllocator::reclaim_id(int type, idno_t id) 
+{
+  dout(DBLEVEL) << "idalloc " << this << ": reclaim type " << type << " id " << id << endl;
+  free[type].insert(id);
+  //free[type].dump();
+  save();
+}
+
+
+
 
 char *IdAllocator::get_filename() {
   sprintf(ifn,"osddata/idalloc.%d", mds->get_nodeid());
@@ -38,7 +68,7 @@ void IdAllocator::save()
 	  
 	  int mapsize = free[type].map_size();
 	  write(fd, (char*)&mapsize, sizeof(mapsize));
-	  cout << "type " << type << " num " << mapsize << endl;
+	  dout(DBLEVEL) << "type " << type << " num " << mapsize << endl;
 	  
 	  // over entries
 	  for (map<idno_t,idno_t>::iterator it = free[type].map_begin();
@@ -65,7 +95,7 @@ void IdAllocator::load()
   if (fd >= 0) {
 	int ntypes;
 	read(fd, &ntypes, sizeof(ntypes));
-	cout << "ntypes " << ntypes << endl;
+	dout(DBLEVEL) << "ntypes " << ntypes << endl;
 
 	for (int ty = 0; ty < ntypes; ty++) {
 	  int type;
@@ -74,7 +104,7 @@ void IdAllocator::load()
 	  int mapsize = 0;
 	  read(fd, &mapsize, sizeof(mapsize));
 
-	  cout << "type " << type << " num " << mapsize << endl;
+	  dout(DBLEVEL) << "type " << type << " num " << mapsize << endl;
 	  for (int i=0; i<mapsize; i++) {
 		idno_t a,b;
 		read(fd, &a, sizeof(a));

@@ -1,6 +1,8 @@
 #ifndef __MCLIENTREPLY_H
 #define __MCLIENTREPLY_H
 
+#include "include/types.h"
+
 #include "msg/Message.h"
 #include "mds/CInode.h"
 #include "mds/CDentry.h"
@@ -41,6 +43,7 @@ class c_inode_info {
 
   set<int> dist;    // where am i replicated?
 
+
  public:
   c_inode_info() {}
   c_inode_info(CInode *in, int whoami, string ref_dn) {
@@ -64,20 +67,9 @@ class c_inode_info {
 	s.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
 	s.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
 
-	if (ref_dn.length()) s.append(ref_dn.c_str());
-	s.append((char)0);
-	if (symlink.length()) s.append(symlink.c_str());
-	s.append((char)0);
-
-	// distn
-	int n = dist.size();
-	s.append((char*)&n, sizeof(int));
-	for (set<int>::iterator it = dist.begin();
-		 it != dist.end();
-		 it++) {
-	  int j = *it;
-	  s.append((char*)&j,sizeof(int));
-	}
+	::_rope(ref_dn, s);
+	::_rope(symlink, s);
+	::_rope(dist, s);	// distn
   }
   
   void _unrope(crope &s, int& off) {
@@ -88,21 +80,9 @@ class c_inode_info {
 	s.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
 	off += sizeof(inode_hard_valid);
 
-	ref_dn = s.c_str() + off;
-	off += ref_dn.length() + 1;
-
-	symlink = s.c_str() + off;
-	off += symlink.length() + 1;
-
-	int l;
-	s.copy(off, sizeof(int), (char*)&l);
-	off += sizeof(int);
-	for (int i=0; i<l; i++) {
-	  int j;
-	  s.copy(off, sizeof(int), (char*)&j);
-	  off += sizeof(int);
-	  dist.insert(j);
-	}
+	::_unrope(ref_dn, s, off);
+	::_unrope(symlink, s, off);
+	::_unrope(dist, s, off);
   }
 };
 
@@ -114,6 +94,7 @@ typedef struct {
   int result;  // error code
   int trace_depth;
   int dir_size;
+  unsigned char file_caps;  // for open
 } MClientReply_st;
 
 class MClientReply : public Message {
@@ -135,9 +116,11 @@ class MClientReply : public Message {
   const string& get_path() { return path; }
   const vector<c_inode_info*>& get_trace() { return trace; }
   vector<c_inode_info*>& get_dir_contents() { return dir_contents; }
+  unsigned char get_file_caps() { return st.file_caps; }
   
   void set_result(int r) { st.result = r; }
-  
+  void set_file_caps(unsigned char c) { st.file_caps = c; }
+
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 
 	Message(MSG_CLIENT_REPLY) {

@@ -157,6 +157,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_WAIT_RENAMEACK       (1<<28)
 #define CINODE_WAIT_RENAMENOTIFYACK (1<<29)
 
+#define CINODE_WAIT_CAPS            (1<<30)
 
 
 
@@ -264,9 +265,9 @@ class CInode : LRUObject {
   
 
   // -- accessors --
-  bool is_file()    { return (inode.mode & INODE_MODE_FILE)    ? true:false; }
-  bool is_symlink() { return (inode.mode & INODE_MODE_SYMLINK) ? true:false; }
-  bool is_dir()     { return (inode.mode & INODE_MODE_DIR)     ? true:false; }
+  bool is_file()    { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_FILE)    ? true:false; }
+  bool is_symlink() { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) ? true:false; }
+  bool is_dir()     { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR)     ? true:false; }
 
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_proxy() { return state & CINODE_STATE_PROXY; }
@@ -441,7 +442,10 @@ class CInode : LRUObject {
   }
   void add_fh(CFile *f) {
 	if (f->mode == CFILE_MODE_R) nrdonly++;
-	if (f->mode == CFILE_MODE_W) nwronly++;
+	if (f->mode == CFILE_MODE_W) {
+	  nwronly++;
+	  softlock.get_write();
+	}
 	if (f->mode == CFILE_MODE_RW) nrdwr++;
 	
 	if (fh_map.empty()) get(CINODE_PIN_OPEN);
@@ -449,7 +453,10 @@ class CInode : LRUObject {
   }
   void remove_fh(CFile *f) {
 	if (f->mode == CFILE_MODE_R) nrdonly--;
-	if (f->mode == CFILE_MODE_W) nwronly--;
+	if (f->mode == CFILE_MODE_W) {
+	  nwronly--;
+	  softlock.put_write();
+	}
 	if (f->mode == CFILE_MODE_RW) nrdwr--;
 
 	fh_map.erase(f->fh);

@@ -13,6 +13,7 @@
 #include "messages/MOSDWrite.h"
 #include "messages/MOSDWriteReply.h"
 
+#include "messages/MClientFileCaps.h"
 
 #include "include/config.h"
 #undef dout
@@ -63,6 +64,10 @@ void Client::shutdown() {
   dout(1) << "shutdown" << endl;
   messenger->shutdown();
 }
+
+
+
+
 
 // insert inode info into metadata cache
 
@@ -189,6 +194,60 @@ Dentry *Client::lookup(filepath& path)
 
 
 
+// ------------------------
+// incoming messages
+
+void Client::dispatch(Message *m)
+{
+  switch (m->get_type()) {
+
+  case MSG_CLIENT_FILECAPS:
+	handle_file_caps((MClientFileCaps*)m);
+	break;
+
+  default:
+	cout << "dispatch doesn't recognize message type " << m->get_type() << endl;
+	assert(0);  // fail loudly
+	break;
+  }
+}
+
+void Client::handle_file_caps(MClientFileCaps *m)
+{
+  Fh *f = fh_map[m->get_fh()];
+  
+  if (f && fh_closing.count(m->get_fh()) == 0) {
+	// file is still open, we care
+
+	// auth?
+	if (m->get_mds() >= 0) {
+	  f->mds = m->get_mds();
+	  dout(5) << "handle_file_caps on fh " << m->get_fh() << " mds now " << f->mds << endl;
+	}
+	
+	f->caps = m->get_caps();
+	dout(5) << "handle_file_caps on fh " << m->get_fh() << " caps now " << f->caps << endl;
+	
+	// update inode
+	Inode *in = inode_map[f->ino];
+	assert(in);
+	in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
+	
+	// ack?
+	if (m->needs_ack()) {
+	  dout(5) << "acking" << endl;
+	  messenger->send_message(m, m->get_source(), m->get_source_port());
+	  return;
+	} 
+  } else {
+	dout(5) << "handle_file_caps fh is closed or closing, dropping" << endl;
+  }
+
+  delete m;
+}
+
+
+
 
 // -------------------
 // fs ops
@@ -211,7 +270,9 @@ int Client::unlink(const char *path)
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
   if (res == 0) {
-	unlink(lookup(req->get_filepath()));
+	//this crashes, haven't looked at why yet
+	//Dentry *dn = lookup(req->get_filepath()); 
+	//if (dn) unlink(dn);
   }
   this->insert_trace(reply->get_trace());
   delete reply;
@@ -278,7 +339,8 @@ int Client::rmdir(const char *path)
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   int res = reply->get_result();
   if (res == 0) {
-	unlink(lookup(req->get_filepath()));
+	// crashes, not sure why yet
+	//unlink(lookup(req->get_filepath()));
   }
   this->insert_trace(reply->get_trace());  
   delete reply;
@@ -453,6 +515,31 @@ int Client::utime(const char *path, struct utimbuf *buf)
 }
 
 
+
+int Client::mknod(const char *path, mode_t mode) 
+{ 
+  dout(3) << "mkdir " << path << " mode " << mode << endl;
+  MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, whoami);
+  req->set_path(path); 
+  req->set_iarg( mode );
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+
+  //FIXME enforce caller uid rights?
+   
+  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  int res = reply->get_result();
+  this->insert_trace(reply->get_trace());  
+
+  delete reply;
+  dout(10) << "mknod result is " << res << endl;
+  return res;
+}
+
+
+
   
 //readdir usually include inode info for each entry except of locked entries
 
@@ -494,17 +581,13 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 	// put in cache
 	Inode *in = this->insert_inode_info(dir, *it);
 	in->last_updated = now;
+
+	// contents to caller too!
+    contents[(*it)->ref_dn] = &in->inode;
   }
 
   // FIXME: remove items in cache that weren't in my readdir
   // ***
-
-  // dir contents to caller -- some of them might not have been in reply!
-  for (hash_map<string, Dentry*>::iterator it = dir->dentries.begin();
-       it != dir->dentries.end();
-	   it++) {
-    contents[it->first] = &it->second->inode->inode;
-  }
 
   delete reply;     //fix thing above first
   return res;
@@ -518,7 +601,6 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 int Client::open(const char *path, int mode) 
 {
   dout(3) << "open " << path << " mode " << mode << endl;
-  mode = 0;  // HACK file writing on MDS is still weird
   
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
   req->set_path(path); 
@@ -537,12 +619,15 @@ int Client::open(const char *path, int mode)
 
   // success?
   if (reply->get_result() > 0) {
-	dout(3) << "open success, fh is " << reply->get_result() << endl;
 	// yay
 	Fh *fh = new Fh;
+	memset(fh, sizeof(Fh), 0);
 	fh->ino = trace[trace.size()-1]->inode.ino;
 	fh->mds = reply->get_source();
+	fh->caps = reply->get_file_caps();
 	fh_map[reply->get_result()] = fh;
+
+	dout(3) << "open success, fh is " << reply->get_result() << " caps " << fh->caps << endl;
   }
 
   return reply->get_result();
@@ -552,19 +637,27 @@ int Client::close(fileh_t fh)
 {
   dout(3) << "close " << fh << endl;
   assert(fh_map.count(fh));
-  
+  Fh *f = fh_map[fh];
+
   MClientRequest *req = new MClientRequest(MDS_OP_CLOSE, whoami);
   req->set_iarg(fh);
-  req->set_ino(fh_map[fh]->ino);
+  req->set_ino(f->ino);
+
+  req->set_targ( f->mtime );
+  req->set_sizearg( f->size );
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
+  // take note of the fact that we're mid-close
+  fh_closing.insert(fh);
+
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   assert(reply);
   dout(3) << "close " << fh << " result = " << reply->get_result() << endl;
   
+  fh_closing.erase(fh);
   fh_map.erase(fh);
   return reply->get_result();
 }
@@ -594,7 +687,7 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 	   it != extents.end();
 	   it++) {
 	// what where who
-	int osd = it->osds.front();   // only 1 replica for now
+	int osd = it->osds[0];   // only 1 replica for now
 	dout(7) << "reading range from object " << it->oid << " on " << osd << ": len " << it->len << " offset " << it->offset << endl;
 	assert(it->len <= left);
 	
@@ -629,6 +722,9 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   assert(fh_map.count(fh));
   inodeno_t ino = fh_map[fh]->ino;
 
+  Fh *f = fh_map[fh];
+  Inode *in = inode_map[ino];
+
   // check current file mode (are we allowed to write, buffer, etc.)
   // ***
   
@@ -646,7 +742,7 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 	   it != extents.end();
 	   it++) {
 	// what where who
-	int osd = it->osds.front();   // only 1 replica for now
+	int osd = it->osds[0];   // only 1 replica for now
 	dout(7) << "writing range to object " << it->oid << " on " << osd << ": len " << it->len << " offset " << it->offset << endl;
 	
 	// issue write
@@ -669,6 +765,17 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
   assert(totalwritten == size);
 
+  // extend file?
+  if (totalwritten + offset > f->size) {
+	f->size = totalwritten + offset;
+	in->inode.size = f->size;
+	dout(7) << "extending file to " << f->size << endl;
+  }
+
+  // mtime
+  f->mtime = in->inode.mtime = g_clock.gettime();
+
+  // ok!
   return totalwritten;  
 }
 
@@ -676,6 +783,5 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
 // not written yet, but i want to link!
 
-int Client::mknod(const char *path, mode_t mode) { }
 int Client::link(const char *existing, const char *newname) {}
 int Client::statfs(const char *path, struct statfs *stbuf) {}
