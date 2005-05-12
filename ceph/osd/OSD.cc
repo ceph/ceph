@@ -87,23 +87,6 @@ void OSD::dispatch(Message *m)
 
 
 
-void OSD::handle_op(MOSDOp *op)
-{
-  switch (op->get_op()) {
-  case OSD_OP_DELETE:
-	dout(3) << "delete on " << r->get_oid() << endl;
-	{
-	  char *f = get_filename(whoami, r->get_oid());
-	  unlink(f);
-	}
-	
-	// "ack"
-	messenger->send_messenger(op, op->get_source(), op->get_source_port());
-	break;
-  }
-}
-
-
 // -- osd_read
 
 
@@ -136,6 +119,28 @@ char *get_dir(int osd)
   sprintf(dir, "%s/%d", osd_base_path, osd);
   return dir;
 }
+
+
+
+
+
+
+void OSD::handle_op(MOSDOp *op)
+{
+  switch (op->get_op()) {
+  case OSD_OP_DELETE:
+	dout(3) << "delete on " << op->get_oid() << endl;
+	{
+	  char *f = get_filename(whoami, op->get_oid());
+	  unlink(f);
+	}
+	
+	// "ack"
+	messenger->send_message(op, op->get_source(), op->get_source_port());
+	break;
+  }
+}
+
 
 
 

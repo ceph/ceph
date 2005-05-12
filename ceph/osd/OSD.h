@@ -24,6 +24,7 @@ class OSD : public Dispatcher {
 
   virtual void dispatch(Message *m);
 
+  void handle_op(class MOSDOp *m);
   void read(MOSDRead *m);
   void write(MOSDWrite *m);
 };

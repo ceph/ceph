@@ -26,7 +26,7 @@ class MOSDOp : public Message {
 
  public:
   long get_tid() { return st.tid; }
-  size_t get_len() { return st.len; }
+  object_t get_oid() { return st.oid; }
   int get_op() { return st.op; }
 
   // keep a pcid (procedure call id) to match up request+reply
@@ -34,7 +34,7 @@ class MOSDOp : public Message {
   long get_pcid() { return st.pcid; }
 
   MOSDOp(long tid, object_t oid, int op) :
-	Message(MSG_OSD_READ) {
+	Message(MSG_OSD_OP) {
 	this->st.tid = tid;
 	this->st.oid = oid;
 	this->st.op = op;
