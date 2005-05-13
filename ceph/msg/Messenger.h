@@ -3,6 +3,7 @@
 #define __MESSENGER_H
 
 #include <list>
+#include <vector>
 using namespace std;
 
 #include "Message.h"
@@ -13,14 +14,29 @@ class Timer;
 
 class Messenger {
  protected:
-  Dispatcher     *dispatcher;     // i deliver incoming messages here.
-  list<Message*> incoming;        // incoming queue
+  //vector<Dispatcher*>  dispatch_vec;   // or to specific ports
+  Dispatcher          *dispatcher;
+  list<Message*>       incoming;        // incoming queue
 
  public:
   Messenger() : dispatcher(0) { }
   
   // administrative
-  void set_dispatcher(Dispatcher *d) { dispatcher = d; }
+  void set_dispatcher(Dispatcher *d) {   // for default.. OLD WAY
+	//dispatch_vec[0] = d; 
+	dispatcher = d;
+  }   
+  /*
+  void add_dispatcher(Dispatcher *d) {                     // NEW WAY
+	// allocate a port and add to my vec
+	int port = dispatch_vec.size();    
+	dispatch_vec.push_back(d);
+	assert(dispatch_vec[port] == d);
+
+	// tell dispatcher what port to send from.
+	d->set_messenger_port(this,port);
+  }
+  */
 
   virtual int shutdown() = 0;
 
@@ -61,6 +77,17 @@ class Messenger {
   }
   void dispatch(Message *m) {
 	dispatcher->dispatch(m);
+
+	/*
+	// do we know the port?
+	if (m->get_dest_port() >= 1000) {//< dispatch_vec.size()) {
+	  // new way
+	  dispatch_vec[m->get_dest_port()-1000]->dispatch(m);
+	} else {
+	  // default (old way)
+	  dispatch_vec[0]->dispatch(m);
+	}
+	*/
   }
 
 };

@@ -5,6 +5,7 @@
 #include "msg/Messenger.h"
 
 #include "osd/OSDCluster.h"
+#include "osd/Filer.h"
 
 #include "MDS.h"
 #include "MDCache.h"
@@ -13,7 +14,6 @@
 #include "MDCluster.h"
 #include "MDBalancer.h"
 #include "IdAllocator.h"
-
 
 #include "include/filepath.h"
 
@@ -97,6 +97,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   osdcluster->add_group(osdg);
   // </HACK>
 
+  filer = new Filer(messenger, osdcluster);
+
   mdlog->set_max_events(g_conf.mds_log_max_len);
 
   shutting_down = false;
@@ -104,7 +106,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   stat_ops = 0;
   last_heartbeat = 0;
-  osd_last_tid = 0;
 
   // log
   string name;
@@ -265,11 +266,11 @@ void MDS::proc_message(Message *m)
 
 	// OSD ===============
   case MSG_OSD_READREPLY:
-	osd_read_finish(m);
+	filer->handle_osd_read_reply((MOSDReadReply*)m);
 	break;
-
+	
   case MSG_OSD_WRITEREPLY:
-	osd_write_finish(m);
+	filer->handle_osd_write_reply((MOSDWriteReply*)m);
 	break;
 	
   default:
@@ -310,7 +311,8 @@ void MDS::dispatch(Message *m)
 	break;
 
   default:
-	dout(1) << "MDS dispatch unkown message port" << m->get_dest_port() << endl;
+	dout(1) << "MDS dispatch unknown message port" << m->get_dest_port() << endl;
+	assert(0);
   }
 
   // finish any triggered contexts
@@ -1961,104 +1963,6 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
 
 
 
-
-
-
-
-// OSD fun ------------------------
-
-int 
-MDS::osd_read(int osd, 
-			  object_t oid, 
-			  size_t len, 
-			  size_t offset, 
-			  crope *buffer, 
-			  Context *c) 
-{
-  osd_last_tid++;
-  MOSDRead *m = new MOSDRead(osd_last_tid,
-							 oid,
-							 len, offset);
-  
-  PendingOSDRead_t *p = new PendingOSDRead_t;
-  p->buffer = buffer;
-  p->context = c;
-  osd_reads[osd_last_tid] = p;
-
-  messenger->send_message(m,
-						  MSG_ADDR_OSD(osd),
-						  0, MDS_PORT_MAIN);
-}
-
-int MDS::osd_read_finish(Message *rawm) 
-{
-  MOSDReadReply *m = (MOSDReadReply*)rawm;
-  
-  assert(m->get_result() >= 0);
-
-  // get pio
-  PendingOSDRead_t *p = osd_reads[ m->get_tid() ];
-  osd_reads.erase( m->get_tid() );
-  Context *c = p->context;
-
-  p->buffer->clear();
-  p->buffer->append( m->get_buffer() );
-  p->buffer = 0;
-  long result = m->get_len();
-
-  delete p;   // del pendingOsdRead_t
-  delete m;   // del message
-  
-  if (c) {
-	c->finish(result);
-	delete c;
-  }
-}
-
-
-
-// -- osd_write
-int 
-MDS::osd_write(int osd, 
-			   object_t oid, 
-			   size_t len, 
-			   size_t offset, 
-			   crope& buffer, 
-			   int flags, 
-			   Context *c)
-{
-  osd_last_tid++;
-
-  MOSDWrite *m = new MOSDWrite(osd_last_tid,
-							   oid,
-							   len, offset,
-							   buffer, flags);
-  osd_writes[ osd_last_tid ] = c;
-
-  dout(10) << "sending MOSDWrite " << m->get_type() << endl;
-  messenger->send_message(m,
-						  MSG_ADDR_OSD(osd),
-						  0, MDS_PORT_MAIN);
-}
-
-
-int MDS::osd_write_finish(Message *rawm)
-{
-  MOSDWriteReply *m = (MOSDWriteReply *)rawm;
-
-  Context *c = osd_writes[ m->get_tid() ];
-  osd_writes.erase(m->get_tid());
-
-  long result = m->get_result();
-  delete m;
-
-  dout(10) << " finishing osd_write" << endl;
-
-  if (c) {
-	c->finish(result);
-	delete c;
-  }
-}
 
 
 

@@ -7,6 +7,9 @@
 #include "CDentry.h"
 #include "MDCluster.h"
 
+#include "osd/Filer.h"
+#include "osd/OSDCluster.h"
+
 #include "msg/Message.h"
 
 #include <cassert>
@@ -376,7 +379,11 @@ void MDStore::do_commit_dir( CDir *dir,
   // put count in buffer
   fin->buffer.append((char*)&num, sizeof(num));
   fin->buffer.append(dirdata);
-  
+
+  size_t size = fin->buffer.length();
+  fin->buffer.insert(0, (char*)&size, sizeof(size));
+  assert(fin->buffer.length() == size + sizeof(size));
+
   // pin inode
   dir->auth_pin();
   
@@ -393,11 +400,11 @@ void MDStore::do_commit_dir( CDir *dir,
 	oid = mds->mdcluster->get_meta_oid(dir->ino());
   }
   
-  mds->osd_write( osd, oid, 
-				  fin->buffer.length(), 0,
-				  fin->buffer, 
-				  0, // flags
-				  fin );
+  mds->filer->write( dir->ino(),
+					 fin->buffer.length(), 0,
+					 fin->buffer, 
+					 0, // flags
+					 fin );
 }
 
 
@@ -523,31 +530,11 @@ void MDStore::do_fetch_dir( CDir *dir,
   // create return context
   MDDoFetchDirContext *fin = new MDDoFetchDirContext( this, dir->ino(), c, hashcode );
 
-  // issue osd read
-  int osd;
-  object_t oid;
-  if (hashcode >= 0) {
-	// hashed
-	osd = mds->mdcluster->get_hashdir_meta_osd(dir->ino(), hashcode);
-	oid = mds->mdcluster->get_hashdir_meta_oid(dir->ino(), hashcode);
-  } else {
-	// normal
-	osd = mds->mdcluster->get_meta_osd(dir->ino());
-	oid = mds->mdcluster->get_meta_oid(dir->ino());
-	
-	/*
-	oid = mds->osdcluster->file_to_object( dir->ino(), 0 );
-	repgroup_t rg = mds->osdcluster->file_to_repgroup( dir->ino() );
-	list<int> osds;
-	mds->osdcluster->repgroup_to_osds(rg, osds, 1);
-	osd = osds[0];
-	*/
-  }
-  
-  mds->osd_read( osd, oid, 
-				 0, 0,
-				 &fin->buffer,
-				 fin );
+  // read first bit
+  mds->filer->read(dir->ino(),
+				   FILE_OBJECT_SIZE, 0,
+				   &fin->buffer,
+				   fin );
 }
 
 void MDStore::do_fetch_dir_2( int result, 
@@ -574,6 +561,27 @@ void MDStore::do_fetch_dir_2( int result,
   // make sure we have a CDir
   CDir *dir = idir->get_or_open_dir(mds);
   
+
+  // did i get the whole thing?
+  size_t size;
+  buffer.copy(0, sizeof(size), (char*)&size);
+  size_t got = buffer.length() - sizeof(size);
+  if (got < size) {
+	// read the rest!
+	dout(7) << "do_fetch_dir_2 dir size is " << size << ", got " << got << ", reading rest" << endl;
+
+	// create return context
+	MDDoFetchDirContext *fin = new MDDoFetchDirContext( this, dir->ino(), c, hashcode );
+	fin->buffer = buffer;
+	mds->filer->read(dir->ino(),
+					 size - got, buffer.length(),
+					 &fin->buffer,
+					 fin );
+	return;
+  }
+
+
+
   // do it
   dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
   
@@ -581,9 +589,10 @@ void MDStore::do_fetch_dir_2( int result,
   const char *buf = buffer.c_str();
   long buflen = buffer.length();
   
-  __uint32_t num = *((__uint32_t*)buf);
+  __uint32_t num;
+  buffer.copy(sizeof(size), sizeof(num), (char*)&num);
   dout(10) << "  " << num << " items" << endl;
-  size_t p = 4;
+  size_t p = sizeof(num) + sizeof(size_t);
   int parsed = 0;
   while (parsed < num) {
 	assert(p < buflen && num > 0);

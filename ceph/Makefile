@@ -27,7 +27,9 @@ MDS_OBJS= \
 
 COMMON_OBJS= \
 	msg/Messenger.o\
+	msg/Dispatcher.o\
 	msg/error.o\
+	osd/Filer.o\
 	common/Logger.o\
 	common/clock.o\
 	common/Timer.o\

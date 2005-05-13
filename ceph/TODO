@@ -6,20 +6,10 @@ SAGE:
 
 - scatter/gather parallel rendrecv (for client file i/o)
 
-- basic client read, write.
+- sync clients on soft read
+- truncate
 
-- fix MExportAck and others to use dir+dentry, not inode
-  (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
-
-- fix logging model for data safety
- - inodeupdate
- - dentryunlink
- - dentrylink
- - inodecreate
-? - inodedestroy
- - put path to each item in log entry
- - EMkdir event?
-   ?- properly commit dir, dirty inode+dentry
+- unlink inode should delete object data!
 
 - readdir
  - set up waiters for pending xlocks
@@ -34,27 +24,20 @@ fully document export process
   - flush logs
 
 - hard links
+ - fix MExportAck and others to use dir+dentry, not inode
+   (otherwise this all breaks with hard links.. altho it probably needs reworking already!)
 
-- do real permissions checks
+- do real permission checks?
+
 
 
 CLIENT TODO
 
-- put size and mtime in client close op?
-- clean up rest of Request/Reply messages?
 - statfs
 - readdir content only optionally includes valid inode info
-- open file modes and/or states (where the state is the effective global combination of all modes)
-  - mode potentially distinct from open mode (i.e. might open RDWR, but only read for a while) ????
-  - RDONLY
-    - read from any replica
-    - field day with buffer cache
-  - RDWR
-    - writes and reads are synchronous
-    - writes to primary replica
-  - WRONLY
-    - field day with buffered/delayed write-back
-    - writes to primary replica?
+- pay attention to file_caps on read, write
+  - block on lacking caps
+
 
 
 FILE STUFF
@@ -85,19 +68,21 @@ FILE STUFF
 
 - think about softlock.mode versus shutdown
 - qsync
-- lock modes (sync, async)
- - recalls
 
 - freeze interaction.....  test!
   - freeze state diagram?
 
-- add client file handles.
-  - fh modes:  RD, RDWR, WR ... append?  :/
-  - fh states: SYNC, ASYNC... LOCK? 
 
 
-
-=> grep for FIXME :)
+- fix logging model for data safety
+ - inodeupdate
+ - dentryunlink
+ - dentrylink
+ - inodecreate
+? - inodedestroy
+ - put path to each item in log entry
+ - EMkdir event?
+   ?- properly commit dir, dirty inode+dentry
 
 
 

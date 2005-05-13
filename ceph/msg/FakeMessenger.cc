@@ -114,9 +114,12 @@ int fakemessenger_do_loop_2()
 	// messages
 	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
+
+	  //dout(18) << "messenger " << it->second << " has " << it->second->num_incoming() << " queued" << endl;
+
 	  Message *m = it->second->get_message();
 	  if (m) {
-		dout(18) << "got " << m << endl;
+		//dout(18) << "got " << m << endl;
 		dout(5) << "---- do_loop dispatching '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
@@ -195,6 +198,7 @@ FakeMessenger::~FakeMessenger()
 
 int FakeMessenger::shutdown()
 {
+  //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   directory.erase(whoami);
 }
 
@@ -233,7 +237,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 	FakeMessenger *dm = directory[dest];
 	dm->queue_incoming(m);
 
-	dout(10) << "sending " << m << " to " << dest << endl;
+	dout(10) << "sending " << m << " to " << dest << " m " << dm << " has " << dm->num_incoming() << " queued" << endl;
 	
   }
   catch (...) {

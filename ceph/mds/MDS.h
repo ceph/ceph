@@ -23,11 +23,11 @@ typedef __uint64_t object_t;
 
 
 
-#define MDS_PORT_MAIN     1
-#define MDS_PORT_SERVER   5
-#define MDS_PORT_CACHE    10
-#define MDS_PORT_STORE    11
-#define MDS_PORT_BALANCER 20
+#define MDS_PORT_MAIN     0
+#define MDS_PORT_SERVER   1
+#define MDS_PORT_CACHE    101
+#define MDS_PORT_STORE    102
+#define MDS_PORT_BALANCER 103
 
 
 
@@ -39,10 +39,10 @@ typedef __uint64_t object_t;
 
 class filepath;
 
-class IdAllocator;
+class OSDCluster;
+class Filer;
 
 class MDCluster;
-class OSDCluster;
 class CInode;
 class CDir;
 class CDentry;
@@ -55,14 +55,10 @@ class MClientRequest;
 class MClientReply;
 class MDBalancer;
 class LogEvent;
+class IdAllocator;
+
 
 // types
-
-typedef struct {
-  crope *buffer;
-  Context *context;
-} PendingOSDRead_t;
-
 
 class MDS;
 
@@ -76,6 +72,9 @@ class MDS : public Dispatcher {
 
   MDCluster    *mdcluster;
   OSDCluster   *osdcluster;
+ public:
+  Filer        *filer;       // for reading/writing to/from osds
+ protected:
 
   bool         shutting_down;
   set<int>     did_shut_down;
@@ -85,11 +84,6 @@ class MDS : public Dispatcher {
  public:
   class IdAllocator  *idalloc;
  protected:
-
-  // osd interface
-  __uint64_t         osd_last_tid;
-  hash_map<__uint64_t,PendingOSDRead_t*>  osd_reads;
-  hash_map<__uint64_t,Context*> osd_writes;   
 
   friend class MDStore;
 
@@ -220,28 +214,6 @@ class MDS : public Dispatcher {
   void queue_finished(list<Context*>& ls) {
 	finished_queue.splice( finished_queue.end(), ls );
   }
-
-
-  // osd fun
-  int osd_read(int osd, 
-			 object_t oid, 
-			 size_t len, 
-			 size_t offset, 
-			 crope *buffer, 
-			 Context *c);
-  int osd_read_finish(Message *m);
-
-  int osd_write(int osd, 
-				object_t oid, 
-				size_t len, 
-				size_t offset, 
-				crope& buffer, 
-				int flags, 
-				Context *c);
-  int osd_write_finish(Message *m);
-
-
-
 };
 
 

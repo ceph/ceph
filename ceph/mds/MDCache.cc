@@ -2034,10 +2034,16 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	// don't need ack.
   }
 
-  if (dn->inode && dn->inode->dir) {
-	// mark dir clean, since it dne!
-	dn->inode->dir->remove_null_dentries();
-	dn->inode->dir->mark_clean();
+  if (dn->inode) {
+	assert(dn->inode->is_auth());
+
+	if (dn->inode->dir) {
+	  // mark dir clean, since it dne!
+	  assert(dn->inode->dir->is_auth());
+	  dn->inode->dir->state_set(CDIR_STATE_DELETED);
+	  dn->inode->dir->remove_null_dentries();
+	  dn->inode->dir->mark_clean();
+	}
   }
 
   // unlink
@@ -2075,8 +2081,12 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	dout(7) << "handle_dentry_unlink on " << *dn << endl;
 
 	// dir?
-	if (dn->inode && dn->inode->dir)
-	  dn->inode->dir->remove_null_dentries();
+	if (dn->inode) {
+	  if (dn->inode->dir) {
+		dn->inode->dir->state_set(CDIR_STATE_DELETED);
+		dn->inode->dir->remove_null_dentries();
+	  }
+	}
 
 	string dname = dn->name;
 	
@@ -4424,8 +4434,12 @@ void MDCache::handle_lock_dn(MLock *m)
 
 	  case LOCK_AC_REQXLOCK:
 		// send nak
-		{
+		if (dir->state_test(CDIR_STATE_DELETED)) {
+		  dout(7) << "handle_lock_dn reqxlock on deleted dir " << *dir << ", nak" << endl;
+		} else {
 		  dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << " dne, nak" << endl;
+		}
+		{
 		  MLock *reply = new MLock(LOCK_AC_REQXLOCKNAK, mds->get_nodeid());
 		  reply->set_dn(dir->ino(), dname);
 		  reply->set_path(m->get_path());

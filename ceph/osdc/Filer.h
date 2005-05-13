@@ -11,10 +11,6 @@
  * "files" are identified by ino. 
  */
 
-#include "include/Context.h"
-
-#include "OSDCluster.h"
-
 #include <set>
 #include <map>
 using namespace std;
@@ -23,9 +19,17 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
+#include "include/types.h"
+#include "msg/Dispatcher.h"
+
+class Context;
+class Messenger;
+class OSDCluster;
+
 typedef __uint64_t tid_t;
 
 
+/*** track pending operations ***/
 typedef struct {
   set<tid_t>           outstanding_ops;
   map<size_t, crope*>  finished_reads;
@@ -36,45 +40,49 @@ typedef struct {
 typedef struct {
   set<tid_t>  outstanding_ops;
   Context    *onfinish;
-} PendingOSDWrite_t;
+} PendingOSDOp_t;
 
 
+/**** Filer interface ***/
 
-class Filer {
+class Filer : public Dispatcher {
   OSDCluster *osdcluster;     // what osds am i dealing with?
+  Messenger *messenger;
   
   __uint64_t         last_tid;
   hash_map<tid_t,PendingOSDRead_t*>  osd_reads;
-  hash_map<tid_t,PendingOSDWrite_t*> osd_writes;   
+  hash_map<tid_t,PendingOSDOp_t*>    osd_writes;   
+  hash_map<tid_t,PendingOSDOp_t*>    osd_zeros;   
 
  public:
-  Filer(OSDCluster *osdcluster);
-  ~Filer();
+  Filer(Messenger *m, OSDCluster *o);
+  ~Filer() {}
 
+  void dispatch(Message *m);
 
   // osd fun
- public:
   int read(inodeno_t ino,
 		   size_t len, 
 		   size_t offset, 
 		   crope *buffer, 
 		   Context *c);
- protected:
-  void handle_osd_read_reply(class MOSDReadReply *m);
+
   
- public:
   int write(inodeno_t ino,
 			size_t len, 
 			size_t offset, 
 			crope& buffer, 
 			int flags, 
 			Context *c);
- protected:
+
+  int probe_size(inodeno_t ino, size_t *size, Context *c);
+  int remove(inodeno_t ino, size_t size, Context *c);
+
+  //int zero(inodeno_t ino, size_t len, size_t offset, Context *c);   
+
+  void handle_osd_read_reply(class MOSDReadReply *m);
   void handle_osd_write_reply(class MOSDWriteReply *m);
-
-
- public:
-  int zero(inodeno_t ino, size_t len, size_t offset, Context *c);   // delete, if len==offset==0
+  void handle_osd_op_reply(class MOSDOpReply *m);
   
 };
 

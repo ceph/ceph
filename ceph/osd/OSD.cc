@@ -1,5 +1,4 @@
 
-
 #include "include/types.h"
 
 #include "OSD.h"
@@ -12,6 +11,7 @@
 #include "messages/MOSDWrite.h"
 #include "messages/MOSDWriteReply.h"
 #include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -129,15 +129,36 @@ void OSD::handle_op(MOSDOp *op)
 {
   switch (op->get_op()) {
   case OSD_OP_DELETE:
-	dout(3) << "delete on " << op->get_oid() << endl;
 	{
 	  char *f = get_filename(whoami, op->get_oid());
-	  unlink(f);
+	  int r = unlink(f);
+	  dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
+	  
+	  // "ack"
+	  messenger->send_message(new MOSDOpReply(op, r), 
+							  op->get_source(), op->get_source_port());
+	  delete op;
+	}
+	break;
+
+  case OSD_OP_STAT:
+	{
+	  struct stat st;
+	  memset(&st, sizeof(st), 0);
+	  char *f = get_filename(whoami, op->get_oid());
+	  int r = stat(f, &st);
+	  
+	  dout(3) << "stat on " << op->get_oid() << " r = " << r << " size = " << st.st_size << endl;
+	  
+	  MOSDOpReply *reply = new MOSDOpReply(op, r);
+	  reply->set_size(st.st_size);
+	  messenger->send_message(reply,
+							  op->get_source(), op->get_source_port());
+	  delete op;
 	}
 	
-	// "ack"
-	messenger->send_message(op, op->get_source(), op->get_source_port());
-	break;
+  default:
+	assert(0);
   }
 }
 

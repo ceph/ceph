@@ -3,6 +3,8 @@
 #include "MDS.h"
 #include "LogEvent.h"
 
+#include "osd/Filer.h"
+
 #include "events/EString.h"
 #include "events/EInodeUpdate.h"
 #include "events/EUnlink.h"
@@ -29,11 +31,11 @@ int LogStream::append(LogEvent *e, Context *c)
   append_pos += buffer.length();
   
   // submit write
-  mds->osd_write(osd, oid,
-				 buflen, append_pos-buflen,
-				 buffer,
-				 0,
-				 c);
+  mds->filer->write(oid,   // FIXME
+					buflen, append_pos-buflen,
+					buffer,
+					0,
+					c);
   return 0;
 }
 
@@ -109,10 +111,10 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 		// nope.  read a chunk
 		C_LS_ReadChunk *readc = new C_LS_ReadChunk(this, le, c);
 		reading_block = true;
-		mds->osd_read(osd, oid,
-					  g_conf.mds_log_read_inc, start,
-					  &readc->next_bit,
-					  readc);
+		mds->filer->read(oid,  // FIXME
+						 g_conf.mds_log_read_inc, start,
+						 &readc->next_bit,
+						 readc);
 	  }
 	  return 0;
 	}

@@ -9,20 +9,26 @@
  * oid - object id
  * op  - OSD_OP_DELETE, etc.
  *
- * for now, just send same message back for "ack".  simple!
  */
 
-#define OSD_OP_DELETE  1
+#define OSD_OP_STAT       1
+#define OSD_OP_DELETE     2
+#define OSD_OP_ZERORANGE  3
 
 typedef struct {
   long tid;
   long pcid;
   object_t oid;
   int op;
+
+  size_t length, offset;
 } MOSDOp_st;
 
 class MOSDOp : public Message {
   MOSDOp_st st;
+
+
+  friend class MOSDOpReply;
 
  public:
   long get_tid() { return st.tid; }

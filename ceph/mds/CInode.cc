@@ -173,6 +173,11 @@ void CInode::mark_dirty() {
   
   dout(10) << "mark_dirty " << *this << endl;
 
+  if (!parent) {
+	dout(10) << " dangling, not marking dirty!" << endl;
+	return;
+  }
+
   /*
 	NOTE: I may already be dirty, but this fn _still_ needs to be called so that
 	the directory is (perhaps newly) dirtied, and so that parent_dir_version is 

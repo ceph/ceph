@@ -64,6 +64,8 @@ class Context;
 #define CDIR_STATE_AUTHMOVING       (1<<19)  // dir replica bystander
 #define CDIR_STATE_IMPORTINGEXPORT  (1<<20)
 
+#define CDIR_STATE_DELETED          (1<<21)
+
 
 // these state bits are preserved by an import/export
 // ...except if the directory is hashed, in which case none of them are!

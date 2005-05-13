@@ -178,7 +178,7 @@ class MDiscoverReply : public Message {
       dirs.push_back( new CDirDiscover() );
       off = dirs[i]->_unrope(r, off);
     }
-	dout(12) << n << " dirs out" << endl;
+	//dout(12) << n << " dirs out" << endl;
 
     // inodes
     r.copy(off, sizeof(int), (char*)&n);
@@ -187,11 +187,11 @@ class MDiscoverReply : public Message {
       inodes.push_back( new CInodeDiscover() );
       off = inodes[i]->_unrope(r, off);
     }
-	dout(12) << n << " inodes out" << endl;
+	//dout(12) << n << " inodes out" << endl;
 
     // filepath
     path._unrope(r, off);
-	dout(12) << path.depth() << " dentries out" << endl;
+	//dout(12) << path.depth() << " dentries out" << endl;
 
 	// path_xlock
 	r.copy(off, sizeof(int), (char*)&n);
@@ -222,7 +222,7 @@ class MDiscoverReply : public Message {
          it != dirs.end();
          it++) 
 	  (*it)->_rope( r );
-	dout(12) << n << " dirs in" << endl;
+	//dout(12) << n << " dirs in" << endl;
     
 	// inodes
     n = inodes.size();
@@ -231,11 +231,11 @@ class MDiscoverReply : public Message {
          it != inodes.end();
          it++) 
  	  (*it)->_rope( r );
-	dout(12) << n << " inodes in" << endl;
+	//dout(12) << n << " inodes in" << endl;
 
 	// path
     path._rope( r );
-	dout(12) << path.depth() << " dentries in" << endl;
+	//dout(12) << path.depth() << " dentries in" << endl;
 
 	// path_xlock
 	n = path_xlock.size();
