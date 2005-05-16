@@ -118,9 +118,7 @@ Message *mpi_recv(int tag)
   dout(10) << "mpi_recv got " << status.count << " byte message tag " << status.MPI_TAG << endl;
   
   // unmarshall message
-  crope r(buf, status.count);
-  delete[] buf;
-  Message *m = decode_message(r);
+  Message *m = decode_message(buf, status.count);
   
   return m;
 }
@@ -133,10 +131,9 @@ int mpi_send(Message *m, int rank, int tag)
   } 
 
   // marshall
-  crope r;
-  m->encode(r);
-  int size = r.length();
-  const char *buf = r.c_str();
+  m->encode();
+  int size = m->get_raw_message_len();
+  const char *buf = m->get_raw_message();
   
   dout(10) << "mpi_sending " << size << " byte message to rank " << rank << " tag " << tag << endl;
 
