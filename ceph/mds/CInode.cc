@@ -64,7 +64,6 @@ CInode::CInode(bool auth) : LRUObject(),
   ref = 0;
   
   parent = NULL;
-  nparents = 0;
   lru_next = lru_prev = NULL;
   
   dir = NULL;     // CDir opened separately
@@ -432,54 +431,10 @@ int CInode::authority() {
 }
 
 
-/*
-int CInode::dir_authority(MDCluster *mdc) 
-{
-  // explicit
-  if (dir_auth >= 0) {
-	dout(11) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
-	return dir_auth;
-  }
-
-  // parent
-  if (dir_auth == CDIR_AUTH_PARENT) {
-	dout(11) << "dir_auth parent at " << *this << endl;
-	return authority(mdc);
-  }
-}
-*/
 
 
 
-void CInode::add_parent(CDentry *p) {
-  nparents++;
-  if (nparents == 1)         // first
-	parent = p;
-  else if (nparents == 2) {  // second, switch to the vector
-	parents.push_back(parent);
-	parents.push_back(p);
-  } else                     // additional
-	parents.push_back(p);
-}
-
-void CInode::remove_parent(CDentry *p) {
-  nparents--;
-  if (nparents == 0) {         // first
-	assert(parent == p);
-	parent = 0;
-  }
-  else if (nparents == 1) {  // second, switch back from the vector
-	parent = parents.front();
-	if (parent == p)
-	  parent = parents.back();
-	assert(parent != p);
-	parents.clear();
-  } else {
-	assert(0); // implement me
-  }
-}
-
-
+// debug crap -----------------------------
 
 void CInode::dump(int dep)
 {

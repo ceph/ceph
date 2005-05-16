@@ -129,10 +129,36 @@ CDentry* CDir::lookup(const string& n) {
 
 
 
+CDentry* CDir::add_dentry( const string& dname, inodeno_t ino) 
+{
+  // foreign
+  assert(lookup(dname) == 0);
+  
+  // create dentry
+  CDentry* dn = new CDentry(dname, ino);
+  dn->dir = this;
+  dn->parent_dir_version = version;
+  
+  // add to dir
+  assert(items.count(dn->name) == 0);
+  assert(null_items.count(dn->name) == 0);
+
+  items[dn->name] = dn;
+  
+  dout(12) << "add_dentry " << *dn << endl;
+
+  // pin?
+  if (nnull + nitems == 1) get(CDIR_PIN_CHILD);
+  
+  assert(nnull + nitems == items.size());
+  assert(nnull == null_items.size());		 
+  return dn;
+}
 
 
 CDentry* CDir::add_dentry( const string& dname, CInode *in ) 
 {
+  // primary
   assert(lookup(dname) == 0);
   
   // create dentry
@@ -193,9 +219,22 @@ void CDir::remove_dentry(CDentry *dn)
   assert(nnull == null_items.size());		 
 }
 
+void CDir::link_inode( CDentry *dn, inodeno_t ino)
+{
+  dout(12) << "link_inode " << *dn << " remote " << ino << endl;
+
+  assert(dn->is_null());
+  dn->set_remote_ino(ino);
+
+  assert(null_items.count(dn->name) == 1);
+  null_items.erase(dn->name);
+  nnull--;
+}
 
 void CDir::link_inode( CDentry *dn, CInode *in )
 {
+  assert(!dn->is_remote());
+
   link_inode_work(dn,in);
   dout(12) << "link_inode " << *dn << " " << *in << endl;
   
@@ -211,7 +250,7 @@ void CDir::link_inode( CDentry *dn, CInode *in )
 void CDir::link_inode_work( CDentry *dn, CInode *in )
 {
   dn->inode = in;
-  in->add_parent(dn);
+  in->set_primary_parent(dn);
 
   nitems++;  // adjust dir size
   
@@ -247,31 +286,32 @@ void CDir::unlink_inode( CDentry *dn )
 void CDir::unlink_inode_work( CDentry *dn )
 {
   CInode *in = dn->inode;
-  
-  // explicitly define auth
-  in->dangling_auth = in->authority();
-  //dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
-  
-  // unlink auth_pin count
-  if (in->auth_pins + in->nested_auth_pins)
-	adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
-  
-  // set dangling flag
-  in->state_set(CINODE_STATE_DANGLING);
+ 
+  if (!in) {
+	// remote
+	assert(dn->is_remote());
+	dn->unlink_remote();
+  } else {
+	// primary
+ 
+	// explicitly define auth
+	in->dangling_auth = in->authority();
+	//dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
+	
+	// unlink auth_pin count
+	if (in->auth_pins + in->nested_auth_pins)
+	  adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
+	
+	// set dangling flag
+	in->state_set(CINODE_STATE_DANGLING);
 
-  // dn dirty?
-  if (dn->is_dirty()) in->put(CINODE_PIN_DNDIRTY);
-  
-  // detach inode
-  in->remove_parent(dn);
-  assert(in->nparents == 0);
-  assert(in->parent == 0);
-  // FIXME... might need to migrate inode to another dir?   XXX
-  
-  if (in->is_dirty() && in->nparents == 0) 
-	in->mark_clean();
-  
-  dn->inode = 0;
+	// dn dirty?
+	if (dn->is_dirty()) in->put(CINODE_PIN_DNDIRTY);
+	
+	// detach inode
+	in->remove_primary_parent(dn);
+	dn->inode = 0;
+  }
 
   nitems--;   // adjust dir size
 }
@@ -291,12 +331,11 @@ void CDir::remove_null_dentries() {
 	   it++) {
 	CDentry *dn = *it;
 	assert(dn->is_sync());
-	assert(dn->is_null());
 	remove_dentry(dn);
   }
+  assert(null_items.empty());		 
   assert(nnull == 0);
   assert(nnull + nitems == items.size());
-  assert(nnull == null_items.size());		 
 }
 
 
@@ -504,6 +543,7 @@ void CDir::mark_dirty()
 	version++;
 	state_set(CDIR_STATE_DIRTY);
 	dout(10) << "mark_dirty (was clean) " << *this << " new version " << version << endl;
+	get(CDIR_PIN_DIRTY);
   } 
   else if (state_test(CDIR_STATE_COMMITTING) &&
 		   committing_version == version) {
@@ -517,8 +557,10 @@ void CDir::mark_dirty()
 void CDir::mark_clean()
 {
   dout(10) << "mark_clean " << *this << " version " << version << endl;
-  state_clear(CDIR_STATE_DIRTY);
-  //assert(nnull == 0);   // what about requests in progres... null dentries but dir isn't marked dirty (yet)
+  if (state_test(CDIR_STATE_DIRTY)) {
+	state_clear(CDIR_STATE_DIRTY);
+	put(CDIR_PIN_DIRTY);
+  }
 }
 
 

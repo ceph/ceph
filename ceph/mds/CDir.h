@@ -107,7 +107,9 @@ class Context;
 #define CDIR_PIN_IMPORTING 9
 #define CDIR_PIN_IMPORTINGEXPORT 10
 
-#define CDIR_NUM_PINS      11
+#define CDIR_PIN_DIRTY     11
+
+#define CDIR_NUM_PINS      12
 static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "child",
   "opened",
@@ -119,7 +121,8 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "proxy",
   "authpin",
   "importing",
-  "importingexport"
+  "importingexport",
+  "dirty"
 };
 
 
@@ -182,7 +185,7 @@ class CDir {
  protected:
   // contents
   CDir_map_t       items;              // non-null AND null
-  CDir_map_t       null_items;         // just null
+  CDir_map_t       null_items;        // null and foreign
   size_t           nitems;             // non-null
   size_t           nnull;              // null
   //size_t           nauthitems;
@@ -274,7 +277,9 @@ class CDir {
   // dentries and inodes
  public:
   CDentry* add_dentry( const string& dname, CInode *in=0 );
+  CDentry* add_dentry( const string& dname, inodeno_t ino );
   void remove_dentry( CDentry *dn );         // delete dentry
+  void link_inode( CDentry *dn, inodeno_t ino );
   void link_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
  private:
@@ -619,6 +624,8 @@ class CDirExport {
 	dir->open_by_nonce = open_by_nonce;
 	if (!open_by.empty())
 	  dir->get(CDIR_PIN_OPENED);
+	if (dir->is_dirty())
+	  dir->get(CDIR_PIN_DIRTY);
   }
 
 

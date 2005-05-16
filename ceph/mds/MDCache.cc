@@ -2045,22 +2045,35 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
   }
 
   // inode deleted?
-  if (dn->inode) {
+  if (dn->is_primary() && dn->inode) {
 	assert(dn->inode->is_auth());
 	dn->inode->inode.nlink--;
 
 	if (dn->inode->is_dir()) assert(dn->inode->inode.nlink == 0);  // no hard links on dirs
 
 	if (dn->inode->inode.nlink == 0) {
-
+	  // truly dangling
+	  
 	  if (dn->inode->dir) {
 		// mark dir clean, since it dne!
 		assert(dn->inode->dir->is_auth());
 		dn->inode->dir->state_set(CDIR_STATE_DELETED);
-		dn->inode->dir->remove_null_dentries();
+		dn->inode->dir->remove_null_dentries();    // should be just null tho
 		dn->inode->dir->mark_clean();
 	  }
+
+	  // FIXME
+	  if (dn->inode->is_dirty())
+		dn->inode->mark_clean();
+	  
+	} else {
+	  // migrate?
+	  assert(0);  
 	}
+  }
+  if (dn->is_remote()) {
+	// need to dec nlink on primary somehow
+	assert(0);
   }
 
   // unlink
@@ -2247,6 +2260,9 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
   dout(7) << "file_rename src and dest auth, renaming locally (easy!)" << endl;
   
   // update our cache
+  if (destdn->inode && destdn->inode->is_dirty())
+	destdn->inode->mark_clean();
+
   rename_file(srcdn, destdn);
   
   // update imports/exports?
@@ -2554,6 +2570,9 @@ void MDCache::handle_rename(MRename *m)
   if (srcdn->inode->dir) old_dir_auth = srcdn->inode->dir->authority();
 	
   // rename replica into position
+  if (destdn->inode && destdn->inode->is_dirty())
+	destdn->inode->mark_clean();
+
   rename_file(srcdn, destdn);
 
   // decode + import inode (into new location start)
@@ -5241,6 +5260,10 @@ void MDCache::export_dir_walk(MExportDir *req,
   dir->state_clear(CDIR_STATE_AUTH);
   dir->replica_nonce = CDIR_NONCE_EXPORT;
   
+  if (dir->is_dirty()) {
+	dir->mark_clean();
+  }
+
   // discard most dir state
   dir->state &= CDIR_MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
   
@@ -5249,8 +5272,6 @@ void MDCache::export_dir_walk(MExportDir *req,
   dir->get(CDIR_PIN_PROXY);
   export_proxy_dirinos[basedir].push_back(dir->ino());
 
-  if (!dir->is_clean())
-	dir->mark_clean();
   
   // suck up all waiters
   list<Context*> waiting;
@@ -5276,16 +5297,25 @@ void MDCache::export_dir_walk(MExportDir *req,
 	  dir_rope.append((char)'C');  // clean
 
 	// null dentry?
-	if (in == 0) {
+	if (dn->is_null()) {
 	  dir_rope.append((char)'N');  // null dentry
 	  assert(dn->is_sync());
 	  continue;
 	}
-	  
 
+	if (dn->is_remote()) {
+	  // remote link
+	  dir_rope.append((char)'L');  // remote link
+
+	  inodeno_t ino = dn->get_remote_ino();
+	  dir_rope.append((char*)&ino, sizeof(ino));
+	  continue;
+	}
+
+	// primary link
 	// -- inode
 	dir_rope.append((char)'I');    // inode dentry
-
+	
 	encode_export_inode(in, dir_rope, newauth);  // encode, and (update state for) export
 	
 	// directory?
@@ -5315,7 +5345,7 @@ void MDCache::export_dir_walk(MExportDir *req,
 	export_proxy_inos[basedir].push_back(in->ino());
 	in->state_set(CINODE_STATE_PROXY);
 	in->get(CINODE_PIN_PROXY);
-
+	
 	// waiters
 	list<Context*> waiters;
 	in->take_waiting(CINODE_WAIT_ANY, waiters);
@@ -6038,12 +6068,18 @@ void MDCache::import_dir_block(crope& r,
 	  
 	  // fall thru
 	}
+	else if (icode == 'L') {
+	  // remote link
+	  inodeno_t ino;
+	  r.copy(off, sizeof(ino), (char*)&ino);
+	  dir->link_inode(dn, ino);
+	}
 	else if (icode == 'I') {
 	  // inode
 	  decode_import_inode(dn, r, off, oldauth);
     }
 
-	// mark dentry dirty?  (only _after_ we link the inode)
+	// mark dentry dirty?  (only _after_ we link the inode!)
 	if (dirty == 'D') dn->mark_dirty();
     
   }

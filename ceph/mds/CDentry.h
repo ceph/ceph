@@ -7,6 +7,8 @@
 #include <set>
 using namespace std;
 
+#include "include/types.h"
+
 class CInode;
 class CDir;
 
@@ -25,6 +27,8 @@ class CDentry {
   string          name;
   CInode         *inode;
   CDir           *dir;
+
+  inodeno_t       remote_ino;      // if remote dentry
 
   // state
   bool             dirty;
@@ -45,31 +49,53 @@ class CDentry {
 
  public:
   // cons
-  CDentry() {
-	inode = NULL;
-	dir = NULL;
-	lockstate = DN_LOCK_SYNC;
-	xlockedby = 0;
-	npins = 0;
-	dirty = 0;
-	parent_dir_version = 0;
-  }
-  CDentry(const string& n, CInode *in) {
-	name = n;
-	inode = in;
-	lockstate = DN_LOCK_SYNC;
-	xlockedby = 0;
-	npins = 0;
-	dirty = 0;
-	parent_dir_version = 0;
-  }
+  CDentry() :
+	inode(0),
+	dir(0),
+	remote_ino(0),
+	lockstate(DN_LOCK_SYNC),
+	xlockedby(0),
+	npins(0),
+	dirty(0),
+	parent_dir_version(0) { }
+  CDentry(const string& n, inodeno_t ino, CInode *in=0) :
+	name(n),
+	dir(0),
+	remote_ino(ino),
+	inode(in),
+	lockstate(DN_LOCK_SYNC),
+	xlockedby(0),
+	npins(0),
+	dirty(0),
+	parent_dir_version(0) { }
+  CDentry(const string& n, CInode *in) :
+	name(n),
+	dir(0),
+	inode(in),
+	remote_ino(0),
+	lockstate(DN_LOCK_SYNC),
+	xlockedby(0),
+	npins(0),
+	dirty(0),
+	parent_dir_version(0) { }
 
   CInode *get_inode() { return inode; }
   CDir *get_dir() { return dir; }
   const string& get_name() { return name; }
-  int get_lockstate() { return lockstate; }
-  set<int>& get_gather_set() { return gather_set; }
-  bool is_null() { return (inode == 0) ? true:false; }
+  inodeno_t get_remote_ino() { return remote_ino; }
+
+  void set_remote_ino(inodeno_t ino) { remote_ino = ino; }
+
+  // dentry type is primary || remote || null
+  // inode ptr is required for primary, optional for remote, undefined for null
+  bool is_primary() { return remote_ino == 0; }
+  bool is_remote() { return remote_ino > 0; }
+  bool is_null() { return (remote_ino == 0 && inode == 0) ? true:false; }
+
+  // remote links
+  void link_remote(CInode *in);
+  void unlink_remote();
+  
 
   // copy cons
   CDentry(const CDentry& m);
@@ -101,6 +127,9 @@ class CDentry {
 
 
   // -- locking
+  int get_lockstate() { return lockstate; }
+  set<int>& get_gather_set() { return gather_set; }
+
   bool is_sync() { return lockstate == DN_LOCK_SYNC; }
   bool can_read()  { return (lockstate == DN_LOCK_SYNC) || (lockstate == DN_LOCK_UNPINNING);  }
   bool can_read(Message *m) { return is_xlockedbyme(m) || can_read(); }

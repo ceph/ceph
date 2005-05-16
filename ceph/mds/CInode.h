@@ -218,10 +218,8 @@ class CInode : LRUObject {
   unsigned         state;
 
   // parent dentries in cache
-  int              nparents;  
-  CDentry         *parent;     // if 1 parent (usually)
-  vector<CDentry*> parents;    // if > 1
-
+  CDentry         *parent;             // primary link
+  set<CDentry*>    remote_parents;     // if hard linked
 
   // -- distributed caching
   set<int>         cached_by;        // [auth] mds's that cache me.  
@@ -530,8 +528,22 @@ class CInode : LRUObject {
   }
 
   // -- hierarchy stuff --
-  void add_parent(CDentry *p);
-  void remove_parent(CDentry *p);
+  void set_primary_parent(CDentry *p) {
+	parent = p;
+  }
+  void remove_primary_parent(CDentry *dn) {
+	assert(dn == parent);
+	parent = 0;
+  }
+  void add_remote_parent(CDentry *p) {
+	remote_parents.insert(p);
+  }
+  void remove_remote_parent(CDentry *p) {
+	remote_parents.erase(p);
+  }
+  int num_remote_parents() {
+	return remote_parents.size(); 
+  }
 
 
   // for giving to clients

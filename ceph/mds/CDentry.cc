@@ -59,6 +59,29 @@ void CDentry::make_path(string& s)
   s += name;
 }
 
+
+void CDentry::link_remote(CInode *in)
+{
+  assert(is_remote());
+  assert(in->ino() == remote_ino);
+
+  inode = in;
+  in->add_remote_parent(this);
+}
+
+void CDentry::unlink_remote()
+{
+  assert(is_remote());
+  assert(inode);
+  
+  inode->remove_remote_parent(this);
+  inode = 0;
+}
+
+
+
+
+
 // =
 const CDentry& CDentry::operator= (const CDentry& right) {
   assert(0); //std::cerr << "copy op called, implement me" << endl;

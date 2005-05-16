@@ -350,29 +350,46 @@ void MDStore::do_commit_dir( CDir *dir,
 	  dout(12) << " dirty dn " << *dn << " now " << dn->get_parent_dir_version() << endl;
 	}
 	
-	CInode *in = dn->get_inode();
-	if (!in) continue;  // skip negative dentries
-	
-	// name
-	dirdata.append( it->first.c_str(), it->first.length() + 1);
-	
-	// marker
-	dirdata.append( 'I' );         // inode
-	
-	// inode
-	dirdata.append( (char*) &in->inode, sizeof(inode_t));
 
-	if (in->is_symlink()) {
-	  // include symlink destination!
-	  dirdata.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+	// primary or remote?
+	if (dn->is_remote()) {
+
+	  // name
+	  dirdata.append( it->first.c_str(), it->first.length() + 1);
+	  
+	  // marker
+	  dirdata.append( 'L' );         // remote link
+
+	  // ino
+	  inodeno_t ino = dn->get_remote_ino();
+	  dirdata.append((char*)&ino, sizeof(ino));
+
+	} else {
+	  // primary link
+	  CInode *in = dn->get_inode();
+	  if (!in) continue;  // skip negative dentries
+	  
+	  // name
+	  dirdata.append( it->first.c_str(), it->first.length() + 1);
+	  
+	  // marker
+	  dirdata.append( 'I' );         // inode
+	  
+	  // inode
+	  dirdata.append( (char*) &in->inode, sizeof(inode_t));
+	  
+	  if (in->is_symlink()) {
+		// include symlink destination!
+		dirdata.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+	  }
+	  
+	  // put inode in this dir version
+	  if (in->is_dirty()) {
+		in->float_parent_dir_version( dir->get_version() );
+		dout(12) << " dirty inode " << *in << " now " << in->get_parent_dir_version() << endl;
+	  }
 	}
-	
-	// put inode in this dir version
-	if (in->is_dirty()) {
-	  in->float_parent_dir_version( dir->get_version() );
-	  dout(12) << " dirty inode " << *in << " now " << in->get_parent_dir_version() << endl;
-	}
-	
+
 	num++;
   }
   
@@ -621,7 +638,39 @@ void MDStore::do_fetch_dir_2( char *buffer,
 	
 	if (*(buffer+p) == 'L') {
 	  // hard link, we don't do that yet.
-	  assert(0);
+	  p++;
+
+	  inodeno_t ino = *(inodeno_t*)(buffer+p);
+	  p += sizeof(ino);
+
+	  // what to do?
+	  if (hashcode >= 0) {
+		int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), dname );
+		assert(dentryhashcode == hashcode);
+	  }
+
+	  if (dn) {
+		if (dn->get_inode() == 0) {
+		  // negative dentry?
+		  dout(12) << "readdir had NEG dentry " << dname << endl;
+		} else {
+		  // had dentry
+		  dout(12) << "readdir had dentry " << dname << endl;
+		}
+		continue;
+	  }
+
+	  // (remote) link
+	  CDentry *dn = dir->add_dentry( dname, ino );
+
+	  // link to inode?
+	  CInode *in = mds->mdcache->get_inode(ino);   // we may or may not have it.
+	  if (in) {
+		dn->link_remote(in);
+		dout(12) << "readdir got remote link " << ino << " which we have " << *in << endl;
+	  } else {
+		dout(12) << "readdir got remote link " << ino << " (dont' have it)" << endl;
+	  }
 	} 
 	else if (*(buffer+p) == 'I') {
 	  // inode

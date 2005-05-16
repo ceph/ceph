@@ -1,11 +1,26 @@
 
+- sync clients on stat
+  - will need to ditch 10s client metadata caching before this is useful
+  - truncate
 - hard links
+- better fh management
 - rewrite journal + recovery
 - online failure recovery
 - hashed directories
-- better fh management
 - btree directories
 - checkpoints
+
+
+why qsync could be wrong: varying mds -> client message transit or processing times.
+- mds -> 1,2 : qsync
+- client1 writes at byte 100
+- client1 -> mds : qsync reply (size=100)
+- client1 writes at byte 300
+- client1 sends message to client2 (outside channel)
+- client2 writes at byte 200
+- client2 -> mds : qsync reply (size=200)
+-> stat results in size 200, even though at no single point in time was the max size 500.
+-> for correct result, need to _stop_ client writers while gathering metadata.
 
 
 SAGE:
@@ -20,7 +35,7 @@ SAGE:
 - sync clients on soft read
 - truncate
 
-- unlink inode should delete object data!
+/- unlink inode should delete object data!
 
 - readdir
  - set up waiters for pending xlocks
@@ -32,7 +47,7 @@ fully document export process
 
 - global sync (to be used by shutdown)
   - flush all dirty data to disk
-  - flush logs
+  - flush logs/journals
 
 - hard links
  - fix MExportAck and others to use dir+dentry, not inode
