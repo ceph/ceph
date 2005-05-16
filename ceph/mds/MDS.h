@@ -29,6 +29,7 @@ typedef __uint64_t object_t;
 #define MDS_PORT_STORE    102
 #define MDS_PORT_BALANCER 103
 
+#define MDS_PORT_ANCHORMGR 200
 
 
 #define MDS_TRAVERSE_FORWARD       1
@@ -42,6 +43,7 @@ class filepath;
 class OSDCluster;
 class Filer;
 
+class AnchorTable;
 class MDCluster;
 class CInode;
 class CDir;
@@ -76,6 +78,9 @@ class MDS : public Dispatcher {
   Filer        *filer;       // for reading/writing to/from osds
  protected:
 
+  AnchorTable  *anchormgr;
+
+  // shutdown crap
   bool         shutting_down;
   set<int>     did_shut_down;
   bool         shut_down;

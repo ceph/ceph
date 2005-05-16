@@ -27,7 +27,6 @@ typedef struct {
 
 class MOSDWrite : public Message {
   MOSDWrite_st st;
-  crope buffer;
 
   friend class MOSDWriteReply;
 
@@ -38,8 +37,12 @@ class MOSDWrite : public Message {
   int get_flags() { return st.flags; }
   long get_len() { return st.len; }
 
-  const char *get_buf() {
-	return buffer.c_str();
+  char *get_buffer() {
+	if (!raw_message) {
+	  raw_message_len = MSG_ENVELOPE_LEN + sizeof(MOSDWrite_st) + st.len;
+	  raw_message = new char[raw_message_len];
+	}
+	return raw_message + MSG_ENVELOPE_LEN + sizeof(st);
   }
 
   // keep a pcid (procedure call id) to match up request+reply
@@ -47,26 +50,32 @@ class MOSDWrite : public Message {
   long get_pcid() { return st.pcid; }
 
   MOSDWrite() {}
-  MOSDWrite(long tid, object_t oid, size_t len, off_t offset, crope& buffer, int flags=0) :
+  MOSDWrite(long tid, object_t oid, size_t len, off_t offset, const char *buffer=0, int flags=0) :
 	Message(MSG_OSD_WRITE) {
 	this->st.tid = tid;
 	this->st.oid = oid;
 	this->st.offset = offset;
 	this->st.flags = flags;
 	this->st.len = len;
-	this->buffer = buffer;
+
+	if (buffer) 
+	  memcpy(get_buffer(), buffer, len);
+  }
+  
+  virtual void decode_payload() {
+	st = *(MOSDWrite_st*)(raw_message + MSG_ENVELOPE_LEN);
   }
 
-  virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
-	buffer = s.substr(off, st.len);
-	off += st.len;
-  }
-  virtual void encode_payload(crope& s) {
-	assert(buffer.length() == st.len);
-	s.append((char*)&st,sizeof(st));
-	s.append(buffer);
+  virtual void encode() {
+	raw_message_len = MSG_ENVELOPE_LEN + sizeof(st) + st.len;
+	if (!raw_message) {
+	  assert(st.len == 0);
+	  raw_message = new char[raw_message_len];
+	}
+
+	encode_envelope();
+
+	*(MOSDWrite_st*)(raw_message+MSG_ENVELOPE_LEN) = st;
   }
 
   virtual char *get_type_name() { return "owr"; }

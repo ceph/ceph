@@ -32,8 +32,13 @@ typedef __uint64_t tid_t;
 /*** track pending operations ***/
 typedef struct {
   set<tid_t>           outstanding_ops;
-  map<size_t, crope*>  finished_reads;
-  crope               *buffer;           // final result goes here
+  size_t               orig_offset;
+
+  char                *buffer;
+  char                **dataptr;
+  char                **freeptr;
+
+  size_t               bytes_read;
   Context             *onfinish;
 } PendingOSDRead_t;
 
@@ -41,6 +46,12 @@ typedef struct {
   set<tid_t>  outstanding_ops;
   Context    *onfinish;
 } PendingOSDOp_t;
+
+typedef struct {
+  size_t     *final_size;
+  size_t     cur_offset;
+  Context    *onfinish;
+} PendingOSDProbe_t;
 
 
 /**** Filer interface ***/
@@ -50,9 +61,11 @@ class Filer : public Dispatcher {
   Messenger *messenger;
   
   __uint64_t         last_tid;
-  hash_map<tid_t,PendingOSDRead_t*>  osd_reads;
-  hash_map<tid_t,PendingOSDOp_t*>    osd_writes;   
-  hash_map<tid_t,PendingOSDOp_t*>    osd_zeros;   
+  hash_map<tid_t,PendingOSDRead_t*>  op_reads;
+  hash_map<tid_t,PendingOSDOp_t*>    op_writes;   
+  hash_map<tid_t,PendingOSDOp_t*>    op_removes;   
+  hash_map<tid_t,PendingOSDOp_t*>    op_zeros;   
+  hash_map<tid_t,PendingOSDProbe_t*> op_probes;
 
  public:
   Filer(Messenger *m, OSDCluster *o);
@@ -60,18 +73,36 @@ class Filer : public Dispatcher {
 
   void dispatch(Message *m);
 
+  bool is_active() {
+	if (!op_reads.empty() ||
+		!op_writes.empty() ||
+		!op_zeros.empty() ||
+		!op_probes.empty() ||
+		!op_removes.empty()) return true;
+	return false;
+  }
+
   // osd fun
   int read(inodeno_t ino,
 		   size_t len, 
 		   size_t offset, 
-		   crope *buffer, 
+		   char **dataptr,   // ptr to data
+		   char **freeptr,   // ptr to delete
 		   Context *c);
+  int read(inodeno_t ino,
+		   size_t len, 
+		   size_t offset, 
+		   char *buffer,     // my existing buffer
+		   Context *c);
+
+  // returns num fragments
+  int issue_read(inodeno_t ino, size_t len, size_t offset, PendingOSDRead_t *p);
 
   
   int write(inodeno_t ino,
 			size_t len, 
 			size_t offset, 
-			crope& buffer, 
+			const char *buffer,
 			int flags, 
 			Context *c);
 

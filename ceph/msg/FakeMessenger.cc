@@ -132,13 +132,16 @@ int fakemessenger_do_loop_2()
 			  || t == MSG_CLIENT_REPLY
 			  || t == MSG_MDS_DISCOVER
 			  ) {
-			// serialize
-			crope buffer;
-			m->encode(buffer);
+
+			// encode
+			m->encode();
+			char *buf = m->get_raw_message();
+			int  len = m->get_raw_message_len();
+			m->clear_raw_message();
 			delete m;
-			
+
 			// decode
-			m = decode_message(buffer);
+			m = decode_message(buf, len);
 			assert(m);
 		  }
 		}

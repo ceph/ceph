@@ -137,7 +137,6 @@ void OSD::handle_op(MOSDOp *op)
 	  // "ack"
 	  messenger->send_message(new MOSDOpReply(op, r), 
 							  op->get_source(), op->get_source_port());
-	  delete op;
 	}
 	break;
 
@@ -154,7 +153,6 @@ void OSD::handle_op(MOSDOp *op)
 	  reply->set_size(st.st_size);
 	  messenger->send_message(reply,
 							  op->get_source(), op->get_source_port());
-	  delete op;
 	}
 	
   default:
@@ -180,7 +178,7 @@ void OSD::read(MOSDRead *r)
 	if (fd < 0) {
 	  // send reply (failure)
 	  dout(1) << "read open FAILED on " << get_filename(whoami, r->get_oid()) << " errno " << errno << endl;
-	  reply = new MOSDReadReply(r, NULL, -1);
+	  reply = new MOSDReadReply(r, -1);
 	  //assert(0);
 	}
   }
@@ -196,21 +194,20 @@ void OSD::read(MOSDRead *r)
 	} else
 	  lseek(fd, r->get_offset(), SEEK_SET);   // seek	
 
+	// create reply, buffer
+	reply = new MOSDReadReply(r, len);
+
 	// read into a buffer
-	char *buf = new char[len];
+	char *buf = reply->get_buffer();
 	long got = ::read(fd, buf, len);
+	
+	reply->set_len(got);
 
 	dout(10) << "osd_read " << got << " / " << len << " bytes from " << f << endl;
 
 	// close
 	flock(fd, LOCK_UN);
 	close(fd);
-	
-	// send reply
-	reply = new MOSDReadReply(r, buf, got);
-
-	// free buffer
-	delete[] buf;
   }
 
   // send it
@@ -251,7 +248,7 @@ void OSD::write(MOSDWrite *m)
 	
 	if (m->get_offset())
 	  lseek(fd, m->get_offset(), SEEK_SET);
-	long wrote = ::write(fd, m->get_buf(), m->get_len());
+	long wrote = ::write(fd, m->get_buffer(), m->get_len());
 	flock(fd, LOCK_UN);
 	close(fd);
 

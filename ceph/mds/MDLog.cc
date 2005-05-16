@@ -25,11 +25,9 @@ MDLog::MDLog(MDS *m)
   max_events = 0;
   trim_reading = false;
   reader = new LogStream(mds, 
-						 mds->get_cluster()->get_log_osd(mds->get_nodeid()),
-						 mds->get_cluster()->get_log_oid(mds->get_nodeid()));
+						 100 + mds->get_nodeid());
   writer = new LogStream(mds,
-						 mds->get_cluster()->get_log_osd(mds->get_nodeid()),
-						 mds->get_cluster()->get_log_oid(mds->get_nodeid()));
+						 100 + mds->get_nodeid());
 
   string name;
   name = "log.mds";

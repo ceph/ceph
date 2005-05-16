@@ -46,8 +46,8 @@ class MDStore {
   void do_fetch_dir( CDir *dir,
 					 Context *c,
 					 int hashcode = -1);
-  void do_fetch_dir_2( int result, 
-					   crope buffer,
+  void do_fetch_dir_2( char *buffer,
+					   int buflen,
 					   inodeno_t ino,
 					   Context *c,
 					   int which);

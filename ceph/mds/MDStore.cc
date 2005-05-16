@@ -402,7 +402,7 @@ void MDStore::do_commit_dir( CDir *dir,
   
   mds->filer->write( dir->ino(),
 					 fin->buffer.length(), 0,
-					 fin->buffer, 
+					 fin->buffer.c_str(), 
 					 0, // flags
 					 fin );
 }
@@ -499,23 +499,54 @@ void MDStore::do_commit_dir_2( int result,
 
 class MDDoFetchDirContext : public Context {
  protected:
-  MDStore *ms;
+  MDS *mds;
   inodeno_t ino;
   int hashcode;
   Context *context;
 
  public:
-  crope buffer;
+  char  *buffer;
+  char  *freeptr;
+  int    buflen;
 
-  MDDoFetchDirContext(MDStore *ms, inodeno_t ino, Context *c, int which) : Context() {
-	this->ms = ms;
+  MDDoFetchDirContext(MDS *mds, inodeno_t ino, Context *c, int which) : Context() {
+	this->mds = mds;
 	this->ino = ino;
 	this->hashcode = which;
 	this->context = c;
+
+	buffer = 0;
+	freeptr = 0;
+	buflen = 0;
   }
   
   void finish(int result) {
-	ms->do_fetch_dir_2( result, buffer, ino, context, hashcode );
+	assert(result>0);
+	buflen += result;
+
+	// did i get the whole thing?
+	size_t size = *(size_t*)buffer;
+	size_t got = buflen - sizeof(size);
+	if (got == size) {
+	  // done.
+	  mds->mdstore->do_fetch_dir_2( buffer, buflen, ino, context, hashcode );
+	  delete freeptr;
+	}
+	else {
+	  // read the rest!
+	  cout << "do_fetch_dir_2 dir size is " << size << ", got " << got << ", reading rest" << endl;
+	  
+	  // create return context
+	  MDDoFetchDirContext *fin = new MDDoFetchDirContext( mds, ino, context, hashcode );
+	  fin->buffer = new char[size + sizeof(size)];
+	  memcpy(fin->buffer, buffer, buflen);  // what we have so far
+	  delete freeptr;
+	  mds->filer->read(ino,
+					   size - got, buflen,
+					   fin->buffer + buflen,
+					   fin );
+	  return;
+	}
   }
 };
 
@@ -528,17 +559,18 @@ void MDStore::do_fetch_dir( CDir *dir,
   dout(11) << "fetch_hashed_dir hashcode " << hashcode << " " << *dir << " context is " << c << endl;
   
   // create return context
-  MDDoFetchDirContext *fin = new MDDoFetchDirContext( this, dir->ino(), c, hashcode );
+  MDDoFetchDirContext *fin = new MDDoFetchDirContext( mds, dir->ino(), c, hashcode );
 
   // read first bit
   mds->filer->read(dir->ino(),
 				   FILE_OBJECT_SIZE, 0,
 				   &fin->buffer,
+				   &fin->freeptr,
 				   fin );
 }
 
-void MDStore::do_fetch_dir_2( int result, 
-							  crope buffer, 
+void MDStore::do_fetch_dir_2( char *buffer, 
+							  int   buflen,
 							  inodeno_t ino,
 							  Context *c,						   
 							  int hashcode)
@@ -561,66 +593,47 @@ void MDStore::do_fetch_dir_2( int result,
   // make sure we have a CDir
   CDir *dir = idir->get_or_open_dir(mds);
   
-
-  // did i get the whole thing?
-  size_t size;
-  buffer.copy(0, sizeof(size), (char*)&size);
-  size_t got = buffer.length() - sizeof(size);
-  if (got < size) {
-	// read the rest!
-	dout(7) << "do_fetch_dir_2 dir size is " << size << ", got " << got << ", reading rest" << endl;
-
-	// create return context
-	MDDoFetchDirContext *fin = new MDDoFetchDirContext( this, dir->ino(), c, hashcode );
-	fin->buffer = buffer;
-	mds->filer->read(dir->ino(),
-					 size - got, buffer.length(),
-					 &fin->buffer,
-					 fin );
-	return;
-  }
-
-
-
   // do it
   dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
   
   // parse buffer contents into cache
-  const char *buf = buffer.c_str();
-  long buflen = buffer.length();
-  
-  __uint32_t num;
-  buffer.copy(sizeof(size), sizeof(num), (char*)&num);
-  dout(10) << "  " << num << " items" << endl;
-  size_t p = sizeof(num) + sizeof(size_t);
+  size_t size = *(size_t*)buffer;
+  assert(buflen == size + sizeof(size));  
+  size_t p = sizeof(size_t);
+		 
+  __uint32_t num = *(__uint32_t*)(buffer + p);
+  p += sizeof(num);
+
+  dout(10) << "  " << num << " items in " << size << " bytes" << endl;
+
   int parsed = 0;
   while (parsed < num) {
 	assert(p < buflen && num > 0);
 	parsed++;
 	
 	// dentry
-	string dname = buf+p;
+	string dname = buffer+p;
 	p += dname.length() + 1;
 	//dout(7) << "parse filename " << dname << endl;
 	
 	CDentry *dn = dir->lookup(dname);  // existing dentry?
 
 	
-	if (*(buf+p) == 'L') {
+	if (*(buffer+p) == 'L') {
 	  // hard link, we don't do that yet.
 	  assert(0);
 	} 
-	else if (*(buf+p) == 'I') {
+	else if (*(buffer+p) == 'I') {
 	  // inode
 	  p++;
 	  
 	  // parse out inode
-	  inode_t *inode = (inode_t*)(buf+p);
+	  inode_t *inode = (inode_t*)(buffer+p);
 	  p += sizeof(inode_t);
 
 	  string symlink;
 	  if (inode->mode & INODE_MODE_SYMLINK) {
-		symlink = (char*)(buf+p);
+		symlink = (char*)(buffer+p);
 		p += symlink.length() + 1;
 	  }
 

@@ -74,7 +74,7 @@ class MClientRequest : public Message {
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
   void set_caller_uid(int u) { st.caller_uid = u; }
-  void set_caller_gid(int g) { st.caller_uid = g; }
+  void set_caller_gid(int g) { st.caller_gid = g; }
   void set_ino(inodeno_t ino) { st.ino = ino; }
   void set_iarg(int i) { st.iarg = i; }
   void set_iarg2(int i) { st.iarg2 = i; }

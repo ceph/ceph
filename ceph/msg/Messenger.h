@@ -93,7 +93,7 @@ class Messenger {
 };
 
 
-extern Message *decode_message(crope& rope);
+extern Message *decode_message(char *buffer, int len);
 
 
 

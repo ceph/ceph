@@ -1,10 +1,21 @@
 
+- hard links
+- rewrite journal + recovery
+- online failure recovery
+- hashed directories
+- better fh management
+- btree directories
+- checkpoints
+
 
 SAGE:
 
-- mount, unmount, distribute osdcluster
+- MOSDWrite encode/decode
+
+, unmount, distribute osdcluster
 
 - scatter/gather parallel rendrecv (for client file i/o)
+  - use Filer, Cond's
 
 - sync clients on soft read
 - truncate
@@ -29,6 +40,7 @@ fully document export process
 
 - do real permission checks?
 
+- journal entries, recovery system
 
 
 CLIENT TODO

@@ -34,7 +34,7 @@ md_config_t g_conf = {
   client_use_random_mds:  false,
   
   // --- mds ---
-  mds_log_max_len: 1000,
+  mds_log_max_len: 10000,
   mds_log_max_trimming: 16,
   mds_log_read_inc: 4096,
 
@@ -49,7 +49,7 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
 
   // --- fakeclient (mds regression testing) ---
-  num_fakeclient: 100,
+  num_fakeclient: 1,
   fakeclient_requests: 100,
   fakeclient_deterministic: false,
 

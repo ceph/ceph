@@ -77,7 +77,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
 	dn = dir->dentries[dname];
-  dout(12) << "insert_inode_info " << dname << " ino " << in_info->inode.ino << endl;
+  dout(12) << "insert_inode_info " << dname << " ino " << in_info->inode.ino << "  size " << in_info->inode.size << endl;
   
   if (dn) {
 	if (dn->inode->inode.ino == in_info->inode.ino) {
@@ -444,7 +444,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
   //stbuf->st_flags =
   //stbuf->st_gen =
 
-  dout(1) << "stat sez uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
+  dout(1) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
 
   return 0;
 }
@@ -518,7 +518,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
 int Client::mknod(const char *path, mode_t mode) 
 { 
-  dout(3) << "mkdir " << path << " mode " << mode << endl;
+  dout(3) << "mknod " << path << " mode " << mode << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, whoami);
   req->set_path(path); 
   req->set_iarg( mode );
@@ -533,8 +533,10 @@ int Client::mknod(const char *path, mode_t mode)
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
 
+  size_t size = inode_map[ reply->get_trace()[reply->get_trace().size()-1]->inode.ino ]->inode.size;
+
   delete reply;
-  dout(10) << "mknod result is " << res << endl;
+  dout(10) << "mknod result is " << res << ", size is " << size << endl;
   return res;
 }
 
@@ -620,14 +622,14 @@ int Client::open(const char *path, int mode)
   // success?
   if (reply->get_result() > 0) {
 	// yay
-	Fh *fh = new Fh;
-	memset(fh, sizeof(Fh), 0);
-	fh->ino = trace[trace.size()-1]->inode.ino;
-	fh->mds = reply->get_source();
-	fh->caps = reply->get_file_caps();
-	fh_map[reply->get_result()] = fh;
+	Fh *f = new Fh;
+	memset(f, 0, sizeof(*f));
+	f->ino = trace[trace.size()-1]->inode.ino;
+	f->mds = reply->get_source();
+	f->caps = reply->get_file_caps();
+	fh_map[reply->get_result()] = f;
 
-	dout(3) << "open success, fh is " << reply->get_result() << " caps " << fh->caps << endl;
+	dout(3) << "open success, fh is " << reply->get_result() << " caps " << f->caps << "  fh size " << f->size << endl;
   }
 
   return reply->get_result();
@@ -699,8 +701,8 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 	assert(reply);
 
 	// copy data into *buf
-	size_t readlen = reply->get_buffer().length();
-	reply->get_buffer().copy(0, readlen, buf);
+	size_t readlen = reply->get_len();
+	memcpy(buf, reply->get_buffer(), readlen);
 	
 	// move on
 	left -= readlen;
@@ -719,11 +721,15 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 
 int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset) 
 {
+  dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
+
   assert(fh_map.count(fh));
   inodeno_t ino = fh_map[fh]->ino;
 
   Fh *f = fh_map[fh];
   Inode *in = inode_map[ino];
+
+  dout(10) << "cur file size is " << in->inode.size << "    fh size " << f->size << endl;
 
   // check current file mode (are we allowed to write, buffer, etc.)
   // ***
@@ -746,13 +752,12 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 	dout(7) << "writing range to object " << it->oid << " on " << osd << ": len " << it->len << " offset " << it->offset << endl;
 	
 	// issue write
-	crope buffer(buf, it->len);
 	MOSDWrite *req = new MOSDWrite(0,   // tid
 								   it->oid,
 								   it->len, it->offset,
-								   buffer,
+								   buf,
 								   0);   // no flags
-	MOSDWriteReply *reply = (MOSDWriteReply*)messenger->sendrecv(req, MSG_ADDR_OSD(osd));
+  	MOSDWriteReply *reply = (MOSDWriteReply*)messenger->sendrecv(req, MSG_ADDR_OSD(osd));
 	assert(reply);
 
 	// don't tolerate osd crankiness yet
@@ -769,7 +774,9 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   if (totalwritten + offset > f->size) {
 	f->size = totalwritten + offset;
 	in->inode.size = f->size;
-	dout(7) << "extending file to " << f->size << endl;
+	dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << endl;
+  } else {
+	dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << f->size << endl;
   }
 
   // mtime

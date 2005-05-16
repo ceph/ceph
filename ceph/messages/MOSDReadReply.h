@@ -23,7 +23,6 @@ typedef struct {
 
 class MOSDReadReply : public Message {
   MOSDReadReply_st st;
-  crope buffer;
 
  public:
   size_t get_len() { return st.len; }
@@ -36,31 +35,48 @@ class MOSDReadReply : public Message {
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid() { return st.pcid; }
 
-  MOSDReadReply() { }
-  MOSDReadReply(MOSDRead *r, char *buf, long result) :
+  MOSDReadReply() { 
+  }
+  MOSDReadReply(MOSDRead *r, long result) :
 	Message(MSG_OSD_READREPLY) {
 	this->st.tid = r->st.tid;
 	this->st.pcid = r->st.pcid;
 	this->st.oid = r->st.oid;
 	this->st.offset = r->st.offset;
 	this->st.result = result;
-	if (buf && result > 0) buffer.append( buf, result );
+	if (result >= 0) 
+	  this->st.len = result;
+	else
+	  this->st.len = 0;	  
+  }
+  ~MOSDReadReply() {
   }
 
-  crope& get_buffer() {
-	return buffer;
+  // called by sender and receiver.  on sender, allocates raw_message buffer.
+  char *get_buffer() {
+	if (!raw_message) {
+	  raw_message_len = MSG_ENVELOPE_LEN + sizeof(MOSDReadReply_st) + st.len;
+	  raw_message = new char[raw_message_len];
+	}
+	return raw_message + MSG_ENVELOPE_LEN + sizeof(MOSDReadReply_st);
+  }
+  void set_len(int len) {
+	this->st.len = len;
   }
   
-  virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
-	buffer = s.substr(off, st.len);
-	off += st.len;
+  virtual void decode_payload() {
+	st = *(MOSDReadReply_st*)(raw_message + MSG_ENVELOPE_LEN);
   }
-  virtual void encode_payload(crope& payload) {
-	st.len = buffer.length();
-	payload.append((char*)&st, sizeof(st));
-	payload.append(buffer);
+  virtual void encode() {
+	raw_message_len = MSG_ENVELOPE_LEN + sizeof(st) + st.len;
+	if (!raw_message) {
+	  assert(st.len == 0);
+	  raw_message = new char[raw_message_len];
+	}
+
+	encode_envelope();
+
+	*(MOSDReadReply_st*)(raw_message+MSG_ENVELOPE_LEN) = st;
   }
 
   virtual char *get_type_name() { return "oreadr"; }

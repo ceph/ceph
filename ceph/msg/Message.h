@@ -2,9 +2,9 @@
 #ifndef __MESSAGE_H
 #define __MESSAGE_H
 
-#define MSG_PING       1
+#define MSG_PING       2
 
-#define MSG_SHUTDOWN   2
+#define MSG_SHUTDOWN   3
 
 #define MSG_OSD_READ         10
 #define MSG_OSD_READREPLY    11
@@ -34,6 +34,9 @@
 #define MSG_MDS_DIREXPIREREQ 124
 
 #define MSG_MDS_CACHEEXPIRE  125
+
+#define MSG_MDS_ANCHORREQUEST 130
+#define MSG_MDS_ANCHORREPLY   131
 
 #define MSG_MDS_EXPORTDIRDISCOVER      150
 #define MSG_MDS_EXPORTDIRDISCOVERACK   151
@@ -114,6 +117,9 @@ class Message {
   int type;
   msg_addr_t source, dest;
   int source_port, dest_port;
+
+  char *raw_message;
+  int raw_message_len;
   
   // any payload is in an overloaded child class
 
@@ -123,24 +129,40 @@ class Message {
   Message() { 
 	source_port = dest_port = -1;
 	source = dest = -1;
+	raw_message = 0;
+	raw_message_len = 0;
   };
   Message(int t) {
 	source_port = dest_port = -1;
 	source = dest = -1;
 	type = t;
+	raw_message = 0;
+	raw_message_len = 0;
   }
-  Message(crope& s) {
-	// no payload in default message
-	int off = 0;
-	decode_envelope(s, off);
+  virtual ~Message() {
+	if (raw_message) delete raw_message;
   }
-  virtual ~Message() {}
 
 
   // for rpc-type procedural messages (pcid = procedure call id)
   virtual long get_pcid() { return 0; }
   virtual void set_pcid(long t) { assert(0); }  // overload me
 
+  
+  void set_raw_message(char *raw, int len) {
+	raw_message = raw;
+	raw_message_len = len;
+  }
+  char *get_raw_message() { 
+	return raw_message;
+  }
+  int get_raw_message_len() {
+	return raw_message_len;
+  }
+  void clear_raw_message() {
+	raw_message = 0;
+  }
+  
 
   // ENVELOPE ----
 
@@ -159,35 +181,89 @@ class Message {
   void set_source(msg_addr_t a, int p) { source = a; source_port = p; }
   int get_source_port() { return source_port; }
 
-  void encode_envelope(crope& e) {
-	e.append((char*)&type, sizeof(int));
-	e.append((char*)&source, sizeof(msg_addr_t));
-	e.append((char*)&source_port, sizeof(int));
-	e.append((char*)&dest, sizeof(msg_addr_t));
-	e.append((char*)&dest_port, sizeof(int));
+  void encode_envelope() {
+	assert(raw_message);
+	int off = 0;
+	*(int*)(raw_message + off) = type;
+	off += sizeof(type);
+	*(msg_addr_t*)(raw_message + off) = source;
+	off += sizeof(source);
+	*(int*)(raw_message + off) = source_port;
+	off += sizeof(source_port);
+	*(msg_addr_t*)(raw_message + off) = dest;
+	off += sizeof(dest);
+	*(int*)(raw_message + off) = dest_port;
+	off += sizeof(dest_port);
   }
-  void decode_envelope(crope& s, int& off) {
-	s.copy(off, sizeof(int), (char*)&type);
+  void decode_envelope() {
+	assert(raw_message);
+	int off = 0;
+	type = *(int*)(raw_message + off);
 	off += sizeof(int);
-	s.copy(off, sizeof(msg_addr_t), (char*)&source);
+	source = *(msg_addr_t*)(raw_message + off);
 	off += sizeof(msg_addr_t);
-	s.copy(off, sizeof(int), (char*)&source_port);
+	source_port = *(int*)(raw_message + off);
 	off += sizeof(int);
-	s.copy(off, sizeof(long), (char*)&dest);
-	off += sizeof(long);
-	s.copy(off, sizeof(int), (char*)&dest_port);
+	dest = *(msg_addr_t*)(raw_message + off);
+	off += sizeof(msg_addr_t);
+	dest_port = *(int*)(raw_message + off);
 	off += sizeof(int);
   }
   
   // PAYLOAD ----
-  virtual void encode_payload(crope& s) = 0; //{ }
-  virtual void decode_payload(crope& s, int& off) = 0; //{ }
+  // overload either the rope version (easier)
+  virtual void encode_payload(crope& s)           { assert(0); }
+  virtual void decode_payload(crope& s, int& off) { assert(0); }
  
-  // BOTH ----
-  void encode(crope& both) {
-	encode_envelope(both);
-	encode_payload(both);
+  // of the buffer version (faster)
+  virtual void decode_payload() {
+	assert(raw_message);
+	
+	// use a crope for convenience, small messages, etc.  FIXME someday.
+	crope ser;
+	ser.append(raw_message + MSG_ENVELOPE_LEN, raw_message_len-MSG_ENVELOPE_LEN);
+	
+	int off = 0;
+	decode_payload(ser, off);
+	assert(off == raw_message_len-MSG_ENVELOPE_LEN);
+	assert(off == ser.length());
   }
+  virtual void encode() {
+	// use crope for convenience, small messages. FIXME someday.
+	crope r;
+	
+	// payload
+	encode_payload(r);
+
+	// alloc or reuse buf
+	if (raw_message && 
+		raw_message_len != r.length() + MSG_ENVELOPE_LEN) {
+	  delete raw_message;
+	  raw_message = 0;
+	}
+
+	raw_message_len = r.length() + MSG_ENVELOPE_LEN;
+	if (!raw_message) raw_message = new char[raw_message_len];
+	
+	// envelope
+	int off = 0;
+	encode_envelope();
+
+	// copy payload
+	memcpy(raw_message + MSG_ENVELOPE_LEN, r.c_str(), r.length());
+  }
+  virtual void decode() {
+	assert(raw_message);
+
+	// decode envelope
+	assert(raw_message_len >= MSG_ENVELOPE_LEN);
+	decode_envelope();
+
+	if (raw_message_len > MSG_ENVELOPE_LEN) 
+	  decode_payload();
+  }
+
+  
 };
 
 

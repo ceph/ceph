@@ -18,6 +18,8 @@ using namespace std;
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
 #include "messages/MOSDWriteReply.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
@@ -70,15 +72,15 @@ ostream& operator<<(ostream& out, Message& m)
 
 
 Message *
-decode_message(crope& ser)
+decode_message(char *buffer, int len)
 {
   int type;
 
   // peek at type
-  ser.copy(0, sizeof(int), (char*)&type);
-
+  type = *(int*)buffer;
+  
   // make message
-  Message *m;
+  Message *m = 0;
   switch(type) {
 
 	// -- with payload --
@@ -101,6 +103,13 @@ decode_message(crope& ser)
 
   case MSG_OSD_WRITEREPLY:
 	m = new MOSDWriteReply();
+	break;
+
+  case MSG_OSD_OP:
+	m = new MOSDOp();
+	break;
+  case MSG_OSD_OPREPLY:
+	m = new MOSDOpReply();
 	break;
 
 	// clients
@@ -229,18 +238,9 @@ decode_message(crope& ser)
 	assert(0);
   }
   
-  // decode envelope
-  int off = 0;
-  m->decode_envelope(ser, off);
-
-  // payload
-  if (ser.length() > MSG_ENVELOPE_LEN) 
-	m->decode_payload(ser, off);
-
-  if (off != ser.length()) {
-	dout(1) << "uh oh, decode finish off " << off << " len " << ser.length() << endl;
-	assert(off == ser.length());
-  }
+  // decode
+  m->set_raw_message(buffer, len);
+  m->decode();
 
   // done!
   return m;

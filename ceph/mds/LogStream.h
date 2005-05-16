@@ -14,7 +14,7 @@ class LogStream {
  protected:
   MDS *mds;
   off_t cur_pos, append_pos;
-  int osd;
+  inodeno_t log_ino;
   object_t oid;
 
   bool reading_block;
@@ -23,10 +23,9 @@ class LogStream {
   crope buffer;
   off_t buf_start;
  public:
-  LogStream(MDS *mds, int osd, object_t oid) {
+  LogStream(MDS *mds, inodeno_t log_ino) {
 	this->mds = mds;
-	this->osd = osd;
-	this->oid = oid;
+	this->log_ino = log_ino;
 	cur_pos = 0;
 	append_pos = 0; // fixme
 	buf_start = 0;

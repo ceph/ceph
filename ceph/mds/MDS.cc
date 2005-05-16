@@ -14,6 +14,7 @@
 #include "MDCluster.h"
 #include "MDBalancer.h"
 #include "IdAllocator.h"
+#include "AnchorTable.h"
 
 #include "include/filepath.h"
 
@@ -268,9 +269,11 @@ void MDS::proc_message(Message *m)
   case MSG_OSD_READREPLY:
 	filer->handle_osd_read_reply((MOSDReadReply*)m);
 	break;
-	
   case MSG_OSD_WRITEREPLY:
 	filer->handle_osd_write_reply((MOSDWriteReply*)m);
+	break;
+  case MSG_OSD_OPREPLY:
+	filer->handle_osd_op_reply((MOSDOpReply*)m);
 	break;
 	
   default:
@@ -287,6 +290,10 @@ void MDS::dispatch(Message *m)
 	
   case MDS_PORT_STORE:
 	mdstore->proc_message(m);
+	break;
+
+  case MDS_PORT_ANCHORMGR:
+	anchormgr->proc_message(m);
 	break;
 	
 
@@ -946,6 +953,7 @@ void MDS::handle_client_mknod(MClientRequest *req, CInode *ref)
   if (!newi) return;
 
   // it's a file!
+  newi->inode.mode = req->get_iarg();
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
   

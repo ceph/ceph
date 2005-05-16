@@ -19,6 +19,7 @@ MDS_OBJS= \
 	mds/CDentry.o\
 	mds/CDir.o\
 	mds/CInode.o\
+	mds/AnchorTable.o\
 	mds/MDStore.o\
 	mds/LogStream.o\
 	mds/IdAllocator.o\

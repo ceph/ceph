@@ -31,13 +31,14 @@ int LogStream::append(LogEvent *e, Context *c)
   append_pos += buffer.length();
   
   // submit write
-  mds->filer->write(oid,   // FIXME
+  mds->filer->write(log_ino,   // FIXME
 					buflen, append_pos-buflen,
-					buffer,
+					buffer.c_str(),
 					0,
 					c);
   return 0;
 }
+
 
 
 // reading
@@ -61,7 +62,8 @@ public:
 
 class C_LS_ReadChunk : public Context {
 public:
-  crope next_bit;
+  char *buffer;
+  char *freeptr;
   LogStream *ls;
   LogEvent **le;
   Context *c;
@@ -71,6 +73,9 @@ public:
 	this->c = c;
   }
   void finish(int result) {
+	crope next_bit;
+	next_bit.append(buffer, result);
+	delete freeptr;
 	ls->did_read_bit(next_bit, le, c);
   }
 };
@@ -111,9 +116,9 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 		// nope.  read a chunk
 		C_LS_ReadChunk *readc = new C_LS_ReadChunk(this, le, c);
 		reading_block = true;
-		mds->filer->read(oid,  // FIXME
+		mds->filer->read(log_ino,  // FIXME
 						 g_conf.mds_log_read_inc, start,
-						 &readc->next_bit,
+						 &readc->buffer, &readc->freeptr,
 						 readc);
 	  }
 	  return 0;

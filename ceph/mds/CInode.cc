@@ -10,7 +10,7 @@
 
 #include "include/config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "cinode:"
+#define dout(x)  if (x <= g_conf.debug) cout << "cinode: "
 
 
 

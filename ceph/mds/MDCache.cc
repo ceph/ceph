@@ -13,6 +13,8 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
+#include "osd/Filer.h"
+
 #include "events/EInodeUpdate.h"
 #include "events/EUnlink.h"
 
@@ -473,6 +475,14 @@ bool MDCache::trim(__int32_t max) {
 	  root = NULL;
 	}
 
+
+	// last link?
+	if (in->inode.nlink == 0) {
+	  dout(7) << "last link, destroying inode " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
+	  mds->filer->remove(in->ino(), in->inode.size, 
+						 NULL);   // FIXME
+	}
+
 	// remove it
 	dout(11) << "trim removing " << *in << " " << in << endl;
 	remove_inode(in);
@@ -594,7 +604,7 @@ bool MDCache::shutdown_pass()
   assert(inode_map.size() == lru.lru_get_size());
 
   // done?
-  if (lru.lru_get_size() == 0) {
+  if (lru.lru_get_size() == 0 && !mds->filer->is_active()) {
 	if (mds->get_nodeid() != 0) {
 	  dout(7) << "done, sending shutdown_finish" << endl;
 	  mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),
@@ -604,7 +614,7 @@ bool MDCache::shutdown_pass()
 	}
 	return true;
   } else {
-	dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << endl;
+	dout(7) << "filer active, or there's still stuff in the cache: " << lru.lru_get_size() << endl;
 	show_cache();
 	//dump();
   }
@@ -2034,15 +2044,22 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	// don't need ack.
   }
 
+  // inode deleted?
   if (dn->inode) {
 	assert(dn->inode->is_auth());
+	dn->inode->inode.nlink--;
 
-	if (dn->inode->dir) {
-	  // mark dir clean, since it dne!
-	  assert(dn->inode->dir->is_auth());
-	  dn->inode->dir->state_set(CDIR_STATE_DELETED);
-	  dn->inode->dir->remove_null_dentries();
-	  dn->inode->dir->mark_clean();
+	if (dn->inode->is_dir()) assert(dn->inode->inode.nlink == 0);  // no hard links on dirs
+
+	if (dn->inode->inode.nlink == 0) {
+
+	  if (dn->inode->dir) {
+		// mark dir clean, since it dne!
+		assert(dn->inode->dir->is_auth());
+		dn->inode->dir->state_set(CDIR_STATE_DELETED);
+		dn->inode->dir->remove_null_dentries();
+		dn->inode->dir->mark_clean();
+	  }
 	}
   }
 

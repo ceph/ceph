@@ -27,7 +27,6 @@ typedef struct {
 class MOSDOp : public Message {
   MOSDOp_st st;
 
-
   friend class MOSDOpReply;
 
  public:
