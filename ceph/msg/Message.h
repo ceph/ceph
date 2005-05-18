@@ -15,9 +15,12 @@
 
 #define MSG_CLIENT_REQUEST         20
 #define MSG_CLIENT_REPLY           21
-#define MSG_CLIENT_DONE            22
+//#define MSG_CLIENT_DONE            22
 #define MSG_CLIENT_FILECAPS        23
 #define MSG_CLIENT_INODEAUTHUPDATE 24
+
+#define MSG_CLIENT_MOUNT           30
+#define MSG_CLIENT_UNMOUNT         31
 
 #define MSG_MDS_HEARTBEAT          100
 #define MSG_MDS_DISCOVER           110

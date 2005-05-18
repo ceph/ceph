@@ -350,36 +350,33 @@ void MDStore::do_commit_dir( CDir *dir,
 	  dout(12) << " dirty dn " << *dn << " now " << dn->get_parent_dir_version() << endl;
 	}
 	
+	if (dn->is_null()) continue;  // skipping negative entry
 
 	// primary or remote?
 	if (dn->is_remote()) {
 
-	  // name
-	  dirdata.append( it->first.c_str(), it->first.length() + 1);
-	  
-	  // marker
-	  dirdata.append( 'L' );         // remote link
-
-	  // ino
 	  inodeno_t ino = dn->get_remote_ino();
+
+	  // name, marker, ion
+	  dirdata.append( it->first.c_str(), it->first.length() + 1);
+	  dirdata.append( 'L' );         // remote link
 	  dirdata.append((char*)&ino, sizeof(ino));
 
 	} else {
 	  // primary link
 	  CInode *in = dn->get_inode();
-	  if (!in) continue;  // skip negative dentries
-	  
-	  // name
+	  assert(in);
+
+	  dout(14) << " pos " << dirdata.length() << " dn '" << it->first << "' inode " << *in << endl;
+  
+	  // name, marker, inode, [symlink string]
 	  dirdata.append( it->first.c_str(), it->first.length() + 1);
-	  
-	  // marker
 	  dirdata.append( 'I' );         // inode
-	  
-	  // inode
 	  dirdata.append( (char*) &in->inode, sizeof(inode_t));
 	  
 	  if (in->is_symlink()) {
 		// include symlink destination!
+		dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
 		dirdata.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
 	  }
 	  
@@ -392,6 +389,7 @@ void MDStore::do_commit_dir( CDir *dir,
 
 	num++;
   }
+  dout(14) << "num " << num << endl;
   
   // put count in buffer
   fin->buffer.append((char*)&num, sizeof(num));
@@ -628,10 +626,12 @@ void MDStore::do_fetch_dir_2( char *buffer,
 	assert(p < buflen && num > 0);
 	parsed++;
 	
+	dout(24) << " " << parsed << "/" << num << " pos " << p-8 << endl;
+
 	// dentry
 	string dname = buffer+p;
 	p += dname.length() + 1;
-	//dout(7) << "parse filename " << dname << endl;
+	dout(24) << "parse filename '" << dname << "'" << endl;
 	
 	CDentry *dn = dir->lookup(dname);  // existing dentry?
 
@@ -681,7 +681,7 @@ void MDStore::do_fetch_dir_2( char *buffer,
 	  p += sizeof(inode_t);
 
 	  string symlink;
-	  if (inode->mode & INODE_MODE_SYMLINK) {
+	  if ((inode->mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) {
 		symlink = (char*)(buffer+p);
 		p += symlink.length() + 1;
 	  }
@@ -726,7 +726,12 @@ void MDStore::do_fetch_dir_2( char *buffer,
 	  dir->add_dentry( dname, in );
 	  dout(12) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
+	else {
+	  dout(1) << "corrupt directory, i got tag char '" << *(buffer+p) << "' val " << (int)(*(buffer+p)) << " at pos " << p << endl;
+	  assert(0);
+	}
   }
+  dout(15) << "parsed " << parsed << endl;
   
   c->finish(0);
   delete c;

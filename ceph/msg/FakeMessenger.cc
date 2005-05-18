@@ -49,6 +49,7 @@ void *fakemessenger_thread(void *ptr)
   lock.Lock();
   while (1) {
 	dout(20) << "thread waiting" << endl;
+	if (shutdown) break;
 	awake = false;
 	cond.Wait(lock);
 	awake = true;
@@ -126,24 +127,16 @@ int fakemessenger_do_loop_2()
 			 << endl;
 		
 		if (g_conf.fakemessenger_serialize) {
-		  int t = m->get_type();
-		  if (true
-			  || t == MSG_CLIENT_REQUEST
-			  || t == MSG_CLIENT_REPLY
-			  || t == MSG_MDS_DISCOVER
-			  ) {
-
-			// encode
-			m->encode();
-			char *buf = m->get_raw_message();
-			int  len = m->get_raw_message_len();
-			m->clear_raw_message();
-			delete m;
-
-			// decode
-			m = decode_message(buf, len);
-			assert(m);
-		  }
+		  // encode
+		  m->encode();
+		  char *buf = m->get_raw_message();
+		  int  len = m->get_raw_message_len();
+		  m->clear_raw_message();
+		  delete m;
+		  
+		  // decode
+		  m = decode_message(buf, len);
+		  assert(m);
 		}
 		
 		didone = true;

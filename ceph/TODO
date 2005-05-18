@@ -1,14 +1,29 @@
 
+MDS TODO
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - truncate
 - hard links
-- better fh management
 - rewrite journal + recovery
-- online failure recovery
-- hashed directories
-- btree directories
-- checkpoints
+- figure out online failure recovery
+- implement hashed directories
+- most distributed fh management?
+- btree directories (for efficient large directories)
+- consistency points/snapshots
+
+OSD TODO
+- collaborative write replication/commit protocol
+- collections
+- osd failure recovery
+- osd cluster expansion
+
+CLIENT TODO
+- finish cache (remove items...)
+- strong consistency
+  - get short-term leases from MDS (for stat etc)
+- ditch FUSE for ____
+
+
 
 
 why qsync could be wrong: varying mds -> client message transit or processing times.
@@ -25,15 +40,14 @@ why qsync could be wrong: varying mds -> client message transit or processing ti
 
 SAGE:
 
-- MOSDWrite encode/decode
+- unmount, distribute osdcluster
 
-, unmount, distribute osdcluster
-
-- scatter/gather parallel rendrecv (for client file i/o)
+- scatter/gather parallel sendrecv (for client file i/o)?
   - use Filer, Cond's
+- prefetch?
 
-- sync clients on soft read
-- truncate
+- sync clients on stat
+  - truncate
 
 /- unlink inode should delete object data!
 
@@ -67,7 +81,7 @@ CLIENT TODO
 
 
 
-FILE STUFF
+FILE STUFF (old)
 
 - send all file writers to auth
   - migrate open file ppl w/ export
@@ -101,18 +115,6 @@ FILE STUFF
 
 
 
-- fix logging model for data safety
- - inodeupdate
- - dentryunlink
- - dentrylink
- - inodecreate
-? - inodedestroy
- - put path to each item in log entry
- - EMkdir event?
-   ?- properly commit dir, dirty inode+dentry
-
-
-
 
 ISSUES
 
@@ -123,13 +125,6 @@ ISSUES
  - forward flag (see soft)
  - error flag   (if file not found, etc.)
  - [what was i talking about?] make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
-
-
-- log
-  - overall logging strategy.  
-    - currently (?): do everything immediately, reply when logged.
-  - the log grows indefinitely
-
 
 
 
@@ -155,20 +150,14 @@ TEST
 
 IMPLEMENT
 
-- rename
 - truncate
 
 - hash + unhash!
 
 - dir sync
- - stat of a dir should return dir size????
+ - stat of a dir should return dir mtime?
  - readdir of hashed dir
 
-- softasync mode
-
-- log MDS actions
-  - imports/exports
-  - hash/unhash
 
 - smarter balancing
   - popularity calculation and management is inconsistent/wrong.

@@ -66,10 +66,10 @@ int main(int argc, char **argv) {
 	client[i]->init();
   }
   
-  // seed initial requests
+  // mount clients
   for (int i=0; i<NUMCLIENT; i++) 
 	//for (int i=0; i<1; i++) 
-	client[i]->issue_request();
+	client[i]->mount();
 
   // loop
   fakemessenger_do_loop();

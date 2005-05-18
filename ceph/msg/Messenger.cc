@@ -229,7 +229,8 @@ decode_message(char *buffer, int len)
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_SHUTDOWN:
-  case MSG_CLIENT_DONE:
+  case MSG_CLIENT_MOUNT:
+  case MSG_CLIENT_UNMOUNT:
 	m = new MGenericMessage(type);
 	break;
 

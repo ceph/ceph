@@ -8,6 +8,7 @@
 #include <utime.h>
 
 
+#include "messages/MGenericMessage.h"
 #include "messages/MOSDRead.h"
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
@@ -115,7 +116,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   dn->inode->inode = in_info->inode;
 
   // symlink?
-  if (dn->inode->inode.mode & INODE_MODE_SYMLINK) {
+  if ((dn->inode->inode.mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) {
 	if (!dn->inode->symlink) 
 	  dn->inode->symlink = new string;
 	*(dn->inode->symlink) = in_info->symlink;
@@ -251,6 +252,35 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
 // -------------------
 // fs ops
+
+
+
+int Client::mount()
+{
+  assert(!mounted);  // caller is confused?
+
+  dout(1) << "mounting" << endl;
+  Message *req = new MGenericMessage(MSG_CLIENT_MOUNT);
+  Message *reply = messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  assert(reply);
+  dout(1) << "mounted" << endl;
+  mounted = true;
+}
+
+int Client::unmount()
+{
+  assert(mounted);  // caller is confused?
+
+  dout(1) << "unmounting" << endl;
+  Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
+  Message *reply = messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  assert(reply);
+  mounted = false;
+  dout(1) << "unmounted" << endl;
+}
+
+
+
 // namespace ops
 //?int getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler);
 //int Client::link(const char *existing, const char *new)

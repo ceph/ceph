@@ -2048,21 +2048,26 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
   if (dn->is_primary() && dn->inode) {
 	assert(dn->inode->is_auth());
 	dn->inode->inode.nlink--;
-
+	
 	if (dn->inode->is_dir()) assert(dn->inode->inode.nlink == 0);  // no hard links on dirs
 
+	if (dn->inode->inode.nlink) {
+	  // need to migrate inode somehow .. FIXME
+	  assert(0);
+	}
+
+	// last link?
 	if (dn->inode->inode.nlink == 0) {
-	  // truly dangling
-	  
+	  // truly dangling	  
 	  if (dn->inode->dir) {
-		// mark dir clean, since it dne!
+		// mark dir clean too, since it now dne!
 		assert(dn->inode->dir->is_auth());
 		dn->inode->dir->state_set(CDIR_STATE_DELETED);
-		dn->inode->dir->remove_null_dentries();    // should be just null tho
+		dn->inode->dir->remove_null_dentries();
 		dn->inode->dir->mark_clean();
 	  }
 
-	  // FIXME
+	  // mark it clean
 	  if (dn->inode->is_dirty())
 		dn->inode->mark_clean();
 	  
@@ -2072,7 +2077,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	}
   }
   if (dn->is_remote()) {
-	// need to dec nlink on primary somehow
+	// need to dec nlink on primary somehow FIXME
 	assert(0);
   }
 
@@ -2637,7 +2642,7 @@ void MDCache::file_rename_notify(CInode *in,
 
 
 
-/************ bystanders ****************/
+/************** bystanders ****************/
 
 void MDCache::handle_rename_warning(MRenameWarning *m)
 {

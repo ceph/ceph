@@ -115,7 +115,6 @@ class Client : public Dispatcher {
   Messenger *messenger;  
   int whoami;
   bool all_files_closed;
-
   
   // cluster descriptors
   MDCluster             *mdcluster; 
@@ -233,6 +232,9 @@ class Client : public Dispatcher {
 
   // ----------------------
   // fs ops.
+  int mount();
+  int unmount();
+
   // these shoud (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statfs *stbuf);
 

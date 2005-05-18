@@ -246,8 +246,11 @@ void MDS::proc_message(Message *m)
 	handle_ping((MPing*)m);
 	break;
 
-  case MSG_CLIENT_DONE:
-	handle_client_done(m);
+  case MSG_CLIENT_MOUNT:
+	handle_client_mount(m);
+	break;
+  case MSG_CLIENT_UNMOUNT:
+	handle_client_unmount(m);
 	break;
 	
 	// MDS
@@ -365,17 +368,35 @@ void MDS::dispatch(Message *m)
 }
 
 
-void MDS::handle_client_done(Message *m)
+void MDS::handle_client_mount(Message *m)
 {
   int n = MSG_ADDR_NUM(m->get_source());
-  dout(3) << "client" << n << " done" << endl;
-  done_clients.insert(n);
-  if (done_clients.size() == g_conf.num_client) {
+  dout(3) << "mount by client" << n << endl;
+  mounted_clients.insert(n);
+
+  assert(whoami == 0);  // mds0 mounts/unmounts
+
+  // ack by sending back to client
+  messenger->send_message(m, m->get_source(), m->get_source_port());
+}
+
+void MDS::handle_client_unmount(Message *m)
+{
+  int n = MSG_ADDR_NUM(m->get_source());
+  dout(3) << "unmount by client" << n << endl;
+
+  assert(whoami == 0);  // mds0 mounts/unmounts
+
+  assert(mounted_clients.count(n));
+  mounted_clients.erase(n);
+
+  if (mounted_clients.empty()) {
 	dout(3) << "all clients done, initiating shutdown" << endl;
 	shutdown_start();
   }
 
-  delete m;  // done
+  // ack by sending back to client
+  messenger->send_message(m, m->get_source(), m->get_source_port());
 }
 
 
