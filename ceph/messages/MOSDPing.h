@@ -10,9 +10,11 @@ class MOSDPing : public Message {
   int ttl;
   int osd_status;  
 
+  int get_status() { return osd_status; }
+
   MOSDPing(int status) : Message(MSG_OSD_PING) {
 	//ttl = n;
-	this->status = status;
+	this->osd_status = status;
   }
   MOSDPing() {}
 
