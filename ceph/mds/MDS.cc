@@ -350,12 +350,12 @@ void MDS::dispatch(Message *m)
 	balancer->send_heartbeat();
   }
 
-  if (false && whoami == 0) {
+  if (whoami == 0) {
 	static bool didit = false;
 	
 	// 7 to 1
-	CInode *in = mdcache->get_inode(2);
-	if (in && !didit) {
+	CInode *in = mdcache->get_inode(1001);
+	if (in && in->is_dir() && !didit) {
 	  CDir *dir = in->get_or_open_dir(this);
 	  if (dir->is_auth()) {
 		dout(1) << "FORCING EXPORT" << endl;
@@ -1179,12 +1179,13 @@ public:
 	this->targeti = targeti;
   }
   void finish(int r) {
-	if (r == 1) { // success
+	if (r > 0) { // success
 	  // yay
 	  mds->handle_client_link_finish(req, ref, dn, targeti);
 	} 
 	else if (r == 0) {
 	  // huh?  retry!
+	  assert(0);
 	  mds->dispatch_request(req, ref);	  
 	} else {
 	  // link failed

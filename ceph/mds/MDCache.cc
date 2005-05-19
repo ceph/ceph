@@ -746,6 +746,13 @@ int MDCache::proc_message(Message *m)
 	break;
 	*/
 
+  case MSG_MDS_INODELINK:
+	handle_inode_link((MInodeLink*)m);
+	break;
+  case MSG_MDS_INODELINKACK:
+	handle_inode_link_ack((MInodeLinkAck*)m);
+	break;
+
   case MSG_MDS_DIRUPDATE:
 	handle_dir_update((MDirUpdate*)m);
 	break;
@@ -1464,9 +1471,9 @@ void MDCache::handle_inode_link_ack(MInodeLinkAck *m)
   CInode *in = get_inode(m->get_ino());
   assert(in);
 
-  dout(7) << "handle_inode_link_ack on " << *in << endl;
+  dout(7) << "handle_inode_link_ack success = " << m->is_success() << " on " << *in << endl;
   in->finish_waiting(CINODE_WAIT_LINK,
-					 m->is_success());
+					 m->is_success() ? 1:-1);
 }
 
 

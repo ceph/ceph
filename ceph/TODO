@@ -1,14 +1,17 @@
 notes and todos.
 
 HARD LINKS
-- link
-discover 
-xlock
-if local
-  anchor
-else
-  anchor request to auth
-create remote link, mark dirty
+
+-> discover mechanism
+
+/- link
+ discover 
+ xlock
+ if local
+   anchor
+ else
+   anchor request to auth
+ create remote link, mark dirty
 
 - unlink (primary)
 nlink--

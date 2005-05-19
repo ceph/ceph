@@ -106,8 +106,8 @@ void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace)
   dout(7) << "create " << ino << endl;
   
   // make sure trace is in table
-  for (int i=trace.size()-1; i>=0; i--)
-	if (!add(trace[i]->ino, trace[i]->dirino, trace[i]->ref_dn)) break;
+  for (int i=0; i<trace.size(); i++) 
+	add(trace[i]->ino, trace[i]->dirino, trace[i]->ref_dn);
 
   inc(ino);  // ok!
 }
@@ -225,7 +225,7 @@ void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfinis
   pending_lookup_trace[ino] = &trace;
   pending_lookup_context[ino] = onfinish;
 
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR);
+  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
 }
 
 void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish)
@@ -244,7 +244,7 @@ void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinis
 
   pending_op[ino] = onfinish;
 
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR);
+  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
 }
 
 void AnchorTable::destroy(inodeno_t ino, Context *onfinish)
@@ -262,7 +262,7 @@ void AnchorTable::destroy(inodeno_t ino, Context *onfinish)
 
   pending_op[ino] = onfinish;
 
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR);
+  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
 }
 
 

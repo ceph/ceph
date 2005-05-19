@@ -161,6 +161,7 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
   if (parent) {
 	parent->dir->inode->make_anchor_trace(trace);
 	
+	dout(7) << "make_anchor_trace adding " << ino() << " dirino " << parent->dir->inode->ino() << " dn " << parent->name << endl;
 	trace.push_back( new Anchor(ino(), 
 								parent->dir->inode->ino(),
 								parent->name) );
@@ -393,7 +394,7 @@ void CInode::finish_waiting(int mask, int result)
   
   list<Context*> finished;
   take_waiting(mask, finished);
-  finish_contexts(finished);
+  finish_contexts(finished, result);
 }
 
 

@@ -24,10 +24,11 @@ public:
   }  
 
   void _rope(crope& r) {
-	r.append((char*)this, sizeof(this));
+	r.append((char*)this, sizeof(*this));
   }
   void _unrope(crope& r, int& off) {
-	r.copy(off, sizeof(this), (char*)this);
+	r.copy(off, sizeof(*this), (char*)this);
+	off += sizeof(*this);
   }
 } ;
 
