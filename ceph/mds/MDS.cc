@@ -15,6 +15,7 @@
 #include "MDBalancer.h"
 #include "IdAllocator.h"
 #include "AnchorTable.h"
+#include "OSDMonitor.h"
 
 #include "include/filepath.h"
 
@@ -91,6 +92,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
   anchormgr = new AnchorTable(this);
+  osdmonitor = new OSDMonitor(this);
 
 
   // <HACK set up OSDCluster from g_conf>
@@ -303,6 +305,9 @@ void MDS::dispatch(Message *m)
 	anchormgr->proc_message(m);
 	break;
 	
+  case MDS_PORT_OSDMON:
+	osdmonitor->proc_message(m);
+	break;
 
   case MDS_PORT_CACHE:
 	mdcache->proc_message(m);

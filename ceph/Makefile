@@ -24,7 +24,8 @@ MDS_OBJS= \
 	mds/LogStream.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o\
-	mds/MDCluster.o
+	mds/MDCluster.o\
+	mds/OSDMonitor.o
 
 COMMON_OBJS= \
 	msg/Messenger.o\

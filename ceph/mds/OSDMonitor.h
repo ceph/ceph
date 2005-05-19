@@ -1,10 +1,11 @@
+#ifndef __OSDMONITOR_H
+#define __OSDMONITOR_H
 
 class MDS;
+class Message;
 
 class OSDMonitor {
   MDS *mds;
-
-
 
  public:
   OSDMonitor(MDS *mds) {
@@ -12,6 +13,8 @@ class OSDMonitor {
   }
 
   void proc_message(Message *m);
-  void handle_ping(MPing *m);
+  void handle_ping(class MPing *m);
 
 };
+
+#endif

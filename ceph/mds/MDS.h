@@ -46,6 +46,7 @@ class OSDCluster;
 class Filer;
 
 class AnchorTable;
+class OSDMonitor;
 class MDCluster;
 class CInode;
 class CDir;
@@ -79,6 +80,7 @@ class MDS : public Dispatcher {
  public:
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
+  OSDMonitor   *osdmonitor;
  protected:
 
 
