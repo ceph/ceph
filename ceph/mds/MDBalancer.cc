@@ -77,7 +77,7 @@ void MDBalancer::send_heartbeat()
 {
   if (!mds->mdcache->get_root()) {
 	dout(5) << "no root on send_heartbeat" << endl;
-	mds->open_root(new C_Bal_SendHeartbeat(mds));
+	mds->mdcache->open_root(new C_Bal_SendHeartbeat(mds));
 	return;
   }
 
@@ -105,7 +105,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   
   if (!mds->mdcache->get_root()) {
 	dout(10) << "no root on handle" << endl;
-	mds->open_root(new C_MDS_RetryMessage(mds, m));
+	mds->mdcache->open_root(new C_MDS_RetryMessage(mds, m));
 	return;
   }
   

@@ -109,7 +109,9 @@ class Context;
 
 #define CDIR_PIN_DIRTY     11
 
-#define CDIR_NUM_PINS      12
+#define CDIR_PIN_REQUEST   12
+
+#define CDIR_NUM_PINS      13
 static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "child",
   "opened",
@@ -122,6 +124,7 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "authpin",
   "importing",
   "importingexport",
+  "requestpins",
   "dirty"
 };
 
@@ -210,6 +213,7 @@ class CDir {
   // lock nesting, freeze
   int        auth_pins;
   int        nested_auth_pins;
+  int        request_pins;
 
   // context
   MDS              *mds;
@@ -413,7 +417,14 @@ class CDir {
   bool is_pinned() { return ref > 0; }
   int get_ref() { return ref; }
   set<int>& get_ref_set() { return ref_set; }
-
+  void request_pin_get() {
+	if (request_pins == 0) get(CDIR_PIN_REQUEST);
+	request_pins++;
+  }
+  void request_pin_put() {
+	request_pins--;
+	if (request_pins == 0) put(CDIR_PIN_REQUEST);
+  }
 
   
   // -- sync --

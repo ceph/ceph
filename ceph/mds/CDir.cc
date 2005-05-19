@@ -80,6 +80,7 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
   
   auth_pins = 0;
   nested_auth_pins = 0;
+  request_pins = 0;
   
   dir_rep = CDIR_REP_NONE;
 }
@@ -144,7 +145,8 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino)
   assert(null_items.count(dn->name) == 0);
 
   items[dn->name] = dn;
-  
+  nitems++;
+
   dout(12) << "add_dentry " << *dn << endl;
 
   // pin?

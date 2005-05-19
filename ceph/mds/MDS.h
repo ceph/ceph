@@ -76,9 +76,9 @@ class MDS : public Dispatcher {
   OSDCluster   *osdcluster;
  public:
   Filer        *filer;       // for reading/writing to/from osds
+  AnchorTable  *anchormgr;
  protected:
 
-  AnchorTable  *anchormgr;
 
   // shutdown crap
   bool         shutting_down;
@@ -121,6 +121,7 @@ class MDS : public Dispatcher {
   MDS(MDCluster *mdc, int whoami, Messenger *m);
   ~MDS();
 
+  // who am i etc
   int get_nodeid() { return whoami; }
   MDCluster *get_cluster() { return mdcluster; }
   MDCluster *get_mds_cluster() { return mdcluster; }
@@ -128,6 +129,7 @@ class MDS : public Dispatcher {
 
   mds_load_t get_load();
 
+  // start up, shutdown
   bool is_shutting_down() { return shutting_down; }
   bool is_shut_down(int who=-1) { 
 	if (who<0)
@@ -139,11 +141,9 @@ class MDS : public Dispatcher {
   int shutdown_start();
   int shutdown_final();
 
+  // messages
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
-
-  bool open_root(Context *c);
-  bool open_root_2(int result, Context *c);
 
   // generic request helpers
   void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
@@ -154,20 +154,21 @@ class MDS : public Dispatcher {
 					  LogEvent *event,
 					  LogEvent *event2 = 0);
   
-  
+  // special message types
   void handle_ping(class MPing *m);
-
-  void handle_client_mount(Message *m);
-  void handle_client_unmount(Message *m);
 
   void handle_shutdown_start(Message *m);
   void handle_shutdown_finish(Message *m);
+
+  // clients
+  void handle_client_mount(class MClientMount *m);
+  void handle_client_unmount(Message *m);
 
   void handle_client_request(MClientRequest *m);
   void handle_client_request_2(MClientRequest *req, 
 							   vector<CDentry*>& trace,
 							   int r);
-
+  
   // fs ops
   void handle_client_fstat(MClientRequest *req);
 
@@ -190,6 +191,10 @@ class MDS : public Dispatcher {
   void handle_client_readdir(MClientRequest *req, CInode *ref);
   void handle_client_mknod(MClientRequest *req, CInode *ref);
   void handle_client_link(MClientRequest *req, CInode *ref);
+  void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
+  void handle_client_link_finish(MClientRequest *req, CInode *ref,
+								 CDentry *dn, CInode *targeti);
+
   void handle_client_unlink(MClientRequest *req, CInode *ref);
   void handle_client_rename(MClientRequest *req, CInode *ref);
   void handle_client_rename_2(MClientRequest *req,

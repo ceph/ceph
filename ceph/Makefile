@@ -31,6 +31,7 @@ COMMON_OBJS= \
 	msg/Dispatcher.o\
 	msg/error.o\
 	osd/Filer.o\
+	osd/OSDCluster.o\
 	common/Logger.o\
 	common/clock.o\
 	common/Timer.o\

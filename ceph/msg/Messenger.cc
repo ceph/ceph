@@ -21,6 +21,8 @@ using namespace std;
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
+#include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
@@ -50,6 +52,11 @@ using namespace std;
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MHeartbeat.h"
+
+#include "messages/MAnchorRequest.h"
+#include "messages/MAnchorReply.h"
+#include "messages/MInodeLink.h"
+#include "messages/MInodeLinkAck.h"
 
 #include "messages/MInodeUpdate.h"
 #include "messages/MInodeExpire.h"
@@ -113,6 +120,12 @@ decode_message(char *buffer, int len)
 	break;
 
 	// clients
+  case MSG_CLIENT_MOUNT:
+	m = new MClientMount();
+	break;
+  case MSG_CLIENT_MOUNTACK:
+	m = new MClientMountAck();
+	break;
   case MSG_CLIENT_REQUEST:
 	m = new MClientRequest();
 	break;
@@ -207,6 +220,20 @@ decode_message(char *buffer, int len)
 	m = new MCacheExpire();
 	break;
 
+  case MSG_MDS_ANCHORREQUEST:
+	m = new MAnchorRequest();
+	break;
+  case MSG_MDS_ANCHORREPLY:
+	m = new MAnchorReply();
+	break;
+
+  case MSG_MDS_INODELINK:
+	m = new MInodeLink();
+	break;
+  case MSG_MDS_INODELINKACK:
+	m = new MInodeLinkAck();
+	break;
+
   case MSG_MDS_INODEUPDATE:
 	m = new MInodeUpdate();
 	break;
@@ -229,7 +256,6 @@ decode_message(char *buffer, int len)
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_SHUTDOWN:
-  case MSG_CLIENT_MOUNT:
   case MSG_CLIENT_UNMOUNT:
 	m = new MGenericMessage(type);
 	break;

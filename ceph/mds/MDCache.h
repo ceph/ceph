@@ -68,7 +68,8 @@ typedef const char* pchar;
  */
 typedef struct {
   CInode *ref;                                // reference inode
-  set< CInode* >            request_pins;     // CINODE_PIN_REQUEST's
+  set< CInode* >            request_pins;
+  set< CDir* >              request_dir_pins;
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
   set< CDentry* >           xlocks;           // xlocks (local)
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
@@ -186,6 +187,7 @@ class MDCache {
 					int onfail,
 					Context *onfinish=0);
   void open_remote_dir(CInode *diri, Context *fin);
+  void open_remote_ino(inodeno_t ino, Context *fin);
 
   bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
   void path_unpin(vector<CDentry*>& trace, Message *m);
@@ -200,6 +202,12 @@ class MDCache {
   void request_pin_inode(Message *req, CInode *in);
   void request_pin_dir(Message *req, CDir *dir);
 
+  // anchors
+  void anchor_inode(CInode *in, Context *onfinish);
+  //void unanchor_inode(CInode *in, Context *c);
+
+  void handle_inode_link(class MInodeLink *m);
+  void handle_inode_link_ack(class MInodeLinkAck *m);
 
   // == messages ==
   int proc_message(Message *m);

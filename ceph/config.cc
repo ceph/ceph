@@ -25,7 +25,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  debug: 10,
+  debug: 20,
   
   // --- client ---
   client_cache_size: 400,

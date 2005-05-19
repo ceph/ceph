@@ -7,14 +7,18 @@
 #include <time.h>
 #include <utime.h>
 
+#include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
+#include "messages/MClientFileCaps.h"
 
 #include "messages/MGenericMessage.h"
+
 #include "messages/MOSDRead.h"
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
 #include "messages/MOSDWriteReply.h"
 
-#include "messages/MClientFileCaps.h"
+
 
 #include "include/config.h"
 #undef dout
@@ -31,14 +35,7 @@ Client::Client(MDCluster *mdc, int id, Messenger *m)
 
   mounted = false;
 
-  // <HACK set up OSDCluster from g_conf>
-  osdcluster = new OSDCluster();
-  OSDGroup osdg;
-  osdg.num_osds = g_conf.num_osd;
-  for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
-  osdg.weight = 100;
-  osdcluster->add_group(osdg);
-  // </HACK>
+  osdcluster = new OSDCluster();     // initially blank.. see mount()
 
   // set up messengers
   messenger = m;
@@ -260,9 +257,14 @@ int Client::mount()
   assert(!mounted);  // caller is confused?
 
   dout(1) << "mounting" << endl;
-  Message *req = new MGenericMessage(MSG_CLIENT_MOUNT);
-  Message *reply = messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientMountAck *reply = (MClientMountAck*)messenger->sendrecv(new MClientMount(), 
+																 MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   assert(reply);
+
+  // we got osdcluster!
+  int off = 0;
+  osdcluster->_unrope(reply->get_osd_cluster_state(), off);
+
   dout(1) << "mounted" << endl;
   mounted = true;
 }
@@ -282,8 +284,31 @@ int Client::unmount()
 
 
 // namespace ops
-//?int getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler);
-//int Client::link(const char *existing, const char *new)
+
+int Client::link(const char *existing, const char *newname) 
+{
+  // main path arg is new link name
+  // sarg is target (existing file)
+
+  dout(3) << "link " << existing << " " << newname << endl;
+
+  MClientRequest *req = new MClientRequest(MDS_OP_LINK, whoami);
+  req->set_path(newname);
+  req->set_sarg(existing);
+  
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+  
+  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  int res = reply->get_result();
+  
+  this->insert_trace(reply->get_trace());
+  delete reply;
+  dout(10) << "link result is " << res << endl;
+  return res;
+}
+
 
 int Client::unlink(const char *path)
 {
@@ -820,5 +845,4 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
 // not written yet, but i want to link!
 
-int Client::link(const char *existing, const char *newname) {}
 int Client::statfs(const char *path, struct statfs *stbuf) {}

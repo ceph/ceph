@@ -1,5 +1,35 @@
+notes and todos.
+
+HARD LINKS
+- link
+discover 
+xlock
+if local
+  anchor
+else
+  anchor request to auth
+create remote link, mark dirty
+
+- unlink (primary)
+nlink--
+move inode into inode file
+
+- unlink (remote)
+discover
+if local
+  nlink--; 
+  remove anchor if nlink==1
+else
+  nlinkreq
+remove link
+
+- fix rename
+
+
+
 
 MDS TODO
+- statfs?
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - truncate
@@ -12,13 +42,16 @@ MDS TODO
 - consistency points/snapshots
 
 OSD TODO
+- heartbeat
 - collaborative write replication/commit protocol
 - collections
 - osd failure recovery
 - osd cluster expansion
 
 CLIENT TODO
-- finish cache (remove items...)
+- finish basic metadata cache (remove items...)
+- block i/o on missing caps
+- buffer cache
 - strong consistency
   - get short-term leases from MDS (for stat etc)
 - ditch FUSE for ____
@@ -31,7 +64,7 @@ why qsync could be wrong: varying mds -> client message transit or processing ti
 - client1 writes at byte 100
 - client1 -> mds : qsync reply (size=100)
 - client1 writes at byte 300
-- client1 sends message to client2 (outside channel)
+- client1 -> client2 (outside channel)
 - client2 writes at byte 200
 - client2 -> mds : qsync reply (size=200)
 -> stat results in size 200, even though at no single point in time was the max size 500.
@@ -40,7 +73,11 @@ why qsync could be wrong: varying mds -> client message transit or processing ti
 
 SAGE:
 
-- unmount, distribute osdcluster
+- figure out threading, locking stuff in client
+
+- global sync (to be used by shutdown)
+  - flush all dirty data to disk
+  - flush logs/journals
 
 - scatter/gather parallel sendrecv (for client file i/o)?
   - use Filer, Cond's
@@ -49,8 +86,6 @@ SAGE:
 - sync clients on stat
   - truncate
 
-/- unlink inode should delete object data!
-
 - readdir
  - set up waiters for pending xlocks
 
@@ -58,10 +93,6 @@ fully document export process
  - including the whole warning business.. wtf is that about again?
 
 - string table?
-
-- global sync (to be used by shutdown)
-  - flush all dirty data to disk
-  - flush logs/journals
 
 - hard links
  - fix MExportAck and others to use dir+dentry, not inode

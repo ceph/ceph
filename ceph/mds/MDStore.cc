@@ -356,6 +356,7 @@ void MDStore::do_commit_dir( CDir *dir,
 	if (dn->is_remote()) {
 
 	  inodeno_t ino = dn->get_remote_ino();
+	  dout(14) << " pos " << dirdata.length() << " dn '" << it->first << "' remote ino " << ino << endl;
 
 	  // name, marker, ion
 	  dirdata.append( it->first.c_str(), it->first.length() + 1);
@@ -464,13 +465,11 @@ void MDStore::do_commit_dir_2( int result,
 	  assert(dn->is_dirty() || !dn->is_sync());
 	}
 
-	// inode  FIXME: if primary link!
+	// only do primary...
+	if (!dn->is_primary()) continue;
+	
 	CInode *in = dn->get_inode();
-	if (!in) {
-	  assert(dn->is_dirty() || !dn->is_sync());
-	  continue;
-	}
-			 
+	assert(in);
 	assert(in->is_auth());
 	
 	if (committed_version > in->get_parent_dir_version()) {

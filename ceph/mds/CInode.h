@@ -49,20 +49,10 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_DNDIRTY   7  // dentry is dirty
 
 #define CINODE_PIN_AUTHPIN   8
-
 #define CINODE_PIN_IMPORTING  9   // multipurpose, for importing
-
 #define CINODE_PIN_REQUEST   10  // request is logging, finishing
-
 #define CINODE_PIN_RENAMESRC 11  // pinned on dest for foreign rename
-
-//#define CINODE_PIN_SYNCBYME     70000
-//#define CINODE_PIN_SYNCBYAUTH   70001
-//#define CINODE_PIN_PRESYNC      10   // waiter
-//#define CINODE_PIN_WAITONUNSYNC 11   // waiter
-
-//#define CINODE_PIN_PRELOCK      12
-//#define CINODE_PIN_WAITONUNLOCK 13
+#define CINODE_PIN_ANCHORING 12
 
 #define CINODE_PIN_DENTRYLOCK   14
 
@@ -74,15 +64,15 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "dirty",
   "proxy",
   "waiter",
-  "openrd",
-  "openwr",
+  "open",
+  "opentok",
   "dndirty",
   "authpin",
   "importing",
-  "presync",
-  "waitonunsync",
-  "prelock",
-  "waitonunlock",
+  "request",
+  "renamesrc",
+  "archoring",
+  "--",
   "dentrylock"
 };
 
@@ -90,55 +80,25 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 
 
 
-// sync => coherent soft metadata (size, mtime, etc.)
-// lock => coherent hard metadata (owner, mode, etc. affecting namespace)
-//#define CINODE_DIST_PRESYNC         1   // mtime, size, etc.
-//#define CINODE_DIST_SYNCBYME        2
-//#define CINODE_DIST_SYNCBYAUTH      4
-//#define CINODE_DIST_WAITONUNSYNC    8
-
-#define CINODE_DIST_SOFTASYNC      16  // replica can soft write w/o sync
-
-//#define CINODE_DIST_PRELOCK        64   // file mode, owner, etc.
-//#define CINODE_DIST_LOCKBYME      128 // i am auth
-//#define CINODE_DIST_LOCKBYAUTH    256 // i am not auth
-//#define CINODE_DIST_WAITONUNLOCK  512
-
 
 // wait reasons
-//#define CINODE_WAIT_SYNC           128
-    // waiters: read_soft_start, write_soft_start
-    // trigger: handle_inode_sync_ack
-//#define CINODE_WAIT_UNSYNC         256
-    // waiters: read_soft_start, write_soft_start
-    // trigger: handle_inode_sync_release
-//#define CINODE_WAIT_LOCK           512
-    // waiters: write_hard_start
-    // trigger: handle_inode_lock_ack
-    // SPECIALNESS: lock_active_count indicates waiter, active lock count.
-//#define CINODE_WAIT_UNLOCK        1024
-    // waiters: read_hard_try
-    // trigger: handle_inode_lock_release
-
-
 #define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
     // waiters: write_hard_start, read_soft_start, write_soft_start  (mdcache)
     //          handle_client_chmod, handle_client_touch             (mds)
     // trigger: (see CDIR_WAIT_UNFREEZE)
-#define CINODE_WAIT_GETREPLICA    2048  // update/replicate individual inode
+#define CINODE_WAIT_GETREPLICA    (1<<11)  // update/replicate individual inode
     // waiters: import_dentry_inode
     // trigger: handle_inode_replicate_ack
-#define CINODE_WAIT_UNLINK        4096
+#define CINODE_WAIT_UNLINK        (1<<12)
     // waiters: inode_unlink 
     // triggers: inode_unlink_finish
 
-#define CINODE_WAIT_DIR           8192
+#define CINODE_WAIT_DIR           (1<<13)
     // waiters: traverse_path
     // triggers: handle_disocver_reply
 
-//#define CINODE_WAIT_EXPORTWARNING  16384
-    // waiters: handle_export_dir_warning
-    // triggers: handle_export_dir_notify
+#define CINODE_WAIT_LINK         (1<<15)  // as in remotely nlink++
+#define CINODE_WAIT_ANCHORED     (1<<16)
 
 #define CINODE_WAIT_HARDR        (1<<17)  // 131072
 #define CINODE_WAIT_HARDW        (1<<18)  // 262...
@@ -175,6 +135,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_STATE_UNLINKING   (1<<5)
 #define CINODE_STATE_PROXY       (1<<6)   // can't expire yet
 #define CINODE_STATE_EXPORTING   (1<<7)   // on nonauth bystander.
+
+#define CINODE_STATE_ANCHORING   (1<<8)
 
 //#define CINODE_STATE_RENAMING    (1<<8)  // moving me
 //#define CINODE_STATE_RENAMINGTO  (1<<9)  // rename target (will be unlinked)
@@ -267,6 +229,8 @@ class CInode : LRUObject {
   bool is_symlink() { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) ? true:false; }
   bool is_dir()     { return ((inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR)     ? true:false; }
 
+  bool is_anchored() { return inode.anchored; }
+
   bool is_root() { return state & CINODE_STATE_ROOT; }
   bool is_proxy() { return state & CINODE_STATE_PROXY; }
 
@@ -298,6 +262,7 @@ class CInode : LRUObject {
 
   // -- misc -- 
   void make_path(string& s);
+  void make_anchor_trace(vector<class Anchor*>& trace);
   void hit(int type);                // popularity
 
 

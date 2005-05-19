@@ -4,7 +4,7 @@
 #include "CDentry.h"
 
 #include "MDS.h"
-
+#include "AnchorTable.h"
 
 #include <string>
 
@@ -153,6 +153,17 @@ void CInode::make_path(string& s)
   } 
   else {
 	s = "(dangling)";  // dangling
+  }
+}
+
+void CInode::make_anchor_trace(vector<Anchor*>& trace)
+{
+  if (parent) {
+	parent->dir->inode->make_anchor_trace(trace);
+	
+	trace.push_back( new Anchor(ino(), 
+								parent->dir->inode->ino(),
+								parent->name) );
   }
 }
 

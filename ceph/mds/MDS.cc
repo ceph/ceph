@@ -29,12 +29,15 @@
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWriteReply.h"
 
+#include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
 #include "messages/MLock.h"
 #include "messages/MInodeWriterClosed.h"
 
+#include "messages/MInodeLink.h"
 
 #include "events/EInodeUpdate.h"
 
@@ -87,6 +90,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdstore = new MDStore(this);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
+  anchormgr = new AnchorTable(this);
 
 
   // <HACK set up OSDCluster from g_conf>
@@ -247,7 +251,7 @@ void MDS::proc_message(Message *m)
 	break;
 
   case MSG_CLIENT_MOUNT:
-	handle_client_mount(m);
+	handle_client_mount((MClientMount*)m);
 	break;
   case MSG_CLIENT_UNMOUNT:
 	handle_client_unmount(m);
@@ -368,7 +372,7 @@ void MDS::dispatch(Message *m)
 }
 
 
-void MDS::handle_client_mount(Message *m)
+void MDS::handle_client_mount(MClientMount *m)
 {
   int n = MSG_ADDR_NUM(m->get_source());
   dout(3) << "mount by client" << n << endl;
@@ -376,8 +380,10 @@ void MDS::handle_client_mount(Message *m)
 
   assert(whoami == 0);  // mds0 mounts/unmounts
 
-  // ack by sending back to client
-  messenger->send_message(m, m->get_source(), m->get_source_port());
+  // ack
+  messenger->send_message(new MClientMountAck(m, osdcluster), 
+						  m->get_source(), m->get_source_port());
+  delete m;
 }
 
 void MDS::handle_client_unmount(Message *m)
@@ -546,7 +552,7 @@ void MDS::handle_client_request(MClientRequest *req)
   
   if (!mdcache->get_root()) {
 	dout(5) << "need to open root" << endl;
-	open_root(new C_MDS_RetryMessage(this, req));
+	mdcache->open_root(new C_MDS_RetryMessage(this, req));
 	return;
   }
 
@@ -594,6 +600,7 @@ void MDS::handle_client_request(MClientRequest *req)
 	case MDS_OP_MKDIR:
 	case MDS_OP_SYMLINK:
 	case MDS_OP_TRUNCATE:
+	case MDS_OP_LINK:
 	case MDS_OP_UNLINK:   // also wrt parent dir, NOT the unlinked inode!!
 	case MDS_OP_RMDIR:
 	case MDS_OP_RENAME:
@@ -720,11 +727,9 @@ void MDS::dispatch_request(Message *m, CInode *ref)
   case MDS_OP_MKNOD:
 	handle_client_mknod(req, ref);
 	break;
-	/*
   case MDS_OP_LINK:
 	handle_client_link(req, ref);
 	break;
-	*/
   case MDS_OP_UNLINK:
 	handle_client_unlink(req, ref);
 	break;
@@ -1076,6 +1081,210 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
 
 
 // LINK
+
+class C_MDS_LinkTraverse : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CInode *ref;
+public:
+  vector<CDentry*> trace;
+  C_MDS_LinkTraverse(MDS *mds, MClientRequest *req, CInode *ref) {
+	this->mds = mds;
+	this->req = req;
+	this->ref = ref;
+  }
+  void finish(int r) {
+	mds->handle_client_link_2(r, req, ref, trace);
+  }
+};
+
+void MDS::handle_client_link(MClientRequest *req, CInode *ref)
+{
+  // figure out name
+  string dname = req->get_filepath().last_bit();
+  dout(7) << "dname is " << dname << endl;
+  
+  // make sure parent is a dir?
+  if (!ref->is_dir()) {
+	dout(7) << "not a dir " << *ref << endl;
+	reply_request(req, -EINVAL);
+	return;
+  }
+
+  // am i not open, not auth?
+  if (!ref->dir && !ref->is_auth()) {
+	int dirauth = ref->authority();
+	dout(7) << "don't know dir auth, not open, srcdir auth is probably " << dirauth << endl;
+	mdcache->request_forward(req, dirauth);
+	return;
+  }
+  
+  CDir *dir = ref->get_or_open_dir(this);
+  dout(7) << "handle_client_link dir is " << *dir << endl;
+  
+  // make sure it's my dentry
+  int dauth = dir->dentry_authority(dname);  
+  if (dauth != get_nodeid()) {
+	// fw
+	dout(7) << "link on " << req->get_path() << ", dn " << dname << " in " << *dir << " not mine, fw to " << dauth << endl;
+	mdcache->request_forward(req, dauth);
+	return;
+  }
+  // ok, done passing buck.
+  
+
+  // exists?
+  CDentry *dn = dir->lookup(dname);
+  if (dn && (!dn->is_null() || dn->is_xlockedbyother(req))) {
+	dout(7) << "handle_client_link dn exists " << *dn << endl;
+	reply_request(req, -EEXIST);
+	return;
+  }
+
+  // keep src dir in memory
+  mdcache->request_pin_dir(req, dir);
+
+  // discover link target
+  filepath target = req->get_sarg();
+
+  dout(7) << "handle_client_link discovering target " << target << endl;
+
+  C_MDS_LinkTraverse *onfinish = new C_MDS_LinkTraverse(this, req, ref);
+  Context *ondelay = new C_MDS_RetryRequest(this, req, ref);
+  
+  mdcache->path_traverse(target, onfinish->trace, false,
+						 req, ondelay,
+						 MDS_TRAVERSE_DISCOVER,  //XLOCK, 
+						 onfinish);
+}
+
+
+class C_MDS_RemoteLink : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CInode *ref;
+  CDentry *dn;
+  CInode *targeti;
+public:
+  C_MDS_RemoteLink(MDS *mds, MClientRequest *req, CInode *ref, CDentry *dn, CInode *targeti) {
+	this->mds = mds;
+	this->req = req;
+	this->ref = ref;
+	this->dn = dn;
+	this->targeti = targeti;
+  }
+  void finish(int r) {
+	if (r == 1) { // success
+	  // yay
+	  mds->handle_client_link_finish(req, ref, dn, targeti);
+	} 
+	else if (r == 0) {
+	  // huh?  retry!
+	  mds->dispatch_request(req, ref);	  
+	} else {
+	  // link failed
+	  mds->reply_request(req, r);
+	}
+  }
+};
+
+void MDS::handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace)
+{
+  // target dne?
+  if (r < 0) {
+	dout(7) << "target " << req->get_sarg() << " dne" << endl;
+	reply_request(req, r);
+	return;
+  }
+  assert(r == 0);
+
+  CInode *targeti = trace[trace.size()-1]->inode;
+  assert(targeti);
+
+  dout(7) << "target is " << *targeti << endl;
+  dout(7) << "dir is " << *ref << endl;
+
+
+  // keep target inode in memory
+  mdcache->request_pin_inode(req, targeti);
+
+
+  // xlock the dentry
+  CDir *dir = ref->dir;
+  assert(dir);
+  
+  string dname = req->get_filepath().last_bit();
+  int dauth = dir->dentry_authority(dname);
+  if (get_nodeid() != dauth) {
+	// ugh, exported out from under us
+	dout(7) << "ugh, forwarded out from under us, dentry auth is " << dauth << endl;
+	mdcache->request_forward(req, dauth);
+	return;
+  }
+  
+  CDentry *dn = dir->lookup(dname);
+  if (dn && (!dn->is_null() || dn->is_xlockedbyother(req))) {
+	dout(7) << "handle_client_link dn exists " << *dn << endl;
+	reply_request(req, -EEXIST);
+	return;
+  }
+
+  if (!dn) dn = dir->add_dentry(dname);
+  
+  if (!dn->is_xlockedbyme(req)) {
+	if (!mdcache->dentry_xlock_start(dn, req, ref)) {
+	  if (dn->is_clean() && dn->is_null() && dn->is_sync()) dir->remove_dentry(dn);
+	  return;
+	}
+  }
+
+  
+  // ok xlocked!
+  if (targeti->is_auth()) {
+	// mine
+	if (targeti->is_anchored()) {
+	  dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << endl;
+	} else {
+	  assert(targeti->inode.nlink == 1);
+	  dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << endl;
+	  
+	  mdcache->anchor_inode(targeti,
+							new C_MDS_RetryRequest(this, req, ref));
+	  return;
+	}
+
+	// ok, inc link!
+	targeti->inode.nlink++;
+	dout(7) << "nlink++, now " << targeti->inode.nlink << " on " << *targeti << endl;
+	targeti->mark_dirty();
+	
+  } else {
+	// remote: send nlink++ request, wait
+	dout(7) << "target is remote, sending InodeLink" << endl;
+	messenger->send_message(new MInodeLink(targeti->ino(), whoami),
+							MSG_ADDR_MDS(targeti->authority()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	
+	// wait
+	targeti->add_waiter(CINODE_WAIT_LINK,
+						new C_MDS_RemoteLink(this, req, ref, dn, targeti));
+	return;
+  }
+
+  handle_client_link_finish(req, ref, dn, targeti);
+}
+
+void MDS::handle_client_link_finish(MClientRequest *req, CInode *ref,
+									CDentry *dn, CInode *targeti)
+{
+  // create remote link
+  dn->set_remote_ino( targeti->ino() );
+  dn->mark_dirty();
+  dn->link_remote( targeti );   // since we have it
+  
+  // done!
+  commit_request(req, new MClientReply(req, 0), ref,
+				 0);          // FIXME i should log something
+}
 
 
 // UNLINK
@@ -1995,10 +2204,3 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
 
 
 
-// ---------------------------
-// open_root
-
-bool MDS::open_root(Context *c)
-{
-  mdcache->open_root(c);
-}

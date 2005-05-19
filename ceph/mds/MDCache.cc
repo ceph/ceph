@@ -7,6 +7,7 @@
 #include "MDCluster.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
+#include "AnchorTable.h"
 
 #include "include/filepath.h"
 
@@ -39,6 +40,9 @@
 //#include "messages/MInodeUpdate.h"
 #include "messages/MDirUpdate.h"
 #include "messages/MCacheExpire.h"
+
+#include "messages/MInodeLink.h"
+#include "messages/MInodeLinkAck.h"
 
 #include "messages/MLock.h"
 #include "messages/MDentryUnlink.h"
@@ -1256,6 +1260,14 @@ void MDCache::request_pin_inode(Message *req, CInode *in)
   }
 }
 
+void MDCache::request_pin_dir(Message *req, CDir *dir) 
+{
+  if (active_requests[req].request_dir_pins.count(dir) == 0) {
+	dir->request_pin_get();
+	active_requests[req].request_dir_pins.insert(dir);
+  }
+}
+
 
 void MDCache::request_cleanup(Message *req)
 {
@@ -1319,6 +1331,11 @@ void MDCache::request_cleanup(Message *req)
 	   it++) {
 	(*it)->request_pin_put();
   }
+  for (set<CDir*>::iterator it = active_requests[req].request_dir_pins.begin();
+	   it != active_requests[req].request_dir_pins.end();
+	   it++) {
+	(*it)->request_pin_put();
+  }
 
   // remove from map
   active_requests.erase(req);
@@ -1347,8 +1364,110 @@ void MDCache::request_forward(Message *req, int who, int port)
 
 
 
-// rename crap
+// ANCHORS
 
+class C_MDC_AnchorInode : public Context {
+  CInode *in;
+  
+public:
+  C_MDC_AnchorInode(CInode *in) {
+	this->in = in;
+  }
+  void finish(int r) {
+	if (r == 0) {
+	  assert(in->inode.anchored == false);
+	  in->inode.anchored = true;
+
+	  in->state_clear(CINODE_STATE_ANCHORING);
+	  in->put(CINODE_PIN_ANCHORING);
+	  
+	  in->mark_dirty();
+	}
+
+	// trigger
+	in->finish_waiting(CINODE_WAIT_ANCHORED, r);
+  }
+};
+
+void MDCache::anchor_inode(CInode *in, Context *onfinish)
+{
+  assert(in->is_auth());
+
+  // already anchoring?
+  if (in->state_test(CINODE_STATE_ANCHORING)) {
+	dout(7) << "anchor_inode already anchoring " << *in << endl;
+
+	// wait
+	in->add_waiter(CINODE_WAIT_ANCHORED,
+				   onfinish);
+
+  } else {
+	dout(7) << "anchor_inode anchoring " << *in << endl;
+
+	// auth: do it
+	in->state_set(CINODE_STATE_ANCHORING);
+	in->get(CINODE_PIN_ANCHORING);
+	
+	// wait
+	in->add_waiter(CINODE_WAIT_ANCHORED,
+				   onfinish);
+	
+	// make trace
+	vector<Anchor*> trace;
+	in->make_anchor_trace(trace);
+	
+	// do it
+	mds->anchormgr->create(in->ino(), trace, 
+						   new C_MDC_AnchorInode( in ));
+  }
+}
+
+
+void MDCache::handle_inode_link(MInodeLink *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  assert(in);
+
+  if (!in->is_auth()) {
+	assert(in->is_proxy());
+	dout(7) << "handle_inode_link not auth for " << *in << ", fw to auth" << endl;
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(in->authority()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	return;
+  }
+
+  dout(7) << "handle_inode_link on " << *in << endl;
+
+  if (!in->is_anchored()) {
+	assert(in->inode.nlink == 1);
+	dout(7) << "needs anchor, nlink=" << in->inode.nlink << ", creating anchor" << endl;
+	
+	anchor_inode(in,
+				 new C_MDS_RetryMessage(mds, m));
+	return;
+  }
+
+  in->inode.nlink++;
+  in->mark_dirty();
+
+  // reply
+  dout(7) << " nlink++, now " << in->inode.nlink++ << endl;
+
+  mds->messenger->send_message(new MInodeLinkAck(m->get_ino(), true),
+							   MSG_ADDR_MDS(m->get_from()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  delete m;
+}
+
+
+void MDCache::handle_inode_link_ack(MInodeLinkAck *m) 
+{
+  CInode *in = get_inode(m->get_ino());
+  assert(in);
+
+  dout(7) << "handle_inode_link_ack on " << *in << endl;
+  in->finish_waiting(CINODE_WAIT_LINK,
+					 m->is_success());
+}
 
 
 
