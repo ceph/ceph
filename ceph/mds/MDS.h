@@ -76,8 +76,8 @@ class MDS : public Dispatcher {
   int          whoami;
 
   MDCluster    *mdcluster;
-  OSDCluster   *osdcluster;
  public:
+  OSDCluster   *osdcluster;
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
   OSDMonitor   *osdmonitor;

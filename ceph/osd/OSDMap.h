@@ -82,6 +82,9 @@ class OSDCluster {
 	  n += it->num_osds;
 	return n;
   }
+  void get_all_osds(set<int>& ls) {
+	// blah
+  }
 
   int get_num_groups() { return osd_groups.size(); }
   OSDGroup& get_group(int i) { return osd_groups[i]; }

@@ -295,6 +295,7 @@ void MDS::proc_message(Message *m)
 
 void MDS::dispatch(Message *m)
 {
+
   switch (m->get_dest_port()) {
 	
   case MDS_PORT_STORE:
@@ -333,6 +334,12 @@ void MDS::dispatch(Message *m)
 	dout(1) << "MDS dispatch unknown message port" << m->get_dest_port() << endl;
 	assert(0);
   }
+
+
+  // HACK FOR NOW
+  static bool did_heartbeat_hack = false;
+  if (!did_heartbeat_hack) osdmonitor->initiate_heartbeat();
+	
 
   // finish any triggered contexts
   if (finished_queue.size()) {

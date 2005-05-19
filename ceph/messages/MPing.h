@@ -4,9 +4,11 @@
 
 #include "msg/Message.h"
 
+
 class MPing : public Message {
  public:
   int ttl;
+  int osd_status;  
   MPing(int n) : Message(MSG_PING) {
 	ttl = n;
   }

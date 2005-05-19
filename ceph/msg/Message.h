@@ -12,6 +12,7 @@
 #define MSG_OSD_WRITEREPLY   13
 #define MSG_OSD_OP           14    // delete, etc.
 #define MSG_OSD_OPREPLY      15    // delete, etc.
+#define MSG_OSD_PING         16
 
 #define MSG_CLIENT_REQUEST         20
 #define MSG_CLIENT_REPLY           21

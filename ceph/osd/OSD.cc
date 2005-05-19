@@ -6,6 +6,7 @@
 #include "msg/Messenger.h"
 #include "msg/Message.h"
 
+#include "messages/MPing.h"
 #include "messages/MOSDRead.h"
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
@@ -65,6 +66,10 @@ void OSD::dispatch(Message *m)
   case MSG_SHUTDOWN:
 	shutdown();
 	break;
+
+  case MSG_PING:
+	handle_ping((MPing*)m);
+	break;
 	
   case MSG_OSD_READ:
 	read((MOSDRead*)m);
@@ -80,6 +85,21 @@ void OSD::dispatch(Message *m)
 
   default:
 	dout(1) << " got unknown message " << m->get_type() << endl;
+  }
+
+  delete m;
+}
+
+
+void OSD::handle_ping(MPing *m)
+{
+  // play dead?
+  if (whoami == 3) {
+	dout(7) << "got ping, replying" << endl;
+	messenger->send_message(new MPing(0),
+							m->get_source(), m->get_source_port(), 0);
+  } else {
+	dout(7) << "playing dead" << endl;
   }
 
   delete m;

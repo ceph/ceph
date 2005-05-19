@@ -14,6 +14,8 @@ using namespace std;
 
 
 #include "messages/MPing.h"
+
+#include "messages/MOSDPing.h"
 #include "messages/MOSDRead.h"
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
@@ -96,6 +98,9 @@ decode_message(char *buffer, int len)
 	m = new MPing();
 	break;
 
+  case MSG_OSD_PING:
+	m = new MOSDPing();
+	break;
   case MSG_OSD_READ:
 	m = new MOSDRead();
 	break;
