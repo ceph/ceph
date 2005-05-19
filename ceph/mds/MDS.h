@@ -31,6 +31,8 @@ typedef __uint64_t object_t;
 
 #define MDS_PORT_ANCHORMGR 200
 
+#define MDS_PORT_OSDMON    300
+
 
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
