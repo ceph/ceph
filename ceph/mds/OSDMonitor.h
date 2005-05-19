@@ -1,6 +1,8 @@
 #ifndef __OSDMONITOR_H
 #define __OSDMONITOR_H
 
+#include <time.h>
+
 #include <map>
 using namespace std;
 
