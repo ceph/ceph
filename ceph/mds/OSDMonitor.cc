@@ -2,6 +2,7 @@
 #include "OSDMonitor.h"
 
 #include "msg/Message.h"
+
 #include "messages/MPing.h"
 
 #include "common/Timer.h"
@@ -17,13 +18,21 @@ mds->messenger->send_message(messageptr,
 timer example:
 
 class C_Test : public Context {
+  OSDMonitor *om;
 public:
+  C_Test(OSDMonitor *om) {
+     this->om = om;
+  }
   void finish(int r) {
 	cout << "C_Test->finish(" << r << ")" << endl;
+    om->check_for_ping_timeouts_or_something();
   }
 };
 
 g_timer.add_event_after(10, new C_Test);
+
+
+to tell which mds we are, mds->get_nodeid()  (out of mds->get_cluster()->get_num_mds())
 
 */
 
