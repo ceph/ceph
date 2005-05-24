@@ -187,7 +187,10 @@ class MDCache {
 					int onfail,
 					Context *onfinish=0);
   void open_remote_dir(CInode *diri, Context *fin);
-  void open_remote_ino(inodeno_t ino, Context *fin);
+  void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
+  void open_remote_ino_2(inodeno_t ino, Message *req,
+						 vector<Anchor*>& anchortrace,
+						 Context *onfinish);
 
   bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
   void path_unpin(vector<CDentry*>& trace, Message *m);

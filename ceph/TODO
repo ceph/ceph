@@ -2,7 +2,13 @@ notes and todos.
 
 HARD LINKS
 
--> discover mechanism
+- discover_ino
+ - called by path_traverse 
+- clean up inode file concept, #define's, etc.
+- unlink
+  - migrate to inode file
+- reclaim from inode file on discover...
+
 
 /- link
  discover 

@@ -39,7 +39,7 @@ void CDentry::mark_dirty()
   dir->mark_dirty();
 
   // pin inode?
-  if (is_primary() && !dirty) inode->get(CINODE_PIN_DNDIRTY);
+  if (is_primary() && !dirty && inode) inode->get(CINODE_PIN_DNDIRTY);
 	
   // i now live in that (potentially newly dirty) version
   parent_dir_version = dir->get_version();
@@ -49,7 +49,7 @@ void CDentry::mark_dirty()
 void CDentry::mark_clean() {
   dout(10) << " mark_clean " << *this << endl;
 
-  if (is_primary() && dirty) inode->put(CINODE_PIN_DNDIRTY);
+  if (is_primary() && dirty && inode) inode->put(CINODE_PIN_DNDIRTY);
   dirty = false;
 }	
 

@@ -116,7 +116,7 @@ int fakemessenger_do_loop_2()
 	map<int, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
 
-	  //dout(18) << "messenger " << it->second << " has " << it->second->num_incoming() << " queued" << endl;
+	  dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has " << it->second->num_incoming() << " queued" << endl;
 
 	  Message *m = it->second->get_message();
 	  if (m) {

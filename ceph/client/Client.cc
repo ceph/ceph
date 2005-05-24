@@ -252,12 +252,14 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
 
 
-int Client::mount()
+int Client::mount(bool mkfs)
 {
   assert(!mounted);  // caller is confused?
 
   dout(1) << "mounting" << endl;
-  MClientMountAck *reply = (MClientMountAck*)messenger->sendrecv(new MClientMount(), 
+  MClientMount *m = new MClientMount();
+  if (mkfs) m->set_mkfs();
+  MClientMountAck *reply = (MClientMountAck*)messenger->sendrecv(m,
 																 MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   assert(reply);
 

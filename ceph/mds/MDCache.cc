@@ -876,28 +876,6 @@ class C_MDC_TraverseDiscover : public Context {
   }
 };
 
-void MDCache::open_remote_dir(CInode *diri,
-							  Context *fin) 
-{
-  dout(10) << "open_remote_dir on " << *diri << endl;
-  
-  assert(diri->is_dir());
-  assert(!diri->dir_is_auth());
-  assert(!diri->is_auth());
-  assert(diri->dir == 0);
-
-  filepath want;  // no dentries, i just want the dir open
-  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
-											 diri->ino(),
-											 want,
-											 true),  // need the dir open
-							   MSG_ADDR_MDS(diri->authority()), MDS_PORT_CACHE,
-							   MDS_PORT_CACHE);
-
-  diri->add_waiter(CINODE_WAIT_DIR, fin);
-}
-
-
 int MDCache::path_traverse(filepath& origpath, 
 						   vector<CDentry*>& trace, 
 						   bool follow_trailing_symlink,
@@ -996,19 +974,21 @@ int MDCache::path_traverse(filepath& origpath,
 	  continue;
 	}
 
+
 	// dentry
 	CDentry *dn = cur->dir->lookup(path[depth]);
 
-	// xlocked by me?
-	if (dn && !dn->inode && dn->is_xlockedbyme(req) &&
+	// null and last_bit and xlocked by me?
+	if (dn && dn->is_null() && 
+		dn->is_xlockedbyme(req) &&
 		depth == path.depth()-1) {
 	  dout(10) << "traverse: hit (my) xlocked dentry at tail of traverse, succeeding" << endl;
 	  trace.push_back(dn);
 	  break; // done!
 	}
 
-	if (dn && dn->inode) {
-	  // have it.  locked?
+	if (dn && !dn->is_null()) {
+	  // dentry exists.  xlocked?
 	  if (!noperm && dn->is_xlockedbyother(req)) {
 		dout(10) << "traverse: xlocked dentry at " << *dn << endl;
 		cur->dir->add_waiter(CDIR_WAIT_DNREAD,
@@ -1018,6 +998,23 @@ int MDCache::path_traverse(filepath& origpath,
 		return 1;
 	  }
 
+	  // do we have inode?
+	  if (!dn->inode) {
+		assert(dn->is_remote());
+		// do i have it?
+		CInode *in = get_inode(dn->get_remote_ino());
+		if (in) {
+		  dout(7) << "linking in remote in " << *in << endl;
+		  dn->link_remote(in);
+		} else {
+		  dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << endl;
+		  open_remote_ino(dn->get_remote_ino(), req,
+						  ondelay);
+		  return 1;
+		}		
+	  }
+
+	  // symlink?
 	  if (dn->inode->is_symlink() &&
 		  (follow_trailing_symlink || depth < path.depth()-1)) {
 		// symlink, resolve!
@@ -1061,7 +1058,8 @@ int MDCache::path_traverse(filepath& origpath,
 	  }
 	}
 	
-	// don't have it.
+	// MISS.  don't have it.
+
 	int dauth = cur->dir->dentry_authority( path[depth] );
 	dout(12) << "traverse: miss on dentry " << path[depth] << " dauth " << dauth << " in " << *cur->dir << endl;
 	
@@ -1163,6 +1161,93 @@ int MDCache::path_traverse(filepath& origpath,
 }
 
 
+
+void MDCache::open_remote_dir(CInode *diri,
+							  Context *fin) 
+{
+  dout(10) << "open_remote_dir on " << *diri << endl;
+  
+  assert(diri->is_dir());
+  assert(!diri->dir_is_auth());
+  assert(!diri->is_auth());
+  assert(diri->dir == 0);
+
+  filepath want;  // no dentries, i just want the dir open
+  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
+											 diri->ino(),
+											 want,
+											 true),  // need the dir open
+							   MSG_ADDR_MDS(diri->authority()), MDS_PORT_CACHE,
+							   MDS_PORT_CACHE);
+
+  diri->add_waiter(CINODE_WAIT_DIR, fin);
+}
+
+
+
+class C_MDC_OpenRemoteInoLookup : public Context {
+  MDCache *mdc;
+  inodeno_t ino;
+  Message *req;
+  Context *onfinish;
+public:
+  vector<Anchor*> anchortrace;
+  C_MDC_OpenRemoteInoLookup(MDCache *mdc, inodeno_t ino, Message *req, Context *onfinish) {
+	this->mdc = mdc;
+	this->ino = ino;
+	this->req = req;
+	this->onfinish = onfinish;
+  }
+  void finish(int r) {
+	assert(r == 0);
+	if (r == 0)
+	  mdc->open_remote_ino_2(ino, req, anchortrace, onfinish);
+	else {
+	  onfinish->finish(r);
+	  delete onfinish;
+	}
+  }
+};
+
+void MDCache::open_remote_ino(inodeno_t ino,
+							  Message *req,
+							  Context *onfinish)
+{
+  dout(7) << "open_remote_ino on " << ino << endl;
+  
+  C_MDC_OpenRemoteInoLookup *c = new C_MDC_OpenRemoteInoLookup(this, ino, req, onfinish);
+  mds->anchormgr->lookup(ino, c->anchortrace, c);
+}
+
+void MDCache::open_remote_ino_2(inodeno_t ino,
+								Message *req,
+								vector<Anchor*>& anchortrace,
+								Context *onfinish)
+{
+  dout(7) << "open_remote_ino_2 on " << ino << ", trace depth is " << anchortrace.size() << endl;
+  
+  // construct path
+  filepath path;
+  for (int i=0; i<anchortrace.size(); i++) 
+	path.add_dentry(anchortrace[i]->ref_dn);
+
+  dout(7) << " path is " << path << endl;
+
+  vector<CDentry*> trace;
+  int r = path_traverse(path, trace, false,
+						req,
+						onfinish,  // delay actually
+						MDS_TRAVERSE_DISCOVER);
+  if (r > 0) return;
+  
+  onfinish->finish(r);
+  delete onfinish;
+}
+
+
+
+
+// path pins
 
 bool MDCache::path_pin(vector<CDentry*>& trace,
 					   Message *m,

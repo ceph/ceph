@@ -338,7 +338,12 @@ void MDS::dispatch(Message *m)
 
   // HACK FOR NOW
   static bool did_heartbeat_hack = false;
-  if (!did_heartbeat_hack) osdmonitor->initiate_heartbeat();
+  if (!shutting_down && !shut_down &&
+	  //false && 
+	  !did_heartbeat_hack) {
+	osdmonitor->initiate_heartbeat();
+	did_heartbeat_hack = true;
+  }
 	
 
   // finish any triggered contexts
@@ -391,6 +396,24 @@ void MDS::handle_client_mount(MClientMount *m)
   mounted_clients.insert(n);
 
   assert(whoami == 0);  // mds0 mounts/unmounts
+
+  // mkfs?  (sorta hack!)
+  if (m->get_mkfs()) {
+	dout(3) << "MKFS flag is set" << endl;
+	if (mdcache->get_root()) {
+	  dout(3) << "   TOO BAD, root inode is already open" << endl;
+	} else {
+	  dout(3) << "   root inode isn't open yet, inventing a fresh filesystem" << endl;
+	  
+	  mdcache->open_root(0);
+
+	  // force empty root dir
+	  CDir *dir = mdcache->get_root()->dir;
+	  dir->mark_complete();
+	  dir->mark_dirty();
+	}
+  }
+
 
   // ack
   messenger->send_message(new MClientMountAck(m, osdcluster), 

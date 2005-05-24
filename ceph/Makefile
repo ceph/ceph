@@ -84,6 +84,10 @@ mds/mds.o: ${MDS_OBJS}
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@
 
+count:
+	cat *.cc */*.cc */*.h */*/*.h | wc -l
+	cat *.cc */*.cc */*.h */*/*.h | grep -c \;
+
 .depend:
 	touch .depend
 

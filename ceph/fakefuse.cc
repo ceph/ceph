@@ -49,9 +49,17 @@ int main(int argc, char **argv) {
   // start messenger thread
   fakemessenger_startthread();
 
-  g_timer.add_event_after(5.0, new C_Test2);
-  g_timer.add_event_after(10.0, new C_Test);
+  //g_timer.add_event_after(5.0, new C_Test2);
+  //g_timer.add_event_after(10.0, new C_Test);
 
+  bool mkfs = false;
+  for (int i=1; i<argc; i++)
+	if (strcmp(argv[i], "--mkfs") == 0) {
+	  mkfs = true;
+	  argv[i] = 0;
+	  argc--;
+	  break;
+	}
 
   // create mds
   MDS *mds[NUMMDS];
@@ -82,7 +90,7 @@ int main(int argc, char **argv) {
 	// start up fuse
 	// use my argc, argv (make sure you pass a mount point!)
 	cout << "starting fuse on pid " << getpid() << endl;
-	client[i]->mount();
+	client[i]->mount(mkfs);
 	ceph_fuse_main(client[i], argc, argv);
 	client[i]->unmount();
 	cout << "fuse finished on pid " << getpid() << endl;

@@ -5,9 +5,15 @@
 
 class MClientMount : public Message {
   long pcid;
+  bool mkfs;
 
  public:
-  MClientMount() : Message(MSG_CLIENT_MOUNT) { }
+  MClientMount() : Message(MSG_CLIENT_MOUNT) { 
+	mkfs = false;
+  }
+
+  void set_mkfs() { mkfs = true; }
+  bool get_mkfs() { return mkfs; }
 
   void set_pcid(long pcid) { this->pcid = pcid; }
   long get_pcid() { return pcid; }
@@ -17,9 +23,12 @@ class MClientMount : public Message {
   virtual void decode_payload(crope& s, int& off) {  
 	s.copy(off, sizeof(pcid), (char*)&pcid);
 	off += sizeof(pcid);
+	s.copy(off, sizeof(mkfs), (char*)&mkfs);
+	off += sizeof(mkfs);
   }
   virtual void encode_payload(crope& s) {  
 	s.append((char*)&pcid, sizeof(pcid));
+	s.append((char*)&mkfs, sizeof(mkfs));
   }
 };
 
