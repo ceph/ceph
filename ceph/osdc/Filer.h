@@ -38,6 +38,8 @@ typedef struct {
   char                **dataptr;
   char                **freeptr;
 
+  map<object_t, off_t> read_off;
+
   size_t               bytes_read;
   Context             *onfinish;
 } PendingOSDRead_t;

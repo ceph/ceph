@@ -116,6 +116,7 @@ int Filer::issue_read(inodeno_t ino, size_t len, size_t offset, PendingOSDRead_t
   dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
 
   int nfrag = 0;
+  off_t off = 0;
   for (list<OSDExtent>::iterator it = extents.begin();
 	   it != extents.end();
 	   it++) {
@@ -125,6 +126,10 @@ int Filer::issue_read(inodeno_t ino, size_t len, size_t offset, PendingOSDRead_t
 	// issue read
 	MOSDRead *m = new MOSDRead(last_tid, it->oid, it->len, it->offset);
 	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
+
+	// note offset into read buffer
+	p->read_off[it->oid] = off;
+	off += it->len;
 
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);
@@ -151,7 +156,8 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 	m->clear_raw_message();
   } else {
 	// copy result into buffer
-	size_t off = m->get_offset() - p->orig_offset;
+	size_t off = p->read_off[m->get_oid()];
+	dout(7) << "filer: got frag at " << off << " len " << m->get_len() << endl;
 	memcpy(p->buffer + off, m->get_buffer(), m->get_len());
   }
 

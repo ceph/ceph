@@ -144,18 +144,20 @@ class OSDCluster {
 	  OSDExtent ex;
 	  
 	  // find oid, osds
-	  size_t blockno = offset / FILE_OBJECT_SIZE;
+	  size_t blockno = cur / FILE_OBJECT_SIZE;
 	  ex.oid = file_to_object( ino, blockno );
 	  repgroup_t rg = file_to_repgroup(ino, blockno );
 	  repgroup_to_osds( rg, ex.osds, num_reps );
 
 	  // map range into object
-	  ex.offset = offset % FILE_OBJECT_SIZE;
+	  ex.offset = cur % FILE_OBJECT_SIZE;
 	  if (left + ex.offset > FILE_OBJECT_SIZE) 
 		ex.len = FILE_OBJECT_SIZE - ex.offset;	 // doesn't fully fit
 	  else
 		ex.len = left;		                     // fits!
+
 	  left -= ex.len;
+	  cur += ex.len;
 
 	  // add it
 	  extents.push_back(ex);

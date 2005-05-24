@@ -42,7 +42,7 @@ public:
 
 
 int main(int argc, char **argv) {
-  cout << "fakefuse starting" << endl;
+  cerr << "fakefuse starting" << endl;
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
