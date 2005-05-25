@@ -244,7 +244,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 
   // wake up loop?
   if (!awake) {
-	dout(1) << "waking up fakemessenger thread" << endl; 
+	dout(10) << "waking up fakemessenger thread" << endl; 
 	awake = true;
 	lock.Unlock();
 	cond.Signal();

@@ -501,7 +501,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
   //stbuf->st_flags =
   //stbuf->st_gen =
 
-  dout(1) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
+  dout(10) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
 
   return 0;
 }
