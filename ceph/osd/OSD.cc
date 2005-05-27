@@ -51,13 +51,13 @@ OSD::~OSD()
 int OSD::init()
 {
   messenger->set_dispatcher(this);
-  return 0;
+  return store->init();
 }
 
 int OSD::shutdown()
 {
   messenger->shutdown();
-  return 0;
+  return store->finalize();
 }
 
 

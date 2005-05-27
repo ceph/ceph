@@ -10,7 +10,7 @@
 CC = g++
 MPICC = mpicxx
 CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread -lfuse
+LIBS = -lpthread
 
 MDS_OBJS= \
 	mds/MDS.o\
@@ -59,7 +59,7 @@ msg/CheesySerializer.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS}
 
 fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o \
 msg/FakeMessenger.o ${COMMON_OBJS} 
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/mds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
@@ -71,10 +71,10 @@ mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
 mpifuse: mpifuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
-	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
+	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakefuse: fakefuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}

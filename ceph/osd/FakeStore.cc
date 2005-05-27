@@ -26,6 +26,8 @@ FakeStore::FakeStore(char *base, int whoami)
 
 int FakeStore::init() 
 {
+  dout(5) << "init" << endl;
+
   // make sure global base dir exists
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
@@ -56,6 +58,7 @@ int FakeStore::init()
 
 int FakeStore::finalize() 
 {
+  dout(5) << "finalize" << endl;
   // nothing
 }
 
@@ -73,6 +76,7 @@ bool FakeStore::exists(object_t oid)
 int FakeStore::stat(object_t oid,
 					struct stat *st)
 {
+  dout(20) << "stat " << oid << endl;
   string fn;
   make_oname(oid,fn);
   return ::stat(fn.c_str(), st);
@@ -80,6 +84,7 @@ int FakeStore::stat(object_t oid,
 
 int FakeStore::destroy(object_t oid) 
 {
+  dout(20) << "destroy " << oid << endl;
   string fn;
   make_oname(oid,fn);
   return ::unlink(fn.c_str());
@@ -87,6 +92,7 @@ int FakeStore::destroy(object_t oid)
 
 int FakeStore::truncate(object_t oid, off_t size)
 {
+  dout(20) << "truncate " << oid << " size " << size << endl;
   string fn;
   make_oname(oid,fn);
   ::truncate(fn.c_str(), size);
@@ -95,6 +101,8 @@ int FakeStore::truncate(object_t oid, off_t size)
 int FakeStore::read(object_t oid, 
 					size_t len, off_t offset,
 					char *buffer) {
+  dout(20) << "read " << oid << " len " << len << " off " << offset << endl;
+
   string fn;
   make_oname(oid,fn);
   
@@ -115,6 +123,8 @@ int FakeStore::read(object_t oid,
 int FakeStore::write(object_t oid,
 					 size_t len, off_t offset,
 					 char *buffer) {
+  dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
+
   string fn;
   make_oname(oid,fn);
   
