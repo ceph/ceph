@@ -63,6 +63,9 @@ class MOSDReadReply : public Message {
   void set_len(int len) {
 	this->st.len = len;
   }
+  void set_result(int result) {
+	this->st.result = result;
+  }
   
   virtual void decode_payload() {
 	st = *(MOSDReadReply_st*)(raw_message + MSG_ENVELOPE_LEN);

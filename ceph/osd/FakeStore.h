@@ -22,7 +22,7 @@ class FakeStore : public ObjectStore {
   int stat(object_t oid,
 		   struct stat *st);
 
-  int destroy(object_t oid);
+  int remove(object_t oid);
   int truncate(object_t oid, off_t size);
 
   int read(object_t oid, 

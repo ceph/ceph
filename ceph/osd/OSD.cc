@@ -16,21 +16,19 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/file.h>
 #include <iostream>
 #include <cassert>
 #include <errno.h>
+#include <sys/stat.h>
+
 
 #include "include/config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << " "
 
 char *osd_base_path = "./osddata";
+
+
 
 // cons/des
 
@@ -112,16 +110,13 @@ void OSD::handle_ping(MPing *m)
 
 
 
-// -- osd_read
-
-
 
 void OSD::handle_op(MOSDOp *op)
 {
   switch (op->get_op()) {
   case OSD_OP_DELETE:
 	{
-	  int r = store->destroy(op->get_oid());
+	  int r = store->remove(op->get_oid());
 	  dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
 	  
 	  // "ack"
@@ -143,6 +138,7 @@ void OSD::handle_op(MOSDOp *op)
 	  messenger->send_message(reply,
 							  op->get_source(), op->get_source_port());
 	}
+	break;
 	
   default:
 	assert(0);
@@ -154,26 +150,20 @@ void OSD::handle_op(MOSDOp *op)
 
 void OSD::read(MOSDRead *r)
 {
-  MOSDReadReply *reply;
-
-  if (!store->exists(r->get_oid())) {
-	// send reply (failure)
-	dout(1) << "read open FAILED on " << r->get_oid() << endl;
-	reply = new MOSDReadReply(r, -1);
-	//assert(0);
-  }
-
   // create reply, buffer
-  reply = new MOSDReadReply(r, r->get_len());
+  MOSDReadReply *reply = new MOSDReadReply(r, r->get_len());
 
   // read into a buffer
   char *buf = reply->get_buffer();
   long got = store->read(r->get_oid(), 
 						 r->get_len(), r->get_offset(),
 						 buf);
-  reply->set_len(got);
-
-  dout(10) << "osd_read " << got << " / " << r->get_len() << " bytes from " << r->get_oid() << endl;
+  if (got >= 0) 
+	reply->set_len(got);      // "success" (or 0 bytes read)
+  else
+	reply->set_result(got);   // error
+  
+  dout(10) << "read got " << got << " / " << r->get_len() << " bytes from " << r->get_oid() << endl;
 
   // send it
   messenger->send_message(reply, r->get_source(), r->get_source_port());
@@ -184,17 +174,14 @@ void OSD::read(MOSDRead *r)
 
 void OSD::write(MOSDWrite *m)
 {
-
+  // write
   int r = store->write(m->get_oid(),
 					   m->get_len(), m->get_offset(),
 					   m->get_buffer());
-  if (r < 0) {
-	assert(2+2==5);
-  }
+  assert(r >= 0);
   
-  // clean up
+  // reply
   MOSDWriteReply *reply = new MOSDWriteReply(m, r);
-
   messenger->send_message(reply, m->get_source(), m->get_source_port());
 }
 

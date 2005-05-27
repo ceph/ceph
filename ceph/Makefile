@@ -50,10 +50,10 @@ test: depend ${TEST_TARGETS}
 
 
 
-import: mds/mds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
+import: mds/allmds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-singleclient: mds/mds.o osd/OSD.o fakesingleclient.o client/Client.o \
+singleclient: mds/allmds.o osd/OSD.o fakesingleclient.o client/Client.o \
 msg/CheesySerializer.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
@@ -61,26 +61,26 @@ fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o \
 msg/FakeMessenger.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/mds.o ${COMMON_OBJS} 
+fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/allmds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpitest: test/mpitest.o msg/MPIMessenger.cc mds/mds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
+mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
 	${MPICC} ${CFLAGS} $^ -o $@
 
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpifuse: mpifuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakefuse: fakefuse.cc mds/mds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
-mds/mds.o: ${MDS_OBJS}
-	ld -i -o mds/mds.o $^
+mds/allmds.o: ${MDS_OBJS}
+	ld -i -o mds/allmds.o $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@

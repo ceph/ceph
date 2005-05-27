@@ -25,11 +25,6 @@
 #include "messages/MPing.h"
 #include "messages/MGenericMessage.h"
 
-#include "messages/MOSDRead.h"
-#include "messages/MOSDWrite.h"
-#include "messages/MOSDReadReply.h"
-#include "messages/MOSDWriteReply.h"
-
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientRequest.h"

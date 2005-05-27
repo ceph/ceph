@@ -82,9 +82,9 @@ int FakeStore::stat(object_t oid,
   return ::stat(fn.c_str(), st);
 }
 
-int FakeStore::destroy(object_t oid) 
+int FakeStore::remove(object_t oid) 
 {
-  dout(20) << "destroy " << oid << endl;
+  dout(20) << "remove " << oid << endl;
   string fn;
   make_oname(oid,fn);
   return ::unlink(fn.c_str());
