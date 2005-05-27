@@ -8,12 +8,14 @@ class Messenger;
 class MOSDRead;
 class MOSDWrite;
 class Message;
-
+class ObjectStore;
 
 class OSD : public Dispatcher {
  protected:
   Messenger *messenger;
   int whoami;
+
+  ObjectStore *store;
 
  public:
   OSD(int id, Messenger *m);

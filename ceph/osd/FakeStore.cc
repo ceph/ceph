@@ -12,6 +12,64 @@
 #include <cassert>
 #include <errno.h>
 
+#include "include/config.h"
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
+
+
+FakeStore::FakeStore(char *base, int whoami) 
+{
+  this->basedir = base;
+  this->whoami = whoami;
+}
+
+
+int FakeStore::init() 
+{
+  // make sure global base dir exists
+  struct stat st;
+  int r = ::stat(basedir.c_str(), &st);
+  if (r != 0) {
+	dout(1) << "unable to stat basedir " << basedir << ", r = " << r << endl;
+	return r;
+  }
+
+  // make sure my dir exists
+  static char s[30];
+  sprintf(s, "%d", whoami);
+  string mydir = basedir + "/" + s;
+  
+  r = ::stat(mydir.c_str(), &st);
+  if (r != 0) {
+	dout(1) << mydir << " dne, creating" << endl;
+	mkdir(mydir.c_str(), 0755);
+	r = ::stat(mydir.c_str(), &st);
+	if (r != 0) {
+	  dout(1) << "coudlnt create dir, r = " << r << endl;
+	  return r;
+	}
+  }
+
+  // all okay.
+  return 0;
+}
+
+int FakeStore::finalize() 
+{
+  // nothing
+}
+
+
+
+bool FakeStore::exists(object_t oid)
+{
+  struct stat st;
+  if (stat(oid, &st) == 0) 
+	return true;
+  else
+	return false;
+}
+
 int FakeStore::stat(object_t oid,
 					struct stat *st)
 {
@@ -20,11 +78,18 @@ int FakeStore::stat(object_t oid,
   return ::stat(fn.c_str(), st);
 }
 
-int FakeStore::unlink(object_t oid) 
+int FakeStore::destroy(object_t oid) 
 {
   string fn;
   make_oname(oid,fn);
   return ::unlink(fn.c_str());
+}
+
+int FakeStore::truncate(object_t oid, off_t size)
+{
+  string fn;
+  make_oname(oid,fn);
+  ::truncate(fn.c_str(), size);
 }
 
 int FakeStore::read(object_t oid, 

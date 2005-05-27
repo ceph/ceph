@@ -21,8 +21,7 @@ bool AnchorTable::add(inodeno_t ino, inodeno_t dirino, string& ref_dn)
   dout(7) << "add " << ino << " dirino " << dirino << " ref_dn " << ref_dn << endl;
 
   // parent should be there
-  assert(dirino == 1 ||               // root dir
-		 dirino == 0 ||               // inode file
+  assert(dirino < 1000 ||             // system dirino
 		 anchor_map.count(dirino));   // have
   
   if (anchor_map.count(ino) == 0) {

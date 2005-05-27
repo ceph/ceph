@@ -3,12 +3,20 @@
 
 #include "include/types.h"
 
+/*
+ * low-level interface to the local OSD file system
+ */
+
 class ObjectStore {
  public:
-  virtual bool exists(object_t oid) = 0;
-  //bool create(object_t oid);
+  virtual int init() = 0;
+  virtual int finalize() = 0;
 
-  virtual int stat(object_t oid, struct stat *st) = 0;  // ?????
+  virtual bool exists(object_t oid) = 0;
+  virtual int stat(object_t oid, struct stat *st) = 0;     // struct stat?
+
+  virtual int destroy(object_t oid) = 0;
+  virtual int truncate(object_t oid, off_t size) = 0;
 
   virtual int read(object_t oid, 
 				   size_t len, off_t offset,
@@ -16,8 +24,17 @@ class ObjectStore {
   virtual int write(object_t oid,
 					size_t len, off_t offset,
 					char *buffer) = 0;
-  virtual int unlink(object_t oid);
-  
+
+  /*
+  virtual int setattr(...) = 0;
+  virtual int getattr(...) = 0;
+
+  virtual int collection_create(coll_t c) = 0;
+  virtual int collection_destroy(coll_t c) = 0;
+  virtual int collection_add(coll_t c, object_t o) = 0;
+  virtual int collection_remote(coll_t c, object_t o) = 0;
+  */
+
 };
 
 #endif

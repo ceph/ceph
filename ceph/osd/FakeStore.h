@@ -4,27 +4,26 @@
 
 class FakeStore : public ObjectStore {
   string basedir;
+  int whoami;
 
   void make_oname(object_t oid, string& fn) {
-	static char oname[50];
-	sprintf(oname, "%lld", oid);
-	fn = basedir + "/" + oname;
+	static char s[100];
+	sprintf(s, "%d/%lld", whoami, oid);
+	fn = basedir + "/" + s;
   }
 
  public:
-  FakeStore(string& basedir) {
-	this->basedir = basedir;
-  }
+  FakeStore(char *base, int whoami);
 
-  bool exists(object_t oid) {
-	string fn;
-	make_oname(oid, fn);
-	
-	// stat
-  }
+  int init();
+  int finalize();
 
+  bool exists(object_t oid);
   int stat(object_t oid,
 		   struct stat *st);
+
+  int destroy(object_t oid);
+  int truncate(object_t oid, off_t size);
 
   int read(object_t oid, 
 		   size_t len, off_t offset,
@@ -32,6 +31,4 @@ class FakeStore : public ObjectStore {
   int write(object_t oid,
 			size_t len, off_t offset,
 			char *buffer);
-  int unlink(object_t oid);
-
 };

@@ -7,7 +7,6 @@
  *   whether we're in limbo/recovery state, etc.
  *
  */
-
 #include "include/config.h"
 #include "include/types.h"
 #include "msg/Message.h"
@@ -24,14 +23,13 @@ using namespace __gnu_cxx;
 /*
  * some system constants
  */
-
-#define NUM_REPLICA_GROUPS   (1<<20) // ~1M
+#define NUM_REPLICA_GROUPS   (1<<20)  // ~1M
 #define NUM_RUSH_REPLICAS        10   // this should be big enough to cope w/ failing disks.
 #define MAX_REPLICAS              3
 
 #define FILE_OBJECT_SIZE     (1<<20)  // 1 MB object size
 
-#define OID_BLOCK_BITS     30       // 1mb * 1^9 = 1 petabyte files
+#define OID_BLOCK_BITS     30       // 1mb * 10^9 = 1 petabyte files
 #define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
 
 #define MAX_FILE_SIZE      (FILE_OBJECT_SIZE << OID_BLOCK_BITS)  // 1 PB

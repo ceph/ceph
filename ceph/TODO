@@ -35,6 +35,8 @@ remove link
 - fix rename
 
 
+- scatter/gather parallel rendrecv (for client file i/o)
+- client buffered writes
 
 
 MDS TODO
@@ -66,6 +68,9 @@ CLIENT TODO
 - ditch FUSE for ____
 
 
+
+- fix MExportAck and others to use dir+dentry, not inode
+  (otherwise this all breaks with hard links.. altho it probably needs reworking already?)
 
 
 why qsync could be wrong: varying mds -> client message transit or processing times.
