@@ -43,6 +43,7 @@
 
 #include "messages/MInodeLink.h"
 #include "messages/MInodeLinkAck.h"
+#include "messages/MInodeUnlink.h"
 
 #include "messages/MLock.h"
 #include "messages/MDentryUnlink.h"
@@ -2239,7 +2240,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
   // log it
   if (dn->inode) dn->inode->mark_unsafe();   // XXX ??? FIXME
   mds->mdlog->submit_entry(new EUnlink(dir, dn),
-						   c);
+						   NULL);    // FIXME FIXME FIXME
 
   // tell replicas
   if (dir->is_open_by_anyone()) {
@@ -2254,6 +2255,10 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 
 	// don't need ack.
   }
+
+  // unlink locally
+  dn->dir->unlink_inode( dn );
+  dn->mark_dirty();
 
   // inode deleted?
   if (dn->is_primary() && dn->inode) {
@@ -2278,35 +2283,56 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 		dn->inode->dir->mark_clean();
 	  }
 
-	  // mark it clean
+	  // mark it clean, it's dead
 	  if (dn->inode->is_dirty())
 		dn->inode->mark_clean();
 	  
 	} else {
-	  // migrate?
-	  assert(0);  
+	  // dangling but still linked.  
+	  assert(dn->inode->is_anchored());
+
+	  // mark it dirty!
+	  dn->inode->mark_dirty();
+
+	  // update anchor to point to inode file+mds
+	  assert(0);
 	}
   }
   if (dn->is_remote()) {
 	// need to dec nlink on primary somehow FIXME
-	assert(0);
+	int auth = dn->inode->authority();
+	dout(7) << "sending MInodeUnlink to src " << auth << endl;
+	mds->messenger->send_message(new MInodeUnlink(dn->inode->ino(), mds->get_nodeid()),
+								 MSG_ADDR_MDS(auth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+
+	// add waiter
+	dn->inode->add_waiter(CINODE_WAIT_UNLINK, c);
+	return;
   }
+  
+  // finish!
+  dentry_unlink_finish(dn, dir, c);
+}
 
-  // unlink
-  dn->dir->unlink_inode( dn );
-  dn->mark_dirty();
-
+void MDCache::dentry_unlink_finish(CDentry *dn, CDir *dir, Context *c)
+{
+  dout(7) << "dentry_unlink_finish on " << *dn << endl;
+  string dname = dn->name;
+ 
   // unpin dir / unxlock
   dentry_xlock_finish(dn, true); // quiet, no need to bother replicas since they're already unlinking
-
+  
   // did i empty out an imported dir?
   if (dir->is_import() && !dir->inode->is_root() && dir->get_size() == 0) 
 	export_empty_import(dir);
 
   // wake up any waiters
-  //dir->finish_waiting(CDIR_WAIT_ANY, dname);
   dir->take_waiting(CDIR_WAIT_ANY, dname, mds->finished_queue);
+
+  c->finish(0);
 }
+
+
 
 
 void MDCache::handle_dentry_unlink(MDentryUnlink *m)

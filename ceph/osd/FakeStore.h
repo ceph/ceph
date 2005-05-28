@@ -1,4 +1,5 @@
-
+#ifndef __FAKESTORE_H
+#define __FAKESTORE_H
 
 #include "ObjectStore.h"
 
@@ -32,3 +33,5 @@ class FakeStore : public ObjectStore {
 			size_t len, off_t offset,
 			char *buffer);
 };
+
+#endif

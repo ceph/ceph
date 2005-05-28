@@ -224,6 +224,7 @@ class MDCache {
   // -- namespace --
   // these handle logging, cache sync themselves.
   void dentry_unlink(CDentry *in, Context *c);
+  void dentry_unlink_finish(CDentry *in, CDir *dir, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
 
   // initiator

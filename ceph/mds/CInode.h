@@ -89,16 +89,14 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_WAIT_GETREPLICA    (1<<11)  // update/replicate individual inode
     // waiters: import_dentry_inode
     // trigger: handle_inode_replicate_ack
-#define CINODE_WAIT_UNLINK        (1<<12)
-    // waiters: inode_unlink 
-    // triggers: inode_unlink_finish
 
 #define CINODE_WAIT_DIR           (1<<13)
     // waiters: traverse_path
     // triggers: handle_disocver_reply
 
-#define CINODE_WAIT_LINK         (1<<15)  // as in remotely nlink++
-#define CINODE_WAIT_ANCHORED     (1<<16)
+#define CINODE_WAIT_LINK         (1<<14)  // as in remotely nlink++
+#define CINODE_WAIT_ANCHORED     (1<<15)
+#define CINODE_WAIT_UNLINK       (1<<16)  // as in remotely nlink--
 
 #define CINODE_WAIT_HARDR        (1<<17)  // 131072
 #define CINODE_WAIT_HARDW        (1<<18)  // 262...
