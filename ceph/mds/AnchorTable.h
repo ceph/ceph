@@ -24,11 +24,19 @@ public:
   }  
 
   void _rope(crope& r) {
-	r.append((char*)this, sizeof(*this));
+	r.append((char*)&ino, sizeof(ino));
+	r.append((char*)&dirino, sizeof(dirino));
+	r.append((char*)&nref, sizeof(nref));
+	::_rope(ref_dn, r);
   }
   void _unrope(crope& r, int& off) {
-	r.copy(off, sizeof(*this), (char*)this);
-	off += sizeof(*this);
+	r.copy(off, sizeof(ino), (char*)&ino);
+	off += sizeof(ino);
+	r.copy(off, sizeof(dirino), (char*)&dirino);
+	off += sizeof(dirino);
+	r.copy(off, sizeof(nref), (char*)&nref);
+	off += sizeof(nref);
+	::_unrope(ref_dn, r, off);
   }
 } ;
 
@@ -37,22 +45,20 @@ class AnchorTable {
   MDS *mds;
   hash_map<inodeno_t, Anchor*>  anchor_map;
 
-  // load/save entire table for now!
-  void load(Context *onfinish);
-  void save(Context *onfinish);
-
-  bool opened;
+  bool opening, opened;
+  list<Context*> waiting_for_open;
 
   // remote state
   hash_map<inodeno_t, Context*>  pending_op;
   hash_map<inodeno_t, Context*>  pending_lookup_context;
   hash_map<inodeno_t, vector<Anchor*>*>  pending_lookup_trace;
 
- public:
-  AnchorTable(MDS *mds) : opened(false) {
-	this->mds = mds;
 
-  	opened = true;  // for now, all in memory   HACK FIXME BLAH
+ public:
+  AnchorTable(MDS *mds) {
+	this->mds = mds;
+	opening = false;
+	opened = false;
   }
 
  protected:
@@ -89,6 +95,18 @@ class AnchorTable {
   void lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
   void create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
   void destroy(inodeno_t ino, Context *onfinish);
+
+
+
+  // load/save entire table for now!
+  void reset() {
+	opened = true;
+	anchor_map.clear();
+  }
+  void save(Context *onfinish);
+  void load(Context *onfinish);
+  void load_2(size_t size, crope& r, Context *onfinish);
+
 
 };
 

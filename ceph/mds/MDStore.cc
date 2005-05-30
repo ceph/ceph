@@ -541,9 +541,9 @@ class MDDoFetchDirContext : public Context {
 	// did i get the whole thing?
 	size_t size = *(size_t*)buffer;
 	size_t got = buflen - sizeof(size);
-	if (got == size) {
+	if (got >= size) {
 	  // done.
-	  mds->mdstore->do_fetch_dir_2( buffer, buflen, ino, context, hashcode );
+	  mds->mdstore->do_fetch_dir_2( buffer, size+sizeof(size), ino, context, hashcode );
 	  delete freeptr;
 	}
 	else {

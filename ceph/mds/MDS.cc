@@ -143,6 +143,7 @@ int MDS::init()
 {
   // init messenger
   messenger->set_dispatcher(this);
+
 }
 
 
@@ -170,6 +171,9 @@ void MDS::handle_shutdown_start(Message *m)
 
   mdcache->shutdown_start();
   
+  // save anchor table
+  anchormgr->save(0);  // FIXME FIXME
+
   // flush log
   mdlog->set_max_events(0);
   mdlog->trim(NULL);
@@ -401,9 +405,11 @@ void MDS::handle_client_mount(MClientMount *m)
 	  dout(3) << "   root inode isn't open yet, inventing a fresh filesystem" << endl;
 	  
 	  mdcache->open_root(0);
+	  CInode *root = mdcache->get_root();
+	  assert(root);
 
 	  // force empty root dir
-	  CDir *dir = mdcache->get_root()->dir;
+	  CDir *dir = root->dir;
 	  dir->mark_complete();
 	  dir->mark_dirty();
 	}
@@ -1229,16 +1235,22 @@ void MDS::handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<C
   }
   assert(r == 0);
 
-  CInode *targeti = trace[trace.size()-1]->inode;
+  CInode *targeti = mdcache->get_root();
+  if (trace.size()) trace[trace.size()-1]->inode;
   assert(targeti);
 
+  // dir?
   dout(7) << "target is " << *targeti << endl;
-  dout(7) << "dir is " << *ref << endl;
-
-
+  if (targeti->is_dir()) {
+	dout(7) << "target is a dir, failing" << endl;
+	reply_request(req, -EINVAL);
+	return;
+  }
+  
   // keep target inode in memory
   mdcache->request_pin_inode(req, targeti);
 
+  dout(7) << "dir is " << *ref << endl;
 
   // xlock the dentry
   CDir *dir = ref->dir;
@@ -1476,6 +1488,21 @@ void MDS::handle_client_unlink(MClientRequest *req,
   // xlock dentry
   if (!mdcache->dentry_xlock_start(dn, req, diri))
 	return;
+
+  // is this a remote link?
+  if (dn->is_remote() && !dn->inode) {
+	CInode *in = mdcache->get_inode(dn->get_remote_ino());
+	if (in) {
+	  dn->link_remote(in);
+	} else {
+	  // open inode
+	  dout(7) << "opening target inode first, ino is " << dn->get_remote_ino() << endl;
+	  mdcache->open_remote_ino(dn->get_remote_ino(), req, 
+							   new C_MDS_RetryRequest(this, req, diri));
+	  return;
+	}
+  }
+
 	
   // it's locked, unlink!
   MClientReply *reply = new MClientReply(req,0);

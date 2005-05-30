@@ -158,10 +158,12 @@ void OSD::read(MOSDRead *r)
   long got = store->read(r->get_oid(), 
 						 r->get_len(), r->get_offset(),
 						 buf);
-  if (got >= 0) 
+  if (got >= 0)
 	reply->set_len(got);      // "success" (or 0 bytes read)
-  else
+  else {
 	reply->set_result(got);   // error
+	reply->set_len(0);
+  }
   
   dout(10) << "read got " << got << " / " << r->get_len() << " bytes from " << r->get_oid() << endl;
 

@@ -2237,6 +2237,9 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 
   assert(dn->lockstate == DN_LOCK_XLOCK);
 
+  // i need the inode to do any of this properly
+  assert(dn->inode);
+
   // log it
   if (dn->inode) dn->inode->mark_unsafe();   // XXX ??? FIXME
   mds->mdlog->submit_entry(new EUnlink(dir, dn),
@@ -2256,21 +2259,13 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	// don't need ack.
   }
 
-  // unlink locally
-  dn->dir->unlink_inode( dn );
-  dn->mark_dirty();
 
   // inode deleted?
-  if (dn->is_primary() && dn->inode) {
+  if (dn->is_primary()) {
 	assert(dn->inode->is_auth());
 	dn->inode->inode.nlink--;
 	
 	if (dn->inode->is_dir()) assert(dn->inode->inode.nlink == 0);  // no hard links on dirs
-
-	if (dn->inode->inode.nlink) {
-	  // need to migrate inode somehow .. FIXME
-	  assert(0);
-	}
 
 	// last link?
 	if (dn->inode->inode.nlink == 0) {
@@ -2288,6 +2283,9 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 		dn->inode->mark_clean();
 	  
 	} else {
+	  // migrate to inode file
+	  dout(7) << "removed primary, but there are remote links, moving to inode file: " << *dn->inode << endl;
+
 	  // dangling but still linked.  
 	  assert(dn->inode->is_anchored());
 
@@ -2295,21 +2293,31 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	  dn->inode->mark_dirty();
 
 	  // update anchor to point to inode file+mds
-	  assert(0);
+	  assert(0);  
 	}
   }
-  if (dn->is_remote()) {
-	// need to dec nlink on primary somehow FIXME
-	int auth = dn->inode->authority();
-	dout(7) << "sending MInodeUnlink to src " << auth << endl;
-	mds->messenger->send_message(new MInodeUnlink(dn->inode->ino(), mds->get_nodeid()),
-								 MSG_ADDR_MDS(auth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  else if (dn->is_remote()) {
+	// need to dec nlink on primary
+	if (dn->inode->is_auth()) {
+	  // awesome, i can do it
+	  dout(7) << "remote target is local, nlink--" << endl;
+	  dn->inode->inode.nlink--;
+	  dn->inode->mark_dirty();
+	} else {
+	  int auth = dn->inode->authority();
+	  dout(7) << "remote target is remote, sending unlink request to " << auth << endl;
 
-	// add waiter
-	dn->inode->add_waiter(CINODE_WAIT_UNLINK, c);
-	return;
+	  mds->messenger->send_message(new MInodeUnlink(dn->inode->ino(), mds->get_nodeid()),
+								   MSG_ADDR_MDS(auth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+
+	  // add waiter
+	  dn->inode->add_waiter(CINODE_WAIT_UNLINK, c);
+	  return;
+	}
   }
-  
+  else 
+	assert(0);   // unlink on null dentry??
+ 
   // finish!
   dentry_unlink_finish(dn, dir, c);
 }
@@ -2318,7 +2326,11 @@ void MDCache::dentry_unlink_finish(CDentry *dn, CDir *dir, Context *c)
 {
   dout(7) << "dentry_unlink_finish on " << *dn << endl;
   string dname = dn->name;
- 
+
+  // unlink locally
+  dn->dir->unlink_inode( dn );
+  dn->mark_dirty();
+
   // unpin dir / unxlock
   dentry_xlock_finish(dn, true); // quiet, no need to bother replicas since they're already unlinking
   
@@ -2744,7 +2756,7 @@ void MDCache::handle_rename_prep(MRenamePrep *m)
   // open src
   filepath srcpath = m->get_srcpath();
   vector<CDentry*> trace;
-  int r = path_traverse(srcpath, trace, true,
+  int r = path_traverse(srcpath, trace, false,
 						m, new C_MDS_RetryMessage(mds, m), 
 						MDS_TRAVERSE_DISCOVER);
 
@@ -4749,6 +4761,7 @@ void MDCache::handle_lock_dn(MLock *m)
 	  if (m->get_action() == LOCK_AC_REQXLOCKACK ||
 		  m->get_action() == LOCK_AC_REQXLOCKNAK) {
 		dout(7) << "handle_lock_dn got reqxlockack/nak, but don't have dn " << m->get_path() << ", discovering" << endl;
+		//assert(0);  // how can this happen?  tell me now!
 		
 		vector<CDentry*> trace;
 		filepath path = m->get_path();

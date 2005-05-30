@@ -12,6 +12,7 @@
 #include <cassert>
 #include <errno.h>
 
+
 #include "include/config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
@@ -47,7 +48,7 @@ int FakeStore::init()
 	mkdir(mydir.c_str(), 0755);
 	r = ::stat(mydir.c_str(), &st);
 	if (r != 0) {
-	  dout(1) << "coudlnt create dir, r = " << r << endl;
+	  dout(1) << "couldnt create dir, r = " << r << endl;
 	  return r;
 	}
   }

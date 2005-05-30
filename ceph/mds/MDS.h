@@ -33,6 +33,13 @@ typedef __uint64_t object_t;
 
 #define MDS_PORT_OSDMON    300
 
+#define MDS_INO_ROOT              1
+#define MDS_INO_LOG_OFFSET        100
+#define MDS_INO_IDS_OFFSET        200
+#define MDS_INO_INODEFILE_OFFSET  300
+#define MDS_INO_ANCHORTABLE       400
+#define MDS_INO_BASE              1000
+
 
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.

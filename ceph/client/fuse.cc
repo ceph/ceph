@@ -250,6 +250,10 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   newargv[newargc++] = "-o";
   newargv[newargc++] = "allow_other";
   
+  // use inos
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "use_ino";
+
   // force into foreground
   //   -> we can watch stdout this way!!
   newargv[newargc++] = "-f";

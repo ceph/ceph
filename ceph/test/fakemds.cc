@@ -90,28 +90,13 @@ int main(int argc, char **argv) {
   // cleanup
   cout << "cleanup" << endl;
   for (int i=0; i<NUMMDS; i++) {
-	if (mds[i]->shutdown_final() == 0) {
-	  //cout << "clean shutdown of mds " << i << endl;
-	  delete mds[i];
-	} else {
-	  cout << "problems shutting down mds " << i << endl;
-	}
+	delete mds[i];
   }
   for (int i=0; i<NUMOSD; i++) {
-	if (osd[i]->shutdown() == 0) { 
-	  //cout << "clean shutdown of osd " << i << endl;
-	  delete osd[i];
-	} else {
-	  cout << "problems shutting down osd " << i << endl;
-	}
+	delete osd[i];
   }
   for (int i=0; i<NUMCLIENT; i++) {
-	if (client[i]->shutdown() == 0) { 
-	  //cout << "clean shutdown of client " << i << endl;
-	  delete client[i];
-	} else {
-	  cout << "problems shutting down client " << i << endl;
-	}
+	delete client[i];
   }
   delete mdc;
   cout << "done." << endl;
