@@ -114,6 +114,15 @@ void OSD::handle_ping(MPing *m)
 void OSD::handle_op(MOSDOp *op)
 {
   switch (op->get_op()) {
+  case OSD_OP_MKFS:
+	dout(3) << "MKFS" << endl;
+	{
+	  int r = store->mkfs();	
+	  messenger->send_message(new MOSDOpReply(op, r), 
+							  op->get_source(), op->get_source_port());
+	}
+	break;
+
   case OSD_OP_DELETE:
 	{
 	  int r = store->remove(op->get_oid());

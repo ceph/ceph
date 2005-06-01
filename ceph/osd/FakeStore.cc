@@ -11,6 +11,7 @@
 #include <iostream>
 #include <cassert>
 #include <errno.h>
+#include <dirent.h>
 
 
 #include "include/config.h"
@@ -27,7 +28,10 @@ FakeStore::FakeStore(char *base, int whoami)
 
 int FakeStore::init() 
 {
-  dout(5) << "init" << endl;
+  string mydir;
+  make_dir(mydir);
+
+  dout(5) << "init with basedir " << mydir << endl;
 
   // make sure global base dir exists
   struct stat st;
@@ -38,8 +42,6 @@ int FakeStore::init()
   }
 
   // make sure my dir exists
-  string mydir;
-  make_dir(mydir);
   
   r = ::stat(mydir.c_str(), &st);
   if (r != 0) {

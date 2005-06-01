@@ -232,7 +232,7 @@ class Client : public Dispatcher {
 
   // ----------------------
   // fs ops.
-  int mount(bool mkfs=false);
+  int mount(int mkfs=0);
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.

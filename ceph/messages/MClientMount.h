@@ -5,15 +5,15 @@
 
 class MClientMount : public Message {
   long pcid;
-  bool mkfs;
+  int mkfs;
 
  public:
   MClientMount() : Message(MSG_CLIENT_MOUNT) { 
-	mkfs = false;
+	mkfs = 0;
   }
 
-  void set_mkfs() { mkfs = true; }
-  bool get_mkfs() { return mkfs; }
+  void set_mkfs(int m) { mkfs = m; }
+  int get_mkfs() { return mkfs; }
 
   void set_pcid(long pcid) { this->pcid = pcid; }
   long get_pcid() { return pcid; }

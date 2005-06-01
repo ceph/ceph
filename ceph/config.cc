@@ -49,7 +49,7 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
 
   // --- fakeclient (mds regression testing) ---
-  num_fakeclient: 1000,
+  num_fakeclient: 100,
   fakeclient_requests: 100,
   fakeclient_deterministic: false,
 

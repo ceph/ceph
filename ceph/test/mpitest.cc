@@ -38,20 +38,20 @@ int main(int argc, char **argv) {
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   
-  // create mds
-  MDS *mds[NUMMDS];
-  for (int i=0; i<NUMMDS; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	mds[i] = new MDS(mdc, i, new MPIMessenger(MSG_ADDR_MDS(i)));
-	mds[i]->init();
-  }
-  
   // create osds
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
 	osd[i] = new OSD(i, new MPIMessenger(MSG_ADDR_OSD(i)));
 	osd[i]->init();
+  }
+  
+  // create mds
+  MDS *mds[NUMMDS];
+  for (int i=0; i<NUMMDS; i++) {
+	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
+	mds[i] = new MDS(mdc, i, new MPIMessenger(MSG_ADDR_MDS(i)));
+	mds[i]->init();
   }
   
   // create clients

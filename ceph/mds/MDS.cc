@@ -397,7 +397,7 @@ void MDS::handle_client_mount(MClientMount *m)
   assert(whoami == 0);  // mds0 mounts/unmounts
 
   // mkfs?  (sorta hack!)
-  if (m->get_mkfs()) {
+  if (int cmd = m->get_mkfs()) {
 	dout(3) << "MKFS flag is set" << endl;
 	if (mdcache->get_root()) {
 	  dout(3) << "   TOO BAD, root inode is already open" << endl;
@@ -412,6 +412,12 @@ void MDS::handle_client_mount(MClientMount *m)
 	  CDir *dir = root->dir;
 	  dir->mark_complete();
 	  dir->mark_dirty();
+
+	  if (cmd == MDS_MKFS_FULL) {
+		// wipe osds too
+		dout(3) << "wiping osds too" << endl;
+		filer->mkfs(0);
+	  }
 	}
   }
 

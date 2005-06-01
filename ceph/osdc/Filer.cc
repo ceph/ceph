@@ -41,6 +41,10 @@ void Filer::dispatch(Message *m)
   case MSG_OSD_WRITEREPLY:
 	handle_osd_write_reply((MOSDWriteReply*)m);
 	break;
+
+  case MSG_OSD_OPREPLY:
+	handle_osd_op_reply((MOSDOpReply*)m);
+	break;
 	
   default:
 	dout(1) << "don't know message type " << m->get_type() << endl;
@@ -281,6 +285,11 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 	p = op_removes[tid];
 	op_removes.erase(tid);
   }
+  else if (op_mkfs.count(tid)) {
+	// mkfs op
+	p = op_mkfs[tid];
+	op_mkfs.erase(tid);
+  }
   else
 	assert(0); // why did i get this message?
 
@@ -359,6 +368,41 @@ int Filer::probe_size(inodeno_t ino, size_t *size, Context *onfinish)
 
 
 }
+
+
+
+// mkfs on all osds, wipe everything.
+
+int Filer::mkfs(Context *onfinish)
+{
+  int num_rep = 1;
+  
+  dout(7) << "mkfs, wiping all OSDs" << endl;
+
+  // pending write record
+  PendingOSDOp_t *p = new PendingOSDOp_t;
+  p->onfinish = onfinish;
+  
+  // send MKFS to osds
+  set<int> ls;
+  osdcluster->get_all_osds(ls);
+  
+  for (set<int>::iterator it = ls.begin();
+	   it != ls.end();
+	   it++) {
+
+	++last_tid;
+
+	// issue mkfs
+	MOSDOp *m = new MOSDOp(last_tid, 0, OSD_OP_MKFS);
+	messenger->send_message(m, MSG_ADDR_OSD(*it), 0);
+	
+	// add to gather set
+	p->outstanding_ops.insert(last_tid);
+	op_mkfs[last_tid] = p;
+  }
+}
+
 
 
 /*

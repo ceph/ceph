@@ -62,7 +62,7 @@ class MOSDOpReply : public Message {
 	s.append((char*)&st, sizeof(st));
   }
 
-  virtual char *get_type_name() { return "oop"; }
+  virtual char *get_type_name() { return "oopr"; }
 };
 
 #endif

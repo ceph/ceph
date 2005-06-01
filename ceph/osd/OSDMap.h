@@ -81,7 +81,12 @@ class OSDCluster {
 	return n;
   }
   void get_all_osds(set<int>& ls) {
-	// blah
+	for (vector<OSDGroup>::iterator it = osd_groups.begin();
+		 it != osd_groups.end();
+		 it++) {
+	  for (int i=0; i<it->osds.size(); i++)
+		ls.insert(it->osds[i]);
+	}
   }
 
   int get_num_groups() { return osd_groups.size(); }

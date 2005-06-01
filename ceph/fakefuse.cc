@@ -52,14 +52,28 @@ int main(int argc, char **argv) {
   //g_timer.add_event_after(5.0, new C_Test2);
   //g_timer.add_event_after(10.0, new C_Test);
 
-  bool mkfs = false;
-  for (int i=1; i<argc; i++)
-	if (strcmp(argv[i], "--mkfs") == 0) {
-	  mkfs = true;
+  int mkfs = 0;
+  for (int i=1; i<argc; i++) {
+	if (strcmp(argv[i], "--fastmkfs") == 0) {
+	  mkfs = MDS_MKFS_FAST;
 	  argv[i] = 0;
 	  argc--;
 	  break;
 	}
+	if (strcmp(argv[i], "--fullmkfs") == 0) {
+	  mkfs = MDS_MKFS_FULL;
+	  argv[i] = 0;
+	  argc--;
+	  break;
+	}
+  }
+
+  // create osd
+  OSD *osd[NUMOSD];
+  for (int i=0; i<NUMOSD; i++) {
+	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
+	osd[i]->init();
+  }
 
   // create mds
   MDS *mds[NUMMDS];
@@ -67,13 +81,7 @@ int main(int argc, char **argv) {
 	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
 	mds[i]->init();
   }
-  
-  // create osd
-  OSD *osd[NUMOSD];
-  for (int i=0; i<NUMOSD; i++) {
-	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
-	osd[i]->init();
-  }
+ 
   
   // create client
   Client *client[NUMCLIENT];

@@ -45,19 +45,20 @@ int main(int argc, char **argv) {
   // local config settings
   g_conf.num_client = g_conf.num_fakeclient;  // to fool mds, hack gross
 
-  // create mds
-  MDS *mds[NUMMDS];
-  for (int i=0; i<NUMMDS; i++) {
-	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
-	mds[i]->init();
-  }
-  
   // create osds
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
 	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
 	osd[i]->init();
   }
+
+  // create mds
+  MDS *mds[NUMMDS];
+  for (int i=0; i<NUMMDS; i++) {
+	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
+	mds[i]->init();
+  }
+ 
   
   // create clients
   FakeClient *client[NUMCLIENT];

@@ -40,6 +40,8 @@ typedef __uint64_t object_t;
 #define MDS_INO_ANCHORTABLE       400
 #define MDS_INO_BASE              1000
 
+#define MDS_MKFS_FAST      1   // fake new root inode+dir
+#define MDS_MKFS_FULL      2   // wipe osd's too
 
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.

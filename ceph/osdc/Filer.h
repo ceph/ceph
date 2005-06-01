@@ -68,6 +68,7 @@ class Filer : public Dispatcher {
   hash_map<tid_t,PendingOSDOp_t*>    op_removes;   
   hash_map<tid_t,PendingOSDOp_t*>    op_zeros;   
   hash_map<tid_t,PendingOSDProbe_t*> op_probes;
+  hash_map<tid_t,PendingOSDOp_t*>    op_mkfs;
 
  public:
   Filer(Messenger *m, OSDCluster *o);
@@ -113,6 +114,8 @@ class Filer : public Dispatcher {
 
   //int zero(inodeno_t ino, size_t len, size_t offset, Context *c);   
 
+  int mkfs(Context *c);
+  
   void handle_osd_read_reply(class MOSDReadReply *m);
   void handle_osd_write_reply(class MOSDWriteReply *m);
   void handle_osd_op_reply(class MOSDOpReply *m);

@@ -14,6 +14,7 @@
 #define OSD_OP_STAT       1
 #define OSD_OP_DELETE     2
 #define OSD_OP_ZERORANGE  3
+#define OSD_OP_MKFS       10
 
 typedef struct {
   long tid;
