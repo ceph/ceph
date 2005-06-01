@@ -166,6 +166,15 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
 								parent->dir->inode->ino(),
 								parent->name) );
   }
+  else if (state_test(CINODE_STATE_DANGLING)) {
+	dout(7) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
+	string ref_dn;
+	trace.push_back( new Anchor(ino(),
+								MDS_INO_INODEFILE_OFFSET+dangling_auth,
+								ref_dn) );
+  }
+  else 
+	assert(is_root());
 }
 
 

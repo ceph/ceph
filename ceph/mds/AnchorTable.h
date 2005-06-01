@@ -94,6 +94,7 @@ class AnchorTable {
   // user interface
   void lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
   void create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
+  void update(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish);
   void destroy(inodeno_t ino, Context *onfinish);
 
 

@@ -226,6 +226,8 @@ class MDCache {
   void dentry_unlink(CDentry *in, Context *c);
   void dentry_unlink_finish(CDentry *in, CDir *dir, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
+  void handle_inode_unlink(class MInodeUnlink *m);
+  void handle_inode_unlink_ack(class MInodeUnlinkAck *m);
 
   // initiator
   void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);

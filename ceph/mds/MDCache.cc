@@ -44,6 +44,7 @@
 #include "messages/MInodeLink.h"
 #include "messages/MInodeLinkAck.h"
 #include "messages/MInodeUnlink.h"
+#include "messages/MInodeUnlinkAck.h"
 
 #include "messages/MLock.h"
 #include "messages/MDentryUnlink.h"
@@ -2226,6 +2227,23 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 
 
+class C_MDC_DentryUnlink : public Context {
+public:
+  MDCache *mdc;
+  CDentry *dn;
+  CDir *dir;
+  Context *c;
+  C_MDC_DentryUnlink(MDCache *mdc, CDentry *dn, CDir *dir, Context *c) {
+	this->mdc = mdc;
+	this->dn = dn;
+	this->dir = dir;
+	this->c = c;
+  }
+  void finish(int r) {
+	assert(r == 0);
+	mdc->dentry_unlink_finish(dn, dir, c);
+  }
+};
 
 
 // NAMESPACE FUN
@@ -2289,11 +2307,20 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	  // dangling but still linked.  
 	  assert(dn->inode->is_anchored());
 
+	  // unlink locally
+	  CInode *in = dn->inode;
+	  dn->dir->unlink_inode( dn );
+	  dn->mark_dirty();
+
 	  // mark it dirty!
-	  dn->inode->mark_dirty();
+	  in->mark_dirty();
 
 	  // update anchor to point to inode file+mds
-	  assert(0);  
+	  vector<Anchor*> atrace;
+	  in->make_anchor_trace(atrace);
+	  assert(atrace.size() == 1);   // it's dangling
+	  mds->anchormgr->update(in->ino(), atrace, 
+							 new C_MDC_DentryUnlink(this, dn, dir, c));
 	}
   }
   else if (dn->is_remote()) {
@@ -2310,26 +2337,32 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	  mds->messenger->send_message(new MInodeUnlink(dn->inode->ino(), mds->get_nodeid()),
 								   MSG_ADDR_MDS(auth), MDS_PORT_CACHE, MDS_PORT_CACHE);
 
+	  // unlink locally
+	  CInode *in = dn->inode;
+	  dn->dir->unlink_inode( dn );
+	  dn->mark_dirty();
+
 	  // add waiter
-	  dn->inode->add_waiter(CINODE_WAIT_UNLINK, c);
+	  in->add_waiter(CINODE_WAIT_UNLINK, c);
 	  return;
 	}
   }
   else 
 	assert(0);   // unlink on null dentry??
  
+  // unlink locally
+  dn->dir->unlink_inode( dn );
+  dn->mark_dirty();
+
   // finish!
   dentry_unlink_finish(dn, dir, c);
 }
+
 
 void MDCache::dentry_unlink_finish(CDentry *dn, CDir *dir, Context *c)
 {
   dout(7) << "dentry_unlink_finish on " << *dn << endl;
   string dname = dn->name;
-
-  // unlink locally
-  dn->dir->unlink_inode( dn );
-  dn->mark_dirty();
 
   // unpin dir / unxlock
   dentry_xlock_finish(dn, true); // quiet, no need to bother replicas since they're already unlinking
@@ -2386,6 +2419,66 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
   return;
 }
 
+
+void MDCache::handle_inode_unlink(MInodeUnlink *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  assert(in);
+
+  // proxy?
+  if (in->is_proxy()) {
+	dout(7) << "handle_inode_unlink proxy on " << *in << endl;
+	mds->messenger->send_message(m,
+								 MSG_ADDR_MDS(in->authority()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+	return;
+  }
+  assert(in->is_auth());
+
+  // do it.
+  dout(7) << "handle_inode_unlink nlink=" << in->inode.nlink << " on " << *in << endl;
+  assert(in->inode.nlink > 0);
+  in->inode.nlink--;
+
+  if (in->state_test(CINODE_STATE_DANGLING)) {
+	// already dangling.
+	// last link?
+	if (in->inode.nlink == 0) {
+	  dout(7) << "last link, marking clean and removing anchor" << endl;
+	  
+	  in->mark_clean();       // mark it clean.
+	  
+	  // remove anchor (async)
+	  mds->anchormgr->destroy(in->ino(), NULL);
+	}
+	else {
+	  in->mark_dirty();
+	}
+  } else {
+	// has primary link still.
+	assert(in->inode.nlink >= 1);
+	in->mark_dirty();
+
+	if (in->inode.nlink == 1) {
+	  dout(7) << "nlink=1, removing anchor" << endl;
+	  
+	  // remove anchor (async)
+	  mds->anchormgr->destroy(in->ino(), NULL);
+	}
+  }
+
+  // ack
+  mds->messenger->send_message(new MInodeUnlinkAck(m->get_ino()),
+							   MSG_ADDR_MDS(m->get_from()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+}
+
+void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
+{
+  CInode *in = get_inode(m->get_ino());
+  assert(in);
+
+  dout(7) << "handle_inode_unlink_ack on " << *in << endl;
+  in->finish_waiting(CINODE_WAIT_UNLINK, 0);
+}
 
 
 

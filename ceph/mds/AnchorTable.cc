@@ -176,6 +176,11 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
 	lookup( m->get_ino(), reply->get_trace() );
 	break;
 
+  case ANCHOR_OP_UPDATE:
+	destroy( m->get_ino() );
+	create( m->get_ino(), m->get_trace() );
+	break;
+
   case ANCHOR_OP_CREATE:
 	create( m->get_ino(), m->get_trace() );
 	break;
@@ -212,6 +217,7 @@ void AnchorTable::handle_anchor_reply(class MAnchorReply *m)
 	}
 	break;
 
+  case ANCHOR_OP_UPDATE:
   case ANCHOR_OP_CREATE:
   case ANCHOR_OP_DESTROY:
 	{
@@ -267,6 +273,17 @@ void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinis
 
   // send message
   MAnchorRequest *req = new MAnchorRequest(ANCHOR_OP_CREATE, ino);
+  req->set_trace(trace);
+
+  pending_op[ino] = onfinish;
+
+  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
+}
+
+void AnchorTable::update(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish)
+{
+  // send message
+  MAnchorRequest *req = new MAnchorRequest(ANCHOR_OP_UPDATE, ino);
   req->set_trace(trace);
 
   pending_op[ino] = onfinish;

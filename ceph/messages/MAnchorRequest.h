@@ -9,6 +9,7 @@
 #define ANCHOR_OP_CREATE   1
 #define ANCHOR_OP_DESTROY  2
 #define ANCHOR_OP_LOOKUP   3
+#define ANCHOR_OP_UPDATE   4
 
 class MAnchorRequest : public Message {
   int op;
