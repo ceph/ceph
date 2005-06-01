@@ -13,28 +13,6 @@ HARD LINKS
 - reclaim from inode file on discover...
 
 
-/- link
- discover 
- xlock
- if local
-   anchor
- else
-   anchor request to auth
- create remote link, mark dirty
-
-- unlink (primary)
-nlink--
-move inode into inode file
-
-- unlink (remote)
-discover
-if local
-  nlink--; 
-  remove anchor if nlink==1
-else
-  nlinkreq
-remove link
-
 - fix rename
 
 

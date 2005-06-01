@@ -25,7 +25,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  debug: 13,
+  debug: 10,
   
   // --- client ---
   client_cache_size: 400,
@@ -49,7 +49,7 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
 
   // --- fakeclient (mds regression testing) ---
-  num_fakeclient: 100,
+  num_fakeclient: 1000,
   fakeclient_requests: 100,
   fakeclient_deterministic: false,
 
@@ -63,8 +63,8 @@ md_config_t g_conf = {
 
   fakeclient_op_readdir:  10,
   fakeclient_op_mknod:    10,
-  fakeclient_op_link:    200,
-  fakeclient_op_unlink:   false,//10,
+  fakeclient_op_link:     false,
+  fakeclient_op_unlink:   10,
   fakeclient_op_rename:   100,
 
   fakeclient_op_mkdir:    50,

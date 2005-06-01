@@ -88,7 +88,7 @@ class CDentry {
 
   // dentry type is primary || remote || null
   // inode ptr is required for primary, optional for remote, undefined for null
-  bool is_primary() { return remote_ino == 0; }
+  bool is_primary() { return remote_ino == 0 && inode != 0; }
   bool is_remote() { return remote_ino > 0; }
   bool is_null() { return (remote_ino == 0 && inode == 0) ? true:false; }
 
