@@ -38,9 +38,8 @@ int FakeStore::init()
   }
 
   // make sure my dir exists
-  static char s[30];
-  sprintf(s, "%d", whoami);
-  string mydir = basedir + "/" + s;
+  string mydir;
+  make_dir(mydir);
   
   r = ::stat(mydir.c_str(), &st);
   if (r != 0) {
@@ -61,6 +60,30 @@ int FakeStore::finalize()
 {
   dout(5) << "finalize" << endl;
   // nothing
+}
+
+
+int FakeStore::mkfs()
+{
+  string mydir;
+  make_dir(mydir);
+
+  // wipe my dir
+  DIR *dir = opendir(mydir.c_str());
+  if (dir) {
+	struct dirent *ent = 0;
+
+	while (ent = readdir(dir)) {
+	  if (ent->d_name[0] == '.') continue;
+	  dout(10) << "mkfs unlinking " << ent->d_name << endl;
+	  string fn = mydir + "/" + ent->d_name;
+	  unlink(fn.c_str());
+	}	
+
+	closedir(dir);
+  } else {
+	dout(1) << "mkfs couldn't read dir " << mydir << endl;
+  }
 }
 
 

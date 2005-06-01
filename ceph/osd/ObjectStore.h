@@ -12,6 +12,8 @@ class ObjectStore {
   virtual int init() = 0;
   virtual int finalize() = 0;
 
+  virtual int mkfs() = 0;  // wipe
+
   // objects
   virtual bool exists(object_t oid) = 0;                   // useful?
   virtual int stat(object_t oid, struct stat *st) = 0;     // struct stat?
