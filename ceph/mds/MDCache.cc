@@ -2321,6 +2321,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	  assert(atrace.size() == 1);   // it's dangling
 	  mds->anchormgr->update(in->ino(), atrace, 
 							 new C_MDC_DentryUnlink(this, dn, dir, c));
+	  return;
 	}
   }
   else if (dn->is_remote()) {
@@ -2330,6 +2331,14 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 	  dout(7) << "remote target is local, nlink--" << endl;
 	  dn->inode->inode.nlink--;
 	  dn->inode->mark_dirty();
+
+	  if (( dn->inode->state_test(CINODE_STATE_DANGLING) && dn->inode->inode.nlink == 0) ||
+		  (!dn->inode->state_test(CINODE_STATE_DANGLING) && dn->inode->inode.nlink == 1)) {
+		dout(7) << "nlink=1+primary or 0+dangling, removing anchor" << endl;
+
+		// remove anchor (async)
+		mds->anchormgr->destroy(dn->inode->ino(), NULL);
+	  }
 	} else {
 	  int auth = dn->inode->authority();
 	  dout(7) << "remote target is remote, sending unlink request to " << auth << endl;

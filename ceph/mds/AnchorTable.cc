@@ -212,8 +212,10 @@ void AnchorTable::handle_anchor_reply(class MAnchorReply *m)
 	  pending_lookup_trace.erase(m->get_ino());
 	  pending_lookup_context.erase(m->get_ino());
 
-	  onfinish->finish(0);
-	  delete onfinish;
+	  if (onfinish) {
+		onfinish->finish(0);
+		delete onfinish;
+	  }
 	}
 	break;
 
@@ -226,8 +228,10 @@ void AnchorTable::handle_anchor_reply(class MAnchorReply *m)
 	  Context *onfinish = pending_op[m->get_ino()];
 	  pending_op.erase(m->get_ino());
 
-	  onfinish->finish(0);
-	  delete onfinish;
+	  if (onfinish) {
+		onfinish->finish(0);
+		delete onfinish;
+	  }
 	}
 	break;
 

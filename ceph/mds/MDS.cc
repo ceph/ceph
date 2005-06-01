@@ -1236,7 +1236,7 @@ void MDS::handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<C
   assert(r == 0);
 
   CInode *targeti = mdcache->get_root();
-  if (trace.size()) trace[trace.size()-1]->inode;
+  if (trace.size()) targeti = trace[trace.size()-1]->inode;
   assert(targeti);
 
   // dir?
@@ -1320,9 +1320,9 @@ void MDS::handle_client_link_finish(MClientRequest *req, CInode *ref,
 									CDentry *dn, CInode *targeti)
 {
   // create remote link
-  dn->set_remote_ino( targeti->ino() );
-  dn->mark_dirty();
+  dn->dir->link_inode(dn, targeti->ino());
   dn->link_remote( targeti );   // since we have it
+  dn->mark_dirty();
   
   // done!
   commit_request(req, new MClientReply(req, 0), ref,

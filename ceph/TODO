@@ -43,15 +43,16 @@ remove link
 
 
 MDS TODO
-- statfs?
+- fix hard links
+  - they mostly work, but they're fragile
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
   - truncate
-- hard links
+- implement hashed directories
+- statfs?
 - rewrite journal + recovery
 - figure out online failure recovery
-- implement hashed directories
-- most distributed fh management?
+- more distributed fh management?
 - btree directories (for efficient large directories)
 - consistency points/snapshots
 

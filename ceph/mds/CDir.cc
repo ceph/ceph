@@ -227,6 +227,7 @@ void CDir::link_inode( CDentry *dn, inodeno_t ino)
 
   assert(dn->is_null());
   dn->set_remote_ino(ino);
+  nitems++;
 
   assert(null_items.count(dn->name) == 1);
   null_items.erase(dn->name);
@@ -289,12 +290,15 @@ void CDir::unlink_inode_work( CDentry *dn )
 {
   CInode *in = dn->inode;
  
-  if (!in) {
+  if (dn->is_remote()) {
 	// remote
-	assert(dn->is_remote());
-	dn->unlink_remote();
+	if (in) 
+	  dn->unlink_remote();
+
+	dn->set_remote_ino(0);
   } else {
 	// primary
+	assert(dn->is_primary());
  
 	// explicitly define auth
 	in->dangling_auth = in->authority();
