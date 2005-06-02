@@ -150,6 +150,7 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+  assert(op_reads.count(tid));
   PendingOSDRead_t *p = op_reads[ tid ];
   op_reads.erase( tid );
 
@@ -249,6 +250,7 @@ Filer::handle_osd_write_reply(MOSDWriteReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+  assert(op_writes.count(tid));
   PendingOSDOp_t *p = op_writes[ tid ];
   op_writes.erase( tid );
 
@@ -460,6 +462,7 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
   // get pio
   tid_t tid = m->get_tid();
 
+  
   if (PendingOSDOp_t *p = op_zeros[ tid ])
   op_zeros.erase( tid );
 

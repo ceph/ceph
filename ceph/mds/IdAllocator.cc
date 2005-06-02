@@ -1,8 +1,4 @@
 
-#include "include/config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "idalloc:"
-
 #define DBLEVEL  20
 
 #include "IdAllocator.h"
@@ -11,7 +7,10 @@
 
 #include "include/types.h"
 
-char ifn[100];
+#include "include/config.h"
+#undef dout
+#define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << ".idalloc: "
+
 
 
 idno_t IdAllocator::get_id(int type) 
@@ -41,10 +40,6 @@ void IdAllocator::reclaim_id(int type, idno_t id)
 
 
 
-char *IdAllocator::get_filename() {
-  sprintf(ifn,"osddata/idalloc.%d", mds->get_nodeid());
-  return ifn;
-}
 
 void IdAllocator::save()
 {
@@ -143,6 +138,8 @@ void IdAllocator::load_2(int r, char *dataptr, char *freeptr)
 	}
   }
   else {
+	dout(3) << "no alloc file, starting from scratch" << endl;
+
 	// use generic range FIXME THIS IS CRAP
 	free[ID_INO].map_insert((long long)1000000LL * (mds->get_nodeid()+1),
 							(long long)1000000LL * (mds->get_nodeid()+2) - 1);

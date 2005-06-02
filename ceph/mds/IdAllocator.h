@@ -38,9 +38,6 @@ class IdAllocator {
   void load();
   void load_2(int, char *, char*);
 
- private:
-  char *get_filename();
-
 };
 
 #endif
