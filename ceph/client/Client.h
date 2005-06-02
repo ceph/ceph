@@ -27,6 +27,8 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+class Filer;
+
 
 // ============================================
 // types for my local metadata cache
@@ -121,6 +123,7 @@ class Client : public Dispatcher {
   OSDCluster            *osdcluster;
   bool mounted;
   
+  Filer                 *filer;  // (non-blocking) osd interface
   
   // cache
   map<inodeno_t, Inode*> inode_map;
@@ -214,6 +217,10 @@ class Client : public Dispatcher {
   
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
+
+  // blocking osd accessors
+  int blocking_osd_read(inodeno_t ino, size_t len, size_t offset, char* buffer);
+  int blocking_osd_write(inodeno_t ino, size_t len, size_t offset, const char* buffer);
 		
  public:
   Client(MDCluster *mdc, int id, Messenger *m);
