@@ -154,7 +154,8 @@ Message *mpi_recv()
 	dout(10) << "mpi_recv got frag " << i << " of " << env.nchunks << " len " << fragstatus.count << endl;
   }
   
-  dout(10) << "mpi_recv sending ack to " << status.MPI_SOURCE << endl;
+  /*
+  dout(10) << "mpi_recv sending (*&#($#$ ack to " << status.MPI_SOURCE << endl;
   char ack = 1;
   MPI_Send(&ack,
 		   1,
@@ -162,7 +163,7 @@ Message *mpi_recv()
 		   status.MPI_SOURCE,
 		   TAG_ACK,
 		   MPI_COMM_WORLD);
-  
+  */
   dout(10) << "mpi_recv got " << blist.length() << " byte message tag " << status.MPI_TAG << endl;
   
 
@@ -215,7 +216,8 @@ int mpi_send(Message *m)
 	i++;
   }
 
-  dout(10) << "mpi_send waiting for ack" << endl;
+  /*
+  dout(10) << "mpi_send aaaaahhhhhh waiting for ack" << endl;
   char ack;
   MPI_Status ackstatus;
   ASSERT(MPI_Recv(&ack,
@@ -225,7 +227,7 @@ int mpi_send(Message *m)
 				  TAG_ACK,
 				  MPI_COMM_WORLD,
 				  &ackstatus) == MPI_SUCCESS);
-
+  */
 
   dout(10) << "mpi_send done" << endl;
 

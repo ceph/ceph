@@ -64,7 +64,7 @@ msg/FakeMessenger.o ${COMMON_OBJS}
 fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/allmds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
+mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/FakeClient.o msg/CheesySerializer.o ${COMMON_OBJS} 
 	${MPICC} ${CFLAGS} $^ -o $@
 
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}

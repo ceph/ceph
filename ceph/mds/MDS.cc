@@ -143,9 +143,9 @@ MDS::~MDS() {
 int MDS::init()
 {
   // init messenger
-  mds_lock.Lock();
-  //idalloc->load();
-  mds_lock.Unlock();
+  //mds_lock.Lock();
+  idalloc->load();
+  //mds_lock.Unlock();
 
 }
 
@@ -297,7 +297,7 @@ void MDS::proc_message(Message *m)
 
 void MDS::dispatch(Message *m)
 {
-  mds_lock.Lock();
+  //  mds_lock.Lock();
 
   switch (m->get_dest_port()) {
 	
@@ -390,7 +390,7 @@ void MDS::dispatch(Message *m)
   }
 
 
-  mds_lock.Unlock();
+  //mds_lock.Unlock();
 }
 
 

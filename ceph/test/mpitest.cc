@@ -14,6 +14,7 @@ using namespace std;
 #include "mds/MDStore.h"
 
 #include "msg/MPIMessenger.h"
+#include "msg/CheesySerializer.h"
 
 #include "messages/MPing.h"
 
