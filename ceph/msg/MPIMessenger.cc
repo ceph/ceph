@@ -94,11 +94,14 @@ int mpimessenger_world()
  * internal send/recv
  */
 
+
+MPI_Request recv_env_req;
+
 Message *mpi_recv()
 {
   MPI_Status status;
   
-  dout(10) << "mpi_recv waiting for message" << endl;
+  //dout(10) << "mpi_recv waiting for message" << endl;
 
   /*
   // get message size
@@ -115,16 +118,21 @@ Message *mpi_recv()
 
   msg_envelope_t env;
 
-  MPI_Request env_req;
+  dout(10) << "mpi_recv Irecv envelope" << endl;
   ASSERT(MPI_Irecv((void*)&env,
-				   sizeof(env),
-				   MPI_CHAR, 
-				   MPI_ANY_SOURCE,
-				   TAG_ENV,
-				   MPI_COMM_WORLD,
-				   &env_req) == MPI_SUCCESS);
+				  sizeof(env),
+				  MPI_CHAR, 
+				  MPI_ANY_SOURCE,
+				  TAG_ENV,
+				  MPI_COMM_WORLD,
+				  &recv_env_req) == MPI_SUCCESS);
+  
+  dout(10) << "mpi_recv wait" << endl;
 
-  ASSERT(MPI_Wait(&env_req, &status) == MPI_SUCCESS);
+  if (MPI_Wait(&recv_env_req, &status) != MPI_SUCCESS) {
+	dout(10) << "mpi_recv MPI_Wait not success" << endl;
+	return 0;
+  }
   
   if (status.count < MSG_ENVELOPE_LEN) {
 	dout(10) << "mpi_recv got short recv " << status.count << " bytes" << endl;
@@ -336,10 +344,17 @@ MPI_Request kick_req;
 
 void mpimessenger_kick_loop()
 {
+  dout(10) << "kicking" << endl;
+  MPI_Cancel(&recv_env_req);
+  dout(10) << "kicked" << endl;
+  return;
+
+
   // wake up the event loop with a bad "message"
   //char stop = 0;               // a byte will do
   msg_envelope_t env;
   env.type = 0;
+  dout(10) << "kicking" << endl;
   ASSERT(MPI_Isend(&env,
 				   sizeof(env),
 				   MPI_CHAR,
@@ -347,6 +362,7 @@ void mpimessenger_kick_loop()
 				   TAG_ENV,
 				   MPI_COMM_WORLD,
 				   &kick_req) == MPI_SUCCESS);
+  dout(10) << "kicked" << endl;
 }
 
 void mpimessenger_stop()
@@ -453,7 +469,7 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
 
-  if (1) {
+  if (0) {
 	// send in this thread
 	mpi_send(m);
   } else {
