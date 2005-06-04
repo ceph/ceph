@@ -42,6 +42,7 @@ class MOSDRead : public Message {
 	this->st.oid = oid;
 	this->st.len = len;
 	this->st.offset = offset;
+	this->st.pcid = 0;
   }
   MOSDRead() {}
 

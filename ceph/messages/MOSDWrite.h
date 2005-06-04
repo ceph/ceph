@@ -50,6 +50,7 @@ class MOSDWrite : public Message {
 	this->st.offset = offset;
 	//this->st.flags = flags;
 	this->st.len = len;
+	this->st.pcid = 0;
   }
 
   void set_data(bufferlist &d) {
