@@ -209,13 +209,13 @@ int mpi_send(Message *m)
 
   // send envelope
   MPI_Request req; 
-  ASSERT(MPI_Send((void*)env,
+  ASSERT(MPI_Isend((void*)env,
 				  sizeof(*env),
 				  MPI_CHAR,
 				  rank,
 				  TAG_ENV,
-				  MPI_COMM_WORLD/*,
-								  &req*/) == MPI_SUCCESS);
+				  MPI_COMM_WORLD,
+				   &req) == MPI_SUCCESS);
   
   int i = 0;
   vector<MPI_Request> chunk_reqs(env->nchunks);
@@ -223,13 +223,13 @@ int mpi_send(Message *m)
 	   it != blist.buffers().end();
 	   it++) {
 	dout(10) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
-	ASSERT(MPI_Send((void*)(*it).c_str(),
+	ASSERT(MPI_Isend((void*)(*it).c_str(),
 					 (*it).length(),
 					 MPI_CHAR,
 					 rank,
 					 TAG_PAYLOAD,
-					 MPI_COMM_WORLD/*,
-									 &chunk_reqs[i]*/) == MPI_SUCCESS);
+					 MPI_COMM_WORLD,
+					 &chunk_reqs[i]) == MPI_SUCCESS);
 	i++;
   }
 
@@ -344,11 +344,12 @@ MPI_Request kick_req;
 
 void mpimessenger_kick_loop()
 {
+  /*
   dout(10) << "kicking" << endl;
   MPI_Cancel(&recv_env_req);
   dout(10) << "kicked" << endl;
   return;
-
+  */
 
   // wake up the event loop with a bad "message"
   //char stop = 0;               // a byte will do
@@ -469,7 +470,7 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
 
-  if (0) {
+  if (1) {
 	// send in this thread
 	mpi_send(m);
   } else {
