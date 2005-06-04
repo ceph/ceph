@@ -118,7 +118,7 @@ Message *mpi_recv(int tag)
 
   // make sure it's the size of an envelope!
   assert(status.count <= MSG_ENVELOPE_LEN);
-  */
+  */ 
   msg_envelope_t env;
   
   dout(10) << "mpi_recv Irecv envelope" << endl;
@@ -284,7 +284,7 @@ void* mpimessenger_loop(void*)
 	
 
 	// check mpi
-	dout(12) << "mpimessenger_loop waiting for incoming messages" << endl;
+	dout(12) << "loop waiting for incoming messages" << endl;
 
 	// get message
 	Message *m = mpi_recv(TAG_UNSOLICITED);
@@ -294,7 +294,7 @@ void* mpimessenger_loop(void*)
 	if (directory.count(dest)) {
 	  Messenger *who = directory[ dest ];
 	  
-	  dout(3) << "---- mpimessenger_loop dispatching '" << m->get_type_name() << 
+	  dout(3) << "dispatching '" << m->get_type_name() << 
 		"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			  << endl;
@@ -317,7 +317,7 @@ void* mpimessenger_loop(void*)
 
 int mpimessenger_start()
 {
-  dout(5) << "mpimessenger_start starting thread" << endl;
+  dout(5) << "starting thread" << endl;
   
   // start a thread
   pthread_create(&thread_id, 
@@ -330,6 +330,10 @@ MPI_Request kick_req;
 
 void mpimessenger_kick_loop()
 {
+
+  if (pthread_self() == thread_id) return;   // if we're same thread as the loop, no kicking necessary
+
+
   /*
   dout(10) << "kicking" << endl;
   MPI_Cancel(&recv_env_req);
@@ -341,7 +345,7 @@ void mpimessenger_kick_loop()
   //char stop = 0;               // a byte will do
   msg_envelope_t env;
   env.type = 0;
-  dout(10) << "kicking" << endl;
+  //dout(10) << "kicking" << endl;
   ASSERT(MPI_Send(&env,
 				   sizeof(env),
 				   MPI_CHAR,
@@ -349,7 +353,7 @@ void mpimessenger_kick_loop()
 				   TAG_UNSOLICITED,
 				   MPI_COMM_WORLD/*,
 								   &kick_req*/) == MPI_SUCCESS);
-  dout(10) << "kicked" << endl;
+  //dout(10) << "kicked" << endl;
 }
 
 void mpimessenger_stop()
@@ -462,10 +466,10 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   } else {
 	// queue up
 	sender_lock.Lock();
-	dout(10) << "send_message queueing up outgoing message " << *m << endl;
+	dout(10) << "queueing outgoing message " << *m << endl;
 	outgoing.push_back(m);
-	mpimessenger_kick_loop();
 	sender_lock.Unlock();
+	mpimessenger_kick_loop();
   }
 }
 
