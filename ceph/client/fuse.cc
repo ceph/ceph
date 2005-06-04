@@ -254,6 +254,17 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   newargv[newargc++] = "-o";
   newargv[newargc++] = "use_ino";
 
+  // large reads, direct_io (no kernel cachine)
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "large_read";
+
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "direct_io";
+
+  // disable stupid fuse unlink hiding thing
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "hard_remove";
+
   // force into foreground
   //   -> we can watch stdout this way!!
   newargv[newargc++] = "-f";

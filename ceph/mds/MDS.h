@@ -18,6 +18,7 @@ using namespace __gnu_cxx;
 #include "include/Context.h"
 #include "common/DecayCounter.h"
 #include "common/Logger.h"
+#include "common/Mutex.h"
 
 typedef __uint64_t object_t;
 
@@ -83,6 +84,8 @@ void split_path(string& path,
 class MDS : public Dispatcher {
  protected:
   int          whoami;
+
+  Mutex        mds_lock;
 
   MDCluster    *mdcluster;
  public:

@@ -3,8 +3,10 @@
 #include "include/error.h"
 
 #include "common/Timer.h"
+#include "common/Mutex.h"
 
 #include "MPIMessenger.h"
+#include "CheesySerializer.h"
 #include "Message.h"
 
 #include <iostream>
@@ -23,16 +25,22 @@ using namespace __gnu_cxx;
  */
 
 hash_map<int, MPIMessenger*>  directory;
+list<Message*>                outgoing;
 
 /* this process */
 int mpi_world;
 int mpi_rank;
 bool mpi_done = false;     // set this flag to stop the event loop
 
+#define TAG_ENV         1
+#define TAG_PAYLOAD     2
+#define TAG_ACK         3
 
 // the key used to fetch the tag for the current thread.
 pthread_key_t tag_key;
 pthread_t thread_id = 0;   // thread id of the event loop.  init value == nobody
+
+Mutex sender_lock;
 
 // our lock for any common data; it's okay to have only the one global mutex
 // because our common data isn't a whole lot.
@@ -42,11 +50,11 @@ static pthread_mutex_t mutex;
 // a unique tag for each thread.
 static int nthreads;
 
-#define TAG_UNSOLICITED 0
+//#define TAG_UNSOLICITED 0
 
 // debug
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world << " " << getpid() << "] "
+#define  dout(l)    if (l<=g_conf.debug) cout << "[MPI " << mpi_rank << "/" << mpi_world << " " << getpid() << "." << pthread_self() << "] "
 
 
 
@@ -86,71 +94,148 @@ int mpimessenger_world()
  * internal send/recv
  */
 
-Message *mpi_recv(int tag)
+Message *mpi_recv()
 {
   MPI_Status status;
   
-  dout(10) << "mpi_recv waiting for message on tag " << tag << endl;
+  dout(10) << "mpi_recv waiting for message" << endl;
 
   // get message size
   ASSERT(MPI_Probe(MPI_ANY_SOURCE, 
-				   tag,
+				   TAG_ENV,
 				   MPI_COMM_WORLD,
 				   &status) == MPI_SUCCESS);
   
-  // get message; there may be multiple messages on the queue, we
-  // need to be sure to read the one which corresponds to size
-  // obtained above.
-  char *buf = new char[status.count];
-  ASSERT(MPI_Recv(buf,
-				  status.count,
+  dout(10) << "mpi_recv probe sees " << status.count << " bytes incoming" << endl;
+
+  // make sure it's the size of an envelope!
+  assert(status.count <= MSG_ENVELOPE_LEN);
+
+  msg_envelope_t env;
+
+  ASSERT(MPI_Recv((void*)&env,
+				  status.count,//MSG_ENVELOPE_LEN,
 				  MPI_CHAR, 
-				  status.MPI_SOURCE,
-				  status.MPI_TAG,
+				  MPI_ANY_SOURCE,
+				  TAG_ENV,
 				  MPI_COMM_WORLD,
 				  &status) == MPI_SUCCESS);
-
-  if (status.count < 4) {
+  
+  if (status.count < MSG_ENVELOPE_LEN) {
 	dout(10) << "mpi_recv got short recv " << status.count << " bytes" << endl;
 	return 0;
   }
 
-  dout(10) << "mpi_recv got " << status.count << " byte message tag " << status.MPI_TAG << endl;
+  dout(10) << "mpi_recv got envelope " << status.count << ", type=" << env.type << " src " << env.source << " dst " << env.dest << " nchunks=" << env.nchunks << " from " << status.MPI_SOURCE << endl;
+
+  // get the rest of the message
+  bufferlist blist;
+  for (int i=0; i<env.nchunks; i++) {
+	MPI_Status fragstatus;
+	ASSERT(MPI_Probe(status.MPI_SOURCE,
+					 TAG_PAYLOAD,
+					 MPI_COMM_WORLD,
+					 &fragstatus) == MPI_SUCCESS);
+
+	dout(10) << "mpi_recv frag " << i << " of " << env.nchunks << " is len " << fragstatus.count << endl;
+
+	bufferptr bp = new buffer(fragstatus.count);
+	
+	ASSERT(MPI_Recv(bp.c_str(),
+					fragstatus.count,
+					MPI_CHAR, 
+					status.MPI_SOURCE,
+					TAG_PAYLOAD,
+					MPI_COMM_WORLD,
+					&fragstatus) == MPI_SUCCESS);
+	bp.set_length(fragstatus.count);
+	blist.push_back(bp);
+
+	dout(10) << "mpi_recv got frag " << i << " of " << env.nchunks << " len " << fragstatus.count << endl;
+  }
   
+  dout(10) << "mpi_recv sending ack to " << status.MPI_SOURCE << endl;
+  char ack = 1;
+  MPI_Send(&ack,
+		   1,
+		   MPI_CHAR,
+		   status.MPI_SOURCE,
+		   TAG_ACK,
+		   MPI_COMM_WORLD);
+  
+  dout(10) << "mpi_recv got " << blist.length() << " byte message tag " << status.MPI_TAG << endl;
+  
+
   // unmarshall message
-  Message *m = decode_message(buf, status.count);
-  
+  Message *m = decode_message(env, blist);
   return m;
 }
 
-int mpi_send(Message *m, int rank, int tag)
+int mpi_send(Message *m)
 {
+  int rank = MPI_DEST_TO_RANK(m->get_dest(), mpi_world);
   if (rank == mpi_rank) {      
 	dout(1) << "local delivery not implemented" << endl;
 	assert(0);
   } 
 
   // marshall
-  m->encode();
-  int size = m->get_raw_message_len();
-  const char *buf = m->get_raw_message();
-  
-  dout(10) << "mpi_sending " << size << " byte message to rank " << rank << " tag " << tag << endl;
+  m->encode_payload();
+  msg_envelope_t *env = &m->get_envelope();
+  bufferlist blist = m->get_payload();
+  env->nchunks = blist.buffers().size();
 
-  // sending
-  MPI_Request req;             // non-blocking, in case we send to ourselves from same thread
-  ASSERT(MPI_Isend((void*)buf,
-				   size,
-				   MPI_CHAR,
-				   rank,
-				   tag,
-				   MPI_COMM_WORLD,
-				   &req) == MPI_SUCCESS);
+  dout(10) << "mpi_sending " << blist.length() << " size message type " << env->type << " src " << env->source << " dst " << env->dest << " to rank " << rank << " nchunks=" << env->nchunks << endl;
+
+  //sender_mutex.Lock();
+
+  // send envelope
+  MPI_Request req; 
+  ASSERT(MPI_Send((void*)env,
+				  sizeof(*env),
+				  MPI_CHAR,
+				  rank,
+				  TAG_ENV,
+				  MPI_COMM_WORLD/*,
+								  &req*/) == MPI_SUCCESS);
+  
+  int i = 0;
+  vector<MPI_Request> chunk_reqs(env->nchunks);
+  for (list<bufferptr>::iterator it = blist.buffers().begin();
+	   it != blist.buffers().end();
+	   it++) {
+	dout(10) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
+	ASSERT(MPI_Send((void*)(*it).c_str(),
+					 (*it).length(),
+					 MPI_CHAR,
+					 rank,
+					 TAG_PAYLOAD,
+					 MPI_COMM_WORLD/*,
+									 &chunk_reqs[i]*/) == MPI_SUCCESS);
+	i++;
+  }
+
+  dout(10) << "mpi_send waiting for ack" << endl;
+  char ack;
+  MPI_Status ackstatus;
+  ASSERT(MPI_Recv(&ack,
+				  1,
+				  MPI_CHAR, 
+				  rank,
+				  TAG_ACK,
+				  MPI_COMM_WORLD,
+				  &ackstatus) == MPI_SUCCESS);
+
+
+  dout(10) << "mpi_send done" << endl;
+
+  //sender_mutex.Unlock();
 }
 
 
 
 // get the tag for this thread
+/*
 static int get_thread_tag()
 {
   int tag = (int)pthread_getspecific(tag_key);
@@ -172,7 +257,7 @@ static int get_thread_tag()
   
   return tag;
 }
-
+*/
 
 
 
@@ -183,11 +268,21 @@ void* mpimessenger_loop(void*)
   dout(1) << "mpimessenger_loop start pid " << getpid() << endl;
 
   while (!mpi_done) {
+	// check outgoing queue
+	sender_lock.Lock();
+	for (list<Message*>::iterator it = outgoing.begin();
+		 it != outgoing.end();
+		 it++) {
+	  mpi_send(*it);
+	}
+	outgoing.clear();
+	sender_lock.Unlock();
+	
 	// check mpi
-	dout(12) << "mpimessenger_loop waiting for (unsolicited) messages" << endl;
+	dout(12) << "mpimessenger_loop waiting for incoming messages" << endl;
 
 	// get message
-	Message *m = mpi_recv(TAG_UNSOLICITED);
+	Message *m = mpi_recv();
 	if (!m) continue;  // no message?
 	
 	int dest = m->get_dest();
@@ -202,6 +297,7 @@ void* mpimessenger_loop(void*)
 	  who->dispatch(m);
 	} else {
 	  dout (1) << "---- i don't know who " << dest << " is." << endl;
+	  assert(0);
 	  break;
 	}
   }
@@ -225,6 +321,21 @@ int mpimessenger_start()
 				 0);
 }
 
+MPI_Request kick_req;
+
+void mpimessenger_kick_loop()
+{
+  // wake up the event loop with a bad "message"
+  char stop = 0;               // a byte will do
+  ASSERT(MPI_Isend(&stop,
+				   1,
+				   MPI_CHAR,
+				   mpi_rank,
+				   TAG_ENV,
+				   MPI_COMM_WORLD,
+				   &kick_req) == MPI_SUCCESS);
+}
+
 void mpimessenger_stop()
 {
   dout(5) << "mpimessenger_stop stopping thread" << endl;
@@ -237,14 +348,7 @@ void mpimessenger_stop()
   // set finish flag
   mpi_done = true;
 
-  // wake up the event loop with a bad "message"
-  char stop = 0;               // a byte will do
-  ASSERT(MPI_Send(&stop,
-				  1,
-				  MPI_CHAR,
-				  mpi_rank,
-				  TAG_UNSOLICITED,
-				  MPI_COMM_WORLD) == MPI_SUCCESS);
+  mpimessenger_kick_loop();
   
   // wait for thread to stop
   mpimessenger_wait();
@@ -336,13 +440,29 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
 
-  int rank = MPI_DEST_TO_RANK(dest, mpi_world);
-
-  mpi_send(m, rank, m->get_pcid());
+  if (1) {
+	// send in this thread
+	mpi_send(m);
+  } else {
+	// queue up
+	sender_lock.Lock();
+	dout(10) << "send_message queueing up outgoing message " << *m << endl;
+	outgoing.push_back(m);
+	mpimessenger_kick_loop();
+	sender_lock.Unlock();
+  }
 }
 
+
+
+/*
 Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
 {
+
+  // no worky no more, use CheesySerializer
+  assert(0);
+
+
   int fromport = 0;
 
   // set envelope
@@ -357,8 +477,8 @@ Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
 
   mpi_send(m, dest, TAG_UNSOLICITED);
 
-  return mpi_recv(my_tag);
+  return mpi_recv();
 }
 
-
+*/
 

@@ -81,6 +81,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdcluster = mdc;
 
   messenger = m;
+  messenger->set_dispatcher(this);
 
   mdcache = new MDCache(this);
   mdstore = new MDStore(this);
@@ -142,7 +143,9 @@ MDS::~MDS() {
 int MDS::init()
 {
   // init messenger
-  messenger->set_dispatcher(this);
+  mds_lock.Lock();
+  //idalloc->load();
+  mds_lock.Unlock();
 
 }
 
@@ -294,6 +297,7 @@ void MDS::proc_message(Message *m)
 
 void MDS::dispatch(Message *m)
 {
+  mds_lock.Lock();
 
   switch (m->get_dest_port()) {
 	
@@ -338,7 +342,7 @@ void MDS::dispatch(Message *m)
   // HACK FOR NOW
   static bool did_heartbeat_hack = false;
   if (!shutting_down && !shut_down &&
-	  //false && 
+	  false && 
 	  !did_heartbeat_hack) {
 	osdmonitor->initiate_heartbeat();
 	did_heartbeat_hack = true;
@@ -385,6 +389,8 @@ void MDS::dispatch(Message *m)
 	}
   }
 
+
+  mds_lock.Unlock();
 }
 
 

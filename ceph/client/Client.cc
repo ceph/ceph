@@ -204,12 +204,28 @@ Dentry *Client::lookup(filepath& path)
 
 
 
+// -------
+
+MClientReply *Client::make_request(MClientRequest *req, int mds)
+{
+  // drop mutex for duration of call
+  client_lock.Unlock();  
+  MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
+														   MSG_ADDR_MDS(mds), 
+														   MDS_PORT_SERVER);
+  client_lock.Lock();  
+  return reply;
+}
+
+
 
 // ------------------------
 // incoming messages
 
 void Client::dispatch(Message *m)
 {
+  client_lock.Lock();
+
   switch (m->get_type()) {
 	// osd
   case MSG_OSD_READREPLY:
@@ -232,6 +248,8 @@ void Client::dispatch(Message *m)
 	assert(0);  // fail loudly
 	break;
   }
+
+  client_lock.Unlock();
 }
 
 void Client::handle_file_caps(MClientFileCaps *m)
@@ -276,13 +294,18 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
 int Client::mount(int mkfs)
 {
+  client_lock.Lock();
+
   assert(!mounted);  // caller is confused?
 
   dout(1) << "mounting" << endl;
   MClientMount *m = new MClientMount();
   if (mkfs) m->set_mkfs(mkfs);
+
+  client_lock.Unlock();
   MClientMountAck *reply = (MClientMountAck*)messenger->sendrecv(m,
 																 MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  client_lock.Lock();
   assert(reply);
 
   // we got osdcluster!
@@ -291,18 +314,26 @@ int Client::mount(int mkfs)
 
   dout(1) << "mounted" << endl;
   mounted = true;
+
+  client_lock.Unlock();
 }
 
 int Client::unmount()
 {
+  client_lock.Lock();
+
   assert(mounted);  // caller is confused?
 
   dout(1) << "unmounting" << endl;
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
+  client_lock.Unlock();
   Message *reply = messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  client_lock.Lock();
   assert(reply);
   mounted = false;
   dout(1) << "unmounted" << endl;
+
+  client_lock.Unlock();
 }
 
 
@@ -311,6 +342,8 @@ int Client::unmount()
 
 int Client::link(const char *existing, const char *newname) 
 {
+  client_lock.Lock();
+
   // main path arg is new link name
   // sarg is target (existing file)
 
@@ -324,18 +357,22 @@ int Client::link(const char *existing, const char *newname)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   
   this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "link result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
 
 int Client::unlink(const char *path)
 {
+  client_lock.Lock();
+
   dout(3) << "unlink " << path << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, whoami);
   req->set_path(path);
@@ -346,7 +383,7 @@ int Client::unlink(const char *path)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   if (res == 0) {
 	//this crashes, haven't looked at why yet
@@ -356,11 +393,15 @@ int Client::unlink(const char *path)
   this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "unlink result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
 int Client::rename(const char *from, const char *to)
 {
+  client_lock.Lock();
+
   dout(3) << "rename " << from << " " << to << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_RENAME, whoami);
   req->set_path(from);
@@ -372,11 +413,13 @@ int Client::rename(const char *from, const char *to)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "rename result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
@@ -384,6 +427,8 @@ int Client::rename(const char *from, const char *to)
 
 int Client::mkdir(const char *path, mode_t mode)
 {
+  client_lock.Lock();
+
   dout(3) << "mkdir " << path << " mode " << mode << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, whoami);
   req->set_path(path);
@@ -395,16 +440,20 @@ int Client::mkdir(const char *path, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());
   delete reply;
   dout(10) << "mkdir result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
 int Client::rmdir(const char *path)
 {
+  client_lock.Lock();
+
   dout(3) << "rmdir " << path << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, whoami);
   req->set_path(path);
@@ -415,7 +464,7 @@ int Client::rmdir(const char *path)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   if (res == 0) {
 	// crashes, not sure why yet
@@ -424,6 +473,8 @@ int Client::rmdir(const char *path)
   this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "rmdir result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
@@ -431,6 +482,8 @@ int Client::rmdir(const char *path)
   
 int Client::symlink(const char *target, const char *link)
 {
+  client_lock.Lock();
+
   dout(3) << "symlink target " << target << " link " << link << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, whoami);
   req->set_path(link);
@@ -442,11 +495,13 @@ int Client::symlink(const char *target, const char *link)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  //FIXME assuming trace of link, not of target
   delete reply;
   dout(10) << "symlink result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
@@ -458,6 +513,8 @@ int Client::readlink(const char *path, char *buf, size_t size)
   int r = this->lstat(path, &stbuf);
   if (r != 0) return r;
 
+  client_lock.Lock();
+
   // pull symlink content from cache
   Inode *in = inode_map[stbuf.st_ino];
   assert(in);  // i just did a stat
@@ -467,6 +524,7 @@ int Client::readlink(const char *path, char *buf, size_t size)
   if (res > size) res = size;
   memcpy(buf, in->symlink->c_str(), res);
 
+  client_lock.Unlock();
   return res;  // return length in bytes (to mimic the system call)
 }
 
@@ -476,12 +534,15 @@ int Client::readlink(const char *path, char *buf, size_t size)
 
 int Client::lstat(const char *path, struct stat *stbuf)
 {
+  client_lock.Lock();
+
   dout(3) << "lstat " << path << endl;
   // FIXME, PERF request allocation convenient but not necessary for cache hit
   MClientRequest *req = new MClientRequest(MDS_OP_STAT, whoami);
   req->set_path(path);
   
   // check whether cache content is fresh enough
+  int res = 0;
   Dentry *dn = lookup(req->get_filepath());
   inode_t inode;
   time_t now = time(NULL);
@@ -493,45 +554,50 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	req->set_caller_uid(getuid());
 	req->set_caller_gid(getgid());
 	
-	MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
-	int res = reply->get_result();
+	MClientReply *reply = make_request(req, 0);
+	res = reply->get_result();
 	dout(10) << "lstat res is " << res << endl;
-	if (res != 0) return res;
-	
-	//Transfer information from reply to stbuf
-	vector<c_inode_info*> trace = reply->get_trace();
-	inode = trace[trace.size()-1]->inode;
-	
-	//Update metadata cache
-	this->insert_trace(trace);
-	delete reply;
+	if (res == 0) {
+	  //Transfer information from reply to stbuf
+	  vector<c_inode_info*> trace = reply->get_trace();
+	  inode = trace[trace.size()-1]->inode;
+	  
+	  //Update metadata cache
+	  this->insert_trace(trace);
+	  delete reply;
+	}
   }
      
-  memset(stbuf, 0, sizeof(struct stat));
-  //stbuf->st_dev = 
-  stbuf->st_ino = inode.ino;
-  stbuf->st_mode = inode.mode;
-  stbuf->st_nlink = inode.nlink;
-  stbuf->st_uid = inode.uid;
-  stbuf->st_gid = inode.gid;
-  stbuf->st_ctime = inode.ctime;
-  stbuf->st_atime = inode.atime;
-  stbuf->st_mtime = inode.mtime;
-  stbuf->st_size = (off_t) inode.size; //FIXME off_t is signed 64 vs size is unsigned 64
-  stbuf->st_blocks = (inode.size - 1) / 1024 + 1;
-  stbuf->st_blksize = 1024;
-  //stbuf->st_flags =
-  //stbuf->st_gen =
+  if (res == 0) {
+	memset(stbuf, 0, sizeof(struct stat));
+	//stbuf->st_dev = 
+	stbuf->st_ino = inode.ino;
+	stbuf->st_mode = inode.mode;
+	stbuf->st_nlink = inode.nlink;
+	stbuf->st_uid = inode.uid;
+	stbuf->st_gid = inode.gid;
+	stbuf->st_ctime = inode.ctime;
+	stbuf->st_atime = inode.atime;
+	stbuf->st_mtime = inode.mtime;
+	stbuf->st_size = (off_t) inode.size; //FIXME off_t is signed 64 vs size is unsigned 64
+	stbuf->st_blocks = (inode.size - 1) / 1024 + 1;
+	stbuf->st_blksize = 1024;
+	//stbuf->st_flags =
+	//stbuf->st_gen =
+	
+	dout(10) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
+  }
 
-  dout(10) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
-
-  return 0;
+  client_lock.Unlock();
+  return res;
 }
 
 
 
 int Client::chmod(const char *path, mode_t mode)
 {
+  client_lock.Lock();
+
   dout(3) << "chmod " << path << " mode " << mode << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, whoami);
   req->set_path(path); 
@@ -541,16 +607,20 @@ int Client::chmod(const char *path, mode_t mode)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "chmod result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
 int Client::chown(const char *path, uid_t uid, gid_t gid)
 {
+  client_lock.Lock();
+
   dout(3) << "chown " << path << " " << uid << "." << gid << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, whoami);
   req->set_path(path); 
@@ -563,16 +633,20 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
 
   //FIXME enforce caller uid rights?
 
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "chown result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
 int Client::utime(const char *path, struct utimbuf *buf)
 {
+  client_lock.Lock();
+
   dout(3) << "utime " << path << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_UTIME, whoami);
   req->set_path(path); 
@@ -585,11 +659,13 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
   delete reply;
   dout(10) << "utime result is " << res << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
@@ -597,6 +673,8 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
 int Client::mknod(const char *path, mode_t mode) 
 { 
+  client_lock.Lock();
+
   dout(3) << "mknod " << path << " mode " << mode << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, whoami);
   req->set_path(path); 
@@ -608,7 +686,7 @@ int Client::mknod(const char *path, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
 
@@ -616,6 +694,8 @@ int Client::mknod(const char *path, mode_t mode)
 
   delete reply;
   dout(10) << "mknod result is " << res << ", size is " << size << endl;
+
+  client_lock.Unlock();
   return res;
 }
 
@@ -631,6 +711,8 @@ int Client::mknod(const char *path, mode_t mode)
 
 int Client::getdir(const char *path, map<string,inode_t*>& contents) 
 {
+  client_lock.Unlock();
+
   dout(3) << "getdir " << path << endl;
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, whoami);
   req->set_path(path); 
@@ -641,36 +723,39 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   int res = reply->get_result();
   vector<c_inode_info*> trace = reply->get_trace();
   this->insert_trace(trace);  
 
-  if (res) return res;
+  if (res == 0) {
 
-  // dir contents to cache!
-  inodeno_t ino = trace[trace.size()-1]->inode.ino;
-  Inode *diri = inode_map[ ino ];
-  assert(diri);
-  assert(diri->inode.mode & INODE_MODE_DIR);
-  Dir *dir = open_dir(diri);
-  assert(dir);
-  time_t now = time(NULL);
-  for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 
-	   it != reply->get_dir_contents().end(); 
-	   it++) {
-	// put in cache
-	Inode *in = this->insert_inode_info(dir, *it);
-	in->last_updated = now;
+	// dir contents to cache!
+	inodeno_t ino = trace[trace.size()-1]->inode.ino;
+	Inode *diri = inode_map[ ino ];
+	assert(diri);
+	assert(diri->inode.mode & INODE_MODE_DIR);
+	Dir *dir = open_dir(diri);
+	assert(dir);
+	time_t now = time(NULL);
+	for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 
+		 it != reply->get_dir_contents().end(); 
+		 it++) {
+	  // put in cache
+	  Inode *in = this->insert_inode_info(dir, *it);
+	  in->last_updated = now;
+	  
+	  // contents to caller too!
+	  contents[(*it)->ref_dn] = &in->inode;
+	}
 
-	// contents to caller too!
-    contents[(*it)->ref_dn] = &in->inode;
+	// FIXME: remove items in cache that weren't in my readdir
+	// ***
   }
 
-  // FIXME: remove items in cache that weren't in my readdir
-  // ***
-
   delete reply;     //fix thing above first
+
+  client_lock.Unlock();
   return res;
 }
 
@@ -681,6 +766,8 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 
 int Client::open(const char *path, int mode) 
 {
+  client_lock.Lock();
+
   dout(3) << "open " << path << " mode " << mode << endl;
   
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
@@ -691,15 +778,16 @@ int Client::open(const char *path, int mode)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   assert(reply);
   dout(3) << "open result = " << reply->get_result() << endl;
 
   vector<c_inode_info*> trace = reply->get_trace();
   this->insert_trace(trace);  
+  int result = reply->get_result();
 
   // success?
-  if (reply->get_result() > 0) {
+  if (result > 0) {
 	// yay
 	Fh *f = new Fh;
 	memset(f, 0, sizeof(*f));
@@ -711,11 +799,16 @@ int Client::open(const char *path, int mode)
 	dout(3) << "open success, fh is " << reply->get_result() << " caps " << f->caps << "  fh size " << f->size << endl;
   }
 
-  return reply->get_result();
+  delete reply;
+
+  client_lock.Unlock();
+  return result;
 }
 
 int Client::close(fileh_t fh)
 {
+  client_lock.Lock();
+
   dout(3) << "close " << fh << endl;
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
@@ -734,13 +827,18 @@ int Client::close(fileh_t fh)
   // take note of the fact that we're mid-close
   fh_closing.insert(fh);
 
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  MClientReply *reply = make_request(req, 0);
   assert(reply);
-  dout(3) << "close " << fh << " result = " << reply->get_result() << endl;
+  int result = reply->get_result();
+  dout(3) << "close " << fh << " result = " << result << endl;
   
   fh_closing.erase(fh);
   fh_map.erase(fh);
-  return reply->get_result();
+  
+  delete reply;
+
+  client_lock.Unlock();
+  return result;
 }
 
 
@@ -762,38 +860,37 @@ public:
 	this->rvalue = rvalue;
   }
   void finish(int r) {
-	//cout << "client_cond finish" << endl;
-	mutex->Lock();
-	//cout << "got mutex" << endl;
 	*rvalue = r;
 	cond->Signal();
-	mutex->Unlock();
   }
 };
 
 
 int Client::read(fileh_t fh, char *buf, size_t size, off_t offset) 
 {
+  client_lock.Lock();
+
   assert(fh_map.count(fh));
   inodeno_t ino = fh_map[fh]->ino;
   
   // check current file mode (are we allowed to read, cache, etc.)
   // ***
   
+  bufferlist blist;   // data will go here
+
   // issue async read
   Cond cond;
-  static Mutex mylock;
   int rvalue;
 
-  Mutex *mutex = &mylock;
-  mutex->Lock();
-
-  C_Client_Cond *onfinish = new C_Client_Cond(&cond, mutex, &rvalue);
-  filer->read(ino, size, offset, buf, onfinish);
+  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+  filer->read(ino, size, offset, &blist, onfinish);
   
-  cond.Wait(*mutex);
-  mutex->Unlock();
+  cond.Wait(client_lock);
 
+  // copy data into caller's buf
+  blist.copy(0, blist.length(), buf);
+
+  client_lock.Unlock();
   return rvalue;  
 }
 
@@ -801,6 +898,8 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 
 int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset) 
 {
+  client_lock.Lock();
+
   dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
 
   assert(fh_map.count(fh));
@@ -814,19 +913,18 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   // check current file mode (are we allowed to write, buffer, etc.)
   // ***
   
+  // create a buffer that refers to *buf, but doesn't try to free it when it's done.
+  bufferlist blist;
+  blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
+
   // issue write
   Cond cond;
-  static Mutex mylock;
   int rvalue;
 
-  Mutex *mutex = &mylock;
-  mutex->Lock();
-
-  C_Client_Cond *onfinish = new C_Client_Cond(&cond, mutex, &rvalue);
-  filer->write(ino, size, offset, buf, 0, onfinish);
+  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+  filer->write(ino, size, offset, blist, 0, onfinish);
   
-  cond.Wait(*mutex);
-  mutex->Unlock();
+  cond.Wait(client_lock);
 
   // assume success for now.  FIXME.
   size_t totalwritten = size;
@@ -844,6 +942,7 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   f->mtime = in->inode.mtime = g_clock.gettime();
 
   // ok!
+  client_lock.Unlock();
   return totalwritten;  
 }
 

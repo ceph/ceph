@@ -59,58 +59,16 @@ int
 Filer::read(inodeno_t ino,
 			size_t len, 
 			size_t offset, 
-			char *buffer,
+			bufferlist *bl,
 			Context *onfinish) 
 {
   // pending read record
   PendingOSDRead_t *p = new PendingOSDRead_t;
-  p->buffer = buffer;                // this way
-  p->dataptr = 0; p->freeptr = 0;    // not this way
+  p->read_result = bl;
   p->orig_offset = offset;
   p->bytes_read = 0;
   p->onfinish = onfinish;
 
-  issue_read(ino, len, offset, p);
-}
-
-int
-Filer::read(inodeno_t ino,
-			size_t len, 
-			size_t offset, 
-			char **dataptr,   // ptr to data
-			char **freeptr,   // ptr to delete
-			Context *onfinish) 
-{
-  // pending read record
-  PendingOSDRead_t *p = new PendingOSDRead_t;
-  p->orig_offset = offset;
-  p->bytes_read = 0;
-  p->onfinish = onfinish;
-
-  int nfrag = issue_read(ino, len, offset, p);
-
-  if (nfrag == 1) {
-	// one fragment, we can re-use message buffer.
-	p->dataptr = dataptr; p->freeptr = freeptr;  // this way
-	p->buffer = 0;                               // not this way
-  } 
-  else if (nfrag > 1) {
-	// we need a new buffer, cuz we have multiple bits!
-	p->buffer = new char[len];
-	p->dataptr = 0; p->freeptr = 0;    // not this way
-
-	*dataptr = p->buffer;
-	*freeptr = p->buffer;
-  }
-  else {
-	assert(len == 0);
-	assert(0);   // wtf, zero byte read?
-  }
-}
-
-
-int Filer::issue_read(inodeno_t ino, size_t len, size_t offset, PendingOSDRead_t *p)
-{  
   int num_rep = 1;          // FIXME
 
   // find data
@@ -154,47 +112,50 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
   PendingOSDRead_t *p = op_reads[ tid ];
   op_reads.erase( tid );
 
-  if (!p->buffer) {
-	// claim message buffer
-	*p->freeptr = m->get_raw_message();
-	*p->dataptr = m->get_buffer();
-	m->clear_raw_message();
-  } else {
-	// copy result into buffer
-	size_t off = p->read_off[m->get_oid()];
-	dout(7) << "filer: got frag at " << off << " len " << m->get_len() << endl;
-	memcpy(p->buffer + off, m->get_buffer(), m->get_len());
-  }
-
-  p->bytes_read += m->get_len();
+  // copy result into buffer
+  size_t off = p->read_off[m->get_oid()];
+  dout(7) << "filer: got frag at " << off << " len " << m->get_len() << endl;
   
-  // FIXME this braeks for fragmented reads and holes
-  /*
-	if (m->get_len() < m->get_origlen()) {
-	dout(7) << "zeroing gap" << endl;
-	memset(p->buffer + off + m->get_len(), m->get_origlen() - m->get_len(), 0);
-	}
-  */
-
-  delete m;
-
   // our op finished
   p->outstanding_ops.erase(tid);
-
+  
   if (p->outstanding_ops.empty()) {
 	// all done
-	long result = p->bytes_read;
+	p->read_result->clear();
+	if (p->read_data.size()) {
+	  // we have other fragments, assemble them all... blech!
+	  p->read_data[off] = new bufferlist;
+	  p->read_data[off]->claim( m->get_data() );
+
+	  // sort and string them together
+	  for (map<off_t, bufferlist*>::iterator it = p->read_data.begin();
+		   it != p->read_data.end();
+		   it++) {
+		p->read_result->claim_append(*(it->second));
+	  }
+	} else {
+	  // only one fragment, easy
+	  p->read_result->claim( m->get_data() );
+	}
 
 	// finish, clean up
 	Context *onfinish = p->onfinish;
 	delete p;   // del pendingOsdRead_t
 	
+	int result = p->read_result->length(); // assume success
+
 	// done
 	if (onfinish) {
 	  onfinish->finish(result);
 	  delete onfinish;
 	}
+  } else {
+	// store my bufferlist for later assembling
+	p->read_data[off] = new bufferlist;
+	p->read_data[off]->claim( m->get_data() );
   }
+
+  delete m;
 }
 
 
@@ -205,7 +166,7 @@ int
 Filer::write(inodeno_t ino,
 			 size_t len, 
 			 size_t offset, 
-			 const char *buffer,
+			 bufferlist& bl,
 			 int flags, 
 			 Context *onfinish)
 {
@@ -231,8 +192,11 @@ Filer::write(inodeno_t ino,
 	last_tid++;
 	
 	// issue write
-	MOSDWrite *m = new MOSDWrite(last_tid, it->oid, it->len, it->offset,
-								 buffer + off);
+	MOSDWrite *m = new MOSDWrite(last_tid, it->oid, it->len, it->offset);
+
+	bufferlist cur;
+	cur.substr_of(bl, off, it->len);
+	m->set_data(cur);
 
 	off += it->len;
 

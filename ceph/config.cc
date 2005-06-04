@@ -4,7 +4,7 @@
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
 //#define MDS_CACHE_SIZE        80000         62mb
 
-#define AVG_PER_INODE_SIZE    400
+#define AVG_PER_INODE_SIZE    450
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
 #define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 100 )
@@ -12,8 +12,8 @@
 
 
 md_config_t g_conf = {
-  num_mds: 3,
-  num_osd: 10,
+  num_mds: 2,
+  num_osd: 2,
   num_client: 1,
 
   osd_cow: false, // crashy? true,  
@@ -34,11 +34,11 @@ md_config_t g_conf = {
   client_use_random_mds:  false,
   
   // --- mds ---
-  mds_log_max_len: 10000,
+  mds_log_max_len: 10000000,
   mds_log_max_trimming: 16,
   mds_log_read_inc: 4096,
 
-  mds_cache_size: 10000, //MDS_CACHE_SIZE,
+  mds_cache_size: 10000000, //MDS_CACHE_SIZE,
   mds_cache_mid: .8,
 
   mds_bal_replicate_threshold: 500,

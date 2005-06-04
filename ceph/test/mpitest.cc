@@ -58,7 +58,12 @@ int main(int argc, char **argv) {
   FakeClient *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	client[i] = new FakeClient(mdc, i, new MPIMessenger(MSG_ADDR_CLIENT(i)), g_conf.fakeclient_requests);
+
+	MPIMessenger *real = new MPIMessenger(MSG_ADDR_CLIENT(i));
+	CheesySerializer *serializer = new CheesySerializer(real);
+	real->set_dispatcher(serializer);   
+
+	client[i] = new FakeClient(mdc, i, real, g_conf.fakeclient_requests);
 	client[i]->init();
   }
   

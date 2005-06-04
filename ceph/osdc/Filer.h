@@ -34,11 +34,10 @@ typedef struct {
   set<tid_t>           outstanding_ops;
   size_t               orig_offset;
 
-  char                *buffer;
-  char                **dataptr;
-  char                **freeptr;
-
   map<object_t, off_t> read_off;
+  map<off_t, bufferlist*> read_data;     // bits go here as they come back
+
+  bufferlist          *read_result;      // eventaully condensed into here.
 
   size_t               bytes_read;
   Context             *onfinish;
@@ -89,23 +88,13 @@ class Filer : public Dispatcher {
   int read(inodeno_t ino,
 		   size_t len, 
 		   size_t offset, 
-		   char **dataptr,   // ptr to data
-		   char **freeptr,   // ptr to delete
-		   Context *c);
-  int read(inodeno_t ino,
-		   size_t len, 
-		   size_t offset, 
-		   char *buffer,     // my existing buffer
+		   bufferlist *bl,   // ptr to data
 		   Context *c);
 
-  // returns num fragments
-  int issue_read(inodeno_t ino, size_t len, size_t offset, PendingOSDRead_t *p);
-
-  
   int write(inodeno_t ino,
 			size_t len, 
 			size_t offset, 
-			const char *buffer,
+			bufferlist& bl,
 			int flags, 
 			Context *c);
 

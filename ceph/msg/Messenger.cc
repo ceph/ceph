@@ -81,16 +81,13 @@ ostream& operator<<(ostream& out, Message& m)
 
 
 Message *
-decode_message(char *buffer, int len)
+decode_message(msg_envelope_t& env, bufferlist& payload)
 {
   int type;
 
-  // peek at type
-  type = *(int*)buffer;
-  
   // make message
   Message *m = 0;
-  switch(type) {
+  switch(env.type) {
 
 	// -- with payload --
 
@@ -262,17 +259,20 @@ decode_message(char *buffer, int len)
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_SHUTDOWN:
   case MSG_CLIENT_UNMOUNT:
-	m = new MGenericMessage(type);
+	m = new MGenericMessage(env.type);
 	break;
 
   default:
-	dout(1) << "can't decode unknown message type " << type << endl;
+	dout(1) << "can't decode unknown message type " << env.type << endl;
 	assert(0);
   }
   
+  // env
+  m->set_envelope(env);
+
   // decode
-  m->set_raw_message(buffer, len);
-  m->decode();
+  m->set_payload(payload);
+  m->decode_payload();
 
   // done!
   return m;

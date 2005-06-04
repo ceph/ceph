@@ -23,6 +23,7 @@ typedef struct {
 
 class MOSDReadReply : public Message {
   MOSDReadReply_st st;
+  bufferlist data;
 
  public:
   size_t get_len() { return st.len; }
@@ -30,6 +31,7 @@ class MOSDReadReply : public Message {
   object_t get_oid() { return st.oid; }
   off_t get_offset() { return st.offset; }
   long get_tid() { return st.tid; }
+
 
   // keep a pcid (procedure call id) to match up request+reply
   void set_pcid(long pcid) { this->st.pcid = pcid; }
@@ -44,44 +46,31 @@ class MOSDReadReply : public Message {
 	this->st.oid = r->st.oid;
 	this->st.offset = r->st.offset;
 	this->st.result = result;
-	if (result >= 0) 
-	  this->st.len = result;
-	else
-	  this->st.len = 0;	  
-  }
-  ~MOSDReadReply() {
+	this->st.len = 0;
   }
 
-  // called by sender and receiver.  on sender, allocates raw_message buffer.
-  char *get_buffer() {
-	if (!raw_message) {
-	  raw_message_len = MSG_ENVELOPE_LEN + sizeof(MOSDReadReply_st) + st.len;
-	  raw_message = new char[raw_message_len];
-	}
-	return raw_message + MSG_ENVELOPE_LEN + sizeof(MOSDReadReply_st);
+  bufferlist& get_data() {
+	return data;
   }
-  void set_len(int len) {
-	this->st.len = len;
+  void set_data(bufferlist &bl) {
+	data.claim(bl);
+	this->st.len = data.length();
   }
   void set_result(int result) {
 	this->st.result = result;
   }
   
   virtual void decode_payload() {
-	st = *(MOSDReadReply_st*)(raw_message + MSG_ENVELOPE_LEN);
+	// warning: only call this once, we modify the payload!
+	payload.copy(0, sizeof(st), (char*)&st);
+	payload.splice(0, sizeof(st));
+	data.claim(payload);
   }
-  virtual void encode() {
-	raw_message_len = MSG_ENVELOPE_LEN + sizeof(st) + st.len;
-	if (!raw_message) {
-	  assert(st.len == 0);
-	  raw_message = new char[raw_message_len];
-	}
-
-	encode_envelope();
-
-	*(MOSDReadReply_st*)(raw_message+MSG_ENVELOPE_LEN) = st;
+  virtual void encode_payload() {
+	payload.push_back( new buffer((char*)&st, sizeof(st)) );
+	payload.claim_append(data);
   }
-
+  
   virtual char *get_type_name() { return "oreadr"; }
 };
 

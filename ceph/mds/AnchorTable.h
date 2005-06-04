@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "include/Context.h"
+#include "include/bufferlist.h"
 
 #include <ext/hash_map>
 using namespace __gnu_cxx;
@@ -106,7 +107,7 @@ class AnchorTable {
   }
   void save(Context *onfinish);
   void load(Context *onfinish);
-  void load_2(size_t size, crope& r, Context *onfinish);
+  void load_2(size_t size, bufferlist& bl, Context *onfinish);
 
 
 };

@@ -302,7 +302,7 @@ class MDDoCommitDirContext : public Context {
   __uint64_t version;
 
 public:
-  crope buffer;
+  bufferlist bl;
   
   MDDoCommitDirContext(MDStore *ms, CDir *dir, Context *c, int w) : Context() {
 	this->ms = ms;
@@ -393,13 +393,12 @@ void MDStore::do_commit_dir( CDir *dir,
   dout(14) << "num " << num << endl;
   
   // put count in buffer
-  fin->buffer.append((char*)&num, sizeof(num));
-  fin->buffer.append(dirdata);
-
-  size_t size = fin->buffer.length();
-  fin->buffer.insert(0, (char*)&size, sizeof(size));
-  assert(fin->buffer.length() == size + sizeof(size));
-
+  size_t size = sizeof(num) + dirdata.length();
+  fin->bl.append((char*)&size, sizeof(size));
+  fin->bl.append((char*)&num, sizeof(num));
+  fin->bl.append(dirdata.c_str(), dirdata.length());
+  assert(fin->bl.length() == size + sizeof(size));
+  
   // pin inode
   dir->auth_pin();
   
@@ -416,9 +415,10 @@ void MDStore::do_commit_dir( CDir *dir,
 	oid = mds->mdcluster->get_meta_oid(dir->ino());
   }
   
+
   mds->filer->write( dir->ino(),
-					 fin->buffer.length(), 0,
-					 fin->buffer.c_str(), 
+					 fin->bl.length(), 0,
+					 fin->bl,
 					 0, // flags
 					 fin );
 }
@@ -519,32 +519,30 @@ class MDDoFetchDirContext : public Context {
   Context *context;
 
  public:
-  char  *buffer;
-  char  *freeptr;
-  int    buflen;
+  bufferlist bl;
+  bufferlist bl2;
 
   MDDoFetchDirContext(MDS *mds, inodeno_t ino, Context *c, int which) : Context() {
 	this->mds = mds;
 	this->ino = ino;
 	this->hashcode = which;
 	this->context = c;
-
-	buffer = 0;
-	freeptr = 0;
-	buflen = 0;
   }
   
   void finish(int result) {
 	assert(result>0);
-	buflen += result;
+
+	// combine bufferlists bl + bl2 -> bl
+	bl.claim_append(bl2);
 
 	// did i get the whole thing?
-	size_t size = *(size_t*)buffer;
-	size_t got = buflen - sizeof(size);
+	size_t size;
+	bl.copy(0, sizeof(size_t), (char*)&size);
+	size_t got = bl.length() - sizeof(size);
+
 	if (got >= size) {
 	  // done.
-	  mds->mdstore->do_fetch_dir_2( buffer, size+sizeof(size), ino, context, hashcode );
-	  delete freeptr;
+	  mds->mdstore->do_fetch_dir_2( bl, ino, context, hashcode );
 	}
 	else {
 	  // read the rest!
@@ -552,12 +550,10 @@ class MDDoFetchDirContext : public Context {
 	  
 	  // create return context
 	  MDDoFetchDirContext *fin = new MDDoFetchDirContext( mds, ino, context, hashcode );
-	  fin->buffer = new char[size + sizeof(size)];
-	  memcpy(fin->buffer, buffer, buflen);  // what we have so far
-	  delete freeptr;
+	  fin->bl.claim( bl );
 	  mds->filer->read(ino,
-					   size - got, buflen,
-					   fin->buffer + buflen,
+					   size - got, bl.length(),
+					   &fin->bl2,
 					   fin );
 	  return;
 	}
@@ -578,13 +574,11 @@ void MDStore::do_fetch_dir( CDir *dir,
   // read first bit
   mds->filer->read(dir->ino(),
 				   FILE_OBJECT_SIZE, 0,
-				   &fin->buffer,
-				   &fin->freeptr,
+				   &fin->bl,
 				   fin );
 }
 
-void MDStore::do_fetch_dir_2( char *buffer, 
-							  int   buflen,
+void MDStore::do_fetch_dir_2( bufferlist& bl,
 							  inodeno_t ino,
 							  Context *c,						   
 							  int hashcode)
@@ -611,8 +605,17 @@ void MDStore::do_fetch_dir_2( char *buffer,
   dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
   
   // parse buffer contents into cache
-  size_t size = *(size_t*)buffer;
-  assert(buflen == size + sizeof(size));  
+  size_t size;
+  bl.copy(0, sizeof(size), (char*)&size);
+  assert(bl.length() == size + sizeof(size));  
+
+  cout << "bl is " << bl << endl;
+
+  int n;
+  bl.copy(sizeof(size), sizeof(n), (char*)&n);
+
+  char *buffer = bl.c_str();      // contiguous ptr to whole buffer(list)  
+  size_t buflen = bl.length();
   size_t p = sizeof(size_t);
 		 
   __uint32_t num = *(__uint32_t*)(buffer + p);

@@ -24,6 +24,11 @@ int LogStream::append(LogEvent *e, Context *c)
   crope buffer = e->get_serialized();
   size_t buflen = buffer.length();
 
+  // into a bufferlist.. FIXME
+  bufferlist bl;
+  bl.append(buffer.c_str(), buffer.length());
+
+
   dout(10) << "append event type " << e->get_type() << " size " << buflen << " at log offset " << append_pos << endl;
 
   
@@ -33,7 +38,7 @@ int LogStream::append(LogEvent *e, Context *c)
   // submit write
   mds->filer->write(log_ino,   // FIXME
 					buflen, append_pos-buflen,
-					buffer.c_str(),
+					bl,
 					0,
 					c);
   return 0;
@@ -62,8 +67,7 @@ public:
 
 class C_LS_ReadChunk : public Context {
 public:
-  char *buffer;
-  char *freeptr;
+  bufferlist bl;
   LogStream *ls;
   LogEvent **le;
   Context *c;
@@ -74,8 +78,7 @@ public:
   }
   void finish(int result) {
 	crope next_bit;
-	next_bit.append(buffer, result);
-	delete freeptr;
+	next_bit.append(bl.c_str(), bl.length());
 	ls->did_read_bit(next_bit, le, c);
   }
 };
@@ -118,7 +121,7 @@ int LogStream::read_next(LogEvent **le, Context *c, int step)
 		reading_block = true;
 		mds->filer->read(log_ino,  // FIXME
 						 g_conf.mds_log_read_inc, start,
-						 &readc->buffer, &readc->freeptr,
+						 &readc->bl,
 						 readc);
 	  }
 	  return 0;

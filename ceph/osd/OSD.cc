@@ -35,7 +35,9 @@ char *osd_base_path = "./osddata";
 OSD::OSD(int id, Messenger *m) 
 {
   whoami = id;
+
   messenger = m;
+  messenger->set_dispatcher(this);
 
   // use fake store
   store = new FakeStore(osd_base_path, whoami);
@@ -48,8 +50,10 @@ OSD::~OSD()
 
 int OSD::init()
 {
-  messenger->set_dispatcher(this);
-  return store->init();
+  osd_lock.Lock();
+  int r = store->init();
+  osd_lock.Unlock();
+  return r;
 }
 
 int OSD::shutdown()
@@ -64,6 +68,8 @@ int OSD::shutdown()
 
 void OSD::dispatch(Message *m) 
 {
+  osd_lock.Lock();
+
   switch (m->get_type()) {
   
   case MSG_SHUTDOWN:
@@ -91,6 +97,8 @@ void OSD::dispatch(Message *m)
   }
 
   delete m;
+
+  osd_lock.Unlock();
 }
 
 
@@ -159,23 +167,25 @@ void OSD::handle_op(MOSDOp *op)
 
 void OSD::read(MOSDRead *r)
 {
-  // create reply, buffer
-  MOSDReadReply *reply = new MOSDReadReply(r, r->get_len());
-
   // read into a buffer
-  char *buf = reply->get_buffer();
+  bufferptr bptr = new buffer(r->get_len());   // prealloc space for entire read
   long got = store->read(r->get_oid(), 
 						 r->get_len(), r->get_offset(),
-						 buf);
-  if (got >= 0)
-	reply->set_len(got);      // "success" (or 0 bytes read)
-  else {
+						 bptr.c_str());
+  MOSDReadReply *reply = new MOSDReadReply(r, 0); 
+  if (got >= 0) {
+	bptr.set_length(got);     // properly size buffer
+	
+	// give it to the reply in a bufferlist
+	bufferlist bl;
+	bl.push_back( bptr );
+	reply->set_data(bl);
+  } else {
 	reply->set_result(got);   // error
-	reply->set_len(0);
   }
   
   dout(10) << "read got " << got << " / " << r->get_len() << " bytes from " << r->get_oid() << endl;
-
+  
   // send it
   messenger->send_message(reply, r->get_source(), r->get_source_port());
 }
@@ -185,14 +195,26 @@ void OSD::read(MOSDRead *r)
 
 void OSD::write(MOSDWrite *m)
 {
-  // write
-  int r = store->write(m->get_oid(),
-					   m->get_len(), m->get_offset(),
-					   m->get_buffer());
-  assert(r >= 0);
+  // take buffers from the message
+  bufferlist bl;
+  bl.claim( m->get_data() );
   
+  // write out buffers
+  off_t off = m->get_offset();
+  for (list<bufferptr>::iterator it = bl.buffers().begin();
+	   it != bl.buffers().end();
+	   it++) {
+	int r = store->write(m->get_oid(),
+						 (*it).length(), off,
+						 (*it).c_str());
+	off += (*it).length();
+	assert(r >= 0);
+  }
+  
+  // assume success.  FIXME.
+
   // reply
-  MOSDWriteReply *reply = new MOSDWriteReply(m, r);
+  MOSDWriteReply *reply = new MOSDWriteReply(m, 0);
   messenger->send_message(reply, m->get_source(), m->get_source_port());
 }
 

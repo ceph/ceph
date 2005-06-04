@@ -4,6 +4,8 @@
 
 #include "msg/Dispatcher.h"
 
+#include "common/Mutex.h"
+
 class Messenger;
 class MOSDRead;
 class MOSDWrite;
@@ -16,6 +18,8 @@ class OSD : public Dispatcher {
   int whoami;
 
   ObjectStore *store;
+
+  Mutex osd_lock;
 
  public:
   OSD(int id, Messenger *m);

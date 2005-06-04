@@ -18,6 +18,8 @@
 #include "include/lru.h"
 #include "include/filepath.h"
 
+#include "common/Mutex.h"
+
 // stl
 #include <set>
 #include <map>
@@ -134,7 +136,8 @@ class Client : public Dispatcher {
   map<fileh_t, Fh*>         fh_map;
   set<fileh_t>              fh_closing;
 
-
+  // global (client) lock
+  Mutex                  client_lock;
 
   // global semaphore/mutex protecting cache+fh structures
   // ??
@@ -218,9 +221,9 @@ class Client : public Dispatcher {
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
 
-  // blocking osd accessors
-  int blocking_osd_read(inodeno_t ino, size_t len, size_t offset, char* buffer);
-  int blocking_osd_write(inodeno_t ino, size_t len, size_t offset, const char* buffer);
+
+  // blocking mds call
+  MClientReply *make_request(MClientRequest *req, int mds);
 		
  public:
   Client(MDCluster *mdc, int id, Messenger *m);

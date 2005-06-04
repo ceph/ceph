@@ -8,6 +8,8 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
+#include "include/bufferlist.h"
+
 class MDS;
 class CDir;
 class Context;
@@ -46,8 +48,7 @@ class MDStore {
   void do_fetch_dir( CDir *dir,
 					 Context *c,
 					 int hashcode = -1);
-  void do_fetch_dir_2( char *buffer,
-					   int buflen,
+  void do_fetch_dir_2( bufferlist &bl,
 					   inodeno_t ino,
 					   Context *c,
 					   int which);

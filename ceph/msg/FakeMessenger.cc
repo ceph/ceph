@@ -128,14 +128,14 @@ int fakemessenger_do_loop_2()
 		
 		if (g_conf.fakemessenger_serialize) {
 		  // encode
-		  m->encode();
-		  char *buf = m->get_raw_message();
-		  int  len = m->get_raw_message_len();
-		  m->clear_raw_message();
+		  m->encode_payload();
+		  msg_envelope_t env = m->get_envelope();
+		  bufferlist bl = m->get_payload();
+
 		  delete m;
 		  
 		  // decode
-		  m = decode_message(buf, len);
+		  m = decode_message(env, bl);
 		  assert(m);
 		}
 		

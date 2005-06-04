@@ -84,9 +84,8 @@
 
 //#include "config.h"
 
+#include "include/bufferlist.h"
 
-// address types
-typedef int  msg_addr_t;
 
 // mds's, client's share same (integer) namespace    ??????
 // osd's could be separate.
@@ -115,42 +114,42 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-// abstract Message class
 
-#define MSG_ENVELOPE_LEN  ((3*sizeof(int)+2*sizeof(long)))
+// abstract Message class
+typedef int  msg_addr_t;
+
+typedef struct {
+  int type;
+  msg_addr_t source, dest;
+  int source_port, dest_port;
+  int nchunks;
+} msg_envelope_t;
+
+#define MSG_ENVELOPE_LEN  sizeof(msg_envelope_t)
+
 
 class Message {
  private:
   
  protected:
-  // envelope  (make sure you update MSG_ENVELOPE_LEN above if you change this)
-  int type;
-  msg_addr_t source, dest;
-  int source_port, dest_port;
-
-  char *raw_message;
-  int raw_message_len;
+  msg_envelope_t  env;    // envelope
+  bufferlist      payload;        // payload
   
-  // any payload is in an overloaded child class
-
   friend class Messenger;
 
  public:
   Message() { 
-	source_port = dest_port = -1;
-	source = dest = -1;
-	raw_message = 0;
-	raw_message_len = 0;
+	env.source_port = env.dest_port = -1;
+	env.source = env.dest = -1;
+	env.nchunks = 0;
   };
   Message(int t) {
-	source_port = dest_port = -1;
-	source = dest = -1;
-	type = t;
-	raw_message = 0;
-	raw_message_len = 0;
+	env.source_port = env.dest_port = -1;
+	env.source = env.dest = -1;
+	env.nchunks = 0;
+	env.type = t;
   }
   virtual ~Message() {
-	if (raw_message) delete raw_message;
   }
 
 
@@ -158,121 +157,61 @@ class Message {
   virtual long get_pcid() { return 0; }
   virtual void set_pcid(long t) { assert(0); }  // overload me
 
-  
-  void set_raw_message(char *raw, int len) {
-	raw_message = raw;
-	raw_message_len = len;
+  bufferlist& get_payload() {
+	return payload;
   }
-  char *get_raw_message() { 
-	return raw_message;
+  void set_payload(bufferlist& bl) {
+	payload.claim(bl);
   }
-  int get_raw_message_len() {
-	return raw_message_len;
+  msg_envelope_t& get_envelope() {
+	return env;
   }
-  void clear_raw_message() {
-	raw_message = 0;
+  void set_envelope(msg_envelope_t& env) {
+	this->env = env;
   }
-  
+
 
   // ENVELOPE ----
 
   // type
-  int get_type() { return type; }
-  void set_type(int t) { type = t; }
+  int get_type() { return env.type; }
+  void set_type(int t) { env.type = t; }
   virtual char *get_type_name() = 0;
 
   // source/dest
-  msg_addr_t get_dest() { return dest; }
-  void set_dest(msg_addr_t a, int p) { dest = a; dest_port = p; }
-  int get_dest_port() { return dest_port; }
+  msg_addr_t get_dest() { return env.dest; }
+  void set_dest(msg_addr_t a, int p) { env.dest = a; env.dest_port = p; }
+  int get_dest_port() { return env.dest_port; }
   
-  
-  msg_addr_t get_source() { return source; }
-  void set_source(msg_addr_t a, int p) { source = a; source_port = p; }
-  int get_source_port() { return source_port; }
+  msg_addr_t get_source() { return env.source; }
+  void set_source(msg_addr_t a, int p) { env.source = a; env.source_port = p; }
+  int get_source_port() { return env.source_port; }
 
-  void encode_envelope() {
-	assert(raw_message);
-	int off = 0;
-	*(int*)(raw_message + off) = type;
-	off += sizeof(type);
-	*(msg_addr_t*)(raw_message + off) = source;
-	off += sizeof(source);
-	*(int*)(raw_message + off) = source_port;
-	off += sizeof(source_port);
-	*(msg_addr_t*)(raw_message + off) = dest;
-	off += sizeof(dest);
-	*(int*)(raw_message + off) = dest_port;
-	off += sizeof(dest_port);
-  }
-  void decode_envelope() {
-	assert(raw_message);
-	int off = 0;
-	type = *(int*)(raw_message + off);
-	off += sizeof(int);
-	source = *(msg_addr_t*)(raw_message + off);
-	off += sizeof(msg_addr_t);
-	source_port = *(int*)(raw_message + off);
-	off += sizeof(int);
-	dest = *(msg_addr_t*)(raw_message + off);
-	off += sizeof(msg_addr_t);
-	dest_port = *(int*)(raw_message + off);
-	off += sizeof(int);
-  }
-  
+
   // PAYLOAD ----
-  // overload either the rope version (easier)
+  // overload either the rope version (easier!)
   virtual void encode_payload(crope& s)           { assert(0); }
   virtual void decode_payload(crope& s, int& off) { assert(0); }
  
-  // of the buffer version (faster)
+  // of the bufferlist versions (faster!)
   virtual void decode_payload() {
-	assert(raw_message);
-	
 	// use a crope for convenience, small messages, etc.  FIXME someday.
 	crope ser;
-	ser.append(raw_message + MSG_ENVELOPE_LEN, raw_message_len-MSG_ENVELOPE_LEN);
+	payload._rope(ser);
 	
 	int off = 0;
 	decode_payload(ser, off);
-	assert(off == raw_message_len-MSG_ENVELOPE_LEN);
-	assert(off == ser.length());
+	assert(off == payload.length());
   }
-  virtual void encode() {
+  virtual void encode_payload() {
 	// use crope for convenience, small messages. FIXME someday.
 	crope r;
-	
-	// payload
 	encode_payload(r);
 
-	// alloc or reuse buf
-	if (raw_message && 
-		raw_message_len != r.length() + MSG_ENVELOPE_LEN) {
-	  delete raw_message;
-	  raw_message = 0;
-	}
-
-	raw_message_len = r.length() + MSG_ENVELOPE_LEN;
-	if (!raw_message) raw_message = new char[raw_message_len];
-	
-	// envelope
-	int off = 0;
-	encode_envelope();
-
 	// copy payload
-	memcpy(raw_message + MSG_ENVELOPE_LEN, r.c_str(), r.length());
+	payload.clear();
+	payload.push_back( new buffer(r.c_str(), r.length()) );
   }
-  virtual void decode() {
-	assert(raw_message);
-
-	// decode envelope
-	assert(raw_message_len >= MSG_ENVELOPE_LEN);
-	decode_envelope();
-
-	if (raw_message_len > MSG_ENVELOPE_LEN) 
-	  decode_payload();
-  }
-
   
 };
 

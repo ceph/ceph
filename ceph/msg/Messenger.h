@@ -93,7 +93,7 @@ class Messenger {
 };
 
 
-extern Message *decode_message(char *buffer, int len);
+extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);
 
 
 

@@ -16,7 +16,7 @@ HARD LINKS
 - fix rename
 
 
-- scatter/gather parallel rendrecv (for client file i/o)
+/- scatter/gather parallel rendrecv (for client file i/o)
 - client buffered writes
 
 
@@ -55,7 +55,7 @@ CLIENT TODO
   (otherwise this all breaks with hard links.. altho it probably needs reworking already?)
 
 
-why qsync could be wrong: varying mds -> client message transit or processing times.
+why qsync could be wrong (for very strict POSIX) : varying mds -> client message transit or processing times.
 - mds -> 1,2 : qsync
 - client1 writes at byte 100
 - client1 -> mds : qsync reply (size=100)

@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "include/rangeset.h"
+#include "include/bufferlist.h"
 
 class MDS;
 
@@ -23,10 +24,6 @@ class IdAllocator {
   IdAllocator(MDS *mds) {
 	this->mds = mds;
 	opened = false;
-	
-	load();
-	free[ID_INO].dump();
-	free[ID_FH].dump();
   }
   //~InoAllocator();
 
@@ -36,7 +33,7 @@ class IdAllocator {
   // load/save from disk (hack)
   void save();
   void load();
-  void load_2(int, char *, char*);
+  void load_2(int, bufferlist&);
 
 };
 

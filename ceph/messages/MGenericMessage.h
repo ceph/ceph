@@ -9,7 +9,7 @@ class MGenericMessage : public Message {
 
  public:
   MGenericMessage(int t) : Message(t) { 
-	sprintf(tname, "%d", type);
+	sprintf(tname, "%d", get_type());
   }
 
   void set_pcid(long pcid) { this->pcid = pcid; }

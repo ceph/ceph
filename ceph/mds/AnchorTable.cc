@@ -348,9 +348,11 @@ void AnchorTable::save(Context *onfinish)
   dout(7) << " " << num << " anchors, " << size << " bytes" << endl;
   
   // write!
+  bufferlist bl;
+  bl.append(tab.c_str(), tab.length());
   mds->filer->write(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
-					tab.length(), 0,
-					tab.c_str(), 0, 
+					bl.length(), 0,
+					bl, 0, 
 					onfinish);
 }
 
@@ -361,8 +363,7 @@ class C_AT_Load : public Context {
   Context *onfinish;
 public:
   size_t size;
-  char *dataptr;
-  char *freeptr;
+  bufferlist bl;
   C_AT_Load(size_t size, AnchorTable *at, Context *onfinish) {
 	this->size = size;
 	this->at = at;
@@ -370,11 +371,8 @@ public:
   }
   void finish(int result) {
 	assert(result > 0);
-	crope r;
-	r.append(dataptr, result);
-	delete freeptr;
 
-	at->load_2(size, r, onfinish);
+	at->load_2(size, bl, onfinish);
   }
 };
 
@@ -383,24 +381,25 @@ class C_AT_LoadSize : public Context {
   MDS *mds;
   Context *onfinish;
 public:
-  size_t size;
+  bufferlist bl;
   C_AT_LoadSize(AnchorTable *at, MDS *mds, Context *onfinish) {
 	this->at = at;
 	this->mds = mds;
 	this->onfinish = onfinish;
-	size = 0;
   }
   void finish(int r) {
+	size_t size = 0;
+	bl.copy(0, sizeof(size), (char*)&size);
 	cout << "r is " << r << " size is " << size << endl;
 	if (r > 0 && size > 0) {
 	  C_AT_Load *c = new C_AT_Load(size, at, onfinish);
 	  mds->filer->read(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
 					   size, sizeof(size),
-					   &c->dataptr, &c->freeptr,
+					   &c->bl,
 					   c);
 	} else {
 	  // fail
-	  crope empty;
+	  bufferlist empty;
 	  at->load_2(0, empty, onfinish);
 	}
   }
@@ -415,12 +414,16 @@ void AnchorTable::load(Context *onfinish)
   C_AT_LoadSize *c = new C_AT_LoadSize(this, mds, onfinish);
   mds->filer->read(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
 				   sizeof(size_t), 0,
-				   (char*)&c->size,
+				   &c->bl,
 				   c);
 }
 
-void AnchorTable::load_2(size_t size, crope& r, Context *onfinish)
+void AnchorTable::load_2(size_t size, bufferlist& bl, Context *onfinish)
 {
+  // make a rope to be easy.. FIXME someday
+  crope r;
+  bl._rope(r);
+
   // num
   int off = 0;
   int num;

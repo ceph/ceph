@@ -72,11 +72,15 @@ void IdAllocator::save()
 	assert(mapsize == 0);
   }
 
+  // turn into bufferlist
+  bufferlist bl;
+  bl.append(data.c_str(), data.length());
+
   // write (async)
   mds->filer->write(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
 					data.length(),
 					0,
-					data.c_str(),
+					bl,
 					0,
 					NULL);
 }
@@ -85,13 +89,12 @@ void IdAllocator::save()
 class C_ID_Load : public Context {
 public:
   IdAllocator *ida;
-  char *dataptr;
-  char *freeptr;
+  bufferlist bl;
   C_ID_Load(IdAllocator *ida) {
 	this->ida = ida;
   }
   void finish(int r) {
-	ida->load_2(r, dataptr, freeptr);
+	ida->load_2(r, bl);
   }
 };
 
@@ -106,12 +109,14 @@ void IdAllocator::load()
   mds->filer->read(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
 				   1000000,
 				   0,
-				   &c->dataptr, &c->freeptr,
+				   &c->bl,
 				   c);
 }
 
-void IdAllocator::load_2(int r, char *dataptr, char *freeptr)
+void IdAllocator::load_2(int r, bufferlist& blist)
 {
+  char *dataptr = blist.c_str();
+
   if (r > 0) {
 	int off = 0;
 	int ntypes = *(int*)(dataptr + off);
