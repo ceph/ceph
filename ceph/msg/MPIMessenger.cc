@@ -107,7 +107,7 @@ Message *mpi_recv(int tag)
   MPI_Status status;
   
   dout(10) << "mpi_recv waiting for message tag " << tag  << endl;
-
+  /*
   // get message size
   ASSERT(MPI_Probe(MPI_ANY_SOURCE, 
 				   tag,
@@ -118,14 +118,14 @@ Message *mpi_recv(int tag)
 
   // make sure it's the size of an envelope!
   assert(status.count <= MSG_ENVELOPE_LEN);
-
+  */
   msg_envelope_t env;
   
   dout(10) << "mpi_recv Irecv envelope" << endl;
   ASSERT(MPI_Recv((void*)&env,
 				   sizeof(env),
-				   MPI_CHAR, 
-				   status.MPI_SOURCE,//MPI_ANY_SOURCE,
+				  MPI_CHAR, 
+				  MPI_ANY_SOURCE,// status.MPI_SOURCE,//MPI_ANY_SOURCE,
 				   tag,
 				   MPI_COMM_WORLD,
 				  &status/*,
@@ -201,7 +201,7 @@ int mpi_send(Message *m, int tag)
 
   dout(10) << "mpi_sending " << blist.length() << " size message on tag " << tag << " type " << env->type << " src " << env->source << " dst " << env->dest << " to rank " << rank << " nchunks=" << env->nchunks << endl;
 
-  sender_lock.Lock();
+  //sender_lock.Lock();
 
   // send envelope
   MPI_Request req; 
@@ -231,7 +231,7 @@ int mpi_send(Message *m, int tag)
 
   dout(10) << "mpi_send done" << endl;
 
-  sender_lock.Unlock();
+  //sender_lock.Unlock();
 }
 
 
@@ -272,16 +272,16 @@ void* mpimessenger_loop(void*)
 
   while (!mpi_done) {
 	// check outgoing queue
-	/*
+	
 	sender_lock.Lock();
 	for (list<Message*>::iterator it = outgoing.begin();
 		 it != outgoing.end();
 		 it++) {
-	  mpi_send(*it);
+	  mpi_send(*it, TAG_UNSOLICITED);
 	}
 	outgoing.clear();
 	sender_lock.Unlock();
-	*/
+	
 
 	// check mpi
 	dout(12) << "mpimessenger_loop waiting for incoming messages" << endl;
@@ -342,13 +342,13 @@ void mpimessenger_kick_loop()
   msg_envelope_t env;
   env.type = 0;
   dout(10) << "kicking" << endl;
-  ASSERT(MPI_Isend(&env,
+  ASSERT(MPI_Send(&env,
 				   sizeof(env),
 				   MPI_CHAR,
 				   mpi_rank,
-				   TAG_ENV,
-				   MPI_COMM_WORLD,
-				   &kick_req) == MPI_SUCCESS);
+				   TAG_UNSOLICITED,
+				   MPI_COMM_WORLD/*,
+								   &kick_req*/) == MPI_SUCCESS);
   dout(10) << "kicked" << endl;
 }
 
@@ -456,7 +456,7 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
 
-  if (1) {
+  if (0) {
 	// send in this thread
 	mpi_send(m, m->get_pcid());
   } else {
