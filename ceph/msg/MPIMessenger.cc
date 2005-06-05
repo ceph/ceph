@@ -89,7 +89,9 @@ int mpimessenger_init(int& argc, char**& argv)
 
 int mpimessenger_shutdown() 
 {
-  dout(1) << "mpimessenger_shutdown MPI_Finalize()" << endl;
+  dout(5) << "mpimessenger_shutdown barrier waiting for all to finish" << endl;
+  MPI_Barrier (MPI_COMM_WORLD);
+  dout(1) << "mpimessenger_shutdown all done, MPI_Finalize()" << endl;
   MPI_Finalize();
 }
 
@@ -229,7 +231,7 @@ int mpi_send(Message *m, int tag)
   bufferlist blist = m->get_payload();
   env->nchunks = blist.buffers().size();
 
-  dout(3) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
+  dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
 
   dout(DBLVL) << "mpi_sending " << blist.length() << " size message on tag " << tag << " type " << env->type << " src " << env->source << " dst " << env->dest << " to rank " << rank << " nchunks=" << env->nchunks << endl;
 
@@ -362,7 +364,8 @@ void* mpimessenger_loop(void*)
 		
 		dout(3) << "---- '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
+		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+				<< m 
 				<< endl;
 		
 		who->dispatch(m);
@@ -380,9 +383,8 @@ void* mpimessenger_loop(void*)
   dout(5) << "finishing async sends" << endl;
   mpi_finish_sends();
 
-  dout(5) << "mpimessenger_loop finish, waiting for all to finish" << endl;
-  MPI_Barrier (MPI_COMM_WORLD);
-  dout(5) << "mpimessenger_loop everybody done, exiting loop" << endl;
+
+  dout(5) << "mpimessenger_loop exiting loop" << endl;
 }
 
 

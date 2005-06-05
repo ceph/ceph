@@ -609,7 +609,7 @@ void MDStore::do_fetch_dir_2( bufferlist& bl,
   bl.copy(0, sizeof(size), (char*)&size);
   assert(bl.length() == size + sizeof(size));  
 
-  cout << "bl is " << bl << endl;
+  //cout << "bl is " << bl << endl;
 
   int n;
   bl.copy(sizeof(size), sizeof(n), (char*)&n);

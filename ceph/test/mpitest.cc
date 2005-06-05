@@ -37,6 +37,8 @@ int main(int argc, char **argv) {
   int myrank = mpimessenger_init(argc, argv);
   int world = mpimessenger_world();
 
+
+
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   
   // create osds

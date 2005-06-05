@@ -102,6 +102,8 @@ int FakeStore::mkfs()
   string mydir;
   get_dir(mydir);
 
+  dout(1) << "mkfs in " << mydir << endl;
+
   // make sure my dir exists
   r = ::stat(mydir.c_str(), &st);
   if (r != 0) {

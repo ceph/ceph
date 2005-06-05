@@ -208,7 +208,10 @@ void OSD::write(MOSDWrite *m)
 						 (*it).length(), off,
 						 (*it).c_str());
 	off += (*it).length();
-	assert(r >= 0);
+	if (r < 0) {
+	  dout(1) << "write error on " << m->get_oid() << " r = " << r << endl;
+	  assert(r >= 0);
+	}
   }
   
   // assume success.  FIXME.
