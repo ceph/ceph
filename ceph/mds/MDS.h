@@ -101,6 +101,10 @@ class MDS : public Dispatcher {
   set<int>     did_shut_down;
   bool         shut_down;
 
+  bool         mds_paused;
+  list<Context*> waiting_for_unpause;
+  friend class C_MDS_Unpause;
+
   // ino's and fh's
  public:
   class IdAllocator  *idalloc;
@@ -115,9 +119,7 @@ class MDS : public Dispatcher {
   
   set<int>     mounted_clients;
 
-
-  list<Context*> waiting_for_idalloc;
-  friend class C_MDS_IdAllocOpen;
+  
   
  public:
   list<Context*> finished_queue;

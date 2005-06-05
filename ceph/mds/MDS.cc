@@ -237,14 +237,15 @@ mds_load_t MDS::get_load()
 }
 
 
-class C_MDS_IdAllocOpen : public Context {
+class C_MDS_Unpause : public Context {
 public:
   MDS *mds;
-  C_MDS_IdAllocOpen(MDS *mds) {
+  C_MDS_Unpause(MDS *mds) {
 	this->mds = mds;
   }
   void finish(int r) {
-	mds->queue_finished(mds->waiting_for_idalloc);
+	mds->mds_paused = false;
+	mds->queue_finished(mds->waiting_for_unpause);
   }
 };
 
@@ -275,41 +276,48 @@ void MDS::proc_message(Message *m)
   case MSG_PING:
 	handle_ping((MPing*)m);
 	return;
+  }
 
+
+  // paused?
+  if (mds_paused) {
+	dout(3) << "paused" << endl;
+	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
+	return;
+  }
+
+
+  switch (m->get_type()) {
   case MSG_CLIENT_MOUNT:
 	handle_client_mount((MClientMount*)m);
 	return;
   case MSG_CLIENT_UNMOUNT:
 	handle_client_unmount(m);
 	return;
-	
   }
-  
+ 
 
-
-  // make sure we're started up
+  // need idalloc
   if (!idalloc->is_open()) {
 	dout(3) << "idalloc not open yet" << endl;
-	if (!idalloc->is_opening())
-	  idalloc->load(new C_MDS_IdAllocOpen(this));
 
+	mds_paused = true;
+	idalloc->load(new C_MDS_Unpause(this));
+	
 	// defer
-	waiting_for_idalloc.push_back(new C_MDS_RetryMessage(this, m));
+	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
 	return;
   }
 
-  switch (m->get_type()) {
 
-	// CLIENTS ===========
+  switch (m->get_type()) {
   case MSG_CLIENT_REQUEST:
 	handle_client_request((MClientRequest*)m);
 	return;
-	
-  default:
-	dout(1) << " main unknown message " << m->get_type() << endl;
-	assert(0);
   }
 
+  dout(1) << " main unknown message " << m->get_type() << endl;
+  assert(0);
 }
 
 
@@ -420,17 +428,11 @@ void MDS::my_dispatch(Message *m)
 
 void MDS::handle_client_mount(MClientMount *m)
 {
-  int n = MSG_ADDR_NUM(m->get_source());
-  dout(3) << "mount by client" << n << endl;
-  mounted_clients.insert(n);
-
-  assert(whoami == 0);  // mds0 mounts/unmounts
-
   // mkfs?  (sorta hack!)
   if (int cmd = m->get_mkfs()) {
 	dout(3) << "MKFS flag is set" << endl;
 	if (mdcache->get_root()) {
-	  dout(3) << "   TOO BAD, root inode is already open" << endl;
+	  dout(3) << "   root inode is already open" << endl;
 	} else {
 	  dout(3) << "   root inode isn't open yet, inventing a fresh filesystem" << endl;
 	  
@@ -446,10 +448,21 @@ void MDS::handle_client_mount(MClientMount *m)
 	  if (cmd == MDS_MKFS_FULL) {
 		// wipe osds too
 		dout(3) << "wiping osds too" << endl;
-		filer->mkfs(0);
+		mds_paused = true;
+		filer->mkfs(new C_MDS_Unpause(this));
 	  }
+	  
+	  waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
+	  return;
 	}
   }
+
+  int n = MSG_ADDR_NUM(m->get_source());
+  dout(3) << "mount by client" << n << endl;
+  mounted_clients.insert(n);
+
+  assert(whoami == 0);  // mds0 mounts/unmounts
+
 
 
   // ack

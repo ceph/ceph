@@ -52,10 +52,27 @@ void Filer::dispatch(Message *m)
   }
 }
 
+/*
+void Filer::queue_outgoing(Message *m, int osd)
+{
+  outgoing.push_back(pair<Message*,int>(m,osd));
+}
+
+void Filer::send_outgoing() 
+{
+  // send messages AFTER all my structs are ready (locking can make replies appear to arrive quickly!)
+  for (list< pair<Message*,int> >::iterator it = outgoing.begin();
+	   it != outgoing.end();
+	   it++) {
+	messenger->send_message(it->first, MSG_ADDR_OSD(it->second), 0);
+  }
+}
+*/
+
 
 // read
 
-int 
+int
 Filer::read(inodeno_t ino,
 			size_t len, 
 			size_t offset, 
@@ -77,6 +94,7 @@ Filer::read(inodeno_t ino,
 
   dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
 
+
   int nfrag = 0;
   off_t off = 0;
   for (list<OSDExtent>::iterator it = extents.begin();
@@ -87,6 +105,7 @@ Filer::read(inodeno_t ino,
 	
 	// issue read
 	MOSDRead *m = new MOSDRead(last_tid, it->oid, it->len, it->offset);
+	dout(15) << " read on " << last_tid << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
 
 	// note offset into read buffer
@@ -99,7 +118,7 @@ Filer::read(inodeno_t ino,
 	nfrag++;
   }
 
-  return nfrag;
+  return 0;
 }
 
 
@@ -108,13 +127,15 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+  dout(15) << "handle_osd_read_reply on " << tid << endl;
+
   assert(op_reads.count(tid));
   PendingOSDRead_t *p = op_reads[ tid ];
   op_reads.erase( tid );
 
   // copy result into buffer
   size_t off = p->read_off[m->get_oid()];
-  dout(7) << "filer: got frag at " << off << " len " << m->get_len() << endl;
+  dout(7) << "got frag at " << off << " len " << m->get_len() << endl;
   
   // our op finished
   p->outstanding_ops.erase(tid);
@@ -141,7 +162,7 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 		  p->read_result->claim_append(*(it->second));
 	  }
 	} else {
-	  dout(20) << "only one frag" << endl;
+	  dout(20) << "  only one frag" << endl;
 	  // only one fragment, easy
 	  p->read_result->claim( m->get_data() );
 	}
@@ -151,7 +172,7 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 	delete p;   // del pendingOsdRead_t
 	
 	int result = p->read_result->length(); // assume success
-	dout(7) << "filer: read " << result << " bytes " << p->read_result->length() << endl;
+	dout(7) << "read " << result << " bytes " << p->read_result->length() << endl;
 
 	// done
 	if (onfinish) {
@@ -209,12 +230,16 @@ Filer::write(inodeno_t ino,
 
 	off += it->len;
 
-	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
-	
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);
 	op_writes[last_tid] = p;
+
+	// send
+	dout(15) << " write on " << last_tid << endl;
+	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
   }
+
+  return 0;
 }
 
 
@@ -223,6 +248,8 @@ Filer::handle_osd_write_reply(MOSDWriteReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+  dout(15) << "handle_osd_write_reply on " << tid << endl;
+
   assert(op_writes.count(tid));
   PendingOSDOp_t *p = op_writes[ tid ];
   op_writes.erase( tid );
@@ -252,6 +279,7 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+  dout(15) << "handle_osd_op_reply on " << tid << endl;
 
   PendingOSDOp_t *p = 0;
 
@@ -324,6 +352,7 @@ int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
 	  op_removes[last_tid] = p;
 	}
   }
+
 }
 
 

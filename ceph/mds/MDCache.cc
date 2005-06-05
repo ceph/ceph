@@ -621,7 +621,7 @@ bool MDCache::shutdown_pass()
 	return true;
   } else {
 	dout(7) << "filer active, or there's still stuff in the cache: " << lru.lru_get_size() << endl;
-	show_cache();
+	//show_cache();
 	//dump();
   }
   return false;

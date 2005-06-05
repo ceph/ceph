@@ -34,12 +34,12 @@ md_config_t g_conf = {
   client_use_random_mds:  false,
   
   // --- mds ---
-  mds_log_max_len: 10000000,
+  mds_cache_size: MDS_CACHE_SIZE,
+  mds_cache_mid: .7,
+
+  mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 16,
   mds_log_read_inc: 4096,
-
-  mds_cache_size: 10000000, //MDS_CACHE_SIZE,
-  mds_cache_mid: .8,
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,

@@ -224,8 +224,6 @@ MClientReply *Client::make_request(MClientRequest *req, int mds)
 
 void Client::dispatch(Message *m)
 {
-  client_lock.Lock();
-
   switch (m->get_type()) {
 	// osd
   case MSG_OSD_READREPLY:
@@ -240,7 +238,9 @@ void Client::dispatch(Message *m)
 	
 	// client
   case MSG_CLIENT_FILECAPS:
+	client_lock.Lock();
 	handle_file_caps((MClientFileCaps*)m);
+	client_lock.Unlock();
 	break;
 
   default:
@@ -248,8 +248,6 @@ void Client::dispatch(Message *m)
 	assert(0);  // fail loudly
 	break;
   }
-
-  client_lock.Unlock();
 }
 
 void Client::handle_file_caps(MClientFileCaps *m)
@@ -853,14 +851,19 @@ public:
   Cond *cond;
   Mutex *mutex;
   int *rvalue;
+  bool finished;
   C_Client_Cond(Cond *cond, Mutex *mutex, int *rvalue) { 
 	this->cond = cond;
 	this->mutex = mutex;
 	this->rvalue = rvalue;
+	this->finished = false;
   }
   void finish(int r) {
+	mutex->Lock();
 	*rvalue = r;
+	finished = true;
 	cond->Signal();
+	mutex->Unlock();
   }
 };
 
@@ -882,8 +885,9 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
   int rvalue;
 
   C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+
   filer->read(ino, size, offset, &blist, onfinish);
-  
+
   cond.Wait(client_lock);
 
   // copy data into caller's buf

@@ -46,6 +46,7 @@ pthread_t thread_id = 0;   // thread id of the event loop.  init value == nobody
 
 Mutex sender_lock;
 Mutex out_queue_lock;
+//Mutex send_req_lock;
 
 // our lock for any common data; it's okay to have only the one global mutex
 // because our common data isn't a whole lot.
@@ -87,6 +88,7 @@ int mpimessenger_init(int& argc, char**& argv)
 
 int mpimessenger_shutdown() 
 {
+  dout(1) << "mpimessenger_shutdown MPI_Finalize()" << endl;
   MPI_Finalize();
 }
 
@@ -102,7 +104,15 @@ int mpimessenger_world()
 
 // reap finished send.  don't block.
 
+MPI_Request *mpi_prep_send_req() {
+  MPI_Request *req = new MPI_Request;
+  unfinished_sends.push_back(req);
+  dout(DBLVL) << "prep_send_req " << req << endl;
+  return req;
+}
+
 void mpi_reap_sends() {
+  sender_lock.Lock();
   list<MPI_Request*>::iterator it = unfinished_sends.begin();
   while (it != unfinished_sends.end()) {
 	MPI_Status status;
@@ -114,10 +124,13 @@ void mpi_reap_sends() {
 	it++;
 	unfinished_sends.pop_front();
   }
+  dout(DBLVL) << "reap has " << unfinished_sends.size() << " Isends outstanding" << endl;
+  sender_lock.Unlock();
 }
 
 
 void mpi_finish_sends() {
+  sender_lock.Lock();  // not necessary?
   list<MPI_Request*>::iterator it = unfinished_sends.begin();
   while (it != unfinished_sends.end()) {
 	MPI_Status status;
@@ -128,6 +141,7 @@ void mpi_finish_sends() {
 	it++;
 	unfinished_sends.pop_front();
   }
+  sender_lock.Unlock();
 }
 
 
@@ -222,15 +236,13 @@ int mpi_send(Message *m, int tag)
 
 
   // send envelope
-  MPI_Request *req = new MPI_Request;
-  unfinished_sends.push_back(req);
   ASSERT(MPI_Isend((void*)env,
 				   sizeof(*env),
 				   MPI_CHAR,
 				   rank,
 				   tag,
 				   MPI_COMM_WORLD,
-				   req) == MPI_SUCCESS);
+				   mpi_prep_send_req()) == MPI_SUCCESS);
   
   int i = 0;
   for (list<bufferptr>::iterator it = blist.buffers().begin();
@@ -238,14 +250,13 @@ int mpi_send(Message *m, int tag)
 	   it++) {
 	dout(DBLVL) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
 	MPI_Request *req = new MPI_Request;
-	unfinished_sends.push_back(req);
 	ASSERT(MPI_Isend((void*)(*it).c_str(),
 					 (*it).length(),
 					 MPI_CHAR,
 					 rank,
 					 tag,
 					 MPI_COMM_WORLD,
-					 req) == MPI_SUCCESS);
+					 mpi_prep_send_req()) == MPI_SUCCESS);
 	i++;
   }
 
@@ -390,13 +401,16 @@ void mpimessenger_kick_loop()
 
   kick_env.type = 0;
   //dout(DBLVL) << "kicking" << endl;
-  ASSERT(MPI_Send(&kick_env,               // kick sync for now, but ONLY because it makes me feel safer.
+
+  sender_lock.Lock();
+  ASSERT(MPI_Isend(&kick_env,               // kick sync for now, but ONLY because it makes me feel safer.
 				   sizeof(kick_env),
 				   MPI_CHAR,
 				   mpi_rank,
 				   TAG_UNSOLICITED,
-				   MPI_COMM_WORLD/*,
-								   &kick_req*/) == MPI_SUCCESS);
+				   MPI_COMM_WORLD,
+				   mpi_prep_send_req()) == MPI_SUCCESS);
+  sender_lock.Unlock();
   //dout(DBLVL) << "kicked" << endl;
 }
 
@@ -500,6 +514,8 @@ void MPIMessenger::trigger_timer(Timer *t)
  * public messaging interface
  */
 
+
+/* note: send_message _MUST_ be non-blocking */
 int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
   // set envelope
@@ -513,6 +529,7 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   dout(DBLVL) << "queuing outgoing message " << *m << endl;
   outgoing.push_back(m);
   out_queue_lock.Unlock();
+
   mpimessenger_kick_loop();
   
 #else

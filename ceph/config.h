@@ -25,13 +25,13 @@ struct md_config_t {
   bool     client_use_random_mds;          // debug flag
 
   // mds
+  int   mds_cache_size;
+  float mds_cache_mid;
+
   int mds_log_max_len;
   int mds_log_max_trimming;
   int mds_log_read_inc;
   
-  int   mds_cache_size;
-  float mds_cache_mid;
-
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
 
