@@ -27,6 +27,7 @@ using namespace __gnu_cxx;
 hash_map<int, MPIMessenger*>  directory;
 list<Message*>                outgoing, incoming;
 list<MPI_Request*>            unfinished_sends;
+map<MPI_Request*, Message*>   unfinished_send_message;
 
 /* this process */
 int mpi_world;
@@ -111,37 +112,40 @@ MPI_Request *mpi_prep_send_req() {
   return req;
 }
 
-void mpi_reap_sends() {
+void mpi_reap_sends(bool wait=false) {
   sender_lock.Lock();
+
   list<MPI_Request*>::iterator it = unfinished_sends.begin();
   while (it != unfinished_sends.end()) {
 	MPI_Status status;
 	int flag;
-	MPI_Test(*it, &flag, &status);
-	if (!flag) break;   // not finished yet
+	
+	if (wait) {
+	  MPI_Wait(*it, &status);
+	} else {
+	  MPI_Test(*it, &flag, &status);
+	  if (!flag) break;   // not finished yet
+	}
+
 	dout(DBLVL) << "send " << *it << " completed" << endl;
+
+	if (unfinished_send_message.count(*it)) {
+	  dout(DBLVL) << "send message " << unfinished_send_message[*it] << " completed" << endl;
+	  delete unfinished_send_message[*it];
+	  unfinished_send_message.erase(*it);
+	}
+
 	delete *it;
 	it++;
 	unfinished_sends.pop_front();
   }
-  dout(DBLVL) << "reap has " << unfinished_sends.size() << " Isends outstanding" << endl;
+  dout(DBLVL) << "reap has " << unfinished_sends.size() << " Isends outstanding, " << unfinished_send_message.size() << " messages" << endl;
   sender_lock.Unlock();
 }
 
 
 void mpi_finish_sends() {
-  sender_lock.Lock();  // not necessary?
-  list<MPI_Request*>::iterator it = unfinished_sends.begin();
-  while (it != unfinished_sends.end()) {
-	MPI_Status status;
-	int flag;
-	MPI_Wait(*it, &status);
-	dout(DBLVL) << "send " << *it << " completed" << endl;
-	delete *it;
-	it++;
-	unfinished_sends.pop_front();
-  }
-  sender_lock.Unlock();
+  mpi_reap_sends(true);
 }
 
 
@@ -260,7 +264,11 @@ int mpi_send(Message *m, int tag)
 	i++;
   }
 
-  dout(DBLVL) << "mpi_send done" << endl;
+  // attach message to last send, so we can free it later
+  MPI_Request *req = unfinished_sends.back();
+  unfinished_send_message[req] = m;
+
+  dout(DBLVL) << "mpi_send done, attached message to Isend " << req << endl;
 
 #ifndef FUNNEL_MPI
   sender_lock.Unlock();
