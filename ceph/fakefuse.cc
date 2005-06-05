@@ -109,14 +109,6 @@ int main(int argc, char **argv) {
   cout << "DONE -----" << endl;
   fakemessenger_stopthread();  // blocks until messenger stops
   
-  // shutdown
-  /*
-  cout << "---- check ----" << endl;
-  for (int i=0; i<NUMMDS; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	mds[i]->mdcache->shutdown_pass();
-  }
-  */
 
   // cleanup
   for (int i=0; i<NUMMDS; i++) {

@@ -14,7 +14,7 @@ using namespace std;
 #define BUFFER_MODE_NOFREE 0
 #define BUFFER_MODE_FREE   2
 
-#define BUFFER_MODE_DEFAULT (BUFFER_MODE_COPY)
+#define BUFFER_MODE_DEFAULT (BUFFER_MODE_COPY|BUFFER_MODE_FREE)
 
 /*
  * buffer  - the underlying buffer container.  with a reference count.
@@ -42,29 +42,31 @@ class buffer {
  public:
   // constructors
   buffer() : _dataptr(0), _len(0), _alloc_len(0), _ref(0), _myptr(true) { 
-	cout << "buffer() " << *this << endl;
+	//cout << "buffer() " << *this << endl;
   }
   buffer(int a) : _len(0), _alloc_len(a), _ref(0), _myptr(true) {
-	cout << "buffer(empty) " << *this << endl;
+	//cout << "buffer(empty) " << *this << endl;
 	_dataptr = new char[a];
   }
   ~buffer() {
-	cout << "~buffer " << *this << endl;
-	if (_dataptr && _myptr) delete _dataptr;
+	//cout << "~buffer " << *this << endl;
+	if (_dataptr && _myptr) 
+	  delete[] _dataptr;
   }
 
-  buffer(const char *p, int l, int mode=BUFFER_MODE_COPY) : 
+  buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT) : 
 	_len(l), 
 	_alloc_len(l), 
-	_ref(0), 
+	_ref(0),
 	_myptr(mode & BUFFER_MODE_FREE ? true:false) {
+	//cout << "buffer cons mode = " << _myptr << endl;
 	if (mode & BUFFER_MODE_COPY) {
-	  cout << "buffer(copy) " << *this << endl;
 	  _dataptr = new char[l];
 	  memcpy(_dataptr, p, l);
+	  //cout << "buffer(copy) " << *this << endl;
 	} else {
-	  cout << "buffer(claim), myptr=" << _myptr << " " << *this << endl;
 	  _dataptr = (char*)p;                              // ugly
+	  //cout << "buffer(claim), myptr=" << _myptr << " " << *this << endl;
 	}
   }
 
@@ -146,7 +148,8 @@ class bufferptr {
   // assignment operator
   bufferptr& operator=(const bufferptr& other) {
 	// discard old
-	if (_buffer && _buffer->_put() == 0) delete _buffer; 
+	if (_buffer && _buffer->_put() == 0) 
+	  delete _buffer; 
 
 	// new
 	_buffer = other._buffer;
@@ -210,8 +213,9 @@ class bufferptr {
 
 inline ostream& operator<<(ostream& out, bufferptr& bp) {
   return out << "bufferptr(len=" << bp._len << ", off=" << bp._off 
-	//<< ", " << bp.c_str() 
-			 << ", " << *bp._buffer << ")";
+			 << ", " << bp.c_str() 
+	//<< ", " << *bp._buffer 
+			 << ")";
 }
 
 

@@ -10,7 +10,7 @@
 CC = g++
 MPICC = mpicxx
 CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread
+LIBS = -lpthread 
 
 MDS_OBJS= \
 	mds/MDS.o\

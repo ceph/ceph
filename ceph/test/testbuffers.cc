@@ -34,6 +34,6 @@ int main()
   bufferlist bl2;
   bl2.substr_of(bl, 3, 5);
   cout << "bl2 is " << bl2 << endl;
-
+  
 
 }

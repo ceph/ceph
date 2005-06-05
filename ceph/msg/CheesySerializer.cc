@@ -120,4 +120,7 @@ int CheesySerializer::shutdown()
 	it->second->Signal();  // wake up!
   }	   
   lock.Unlock();
+
+  // shutdown underlying messenger.
+  messenger->shutdown();
 }

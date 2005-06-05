@@ -161,12 +161,12 @@ class bufferlist {
 	  assert(curbuf != _buffers.end());
 	  if (off >= (*curbuf).length()) {
 		// skip this buffer
-		cout << "skipping over " << *curbuf << endl;
+		//cout << "skipping over " << *curbuf << endl;
 		off -= (*curbuf).length();
 		curbuf++;
 	  } else {
 		// somewhere in this buffer!
-		cout << "somewhere in " << *curbuf << endl;
+		//cout << "somewhere in " << *curbuf << endl;
 		break;
 	  }
 	}
@@ -174,13 +174,13 @@ class bufferlist {
 	while (len > 0) {
 	  // partial?
 	  if (off + len < (*curbuf).length()) {
-		cout << "copying partial of " << *curbuf << endl;
+		//cout << "copying partial of " << *curbuf << endl;
 		_buffers.push_back( bufferptr( *curbuf, len, off ) );
 		break;
 	  }
 
 	  // hose the whole thing
-	  cout << "copying end (all?) of " << *curbuf << endl;
+	  //cout << "copying end (all?) of " << *curbuf << endl;
 	  int howmuch = (*curbuf).length() - off;
 	  _buffers.push_back( bufferptr( *curbuf, howmuch, off ) );
 	  len -= howmuch;
@@ -197,12 +197,12 @@ class bufferlist {
 	  assert(curbuf != _buffers.end());
 	  if (off >= (*curbuf).length()) {
 		// skip this buffer
-		cout << "skipping over " << *curbuf << endl;
+		//cout << "skipping over " << *curbuf << endl;
 		off -= (*curbuf).length();
 		curbuf++;
 	  } else {
 		// somewhere in this buffer!
-		cout << "somewhere in " << *curbuf << endl;
+		//cout << "somewhere in " << *curbuf << endl;
 		break;
 	  }
 	}
@@ -210,22 +210,22 @@ class bufferlist {
 	if (off) {
 	  // add a reference to the front bit
 	  //  insert it before curbuf (which we'll hose)
-	  cout << "keeping front " << off << " of " << *curbuf << endl;
+	  //cout << "keeping front " << off << " of " << *curbuf << endl;
 	  _buffers.insert( curbuf, bufferptr( *curbuf, off, 0 ) );
 	}
 
 	while (len > 0) {
 	  // partial?
 	  if (off + len < (*curbuf).length()) {
-		cout << "keeping end of " << *curbuf << endl;
+		//cout << "keeping end of " << *curbuf << endl;
 		(*curbuf).set_offset( off + len );    // ignore beginning big
 		(*curbuf).set_length( len );
-		cout << " now " << *curbuf << endl;
+		//cout << " now " << *curbuf << endl;
 		break;
 	  }
 
 	  // hose the whole thing
-	  cout << "discarding all of " << *curbuf << endl;
+	  //cout << "discarding all of " << *curbuf << endl;
 	  int howmuch = (*curbuf).length() - off;
 	  _buffers.erase( curbuf++ );
 	  len -= howmuch;

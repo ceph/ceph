@@ -204,7 +204,6 @@ int mpi_send(Message *m, int tag)
 	return 0;
   } 
 
-  mpi_reap_sends();
 
   // marshall
   m->encode_payload();
@@ -293,8 +292,11 @@ void* mpimessenger_loop(void*)
 {
   dout(1) << "mpimessenger_loop start pid " << getpid() << endl;
 
-  while (!mpi_done) {
+  while (1) {
 
+	// outgoing
+	mpi_reap_sends();
+	
 #ifdef FUNNEL_MPI
 	// check outgoing queue
 	out_queue_lock.Lock();
@@ -310,6 +312,14 @@ void* mpimessenger_loop(void*)
 	out_queue_lock.Unlock();
 #endif
 
+
+	// done?
+	if (mpi_done &&
+		incoming.empty() &&
+		outgoing.empty()) break;
+
+
+	// incoming
 	Message *m = 0;
 
 	if (incoming.size()) {
@@ -324,23 +334,28 @@ void* mpimessenger_loop(void*)
 	  // get message
 	  m = mpi_recv(TAG_UNSOLICITED);
 	}
-	if (!m) continue;  // no message?
-	
-	int dest = m->get_dest();
-	if (directory.count(dest)) {
-	  Messenger *who = directory[ dest ];
-	  
-	  dout(3) << "---- '" << m->get_type_name() << 
-		"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
-			  << endl;
-	  
-	  who->dispatch(m);
-	} else {
-	  dout (1) << "---- i don't know who " << dest << " is." << endl;
-	  assert(0);
-	  break;
+
+	// dispatch?
+	if (m) {
+	  int dest = m->get_dest();
+	  if (directory.count(dest)) {
+		Messenger *who = directory[ dest ];
+		
+		dout(3) << "---- '" << m->get_type_name() << 
+		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
+				<< endl;
+		
+		who->dispatch(m);
+	  } else {
+		dout (1) << "---- i don't know who " << dest << " is." << endl;
+		assert(0);
+		break;
+	  }
 	}
+
+	
+
   }
 
   dout(5) << "finishing async sends" << endl;
@@ -405,6 +420,7 @@ void mpimessenger_stop()
 void mpimessenger_wait()
 {
   void *returnval;
+  dout(10) << "mpimessenger_wait waiting for thread to finished." << endl;
   pthread_join(thread_id, &returnval);
   dout(10) << "mpimessenger_wait thread finished." << endl;
 }
@@ -452,7 +468,7 @@ int MPIMessenger::shutdown()
 
   // last one?
   if (directory.empty()) {
-	dout(10) << "last mpimessenger on rank " << mpi_rank << " shut down" << endl;
+	dout(10) << "shutdown last mpimessenger on rank " << mpi_rank << " shut down" << endl;
 	pthread_t whoami = pthread_self();
 
 	dout(15) << "whoami = " << whoami << ", thread = " << thread_id << endl;
@@ -465,6 +481,8 @@ int MPIMessenger::shutdown()
 	  dout(15) << "  calling mpimessenger_stop()" << endl;
 	  mpimessenger_stop();
 	}
+  } else {
+	dout(10) << "shutdown still " << directory.size() << " other messengers on rank " << mpi_rank << endl;
   }
 }
 

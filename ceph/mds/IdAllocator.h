@@ -25,6 +25,7 @@ class IdAllocator {
   IdAllocator(MDS *mds) {
 	this->mds = mds;
 	opened = false;
+	opening = false;
   }
   //~InoAllocator();
 

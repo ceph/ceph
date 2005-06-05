@@ -31,6 +31,11 @@ class CheesySerializer : public Messenger,
 	messenger->set_dispatcher(this);
 	last_pcid = 1;
   }
+  CheesySerializer() {
+	if (messenger) 
+	  delete messenger;
+  }
+
   int shutdown();
 
   // incoming messages
@@ -43,7 +48,7 @@ class CheesySerializer : public Messenger,
 					int port=0);                     // blocks for matching reply
 
   void trigger_timer(class Timer *t) {
-	assert(0);
+	messenger->trigger_timer(t);
   }
 };
 
