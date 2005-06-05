@@ -115,6 +115,9 @@ class MDS : public Dispatcher {
   
   set<int>     mounted_clients;
 
+
+  list<Context*> waiting_for_idalloc;
+  friend class C_MDS_IdAllocOpen;
   
  public:
   list<Context*> finished_queue;
@@ -160,6 +163,7 @@ class MDS : public Dispatcher {
   // messages
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
+  void my_dispatch(Message *m);
 
   // generic request helpers
   void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
@@ -276,7 +280,7 @@ public:
 	this->mds = mds;
   }
   virtual void finish(int r) {
-	mds->dispatch(m);
+	mds->my_dispatch(m);
   }
   
   virtual bool can_redelegate() {

@@ -25,7 +25,7 @@
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "client" << whoami << " "
+#define  dout(l)    if (l<=g_conf.debug) cout << "client" << whoami << "." << pthread_self() << " "
 
 
 
@@ -256,7 +256,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 {
   Fh *f = fh_map[m->get_fh()];
   
-  if (f && fh_closing.count(m->get_fh()) == 0) {
+  if (f) {
 	// file is still open, we care
 
 	// auth?
@@ -825,15 +825,14 @@ int Client::close(fileh_t fh)
   req->set_caller_gid(getgid());
   
   // take note of the fact that we're mid-close
-  fh_closing.insert(fh);
+  /* mds may ack our close() after reissuing same fh to another open; remove from
+	 fh_map _before_ sending request. */
+  fh_map.erase(fh);
 
   MClientReply *reply = make_request(req, 0);
   assert(reply);
   int result = reply->get_result();
   dout(3) << "close " << fh << " result = " << result << endl;
-  
-  fh_closing.erase(fh);
-  fh_map.erase(fh);
   
   delete reply;
 

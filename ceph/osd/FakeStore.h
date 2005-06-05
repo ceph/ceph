@@ -7,16 +7,9 @@ class FakeStore : public ObjectStore {
   string basedir;
   int whoami;
 
-  void make_dir(string& dir) {
-	static char s[30];
-	sprintf(s, "%d", whoami);
-	dir = basedir + "/" + s;
-  }
-  void make_oname(object_t oid, string& fn) {
-	static char s[100];
-	sprintf(s, "%d/%lld", whoami, oid);
-	fn = basedir + "/" + s;
-  }
+  void get_dir(string& dir);
+  void get_oname(object_t oid, string& fn);
+  void wipe_dir(string mydir);
 
  public:
   FakeStore(char *base, int whoami);

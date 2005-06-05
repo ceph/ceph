@@ -87,9 +87,7 @@ int main(int argc, char **argv) {
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	// build a serialized fakemessenger...
-	FakeMessenger *fake = new FakeMessenger(MSG_ADDR_CLIENT(0));
-	CheesySerializer *serializer = new CheesySerializer(fake);
-	fake->set_dispatcher(serializer);   
+	CheesySerializer *serializer = new CheesySerializer( new FakeMessenger(MSG_ADDR_CLIENT(0)) );
 
 	client[i] = new Client(mdc, i, serializer);
 	client[i]->init();

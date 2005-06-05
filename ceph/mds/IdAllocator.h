@@ -4,6 +4,7 @@
 #include "include/types.h"
 #include "include/rangeset.h"
 #include "include/bufferlist.h"
+#include "include/Context.h"
 
 class MDS;
 
@@ -31,9 +32,12 @@ class IdAllocator {
   void reclaim_id(int type, idno_t id);
 
   // load/save from disk (hack)
+  bool is_open() { return opened; }
+  bool is_opening() { return opening; }
+
   void save();
-  void load();
-  void load_2(int, bufferlist&);
+  void load(Context *onfinish);
+  void load_2(int, bufferlist&, Context *onfinish);
 
 };
 

@@ -123,6 +123,10 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 	// all done
 	p->read_result->clear();
 	if (p->read_data.size()) {
+	  dout(20) << "assembling frags" << endl;
+
+	  /** BUG this doesn't handle holes properly **/
+
 	  // we have other fragments, assemble them all... blech!
 	  p->read_data[off] = new bufferlist;
 	  p->read_data[off]->claim( m->get_data() );
@@ -131,9 +135,13 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 	  for (map<off_t, bufferlist*>::iterator it = p->read_data.begin();
 		   it != p->read_data.end();
 		   it++) {
-		p->read_result->claim_append(*(it->second));
+		dout(10) << "  frag off " << it->first << " len " << it->second->length() << endl;
+		// FIXME: pad if hole?
+		if (it->second->length())
+		  p->read_result->claim_append(*(it->second));
 	  }
 	} else {
+	  dout(20) << "only one frag" << endl;
 	  // only one fragment, easy
 	  p->read_result->claim( m->get_data() );
 	}
@@ -143,6 +151,7 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
 	delete p;   // del pendingOsdRead_t
 	
 	int result = p->read_result->length(); // assume success
+	dout(7) << "filer: read " << result << " bytes " << p->read_result->length() << endl;
 
 	// done
 	if (onfinish) {

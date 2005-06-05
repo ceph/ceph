@@ -142,11 +142,6 @@ MDS::~MDS() {
 
 int MDS::init()
 {
-  // init messenger
-  //mds_lock.Lock();
-  idalloc->load();
-  //mds_lock.Unlock();
-
 }
 
 
@@ -242,50 +237,73 @@ mds_load_t MDS::get_load()
 }
 
 
+class C_MDS_IdAllocOpen : public Context {
+public:
+  MDS *mds;
+  C_MDS_IdAllocOpen(MDS *mds) {
+	this->mds = mds;
+  }
+  void finish(int r) {
+	mds->queue_finished(mds->waiting_for_idalloc);
+  }
+};
+
 
 void MDS::proc_message(Message *m) 
 {
-  
-  //if (whoami == 8)	mdcache->show_imports();
-
   switch (m->get_type()) {
-	// MISC
-  case MSG_PING:
-	handle_ping((MPing*)m);
-	break;
+	// OSD ===============
+  case MSG_OSD_READREPLY:
+	filer->handle_osd_read_reply((MOSDReadReply*)m);
+	return;
+  case MSG_OSD_WRITEREPLY:
+	filer->handle_osd_write_reply((MOSDWriteReply*)m);
+	return;
+  case MSG_OSD_OPREPLY:
+	filer->handle_osd_op_reply((MOSDOpReply*)m);
+	return;
 
-  case MSG_CLIENT_MOUNT:
-	handle_client_mount((MClientMount*)m);
-	break;
-  case MSG_CLIENT_UNMOUNT:
-	handle_client_unmount(m);
-	break;
-	
 	// MDS
   case MSG_MDS_SHUTDOWNSTART:
 	handle_shutdown_start(m);
-	break;
+	return;
 
   case MSG_MDS_SHUTDOWNFINISH:
 	handle_shutdown_finish(m);
-	break;
+	return;
+
+  case MSG_PING:
+	handle_ping((MPing*)m);
+	return;
+
+  case MSG_CLIENT_MOUNT:
+	handle_client_mount((MClientMount*)m);
+	return;
+  case MSG_CLIENT_UNMOUNT:
+	handle_client_unmount(m);
+	return;
+	
+  }
+  
+
+
+  // make sure we're started up
+  if (!idalloc->is_open()) {
+	dout(3) << "idalloc not open yet" << endl;
+	if (!idalloc->is_opening())
+	  idalloc->load(new C_MDS_IdAllocOpen(this));
+
+	// defer
+	waiting_for_idalloc.push_back(new C_MDS_RetryMessage(this, m));
+	return;
+  }
+
+  switch (m->get_type()) {
 
 	// CLIENTS ===========
   case MSG_CLIENT_REQUEST:
 	handle_client_request((MClientRequest*)m);
-	break;
-
-
-	// OSD ===============
-  case MSG_OSD_READREPLY:
-	filer->handle_osd_read_reply((MOSDReadReply*)m);
-	break;
-  case MSG_OSD_WRITEREPLY:
-	filer->handle_osd_write_reply((MOSDWriteReply*)m);
-	break;
-  case MSG_OSD_OPREPLY:
-	filer->handle_osd_op_reply((MOSDOpReply*)m);
-	break;
+	return;
 	
   default:
 	dout(1) << " main unknown message " << m->get_type() << endl;
@@ -297,7 +315,15 @@ void MDS::proc_message(Message *m)
 
 void MDS::dispatch(Message *m)
 {
-  //  mds_lock.Lock();
+  mds_lock.Lock();
+
+  my_dispatch(m);
+
+  mds_lock.Unlock();
+}
+
+void MDS::my_dispatch(Message *m)
+{
 
   switch (m->get_dest_port()) {
 	
@@ -389,8 +415,6 @@ void MDS::dispatch(Message *m)
 	}
   }
 
-
-  //mds_lock.Unlock();
 }
 
 

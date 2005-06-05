@@ -134,7 +134,6 @@ class Client : public Dispatcher {
 
   // file handles
   map<fileh_t, Fh*>         fh_map;
-  set<fileh_t>              fh_closing;
 
   // global (client) lock
   Mutex                  client_lock;

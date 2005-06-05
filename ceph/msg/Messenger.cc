@@ -79,7 +79,6 @@ ostream& operator<<(ostream& out, Message& m)
 
 
 
-
 Message *
 decode_message(msg_envelope_t& env, bufferlist& payload)
 {
@@ -277,3 +276,5 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   // done!
   return m;
 }
+
+

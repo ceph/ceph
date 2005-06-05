@@ -4,6 +4,7 @@
 #include "IdAllocator.h"
 #include "MDS.h"
 #include "osd/Filer.h"
+#include "osd/OSDCluster.h"
 
 #include "include/types.h"
 
@@ -89,31 +90,33 @@ void IdAllocator::save()
 class C_ID_Load : public Context {
 public:
   IdAllocator *ida;
+  Context *onfinish;
   bufferlist bl;
-  C_ID_Load(IdAllocator *ida) {
+  C_ID_Load(IdAllocator *ida, Context *onfinish) {
 	this->ida = ida;
+	this->onfinish = onfinish;
   }
   void finish(int r) {
-	ida->load_2(r, bl);
+	ida->load_2(r, bl, onfinish);
   }
 };
 
-void IdAllocator::load()
+void IdAllocator::load(Context *onfinish)
 { 
-  C_ID_Load *c = new C_ID_Load(this);
+  C_ID_Load *c = new C_ID_Load(this, onfinish);
 
   assert(opened == false);
   assert(opening == false);
   opening = true;
 
   mds->filer->read(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
-				   1000000,
+				   FILE_OBJECT_SIZE,
 				   0,
 				   &c->bl,
 				   c);
 }
 
-void IdAllocator::load_2(int r, bufferlist& blist)
+void IdAllocator::load_2(int r, bufferlist& blist, Context *onfinish)
 {
   char *dataptr = blist.c_str();
 
@@ -157,4 +160,9 @@ void IdAllocator::load_2(int r, bufferlist& blist)
 
   opened = true;
   opening = false;
+
+  if (onfinish) {
+	onfinish->finish(0);
+	delete onfinish;
+  }
 }

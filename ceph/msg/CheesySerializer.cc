@@ -18,6 +18,7 @@ using namespace std;
 void CheesySerializer::dispatch(Message *m)
 {
   long pcid = m->get_pcid();
+  Dispatcher *dispatcher = get_dispatcher();
 
   lock.Lock();
 
@@ -74,15 +75,20 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
   call_cond[pcid] = cond;
   call_reply[pcid] = 0;   // no reply yet
 
-  // send
-  messenger->send_message(m, dest, port, fromport);
-  
-  // wait
-  dout(DEBUGLVL) << "sendrecv waiting for reply on pcid " << pcid << endl;
-  //cout << "wait start, value = " << sem->Value() << endl;
+  // send.  drop locks in case send_message is bad and blocks
+  lock.Unlock();
+  messenger->send_message(m, dest, port, fromport); 
+  lock.Lock();
 
-  cond->Wait(lock);
-
+  // wait?
+  if (call_reply[pcid] == 0) {
+	dout(DEBUGLVL) << "sendrecv waiting for reply on pcid " << pcid << endl;
+	//cout << "wait start, value = " << sem->Value() << endl;
+	
+	cond->Wait(lock);
+  } else {
+	dout(DEBUGLVL) << "sendrecv reply is already here on pcid " << pcid << endl;
+  }
 
   // pick up reply
   Message *reply = call_reply[pcid];
