@@ -1,23 +1,24 @@
-notes and todos.
 
-- new fakeclient that uses client
-- virtual mega-filesystem
+big fast todo's:
+- client buffer cache
+- replication protocol
+- heartbeat protocol
+
+
+ask tyce+bill:
+- obfs on alc?
+
+
+notes and todos.
+- SyntheticClient
+- virtual mega-filesystem (metadata only)
+
 
 HARD LINKS
-
-- discover_ino
- - called by path_traverse 
-- clean up inode file concept, #define's, etc.
-- unlink
-  - migrate to inode file
-- reclaim from inode file on discover...
-
-
+- reclaim danglers from inode file on discover...
 - fix rename
 
 
-/- scatter/gather parallel rendrecv (for client file i/o)
-- client buffered writes
 
 
 MDS TODO
@@ -25,7 +26,7 @@ MDS TODO
   - they mostly work, but they're fragile
 - sync clients on stat
   - will need to ditch 10s client metadata caching before this is useful
-  - truncate
+  - implement truncate
 - implement hashed directories
 - statfs?
 - rewrite journal + recovery
