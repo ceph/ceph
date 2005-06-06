@@ -108,6 +108,7 @@ class bufferlist {
 	  (*curbuf).copy(off, howmuch, dest);
 
 	  dest += howmuch;
+	  len -= howmuch;
 	  off = 0;
 	  curbuf++;
 	  assert(curbuf != _buffers.end());
