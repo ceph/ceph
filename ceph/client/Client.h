@@ -66,6 +66,11 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
 
+  list<Cond*>       waitfor_write;
+  list<Cond*>       waitfor_read;
+  list<Cond*>       waitfor_flushed;
+  set<bufferlist*>  inflight_buffers;
+
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
 
@@ -273,6 +278,7 @@ class Client : public Dispatcher {
   int close(fileh_t fh);
   int read(fileh_t fh, char *buf, size_t size, off_t offset);
   int write(fileh_t fh, const char *buf, size_t size, off_t offset);
+  int flush(fileh_t fh);
   int truncate(fileh_t fh, off_t size);
   int fsync(fileh_t fh);
 

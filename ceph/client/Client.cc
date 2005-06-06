@@ -224,6 +224,8 @@ MClientReply *Client::make_request(MClientRequest *req, int mds)
 
 void Client::dispatch(Message *m)
 {
+  client_lock.Lock();
+
   switch (m->get_type()) {
 	// osd
   case MSG_OSD_READREPLY:
@@ -238,9 +240,7 @@ void Client::dispatch(Message *m)
 	
 	// client
   case MSG_CLIENT_FILECAPS:
-	client_lock.Lock();
 	handle_file_caps((MClientFileCaps*)m);
-	client_lock.Unlock();
 	break;
 
   default:
@@ -248,6 +248,8 @@ void Client::dispatch(Message *m)
 	assert(0);  // fail loudly
 	break;
   }
+
+  client_lock.Unlock();
 }
 
 void Client::handle_file_caps(MClientFileCaps *m)
@@ -277,6 +279,27 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	  messenger->send_message(m, m->get_source(), m->get_source_port());
 	  return;
 	} 
+
+	// wake up waiters?
+	if (f->caps & CFILE_CAP_RD) {
+	  for (list<Cond*>::iterator it = in->waitfor_read.begin();
+		   it != in->waitfor_read.end();
+		   it++) {
+		dout(5) << "signaling read waiter " << *it << endl;
+		(*it)->Signal();
+	  }
+	  in->waitfor_read.clear();
+	}
+	if (f->caps & CFILE_CAP_WR) {
+	  for (list<Cond*>::iterator it = in->waitfor_write.begin();
+		   it != in->waitfor_write.end();
+		   it++) {
+		dout(5) << "signaling write waiter " << *it << endl;
+		(*it)->Signal();
+	  }
+	  in->waitfor_write.clear();
+	}
+
   } else {
 	dout(5) << "handle_file_caps fh is closed or closing, dropping" << endl;
   }
@@ -898,6 +921,30 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 }
 
 
+// hack.. see async write() below
+class C_Client_WriteBuffer : public Context {
+public:
+  Inode *in;
+  bufferlist *blist;
+  C_Client_WriteBuffer(Inode *in, bufferlist *blist) {
+	this->in = in;
+	this->blist = blist;
+  }
+  void finish(int r) {
+	in->inflight_buffers.erase(blist);
+	delete blist;
+	
+	if (in->inflight_buffers.empty()) {
+	  // wake up flush waiters
+	  for (list<Cond*>::iterator it = in->waitfor_flushed.begin();
+		   it != in->waitfor_flushed.end();
+		   it++) {
+		(*it)->Signal();
+	  }
+	  in->waitfor_flushed.clear();
+	}
+  }
+};
 
 int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset) 
 {
@@ -913,21 +960,56 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
   dout(10) << "cur file size is " << in->inode.size << "    fh size " << f->size << endl;
 
-  // check current file mode (are we allowed to write, buffer, etc.)
-  // ***
-  
-  // create a buffer that refers to *buf, but doesn't try to free it when it's done.
-  bufferlist blist;
-  blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
 
-  // issue write
-  Cond cond;
-  int rvalue;
+  // do we have write file cap?
+  Cond *cond = 0;
+  while (f->caps & CFILE_CAP_WR == 0) {
+	dout(7) << " don't have write cap, waiting" << endl;
+	if (!cond) cond = new Cond;
+	in->waitfor_write.push_back(cond);
+	cond->Wait(client_lock);
+  }
+  if (cond) delete cond;
 
-  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
-  filer->write(ino, size, offset, blist, 0, onfinish);
-  
-  cond.Wait(client_lock);
+
+  // buffered write?
+  if (f->caps & CFILE_CAP_WRBUFFER) {
+	// buffered write
+	dout(10) << "buffered/async write" << endl;
+
+	/*
+	  hack for now.. replace this with a real buffer cache
+
+	  just copy the buffer, send the write off, and return immediately.  
+	  flush() will block until all outstanding writes complete.
+	*/
+
+	bufferlist *blist = new bufferlist;
+	blist->push_back( new buffer(buf, size, BUFFER_MODE_COPY|BUFFER_MODE_FREE) );
+
+	in->inflight_buffers.insert(blist);
+
+	Context *onfinish = new C_Client_WriteBuffer( in, blist );
+	filer->write(ino, size, offset, *blist, 0, onfinish);
+
+  } else {
+	// synchronous write
+	dout(10) << "synchronous write" << endl;
+
+	// create a buffer that refers to *buf, but doesn't try to free it when it's done.
+	bufferlist blist;
+	blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
+	
+	// issue write
+	Cond cond;
+	int rvalue;
+	
+	C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+	filer->write(ino, size, offset, blist, 0, onfinish);
+	
+	cond.Wait(client_lock);
+  }
+
 
   // assume success for now.  FIXME.
   size_t totalwritten = size;
@@ -949,6 +1031,32 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   return totalwritten;  
 }
 
+int Client::flush(fileh_t fh) 
+{
+  client_lock.Lock();
+  int r = 0;
+
+  dout(3) << "flush fh " << fh << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = inode_map[f->ino];
+  
+  if (in->inflight_buffers.size() 
+	  /* || in->dirty_buffers.size() */) {
+	dout(7) << "inflight buffers, waiting" << endl;
+	Cond *cond = new Cond;
+	in->waitfor_flushed.push_back(cond);
+	cond->Wait(client_lock);
+	assert(in->inflight_buffers.empty());
+	dout(7) << "inflight buffers flushed" << endl;
+  } else {
+	dout(7) << "no inflight buffers" << endl;
+  }
+
+  client_lock.Unlock();
+  return r;
+}
 
 
 // not written yet, but i want to link!
