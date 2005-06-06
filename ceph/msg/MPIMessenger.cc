@@ -39,7 +39,7 @@ bool mpi_done = false;     // set this flag to stop the event loop
 
 #define TAG_UNSOLICITED 0
 
-#define DBLVL 10
+#define DBLVL 18
 
 // the key used to fetch the tag for the current thread.
 pthread_key_t tag_key;
@@ -66,7 +66,7 @@ static int nthreads = 10;
 
 
 /*****
- * MPI global methods for process-wide setup, shutdown.
+ * MPI global methods for process-wide startup, shutdown.
  */
 
 int mpimessenger_init(int& argc, char**& argv)
@@ -100,12 +100,16 @@ int mpimessenger_world()
   return mpi_world;
 }
 
+
+
 /***
  * internal send/recv
  */
 
 
-// reap finished send.  don't block.
+/*
+ * get fresh MPI_Request* (on heap) for a new async MPI_Isend
+ */
 
 MPI_Request *mpi_prep_send_req() {
   MPI_Request *req = new MPI_Request;
@@ -113,6 +117,14 @@ MPI_Request *mpi_prep_send_req() {
   dout(DBLVL) << "prep_send_req " << req << endl;
   return req;
 }
+
+
+/*
+ * clean up MPI_Request*'s for Isends that have completed.
+ * also, hose any associated Message*'s for Messages that are completely sent.
+ *
+ * if wait=true, block and wait for sends to finish.
+ */
 
 void mpi_reap_sends(bool wait=false) {
   sender_lock.Lock();
@@ -141,7 +153,9 @@ void mpi_reap_sends(bool wait=false) {
 	it++;
 	unfinished_sends.pop_front();
   }
+
   dout(DBLVL) << "reap has " << unfinished_sends.size() << " Isends outstanding, " << unfinished_send_message.size() << " messages" << endl;
+
   sender_lock.Unlock();
 }
 
@@ -151,12 +165,15 @@ void mpi_finish_sends() {
 }
 
 
+/*
+ * recv a Message*
+ */
 Message *mpi_recv(int tag)
 {
-  MPI_Status status;
-  
+  // envelope
   dout(DBLVL) << "mpi_recv waiting for message tag " << tag  << endl;
 
+  MPI_Status status;
   msg_envelope_t env;
   
   ASSERT(MPI_Recv((void*)&env,
@@ -180,7 +197,7 @@ Message *mpi_recv(int tag)
 
   dout(DBLVL) << "mpi_recv got envelope " << status.count << ", type=" << env.type << " src " << env.source << " dst " << env.dest << " nchunks=" << env.nchunks << " from " << status.MPI_SOURCE << endl;
 
-  // get the rest of the message
+  // payload
   bufferlist blist;
   for (int i=0; i<env.nchunks; i++) {
 	MPI_Status fragstatus;
@@ -213,17 +230,19 @@ Message *mpi_recv(int tag)
 }
 
 
-#define NUM_REQS  100
-
+/*
+ * send a Message* over the wire.  ** do not block **.
+ */
 int mpi_send(Message *m, int tag)
 {
   int rank = MPI_DEST_TO_RANK(m->get_dest(), mpi_world);
+
+  // local?
   if (rank == mpi_rank) {      
 	dout(DBLVL) << "queuing local delivery" << endl;
 	incoming.push_back(m);
 	return 0;
   } 
-
 
   // marshall
   m->encode_payload();
@@ -233,13 +252,9 @@ int mpi_send(Message *m, int tag)
 
   dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
 
-  dout(DBLVL) << "mpi_sending " << blist.length() << " size message on tag " << tag << " type " << env->type << " src " << env->source << " dst " << env->dest << " to rank " << rank << " nchunks=" << env->nchunks << endl;
-
 #ifndef FUNNEL_MPI
   sender_lock.Lock();
 #endif
-
-
 
   // send envelope
   ASSERT(MPI_Isend((void*)env,
@@ -249,7 +264,8 @@ int mpi_send(Message *m, int tag)
 				   tag,
 				   MPI_COMM_WORLD,
 				   mpi_prep_send_req()) == MPI_SUCCESS);
-  
+
+  // payload
   int i = 0;
   for (list<bufferptr>::iterator it = blist.buffers().begin();
 	   it != blist.buffers().end();
@@ -269,7 +285,7 @@ int mpi_send(Message *m, int tag)
   // attach message to last send, so we can free it later
   MPI_Request *req = unfinished_sends.back();
   unfinished_send_message[req] = m;
-
+  
   dout(DBLVL) << "mpi_send done, attached message to Isend " << req << endl;
 
 #ifndef FUNNEL_MPI
@@ -376,20 +392,16 @@ void* mpimessenger_loop(void*)
 	  }
 	}
 
-	
-
   }
 
   dout(5) << "finishing async sends" << endl;
   mpi_finish_sends();
-
 
   dout(5) << "mpimessenger_loop exiting loop" << endl;
 }
 
 
 // start/stop mpi receiver thread (for unsolicited messages)
-
 int mpimessenger_start()
 {
   dout(5) << "starting thread" << endl;
@@ -401,7 +413,12 @@ int mpimessenger_start()
 				 0);
 }
 
-MPI_Request kick_req;
+
+/*
+ * kick and wake up _loop (to pick up new outgoing message, or quit)
+ */
+
+MPI_Request    kick_req;
 msg_envelope_t kick_env;
 
 void mpimessenger_kick_loop()
@@ -410,7 +427,6 @@ void mpimessenger_kick_loop()
   if (pthread_self() == thread_id) return;   
 
   kick_env.type = 0;
-  //dout(DBLVL) << "kicking" << endl;
 
   sender_lock.Lock();
   ASSERT(MPI_Isend(&kick_env,               // kick sync for now, but ONLY because it makes me feel safer.
@@ -421,8 +437,10 @@ void mpimessenger_kick_loop()
 				   MPI_COMM_WORLD,
 				   mpi_prep_send_req()) == MPI_SUCCESS);
   sender_lock.Unlock();
-  //dout(DBLVL) << "kicked" << endl;
 }
+
+
+// stop thread
 
 void mpimessenger_stop()
 {
@@ -441,6 +459,9 @@ void mpimessenger_stop()
   mpimessenger_wait();
 }
 
+
+// wait for thread to finish
+
 void mpimessenger_wait()
 {
   void *returnval;
@@ -451,8 +472,9 @@ void mpimessenger_wait()
 
 
 
+
 /***********
- * MPIMessenger implementation
+ * MPIMessenger class implementation
  */
 
 MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger()
@@ -556,7 +578,7 @@ Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
 {
 #ifdef FUNNEL_MPI
 
-  assert(0);
+  assert(0);   // use CheesySerializer
 
 #else
   int fromport = 0;
