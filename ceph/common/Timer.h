@@ -75,10 +75,10 @@ class Timer {
   }
 
   void set_messenger(Messenger *m);
-
+  void unset_messenger();
 
   // schedule events
-  void add_event_after(int seconds,
+  void add_event_after(float seconds,
 					   Context *callback) {
 	struct timeval tv;
 	g_clock.gettime(&tv);

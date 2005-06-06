@@ -84,7 +84,7 @@ class MDiscoverReply : public Message {
     }
 	return false;
   }
-  string& get_path() { return path.get_path(); }
+  const string& get_path() { return path.get_path(); }
   bool get_path_xlock(int i) { return path_xlock[i]; }
 
   //  bool is_flag_forward() { return flag_forward; }
@@ -94,7 +94,7 @@ class MDiscoverReply : public Message {
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
   CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
-  string& get_dentry(int n) { return path[n - no_base_dentry]; }
+  const string& get_dentry(int n) { return path[n - no_base_dentry]; }
   bool get_dentry_xlock(int n) { return path_xlock[n - no_base_dentry]; }
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
   inodeno_t get_ino(int n) { return inodes[n]->get_ino(); }
@@ -127,8 +127,8 @@ class MDiscoverReply : public Message {
 	  !flag_error_dn &&
 	  !flag_error_dir;
   }
-  void set_path(filepath& dp) { path = dp; }
-  void add_dentry(string& dn, bool xlock) { 
+  void set_path(const filepath& dp) { path = dp; }
+  void add_dentry(const string& dn, bool xlock) { 
 	if (path.depth() == 0 && dirs.empty()) no_base_dir = true;
     path.add_dentry(dn);
 	path_xlock.push_back(xlock);
@@ -144,7 +144,7 @@ class MDiscoverReply : public Message {
   }
 
   //  void set_flag_forward() { flag_forward = true; }
-  void set_flag_error_dn(string& dn) { 
+  void set_flag_error_dn(const string& dn) { 
 	flag_error_dn = true; 
 	error_dentry = dn; 
   }

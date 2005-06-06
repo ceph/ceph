@@ -40,7 +40,7 @@ COMMON_OBJS= \
 	config.o
 
 TEST_TARGETS = fakemds mpitest
-TARGETS = import singleclient mpifuse fakefuse
+TARGETS = import singleclient mpifuse fakefuse mpisyn
 
 SRCS=*.cc */*.cc
 
@@ -70,7 +70,10 @@ mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/Fa
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpifuse: mpifuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+
+mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}

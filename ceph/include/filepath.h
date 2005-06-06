@@ -41,14 +41,14 @@ class filepath {
 
  public:
   filepath() {}
-  filepath(string& s) {
+  filepath(const string& s) {
 	set_path(s);
   }
-  filepath(char* s) {
+  filepath(const char* s) {
 	set_path(s);
   }
 
-  void set_path(string& s) {
+  void set_path(const string& s) {
 	path = s;
 	parse();
   }
@@ -60,34 +60,34 @@ class filepath {
   string& get_path() {
 	return path;
   }
-  int length() {
+  int length() const {
 	return path.length();
   }
 
-  const char *c_str() {
+  const char *c_str() const {
 	return path.c_str();
   }
 
 
-  filepath prefixpath(int s) {
+  filepath prefixpath(int s) const {
 	filepath t;
 	for (int i=0; i<s; i++)
 	  t.add_dentry(bits[i]);
 	return t;
   }
-  filepath postfixpath(int s) {
+  filepath postfixpath(int s) const {
 	filepath t;
 	for (int i=s; i<bits.size(); i++)
 	  t.add_dentry(bits[i]);
 	return t;
   }
-  void add_dentry(string& s) {
+  void add_dentry(const string& s) {
 	bits.push_back(s);
 	if (path.length())
 	  path += "/";
 	path += s;
   }
-  void append(filepath& a) {
+  void append(const filepath& a) {
 	for (int i=0; i<a.depth(); i++) 
 	  add_dentry(a[i]);
   }
@@ -98,15 +98,15 @@ class filepath {
     bits.clear();
   }
 
-  string& operator[](int i) {
+  const string& operator[](int i) const {
 	return bits[i];
   }
 
-  string& last_bit() {
+  const string& last_bit() const {
 	return bits[ bits.size()-1 ];
   }
 
-  int depth() {
+  int depth() const {
 	return bits.size();
   }
   bool empty() {

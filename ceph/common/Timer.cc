@@ -88,28 +88,21 @@ void Timer::timer_thread()
 }
 
 
-/***
- * signal handler callback fun
+
+/**
+ * Timer bits
  */
-
-/*
-void timer_signal_handler(int sig)
-{
-  //cout << "hi ms = " << messenger_to_kick << endl;
-
-  // kick messenger.
-  if (messenger_to_kick) {
-	messenger_to_kick->trigger_timer(&g_timer);
-  }
-
-  //cout << "bye" << endl;
-}
-*/
 
 void Timer::set_messenger(Messenger *m) 
 {
   dout(10) << "messenger to kick is " << m << endl;
   messenger_to_kick = m;
+}
+void Timer::unset_messenger() 
+{
+  dout(10) << "unset messenger" << endl;
+  messenger_to_kick = 0;
+  cancel_timer();
 }
 
 void Timer::register_timer()

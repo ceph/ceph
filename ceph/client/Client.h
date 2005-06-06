@@ -102,7 +102,8 @@ class Dentry : public LRUObject {
 #define FH_STATE_LOCK     4    // no read or write
 
 struct Fh {
-  inodeno_t ino;
+  //inodeno_t ino;
+  Inode    *inode;
   int       mds;        // have to talk to mds we opened with (for now)
 
   int       mode;       // the mode i opened the file with
@@ -228,10 +229,19 @@ class Client : public Dispatcher {
 
   // blocking mds call
   MClientReply *make_request(MClientRequest *req, int mds);
+
+  
+  // buffer cache
+  int flush_inode_buffers(Inode *in);     // flush buffered writes
+  int release_inode_buffers(Inode *in);   // release cached reads
 		
+  friend class SyntheticClient;
+
  public:
   Client(MDCluster *mdc, int id, Messenger *m);
   ~Client();
+
+  int get_nodeid() { return whoami; }
 
   void init();
   void shutdown();

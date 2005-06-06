@@ -36,9 +36,7 @@ bool mpi_done = false;     // set this flag to stop the event loop
 
 
 #define FUNNEL_MPI        // if we want to funnel mpi through a single thread
-
 #define TAG_UNSOLICITED 0
-
 #define DBLVL 18
 
 // the key used to fetch the tag for the current thread.
@@ -47,7 +45,9 @@ pthread_t thread_id = 0;   // thread id of the event loop.  init value == nobody
 
 Mutex sender_lock;
 Mutex out_queue_lock;
-//Mutex send_req_lock;
+
+Timer *pending_timer = 0;
+
 
 // our lock for any common data; it's okay to have only the one global mutex
 // because our common data isn't a whole lot.
@@ -350,10 +350,20 @@ void* mpimessenger_loop(void*)
 #endif
 
 
+	// timer events?
+	if (pending_timer) {
+	  Timer *t = pending_timer;
+	  pending_timer = 0;
+	  
+	  dout(DBLVL) << "pending timer" << endl;
+	  t->execute_pending();
+	}
+
 	// done?
 	if (mpi_done &&
 		incoming.empty() &&
-		outgoing.empty()) break;
+		outgoing.empty() &&
+		pending_timer == 0) break;
 
 
 	// incoming
@@ -378,7 +388,7 @@ void* mpimessenger_loop(void*)
 	  if (directory.count(dest)) {
 		Messenger *who = directory[ dest ];
 		
-		dout(3) << "---- '" << m->get_type_name() << 
+		dout(4) << "---- '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
 				<< m 
@@ -485,6 +495,9 @@ MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger()
   // register myself in the messenger directory
   directory[myaddr] = this;
 
+  // register to execute timer events
+  g_timer.set_messenger(this);
+
   // logger
   /*
   string name;
@@ -511,6 +524,9 @@ int MPIMessenger::shutdown()
 {
   // remove me from the directory
   directory.erase(myaddr);
+
+  // no more timer events
+  g_timer.unset_messenger();
 
   // last one?
   if (directory.empty()) {
@@ -539,7 +555,9 @@ int MPIMessenger::shutdown()
 
 void MPIMessenger::trigger_timer(Timer *t)
 {
-  assert(0); //implement me
+  pending_timer = t;
+
+  mpimessenger_kick_loop();
 }
 
 /***

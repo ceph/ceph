@@ -194,6 +194,8 @@ FakeMessenger::~FakeMessenger()
 
 int FakeMessenger::shutdown()
 {
+  g_timer.unset_messenger();
+
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   directory.erase(whoami);
 }

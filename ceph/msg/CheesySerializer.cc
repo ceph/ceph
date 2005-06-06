@@ -46,7 +46,7 @@ int CheesySerializer::send_message(Message *m, msg_addr_t dest, int port, int fr
 {
   // just pass it on to the messenger
   dout(DEBUGLVL) << "send " << m << endl;
-  m->set_pcid(0);
+  //m->set_pcid(0);
   messenger->send_message(m, dest, port, fromport);
 }
 

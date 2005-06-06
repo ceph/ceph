@@ -22,7 +22,7 @@ class MDiscover : public Message {
   int       get_asker() { return asker; }
   inodeno_t get_base_ino() { return base_ino; }
   filepath& get_want() { return want; }
-  string&   get_dentry(int n) { return want[n]; }
+  const string&   get_dentry(int n) { return want[n]; }
   bool      wants_base_dir() { return want_base_dir; }
 
   MDiscover() { }
