@@ -1,0 +1,28 @@
+#ifndef __MFAILUREACK_H
+#define __MFAILUREACK_H
+
+#include "MFailure.h"
+
+
+class MFailureAck : public Message {
+ public:
+  msg_addr_t failed;
+  MFailureAck(MFailure *m) : Message(MSG_FAILURE_ACK) {
+	this->failed = m->get_failed();
+  }
+  MFailureAck() {}
+ 
+  msg_addr_t get_failed() { return failed; }
+
+  virtual void decode_payload(crope& s, int& off) {
+	s.copy(0, sizeof(failed), (char*)&failed);
+	off += sizeof(failed);
+  }
+  virtual void encode_payload(crope& s) {
+	s.append((char*)&failed, sizeof(failed));
+  }
+
+  virtual char *get_type_name() { return "faila"; }
+};
+
+#endif

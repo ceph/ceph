@@ -28,10 +28,8 @@ class OSDMonitor {
   void init_my_stuff();
 
   void proc_message(Message *m);
-  void handle_ping(class MPing *m);
-
-  void initiate_heartbeat();
-  void check_heartbeat();
+  void handle_ping_ack(class MPingAck *m);
+  void handle_failure(class MFailure *m);
 
 };
 

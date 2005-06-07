@@ -1,10 +1,14 @@
 
 #ifndef __MESSAGE_H
 #define __MESSAGE_H
+ 
+#define MSG_PING        2
+#define MSG_PING_ACK    3
 
-#define MSG_PING       2
+#define MSG_FAILURE     4
+#define MSG_FAILURE_ACK 5
 
-#define MSG_SHUTDOWN   3
+#define MSG_SHUTDOWN    6
 
 #define MSG_OSD_READ         10
 #define MSG_OSD_READREPLY    11

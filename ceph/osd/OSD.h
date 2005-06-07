@@ -11,6 +11,7 @@ class MOSDRead;
 class MOSDWrite;
 class Message;
 class ObjectStore;
+class HostMonitor;
 
 class OSD : public Dispatcher {
  protected:
@@ -18,6 +19,7 @@ class OSD : public Dispatcher {
   int whoami;
 
   ObjectStore *store;
+  HostMonitor *monitor;
 
   Mutex osd_lock;
 
@@ -32,8 +34,8 @@ class OSD : public Dispatcher {
 
   void handle_ping(class MPing *m);
   void handle_op(class MOSDOp *m);
-  void read(MOSDRead *m);
-  void write(MOSDWrite *m);
+  void handle_read(MOSDRead *m);
+  void handle_write(MOSDWrite *m);
 };
 
 #endif

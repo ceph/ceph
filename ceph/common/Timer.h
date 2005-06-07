@@ -79,46 +79,10 @@ class Timer {
 
   // schedule events
   void add_event_after(float seconds,
-					   Context *callback) {
-	struct timeval tv;
-	g_clock.gettime(&tv);
-	tv.tv_sec += seconds;
-	add_event_at(&tv, callback);
-  }
-  
+					   Context *callback);
   void add_event_at(struct timeval *tv,
-					Context *callback) {
-	// insert
-	timepair_t when = timepair_t(tv->tv_sec,tv->tv_usec);
-
-	lock.Lock();
-	scheduled[ when ].insert(callback);
-	event_times[callback] = when;
-	lock.Unlock();
-
-	// make sure i wake up
-	register_timer();
-  }
-
-  /*
-  bool cancel_event(Context *callback) {
-	lock.Lock();
-
-	if (!event_times.count(callback)) {
-	  lock.Unlock();
-	  return false;     // wasn't scheduled.
-	}
-	
-	timepair_t tp = event_times[callback];
-	
-	event_times.erase(callback);
-	event_map[ tp ].erase(callback);
-	if (event_map[ tp ].empty()) event_map.erase( tp );
-
-	lock.Unlock();
-	return true;
-  }
-  */
+					Context *callback);
+  bool cancel_event(Context *callback);
 
   // execute pending events
   void execute_pending();

@@ -11,6 +11,7 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "Timer: "
 
+#define DBL 20
 
 #include <signal.h>
 #include <sys/time.h>
@@ -58,27 +59,27 @@ void Timer::timer_thread()
 		if (it->first > now) break;
 
 		timepair_t t = it->first;
-		dout(5) << "queuing event(s) scheduled at " << t << endl;
+		dout(DBL) << "queuing event(s) scheduled at " << t << endl;
 
 		pending[t] = it->second;
 		it++;
 		scheduled.erase(t);
 	  }
 
-	  dout(5) << "kicking messenger" << endl;
+	  dout(DBL) << "kicking messenger" << endl;
 	  messenger_to_kick->trigger_timer(this);
 	}
 
 	else {
 	  // sleep
 	  if (event) {
-		dout(5) << "sleeping until " << next << endl;
+		dout(DBL) << "sleeping until " << next << endl;
 		struct timeval tv;
 		tv.tv_sec = next.first;
 		tv.tv_usec = next.second;
 		cond.Wait(lock, &tv);  // wait for waker or time
 	  } else {
-		dout(5) << "sleeping" << endl;
+		dout(DBL) << "sleeping" << endl;
 		cond.Wait(lock);         // wait for waker
 	  }
 	}
@@ -92,6 +93,7 @@ void Timer::timer_thread()
 /**
  * Timer bits
  */
+
 
 void Timer::set_messenger(Messenger *m) 
 {
@@ -108,10 +110,10 @@ void Timer::unset_messenger()
 void Timer::register_timer()
 {
   if (thread_id) {
-	dout(10) << "register_timer kicking thread" << endl;
+	dout(DBL) << "register_timer kicking thread" << endl;
 	cond.Signal();
   } else {
-	dout(10) << "register_timer starting thread" << endl;
+	dout(DBL) << "register_timer starting thread" << endl;
 	pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
   }
 }
@@ -137,6 +139,58 @@ void Timer::cancel_timer()
 }
 
 
+/*
+ * schedule
+ */
+
+
+void Timer::add_event_after(float seconds,
+							Context *callback) 
+{
+  struct timeval tv;
+  g_clock.gettime(&tv);
+  tv.tv_sec += seconds;
+  add_event_at(&tv, callback);
+}
+
+void Timer::add_event_at(struct timeval *tv,
+						 Context *callback) 
+{
+  // insert
+  timepair_t when = timepair_t(tv->tv_sec,tv->tv_usec);
+  
+  dout(DBL) << "add_event " << callback << " at " << when << endl;
+
+  lock.Lock();
+  scheduled[ when ].insert(callback);
+  event_times[callback] = when;
+  lock.Unlock();
+  
+  // make sure i wake up
+  register_timer();
+}
+
+bool Timer::cancel_event(Context *callback) 
+{
+  lock.Lock();
+  
+  dout(DBL) << "cancel_event " << callback << endl;
+
+  if (!event_times.count(callback)) {
+	dout(DBL) << "cancel_event " << callback << " wasn't scheduled?" << endl;
+	lock.Unlock();
+	return false;     // wasn't scheduled.
+  }
+
+  timepair_t tp = event_times[callback];
+
+  event_times.erase(callback);
+  scheduled.erase(tp);
+  pending.erase(tp);
+  
+  lock.Unlock();
+  return true;
+}
 
 /***
  * do user callbacks
@@ -154,14 +208,14 @@ void Timer::execute_pending()
 
 	lock.Unlock();
 
-	dout(5) << "executing event " << event << " scheduled for " << when << endl;
+	dout(DBL) << "executing event " << event << " scheduled for " << when << endl;
 	event->finish(0);
 	delete event;
 	
 	lock.Lock();
   }
 
-  dout(12) << "no more events for now" << endl;
+  dout(DBL) << "no more events for now" << endl;
 
   lock.Unlock();
 }

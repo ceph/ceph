@@ -13,7 +13,7 @@
 
 md_config_t g_conf = {
   num_mds: 2,
-  num_osd: 2,
+  num_osd: 5,
   num_client: 1,
 
   osd_cow: false, // crashy? true,  
@@ -25,7 +25,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  debug: 3,
+  debug: 15,
   
   // --- client ---
   client_cache_size: 400,

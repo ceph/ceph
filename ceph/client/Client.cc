@@ -1100,18 +1100,24 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 }
 
 
-int Client::flush(fileh_t fh) 
+int Client::fsync(fileh_t fh, bool syncdataonly) 
 {
   client_lock.Lock();
   int r = 0;
 
-  dout(3) << "flush fh " << fh << endl;
-
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
-  
+
+  dout(3) << "fsync fh " << fh << " ino " << in->inode.ino << " syncdataonly " << syncdataonly << endl;
+ 
   flush_inode_buffers(in);
+
+  if (syncdataonly &&
+	  (f->caps & CFILE_CAP_WR)) {
+	// flush metadata too.. size, mtime
+	// ...
+  }
 
   client_lock.Unlock();
   return r;

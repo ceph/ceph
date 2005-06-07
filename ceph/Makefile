@@ -31,6 +31,7 @@ COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Dispatcher.o\
 	msg/error.o\
+	msg/HostMonitor.o\
 	osd/FakeStore.o\
 	osd/Filer.o\
 	osd/OSDCluster.o\

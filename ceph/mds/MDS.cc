@@ -23,6 +23,7 @@
 #include "common/LogType.h"
 
 #include "messages/MPing.h"
+#include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
 #include "messages/MClientMount.h"
@@ -374,6 +375,7 @@ void MDS::my_dispatch(Message *m)
 
 
   // HACK FOR NOW
+  /*
   static bool did_heartbeat_hack = false;
   if (!shutting_down && !shut_down &&
 	  false && 
@@ -381,6 +383,7 @@ void MDS::my_dispatch(Message *m)
 	osdmonitor->initiate_heartbeat();
 	did_heartbeat_hack = true;
   }
+  */
 	
 
   // finish any triggered contexts
@@ -493,14 +496,12 @@ void MDS::handle_client_unmount(Message *m)
 
 void MDS::handle_ping(MPing *m)
 {
-  dout(10) << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with ttl " << m->ttl << endl;
-  if (m->ttl > 0) {
-	//cout << "mds" << whoami << " responding to " << m->get_source() << endl;
-	messenger->send_message(new MPing(m->ttl - 1),
-							m->get_source(), m->get_source_port(),
-							MDS_PORT_MAIN);
-  }
+  dout(10) << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with seq " << m->seq << endl;
 
+  messenger->send_message(new MPingAck(m),
+						  m->get_source(), m->get_source_port(),
+						  MDS_PORT_MAIN);
+  
   delete m;
 }
 

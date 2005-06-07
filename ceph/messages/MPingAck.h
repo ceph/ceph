@@ -1,17 +1,16 @@
+#ifndef __MPINGACK_H
+#define __MPINGACK_H
 
-#ifndef __MPING_H
-#define __MPING_H
-
-#include "msg/Message.h"
+#include "MPing.h"
 
 
-class MPing : public Message {
+class MPingAck : public Message {
  public:
   int seq;
-  MPing(int s) : Message(MSG_PING) {
-	seq = s;
+  MPingAck() {}
+  MPingAck(MPing *p) : Message(MSG_PING_ACK) {
+	this->seq = p->seq;
   }
-  MPing() : Message(MSG_PING) {}
 
   virtual void decode_payload(crope& s, int& off) {
 	s.copy(0, sizeof(seq), (char*)&seq);
@@ -21,7 +20,7 @@ class MPing : public Message {
 	s.append((char*)&seq, sizeof(seq));
   }
 
-  virtual char *get_type_name() { return "ping"; }
+  virtual char *get_type_name() { return "pinga"; }
 };
 
 #endif

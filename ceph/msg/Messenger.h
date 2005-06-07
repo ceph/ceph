@@ -15,10 +15,13 @@ class Timer;
 class Messenger {
  private:
   Dispatcher          *dispatcher;
+  msg_addr_t           _myaddr;
 
  public:
-  Messenger() : dispatcher(0) { }
+  Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w) { }
   
+  msg_addr_t get_myaddr() { return _myaddr; }
+
   virtual int shutdown() = 0;
   
   // dispatching incoming messages

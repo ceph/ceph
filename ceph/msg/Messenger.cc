@@ -14,6 +14,9 @@ using namespace std;
 
 
 #include "messages/MPing.h"
+#include "messages/MPingAck.h"
+#include "messages/MFailure.h"
+#include "messages/MFailureAck.h"
 
 #include "messages/MOSDPing.h"
 #include "messages/MOSDRead.h"
@@ -92,6 +95,15 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
   case MSG_PING:
 	m = new MPing();
+	break;
+  case MSG_PING_ACK:
+	m = new MPingAck();
+	break;
+  case MSG_FAILURE:
+	m = new MFailure();
+	break;
+  case MSG_FAILURE_ACK:
+	m = new MFailureAck();
 	break;
 
   case MSG_OSD_PING:

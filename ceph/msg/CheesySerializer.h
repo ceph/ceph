@@ -26,12 +26,12 @@ class CheesySerializer : public Messenger,
   map<long, Message*>    call_reply;
   
  public:
-  CheesySerializer(Messenger *msg) {
+  CheesySerializer(Messenger *msg) : Messenger(msg->get_myaddr()) {
 	messenger = msg;
 	messenger->set_dispatcher(this);
 	last_pcid = 1;
   }
-  CheesySerializer() {
+  ~CheesySerializer() {
 	if (messenger) 
 	  delete messenger;
   }

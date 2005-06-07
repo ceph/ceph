@@ -2,13 +2,17 @@
 #include "include/types.h"
 
 #include "OSD.h"
-
 #include "FakeStore.h"
+
+#include "mds/MDS.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
 
+#include "msg/HostMonitor.h"
+
 #include "messages/MPing.h"
+#include "messages/MPingAck.h"
 #include "messages/MOSDRead.h"
 #include "messages/MOSDReadReply.h"
 #include "messages/MOSDWrite.h"
@@ -41,6 +45,24 @@ OSD::OSD(int id, Messenger *m)
 
   // use fake store
   store = new FakeStore(osd_base_path, whoami);
+
+  // monitor
+  char s[80];
+  sprintf(s, "osd%d", whoami);
+  string st = s;
+  monitor = new HostMonitor(m, st);
+  monitor->set_notify_port(MDS_PORT_OSDMON);
+  
+  // hack
+  int i = whoami;
+  if (++i == g_conf.num_osd) i = 0;
+  monitor->get_hosts().insert(MSG_ADDR_OSD(i));
+  if (++i == g_conf.num_osd) i = 0;
+  monitor->get_hosts().insert(MSG_ADDR_OSD(i));
+  if (++i == g_conf.num_osd) i = 0;  
+  monitor->get_hosts().insert(MSG_ADDR_OSD(i));
+  
+  monitor->get_notify().insert(MSG_ADDR_MDS(0));
 }
 
 OSD::~OSD()
@@ -51,15 +73,21 @@ OSD::~OSD()
 int OSD::init()
 {
   osd_lock.Lock();
+
   int r = store->init();
+
+  monitor->init();
+
   osd_lock.Unlock();
   return r;
 }
 
 int OSD::shutdown()
 {
+  monitor->shutdown();
   messenger->shutdown();
-  return store->finalize();
+  int r = store->finalize();
+  return r;
 }
 
 
@@ -71,21 +99,32 @@ void OSD::dispatch(Message *m)
   osd_lock.Lock();
 
   switch (m->get_type()) {
+	// host monitor
+  case MSG_PING_ACK:
+  case MSG_FAILURE_ACK:
+	monitor->proc_message(m);
+	break;
   
+	
+	// osd
+
   case MSG_SHUTDOWN:
 	shutdown();
 	break;
 
   case MSG_PING:
+	// take note.
+	monitor->host_is_alive(m->get_source());
+
 	handle_ping((MPing*)m);
 	break;
 	
   case MSG_OSD_READ:
-	read((MOSDRead*)m);
+	handle_read((MOSDRead*)m);
 	break;
 
   case MSG_OSD_WRITE:
-	write((MOSDWrite*)m);
+	handle_write((MOSDWrite*)m);
 	break;
 
   case MSG_OSD_OP:
@@ -96,8 +135,6 @@ void OSD::dispatch(Message *m)
 	dout(1) << " got unknown message " << m->get_type() << endl;
   }
 
-  delete m;
-
   osd_lock.Unlock();
 }
 
@@ -105,14 +142,14 @@ void OSD::dispatch(Message *m)
 void OSD::handle_ping(MPing *m)
 {
   // play dead?
-  if (whoami == 3) {
-	dout(7) << "got ping, replying" << endl;
-	messenger->send_message(new MPing(0),
-							m->get_source(), m->get_source_port(), 0);
-  } else {
+  if (whoami == 1) {
 	dout(7) << "playing dead" << endl;
+  } else {
+	dout(7) << "got ping, replying" << endl;
+	messenger->send_message(new MPingAck(m),
+							m->get_source(), m->get_source_port(), 0);
   }
-
+  
   delete m;
 }
 
@@ -160,12 +197,14 @@ void OSD::handle_op(MOSDOp *op)
   default:
 	assert(0);
   }
+
+  delete op;
 }
 
 
 
 
-void OSD::read(MOSDRead *r)
+void OSD::handle_read(MOSDRead *r)
 {
   // read into a buffer
   bufferptr bptr = new buffer(r->get_len());   // prealloc space for entire read
@@ -188,12 +227,14 @@ void OSD::read(MOSDRead *r)
   
   // send it
   messenger->send_message(reply, r->get_source(), r->get_source_port());
+
+  delete r;
 }
 
 
 // -- osd_write
 
-void OSD::write(MOSDWrite *m)
+void OSD::handle_write(MOSDWrite *m)
 {
   // take buffers from the message
   bufferlist bl;
@@ -219,5 +260,7 @@ void OSD::write(MOSDWrite *m)
   // reply
   MOSDWriteReply *reply = new MOSDWriteReply(m, 0);
   messenger->send_message(reply, m->get_source(), m->get_source_port());
+
+  delete m;
 }
 

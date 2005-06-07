@@ -18,7 +18,7 @@ class MPIMessenger : public Messenger {
   //class Logger *logger;  // for logging
   
  public:
-  MPIMessenger(msg_addr_t myaddr);
+  MPIMessenger(msg_addr_t myaddr) : Messenger(myaddr);
   ~MPIMessenger();
 
   // init, shutdown MPI and associated event loop thread.

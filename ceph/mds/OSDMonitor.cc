@@ -4,104 +4,56 @@
 #include "osd/OSDCluster.h"
 
 #include "msg/Message.h"
+#include "msg/Messenger.h"
 
 #include "messages/MPing.h"
+#include "messages/MPingAck.h"
+#include "messages/MFailure.h"
+#include "messages/MFailureAck.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
 
-/* to send a message,
-
-Message *messageptr = ......;
-mds->messenger->send_message(messageptr,
-                             MSG_ADDR_OSD(osdnum), 0, MDS_PORT_OSDMON);
-
-
-timer example:
-
-class C_Test : public Context {
-  OSDMonitor *om;
-public:
-  C_Test(OSDMonitor *om) {
-     this->om = om;
-  }
-  void finish(int r) {
-	cout << "C_Test->finish(" << r << ")" << endl;
-    om->check_for_ping_timeouts_or_something();
-  }
-};
-
-g_timer.add_event_after(10, new C_Test);
-
-
-to tell which mds we are, mds->get_nodeid()  (out of mds->get_cluster()->get_num_mds())
-
-*/
+#include "include/config.h"
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".osdmon: "
 
 
 void OSDMonitor::init_my_stuff()
 {
-  set<int> all_osds;
-  mds->osdcluster->get_all_osds(all_osds);
 
-  // pick mine
-  for (set<int>::iterator it = all_osds.begin();
-	   it != all_osds.end();
-	   it++) {
-	if (1 /* something */) my_osds.insert(*it);
-  }
 }
 
 
 void OSDMonitor::proc_message(Message *m)
 {
   switch (m->get_type()) {
-  case MSG_PING:
-	handle_ping((MPing*)m);
+  case MSG_FAILURE:
+	handle_failure((MFailure*)m);
+	break;
+
+  case MSG_PING_ACK:
+	handle_ping_ack((MPingAck*)m);
 	break;
   }
 }
 
 
-
-// simple heartbeat for now
-
-class C_CheckHeartbeat : public Context {
-  OSDMonitor *om;
-public:
-  C_CheckHeartbeat(OSDMonitor *om) {
-     this->om = om;
-  }
-  void finish(int r) {
-    om->check_heartbeat();
-  }
-};
-
-void OSDMonitor::initiate_heartbeat()
+void OSDMonitor::handle_ping_ack(MPingAck *m)
 {
-  // send out pings
+  // ...
   
-  
-  // set timer for 10s later
-  g_timer.add_event_after(10, new C_CheckHeartbeat(this));
-  
+  delete m;
 }
 
-void OSDMonitor::check_heartbeat()
+void OSDMonitor::handle_failure(MFailure *m)
 {
-  // blah
+  dout(1) << "osd failure: " << MSG_ADDR_NICE(m->get_failed()) << " from " << MSG_ADDR_NICE(m->get_source()) << endl;
   
-  
-}
-
-
-void OSDMonitor::handle_ping(MPing *m)
-{
-  
-  // check m->get_osd_status();
-  
-
-
+  // ack
+  mds->messenger->send_message(new MFailureAck(m),
+							   m->get_source(), m->get_source_port());
+  delete m;
 }
 
 

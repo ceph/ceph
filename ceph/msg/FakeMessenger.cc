@@ -161,7 +161,7 @@ int fakemessenger_do_loop_2()
 
 // class
 
-FakeMessenger::FakeMessenger(long me)
+FakeMessenger::FakeMessenger(long me)  : Messenger(me)
 {
   whoami = me;
   directory[ whoami ] = this;
