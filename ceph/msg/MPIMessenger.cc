@@ -487,7 +487,7 @@ void mpimessenger_wait()
  * MPIMessenger class implementation
  */
 
-MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger()
+MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger(myaddr)
 {
   // my address
   this->myaddr = myaddr;
