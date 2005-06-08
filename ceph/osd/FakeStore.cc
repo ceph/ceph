@@ -25,10 +25,15 @@
 
 
 
-FakeStore::FakeStore(char *base, int whoami) 
+FakeStore::FakeStore(char *base, int whoami, char *shadow) 
 {
   this->basedir = base;
   this->whoami = whoami;
+
+  if (shadow) {
+	is_shadow = true;
+	shadowdir = shadow;
+  }
 }
 
 
@@ -38,6 +43,9 @@ int FakeStore::init()
   get_dir(mydir);
 
   dout(5) << "init with basedir " << mydir << endl;
+  if (is_shadow) {
+	dout(5) << " SHADOW dir is " << shadowdir << endl;
+  }
 
   // make sure global base dir exists
   struct stat st;
@@ -67,10 +75,13 @@ void FakeStore::get_dir(string& dir) {
   sprintf(s, "%d", whoami);
   dir = basedir + "/" + s;
 }
-void FakeStore::get_oname(object_t oid, string& fn) {
+void FakeStore::get_oname(object_t oid, string& fn, bool shadow) {
   static char s[100];
   sprintf(s, "%d/%02lld/%lld", whoami, HASH_FUNC(oid), oid);
-  fn = basedir + "/" + s;
+  if (shadow)
+	fn = shadowdir + "/" + s;
+  else 
+	fn = basedir + "/" + s;
   //  dout(1) << "oname is " << fn << endl;
 }
 
@@ -103,6 +114,10 @@ int FakeStore::mkfs()
   get_dir(mydir);
 
   dout(1) << "mkfs in " << mydir << endl;
+
+  if (is_shadow) {
+	dout(1) << "WARNING mkfs reverting to shadow fs, which pbly isn't what MDS expects!" << endl;
+  }
 
   // make sure my dir exists
   r = ::stat(mydir.c_str(), &st);
@@ -142,32 +157,91 @@ int FakeStore::mkfs()
 bool FakeStore::exists(object_t oid)
 {
   struct stat st;
-  if (stat(oid, &st) == 0) 
+  if (stat(oid, &st) == 0)
 	return true;
-  else
+  else 
 	return false;
 }
 
+  
 int FakeStore::stat(object_t oid,
 					struct stat *st)
 {
   dout(20) << "stat " << oid << endl;
   string fn;
   get_oname(oid,fn);
-  return ::stat(fn.c_str(), st);
+  int r = ::stat(fn.c_str(), st);
+  
+  if (is_shadow && 
+	  r != 0 &&                          // primary didn't exist
+	  ::lstat(fn.c_str(), st) != 0)  {   // and wasn't an intentionally bad symlink
+	get_oname(oid,fn,true);
+	return ::stat(fn.c_str(), st);
+  } else
+	return r;
 }
+ 
+ 
+void FakeStore::shadow_copy_maybe(object_t oid) {
+  struct stat st;
+  string fn;
+  get_oname(oid, fn);
+  if (::lstat(fn.c_str(), &st) == 0) 
+	return;  // live copy exists, we're fine, do nothing.
+
+  // is there a shadow object?
+  string sfn;
+  get_oname(oid, sfn, true);
+  if (::stat(sfn.c_str(), &st) == 0) {
+	// shadow exists.  copy!
+	dout(10) << "copying shadow for " << oid << " " << st.st_size << " bytes" << endl;
+	char *buf = new char[1024*1024];
+	int left = st.st_size;
+
+	int sfd = ::open(sfn.c_str(), O_RDONLY);
+	int fd = ::open(fn.c_str(), O_WRONLY);
+	assert(sfd && fd);
+	while (left) {
+	  int howmuch = left;
+	  if (howmuch > 1024*1024) howmuch = 1024*1024;
+	  int got = ::read(sfd, buf, howmuch);
+	  int wrote = ::write(fd, buf, got);
+	  assert(wrote == got);
+	  left -= got;
+	}
+	::close(fd);
+	::close(sfd);
+  }
+}
+
 
 int FakeStore::remove(object_t oid) 
 {
   dout(20) << "remove " << oid << endl;
   string fn;
   get_oname(oid,fn);
-  return ::unlink(fn.c_str());
+  int r = ::unlink(fn.c_str());
+
+  if (r == 0 && is_shadow) {
+	string sfn;
+	struct stat st;
+	get_oname(oid, sfn, true);
+	int s = ::stat(sfn.c_str(), &st);
+	if (s == 0) {
+	  // shadow exists.  make a bad symlink to mask it.
+	  ::symlink(sfn.c_str(), "doesnotexist");
+	  r = 0;
+	}
+  }
+  return r;
 }
 
 int FakeStore::truncate(object_t oid, off_t size)
 {
   dout(20) << "truncate " << oid << " size " << size << endl;
+
+  if (is_shadow) shadow_copy_maybe(oid);
+  
   string fn;
   get_oname(oid,fn);
   ::truncate(fn.c_str(), size);
@@ -182,7 +256,17 @@ int FakeStore::read(object_t oid,
   get_oname(oid,fn);
   
   int fd = open(fn.c_str(), O_RDONLY);
-  if (fd < 0) return fd;
+  if (fd < 0) {
+	if (is_shadow) {
+	  struct stat st;
+	  if (::lstat(fn.c_str(), &st) == 0) return fd;  // neg symlink
+	  get_oname(oid,fn);
+	  fd = open(fn.c_str(), O_RDONLY);
+	  if (fd < 0) 
+		return fd;    // no shadow either.
+	} else 
+	  return fd;
+  }
   flock(fd, LOCK_EX);    // lock for safety
   
   off_t actual = lseek(fd, offset, SEEK_SET);
@@ -199,6 +283,8 @@ int FakeStore::write(object_t oid,
 					 size_t len, off_t offset,
 					 char *buffer) {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
+
+  if (is_shadow) shadow_copy_maybe(oid);
 
   string fn;
   get_oname(oid,fn);

@@ -20,7 +20,19 @@
 void *synthetic_client_thread_entry(void *ptr)
 {
   SyntheticClient *sc = (SyntheticClient*)ptr;
-  sc->run();
+  switch (sc->mode) {
+  case SYNCLIENT_MODE_RANDOMWALK:
+	sc->random_walk(sc->iarg1);
+	break;
+  case SYNCLIENT_MODE_MAKEDIRS:
+	sc->make_dirs(sc->sarg1.c_str(), sc->iarg1, sc->iarg2, sc->iarg3);
+	break;
+  case SYNCLIENT_MODE_FULLWALK:
+	sc->full_walk(sc->sarg1);
+	break;
+  default:
+	assert(0);
+  }
   return 0;
 }
 
@@ -84,11 +96,68 @@ void SyntheticClient::up()
 }
 
 
-int SyntheticClient::run()
+
+
+int SyntheticClient::full_walk(string& basedir) 
+{
+  // read dir
+  map<string, inode_t*> contents;
+  int r = client->getdir(basedir.c_str(), contents);
+  if (r < 0) {
+	dout(1) << "readdir on " << basedir << " returns " << r << endl;
+	return r;
+  }
+
+  for (map<string, inode_t*>::iterator it = contents.begin();
+	   it != contents.end();
+	   it++) {
+	string file = basedir + "/" + it->first;
+
+	struct stat st;
+	int r = client->lstat(file.c_str(), &st);
+	if (r < 0) {
+	  dout(1) << "stat error on " << file << " r=" << r << endl;
+	  continue;
+	}
+
+	if (st.st_mode & INODE_MODE_DIR) full_walk(file);
+  }
+
+  return 0;
+}
+
+int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int depth)
+{
+  // make sure base dir exists
+  int r = client->mkdir(basedir, 0755);
+  if (r != 0) {
+	dout(1) << "can't make base dir? " << basedir << endl;
+	return -1;
+  }
+
+  if (depth == 0) return 0;
+
+  // children
+  char d[500];
+  dout(5-depth) << "make_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
+  for (int i=0; i<files; i++) {
+	sprintf(d,"%s/file.%d", basedir, i);
+	client->mknod(d, 0644);
+  }
+
+  for (int i=0; i<dirs; i++) {
+	sprintf(d, "%s/dir.%d", basedir, i);
+	make_dirs(d, dirs, files, depth-1);
+  }
+  
+  return 0;
+}
+
+int SyntheticClient::random_walk(int num_req)
 {
   int left = num_req;
 
-  dout(1) << "run() will do " << left << " ops" << endl;
+  dout(1) << "random_walk() will do " << left << " ops" << endl;
 
   init_op_dist();  // set up metadata op distribution
  

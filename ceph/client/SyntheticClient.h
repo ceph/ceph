@@ -6,9 +6,12 @@
 #include "Client.h"
 #include "include/Distribution.h"
 
+#define SYNCLIENT_MODE_RANDOMWALK  1
+#define SYNCLIENT_MODE_FULLWALK    2
+#define SYNCLIENT_MODE_MAKEDIRS    3
+
 class SyntheticClient {
   Client *client;
-  int num_req;
 
   pthread_t thread_id;
 
@@ -66,17 +69,21 @@ class SyntheticClient {
   }
 
  public:
-  SyntheticClient(Client *client,
-				  int num_req) {
+  SyntheticClient(Client *client) {
 	this->client = client;
-	this->num_req = num_req;
 	thread_id = 0;
   }
 
   int start_thread();
   int join_thread();
 
-  int run();
+  string sarg1;
+  int iarg1, iarg2, iarg3;
+  int mode;
+  
+  int full_walk(string& fromdir);
+  int random_walk(int n);
+  int make_dirs(const char *basedir, int dirs, int files, int depth);
 };
 
 #endif

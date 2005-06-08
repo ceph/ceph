@@ -74,8 +74,13 @@ void fakemessenger_stopthread() {
   shutdown = true;
   lock.Unlock();
   cond.Signal();
+  
+  fakemessenger_wait();
+}
 
-  cout << "fakemessenger_stopthread waiting" << endl;
+void fakemessenger_wait()
+{
+  cout << "fakemessenger_wait waiting" << endl;
   void *ptr;
   pthread_join(thread_id, &ptr);
 }
@@ -121,7 +126,7 @@ int fakemessenger_do_loop_2()
 	  Message *m = it->second->get_message();
 	  if (m) {
 		//dout(18) << "got " << m << endl;
-		dout(5) << "---- do_loop dispatching '" << m->get_type_name() << 
+		dout(5) << "---- '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
 			 << endl;
@@ -198,6 +203,8 @@ int FakeMessenger::shutdown()
 
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   directory.erase(whoami);
+  if (directory.empty()) 
+	::shutdown = true;
 }
 
 void FakeMessenger::trigger_timer(Timer *t) 

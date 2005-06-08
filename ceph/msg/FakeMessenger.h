@@ -58,7 +58,6 @@ int fakemessenger_do_loop();
 int fakemessenger_do_loop_2();
 void fakemessenger_startthread();
 void fakemessenger_stopthread();
-
-
+void fakemessenger_wait();
 
 #endif

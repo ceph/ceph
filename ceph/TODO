@@ -7,21 +7,30 @@ big fast todo's:
 - mds benchmarks
  - synthetic client stable,
  - pseudo-mega-filesystem
-   - osd copy-on-write?
+   - osd copy-on-write..
+
+- osd failure structures
+- heartbeatmonitor vs pingmonitor
+
+
 
 ask tyce+bill:
 - obfs on alc?
 
 
+md tests:
+- log length versus cache size, workload
+
+
 notes and todos.
 - SyntheticClient
+
 - virtual mega-filesystem (metadata only)
 
 
-HARD LINKS
+finish HARD LINKS
 - reclaim danglers from inode file on discover...
 - fix rename
-
 
 
 
