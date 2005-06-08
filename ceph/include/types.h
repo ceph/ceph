@@ -106,15 +106,18 @@ typedef __uint32_t fileh_t;       // file handle
 
 
 
+
 // -- load balancing stuff --
 
+
+
+
 // popularity
-#define MDS_POP_ANY     0
-#define MDS_POP_SOFTRD  1
-#define MDS_POP_SOFTWR  2
-#define MDS_POP_HARDRD  3
-#define MDS_POP_HARDWR  4
-#define MDS_NPOP        5
+#define MDS_POP_JUSTME  0   // just me
+#define MDS_POP_NESTED  1   // me + children, auth or not
+#define MDS_POP_CURDOM  2   // me + children in current domain
+#define MDS_POP_ANYDOM  3   // me + children in any (nested) domain
+#define MDS_NPOP        4
 
 class mds_load_t {
  public:

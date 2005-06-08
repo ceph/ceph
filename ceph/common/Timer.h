@@ -1,6 +1,7 @@
 #ifndef __TIMER_H
 #define __TIMER_H
 
+#include "include/types.h"
 #include "include/Context.h"
 #include "Clock.h"
 
@@ -17,8 +18,6 @@ using namespace std;
  */
 
 class Messenger;
-
-typedef pair<time_t, long> timepair_t;  // struct timeval is a PITA
 
 class Timer {
  private:
@@ -80,7 +79,7 @@ class Timer {
   // schedule events
   void add_event_after(float seconds,
 					   Context *callback);
-  void add_event_at(struct timeval *tv,
+  void add_event_at(timepair_t when,
 					Context *callback);
   bool cancel_event(Context *callback);
 

@@ -44,8 +44,21 @@ class Filer;
  
 */
 
-class Dentry;
+class Dir;
 class Inode;
+
+class Dentry : public LRUObject {
+ public:
+  string  name;                      // sort of lame
+  Dir     *dir;
+  Inode   *inode;
+  int     ref;                       // 1 if there's a dir beneath me.
+  
+  void get() { assert(ref == 0); ref++; lru_pin(); }
+  void put() { assert(ref == 1); ref--; lru_unpin(); }
+  
+  Dentry() : ref(0), dir(0), inode(0) { }
+};
 
 class Dir {
  public:
@@ -53,7 +66,11 @@ class Dir {
   hash_map< string, Dentry* > dentries;
 
   Dir(Inode* in) { parent_inode = in; }
+
+  bool is_empty() {  return dentries.empty(); }
+
 };
+
 
 class Inode {
  public:
@@ -61,7 +78,7 @@ class Inode {
   set<int>	mds_contacts;
   time_t    last_updated;
 
-  int       ref;      // ref count. 1 for each dentry, fh or dir that links to me.
+  int       ref;      // ref count. 1 for each dentry, fh that links to me.
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
@@ -78,20 +95,18 @@ class Inode {
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
   }
+
+  // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
+  Dir *open_dir() {
+	if (!dir) {
+	  if (dn) dn->get();  	// pin dentry
+	  get();
+	  dir = new Dir(this);
+	}
+	return dir;
+  }
 };
 
-class Dentry : public LRUObject {
- public:
-  string  name;                      // sort of lame
-  Dir     *dir;
-  Inode   *inode;
-  int     ref;                       // 1 if there's a dir beneath me.
-  
-  void get() { assert(ref == 0); ref++; lru_pin(); }
-  void put() { assert(ref == 1); ref--; lru_unpin(); }
-  
-  Dentry() : ref(0), dir(0), inode(0) { }
-};
 
 
 
@@ -157,13 +172,16 @@ class Client : public Dispatcher {
 	  delete in;
 	}
   }
-  // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
-  Dir *open_dir(Inode *in) {
-	if (!in->dir) {
-	  if (in->dn) in->dn->get();  	// pin dentry
-	  in->dir = new Dir(in);
-	}
-	return in->dir;
+
+  void close_dir(Dir *dir) {
+	assert(dir->is_empty());
+	
+	Inode *in = dir->parent_inode;
+	if (in->dn) in->dn->put();   // unpin dentry
+	
+	delete in->dir;
+	in->dir = 0;
+	put_inode(in);
   }
 
   int get_cache_size() { return lru.lru_get_size(); }
@@ -172,7 +190,7 @@ class Client : public Dispatcher {
   Dentry* link(Dir *dir, string& name, Inode *in) {
 	Dentry *dn = new Dentry;
 	dn->name = name;
-
+	
 	// link to dir
 	dn->dir = dir;
 	dir->dentries[name] = dn;
@@ -185,7 +203,7 @@ class Client : public Dispatcher {
 	lru.lru_insert_mid(dn);    // mid or top?
 	return dn;
   }
-  
+
   void unlink(Dentry *dn) {
 	Inode *in = dn->inode;
 
@@ -193,16 +211,11 @@ class Client : public Dispatcher {
 	dn->inode = 0;
 	in->dn = 0;
 	in->put();
-
+	
 	// unlink from dir
 	dn->dir->dentries.erase(dn->name);
-	if (dn->dir->dentries.empty()) {   // close dir
-	  if (dn->dir->parent_inode->dn)
-		dn->dir->parent_inode->dn->put();
-	  dn->dir->parent_inode->dir = 0;
-	  put_inode(dn->dir->parent_inode);
-	  delete dn->dir;
-	}
+	if (dn->dir->is_empty()) 
+	  close_dir(dn->dir);
 	dn->dir = 0;
 
 	// delete den

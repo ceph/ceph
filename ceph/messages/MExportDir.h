@@ -9,7 +9,6 @@ using namespace std;
 
 class MExportDir : public Message {
   inodeno_t ino;
-  double ipop;
   
   int    ndirs;
   crope  state;
@@ -21,16 +20,14 @@ class MExportDir : public Message {
 
  public:  
   MExportDir() {}
-  MExportDir(CInode *in, double pop) : 
+  MExportDir(CInode *in) : 
 	Message(MSG_MDS_EXPORTDIR) {
 	this->ino = in->inode.ino;
-	ipop = pop;
 	ndirs = 0;
   }
   virtual char *get_type_name() { return "Ex"; }
 
   inodeno_t get_ino() { return ino; }
-  double get_ipop() { return ipop; }
   int get_ndirs() { return ndirs; }
   crope& get_state() { return state; }
   list<inodeno_t>& get_exports() { return exports; }
@@ -45,8 +42,6 @@ class MExportDir : public Message {
   virtual void decode_payload(crope& s, int& off) {
 	s.copy(off, sizeof(ino), (char*)&ino);
 	off += sizeof(ino);
-	s.copy(off, sizeof(ipop), (char*)&ipop);
-	off += sizeof(ipop);
 	s.copy(off, sizeof(ndirs), (char*)&ndirs);
 	off += sizeof(ndirs);
 
@@ -71,7 +66,6 @@ class MExportDir : public Message {
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&ino, sizeof(ino));
-	s.append((char*)&ipop, sizeof(ipop));
 	s.append((char*)&ndirs, sizeof(ndirs));
 
     // exports

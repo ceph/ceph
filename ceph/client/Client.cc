@@ -157,7 +157,7 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
       dout(12) << "insert_trace trace " << i << " root" << endl;
     } else {
       dout(12) << "insert_trace trace " << i << endl;
-      Dir *dir = open_dir( cur );
+      Dir *dir = cur->open_dir();
 	  cur = this->insert_inode_info(dir, trace[i]);
 	  cur->last_updated = now;
     }    
@@ -177,9 +177,10 @@ Dentry *Client::lookup(filepath& path)
   Dentry *dn = 0;
   for (int i=0; i<path.depth(); i++) {
 	dout(14) << " seg " << i << " = " << path[i] << endl;
-	if (cur->inode.mode & INODE_MODE_DIR) {
+	if (cur->inode.mode & INODE_MODE_DIR &&
+		cur->dir) {
 	  // dir, we can descend
-	  Dir *dir = open_dir(cur);
+	  Dir *dir = cur->dir;
 	  if (dir->dentries.count(path[i])) {
 		dn = dir->dentries[path[i]];
 		dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " last_updated " << dn->inode->last_updated<< endl;
@@ -809,7 +810,8 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 	Inode *diri = inode_map[ ino ];
 	assert(diri);
 	assert(diri->inode.mode & INODE_MODE_DIR);
-	Dir *dir = open_dir(diri);
+
+	Dir *dir = diri->open_dir();
 	assert(dir);
 	time_t now = time(NULL);
 	for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 

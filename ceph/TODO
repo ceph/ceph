@@ -4,6 +4,10 @@ big fast todo's:
 - replication protocol
 - heartbeat protocol
 
+- mds benchmarks
+ - synthetic client stable,
+ - pseudo-mega-filesystem
+   - osd copy-on-write?
 
 ask tyce+bill:
 - obfs on alc?

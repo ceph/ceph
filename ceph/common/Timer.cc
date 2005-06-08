@@ -44,9 +44,7 @@ void Timer::timer_thread()
   while (!thread_stop) {
 	
 	// now
-	struct timeval nowtv;
-	g_clock.gettime(&nowtv);
-	timepair_t now = timepair_t(nowtv.tv_sec, nowtv.tv_usec);
+	timepair_t now = g_clock.gettimepair();
 
 	// any events due?
 	timepair_t next;
@@ -74,10 +72,7 @@ void Timer::timer_thread()
 	  // sleep
 	  if (event) {
 		dout(DBL) << "sleeping until " << next << endl;
-		struct timeval tv;
-		tv.tv_sec = next.first;
-		tv.tv_usec = next.second;
-		cond.Wait(lock, &tv);  // wait for waker or time
+		cond.Wait(lock, next);  // wait for waker or time
 	  } else {
 		dout(DBL) << "sleeping" << endl;
 		cond.Wait(lock);         // wait for waker
@@ -147,18 +142,15 @@ void Timer::cancel_timer()
 void Timer::add_event_after(float seconds,
 							Context *callback) 
 {
-  struct timeval tv;
-  g_clock.gettime(&tv);
-  tv.tv_sec += seconds;
-  add_event_at(&tv, callback);
+  timepair_t when = g_clock.gettimepair();
+  when.first += (int)seconds;
+  add_event_at(when, callback);
 }
 
-void Timer::add_event_at(struct timeval *tv,
+void Timer::add_event_at(timepair_t when,
 						 Context *callback) 
 {
   // insert
-  timepair_t when = timepair_t(tv->tv_sec,tv->tv_usec);
-  
   dout(DBL) << "add_event " << callback << " at " << when << endl;
 
   lock.Lock();

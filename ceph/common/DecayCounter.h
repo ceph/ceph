@@ -5,6 +5,7 @@
 #include <math.h>
 #include "Clock.h"
 
+
 class DecayCounter {
  protected:
   double val;              // value
@@ -12,7 +13,7 @@ class DecayCounter {
   double half_life;        // in seconds
   double k;                // k = ln(.5)/half_life
 
-  double last_decay;       // time of last decay
+  timepair_t last_decay;   // time of last decay
 
  public:
   DecayCounter() {
@@ -24,8 +25,8 @@ class DecayCounter {
 	reset();
   }
   
-  void adjust(double a) {
-	decay();
+  void adjust(const timepair_t& now, double a) {
+	decay(now);
 	val += a;
   }
 
@@ -34,32 +35,32 @@ class DecayCounter {
 	k = log(.5) / hl;
   }
 
-  double getnow() {
-	return g_clock.gettime();
+  void take(DecayCounter& other) {
+	*this = other;
+	other.reset();
   }
 
   void reset() {
-	last_decay = 0.0;
+	last_decay = timepair_t(0,0);
 	val = 0;
   }
-
-  void decay() {
-	double tnow = getnow();
-	double el = tnow - last_decay;
+  
+  void decay(const timepair_t& now) {
+	double el = timepair_to_double(now) - timepair_to_double(last_decay);
 	if (el > .5) {
 	  val = val * exp(el * k);
-	  last_decay = tnow;
+	  last_decay = now;
 	}
 	if (val < .01) val = 0;
   }
 
-  double get() {
-	decay();
+  double get(const timepair_t& now) {
+	decay(now);
 	return val;
   }
 
-  double hit(double v = 1.0) {
-	decay();
+  double hit(const timepair_t& now, double v = 1.0) {
+	decay(now);
 	val += v;
 	return val;
   }

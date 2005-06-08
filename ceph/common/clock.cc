@@ -45,3 +45,11 @@ time_t Clock::gettime(struct timeval *ts)
   }
 }
 
+
+struct timeval now;
+
+timepair_t Clock::gettimepair() 
+{
+  gettime(&now);
+  return timepair_t(now.tv_sec, now.tv_usec);
+}
