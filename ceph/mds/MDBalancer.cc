@@ -148,6 +148,8 @@ void MDBalancer::export_empties()
 
 void MDBalancer::do_rebalance()
 {
+  timepair_t now = g_clock.gettimepair();
+
   int cluster_size = mds->get_cluster()->get_num_mds();
   int whoami = mds->get_nodeid();
 
@@ -222,7 +224,7 @@ void MDBalancer::do_rebalance()
   for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
-	import_pop_map.insert(pair<double,CDir*>((*it)->get_popularity(), *it));
+	import_pop_map.insert(pair<double,CDir*>((*it)->popularity[MDS_POP_CURDOM].get(now), *it));
 	int from = (*it)->inode->authority();
 	dout(5) << "map i imported " << **it << " from " << from << endl;
 	import_from_map.insert(pair<int,CDir*>(from, *it));
@@ -253,7 +255,7 @@ void MDBalancer::do_rebalance()
 		
 		if (dir->inode->is_root()) continue;
 		if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
-		double pop = dir->get_popularity();
+		double pop = dir->popularity[MDS_POP_CURDOM].get(now);
 		assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
 		
 		if (pop <= amount) {
@@ -302,7 +304,7 @@ void MDBalancer::do_rebalance()
 	}
 	
 	for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->get_popularity() << endl;
+	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].get(now) << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
@@ -327,6 +329,8 @@ void MDBalancer::find_exports(CDir *dir,
   double midchunk = need * .3;
   double minchunk = need * .01;
 
+  timepair_t now = g_clock.gettimepair();
+
   list<CDir*> bigger;
   multimap<double, CDir*> smaller;
 
@@ -344,7 +348,7 @@ void MDBalancer::find_exports(CDir *dir,
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
 	if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
 	
-	double pop = in->dir->get_popularity();
+	double pop = in->dir->popularity[MDS_POP_CURDOM].get(now);
 
 	//cout << "   in " << in->inode.ino << " " << pop << endl;
 
@@ -409,24 +413,106 @@ void MDBalancer::find_exports(CDir *dir,
 
 
 
-void MDBalancer::hit_inode(CInode *in, int type)
+void MDBalancer::hit_inode(CInode *in)
 {
-  // inode
-  in->hit(type);
-
-  CInode *p = in->get_parent_inode();
-  if (p)
-	hit_dir(p->dir, type);
+  // hit me
+  timepair_t now = g_clock.gettimepair();
+  in->popularity[MDS_POP_JUSTME].hit(now);
+  in->popularity[MDS_POP_NESTED].hit(now);
+  if (in->is_auth()) {
+	in->popularity[MDS_POP_CURDOM].hit(now);
+	in->popularity[MDS_POP_ANYDOM].hit(now);
+  }
+  
+  // hit auth up to import
+  CDir *dir = in->get_parent_dir();
+  if (dir) hit_recursive(dir, now);
 }
-	
-void MDBalancer::hit_dir(CDir *dir, int type) 
+
+
+void MDBalancer::hit_dir(CDir *dir) 
 {
-  CInode *in = dir->inode;
+  // hit me
+  timepair_t now = g_clock.gettimepair();
+  dir->popularity[MDS_POP_JUSTME].hit(now);
+  
+  hit_recursive(dir, now);
+}
+
+
+
+void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
+{
+  bool anydom = dir->is_auth();
+  bool curdom = dir->is_auth();
 
   while (dir) {
-	dir->hit(type);
+	CInode *in = dir->inode;
 
-	if (type == 0) {
+	dir->popularity[MDS_POP_NESTED].hit(now);
+	in->popularity[MDS_POP_NESTED].hit(now);
+	
+	if (anydom) {
+	  dir->popularity[MDS_POP_ANYDOM].hit(now);
+	  in->popularity[MDS_POP_ANYDOM].hit(now);
+	}
+	
+	if (curdom) {
+	  dir->popularity[MDS_POP_CURDOM].hit(now);
+	  in->popularity[MDS_POP_CURDOM].hit(now);
+	}
+	
+	if (dir->is_import()) 
+	  curdom = false;   // end of auth domain, stop hitting auth counters.
+	dir = dir->inode->get_parent_dir();
+  }
+}
+
+
+/*
+ * subtract off an exported chunk
+ */
+void MDBalancer::subtract_export(CDir *dir)
+{
+
+  // FIXME this is totally wrong
+
+  timepair_t now = g_clock.gettimepair();
+  double curdom = -dir->popularity[MDS_POP_CURDOM].get(now);
+  double anydom = -dir->popularity[MDS_POP_ANYDOM].get(now);
+
+  bool in_domain = !dir->is_import();
+  
+  while (true) {
+	CInode *in = dir->inode;
+	
+	if (in_domain)
+	  in->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	if (in->is_auth()) 
+	  in->popularity[MDS_POP_ANYDOM].adjust(now, anydom);
+	
+	dir = in->get_parent_dir();
+	if (!dir) break;
+
+	if (dir->is_import()) in_domain = false;
+	
+	if (in_domain)
+	  dir->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	if (dir->is_auth())
+	  dir->popularity[MDS_POP_ANYDOM].adjust(now, anydom);
+  }
+}
+	
+
+void MDBalancer::add_import(CDir *dir)
+{
+  
+}
+
+
+
+/*  replicate?
+
 	  float dir_pop = dir->get_popularity();
 	  
 	  if (dir->is_auth()) {
@@ -448,14 +534,5 @@ void MDBalancer::hit_dir(CDir *dir, int type)
 		  mds->mdcache->send_dir_updates(dir);
 		}
 	  }
-	}
 
-	// next!
-	in->hit(type);   // hit inode too.
-
-	in = in->get_parent_inode();
-	if (!in) break;
-	dir = in->dir;
-  }
-
-}
+*/

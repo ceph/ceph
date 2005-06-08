@@ -270,9 +270,11 @@ class CDir {
   }
   */
 
+  /*
   float get_popularity() {
 	return popularity[0].get();
   }
+  */
   
 
   // -- manipulation --
@@ -396,10 +398,6 @@ class CDir {
   void mark_clean();
   void mark_complete() { state_set(CDIR_STATE_COMPLETE); }
   bool is_clean() { return !state_test(CDIR_STATE_DIRTY); }
-
-
-  // -- popularity --
-  void hit(int dir);
 
 
   // -- encoded state --
@@ -584,7 +582,8 @@ typedef struct {
   __uint64_t     nden;   // num dentries (including null ones)
   __uint64_t     version;
   unsigned       state;
-  DecayCounter   popularity;
+  DecayCounter   popularity_justme;
+  DecayCounter   popularity_curdom;
   int            dir_auth;
   int            dir_rep;
   int            nopen_by;
@@ -606,9 +605,11 @@ class CDirExport {
 	st.nden = dir->items.size();
     st.version = dir->version;
     st.state = dir->state;
-    st.popularity = dir->popularity[0];        // FIXME FIXME
     st.dir_auth = dir->dir_auth;
     st.dir_rep = dir->dir_rep;
+
+    st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
+    st.popularity_curdom.take( dir->popularity[MDS_POP_CURDOM] );
 
     rep_by = dir->dir_rep_by;
 	open_by = dir->open_by;
@@ -625,9 +626,11 @@ class CDirExport {
 	dir->version = st.version;
 	dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
 	  (st.state & CDIR_MASK_STATE_EXPORTED);
-	dir->popularity[0] = st.popularity;
 	dir->dir_auth = st.dir_auth;
 	dir->dir_rep = st.dir_rep;
+
+	dir->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
+	dir->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
 
 	dir->dir_rep_by = rep_by;
 	dir->open_by = open_by;

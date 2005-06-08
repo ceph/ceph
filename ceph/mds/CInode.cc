@@ -179,15 +179,6 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
 
 
 
-void CInode::hit(int type)
-{
-  assert(type >= 0 && type < MDS_NPOP);
-  popularity[type].hit();
-
-  // hit my containing directory, too
-  //if (parent) parent->dir->hit();
-}
-
 
 void CInode::mark_dirty() {
   

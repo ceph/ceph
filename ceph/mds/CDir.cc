@@ -97,11 +97,6 @@ CDir *CDir::get_parent_dir()
 }
 
 
-void CDir::hit(int type) 
-{
-  assert(type >= 0 && type < MDS_NPOP);
-  popularity[type].hit();
-}
 
 int CDir::get_rep_count(MDCluster *mdc) 
 {

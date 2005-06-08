@@ -226,14 +226,15 @@ int MDS::shutdown_final()
 
 mds_load_t MDS::get_load()
 {
+  timepair_t now = g_clock.gettimepair();
   mds_load_t l;
-  if (mdcache->get_root()) 
-	l.root_pop = mdcache->get_root()->get_popularity();
-  else
+  if (mdcache->get_root()) {
+	l.root_pop = mdcache->get_root()->popularity[MDS_POP_ANYDOM].get(now);
+  } else
 	l.root_pop = 0;
-  l.req_rate = stat_req.get();
-  l.rd_rate = stat_read.get();
-  l.wr_rate = stat_write.get();
+  l.req_rate = stat_req.get(now);
+  l.rd_rate = stat_read.get(now);
+  l.wr_rate = stat_write.get(now);
   return l;
 }
 
@@ -767,9 +768,6 @@ void MDS::dispatch_request(Message *m, CInode *ref)
 
   // MClientRequest.
 
-  // bump popularity
-  balancer->hit_inode(ref, MDS_POP_ANY);   
-  
   switch(req->get_op()) {
 	
 	// files
@@ -853,7 +851,7 @@ void MDS::handle_client_stat(MClientRequest *req,
   if (!mdcache->inode_soft_read_start(ref, req))
 	return;  // sync
 
-  dout(10) << "reply to " << *req << " stat " << ref->inode.mtime << " pop " << ref->get_popularity() << endl;
+  dout(10) << "reply to " << *req << " stat " << ref->inode.mtime << endl;
   MClientReply *reply = new MClientReply(req);
 
   // inode info is in the trace
@@ -861,8 +859,11 @@ void MDS::handle_client_stat(MClientRequest *req,
   mdcache->inode_soft_read_finish(ref);
 
   logger->inc("ostat");
-  stat_read.hit();
-  stat_req.hit();
+  timepair_t now = g_clock.gettimepair();
+  stat_read.hit(now);
+  stat_req.hit(now);
+
+  balancer->hit_inode(ref);   
 
   // reply
   reply_request(req, reply, ref);
@@ -891,6 +892,8 @@ void MDS::handle_client_utime(MClientRequest *req,
 
   mdcache->inode_soft_write_finish(cur);
   
+  balancer->hit_inode(cur);   
+
   // init reply
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_result(0);
@@ -924,6 +927,8 @@ void MDS::handle_client_chmod(MClientRequest *req,
 
   mdcache->inode_hard_write_finish(cur);
 
+  balancer->hit_inode(cur);   
+
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
 
@@ -951,6 +956,8 @@ void MDS::handle_client_chown(MClientRequest *req,
   cur->mark_dirty();
 
   mdcache->inode_hard_write_finish(cur);
+
+  balancer->hit_inode(cur);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1048,8 +1055,11 @@ void MDS::handle_client_readdir(MClientRequest *req,
   reply->set_result(0);
   
   logger->inc("ordir");
-  stat_read.hit();
-  stat_req.hit();
+  timepair_t now = g_clock.gettimepair();
+  stat_read.hit(now);
+  stat_req.hit(now);
+
+  balancer->hit_dir(cur->dir);
 
   // reply
   reply_request(req, reply, cur);
@@ -1069,6 +1079,8 @@ void MDS::handle_client_mknod(MClientRequest *req, CInode *ref)
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
   
+  balancer->hit_inode(newi);
+
   // commit
   commit_request(req, new MClientReply(req, 0), ref,
 				 new EInodeUpdate(newi));  // FIXME this is the wrong message
@@ -1374,6 +1386,8 @@ void MDS::handle_client_link_finish(MClientRequest *req, CInode *ref,
   dn->link_remote( targeti );   // since we have it
   dn->mark_dirty();
   
+  balancer->hit_dir(dn->dir);
+
   // done!
   commit_request(req, new MClientReply(req, 0), ref,
 				 0);          // FIXME i should log something
@@ -1554,6 +1568,8 @@ void MDS::handle_client_unlink(MClientRequest *req,
   }
 
 	
+  balancer->hit_dir(dn->dir);
+
   // it's locked, unlink!
   MClientReply *reply = new MClientReply(req,0);
   mdcache->dentry_unlink(dn,
@@ -2054,7 +2070,8 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	}
   }
   
-
+  balancer->hit_dir(srcdn->dir);
+  balancer->hit_dir(destdn->dir);
 
   // we're golden.
   // everything is xlocked by us, we rule, etc.
@@ -2088,6 +2105,8 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   newdir->mark_complete();
   newdir->mark_dirty();
   
+  balancer->hit_dir(newdir);
+
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
 				 new EInodeUpdate(newi));                  // FIXME should be differnet log entry
@@ -2118,6 +2137,8 @@ void MDS::handle_client_symlink(MClientRequest *req, CInode *diri)
   // set target
   newi->symlink = req->get_sarg();
   
+  balancer->hit_inode(newi);
+
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
 				 new EInodeUpdate(newi));                   // FIXME should be differnet log entry
@@ -2204,6 +2225,8 @@ void MDS::handle_client_open(MClientRequest *req,
 	mdcache->inode_soft_write_finish(cur);
   }
   
+  balancer->hit_inode(cur);
+
   // reply
   MClientReply *reply = new MClientReply(req, f->fh);   // fh # is return code
   reply->set_file_caps(caps);

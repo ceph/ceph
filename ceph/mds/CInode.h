@@ -208,6 +208,7 @@ class CInode : LRUObject {
   int auth_pins;
   int nested_auth_pins;
 
+ public:
   DecayCounter popularity[MDS_NPOP];
 
   // friends
@@ -253,15 +254,17 @@ class CInode : LRUObject {
   }
   bool dir_is_auth();
 
+  /*
   float get_popularity() {
-	return popularity[0].get();
+	timepair_t now = g_clock.gettimepair();
+	return popularity[0].get(now);
   }
+  */
 
 
   // -- misc -- 
   void make_path(string& s);
   void make_anchor_trace(vector<class Anchor*>& trace);
-  void hit(int type);                // popularity
 
 
   // -- state --
@@ -584,7 +587,8 @@ class CInodeDiscover {
 typedef struct {
   inode_t        inode;
   __uint64_t     version;
-  DecayCounter   popularity;
+  DecayCounter   popularity_justme;
+  DecayCounter   popularity_curdom;
   bool           is_dirty;       // dirty inode?
 
   int            ncached_by;  // int pairs follow
@@ -606,12 +610,14 @@ public:
   CInodeExport(CInode *in) {
 	st.inode = in->inode;
 	st.version = in->get_version();
-	st.popularity = in->get_popularity();
 	st.is_dirty = in->is_dirty();
 	cached_by = in->cached_by;
 	cached_by_nonce = in->cached_by_nonce; 
 	hardlock = in->hardlock;
 	softlock = in->softlock;
+
+	st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
+	st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
 	
 	// suck up fh's from inode
 	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
@@ -636,7 +642,8 @@ public:
 	in->inode = st.inode;
 
 	in->version = st.version;
-	in->popularity[0] = st.popularity;
+	in->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
+	in->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
 
 	if (st.is_dirty)
 	  in->mark_dirty();

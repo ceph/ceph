@@ -9,6 +9,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "include/types.h"
+#include "common/Clock.h"
 
 class MDS;
 class Message;
@@ -43,8 +44,13 @@ class MDBalancer {
 					list<CDir*>& exports, 
 					double& have);
 
-  void hit_inode(class CInode *in, int type);
-  void hit_dir(class CDir *dir, int type);
+
+  void hit_inode(class CInode *in);
+  void hit_dir(class CDir *dir);
+  void hit_recursive(class CDir *dir, timepair_t& now);
+
+  void subtract_export(CDir *export);
+  void add_import(CDir *import);
 
 };
 

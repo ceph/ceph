@@ -5170,17 +5170,15 @@ class C_MDS_ExportGo : public Context {
   MDS *mds;
   CDir *ex;   // dir i'm exporting
   int dest;
-  double pop;
 
 public:
-  C_MDS_ExportGo(MDS *mds, CDir *ex, int dest, double pop) {
+  C_MDS_ExportGo(MDS *mds, CDir *ex, int dest) {
 	this->mds = mds;
 	this->ex = ex;
 	this->dest = dest;
-	this->pop = pop;
   }
   virtual void finish(int r) {
-	mds->mdcache->export_dir_go(ex, dest, pop);
+	mds->mdcache->export_dir_go(ex, dest);
   }
 };
 
@@ -5296,22 +5294,14 @@ void MDCache::export_dir(CDir *dir,
   mds->logger->inc("ex");
   
   // take away popularity (and pass it on to the context, MExportDir request later)
-  double pop = dir->inode->popularity[0].get();  // FIXME rest of vector?
-  CInode *t = dir->inode;
-  while (t) {
-	t->popularity[0].adjust(-pop);
-	if (t->parent)
-	  t = t->parent->dir->inode;
-	else 
-	  break;
-  }
+  mds->balancer->subtract_export(dir);
 
   // freeze the subtree
   dir->freeze_tree(new C_MDS_ExportFreeze(mds, dir, dest));
 
   // get waiter ready to do actual export
   dir->add_waiter(CDIR_WAIT_EXPORTPREPACK,
-				  new C_MDS_ExportGo(mds, dir, dest, pop));
+				  new C_MDS_ExportGo(mds, dir, dest));
   
   // drop any sync or lock if sticky
   /*
@@ -5432,8 +5422,7 @@ void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
 
 
 void MDCache::export_dir_go(CDir *dir,
-							int dest,
-							double pop)
+							int dest)
 {  
   dout(7) << "export_dir_go " << *dir << " to " << dest << endl;
 
@@ -5441,7 +5430,7 @@ void MDCache::export_dir_go(CDir *dir,
 
 
   // build export message
-  MExportDir *req = new MExportDir(dir->inode, pop);  // include pop
+  MExportDir *req = new MExportDir(dir->inode);  // include pop
 
 
   // update imports/exports
@@ -6194,19 +6183,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   
 
   // adjust popularity
-  // FIXME what about rest of pop vector?  also, i think this is wrong.
-  double newpop = m->get_ipop() - diri->popularity[0].get();
-  dout(7) << " imported popularity jump by " << newpop << endl;
-  if (newpop > 0) {  // duh
-	CInode *t = diri;
-	while (t) {
-	  t->popularity[0].adjust(newpop);
-	  if (t->parent) 
-		t = t->parent->dir->inode;
-	  else break;
-	}
-  }
-
+  mds->balancer->add_import(dir);
 
   // send notify's etc.
   dout(7) << "sending notifyack for " << *dir << " to old auth " << m->get_source() << endl;

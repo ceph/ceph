@@ -288,8 +288,7 @@ class MDCache {
   void export_dir_frozen(CDir *dir, int dest);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir_go(CDir *dir,
-					 int dest,
-					 double pop);
+					 int dest);
   void export_dir_walk(MExportDir *req,
 					   class C_MDS_ExportFinish *fin,
 					   CDir *basedir,
