@@ -39,6 +39,7 @@ int SyntheticClient::run()
 	break;
   case SYNCLIENT_MODE_WRITEFILE:
 	write_file(sarg1, iarg1);
+	break;
   default:
 	assert(0);
   }
@@ -166,15 +167,17 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
 
 int SyntheticClient::write_file(string& fn, int size)   // size is in MB
 {
-  char *buf = new char[1024*1024];   // 1 MB
+  int wrsize = 1024*256;
+  char *buf = new char[wrsize];   // 1 MB
+  int chunks = size * 1024*1024 / wrsize;
 
-  int fd = client->open(fn.c_str(), O_WRONLY);
+  int fd = client->open(fn.c_str(), O_WRONLY|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << endl;
   if (fd < 0) return fd;
 
-  for (int i=0; i<size; i++) {
-	dout(5) << "writing block " << i << "/" << size << endl;
-	client->write(fd, buf, 1024*1024, i*1024*1024);
+  for (int i=0; i<chunks; i++) {
+	dout(2) << "writing block " << i << "/" << chunks << endl;
+	client->write(fd, buf, wrsize, i*wrsize);
   }
   
   client->close(fd);

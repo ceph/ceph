@@ -454,10 +454,10 @@ void MDS::handle_client_mount(MClientMount *m)
 		dout(3) << "wiping osds too" << endl;
 		mds_paused = true;
 		filer->mkfs(new C_MDS_Unpause(this));
+	  	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
+	  	return;
 	  }
 	  
-	  waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
-	  return;
 	}
   }
 

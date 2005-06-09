@@ -1043,7 +1043,7 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
 
   // buffered write?
-  if (f->caps & CFILE_CAP_WRBUFFER) {
+  if (false && f->caps & CFILE_CAP_WRBUFFER) {
 	// buffered write
 	dout(10) << "buffered/async write" << endl;
 

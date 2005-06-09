@@ -565,9 +565,10 @@ bool MDCache::shutdown_pass()
   } 
   
   // make a pass on the cache
-  dout(7) << "log is empty.  flushing cache" << endl;
-  trim(0);
-  
+  if (g_conf.mds_log_flush_on_shutdown) {
+	dout(7) << "log is empty.  flushing cache" << endl;
+	trim(0);
+  }
   dout(7) << "cache size now " << lru.lru_get_size() << endl;
   
   // send all imports back to 0.
@@ -610,7 +611,8 @@ bool MDCache::shutdown_pass()
   assert(inode_map.size() == lru.lru_get_size());
 
   // done?
-  if (lru.lru_get_size() == 0 && !mds->filer->is_active()) {
+  if ((lru.lru_get_size() == 0 || g_conf.mds_log_flush_on_shutdown == false) && 
+	  !mds->filer->is_active()) {
 	if (mds->get_nodeid() != 0) {
 	  dout(7) << "done, sending shutdown_finish" << endl;
 	  mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),

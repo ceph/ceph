@@ -114,7 +114,7 @@ void parse_config_options(int argc, char **argv,
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
 	else {
-	  cout << "passing arg " << argv[i] << endl;
+	  //cout << "passing arg " << argv[i] << endl;
 	  nargv[nargc++] = argv[i];
 	}
   }
