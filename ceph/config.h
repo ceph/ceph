@@ -30,13 +30,14 @@ struct md_config_t {
   int mds_log_max_len;
   int mds_log_max_trimming;
   int mds_log_read_inc;
+  bool  mds_log_before_reply;
+  bool  mds_log_flush_on_shutdown;
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
   int   mds_bal_interval;
 
   bool  mds_verify_export_dirauth;     // debug flag
-  bool  mds_log_before_reply;
 
   // fake client
   int      num_fakeclient;
@@ -76,5 +77,8 @@ extern md_config_t g_conf;
 
 #define dout(x)  if ((x) <= g_conf.debug) cout
 #define dout2(x) if ((x) <= g_conf.debug) cout
+
+void parse_config_options(int argc, char **argv,
+						  int& nargc, char**&nargv);
 
 #endif

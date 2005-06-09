@@ -30,9 +30,13 @@ public:
 };
 
 
-int main(int argc, char **argv) {
+int main(int oargc, char **oargv) {
 
   //cerr << "mpisyn starting " << myrank << "/" << world << endl;
+  int argc;
+  char **argv;
+  parse_config_options(oargc, oargv,
+					   argc, argv);
 
   int start = 0;
 
@@ -50,16 +54,6 @@ int main(int argc, char **argv) {
 	}
 	else if (strcmp(argv[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
-	}
-
-	else if (strcmp(argv[i],"--numosd") == 0) {
-	  g_conf.num_osd = atoi(argv[++i]);
-	}
-	else if (strcmp(argv[i],"--numclient") == 0) {
-	  g_conf.num_client = atoi(argv[++i]);
-	}
-	else if (strcmp(argv[i],"--nummds") == 0) {
-	  g_conf.num_mds = atoi(argv[++i]);
 	}
 	else if (strcmp(argv[i],"--synthetic") == 0) {
 	  synthetic = atoi(argv[++i]);
