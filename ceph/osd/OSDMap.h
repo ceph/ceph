@@ -10,6 +10,7 @@
 #include "include/config.h"
 #include "include/types.h"
 #include "msg/Message.h"
+#include "rush.h"
 
 #include <vector>
 #include <list>
@@ -65,9 +66,21 @@ class OSDCluster {
   vector<OSDGroup> osd_groups;  // RUSH disk groups
   set<int>         failed_osds; // list of failed disks
 
+  Rush             *rush;       // rush implementation
+
+  void init_rush() {
+	if (rush) delete rush;
+	rush = new Rush();
+	
+	int ngroups = osd_groups.size();
+	for (int i=0; i<ngroups; i++) 
+	  rush->AddCluster(osd_groups[i].num_osds,
+					   osd_groups[i].weight);
+  }
+
 
  public:
-  OSDCluster() : version(0) { }
+  OSDCluster() : version(0), rush(0) { }
 
   // cluster state
   bool is_failed(int osd) { return failed_osds.count(osd) ? true:false; }
@@ -91,7 +104,10 @@ class OSDCluster {
 
   int get_num_groups() { return osd_groups.size(); }
   OSDGroup& get_group(int i) { return osd_groups[i]; }
-  void add_group(OSDGroup& g) { osd_groups.push_back(g); }
+  void add_group(OSDGroup& g) { 
+	osd_groups.push_back(g); 
+	init_rush();
+  }
 
   // serialize, unserialize
   void _rope(crope& r);
@@ -115,11 +131,9 @@ class OSDCluster {
   int repgroup_to_osds(repgroup_t rg,
 					   int *osds,         // list of osd addr's
 					   int num_rep) {     // num replicas we want
-
-	// do something simple for now
-	for (int i=0; i<num_rep; i++) 
-	  osds[i] = (rg+i) % num_osds();
-
+	// get rush list
+	assert(rush);
+	rush->GetServersByKey( rg, num_rep, osds );
 	return 0;
   }
 

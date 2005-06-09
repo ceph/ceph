@@ -20,16 +20,25 @@
 void *synthetic_client_thread_entry(void *ptr)
 {
   SyntheticClient *sc = (SyntheticClient*)ptr;
-  switch (sc->mode) {
+  int r = sc->run();
+  return (void*)r;
+}
+
+
+int SyntheticClient::run()
+{ 
+  switch (mode) {
   case SYNCLIENT_MODE_RANDOMWALK:
-	sc->random_walk(sc->iarg1);
+	random_walk(iarg1);
 	break;
   case SYNCLIENT_MODE_MAKEDIRS:
-	sc->make_dirs(sc->sarg1.c_str(), sc->iarg1, sc->iarg2, sc->iarg3);
+	make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
 	break;
   case SYNCLIENT_MODE_FULLWALK:
-	sc->full_walk(sc->sarg1);
+	full_walk(sarg1);
 	break;
+  case SYNCLIENT_MODE_WRITEFILE:
+	write_file(sarg1, iarg1);
   default:
 	assert(0);
   }
@@ -152,6 +161,27 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
   
   return 0;
 }
+
+
+
+int SyntheticClient::write_file(string& fn, int size)   // size is in MB
+{
+  char *buf = new char[1024*1024];   // 1 MB
+
+  int fd = client->open(fn.c_str(), O_WRONLY);
+  dout(5) << "writing to " << fn << " fd " << fd << endl;
+  if (fd < 0) return fd;
+
+  for (int i=0; i<size; i++) {
+	dout(5) << "writing block " << i << "/" << size << endl;
+	client->write(fd, buf, 1024*1024, i*1024*1024);
+  }
+  
+  client->close(fd);
+  delete[] buf;
+}
+
+
 
 int SyntheticClient::random_walk(int num_req)
 {

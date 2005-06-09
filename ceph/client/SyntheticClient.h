@@ -9,6 +9,7 @@
 #define SYNCLIENT_MODE_RANDOMWALK  1
 #define SYNCLIENT_MODE_FULLWALK    2
 #define SYNCLIENT_MODE_MAKEDIRS    3
+#define SYNCLIENT_MODE_WRITEFILE   4
 
 class SyntheticClient {
   Client *client;
@@ -77,13 +78,17 @@ class SyntheticClient {
   int start_thread();
   int join_thread();
 
+  int run();
+
+  // run() will do one of these things:
+  int mode;
   string sarg1;
   int iarg1, iarg2, iarg3;
-  int mode;
   
   int full_walk(string& fromdir);
   int random_walk(int n);
   int make_dirs(const char *basedir, int dirs, int files, int depth);
+  int write_file(string& fn, int mb);
 };
 
 #endif

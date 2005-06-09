@@ -2,6 +2,8 @@
 #include "OSDCluster.h"
 
 
+
+
 // serialize/unserialize
 
 void OSDCluster::_rope(crope& r)
@@ -33,4 +35,7 @@ void OSDCluster::_unrope(crope& r, int& off)
   }
 
   // failed
+
+
+  init_rush();
 }
