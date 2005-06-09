@@ -16,8 +16,6 @@ md_config_t g_conf = {
   num_osd: 5,
   num_client: 1,
 
-  osd_cow: false, // crashy? true,  
-
   // profiling and debugging
   log_messages: true,
   log_interval: 10.0,
@@ -25,7 +23,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  debug: 5,
+  debug: 2,
   
   // --- client ---
   client_cache_size: 400,
@@ -37,14 +35,14 @@ md_config_t g_conf = {
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
-  mds_log_max_len:  MDS_CACHE_SIZE / 3,
+  mds_log_max_len:  10000,//MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 16,
-  mds_log_read_inc: 4096,
+  mds_log_read_inc: 65536,
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,
+  mds_bal_interval: 200,
 
-  mds_heartbeat_op_interval: 200,
   mds_verify_export_dirauth: true,
   mds_log_before_reply: true,
 
@@ -81,3 +79,29 @@ md_config_t g_conf = {
   fakeclient_op_close:    20
 };
 
+
+#include <stdlib.h>
+#include <string.h>
+
+void parse_config_options(int argc, char **argv,
+						  int& nargc, (char**)&nargv)
+{
+  // alloc new argc
+  nargv = new (char*)[argc];
+  nargc = 0;
+  nargv[nargc++] - argv[0];
+
+  for (int i=1; i<argc; i++) {
+	if (strcmp(argv[i], "--nummds") == 0) g_conf.nummds = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--numclient") == 0) g_conf.numclient = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--numosd") == 0) g_conf.numosd = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug") == 0) g_conf.debug = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_cache_size") == 0) g_conf.mds_cache_size = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_log_max_len") == 0) g_conf.mds_log_max_len = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) g_conf.mds_log_max_trimming = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_bal_interval") == 0) g_conf.mds_bal_interval = atoi(argv[++i]);
+	else 
+	  nargv[nargc++] = argv[i];
+
+  }
+}

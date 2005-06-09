@@ -6,7 +6,6 @@ struct md_config_t {
   int  num_osd;
   int  num_client;
 
-  bool osd_cow;                      // debug flag?
 
   // profiling
   bool log_messages;
@@ -34,8 +33,8 @@ struct md_config_t {
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
+  int   mds_bal_interval;
 
-  int   mds_heartbeat_op_interval;
   bool  mds_verify_export_dirauth;     // debug flag
   bool  mds_log_before_reply;
 

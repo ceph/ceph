@@ -64,8 +64,10 @@ void Timer::timer_thread()
 		scheduled.erase(t);
 	  }
 
-	  dout(DBL) << "kicking messenger" << endl;
-	  messenger_to_kick->trigger_timer(this);
+	  if (messenger_to_kick) {
+		dout(DBL) << "kicking messenger" << endl;
+		messenger_to_kick->trigger_timer(this);
+	  }
 	}
 
 	else {

@@ -398,7 +398,7 @@ void MDS::my_dispatch(Message *m)
 
   // balance?
   if (true && whoami == 0 &&
-	  stat_ops >= last_heartbeat + g_conf.mds_heartbeat_op_interval) {
+	  stat_ops >= last_heartbeat + g_conf.mds_bal_interval) {
 	last_heartbeat = stat_ops;
 	balancer->send_heartbeat();
   }

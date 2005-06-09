@@ -45,12 +45,14 @@ class MDBalancer {
 					double& have);
 
 
+  void subtract_export(class CDir *ex);
+  void add_import(class CDir *im);
+
   void hit_inode(class CInode *in);
   void hit_dir(class CDir *dir);
   void hit_recursive(class CDir *dir, timepair_t& now);
 
-  void subtract_export(CDir *export);
-  void add_import(CDir *import);
+
 
 };
 
