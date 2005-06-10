@@ -39,12 +39,13 @@ md_config_t g_conf = {
   mds_log_max_trimming: 16,
   mds_log_read_inc: 65536,
   mds_log_before_reply: true,
-  mds_log_flush_on_shutdown: true,
+  mds_log_flush_on_shutdown: false,  //true,
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,
   mds_bal_interval: 200,
 
+  mds_flush_on_shutdown: true,
   mds_verify_export_dirauth: true,
 
 
@@ -108,18 +109,26 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.num_client = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--numosd") == 0) 
 	  g_conf.num_osd = atoi(argv[++i]);
+
 	else if (strcmp(argv[i], "--debug") == 0) 
 	  g_conf.debug = atoi(argv[++i]);
+
 	else if (strcmp(argv[i], "--mds_cache_size") == 0) 
 	  g_conf.mds_cache_size = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_len") == 0) 
 	  g_conf.mds_log_max_len = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) 
 	  g_conf.mds_log_max_trimming = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_flush_on_shutdown") == 0) 
+	  g_conf.mds_flush_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_flush_on_shutdown") == 0) 
 	  g_conf.mds_log_flush_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
+
+	else if (strcmp(argv[i], "--osd_fsync") == 0) 
+	  g_conf.osd_fsync = atoi(argv[++i]);
+
 	else {
 	  //cout << "passing arg " << argv[i] << endl;
 	  nargv[nargc++] = argv[i];

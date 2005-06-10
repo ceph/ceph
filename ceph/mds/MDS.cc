@@ -458,7 +458,7 @@ void MDS::handle_client_mount(MClientMount *m)
 	  	return;
 	  } else {
 		// fake out idalloc (reset, pretend loaded)
-		mds->idalloc->reset();
+		idalloc->reset();
 	  }
 	  
 	}

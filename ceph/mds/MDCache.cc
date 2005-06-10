@@ -523,23 +523,20 @@ bool MDCache::trim(__int32_t max) {
 
 void MDCache::shutdown_start()
 {
-  dout(1) << "shutdown_start: forcing unsync, unlock of everything" << endl;
+  dout(1) << "shutdown_start" << endl;
 
-  // walk cache
-  bool didsomething = false;
-  for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
-	   it != inode_map.end();
-	   it++) {
-	CInode *in = it->second;
+  if (g_conf.mds_commit_on_shutdown) {
+	dout(1) << "shutdown_start committing all dirty dirs" << endl;
 
-	// commit any dirty dir that's ours
-	if (in->is_dir() && in->dir && in->dir->is_auth() && in->dir->is_dirty())
-	  mds->mdstore->commit_dir(in->dir, NULL);
-	
-	//drop locks?
-	if (in->is_auth()) {
-	  //if (in->is_syncbyme()) inode_sync_release(in);
-	  //if (in->is_lockbyme()) inode_lock_release(in);
+	for (hash_map<inodeno_t, CInode*>::iterator it = inode_map.begin();
+		 it != inode_map.end();
+		 it++) {
+	  CInode *in = it->second;
+	  
+	  // commit any dirty dir that's ours
+	  if (in->is_dir() && in->dir && in->dir->is_auth() && in->dir->is_dirty())
+		mds->mdstore->commit_dir(in->dir, NULL);
+	  
 	}
   }
 
@@ -611,7 +608,8 @@ bool MDCache::shutdown_pass()
   assert(inode_map.size() == lru.lru_get_size());
 
   // done?
-  if ((lru.lru_get_size() == 0 || g_conf.mds_log_flush_on_shutdown == false) && 
+  if ((lru.lru_get_size() == 0 || 
+	   (g_conf.mds_commit_on_shutdown == false && g_conf.mds_log_flush_on_shutdown == false)) && 
 	  !mds->filer->is_active()) {
 	if (mds->get_nodeid() != 0) {
 	  dout(7) << "done, sending shutdown_finish" << endl;
