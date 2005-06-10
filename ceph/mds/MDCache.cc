@@ -555,14 +555,16 @@ bool MDCache::shutdown_pass()
 	return true;
   }
 
-  // (wait for) flush log
-  if (mds->mdlog->get_num_events()) {
-	dout(7) << "waiting for log to flush" << endl;
-	return false;
-  } 
-  
-  // make a pass on the cache
+
+  // flush log?
   if (g_conf.mds_log_flush_on_shutdown) {
+	// (wait for) flush log
+	if (mds->mdlog->get_num_events()) {
+	  dout(7) << "waiting for log to flush" << endl;
+	  return false;
+	} 
+  
+	// make a pass on the cache
 	dout(7) << "log is empty.  flushing cache" << endl;
 	trim(0);
   }
