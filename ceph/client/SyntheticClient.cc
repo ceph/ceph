@@ -145,8 +145,6 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
 	return -1;
   }
 
-  if (depth == 0) return 0;
-
   // children
   char d[500];
   dout(5-depth) << "make_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
@@ -154,6 +152,8 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
 	sprintf(d,"%s/file.%d", basedir, i);
 	client->mknod(d, 0644);
   }
+
+  if (depth == 0) return 0;
 
   for (int i=0; i<dirs; i++) {
 	sprintf(d, "%s/dir.%d", basedir, i);
