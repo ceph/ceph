@@ -99,7 +99,7 @@ void parse_config_options(int argc, char **argv,
   // alloc new argc
   nargv = (char**)malloc(sizeof(char*) * argc);
   nargc = 0;
-  nargv[nargc++] - argv[0];
+  nargv[nargc++] = argv[0];
 
   for (int i=1; i<argc; i++) {
 	if (strcmp(argv[i], "--nummds") == 0) 
