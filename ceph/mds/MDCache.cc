@@ -566,7 +566,7 @@ bool MDCache::shutdown_pass()
 	dout(7) << "log is empty.  flushing cache" << endl;
 	trim(0);
   }
-  dout(7) << "cache size now " << lru.lru_get_size() << endl;
+  dout(5) << "cache size now " << lru.lru_get_size() << endl;
   
   // send all imports back to 0.
   if (mds->get_nodeid() != 0) {
