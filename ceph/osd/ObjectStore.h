@@ -26,7 +26,8 @@ class ObjectStore {
 				   char *buffer) = 0;
   virtual int write(object_t oid,
 					size_t len, off_t offset,
-					char *buffer) = 0;
+					char *buffer,
+					bool fsync=true) = 0;
 
   /*
   // attributes

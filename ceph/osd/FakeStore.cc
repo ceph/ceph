@@ -281,7 +281,8 @@ int FakeStore::read(object_t oid,
 
 int FakeStore::write(object_t oid,
 					 size_t len, off_t offset,
-					 char *buffer) {
+					 char *buffer,
+					 bool do_fsync) {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
 
   if (is_shadow) shadow_copy_maybe(oid);
@@ -299,6 +300,10 @@ int FakeStore::write(object_t oid,
   if (actual == offset) {
 	did = ::write(fd, buffer, len);
   }
+
+  // sync to to disk?
+  if (do_fsync) fsync(fd);     // should this be fsync?
+
   flock(fd, LOCK_UN);
   close(fd);
   

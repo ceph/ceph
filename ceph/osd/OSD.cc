@@ -247,7 +247,8 @@ void OSD::handle_write(MOSDWrite *m)
 	   it++) {
 	int r = store->write(m->get_oid(),
 						 (*it).length(), off,
-						 (*it).c_str());
+						 (*it).c_str(),
+						 g_conf.osd_fsync);
 	off += (*it).length();
 	if (r < 0) {
 	  dout(1) << "write error on " << m->get_oid() << " r = " << r << endl;

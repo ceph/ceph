@@ -36,6 +36,8 @@ class IdAllocator {
   bool is_open() { return opened; }
   bool is_opening() { return opening; }
 
+  void reset();
+
   void save();
   void load(Context *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);

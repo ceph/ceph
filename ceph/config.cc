@@ -47,6 +47,13 @@ md_config_t g_conf = {
 
   mds_verify_export_dirauth: true,
 
+
+  // --- osd ---
+
+  osd_fsync: true,
+
+
+
   // --- fakeclient (mds regression testing) ---
   num_fakeclient: 100,
   fakeclient_requests: 100,

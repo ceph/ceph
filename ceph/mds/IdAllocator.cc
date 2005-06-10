@@ -87,6 +87,24 @@ void IdAllocator::save()
 }
 
 
+void IdAllocator::reset()
+{
+  free.clear();
+
+  // use generic range FIXME THIS IS CRAP
+  free[ID_INO].map_insert((long long)1000000LL * (mds->get_nodeid()+1),
+						  (long long)1000000LL * (mds->get_nodeid()+2) - 1);
+  //free[ID_INO].dump();
+  
+  free[ID_FH].map_insert(1000000LL * (mds->get_nodeid()+1),
+						 1000000LL * (mds->get_nodeid()+2) - 1);
+  //free[ID_FH].dump();
+
+  opened = true;
+  opening = false;
+}
+
+
 class C_ID_Load : public Context {
 public:
   IdAllocator *ida;
@@ -147,15 +165,7 @@ void IdAllocator::load_2(int r, bufferlist& blist, Context *onfinish)
   }
   else {
 	dout(3) << "no alloc file, starting from scratch" << endl;
-
-	// use generic range FIXME THIS IS CRAP
-	free[ID_INO].map_insert((long long)1000000LL * (mds->get_nodeid()+1),
-							(long long)1000000LL * (mds->get_nodeid()+2) - 1);
-	//free[ID_INO].dump();
-	
-	free[ID_FH].map_insert(1000000LL * (mds->get_nodeid()+1),
-						   1000000LL * (mds->get_nodeid()+2) - 1);
-	//free[ID_FH].dump();
+	reset();
   }
 
   opened = true;

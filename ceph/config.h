@@ -39,6 +39,9 @@ struct md_config_t {
 
   bool  mds_verify_export_dirauth;     // debug flag
 
+  // osd
+  bool  osd_fsync;
+
   // fake client
   int      num_fakeclient;
   unsigned fakeclient_requests;

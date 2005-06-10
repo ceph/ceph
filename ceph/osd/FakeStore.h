@@ -52,7 +52,8 @@ class FakeStore : public ObjectStore {
 		   char *buffer);
   int write(object_t oid,
 			size_t len, off_t offset,
-			char *buffer);
+			char *buffer,
+			bool fsync);
 };
 
 #endif

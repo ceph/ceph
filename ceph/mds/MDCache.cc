@@ -7198,11 +7198,13 @@ void MDCache::show_imports()
 
   set<CDir*> ecopy = exports;
 
+  timepair_t now = g_clock.gettimepair();
+
   for (set<CDir*>::iterator it = imports.begin();
 	   it != imports.end();
 	   it++) {
 	CDir *im = *it;
-	dout(7) << "  + import " << *im << endl;
+	dout(7) << "  + import (" << im->popularity[MDS_POP_CURDOM].get(now) << "/" << im->popularity[MDS_POP_ANYDOM].get(now) << ")  " << *im << endl;
 	assert( im->is_import() );
 	assert( im->is_auth() );
 	
@@ -7210,7 +7212,7 @@ void MDCache::show_imports()
 		 p != nested_exports[im].end();
 		 p++) {
 	  CDir *exp = *p;
-	  dout(7) << "      - ex " << *exp << " to " << exp->dir_auth << endl;
+	  dout(7) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get(now) << ", " << exp->popularity[MDS_POP_ANYDOM].get(now) << ")" << *exp << " to " << exp->dir_auth << endl;
 	  assert( exp->is_export() );
 	  assert( !exp->is_auth() );
 	  

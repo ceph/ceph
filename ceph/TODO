@@ -9,8 +9,9 @@ big fast todo's:
  - pseudo-mega-filesystem
    - osd copy-on-write..
 
-- osd failure structures
-- heartbeatmonitor vs pingmonitor
+- osd recovery structures (per-RG, etc)
+- heartbeatmonitor vs pingmonitor?
+
 
 
 
