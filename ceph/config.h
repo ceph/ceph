@@ -37,7 +37,7 @@ struct md_config_t {
   float mds_bal_unreplicate_threshold;
   int   mds_bal_interval;
 
-  bool  mds_flush_on_shutdown;
+  bool  mds_commit_on_shutdown;
   bool  mds_verify_export_dirauth;     // debug flag
 
   // osd

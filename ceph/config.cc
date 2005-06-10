@@ -45,7 +45,7 @@ md_config_t g_conf = {
   mds_bal_unreplicate_threshold: 200,
   mds_bal_interval: 200,
 
-  mds_flush_on_shutdown: true,
+  mds_commit_on_shutdown: true,
   mds_verify_export_dirauth: true,
 
 
@@ -119,8 +119,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.mds_log_max_len = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) 
 	  g_conf.mds_log_max_trimming = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_flush_on_shutdown") == 0) 
-	  g_conf.mds_flush_on_shutdown = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_commit_on_shutdown") == 0) 
+	  g_conf.mds_commit_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_flush_on_shutdown") == 0) 
 	  g_conf.mds_log_flush_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
