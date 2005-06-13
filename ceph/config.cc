@@ -39,7 +39,7 @@ md_config_t g_conf = {
   mds_log_max_trimming: 16,
   mds_log_read_inc: 65536,
   mds_log_before_reply: true,
-  mds_log_flush_on_shutdown: false,  //true,
+  mds_log_flush_on_shutdown: true,
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,

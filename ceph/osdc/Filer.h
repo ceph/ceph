@@ -105,8 +105,8 @@ class Filer : public Dispatcher {
 
   int mkfs(Context *c);
   
-  void handle_osd_read_reply(class MOSDReadReply *m);
-  void handle_osd_write_reply(class MOSDWriteReply *m);
+  void handle_osd_read_reply(class MOSDOpReply *m);
+  void handle_osd_write_reply(class MOSDOpReply *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
   
 };

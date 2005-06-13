@@ -19,10 +19,6 @@ using namespace std;
 #include "messages/MFailureAck.h"
 
 #include "messages/MOSDPing.h"
-#include "messages/MOSDRead.h"
-#include "messages/MOSDReadReply.h"
-#include "messages/MOSDWrite.h"
-#include "messages/MOSDWriteReply.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
@@ -109,22 +105,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_OSD_PING:
 	m = new MOSDPing();
 	break;
-  case MSG_OSD_READ:
-	m = new MOSDRead();
-	break;
-
-  case MSG_OSD_READREPLY:
-	m = new MOSDReadReply();
-	break;
-
-  case MSG_OSD_WRITE:
-	m = new MOSDWrite();
-	break;
-
-  case MSG_OSD_WRITEREPLY:
-	m = new MOSDWriteReply();
-	break;
-
   case MSG_OSD_OP:
 	m = new MOSDOp();
 	break;

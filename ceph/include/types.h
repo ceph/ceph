@@ -35,8 +35,6 @@ using namespace __gnu_cxx;
 #define MDS_OP_SYMLINK  222
 
 #define MDS_OP_OPEN     301
-#define OSD_OP_READ     304
-#define OSD_OP_WRITE    305
 #define MDS_OP_TRUNCATE 306
 #define MDS_OP_FSYNC    307
 #define MDS_OP_CLOSE    310

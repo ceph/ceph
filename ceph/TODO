@@ -1,4 +1,10 @@
 
+!!!
+- make mds shut down with mds_commit_on_shutdown=0 and/or mds_log_flush_on_shutdown=0.
+- test mds scaling w/ makedirs, vs mds_log_on_request 
+
+- finish osd replication MOSDOp groundwork
+
 big fast todo's:
 - client buffer cache
 - replication protocol

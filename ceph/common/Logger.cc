@@ -15,7 +15,8 @@ Logger::Logger(string& fn, LogType *type)
   filename = "log/";
   filename += fn;
   interval = g_conf.log_interval;
-  start = last_logged = g_clock.gettime();  // time 0!
+  start = g_clock.gettimepair();  // time 0!
+  last_logged = 0;
   wrote_header = -1;
   open = false;
   this->type = type;
@@ -68,8 +69,11 @@ long Logger::get(string& key)
 
 void Logger::flush(bool force) 
 {
-  double now = g_clock.gettime();
-  while (now >= last_logged + interval || force) {
+  timepair_t now = g_clock.gettimepair();
+  double fromstart = timepair_to_double(now - start);
+
+  while (force ||
+		 fromstart - last_logged >= interval) {
 	last_logged += interval;
 	force = false;
 
@@ -93,7 +97,7 @@ void Logger::flush(bool force)
 
 	// write line to log
 	//out << (long)(last_logged - start);
-	out << last_logged - start;
+	out << fromstart;
 	for (vector<string>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
 	  out << "\t" << get(*it);
 	}

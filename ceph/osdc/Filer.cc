@@ -4,10 +4,10 @@
 #include "Filer.h"
 #include "OSDCluster.h"
 
-#include "messages/MOSDRead.h"
-#include "messages/MOSDReadReply.h"
-#include "messages/MOSDWrite.h"
-#include "messages/MOSDWriteReply.h"
+//#include "messages/MOSDRead.h"
+//#include "messages/MOSDReadReply.h"
+//#include "messages/MOSDWrite.h"
+//#include "messages/MOSDWriteReply.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
@@ -34,14 +34,6 @@ Filer::Filer(Messenger *m, OSDCluster *o)
 void Filer::dispatch(Message *m)
 {
   switch (m->get_type()) {
-  case MSG_OSD_READREPLY:
-	handle_osd_read_reply((MOSDReadReply*)m);
-	break;
-	
-  case MSG_OSD_WRITEREPLY:
-	handle_osd_write_reply((MOSDWriteReply*)m);
-	break;
-
   case MSG_OSD_OPREPLY:
 	handle_osd_op_reply((MOSDOpReply*)m);
 	break;
@@ -86,13 +78,11 @@ Filer::read(inodeno_t ino,
   p->bytes_read = 0;
   p->onfinish = onfinish;
 
-  int num_rep = 1;          // FIXME
-
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, len, offset, num_rep, extents);
+  osdcluster->file_to_extents(ino, len, offset, extents);
 
-  dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
+  dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
 
   int nfrag = 0;
@@ -104,12 +94,16 @@ Filer::read(inodeno_t ino,
 	last_tid++;
 	
 	// issue read
-	MOSDRead *m = new MOSDRead(last_tid, it->oid, it->len, it->offset);
+	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+						   it->oid, it->rg, osdcluster->get_version(), 
+						   OSD_OP_READ);
+	m->set_length(it->len);
+	m->set_offset(it->offset);
 	dout(15) << " read on " << last_tid << endl;
-	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
+	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 
 	// note offset into read buffer
-	p->read_off[it->oid] = off;
+	p->read_off[last_tid] = off;
 	off += it->len;
 
 	// add to gather set
@@ -123,7 +117,7 @@ Filer::read(inodeno_t ino,
 
 
 void
-Filer::handle_osd_read_reply(MOSDReadReply *m) 
+Filer::handle_osd_read_reply(MOSDOpReply *m) 
 {
   // get pio
   tid_t tid = m->get_tid();
@@ -134,8 +128,8 @@ Filer::handle_osd_read_reply(MOSDReadReply *m)
   op_reads.erase( tid );
 
   // copy result into buffer
-  size_t off = p->read_off[m->get_oid()];
-  dout(7) << "got frag at " << off << " len " << m->get_len() << endl;
+  size_t off = p->read_off[tid];
+  dout(7) << "got frag at " << off << " len " << m->get_length() << endl;
   
   // our op finished
   p->outstanding_ops.erase(tid);
@@ -201,7 +195,6 @@ Filer::write(inodeno_t ino,
 			 Context *onfinish)
 {
   last_tid++;
-  int num_rep = 1;
 
   // pending write record
   PendingOSDOp_t *p = new PendingOSDOp_t;
@@ -209,9 +202,9 @@ Filer::write(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, len, offset, num_rep, extents);
+  osdcluster->file_to_extents(ino, len, offset, extents);
 
-  dout(7) << "osd write ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
+  dout(7) << "osd write ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
   size_t off = 0;  // ptr into buffer
 
@@ -222,8 +215,12 @@ Filer::write(inodeno_t ino,
 	last_tid++;
 	
 	// issue write
-	MOSDWrite *m = new MOSDWrite(last_tid, it->oid, it->len, it->offset);
-
+	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+						   it->oid, it->rg, osdcluster->get_version(),
+						   OSD_OP_WRITE);
+	m->set_length(it->len);
+	m->set_offset(it->offset);
+	
 	bufferlist cur;
 	cur.substr_of(bl, off, it->len);
 	m->set_data(cur);
@@ -236,7 +233,7 @@ Filer::write(inodeno_t ino,
 
 	// send
 	dout(15) << " write on " << last_tid << endl;
-	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
+	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
   }
 
   return 0;
@@ -244,7 +241,7 @@ Filer::write(inodeno_t ino,
 
 
 void
-Filer::handle_osd_write_reply(MOSDWriteReply *m)
+Filer::handle_osd_write_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
@@ -277,6 +274,25 @@ Filer::handle_osd_write_reply(MOSDWriteReply *m)
 void
 Filer::handle_osd_op_reply(MOSDOpReply *m)
 {
+  // updated cluster info?
+  if (m->get_ocv() && 
+	  m->get_ocv() > osdcluster->get_version()) {
+	dout(3) << "op reply has newer cluster " << m->get_ocv() << " > " << osdcluster->get_version() << endl;
+	osdcluster->decode( m->get_osdcluster() );
+  }
+
+
+  // read or write?
+  switch (m->get_op()) {
+  case OSD_OP_READ:
+	handle_osd_read_reply(m);
+	return;
+  case OSD_OP_WRITE:
+	handle_osd_write_reply(m);
+	return;
+  }
+
+
   // get pio
   tid_t tid = m->get_tid();
   dout(15) << "handle_osd_op_reply on " << tid << endl;
@@ -322,17 +338,15 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 
 int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
 {
-  int num_rep = 1;
-
   // pending write record
   PendingOSDOp_t *p = new PendingOSDOp_t;
   p->onfinish = onfinish;
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, size, 0, num_rep, extents);
+  osdcluster->file_to_extents(ino, size, 0, extents);
 
-  dout(7) << "osd remove ino " << ino << " size " << size << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
+  dout(7) << "osd remove ino " << ino << " size " << size << " in " << extents.size() << " extents" << endl;
 
   size_t off = 0;  // ptr into buffer
 
@@ -342,15 +356,15 @@ int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
 	int r = 0;   // pick a replica
 	last_tid++;
 	
-	for (int r=0;r<num_rep; r++) {
-	  // issue delete
-	  MOSDOp *m = new MOSDOp(last_tid, it->oid, OSD_OP_DELETE);
-	  messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
+	// issue delete
+	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+						   it->oid, it->rg, osdcluster->get_version(),
+						   OSD_OP_DELETE);
+	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 	
-	  // add to gather set
-	  p->outstanding_ops.insert(last_tid);
-	  op_removes[last_tid] = p;
-	}
+	// add to gather set
+	p->outstanding_ops.insert(last_tid);
+	op_removes[last_tid] = p;
   }
 
 }
@@ -379,8 +393,6 @@ int Filer::probe_size(inodeno_t ino, size_t *size, Context *onfinish)
 
 int Filer::mkfs(Context *onfinish)
 {
-  int num_rep = 1;
-  
   dout(7) << "mkfs, wiping all OSDs" << endl;
 
   // pending write record
@@ -398,7 +410,9 @@ int Filer::mkfs(Context *onfinish)
 	++last_tid;
 
 	// issue mkfs
-	MOSDOp *m = new MOSDOp(last_tid, 0, OSD_OP_MKFS);
+	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+						   0, 0, osdcluster->get_version(), 
+						   OSD_OP_MKFS);
 	messenger->send_message(m, MSG_ADDR_OSD(*it), 0);
 	
 	// add to gather set
@@ -447,9 +461,12 @@ int Filer::zero(inodeno_t ino,
 	
 	// issue zero
 	MOSDOp *m;
-	if (it->len == new MOSDOp(last_tid, it->oid, OSD_OP_DELETE);
+	//if (it->len == 
+	m = new MOSDOp(last_tid, messenger->get_myaddr(),
+	it->oid, it->rg, osdcluster->get_version(), 
+				   OSD_OP_DELETE);
 	it->len, it->offset);
-	messenger->send_message(m, MSG_ADDR_OSD(it->osds[r]), 0);
+	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 	
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);

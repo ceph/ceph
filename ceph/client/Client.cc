@@ -13,11 +13,6 @@
 
 #include "messages/MGenericMessage.h"
 
-#include "messages/MOSDRead.h"
-#include "messages/MOSDReadReply.h"
-#include "messages/MOSDWrite.h"
-#include "messages/MOSDWriteReply.h"
-
 #include "osd/Filer.h"
 
 #include "common/Cond.h"
@@ -229,12 +224,6 @@ void Client::dispatch(Message *m)
 
   switch (m->get_type()) {
 	// osd
-  case MSG_OSD_READREPLY:
-	filer->handle_osd_read_reply((MOSDReadReply*)m);
-	break;
-  case MSG_OSD_WRITEREPLY:
-	filer->handle_osd_write_reply((MOSDWriteReply*)m);
-	break;
   case MSG_OSD_OPREPLY:
 	filer->handle_osd_op_reply((MOSDOpReply*)m);
 	break;
@@ -373,8 +362,7 @@ int Client::mount(int mkfs)
   assert(reply);
 
   // we got osdcluster!
-  int off = 0;
-  osdcluster->_unrope(reply->get_osd_cluster_state(), off);
+  osdcluster->decode(reply->get_osd_cluster_state());
 
   dout(1) << "mounted" << endl;
   mounted = true;

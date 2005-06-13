@@ -6,36 +6,38 @@
 
 // serialize/unserialize
 
-void OSDCluster::_rope(crope& r)
+void OSDCluster::encode(bufferlist& blist)
 {
-  r.append((char*)&version, sizeof(version));
+  blist.append((char*)&version, sizeof(version));
 
   int ngroups = osd_groups.size();
-  r.append((char*)&ngroups, sizeof(ngroups));
+  blist.append((char*)&ngroups, sizeof(ngroups));
   for (int i=0; i<ngroups; i++) {
-	r.append((char*)&osd_groups[i], sizeof(OSDGroup));
+	blist.append((char*)&osd_groups[i], sizeof(OSDGroup));
   }
 
-  // failed
+  _encode(down_osds, blist);
+  _encode(failed_osds, blist);
 }
 
-void OSDCluster::_unrope(crope& r, int& off)
+void OSDCluster::decode(bufferlist& blist)
 {
-  r.copy(off, sizeof(version), (char*)&version);
+  int off = 0;
+  blist.copy(off, sizeof(version), (char*)&version);
   off += sizeof(version);
 
   int ngroups;
-  r.copy(off, sizeof(ngroups), (char*)&ngroups);
+  blist.copy(off, sizeof(ngroups), (char*)&ngroups);
   off += sizeof(ngroups);
 
   osd_groups = vector<OSDGroup>(ngroups);
   for (int i=0; i<ngroups; i++) {
-	r.copy(off, sizeof(OSDGroup), (char*)&osd_groups[i]);
+	blist.copy(off, sizeof(OSDGroup), (char*)&osd_groups[i]);
 	off += sizeof(OSDGroup);
   }
 
-  // failed
-
+  _decode(down_osds, blist, off);
+  _decode(failed_osds, blist, off);
 
   init_rush();
 }

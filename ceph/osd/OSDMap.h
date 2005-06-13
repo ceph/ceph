@@ -51,8 +51,9 @@ struct OSDGroup {
  * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
  */
 struct OSDExtent {
-  int         osds[MAX_REPLICAS];
+  int         osd;
   object_t    oid;
+  repgroup_t  rg;
   size_t      offset, len;
 };
 
@@ -64,6 +65,8 @@ class OSDCluster {
 
   // RUSH disk groups
   vector<OSDGroup> osd_groups;  // RUSH disk groups
+
+  set<int>         down_osds;   // list of down disks
   set<int>         failed_osds; // list of failed disks
 
   Rush             *rush;       // rush implementation
@@ -81,6 +84,8 @@ class OSDCluster {
 
  public:
   OSDCluster() : version(0), rush(0) { }
+
+  __uint64_t get_version() { return version; }
 
   // cluster state
   bool is_failed(int osd) { return failed_osds.count(osd) ? true:false; }
@@ -110,9 +115,35 @@ class OSDCluster {
   }
 
   // serialize, unserialize
-  void _rope(crope& r);
-  void _unrope(crope& r, int& off);
+  //void _rope(crope& r);
+  //void _unrope(crope& r, int& off);
+  void encode(bufferlist& blist);
+  void decode(bufferlist& blist);
 
+
+  /****  ****/
+  int get_rg_primary(repgroup_t rg) {
+	int group[NUM_RUSH_REPLICAS];
+	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
+	  if (failed_osds.count(group[i])) continue;
+	  return i;
+	}
+	assert(0);
+	return -1;  // we fail!
+
+  }
+  int get_rg_acting_primary(repgroup_t rg) {
+	int group[NUM_RUSH_REPLICAS];
+	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
+	  if (down_osds.count(group[i])) continue;
+	  if (failed_osds.count(group[i])) continue;
+	  return i;
+	}
+	assert(0);
+	return -1;  // we fail!
+  }
 
 
   /****   mapping facilities   ****/
@@ -153,7 +184,6 @@ class OSDCluster {
   void file_to_extents(inodeno_t ino,
 					   size_t len,
 					   size_t offset,
-					   int num_reps,
 					   list<OSDExtent>& extents) {
 	size_t cur = offset;
 	size_t left = len;
@@ -163,8 +193,8 @@ class OSDCluster {
 	  // find oid, osds
 	  size_t blockno = cur / FILE_OBJECT_SIZE;
 	  ex.oid = file_to_object( ino, blockno );
-	  repgroup_t rg = file_to_repgroup(ino, blockno );
-	  repgroup_to_osds( rg, ex.osds, num_reps );
+	  ex.rg = file_to_repgroup(ino, blockno );
+	  ex.osd = get_rg_acting_primary( ex.rg );
 
 	  // map range into object
 	  ex.offset = cur % FILE_OBJECT_SIZE;

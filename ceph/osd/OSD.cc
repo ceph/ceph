@@ -3,6 +3,7 @@
 
 #include "OSD.h"
 #include "FakeStore.h"
+#include "OSDCluster.h"
 
 #include "mds/MDS.h"
 
@@ -13,10 +14,6 @@
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
-#include "messages/MOSDRead.h"
-#include "messages/MOSDReadReply.h"
-#include "messages/MOSDWrite.h"
-#include "messages/MOSDWriteReply.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
@@ -107,27 +104,18 @@ void OSD::dispatch(Message *m)
   
 	
 	// osd
-
   case MSG_SHUTDOWN:
 	shutdown();
 	break;
-
+	
   case MSG_PING:
 	// take note.
 	monitor->host_is_alive(m->get_source());
-
 	handle_ping((MPing*)m);
-	break;
-	
-  case MSG_OSD_READ:
-	handle_read((MOSDRead*)m);
-	break;
-
-  case MSG_OSD_WRITE:
-	handle_write((MOSDWrite*)m);
 	break;
 
   case MSG_OSD_OP:
+	monitor->host_is_alive(m->get_source());
 	handle_op((MOSDOp*)m);
 	break;
 
@@ -158,14 +146,52 @@ void OSD::handle_ping(MPing *m)
 
 void OSD::handle_op(MOSDOp *op)
 {
+  // check cluster version
+  if (op->get_ocv() > osdcluster->get_version()) {
+	// op's is newer
+	dout(7) << "op cluster " << op->get_ocv() << " > " << osdcluster->get_version() << endl;
+	
+	// query MDS
+	dout(7) << "querying MDS" << endl;
+	//messenger->send_message(new MGetOSDCluster(), MSG_ADDR_MDS(0), MDS_PORT_MAIN);
+	assert(0);
+	waiting_for_osdcluster.push_back(op);
+	return;
+  }
+
+  if (op->get_ocv() < osdcluster->get_version()) {
+	// op's is old
+	dout(7) << "op cluster " << op->get_ocv() << " > " << osdcluster->get_version() << endl;
+
+	// verify that we are primary, or acting primary
+	int acting_primary = osdcluster->get_rg_acting_primary( op->get_rg() );
+	if (acting_primary != whoami) {
+	  dout(7) << " acting primary is " << acting_primary << ", forwarding" << endl;
+	  messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
+	  return;
+	}
+  }
+
+  
+  // do the op
   switch (op->get_op()) {
+
+  case OSD_OP_READ:
+	op_read(op);
+	break;
+
+  case OSD_OP_WRITE:
+	op_write(op);
+	break;
+
   case OSD_OP_MKFS:
 	dout(3) << "MKFS" << endl;
 	{
 	  int r = store->mkfs();	
-	  messenger->send_message(new MOSDOpReply(op, r), 
-							  op->get_source(), op->get_source_port());
+	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
+							  op->get_asker());
 	}
+	delete op;
 	break;
 
   case OSD_OP_DELETE:
@@ -174,9 +200,10 @@ void OSD::handle_op(MOSDOp *op)
 	  dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
 	  
 	  // "ack"
-	  messenger->send_message(new MOSDOpReply(op, r), 
-							  op->get_source(), op->get_source_port());
+	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
+							  op->get_asker());
 	}
+	delete op;
 	break;
 
   case OSD_OP_STAT:
@@ -187,46 +214,50 @@ void OSD::handle_op(MOSDOp *op)
   
 	  dout(3) << "stat on " << op->get_oid() << " r = " << r << " size = " << st.st_size << endl;
 	  
-	  MOSDOpReply *reply = new MOSDOpReply(op, r);
-	  reply->set_size(st.st_size);
-	  messenger->send_message(reply,
-							  op->get_source(), op->get_source_port());
+	  MOSDOpReply *reply = new MOSDOpReply(op, r, osdcluster);
+	  reply->set_object_size(st.st_size);
+	  messenger->send_message(reply, op->get_asker());
 	}
+	delete op;
 	break;
 	
   default:
 	assert(0);
   }
-
-  delete op;
 }
 
 
 
 
-void OSD::handle_read(MOSDRead *r)
+void OSD::op_read(MOSDOp *r)
 {
   // read into a buffer
-  bufferptr bptr = new buffer(r->get_len());   // prealloc space for entire read
+  bufferptr bptr = new buffer(r->get_length());   // prealloc space for entire read
   long got = store->read(r->get_oid(), 
-						 r->get_len(), r->get_offset(),
+						 r->get_length(), r->get_offset(),
 						 bptr.c_str());
-  MOSDReadReply *reply = new MOSDReadReply(r, 0); 
+
+  // set up reply
+  MOSDOpReply *reply = new MOSDOpReply(r, 0, osdcluster); 
   if (got >= 0) {
-	bptr.set_length(got);     // properly size buffer
-	
+	bptr.set_length(got);   // properly size the buffer
+
 	// give it to the reply in a bufferlist
 	bufferlist bl;
 	bl.push_back( bptr );
+	
+	reply->set_result(0);
 	reply->set_data(bl);
+	reply->set_length(got);
   } else {
 	reply->set_result(got);   // error
+	reply->set_length(0);
   }
   
-  dout(10) << "read got " << got << " / " << r->get_len() << " bytes from " << r->get_oid() << endl;
+  dout(10) << "read got " << got << " / " << r->get_length() << " bytes from " << r->get_oid() << endl;
   
   // send it
-  messenger->send_message(reply, r->get_source(), r->get_source_port());
+  messenger->send_message(reply, r->get_asker());
 
   delete r;
 }
@@ -234,7 +265,7 @@ void OSD::handle_read(MOSDRead *r)
 
 // -- osd_write
 
-void OSD::handle_write(MOSDWrite *m)
+void OSD::op_write(MOSDOp *m)
 {
   // take buffers from the message
   bufferlist bl;
@@ -259,8 +290,8 @@ void OSD::handle_write(MOSDWrite *m)
   // assume success.  FIXME.
 
   // reply
-  MOSDWriteReply *reply = new MOSDWriteReply(m, 0);
-  messenger->send_message(reply, m->get_source(), m->get_source_port());
+  MOSDOpReply *reply = new MOSDOpReply(m, 0, osdcluster);
+  messenger->send_message(reply, m->get_asker());
 
   delete m;
 }

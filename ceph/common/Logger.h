@@ -2,7 +2,7 @@
 #define __LOGGER_H
 
 #include "include/types.h"
-
+#include "Clock.h"
 #include <string>
 #include <fstream>
 using namespace std;
@@ -17,7 +17,7 @@ class Logger {
 
   LogType *type;
 
-  double start;
+  timepair_t start;
   double last_logged;
   double interval;
   int wrote_header;

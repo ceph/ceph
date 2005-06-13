@@ -256,14 +256,8 @@ void MDS::proc_message(Message *m)
 {
   switch (m->get_type()) {
 	// OSD ===============
-  case MSG_OSD_READREPLY:
-	filer->handle_osd_read_reply((MOSDReadReply*)m);
-	return;
-  case MSG_OSD_WRITEREPLY:
-	filer->handle_osd_write_reply((MOSDWriteReply*)m);
-	return;
   case MSG_OSD_OPREPLY:
-	filer->handle_osd_op_reply((MOSDOpReply*)m);
+	filer->handle_osd_op_reply((class MOSDOpReply*)m);
 	return;
 
 	// MDS

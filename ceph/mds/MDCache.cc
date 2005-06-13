@@ -520,11 +520,22 @@ bool MDCache::trim(__int32_t max) {
   return true;
 }
 
+class C_MDC_ShutdownCommit : public Context {
+  MDCache *mdc;
+public:
+  C_MDC_ShutdownCommit(MDCache *mdc) {
+	this->mdc = mdc;
+  }
+  void finish(int r) {
+	mdc->shutdown_commits--;
+  }
+};
 
 void MDCache::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
 
+  shutdown_commits = 0;
   if (g_conf.mds_commit_on_shutdown) {
 	dout(1) << "shutdown_start committing all dirty dirs" << endl;
 
@@ -534,9 +545,10 @@ void MDCache::shutdown_start()
 	  CInode *in = it->second;
 	  
 	  // commit any dirty dir that's ours
-	  if (in->is_dir() && in->dir && in->dir->is_auth() && in->dir->is_dirty())
-		mds->mdstore->commit_dir(in->dir, NULL);
-	  
+	  if (in->is_dir() && in->dir && in->dir->is_auth() && in->dir->is_dirty()) {
+		mds->mdstore->commit_dir(in->dir, new C_MDC_ShutdownCommit(this));
+		shutdown_commits++;
+	  }
 	}
   }
 
@@ -555,7 +567,13 @@ bool MDCache::shutdown_pass()
 	return true;
   }
 
-
+  // commits?
+  if (g_conf.mds_commit_on_shutdown &&
+	  shutdown_commits > 0) {
+	dout(7) << "shutdown_commits = " << shutdown_commits << endl;
+	return false;
+  }
+  
   // flush log?
   if (g_conf.mds_log_flush_on_shutdown) {
 	// (wait for) flush log

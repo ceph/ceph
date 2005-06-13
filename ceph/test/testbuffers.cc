@@ -8,12 +8,12 @@ using namespace std;
 int main()
 {
 
-  bufferptr p1 = new buffer("hello",6);
+  bufferptr p1 = new buffer("123456",6);
   bufferptr p2 = p1;
 
   cout << "it is '" << p1.c_str() << "'" << endl;
 
-  bufferptr p3 = new buffer("there",6);
+  bufferptr p3 = new buffer("abcdef",6);
   
   cout << "p3 is " << p3 << endl;
 
@@ -26,10 +26,11 @@ int main()
 
   cout << "len is " << bl.length() << endl;
 
-  bl.splice(3,6);
+  bufferlist took;
+  bl.splice(10,4,&took);
 
-  cout << "bl is now " << bl << endl;
-  cout << "len is " << bl.length() << endl;
+  cout << "took out " << took << "leftover is " << bl << endl;
+  //cout << "len is " << bl.length() << endl;
 
   bufferlist bl2;
   bl2.substr_of(bl, 3, 5);

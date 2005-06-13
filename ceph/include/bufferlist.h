@@ -4,6 +4,7 @@
 #include "buffer.h"
 
 #include <list>
+#include <set>
 using namespace std;
 
 #include <ext/rope>
@@ -120,6 +121,13 @@ class bufferlist {
 	// just add another buffer
 	push_back(new buffer(data, len));  
   }
+  void append(bufferptr& bp) {
+	push_back(bp);
+  }
+  void append(bufferptr& bp, int len, int off) {
+	bufferptr tempbp(bp, len, off);
+	push_back(tempbp);
+  }
   
   
   /*
@@ -191,7 +199,7 @@ class bufferlist {
   }
 
   // funky modifer
-  void splice(int off, int len /*, bufferlist *replace */) {    // fixme?
+  void splice(int off, int len, bufferlist *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
 	// skip off
 	list<bufferptr>::iterator curbuf = _buffers.begin();
 	while (off > 0) {
@@ -211,23 +219,27 @@ class bufferlist {
 	if (off) {
 	  // add a reference to the front bit
 	  //  insert it before curbuf (which we'll hose)
-	  //cout << "keeping front " << off << " of " << *curbuf << endl;
+	  cout << "keeping front " << off << " of " << *curbuf << endl;
 	  _buffers.insert( curbuf, bufferptr( *curbuf, off, 0 ) );
 	}
 
 	while (len > 0) {
 	  // partial?
 	  if (off + len < (*curbuf).length()) {
-		//cout << "keeping end of " << *curbuf << endl;
+		cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
+		if (claim_by) 
+		  claim_by->append( *curbuf, len, off );
 		(*curbuf).set_offset( off + len );    // ignore beginning big
-		(*curbuf).set_length( len );
-		//cout << " now " << *curbuf << endl;
+		(*curbuf).set_length( (*curbuf).length() - len - off );
+		cout << " now " << *curbuf << endl;
 		break;
 	  }
 
 	  // hose the whole thing
-	  //cout << "discarding all of " << *curbuf << endl;
 	  int howmuch = (*curbuf).length() - off;
+	  cout << "discarding " << howmuch << " of " << *curbuf << endl;
+	  if (claim_by) 
+		claim_by->append( *curbuf, howmuch, off );
 	  _buffers.erase( curbuf++ );
 	  len -= howmuch;
 	  off = 0;
@@ -249,6 +261,40 @@ inline ostream& operator<<(ostream& out, bufferlist& bl) {
   out << ")" << endl;
   return out;
 }
+
+
+
+// encoder/decode helpers
+
+// set<int>
+inline void _encode(set<int>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (set<int>::iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	int v = *it;
+	bl.append((char*)&v, sizeof(v));
+	n--;
+  }
+  assert(n==0);
+}
+inline void _decode(set<int>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+	int v;
+	bl.copy(off, sizeof(v), (char*)&v);
+	off += sizeof(v);
+	s.insert(v);
+  }
+  assert(s.size() == n);
+}
+
 
 
 

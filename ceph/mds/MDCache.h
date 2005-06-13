@@ -117,6 +117,8 @@ class MDCache {
  public:
   // active MDS requests
   map<Message*, active_request_t>   active_requests;
+
+  int shutdown_commits;
   
 
   friend class MDBalancer;
