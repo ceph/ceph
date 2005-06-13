@@ -10,7 +10,7 @@
 #include "include/config.h"
 
 
-Logger::Logger(string& fn, LogType *type)
+Logger::Logger(string fn, LogType *type)
 {
   filename = "log/";
   if (g_conf.log_name) {

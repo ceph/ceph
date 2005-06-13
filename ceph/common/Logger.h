@@ -28,7 +28,7 @@ class Logger {
   bool open;
 
  public:
-  Logger(string& fn, LogType *type);
+  Logger(string fn, LogType *type);
   ~Logger();
 
   long inc(char *s, long v = 1);

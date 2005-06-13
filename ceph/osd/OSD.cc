@@ -19,6 +19,8 @@
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDGetClusterAck.h"
 
+#include "common/Logger.h"
+#include "common/LogType.h"
 
 #include <iostream>
 #include <cassert>
@@ -35,6 +37,8 @@ char *osd_base_path = "./osddata";
 
 
 // cons/des
+
+LogType osd_logtype;
 
 OSD::OSD(int id, Messenger *m) 
 {
@@ -63,11 +67,20 @@ OSD::OSD(int id, Messenger *m)
   monitor->get_hosts().insert(MSG_ADDR_OSD(i));
   
   monitor->get_notify().insert(MSG_ADDR_MDS(0));
+
+
+
+  // log
+  char name[80];
+  sprintf(name, "osd%02d", whoami);
+  logger = new Logger(name, (LogType*)&osd_logtype);
+
 }
 
 OSD::~OSD()
 {
   if (messenger) { delete messenger; messenger = 0; }
+  if (logger) { delete logger; logger = 0; }
 }
 
 int OSD::init()
@@ -204,6 +217,7 @@ void OSD::handle_op(MOSDOp *op)
 	if (acting_primary != whoami) {
 	  dout(7) << " acting primary is " << acting_primary << ", forwarding" << endl;
 	  messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
+	  logger->inc("fwd");
 	  return;
 	}
   }
@@ -238,6 +252,8 @@ void OSD::handle_op(MOSDOp *op)
 	  // "ack"
 	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
 							  op->get_asker());
+
+	  logger->inc("rm");
 	}
 	delete op;
 	break;
@@ -250,6 +266,7 @@ void OSD::handle_op(MOSDOp *op)
 	  // "ack"
 	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
 							  op->get_asker());
+	  logger->inc("trunc");
 	}
 	delete op;
 	break;
@@ -265,6 +282,8 @@ void OSD::handle_op(MOSDOp *op)
 	  MOSDOpReply *reply = new MOSDOpReply(op, r, osdcluster);
 	  reply->set_object_size(st.st_size);
 	  messenger->send_message(reply, op->get_asker());
+	  
+	  logger->inc("stat");
 	}
 	delete op;
 	break;
@@ -303,6 +322,9 @@ void OSD::op_read(MOSDOp *r)
   }
   
   dout(10) << "read got " << got << " / " << r->get_length() << " bytes from " << r->get_oid() << endl;
+
+  logger->inc("rd");
+  if (got >= 0) logger->inc("rdb", got);
   
   // send it
   messenger->send_message(reply, r->get_asker());
@@ -343,6 +365,10 @@ void OSD::op_write(MOSDOp *m)
 	dout(7) << "truncating object after tail of write at " << at << ", r = " << r << endl;
   }
   */
+
+  logger->inc("wr");
+  logger->inc("wrb", m->get_length());
+
   
   // assume success.  FIXME.
 

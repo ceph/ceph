@@ -121,30 +121,6 @@ class OSDCluster {
   void decode(bufferlist& blist);
 
 
-  /****  ****/
-  int get_rg_primary(repgroup_t rg) {
-	int group[NUM_RUSH_REPLICAS];
-	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
-	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
-	  if (failed_osds.count(group[i])) continue;
-	  return i;
-	}
-	assert(0);
-	return -1;  // we fail!
-
-  }
-  int get_rg_acting_primary(repgroup_t rg) {
-	int group[NUM_RUSH_REPLICAS];
-	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
-	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
-	  if (down_osds.count(group[i])) continue;
-	  if (failed_osds.count(group[i])) continue;
-	  return i;
-	}
-	assert(0);
-	return -1;  // we fail!
-  }
-
 
   /****   mapping facilities   ****/
 
@@ -179,6 +155,33 @@ class OSDCluster {
   }
 
   
+  /****  ****/
+
+  /* map rg to the primary osd */
+  int get_rg_primary(repgroup_t rg) {
+	int group[NUM_RUSH_REPLICAS];
+	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
+	  if (failed_osds.count(group[i])) continue;
+	  return group[i];
+	}
+	assert(0);
+	return -1;  // we fail!
+
+  }
+  /* map rg to the _acting_ primary osd (primary may be down) */
+  int get_rg_acting_primary(repgroup_t rg) {
+	int group[NUM_RUSH_REPLICAS];
+	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
+	  if (down_osds.count(group[i])) continue;
+	  if (failed_osds.count(group[i])) continue;
+	  return group[i];
+	}
+	assert(0);
+	return -1;  // we fail!
+  }
+
   /* map (ino, offset, len) to a (list of) OSDExtents 
 	 (byte ranges in objects on osds) */
   void file_to_extents(inodeno_t ino,

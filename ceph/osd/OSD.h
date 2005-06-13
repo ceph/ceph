@@ -42,6 +42,7 @@ class OSD : public Dispatcher {
   class OSDCluster  *osdcluster;
   class ObjectStore *store;
   class HostMonitor *monitor;
+  class Logger      *logger;
 
   list<class MOSDOp*> waiting_for_osdcluster;
 
