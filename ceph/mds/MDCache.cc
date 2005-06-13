@@ -98,9 +98,9 @@ bool MDCache::shutdown()
 {
   if (lru.lru_get_size() > 0) {
 	dout(7) << "WARNING: mdcache shutodwn with non-empty cache" << endl;
-	show_cache();
+	//show_cache();
 	show_imports();
-	dump();
+	//dump();
   }
 }
 
@@ -570,7 +570,7 @@ bool MDCache::shutdown_pass()
   // commits?
   if (g_conf.mds_commit_on_shutdown &&
 	  shutdown_commits > 0) {
-	dout(7) << "shutdown_commits = " << shutdown_commits << endl;
+	dout(7) << "shutdown_commits still waiting for " << shutdown_commits << endl;
 	return false;
   }
   
@@ -586,6 +586,7 @@ bool MDCache::shutdown_pass()
 	dout(7) << "log is empty.  flushing cache" << endl;
 	trim(0);
   }
+
   dout(5) << "cache size now " << lru.lru_get_size() << endl;
   
   // send all imports back to 0.
@@ -603,48 +604,57 @@ bool MDCache::shutdown_pass()
 	}
   } 
 
-  // shut down root?
-  if (lru.lru_get_size() == 1) {
-	if (root && 
-		root->dir && 
-		root->dir->is_import() &&
-		root->dir->get_ref() == 1) {  // 1 is the import!
-	  // un-import
-	  dout(7) << "removing root import" << endl;
-	  imports.erase(root->dir);
-	  root->dir->state_clear(CDIR_STATE_IMPORT);
-	  root->dir->put(CDIR_PIN_IMPORT);
-	  trim(0);
+  // filer active?
+  if (mds->filer->is_active()) {
+	dout(7) << "filer still active" << endl;
+	return false;
+  }
+  
+  if (g_conf.mds_log_flush_on_shutdown ||
+	  g_conf.mds_commit_on_shutdown) {
+  
+	// shut down root?
+	if (lru.lru_get_size() == 1) {
+	  if (root && 
+		  root->dir && 
+		  root->dir->is_import() &&
+		  root->dir->get_ref() == 1) {  // 1 is the import!
+		// un-import
+		dout(7) << "removing root import" << endl;
+		imports.erase(root->dir);
+		root->dir->state_clear(CDIR_STATE_IMPORT);
+		root->dir->put(CDIR_PIN_IMPORT);
+		trim(0);
+	  }
+	  
+	  if (root && root->is_pinned_by(CINODE_PIN_DIRTY)) {
+		dout(7) << "clearing root dirty flag" << endl;
+		root->put(CINODE_PIN_DIRTY);
+		trim(0);
+	  }
 	}
+	
+	// sanity
+	assert(inode_map.size() == lru.lru_get_size());
 
-	if (root && root->is_pinned_by(CINODE_PIN_DIRTY)) {
-	  dout(7) << "clearing root dirty flag" << endl;
-	  root->put(CINODE_PIN_DIRTY);
-	  trim(0);
+	// done?
+	if (lru.lru_get_size() > 0) {
+	  dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << endl;
+	  //show_cache();
+	  //dump();
+	  return false;
 	}
   }
 	
-  // sanity
-  assert(inode_map.size() == lru.lru_get_size());
-
-  // done?
-  if ((lru.lru_get_size() == 0 || 
-	   (g_conf.mds_commit_on_shutdown == false && g_conf.mds_log_flush_on_shutdown == false)) && 
-	  !mds->filer->is_active()) {
-	if (mds->get_nodeid() != 0) {
-	  dout(7) << "done, sending shutdown_finish" << endl;
-	  mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),
-								   MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
-	} else {
-	  mds->handle_shutdown_finish(NULL);
-	}
-	return true;
+  // done!
+  if (mds->get_nodeid() != 0) {
+	dout(7) << "done, sending shutdown_finish" << endl;
+	mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),
+								 MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
   } else {
-	dout(7) << "filer active, or there's still stuff in the cache: " << lru.lru_get_size() << endl;
-	//show_cache();
-	//dump();
+	mds->handle_shutdown_finish(NULL);
   }
-  return false;
+  return true;
 }
 
 

@@ -29,7 +29,10 @@ class Context;
 class Messenger;
 class OSDCluster;
 
+/*** types ***/
 typedef __uint64_t tid_t;
+
+#define FILER_FLAG_TRUNCATE_AFTER_WRITE  1
 
 
 /*** track pending operations ***/

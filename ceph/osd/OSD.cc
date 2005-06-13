@@ -242,6 +242,18 @@ void OSD::handle_op(MOSDOp *op)
 	delete op;
 	break;
 
+  case OSD_OP_TRUNCATE:
+	{
+	  int r = store->truncate(op->get_oid(), op->get_offset());
+	  dout(3) << "truncate on " << op->get_oid() << " at " << op->get_offset() << " r = " << r << endl;
+	  
+	  // "ack"
+	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
+							  op->get_asker());
+	}
+	delete op;
+	break;
+
   case OSD_OP_STAT:
 	{
 	  struct stat st;
@@ -322,6 +334,15 @@ void OSD::op_write(MOSDOp *m)
 	  assert(r >= 0);
 	}
   }
+
+  // trucnate after?
+  /*
+  if (m->get_flags() & OSD_OP_FLAG_TRUNCATE) {
+	size_t at = m->get_offset() + m->get_length();
+	int r = store->truncate(m->get_oid(), at);
+	dout(7) << "truncating object after tail of write at " << at << ", r = " << r << endl;
+  }
+  */
   
   // assume success.  FIXME.
 

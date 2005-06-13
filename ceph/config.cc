@@ -46,11 +46,11 @@ md_config_t g_conf = {
   mds_bal_interval: 200,
 
   mds_commit_on_shutdown: true,
+
   mds_verify_export_dirauth: true,
 
 
   // --- osd ---
-
   osd_fsync: true,
 
 

@@ -11,12 +11,15 @@
  *
  */
 
-#define OSD_OP_STAT       1
-#define OSD_OP_DELETE     2
-#define OSD_OP_ZERORANGE  3
-#define OSD_OP_MKFS       10
-#define OSD_OP_READ       20
-#define OSD_OP_WRITE      21
+#define OSD_OP_READ       1
+#define OSD_OP_WRITE      2
+#define OSD_OP_STAT       10
+#define OSD_OP_DELETE     11
+#define OSD_OP_TRUNCATE   12
+#define OSD_OP_ZERORANGE  13
+#define OSD_OP_MKFS       20
+
+#define OSD_OP_FLAG_TRUNCATE  1   // truncate object after end of write
 
 typedef struct {
   long tid;

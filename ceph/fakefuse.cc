@@ -41,8 +41,13 @@ public:
 
 
 
-int main(int argc, char **argv) {
+int main(int oargc, char **oargv) {
   cerr << "fakefuse starting" << endl;
+
+  int argc;
+  char **argv;
+  parse_config_options(oargc, oargv,
+					   argc, argv);
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
