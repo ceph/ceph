@@ -13,7 +13,12 @@
 Logger::Logger(string& fn, LogType *type)
 {
   filename = "log/";
+  if (g_conf.log_name) {
+	filename += g_conf.log_name;
+	filename += "/";
+  }
   filename += fn;
+  cout << "log " << filename << endl;
   interval = g_conf.log_interval;
   start = g_clock.gettimepair();  // time 0!
   last_logged = 0;
@@ -96,8 +101,7 @@ void Logger::flush(bool force)
 	}
 
 	// write line to log
-	//out << (long)(last_logged - start);
-	out << fromstart;
+	out << last_logged;
 	for (vector<string>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
 	  out << "\t" << get(*it);
 	}

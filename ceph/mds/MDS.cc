@@ -871,7 +871,6 @@ void MDS::handle_client_stat(MClientRequest *req,
 
   mdcache->inode_soft_read_finish(ref);
 
-  logger->inc("ostat");
   timepair_t now = g_clock.gettimepair();
   stat_read.hit(now);
   stat_req.hit(now);
@@ -1067,7 +1066,6 @@ void MDS::handle_client_readdir(MClientRequest *req,
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(0);
   
-  logger->inc("ordir");
   timepair_t now = g_clock.gettimepair();
   stat_read.hit(now);
   stat_req.hit(now);

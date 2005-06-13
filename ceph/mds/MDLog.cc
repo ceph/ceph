@@ -30,12 +30,13 @@ MDLog::MDLog(MDS *m)
 						 100 + mds->get_nodeid());
 
   string name;
-  name = "log.mds";
+  name = "mds";
   int w = mds->get_nodeid();
   if (w >= 1000) name += ('0' + ((w/1000)%10));
   if (w >= 100) name += ('0' + ((w/100)%10));
   if (w >= 10) name += ('0' + ((w/10)%10));
   name += ('0' + ((w/1)%10));
+  name += ".log";
   logger = new Logger(name, (LogType*)&mdlog_logtype);
 }
 
@@ -83,6 +84,7 @@ int MDLog::submit_entry_2( LogEvent *e,
   // written!
   num_events++;
   delete e;
+  logger->set("len", num_events);
 
   if (c) {
 	c->finish(0);

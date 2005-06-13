@@ -1372,6 +1372,8 @@ bool MDCache::request_start(Message *req,
   // request pins
   request_pin_inode(req, ref);
   
+  mds->logger->inc("req");
+
   return true;
 }
 
@@ -1471,6 +1473,8 @@ void MDCache::request_finish(Message *req)
   request_cleanup(req);
   delete req;  // delete req
   
+  mds->logger->inc("rep");
+
   //dump();
 }
 
@@ -1484,6 +1488,8 @@ void MDCache::request_forward(Message *req, int who, int port)
   mds->messenger->send_message(req,
 							   MSG_ADDR_MDS(who), port,
 							   port);
+
+  mds->logger->inc("fw");
 }
 
 

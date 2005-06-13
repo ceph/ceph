@@ -19,6 +19,7 @@ md_config_t g_conf = {
   // profiling and debugging
   log_messages: true,
   log_interval: 10.0,
+  log_name: 0,
 
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -112,6 +113,8 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--debug") == 0) 
 	  g_conf.debug = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--log") == 0) 
+	  g_conf.log_name = argv[++i];
 
 	else if (strcmp(argv[i], "--mds_cache_size") == 0) 
 	  g_conf.mds_cache_size = atoi(argv[++i]);

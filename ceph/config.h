@@ -10,13 +10,14 @@ struct md_config_t {
   // profiling
   bool log_messages;
   float log_interval;
+  char *log_name;
 
   bool fake_clock;
   bool fakemessenger_serialize;
 
   int  debug;
-
  
+
   // client
   int      client_cache_size;
   float    client_cache_mid;
