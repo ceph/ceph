@@ -28,6 +28,7 @@ struct md_config_t {
   int   mds_cache_size;
   float mds_cache_mid;
 
+  bool mds_log;
   int mds_log_max_len;
   int mds_log_max_trimming;
   int mds_log_read_inc;

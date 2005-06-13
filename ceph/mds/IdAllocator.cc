@@ -24,7 +24,7 @@ idno_t IdAllocator::get_id(int type)
   free[type].erase(id);
   dout(DBLEVEL) << "idalloc " << this << ": getid type " << type << " is " << id << endl;
   //free[type].dump();
-  save();
+  //save();
   return id;
 }
 
@@ -35,7 +35,7 @@ void IdAllocator::reclaim_id(int type, idno_t id)
   dout(DBLEVEL) << "idalloc " << this << ": reclaim type " << type << " id " << id << endl;
   free[type].insert(id);
   //free[type].dump();
-  save();
+  //save();
 }
 
 
@@ -92,8 +92,8 @@ void IdAllocator::reset()
   free.clear();
 
   // use generic range FIXME THIS IS CRAP
-  free[ID_INO].map_insert((long long)1000000LL * (mds->get_nodeid()+1),
-						  (long long)1000000LL * (mds->get_nodeid()+2) - 1);
+  free[ID_INO].map_insert((long long)100000000LL * (mds->get_nodeid()+1),
+						  (long long)100000000LL * (mds->get_nodeid()+2) - 1);
   //free[ID_INO].dump();
   
   free[ID_FH].map_insert(1000000LL * (mds->get_nodeid()+1),

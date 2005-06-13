@@ -69,6 +69,14 @@ public:
 int MDLog::submit_entry( LogEvent *e,
 						 Context *c ) 
 {
+  if (!g_conf.mds_log) {
+	if (c) {
+	  c->finish(0);
+	  delete c;
+	}
+	return 0;
+  }
+
   dout(5) << "submit_entry" << endl;
 
   // write it

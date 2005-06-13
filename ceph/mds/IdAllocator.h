@@ -38,6 +38,10 @@ class IdAllocator {
 
   void reset();
 
+  void shutdown() {
+	if (is_open()) save();
+  }
+
   void save();
   void load(Context *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);

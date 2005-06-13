@@ -19,7 +19,7 @@ md_config_t g_conf = {
   // profiling and debugging
   log_messages: true,
   log_interval: 1,
-  log_name: 0,
+  log_name: (char*)0,
 
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -36,6 +36,7 @@ md_config_t g_conf = {
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
+  mds_log: true,
   mds_log_max_len:  10000,//MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 16,
   mds_log_read_inc: 65536,
@@ -118,6 +119,11 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--mds_cache_size") == 0) 
 	  g_conf.mds_cache_size = atoi(argv[++i]);
+
+	else if (strcmp(argv[i], "--mds_log") == 0) 
+	  g_conf.mds_log = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_log_before_reply") == 0) 
+	  g_conf.mds_log_before_reply = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_len") == 0) 
 	  g_conf.mds_log_max_len = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) 
@@ -128,8 +134,7 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.mds_log_flush_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_log_before_reply") == 0) 
-	  g_conf.mds_log_before_reply = atoi(argv[++i]);
+
 
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 

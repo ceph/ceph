@@ -159,6 +159,8 @@ int MDS::shutdown_start()
 							MDS_PORT_MAIN);
   }
 
+  if (idalloc) idalloc->shutdown();
+  
   handle_shutdown_start(NULL);
 }
 
