@@ -241,7 +241,7 @@ class Client : public Dispatcher {
 
 
   // blocking mds call
-  MClientReply *make_request(MClientRequest *req, int mds);
+  MClientReply *make_request(MClientRequest *req);
 
   
   // buffer cache

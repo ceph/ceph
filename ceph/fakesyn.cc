@@ -46,7 +46,9 @@ int main(int oargc, char **oargv) {
   char **nargv = new pchar[argc];
   nargv[nargc++] = argv[0];
 
-  int synthetic = 100;
+  string syn_sarg1;
+  int syn_mode = SYNCLIENT_MODE_WRITEFILE;
+  int syn_iarg1, syn_iarg2, syn_iarg3;
   int mkfs = 0;
   for (int i=1; i<argc; i++) {
 	if (strcmp(argv[i], "--fastmkfs") == 0) {
@@ -55,9 +57,31 @@ int main(int oargc, char **oargv) {
 	else if (strcmp(argv[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
 	}
-	else if (strcmp(argv[i],"--synthetic") == 0) {
-	  synthetic = atoi(argv[++i]);
+
+	else if (strcmp(argv[i],"--synsarg1") == 0) 
+	  syn_sarg1 = argv[++i];
+	else if (strcmp(argv[i],"--syniarg1") == 0) 
+	  syn_iarg1 = atoi(argv[++i]);
+	else if (strcmp(argv[i],"--syniarg2") == 0) 
+	  syn_iarg2 = atoi(argv[++i]);
+	else if (strcmp(argv[i],"--syniarg3") == 0) 
+	  syn_iarg3 = atoi(argv[++i]);
+	else if (strcmp(argv[i],"--synmode") == 0) {
+	  ++i;
+	  if (strcmp(argv[i],"writefile") == 0) 
+		syn_mode = SYNCLIENT_MODE_WRITEFILE;
+	  else if (strcmp(argv[i],"makedirs") == 0) 
+		syn_mode = SYNCLIENT_MODE_MAKEDIRS;
+	  else if (strcmp(argv[i],"fullwalk") == 0) 
+		syn_mode = SYNCLIENT_MODE_FULLWALK;
+	  else if (strcmp(argv[i],"randomwalk") == 0) 
+		syn_mode = SYNCLIENT_MODE_RANDOMWALK;
+	  else {
+		cerr << "unknown syn mode " << argv[i] << endl;
+		return -1;
+	  }
 	}
+
 	else {
 	  // unknown arg, pass it on.
 	  nargv[nargc++] = argv[i];
@@ -123,14 +147,15 @@ int main(int oargc, char **oargv) {
 	cout << "starting synthatic client  " << endl;
 	syn[i] = new SyntheticClient(client[i]);
 
-	syn[i]->mode = SYNCLIENT_MODE_MAKEDIRS;
 	char s[20];
 	sprintf(s,"syn.%d", i);
 	syn[i]->sarg1 = s;
-	syn[i]->iarg1 = 5;
-	syn[i]->iarg2 = 5;
-	syn[i]->iarg3 = 2;
-	  
+	
+	syn[i]->mode = syn_mode;
+	syn[i]->iarg1 = syn_iarg1;
+	syn[i]->iarg2 = syn_iarg2;
+	syn[i]->iarg3 = syn_iarg3;
+
 	syn[i]->start_thread();
   }
   for (int i=0; i<NUMCLIENT; i++) {

@@ -18,7 +18,7 @@ md_config_t g_conf = {
 
   // profiling and debugging
   log_messages: true,
-  log_interval: 10,
+  log_interval: 1,
   log_name: 0,
 
   fake_clock: false,

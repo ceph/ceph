@@ -202,8 +202,37 @@ Dentry *Client::lookup(filepath& path)
 
 // -------
 
-MClientReply *Client::make_request(MClientRequest *req, int mds)
+MClientReply *Client::make_request(MClientRequest *req)
 {
+  // send to what MDS?  find deepest known prefix
+  int mds = 0;
+  Inode *cur = root;
+  for (int i=0; i<req->get_filepath().depth(); i++) {
+	if (cur && cur->inode.mode & INODE_MODE_DIR && cur->dir) {
+	  Dir *dir = cur->dir;
+	  Dentry *dn;
+	  if (dir->dentries.count( req->get_filepath()[i] ) == 0) 
+		break;
+	  
+	  dout(7) << " have path seg " << i << " " << cur->inode.ino << " " << req->get_filepath()[i] << endl;
+	  cur = dir->dentries[ req->get_filepath()[i] ]->inode;
+	  assert(cur);
+	} else
+	  break;
+  }
+  
+  if (cur && cur->mds_contacts.size()) {
+	dout(7) << "contacting mds from deepest inode " << cur->inode.ino << " : " << cur->mds_contacts << endl;
+	set<int>::iterator it = cur->mds_contacts.begin();
+	if (cur->mds_contacts.size() == 1)
+	  mds = *it;
+	else {
+	  int r = rand() % cur->mds_contacts.size();
+	  while (r--) it++;
+	  mds = *it;
+	}
+  }
+
   // drop mutex for duration of call
   client_lock.Unlock();  
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
@@ -409,7 +438,7 @@ int Client::link(const char *existing, const char *newname)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   
   this->insert_trace(reply->get_trace());
@@ -436,7 +465,7 @@ int Client::unlink(const char *path)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
 	//this crashes, haven't looked at why yet
@@ -467,7 +496,7 @@ int Client::rename(const char *from, const char *to)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());
   delete reply;
@@ -495,7 +524,7 @@ int Client::mkdir(const char *path, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());
   delete reply;
@@ -520,7 +549,7 @@ int Client::rmdir(const char *path)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
 	// crashes, not sure why yet
@@ -552,7 +581,7 @@ int Client::symlink(const char *target, const char *link)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  //FIXME assuming trace of link, not of target
   delete reply;
@@ -613,7 +642,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	req->set_caller_uid(getuid());
 	req->set_caller_gid(getgid());
 	
-	MClientReply *reply = make_request(req, 0);
+	MClientReply *reply = make_request(req);
 	res = reply->get_result();
 	dout(10) << "lstat res is " << res << endl;
 	if (res == 0) {
@@ -667,7 +696,7 @@ int Client::chmod(const char *path, mode_t mode)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
   delete reply;
@@ -694,7 +723,7 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
 
   //FIXME enforce caller uid rights?
 
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
   delete reply;
@@ -721,7 +750,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
   delete reply;
@@ -749,7 +778,7 @@ int Client::mknod(const char *path, mode_t mode)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   this->insert_trace(reply->get_trace());  
 
@@ -786,7 +815,7 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 
   //FIXME enforce caller uid rights?
    
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
   vector<c_inode_info*> trace = reply->get_trace();
   this->insert_trace(trace);  
@@ -842,7 +871,7 @@ int Client::open(const char *path, int mode)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   assert(reply);
   dout(3) << "open result = " << reply->get_result() << endl;
 
@@ -897,7 +926,7 @@ int Client::close(fileh_t fh)
 
   release_inode_buffers(in);
 
-  MClientReply *reply = make_request(req, 0);
+  MClientReply *reply = make_request(req);
   assert(reply);
   int result = reply->get_result();
   dout(3) << "close " << fh << " result = " << result << endl;

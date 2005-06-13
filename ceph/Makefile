@@ -9,7 +9,7 @@
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
 MPICC = mpicxx
-CFLAGS = -g -I. -pg -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread 
 
 MDS_OBJS= \
@@ -81,10 +81,10 @@ mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o msg/CheesySerializer.o ${COMMON_OBJS}
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
-	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}

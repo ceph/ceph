@@ -3,7 +3,7 @@
 - test mds scaling w/ makedirs, vs mds_log_on_request 
 - client needs to choose MDS intelligently
 
-- finish osd replication MOSDOp groundwork
+- fix up MDLog
 
 big fast todo's:
 - client buffer cache
@@ -11,7 +11,6 @@ big fast todo's:
 - heartbeat protocol
 
 - mds benchmarks
- - synthetic client stable,
  - pseudo-mega-filesystem
    - osd copy-on-write..
 
