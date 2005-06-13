@@ -17,13 +17,12 @@ class bufferlist {
  public:
   // cons/des
   ~bufferlist() {
-	clear();
   }
 
   // sort-of-like-assignment-op
   void claim(bufferlist& bl) {
 	// free my buffers
-	clear();                    
+	_buffers.clear();                    
 	claim_append(bl);
   }
   void claim_append(bufferlist& bl) {
@@ -162,7 +161,7 @@ class bufferlist {
 
 
   void substr_of(bufferlist& other, int off, int len) {
-	clear();
+	_buffers.clear();
 
 	// skip off
 	list<bufferptr>::iterator curbuf = other._buffers.begin();

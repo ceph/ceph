@@ -159,7 +159,7 @@ class bufferptr {
   }
 
   ~bufferptr() {
-	if (_buffer->_put() == 0) 
+	if (_buffer && _buffer->_put() == 0) 
 	  delete _buffer;
   }
 
