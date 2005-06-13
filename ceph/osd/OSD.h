@@ -34,7 +34,6 @@ class ReplicaGroup {
   void enumerate_objects(list<object_t>& ls);
 };
 
-
 class OSD : public Dispatcher {
  protected:
   Messenger *messenger;
@@ -63,6 +62,7 @@ class OSD : public Dispatcher {
   virtual void dispatch(Message *m);
 
   void handle_ping(class MPing *m);
+  void handle_getcluster_ack(class MOSDGetClusterAck *m);
   void handle_op(class MOSDOp *m);
   void op_read(class MOSDOp *m);
   void op_write(class MOSDOp *m);

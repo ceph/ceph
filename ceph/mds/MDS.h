@@ -182,6 +182,9 @@ class MDS : public Dispatcher {
   void handle_shutdown_start(Message *m);
   void handle_shutdown_finish(Message *m);
 
+  // osds
+  void handle_osd_getcluster(Message *m);
+
   // clients
   void handle_client_mount(class MClientMount *m);
   void handle_client_unmount(Message *m);

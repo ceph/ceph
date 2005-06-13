@@ -25,7 +25,7 @@ class MClientMountAck : public Message {
   char *get_type_name() { return "CmntA"; }
 
   virtual void decode_payload() {  
-	int off;
+	int off = 0;
 	payload.copy(off, sizeof(pcid), (char*)&pcid);
 	off += sizeof(pcid);
 	if (off < payload.length())

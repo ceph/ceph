@@ -30,6 +30,9 @@ Filer::Filer(Messenger *m, OSDCluster *o)
   osdcluster = o;
 }
 
+Filer::~Filer()
+{
+}
 
 void Filer::dispatch(Message *m)
 {
@@ -43,6 +46,7 @@ void Filer::dispatch(Message *m)
 	assert(0);
   }
 }
+
 
 /*
 void Filer::queue_outgoing(Message *m, int osd)

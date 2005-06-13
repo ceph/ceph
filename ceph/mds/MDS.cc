@@ -26,6 +26,8 @@
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
+#include "messages/MOSDGetClusterAck.h"
+
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientRequest.h"
@@ -260,6 +262,10 @@ void MDS::proc_message(Message *m)
 	filer->handle_osd_op_reply((class MOSDOpReply*)m);
 	return;
 
+  case MSG_OSD_GETCLUSTER:
+	handle_osd_getcluster(m);
+	return;
+
 	// MDS
   case MSG_MDS_SHUTDOWNSTART:
 	handle_shutdown_start(m);
@@ -421,6 +427,16 @@ void MDS::my_dispatch(Message *m)
 	}
   }
 
+}
+
+
+void MDS::handle_osd_getcluster(Message *m)
+{
+  dout(7) << "osd_getcluster from " << MSG_ADDR_NICE(m->get_source()) << endl;
+  
+  messenger->send_message(new MOSDGetClusterAck(osdcluster),
+						  m->get_source());
+  delete m;
 }
 
 

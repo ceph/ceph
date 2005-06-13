@@ -10,13 +10,12 @@
 
 #define MSG_SHUTDOWN    6
 
-#define MSG_OSD_READ         10
-#define MSG_OSD_READREPLY    11
-#define MSG_OSD_WRITE        12
-#define MSG_OSD_WRITEREPLY   13
 #define MSG_OSD_OP           14    // delete, etc.
 #define MSG_OSD_OPREPLY      15    // delete, etc.
 #define MSG_OSD_PING         16
+
+#define MSG_OSD_GETCLUSTER    17
+#define MSG_OSD_GETCLUSTERACK 18
 
 #define MSG_CLIENT_REQUEST         20
 #define MSG_CLIENT_REPLY           21

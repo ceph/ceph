@@ -12,10 +12,13 @@
 
 #include "msg/HostMonitor.h"
 
+#include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDGetClusterAck.h"
+
 
 #include <iostream>
 #include <cassert>
@@ -107,6 +110,10 @@ void OSD::dispatch(Message *m)
   case MSG_SHUTDOWN:
 	shutdown();
 	break;
+
+  case MSG_OSD_GETCLUSTERACK:
+	handle_getcluster_ack((MOSDGetClusterAck*)m);
+	break;
 	
   case MSG_PING:
 	// take note.
@@ -127,6 +134,7 @@ void OSD::dispatch(Message *m)
 }
 
 
+
 void OSD::handle_ping(MPing *m)
 {
   // play dead?
@@ -142,10 +150,37 @@ void OSD::handle_ping(MPing *m)
 }
 
 
+void OSD::handle_getcluster_ack(MOSDGetClusterAck *m)
+{
+  if (!osdcluster) osdcluster = new OSDCluster();
+  osdcluster->decode(m->get_osdcluster());
+  dout(7) << "got OSDCluster version " << osdcluster->get_version() << endl;
+  delete m;
 
+  // process waiters
+  list<MOSDOp*> waiting;
+  waiting.splice(waiting.begin(), waiting_for_osdcluster);
+
+  for (list<MOSDOp*>::iterator it = waiting.begin();
+	   it != waiting.end();
+	   it++) {
+	handle_op(*it);
+  }
+
+}
 
 void OSD::handle_op(MOSDOp *op)
 {
+  // starting up?
+  if (!osdcluster) {
+	dout(7) << "no OSDCluster, starting up" << endl;
+	if (waiting_for_osdcluster.empty()) 
+	  messenger->send_message(new MGenericMessage(MSG_OSD_GETCLUSTER), 
+							  MSG_ADDR_MDS(0), MDS_PORT_MAIN);
+	waiting_for_osdcluster.push_back(op);
+	return;
+  }
+
   // check cluster version
   if (op->get_ocv() > osdcluster->get_version()) {
 	// op's is newer
@@ -153,7 +188,8 @@ void OSD::handle_op(MOSDOp *op)
 	
 	// query MDS
 	dout(7) << "querying MDS" << endl;
-	//messenger->send_message(new MGetOSDCluster(), MSG_ADDR_MDS(0), MDS_PORT_MAIN);
+	messenger->send_message(new MGenericMessage(MSG_OSD_GETCLUSTER), 
+							MSG_ADDR_MDS(0), MDS_PORT_MAIN);
 	assert(0);
 	waiting_for_osdcluster.push_back(op);
 	return;

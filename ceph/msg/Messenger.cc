@@ -21,6 +21,7 @@ using namespace std;
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDGetClusterAck.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -110,6 +111,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 	break;
   case MSG_OSD_OPREPLY:
 	m = new MOSDOpReply();
+	break;
+  case MSG_OSD_GETCLUSTERACK:
+	m = new MOSDGetClusterAck();
 	break;
 
 	// clients
@@ -250,6 +254,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_SHUTDOWN:
   case MSG_CLIENT_UNMOUNT:
+  case MSG_OSD_GETCLUSTER:
 	m = new MGenericMessage(env.type);
 	break;
 

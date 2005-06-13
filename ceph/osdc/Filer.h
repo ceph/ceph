@@ -3,10 +3,13 @@
 
 /*** Filer
  *
- * client/mds interface to access "files" in OSD cluster
+ * client/mds interface to access "files" in OSD cluster.
  *
  * generic non-blocking interface for reading/writing to osds, using
  * the file-to-object mappings defined by OSDCluster.
+ *
+ * Filer also handles details of replication on OSDs (to the extent that 
+ * it affects OSD clients)
  *
  * "files" are identified by ino. 
  */
@@ -59,7 +62,7 @@ typedef struct {
 
 class Filer : public Dispatcher {
   OSDCluster *osdcluster;     // what osds am i dealing with?
-  Messenger *messenger;
+  Messenger  *messenger;
   
   __uint64_t         last_tid;
   hash_map<tid_t,PendingOSDRead_t*>  op_reads;
@@ -71,7 +74,7 @@ class Filer : public Dispatcher {
 
  public:
   Filer(Messenger *m, OSDCluster *o);
-  ~Filer() {}
+  ~Filer();
 
   void dispatch(Message *m);
 
