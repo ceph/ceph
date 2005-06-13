@@ -51,6 +51,8 @@ all: depend ${TARGETS}
 test: depend ${TEST_TARGETS}
 
 
+gprof-helper.so: test/gprof-helper.c
+	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
 
 import: mds/allmds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@

@@ -1,7 +1,7 @@
 
 !!!
-- make mds shut down with mds_commit_on_shutdown=0 and/or mds_log_flush_on_shutdown=0.
 - test mds scaling w/ makedirs, vs mds_log_on_request 
+- client needs to choose MDS intelligently
 
 - finish osd replication MOSDOp groundwork
 

@@ -18,8 +18,8 @@ class Logger {
   LogType *type;
 
   timepair_t start;
-  double last_logged;
-  double interval;
+  int last_logged;
+  int interval;
   int wrote_header;
 
   string filename;

@@ -16,11 +16,11 @@ class DecayCounter {
   timepair_t last_decay;   // time of last decay
 
  public:
-  DecayCounter() {
+  DecayCounter() : val(0) {
 	set_halflife( 10.0 );
 	reset();
   }
-  DecayCounter(double hl) {
+  DecayCounter(double hl) : val(0) {
 	set_halflife(hl);
 	reset();
   }
@@ -46,12 +46,13 @@ class DecayCounter {
   }
   
   void decay(const timepair_t& now) {
-	double el = timepair_to_double(now) - timepair_to_double(last_decay);
-	if (el > .5) {
-	  val = val * exp(el * k);
+	timepair_t el = now;
+	el -= last_decay;
+	if (el.first > 1) {
+	  val = val * exp(timepair_to_double(el) * k);
+	  if (val < .01) val = 0;
 	  last_decay = now;
 	}
-	if (val < .01) val = 0;
   }
 
   double get(const timepair_t& now) {

@@ -18,7 +18,7 @@ Logger::Logger(string fn, LogType *type)
 	filename += "/";
   }
   filename += fn;
-  cout << "log " << filename << endl;
+  //cout << "log " << filename << endl;
   interval = g_conf.log_interval;
   start = g_clock.gettimepair();  // time 0!
   last_logged = 0;
@@ -75,10 +75,10 @@ long Logger::get(string& key)
 void Logger::flush(bool force) 
 {
   timepair_t now = g_clock.gettimepair();
-  double fromstart = timepair_to_double(now - start);
+  timepair_t fromstart = now - start;
 
   while (force ||
-		 fromstart - last_logged >= interval) {
+		 fromstart.first - last_logged >= interval) {
 	last_logged += interval;
 	force = false;
 

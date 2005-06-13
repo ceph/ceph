@@ -9,7 +9,7 @@ struct md_config_t {
 
   // profiling
   bool log_messages;
-  float log_interval;
+  int   log_interval;
   char *log_name;
 
   bool fake_clock;
