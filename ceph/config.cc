@@ -128,6 +128,9 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.mds_log_flush_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_log_before_reply") == 0) 
+	  g_conf.mds_log_before_reply = atoi(argv[++i]);
+
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);
