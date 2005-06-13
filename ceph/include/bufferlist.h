@@ -219,25 +219,25 @@ class bufferlist {
 	if (off) {
 	  // add a reference to the front bit
 	  //  insert it before curbuf (which we'll hose)
-	  cout << "keeping front " << off << " of " << *curbuf << endl;
+	  //cout << "keeping front " << off << " of " << *curbuf << endl;
 	  _buffers.insert( curbuf, bufferptr( *curbuf, off, 0 ) );
 	}
 
 	while (len > 0) {
 	  // partial?
 	  if (off + len < (*curbuf).length()) {
-		cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
+		//cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
 		if (claim_by) 
 		  claim_by->append( *curbuf, len, off );
 		(*curbuf).set_offset( off + len );    // ignore beginning big
 		(*curbuf).set_length( (*curbuf).length() - len - off );
-		cout << " now " << *curbuf << endl;
+		//cout << " now " << *curbuf << endl;
 		break;
 	  }
 
 	  // hose the whole thing
 	  int howmuch = (*curbuf).length() - off;
-	  cout << "discarding " << howmuch << " of " << *curbuf << endl;
+	  //cout << "discarding " << howmuch << " of " << *curbuf << endl;
 	  if (claim_by) 
 		claim_by->append( *curbuf, howmuch, off );
 	  _buffers.erase( curbuf++ );
