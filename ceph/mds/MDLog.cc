@@ -24,6 +24,8 @@ MDLog::MDLog(MDS *m)
   num_events = 0;
   max_events = 0;
 
+  waiting_for_read = false;
+
   logstream = new LogStream(mds, mds->filer, MDS_INO_LOG_OFFSET + mds->get_nodeid());
 
   char name[80];

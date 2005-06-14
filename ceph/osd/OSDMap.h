@@ -84,6 +84,9 @@ class OSDCluster {
 
  public:
   OSDCluster() : version(0), rush(0) { }
+  ~OSDCluster() {
+	if (rush) { delete rush; rush = 0; }
+  }
 
   __uint64_t get_version() { return version; }
 

@@ -14,27 +14,26 @@ using namespace std;
 
 // generic log event
 class LogEvent {
- protected:
-  int type;
+ private:
+  int _type;
 
  public:
-  LogEvent(int t) {
-	type = t;
-  }
+  LogEvent(int t) : _type(t) { }
   
-  int get_type() { return type; }
+  int get_type() { return _type; }
 
   virtual void encode_payload(bufferlist& bl) = 0;
   virtual void decode_payload(bufferlist& bl, int& off) = 0;
 
   void encode(bufferlist& bl) {
 	// type
-	bl.append((char*)&type, sizeof(type));
+	assert(_type > 0);
+	bl.append((char*)&_type, sizeof(_type));
 
 	// len placeholder
 	int len = 0;   // we don't know just yet...
 	int off = bl.length();
-	bl.append((char*)&type, sizeof(len)); 
+	bl.append((char*)&len, sizeof(len)); 
 
 	// payload
 	encode_payload(bl);

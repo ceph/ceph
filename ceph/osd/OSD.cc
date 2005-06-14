@@ -47,6 +47,8 @@ OSD::OSD(int id, Messenger *m)
   messenger = m;
   messenger->set_dispatcher(this);
 
+  osdcluster = 0;
+
   // use fake store
   store = new FakeStore(osd_base_path, whoami);
 
@@ -79,8 +81,10 @@ OSD::OSD(int id, Messenger *m)
 
 OSD::~OSD()
 {
+  if (osdcluster) { delete osdcluster; osdcluster = 0; }
   if (messenger) { delete messenger; messenger = 0; }
   if (logger) { delete logger; logger = 0; }
+  if (store) { delete store; store = 0; }
 }
 
 int OSD::init()
@@ -122,6 +126,7 @@ void OSD::dispatch(Message *m)
 	// osd
   case MSG_SHUTDOWN:
 	shutdown();
+	delete m;
 	break;
 
   case MSG_OSD_GETCLUSTERACK:
@@ -310,8 +315,7 @@ void OSD::op_read(MOSDOp *r)
 	bptr.set_length(got);   // properly size the buffer
 
 	// give it to the reply in a bufferlist
-	bufferlist bl;
-	bl.push_back( bptr );
+	reply->get_data().push_back( bptr );
 	
 	reply->set_result(0);
 	reply->set_data(bl);
@@ -346,6 +350,7 @@ void OSD::op_write(MOSDOp *m)
   for (list<bufferptr>::iterator it = bl.buffers().begin();
 	   it != bl.buffers().end();
 	   it++) {
+
 	int r = store->write(m->get_oid(),
 						 (*it).length(), off,
 						 (*it).c_str(),

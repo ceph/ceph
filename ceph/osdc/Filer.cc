@@ -167,12 +167,12 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 
 	// finish, clean up
 	Context *onfinish = p->onfinish;
-	delete p;   // del pendingOsdRead_t
-	
 	int result = p->read_result->length(); // assume success
+
 	dout(7) << "read " << result << " bytes " << p->read_result->length() << endl;
 
 	// done
+	delete p;   // del pendingOsdRead_t
 	if (onfinish) {
 	  onfinish->finish(result);
 	  delete onfinish;

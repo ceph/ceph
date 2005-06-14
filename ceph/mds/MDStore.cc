@@ -605,7 +605,7 @@ void MDStore::do_fetch_dir_2( bufferlist& bl,
   dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
 
   // parse buffer contents into cache
-  cout << "bl is " << bl << endl;
+  dout(15) << "bl is " << bl << endl;
   size_t size;
   bl.copy(0, sizeof(size), (char*)&size);
   assert(bl.length() >= size + sizeof(size));  

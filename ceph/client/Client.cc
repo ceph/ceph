@@ -396,6 +396,8 @@ int Client::mount(int mkfs)
   dout(1) << "mounted" << endl;
   mounted = true;
 
+  delete reply;
+
   client_lock.Unlock();
 }
 
@@ -413,6 +415,8 @@ int Client::unmount()
   assert(reply);
   mounted = false;
   dout(1) << "unmounted" << endl;
+
+  delete reply;
 
   client_lock.Unlock();
 }

@@ -291,11 +291,11 @@ class MDCache {
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir_go(CDir *dir,
 					 int dest);
-  void export_dir_walk(MExportDir *req,
-					   class C_MDS_ExportFinish *fin,
-					   CDir *basedir,
-					   CDir *dir,
-					   int newauth);
+  int export_dir_walk(MExportDir *req,
+					  class C_MDS_ExportFinish *fin,
+					  CDir *basedir,
+					  CDir *dir,
+					  int newauth);
   void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
@@ -309,16 +309,17 @@ class MDCache {
   void handle_export_dir(MExportDir *m);
   void import_dir_finish(CDir *dir);
   void handle_export_dir_finish(MExportDirFinish *m);
-  void import_dir_block(crope& r,
-						int& off,
-						int oldauth,
-						CDir *import_root,
-						list<inodeno_t>& imported_subdirs);
+  int import_dir_block(crope& r,
+					   int& off,
+					   int oldauth,
+					   CDir *import_root,
+					   list<inodeno_t>& imported_subdirs,
+					   timepair_t& now);
   void got_hashed_replica(CDir *import,
 						  inodeno_t dir_ino,
 						  inodeno_t replica_ino);
 
-  void decode_import_inode(CDentry *dn, crope& r, int &off, int oldauth);
+  void decode_import_inode(CDentry *dn, crope& r, int &off, int oldauth, timepair_t& now);
 
   // bystander
   void handle_export_dir_warning(MExportDirWarning *m);

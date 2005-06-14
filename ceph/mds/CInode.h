@@ -618,6 +618,7 @@ public:
 
 	st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
 	st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
+	in->popularity[MDS_POP_ANYDOM].adjust_down(st.popularity_curdom);
 	
 	// suck up fh's from inode
 	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
@@ -638,12 +639,15 @@ public:
   
   inodeno_t get_ino() { return st.inode.ino; }
 
-  int update_inode(CInode *in) {
+  int update_inode(CInode *in, timepair_t& now) {
 	in->inode = st.inode;
 
 	in->version = st.version;
+
+	double newcurdom = st.popularity_curdom.get(now) - in->popularity[MDS_POP_CURDOM].get(now);
 	in->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
 	in->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
+	in->popularity[MDS_POP_ANYDOM].adjust(now, newcurdom);
 
 	if (st.is_dirty)
 	  in->mark_dirty();

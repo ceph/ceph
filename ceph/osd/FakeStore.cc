@@ -33,7 +33,8 @@ FakeStore::FakeStore(char *base, int whoami, char *shadow)
   if (shadow) {
 	is_shadow = true;
 	shadowdir = shadow;
-  }
+  } else
+	is_shadow = false;
 }
 
 
@@ -71,12 +72,12 @@ int FakeStore::finalize()
 ////
 
 void FakeStore::get_dir(string& dir) {
-  static char s[30];
+  char s[30];
   sprintf(s, "%d", whoami);
   dir = basedir + "/" + s;
 }
 void FakeStore::get_oname(object_t oid, string& fn, bool shadow) {
-  static char s[100];
+  char s[100];
   sprintf(s, "%d/%02lld/%lld", whoami, HASH_FUNC(oid), oid);
   if (shadow)
 	fn = shadowdir + "/" + s;
@@ -297,9 +298,8 @@ int FakeStore::write(object_t oid,
   
   off_t actual = lseek(fd, offset, SEEK_SET);
   size_t did = 0;
-  if (actual == offset) {
-	did = ::write(fd, buffer, len);
-  }
+  assert(actual == offset);
+  did = ::write(fd, buffer, len);
 
   // sync to to disk?
   if (do_fsync) fsync(fd);     // should this be fsync?

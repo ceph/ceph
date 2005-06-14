@@ -43,20 +43,20 @@ off_t LogStream::append(LogEvent *e)
   size_t elen = bl.length();
   
   // append
-  dout(10) << "append event type " << e->get_type() << " size " << elen << " at log offset " << append_pos << endl;
+  dout(15) << "append event type " << e->get_type() << " size " << elen << " at log offset " << append_pos << endl;
   
   off_t off = append_pos;
   append_pos += elen;
-  dout(15) << "write buf was " << write_buf.length() << endl;
+  //dout(15) << "write buf was " << write_buf.length() << " bl " << write_buf << endl;
   write_buf.claim_append(bl);
-  dout(15) << "write buf now " << write_buf.length() << endl;
+  //dout(15) << "write buf now " << write_buf.length() << " bl " << write_buf << endl;
 
   return off;
 }
 
 void LogStream::_append_2(off_t off)
 {
-  dout(10) << "sync_pos now " << off << endl;
+  dout(15) << "sync_pos now " << off << endl;
   sync_pos = off;
   
   // wake up waiters
@@ -133,7 +133,7 @@ LogEvent *LogStream::get_next_event()
   read_buf.copy(off, sizeof(__uint32_t), (char*)&length);
   off += sizeof(__uint32_t);
 
-  dout(10) << "getting next event from " << read_pos << ", type " << type << ", size " << length << endl;
+  dout(15) << "getting next event from " << read_pos << ", type " << type << ", size " << length << endl;
 
   assert(type > 0);
 

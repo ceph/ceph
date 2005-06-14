@@ -474,39 +474,50 @@ void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
  */
 void MDBalancer::subtract_export(CDir *dir)
 {
-
-  // FIXME this is totally wrong
-
   timepair_t now = g_clock.gettimepair();
   double curdom = -dir->popularity[MDS_POP_CURDOM].get(now);
-  double anydom = -dir->popularity[MDS_POP_ANYDOM].get(now);
 
   bool in_domain = !dir->is_import();
   
   while (true) {
 	CInode *in = dir->inode;
 	
-	if (in_domain)
-	  in->popularity[MDS_POP_CURDOM].adjust(now, curdom);
-	if (in->is_auth()) 
-	  in->popularity[MDS_POP_ANYDOM].adjust(now, anydom);
+	in->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
+	if (in_domain) in->popularity[MDS_POP_CURDOM].adjust(now, curdom);
 	
 	dir = in->get_parent_dir();
 	if (!dir) break;
-
+	
 	if (dir->is_import()) in_domain = false;
 	
-	if (in_domain)
-	  dir->popularity[MDS_POP_CURDOM].adjust(now, curdom);
-	if (dir->is_auth())
-	  dir->popularity[MDS_POP_ANYDOM].adjust(now, anydom);
+	dir->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
+	if (in_domain) dir->popularity[MDS_POP_CURDOM].adjust(now, curdom);
   }
 }
 	
 
 void MDBalancer::add_import(CDir *dir)
 {
+  timepair_t now = g_clock.gettimepair();
+  double curdom = dir->popularity[MDS_POP_CURDOM].get(now);
+
+  bool in_domain = !dir->is_import();
   
+  while (true) {
+	CInode *in = dir->inode;
+	
+	in->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
+	if (in_domain) in->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	
+	dir = in->get_parent_dir();
+	if (!dir) break;
+	
+	if (dir->is_import()) in_domain = false;
+	
+	dir->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
+	if (in_domain) dir->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+  }
+ 
 }
 
 

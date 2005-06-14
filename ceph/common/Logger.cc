@@ -25,6 +25,7 @@ Logger::Logger(string fn, LogType *type)
   wrote_header = -1;
   open = false;
   this->type = type;
+  wrote_header_last = 0;
 }
 
 Logger::~Logger()
@@ -91,13 +92,16 @@ void Logger::flush(bool force)
 	}
 
 	// header?
-	if (wrote_header != type->version) {
+	wrote_header_last++;
+	if (wrote_header != type->version ||
+		wrote_header_last > 10) {
 	  out << "#";
 	  for (vector<string>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
 		out << "\t" << *it;
 	  }
 	  out << endl;
 	  wrote_header = type->version;
+	  wrote_header_last = 0;
 	}
 
 	// write line to log

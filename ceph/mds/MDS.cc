@@ -109,6 +109,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   shutting_down = false;
   shut_down = false;
+  mds_paused = false;
 
   stat_ops = 0;
   last_heartbeat = 0;
@@ -134,12 +135,16 @@ MDS::~MDS() {
   if (mdstore) { delete mdstore; mdstore = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
+  if (osdmonitor) { delete osdmonitor; osdmonitor = 0; }
+  if (idalloc) { delete idalloc; idalloc = NULL; }
+  if (anchormgr) { delete anchormgr; anchormgr = NULL; }
+  if (osdcluster) { delete osdcluster; osdcluster = 0; }
+
+  if (filer) { delete filer; filer = 0; }
+  if (messenger) { delete messenger; messenger = NULL; }
 
   if (logger) { delete logger; logger = 0; }
 
-  if (messenger) { delete messenger; messenger = NULL; }
-
-  if (idalloc) { delete idalloc; idalloc = NULL; }
 }
 
 
@@ -392,6 +397,9 @@ void MDS::my_dispatch(Message *m)
 
   // flush log
   mdlog->flush();
+
+  // trim cache
+  mdcache->trim();
 	
 
   // finish any triggered contexts

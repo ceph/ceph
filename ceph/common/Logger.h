@@ -21,6 +21,7 @@ class Logger {
   int last_logged;
   int interval;
   int wrote_header;
+  int wrote_header_last;
 
   string filename;
 

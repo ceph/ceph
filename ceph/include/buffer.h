@@ -221,7 +221,7 @@ class bufferptr {
 
 inline ostream& operator<<(ostream& out, bufferptr& bp) {
   return out << "bufferptr(len=" << bp._len << ", off=" << bp._off 
-	//<< ", " << bp.c_str() 
+			 << ", int=" << *(int*)(bp.c_str())
 			 << ", " << *bp._buffer 
 			 << ")";
 }

@@ -556,8 +556,6 @@ void MDCache::shutdown_start()
 
 bool MDCache::shutdown_pass()
 {
-  static bool did_inode_updates = false;
-
   dout(7) << "shutdown_pass" << endl;
   //assert(mds->is_shutting_down());
   if (mds->is_shut_down()) {
@@ -2976,7 +2974,8 @@ void MDCache::handle_rename(MRename *m)
 
   // decode + import inode (into new location start)
   int off = 0;
-  decode_import_inode(destdn, m->get_inode_state(), off, m->get_source());
+  timepair_t now = g_clock.gettimepair();
+  decode_import_inode(destdn, m->get_inode_state(), off, m->get_source(), now);
 
   CInode *in = destdn->inode;
   assert(in);
@@ -5334,7 +5333,6 @@ void MDCache::export_dir(CDir *dir,
   mds->messenger->send_message(new MExportDirDiscover(dir->inode),
 							   dest, MDS_PORT_CACHE, MDS_PORT_CACHE);
   dir->auth_pin();   // pin dir, to hang up our freeze
-  mds->logger->inc("ex");
   
   // take away popularity (and pass it on to the context, MExportDir request later)
   mds->balancer->subtract_export(dir);
@@ -5561,11 +5559,11 @@ void MDCache::export_dir_go(CDir *dir,
 
   // fill export message with cache data
   C_MDS_ExportFinish *fin = new C_MDS_ExportFinish(mds, dir, dest);
-  export_dir_walk( req, 
-				   fin, 
-				   dir,   // base
-				   dir,   // recur start point
-				   dest );
+  int num_exported_inodes = export_dir_walk( req, 
+											 fin, 
+											 dir,   // base
+											 dir,   // recur start point
+											 dest );
   
   // send the export data!
   mds->messenger->send_message(req,
@@ -5574,6 +5572,11 @@ void MDCache::export_dir_go(CDir *dir,
 
   // queue up the finisher
   dir->add_waiter( CDIR_WAIT_UNFREEZE, fin );
+
+
+  // stats
+  mds->logger->inc("ex");
+  mds->logger->inc("iex", num_exported_inodes);
 
   show_imports();
 }
@@ -5627,12 +5630,14 @@ void MDCache::encode_export_inode(CInode *in, crope& state_rope, int new_auth)
 }
 
 
-void MDCache::export_dir_walk(MExportDir *req,
+int MDCache::export_dir_walk(MExportDir *req,
 							  C_MDS_ExportFinish *fin,
 							  CDir *basedir,
 							  CDir *dir,
 							  int newauth)
 {
+  int num_exported = 0;
+
   dout(7) << "export_dir_walk " << *dir << " " << dir->nitems << " items" << endl;
   
   // dir 
@@ -5676,6 +5681,8 @@ void MDCache::export_dir_walk(MExportDir *req,
 	CDentry *dn = it->second;
 	CInode *in = dn->inode;
 	
+	num_exported++;
+
 	// -- dentry
 	dout(7) << "export_dir_walk exporting " << *dn << endl;
 	dir_rope.append( it->first.c_str(), it->first.length()+1 );
@@ -5745,7 +5752,9 @@ void MDCache::export_dir_walk(MExportDir *req,
   
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
-	export_dir_walk(req, fin, basedir, *it, newauth);
+	num_exported += export_dir_walk(req, fin, basedir, *it, newauth);
+
+  return num_exported;
 }
 
 
@@ -6124,7 +6133,6 @@ void MDCache::handle_export_dir(MExportDir *m)
 
 
   show_imports();
-  mds->logger->inc("im");
   
   // note new authority (locally) in inode
   if (dir->inode->is_auth())
@@ -6182,7 +6190,7 @@ void MDCache::handle_export_dir(MExportDir *m)
       imports.erase(ex);
       ex->state_clear(CDIR_STATE_IMPORT);
 
-      mds->logger->inc("immyex");
+      mds->logger->inc("imex");
 
       // move nested exports under containing_import
 	  for (set<CDir*>::iterator it = nested_exports[ex].begin();
@@ -6214,12 +6222,17 @@ void MDCache::handle_export_dir(MExportDir *m)
   list<inodeno_t> imported_subdirs;
   crope dir_state = m->get_state();
   int off = 0;
+  int num_imported_inodes = 0;
+  timepair_t now = g_clock.gettimepair();   // for popularity adjustments
+
   for (int i = 0; i < m->get_ndirs(); i++) {
-	import_dir_block(dir_state, 
-					 off,
-					 oldauth, 
-					 dir,                 // import root
-					 imported_subdirs);
+	num_imported_inodes += 
+	  import_dir_block(dir_state, 
+					   off,
+					   oldauth, 
+					   dir,                 // import root
+					   imported_subdirs,
+					   now);
   }
   dout(10) << " " << imported_subdirs.size() << " imported subdirs" << endl;
   dout(10) << " " << m->get_exports().size() << " imported nested exports" << endl;
@@ -6266,6 +6279,13 @@ void MDCache::handle_export_dir(MExportDir *m)
   }
 
 
+  // some stats
+  mds->logger->inc("im");
+  mds->logger->inc("iim", num_imported_inodes);
+  mds->logger->set("nex", exports.size());
+  mds->logger->set("nim", imports.size());
+
+
   // FIXME LOG IT
 
   /*
@@ -6309,7 +6329,7 @@ void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 }
 
 
-void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth)
+void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth, timepair_t& now)
 {
   
   CInodeExport istate;
@@ -6326,7 +6346,7 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth)
   }
   
   // state
-  istate.update_inode(in);
+  istate.update_inode(in, now);
   
   // add inode?
   if (added) {
@@ -6372,11 +6392,12 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth)
 }
 
 
-void MDCache::import_dir_block(crope& r,
-							   int& off,
-							   int oldauth,
-							   CDir *import_root,
-							   list<inodeno_t>& imported_subdirs)
+int MDCache::import_dir_block(crope& r,
+							  int& off,
+							  int oldauth,
+							  CDir *import_root,
+							  list<inodeno_t>& imported_subdirs,
+							  timepair_t& now)
 {
   // set up dir
   CDirExport dstate;
@@ -6394,7 +6415,7 @@ void MDCache::import_dir_block(crope& r,
     imported_subdirs.push_back(dir->ino());
 
   // assimilate state
-  dstate.update_dir( dir );
+  dstate.update_dir( dir, now );
   if (diri->is_auth()) dir->dir_auth = CDIR_AUTH_PARENT;   // update_dir may hose dir_auth
 
   // mark  (may already be marked from get_or_open_dir() above)
@@ -6420,7 +6441,11 @@ void MDCache::import_dir_block(crope& r,
   dout(15) << "doing contents" << endl;
 
   // contents
+  int num_imported = 0;
   for (long nden = dstate.get_nden(); nden>0; nden--) {
+
+	num_imported++;
+
     // dentry
     string dname = r.c_str() + off;
     off += dname.length()+1;
@@ -6453,7 +6478,7 @@ void MDCache::import_dir_block(crope& r,
 	}
 	else if (icode == 'I') {
 	  // inode
-	  decode_import_inode(dn, r, off, oldauth);
+	  decode_import_inode(dn, r, off, oldauth, now);
     }
 
 	// mark dentry dirty?  (only _after_ we link the inode!)
@@ -6461,6 +6486,7 @@ void MDCache::import_dir_block(crope& r,
     
   }
  
+  return num_imported;
 }
 
 

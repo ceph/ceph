@@ -88,8 +88,6 @@ int main(int oargc, char **oargv) {
 	}
   }
 
-  fakemessenger_startthread();
-
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
 
@@ -141,10 +139,10 @@ int main(int oargc, char **oargv) {
 	client[i]->init();
 	
 	// use my argc, argv (make sure you pass a mount point!)
-	cout << "mounting" << endl;
+	//cout << "mounting" << endl;
 	client[i]->mount(mkfs);
 	
-	cout << "starting synthetic client  " << endl;
+	//cout << "starting synthetic client  " << endl;
 	syn[i] = new SyntheticClient(client[i]);
 
 	char s[20];
@@ -160,12 +158,12 @@ int main(int oargc, char **oargv) {
   }
   for (int i=0; i<NUMCLIENT; i++) {
 	
-	cout << "waiting for synthetic client to finish" << endl;
+	cout << "waiting for synthetic client " << i << " to finish" << endl;
 	syn[i]->join_thread();
 	delete syn[i];
 	
 	client[i]->unmount();
-	cout << "unmounted" << endl;
+	//cout << "unmounted" << endl;
 	client[i]->shutdown();
   }
   

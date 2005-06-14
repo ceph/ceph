@@ -54,7 +54,7 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
 {
   int fromport = 0;
 
-  Cond *cond = new Cond();
+  Cond cond;
 
   // make up a pcid that is unique (to me!)
   /* NOTE: since request+replies are matched up on pcid's alone, it means that
@@ -72,7 +72,7 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
 
   // add call records
   assert(call_cond.count(pcid) == 0);  // pcid should be UNIQUE
-  call_cond[pcid] = cond;
+  call_cond[pcid] = &cond;
   call_reply[pcid] = 0;   // no reply yet
 
   // send.  drop locks in case send_message is bad and blocks
@@ -85,7 +85,7 @@ Message *CheesySerializer::sendrecv(Message *m, msg_addr_t dest, int port)
 	dout(DEBUGLVL) << "sendrecv waiting for reply on pcid " << pcid << endl;
 	//cout << "wait start, value = " << sem->Value() << endl;
 	
-	cond->Wait(lock);
+	cond.Wait(lock);
   } else {
 	dout(DEBUGLVL) << "sendrecv reply is already here on pcid " << pcid << endl;
   }

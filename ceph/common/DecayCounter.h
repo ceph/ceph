@@ -29,6 +29,10 @@ class DecayCounter {
 	decay(now);
 	val += a;
   }
+  void adjust_down(const DecayCounter& other) {
+	// assume other has same time stamp as us...
+	val -= other.val;
+  }
 
   void set_halflife(double hl) {
 	half_life = hl;

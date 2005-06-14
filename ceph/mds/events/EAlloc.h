@@ -13,14 +13,14 @@
 
 class EAlloc : public LogEvent {
  protected:
-  int  type;
+  int  idtype;
   idno_t id;
   int  what;  
 
  public:
-  EAlloc(int type, idno_t id, int what) :
+  EAlloc(int idtype, idno_t id, int what) :
 	LogEvent(EVENT_ALLOC) {
-	this->type = type;
+	this->idtype = idtype;
 	this->id = id;
 	this->what = what;
   }
@@ -28,14 +28,14 @@ class EAlloc : public LogEvent {
 	LogEvent(EVENT_ALLOC) {
   }
   
-  virtual void encode_payload(bufferlist& bl) {
-	bl.append((char*)&type, sizeof(type));
+  void encode_payload(bufferlist& bl) {
+	bl.append((char*)&idtype, sizeof(idtype));
 	bl.append((char*)&id, sizeof(id));
 	bl.append((char*)&what, sizeof(what));
   }
   void decode_payload(bufferlist& bl, int& off) {
-	bl.copy(off, sizeof(type), (char*)&type);
-	off += sizeof(type);
+	bl.copy(off, sizeof(idtype), (char*)&idtype);
+	off += sizeof(idtype);
 	bl.copy(off, sizeof(id), (char*)&id);
 	off += sizeof(id);
 	bl.copy(off, sizeof(what), (char*)&what);
@@ -44,7 +44,7 @@ class EAlloc : public LogEvent {
 
   
   virtual bool obsolete(MDS *mds) {
-	if (mds->idalloc->is_dirty(type,id))
+	if (mds->idalloc->is_dirty(idtype, id))
 	  return false;   // still dirty
 	else
 	  return true;    // already flushed

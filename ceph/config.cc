@@ -136,13 +136,14 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.mds_log_read_inc = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) 
 	  g_conf.mds_log_max_trimming = atoi(argv[++i]);
+
 	else if (strcmp(argv[i], "--mds_commit_on_shutdown") == 0) 
 	  g_conf.mds_commit_on_shutdown = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_flush_on_shutdown") == 0) 
 	  g_conf.mds_log_flush_on_shutdown = atoi(argv[++i]);
+
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
-
 
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 

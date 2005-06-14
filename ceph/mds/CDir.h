@@ -610,6 +610,7 @@ class CDirExport {
 
     st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( dir->popularity[MDS_POP_CURDOM] );
+	dir->popularity[MDS_POP_ANYDOM].adjust_down(st.popularity_curdom);
 
     rep_by = dir->dir_rep_by;
 	open_by = dir->open_by;
@@ -619,7 +620,7 @@ class CDirExport {
   inodeno_t get_ino() { return st.ino; }
   __uint64_t get_nden() { return st.nden; }
 
-  void update_dir(CDir *dir) {
+  void update_dir(CDir *dir, timepair_t& now) {
 	assert(dir->ino() == st.ino);
 
 	//dir->nitems = st.nitems;
@@ -629,8 +630,10 @@ class CDirExport {
 	dir->dir_auth = st.dir_auth;
 	dir->dir_rep = st.dir_rep;
 
+	double newcurdom = st.popularity_curdom.get(now) - dir->popularity[MDS_POP_CURDOM].get(now);
 	dir->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
 	dir->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
+	dir->popularity[MDS_POP_ANYDOM].adjust(now, newcurdom);
 
 	dir->dir_rep_by = rep_by;
 	dir->open_by = open_by;

@@ -201,13 +201,16 @@ void HostMonitor::handle_ping_ack(MPingAck *m)
 
 void HostMonitor::handle_failure_ack(MFailureAck *m)
 {
+
+  // FIXME: this doesn't handle failed -> alive transitions gracefully at all..
+
   // the higher-up's acknowledged our failure notification, we can stop resending it.
   msg_addr_t failed = m->get_failed();
   dout(DBL) << "handle_failure_ack " << failed << endl;
   unacked_failures.erase(failed);
   acked_failures.insert(failed);
 
-  // FIXME: this doesn't handle failed -> alive transitions gracefully at all..
+  delete m;
 }
 
 
