@@ -1,9 +1,7 @@
 
 !!!
 - test mds scaling w/ makedirs, vs mds_log_on_request 
-- client needs to choose MDS intelligently
 
-- fix up MDLog
 
 big fast todo's:
 - client buffer cache

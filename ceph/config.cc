@@ -17,9 +17,11 @@ md_config_t g_conf = {
   num_client: 1,
 
   // profiling and debugging
-  log_messages: true,
   log_interval: 1,
   log_name: (char*)0,
+
+  log_messages: true,
+  log_pins: false,
 
   fake_clock: false,
   fakemessenger_serialize: true,

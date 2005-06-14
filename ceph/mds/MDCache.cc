@@ -1493,28 +1493,29 @@ void MDCache::request_cleanup(Message *req)
   mds->logger->set("cpin", lru.lru_get_num_pinned());
   mds->logger->set("cmax", lru.lru_get_max());
 
-  // pin
-  for (map<int,int>::iterator it = cinode_pins.begin();
-	   it != cinode_pins.end();
-	   it++) {
-	//string s = "I";
-	//s += cinode_pin_names[it->first];
-	mds->logger2->set(//s, 
-					  cinode_pin_names[it->first],
-					  it->second);
+  if (g_conf.log_pins) {
+	// pin
+	for (map<int,int>::iterator it = cinode_pins.begin();
+		 it != cinode_pins.end();
+		 it++) {
+	  //string s = "I";
+	  //s += cinode_pin_names[it->first];
+	  mds->logger2->set(//s, 
+						cinode_pin_names[it->first],
+						it->second);
+	}
+	/*
+	  for (map<int,int>::iterator it = cdir_pins.begin();
+	  it != cdir_pins.end();
+	  it++) {
+	  //string s = "D";
+	  //s += cdir_pin_names[it->first];
+	  mds->logger2->set(//s, 
+	  cdir_pin_names[it->first],
+	  it->second);
+	  }
+	*/
   }
-  /*
-  for (map<int,int>::iterator it = cdir_pins.begin();
-	   it != cdir_pins.end();
-	   it++) {
-	//string s = "D";
-	//s += cdir_pin_names[it->first];
-	mds->logger2->set(//s, 
-					  cdir_pin_names[it->first],
-					  it->second);
-  }
-  */
-
 
 }
 

@@ -8,9 +8,11 @@ struct md_config_t {
 
 
   // profiling
-  bool log_messages;
   int   log_interval;
   char *log_name;
+
+  bool log_messages;
+  bool log_pins;
 
   bool fake_clock;
   bool fakemessenger_serialize;
