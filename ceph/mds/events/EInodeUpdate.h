@@ -22,18 +22,21 @@ class EInodeUpdate : public LogEvent {
 	this->inode = in->inode;
 	version = in->get_version();
   }
-  EInodeUpdate(crope s) :
+  EInodeUpdate() :
 	LogEvent(EVENT_INODEUPDATE) {
-	s.copy(0, sizeof(version), (char*)&version);
-	s.copy(sizeof(version), sizeof(inode), (char*)&inode);
   }
   
-  virtual crope get_payload() {
-	crope r;
-	r.append((char*)&version, sizeof(version));
-	r.append((char*)&inode, sizeof(inode));
-	return r;
+  virtual void encode_payload(bufferlist& bl) {
+	bl.append((char*)&version, sizeof(version));
+	bl.append((char*)&inode, sizeof(inode));
   }
+  void decode_payload(bufferlist& bl, int& off) {
+	bl.copy(off, sizeof(version), (char*)&version);
+	off += sizeof(version);
+	bl.copy(off, sizeof(inode), (char*)&inode);
+	off += sizeof(inode);
+  }
+
   
   virtual bool obsolete(MDS *mds) {
 	// am i obsolete?

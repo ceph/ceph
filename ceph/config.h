@@ -15,8 +15,9 @@ struct md_config_t {
   bool fake_clock;
   bool fakemessenger_serialize;
 
-  int  debug;
- 
+  int debug;
+  int debug_mds_balancer;
+  int debug_mds_log;
 
   // client
   int      client_cache_size;

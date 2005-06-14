@@ -16,8 +16,9 @@ typedef __uint64_t idno_t;
 class IdAllocator {
   MDS *mds;
 
-  map< int, rangeset<idno_t> > free;  // type -> rangeset
-
+  map< int, rangeset<idno_t> > free;   // type -> rangeset
+  map< int, set<idno_t> >      dirty;  // dirty ids
+  
   bool opened, opening;
   
  public:
@@ -36,13 +37,17 @@ class IdAllocator {
   bool is_open() { return opened; }
   bool is_opening() { return opening; }
 
-  void reset();
-
-  void shutdown() {
-	if (is_open()) save();
+  bool is_dirty(int type, idno_t id) {
+	return dirty[type].count(id) ? true:false;
   }
 
-  void save();
+  void reset();
+  void save(Context *onfinish=0);
+
+  void shutdown() {
+	if (is_open()) save(0);
+  }
+
   void load(Context *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);
 

@@ -53,6 +53,7 @@ class MDBalancer {
   void hit_recursive(class CDir *dir, timepair_t& now);
 
 
+  void show_imports(bool external=false);
 
 };
 

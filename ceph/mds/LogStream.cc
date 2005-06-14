@@ -8,182 +8,220 @@
 #include "events/EString.h"
 #include "events/EInodeUpdate.h"
 #include "events/EUnlink.h"
+#include "events/EAlloc.h"
 
 #include <iostream>
 using namespace std;
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".logstream "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_log) cout << "mds" << mds->get_nodeid() << ".logstream "
 
+
+// ----------------------------
 // writing
 
-int LogStream::append(LogEvent *e, Context *c)
+class C_LS_Append : public Context {
+  LogStream *ls;
+  off_t off;
+public:
+  C_LS_Append(LogStream *ls, off_t off) {
+	this->ls = ls;
+	this->off = off;
+  }
+  void finish(int r) {
+	ls->_append_2(off);
+  }
+};
+
+
+off_t LogStream::append(LogEvent *e)
 {
-  // serialize
-  crope buffer = e->get_serialized();
-  size_t buflen = buffer.length();
-
-  // into a bufferlist.. FIXME
+  // serialize FIXME  ********
   bufferlist bl;
-  bl.append(buffer.c_str(), buffer.length());
-
-
-  dout(10) << "append event type " << e->get_type() << " size " << buflen << " at log offset " << append_pos << endl;
-
+  e->encode(bl);
+  size_t elen = bl.length();
   
-  // advance ptr for later
-  append_pos += buffer.length();
+  // append
+  dout(10) << "append event type " << e->get_type() << " size " << elen << " at log offset " << append_pos << endl;
   
-  // submit write
-  mds->filer->write(log_ino,   // FIXME
-					buflen, append_pos-buflen,
-					bl,
-					0,
-					c);
-  return 0;
+  off_t off = append_pos;
+  append_pos += elen;
+  dout(15) << "write buf was " << write_buf.length() << endl;
+  write_buf.claim_append(bl);
+  dout(15) << "write buf now " << write_buf.length() << endl;
+
+  return off;
+}
+
+void LogStream::_append_2(off_t off)
+{
+  dout(10) << "sync_pos now " << off << endl;
+  sync_pos = off;
+  
+  // wake up waiters
+  map< off_t, list<Context*> >::iterator it = waiting_for_sync.begin();
+  while (it != waiting_for_sync.end()) {
+	if (it->first > sync_pos) break;
+	
+	// wake them up!
+	dout(15) << it->second.size() << " waiters at offset " << it->first << " <= " << sync_pos << endl;
+	for (list<Context*>::iterator cit = it->second.begin();
+		 cit != it->second.end();
+		 cit++) 
+	  mds->finished_queue.push_back(*cit);
+	
+	// continue
+	waiting_for_sync.erase(it++);
+  }
+}
+
+
+void LogStream::wait_for_sync(Context *c, off_t off) 
+{
+  if (off == 0) off = append_pos;
+  assert(off > sync_pos);
+  
+  dout(15) << "sync " << c << " waiting for " << off << "  (sync_pos currently " << sync_pos << ")" << endl;
+  waiting_for_sync[off].push_back(c);
+  
+  // initiate flush now?  (since we have a waiter...)
+  if (autoflush) flush();
+}
+
+void LogStream::flush()
+{
+  // write to disk
+  if (write_buf.length()) {
+	dout(15) << "flush flush_pos " << flush_pos << " < append_pos " << append_pos << ", writing " << write_buf.length() << " bytes" << endl;
+	
+	assert(write_buf.length() == append_pos - flush_pos);
+	
+	mds->filer->write(log_ino, 
+					  write_buf.length(), flush_pos,
+					  write_buf,
+					  0,
+					  new C_LS_Append(this, append_pos));
+	
+	write_buf.clear();
+	flush_pos = append_pos;
+  } else {
+	dout(15) << "flush flush_pos " << flush_pos << " == append_pos " << append_pos << ", nothing to do" << endl;
+  }
+
 }
 
 
 
+
+
+
+// -------------------------------------------------
 // reading
 
-/*
-class C_LS_ReadNext : public Context {
-  LogStream *ls;
-  LogEvent **le;
-  Context *c;
-public:
-  C_LS_ReadNext(LogStream *ls, LogEvent **le, Context *c) {
-	this->ls = ls;
-	this->le = le;
-	this->c = c;
+
+LogEvent *LogStream::get_next_event()
+{
+  if (read_buf.length() < 2*sizeof(__uint32_t)) 
+	return 0;
+  
+  // parse type, length
+  int off = 0;
+  __uint32_t type, length;
+  read_buf.copy(off, sizeof(__uint32_t), (char*)&type);
+  off += sizeof(__uint32_t);
+  read_buf.copy(off, sizeof(__uint32_t), (char*)&length);
+  off += sizeof(__uint32_t);
+
+  dout(10) << "getting next event from " << read_pos << ", type " << type << ", size " << length << endl;
+
+  assert(type > 0);
+
+  if (read_buf.length() < off + length)
+	return 0;
+  
+  // create event
+  LogEvent *le;
+  switch (type) {
+  case EVENT_STRING:  // string
+	le = new EString();
+	break;
+	
+  case EVENT_INODEUPDATE:
+	le = new EInodeUpdate();
+	break;
+	
+  case EVENT_UNLINK:
+	le = new EUnlink();
+	break;
+	
+  case EVENT_ALLOC:
+	le = new EAlloc();
+	break;
+
+  default:
+	dout(1) << "uh oh, unknown event type " << type << endl;
+	assert(0);
   }
-  void finish(int result) {
-	ls->read_next(le,c,2);
-  }
-};
-*/
+
+  // decode
+  le->decode_payload(read_buf, off);
+
+  // discard front of read_buf
+  read_pos += off;
+  read_buf.splice(0, off);  
+
+  dout(15) << "get_next_event got event, read_pos now " << read_pos << " (append_pos is " << append_pos << ")" << endl;
+
+  // ok!
+  return le;
+}
+
+
 
 class C_LS_ReadChunk : public Context {
 public:
   bufferlist bl;
   LogStream *ls;
-  LogEvent **le;
-  Context *c;
-  C_LS_ReadChunk(LogStream *ls, LogEvent **le, Context *c) {
+
+  C_LS_ReadChunk(LogStream *ls) {
 	this->ls = ls;
-	this->le = le;
-	this->c = c;
   }
   void finish(int result) {
-	crope next_bit;
-	next_bit.append(bl.c_str(), bl.length());
-	ls->did_read_bit(next_bit, le, c);
+	ls->_did_read(bl);
   }
 };
 
-void LogStream::did_read_bit(crope& next_bit, LogEvent **le, Context *c) 
+
+void LogStream::wait_for_next_event(Context *c)
 {
-  // add to our buffer
-  buffer.append(next_bit);
-  reading_block = false;
-  
-  // throw off beginning part
-  if (buffer.length() > g_conf.mds_log_read_inc*2) {
-	int trim = buffer.length() - g_conf.mds_log_read_inc*2;
-	buf_start += trim;
-	buffer = buffer.substr(trim, buffer.length() - trim);
-	dout(10) << "did_read_bit adjusting buf_start now +" << trim << " = " << buf_start << " len " << buffer.length() << endl;
+  // add waiter
+  if (c) waiting_for_read.push_back(c);
+
+  // issue read
+  off_t tail = read_pos + read_buf.length();
+  size_t size = g_conf.mds_log_read_inc;
+  if (tail + size > sync_pos) {
+	size = sync_pos - tail;
+	assert(size > 0);   // bleh, wait for sync, etc.
   }
-  
-  // continue at step 2
-  read_next(le, c, 2);
+
+  dout(15) << "wait_for_next_event reading from pos " << tail << " len " << size << endl;
+  C_LS_ReadChunk *readc = new C_LS_ReadChunk(this);
+  mds->filer->read(log_ino,  
+				   g_conf.mds_log_read_inc, tail,
+				   &readc->bl,
+				   readc);
 }
 
-int LogStream::read_next(LogEvent **le, Context *c, int step) 
+
+void LogStream::_did_read(bufferlist& blist)
 {
-  if (step == 1) {
-	// does buffer have what we want?
-	//if (buf_start > cur_pos ||
-	//buf_start+buffer.length() < cur_pos+4) {
-	if (buf_start+buffer.length() < cur_pos+ g_conf.mds_log_read_inc/2) {
+  dout(15) << "_did_read got " << blist.length() << " bytes" << endl;
+  read_buf.claim_append(blist);
 
-	  // make sure block is being read
-	  if (reading_block) {
-		dout(10) << "read_next already reading log head from disk, offset " << cur_pos << endl;
-		assert(0);  
-	  } else {
-		off_t start = buf_start+buffer.length();
-		dout(10) << "read_next reading log head from disk, offset " << start << " len " << g_conf.mds_log_read_inc << endl;
-		// nope.  read a chunk
-		C_LS_ReadChunk *readc = new C_LS_ReadChunk(this, le, c);
-		reading_block = true;
-		mds->filer->read(log_ino,  // FIXME
-						 g_conf.mds_log_read_inc, start,
-						 &readc->bl,
-						 readc);
-	  }
-	  return 0;
-	}
-	step = 2;
-  }
-
-
-  if (step == 2) {
-	reading_block = false;
-
-	// decode event
-	unsigned off = cur_pos-buf_start;
-	__uint32_t type, length;
-	buffer.copy(off, sizeof(__uint32_t), (char*)&type);
-	buffer.copy(off+sizeof(__uint32_t), sizeof(__uint32_t), (char*)&length);
-	off += sizeof(type) + sizeof(length);
-
-	dout(10) << "read_next got event type " << type << " size " << length << " at log offset " << cur_pos << endl;
-	cur_pos += sizeof(type) + sizeof(length) + length;
-
-	switch (type) {
-	  
-	case EVENT_STRING:  // string
-	  *le = new EString(buffer.substr(off,length));
-	  break;
-	  
-	case EVENT_INODEUPDATE:
-	  *le = new EInodeUpdate(buffer.substr(off,length));
-	  break;
-
-	case EVENT_UNLINK:
-	  *le = new EUnlink(buffer.substr(off,length));
-	  break;
-
-	  
-
-	default:
-	  dout(1) << "uh oh, unknown event type " << type << endl;
-	  assert(0);
-	}
-	
-	// finish
-	if (c) {
-	  c->finish(0);
-	  delete c;
-	}
-
-	/*
-	// any other waiters too!
-	list<Context*> finished = waiting_for_read_block;
-	waiting_for_read_block.clear();
-	for (list<Context*>::iterator it = finished.begin();
-		 it != finished.end();
-		 it++) {
-	  Context *c = *it;
-	  if (c) {
-		c->finish(0);
-		delete c;
-	  }
-	}
-	*/
-	
-  }
+  list<Context*> finished;
+  finished.splice(finished.begin(), waiting_for_read);
+  finish_contexts(finished, 0);
 }
+

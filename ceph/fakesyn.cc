@@ -144,7 +144,7 @@ int main(int oargc, char **oargv) {
 	cout << "mounting" << endl;
 	client[i]->mount(mkfs);
 	
-	cout << "starting synthatic client  " << endl;
+	cout << "starting synthetic client  " << endl;
 	syn[i] = new SyntheticClient(client[i]);
 
 	char s[20];

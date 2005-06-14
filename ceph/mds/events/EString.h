@@ -18,14 +18,17 @@ class EString : public LogEvent {
 	LogEvent(EVENT_STRING) {
 	event = e;
   }
-  EString(crope s) :
+  EString() :
 	LogEvent(EVENT_STRING) {
-	event = s.c_str();
+  }
+
+  void decode_payload(bufferlist& bl, int& off) {
+	event = bl.c_str() + off;
+	off += event.length() + 1;
   }
   
-  // note: LogEvent owns serialized buffer
-  virtual crope get_payload() {
-	return crope(event.c_str());
+  void encode_payload(bufferlist& bl) {
+	bl.append(event.c_str(), event.length()+1);
   }
 };
 

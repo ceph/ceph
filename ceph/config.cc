@@ -25,6 +25,8 @@ md_config_t g_conf = {
   fakemessenger_serialize: true,
 
   debug: 15,
+  debug_mds_balancer: 1,
+  debug_mds_log: 1,
   
   // --- client ---
   client_cache_size: 400,
@@ -38,14 +40,14 @@ md_config_t g_conf = {
 
   mds_log: true,
   mds_log_max_len:  10000,//MDS_CACHE_SIZE / 3,
-  mds_log_max_trimming: 16,
+  mds_log_max_trimming: 32,
   mds_log_read_inc: 65536,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,
-  mds_bal_interval: 200,
+  mds_bal_interval: 500,
 
   mds_commit_on_shutdown: true,
 
@@ -114,6 +116,10 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--debug") == 0) 
 	  g_conf.debug = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug_mds_balancer") == 0) 
+	  g_conf.debug_mds_balancer = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug_mds_log") == 0) 
+	  g_conf.debug_mds_log = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--log") == 0) 
 	  g_conf.log_name = argv[++i];
 
@@ -126,6 +132,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.mds_log_before_reply = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_len") == 0) 
 	  g_conf.mds_log_max_len = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_log_read_inc") == 0) 
+	  g_conf.mds_log_read_inc = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) 
 	  g_conf.mds_log_max_trimming = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_commit_on_shutdown") == 0) 

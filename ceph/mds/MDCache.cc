@@ -1465,6 +1465,13 @@ void MDCache::request_cleanup(Message *req)
 
   // remove from map
   active_requests.erase(req);
+
+
+  // log some stats *****
+  mds->logger->set("c", lru.lru_get_size());
+  mds->logger->set("cmax", lru.lru_get_max());
+
+
 }
 
 void MDCache::request_finish(Message *req)
@@ -1473,7 +1480,7 @@ void MDCache::request_finish(Message *req)
   request_cleanup(req);
   delete req;  // delete req
   
-  mds->logger->inc("rep");
+  mds->logger->inc("reply");
 
   //dump();
 }
@@ -7224,55 +7231,7 @@ void MDCache::handle_unhash_dir_finish(CDir *dir, int auth)
 
 void MDCache::show_imports()
 {
-  if (imports.size() == 0) {
-	dout(7) << "no imports/exports" << endl;
-	return;
-  }
-  dout(7) << "imports/exports:" << endl;
-
-  set<CDir*> ecopy = exports;
-
-  timepair_t now = g_clock.gettimepair();
-
-  for (set<CDir*>::iterator it = imports.begin();
-	   it != imports.end();
-	   it++) {
-	CDir *im = *it;
-	dout(7) << "  + import (" << im->popularity[MDS_POP_CURDOM].get(now) << "/" << im->popularity[MDS_POP_ANYDOM].get(now) << ")  " << *im << endl;
-	assert( im->is_import() );
-	assert( im->is_auth() );
-	
-	for (set<CDir*>::iterator p = nested_exports[im].begin();
-		 p != nested_exports[im].end();
-		 p++) {
-	  CDir *exp = *p;
-	  dout(7) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get(now) << ", " << exp->popularity[MDS_POP_ANYDOM].get(now) << ")" << *exp << " to " << exp->dir_auth << endl;
-	  assert( exp->is_export() );
-	  assert( !exp->is_auth() );
-	  
-	  if ( get_containing_import(exp) != im ) {
-		dout(7) << "uh oh, containing import is " << get_containing_import(exp) << endl;
-		dout(7) << "uh oh, containing import is " << *get_containing_import(exp) << endl;
-		assert( get_containing_import(exp) == im );
-	  }
-	  
-	  if (ecopy.count(exp) != 1) {
-		dout(7) << " nested_export " << *exp << " not in exports" << endl;
-		assert(0);
-	  }
-	  ecopy.erase(exp);
-	}
-  }
-  
-  if (ecopy.size()) {
-	for (set<CDir*>::iterator it = ecopy.begin();
-		 it != ecopy.end();
-		 it++) 
-	  dout(7) << " stray item in exports: " << **it << endl;
-	assert(ecopy.size() == 0);
-  }
-  
-
+  //mds->balancer->show_imports(true);
 }
 
 

@@ -99,13 +99,13 @@ class bufferlist {
 	while (len > 0) {
 	  // is the rest ALL in this buffer?
 	  if (off + len <= (*curbuf).length()) {
-		(*curbuf).copy(off, len, dest);        // yup, last bit!
+		(*curbuf).copy_out(off, len, dest);        // yup, last bit!
 		break;
 	  }
 
 	  // get as much as we can from this buffer.
 	  int howmuch = (*curbuf).length() - off;
-	  (*curbuf).copy(off, howmuch, dest);
+	  (*curbuf).copy_out(off, howmuch, dest);
 
 	  dest += howmuch;
 	  len -= howmuch;
@@ -114,6 +114,48 @@ class bufferlist {
 	  assert(curbuf != _buffers.end());
 	}
   }
+
+  void copy_in(int off, int len, char *src) {
+	assert(off >= 0);
+	assert(off + len <= length());
+
+	// advance to off
+	list<bufferptr>::iterator curbuf = _buffers.begin();
+
+	// skip off
+	while (off > 0) {
+	  assert(curbuf != _buffers.end());
+	  if (off >= (*curbuf).length()) {
+		// skip this buffer
+		off -= (*curbuf).length();
+		curbuf++;
+	  } else {
+		// somewhere in this buffer!
+		break;
+	  }
+	}
+	
+	// copy
+	while (len > 0) {
+	  // is the rest ALL in this buffer?
+	  if (off + len <= (*curbuf).length()) {
+		(*curbuf).copy_in(off, len, src);        // yup, last bit!
+		break;
+	  }
+
+	  // get as much as we can from this buffer.
+	  int howmuch = (*curbuf).length() - off;
+	  (*curbuf).copy_in(off, howmuch, src);
+
+	  src += howmuch;
+	  len -= howmuch;
+	  off = 0;
+	  curbuf++;
+	  assert(curbuf != _buffers.end());
+	}
+  }
+
+
   void append(const char *data, int len) {
 	if (len == 0) return;
 	
@@ -228,7 +270,7 @@ class bufferlist {
 		//cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
 		if (claim_by) 
 		  claim_by->append( *curbuf, len, off );
-		(*curbuf).set_offset( off + len );    // ignore beginning big
+		(*curbuf).set_offset( off + len + (*curbuf).offset() );    // ignore beginning big
 		(*curbuf).set_length( (*curbuf).length() - len - off );
 		//cout << " now " << *curbuf << endl;
 		break;

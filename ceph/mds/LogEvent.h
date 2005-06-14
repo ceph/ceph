@@ -10,6 +10,7 @@ using namespace std;
 #define EVENT_STRING       1
 #define EVENT_INODEUPDATE  2
 #define EVENT_UNLINK       3
+#define EVENT_ALLOC        4
 
 // generic log event
 class LogEvent {
@@ -23,21 +24,22 @@ class LogEvent {
   
   int get_type() { return type; }
 
-  virtual crope get_payload() = 0;   // children overload this
+  virtual void encode_payload(bufferlist& bl) = 0;
+  virtual void decode_payload(bufferlist& bl, int& off) = 0;
 
-  crope get_serialized() {
-	crope s;
-
+  void encode(bufferlist& bl) {
 	// type
-	__uint32_t ptype = type;
-	s.append((char*)&ptype, sizeof(ptype));
+	bl.append((char*)&type, sizeof(type));
 
-	// len+payload
-	crope payload = get_payload();
-	__uint32_t plen = payload.length();
-	s.append((char*)&plen, sizeof(plen));
-	s.append(payload);
-	return s;
+	// len placeholder
+	int len = 0;   // we don't know just yet...
+	int off = bl.length();
+	bl.append((char*)&type, sizeof(len)); 
+
+	// payload
+	encode_payload(bl);
+	len = bl.length() - off - sizeof(len);
+	bl.copy_in(off, sizeof(len), (char*)&len);
   }
   
   virtual bool obsolete(MDS *m) {

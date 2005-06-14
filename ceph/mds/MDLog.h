@@ -39,12 +39,14 @@ class MDLog {
   size_t num_events; // in events
   size_t max_events;
 
-  LogStream *reader;
-  LogStream *writer;
+  LogStream *logstream;
   
-  list<LogEvent*> trimming;     // events currently being trimmed
+  set<LogEvent*>  trimming;     // events currently being trimmed
   list<Context*>  trim_waiters; // contexts waiting for trim
   bool            trim_reading;
+
+  bool waiting_for_read;
+  friend class C_MDL_Reading;
 
   Logger *logger;
   
@@ -63,16 +65,12 @@ class MDLog {
   }
 
   int submit_entry( LogEvent *e,
-					 Context *c );
-  int submit_entry_2( LogEvent *e,
-					  Context *c );
+					Context *c = 0 );
+  void wait_for_sync( Context *c );
+  void flush();
 
-  int trim(Context *c);                // want to trim
-  void trim_readnext();                // read next event
-  int trim_2_didread(LogEvent *e);     // read log event
-  int trim_3_didretire(LogEvent *e);   // finished retiring log event
-
-
+  void trim(Context *c);
+  void _trimmed(LogEvent *le);
 };
 
 #endif

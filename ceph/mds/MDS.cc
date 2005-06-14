@@ -258,6 +258,7 @@ public:
 
 void MDS::proc_message(Message *m) 
 {
+  
   switch (m->get_type()) {
 	// OSD ===============
   case MSG_OSD_OPREPLY:
@@ -387,6 +388,10 @@ void MDS::my_dispatch(Message *m)
 	did_heartbeat_hack = true;
   }
   */
+
+
+  // flush log
+  mdlog->flush();
 	
 
   // finish any triggered contexts
@@ -534,31 +539,32 @@ class C_MDS_CommitRequest : public Context {
   MClientRequest *req;
   MClientReply *reply;
   CInode *tracei;    // inode to include a trace for
-  bool pinned;
   LogEvent *event;
+
 public:
   C_MDS_CommitRequest(MDS *mds, 
-					  MClientRequest *req, MClientReply *reply, CInode *tracei,
-					  LogEvent *event = 0,
-					  bool pinned=false) {
+					  MClientRequest *req, MClientReply *reply, CInode *tracei, 
+					  LogEvent *event=0) {
 	this->mds = mds;
 	this->req = req;
 	this->tracei = tracei;
-	this->pinned = pinned;
 	this->reply = reply;
 	this->event = event;
   }
   void finish(int r) {
-	if (r == 0) {
-	  // success.  log and reply.
-	  mds->commit_request(req, reply, tracei, event);
-	} else {
+	if (r != 0) {
 	  // failure.  set failure code and reply.
 	  reply->set_result(r);
+	}
+	if (event) {
+	  mds->commit_request(req, reply, tracei, event);
+	} else {
+	  // reply.
 	  mds->reply_request(req, reply, tracei);
 	}
   }
 };
+
 
 /*
  * send generic response (just and error code)
@@ -567,6 +573,7 @@ void MDS::reply_request(MClientRequest *req, int r, CInode *tracei)
 {
   reply_request(req, new MClientReply(req, r), tracei);
 }
+
 
 /*
  * send given reply
@@ -591,6 +598,7 @@ void MDS::reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei
   stat_ops++;
 }
 
+
 /* 
  * commit event(s) to the metadata journal, then reply.
  * or, be sloppy and do it concurrently (see g_conf.mds_log_before_reply)
@@ -601,37 +609,22 @@ void MDS::commit_request(MClientRequest *req,
 						 LogEvent *event,
 						 LogEvent *event2) 
 {	  
-  if (g_conf.mds_log_before_reply) {
+  // log
+  if (event) mdlog->submit_entry(event);
+  if (event2) mdlog->submit_entry(event2);
+  
+  if (g_conf.mds_log_before_reply && g_conf.mds_log) {
 	// SAFE mode!
-	
-	if (event) {
-	  // log, then reply
 
-	  // pin inode so it doesn't go away!
-	  if (tracei) mdcache->request_pin_inode(req, tracei);
-	  
-	  // pass event2 as event1 (so we chain together!)
-	  /*
-		WARNING: by chaining back to CommitRequest we may get
-		something not quite right if the log commit fails.  what 
-		happens (to the whole system!) then?   ** FIXME **
-	  */
-	  dout(10) << "commit_request submitting log entry" << endl;
-	  mdlog->submit_entry(event, 
-						  new C_MDS_CommitRequest(this, req, reply, tracei, event2, true));  // inode is pinned
-	}
-	else {
-	  // just reply, no log entry (anymore).
-	  reply_request(req, reply, tracei);
-	}
-  } else {
-	// SLOPPY mode!
+	// pin inode so it doesn't go away!
+	if (tracei) mdcache->request_pin_inode(req, tracei);
 
-	// log
-	if (event) mdlog->submit_entry(event, NULL);
-	if (event2) mdlog->submit_entry(event2, NULL);
-
-	// reply
+	// wait for log sync
+	mdlog->wait_for_sync(new C_MDS_CommitRequest(this, req, reply, tracei)); 
+	return;
+  }
+  else {
+	// just reply
 	reply_request(req, reply, tracei);
   }
 }

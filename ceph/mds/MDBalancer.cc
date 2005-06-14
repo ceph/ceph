@@ -17,7 +17,7 @@ using namespace std;
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".bal "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << "mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
@@ -101,7 +101,7 @@ void MDBalancer::send_heartbeat()
 
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  dout(5) << " got heartbeat " << m->get_beat() << " from " << m->get_source() << " " << m->get_load() << endl;
+  dout(5) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source() << " " << m->get_load() << endl;
   
   if (!mds->mdcache->get_root()) {
 	dout(10) << "no root on handle" << endl;
@@ -114,7 +114,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 	beat_epoch = m->get_beat();
 	send_heartbeat();
 
-	mds->mdcache->show_imports();
+	show_imports();
   }
   
   mds_load[ m->get_source() ] = m->get_load();
@@ -173,7 +173,7 @@ void MDBalancer::do_rebalance()
   
   if (my_load < target_load.root_pop) {
 	dout(5) << "  i am underloaded, doing nothing." << endl;
-	mds->mdcache->show_imports();
+	show_imports();
 	return;
   }  
 
@@ -241,7 +241,7 @@ void MDBalancer::do_rebalance()
 
 	dout(5) << " sending " << amount << " to " << target << endl;
 	
-	mds->mdcache->show_imports();
+	show_imports();
 
 	// search imports from target
 	if (import_from_map.count(target)) {
@@ -310,7 +310,7 @@ void MDBalancer::do_rebalance()
   }
 
   dout(5) << "rebalance done" << endl;
-  mds->mdcache->show_imports();
+  show_imports();
   
 }
 
@@ -507,6 +507,64 @@ void MDBalancer::subtract_export(CDir *dir)
 void MDBalancer::add_import(CDir *dir)
 {
   
+}
+
+
+
+
+
+
+void MDBalancer::show_imports(bool external)
+{
+  int db = 7; //debug level
+
+  if (mds->mdcache->imports.size() == 0) {
+	dout(db) << "no imports/exports" << endl;
+	return;
+  }
+  dout(db) << "imports/exports:" << endl;
+
+  set<CDir*> ecopy = mds->mdcache->exports;
+
+  timepair_t now = g_clock.gettimepair();
+
+  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
+	   it != mds->mdcache->imports.end();
+	   it++) {
+	CDir *im = *it;
+	dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM].get(now) << "/" << im->popularity[MDS_POP_ANYDOM].get(now) << ")  " << *im << endl;
+	assert( im->is_import() );
+	assert( im->is_auth() );
+	
+	for (set<CDir*>::iterator p = mds->mdcache->nested_exports[im].begin();
+		 p != mds->mdcache->nested_exports[im].end();
+		 p++) {
+	  CDir *exp = *p;
+	  dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get(now) << ", " << exp->popularity[MDS_POP_ANYDOM].get(now) << ")" << *exp << " to " << exp->dir_auth << endl;
+	  assert( exp->is_export() );
+	  assert( !exp->is_auth() );
+	  
+	  if ( mds->mdcache->get_containing_import(exp) != im ) {
+		dout(1) << "uh oh, containing import is " << mds->mdcache->get_containing_import(exp) << endl;
+		dout(1) << "uh oh, containing import is " << *mds->mdcache->get_containing_import(exp) << endl;
+		assert( mds->mdcache->get_containing_import(exp) == im );
+	  }
+	  
+	  if (ecopy.count(exp) != 1) {
+		dout(1) << " nested_export " << *exp << " not in exports" << endl;
+		assert(0);
+	  }
+	  ecopy.erase(exp);
+	}
+  }
+  
+  if (ecopy.size()) {
+	for (set<CDir*>::iterator it = ecopy.begin();
+		 it != ecopy.end();
+		 it++) 
+	  dout(1) << " stray item in exports: " << **it << endl;
+	assert(ecopy.size() == 0);
+  }
 }
 
 

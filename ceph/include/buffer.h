@@ -177,11 +177,14 @@ class bufferptr {
   int length() {
 	return _len;
   }
+  int offset() {
+	return _off;
+  }
 
 
   // modifiers
   void set_offset(int off) {
-	assert(off <= _len);
+	assert(off <= _buffer->_alloc_len);
 	_off = off;
   }
   void set_length(int len) {
@@ -201,10 +204,15 @@ class bufferptr {
 	_buffer->_len += len;
 	_len += len;
   }
-  void copy(int off, int len, char *dest) {
+  void copy_out(int off, int len, char *dest) {
 	assert(off >= 0 && off <= _len);
 	assert(len >= 0 && off + len <= _len);
 	memcpy(dest, c_str() + off, len);
+  }
+  void copy_in(int off, int len, char *src) {
+	assert(off >= 0 && off <= _len);
+	assert(len >= 0 && off + len <= _len);
+	memcpy(c_str() + off, src, len);
   }
 
   friend ostream& operator<<(ostream& out, bufferptr& bp);
@@ -213,8 +221,8 @@ class bufferptr {
 
 inline ostream& operator<<(ostream& out, bufferptr& bp) {
   return out << "bufferptr(len=" << bp._len << ", off=" << bp._off 
-			 << ", " << bp.c_str() 
-	//<< ", " << *bp._buffer 
+	//<< ", " << bp.c_str() 
+			 << ", " << *bp._buffer 
 			 << ")";
 }
 

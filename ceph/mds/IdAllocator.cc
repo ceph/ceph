@@ -3,6 +3,9 @@
 
 #include "IdAllocator.h"
 #include "MDS.h"
+#include "MDLog.h"
+#include "events/EAlloc.h"
+
 #include "osd/Filer.h"
 #include "osd/OSDCluster.h"
 
@@ -23,8 +26,10 @@ idno_t IdAllocator::get_id(int type)
   idno_t id = free[type].first();
   free[type].erase(id);
   dout(DBLEVEL) << "idalloc " << this << ": getid type " << type << " is " << id << endl;
-  //free[type].dump();
-  //save();
+
+  mds->mdlog->submit_entry(new EAlloc(type, id, EALLOC_EV_ALLOC));
+  dirty[type].insert(id);
+
   return id;
 }
 
@@ -35,14 +40,16 @@ void IdAllocator::reclaim_id(int type, idno_t id)
   dout(DBLEVEL) << "idalloc " << this << ": reclaim type " << type << " id " << id << endl;
   free[type].insert(id);
   //free[type].dump();
-  //save();
+
+  mds->mdlog->submit_entry(new EAlloc(type, id, EALLOC_EV_FREE));
+  dirty[type].insert(id);
 }
 
 
 
 
 
-void IdAllocator::save()
+void IdAllocator::save(Context *onfinish)
 {
   crope data;
 
@@ -73,6 +80,9 @@ void IdAllocator::save()
 	assert(mapsize == 0);
   }
 
+  // reset dirty list   .. FIXME this is optimistic, i'm assuming the write succeeds.
+  dirty.clear();
+
   // turn into bufferlist
   bufferlist bl;
   bl.append(data.c_str(), data.length());
@@ -83,7 +93,7 @@ void IdAllocator::save()
 					0,
 					bl,
 					0,
-					NULL);
+					onfinish);
 }
 
 

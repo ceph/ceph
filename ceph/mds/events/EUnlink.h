@@ -24,19 +24,22 @@ class EUnlink : public LogEvent {
 	this->dname = dn->get_name();
 	this->version = dir->get_version();
   }
-  EUnlink(crope s) :
+  EUnlink() :
 	LogEvent(EVENT_UNLINK) {
-	s.copy(0, sizeof(dir_ino), (char*)&dir_ino);
-	s.copy(sizeof(dir_ino), sizeof(version), (char*)&version);
-	dname = s.c_str() + sizeof(dir_ino) + sizeof(version);
   }
   
-  virtual crope get_payload() {
-	crope r;
-	r.append((char*)&dir_ino, sizeof(dir_ino));
-	r.append((char*)&version, sizeof(version));
-	r.append((char*)dname.c_str(), dname.length() + 1);
-	return r;
+  virtual void encode_payload(bufferlist& bl) {
+	bl.append((char*)&dir_ino, sizeof(dir_ino));
+	bl.append((char*)&version, sizeof(version));
+	bl.append((char*)dname.c_str(), dname.length() + 1);
+  }
+  void decode_payload(bufferlist& bl, int& off) {
+	bl.copy(off, sizeof(dir_ino), (char*)&dir_ino);
+	off += sizeof(dir_ino);
+	bl.copy(off, sizeof(version), (char*)&version);
+	off += sizeof(version);
+	dname = bl.c_str() + off;
+	off += dname.length() + 1;
   }
   
   virtual bool obsolete(MDS *mds) {
