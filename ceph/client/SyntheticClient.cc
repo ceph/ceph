@@ -165,10 +165,11 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
 
 
 
-int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB
+int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
 {
   //__uint64_t wrsize = 1024*256;
   char *buf = new char[wrsize];   // 1 MB
+  memset(buf, 1, wrsize);
   __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)wrsize;
 
   int fd = client->open(fn.c_str(), O_WRONLY|O_CREAT);

@@ -210,7 +210,7 @@ class Client : public Dispatcher {
 	// unlink from inode
 	dn->inode = 0;
 	in->dn = 0;
-	in->put();
+	put_inode(in);
 	
 	// unlink from dir
 	dn->dir->dentries.erase(dn->name);
@@ -227,14 +227,7 @@ class Client : public Dispatcher {
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 
   // trim cache.
-  void trim_cache() {
-	while (lru.lru_get_size() > lru.lru_get_max()) {
-	  Dentry *dn = (Dentry*)lru.lru_expire();
-	  if (!dn) break;  // done
-	  
-	  unlink(dn);
-	}
-  }
+  void trim_cache();
   
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
@@ -253,6 +246,7 @@ class Client : public Dispatcher {
  public:
   Client(MDCluster *mdc, int id, Messenger *m);
   ~Client();
+  void tear_down_cache();   
 
   int get_nodeid() { return whoami; }
 

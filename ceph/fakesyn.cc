@@ -182,7 +182,9 @@ int main(int oargc, char **oargv) {
 	delete client[i];
   }
   delete mdc;
-  
+
+  free(argv);
+  delete[] nargv;
   return 0;
 }
 

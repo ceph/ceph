@@ -407,6 +407,8 @@ void* mpimessenger_loop(void*)
   dout(5) << "finishing async sends" << endl;
   mpi_finish_sends();
 
+  g_timer.shutdown();
+
   dout(5) << "mpimessenger_loop exiting loop" << endl;
 }
 

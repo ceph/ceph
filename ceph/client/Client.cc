@@ -54,6 +54,35 @@ Client::~Client()
   if (messenger) { delete messenger; messenger = 0; }
   if (filer) { delete filer; filer = 0; }
   if (osdcluster) { delete osdcluster; osdcluster = 0; }
+
+  tear_down_cache();
+}
+
+void Client::tear_down_cache()
+{
+  // fh's
+  for (map<fileh_t, Fh*>::iterator it = fh_map.begin();
+	   it != fh_map.end();
+	   it++) {
+	Fh *fh = it->second;
+	put_inode(fh->inode);
+	delete fh;
+  }
+  fh_map.clear();
+
+  // empty lru
+  lru.lru_set_max(0);
+  trim_cache();
+
+  // close root ino
+  assert(inode_map.size() <= 1);
+  if (root && inode_map.size() == 1) {
+	delete root;
+	root = 0;
+	inode_map.clear();
+  }
+
+  assert(inode_map.empty());
 }
 
 
@@ -72,6 +101,16 @@ void Client::shutdown() {
 // ===================
 // metadata cache stuff
 
+void Client::trim_cache()
+{
+  while (lru.lru_get_size() > lru.lru_get_max()) {
+	Dentry *dn = (Dentry*)lru.lru_expire();
+	if (!dn) break;  // done
+
+	//dout(10) << "unlinking dn " << dn->name << " in dir " << dn->dir->inode->inode.ino << endl;
+	unlink(dn);
+  }
+}
 
 // insert inode info into metadata cache
 
@@ -886,14 +925,16 @@ int Client::open(const char *path, int mode)
   // success?
   if (result > 0) {
 	// yay
+	fileh_t fh = reply->get_result();      // FIXME?
 	Fh *f = new Fh;
 	memset(f, 0, sizeof(*f));
 	f->mds = reply->get_source();
 	f->inode = inode_map[trace[trace.size()-1]->inode.ino];
 	f->caps = reply->get_file_caps();
-	fh_map[reply->get_result()] = f;
+	assert(fh_map.count(fh) == 0);
+	fh_map[fh] = f;
 
-	dout(3) << "open success, fh is " << reply->get_result() << " caps " << f->caps << "  fh size " << f->size << endl;
+	dout(3) << "open success, fh is " << fh << " caps " << f->caps << "  fh size " << f->size << endl;
   }
 
   delete reply;
@@ -927,6 +968,7 @@ int Client::close(fileh_t fh)
   /* mds may ack our close() after reissuing same fh to another open; remove from
 	 fh_map _before_ sending request. */
   fh_map.erase(fh);
+  delete f;
 
   release_inode_buffers(in);
 

@@ -173,6 +173,7 @@ bool Timer::cancel_event(Context *callback)
   if (!event_times.count(callback)) {
 	dout(DBL) << "cancel_event " << callback << " wasn't scheduled?" << endl;
 	lock.Unlock();
+	assert(0);
 	return false;     // wasn't scheduled.
   }
 

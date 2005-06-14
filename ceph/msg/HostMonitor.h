@@ -42,8 +42,10 @@ class HostMonitor {
   int   max_heartbeat_misses;  // how many misses before i tell
   float notify_retry_interval; // how often to retry failure notification
 
+ public:
   set<Context*>  pending_events;
 
+ private:
   void schedule_heartbeat();
 
  public:

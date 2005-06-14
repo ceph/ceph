@@ -91,7 +91,7 @@ void FakeStore::wipe_dir(string mydir)
 {
   DIR *dir = opendir(mydir.c_str());
   if (dir) {
-	dout(1) << "wiping " << mydir << endl;
+	dout(10) << "wiping " << mydir << endl;
 	struct dirent *ent = 0;
 	
 	while (ent = readdir(dir)) {
@@ -123,7 +123,7 @@ int FakeStore::mkfs()
   // make sure my dir exists
   r = ::stat(mydir.c_str(), &st);
   if (r != 0) {
-	dout(1) << "creating " << mydir << endl;
+	dout(10) << "creating " << mydir << endl;
 	mkdir(mydir.c_str(), 0755);
 	r = ::stat(mydir.c_str(), &st);
 	if (r != 0) {

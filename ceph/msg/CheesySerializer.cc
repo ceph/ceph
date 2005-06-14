@@ -121,6 +121,7 @@ int CheesySerializer::shutdown()
   }	   
   lock.Unlock();
 
-  // shutdown underlying messenger.
+  // shutdown and delete underlying messenger.
   messenger->shutdown();
+  delete messenger;
 }

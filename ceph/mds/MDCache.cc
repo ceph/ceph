@@ -3176,7 +3176,7 @@ void MDCache::handle_rename_notify(MRenameNotify *m)
 
 int MDCache::issue_file_caps(CInode *in,
 							 int mode,
-							 Context *onwait)
+							 MClientRequest *req)
 {
   dout(7) << "issue_file_caps for mode " << mode << " on " << *in << endl;
 
@@ -3222,14 +3222,15 @@ int MDCache::issue_file_caps(CInode *in,
 	  }
 	}
 	
-	in->add_waiter(CINODE_WAIT_CAPS, onwait);
+	in->add_waiter(CINODE_WAIT_CAPS, new C_MDS_RetryRequest(mds, req, in));
 	return 0;
   }
 
   // we're okay!
   int caps = my_want & allowed;
   dout(7) << " issuing caps " << caps << " (i want " << my_want << ", allowed " << allowed << ")" << endl;
-  assert(caps);
+  assert(caps > 0);
+
   return caps;
 }
 

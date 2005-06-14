@@ -95,6 +95,8 @@ int fakemessenger_do_loop()
   lock.Lock();
   fakemessenger_do_loop_2();
   lock.Unlock();
+
+  g_timer.shutdown();
 }
 
 
@@ -176,6 +178,7 @@ FakeMessenger::FakeMessenger(long me)  : Messenger(me)
 
   cout << "fakemessenger " << whoami << " messenger is " << this << endl;
 
+  /*
   string name;
   name = "m.";
   name += MSG_ADDR_TYPE(whoami);
@@ -185,15 +188,18 @@ FakeMessenger::FakeMessenger(long me)  : Messenger(me)
   if (w >= 10) name += ('0' + ((w/10)%10));
   name += ('0' + ((w/1)%10));
 
-  logger = new Logger(name, (LogType*)&fakemsg_logtype);
-  loggers[ whoami ] = logger;
+  loggers[ whoami ] = new Logger(name, (LogType*)&fakemsg_logtype);
+  */
 }
 
 FakeMessenger::~FakeMessenger()
 {
   shutdown();
 
-  delete logger;
+  if (loggers[whoami]) {
+	delete loggers[whoami];
+	loggers.erase(whoami);
+  }
 }
 
 

@@ -30,6 +30,7 @@ public:
   }
   void finish(int r) {
 	//cout << "HEARTBEAT" << endl;
+	hm->pending_events.erase(this);
     hm->initiate_heartbeat();
   }
 };
@@ -42,6 +43,7 @@ public:
   }
   void finish(int r) {
 	//cout << "CHECK" << endl;
+	hm->pending_events.erase(this);
     hm->check_heartbeat();
   }
 };
@@ -72,6 +74,7 @@ void HostMonitor::shutdown()
 	   it != pending_events.end();
 	   it++) {
 	g_timer.cancel_event(*it);
+	delete *it;
   }
   pending_events.clear();
 }

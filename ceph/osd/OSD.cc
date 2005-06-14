@@ -82,6 +82,7 @@ OSD::OSD(int id, Messenger *m)
 OSD::~OSD()
 {
   if (osdcluster) { delete osdcluster; osdcluster = 0; }
+  if (monitor) { delete monitor; monitor = 0; }
   if (messenger) { delete messenger; messenger = 0; }
   if (logger) { delete logger; logger = 0; }
   if (store) { delete store; store = 0; }

@@ -66,11 +66,34 @@ class Timer {
 	thread_stop = false;
   }
   ~Timer() { 
-	// cancel any wakeup/thread crap
-	cancel_timer();
+	// scheduled
+	for (map< timepair_t, set<Context*> >::iterator it = scheduled.begin();
+		 it != scheduled.end();
+		 it++) {
+	  for (set<Context*>::iterator sit = it->second.begin();
+		   sit != it->second.end();
+		   sit++)
+		delete *sit;
+	}
+	scheduled.clear();
 
-	// clean up pending events
-	// ** FIXME **
+	// pending
+	for (map< timepair_t, set<Context*> >::iterator it = pending.begin();
+		 it != pending.end();
+		 it++) {
+	  for (set<Context*>::iterator sit = it->second.begin();
+		   sit != it->second.end();
+		   sit++)
+		delete *sit;
+	}
+	pending.clear();
+  }
+  
+  void init() {
+	register_timer();
+  }
+  void shutdown() {
+	cancel_timer();
   }
 
   void set_messenger(Messenger *m);

@@ -2238,8 +2238,7 @@ void MDS::handle_client_open(MClientRequest *req,
 
 
   // can we issue the caps they want?
-  int caps = mdcache->issue_file_caps(cur, mode,
-									  new C_MDS_RetryRequest(this, req, cur));
+  int caps = mdcache->issue_file_caps(cur, mode, req);
   if (!caps) return; // can't issue (yet), so wait!
 
   // create fh

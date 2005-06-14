@@ -302,8 +302,6 @@ class MDDoCommitDirContext : public Context {
   __uint64_t version;
 
 public:
-  bufferlist bl;
-  
   MDDoCommitDirContext(MDStore *ms, CDir *dir, Context *c, int w) : Context() {
 	this->ms = ms;
 	this->dir = dir;
@@ -393,32 +391,20 @@ void MDStore::do_commit_dir( CDir *dir,
   dout(14) << "num " << num << endl;
   
   // put count in buffer
+  bufferlist bl;
   size_t size = sizeof(num) + dirdata.length();
-  fin->bl.append((char*)&size, sizeof(size));
-  fin->bl.append((char*)&num, sizeof(num));
-  fin->bl.append(dirdata.c_str(), dirdata.length());
-  assert(fin->bl.length() == size + sizeof(size));
+  bl.append((char*)&size, sizeof(size));
+  bl.append((char*)&num, sizeof(num));
+  bl.append(dirdata.c_str(), dirdata.length());
+  assert(bl.length() == size + sizeof(size));
   
   // pin inode
   dir->auth_pin();
   
   // submit to osd
-  int osd;
-  object_t oid;
-  if (hashcode >= 0) {
-	// hashed
-	osd = mds->mdcluster->get_hashdir_meta_osd(dir->ino(), hashcode);
-	oid = mds->mdcluster->get_hashdir_meta_oid(dir->ino(), hashcode);
-  } else {
-	// normal
-	osd = mds->mdcluster->get_meta_osd(dir->ino());
-	oid = mds->mdcluster->get_meta_oid(dir->ino());
-  }
-  
-
   mds->filer->write( dir->ino(),
-					 fin->bl.length(), 0,
-					 fin->bl,
+					 bl.length(), 0,
+					 bl,
 					 0, //OSD_OP_FLAGS_TRUNCATE, // truncate file/object after end of this write
 					 fin );
 }
