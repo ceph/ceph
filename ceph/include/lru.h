@@ -9,22 +9,29 @@ using namespace std;
 #include "include/config.h"
 
 
+#define LRU_POS_NONE    0
+#define LRU_POS_TOP     1
+#define LRU_POS_BOT     2
+#define LRU_POS_PINTAIL 3
+
+
 class LRUObject {
  private:
   LRUObject *lru_next, *lru_prev;
-  bool lru_in_top;
-  //bool lru_in_lru;
+  char lru_pos;
   bool lru_expireable;
   class LRU *lru;
 
  public:
   LRUObject() {
 	lru_next = lru_prev = NULL;
-	lru_in_top = false;
-	//lru_in_lru = false;
-	lru = 0;
+	lru_pos = LRU_POS_NONE;
 	lru_expireable = true;
+	lru = 0;
   }
+
+  bool lru_get_pos() { return lru_pos; }
+  void lru_set_pos(char p) { lru_pos = p; }
 
   // pin/unpin item in cache
   void lru_pin(); 
@@ -40,6 +47,7 @@ class LRUObject {
 class LRU {
  protected:
   LRUObject *lru_tophead, *lru_toptail, *lru_bothead, *lru_bottail;
+  LRUObject *lru_pintailhead, *lru_pintailtail;
   __uint32_t lru_ntop, lru_nbot, lru_num, lru_num_pinned;
   double lru_midpoint;
   __uint32_t lru_max;   // max items
@@ -52,6 +60,7 @@ class LRU {
 	lru_num_pinned = 0;
 	lru_tophead = lru_toptail = NULL;
 	lru_bothead = lru_bottail = NULL;
+	lru_pintailhead = lru_pintailtail = NULL;
 	lru_midpoint = .9;
 	lru_max = 0;
   }
@@ -80,7 +89,7 @@ class LRU {
 	assert(!o->lru);
 	o->lru = this;
 
-	o->lru_in_top = true;
+	o->lru_set_pos( LRU_POS_TOP );
 	o->lru_next = lru_tophead;
 	o->lru_prev = NULL;
 	if (lru_tophead) {
@@ -102,7 +111,7 @@ class LRU {
 	assert(!o->lru);
 	o->lru = this;
 
-	o->lru_in_top = false;
+	o->lru_set_pos( LRU_POS_BOT );
 	o->lru_next = lru_bothead;
 	o->lru_prev = NULL;
 	if (lru_bothead) {
@@ -121,7 +130,7 @@ class LRU {
 	assert(!o->lru);
 	o->lru = this;
 
-	o->lru_in_top = false;
+	o->lru_set_pos( LRU_POS_BOT );
 	o->lru_next = NULL;
 	o->lru_prev = lru_bottail;
 	if (lru_bottail) {
@@ -143,7 +152,7 @@ class LRU {
 	if (!lru_max) return;
 
 	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_max);
-	while (lru_ntop > topwant) {
+	while (lru_ntop > topwant && lru_toptail) {
 	  // remove from tail of top, stick at head of bot
 	  // FIXME: this could be way more efficient by moving a whole chain of items.
 	  lru_insert_mid( lru_remove( lru_toptail) );
@@ -159,7 +168,7 @@ class LRU {
 	if (!o->lru) return o;
 
 
-	if (o->lru_in_top) {
+	if (o->lru_get_pos() == LRU_POS_TOP) {
 	  //cout << "removing " << o << " from top" << endl;
 	  // top
 	  if (o->lru_next)
@@ -171,7 +180,8 @@ class LRU {
 	  else
 		lru_tophead = o->lru_next;
 	  lru_ntop--;
-	} else {
+	} 
+	else if (o->lru_get_pos() == LRU_POS_BOT) {
 	  //cout << "removing " << o << " from bot" << endl;
 	  // bot
 	  if (o->lru_next)
@@ -184,10 +194,22 @@ class LRU {
 		lru_bothead = o->lru_next;
 	  lru_nbot--;
 	}
+	else {
+	  assert(o->lru_get_pos() == LRU_POS_PINTAIL);
+	  if (o->lru_next)
+		o->lru_next->lru_prev = o->lru_prev;
+	  else
+		lru_pintailtail = o->lru_prev;
+	  if (o->lru_prev)
+		o->lru_prev->lru_next = o->lru_next;
+	  else
+		lru_pintailhead = o->lru_next;
+	  lru_nbot--;
+	}
 	lru_num--;
 	lru_num_pinned -= !o->lru_expireable;
 	o->lru_next = o->lru_prev = NULL;
-	//o->lru_in_lru = false;
+	o->lru_set_pos(LRU_POS_NONE);
 	o->lru = 0;
 	return o;
   }
@@ -201,8 +223,8 @@ class LRU {
 
   // touch item -- move to midpoint (unless already higher)
   bool lru_midtouch(LRUObject *o) {
-	if (o->lru_in_top) return false;
-
+	if (o->lru_get_pos() == LRU_POS_TOP) return false;
+	
 	lru_remove(o);
 	lru_insert_mid(o);
 	return true;
@@ -221,12 +243,22 @@ class LRU {
 	LRUObject *p;
 
 	// look through tail of bot
-	p = lru_bottail;
-	while (p) {
+	while (lru_bottail) {
+	  p = lru_remove( lru_bottail );
 	  if (p->lru_expireable) 
-		return lru_remove( p );
-	  //cout << "p " << p << " no expireable" << endl;
-	  p = p->lru_prev;
+		return p;   // yay.
+	  
+	  // pinned, move to pintail
+	  p->lru_next = lru_pintailhead;
+	  p->lru_prev = NULL;
+	  if (lru_pintailhead) {
+		lru_pintailhead->lru_prev = p;
+	  } else {
+		lru_pintailtail = p;
+	  }
+	  lru_pintailhead = p;
+	  
+	  p->lru_set_pos( LRU_POS_PINTAIL );
 	}
 
 	// ok, try head then
@@ -257,7 +289,15 @@ inline void LRUObject::lru_pin()
 }
 inline void LRUObject::lru_unpin() {
   lru_expireable = true;
-  if (lru) lru->lru_num_pinned--;
+  if (lru) {
+	lru->lru_num_pinned--;
+
+	// move out of tail?
+	if (lru_get_pos() == LRU_POS_PINTAIL) {
+	  lru->lru_remove(this);
+	  lru->lru_insert_bot(this);
+	}
+  }
 }
 
 #endif
