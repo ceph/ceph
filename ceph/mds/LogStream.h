@@ -54,6 +54,9 @@ class LogStream {
 	reading = false;
   }
 
+  off_t get_read_pos() { return read_pos; }
+  off_t get_append_pos() { return append_pos; }
+
   // write (append to end)
   off_t append(LogEvent *e);          // returns offset it will be written to
   void  _append_2(off_t off);     

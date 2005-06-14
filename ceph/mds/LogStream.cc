@@ -203,6 +203,7 @@ void LogStream::wait_for_next_event(Context *c)
   size_t size = g_conf.mds_log_read_inc;
   if (tail + size > sync_pos) {
 	size = sync_pos - tail;
+	dout(15) << "wait_for_next_event ugh.. read_pos is " << read_pos << ", tail is " << tail << ", sync_pos only " << sync_pos << ", flush_pos " << flush_pos << ", append_pos " << append_pos << endl;
 	assert(size > 0);   // bleh, wait for sync, etc.
   }
 

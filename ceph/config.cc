@@ -24,7 +24,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  debug: 15,
+  debug: 5,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   
@@ -47,7 +47,7 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,
-  mds_bal_interval: 500,
+  mds_bal_interval: 10000,
 
   mds_commit_on_shutdown: true,
 

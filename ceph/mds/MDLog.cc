@@ -125,18 +125,20 @@ void MDLog::trim(Context *c)
   if (c) trim_waiters.push_back(c);
 
   // trim!
-  while (num_events - trimming.size() > max_events) {
-	dout(5) << "trim: num_events " << num_events << " - trimming " << trimming.size() << " > max " << max_events << endl;
+  while (num_events > max_events) {
+	off_t gap = logstream->get_append_pos() - logstream->get_read_pos();
+	dout(5) << "trim: num_events " << num_events << " - trimming " << trimming.size() << " > max " << max_events << " .. gap " << gap << endl;
 	
 	LogEvent *le = logstream->get_next_event();
 
 	if (le) {
+	  num_events--;
+
 	  // we just read an event.
 	  if (le->obsolete(mds) == true) {
 		// obsolete
 		dout(7) << "  obsolete " << le << endl;
 		delete le;
-		num_events--;
 		logger->inc("obs");
 	  } else {
 		if (trimming.size() < g_conf.mds_log_max_trimming) {
@@ -163,7 +165,7 @@ void MDLog::trim(Context *c)
 	}
   }
   
-  // done!
+  // trimmed!
   list<Context*> finished;
   finished.splice(finished.begin(), trim_waiters);
   
@@ -175,7 +177,6 @@ void MDLog::_trimmed(LogEvent *le)
   dout(7) << "  trimmed " << le << endl;
   trimming.erase(le);
   delete le;
-  num_events--;
   
   trim(0);
 }

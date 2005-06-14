@@ -125,6 +125,25 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   logger = new Logger(name, (LogType*)&mds_logtype);
 
+  mds_logtype.add_inc("req");
+  mds_logtype.add_inc("reply");
+  mds_logtype.add_inc("fw");
+  mds_logtype.add_inc("cfw");
+
+  mds_logtype.add_set("c");
+  mds_logtype.add_set("cmax");
+  mds_logtype.add_inc("dis");
+  mds_logtype.add_inc("cmiss");
+
+  mds_logtype.add_inc("iex");
+  mds_logtype.add_inc("iim");
+  mds_logtype.add_inc("ex");
+  mds_logtype.add_inc("im");
+  mds_logtype.add_inc("imex");  
+  mds_logtype.add_set("nex");
+  mds_logtype.add_set("nim");
+
+
   // alloc
   idalloc = new IdAllocator(this);
 
