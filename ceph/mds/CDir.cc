@@ -14,6 +14,8 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << "        cdir: "
 
+map<int,int> cdir_pins;
+
 
 ostream& operator<<(ostream& out, CDir& dir)
 {
@@ -569,6 +571,8 @@ void CDir::mark_clean()
 // ref counts
 
 void CDir::put(int by) {
+  cdir_pins[by]--;
+
   // bad?
   if (ref == 0 || ref_set.count(by) != 1) {
 	dout(7) << *this << " bad put by " << by << " " << cdir_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
@@ -587,6 +591,8 @@ void CDir::put(int by) {
 }
 
 void CDir::get(int by) {
+  cdir_pins[by]++;
+
   // inode
   if (ref == 0)
 	inode->get(CINODE_PIN_DIR);

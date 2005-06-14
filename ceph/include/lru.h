@@ -29,8 +29,10 @@ class LRUObject {
   // pin/unpin item in cache
   void lru_pin(); 
   void lru_unpin();
+  bool lru_is_expireable() { return lru_expireable; }
 
   friend class LRU;
+  //friend class MDCache;
 };
 
 
@@ -43,7 +45,7 @@ class LRU {
   __uint32_t lru_max;   // max items
 
   friend class LRUObject;
-
+  //friend class MDCache; // hack
  public:
   LRU() {
 	lru_ntop = lru_nbot = lru_num = 0;

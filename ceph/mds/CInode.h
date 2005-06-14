@@ -68,12 +68,12 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "opentok",
   "dndirty",
   "authpin",
-  "importing",
+  "imping",
   "request",
-  "renamesrc",
-  "archoring",
+  "rensrc",
+  "anching",
   "--",
-  "dentrylock"
+  "dnlock"
 };
 
 
@@ -155,6 +155,9 @@ class CInode;
 //class MInodeSyncStart;
 
 ostream& operator<<(ostream& out, CInode& in);
+
+
+extern map<int, int> cinode_pins;  // counts
 
 
 // cached inode wrapper
@@ -265,6 +268,7 @@ class CInode : LRUObject {
   // -- misc -- 
   void make_path(string& s);
   void make_anchor_trace(vector<class Anchor*>& trace);
+
 
 
   // -- state --
@@ -467,6 +471,7 @@ class CInode : LRUObject {
   bool is_pinned() { return ref > 0; }
   set<int>& get_ref_set() { return ref_set; }
   void put(int by) {
+	cinode_pins[by]--;
 	if (ref == 0 || ref_set.count(by) != 1) {
 	  dout(7) << " bad put " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
 	  assert(ref_set.count(by) == 1);
@@ -479,6 +484,7 @@ class CInode : LRUObject {
 	dout(7) << " put " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
   }
   void get(int by) {
+	cinode_pins[by]++;
 	if (ref == 0)
 	  lru_pin();
 	if (ref_set.count(by)) {
@@ -649,8 +655,9 @@ public:
 	in->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
 	in->popularity[MDS_POP_ANYDOM].adjust(now, newcurdom);
 
-	if (st.is_dirty)
+	if (st.is_dirty) {
 	  in->mark_dirty();
+	}
 
 	in->cached_by.clear();
 	in->cached_by = cached_by;

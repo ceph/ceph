@@ -122,9 +122,9 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "freeze",
   "proxy",
   "authpin",
-  "importing",
-  "importingexport",
-  "requestpins",
+  "imping",
+  "impgex",
+  "reqpins",
   "dirty"
 };
 
@@ -180,6 +180,10 @@ ostream& operator<<(ostream& out, class CDir& dir);
 
 // CDir
 typedef map<string, CDentry*> CDir_map_t;
+
+
+extern map<int, int> cdir_pins;  // counts
+
 
 class CDir {
  public:

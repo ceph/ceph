@@ -48,7 +48,7 @@
 using namespace std;
 
 
-LogType mds_logtype;
+LogType mds_logtype, mds_cache_logtype;
 
 #include "include/config.h"
 #undef dout
@@ -144,6 +144,10 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
 
+  char n[80];
+  sprintf(n, "mds%d.cache", whoami);
+  logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
+  
 
   // alloc
   idalloc = new IdAllocator(this);

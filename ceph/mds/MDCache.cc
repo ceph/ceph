@@ -507,6 +507,28 @@ bool MDCache::trim(__int32_t max) {
 	} 
   }
 
+  /* hack
+  if (lru.lru_get_size() == max) {
+	int i;
+	dout(1) << "lru_top " << lru.lru_ntop << "/" << lru.lru_num << endl;
+	CInode *cur = (CInode*)lru.lru_tophead;
+	i = 1;
+	while (cur) {
+	  dout(1) << " top " << i++ << "/" << lru.lru_ntop << " " << cur->lru_is_expireable() << "  " << *cur << endl;
+	  cur = (CInode*)cur->lru_next;
+	}
+
+	dout(1) << "lru_bot " << lru.lru_nbot << "/" << lru.lru_num << endl;
+	cur = (CInode*)lru.lru_bothead;
+	i = 1;
+	while (cur) {
+	  dout(1) << " bot " << i++ << "/" << lru.lru_nbot << " " << cur->lru_is_expireable() << "  " << *cur << endl;
+	  cur = (CInode*)cur->lru_next;
+	}
+
+  }
+  */
+
   // send expires
   for (map<int, MCacheExpire*>::iterator it = expiremap.begin();
 	   it != expiremap.end();
@@ -1083,6 +1105,7 @@ int MDCache::path_traverse(filepath& origpath,
 		// keep going.
 		trace.push_back(dn);
 		cur = dn->inode;
+		touch_inode(cur);
 		depth++;
 		continue;
 	  }
@@ -1112,7 +1135,7 @@ int MDCache::path_traverse(filepath& origpath,
 		
 		// directory isn't complete; reload
 		dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << endl;
-		lru.lru_touch(cur);  // touch readdiree
+		touch_inode(cur);
 		mds->mdstore->fetch_dir(cur->dir, ondelay);
 		
 		mds->logger->inc("cmiss");
@@ -1134,7 +1157,7 @@ int MDCache::path_traverse(filepath& origpath,
 		} else {
 		  dout(7) << "traverse: discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
 		  
-		  lru.lru_touch(cur);  // touch discoveree
+		  touch_inode(cur);
 		
 		  mds->messenger->send_message(new MDiscover(mds->get_nodeid(),
 													 cur->ino(),
@@ -1469,6 +1492,28 @@ void MDCache::request_cleanup(Message *req)
   mds->logger->set("c", lru.lru_get_size());
   mds->logger->set("cpin", lru.lru_get_num_pinned());
   mds->logger->set("cmax", lru.lru_get_max());
+
+  // pin
+  for (map<int,int>::iterator it = cinode_pins.begin();
+	   it != cinode_pins.end();
+	   it++) {
+	//string s = "I";
+	//s += cinode_pin_names[it->first];
+	mds->logger2->set(//s, 
+					  cinode_pin_names[it->first],
+					  it->second);
+  }
+  /*
+  for (map<int,int>::iterator it = cdir_pins.begin();
+	   it != cdir_pins.end();
+	   it++) {
+	//string s = "D";
+	//s += cdir_pin_names[it->first];
+	mds->logger2->set(//s, 
+					  cdir_pin_names[it->first],
+					  it->second);
+  }
+  */
 
 
 }
@@ -6346,10 +6391,17 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth, 
   } else {
 	in->set_auth(true);
   }
-  
-  // state
+
+  // link before state
+  if (dn->inode != in) {
+	assert(!dn->inode);
+	dn->dir->link_inode(dn, in);
+  }
+
+  // state after link
   istate.update_inode(in, now);
-  
+ 
+ 
   // add inode?
   if (added) {
 	add_inode(in);
@@ -6358,11 +6410,6 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth, 
 	dout(10) << "  had " << *in << endl;
   }
   
-  // link to dentry
-  if (dn->inode != in) {
-	assert(!dn->inode);
-	dn->dir->link_inode(dn, in);
-  }
   
   // cached_by
   assert(!in->is_cached_by(oldauth));

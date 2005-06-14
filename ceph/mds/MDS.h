@@ -132,7 +132,7 @@ class MDS : public Dispatcher {
   MDLog        *mdlog;
   MDBalancer   *balancer;
 
-  Logger       *logger;
+  Logger       *logger, *logger2;
 
  protected:
   __uint64_t   stat_ops;

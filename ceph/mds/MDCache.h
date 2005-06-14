@@ -59,6 +59,7 @@ class MUnhashDirAck;
 
 typedef hash_map<inodeno_t, CInode*> inode_map_t;
 
+
 typedef const char* pchar;
 
 /** active_request_t
@@ -170,6 +171,13 @@ class MDCache {
  protected:
   void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
+
+  void touch_inode(CInode *in) {
+	if (in->is_auth())
+	  lru.lru_touch(in);
+	else
+	  lru.lru_midtouch(in);
+  }
 
  public:
   void export_empty_import(CDir *dir);
