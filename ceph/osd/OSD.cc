@@ -315,7 +315,8 @@ void OSD::op_read(MOSDOp *r)
 	bptr.set_length(got);   // properly size the buffer
 
 	// give it to the reply in a bufferlist
-	reply->get_data().push_back( bptr );
+	bufferlist bl;
+	bl.push_back( bptr );
 	
 	reply->set_result(0);
 	reply->set_data(bl);
