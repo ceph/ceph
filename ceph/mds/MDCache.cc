@@ -5675,6 +5675,9 @@ void MDCache::encode_export_inode(CInode *in, crope& state_rope, int new_auth)
   in->replica_nonce = CINODE_EXPORT_NONCE;
   
   // *** other state too?
+
+  // move to end of LRU so we drop it out of cache quickly!
+  lru.lru_bottouch(in);
 }
 
 
@@ -6436,8 +6439,7 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth, 
   // other
   if (in->is_dirty()) {
 	dout(10) << "logging dirty import " << *in << endl;
-	mds->mdlog->submit_entry(new EInodeUpdate(in),
-							 NULL);   // FIXME pay attention to completion?
+	mds->mdlog->submit_entry(new EInodeUpdate(in));
   }
 }
 

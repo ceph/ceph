@@ -116,7 +116,26 @@ class LRU {
 	lru_num_pinned += !o->lru_expireable;
   }
 
+  // insert at bottom of lru
+  void lru_insert_bot(LRUObject *o) {
+	assert(!o->lru);
+	o->lru = this;
 
+	o->lru_in_top = false;
+	o->lru_next = NULL;
+	o->lru_prev = lru_bottail;
+	if (lru_bottail) {
+	  lru_bottail->lru_next = o;
+	} else {
+	  lru_bothead = o;
+	}
+	lru_bottail = o;
+	lru_nbot++;
+	lru_num++;
+	lru_num_pinned += !o->lru_expireable;
+  }
+
+  
 
 
   // adjust top/bot balance, as necessary
@@ -186,6 +205,13 @@ class LRU {
 
 	lru_remove(o);
 	lru_insert_mid(o);
+	return true;
+  }
+
+  // touch item -- move to bottom
+  bool lru_bottouch(LRUObject *o) {
+	lru_remove(o);
+	lru_insert_bot(o);
 	return true;
   }
 

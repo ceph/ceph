@@ -21,7 +21,7 @@ md_config_t g_conf = {
   log_name: (char*)0,
 
   log_messages: true,
-  log_pins: false,
+  log_pins: true,
 
   fake_clock: false,
   fakemessenger_serialize: true,
