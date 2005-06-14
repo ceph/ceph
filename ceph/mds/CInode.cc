@@ -64,7 +64,6 @@ CInode::CInode(bool auth) : LRUObject(),
   ref = 0;
   
   parent = NULL;
-  lru_next = lru_prev = NULL;
   
   dir = NULL;     // CDir opened separately
 

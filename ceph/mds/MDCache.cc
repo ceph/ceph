@@ -1467,6 +1467,7 @@ void MDCache::request_cleanup(Message *req)
 
   // log some stats *****
   mds->logger->set("c", lru.lru_get_size());
+  mds->logger->set("cpin", lru.lru_get_num_pinned());
   mds->logger->set("cmax", lru.lru_get_max());
 
 

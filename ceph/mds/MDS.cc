@@ -131,6 +131,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("cfw");
 
   mds_logtype.add_set("c");
+  mds_logtype.add_set("cpin");
   mds_logtype.add_set("cmax");
   mds_logtype.add_inc("dis");
   mds_logtype.add_inc("cmiss");

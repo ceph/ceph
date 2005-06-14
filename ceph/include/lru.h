@@ -10,27 +10,25 @@ using namespace std;
 
 
 class LRUObject {
- protected:
+ private:
   LRUObject *lru_next, *lru_prev;
   bool lru_in_top;
-  bool lru_in_lru;
+  //bool lru_in_lru;
   bool lru_expireable;
+  class LRU *lru;
 
  public:
   LRUObject() {
 	lru_next = lru_prev = NULL;
 	lru_in_top = false;
-	lru_in_lru = false;
+	//lru_in_lru = false;
+	lru = 0;
 	lru_expireable = true;
   }
 
   // pin/unpin item in cache
-  void lru_pin() {
-	lru_expireable = false;
-  }
-  void lru_unpin() {
-	lru_expireable = true;
-  }
+  void lru_pin(); 
+  void lru_unpin();
 
   friend class LRU;
 };
@@ -40,13 +38,16 @@ class LRUObject {
 class LRU {
  protected:
   LRUObject *lru_tophead, *lru_toptail, *lru_bothead, *lru_bottail;
-  __uint32_t lru_ntop, lru_nbot, lru_num;
+  __uint32_t lru_ntop, lru_nbot, lru_num, lru_num_pinned;
   double lru_midpoint;
   __uint32_t lru_max;   // max items
+
+  friend class LRUObject;
 
  public:
   LRU() {
 	lru_ntop = lru_nbot = lru_num = 0;
+	lru_num_pinned = 0;
 	lru_tophead = lru_toptail = NULL;
 	lru_bothead = lru_bottail = NULL;
 	lru_midpoint = .9;
@@ -60,9 +61,11 @@ class LRU {
   __uint32_t lru_get_size() {
 	return lru_num;
   }
-
   __uint32_t lru_get_max() {
 	return lru_max;
+  }
+  __uint32_t lru_get_num_pinned() {
+	return lru_num_pinned;
   }
   void lru_set_max(__uint32_t m) { lru_max = m; }
   void lru_set_midpoint(float f) { lru_midpoint = f; }
@@ -70,8 +73,10 @@ class LRU {
 
   // insert at top of lru
   void lru_insert_top(LRUObject *o) {
-	assert(!o->lru_in_lru);
-	o->lru_in_lru = true;
+	//assert(!o->lru_in_lru);
+	//o->lru_in_lru = true;
+	assert(!o->lru);
+	o->lru = this;
 
 	o->lru_in_top = true;
 	o->lru_next = lru_tophead;
@@ -84,14 +89,16 @@ class LRU {
 	lru_tophead = o;
 	lru_ntop++;
 	lru_num++;
-
+	lru_num_pinned += !o->lru_expireable;
 	lru_adjust();
   }
 
   // insert at mid point in lru
   void lru_insert_mid(LRUObject *o) {
-	assert(!o->lru_in_lru);
-	o->lru_in_lru = true;
+	//assert(!o->lru_in_lru);
+	//o->lru_in_lru = true;
+	assert(!o->lru);
+	o->lru = this;
 
 	o->lru_in_top = false;
 	o->lru_next = lru_bothead;
@@ -104,6 +111,7 @@ class LRU {
 	lru_bothead = o;
 	lru_nbot++;
 	lru_num++;
+	lru_num_pinned += !o->lru_expireable;
   }
 
 
@@ -126,7 +134,9 @@ class LRU {
   LRUObject *lru_remove(LRUObject *o) {
 	// not in list
 	//assert(o->lru_in_lru);
-	if (!o->lru_in_lru) return o;  // might have expired and been removed that way.
+	//if (!o->lru_in_lru) return o;  // might have expired and been removed that way.
+	if (!o->lru) return o;
+
 
 	if (o->lru_in_top) {
 	  //cout << "removing " << o << " from top" << endl;
@@ -154,8 +164,10 @@ class LRU {
 	  lru_nbot--;
 	}
 	lru_num--;
+	lru_num_pinned -= !o->lru_expireable;
 	o->lru_next = o->lru_prev = NULL;
-	o->lru_in_lru = false;
+	//o->lru_in_lru = false;
+	o->lru = 0;
 	return o;
   }
 
@@ -209,5 +221,15 @@ class LRU {
 
 };
 
+
+inline void LRUObject::lru_pin() 
+{
+  lru_expireable = false;
+  if (lru) lru->lru_num_pinned++;
+}
+inline void LRUObject::lru_unpin() {
+  lru_expireable = true;
+  if (lru) lru->lru_num_pinned--;
+}
 
 #endif
