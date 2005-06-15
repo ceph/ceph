@@ -1499,14 +1499,9 @@ void MDCache::request_cleanup(Message *req)
 
   if (g_conf.log_pins) {
 	// pin
-	for (map<int,int>::iterator it = cinode_pins.begin();
-		 it != cinode_pins.end();
-		 it++) {
-	  //string s = "I";
-	  //s += cinode_pin_names[it->first];
-	  mds->logger2->set(//s, 
-						cinode_pin_names[it->first],
-						it->second);
+	for (int i=0; i<CINODE_NUM_PINS; i++) {
+	  mds->logger2->set(cinode_pin_names[i],
+						cinode_pins[i]);
 	}
 	/*
 	  for (map<int,int>::iterator it = cdir_pins.begin();

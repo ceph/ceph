@@ -86,6 +86,10 @@ fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OS
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
+testmpi: test/testmpi.cc msg/MPIMessenger.cc ${COMMON_OBJS}
+	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
+
+
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 

@@ -27,7 +27,7 @@ typedef struct {
   msg_addr_t asker;
 
   object_t oid;
-  repgroup_t rg;
+  repgroup_t rg, rg_role;
   __uint64_t ocv;
 
   int op;
@@ -48,6 +48,7 @@ class MOSDOp : public Message {
 
   object_t get_oid() { return st.oid; }
   repgroup_t get_rg() { return st.rg; }
+  int        get_rg_role() { return st.rg_role; }  // who am i asking for?
   __uint64_t get_ocv() { return st.ocv; }
 
   int get_op() { return st.op; }
@@ -76,11 +77,14 @@ class MOSDOp : public Message {
 
 	this->st.oid = oid;
 	this->st.rg = rg;
+	this->st.rg_role = 0;
 	this->st.ocv = ocv;
 	this->st.op = op;
   }
   MOSDOp() {}
 
+  void set_rg_role(int r) { st.rg_role = r; }
+  
   void set_length(size_t l) { st.length = l; }
   void set_offset(size_t o) { st.offset = o; }
 

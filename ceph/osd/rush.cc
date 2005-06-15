@@ -82,6 +82,9 @@ Rush::GetServersByKey (int key, int nReplicas, int servers[])
   double	myWeight;
   RushRNG	rng;
 
+  // There may not be more replicas than servers!
+  assert (nReplicas <= totalServers);
+  
   for (cluster = nClusters-1; (cluster >= 0) && (replicasLeft > 0); cluster--) {
     if (serversInPrevious[cluster] < replicasLeft) {
       mustAssign = replicasLeft - serversInPrevious[cluster];
@@ -96,13 +99,13 @@ Rush::GetServersByKey (int key, int nReplicas, int servers[])
     rng.Seed (myhash (key)^cluster, cluster^0xb90738);
     numberAssigned = mustAssign +
       rng.HyperGeometricWeighted (toDraw, myWeight,
-				  totalWeightBefore[cluster] + myWeight,
-				  clusterWeight[cluster]);
+								  totalWeightBefore[cluster] + myWeight,
+								  clusterWeight[cluster]);
     if (numberAssigned > 0) {
       rng.Seed (myhash (key)^cluster ^ 11, cluster^0xfea937);
       rng.DrawKofN (srv, numberAssigned, clusterSize[cluster]);
       for (i = 0; i < numberAssigned; i++) {
-	srv[i] += serversInPrevious[cluster];
+		srv[i] += serversInPrevious[cluster];
       }
       replicasLeft -= numberAssigned;
       srv += numberAssigned;

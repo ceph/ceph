@@ -112,7 +112,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_paused = false;
 
   stat_ops = 0;
-  last_heartbeat = 0;
+  last_balancer_heartbeat = g_clock.gettimepair();
 
   // log
   string name;
@@ -441,9 +441,10 @@ void MDS::my_dispatch(Message *m)
   }
 
   // balance?
+  timepair_t now = g_clock.gettimepair();
   if (true && whoami == 0 &&
-	  stat_ops >= last_heartbeat + g_conf.mds_bal_interval) {
-	last_heartbeat = stat_ops;
+	  now.first - last_balancer_heartbeat.first >= g_conf.mds_bal_interval) {
+	last_balancer_heartbeat = now;
 	balancer->send_heartbeat();
   }
 

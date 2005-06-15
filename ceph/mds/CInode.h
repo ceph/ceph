@@ -157,7 +157,7 @@ class CInode;
 ostream& operator<<(ostream& out, CInode& in);
 
 
-extern map<int, int> cinode_pins;  // counts
+extern int cinode_pins[CINODE_NUM_PINS];  // counts
 
 
 // cached inode wrapper

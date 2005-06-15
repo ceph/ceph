@@ -24,7 +24,7 @@ class Message;
 class ReplicaGroup {
  public:
   repgroup_t rg;
-  int        role;    // 1 = primary, 2 = secondary, etc.  0=undef.
+  int        role;    // 0 = primary, 1 = secondary, etc.  0=undef.
   int        state;   
 
   map<object_t, int>  dirty_map;  // dirty objects
@@ -33,6 +33,8 @@ class ReplicaGroup {
 
   void enumerate_objects(list<object_t>& ls);
 };
+
+
 
 class OSD : public Dispatcher {
  protected:

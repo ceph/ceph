@@ -183,6 +183,19 @@ class OSDCluster {
 	return -1;  // we fail!
   }
 
+  /* what replica # is a given osd? 0 primary, -1 for none. */
+  int get_rg_role(repgroup_t rg, int osd) {
+	int group[NUM_RUSH_REPLICAS];
+	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	int role = 0;
+	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
+	  if (failed_osds.count(group[i])) continue;
+	  if (group[i] == osd) return role;
+	  role++;
+	}
+	return -1;  // none
+  }
+
   /* map (ino, offset, len) to a (list of) OSDExtents 
 	 (byte ranges in objects on osds) */
   void file_to_extents(inodeno_t ino,

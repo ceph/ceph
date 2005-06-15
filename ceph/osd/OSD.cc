@@ -217,7 +217,15 @@ void OSD::handle_op(MOSDOp *op)
   if (op->get_ocv() < osdcluster->get_version()) {
 	// op's is old
 	dout(7) << "op cluster " << op->get_ocv() << " > " << osdcluster->get_version() << endl;
+  }
 
+
+
+  // am i the right rg_role?
+  repgroup_t rg = op->get_rg();
+  if (op->get_rg_role() == 0) {
+	// PRIMARY
+	
 	// verify that we are primary, or acting primary
 	int acting_primary = osdcluster->get_rg_acting_primary( op->get_rg() );
 	if (acting_primary != whoami) {
@@ -226,7 +234,18 @@ void OSD::handle_op(MOSDOp *op)
 	  logger->inc("fwd");
 	  return;
 	}
+  } else {
+	// REPLICA
+	int my_role = osdcluster->get_rg_role(rg, whoami);
+	
+	dout(7) << "rg " << rg << " my_role " << my_role << " wants " << op->get_rg_role() << endl;
+
+	if (my_role != op->get_rg_role()) {
+	  assert(0); 
+	}
   }
+
+  
 
   
   // do the op

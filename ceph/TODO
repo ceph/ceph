@@ -26,10 +26,6 @@ md tests:
 - log length versus cache size, workload
 
 
-notes and todos.
-- SyntheticClient
-
-- virtual mega-filesystem (metadata only)
 
 
 finish HARD LINKS

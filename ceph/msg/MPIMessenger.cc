@@ -35,7 +35,7 @@ int mpi_rank;
 bool mpi_done = false;     // set this flag to stop the event loop
 
 
-#define FUNNEL_MPI        // if we want to funnel mpi through a single thread
+#define FUNNEL_MPI         // if we want to funnel mpi through a single thread
 #define TAG_UNSOLICITED 0
 #define DBLVL 18
 
