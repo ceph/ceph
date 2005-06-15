@@ -118,8 +118,6 @@ class OSDCluster {
   }
 
   // serialize, unserialize
-  //void _rope(crope& r);
-  //void _unrope(crope& r, int& off);
   void encode(bufferlist& blist);
   void decode(bufferlist& blist);
 

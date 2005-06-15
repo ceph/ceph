@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <cassert>
 #include "rush.h"
 
 
@@ -159,12 +160,17 @@ RushRNG::DrawKofN (int vals[], int nToDraw, int setSize)
   int	deck[setSize];
   int	i, pick, t;
 
+  assert(nToDraw <= setSize);
+
   for (i = 0; i < setSize; i++) {
     deck[i] = i;
   }
 
   for (i = 0; i < nToDraw; i++) {
     pick = (int)(RandomDouble () * (double)(setSize - i));
+	if (pick >= setSize-i) pick = setSize-i-1;  // in case
+	//	assert(i >= 0 && i < nToDraw);
+	//	assert(pick >= 0 && pick < setSize);
     vals[i] = deck[pick];
     deck[pick] = deck[setSize-i-1];
   }

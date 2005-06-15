@@ -130,7 +130,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("fw");
   mds_logtype.add_inc("cfw");
 
-  mds_logtype.add_set("cmax");
   mds_logtype.add_set("c");
   mds_logtype.add_set("ctop");
   mds_logtype.add_set("cbot");
@@ -147,8 +146,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("imex");  
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
-
-  mds->logger->set("cmax", lru.lru_get_max());
 
   
   char n[80];
@@ -2255,7 +2252,7 @@ void MDS::handle_client_open(MClientRequest *req,
   if (!caps) return; // can't issue (yet), so wait!
 
   // create fh
-  CFile *f = new CFile;
+  CFile *f = new CFile();
   f->mode = mode;
   f->client = req->get_client();
   f->fh = idalloc->get_id(ID_FH);
