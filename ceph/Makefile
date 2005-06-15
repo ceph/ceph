@@ -8,9 +8,19 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-MPICC = mpicxx
 CFLAGS = -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread 
+
+#for normal machines
+MPICC = mpicxx
+MPICFLAGS = ${CFLAGS}
+MPILIBS = ${LIBS}
+
+#for LLNL boxes without mpicxx
+#MPICC = g++
+#MPICFLAGS = ${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
+#MPILIBS = ${LIBS} -lelan -lmpi
+
 
 MDS_OBJS= \
 	mds/MDS.o\
@@ -78,7 +88,7 @@ mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OS
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
-	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o msg/CheesySerializer.o ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@

@@ -222,6 +222,7 @@ void OSD::handle_op(MOSDOp *op)
 
 
   // am i the right rg_role?
+  if (0) {
   repgroup_t rg = op->get_rg();
   if (op->get_rg_role() == 0) {
 	// PRIMARY
@@ -244,7 +245,7 @@ void OSD::handle_op(MOSDOp *op)
 	  assert(0); 
 	}
   }
-
+  }
   
 
   
