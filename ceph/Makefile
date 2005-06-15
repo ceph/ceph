@@ -1,6 +1,6 @@
 
 # mpicxx must be on your path; on Szilard, this means that
-# /usr/local/mpich2-1.0.1/bin must be on your path.
+# /usr/local/mpich2-1.0.2/bin must be on your path.
 
 # For now, use g++ most of the time.
 # When compiling MPI stuff, specify myfile.cc instead of myfile.o so that ${MPICC} is 
@@ -86,7 +86,7 @@ fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OS
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-testmpi: test/testmpi.cc msg/MPIMessenger.cc ${COMMON_OBJS}
+testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/clock.o msg/Messenger.o msg/Dispatcher.o msg/error.o
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
 

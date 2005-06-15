@@ -5,6 +5,7 @@ using namespace std;
 
 #include "include/config.h"
 #include "messages/MPing.h"
+#include "common/Mutex.h"
 
 #include "msg/MPIMessenger.h"
 
@@ -15,13 +16,14 @@ public:
 	m->set_dispatcher(this);
   }
   void dispatch(Message *m) {
-	cout << "got incoming " << m << endl;
+	//dout(1) << "got incoming " << m << endl;
 	delete m;
+
   }
 };
 
 int main(int argc, char **argv) {
-
+  int num = 1000;
 
   int myrank = mpimessenger_init(argc, argv);
   int world = mpimessenger_world();
@@ -30,14 +32,19 @@ int main(int argc, char **argv) {
 
   mpimessenger_start();
 
-  while (1) {
+  while(1) {
 	
 	// ping random nodes
 	int d = rand() % world;
-	p->messenger->send_message(new MPing(), d);
-
+	if (d != myrank) {
+	  //cout << "sending " << i << " to " << d << endl;
+	  p->messenger->send_message(new MPing(), d);
+	 }
+	
   }
+  cout << "shutting down" << endl;
 
+  p->messenger->shutdown();
   
   mpimessenger_wait();
   mpimessenger_shutdown();  // shutdown MPI

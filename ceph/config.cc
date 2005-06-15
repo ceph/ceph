@@ -26,7 +26,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  debug: 5,
+  debug: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   
