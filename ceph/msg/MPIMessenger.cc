@@ -327,7 +327,7 @@ static int get_thread_tag()
 
 void* mpimessenger_loop(void*)
 {
-  dout(1) << "mpimessenger_loop start pid " << getpid() << endl;
+  dout(5) << "mpimessenger_loop start pid " << getpid() << endl;
 
   while (1) {
 
