@@ -13,7 +13,7 @@ using namespace std;
 class LRUObject {
  private:
   LRUObject *lru_next, *lru_prev;
-  bool lru_expireable;
+  bool lru_pinned;
   class LRU *lru;
   class LRUList *lru_list;
 
@@ -21,14 +21,14 @@ class LRUObject {
   LRUObject() {
 	lru_next = lru_prev = NULL;
 	lru_list = 0;
-	lru_expireable = true;
+	lru_pinned = false;
 	lru = 0;
   }
 
   // pin/unpin item in cache
   void lru_pin(); 
   void lru_unpin();
-  bool lru_is_expireable() { return lru_expireable; }
+  bool lru_is_expireable() { return !lru_pinned; }
 
   friend class LRU;
   friend class LRUList;
@@ -121,15 +121,13 @@ class LRU {
 	lru_max = max;
   }
 
-  __uint32_t lru_get_size() {
-	return lru_num;
-  }
-  __uint32_t lru_get_max() {
-	return lru_max;
-  }
-  __uint32_t lru_get_num_pinned() {
-	return lru_num_pinned;
-  }
+  __uint32_t lru_get_size() { return lru_num; }
+  __uint32_t lru_get_top() { return lru_top.get_length(); }
+  __uint32_t lru_get_bot() { return lru_bot.get_length(); }
+  __uint32_t lru_get_pintail() { return lru_pintail.get_length(); }
+  __uint32_t lru_get_max() { return lru_max; }
+  __uint32_t lru_get_num_pinned() { return lru_num_pinned; }
+
   void lru_set_max(__uint32_t m) { lru_max = m; }
   void lru_set_midpoint(float f) { lru_midpoint = f; }
   
@@ -142,7 +140,7 @@ class LRU {
 	o->lru = this;
 	lru_top.insert_head( o );
 	lru_num++;
-	lru_num_pinned += !o->lru_expireable;
+	if (o->lru_pinned) lru_num_pinned++;
 	lru_adjust();
   }
 
@@ -154,7 +152,7 @@ class LRU {
 	o->lru = this;
 	lru_bot.insert_head(o);
 	lru_num++;
-	lru_num_pinned += !o->lru_expireable;
+	if (o->lru_pinned) lru_num_pinned++;
   }
 
   // insert at bottom of lru
@@ -163,20 +161,22 @@ class LRU {
 	o->lru = this;
 	lru_bot.insert_tail(o);
 	lru_num++;
-	lru_num_pinned += !o->lru_expireable;
+	if (o->lru_pinned) lru_num_pinned++;
   }
 
+  /*
   // insert at bottom of lru
   void lru_insert_pintail(LRUObject *o) {
 	assert(!o->lru);
 	o->lru = this;
 	
-	assert(!o->lru_is_expireable());
+	assert(o->lru_pinned);
 
 	lru_pintail.insert_head(o);
 	lru_num++;
-	lru_num_pinned += !o->lru_expireable;
+	lru_num_pinned += o->lru_pinned;
   }
+  */
 
   
 
@@ -186,7 +186,7 @@ class LRU {
 	if (!lru_max) return;
 
 	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_max);
-	while (0 && lru_top.get_length() > 0 && 
+	while (lru_top.get_length() > 0 && 
 		   lru_top.get_length() > topwant) {
 	  // remove from tail of top, stick at head of bot
 	  // FIXME: this could be way more efficient by moving a whole chain of items.
@@ -216,7 +216,7 @@ class LRU {
 	  assert(0);
 
 	lru_num--;
-	lru_num_pinned -= !o->lru_expireable;
+	if (o->lru_pinned) lru_num_pinned--;
 	o->lru = 0;
 	return o;
   }
@@ -253,20 +253,22 @@ class LRU {
 	while (lru_bot.get_length()) {
 	  p = lru_bot.get_tail();
 
-	  if (p->lru_expireable) 
+	  if (!p->lru_pinned) 
 		return lru_remove(p);   // yay.
 
 	  // move to pintail
+	  lru_bot.remove(p);
 	  lru_pintail.insert_head(p);
 	}
 
 	// ok, try head then
 	while (lru_top.get_length()) {
 	  p = lru_top.get_tail();
-	  if (p->lru_expireable) 
+	  if (!p->lru_pinned) 
 		return lru_remove( p );
 
 	  // move to pintail
+	  lru_top.remove(p);
 	  lru_pintail.insert_head(p);
 	}
 	
@@ -284,15 +286,15 @@ class LRU {
 
 inline void LRUObject::lru_pin() 
 {
-  lru_expireable = false;
+  lru_pinned = true;
   if (lru) lru->lru_num_pinned++;
 }
 inline void LRUObject::lru_unpin() {
-  lru_expireable = true;
+  lru_pinned = false;
   if (lru) {
 	lru->lru_num_pinned--;
 
-	// move out of tail?
+	// move from pintail -> bot
 	if (lru_list == &lru->lru_pintail) {
 	  lru->lru_pintail.remove(this);
 	  lru->lru_bot.insert_tail(this);

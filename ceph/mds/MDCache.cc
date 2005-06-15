@@ -505,6 +505,8 @@ bool MDCache::trim(__int32_t max) {
 		export_empty_import(diri->dir);
 	  
 	} 
+
+	mds->logger->inc("cex");
   }
 
   /* hack
@@ -1491,7 +1493,9 @@ void MDCache::request_cleanup(Message *req)
   // log some stats *****
   mds->logger->set("c", lru.lru_get_size());
   mds->logger->set("cpin", lru.lru_get_num_pinned());
-  mds->logger->set("cmax", lru.lru_get_max());
+  mds->logger->set("ctop", lru.lru_get_top());
+  mds->logger->set("cbot", lru.lru_get_bot());
+  mds->logger->set("cptail", lru.lru_get_pintail());
 
   if (g_conf.log_pins) {
 	// pin

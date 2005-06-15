@@ -529,7 +529,8 @@ void MDBalancer::show_imports(bool external)
 {
   int db = 7; //debug level
 
-  if (mds->mdcache->imports.size() == 0) {
+  int num = mds->mdcache->imports.size();
+  if (num == 0) {
 	dout(db) << "no imports/exports" << endl;
 	return;
   }

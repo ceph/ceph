@@ -130,9 +130,13 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("fw");
   mds_logtype.add_inc("cfw");
 
-  mds_logtype.add_set("c");
-  mds_logtype.add_set("cpin");
   mds_logtype.add_set("cmax");
+  mds_logtype.add_set("c");
+  mds_logtype.add_set("ctop");
+  mds_logtype.add_set("cbot");
+  mds_logtype.add_set("cptail");  
+  mds_logtype.add_set("cpin");
+  mds_logtype.add_inc("cex");
   mds_logtype.add_inc("dis");
   mds_logtype.add_inc("cmiss");
 
@@ -144,6 +148,9 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
 
+  mds->logger->set("cmax", lru.lru_get_max());
+
+  
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
   logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
@@ -168,6 +175,7 @@ MDS::~MDS() {
   if (messenger) { delete messenger; messenger = NULL; }
 
   if (logger) { delete logger; logger = 0; }
+  if (logger2) { delete logger2; logger2 = 0; }
 
 }
 
