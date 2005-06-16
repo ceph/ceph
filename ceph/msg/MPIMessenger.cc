@@ -184,12 +184,8 @@ Message *mpi_recv(int tag)
 				  MPI_COMM_WORLD,
 				  &status/*,
 						   &recv_env_req*/) == MPI_SUCCESS);
-  
-  if (status.count < MSG_ENVELOPE_LEN) {
-	dout(DBLVL) << "mpi_recv got short recv " << status.count << " bytes" << endl;
-	assert(0);
-	return 0;
-  }
+  assert(status.count == MSG_ENVELOPE_LEN);
+
   if (env.type == 0) {
 	dout(DBLVL) << "mpi_recv got type 0 message, kicked!" << endl;
 	return 0;
@@ -202,7 +198,7 @@ Message *mpi_recv(int tag)
   for (int i=0; i<env.nchunks; i++) {
 	MPI_Status fragstatus;
 	ASSERT(MPI_Probe(status.MPI_SOURCE,
-					 tag, //TAG_PAYLOAD,
+					 tag,
 					 MPI_COMM_WORLD,
 					 &fragstatus) == MPI_SUCCESS);
 
@@ -212,7 +208,7 @@ Message *mpi_recv(int tag)
 					fragstatus.count,
 					MPI_CHAR, 
 					status.MPI_SOURCE,
-					tag, //TAG_PAYLOAD,
+					tag,
 					MPI_COMM_WORLD,
 					&fragstatus) == MPI_SUCCESS);
 

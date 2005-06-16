@@ -194,7 +194,7 @@ void MDBalancer::do_rebalance()
 		maxim < 0) break;
 
 	if (maxim < maxex) {  // import takes it all
-	  dout(5) << " - " << (*exporter).second << " exports " << maxim << " to " << (*importer).second << endl;
+	  dout(5) << "   - mds" << (*exporter).second << " exports " << maxim << " to mds" << (*importer).second << endl;
 	  if ((*exporter).second == whoami)
 		my_targets.insert(pair<int,double>((*importer).second, maxim));
 	  exported += maxim;
@@ -202,7 +202,7 @@ void MDBalancer::do_rebalance()
 	  imported = 0;
 	} 
 	else if (maxim > maxex) {         // export all
-	  dout(5) << " - " << (*exporter).second << " exports " << maxex << " to " << (*importer).second << endl;
+	  dout(5) << "   - mds" << (*exporter).second << " exports " << maxex << " to mds" << (*importer).second << endl;
 	  if ((*exporter).second == whoami)
 		my_targets.insert(pair<int,double>((*importer).second, maxex));
 	  imported += maxex;
@@ -210,7 +210,7 @@ void MDBalancer::do_rebalance()
 	  exported = 0;
 	} else {
 	  // wow, perfect match!
-	  dout(5) << " - " << (*exporter).second << " exports " << maxex << " to " << (*importer).second << endl;
+	  dout(5) << "   - mds" << (*exporter).second << " exports " << maxex << " to mds" << (*importer).second << endl;
 	  if ((*exporter).second == whoami)
 		my_targets.insert(pair<int,double>((*importer).second, maxex));
 	  imported = exported = 0;
@@ -224,9 +224,16 @@ void MDBalancer::do_rebalance()
   for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
-	import_pop_map.insert(pair<double,CDir*>((*it)->popularity[MDS_POP_CURDOM].get(now), *it));
+	double pop = (*it)->popularity[MDS_POP_CURDOM].get(now);
+	if (pop < g_conf.mds_bal_idle_threshold &&
+		(*it)->inode != mds->mdcache->get_root()) {
+	  dout(5) << " exporting idle import " << **it << endl;
+	  mds->mdcache->export_dir(*it, (*it)->inode->authority());
+	  continue;
+	}
+	import_pop_map[ pop ] = *it;
 	int from = (*it)->inode->authority();
-	dout(5) << "map i imported " << **it << " from " << from << endl;
+	dout(15) << "  map: i imported " << **it << " from " << from << endl;
 	import_from_map.insert(pair<int,CDir*>(from, *it));
   }
   
@@ -552,7 +559,7 @@ void MDBalancer::show_imports(bool external)
 		 p != mds->mdcache->nested_exports[im].end();
 		 p++) {
 	  CDir *exp = *p;
-	  dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get(now) << ", " << exp->popularity[MDS_POP_ANYDOM].get(now) << ")" << *exp << " to " << exp->dir_auth << endl;
+	  dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get(now) << ", " << exp->popularity[MDS_POP_ANYDOM].get(now) << ")  " << *exp << " to " << exp->dir_auth << endl;
 	  assert( exp->is_export() );
 	  assert( !exp->is_auth() );
 	  

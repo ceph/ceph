@@ -87,7 +87,13 @@ mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
+tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+
 mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
+
+tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o msg/CheesySerializer.o ${COMMON_OBJS}

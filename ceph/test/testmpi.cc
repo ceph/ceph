@@ -32,7 +32,8 @@ int main(int argc, char **argv) {
 
   mpimessenger_start();
 
-  while(1) {
+  //while (1) {
+  for (int i=0; i<10000; i++) {
 	
 	// ping random nodes
 	int d = rand() % world;
@@ -42,9 +43,10 @@ int main(int argc, char **argv) {
 	 }
 	
   }
-  cout << "shutting down" << endl;
 
-  p->messenger->shutdown();
+
+  //cout << "shutting down" << endl;
+  //p->messenger->shutdown();
   
   mpimessenger_wait();
   mpimessenger_shutdown();  // shutdown MPI

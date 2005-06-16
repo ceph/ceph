@@ -50,6 +50,7 @@ md_config_t g_conf = {
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,
   mds_bal_interval: 60,           // seconds
+  mds_bal_idle_threshold: .1,
 
   mds_commit_on_shutdown: true,
 

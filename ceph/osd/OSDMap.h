@@ -25,7 +25,7 @@ using namespace __gnu_cxx;
  * some system constants
  */
 #define NUM_REPLICA_GROUPS   (1<<20)  // ~1M
-#define NUM_RUSH_REPLICAS        10   // this should be big enough to cope w/ failing disks.
+#define NUM_RUSH_REPLICAS         4   // this should be big enough to cope w/ failing disks.
 #define MAX_REPLICAS              3
 
 #define FILE_OBJECT_SIZE    (1<<20)  // 1 MB object size
