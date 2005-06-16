@@ -46,7 +46,7 @@ pthread_t thread_id = 0;   // thread id of the event loop.  init value == nobody
 Mutex sender_lock;
 Mutex out_queue_lock;
 
-Timer *pending_timer = 0;
+bool pending_timer;
 
 
 // our lock for any common data; it's okay to have only the one global mutex
@@ -348,18 +348,15 @@ void* mpimessenger_loop(void*)
 
 	// timer events?
 	if (pending_timer) {
-	  Timer *t = pending_timer;
-	  pending_timer = 0;
-	  
 	  dout(DBLVL) << "pending timer" << endl;
-	  t->execute_pending();
+	  g_timer.execute_pending();
 	}
 
 	// done?
 	if (mpi_done &&
 		incoming.empty() &&
 		outgoing.empty() &&
-		pending_timer == 0) break;
+		!pending_timer) break;
 
 
 	// incoming
@@ -485,6 +482,13 @@ void mpimessenger_wait()
  * MPIMessenger class implementation
  */
 
+class C_MPIKicker : public Context {
+  void finish(int r) {
+	dout(DBLVL) << "timer kick" << endl;
+	mpimessenger_kick_loop();
+  }
+};
+
 MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger(myaddr)
 {
   // my address
@@ -494,7 +498,7 @@ MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger(myaddr)
   directory[myaddr] = this;
 
   // register to execute timer events
-  g_timer.set_messenger(this);
+  g_timer.set_messenger_kicker(new C_MPIKicker());
 
   // logger
   /*
@@ -524,7 +528,7 @@ int MPIMessenger::shutdown()
   directory.erase(myaddr);
 
   // no more timer events
-  g_timer.unset_messenger();
+  g_timer.unset_messenger_kicker();
 
   // last one?
   if (directory.empty()) {
@@ -548,15 +552,6 @@ int MPIMessenger::shutdown()
 
 
 
-/*** events
- */
-
-void MPIMessenger::trigger_timer(Timer *t)
-{
-  pending_timer = t;
-
-  mpimessenger_kick_loop();
-}
 
 /***
  * public messaging interface

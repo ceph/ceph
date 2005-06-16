@@ -31,7 +31,7 @@ class FakeMessenger : public Messenger {
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0) { assert(0); };
 
   // events
-  virtual void trigger_timer(Timer *t);
+  //virtual void trigger_timer(Timer *t);
 
 
   // -- incoming queue --

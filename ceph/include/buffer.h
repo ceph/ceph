@@ -14,7 +14,7 @@ using namespace std;
 #define BUFFER_MODE_NOFREE 0
 #define BUFFER_MODE_FREE   2
 
-#define BUFFER_MODE_DEFAULT (BUFFER_MODE_COPY|BUFFER_MODE_FREE)
+#define BUFFER_MODE_DEFAULT 3//(BUFFER_MODE_COPY|BUFFER_MODE_FREE)
 
 /*
  * buffer  - the underlying buffer container.  with a reference count.
@@ -34,34 +34,46 @@ class buffer {
 
   
   int _ref;
-  int _get() { return ++_ref; }
-  int _put() { return --_ref; }
+  int _get() { 
+	cout << "buffer.get " << *this << " get " << _ref+1 << endl;
+	return ++_ref; 
+  }
+  int _put() { 
+	cout << "buffer.put " << *this << " put " << _ref-1 << endl;
+	return --_ref; 
+  }
   
   friend class bufferptr;
 
  public:
   // constructors
   buffer() : _dataptr(0), _len(0), _alloc_len(0), _ref(0), _myptr(true) { 
-	//cout << "buffer() " << *this << endl;
+	cout << "buffer.cons " << *this << endl;
   }
-  buffer(int a) : _len(0), _alloc_len(a), _ref(0), _myptr(true) {
-	//cout << "buffer(empty) " << *this << endl;
+  buffer(int a) : _dataptr(0), _len(0), _alloc_len(a), _ref(0), _myptr(true) {
+	cout << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
+	cout << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
-	//cout << "~buffer " << *this << endl;
-	if (_dataptr && _myptr) 
+	cout << "buffer.des " << *this << endl;
+	if (_dataptr && _myptr) {
+	  cout << "buffer.free " << (void*)_dataptr << endl;
 	  delete[] _dataptr;
+	}
   }
-
+  
   buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT) : 
-	_len(l), 
-	_alloc_len(l), 
-	_ref(0),
-	_myptr(mode & BUFFER_MODE_FREE ? true:false) {
-	//cout << "buffer cons mode = " << _myptr << endl;
+	_dataptr(0), 
+	 _len(l), 
+	 _alloc_len(l), 
+	 _ref(0),
+	 _myptr(0) {
+	_myptr = mode & BUFFER_MODE_FREE ? true:false;
+	cout << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
 	if (mode & BUFFER_MODE_COPY) {
 	  _dataptr = new char[l];
+	  cout << "buffer.malloc " << (void*)_dataptr << endl;
 	  memcpy(_dataptr, p, l);
 	  //cout << "buffer(copy) " << *this << endl;
 	} else {
@@ -94,7 +106,7 @@ class buffer {
 };
 
 inline ostream& operator<<(ostream& out, buffer& b) {
-  return out << "buffer(len=" << b._len << ", alloc=" << b._alloc_len << ", " << (void*)b._dataptr << ")";
+  return out << "buffer(this=" << &b << " len=" << b._len << ", alloc=" << b._alloc_len << ", data=" << (void*)b._dataptr << " ref=" << b._ref << ")";
 }
 
 

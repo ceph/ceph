@@ -38,6 +38,8 @@ LogType fakemsg_logtype;
 Mutex lock;
 Cond  cond;
 
+bool pending_timer = false;
+
 bool      awake = false;
 bool      shutdown = false;
 pthread_t thread_id;
@@ -83,10 +85,15 @@ void fakemessenger_wait()
   cout << "fakemessenger_wait waiting" << endl;
   void *ptr;
   pthread_join(thread_id, &ptr);
+
+
+  g_timer.unset_messenger_kicker();
+
+
 }
 
 
-Timer *pending_timer = 0;
+
 
 // lame main looper
 
@@ -112,11 +119,8 @@ int fakemessenger_do_loop_2()
 
 	// timer?
 	if (pending_timer) {
-	  Timer *t = pending_timer;
-	  pending_timer = 0;
-
 	  dout(5) << "pending timer" << endl;
-	  t->execute_pending();
+	  g_timer.execute_pending();
 	}
 
 	// messages
@@ -168,13 +172,20 @@ int fakemessenger_do_loop_2()
 
 // class
 
+class C_FakeKicker : public Context {
+  void finish(int r) {
+	dout(18) << "timer kick" << endl;
+	pending_timer = true;
+	cond.Signal();  // why not
+  }
+};
+
 FakeMessenger::FakeMessenger(long me)  : Messenger(me)
 {
   whoami = me;
   directory[ whoami ] = this;
 
-  g_timer.set_messenger(this);
-  pending_timer = 0;
+  g_timer.set_messenger_kicker(new C_FakeKicker());
 
   cout << "fakemessenger " << whoami << " messenger is " << this << endl;
 
@@ -205,14 +216,13 @@ FakeMessenger::~FakeMessenger()
 
 int FakeMessenger::shutdown()
 {
-  g_timer.unset_messenger();
-
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   directory.erase(whoami);
   if (directory.empty()) 
 	::shutdown = true;
 }
 
+/*
 void FakeMessenger::trigger_timer(Timer *t) 
 {
   // note timer to call
@@ -221,7 +231,7 @@ void FakeMessenger::trigger_timer(Timer *t)
   // wake up thread?
   cond.Signal();  // why not
 }
-
+*/
 
 int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {

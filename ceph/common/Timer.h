@@ -19,6 +19,7 @@ using namespace std;
 
 class Messenger;
 
+
 class Timer {
  private:
   map< timepair_t, set<Context*> >  scheduled;    // time -> (context ...)
@@ -96,8 +97,8 @@ class Timer {
 	cancel_timer();
   }
 
-  void set_messenger(Messenger *m);
-  void unset_messenger();
+  void set_messenger_kicker(Context *c);
+  void unset_messenger_kicker();
 
   // schedule events
   void add_event_after(float seconds,

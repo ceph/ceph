@@ -185,6 +185,7 @@ int main(int oargc, char **oargv) {
 
   free(argv);
   delete[] nargv;
+  cout << "fakesyn done" << endl;
   return 0;
 }
 

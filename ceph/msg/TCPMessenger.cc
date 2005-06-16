@@ -65,7 +65,7 @@ pthread_t out_thread_id = 0;   // thread id of the event loop.  init value == no
 pthread_t listen_thread_id = 0;
 Mutex sender_lock;
 
-Timer *pending_timer = 0;
+bool pending_timer = false;
 
 
 
@@ -491,17 +491,14 @@ void* tcpmessenger_loop(void*)
 
 	// timer events?
 	if (pending_timer) {
-	  Timer *t = pending_timer;
-	  pending_timer = 0;
-	  
 	  dout(DBL) << "pending timer" << endl;
-	  t->execute_pending();
+	  g_timer.execute_pending();
 	}
 
 	// done?
 	if (tcp_done &&
 		incoming.empty() &&
-		pending_timer == 0) break;
+		!pending_timer) break;
 	
 	// incoming
 	dout(12) << "loop waiting for incoming messages" << endl;
@@ -612,6 +609,13 @@ void tcpmessenger_wait()
  * Tcpmessenger class implementation
  */
 
+class C_TCPKicker : public Context {
+  void finish(int r) {
+	dout(DBL) << "timer kick" << endl;
+	incoming_cond.Signal();
+  }
+};
+
 TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
 {
   // my address
@@ -621,7 +625,7 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
   directory[myaddr] = this;
 
   // register to execute timer events
-  g_timer.set_messenger(this);
+  g_timer.set_messenger_kicker(new C_TCPKicker());
 
   // logger
   /*
@@ -651,7 +655,7 @@ int TCPMessenger::shutdown()
   directory.erase(myaddr);
 
   // no more timer events
-  g_timer.unset_messenger();
+  g_timer.unset_messenger_kicker();
 
   // last one?
   if (directory.empty()) {
@@ -691,15 +695,6 @@ int TCPMessenger::shutdown()
 
 
 
-/*** events
- */
-
-void TCPMessenger::trigger_timer(Timer *t)
-{
-  pending_timer = t;
-
-  tcpmessenger_kick_loop();
-}
 
 /***
  * public messaging interface
@@ -714,8 +709,10 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_dest(dest, port);
 
   if (0) {
+	// der
 	tcp_send(m);
   } else {
+	// good way
 	outgoing_lock.Lock();
 	outgoing.push_back(m);
 	outgoing_lock.Unlock();

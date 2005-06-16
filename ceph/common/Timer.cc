@@ -20,7 +20,8 @@
 // single global instance
 Timer      g_timer;
 
-Messenger *messenger_to_kick = 0;
+Context *messenger_kicker = 0;
+
 
 ostream& operator<<(ostream& out, timepair_t& t)
 {
@@ -64,10 +65,13 @@ void Timer::timer_thread()
 		scheduled.erase(t);
 	  }
 
-	  if (messenger_to_kick) {
+	  if (messenger_kicker) {
 		dout(DBL) << "kicking messenger" << endl;
-		messenger_to_kick->trigger_timer(this);
+		messenger_kicker->finish(0);
+	  } else {
+		dout(DBL) << "no messenger ot kick!" << endl;
 	  }
+
 	}
 
 	else {
@@ -92,15 +96,19 @@ void Timer::timer_thread()
  */
 
 
-void Timer::set_messenger(Messenger *m) 
+void Timer::set_messenger_kicker(Context *c)
 {
-  dout(10) << "messenger to kick is " << m << endl;
-  messenger_to_kick = m;
+  dout(10) << "messenger kicker is " << c << endl;
+  messenger_kicker = c;
 }
-void Timer::unset_messenger() 
+
+void Timer::unset_messenger_kicker() 
 {
   dout(10) << "unset messenger" << endl;
-  messenger_to_kick = 0;
+  if (messenger_kicker) {
+	delete messenger_kicker;
+	messenger_kicker = 0;
+  }
   cancel_timer();
 }
 
@@ -118,8 +126,6 @@ void Timer::register_timer()
 void Timer::cancel_timer()
 {
   // clear my callback pointers
-  messenger_to_kick = 0;
-
   if (thread_id) {
 	dout(10) << "setting thread_stop flag" << endl;
 	lock.Lock();
