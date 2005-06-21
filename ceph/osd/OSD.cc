@@ -77,6 +77,7 @@ OSD::OSD(int id, Messenger *m)
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
 
+  threadpool->init(10);
 }
 
 OSD::~OSD()
@@ -114,8 +115,6 @@ int OSD::shutdown()
 
 void OSD::dispatch(Message *m) 
 {
-  osd_lock.Lock();
-
   switch (m->get_type()) {
 	// host monitor
   case MSG_PING_ACK:
@@ -148,8 +147,6 @@ void OSD::dispatch(Message *m)
   default:
 	dout(1) << " got unknown message " << m->get_type() << endl;
   }
-
-  osd_lock.Unlock();
 }
 
 
@@ -171,6 +168,9 @@ void OSD::handle_ping(MPing *m)
 
 void OSD::handle_getcluster_ack(MOSDGetClusterAck *m)
 {
+  // SAB
+  osd_lock.Lock();
+
   if (!osdcluster) osdcluster = new OSDCluster();
   osdcluster->decode(m->get_osdcluster());
   dout(7) << "got OSDCluster version " << osdcluster->get_version() << endl;
@@ -186,19 +186,30 @@ void OSD::handle_getcluster_ack(MOSDGetClusterAck *m)
 	handle_op(*it);
   }
 
+  // SAB
+  osd_lock.Unlock();
 }
 
 void OSD::handle_op(MOSDOp *op)
 {
   // starting up?
+
   if (!osdcluster) {
+    // SAB
+    osd_lock.Lock();
+
 	dout(7) << "no OSDCluster, starting up" << endl;
 	if (waiting_for_osdcluster.empty()) 
 	  messenger->send_message(new MGenericMessage(MSG_OSD_GETCLUSTER), 
 							  MSG_ADDR_MDS(0), MDS_PORT_MAIN);
 	waiting_for_osdcluster.push_back(op);
+
+	// SAB
+	osd_lock.Unlock();
+
 	return;
   }
+  
 
   // check cluster version
   if (op->get_ocv() > osdcluster->get_version()) {
@@ -210,7 +221,15 @@ void OSD::handle_op(MOSDOp *op)
 	messenger->send_message(new MGenericMessage(MSG_OSD_GETCLUSTER), 
 							MSG_ADDR_MDS(0), MDS_PORT_MAIN);
 	assert(0);
+
+	// SAB
+	osd_lock.Lock();
+
 	waiting_for_osdcluster.push_back(op);
+
+	// SAB
+	osd_lock.Unlock();
+
 	return;
   }
 
@@ -246,80 +265,43 @@ void OSD::handle_op(MOSDOp *op)
 	}
   }
   }
-  
 
+  do_op(op);
+}
   
+void OSD::do_op(MOSDOp *op) 
+{
   // do the op
   switch (op->get_op()) {
 
   case OSD_OP_READ:
-	op_read(op);
-	break;
+    op_read(op);
+    break;
 
   case OSD_OP_WRITE:
-	op_write(op);
-	break;
+    op_write(op);
+    break;
 
   case OSD_OP_MKFS:
-	dout(3) << "MKFS" << endl;
-	{
-	  int r = store->mkfs();	
-	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
-							  op->get_asker());
-	}
-	delete op;
-	break;
+    op_mkfs(op);
+    break;
 
   case OSD_OP_DELETE:
-	{
-	  int r = store->remove(op->get_oid());
-	  dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
-	  
-	  // "ack"
-	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
-							  op->get_asker());
-
-	  logger->inc("rm");
-	}
-	delete op;
-	break;
+    op_delete(op);
+    break;
 
   case OSD_OP_TRUNCATE:
-	{
-	  int r = store->truncate(op->get_oid(), op->get_offset());
-	  dout(3) << "truncate on " << op->get_oid() << " at " << op->get_offset() << " r = " << r << endl;
-	  
-	  // "ack"
-	  messenger->send_message(new MOSDOpReply(op, r, osdcluster), 
-							  op->get_asker());
-	  logger->inc("trunc");
-	}
-	delete op;
-	break;
+    op_truncate(op);
+    break;
 
   case OSD_OP_STAT:
-	{
-	  struct stat st;
-	  memset(&st, sizeof(st), 0);
-	  int r = store->stat(op->get_oid(), &st);
-  
-	  dout(3) << "stat on " << op->get_oid() << " r = " << r << " size = " << st.st_size << endl;
-	  
-	  MOSDOpReply *reply = new MOSDOpReply(op, r, osdcluster);
-	  reply->set_object_size(st.st_size);
-	  messenger->send_message(reply, op->get_asker());
-	  
-	  logger->inc("stat");
-	}
-	delete op;
-	break;
+    op_stat(op);
+    break;
 	
   default:
-	assert(0);
+    assert(0);
   }
 }
-
-
 
 
 void OSD::op_read(MOSDOp *r)
@@ -406,3 +388,53 @@ void OSD::op_write(MOSDOp *m)
   delete m;
 }
 
+void OSD::op_mkfs(MOSDOp *op)
+{
+  dout(3) << "MKFS" << endl;
+  {
+    int r = store->mkfs();	
+    messenger->send_message(new MOSDOpReply(op, r, osdcluster), op->get_asker());
+  }
+  delete op;
+}
+
+void OSD::op_delete(MOSDOp *op)
+{
+  int r = store->remove(op->get_oid());
+  dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
+  
+  // "ack"
+  messenger->send_message(new MOSDOpReply(op, r, osdcluster), op->get_asker());
+  
+  logger->inc("rm");
+  delete op;
+}
+
+void OSD::op_truncate(MOSDOp *op)
+{
+  int r = store->truncate(op->get_oid(), op->get_offset());
+  dout(3) << "truncate on " << op->get_oid() << " at " << op->get_offset() << " r = " << r << endl;
+  
+  // "ack"
+  messenger->send_message(new MOSDOpReply(op, r, osdcluster), op->get_asker());
+  
+  logger->inc("trunc");
+
+  delete op;
+}
+
+void OSD::op_stat(MOSDOp *op)
+{
+  struct stat st;
+  memset(&st, sizeof(st), 0);
+  int r = store->stat(op->get_oid(), &st);
+  
+  dout(3) << "stat on " << op->get_oid() << " r = " << r << " size = " << st.st_size << endl;
+	  
+  MOSDOpReply *reply = new MOSDOpReply(op, r, osdcluster);
+  reply->set_object_size(st.st_size);
+  messenger->send_message(reply, op->get_asker());
+	  
+  logger->inc("stat");
+  delete op;
+}

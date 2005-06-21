@@ -71,14 +71,24 @@ class OSDCluster {
 
   Rush             *rush;       // rush implementation
 
+  Mutex  osd_cluster_lock;
+
   void init_rush() {
+
+    // SAB
+    osd_cluster_lock.Lock();
+
 	if (rush) delete rush;
 	rush = new Rush();
 	
 	int ngroups = osd_groups.size();
-	for (int i=0; i<ngroups; i++) 
+	for (int i=0; i<ngroups; i++) {
 	  rush->AddCluster(osd_groups[i].num_osds,
 					   osd_groups[i].weight);
+	}
+
+    // SAB
+    osd_cluster_lock.Unlock();
   }
 
 

@@ -20,7 +20,6 @@ class Message;
 #define RG_DIRTY_REPLICA_MEM   4
 #define RG_DIRTY_REPLICA_SYNC  8
 
-
 class ReplicaGroup {
  public:
   repgroup_t rg;
@@ -45,6 +44,7 @@ class OSD : public Dispatcher {
   class ObjectStore *store;
   class HostMonitor *monitor;
   class Logger      *logger;
+  class ThreadPool  *threadpool;
 
   list<class MOSDOp*> waiting_for_osdcluster;
 
@@ -61,6 +61,8 @@ class OSD : public Dispatcher {
   // OSDCluster
   void update_osd_cluster(__uint64_t ocv, bufferlist& blist);
 
+  void do_op(class MOSDOp *m);
+
   // messages
   virtual void dispatch(Message *m);
 
@@ -69,6 +71,10 @@ class OSD : public Dispatcher {
   void handle_op(class MOSDOp *m);
   void op_read(class MOSDOp *m);
   void op_write(class MOSDOp *m);
+  void op_mkfs(class MOSDOp *m);
+  void op_delete(class MOSDOp *m);
+  void op_truncate(class MOSDOp *m);
+  void op_stat(class MOSDOp *m);
 };
 
 #endif
