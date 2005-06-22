@@ -77,7 +77,6 @@ OSD::OSD(int id, Messenger *m)
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
 
-  threadpool->init(10);
 }
 
 OSD::~OSD()

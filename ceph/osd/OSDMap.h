@@ -10,6 +10,7 @@
 #include "include/config.h"
 #include "include/types.h"
 #include "msg/Message.h"
+#include "common/Mutex.h"
 #include "rush.h"
 
 #include <vector>
