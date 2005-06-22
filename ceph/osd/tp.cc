@@ -7,7 +7,6 @@ using namespace std;
 
 #include "common/Mutex.h"
 #include "osd/ThreadPool.h"
-#include <thread.h>
 
 class Op {
   int i;
@@ -24,7 +23,7 @@ public:
 };
 
 void foo(Op *o) {
-  cout << "Thread "<< thr_self() << ": " << o->get() << "\n";
+  cout << "Thread "<< pthread_self() << ": " << o->get() << "\n";
   usleep(1);
 }
 
