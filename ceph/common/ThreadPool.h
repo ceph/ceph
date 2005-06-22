@@ -2,31 +2,14 @@
 #define THREADPOOL
 
 #include <queue>
-#include<semaphore.h>
 #include <pthread.h>
 #include <common/Mutex.h>
+#include <common/Cond.h>
+#include<common/Semaphore.h>
 
 using namespace std;
  
 #define MAX_THREADS 1000
-
-class Semaphore {
-  sem_t sem;
-
- public:
-
-  void init(int i) {
-    sem_init(&sem, 0, i);
-  }
-
-  void get() {
-    sem_wait(&sem);
-  }
-
-  void put() {
-    sem_post(&sem);
-  }
-};
 
 template <class T>
 class ThreadPool {
@@ -35,22 +18,24 @@ class ThreadPool {
   queue<T *> q;
   Mutex q_lock;
   Semaphore q_sem;
-  pthread_t thread[MAX_THREADS];
+  pthread_t *thread;
   int num_ops;
   int num_threads;
   void (*func)(T*);
 
-  static void *foo(void *arg) {
+  static void *foo(void *arg)
+  {
     ThreadPool *t = (ThreadPool *)arg;
     t->do_ops(arg);
   }
 
-  void * do_ops(void *nothing) {
+  void * do_ops(void *nothing)
+  {
     T* op;
 
     cout << "Thread ready for action\n";
     while(1) {
-      q_sem.get();
+      q_sem.Get();
       op = get_op();
 
       if(op == NULL) {
@@ -62,7 +47,8 @@ class ThreadPool {
   }
 
 
-  T* get_op() {
+  T* get_op()
+  {
     T* op;
 
     q_lock.Lock();
@@ -75,45 +61,36 @@ class ThreadPool {
   }
 
  public:
-  ThreadPool(int howmany, void (*f)(T*)) {
-    num_ops = 0;
-    num_threads = 0;
 
+  ThreadPool(int howmany, void (*f)(T*))
+  {
     int status;
 
+    num_ops = 0;
     func = f;
-
     num_threads = howmany;
-
-    q_sem.init(0);
+    thread = new pthread_t[num_threads];
 
     for(int i = 0; i < howmany; i++) {
       status = pthread_create(&thread[i], NULL, (void*(*)(void *))&ThreadPool::foo, this);
     }
   }
 
-  ~ThreadPool() {
-    q_lock.Lock();
-    for(int i = num_ops; i > 0; i--) 
-      get_op();
-
+  ~ThreadPool()
+  {
     for(int i = 0; i < num_threads; i++) {
-      put_op((T*)NULL);
+      cout << "Killing thread " << i << "\n";
+      pthread_cancel(thread[i]);
     }
-    q_lock.Unlock();
-
-    for(int i = 0; i < num_threads; i++) {
-      cout << "Waiting for thread " << i << " to die\n";
-      pthread_join(thread[i], NULL);
-    }
-
+    delete thread;
   }
 
-  void put_op(T* op) {
+  void put_op(T* op)
+  {
     q_lock.Lock();
     q.push(op);
     num_ops++;
-    q_sem.put();
+    q_sem.Put();
     q_lock.Unlock();
   }
 

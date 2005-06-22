@@ -16,7 +16,8 @@ class Semaphore
     count = 0;
   }
 
-  void Put()  { 
+  void Put()
+  { 
     m.Lock();
     count++;
     c.Signal();
@@ -27,7 +28,7 @@ class Semaphore
   { 
     m.Lock();
     while(count <= 0) {
-      C.Wait(m);
+      c.Wait(m);
     }
     count--;
     m.Unlock();
