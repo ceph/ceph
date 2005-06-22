@@ -9,7 +9,7 @@
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
 CFLAGS = -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread 
+LIBS = -lpthread  -lrt
 
 #for normal machines
 MPICC = mpicxx
@@ -69,6 +69,9 @@ import: mds/allmds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS}
 
 singleclient: mds/allmds.o osd/OSD.o fakesingleclient.o client/Client.o \
 msg/CheesySerializer.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+tp: osd/tp.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o \
