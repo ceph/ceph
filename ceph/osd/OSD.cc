@@ -22,6 +22,8 @@
 #include "common/Logger.h"
 #include "common/LogType.h"
 
+#include "common/ThreadPool.h"
+
 #include <iostream>
 #include <cassert>
 #include <errno.h>
@@ -39,6 +41,7 @@ char *osd_base_path = "./osddata";
 // cons/des
 
 LogType osd_logtype;
+
 
 OSD::OSD(int id, Messenger *m) 
 {
@@ -70,13 +73,13 @@ OSD::OSD(int id, Messenger *m)
   
   monitor->get_notify().insert(MSG_ADDR_MDS(0));
 
-
-
   // log
   char name[80];
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
 
+  // Thread pool
+  threadpool = new ThreadPool<OSD, MOSDOp>(10, (void (*)(OSD*, MOSDOp*))doop, this);
 }
 
 OSD::~OSD()
@@ -241,31 +244,36 @@ void OSD::handle_op(MOSDOp *op)
 
   // am i the right rg_role?
   if (0) {
-  repgroup_t rg = op->get_rg();
-  if (op->get_rg_role() == 0) {
-	// PRIMARY
+    repgroup_t rg = op->get_rg();
+    if (op->get_rg_role() == 0) {
+      // PRIMARY
 	
-	// verify that we are primary, or acting primary
-	int acting_primary = osdcluster->get_rg_acting_primary( op->get_rg() );
-	if (acting_primary != whoami) {
-	  dout(7) << " acting primary is " << acting_primary << ", forwarding" << endl;
-	  messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
-	  logger->inc("fwd");
-	  return;
-	}
-  } else {
-	// REPLICA
-	int my_role = osdcluster->get_rg_role(rg, whoami);
-	
-	dout(7) << "rg " << rg << " my_role " << my_role << " wants " << op->get_rg_role() << endl;
-
-	if (my_role != op->get_rg_role()) {
-	  assert(0); 
-	}
+      // verify that we are primary, or acting primary
+      int acting_primary = osdcluster->get_rg_acting_primary( op->get_rg() );
+      if (acting_primary != whoami) {
+	dout(7) << " acting primary is " << acting_primary << ", forwarding" << endl;
+	messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
+	logger->inc("fwd");
+	return;
+      }
+    } else {
+      // REPLICA
+      int my_role = osdcluster->get_rg_role(rg, whoami);
+      
+      dout(7) << "rg " << rg << " my_role " << my_role << " wants " << op->get_rg_role() << endl;
+      
+      if (my_role != op->get_rg_role()) {
+	assert(0); 
+      }
+    }
   }
-  }
 
-  do_op(op);
+  queue_op(op);
+  // do_op(op);
+}
+
+void OSD::queue_op(MOSDOp *op) {
+  threadpool->put_op(op);
 }
   
 void OSD::do_op(MOSDOp *op) 
@@ -436,4 +444,8 @@ void OSD::op_stat(MOSDOp *op)
 	  
   logger->inc("stat");
   delete op;
+}
+
+void doop(OSD *u, MOSDOp *p) {
+  u->do_op(p);
 }

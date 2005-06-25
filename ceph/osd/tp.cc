@@ -5,7 +5,7 @@
 using namespace std;
 
 #include "common/Mutex.h"
-#include "osd/ThreadPool.h"
+#include "common/ThreadPool.h"
 // #include <thread.h>
 
 class Op {
@@ -24,27 +24,43 @@ public:
   }
 };
 
-void foo(Op *o)
-{
-  cout << "Thread "<< pthread_self() << ": " << o->get() << "\n";
-  usleep(1);
-  
-  //  sched_yield();
-}
+void foop(class TP *t, class Op *o);
 
-int main(int argc, char *argv)
-{
-  ThreadPool<Op> *t = new ThreadPool<Op>(10, foo);
+class TP {
+public:
 
-  for(int i = 0; i < 100; i++) {
-    Op *o = new Op(i); 
-    t->put_op(o);
+  void foo(Op *o)
+  {
+    cout << "Thread "<< pthread_self() << ": " << o->get() << "\n";
+    usleep(1);
+    
+    //  sched_yield();
   }
 
-  sleep(1);
+  int main(int argc, char *argv)
+  {
+    ThreadPool<TP,Op> *t = new ThreadPool<TP,Op>(10, (void (*)(TP*, Op*))foop, this);
+    
+    for(int i = 0; i < 100; i++) {
+      Op *o = new Op(i); 
+      t->put_op(o);
+    }
+    
+    sleep(1);
+    
+    delete(t);
+    
+    return 0;
+  }
+};
 
-  delete(t);
+void foop(class TP *t, class Op *o) {
+  t->foo(o);
+}
 
-  return 0;
+int main(int argc, char *argv) {
+  TP t;
+
+  t.main(argc,argv);
 }
 

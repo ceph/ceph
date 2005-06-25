@@ -11,7 +11,7 @@ using namespace std;
  
 #define MAX_THREADS 1000
 
-template <class T>
+template <class U, class T>
 class ThreadPool {
 
  private:
@@ -21,7 +21,8 @@ class ThreadPool {
   pthread_t *thread;
   int num_ops;
   int num_threads;
-  void (*func)(T*);
+  void (*func)(U*,T*);
+  U *u;
 
   static void *foo(void *arg)
   {
@@ -33,7 +34,7 @@ class ThreadPool {
   {
     T* op;
 
-    cout << "Thread ready for action\n";
+    cout << "Thread "<< pthread_self() << " ready for action\n";
     while(1) {
       q_sem.Get();
       op = get_op();
@@ -42,7 +43,8 @@ class ThreadPool {
 	cout << "Thread exiting\n";
 	pthread_exit(0);
       }
-      func(op);
+      cout << "Thread "<< pthread_self() << " calling the function\n";
+      func(u, op);
     }
   }
 
@@ -62,10 +64,11 @@ class ThreadPool {
 
  public:
 
-  ThreadPool(int howmany, void (*f)(T*))
+  ThreadPool(int howmany, void (*f)(U*,T*), U *obj)
   {
     int status;
 
+    u = obj;
     num_ops = 0;
     func = f;
     num_threads = howmany;

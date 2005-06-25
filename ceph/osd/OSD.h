@@ -5,6 +5,7 @@
 #include "msg/Dispatcher.h"
 
 #include "common/Mutex.h"
+#include "common/ThreadPool.h"
 
 #include <map>
 using namespace std;
@@ -44,7 +45,7 @@ class OSD : public Dispatcher {
   class ObjectStore *store;
   class HostMonitor *monitor;
   class Logger      *logger;
-  class ThreadPool  *threadpool;
+  class ThreadPool<class OSD, class MOSDOp>  *threadpool;
 
   list<class MOSDOp*> waiting_for_osdcluster;
 
@@ -61,7 +62,12 @@ class OSD : public Dispatcher {
   // OSDCluster
   void update_osd_cluster(__uint64_t ocv, bufferlist& blist);
 
+  void queue_op(class MOSDOp *m);
   void do_op(class MOSDOp *m);
+  static void doop(OSD *o, MOSDOp *op) {
+      o->do_op(op);
+    };
+
 
   // messages
   virtual void dispatch(Message *m);
