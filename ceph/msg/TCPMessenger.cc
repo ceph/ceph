@@ -77,10 +77,10 @@ ostream& operator<<(ostream& out, struct sockaddr_in &a)
 {
   char addr[4];
   memcpy((char*)addr, (char*)&a.sin_addr.s_addr, 4);
-  out << (int)addr[0] << "."
-	  << (int)addr[1] << "."
-	  << (int)addr[2] << "."
-	  << (int)addr[3] << ":"
+  out << (unsigned)addr[0] << "."
+	  << (unsigned)addr[1] << "."
+	  << (unsigned)addr[2] << "."
+	  << (unsigned)addr[3] << ":"
 	  << (int)a.sin_port;
   return out;
 }
@@ -127,7 +127,7 @@ int tcpmessenger_init(int& argc, char**& argv)
 
   dout(DBL) << "listening on " << myport << endl;
   
-  remote_addr = new (struct sockaddr_in)[mpi_world];
+  remote_addr = new sockaddr_in[mpi_world];
 
   // my address is...
   char host[100];
@@ -228,7 +228,7 @@ void tcp_write(int sd, char *buf, int len)
  */
 
 
-
+/*
 void tcp_wait()
 {
   fd_set fds;
@@ -251,7 +251,7 @@ void tcp_wait()
   int r = ::select(n, &fds, 0, &fds, 0);//&tv);
   dout(DBL) << "select returned " << r << endl;
 }
-
+*/
 
 
 Message *tcp_recv(int from)
@@ -363,6 +363,7 @@ void *tcp_accepter(void *)
 }
 
 
+/*
 
 bool tcp_recv_any() 
 {  
@@ -390,6 +391,8 @@ bool tcp_recv_any()
 
   return any;
 }
+
+*/
 
 void tcp_open(int who)
 {
@@ -506,26 +509,30 @@ void* tcpmessenger_loop(void*)
 	incoming_cond.Wait(incoming_lock);
 	
 	while (incoming.size()) {
-	  Message *m = incoming.front();
-	  incoming.pop_front();
+	  list<Message*> in;
+	  in.splice(in.begin(), incoming);
 
 	  incoming_lock.Unlock();
+
+	  while (in.size()) {
+		Message *m = in.front();
+		in.pop_front();
 	  
-	  int dest = m->get_dest();
-	  if (directory.count(dest)) {
-		Messenger *who = directory[ dest ];
-		
-		dout(4) << "---- '" << m->get_type_name() << 
-		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
-				<< m 
-				<< endl;
-		
-		who->dispatch(m);
-	  } else {
-		dout (1) << "---- i don't know who " << dest << " is." << endl;
-		assert(0);
-		break;
+		int dest = m->get_dest();
+		if (directory.count(dest)) {
+		  Messenger *who = directory[ dest ];
+		  
+		  dout(4) << "---- '" << m->get_type_name() << 
+			"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+			" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+				  << m 
+				  << endl;
+		  
+		  who->dispatch(m);
+		} else {
+		  dout (1) << "---- i don't know who " << dest << " is." << endl;
+		  assert(0);
+		}
 	  }
 
 	  incoming_lock.Lock();

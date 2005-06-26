@@ -7,7 +7,7 @@
 #define AVG_PER_INODE_SIZE    450
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
-#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 100 )
+#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
 //#define MDS_CACHE_SIZE 25000  // 
 
 
@@ -41,8 +41,8 @@ md_config_t g_conf = {
   mds_cache_mid: .7,
 
   mds_log: true,
-  mds_log_max_len:  10000,//MDS_CACHE_SIZE / 3,
-  mds_log_max_trimming: 32,
+  mds_log_max_len:  MDS_CACHE_SIZE / 3,
+  mds_log_max_trimming: 256,
   mds_log_read_inc: 65536,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
