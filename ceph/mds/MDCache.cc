@@ -669,8 +669,8 @@ bool MDCache::shutdown_pass()
   }
 	
   // done!
+  dout(7) << "done, sending shutdown_finish" << endl;
   if (mds->get_nodeid() != 0) {
-	dout(7) << "done, sending shutdown_finish" << endl;
 	mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),
 								 MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
   } else {

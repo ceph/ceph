@@ -110,8 +110,16 @@ int OSD::init()
 
 int OSD::shutdown()
 {
+  dout(1) << "shutdown" << endl;
+
+  // stop threads
+  delete threadpool;
+  threadpool = 0;
+
+  // shut everything else down
   monitor->shutdown();
   messenger->shutdown();
+
   int r = store->finalize();
   return r;
 }

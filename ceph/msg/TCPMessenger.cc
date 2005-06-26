@@ -155,9 +155,12 @@ int tcpmessenger_init(int& argc, char**& argv)
   //  for (int i=0; i<mpi_world; i++) 
   //dout(DBL) << "  addr of " << i << " is " << remote_addr[i] << endl;
 
-
+  dout(DBL) << "tcpmessenger_shutdown barrier" << endl;
+  MPI_Barrier (MPI_COMM_WORLD);
   MPI_Finalize();
 
+
+  // init socket arrays
   in_sd = new int[mpi_world];
   memset(in_sd, 0, sizeof(int)*mpi_world);
   out_sd = new int[mpi_world];
@@ -173,7 +176,7 @@ int tcpmessenger_init(int& argc, char**& argv)
 
 int tcpmessenger_shutdown() 
 {
-  dout(5) << "tcpmessenger_shutdown closing all sockets etc" << endl;
+  dout(1) << "tcpmessenger_shutdown closing all sockets etc" << endl;
 
   // bleh
   for (int i=0; i<mpi_world; i++) {
@@ -576,6 +579,7 @@ void tcpmessenger_wait()
   dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
   pthread_join(dispatch_thread_id, &returnval);
   dout(10) << "tcpmessenger_wait thread finished." << endl;
+
 }
 
 
@@ -635,7 +639,7 @@ int TCPMessenger::shutdown()
 
   // last one?
   if (directory.empty()) {
-	dout(10) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
+	dout(1) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
 	pthread_t whoami = pthread_self();
 
 
@@ -652,9 +656,14 @@ int TCPMessenger::shutdown()
 
 	dout(DBL) << "setting tcp_done" << endl;
 
+	incoming_lock.Lock();
 	tcp_done = true;
-	tcpmessenger_kick_incoming_loop();
+	incoming_cond.Signal();
+	incoming_lock.Unlock();
+
 	tcpmessenger_kick_outgoing_loop();
+
+
 	/*
 
 	dout(15) << "whoami = " << whoami << ", thread = " << dispatch_thread_id << endl;
