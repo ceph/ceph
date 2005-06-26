@@ -35,11 +35,11 @@ class buffer {
   
   int _ref;
   int _get() { 
-	cout << "buffer.get " << *this << " get " << _ref+1 << endl;
+	//cout << "buffer.get " << *this << " get " << _ref+1 << endl;
 	return ++_ref; 
   }
   int _put() { 
-	cout << "buffer.put " << *this << " put " << _ref-1 << endl;
+	//cout << "buffer.put " << *this << " put " << _ref-1 << endl;
 	return --_ref; 
   }
   
@@ -48,17 +48,17 @@ class buffer {
  public:
   // constructors
   buffer() : _dataptr(0), _len(0), _alloc_len(0), _ref(0), _myptr(true) { 
-	cout << "buffer.cons " << *this << endl;
+	//cout << "buffer.cons " << *this << endl;
   }
   buffer(int a) : _dataptr(0), _len(0), _alloc_len(a), _ref(0), _myptr(true) {
-	cout << "buffer.cons " << *this << endl;
+	//cout << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
-	cout << "buffer.malloc " << (void*)_dataptr << endl;
+	//cout << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
-	cout << "buffer.des " << *this << endl;
+	//cout << "buffer.des " << *this << endl;
 	if (_dataptr && _myptr) {
-	  cout << "buffer.free " << (void*)_dataptr << endl;
+	  //cout << "buffer.free " << (void*)_dataptr << endl;
 	  delete[] _dataptr;
 	}
   }
@@ -70,10 +70,10 @@ class buffer {
 	 _ref(0),
 	 _myptr(0) {
 	_myptr = mode & BUFFER_MODE_FREE ? true:false;
-	cout << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
+	//cout << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
 	if (mode & BUFFER_MODE_COPY) {
 	  _dataptr = new char[l];
-	  cout << "buffer.malloc " << (void*)_dataptr << endl;
+	  //cout << "buffer.malloc " << (void*)_dataptr << endl;
 	  memcpy(_dataptr, p, l);
 	  //cout << "buffer(copy) " << *this << endl;
 	} else {
@@ -84,7 +84,6 @@ class buffer {
 
   // operators
   buffer& operator=(buffer& other) {
-	//cout << "buffer =" << endl;
 	assert(0);  // not implemented, no reasonable assignment semantics.
   }
 
