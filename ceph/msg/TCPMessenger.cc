@@ -178,9 +178,9 @@ int tcpmessenger_shutdown()
   // bleh
 
 
-  delete remote_addr;
-  delete in_sd;
-  delete out_sd;
+  delete[] remote_addr;
+  delete[] in_sd;
+  delete[] out_sd;
 }
 
 int tcpmessenger_world()

@@ -228,6 +228,8 @@ class Client : public Dispatcher {
 
   // trim cache.
   void trim_cache();
+  void dump_inode(Inode *in, set<Inode*>& did);
+  void dump_cache();  // debug
   
   // find dentry based on filepath
   Dentry *lookup(filepath& path);

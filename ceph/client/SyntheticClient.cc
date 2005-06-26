@@ -276,6 +276,7 @@ int SyntheticClient::random_walk(int num_req)
 	 
 	if (op == MDS_OP_UTIME) {
 	  struct utimbuf b;
+	  memset(&b, 1, sizeof(b));
 	  if (contents.empty()) 
 		r = client->utime( cwd.c_str(), &b );
 	  else

@@ -79,7 +79,7 @@ OSD::OSD(int id, Messenger *m)
   logger = new Logger(name, (LogType*)&osd_logtype);
 
   // Thread pool
-  threadpool = new ThreadPool<OSD, MOSDOp>(10, (void (*)(OSD*, MOSDOp*))doop, this);
+  threadpool = new ThreadPool<OSD, MOSDOp>(g_conf.osd_maxthreads, (void (*)(OSD*, MOSDOp*))doop, this);
 }
 
 OSD::~OSD()
@@ -89,6 +89,7 @@ OSD::~OSD()
   if (messenger) { delete messenger; messenger = 0; }
   if (logger) { delete logger; logger = 0; }
   if (store) { delete store; store = 0; }
+  if (threadpool) { delete threadpool; threadpool = 0; }
 }
 
 int OSD::init()

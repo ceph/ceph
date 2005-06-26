@@ -15,6 +15,7 @@ class Messenger;
 class Message;
 
 
+
 // ways to be dirty
 #define RG_DIRTY_LOCAL_LOG     1
 #define RG_DIRTY_LOCAL_SYNC    2

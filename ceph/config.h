@@ -48,6 +48,7 @@ struct md_config_t {
 
   // osd
   bool  osd_fsync;
+  int   osd_maxthreads;
 
   // fake client
   int      num_fakeclient;

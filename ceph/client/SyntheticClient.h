@@ -73,6 +73,8 @@ class SyntheticClient {
   SyntheticClient(Client *client) {
 	this->client = client;
 	thread_id = 0;
+
+	did_readdir = false;
   }
 
   int start_thread();

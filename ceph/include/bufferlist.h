@@ -5,6 +5,7 @@
 
 #include <list>
 #include <set>
+#include <vector>
 using namespace std;
 
 #include <ext/rope>
@@ -332,6 +333,36 @@ inline void _decode(set<int>& s, bufferlist& bl, int& off)
 	bl.copy(off, sizeof(v), (char*)&v);
 	off += sizeof(v);
 	s.insert(v);
+  }
+  assert(s.size() == n);
+}
+
+// vector<int>
+inline void _encode(vector<int>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (vector<int>::iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	int v = *it;
+	bl.append((char*)&v, sizeof(v));
+	n--;
+  }
+  assert(n==0);
+}
+inline void _decode(vector<int>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  s = vector<int>(n);
+  for (int i=0; i<n; i++) {
+	int v;
+	bl.copy(off, sizeof(v), (char*)&v);
+	off += sizeof(v);
+	s[i] = v;
   }
   assert(s.size() == n);
 }

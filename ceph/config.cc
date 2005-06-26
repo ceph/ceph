@@ -59,7 +59,7 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_fsync: true,
-
+  osd_maxthreads: 10,
 
 
   // --- fakeclient (mds regression testing) ---
@@ -151,6 +151,8 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--osd_maxthreads") == 0) 
+	  g_conf.osd_maxthreads = atoi(argv[++i]);
 
 	else {
 	  //cout << "passing arg " << argv[i] << endl;

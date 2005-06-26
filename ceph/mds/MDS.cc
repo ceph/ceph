@@ -100,6 +100,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   osdg.num_osds = g_conf.num_osd;
   for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
   osdg.weight = 100;
+  osdg.osd_size = 100;  // not used yet?
   osdcluster->add_group(osdg);
   // </HACK>
 

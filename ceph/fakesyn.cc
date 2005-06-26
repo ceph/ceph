@@ -30,9 +30,9 @@ public:
 };
 
 
-int main(int oargc, char **oargv) {
-
-  //cerr << "mpisyn starting " << myrank << "/" << world << endl;
+int main(int oargc, char **oargv) 
+{
+  cerr << "fakesyn starting" << endl;
   int argc;
   char **argv;
   parse_config_options(oargc, oargv,

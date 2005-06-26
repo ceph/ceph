@@ -354,6 +354,7 @@ int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
 
   size_t off = 0;  // ptr into buffer
 
+  int n = 0;
   for (list<OSDExtent>::iterator it = extents.begin();
 	   it != extents.end();
 	   it++) {
@@ -369,8 +370,16 @@ int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);
 	op_removes[last_tid] = p;
+	n++;
   }
 
+  if (n == 0) {
+	delete p;
+	if (onfinish) {
+	  onfinish->finish(0);
+	  delete onfinish;
+	}
+  }
 }
 
 

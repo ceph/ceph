@@ -13,7 +13,7 @@ void OSDCluster::encode(bufferlist& blist)
   int ngroups = osd_groups.size();
   blist.append((char*)&ngroups, sizeof(ngroups));
   for (int i=0; i<ngroups; i++) {
-	blist.append((char*)&osd_groups[i], sizeof(OSDGroup));
+	osd_groups[i]._encode(blist);
   }
 
   _encode(down_osds, blist);
@@ -32,8 +32,7 @@ void OSDCluster::decode(bufferlist& blist)
 
   osd_groups = vector<OSDGroup>(ngroups);
   for (int i=0; i<ngroups; i++) {
-	blist.copy(off, sizeof(OSDGroup), (char*)&osd_groups[i]);
-	off += sizeof(OSDGroup);
+	osd_groups[i]._decode(blist, off);
   }
 
   _decode(down_osds, blist, off);

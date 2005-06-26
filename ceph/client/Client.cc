@@ -65,6 +65,7 @@ void Client::tear_down_cache()
 	   it != fh_map.end();
 	   it++) {
 	Fh *fh = it->second;
+	dout(3) << "forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
 	put_inode(fh->inode);
 	delete fh;
   }
@@ -72,7 +73,13 @@ void Client::tear_down_cache()
 
   // empty lru
   lru.lru_set_max(0);
-  trim_cache();
+  int last = 0;
+  while (lru.lru_get_size() != last) {
+	last = lru.lru_get_size();
+	dout(10) << "trim pass, size is " << last << endl;
+	//dump_cache();
+	trim_cache();
+  }
 
   // close root ino
   assert(inode_map.size() <= 1);
@@ -83,6 +90,44 @@ void Client::tear_down_cache()
   }
 
   assert(inode_map.empty());
+}
+
+
+
+// debug crapola
+
+void Client::dump_inode(Inode *in, set<Inode*>& did)
+{
+  dout(1) << "inode " << in << " ref " << in->ref << " dir " << in->dir << endl;
+
+  if (in->dir) {
+	dout(1) << "  dir size " << in->dir->dentries.size() << endl;
+	for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
+		 it != in->dir->dentries.end();
+		 it++) {
+	  dout(1) << "    dn " << it->first << " ref " << it->second->ref << endl;
+	  dump_inode(it->second->inode, did);
+	}
+  }
+}
+
+void Client::dump_cache()
+{
+  set<Inode*> did;
+
+  if (root) dump_inode(root, did);
+
+  for (map<inodeno_t, Inode*>::iterator it = inode_map.begin();
+	   it != inode_map.end();
+	   it++) {
+	if (did.count(it->second)) continue;
+	
+	dout(1) << "inode " << it->first << " ref " << it->second->ref << " dir " << it->second->dir << endl;
+	if (it->second->dir) {
+	  dout(1) << "  dir size " << it->second->dir->dentries.size() << endl;
+	}
+  }
+ 
 }
 
 
@@ -680,6 +725,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
   if (dn && ((now - dn->inode->last_updated) <= g_conf.client_cache_stat_ttl)) {
 	inode = dn->inode->inode;
 	dout(10) << "lstat cache hit, age is " << (now - dn->inode->last_updated) << endl;
+	delete req;  // don't need this
   } else {  
 	// FIXME where does FUSE maintain user information
 	req->set_caller_uid(getuid());
@@ -695,8 +741,9 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	  
 	  //Update metadata cache
 	  this->insert_trace(trace);
-	  delete reply;
 	}
+
+	delete reply;
   }
      
   if (res == 0) {
@@ -871,18 +918,21 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 	assert(diri);
 	assert(diri->inode.mode & INODE_MODE_DIR);
 
-	Dir *dir = diri->open_dir();
-	assert(dir);
-	time_t now = time(NULL);
-	for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 
-		 it != reply->get_dir_contents().end(); 
-		 it++) {
-	  // put in cache
-	  Inode *in = this->insert_inode_info(dir, *it);
-	  in->last_updated = now;
-	  
-	  // contents to caller too!
-	  contents[(*it)->ref_dn] = &in->inode;
+	if (reply->get_dir_contents().size()) {
+	  // only open dir if we're actually adding stuff to it!
+	  Dir *dir = diri->open_dir();
+	  assert(dir);
+	  time_t now = time(NULL);
+	  for (vector<c_inode_info*>::iterator it = reply->get_dir_contents().begin(); 
+		   it != reply->get_dir_contents().end(); 
+		   it++) {
+		// put in cache
+		Inode *in = this->insert_inode_info(dir, *it);
+		in->last_updated = now;
+		
+		// contents to caller too!
+		contents[(*it)->ref_dn] = &in->inode;
+	  }
 	}
 
 	// FIXME: remove items in cache that weren't in my readdir

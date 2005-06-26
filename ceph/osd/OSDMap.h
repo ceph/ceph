@@ -40,11 +40,28 @@ using namespace __gnu_cxx;
 /** OSDGroup
  * a group of identical disks added to the OSD cluster
  */
-struct OSDGroup {
+class OSDGroup {
+ public:
   int         num_osds; // num disks in this group           (aka num_disks_in_cluster[])
   float       weight;   // weight (for data migration etc.)  (aka weight_cluster[])
   size_t      osd_size; // osd size (in MB)
   vector<int> osds;     // the list of actual osd's
+
+  void _encode(bufferlist& bl) {
+	bl.append((char*)&num_osds, sizeof(num_osds));
+	bl.append((char*)&weight, sizeof(weight));
+	bl.append((char*)&osd_size, sizeof(osd_size));
+	::_encode(osds, bl);
+  }
+  void _decode(bufferlist& bl, int& off) {
+	bl.copy(off, sizeof(num_osds), (char*)&num_osds);
+	off += sizeof(num_osds);
+	bl.copy(off, sizeof(weight), (char*)&weight);
+	off += sizeof(weight);
+	bl.copy(off, sizeof(osd_size), (char*)&osd_size);
+	off += sizeof(osd_size);
+	::_decode(osds, bl, off);
+  }
 };
 
 
@@ -52,10 +69,10 @@ struct OSDGroup {
  * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
  */
 struct OSDExtent {
-  int         osd;
-  object_t    oid;
-  repgroup_t  rg;
-  size_t      offset, len;
+  int         osd;       // (acting) primary osd
+  object_t    oid;       // object id
+  repgroup_t  rg;        // replica group
+  size_t      offset, len;   // extent within the object
 };
 
 

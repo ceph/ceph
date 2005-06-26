@@ -33,15 +33,16 @@ class ThreadPool {
   void * do_ops(void *nothing)
   {
     T* op;
-
+	
     cout << "Thread "<< pthread_self() << " ready for action\n";
     while(1) {
       q_sem.Get();
       op = get_op();
-
+	  
       if(op == NULL) {
-	cout << "Thread exiting\n";
-	pthread_exit(0);
+		cout << "Thread exiting\n";
+		//pthread_exit(0);
+		return 0;   // like this, i think!
       }
       cout << "Thread "<< pthread_self() << " calling the function\n";
       func(u, op);
@@ -81,11 +82,17 @@ class ThreadPool {
 
   ~ThreadPool()
   {
+	// put null ops to make threads exit cleanly
+    for(int i = 0; i < num_threads; i++) 
+	  put_op(0);
+
+	// wait for them to die
     for(int i = 0; i < num_threads; i++) {
-      cout << "Killing thread " << i << "\n";
-      pthread_cancel(thread[i]);
+      cout << "Joining thread " << i << "\n";
+	  void *rval = 0;  // we don't actually care
+      pthread_join(thread[i], &rval);
     }
-    delete thread;
+    delete[] thread;
   }
 
   void put_op(T* op)
