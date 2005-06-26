@@ -41,11 +41,14 @@ long Logger::inc(char *s, long v)
 }
 long Logger::inc(string& key, long v)
 {
+  lock.Lock();
   if (!type->have_key(key)) 
 	type->add_inc(key);
   flush();
   vals[key] += v;
-  return vals[key];
+  long r = vals[key];
+  lock.Unlock();
+  return r;
 }
 
 long Logger::set(char *s, long v)
@@ -55,12 +58,15 @@ long Logger::set(char *s, long v)
 }
 long Logger::set(string& key, long v)
 {
+  lock.Lock();
   if (!type->have_key(key)) 
 	type->add_set(key);
 
   flush();
   vals[key] = v;
-  return vals[key];
+  long r = vals[key];
+  lock.Unlock();
+  return r;
 }
 
 long Logger::get(char *s)
@@ -70,11 +76,16 @@ long Logger::get(char *s)
 }
 long Logger::get(string& key)
 {
-  return vals[key];
+  lock.Lock();
+  long r = vals[key];
+  lock.Unlock();
+  return r;
 }
 
 void Logger::flush(bool force) 
 {
+  lock.Lock();
+
   timepair_t now = g_clock.gettimepair();
   timepair_t fromstart = now - start;
 
@@ -115,6 +126,8 @@ void Logger::flush(bool force)
 	for (vector<string>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) 
 	  set(*it, 0);
   }
+
+  lock.Unlock();
 }
 
 

@@ -3,6 +3,8 @@
 
 #include "include/types.h"
 #include "Clock.h"
+#include "Mutex.h"
+
 #include <string>
 #include <fstream>
 using namespace std;
@@ -14,7 +16,7 @@ class LogType;
 class Logger {
  protected:
   hash_map<string, long> vals;
-
+  Mutex lock;
   LogType *type;
 
   timepair_t start;
