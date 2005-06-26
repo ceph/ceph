@@ -5,7 +5,14 @@
 #include <pthread.h>
 #include <common/Mutex.h>
 #include <common/Cond.h>
-#include<common/Semaphore.h>
+#include <common/Semaphore.h>
+
+
+// debug output
+#include "include/config.h"
+#define tpdout(x) if (x <= g_conf.debug) cout << myname << " "
+#define DBLVL 10
+
 
 using namespace std;
  
@@ -23,6 +30,7 @@ class ThreadPool {
   int num_threads;
   void (*func)(U*,T*);
   U *u;
+  string myname;
 
   static void *foo(void *arg)
   {
@@ -34,17 +42,17 @@ class ThreadPool {
   {
     T* op;
 	
-    cout << "Thread "<< pthread_self() << " ready for action\n";
+    tpdout(DBLVL) << "Thread "<< pthread_self() << " ready for action\n";
     while(1) {
       q_sem.Get();
       op = get_op();
 	  
       if(op == NULL) {
-		cout << "Thread exiting\n";
+		tpdout(DBLVL) << "Thread exiting\n";
 		//pthread_exit(0);
 		return 0;   // like this, i think!
       }
-      cout << "Thread "<< pthread_self() << " calling the function\n";
+      //tpdout(DBLVL) << "Thread "<< pthread_self() << " calling the function\n";
       func(u, op);
     }
   }
@@ -65,10 +73,11 @@ class ThreadPool {
 
  public:
 
-  ThreadPool(int howmany, void (*f)(U*,T*), U *obj)
+  ThreadPool(char *myname, int howmany, void (*f)(U*,T*), U *obj)
   {
     int status;
 
+	this->myname = myname;
     u = obj;
     num_ops = 0;
     func = f;
@@ -88,7 +97,7 @@ class ThreadPool {
 
 	// wait for them to die
     for(int i = 0; i < num_threads; i++) {
-      cout << "Joining thread " << i << "\n";
+      tpdout(DBLVL) << "Joining thread " << i << "\n";
 	  void *rval = 0;  // we don't actually care
       pthread_join(thread[i], &rval);
     }

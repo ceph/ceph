@@ -79,7 +79,11 @@ OSD::OSD(int id, Messenger *m)
   logger = new Logger(name, (LogType*)&osd_logtype);
 
   // Thread pool
-  threadpool = new ThreadPool<OSD, MOSDOp>(g_conf.osd_maxthreads, (void (*)(OSD*, MOSDOp*))doop, this);
+  {
+	char name[80];
+	sprintf(name,"osd%d.threadpool", whoami);
+	threadpool = new ThreadPool<OSD, MOSDOp>(name, g_conf.osd_maxthreads, (void (*)(OSD*, MOSDOp*))doop, this);
+  }
 }
 
 OSD::~OSD()

@@ -139,7 +139,10 @@ int fakemessenger_do_loop_2()
 
 	  dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has " << it->second->num_incoming() << " queued" << endl;
 
-	  Message *m = it->second->get_message();
+	  FakeMessenger *mgr = it->second;
+	  Message *m = mgr->get_message();
+	  it++;
+	  
 	  if (m) {
 		//dout(18) << "got " << m << endl;
 		dout(5) << "---- '" << m->get_type_name() << 
@@ -163,10 +166,9 @@ int fakemessenger_do_loop_2()
 		didone = true;
 
 		lock.Unlock();
-		it->second->dispatch(m);
+		mgr->dispatch(m);
 		lock.Lock();
 	  }
-	  it++;
 	}
 	
 	

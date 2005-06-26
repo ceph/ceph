@@ -173,10 +173,12 @@ int tcpmessenger_init(int& argc, char**& argv)
 
 int tcpmessenger_shutdown() 
 {
-  dout(5) << "tcpmessenger_shutdown clsoing all sockets etc" << endl;
+  dout(5) << "tcpmessenger_shutdown closing all sockets etc" << endl;
 
   // bleh
-
+  for (int i=0; i<mpi_world; i++) {
+	if (out_sd[i]) ::close(out_sd[i]);
+  }
 
   delete[] remote_addr;
   delete[] in_sd;
@@ -315,8 +317,8 @@ void *tcp_inthread(void *r)
 
 	incoming_lock.Lock();
 	incoming.push_back(m);
-	incoming_lock.Unlock();
 	incoming_cond.Signal();
+	incoming_lock.Unlock();
   }
 
   dout(DBL) << "tcp_inthrad closing " << who << endl;
@@ -363,36 +365,6 @@ void *tcp_accepter(void *)
 }
 
 
-/*
-
-bool tcp_recv_any() 
-{  
-  bool any = false;
-
-  //if (mpi_rank == 0 && tcp_accept()) any = true;
-  
-  // any?
-  for (int i=0; i<mpi_world; i++) {
-	if (in_sd[i] == 0) continue;
-
-	char blah;
-	int r = ::recv( in_sd[i], &blah, 1, MSG_PEEK|MSG_DONTWAIT );
-	if (r > 0) {
-	  Message *m = tcp_recv(i);
-	  if (m) {
-		incoming_lock.Lock();
-		incoming.push_back(m);
-		incoming_cond.Signal();
-		incoming_lock.Unlock();
-		any = true;
-	  }
-	}
-  }
-
-  return any;
-}
-
-*/
 
 void tcp_open(int who)
 {
@@ -543,6 +515,7 @@ void* tcpmessenger_loop(void*)
 
   g_timer.shutdown();
 
+
   dout(5) << "tcpmessenger_loop exiting loop" << endl;
 }
 
@@ -578,22 +551,18 @@ int tcpmessenger_start()
  * kick and wake up _loop (to pick up new outgoing message, or quit)
  */
 
-void tcpmessenger_kick_loop()
+void tcpmessenger_kick_incoming_loop()
 {
-
+  incoming_lock.Lock();
   incoming_cond.Signal();
-  /*
+  incoming_lock.Unlock();
+}
 
-  // if we're same thread as the loop, no kicking necessary
-  if (pthread_self() == dispatch_thread_id) return;   
-  
-  msg_envelope_t kick_env;
-  kick_env.type = 0;
-
-  sender_lock.Lock();
-  tcp_write( out_sd[mpi_rank], (char*)&kick_env, sizeof(kick_env) );
-  sender_lock.Unlock();
-  */
+void tcpmessenger_kick_outgoing_loop()
+{
+  outgoing_lock.Lock();
+  outgoing_cond.Signal();
+  outgoing_lock.Unlock();
 }
 
 
@@ -601,7 +570,7 @@ void tcpmessenger_kick_loop()
 
 void tcpmessenger_wait()
 {
-  incoming_cond.Signal();
+  tcpmessenger_kick_incoming_loop();
 
   void *returnval;
   dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
@@ -619,7 +588,7 @@ void tcpmessenger_wait()
 class C_TCPKicker : public Context {
   void finish(int r) {
 	dout(DBL) << "timer kick" << endl;
-	incoming_cond.Signal();
+	tcpmessenger_kick_incoming_loop();
   }
 };
 
@@ -684,8 +653,8 @@ int TCPMessenger::shutdown()
 	dout(DBL) << "setting tcp_done" << endl;
 
 	tcp_done = true;
-	incoming_cond.Signal();
-	outgoing_cond.Signal();
+	tcpmessenger_kick_incoming_loop();
+	tcpmessenger_kick_outgoing_loop();
 	/*
 
 	dout(15) << "whoami = " << whoami << ", thread = " << dispatch_thread_id << endl;
@@ -722,8 +691,8 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 	// good way
 	outgoing_lock.Lock();
 	outgoing.push_back(m);
-	outgoing_lock.Unlock();
 	outgoing_cond.Signal();
+	outgoing_lock.Unlock();
   }
 }
 
