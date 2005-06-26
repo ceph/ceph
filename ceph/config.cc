@@ -29,6 +29,7 @@ md_config_t g_conf = {
   debug: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
+  debug_buffer: 0,
   
   // --- client ---
   client_cache_size: 400,

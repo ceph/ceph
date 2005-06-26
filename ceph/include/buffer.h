@@ -16,6 +16,11 @@ using namespace std;
 
 #define BUFFER_MODE_DEFAULT 3//(BUFFER_MODE_COPY|BUFFER_MODE_FREE)
 
+// debug crap
+#include "include/config.h"
+#define bdbout(x) if (x <= g_conf.debug_buffer) cout
+
+
 /*
  * buffer  - the underlying buffer container.  with a reference count.
  * 
@@ -35,11 +40,11 @@ class buffer {
   
   int _ref;
   int _get() { 
-	//cout << "buffer.get " << *this << " get " << _ref+1 << endl;
+	bdbout(1) << "buffer.get " << *this << " get " << _ref+1 << endl;
 	return ++_ref; 
   }
   int _put() { 
-	//cout << "buffer.put " << *this << " put " << _ref-1 << endl;
+	bdbout(1) << "buffer.put " << *this << " put " << _ref-1 << endl;
 	return --_ref; 
   }
   
@@ -48,17 +53,17 @@ class buffer {
  public:
   // constructors
   buffer() : _dataptr(0), _len(0), _alloc_len(0), _ref(0), _myptr(true) { 
-	//cout << "buffer.cons " << *this << endl;
+	bdbout(1) << "buffer.cons " << *this << endl;
   }
   buffer(int a) : _dataptr(0), _len(0), _alloc_len(a), _ref(0), _myptr(true) {
-	//cout << "buffer.cons " << *this << endl;
+	bdbout(1) << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
-	//cout << "buffer.malloc " << (void*)_dataptr << endl;
+	bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
-	//cout << "buffer.des " << *this << endl;
+	bdbout(1) << "buffer.des " << *this << endl;
 	if (_dataptr && _myptr) {
-	  //cout << "buffer.free " << (void*)_dataptr << endl;
+	  bdbout(1) << "buffer.free " << (void*)_dataptr << endl;
 	  delete[] _dataptr;
 	}
   }
@@ -70,15 +75,15 @@ class buffer {
 	 _ref(0),
 	 _myptr(0) {
 	_myptr = mode & BUFFER_MODE_FREE ? true:false;
-	//cout << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
+	bdbout(1) << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
 	if (mode & BUFFER_MODE_COPY) {
 	  _dataptr = new char[l];
-	  //cout << "buffer.malloc " << (void*)_dataptr << endl;
+	  bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
 	  memcpy(_dataptr, p, l);
-	  //cout << "buffer(copy) " << *this << endl;
+	  bdbout(1) << "buffer.copy " << *this << endl;
 	} else {
 	  _dataptr = (char*)p;                              // ugly
-	  //cout << "buffer(claim), myptr=" << _myptr << " " << *this << endl;
+	  bdbout(1) << "buffer.claim " << *this << " myptr=" << _myptr << endl;
 	}
   }
 
