@@ -72,6 +72,9 @@ bool MDStore::fetch_dir( CDir *dir,
   
   dir->state_set(CDIR_STATE_FETCHING);
 
+  // stats
+  mds->logger->inc("fdir");
+
   // create return context
   MDFetchDirContext *fin = new MDFetchDirContext( this, dir->ino() );
   
@@ -258,6 +261,9 @@ bool MDStore::commit_dir( CDir *dir,
   // state
   dir->state_set(CDIR_STATE_COMMITTING);
   dir->set_committing_version(); 
+
+  // stats
+  mds->logger->inc("cdir");
 
   if (dir->is_hashed()) {
 	// hashed
@@ -559,7 +565,8 @@ void MDStore::do_fetch_dir( CDir *dir,
 
   // read first bit
   mds->filer->read(dir->ino(),
-				   FILE_OBJECT_SIZE, 0,
+				   FILE_OBJECT_SIZE, 0,  // get first object's bit
+				   //16, 0,  // just get front bit
 				   &fin->bl,
 				   fin );
 }
@@ -720,8 +727,10 @@ void MDStore::do_fetch_dir_2( bufferlist& bl,
   }
   dout(15) << "parsed " << parsed << endl;
   
-  c->finish(0);
-  delete c;
+  if (c) {
+	c->finish(0);
+	delete c;
+  }
 }
 
 

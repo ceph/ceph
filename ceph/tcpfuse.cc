@@ -14,7 +14,6 @@ using namespace std;
 #include "client/fuse.h"
 
 #include "msg/TCPMessenger.h"
-#include "msg/CheesySerializer.h"
 
 #include "common/Timer.h"
 
@@ -95,8 +94,7 @@ int main(int oargc, char **oargv) {
   for (int i=0; i<NUMCLIENT; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
 	cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	CheesySerializer *serializer = new CheesySerializer( new TCPMessenger(MSG_ADDR_CLIENT(i)) );
-	client[i] = new Client(mdc, i, serializer);
+	client[i] = new Client(mdc, i, new TCPMessenger(MSG_ADDR_CLIENT(i)));
 	start++;
   }
 

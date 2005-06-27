@@ -2,6 +2,7 @@
 
 use strict;
 my %buffers;
+my %bufferlists;
 my %ref;
 my %mal;
 my $l = 1;
@@ -21,6 +22,17 @@ while (<>) {
 		die "des with ref>0 at $l: $_" unless $ref{$x} == 0;
 		delete $ref{$x};
 	}
+
+	if (/^bufferlist\.cons /) {
+		my ($x) = /(0x\S+)/;
+		$bufferlists{$x} = 1;
+	}
+	if (/^bufferlist\.des /) {
+		my ($x) = /(0x\S+)/;
+		warn "des without cons at $l: $_" unless $bufferlists{$x};
+		delete $bufferlists{$x};
+	}
+
 
 	if (/^buffer\.malloc /) {
 		my ($x) = /(0x\S+)/;
@@ -42,6 +54,10 @@ while (<>) {
 	}
 
 $l++;
+}
+
+for my $x (keys %bufferlists) {
+	print "leaked bufferlist $x\n";
 }
 
 for my $x (keys %buffers) {

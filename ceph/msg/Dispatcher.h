@@ -11,6 +11,8 @@ class Dispatcher {
   int        dis_port;
 
  public:
+  virtual ~Dispatcher() { }
+
   // how i receive messages
   virtual void dispatch(Message *m) = 0;
 
@@ -21,7 +23,7 @@ class Dispatcher {
   }
 
   // this is how i send messages
-  int send_message(Message *m, msg_addr_t dest, int dest_port);
+  //int send_message(Message *m, msg_addr_t dest, int dest_port);
 };
 
 #endif

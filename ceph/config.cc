@@ -11,6 +11,11 @@
 //#define MDS_CACHE_SIZE 25000  // 
 
 
+// hack hack hack ugly FIXME
+long buffer_total_alloc = 0;
+
+
+
 md_config_t g_conf = {
   num_mds: 2,
   num_osd: 5,
@@ -124,6 +129,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.debug_mds_balancer = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--debug_mds_log") == 0) 
 	  g_conf.debug_mds_log = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug_buffer") == 0) 
+	  g_conf.debug_buffer = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--log") == 0) 
 	  g_conf.log_name = argv[++i];
 

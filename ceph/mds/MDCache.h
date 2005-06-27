@@ -173,6 +173,10 @@ class MDCache {
   void destroy_inode(CInode *in);
 
   void touch_inode(CInode *in) {
+	// touch parent(s) too
+	if (in->get_parent_dir()) touch_inode(in->get_parent_dir()->inode);
+	
+	// top or mid, depending on whether i'm auth
 	if (in->is_auth())
 	  lru.lru_touch(in);
 	else

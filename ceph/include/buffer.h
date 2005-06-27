@@ -21,6 +21,8 @@ using namespace std;
 #define bdbout(x) if (x <= g_conf.debug_buffer) cout
 
 
+extern long buffer_total_alloc;
+
 /*
  * buffer  - the underlying buffer container.  with a reference count.
  * 
@@ -58,6 +60,7 @@ class buffer {
   buffer(int a) : _dataptr(0), _len(0), _alloc_len(a), _ref(0), _myptr(true) {
 	bdbout(1) << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
+	buffer_total_alloc += _alloc_len;
 	bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
@@ -65,6 +68,7 @@ class buffer {
 	if (_dataptr && _myptr) {
 	  bdbout(1) << "buffer.free " << (void*)_dataptr << endl;
 	  delete[] _dataptr;
+	  buffer_total_alloc -= _alloc_len;
 	}
   }
   
@@ -79,6 +83,7 @@ class buffer {
 	if (mode & BUFFER_MODE_COPY) {
 	  _dataptr = new char[l];
 	  bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
+	  buffer_total_alloc += _alloc_len;
 	  memcpy(_dataptr, p, l);
 	  bdbout(1) << "buffer.copy " << *this << endl;
 	} else {

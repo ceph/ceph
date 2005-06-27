@@ -585,30 +585,6 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 
 
 
-Message *MPIMessenger::sendrecv(Message *m, msg_addr_t dest, int port)
-{
-#ifdef FUNNEL_MPI
-
-  assert(0);   // use CheesySerializer
-
-#else
-  int fromport = 0;
-
-  // set envelope
-  m->set_source(myaddr, fromport);
-  m->set_dest(dest, port);
-  
-  int rank = MPI_DEST_TO_RANK(dest, mpi_world);
-  
-  // get a tag to uniquely identify this procedure call
-  int my_tag = get_thread_tag();
-  m->set_pcid(my_tag);
-
-  mpi_send(m, TAG_UNSOLICITED);
-
-  return mpi_recv(my_tag);
-#endif
-}
 
 
 

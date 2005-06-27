@@ -67,42 +67,40 @@ gprof-helper.so: test/gprof-helper.c
 import: mds/allmds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-singleclient: mds/allmds.o osd/OSD.o fakesingleclient.o client/Client.o \
-msg/CheesySerializer.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
+singleclient: mds/allmds.o osd/OSD.o fakesingleclient.o client/Client.o  msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 tp: osd/tp.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-fuseclient: client/Client.o client/fuse.o msg/CheesySerializer.o \
-msg/FakeMessenger.o ${COMMON_OBJS} 
+fuseclient: client/Client.o client/fuse.o msg/FakeMessenger.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/allmds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/FakeClient.o msg/CheesySerializer.o ${COMMON_OBJS} 
+mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
 	${MPICC} ${CFLAGS} $^ -o $@
 
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o msg/CheesySerializer.o ${COMMON_OBJS}
+fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc msg/CheesySerializer.o ${COMMON_OBJS}
+fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/clock.o msg/Messenger.o msg/Dispatcher.o msg/error.o

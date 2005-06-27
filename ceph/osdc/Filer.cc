@@ -131,7 +131,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
   PendingOSDRead_t *p = op_reads[ tid ];
   op_reads.erase( tid );
 
-  // copy result into buffer
+  // what buffer offset are we?
   size_t off = p->read_off[tid];
   dout(7) << "got frag at " << off << " len " << m->get_length() << endl;
   
@@ -142,7 +142,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	// all done
 	p->read_result->clear();
 	if (p->read_data.size()) {
-	  dout(20) << "assembling frags" << endl;
+	  dout(15) << "assembling frags" << endl;
 
 	  /** BUG this doesn't handle holes properly **/
 
@@ -158,9 +158,10 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		// FIXME: pad if hole?
 		if (it->second->length())
 		  p->read_result->claim_append(*(it->second));
+		delete it->second;
 	  }
 	} else {
-	  dout(20) << "  only one frag" << endl;
+	  dout(15) << "  only one frag" << endl;
 	  // only one fragment, easy
 	  p->read_result->claim( m->get_data() );
 	}

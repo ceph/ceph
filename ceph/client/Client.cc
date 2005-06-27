@@ -372,6 +372,7 @@ int Client::flush_inode_buffers(Inode *in)
 	Cond *cond = new Cond;
 	in->waitfor_flushed.push_back(cond);
 	cond->Wait(client_lock);
+	delete cond;
 	assert(in->inflight_buffers.empty());
 	dout(7) << "inflight buffers flushed" << endl;
   } else {
@@ -979,8 +980,14 @@ int Client::open(const char *path, int mode)
 	Fh *f = new Fh;
 	memset(f, 0, sizeof(*f));
 	f->mds = reply->get_source();
-	f->inode = inode_map[trace[trace.size()-1]->inode.ino];
 	f->caps = reply->get_file_caps();
+
+	// inode
+	f->inode = inode_map[trace[trace.size()-1]->inode.ino];
+	assert(f->inode);
+	f->inode->get();
+
+	// put in map
 	assert(fh_map.count(fh) == 0);
 	fh_map[fh] = f;
 
@@ -1018,6 +1025,7 @@ int Client::close(fileh_t fh)
   /* mds may ack our close() after reissuing same fh to another open; remove from
 	 fh_map _before_ sending request. */
   fh_map.erase(fh);
+  put_inode( in );
   delete f;
 
   release_inode_buffers(in);

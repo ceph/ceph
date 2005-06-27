@@ -14,7 +14,6 @@ using namespace std;
 #include "client/SyntheticClient.h"
 
 #include "msg/FakeMessenger.h"
-#include "msg/CheesySerializer.h"
 
 #include "common/Timer.h"
 
@@ -32,7 +31,8 @@ public:
 
 int main(int oargc, char **oargv) 
 {
-  cerr << "fakesyn starting" << endl;
+  //cerr << "fakesyn starting" << endl;
+
   int argc;
   char **argv;
   parse_config_options(oargc, oargv,
@@ -116,8 +116,7 @@ int main(int oargc, char **oargv)
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	//cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	CheesySerializer *serializer = new CheesySerializer( new FakeMessenger(MSG_ADDR_CLIENT(i)) );
-	client[i] = new Client(mdc, i, serializer);
+	client[i] = new Client(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)));
 	start++;
   }
 

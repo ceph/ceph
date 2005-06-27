@@ -18,6 +18,8 @@ class Context {
   int result;
   
  public:
+  virtual ~Context() {}       // we want a virtual destructor!!!
+
   virtual void finish(int r) = 0;
   //virtual void fail(int r) = 0;
 

@@ -29,7 +29,7 @@ using namespace __gnu_cxx;
 #define NUM_RUSH_REPLICAS         4   // this should be big enough to cope w/ failing disks.
 #define MAX_REPLICAS              3
 
-#define FILE_OBJECT_SIZE    (1<<20)  // 1 MB object size
+#define FILE_OBJECT_SIZE     (1<<20)  // 1 MB object size
 
 #define OID_BLOCK_BITS     30       // 1mb * 10^9 = 1 petabyte files
 #define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files

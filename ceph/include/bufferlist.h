@@ -11,14 +11,34 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
+
+// debug crap
+#include "include/config.h"
+#define bdbout(x) if (x <= g_conf.debug_buffer) cout
+
+
+
 class bufferlist {
  private:
   list<bufferptr> _buffers;
 
  public:
   // cons/des
-  ~bufferlist() {
+  bufferlist() {
+	bdbout(1) << "bufferlist.cons " << this << endl;
   }
+  bufferlist(bufferlist& bl) {
+	bdbout(1) << "bufferlist.cons " << this << endl;
+	_buffers = bl._buffers;
+  }
+  ~bufferlist() {
+	bdbout(1) << "bufferlist.des " << this << endl;
+  }
+  /*
+  bufferlist& operator=(bufferlist& bl) {
+	assert(0);  // actually, this should be fine.
+  }
+  */
 
   // sort-of-like-assignment-op
   void claim(bufferlist& bl) {

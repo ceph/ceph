@@ -77,8 +77,6 @@ using namespace std;
 
 
 
-
-
 MDCache::MDCache(MDS *m)
 {
   mds = m;
@@ -1141,7 +1139,6 @@ int MDCache::path_traverse(filepath& origpath,
 		mds->mdstore->fetch_dir(cur->dir, ondelay);
 		
 		mds->logger->inc("cmiss");
-		mds->logger->inc("rdir");
 
 		if (onfinish) delete onfinish;
 		return 1;
@@ -1496,6 +1493,7 @@ void MDCache::request_cleanup(Message *req)
   mds->logger->set("ctop", lru.lru_get_top());
   mds->logger->set("cbot", lru.lru_get_bot());
   mds->logger->set("cptail", lru.lru_get_pintail());
+  mds->logger->set("buf",buffer_total_alloc);
 
   if (g_conf.log_pins) {
 	// pin

@@ -16,7 +16,7 @@ using namespace std;
 #include "common/Timer.h"
 
 #include "msg/FakeMessenger.h"
-#include "msg/CheesySerializer.h"
+
 
 
 
@@ -91,10 +91,7 @@ int main(int oargc, char **oargv) {
   // create client
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	// build a serialized fakemessenger...
-	CheesySerializer *serializer = new CheesySerializer( new FakeMessenger(MSG_ADDR_CLIENT(0)) );
-
-	client[i] = new Client(mdc, i, serializer);
+	client[i] = new Client(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(0)));
 	client[i]->init();
 
 
