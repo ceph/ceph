@@ -129,7 +129,7 @@ Message *Messenger::sendrecv(Message *m, msg_addr_t dest, int port)
 	 This should be fine. only the Client uses this so far (not MDS).
 	 If OSDs want to use this, though, this must be made smarter!!!
   */
-  long pcid = ++last_pcid;
+  long pcid = ++_last_pcid;
   m->set_pcid(pcid);
 
   _lock.Lock();

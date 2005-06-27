@@ -21,13 +21,13 @@ class Messenger {
   msg_addr_t           _myaddr;
 
   // procedure call fun
-  long last_pcid;
+  long                   _last_pcid;
   Mutex                  _lock;      // protect call_sem, call_reply
   map<long, Cond*>       call_cond;
   map<long, Message*>    call_reply;
 
  public:
-  Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w) { }
+  Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w), _last_pcid(1) { }
   virtual ~Messenger() { }
   
   msg_addr_t get_myaddr() { return _myaddr; }

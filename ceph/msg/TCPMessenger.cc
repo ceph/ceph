@@ -219,6 +219,9 @@ void tcp_write(int sd, char *buf, int len)
   //dout(DBL) << "tcp_write writing " << len << endl;
   while (len > 0) {
 	int did = ::send( sd, buf, len, 0 );
+	if (did < 0) {
+	  dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
+	}
 	assert(did >= 0);
 	len -= did;
 	buf += did;
@@ -436,6 +439,9 @@ int tcp_send(Message *m)
   }
 
   sender_lock.Unlock();
+
+  // hose message
+  delete m;
 }
 
 
