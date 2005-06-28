@@ -506,6 +506,9 @@ void MDS::handle_client_mount(MClientMount *m)
 	  dir->mark_complete();
 	  dir->mark_dirty();
 
+	  // fake out idalloc (reset, pretend loaded)
+	  idalloc->reset();
+
 	  if (cmd == MDS_MKFS_FULL) {
 		// wipe osds too
 		dout(3) << "wiping osds too" << endl;
@@ -513,9 +516,6 @@ void MDS::handle_client_mount(MClientMount *m)
 		filer->mkfs(new C_MDS_Unpause(this));
 	  	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
 	  	return;
-	  } else {
-		// fake out idalloc (reset, pretend loaded)
-		idalloc->reset();
 	  }
 	  
 	}

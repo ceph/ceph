@@ -109,8 +109,8 @@ mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.
 tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OBFSOSD.o osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} 
-	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@ ./lib/uofs.a
+obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} 
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ./lib/uofs.a
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@

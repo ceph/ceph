@@ -14,7 +14,7 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-
+#include <errno.h>
 # include <netdb.h>
 # include <sys/socket.h>
 # include <netinet/in.h>

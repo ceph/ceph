@@ -129,6 +129,7 @@ int fakemessenger_do_loop_2()
 
 	// timer?
 	if (pending_timer) {
+	  pending_timer = false;
 	  dout(5) << "pending timer" << endl;
 	  g_timer.execute_pending();
 	}

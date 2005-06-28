@@ -2,8 +2,14 @@
 #include "include/types.h"
 
 #include "OSD.h"
-#include "FakeStore.h"
 #include "OSDCluster.h"
+
+#ifdef USE_OBFS
+# include "OBFSStore.h"
+#else
+# include "FakeStore.h"
+#endif
+
 
 #include "mds/MDS.h"
 
@@ -53,7 +59,11 @@ OSD::OSD(int id, Messenger *m)
   osdcluster = 0;
 
   // use fake store
+#ifdef USE_OBFS
+  store = new OBFSStore(whoami, "./param.in", NULL);
+#else
   store = new FakeStore(osd_base_path, whoami);
+#endif
 
   // monitor
   char s[80];
@@ -331,7 +341,6 @@ void OSD::op_read(MOSDOp *r)
   long got = store->read(r->get_oid(), 
 						 r->get_length(), r->get_offset(),
 						 bptr.c_str());
-
   // set up reply
   MOSDOpReply *reply = new MOSDOpReply(r, 0, osdcluster); 
   if (got >= 0) {

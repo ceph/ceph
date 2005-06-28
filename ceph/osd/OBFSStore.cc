@@ -1,7 +1,10 @@
 
 #include "OBFSStore.h"
+
+extern "C" {
 #include "../include/uofs.h"
-#include "../include/types.h"
+}
+#include "include/types.h"
 
 #include <unistd.h>
 #include <stdlib.h>

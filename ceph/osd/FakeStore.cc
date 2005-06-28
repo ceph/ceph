@@ -266,7 +266,7 @@ int FakeStore::read(object_t oid,
 	  if (fd < 0) 
 		return fd;    // no shadow either.
 	} else {
-	  dout(1) << "couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
+	  dout(1) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
 	  return fd;
 	}
   }
@@ -299,7 +299,7 @@ int FakeStore::write(object_t oid,
   if (do_fsync && g_conf.osd_writesync) flags |= O_SYNC;
   int fd = ::open(fn.c_str(), flags);
   if (fd < 0) {
-	dout(1) << "couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
+	dout(1) << "write couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
 	return fd;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
