@@ -351,6 +351,7 @@ void AnchorTable::save(Context *onfinish)
   bufferlist bl;
   bl.append(tab.c_str(), tab.length());
   mds->filer->write(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
+					g_OSD_FileLayout,
 					bl.length(), 0,
 					bl, 0, 
 					onfinish);
@@ -394,6 +395,7 @@ public:
 	if (r > 0 && size > 0) {
 	  C_AT_Load *c = new C_AT_Load(size, at, onfinish);
 	  mds->filer->read(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
+					   g_OSD_FileLayout,
 					   size, sizeof(size),
 					   &c->bl,
 					   c);
@@ -413,6 +415,7 @@ void AnchorTable::load(Context *onfinish)
   
   C_AT_LoadSize *c = new C_AT_LoadSize(this, mds, onfinish);
   mds->filer->read(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
+				   g_OSD_FileLayout,
 				   sizeof(size_t), 0,
 				   &c->bl,
 				   c);

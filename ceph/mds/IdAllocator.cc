@@ -89,6 +89,7 @@ void IdAllocator::save(Context *onfinish)
 
   // write (async)
   mds->filer->write(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
+					g_OSD_FileLayout,
 					data.length(),
 					0,
 					bl,
@@ -138,7 +139,8 @@ void IdAllocator::load(Context *onfinish)
   opening = true;
 
   mds->filer->read(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
-				   FILE_OBJECT_SIZE,
+				   g_OSD_FileLayout,
+				   g_OSD_FileLayout.stripe_size,
 				   0,
 				   &c->bl,
 				   c);

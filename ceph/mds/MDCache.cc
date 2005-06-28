@@ -483,7 +483,9 @@ bool MDCache::trim(__int32_t max) {
 	// last link?
 	if (in->inode.nlink == 0) {
 	  dout(7) << "last link, destroying inode " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
-	  mds->filer->remove(in->ino(), in->inode.size, 
+	  mds->filer->remove(in->ino(), 
+						 g_OSD_FileLayout,
+						 in->inode.size, 
 						 NULL);   // FIXME
 	}
 

@@ -29,12 +29,28 @@ using namespace __gnu_cxx;
 #define NUM_RUSH_REPLICAS         4   // this should be big enough to cope w/ failing disks.
 #define MAX_REPLICAS              3
 
-#define FILE_OBJECT_SIZE     (1<<20)  // 1 MB object size
+//#define FILE_OBJECT_SIZE     (1<<20)  // 1 MB object size
 
-#define OID_BLOCK_BITS     30       // 1mb * 10^9 = 1 petabyte files
+#define OID_ONO_BITS       30       // 1mb * 10^9 = 1 petabyte files
 #define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
 
-#define MAX_FILE_SIZE      (FILE_OBJECT_SIZE << OID_BLOCK_BITS)  // 1 PB
+//#define MAX_FILE_SIZE      (FILE_OBJECT_SIZE << OID_ONO_BITS)  // 1 PB
+
+
+/** OSDFileLayout 
+ * specifies a striping strategy
+ */
+
+class OSDFileLayout {
+ public:
+  int stripe_size;     // stripe unit, in bytes
+  int stripe_count;    // over this many objects
+  int object_size;     // until objects are this big, then use a new set of objects.
+
+  OSDFileLayout(int ss, int sc, int os) :
+	stripe_size(ss), stripe_count(sc), object_size(os) { }
+};
+
 
 
 /** OSDGroup
@@ -155,10 +171,10 @@ class OSDCluster {
 
   /* map (ino, blockno) into a replica group */
   repgroup_t file_to_repgroup(inodeno_t ino, 
-							  size_t blockno) {
+							  size_t ono) {
 	// something simple for now
-	// hash this eventually
-	return (ino+blockno) % NUM_REPLICA_GROUPS;
+	// hash this eventually!
+	return (ino+ono) % NUM_REPLICA_GROUPS;
   }
 
 
@@ -174,13 +190,13 @@ class OSDCluster {
   }
 
 
-  /* map (ino, block) to an object name
+  /* map (ino, ono) to an object name
 	 (to be used on any osd in the proper replica group) */
   object_t file_to_object(inodeno_t ino,
-						  size_t    blockno) {  
+						  size_t    ono) {  
 	assert(ino < (1LL<<OID_INO_BITS));       // legal ino can't be too big
-	assert(blockno < (1LL<<OID_BLOCK_BITS));
-	return (ino << OID_INO_BITS) + blockno;
+	assert(ono < (1LL<<OID_ONO_BITS));
+	return (ino << OID_INO_BITS) + ono;
   }
 
   
@@ -227,26 +243,42 @@ class OSDCluster {
   /* map (ino, offset, len) to a (list of) OSDExtents 
 	 (byte ranges in objects on osds) */
   void file_to_extents(inodeno_t ino,
+					   OSDFileLayout& layout,
 					   size_t len,
 					   size_t offset,
 					   list<OSDExtent>& extents) {
+	// layout constant
+	size_t stripes_per_object = layout.object_size / layout.stripe_size;
+
 	size_t cur = offset;
 	size_t left = len;
 	while (left > 0) {
 	  OSDExtent ex;
-	  
-	  // find oid, osds
-	  size_t blockno = cur / FILE_OBJECT_SIZE;
-	  ex.oid = file_to_object( ino, blockno );
-	  ex.rg = file_to_repgroup(ino, blockno );
-	  ex.osd = get_rg_acting_primary( ex.rg );
 
+	  // layout into objects
+	  size_t blockno = cur / layout.stripe_size;
+	  size_t stripeno = blockno / layout.stripe_count;
+	  size_t stripepos = blockno % layout.stripe_count;
+	  size_t objectsetno = stripeno / stripes_per_object;
+	  size_t objectno = objectsetno * layout.stripe_count + stripepos;
+
+	  // find oid, osds
+	  ex.oid = file_to_object( ino, objectno );
+	  ex.rg = file_to_repgroup( ino, objectno );
+	  ex.osd = get_rg_acting_primary( ex.rg );
+	  
 	  // map range into object
-	  ex.offset = cur % FILE_OBJECT_SIZE;
-	  if (left + ex.offset > FILE_OBJECT_SIZE) 
-		ex.len = FILE_OBJECT_SIZE - ex.offset;	 // doesn't fully fit
+	  size_t block_start = (stripeno % stripes_per_object)*layout.stripe_size;
+	  size_t block_off = cur % layout.stripe_size;
+	  size_t max = layout.stripe_size - block_off;
+
+	  ex.offset = block_start + block_off;
+	  if (left > max)
+		ex.len = max;
 	  else
-		ex.len = left;		                     // fits!
+		ex.len = left;
+
+	  //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
 
 	  left -= ex.len;
 	  cur += ex.len;

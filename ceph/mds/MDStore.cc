@@ -23,6 +23,8 @@ using namespace std;
 
 
 
+
+
 void MDStore::proc_message(Message *m)
 {
   switch (m->get_type()) {
@@ -409,6 +411,7 @@ void MDStore::do_commit_dir( CDir *dir,
   
   // submit to osd
   mds->filer->write( dir->ino(),
+					 g_OSD_MDDirLayout,
 					 bl.length(), 0,
 					 bl,
 					 0, //OSD_OP_FLAGS_TRUNCATE, // truncate file/object after end of this write
@@ -544,6 +547,7 @@ class MDDoFetchDirContext : public Context {
 	  MDDoFetchDirContext *fin = new MDDoFetchDirContext( mds, ino, context, hashcode );
 	  fin->bl.claim( bl );
 	  mds->filer->read(ino,
+					   g_OSD_MDDirLayout,
 					   size - got, bl.length(),
 					   &fin->bl2,
 					   fin );
@@ -565,8 +569,10 @@ void MDStore::do_fetch_dir( CDir *dir,
 
   // read first bit
   mds->filer->read(dir->ino(),
-				   FILE_OBJECT_SIZE, 0,  // get first object's bit
+				   g_OSD_MDDirLayout,
+				   //FILE_OBJECT_SIZE, 0,  // get first object's bit
 				   //16, 0,  // just get front bit
+				   g_OSD_MDDirLayout.stripe_size, 0,  // grab first stripe bit (better be more than 16 bytes!)
 				   &fin->bl,
 				   fin );
 }

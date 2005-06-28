@@ -18,6 +18,10 @@ using namespace std;
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_log) cout << "mds" << mds->get_nodeid() << ".logstream "
 
 
+
+
+
+
 // ----------------------------
 // writing
 
@@ -40,6 +44,7 @@ off_t LogStream::append(LogEvent *e)
   // serialize FIXME  ********
   bufferlist bl;
   e->encode(bl);
+
   size_t elen = bl.length();
   
   // append
@@ -47,6 +52,7 @@ off_t LogStream::append(LogEvent *e)
   
   off_t off = append_pos;
   append_pos += elen;
+  
   //dout(15) << "write buf was " << write_buf.length() << " bl " << write_buf << endl;
   write_buf.claim_append(bl);
   //dout(15) << "write buf now " << write_buf.length() << " bl " << write_buf << endl;
@@ -56,7 +62,7 @@ off_t LogStream::append(LogEvent *e)
 
 void LogStream::_append_2(off_t off)
 {
-  dout(15) << "sync_pos now " << off << endl;
+  dout(15) << "sync_pos now " << off << " skew " << off % g_conf.mds_log_pad_entry << endl;
   sync_pos = off;
 
   // discard written bufferlist
@@ -107,6 +113,7 @@ void LogStream::flush()
 
 	// write it
 	mds->filer->write(log_ino, 
+					  g_OSD_MDLogLayout,
 					  writing_buffers[flush_pos]->length(), flush_pos,
 					  *writing_buffers[flush_pos],
 					  0,
@@ -174,6 +181,7 @@ LogEvent *LogStream::get_next_event()
 
   // decode
   le->decode_payload(read_buf, off);
+  off = sizeof(type) + sizeof(length) + length;  // advance past any padding that wasn't decoded..
 
   // discard front of read_buf
   read_pos += off;
@@ -218,6 +226,7 @@ void LogStream::wait_for_next_event(Context *c)
   dout(15) << "wait_for_next_event reading from pos " << tail << " len " << size << endl;
   C_LS_ReadChunk *readc = new C_LS_ReadChunk(this);
   mds->filer->read(log_ino,  
+				   g_OSD_MDLogLayout,
 				   g_conf.mds_log_read_inc, tail,
 				   &readc->bl,
 				   readc);

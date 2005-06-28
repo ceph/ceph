@@ -1,5 +1,7 @@
 
 #include "include/config.h"
+#include "osd/OSDCluster.h"
+
 
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
 //#define MDS_CACHE_SIZE        80000         62mb
@@ -13,6 +15,16 @@
 
 // hack hack hack ugly FIXME
 long buffer_total_alloc = 0;
+
+
+//OSDFileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20 );   // stripe files over whole objects
+OSDFileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
+
+// ??
+OSDFileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19 );
+
+// stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
+OSDFileLayout g_OSD_MDLogLayout( 1<<7, 1<<3, 1<<20 );
 
 
 
@@ -50,6 +62,7 @@ md_config_t g_conf = {
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 256,
   mds_log_read_inc: 65536,
+  mds_log_pad_entry: 64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
 

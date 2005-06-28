@@ -124,7 +124,7 @@ void Logger::flush(bool force)
 
 	// reset the counters
 	for (vector<string>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) 
-	  set(*it, 0);
+	  this->vals[*it] = 0;
   }
 
   lock.Unlock();

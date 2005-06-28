@@ -24,6 +24,7 @@ using namespace __gnu_cxx;
 
 #include "include/types.h"
 #include "msg/Dispatcher.h"
+#include "OSDCluster.h"
 
 class Context;
 class Messenger;
@@ -92,20 +93,26 @@ class Filer : public Dispatcher {
 
   // osd fun
   int read(inodeno_t ino,
+		   OSDFileLayout& layout,
 		   size_t len, 
 		   size_t offset, 
 		   bufferlist *bl,   // ptr to data
 		   Context *c);
 
   int write(inodeno_t ino,
+			OSDFileLayout& layout,
 			size_t len, 
 			size_t offset, 
 			bufferlist& bl,
 			int flags, 
 			Context *c);
 
-  int probe_size(inodeno_t ino, size_t *size, Context *c);
-  int remove(inodeno_t ino, size_t size, Context *c);
+  int probe_size(inodeno_t ino, 
+				 OSDFileLayout& layout,
+				 size_t *size, Context *c);
+  int remove(inodeno_t ino, 
+			 OSDFileLayout& layout,
+			 size_t size, Context *c);
 
   //int zero(inodeno_t ino, size_t len, size_t offset, Context *c);   
 

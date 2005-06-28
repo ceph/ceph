@@ -12,6 +12,9 @@ using namespace std;
 #define EVENT_UNLINK       3
 #define EVENT_ALLOC        4
 
+#include "include/config.h"
+
+
 // generic log event
 class LogEvent {
  private:
@@ -37,7 +40,21 @@ class LogEvent {
 
 	// payload
 	encode_payload(bl);
+
+	// HACK: pad payload to match md log layout?
+	int elen = bl.length() - off + sizeof(_type);
+	if (elen % g_conf.mds_log_pad_entry > 0) {
+	  int add = g_conf.mds_log_pad_entry - (elen % g_conf.mds_log_pad_entry);
+	  //cout << "elen " << elen << "  adding " << add << endl;
+	  buffer *b = new buffer(add);
+	  memset(b->c_str(), 0, add);
+	  b->set_length(add);
+	  bufferptr bp(b);
+	  bl.append(bp);
+	} 
+
 	len = bl.length() - off - sizeof(len);
+
 	bl.copy_in(off, sizeof(len), (char*)&len);
   }
   

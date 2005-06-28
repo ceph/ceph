@@ -24,6 +24,10 @@
 
 
 
+
+
+
+
 // cons/des
 
 Client::Client(MDCluster *mdc, int id, Messenger *m)
@@ -1101,7 +1105,7 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 	
 	C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
 	
-	filer->read(in->inode.ino, size, offset, &blist, onfinish);
+	filer->read(in->inode.ino, g_OSD_FileLayout, size, offset, &blist, onfinish);
 	
 	cond.Wait(client_lock);
 
@@ -1181,7 +1185,7 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 	in->inflight_buffers.insert(blist);
 
 	Context *onfinish = new C_Client_WriteBuffer( in, blist );
-	filer->write(in->inode.ino, size, offset, *blist, 0, onfinish);
+	filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, *blist, 0, onfinish);
 
   } else {
 	// synchronous write
@@ -1196,7 +1200,7 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 	int rvalue;
 	
 	C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
-	filer->write(in->inode.ino, size, offset, blist, 0, onfinish);
+	filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, blist, 0, onfinish);
 	
 	cond.Wait(client_lock);
   }

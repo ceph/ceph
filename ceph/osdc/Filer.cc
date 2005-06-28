@@ -70,6 +70,7 @@ void Filer::send_outgoing()
 
 int
 Filer::read(inodeno_t ino,
+			OSDFileLayout& layout,
 			size_t len, 
 			size_t offset, 
 			bufferlist *bl,
@@ -84,7 +85,7 @@ Filer::read(inodeno_t ino,
 
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, len, offset, extents);
+  osdcluster->file_to_extents(ino, layout, len, offset, extents);
 
   dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
@@ -193,6 +194,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 
 int 
 Filer::write(inodeno_t ino,
+			 OSDFileLayout& layout,
 			 size_t len, 
 			 size_t offset, 
 			 bufferlist& bl,
@@ -207,7 +209,7 @@ Filer::write(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, len, offset, extents);
+  osdcluster->file_to_extents(ino, layout, len, offset, extents);
 
   dout(7) << "osd write ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
@@ -341,7 +343,10 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
+int Filer::remove(inodeno_t ino, 
+				  OSDFileLayout& layout,
+				  size_t size, 
+				  Context *onfinish)
 {
   // pending write record
   PendingOSDOp_t *p = new PendingOSDOp_t;
@@ -349,7 +354,7 @@ int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, size, 0, extents);
+  osdcluster->file_to_extents(ino, layout, size, 0, extents);
 
   dout(7) << "osd remove ino " << ino << " size " << size << " in " << extents.size() << " extents" << endl;
 
@@ -384,7 +389,10 @@ int Filer::remove(inodeno_t ino, size_t size, Context *onfinish)
 }
 
 
-int Filer::probe_size(inodeno_t ino, size_t *size, Context *onfinish)
+int Filer::probe_size(inodeno_t ino, 
+					  OSDFileLayout& layout,
+					  size_t *size, 
+					  Context *onfinish)
 {
   PendingOSDProbe_t *p = new PendingOSDProbe_t;
   p->final_size = size;
