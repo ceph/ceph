@@ -24,7 +24,7 @@ OSDFileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets o
 OSDFileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19 );
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-OSDFileLayout g_OSD_MDLogLayout( 1<<7, 1<<3, 1<<20 );
+OSDFileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20 );
 
 
 
