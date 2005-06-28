@@ -118,14 +118,16 @@ int main(int oargc, char **oargv) {
   }
   
   // create client
+  set<int> clientlist;
   Client *client[NUMCLIENT];
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
+	clientlist.insert(i);
 	client[i] = new Client(mdc, i, new TCPMessenger(MSG_ADDR_CLIENT(i)) );
 	start++;
   }
+  cerr << "clients " << clientlist << " on rank " << myrank << " " << hostname << "." << pid << endl;
 
 
   // start message loop

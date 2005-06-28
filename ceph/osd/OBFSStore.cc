@@ -2,8 +2,9 @@
 #include "OBFSStore.h"
 
 extern "C" {
-#include "../include/uofs.h"
+#include "../../uofs/uofs.h"
 }
+
 #include "include/types.h"
 
 #include <unistd.h>

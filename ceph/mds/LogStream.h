@@ -27,6 +27,9 @@ class LogStream {
   off_t append_pos;      // where next event will be written
   bufferlist write_buf;  // unwritten (between flush_pos and append_pos)
 
+  std::map< off_t, bufferlist* >   writing_buffers;
+
+
   // reading
   off_t read_pos;        // abs position in file
   //off_t read_buf_start;  // where read buf begins

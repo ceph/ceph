@@ -58,6 +58,10 @@ void LogStream::_append_2(off_t off)
 {
   dout(15) << "sync_pos now " << off << endl;
   sync_pos = off;
+
+  // discard written bufferlist
+  delete writing_buffers[off];
+  writing_buffers.erase(off);
   
   // wake up waiters
   map< off_t, list<Context*> >::iterator it = waiting_for_sync.begin();
@@ -97,13 +101,17 @@ void LogStream::flush()
 	
 	assert(write_buf.length() == append_pos - flush_pos);
 	
+	// tuck writing buffer away until write finishes
+	writing_buffers[flush_pos] = new bufferlist;
+	writing_buffers[flush_pos]->claim(write_buf);
+
+	// write it
 	mds->filer->write(log_ino, 
-					  write_buf.length(), flush_pos,
-					  write_buf,
+					  writing_buffers[flush_pos]->length(), flush_pos,
+					  *writing_buffers[flush_pos],
 					  0,
 					  new C_LS_Append(this, append_pos));
-	
-	write_buf.clear();
+
 	flush_pos = append_pos;
   } else {
 	dout(15) << "flush flush_pos " << flush_pos << " == append_pos " << append_pos << ", nothing to do" << endl;

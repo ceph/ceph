@@ -177,7 +177,7 @@ int tcpmessenger_init(int& argc, char**& argv)
 
 int tcpmessenger_shutdown() 
 {
-  dout(1) << "tcpmessenger_shutdown closing all sockets etc" << endl;
+  dout(2) << "tcpmessenger_shutdown closing all sockets etc" << endl;
 
   // bleh
   for (int i=0; i<mpi_world; i++) {

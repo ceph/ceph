@@ -465,7 +465,7 @@ int Client::mount(int mkfs)
 
   assert(!mounted);  // caller is confused?
 
-  dout(1) << "mounting" << endl;
+  dout(2) << "mounting" << endl;
   MClientMount *m = new MClientMount();
   if (mkfs) m->set_mkfs(mkfs);
 
@@ -478,7 +478,7 @@ int Client::mount(int mkfs)
   // we got osdcluster!
   osdcluster->decode(reply->get_osd_cluster_state());
 
-  dout(1) << "mounted" << endl;
+  dout(2) << "mounted" << endl;
   mounted = true;
 
   delete reply;
@@ -492,14 +492,14 @@ int Client::unmount()
 
   assert(mounted);  // caller is confused?
 
-  dout(1) << "unmounting" << endl;
+  dout(2) << "unmounting" << endl;
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
   client_lock.Unlock();
   Message *reply = messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   client_lock.Lock();
   assert(reply);
   mounted = false;
-  dout(1) << "unmounted" << endl;
+  dout(2) << "unmounted" << endl;
 
   delete reply;
 
