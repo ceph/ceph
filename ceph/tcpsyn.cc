@@ -127,7 +127,8 @@ int main(int oargc, char **oargv) {
 	client[i] = new Client(mdc, i, new TCPMessenger(MSG_ADDR_CLIENT(i)) );
 	start++;
   }
-  cerr << "clients " << clientlist << " on rank " << myrank << " " << hostname << "." << pid << endl;
+  if (clientlist.size())
+	cerr << "clients " << clientlist << " on rank " << myrank << " " << hostname << "." << pid << endl;
 
 
   // start message loop

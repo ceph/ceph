@@ -33,6 +33,10 @@ int SyntheticClient::run()
 	break;
   case SYNCLIENT_MODE_MAKEDIRS:
 	make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	{
+	  string root;
+	  full_walk(root);
+	}
 	break;
   case SYNCLIENT_MODE_FULLWALK:
 	full_walk(sarg1);

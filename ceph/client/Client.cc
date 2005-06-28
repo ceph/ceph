@@ -727,7 +727,8 @@ int Client::lstat(const char *path, struct stat *stbuf)
   Dentry *dn = lookup(req->get_filepath());
   inode_t inode;
   time_t now = time(NULL);
-  if (dn && ((now - dn->inode->last_updated) <= g_conf.client_cache_stat_ttl)) {
+  if (dn && 
+	  ((now - dn->inode->last_updated) < g_conf.client_cache_stat_ttl)) {
 	inode = dn->inode->inode;
 	dout(10) << "lstat cache hit, age is " << (now - dn->inode->last_updated) << endl;
 	delete req;  // don't need this

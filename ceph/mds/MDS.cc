@@ -2160,7 +2160,7 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   // schedule a commit for good measure 
   // NOTE: not strictly necessary.. it's in the log!
   // but, if fakemds crashes we'll be less likely to corrupt osddata/* (in leiu of a real recovery mechanism)
-  mdstore->commit_dir(newdir, NULL);
+  //mdstore->commit_dir(newdir, NULL);
   return;
 }
 

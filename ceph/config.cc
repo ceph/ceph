@@ -9,7 +9,7 @@
 #define AVG_PER_INODE_SIZE    450
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
-#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
+#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 500 )
 //#define MDS_CACHE_SIZE 25000  // 
 
 
@@ -177,6 +177,8 @@ void parse_config_options(int argc, char **argv,
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
 
+	else if (strcmp(argv[i], "--client_cache_stat_ttl") == 0)
+	  g_conf.client_cache_stat_ttl = atoi(argv[++i]);
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);

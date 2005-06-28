@@ -416,7 +416,11 @@ int tcp_send(Message *m)
   m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
   bufferlist blist = m->get_payload();
+#ifdef TCP_KEEP_CHUNKS
   env->nchunks = blist.buffers().size();
+#else
+  env->nchunks = 1;
+#endif
 
   dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
   
@@ -429,6 +433,8 @@ int tcp_send(Message *m)
   tcp_write( out_sd[rank], (char*)env, sizeof(*env) );
 
   // payload
+#ifdef TCP_KEEP_CHUNKS
+  // send chunk-wise
   int i = 0;
   for (list<bufferptr>::iterator it = blist.buffers().begin();
 	   it != blist.buffers().end();
@@ -439,6 +445,16 @@ int tcp_send(Message *m)
 	tcp_write( out_sd[rank], (*it).c_str(), size );
 	i++;
   }
+#else
+  // one big chunk
+  int size = blist.length();
+  tcp_write( out_sd[rank], (char*)&size, sizeof(size) );
+  for (list<bufferptr>::iterator it = blist.buffers().begin();
+	   it != blist.buffers().end();
+	   it++) {
+	tcp_write( out_sd[rank], (*it).c_str(), (*it).length() );
+  }
+#endif
 
   sender_lock.Unlock();
 
@@ -647,7 +663,7 @@ int TCPMessenger::shutdown()
 
   // last one?
   if (directory.empty()) {
-	dout(1) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
+	dout(2) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
 	pthread_t whoami = pthread_self();
 
 

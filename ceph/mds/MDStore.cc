@@ -310,6 +310,8 @@ class MDDoCommitDirContext : public Context {
   __uint64_t version;
 
 public:
+  bufferlist bl;
+
   MDDoCommitDirContext(MDStore *ms, CDir *dir, Context *c, int w) : Context() {
 	this->ms = ms;
 	this->dir = dir;
@@ -399,12 +401,12 @@ void MDStore::do_commit_dir( CDir *dir,
   dout(14) << "num " << num << endl;
   
   // put count in buffer
-  bufferlist bl;
+  //bufferlist bl;
   size_t size = sizeof(num) + dirdata.length();
-  bl.append((char*)&size, sizeof(size));
-  bl.append((char*)&num, sizeof(num));
-  bl.append(dirdata.c_str(), dirdata.length());
-  assert(bl.length() == size + sizeof(size));
+  fin->bl.append((char*)&size, sizeof(size));
+  fin->bl.append((char*)&num, sizeof(num));
+  fin->bl.append(dirdata.c_str(), dirdata.length());
+  assert(fin->bl.length() == size + sizeof(size));
   
   // pin inode
   dir->auth_pin();
@@ -412,8 +414,8 @@ void MDStore::do_commit_dir( CDir *dir,
   // submit to osd
   mds->filer->write( dir->ino(),
 					 g_OSD_MDDirLayout,
-					 bl.length(), 0,
-					 bl,
+					 fin->bl.length(), 0,
+					 fin->bl,
 					 0, //OSD_OP_FLAGS_TRUNCATE, // truncate file/object after end of this write
 					 fin );
 }

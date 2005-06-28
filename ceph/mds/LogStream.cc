@@ -66,6 +66,7 @@ void LogStream::_append_2(off_t off)
   sync_pos = off;
 
   // discard written bufferlist
+  assert(writing_buffers.count(off) == 1);
   delete writing_buffers[off];
   writing_buffers.erase(off);
   
@@ -108,14 +109,14 @@ void LogStream::flush()
 	assert(write_buf.length() == append_pos - flush_pos);
 	
 	// tuck writing buffer away until write finishes
-	writing_buffers[flush_pos] = new bufferlist;
-	writing_buffers[flush_pos]->claim(write_buf);
+	writing_buffers[append_pos] = new bufferlist;
+	writing_buffers[append_pos]->claim(write_buf);
 
 	// write it
 	mds->filer->write(log_ino, 
 					  g_OSD_MDLogLayout,
-					  writing_buffers[flush_pos]->length(), flush_pos,
-					  *writing_buffers[flush_pos],
+					  writing_buffers[append_pos]->length(), flush_pos,
+					  *writing_buffers[append_pos],
 					  0,
 					  new C_LS_Append(this, append_pos));
 
