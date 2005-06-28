@@ -102,7 +102,7 @@ class MClientRequest : public Message {
   size_t get_sizearg() { return st.sizearg; }
 
   virtual void decode_payload() {
-	int off;
+	int off = 0;
 	payload.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
 	path._decode(payload, off);

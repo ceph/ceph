@@ -15,6 +15,8 @@
 
 // hack hack hack ugly FIXME
 long buffer_total_alloc = 0;
+Mutex bufferlock;
+
 
 
 OSDFileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20 );   // stripe files over whole objects
@@ -121,6 +123,8 @@ md_config_t g_conf = {
 #include <string.h>
 #include <iostream>
 using namespace std;
+
+
 
 void parse_config_options(int argc, char **argv,
 						  int& nargc, char**&nargv)

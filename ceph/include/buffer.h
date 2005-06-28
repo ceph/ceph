@@ -20,8 +20,26 @@ using namespace std;
 #include "include/config.h"
 #define bdbout(x) if (x <= g_conf.debug_buffer) cout
 
+#include "common/Mutex.h"
 
+// HACK: in config.cc
+/*
+ * WARNING: bufferlock placements are tricky for efficiency.  note that only bufferptr and
+ * buffer ever use buffer._ref, and only bufferptr should call ~buffer().
+ *
+ * So, I only need to protect:
+ *  - buffer()'s modification of buffer_total_alloc
+ *  - ~bufferptr() check of buffer._ref, and ~buffer's mod of buffer_total_alloc
+ * 
+ * I don't protect
+ *  - buffer._get() .. increment is atomic on any sane architecture
+ *  - buffer._put() .. only called by ~bufferptr.
+ *  - ~buffer       .. only called by ~bufferptr   *** I HOPE!!  
+ */
+extern Mutex bufferlock;
 extern long buffer_total_alloc;
+
+
 
 /*
  * buffer  - the underlying buffer container.  with a reference count.
@@ -43,11 +61,11 @@ class buffer {
   int _ref;
   int _get() { 
 	bdbout(1) << "buffer.get " << *this << " get " << _ref+1 << endl;
-	return ++_ref; 
+	return ++_ref;
   }
   int _put() { 
 	bdbout(1) << "buffer.put " << *this << " put " << _ref-1 << endl;
-	return --_ref; 
+	return --_ref;
   }
   
   friend class bufferptr;
@@ -60,7 +78,9 @@ class buffer {
   buffer(int a) : _dataptr(0), _len(0), _alloc_len(a), _ref(0), _myptr(true) {
 	bdbout(1) << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
+	bufferlock.Lock();
 	buffer_total_alloc += _alloc_len;
+	bufferlock.Unlock();
 	bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
@@ -88,7 +108,9 @@ class buffer {
 	if (mode & BUFFER_MODE_COPY) {
 	  _dataptr = new char[_alloc_len];
 	  bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
+	  bufferlock.Lock();
 	  buffer_total_alloc += _alloc_len;
+	  bufferlock.Unlock();
 	  memcpy(_dataptr, p, l);
 	  bdbout(1) << "buffer.copy " << *this << endl;
 	} else {
@@ -186,8 +208,12 @@ class bufferptr {
   }
 
   ~bufferptr() {
-	if (_buffer && _buffer->_put() == 0) 
-	  delete _buffer;
+	if (_buffer) {
+	  bufferlock.Lock();
+	  if (_buffer->_put() == 0) 
+		delete _buffer;
+	  bufferlock.Unlock();
+	}
   }
 
 
