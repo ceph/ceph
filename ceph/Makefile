@@ -51,6 +51,17 @@ COMMON_OBJS= \
 	common/Timer.o\
 	config.o
 
+OBFS_OBJS= \
+	obfs/uofs_mem.o\
+	obfs/uofs_disk_io.o\
+	obfs/uofs_alloc.o\
+	obfs/uofs_mapping.o\
+	obfs/uofs_cache.o\
+	obfs/uofs_onode.o\
+	obfs/uofs_rw.o\
+	obfs/uofs_stat.o\
+	obfs/uofs.o
+
 TEST_TARGETS = fakemds mpitest
 TARGETS = import singleclient mpifuse fakefuse mpisyn
 
@@ -60,6 +71,7 @@ all: depend ${TARGETS}
 
 test: depend ${TEST_TARGETS}
 
+obfs: depend obfstest
 
 gprof-helper.so: test/gprof-helper.c
 	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
@@ -96,6 +108,9 @@ mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.
 
 tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
+
+obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OBFSOSD.o osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} 
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@ ./lib/uofs.a
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@

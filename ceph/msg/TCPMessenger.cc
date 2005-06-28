@@ -21,6 +21,7 @@ using namespace __gnu_cxx;
 # include <arpa/inet.h>
 #include <sys/select.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sys/types.h>
 
 #include <unistd.h>
