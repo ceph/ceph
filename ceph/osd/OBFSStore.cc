@@ -26,7 +26,10 @@ extern "C" {
 OBFSStore::OBFSStore(int whoami, char *param, char *dev)
 {
 	this->whoami = whoami;
+	this->mounted = -1;
+	this->bdev_id = -1;
 	this->param[0] = 0;
+	this->dev[0] = 0;
 	if (dev)
 		strcpy(this->dev, dev);
 	if (param) 
@@ -35,15 +38,36 @@ OBFSStore::OBFSStore(int whoami, char *param, char *dev)
 
 int OBFSStore::init(void)
 {
-	int	dev_id;
-
+	dout(0) << "OBFS init!" << endl;
 	if ((this->bdev_id = device_open(this->dev, 0)) < 0) {
-		dout(1) << "device open FAILED on " << this->dev << ", errno " << errno << endl;
+		dout(0) << "device open FAILED on " << this->dev << ", errno " << errno << endl;
 		return -1;
 	}
 
-	uofs_mount(dev_id);
+	this->mounted = uofs_mount(this->bdev_id);
+	switch (this->mounted) {
+		case -1:
+			this->mkfs();
+			//retry to mount
+			dout(0) << "remount the OBFS" << endl;
+			this->mounted = uofs_mount(this->bdev_id);
+			assert(this->mounted >= 0);
+			break;
+		case -2: 
+			//fsck
+			break;
+		case 0:
+			//success
+			break;
+		default:
+			break;
+	}
 
+	if (this->mounted >= 0) 
+		dout(0) << "successfully mounted!" << endl;
+	else
+		dout(0) << "error in mounting!" << endl;
+	
 	return 0;
 }
 
@@ -57,13 +81,17 @@ int OBFSStore::mkfs(void)
 		nr_hash_table_buckets   = 1023,
 		delay_allocation        = 0,
 		flush_interval		= 5;
-		bdev_id;
 	FILE	*param;
 	
+
+	dout(0) << "OBFS.mkfs!" << endl;
+	if (this->mounted >= 0)
+		return 0;
+
 	if (strlen(this->param) > 0) {
 		param = fopen(this->param, "r");
 		if (param) {
-			fscanf(param, "Block Device: %s\n", this->dev);
+			//fscanf(param, "Block Device: %s\n", this->dev);
 			fscanf(param, "Donode Size: %d\n", &donode_size_byte);
 			fscanf(param, "Block vs Donode Ratio: %d\n", &bd_ratio);
 			fscanf(param, "Region Size: %d MB\n", &reg_size_mb);
@@ -72,21 +100,24 @@ int OBFSStore::mkfs(void)
 			fscanf(param, "Hash Table Buckets: %d\n", &nr_hash_table_buckets);
 			fscanf(param, "Delayed Allocation: %d\n", &delay_allocation);
 		} else {
-			dout(1) << "read open FAILED on "<< this->param <<", errno " << errno << endl;
-			dout(1) << "use default parameters" << endl;
+			dout(0) << "read open FAILED on "<< this->param <<", errno " << errno << endl;
+			dout(0) << "use default parameters" << endl;
 		}
-	}
+	} else
+		dout(0) << "use default parameters" << endl;
 
-	if ((bdev_id = device_open(this->dev, 0)) < 0) {
-		dout(1) << "device open FAILED on "<< this->dev <<", errno " << errno << endl;
-		return -1;
-	}
+	if (this->bdev_id <= 0)
+		if ((this->bdev_id = device_open(this->dev, 0)) < 0) {
+			dout(0) << "device open FAILED on "<< this->dev <<", errno " << errno << endl;
+			return -1;
+		}
+	
+	dout(0) << "start formating!" << endl;
 
-	uofs_format(bdev_id, donode_size_byte, bd_ratio, reg_size_mb, sb_size_kb, 
-		    lb_size_kb, nr_hash_table_buckets, delay_allocation, flush_interval);
+	uofs_format(this->bdev_id, donode_size_byte, bd_ratio, (reg_size_mb << 20), (sb_size_kb << 10), 
+			(lb_size_kb << 10), nr_hash_table_buckets, delay_allocation, flush_interval);
 
-	close(bdev_id);
-
+	dout(0) << "formatting complete!" << endl;
 	return 0;
 }
 

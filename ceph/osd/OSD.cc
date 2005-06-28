@@ -60,7 +60,7 @@ OSD::OSD(int id, Messenger *m)
 
   // use fake store
 #ifdef USE_OBFS
-  store = new OBFSStore(whoami, "./param.in", NULL);
+  store = new OBFSStore(whoami, NULL, "/dev/sdb3");
 #else
   store = new FakeStore(osd_base_path, whoami);
 #endif

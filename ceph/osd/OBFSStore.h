@@ -7,6 +7,7 @@
 class OBFSStore: public ObjectStore {
 	int	whoami;
 	int	bdev_id;
+	int	mounted;
 	char	dev[128];
 	char	param[128];
 
