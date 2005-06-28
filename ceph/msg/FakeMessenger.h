@@ -34,7 +34,7 @@ class FakeMessenger : public Messenger {
   // -- incoming queue --
   // (that nothing uses)
   Message *get_message() {
-	if (incoming.size() > 0) {
+	if (!incoming.empty()) {
 	  Message *m = incoming.front();
 	  incoming.pop_front();
 	  return m;

@@ -17,15 +17,15 @@
 long buffer_total_alloc = 0;
 
 
-//OSDFileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20 );   // stripe files over whole objects
-OSDFileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
+OSDFileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20 );   // stripe files over whole objects
+//OSDFileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
 OSDFileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19 );
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
 OSDFileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20 );
-
+//OSDFileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );
 
 
 md_config_t g_conf = {
@@ -34,6 +34,7 @@ md_config_t g_conf = {
   num_client: 1,
 
   // profiling and debugging
+  log: true,
   log_interval: 1,
   log_name: (char*)0,
 
@@ -146,6 +147,8 @@ void parse_config_options(int argc, char **argv,
 	else if (strcmp(argv[i], "--debug_buffer") == 0) 
 	  g_conf.debug_buffer = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--log") == 0) 
+	  g_conf.log = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--log_name") == 0) 
 	  g_conf.log_name = argv[++i];
 
 	else if (strcmp(argv[i], "--mds_cache_size") == 0) 

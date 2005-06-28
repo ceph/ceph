@@ -130,8 +130,8 @@ void Timer::cancel_timer()
 	dout(10) << "setting thread_stop flag" << endl;
 	lock.Lock();
 	thread_stop = true;
-	lock.Unlock();
 	cond.Signal();
+	lock.Unlock();
 	
 	dout(10) << "waiting for thread to finish" << endl;
 	void *ptr;

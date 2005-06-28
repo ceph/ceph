@@ -185,15 +185,17 @@ class LRU {
   void lru_adjust() {
 	if (!lru_max) return;
 
+	int toplen = lru_top.get_length();
 	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_max);
-	while (lru_top.get_length() > 0 && 
-		   lru_top.get_length() > topwant) {
+	while (toplen > 0 && 
+		   toplen > topwant) {
 	  // remove from tail of top, stick at head of bot
 	  // FIXME: this could be way more efficient by moving a whole chain of items.
 
 	  LRUObject *o = lru_top.get_tail();
 	  lru_top.remove(o);
 	  lru_bot.insert_head(o);
+	  toplen--;
 	}
   }
 

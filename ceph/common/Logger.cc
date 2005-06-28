@@ -34,13 +34,9 @@ Logger::~Logger()
   out.close();
 }
 
-long Logger::inc(char *s, long v)
+long Logger::inc(const char *key, long v)
 {
-  string key = s;
-  return inc(key,v);
-}
-long Logger::inc(string& key, long v)
-{
+  if (!g_conf.log) return 0;
   lock.Lock();
   if (!type->have_key(key)) 
 	type->add_inc(key);
@@ -51,13 +47,9 @@ long Logger::inc(string& key, long v)
   return r;
 }
 
-long Logger::set(char *s, long v)
+long Logger::set(const char *key, long v)
 {
-  string key = s;
-  return set(key,v);
-}
-long Logger::set(string& key, long v)
-{
+  if (!g_conf.log) return 0;
   lock.Lock();
   if (!type->have_key(key)) 
 	type->add_set(key);
@@ -69,13 +61,9 @@ long Logger::set(string& key, long v)
   return r;
 }
 
-long Logger::get(char *s)
+long Logger::get(const char* key)
 {
-  string key = s;
-  return get(key);
-}
-long Logger::get(string& key)
-{
+  if (!g_conf.log) return 0;
   lock.Lock();
   long r = vals[key];
   lock.Unlock();
@@ -84,6 +72,7 @@ long Logger::get(string& key)
 
 void Logger::flush(bool force) 
 {
+  if (!g_conf.log) return;
   lock.Lock();
 
   timepair_t now = g_clock.gettimepair();
@@ -107,7 +96,7 @@ void Logger::flush(bool force)
 	if (wrote_header != type->version ||
 		wrote_header_last > 10) {
 	  out << "#";
-	  for (vector<string>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
+	  for (vector<const char*>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
 		out << "\t" << *it;
 	  }
 	  out << endl;
@@ -117,13 +106,13 @@ void Logger::flush(bool force)
 
 	// write line to log
 	out << last_logged;
-	for (vector<string>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
+	for (vector<const char*>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
 	  out << "\t" << get(*it);
 	}
 	out << endl;
 
 	// reset the counters
-	for (vector<string>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) 
+	for (vector<const char*>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) 
 	  this->vals[*it] = 0;
   }
 

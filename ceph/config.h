@@ -12,6 +12,7 @@ struct md_config_t {
 
 
   // profiling
+  bool  log;
   int   log_interval;
   char *log_name;
 

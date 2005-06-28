@@ -454,7 +454,7 @@ void* tcp_sendthread(void*)
   outgoing_lock.Lock();
   while (!outgoing.empty() || !tcp_done) {
 	
-	while (outgoing.size()) {
+	while (!outgoing.empty()) {
 	  Message *m = outgoing.front();
 	  outgoing.pop_front();
 	  tcp_send(m);

@@ -12,10 +12,21 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-class LogType;
+#include "LogType.h"
+
+
+struct eqstr
+{
+  bool operator()(const char* s1, const char* s2) const
+  {
+    return strcmp(s1, s2) == 0;
+  }
+};
+
+
 class Logger {
  protected:
-  hash_map<string, long> vals;
+  hash_map<const char*, long, hash<const char*>, eqstr> vals;
   Mutex lock;
   LogType *type;
 
@@ -34,12 +45,9 @@ class Logger {
   Logger(string fn, LogType *type);
   ~Logger();
 
-  long inc(char *s, long v = 1);
-  long inc(string& key, long v = 1);
-  long set(char *s, long v);
-  long set(string& key, long v);
-  long get(char *s);
-  long get(string& key);
+  long inc(const char *s, long v = 1);
+  long set(const char *s, long v);
+  long get(const char *s);
 
   void flush(bool force = false);
 };

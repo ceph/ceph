@@ -15,11 +15,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
-#include <ext/hash_map>
 #include <cassert>
 #include <iostream>
 
 using namespace std;
+
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 
 #include "common/Cond.h"

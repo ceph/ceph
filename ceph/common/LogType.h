@@ -3,17 +3,27 @@
 
 #include "include/types.h"
 
-#include <ext/hash_map>
 #include <string>
 #include <fstream>
 using namespace std;
+#include <ext/hash_map>
 using namespace __gnu_cxx;
+
+// for const char* comparisons
+struct ltstr
+{
+  bool operator()(const char* s1, const char* s2) const
+  {
+    return strcmp(s1, s2) < 0;
+  }
+};
 
 class LogType {
  protected:
-  vector<string>   keys;
-  vector<string>   inc_keys;
-  vector<string>   set_keys;
+  set<const char*, ltstr>   keyset;
+  vector<const char*>   keys;
+  vector<const char*>   inc_keys;
+  vector<const char*>   set_keys;
 
   int version;
 
@@ -23,35 +33,22 @@ class LogType {
   LogType() {
 	version = 1;
   }
-  void add_inc(char *s) {
-	string name = s;
-	add_inc(name);
-  }
-  void add_inc(string& key) {
+  void add_inc(const char* key) {
     if (have_key(key)) return;
 	keys.push_back(key);
+	keyset.insert(key);
 	inc_keys.push_back(key);
 	version++;
   }
-  void add_set(char *s) {
-	string name = s;
-	add_set(name);
-  }
-  void add_set(string& key){
+  void add_set(const char* key){
 	if (have_key(key)) return;
 	keys.push_back(key);
+	keyset.insert(key);
 	set_keys.push_back(key);
 	version++;
   }
-  bool have_key(char *s) {
-	string n = s;
-	return have_key(n);
-  }
-  bool have_key(string& key) {
-	for (vector<string>::iterator it = keys.begin(); it != keys.end(); it++) {
-	  if (*it == key) return true;
-	}
-	return false;
+  bool have_key(const char* key) {
+	return keyset.count(key) ? true:false;
   }
 
 };
