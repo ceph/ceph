@@ -46,12 +46,10 @@ void Filecache::map_existing(size_t len,
   if (next_off < off + len) {
     holes[next_off] = (size_t) (off + len - next_off);
   }
-  // FIXME: consolidate holes
 }
 
-list<Bufferhead*> Filecache::simplify()
+void Filecache::simplify(list<Bufferhead*>& removed)
 {
-  list<Bufferhead*> removed;
   map<off_t, Bufferhead*>::iterator start, next;
   start = buffer_map.begin();
   while (start != buffer_map.end()) {
@@ -61,7 +59,7 @@ list<Bufferhead*> Filecache::simplify()
 		  (*start)->second->state == (*next)->second->state &&
 		  (*start)->second->offset + (*start)->second->len == (*next)->second->offset) {
 		(*start)->second->claim_append((*next)->second);
-		buffer_map.erase((*next)->first);
+		buffer_map.erase((*next)->first); (*next)->second->put();
 		removed.push_back((*next)->second);
 		next++;
 	  } else {
@@ -70,7 +68,6 @@ list<Bufferhead*> Filecache::simplify()
 	}
 	start = next;
   }
-  return removed;
 }
 
 void Filecache::copy_out(size_t size, off_t offset, char *dst) 
@@ -111,8 +108,8 @@ void Buffercache::insert(Bufferhead *bh) {
     bcache_map[bh->ino] = fc;
   }
   if (fc->buffermap.count(bh->offset)) assert(0); // fail loudly if offset already exists!
-  fc->buffer_map[bh->offset] = bh;
-  lru.lru_insert_top(bh);
+  fc->buffer_map[bh->offset] = bh; bh->get();
+  lru.lru_insert_top(bh); bh->get();
   clean_size += bh->len;
 }
 
@@ -165,12 +162,20 @@ size_t Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size,
 void Buffercache::simplify(inodeno_t ino)
 {
   Filecache *fc = bcache_map[ino];
-  list<Bufferhead*> removed = fc->simplify();
+  list<Bufferhead*> removed;
+  fc->simplify(&removed);
   for (list<Bufferhead*>::iterator it = removed.begin();
 	   it != removed.end();
 	   it++) {
-	lru.lru_remove(*it);
-	delete *it;
+	lru.lru_remove(*it); (*it)->put();
+    if (dirty_buffers.count(*it)) {
+      dirty_buffers.erase(*it);
+      (*it)->put();
+    }
+    if (bcache_map[ino]->dirty_buffers.count(*it)) {
+      bcache_map[ino]->dirty_buffers.erase(*it)
+      (*it)->put();
+    }
   }
 }
 
@@ -191,8 +196,8 @@ Bufferhead *Buffercache::alloc_buffers(ino, offset, size)
 
 
 void Buffercache::map_or_alloc(inodeno_t ino, size_t len, off_t off, 
-                               map<off_t, Bufferhead*> *buffers, 
-                               map<off_t, Bufferhead*> *inflight)
+                               map<off_t, Bufferhead*>& buffers, 
+                               map<off_t, Bufferhead*>& inflight)
 {
   Filecache *fc = bcache_map[ino];
   map<off_t, size_t> holes;
@@ -214,10 +219,10 @@ void Buffercache::free_buffers(Bufferhead *bh)
 {
   assert(bh->state == BUFH_STATE_CLEAN);
   assert(bh->lru_is_expirable());
-  bcache_map[bh->ino]->buffer_map.erase(bh->offset);
-  lru.lru_remove(bh);    
   clean_size -= bh->len;
-  delete bh;
+  lru.lru_remove(bh); bh->put();
+  assert(bh->ref == 1); // next put is going to delete it
+  bcache_map[bh->ino]->buffer_map.erase(bh->offset); bh->put();
 }
 
 void Buffercache::release_file(inodeno_t ino) 

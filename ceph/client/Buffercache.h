@@ -16,17 +16,6 @@
 class Buffercache;
 
 class Bufferhead : public LRUObject {
-  // reference counter
-  int ref;  
-  void get() {
-	if (ref == 0) lru_pin();
-	++ref;
-  }
-  void put() {
-	--ref;
-	if (ref == 0) lru_unpin();
-  }
-
  public: // FIXME: make more private and write some accessors
   off_t offset;
   size_t len;
@@ -38,10 +27,10 @@ class Bufferhead : public LRUObject {
   // write_waiters: threads waiting for writes into the buffer
   list<Cond*> read_waiters, write_waiters;
   Buffercache *bc;
+  ref = 0;
   
   // cons/destructors
   Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc, int state=BUFHD_STATE_CLEAN) {
-	this->ref = 0;
     this->ino = ino;
     this->offset = off;
 	this->len = len;
@@ -52,32 +41,41 @@ class Bufferhead : public LRUObject {
   }
   
   ~Bufferhead() {
-	// no need to delete bufferlist bufferptr's explicitly; ~list() does that (since it's list<bufferptr>, not list<bufferptr*>)
+    list<bufferptr> bl = bh->bl.buffers();
+    for (list<bufferptr>::iterator it == bl.begin();
+         it != bl.end();
+         it++) {
+      delete *it;
+    }
   }
   
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
-  
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
-
-
-  // -- wait for read, write: these will block
-  // i think this will work okay?  and reference coutning in the waiter makes sure the wakeup fn doesn't 
-  // inadvertantly unpin the bufferhead before the waiters get to go
-  void wait_for_read(Mutex& lock) {
-	Cond cond;  // on local stack
-	get();
-	read_waiters.push_back(&cond);
-	cond.Wait(lock);
-	put();
+  
+  void get() {
+    ref++;
+    assert(ref > 0);
   }
-  void wait_for_write(Mutex& lock) {
-	Cond cond;  // on local stack
-	get();
-	write_waiters.push_back(&cond);
-	cond.Wait(lock);
-	put();  
+  
+  void put() {
+    assert (ref > 0);
+    ref--;
+    if (ref == 0) {
+      assert(!lru_pinned);
+      delete this;
+    }
   }
 
+  void add_read_waiter(Cond *cond) {
+    read_waiters->push_back(cond); 
+	lru_pin(); 
+  }
+  
+  void add_write_waiter(Cond *cond) { 
+    write_waiters->push_back(cond); 
+	lru_pin(); 
+  }
+  
   void wakeup_read_waiters() { 
     for (list<Cond*>::iterator it = read_waiters.begin();
 		 it != read_waiters.end();
@@ -85,6 +83,7 @@ class Bufferhead : public LRUObject {
 	  (*it)->Signal();
 	}
     read_waiters.clear(); 
+	if (write_waiters.empty()) lru_unpin(); 
   }
   
   void wakeup_write_waiters() {
@@ -93,6 +92,8 @@ class Bufferhead : public LRUObject {
 		 it++) {
 	  (*it)->Signal();
 	}
+    write_waiters.clear(); 
+	if (read_waiters.empty()) lru_unpin(); 
   }
   
   void miss_start() {
@@ -112,7 +113,14 @@ class Bufferhead : public LRUObject {
       state = BUFHD_STATE_DIRTY;
       bc->dirty_size += bh->len;
       bc->clean_size -= bh->len;
-      bc->dirty_map[last_written] = this;
+      if (bc->dirty_buffers.count(offset)) {
+        bc->dirty_buffers.insert(this); 
+        get();
+      }
+      if (bc->bcache_map[ino]->dirty_buffers.count(offset)) {
+        bc->bcache_map[ino]->dirty_buffers.insert(this); 
+        get();
+      }
     }    
   }
   
@@ -126,8 +134,11 @@ class Bufferhead : public LRUObject {
   void flush_finish() {
 	assert(state == BUFHD_STATE_INFLIGHT);
 	state = BUFHD_STATE_CLEAN;
+    last_written = time();
     bc->flush_size -= len;
     bc->clean_size += len;
+    bc->dirty_buffers.erase(this); put();
+    bc->bcache_map[ino]->dirty_buffers.erase(this); put();
 	wakeup_write_waiters(); // readers never wait on flushes
   }
   
@@ -143,6 +154,8 @@ class Bufferhead : public LRUObject {
 class Filecache {
  public: 
   map<off_t, Bufferhead*> buffer_map;
+  set<Bufferhead*> dirty_buffers;
+  list<Cond*> waitfor_flushed;
 
   size_t length() {
     size_t len = 0;
@@ -159,7 +172,7 @@ class Filecache {
   void map_existing(size_t len, off_t start_off, 
                     map<off_t, Bufferhead*>& hits, inflight,
                     map<off_t, size_t>& holes);
-  void simplify();
+  void simplify(list<Bufferhead*>& removed);
 
 };
 
@@ -168,8 +181,9 @@ class Buffercache {
   map<inodeno_t, Filecache*> bcache_map;
   LRU lru;
   size_t dirty_size = 0, flushing_size = 0, clean_size = 0;
-  map<time_t, Bufferhead*> dirty_map;
-
+  set<Bufferhead*> dirty_buffers;
+  list<Cond*> waitfor_flushed;
+  
   // FIXME: constructor & destructor need to mesh with allocator scheme
   ~Buffercache() {
     // FIXME: make sure all buffers are cleaned  and then free them
