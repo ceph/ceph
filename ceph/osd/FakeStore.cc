@@ -89,19 +89,19 @@ void FakeStore::get_oname(object_t oid, string& fn, bool shadow) {
 
 void FakeStore::wipe_dir(string mydir)
 {
-  DIR *dir = opendir(mydir.c_str());
+  DIR *dir = ::opendir(mydir.c_str());
   if (dir) {
 	dout(10) << "wiping " << mydir << endl;
 	struct dirent *ent = 0;
 	
-	while (ent = readdir(dir)) {
+	while (ent = ::readdir(dir)) {
 	  if (ent->d_name[0] == '.') continue;
 	  dout(25) << "mkfs unlinking " << ent->d_name << endl;
 	  string fn = mydir + "/" + ent->d_name;
-	  unlink(fn.c_str());
+	  ::unlink(fn.c_str());
 	}	
 	
-	closedir(dir);
+	::closedir(dir);
   } else {
 	dout(1) << "mkfs couldn't read dir " << mydir << endl;
   }
@@ -141,7 +141,7 @@ int FakeStore::mkfs()
 	r = ::stat(subdir.c_str(), &st);
 	if (r != 0) {
 	  dout(2) << " creating " << subdir << endl;
-	  mkdir(subdir.c_str(), 0755);
+	  ::mkdir(subdir.c_str(), 0755);
 	  r = ::stat(subdir.c_str(), &st);
 	  if (r != 0) {
 		dout(1) << "couldnt create subdir, r = " << r << endl;
@@ -256,27 +256,29 @@ int FakeStore::read(object_t oid,
   string fn;
   get_oname(oid,fn);
   
-  int fd = open(fn.c_str(), O_RDONLY);
+  int fd = ::open(fn.c_str(), O_RDONLY);
   if (fd < 0) {
 	if (is_shadow) {
 	  struct stat st;
 	  if (::lstat(fn.c_str(), &st) == 0) return fd;  // neg symlink
 	  get_oname(oid,fn);
-	  fd = open(fn.c_str(), O_RDONLY);
+	  fd = ::open(fn.c_str(), O_RDONLY);
 	  if (fd < 0) 
 		return fd;    // no shadow either.
-	} else 
+	} else {
+	  dout(1) << "couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
 	  return fd;
+	}
   }
-  flock(fd, LOCK_EX);    // lock for safety
+  ::flock(fd, LOCK_EX);    // lock for safety
   
   off_t actual = lseek(fd, offset, SEEK_SET);
   size_t got = 0;
   if (actual == offset) {
 	got = ::read(fd, buffer, len);
   }
-  flock(fd, LOCK_UN);
-  close(fd);
+  ::flock(fd, LOCK_UN);
+  ::close(fd);
   return got;
 }
 
@@ -291,21 +293,31 @@ int FakeStore::write(object_t oid,
   string fn;
   get_oname(oid,fn);
   
-  int fd = open(fn.c_str(), O_WRONLY|O_CREAT);
-  if (fd < 0) return fd;
-  flock(fd, LOCK_EX);    // lock for safety
-  fchmod(fd, 0664);
+  ::mknod(fn.c_str(), 0644, 0);  // in case it doesn't exist yet.
+
+  int flags = O_WRONLY;//|O_CREAT;
+  if (do_fsync && g_conf.osd_writesync) flags |= O_SYNC;
+  int fd = ::open(fn.c_str(), flags);
+  if (fd < 0) {
+	dout(1) << "couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
+	return fd;
+  }
+  ::flock(fd, LOCK_EX);    // lock for safety
+  //::fchmod(fd, 0664);
   
   off_t actual = lseek(fd, offset, SEEK_SET);
-  size_t did = 0;
+  int did = 0;
   assert(actual == offset);
   did = ::write(fd, buffer, len);
+  if (did < 0) {
+	dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+  }
 
   // sync to to disk?
-  if (do_fsync) fsync(fd);     // should this be fsync?
+  if (do_fsync && g_conf.osd_fsync) ::fsync(fd); // fsync or fdatasync?
 
-  flock(fd, LOCK_UN);
-  close(fd);
+  ::flock(fd, LOCK_UN);
+  ::close(fd);
   
   return did;
 }

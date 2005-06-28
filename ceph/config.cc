@@ -65,6 +65,7 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_fsync: true,
+  osd_writesync: false,
   osd_maxthreads: 10,
 
 
@@ -159,6 +160,8 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--osd_writesync") == 0) 
+	  g_conf.osd_writesync = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_maxthreads") == 0) 
 	  g_conf.osd_maxthreads = atoi(argv[++i]);
 

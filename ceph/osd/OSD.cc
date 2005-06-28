@@ -378,10 +378,10 @@ void OSD::op_write(MOSDOp *m)
 	int r = store->write(m->get_oid(),
 						 (*it).length(), off,
 						 (*it).c_str(),
-						 g_conf.osd_fsync);
+						 true);  // write synchronously
 	off += (*it).length();
 	if (r < 0) {
-	  dout(1) << "write error on " << m->get_oid() << " r = " << r << endl;
+	  dout(1) << "write error on " << m->get_oid() << " len " << (*it).length() << "  off " << off << "  r = " << r << endl;
 	  assert(r >= 0);
 	}
   }
