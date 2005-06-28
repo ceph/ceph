@@ -412,6 +412,7 @@ int tcp_send(Message *m)
   int rank = MPI_DEST_TO_RANK(m->get_dest(), mpi_world);
 
   // marshall
+  m->reset_payload();
   m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
   bufferlist blist = m->get_payload();

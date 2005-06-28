@@ -179,9 +179,31 @@ class bufferlist {
 
   void append(const char *data, int len) {
 	if (len == 0) return;
+
+	int alen = 0;
 	
-	// just add another buffer
-	push_back(new buffer(data, len));  
+	// copy into the tail buffer?
+	if (!_buffers.empty()) {
+	  int avail = _buffers.back().unused_tail_length();
+	  if (avail > 0) {
+		//cout << "copying up to " << len << " into tail " << avail << " bytes of tail buf" << endl;
+		if (avail > len) 
+		  avail = len;
+		int blen = _buffers.back().length();
+		memcpy(_buffers.back().c_str() + blen, data, avail);
+		blen += avail;
+		_buffers.back().set_length(blen);
+		data += avail;
+		len -= avail;
+	  }
+	  alen = _buffers.back().length();
+	}
+	if (len == 0) return;
+
+	// just add another buffer.
+	// alloc a bit extra, in case we do a bunch of appends.   FIXME be smarter!
+	if (alen < 128) alen = 128;
+	push_back(new buffer(data, len, BUFFER_MODE_DEFAULT, alen));  
   }
   void append(bufferptr& bp) {
 	push_back(bp);
@@ -327,6 +349,18 @@ inline ostream& operator<<(ostream& out, bufferlist& bl) {
 
 
 // encoder/decode helpers
+
+// string
+inline void _encode(string& s, bufferlist& bl) 
+{
+  bl.append(s.c_str(), s.length()+1);
+}
+inline void _decode(string& s, bufferlist& bl, int& off)
+{
+  s = bl.c_str() + off;
+  off += s.length() + 1;
+}
+
 
 // set<int>
 inline void _encode(set<int>& s, bufferlist& bl)

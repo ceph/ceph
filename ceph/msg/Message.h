@@ -192,6 +192,10 @@ class Message {
 
 
   // PAYLOAD ----
+  void reset_payload() {
+	payload.clear();
+  }
+
   // overload either the rope version (easier!)
   virtual void encode_payload(crope& s)           { assert(0); }
   virtual void decode_payload(crope& s, int& off) { assert(0); }
@@ -207,12 +211,13 @@ class Message {
 	assert(off == payload.length());
   }
   virtual void encode_payload() {
+	assert(payload.length() == 0);  // caller should reset payload
+
 	// use crope for convenience, small messages. FIXME someday.
 	crope r;
 	encode_payload(r);
 
 	// copy payload
-	payload.clear();
 	payload.push_back( new buffer(r.c_str(), r.length()) );
   }
   

@@ -72,16 +72,21 @@ class buffer {
 	}
   }
   
-  buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT) : 
+  buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT, int alloc_len=0) : 
 	_dataptr(0), 
 	 _len(l), 
-	 _alloc_len(l), 
 	 _ref(0),
 	 _myptr(0) {
+	
+	if (alloc_len) 
+	  _alloc_len = alloc_len;
+	else
+	  _alloc_len = l;
+
 	_myptr = mode & BUFFER_MODE_FREE ? true:false;
 	bdbout(1) << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
 	if (mode & BUFFER_MODE_COPY) {
-	  _dataptr = new char[l];
+	  _dataptr = new char[_alloc_len];
 	  bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
 	  buffer_total_alloc += _alloc_len;
 	  memcpy(_dataptr, p, l);
@@ -110,6 +115,7 @@ class buffer {
 	_len = l;
   }
   int length() { return _len; }
+  int unused_tail_length() { return _alloc_len - _len; }
 
   friend ostream& operator<<(ostream& out, buffer& b);
 };
@@ -191,6 +197,13 @@ class bufferptr {
   }
 
 
+  bool at_buffer_head() {
+	return _off == 0;
+  }
+  bool at_buffer_tail() {
+	return _off + _len == _buffer->_len;
+  }
+
   // accessors for my subset
   char *c_str() {
 	return _buffer->_dataptr + _off;
@@ -201,6 +214,11 @@ class bufferptr {
   int offset() {
 	return _off;
   }
+  int unused_tail_length() {
+	if (!at_buffer_tail()) return 0;
+	return _buffer->unused_tail_length();
+  }
+
 
 
   // modifiers

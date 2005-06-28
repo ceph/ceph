@@ -155,6 +155,7 @@ int fakemessenger_do_loop_2()
 		
 		if (g_conf.fakemessenger_serialize) {
 		  // encode
+		  m->reset_payload();
 		  m->encode_payload();
 		  msg_envelope_t env = m->get_envelope();
 		  bufferlist bl = m->get_payload();

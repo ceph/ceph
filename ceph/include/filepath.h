@@ -17,6 +17,9 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
+#include "bufferlist.h"
+
+
 class filepath {
   string path;
   vector<string> bits;
@@ -132,6 +135,29 @@ class filepath {
     off += sizeof(char);
     for (int i=0; i<n; i++) {
       string s = r.c_str() + off;
+      off += s.length() + 1;
+	  add_dentry(s);
+    }
+  }
+
+  void _encode(bufferlist& bl) {
+    char n = bits.size();
+    bl.append((char*)&n, sizeof(char));
+    for (vector<string>::iterator it = bits.begin();
+         it != bits.end();
+         it++) { 
+      bl.append((*it).c_str(), (*it).length()+1);
+    }
+  }
+
+  void _decode(bufferlist& bl, int& off) {
+    clear();
+
+    char n;
+    bl.copy(off, sizeof(char), (char*)&n);
+    off += sizeof(char);
+    for (int i=0; i<n; i++) {
+      string s = bl.c_str() + off;
       off += s.length() + 1;
 	  add_dentry(s);
     }

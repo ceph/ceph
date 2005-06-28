@@ -62,27 +62,27 @@ class c_inode_info {
 	in->get_dist_spec(this->dist, whoami);
   }
   
-  void _rope(crope &s) {
-	s.append((char*)&inode, sizeof(inode));
-	s.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
-	s.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
+  void _encode(bufferlist &bl) {
+	bl.append((char*)&inode, sizeof(inode));
+	bl.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
+	bl.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
 
-	::_rope(ref_dn, s);
-	::_rope(symlink, s);
-	::_rope(dist, s);	// distn
+	::_encode(ref_dn, bl);
+	::_encode(symlink, bl);
+	::_encode(dist, bl);	// distn
   }
   
-  void _unrope(crope &s, int& off) {
-	s.copy(off, sizeof(inode), (char*)&inode);
+  void _decode(bufferlist &bl, int& off) {
+	bl.copy(off, sizeof(inode), (char*)&inode);
 	off += sizeof(inode);
-	s.copy(off, sizeof(inode_soft_valid), (char*)&inode_soft_valid);
+	bl.copy(off, sizeof(inode_soft_valid), (char*)&inode_soft_valid);
 	off += sizeof(inode_soft_valid);
-	s.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
+	bl.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
 	off += sizeof(inode_hard_valid);
 
-	::_unrope(ref_dn, s, off);
-	::_unrope(symlink, s, off);
-	::_unrope(dist, s, off);
+	::_decode(ref_dn, bl, off);
+	::_decode(symlink, bl, off);
+	::_decode(dist, bl, off);
   }
 };
 
@@ -146,40 +146,40 @@ class MClientReply : public Message {
 
 
   // serialization
-  virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(st), (char*)&st);
+  virtual void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
 
-	path = s.c_str() + off;
-	off += path.length() + 1;
+	_decode(path, payload, off);
 
 	for (int i=0; i<st.trace_depth; i++) {
 	  c_inode_info *ci = new c_inode_info;
-	  ci->_unrope(s, off);
+	  ci->_decode(payload, off);
 	  trace.push_back(ci);
 	}
 
 	if (st.dir_size) {
 	  for (int i=0; i<st.dir_size; i++) {
 		c_inode_info *ci = new c_inode_info;
-		ci->_unrope(s, off);
+		ci->_decode(payload, off);
 		dir_contents.push_back(ci);
 	  }
 	}
   }
-  virtual void encode_payload(crope& r) {
+  virtual void encode_payload() {
 	st.dir_size = dir_contents.size();
 	st.trace_depth = trace.size();
 	
-	r.append((char*)&st, sizeof(st));
-	r.append(path.c_str(), path.length()+1);
+	payload.append((char*)&st, sizeof(st));
+	_encode(path, payload);
 
 	vector<c_inode_info*>::iterator it;
 	for (it = trace.begin(); it != trace.end(); it++) 
-	  (*it)->_rope(r);
+	  (*it)->_encode(payload);
 
 	for (it = dir_contents.begin(); it != dir_contents.end(); it++) 
-	  (*it)->_rope(r);
+	  (*it)->_encode(payload);
   }
 
   // builders
