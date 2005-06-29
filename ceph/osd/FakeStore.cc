@@ -19,7 +19,7 @@
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
 
 
-#define HASH_DIRS       100LL
+#define HASH_DIRS       128LL
 #define HASH_FUNC(x)    (((x)/13LL)%HASH_DIRS)
 
 
@@ -78,7 +78,7 @@ void FakeStore::get_dir(string& dir) {
 }
 void FakeStore::get_oname(object_t oid, string& fn, bool shadow) {
   char s[100];
-  sprintf(s, "%d/%02lld/%lld", whoami, HASH_FUNC(oid), oid);
+  sprintf(s, "%d/%02llx/%016llx", whoami, HASH_FUNC(oid), oid);
   if (shadow)
 	fn = shadowdir + "/" + s;
   else 
@@ -136,7 +136,7 @@ int FakeStore::mkfs()
   // hashed bits too
   for (int i=0; i<HASH_DIRS; i++) {
 	char s[4];
-	sprintf(s, "%02d", i);
+	sprintf(s, "%02x", i);
 	string subdir = mydir + "/" + s;
 	r = ::stat(subdir.c_str(), &st);
 	if (r != 0) {
