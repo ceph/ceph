@@ -303,74 +303,6 @@ Message *tcp_recv(int from)
 }
 
 
-void *tcp_inthread(void *r)
-{
-  int who = (int)r;
-
-  dout(DBL) << "tcp_inthread reading for " << who << endl;
-
-  while (!tcp_done) {
-	/*
-	fd_set fds;
-	FD_ZERO(&fds);
-	FD_SET(in_sd[who], &fds);
-	
-	dout(DBL) << "tcp_inthread waiting on socket" << endl;
-	::select(1, &fds, 0, &fds, 0);
-	*/
-
-	Message *m = tcp_recv(who);
-	if (!m) break;
-
-	incoming_lock.Lock();
-	incoming.push_back(m);
-	incoming_cond.Signal();
-	incoming_lock.Unlock();
-  }
-
-  dout(DBL) << "tcp_inthrad closing " << who << endl;
-
-  ::close(in_sd[who]);
-  in_sd[who] = 0;
-
-  return 0;  
-}
-
-
-void *tcp_accepter(void *)
-{
-  dout(DBL) << "tcp_accepter starting" << endl;
-
-  int left = mpi_world;
-  while (left > 0) {
-	//dout(DBL) << "accepting, left = " << left << endl;
-
-	struct sockaddr_in addr;
-	socklen_t slen = sizeof(addr);
-	int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
-	if (sd > 0) {
-	  
-	  //dout(DBL) << "accepted incoming, reading who it is " << endl;
-	  
-	  int who;
-	  tcp_read(sd, (char*)&who, sizeof(who));
-	  
-	  in_sd[who] = sd;
-	  left--;
-
-	  dout(DBL) << "accepted incoming from " << who << ", left = " << left << endl;
-
-	  pthread_create(&in_threads[who],
-					 NULL,
-					 tcp_inthread,
-					 (void*)who);
-	} else {
-	  dout(DBL) << "no incoming connection?" << endl;
-	}
-  }
-  dout(DBL) << "got incoming from everyone!" << endl;
-}
-
 
 
 void tcp_open(int who)
@@ -464,28 +396,126 @@ int tcp_send(Message *m)
 
 
 
-// recv event loop, for unsolicited messages.
 
-void* tcp_sendthread(void*)
+
+/** tcp_outthread
+ * this thread watching the outgoing queue, and encodes+sends any queued messages
+ */
+void* tcp_outthread(void*)
 {
   outgoing_lock.Lock();
   while (!outgoing.empty() || !tcp_done) {
 	
-	while (!outgoing.empty()) {
-	  Message *m = outgoing.front();
-	  outgoing.pop_front();
-	  tcp_send(m);
+	if (!outgoing.empty()) {
+	  // grab outgoing list
+	  list<Message*> out;
+	  out.splice(out.begin(), outgoing);
+
+	  // drop lock while i send these
+	  outgoing_lock.Unlock();
+
+	  while (!out.empty()) {
+		Message *m = out.front();
+		out.pop_front();
+		tcp_send(m);
+	  }
+
+	  outgoing_lock.Lock();
 	}
 
-	outgoing_cond.Wait(outgoing_lock);
+	// wait
+	if (outgoing.empty())
+	  outgoing_cond.Wait(outgoing_lock);
 	
   }
   outgoing_lock.Unlock();
 }
 
-void* tcpmessenger_loop(void*)
+/** tcp_inthread
+ * read incoming messages from a given peer.
+ * give received and decoded messages to dispatch loop.
+ */
+void *tcp_inthread(void *r)
 {
-  dout(5) << "tcpmessenger_loop start pid " << getpid() << endl;
+  int who = (int)r;
+
+  dout(DBL) << "tcp_inthread reading for " << who << endl;
+
+  while (!tcp_done) {
+	/*
+	fd_set fds;
+	FD_ZERO(&fds);
+	FD_SET(in_sd[who], &fds);
+	
+	dout(DBL) << "tcp_inthread waiting on socket" << endl;
+	::select(1, &fds, 0, &fds, 0);
+	*/
+
+	Message *m = tcp_recv(who);
+	if (!m) break;
+
+	// give to dispatch loop
+	incoming_lock.Lock();
+	incoming.push_back(m);
+	incoming_cond.Signal();
+	incoming_lock.Unlock();
+  }
+
+  dout(DBL) << "tcp_inthread closing " << who << endl;
+
+  ::close(in_sd[who]);
+  in_sd[who] = 0;
+
+  return 0;  
+}
+
+/** tcp_accepthread
+ * accept incoming connections from peers.
+ * start a tcp_inthread for each.
+ */
+void *tcp_acceptthread(void *)
+{
+  dout(DBL) << "tcp_acceptthread starting" << endl;
+
+  int left = mpi_world;
+  while (left > 0) {
+	//dout(DBL) << "accepting, left = " << left << endl;
+
+	struct sockaddr_in addr;
+	socklen_t slen = sizeof(addr);
+	int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
+	if (sd > 0) {
+	  
+	  //dout(DBL) << "accepted incoming, reading who it is " << endl;
+	  
+	  int who;
+	  tcp_read(sd, (char*)&who, sizeof(who));
+	  
+	  in_sd[who] = sd;
+	  left--;
+
+	  dout(DBL) << "accepted incoming from " << who << ", left = " << left << endl;
+
+	  pthread_create(&in_threads[who],
+					 NULL,
+					 tcp_inthread,
+					 (void*)who);
+	} else {
+	  dout(DBL) << "no incoming connection?" << endl;
+	}
+  }
+  dout(DBL) << "got incoming from everyone!" << endl;
+}
+
+
+
+
+/** tcp_dispatchthread
+ * wait for pending timers, incoming messages.  dispatch them.
+ */
+void* tcp_dispatchthread(void*)
+{
+  dout(5) << "tcp_dispatchthread start pid " << getpid() << endl;
 
   incoming_lock.Lock();
 
@@ -493,7 +523,8 @@ void* tcpmessenger_loop(void*)
 
 	// timer events?
 	if (pending_timer) {
-	  dout(DBL) << "pending timer" << endl;
+	  pending_timer = false;
+	  dout(DBL) << "dispatch: pending timer" << endl;
 	  g_timer.execute_pending();
 	}
 
@@ -501,16 +532,21 @@ void* tcpmessenger_loop(void*)
 	if (tcp_done &&
 		incoming.empty() &&
 		!pending_timer) break;
-	
-	// incoming
-	dout(12) << "loop waiting for incoming messages" << endl;
-	
-	incoming_cond.Wait(incoming_lock);
-	
-	while (incoming.size()) {
+
+	// wait?
+	if (incoming.empty()) {
+	  // wait
+	  dout(12) << "dispatch: waiting for incoming messages" << endl;
+	  incoming_cond.Wait(incoming_lock);
+	}
+
+	// incoming?
+	while (!incoming.empty()) {
+	  // grab incoming messages
 	  list<Message*> in;
 	  in.splice(in.begin(), incoming);
 
+	  // drop lock while we deliver
 	  incoming_lock.Unlock();
 
 	  while (in.size()) {
@@ -543,7 +579,7 @@ void* tcpmessenger_loop(void*)
   g_timer.shutdown();
 
 
-  dout(5) << "tcpmessenger_loop exiting loop" << endl;
+  dout(5) << "tcp_dispatchthread exiting loop" << endl;
 }
 
 
@@ -553,7 +589,7 @@ int tcpmessenger_start()
   dout(5) << "starting accept thread" << endl;
   pthread_create(&listen_thread_id,
 				 NULL,
-				 tcp_accepter,
+				 tcp_acceptthread,
 				 0);				
 
   dout(5) << "starting dispatch thread" << endl;
@@ -561,14 +597,14 @@ int tcpmessenger_start()
   // start a thread
   pthread_create(&dispatch_thread_id, 
 				 NULL, 
-				 tcpmessenger_loop, 
+				 tcp_dispatchthread,
 				 0);
 
 
   dout(5) << "starting outgoing thread" << endl;
   pthread_create(&out_thread_id, 
 				 NULL, 
-				 tcp_sendthread,
+				 tcp_outthread,
 				 0);
 
 }
@@ -578,7 +614,7 @@ int tcpmessenger_start()
  * kick and wake up _loop (to pick up new outgoing message, or quit)
  */
 
-void tcpmessenger_kick_incoming_loop()
+void tcpmessenger_kick_dispatch_loop()
 {
   incoming_lock.Lock();
   incoming_cond.Signal();
@@ -597,7 +633,7 @@ void tcpmessenger_kick_outgoing_loop()
 
 void tcpmessenger_wait()
 {
-  tcpmessenger_kick_incoming_loop();
+  tcpmessenger_kick_dispatch_loop();
 
   void *returnval;
   dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
@@ -616,7 +652,7 @@ void tcpmessenger_wait()
 class C_TCPKicker : public Context {
   void finish(int r) {
 	dout(DBL) << "timer kick" << endl;
-	tcpmessenger_kick_incoming_loop();
+	tcpmessenger_kick_dispatch_loop();
   }
 };
 
