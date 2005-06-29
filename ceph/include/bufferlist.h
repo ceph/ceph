@@ -20,16 +20,21 @@ using namespace __gnu_cxx;
 
 class bufferlist {
  private:
+  /* local state limited to _buffers, and _len.
+   * we maintain _len ourselves, so we must be careful when fiddling with buffers!
+   */
   list<bufferptr> _buffers;
+  int _len;
 
  public:
   // cons/des
-  bufferlist() {
+  bufferlist() : _len(0) {
 	bdbout(1) << "bufferlist.cons " << this << endl;
   }
-  bufferlist(bufferlist& bl) {
+  bufferlist(bufferlist& bl) : _len(0) {
 	bdbout(1) << "bufferlist.cons " << this << endl;
 	_buffers = bl._buffers;
+	_len = bl._len;
   }
   ~bufferlist() {
 	bdbout(1) << "bufferlist.des " << this << endl;
@@ -40,17 +45,6 @@ class bufferlist {
   }
   */
 
-  // sort-of-like-assignment-op
-  void claim(bufferlist& bl) {
-	// free my buffers
-	_buffers.clear();                    
-	claim_append(bl);
-  }
-  void claim_append(bufferlist& bl) {
-	// steal the other guy's buffers
-	_buffers.splice( _buffers.end(), bl._buffers );
-  }
-
   // accessors
   list<bufferptr>& buffers() { 
 	return _buffers; 
@@ -59,13 +53,18 @@ class bufferlist {
   //list<buffer*>::iterator end() { return _buffers.end(); }
 
   int length() {
-	int len = 0;
-	for (list<bufferptr>::iterator it = _buffers.begin();
-		 it != _buffers.end();
-		 it++) {
-	  len += (*it).length();
+#if 0
+	{ // DEBUG: verify _len
+	  int len = 0;
+	  for (list<bufferptr>::iterator it = _buffers.begin();
+		   it != _buffers.end();
+		   it++) {
+		len += (*it).length();
+	  }
+	  assert(len == _len);
 	}
-	return len;
+#endif
+	return _len;
   }
 
   void _rope(crope& r) {
@@ -78,21 +77,43 @@ class bufferlist {
   // modifiers
   void clear() {
 	_buffers.clear();
+	_len = 0;
   }
   void push_front(bufferptr& bp) {
 	_buffers.push_front(bp);
+	_len += bp.length();
   }
   void push_front(buffer *b) {
 	bufferptr bp(b);
 	_buffers.push_front(bp);
+	_len += bp.length();
   }
   void push_back(bufferptr& bp) {
 	_buffers.push_back(bp);
+	_len += bp.length();
   }
   void push_back(buffer *b) {
 	bufferptr bp(b);
+
 	_buffers.push_back(bp);
+	_len += bp.length();
+
   }
+
+  // sort-of-like-assignment-op
+  void claim(bufferlist& bl) {
+	// free my buffers
+	clear();
+	claim_append(bl);
+  }
+  void claim_append(bufferlist& bl) {
+	// steal the other guy's buffers
+	_len += bl._len;
+	_buffers.splice( _buffers.end(), bl._buffers );
+	bl._len = 0;
+  }
+
+
 
   
   // crope lookalikes
@@ -193,6 +214,7 @@ class bufferlist {
 		memcpy(_buffers.back().c_str() + blen, data, avail);
 		blen += avail;
 		_buffers.back().set_length(blen);
+		_len += avail;
 		data += avail;
 		len -= avail;
 	  }
@@ -246,7 +268,7 @@ class bufferlist {
 
 
   void substr_of(bufferlist& other, int off, int len) {
-	_buffers.clear();
+	clear();
 
 	// skip off
 	list<bufferptr>::iterator curbuf = other._buffers.begin();
@@ -269,6 +291,7 @@ class bufferlist {
 	  if (off + len < (*curbuf).length()) {
 		//cout << "copying partial of " << *curbuf << endl;
 		_buffers.push_back( bufferptr( *curbuf, len, off ) );
+		_len += len;
 		break;
 	  }
 
@@ -276,6 +299,7 @@ class bufferlist {
 	  //cout << "copying end (all?) of " << *curbuf << endl;
 	  int howmuch = (*curbuf).length() - off;
 	  _buffers.push_back( bufferptr( *curbuf, howmuch, off ) );
+	  _len += howmuch;
 	  len -= howmuch;
 	  off = 0;
 	  curbuf++;
@@ -305,6 +329,7 @@ class bufferlist {
 	  //  insert it before curbuf (which we'll hose)
 	  //cout << "keeping front " << off << " of " << *curbuf << endl;
 	  _buffers.insert( curbuf, bufferptr( *curbuf, off, 0 ) );
+	  _len += off;
 	}
 
 	while (len > 0) {
@@ -315,6 +340,7 @@ class bufferlist {
 		  claim_by->append( *curbuf, len, off );
 		(*curbuf).set_offset( off + len + (*curbuf).offset() );    // ignore beginning big
 		(*curbuf).set_length( (*curbuf).length() - len - off );
+		_len -= off+len;
 		//cout << " now " << *curbuf << endl;
 		break;
 	  }
@@ -324,6 +350,7 @@ class bufferlist {
 	  //cout << "discarding " << howmuch << " of " << *curbuf << endl;
 	  if (claim_by) 
 		claim_by->append( *curbuf, howmuch, off );
+	  _len -= (*curbuf).length();
 	  _buffers.erase( curbuf++ );
 	  len -= howmuch;
 	  off = 0;

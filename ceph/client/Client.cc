@@ -65,11 +65,11 @@ Client::~Client()
 void Client::tear_down_cache()
 {
   // fh's
-  for (map<fileh_t, Fh*>::iterator it = fh_map.begin();
+  for (hash_map<fileh_t, Fh*>::iterator it = fh_map.begin();
 	   it != fh_map.end();
 	   it++) {
 	Fh *fh = it->second;
-	dout(3) << "forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
+	dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
 	put_inode(fh->inode);
 	delete fh;
   }
@@ -121,7 +121,7 @@ void Client::dump_cache()
 
   if (root) dump_inode(root, did);
 
-  for (map<inodeno_t, Inode*>::iterator it = inode_map.begin();
+  for (hash_map<inodeno_t, Inode*>::iterator it = inode_map.begin();
 	   it != inode_map.end();
 	   it++) {
 	if (did.count(it->second)) continue;

@@ -16,6 +16,7 @@
 class Buffercache;
 
 class Bufferhead : public LRUObject {
+  // reference counting
   int ref;
 
   int get() {

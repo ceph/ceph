@@ -1,5 +1,5 @@
 
-# mpicxx must be on your path; on Szilard, this means that
+# mpicxx must be on your path; on Szilard and googoo, this means that
 # /usr/local/mpich2-1.0.2/bin must be on your path.
 
 # For now, use g++ most of the time.
@@ -8,10 +8,10 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-CFLAGS = -pg -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread  -lrt
 
-#for normal machines
+#for normal mpich2 machines
 MPICC = mpicxx
 MPICFLAGS = ${CFLAGS}
 MPILIBS = ${LIBS}
@@ -102,7 +102,7 @@ obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OS
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS}
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@

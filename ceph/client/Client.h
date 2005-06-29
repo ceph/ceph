@@ -149,12 +149,12 @@ class Client : public Dispatcher {
   Filer                 *filer;  // (non-blocking) osd interface
   
   // cache
-  map<inodeno_t, Inode*> inode_map;
+  hash_map<inodeno_t, Inode*> inode_map;
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // file handles
-  map<fileh_t, Fh*>         fh_map;
+  hash_map<fileh_t, Fh*>         fh_map;
 
   // global (client) lock
   Mutex                  client_lock;
