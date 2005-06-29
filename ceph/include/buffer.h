@@ -197,8 +197,7 @@ class bufferptr {
   // assignment operator
   bufferptr& operator=(const bufferptr& other) {
 	// discard old
-	if (_buffer && _buffer->_put() == 0) 
-	  delete _buffer; 
+	discard_buffer();
 
 	// new
 	_buffer = other._buffer;
@@ -208,6 +207,10 @@ class bufferptr {
   }
 
   ~bufferptr() {
+	discard_buffer();
+  }
+
+  void discard_buffer() {
 	if (_buffer) {
 	  bufferlock.Lock();
 	  if (_buffer->_put() == 0) 

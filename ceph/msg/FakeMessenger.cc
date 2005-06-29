@@ -158,14 +158,16 @@ int fakemessenger_do_loop_2()
 		  m->reset_payload();
 		  m->encode_payload();
 		  msg_envelope_t env = m->get_envelope();
-		  bufferlist bl = m->get_payload();
+		  bufferlist bl;
+		  bl.claim( m->get_payload() );
+		  bl.c_str();   // condense into 1 buffer
 
 		  delete m;
 		  
 		  // decode
 		  m = decode_message(env, bl);
 		  assert(m);
-		}
+		} 
 		
 		didone = true;
 

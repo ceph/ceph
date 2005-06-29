@@ -155,6 +155,9 @@ void parse_config_options(int argc, char **argv,
 	else if (strcmp(argv[i], "--log_name") == 0) 
 	  g_conf.log_name = argv[++i];
 
+	else if (strcmp(argv[i], "--fakemessenger_serialize") == 0) 
+	  g_conf.fakemessenger_serialize = atoi(argv[++i]);
+
 	else if (strcmp(argv[i], "--mds_cache_size") == 0) 
 	  g_conf.mds_cache_size = atoi(argv[++i]);
 

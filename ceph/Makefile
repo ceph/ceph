@@ -8,7 +8,7 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-CFLAGS = -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -pg -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread  -lrt
 
 #for normal machines
@@ -51,19 +51,8 @@ COMMON_OBJS= \
 	common/Timer.o\
 	config.o
 
-OBFS_OBJS= \
-	obfs/uofs_mem.o\
-	obfs/uofs_disk_io.o\
-	obfs/uofs_alloc.o\
-	obfs/uofs_mapping.o\
-	obfs/uofs_cache.o\
-	obfs/uofs_onode.o\
-	obfs/uofs_rw.o\
-	obfs/uofs_stat.o\
-	obfs/uofs.o
-
 TEST_TARGETS = fakemds mpitest
-TARGETS = import singleclient mpifuse fakefuse mpisyn
+TARGETS = import singleclient mpifuse fakefuse mpisyn fakesyn tcpsyn
 
 SRCS=*.cc */*.cc
 
@@ -113,7 +102,7 @@ obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OS
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS}
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@

@@ -202,8 +202,8 @@ class bufferlist {
 
 	// just add another buffer.
 	// alloc a bit extra, in case we do a bunch of appends.   FIXME be smarter!
-	if (alen < 128) alen = 128;
-	push_back(new buffer(data, len, BUFFER_MODE_DEFAULT, alen));  
+	if (alen < 1024) alen = 1024;
+	push_back(new buffer(data, len, BUFFER_MODE_DEFAULT, len+alen));  
   }
   void append(bufferptr& bp) {
 	push_back(bp);
