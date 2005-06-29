@@ -43,6 +43,8 @@ int SyntheticClient::run()
 	break;
   case SYNCLIENT_MODE_WRITEFILE:
 	write_file(sarg1, iarg1, iarg2);
+	dout(1) << "finished write, doing read" << endl;
+	read_file(sarg1, iarg1, iarg2);
 	break;
   default:
 	assert(0);
@@ -183,6 +185,25 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   for (int i=0; i<chunks; i++) {
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	client->write(fd, buf, wrsize, i*wrsize);
+  }
+  
+  client->close(fd);
+  delete[] buf;
+}
+
+int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
+{
+  char *buf = new char[rdsize]; 
+  memset(buf, 1, rdsize);
+  __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)rdsize;
+
+  int fd = client->open(fn.c_str(), O_RDONLY);
+  dout(5) << "reading from " << fn << " fd " << fd << endl;
+  if (fd < 0) return fd;
+
+  for (int i=0; i<chunks; i++) {
+	dout(2) << "reading block " << i << "/" << chunks << endl;
+	client->read(fd, buf, rdsize, i*rdsize);
   }
   
   client->close(fd);
