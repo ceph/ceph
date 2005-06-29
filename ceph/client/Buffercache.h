@@ -16,6 +16,20 @@
 class Buffercache;
 
 class Bufferhead : public LRUObject {
+  int ref;
+
+  int get() {
+	assert(ref >= 0);
+	if (ref == 0) lru_pin();
+	ref++;
+  }
+  int put() {
+	assert(ref > 0);
+	ref--;
+	if (ref == 0) lru_unpin();
+  }
+
+  
  public: // FIXME: make more private and write some accessors
   off_t offset;
   size_t len;
@@ -27,11 +41,11 @@ class Bufferhead : public LRUObject {
   // write_waiters: threads waiting for writes into the buffer
   list<Cond*> read_waiters, write_waiters;
   Buffercache *bc;
-  ref = 0;
   
   // cons/destructors
-  Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc, int state=BUFHD_STATE_CLEAN) {
-    this->ino = ino;
+  Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc, int state=BUFHD_STATE_CLEAN) 
+	: ref(0) {
+	this->ino = ino;
     this->offset = off;
 	this->len = len;
 	this->state = state;
@@ -41,39 +55,29 @@ class Bufferhead : public LRUObject {
   }
   
   ~Bufferhead() {
-    list<bufferptr> bl = bh->bl.buffers();
-    for (list<bufferptr>::iterator it == bl.begin();
-         it != bl.end();
-         it++) {
-      delete *it;
-    }
   }
   
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
   
-  void get() {
-    ref++;
-    assert(ref > 0);
-  }
-  
-  void put() {
-    assert (ref > 0);
-    ref--;
-    if (ref == 0) {
-      assert(!lru_pinned);
-      delete this;
-    }
-  }
 
-  void add_read_waiter(Cond *cond) {
-    read_waiters->push_back(cond); 
-	lru_pin(); 
+  /** wait_for_(read|write) 
+   * put Cond on local stack, block until woken up.
+   * _caller_ pins to avoid any race weirdness
+   */
+  void wait_for_read(Mutex &lock) {
+	Cond cond;
+	get();
+	read_waiters.push_back(&cond);
+	cond.Wait(lock);
+	put();
   }
-  
-  void add_write_waiter(Cond *cond) { 
-    write_waiters->push_back(cond); 
-	lru_pin(); 
+  void wait_for_write(Mutex &lock) {
+	Cond cond;
+	get();
+	write_waiters.push_back(&cond);
+	cond.Wait(lock);
+	put();
   }
   
   void wakeup_read_waiters() { 
@@ -83,9 +87,7 @@ class Bufferhead : public LRUObject {
 	  (*it)->Signal();
 	}
     read_waiters.clear(); 
-	if (write_waiters.empty()) lru_unpin(); 
   }
-  
   void wakeup_write_waiters() {
     for (list<Cond*>::iterator it = write_waiters.begin();
 		 it != write_waiters.end();
@@ -93,7 +95,6 @@ class Bufferhead : public LRUObject {
 	  (*it)->Signal();
 	}
     write_waiters.clear(); 
-	if (read_waiters.empty()) lru_unpin(); 
   }
   
   void miss_start() {
@@ -108,7 +109,7 @@ class Bufferhead : public LRUObject {
 	wakeup_write_waiters();
   }
   
-  void dirty() {
+  void mark_dirty() {
     if (state == BUFHD_STATE_CLEAN) {
       state = BUFHD_STATE_DIRTY;
       bc->dirty_size += bh->len;
@@ -150,6 +151,7 @@ class Bufferhead : public LRUObject {
 	other->len = 0;
   }
 };
+
 
 class Filecache {
  public: 
