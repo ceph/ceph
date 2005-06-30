@@ -27,27 +27,33 @@ void *synthetic_client_thread_entry(void *ptr)
 
 int SyntheticClient::run()
 { 
-  switch (mode) {
-  case SYNCLIENT_MODE_RANDOMWALK:
-	random_walk(iarg1);
-	break;
-  case SYNCLIENT_MODE_MAKEDIRS:
-	make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
-	{
-	  string root;
-	  full_walk(root);
+  if (modes.empty()) modes.push_back(mode);
+
+  for (list<int>::iterator it = modes.begin();
+	   it != modes.end();
+	   it++) {
+	mode = *it;
+		 
+	switch (mode) {
+	case SYNCLIENT_MODE_RANDOMWALK:
+	  random_walk(iarg1);
+	  break;
+	case SYNCLIENT_MODE_MAKEDIRS:
+	  make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	  break;
+	case SYNCLIENT_MODE_FULLWALK:
+	  full_walk(sarg1);
+	  break;
+	case SYNCLIENT_MODE_WRITEFILE:
+	  write_file(sarg1, iarg1, iarg2);
+	  break;
+	case SYNCLIENT_MODE_READFILE:
+	  dout(2) << "readfile" << endl;
+	  read_file(sarg1, iarg1, iarg2);
+	  break;
+	default:
+	  assert(0);
 	}
-	break;
-  case SYNCLIENT_MODE_FULLWALK:
-	full_walk(sarg1);
-	break;
-  case SYNCLIENT_MODE_WRITEFILE:
-	write_file(sarg1, iarg1, iarg2);
-	dout(1) << "finished write, doing read" << endl;
-	read_file(sarg1, iarg1, iarg2);
-	break;
-  default:
-	assert(0);
   }
   return 0;
 }

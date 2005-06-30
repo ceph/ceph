@@ -146,6 +146,9 @@ void MDBalancer::export_empties()
   }
 }
 
+
+
+
 void MDBalancer::do_rebalance()
 {
   timepair_t now = g_clock.gettimepair();
@@ -178,7 +181,7 @@ void MDBalancer::do_rebalance()
   }  
 
   dout(5) << "  i am overloaded" << endl;
-  
+
 
   // determine load transfer mapping
   multimap<int,double> my_targets;
@@ -238,6 +241,7 @@ void MDBalancer::do_rebalance()
   }
   
   // do my exports!
+  set<CDir*> already_exporting;
   for (multimap<int,double>::iterator it = my_targets.begin();
 	   it != my_targets.end();
 	   it++) {
@@ -306,7 +310,7 @@ void MDBalancer::do_rebalance()
 	for (set<CDir*>::iterator pot = candidates.begin();
 		 pot != candidates.end();
 		 pot++) {
-	  find_exports(*pot, amount, exports, have);
+	  find_exports(*pot, amount, exports, have, already_exporting);
 	  if (have > amount-MIN_OFFLOAD) break;
 	}
 	
@@ -326,7 +330,8 @@ void MDBalancer::do_rebalance()
 void MDBalancer::find_exports(CDir *dir, 
 							  double amount, 
 							  list<CDir*>& exports, 
-							  double& have)
+							  double& have,
+							  set<CDir*>& already_exporting)
 {
   double need = amount - have;
   if (need < amount / 5)
@@ -334,7 +339,7 @@ void MDBalancer::find_exports(CDir *dir,
   double needmax = need * 1.2;
   double needmin = need * .8;
   double midchunk = need * .3;
-  double minchunk = need * .01;
+  double minchunk = need * .001;
 
   timepair_t now = g_clock.gettimepair();
 
@@ -351,7 +356,8 @@ void MDBalancer::find_exports(CDir *dir,
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;  // clearly not popular
 	if (mds->mdcache->exports.count(in->dir)) continue;  
-	//if (in->dir->is_freezetree_root()) continue;  
+	if (already_exporting.count(in->dir)) continue;
+
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
 	if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
 	
@@ -386,6 +392,7 @@ void MDBalancer::find_exports(CDir *dir,
 	dout(7) << " taking smaller " << *(*it).second << endl;
 	
 	exports.push_back((*it).second);
+	already_exporting.insert((*it).second);
 	have += (*it).first;
 	if (have > needmin)
 	  return;
@@ -396,7 +403,7 @@ void MDBalancer::find_exports(CDir *dir,
 	   it != bigger.end();
 	   it++) {
 	dout(7) << " descending into " << **it << endl;
-	find_exports(*it, amount, exports, have);
+	find_exports(*it, amount, exports, have, already_exporting);
 	if (have > needmin)
 	  return;
   }
@@ -409,6 +416,7 @@ void MDBalancer::find_exports(CDir *dir,
 	dout(7) << " taking (much) smaller " << *(*it).second << endl;
 
 	exports.push_back((*it).second);
+	already_exporting.insert((*it).second);
 	have += (*it).first;
 	if (have > needmin)
 	  return;

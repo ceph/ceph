@@ -26,6 +26,8 @@ Logger::Logger(string fn, LogType *type)
   open = false;
   this->type = type;
   wrote_header_last = 0;
+
+  flush(false);
 }
 
 Logger::~Logger()
@@ -74,6 +76,12 @@ void Logger::flush(bool force)
 {
   if (!g_conf.log) return;
   lock.Lock();
+
+  if (!open) {
+	out.open(filename.c_str(), ofstream::out);
+	open = true;
+	//cout << "opening log file " << filename << endl;
+  }
 
   timepair_t now = g_clock.gettimepair();
   timepair_t fromstart = now - start;

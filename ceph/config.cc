@@ -9,7 +9,7 @@
 #define AVG_PER_INODE_SIZE    450
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
-#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 500 )
+#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
 //#define MDS_CACHE_SIZE 25000  // 
 
 
@@ -71,8 +71,9 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 500,
   mds_bal_unreplicate_threshold: 200,
-  mds_bal_interval: 60,           // seconds
+  mds_bal_interval: 30,           // seconds
   mds_bal_idle_threshold: .1,
+  mds_bal_max: -1,
 
   mds_commit_on_shutdown: true,
 
@@ -179,6 +180,8 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_bal_max") == 0) 
+	  g_conf.mds_bal_max = atoi(argv[++i]);
 
 	else if (strcmp(argv[i], "--client_cache_stat_ttl") == 0)
 	  g_conf.client_cache_stat_ttl = atoi(argv[++i]);

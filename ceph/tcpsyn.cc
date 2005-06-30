@@ -45,7 +45,7 @@ int main(int oargc, char **oargv) {
   nargv[nargc++] = argv[0];
 
   string syn_sarg1;
-  int syn_mode = SYNCLIENT_MODE_WRITEFILE;
+  list<int> syn_modes;
   int syn_iarg1, syn_iarg2, syn_iarg3;
   int mkfs = 0;
   for (int i=1; i<argc; i++) {
@@ -66,13 +66,15 @@ int main(int oargc, char **oargv) {
 	else if (strcmp(argv[i],"--synmode") == 0) {
 	  ++i;
 	  if (strcmp(argv[i],"writefile") == 0) 
-		syn_mode = SYNCLIENT_MODE_WRITEFILE;
+		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
+	  else if (strcmp(argv[i],"readfile") == 0) 
+		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
 	  else if (strcmp(argv[i],"makedirs") == 0) 
-		syn_mode = SYNCLIENT_MODE_MAKEDIRS;
+		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
 	  else if (strcmp(argv[i],"fullwalk") == 0) 
-		syn_mode = SYNCLIENT_MODE_FULLWALK;
+		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
 	  else if (strcmp(argv[i],"randomwalk") == 0) 
-		syn_mode = SYNCLIENT_MODE_RANDOMWALK;
+		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
 	  else {
 		cerr << "unknown syn mode " << argv[i] << endl;
 		return -1;
@@ -163,11 +165,10 @@ int main(int oargc, char **oargv) {
 	  sprintf(s,"syn.%d", i);
 	  syn[i]->sarg1 = s;
 
-	  syn[i]->mode = syn_mode;
+	  syn[i]->modes = syn_modes;
 	  syn[i]->iarg1 = syn_iarg1;
 	  syn[i]->iarg2 = syn_iarg2;
 	  syn[i]->iarg3 = syn_iarg3;
-
 	  syn[i]->start_thread();
 	}
 	for (int i=0; i<NUMCLIENT; i++) {

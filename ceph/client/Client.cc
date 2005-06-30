@@ -3,6 +3,7 @@
 #include "Client.h"
 
 // unix-ey fs stuff
+#include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
 #include <utime.h>

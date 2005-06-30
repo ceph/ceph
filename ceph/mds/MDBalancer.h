@@ -42,7 +42,8 @@ class MDBalancer {
   void find_exports(CDir *dir, 
 					double amount, 
 					list<CDir*>& exports, 
-					double& have);
+					double& have,
+					set<CDir*>& already_exporting);
 
 
   void subtract_export(class CDir *ex);

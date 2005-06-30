@@ -14,7 +14,7 @@ LogType mdlog_logtype;
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_log) cout << "mds" << mds->get_nodeid() << ".log "
+#define  dout(l)    if (mds->get_nodeid() == 0 && (l<=g_conf.debug || l<=g_conf.debug_mds_log)) cout << "mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 
@@ -147,6 +147,7 @@ void MDLog::trim(Context *c)
 		  trimming.insert(le);
 		  le->retire(mds, new C_MDL_Trimmed(this, le));
 		  logger->inc("retire");
+		  logger->set("trim", trimming.size());
 		} else {
 		  dout(7) << "  already trimming max, waiting" << endl;
 		  return;
@@ -177,7 +178,9 @@ void MDLog::_trimmed(LogEvent *le)
   dout(7) << "  trimmed " << le << endl;
   trimming.erase(le);
   delete le;
-  
+ 
+  logger->set("trim", trimming.size());
+ 
   trim(0);
 }
 

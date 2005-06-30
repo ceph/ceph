@@ -10,6 +10,7 @@
 #define SYNCLIENT_MODE_FULLWALK    2
 #define SYNCLIENT_MODE_MAKEDIRS    3
 #define SYNCLIENT_MODE_WRITEFILE   4
+#define SYNCLIENT_MODE_READFILE    5
 
 class SyntheticClient {
   Client *client;
@@ -84,6 +85,7 @@ class SyntheticClient {
 
   // run() will do one of these things:
   int mode;
+  list<int> modes;
   string sarg1;
   int iarg1, iarg2, iarg3;
   

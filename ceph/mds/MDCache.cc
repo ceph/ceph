@@ -5885,6 +5885,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 void MDCache::export_dir_finish(CDir *dir)
 {
   // exported!
+
   
   // FIXME log it
   
@@ -5902,6 +5903,10 @@ void MDCache::export_dir_finish(CDir *dir)
   vector<CDentry*> trace;
   make_trace(trace, dir->inode);
   path_unpin(trace, 0);
+
+
+  // stats
+  mds->logger->set("nex", exports.size());
 
   show_imports();
 }
@@ -6332,7 +6337,6 @@ void MDCache::handle_export_dir(MExportDir *m)
   // some stats
   mds->logger->inc("im");
   mds->logger->inc("iim", num_imported_inodes);
-  mds->logger->set("nex", exports.size());
   mds->logger->set("nim", imports.size());
 
 
