@@ -178,7 +178,6 @@ class C_MDS_CommitDirFinish : public Context {
   __uint64_t version;
 
  public:
-  crope buffer;
 
   C_MDS_CommitDirFinish(MDStore *ms, CDir *dir) : Context() {
 	this->ms = ms;
@@ -340,7 +339,7 @@ void MDStore::do_commit_dir( CDir *dir,
   // fill buffer
   __uint32_t num = 0;
   
-  crope dirdata;
+  bufferlist dirdata;
   
   for (CDir_map_t::iterator it = dir->begin();
 	   it != dir->end();
@@ -368,7 +367,7 @@ void MDStore::do_commit_dir( CDir *dir,
 
 	  // name, marker, ion
 	  dirdata.append( it->first.c_str(), it->first.length() + 1);
-	  dirdata.append( 'L' );         // remote link
+	  dirdata.append( "L", 1 );         // remote link
 	  dirdata.append((char*)&ino, sizeof(ino));
 
 	} else {
@@ -380,7 +379,7 @@ void MDStore::do_commit_dir( CDir *dir,
   
 	  // name, marker, inode, [symlink string]
 	  dirdata.append( it->first.c_str(), it->first.length() + 1);
-	  dirdata.append( 'I' );         // inode
+	  dirdata.append( "I", 1 );         // inode
 	  dirdata.append( (char*) &in->inode, sizeof(inode_t));
 	  
 	  if (in->is_symlink()) {
@@ -405,7 +404,7 @@ void MDStore::do_commit_dir( CDir *dir,
   size_t size = sizeof(num) + dirdata.length();
   fin->bl.append((char*)&size, sizeof(size));
   fin->bl.append((char*)&num, sizeof(num));
-  fin->bl.append(dirdata.c_str(), dirdata.length());
+  fin->bl.claim_append(dirdata);  //.c_str(), dirdata.length());
   assert(fin->bl.length() == size + sizeof(size));
   
   // pin inode
