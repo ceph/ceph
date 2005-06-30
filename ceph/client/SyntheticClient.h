@@ -91,6 +91,7 @@ class SyntheticClient {
   int random_walk(int n);
   int make_dirs(const char *basedir, int dirs, int files, int depth);
   int write_file(string& fn, int mb, int chunk);
+  int read_file(string& fn, int mb, int chunk);
 
 };
 
