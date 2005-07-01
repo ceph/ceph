@@ -84,16 +84,15 @@ Filer::read(inodeno_t ino,
   p->onfinish = onfinish;
 
   // find data
-  list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, layout, len, offset, extents);
+  osdcluster->file_to_extents(ino, layout, len, offset, p->extents);
 
-  dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
+  dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
 
   int nfrag = 0;
   off_t off = 0;
-  for (list<OSDExtent>::iterator it = extents.begin();
-	   it != extents.end();
+  for (list<OSDExtent>::iterator it = p->extents.begin();
+	   it != p->extents.end();
 	   it++) {
 	int r = 0;   // pick a replica
 	last_tid++;
@@ -106,10 +105,6 @@ Filer::read(inodeno_t ino,
 	m->set_offset(it->offset);
 	dout(15) << " read on " << last_tid << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
-
-	// note offset into read buffer
-	p->read_off[last_tid] = off;
-	off += it->len;
 
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);
@@ -136,8 +131,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
   p->outstanding_ops.erase(tid);
   
   // what buffer offset are we?
-  size_t off = p->read_off[tid];
-  dout(7) << "got frag at " << off << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
+  dout(7) << "got frag from " << m->get_oid() << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
   
   if (p->outstanding_ops.empty()) {
 	// all done
@@ -148,17 +142,43 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	  /** BUG this doesn't handle holes properly **/
 
 	  // we have other fragments, assemble them all... blech!
-	  p->read_data[off] = new bufferlist;
-	  p->read_data[off]->claim( m->get_data() );
+	  p->read_data[m->get_oid()] = new bufferlist;
+	  p->read_data[m->get_oid()]->claim( m->get_data() );
 
-	  // sort and string them together
-	  for (map<off_t, bufferlist*>::iterator it = p->read_data.begin();
-		   it != p->read_data.end();
+	  // map extents back into buffer
+	  map<off_t, bufferlist*> by_off;  // buffer offset -> bufferlist
+	  
+	  for (list<OSDExtent>::iterator eit = p->extents.begin();
+		   eit != p->extents.end();
+		   eit++) {
+		bufferlist *ox_buf = p->read_data[eit->oid];
+		int ox_off = 0;
+
+		for (map<size_t,size_t>::iterator bit = eit->extents_in_buffer.begin();
+			 bit != eit->extents_in_buffer.end();
+			 bit++) {
+		  dout(10) << "object " << eit->oid << " extent (...) : offset " << ox_off << " -> buffer " << bit->first << " len " << bit->second << endl;
+		  by_off[bit->first] = new bufferlist;
+		  by_off[bit->first]->substr_of(*ox_buf, ox_off, bit->second);
+		  ox_off += bit->second;
+		}
+	  }
+
+	  // sort and string bits together
+	  for (map<off_t, bufferlist*>::iterator it = by_off.begin();
+		   it != by_off.end();
 		   it++) {
-		dout(10) << "  frag off " << it->first << " len " << it->second->length() << endl;
+		dout(10) << "  frag buffer off " << it->first << " len " << it->second->length() << endl;
 		// FIXME: pad if hole?
 		if (it->second->length())
 		  p->read_result->claim_append(*(it->second));
+		delete it->second;
+	  }
+
+	  // hose p->read_data
+	  for (map<object_t, bufferlist*>::iterator it = p->read_data.begin();
+		   it != p->read_data.end();
+		   it++) {
 		delete it->second;
 	  }
 	} else {
@@ -181,8 +201,8 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	}
   } else {
 	// store my bufferlist for later assembling
-	p->read_data[off] = new bufferlist;
-	p->read_data[off]->claim( m->get_data() );
+	p->read_data[m->get_oid()] = new bufferlist;
+	p->read_data[m->get_oid()]->claim( m->get_data() );
   }
 
   delete m;
@@ -228,8 +248,17 @@ Filer::write(inodeno_t ino,
 	m->set_length(it->len);
 	m->set_offset(it->offset);
 	
+	// map buffer segments into this extent
+	// (may be fragmented bc of striping)
 	bufferlist cur;
-	cur.substr_of(bl, off, it->len);
+	for (map<size_t,size_t>::iterator bit = it->extents_in_buffer.begin();
+		 bit != it->extents_in_buffer.end();
+		 bit++) {
+	  bufferlist thisbit;
+	  thisbit.substr_of(bl, bit->first, bit->second);
+	  cur.claim_append(thisbit);
+	}
+	assert(cur.length() == it->len);
 	m->set_data(cur);
 
 	off += it->len;

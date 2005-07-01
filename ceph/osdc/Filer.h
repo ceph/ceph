@@ -40,9 +40,8 @@ typedef __uint64_t tid_t;
 typedef struct {
   set<tid_t>           outstanding_ops;
   size_t               orig_offset;
-
-  map<object_t, off_t> read_off;
-  map<off_t, bufferlist*> read_data;     // bits go here as they come back
+  list<OSDExtent>      extents;
+  map<object_t, bufferlist*> read_data;  // bits of data as they come back
 
   bufferlist          *read_result;      // eventaully condensed into here.
 

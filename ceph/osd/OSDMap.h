@@ -16,10 +16,8 @@
 #include <vector>
 #include <list>
 #include <set>
+#include <map>
 using namespace std;
-
-#include <ext/rope>
-using namespace __gnu_cxx;
 
 
 /*
@@ -84,11 +82,15 @@ class OSDGroup {
 /** OSDExtent
  * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
  */
-struct OSDExtent {
+class OSDExtent {
+ public:
   int         osd;       // (acting) primary osd
   object_t    oid;       // object id
   repgroup_t  rg;        // replica group
   size_t      offset, len;   // extent within the object
+  map<size_t, size_t>  extents_in_buffer;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
+
+  OSDExtent() : osd(0), oid(0), rg(0), offset(0), len(0) { }
 };
 
 
@@ -247,14 +249,18 @@ class OSDCluster {
 					   size_t len,
 					   size_t offset,
 					   list<OSDExtent>& extents) {
+	/* we want only one extent per object!
+	 * this means that each extent we read may map into different bits of the 
+	 * final read buffer.. hence OSDExtent.extents_in_buffer
+	 */
+	map< object_t, OSDExtent > object_extents;
+
 	// layout constant
 	size_t stripes_per_object = layout.object_size / layout.stripe_size;
 
 	size_t cur = offset;
 	size_t left = len;
 	while (left > 0) {
-	  OSDExtent ex;
-
 	  // layout into objects
 	  size_t blockno = cur / layout.stripe_size;
 	  size_t stripeno = blockno / layout.stripe_count;
@@ -262,29 +268,53 @@ class OSDCluster {
 	  size_t objectsetno = stripeno / stripes_per_object;
 	  size_t objectno = objectsetno * layout.stripe_count + stripepos;
 
-	  // find oid, osds
-	  ex.oid = file_to_object( ino, objectno );
-	  ex.rg = file_to_repgroup( ino, objectno );
-	  ex.osd = get_rg_acting_primary( ex.rg );
-	  
+	  // find oid, extent
+	  OSDExtent *ex = 0;
+	  object_t oid = file_to_object( ino, objectno );
+	  if (object_extents.count(oid)) 
+		ex = &object_extents[oid];
+	  else {
+		ex = &object_extents[oid];
+		ex->oid = oid;
+		ex->rg = file_to_repgroup( ino, objectno );
+		ex->osd = get_rg_acting_primary( ex->rg );
+	  }
+
 	  // map range into object
 	  size_t block_start = (stripeno % stripes_per_object)*layout.stripe_size;
 	  size_t block_off = cur % layout.stripe_size;
 	  size_t max = layout.stripe_size - block_off;
 
-	  ex.offset = block_start + block_off;
+	  size_t x_offset = block_start + block_off;
+	  size_t x_len;
 	  if (left > max)
-		ex.len = max;
+		x_len = max;
 	  else
-		ex.len = left;
+		x_len = left;
 
+	  if (ex->offset + ex->len == x_offset) {
+		// add to extent
+		ex->len += x_len;
+	  } else {
+		// new extent
+		assert(ex->len == 0);
+		assert(ex->offset == 0);
+		ex->offset = x_offset;
+		ex->len = x_len;
+	  }
+	  ex->extents_in_buffer[cur-offset] = x_len;
+	  
 	  //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
 
-	  left -= ex.len;
-	  cur += ex.len;
+	  left -= x_len;
+	  cur += x_len;
+	}
 
-	  // add it
-	  extents.push_back(ex);
+	// make final list
+	for (map<object_t, OSDExtent>::iterator it = object_extents.begin();
+		 it != object_extents.end();
+		 it++) {
+	  extents.push_back(it->second);
 	}
   }
 
