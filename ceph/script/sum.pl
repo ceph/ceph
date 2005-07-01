@@ -79,7 +79,7 @@ print join("\t",'#', map { $col{$_} } @c) . "\n";
 my $n = 0;
 for my $k (sort {$a <=> $b} keys %sum) {
 	if ($avgrows) {
-		print join("\t",$k, map { $sum{$k}->{$col{$_}}/$tcount{$k} } @c ) . "\n";
+		print join("\t",$k, map int, map { $sum{$k}->{$col{$_}}/$tcount{$k} } @c ) . "\n";
 	} else {
 		print join("\t",$k, map { $sum{$k}->{$col{$_}} } @c ) . "\n";
 	}
