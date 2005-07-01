@@ -17,7 +17,7 @@
 
 #include "include/config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "filer: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << "filer: "
 
 
 
@@ -132,12 +132,12 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
   PendingOSDRead_t *p = op_reads[ tid ];
   op_reads.erase( tid );
 
-  // what buffer offset are we?
-  size_t off = p->read_off[tid];
-  dout(7) << "got frag at " << off << " len " << m->get_length() << endl;
-  
   // our op finished
   p->outstanding_ops.erase(tid);
+  
+  // what buffer offset are we?
+  size_t off = p->read_off[tid];
+  dout(7) << "got frag at " << off << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
   
   if (p->outstanding_ops.empty()) {
 	// all done

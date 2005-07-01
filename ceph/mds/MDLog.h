@@ -70,6 +70,7 @@ class MDLog {
   void flush();
 
   void trim(Context *c);
+  void _did_read();
   void _trimmed(LogEvent *le);
 };
 

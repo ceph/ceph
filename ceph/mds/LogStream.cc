@@ -236,7 +236,7 @@ void LogStream::wait_for_next_event(Context *c)
 
 void LogStream::_did_read(bufferlist& blist)
 {
-  dout(15) << "_did_read got " << blist.length() << " bytes" << endl;
+  dout(15) << "_did_read got " << blist.length() << " bytes at offset " << (read_pos + read_buf.length()) << endl;
   read_buf.claim_append(blist);
 
   list<Context*> finished;

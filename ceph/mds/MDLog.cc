@@ -113,11 +113,17 @@ public:
 	mdl = m; 
   }
   void finish(int res) {
-	mdl->waiting_for_read = false;
-	mdl->trim(0);
+	mdl->_did_read();
   }
 };
 
+
+void MDLog::_did_read() 
+{
+  dout(5) << "_did_read()" << endl;
+  waiting_for_read = false;
+  trim(0);
+}
 
 void MDLog::trim(Context *c)
 {

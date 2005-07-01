@@ -50,6 +50,7 @@ md_config_t g_conf = {
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   debug_buffer: 0,
+  debug_filer: 0,
   
   // --- client ---
   client_cache_size: 400,
@@ -151,6 +152,9 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.debug_mds_log = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--debug_buffer") == 0) 
 	  g_conf.debug_buffer = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug_filer") == 0) 
+	  g_conf.debug_filer = atoi(argv[++i]);
+
 	else if (strcmp(argv[i], "--log") == 0) 
 	  g_conf.log = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--log_name") == 0) 

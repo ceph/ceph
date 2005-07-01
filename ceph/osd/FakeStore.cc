@@ -2,6 +2,7 @@
 #include "FakeStore.h"
 #include "include/types.h"
 
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -19,9 +20,10 @@
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
 
 
+// crap-a-crap hash
 #define HASH_DIRS       128LL
-#define HASH_FUNC(x)    (((x)/13LL)%HASH_DIRS)
-
+#define HASH_FUNC(x)    (((x) ^ ((x)>>30) ^ ((x)>>18) ^ ((x)>>45) ^ 0xdead1234) * 884811 % HASH_DIRS)
+// end crap hash
 
 
 
