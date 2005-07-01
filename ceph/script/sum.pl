@@ -1,7 +1,8 @@
 #!/usr/bin/perl
 
+use strict;
 my $starttime = 1;
-my $enddtime = -1;
+my $endtime = -1;
 
 my $avgrows = 0;
 
@@ -14,7 +15,7 @@ while ($ARGV[0] =~ /^-/) {
 		$starttime = shift @ARGV;
 	}
 	elsif ($_ eq '-end') {
-		$endttime = shift @ARGV;
+		$endtime = shift @ARGV;
 	}
 	else {
 		die "i don't understand arg $_";
@@ -51,6 +52,8 @@ for (@data) {
 	}
 
 	next unless int $r;
+	next if $r < $starttime;
+	next if $endtime > 0 && $r > $endtime;
 
 	$tcount{$r}++;
 	#print "$r: @r\n";
