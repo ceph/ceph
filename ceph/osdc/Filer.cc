@@ -135,11 +135,18 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
   
   if (p->outstanding_ops.empty()) {
 	// all done
+	p->bytes_read = 0;
 	p->read_result->clear();
 	if (p->read_data.size()) {
 	  dout(15) << "assembling frags" << endl;
 
-	  /** BUG this doesn't handle holes properly **/
+	  /** FIXME This doesn't handle holes efficiently.
+	   * It allocates zero buffers to fill whole buffer, and
+	   * then discards trailing ones at the end.
+	   *
+	   * Actually, this whole thing is pretty messy with bufferlist*'s all over
+	   * the heap. 
+	   */
 
 	  // we have other fragments, assemble them all... blech!
 	  p->read_data[m->get_oid()] = new bufferlist;
@@ -152,30 +159,59 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		   eit != p->extents.end();
 		   eit++) {
 		bufferlist *ox_buf = p->read_data[eit->oid];
+		int ox_len = ox_buf->length();
 		int ox_off = 0;
+		assert(ox_len <= eit->len);           
 
 		for (map<size_t,size_t>::iterator bit = eit->extents_in_buffer.begin();
 			 bit != eit->extents_in_buffer.end();
 			 bit++) {
 		  dout(10) << "object " << eit->oid << " extent (...) : offset " << ox_off << " -> buffer " << bit->first << " len " << bit->second << endl;
 		  by_off[bit->first] = new bufferlist;
-		  by_off[bit->first]->substr_of(*ox_buf, ox_off, bit->second);
+		  if (ox_off + bit->second <= ox_len) {
+			by_off[bit->first]->substr_of(*ox_buf, ox_off, bit->second);
+			if (p->bytes_read < bit->first + bit->second) 
+			  p->bytes_read = bit->first + bit->second;
+		  } else if (ox_off > ox_len) {
+			by_off[bit->first]->substr_of(*ox_buf, ox_off, (ox_len-ox_off));
+			if (p->bytes_read < bit->first + ox_len-ox_off) 
+			  p->bytes_read = bit->first + ox_len-ox_off;
+
+			// zero end bit
+			bufferptr z = new buffer(ox_off + bit->second - ox_len);
+			z.set_length(ox_off + bit->second - ox_len);
+			memset(z.c_str(), 0, z.length());
+			by_off[bit->first]->append( z );
+		  } else {
+			// zero whole bit
+			bufferptr z = new buffer(bit->second);
+			z.set_length(bit->second);
+			memset(z.c_str(), 0, z.length());
+			by_off[bit->first]->append( z );
+		  }
 		  ox_off += bit->second;
 		}
+		assert(ox_off == eit->len);
 	  }
 
 	  // sort and string bits together
 	  for (map<off_t, bufferlist*>::iterator it = by_off.begin();
 		   it != by_off.end();
 		   it++) {
-		dout(10) << "  frag buffer off " << it->first << " len " << it->second->length() << endl;
+		dout(10) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
 		// FIXME: pad if hole?
-		if (it->second->length())
+		if (it->second->length() &&
+			it->first <= p->bytes_read)
 		  p->read_result->claim_append(*(it->second));
 		delete it->second;
 	  }
-
-	  // hose p->read_data
+	  // trim trailing zeros?
+	  if (p->read_result->length() > p->bytes_read) {
+		dout(10) << " trimming off trailing zeros . bytes_read=" << p->bytes_read << " len=" << p->read_result->length() << endl;
+		p->read_result->splice(p->bytes_read, p->bytes_read-p->read_result->length());
+	  }
+	  
+	  // hose p->read_data bufferlist*'s
 	  for (map<object_t, bufferlist*>::iterator it = p->read_data.begin();
 		   it != p->read_data.end();
 		   it++) {
@@ -183,13 +219,15 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	  }
 	} else {
 	  dout(15) << "  only one frag" << endl;
+
 	  // only one fragment, easy
 	  p->read_result->claim( m->get_data() );
+	  p->bytes_read = p->read_result->length();
 	}
 
 	// finish, clean up
 	Context *onfinish = p->onfinish;
-	int result = p->read_result->length(); // assume success
+	int result = p->bytes_read;
 
 	dout(7) << "read " << result << " bytes " << p->read_result->length() << endl;
 
@@ -259,7 +297,7 @@ Filer::write(inodeno_t ino,
 	  cur.claim_append(thisbit);
 	}
 	assert(cur.length() == it->len);
-	m->get_data().claim(cur);
+	m->set_data(cur);//.claim(cur);
 
 	off += it->len;
 

@@ -268,6 +268,7 @@ class bufferlist {
 
 
   void substr_of(bufferlist& other, int off, int len) {
+	assert(off + len <= other.length());
 	clear();
 
 	// skip off
@@ -295,7 +296,7 @@ class bufferlist {
 		break;
 	  }
 
-	  // hose the whole thing
+	  // through end
 	  //cout << "copying end (all?) of " << *curbuf << endl;
 	  int howmuch = (*curbuf).length() - off;
 	  _buffers.push_back( bufferptr( *curbuf, howmuch, off ) );
