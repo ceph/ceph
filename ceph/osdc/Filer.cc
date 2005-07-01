@@ -259,7 +259,7 @@ Filer::write(inodeno_t ino,
 	  cur.claim_append(thisbit);
 	}
 	assert(cur.length() == it->len);
-	m->set_data(cur);
+	m->get_data().claim(cur);
 
 	off += it->len;
 
