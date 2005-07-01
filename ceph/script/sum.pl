@@ -1,11 +1,41 @@
 #!/usr/bin/perl
 
+my $starttime = 1;
+my $enddtime = -1;
+
+my $avgrows = 0;
+
+while ($ARGV[0] =~ /^-/) {
+	$_ = shift @ARGV;
+	if ($_ eq '-avg') {
+		$avgrows = 1;
+	}
+	elsif ($_ eq '-start') {
+		$starttime = shift @ARGV;
+	}
+	elsif ($_ eq '-end') {
+		$endttime = shift @ARGV;
+	}
+	else {
+		die "i don't understand arg $_";
+	}
+}
+my @files = @ARGV;
+
+my @data;
+for my $f (@files) {
+	open(I,$f);
+	push( @data, <I> );
+	close I;
+}
+
 my %sum;  # time -> name -> val
 my %col;  # colnum -> name   .. colnums start at 0 (time doesn't count)
 my %min;
 my %max;
 my %avg;
-while (<>) {
+my %tcount;
+for (@data) {
 	chomp;
 	my @r = split(/\s+/,$_);
 	my $r = shift @r;
@@ -21,6 +51,8 @@ while (<>) {
 	}
 
 	next unless int $r;
+
+	$tcount{$r}++;
 	#print "$r: @r\n";
 	my $i = 0;
 	while (@r) {
@@ -43,12 +75,21 @@ my @c = sort {$a <=> $b} keys %col;
 print join("\t",'#', map { $col{$_} } @c) . "\n";
 my $n = 0;
 for my $k (sort {$a <=> $b} keys %sum) {
-	print join("\t",$k, map { $sum{$k}->{$col{$_}} } @c ) . "\n";
+	if ($avgrows) {
+		print join("\t",$k, map { $sum{$k}->{$col{$_}}/$tcount{$k} } @c ) . "\n";
+	} else {
+		print join("\t",$k, map { $sum{$k}->{$col{$_}} } @c ) . "\n";
+	}
 	$n++;
 }
 
+my $rows = $n;
+my $files = $tcount{$starttime};
 
 print "\n";
 print join("\t", 'minval', map { $min{$col{$_}} } @c ) . "\n";
 print join("\t", 'maxval', map { $max{$col{$_}} } @c ) . "\n";
-print join("\t", 'avgsum', map int, map { $_ / $n } map { $avg{$col{$_}} } @c ) . "\n";
+print join("\t", 'rows', map { $rows } @c) . "\n";
+print join("\t", 'files', map { $files } @c) . "\n";
+print join("\t", 'avgval', map int, map { $_ / ($rows*$files) } map { $avg{$col{$_}} } @c ) . "\n";
+print join("\t", 'avgsum', map int, map { $_ / $rows } map { $avg{$col{$_}} } @c ) . "\n";
