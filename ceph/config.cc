@@ -66,7 +66,7 @@ md_config_t g_conf = {
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 256,
-  mds_log_read_inc: 65536,
+  mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
