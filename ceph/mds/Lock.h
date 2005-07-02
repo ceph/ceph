@@ -5,8 +5,7 @@
 #include <set>
 using namespace std;
 
-#include <ext/rope>
-using namespace __gnu_cxx;
+#include "include/bufferlist.h"
 
 
 // STATES
@@ -63,49 +62,34 @@ class CLock {
   }
   
   // encode/decode
-  void encode_state(crope& r) {
-	r.append((char*)&type, sizeof(char));
-	r.append((char*)&state, sizeof(state));
-	r.append((char*)&mode, sizeof(mode));
-	r.append((char*)&nread, sizeof(nread));
-	r.append((char*)&nwrite, sizeof(nwrite));
+  void encode_state(bufferlist& bl) {
+	bl.append((char*)&type, sizeof(char));
+	bl.append((char*)&state, sizeof(state));
+	bl.append((char*)&mode, sizeof(mode));
+	bl.append((char*)&nread, sizeof(nread));
+	bl.append((char*)&nwrite, sizeof(nwrite));
 	//r.append((char*)&req_read, sizeof(req_read));
 	//r.append((char*)&req_write, sizeof(req_write));
-	int n = gather_set.size();
-	r.append((char*)&n, sizeof(n));	
-	for (set<int>::iterator it = gather_set.begin();
-		 it != gather_set.end();
-		 it++) {
-	  n = *it;
-	  r.append((char*)&n, sizeof(n));
-	}	
+
+	_encode(gather_set, bl);
   }
-  void decode_state(crope& r, int& off) {
-	r.copy(off, sizeof(type), (char*)&type);
+  void decode_state(bufferlist& bl, int& off) {
+	bl.copy(off, sizeof(type), (char*)&type);
 	off += sizeof(type);
-	r.copy(off, sizeof(state), (char*)&state);
+	bl.copy(off, sizeof(state), (char*)&state);
 	off += sizeof(state);
-	r.copy(off, sizeof(mode), (char*)&mode);
+	bl.copy(off, sizeof(mode), (char*)&mode);
 	off += sizeof(mode);
-	r.copy(off, sizeof(nread), (char*)&nread);
+	bl.copy(off, sizeof(nread), (char*)&nread);
 	off += sizeof(nread);
-	r.copy(off, sizeof(nwrite), (char*)&nwrite);
+	bl.copy(off, sizeof(nwrite), (char*)&nwrite);
 	off += sizeof(nwrite);
 	//r.copy(off, sizeof(req_read), (char*)&req_read);
 	//off += sizeof(req_read);
 	//r.copy(off, sizeof(req_write), (char*)&req_write);
 	//off += sizeof(req_write);
 
-	int n;
-	r.copy(off, sizeof(n), (char*)&n);
-	off += sizeof(n);
-	gather_set.clear();
-	int x;
-	for (int i=0; i<n; i++) {
-	  r.copy(off, sizeof(x), (char*)&x);
-	  off += sizeof(x);
-	  gather_set.insert(x);
-	}
+	_decode(gather_set, bl, off);
   }
 
   char get_state() { return state; }

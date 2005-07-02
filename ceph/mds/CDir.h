@@ -3,6 +3,7 @@
 #define __CDIR_H
 
 #include "include/types.h"
+#include "include/bufferlist.h"
 #include "include/config.h"
 #include "common/DecayCounter.h"
 
@@ -650,19 +651,19 @@ class CDirExport {
   }
 
 
-  void _rope(crope& r) {
+  void _encode(bufferlist& bl) {
     st.nrep_by = rep_by.size();
     st.nopen_by = open_by_nonce.size();
-    r.append((char*)&st, sizeof(st));
+    bl.append((char*)&st, sizeof(st));
     
     // open_by
     for (map<int,int>::iterator it = open_by_nonce.begin();
          it != open_by_nonce.end();
          it++) {
       int m = it->first;
-      r.append((char*)&m, sizeof(int));
+      bl.append((char*)&m, sizeof(int));
       int n = it->second;
-      r.append((char*)&n, sizeof(int));
+      bl.append((char*)&n, sizeof(int));
     }
 
     // rep_by
@@ -670,20 +671,20 @@ class CDirExport {
          it != rep_by.end();
          it++) {
       int m = *it;
-      r.append((char*)&m, sizeof(int));
+      bl.append((char*)&m, sizeof(int));
     }
   }
 
-  int _unrope(crope s, int off = 0) {
-    s.copy(off, sizeof(st), (char*)&st);
+  int _decode(bufferlist& bl, int off = 0) {
+    bl.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
 
     // open_by
     for (int i=0; i<st.nopen_by; i++) {
       int m,n;
-      s.copy(off, sizeof(int), (char*)&m);
+      bl.copy(off, sizeof(int), (char*)&m);
       off += sizeof(int);
-      s.copy(off, sizeof(int), (char*)&n);
+      bl.copy(off, sizeof(int), (char*)&n);
       off += sizeof(int);
 	  open_by.insert(m);
       open_by_nonce.insert(pair<int,int>(m,n));
@@ -692,7 +693,7 @@ class CDirExport {
     // rep_by
     for (int i=0; i<st.nrep_by; i++) {
       int m;
-      s.copy(off, sizeof(int), (char*)&m);
+      bl.copy(off, sizeof(int), (char*)&m);
       off += sizeof(int);
       rep_by.insert(m);
     }

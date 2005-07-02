@@ -446,6 +446,7 @@ void MDS::my_dispatch(Message *m)
   static int num_bal_times = g_conf.mds_bal_max;
   timepair_t now = g_clock.gettimepair();
   if (true && num_bal_times && whoami == 0 &&
+	  !shutting_down && !shut_down &&
 	  now.first - last_balancer_heartbeat.first >= g_conf.mds_bal_interval) {
 	last_balancer_heartbeat = now;
 	balancer->send_heartbeat();

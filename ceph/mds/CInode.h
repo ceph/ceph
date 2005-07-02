@@ -678,55 +678,55 @@ public:
 
   }
 
-  void _rope(crope& r) {
+  void _encode(bufferlist& bl) {
     st.ncached_by = cached_by.size();
 	st.num_fh = fh_list.size();
-    r.append((char*)&st, sizeof(st));
+    bl.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
     for (map<int,int>::iterator it = cached_by_nonce.begin();
          it != cached_by_nonce.end();
          it++) {
       int m = it->first;
-      r.append((char*)&m, sizeof(int));
+      bl.append((char*)&m, sizeof(int));
       int n = it->second;
-      r.append((char*)&n, sizeof(int));
+      bl.append((char*)&n, sizeof(int));
     }
 
-	hardlock.encode_state(r);
-	softlock.encode_state(r);
+	hardlock.encode_state(bl);
+	softlock.encode_state(bl);
 
 	// fh
 	for (list<CFile*>::iterator it = fh_list.begin();
 		 it != fh_list.end();
 		 it++) {
-	  r.append((char*)*it, sizeof(CFile));
+	  bl.append((char*)*it, sizeof(CFile));
 	  CFile *f = *it;
 	  //cout << "f in client " << f->client << " fh " << f->fh << endl;
 	}
   }
 
-  int _unrope(crope s, int off = 0) {
-    s.copy(off, sizeof(st), (char*)&st);
+  int _decode(bufferlist& bl, int off = 0) {
+    bl.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
 	
     for (int i=0; i<st.ncached_by; i++) {
       int m,n;
-      s.copy(off, sizeof(int), (char*)&m);
+      bl.copy(off, sizeof(int), (char*)&m);
       off += sizeof(int);
-      s.copy(off, sizeof(int), (char*)&n);
+      bl.copy(off, sizeof(int), (char*)&n);
       off += sizeof(int);
       cached_by.insert(m);
       cached_by_nonce.insert(pair<int,int>(m,n));
     }
 
-	hardlock.decode_state(s, off);
-	softlock.decode_state(s, off);
+	hardlock.decode_state(bl, off);
+	softlock.decode_state(bl, off);
 
 	// fh
 	for (int i=0; i<st.num_fh; i++) {
 	  CFile *f = new CFile;
-	  s.copy(off, sizeof(CFile), (char*)f);
+	  bl.copy(off, sizeof(CFile), (char*)f);
 	  //cout << "f out client " << f->client << " fh " << f->fh << endl;
 	  off += sizeof(CFile);
 	  fh_list.push_back(f);

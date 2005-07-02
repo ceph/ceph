@@ -83,6 +83,8 @@ MDCache::MDCache(MDS *m)
   root = NULL;
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
+
+  did_shutdown_exports = false;
 }
 
 MDCache::~MDCache() 
@@ -612,7 +614,7 @@ bool MDCache::shutdown_pass()
   dout(5) << "cache size now " << lru.lru_get_size() << endl;
   
   // send all imports back to 0.
-  if (mds->get_nodeid() != 0) {
+  if (mds->get_nodeid() != 0 && !did_shutdown_exports) {
 	for (set<CDir*>::iterator it = imports.begin();
 		 it != imports.end();
 		 ) {
@@ -624,6 +626,7 @@ bool MDCache::shutdown_pass()
 	  dout(7) << "sending " << *im << " back to mds0" << endl;
 	  export_dir(im,0);
 	}
+	did_shutdown_exports = true;
   } 
 
   // filer active?
@@ -666,6 +669,12 @@ bool MDCache::shutdown_pass()
 	  //dump();
 	  return false;
 	}
+  }
+
+  // imports?
+  if (!imports.empty()) {
+	dout(7) << "still have " << imports.size() << " imports" << endl;
+	return false;
   }
 	
   // done!
@@ -2813,13 +2822,16 @@ void MDCache::file_rename_foreign_src(CDentry *srcdn,
   if (in->is_dir()) show_imports();
 
   // encode and export inode state
-  crope inode_state;
+  bufferlist inode_state;
   encode_export_inode(in, inode_state, destauth);
+  // HACK FIXME
+  crope inode_state_rope;
+  inode_state_rope.append(inode_state.c_str(), inode_state.length());
 
   // send
   MRename *m = new MRename(initiator,
 						   srcdir->ino(), srcdn->name, destdirino, destname,
-						   inode_state);
+						   inode_state_rope);
   mds->messenger->send_message(m,
 							   MSG_ADDR_MDS(destauth), MDS_PORT_CACHE, MDS_PORT_CACHE);
   
@@ -3021,7 +3033,10 @@ void MDCache::handle_rename(MRename *m)
   // decode + import inode (into new location start)
   int off = 0;
   timepair_t now = g_clock.gettimepair();
-  decode_import_inode(destdn, m->get_inode_state(), off, m->get_source(), now);
+  // HACK
+  bufferlist bufstate;
+  bufstate.append(m->get_inode_state().c_str(), m->get_inode_state().length());
+  decode_import_inode(destdn, bufstate, off, m->get_source(), now);
 
   CInode *in = destdn->inode;
   assert(in);
@@ -5634,7 +5649,7 @@ void MDCache::export_dir_go(CDir *dir,
  * encode relevant state to be sent over the wire.
  * used by: export_dir_walk, file_rename (if foreign)
  */
-void MDCache::encode_export_inode(CInode *in, crope& state_rope, int new_auth)
+void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_auth)
 {
   in->version++;  // so local log entries are ignored, etc.  (FIXME ??)
   
@@ -5654,7 +5669,7 @@ void MDCache::encode_export_inode(CInode *in, crope& state_rope, int new_auth)
   
   // add inode
   CInodeExport istate( in );
-  istate._rope( state_rope );
+  istate._encode( enc_state );
 
   // we're export this inode; fix inode state
   dout(7) << "encode_export_inode " << *in << endl;
@@ -5691,10 +5706,10 @@ int MDCache::export_dir_walk(MExportDir *req,
   dout(7) << "export_dir_walk " << *dir << " " << dir->nitems << " items" << endl;
   
   // dir 
-  crope dir_rope;
+  bufferlist enc_dir;
   
   CDirExport dstate(dir);
-  dstate._rope( dir_rope );
+  dstate._encode( enc_dir );
   
   // release open_by 
   dir->open_by_clear();
@@ -5735,34 +5750,34 @@ int MDCache::export_dir_walk(MExportDir *req,
 
 	// -- dentry
 	dout(7) << "export_dir_walk exporting " << *dn << endl;
-	dir_rope.append( it->first.c_str(), it->first.length()+1 );
+	_encode(it->first, enc_dir);
 	
 	if (dn->is_dirty()) 
-	  dir_rope.append((char)'D');  // dirty
+	  enc_dir.append("D", 1);  // dirty
 	else 
-	  dir_rope.append((char)'C');  // clean
+	  enc_dir.append("C", 1);  // clean
 
 	// null dentry?
 	if (dn->is_null()) {
-	  dir_rope.append((char)'N');  // null dentry
+	  enc_dir.append("N", 1);  // null dentry
 	  assert(dn->is_sync());
 	  continue;
 	}
 
 	if (dn->is_remote()) {
 	  // remote link
-	  dir_rope.append((char)'L');  // remote link
+	  enc_dir.append("L", 1);  // remote link
 
 	  inodeno_t ino = dn->get_remote_ino();
-	  dir_rope.append((char*)&ino, sizeof(ino));
+	  enc_dir.append((char*)&ino, sizeof(ino));
 	  continue;
 	}
 
 	// primary link
 	// -- inode
-	dir_rope.append((char)'I');    // inode dentry
+	enc_dir.append("I", 1);    // inode dentry
 	
-	encode_export_inode(in, dir_rope, newauth);  // encode, and (update state for) export
+	encode_export_inode(in, enc_dir, newauth);  // encode, and (update state for) export
 	
 	// directory?
 	if (in->is_dir() && in->dir) { 
@@ -5798,7 +5813,7 @@ int MDCache::export_dir_walk(MExportDir *req,
 	fin->assim_waitlist(waiters);
   }
 
-  req->add_dir( dir_rope );
+  req->add_dir( enc_dir );
   
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); it++)
@@ -6275,7 +6290,8 @@ void MDCache::handle_export_dir(MExportDir *m)
 
   // add this crap to my cache
   list<inodeno_t> imported_subdirs;
-  crope dir_state = m->get_state();
+  bufferlist dir_state;
+  dir_state.claim( m->get_state() );
   int off = 0;
   int num_imported_inodes = 0;
   timepair_t now = g_clock.gettimepair();   // for popularity adjustments
@@ -6383,11 +6399,11 @@ void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 }
 
 
-void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth, timepair_t& now)
+void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth, timepair_t& now)
 {
   
   CInodeExport istate;
-  off = istate._unrope(r, off);
+  off = istate._decode(bl, off);
   dout(15) << "got a cinodeexport " << endl;
   
   bool added = false;
@@ -6447,7 +6463,7 @@ void MDCache::decode_import_inode(CDentry *dn, crope& r, int& off, int oldauth, 
 }
 
 
-int MDCache::import_dir_block(crope& r,
+int MDCache::import_dir_block(bufferlist& bl,
 							  int& off,
 							  int oldauth,
 							  CDir *import_root,
@@ -6456,7 +6472,7 @@ int MDCache::import_dir_block(crope& r,
 {
   // set up dir
   CDirExport dstate;
-  off = dstate._unrope(r, off);
+  off = dstate._decode(bl, off);
 
   CInode *diri = get_inode(dstate.get_ino());
   assert(diri);
@@ -6502,14 +6518,16 @@ int MDCache::import_dir_block(crope& r,
 	num_imported++;
 
     // dentry
-    string dname = r.c_str() + off;
-    off += dname.length()+1;
+	string dname;
+	_decode(dname, bl, off);
     dout(15) << "dname is " << dname << endl;
 
-	char dirty = *(r.c_str() + off);
+	char dirty;
+	bl.copy(off, 1, &dirty);
 	off++;
 
-	char icode = *(r.c_str() + off);
+	char icode;
+	bl.copy(off, 1, &icode);
 	off++;
 
 	CDentry *dn = dir->lookup(dname);
@@ -6528,12 +6546,13 @@ int MDCache::import_dir_block(crope& r,
 	else if (icode == 'L') {
 	  // remote link
 	  inodeno_t ino;
-	  r.copy(off, sizeof(ino), (char*)&ino);
+	  bl.copy(off, sizeof(ino), (char*)&ino);
+	  off += sizeof(ino);
 	  dir->link_inode(dn, ino);
 	}
 	else if (icode == 'I') {
 	  // inode
-	  decode_import_inode(dn, r, off, oldauth, now);
+	  decode_import_inode(dn, bl, off, oldauth, now);
     }
 
 	// mark dentry dirty?  (only _after_ we link the inode!)

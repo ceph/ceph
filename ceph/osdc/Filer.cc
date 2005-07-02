@@ -142,7 +142,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	   * It allocates zero buffers to fill whole buffer, and
 	   * then discards trailing ones at the end.
 	   *
-	   * Actually, this whole thing is pretty messy with bufferlist*'s all over
+	   * Actually, this whole thing is pretty messy with temporary bufferlist*'s all over
 	   * the heap. 
 	   */
 
@@ -153,7 +153,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	  // map extents back into buffer
 	  map<off_t, bufferlist*> by_off;  // buffer offset -> bufferlist
 
-	  // for each object extent
+	  // for each object extent...
 	  for (list<OSDExtent>::iterator eit = p->extents.begin();
 		   eit != p->extents.end();
 		   eit++) {
@@ -212,6 +212,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		}
 		delete it->second;
 	  }
+
 	  // trim trailing zeros?
 	  if (p->read_result->length() > p->bytes_read) {
 		dout(10) << " trimming off trailing zeros . bytes_read=" << p->bytes_read << " len=" << p->read_result->length() << endl;

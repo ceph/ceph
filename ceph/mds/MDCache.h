@@ -120,6 +120,7 @@ class MDCache {
   map<Message*, active_request_t>   active_requests;
 
   int shutdown_commits;
+  bool did_shutdown_exports;
   
 
   friend class MDBalancer;
@@ -311,7 +312,7 @@ class MDCache {
   void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
-  void encode_export_inode(CInode *in, crope& r, int newauth);
+  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
   
 
   // importer
@@ -321,7 +322,7 @@ class MDCache {
   void handle_export_dir(MExportDir *m);
   void import_dir_finish(CDir *dir);
   void handle_export_dir_finish(MExportDirFinish *m);
-  int import_dir_block(crope& r,
+  int import_dir_block(bufferlist& bl,
 					   int& off,
 					   int oldauth,
 					   CDir *import_root,
@@ -331,7 +332,7 @@ class MDCache {
 						  inodeno_t dir_ino,
 						  inodeno_t replica_ino);
 
-  void decode_import_inode(CDentry *dn, crope& r, int &off, int oldauth, timepair_t& now);
+  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, timepair_t& now);
 
   // bystander
   void handle_export_dir_warning(MExportDirWarning *m);
