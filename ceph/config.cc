@@ -27,8 +27,8 @@ OSDFileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19 );
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
 //OSDFileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20 );
-//OSDFileLayout g_OSD_MDLogLayout( 127, 32, 1<<20 );  // pathological case to test striping buffer mapping
-OSDFileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );
+OSDFileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
+//OSDFileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );
 
 
 md_config_t g_conf = {

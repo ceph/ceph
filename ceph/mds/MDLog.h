@@ -61,7 +61,7 @@ class MDLog {
 	return max_events;
   }
   size_t get_num_events() {
-	return num_events;
+	return num_events + trimming.size();
   }
 
   int submit_entry( LogEvent *e,
