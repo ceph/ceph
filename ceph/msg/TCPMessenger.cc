@@ -346,8 +346,8 @@ int tcp_send(Message *m)
   int rank = MPI_DEST_TO_RANK(m->get_dest(), mpi_world);
 
   // marshall
-  m->reset_payload();
-  m->encode_payload();
+  if (m->empty_payload())
+	m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
   bufferlist blist;
   blist.claim( m->get_payload() );
@@ -467,8 +467,8 @@ void *tcp_inthread(void *r)
 
   dout(DBL) << "tcp_inthread closing " << who << endl;
 
-  ::close(in_sd[who]);
-  in_sd[who] = 0;
+  //::close(in_sd[who]);
+  //in_sd[who] = 0;
 
   return 0;  
 }

@@ -124,6 +124,7 @@ class MClientReply : public Message {
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 
 	Message(MSG_CLIENT_REPLY) {
+	memset(&st, 0, sizeof(st));
 	this->st.pcid = req->get_pcid();    // match up procedure call id!!!
 	this->st.tid = req->get_tid();
 	this->st.op = req->get_op();

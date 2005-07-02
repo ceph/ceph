@@ -160,6 +160,7 @@ class Message {
   virtual long get_pcid() { return 0; }
   virtual void set_pcid(long t) { assert(0); }  // overload me
 
+  bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() {
 	return payload;
   }

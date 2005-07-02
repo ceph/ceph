@@ -111,7 +111,7 @@ void FakeStore::wipe_dir(string mydir)
 
 int FakeStore::mkfs()
 {
-  int r;
+  int r = 0;
   struct stat st;
   string mydir;
   get_dir(mydir);
@@ -153,6 +153,8 @@ int FakeStore::mkfs()
 	else
 	  wipe_dir( subdir );
   }
+
+  return r;
 }
 
 

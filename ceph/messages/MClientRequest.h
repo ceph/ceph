@@ -122,8 +122,8 @@ class MClientRequest : public Message {
 inline ostream& operator<<(ostream& out, MClientRequest& req) {
   out << &req << " ";
   out << "client" << req.get_client() 
-	//	  << "." << req.get_tid() 
-	//<< ".pcid=" << req.get_pcid() 
+	  << "." << req.get_tid() 
+	  << ".pcid=" << req.get_pcid() 
 	  << ":";
   switch(req.get_op()) {
   case MDS_OP_STAT: 
