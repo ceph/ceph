@@ -187,8 +187,10 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 			by_off[bit->first]->append( z );
 		  } else {
 			// we got none of this bx.  zero whole thing.
+			assert(ox_off >= ox_len);
 			dout(10) << "  adding all zeros for this bit " << bit->second << endl;
 			bufferptr z = new buffer(bit->second);
+			assert(z.length() == bit->second);
 			memset(z.c_str(), 0, z.length());
 			by_off[bit->first]->append( z );
 		  }
@@ -201,17 +203,20 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	  for (map<off_t, bufferlist*>::iterator it = by_off.begin();
 		   it != by_off.end();
 		   it++) {
-		dout(10) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
-		// FIXME: pad if hole?
-		if (it->second->length() &&
-			it->first <= p->bytes_read)
+		assert(it->second->length());
+		if (it->first < p->bytes_read) {
+		  dout(10) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
 		  p->read_result->claim_append(*(it->second));
+		} else {
+		  dout(10) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << endl;		  
+		}
 		delete it->second;
 	  }
 	  // trim trailing zeros?
 	  if (p->read_result->length() > p->bytes_read) {
 		dout(10) << " trimming off trailing zeros . bytes_read=" << p->bytes_read << " len=" << p->read_result->length() << endl;
-		p->read_result->splice(p->bytes_read, p->bytes_read-p->read_result->length());
+		p->read_result->splice(p->bytes_read, p->read_result->length() - p->bytes_read);
+		assert(p->bytes_read == p->read_result->length());
 	  }
 	  
 	  // hose p->read_data bufferlist*'s

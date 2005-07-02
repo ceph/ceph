@@ -315,21 +315,26 @@ class bufferlist {
 
   // funky modifer
   void splice(int off, int len, bufferlist *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
+	assert(off < length()); 
+	assert(len > 0);
+	//cout << "splice off " << off << " len " << len << " ... mylen = " << length() << endl;
+
 	// skip off
 	list<bufferptr>::iterator curbuf = _buffers.begin();
 	while (off > 0) {
 	  assert(curbuf != _buffers.end());
 	  if (off >= (*curbuf).length()) {
 		// skip this buffer
-		//cout << "skipping over " << *curbuf << endl;
+		//cout << "off = " << off << " skipping over " << *curbuf << endl;
 		off -= (*curbuf).length();
 		curbuf++;
 	  } else {
 		// somewhere in this buffer!
-		//cout << "somewhere in " << *curbuf << endl;
+		//cout << "off = " << off << " somewhere in " << *curbuf << endl;
 		break;
 	  }
 	}
+	assert(off >= 0);
 
 	if (off) {
 	  // add a reference to the front bit
@@ -345,14 +350,14 @@ class bufferlist {
 		//cout << "keeping end of " << *curbuf << ", losing first " << off+len << endl;
 		if (claim_by) 
 		  claim_by->append( *curbuf, len, off );
-		(*curbuf).set_offset( off + len + (*curbuf).offset() );    // ignore beginning big
-		(*curbuf).set_length( (*curbuf).length() - len - off );
+		(*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
+		(*curbuf).set_length( (*curbuf).length() - (len+off) );
 		_len -= off+len;
 		//cout << " now " << *curbuf << endl;
 		break;
 	  }
 
-	  // hose the whole thing
+	  // hose though the end
 	  int howmuch = (*curbuf).length() - off;
 	  //cout << "discarding " << howmuch << " of " << *curbuf << endl;
 	  if (claim_by) 
