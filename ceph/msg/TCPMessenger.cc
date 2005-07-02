@@ -156,10 +156,6 @@ int tcpmessenger_init(int& argc, char**& argv)
   //  for (int i=0; i<mpi_world; i++) 
   //dout(DBL) << "  addr of " << i << " is " << remote_addr[i] << endl;
 
-  dout(DBL) << "tcpmessenger_shutdown barrier" << endl;
-  MPI_Barrier (MPI_COMM_WORLD);
-  MPI_Finalize();
-
 
   // init socket arrays
   in_sd = new int[mpi_world];
@@ -177,6 +173,10 @@ int tcpmessenger_init(int& argc, char**& argv)
 
 int tcpmessenger_shutdown() 
 {
+  dout(DBL) << "tcpmessenger_shutdown barrier" << endl;
+  MPI_Barrier (MPI_COMM_WORLD);
+  MPI_Finalize();
+
   dout(2) << "tcpmessenger_shutdown closing all sockets etc" << endl;
 
   // bleh

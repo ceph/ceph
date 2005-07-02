@@ -38,6 +38,8 @@ int main(int oargc, char **oargv) {
 
   int start = 0;
 
+
+
   // build new argc+argv for fuse
   typedef char* pchar;
   int nargc = 0;
@@ -89,6 +91,10 @@ int main(int oargc, char **oargv) {
 
   int myrank = tcpmessenger_init(argc, argv);
   int world = tcpmessenger_world();
+
+  //cerr << "horrible hack remove me" << endl;
+  //if (myrank == 0) g_conf.debug_filer = 15;
+
 
   if (myrank == 0)
 	cerr << "nummds " << NUMMDS << "  numosd " << NUMOSD << "  numclient " << NUMCLIENT << endl;

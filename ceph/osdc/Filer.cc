@@ -83,13 +83,12 @@ Filer::read(inodeno_t ino,
   p->bytes_read = 0;
   p->onfinish = onfinish;
 
-  // find data
+  // map buffer into OSD extents
   osdcluster->file_to_extents(ino, layout, len, offset, p->extents);
 
   dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
-
-  int nfrag = 0;
+  // issue reads
   off_t off = 0;
   for (list<OSDExtent>::iterator it = p->extents.begin();
 	   it != p->extents.end();
@@ -103,13 +102,12 @@ Filer::read(inodeno_t ino,
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
-	dout(15) << " read on " << last_tid << endl;
+	dout(15) << " read on " << last_tid << " from oid " << it->oid << " off " << it->offset << " len " << it->len << " (" << it->extents_in_buffer.size() << " buffer bits)" << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);
 	op_reads[last_tid] = p;
-	nfrag++;
   }
 
   return 0;

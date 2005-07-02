@@ -41,7 +41,7 @@ public:
 
 off_t LogStream::append(LogEvent *e)
 {
-  // serialize FIXME  ********
+  // serialize
   bufferlist bl;
   e->encode(bl);
 

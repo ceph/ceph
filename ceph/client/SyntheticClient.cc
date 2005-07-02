@@ -32,7 +32,7 @@ int SyntheticClient::run()
   for (list<int>::iterator it = modes.begin();
 	   it != modes.end();
 	   it++) {
-	mode = *it;
+	int mode = *it;
 		 
 	switch (mode) {
 	case SYNCLIENT_MODE_RANDOMWALK:
