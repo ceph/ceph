@@ -265,6 +265,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 
 	// queue
 	FakeMessenger *dm = directory[dest];
+	assert(dm);
 	dm->queue_incoming(m);
 
 	dout(10) << "sending " << m << " to " << dest << " m " << dm << " has " << dm->num_incoming() << " queued" << endl;
