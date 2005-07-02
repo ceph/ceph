@@ -93,7 +93,7 @@ int main(int oargc, char **oargv) {
   int world = tcpmessenger_world();
 
   //cerr << "horrible hack remove me" << endl;
-  //if (myrank == 0) g_conf.debug_filer = 15;
+  //if (myrank == 0) g_conf.debug = 10;
 
 
   if (myrank == 0)

@@ -349,7 +349,9 @@ int tcp_send(Message *m)
   m->reset_payload();
   m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
-  bufferlist blist = m->get_payload();
+  bufferlist blist;
+  blist.claim( m->get_payload() );
+
 #ifdef TCP_KEEP_CHUNKS
   env->nchunks = blist.buffers().size();
 #else

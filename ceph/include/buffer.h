@@ -196,6 +196,7 @@ class bufferptr {
 
   // assignment operator
   bufferptr& operator=(const bufferptr& other) {
+	assert(0);
 	// discard old
 	discard_buffer();
 

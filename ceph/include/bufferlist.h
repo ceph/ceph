@@ -32,18 +32,21 @@ class bufferlist {
 	bdbout(1) << "bufferlist.cons " << this << endl;
   }
   bufferlist(bufferlist& bl) : _len(0) {
-	bdbout(1) << "bufferlist.cons " << this << endl;
+	bdbout(1) << "bufferlist.cons " << this << endl;   // O(n) and stupid!
 	_buffers = bl._buffers;
 	_len = bl._len;
   }
   ~bufferlist() {
 	bdbout(1) << "bufferlist.des " << this << endl;
   }
-  /*
+  
   bufferlist& operator=(bufferlist& bl) {
-	assert(0);  // actually, this should be fine.
+	assert(0);  // actually, this should be fine, just slow (O(n)) and stupid.
+	_buffers = bl._buffers;
+	_len = bl._len;
+	return *this;
   }
-  */
+  
 
   // accessors
   list<bufferptr>& buffers() { 
