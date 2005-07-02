@@ -385,7 +385,7 @@ inline ostream& operator<<(ostream& out, bufferlist& bl) {
 // encoder/decode helpers
 
 // string
-inline void _encode(string& s, bufferlist& bl) 
+inline void _encode(const string& s, bufferlist& bl) 
 {
   bl.append(s.c_str(), s.length()+1);
 }

@@ -102,7 +102,7 @@ Filer::read(inodeno_t ino,
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
-	dout(15) << " read on " << last_tid << " from oid " << it->oid << " off " << it->offset << " len " << it->len << " (" << it->extents_in_buffer.size() << " buffer bits)" << endl;
+	dout(15) << " read on " << last_tid << " from oid " << it->oid << " off " << it->offset << " len " << it->len << " (" << it->buffer_extents.size() << " buffer bits)" << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 
 	// add to gather set
@@ -152,7 +152,8 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 
 	  // map extents back into buffer
 	  map<off_t, bufferlist*> by_off;  // buffer offset -> bufferlist
-	  
+
+	  // for each object extent
 	  for (list<OSDExtent>::iterator eit = p->extents.begin();
 		   eit != p->extents.end();
 		   eit++) {
@@ -161,26 +162,32 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		int ox_off = 0;
 		assert(ox_len <= eit->len);           
 
-		for (map<size_t,size_t>::iterator bit = eit->extents_in_buffer.begin();
-			 bit != eit->extents_in_buffer.end();
+		// for each buffer extent we're mapping into...
+		for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
+			 bit != eit->buffer_extents.end();
 			 bit++) {
-		  dout(10) << "object " << eit->oid << " extent (...) : offset " << ox_off << " -> buffer " << bit->first << " len " << bit->second << endl;
+		  dout(10) << "object " << eit->oid << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
 		  by_off[bit->first] = new bufferlist;
+
 		  if (ox_off + bit->second <= ox_len) {
+			// we got the whole bx
 			by_off[bit->first]->substr_of(*ox_buf, ox_off, bit->second);
 			if (p->bytes_read < bit->first + bit->second) 
 			  p->bytes_read = bit->first + bit->second;
-		  } else if (ox_off > ox_len) {
+		  } else if (ox_off + bit->second > ox_len && ox_off < ox_len) {
+			// we got part of this bx
 			by_off[bit->first]->substr_of(*ox_buf, ox_off, (ox_len-ox_off));
 			if (p->bytes_read < bit->first + ox_len-ox_off) 
 			  p->bytes_read = bit->first + ox_len-ox_off;
 
-			// zero end bit
+			// zero end of bx
+			dout(10) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << endl;
 			bufferptr z = new buffer(ox_off + bit->second - ox_len);
 			memset(z.c_str(), 0, z.length());
 			by_off[bit->first]->append( z );
 		  } else {
-			// zero whole bit
+			// we got none of this bx.  zero whole thing.
+			dout(10) << "  adding all zeros for this bit " << bit->second << endl;
 			bufferptr z = new buffer(bit->second);
 			memset(z.c_str(), 0, z.length());
 			by_off[bit->first]->append( z );
@@ -285,8 +292,8 @@ Filer::write(inodeno_t ino,
 	// map buffer segments into this extent
 	// (may be fragmented bc of striping)
 	bufferlist cur;
-	for (map<size_t,size_t>::iterator bit = it->extents_in_buffer.begin();
-		 bit != it->extents_in_buffer.end();
+	for (map<size_t,size_t>::iterator bit = it->buffer_extents.begin();
+		 bit != it->buffer_extents.end();
 		 bit++) {
 	  bufferlist thisbit;
 	  thisbit.substr_of(bl, bit->first, bit->second);

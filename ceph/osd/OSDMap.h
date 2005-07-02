@@ -88,7 +88,7 @@ class OSDExtent {
   object_t    oid;       // object id
   repgroup_t  rg;        // replica group
   size_t      offset, len;   // extent within the object
-  map<size_t, size_t>  extents_in_buffer;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
+  map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
 
   OSDExtent() : osd(0), oid(0), rg(0), offset(0), len(0) { }
 };
@@ -251,7 +251,7 @@ class OSDCluster {
 					   list<OSDExtent>& extents) {
 	/* we want only one extent per object!
 	 * this means that each extent we read may map into different bits of the 
-	 * final read buffer.. hence OSDExtent.extents_in_buffer
+	 * final read buffer.. hence OSDExtent.buffer_extents
 	 */
 	map< object_t, OSDExtent > object_extents;
 
@@ -302,7 +302,7 @@ class OSDCluster {
 		ex->offset = x_offset;
 		ex->len = x_len;
 	  }
-	  ex->extents_in_buffer[cur-offset] = x_len;
+	  ex->buffer_extents[cur-offset] = x_len;
 	  
 	  //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
 
