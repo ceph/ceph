@@ -32,7 +32,8 @@ class bufferlist {
 	bdbout(1) << "bufferlist.cons " << this << endl;
   }
   bufferlist(bufferlist& bl) : _len(0) {
-	bdbout(1) << "bufferlist.cons " << this << endl;   // O(n) and stupid!
+	assert(0); // o(n) and stupid
+	bdbout(1) << "bufferlist.cons " << this << endl; 
 	_buffers = bl._buffers;
 	_len = bl._len;
   }
