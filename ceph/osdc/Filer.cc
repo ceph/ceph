@@ -177,13 +177,11 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 
 			// zero end bit
 			bufferptr z = new buffer(ox_off + bit->second - ox_len);
-			z.set_length(ox_off + bit->second - ox_len);
 			memset(z.c_str(), 0, z.length());
 			by_off[bit->first]->append( z );
 		  } else {
 			// zero whole bit
 			bufferptr z = new buffer(bit->second);
-			z.set_length(bit->second);
 			memset(z.c_str(), 0, z.length());
 			by_off[bit->first]->append( z );
 		  }

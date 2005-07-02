@@ -9,6 +9,7 @@ class MClientMount : public Message {
 
  public:
   MClientMount() : Message(MSG_CLIENT_MOUNT) { 
+	pcid = 0;
 	mkfs = 0;
   }
 

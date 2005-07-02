@@ -354,6 +354,7 @@ void OSD::op_read(MOSDOp *r)
 	reply->set_data(bl);
 	reply->set_length(got);
   } else {
+	bptr.set_length(0);
 	reply->set_result(got);   // error
 	reply->set_length(0);
   }

@@ -129,6 +129,7 @@ int tcpmessenger_init(int& argc, char**& argv)
   dout(DBL) << "listening on " << myport << endl;
   
   remote_addr = new sockaddr_in[mpi_world];
+  memset(remote_addr, 0, sizeof(sockaddr_in)*mpi_world);
 
   // my address is...
   char host[100];
@@ -138,6 +139,8 @@ int tcpmessenger_init(int& argc, char**& argv)
   struct hostent *myhostname = gethostbyname( host ); 
   
   struct sockaddr_in myaddr;
+  memset(&myaddr, 0, sizeof(myaddr));
+
   myaddr.sin_family = myhostname->h_addrtype;
   memcpy((char *) &myaddr.sin_addr.s_addr, 
 		 myhostname->h_addr_list[0], 
@@ -289,7 +292,6 @@ Message *tcp_recv(int from)
 	
 	tcp_read( in_sd[from], bp.c_str(), size );
 
-	bp.set_length(size);
 	blist.push_back(bp);
 
 	dout(DBL) << "tcp_recv got frag " << i << " of " << env.nchunks << " len " << bp.length() << endl;

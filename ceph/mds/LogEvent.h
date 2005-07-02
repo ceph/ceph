@@ -48,7 +48,6 @@ class LogEvent {
 	  //cout << "elen " << elen << "  adding " << add << endl;
 	  buffer *b = new buffer(add);
 	  memset(b->c_str(), 0, add);
-	  b->set_length(add);
 	  bufferptr bp(b);
 	  bl.append(bp);
 	} 

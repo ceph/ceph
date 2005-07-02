@@ -249,14 +249,16 @@ class bufferlist {
 	else {
 	  // make one new contiguous buffer.
 	  bufferptr newbuf = new buffer(length());
+	  int off = 0;
 
 	  for (list<bufferptr>::iterator it = _buffers.begin();
 		   it != _buffers.end();
 		   it++) {
-		memcpy(newbuf.c_str() + newbuf.length(),
+		memcpy(newbuf.c_str() + off,
 			   (*it).c_str(), (*it).length());
-		newbuf.set_length( newbuf.length() + (*it).length() );
+		off += (*it).length();
 	  }
+	  assert(off == newbuf.length());
 	  
 	  _buffers.clear();
 	  _buffers.push_back( newbuf );

@@ -212,7 +212,6 @@ Message *mpi_recv(int tag)
 					MPI_COMM_WORLD,
 					&fragstatus) == MPI_SUCCESS);
 
-	bp.set_length(fragstatus.count);
 	blist.push_back(bp);
 
 	dout(DBLVL) << "mpi_recv got frag " << i << " of " << env.nchunks << " len " << fragstatus.count << endl;

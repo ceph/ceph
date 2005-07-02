@@ -75,7 +75,7 @@ class buffer {
   buffer() : _dataptr(0), _len(0), _alloc_len(0), _ref(0), _myptr(true) { 
 	bdbout(1) << "buffer.cons " << *this << endl;
   }
-  buffer(int a) : _dataptr(0), _len(0), _alloc_len(a), _ref(0), _myptr(true) {
+  buffer(int a) : _dataptr(0), _len(a), _alloc_len(a), _ref(0), _myptr(true) {
 	bdbout(1) << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
 	bufferlock.Lock();

@@ -59,6 +59,7 @@ class MClientRequest : public Message {
  public:
   MClientRequest() {}
   MClientRequest(int op, int client) : Message(MSG_CLIENT_REQUEST) {
+	memset(&st, 0, sizeof(st));
 	this->st.op = op;
 	this->st.client = client;
 	this->st.iarg = 0;
@@ -121,8 +122,8 @@ class MClientRequest : public Message {
 inline ostream& operator<<(ostream& out, MClientRequest& req) {
   out << &req << " ";
   out << "client" << req.get_client() 
-	  << "." << req.get_tid() 
-	  << ".pcid=" << req.get_pcid() 
+	//	  << "." << req.get_tid() 
+	//<< ".pcid=" << req.get_pcid() 
 	  << ":";
   switch(req.get_op()) {
   case MDS_OP_STAT: 
@@ -163,7 +164,7 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
   case MDS_OP_CLOSE: 
 	out << "close"; break;
   default: 
-	out << req.get_op();
+	out << "unknown=" << req.get_op();
   }
   if (req.get_path().length()) 
 	out << "=" << req.get_path();

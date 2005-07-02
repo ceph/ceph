@@ -8,8 +8,8 @@ class MGenericMessage : public Message {
   long pcid;
 
  public:
-  MGenericMessage(int t) : Message(t) { 
-	sprintf(tname, "%d", get_type());
+  MGenericMessage(int t) : Message(t), pcid(0) { 
+	sprintf(tname, "generic%d", get_type());
   }
 
   void set_pcid(long pcid) { this->pcid = pcid; }
@@ -17,12 +17,13 @@ class MGenericMessage : public Message {
 
   char *get_type_name() { return tname; }
 
-  virtual void decode_payload(crope& s, int& off) {  
-	s.copy(off, sizeof(pcid), (char*)&pcid);
+  virtual void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(pcid), (char*)&pcid);
 	off += sizeof(pcid);
   }
-  virtual void encode_payload(crope& s) {  
-	s.append((char*)&pcid, sizeof(pcid));
+  virtual void encode_payload() {
+	payload.append((char*)&pcid, sizeof(pcid));
   }
 };
 
