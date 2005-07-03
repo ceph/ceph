@@ -243,7 +243,8 @@ int mpi_send(Message *m, int tag)
   if (m->empty_payload())
 	m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
-  bufferlist blist = m->get_payload();
+  bufferlist blist;
+  blist.claim( m->get_payload() );
   env->nchunks = blist.buffers().size();
 
   dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
