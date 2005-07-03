@@ -243,9 +243,7 @@ int mpi_send(Message *m, int tag)
   if (m->empty_payload())
 	m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
-  bufferlist blist;
-  blist.claim( m->get_payload() );
-  env->nchunks = blist.buffers().size();
+  env->nchunks = m->get_payload().buffers().size();
 
   dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
 
@@ -264,8 +262,8 @@ int mpi_send(Message *m, int tag)
 
   // payload
   int i = 0;
-  for (list<bufferptr>::iterator it = blist.buffers().begin();
-	   it != blist.buffers().end();
+  for (list<bufferptr>::iterator it = m->get_payload().buffers().begin();
+	   it != m->get_payload().buffers().end();
 	   it++) {
 	dout(DBLVL) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
 	MPI_Request *req = new MPI_Request;
