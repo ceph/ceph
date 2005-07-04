@@ -1,11 +1,22 @@
-#ifndef __Buffercache_H
-#define __Buffercache_H
+#ifndef __BUFFERCACHE_H
+#define __BUFFERCACHE_H
 
+#include <time.h>
+
+#include "include/types.h"
 #include "include/buffer.h"
 #include "include/bufferlist.h"
 #include "include/lru.h"
+#include "common/Cond.h"
+
+// stl
+#include <set>
+#include <list>
+#include <map>
+using namespace std;
 
 // FIXME: buffer constants
+#define BUFC_ALLOC_MINSIZE 1024
 #define BUFC_ALLOC_MAXSIZE 262144
 
 // Bufferhead states
@@ -14,11 +25,12 @@
 #define BUFHD_STATE_INFLIGHT  3
 
 class Buffercache;
+class Filecache;
 
 class Bufferhead : public LRUObject {
-  // reference counting
   int ref;
 
+ public: // FIXME: make more private and write some accessors
   int get() {
 	assert(ref >= 0);
 	if (ref == 0) lru_pin();
@@ -29,9 +41,7 @@ class Bufferhead : public LRUObject {
 	ref--;
 	if (ref == 0) lru_unpin();
   }
-
   
- public: // FIXME: make more private and write some accessors
   off_t offset;
   size_t len;
   inodeno_t ino;
@@ -42,25 +52,16 @@ class Bufferhead : public LRUObject {
   // write_waiters: threads waiting for writes into the buffer
   list<Cond*> read_waiters, write_waiters;
   Buffercache *bc;
+  Filecache *fc;
   
   // cons/destructors
-  Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc, int state=BUFHD_STATE_CLEAN) 
-	: ref(0) {
-	this->ino = ino;
-    this->offset = off;
-	this->len = len;
-	this->state = state;
-    this->bc = bc;
-    last_written = time();
-    // buffers are allocated later
-  }
-  
-  ~Bufferhead() {
-  }
+  Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc);
+  ~Bufferhead(); 
   
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
   
+  void alloc_buffers();
 
   /** wait_for_(read|write) 
    * put Cond on local stack, block until woken up.
@@ -110,82 +111,59 @@ class Bufferhead : public LRUObject {
 	wakeup_write_waiters();
   }
   
-  void mark_dirty() {
-    if (state == BUFHD_STATE_CLEAN) {
-      state = BUFHD_STATE_DIRTY;
-      bc->dirty_size += bh->len;
-      bc->clean_size -= bh->len;
-      if (bc->dirty_buffers.count(offset)) {
-        bc->dirty_buffers.insert(this); 
-        get();
-      }
-      if (bc->bcache_map[ino]->dirty_buffers.count(offset)) {
-        bc->bcache_map[ino]->dirty_buffers.insert(this); 
-        get();
-      }
-    }    
-  }
-  
-  void flush_start() {
-	assert(state == BUFHD_STATE_DIRTY);
-	state = BUFHD_STATE_INFLIGHT;
-    bc->dirty_size -= len;
-    bc->flush_size += len;
-  }
-  
-  void flush_finish() {
-	assert(state == BUFHD_STATE_INFLIGHT);
-	state = BUFHD_STATE_CLEAN;
-    last_written = time();
-    bc->flush_size -= len;
-    bc->clean_size += len;
-    bc->dirty_buffers.erase(this); put();
-    bc->bcache_map[ino]->dirty_buffers.erase(this); put();
-	wakeup_write_waiters(); // readers never wait on flushes
-  }
-  
-  void claim_append(Bufferhead *other) {
-	bl.claim_append(other->bl);
-	len += other->len;
-    if (other->last_written < last_written) last_written = other->last_written;
-	other->bl.clear();
-	other->len = 0;
-  }
+  void dirty();
+  void clean();
+  void flush_start();
+  void flush_finish();
+  void claim_append(Bufferhead* other);
 };
-
-
+  
 class Filecache {
  public: 
   map<off_t, Bufferhead*> buffer_map;
   set<Bufferhead*> dirty_buffers;
   list<Cond*> waitfor_flushed;
+  Buffercache *bc;
+
+  Filecache(Buffercache *bc) { 
+    this->bc = bc;
+    buffer_map.clear();
+  }
 
   size_t length() {
     size_t len = 0;
     for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
          it != buffer_map.end();
          it++) {
-      len += (*it)->second->len;
+      len += it->second->len;
     }
     return len;
+  }
+
+  void wait_for_flush(Mutex &lock) {
+	Cond cond;
+	waitfor_flushed.push_back(&cond);
+	cond.Wait(lock);
   }
 
   map<off_t, Bufferhead*>::iterator overlap(size_t len, off_t off);
   void copy_out(size_t size, off_t offset, char *dst);    
   void map_existing(size_t len, off_t start_off, 
-                    map<off_t, Bufferhead*>& hits, inflight,
+                    map<off_t, Bufferhead*>& hits, 
+		    map<off_t, Bufferhead*>& inflight,
                     map<off_t, size_t>& holes);
-  void simplify(list<Bufferhead*>& removed);
-
+  void simplify();
 };
 
 class Buffercache { 
  public:
   map<inodeno_t, Filecache*> bcache_map;
   LRU lru;
-  size_t dirty_size = 0, flushing_size = 0, clean_size = 0;
+  size_t dirty_size, flushing_size, clean_size;
   set<Bufferhead*> dirty_buffers;
   list<Cond*> waitfor_flushed;
+
+  Buffercache() : dirty_size(0), flushing_size(0), clean_size(0) { }
   
   // FIXME: constructor & destructor need to mesh with allocator scheme
   ~Buffercache() {
@@ -193,17 +171,17 @@ class Buffercache {
     for (map<inodeno_t, Filecache*>::iterator it = bcache_map.begin();
          it != bcache_map.end();
          it++) {
-      delete (*it)->second; 
+      delete it->second; 
     }
   }
   
   void insert(Bufferhead *bh);
-  void dirty(inodeno_t ino, size_t size, off_t offset, char *src);
-  void simplify(inodeno_t ino);
-  Bufferhead *alloc_buffers(inodeno_t ino, size_t size, off_t offset, int state);
+
+  void dirty(inodeno_t ino, size_t size, off_t offset, const char *src);
+  int touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
   void map_or_alloc(inodeno_t ino, size_t len, off_t off, 
-                    map<off_t, Bufferhead*>& buffers, inflight);
-  void free_buffers(Bufferhead *bh);
+                    map<off_t, Bufferhead*>& buffers, 
+		    map<off_t, Bufferhead*>& inflight);
   void release_file(inodeno_t ino);       
   size_t reclaim(size_t min_size);
 };
