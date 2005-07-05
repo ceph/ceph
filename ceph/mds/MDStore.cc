@@ -535,6 +535,8 @@ class MDDoFetchDirContext : public Context {
 	size_t size;
 	bl.copy(0, sizeof(size_t), (char*)&size);
 	size_t got = bl.length() - sizeof(size);
+	size_t left = size - got;
+	size_t from = bl.length();
 
 	if (got >= size) {
 	  // done.
@@ -542,14 +544,14 @@ class MDDoFetchDirContext : public Context {
 	}
 	else {
 	  // read the rest!
-	  cout << "do_fetch_dir_2 dir size is " << size << ", got " << got << ", reading rest" << endl;
+	  cout << "do_fetch_dir_2 dir size is " << size << ", got " << got << ", reading remaniing " << left << " from off " << from << endl;
 	  
 	  // create return context
 	  MDDoFetchDirContext *fin = new MDDoFetchDirContext( mds, ino, context, hashcode );
 	  fin->bl.claim( bl );
 	  mds->filer->read(ino,
 					   g_OSD_MDDirLayout,
-					   size - got, bl.length(),
+					   left, from,
 					   &fin->bl2,
 					   fin );
 	  return;
