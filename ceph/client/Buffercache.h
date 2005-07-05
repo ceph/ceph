@@ -43,7 +43,6 @@ class Bufferhead : public LRUObject {
   }
   
   off_t offset;
-  size_t len;
   inodeno_t ino;
   time_t last_written;
   int state; 
@@ -55,13 +54,13 @@ class Bufferhead : public LRUObject {
   Filecache *fc;
   
   // cons/destructors
-  Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc);
+  Bufferhead(inodeno_t ino, off_t off, Buffercache *bc);
   ~Bufferhead(); 
   
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
   
-  void alloc_buffers();
+  void alloc_buffers(size_t size);
 
   /** wait_for_(read|write) 
    * put Cond on local stack, block until woken up.
@@ -135,7 +134,7 @@ class Filecache {
     for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
          it != buffer_map.end();
          it++) {
-      len += it->second->len;
+      len += it->second->bl.length();
     }
     return len;
   }
@@ -147,8 +146,8 @@ class Filecache {
   }
 
   map<off_t, Bufferhead*>::iterator overlap(size_t len, off_t off);
-  void copy_out(size_t size, off_t offset, char *dst);    
-  void map_existing(size_t len, off_t start_off, 
+  int copy_out(size_t size, off_t offset, char *dst);    
+  map<off_t, Bufferhead*>::iterator map_existing(size_t len, off_t start_off, 
                     map<off_t, Bufferhead*>& hits, 
 		    map<off_t, Bufferhead*>& inflight,
                     map<off_t, size_t>& holes);
@@ -175,6 +174,13 @@ class Buffercache {
     }
   }
   
+  Filecache *get_fc(inodeno_t ino) {
+    if (!bcache_map.count(ino)) {
+      bcache_map[ino] = new Filecache(this);
+    } 
+    return bcache_map[ino];
+  }
+      
   void insert(Bufferhead *bh);
 
   void dirty(inodeno_t ino, size_t size, off_t offset, const char *src);

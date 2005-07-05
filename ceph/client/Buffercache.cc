@@ -6,22 +6,16 @@
 
 // -- Bufferhead methods
 
-Bufferhead::Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc) : 
+Bufferhead::Bufferhead(inodeno_t ino, off_t off, Buffercache *bc) : 
   ref(0) {
-  dout(10) << "bc: new bufferhead ino: " << ino << " len: " << len << " offset: " << off << endl;
+  dout(10) << "bc: new bufferhead ino: " << ino << " offset: " << off << endl;
   this->ino = ino;
-  this->offset = off;
-  this->len = len;
-  this->state = BUFHD_STATE_CLEAN;
+  offset = off;
+  state = BUFHD_STATE_CLEAN;
   this->bc = bc;
-  if (bc->bcache_map.count(ino)) {
-    fc = bc->bcache_map[ino];
-  } else {
-    fc = new Filecache(bc);
-    bc->bcache_map[ino] = fc;
-  }
+  fc = bc->get_fc(ino);
   bc->lru.lru_insert_top(this); //FIXME: parameterize whether top or mid
-  bc->clean_size += len;
+  bc->clean_size += bl.length();
   dout(10) << "bc: clean_size: " << bc->clean_size << " dirty_size: " << bc->dirty_size << " flushing_size: " << bc->flushing_size << endl;
   assert(!fc->buffer_map.count(offset)); // fail loudly if offset already exists!
   fc->buffer_map[offset] = this; 
@@ -31,24 +25,30 @@ Bufferhead::Bufferhead(inodeno_t ino, off_t off, size_t len, Buffercache *bc) :
 
 Bufferhead::~Bufferhead()
 {
-  dout(10) << "bc: destroying bufferhead ino: " << ino << " len: " << len << " offset: " << offset << endl;
+  dout(10) << "bc: destroying bufferhead ino: " << ino << " size: " << bl.length() << " offset: " << offset << endl;
   assert(state == BUFHD_STATE_CLEAN);
   assert(ref == 0);
   assert(lru_is_expireable());
   assert(read_waiters.empty());
   assert(write_waiters.empty());
   bc->lru.lru_remove(this);   
-  fc->buffer_map.erase(offset); 
-  if (fc->buffer_map.empty()) {
-    bc->bcache_map.erase(ino);
-    delete fc;  
-  }
+  // debug segmentation fault
+  if (bl.buffers().empty()) {
+    dout(10) << "bc: bufferlist is empty" << endl;
+  } else {
+    for (list<bufferptr>::iterator it = bl.buffers().begin();
+         it != bl.buffers().end();
+	 it++) {
+      //dout(10) << "bc: bufferptr len: " << it->length() << " off: " << it->offset() << endl;
+      dout(10) << "bc: bufferptr: " << *it << endl; 
+    }
+    dout(10) <<"bc: listed all bufferptrs" << endl;
+  }   
 }
 
-void Bufferhead::alloc_buffers()
+void Bufferhead::alloc_buffers(size_t size)
 {
-  dout(10) << "bc: allocating buffers len: " << len << endl;
-  size_t size = this->len;
+  dout(10) << "bc: allocating buffers size: " << size << endl;
   while (size > 0) {
     if (size <= BUFC_ALLOC_MAXSIZE) {
           size_t k = BUFC_ALLOC_MINSIZE;
@@ -70,10 +70,10 @@ void Bufferhead::alloc_buffers()
 
 void Bufferhead::dirty() {
   if (state == BUFHD_STATE_CLEAN) {
-    dout(10) << "bc: dirtying clean buffer of len " << len << endl;
+    dout(10) << "bc: dirtying clean buffer size: " << bl.length() << endl;
     state = BUFHD_STATE_DIRTY;
-    bc->dirty_size += len;
-    bc->clean_size -= len;
+    bc->dirty_size += bl.length();
+    bc->clean_size -= bl.length();
     dout(10) << "bc: clean_size: " << bc->clean_size << " dirty_size: " << bc->dirty_size << " flushing_size: " << bc->flushing_size << endl;
     assert(!bc->dirty_buffers.count(this));
     bc->dirty_buffers.insert(this); 
@@ -82,12 +82,12 @@ void Bufferhead::dirty() {
     fc->dirty_buffers.insert(this); 
     get();
   } else {
-    dout(10) << "bc: dirtying dirty buffer of len " << len << endl;
+    dout(10) << "bc: dirtying dirty buffer size: " << bl.length() << endl;
   }
 }
 
 void Bufferhead::clean() {
-  dout(10) << "bc: cleaning buffer of len " << len << " in state " << state << endl;
+  dout(10) << "bc: cleaning buffer size: " << bl.length() << " in state " << state << endl;
   state = BUFHD_STATE_CLEAN;
   assert(bc->dirty_buffers.count(this));
   bc->dirty_buffers.erase(this);
@@ -101,31 +101,30 @@ void Bufferhead::flush_start() {
   dout(10) << "bc: flush_start" << endl;
   assert(state == BUFHD_STATE_DIRTY);
   state = BUFHD_STATE_INFLIGHT;
-  bc->dirty_size -= len;
-  bc->flushing_size += len;
+  bc->dirty_size -= bl.length();
+  bc->flushing_size += bl.length();
   dout(10) << "bc: clean_size: " << bc->clean_size << " dirty_size: " << bc->dirty_size << " flushing_size: " << bc->flushing_size << endl;
 }
 
 void Bufferhead::flush_finish() {
-  dout(10) << "flush_finish" << endl;
+  dout(10) << "bc: flush_finish" << endl;
   assert(state == BUFHD_STATE_INFLIGHT);
   last_written = time(NULL);
   clean();
-  bc->flushing_size -= len;
-  bc->clean_size += len;
+  bc->flushing_size -= bl.length();
+  bc->clean_size += bl.length();
   dout(10) << "bc: clean_size: " << bc->clean_size << " dirty_size: " << bc->dirty_size << " flushing_size: " << bc->flushing_size << endl;
   wakeup_write_waiters(); // readers never wait on flushes
 }
 
 void Bufferhead::claim_append(Bufferhead *other) 
 {
-  dout(10) << "bc: claim_append old bl size: " << bl.buffers().size() << " len: " << len << endl;
+  dout(10) << "bc: claim_append old bl size: " << bl.buffers().size() << " length " << bl.length() << endl;
   bl.claim_append(other->bl);
-  len += other->len;
-  dout(10) << "bc: claim_append new bl size: " << bl.buffers().size() << " len: " << len << endl;
+  dout(10) << "bc: claim_append new bl size: " << bl.buffers().size() << " length: " << bl.length() << endl;
+  // keep older time stamp
   if (other->last_written < last_written) last_written = other->last_written;
   other->bl.clear();
-  other->len = 0;
 }
 
 // -- Filecache methods
@@ -136,52 +135,59 @@ map<off_t, Bufferhead*>::iterator Filecache::overlap(size_t len, off_t off)
   dout(7) << "bc: overlap " << len << " " << off << endl;
   map<off_t, Bufferhead*>::iterator it = buffer_map.lower_bound(off);
   if (it == buffer_map.end() || it->first < off + len) {
+    dout(10) << "bc: overlap -- either no lower bound or overlap found" << endl;
     return it;
   } else if (it == buffer_map.begin()) {
+    dout(10) << "bc: overlap -- extent is below where buffer_map begins" << endl;
     return buffer_map.end();
   } else {
+    dout(10) << "bc: overlap -- examining previous buffer" << endl;
     it--;
     if (it->first + it->second->bl.length() > off) {
+      dout(10) << "bc: overlap -- found overlap with previous buffer" << endl;
       return it;
     } else {
+      dout(10) << "bc: overlap -- no overlap with previous buffer" << endl;
       return buffer_map.end();
     }
   }
 }
 
-void Filecache::map_existing(size_t len, 
-                             off_t start_off,
-                             map<off_t, Bufferhead*>& hits, 
-                             map<off_t, Bufferhead*>& inflight, 
-                             map<off_t, size_t>& holes)
+map<off_t, Bufferhead*>::iterator 
+Filecache::map_existing(size_t len, 
+			off_t start_off,
+			map<off_t, Bufferhead*>& hits, 
+			map<off_t, Bufferhead*>& inflight, 
+			map<off_t, size_t>& holes)
 {
   dout(7) << "bc: map_existing len: " << len << " off: " << start_off << endl;
   off_t need_off = start_off;
   off_t actual_off = start_off;
-  for (map<off_t, Bufferhead*>::iterator existing = overlap(len, start_off);
+  map<off_t, Bufferhead*>::iterator existing, rvalue = overlap(len, start_off);
+  for (existing = rvalue;
        existing != buffer_map.end() && existing->first < start_off + len;
        existing++) {
-    actual_off = existing->first;
     dout(7) << "bc: map: found overlap at offset " << actual_off << endl;
+    actual_off = existing->first;
     Bufferhead *bh = existing->second;
-    bc->lru.lru_touch(bh);
     if (actual_off > need_off) {
       holes[need_off] = (size_t) (actual_off - need_off);
       dout(10) << "bc: map: hole " << need_off << " " << holes[need_off] << endl;
     }
     if (bh->state == BUFHD_STATE_INFLIGHT) {
       inflight[actual_off] = bh;
-      dout(10) << "bc: map: inflight " << actual_off << " " << inflight[actual_off] << endl;
+      dout(10) << "bc: map: inflight " << actual_off << " " << inflight[actual_off]->bl.length() << endl;
     } else {
       hits[actual_off] = bh;
-      dout(10) << "bc: map: hits " << actual_off << " " << hits[actual_off] << endl;
+      dout(10) << "bc: map: hits " << actual_off << " " << hits[actual_off]->bl.length() << endl;
     }
-    need_off = actual_off + bh->len;
+    need_off = actual_off + bh->bl.length();
   }
   if (need_off < actual_off + len) {
     holes[need_off] = (size_t) (actual_off + len - need_off);
     dout(10) << "bc: map: hole " << need_off << " " << holes[need_off] << endl;
   }
+  return rvalue;
 }
 
 void Filecache::simplify()
@@ -194,11 +200,10 @@ void Filecache::simplify()
   int count = 0;
   while (start != buffer_map.end()) {
     next++;
-    dout(10) << "bc: simplify next: " << next->first << " " << next->second->len << endl;
     while (next != buffer_map.end() &&
            start->second->state != BUFHD_STATE_INFLIGHT &&
 	   start->second->state == next->second->state &&
-	   start->second->offset + start->second->len == next->second->offset &&
+	   start->second->offset + start->second->bl.length() == next->second->offset &&
 	   next->second->read_waiters.empty() &&
 	   next->second->write_waiters.empty()) {
       dout(10) << "bc: simplify start: " << start->first << " next: " << next->first << endl;
@@ -211,7 +216,7 @@ void Filecache::simplify()
     }
     if (next != buffer_map.end()) {
       dout(10) << "bc: simplify failed, start state: " << start->second->state << " next state: " << next->second->state << endl;
-      dout(10) << "bc: simplify failed, start offset + len " << start->second->offset + start->second->len << " next offset: " << next->second->offset << endl;
+      dout(10) << "bc: simplify failed, start offset + len " << start->second->offset + start->second->bl.length() << " next offset: " << next->second->offset << endl;
       dout(10) << "bc: simplify failed, " << next->second->read_waiters.size() << " read waiters" << endl;
       dout(10) << "bc: simplify failed, " << next->second->write_waiters.size() << " write waiters" << endl;
     }
@@ -221,28 +226,38 @@ void Filecache::simplify()
   for (list<Bufferhead*>::iterator it = removed.begin();
        it != removed.end();
        it++) {
+    buffer_map.erase((*it)->offset);
     delete *it;
   }
+  assert(!buffer_map.empty());
 }
 
-void Filecache::copy_out(size_t size, off_t offset, char *dst) 
+int Filecache::copy_out(size_t size, off_t offset, char *dst) 
 {
   dout(7) << "bc: copy_out size: " << size << " offset: " << offset << endl;
   assert(offset >= 0);
   assert(offset + size <= length());
+  int rvalue = size;
   
   map<off_t, Bufferhead*>::iterator curbuf = overlap(size, offset);
+  if (curbuf == buffer_map.end()) {
+    return -1;
+  }
   offset -= curbuf->first;
   assert(offset >= 0);
   
   while (size > 0) {
     Bufferhead *bh = curbuf->second;
-    if (offset + size <= bh->len) {
+    if (offset + size <= bh->bl.length()) {
+      dout(10) << "bc: copy_out bh len: " << bh->bl.length() << endl;
+      dout(10) << "bc: want to copy off: " << offset << " size: " << size << endl;
       bh->bl.copy(offset, size, dst);
       break;
     }
     
-    int howmuch = bh->len - offset;
+    int howmuch = bh->bl.length() - offset;
+    dout(10) << "bc: copy_out bh len: " << bh->bl.length() << endl;
+    dout(10) << "bc: want to copy off: " << offset << " size: " << howmuch << endl;
     bh->bl.copy(offset, howmuch, dst);
     
     dst += howmuch;
@@ -251,6 +266,7 @@ void Filecache::copy_out(size_t size, off_t offset, char *dst)
     curbuf++;
     assert(curbuf != buffer_map.end());
   }
+  return rvalue;
 }
 
 // -- Buffercache methods
@@ -269,13 +285,13 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
   
   while (size > 0) {
     Bufferhead *bh = curbuf->second;
-    if (offset + size <= bh->len) {
+    if (offset + size <= bh->bl.length()) {
       bh->bl.copy_in(offset, size, src); // last bit
       bh->dirty();
       break;
     }
     
-    int howmuch = bh->len - offset;
+    int howmuch = bh->bl.length() - offset;
     bh->bl.copy_in(offset, howmuch, src);
     bh->dirty();    
     src += howmuch;
@@ -290,16 +306,17 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
 int Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset)
 {
   dout(7) << "bc: touch_continuous size: " << size << " offset: " << offset << endl;
-  off_t next_off;
+  off_t next_off = offset;
   for (map<off_t, Bufferhead*>::iterator curbuf = hits.begin(); 
        curbuf != hits.end(); 
        curbuf++) {
-    if (curbuf != hits.begin() &&
-        curbuf->first != next_off) {
+    if (curbuf == hits.begin()) {
+      next_off = curbuf->first;
+    } else if (curbuf->first != next_off) {
       break;
     }
     lru.lru_touch(curbuf->second);
-    next_off += curbuf->second->len;
+    next_off += curbuf->second->bl.length();
   }
   return (int)(next_off - offset) >= size ? size : (next_off - offset);
 }
@@ -309,8 +326,7 @@ void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset,
                                map<off_t, Bufferhead*>& inflight)
 {
   dout(7) << "bc: map_or_alloc len: " << size << " off: " << offset << endl;
-  if (!bcache_map.count(ino)) bcache_map[ino] = new Filecache(this);
-  Filecache *fc = bcache_map[ino];
+  Filecache *fc = get_fc(ino);
   map<off_t, size_t> holes;
   fc->map_existing(size, offset, buffers, inflight, holes);
   // stuff buffers into holes
@@ -319,9 +335,9 @@ void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset,
        hole++) {
     dout(10) << "bc: allocate hole " << hole->first << " " << hole->second << endl;
     assert(buffers.count(hole->first) == 0);
-    Bufferhead *bh = new Bufferhead(ino, hole->first, hole->second, this);
+    Bufferhead *bh = new Bufferhead(ino, hole->first, this);
     buffers[hole->first] = bh;
-    bh->alloc_buffers();
+    bh->alloc_buffers(hole->second);
   }
   // split buffers
   // FIXME: not implemented yet
@@ -335,10 +351,13 @@ void Buffercache::release_file(inodeno_t ino)
   for (map<off_t, Bufferhead*>::iterator it = fc->buffer_map.begin();
        it != fc->buffer_map.end();
        it++) {
-    clean_size -= it->second->len;
+    clean_size -= it->second->bl.length();
     dout(10) << "bc: clean_size: " << clean_size << " dirty_size: " << dirty_size << " flushing_size: " << flushing_size << endl;
     delete it->second;    
   }
+  fc->buffer_map.clear();
+  bcache_map.erase(ino);
+  delete fc;  
 }
 
 size_t Buffercache::reclaim(size_t min_size)
@@ -352,8 +371,13 @@ size_t Buffercache::reclaim(size_t min_size)
     } else {
       assert(bh->state == BUFHD_STATE_CLEAN);
       freed_size += bh->bl.length();
-      clean_size -= bh->len;
+      clean_size -= bh->bl.length();
       dout(10) << "bc: clean_size: " << clean_size << " dirty_size: " << dirty_size << " flushing_size: " << flushing_size << endl;
+      bh->fc->buffer_map.erase(bh->offset);
+      if (bh->fc->buffer_map.empty()) {
+        bcache_map.erase(bh->ino);
+	delete bh->fc;
+      }
       delete bh;
     }
   }
