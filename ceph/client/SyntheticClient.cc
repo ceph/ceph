@@ -43,6 +43,7 @@ string SyntheticClient::get_sarg()
 int SyntheticClient::run()
 { 
   run_start = g_clock.gettimepair();
+  run_until = timepair_t(0,0);
 
   for (list<int>::iterator it = modes.begin();
 	   it != modes.end();
@@ -54,9 +55,14 @@ int SyntheticClient::run()
 	  {
 		int iarg1 = iargs.front();
 		iargs.pop_front();
-		dout(2) << "until " << iarg1 << endl;
-		timepair_t dur(iarg1,0);
-		run_until = run_start + dur;
+		if (iarg1) {
+		  dout(2) << "until " << iarg1 << endl;
+		  timepair_t dur(iarg1,0);
+		  run_until = run_start + dur;
+		} else {
+		  dout(2) << "until " << iarg1 << " (no limit)" << endl;
+		  run_until = timepair_t(0,0);
+		}
 	  }
 	  break;
 	case SYNCLIENT_MODE_RANDOMWALK:
@@ -172,7 +178,7 @@ void SyntheticClient::up()
 
 int SyntheticClient::full_walk(string& basedir) 
 {
-  if (g_clock.gettimepair() > run_until) return 0;
+  if (run_until.first && g_clock.gettimepair() > run_until) return 0;
 
   // read dir
   map<string, inode_t*> contents;
@@ -202,7 +208,7 @@ int SyntheticClient::full_walk(string& basedir)
 
 int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int depth)
 {
-  if (g_clock.gettimepair() > run_until) return 0;
+  if (run_until.first && g_clock.gettimepair() > run_until) return 0;
 
   // make sure base dir exists
   int r = client->mkdir(basedir, 0755);
@@ -243,7 +249,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
-	if (g_clock.gettimepair() > run_until) break;
+	if (run_until.first && g_clock.gettimepair() > run_until) break;
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	client->write(fd, buf, wrsize, i*wrsize);
   }
@@ -263,7 +269,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
-	if (g_clock.gettimepair() > run_until) break;
+	if (run_until.first && g_clock.gettimepair() > run_until) break;
 	dout(2) << "reading block " << i << "/" << chunks << endl;
 	client->read(fd, buf, rdsize, i*rdsize);
   }
@@ -285,7 +291,7 @@ int SyntheticClient::random_walk(int num_req)
   while (left > 0) {
 	left--;
 
-	if (g_clock.gettimepair() > run_until) break;
+	if (run_until.first && g_clock.gettimepair() > run_until) break;
 
 	// ascend?
 	if (cwd.depth() && roll_die(.05)) {
