@@ -271,6 +271,7 @@ class MDCache {
 
 
   // -- file i/o --
+  __uint64_t issue_file_data_version(CInode *in);
   int issue_file_caps(CInode *in, int mode, MClientRequest *req);
   void eval_file_caps(CInode *in);
   void handle_client_file_caps(class MClientFileCaps *m);

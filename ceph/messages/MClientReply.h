@@ -95,6 +95,7 @@ typedef struct {
   int trace_depth;
   int dir_size;
   unsigned char file_caps;  // for open
+  __uint64_t file_data_version;  // for client buffercache consistency
 } MClientReply_st;
 
 class MClientReply : public Message {
@@ -117,9 +118,11 @@ class MClientReply : public Message {
   const vector<c_inode_info*>& get_trace() { return trace; }
   vector<c_inode_info*>& get_dir_contents() { return dir_contents; }
   unsigned char get_file_caps() { return st.file_caps; }
+  __uint64_t get_file_data_version() { return st.file_data_version; }
   
   void set_result(int r) { st.result = r; }
   void set_file_caps(unsigned char c) { st.file_caps = c; }
+  void set_file_data_version(__uint64_t v) { st.file_data_version = v; }
 
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 

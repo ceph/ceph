@@ -3237,6 +3237,11 @@ void MDCache::handle_rename_notify(MRenameNotify *m)
 
 // file i/o -----------------------------------------
 
+__uint64_t MDCache::issue_file_data_version(CInode *in)
+{
+  dout(7) << "issue_file_data_version on " << *in << endl;
+  return in->inode.file_data_version;
+}
 
 
 int MDCache::issue_file_caps(CInode *in,
@@ -3295,6 +3300,13 @@ int MDCache::issue_file_caps(CInode *in,
   int caps = my_want & allowed;
   dout(7) << " issuing caps " << caps << " (i want " << my_want << ", allowed " << allowed << ")" << endl;
   assert(caps > 0);
+
+  // issuing new write permissions?
+  if ((issued & CFILE_CAP_WR) == 0 &&
+	  (  caps & CFILE_CAP_WR) != 0) {
+	dout(7) << " incrementing file_data_version for " << *in << endl;
+	in->inode.file_data_version++;
+  }
 
   return caps;
 }

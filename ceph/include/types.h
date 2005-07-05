@@ -92,6 +92,7 @@ struct inode_t {
   unsigned char hash_seed;  // 0 if not hashed.
   int   nlink;
   bool  anchored;
+  __uint64_t file_data_version;
 };
 
 

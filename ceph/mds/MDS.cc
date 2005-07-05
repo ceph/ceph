@@ -2258,6 +2258,7 @@ void MDS::handle_client_open(MClientRequest *req,
 
 
   // can we issue the caps they want?
+  __uint64_t fdv = mdcache->issue_file_data_version(cur);
   int caps = mdcache->issue_file_caps(cur, mode, req);
   if (!caps) return; // can't issue (yet), so wait!
 
@@ -2282,6 +2283,7 @@ void MDS::handle_client_open(MClientRequest *req,
   // reply
   MClientReply *reply = new MClientReply(req, f->fh);   // fh # is return code
   reply->set_file_caps(caps);
+  reply->set_file_data_version(fdv);
   reply_request(req, reply, cur);
 }
 
@@ -2350,7 +2352,16 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   }
 
   // atime?  ****
-  
+
+  // were we writing?
+  int had_caps = f->pending_caps & f->confirmed_caps;  // safe set of caps the client can assume it had
+
+  if ((f->confirmed_caps | f->pending_caps) & CFILE_CAP_WR != 0) { 
+	// inc file_data_version
+	dout(7) << " incrementing file_data_version for " << *cur << endl;
+	cur->inode.file_data_version++;
+  }
+
   // close it.
   cur->remove_fh(f);
 
@@ -2372,8 +2383,15 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
 
   // XXX what about atime?
 
+
+  // give back a file_data_version to client
+  MClientReply *reply = new MClientReply(req, 0);
+  __uint64_t fdv = mdcache->issue_file_data_version(cur);
+  reply->set_file_caps(had_caps);
+  reply->set_file_data_version(fdv);
+
   // commit
-  commit_request(req, new MClientReply(req, 0), cur,
+  commit_request(req, reply, cur,
 				 new EInodeUpdate(cur));               // FIXME wrong message?
 }
 
