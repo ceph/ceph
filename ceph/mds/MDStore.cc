@@ -442,21 +442,21 @@ void MDStore::do_commit_dir_2( int result,
 
 	// dentry
 	if (committed_version > dn->get_parent_dir_version()) {
-	  dout(5) << " dir " << committed_version << " > dn " << dn->get_parent_dir_version() << " still clean " << *dn << endl;
+	  dout(15) << " dir " << committed_version << " > dn " << dn->get_parent_dir_version() << " still clean " << *dn << endl;
 	  assert(!dn->is_dirty());
 	}
 	else if (dn->get_parent_dir_version() == committed_version) {
-	  dout(5) << " dir " << committed_version << " == dn " << dn->get_parent_dir_version() << " now clean " << *dn << endl;
+	  dout(15) << " dir " << committed_version << " == dn " << dn->get_parent_dir_version() << " now clean " << *dn << endl;
 	  dn->mark_clean();     // might not but could be dirty
 	  
 	  // remove, if it's null and unlocked
 	  if (dn->is_null() && dn->is_sync()) {
-		dout(5) << "   removing clean and null " << *dn << endl;
+		dout(15) << "   removing clean and null " << *dn << endl;
 		null_clean.push_back(dn);
 		continue;
 	  }
 	} else {
-	  dout(5) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
+	  dout(15) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
 	  assert(committed_version < dn->get_parent_dir_version());
 	  assert(dn->is_dirty() || !dn->is_sync());
 	}
@@ -469,14 +469,14 @@ void MDStore::do_commit_dir_2( int result,
 	assert(in->is_auth());
 	
 	if (committed_version > in->get_parent_dir_version()) {
-	  dout(5) << " dir " << committed_version << " > inode " << in->get_parent_dir_version() << " still clean " << *(in) << endl;
+	  dout(15) << " dir " << committed_version << " > inode " << in->get_parent_dir_version() << " still clean " << *(in) << endl;
 	  assert(!in->is_dirty());
 	}
 	else if (in->get_parent_dir_version() == committed_version) {
-	  dout(5) << " dir " << committed_version << " == inode " << in->get_parent_dir_version() << " now clean " << *(in) << endl;
+	  dout(15) << " dir " << committed_version << " == inode " << in->get_parent_dir_version() << " now clean " << *(in) << endl;
 	  in->mark_clean();     // might not but could be dirty
 	} else {
-	  dout(5) << " dir " << committed_version << " < inode " << in->get_parent_dir_version() << " still dirty " << *(in) << endl;
+	  dout(15) << " dir " << committed_version << " < inode " << in->get_parent_dir_version() << " still dirty " << *(in) << endl;
 	  assert(committed_version < in->get_parent_dir_version());
 	  assert(in->is_dirty());
 	}
