@@ -161,6 +161,7 @@ int main(int oargc, char **oargv) {
 	}
 	
 	// create client
+	int nclients = 0;
 	for (int i=0; i<NUMCLIENT; i++) {
 	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
 	  
@@ -177,11 +178,16 @@ int main(int oargc, char **oargv) {
 	  syn[i]->sargs = syn_sargs;
 	  syn[i]->iargs = syn_iargs;
 	  syn[i]->start_thread();
+
+	  nclients++;
+	}
+	if (nclients) {
+	  cout << "waiting for " << nclients << " clients to finish" << endl;
 	}
 	for (int i=0; i<NUMCLIENT; i++) {
 	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
 	  
-	  cout << "waiting for synthetic client" << i << " to finish" << endl;
+	  //	  cout << "waiting for synthetic client" << i << " to finish" << endl;
 	  syn[i]->join_thread();
 	  delete syn[i];
 
