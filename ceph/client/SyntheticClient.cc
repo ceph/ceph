@@ -113,6 +113,7 @@ int SyntheticClient::start_thread()
   assert(!thread_id);
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
+  assert(thread_id);
 }
 
 int SyntheticClient::join_thread()
@@ -242,7 +243,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
-	if (g_clock.gettimepair() > run_until) return 0;
+	if (g_clock.gettimepair() > run_until) break;
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	client->write(fd, buf, wrsize, i*wrsize);
   }
@@ -262,7 +263,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
-	if (g_clock.gettimepair() > run_until) return 0;
+	if (g_clock.gettimepair() > run_until) break;
 	dout(2) << "reading block " << i << "/" << chunks << endl;
 	client->read(fd, buf, rdsize, i*rdsize);
   }
@@ -284,7 +285,7 @@ int SyntheticClient::random_walk(int num_req)
   while (left > 0) {
 	left--;
 
-	if (g_clock.gettimepair() > run_until) return 0;
+	if (g_clock.gettimepair() > run_until) break;
 
 	// ascend?
 	if (cwd.depth() && roll_die(.05)) {
@@ -380,8 +381,10 @@ int SyntheticClient::random_walk(int num_req)
 		op = MDS_OP_READDIR;
 	  else {
 		r = client->open( get_random_sub(), O_RDWR );
-		if (r > 0) 
+		if (r > 0) {
+		  assert(open_files.count(r) == 0);
 		  open_files.insert(r);
+		}
 	  }
 	}
 
@@ -446,4 +449,5 @@ int SyntheticClient::random_walk(int num_req)
   }
 
   dout(DBL) << "done" << endl;
+  return 0;
 }

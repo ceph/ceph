@@ -189,6 +189,8 @@ void parse_config_options(int argc, char **argv,
 	else if (strcmp(argv[i], "--mds_bal_max") == 0) 
 	  g_conf.mds_bal_max = atoi(argv[++i]);
 
+	else if (strcmp(argv[i], "--client_cache_size") == 0)
+	  g_conf.client_cache_size = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--client_cache_stat_ttl") == 0)
 	  g_conf.client_cache_stat_ttl = atoi(argv[++i]);
 

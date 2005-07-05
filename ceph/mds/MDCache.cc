@@ -615,6 +615,10 @@ bool MDCache::shutdown_pass()
   
   // send all imports back to 0.
   if (mds->get_nodeid() != 0 && !did_shutdown_exports) {
+	// flush what i can from the cache first..
+	trim(0);
+
+	// export to root
 	for (set<CDir*>::iterator it = imports.begin();
 		 it != imports.end();
 		 ) {
