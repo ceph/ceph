@@ -9,8 +9,8 @@
 #define AVG_PER_INODE_SIZE    450
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
-#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
-//#define MDS_CACHE_SIZE 25000  // 
+//#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
+#define MDS_CACHE_SIZE 1500000
 
 
 // hack hack hack ugly FIXME
@@ -95,30 +95,31 @@ md_config_t g_conf = {
 
   fakeclient_op_statfs:     false,
 
-  fakeclient_op_stat:     10,
+  // loosely based on Roselli workload paper numbers
+  fakeclient_op_stat:     610,
   fakeclient_op_lstat:      false,
-  fakeclient_op_utime:    10,   // untested
-  fakeclient_op_chmod:    10,
-  fakeclient_op_chown:    10,   // untested
+  fakeclient_op_utime:    0,
+  fakeclient_op_chmod:    1,
+  fakeclient_op_chown:    1,
 
-  fakeclient_op_readdir:  10,
+  fakeclient_op_readdir:  20,
   fakeclient_op_mknod:    10,
   fakeclient_op_link:     false,
-  fakeclient_op_unlink:   10,
+  fakeclient_op_unlink:   5,
   fakeclient_op_rename:   100,
 
   fakeclient_op_mkdir:    50,
   fakeclient_op_rmdir:    0,  // there's a bug...10,
   fakeclient_op_symlink:  10,
 
-  fakeclient_op_openrd:   100,
-  fakeclient_op_openwr:   100,
-  fakeclient_op_openwrc:  100,
+  fakeclient_op_openrd:   200,
+  fakeclient_op_openwr:   0,
+  fakeclient_op_openwrc:  0,
   fakeclient_op_read:       false,  // osd!
   fakeclient_op_write:      false,  // osd!
   fakeclient_op_truncate:   false,
   fakeclient_op_fsync:      false,
-  fakeclient_op_close:    20
+  fakeclient_op_close:    200
 };
 
 

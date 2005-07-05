@@ -390,7 +390,7 @@ int Client::flush_inode_buffers(Inode *in)
  */
 int Client::release_inode_buffers(Inode *in)
 {
-  dout(1) << "release_inode_buffers IMPLEMENT ME" << endl;
+  dout(2) << "release_inode_buffers IMPLEMENT ME" << endl;
 }
 
 

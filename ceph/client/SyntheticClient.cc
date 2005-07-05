@@ -24,10 +24,25 @@ void *synthetic_client_thread_entry(void *ptr)
   return (void*)r;
 }
 
+string SyntheticClient::get_sarg() 
+{
+  string a;
+  if (!sargs.empty()) {
+	a = sargs.front(); 
+	sargs.pop_front();
+  }
+  if (a.length() == 0 || a == "~") {
+	char s[20];
+	sprintf(s,"syn.%d", client->whoami);
+	a = s;
+  } 
+  //cout << "a is " << a << endl;
+  return a;
+}
 
 int SyntheticClient::run()
 { 
-  if (modes.empty()) modes.push_back(mode);
+  run_start = g_clock.gettimepair();
 
   for (list<int>::iterator it = modes.begin();
 	   it != modes.end();
@@ -35,21 +50,55 @@ int SyntheticClient::run()
 	int mode = *it;
 		 
 	switch (mode) {
+	case SYNCLIENT_MODE_UNTIL:
+	  {
+		int iarg1 = iargs.front();
+		iargs.pop_front();
+		dout(2) << "until " << iarg1 << endl;
+		timepair_t dur(iarg1,0);
+		run_until = run_start + dur;
+	  }
+	  break;
 	case SYNCLIENT_MODE_RANDOMWALK:
-	  random_walk(iarg1);
+	  {
+		int iarg1 = iargs.front();
+		iargs.pop_front();
+		dout(2) << "randomwalk " << iarg1 << endl;
+		random_walk(iarg1);
+	  }
 	  break;
 	case SYNCLIENT_MODE_MAKEDIRS:
-	  make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	  {
+		string sarg1 = get_sarg();
+		int iarg1 = iargs.front();  iargs.pop_front();
+		int iarg2 = iargs.front();  iargs.pop_front();
+		int iarg3 = iargs.front();  iargs.pop_front();
+		dout(2) << "makedirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+		make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+	  }
 	  break;
 	case SYNCLIENT_MODE_FULLWALK:
-	  full_walk(sarg1);
+	  {
+		string sarg1 = sargs.front(); sargs.pop_front();
+		dout(2) << "fullwalk" << sarg1 << endl;
+		full_walk(sarg1);
+	  }
 	  break;
 	case SYNCLIENT_MODE_WRITEFILE:
-	  write_file(sarg1, iarg1, iarg2);
+	  {
+		string sarg1 = sargs.front(); sargs.pop_front();
+		int iarg1 = iargs.front();  iargs.pop_front();
+		int iarg2 = iargs.front();  iargs.pop_front();
+		write_file(sarg1, iarg1, iarg2);
+	  }
 	  break;
 	case SYNCLIENT_MODE_READFILE:
-	  dout(2) << "readfile" << endl;
-	  read_file(sarg1, iarg1, iarg2);
+	  {
+		string sarg1 = sargs.front(); sargs.pop_front();
+		int iarg1 = iargs.front();  iargs.pop_front();
+		int iarg2 = iargs.front();  iargs.pop_front();
+		read_file(sarg1, iarg1, iarg2);
+	  }
 	  break;
 	default:
 	  assert(0);
@@ -122,6 +171,8 @@ void SyntheticClient::up()
 
 int SyntheticClient::full_walk(string& basedir) 
 {
+  if (g_clock.gettimepair() > run_until) return 0;
+
   // read dir
   map<string, inode_t*> contents;
   int r = client->getdir(basedir.c_str(), contents);
@@ -150,6 +201,8 @@ int SyntheticClient::full_walk(string& basedir)
 
 int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int depth)
 {
+  if (g_clock.gettimepair() > run_until) return 0;
+
   // make sure base dir exists
   int r = client->mkdir(basedir, 0755);
   if (r != 0) {
@@ -189,6 +242,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
+	if (g_clock.gettimepair() > run_until) return 0;
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	client->write(fd, buf, wrsize, i*wrsize);
   }
@@ -208,6 +262,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
+	if (g_clock.gettimepair() > run_until) return 0;
 	dout(2) << "reading block " << i << "/" << chunks << endl;
 	client->read(fd, buf, rdsize, i*rdsize);
   }
@@ -222,12 +277,14 @@ int SyntheticClient::random_walk(int num_req)
 {
   int left = num_req;
 
-  dout(1) << "random_walk() will do " << left << " ops" << endl;
+  //dout(1) << "random_walk() will do " << left << " ops" << endl;
 
   init_op_dist();  // set up metadata op distribution
  
   while (left > 0) {
 	left--;
+
+	if (g_clock.gettimepair() > run_until) return 0;
 
 	// ascend?
 	if (cwd.depth() && roll_die(.05)) {

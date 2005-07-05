@@ -46,38 +46,44 @@ int main(int oargc, char **oargv) {
   char **nargv = new pchar[argc];
   nargv[nargc++] = argv[0];
 
-  string syn_sarg1;
   list<int> syn_modes;
-  int syn_iarg1, syn_iarg2, syn_iarg3;
+  list<int> syn_iargs;
+  list<string> syn_sargs;
+  
   int mkfs = 0;
   for (int i=1; i<argc; i++) {
+	//cout << "a " << argv[i] << endl;
 	if (strcmp(argv[i], "--fastmkfs") == 0) {
 	  mkfs = MDS_MKFS_FAST;
 	}
 	else if (strcmp(argv[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
 	}
-	else if (strcmp(argv[i],"--synsarg1") == 0) 
-	  syn_sarg1 = argv[++i];
-	else if (strcmp(argv[i],"--syniarg1") == 0) 
-	  syn_iarg1 = atoi(argv[++i]);
-	else if (strcmp(argv[i],"--syniarg2") == 0) 
-	  syn_iarg2 = atoi(argv[++i]);
-	else if (strcmp(argv[i],"--syniarg3") == 0) 
-	  syn_iarg3 = atoi(argv[++i]);
-	else if (strcmp(argv[i],"--synmode") == 0) {
+	else if (strcmp(argv[i],"--syn") == 0) {
 	  ++i;
-	  if (strcmp(argv[i],"writefile") == 0) 
+	  if (strcmp(argv[i],"writefile") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
-	  else if (strcmp(argv[i],"readfile") == 0) 
+		syn_iargs.push_back( atoi(argv[++i]) );
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"readfile") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
-	  else if (strcmp(argv[i],"makedirs") == 0) 
+		syn_iargs.push_back( atoi(argv[++i]) );
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"makedirs") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
-	  else if (strcmp(argv[i],"fullwalk") == 0) 
+		syn_iargs.push_back( atoi(argv[++i]) );
+		syn_iargs.push_back( atoi(argv[++i]) );
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"fullwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
-	  else if (strcmp(argv[i],"randomwalk") == 0) 
+		//syn_sargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"randomwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
-	  else {
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"until") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else {
 		cerr << "unknown syn mode " << argv[i] << endl;
 		return -1;
 	  }
@@ -167,14 +173,9 @@ int main(int oargc, char **oargv) {
 	  //cout << "starting synthetic client on rank " << myrank << endl;
 	  syn[i] = new SyntheticClient(client[i]);
 
-	  char s[20];
-	  sprintf(s,"syn.%d", i);
-	  syn[i]->sarg1 = s;
-
 	  syn[i]->modes = syn_modes;
-	  syn[i]->iarg1 = syn_iarg1;
-	  syn[i]->iarg2 = syn_iarg2;
-	  syn[i]->iarg3 = syn_iarg3;
+	  syn[i]->sargs = syn_sargs;
+	  syn[i]->iargs = syn_iargs;
 	  syn[i]->start_thread();
 	}
 	for (int i=0; i<NUMCLIENT; i++) {

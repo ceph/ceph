@@ -11,6 +11,7 @@
 #define SYNCLIENT_MODE_MAKEDIRS    3
 #define SYNCLIENT_MODE_WRITEFILE   4
 #define SYNCLIENT_MODE_READFILE    5
+#define SYNCLIENT_MODE_UNTIL       6
 
 class SyntheticClient {
   Client *client;
@@ -84,16 +85,20 @@ class SyntheticClient {
   int run();
 
   // run() will do one of these things:
-  int mode;
   list<int> modes;
-  string sarg1;
-  int iarg1, iarg2, iarg3;
+  list<string> sargs;
+  list<int> iargs;
+  timepair_t run_start;
+  timepair_t run_until;
+
+  string get_sarg();
   
   int full_walk(string& fromdir);
   int random_walk(int n);
   int make_dirs(const char *basedir, int dirs, int files, int depth);
   int write_file(string& fn, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk);
+
 
 };
 
