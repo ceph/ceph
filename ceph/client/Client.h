@@ -1,6 +1,8 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
+#include "Buffercache.h"
+
 #include "mds/MDCluster.h"
 #include "osd/OSDCluster.h"
 
@@ -240,6 +242,9 @@ class Client : public Dispatcher {
 
   
   // buffer cache
+  Buffercache bc;
+  
+  int flush_buffers();     // flush dirty buffers
   int flush_inode_buffers(Inode *in);     // flush buffered writes
   int release_inode_buffers(Inode *in);   // release cached reads
 		

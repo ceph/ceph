@@ -278,7 +278,7 @@ class bufferptr {
 	assert(len >= 0 && off + len <= _len);
 	memcpy(dest, c_str() + off, len);
   }
-  void copy_in(int off, int len, char *src) {
+  void copy_in(int off, int len, const char *src) {
 	assert(off >= 0 && off <= _len);
 	assert(len >= 0 && off + len <= _len);
 	memcpy(c_str() + off, src, len);

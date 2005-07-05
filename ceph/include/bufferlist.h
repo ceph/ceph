@@ -161,7 +161,7 @@ class bufferlist {
 	}
   }
 
-  void copy_in(int off, int len, char *src) {
+  void copy_in(int off, int len, const char *src) {
 	assert(off >= 0);
 	assert(off + len <= length());
 
