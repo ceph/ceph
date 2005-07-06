@@ -605,6 +605,8 @@ class CDirExport {
  public:
   CDirExport() {}
   CDirExport(CDir *dir) {
+	memset(&st, 0, sizeof(st));
+
     st.ino = dir->ino();
     st.nitems = dir->nitems;
 	st.nden = dir->items.size();

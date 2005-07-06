@@ -86,14 +86,14 @@ int SyntheticClient::run()
 	  break;
 	case SYNCLIENT_MODE_FULLWALK:
 	  {
-		string sarg1 = sargs.front(); sargs.pop_front();
+		string sarg1 = get_sarg();
 		dout(2) << "fullwalk" << sarg1 << endl;
 		full_walk(sarg1);
 	  }
 	  break;
 	case SYNCLIENT_MODE_WRITEFILE:
 	  {
-		string sarg1 = sargs.front(); sargs.pop_front();
+		string sarg1 = get_sarg();
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		write_file(sarg1, iarg1, iarg2);
@@ -101,7 +101,7 @@ int SyntheticClient::run()
 	  break;
 	case SYNCLIENT_MODE_READFILE:
 	  {
-		string sarg1 = sargs.front(); sargs.pop_front();
+		string sarg1 = get_sarg();
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		read_file(sarg1, iarg1, iarg2);

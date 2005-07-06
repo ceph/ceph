@@ -111,7 +111,7 @@ md_config_t g_conf = {
   fakeclient_op_mknod:    30,
   fakeclient_op_link:     false,
   fakeclient_op_unlink:   20,
-  fakeclient_op_rename:   40,
+  fakeclient_op_rename:   0,//40,
 
   fakeclient_op_mkdir:    10,
   fakeclient_op_rmdir:    20,
