@@ -389,7 +389,7 @@ int SyntheticClient::random_walk(int num_req)
 	  if (contents.empty())
 		op = MDS_OP_READDIR;
 	  else {
-		r = client->open( get_random_sub(), O_RDWR );
+		r = client->open( get_random_sub(), O_RDONLY );
 		if (r > 0) {
 		  assert(open_files.count(r) == 0);
 		  open_files.insert(r);
