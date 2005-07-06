@@ -9,6 +9,8 @@
 
 #include "include/config.h"
 
+// per-process lock.  lame, but this way I protect LogType too!
+Mutex logger_lock;
 
 Logger::Logger(string fn, LogType *type)
 {
@@ -39,43 +41,43 @@ Logger::~Logger()
 long Logger::inc(const char *key, long v)
 {
   if (!g_conf.log) return 0;
-  lock.Lock();
+  logger_lock.Lock();
   if (!type->have_key(key)) 
 	type->add_inc(key);
   flush();
   vals[key] += v;
   long r = vals[key];
-  lock.Unlock();
+  logger_lock.Unlock();
   return r;
 }
 
 long Logger::set(const char *key, long v)
 {
   if (!g_conf.log) return 0;
-  lock.Lock();
+  logger_lock.Lock();
   if (!type->have_key(key)) 
 	type->add_set(key);
 
   flush();
   vals[key] = v;
   long r = vals[key];
-  lock.Unlock();
+  logger_lock.Unlock();
   return r;
 }
 
 long Logger::get(const char* key)
 {
   if (!g_conf.log) return 0;
-  lock.Lock();
+  logger_lock.Lock();
   long r = vals[key];
-  lock.Unlock();
+  logger_lock.Unlock();
   return r;
 }
 
 void Logger::flush(bool force) 
 {
   if (!g_conf.log) return;
-  lock.Lock();
+  logger_lock.Lock();
 
   if (!open) {
 	out.open(filename.c_str(), ofstream::out);
@@ -124,7 +126,7 @@ void Logger::flush(bool force)
 	  this->vals[*it] = 0;
   }
 
-  lock.Unlock();
+  logger_lock.Unlock();
 }
 
 

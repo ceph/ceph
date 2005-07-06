@@ -52,6 +52,7 @@ md_config_t g_conf = {
   debug_mds_log: 1,
   debug_buffer: 0,
   debug_filer: 0,
+  debug_client: 0,
   
   // --- client ---
   client_cache_size: 400,
@@ -106,15 +107,15 @@ md_config_t g_conf = {
   fakeclient_op_chmod:    1,
   fakeclient_op_chown:    1,
 
-  fakeclient_op_readdir:  20,
-  fakeclient_op_mknod:    10,
+  fakeclient_op_readdir:  2,
+  fakeclient_op_mknod:    30,
   fakeclient_op_link:     false,
-  fakeclient_op_unlink:   5,
-  fakeclient_op_rename:   100,
+  fakeclient_op_unlink:   20,
+  fakeclient_op_rename:   40,
 
-  fakeclient_op_mkdir:    50,
-  fakeclient_op_rmdir:    0,  // there's a bug...10,
-  fakeclient_op_symlink:  10,
+  fakeclient_op_mkdir:    10,
+  fakeclient_op_rmdir:    20,
+  fakeclient_op_symlink:  20,
 
   fakeclient_op_openrd:   200,
   fakeclient_op_openwr:   0,
@@ -160,6 +161,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.debug_buffer = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--debug_filer") == 0) 
 	  g_conf.debug_filer = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug_client") == 0) 
+	  g_conf.debug_client = atoi(argv[++i]);
 
 	else if (strcmp(argv[i], "--log") == 0) 
 	  g_conf.log = atoi(argv[++i]);

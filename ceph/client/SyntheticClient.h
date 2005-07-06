@@ -45,20 +45,32 @@ class SyntheticClient {
 	return *it;
   }
 
+
+  filepath n1;
   const char *get_random_subdir() {
 	assert(!subdirs.empty());
-	int r = rand() % subdirs.size();
+	int r = ((rand() % subdirs.size()) + (rand() % subdirs.size())) / 2;  // non-uniform distn
 	set<string>::iterator it = subdirs.begin();
 	while (r--) it++;
-	return (*it).c_str();
 
+	n1 = cwd;
+	n1.add_dentry( *it );
+	return n1.get_path().c_str();
   }
+  filepath n2;
   const char *get_random_sub() {
 	assert(!contents.empty());
-	int r = rand() % contents.size();
+	int r = ((rand() % contents.size()) + (rand() % contents.size())) / 2;  // non-uniform distn
+	if (cwd.depth() && cwd.last_bit().length()) 
+	  r += cwd.last_bit().c_str()[0];                                         // slightly permuted
+	r %= contents.size();
+
 	map<string,inode_t>::iterator it = contents.begin();
 	while (r--) it++;
-	return it->first.c_str();
+
+	n2 = cwd;
+	n2.add_dentry( it->first );
+	return n2.get_path().c_str();
   }
   
   filepath sub;

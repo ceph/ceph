@@ -27,7 +27,7 @@ struct eqstr
 class Logger {
  protected:
   hash_map<const char*, long, hash<const char*>, eqstr> vals;
-  Mutex lock;
+  //Mutex lock;
   LogType *type;
 
   timepair_t start;

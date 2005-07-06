@@ -225,6 +225,22 @@ class Client : public Dispatcher {
 	delete dn;
   }
 
+  Dentry *relink(Dentry *dn, Dir *dir, string& name) {
+	// first link new dn to dir
+	dir->dentries[name] = dn;
+	
+	// unlink from old dir
+	dn->dir->dentries.erase(dn->name);
+	if (dn->dir->is_empty()) 
+	  close_dir(dn->dir);
+
+	// fix up dn
+	dn->name = name;
+	dn->dir = dir;
+
+	return dn;
+  }
+
   // move dentry to top of lru
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 

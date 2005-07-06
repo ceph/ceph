@@ -21,7 +21,7 @@
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "client" << "." << pthread_self() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "client" << "." << pthread_self() << " "
 
 
 
@@ -184,11 +184,17 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   }
   
   if (!dn) {
+	// have inode linked elsewhere?  -> unlink and relink!
 	if (inode_map.count(in_info->inode.ino)) {
 	  Inode *in = inode_map[in_info->inode.ino];
-	  if (in) {
-		dout(12) << " had ino " << in->inode.ino << " at wrong position, moving" << endl;
-		if (in->dn) unlink(in->dn);
+	  assert(in);
+
+	  if (in->dn) {
+		dout(12) << " had ino " << in->inode.ino << " linked at wrong position, unlinking" << endl;
+		dn = relink(in->dn, dir, dname);
+	  } else {
+		// link
+		dout(12) << " had ino " << in->inode.ino << " unlinked, linking" << endl;
 		dn = link(dir, dname, in);
 	  }
 	}

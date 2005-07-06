@@ -27,6 +27,7 @@ struct md_config_t {
   int debug_mds_log;
   int debug_buffer;
   int debug_filer;
+  int debug_client;
 
   // client
   int      client_cache_size;

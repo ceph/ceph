@@ -12,7 +12,7 @@
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "synthetic" << client->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "synthetic" << client->get_nodeid() << " "
 
 
 #define DBL 2
@@ -294,13 +294,14 @@ int SyntheticClient::random_walk(int num_req)
 	if (run_until.first && g_clock.gettimepair() > run_until) break;
 
 	// ascend?
-	if (cwd.depth() && roll_die(.05)) {
+	if (cwd.depth() && roll_die(.1)) {
+	  dout(DBL) << "die says up" << endl;
 	  up();
 	  continue;
 	}
 
 	// descend?
-	if (roll_die(.5) && subdirs.size()) {
+	if (roll_die(.3) && subdirs.size()) {
 	  string s = get_random_subdir();
 	  cwd.add_dentry( s );
 	  dout(DBL) << "cd " << s << " -> " << cwd << endl;
@@ -311,10 +312,11 @@ int SyntheticClient::random_walk(int num_req)
 	int op = 0;
 	filepath path;
 
-	if (contents.empty() && roll_die(.7)) {
-	  if (did_readdir)
+	if (contents.empty() && roll_die(.3)) {
+	  if (did_readdir) {
+		dout(DBL) << "empty dir, up" << endl;
 		up();
-	  else
+	  } else
 		op = MDS_OP_READDIR;
 	} else {
 	  op = op_dist.sample();
@@ -335,7 +337,7 @@ int SyntheticClient::random_walk(int num_req)
 	  if (contents.empty())
 		op = MDS_OP_READDIR;
 	  else {
-		
+		r = client->rename( get_random_sub(), make_sub("ren") );
 	  }
 	}
 	
@@ -407,9 +409,14 @@ int SyntheticClient::random_walk(int num_req)
 	if (op == MDS_OP_STAT) {
 	  struct stat st;
 	  if (contents.empty()) {
-		if (did_readdir)
-		  up();
-		else
+		if (did_readdir) {
+		  if (roll_die(.1)) {
+			dout(DBL) << "stat in empty dir, up" << endl;
+			up();
+		  } else {
+			op = MDS_OP_MKNOD;
+		  }
+		} else
 		  op = MDS_OP_READDIR;
 	  } else
 		r = client->lstat(get_random_sub(), &st);
@@ -436,13 +443,13 @@ int SyntheticClient::random_walk(int num_req)
 	// errors?
 	if (r < 0) {
 	  // reevaluate cwd.
-	  while (cwd.depth()) {
-		//if (client->lookup(cwd)) break;   // it's in the cache
+	  //while (cwd.depth()) {
+	  //if (client->lookup(cwd)) break;   // it's in the cache
 		
-		//dout(DBL) << "r = " << r << ", client doesn't have " << cwd << ", cd .." << endl;
-		dout(DBL) << "r = " << r << ", client may not have " << cwd << ", cd .." << endl;
-		cwd = cwd.prefixpath(cwd.depth()-1);
-	  }	  
+	  //dout(DBL) << "r = " << r << ", client doesn't have " << cwd << ", cd .." << endl;
+	  dout(DBL) << "r = " << r << ", client may not have " << cwd << ", cd .." << endl;
+	  up();
+	  //}	  
 	}
   }
 

@@ -9,6 +9,8 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "Mutex.h"
+
 // for const char* comparisons
 struct ltstr
 {
@@ -34,18 +36,20 @@ class LogType {
 	version = 1;
   }
   void add_inc(const char* key) {
-    if (have_key(key)) return;
-	keys.push_back(key);
-	keyset.insert(key);
-	inc_keys.push_back(key);
-	version++;
+    if (!have_key(key)) {
+	  keys.push_back(key);
+	  keyset.insert(key);
+	  inc_keys.push_back(key);
+	  version++;
+	}
   }
   void add_set(const char* key){
-	if (have_key(key)) return;
-	keys.push_back(key);
-	keyset.insert(key);
-	set_keys.push_back(key);
-	version++;
+	if (!have_key(key)) {
+	  keys.push_back(key);
+	  keyset.insert(key);
+	  set_keys.push_back(key);
+	  version++;
+	}
   }
   bool have_key(const char* key) {
 	return keyset.count(key) ? true:false;
