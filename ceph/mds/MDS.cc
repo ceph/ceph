@@ -2366,7 +2366,7 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
   cur->remove_fh(f);
 
   // reclaim fh
-  idalloc->reclaim_id(ID_FH, f->fh);
+  //idalloc->reclaim_id(ID_FH, f->fh);   // don't do this for now.... we'll rewrite this anyway!  FIXME sage
 
   // ok we're done
   if (f->confirmed_caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
