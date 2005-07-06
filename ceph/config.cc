@@ -58,6 +58,9 @@ md_config_t g_conf = {
   client_cache_mid: .5,
   client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
+  client_bcache_alloc_minsize: 1024,
+  client_bcache_alloc_maxsize: 262144,
+  client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
   
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,

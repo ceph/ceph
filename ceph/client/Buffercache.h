@@ -7,6 +7,7 @@
 #include "include/buffer.h"
 #include "include/bufferlist.h"
 #include "include/lru.h"
+#include "include/config.h"
 #include "common/Cond.h"
 
 // stl
@@ -14,10 +15,6 @@
 #include <list>
 #include <map>
 using namespace std;
-
-// FIXME: buffer constants
-#define BUFC_ALLOC_MINSIZE 1024
-#define BUFC_ALLOC_MAXSIZE 262144
 
 // Bufferhead states
 #define BUFHD_STATE_CLEAN	  1
@@ -129,6 +126,14 @@ class Filecache {
     buffer_map.clear();
   }
 
+  ~Filecache() {
+    for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
+         it != buffer_map.end();
+         it++) {
+      delete it->second; 
+    }
+  }
+
   size_t length() {
     size_t len = 0;
     for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
@@ -166,10 +171,10 @@ class Buffercache {
   
   // FIXME: constructor & destructor need to mesh with allocator scheme
   ~Buffercache() {
-    // FIXME: make sure all buffers are cleaned  and then free them
     for (map<inodeno_t, Filecache*>::iterator it = bcache_map.begin();
          it != bcache_map.end();
          it++) {
+      // FIXME: make sure all buffers are cleaned  and then free them
       delete it->second; 
     }
   }

@@ -50,8 +50,8 @@ void Bufferhead::alloc_buffers(size_t size)
 {
   dout(10) << "bc: allocating buffers size: " << size << endl;
   while (size > 0) {
-    if (size <= BUFC_ALLOC_MAXSIZE) {
-          size_t k = BUFC_ALLOC_MINSIZE;
+    if (size <= g_conf.client_bcache_alloc_maxsize) {
+          size_t k = g_conf.client_bcache_alloc_minsize;
           size_t asize = size - size % k + (size % k > 0) * k;
 	  buffer *b = new buffer(asize);
 	  b->set_length(size);
@@ -59,11 +59,11 @@ void Bufferhead::alloc_buffers(size_t size)
           dout(10) << "bc: new buffer(" << asize << "), total: " << bl.length() << endl;
 	  break;
 	}
-        buffer *b = new buffer(BUFC_ALLOC_MAXSIZE);
-	b->set_length(BUFC_ALLOC_MAXSIZE);
+        buffer *b = new buffer(g_conf.client_bcache_alloc_maxsize);
+	b->set_length(g_conf.client_bcache_alloc_maxsize);
 	bl.push_back(b);
-        dout(10) << "bc: new buffer(" << BUFC_ALLOC_MAXSIZE << "), total: " << bl.length() << endl;
-	size -= BUFC_ALLOC_MAXSIZE;
+        dout(10) << "bc: new buffer(" << g_conf.client_bcache_alloc_maxsize << "), total: " << bl.length() << endl;
+	size -= g_conf.client_bcache_alloc_maxsize;
   }
   dout(7) << "bc: allocated " << bl.buffers().size() << " buffers (" << bl.length() << " bytes) " << endl;
 }
