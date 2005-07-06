@@ -281,10 +281,10 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   if (!awake) {
 	dout(10) << "waking up fakemessenger thread" << endl; 
 	awake = true;
+	lock.Unlock();
 	cond.Signal();
-  } 
-  
-  lock.Unlock();
+  } else
+	lock.Unlock();
 
 
 }

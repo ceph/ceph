@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <utime.h>
+#include <math.h>
 
 #include "include/config.h"
 #undef dout
@@ -294,14 +295,14 @@ int SyntheticClient::random_walk(int num_req)
 	if (run_until.first && g_clock.gettimepair() > run_until) break;
 
 	// ascend?
-	if (cwd.depth() && roll_die(.1)) {
+	if (cwd.depth() && !roll_die(pow(.9, cwd.depth()))) {
 	  dout(DBL) << "die says up" << endl;
 	  up();
 	  continue;
 	}
 
 	// descend?
-	if (roll_die(.3) && subdirs.size()) {
+	if (.9*roll_die(pow(.9,cwd.depth())) && subdirs.size()) {
 	  string s = get_random_subdir();
 	  cwd.add_dentry( s );
 	  dout(DBL) << "cd " << s << " -> " << cwd << endl;
