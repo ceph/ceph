@@ -57,6 +57,14 @@ int SyntheticClient::run()
 	int mode = *it;
 		 
 	switch (mode) {
+	case SYNCLIENT_MODE_RANDOMSLEEP:
+	  {
+		int iarg1 = iargs.front();
+		iargs.pop_front();
+		sleep(rand() % iarg1);
+	  }
+	  break;
+
 	case SYNCLIENT_MODE_UNTIL:
 	  {
 		int iarg1 = iargs.front();

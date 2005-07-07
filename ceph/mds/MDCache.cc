@@ -492,7 +492,7 @@ bool MDCache::trim(__int32_t max) {
 	}
 
 	// remove it
-	dout(11) << "trim removing " << *in << " " << in << endl;
+	dout(5) << "trim removing " << *in << " " << in << endl;
 	remove_inode(in);
 	delete in;
 
@@ -510,6 +510,7 @@ bool MDCache::trim(__int32_t max) {
 
 	mds->logger->inc("cex");
   }
+
 
   /* hack
   if (lru.lru_get_size() == max) {
@@ -597,21 +598,18 @@ bool MDCache::shutdown_pass()
 	dout(7) << "shutdown_commits still waiting for " << shutdown_commits << endl;
 	return false;
   }
-  
-  // flush log?
-  if (g_conf.mds_log_flush_on_shutdown) {
-	// (wait for) flush log
-	if (mds->mdlog->get_num_events()) {
-	  dout(7) << "waiting for log to flush" << endl;
-	  return false;
-	} 
-  
-	// make a pass on the cache
-	dout(7) << "log is empty.  flushing cache" << endl;
-	trim(0);
-  }
 
+  // flush anything we can from the cache
+  trim(0);
   dout(5) << "cache size now " << lru.lru_get_size() << endl;
+
+
+  // (wait for) flush log?
+  if (g_conf.mds_log_flush_on_shutdown &&
+	  mds->mdlog->get_num_events()) {
+	dout(7) << "waiting for log to flush" << endl;
+	return false;
+  } 
   
   // send all imports back to 0.
   if (mds->get_nodeid() != 0 && !did_shutdown_exports) {
@@ -633,57 +631,59 @@ bool MDCache::shutdown_pass()
 	did_shutdown_exports = true;
   } 
 
+
+  // waiting for imports?  (e.g. root?)
+  if (exports.size()) {
+	dout(7) << "still have " << exports.size() << " exports" << endl;
+	return false;
+  }
+
   // filer active?
   if (mds->filer->is_active()) {
 	dout(7) << "filer still active" << endl;
 	return false;
   }
   
-  if (g_conf.mds_log_flush_on_shutdown ||
-	  g_conf.mds_commit_on_shutdown) {
-  
-	// shut down root?
-	if (lru.lru_get_size() == 1) {
-	  if (root && 
-		  root->dir && 
-		  root->dir->is_import() &&
-		  root->dir->get_ref() == 1) {  // 1 is the import!
-		// un-import
-		dout(7) << "removing root import" << endl;
-		imports.erase(root->dir);
-		root->dir->state_clear(CDIR_STATE_IMPORT);
-		root->dir->put(CDIR_PIN_IMPORT);
-		trim(0);
-	  }
-	  
-	  if (root && root->is_pinned_by(CINODE_PIN_DIRTY)) {
-		dout(7) << "clearing root dirty flag" << endl;
-		root->put(CINODE_PIN_DIRTY);
-		trim(0);
-	  }
+  // close root?
+  if (mds->get_nodeid() == 0 &&
+	  lru.lru_get_size() == 1 &&
+	  root && 
+	  root->dir && 
+	  root->dir->is_import() &&
+	  root->dir->get_ref() == 1) {  // 1 is the import!
+	// un-import
+	dout(7) << "removing root import" << endl;
+	imports.erase(root->dir);
+	root->dir->state_clear(CDIR_STATE_IMPORT);
+	root->dir->put(CDIR_PIN_IMPORT);
+
+	if (root->is_pinned_by(CINODE_PIN_DIRTY)) {
+	  dout(7) << "clearing root dirty flag" << endl;
+	  root->put(CINODE_PIN_DIRTY);
 	}
-	
-	// sanity
+
+	trim(0);
 	assert(inode_map.size() == lru.lru_get_size());
-
-	// done?
-	if (lru.lru_get_size() > 0) {
-	  dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << endl;
-	  //show_cache();
-	  //dump();
-	  return false;
-	}
   }
-
+  
   // imports?
   if (!imports.empty()) {
 	dout(7) << "still have " << imports.size() << " imports" << endl;
 	return false;
   }
-	
+  
+  // done?
+  if (lru.lru_get_size() > 0) {
+	dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << endl;
+	//show_cache();
+	//dump();
+	return false;
+  }
+  
   // done!
-  dout(7) << "done, sending shutdown_finish" << endl;
+  dout(1) << "shutdown done, sending shutdown_finish" << endl;
   if (mds->get_nodeid() != 0) {
+	//g_conf.debug = 25;
 	mds->messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNFINISH),
 								 MSG_ADDR_MDS(0), MDS_PORT_MAIN, MDS_PORT_MAIN);
   } else {
@@ -5453,7 +5453,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 								int dest)
 {
   // subtree is now frozen!
-  dout(7) << "export_dir_frozen on " << *dir << " to " << dest << endl;
+  dout(5) << "export_dir_frozen on " << *dir << " to " << dest << endl;
 
   show_imports();
 
@@ -5461,7 +5461,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 
   // include spanning tree for all nested exports.
   // these need to be on the destination _before_ the final export so that
-  // dir_auth updates on any nexted exports are properly absorbed.
+  // dir_auth updates on any nested exports are properly absorbed.
   
   set<inodeno_t> inodes_added;
   
@@ -5476,7 +5476,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 	   it++) {
 	CDir *exp = *it;
     
-	dout(7) << " including nested export " << *exp << " in prep" << endl;
+	dout(5) << " including nested export " << *exp << " in prep" << endl;
 
 	prep->add_export( exp->ino() );
 
@@ -5495,13 +5495,13 @@ void MDCache::export_dir_frozen(CDir *dir,
       // inode?
       assert(cur->inode->is_auth());
 	  inode_trace.push_front(cur->inode);
-      dout(10) << "  will add " << *cur->inode << endl;
+      dout(5) << "  will add " << *cur->inode << endl;
       
       // include dir? note: this'll include everything except the nested exports themselves, 
 	  // since someone else is obviously auth.
       if (cur->is_auth()) {
         prep->add_dir( new CDirDiscover(cur, cur->open_by_add(dest)) );  // yay!
-        dout(10) << "  added " << *cur << endl;
+        dout(5) << "  added " << *cur << endl;
       }
       
       cur = parent_dir;      
@@ -5511,7 +5511,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 		 it != inode_trace.end();
 		 it++) {
 	  CInode *in = *it;
-      dout(10) << "  added " << *in << endl;
+      dout(5) << "  added " << *in << endl;
       prep->add_inode( in->parent->dir->ino(),
 					   in->parent->name,
 					   new CInodeDiscover(in, in->cached_by_add(dest)) );
@@ -6041,7 +6041,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   // assimilate root dir.
   CDir *dir = diri->dir;
   if (dir) {
-    dout(7) << "handle_export_dir_prep on " << *dir << " (had dir)" << endl;
+    dout(5) << "handle_export_dir_prep on " << *dir << " (had dir)" << endl;
 
 	if (!m->did_assim())
 	  m->get_dir(diri->ino())->update_dir(dir);
@@ -6051,10 +6051,9 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
     // open dir i'm importing.
     diri->set_dir( new CDir(diri, mds, false) );
     dir = diri->dir;
-
     m->get_dir(diri->ino())->update_dir(dir);
     
-    dout(7) << "handle_export_dir_prep on " << *dir << " (opening dir)" << endl;
+    dout(5) << "handle_export_dir_prep on " << *dir << " (opening dir)" << endl;
 
 	diri->take_waiting(CINODE_WAIT_DIR, finished);
   }
@@ -6064,6 +6063,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 
   // assimilate contents?
   if (!m->did_assim()) {
+	dout(5) << "doing assim" << endl;
     m->mark_assim();  // only do this the first time!
 
 	// move pin to dir
@@ -6082,7 +6082,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
       CInode *in = get_inode( (*it)->get_ino() );
       if (in) {
         (*it)->update_inode(in);
-        dout(10) << " updated " << *in << endl;
+        dout(5) << " updated " << *in << endl;
       } else {
         in = new CInode(false);
         (*it)->update_inode(in);
@@ -6093,7 +6093,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
         add_inode( in );
         condiri->dir->add_dentry( m->get_dentry(in->ino()), in );
         
-        dout(10) << "   added " << *in << endl;
+        dout(5) << "   added " << *in << endl;
       }
       
       assert( in->get_parent_dir()->ino() == m->get_containing_dirino(in->ino()) );
@@ -6102,11 +6102,11 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
       if (m->have_dir(in->ino())) {
         if (in->dir) {
           m->get_dir(in->ino())->update_dir(in->dir);
-          dout(10) << " updated " << *in->dir << endl;
+          dout(5) << " updated " << *in->dir << endl;
         } else {
           in->set_dir( new CDir(in, mds, false) );
           m->get_dir(in->ino())->update_dir(in->dir);
-          dout(10) << "   added " << *in->dir << endl;
+          dout(5) << "   added " << *in->dir << endl;
 		  in->take_waiting(CINODE_WAIT_DIR, finished);
         }
       }
@@ -6120,7 +6120,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
       assert(in);
       
       if (!in->dir) {
-        dout(10) << "  opening nested export on " << *in << endl;
+        dout(5) << "  opening nested export on " << *in << endl;
 
         // open (send discover back to old auth for fw to dir auth)
         filepath want;
@@ -6135,6 +6135,8 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
                        new C_MDS_RetryMessage(mds, m));
       }
     }
+  } else {
+	dout(5) << " not doing assim" << endl;
   }
   
 
@@ -6143,25 +6145,27 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   for (list<inodeno_t>::iterator it = m->get_exports().begin();
        it != m->get_exports().end();
        it++) {
-    CInode *in = get_inode(*it);
+	inodeno_t ino = *it;
+    CInode *in = get_inode(ino);
+	assert(in);
     if (in->dir) {
 	  if (!in->dir->state_test(CDIR_STATE_IMPORTINGEXPORT)) {
-		dout(10) << "  pinning nested export " << *in->dir << endl;
+		dout(5) << "  pinning nested export " << *in->dir << endl;
 		in->dir->get(CDIR_PIN_IMPORTINGEXPORT);
 		in->dir->state_set(CDIR_STATE_IMPORTINGEXPORT);
 	  } else {
-		dout(10) << "  already pinned nested export " << *in << endl;
+		dout(5) << "  already pinned nested export " << *in << endl;
 	  }
 	} else {
-	  dout(10) << "  waiting for nested export dir on " << *in << endl;
+	  dout(5) << "  waiting for nested export dir on " << *in << endl;
 	  waiting_for++;
 	}
   }
   if (waiting_for) {
-    dout(7) << " waiting for " << waiting_for << " nested export dir opens" << endl;
+    dout(5) << " waiting for " << waiting_for << " nested export dir opens" << endl;
   } else {
 	// ok!
-	dout(7) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
+	dout(5) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
 	mds->messenger->send_message(new MExportDirPrepAck(dir->ino()),
 								 m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
 	

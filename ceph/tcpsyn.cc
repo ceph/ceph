@@ -87,6 +87,9 @@ int main(int oargc, char **oargv) {
 	  } else if (strcmp(argv[i],"trace_openssh") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSH );
 		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"randomsleep") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_RANDOMSLEEP );
+		syn_iargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"until") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
 		syn_iargs.push_back( atoi(argv[++i]) );

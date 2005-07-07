@@ -130,6 +130,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("reply");
   mds_logtype.add_inc("fw");
   mds_logtype.add_inc("cfw");
+  mds_logtype.add_set("rootpop");
 
   mds_logtype.add_set("c");
   mds_logtype.add_set("ctop");
@@ -140,6 +141,10 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("dis");
   mds_logtype.add_inc("cmiss");
 
+  mds_logtype.add_set("buf");
+  mds_logtype.add_inc("cdir");
+  mds_logtype.add_inc("fdir");
+
   mds_logtype.add_inc("iex");
   mds_logtype.add_inc("iim");
   mds_logtype.add_inc("ex");
@@ -147,6 +152,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("imex");  
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
+
 
   
   char n[80];
@@ -457,6 +463,23 @@ void MDS::my_dispatch(Message *m)
 	num_bal_times--;
   }
 
+  // periodic logging crap
+  static timepair_t last_log = g_clock.gettimepair();
+  if (last_log.first != now.first) {
+	last_log = now;
+	mds_load_t load = get_load();
+
+	logger->set("rootpop", (int)load.root_pop);
+	logger->set("c", mdcache->lru.lru_get_size());
+	logger->set("cpin", mdcache->lru.lru_get_num_pinned());
+	logger->set("ctop", mdcache->lru.lru_get_top());
+	logger->set("cbot", mdcache->lru.lru_get_bot());
+	logger->set("cptail", mdcache->lru.lru_get_pintail());
+	logger->set("buf", buffer_total_alloc);
+
+  }
+
+  // hack
   if (whoami == 0) {
 	static bool didit = false;
 	

@@ -81,7 +81,9 @@ class MDCache {
  protected:
   // the cache
   CInode                       *root;        // root inode
+ public:
   LRU                           lru;         // lru for expiring items
+ protected:
   inode_map_t                   inode_map;   // map of inodes by ino            
  
   MDS *mds;

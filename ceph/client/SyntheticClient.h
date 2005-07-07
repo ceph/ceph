@@ -19,6 +19,8 @@
 #define SYNCLIENT_MODE_TRACEOPENSSH 8
 #define SYNCLIENT_MODE_TRACEINCLUDE 9
 
+#define SYNCLIENT_MODE_RANDOMSLEEP  10
+
 class SyntheticClient {
   Client *client;
 

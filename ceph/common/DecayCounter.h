@@ -17,7 +17,7 @@ class DecayCounter {
 
  public:
   DecayCounter() : val(0) {
-	set_halflife( 10.0 );
+	set_halflife( 40.0 );
 	reset();
   }
   DecayCounter(double hl) : val(0) {
