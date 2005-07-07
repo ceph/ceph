@@ -250,6 +250,10 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
       Dir *dir = cur->open_dir();
 	  cur = this->insert_inode_info(dir, trace[i]);
 	  cur->last_updated = now;
+
+	  // move to top of lru!
+	  if (cur->dn) lru.lru_touch(cur->dn);
+
     }    
   }
 }
@@ -314,7 +318,7 @@ MClientReply *Client::make_request(MClientRequest *req)
   }
   
   if (cur && cur->mds_contacts.size()) {
-	dout(7) << "contacting mds from deepest inode " << cur->inode.ino << " : " << cur->mds_contacts << endl;
+	dout(9) << "contacting mds from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->mds_contacts << endl;
 	set<int>::iterator it = cur->mds_contacts.begin();
 	if (cur->mds_contacts.size() == 1)
 	  mds = *it;
@@ -323,6 +327,8 @@ MClientReply *Client::make_request(MClientRequest *req)
 	  while (r--) it++;
 	  mds = *it;
 	}
+  } else {
+	dout(9) << "i have no idea where " << req->get_filepath() << " is" << endl;
   }
 
   // drop mutex for duration of call

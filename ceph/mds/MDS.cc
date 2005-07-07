@@ -654,8 +654,10 @@ void MDS::reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei
   dout(10) << "reply_request r=" << reply->get_result() << " " << *req << endl;
 
   // include trace
-  if (tracei)
-	reply->set_trace_dist( tracei, whoami );
+  if (tracei) {
+	timepair_t now = g_clock.gettimepair();
+	reply->set_trace_dist( tracei, whoami, now );
+  }
   
   // send reply
   messenger->send_message(reply,
@@ -1106,6 +1108,7 @@ void MDS::handle_client_readdir(MClientRequest *req,
   MClientReply *reply = new MClientReply(req);
   
   // build dir contents
+  timepair_t now = g_clock.gettimepair();
   CDir_map_t::iterator it;
   int numfiles = 0;
   for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
@@ -1124,14 +1127,13 @@ void MDS::handle_client_readdir(MClientRequest *req,
 
 	// add this item
 	// note: c_inode_info makes note of whether inode data is readable.
-	reply->add_dir_item(new c_inode_info(in, whoami, it->first));
+	reply->add_dir_item(new c_inode_info(in, whoami, it->first, now));
 	numfiles++;
   }
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(0);
   
-  timepair_t now = g_clock.gettimepair();
   stat_read.hit(now);
   stat_req.hit(now);
 

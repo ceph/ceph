@@ -519,8 +519,10 @@ class CInode : LRUObject {
 
 
   // for giving to clients
-  void get_dist_spec(set<int>& ls, int auth) {
-	ls = cached_by;
+  void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
+	if (popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold) {
+	  ls = cached_by;
+	}
 	ls.insert(auth);
   }
 

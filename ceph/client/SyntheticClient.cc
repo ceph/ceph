@@ -61,6 +61,7 @@ int SyntheticClient::run()
 	  {
 		int iarg1 = iargs.front();
 		iargs.pop_front();
+		srand(time(0) + getpid());
 		sleep(rand() % iarg1);
 	  }
 	  break;

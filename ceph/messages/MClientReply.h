@@ -46,7 +46,7 @@ class c_inode_info {
 
  public:
   c_inode_info() {}
-  c_inode_info(CInode *in, int whoami, string ref_dn) {
+  c_inode_info(CInode *in, int whoami, string ref_dn, timepair_t& now) {
 	// inode
 	this->inode = in->inode;
 	this->inode_soft_valid = in->softlock.can_read(in->is_auth());
@@ -59,7 +59,7 @@ class c_inode_info {
 	this->ref_dn = ref_dn;
 	
 	// replicated where?
-	in->get_dist_spec(this->dist, whoami);
+	in->get_dist_spec(this->dist, whoami, now);
   }
   
   void _encode(bufferlist &bl) {
@@ -191,14 +191,14 @@ class MClientReply : public Message {
 	dir_contents.push_back(c);
   }
 
-  void set_trace_dist(CInode *in, int whoami) {
+  void set_trace_dist(CInode *in, int whoami, timepair_t& now) {
 	while (in) {
 	  // add this inode to trace, along with referring dentry name
 	  string ref_dn;
 	  CDentry *dn = in->get_parent_dn();
 	  if (dn) ref_dn = dn->get_name();
 
-	  trace.insert(trace.begin(), new c_inode_info(in, whoami, ref_dn));
+	  trace.insert(trace.begin(), new c_inode_info(in, whoami, ref_dn, now));
 	  
 	  in = in->get_parent_inode();
 	}
