@@ -4,6 +4,7 @@
 #include "include/filepath.h"
 #include "mds/MDS.h"
 
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -14,6 +15,10 @@
 #include "include/config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "synthetic" << client->get_nodeid() << " "
+
+// traces
+//void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
+//void trace_openssh(SyntheticClient *syn, Client *cl, string& prefix);
 
 
 #define DBL 2
@@ -118,6 +123,38 @@ int SyntheticClient::run()
 		read_file(sarg1, iarg1, iarg2);
 	  }
 	  break;
+
+
+	case SYNCLIENT_MODE_TRACEINCLUDE:
+	  {
+		int iarg1 = iargs.front();  iargs.pop_front();
+		string prefix;
+		if (client->whoami == 0) {
+		  Trace t("client/traces/trace.include");
+		  play_trace(t, prefix);
+		} else {
+		  sleep(iarg1);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_TRACEOPENSSH:
+	  {
+		string prefix = get_sarg();
+		int iarg1 = iargs.front();  iargs.pop_front();
+		
+		Trace t("client/traces/trace.openssh");
+
+		client->mkdir(prefix.c_str(), 0755);
+		
+		for (int i=0; i<iarg1; i++) {
+		  if (time_to_stop()) break;
+		  play_trace(t, prefix);
+		  if (time_to_stop()) break;
+		  clean_dir(prefix);
+		}
+	  }
+	  break;
+
 	default:
 	  assert(0);
 	}
@@ -186,11 +223,148 @@ void SyntheticClient::up()
 }
 
 
+int SyntheticClient::play_trace(Trace& t, string& prefix)
+{
+  dout(4) << "play trace" << endl;
+  t.start();
+
+  const char *p = prefix.c_str();
+
+  map<__int64_t, int> open_files;
+
+  while (!t.end()) {
+	
+	if (time_to_stop()) break;
+	
+	// op
+	const char *op = t.get_string();
+	dout(4) << "trace op " << op << endl;
+	if (strcmp(op, "link") == 0) {
+	  const char *a = t.get_string(p);
+	  const char *b = t.get_string(p);
+	  client->link(a,b);	  
+	} else if (strcmp(op, "unlink") == 0) {
+	  const char *a = t.get_string(p);
+	  client->unlink(a);
+	} else if (strcmp(op, "rename") == 0) {
+	  const char *a = t.get_string(p);
+	  const char *b = t.get_string(p);
+	  client->rename(a,b);	  
+	} else if (strcmp(op, "mkdir") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  client->mkdir(a, b);
+	} else if (strcmp(op, "rmdir") == 0) {
+	  const char *a = t.get_string(p);
+	  client->rmdir(a);
+	} else if (strcmp(op, "symlink") == 0) {
+	  const char *a = t.get_string(p);
+	  const char *b = t.get_string(p);
+	  client->symlink(a,b);	  
+	} else if (strcmp(op, "readlink") == 0) {
+	  const char *a = t.get_string(p);
+	  char buf[100];
+	  client->readlink(a, buf, 100);
+	} else if (strcmp(op, "lstat") == 0) {
+	  struct stat st;
+	  const char *a = t.get_string(p);
+	  client->lstat(a, &st);
+	} else if (strcmp(op, "chmod") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  client->chmod(a, b);
+	} else if (strcmp(op, "chown") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  __int64_t c = t.get_int();
+	  client->chown(a, b, c);
+	} else if (strcmp(op, "utime") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  __int64_t c = t.get_int();
+	  struct utimbuf u;
+	  u.actime = b;
+	  u.modtime = c;
+	  client->utime(a, &u);
+	} else if (strcmp(op, "mknod") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  client->mknod(a, b);
+	} else if (strcmp(op, "getdir") == 0) {
+	  const char *a = t.get_string(p);
+	  map<string,inode_t*> contents;
+	  client->getdir(a, contents);
+	} else if (strcmp(op, "open") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  __int64_t id = t.get_int();
+	  __int64_t fh = client->open(a, b);
+	  open_files[id] = fh;
+	} else if (strcmp(op, "close") == 0) {
+	  __int64_t id = t.get_int();
+	  __int64_t fh = open_files[id];
+	  if (fh > 0) client->close(fh);
+	  open_files.erase(id);
+	} else if (strcmp(op, "truncate") == 0) {
+	  const char *a = t.get_string(p);
+	  __int64_t b = t.get_int();
+	  client->truncate(a,b);
+	} else if (strcmp(op, "fsync") == 0) {
+	  assert(0);
+	} else 
+	  assert(0);
+  }
+
+  // close open files
+  for (map<__int64_t, __int64_t>::iterator fi = open_files.begin();
+	   fi != open_files.end();
+	   fi++) {
+	client->close(fi->second);
+  }
+  
+}
+
+
+int SyntheticClient::clean_dir(string& basedir)
+{
+  // read dir
+  map<string, inode_t*> contents;
+  int r = client->getdir(basedir.c_str(), contents);
+  if (r < 0) {
+	dout(1) << "readdir on " << basedir << " returns " << r << endl;
+	return r;
+  }
+
+  for (map<string, inode_t*>::iterator it = contents.begin();
+	   it != contents.end();
+	   it++) {
+	string file = basedir + "/" + it->first;
+
+	if (time_to_stop()) break;
+
+	struct stat st;
+	int r = client->lstat(file.c_str(), &st);
+	if (r < 0) {
+	  dout(1) << "stat error on " << file << " r=" << r << endl;
+	  continue;
+	}
+
+	if (st.st_mode & INODE_MODE_DIR) {
+	  clean_dir(file);
+	  client->rmdir(file.c_str());
+	} else {
+	  client->unlink(file.c_str());
+	}
+  }
+
+  return 0;
+
+}
 
 
 int SyntheticClient::full_walk(string& basedir) 
 {
-  if (run_until.first && g_clock.gettimepair() > run_until) return -1;
+  if (time_to_stop()) return -1;
 
   // read dir
   map<string, inode_t*> contents;
@@ -220,7 +394,7 @@ int SyntheticClient::full_walk(string& basedir)
 
 int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int depth)
 {
-  if (run_until.first && g_clock.gettimepair() > run_until) return 0;
+  if (time_to_stop()) return 0;
 
   // make sure base dir exists
   int r = client->mkdir(basedir, 0755);
@@ -261,7 +435,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
-	if (run_until.first && g_clock.gettimepair() > run_until) break;
+	if (time_to_stop()) break;
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	client->write(fd, buf, wrsize, i*wrsize);
   }
@@ -281,7 +455,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   if (fd < 0) return fd;
 
   for (int i=0; i<chunks; i++) {
-	if (run_until.first && g_clock.gettimepair() > run_until) break;
+	if (time_to_stop()) break;
 	dout(2) << "reading block " << i << "/" << chunks << endl;
 	client->read(fd, buf, rdsize, i*rdsize);
   }
@@ -303,7 +477,7 @@ int SyntheticClient::random_walk(int num_req)
   while (left > 0) {
 	left--;
 
-	if (run_until.first && g_clock.gettimepair() > run_until) break;
+	if (time_to_stop()) break;
 
 	// ascend?
 	if (cwd.depth() && !roll_die(pow(.9, cwd.depth()))) {
@@ -476,3 +650,5 @@ int SyntheticClient::random_walk(int num_req)
   dout(DBL) << "done" << endl;
   return 0;
 }
+
+

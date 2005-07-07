@@ -171,6 +171,7 @@ class Client : public Dispatcher {
 	in->put();
 	if (in->ref == 0) {
 	  inode_map.erase(in->inode.ino);
+	  if (in == root) root = 0;
 	  delete in;
 	}
   }
@@ -318,7 +319,8 @@ class Client : public Dispatcher {
   int close(fileh_t fh);
   int read(fileh_t fh, char *buf, size_t size, off_t offset);
   int write(fileh_t fh, const char *buf, size_t size, off_t offset);
-  int truncate(fileh_t fh, off_t size);
+  int truncate(const char *file, off_t size);
+	//int truncate(fileh_t fh, off_t size);
   int fsync(fileh_t fh, bool syncdataonly);
 
 };

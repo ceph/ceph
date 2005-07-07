@@ -51,6 +51,9 @@ COMMON_OBJS= \
 	common/Timer.o\
 	config.o
 
+SYN_OBJS = \
+	client/Trace.o
+
 TEST_TARGETS = fakemds mpitest
 TARGETS = import singleclient mpifuse fakefuse mpisyn fakesyn tcpsyn
 
@@ -65,6 +68,8 @@ obfs: depend obfstest
 gprof-helper.so: test/gprof-helper.c
 	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
 
+
+# old test crap
 import: mds/allmds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
@@ -86,26 +91,32 @@ mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/Fa
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
-	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+
+# fuse
+fakefuse: fakefuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
+	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
+	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+
+# synthetic workload
+fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS}
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+
+mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS}
+tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
+# obfs + synthetic
 obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} 
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
-fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS}
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-fakefuse: fakefuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
-	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/clock.o msg/Messenger.o msg/Dispatcher.o msg/error.o
 	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@

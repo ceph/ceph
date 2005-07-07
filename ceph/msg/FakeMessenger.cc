@@ -191,8 +191,9 @@ int fakemessenger_do_loop_2()
 FakeMessenger::FakeMessenger(long me)  : Messenger(me)
 {
   whoami = me;
+  lock.Lock();
   directory[ whoami ] = this;
-
+  lock.Unlock();
 
   cout << "fakemessenger " << whoami << " messenger is " << this << endl;
 
@@ -224,11 +225,13 @@ FakeMessenger::~FakeMessenger()
 int FakeMessenger::shutdown()
 {
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
+  lock.Lock();
   directory.erase(whoami);
   if (directory.empty()) {
 	::shutdown = true;
 	cond.Signal();  // why not
-  }
+  } 
+  lock.Unlock();
 }
 
 /*

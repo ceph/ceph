@@ -62,6 +62,8 @@ md_config_t g_conf = {
   client_bcache_alloc_minsize: 1024,
   client_bcache_alloc_maxsize: 262144,
   client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
+  client_trace: 0,
+  fuse_direct_io: 1,
   
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
@@ -202,6 +204,10 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.client_cache_size = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--client_cache_stat_ttl") == 0)
 	  g_conf.client_cache_stat_ttl = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--client_trace") == 0)
+	  g_conf.client_trace = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--fuse_direct_io") == 0)
+	  g_conf.fuse_direct_io = atoi(argv[++i]);
 
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);

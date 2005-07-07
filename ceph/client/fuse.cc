@@ -31,6 +31,8 @@
 
 #include "Client.h"
 
+#include "include/config.h"
+
 // stl
 #include <map>
 using namespace std;
@@ -141,7 +143,7 @@ static int ceph_chown(const char *path, uid_t uid, gid_t gid)
 
 static int ceph_truncate(const char *path, off_t size)
 {
-  return truncate(path, size);      
+  return client->truncate(path, size);      
 }
 
 static int ceph_utime(const char *path, struct utimbuf *buf)
@@ -276,8 +278,10 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   // large reads, direct_io (no kernel cachine)
   //newargv[newargc++] = "-o";
   //newargv[newargc++] = "large_read";
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "direct_io";
+  if (g_conf.fuse_direct_io) {
+	newargv[newargc++] = "-o";
+	newargv[newargc++] = "direct_io";
+  }
 
   // disable stupid fuse unlink hiding thing
   newargv[newargc++] = "-o";

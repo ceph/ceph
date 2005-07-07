@@ -1,3 +1,11 @@
+known bugs to fix after fast
+- RDWR on synthetic client results in
+fakesyn: mds/MDS.cc:2334: void MDS::handle_client_close(MClientRequest*, CInode*): Assertion `cur->softlock.can_write(true)' failed.
+- caps needs to be rewritten
+ - MDS currently not reclaiming fh's  (otherwise a client assertion eventually fails)
+- hard links!
+
+
 
 !!!
 - test mds scaling w/ makedirs, vs mds_log_on_request 

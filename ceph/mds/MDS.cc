@@ -475,6 +475,7 @@ void MDS::my_dispatch(Message *m)
   // shut down?
   if (shutting_down && !shut_down) {
 	if (mdcache->shutdown_pass()) {
+	  dout(7) << "shutdown_pass=true, finished w/ shutdown" << endl;
 	  shutting_down = false;
 	  shut_down = true;
 	  if (whoami) shutdown_final();
@@ -713,7 +714,7 @@ void MDS::handle_client_request(MClientRequest *req)
 	*/
 	
   case MDS_OP_TRUNCATE:
-	if (!req->get_iarg()) break;   // can be called w/ either fh OR path
+	if (!req->get_ino()) break;   // can be called w/ either fh OR path
 	
   case MDS_OP_CLOSE:
   case MDS_OP_FSYNC:
@@ -741,7 +742,6 @@ void MDS::handle_client_request(MClientRequest *req)
 	case MDS_OP_MKNOD:
 	case MDS_OP_MKDIR:
 	case MDS_OP_SYMLINK:
-	case MDS_OP_TRUNCATE:
 	case MDS_OP_LINK:
 	case MDS_OP_UNLINK:   // also wrt parent dir, NOT the unlinked inode!!
 	case MDS_OP_RMDIR:
@@ -832,10 +832,10 @@ void MDS::dispatch_request(Message *m, CInode *ref)
 	else 
 	  handle_client_open(req, ref);
 	break;
-	/*
   case MDS_OP_TRUNCATE:
 	handle_client_truncate(req, ref);
 	break;
+	/*
   case MDS_OP_FSYNC:
 	handle_client_fsync(req, ref);
 	break;
@@ -2203,6 +2203,36 @@ void MDS::handle_client_symlink(MClientRequest *req, CInode *diri)
 
 
 
+// ===================================
+// TRUNCATE, FSYNC
+
+/*
+ * FIXME: this truncate implemention is WRONG WRONG WRONG
+ */
+
+void MDS::handle_client_truncate(MClientRequest *req, CInode *cur)
+{
+  // write
+  if (!mdcache->inode_hard_write_start(cur, req))
+	return;  // fw or (wait for) lock
+
+   // check permissions
+  
+  // do update
+  cur->inode.size = req->get_sizearg();
+  cur->mark_dirty();
+
+  mdcache->inode_hard_write_finish(cur);
+
+  balancer->hit_inode(cur);   
+
+  // start reply
+  MClientReply *reply = new MClientReply(req, 0);
+
+  // commit
+  commit_request(req, reply, cur,
+				 new EInodeUpdate(cur));
+}
 
 
 

@@ -21,9 +21,9 @@
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "client" << "." << pthread_self() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "client" << whoami << "." << pthread_self() << " "
 
-
+#define  tout       if (g_conf.client_trace) cout << "trace: " 
 
 
 
@@ -555,6 +555,15 @@ int Client::mount(int mkfs)
   delete reply;
 
   client_lock.Unlock();
+
+  dout(3) << "op: // client trace data structs" << endl;
+  dout(3) << "op: struct stat st;" << endl;
+  dout(3) << "op: struct utimbuf utim;" << endl;
+  dout(3) << "op: int readlinkbuf_len = 1000;" << endl;
+  dout(3) << "op: char readlinkbuf[readlinkbuf_len];" << endl;
+  dout(3) << "op: map<string, inode_t*> dir_contents;" << endl;
+  dout(3) << "op: map<fileh_t, fileh_t> open_files;" << endl;
+  dout(3) << "op: fileh_t fh;" << endl;
 }
 
 int Client::unmount()
@@ -584,11 +593,15 @@ int Client::unmount()
 int Client::link(const char *existing, const char *newname) 
 {
   client_lock.Lock();
+  dout(3) << "op: client->link(\"" << existing << "\", \"" << newname << "\");" << endl;
+  tout << "link" << endl;
+  tout << existing << endl;
+  tout << newname << endl;
+
 
   // main path arg is new link name
   // sarg is target (existing file)
 
-  dout(3) << "link " << existing << " " << newname << endl;
 
   MClientRequest *req = new MClientRequest(MDS_OP_LINK, whoami);
   req->set_path(newname);
@@ -614,8 +627,11 @@ int Client::link(const char *existing, const char *newname)
 int Client::unlink(const char *path)
 {
   client_lock.Lock();
+  dout(3) << "op: client->unlink\(\"" << path << "\");" << endl;
+  tout << "unlink" << endl;
+  tout << path << endl;
 
-  dout(3) << "unlink " << path << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_UNLINK, whoami);
   req->set_path(path);
  
@@ -628,9 +644,10 @@ int Client::unlink(const char *path)
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
-	//this crashes, haven't looked at why yet
-	//Dentry *dn = lookup(req->get_filepath()); 
-	//if (dn) unlink(dn);
+	// remove from local cache
+	filepath fp(path);
+	Dentry *dn = lookup(fp);
+	if (dn) unlink(dn);
   }
   this->insert_trace(reply->get_trace());
   delete reply;
@@ -644,8 +661,12 @@ int Client::unlink(const char *path)
 int Client::rename(const char *from, const char *to)
 {
   client_lock.Lock();
+  dout(3) << "op: client->rename(\"" << from << "\", \"" << to << "\");" << endl;
+  tout << "rename" << endl;
+  tout << from << endl;
+  tout << to << endl;
 
-  dout(3) << "rename " << from << " " << to << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_RENAME, whoami);
   req->set_path(from);
   req->set_sarg(to);
@@ -672,8 +693,12 @@ int Client::rename(const char *from, const char *to)
 int Client::mkdir(const char *path, mode_t mode)
 {
   client_lock.Lock();
+  dout(3) << "op: client->mkdir(\"" << path << "\", " << mode << ");" << endl;
+  tout << "mkdir" << endl;
+  tout << path << endl;
+  tout << mode << endl;
 
-  dout(3) << "mkdir " << path << " mode " << mode << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_MKDIR, whoami);
   req->set_path(path);
   req->set_iarg( (int)mode );
@@ -698,8 +723,11 @@ int Client::mkdir(const char *path, mode_t mode)
 int Client::rmdir(const char *path)
 {
   client_lock.Lock();
+  dout(3) << "op: client->rmdir(\"" << path << "\");" << endl;
+  tout << "rmdir" << endl;
+  tout << path << endl;
 
-  dout(3) << "rmdir " << path << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_RMDIR, whoami);
   req->set_path(path);
  
@@ -712,8 +740,14 @@ int Client::rmdir(const char *path)
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
   if (res == 0) {
-	// crashes, not sure why yet
-	//unlink(lookup(req->get_filepath()));
+	// remove from local cache
+	filepath fp(path);
+	Dentry *dn = lookup(fp);
+	if (dn) {
+	  if (dn->inode->dir && dn->inode->dir->is_empty()) 
+		close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
+	  unlink(dn);
+	}
   }
   this->insert_trace(reply->get_trace());  
   delete reply;
@@ -729,8 +763,12 @@ int Client::rmdir(const char *path)
 int Client::symlink(const char *target, const char *link)
 {
   client_lock.Lock();
+  dout(3) << "op: client->symlink(\"" << target << "\", \"" << link << "\");" << endl;
+  tout << "symlink" << endl;
+  tout << target << endl;
+  tout << link << endl;
 
-  dout(3) << "symlink target " << target << " link " << link << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_SYMLINK, whoami);
   req->set_path(link);
   req->set_sarg(target);
@@ -754,7 +792,12 @@ int Client::symlink(const char *target, const char *link)
 
 int Client::readlink(const char *path, char *buf, size_t size) 
 { 
-  dout(3) << "readlink " << path << endl;
+  client_lock.Lock();
+  dout(3) << "op: client->readlink(\"" << path << "\", readlinkbuf, readlinkbuf_len);" << endl;
+  tout << "readlink" << endl;
+  tout << path << endl;
+  client_lock.Unlock();
+
   // stat first  (FIXME, PERF access cache directly) ****
   struct stat stbuf;
   int r = this->lstat(path, &stbuf);
@@ -783,8 +826,11 @@ int Client::readlink(const char *path, char *buf, size_t size)
 int Client::lstat(const char *path, struct stat *stbuf)
 {
   client_lock.Lock();
+  dout(3) << "op: client->lstat(\"" << path << "\", &st);" << endl;
+  tout << "lstat" << endl;
+  tout << path << endl;
 
-  dout(3) << "lstat " << path << endl;
+
   // FIXME, PERF request allocation convenient but not necessary for cache hit
   MClientRequest *req = new MClientRequest(MDS_OP_STAT, whoami);
   req->set_path(path);
@@ -849,8 +895,12 @@ int Client::lstat(const char *path, struct stat *stbuf)
 int Client::chmod(const char *path, mode_t mode)
 {
   client_lock.Lock();
+  dout(3) << "op: client->chmod(\"" << path << "\", " << mode << ");" << endl;
+  tout << "chmod" << endl;
+  tout << path << endl;
+  tout << mode << endl;
 
-  dout(3) << "chmod " << path << " mode " << mode << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_CHMOD, whoami);
   req->set_path(path); 
   req->set_iarg( (int)mode );
@@ -873,8 +923,13 @@ int Client::chmod(const char *path, mode_t mode)
 int Client::chown(const char *path, uid_t uid, gid_t gid)
 {
   client_lock.Lock();
+  dout(3) << "op: client->chown(\"" << path << "\", " << uid << ", " << gid << ");" << endl;
+  tout << "chown" << endl;
+  tout << path << endl;
+  tout << uid << endl;
+  tout << gid << endl;
 
-  dout(3) << "chown " << path << " " << uid << "." << gid << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_CHOWN, whoami);
   req->set_path(path); 
   req->set_iarg( (int)uid );
@@ -900,8 +955,14 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
 int Client::utime(const char *path, struct utimbuf *buf)
 {
   client_lock.Lock();
+  dout(3) << "op: utim.actime = " << buf->actime << "; utim.modtime = " << buf->modtime << ";" << endl;
+  dout(3) << "op: client->utime(\"" << path << "\", &utim);" << endl;
+  tout << "utime" << endl;
+  tout << path << endl;
+  tout << buf->actime << endl;
+  tout << buf->modtime << endl;
 
-  dout(3) << "utime " << path << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_UTIME, whoami);
   req->set_path(path); 
   req->set_targ( buf->modtime );
@@ -929,8 +990,12 @@ int Client::utime(const char *path, struct utimbuf *buf)
 int Client::mknod(const char *path, mode_t mode) 
 { 
   client_lock.Lock();
+  dout(3) << "op: client->mknod(\"" << path << "\", " << mode << ");" << endl;
+  tout << "mknod" << endl;
+  tout << path << endl;
+  tout << mode << endl;
 
-  dout(3) << "mknod " << path << " mode " << mode << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_MKNOD, whoami);
   req->set_path(path); 
   req->set_iarg( mode );
@@ -967,8 +1032,11 @@ int Client::mknod(const char *path, mode_t mode)
 int Client::getdir(const char *path, map<string,inode_t*>& contents) 
 {
   client_lock.Lock();
+  dout(3) << "op: client->getdir(\"" << path << "\", dir_contents);" << endl;
+  tout << "getdir" << endl;
+  tout << path << endl;
 
-  dout(3) << "getdir " << path << endl;
+
   MClientRequest *req = new MClientRequest(MDS_OP_READDIR, whoami);
   req->set_path(path); 
 
@@ -1026,9 +1094,12 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 int Client::open(const char *path, int mode) 
 {
   client_lock.Lock();
+  dout(3) << "op: fh = client->open(\"" << path << "\", " << mode << ");" << endl;
+  tout << "open" << endl;
+  tout << path << endl;
+  tout << mode << endl;
 
-  dout(3) << "open " << path << " mode " << mode << endl;
-  
+
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
   req->set_path(path); 
   req->set_iarg(mode);
@@ -1039,7 +1110,8 @@ int Client::open(const char *path, int mode)
   
   MClientReply *reply = make_request(req);
   assert(reply);
-  dout(3) << "open result = " << reply->get_result() << endl;
+  dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
+  tout << reply->get_result() << endl;
 
   vector<c_inode_info*> trace = reply->get_trace();
   this->insert_trace(trace);  
@@ -1076,8 +1148,12 @@ int Client::open(const char *path, int mode)
 int Client::close(fileh_t fh)
 {
   client_lock.Lock();
+  dout(3) << "op: client->close(open_files[ " << fh << " ]);" << endl;
+  dout(3) << "op: open_files.erase( " << fh << " );" << endl;
+  tout << "close" << endl;
+  tout << fh << endl;
 
-  dout(3) << "close " << fh << endl;
+
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -1378,6 +1454,9 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 	
 	cond.Wait(client_lock);
   }
+#if 0
+  }
+#endif
 
 
   // assume success for now.  FIXME.
@@ -1401,9 +1480,43 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 }
 
 
+int Client::truncate(const char *file, off_t size) 
+{
+  client_lock.Lock();
+  dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;
+  tout << "truncate" << endl;
+  tout << file << endl;
+  tout << size << endl;
+
+
+  MClientRequest *req = new MClientRequest(MDS_OP_TRUNCATE, whoami);
+  req->set_path(file); 
+  req->set_sizearg( size );
+
+  // FIXME where does FUSE maintain user information
+  req->set_caller_uid(getuid());
+  req->set_caller_gid(getgid());
+  
+  MClientReply *reply = make_request(req);
+  int res = reply->get_result();
+  this->insert_trace(reply->get_trace());  
+  delete reply;
+
+  dout(10) << " truncate result is " << res << endl;
+
+  client_lock.Unlock();
+  return res;
+}
+
+
 int Client::fsync(fileh_t fh, bool syncdataonly) 
 {
   client_lock.Lock();
+  dout(3) << "op: client->fsync(open_files[ " << fh << " ], " << syncdataonly << ");" << endl;
+  tout << "fsync" << endl;
+  tout << fh << endl;
+  tout << syncdataonly << endl;
+
   int r = 0;
 
   assert(fh_map.count(fh));

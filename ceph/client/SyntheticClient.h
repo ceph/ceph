@@ -6,6 +6,8 @@
 #include "Client.h"
 #include "include/Distribution.h"
 
+#include "Trace.h"
+
 #define SYNCLIENT_MODE_RANDOMWALK  1
 #define SYNCLIENT_MODE_FULLWALK    2
 #define SYNCLIENT_MODE_MAKEDIRS    3
@@ -13,6 +15,9 @@
 #define SYNCLIENT_MODE_READFILE    5
 #define SYNCLIENT_MODE_UNTIL       6
 #define SYNCLIENT_MODE_REPEATWALK  7
+
+#define SYNCLIENT_MODE_TRACEOPENSSH 8
+#define SYNCLIENT_MODE_TRACEINCLUDE 9
 
 class SyntheticClient {
   Client *client;
@@ -105,13 +110,27 @@ class SyntheticClient {
   timepair_t run_until;
 
   string get_sarg();
-  
+
+  bool time_to_stop() {
+	if (run_until.first && g_clock.gettimepair() > run_until) 
+	  return true;
+	else
+	  return false;
+  }
+
+  string compose_path(string& prefix, char *rest) {
+	return prefix + rest;
+  }
+
   int full_walk(string& fromdir);
   int random_walk(int n);
   int make_dirs(const char *basedir, int dirs, int files, int depth);
   int write_file(string& fn, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk);
 
+  int clean_dir(string& basedir);
+
+  int play_trace(Trace& t, string& prefix);
 
 };
 

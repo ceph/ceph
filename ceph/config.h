@@ -37,6 +37,8 @@ struct md_config_t {
   int      client_bcache_alloc_minsize;
   int      client_bcache_alloc_maxsize;
   int      client_bcache_ttl;
+  int      client_trace;
+  int      fuse_direct_io;
 
   // mds
   int   mds_cache_size;
