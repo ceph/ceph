@@ -33,7 +33,7 @@ class Mutex
 
   virtual ~Mutex()
   { 
-	pthread_mutex_unlock(&M); 
+	//pthread_mutex_unlock(&M); 
 	pthread_mutex_destroy(&M); 
   }
 

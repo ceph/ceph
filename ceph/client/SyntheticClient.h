@@ -12,6 +12,7 @@
 #define SYNCLIENT_MODE_WRITEFILE   4
 #define SYNCLIENT_MODE_READFILE    5
 #define SYNCLIENT_MODE_UNTIL       6
+#define SYNCLIENT_MODE_REPEATWALK  7
 
 class SyntheticClient {
   Client *client;

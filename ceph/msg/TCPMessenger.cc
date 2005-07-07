@@ -39,6 +39,7 @@ int tcp_port = 9876;
  */
 
 hash_map<int, TCPMessenger*>  directory;  // local
+Mutex                         directory_lock;
 list<Message*>                incoming;
 Mutex                         incoming_lock;
 Cond                          incoming_cond;
@@ -558,9 +559,11 @@ void* tcp_dispatchthread(void*)
 		in.pop_front();
 	  
 		int dest = m->get_dest();
+		directory_lock.Lock();
 		if (directory.count(dest)) {
 		  Messenger *who = directory[ dest ];
-		  
+		  directory_lock.Unlock();		  
+
 		  dout(4) << "---- '" << m->get_type_name() << 
 			"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 			" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
@@ -569,6 +572,7 @@ void* tcp_dispatchthread(void*)
 		  
 		  who->dispatch(m);
 		} else {
+		  directory_lock.Unlock();
 		  dout (1) << "---- i don't know who " << dest << " is." << endl;
 		  assert(0);
 		}
@@ -666,7 +670,9 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
   this->myaddr = myaddr;
 
   // register myself in the messenger directory
+  directory_lock.Lock();
   directory[myaddr] = this;
+  directory_lock.Unlock();
 
   // register to execute timer events
   g_timer.set_messenger_kicker(new C_TCPKicker());
@@ -696,16 +702,18 @@ TCPMessenger::~TCPMessenger()
 int TCPMessenger::shutdown()
 {
   // remove me from the directory
+  directory_lock.Lock();
   directory.erase(myaddr);
-
-  // no more timer events
-  g_timer.unset_messenger_kicker();
+  bool lastone = directory.empty();
+  directory_lock.Unlock();
 
   // last one?
-  if (directory.empty()) {
+  if (lastone) {
 	dout(2) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
 	pthread_t whoami = pthread_self();
 
+	// no more timer events
+	g_timer.unset_messenger_kicker();
 
   
 	// close incoming sockets
@@ -738,7 +746,7 @@ int TCPMessenger::shutdown()
 	}
 	*/
   } else {
-	dout(10) << "shutdown still " << directory.size() << " other messengers on rank " << mpi_rank << endl;
+	dout(10) << "shutdown still" /*<< directory.size()*/ << " other messengers on rank " << mpi_rank << endl;
   }
 }
 
@@ -757,7 +765,7 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
 
-  if (0) {
+  if (1) {
 	// der
 	tcp_send(m);
   } else {

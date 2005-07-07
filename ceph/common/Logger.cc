@@ -9,6 +9,10 @@
 
 #include "include/config.h"
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
+
 // per-process lock.  lame, but this way I protect LogType too!
 Mutex logger_lock;
 
@@ -17,6 +21,7 @@ Logger::Logger(string fn, LogType *type)
   filename = "log/";
   if (g_conf.log_name) {
 	filename += g_conf.log_name;
+	::mkdir( filename.c_str(), 0755 );   // make sure dir exists
 	filename += "/";
   }
   filename += fn;

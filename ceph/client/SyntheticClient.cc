@@ -66,6 +66,7 @@ int SyntheticClient::run()
 		}
 	  }
 	  break;
+
 	case SYNCLIENT_MODE_RANDOMWALK:
 	  {
 		int iarg1 = iargs.front();
@@ -74,6 +75,7 @@ int SyntheticClient::run()
 		random_walk(iarg1);
 	  }
 	  break;
+
 	case SYNCLIENT_MODE_MAKEDIRS:
 	  {
 		string sarg1 = get_sarg();
@@ -84,6 +86,7 @@ int SyntheticClient::run()
 		make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
 	  }
 	  break;
+
 	case SYNCLIENT_MODE_FULLWALK:
 	  {
 		string sarg1 = get_sarg();
@@ -91,6 +94,14 @@ int SyntheticClient::run()
 		full_walk(sarg1);
 	  }
 	  break;
+	case SYNCLIENT_MODE_REPEATWALK:
+	  {
+		string sarg1 = get_sarg();
+		dout(2) << "repeatwalk " << sarg1 << endl;
+		while (full_walk(sarg1) == 0) ;
+	  }
+	  break;
+
 	case SYNCLIENT_MODE_WRITEFILE:
 	  {
 		string sarg1 = get_sarg();
@@ -179,7 +190,7 @@ void SyntheticClient::up()
 
 int SyntheticClient::full_walk(string& basedir) 
 {
-  if (run_until.first && g_clock.gettimepair() > run_until) return 0;
+  if (run_until.first && g_clock.gettimepair() > run_until) return -1;
 
   // read dir
   map<string, inode_t*> contents;
