@@ -1,6 +1,7 @@
 
 #include "Trace.h"
 
+#include <iostream>
 #include <cassert>
 #include <map>
 #include <ext/rope>

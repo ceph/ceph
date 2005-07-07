@@ -230,7 +230,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 
   const char *p = prefix.c_str();
 
-  map<__int64_t, int> open_files;
+  map<__int64_t, __int64_t> open_files;
 
   while (!t.end()) {
 	
