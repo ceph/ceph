@@ -139,7 +139,7 @@ int SyntheticClient::run()
 		int iarg1 = iargs.front();  iargs.pop_front();
 		string prefix;
 		if (client->whoami == 0) {
-		  Trace t("client/traces/trace.include");
+		  Trace t("traces/trace.include");
 		  play_trace(t, prefix);
 		} else {
 		  sleep(iarg1);
@@ -151,7 +151,7 @@ int SyntheticClient::run()
 		string prefix = get_sarg();
 		int iarg1 = iargs.front();  iargs.pop_front();
 		
-		Trace t("client/traces/trace.openssh");
+		Trace t("traces/trace.openssh");
 
 		client->mkdir(prefix.c_str(), 0755);
 		

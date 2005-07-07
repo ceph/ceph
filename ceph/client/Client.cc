@@ -1105,7 +1105,6 @@ int Client::open(const char *path, int mode)
   tout << path << endl;
   tout << mode << endl;
 
-
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
   req->set_path(path); 
   req->set_iarg(mode);
