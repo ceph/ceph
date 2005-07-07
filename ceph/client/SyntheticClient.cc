@@ -305,7 +305,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	  client->getdir(a, contents);
 	} else if (strcmp(op, "open") == 0) {
 	  const char *a = t.get_string(p);
-	  __int64_t b = t.get_int();
+	  __int64_t b = t.get_int(); 
+	  // HACK
+	  b = O_RDONLY;
 	  __int64_t id = t.get_int();
 	  __int64_t fh = client->open(a, b);
 	  open_files[id] = fh;
