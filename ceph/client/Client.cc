@@ -1325,22 +1325,20 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
 
   // do we have write file cap?
-  Cond *cond = 0;
   while (f->caps & CFILE_CAP_WR == 0) {
 	dout(7) << " don't have write cap, waiting" << endl;
-	if (!cond) cond = new Cond;
-	in->waitfor_write.push_back(cond);
-	cond->Wait(client_lock);
+	Cond cond;
+	in->waitfor_write.push_back(&cond);
+	cond.Wait(client_lock);
   }
-  if (cond) delete cond;
 
 
+#ifdef BUFFERCACHE
   // buffered write?
   if (f->caps & CFILE_CAP_WRBUFFER) {
 	// buffered write
 	dout(7) << "buffered/async write" << endl;
     
-#ifdef BUFFERCACHE
     // map buffercache for writing
     map<off_t, Bufferhead*> buffers, inflight;
     bc.map_or_alloc(in->inode.ino, size, offset, buffers, inflight); 
@@ -1352,14 +1350,14 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
       bc.map_or_alloc(in->inode.ino, size, offset, buffers, inflight); // FIXME: overkill
     } 
     bc.dirty(in->inode.ino, size, offset, buf);
-#else
+
     /*
       hack for now.. replace this with a real buffer cache
 
       just copy the buffer, send the write off, and return immediately.  
       flush() will block until all outstanding writes complete.
     */
-
+	/* this totally sucks, just do synchronous writes!
     bufferlist *blist = new bufferlist;
     blist->push_back( new buffer(buf, size, BUFFER_MODE_COPY|BUFFER_MODE_FREE) );
 
@@ -1367,9 +1365,12 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 
     Context *onfinish = new C_Client_WriteBuffer( in, blist );
     filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, *blist, 0, onfinish);
-#endif
+	*/
 
   } else {
+#else
+  {
+#endif
 	// synchronous write
     // FIXME: do not bypass buffercache
 	dout(7) << "synchronous write" << endl;
