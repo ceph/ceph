@@ -78,7 +78,6 @@ int main(int oargc, char **oargv) {
 		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
 	  } else if (strcmp(argv[i],"repeatwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_REPEATWALK );
-		//syn_sargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"randomwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
 		syn_iargs.push_back( atoi(argv[++i]) );
