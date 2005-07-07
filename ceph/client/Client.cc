@@ -404,8 +404,10 @@ int Client::flush_inode_buffers(Inode *in)
     dout(7) << "inode " << in->inode.ino << " has dirty buffers" << endl;
     Filecache *fc = bc.get_fc(in->inode.ino);
     fc->simplify();
-    for (set<Bufferhead*>::iterator it = fc->dirty_buffers.begin();
-         it != fc->dirty_buffers.end();
+    list<Bufferhead*> expired;
+    fc->dirty_buffers.get_expired(0, 0, expired);
+    for (list<Bufferhead*>::iterator it = expired.begin();
+         it != expired.end();
          it++) {
       (*it)->flush_start();
       C_Client_FileFlushFinish *onfinish = new C_Client_FileFlushFinish(fc, *it);
@@ -421,40 +423,28 @@ int Client::flush_inode_buffers(Inode *in)
 
 class C_Client_FlushFinish : public Context {
 public:
-  Buffercache *bc;
   Bufferhead *bh;
-  C_Client_FlushFinish(Buffercache *bc, Bufferhead *bh) {
-	this->bc = bc;
+  C_Client_FlushFinish(Bufferhead *bh) {
     this->bh = bh;
   }
   void finish(int r) {
     bh->flush_finish();
-	if (bc->dirty_buffers.empty()) {
-	  // wake up flush waiters
-	  for (list<Cond*>::iterator it = bc->waitfor_flushed.begin();
-		   it != bc->waitfor_flushed.end();
-		   it++) {
-		(*it)->Signal();
-	  }
-	  bc->waitfor_flushed.clear();
-	}
   }
 };
 
-int Client::flush_buffers()
+int Client::flush_buffers(int ttl, size_t dirty_size)
 {
+  // ttl = 0 or dirty_size = 0: flush all
   if (!bc.dirty_buffers.empty()) {
-    for (set<Bufferhead*>::iterator it = bc.dirty_buffers.begin();
-         it != bc.dirty_buffers.end();
+    list<Bufferhead*> expired;
+    bc.dirty_buffers.get_expired(ttl, dirty_size, expired);
+    for (list<Bufferhead*>::iterator it = expired.begin();
+         it != expired.end();
          it++) {
       (*it)->flush_start();
-      C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(&bc, *it);
+      C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(*it);
       filer->write((*it)->ino, g_OSD_FileLayout, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
     }
-    dout(7) << "dirty buffers, waiting" << endl;
-    Cond cond;
-    bc.waitfor_flushed.push_back(&cond);
-    cond.Wait(client_lock);
   } else {
 	dout(7) << "no dirty buffers" << endl;
   }
@@ -1110,10 +1100,10 @@ int Client::close(fileh_t fh)
   /* mds may ack our close() after reissuing same fh to another open; remove from
 	 fh_map _before_ sending request. */
   fh_map.erase(fh);
-  put_inode( in );
   delete f;
 
   release_inode_buffers(in);
+  put_inode( in );
 
   MClientReply *reply = make_request(req);
   assert(reply);
@@ -1250,7 +1240,7 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
     Bufferhead *bh = new Bufferhead(in->inode.ino, hole_offset, &bc);
     
     // read into the buffercache: when finished transition state from inflight to clean
-    bh->miss_start();
+    bh->miss_start(hole_size);
     C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
     filer->read(in->inode.ino, g_OSD_FileLayout, hole_size, hole_offset, &(bh->bl), onfinish);
     dout(7) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;

@@ -260,7 +260,7 @@ class Client : public Dispatcher {
   // buffer cache
   Buffercache bc;
   
-  int flush_buffers();     // flush dirty buffers
+  int flush_buffers(int ttl, size_t dirty_size);     // flush dirty buffers
   int flush_inode_buffers(Inode *in);     // flush buffered writes
   int release_inode_buffers(Inode *in);   // release cached reads
 		

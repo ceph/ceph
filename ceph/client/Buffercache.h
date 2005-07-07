@@ -11,7 +11,6 @@
 #include "common/Cond.h"
 
 // stl
-#include <set>
 #include <list>
 #include <map>
 using namespace std;
@@ -20,6 +19,9 @@ using namespace std;
 #define BUFHD_STATE_CLEAN	  1
 #define BUFHD_STATE_DIRTY	  2
 #define BUFHD_STATE_INFLIGHT  3
+
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug) cout << "client" << "." << pthread_self() << " " 
 
 class Buffercache;
 class Filecache;
@@ -40,8 +42,9 @@ class Bufferhead : public LRUObject {
   }
   
   off_t offset;
+  size_t miss_len;  // only valid during misses 
   inodeno_t ino;
-  time_t last_written;
+  time_t dirty_since;
   int state; 
   bufferlist bl;
   // read_waiters: threads waiting for reads from the buffer
@@ -95,29 +98,73 @@ class Bufferhead : public LRUObject {
     write_waiters.clear(); 
   }
   
-  void miss_start() {
+  void miss_start(size_t miss_len) {
 	assert(state == BUFHD_STATE_CLEAN);
 	state = BUFHD_STATE_INFLIGHT;
+	this->miss_len = miss_len;
   }
   
   void miss_finish() {
 	assert(state == BUFHD_STATE_INFLIGHT);
 	state = BUFHD_STATE_CLEAN;
+	//assert(bl.length() == miss_len);
 	wakeup_read_waiters();
 	wakeup_write_waiters();
   }
   
   void dirty();
-  void clean();
+  void leave_dirtybuffers();
   void flush_start();
   void flush_finish();
   void claim_append(Bufferhead* other);
 };
   
+
+class Dirtybuffers {
+ private:
+  multimap<time_t, Bufferhead*> _dbufs;
+
+ public:
+  void erase(Bufferhead* bh) {
+    dout(7) << "dirtybuffer: erase bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
+    int osize = _dbufs.size();
+    for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
+         it != _dbufs.upper_bound(bh->dirty_since);
+	 it++) {
+     if (it->second == bh) {
+        _dbufs.erase(it);
+        break;
+      }
+    }
+    assert(_dbufs.size() == osize - 1);
+  }
+
+  void insert(Bufferhead* bh) {
+    dout(7) << "dirtybuffer: insert bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
+    _dbufs.insert(pair<time_t, Bufferhead*>(bh->dirty_since, bh));
+  }
+
+  bool empty() { return _dbufs.empty(); }
+
+  bool exist(Bufferhead* bh) {
+    for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
+        it != _dbufs.upper_bound(bh->dirty_since);
+	it++ ) {
+      if (it->second == bh) {
+	dout(10) << "dirtybuffer: found bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
+        return true;
+      }
+    }
+    return false;
+  }
+  void get_expired(time_t ttl, size_t left_dirty, list<Bufferhead*>& to_flush);
+};
+
+
 class Filecache {
  public: 
   map<off_t, Bufferhead*> buffer_map;
-  set<Bufferhead*> dirty_buffers;
+  Dirtybuffers dirty_buffers;
   list<Cond*> waitfor_flushed;
   Buffercache *bc;
 
@@ -160,11 +207,14 @@ class Filecache {
 };
 
 class Buffercache { 
+ private:
+  Mutex buffercache_lock;
+  size_t dirty_size, flushing_size, clean_size;
+
  public:
   map<inodeno_t, Filecache*> bcache_map;
   LRU lru;
-  size_t dirty_size, flushing_size, clean_size;
-  set<Bufferhead*> dirty_buffers;
+  Dirtybuffers dirty_buffers;
   list<Cond*> waitfor_flushed;
 
   Buffercache() : dirty_size(0), flushing_size(0), clean_size(0) { }
@@ -186,8 +236,38 @@ class Buffercache {
     return bcache_map[ino];
   }
       
-  void insert(Bufferhead *bh);
+  void clean_to_dirty(size_t size) {
+    clean_size -= size;
+    assert(clean_size >= 0);
+    dirty_size += size;
+  }
+  void dirty_to_flushing(size_t size) {
+    dirty_size -= size;
+    assert(dirty_size >= 0);
+    flushing_size += size;
+  }
+  void flushing_to_dirty(size_t size) {
+    flushing_size -= size;
+    assert(flushing_size >= 0);
+    dirty_size += size;
+  }
+  void flushing_to_clean(size_t size) {
+    flushing_size -= size;
+    assert(flushing_size >= 0);
+    clean_size += size;
+  }
+  void increase_size(size_t size) {
+    clean_size += size;
+  }
+  void decrease_size(size_t size) {
+    clean_size -= size;
+    assert(clean_size >= 0);
+  }
+  size_t get_clean_size() { return clean_size; }
+  size_t get_dirty_size() { return dirty_size; }
+  size_t get_flushing_size() { return flushing_size; }
 
+  void insert(Bufferhead *bh);
   void dirty(inodeno_t ino, size_t size, off_t offset, const char *src);
   int touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
   void map_or_alloc(inodeno_t ino, size_t len, off_t off, 
