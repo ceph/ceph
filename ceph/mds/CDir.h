@@ -350,6 +350,14 @@ class CDir {
 
   
 
+  // for giving to clients
+  void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
+	if (( popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold)) {
+	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+	  ls = open_by;
+	}
+  }
+
 
   // -- state --
   unsigned get_state() { return state; }

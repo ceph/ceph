@@ -42,6 +42,7 @@ class c_inode_info {
   bool inode_soft_valid;  // true if inode info is valid (ie was readable on mds at the time)
   bool inode_hard_valid;  // true if inode info is valid (ie was readable on mds at the time)
 
+  bool     spec_defined;
   int      dir_auth;
   set<int> dist;    // where am i replicated?
 
@@ -61,17 +62,18 @@ class c_inode_info {
 	this->ref_dn = ref_dn;
 	
 	// replicated where?
-	if (in->is_dir() && in->dir) 
+	spec_defined = in->dir && in->dir->is_auth();
+	if (spec_defined) {
 	  dir_auth = in->dir->get_dir_auth();
-	else 
-	  dir_auth = -1;
-	in->get_dist_spec(this->dist, whoami, now);
+	  in->dir->get_dist_spec(this->dist, whoami, now);
+	} 
   }
   
   void _encode(bufferlist &bl) {
 	bl.append((char*)&inode, sizeof(inode));
 	bl.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
 	bl.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
+	bl.append((char*)&spec_defined, sizeof(spec_defined));
 	bl.append((char*)&dir_auth, sizeof(dir_auth));
 
 	::_encode(ref_dn, bl);
@@ -86,6 +88,8 @@ class c_inode_info {
 	off += sizeof(inode_soft_valid);
 	bl.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
 	off += sizeof(inode_hard_valid);
+	bl.copy(off, sizeof(spec_defined), (char*)&spec_defined);
+	off += sizeof(spec_defined);
 	bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
 	off += sizeof(dir_auth);
 

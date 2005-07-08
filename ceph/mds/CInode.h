@@ -518,13 +518,16 @@ class CInode : LRUObject {
   }
 
 
+  /*
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
-	if (popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold) {
+	if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
+		(!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
+	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
 	  ls = cached_by;
 	}
   }
-
+  */
 
   // dbg
   void dump(int d = 0);

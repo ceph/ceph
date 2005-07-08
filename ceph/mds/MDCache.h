@@ -368,7 +368,7 @@ class MDCache {
   //int send_inode_updates(CInode *in);
   //void handle_inode_update(MInodeUpdate *m);
 
-  int send_dir_updates(CDir *in, int except=-1);
+  int send_dir_updates(CDir *in, bool bcast=false);
   void handle_dir_update(MDirUpdate *m);
 
   void handle_cache_expire(MCacheExpire *m);

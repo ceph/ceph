@@ -6,25 +6,37 @@
 typedef struct {
   inodeno_t ino;
   int dir_rep;
+  int discover;
 } MDirUpdate_st;
 
 class MDirUpdate : public Message {
   MDirUpdate_st st;
   set<int> dir_rep_by;
+  string path;
 
  public:
   inodeno_t get_ino() { return st.ino; }
   int get_dir_rep() { return st.dir_rep; }
   set<int>& get_dir_rep_by() { return dir_rep_by; } 
+  bool should_discover() { return st.discover > 0; }
+  string& get_path() { return path; }
+
+  void tried_discover() {
+	if (st.discover) st.discover--;
+  }
 
   MDirUpdate() {}
   MDirUpdate(inodeno_t ino,
 			 int dir_rep,
-			 set<int>& dir_rep_by) :
+			 set<int>& dir_rep_by,
+			 string& path,
+			 bool discover = false) :
 	Message(MSG_MDS_DIRUPDATE) {
 	this->st.ino = ino;
 	this->st.dir_rep = dir_rep;
 	this->dir_rep_by = dir_rep_by;
+	if (discover) this->st.discover = 3;
+	this->path = path;
   }
   virtual char *get_type_name() { return "dup"; }
 
@@ -32,11 +44,13 @@ class MDirUpdate : public Message {
 	s.copy(off, sizeof(st), (char*)&st);
 	off += sizeof(st);
 	_unrope(dir_rep_by, s, off);
+	_unrope(path, s, off);
   }
 
   virtual void encode_payload(crope& r) {
 	r.append((char*)&st, sizeof(st));
 	_rope(dir_rep_by, r);
+	_rope(path, r);
   }
 };
 

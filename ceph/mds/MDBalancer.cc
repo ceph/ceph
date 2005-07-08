@@ -515,6 +515,7 @@ void MDBalancer::hit_dir(CDir *dir)
   dir->popularity[MDS_POP_JUSTME].hit(now);
   
   hit_recursive(dir, now);
+
 }
 
 
@@ -523,6 +524,31 @@ void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
 {
   bool anydom = dir->is_auth();
   bool curdom = dir->is_auth();
+
+
+  // replicate?
+  float dir_pop = dir->popularity[MDS_POP_CURDOM].get(now);    // hmm??
+
+  if (dir->is_auth()) {
+	if (!dir->is_rep() &&
+		dir_pop >= g_conf.mds_bal_replicate_threshold) {
+	  // replicate
+	  dout(5) << "replicating dir " << *dir << " pop " << dir_pop << endl;
+		  
+	  dir->dir_rep = CDIR_REP_ALL;
+	  mds->mdcache->send_dir_updates(dir, true);
+	}
+		
+	if (dir->is_rep() &&
+		dir_pop < g_conf.mds_bal_unreplicate_threshold) {
+	  // unreplicate
+	  dout(5) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;
+	  
+	  dir->dir_rep = CDIR_REP_NONE;
+	  mds->mdcache->send_dir_updates(dir);
+	}
+  }
+
 
   while (dir) {
 	CInode *in = dir->inode;

@@ -221,9 +221,16 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   }
 
   // take note of latest distribution on mds's
-  dn->inode->mds_contacts = in_info->dist;
-  dn->inode->mds_dir_auth = in_info->dir_auth;
-
+  if (in_info->spec_defined) {
+	if (in_info->dist.empty() && !dn->inode->mds_contacts.empty()) {
+	  dout(9) << "lost dist spec for " << dn->inode->inode.ino << " " << in_info->dist << endl;
+	}
+	if (!in_info->dist.empty() && dn->inode->mds_contacts.empty()) {
+	  dout(9) << "got dist spec for " << dn->inode->inode.ino << " " << in_info->dist << endl;
+	}
+	dn->inode->mds_contacts = in_info->dist;
+	dn->inode->mds_dir_auth = in_info->dir_auth;
+  }
 
   return dn->inode;
 }
@@ -244,7 +251,10 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
         root->inode = trace[i]->inode;
         inode_map[root->inode.ino] = root;
       }
-	  root->mds_contacts = trace[i]->dist;
+	  if (trace[i]->spec_defined) {
+		root->mds_contacts = trace[i]->dist;
+		root->mds_dir_auth = trace[i]->dir_auth;
+	  }
 	  root->last_updated = now;
       dout(12) << "insert_trace trace " << i << " root" << endl;
     } else {
@@ -322,21 +332,22 @@ MClientReply *Client::make_request(MClientRequest *req,
   
   int mds = 0;
   if (cur) {
-	if (!auth_best && cur->mds_contacts.size()) {
+	if (!auth_best && cur->get_replicas().size()) {
 	  // try replica(s)
-	  dout(9) << "contacting mds from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->mds_contacts << endl;
-	  set<int>::iterator it = cur->mds_contacts.begin();
-	  if (cur->mds_contacts.size() == 1)
+	  dout(9) << "contacting replica from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->get_replicas() << endl;
+	  set<int>::iterator it = cur->get_replicas().begin();
+	  if (cur->get_replicas().size() == 1)
 		mds = *it;
 	  else {
-		int r = rand() % cur->mds_contacts.size();
+		int r = rand() % cur->get_replicas().size();
 		while (r--) it++;
 		mds = *it;
 	  }
 	} else {
 	  // try auth
 	  mds = cur->authority();
-	  dout(9) << "contacting auth mds " << mds << endl;
+	  //if (!auth_best && req->get_filepath().get_path()[0] == '/')
+		dout(9) << "contacting auth mds " << mds << " auth_best " << auth_best << " for " << req->get_filepath() << endl;
 	}
   } else {
 	dout(9) << "i have no idea where " << req->get_filepath() << " is" << endl;

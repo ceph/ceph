@@ -1161,8 +1161,14 @@ int MDCache::path_traverse(filepath& origpath,
 	} else {
 	  // not mine.
 	  
-	  if (onfail == MDS_TRAVERSE_DISCOVER ||
-		  onfail == MDS_TRAVERSE_DISCOVERXLOCK) {
+	  if (onfail == MDS_TRAVERSE_DISCOVER &&
+		  cur->dir->is_rep()) {
+		dout(5) << "trying to discover in popular dir " << *cur->dir << endl;
+		onfail = MDS_TRAVERSE_DISCOVER;
+	  }
+
+	  if ((onfail == MDS_TRAVERSE_DISCOVER ||
+		   onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
 		// discover
 
 		filepath want = path.postfixpath(depth);
@@ -2283,20 +2289,32 @@ void MDCache::handle_inode_writer_closed(MInodeWriterClosed *m)
 */
 
 
-int MDCache::send_dir_updates(CDir *dir, int except)
+int MDCache::send_dir_updates(CDir *dir, bool bcast)
 {
   // this is an FYI, re: replication
 
+  set<int> who = dir->open_by;
+  if (bcast) 
+	who = mds->get_cluster()->get_mds_set();
+  
+  dout(7) << "sending dir_update on " << *dir << " bcast " << bcast << " to " << who << endl;
+
+  string path;
+  dir->inode->make_path(path);
+
   int whoami = mds->get_nodeid();
-  for (set<int>::iterator it = dir->open_by_begin(); 
-	   it != dir->open_by_end(); 
+  for (set<int>::iterator it = who.begin();
+	   it != who.end();
 	   it++) {
 	if (*it == whoami) continue;
-	if (*it == except) continue;
+	//if (*it == except) continue;
 	dout(7) << "sending dir_update on " << *dir << " to " << *it << endl;
+
 	mds->messenger->send_message(new MDirUpdate(dir->ino(),
 												dir->dir_rep,
-												dir->dir_rep_by),
+												dir->dir_rep_by,
+												path,
+												bcast),
 								 MSG_ADDR_MDS(*it), MDS_PORT_CACHE,
 								 MDS_PORT_CACHE);
   }
@@ -2309,12 +2327,34 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 {
   CInode *in = get_inode(m->get_ino());
   if (!in || !in->dir) {
-	dout(7) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
+	dout(5) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
+
+	// discover it?
+	if (m->should_discover()) {
+	  m->tried_discover();  // only once!
+	  vector<CDentry*> trace;
+	  filepath path = m->get_path();
+
+	  dout(5) << "trying discover on dir_update for " << path << endl;
+
+	  int r = path_traverse(path, trace, true,
+							m, new C_MDS_RetryMessage(mds, m),
+							MDS_TRAVERSE_DISCOVER);
+	  if (r > 0)
+		return;
+	  if (r == 0) {
+		assert(in);
+		open_remote_dir(in, new C_MDS_RetryMessage(mds, m));
+		return;
+	  }
+	  assert(0);
+	}
+
 	goto out;
   }
 
   // update
-  dout(7) << "dir_update on " << m->get_ino() << endl;
+  dout(5) << "dir_update on " << m->get_ino() << endl;
   in->dir->dir_rep = m->get_dir_rep();
   in->dir->dir_rep_by = m->get_dir_rep_by();
   

@@ -74,6 +74,7 @@ class Dir {
 };
 
 
+
 class Inode {
  public:
   inode_t   inode;    // the actual inode
@@ -99,6 +100,10 @@ class Inode {
 	if (symlink) { delete symlink; symlink = 0; }
   }
 
+  bool is_dir() {
+	return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
+  }
+
   int authority() {
 	// my info valid?
 	if (mds_dir_auth >= 0)  
@@ -110,6 +115,18 @@ class Inode {
 
 	return 0;  // who knows!
   }
+  set<int>& get_replicas() {
+	if (mds_contacts.size())
+	  return mds_contacts;
+	if (is_dir()) {
+	  return mds_contacts;
+	} 
+	if (dn && dn->dir && dn->dir->parent_inode) {
+	  return dn->dir->parent_inode->get_replicas();
+	}
+	return mds_contacts;
+  }
+  
 
   // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
   Dir *open_dir() {
