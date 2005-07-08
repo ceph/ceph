@@ -5,6 +5,7 @@
 
 #include "msg/Message.h"
 #include "mds/CInode.h"
+#include "mds/CDir.h"
 #include "mds/CDentry.h"
 
 #include <vector>
@@ -41,7 +42,7 @@ class c_inode_info {
   bool inode_soft_valid;  // true if inode info is valid (ie was readable on mds at the time)
   bool inode_hard_valid;  // true if inode info is valid (ie was readable on mds at the time)
 
-  int      auth;
+  int      dir_auth;
   set<int> dist;    // where am i replicated?
 
 
@@ -60,7 +61,10 @@ class c_inode_info {
 	this->ref_dn = ref_dn;
 	
 	// replicated where?
-	auth = in->authority();
+	if (in->dir) 
+	  dir_auth = in->dir->get_dir_auth();
+	else 
+	  dir_auth -1;
 	in->get_dist_spec(this->dist, whoami, now);
   }
   
@@ -68,7 +72,7 @@ class c_inode_info {
 	bl.append((char*)&inode, sizeof(inode));
 	bl.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
 	bl.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
-	bl.append((char*)&auth, sizeof(auth));
+	bl.append((char*)&dir_auth, sizeof(dir_auth));
 
 	::_encode(ref_dn, bl);
 	::_encode(symlink, bl);
@@ -82,8 +86,8 @@ class c_inode_info {
 	off += sizeof(inode_soft_valid);
 	bl.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
 	off += sizeof(inode_hard_valid);
-	bl.copy(off, sizeof(auth), (char*)&auth);
-	off += sizeof(auth);
+	bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
+	off += sizeof(dir_auth);
 
 	::_decode(ref_dn, bl, off);
 	::_decode(symlink, bl, off);

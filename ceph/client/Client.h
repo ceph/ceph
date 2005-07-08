@@ -77,7 +77,7 @@ class Dir {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  int       mds_auth;
+  int       mds_dir_auth;
   set<int>	mds_contacts;
   time_t    last_updated;
 
@@ -94,9 +94,17 @@ class Inode {
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
 
-  Inode() : ref(0), dir(0), dn(0), symlink(0), mds_auth(0) { }
+  Inode() : ref(0), dir(0), dn(0), symlink(0), mds_dir_auth(-1), last_updated(0) { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
+  }
+
+  int authority() {
+	if (mds_dir_auth >= 0) 
+	  return mds_dir_auth;
+	if (dn && dn->dir && dn->dir->parent_inode)
+	  return dn->dir->parent_inode->authority();
+	return 0;  // who knows!
   }
 
   // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).

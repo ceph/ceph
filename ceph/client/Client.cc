@@ -207,7 +207,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 	dout(12) << " new dentry+node with ino " << in_info->inode.ino << endl;
   }
 
-  // OK!
+  // OK, we found it!
   assert(dn && dn->inode);
 
   // actually update info
@@ -222,7 +222,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 
   // take note of latest distribution on mds's
   dn->inode->mds_contacts = in_info->dist;
-  dn->inode->mds_auth = in_info->auth;
+  dn->inode->mds_dir_auth = in_info->dir_auth;
 
   return dn->inode;
 }
@@ -319,8 +319,8 @@ MClientReply *Client::make_request(MClientRequest *req, bool auth_best)
   }
   
   if (cur) {
-	if (auth_best) {
-	  mds = cur->mds_auth;
+	if (auth_best) {  // hack fixme 
+	  mds = cur->authority();
 	} else {
 	  if (cur->mds_contacts.size()) {
 		dout(9) << "contacting mds from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->mds_contacts << endl;
@@ -333,7 +333,7 @@ MClientReply *Client::make_request(MClientRequest *req, bool auth_best)
 		  mds = *it;
 		}
 	  } else {
-		mds = cur->mds_auth;
+		mds = cur->authority();
 	  }
 	}
   } else {
