@@ -171,6 +171,7 @@ void MDBalancer::do_rebalance()
   
   double my_load = mds_load[whoami].root_pop;
   mds_load_t target_load = total_load / (double)cluster_size;
+  double target_root = target_load.root_pop;
 
   dout(5) << "  target load " << target_load << endl;
   
@@ -185,39 +186,101 @@ void MDBalancer::do_rebalance()
 
   // determine load transfer mapping
   multimap<int,double> my_targets;
-  multimap<double,int>::reverse_iterator exporter = load_map.rbegin();
-  multimap<double,int>::iterator importer = load_map.begin();
-  double imported = 0;
-  double exported = 0;
-  while (exporter != load_map.rend() &&
-		 importer != load_map.end()) {
-	double maxex = (*exporter).first - target_load.root_pop - exported;
-	double maxim = target_load.root_pop - (*importer).first - imported;
-	if (maxex < 0 ||
-		maxim < 0) break;
 
-	if (maxim < maxex) {  // import takes it all
-	  dout(5) << "   - mds" << (*exporter).second << " exports " << maxim << " to mds" << (*importer).second << endl;
-	  if ((*exporter).second == whoami)
-		my_targets.insert(pair<int,double>((*importer).second, maxim));
-	  exported += maxim;
-	  importer++;
-	  imported = 0;
-	} 
-	else if (maxim > maxex) {         // export all
-	  dout(5) << "   - mds" << (*exporter).second << " exports " << maxex << " to mds" << (*importer).second << endl;
-	  if ((*exporter).second == whoami)
-		my_targets.insert(pair<int,double>((*importer).second, maxex));
-	  imported += maxex;
-	  exporter++;
-	  exported = 0;
-	} else {
-	  // wow, perfect match!
-	  dout(5) << "   - mds" << (*exporter).second << " exports " << maxex << " to mds" << (*importer).second << endl;
-	  if ((*exporter).second == whoami)
-		my_targets.insert(pair<int,double>((*importer).second, maxex));
-	  imported = exported = 0;
-	  importer++; importer++;
+  if (0) {
+	// old way
+	
+	// match up big exporters with big importers
+	multimap<double,int>::reverse_iterator exporter = load_map.rbegin();
+	multimap<double,int>::iterator importer = load_map.begin();
+	double imported = 0;
+	double exported = 0;
+	while (exporter != load_map.rend() &&
+		   importer != load_map.end()) {
+	  double maxex = (*exporter).first - target_load.root_pop - exported;
+	  double maxim = target_load.root_pop - (*importer).first - imported;
+	  if (maxex < 0 ||
+		  maxim < 0) break;
+	  
+	  if (maxim < maxex) {  // import takes it all
+		dout(5) << "   - mds" << (*exporter).second << " exports " << maxim << " to mds" << (*importer).second << endl;
+		if ((*exporter).second == whoami)
+		  my_targets.insert(pair<int,double>((*importer).second, maxim));
+		exported += maxim;
+		importer++;
+		imported = 0;
+	  } 
+	  else if (maxim > maxex) {         // export all
+		dout(5) << "   - mds" << (*exporter).second << " exports " << maxex << " to mds" << (*importer).second << endl;
+		if ((*exporter).second == whoami)
+		  my_targets.insert(pair<int,double>((*importer).second, maxex));
+		imported += maxex;
+		exporter++;
+		exported = 0;
+	  } else {
+		// wow, perfect match!
+		dout(5) << "   - mds" << (*exporter).second << " exports " << maxex << " to mds" << (*importer).second << endl;
+		if ((*exporter).second == whoami)
+		  my_targets.insert(pair<int,double>((*importer).second, maxex));
+		imported = exported = 0;
+		importer++; importer++;
+	  }
+	}
+  } else {
+	// new way
+
+	// first separate exporters and importers
+	multimap<double,int> importers;
+	multimap<double,int> exporters;
+	
+	for (multimap<double,int>::iterator it = load_map.begin();
+		 it != load_map.end();
+		 it++) {
+	  if (it->first < target_root) {
+		//dout(5) << "   mds" << it->second << " is importer" << endl;
+		importers.insert(pair<double,int>(it->first,it->second));
+	  } else {
+		//dout(5) << "   mds" << it->second << " is exporter" << endl;
+		exporters.insert(pair<double,int>(it->first,it->second));
+	  }
+	}
+	
+	// now match them up.. big exporters with small importers!
+	multimap<double,int>::iterator ex = exporters.begin();
+	multimap<double,int>::iterator im = importers.begin();
+	double imported = 0;
+	double exported = 0;
+	while (ex != exporters.end() &&
+		   im != importers.end()) {
+	  double maxex = ex->first - target_load.root_pop - exported;
+	  double maxim = target_load.root_pop - im->first - imported;
+	  
+	  if (maxex < 0 ||
+		  maxim < 0) break;
+	  
+	  if (maxim < maxex) {  // import takes it all
+		dout(5) << "   - mds" << ex->second << " exports " << maxim << " to mds" << im->second << endl;
+		  if (ex->second == whoami)
+			my_targets.insert(pair<int,double>(im->second, maxim));
+		  exported += maxim;
+		  im++;
+		  imported = 0;
+	  } 
+	  else if (maxim > maxex) {         // export all
+		dout(5) << "   - mds" << ex->second << " exports " << maxex << " to mds" << im->second << endl;
+		if (ex->second == whoami)
+		  my_targets.insert(pair<int,double>(im->second, maxex));
+		imported += maxex;
+		ex++;
+		exported = 0;
+	  } else {
+		// wow, perfect match!
+		dout(5) << "   - mds" << ex->second << " exports " << maxex << " to mds" << im->second << endl;
+		if (ex->second == whoami)
+		  my_targets.insert(pair<int,double>(im->second, maxex));
+		imported = exported = 0;
+		im++; ex++;
+	  }
 	}
   }
 
