@@ -68,6 +68,7 @@ class c_inode_info {
 	bl.append((char*)&inode, sizeof(inode));
 	bl.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
 	bl.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
+	bl.append((char*)&auth, sizeof(auth));
 
 	::_encode(ref_dn, bl);
 	::_encode(symlink, bl);
@@ -81,6 +82,8 @@ class c_inode_info {
 	off += sizeof(inode_soft_valid);
 	bl.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
 	off += sizeof(inode_hard_valid);
+	bl.copy(off, sizeof(auth), (char*)&auth);
+	off += sizeof(auth);
 
 	::_decode(ref_dn, bl, off);
 	::_decode(symlink, bl, off);

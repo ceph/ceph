@@ -94,7 +94,7 @@ class Inode {
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
 
-  Inode() : ref(0), dir(0), dn(0), symlink(0) { }
+  Inode() : ref(0), dir(0), dn(0), symlink(0), mds_auth(0) { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
   }
