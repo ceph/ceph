@@ -77,6 +77,7 @@ class Dir {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
+  int       mds_auth;
   set<int>	mds_contacts;
   time_t    last_updated;
 
@@ -255,7 +256,7 @@ class Client : public Dispatcher {
 
 
   // blocking mds call
-  MClientReply *make_request(MClientRequest *req);
+  MClientReply *make_request(MClientRequest *req, bool auth_best=false);
 
   
   // buffer cache

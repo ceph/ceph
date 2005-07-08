@@ -41,6 +41,7 @@ class c_inode_info {
   bool inode_soft_valid;  // true if inode info is valid (ie was readable on mds at the time)
   bool inode_hard_valid;  // true if inode info is valid (ie was readable on mds at the time)
 
+  int      auth;
   set<int> dist;    // where am i replicated?
 
 
@@ -59,6 +60,7 @@ class c_inode_info {
 	this->ref_dn = ref_dn;
 	
 	// replicated where?
+	auth = in->authority();
 	in->get_dist_spec(this->dist, whoami, now);
   }
   
