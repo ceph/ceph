@@ -38,7 +38,7 @@ class MDBalancer {
   void handle_heartbeat(MHeartbeat *m);
 
   void export_empties();
-  void do_rebalance();
+  void do_rebalance(int beat);
   void find_exports(CDir *dir, 
 					double amount, 
 					list<CDir*>& exports, 

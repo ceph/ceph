@@ -124,7 +124,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   if (mds_load.size() == cluster_size) {
 	// let's go!
 	export_empties();
-	do_rebalance();
+	do_rebalance(m->get_beat());
   }
   
   // done
@@ -149,7 +149,7 @@ void MDBalancer::export_empties()
 
 
 
-void MDBalancer::do_rebalance()
+void MDBalancer::do_rebalance(int beat)
 {
   timepair_t now = g_clock.gettimepair();
 
@@ -187,7 +187,7 @@ void MDBalancer::do_rebalance()
   // determine load transfer mapping
   multimap<int,double> my_targets;
 
-  if (0) {
+  if (beat % 2 == 1) {
 	// old way
 	
 	// match up big exporters with big importers
