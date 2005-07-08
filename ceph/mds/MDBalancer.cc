@@ -187,7 +187,7 @@ void MDBalancer::do_rebalance(int beat)
   // determine load transfer mapping
   multimap<int,double> my_targets;
 
-  if (beat % 2 == 1) {
+  if (true || beat % 2 == 1) {
 	// old way
 	
 	// match up big exporters with big importers
