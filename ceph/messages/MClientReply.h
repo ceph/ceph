@@ -61,10 +61,10 @@ class c_inode_info {
 	this->ref_dn = ref_dn;
 	
 	// replicated where?
-	if (in->dir) 
+	if (in->is_dir() && in->dir) 
 	  dir_auth = in->dir->get_dir_auth();
 	else 
-	  dir_auth -1;
+	  dir_auth = -1;
 	in->get_dist_spec(this->dist, whoami, now);
   }
   

@@ -100,10 +100,14 @@ class Inode {
   }
 
   int authority() {
-	if (mds_dir_auth >= 0) 
+	// my info valid?
+	if (mds_dir_auth >= 0)  
 	  return mds_dir_auth;
-	if (dn && dn->dir && dn->dir->parent_inode)
+	
+	// otherwise try parent
+	if (dn && dn->dir && dn->dir->parent_inode) 
 	  return dn->dir->parent_inode->authority();
+
 	return 0;  // who knows!
   }
 

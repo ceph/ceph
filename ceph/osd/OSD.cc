@@ -171,6 +171,7 @@ void OSD::dispatch(Message *m)
 
   default:
 	dout(1) << " got unknown message " << m->get_type() << endl;
+	assert(0);
   }
 }
 

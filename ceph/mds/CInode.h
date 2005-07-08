@@ -523,7 +523,6 @@ class CInode : LRUObject {
 	if (popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold) {
 	  ls = cached_by;
 	}
-	ls.insert(auth);
   }
 
 

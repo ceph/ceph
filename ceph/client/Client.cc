@@ -224,6 +224,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   dn->inode->mds_contacts = in_info->dist;
   dn->inode->mds_dir_auth = in_info->dir_auth;
 
+
   return dn->inode;
 }
 
@@ -302,7 +303,6 @@ Dentry *Client::lookup(filepath& path)
 MClientReply *Client::make_request(MClientRequest *req, bool auth_best)
 {
   // send to what MDS?  find deepest known prefix
-  int mds = 0;
   Inode *cur = root;
   for (int i=0; i<req->get_filepath().depth(); i++) {
 	if (cur && cur->inode.mode & INODE_MODE_DIR && cur->dir) {
@@ -311,30 +311,30 @@ MClientReply *Client::make_request(MClientRequest *req, bool auth_best)
 	  if (dir->dentries.count( req->get_filepath()[i] ) == 0) 
 		break;
 	  
-	  dout(7) << " have path seg " << i << " " << cur->inode.ino << " " << req->get_filepath()[i] << endl;
+	  dout(7) << " have path seg " << i << " on " << cur->mds_dir_auth << " ino " << cur->inode.ino << " " << req->get_filepath()[i] << endl;
 	  cur = dir->dentries[ req->get_filepath()[i] ]->inode;
 	  assert(cur);
 	} else
 	  break;
   }
   
+  int mds = 0;
   if (cur) {
-	if (auth_best) {  // hack fixme 
-	  mds = cur->authority();
-	} else {
-	  if (cur->mds_contacts.size()) {
-		dout(9) << "contacting mds from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->mds_contacts << endl;
-		set<int>::iterator it = cur->mds_contacts.begin();
-		if (cur->mds_contacts.size() == 1)
-		  mds = *it;
-		else {
-		  int r = rand() % cur->mds_contacts.size();
-		  while (r--) it++;
-		  mds = *it;
-		}
-	  } else {
-		mds = cur->authority();
+	if (!auth_best && cur->mds_contacts.size()) {
+	  // try replica(s)
+	  dout(9) << "contacting mds from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->mds_contacts << endl;
+	  set<int>::iterator it = cur->mds_contacts.begin();
+	  if (cur->mds_contacts.size() == 1)
+		mds = *it;
+	  else {
+		int r = rand() % cur->mds_contacts.size();
+		while (r--) it++;
+		mds = *it;
 	  }
+	} else {
+	  // try auth
+	  mds = cur->authority();
+	  dout(9) << "contacting auth mds " << mds << endl;
 	}
   } else {
 	dout(9) << "i have no idea where " << req->get_filepath() << " is" << endl;

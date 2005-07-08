@@ -4,7 +4,8 @@ fakesyn: mds/MDS.cc:2334: void MDS::handle_client_close(MClientRequest*, CInode*
 - caps needs to be rewritten
  - MDS currently not reclaiming fh's  (otherwise a client assertion eventually fails)
 - hard links!
-
+- g_clock.gettimepair() all over the place.. need a get_recent()!
+- the client request direction is sort of borken.. some reqs have to go to auth, others don't
 
 
 !!!

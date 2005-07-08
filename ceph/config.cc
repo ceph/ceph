@@ -77,8 +77,8 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
 
-  mds_bal_replicate_threshold: 50000,
-  mds_bal_unreplicate_threshold: 20000,
+  mds_bal_replicate_threshold: 500,
+  mds_bal_unreplicate_threshold: 200,
   mds_bal_interval: 30,           // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,
