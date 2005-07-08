@@ -330,6 +330,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
   for (map<__int64_t, __int64_t>::iterator fi = open_files.begin();
 	   fi != open_files.end();
 	   fi++) {
+	dout(1) << "leftover close " << fi->second << endl;
 	client->close(fi->second);
   }
   

@@ -268,7 +268,7 @@ class Client : public Dispatcher {
 
 
   // blocking mds call
-  MClientReply *make_request(MClientRequest *req, bool auth_best=false);
+  MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
 
   
   // buffer cache

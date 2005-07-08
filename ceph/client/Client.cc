@@ -300,7 +300,9 @@ Dentry *Client::lookup(filepath& path)
 
 // -------
 
-MClientReply *Client::make_request(MClientRequest *req, bool auth_best)
+MClientReply *Client::make_request(MClientRequest *req, 
+								   bool auth_best, 
+								   int use_auth)  // this param is icky!
 {
   // send to what MDS?  find deepest known prefix
   Inode *cur = root;
@@ -339,6 +341,10 @@ MClientReply *Client::make_request(MClientRequest *req, bool auth_best)
   } else {
 	dout(9) << "i have no idea where " << req->get_filepath() << " is" << endl;
   }
+
+  // force use of a particular mds auth?
+  if (use_auth >= 0)
+	mds = use_auth;
 
   // drop mutex for duration of call
   client_lock.Unlock();  
@@ -1192,10 +1198,13 @@ int Client::close(fileh_t fh)
   fh_map.erase(fh);
   delete f;
 
+  // note mds auth.. we'll send the close there!  FIXME this is sort of icky
+  int mds_auth = in->authority();
+
   release_inode_buffers(in);
   put_inode( in );
 
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req, true, mds_auth);
   assert(reply);
   int result = reply->get_result();
   dout(3) << "close " << fh << " result = " << result << endl;
