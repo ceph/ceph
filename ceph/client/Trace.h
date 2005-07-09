@@ -1,6 +1,7 @@
 #ifndef __CLIENT_TRACE_H
 #define __CLIENT_TRACE_H
 
+#include <cassert>
 #include <list>
 #include <string>
 using namespace std;
@@ -33,6 +34,7 @@ class Trace {
   char strings[10][200];
   int ns;
   const char *get_string(const char *prefix = 0) {
+	assert(_cur != _end);
 	const char *s = *_cur;
 	_cur++;
 	if (prefix) {

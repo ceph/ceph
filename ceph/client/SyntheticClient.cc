@@ -61,7 +61,7 @@ int SyntheticClient::run()
 	  {
 		int iarg1 = iargs.front();
 		iargs.pop_front();
-		srand(time(0) + getpid());
+		srand(time(0) + getpid() + client->whoami);
 		sleep(rand() % iarg1);
 	  }
 	  break;
@@ -179,7 +179,7 @@ int SyntheticClient::run()
 	  {
 		string prefix = get_sarg();
 		int iarg1 = iargs.front();  iargs.pop_front();
-		
+
 		Trace t("traces/trace.openssh.lib");
 
 		client->mkdir(prefix.c_str(), 0755);

@@ -57,13 +57,13 @@ Trace::Trace(const char* f)
 	  cr.append(buf, r);
 	}
 	close(fd);
-
+	
 	// copy
 	tl->len = cr.length()+1;
-	tl->data = new char[cr.length()];
+	tl->data = new char[tl->len];
 	memcpy(tl->data, cr.c_str(), cr.length());
 	tl->data[tl->len-1] = '\n';
-	
+
 	// index!
 	int o = 0;
 	while (o < tl->len) {
@@ -81,6 +81,7 @@ Trace::Trace(const char* f)
 	dout(1) << "trace " << filename << " loaded with " << tl->tokens.size() << " tokens" << endl;
 	traces[filename] = tl;
   }
+
   tl->ref++;
 
   trace_lock.Unlock();
