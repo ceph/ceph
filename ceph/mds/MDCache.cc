@@ -1161,7 +1161,8 @@ int MDCache::path_traverse(filepath& origpath,
 	} else {
 	  // not mine.
 	  
-	  if (onfail == MDS_TRAVERSE_DISCOVER &&
+	  if (onfail == MDS_TRAVERSE_FORWARD && 
+		  onfinish == 0 &&   // no funnyness
 		  cur->dir->is_rep()) {
 		dout(5) << "trying to discover in popular dir " << *cur->dir << endl;
 		onfail = MDS_TRAVERSE_DISCOVER;
@@ -1200,7 +1201,7 @@ int MDCache::path_traverse(filepath& origpath,
 	  } 
 	  if (onfail == MDS_TRAVERSE_FORWARD) {
 		// forward
-		dout(7) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
+		dout(1) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
 		mds->messenger->send_message(req,
 									 MSG_ADDR_MDS(dauth), req->get_dest_port(),
 									 req->get_dest_port());
@@ -2319,6 +2320,8 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 								 MDS_PORT_CACHE);
   }
 
+  //g_conf.debug = 10;
+
   return 0;
 }
 
@@ -2354,7 +2357,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
   }
 
   // update
-  dout(5) << "dir_update on " << m->get_ino() << endl;
+  dout(1) << "dir_update on " << m->get_ino() << endl;
   in->dir->dir_rep = m->get_dir_rep();
   in->dir->dir_rep_by = m->get_dir_rep_by();
   
