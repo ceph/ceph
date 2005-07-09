@@ -195,6 +195,10 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_bal_replicate_threshold") == 0) 
+	  g_conf.mds_bal_replicate_threshold = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--mds_bal_unreplicate_threshold") == 0) 
+	  g_conf.mds_bal_unreplicate_threshold = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_bal_max") == 0) 
 	  g_conf.mds_bal_max = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--mds_bal_max_until") == 0) 
