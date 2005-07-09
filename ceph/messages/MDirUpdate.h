@@ -35,7 +35,7 @@ class MDirUpdate : public Message {
 	this->st.ino = ino;
 	this->st.dir_rep = dir_rep;
 	this->dir_rep_by = dir_rep_by;
-	if (discover) this->st.discover = 3;
+	if (discover) this->st.discover = 5;
 	this->path = path;
   }
   virtual char *get_type_name() { return "dup"; }
