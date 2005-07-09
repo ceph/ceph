@@ -1201,7 +1201,7 @@ int MDCache::path_traverse(filepath& origpath,
 	  } 
 	  if (onfail == MDS_TRAVERSE_FORWARD) {
 		// forward
-		dout(1) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
+		dout(7) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
 		mds->messenger->send_message(req,
 									 MSG_ADDR_MDS(dauth), req->get_dest_port(),
 									 req->get_dest_port());

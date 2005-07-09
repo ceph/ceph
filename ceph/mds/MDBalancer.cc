@@ -283,7 +283,6 @@ void MDBalancer::do_rebalance(int beat)
 		   im++) {
 		double maxim = get_maxim(im->first);
 		if (maxim <= .001) continue;
-		
 		try_match(ex->second, maxex,
 				  im->first, maxim);
 		if (maxex <= .001) break;;
@@ -303,9 +302,7 @@ void MDBalancer::do_rebalance(int beat)
 			 im != importers.end()) {
 		double maxex = get_maxex(ex->second);
 		double maxim = get_maxim(im->second);
-		
 		if (maxex < .001 || maxim < .001) break;
-		
 		try_match(ex->second, maxex,
 				  im->second, maxim);
 		if (maxex <= .001) ex++;
@@ -321,9 +318,7 @@ void MDBalancer::do_rebalance(int beat)
 			 im != importers.end()) {
 		double maxex = get_maxex(ex->second);
 		double maxim = get_maxim(im->second);
-		
 		if (maxex < .001 || maxim < .001) break;
-		
 		try_match(ex->second, maxex,
 				  im->second, maxim);
 		if (maxex <= .001) ex++;
