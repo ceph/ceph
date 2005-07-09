@@ -84,8 +84,14 @@ int main(int oargc, char **oargv) {
 	  } else if (strcmp(argv[i],"trace_include") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACEINCLUDE );
 		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"trace_lib") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACELIB );
+		syn_iargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"trace_openssh") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSH );
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"trace_opensshlib") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSHLIB );
 		syn_iargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"randomsleep") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_RANDOMSLEEP );

@@ -146,12 +146,41 @@ int SyntheticClient::run()
 		}
 	  }
 	  break;
+	case SYNCLIENT_MODE_TRACELIB:
+	  {
+		int iarg1 = iargs.front();  iargs.pop_front();
+		string prefix;
+		if (client->whoami == 0) {
+		  Trace t("traces/trace.lib");
+		  play_trace(t, prefix);
+		} else {
+		  sleep(iarg1);
+		}
+	  }
+	  break;
 	case SYNCLIENT_MODE_TRACEOPENSSH:
 	  {
 		string prefix = get_sarg();
 		int iarg1 = iargs.front();  iargs.pop_front();
 		
 		Trace t("traces/trace.openssh");
+
+		client->mkdir(prefix.c_str(), 0755);
+		
+		for (int i=0; i<iarg1; i++) {
+		  if (time_to_stop()) break;
+		  play_trace(t, prefix);
+		  if (time_to_stop()) break;
+		  clean_dir(prefix);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_TRACEOPENSSHLIB:
+	  {
+		string prefix = get_sarg();
+		int iarg1 = iargs.front();  iargs.pop_front();
+		
+		Trace t("traces/trace.openssh.lib");
 
 		client->mkdir(prefix.c_str(), 0755);
 		
