@@ -7,10 +7,15 @@
 class MHeartbeat : public Message {
   mds_load_t load;
   int        beat;
+  map<int, float> import_map;
 
  public:
   mds_load_t& get_load() { return load; }
   int get_beat() { return beat; }
+
+  map<int, float>& get_import_map() {
+	return import_map;
+  }
 
   MHeartbeat() {}
   MHeartbeat(mds_load_t& load, int beat) :
@@ -26,10 +31,35 @@ class MHeartbeat : public Message {
 	off += sizeof(load);
 	s.copy(off, sizeof(beat), (char*)&beat);
 	off += sizeof(beat);
+
+	int n;
+	s.copy(off, sizeof(n), (char*)&n);
+	off += sizeof(n);
+	while (n--) {
+	  int f;
+	  s.copy(off, sizeof(f), (char*)&f);
+	  off += sizeof(f);
+	  float v;
+	  s.copy(off, sizeof(v), (char*)&v);
+	  off += sizeof(v);	  
+	  import_map[f] = v;
+	}
   }
   virtual void encode_payload(crope& s) {
 	s.append((char*)&load, sizeof(load));
 	s.append((char*)&beat, sizeof(beat));
+
+	int n = import_map.size();
+	s.append((char*)&n, sizeof(n));
+	for (map<int, float>::iterator it = import_map.begin();
+		 it != import_map.end();
+		 it++) {
+	  int f = it->first;
+	  s.append((char*)&f, sizeof(f));
+	  float v = it->second;
+	  s.append((char*)&v, sizeof(v));
+	}
+
   }
 
 };

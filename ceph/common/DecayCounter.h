@@ -5,6 +5,7 @@
 #include <math.h>
 #include "Clock.h"
 
+#include "include/config.h"
 
 class DecayCounter {
  protected:
@@ -17,7 +18,7 @@ class DecayCounter {
 
  public:
   DecayCounter() : val(0) {
-	set_halflife( 40.0 );
+	set_halflife( g_conf.mds_bal_interval );
 	reset();
   }
   DecayCounter(double hl) : val(0) {

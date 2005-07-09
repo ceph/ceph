@@ -5,6 +5,7 @@
 #include <list>
 using namespace std;
 
+#include <map>
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
@@ -24,7 +25,24 @@ class MDBalancer {
   
   int beat_epoch;
 
-  hash_map<int, mds_load_t> mds_load;
+  // per-epoch scatter/gathered info
+  hash_map<int, mds_load_t>  mds_load;
+  map<int, map<int, float> > mds_import_map;
+
+  // per-epoch state
+  mds_load_t      target_load;
+  map<int,double> my_targets;
+  map<int,double> imported;
+  map<int,double> exported;
+
+  double try_match(int ex, double& maxex,
+				   int im, double& maxim);
+  double get_maxim(int im) {
+	return target_load.root_pop - mds_load[im].root_pop - imported[im];
+  }
+  double get_maxex(int ex) {
+	return mds_load[ex].root_pop - target_load.root_pop - exported[ex];	
+  }
 
  public:
   MDBalancer(MDS *m) {
