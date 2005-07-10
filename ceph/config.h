@@ -35,9 +35,15 @@ struct md_config_t {
   float    client_cache_mid;
   int      client_cache_stat_ttl;
   bool     client_use_random_mds;          // debug flag
+
   int      client_bcache_alloc_minsize;
   int      client_bcache_alloc_maxsize;
   int      client_bcache_ttl;
+  int      client_bcache_size;
+  float    client_bcache_lowater;
+  float    client_bcache_hiwater;
+  int      client_bcache_maxfrag;
+
   int      client_trace;
   int      fuse_direct_io;
 

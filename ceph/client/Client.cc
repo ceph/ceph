@@ -421,7 +421,7 @@ public:
 };
 
 
-int Client::flush_inode_buffers(Inode *in)
+void Client::flush_inode_buffers(Inode *in)
 {
   if (!in->inflight_buffers.empty()) {
     dout(7) << "inflight buffers of sync write, waiting" << endl;
@@ -458,13 +458,23 @@ public:
   Bufferhead *bh;
   C_Client_FlushFinish(Bufferhead *bh) {
     this->bh = bh;
+    bh->bc->flushing_buffers.insert(bh);
   }
   void finish(int r) {
     bh->flush_finish();
+    bh->bc->flushing_buffers.erase(bh);
+    if (bh->bc->flushing_buffers.empty()) {
+      for (list<Cond*>::iterator it = bh->bc->waitfor_flushed.begin();
+           it != bh->bc->waitfor_flushed.end();
+	   it++) {
+	(*it)->Signal();
+      }
+      bh->bc->waitfor_flushed.clear();
+    }
   }
 };
 
-int Client::flush_buffers(int ttl, size_t dirty_size)
+void Client::flush_buffers(int ttl, size_t dirty_size)
 {
   // ttl = 0 or dirty_size = 0: flush all
   if (!bc.dirty_buffers.empty()) {
@@ -476,22 +486,39 @@ int Client::flush_buffers(int ttl, size_t dirty_size)
       (*it)->flush_start();
       C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(*it);
       filer->write((*it)->ino, g_OSD_FileLayout, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
+      bc.wait_for_flush(client_lock);
     }
   } else {
 	dout(7) << "no dirty buffers" << endl;
   }
 }
 
+void Client::trim_bcache()
+{
+  if (bc.get_total_size() >  g_conf.client_bcache_size) {
+    // need to free buffers 
+    if (bc.get_dirty_size() > g_conf.client_bcache_hiwater * bc.get_total_size()) {
+      // flush buffers until we have low water mark
+      size_t want_target_size = (size_t)  g_conf.client_bcache_lowater * bc.get_total_size();
+      flush_buffers(g_conf.client_bcache_ttl, want_target_size);
+    }
+    // Now reclaim buffers
+    bc.reclaim(bc.get_total_size() - g_conf.client_bcache_size);
+  }
+}
+      
+                                                                                  
+
 /*
  * release inode (read cached) buffers from memory
  */
-int Client::release_inode_buffers(Inode *in)
+void Client::release_inode_buffers(Inode *in)
 {
 #ifdef BUFFERCACHE
-  bc.release_file(in->inode.ino);
+  // Check first we actually cached the file
+  if (bc.bcache_map.count(in->inode.ino)) bc.release_file(in->inode.ino);
 #endif
 }
-
 
 
 void Client::handle_file_caps(MClientFileCaps *m)
@@ -1214,7 +1241,7 @@ int Client::close(fileh_t fh)
 
   release_inode_buffers(in);
   put_inode( in );
-
+  
   MClientReply *reply = make_request(req, true, mds_auth);
   assert(reply);
   int result = reply->get_result();
@@ -1378,6 +1405,8 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
     rvalue = bc.touch_continuous(hits, size, offset);
     fc->copy_out(rvalue, offset, buf);
     dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;
+
+    trim_bcache();
   }
 #endif
   // done!
@@ -1450,6 +1479,8 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
       bc.map_or_alloc(in->inode.ino, size, offset, buffers, inflight); // FIXME: overkill
     } 
     bc.dirty(in->inode.ino, size, offset, buf);
+
+    trim_bcache();
 
     /*
       hack for now.. replace this with a real buffer cache

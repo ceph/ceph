@@ -98,22 +98,10 @@ class Bufferhead : public LRUObject {
     write_waiters.clear(); 
   }
   
-  void miss_start(size_t miss_len) {
-	assert(state == BUFHD_STATE_CLEAN);
-	state = BUFHD_STATE_INFLIGHT;
-	this->miss_len = miss_len;
-  }
-  
-  void miss_finish() {
-	assert(state == BUFHD_STATE_INFLIGHT);
-	state = BUFHD_STATE_CLEAN;
-	//assert(bl.length() == miss_len);
-	wakeup_read_waiters();
-	wakeup_write_waiters();
-  }
-  
+  void miss_start(size_t miss_len);
+  void miss_finish();
   void dirty();
-  void leave_dirtybuffers();
+  void dirtybuffers_erase();
   void flush_start();
   void flush_finish();
   void claim_append(Bufferhead* other);
@@ -125,39 +113,14 @@ class Dirtybuffers {
   multimap<time_t, Bufferhead*> _dbufs;
 
  public:
-  void erase(Bufferhead* bh) {
-    dout(7) << "dirtybuffer: erase bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
-    int osize = _dbufs.size();
-    for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
-         it != _dbufs.upper_bound(bh->dirty_since);
-	 it++) {
-     if (it->second == bh) {
-        _dbufs.erase(it);
-        break;
-      }
-    }
-    assert(_dbufs.size() == osize - 1);
-  }
-
-  void insert(Bufferhead* bh) {
-    dout(7) << "dirtybuffer: insert bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
-    _dbufs.insert(pair<time_t, Bufferhead*>(bh->dirty_since, bh));
-  }
-
+  void erase(Bufferhead* bh);
+  void insert(Bufferhead* bh);
   bool empty() { return _dbufs.empty(); }
-
-  bool exist(Bufferhead* bh) {
-    for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
-        it != _dbufs.upper_bound(bh->dirty_since);
-	it++ ) {
-      if (it->second == bh) {
-	dout(10) << "dirtybuffer: found bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
-        return true;
-      }
-    }
-    return false;
-  }
+  bool exist(Bufferhead* bh);
   void get_expired(time_t ttl, size_t left_dirty, list<Bufferhead*>& to_flush);
+  time_t get_age() { 
+    if (!_dbufs.empty()) return time(NULL) - _dbufs.begin()->second->dirty_since;
+  }
 };
 
 
@@ -216,6 +179,7 @@ class Buffercache {
   LRU lru;
   Dirtybuffers dirty_buffers;
   list<Cond*> waitfor_flushed;
+  set<Bufferhead*> flushing_buffers;
 
   Buffercache() : dirty_size(0), flushing_size(0), clean_size(0) { }
   
@@ -236,6 +200,12 @@ class Buffercache {
     return bcache_map[ino];
   }
       
+  void wait_for_flush(Mutex &lock) {
+    Cond cond;
+    waitfor_flushed.push_back(&cond);
+    cond.Wait(lock);
+  }
+
   void clean_to_dirty(size_t size) {
     clean_size -= size;
     assert(clean_size >= 0);
@@ -266,6 +236,8 @@ class Buffercache {
   size_t get_clean_size() { return clean_size; }
   size_t get_dirty_size() { return dirty_size; }
   size_t get_flushing_size() { return flushing_size; }
+  size_t get_total_size() { return clean_size + dirty_size + flushing_size; }
+  void get_reclaimable(size_t min_size, list<Bufferhead*>&);
 
   void insert(Bufferhead *bh);
   void dirty(inodeno_t ino, size_t size, off_t offset, const char *src);

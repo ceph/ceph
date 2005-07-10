@@ -60,9 +60,15 @@ md_config_t g_conf = {
   client_cache_mid: .5,
   client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
+
   client_bcache_alloc_minsize: 1024,
   client_bcache_alloc_maxsize: 262144,
   client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
+  client_bcache_size: 10485760, // 10MB *for testing*
+  client_bcache_lowater: .6, // fraction of size
+  client_bcache_hiwater: .8, 
+  client_bcache_maxfrag: 10, // max actual relative # of bheads over opt rel # of bheads
+
   client_trace: 0,
   fuse_direct_io: 1,
   
