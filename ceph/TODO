@@ -1,4 +1,7 @@
-known bugs to fix after fast
+
+
+
+KNOWN BUGS to fix after fast
 - RDWR on synthetic client results in
 fakesyn: mds/MDS.cc:2334: void MDS::handle_client_close(MClientRequest*, CInode*): Assertion `cur->softlock.can_write(true)' failed.
 - caps needs to be rewritten
@@ -6,10 +9,7 @@ fakesyn: mds/MDS.cc:2334: void MDS::handle_client_close(MClientRequest*, CInode*
 - hard links!
 - g_clock.gettimepair() all over the place.. need a get_recent()!
 - the client request direction is sort of borken.. some reqs have to go to auth, others don't
-
-
-!!!
-- test mds scaling w/ makedirs, vs mds_log_on_request 
+- implement truncate() for real
 
 
 big fast todo's:

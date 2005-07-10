@@ -53,6 +53,7 @@ md_config_t g_conf = {
   debug_buffer: 0,
   debug_filer: 0,
   debug_client: 0,
+  debug_osd: 0,
   
   // --- client ---
   client_cache_size: 300,
@@ -90,6 +91,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
+  osd_nrep: 1,
   osd_fsync: true,
   osd_writesync: false,
   osd_maxthreads: 10,
@@ -165,6 +167,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.debug_filer = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--debug_client") == 0) 
 	  g_conf.debug_client = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--debug_osd") == 0) 
+	  g_conf.debug_osd = atoi(argv[++i]);
 
 	else if (strcmp(argv[i], "--log") == 0) 
 	  g_conf.log = atoi(argv[++i]);
@@ -213,6 +217,8 @@ void parse_config_options(int argc, char **argv,
 	else if (strcmp(argv[i], "--fuse_direct_io") == 0)
 	  g_conf.fuse_direct_io = atoi(argv[++i]);
 
+	else if (strcmp(argv[i], "--osd_nrep") == 0) 
+	  g_conf.osd_nrep = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_writesync") == 0) 

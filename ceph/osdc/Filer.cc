@@ -308,6 +308,8 @@ Filer::write(inodeno_t ino,
 	assert(cur.length() == it->len);
 	m->set_data(cur);//.claim(cur);
 
+	m->set_rg_nrep(g_conf.osd_nrep);
+
 	off += it->len;
 
 	// add to gather set

@@ -50,7 +50,16 @@ class OSD : public Dispatcher {
 
   list<class MOSDOp*> waiting_for_osdcluster;
 
+  // replica hack
+  __uint64_t                     last_tid;
+  Mutex                          replica_write_lock;
+  map<MOSDOp*, Cond*>            replica_write_cond;
+  map<MOSDOp*, set<__uint64_t> > replica_write_tids;
+  map<__uint64_t, MOSDOp*>       replica_writes;
+
+  // global lock
   Mutex osd_lock;
+
 
  public:
   OSD(int id, Messenger *m);
@@ -82,6 +91,9 @@ class OSD : public Dispatcher {
   void op_delete(class MOSDOp *m);
   void op_truncate(class MOSDOp *m);
   void op_stat(class MOSDOp *m);
+
+  // for replication
+  void handle_op_reply(class MOSDOpReply *m);
 };
 
 #endif

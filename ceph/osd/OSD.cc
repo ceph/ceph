@@ -38,7 +38,7 @@
 
 #include "include/config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << whoami << " "
 
 char *osd_base_path = "./osddata";
 
@@ -57,6 +57,8 @@ OSD::OSD(int id, Messenger *m)
   messenger->set_dispatcher(this);
 
   osdcluster = 0;
+
+  last_tid = 0;
 
   // use fake store
 #ifdef USE_OBFS
@@ -169,10 +171,32 @@ void OSD::dispatch(Message *m)
 	handle_op((MOSDOp*)m);
 	break;
 
+
+	// for replication..
+  case MSG_OSD_OPREPLY:
+	monitor->host_is_alive(m->get_source());
+	handle_op_reply((MOSDOpReply*)m);
+	break;
+
+
   default:
 	dout(1) << " got unknown message " << m->get_type() << endl;
 	assert(0);
   }
+}
+
+
+void OSD::handle_op_reply(MOSDOpReply *m)
+{
+  replica_write_lock.Lock();
+  MOSDOp *op = replica_writes[m->get_tid()];
+  dout(7) << "got replica write ack tid " << m->get_tid() << " orig op " << op << endl;
+
+  replica_write_tids[op].erase(m->get_tid());
+  if (replica_write_tids[op].empty())
+	replica_write_cond[op]->Signal();
+
+  replica_write_lock.Unlock();
 }
 
 
@@ -374,25 +398,64 @@ void OSD::op_read(MOSDOp *r)
 
 // -- osd_write
 
-void OSD::op_write(MOSDOp *m)
+void OSD::op_write(MOSDOp *op)
 {
+
+  // replicated write?
+  Cond *cond = 0;
+  if (op->get_rg_role() == 0) {
+	// primary
+	if (op->get_rg_nrep() > 1) {
+	  dout(7) << "op_write nrep=" << op->get_rg_nrep() << endl;
+	  int reps[op->get_rg_nrep()];
+	  osdcluster->repgroup_to_osds(op->get_rg(),
+								   reps,
+								   op->get_rg_nrep());
+
+	  replica_write_lock.Lock();
+	  for (int i=1; i<op->get_rg_nrep(); i++) {
+		// forward the write
+		dout(7) << "  replica write to " << reps[i] << endl;
+
+		__uint64_t tid = ++last_tid;
+		MOSDOp *wr = new MOSDOp(tid,
+								messenger->get_myaddr(),
+								op->get_oid(),
+								op->get_rg(),
+								osdcluster->get_version(),
+								op->get_op());
+		wr->get_data() = op->get_data();   // copy bufferlist
+		messenger->send_message(wr, MSG_ADDR_OSD(reps[i]));
+
+		replica_write_tids[op].insert(tid);
+		replica_writes[tid] = op;
+	  }
+
+	  replica_write_cond[op] = cond = new Cond;
+	  replica_write_lock.Unlock();
+	}
+  }
+
+  bool write_sync = op->get_rg_role() == 0;  // primary writes synchronously, replicas don't.
+
+  
   // take buffers from the message
   bufferlist bl;
-  bl.claim( m->get_data() );
+  bl.claim( op->get_data() );
   
   // write out buffers
-  off_t off = m->get_offset();
+  off_t off = op->get_offset();
   for (list<bufferptr>::iterator it = bl.buffers().begin();
 	   it != bl.buffers().end();
 	   it++) {
 
-	int r = store->write(m->get_oid(),
+	int r = store->write(op->get_oid(),
 						 (*it).length(), off,
 						 (*it).c_str(),
-						 true);  // write synchronously
+						 write_sync);  // write synchronously
 	off += (*it).length();
 	if (r < 0) {
-	  dout(1) << "write error on " << m->get_oid() << " len " << (*it).length() << "  off " << off << "  r = " << r << endl;
+	  dout(1) << "write error on " << op->get_oid() << " len " << (*it).length() << "  off " << off << "  r = " << r << endl;
 	  assert(r >= 0);
 	}
   }
@@ -407,16 +470,31 @@ void OSD::op_write(MOSDOp *m)
   */
 
   logger->inc("wr");
-  logger->inc("wrb", m->get_length());
+  logger->inc("wrb", op->get_length());
 
-  
   // assume success.  FIXME.
 
-  // reply
-  MOSDOpReply *reply = new MOSDOpReply(m, 0, osdcluster);
-  messenger->send_message(reply, m->get_asker());
+  // wait for replicas?
+  if (cond) {
+	replica_write_lock.Lock();
+	while (!replica_write_tids[op].empty()) {
+	  // wait
+	  dout(7) << "op_write " << op << " waiting for " << replica_write_tids[op].size() << " replicas to write" << endl;
+	  cond->Wait(replica_write_lock);
+	}
 
-  delete m;
+	dout(7) << "op_write " << op << " all replicas finished, replying" << endl;
+	
+	replica_write_tids.erase(op);
+	replica_write_cond.erase(op);
+	replica_write_lock.Unlock();
+  }
+
+  // reply
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdcluster);
+  messenger->send_message(reply, op->get_asker());
+
+  delete op;
 }
 
 void OSD::op_mkfs(MOSDOp *op)

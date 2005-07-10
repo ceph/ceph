@@ -28,6 +28,7 @@ struct md_config_t {
   int debug_buffer;
   int debug_filer;
   int debug_client;
+  int debug_osd;
 
   // client
   int      client_cache_size;
@@ -63,6 +64,7 @@ struct md_config_t {
   bool  mds_verify_export_dirauth;     // debug flag
 
   // osd
+  int   osd_nrep;
   bool  osd_fsync;
   bool  osd_writesync;
   int   osd_maxthreads;

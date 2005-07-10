@@ -42,7 +42,7 @@ class bufferlist {
   }
   
   bufferlist& operator=(bufferlist& bl) {
-	assert(0);  // actually, this should be fine, just slow (O(n)) and stupid.
+	//assert(0);  // actually, this should be fine, just slow (O(n)) and stupid.
 	_buffers = bl._buffers;
 	_len = bl._len;
 	return *this;
