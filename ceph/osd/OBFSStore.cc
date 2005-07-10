@@ -80,7 +80,7 @@ int OBFSStore::mkfs(void)
 		sb_size_kb              = 4,
 		lb_size_kb              = 1024,
 		nr_hash_table_buckets   = 1023,
-		delay_allocation        = 0,
+		delay_allocation        = 1,
 		flush_interval		= 5;
 	FILE	*param;
 	
@@ -156,20 +156,22 @@ int OBFSStore::truncate(object_t oid, off_t size)
 int OBFSStore::read(object_t oid, size_t len, 
 		    off_t offset, char *buffer)
 {
-	dout(0) << "calling read function!" << endl;
+	//dout(0) << "calling read function!" << endl;
+	//dout(0) << oid << " 0  " << len << " " << offset << " 100" << endl;
 	return uofs_read(oid, buffer, offset, len);
 }
 
 int OBFSStore::write(object_t oid, size_t len,
 		     off_t offset, char *buffer, bool fsync)
 {
-	int ret, sync = 0;
+	int ret;//, sync = 0;
 	
 	//dout(0) << "calling write function!" << endl;
-	if (fsync) sync = 1;
-	ret = uofs_write(oid, buffer, offset, len, sync);
-	if (fsync)
-		ret += uofs_sync(oid);
+	//dout(0) << oid << " 0  " << len << " " << offset << " 101" << endl;
+	//if (fsync) sync = 1;
+	ret = uofs_write(oid, buffer, offset, len, 0);
+	//if (fsync)
+	//	ret += uofs_sync(oid);
 	
 	return ret;
 }
