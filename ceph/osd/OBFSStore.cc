@@ -44,7 +44,7 @@ int OBFSStore::init(void)
 		return -1;
 	}
 
-	this->mkfs();
+	//this->mkfs();
 	this->mounted = uofs_mount(this->bdev_id, this->whoami);
 	switch (this->mounted) {
 		case -1:
