@@ -632,6 +632,11 @@ public:
 	if (event) {
 	  mds->commit_request(req, reply, tracei, event);
 	} else {
+	  // committed, log separately
+	  timepair_t now = g_clock.gettimepair();
+	  timepair_t lat = now - mds->mdcache->active_requests[req].start_time;
+	  mds->logger->finc("ljsum", timepair_to_double(lat));
+	  mds->logger->inc("ljnum");
 	  // reply.
 	  mds->reply_request(req, reply, tracei);
 	}
