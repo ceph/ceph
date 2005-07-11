@@ -27,6 +27,8 @@ struct eqstr
 class Logger {
  protected:
   hash_map<const char*, long, hash<const char*>, eqstr> vals;
+  hash_map<const char*, double, hash<const char*>, eqstr> fvals;
+
   //Mutex lock;
   LogType *type;
 
@@ -49,6 +51,9 @@ class Logger {
   long set(const char *s, long v);
   long get(const char *s);
 
+  double fset(const char *s, double v);
+  double finc(const char *s, double v);
+  
   void flush(bool force = false);
 };
 

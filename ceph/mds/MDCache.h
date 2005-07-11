@@ -74,6 +74,7 @@ typedef struct {
   map< CDentry*, vector<CDentry*> > traces;   // path pins held
   set< CDentry* >           xlocks;           // xlocks (local)
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
+  timepair_t                start_time;
 } active_request_t;
 
 

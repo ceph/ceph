@@ -56,6 +56,19 @@ long Logger::inc(const char *key, long v)
   return r;
 }
 
+double Logger::finc(const char *key, double v)
+{
+  if (!g_conf.log) return 0;
+  logger_lock.Lock();
+  if (!type->have_key(key)) 
+	type->add_inc(key);
+  flush();
+  fvals[key] += v;
+  double r = vals[key];
+  logger_lock.Unlock();
+  return r;
+}
+
 long Logger::set(const char *key, long v)
 {
   if (!g_conf.log) return 0;
@@ -66,6 +79,20 @@ long Logger::set(const char *key, long v)
   flush();
   vals[key] = v;
   long r = vals[key];
+  logger_lock.Unlock();
+  return r;
+}
+
+double Logger::fset(const char *key, double v)
+{
+  if (!g_conf.log) return 0;
+  logger_lock.Lock();
+  if (!type->have_key(key)) 
+	type->add_set(key);
+
+  flush();
+  fvals[key] = v;
+  double r = vals[key];
   logger_lock.Unlock();
   return r;
 }
@@ -122,13 +149,20 @@ void Logger::flush(bool force)
 	// write line to log
 	out << last_logged;
 	for (vector<const char*>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
-	  out << "\t" << get(*it);
+	  if (fvals.count(*it))
+		out << "\t" << fvals[*it];
+	  else
+		out << "\t" << vals[*it];
 	}
 	out << endl;
 
 	// reset the counters
-	for (vector<const char*>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) 
-	  this->vals[*it] = 0;
+	for (vector<const char*>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) {
+	  if (this->vals.count(*it)) 
+		this->vals[*it] = 0;
+	  if (this->fvals.count(*it)) 
+		this->fvals[*it] = 0;
+	}
   }
 
   logger_lock.Unlock();

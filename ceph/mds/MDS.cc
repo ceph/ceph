@@ -153,6 +153,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
 
+  mds_logtype.add_inc("lsum");
+  mds_logtype.add_inc("lnum");
 
   
   char n[80];
