@@ -18,6 +18,7 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/Logger.h"
 
 #include "include/config.h"
 #undef dout
@@ -26,6 +27,9 @@
 #define  tout       if (g_conf.client_trace) cout << "trace: " 
 
 
+// static logger
+LogType client_logtype;
+Logger  *client_logger = 0;
 
 
 
@@ -359,9 +363,15 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   // drop mutex for duration of call
   client_lock.Unlock();  
+  timepair_t start = g_clock.gettimepair();
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
 														   MSG_ADDR_MDS(mds), 
 														   MDS_PORT_SERVER);
+  timepair_t end = g_clock.gettimepair();
+  timepair_t lat = end - start;
+  client_logger->finc("lsum",timepair_to_double(lat));
+  client_logger->inc("lnum");
+
   client_lock.Lock();  
   return reply;
 }

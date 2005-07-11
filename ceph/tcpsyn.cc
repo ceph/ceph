@@ -181,6 +181,13 @@ int main(int oargc, char **oargv) {
 	for (int i=0; i<NUMCLIENT; i++) {
 	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
 	  
+	  // logger?
+	  if (client_logger == 0) {
+		char s[80];
+		sprintf(s,"clnode.%d", myrank);
+		client_logger = new Logger(s, &client_logtype);
+	  }
+
 	  client[i]->init();
 	  
 	  // use my argc, argv (make sure you pass a mount point!)

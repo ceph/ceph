@@ -33,6 +33,10 @@ using namespace __gnu_cxx;
 
 class Filer;
 
+extern class LogType client_logtype;
+extern class Logger  *client_logger;
+
+
 
 // ============================================
 // types for my local metadata cache
