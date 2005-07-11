@@ -349,6 +349,22 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	  const char *a = t.get_string(p);
 	  __int64_t b = t.get_int();
 	  client->truncate(a,b);
+	} else if (strcmp(op, "read") == 0) {
+	  __int64_t id = t.get_int();
+	  __int64_t fh = open_files[id];
+	  int size = t.get_int();
+	  int off = t.get_int();
+	  char *buf = new char[size];
+	  client->read(fh, buf, size, off);
+	  delete buf;
+	} else if (strcmp(op, "write") == 0) {
+	  __int64_t id = t.get_int();
+	  __int64_t fh = open_files[id];
+	  int size = t.get_int();
+	  int off = t.get_int();
+	  char *buf = new char[size];
+	  client->write(fh, buf, size, off);
+	  delete buf;
 	} else if (strcmp(op, "fsync") == 0) {
 	  assert(0);
 	} else 

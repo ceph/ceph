@@ -1298,6 +1298,11 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
   client_lock.Lock();
 
   dout(7) << "read len: " << size << " off: " << offset << endl;
+  tout << "read" << endl;
+  tout << fh << endl;
+  tout << size << endl;
+  tout << offset << endl;
+
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -1436,6 +1441,10 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   client_lock.Lock();
 
   dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
+  tout << "write" << endl;
+  tout << fh << endl;
+  tout << size << endl;
+  tout << offset << endl;
 
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
