@@ -1414,8 +1414,6 @@ bool MDCache::request_start(Message *req,
   // request pins
   request_pin_inode(req, ref);
   
-  active_requests[req].start_time = g_clock.gettimepair();
-
   mds->logger->inc("req");
 
   return true;
@@ -1542,11 +1540,6 @@ void MDCache::request_cleanup(Message *req)
 
 void MDCache::request_finish(Message *req)
 {
-  timepair_t now = g_clock.gettimepair();
-  timepair_t lat = now - active_requests[req].start_time;
-  mds->logger->finc("lsum", timepair_to_double(lat));
-  mds->logger->inc("lnum");
-
   dout(7) << "request_finish " << *req << endl;
   request_cleanup(req);
   delete req;  // delete req

@@ -153,9 +153,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_set("nex");
   mds_logtype.add_set("nim");
 
-  mds_logtype.add_inc("lsum");
-  mds_logtype.add_inc("lnum");
-
   
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
@@ -632,11 +629,6 @@ public:
 	if (event) {
 	  mds->commit_request(req, reply, tracei, event);
 	} else {
-	  // committed, log separately
-	  timepair_t now = g_clock.gettimepair();
-	  timepair_t lat = now - mds->mdcache->active_requests[req].start_time;
-	  mds->logger->finc("ljsum", timepair_to_double(lat));
-	  mds->logger->inc("ljnum");
 	  // reply.
 	  mds->reply_request(req, reply, tracei);
 	}
