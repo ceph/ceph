@@ -56,6 +56,10 @@ int OBFSStore::init(void)
 			break;
 		case -2: 
 			//fsck
+			dout(0) << "Need fsck! Simply formatted for now!" << endl;
+			this->mkfs();
+			this->mounted = uofs_mount(this->bdev_id, this->whoami);
+			assert(this->mounted >= 0);
 			break;
 		case 0:
 			//success
