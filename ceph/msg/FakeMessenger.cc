@@ -228,6 +228,7 @@ int FakeMessenger::shutdown()
   lock.Lock();
   directory.erase(whoami);
   if (directory.empty()) {
+	dout(1) << "fakemessenger: last shutdown" << endl;
 	::shutdown = true;
 	cond.Signal();  // why not
   } 

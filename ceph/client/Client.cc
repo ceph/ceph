@@ -406,7 +406,8 @@ public:
   }
   void finish(int r) {
     bh->flush_finish();
-    if (bh->fc->inflight_buffers.empty()) bh->fc->wakeup_inflight_waiters();
+    if (bh->fc->inflight_buffers.empty()) 
+	  bh->fc->wakeup_inflight_waiters();
   }
 };
 
@@ -415,14 +416,14 @@ void Client::flush_inode_buffers(Inode *in)
 {
   if (!in->inflight_buffers.empty()) {
     dout(7) << "inflight buffers of sync write, waiting" << endl;
-    Cond *cond = new Cond;
-    in->waitfor_flushed.push_back(cond);
-    cond->Wait(client_lock);
-    delete cond;
+    Cond cond;
+    in->waitfor_flushed.push_back(&cond);
+    cond.Wait(client_lock);
     assert(in->inflight_buffers.empty());
     dout(7) << "inflight buffers flushed" << endl;
-#ifdef BUFFERCACHE
-  } else if (!bc.get_fc(in->inode.ino)->dirty_buffers.empty()) {
+  } 
+  else if (g_conf.client_bcache &&
+		   !bc.get_fc(in->inode.ino)->dirty_buffers.empty()) {
     Filecache *fc = bc.get_fc(in->inode.ino);
     dout(7) << "bc: flush_inode_buffers: inode " << in->inode.ino << " has " << fc->dirty_buffers.size() << " dirty buffers" << endl;
     //fc->simplify();
@@ -437,8 +438,8 @@ void Client::flush_inode_buffers(Inode *in)
     }
     dout(7) << "flush_inode_buffers: dirty buffers, waiting" << endl;
     fc->wait_for_inflight(client_lock);
-#endif
-  } else {
+  } 
+  else {
 	dout(7) << "no inflight buffers" << endl;
   }
 }
@@ -451,7 +452,8 @@ public:
   }
   void finish(int r) {
     bh->flush_finish();
-    if (bh->bc->inflight_buffers.empty()) bh->bc->wakeup_inflight_waiters();
+    if (bh->bc->inflight_buffers.empty()) 
+	  bh->bc->wakeup_inflight_waiters();
   }
 };
 
@@ -500,10 +502,11 @@ void Client::trim_bcache()
  */
 void Client::release_inode_buffers(Inode *in)
 {
-#ifdef BUFFERCACHE
-  // Check first we actually cached the file
-  if (bc.bcache_map.count(in->inode.ino)) bc.release_file(in->inode.ino);
-#endif
+  if (g_conf.client_bcache) {
+	// Check first we actually cached the file
+	if (bc.bcache_map.count(in->inode.ino)) 
+	  bc.release_file(in->inode.ino);
+  }
 }
 
 
@@ -1300,14 +1303,12 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
   Inode *in = f->inode;
   
   // do we have read file cap?
-  Cond *cond = 0;
   while (f->caps & CFILE_CAP_RD == 0) {
 	dout(7) << " don't have read cap, waiting" << endl;
-	if (!cond) cond = new Cond;
-	in->waitfor_read.push_back(cond);
-	cond->Wait(client_lock);
+	Cond cond;
+	in->waitfor_read.push_back(&cond);
+	cond.Wait(client_lock);
   }
-  if (cond) delete cond;
 
 
   // determine whether read range overlaps with file
@@ -1320,8 +1321,9 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
   if (size > in->inode.size) size = in->inode.size;
   
   int rvalue = 0;
-#ifndef BUFFERCACHE
-  {
+
+  if (!g_conf.client_bcache) {
+	// buffer cache OFF
     Cond cond;
     bufferlist blist;   // data will go here
 
@@ -1332,70 +1334,72 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
     // copy data into caller's buf
     blist.copy(0, blist.length(), buf);
   }
+  else {
+	// buffer cache ON
 
-#else
-  // map buffercache 
-  map<off_t, Bufferhead*> hits, rx, tx;
-  map<off_t, Bufferhead*>::iterator curbuf;
-  map<off_t, size_t> holes;
-  map<off_t, size_t>::iterator hole;
-  
-  Filecache *fc = bc.get_fc(in->inode.ino);
-  curbuf = fc->map_existing(size, offset, hits, rx, tx, holes);  
-  
-  if (curbuf != fc->buffer_map.end() && hits.count(curbuf->first)) {
-    // sweet -- we can return stuff immediately: find out how much
-    dout(7) << "read bc hit" << endl;
-    rvalue = (int)bc.touch_continuous(hits, size, offset);
-    assert(rvalue > 0);
-    rvalue = fc->copy_out((size_t)rvalue, offset, buf);
-    assert(rvalue > 0);
-    dout(7) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
+	// map buffercache 
+	map<off_t, Bufferhead*> hits, rx, tx;
+	map<off_t, Bufferhead*>::iterator curbuf;
+	map<off_t, size_t> holes;
+	map<off_t, size_t>::iterator hole;
+	
+	Filecache *fc = bc.get_fc(in->inode.ino);
+	curbuf = fc->map_existing(size, offset, hits, rx, tx, holes);  
+	
+	if (curbuf != fc->buffer_map.end() && hits.count(curbuf->first)) {
+	  // sweet -- we can return stuff immediately: find out how much
+	  dout(7) << "read bc hit" << endl;
+	  rvalue = (int)bc.touch_continuous(hits, size, offset);
+	  assert(rvalue > 0);
+	  rvalue = fc->copy_out((size_t)rvalue, offset, buf);
+	  assert(rvalue > 0);
+	  dout(7) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
+	}
+	// issue reads for holes
+	int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
+	for (hole = holes.begin(); hole != holes.end(); hole++) {
+	  dout(7) << "read bc miss" << endl;
+	  off_t hole_offset = hole->first;
+	  size_t hole_size = hole->second;
+	  
+	  // insert new bufferhead without allocating buffers (Filer::handle_osd_read_reply allocates them)
+	  Bufferhead *bh = new Bufferhead(in->inode.ino, hole_offset, &bc);
+	  
+	  // read into the buffercache: when finished transition state from inflight to clean
+	  bh->miss_start(hole_size);
+	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
+	  filer->read(in->inode.ino, g_OSD_FileLayout, hole_size, hole_offset, &(bh->bl), onfinish);
+	  dout(7) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
+	}
+	
+	if (rvalue == 0) {
+	  // we need to wait for the first buffer
+	  dout(7) << "read bc miss: waiting for first buffer" << endl;
+	  Bufferhead *bh;
+	  if (curbuf == fc->buffer_map.end() && fc->buffer_map.count(offset)) {
+		dout(10) << "first buffer is currently read in" << endl;
+		bh = fc->buffer_map[offset];
+	  } else {
+		dout(10) << "first buffer is either hit or inflight" << endl;
+		bh = curbuf->second;  
+	  }
+	  if (bh->state == BUFHD_STATE_RX || bh->state == BUFHD_STATE_TX) {
+		dout(10) << "waiting for first buffer" << endl;
+		bh->wait_for_read(client_lock);
+	  }
+	  
+	  // buffer is filled -- see how much we can return
+	  hits.clear(); rx.clear(); tx.clear(); holes.clear();
+	  fc->map_existing(size, offset, hits, rx, tx, holes); // FIXME: overkill
+	  assert(hits.count(bh->offset));
+	  rvalue = bc.touch_continuous(hits, size, offset);
+	  fc->copy_out(rvalue, offset, buf);
+	  dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;
+	  
+	  trim_bcache();
+	}
   }
-  // issue reads for holes
-  int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
-  for (hole = holes.begin(); hole != holes.end(); hole++) {
-    dout(7) << "read bc miss" << endl;
-    off_t hole_offset = hole->first;
-    size_t hole_size = hole->second;
-    
-    // insert new bufferhead without allocating buffers (Filer::handle_osd_read_reply allocates them)
-    Bufferhead *bh = new Bufferhead(in->inode.ino, hole_offset, &bc);
-    
-    // read into the buffercache: when finished transition state from inflight to clean
-    bh->miss_start(hole_size);
-    C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
-    filer->read(in->inode.ino, g_OSD_FileLayout, hole_size, hole_offset, &(bh->bl), onfinish);
-    dout(7) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
-  }
-  
-  if (rvalue == 0) {
-    // we need to wait for the first buffer
-    dout(7) << "read bc miss: waiting for first buffer" << endl;
-    Bufferhead *bh;
-    if (curbuf == fc->buffer_map.end() && fc->buffer_map.count(offset)) {
-      dout(10) << "first buffer is currently read in" << endl;
-      bh = fc->buffer_map[offset];
-    } else {
-      dout(10) << "first buffer is either hit or inflight" << endl;
-      bh = curbuf->second;  
-    }
-    if (bh->state == BUFHD_STATE_RX || bh->state == BUFHD_STATE_TX) {
-      dout(10) << "waiting for first buffer" << endl;
-      bh->wait_for_read(client_lock);
-    }
 
-    // buffer is filled -- see how much we can return
-    hits.clear(); rx.clear(); tx.clear(); holes.clear();
-    fc->map_existing(size, offset, hits, rx, tx, holes); // FIXME: overkill
-    assert(hits.count(bh->offset));
-    rvalue = bc.touch_continuous(hits, size, offset);
-    fc->copy_out(rvalue, offset, buf);
-    dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;
-
-    trim_bcache();
-  }
-#endif
   // done!
   client_lock.Unlock();
   return rvalue;
@@ -1449,70 +1453,69 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
   }
 
 
-#ifdef BUFFERCACHE
-  // buffered write?
-  if (f->caps & CFILE_CAP_WRBUFFER) {
+  if (g_conf.client_bcache &&	        // buffer cache ON?
+	  f->caps & CFILE_CAP_WRBUFFER) {   // caps buffered write?
 	// buffered write
 	dout(7) << "buffered/async write" << endl;
-    
-    // map buffercache for writing
-    map<off_t, Bufferhead*> buffers, rx, tx;
-    bc.map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); 
-    
-    // wait for rx and tx buffers -- FIXME: don't need to wait for tx buffers
-    while (!rx.empty() || !tx.empty()) {
-      if (!rx.empty()) {
-        rx.begin()->second->wait_for_write(client_lock);
-      } else {
-        tx.begin()->second->wait_for_write(client_lock);
-      }
-      buffers.clear(); tx.clear(); rx.clear();
-      bc.map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); // FIXME: overkill
-    } 
-    bc.dirty(in->inode.ino, size, offset, buf);
-
-    trim_bcache();
-
-    /*
-      hack for now.. replace this with a real buffer cache
-
-      just copy the buffer, send the write off, and return immediately.  
-      flush() will block until all outstanding writes complete.
-    */
-	/* this totally sucks, just do synchronous writes!
-    bufferlist *blist = new bufferlist;
-    blist->push_back( new buffer(buf, size, BUFFER_MODE_COPY|BUFFER_MODE_FREE) );
-
-    in->inflight_buffers.insert(blist);
-
-    Context *onfinish = new C_Client_WriteBuffer( in, blist );
-    filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, *blist, 0, onfinish);
+	
+	// map buffercache for writing
+	map<off_t, Bufferhead*> buffers, rx, tx;
+	bc.map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); 
+	
+	// wait for rx and tx buffers -- FIXME: don't need to wait for tx buffers
+	while (!rx.empty() || !tx.empty()) {
+	  if (!rx.empty()) {
+		rx.begin()->second->wait_for_write(client_lock);
+	  } else {
+		tx.begin()->second->wait_for_write(client_lock);
+	  }
+	  buffers.clear(); tx.clear(); rx.clear();
+	  bc.map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); // FIXME: overkill
+	} 
+	bc.dirty(in->inode.ino, size, offset, buf);
+	
+	trim_bcache();
+	
+	/*
+	  hack for now.. replace this with a real buffer cache
+	  
+	  just copy the buffer, send the write off, and return immediately.  
+	  flush() will block until all outstanding writes complete.
 	*/
-
+	/* this totally sucks, just do synchronous writes!
+	   bufferlist *blist = new bufferlist;
+	   blist->push_back( new buffer(buf, size, BUFFER_MODE_COPY|BUFFER_MODE_FREE) );
+	   
+	   in->inflight_buffers.insert(blist);
+	   
+	   Context *onfinish = new C_Client_WriteBuffer( in, blist );
+	   filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, *blist, 0, onfinish);
+	*/
+	
   } else {
-#else
-  {
-#endif
 	// synchronous write
     // FIXME: do not bypass buffercache
-	dout(7) << "synchronous write" << endl;
+	//if (g_conf.client_bcache) {
+	  // write me
+	//} else
+	{
+	  dout(7) << "synchronous write" << endl;
+	  
+	  // create a buffer that refers to *buf, but doesn't try to free it when it's done.
+	  bufferlist blist;
+	  blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
+	  
+	  // issue write
+	  Cond cond;
+	  int rvalue;
+	  
+	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+	  filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, blist, 0, onfinish);
+	  
+	  cond.Wait(client_lock);
+	}
+  }
 
-	// create a buffer that refers to *buf, but doesn't try to free it when it's done.
-	bufferlist blist;
-	blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
-	
-	// issue write
-	Cond cond;
-	int rvalue;
-	
-	C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
-	filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, blist, 0, onfinish);
-	
-	cond.Wait(client_lock);
-  }
-#if 0
-  }
-#endif
 
 
   // assume success for now.  FIXME.

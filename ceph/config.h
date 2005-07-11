@@ -36,6 +36,8 @@ struct md_config_t {
   int      client_cache_stat_ttl;
   bool     client_use_random_mds;          // debug flag
 
+  bool     client_sync_writes;
+  bool     client_bcache;
   int      client_bcache_alloc_minsize;
   int      client_bcache_alloc_maxsize;
   int      client_bcache_ttl;

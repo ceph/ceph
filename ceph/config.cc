@@ -32,8 +32,8 @@ OSDFileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20 );  // new (good?) way
 
 
 md_config_t g_conf = {
-  num_mds: 2,
-  num_osd: 5,
+  num_mds: 1,
+  num_osd: 4,
   num_client: 1,
 
   // profiling and debugging
@@ -61,6 +61,9 @@ md_config_t g_conf = {
   client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
 
+  client_sync_writes: 0,
+
+  client_bcache: 1,
   client_bcache_alloc_minsize: 1024,
   client_bcache_alloc_maxsize: 262144,
   client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
@@ -222,6 +225,12 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.client_trace = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--fuse_direct_io") == 0)
 	  g_conf.fuse_direct_io = atoi(argv[++i]);
+
+	else if (strcmp(argv[i], "--client_sync_writes") == 0)
+	  g_conf.client_sync_writes = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--client_bcache") == 0)
+	  g_conf.client_bcache = atoi(argv[++i]);
+
 
 	else if (strcmp(argv[i], "--osd_nrep") == 0) 
 	  g_conf.osd_nrep = atoi(argv[++i]);
