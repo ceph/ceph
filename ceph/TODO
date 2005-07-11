@@ -1,4 +1,25 @@
 
+MDS tests
+- scaling
+- latency
+ - w/wo journal
+- throughput vs latency
+- get number for commit overhead (worst case)
+
+
+OBFS
+- ext2 vs obfs
+- single box thing
+- read prefetch performance thing
+
+MACRO
+- compile trace w/ read+write
+ - client latency!!
+
+
+
+
+
 
 
 KNOWN BUGS to fix after fast
