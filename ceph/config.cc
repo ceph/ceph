@@ -64,9 +64,9 @@ md_config_t g_conf = {
   client_bcache_alloc_minsize: 1024,
   client_bcache_alloc_maxsize: 262144,
   client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
-  client_bcache_size: 10485760, // 10MB *for testing*
-  client_bcache_lowater: .6, // fraction of size
-  client_bcache_hiwater: .8, 
+  client_bcache_size: 2147483648, // 2GB
+  client_bcache_lowater: 60, // % of size
+  client_bcache_hiwater: 80, // % of size
   client_bcache_maxfrag: 10, // max actual relative # of bheads over opt rel # of bheads
 
   client_trace: 0,

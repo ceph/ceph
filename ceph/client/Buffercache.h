@@ -18,7 +18,8 @@ using namespace std;
 // Bufferhead states
 #define BUFHD_STATE_CLEAN	  1
 #define BUFHD_STATE_DIRTY	  2
-#define BUFHD_STATE_INFLIGHT  3
+#define BUFHD_STATE_RX            3
+#define BUFHD_STATE_TX            4
 
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "client" << "." << pthread_self() << " " 
@@ -111,30 +112,52 @@ class Bufferhead : public LRUObject {
 class Dirtybuffers {
  private:
   multimap<time_t, Bufferhead*> _dbufs;
+  // DEBUG
+  time_t former_age;
 
  public:
+  Dirtybuffers() { 
+    former_age = 0;
+    dout(5) << "Dirtybuffers() former_age: " << former_age << endl; 
+  }
+  Dirtybuffers(const Dirtybuffers& other);
+  Dirtybuffers& operator=(const Dirtybuffers& other);
   void erase(Bufferhead* bh);
   void insert(Bufferhead* bh);
   bool empty() { return _dbufs.empty(); }
   bool exist(Bufferhead* bh);
-  void get_expired(time_t ttl, size_t left_dirty, list<Bufferhead*>& to_flush);
+  void get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush);
   time_t get_age() { 
-    if (!_dbufs.empty()) return time(NULL) - _dbufs.begin()->second->dirty_since;
+    time_t age;
+    if (_dbufs.empty()) {
+      age = 0;
+    } else {
+      age = time(NULL) - _dbufs.begin()->second->dirty_since;
+    }
+    dout(10) << "former age: " << former_age << " age: " << age << endl;
+    assert((!(former_age > 30)) || (age > 0));
+    former_age = age;
+    return age;
   }
 };
 
 
 class Filecache {
+ private:
+  list<Cond*> inflight_waiters;
+
  public: 
   map<off_t, Bufferhead*> buffer_map;
-  Dirtybuffers dirty_buffers;
-  list<Cond*> waitfor_flushed;
+  set<Bufferhead*> dirty_buffers;
+  set<Bufferhead*> inflight_buffers;
   Buffercache *bc;
 
   Filecache(Buffercache *bc) { 
     this->bc = bc;
     buffer_map.clear();
   }
+  Filecache(const Filecache& other); 
+  Filecache& operator=(const Filecache& other);
 
   ~Filecache() {
     for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
@@ -154,34 +177,43 @@ class Filecache {
     return len;
   }
 
-  void wait_for_flush(Mutex &lock) {
+  void wait_for_inflight(Mutex &lock) {
 	Cond cond;
-	waitfor_flushed.push_back(&cond);
+	inflight_waiters.push_back(&cond);
 	cond.Wait(lock);
+  }
+
+  void wakeup_inflight_waiters() {
+    for (list<Cond*>::iterator it = inflight_waiters.begin();
+		 it != inflight_waiters.end();
+		 it++) {
+	  (*it)->Signal();
+	}
+    inflight_waiters.clear(); 
   }
 
   map<off_t, Bufferhead*>::iterator overlap(size_t len, off_t off);
   int copy_out(size_t size, off_t offset, char *dst);    
   map<off_t, Bufferhead*>::iterator map_existing(size_t len, off_t start_off, 
                     map<off_t, Bufferhead*>& hits, 
-		    map<off_t, Bufferhead*>& inflight,
+		    map<off_t, Bufferhead*>& rx,
+		    map<off_t, Bufferhead*>& tx,
                     map<off_t, size_t>& holes);
   void simplify();
 };
 
 class Buffercache { 
  private:
-  Mutex buffercache_lock;
-  size_t dirty_size, flushing_size, clean_size;
+  size_t dirty_size, rx_size, tx_size, clean_size;
+  list<Cond*> inflight_waiters;
 
  public:
   map<inodeno_t, Filecache*> bcache_map;
   LRU lru;
   Dirtybuffers dirty_buffers;
-  list<Cond*> waitfor_flushed;
-  set<Bufferhead*> flushing_buffers;
+  set<Bufferhead*> inflight_buffers;
 
-  Buffercache() : dirty_size(0), flushing_size(0), clean_size(0) { }
+  Buffercache() : dirty_size(0), rx_size(0), tx_size(0), clean_size(0) { }
   
   // FIXME: constructor & destructor need to mesh with allocator scheme
   ~Buffercache() {
@@ -192,6 +224,8 @@ class Buffercache {
       delete it->second; 
     }
   }
+  Buffercache(const Buffercache& other);
+  Buffercache& operator=(const Buffercache& other);
   
   Filecache *get_fc(inodeno_t ino) {
     if (!bcache_map.count(ino)) {
@@ -200,10 +234,19 @@ class Buffercache {
     return bcache_map[ino];
   }
       
-  void wait_for_flush(Mutex &lock) {
-    Cond cond;
-    waitfor_flushed.push_back(&cond);
-    cond.Wait(lock);
+  void wait_for_inflight(Mutex &lock) {
+	Cond cond;
+	inflight_waiters.push_back(&cond);
+	cond.Wait(lock);
+  }
+
+  void wakeup_inflight_waiters() {
+    for (list<Cond*>::iterator it = inflight_waiters.begin();
+		 it != inflight_waiters.end();
+		 it++) {
+	  (*it)->Signal();
+	}
+    inflight_waiters.clear(); 
   }
 
   void clean_to_dirty(size_t size) {
@@ -211,19 +254,19 @@ class Buffercache {
     assert(clean_size >= 0);
     dirty_size += size;
   }
-  void dirty_to_flushing(size_t size) {
+  void dirty_to_tx(size_t size) {
     dirty_size -= size;
     assert(dirty_size >= 0);
-    flushing_size += size;
+    tx_size += size;
   }
-  void flushing_to_dirty(size_t size) {
-    flushing_size -= size;
-    assert(flushing_size >= 0);
+  void tx_to_dirty(size_t size) {
+    tx_size -= size;
+    assert(tx_size >= 0);
     dirty_size += size;
   }
-  void flushing_to_clean(size_t size) {
-    flushing_size -= size;
-    assert(flushing_size >= 0);
+  void tx_to_clean(size_t size) {
+    tx_size -= size;
+    assert(tx_size >= 0);
     clean_size += size;
   }
   void increase_size(size_t size) {
@@ -235,8 +278,9 @@ class Buffercache {
   }
   size_t get_clean_size() { return clean_size; }
   size_t get_dirty_size() { return dirty_size; }
-  size_t get_flushing_size() { return flushing_size; }
-  size_t get_total_size() { return clean_size + dirty_size + flushing_size; }
+  size_t get_rx_size() { return rx_size; }
+  size_t get_tx_size() { return tx_size; }
+  size_t get_total_size() { return clean_size + dirty_size + rx_size + tx_size; }
   void get_reclaimable(size_t min_size, list<Bufferhead*>&);
 
   void insert(Bufferhead *bh);
@@ -244,7 +288,8 @@ class Buffercache {
   int touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
   void map_or_alloc(inodeno_t ino, size_t len, off_t off, 
                     map<off_t, Bufferhead*>& buffers, 
-		    map<off_t, Bufferhead*>& inflight);
+		    map<off_t, Bufferhead*>& rx,
+		    map<off_t, Bufferhead*>& tx);
   void release_file(inodeno_t ino);       
   size_t reclaim(size_t min_size);
 };

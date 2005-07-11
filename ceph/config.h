@@ -40,8 +40,8 @@ struct md_config_t {
   int      client_bcache_alloc_maxsize;
   int      client_bcache_ttl;
   int      client_bcache_size;
-  float    client_bcache_lowater;
-  float    client_bcache_hiwater;
+  int      client_bcache_lowater;
+  int      client_bcache_hiwater;
   int      client_bcache_maxfrag;
 
   int      client_trace;
