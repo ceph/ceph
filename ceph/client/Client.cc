@@ -1239,7 +1239,7 @@ int Client::close(fileh_t fh)
   // note mds auth.. we'll send the close there!  FIXME this is sort of icky
   int mds_auth = in->authority();
 
-  release_inode_buffers(in);
+  //release_inode_buffers(in);
   put_inode( in );
   
   MClientReply *reply = make_request(req, true, mds_auth);
