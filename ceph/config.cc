@@ -233,6 +233,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.client_sync_writes = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--client_bcache") == 0)
 	  g_conf.client_bcache = atoi(argv[++i]);
+	else if (strcmp(argv[i], "--client_bcache_ttl") == 0)
+	  g_conf.client_bcache_ttl = atoi(argv[++i]);
 
 
 	else if (strcmp(argv[i], "--osd_nrep") == 0) 
