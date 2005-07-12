@@ -47,8 +47,7 @@ int main(int oargc, char **oargv) {
   int argc;
   char **argv;
   parse_config_options(oargc, oargv,
-					   argc, argv,
-					   true);
+					   argc, argv);
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
