@@ -1371,6 +1371,7 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 	  assert(rvalue > 0);
 	  dout(7) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
 	}
+        assert(!(rvalue == size) || holes.empty());
 	// issue reads for holes
 	int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
 	for (hole = holes.begin(); hole != holes.end(); hole++) {

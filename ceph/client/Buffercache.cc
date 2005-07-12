@@ -29,6 +29,7 @@ Bufferhead::~Bufferhead()
   assert(lru_is_expireable());
   assert(read_waiters.empty());
   assert(write_waiters.empty());
+  assert(!fc->buffer_map.count(offset));
   bc->lru.lru_remove(this);   
   // debug segmentation fault
   if (bl.buffers().empty()) {
@@ -271,9 +272,9 @@ Filecache::map_existing(size_t len,
     }
     need_off = actual_off + bh->bl.length();
   }
-  if (need_off < actual_off + len) {
-    holes[need_off] = (size_t) (actual_off + len - need_off);
-    dout(10) << "bc: map: hole " << need_off << " " << holes[need_off] << endl;
+  if (need_off < start_off + len) {
+    holes[need_off] = (size_t) (start_off + len - need_off);
+    dout(10) << "bc: map: last hole " << need_off << " " << holes[need_off] << endl;
   }
   return rvalue;
 }
@@ -441,17 +442,15 @@ void Buffercache::release_file(inodeno_t ino)
   dout(7) << "bc: release_file ino: " << ino << endl;
   assert(bcache_map.count(ino));
   Filecache *fc = bcache_map[ino];
-  for (map<off_t, Bufferhead*>::iterator it = fc->buffer_map.begin();
-       it != fc->buffer_map.end();
+  map<off_t, Bufferhead*> to_release = fc->buffer_map;
+  fc->buffer_map.clear();
+  for (map<off_t, Bufferhead*>::iterator it = to_release.begin();
+       it != to_release.end();
        it++) {
-
     decrease_size(it->second->bl.length());
-
     dout(6) << "bc: release_file: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers.get_age() << endl;
-    assert(clean_size >= 0);
     delete it->second;    
   }
-  fc->buffer_map.clear();
   bcache_map.erase(ino);
   delete fc;  
 }
