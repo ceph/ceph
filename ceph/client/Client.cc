@@ -1228,7 +1228,7 @@ int Client::close(fileh_t fh)
   req->set_caller_gid(getgid());
 
   // Make sure buffers are all clean!
-  flush_inode_buffers(in);
+  //flush_inode_buffers(in);
   
   // take note of the fact that we're mid-close
   /* mds may ack our close() after reissuing same fh to another open; remove from
