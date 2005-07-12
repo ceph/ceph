@@ -81,6 +81,10 @@ int main(int oargc, char **oargv) {
 	  } else if (strcmp(argv[i],"randomwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
 		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"trace") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
+		syn_sargs.push_back( argv[++i] );
+		syn_iargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"trace_include") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACEINCLUDE );
 		syn_iargs.push_back( atoi(argv[++i]) );

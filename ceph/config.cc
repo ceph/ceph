@@ -149,12 +149,15 @@ using namespace std;
 
 
 void parse_config_options(int argc, char **argv,
-						  int& nargc, char**&nargv)
+						  int& nargc, char**&nargv,
+						  bool barf_on_extras)
 {
   // alloc new argc
   nargv = (char**)malloc(sizeof(char*) * argc);
   nargc = 0;
   nargv[nargc++] = argv[0];
+  
+  int extras = 0;
 
   for (int i=1; i<argc; i++) {
 	if (strcmp(argv[i], "--nummds") == 0) 
@@ -242,8 +245,18 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.osd_maxthreads = atoi(argv[++i]);
 
 	else {
-	  //cout << "passing arg " << argv[i] << endl;
 	  nargv[nargc++] = argv[i];
+	  if (barf_on_extras) {
+		cerr << "extra arg " << argv[i] << endl;
+		extras++;
+	  } else {
+		dout(2) << "passing arg " << argv[i] << endl;
+	  }
 	}
+  }
+
+  if (barf_on_extras) {
+	cerr << extras << " extra args" << endl;
+	exit(0);
   }
 }

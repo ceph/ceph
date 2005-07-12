@@ -1,10 +1,13 @@
 
 MDS tests
-- scaling
-- latency
- - w/wo journal
-- throughput vs latency
+/- scaling (graph)
+- latency (table)
+ - w/wo journal   
+ ...proc at mds,           152us vs 2.5ms
+ ...total rtt from client, 1.5ms vs 4.5ms
+- throughput vs latency (graph)
 - get number for commit overhead (worst case)
+ ...5-15% in workloads we tested
 
 
 OBFS

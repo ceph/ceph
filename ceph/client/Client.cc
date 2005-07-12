@@ -367,11 +367,12 @@ MClientReply *Client::make_request(MClientRequest *req,
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
 														   MSG_ADDR_MDS(mds), 
 														   MDS_PORT_SERVER);
-  timepair_t end = g_clock.gettimepair();
-  timepair_t lat = end - start;
-  client_logger->finc("lsum",timepair_to_double(lat));
-  client_logger->inc("lnum");
-
+  if (client_logger) {
+	timepair_t end = g_clock.gettimepair();
+	timepair_t lat = end - start;
+	client_logger->finc("lsum",timepair_to_double(lat));
+	client_logger->inc("lnum");
+  }
   client_lock.Lock();  
   return reply;
 }
@@ -1307,7 +1308,7 @@ int Client::read(fileh_t fh, char *buf, size_t size, off_t offset)
 {
   client_lock.Lock();
 
-  dout(7) << "read len: " << size << " off: " << offset << endl;
+  dout(3) << "op: client->read(" << fh << ", buf, " << size << ", " << offset << ");" << endl;
   tout << "read" << endl;
   tout << fh << endl;
   tout << size << endl;
@@ -1450,7 +1451,8 @@ int Client::write(fileh_t fh, const char *buf, size_t size, off_t offset)
 {
   client_lock.Lock();
 
-  dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
+  //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
+  dout(3) << "op: client->write(" << fh << ", buf, " << size << ", " << offset << ");" << endl;
   tout << "write" << endl;
   tout << fh << endl;
   tout << size << endl;

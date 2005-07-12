@@ -55,7 +55,8 @@ int SyntheticClient::run()
 	   it != modes.end();
 	   it++) {
 	int mode = *it;
-		 
+	dout(3) << "mode " << mode << endl;
+
 	switch (mode) {
 	case SYNCLIENT_MODE_RANDOMSLEEP:
 	  {
@@ -133,6 +134,27 @@ int SyntheticClient::run()
 	  }
 	  break;
 
+	case SYNCLIENT_MODE_TRACE:
+	  {
+		string tfile = get_sarg();
+		sargs.push_front(string("~"));
+		int iarg1 = iargs.front();  iargs.pop_front();
+		string prefix = get_sarg();
+
+		dout(3) << "trace " << tfile << " prefix " << prefix << " " << iarg1 << " times" << endl;
+
+		Trace t(tfile.c_str());
+		
+		client->mkdir(prefix.c_str(), 0755);
+		
+		for (int i=0; i<iarg1; i++) {
+		  if (time_to_stop()) break;
+		  play_trace(t, prefix);
+		  if (time_to_stop()) break;
+		  clean_dir(prefix);
+		}
+	  }
+	  break;
 
 	case SYNCLIENT_MODE_TRACEINCLUDE:
 	  {
@@ -356,7 +378,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	  int off = t.get_int();
 	  char *buf = new char[size];
 	  client->read(fh, buf, size, off);
-	  delete buf;
+	  delete[] buf;
 	} else if (strcmp(op, "write") == 0) {
 	  __int64_t id = t.get_int();
 	  __int64_t fh = open_files[id];
@@ -364,7 +386,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	  int off = t.get_int();
 	  char *buf = new char[size];
 	  client->write(fh, buf, size, off);
-	  delete buf;
+	  delete[] buf;
 	} else if (strcmp(op, "fsync") == 0) {
 	  assert(0);
 	} else 

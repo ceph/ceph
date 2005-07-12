@@ -52,6 +52,7 @@ int main(int oargc, char **oargv)
 
   int mkfs = 0;
   for (int i=1; i<argc; i++) {
+	cout << "asdf" << endl;
 	if (strcmp(argv[i], "--fastmkfs") == 0) {
 	  mkfs = MDS_MKFS_FAST;
 	}
@@ -91,6 +92,10 @@ int main(int oargc, char **oargv)
 		syn_iargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"trace_opensshlib") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSHLIB );
+		syn_iargs.push_back( atoi(argv[++i]) );
+	  } else if (strcmp(argv[i],"trace") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
+		syn_sargs.push_back( argv[++i] );
 		syn_iargs.push_back( atoi(argv[++i]) );
 	  } else if (strcmp(argv[i],"until") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
