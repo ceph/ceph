@@ -107,8 +107,8 @@ void IdAllocator::reset()
 						  (long long)100000000LL * (mds->get_nodeid()+2) - 1);
   //free[ID_INO].dump();
   
-  free[ID_FH].map_insert(1000000LL * (mds->get_nodeid()+1),
-						 1000000LL * (mds->get_nodeid()+2) - 1);
+  free[ID_FH].map_insert(10000000LL * (mds->get_nodeid()+1),
+						 10000000LL * (mds->get_nodeid()+2) - 1);
   //free[ID_FH].dump();
 
   opened = true;

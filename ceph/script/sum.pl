@@ -79,7 +79,8 @@ print join("\t",'#', map { $col{$_} } @c) . "\n";
 my $n = 0;
 for my $k (sort {$a <=> $b} keys %sum) {
 	if ($avgrows) {
-		print join("\t",$k, map int, map { $sum{$k}->{$col{$_}}/$tcount{$k} } @c ) . "\n";
+		print join("\t",$k, #map int, 
+				   map { $sum{$k}->{$col{$_}}/$tcount{$k} } @c ) . "\n";
 	} else {
 		print join("\t",$k, map { $sum{$k}->{$col{$_}} } @c ) . "\n";
 	}
@@ -90,9 +91,11 @@ my $rows = $n;
 my $files = $tcount{$starttime};
 
 print "\n";
-print join("\t", 'minval', map { $min{$col{$_}} } @c ) . "\n";
-print join("\t", 'maxval', map { $max{$col{$_}} } @c ) . "\n";
-print join("\t", 'rows', map { $rows } @c) . "\n";
-print join("\t", 'files', map { $files } @c) . "\n";
-print join("\t", 'avgval', map int, map { $_ / ($rows*$files) } map { $avg{$col{$_}} } @c ) . "\n";
-print join("\t", 'avgsum', map int, map { $_ / $rows } map { $avg{$col{$_}} } @c ) . "\n";
+print join("\t", '#minval', map { $min{$col{$_}} } @c ) . "\n";
+print join("\t", '#maxval', map { $max{$col{$_}} } @c ) . "\n";
+print join("\t", '#rows', map { $rows } @c) . "\n";
+print join("\t", '#files', map { $files } @c) . "\n";
+print join("\t", '#avgval', #map int, 
+		   map { $_ / ($rows*$files) } map { $avg{$col{$_}} } @c ) . "\n";
+print join("\t", '#avgsum', #map int, 
+		   map { $_ / $rows } map { $avg{$col{$_}} } @c ) . "\n";

@@ -577,7 +577,7 @@ void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
 	if (!dir->is_rep() &&
 		dir_pop >= g_conf.mds_bal_replicate_threshold) {
 	  // replicate
-	  dout(5) << "replicating dir " << *dir << " pop " << dir_pop << endl;
+	  dout(1) << "replicating dir " << *dir << " pop " << dir_pop << endl;
 		  
 	  dir->dir_rep = CDIR_REP_ALL;
 	  mds->mdcache->send_dir_updates(dir, true);
@@ -586,7 +586,7 @@ void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
 	if (dir->is_rep() &&
 		dir_pop < g_conf.mds_bal_unreplicate_threshold) {
 	  // unreplicate
-	  dout(5) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;
+	  dout(1) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;
 	  
 	  dir->dir_rep = CDIR_REP_NONE;
 	  mds->mdcache->send_dir_updates(dir);

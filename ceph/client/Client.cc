@@ -364,15 +364,36 @@ MClientReply *Client::make_request(MClientRequest *req,
   // drop mutex for duration of call
   client_lock.Unlock();  
   timepair_t start = g_clock.gettimepair();
+
+  
+  bool nojournal = false;
+  if (req->get_op() == MDS_OP_STAT ||
+	  req->get_op() == MDS_OP_LSTAT ||
+	  req->get_op() == MDS_OP_READDIR ||
+	  req->get_op() == MDS_OP_OPEN ||    // not quite true!  a lie actually!
+	  req->get_op() == MDS_OP_CLOSE)
+	nojournal = true;
+
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
 														   MSG_ADDR_MDS(mds), 
 														   MDS_PORT_SERVER);
+
+
   if (client_logger) {
 	timepair_t end = g_clock.gettimepair();
 	timepair_t lat = end - start;
 	client_logger->finc("lsum",timepair_to_double(lat));
 	client_logger->inc("lnum");
+
+	if (nojournal) {
+	  client_logger->finc("lrsum",timepair_to_double(lat));
+	  client_logger->inc("lrnum");
+	} else {
+	  client_logger->finc("lwsum",timepair_to_double(lat));
+	  client_logger->inc("lwnum");
+	}
   }
+
   client_lock.Lock();  
   return reply;
 }

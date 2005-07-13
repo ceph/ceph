@@ -148,10 +148,24 @@ int SyntheticClient::run()
 		client->mkdir(prefix.c_str(), 0755);
 		
 		for (int i=0; i<iarg1; i++) {
+		  timepair_t start = g_clock.gettimepair();
+		  
 		  if (time_to_stop()) break;
 		  play_trace(t, prefix);
 		  if (time_to_stop()) break;
 		  clean_dir(prefix);
+
+		  timepair_t end = g_clock.gettimepair();
+		  timepair_t lat = end-start;
+
+		  dout(1) << " trace loop " << i << " in " << timepair_to_double(lat) << " seconds" << endl;
+		  if (client_logger 
+			  && i > 0
+			  && i < iarg1-1
+			  ) {
+			client_logger->finc("trsum", timepair_to_double(lat));
+			client_logger->inc("trnum");
+		  }
 		}
 	  }
 	  break;
@@ -211,6 +225,7 @@ int SyntheticClient::run()
 		  play_trace(t, prefix);
 		  if (time_to_stop()) break;
 		  clean_dir(prefix);
+		  cerr << "LOOP" << endl;
 		}
 	  }
 	  break;
@@ -287,6 +302,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 {
   dout(4) << "play trace" << endl;
   t.start();
+
+  timepair_t start = g_clock.gettimepair();
 
   const char *p = prefix.c_str();
 
@@ -398,8 +415,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	   fi != open_files.end();
 	   fi++) {
 	dout(1) << "leftover close " << fi->second << endl;
-	client->close(fi->second);
+	if (fi->second > 0) client->close(fi->second);
   }
+
   
 }
 
