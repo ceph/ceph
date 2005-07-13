@@ -44,7 +44,7 @@ int OBFSStore::init(void)
 		return -1;
 	}
 
-	//this->mkfs();
+	this->mkfs();
 	this->mounted = uofs_mount(this->bdev_id, this->whoami);
 	switch (this->mounted) {
 		case -1:
@@ -171,11 +171,12 @@ int OBFSStore::write(object_t oid, size_t len,
 	int ret;//, sync = 0;
 	
 	//dout(0) << "calling write function!" << endl;
-	//dout(0) << oid << " 0  " << len << " " << offset << " 101" << endl;
+	//if (whoami == 0)
+	//	dout(0) << oid << " 0  " << len << " " << offset << " 101" << endl;
 	//if (fsync) sync = 1;
 	ret = uofs_write(oid, buffer, offset, len, 0);
-	//if (fsync)
-	//	ret += uofs_sync(oid);
+	if (fsync)
+		ret += uofs_sync(oid);
 	
 	return ret;
 }

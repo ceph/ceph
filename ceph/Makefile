@@ -8,7 +8,7 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-CFLAGS = -g -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -O2 -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread  -lrt
 
 #for normal mpich2 machines
@@ -113,7 +113,7 @@ tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/Synth
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # obfs + synthetic
-obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} 
+obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} $(SYN_OBJS)
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 
