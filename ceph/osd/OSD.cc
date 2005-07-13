@@ -89,6 +89,7 @@ OSD::OSD(int id, Messenger *m)
   char name[80];
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
+  osd_logtype.add_inc("op");
   osd_logtype.add_inc("rd");
   osd_logtype.add_inc("rdb");
   osd_logtype.add_inc("wr");
@@ -330,6 +331,8 @@ void OSD::queue_op(MOSDOp *op) {
   
 void OSD::do_op(MOSDOp *op) 
 {
+  logger->inc("op");
+
   // do the op
   switch (op->get_op()) {
 
