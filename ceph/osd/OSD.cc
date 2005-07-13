@@ -89,6 +89,10 @@ OSD::OSD(int id, Messenger *m)
   char name[80];
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
+  osd_logtype.add_inc("rd");
+  osd_logtype.add_inc("rdb");
+  osd_logtype.add_inc("wr");
+  osd_logtype.add_inc("wrb");
 
   // Thread pool
   {
