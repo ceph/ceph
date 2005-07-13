@@ -259,18 +259,21 @@ Filecache::map_existing(size_t len,
     if (actual_off > need_off) {
       holes[need_off] = (size_t) (actual_off - need_off);
       dout(10) << "bc: map: hole " << need_off << " " << holes[need_off] << endl;
+      need_off = actual_off;
     }
     if (bh->state == BUFHD_STATE_RX) {
       rx[actual_off] = bh;
       dout(10) << "bc: map: rx " << actual_off << " " << rx[actual_off]->miss_len << endl;
+      need_off = actual_off + bh->miss_len;
     } else if (bh->state == BUFHD_STATE_TX) {
       tx[actual_off] = bh;
       dout(10) << "bc: map: tx " << actual_off << " " << tx[actual_off]->bl.length() << endl;
+      need_off = actual_off + bh->bl.length();
     } else {
       hits[actual_off] = bh;
       dout(10) << "bc: map: hits " << actual_off << " " << hits[actual_off]->bl.length() << endl;
+      need_off = actual_off + bh->bl.length();
     }
-    need_off = actual_off + bh->bl.length();
   }
   if (need_off < start_off + len) {
     holes[need_off] = (size_t) (start_off + len - need_off);
