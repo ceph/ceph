@@ -202,6 +202,9 @@ class CInode : LRUObject {
   // waiters
   multimap<int,Context*>  waiting;
 
+  // issued client capabilities
+  map<int, Capability>  caps;
+
   // open file state (me)
   map<fileh_t, CFile*>  fh_map;                   // locally opened files
   int                   nrdonly, nrdwr, nwronly;  // file mode counts
@@ -397,8 +400,18 @@ class CInode : LRUObject {
   void finish_waiting(int mask, int result = 0);
 
 
+  // -- caps -- (new)
+  bool is_caps_issued() { return !caps.empty(); }
+  void add_cap(int client, Capability& cap) {
+	assert(caps.count(client) == 0);
+	caps[client] = cap;
+  }
+  void remove_cap(int client) {
+	assert(caps.count(client) == 1);
+	caps.erase(client);
+  }
 
-  // -- open files --
+  // -- open files -- (old)
   bool is_open_write() { return nwronly; }
   bool is_open_read() { return nrdonly; }
   bool is_open() { return is_open_write() || is_open_read(); }
