@@ -23,7 +23,7 @@ __uint64_t ino = 1;
 
 
 
-#include "include/config.h"
+#include "config.h"
 #define NUMMDS g_conf.num_mds
 #define NUMOSD g_conf.num_osd
 #define NUMCLIENT g_conf.num_client

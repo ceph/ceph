@@ -34,14 +34,14 @@ class Cond
 
   int Wait(Mutex &mutex,
 		   struct timeval *tv) {
-	Wait(mutex, timepair_t(tv->tv_sec, tv->tv_usec));
+	return Wait(mutex, utime_t(tv->tv_sec, tv->tv_usec));
   }
   int Wait(Mutex &mutex,
-		   timepair_t when) {
+		   utime_t when) {
 	// timeval -> timespec
 	struct timespec ts;
-	ts.tv_sec = when.first;
-	ts.tv_nsec = when.second*1000;
+	ts.tv_sec = when.sec();
+	ts.tv_nsec = when.nsec();
 	int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
 	return r;
   }

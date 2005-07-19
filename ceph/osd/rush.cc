@@ -161,7 +161,7 @@ void
 RushRNG::DrawKofN (int vals[], int nToDraw, int setSize)
 {
   int	deck[setSize];
-  int	i, pick, t;
+  int	i, pick;
 
   assert(nToDraw <= setSize);
 

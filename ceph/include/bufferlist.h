@@ -13,7 +13,7 @@ using namespace __gnu_cxx;
 
 
 // debug crap
-#include "include/config.h"
+#include "config.h"
 #define bdbout(x) if (x <= g_conf.debug_buffer) cout
 
 
@@ -24,7 +24,7 @@ class bufferlist {
    * we maintain _len ourselves, so we must be careful when fiddling with buffers!
    */
   list<bufferptr> _buffers;
-  int _len;
+  unsigned _len;
 
  public:
   // cons/des
@@ -56,7 +56,7 @@ class bufferlist {
   //list<buffer*>::iterator begin() { return _buffers.begin(); }
   //list<buffer*>::iterator end() { return _buffers.end(); }
 
-  int length() {
+  unsigned length() {
 #if 0
 	{ // DEBUG: verify _len
 	  int len = 0;
@@ -121,7 +121,7 @@ class bufferlist {
 
   
   // crope lookalikes
-  void copy(int off, int len, char *dest) {
+  void copy(unsigned off, unsigned len, char *dest) {
 	assert(off >= 0);
 	assert(off + len <= length());
 
@@ -150,7 +150,7 @@ class bufferlist {
 	  }
 
 	  // get as much as we can from this buffer.
-	  int howmuch = (*curbuf).length() - off;
+	  unsigned howmuch = (*curbuf).length() - off;
 	  (*curbuf).copy_out(off, howmuch, dest);
 
 	  dest += howmuch;
@@ -161,7 +161,7 @@ class bufferlist {
 	}
   }
 
-  void copy_in(int off, int len, const char *src) {
+  void copy_in(unsigned off, unsigned len, const char *src) {
 	assert(off >= 0);
 	assert(off + len <= length());
 
@@ -190,7 +190,7 @@ class bufferlist {
 	  }
 
 	  // get as much as we can from this buffer.
-	  int howmuch = (*curbuf).length() - off;
+	  unsigned howmuch = (*curbuf).length() - off;
 	  (*curbuf).copy_in(off, howmuch, src);
 
 	  src += howmuch;
@@ -202,19 +202,19 @@ class bufferlist {
   }
 
 
-  void append(const char *data, int len) {
+  void append(const char *data, unsigned len) {
 	if (len == 0) return;
 
-	int alen = 0;
+	unsigned alen = 0;
 	
 	// copy into the tail buffer?
 	if (!_buffers.empty()) {
-	  int avail = _buffers.back().unused_tail_length();
+	  unsigned avail = _buffers.back().unused_tail_length();
 	  if (avail > 0) {
 		//cout << "copying up to " << len << " into tail " << avail << " bytes of tail buf" << endl;
 		if (avail > len) 
 		  avail = len;
-		int blen = _buffers.back().length();
+		unsigned blen = _buffers.back().length();
 		memcpy(_buffers.back().c_str() + blen, data, avail);
 		blen += avail;
 		_buffers.back().set_length(blen);
@@ -234,7 +234,7 @@ class bufferlist {
   void append(bufferptr& bp) {
 	push_back(bp);
   }
-  void append(bufferptr& bp, int len, int off) {
+  void append(bufferptr& bp, unsigned len, unsigned off) {
 	bufferptr tempbp(bp, len, off);
 	push_back(tempbp);
   }
@@ -253,7 +253,7 @@ class bufferlist {
 	else {
 	  // make one new contiguous buffer.
 	  bufferptr newbuf = new buffer(length());
-	  int off = 0;
+	  unsigned off = 0;
 
 	  for (list<bufferptr>::iterator it = _buffers.begin();
 		   it != _buffers.end();
@@ -273,7 +273,7 @@ class bufferlist {
   }
 
 
-  void substr_of(bufferlist& other, int off, int len) {
+  void substr_of(bufferlist& other, unsigned off, unsigned len) {
 	assert(off + len <= other.length());
 	clear();
 
@@ -304,7 +304,7 @@ class bufferlist {
 
 	  // through end
 	  //cout << "copying end (all?) of " << *curbuf << endl;
-	  int howmuch = (*curbuf).length() - off;
+	  unsigned howmuch = (*curbuf).length() - off;
 	  _buffers.push_back( bufferptr( *curbuf, howmuch, off ) );
 	  _len += howmuch;
 	  len -= howmuch;
@@ -314,7 +314,7 @@ class bufferlist {
   }
 
   // funky modifer
-  void splice(int off, int len, bufferlist *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
+  void splice(unsigned off, unsigned len, bufferlist *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
 	assert(off < length()); 
 	assert(len > 0);
 	//cout << "splice off " << off << " len " << len << " ... mylen = " << length() << endl;
@@ -358,7 +358,7 @@ class bufferlist {
 	  }
 
 	  // hose though the end
-	  int howmuch = (*curbuf).length() - off;
+	  unsigned howmuch = (*curbuf).length() - off;
 	  //cout << "discarding " << howmuch << " of " << *curbuf << endl;
 	  if (claim_by) 
 		claim_by->append( *curbuf, howmuch, off );
@@ -427,7 +427,7 @@ inline void _decode(set<int>& s, bufferlist& bl, int& off)
 	off += sizeof(v);
 	s.insert(v);
   }
-  assert(s.size() == n);
+  assert(s.size() == (unsigned)n);
 }
 
 // vector<int>
@@ -457,7 +457,7 @@ inline void _decode(vector<int>& s, bufferlist& bl, int& off)
 	off += sizeof(v);
 	s[i] = v;
   }
-  assert(s.size() == n);
+  assert(s.size() == (unsigned)n);
 }
 
 

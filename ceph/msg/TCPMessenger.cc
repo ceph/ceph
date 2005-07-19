@@ -1,5 +1,5 @@
 
-#include "include/config.h"
+#include "config.h"
 #include "include/error.h"
 
 #include "common/Timer.h"
@@ -191,6 +191,8 @@ int tcpmessenger_shutdown()
   delete[] remote_addr;
   delete[] in_sd;
   delete[] out_sd;
+  
+  return 0;
 }
 
 int tcpmessenger_world()
@@ -397,6 +399,7 @@ int tcp_send(Message *m)
 
   // hose message
   delete m;
+  return 0;
 }
 
 
@@ -434,6 +437,7 @@ void* tcp_outthread(void*)
 	
   }
   outgoing_lock.Unlock();
+  return 0;
 }
 
 /** tcp_inthread
@@ -510,6 +514,7 @@ void *tcp_acceptthread(void *)
 	}
   }
   dout(DBL) << "got incoming from everyone!" << endl;
+  return 0;
 }
 
 
@@ -586,8 +591,8 @@ void* tcp_dispatchthread(void*)
 
   g_timer.shutdown();
 
-
   dout(5) << "tcp_dispatchthread exiting loop" << endl;
+  return 0;
 }
 
 
@@ -614,7 +619,7 @@ int tcpmessenger_start()
 				 NULL, 
 				 tcp_outthread,
 				 0);
-
+  return 0;
 }
 
 
@@ -710,14 +715,14 @@ int TCPMessenger::shutdown()
   // last one?
   if (lastone) {
 	dout(2) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
-	pthread_t whoami = pthread_self();
+	//pthread_t whoami = pthread_self();
 
 	// no more timer events
 	g_timer.unset_messenger_kicker();
 
   
 	// close incoming sockets
-	void *r;
+	//void *r;
 	for (int i=0; i<mpi_world; i++) {
 	  if (in_sd[i] == 0) continue;
 	  dout(DBL) << "closing reader on " << i << " sd " << in_sd[i] << endl;
@@ -748,6 +753,7 @@ int TCPMessenger::shutdown()
   } else {
 	dout(10) << "shutdown still" /*<< directory.size()*/ << " other messengers on rank " << mpi_rank << endl;
   }
+  return 0;
 }
 
 
@@ -775,6 +781,7 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 	outgoing_cond.Signal();
 	outgoing_lock.Unlock();
   }
+  return 0;
 }
 
 

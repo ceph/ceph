@@ -49,7 +49,7 @@ class c_inode_info {
 
  public:
   c_inode_info() {}
-  c_inode_info(CInode *in, int whoami, string ref_dn, timepair_t& now) {
+  c_inode_info(CInode *in, int whoami, string ref_dn) {
 	// inode
 	this->inode = in->inode;
 	this->inode_soft_valid = in->softlock.can_read(in->is_auth());
@@ -65,7 +65,7 @@ class c_inode_info {
 	spec_defined = in->dir && in->dir->is_auth();
 	if (spec_defined) {
 	  dir_auth = in->dir->get_dir_auth();
-	  in->dir->get_dist_spec(this->dist, whoami, now);
+	  in->dir->get_dist_spec(this->dist, whoami);
 	} 
   }
   
@@ -108,6 +108,7 @@ typedef struct {
   int trace_depth;
   int dir_size;
   unsigned char file_caps;  // for open
+  long          file_caps_seq;
   __uint64_t file_data_version;  // for client buffercache consistency
 } MClientReply_st;
 
@@ -131,10 +132,12 @@ class MClientReply : public Message {
   const vector<c_inode_info*>& get_trace() { return trace; }
   vector<c_inode_info*>& get_dir_contents() { return dir_contents; }
   unsigned char get_file_caps() { return st.file_caps; }
+  long get_file_caps_seq() { return st.file_caps_seq; }
   __uint64_t get_file_data_version() { return st.file_data_version; }
   
   void set_result(int r) { st.result = r; }
   void set_file_caps(unsigned char c) { st.file_caps = c; }
+  void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   void set_file_data_version(__uint64_t v) { st.file_data_version = v; }
 
   MClientReply() {};
@@ -204,14 +207,14 @@ class MClientReply : public Message {
 	dir_contents.push_back(c);
   }
 
-  void set_trace_dist(CInode *in, int whoami, timepair_t& now) {
+  void set_trace_dist(CInode *in, int whoami) {
 	while (in) {
 	  // add this inode to trace, along with referring dentry name
 	  string ref_dn;
 	  CDentry *dn = in->get_parent_dn();
 	  if (dn) ref_dn = dn->get_name();
 
-	  trace.insert(trace.begin(), new c_inode_info(in, whoami, ref_dn, now));
+	  trace.insert(trace.begin(), new c_inode_info(in, whoami, ref_dn));
 	  
 	  in = in->get_parent_inode();
 	}

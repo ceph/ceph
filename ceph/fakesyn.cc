@@ -5,7 +5,7 @@
 #include <string>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
@@ -117,7 +117,7 @@ int main(int oargc, char **oargv)
 
   char hostname[100];
   gethostname(hostname,100);
-  int pid = getpid();
+  //int pid = getpid();
 
   // create mds
   MDS *mds[NUMMDS];

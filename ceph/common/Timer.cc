@@ -3,7 +3,7 @@
 #include "Timer.h"
 #include "Cond.h"
 
-#include "include/config.h"
+#include "config.h"
 #include "include/Context.h"
 
 #include "msg/Messenger.h"
@@ -23,11 +23,6 @@ Timer      g_timer;
 Context *messenger_kicker = 0;
 
 
-ostream& operator<<(ostream& out, timepair_t& t)
-{
-  return out << t.first << "." << t.second;
-}
-
 
 /**** thread solution *****/
 
@@ -45,19 +40,19 @@ void Timer::timer_thread()
   while (!thread_stop) {
 	
 	// now
-	timepair_t now = g_clock.gettimepair();
+	utime_t now = g_clock.now();
 
 	// any events due?
-	timepair_t next;
+	utime_t next;
 	Context *event = get_next_scheduled(next);
 	  
 	if (event && now > next) {
 	  // move to pending list
-	  map< timepair_t, set<Context*> >::iterator it = scheduled.begin();
+	  map< utime_t, set<Context*> >::iterator it = scheduled.begin();
 	  while (it != scheduled.end()) {
 		if (it->first > now) break;
 
-		timepair_t t = it->first;
+		utime_t t = it->first;
 		dout(DBL) << "queuing event(s) scheduled at " << t << endl;
 
 		pending[t] = it->second;
@@ -150,12 +145,12 @@ void Timer::cancel_timer()
 void Timer::add_event_after(float seconds,
 							Context *callback) 
 {
-  timepair_t when = g_clock.gettimepair();
-  when.first += (int)seconds;
+  utime_t when = g_clock.now();
+  when.sec_ref() += (int)seconds;
   add_event_at(when, callback);
 }
 
-void Timer::add_event_at(timepair_t when,
+void Timer::add_event_at(utime_t when,
 						 Context *callback) 
 {
   // insert
@@ -183,7 +178,7 @@ bool Timer::cancel_event(Context *callback)
 	return false;     // wasn't scheduled.
   }
 
-  timepair_t tp = event_times[callback];
+  utime_t tp = event_times[callback];
 
   event_times.erase(callback);
   scheduled.erase(tp);
@@ -204,7 +199,7 @@ void Timer::execute_pending()
   lock.Lock();
 
   while (pending.size()) {
-	timepair_t when;
+	utime_t when;
 	Context *event = take_next_pending(when);
 
 	lock.Unlock();

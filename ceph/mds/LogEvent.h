@@ -12,7 +12,7 @@ using namespace std;
 #define EVENT_UNLINK       3
 #define EVENT_ALLOC        4
 
-#include "include/config.h"
+#include "config.h"
 
 
 // generic log event
@@ -22,6 +22,7 @@ class LogEvent {
 
  public:
   LogEvent(int t) : _type(t) { }
+  virtual ~LogEvent() { }
   
   int get_type() { return _type; }
 

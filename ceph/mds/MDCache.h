@@ -139,11 +139,11 @@ class MDCache {
   }
 
   // cache
-  size_t set_cache_size(size_t max) {
+  void set_cache_size(size_t max) {
 	lru.lru_set_max(max);
   }
-  size_t get_cache_size() { lru.lru_get_size(); }
-  bool trim(__int32_t max = -1);   // trim cache
+  size_t get_cache_size() { return lru.lru_get_size(); }
+  bool trim(int max = -1);   // trim cache
 
   // shutdown
   void shutdown_start();
@@ -274,7 +274,7 @@ class MDCache {
 
   // -- file i/o --
   __uint64_t issue_file_data_version(CInode *in);
-  int issue_file_caps(CInode *in, int mode, MClientRequest *req);
+  Capability* issue_file_caps(CInode *in, int mode, MClientRequest *req);
   void eval_file_caps(CInode *in);
   void handle_client_file_caps(class MClientFileCaps *m);
 
@@ -329,13 +329,12 @@ class MDCache {
 					   int& off,
 					   int oldauth,
 					   CDir *import_root,
-					   list<inodeno_t>& imported_subdirs,
-					   timepair_t& now);
+					   list<inodeno_t>& imported_subdirs);
   void got_hashed_replica(CDir *import,
 						  inodeno_t dir_ino,
 						  inodeno_t replica_ino);
 
-  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth, timepair_t& now);
+  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
 
   // bystander
   void handle_export_dir_warning(MExportDirWarning *m);

@@ -50,17 +50,12 @@ using namespace std;
 
 LogType mds_logtype, mds_cache_logtype;
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "mds" << whoami << " "
 #define  dout3(l,mds)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << " "
 
 
-
-ostream& operator<<(ostream& out, MDS& mds)
-{
-  out << "mds" << mds.get_nodeid() << " ";
-}
 
 void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 {
@@ -113,7 +108,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_paused = false;
 
   stat_ops = 0;
-  last_balancer_heartbeat = g_clock.gettimepair();
+  last_balancer_heartbeat = g_clock.recent_now();
 
   // log
   string name;
@@ -185,6 +180,7 @@ MDS::~MDS() {
 
 int MDS::init()
 {
+  return 0;
 }
 
 
@@ -202,6 +198,7 @@ int MDS::shutdown_start()
   if (idalloc) idalloc->shutdown();
   
   handle_shutdown_start(NULL);
+  return 0;
 }
 
 
@@ -234,7 +231,7 @@ void MDS::handle_shutdown_finish(Message *m)
   did_shut_down.insert(mds);
   dout(1) << " shut down so far: " << did_shut_down << endl;
   
-  if (did_shut_down.size() == mdcluster->get_num_mds()) {
+  if (did_shut_down.size() == (unsigned)mdcluster->get_num_mds()) {
 	// MDS's all shut down!
 
 	// shut down osd's
@@ -271,15 +268,14 @@ int MDS::shutdown_final()
 
 mds_load_t MDS::get_load()
 {
-  timepair_t now = g_clock.gettimepair();
   mds_load_t l;
   if (mdcache->get_root()) {
-	l.root_pop = mdcache->get_root()->popularity[MDS_POP_ANYDOM].get(now);
+	l.root_pop = mdcache->get_root()->popularity[MDS_POP_ANYDOM].get();
   } else
 	l.root_pop = 0;
-  l.req_rate = stat_req.get(now);
-  l.rd_rate = stat_read.get(now);
-  l.wr_rate = stat_write.get(now);
+  l.req_rate = stat_req.get();
+  l.rd_rate = stat_read.get();
+  l.wr_rate = stat_write.get();
   return l;
 }
 
@@ -369,10 +365,12 @@ void MDS::proc_message(Message *m)
 
 void MDS::dispatch(Message *m)
 {
+  // make sure we advacne the clock
+  g_clock.now();
+
+  // process
   mds_lock.Lock();
-
   my_dispatch(m);
-
   mds_lock.Unlock();
 }
 
@@ -447,24 +445,12 @@ void MDS::my_dispatch(Message *m)
 	finish_contexts(ls);
   }
 
-  // balance?
-  static int num_bal_times = g_conf.mds_bal_max;
-  static timepair_t first = g_clock.gettimepair();
-  timepair_t now = g_clock.gettimepair();
-  timepair_t elapsed = now - first;
-  if (true && 
-	  whoami == 0 &&
-	  (num_bal_times || (g_conf.mds_bal_max_until >= 0 && elapsed.first > g_conf.mds_bal_max_until)) && 
-	  !shutting_down && !shut_down &&
-	  now.first - last_balancer_heartbeat.first >= g_conf.mds_bal_interval) {
-	last_balancer_heartbeat = now;
-	balancer->send_heartbeat();
-	num_bal_times--;
-  }
+  // periodic crap (second resolution)
+  static utime_t last_log = g_clock.recent_now();
+  utime_t now = g_clock.recent_now();
+  if (last_log.sec() != now.sec()) {
 
-  // periodic logging crap
-  static timepair_t last_log = g_clock.gettimepair();
-  if (last_log.first != now.first) {
+	// log
 	last_log = now;
 	mds_load_t load = get_load();
 
@@ -476,6 +462,21 @@ void MDS::my_dispatch(Message *m)
 	logger->set("cptail", mdcache->lru.lru_get_pintail());
 	logger->set("buf", buffer_total_alloc);
 
+	// balance?
+	static int num_bal_times = g_conf.mds_bal_max;
+	static utime_t first = g_clock.recent_now();
+	utime_t elapsed = now;
+	elapsed -= first;
+	if (true && 
+		whoami == 0 &&
+		(num_bal_times || (g_conf.mds_bal_max_until >= 0 && elapsed.sec() > g_conf.mds_bal_max_until)) && 
+		!shutting_down && !shut_down &&
+		now.sec() - last_balancer_heartbeat.sec() >= g_conf.mds_bal_interval) {
+	  last_balancer_heartbeat = now;
+	  balancer->send_heartbeat();
+	  num_bal_times--;
+	}
+	
   }
 
   // hack
@@ -654,8 +655,7 @@ void MDS::reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei
 
   // include trace
   if (tracei) {
-	timepair_t now = g_clock.gettimepair();
-	reply->set_trace_dist( tracei, whoami, now );
+	reply->set_trace_dist( tracei, whoami );
   }
   
   // send reply
@@ -740,7 +740,7 @@ void MDS::handle_client_request(MClientRequest *req)
   case MDS_OP_TRUNCATE:
 	if (!req->get_ino()) break;   // can be called w/ either fh OR path
 	
-  case MDS_OP_CLOSE:
+  case MDS_OP_RELEASE:
   case MDS_OP_FSYNC:
 	ref = mdcache->get_inode(req->get_ino());   // fixme someday no ino needed?
 
@@ -864,8 +864,8 @@ void MDS::dispatch_request(Message *m, CInode *ref)
 	handle_client_fsync(req, ref);
 	break;
 	*/
-  case MDS_OP_CLOSE:
-	handle_client_close(req, ref);
+  case MDS_OP_RELEASE:
+	handle_client_release(req, ref);
 	break;
 
 	// inodes
@@ -937,9 +937,8 @@ void MDS::handle_client_stat(MClientRequest *req,
 
   mdcache->inode_soft_read_finish(ref);
 
-  timepair_t now = g_clock.gettimepair();
-  stat_read.hit(now);
-  stat_req.hit(now);
+  stat_read.hit();
+  stat_req.hit();
 
   balancer->hit_inode(ref);   
 
@@ -961,10 +960,8 @@ void MDS::handle_client_utime(MClientRequest *req,
 	return;  // fw or (wait for) sync
 
   // do update
-  time_t mtime = req->get_targ();
-  time_t atime = req->get_targ2();
-  cur->inode.mtime = mtime;
-  cur->inode.atime = mtime;
+  cur->inode.mtime = req->get_targ();
+  cur->inode.atime = req->get_targ2();
   if (cur->is_auth())
 	cur->mark_dirty();
 
@@ -1107,7 +1104,6 @@ void MDS::handle_client_readdir(MClientRequest *req,
   MClientReply *reply = new MClientReply(req);
   
   // build dir contents
-  timepair_t now = g_clock.gettimepair();
   CDir_map_t::iterator it;
   int numfiles = 0;
   for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
@@ -1126,15 +1122,15 @@ void MDS::handle_client_readdir(MClientRequest *req,
 
 	// add this item
 	// note: c_inode_info makes note of whether inode data is readable.
-	reply->add_dir_item(new c_inode_info(in, whoami, it->first, now));
+	reply->add_dir_item(new c_inode_info(in, whoami, it->first));
 	numfiles++;
   }
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(0);
   
-  stat_read.hit(now);
-  stat_req.hit(now);
+  stat_read.hit();
+  stat_req.hit();
 
   balancer->hit_dir(cur->dir);
 
@@ -1866,7 +1862,6 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   assert(srci);
   CDir*  destdir = 0;
   string destname;
-  bool result;
   
   // what is the dest?  (dir or file or complete filename)
   // note: trace includes root, destpath doesn't (include leading /)
@@ -2017,7 +2012,7 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 									 CDentry *destdn,
 									 string& destname)
 {
-  bool everybody = false;
+  //bool everybody = false;
   //if (true || srcdn->inode->is_dir()) {
 	/* overkill warning: lock w/ everyone for simplicity.  FIXME someday!  along with the foreign rename crap!
 	   i could limit this to cases where something beneath me is exported.
@@ -2280,13 +2275,13 @@ void MDS::handle_client_open(MClientRequest *req,
   // mode!
   int mode = 0;
   if (flags & O_WRONLY) 
-	mode = CFILE_MODE_W;
+	mode = FILE_MODE_W;
   else if (flags & O_RDWR) 
-	mode = CFILE_MODE_RW;
+	mode = FILE_MODE_RW;
   else if (flags & O_APPEND)
-	mode = CFILE_MODE_W;
+	mode = FILE_MODE_W;
   else
-	mode = CFILE_MODE_R;
+	mode = FILE_MODE_R;
 
   dout(10) << " flags = " << flags << "  mode = " << mode << endl;
 
@@ -2302,8 +2297,8 @@ void MDS::handle_client_open(MClientRequest *req,
   assert(cur->is_auth());
 
   // writer?
-  if (mode == CFILE_MODE_W ||
-	  mode == CFILE_MODE_RW) {
+  if (mode == FILE_MODE_W ||
+	  mode == FILE_MODE_RW) {
 	if (!mdcache->inode_soft_write_start(cur, req)) return;
   }
 
@@ -2313,30 +2308,22 @@ void MDS::handle_client_open(MClientRequest *req,
 
   // can we issue the caps they want?
   __uint64_t fdv = mdcache->issue_file_data_version(cur);
-  int caps = mdcache->issue_file_caps(cur, mode, req);
-  if (!caps) return; // can't issue (yet), so wait!
+  Capability *cap = mdcache->issue_file_caps(cur, mode, req);
+  if (!cap) return; // can't issue (yet), so wait!
 
-  // create fh
-  CFile *f = new CFile();
-  f->mode = mode;
-  f->client = req->get_client();
-  f->fh = idalloc->get_id(ID_FH);
-  f->pending_caps = f->confirmed_caps = caps;
-  f->last_sent = f->last_recv = 0;   // none yet!
-  cur->add_fh(f);
+  dout(12) << "open gets caps " << cap->pending() << endl;
 
-  dout(12) << "new fh " << f->fh << " gets caps " << caps << endl;
-
-  if (mode == CFILE_MODE_W ||
-	  mode == CFILE_MODE_RW) {
+  if (mode == FILE_MODE_W ||
+	  mode == FILE_MODE_RW) {
 	mdcache->inode_soft_write_finish(cur);
   }
   
   balancer->hit_inode(cur);
 
   // reply
-  MClientReply *reply = new MClientReply(req, f->fh);   // fh # is return code
-  reply->set_file_caps(caps);
+  MClientReply *reply = new MClientReply(req, 0);   // fh # is return code
+  reply->set_file_caps(cap->pending());
+  reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_data_version(fdv);
   reply_request(req, reply, cur);
 }
@@ -2359,13 +2346,13 @@ void MDS::handle_client_openc(MClientRequest *req, CInode *ref)
 
 
 
-void MDS::handle_client_close(MClientRequest *req, CInode *cur) 
+void MDS::handle_client_release(MClientRequest *req, CInode *cur) 
 {
   // auth only
   if (!cur->is_auth()) {
 	int auth = cur->authority();
 	assert(auth != whoami);
-	dout(9) << "close " << *cur << " on replica, fw to auth " << auth << endl;
+	dout(9) << "release " << *cur << " on replica, fw to auth " << auth << endl;
 	
 	mdcache->request_forward(req, auth);
 	return;
@@ -2374,17 +2361,16 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
 
   // verify on read or write list
   int client = req->get_client();
-  int fh = req->get_iarg();
-  CFile *f = cur->get_fh(fh);
-  if (!f) {
-	dout(1) << "close on unopen fh " << fh << " inode " << *cur << endl;
+  Capability *cap = cur->get_cap(client);
+  if (!cap) {
+	dout(1) << "release on non-existant capability client " << client << " inode " << *cur << endl;
 	assert(0);
   }
-
-  dout(10) << "close on " << *cur << ", fh=" << f->fh << " mode=" << f->mode << endl;
+  
+  dout(10) << "release on " << *cur << " client " << client << endl;
 
   // update soft metadata
-  if (f->confirmed_caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
+  if (cap->issued() & CAP_FILE_WR) {
 	assert(cur->softlock.can_write(true));   // otherwise we're toast???
 	if (!mdcache->inode_soft_write_start(cur, req))
 	  return;  // wait
@@ -2403,47 +2389,38 @@ void MDS::handle_client_close(MClientRequest *req, CInode *cur)
 	  dout(10) << " extended size to " << size << endl;
 	  cur->mark_dirty();
 	}
-  }
 
-  // atime?  ****
-
-  // were we writing?
-  int had_caps = f->pending_caps & f->confirmed_caps;  // safe set of caps the client can assume it had
-
-  if ((f->confirmed_caps | f->pending_caps) & CFILE_CAP_WR != 0) { 
 	// inc file_data_version
 	dout(7) << " incrementing file_data_version for " << *cur << endl;
 	cur->inode.file_data_version++;
-  }
 
-  // close it.
-  cur->remove_fh(f);
-
-  // reclaim fh
-  //idalloc->reclaim_id(ID_FH, f->fh);   // don't do this for now.... we'll rewrite this anyway!  FIXME sage
-
-  // ok we're done
-  if (f->confirmed_caps & (CFILE_CAP_WR|CFILE_CAP_WRBUFFER)) {
-	dout(7) << "soft write fnish" << endl;
-
+	// release write
 	mdcache->inode_soft_write_finish(cur); 
 	mdcache->inode_soft_eval(cur);
+  } else {
+	dout(10) << "no WR caps issued, not updating mtime/size" << endl;
   }
 
-  mdcache->eval_file_caps(cur);
-
-  // hose CFile
-  delete f;
-
   // XXX what about atime?
+
+
+  // release it.
+  int had_caps = cap->issued();
+  long had_caps_seq = cap->get_last_seq();
+  cur->remove_cap(client);
+
+  // reeval caps
+  mdcache->eval_file_caps(cur);
+  
 
 
   // give back a file_data_version to client
   MClientReply *reply = new MClientReply(req, 0);
   __uint64_t fdv = mdcache->issue_file_data_version(cur);
   reply->set_file_caps(had_caps);
+  reply->set_file_caps_seq(had_caps_seq);
   reply->set_file_data_version(fdv);
-
+  
   // commit
   commit_request(req, reply, cur,
 				 new EInodeUpdate(cur));               // FIXME wrong message?

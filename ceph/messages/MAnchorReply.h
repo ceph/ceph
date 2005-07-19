@@ -21,7 +21,7 @@ class MAnchorReply : public Message {
 	this->ino = req->get_ino();
   }
   ~MAnchorReply() {
-	for (int i=0; i<trace.size(); i++) delete trace[i];
+	for (unsigned i=0; i<trace.size(); i++) delete trace[i];
   }
   virtual char *get_type_name() { return "arep"; }
 

@@ -3,7 +3,7 @@
 #include <string>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 #include "messages/MPing.h"
 #include "common/Mutex.h"
 

@@ -13,7 +13,7 @@
 #include <iostream>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (mds->get_nodeid() == 0 && (l<=g_conf.debug || l<=g_conf.debug_mds_log)) cout << "mds" << mds->get_nodeid() << ".logstream "
 

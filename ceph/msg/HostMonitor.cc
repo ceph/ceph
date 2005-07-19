@@ -15,7 +15,7 @@
 #define DBL  10
 
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << whoami << " hostmon: "
 
@@ -63,7 +63,7 @@ void HostMonitor::init()
   notify_retry_interval = 10;
   
   // schedule first hb
-  schedule_heartbeat();
+  //schedule_heartbeat();
 }
 
 

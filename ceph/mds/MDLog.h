@@ -64,8 +64,8 @@ class MDLog {
 	return num_events + trimming.size();
   }
 
-  int submit_entry( LogEvent *e,
-					Context *c = 0 );
+  void submit_entry( LogEvent *e,
+					 Context *c = 0 );
   void wait_for_sync( Context *c );
   void flush();
 

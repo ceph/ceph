@@ -2,79 +2,127 @@
 #ifndef __CLOCK_H
 #define __CLOCK_H
 
+#include <iostream>
+#include <iomanip>
+
 #include <sys/time.h>
 #include <time.h>
 
 #include <list>
 using namespace std;
 
-// --- time stuff ---
-typedef pair<time_t, long> timepair_t;  // struct timeval is a PITA
 
-// addition, subtraction
-inline timepair_t operator+(timepair_t& l, timepair_t& r) {
-  return timepair_t( l.first + r.first + (l.second+r.second)/1000000L,
-					 (l.second+r.second)%1000000L );
+// --------
+// utime_t
+
+class utime_t {
+ private:
+  struct timeval tv;
+
+ public:
+  // cons
+  utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; }
+  utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; }
+  
+  // accessors
+  time_t        sec()  const { return tv.tv_sec; } 
+  __suseconds_t usec() const { return tv.tv_usec; }
+  int           nsec() const { return tv.tv_usec*1000; }
+
+  // ref accessors/modifiers
+  time_t&         sec_ref()  { return tv.tv_sec; } 
+  __suseconds_t&  usec_ref() { return tv.tv_usec; }
+
+  struct timeval& timeval()  { return tv; }
+
+  // cast to double
+  operator double() {
+	return (double)sec() + ((double)usec() / 1000000.0L);
+  }
+};
+
+// arithmetic operators
+inline utime_t operator+(const utime_t& l, const utime_t& r) {
+  return utime_t( l.sec() + r.sec() + (l.usec()+r.usec())/1000000L,
+				  (l.usec()+r.usec())%1000000L );
 }
-inline timepair_t& operator+=(timepair_t& l, timepair_t& r) {
-  l.first += r.first + (l.second+r.second)/1000000L;
-  l.second += r.second;
-  l.second %= 1000000L;
+inline utime_t& operator+=(utime_t& l, const utime_t& r) {
+  l.sec_ref() += r.sec() + (l.usec()+r.usec())/1000000L;
+  l.usec_ref() += r.usec();
+  l.usec_ref() %= 1000000L;
   return l;
 }
 
-inline timepair_t operator-(timepair_t& l, timepair_t& r) {
-  return timepair_t( l.first - r.first - (l.second<r.second ? 1:0),
-					 l.second - r.second + (l.second<r.second ? 1000000:0) );
+inline utime_t operator-(const utime_t& l, const utime_t& r) {
+  return utime_t( l.sec() - r.sec() - (l.usec()<r.usec() ? 1:0),
+				  l.usec() - r.usec() + (l.usec()<r.usec() ? 1000000:0) );
 }
-inline timepair_t& operator-=(timepair_t& l, timepair_t& r) {
-  l.first -= r.first;
-  if (l.second >= r.second)
-	l.second -= r.second;
+inline utime_t& operator-=(utime_t& l, const utime_t& r) {
+  l.sec_ref() -= r.sec();
+  if (l.usec() >= r.usec())
+	l.usec_ref() -= r.usec();
   else {
-	l.second += 1000000L - r.second;
-	l.first--;
+	l.usec_ref() += 1000000L - r.usec();
+	l.sec_ref()--;
   }
+  return l;
 }
-inline double timepair_to_double(const timepair_t &t) {
-  return (double)t.first + ((double)t.second / 1000000.0L);
+
+inline bool operator>(const utime_t& a, const utime_t& b)
+{
+  return (a.sec() > b.sec()) || (a.sec() == b.sec() && a.usec() > b.usec());
 }
+inline bool operator<(const utime_t& a, const utime_t& b)
+{
+  return (a.sec() < b.sec()) || (a.sec() == b.sec() && a.usec() < b.usec());
+}
+
+// ostream
+inline ostream& operator<<(ostream& out, const utime_t& t)
+{
+  //return out << t.sec() << "." << t.usec();
+  out << (long)t.sec() << ".";
+  out.setf(ios::right);
+  out.fill('0');
+  out << setw(6) << t.usec();
+  out.unsetf(ios::right);
+  return out;
+  
+  //return out << (long)t.sec << "." << ios::setf(ios::right) << ios::fill('0') << t.usec() << ios::usetf();
+}
+
+
 
 
 // -- clock --
 class Clock {
  protected:
-  struct timeval faketime;      // if we're faking.
-  struct timeval start_offset;  // time of process startup.
-
+  //utime_t start_offset;
+  //utime_t abs_last;
+  utime_t last;
 
  public:
-  Clock();
-  
-  time_t gettime(struct timeval *ts=0);
-  timepair_t gettimepair();
-
-  void sub(struct timeval *a, struct timeval *b) {
-	a->tv_sec -= b->tv_sec;
-
-	if (a->tv_usec - b->tv_usec >= 0)
-	  a->tv_usec -= b->tv_usec;
-	else { // borrow from seconds
-	  a->tv_usec = a->tv_usec + 1000000 - b->tv_usec;
-	  a->tv_sec--;
-	}
+  Clock() {
+	// set offset
+	//start_offset = now();
   }
-  
-  
-  void add(struct timeval *a, struct timeval *b) {
-	a->tv_sec += b->tv_sec;
-	a->tv_usec += b->tv_usec;
-	if (a->tv_usec > 1000000) {
-	  a->tv_sec++;
-	  a->tv_usec -= 1000000;
-	}
+
+  // relative time (from startup)
+  const utime_t& now() {
+	gettimeofday(&last.timeval(), NULL);
+	//last = abs_last - start_offset;
+	return last;
   }
-  
+
+  const utime_t& recent_now() {
+	return last;
+  }
+
+  // absolute time
+  time_t gettime() {
+	now();
+	return last.sec();
+  }
 
 };
 

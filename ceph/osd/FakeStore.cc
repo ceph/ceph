@@ -13,9 +13,9 @@
 #include <cassert>
 #include <errno.h>
 #include <dirent.h>
+#include <sys/xattr.h>
 
-
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
 
@@ -27,16 +27,10 @@
 
 
 
-FakeStore::FakeStore(char *base, int whoami, char *shadow) 
+FakeStore::FakeStore(char *base, int whoami) 
 {
   this->basedir = base;
   this->whoami = whoami;
-
-  if (shadow) {
-	is_shadow = true;
-	shadowdir = shadow;
-  } else
-	is_shadow = false;
 }
 
 
@@ -46,9 +40,6 @@ int FakeStore::init()
   get_dir(mydir);
 
   dout(5) << "init with basedir " << mydir << endl;
-  if (is_shadow) {
-	dout(5) << " SHADOW dir is " << shadowdir << endl;
-  }
 
   // make sure global base dir exists
   struct stat st;
@@ -66,6 +57,7 @@ int FakeStore::finalize()
 {
   dout(5) << "finalize" << endl;
   // nothing
+  return 0;
 }
 
 
@@ -78,13 +70,10 @@ void FakeStore::get_dir(string& dir) {
   sprintf(s, "%d", whoami);
   dir = basedir + "/" + s;
 }
-void FakeStore::get_oname(object_t oid, string& fn, bool shadow) {
+void FakeStore::get_oname(object_t oid, string& fn) {
   char s[100];
   sprintf(s, "%d/%02llx/%016llx", whoami, HASH_FUNC(oid), oid);
-  if (shadow)
-	fn = shadowdir + "/" + s;
-  else 
-	fn = basedir + "/" + s;
+  fn = basedir + "/" + s;
   //  dout(1) << "oname is " << fn << endl;
 }
 
@@ -96,7 +85,7 @@ void FakeStore::wipe_dir(string mydir)
 	dout(10) << "wiping " << mydir << endl;
 	struct dirent *ent = 0;
 	
-	while (ent = ::readdir(dir)) {
+	while ((ent = ::readdir(dir)) != 0) {
 	  if (ent->d_name[0] == '.') continue;
 	  dout(25) << "mkfs unlinking " << ent->d_name << endl;
 	  string fn = mydir + "/" + ent->d_name;
@@ -117,10 +106,6 @@ int FakeStore::mkfs()
   get_dir(mydir);
 
   dout(1) << "mkfs in " << mydir << endl;
-
-  if (is_shadow) {
-	dout(1) << "WARNING mkfs reverting to shadow fs, which pbly isn't what MDS expects!" << endl;
-  }
 
   // make sure my dir exists
   r = ::stat(mydir.c_str(), &st);
@@ -176,49 +161,10 @@ int FakeStore::stat(object_t oid,
   string fn;
   get_oname(oid,fn);
   int r = ::stat(fn.c_str(), st);
-  
-  if (is_shadow && 
-	  r != 0 &&                          // primary didn't exist
-	  ::lstat(fn.c_str(), st) != 0)  {   // and wasn't an intentionally bad symlink
-	get_oname(oid,fn,true);
-	return ::stat(fn.c_str(), st);
-  } else
-	return r;
+  return r;
 }
  
  
-void FakeStore::shadow_copy_maybe(object_t oid) {
-  struct stat st;
-  string fn;
-  get_oname(oid, fn);
-  if (::lstat(fn.c_str(), &st) == 0) 
-	return;  // live copy exists, we're fine, do nothing.
-
-  // is there a shadow object?
-  string sfn;
-  get_oname(oid, sfn, true);
-  if (::stat(sfn.c_str(), &st) == 0) {
-	// shadow exists.  copy!
-	dout(10) << "copying shadow for " << oid << " " << st.st_size << " bytes" << endl;
-	char *buf = new char[1024*1024];
-	int left = st.st_size;
-
-	int sfd = ::open(sfn.c_str(), O_RDONLY);
-	int fd = ::open(fn.c_str(), O_WRONLY);
-	assert(sfd && fd);
-	while (left) {
-	  int howmuch = left;
-	  if (howmuch > 1024*1024) howmuch = 1024*1024;
-	  int got = ::read(sfd, buf, howmuch);
-	  int wrote = ::write(fd, buf, got);
-	  assert(wrote == got);
-	  left -= got;
-	}
-	::close(fd);
-	::close(sfd);
-  }
-}
-
 
 int FakeStore::remove(object_t oid) 
 {
@@ -226,18 +172,6 @@ int FakeStore::remove(object_t oid)
   string fn;
   get_oname(oid,fn);
   int r = ::unlink(fn.c_str());
-
-  if (r == 0 && is_shadow) {
-	string sfn;
-	struct stat st;
-	get_oname(oid, sfn, true);
-	int s = ::stat(sfn.c_str(), &st);
-	if (s == 0) {
-	  // shadow exists.  make a bad symlink to mask it.
-	  ::symlink(sfn.c_str(), "doesnotexist");
-	  r = 0;
-	}
-  }
   return r;
 }
 
@@ -245,11 +179,9 @@ int FakeStore::truncate(object_t oid, off_t size)
 {
   dout(20) << "truncate " << oid << " size " << size << endl;
 
-  if (is_shadow) shadow_copy_maybe(oid);
-  
   string fn;
   get_oname(oid,fn);
-  ::truncate(fn.c_str(), size);
+  return ::truncate(fn.c_str(), size);
 }
 
 int FakeStore::read(object_t oid, 
@@ -262,17 +194,8 @@ int FakeStore::read(object_t oid,
   
   int fd = ::open(fn.c_str(), O_RDONLY);
   if (fd < 0) {
-	if (is_shadow) {
-	  struct stat st;
-	  if (::lstat(fn.c_str(), &st) == 0) return fd;  // neg symlink
-	  get_oname(oid,fn);
-	  fd = ::open(fn.c_str(), O_RDONLY);
-	  if (fd < 0) 
-		return fd;    // no shadow either.
-	} else {
-	  dout(1) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
-	  return fd;
-	}
+	dout(1) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
+	return fd;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
   
@@ -291,8 +214,6 @@ int FakeStore::write(object_t oid,
 					 char *buffer,
 					 bool do_fsync) {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
-
-  if (is_shadow) shadow_copy_maybe(oid);
 
   string fn;
   get_oname(oid,fn);
@@ -324,5 +245,92 @@ int FakeStore::write(object_t oid,
   ::close(fd);
   
   return did;
+}
+
+
+
+
+
+
+
+// ------------------
+// collections
+
+void FakeStore::get_collfn(coll_t c, string &fn) {
+  char s[100];
+  sprintf(s, "collection.%02llx", c);
+  fn = basedir;
+  fn += "/";
+  fn += s;
+}
+void FakeStore::open_collection(coll_t c) {
+  if (collection_map.count(c) == 0) {
+	string fn;
+	get_collfn(c,fn);
+	collection_map[c] = new BDBMap<coll_t,int>;
+	collection_map[c]->open(fn.c_str());
+  }
+}
+int FakeStore::collection_create(coll_t c) {
+  collections.put(c, 1);
+  open_collection(c);
+  return 0;
+}
+int FakeStore::collection_destroy(coll_t c) {
+  collections.del(c);
+  
+  open_collection(c);
+  collection_map[c]->close();
+  
+  string fn;
+  get_collfn(c,fn);
+  collection_map[c]->remove(fn.c_str());
+  delete collection_map[c];
+  collection_map.erase(c);
+  return 0;
+}
+int FakeStore::collection_add(coll_t c, object_t o) {
+  open_collection(c);
+  collection_map[c]->put(o,1);
+  return 0;
+}
+int FakeStore::collection_remove(coll_t c, object_t o) {
+  open_collection(c);
+  collection_map[c]->del(o);
+  return 0;
+}
+int FakeStore::collection_list(coll_t c, list<object_t>& o) {
+  open_collection(c);
+  collection_map[c]->list_keys(o);
+  return 0;
+}
+
+
+
+// ------------------
+// attributes
+
+int FakeStore::setattr(object_t oid, const char *name,
+					   void *value, size_t size)
+{
+  string fn;
+  get_oname(oid, fn);
+  return setxattr(fn.c_str(), name, value, size, 0);
+}
+
+
+int FakeStore::getattr(object_t oid, const char *name,
+					   void *value, size_t size)
+{
+  string fn;
+  get_oname(oid, fn);
+  return getxattr(fn.c_str(), name, value, size);
+}
+
+int FakeStore::listattr(object_t oid, char *attrs, size_t size)
+{
+  string fn;
+  get_oname(oid, fn);
+  return listxattr(fn.c_str(), attrs, size);
 }
 

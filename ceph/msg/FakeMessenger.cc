@@ -1,6 +1,4 @@
 
-
-
 #include "Message.h"
 #include "FakeMessenger.h"
 #include "mds/MDS.h"
@@ -10,7 +8,7 @@
 #include "common/LogType.h"
 #include "common/Logger.h"
 
-#include "include/config.h"
+#include "config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,12 +26,10 @@ using namespace __gnu_cxx;
 #include "common/Mutex.h"
 #include <pthread.h>
 
-#include "include/config.h"
-
 
 // global queue.
 
-map<int, FakeMessenger*> directory;
+map<int, FakeMessenger*>      directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
@@ -72,6 +68,8 @@ void *fakemessenger_thread(void *ptr)
 	if (shutdown) break;
 
 	fakemessenger_do_loop_2();
+
+	if (directory.empty()) break;
   }
   lock.Unlock();
 
@@ -79,6 +77,7 @@ void *fakemessenger_thread(void *ptr)
   g_timer.unset_messenger_kicker();
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
+  return 0;
 }
 
 
@@ -101,7 +100,6 @@ void fakemessenger_wait()
   cout << "fakemessenger_wait waiting" << endl;
   void *ptr;
   pthread_join(thread_id, &ptr);
-
 }
 
 
@@ -116,6 +114,7 @@ int fakemessenger_do_loop()
   lock.Unlock();
 
   g_timer.shutdown();
+  return 0;
 }
 
 
@@ -213,12 +212,7 @@ FakeMessenger::FakeMessenger(long me)  : Messenger(me)
 
 FakeMessenger::~FakeMessenger()
 {
-  shutdown();
 
-  if (loggers[whoami]) {
-	delete loggers[whoami];
-	loggers.erase(whoami);
-  }
 }
 
 
@@ -226,13 +220,24 @@ int FakeMessenger::shutdown()
 {
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   lock.Lock();
+
+  assert(directory.count(whoami) == 1);
   directory.erase(whoami);
   if (directory.empty()) {
 	dout(1) << "fakemessenger: last shutdown" << endl;
 	::shutdown = true;
 	cond.Signal();  // why not
   } 
+
+  /*
+  if (loggers[whoami]) {
+	delete loggers[whoami];
+	loggers.erase(whoami);
+  }
+  */
+
   lock.Unlock();
+  return 0;
 }
 
 /*
@@ -284,13 +289,12 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   // wake up loop?
   if (!awake) {
 	dout(10) << "waking up fakemessenger thread" << endl; 
-	awake = true;
-	lock.Unlock();
 	cond.Signal();
+	lock.Unlock();
   } else
 	lock.Unlock();
-
-
+  
+  return 0;
 }
 
 

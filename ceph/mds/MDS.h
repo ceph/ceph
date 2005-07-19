@@ -136,7 +136,7 @@ class MDS : public Dispatcher {
 
  protected:
   __uint64_t   stat_ops;
-  timepair_t   last_balancer_heartbeat;
+  utime_t   last_balancer_heartbeat;
   
  public:
   MDS(MDCluster *mdc, int whoami, Messenger *m);
@@ -241,7 +241,7 @@ class MDS : public Dispatcher {
   // file
   void handle_client_open(MClientRequest *req, CInode *ref);
   void handle_client_openc(MClientRequest *req, CInode *ref);
-  void handle_client_close(MClientRequest *req, CInode *in);
+  void handle_client_release(MClientRequest *req, CInode *in);  
   void handle_client_truncate(MClientRequest *req, CInode *in);
   void handle_client_fsync(MClientRequest *req, CInode *in);
 

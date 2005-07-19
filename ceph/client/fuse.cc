@@ -31,7 +31,7 @@
 
 #include "Client.h"
 
-#include "include/config.h"
+#include "config.h"
 
 // stl
 #include <map>
@@ -41,19 +41,6 @@ using namespace std;
 // globals
 Client *client;     // the ceph client
 
-// fh fun
-Mutex                     pfh_lock;
-rangeset<int>             pfh_set;  // available pseudo_fh's
-map<int, fileh_t>         pfh_map;  // map pseudo-fh -> fh
-
-int get_pseudo_fh() {
-  int fh = pfh_set.first();
-  pfh_set.erase(fh);
-  return fh;
-}
-void put_pseudo_fh(int fh) {
-  pfh_set.insert(fh);
-}
 
 
 // ------
@@ -158,44 +145,28 @@ static int ceph_open(const char *path, struct fuse_file_info *fi)
   
   res = client->open(path, fi->flags);
   if (res < 0) return res;
-  
-  /*pfh_lock.Lock();
-  pfh_t pfh = get_pseudo_fh();
-  pfh_map[pfh] = res;
-  fi->fh = pfh;
-  pfh_lock.Unlock();
-  */
   fi->fh = res;
-
   return 0;  // fuse wants 0 onsucess
 }
 
 static int ceph_read(const char *path, char *buf, size_t size, off_t offset,
 					 struct fuse_file_info *fi)
 {
-  /*pfh_lock.Lock();
-  fileh_t fh = pfh_map[fi->fh];
-  pfh_lock.Unlock();
-  */
-  fileh_t fh = fi->fh;
+  fh_t fh = fi->fh;
   return client->read(fh, buf, size, offset);
 }
 
 static int ceph_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi)
 {
-  /*pfh_lock.Lock();
-  fileh_t fh = pfh_map[fi->fh];
-  pfh_lock.Unlock();
-  */
-  fileh_t fh = fi->fh;
+  fh_t fh = fi->fh;
   return client->write(fh, buf, size, offset);
 }
 
 /*
 static int ceph_flush(const char *path, struct fuse_file_info *fi)
 {
-  fileh_t fh = fi->fh;
+  fh_t fh = fi->fh;
   return client->flush(fh);
 }
 */
@@ -209,13 +180,7 @@ static int ceph_statfs(const char *path, struct statfs *stbuf)
 
 static int ceph_release(const char *path, struct fuse_file_info *fi)
 {
-  /*pfh_lock.Lock();
-  fileh_t fh = fi->fh;
-  pfh_map.erase(fi->fh);
-  put_pseudo_fh(fi->fh);
-  pfh_lock.Unlock();
-  */
-  fileh_t fh = fi->fh;
+  fh_t fh = fi->fh;
   int r = client->close(fh);  // close the file
   return r;
 }
@@ -223,7 +188,7 @@ static int ceph_release(const char *path, struct fuse_file_info *fi)
 static int ceph_fsync(const char *path, int isdatasync,
                      struct fuse_file_info *fi)
 {
-  fileh_t fh = fi->fh;
+  fh_t fh = fi->fh;
   return client->fsync(fh, isdatasync ? true:false);
 }
 
@@ -257,9 +222,6 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
 {
   // init client
   client = c;
-
-  // init fh allocator
-  pfh_set.map_insert(10,65000);
 
   // set up fuse argc/argv
   int newargc = 0;

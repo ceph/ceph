@@ -69,7 +69,7 @@ class MDBalancer {
 
   void hit_inode(class CInode *in);
   void hit_dir(class CDir *dir);
-  void hit_recursive(class CDir *dir, timepair_t& now);
+  void hit_recursive(class CDir *dir);
 
 
   void show_imports(bool external=false);

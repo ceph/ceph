@@ -96,11 +96,12 @@ class CLock {
   char set_state(char s) { 
 	state = s; 
 	assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
+	return s;
   };
 
   char get_mode() { return mode; }
   char set_mode(char m) {
-	mode = m;
+	return mode = m;
   }
 
   char get_replica_state() {
@@ -218,7 +219,7 @@ inline ostream& operator<<(ostream& out, CLock& l)
 	"wgsync"
   }; 
 
-  out << "(" << __lock_states[l.get_state()];
+  out << "(" << __lock_states[(int)l.get_state()];
 
   if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
 

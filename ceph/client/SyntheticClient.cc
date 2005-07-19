@@ -12,7 +12,7 @@
 #include <utime.h>
 #include <math.h>
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "synthetic" << client->get_nodeid() << " "
 
@@ -48,8 +48,8 @@ string SyntheticClient::get_sarg()
 
 int SyntheticClient::run()
 { 
-  run_start = g_clock.gettimepair();
-  run_until = timepair_t(0,0);
+  run_start = g_clock.now();
+  run_until = utime_t(0,0);
 
   for (list<int>::iterator it = modes.begin();
 	   it != modes.end();
@@ -73,11 +73,11 @@ int SyntheticClient::run()
 		iargs.pop_front();
 		if (iarg1) {
 		  dout(2) << "until " << iarg1 << endl;
-		  timepair_t dur(iarg1,0);
+		  utime_t dur(iarg1,0);
 		  run_until = run_start + dur;
 		} else {
 		  dout(2) << "until " << iarg1 << " (no limit)" << endl;
-		  run_until = timepair_t(0,0);
+		  run_until = utime_t(0,0);
 		}
 	  }
 	  break;
@@ -148,22 +148,22 @@ int SyntheticClient::run()
 		client->mkdir(prefix.c_str(), 0755);
 		
 		for (int i=0; i<iarg1; i++) {
-		  timepair_t start = g_clock.gettimepair();
+		  utime_t start = g_clock.now();
 		  
 		  if (time_to_stop()) break;
 		  play_trace(t, prefix);
 		  if (time_to_stop()) break;
 		  clean_dir(prefix);
 
-		  timepair_t end = g_clock.gettimepair();
-		  timepair_t lat = end-start;
+		  utime_t lat = g_clock.now();
+		  lat -= start;
 
-		  dout(1) << " trace loop " << i << " in " << timepair_to_double(lat) << " seconds" << endl;
+		  dout(1) << " trace loop " << i << " in " << (double)lat << " seconds" << endl;
 		  if (client_logger 
 			  && i > 0
 			  && i < iarg1-1
 			  ) {
-			client_logger->finc("trsum", timepair_to_double(lat));
+			client_logger->finc("trsum", (double)lat);
 			client_logger->inc("trnum");
 		  }
 		}
@@ -244,6 +244,7 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   assert(thread_id);
+  return 0;
 }
 
 int SyntheticClient::join_thread()
@@ -251,6 +252,7 @@ int SyntheticClient::join_thread()
   assert(thread_id);
   void *rv;
   pthread_join(thread_id, &rv);
+  return 0;
 }
 
 
@@ -286,7 +288,7 @@ void SyntheticClient::init_op_dist()
   //op_dist.add( MDS_OP_WRITE, g_conf.fakeclient_op_write );
   op_dist.add( MDS_OP_TRUNCATE, g_conf.fakeclient_op_truncate );
   op_dist.add( MDS_OP_FSYNC, g_conf.fakeclient_op_fsync );
-  op_dist.add( MDS_OP_CLOSE, g_conf.fakeclient_op_close );
+  op_dist.add( MDS_OP_RELEASE, g_conf.fakeclient_op_close );  // actually, close()
   op_dist.normalize();
 }
 
@@ -303,7 +305,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
   dout(4) << "play trace" << endl;
   t.start();
 
-  timepair_t start = g_clock.gettimepair();
+  utime_t start = g_clock.now();
 
   const char *p = prefix.c_str();
 
@@ -374,8 +376,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	} else if (strcmp(op, "open") == 0) {
 	  const char *a = t.get_string(p);
 	  __int64_t b = t.get_int(); 
-	  // HACK
-	  b = O_RDONLY;
 	  __int64_t id = t.get_int();
 	  __int64_t fh = client->open(a, b);
 	  open_files[id] = fh;
@@ -417,8 +417,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	dout(1) << "leftover close " << fi->second << endl;
 	if (fi->second > 0) client->close(fi->second);
   }
-
   
+  return 0;
 }
 
 
@@ -531,7 +531,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   dout(5) << "writing to " << fn << " fd " << fd << endl;
   if (fd < 0) return fd;
 
-  for (int i=0; i<chunks; i++) {
+  for (unsigned i=0; i<chunks; i++) {
 	if (time_to_stop()) break;
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	client->write(fd, buf, wrsize, i*wrsize);
@@ -539,6 +539,8 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   
   client->close(fd);
   delete[] buf;
+
+  return 0;
 }
 
 int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
@@ -551,7 +553,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   dout(5) << "reading from " << fn << " fd " << fd << endl;
   if (fd < 0) return fd;
 
-  for (int i=0; i<chunks; i++) {
+  for (unsigned i=0; i<chunks; i++) {
 	if (time_to_stop()) break;
 	dout(2) << "reading block " << i << "/" << chunks << endl;
 	client->read(fd, buf, rdsize, i*rdsize);
@@ -559,6 +561,8 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
   
   client->close(fd);
   delete[] buf;
+
+  return 0;
 }
 
 
@@ -577,14 +581,14 @@ int SyntheticClient::random_walk(int num_req)
 	if (time_to_stop()) break;
 
 	// ascend?
-	if (cwd.depth() && !roll_die(pow(.9, cwd.depth()))) {
+	if (cwd.depth() && !roll_die(::pow((double).9, (double)cwd.depth()))) {
 	  dout(DBL) << "die says up" << endl;
 	  up();
 	  continue;
 	}
 
 	// descend?
-	if (.9*roll_die(pow(.9,cwd.depth())) && subdirs.size()) {
+	if (.9*roll_die(::pow((double).9,(double)cwd.depth())) && subdirs.size()) {
 	  string s = get_random_subdir();
 	  cwd.add_dentry( s );
 	  dout(DBL) << "cd " << s << " -> " << cwd << endl;
@@ -679,7 +683,7 @@ int SyntheticClient::random_walk(int num_req)
 	  }
 	}
 
-	if (op == MDS_OP_CLOSE) {
+	if (op == MDS_OP_RELEASE) {   // actually, close
 	  if (open_files.empty())
 		op = MDS_OP_STAT;
 	  else {

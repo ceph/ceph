@@ -5,7 +5,7 @@
 #include <string>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 #include "mds/MDCluster.h"
 
 #include "mds/MDS.h"
@@ -109,7 +109,7 @@ int main(int oargc, char **oargv) {
 
   // wait for it to finish
   cout << "DONE -----" << endl;
-  fakemessenger_stopthread();  // blocks until messenger stops
+  fakemessenger_wait();  // blocks until messenger stops
   
 
   // cleanup

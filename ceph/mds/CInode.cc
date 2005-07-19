@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "cinode: "
 
@@ -76,8 +76,6 @@ CInode::CInode(bool auth) : LRUObject(),
   state = 0;  
   version = 0;
 
-  nrdonly = nwronly = nrdwr = 0;
-
   if (auth) state_set(CINODE_STATE_AUTH);
 }
 
@@ -129,8 +127,8 @@ void CInode::set_auth(bool a)
 {
   if (!is_dangling() && !is_root() && 
 	  is_auth() != a) {
-	CDir *dir = get_parent_dir();
 	/*
+	CDir *dir = get_parent_dir();
 	if (is_auth() && !a) 
 	  dir->nauthitems--;
 	else

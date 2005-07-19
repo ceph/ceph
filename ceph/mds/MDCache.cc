@@ -69,7 +69,7 @@
 #include <map>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".cache "
 
@@ -102,6 +102,7 @@ bool MDCache::shutdown()
 	show_imports();
 	//dump();
   }
+  return true;
 }
 
 
@@ -441,7 +442,7 @@ void MDCache::export_empty_import(CDir *dir)
 }
 
 
-bool MDCache::trim(__int32_t max) {
+bool MDCache::trim(int max) {
   if (max < 0) {
 	max = lru.lru_get_max();
 	if (!max) return false;
@@ -449,7 +450,7 @@ bool MDCache::trim(__int32_t max) {
 
   map<int, MCacheExpire*> expiremap;
 
-  while (lru.lru_get_size() > max) {
+  while (lru.lru_get_size() > (unsigned)max) {
 	CInode *in = (CInode*)lru.lru_expire();
 	if (!in) break; //return false;
 
@@ -756,6 +757,8 @@ int MDCache::open_root(Context *c)
 	waiting_for_root.push_back(c);
 
   }
+
+  return 0;
 }
 
 
@@ -973,7 +976,7 @@ int MDCache::path_traverse(filepath& origpath,
   // make our own copy, since we'll modify when we hit symlinks
   filepath path = origpath;  
 
-  int depth = 0;
+  unsigned depth = 0;
   while (depth < path.depth()) {
 	dout(12) << "traverse: path seg depth " << depth << " = " << path[depth] << endl;
 	
@@ -1302,7 +1305,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   
   // construct path
   filepath path;
-  for (int i=0; i<anchortrace.size(); i++) 
+  for (unsigned i=0; i<anchortrace.size(); i++) 
 	path.add_dentry(anchortrace[i]->ref_dn);
 
   dout(7) << " path is " << path << endl;
@@ -1768,7 +1771,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
   // add content
   // do some fidgeting to include a dir if they asked for the base dir, or just root.
-  for (int i = 0; i < dis->get_want().depth() || dis->get_want().depth() == 0; i++) {
+  for (unsigned i = 0; i < dis->get_want().depth() || dis->get_want().depth() == 0; i++) {
     // add dir
     if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "they don't want the base dir" << endl;
@@ -2695,7 +2698,7 @@ void MDCache::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
   string destname = destdn->name;
 
   CInode *in = srcdn->inode;
-  Message *req = srcdn->xlockedby;
+  //Message *req = srcdn->xlockedby;
 
 
   // determine the players
@@ -3080,11 +3083,10 @@ void MDCache::handle_rename(MRename *m)
 
   // decode + import inode (into new location start)
   int off = 0;
-  timepair_t now = g_clock.gettimepair();
   // HACK
   bufferlist bufstate;
   bufstate.append(m->get_inode_state().c_str(), m->get_inode_state().length());
-  decode_import_inode(destdn, bufstate, off, m->get_source(), now);
+  decode_import_inode(destdn, bufstate, off, m->get_source());
 
   CInode *in = destdn->inode;
   assert(in);
@@ -3288,51 +3290,64 @@ __uint64_t MDCache::issue_file_data_version(CInode *in)
 }
 
 
-int MDCache::issue_file_caps(CInode *in,
-							 int mode,
-							 MClientRequest *req)
+Capability* MDCache::issue_file_caps(CInode *in,
+									 int mode,
+									 MClientRequest *req)
 {
   dout(7) << "issue_file_caps for mode " << mode << " on " << *in << endl;
 
   // my needs
-  int my_want = file_mode_want_caps(mode);
-  int my_conflicts = file_mode_conflict_caps(mode);
+  int my_client = req->get_client();
+  int my_want = 0;
+  if (mode & FILE_MODE_R) my_want |= CAP_FILE_RDCACHE  | CAP_FILE_RD;
+  if (mode & FILE_MODE_W) my_want |= CAP_FILE_WRBUFFER | CAP_FILE_WR;
+
+  // register a capability
+  Capability *cap = in->get_cap(my_client);
+  if (!cap) {
+	Capability c(my_want);
+	in->add_cap(my_client, c);
+	cap = in->get_cap(my_client);
+  }  
 
   // look at what caps are already issued
   int issued = 0;
   int want = my_want;
-  int conflicts = my_conflicts;
-  for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
-	   it != in->fh_map.end();
+  int conflicts = 0;
+  for (map<int, Capability>::iterator it = in->caps.begin();
+	   it != in->caps.end();
 	   it++) {
-	issued |= it->second->pending_caps | it->second->confirmed_caps;
-	want |= file_mode_want_caps( it->second->mode );
-	conflicts |= file_mode_conflict_caps( it->second->mode );
+	issued |= it->second.issued();
+	want |= it->second.wanted();
+	if (it->first != my_client)
+	  conflicts |= it->second.wanted_conflicts();
   }
-  dout(10) << "    issued: " << issued << endl;
-  dout(10) << "      want: " << want << endl;
-  dout(10) << " conflicts: " << conflicts << endl;
+  dout(10) << "         issued: " << cap_string(issued) << endl;
+  dout(10) << "           want: " << cap_string(want) << endl;
+  dout(10) << " want conflicts: " << cap_string(conflicts) << endl;
   
   // what's allowed, given this mix?
   int allowed = want - (want & conflicts);
-  dout(10) << "   allowed: " << allowed << endl;
+  dout(10) << "        allowed: " << cap_string(allowed) << endl;
 
   // problems?
   if (issued & conflicts) {
-	dout(7) << " conflict with existing fh's: " << (issued & conflicts) << endl;
+	dout(7) << " conflict with existing caps: " << cap_string(issued & conflicts) << endl;
 
 	// call back caps!
-	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
-		 it != in->fh_map.end();
+	for (map<int, Capability>::iterator it = in->caps.begin();
+		 it != in->caps.end();
 		 it++) {
-	  CFile *f = it->second;
-	  int extra = f->pending_caps - (f->pending_caps & allowed);
-	  dout(7) << "  fh " << f->fh << " on client " << f->client << " has pending " << f->pending_caps << " .. extra is " << extra << endl;
+	  int extra = it->second.pending() - (it->second.pending() & allowed);
+	  dout(7) << "  client " << it->first << " has pending " << it->second.pending() << " .. extra is " << extra << endl;
 	  if (extra) {
-		f->pending_caps -= extra;
-		dout(7) << "   sending MClientFileCaps on " << f->fh << " new pending " << f->pending_caps << endl;
-		mds->messenger->send_message(new MClientFileCaps(in, f, true),
-									 MSG_ADDR_CLIENT(f->client), 0, MDS_PORT_CACHE);
+		// issue restricted caps
+		it->second.issue(it->second.pending() - extra);
+
+		// send
+		dout(7) << "   sending MClientFileCaps on " << it->first << " new pending " << it->second.pending() << endl;
+		mds->messenger->send_message(new MClientFileCaps(in, it->second, true),
+									 MSG_ADDR_CLIENT(it->first), 0, MDS_PORT_CACHE);
 	  }
 	}
 	
@@ -3342,17 +3357,20 @@ int MDCache::issue_file_caps(CInode *in,
 
   // we're okay!
   int caps = my_want & allowed;
-  dout(7) << " issuing caps " << caps << " (i want " << my_want << ", allowed " << allowed << ")" << endl;
+  dout(7) << " issuing caps " << cap_string(caps) << " (i want " << cap_string(my_want) << ", allowed " << cap_string(allowed) << ")" << endl;
   assert(caps > 0);
+  
+  // issue
+  cap->issue(caps);
 
   // issuing new write permissions?
-  if ((issued & CFILE_CAP_WR) == 0 &&
-	  (  caps & CFILE_CAP_WR) != 0) {
+  if ((issued & CAP_FILE_WR) == 0 &&
+	  (  caps & CAP_FILE_WR) != 0) {
 	dout(7) << " incrementing file_data_version for " << *in << endl;
 	in->inode.file_data_version++;
   }
 
-  return caps;
+  return cap;
 }
 
 void MDCache::handle_client_file_caps(MClientFileCaps *m)
@@ -3373,20 +3391,15 @@ void MDCache::handle_client_file_caps(MClientFileCaps *m)
 	return;
   } 
  
-  dout(7) << "handle_client_file_caps on " << *in << " fh " << m->get_fh() << " confirmed caps " << m->get_caps() << endl;
+  dout(7) << "handle_client_file_caps on " << *in << " confirmed caps " << m->get_caps() << endl;
 
-  CFile *f = in->get_fh(m->get_fh());
-  assert(f);
+  Capability *cap = in->get_cap(m->get_client());
+  assert(cap);
 
-  if (m->get_seq() < f->last_recv) {
-	dout(7) << "older than last_recv, dropping" << endl;
-  } else {
-	f->confirmed_caps = m->get_caps();
-	f->last_recv = m->get_seq();
-
-	// reevaluate, waiters
-	eval_file_caps(in);
-  }
+  cap->confirm_receipt(m->get_seq());
+  
+  // reevaluate, waiters
+  eval_file_caps(in);
 
   delete m;
 }
@@ -4143,7 +4156,7 @@ void MDCache::inode_soft_eval(CInode *in)
 	  inode_soft_mode(in,LOCK_MODE_ASYNC);
 	}
 	*/
-	if (!in->is_open_write() &&
+	if (!in->is_write_caps() &&
 		in->softlock.get_mode() != LOCK_MODE_SYNC) {
 	  inode_soft_mode(in,LOCK_MODE_SYNC);
 	}
@@ -5220,18 +5233,11 @@ void MDCache::handle_lock_dn(MLock *m)
   case LOCK_AC_UNXLOCK:
 	dout(7) << "handle_lock_dn unxlock on " << *dn << endl;
 	{
-	  CDir *dir = dn->dir;
 	  string dname = dn->name;
-
 	  Message *m = dn->xlockedby;
 
 	  // finish request
 	  request_finish(m);  // this will drop the locks (and unpin paths!)
-
-	  // unxlock
-	  //dentry_xlock_finish(dn);
-	  //dir->take_waiting(CDIR_WAIT_ANY, dname, mds->finished_queue);
-
 	  return;
 	}
 	break;
@@ -5713,14 +5719,13 @@ void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_aut
 {
   in->version++;  // so local log entries are ignored, etc.  (FIXME ??)
   
-  // tell clients with fh's about new inode auth
-  for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
-	   it != in->fh_map.end();
+  // tell clients with caps about new inode auth
+  for (map<int, Capability>::iterator it = in->caps.begin();
+	   it != in->caps.end();
 	   it++) {
-	CFile *f = it->second;
-	dout(7) << "encode_export_inode " << *in << " telling client " << f->client << " fh " << f->fh << " new auth " << new_auth << endl;
-	mds->messenger->send_message(new MClientFileCaps(in, f, false, new_auth),
-								 MSG_ADDR_CLIENT(f->client));
+	dout(7) << "encode_export_inode " << *in << " telling client " << it->first << " new auth " << new_auth << endl;
+	mds->messenger->send_message(new MClientFileCaps(in, it->second, false, new_auth),
+								 MSG_ADDR_CLIENT(it->first));
   }
 
   // relax locks
@@ -6024,10 +6029,10 @@ void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
   // must discover it!
   C_MDC_ExportDirDiscover *onfinish = new C_MDC_ExportDirDiscover(this, m);
   filepath fpath(m->get_path());
-  int r = path_traverse(fpath, onfinish->trace, true,
-						m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
-						MDS_TRAVERSE_DISCOVER,
-						onfinish);  // on completion|error
+  path_traverse(fpath, onfinish->trace, true,
+				m, new C_MDS_RetryMessage(mds,m),       // on delay/retry
+				MDS_TRAVERSE_DISCOVER,
+				onfinish);  // on completion|error
 }
 
 void MDCache::handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r)
@@ -6358,7 +6363,6 @@ void MDCache::handle_export_dir(MExportDir *m)
   dir_state.claim( m->get_state() );
   int off = 0;
   int num_imported_inodes = 0;
-  timepair_t now = g_clock.gettimepair();   // for popularity adjustments
 
   for (int i = 0; i < m->get_ndirs(); i++) {
 	num_imported_inodes += 
@@ -6366,8 +6370,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 					   off,
 					   oldauth, 
 					   dir,                 // import root
-					   imported_subdirs,
-					   now);
+					   imported_subdirs);
   }
   dout(10) << " " << imported_subdirs.size() << " imported subdirs" << endl;
   dout(10) << " " << m->get_exports().size() << " imported nested exports" << endl;
@@ -6463,7 +6466,7 @@ void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 }
 
 
-void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth, timepair_t& now)
+void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth)
 {
   
   CInodeExport istate;
@@ -6486,7 +6489,7 @@ void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int old
   }
 
   // state after link
-  istate.update_inode(in, now);
+  istate.update_inode(in);
  
  
   // add inode?
@@ -6531,8 +6534,7 @@ int MDCache::import_dir_block(bufferlist& bl,
 							  int& off,
 							  int oldauth,
 							  CDir *import_root,
-							  list<inodeno_t>& imported_subdirs,
-							  timepair_t& now)
+							  list<inodeno_t>& imported_subdirs)
 {
   // set up dir
   CDirExport dstate;
@@ -6550,7 +6552,7 @@ int MDCache::import_dir_block(bufferlist& bl,
     imported_subdirs.push_back(dir->ino());
 
   // assimilate state
-  dstate.update_dir( dir, now );
+  dstate.update_dir( dir );
   if (diri->is_auth()) dir->dir_auth = CDIR_AUTH_PARENT;   // update_dir may hose dir_auth
 
   // mark  (may already be marked from get_or_open_dir() above)
@@ -6616,7 +6618,7 @@ int MDCache::import_dir_block(bufferlist& bl,
 	}
 	else if (icode == 'I') {
 	  // inode
-	  decode_import_inode(dn, bl, off, oldauth, now);
+	  decode_import_inode(dn, bl, off, oldauth);
     }
 
 	// mark dentry dirty?  (only _after_ we link the inode!)
@@ -7474,7 +7476,7 @@ vector<CInode*> MDCache::hack_add_file(string& fn, CInode *in) {
 }
 
 CInode* MDCache::hack_get_file(string& fn) {
-  int off = 1;
+  unsigned off = 1;
   CInode *cur = root;
   
   // dirs

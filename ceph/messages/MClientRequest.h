@@ -161,8 +161,8 @@ inline ostream& operator<<(ostream& out, MClientRequest& req) {
 	out << "truncate"; break;
   case MDS_OP_FSYNC: 
 	out << "fsync"; break;
-  case MDS_OP_CLOSE: 
-	out << "close"; break;
+  case MDS_OP_RELEASE: 
+	out << "release"; break;
   default: 
 	out << "unknown=" << req.get_op();
   }

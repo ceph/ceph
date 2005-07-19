@@ -1,5 +1,5 @@
 
-#include "include/config.h"
+#include "config.h"
 #include "osd/OSDCluster.h"
 
 
@@ -10,7 +10,8 @@
 #define MDS_CACHE_MB_TO_INODES(x) ((x)*1000000/AVG_PER_INODE_SIZE)
 
 //#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
-#define MDS_CACHE_SIZE 1500000
+//#define MDS_CACHE_SIZE 1500000
+#define MDS_CACHE_SIZE 150000
 
 
 // hack hack hack ugly FIXME

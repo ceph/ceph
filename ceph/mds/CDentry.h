@@ -53,31 +53,31 @@ class CDentry {
 	inode(0),
 	dir(0),
 	remote_ino(0),
+	dirty(0),
+	parent_dir_version(0),
 	lockstate(DN_LOCK_SYNC),
 	xlockedby(0),
-	npins(0),
-	dirty(0),
-	parent_dir_version(0) { }
+	npins(0) { }
   CDentry(const string& n, inodeno_t ino, CInode *in=0) :
 	name(n),
+	inode(in),
 	dir(0),
 	remote_ino(ino),
-	inode(in),
+	dirty(0),
+	parent_dir_version(0),
 	lockstate(DN_LOCK_SYNC),
 	xlockedby(0),
-	npins(0),
-	dirty(0),
-	parent_dir_version(0) { }
+	npins(0) { }
   CDentry(const string& n, CInode *in) :
 	name(n),
-	dir(0),
 	inode(in),
+	dir(0),
 	remote_ino(0),
+	dirty(0),
+	parent_dir_version(0),
 	lockstate(DN_LOCK_SYNC),
 	xlockedby(0),
-	npins(0),
-	dirty(0),
-	parent_dir_version(0) { }
+	npins(0) { }
 
   CInode *get_inode() { return inode; }
   CDir *get_dir() { return dir; }
@@ -145,14 +145,14 @@ class CDentry {
   void pin(Message *m) { 
 	npins++; 
 	pinset.insert(m);
-	assert(pinset.size() == npins);
+	assert(pinset.size() == (unsigned)npins);
   }
   void unpin(Message *m) { 
 	npins--; 
 	assert(npins >= 0); 
 	assert(pinset.count(m) > 0);
 	pinset.erase(pinset.find(m));
-	assert(pinset.size() == npins);
+	assert(pinset.size() == (unsigned)npins);
   }
   bool is_pinnable(Message *m) { 
 	return (lockstate == DN_LOCK_SYNC) ||

@@ -14,7 +14,7 @@
 #include "common/Timer.h"
 #include "common/Clock.h"
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".osdmon: "
 

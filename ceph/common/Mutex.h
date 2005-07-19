@@ -26,7 +26,7 @@ class Mutex
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-	int r = pthread_mutex_init(&M,&attr);
+	pthread_mutex_init(&M,&attr);
     //cout << this << " mutex init = " << r << endl;
     pthread_mutexattr_destroy(&attr);
   }

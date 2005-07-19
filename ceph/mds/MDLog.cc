@@ -12,7 +12,7 @@
 
 LogType mdlog_logtype;
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (mds->get_nodeid() == 0 && (l<=g_conf.debug || l<=g_conf.debug_mds_log)) cout << "mds" << mds->get_nodeid() << ".log "
 
@@ -42,7 +42,7 @@ MDLog::~MDLog()
 
 
 
-int MDLog::submit_entry( LogEvent *e,
+void MDLog::submit_entry( LogEvent *e,
 						 Context *c ) 
 {
   dout(5) << "submit_entry at " << num_events << endl;
@@ -64,7 +64,6 @@ int MDLog::submit_entry( LogEvent *e,
 	  delete c;
 	}
   }
-  
 }
 
 void MDLog::wait_for_sync( Context *c )
@@ -147,7 +146,7 @@ void MDLog::trim(Context *c)
 		delete le;
 		logger->inc("obs");
 	  } else {
-		if (trimming.size() < g_conf.mds_log_max_trimming) {
+		if ((int)trimming.size() < g_conf.mds_log_max_trimming) {
 		  // trim!
 		  dout(7) << "  trimming " << le << endl;
 		  trimming.insert(le);

@@ -7,7 +7,7 @@
 #include "include/buffer.h"
 #include "include/bufferlist.h"
 #include "include/lru.h"
-#include "include/config.h"
+#include "config.h"
 #include "common/Cond.h"
 
 // stl
@@ -34,12 +34,12 @@ class Bufferhead : public LRUObject {
   int get() {
 	assert(ref >= 0);
 	if (ref == 0) lru_pin();
-	ref++;
+	return ++ref;
   }
   int put() {
 	assert(ref > 0);
-	ref--;
-	if (ref == 0) lru_unpin();
+	if (ref == 1) lru_unpin();
+	return --ref;
   }
   
   off_t offset;

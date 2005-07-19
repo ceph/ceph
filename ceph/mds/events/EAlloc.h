@@ -2,7 +2,7 @@
 #define __EALLOC_H
 
 #include <assert.h>
-#include "include/config.h"
+#include "config.h"
 #include "include/types.h"
 
 #include "../LogEvent.h"

@@ -9,7 +9,7 @@ using namespace std;
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "include/config.h"
+#include "config.h"
 
 
 #define HASHDIR_OID_MULT (0x100 * 0x100000000LL) // 40 bits (~1 trillion)

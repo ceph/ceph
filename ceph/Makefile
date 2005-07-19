@@ -8,8 +8,8 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-CFLAGS = -O2 -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread  -lrt
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+LIBS = -lpthread  -lrt -ldb
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -47,11 +47,12 @@ COMMON_OBJS= \
 	osd/OSDCluster.o\
 	osd/rush.o\
 	common/Logger.o\
-	common/clock.o\
+	common/Clock.o\
 	common/Timer.o\
 	config.o
 
 SYN_OBJS = \
+	client/SyntheticClient.o\
 	client/Trace.o
 
 TEST_TARGETS = fakemds mpitest
@@ -96,20 +97,21 @@ mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc ${COMMON_OBJS}
+tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+
 
 # synthetic workload
-fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS}
+fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
+mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o client/SyntheticClient.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
+tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # obfs + synthetic

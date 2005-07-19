@@ -15,7 +15,7 @@
 #include <map>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << "mds" << mds->get_nodeid() << ".bal "
 
@@ -85,8 +85,6 @@ void MDBalancer::send_heartbeat()
   if (mds->get_nodeid() == 0)
 	beat_epoch++;
 
-  timepair_t now = g_clock.gettimepair();
-
   // load
   mds_load_t load = mds->get_load();
   mds_load[ mds->get_nodeid() ] = load;
@@ -100,7 +98,7 @@ void MDBalancer::send_heartbeat()
 	CDir *im = *it;
 	if (im->inode->is_root()) continue;
 	int from = im->inode->authority();
-	import_map[from] += im->popularity[MDS_POP_CURDOM].get(now);
+	import_map[from] += im->popularity[MDS_POP_CURDOM].get();
   }
   mds_import_map[ mds->get_nodeid() ] = import_map;
 
@@ -147,7 +145,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   //cout << "  load is " << load << " have " << mds_load.size() << endl;
   
-  int cluster_size = mds->get_cluster()->get_num_mds();
+  unsigned cluster_size = mds->get_cluster()->get_num_mds();
   if (mds_load.size() == cluster_size) {
 	// let's go!
 	export_empties();
@@ -205,8 +203,6 @@ double MDBalancer::try_match(int ex, double& maxex,
 
 void MDBalancer::do_rebalance(int beat)
 {
-  timepair_t now = g_clock.gettimepair();
-
   int cluster_size = mds->get_cluster()->get_num_mds();
   int whoami = mds->get_nodeid();
 
@@ -334,7 +330,7 @@ void MDBalancer::do_rebalance(int beat)
   for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
-	double pop = (*it)->popularity[MDS_POP_CURDOM].get(now);
+	double pop = (*it)->popularity[MDS_POP_CURDOM].get();
 	if (pop < g_conf.mds_bal_idle_threshold &&
 		(*it)->inode != mds->mdcache->get_root()) {
 	  dout(5) << " exporting idle import " << **it << endl;
@@ -373,7 +369,7 @@ void MDBalancer::do_rebalance(int beat)
 		
 		if (dir->inode->is_root()) continue;
 		if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
-		double pop = dir->popularity[MDS_POP_CURDOM].get(now);
+		double pop = dir->popularity[MDS_POP_CURDOM].get();
 		assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
 		
 		if (pop <= amount) {
@@ -422,7 +418,7 @@ void MDBalancer::do_rebalance(int beat)
 	}
 	
 	for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].get(now) << endl;
+	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].get() << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
@@ -448,8 +444,6 @@ void MDBalancer::find_exports(CDir *dir,
   double midchunk = need * .3;
   double minchunk = need * .001;
 
-  timepair_t now = g_clock.gettimepair();
-
   list<CDir*> bigger;
   multimap<double, CDir*> smaller;
 
@@ -468,7 +462,7 @@ void MDBalancer::find_exports(CDir *dir,
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
 	if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
 	
-	double pop = in->dir->popularity[MDS_POP_CURDOM].get(now);
+	double pop = in->dir->popularity[MDS_POP_CURDOM].get();
 
 	//cout << "   in " << in->inode.ino << " " << pop << endl;
 
@@ -538,40 +532,38 @@ void MDBalancer::find_exports(CDir *dir,
 void MDBalancer::hit_inode(CInode *in)
 {
   // hit me
-  timepair_t now = g_clock.gettimepair();
-  in->popularity[MDS_POP_JUSTME].hit(now);
-  in->popularity[MDS_POP_NESTED].hit(now);
+  in->popularity[MDS_POP_JUSTME].hit();
+  in->popularity[MDS_POP_NESTED].hit();
   if (in->is_auth()) {
-	in->popularity[MDS_POP_CURDOM].hit(now);
-	in->popularity[MDS_POP_ANYDOM].hit(now);
+	in->popularity[MDS_POP_CURDOM].hit();
+	in->popularity[MDS_POP_ANYDOM].hit();
   }
   
   // hit auth up to import
   CDir *dir = in->get_parent_dir();
-  if (dir) hit_recursive(dir, now);
+  if (dir) hit_recursive(dir);
 }
 
 
 void MDBalancer::hit_dir(CDir *dir) 
 {
   // hit me
-  timepair_t now = g_clock.gettimepair();
-  dir->popularity[MDS_POP_JUSTME].hit(now);
+  dir->popularity[MDS_POP_JUSTME].hit();
   
-  hit_recursive(dir, now);
+  hit_recursive(dir);
 
 }
 
 
 
-void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
+void MDBalancer::hit_recursive(CDir *dir)
 {
   bool anydom = dir->is_auth();
   bool curdom = dir->is_auth();
 
 
   // replicate?
-  float dir_pop = dir->popularity[MDS_POP_CURDOM].get(now);    // hmm??
+  float dir_pop = dir->popularity[MDS_POP_CURDOM].get();    // hmm??
 
   if (dir->is_auth()) {
 	if (!dir->is_rep() &&
@@ -597,17 +589,17 @@ void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
   while (dir) {
 	CInode *in = dir->inode;
 
-	dir->popularity[MDS_POP_NESTED].hit(now);
-	in->popularity[MDS_POP_NESTED].hit(now);
+	dir->popularity[MDS_POP_NESTED].hit();
+	in->popularity[MDS_POP_NESTED].hit();
 	
 	if (anydom) {
-	  dir->popularity[MDS_POP_ANYDOM].hit(now);
-	  in->popularity[MDS_POP_ANYDOM].hit(now);
+	  dir->popularity[MDS_POP_ANYDOM].hit();
+	  in->popularity[MDS_POP_ANYDOM].hit();
 	}
 	
 	if (curdom) {
-	  dir->popularity[MDS_POP_CURDOM].hit(now);
-	  in->popularity[MDS_POP_CURDOM].hit(now);
+	  dir->popularity[MDS_POP_CURDOM].hit();
+	  in->popularity[MDS_POP_CURDOM].hit();
 	}
 	
 	if (dir->is_import()) 
@@ -622,48 +614,46 @@ void MDBalancer::hit_recursive(CDir *dir, timepair_t& now)
  */
 void MDBalancer::subtract_export(CDir *dir)
 {
-  timepair_t now = g_clock.gettimepair();
-  double curdom = -dir->popularity[MDS_POP_CURDOM].get(now);
+  double curdom = -dir->popularity[MDS_POP_CURDOM].get();
 
   bool in_domain = !dir->is_import();
   
   while (true) {
 	CInode *in = dir->inode;
 	
-	in->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
-	if (in_domain) in->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	in->popularity[MDS_POP_ANYDOM].adjust(curdom);
+	if (in_domain) in->popularity[MDS_POP_CURDOM].adjust(curdom);
 	
 	dir = in->get_parent_dir();
 	if (!dir) break;
 	
 	if (dir->is_import()) in_domain = false;
 	
-	dir->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
-	if (in_domain) dir->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	dir->popularity[MDS_POP_ANYDOM].adjust(curdom);
+	if (in_domain) dir->popularity[MDS_POP_CURDOM].adjust(curdom);
   }
 }
 	
 
 void MDBalancer::add_import(CDir *dir)
 {
-  timepair_t now = g_clock.gettimepair();
-  double curdom = dir->popularity[MDS_POP_CURDOM].get(now);
+  double curdom = dir->popularity[MDS_POP_CURDOM].get();
 
   bool in_domain = !dir->is_import();
   
   while (true) {
 	CInode *in = dir->inode;
 	
-	in->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
-	if (in_domain) in->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	in->popularity[MDS_POP_ANYDOM].adjust(curdom);
+	if (in_domain) in->popularity[MDS_POP_CURDOM].adjust(curdom);
 	
 	dir = in->get_parent_dir();
 	if (!dir) break;
 	
 	if (dir->is_import()) in_domain = false;
 	
-	dir->popularity[MDS_POP_ANYDOM].adjust(now, curdom);
-	if (in_domain) dir->popularity[MDS_POP_CURDOM].adjust(now, curdom);
+	dir->popularity[MDS_POP_ANYDOM].adjust(curdom);
+	if (in_domain) dir->popularity[MDS_POP_CURDOM].adjust(curdom);
   }
  
 }
@@ -686,13 +676,11 @@ void MDBalancer::show_imports(bool external)
 
   set<CDir*> ecopy = mds->mdcache->exports;
 
-  timepair_t now = g_clock.gettimepair();
-
   for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
 	CDir *im = *it;
-	dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM].get(now) << "/" << im->popularity[MDS_POP_ANYDOM].get(now) << ")  " << *im << endl;
+	dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM].get() << "/" << im->popularity[MDS_POP_ANYDOM].get() << ")  " << *im << endl;
 	assert( im->is_import() );
 	assert( im->is_auth() );
 	
@@ -700,7 +688,7 @@ void MDBalancer::show_imports(bool external)
 		 p != mds->mdcache->nested_exports[im].end();
 		 p++) {
 	  CDir *exp = *p;
-	  dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get(now) << ", " << exp->popularity[MDS_POP_ANYDOM].get(now) << ")  " << *exp << " to " << exp->dir_auth << endl;
+	  dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get() << ", " << exp->popularity[MDS_POP_ANYDOM].get() << ")  " << *exp << " to " << exp->dir_auth << endl;
 	  assert( exp->is_export() );
 	  assert( !exp->is_auth() );
 	  

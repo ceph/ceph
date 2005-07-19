@@ -8,7 +8,7 @@
 #include "messages/MAnchorRequest.h"
 #include "messages/MAnchorReply.h"
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "anchortable: "
 
@@ -117,7 +117,7 @@ void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace)
   dout(7) << "create " << ino << endl;
   
   // make sure trace is in table
-  for (int i=0; i<trace.size(); i++) 
+  for (unsigned i=0; i<trace.size(); i++) 
 	add(trace[i]->ino, trace[i]->dirino, trace[i]->ref_dn);
 
   inc(ino);  // ok!

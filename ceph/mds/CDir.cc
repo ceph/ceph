@@ -10,12 +10,27 @@
 
 #include <cassert>
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << "        cdir: "
 
 map<int,int> cdir_pins;
 
+static char* cdir_pin_names[CDIR_NUM_PINS] = {
+  "child",
+  "opened",
+  "hashed",
+  "waiter",
+  "import",
+  "export",
+  "freeze",
+  "proxy",
+  "authpin",
+  "imping",
+  "impgex",
+  "reqpins",
+  "dirty"
+};
 
 ostream& operator<<(ostream& out, CDir& dir)
 {

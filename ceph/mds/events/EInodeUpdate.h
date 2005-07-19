@@ -2,7 +2,7 @@
 #define __EINODEUPDATE_H
 
 #include <assert.h>
-#include "include/config.h"
+#include "config.h"
 #include "include/types.h"
 #include "../LogEvent.h"
 #include "../CInode.h"

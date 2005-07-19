@@ -17,7 +17,7 @@ using namespace std;
 #define BUFFER_MODE_DEFAULT 3//(BUFFER_MODE_COPY|BUFFER_MODE_FREE)
 
 // debug crap
-#include "include/config.h"
+#include "config.h"
 #define bdbout(x) if (x <= g_conf.debug_buffer) cout
 
 #include "common/Mutex.h"
@@ -52,19 +52,21 @@ extern long buffer_total_alloc;
  */
 class buffer {
  private:
+  // raw buffer alloc
   char *_dataptr;
   bool _myptr;
-  int _len;
-  int _alloc_len;
+  unsigned _len;
+  unsigned _alloc_len;
 
-  
-  int _ref;
+  // ref counts
+  unsigned _ref;
   int _get() { 
 	bdbout(1) << "buffer.get " << *this << " get " << _ref+1 << endl;
 	return ++_ref;
   }
   int _put() { 
 	bdbout(1) << "buffer.put " << *this << " put " << _ref-1 << endl;
+	assert(_ref > 0);
 	return --_ref;
   }
   
@@ -72,10 +74,10 @@ class buffer {
 
  public:
   // constructors
-  buffer() : _dataptr(0), _len(0), _alloc_len(0), _ref(0), _myptr(true) { 
+  buffer() : _dataptr(0), _myptr(true), _len(0), _alloc_len(0), _ref(0) { 
 	bdbout(1) << "buffer.cons " << *this << endl;
   }
-  buffer(int a) : _dataptr(0), _len(a), _alloc_len(a), _ref(0), _myptr(true) {
+  buffer(unsigned a) : _dataptr(0), _myptr(true), _len(a), _alloc_len(a), _ref(0) {
 	bdbout(1) << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
 	bufferlock.Lock();
@@ -94,9 +96,9 @@ class buffer {
   
   buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT, int alloc_len=0) : 
 	_dataptr(0), 
-	 _len(l), 
-	 _ref(0),
-	 _myptr(0) {
+	_myptr(false),
+	_len(l), 
+	_ref(0) {
 	
 	if (alloc_len) 
 	  _alloc_len = alloc_len;
@@ -129,15 +131,15 @@ class buffer {
   }
 
   // accessor
-  int alloc_length() {
+  unsigned alloc_length() {
 	return _alloc_len;
   }
-  int set_length(int l) {
+  void set_length(unsigned l) {
 	assert(l <= _alloc_len);
 	_len = l;
   }
-  int length() { return _len; }
-  int unused_tail_length() { return _alloc_len - _len; }
+  unsigned length() { return _len; }
+  unsigned unused_tail_length() { return _alloc_len - _len; }
 
   friend ostream& operator<<(ostream& out, buffer& b);
 };
@@ -161,7 +163,7 @@ inline ostream& operator<<(ostream& out, buffer& b) {
 class bufferptr {
  private:
   buffer *_buffer;
-  int _len, _off;
+  unsigned _len, _off;
 
  public:
   // empty cons
@@ -177,7 +179,7 @@ class bufferptr {
 	_buffer->_get();
   }
   // subset cons - a subset of another bufferptr (subset)
-  bufferptr(const bufferptr& bp, int len, int off) : 
+  bufferptr(const bufferptr& bp, unsigned len, unsigned off) : 
 	_buffer(bp._buffer), 
 	_len(len) {
 	_off = bp._off + off;
@@ -238,13 +240,13 @@ class bufferptr {
   char *c_str() {
 	return _buffer->_dataptr + _off;
   }
-  int length() {
+  unsigned length() {
 	return _len;
   }
-  int offset() {
+  unsigned offset() {
 	return _off;
   }
-  int unused_tail_length() {
+  unsigned unused_tail_length() {
 	if (!at_buffer_tail()) return 0;
 	return _buffer->unused_tail_length();
   }
@@ -252,11 +254,11 @@ class bufferptr {
 
 
   // modifiers
-  void set_offset(int off) {
+  void set_offset(unsigned off) {
 	assert(off <= _buffer->_alloc_len);
 	_off = off;
   }
-  void set_length(int len) {
+  void set_length(unsigned len) {
 	assert(len >= 0 && _off + len <= _buffer->_alloc_len);
 	if (_buffer->_len < _off + len) 
 	  _buffer->_len = _off + len;    // set new buffer len (_IF_ i'm expanding it)
@@ -265,7 +267,7 @@ class bufferptr {
 
 
   // crope lookalikes
-  void append(const char *p, int len) {
+  void append(const char *p, unsigned len) {
 	assert(len + _len + _off <= _buffer->_alloc_len);  // FIXME later for auto-expansion?
 
 	// copy
@@ -273,12 +275,12 @@ class bufferptr {
 	_buffer->_len += len;
 	_len += len;
   }
-  void copy_out(int off, int len, char *dest) {
+  void copy_out(unsigned off, unsigned len, char *dest) {
 	assert(off >= 0 && off <= _len);
 	assert(len >= 0 && off + len <= _len);
 	memcpy(dest, c_str() + off, len);
   }
-  void copy_in(int off, int len, const char *src) {
+  void copy_in(unsigned off, unsigned len, const char *src) {
 	assert(off >= 0 && off <= _len);
 	assert(len >= 0 && off + len <= _len);
 	memcpy(c_str() + off, src, len);

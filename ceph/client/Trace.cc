@@ -9,7 +9,7 @@ using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
 
-#include "include/config.h"
+#include "config.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

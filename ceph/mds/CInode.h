@@ -2,15 +2,15 @@
 #ifndef __CINODE_H
 #define __CINODE_H
 
-#include "include/config.h"
+#include "config.h"
 #include "include/types.h"
 #include "include/lru.h"
 #include "common/DecayCounter.h"
 #include <sys/stat.h>
 
 #include "CDentry.h"
-#include "CFile.h"
 #include "Lock.h"
+#include "Capability.h"
 
 #include <cassert>
 #include <list>
@@ -203,11 +203,8 @@ class CInode : LRUObject {
   multimap<int,Context*>  waiting;
 
   // issued client capabilities
-  map<int, Capability>  caps;
+  map<int, Capability>  caps;    // client -> caps
 
-  // open file state (me)
-  map<fileh_t, CFile*>  fh_map;                   // locally opened files
-  int                   nrdonly, nrdwr, nwronly;  // file mode counts
 
  private:
   // lock nesting
@@ -260,12 +257,6 @@ class CInode : LRUObject {
   }
   bool dir_is_auth();
 
-  /*
-  float get_popularity() {
-	timepair_t now = g_clock.gettimepair();
-	return popularity[0].get(now);
-  }
-  */
 
 
   // -- misc -- 
@@ -410,38 +401,31 @@ class CInode : LRUObject {
 	assert(caps.count(client) == 1);
 	caps.erase(client);
   }
-
-  // -- open files -- (old)
-  bool is_open_write() { return nwronly; }
-  bool is_open_read() { return nrdonly; }
-  bool is_open() { return is_open_write() || is_open_read(); }
-
-  int get_num_fh() { return fh_map.size(); }
-  CFile* get_fh(int fh) {
-	if (fh_map.count(fh)) return fh_map[fh];
+  Capability* get_cap(int client) {
+	if (caps.count(client))
+	  return &caps[client];
 	return 0;
   }
-  void add_fh(CFile *f) {
-	if (f->mode == CFILE_MODE_R) nrdonly++;
-	if (f->mode == CFILE_MODE_W) {
-	  nwronly++;
-	  softlock.get_write();
-	}
-	if (f->mode == CFILE_MODE_RW) nrdwr++;
-	
-	if (fh_map.empty()) get(CINODE_PIN_OPEN);
-	fh_map[f->fh] = f;
-  }
-  void remove_fh(CFile *f) {
-	if (f->mode == CFILE_MODE_R) nrdonly--;
-	if (f->mode == CFILE_MODE_W) {
-	  nwronly--;
-	  softlock.put_write();
-	}
-	if (f->mode == CFILE_MODE_RW) nrdwr--;
 
-	fh_map.erase(f->fh);
-	if (fh_map.empty()) put(CINODE_PIN_OPEN);
+  void add_caps(map<int,Capability>& cl) {
+	caps.clear();
+	caps = cl;
+  }
+  void remove_caps(map<int,Capability>& cl) {
+	cl = caps;
+	caps.clear();
+  }
+
+  int get_caps_issued() {
+	int c = 0;
+	for (map<int,Capability>::iterator it = caps.begin();
+		 it != caps.end();
+		 it++) 
+	  c |= it->second.issued();
+	return c;
+  }
+  bool is_write_caps() {
+	return get_caps_issued() & CAP_FILE_WR;
   }
 
 
@@ -575,7 +559,7 @@ class CInodeDiscover {
   inodeno_t get_ino() { return inode.ino; }
   int get_replica_nonce() { return replica_nonce; }
 
-  int update_inode(CInode *in) {
+  void update_inode(CInode *in) {
 	in->inode = inode;
 
 	in->replica_nonce = replica_nonce;
@@ -615,7 +599,7 @@ typedef struct {
   bool           is_dirty;       // dirty inode?
 
   int            ncached_by;  // int pairs follow
-  int            num_fh;
+  int            num_caps;
 } CInodeExport_st;
 
 
@@ -624,7 +608,7 @@ class CInodeExport {
   CInodeExport_st st;
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
-  list<CFile*>  fh_list;
+  map<int,Capability>  cap_map;
 
   CLock         hardlock,softlock;
 
@@ -643,34 +627,23 @@ public:
 	st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
 	in->popularity[MDS_POP_ANYDOM].adjust_down(st.popularity_curdom);
 	
-	// suck up fh's from inode
-	for (map<fileh_t, CFile*>::iterator it = in->fh_map.begin();
-		 it != in->fh_map.end();
-		 it++) {
-	  fh_list.push_back(it->second);
-	}
-	for (list<CFile*>::iterator it = fh_list.begin();
-		 it != fh_list.end();
-		 it++) 
-	  in->remove_fh(*it);
+	// steal caps from inode
+	in->remove_caps(cap_map);
   }
   ~CInodeExport() {
-	for (list<CFile*>::iterator it = fh_list.begin();
-		 it != fh_list.end();
-		 it++) delete *it;
   }
   
   inodeno_t get_ino() { return st.inode.ino; }
 
-  int update_inode(CInode *in, timepair_t& now) {
+  void update_inode(CInode *in) {
 	in->inode = st.inode;
 
 	in->version = st.version;
 
-	double newcurdom = st.popularity_curdom.get(now) - in->popularity[MDS_POP_CURDOM].get(now);
+	double newcurdom = st.popularity_curdom.get() - in->popularity[MDS_POP_CURDOM].get();
 	in->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
 	in->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
-	in->popularity[MDS_POP_ANYDOM].adjust(now, newcurdom);
+	in->popularity[MDS_POP_ANYDOM].adjust(newcurdom);
 
 	if (st.is_dirty) {
 	  in->mark_dirty();
@@ -685,19 +658,13 @@ public:
 	in->hardlock = hardlock;
 	in->softlock = softlock;
 
-	// fh's
-	for (list<CFile*>::iterator it = fh_list.begin();
-		 it != fh_list.end();
-		 it++) {
-	  in->add_fh(*it);
-	}
-	fh_list.clear();
-
+	// caps
+	in->add_caps(cap_map);
   }
 
   void _encode(bufferlist& bl) {
     st.ncached_by = cached_by.size();
-	st.num_fh = fh_list.size();
+	st.num_caps = cap_map.size();
     bl.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
@@ -713,13 +680,12 @@ public:
 	hardlock.encode_state(bl);
 	softlock.encode_state(bl);
 
-	// fh
-	for (list<CFile*>::iterator it = fh_list.begin();
-		 it != fh_list.end();
+	// caps
+	for (map<int,Capability>::iterator it = cap_map.begin();
+		 it != cap_map.end();
 		 it++) {
-	  bl.append((char*)*it, sizeof(CFile));
-	  CFile *f = *it;
-	  //cout << "f in client " << f->client << " fh " << f->fh << endl;
+	  bl.append((char*)&it->first, sizeof(it->first));
+	  it->second._encode(bl);
 	}
   }
 
@@ -740,13 +706,12 @@ public:
 	hardlock.decode_state(bl, off);
 	softlock.decode_state(bl, off);
 
-	// fh
-	for (int i=0; i<st.num_fh; i++) {
-	  CFile *f = new CFile;
-	  bl.copy(off, sizeof(CFile), (char*)f);
-	  //cout << "f out client " << f->client << " fh " << f->fh << endl;
-	  off += sizeof(CFile);
-	  fh_list.push_back(f);
+	// caps
+	for (int i=0; i<st.num_caps; i++) {
+	  int c;
+	  bl.copy(off, sizeof(c), (char*)&c);
+	  off += sizeof(c);
+	  cap_map[c]._decode(bl, off);
 	}
 
     return off;

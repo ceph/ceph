@@ -1,5 +1,5 @@
 
-#include "include/config.h"
+#include "config.h"
 #include "include/error.h"
 
 #include "common/Timer.h"
@@ -51,11 +51,11 @@ bool pending_timer;
 
 // our lock for any common data; it's okay to have only the one global mutex
 // because our common data isn't a whole lot.
-static pthread_mutex_t mutex;
+//static pthread_mutex_t mutex;
 
 // the number of distinct threads we've seen so far; used to generate
 // a unique tag for each thread.
-static int nthreads = 10;
+//static int nthreads = 10;
 
 //#define TAG_UNSOLICITED 0
 
@@ -93,6 +93,7 @@ int mpimessenger_shutdown()
   MPI_Barrier (MPI_COMM_WORLD);
   dout(1) << "mpimessenger_shutdown all done, MPI_Finalize()" << endl;
   MPI_Finalize();
+  return 0;
 }
 
 int mpimessenger_world()
@@ -266,7 +267,7 @@ int mpi_send(Message *m, int tag)
 	   it != m->get_payload().buffers().end();
 	   it++) {
 	dout(DBLVL) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
-	MPI_Request *req = new MPI_Request;
+	//MPI_Request *req = new MPI_Request;
 	ASSERT(MPI_Isend((void*)(*it).c_str(),
 					 (*it).length(),
 					 MPI_CHAR,
@@ -286,6 +287,7 @@ int mpi_send(Message *m, int tag)
 #ifndef FUNNEL_MPI
   sender_lock.Unlock();
 #endif
+  return 0;
 }
 
 
@@ -402,6 +404,7 @@ void* mpimessenger_loop(void*)
   g_timer.shutdown();
 
   dout(5) << "mpimessenger_loop exiting loop" << endl;
+  return 0;
 }
 
 
@@ -415,6 +418,7 @@ int mpimessenger_start()
 				 NULL, 
 				 mpimessenger_loop, 
 				 0);
+  return 0;
 }
 
 
@@ -547,6 +551,7 @@ int MPIMessenger::shutdown()
   } else {
 	dout(10) << "shutdown still " << directory.size() << " other messengers on rank " << mpi_rank << endl;
   }
+  return 0;
 }
 
 
@@ -580,6 +585,7 @@ int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   mpi_send(m, m->get_pcid());
 
 #endif
+  return 0;
 }
 
 

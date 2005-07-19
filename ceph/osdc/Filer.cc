@@ -15,7 +15,7 @@
 
 #include "include/Context.h"
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << "filer: "
 
@@ -89,11 +89,9 @@ Filer::read(inodeno_t ino,
   dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
   // issue reads
-  off_t off = 0;
   for (list<OSDExtent>::iterator it = p->extents.begin();
 	   it != p->extents.end();
 	   it++) {
-	int r = 0;   // pick a replica
 	last_tid++;
 	
 	// issue read
@@ -158,8 +156,8 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		   eit != p->extents.end();
 		   eit++) {
 		bufferlist *ox_buf = p->read_data[eit->oid];
-		int ox_len = ox_buf->length();
-		int ox_off = 0;
+		unsigned ox_len = ox_buf->length();
+		unsigned ox_off = 0;
 		assert(ox_len <= eit->len);           
 
 		// for each buffer extent we're mapping into...
@@ -285,7 +283,6 @@ Filer::write(inodeno_t ino,
   for (list<OSDExtent>::iterator it = extents.begin();
 	   it != extents.end();
 	   it++) {
-	int r = 0;   // pick a replica
 	last_tid++;
 	
 	// issue write
@@ -421,10 +418,10 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-int Filer::remove(inodeno_t ino, 
-				  OSDFileLayout& layout,
-				  size_t size, 
-				  Context *onfinish)
+int Filer::truncate(inodeno_t ino, 
+					OSDFileLayout& layout,
+					size_t new_size, size_t old_size,
+					Context *onfinish)
 {
   // pending write record
   PendingOSDOp_t *p = new PendingOSDOp_t;
@@ -432,23 +429,29 @@ int Filer::remove(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, layout, size, 0, extents);
+  osdcluster->file_to_extents(ino, layout, old_size, new_size, extents);
 
-  dout(7) << "osd remove ino " << ino << " size " << size << " in " << extents.size() << " extents" << endl;
-
-  size_t off = 0;  // ptr into buffer
+  dout(7) << "osd truncate ino " << ino << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
 
   int n = 0;
   for (list<OSDExtent>::iterator it = extents.begin();
 	   it != extents.end();
 	   it++) {
-	int r = 0;   // pick a replica
 	last_tid++;
 	
-	// issue delete
-	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->rg, osdcluster->get_version(),
-						   OSD_OP_DELETE);
+	MOSDOp *m;
+	if (it->offset == 0) {
+	  // issue delete
+	  m = new MOSDOp(last_tid, messenger->get_myaddr(),
+					 it->oid, it->rg, osdcluster->get_version(),
+					 OSD_OP_DELETE);
+	} else {
+	  // issue a truncate
+	  m = new MOSDOp(last_tid, messenger->get_myaddr(),
+					 it->oid, it->rg, osdcluster->get_version(),
+					 OSD_OP_TRUNCATE);
+	  m->set_length( it->offset );
+	}
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 	
 	// add to gather set
@@ -464,9 +467,12 @@ int Filer::remove(inodeno_t ino,
 	  delete onfinish;
 	}
   }
+
+  return 0;
 }
 
 
+/*
 int Filer::probe_size(inodeno_t ino, 
 					  OSDFileLayout& layout,
 					  size_t *size, 
@@ -484,9 +490,9 @@ int Filer::probe_size(inodeno_t ino,
   // stat first object
   
 
-
+  return 0;
 }
-
+*/
 
 
 // mkfs on all osds, wipe everything.
@@ -519,6 +525,8 @@ int Filer::mkfs(Context *onfinish)
 	p->outstanding_ops.insert(last_tid);
 	op_mkfs[last_tid] = p;
   }
+
+  return 0;
 }
 
 

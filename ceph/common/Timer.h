@@ -22,24 +22,24 @@ class Messenger;
 
 class Timer {
  private:
-  map< timepair_t, set<Context*> >  scheduled;    // time -> (context ...)
-  map< timepair_t, set<Context*> >  pending;      // time -> (context ...)  
-  map< Context*, timepair_t >       event_times;  // event -> time
+  map< utime_t, set<Context*> >  scheduled;    // time -> (context ...)
+  map< utime_t, set<Context*> >  pending;      // time -> (context ...)  
+  map< Context*, utime_t >       event_times;  // event -> time
 
   // get time of the next event
-  Context* get_next_scheduled(timepair_t& when) {
+  Context* get_next_scheduled(utime_t& when) {
 	if (scheduled.empty()) return 0;
-	map< timepair_t, set<Context*> >::iterator it = scheduled.begin();
+	map< utime_t, set<Context*> >::iterator it = scheduled.begin();
 	when = it->first;
 	set<Context*>::iterator sit = it->second.begin();
 	return *sit;
   }
 
   // get next pending event
-  Context* take_next_pending(timepair_t& when) {
+  Context* take_next_pending(utime_t& when) {
 	if (pending.empty()) return 0;
 	
-	map< timepair_t, set<Context*> >::iterator it = pending.begin();
+	map< utime_t, set<Context*> >::iterator it = pending.begin();
 	when = it->first;
 
 	// take and remove
@@ -68,7 +68,7 @@ class Timer {
   }
   ~Timer() { 
 	// scheduled
-	for (map< timepair_t, set<Context*> >::iterator it = scheduled.begin();
+	for (map< utime_t, set<Context*> >::iterator it = scheduled.begin();
 		 it != scheduled.end();
 		 it++) {
 	  for (set<Context*>::iterator sit = it->second.begin();
@@ -79,7 +79,7 @@ class Timer {
 	scheduled.clear();
 
 	// pending
-	for (map< timepair_t, set<Context*> >::iterator it = pending.begin();
+	for (map< utime_t, set<Context*> >::iterator it = pending.begin();
 		 it != pending.end();
 		 it++) {
 	  for (set<Context*>::iterator sit = it->second.begin();
@@ -103,7 +103,7 @@ class Timer {
   // schedule events
   void add_event_after(float seconds,
 					   Context *callback);
-  void add_event_at(timepair_t when,
+  void add_event_at(utime_t when,
 					Context *callback);
   bool cancel_event(Context *callback);
 

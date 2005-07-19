@@ -109,9 +109,17 @@ class Filer : public Dispatcher {
   int probe_size(inodeno_t ino, 
 				 OSDFileLayout& layout,
 				 size_t *size, Context *c);
-  int remove(inodeno_t ino, 
+
+  int remove(inodeno_t ino,
 			 OSDFileLayout& layout,
-			 size_t size, Context *c);
+			 size_t old_size,
+			 Context *c) {
+	return truncate(ino, layout, 0, old_size, c);
+  }
+  int truncate(inodeno_t ino, 
+			   OSDFileLayout& layout,
+			   size_t new_size, size_t old_size, 
+			   Context *c);
 
   //int zero(inodeno_t ino, size_t len, size_t offset, Context *c);   
 

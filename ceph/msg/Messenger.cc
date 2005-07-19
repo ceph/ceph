@@ -1,7 +1,6 @@
 
 #include <ext/rope>
 #include "include/types.h"
-#include "include/config.h"
 
 #include "Message.h"
 #include "Messenger.h"
@@ -28,7 +27,7 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
-#include "messages/MClientInodeAuthUpdate.h"
+//#include "messages/MClientInodeAuthUpdate.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -67,7 +66,7 @@ using namespace std;
 
 #include "messages/MLock.h"
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "messenger: "
 #define DEBUGLVL  10    // debug level of output
@@ -100,8 +99,7 @@ void Messenger::dispatch(Message *m)
 	// yes, this is a reply to a pending call.
 	dout(DEBUGLVL) << "dispatch got reply for " << pcid << " " << m << endl;
 	call_reply[pcid] = m;     // set reply
-	int r = call_cond[pcid]->Signal();
-	//cout << "post = " << r << endl;
+	call_cond[pcid]->Signal();
 	_lock.Unlock();
   } else {
 	// no, this is an unsolicited message.
@@ -178,8 +176,6 @@ Message *Messenger::sendrecv(Message *m, msg_addr_t dest, int port)
 Message *
 decode_message(msg_envelope_t& env, bufferlist& payload)
 {
-  int type;
-
   // make message
   Message *m = 0;
   switch(env.type) {
@@ -228,9 +224,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_CLIENT_FILECAPS:
 	m = new MClientFileCaps();
 	break;
-  case MSG_CLIENT_INODEAUTHUPDATE:
-	m = new MClientInodeAuthUpdate();
-	break;
+	//  case MSG_CLIENT_INODEAUTHUPDATE:
+	//m = new MClientInodeAuthUpdate();
+	//break;
 
 	// mds
   case MSG_MDS_DIRUPDATE:

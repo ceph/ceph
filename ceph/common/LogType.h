@@ -11,15 +11,6 @@ using namespace __gnu_cxx;
 
 #include "Mutex.h"
 
-// for const char* comparisons
-struct ltstr
-{
-  bool operator()(const char* s1, const char* s2) const
-  {
-    return strcmp(s1, s2) < 0;
-  }
-};
-
 class LogType {
  protected:
   set<const char*, ltstr>   keyset;

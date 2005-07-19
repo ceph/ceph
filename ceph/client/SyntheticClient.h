@@ -111,13 +111,13 @@ class SyntheticClient {
   list<int> modes;
   list<string> sargs;
   list<int> iargs;
-  timepair_t run_start;
-  timepair_t run_until;
+  utime_t run_start;
+  utime_t run_until;
 
   string get_sarg();
 
   bool time_to_stop() {
-	if (run_until.first && g_clock.gettimepair() > run_until) 
+	if (run_until.sec() && g_clock.now() > run_until) 
 	  return true;
 	else
 	  return false;

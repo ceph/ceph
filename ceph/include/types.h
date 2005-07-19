@@ -38,7 +38,8 @@ using namespace __gnu_cxx;
 #define MDS_OP_OPEN     301
 #define MDS_OP_TRUNCATE 306
 #define MDS_OP_FSYNC    307
-#define MDS_OP_CLOSE    310
+//#define MDS_OP_CLOSE    310
+#define MDS_OP_RELEASE  308
 
 
 
@@ -65,6 +66,31 @@ namespace __gnu_cxx {
 }
 
 
+/*
+ * comparators for stl containers
+ */
+// for hash_map:
+//   hash_map<const char*, long, hash<const char*>, eqstr> vals;
+struct eqstr
+{
+  bool operator()(const char* s1, const char* s2) const
+  {
+    return strcmp(s1, s2) == 0;
+  }
+};
+
+// for set, map
+struct ltstr
+{
+  bool operator()(const char* s1, const char* s2) const
+  {
+    return strcmp(s1, s2) < 0;
+  }
+};
+
+
+
+
 // -- inode --
 
 typedef __uint64_t inodeno_t;   // ino
@@ -73,6 +99,10 @@ typedef __uint64_t inodeno_t;   // ino
 #define INODE_MODE_SYMLINK  0120000 // S_IFLNK
 #define INODE_MODE_DIR      0040000 // S_IFDIR
 #define INODE_TYPE_MASK     0170000
+
+#define FILE_MODE_R          1
+#define FILE_MODE_W          2
+#define FILE_MODE_RW         3
 
 struct inode_t {
   // immutable
@@ -96,10 +126,14 @@ struct inode_t {
 };
 
 
-// misc other types
+// osd types
 typedef int        repgroup_t;    // replica group
 typedef __uint64_t object_t;      // object id
-typedef __uint32_t fileh_t;       // file handle 
+typedef __uint64_t coll_t;        // collection id
+
+// client types
+typedef int        fh_t;          // file handle 
+
 
 // dentries
 #define MAX_DENTRY_LEN 255
@@ -206,7 +240,7 @@ inline void _unrope(set<int>& s, crope& r, int& off)
 	off += sizeof(v);
 	s.insert(v);
   }
-  assert(s.size() == n);
+  assert(s.size() == (unsigned)n);
 }
 
 #endif

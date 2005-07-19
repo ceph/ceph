@@ -6,7 +6,7 @@
 #include <iostream>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 
 
 
@@ -185,8 +185,8 @@ class LRU {
   void lru_adjust() {
 	if (!lru_max) return;
 
-	int toplen = lru_top.get_length();
-	__uint32_t topwant = (__uint32_t)(lru_midpoint * (double)lru_max);
+	unsigned toplen = lru_top.get_length();
+	unsigned topwant = (unsigned)(lru_midpoint * (double)lru_max);
 	while (toplen > 0 && 
 		   toplen > topwant) {
 	  // remove from tail of top, stick at head of bot

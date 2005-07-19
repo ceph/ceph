@@ -9,7 +9,7 @@
 class MDS;
 
 #define ID_INO    1  // inode
-#define ID_FH     2  // file handle
+//#define ID_FH     2  // file handle
 
 typedef __uint64_t idno_t;
 

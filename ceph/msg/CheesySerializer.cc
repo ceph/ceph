@@ -6,7 +6,7 @@
 #include <iostream>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "serializer: "
 

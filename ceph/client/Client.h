@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/filepath.h"
+#include "include/rangeset.h"
 
 #include "common/Mutex.h"
 
@@ -50,12 +51,15 @@ extern class Logger  *client_logger;
  
 */
 
+typedef int fh_t;
+
 class Dir;
 class Inode;
 
 class Dentry : public LRUObject {
  public:
   string  name;                      // sort of lame
+  //const char *name;
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
@@ -63,18 +67,26 @@ class Dentry : public LRUObject {
   void get() { assert(ref == 0); ref++; lru_pin(); }
   void put() { assert(ref == 1); ref--; lru_unpin(); }
   
-  Dentry() : ref(0), dir(0), inode(0) { }
+  Dentry() : dir(0), inode(0), ref(0) { }
+  /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
+  Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
+	name = new char[n.length()+1];
+	strcpy((char*)name, n.c_str());
+  }
+  ~Dentry() {
+	delete[] name;
+	}*/
 };
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
-  hash_map< string, Dentry* > dentries;
+  //hash_map<const char*, Dentry*, hash<const char*>, eqstr> dentries;
+  hash_map<string, Dentry*> dentries;
 
   Dir(Inode* in) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
-
 };
 
 
@@ -85,6 +97,13 @@ class Inode {
   int       mds_dir_auth;
   set<int>	mds_contacts;
   time_t    last_updated;
+
+  int       file_caps;
+  long      file_caps_seq;
+  int       file_mds;      // semi-hack
+  time_t    file_wr_mtime;   // [writers] time of last write
+  size_t    file_wr_size;    // [writers] largest offset we've written to
+  int       num_rd, num_wr;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   Dir       *dir;     // if i'm a dir.
@@ -99,7 +118,9 @@ class Inode {
   void get() { ref++; }
   void put() { ref--; assert(ref >= 0); }
 
-  Inode() : ref(0), dir(0), dn(0), symlink(0), mds_dir_auth(-1), last_updated(0) { }
+  Inode() : mds_dir_auth(-1), last_updated(0),
+	file_caps(0), file_caps_seq(0), num_rd(0), num_wr(0),
+	ref(0), dir(0), dn(0), symlink(0) { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
   }
@@ -147,21 +168,11 @@ class Inode {
 
 
 // file handle for any open file state
-#define FH_STATE_RDONLY   1    // all readers, cache at will  (no write)
-#define FH_STATE_WRONLY   2    // all writers, buffer at will (no read) 
-#define FH_STATE_RDWR     3    // read+write synchronously
-#define FH_STATE_LOCK     4    // no read or write
 
 struct Fh {
-  //inodeno_t ino;
   Inode    *inode;
   int       mds;        // have to talk to mds we opened with (for now)
-
   int       mode;       // the mode i opened the file with
-  int       caps;       // my capabilities (read, read+cache, write, write+buffer)
-
-  time_t    mtime;      // [writers] time of last write
-  size_t    size;       // [writers] largest offset we've written to
 };
 
 
@@ -190,7 +201,18 @@ class Client : public Dispatcher {
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // file handles
-  hash_map<fileh_t, Fh*>         fh_map;
+  rangeset<fh_t>         free_fh_set;  // unused fh's
+  hash_map<fh_t, Fh*>    fh_map;
+  
+  fh_t get_fh() {
+	fh_t fh = free_fh_set.first();
+	free_fh_set.erase(fh);
+	return fh;
+  }
+  void put_fh(fh_t fh) {
+	free_fh_set.insert(fh);
+  }
+
 
   // global (client) lock
   Mutex                  client_lock;
@@ -230,7 +252,7 @@ class Client : public Dispatcher {
 	
 	// link to dir
 	dn->dir = dir;
-	dir->dentries[name] = dn;
+	dir->dentries[dn->name] = dn;
 
 	// link to inode
 	dn->inode = in;
@@ -262,10 +284,17 @@ class Client : public Dispatcher {
 
   Dentry *relink(Dentry *dn, Dir *dir, string& name) {
 	// first link new dn to dir
+	/*
+	char *oldname = (char*)dn->name;
+	dn->name = new char[name.length()+1];
+	strcpy((char*)dn->name, name.c_str());
+	dir->dentries[dn->name] = dn;
+	*/
 	dir->dentries[name] = dn;
-	
+
 	// unlink from old dir
 	dn->dir->dentries.erase(dn->name);
+	//delete[] oldname;
 	if (dn->dir->is_empty()) 
 	  close_dir(dn->dir);
 
@@ -351,12 +380,12 @@ class Client : public Dispatcher {
   // file ops
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
-  int close(fileh_t fh);
-  int read(fileh_t fh, char *buf, size_t size, off_t offset);
-  int write(fileh_t fh, const char *buf, size_t size, off_t offset);
+  int close(fh_t fh);
+  int read(fh_t fh, char *buf, size_t size, off_t offset);
+  int write(fh_t fh, const char *buf, size_t size, off_t offset);
   int truncate(const char *file, off_t size);
-	//int truncate(fileh_t fh, off_t size);
-  int fsync(fileh_t fh, bool syncdataonly);
+	//int truncate(fh_t fh, off_t size);
+  int fsync(fh_t fh, bool syncdataonly);
 
 };
 

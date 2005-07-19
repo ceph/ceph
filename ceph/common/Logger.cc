@@ -7,7 +7,7 @@
 #include <iostream>
 #include "Clock.h"
 
-#include "include/config.h"
+#include "config.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -27,7 +27,7 @@ Logger::Logger(string fn, LogType *type)
   filename += fn;
   //cout << "log " << filename << endl;
   interval = g_conf.log_interval;
-  start = g_clock.gettimepair();  // time 0!
+  start = g_clock.now();  // time 0!
   last_logged = 0;
   wrote_header = -1;
   open = false;
@@ -117,11 +117,11 @@ void Logger::flush(bool force)
 	//cout << "opening log file " << filename << endl;
   }
 
-  timepair_t now = g_clock.gettimepair();
-  timepair_t fromstart = now - start;
+  utime_t fromstart = g_clock.recent_now();
+  fromstart -= start;
 
   while (force ||
-		 fromstart.first - last_logged >= interval) {
+		 fromstart.sec() - last_logged >= interval) {
 	last_logged += interval;
 	force = false;
 

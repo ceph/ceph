@@ -1,6 +1,6 @@
 #include "Buffercache.h"
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "client" << "." << pthread_self() << " "
 
@@ -51,7 +51,7 @@ void Bufferhead::alloc_buffers(size_t size)
 {
   dout(10) << "bc: allocating buffers size: " << size << endl;
   while (size > 0) {
-    if (size <= g_conf.client_bcache_alloc_maxsize) {
+    if (size <= (unsigned)g_conf.client_bcache_alloc_maxsize) {
           size_t k = g_conf.client_bcache_alloc_minsize;
           size_t asize = size - size % k + (size % k > 0) * k;
 	  buffer *b = new buffer(asize);
@@ -165,7 +165,7 @@ void Bufferhead::claim_append(Bufferhead *other)
 void Dirtybuffers::erase(Bufferhead* bh) 
 {
   dout(7) << "dirtybuffer: erase bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
-  int osize = _dbufs.size();
+  unsigned osize = _dbufs.size();
   for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
        it != _dbufs.upper_bound(bh->dirty_since);
        it++) {

@@ -7,7 +7,7 @@
  *   whether we're in limbo/recovery state, etc.
  *
  */
-#include "include/config.h"
+#include "config.h"
 #include "include/types.h"
 #include "msg/Message.h"
 #include "common/Mutex.h"
@@ -151,7 +151,7 @@ class OSDCluster {
 	for (vector<OSDGroup>::iterator it = osd_groups.begin();
 		 it != osd_groups.end();
 		 it++) {
-	  for (int i=0; i<it->osds.size(); i++)
+	  for (unsigned i=0; i<it->osds.size(); i++)
 		ls.insert(it->osds[i]);
 	}
   }

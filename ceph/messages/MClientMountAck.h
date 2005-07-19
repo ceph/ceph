@@ -28,7 +28,7 @@ class MClientMountAck : public Message {
 	int off = 0;
 	payload.copy(off, sizeof(pcid), (char*)&pcid);
 	off += sizeof(pcid);
-	if (off < payload.length())
+	if ((unsigned)off < payload.length())
 	  payload.splice( off, payload.length()-off, &osd_cluster_state);
   }
   virtual void encode_payload() {  

@@ -209,7 +209,7 @@ class Message {
 	
 	int off = 0;
 	decode_payload(ser, off);
-	assert(off == payload.length());
+	assert((unsigned)off == payload.length());
   }
   virtual void encode_payload() {
 	assert(payload.length() == 0);  // caller should reset payload

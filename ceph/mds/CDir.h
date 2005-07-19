@@ -4,7 +4,7 @@
 
 #include "include/types.h"
 #include "include/bufferlist.h"
-#include "include/config.h"
+#include "config.h"
 #include "common/DecayCounter.h"
 
 #include <iostream>
@@ -113,21 +113,6 @@ class Context;
 #define CDIR_PIN_REQUEST   12
 
 #define CDIR_NUM_PINS      13
-static char* cdir_pin_names[CDIR_NUM_PINS] = {
-  "child",
-  "opened",
-  "hashed",
-  "waiter",
-  "import",
-  "export",
-  "freeze",
-  "proxy",
-  "authpin",
-  "imping",
-  "impgex",
-  "reqpins",
-  "dirty"
-};
 
 
 
@@ -351,8 +336,8 @@ class CDir {
   
 
   // for giving to clients
-  void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
-	if (( popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold)) {
+  void get_dist_spec(set<int>& ls, int auth) {
+	if (( popularity[MDS_POP_CURDOM].get() > g_conf.mds_bal_replicate_threshold)) {
 	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
 	  ls = open_by;
 	}
@@ -635,7 +620,7 @@ class CDirExport {
   inodeno_t get_ino() { return st.ino; }
   __uint64_t get_nden() { return st.nden; }
 
-  void update_dir(CDir *dir, timepair_t& now) {
+  void update_dir(CDir *dir) {
 	assert(dir->ino() == st.ino);
 
 	//dir->nitems = st.nitems;
@@ -645,10 +630,10 @@ class CDirExport {
 	dir->dir_auth = st.dir_auth;
 	dir->dir_rep = st.dir_rep;
 
-	double newcurdom = st.popularity_curdom.get(now) - dir->popularity[MDS_POP_CURDOM].get(now);
+	double newcurdom = st.popularity_curdom.get() - dir->popularity[MDS_POP_CURDOM].get();
 	dir->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
 	dir->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
-	dir->popularity[MDS_POP_ANYDOM].adjust(now, newcurdom);
+	dir->popularity[MDS_POP_ANYDOM].adjust(newcurdom);
 
 	dir->dir_rep_by = rep_by;
 	dir->open_by = open_by;

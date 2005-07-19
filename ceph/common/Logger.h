@@ -15,13 +15,6 @@ using namespace __gnu_cxx;
 #include "LogType.h"
 
 
-struct eqstr
-{
-  bool operator()(const char* s1, const char* s2) const
-  {
-    return strcmp(s1, s2) == 0;
-  }
-};
 
 
 class Logger {
@@ -32,7 +25,7 @@ class Logger {
   //Mutex lock;
   LogType *type;
 
-  timepair_t start;
+  utime_t start;
   int last_logged;
   int interval;
   int wrote_header;

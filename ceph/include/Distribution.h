@@ -13,7 +13,7 @@ class Distribution {
   //Distribution() { 
   //}
   
-  int get_width() {
+  unsigned get_width() {
 	return p.size();
   }
 
@@ -28,17 +28,17 @@ class Distribution {
 
   void random() {
 	float sum = 0.0;
-	for (int i=0; i<p.size(); i++) {
+	for (unsigned i=0; i<p.size(); i++) {
 	  p[i] = (float)(rand() % 10000);
 	  sum += p[i];
 	}
-	for (int i=0; i<p.size(); i++) 
+	for (unsigned i=0; i<p.size(); i++) 
 	  p[i] /= sum;
   }
 
   int sample() {
 	float s = (float)(rand() % 10000) / 10000.0;
-	for (int i=0; i<p.size(); i++) {
+	for (unsigned i=0; i<p.size(); i++) {
 	  if (s < p[i]) return v[i];
 	  s -= p[i];
 	}
@@ -48,9 +48,9 @@ class Distribution {
 
   float normalize() {
 	float s = 0.0;
-	for (int i=0; i<p.size(); i++)
+	for (unsigned i=0; i<p.size(); i++)
 	  s += p[i];
-	for (int i=0; i<p.size(); i++)
+	for (unsigned i=0; i<p.size(); i++)
 	  p[i] /= s;
 	return s;
   }

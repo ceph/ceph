@@ -11,7 +11,7 @@
 
 #include "include/types.h"
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << ".idalloc: "
 
@@ -103,12 +103,12 @@ void IdAllocator::reset()
   free.clear();
 
   // use generic range FIXME THIS IS CRAP
-  free[ID_INO].map_insert((long long)100000000LL * (mds->get_nodeid()+1),
-						  (long long)100000000LL * (mds->get_nodeid()+2) - 1);
+  free[ID_INO].map_insert((long long)100000000LL * (long long)(mds->get_nodeid()+1),
+						  (long long)100000000LL * (long long)(mds->get_nodeid()+2) - 1LL);
   //free[ID_INO].dump();
   
-  free[ID_FH].map_insert(10000000LL * (mds->get_nodeid()+1),
-						 10000000LL * (mds->get_nodeid()+2) - 1);
+  //free[ID_FH].map_insert(10000000LL * (mds->get_nodeid()+1),
+  //10000000LL * (mds->get_nodeid()+2) - 1);
   //free[ID_FH].dump();
 
   opened = true;

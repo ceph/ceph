@@ -27,7 +27,7 @@ class filepath {
   void parse() {
 	bits.clear();
 	int off = 0;
-	while (off < path.length()) {
+	while (off < (int)path.length()) {
 	  // skip trailing/duplicate slash(es)
 	  int nextslash = path.find('/', off);
 	  if (nextslash == off) {
@@ -80,7 +80,7 @@ class filepath {
   }
   filepath postfixpath(int s) const {
 	filepath t;
-	for (int i=s; i<bits.size(); i++)
+	for (unsigned i=s; i<bits.size(); i++)
 	  t.add_dentry(bits[i]);
 	return t;
   }
@@ -91,7 +91,7 @@ class filepath {
 	path += s;
   }
   void append(const filepath& a) {
-	for (int i=0; i<a.depth(); i++) 
+	for (unsigned i=0; i<a.depth(); i++) 
 	  add_dentry(a[i]);
   }
 
@@ -109,7 +109,7 @@ class filepath {
 	return bits[ bits.size()-1 ];
   }
 
-  int depth() const {
+  unsigned depth() const {
 	return bits.size();
   }
   bool empty() {

@@ -9,7 +9,7 @@
 
 
 // debug output
-#include "include/config.h"
+#include "config.h"
 #define tpdout(x) if (x <= g_conf.debug) cout << myname << " "
 #define DBLVL 10
 
@@ -36,6 +36,7 @@ class ThreadPool {
   {
     ThreadPool *t = (ThreadPool *)arg;
     t->do_ops(arg);
+	return 0;
   }
 
   void * do_ops(void *nothing)
@@ -55,6 +56,7 @@ class ThreadPool {
       //tpdout(DBLVL) << "Thread "<< pthread_self() << " calling the function\n";
       func(u, op);
     }
+	return 0;
   }
 
 

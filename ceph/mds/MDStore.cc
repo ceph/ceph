@@ -17,7 +17,7 @@
 using namespace std;
 
 
-#include "include/config.h"
+#include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".store "
 
@@ -57,7 +57,7 @@ class MDFetchDirContext : public Context {
 };
 
 
-bool MDStore::fetch_dir( CDir *dir,
+void MDStore::fetch_dir( CDir *dir,
 						 Context *c )
 {
   dout(7) << "fetch_dir " << *dir << " context is " << c << endl;
@@ -69,7 +69,7 @@ bool MDStore::fetch_dir( CDir *dir,
   // already fetching?
   if (dir->state_test(CDIR_STATE_FETCHING)) {
 	dout(7) << "already fetching " << *dir << "; waiting" << endl;
-	return true;
+	return;
   }
   
   dir->state_set(CDIR_STATE_FETCHING);
@@ -86,14 +86,14 @@ bool MDStore::fetch_dir( CDir *dir,
 	do_fetch_dir( dir, fin );  // normal
 }
 
-bool MDStore::fetch_dir_2( int result, 
+void MDStore::fetch_dir_2( int result, 
 						   inodeno_t ino)
 {
   CInode *idir = mds->mdcache->get_inode(ino);
   if (result < 0) 
-	dout(7) << *mds << "fetch_dir_2 failed on " << ino << endl;
+	dout(7) << "fetch_dir_2 failed on " << ino << endl;
   
-  if (!idir) return false;
+  if (!idir) return;
 
   assert(idir);
   assert(idir->dir);
@@ -193,7 +193,7 @@ class C_MDS_CommitDirFinish : public Context {
 
 
 
-bool MDStore::commit_dir( CDir *dir,
+void MDStore::commit_dir( CDir *dir,
 						  Context *c )
 {
   assert(dir->is_dirty());
@@ -210,7 +210,7 @@ bool MDStore::commit_dir( CDir *dir,
   commit_dir(dir, dir->get_version(), c);
 }
 
-bool MDStore::commit_dir( CDir *dir,
+void MDStore::commit_dir( CDir *dir,
 						  __uint64_t version,
 						  Context *c )
 {
@@ -228,7 +228,7 @@ bool MDStore::commit_dir( CDir *dir,
 
 	dir->add_waiter(CDIR_WAIT_COMMITTED, 
 					new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
-	return false;
+	return;
   }
 
   if (!dir->can_auth_pin()) {
@@ -236,7 +236,7 @@ bool MDStore::commit_dir( CDir *dir,
 	dout(7) << "commit_dir " << *dir << " can't auth_pin, waiting" << endl;
 	dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
 					new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
-	return false;
+	return;
   }
 
 
@@ -246,7 +246,7 @@ bool MDStore::commit_dir( CDir *dir,
 	// fetch dir first
 	fetch_dir(dir, 
 			  new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
-	return false;
+	return;
   }
 
 
@@ -275,7 +275,7 @@ bool MDStore::commit_dir( CDir *dir,
   }
 }
 
-bool MDStore::commit_dir_2( int result,
+void MDStore::commit_dir_2( int result,
 							CDir *dir,
 							__uint64_t committed_version)
 {
@@ -587,14 +587,14 @@ void MDStore::do_fetch_dir_2( bufferlist& bl,
 {
   CInode *idir = mds->mdcache->get_inode(ino);
   if (!idir) {
-	dout(7) << *mds << "do_fetch_dir_2 on ino " << ino << " but no longer in our cache!" << endl;
+	dout(7) << "do_fetch_dir_2 on ino " << ino << " but no longer in our cache!" << endl;
 	c->finish(-1);
 	delete c;
 	return;
   } 
 
   if (!idir->dir_is_auth()) {
-	dout(7) << *mds << "do_fetch_dir_2 on " << *idir << ", but i'm not auth" << endl;
+	dout(7) << "do_fetch_dir_2 on " << *idir << ", but i'm not auth" << endl;
 	c->finish(-1);
 	delete c;
 	return;
@@ -604,7 +604,7 @@ void MDStore::do_fetch_dir_2( bufferlist& bl,
   CDir *dir = idir->get_or_open_dir(mds);
   
   // do it
-  dout(7) << *mds << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
+  dout(7) << "do_fetch_dir_2 hashcode " << hashcode << " dir " << *dir << endl;
 
   // parse buffer contents into cache
   dout(15) << "bl is " << bl << endl;
@@ -624,7 +624,7 @@ void MDStore::do_fetch_dir_2( bufferlist& bl,
 
   dout(10) << "  " << num << " items in " << size << " bytes" << endl;
 
-  int parsed = 0;
+  unsigned parsed = 0;
   while (parsed < num) {
 	assert(p < buflen && num > 0);
 	parsed++;

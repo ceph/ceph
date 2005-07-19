@@ -5,7 +5,7 @@
 #include <string>
 using namespace std;
 
-#include "include/config.h"
+#include "config.h"
 
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
