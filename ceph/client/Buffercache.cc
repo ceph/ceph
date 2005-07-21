@@ -69,7 +69,8 @@ void Bufferhead::alloc_buffers(size_t size)
 	size -= g_conf.client_bcache_alloc_maxsize;
 	bc->increase_size(g_conf.client_bcache_alloc_maxsize);
   }
-  dout(7) << "bc: allocated " << bl.buffers().size() << " buffers (" << bl.length() << " bytes) " << endl;
+  dout(6) << "bc: allocated " << bl.buffers().size() << " buffers (" << bl.length() << " bytes) " << endl;
+  assert(bl.length() == size);
 }
 
 void Bufferhead::miss_start(size_t miss_len) 
@@ -87,6 +88,7 @@ void Bufferhead::miss_finish()
   if (bl.length() == 0) {
     alloc_buffers(miss_len); 
     bl.zero();
+    dout(6) << "bc: miss_finish: allocated zeroed buffer len: " << bl.length() << endl;
   } else {
     bc->increase_size(bl.length());
   }
@@ -245,24 +247,39 @@ map<off_t, Bufferhead*>::iterator Filecache::overlap(size_t len, off_t off)
 {
   // returns iterator to buffer overlapping specified extent or end() if no overlap exists
   dout(7) << "bc: overlap " << len << " " << off << endl;
+
+  if (buffer_map.empty()) return buffer_map.end();
+
+  // find first buffer with offset >= off
   map<off_t, Bufferhead*>::iterator it = buffer_map.lower_bound(off);
-  if (it == buffer_map.end() || it->first < off + len) {
-    dout(10) << "bc: overlap -- either no lower bound or overlap found" << endl;
+
+  // Found buffer with exact offset
+  if (it != buffer_map.end() && it->first == off) {
+    dout(6) << "bc: overlap -- found buffer with exact offset" << endl;
     return it;
-  } else if (it == buffer_map.begin()) {
-    dout(10) << "bc: overlap -- extent is below where buffer_map begins" << endl;
-    return buffer_map.end();
-  } else {
-    dout(10) << "bc: overlap -- examining previous buffer" << endl;
+  }
+
+  // examine previous buffer (< off) first in case of two overlaps
+  if (it != buffer_map.begin()) {
     it--;
     if (it->first + it->second->length() > off) {
-      dout(10) << "bc: overlap -- found overlap with previous buffer" << endl;
+      dout(6) << "bc: overlap -- found overlap with previous buffer" << endl;
       return it;
     } else {
-      dout(10) << "bc: overlap -- no overlap with previous buffer" << endl;
-      return buffer_map.end();
+      dout(6) << "bc: overlap -- no overlap with previous buffer" << endl;
+      it++;
     }
   }
+
+  // then examine current buffer (> off)
+  if (it != buffer_map.end() && it->first < off + len) {
+    dout(6) << "bc: overlap -- overlap found" << endl;
+    return it;
+  } 
+
+  // give up
+  dout(6) << "bc: overlap -- no overlap found" << endl;
+  return buffer_map.end();
 }
 
 map<off_t, Bufferhead*>::iterator 
@@ -378,7 +395,7 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
   //assert(offset + size <= length()); doesn't hold after trim_bcache
   int rvalue = size;
   
-  map<off_t, Bufferhead*>::iterator curbuf = overlap(size, offset);
+  map<off_t, Bufferhead*>::iterator curbuf = buffer_map.lower_bound(offset);
   if (curbuf == buffer_map.end() || curbuf->first > offset) {
     return -1;
   } 
@@ -421,7 +438,11 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
   Filecache *fc = get_fc(ino);
   assert(offset >= 0);
   
-  map<off_t, Bufferhead*>::iterator curbuf = fc->overlap(size, offset);
+  map<off_t, Bufferhead*>::iterator curbuf = fc->buffer_map.lower_bound(offset);
+  if (curbuf == fc->buffer_map.end() || curbuf->first > offset) {
+    assert(curbuf != fc->buffer_map.begin());
+    curbuf--;
+  }
   offset -= curbuf->first;
   assert(offset >= 0);
   

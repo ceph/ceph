@@ -1457,7 +1457,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	
 	if (hits.count(offset)) {
 	  // sweet -- we can return stuff immediately: find out how much
-	  dout(7) << "read bc hit" << endl;
+	  dout(6) << "read bc hit" << endl;
 	  rvalue = (int)bc.touch_continuous(hits, size, offset);
 	  assert(rvalue > 0);
 	  rvalue = fc->copy_out((size_t)rvalue, offset, buf);
@@ -1469,7 +1469,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	// issue reads for holes
 	int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
 	for (hole = holes.begin(); hole != holes.end(); hole++) {
-	  dout(7) << "read bc miss" << endl;
+	  dout(6) << "read bc miss" << endl;
 	  off_t hole_offset = hole->first;
 	  size_t hole_size = hole->second;
 	  assert(fc->buffer_map.count(hole_offset) == 0);
@@ -1482,13 +1482,19 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  bh->miss_start(hole_size);
 	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
 	  filer->read(in->inode.ino, g_OSD_FileLayout, hole_size, hole_offset, &(bh->bl), onfinish);
-	  dout(7) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
+	  dout(6) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
 	}
 	
 	if (rvalue == 0) {
 	  // we need to wait for the first buffer
 	  dout(7) << "read bc miss: waiting for first buffer" << endl;
-	  Bufferhead *bh = fc->buffer_map[offset];
+	  map<off_t, Bufferhead*>::iterator it = fc->buffer_map.lower_bound(offset);
+	  if (it == fc->buffer_map.end() || it->first > offset) {
+	    assert(it != fc->buffer_map.begin());
+	    it--;
+	  }
+	  Bufferhead *bh = it->second;
+	  assert(bh->offset + bh->length() > offset);
 #if 0
 	  Bufferhead *bh;
 	  if (curbuf == fc->buffer_map.end() && fc->buffer_map.count(offset)) {
@@ -1507,7 +1513,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  // buffer is filled -- see how much we can return
 	  hits.clear(); rx.clear(); tx.clear(); holes.clear();
 	  fc->map_existing(size, offset, hits, rx, tx, holes); // FIXME: overkill
-	  assert(hits.count(offset));
+	  //assert(hits.count(offset));
 	  rvalue = (int)bc.touch_continuous(hits, size, offset);
 	  fc->copy_out(rvalue, offset, buf);
 	  dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;
