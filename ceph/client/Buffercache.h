@@ -61,6 +61,11 @@ class Bufferhead : public LRUObject {
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
   
+  size_t length() {
+    if (state == BUFHD_STATE_RX) return miss_len;
+    return bl.length();
+  }
+
   void alloc_buffers(size_t size);
 
   /** wait_for_(read|write) 
@@ -167,6 +172,7 @@ class Filecache {
     }
   }
 
+#if 0
   size_t length() {
     size_t len = 0;
     for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
@@ -176,6 +182,9 @@ class Filecache {
     }
     return len;
   }
+#endif
+
+  void insert(off_t offset, Bufferhead* bh);
 
   void wait_for_inflight(Mutex &lock) {
 	Cond cond;
@@ -285,7 +294,7 @@ class Buffercache {
 
   void insert(Bufferhead *bh);
   void dirty(inodeno_t ino, size_t size, off_t offset, const char *src);
-  int touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
+  size_t touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
   void map_or_alloc(inodeno_t ino, size_t len, off_t off, 
                     map<off_t, Bufferhead*>& buffers, 
 		    map<off_t, Bufferhead*>& rx,

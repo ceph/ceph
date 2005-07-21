@@ -16,7 +16,7 @@ Bufferhead::Bufferhead(inodeno_t ino, off_t off, Buffercache *bc) :
   fc = bc->get_fc(ino);
   bc->lru.lru_insert_top(this); //FIXME: parameterize whether top or mid
   assert(!fc->buffer_map.count(offset)); // fail loudly if offset already exists!
-  fc->buffer_map[offset] = this; 
+  fc->insert(offset, this); 
   dirty_since = 0; // meaningless when clean or inflight
   // buffers are allocated later
 }
@@ -50,6 +50,7 @@ Bufferhead::~Bufferhead()
 void Bufferhead::alloc_buffers(size_t size)
 {
   dout(10) << "bc: allocating buffers size: " << size << endl;
+  assert(size > 0);
   while (size > 0) {
     if (size <= (unsigned)g_conf.client_bcache_alloc_maxsize) {
           size_t k = g_conf.client_bcache_alloc_minsize;
@@ -83,7 +84,12 @@ void Bufferhead::miss_finish()
 {
   assert(state == BUFHD_STATE_RX);
   state = BUFHD_STATE_CLEAN;
-  bc->increase_size(bl.length());
+  if (bl.length() == 0) {
+    alloc_buffers(miss_len); 
+    bl.zero();
+  } else {
+    bc->increase_size(bl.length());
+  }
   dout(6) << "bc: miss_finish: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
   //assert(bl.length() == miss_len);
   wakeup_read_waiters();
@@ -214,6 +220,27 @@ void Dirtybuffers::get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& 
                                                                                   
 // -- Filecache methods
 
+void Filecache::insert(off_t offset, Bufferhead* bh)
+{
+  pair<map<off_t, Bufferhead*>::iterator, bool> rvalue;
+  rvalue = buffer_map.insert(pair<off_t, Bufferhead*> (offset, bh));
+
+  // The following is just to get the pieces for the last two assertions 
+  map<off_t, Bufferhead*>::iterator next_buf = buffer_map.upper_bound(offset);
+
+  map<off_t, Bufferhead*>::iterator prev_buf = rvalue.first;
+  if (prev_buf != buffer_map.begin()) {
+    prev_buf--;
+  } else {
+    prev_buf = buffer_map.end();
+  }
+
+  // raise if there is any overlap!
+  assert(next_buf == buffer_map.end() || next_buf->first >= offset + bh->length());
+  assert(prev_buf == buffer_map.end() || prev_buf->first + prev_buf->second->length() <= offset);
+}
+
+
 map<off_t, Bufferhead*>::iterator Filecache::overlap(size_t len, off_t off)
 {
   // returns iterator to buffer overlapping specified extent or end() if no overlap exists
@@ -228,7 +255,7 @@ map<off_t, Bufferhead*>::iterator Filecache::overlap(size_t len, off_t off)
   } else {
     dout(10) << "bc: overlap -- examining previous buffer" << endl;
     it--;
-    if (it->first + it->second->bl.length() > off) {
+    if (it->first + it->second->length() > off) {
       dout(10) << "bc: overlap -- found overlap with previous buffer" << endl;
       return it;
     } else {
@@ -256,28 +283,44 @@ Filecache::map_existing(size_t len,
     dout(7) << "bc: map: found overlap at offset " << actual_off << endl;
     actual_off = existing->first;
     Bufferhead *bh = existing->second;
+
     if (actual_off > need_off) {
+      assert(buffer_map.count(need_off) == 0);
       holes[need_off] = (size_t) (actual_off - need_off);
-      dout(10) << "bc: map: hole " << need_off << " " << holes[need_off] << endl;
+      dout(6) << "bc: map: hole " << need_off << " " << holes[need_off] << endl;
       need_off = actual_off;
-    }
+    } 
+
+    // raise if this buffer overlaps with previous buffer
+    assert(existing == rvalue || actual_off == need_off);
+
+    // sort buffer into maps
     if (bh->state == BUFHD_STATE_RX) {
       rx[actual_off] = bh;
-      dout(10) << "bc: map: rx " << actual_off << " " << rx[actual_off]->miss_len << endl;
+      dout(6) << "bc: map: rx " << actual_off << " " << rx[actual_off]->miss_len << endl;
       need_off = actual_off + bh->miss_len;
+      assert(bh->miss_len > 0);
     } else if (bh->state == BUFHD_STATE_TX) {
       tx[actual_off] = bh;
-      dout(10) << "bc: map: tx " << actual_off << " " << tx[actual_off]->bl.length() << endl;
+      dout(6) << "bc: map: tx " << actual_off << " " << tx[actual_off]->bl.length() << endl;
       need_off = actual_off + bh->bl.length();
-    } else {
+      assert(bh->bl.length() > 0);
+    } else if (bh->state == BUFHD_STATE_CLEAN || bh->state == BUFHD_STATE_DIRTY) {
       hits[actual_off] = bh;
-      dout(10) << "bc: map: hits " << actual_off << " " << hits[actual_off]->bl.length() << endl;
+      dout(6) << "bc: map: hits " << actual_off << " " << hits[actual_off]->bl.length() << endl;
       need_off = actual_off + bh->bl.length();
+      assert(bh->bl.length() > 0);
+    } else {
+      dout(1) << "map_existing: Unknown state!" << endl;
+      assert(0);
     }
   }
+
+  // no buffers or no buffers at tail
   if (need_off < start_off + len) {
     holes[need_off] = (size_t) (start_off + len - need_off);
-    dout(10) << "bc: map: last hole " << need_off << " " << holes[need_off] << endl;
+    dout(6) << "bc: map: last hole " << need_off << " " << holes[need_off] << endl;
+    assert(buffer_map.count(need_off) == 0);
   }
   return rvalue;
 }
@@ -336,11 +379,11 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
   int rvalue = size;
   
   map<off_t, Bufferhead*>::iterator curbuf = overlap(size, offset);
-  if (curbuf == buffer_map.end()) {
+  if (curbuf == buffer_map.end() || curbuf->first > offset) {
     return -1;
-  }
+  } 
   offset -= curbuf->first;
-  if (offset < 0) dout(10) << "bc: copy_out: curbuf offset: " << curbuf->first << endl;
+  if (offset < 0) dout(5) << "bc: copy_out: curbuf offset: " << curbuf->first << endl;
   assert(offset >= 0);
   
   while (size > 0) {
@@ -361,7 +404,10 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
     size -= howmuch;
     offset = 0;
     curbuf++;
-    assert(curbuf != buffer_map.end());
+    if (curbuf == buffer_map.end()) {
+      dout(5) << "bc: copy_out size: " << size << endl;
+      assert(curbuf != buffer_map.end());
+    }
   }
   return rvalue;
 }
@@ -399,7 +445,7 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
 }
 
 
-int Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset)
+size_t Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset)
 {
   dout(7) << "bc: touch_continuous size: " << size << " offset: " << offset << endl;
   off_t next_off = offset;
@@ -414,7 +460,7 @@ int Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, of
     lru.lru_touch(curbuf->second);
     next_off += curbuf->second->bl.length();
   }
-  return (int)(next_off - offset) >= size ? size : (next_off - offset);
+  return (size_t)(next_off - offset) >= size ? size : (next_off - offset);
 }
 
 void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset, 
@@ -425,6 +471,7 @@ void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset,
   dout(7) << "bc: map_or_alloc len: " << size << " off: " << offset << endl;
   Filecache *fc = get_fc(ino);
   map<off_t, size_t> holes;
+  holes.clear();
   fc->map_existing(size, offset, buffers, rx, tx, holes);
   // stuff buffers into holes
   for (map<off_t, size_t>::iterator hole = holes.begin();

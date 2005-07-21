@@ -1393,6 +1393,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
   tout << size << endl;
   tout << offset << endl;
 
+  assert(offset >= 0);
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -1447,14 +1448,14 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 
 	// map buffercache 
 	map<off_t, Bufferhead*> hits, rx, tx;
-	map<off_t, Bufferhead*>::iterator curbuf;
 	map<off_t, size_t> holes;
 	map<off_t, size_t>::iterator hole;
 	
 	Filecache *fc = bc.get_fc(in->inode.ino);
-	curbuf = fc->map_existing(size, offset, hits, rx, tx, holes);  
+	hits.clear(); rx.clear(); tx.clear(); holes.clear();
+	fc->map_existing(size, offset, hits, rx, tx, holes);  
 	
-	if (curbuf != fc->buffer_map.end() && hits.count(curbuf->first)) {
+	if (hits.count(offset)) {
 	  // sweet -- we can return stuff immediately: find out how much
 	  dout(7) << "read bc hit" << endl;
 	  rvalue = (int)bc.touch_continuous(hits, size, offset);
@@ -1471,11 +1472,13 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  dout(7) << "read bc miss" << endl;
 	  off_t hole_offset = hole->first;
 	  size_t hole_size = hole->second;
+	  assert(fc->buffer_map.count(hole_offset) == 0);
 	  
 	  // insert new bufferhead without allocating buffers (Filer::handle_osd_read_reply allocates them)
 	  Bufferhead *bh = new Bufferhead(in->inode.ino, hole_offset, &bc);
 	  
-	  // read into the buffercache: when finished transition state from inflight to clean
+	  // read into the buffercache: when finished transition state from
+	  // rx to clean
 	  bh->miss_start(hole_size);
 	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
 	  filer->read(in->inode.ino, g_OSD_FileLayout, hole_size, hole_offset, &(bh->bl), onfinish);
@@ -1485,6 +1488,8 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	if (rvalue == 0) {
 	  // we need to wait for the first buffer
 	  dout(7) << "read bc miss: waiting for first buffer" << endl;
+	  Bufferhead *bh = fc->buffer_map[offset];
+#if 0
 	  Bufferhead *bh;
 	  if (curbuf == fc->buffer_map.end() && fc->buffer_map.count(offset)) {
 		dout(10) << "first buffer is currently read in" << endl;
@@ -1493,6 +1498,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 		dout(10) << "first buffer is either hit or inflight" << endl;
 		bh = curbuf->second;  
 	  }
+#endif
 	  if (bh->state == BUFHD_STATE_RX || bh->state == BUFHD_STATE_TX) {
 		dout(10) << "waiting for first buffer" << endl;
 		bh->wait_for_read(client_lock);
@@ -1501,8 +1507,8 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  // buffer is filled -- see how much we can return
 	  hits.clear(); rx.clear(); tx.clear(); holes.clear();
 	  fc->map_existing(size, offset, hits, rx, tx, holes); // FIXME: overkill
-	  assert(hits.count(bh->offset));
-	  rvalue = bc.touch_continuous(hits, size, offset);
+	  assert(hits.count(offset));
+	  rvalue = (int)bc.touch_continuous(hits, size, offset);
 	  fc->copy_out(rvalue, offset, buf);
 	  dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;
 	  
@@ -1552,6 +1558,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
   tout << size << endl;
   tout << offset << endl;
 
+  assert(offset >= 0);
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
@@ -1575,10 +1582,11 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 	
 	// map buffercache for writing
 	map<off_t, Bufferhead*> buffers, rx, tx;
+	buffers.clear(); rx.clear(); tx.clear();
 	bc.map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); 
 	
 	// wait for rx and tx buffers -- FIXME: don't need to wait for tx buffers
-	while (!rx.empty() || !tx.empty()) {
+	while (!(rx.empty() && tx.empty())) {
 	  if (!rx.empty()) {
 		rx.begin()->second->wait_for_write(client_lock);
 	  } else {
