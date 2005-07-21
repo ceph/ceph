@@ -103,6 +103,12 @@ class bufferlist {
 	_len += bp.length();
 
   }
+  void zero() {
+  	for (list<bufferptr>::iterator it = _buffers.begin();
+	     it != _buffers.end();
+	     it++)
+		it->zero();
+	}
 
   // sort-of-like-assignment-op
   void claim(bufferlist& bl) {

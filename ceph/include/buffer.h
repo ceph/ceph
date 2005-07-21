@@ -264,6 +264,9 @@ class bufferptr {
 	  _buffer->_len = _off + len;    // set new buffer len (_IF_ i'm expanding it)
 	_len = len;                      // my len too
   }
+  void zero() {
+  	bzero((void*)c_str(), _len);
+  }
 
 
   // crope lookalikes
