@@ -502,7 +502,7 @@ public:
   }
 };
 
-void Client::flush_buffers(int ttl, size_t dirty_size)
+void Client::flush_buffers(int ttl, int dirty_size)
 {
   // ttl = 0 or dirty_size = 0: flush all
   if (!bc.dirty_buffers.empty()) {
@@ -531,7 +531,7 @@ void Client::trim_bcache()
     // need to free buffers 
     if (bc.get_dirty_size() > (unsigned)g_conf.client_bcache_hiwater * (unsigned)g_conf.client_bcache_size / 100UL) {
       // flush buffers until we have low water mark
-      size_t want_target_size = (size_t)  g_conf.client_bcache_lowater * g_conf.client_bcache_size / 100;
+      int want_target_size = g_conf.client_bcache_lowater * g_conf.client_bcache_size / 100;
       flush_buffers(g_conf.client_bcache_ttl, want_target_size);
     }
     // Now reclaim buffers

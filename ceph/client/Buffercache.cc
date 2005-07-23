@@ -205,22 +205,24 @@ bool Dirtybuffers::exist(Bufferhead* bh)
 }
 
 
-void Dirtybuffers::get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush) 
+void Dirtybuffers::get_expired(time_t ttl, int left_dirty, set<Bufferhead*>& to_flush) 
 {
   dout(6) << "bc: get_expired ttl: " << ttl << " left_dirty: " << left_dirty << endl;
-  time_t now = time(NULL);
-  for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.begin();
-    it != _dbufs.end();
-    it++) {
-    if (ttl > now - it->second->dirty_since &&
-        left_dirty >= it->second->bc->get_dirty_size()) break;
-    to_flush.insert(it->second);
-    left_dirty -= it->second->bl.length();
+  if (left_dirty > 0) {
+    time_t now = time(NULL);
+    for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.begin();
+      it != _dbufs.end() && left_dirty > 0;
+      it++) {
+      if (ttl > now - it->second->dirty_since &&
+	  left_dirty >= it->second->bc->get_dirty_size()) break;
+      to_flush.insert(it->second);
+      left_dirty -= it->second->length();
+    }
+    dout(6) << "bc: get_expired to_flush.size(): " << to_flush.size() << endl;
   }
-  dout(6) << "bc: get_expired to_flush.size(): " << to_flush.size() << endl;
 }
-                                                                                  
-// -- Filecache methods
+										    
+  // -- Filecache methods
 
 void Filecache::insert(off_t offset, Bufferhead* bh)
 {
@@ -314,23 +316,19 @@ Filecache::map_existing(size_t len,
     // sort buffer into maps
     if (bh->state == BUFHD_STATE_RX) {
       rx[actual_off] = bh;
-      dout(6) << "bc: map: rx " << actual_off << " " << rx[actual_off]->miss_len << endl;
-      need_off = actual_off + bh->miss_len;
-      assert(bh->miss_len > 0);
+      dout(6) << "bc: map: rx " << actual_off << " " << rx[actual_off]->length() << endl;
     } else if (bh->state == BUFHD_STATE_TX) {
       tx[actual_off] = bh;
-      dout(6) << "bc: map: tx " << actual_off << " " << tx[actual_off]->bl.length() << endl;
-      need_off = actual_off + bh->bl.length();
-      assert(bh->bl.length() > 0);
+      dout(6) << "bc: map: tx " << actual_off << " " << tx[actual_off]->length() << endl;
     } else if (bh->state == BUFHD_STATE_CLEAN || bh->state == BUFHD_STATE_DIRTY) {
       hits[actual_off] = bh;
-      dout(6) << "bc: map: hits " << actual_off << " " << hits[actual_off]->bl.length() << endl;
-      need_off = actual_off + bh->bl.length();
-      assert(bh->bl.length() > 0);
+      dout(6) << "bc: map: hits " << actual_off << " " << hits[actual_off]->length() << endl;
     } else {
       dout(1) << "map_existing: Unknown state!" << endl;
       assert(0);
     }
+    need_off = actual_off + bh->length();
+    assert(bh->length() > 0);
   }
 
   // no buffers or no buffers at tail
@@ -405,15 +403,15 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
   
   while (size > 0) {
     Bufferhead *bh = curbuf->second;
-    if (offset + size <= bh->bl.length()) {
-      dout(10) << "bc: copy_out bh len: " << bh->bl.length() << endl;
+    if (offset + size <= bh->length()) {
+      dout(10) << "bc: copy_out bh len: " << bh->length() << endl;
       dout(10) << "bc: want to copy off: " << offset << " size: " << size << endl;
       bh->bl.copy(offset, size, dst);
       break;
     }
     
-    int howmuch = bh->bl.length() - offset;
-    dout(10) << "bc: copy_out bh len: " << bh->bl.length() << endl;
+    int howmuch = bh->length() - offset;
+    dout(10) << "bc: copy_out bh len: " << bh->length() << endl;
     dout(10) << "bc: want to copy off: " << offset << " size: " << howmuch << endl;
     bh->bl.copy(offset, howmuch, dst);
     
@@ -448,13 +446,13 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
   
   while (size > 0) {
     Bufferhead *bh = curbuf->second;
-    if (offset + size <= bh->bl.length()) {
+    if (offset + size <= bh->length()) {
       bh->bl.copy_in(offset, size, src); // last bit
       bh->dirty();
       break;
     }
     
-    int howmuch = bh->bl.length() - offset;
+    int howmuch = bh->length() - offset;
     bh->bl.copy_in(offset, howmuch, src);
     bh->dirty();    
     src += howmuch;
@@ -518,7 +516,7 @@ void Buffercache::release_file(inodeno_t ino)
   for (map<off_t, Bufferhead*>::iterator it = to_release.begin();
        it != to_release.end();
        it++) {
-    decrease_size(it->second->bl.length());
+    decrease_size(it->second->length());
     dout(6) << "bc: release_file: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers.get_age() << endl;
     delete it->second;    
   }
@@ -531,7 +529,7 @@ void Buffercache::get_reclaimable(size_t min_size, list<Bufferhead*>& reclaimed)
   while (min_size > 0) {
     if (Bufferhead *bh = (Bufferhead*)lru.lru_expire()) {
       reclaimed.push_back(bh);
-      min_size -= bh->bl.length();
+      min_size -= bh->length();
     } else {
       break;
     }
@@ -543,18 +541,18 @@ size_t Buffercache::reclaim(size_t min_size)
 {
   dout(7) << "bc: reclaim min_size: " << min_size << endl;
   size_t freed_size = 0;
-  while (freed_size <= min_size) {
+  while (freed_size < min_size) {
     Bufferhead *bh = (Bufferhead*)lru.lru_expire();
     if (!bh) {
       dout(6) << "bc: nothing more to reclaim -- freed_size: " << freed_size << endl;
       assert(0);
       break; // nothing more to reclaim
     } else {
-      dout(6) << "bc: reclaim: offset: " << bh->offset << " len: " << bh->bl.length() << endl;
+      dout(6) << "bc: reclaim: offset: " << bh->offset << " len: " << bh->length() << endl;
       assert(bh->state == BUFHD_STATE_CLEAN);
-      freed_size += bh->bl.length();
+      freed_size += bh->length();
 
-      decrease_size(bh->bl.length());
+      decrease_size(bh->length());
 
       dout(6) << "bc: reclaim: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers.get_age() << endl;
       assert(clean_size >= 0);

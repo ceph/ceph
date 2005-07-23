@@ -131,7 +131,7 @@ class Dirtybuffers {
   void insert(Bufferhead* bh);
   bool empty() { return _dbufs.empty(); }
   bool exist(Bufferhead* bh);
-  void get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush);
+  void get_expired(time_t ttl, int left_dirty, set<Bufferhead*>& to_flush);
   time_t get_age() { 
     time_t age;
     if (_dbufs.empty()) {
