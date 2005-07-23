@@ -517,9 +517,11 @@ void Client::flush_buffers(int ttl, int dirty_size)
       C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(*it);
       filer->write((*it)->ino, g_OSD_FileLayout, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
     }
+#if 0
     dout(7) << "flush_buffers: dirty buffers, waiting" << endl;
     assert(!bc.inflight_buffers.empty());
     bc.wait_for_inflight(client_lock);
+#endif
   } else {
 	dout(7) << "no dirty buffers" << endl;
   }
@@ -536,7 +538,13 @@ void Client::trim_bcache()
     }
     // Now reclaim buffers
     dout(6) << "bc: trim_bcache: reclaim: " << bc.get_total_size() - g_conf.client_bcache_size * g_conf.client_bcache_hiwater / 100 << endl;
-    bc.reclaim(bc.get_total_size() - g_conf.client_bcache_size * g_conf.client_bcache_hiwater / 100);
+    while (bc.reclaim(bc.get_total_size() - 
+                      g_conf.client_bcache_size * 
+		      g_conf.client_bcache_hiwater / 100) == 0) {
+      // cannot reclaim any buffers: wait for flush to finish
+      assert(!bc.inflight_buffers.empty());
+      bc.wait_for_inflight(client_lock);
+    }
   }
 }
       
@@ -1455,14 +1463,17 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	hits.clear(); rx.clear(); tx.clear(); holes.clear();
 	fc->map_existing(size, offset, hits, rx, tx, holes);  
 	
-	if (hits.count(offset)) {
-	  // sweet -- we can return stuff immediately: find out how much
-	  dout(6) << "read bc hit" << endl;
-	  rvalue = (int)bc.touch_continuous(hits, size, offset);
-	  assert(rvalue > 0);
+	// see whether there are initial buffer that can be read immmediately
+	if ((rvalue = (int)bc.touch_continuous(hits, size, offset)) > 0) {
+	  dout(6) << "read bc hit on clean or dirty buffer, rvalue: " << rvalue << endl;
+	} else if ((rvalue = (int)bc.touch_continuous(tx, size, offset)) > 0) {
+	  dout(6) << "read bc hit on tx buffer, rvalue: " << rvalue << endl;
+	}
+	if (rvalue > 0) {
+	  // sweet -- we can return stuff immediately
 	  rvalue = fc->copy_out((size_t)rvalue, offset, buf);
+	  dout(6) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
 	  assert(rvalue > 0);
-	  dout(7) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
 	}
 	assert(!(rvalue >= 0 && (size_t)rvalue == size) || holes.empty());
 	
@@ -1513,7 +1524,6 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  // buffer is filled -- see how much we can return
 	  hits.clear(); rx.clear(); tx.clear(); holes.clear();
 	  fc->map_existing(size, offset, hits, rx, tx, holes); // FIXME: overkill
-	  //assert(hits.count(offset));
 	  rvalue = (int)bc.touch_continuous(hits, size, offset);
 	  fc->copy_out(rvalue, offset, buf);
 	  dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;

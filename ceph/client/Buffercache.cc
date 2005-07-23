@@ -76,6 +76,7 @@ void Bufferhead::alloc_buffers(size_t size)
 void Bufferhead::miss_start(size_t miss_len) 
 {
   assert(state == BUFHD_STATE_CLEAN);
+  get();
   state = BUFHD_STATE_RX;
   this->miss_len = miss_len;
   bc->lru.lru_touch(this);
@@ -96,11 +97,13 @@ void Bufferhead::miss_finish()
   //assert(bl.length() == miss_len);
   wakeup_read_waiters();
   wakeup_write_waiters();
+  put();
 }
 
 void Bufferhead::dirty() 
 {
   if (state == BUFHD_STATE_CLEAN) {
+    get();
     dout(6) << "bc: dirtying clean buffer size: " << bl.length() << endl;
     state = BUFHD_STATE_DIRTY;
     dirty_since = time(NULL); // start clock for dirty buffer here
@@ -110,10 +113,8 @@ void Bufferhead::dirty()
     dout(6) << "bc: dirty after: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
     assert(!bc->dirty_buffers.exist(this));
     bc->dirty_buffers.insert(this); 
-    get();
     assert(!fc->dirty_buffers.count(this));
     fc->dirty_buffers.insert(this);
-    get();
   } else {
     dout(10) << "bc: dirtying dirty buffer size: " << bl.length() << endl;
   }
@@ -124,7 +125,6 @@ void Bufferhead::dirtybuffers_erase()
   dout(10) << "bc: erase in dirtybuffers size: " << bl.length() << " in state " << state << endl;
   assert(bc->dirty_buffers.exist(this));
   bc->dirty_buffers.erase(this);
-  put();
   assert(fc->dirty_buffers.count(this));
   fc->dirty_buffers.erase(this);
   put();
@@ -134,6 +134,7 @@ void Bufferhead::flush_start()
 {
   dout(10) << "bc: flush_start" << endl;
   assert(state == BUFHD_STATE_DIRTY);
+  get();
   state = BUFHD_STATE_TX;
   dirtybuffers_erase();
   assert(!bc->inflight_buffers.count(this));
@@ -156,6 +157,7 @@ void Bufferhead::flush_finish()
   assert(fc->inflight_buffers.count(this));
   fc->inflight_buffers.erase(this);
   wakeup_write_waiters(); // readers never wait on flushes
+  put();
 }
 
 void Bufferhead::claim_append(Bufferhead *other) 
@@ -214,7 +216,7 @@ void Dirtybuffers::get_expired(time_t ttl, int left_dirty, set<Bufferhead*>& to_
       it != _dbufs.end() && left_dirty > 0;
       it++) {
       if (ttl > now - it->second->dirty_since &&
-	  left_dirty >= it->second->bc->get_dirty_size()) break;
+	  left_dirty >= (int)it->second->bc->get_dirty_size()) break;
       to_flush.insert(it->second);
       left_dirty -= it->second->length();
     }
@@ -395,23 +397,28 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
   
   map<off_t, Bufferhead*>::iterator curbuf = buffer_map.lower_bound(offset);
   if (curbuf == buffer_map.end() || curbuf->first > offset) {
-    return -1;
-  } 
+    if (curbuf == buffer_map.begin()) {
+      return -1;
+    } else {
+      curbuf--;
+    }
+  }
   offset -= curbuf->first;
-  if (offset < 0) dout(5) << "bc: copy_out: curbuf offset: " << curbuf->first << endl;
+  dout(6) << "bc: copy_out: curbuf offset: " << curbuf->first << " offset: " << offset << endl;
   assert(offset >= 0);
   
   while (size > 0) {
     Bufferhead *bh = curbuf->second;
     if (offset + size <= bh->length()) {
-      dout(10) << "bc: copy_out bh len: " << bh->length() << endl;
+      dout(6) << "bc: copy_out bh len: " << bh->length() << " size: " << size << endl;
       dout(10) << "bc: want to copy off: " << offset << " size: " << size << endl;
       bh->bl.copy(offset, size, dst);
+      size = 0;
       break;
     }
     
     int howmuch = bh->length() - offset;
-    dout(10) << "bc: copy_out bh len: " << bh->length() << endl;
+    dout(6) << "bc: copy_out bh len: " << bh->length() << " size: " << size << endl;
     dout(10) << "bc: want to copy off: " << offset << " size: " << howmuch << endl;
     bh->bl.copy(offset, howmuch, dst);
     
@@ -424,7 +431,7 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
       assert(curbuf != buffer_map.end());
     }
   }
-  return rvalue;
+  return rvalue - size;
 }
 
 // -- Buffercache methods
@@ -468,8 +475,12 @@ size_t Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size,
 {
   dout(7) << "bc: touch_continuous size: " << size << " offset: " << offset << endl;
   off_t next_off = offset;
+  if (hits.begin()->first > offset ||
+      hits.begin()->first + hits.begin()->second->length() <= offset) {
+    return 0;
+  }
   for (map<off_t, Bufferhead*>::iterator curbuf = hits.begin(); 
-       curbuf != hits.end(); 
+       curbuf != hits.end();
        curbuf++) {
     if (curbuf == hits.begin()) {
       next_off = curbuf->first;
@@ -477,7 +488,7 @@ size_t Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size,
       break;
     }
     lru.lru_touch(curbuf->second);
-    next_off += curbuf->second->bl.length();
+    next_off += curbuf->second->length();
   }
   return (size_t)(next_off - offset) >= size ? size : (next_off - offset);
 }
@@ -545,7 +556,6 @@ size_t Buffercache::reclaim(size_t min_size)
     Bufferhead *bh = (Bufferhead*)lru.lru_expire();
     if (!bh) {
       dout(6) << "bc: nothing more to reclaim -- freed_size: " << freed_size << endl;
-      assert(0);
       break; // nothing more to reclaim
     } else {
       dout(6) << "bc: reclaim: offset: " << bh->offset << " len: " << bh->length() << endl;
