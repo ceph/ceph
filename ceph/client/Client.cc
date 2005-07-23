@@ -481,8 +481,10 @@ void Client::flush_inode_buffers(Inode *in)
       C_Client_FileFlushFinish *onfinish = new C_Client_FileFlushFinish(*it);
       filer->write(in->inode.ino, g_OSD_FileLayout, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
     }
+#if 0    
     dout(7) << "flush_inode_buffers: dirty buffers, waiting" << endl;
     fc->wait_for_inflight(client_lock);
+#endif
   } 
   else {
 	dout(7) << "no inflight buffers" << endl;
@@ -502,13 +504,13 @@ public:
   }
 };
 
-void Client::flush_buffers(int ttl, int dirty_size)
+void Client::flush_buffers(int ttl, size_t dirty_size)
 {
   // ttl = 0 or dirty_size = 0: flush all
-  if (!bc.dirty_buffers.empty()) {
+  if (!bc.dirty_buffers->empty()) {
     dout(6) << "bc: flush_buffers ttl: " << ttl << " dirty_size: " << dirty_size << endl;
     set<Bufferhead*> expired;
-    bc.dirty_buffers.get_expired(ttl, dirty_size, expired);
+    bc.dirty_buffers->get_expired(ttl, dirty_size, expired);
     assert(!expired.empty());
     for (set<Bufferhead*>::iterator it = expired.begin();
 	 it != expired.end();
@@ -533,15 +535,17 @@ void Client::trim_bcache()
     // need to free buffers 
     if (bc.get_dirty_size() > (unsigned)g_conf.client_bcache_hiwater * (unsigned)g_conf.client_bcache_size / 100UL) {
       // flush buffers until we have low water mark
-      int want_target_size = g_conf.client_bcache_lowater * g_conf.client_bcache_size / 100;
+      size_t want_target_size = (unsigned)g_conf.client_bcache_lowater *
+      (unsigned)g_conf.client_bcache_size / 100UL;
       flush_buffers(g_conf.client_bcache_ttl, want_target_size);
     }
     // Now reclaim buffers
-    dout(6) << "bc: trim_bcache: reclaim: " << bc.get_total_size() - g_conf.client_bcache_size * g_conf.client_bcache_hiwater / 100 << endl;
-    while (bc.reclaim(bc.get_total_size() - 
-                      g_conf.client_bcache_size * 
-		      g_conf.client_bcache_hiwater / 100) == 0) {
-      // cannot reclaim any buffers: wait for flush to finish
+    size_t reclaim_size = bc.get_total_size() - 
+			  (unsigned)g_conf.client_bcache_size *
+			  (unsigned)g_conf.client_bcache_hiwater / 100UL;
+    dout(6) << "bc: trim_bcache: reclaim: " << reclaim_size << endl;
+    while (reclaim_size > 0 && bc.reclaim(reclaim_size) == 0) {
+      // cannot reclaim any buffers: wait for inflight buffers
       assert(!bc.inflight_buffers.empty());
       bc.wait_for_inflight(client_lock);
     }
@@ -581,8 +585,11 @@ void Client::handle_file_caps(MClientFileCaps *m)
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
 	
   // flush buffers?
-  if (in->file_caps & CAP_FILE_WRBUFFER == 0)
-	flush_inode_buffers(in);
+  if (in->file_caps & CAP_FILE_WRBUFFER == 0) {
+	flush_inode_buffers(in); 
+	Filecache *fc = bc.get_fc(in->inode.ino);
+	fc->wait_for_inflight(client_lock);
+  }
 
   // release buffers?
   if (in->file_caps & CAP_FILE_RDCACHE == 0)
@@ -1722,7 +1729,10 @@ int Client::fsync(fh_t fh, bool syncdataonly)
 
   dout(3) << "fsync fh " << fh << " ino " << in->inode.ino << " syncdataonly " << syncdataonly << endl;
  
+  // blocking flush
   flush_inode_buffers(in);
+  Filecache *fc = bc.get_fc(in->inode.ino);
+  fc->wait_for_inflight(client_lock);
 
   if (syncdataonly &&
 	  (in->file_caps & CAP_FILE_WR)) {

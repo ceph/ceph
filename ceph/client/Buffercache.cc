@@ -93,7 +93,7 @@ void Bufferhead::miss_finish()
   } else {
     bc->increase_size(bl.length());
   }
-  dout(6) << "bc: miss_finish: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
+  dout(6) << "bc: miss_finish: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
   //assert(bl.length() == miss_len);
   wakeup_read_waiters();
   wakeup_write_waiters();
@@ -108,11 +108,11 @@ void Bufferhead::dirty()
     state = BUFHD_STATE_DIRTY;
     dirty_since = time(NULL); // start clock for dirty buffer here
     bc->lru.lru_touch(this);
-    dout(6) << "bc: dirty before: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
+    dout(6) << "bc: dirty before: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
     bc->clean_to_dirty(bl.length());
-    dout(6) << "bc: dirty after: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
-    assert(!bc->dirty_buffers.exist(this));
-    bc->dirty_buffers.insert(this); 
+    dout(6) << "bc: dirty after: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
+    assert(!bc->dirty_buffers->exist(this));
+    bc->dirty_buffers->insert(this); 
     assert(!fc->dirty_buffers.count(this));
     fc->dirty_buffers.insert(this);
   } else {
@@ -123,8 +123,8 @@ void Bufferhead::dirty()
 void Bufferhead::dirtybuffers_erase() 
 {
   dout(10) << "bc: erase in dirtybuffers size: " << bl.length() << " in state " << state << endl;
-  assert(bc->dirty_buffers.exist(this));
-  bc->dirty_buffers.erase(this);
+  assert(bc->dirty_buffers->exist(this));
+  bc->dirty_buffers->erase(this);
   assert(fc->dirty_buffers.count(this));
   fc->dirty_buffers.erase(this);
   put();
@@ -140,7 +140,7 @@ void Bufferhead::flush_start()
   assert(!bc->inflight_buffers.count(this));
   bc->inflight_buffers.insert(this);
   bc->dirty_to_tx(bl.length());
-  dout(6) << "bc: flush_start: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
+  dout(6) << "bc: flush_start: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
   assert(!fc->inflight_buffers.count(this));
   fc->inflight_buffers.insert(this);
 }
@@ -153,7 +153,7 @@ void Bufferhead::flush_finish()
   assert(bc->inflight_buffers.count(this));
   bc->inflight_buffers.erase(this);
   bc->tx_to_clean(bl.length());
-  dout(6) << "bc: flush_finish: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers.get_age() << endl;
+  dout(6) << "bc: flush_finish: clean_size: " << bc->get_clean_size() << " dirty_size: " << bc->get_dirty_size() << " rx_size: " << bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
   assert(fc->inflight_buffers.count(this));
   fc->inflight_buffers.erase(this);
   wakeup_write_waiters(); // readers never wait on flushes
@@ -207,18 +207,23 @@ bool Dirtybuffers::exist(Bufferhead* bh)
 }
 
 
-void Dirtybuffers::get_expired(time_t ttl, int left_dirty, set<Bufferhead*>& to_flush) 
+void Dirtybuffers::get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush) 
 {
   dout(6) << "bc: get_expired ttl: " << ttl << " left_dirty: " << left_dirty << endl;
-  if (left_dirty > 0) {
+  if (left_dirty >= bc->get_dirty_size()) {
+    dout(6) << "bc: get_expired: already less dirty than left_dirty!" << endl;
+    return;
+  }
+  size_t cleaned = 0;
+  if (cleaned < bc->get_dirty_size() - left_dirty) {
     time_t now = time(NULL);
     for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.begin();
-      it != _dbufs.end() && left_dirty > 0;
+      it != _dbufs.end();
       it++) {
       if (ttl > now - it->second->dirty_since &&
-	  left_dirty >= (int)it->second->bc->get_dirty_size()) break;
+	  cleaned >= bc->get_dirty_size() - left_dirty) break;
       to_flush.insert(it->second);
-      left_dirty -= it->second->length();
+      cleaned += it->second->length();
     }
     dout(6) << "bc: get_expired to_flush.size(): " << to_flush.size() << endl;
   }
@@ -528,7 +533,7 @@ void Buffercache::release_file(inodeno_t ino)
        it != to_release.end();
        it++) {
     decrease_size(it->second->length());
-    dout(6) << "bc: release_file: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers.get_age() << endl;
+    dout(6) << "bc: release_file: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers->get_age() << endl;
     delete it->second;    
   }
   bcache_map.erase(ino);
@@ -564,7 +569,7 @@ size_t Buffercache::reclaim(size_t min_size)
 
       decrease_size(bh->length());
 
-      dout(6) << "bc: reclaim: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers.get_age() << endl;
+      dout(6) << "bc: reclaim: clean_size: " << get_clean_size() << " dirty_size: " << get_dirty_size() << " rx_size: " << get_rx_size() << " tx_size: " << get_tx_size() << " age: " << dirty_buffers->get_age() << endl;
       assert(clean_size >= 0);
       bh->fc->buffer_map.erase(bh->offset);
       if (bh->fc->buffer_map.empty()) {

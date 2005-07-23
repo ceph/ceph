@@ -117,13 +117,15 @@ class Bufferhead : public LRUObject {
 class Dirtybuffers {
  private:
   multimap<time_t, Bufferhead*> _dbufs;
+  Buffercache *bc;
   // DEBUG
   time_t former_age;
 
  public:
-  Dirtybuffers() { 
+  Dirtybuffers(Buffercache *bc) { 
     former_age = 0;
     dout(5) << "Dirtybuffers() former_age: " << former_age << endl; 
+    this->bc = bc;
   }
   Dirtybuffers(const Dirtybuffers& other);
   Dirtybuffers& operator=(const Dirtybuffers& other);
@@ -131,7 +133,7 @@ class Dirtybuffers {
   void insert(Bufferhead* bh);
   bool empty() { return _dbufs.empty(); }
   bool exist(Bufferhead* bh);
-  void get_expired(time_t ttl, int left_dirty, set<Bufferhead*>& to_flush);
+  void get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush);
   time_t get_age() { 
     time_t age;
     if (_dbufs.empty()) {
@@ -219,10 +221,12 @@ class Buffercache {
  public:
   map<inodeno_t, Filecache*> bcache_map;
   LRU lru;
-  Dirtybuffers dirty_buffers;
+  Dirtybuffers *dirty_buffers;
   set<Bufferhead*> inflight_buffers;
 
-  Buffercache() : dirty_size(0), rx_size(0), tx_size(0), clean_size(0) { }
+  Buffercache() : dirty_size(0), rx_size(0), tx_size(0), clean_size(0) { 
+    dirty_buffers = new Dirtybuffers(this);
+  }
   
   // FIXME: constructor & destructor need to mesh with allocator scheme
   ~Buffercache() {
