@@ -512,6 +512,7 @@ void Client::flush_buffers(int ttl, size_t dirty_size)
     set<Bufferhead*> expired;
     bc.dirty_buffers->get_expired(ttl, dirty_size, expired);
     assert(!expired.empty());
+
     for (set<Bufferhead*>::iterator it = expired.begin();
 	 it != expired.end();
 	 it++) {

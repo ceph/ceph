@@ -53,6 +53,7 @@ class Bufferhead : public LRUObject {
   list<Cond*> read_waiters, write_waiters;
   Buffercache *bc;
   Filecache *fc;
+  bool visited;
   
   // cons/destructors
   Bufferhead(inodeno_t ino, off_t off, Buffercache *bc);
@@ -203,6 +204,7 @@ class Filecache {
     inflight_waiters.clear(); 
   }
 
+  map<off_t, Bufferhead*>::iterator get_buf(size_t len, off_t off);
   map<off_t, Bufferhead*>::iterator overlap(size_t len, off_t off);
   int copy_out(size_t size, off_t offset, char *dst);    
   map<off_t, Bufferhead*>::iterator map_existing(size_t len, off_t start_off, 
@@ -210,6 +212,8 @@ class Filecache {
 		    map<off_t, Bufferhead*>& rx,
 		    map<off_t, Bufferhead*>& tx,
                     map<off_t, size_t>& holes);
+  size_t consolidation_opp(time_t ttl, size_t clean_goal, 
+                           off_t offset, list<off_t>& offlist);
   void simplify();
 };
 
@@ -303,6 +307,7 @@ class Buffercache {
                     map<off_t, Bufferhead*>& buffers, 
 		    map<off_t, Bufferhead*>& rx,
 		    map<off_t, Bufferhead*>& tx);
+  void consolidate(map<inodeno_t, map<off_t, list<off_t> > > cons_map);
   void release_file(inodeno_t ino);       
   size_t reclaim(size_t min_size);
 };
