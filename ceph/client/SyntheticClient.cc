@@ -402,6 +402,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	  int size = t.get_int();
 	  int off = t.get_int();
 	  char *buf = new char[size];
+	  memset(buf, 1, size);            // let's write 1's!
 	  client->write(fh, buf, size, off);
 	  delete[] buf;
 	} else if (strcmp(op, "fsync") == 0) {

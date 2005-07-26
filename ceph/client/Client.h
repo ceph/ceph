@@ -119,7 +119,7 @@ class Inode {
   void put() { ref--; assert(ref >= 0); }
 
   Inode() : mds_dir_auth(-1), last_updated(0),
-	file_caps(0), file_caps_seq(0), num_rd(0), num_wr(0),
+	file_caps(0), file_caps_seq(0), file_mds(0), file_wr_mtime(0), file_wr_size(0), num_rd(0), num_wr(0),
 	ref(0), dir(0), dn(0), symlink(0) { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
