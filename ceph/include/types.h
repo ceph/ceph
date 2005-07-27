@@ -53,14 +53,18 @@ using namespace __gnu_cxx;
 
 namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
-	size_t operator()(unsigned long long __x) const { return __x; }
+	size_t operator()(unsigned long long __x) const { 
+	  static hash<unsigned long> H;
+	  return H((__x >> 32) ^ (__x & 0xffffffff)); 
+	}
   };
   
   template<> struct hash< std::string >
   {
     size_t operator()( const std::string& x ) const
     {
-      return hash< char >()( (x.c_str())[0] );
+	  static hash<const char*> H;
+      return H(x.c_str());
     }
   };
 }

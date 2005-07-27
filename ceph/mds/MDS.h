@@ -176,6 +176,8 @@ class MDS : public Dispatcher {
 					  LogEvent *event,
 					  LogEvent *event2 = 0);
   
+  bool try_open_dir(CInode *in, MClientRequest *req);
+
   // special message types
   void handle_ping(class MPing *m);
 
@@ -213,6 +215,7 @@ class MDS : public Dispatcher {
 										 CInode *ref);
 
   // namespace
+  void encode_dir_contents(CDir *dir, list<class c_inode_info*>& items, int& numfiles);
   void handle_client_readdir(MClientRequest *req, CInode *ref);
   void handle_client_mknod(MClientRequest *req, CInode *ref);
   void handle_client_link(MClientRequest *req, CInode *ref);

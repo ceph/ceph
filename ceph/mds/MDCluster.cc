@@ -6,6 +6,9 @@
 #include <iostream>
 using namespace std;
 
+#include <ext/hash_map>
+using namespace __gnu_cxx;
+
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -47,14 +50,19 @@ void MDCluster::map_osds()
  */
 int MDCluster::hash_dentry( inodeno_t dirino, const string& dn )
 {
+  static hash<const char*> H;
   unsigned r = dirino;
   
-  for (unsigned i=0; i<dn.length(); i++)
-	r += (dn[r] ^ i);
-  
+  if (1) {
+	r += H(dn.c_str());
+  } else {
+	for (unsigned i=0; i<dn.length(); i++)
+	  r += (dn[i] ^ (r+i));
+  }
+
   r %= num_mds;
 
-  dout(12) << "hash_dentry(" << dirino << ", " << dn << ") -> " << r;
+  dout(22) << "hash_dentry(" << dirino << ", " << dn << ") -> " << r << endl;
   return r;
 }
 

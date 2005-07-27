@@ -81,91 +81,91 @@ class MExportDirPrep : public Message {
   }
 
 
-  virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(ino), (char*)&ino);
+  virtual void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
     
 	// exports
 	int ne;
-	s.copy(off, sizeof(int), (char*)&ne);
+	payload.copy(off, sizeof(int), (char*)&ne);
 	off += sizeof(int);
     for (int i=0; i<ne; i++) {
 	  inodeno_t ino;
-	  s.copy(off, sizeof(ino), (char*)&ino);
+	  payload.copy(off, sizeof(ino), (char*)&ino);
 	  off += sizeof(ino);
 	  exports.push_back(ino);
     }
 
     // inodes
     int ni;
-    s.copy(off, sizeof(int), (char*)&ni);
+    payload.copy(off, sizeof(int), (char*)&ni);
     off += sizeof(int);
     for (int i=0; i<ni; i++) {
 	  // inode
       CInodeDiscover *in = new CInodeDiscover;
-      off = in->_unrope(s, off);
+      in->_decode(payload, off);
       inodes.push_back(in);
 	  
 	  // dentry
-	  string d = s.c_str() + off;
-	  off += d.length() + 1;
-	  inode_dentry.insert(pair<inodeno_t, string>(in->get_ino(), d));
+	  string d;
+	  _decode(d, payload, off);
+	  inode_dentry[in->get_ino()] = d;
 	  
 	  // dir ino
 	  inodeno_t dino;
-	  s.copy(off, sizeof(dino), (char*)&dino);
+	  payload.copy(off, sizeof(dino), (char*)&dino);
 	  off += sizeof(dino);
-	  inode_dirino.insert(pair<inodeno_t,inodeno_t>(in->get_ino(),dino));
+	  inode_dirino[in->get_ino()] = dino;
     }
 
     // dirs
     int nd;
-    s.copy(off, sizeof(int), (char*)&nd);
+    payload.copy(off, sizeof(int), (char*)&nd);
     off += sizeof(int);
     for (int i=0; i<nd; i++) {
       CDirDiscover *dir = new CDirDiscover;
-      off = dir->_unrope(s, off);
-      dirs.insert(pair<inodeno_t,CDirDiscover*>(dir->get_ino(), dir));
+      dir->_decode(payload, off);
+      dirs[dir->get_ino()] = dir;
     }
   }
 
-  virtual void encode_payload(crope& s) {
-	s.append((char*)&ino, sizeof(ino));
+  virtual void encode_payload() {
+	payload.append((char*)&ino, sizeof(ino));
 
 	// exports
     int ne = exports.size();
-    s.append((char*)&ne, sizeof(int));
+    payload.append((char*)&ne, sizeof(int));
     for (list<inodeno_t>::iterator it = exports.begin();
          it != exports.end();
          it++) {
 	  inodeno_t ino = *it;
-      s.append((char*)&ino, sizeof(ino));
+      payload.append((char*)&ino, sizeof(ino));
 	}
 
     // inodes
     int ni = inodes.size();
-    s.append((char*)&ni, sizeof(int));
+    payload.append((char*)&ni, sizeof(int));
     for (list<CInodeDiscover*>::iterator iit = inodes.begin();
          iit != inodes.end();
          iit++) {
-      (*iit)->_rope(s);
+      (*iit)->_encode(payload);
 	  
 	  // dentry
-	  s.append(inode_dentry[(*iit)->get_ino()].c_str());
-	  s.append((char)0);
+	  _encode(inode_dentry[(*iit)->get_ino()], payload);
 
 	  // dir ino
 	  inodeno_t ino = inode_dirino[(*iit)->get_ino()];
-	  s.append((char*)&ino, sizeof(ino));
+	  payload.append((char*)&ino, sizeof(ino));
 	}
 
     // dirs
     int nd = dirs.size();
-    s.append((char*)&nd, sizeof(int));
+    payload.append((char*)&nd, sizeof(int));
     for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
          dit != dirs.end();
          dit++)
-	  dit->second->_rope(s);
+	  dit->second->_encode(payload);
   }
 };
 

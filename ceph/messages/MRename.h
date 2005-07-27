@@ -8,7 +8,7 @@ class MRename : public Message {
   string destname;
   int initiator;
 
-  crope inode_state;
+  bufferlist inode_state;
 
  public:
   int get_initiator() { return initiator; }
@@ -16,7 +16,7 @@ class MRename : public Message {
   string& get_srcname() { return srcname; }
   inodeno_t get_destdirino() { return destdirino; }
   string& get_destname() { return destname; }
-  crope& get_inode_state() { return inode_state; }
+  bufferlist& get_inode_state() { return inode_state; }
 
   MRename() {}
   MRename(int initiator,
@@ -24,41 +24,42 @@ class MRename : public Message {
 		  const string& srcname,
 		  inodeno_t destdirino,
 		  const string& destname,
-		  crope& inode_state) :
+		  bufferlist& inode_state) :
 	Message(MSG_MDS_RENAME) {
 	this->initiator = initiator;
 	this->srcdirino = srcdirino;
 	this->srcname = srcname;
 	this->destdirino = destdirino;
 	this->destname = destname;
-	this->inode_state = inode_state;
+	this->inode_state.claim( inode_state );
   }
   virtual char *get_type_name() { return "Rn";}
   
-  virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(initiator), (char*)&initiator);
+  virtual void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(initiator), (char*)&initiator);
 	off += sizeof(initiator);
-	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
+	payload.copy(off, sizeof(srcdirino), (char*)&srcdirino);
 	off += sizeof(srcdirino);
-	s.copy(off, sizeof(destdirino), (char*)&destdirino);
+	payload.copy(off, sizeof(destdirino), (char*)&destdirino);
 	off += sizeof(destdirino);
-	_unrope(srcname, s, off);
-	_unrope(destname, s, off);
+	_decode(srcname, payload, off);
+	_decode(destname, payload, off);
 	size_t len;
-	s.copy(off, sizeof(len), (char*)&len);
+	payload.copy(off, sizeof(len), (char*)&len);
 	off += sizeof(len);
-	inode_state = s.substr(off, len);
+	inode_state.substr_of(payload, off, len);
 	off += len;
   }
-  virtual void encode_payload(crope& s) {
-	s.append((char*)&initiator,sizeof(initiator));
-	s.append((char*)&srcdirino,sizeof(srcdirino));
-	s.append((char*)&destdirino,sizeof(destdirino));
-	_rope(srcname, s);
-	_rope(destname, s);
+  virtual void encode_payload() {
+	payload.append((char*)&initiator,sizeof(initiator));
+	payload.append((char*)&srcdirino,sizeof(srcdirino));
+	payload.append((char*)&destdirino,sizeof(destdirino));
+	_encode(srcname, payload);
+	_encode(destname, payload);
 	size_t len = inode_state.length();
-	s.append((char*)&len, sizeof(len));
-	s.append(inode_state);
+	payload.append((char*)&len, sizeof(len));
+	payload.claim_append(inode_state);
   }
 };
 

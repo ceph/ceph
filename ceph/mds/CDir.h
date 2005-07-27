@@ -20,7 +20,9 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-class CInode;
+
+#include "CInode.h"
+
 class CDentry;
 class MDS;
 class MDCluster;
@@ -50,22 +52,18 @@ class Context;
 #define CDIR_STATE_COMMITTING    (1<<8)   // mid-commit
 #define CDIR_STATE_FETCHING      (1<<9)   // currenting fetching
 
-#define CDIR_STATE_IMPORT        (1<<10)   // flag set if this is an import.
-#define CDIR_STATE_EXPORT        (1<<11)
+#define CDIR_STATE_DELETED       (1<<10)
 
-#define CDIR_STATE_HASHED        (1<<12)   // if hashed.  only hashed+auth on auth node.
-#define CDIR_STATE_HASHING       (1<<13)
-#define CDIR_STATE_UNHASHING     (1<<14)
+#define CDIR_STATE_IMPORT           (1<<11)   // flag set if this is an import.
+#define CDIR_STATE_EXPORT           (1<<12)
+#define CDIR_STATE_IMPORTINGEXPORT  (1<<13)
 
-#define CDIR_STATE_SYNCBYME         (1<<15)
-#define CDIR_STATE_PRESYNC          (1<<16) 
-#define CDIR_STATE_SYNCBYAUTH       (1<<17) 
-#define CDIR_STATE_WAITONUNSYNC     (1<<18)
+#define CDIR_STATE_HASHED           (1<<14)   // if hashed
+#define CDIR_STATE_HASHING          (1<<15)
+#define CDIR_STATE_UNHASHING        (1<<16)
 
-#define CDIR_STATE_AUTHMOVING       (1<<19)  // dir replica bystander
-#define CDIR_STATE_IMPORTINGEXPORT  (1<<20)
 
-#define CDIR_STATE_DELETED          (1<<21)
+
 
 
 // these state bits are preserved by an import/export
@@ -95,24 +93,25 @@ class Context;
 
 #define CDIR_PIN_CHILD     0
 #define CDIR_PIN_OPENED    1  // open by another node
-#define CDIR_PIN_HASHED    2  // hashed
-#define CDIR_PIN_WAITER    3  // waiter(s)
+#define CDIR_PIN_WAITER    2  // waiter(s)
 
-#define CDIR_PIN_IMPORT    4
-#define CDIR_PIN_EXPORT    5
-#define CDIR_PIN_FREEZE    6
-#define CDIR_PIN_PROXY     7  // auth just changed.
+#define CDIR_PIN_IMPORT    3
+#define CDIR_PIN_EXPORT    4
+#define CDIR_PIN_FREEZE    5
+#define CDIR_PIN_PROXY     6  // auth just changed.
 
-#define CDIR_PIN_AUTHPIN   8
+#define CDIR_PIN_AUTHPIN   7
 
-#define CDIR_PIN_IMPORTING 9
-#define CDIR_PIN_IMPORTINGEXPORT 10
+#define CDIR_PIN_IMPORTING 8
+#define CDIR_PIN_IMPORTINGEXPORT 9
 
-#define CDIR_PIN_DIRTY     11
+#define CDIR_PIN_HASHED    10
+#define CDIR_PIN_HASHING   11
+#define CDIR_PIN_DIRTY     12
 
-#define CDIR_PIN_REQUEST   12
+#define CDIR_PIN_REQUEST   13
 
-#define CDIR_NUM_PINS      13
+#define CDIR_NUM_PINS      14
 
 
 
@@ -148,6 +147,8 @@ class Context;
     // waiter   export_dir
     // trigger  handel_export_dir_prep_ack
 
+#define CDIR_WAIT_HASHED        (1<<19)  // hash finish
+
 #define CDIR_WAIT_DNREAD        (1<<20)
 #define CDIR_WAIT_DNLOCK        (1<<21)
 #define CDIR_WAIT_DNUNPINNED    (1<<22)
@@ -168,7 +169,7 @@ ostream& operator<<(ostream& out, class CDir& dir);
 typedef map<string, CDentry*> CDir_map_t;
 
 
-extern map<int, int> cdir_pins;  // counts
+extern int cdir_pins[CDIR_NUM_PINS];
 
 
 class CDir {
@@ -205,6 +206,9 @@ class CDir {
   int        nested_auth_pins;
   int        request_pins;
 
+  // hashed dirs
+  set<int>   hashed_subset;  // HASHING: subset of mds's that are hashed
+
   // context
   MDS              *mds;
 
@@ -218,12 +222,10 @@ class CDir {
   int              dir_rep;
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
 
-
-  // sync (for hashed dirs)
-  set<int>   sync_waiting_for_ack;
-
+  // popularity
   DecayCounter popularity[MDS_NPOP];
 
+  // friends
   friend class CInode;
   friend class MDCache;
   friend class MDiscover;
@@ -238,9 +240,9 @@ class CDir {
 
 
   // -- accessors --
-  CInode *get_inode() { return inode; }
-  CDir *get_parent_dir();
-  inodeno_t ino();
+  inodeno_t ino()        { return inode->ino(); }
+  CInode *get_inode()    { return inode; }
+  CDir *get_parent_dir() { return inode->get_parent_dir(); }
 
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
@@ -267,11 +269,16 @@ class CDir {
   */
   
 
-  // -- manipulation --
-  CDentry* lookup(const string& n);
-
-  // dentries and inodes
+  // -- dentries and inodes --
  public:
+  CDentry* lookup(const string& n) {
+	map<string,CDentry*>::iterator iter = items.find(n);
+	if (iter == items.end()) 
+	  return 0;
+	else
+	  return iter->second;
+  }
+
   CDentry* add_dentry( const string& dname, CInode *in=0 );
   CDentry* add_dentry( const string& dname, inodeno_t ino );
   void remove_dentry( CDentry *dn );         // delete dentry
@@ -289,6 +296,7 @@ class CDir {
   int authority();
   int dentry_authority(const string& d);
   int get_dir_auth() { return dir_auth; }
+  void set_dir_auth(int d);
 
   bool is_open_by_anyone() { return !open_by.empty(); }
   bool is_open_by(int mds) { return open_by.count(mds); }
@@ -376,9 +384,7 @@ class CDir {
 	if (dir_rep == CDIR_REP_NONE) return false;
 	return true;
   }
-  int get_rep_count(MDCluster *mdc);
-  
-  void update_auth(int whoami);
+ 
 
 
   // -- dirtyness --
@@ -397,10 +403,6 @@ class CDir {
   void mark_complete() { state_set(CDIR_STATE_COMPLETE); }
   bool is_clean() { return !state_test(CDIR_STATE_DIRTY); }
 
-
-  // -- encoded state --
-  crope encode_basic_state();
-  int decode_basic_state(crope r, int off=0);
 
 
 
@@ -422,15 +424,7 @@ class CDir {
 	if (request_pins == 0) put(CDIR_PIN_REQUEST);
   }
 
-  
-  // -- sync --
-  bool is_sync() { return is_syncbyme() || is_syncbyauth(); }
-  bool is_syncbyme() { return state & CDIR_STATE_SYNCBYME; }
-  bool is_syncbyauth() { return state & CDIR_STATE_SYNCBYAUTH; }
-  bool is_presync() { return state & CDIR_STATE_PRESYNC; }
-  bool is_waitonnsync() { return state & CDIR_STATE_WAITONUNSYNC; }
-
-  
+    
   // -- waiters --
   bool waiting_for(int tag);
   bool waiting_for(int tag, const string& dn);
@@ -487,7 +481,6 @@ class CDir {
 
   // debuggin bs
   void dump(int d = 0);
-  void dump_to_disk(MDS *m);
 };
 
 
@@ -526,47 +519,24 @@ class CDirDiscover {
   inodeno_t get_ino() { return ino; }
 
   
-  void _rope(crope& r) {
-    r.append((char*)&ino, sizeof(ino));
-    r.append((char*)&nonce, sizeof(nonce));
-    r.append((char*)&dir_auth, sizeof(dir_auth));
-    r.append((char*)&dir_rep, sizeof(dir_rep));
-
-    int nrep_by = rep_by.size();
-    r.append((char*)&nrep_by, sizeof(nrep_by));
-    
-    // rep_by
-    for (set<int>::iterator it = rep_by.begin();
-         it != rep_by.end();
-         it++) {
-      int m = *it;
-      r.append((char*)&m, sizeof(int));
-    }
+  void _encode(bufferlist& bl) {
+    bl.append((char*)&ino, sizeof(ino));
+    bl.append((char*)&nonce, sizeof(nonce));
+    bl.append((char*)&dir_auth, sizeof(dir_auth));
+    bl.append((char*)&dir_rep, sizeof(dir_rep));
+	::_encode(rep_by, bl);
   }
 
-  int _unrope(crope s, int off = 0) {
-    s.copy(off, sizeof(ino), (char*)&ino);
+  void _decode(bufferlist& bl, int& off) {
+    bl.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
-    s.copy(off, sizeof(nonce), (char*)&nonce);
+    bl.copy(off, sizeof(nonce), (char*)&nonce);
     off += sizeof(nonce);
-    s.copy(off, sizeof(dir_auth), (char*)&dir_auth);
+    bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
     off += sizeof(dir_auth);
-    s.copy(off, sizeof(dir_rep), (char*)&dir_rep);
+    bl.copy(off, sizeof(dir_rep), (char*)&dir_rep);
     off += sizeof(dir_rep);
-
-    int nrep_by;
-    s.copy(off, sizeof(int), (char*)&nrep_by);
-    off += sizeof(int);
-    
-    // open_by
-    for (int i=0; i<nrep_by; i++) {
-      int m;
-      s.copy(off, sizeof(int), (char*)&m);
-      off += sizeof(int);
-      rep_by.insert(m);
-    }
-
-    return off;
+	::_decode(rep_by, bl, off);
   }
 
 };
@@ -625,8 +595,11 @@ class CDirExport {
 
 	//dir->nitems = st.nitems;
 	dir->version = st.version;
-	dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
-	  (st.state & CDIR_MASK_STATE_EXPORTED);
+	if (dir->state & CDIR_STATE_HASHED) 
+	  dir->state |= CDIR_STATE_AUTH;         // just inherit auth flag when hashed
+	else
+	  dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
+		(st.state & CDIR_MASK_STATE_EXPORTED);
 	dir->dir_auth = st.dir_auth;
 	dir->dir_rep = st.dir_rep;
 

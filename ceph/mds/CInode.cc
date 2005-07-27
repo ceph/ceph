@@ -109,6 +109,9 @@ CDir *CInode::get_or_open_dir(MDS *mds)
 
   if (dir) return dir;
 
+  // can't open a dir if we're frozen_dir, bc of hashing stuff.
+  assert(!is_frozen_dir());
+
   // only auth can open dir alone.
   assert(is_auth());
   set_dir( new CDir(this, mds, true) );
@@ -339,6 +342,13 @@ bool CInode::is_frozen()
   return false;
 }
 
+bool CInode::is_frozen_dir()
+{
+  if (parent && parent->dir->is_frozen_dir())
+	return true;
+  return false;
+}
+
 bool CInode::is_freezing()
 {
   if (parent && parent->dir->is_freezing())
@@ -442,7 +452,16 @@ int CInode::authority() {
 }
 
 
-
+CInodeDiscover* CInode::replicate_to( int rep )
+{
+  // relax locks?
+  if (!is_cached_by_anyone())
+	replicate_relax_locks();
+  
+  // return the thinger
+  int nonce = cached_by_add( rep );
+  return new CInodeDiscover( this, nonce );
+}
 
 
 // debug crap -----------------------------
@@ -455,11 +474,4 @@ void CInode::dump(int dep)
   if (dir)
 	dir->dump(dep);
 }
-
-void CInode::dump_to_disk(MDS *mds) 
-{
-  if (dir)
-	dir->dump_to_disk(mds);
-}
-
 

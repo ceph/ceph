@@ -1,20 +1,20 @@
-#ifndef __MUNHASHDIR_H
-#define __MUNHASHDIR_H
+#ifndef __MHASHDIRACK_H
+#define __MHASHDIRACK_H
 
-#include "msg/Message.h"
+#include "MHashDir.h"
 
-class MUnhashDir : public Message {
+class MHashDirAck : public Message {
   inodeno_t ino;
 
  public:
   inodeno_t get_ino() { return ino; }
   
-  MUnhashDir() {}
-  MUnhashDir(inodeno_t ino) :
-	Message(MSG_MDS_UNHASHDIR) {
+  MHashDirAck() {}
+  MHashDirAck(inodeno_t ino) :
+	Message(MSG_MDS_HASHDIRACK) {
 	this->ino = ino;
   }  
-  virtual char *get_type_name() { return "UH"; }
+  virtual char *get_type_name() { return "HAck"; }
   
   virtual void decode_payload() {
 	payload.copy(0, sizeof(ino), (char*)&ino);

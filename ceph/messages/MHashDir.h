@@ -2,33 +2,48 @@
 #define __MHASHDIR_H
 
 #include "msg/Message.h"
-
-#include <ext/rope>
-using namespace std;
+#include "include/bufferlist.h"
 
 class MHashDir : public Message {
-  string path;
+  inodeno_t ino;
+  bufferlist state;
+  int nden;
   
  public:  
-  crope  dir_rope;
-
   MHashDir() {}
-  MHashDir(string& path) : 
+  MHashDir(inodeno_t ino) : 
 	Message(MSG_MDS_HASHDIR) {
-	this->path = path;
+	this->ino = ino;
+	nden = 0;
   }
   virtual char *get_type_name() { return "Ha"; }
 
-  string& get_path() { return path; }
-  crope& get_state() { return dir_rope; }
+  inodeno_t get_ino() { return ino; }
+  bufferlist& get_state() { return state; }
+  bufferlist* get_state_ptr() { return &state; }
+  int       get_nden() { return nden; }
   
-  virtual void decode_payload(crope& s) {
-	path = s.c_str();
-	dir_rope = s.substr(path.length() + 1, s.length() - path.length() - 1);
+  void set_nden(int n) { nden = n; }
+  void inc_nden() { nden++; }
+
+  void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(ino), (char*)&ino);
+	off += sizeof(ino);
+	payload.copy(off, sizeof(nden), (char*)&nden);
+	off += sizeof(nden);
+
+	size_t len;
+	payload.copy(off, sizeof(len), (char*)&len);
+	off += sizeof(len);
+	state.substr_of(payload, off, len);
   }
-  virtual void encode_payload(crope& s) {
-	s.append(path.c_str(), path.length() + 1);
-	s.append(dir_rope);
+  void encode_payload() {
+	payload.append((char*)&ino, sizeof(ino));
+	payload.append((char*)&nden, sizeof(nden));
+	size_t size = state.length();
+	payload.append((char*)&size, sizeof(size));
+	payload.claim_append(state);
   }
 
 };

@@ -1,13 +1,19 @@
 
-- test exports w/ new capability stuff
+/- finish hashed_subset notify business
+- hashed readdir
+- carefully define/document frozen wrt dir_auth vs hashing
+
+
+/- lacc
+/- streakwave
+/- mapreduce
+
+- make logstream.flush align itself to stipes
+
 
 
 KNOWN BUGS to fix after fast
-- RDWR on synthetic client results in
-fakesyn: mds/MDS.cc:2334: void MDS::handle_client_close(MClientRequest*, CInode*): Assertion `cur->softlock.can_write(true)' failed.
-
 - hard links!
-
 - implement truncate() for real
 
 
@@ -15,11 +21,10 @@ UPCOMING TODOS:
 /- redo client capability stuff
 - finish buffer cache
 
-- hash directories!!
-
 - plan out osd replication, recovery structures
 
-- redo CDir hash in terms of const char * in CDentry?
+- redo CDir hash_map in terms of const char * in CDentry?
+ - or try google's hash library!!
 
 - what to do about fuse direct_io and mmap()?
 

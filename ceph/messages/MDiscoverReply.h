@@ -154,97 +154,96 @@ class MDiscoverReply : public Message {
 
 
   // ...
-  virtual void decode_payload(crope& r, int& off) {
-	r.copy(off, sizeof(base_ino), (char*)&base_ino);
+  virtual void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
-    r.copy(off, sizeof(bool), (char*)&no_base_dir);
+    payload.copy(off, sizeof(bool), (char*)&no_base_dir);
     off += sizeof(bool);
-    r.copy(off, sizeof(bool), (char*)&no_base_dentry);
+    payload.copy(off, sizeof(bool), (char*)&no_base_dentry);
     off += sizeof(bool);
-	//    r.copy(off, sizeof(bool), (char*)&flag_forward);
+	//    payload.copy(off, sizeof(bool), (char*)&flag_forward);
     //off += sizeof(bool);
-    r.copy(off, sizeof(bool), (char*)&flag_error_dn);
+    payload.copy(off, sizeof(bool), (char*)&flag_error_dn);
     off += sizeof(bool);
-	error_dentry = r.c_str() + off;
-	off += error_dentry.length() + 1;
-    r.copy(off, sizeof(bool), (char*)&flag_error_dir);
+	
+	_decode(error_dentry, payload, off);
+    payload.copy(off, sizeof(bool), (char*)&flag_error_dir);
     off += sizeof(bool);
     
     // dirs
     int n;
-    r.copy(off, sizeof(int), (char*)&n);
+    payload.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
       dirs.push_back( new CDirDiscover() );
-      off = dirs[i]->_unrope(r, off);
+      dirs[i]->_decode(payload, off);
     }
 	//dout(12) << n << " dirs out" << endl;
 
     // inodes
-    r.copy(off, sizeof(int), (char*)&n);
+    payload.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
       inodes.push_back( new CInodeDiscover() );
-      off = inodes[i]->_unrope(r, off);
+      inodes[i]->_decode(payload, off);
     }
 	//dout(12) << n << " inodes out" << endl;
 
     // filepath
-    path._unrope(r, off);
+    path._decode(payload, off);
 	//dout(12) << path.depth() << " dentries out" << endl;
 
 	// path_xlock
-	r.copy(off, sizeof(int), (char*)&n);
+	payload.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
 	  bool b;
-	  r.copy(off, sizeof(bool), (char*)&b);
+	  payload.copy(off, sizeof(bool), (char*)&b);
 	  off += sizeof(bool);
 	  path_xlock.push_back(b);
     }
   }
-  virtual void encode_payload(crope& r) {
-	r.append((char*)&base_ino, sizeof(base_ino));
-	r.append((char*)&no_base_dir, sizeof(bool));
-	r.append((char*)&no_base_dentry, sizeof(bool));
-	//	r.append((char*)&flag_forward, sizeof(bool));
-	r.append((char*)&flag_error_dn, sizeof(bool));
+  void encode_payload() {
+	payload.append((char*)&base_ino, sizeof(base_ino));
+	payload.append((char*)&no_base_dir, sizeof(bool));
+	payload.append((char*)&no_base_dentry, sizeof(bool));
+	//	payload.append((char*)&flag_forward, sizeof(bool));
+	payload.append((char*)&flag_error_dn, sizeof(bool));
 
-	r.append((char*)error_dentry.c_str());
-	r.append((char)0);
-
-	r.append((char*)&flag_error_dir, sizeof(bool));
+	_encode(error_dentry, payload);
+	payload.append((char*)&flag_error_dir, sizeof(bool));
 
 	// dirs
     int n = dirs.size();
-    r.append((char*)&n, sizeof(int));
+    payload.append((char*)&n, sizeof(int));
     for (vector<CDirDiscover*>::iterator it = dirs.begin();
          it != dirs.end();
          it++) 
-	  (*it)->_rope( r );
+	  (*it)->_encode( payload );
 	//dout(12) << n << " dirs in" << endl;
     
 	// inodes
     n = inodes.size();
-    r.append((char*)&n, sizeof(int));
+    payload.append((char*)&n, sizeof(int));
     for (vector<CInodeDiscover*>::iterator it = inodes.begin();
          it != inodes.end();
          it++) 
- 	  (*it)->_rope( r );
+ 	  (*it)->_encode( payload );
 	//dout(12) << n << " inodes in" << endl;
 
 	// path
-    path._rope( r );
+    path._encode( payload );
 	//dout(12) << path.depth() << " dentries in" << endl;
 
 	// path_xlock
 	n = path_xlock.size();
-	r.append((char*)&n, sizeof(int));
+	payload.append((char*)&n, sizeof(int));
 	for (vector<bool>::iterator it = path_xlock.begin();
 		 it != path_xlock.end();
 		 it++) {
 	  bool b = *it;
-	  r.append((char*)&b, sizeof(bool));
+	  payload.append((char*)&b, sizeof(bool));
 	}
   }
 

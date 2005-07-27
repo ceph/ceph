@@ -221,7 +221,15 @@ void LogStream::wait_for_next_event(Context *c)
   if (tail + size > sync_pos) {
 	size = sync_pos - tail;
 	dout(15) << "wait_for_next_event ugh.. read_pos is " << read_pos << ", tail is " << tail << ", sync_pos only " << sync_pos << ", flush_pos " << flush_pos << ", append_pos " << append_pos << endl;
-	assert(size > 0);   // bleh, wait for sync, etc.
+	
+	if (size == 0) {
+	  //	assert(size > 0);   // bleh, wait for sync, etc.
+	  // just do it.  communication is ordered, right?   FIXME SOMEDAY this is totally gross blech
+	  //size = flush_pos - tail;
+	  // read tiny bit, kill some time
+	  assert(flush_pos > sync_pos);
+	  size = 1;
+	}
   }
 
   dout(15) << "wait_for_next_event reading from pos " << tail << " len " << size << endl;

@@ -2,7 +2,7 @@
 #include "CDir.h"
 #include "CDentry.h"
 #include "CInode.h"
-#include "MDStore.h"
+
 #include "MDS.h"
 #include "MDCluster.h"
 
@@ -14,12 +14,13 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << "        cdir: "
 
-map<int,int> cdir_pins;
+
+// PINS
+int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
 static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "child",
   "opened",
-  "hashed",
   "waiter",
   "import",
   "export",
@@ -27,10 +28,13 @@ static char* cdir_pin_names[CDIR_NUM_PINS] = {
   "proxy",
   "authpin",
   "imping",
-  "impgex",
-  "reqpins",
-  "dirty"
+  "impex",
+  "hashed",
+  "hashing",
+  "dirty",
+  "reqpins"
 };
+
 
 ostream& operator<<(ostream& out, CDir& dir)
 {
@@ -40,6 +44,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.is_dirty()) out << " dirty";
   if (dir.is_import()) out << " import";
   if (dir.is_export()) out << " export";
+  if (dir.is_hashed()) out << " hashed";
   if (dir.is_auth()) {
 	out << " auth";
 	if (dir.is_open_by_anyone())
@@ -71,6 +76,7 @@ ostream& operator<<(ostream& out, CDir& dir)
 }
 
 
+// -------------------------------------------------------------------
 // CDir
 
 CDir::CDir(CInode *in, MDS *mds, bool auth)
@@ -89,11 +95,14 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
   ref = 0;
 
   // auth
+  dir_auth = -1;
   assert(in->is_dir());
   if (auth) 
 	state |= CDIR_STATE_AUTH;
-  if (in->dir_is_hashed()) 
+  if (in->dir_is_hashed()) {
+	assert(0);                      // when does this happen?  
 	state |= CDIR_STATE_HASHED;
+  }
   
   auth_pins = 0;
   nested_auth_pins = 0;
@@ -103,44 +112,11 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
 }
 
 
-inodeno_t CDir::ino() {
-  return inode->ino();
-}
 
 
-CDir *CDir::get_parent_dir()
-{
-  return inode->get_parent_dir();
-}
-
-
-
-int CDir::get_rep_count(MDCluster *mdc) 
-{
-  if (dir_rep == CDIR_REP_NONE) 
-	return 1;
-  if (dir_rep == CDIR_REP_LIST) 
-	return 1 + dir_rep_by.size();
-  if (dir_rep == CDIR_REP_ALL) 
-	return mdc->get_num_mds();
-  assert(2+2==5);
-}
-
-
-
-
-
-CDentry* CDir::lookup(const string& n) {
-  //cout << " lookup " << n << " in " << this << endl;
-  
-  map<string,CDentry*>::iterator iter = items.find(n);
-  if (iter != items.end()) return iter->second;
-
-  return NULL;
-}
-
-
-
+/***
+ * linking fun
+ */
 
 CDentry* CDir::add_dentry( const string& dname, inodeno_t ino) 
 {
@@ -358,73 +334,9 @@ void CDir::remove_null_dentries() {
 
 
 
-// state encoding
-
-/*
-
-what DIR state is encoded when
-
-- dir open / discover
- nonce
- dir_auth
- dir_rep/by
-
-- dir update
- dir_rep/by
-
-- export
- dir_rep/by
- nitems
- version
- state
- popularity
-
-
-*/
-
-crope CDir::encode_basic_state()
-{
-  crope r;
-
-  // dir rep
-  r.append((char*)&dir_rep, sizeof(int));
-  
-  // dir_rep_by
-  int n = dir_rep_by.size();
-  r.append((char*)&n, sizeof(int));
-  for (set<int>::iterator it = dir_rep_by.begin(); 
-	   it != dir_rep_by.end();
-	   it++) {
-	int j = *it;
-	r.append((char*)&j, sizeof(j));
-  }
-  
-  return r;
-}
- 
-int CDir::decode_basic_state(crope r, int off)
-{
-  // dir_rep
-  r.copy(off, sizeof(int), (char*)&dir_rep);
-  off += sizeof(int);
-
-  // dir_rep_by
-  int n;
-  r.copy(off, sizeof(int), (char*)&n);
-  off += sizeof(int);
-  for (int i=0; i<n; i++) {
-	int j;
-	r.copy(off, sizeof(int), (char*)&j);
-	dir_rep_by.insert(j);
-	off += sizeof(int);
-  }
-
-  return off;
-}
-
-
-
-// wiating
+/****************************************
+ * WAITING
+ */
 
 bool CDir::waiting_for(int tag)
 {
@@ -450,7 +362,8 @@ void CDir::add_waiter(int tag,
 void CDir::add_waiter(int tag, Context *c) {
   // hierarchical?
   if (tag & CDIR_WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
-	if (is_freezing_tree_root() || is_frozen_tree_root()) {
+	if (is_freezing_tree_root() || is_frozen_tree_root() ||
+		is_freezing_dir() || is_frozen_dir()) {
 	  // it's us, pin here.  (fall thru)
 	} else {
 	  // pin parent!
@@ -626,50 +539,65 @@ void CDir::get(int by) {
 
 
 
-// authority
+/********************************
+ * AUTHORITY
+ */
 
 /*
-void CDir::update_auth(int whoami) {
-  if (inode->dir_is_auth(whoami) && !is_auth())
-	state_set(CDIR_STATE_AUTH);
-  if (!inode->dir_is_auth(whoami) && is_auth())
-	state_clear(CDIR_STATE_AUTH);
-}
-*/
-
+ * simple rule: if dir_auth isn't explicit, auth is the same as the inode.
+ */
 int CDir::authority() 
 {
-  if (dir_auth >= 0)
-	return dir_auth;
+  if (get_dir_auth() >= 0)
+	return get_dir_auth();
 
+  /*
   CDir *parent = inode->get_parent_dir();
   if (parent)
 	return parent->authority();
-
+  
   // root, or dangling
-  assert(inode->is_root() || inode->is_dangling());  
+  assert(inode->is_root());  // no dirs under danglers!?
+  //assert(inode->is_root() || inode->is_dangling());  
+  */
+
   return inode->authority();
 }
 
 int CDir::dentry_authority(const string& dn )
 {
+  // hashing -- subset of nodes have hashed the contents
+  if (is_hashing() && !hashed_subset.empty()) {
+	int hashauth = mds->get_cluster()->hash_dentry( inode->ino(), dn );  // hashed
+	if (hashed_subset.count(hashauth))
+	  return hashauth;
+  }
+
+  // hashed
   if (is_hashed()) {
 	return mds->get_cluster()->hash_dentry( inode->ino(), dn );  // hashed
   }
   
-  if (dir_auth == CDIR_AUTH_PARENT) {
-	dout(15) << "dir_auth = parent at " << *this << endl;
+  if (get_dir_auth() == CDIR_AUTH_PARENT) {
+	//dout(15) << "dir_auth = parent at " << *this << endl;
 	return inode->authority();       // same as my inode
   }
 
   // it's explicit for this whole dir
-  dout(15) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
-  return dir_auth;
+  //dout(15) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
+  return get_dir_auth();
+}
+
+void CDir::set_dir_auth(int d) 
+{ 
+  dout(10) << "setting dir_auth=" << d << " from " << dir_auth << " on " << *this << endl;
+  dir_auth = d; 
 }
 
 
-
-// auth pins
+/*****************************************
+ * AUTH PINS
+ */
 
 void CDir::auth_pin() {
   if (auth_pins == 0)
@@ -725,6 +653,12 @@ void CDir::adjust_nested_auth_pins(int inc)
   }
 }
 
+
+
+/*****************************************************************************
+ * FREEZING
+ */
+
 void CDir::on_freezeable()
 {
   // check for anything pending freezeable
@@ -737,8 +671,7 @@ void CDir::on_freezeable()
   finish_waiting(CDIR_WAIT_FREEZEABLE);
 }
 
-
-// FREEZE
+// FREEZE TREE
 
 class C_MDS_FreezeTree : public Context {
   CDir *dir;
@@ -819,6 +752,7 @@ bool CDir::is_freezing_tree()
   while (1) {
 	if (dir->is_freezing_tree_root()) return true;
 	if (dir->is_import()) return false;
+	if (dir->is_hashed()) return false;
 	if (dir->inode->parent)
 	  dir = dir->inode->parent->dir;
 	else
@@ -832,6 +766,7 @@ bool CDir::is_frozen_tree()
   while (1) {
 	if (dir->is_frozen_tree_root()) return true;
 	if (dir->is_import()) return false;
+	if (dir->is_hashed()) return false;
 	if (dir->inode->parent)
 	  dir = dir->inode->parent->dir;
 	else
@@ -924,7 +859,7 @@ void CDir::unfreeze_dir()
 
 
 
-
+// -----------------------------------------------------------------
 // debug shite
 
 
@@ -954,19 +889,3 @@ void CDir::dump(int depth) {
 
 }
 
-
-void CDir::dump_to_disk(MDS *mds)
-{
-  map<string,CDentry*>::iterator iter = items.begin();
-  while (iter != items.end()) {
-	CDentry* d = iter->second;
-	if (d->inode->dir != NULL) {
-	  dout(10) << "dump2disk: " << d->inode->inode.ino << " " << d->name << '/' << endl;
-	  d->inode->dump_to_disk(mds);
-	}
-	iter++;
-  }
-
-  dout(10) << "dump2disk: writing dir " << inode->inode.ino << endl;
-  mds->mdstore->commit_dir(inode->dir, NULL);
-}

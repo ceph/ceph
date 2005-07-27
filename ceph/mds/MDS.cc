@@ -34,7 +34,6 @@
 #include "messages/MClientReply.h"
 
 #include "messages/MLock.h"
-#include "messages/MInodeWriterClosed.h"
 
 #include "messages/MInodeLink.h"
 
@@ -379,9 +378,11 @@ void MDS::my_dispatch(Message *m)
 
   switch (m->get_dest_port()) {
 	
+	/*
   case MDS_PORT_STORE:
 	mdstore->proc_message(m);
 	break;
+	*/
 
   case MDS_PORT_ANCHORMGR:
 	anchormgr->proc_message(m);
@@ -429,7 +430,7 @@ void MDS::my_dispatch(Message *m)
   */
 
 
-  // flush log
+  // flush log to disk after every op.  for now.
   mdlog->flush();
 
   // trim cache
@@ -477,10 +478,29 @@ void MDS::my_dispatch(Message *m)
 	  num_bal_times--;
 	}
 	
+	static map<int,int> didhash;
+	if (0 && elapsed.sec() > 15 && !didhash[whoami]) {
+	  CInode *in = mdcache->get_inode(100000010);
+	  if (in && in->dir) {
+		if (in->dir->is_auth()) 
+		  mdcache->hash_dir(in->dir);
+		didhash[whoami] = 1;
+	  }
+	}
+	if (0 && elapsed.sec() > 25 && didhash[whoami] == 1) {
+	  CInode *in = mdcache->get_inode(100000010);
+	  if (in && in->dir) {
+		if (in->dir->is_auth())
+		  mdcache->unhash_dir(in->dir);
+		didhash[whoami] = 2;
+	  }
+	}
+	  
+
   }
 
   // hack
-  if (whoami == 0) {
+  if (false && whoami == 0) {
 	static bool didit = false;
 	
 	// 7 to 1
@@ -798,6 +818,20 @@ void MDS::handle_client_request(MClientRequest *req)
 	  messenger->send_message(new MClientReply(req, r),
 							  MSG_ADDR_CLIENT(req->get_client()), 0,
 							  MDS_PORT_SERVER);
+
+	  // <HACK>
+	  if (refpath.last_bit() == ".hash" &&
+		  refpath.depth() > 1) {
+		dout(1) << "got explicit hash command " << refpath << endl;
+		CDir *dir = trace[trace.size()-1]->get_inode()->dir;
+		if (!dir->is_hashed() &&
+			!dir->is_hashing() &&
+			dir->is_auth())
+		  mdcache->hash_dir(dir);
+	  }
+	  // </HACK>
+
+
 	  delete req;
 	  return;
 	}
@@ -1044,9 +1078,54 @@ void MDS::handle_client_chown(MClientRequest *req,
 
 
 
+bool MDS::try_open_dir(CInode *in, MClientRequest *req)
+{
+  if (!in->dir && in->is_frozen_dir()) {
+	// doh!
+	dout(10) << " dir inode is frozen, can't open dir, waiting " << *in << endl;
+	assert(in->get_parent_dir());
+	in->get_parent_dir()->add_waiter(CDIR_WAIT_UNFREEZE,
+									 new C_MDS_RetryRequest(this, req, in));
+	return false;
+  }
+
+  in->get_or_open_dir(this);
+  return true;
+}
 
 
 // DIRECTORY and NAMESPACE OPS
+
+
+void MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items, int& numfiles)
+{
+  for (CDir_map_t::iterator it = dir->begin(); 
+	   it != dir->end(); 
+	   it++) {
+	CDentry *dn = it->second;
+	
+	// hashed?
+	if (dir->is_hashed() &&
+		whoami != get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first ))
+	  continue;
+	
+	// is dentry readable?
+	if (dn->is_xlocked()) {
+	  // ***** FIXME *****
+	  dout(10) << "warning, returning xlocked dentry, we are technically WRONG" << endl;
+	}
+	
+	CInode *in = dn->inode;
+	if (!in) continue;  // null dentry?
+	
+	dout(12) << "including inode " << *in << endl;
+
+	// add this item
+	// note: c_inode_info makes note of whether inode data is readable.
+	items.push_back( new c_inode_info(in, whoami, it->first) );
+	numfiles++;
+  }
+}
 
 
 void MDS::handle_client_readdir(MClientRequest *req,
@@ -1075,17 +1154,9 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	return;
   }
   
-  cur->get_or_open_dir(this);
-  assert(cur->dir->is_auth());
-
-  // frozen?
-  if (cur->dir->is_frozen()) {
-	// doh!
-	dout(10) << " dir is frozen, waiting" << endl;
-	cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
-						 new C_MDS_RetryRequest(this, req, cur));
+  if (!try_open_dir(cur, req))
 	return;
-  }
+  assert(cur->dir->is_auth());
 
   // check perm
   if (!mdcache->inode_hard_read_start(cur,req))
@@ -1100,32 +1171,15 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	return;
   }
   
+  // build dir contents
+  list<c_inode_info*> items;
+  int numfiles = 0;
+  encode_dir_contents(cur->dir, items, numfiles);
+  
   // yay, reply
   MClientReply *reply = new MClientReply(req);
-  
-  // build dir contents
-  CDir_map_t::iterator it;
-  int numfiles = 0;
-  for (it = cur->dir->begin(); it != cur->dir->end(); it++) {
-	CDentry *dn = it->second;
-	
-	// is dentry readable?
-	if (dn->is_xlocked()) {
-	  // ***** FIXME *****
-	  dout(10) << "warning, returning xlocked dentry, we are technically WRONG" << endl;
-	}
-	
-	CInode *in = dn->inode;
-	if (!in) continue;  // null dentry?
+  reply->take_dir_items(items);
 
-	dout(12) << "including inode " << *in << endl;
-
-	// add this item
-	// note: c_inode_info makes note of whether inode data is readable.
-	reply->add_dir_item(new c_inode_info(in, whoami, it->first));
-	numfiles++;
-  }
-  
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(0);
   
@@ -1187,7 +1241,8 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
 	return 0;
   }
   
-  CDir *dir = diri->get_or_open_dir(this);
+  if (!try_open_dir(diri, req)) return 0;
+  CDir *dir = diri->dir;
   
   // make sure it's my dentry
   int dnauth = dir->dentry_authority(name);  
@@ -1200,6 +1255,14 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   }
   // ok, done passing buck.
 
+
+  // frozen?
+  if (dir->is_frozen()) {
+	dout(7) << "dir is frozen " << *dir << endl;
+	dir->add_waiter(CDIR_WAIT_UNFREEZE,
+					new C_MDS_RetryRequest(this, req, diri));
+	return 0;
+  }
 
   // make sure name doesn't already exist
   CDentry *dn = dir->lookup(name);
@@ -1290,7 +1353,8 @@ void MDS::handle_client_link(MClientRequest *req, CInode *ref)
 	return;
   }
   
-  CDir *dir = ref->get_or_open_dir(this);
+  if (!try_open_dir(ref, req)) return;
+  CDir *dir = ref->dir;
   dout(7) << "handle_client_link dir is " << *dir << endl;
   
   // make sure it's my dentry
@@ -1499,7 +1563,8 @@ void MDS::handle_client_unlink(MClientRequest *req,
 	return;
   }
   
-  CDir *dir = diri->get_or_open_dir(this);
+  if (!try_open_dir(diri, req)) return;
+  CDir *dir = diri->dir;
   int dnauth = dir->dentry_authority(name);  
 
   // does it exist?
@@ -1547,7 +1612,9 @@ void MDS::handle_client_unlink(MClientRequest *req,
 	  // rmdir
 	  
 	  // open dir?
-	  if (in->is_auth() && !in->dir) in->get_or_open_dir(this);
+	  if (in->is_auth() && !in->dir) {
+		if (!try_open_dir(in, req)) return;
+	  }
 
 	  // not dir auth?  (or not open, which implies the same!)
 	  if (!in->dir) {
@@ -1780,7 +1847,8 @@ void MDS::handle_client_rename(MClientRequest *req,
 	return;
   }
   
-  CDir *srcdir = srcdiri->get_or_open_dir(this);
+  if (!try_open_dir(srcdiri, req)) return;
+  CDir *srcdir = srcdiri->dir;
   dout(7) << "handle_client_rename srcdir is " << *srcdir << endl;
   
   // make sure it's my dentry
@@ -1889,7 +1957,8 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   if (trace.size() == destpath.depth()) {
 	if (d->is_dir()) {
 	  // mv /some/thing /to/some/dir 
-	  destdir = d->get_or_open_dir(this);         // /to/some/dir
+	  if (!try_open_dir(d, req)) return;
+	  destdir = d->dir;                           // /to/some/dir
 	  destname = req->get_filepath().last_bit();  // thing
 	  destpath.add_dentry(destname);
 	} else {
@@ -1901,8 +1970,9 @@ void MDS::handle_client_rename_2(MClientRequest *req,
   else if (trace.size() == destpath.depth()-1) {
 	if (d->is_dir()) {
 	  // mv /some/thing /to/some/place_that_maybe_dne     (we might be replica)
-	  destdir = d->get_or_open_dir(this);   // /to/some
-	  destname = destpath.last_bit();       // place_that_MAYBE_dne
+	  if (!try_open_dir(d, req)) return;
+	  destdir = d->dir;                  // /to/some
+	  destname = destpath.last_bit();    // place_that_MAYBE_dne
 	} else {
 	  dout(7) << "dest dne" << endl;
 	  reply_request(req, -EINVAL);
@@ -2173,6 +2243,7 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   newi->inode.mode |= INODE_MODE_DIR;
   
   // init dir to be empty
+  assert(!newi->is_frozen_dir());  // bc mknod worked
   CDir *newdir = newi->get_or_open_dir(this);
   newdir->mark_complete();
   newdir->mark_dirty();
@@ -2371,7 +2442,10 @@ void MDS::handle_client_release(MClientRequest *req, CInode *cur)
 
   // update soft metadata
   if (cap->issued() & CAP_FILE_WR) {
-	assert(cur->softlock.can_write(true));   // otherwise we're toast???
+
+	// FIXME THIS IS BROKEN
+	//assert(cur->softlock.can_write(true));   // otherwise we're toast???
+
 	if (!mdcache->inode_soft_write_start(cur, req))
 	  return;  // wait
 

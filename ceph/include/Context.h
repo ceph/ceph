@@ -1,38 +1,26 @@
-
 #ifndef __CONTEXT_H
 #define __CONTEXT_H
 
 #include "config.h"
 
-#include <assert.h>
 #include <list>
 #include <iostream>
 using namespace std;
 
-class MDS;
 
-// Context, for retaining context of a message being processed..
-// pure abstract!
+/*
+ * Context - abstract callback class
+ */
 class Context {
- private:
-  int result;
-  
  public:
   virtual ~Context() {}       // we want a virtual destructor!!!
-
   virtual void finish(int r) = 0;
-  //virtual void fail(int r) = 0;
-
-  virtual bool can_redelegate() {
-	return false;
-  }
-  virtual void redelegate(MDS *mds, int newmds) { 
-	assert(false);
-  }
-  
 };
 
 
+/*
+ * finish and destroy a list of Contexts
+ */
 inline void finish_contexts(list<Context*>& finished, 
 							int result = 0)
 {
@@ -47,5 +35,24 @@ inline void finish_contexts(list<Context*>& finished,
 	delete c;
   }
 }
+
+/*
+ * C_Contexts - set of Contexts
+ */
+class C_Contexts : public Context {
+  list<Context*> clist;
+  
+public:
+  void add(Context* c) {
+	clist.push_back(c);
+  }
+  void take(list<Context*>& ls) {
+	clist.splice(clist.end(), ls);
+  }
+  void finish(int r) {
+	finish_contexts(clist, r);
+  }
+};
+
 
 #endif

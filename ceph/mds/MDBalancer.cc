@@ -456,14 +456,16 @@ void MDBalancer::find_exports(CDir *dir,
 	if (!in) continue;
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;  // clearly not popular
-	if (mds->mdcache->exports.count(in->dir)) continue;  
+	
+	if (in->dir->is_export()) continue;
+	if (in->dir->is_hashed()) continue;
 	if (already_exporting.count(in->dir)) continue;
 
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
 	if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
 	
+	// how popular?
 	double pop = in->dir->popularity[MDS_POP_CURDOM].get();
-
 	//cout << "   in " << in->inode.ino << " " << pop << endl;
 
 	if (pop < minchunk) continue;
@@ -667,50 +669,67 @@ void MDBalancer::show_imports(bool external)
 {
   int db = 7; //debug level
 
-  int num = mds->mdcache->imports.size();
-  if (num == 0) {
-	dout(db) << "no imports/exports" << endl;
+  
+  if (mds->mdcache->imports.empty() &&
+	  mds->mdcache->hashdirs.empty()) {
+	dout(db) << "no imports/exports/hashdirs" << endl;
 	return;
   }
-  dout(db) << "imports/exports:" << endl;
+  dout(db) << "imports/exports/hashdirs:" << endl;
 
   set<CDir*> ecopy = mds->mdcache->exports;
 
-  for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
-	   it != mds->mdcache->imports.end();
-	   it++) {
+  set<CDir*>::iterator it = mds->mdcache->hashdirs.begin();
+  while (1) {
+	if (it == mds->mdcache->hashdirs.end()) it = mds->mdcache->imports.begin();
+	if (it == mds->mdcache->imports.end() ) break;
+	
 	CDir *im = *it;
-	dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM].get() << "/" << im->popularity[MDS_POP_ANYDOM].get() << ")  " << *im << endl;
-	assert( im->is_import() );
-	assert( im->is_auth() );
+	
+	if (im->is_import()) {
+	  dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM].get() << "/" << im->popularity[MDS_POP_ANYDOM].get() << ")  " << *im << endl;
+	  assert( im->is_auth() );
+	} 
+	else if (im->is_hashed()) {
+	  if (im->is_import()) continue;  // if import AND hash, list as import.
+	  dout(db) << "  + hash (" << im->popularity[MDS_POP_CURDOM].get() << "/" << im->popularity[MDS_POP_ANYDOM].get() << ")  " << *im << endl;
+	}
 	
 	for (set<CDir*>::iterator p = mds->mdcache->nested_exports[im].begin();
 		 p != mds->mdcache->nested_exports[im].end();
 		 p++) {
 	  CDir *exp = *p;
-	  dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get() << ", " << exp->popularity[MDS_POP_ANYDOM].get() << ")  " << *exp << " to " << exp->dir_auth << endl;
-	  assert( exp->is_export() );
-	  assert( !exp->is_auth() );
-	  
-	  if ( mds->mdcache->get_containing_import(exp) != im ) {
-		dout(1) << "uh oh, containing import is " << mds->mdcache->get_containing_import(exp) << endl;
-		dout(1) << "uh oh, containing import is " << *mds->mdcache->get_containing_import(exp) << endl;
-		assert( mds->mdcache->get_containing_import(exp) == im );
+	  if (exp->is_hashed()) {
+		assert(0);  // we don't do it this way actually
+		dout(db) << "      - hash (" << exp->popularity[MDS_POP_NESTED].get() << ", " << exp->popularity[MDS_POP_ANYDOM].get() << ")  " << *exp << " to " << exp->dir_auth << endl;
+		assert( exp->is_auth() );
+	  } else {
+		dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED].get() << ", " << exp->popularity[MDS_POP_ANYDOM].get() << ")  " << *exp << " to " << exp->dir_auth << endl;
+		assert( exp->is_export() );
+		assert( !exp->is_auth() );
+	  }
+
+	  if ( mds->mdcache->get_auth_container(exp) != im ) {
+		dout(1) << "uh oh, auth container is " << mds->mdcache->get_auth_container(exp) << endl;
+		dout(1) << "uh oh, auth container is " << *mds->mdcache->get_auth_container(exp) << endl;
+		assert( mds->mdcache->get_auth_container(exp) == im );
 	  }
 	  
 	  if (ecopy.count(exp) != 1) {
-		dout(1) << " nested_export " << *exp << " not in exports" << endl;
+		dout(1) << "***** nested_export " << *exp << " not in exports" << endl;
 		assert(0);
 	  }
 	  ecopy.erase(exp);
 	}
+
+	it++;
   }
   
   if (ecopy.size()) {
 	for (set<CDir*>::iterator it = ecopy.begin();
 		 it != ecopy.end();
 		 it++) 
-	  dout(1) << " stray item in exports: " << **it << endl;
+	  dout(1) << "***** stray item in exports: " << **it << endl;
 	assert(ecopy.size() == 0);
   }
 }

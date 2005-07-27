@@ -34,7 +34,6 @@ class MDiscoverReply;
 class MCacheExpire;
 class MDirUpdate;
 class MDentryUnlink;
-class MInodeWriterClosed;
 class MLock;
 
 class MRenameWarning;
@@ -45,14 +44,22 @@ class MRenamePrep;
 class MRenameReq;
 class MRenameAck;
 
-class C_MDS_ExportFinish;
-
 class MClientRequest;
 
+class MHashDirDiscover;
+class MHashDirDiscoverAck;
+class MHashDirPrep;
+class MHashDirPrepAck;
 class MHashDir;
 class MHashDirAck;
+class MHashDirNotify;
+
+class MUnhashDirPrep;
+class MUnhashDirPrepAck;
 class MUnhashDir;
 class MUnhashDirAck;
+class MUnhashDirNotify;
+class MUnhashDirNotifyAck;
 
 
 // MDCache
@@ -91,10 +98,11 @@ class MDCache {
   // root
   list<Context*>     waiting_for_root;
 
-  // imports and exports
+  // imports, exports, and hashes.
   set<CDir*>             imports;                // includes root (on mds0)
   set<CDir*>             exports;
-  map<CDir*,set<CDir*> > nested_exports;
+  set<CDir*>             hashdirs;
+  map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
   // export fun
   map<CDir*, set<int> >  export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
@@ -163,8 +171,9 @@ class MDCache {
   }
   
  protected:
-  CDir *get_containing_import(CDir *in);
-  CDir *get_containing_export(CDir *in);
+  CDir *get_auth_container(CDir *in);
+  void find_nested_exports(CDir *dir, set<CDir*>& s);
+  void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 
 
   // adding/removing
@@ -230,26 +239,35 @@ class MDCache {
   void handle_inode_link_ack(class MInodeLinkAck *m);
 
   // == messages ==
+ public:
   int proc_message(Message *m);
 
+ protected:
   // -- replicas --
   void handle_discover(MDiscover *dis);
   void handle_discover_reply(MDiscoverReply *m);
 
-  void handle_inode_writer_closed(MInodeWriterClosed *m);
 
   // -- namespace --
   // these handle logging, cache sync themselves.
+  // UNLINK
+ public:
   void dentry_unlink(CDentry *in, Context *c);
+ protected:
   void dentry_unlink_finish(CDentry *in, CDir *dir, Context *c);
   void handle_dentry_unlink(MDentryUnlink *m);
   void handle_inode_unlink(class MInodeUnlink *m);
   void handle_inode_unlink_ack(class MInodeUnlinkAck *m);
+  friend class C_MDC_DentryUnlink;
 
+  // RENAME
   // initiator
+ public:
   void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);
+ protected:
   void handle_rename_ack(MRenameAck *m);              // dest -> init (almost always)
   void file_rename_finish(CDir *srcdir, CInode *in, Context *c);
+  friend class C_MDC_RenameAck;
 
   // src
   void handle_rename_req(MRenameReq *m);              // dest -> src
@@ -259,6 +277,7 @@ class MDCache {
   void file_rename_warn(CInode *in, set<int>& notify);
   void handle_rename_notify_ack(MRenameNotifyAck *m); // bystanders -> src
   void file_rename_ack(CInode *in, int initiator);
+  friend class C_MDC_RenameNotifyAck;
 
   // dest
   void handle_rename_prep(MRenamePrep *m);            // init -> dest
@@ -273,9 +292,11 @@ class MDCache {
 
 
   // -- file i/o --
+ public:
   __uint64_t issue_file_data_version(CInode *in);
   Capability* issue_file_caps(CInode *in, int mode, MClientRequest *req);
   void eval_file_caps(CInode *in);
+ protected:
   void handle_client_file_caps(class MClientFileCaps *m);
 
 
@@ -288,27 +309,19 @@ class MDCache {
 
 
   // -- import/export --
-  bool is_import(CDir *dir) {
-	assert(dir->is_import() == imports.count(dir));
-	return dir->is_import();
-  }
-  bool is_export(CDir *dir) {
-	return exports.count(dir);
-  }
-  void find_nested_exports(CDir *dir, set<CDir*>& s);
-  void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
-
   // exporter
+ public:
   void export_dir(CDir *dir,
 				  int mds);
-  void export_dir_dropsync(CDir *dir);
+ protected:
+  map< CDir*, set<int> > export_gather;
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
   void export_dir_frozen(CDir *dir, int dest);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir_go(CDir *dir,
 					 int dest);
   int export_dir_walk(MExportDir *req,
-					  class C_MDS_ExportFinish *fin,
+					  class C_Contexts *fin,
 					  CDir *basedir,
 					  CDir *dir,
 					  int newauth);
@@ -317,6 +330,7 @@ class MDCache {
   
   void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
   
+  friend class C_MDC_ExportFreeze;
 
   // importer
   void handle_export_dir_discover(MExportDirDiscover *m);
@@ -336,32 +350,72 @@ class MDCache {
 
   void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
 
+  friend class C_MDC_ExportDirDiscover;
+
   // bystander
   void handle_export_dir_warning(MExportDirWarning *m);
   void handle_export_dir_notify(MExportDirNotify *m);
 
 
   // -- hashed directories --
+
+  // HASH
+ public:
+  void hash_dir(CDir *dir);  // on auth
+ protected:
+  map< CDir*, set<int> >             hash_gather;
+  map< CDir*, map< int, set<int> > > hash_notify_gather;
+  map< CDir*, list<CInode*> >        hash_proxy_inos;
+
   // hash on auth
-  void hash_dir(CDir *dir);
+  void handle_hash_dir_discover_ack(MHashDirDiscoverAck *m);
   void hash_dir_complete(CDir *dir);
+  void hash_dir_frozen(CDir *dir);
+  void handle_hash_dir_prep_ack(MHashDirPrepAck *m);
+  void hash_dir_go(CDir *dir);
+  void handle_hash_dir_ack(MHashDirAck *m);
   void hash_dir_finish(CDir *dir);
+  friend class C_MDC_HashFreeze;
+  friend class C_MDC_HashComplete;
+
+  // auth and non-auth
+  void handle_hash_dir_notify(MHashDirNotify *m);
 
   // hash on non-auth
+  void handle_hash_dir_discover(MHashDirDiscover *m);
+  void handle_hash_dir_discover_2(MHashDirDiscover *m, CInode *in, int r);
+  void handle_hash_dir_prep(MHashDirPrep *m);
   void handle_hash_dir(MHashDir *m);
+  friend class C_MDC_HashDirDiscover;
+
+  // UNHASH
+ public:
+  void unhash_dir(CDir *dir);   // on auth
+ protected:
+  map< CDir*, list<MUnhashDirAck*> > unhash_content;
+  void import_hashed_content(CDir *dir, bufferlist& bl, int nden, int oldauth);
 
   // unhash on auth
-  void unhash_dir(CDir *dir);
-  void unhash_dir_complete(CDir *dir);
+  void unhash_dir_frozen(CDir *dir);
+  void unhash_dir_prep(CDir *dir);
+  void handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m);
+  void unhash_dir_go(CDir *dir);
   void handle_unhash_dir_ack(MUnhashDirAck *m);
+  void handle_unhash_dir_notify_ack(MUnhashDirNotifyAck *m);
   void unhash_dir_finish(CDir *dir);
+  friend class C_MDC_UnhashFreeze;
+  friend class C_MDC_UnhashComplete;
+
+  // unhash on all
+  void unhash_dir_complete(CDir *dir);
 
   // unhash on non-auth
+  void handle_unhash_dir_prep(MUnhashDirPrep *m);
+  void unhash_dir_prep_frozen(CDir *dir);
+  void unhash_dir_prep_finish(CDir *dir);
   void handle_unhash_dir(MUnhashDir *m);
-  void handle_unhash_dir_complete(CDir *dir, int auth);
-  void handle_unhash_dir_finish(CDir *dir, int auth);
-
-  void drop_sync_in_dir(CDir *dir);
+  void handle_unhash_dir_notify(MUnhashDirNotify *m);
+  friend class C_MDC_UnhashPrepFreeze;
 
   // -- updates --
   //int send_inode_updates(CInode *in);
@@ -374,6 +428,7 @@ class MDCache {
 
   // -- locks --
   // high level interface
+ public:
   bool inode_hard_read_try(CInode *in, Context *con);
   bool inode_hard_read_start(CInode *in, MClientRequest *m);
   void inode_hard_read_finish(CInode *in);
@@ -384,6 +439,10 @@ class MDCache {
   bool inode_soft_write_start(CInode *in, MClientRequest *m);
   void inode_soft_write_finish(CInode *in);
 
+  void inode_hard_eval(CInode *in);
+  void inode_soft_eval(CInode *in);
+
+ protected:
   void inode_hard_mode(CInode *in, int mode);
   void inode_soft_mode(CInode *in, int mode);
 
@@ -393,9 +452,6 @@ class MDCache {
   bool inode_soft_sync(CInode *in);
   void inode_soft_lock(CInode *in);
   void inode_soft_async(CInode *in);
-
-  void inode_hard_eval(CInode *in);
-  void inode_soft_eval(CInode *in);
 
   // messengers
   void handle_lock(MLock *m);
@@ -407,6 +463,7 @@ class MDCache {
   void handle_lock_dir(MLock *m);
 
   // dentry locks
+ public:
   bool dentry_xlock_start(CDentry *dn, 
 						  Message *m, CInode *ref);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
@@ -417,6 +474,7 @@ class MDCache {
   
 
   // == crap fns ==
+ public:
   CInode* hack_get_file(string& fn);
   vector<CInode*> hack_add_file(string& fn, CInode* in);
 
@@ -427,9 +485,6 @@ class MDCache {
   void show_imports();
   void show_cache();
 
-  void dump_to_disk(MDS *m) {
-	if (root) root->dump_to_disk(m);
-  }
 };
 
 

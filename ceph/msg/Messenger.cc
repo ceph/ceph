@@ -27,7 +27,6 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
-//#include "messages/MClientInodeAuthUpdate.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -42,6 +41,21 @@ using namespace std;
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
+
+#include "messages/MHashDirDiscover.h"
+#include "messages/MHashDirDiscoverAck.h"
+#include "messages/MHashDirPrep.h"
+#include "messages/MHashDirPrepAck.h"
+#include "messages/MHashDir.h"
+#include "messages/MHashDirAck.h"
+#include "messages/MHashDirNotify.h"
+
+#include "messages/MUnhashDirPrep.h"
+#include "messages/MUnhashDirPrepAck.h"
+#include "messages/MUnhashDir.h"
+#include "messages/MUnhashDirAck.h"
+#include "messages/MUnhashDirNotify.h"
+#include "messages/MUnhashDirNotifyAck.h"
 
 #include "messages/MRenameWarning.h"
 #include "messages/MRenameNotify.h"
@@ -224,9 +238,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_CLIENT_FILECAPS:
 	m = new MClientFileCaps();
 	break;
-	//  case MSG_CLIENT_INODEAUTHUPDATE:
-	//m = new MClientInodeAuthUpdate();
-	//break;
 
 	// mds
   case MSG_MDS_DIRUPDATE:
@@ -273,6 +284,48 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
   case MSG_MDS_EXPORTDIRWARNING:
 	m = new MExportDirWarning();
+	break;
+
+
+  case MSG_MDS_HASHDIRDISCOVER:
+	m = new MHashDirDiscover();
+	break;
+  case MSG_MDS_HASHDIRDISCOVERACK:
+	m = new MHashDirDiscoverAck();
+	break;
+  case MSG_MDS_HASHDIRPREP:
+	m = new MHashDirPrep();
+	break;
+  case MSG_MDS_HASHDIRPREPACK:
+	m = new MHashDirPrepAck();
+	break;
+  case MSG_MDS_HASHDIR:
+	m = new MHashDir();
+	break;
+  case MSG_MDS_HASHDIRACK:
+	m = new MHashDirAck();
+	break;
+  case MSG_MDS_HASHDIRNOTIFY:
+	m = new MHashDirNotify();
+	break;
+
+  case MSG_MDS_UNHASHDIRPREP:
+	m = new MUnhashDirPrep();
+	break;
+  case MSG_MDS_UNHASHDIRPREPACK:
+	m = new MUnhashDirPrepAck();
+	break;
+  case MSG_MDS_UNHASHDIR:
+	m = new MUnhashDir();
+	break;
+  case MSG_MDS_UNHASHDIRACK:
+	m = new MUnhashDirAck();
+	break;
+  case MSG_MDS_UNHASHDIRNOTIFY:
+	m = new MUnhashDirNotify();
+	break;
+  case MSG_MDS_UNHASHDIRNOTIFYACK:
+	m = new MUnhashDirNotifyAck();
 	break;
 
   case MSG_MDS_RENAMEWARNING:

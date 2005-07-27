@@ -24,17 +24,6 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-// crap
-/*
-#define CINODE_SYNC_START     1  // starting sync
-#define CINODE_SYNC_LOCK      2  // am synced
-#define CINODE_SYNC_FINISH    4  // finishing
-
-#define CINODE_MASK_SYNC      (CINODE_SYNC_START|CINODE_SYNC_LOCK|CINODE_SYNC_FINISH)
-
-#define CINODE_MASK_IMPORT    16
-#define CINODE_MASK_EXPORT    32
-*/
 
 // pins for keeping an item in cache (and debugging)
 #define CINODE_PIN_DIR       0
@@ -151,6 +140,7 @@ class MDS;
 class MDCluster;
 class Message;
 class CInode;
+class CInodeDiscover;
 
 //class MInodeSyncStart;
 
@@ -383,6 +373,8 @@ class CInode : LRUObject {
   set<int>::iterator cached_by_end() { return cached_by.end(); }
   set<int>& get_cached_by() { return cached_by; }
 
+  CInodeDiscover* replicate_to(int rep);
+
 
   // -- waiting --
   bool waiting_for(int tag);
@@ -446,6 +438,7 @@ class CInode : LRUObject {
 
   // -- freeze --
   bool is_frozen();
+  bool is_frozen_dir();
   bool is_freezing();
 
 
@@ -528,7 +521,6 @@ class CInode : LRUObject {
 
   // dbg
   void dump(int d = 0);
-  void dump_to_disk(MDS *m);
 };
 
 
@@ -552,6 +544,7 @@ class CInodeDiscover {
   CInodeDiscover(CInode *in, int nonce) {
 	inode = in->inode;
 	replica_nonce = nonce;
+
 	hardlock_state = in->hardlock.get_replica_state();
 	softlock_state = in->softlock.get_replica_state();
   }
@@ -567,23 +560,22 @@ class CInodeDiscover {
 	in->softlock.set_state(softlock_state);
   }
   
-  void _rope(crope& r) {
-	r.append((char*)&inode, sizeof(inode));
-	r.append((char*)&replica_nonce, sizeof(replica_nonce));
-	r.append((char*)&hardlock_state, sizeof(hardlock_state));
-	r.append((char*)&softlock_state, sizeof(softlock_state));
+  void _encode(bufferlist& bl) {
+	bl.append((char*)&inode, sizeof(inode));
+	bl.append((char*)&replica_nonce, sizeof(replica_nonce));
+	bl.append((char*)&hardlock_state, sizeof(hardlock_state));
+	bl.append((char*)&softlock_state, sizeof(softlock_state));
   }
 
-  int _unrope(crope s, int off = 0) {
-	s.copy(off,sizeof(inode_t), (char*)&inode);
+  void _decode(bufferlist& bl, int& off) {
+	bl.copy(off,sizeof(inode_t), (char*)&inode);
 	off += sizeof(inode_t);
-	s.copy(off, sizeof(int), (char*)&replica_nonce);
+	bl.copy(off, sizeof(int), (char*)&replica_nonce);
 	off += sizeof(int);
-	s.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
+	bl.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
 	off += sizeof(hardlock_state);
-	s.copy(off, sizeof(softlock_state), (char*)&softlock_state);
+	bl.copy(off, sizeof(softlock_state), (char*)&softlock_state);
 	off += sizeof(softlock_state);
-	return off;
   }  
 
 };
@@ -620,6 +612,7 @@ public:
 	st.is_dirty = in->is_dirty();
 	cached_by = in->cached_by;
 	cached_by_nonce = in->cached_by_nonce; 
+
 	hardlock = in->hardlock;
 	softlock = in->softlock;
 

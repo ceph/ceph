@@ -31,7 +31,7 @@ public:
 
 int main(int oargc, char **oargv) 
 {
-  //cerr << "fakesyn starting" << endl;
+  cerr << "fakesyn starting" << endl;
 
   int argc;
   char **argv;

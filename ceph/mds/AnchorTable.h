@@ -8,6 +8,7 @@
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+class MDS;
 
 class Anchor {
 public:

@@ -2,36 +2,49 @@
 #define __MUNHASHDIRACK_H
 
 #include "msg/Message.h"
-
-#include <ext/rope>
-using namespace std;
+#include "include/bufferlist.h"
 
 class MUnhashDirAck : public Message {
   inodeno_t ino;
+  bufferlist state;
+  int nden;
   
  public:  
-  crope  dir_rope;
-
   MUnhashDirAck() {}
-  MUnhashDirAck(inodeno_t ino) : 
+  MUnhashDirAck(inodeno_t ino, bufferlist& bl, int nden) : 
 	Message(MSG_MDS_UNHASHDIRACK) {
 	this->ino = ino;
+	state.claim(bl);
+	this->nden = nden;
   }
-  virtual char *get_type_name() { return "UHaAck"; }
+  virtual char *get_type_name() { return "UHaA"; }
 
   inodeno_t get_ino() { return ino; }
-  crope& get_state() { return dir_rope; }
+  bufferlist& get_state() { return state; }
+  bufferlist* get_state_ptr() { return &state; }
+  int       get_nden() { return nden; }
   
-  virtual int decode_payload(crope s) {
-	s.copy(0, sizeof(ino), (char*)&ino);
-	dir_rope = s.substr(sizeof(ino), s.length() - sizeof(ino));
-	return 0;
+  //void set_nden(int n) { nden = n; }
+  //void inc_nden() { nden++; }
+
+  void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(ino), (char*)&ino);
+	off += sizeof(ino);
+	payload.copy(off, sizeof(nden), (char*)&nden);
+	off += sizeof(nden);
+
+	size_t len;
+	payload.copy(off, sizeof(len), (char*)&len);
+	off += sizeof(len);
+	state.substr_of(payload, off, len);
   }
-  virtual crope get_payload() {
-	crope s;
-	s.append((char*)&ino, sizeof(ino));
-	s.append(dir_rope);
-	return s;
+  void encode_payload() {
+	payload.append((char*)&ino, sizeof(ino));
+	payload.append((char*)&nden, sizeof(nden));
+	size_t size = state.length();
+	payload.append((char*)&size, sizeof(size));
+	payload.claim_append(state);
   }
 
 };
