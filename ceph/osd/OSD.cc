@@ -147,6 +147,9 @@ int OSD::shutdown()
 
 void OSD::dispatch(Message *m) 
 {
+  // check clock regularly
+  g_clock.now();
+
   switch (m->get_type()) {
 	// host monitor
   case MSG_PING_ACK:
