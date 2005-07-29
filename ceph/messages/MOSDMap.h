@@ -2,31 +2,31 @@
 #define __MOSDGETCLUSTERACK_H
 
 #include "msg/Message.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 
 class MOSDGetClusterAck : public Message {
-  bufferlist osdcluster;
+  bufferlist osdmap;
 
  public:
-  // osdcluster
-  bufferlist& get_osdcluster() { 
-	return osdcluster;
+  // osdmap
+  bufferlist& get_osdmap() { 
+	return osdmap;
   }
 
-  MOSDGetClusterAck(OSDCluster *oc) :
+  MOSDGetClusterAck(OSDMap *oc) :
 	Message(MSG_OSD_GETCLUSTERACK) {
-	oc->encode(osdcluster);
+	oc->encode(osdmap);
   }
   MOSDGetClusterAck() {}
 
 
   // marshalling
   virtual void decode_payload() {
-	osdcluster.claim(payload);
+	osdmap.claim(payload);
   }
   virtual void encode_payload() {
-	payload.claim(osdcluster);
+	payload.claim(osdmap);
   }
 
   virtual char *get_type_name() { return "ogca"; }

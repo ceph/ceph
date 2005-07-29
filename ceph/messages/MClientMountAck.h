@@ -3,21 +3,21 @@
 
 #include "msg/Message.h"
 #include "MClientMount.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 
 class MClientMountAck : public Message {
   long pcid;
-  bufferlist osd_cluster_state;
+  bufferlist osd_map_state;
 
  public:
   MClientMountAck() {}
-  MClientMountAck(MClientMount *mnt, OSDCluster *osdcluster) : Message(MSG_CLIENT_MOUNTACK) { 
+  MClientMountAck(MClientMount *mnt, OSDMap *osdmap) : Message(MSG_CLIENT_MOUNTACK) { 
 	this->pcid = mnt->get_pcid();
-	osdcluster->encode( osd_cluster_state );
+	osdmap->encode( osd_map_state );
   }
   
-  bufferlist& get_osd_cluster_state() { return osd_cluster_state; }
+  bufferlist& get_osd_map_state() { return osd_map_state; }
 
   void set_pcid(long pcid) { this->pcid = pcid; }
   long get_pcid() { return pcid; }
@@ -29,11 +29,11 @@ class MClientMountAck : public Message {
 	payload.copy(off, sizeof(pcid), (char*)&pcid);
 	off += sizeof(pcid);
 	if ((unsigned)off < payload.length())
-	  payload.splice( off, payload.length()-off, &osd_cluster_state);
+	  payload.splice( off, payload.length()-off, &osd_map_state);
   }
   virtual void encode_payload() {  
 	payload.append((char*)&pcid, sizeof(pcid));
-	payload.claim_append(osd_cluster_state);
+	payload.claim_append(osd_map_state);
   }
 };
 

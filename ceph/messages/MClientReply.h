@@ -214,6 +214,16 @@ class MClientReply : public Message {
 	}
 	l.clear();
   }
+  void copy_dir_items(list<c_inode_info*>& l) {
+	for (list<c_inode_info*>::iterator it = l.begin();
+		 it != l.end();
+		 it++) {
+	  // copy!
+	  c_inode_info *i = new c_inode_info;
+	  *i = **it;
+	  dir_contents.push_back(i);
+	}
+  }
 
   void set_trace_dist(CInode *in, int whoami) {
 	while (in) {
