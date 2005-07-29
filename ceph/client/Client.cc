@@ -58,8 +58,8 @@ Client::Client(MDCluster *mdc, int id, Messenger *m)
   messenger->set_dispatcher(this);
 
   // osd interfaces
-  osdcluster = new OSDCluster();     // initially blank.. see mount()
-  filer = new Filer(messenger, osdcluster);
+  osdmap = new OSDMap();     // initially blank.. see mount()
+  filer = new Filer(messenger, osdmap);
 }
 
 
@@ -67,7 +67,7 @@ Client::~Client()
 {
   if (messenger) { delete messenger; messenger = 0; }
   if (filer) { delete filer; filer = 0; }
-  if (osdcluster) { delete osdcluster; osdcluster = 0; }
+  if (osdmap) { delete osdmap; osdmap = 0; }
 
   tear_down_cache();
 }
@@ -647,8 +647,8 @@ int Client::mount(int mkfs)
   client_lock.Lock();
   assert(reply);
 
-  // we got osdcluster!
-  osdcluster->decode(reply->get_osd_cluster_state());
+  // we got osdmap!
+  osdmap->decode(reply->get_osd_map_state());
 
   dout(2) << "mounted" << endl;
   mounted = true;

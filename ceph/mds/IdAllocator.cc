@@ -7,7 +7,7 @@
 #include "events/EAlloc.h"
 
 #include "osd/Filer.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 #include "include/types.h"
 

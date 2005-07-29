@@ -52,7 +52,7 @@ typedef __uint64_t object_t;
 
 class filepath;
 
-class OSDCluster;
+class OSDMap;
 class Filer;
 
 class AnchorTable;
@@ -68,6 +68,8 @@ class Messenger;
 class Message;
 class MClientRequest;
 class MClientReply;
+class MHashReaddir;
+class MHashReaddirReply;
 class MDBalancer;
 class LogEvent;
 class IdAllocator;
@@ -89,7 +91,7 @@ class MDS : public Dispatcher {
 
   MDCluster    *mdcluster;
  public:
-  OSDCluster   *osdcluster;
+  OSDMap       *osdmap;
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
   OSDMonitor   *osdmonitor;
@@ -113,10 +115,6 @@ class MDS : public Dispatcher {
   friend class MDStore;
 
   // stats
-  DecayCounter stat_req;
-  DecayCounter stat_read;
-  DecayCounter stat_write;
-  
   set<int>     mounted_clients;
 
   
@@ -146,7 +144,7 @@ class MDS : public Dispatcher {
   int get_nodeid() { return whoami; }
   MDCluster *get_cluster() { return mdcluster; }
   MDCluster *get_mds_cluster() { return mdcluster; }
-  OSDCluster *get_osd_cluster() { return osdcluster; }
+  OSDMap *get_osd_map() { return osdmap; }
 
   mds_load_t get_load();
 
@@ -185,7 +183,7 @@ class MDS : public Dispatcher {
   void handle_shutdown_finish(Message *m);
 
   // osds
-  void handle_osd_getcluster(Message *m);
+  void handle_osd_getmap(Message *m);
 
   // clients
   void handle_client_mount(class MClientMount *m);
@@ -214,9 +212,14 @@ class MDS : public Dispatcher {
 										 MClientReply *reply,
 										 CInode *ref);
 
-  // namespace
-  void encode_dir_contents(CDir *dir, list<class c_inode_info*>& items, int& numfiles);
+  // readdir
   void handle_client_readdir(MClientRequest *req, CInode *ref);
+  int encode_dir_contents(CDir *dir, list<class c_inode_info*>& items);
+  void handle_hash_readdir(MHashReaddir *m);
+  void handle_hash_readdir_reply(MHashReaddirReply *m);
+  void finish_hash_readdir(MClientRequest *req, CDir *dir); 
+
+  // namespace changes
   void handle_client_mknod(MClientRequest *req, CInode *ref);
   void handle_client_link(MClientRequest *req, CInode *ref);
   void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);

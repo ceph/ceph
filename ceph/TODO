@@ -1,12 +1,7 @@
 
-/- finish hashed_subset notify business
-- hashed readdir
+- test hashed readdir
+- interactive hash/unhash interface
 - carefully define/document frozen wrt dir_auth vs hashing
-
-
-/- lacc
-/- streakwave
-/- mapreduce
 
 - make logstream.flush align itself to stipes
 
@@ -36,6 +31,7 @@ finish HARD LINKS
 
 
 MDS TODO
+- fix hashed readdir: should (optionally) do a lock on dir namespace
 - fix hard links
   - they mostly work, but they're fragile
 - sync clients on stat

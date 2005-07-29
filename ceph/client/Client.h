@@ -4,7 +4,7 @@
 #include "Buffercache.h"
 
 #include "mds/MDCluster.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
@@ -190,7 +190,7 @@ class Client : public Dispatcher {
   
   // cluster descriptors
   MDCluster             *mdcluster; 
-  OSDCluster            *osdcluster;
+  OSDMap                *osdmap;
   bool mounted;
   
   Filer                 *filer;  // (non-blocking) osd interface

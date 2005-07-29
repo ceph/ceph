@@ -2,7 +2,7 @@
 #define __MOSDOPREPLY_H
 
 #include "msg/Message.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 #include "MOSDOp.h"
 
@@ -37,7 +37,7 @@ typedef struct {
 class MOSDOpReply : public Message {
   MOSDOpReply_st st;
   bufferlist data;
-  bufferlist osdcluster;
+  bufferlist osdmap;
 
  public:
   long     get_tid() { return st.tid; }
@@ -63,17 +63,17 @@ class MOSDOpReply : public Message {
 	return data;
   }
 
-  // osdcluster
+  // osdmap
   __uint64_t get_ocv() { return st._new_ocv; }
-  bufferlist& get_osdcluster() { 
-	return osdcluster;
+  bufferlist& get_osdmap() { 
+	return osdmap;
   }
 
   // keep a pcid (procedure call id) to match up request+reply
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid()          { return st.pcid; }
 
-  MOSDOpReply(MOSDOp *req, int result, OSDCluster *oc) :
+  MOSDOpReply(MOSDOp *req, int result, OSDMap *oc) :
 	Message(MSG_OSD_OPREPLY) {
 	memset(&st, 0, sizeof(st));
 	this->st.pcid = req->st.pcid;
@@ -88,9 +88,9 @@ class MOSDOpReply : public Message {
 
 	// attach updated cluster spec?
 	if (req->get_ocv() < oc->get_version()) {
-	  oc->encode(osdcluster);
+	  oc->encode(osdmap);
 	  st._new_ocv = oc->get_version();
-	  st._oc_len = osdcluster.length();
+	  st._oc_len = osdmap.length();
 	}
   }
   MOSDOpReply() {}
@@ -101,12 +101,12 @@ class MOSDOpReply : public Message {
 	payload.copy(0, sizeof(st), (char*)&st);
 	payload.splice(0, sizeof(st));
 	if (st._data_len) payload.splice(0, st._data_len, &data);
-	if (st._oc_len) payload.splice(0, st._oc_len, &osdcluster);
+	if (st._oc_len) payload.splice(0, st._oc_len, &osdmap);
   }
   virtual void encode_payload() {
 	payload.push_back( new buffer((char*)&st, sizeof(st)) );
 	payload.claim_append( data );
-	payload.claim_append( osdcluster );
+	payload.claim_append( osdmap );
   }
 
   virtual char *get_type_name() { return "oopr"; }

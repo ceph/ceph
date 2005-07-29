@@ -6,7 +6,7 @@
  * client/mds interface to access "files" in OSD cluster.
  *
  * generic non-blocking interface for reading/writing to osds, using
- * the file-to-object mappings defined by OSDCluster.
+ * the file-to-object mappings defined by OSDMap.
  *
  * Filer also handles details of replication on OSDs (to the extent that 
  * it affects OSD clients)
@@ -24,11 +24,11 @@ using namespace __gnu_cxx;
 
 #include "include/types.h"
 #include "msg/Dispatcher.h"
-#include "OSDCluster.h"
+#include "OSDMap.h"
 
 class Context;
 class Messenger;
-class OSDCluster;
+class OSDMap;
 
 /*** types ***/
 typedef __uint64_t tid_t;
@@ -64,7 +64,7 @@ typedef struct {
 /**** Filer interface ***/
 
 class Filer : public Dispatcher {
-  OSDCluster *osdcluster;     // what osds am i dealing with?
+  OSDMap *osdmap;     // what osds am i dealing with?
   Messenger  *messenger;
   
   __uint64_t         last_tid;
@@ -76,7 +76,7 @@ class Filer : public Dispatcher {
   hash_map<tid_t,PendingOSDOp_t*>    op_mkfs;
 
  public:
-  Filer(Messenger *m, OSDCluster *o);
+  Filer(Messenger *m, OSDMap *o);
   ~Filer();
 
   void dispatch(Message *m);

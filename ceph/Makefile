@@ -44,7 +44,7 @@ COMMON_OBJS= \
 	msg/HostMonitor.o\
 	osd/FakeStore.o\
 	osd/Filer.o\
-	osd/OSDCluster.o\
+	osd/OSDMap.o\
 	osd/rush.o\
 	common/Logger.o\
 	common/Clock.o\

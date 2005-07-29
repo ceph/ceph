@@ -1,12 +1,12 @@
 
-#include "OSDCluster.h"
+#include "OSDMap.h"
 
 
 
 
 // serialize/unserialize
 
-void OSDCluster::encode(bufferlist& blist)
+void OSDMap::encode(bufferlist& blist)
 {
   blist.append((char*)&version, sizeof(version));
 
@@ -20,7 +20,7 @@ void OSDCluster::encode(bufferlist& blist)
   _encode(failed_osds, blist);
 }
 
-void OSDCluster::decode(bufferlist& blist)
+void OSDMap::decode(bufferlist& blist)
 {
   int off = 0;
   blist.copy(off, sizeof(version), (char*)&version);
@@ -40,3 +40,4 @@ void OSDCluster::decode(bufferlist& blist)
 
   init_rush();
 }
+ 

@@ -1,5 +1,5 @@
-#ifndef __OSDCLUSTER_H
-#define __OSDCLUSTER_H
+#ifndef __OSDMAP_H
+#define __OSDMAP_H
 
 /*
  * describe properties of the OSD cluster.
@@ -94,9 +94,9 @@ class OSDExtent {
 };
 
 
-/** OSDCluster
+/** OSDMap
  */
-class OSDCluster {
+class OSDMap {
   __uint64_t version;           // what version of the osd cluster descriptor is this
 
   // RUSH disk groups
@@ -129,8 +129,8 @@ class OSDCluster {
 
 
  public:
-  OSDCluster() : version(0), rush(0) { }
-  ~OSDCluster() {
+  OSDMap() : version(0), rush(0) { }
+  ~OSDMap() {
 	if (rush) { delete rush; rush = 0; }
   }
 

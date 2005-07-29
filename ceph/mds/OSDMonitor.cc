@@ -1,7 +1,7 @@
 
 #include "OSDMonitor.h"
 #include "MDS.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"

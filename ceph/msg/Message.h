@@ -14,8 +14,8 @@
 #define MSG_OSD_OPREPLY      15    // delete, etc.
 #define MSG_OSD_PING         16
 
-#define MSG_OSD_GETCLUSTER    17
-#define MSG_OSD_GETCLUSTERACK 18
+#define MSG_OSD_GETMAP       17
+#define MSG_OSD_GETMAPACK    18
 
 #define MSG_CLIENT_REQUEST         20
 #define MSG_CLIENT_REPLY           21
@@ -69,7 +69,9 @@
 #define MSG_MDS_HASHDIR            164
 #define MSG_MDS_HASHDIRACK         165
 #define MSG_MDS_HASHDIRNOTIFY      166
-#define MSG_MDS_HASHDIRFINISH      167
+
+#define MSG_MDS_HASHREADDIR        168
+#define MSG_MDS_HASHREADDIRREPLY   169
 
 #define MSG_MDS_UNHASHDIRPREP      170
 #define MSG_MDS_UNHASHDIRPREPACK   171

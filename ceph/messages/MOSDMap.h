@@ -1,11 +1,11 @@
-#ifndef __MOSDGETCLUSTERACK_H
-#define __MOSDGETCLUSTERACK_H
+#ifndef __MOSDGETMAPACK_H
+#define __MOSDGETMAPACK_H
 
 #include "msg/Message.h"
 #include "osd/OSDMap.h"
 
 
-class MOSDGetClusterAck : public Message {
+class MOSDGetMapAck : public Message {
   bufferlist osdmap;
 
  public:
@@ -14,11 +14,11 @@ class MOSDGetClusterAck : public Message {
 	return osdmap;
   }
 
-  MOSDGetClusterAck(OSDMap *oc) :
-	Message(MSG_OSD_GETCLUSTERACK) {
+  MOSDGetMapAck(OSDMap *oc) :
+	Message(MSG_OSD_GETMAPACK) {
 	oc->encode(osdmap);
   }
-  MOSDGetClusterAck() {}
+  MOSDGetMapAck() {}
 
 
   // marshalling
@@ -29,7 +29,7 @@ class MOSDGetClusterAck : public Message {
 	payload.claim(osdmap);
   }
 
-  virtual char *get_type_name() { return "ogca"; }
+  virtual char *get_type_name() { return "ogma"; }
 };
 
 #endif

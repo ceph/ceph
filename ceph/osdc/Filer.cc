@@ -2,7 +2,7 @@
 #include <assert.h>
 
 #include "Filer.h"
-#include "OSDCluster.h"
+#include "OSDMap.h"
 
 //#include "messages/MOSDRead.h"
 //#include "messages/MOSDReadReply.h"
@@ -23,11 +23,11 @@
 
 
 
-Filer::Filer(Messenger *m, OSDCluster *o)
+Filer::Filer(Messenger *m, OSDMap *o)
 {
   last_tid = 0;
   messenger = m;
-  osdcluster = o;
+  osdmap = o;
 }
 
 Filer::~Filer()
@@ -84,7 +84,7 @@ Filer::read(inodeno_t ino,
   p->onfinish = onfinish;
 
   // map buffer into OSD extents
-  osdcluster->file_to_extents(ino, layout, len, offset, p->extents);
+  osdmap->file_to_extents(ino, layout, len, offset, p->extents);
 
   dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
@@ -96,7 +96,7 @@ Filer::read(inodeno_t ino,
 	
 	// issue read
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->rg, osdcluster->get_version(), 
+						   it->oid, it->rg, osdmap->get_version(), 
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
@@ -274,7 +274,7 @@ Filer::write(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, layout, len, offset, extents);
+  osdmap->file_to_extents(ino, layout, len, offset, extents);
 
   dout(7) << "osd write ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
@@ -287,7 +287,7 @@ Filer::write(inodeno_t ino,
 	
 	// issue write
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->rg, osdcluster->get_version(),
+						   it->oid, it->rg, osdmap->get_version(),
 						   OSD_OP_WRITE);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
@@ -358,9 +358,9 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 {
   // updated cluster info?
   if (m->get_ocv() && 
-	  m->get_ocv() > osdcluster->get_version()) {
-	dout(3) << "op reply has newer cluster " << m->get_ocv() << " > " << osdcluster->get_version() << endl;
-	osdcluster->decode( m->get_osdcluster() );
+	  m->get_ocv() > osdmap->get_version()) {
+	dout(3) << "op reply has newer cluster " << m->get_ocv() << " > " << osdmap->get_version() << endl;
+	osdmap->decode( m->get_osdmap() );
   }
 
 
@@ -429,7 +429,7 @@ int Filer::truncate(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, layout, old_size, new_size, extents);
+  osdmap->file_to_extents(ino, layout, old_size, new_size, extents);
 
   dout(7) << "osd truncate ino " << ino << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
 
@@ -443,12 +443,12 @@ int Filer::truncate(inodeno_t ino,
 	if (it->offset == 0) {
 	  // issue delete
 	  m = new MOSDOp(last_tid, messenger->get_myaddr(),
-					 it->oid, it->rg, osdcluster->get_version(),
+					 it->oid, it->rg, osdmap->get_version(),
 					 OSD_OP_DELETE);
 	} else {
 	  // issue a truncate
 	  m = new MOSDOp(last_tid, messenger->get_myaddr(),
-					 it->oid, it->rg, osdcluster->get_version(),
+					 it->oid, it->rg, osdmap->get_version(),
 					 OSD_OP_TRUNCATE);
 	  m->set_length( it->offset );
 	}
@@ -507,7 +507,7 @@ int Filer::mkfs(Context *onfinish)
   
   // send MKFS to osds
   set<int> ls;
-  osdcluster->get_all_osds(ls);
+  osdmap->get_all_osds(ls);
   
   for (set<int>::iterator it = ls.begin();
 	   it != ls.end();
@@ -517,7 +517,7 @@ int Filer::mkfs(Context *onfinish)
 
 	// issue mkfs
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   0, 0, osdcluster->get_version(), 
+						   0, 0, osdmap->get_version(), 
 						   OSD_OP_MKFS);
 	messenger->send_message(m, MSG_ADDR_OSD(*it), 0);
 	
@@ -557,7 +557,7 @@ int Filer::zero(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdcluster->file_to_extents(ino, len, offset, num_rep, extents);
+  osdmap->file_to_extents(ino, len, offset, num_rep, extents);
   
   dout(7) << "osd zero ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
   
@@ -571,7 +571,7 @@ int Filer::zero(inodeno_t ino,
 	MOSDOp *m;
 	//if (it->len == 
 	m = new MOSDOp(last_tid, messenger->get_myaddr(),
-	it->oid, it->rg, osdcluster->get_version(), 
+	it->oid, it->rg, osdmap->get_version(), 
 				   OSD_OP_DELETE);
 	it->len, it->offset);
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);

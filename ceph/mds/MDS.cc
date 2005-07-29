@@ -4,7 +4,7 @@
 
 #include "msg/Messenger.h"
 
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 #include "osd/Filer.h"
 
 #include "MDS.h"
@@ -26,12 +26,14 @@
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
-#include "messages/MOSDGetClusterAck.h"
+#include "messages/MOSDGetMapAck.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
+#include "messages/MHashReaddir.h"
+#include "messages/MHashReaddirReply.h"
 
 #include "messages/MLock.h"
 
@@ -88,17 +90,17 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   osdmonitor = new OSDMonitor(this);
 
 
-  // <HACK set up OSDCluster from g_conf>
-  osdcluster = new OSDCluster();
+  // <HACK set up OSDMap from g_conf>
+  osdmap = new OSDMap();
   OSDGroup osdg;
   osdg.num_osds = g_conf.num_osd;
   for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
   osdg.weight = 100;
   osdg.osd_size = 100;  // not used yet?
-  osdcluster->add_group(osdg);
+  osdmap->add_group(osdg);
   // </HACK>
 
-  filer = new Filer(messenger, osdcluster);
+  filer = new Filer(messenger, osdmap);
 
   mdlog->set_max_events(g_conf.mds_log_max_len);
 
@@ -166,7 +168,7 @@ MDS::~MDS() {
   if (osdmonitor) { delete osdmonitor; osdmonitor = 0; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
   if (anchormgr) { delete anchormgr; anchormgr = NULL; }
-  if (osdcluster) { delete osdcluster; osdcluster = 0; }
+  if (osdmap) { delete osdmap; osdmap = 0; }
 
   if (filer) { delete filer; filer = 0; }
   if (messenger) { delete messenger; messenger = NULL; }
@@ -272,9 +274,6 @@ mds_load_t MDS::get_load()
 	l.root_pop = mdcache->get_root()->popularity[MDS_POP_ANYDOM].get();
   } else
 	l.root_pop = 0;
-  l.req_rate = stat_req.get();
-  l.rd_rate = stat_read.get();
-  l.wr_rate = stat_write.get();
   return l;
 }
 
@@ -301,8 +300,8 @@ void MDS::proc_message(Message *m)
 	filer->handle_osd_op_reply((class MOSDOpReply*)m);
 	return;
 
-  case MSG_OSD_GETCLUSTER:
-	handle_osd_getcluster(m);
+  case MSG_OSD_GETMAP:
+	handle_osd_getmap(m);
 	return;
 
 	// MDS
@@ -355,6 +354,14 @@ void MDS::proc_message(Message *m)
   case MSG_CLIENT_REQUEST:
 	handle_client_request((MClientRequest*)m);
 	return;
+
+  case MSG_MDS_HASHREADDIR:
+	handle_hash_readdir((MHashReaddir*)m);
+	return;
+  case MSG_MDS_HASHREADDIRREPLY:
+	handle_hash_readdir_reply((MHashReaddirReply*)m);
+	return;
+	
   }
 
   dout(1) << " main unknown message " << m->get_type() << endl;
@@ -478,28 +485,31 @@ void MDS::my_dispatch(Message *m)
 	  num_bal_times--;
 	}
 	
-	static map<int,int> didhash;
-	if (0 && elapsed.sec() > 15 && !didhash[whoami]) {
-	  CInode *in = mdcache->get_inode(100000010);
-	  if (in && in->dir) {
-		if (in->dir->is_auth()) 
-		  mdcache->hash_dir(in->dir);
-		didhash[whoami] = 1;
+
+	// HACK to test hashing stuff
+	if (1) {
+	  static map<int,int> didhash;
+	  if (elapsed.sec() > 15 && !didhash[whoami]) {
+		CInode *in = mdcache->get_inode(100000010);
+		if (in && in->dir) {
+		  if (in->dir->is_auth()) 
+			mdcache->hash_dir(in->dir);
+		  didhash[whoami] = 1;
+		}
+	  }
+	  if (0 && elapsed.sec() > 25 && didhash[whoami] == 1) {
+		CInode *in = mdcache->get_inode(100000010);
+		if (in && in->dir) {
+		  if (in->dir->is_auth() && in->dir->is_hashed())
+			mdcache->unhash_dir(in->dir);
+		  didhash[whoami] = 2;
+		}
 	  }
 	}
-	if (0 && elapsed.sec() > 25 && didhash[whoami] == 1) {
-	  CInode *in = mdcache->get_inode(100000010);
-	  if (in && in->dir) {
-		if (in->dir->is_auth())
-		  mdcache->unhash_dir(in->dir);
-		didhash[whoami] = 2;
-	  }
-	}
-	  
 
   }
 
-  // hack
+  // HACK to force export to test foreign renames
   if (false && whoami == 0) {
 	static bool didit = false;
 	
@@ -515,6 +525,8 @@ void MDS::my_dispatch(Message *m)
 	}
   }
 
+
+
   // shut down?
   if (shutting_down && !shut_down) {
 	if (mdcache->shutdown_pass()) {
@@ -528,11 +540,11 @@ void MDS::my_dispatch(Message *m)
 }
 
 
-void MDS::handle_osd_getcluster(Message *m)
+void MDS::handle_osd_getmap(Message *m)
 {
-  dout(7) << "osd_getcluster from " << MSG_ADDR_NICE(m->get_source()) << endl;
+  dout(7) << "osd_getmap from " << MSG_ADDR_NICE(m->get_source()) << endl;
   
-  messenger->send_message(new MOSDGetClusterAck(osdcluster),
+  messenger->send_message(new MOSDGetMapAck(osdmap),
 						  m->get_source());
   delete m;
 }
@@ -581,7 +593,7 @@ void MDS::handle_client_mount(MClientMount *m)
 
 
   // ack
-  messenger->send_message(new MClientMountAck(m, osdcluster), 
+  messenger->send_message(new MClientMountAck(m, osdmap), 
 						  m->get_source(), m->get_source_port());
   delete m;
 }
@@ -971,9 +983,6 @@ void MDS::handle_client_stat(MClientRequest *req,
 
   mdcache->inode_soft_read_finish(ref);
 
-  stat_read.hit();
-  stat_req.hit();
-
   balancer->hit_inode(ref);   
 
   // reply
@@ -1096,9 +1105,12 @@ bool MDS::try_open_dir(CInode *in, MClientRequest *req)
 
 // DIRECTORY and NAMESPACE OPS
 
+// READDIR
 
-void MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items, int& numfiles)
+int MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items)
 {
+  int numfiles = 0;
+
   for (CDir_map_t::iterator it = dir->begin(); 
 	   it != dir->end(); 
 	   it++) {
@@ -1125,6 +1137,133 @@ void MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items, int& numfil
 	items.push_back( new c_inode_info(in, whoami, it->first) );
 	numfiles++;
   }
+  return numfiles;
+}
+
+
+/*
+ * note: this is pretty sloppy, but should work just fine i think...
+ */
+void MDS::handle_hash_readdir(MHashReaddir *m)
+{
+  CInode *cur = mdcache->get_inode(m->get_ino());
+  assert(cur);
+
+  if (!cur->dir ||
+	  !cur->dir->is_hashed()) {
+	assert(0);
+	dout(7) << "handle_hash_readdir don't have dir open, or not hashed.  giving up!" << endl;
+	delete m;
+	return;	
+  }
+  CDir *dir = cur->dir;
+  assert(dir);
+  assert(dir->is_hashed());
+
+  // complete?
+  if (!dir->is_complete()) {
+	dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << endl;
+	mdstore->fetch_dir(dir, new C_MDS_RetryMessage(this, m));
+	return;
+  }  
+  
+  // get content
+  list<c_inode_info*> items;
+  encode_dir_contents(dir, items);
+  
+  // sent it back!
+  messenger->send_message(new MHashReaddirReply(dir->ino(), items),
+						  m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+}
+
+
+void MDS::handle_hash_readdir_reply(MHashReaddirReply *m)
+{
+  CInode *cur = mdcache->get_inode(m->get_ino());
+  assert(cur);
+
+  if (!cur->dir ||
+	  !cur->dir->is_hashed()) {
+	assert(0);
+	dout(7) << "handle_hash_readdir don't have dir open, or not hashed.  giving up!" << endl;
+	delete m;
+	return;	
+  }
+  CDir *dir = cur->dir;
+  assert(dir);
+  assert(dir->is_hashed());
+  
+  // move items to hashed_readdir gather
+  int from = m->get_source();
+  assert(dir->hashed_readdir.count(from) == 0);
+  dir->hashed_readdir[from].splice(dir->hashed_readdir[from].begin(),
+								   m->get_items());
+  delete m;
+
+  // gather finished?
+  if (dir->hashed_readdir.size() < (unsigned)get_cluster()->get_num_mds()) {
+	dout(7) << "still waiting for more hashed readdir bits" << endl;
+	return;
+  }
+  
+  dout(7) << "got last bit!  finishing waiters" << endl;
+  
+  // do these finishers.  they'll copy the results.
+  list<Context*> finished;
+  dir->take_waiting(CDIR_WAIT_THISHASHEDREADDIR, finished);
+  finish_contexts(finished);
+  
+  // now discard these results
+  for (map<int, list<c_inode_info*> >::iterator it = dir->hashed_readdir.begin();
+	   it != dir->hashed_readdir.end();
+	   it++) {
+	for (list<c_inode_info*>::iterator ci = it->second.begin();
+		 ci != it->second.end();
+		 ci++) 
+	  delete *ci;
+  }
+  dir->hashed_readdir.clear();
+  
+  // unpin dir (we're done!)
+  dir->auth_unpin();
+  
+  // trigger any waiters for next hashed readdir cycle
+  dir->take_waiting(CDIR_WAIT_NEXTHASHEDREADDIR, finished_queue);
+}
+
+
+class C_MDS_HashReaddir : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CDir *dir;
+public:
+  C_MDS_HashReaddir(MDS *mds, MClientRequest *req, CDir *dir) {
+	this->mds = mds;
+	this->req = req;
+	this->dir = dir;
+  }
+  void finish(int r) {
+	mds->finish_hash_readdir(req, dir);
+  }
+};
+
+void MDS::finish_hash_readdir(MClientRequest *req, CDir *dir) 
+{
+  dout(7) << "finish_hash_readdir on " << *dir << endl;
+
+  assert(dir->is_hashed());
+  assert(dir->hashed_readdir.size() == (unsigned)get_cluster()->get_num_mds());
+
+  // reply!
+  MClientReply *reply = new MClientReply(req);
+  reply->set_result(0);
+
+  for (int i=0; i<get_cluster()->get_num_mds(); i++) {
+	reply->copy_dir_items(dir->hashed_readdir[i]);
+  }
+
+  // ok!
+  reply_request(req, reply, dir->inode);
 }
 
 
@@ -1138,7 +1277,6 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	reply_request(req, -ENOTDIR);
 	return;
   }
-
 
   // auth?
   if (!cur->dir_is_auth()) {
@@ -1158,23 +1296,71 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	return;
   assert(cur->dir->is_auth());
 
+  // unhashing?  wait!
+  if (cur->dir->is_hashed() &&
+	  cur->dir->is_unhashing()) {
+	dout(10) << "unhashing, waiting" << endl;
+	cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
+						 new C_MDS_RetryRequest(this, req, cur));
+	return;
+  }
+
   // check perm
   if (!mdcache->inode_hard_read_start(cur,req))
 	return;
   mdcache->inode_hard_read_finish(cur);
 
+  CDir *dir = cur->dir;
+  assert(dir);
 
-  if (!cur->dir->is_complete()) {
+  if (!dir->is_complete()) {
 	// fetch
 	dout(10) << " incomplete dir contents for readdir on " << *cur->dir << ", fetching" << endl;
-	mdstore->fetch_dir(cur->dir, new C_MDS_RetryRequest(this, req, cur));
+	mdstore->fetch_dir(dir, new C_MDS_RetryRequest(this, req, cur));
 	return;
   }
-  
+
+  if (dir->is_hashed()) {
+	// HASHED
+	dout(7) << "hashed dir" << endl;
+	if (!dir->can_auth_pin()) {
+	  dout(7) << "can't auth_pin dir " << *dir << " waiting" << endl;
+	  dir->add_waiter(CDIR_WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(this, req, cur));
+	  return;
+	}
+
+	if (!dir->hashed_readdir.empty()) {
+	  dout(7) << "another readdir gather in progres, waiting" << endl;
+	  dir->add_waiter(CDIR_WAIT_NEXTHASHEDREADDIR, new C_MDS_RetryRequest(this, req, cur));
+	  return;
+	}
+
+	// start new readdir gather
+	dout(7) << "staring new hashed readdir gather" << endl;
+
+	// pin auth for process!
+	dir->auth_pin();
+	
+	// get local bits
+	encode_dir_contents(cur->dir, dir->hashed_readdir[whoami]);
+	
+	// request other bits
+	for (int i=0; i<get_cluster()->get_num_mds(); i++) {
+	  if (i == get_nodeid()) continue;
+	  messenger->send_message(new MHashReaddir(dir->ino()),
+							  MSG_ADDR_MDS(i), MDS_PORT_SERVER, MDS_PORT_SERVER);
+	}
+
+	// wait
+	dir->add_waiter(CDIR_WAIT_THISHASHEDREADDIR, 
+					new C_MDS_HashReaddir(this, req, dir));
+	return;
+  }
+
+  // NON-HASHED
   // build dir contents
   list<c_inode_info*> items;
-  int numfiles = 0;
-  encode_dir_contents(cur->dir, items, numfiles);
+  int numfiles = encode_dir_contents(cur->dir, items);
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
@@ -1183,9 +1369,6 @@ void MDS::handle_client_readdir(MClientRequest *req,
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(0);
   
-  stat_read.hit();
-  stat_req.hit();
-
   balancer->hit_dir(cur->dir);
 
   // reply
@@ -1309,6 +1492,9 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
   dn->mark_dirty();
   newi->mark_dirty();
   
+  // journal it
+  mdlog->submit_entry(new EInodeUpdate(newi));  // FIXME WRONG EVENT
+
   // ok!
   return newi;
 }

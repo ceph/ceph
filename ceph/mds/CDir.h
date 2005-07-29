@@ -147,7 +147,9 @@ class Context;
     // waiter   export_dir
     // trigger  handel_export_dir_prep_ack
 
-#define CDIR_WAIT_HASHED        (1<<19)  // hash finish
+#define CDIR_WAIT_HASHED        (1<<17)  // hash finish
+#define CDIR_WAIT_THISHASHEDREADDIR (1<<18)  // current readdir lock
+#define CDIR_WAIT_NEXTHASHEDREADDIR (1<<19)  // after current readdir lock finishes
 
 #define CDIR_WAIT_DNREAD        (1<<20)
 #define CDIR_WAIT_DNLOCK        (1<<21)
@@ -208,6 +210,10 @@ class CDir {
 
   // hashed dirs
   set<int>   hashed_subset;  // HASHING: subset of mds's that are hashed
+ public:
+  // for class MDS
+  map<int, list<class c_inode_info*> > hashed_readdir;
+ protected:
 
   // context
   MDS              *mds;

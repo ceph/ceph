@@ -2,7 +2,7 @@
 #include "include/types.h"
 
 #include "OSD.h"
-#include "OSDCluster.h"
+#include "OSDMap.h"
 
 #ifdef USE_OBFS
 # include "OBFSStore.h"
@@ -23,7 +23,7 @@
 #include "messages/MPingAck.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDGetClusterAck.h"
+#include "messages/MOSDGetMapAck.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -56,7 +56,7 @@ OSD::OSD(int id, Messenger *m)
   messenger = m;
   messenger->set_dispatcher(this);
 
-  osdcluster = 0;
+  osdmap = 0;
 
   last_tid = 0;
 
@@ -106,7 +106,7 @@ OSD::OSD(int id, Messenger *m)
 OSD::~OSD()
 {
   if (threadpool) { delete threadpool; threadpool = 0; }
-  if (osdcluster) { delete osdcluster; osdcluster = 0; }
+  if (osdmap) { delete osdmap; osdmap = 0; }
   if (monitor) { delete monitor; monitor = 0; }
   if (messenger) { delete messenger; messenger = 0; }
   if (logger) { delete logger; logger = 0; }
@@ -164,8 +164,8 @@ void OSD::dispatch(Message *m)
 	delete m;
 	break;
 
-  case MSG_OSD_GETCLUSTERACK:
-	handle_getcluster_ack((MOSDGetClusterAck*)m);
+  case MSG_OSD_GETMAPACK:
+	handle_getmap_ack((MOSDGetMapAck*)m);
 	break;
 	
   case MSG_PING:
@@ -224,19 +224,19 @@ void OSD::handle_ping(MPing *m)
 }
 
 
-void OSD::handle_getcluster_ack(MOSDGetClusterAck *m)
+void OSD::handle_getmap_ack(MOSDGetMapAck *m)
 {
   // SAB
   osd_lock.Lock();
 
-  if (!osdcluster) osdcluster = new OSDCluster();
-  osdcluster->decode(m->get_osdcluster());
-  dout(7) << "got OSDCluster version " << osdcluster->get_version() << endl;
+  if (!osdmap) osdmap = new OSDMap();
+  osdmap->decode(m->get_osdmap());
+  dout(7) << "got OSDMap version " << osdmap->get_version() << endl;
   delete m;
 
   // process waiters
   list<MOSDOp*> waiting;
-  waiting.splice(waiting.begin(), waiting_for_osdcluster);
+  waiting.splice(waiting.begin(), waiting_for_osdmap);
 
   for (list<MOSDOp*>::iterator it = waiting.begin();
 	   it != waiting.end();
@@ -252,15 +252,15 @@ void OSD::handle_op(MOSDOp *op)
 {
   // starting up?
 
-  if (!osdcluster) {
+  if (!osdmap) {
     // SAB
     osd_lock.Lock();
 
-	dout(7) << "no OSDCluster, starting up" << endl;
-	if (waiting_for_osdcluster.empty()) 
-	  messenger->send_message(new MGenericMessage(MSG_OSD_GETCLUSTER), 
+	dout(7) << "no OSDMap, starting up" << endl;
+	if (waiting_for_osdmap.empty()) 
+	  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
 							  MSG_ADDR_MDS(0), MDS_PORT_MAIN);
-	waiting_for_osdcluster.push_back(op);
+	waiting_for_osdmap.push_back(op);
 
 	// SAB
 	osd_lock.Unlock();
@@ -270,20 +270,20 @@ void OSD::handle_op(MOSDOp *op)
   
 
   // check cluster version
-  if (op->get_ocv() > osdcluster->get_version()) {
+  if (op->get_ocv() > osdmap->get_version()) {
 	// op's is newer
-	dout(7) << "op cluster " << op->get_ocv() << " > " << osdcluster->get_version() << endl;
+	dout(7) << "op cluster " << op->get_ocv() << " > " << osdmap->get_version() << endl;
 	
 	// query MDS
 	dout(7) << "querying MDS" << endl;
-	messenger->send_message(new MGenericMessage(MSG_OSD_GETCLUSTER), 
+	messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
 							MSG_ADDR_MDS(0), MDS_PORT_MAIN);
 	assert(0);
 
 	// SAB
 	osd_lock.Lock();
 
-	waiting_for_osdcluster.push_back(op);
+	waiting_for_osdmap.push_back(op);
 
 	// SAB
 	osd_lock.Unlock();
@@ -291,9 +291,9 @@ void OSD::handle_op(MOSDOp *op)
 	return;
   }
 
-  if (op->get_ocv() < osdcluster->get_version()) {
+  if (op->get_ocv() < osdmap->get_version()) {
 	// op's is old
-	dout(7) << "op cluster " << op->get_ocv() << " > " << osdcluster->get_version() << endl;
+	dout(7) << "op cluster " << op->get_ocv() << " > " << osdmap->get_version() << endl;
   }
 
 
@@ -305,7 +305,7 @@ void OSD::handle_op(MOSDOp *op)
       // PRIMARY
 	
       // verify that we are primary, or acting primary
-      int acting_primary = osdcluster->get_rg_acting_primary( op->get_rg() );
+      int acting_primary = osdmap->get_rg_acting_primary( op->get_rg() );
       if (acting_primary != whoami) {
 	dout(7) << " acting primary is " << acting_primary << ", forwarding" << endl;
 	messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
@@ -314,7 +314,7 @@ void OSD::handle_op(MOSDOp *op)
       }
     } else {
       // REPLICA
-      int my_role = osdcluster->get_rg_role(rg, whoami);
+      int my_role = osdmap->get_rg_role(rg, whoami);
       
       dout(7) << "rg " << rg << " my_role " << my_role << " wants " << op->get_rg_role() << endl;
       
@@ -377,7 +377,7 @@ void OSD::op_read(MOSDOp *r)
 						 r->get_length(), r->get_offset(),
 						 bptr.c_str());
   // set up reply
-  MOSDOpReply *reply = new MOSDOpReply(r, 0, osdcluster); 
+  MOSDOpReply *reply = new MOSDOpReply(r, 0, osdmap); 
   if (got >= 0) {
 	bptr.set_length(got);   // properly size the buffer
 
@@ -418,7 +418,7 @@ void OSD::op_write(MOSDOp *op)
 	if (op->get_rg_nrep() > 1) {
 	  dout(7) << "op_write nrep=" << op->get_rg_nrep() << endl;
 	  int reps[op->get_rg_nrep()];
-	  osdcluster->repgroup_to_osds(op->get_rg(),
+	  osdmap->repgroup_to_osds(op->get_rg(),
 								   reps,
 								   op->get_rg_nrep());
 
@@ -432,7 +432,7 @@ void OSD::op_write(MOSDOp *op)
 								messenger->get_myaddr(),
 								op->get_oid(),
 								op->get_rg(),
-								osdcluster->get_version(),
+								osdmap->get_version(),
 								op->get_op());
 		wr->get_data() = op->get_data();   // copy bufferlist
 		messenger->send_message(wr, MSG_ADDR_OSD(reps[i]));
@@ -501,7 +501,7 @@ void OSD::op_write(MOSDOp *op)
   }
 
   // reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdcluster);
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);
   messenger->send_message(reply, op->get_asker());
 
   delete op;
@@ -512,7 +512,7 @@ void OSD::op_mkfs(MOSDOp *op)
   dout(3) << "MKFS" << endl;
   {
     int r = store->mkfs();	
-    messenger->send_message(new MOSDOpReply(op, r, osdcluster), op->get_asker());
+    messenger->send_message(new MOSDOpReply(op, r, osdmap), op->get_asker());
   }
   delete op;
 }
@@ -523,7 +523,7 @@ void OSD::op_delete(MOSDOp *op)
   dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
   
   // "ack"
-  messenger->send_message(new MOSDOpReply(op, r, osdcluster), op->get_asker());
+  messenger->send_message(new MOSDOpReply(op, r, osdmap), op->get_asker());
   
   logger->inc("rm");
   delete op;
@@ -535,7 +535,7 @@ void OSD::op_truncate(MOSDOp *op)
   dout(3) << "truncate on " << op->get_oid() << " at " << op->get_offset() << " r = " << r << endl;
   
   // "ack"
-  messenger->send_message(new MOSDOpReply(op, r, osdcluster), op->get_asker());
+  messenger->send_message(new MOSDOpReply(op, r, osdmap), op->get_asker());
   
   logger->inc("trunc");
 
@@ -550,7 +550,7 @@ void OSD::op_stat(MOSDOp *op)
   
   dout(3) << "stat on " << op->get_oid() << " r = " << r << " size = " << st.st_size << endl;
 	  
-  MOSDOpReply *reply = new MOSDOpReply(op, r, osdcluster);
+  MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap);
   reply->set_object_size(st.st_size);
   messenger->send_message(reply, op->get_asker());
 	  

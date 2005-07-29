@@ -1,6 +1,6 @@
 
 #include "config.h"
-#include "osd/OSDCluster.h"
+#include "osd/OSDMap.h"
 
 
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
