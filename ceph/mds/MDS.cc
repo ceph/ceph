@@ -2705,8 +2705,10 @@ void MDS::handle_client_release(MClientRequest *req, CInode *cur)
 	// FIXME THIS IS BROKEN
 	//assert(cur->softlock.can_write(true));   // otherwise we're toast???
 
+	/* FIXME THIS IS BROKEN
 	if (!mdcache->inode_soft_write_start(cur, req))
 	  return;  // wait
+	*/
 
 	// update size, mtime
 	time_t mtime = req->get_targ();
@@ -2727,8 +2729,12 @@ void MDS::handle_client_release(MClientRequest *req, CInode *cur)
 	dout(7) << " incrementing file_data_version for " << *cur << endl;
 	cur->inode.file_data_version++;
 
+	/* FIXME THIS IS BROKEN
+
 	// release write
 	mdcache->inode_soft_write_finish(cur); 
+	*/
+
 	mdcache->inode_soft_eval(cur);
   } else {
 	dout(10) << "no WR caps issued, not updating mtime/size" << endl;
