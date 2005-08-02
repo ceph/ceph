@@ -32,6 +32,12 @@ class Cond
 	return r;
   }
 
+  int Wait(Mutex &mutex, char* s)  { 
+	cout << "Wait: " << s << endl;
+	int r = pthread_cond_wait(&C, &mutex.M);
+	return r;
+  }
+
   int Wait(Mutex &mutex,
 		   struct timeval *tv) {
 	return Wait(mutex, utime_t(tv->tv_sec, tv->tv_usec));

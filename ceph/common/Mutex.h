@@ -18,6 +18,7 @@ class Mutex
   mutable pthread_mutex_t M;
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
+  bool tag;
 
   public:
 
@@ -29,6 +30,18 @@ class Mutex
 	pthread_mutex_init(&M,&attr);
     //cout << this << " mutex init = " << r << endl;
     pthread_mutexattr_destroy(&attr);
+    this->tag = false;
+  }
+
+  Mutex(bool tag)
+  {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&M,&attr);
+    //cout << this << " mutex init = " << r << endl;
+    pthread_mutexattr_destroy(&attr);
+    this->tag = tag;
   }
 
   virtual ~Mutex()
@@ -38,8 +51,16 @@ class Mutex
   }
 
   int Lock()  { 
+	if (tag) cout << this << " " << pthread_self() << endl; 
 	int r = pthread_mutex_lock(&M);
-	//cout << this << " " << pthread_self() << " lock = " << r << endl;
+	if (tag) cout << "lock = " << r << endl;
+	return r;
+  }
+
+  int Lock(char *s)  { 
+	cout << "Lock: " << s << endl;
+	int r = pthread_mutex_lock(&M);
+	cout << this << " " << pthread_self() << " lock = " << r << endl;
 	return r;
   }
 
@@ -50,8 +71,17 @@ class Mutex
 
   int Unlock() 
   { 
+	if (tag) cout << this << " " << pthread_self() << endl;
 	int r = pthread_mutex_unlock(&M);
-	//cout << this << " " << pthread_self() << " unlock = " << r << endl;
+	if (tag) cout << "lock = " << r << endl;
+	return r;
+  }
+
+  int Unlock(char *s) 
+  { 
+	cout << "Unlock: " << s << endl;
+	int r = pthread_mutex_unlock(&M);
+	cout << this << " " << pthread_self() << " unlock = " << r << endl;
 	return r;
   }
 
