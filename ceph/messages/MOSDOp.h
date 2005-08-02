@@ -9,6 +9,9 @@
  * oid - object id
  * op  - OSD_OP_DELETE, etc.
  *
+ * rg_role  - who we want ... 0 == primary, this is what clients/mds will do.
+ * rg_nrep  - how many replicas we want ... just for writes currently?
+ *
  */
 
 #define OSD_OP_READ       1
@@ -29,7 +32,7 @@ typedef struct {
   object_t oid;
   repgroup_t rg;
   int rg_role, rg_nrep;
-  __uint64_t ocv;
+  __uint64_t map_version;
 
   int op;
   size_t length, offset;
@@ -51,7 +54,7 @@ class MOSDOp : public Message {
   repgroup_t get_rg() { return st.rg; }
   int        get_rg_role() { return st.rg_role; }  // who am i asking for?
   int        get_rg_nrep() { return st.rg_nrep; }
-  __uint64_t get_ocv() { return st.ocv; }
+  __uint64_t get_map_version() { return st.map_version; }
 
   int get_op() { return st.op; }
   size_t get_length() { return st.length; }
@@ -71,7 +74,7 @@ class MOSDOp : public Message {
   long get_pcid() { return st.pcid; }
 
   MOSDOp(long tid, msg_addr_t asker, 
-		 object_t oid, repgroup_t rg, __uint64_t ocv, int op) :
+		 object_t oid, repgroup_t rg, __uint64_t mapversion, int op) :
 	Message(MSG_OSD_OP) {
 	memset(&st, 0, sizeof(st));
 	this->st.tid = tid;
@@ -80,7 +83,7 @@ class MOSDOp : public Message {
 	this->st.oid = oid;
 	this->st.rg = rg;
 	this->st.rg_role = 0;
-	this->st.ocv = ocv;
+	this->st.map_version = mapversion;
 	this->st.op = op;
   }
   MOSDOp() {}

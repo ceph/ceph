@@ -29,7 +29,7 @@ typedef struct {
   size_t length, offset;
   size_t object_size;
 
-  __uint64_t _new_ocv;
+  __uint64_t _new_map_version;
   size_t _data_len, _oc_len;
 } MOSDOpReply_st;
 
@@ -64,7 +64,7 @@ class MOSDOpReply : public Message {
   }
 
   // osdmap
-  __uint64_t get_ocv() { return st._new_ocv; }
+  __uint64_t get_map_version() { return st._new_map_version; }
   bufferlist& get_osdmap() { 
 	return osdmap;
   }
@@ -87,9 +87,10 @@ class MOSDOpReply : public Message {
 	this->st.offset = req->st.offset;
 
 	// attach updated cluster spec?
-	if (req->get_ocv() < oc->get_version()) {
+	if (oc &&
+		req->get_map_version() < oc->get_version()) {
 	  oc->encode(osdmap);
-	  st._new_ocv = oc->get_version();
+	  st._new_map_version = oc->get_version();
 	  st._oc_len = osdmap.length();
 	}
   }

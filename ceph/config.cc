@@ -74,7 +74,7 @@ md_config_t g_conf = {
   client_bcache_maxfrag: 10, // max actual relative # of bheads over opt rel # of bheads
 
   client_trace: 0,
-  fuse_direct_io: 1,
+  fuse_direct_io: 0,
   
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,

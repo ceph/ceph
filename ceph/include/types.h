@@ -131,7 +131,7 @@ struct inode_t {
 
 
 // osd types
-typedef int        repgroup_t;    // replica group
+typedef __uint64_t repgroup_t;    // replica group
 typedef __uint64_t object_t;      // object id
 typedef __uint64_t coll_t;        // collection id
 

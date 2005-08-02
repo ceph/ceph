@@ -7,8 +7,12 @@
 #include "common/Mutex.h"
 #include "common/ThreadPool.h"
 
+#include "ObjectStore.h"
+
 #include <map>
 using namespace std;
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 
 class Messenger;
@@ -80,24 +84,66 @@ struct RGPeer {
 #define RG_STATE_CLEAN       4  // i am fully replicated
 
 class RG {
- public:
+ protected:
   repgroup_t rg;
   int        role;    // 0 = primary, 1 = secondary, etc.  -1=undef/none.
-  int        state;   
+  int        state;   // see bit defns above
+
+  int        primary;     // replica: who the primary is (if not me)
+  set<int>   old_replica_set; // old primary: where replicas used to be
   
-  map<int, RGPeer>          peers;
+  map<int, RGPeer*>         peers;  // primary: (soft state) active peers
 
   // for unstable states,
-  map<object_t, version_t>  deleted_objects;  // locally
+  map<object_t, version_t>  deleted_objects;  // locally deleted objects
 
  public:  
-  RG(repgroup_t rg);
+  RG(repgroup_t r) : rg(r),
+	role(0),
+	state(0) { }
   
   repgroup_t get_rg() { return rg; }
   int        get_role() { return role; }
-  int        get_state() { return state; }
+  int        get_primary() { return primary; }
+
+  void       set_role(int r) { role = r; }
+  void       set_primary(int p) { primary = p; }
+
+  map<int, RGPeer*>& get_peers() { return peers; }
+  RGPeer* get_peer(int p) {
+	if (peers.count(p)) return peers[p];
+	return 0;
+  }
+  set<int>   get_old_replica_set() { return old_replica_set; }
+
+  int  get_state() { return state; }
+  bool state_test(int m) { return (state & m) != 0; }
+  void set_state(int s) { state = s; }
+  void state_set(int m) { state |= m; }
+  void state_clear(int m) { state &= ~m; }
   
-  void enumerate_objects(list<object_t>& ls);
+  void store(ObjectStore *store) {
+	if (!store->collection_exists(rg))
+	  store->collection_create(rg);
+	store->collection_setattr(rg, "role", &role, sizeof(role));
+	store->collection_setattr(rg, "primary", &primary, sizeof(primary));
+	store->collection_setattr(rg, "state", &state, sizeof(state));	
+  }
+  void fetch(ObjectStore *store) {
+	store->collection_getattr(rg, "role", &role, sizeof(role));
+	store->collection_getattr(rg, "primary", &primary, sizeof(primary));
+	store->collection_getattr(rg, "state", &state, sizeof(state));	
+  }
+
+  void add_object(ObjectStore *store, object_t oid) {
+	store->collection_add(rg, oid);
+  }
+  void remove_object(ObjectStore *store, object_t oid) {
+	store->collection_remove(rg, oid);
+  }
+  void list_objects(ObjectStore *store, list<object_t>& ls) {
+	store->collection_list(rg, ls);
+  }
 };
 
 
@@ -111,6 +157,14 @@ class Onode {
   map<int, version_t> stray_replicas;   // osds w/ stray replicas.
 
  public:
+  Onode(object_t o) : oid(o), version(0) { }
+
+  void store(ObjectStore *store) {
+	
+  }
+  void fetch(ObjectStore *store) {
+
+  }
 
 };
 
@@ -139,6 +193,17 @@ class OSD : public Dispatcher {
   Mutex osd_lock;
 
 
+  void update_map(bufferlist& state);
+
+  // rg's
+  hash_map<repgroup_t, RG*>      rg_map;
+
+  void get_rg_list(list<repgroup_t>& ls);
+  bool rg_exists(repgroup_t rg);
+  RG *open_rg(repgroup_t rg);            // return RG, load state from store (if needed)
+  void close_rg(repgroup_t rg);          // close in-memory state
+  void remove_rg(repgroup_t rg);         // remove state from store
+
  public:
   OSD(int id, Messenger *m);
   ~OSD();
@@ -147,15 +212,12 @@ class OSD : public Dispatcher {
   int init();
   int shutdown();
 
-  // OSDMap
-  void update_osd_map(__uint64_t ocv, bufferlist& blist);
-
+  // ops
   void queue_op(class MOSDOp *m);
   void do_op(class MOSDOp *m);
   static void doop(OSD *o, MOSDOp *op) {
       o->do_op(op);
     };
-
 
   // messages
   virtual void dispatch(Message *m);

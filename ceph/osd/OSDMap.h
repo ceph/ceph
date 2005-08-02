@@ -181,15 +181,47 @@ class OSDMap {
 
 
   /* map (repgroup) to a list of osds.  
-	 this is where we (will eventually) use RUSH. */
+	 this is where we invoke RUSH. */
   int repgroup_to_osds(repgroup_t rg,
 					   int *osds,         // list of osd addr's
 					   int num_rep) {     // num replicas we want
 	// get rush list
 	assert(rush);
 	rush->GetServersByKey( rg, num_rep, osds );
-	return 0;
+	return num_rep;
   }
+
+  int repgroup_to_nonfailed_osds(repgroup_t rg,
+								 int *osds,         // list of osd addr's
+								 int num_rep) {     // num replicas we want
+	// get rush list
+	assert(rush);
+	int group[NUM_RUSH_REPLICAS];
+	rush->GetServersByKey( rg, NUM_RUSH_REPLICAS, group );
+	int o = 0;
+	for (int i=0; i<NUM_RUSH_REPLICAS && o<num_rep; i++) {
+	  if (failed_osds.count(group[i])) continue;
+	  osds[o++] = group[i];
+	}
+	return o;
+  }
+
+  int repgroup_to_acting_osds(repgroup_t rg,
+							  int *osds,         // list of osd addr's
+							  int num_rep) {     // num replicas we want
+	// get rush list
+	assert(rush);
+	int group[NUM_RUSH_REPLICAS];
+	rush->GetServersByKey( rg, NUM_RUSH_REPLICAS, group );
+	int o = 0;
+	for (int i=0; i<NUM_RUSH_REPLICAS && o<num_rep; i++) {
+	  if (failed_osds.count(group[i])) continue;
+	  if (down_osds.count(group[i])) continue;
+	  osds[o++] = group[i];
+	}
+	return o;
+  }
+
 
 
   /* map (ino, ono) to an object name
@@ -206,36 +238,38 @@ class OSDMap {
 
   /* map rg to the primary osd */
   int get_rg_primary(repgroup_t rg) {
-	int group[NUM_RUSH_REPLICAS];
-	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
-	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
-	  if (failed_osds.count(group[i])) continue;
-	  return group[i];
-	}
-	assert(0);
-	return -1;  // we fail!
-
+	int group[1];
+	int nrep = repgroup_to_nonfailed_osds(rg, group, 1);
+	assert(nrep > 0);   // we fail!
+	return group[0];
   }
   /* map rg to the _acting_ primary osd (primary may be down) */
   int get_rg_acting_primary(repgroup_t rg) {
-	int group[NUM_RUSH_REPLICAS];
-	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
-	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
-	  if (down_osds.count(group[i])) continue;
-	  if (failed_osds.count(group[i])) continue;
-	  return group[i];
-	}
-	assert(0);
-	return -1;  // we fail!
+	int group[1];
+	int nrep = repgroup_to_acting_osds(rg, group, 1);
+	assert(nrep > 0);  // we fail!
+	return group[0];
   }
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
   int get_rg_role(repgroup_t rg, int osd) {
 	int group[NUM_RUSH_REPLICAS];
-	repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	int nrep = repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
 	int role = 0;
-	for (int i=0; i<NUM_RUSH_REPLICAS; i++) {
+	for (int i=0; i<nrep; i++) {
 	  if (failed_osds.count(group[i])) continue;
+	  if (group[i] == osd) return role;
+	  role++;
+	}
+	return -1;  // none
+  }
+  int get_rg_acting_role(repgroup_t rg, int osd) {
+	int group[NUM_RUSH_REPLICAS];
+	int nrep = repgroup_to_osds(rg, group, NUM_RUSH_REPLICAS);
+	int role = 0;
+	for (int i=0; i<nrep; i++) {
+	  if (failed_osds.count(group[i])) continue;
+	  if (down_osds.count(group[i])) continue;
 	  if (group[i] == osd) return role;
 	  role++;
 	}

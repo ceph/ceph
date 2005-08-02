@@ -357,9 +357,9 @@ void
 Filer::handle_osd_op_reply(MOSDOpReply *m)
 {
   // updated cluster info?
-  if (m->get_ocv() && 
-	  m->get_ocv() > osdmap->get_version()) {
-	dout(3) << "op reply has newer cluster " << m->get_ocv() << " > " << osdmap->get_version() << endl;
+  if (m->get_map_version() && 
+	  m->get_map_version() > osdmap->get_version()) {
+	dout(3) << "op reply has newer map " << m->get_map_version() << " > " << osdmap->get_version() << endl;
 	osdmap->decode( m->get_osdmap() );
   }
 

@@ -1,9 +1,32 @@
 
-- test hashed readdir
+I think the OSD stuff breaks down info a few different areas:
+
+- Lay out OSD in-memory data structures.  I've started this based on the stuff I posted to the list.
+
+- The object store needs to be able to store the metadata for objects and replica groups, via the ObjectStore interface.  This boils down to collections and extended attributes (on both objects and collections).  The beginnings of both are are implemented in FakeStore, but untested and unfinished.  
+- OSD::op_write needs to put new objects in a rg collection. 
+
+- Map the actual metadata we're keeping to object and collection xattrs.  Probably via fetch/store methods on the in-memory data structures.
+
+- When an OSD gets a new version of the map it needs to go through the process of checking it's active replica groups, seeing if its role has changed, etc.
+
+- The migration process itself.  Needs to be tunable somehow 
+
+- OSD::op_read needs to do the proxying sort of thing, where if it's is primary but !COMPLETE it needs to wait and fetch the object from the (old) replica it currently resides on, or block until old replicas are scanned.
+
+- OSD::op_write needs to do the replication thing.  I think replication should be implemented last, it's probably easier to add once the role changing stuff already works.
+
+
+
+
+
 - interactive hash/unhash interface
+- test hashed readdir
+- make logstream.flush align itself to stipes
+
 - carefully define/document frozen wrt dir_auth vs hashing
 
-- make logstream.flush align itself to stipes
+
 
 
 

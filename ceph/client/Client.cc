@@ -1308,6 +1308,7 @@ int Client::close(fh_t fh)
   int result = 0;
 
   // release caps right away?
+  dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
   if (in->num_rd == 0 &&
 	  in->num_wr == 0) {
 	// synchronously; FIXME this is dumb
@@ -1323,23 +1324,19 @@ int Client::close(fh_t fh)
 	req->set_caller_uid(getuid());
 	req->set_caller_gid(getgid());
 
+	// release caps locally
+	in->file_caps_seq = 0;
+	in->file_caps = 0;
+	in->file_wr_mtime = 0;
+	in->file_wr_size = 0;
+
+ 	put_inode(in);
+	
+	// make the call .. FIXME there's no reason this has to block!
 	MClientReply *reply = make_request(req, true, mds_auth);
 	assert(reply);
 	int result = reply->get_result();
 	assert(result == 0);
-
-	// success?
-	if (in->file_caps_seq == reply->get_file_caps_seq()) {
-	  // yup.
-	  dout(5) << "successfully released caps" << endl;
-	  in->file_caps_seq = 0;
-	  in->file_caps = 0;
-	  in->file_wr_mtime = 0;
-	  in->file_wr_size = 0;
-	  put_inode(in);
-	} else {
-	  dout(5) << "failed to release caps; i had " << in->file_caps_seq << " mds had " << reply->get_file_caps_seq() << endl;
-	}
   
 	delete reply;
   }

@@ -3,6 +3,8 @@
 
 #include "include/types.h"
 
+#include <sys/stat.h>
+
 #include <list>
 using namespace std;
 
@@ -34,21 +36,32 @@ class ObjectStore {
 					size_t len, off_t offset,
 					char *buffer,
 					bool fsync=true) = 0;
-
+  
+  virtual int setattr(object_t oid, const char *name,
+					  void *value, size_t size) {return 0;} //= 0;
+  virtual int getattr(object_t oid, const char *name,
+					  void *value, size_t size) {return 0;} //= 0;
+  virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
+  
   // collections
+  virtual int list_collections(list<coll_t>& ls) {return 0;}//= 0;
+  virtual bool collection_exists(coll_t c) {
+	struct stat st;
+	return collection_stat(c, &st) == 0;
+  }
+  virtual int collection_stat(coll_t c, struct stat *st) {return 0;}//= 0;
   virtual int collection_create(coll_t c) {return 0;}//= 0;
   virtual int collection_destroy(coll_t c) {return 0;}//= 0;
   virtual int collection_add(coll_t c, object_t o) {return 0;}//= 0;
   virtual int collection_remove(coll_t c, object_t o) {return 0;}// = 0;
   virtual int collection_list(coll_t c, list<object_t>& o) {return 0;}//= 0;
 
-  // attributes
-  virtual int setattr(object_t oid, const char *name,
-					  void *value, size_t size) {return 0;} //= 0;
-  virtual int getattr(object_t oid, const char *name,
-					  void *value, size_t size) {return 0;} //= 0;
-  virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
-
+  virtual int collection_setattr(object_t oid, const char *name,
+								 void *value, size_t size) {return 0;} //= 0;
+  virtual int collection_getattr(object_t oid, const char *name,
+								 void *value, size_t size) {return 0;} //= 0;
+  virtual int collection_listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
+  
 };
 
 #endif

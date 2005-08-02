@@ -487,7 +487,7 @@ void MDS::my_dispatch(Message *m)
 	
 
 	// HACK to test hashing stuff
-	if (1) {
+	if (0) {
 	  static map<int,int> didhash;
 	  if (elapsed.sec() > 15 && !didhash[whoami]) {
 		CInode *in = mdcache->get_inode(100000010);
