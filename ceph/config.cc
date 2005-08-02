@@ -101,10 +101,12 @@ md_config_t g_conf = {
 
 
   // --- osd ---
+  osd_num_rg: 10000,
   osd_nrep: 1,
   osd_fsync: true,
   osd_writesync: false,
   osd_maxthreads: 10,
+  
 
 
   // --- fakeclient (mds regression testing) ---
@@ -238,6 +240,8 @@ void parse_config_options(int argc, char **argv,
 	  g_conf.client_bcache_ttl = atoi(argv[++i]);
 
 
+	else if (strcmp(argv[i], "--osd_num_rg") == 0) 
+	  g_conf.osd_num_rg = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_nrep") == 0) 
 	  g_conf.osd_nrep = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 

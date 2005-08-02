@@ -26,7 +26,7 @@
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
-#include "messages/MOSDGetMapAck.h"
+#include "messages/MOSDMap.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -266,6 +266,37 @@ int MDS::shutdown_final()
 }
 
 
+void MDS::bcast_osd_map()
+{
+  dout(1) << "bcast_osd_map version " << osdmap->get_version() << endl;
+  assert(get_nodeid() == 0);
+
+  // tell mds
+  for (int i=0; i<get_cluster()->get_num_mds(); i++) {
+	messenger->send_message(new MOSDMap(osdmap),
+							MSG_ADDR_MDS(i));
+  }
+  
+  // tell osds
+  set<int> osds;
+  osdmap->get_all_osds(osds);
+  for (set<int>::iterator it = osds.begin();
+	   it != osds.end();
+	   it++) {
+	messenger->send_message(new MOSDMap(osdmap),
+							MSG_ADDR_OSD(*it));
+  }
+  
+  // tell clients
+  for (set<int>::iterator it = mounted_clients.begin();
+	   it != mounted_clients.end();
+	   it++) {
+	messenger->send_message(new MOSDMap(osdmap),
+							MSG_ADDR_CLIENT(*it));
+  }
+}
+
+
 
 mds_load_t MDS::get_load()
 {
@@ -298,6 +329,9 @@ void MDS::proc_message(Message *m)
 	// OSD ===============
   case MSG_OSD_OPREPLY:
 	filer->handle_osd_op_reply((class MOSDOpReply*)m);
+	return;
+  case MSG_OSD_MAP:
+	handle_osd_map((MOSDMap*)m);
 	return;
 
   case MSG_OSD_GETMAP:
@@ -507,6 +541,24 @@ void MDS::my_dispatch(Message *m)
 	  }
 	}
 
+
+	// HACK osd map change
+	if (0) {
+	  static int didit = 0;
+	  if (whoami == 0 && 
+		  elapsed.sec() > 10 && !didit) {
+		didit = 1;
+
+		dout(1) << "changing OSD map, removing one OSD" << endl;
+		osdmap->get_group(0).num_osds--;
+		osdmap->init_rush();
+		osdmap->inc_version();
+		
+		// bcast
+		bcast_osd_map();
+	  }	  
+	}
+
   }
 
   // HACK to force export to test foreign renames
@@ -544,9 +596,30 @@ void MDS::handle_osd_getmap(Message *m)
 {
   dout(7) << "osd_getmap from " << MSG_ADDR_NICE(m->get_source()) << endl;
   
-  messenger->send_message(new MOSDGetMapAck(osdmap),
+  messenger->send_message(new MOSDMap(osdmap),
 						  m->get_source());
   delete m;
+}
+
+
+void MDS::handle_osd_map(MOSDMap *m)
+{
+  if (!osdmap ||
+	  m->get_version() > osdmap->get_version()) {
+	if (osdmap) {
+	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	} else {
+	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << endl;
+	}
+	
+	osdmap->decode(m->get_osdmap());
+	
+	// kick requests who might be timing out on the wrong osds
+	// ** FIXME **
+	
+  } else {
+	dout(3) << "handle_osd_map ignoring osd map version " << m->get_version() << " <= " << osdmap->get_version() << endl;
+  }
 }
 
 

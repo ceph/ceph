@@ -466,6 +466,35 @@ inline void _decode(vector<int>& s, bufferlist& bl, int& off)
   assert(s.size() == (unsigned)n);
 }
 
+// list<__uint64_t>
+inline void _encode(list<__uint64_t>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (list<__uint64_t>::iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	__uint64_t v = *it;
+	bl.append((char*)&v, sizeof(v));
+	n--;
+  }
+  assert(n==0);
+}
+inline void _decode(list<__uint64_t>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+	__uint64_t v;
+	bl.copy(off, sizeof(v), (char*)&v);
+	off += sizeof(v);
+	s.push_back(v);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
 
 
 

@@ -72,6 +72,7 @@ struct md_config_t {
   bool  mds_verify_export_dirauth;     // debug flag
 
   // osd
+  int   osd_num_rg;
   int   osd_nrep;
   bool  osd_fsync;
   bool  osd_writesync;

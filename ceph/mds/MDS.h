@@ -160,6 +160,8 @@ class MDS : public Dispatcher {
   int shutdown_start();
   int shutdown_final();
 
+  void bcast_osd_map();
+
   // messages
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
@@ -184,6 +186,7 @@ class MDS : public Dispatcher {
 
   // osds
   void handle_osd_getmap(Message *m);
+  void handle_osd_map(class MOSDMap *m);
 
   // clients
   void handle_client_mount(class MClientMount *m);

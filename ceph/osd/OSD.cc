@@ -23,7 +23,8 @@
 #include "messages/MPingAck.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDGetMapAck.h"
+#include "messages/MOSDMap.h"
+#include "messages/MOSDRGNotify.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -143,46 +144,6 @@ int OSD::shutdown()
 
 
 
-// ------------------------------------
-// replica groups
-
-void OSD::get_rg_list(list<repgroup_t>& ls)
-{
-  // just list collections; assume they're all rg's (for now)
-  store->list_collections(ls);
-}
-
-
-bool OSD::rg_exists(repgroup_t rg) 
-{
-  struct stat st;
-  if (store->collection_stat(rg, &st) == 0) 
-	return true;
-  else
-	return false;
-}
-
-
-RG *OSD::open_rg(repgroup_t rg)
-{
-  // already open?
-  if (rg_map.count(rg)) 
-	return rg_map[rg];
-
-  // stat collection
-  RG *r = new RG(rg);
-  if (rg_exists(rg)) {
-	// exists
-	r->fetch(store);
-  } else {
-	// dne
-	r->store(store);
-  }
-  rg_map[rg] = r;
-
-  return r;
-}
- 
 
 
 
@@ -202,6 +163,14 @@ void OSD::dispatch(Message *m)
 	monitor->proc_message(m);
 	break;
   
+	// map and replication
+  case MSG_OSD_MAP:
+	handle_osd_map((MOSDMap*)m);
+	break;
+	
+  case MSG_OSD_RG_NOTIFY:
+	handle_rg_notify((MOSDRGNotify*)m);
+	break;
 	
 	// osd
   case MSG_SHUTDOWN:
@@ -209,10 +178,6 @@ void OSD::dispatch(Message *m)
 	delete m;
 	break;
 
-  case MSG_OSD_GETMAPACK:
-	handle_getmap_ack((MOSDGetMapAck*)m);
-	break;
-	
   case MSG_PING:
 	// take note.
 	monitor->host_is_alive(m->get_source());
@@ -270,6 +235,24 @@ void OSD::handle_ping(MPing *m)
 
 
 
+// =====================================================
+// MAP
+
+void OSD::wait_for_new_map(Message *m)
+{
+  // ask MDS
+  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
+						  MSG_ADDR_MDS(0), MDS_PORT_MAIN);
+
+  osd_lock.Lock();
+  waiting_for_osdmap.push_back(m);
+  osd_lock.Unlock();
+}
+
+
+/** update_map
+ * assimilate a new OSDMap.  scan rgs.
+ */
 void OSD::update_map(bufferlist& state)
 {
   // decode new map
@@ -277,11 +260,108 @@ void OSD::update_map(bufferlist& state)
   osdmap->decode(state);
   dout(7) << "update_map version " << osdmap->get_version() << endl;
 
+  // scan known replica groups!
+  scan_rg();
+}
+
+
+void OSD::handle_osd_map(MOSDMap *m)
+{
+  // SAB
+  osd_lock.Lock();
+
+  if (!osdmap ||
+	  m->get_version() > osdmap->get_version()) {
+	if (osdmap) {
+	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	} else {
+	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << endl;
+	}
+
+	update_map(m->get_osdmap());
+	delete m;
+
+	// process waiters
+	list<Message*> waiting;
+	waiting.splice(waiting.begin(), waiting_for_osdmap);
+
+	osd_lock.Unlock();
+	
+	for (list<Message*>::iterator it = waiting.begin();
+		 it != waiting.end();
+		 it++) {
+	  dispatch(*it);
+	}
+  } else {
+	dout(3) << "handle_osd_map ignoring osd map version " << m->get_version() << " <= " << osdmap->get_version() << endl;
+	osd_lock.Unlock();
+  }
+}
+
+
+
+// ======================================================
+// REPLICATION
+
+
+// ------------------------------------
+// replica groups
+
+void OSD::get_rg_list(list<repgroup_t>& ls)
+{
+  // just list collections; assume they're all rg's (for now)
+  store->list_collections(ls);
+}
+
+
+bool OSD::rg_exists(repgroup_t rg) 
+{
+  struct stat st;
+  if (store->collection_stat(rg, &st) == 0) 
+	return true;
+  else
+	return false;
+}
+
+
+RG *OSD::open_rg(repgroup_t rg)
+{
+  // already open?
+  if (rg_map.count(rg)) 
+	return rg_map[rg];
+
+  // stat collection
+  RG *r = new RG(rg);
+  if (rg_exists(rg)) {
+	// exists
+	r->fetch(store);
+  } else {
+	// dne
+	r->store(store);
+  }
+  rg_map[rg] = r;
+
+  return r;
+}
+ 
+
+
+
+
+/** 
+ * scan replica groups, initiate any replication
+ * activities.
+ */
+void OSD::scan_rg()
+{
+  //dout(7) << "scan_rg map version " << osdmap->get_version() << endl;
+
   // scan replica groups
   list<repgroup_t> ls;
   get_rg_list(ls);
   
-  map< int, list<RG*> > primary_ping_queue;
+  map< int, list<repgroup_t> > notify_list;
+  map< int, set<RG*> > start_set;
 
   for (list<repgroup_t>::iterator it = ls.begin();
 	   it != ls.end();
@@ -301,7 +381,7 @@ void OSD::update_map(bufferlist& state)
 
 	if (role != rg->get_role()) {
 	  // role change.
-	  dout(7) << " rg " << rgid << " acting role change " << rg->get_role() << " -> " << role << endl; 
+	  dout(10) << " rg " << rgid << " acting role change " << rg->get_role() << " -> " << role << endl; 
 	  
 	  // am i old-primary?
 	  if (rg->get_role() == 0) {
@@ -309,7 +389,7 @@ void OSD::update_map(bufferlist& state)
 		for (map<int, RGPeer*>::iterator it = rg->get_peers().begin();
 			 it != rg->get_peers().end();
 			 it++) {
-		  dout(7) << " rg " << rgid << " old-primary, dropping old peer " << it->first << endl;
+		  dout(10) << " rg " << rgid << " old-primary, dropping old peer " << it->first << endl;
 		  rg->get_old_replica_set().insert(it->first);
 		  delete it->second;
 		}
@@ -320,7 +400,14 @@ void OSD::update_map(bufferlist& state)
 	  rg->state_clear(RG_STATE_PEERED);
 	  rg->set_role(role);
 	  rg->store(store);
-	  primary_ping_queue[primary].push_back(rg);
+
+	  if (role == 0) {
+		// i am new primary
+		
+	  } else {
+		// i am replica
+		notify_list[primary].push_back(rgid);
+	  }
 	  
 	} else {
 	  // no role change.
@@ -330,75 +417,152 @@ void OSD::update_map(bufferlist& state)
 		
 		// did primary change?
 		if (primary != rg->get_primary()) {
-		  dout(7) << " rg " << rgid << " acting primary change " << rg->get_primary() << " -> " << primary << endl;
+		  dout(10) << " rg " << rgid << " acting primary change " << rg->get_primary() << " -> " << primary << endl;
 		  
 		  // re-peer
 		  rg->state_clear(RG_STATE_PEERED);
 		  rg->set_primary(primary);
 		  rg->store(store);
-		  primary_ping_queue[primary].push_back(rg);
+		  notify_list[primary].push_back(rgid);
 		}
 	  }
-	  else if (role == 0) {
-		// i am primary.
+	}
+	
+	if (role == 0) {
+	  // i am primary.
+	  
+	  // old peers
+	  // ***
 
-		// check replicas
-		for (int r=1; r<nrep; r++) {
-		  if (rg->get_peer(r) == 0) {
-			dout(7) << " rg " << rgid << " primary not peered with replica " << r << " osd" << acting[r] << endl;
-			
-			// ***
-		  } 
-		}
-
+	  // check replicas
+	  for (int r=1; r<nrep; r++) {
+		if (rg->get_peer(r) == 0) {
+		  dout(10) << " rg " << rgid << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
+		  start_set[acting[r]].insert(rg);
+		} 
 	  }
 	}
   }
   
 
-  // initiate any new peering sessions!
-  for (map< int, list<RG*> >::iterator pit = primary_ping_queue.begin();
-	   pit != primary_ping_queue.end();
-	   pit++) {
-	// create peer message
-	int primary = pit->first;
-	
+  // notify?
+  for (map< int, list<repgroup_t> >::iterator pit = notify_list.begin();
+	   pit != notify_list.end();
+	   pit++)
+	peer_notify(pit->first, pit->second);
 
-	for (list<RG*>::iterator rit = pit->second.begin();
-		 rit != pit->second.end();
-		 rit++) {
-	  // add this RG to peer message
+  // start peer?
+  for (map< int, set<RG*> >::iterator pit = start_set.begin();
+	   pit != start_set.end();
+	   pit++)
+	peer_start(pit->first, pit->second);
+
+
+}
+
+
+/** peer_notify
+ * Send an MOSDRGNotify to a primary, with a list of RGs that I have
+ * content for, and they are primary for.
+ */
+void OSD::peer_notify(int primary, list<repgroup_t>& rg_list)
+{
+  dout(7) << "peer_notify osd" << primary << " on " << rg_list.size() << " RGs" << endl;
+  MOSDRGNotify *m = new MOSDRGNotify(primary, rg_list);
+  messenger->send_message(m, 
+						  MSG_ADDR_OSD(primary));
+}
+
+
+/** peer_start
+ * initiate a peer session with a replica on given list of RGs
+ */
+void OSD::peer_start(int replica, set<RG*>& rg_set)
+{
+  dout(7) << "peer_start with osd" << replica << " on " << rg_set.size() << " RGs" << endl;
+  
+  
+}
+
+
+
+
+
+void OSD::handle_rg_notify(MOSDRGNotify *m)
+{
+  int from = MSG_ADDR_NUM(m->get_source());
+  dout(7) << "handle_rg_notify from osd" << from << endl;
+
+  // older map?
+  if (m->get_version() < osdmap->get_version()) {
+	dout(7) << "  from old map version " << m->get_version() << " < " << osdmap->get_version() << endl;
+	delete m;   // discard and ignore.*
+	return;
+  }
+
+  // newer map?
+  if (m->get_version() > osdmap->get_version()) {
+	dout(7) << "  for newer map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	wait_for_new_map(m);
+	return;
+  }
+  
+  assert(m->get_version() == osdmap->get_version());
+  
+  // look for unknown RGs i'm primary for
+  map< int, set<RG*> > start_set;
+
+  for (list<repgroup_t>::iterator it = m->get_rg_list().begin();
+	   it != m->get_rg_list().end();
+	   it++) {
+	repgroup_t rgid = *it;
+	
+	int acting[NUM_RUSH_REPLICAS];
+	int nrep = osdmap->repgroup_to_acting_osds(rgid, acting, NUM_RUSH_REPLICAS);
+	assert(acting[0] == whoami);
+	
+	// get/open RG
+	RG *rg = open_rg(rgid);
+
+	// previously unknown RG?
+	if (rg->get_peers().empty()) {
+	  dout(10) << " rg " << rgid << " is new" << endl;
+	  for (int r=1; r<nrep; r++) {
+		if (rg->get_peer(r) == 0) {
+		  dout(10) << " rg " << rgid << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
+		  start_set[acting[r]].insert(rg);
+		} 
+	  }
 	}
 
-	// send
-	
+	// peered with this guy specifically?
+	RGPeer *rgp = rg->get_peer(from);
+	if (!rgp) {
+	  dout(7) << " not yet peered with osd" << from << " on rg " << rgid << endl;
+	  start_set[from].insert(rg);
+	}
   }
 
-}
-
-
-void OSD::handle_getmap_ack(MOSDGetMapAck *m)
-{
-  // SAB
-  osd_lock.Lock();
-
-  update_map(m->get_osdmap());
+  // start peers?
+  if (start_set.empty()) {
+	dout(7) << " no new peers" << endl;
+  } else {
+	for (map< int, set<RG*> >::iterator pit = start_set.begin();
+		 pit != start_set.end();
+		 pit++)
+	  peer_start(pit->first, pit->second);
+  }
+  
   delete m;
-
-  // process waiters
-  list<MOSDOp*> waiting;
-  waiting.splice(waiting.begin(), waiting_for_osdmap);
-
-  list<MOSDOp*> w = waiting;
-
-  osd_lock.Unlock();
-
-  for (list<MOSDOp*>::iterator it = w.begin();
-	   it != w.end();
-	   it++) {
-	handle_op(*it);
-  }
 }
+
+
+
+
+
+// =========================================================
+// OPS
+
 
 void OSD::handle_op(MOSDOp *op)
 {
@@ -411,7 +575,7 @@ void OSD::handle_op(MOSDOp *op)
   // no map?  starting up?
   if (!osdmap) {
     osd_lock.Lock();
-	dout(7) << "no OSDMap, starting up" << endl;
+	dout(7) << "no OSDMap, asking MDS" << endl;
 	if (waiting_for_osdmap.empty()) 
 	  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
 							  MSG_ADDR_MDS(0), MDS_PORT_MAIN);
@@ -424,17 +588,7 @@ void OSD::handle_op(MOSDOp *op)
   if (op->get_map_version() > osdmap->get_version()) {
 	// op's is newer
 	dout(7) << "op map " << op->get_map_version() << " > " << osdmap->get_version() << endl;
-	
-	// query MDS
-	dout(7) << "querying MDS" << endl;
-	messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
-							MSG_ADDR_MDS(0), MDS_PORT_MAIN);
-
-	assert(0);
-
-	osd_lock.Lock();
-	waiting_for_osdmap.push_back(op);
-	osd_lock.Unlock();
+	wait_for_new_map(op);
 	return;
   }
 

@@ -20,7 +20,8 @@ using namespace std;
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDGetMapAck.h"
+#include "messages/MOSDMap.h"
+#include "messages/MOSDRGNotify.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -218,8 +219,11 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_OSD_OPREPLY:
 	m = new MOSDOpReply();
 	break;
-  case MSG_OSD_GETMAPACK:
-	m = new MOSDGetMapAck();
+  case MSG_OSD_MAP:
+	m = new MOSDMap();
+	break;
+  case MSG_OSD_RG_NOTIFY:
+	m = new MOSDRGNotify();
 	break;
 
 	// clients

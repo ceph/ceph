@@ -174,28 +174,45 @@ class OSD : public Dispatcher {
   Messenger *messenger;
   int whoami;
 
-  class OSDMap  *osdmap;
   class ObjectStore *store;
   class HostMonitor *monitor;
   class Logger      *logger;
-  class ThreadPool<class OSD, class MOSDOp>  *threadpool;
-
-  list<class MOSDOp*> waiting_for_osdmap;
-
-  // replica hack
-  __uint64_t                     last_tid;
-  Mutex                          replica_write_lock;
-  map<MOSDOp*, Cond*>            replica_write_cond;
-  map<MOSDOp*, set<__uint64_t> > replica_write_tids;
-  map<__uint64_t, MOSDOp*>       replica_writes;
 
   // global lock
   Mutex osd_lock;
 
 
-  void update_map(bufferlist& state);
+  // -- ops --
+  class ThreadPool<class OSD, class MOSDOp>  *threadpool;
 
-  // rg's
+  void queue_op(class MOSDOp *m);
+ public:
+  void do_op(class MOSDOp *m);
+  static void doop(OSD *o, MOSDOp *op) {
+	o->do_op(op);
+  };
+
+ protected:
+
+  // -- osd map --
+  class OSDMap  *osdmap;
+  list<class Message*> waiting_for_osdmap;
+
+  void update_map(bufferlist& state);
+  void wait_for_new_map(Message *m);
+  void handle_osd_map(class MOSDMap *m);
+
+  
+  // <old replica hack>
+  __uint64_t                     last_tid;
+  Mutex                          replica_write_lock;
+  map<MOSDOp*, Cond*>            replica_write_cond;
+  map<MOSDOp*, set<__uint64_t> > replica_write_tids;
+  map<__uint64_t, MOSDOp*>       replica_writes;
+  // </hack>
+
+
+  // -- replication --
   hash_map<repgroup_t, RG*>      rg_map;
 
   void get_rg_list(list<repgroup_t>& ls);
@@ -203,6 +220,14 @@ class OSD : public Dispatcher {
   RG *open_rg(repgroup_t rg);            // return RG, load state from store (if needed)
   void close_rg(repgroup_t rg);          // close in-memory state
   void remove_rg(repgroup_t rg);         // remove state from store
+
+  void scan_rg();
+  void peer_notify(int primary, list<repgroup_t>& rg_list);
+  void peer_start(int replica, set<RG*>& rg_list);
+
+  void handle_rg_notify(class MOSDRGNotify *m);
+  void handle_rg_peer(class MOSDRGPeer *m);
+  void handle_rg_peer_ack(class MOSDRGPeerAck *m);
 
  public:
   OSD(int id, Messenger *m);
@@ -212,18 +237,10 @@ class OSD : public Dispatcher {
   int init();
   int shutdown();
 
-  // ops
-  void queue_op(class MOSDOp *m);
-  void do_op(class MOSDOp *m);
-  static void doop(OSD *o, MOSDOp *op) {
-      o->do_op(op);
-    };
-
   // messages
   virtual void dispatch(Message *m);
 
   void handle_ping(class MPing *m);
-  void handle_getmap_ack(class MOSDGetMapAck *m);
   void handle_op(class MOSDOp *m);
   void op_read(class MOSDOp *m);
   void op_write(class MOSDOp *m);

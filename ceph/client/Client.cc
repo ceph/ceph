@@ -425,11 +425,15 @@ void Client::dispatch(Message *m)
   case MSG_OSD_OPREPLY:
 	filer->handle_osd_op_reply((MOSDOpReply*)m);
 	break;
+  case MSG_OSD_MAP:
+	filer->handle_osd_map((MOSDMap*)m);
+	break;
 	
 	// client
   case MSG_CLIENT_FILECAPS:
 	handle_file_caps((MClientFileCaps*)m);
 	break;
+
 
   default:
 	cout << "dispatch doesn't recognize message type " << m->get_type() << endl;
@@ -625,6 +629,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   delete m;
 }
+
 
 
 

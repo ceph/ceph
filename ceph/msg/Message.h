@@ -15,7 +15,12 @@
 #define MSG_OSD_PING         16
 
 #define MSG_OSD_GETMAP       17
-#define MSG_OSD_GETMAPACK    18
+#define MSG_OSD_MAP          18
+
+#define MSG_OSD_RG_NOTIFY    50
+#define MSG_OSD_RG_PEER      51
+#define MSG_OSD_RG_PEERACK   52
+
 
 #define MSG_CLIENT_REQUEST         20
 #define MSG_CLIENT_REPLY           21

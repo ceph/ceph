@@ -10,6 +10,7 @@
 //#include "messages/MOSDWriteReply.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDMap.h"
 
 #include "msg/Messenger.h"
 
@@ -46,6 +47,30 @@ void Filer::dispatch(Message *m)
 	assert(0);
   }
 }
+
+
+
+void Filer::handle_osd_map(MOSDMap *m)
+{
+  if (!osdmap ||
+	  m->get_version() > osdmap->get_version()) {
+	if (osdmap) {
+	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	} else {
+	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << endl;
+	}
+	
+	osdmap->decode(m->get_osdmap());
+	
+	// kick requests who might be timing out on the wrong osds
+	// ** FIXME **
+
+  } else {
+	dout(3) << "handle_osd_map ignoring osd map version " << m->get_version() << " <= " << osdmap->get_version() << endl;
+  }
+}
+
+
 
 
 /*

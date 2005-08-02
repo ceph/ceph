@@ -23,7 +23,7 @@ using namespace std;
 /*
  * some system constants
  */
-#define NUM_REPLICA_GROUPS   (1<<20)  // ~1M
+//#define NUM_REPLICA_GROUPS   (1<<20)  // ~1M
 #define NUM_RUSH_REPLICAS         4   // this should be big enough to cope w/ failing disks.
 #define MAX_REPLICAS              3
 
@@ -44,9 +44,10 @@ class OSDFileLayout {
   int stripe_size;     // stripe unit, in bytes
   int stripe_count;    // over this many objects
   int object_size;     // until objects are this big, then use a new set of objects.
+  int num_rep;
 
-  OSDFileLayout(int ss, int sc, int os) :
-	stripe_size(ss), stripe_count(sc), object_size(os) { }
+  OSDFileLayout(int ss, int sc, int os, int nr=2) :
+	stripe_size(ss), stripe_count(sc), object_size(os), num_rep(nr) { }
 };
 
 
@@ -109,6 +110,7 @@ class OSDMap {
 
   Mutex  osd_cluster_lock;
 
+ public:
   void init_rush() {
 
     // SAB
@@ -135,6 +137,7 @@ class OSDMap {
   }
 
   __uint64_t get_version() { return version; }
+  void inc_version() { version++; }
 
   // cluster state
   bool is_failed(int osd) { return failed_osds.count(osd) ? true:false; }
@@ -173,12 +176,18 @@ class OSDMap {
 
   /* map (ino, blockno) into a replica group */
   repgroup_t file_to_repgroup(inodeno_t ino, 
-							  size_t ono) {
+							  size_t ono,
+							  int nrep) {
 	// something simple for now
 	// hash this eventually!
-	return (ino+ono) % NUM_REPLICA_GROUPS;
+	return ((ino+ono) % g_conf.osd_num_rg) +
+	  (nrep * g_conf.osd_num_rg);
   }
 
+  /* get nrep from rgid */
+  int repgroup_to_nrep(repgroup_t rg) {
+	return rg / g_conf.osd_num_rg;
+  }
 
   /* map (repgroup) to a list of osds.  
 	 this is where we invoke RUSH. */
@@ -310,7 +319,7 @@ class OSDMap {
 	  else {
 		ex = &object_extents[oid];
 		ex->oid = oid;
-		ex->rg = file_to_repgroup( ino, objectno );
+		ex->rg = file_to_repgroup( ino, objectno, layout.num_rep );
 		ex->osd = get_rg_acting_primary( ex->rg );
 	  }
 

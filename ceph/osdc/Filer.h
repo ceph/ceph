@@ -128,6 +128,8 @@ class Filer : public Dispatcher {
   void handle_osd_read_reply(class MOSDOpReply *m);
   void handle_osd_write_reply(class MOSDOpReply *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
+
+  void handle_osd_map(class MOSDMap *m);
   
 };
 
