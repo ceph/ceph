@@ -215,7 +215,7 @@ class Client : public Dispatcher {
 
 
   // global (client) lock
-  Mutex                  client_lock;
+  Mutex                  *client_lock;
 
   // global semaphore/mutex protecting cache+fh structures
   // ??
@@ -322,7 +322,7 @@ class Client : public Dispatcher {
 
   
   // buffer cache
-  Buffercache bc;
+  Buffercache *bc;
   
   void flush_buffers(int ttl, size_t dirty_size);     // flush dirty buffers
   void trim_bcache();

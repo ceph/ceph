@@ -56,12 +56,15 @@ class Bufferhead : public LRUObject {
   bool visited;
   
   // cons/destructors
+  Bufferhead(inodeno_t ino, Buffercache *bc);
   Bufferhead(inodeno_t ino, off_t off, Buffercache *bc);
   ~Bufferhead(); 
   
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
   
+  void set_offset(off_t offset);
+
   size_t length() {
     if (state == BUFHD_STATE_RX) return miss_len;
     return bl.length();
@@ -73,18 +76,20 @@ class Bufferhead : public LRUObject {
    * put Cond on local stack, block until woken up.
    * _caller_ pins to avoid any race weirdness
    */
-  void wait_for_read(Mutex &lock) {
+  void wait_for_read(Mutex *lock) {
+	assert(state == BUFHD_STATE_RX || state == BUFHD_STATE_TX);
 	Cond cond;
 	get();
 	read_waiters.push_back(&cond);
-	cond.Wait(lock);
+	cond.Wait(*lock);
 	put();
   }
-  void wait_for_write(Mutex &lock) {
+  void wait_for_write(Mutex *lock) {
+	assert(state == BUFHD_STATE_RX || state == BUFHD_STATE_TX);
 	Cond cond;
 	get();
 	write_waiters.push_back(&cond);
-	cond.Wait(lock);
+	cond.Wait(*lock);
 	put();
   }
   
@@ -143,7 +148,7 @@ class Dirtybuffers {
       age = time(NULL) - _dbufs.begin()->second->dirty_since;
     }
     dout(10) << "former age: " << former_age << " age: " << age << endl;
-    assert((!(former_age > 30)) || (age > 0));
+    //assert((!(former_age > 30)) || (age > 0));
     former_age = age;
     return age;
   }
@@ -155,13 +160,15 @@ class Filecache {
   list<Cond*> inflight_waiters;
 
  public: 
+  inodeno_t ino;
   map<off_t, Bufferhead*> buffer_map;
   set<Bufferhead*> dirty_buffers;
   set<Bufferhead*> inflight_buffers;
   Buffercache *bc;
 
-  Filecache(Buffercache *bc) { 
+  Filecache(Buffercache *bc, inodeno_t ino) { 
     this->bc = bc;
+    this->ino = ino;
     buffer_map.clear();
   }
   Filecache(const Filecache& other); 
@@ -189,10 +196,12 @@ class Filecache {
 
   void insert(off_t offset, Bufferhead* bh);
 
-  void wait_for_inflight(Mutex &lock) {
+  void splice(off_t offset, size_t size);
+
+  void wait_for_inflight(Mutex *lock) {
 	Cond cond;
 	inflight_waiters.push_back(&cond);
-	cond.Wait(lock);
+	cond.Wait(*lock);
   }
 
   void wakeup_inflight_waiters() {
@@ -204,7 +213,7 @@ class Filecache {
     inflight_waiters.clear(); 
   }
 
-  map<off_t, Bufferhead*>::iterator get_buf(size_t len, off_t off);
+  map<off_t, Bufferhead*>::iterator get_buf(off_t off);
   map<off_t, Bufferhead*>::iterator overlap(size_t len, off_t off);
   int copy_out(size_t size, off_t offset, char *dst);    
   map<off_t, Bufferhead*>::iterator map_existing(size_t len, off_t start_off, 
@@ -246,15 +255,15 @@ class Buffercache {
   
   Filecache *get_fc(inodeno_t ino) {
     if (!bcache_map.count(ino)) {
-      bcache_map[ino] = new Filecache(this);
+      bcache_map[ino] = new Filecache(this, ino);
     } 
     return bcache_map[ino];
   }
       
-  void wait_for_inflight(Mutex &lock) {
+  void wait_for_inflight(Mutex *lock) {
 	Cond cond;
 	inflight_waiters.push_back(&cond);
-	cond.Wait(lock);
+	cond.Wait(*lock);
   }
 
   void wakeup_inflight_waiters() {

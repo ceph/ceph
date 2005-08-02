@@ -6,19 +6,26 @@
 
 // -- Bufferhead methods
 
-Bufferhead::Bufferhead(inodeno_t ino, off_t off, Buffercache *bc) : 
-  ref(0) {
-  dout(10) << "bc: new bufferhead ino: " << ino << " offset: " << off << endl;
+Bufferhead::Bufferhead(inodeno_t ino, Buffercache *bc) : 
+  ref(0), miss_len(0), dirty_since(0), visited(false) {
+  dout(10) << "bc: new bufferhead ino: " << ino << endl;
   this->ino = ino;
-  offset = off;
   state = BUFHD_STATE_CLEAN;
   this->bc = bc;
   fc = bc->get_fc(ino);
   bc->lru.lru_insert_top(this); //FIXME: parameterize whether top or mid
-  assert(!fc->buffer_map.count(offset)); // fail loudly if offset already exists!
-  fc->insert(offset, this); 
-  dirty_since = 0; // meaningless when clean or inflight
-  visited = false;
+  // buffers are allocated later
+}
+
+Bufferhead::Bufferhead(inodeno_t ino, off_t off, Buffercache *bc) : 
+  ref(0), miss_len(0), dirty_since(0), visited(false) {
+  dout(10) << "bc: new bufferhead ino: " << ino << " offset: " << off << endl;
+  this->ino = ino;
+  state = BUFHD_STATE_CLEAN;
+  this->bc = bc;
+  fc = bc->get_fc(ino);
+  bc->lru.lru_insert_top(this); //FIXME: parameterize whether top or mid
+  set_offset(off);
   // buffers are allocated later
 }
 
@@ -46,6 +53,13 @@ Bufferhead::~Bufferhead()
     dout(10) <<"bc: listed all bufferptrs" << endl;
 #endif
   }   
+}
+
+void Bufferhead::set_offset(off_t offset)
+{
+  this->offset = offset;
+  assert(!fc->buffer_map.count(offset)); // fail loudly if offset already exists!
+  fc->insert(offset, this); 
 }
 
 void Bufferhead::alloc_buffers(size_t size)
@@ -123,8 +137,7 @@ void Bufferhead::dirty()
 
 void Bufferhead::dirtybuffers_erase() 
 {
-  dout(10) << "bc: erase in dirtybuffers size: " << bl.length() << " in state " << state << endl;
-  assert(bc->dirty_buffers->exist(this));
+  dout(7) << "bc: erase in dirtybuffers offset: " << offset << " size: " << length() << endl;
   bc->dirty_buffers->erase(this);
   assert(fc->dirty_buffers.count(this));
   fc->dirty_buffers.erase(this);
@@ -168,7 +181,12 @@ void Bufferhead::claim_append(Bufferhead *other)
   bl.claim_append(other->bl);
   dout(10) << "bc: claim_append new bl size: " << bl.buffers().size() << " length: " << bl.length() << endl;
   // keep older time stamp
-  if (other->dirty_since < dirty_since) dirty_since = other->dirty_since;
+  if (other->dirty_since < dirty_since) {
+    // change Dirtybuffers index!
+    bc->dirty_buffers->erase(this);
+    dirty_since = other->dirty_since;
+    bc->dirty_buffers->insert(this);
+  }
   other->bl.clear();
 }
 
@@ -176,7 +194,8 @@ void Bufferhead::claim_append(Bufferhead *other)
 
 void Dirtybuffers::erase(Bufferhead* bh) 
 {
-  dout(7) << "dirtybuffer: erase bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
+  dout(6) << "dirtybuffer: erase bh->ino: " << bh->ino << " offset: " << bh->offset << " len: " << bh->length() << endl;
+  assert(exist(bh));
   unsigned osize = _dbufs.size();
   for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
        it != _dbufs.upper_bound(bh->dirty_since);
@@ -191,7 +210,7 @@ void Dirtybuffers::erase(Bufferhead* bh)
 
 void Dirtybuffers::insert(Bufferhead* bh) 
 {
-  dout(7) << "dirtybuffer: insert bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
+  dout(6) << "dirtybuffer: insert bh->ino: " << bh->ino << " offset: " << bh->offset << " len: " << bh->length() << endl;
   _dbufs.insert(pair<time_t, Bufferhead*>(bh->dirty_since, bh));
 }
 
@@ -276,7 +295,65 @@ void Filecache::insert(off_t offset, Bufferhead* bh)
   assert(prev_buf == buffer_map.end() || prev_buf->first + prev_buf->second->length() <= offset);
 }
 
-map<off_t, Bufferhead*>::iterator Filecache::get_buf(size_t len, off_t off)
+void Filecache::splice(off_t offset, size_t size)
+{
+  // insert Bufferhead at offset with size. only works if all overlapping
+  // buffers are clean. Creates at most two new bufferheads at (offset, size)
+  // and (offset + size, whatsleft). 
+
+  dout(6) << "bc: splice off: " << offset << " len: " << size << endl;
+  // get current buffer
+  map<off_t, Bufferhead*>::iterator curbuf = get_buf(offset);
+  assert(curbuf != buffer_map.end());
+  size_t orig_len = curbuf->second->length();
+
+  // insert new buffer leaving front part to original buffer
+  if (curbuf->second->state == BUFHD_STATE_CLEAN && curbuf->first < offset) {
+    dout(6) << "bc: splice 1st buf off: " << curbuf->first << " len: " << orig_len << endl;
+    if (offset + size < curbuf->first + curbuf->second->length()) {
+      // split off tail first if within this Bufferhead
+      unsigned new_off = offset - curbuf->first + size;
+      unsigned new_len = curbuf->second->length() - new_off;
+      dout(6) << "bc: splice tail of 1st off: " << new_off << " len: " << new_len << endl;
+      Bufferhead* bh = new Bufferhead(ino, bc);
+      curbuf->second->bl.splice(new_off, new_len, &(bh->bl));
+      bh->set_offset(offset + size);
+      assert(bh->length() == new_len);
+      assert(curbuf->second->length() == new_off);
+    }
+
+    // create new bufferhead at offset
+    unsigned new_off = offset - curbuf->first;
+    unsigned new_len = curbuf->second->length() - new_off; // length() takes tail split-off into account
+    dout(6) << "bc: splice head of 1st off: " << new_off << " len: " << new_len << endl;
+    Bufferhead* bh = new Bufferhead(ino, bc);
+    curbuf->second->bl.splice(new_off, new_len, &(bh->bl));
+    bh->set_offset(offset);
+    assert(bh->length() == new_len);
+    assert(curbuf->second->length() == new_off);
+  }
+
+  // insert another new buffer if splice end is not aligned 
+  if (orig_len < size) {
+    curbuf = get_buf(offset + size); 
+    if (curbuf != buffer_map.end() && 
+        curbuf->second->state == BUFHD_STATE_CLEAN &&
+        curbuf->first < offset + size) {
+      dout(6) << "bc: splice last buf off: " << curbuf->first << " len: " << curbuf->second->length() << endl;
+      unsigned new_off = offset + size - curbuf->first;
+      unsigned new_len = curbuf->second->length() - new_off;
+      dout(6) << "bc: splice tail of last off: " << new_off << " len: " << new_len << endl;
+      Bufferhead *bh = new Bufferhead(ino, bc);
+      curbuf->second->bl.splice(new_off, new_len, &(bh->bl));
+      bh->set_offset(offset + size);
+      assert(bh->length() == new_len);
+      assert(curbuf->second->length() == new_off);
+    }
+  }
+}
+
+
+map<off_t, Bufferhead*>::iterator Filecache::get_buf(off_t off)
 {
   map<off_t, Bufferhead*>::iterator curbuf = buffer_map.lower_bound(off);
   if (curbuf == buffer_map.end() || curbuf->first > off) {
@@ -534,14 +611,19 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
   Filecache *fc = get_fc(ino);
   assert(offset >= 0);
   
-  map<off_t, Bufferhead*>::iterator curbuf = fc->buffer_map.lower_bound(offset);
-  if (curbuf == fc->buffer_map.end() || curbuf->first > offset) {
-    assert(curbuf != fc->buffer_map.begin());
-    curbuf--;
+  map<off_t, Bufferhead*>::iterator curbuf = fc->get_buf(offset);
+  assert(curbuf != fc->buffer_map.end());
+
+  if (curbuf->second->state == BUFHD_STATE_CLEAN) {
+    // leave unused buffer space clean
+    fc->splice(offset, size);
+    curbuf = fc->get_buf(offset);
+    assert(curbuf->first == offset);
+    offset = 0;
+  } else { 
+    offset -= curbuf->first;
   }
-  offset -= curbuf->first;
-  assert(offset >= 0);
-  
+
   while (size > 0) {
     Bufferhead *bh = curbuf->second;
     if (offset + size <= bh->length()) {
@@ -564,6 +646,8 @@ void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *sr
 size_t Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset)
 {
   dout(7) << "bc: touch_continuous size: " << size << " offset: " << offset << endl;
+  if (hits.empty()) return 0;
+
   off_t next_off = offset;
   if (hits.begin()->first > offset ||
       hits.begin()->first + hits.begin()->second->length() <= offset) {
@@ -603,8 +687,6 @@ void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset,
     buffers[hole->first] = bh;
     bh->alloc_buffers(hole->second);
   }
-  // split buffers
-  // FIXME: not implemented yet
 }
 
 void Buffercache::consolidate(map<inodeno_t, map<off_t, list<off_t> > > cons_map)
