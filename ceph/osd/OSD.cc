@@ -764,8 +764,10 @@ void OSD::op_write(MOSDOp *op)
   // update object metadata
   if (!existed) {
 	// add to RG collection
+	osd_lock.Lock();
 	RG *r = open_rg(op->get_rg());
 	r->add_object(store, op->get_oid());
+	osd_lock.Unlock();
   }
 
   logger->inc("wr");
