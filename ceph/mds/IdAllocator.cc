@@ -15,6 +15,16 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "mds" << mds->get_nodeid() << ".idalloc: "
 
+IdAllocator::IdAllocator(MDS *mds) 
+{
+  this->mds = mds;
+  opened = false;
+  opening = false;
+
+  memset(&id_inode, 0, sizeof(id_inode));
+  id_inode.ino = MDS_INO_IDS_OFFSET + mds->get_nodeid();
+  id_inode.layout = g_OSD_FileLayout;
+}
 
 
 idno_t IdAllocator::get_id(int type) 
@@ -88,8 +98,7 @@ void IdAllocator::save(Context *onfinish)
   bl.append(data.c_str(), data.length());
 
   // write (async)
-  mds->filer->write(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
-					g_OSD_FileLayout,
+  mds->filer->write(id_inode,
 					data.length(),
 					0,
 					bl,
@@ -138,9 +147,8 @@ void IdAllocator::load(Context *onfinish)
   assert(opening == false);
   opening = true;
 
-  mds->filer->read(MDS_INO_IDS_OFFSET + mds->get_nodeid(),
-				   g_OSD_FileLayout,
-				   g_OSD_FileLayout.stripe_size,
+  mds->filer->read(id_inode,
+				   id_inode.layout.stripe_size,
 				   0,
 				   &c->bl,
 				   c);

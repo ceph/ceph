@@ -93,6 +93,39 @@ struct ltstr
 };
 
 
+/** FileLayout 
+ * specifies a striping and replication strategy
+ */
+
+#define FILE_LAYOUT_RUSHSTRIPE  0  // stripe via rush
+#define FILE_LAYOUT_OSDLOCAL    1  // local to a specific osd
+
+struct FileLayout {
+  // layout
+  int policy;          // FILE_LAYOUT_*
+
+  // FIXME: make this a union?
+  // rushstripe
+  int stripe_size;     // stripe unit, in bytes
+  int stripe_count;    // over this many objects
+  int object_size;     // until objects are this big, then use a new set of objects.
+
+  // osdlocal
+  int osd;
+
+  int num_rep;  // replication
+
+  FileLayout() { }
+  FileLayout(int ss, int sc, int os, int nr=2) :
+	policy(FILE_LAYOUT_RUSHSTRIPE),
+	   stripe_size(ss), stripe_count(sc), object_size(os), 
+	   num_rep(nr) { }
+  FileLayout(int o) :
+	policy(FILE_LAYOUT_OSDLOCAL),
+	   osd(o),
+	   num_rep(1) { }
+};
+
 
 
 // -- inode --
@@ -111,22 +144,23 @@ typedef __uint64_t inodeno_t;   // ino
 struct inode_t {
   // immutable
   inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
-  time_t ctime;
+  time_t    ctime;
 
   // hard (permissions)
   mode_t mode;
-  uid_t uid;
-  gid_t gid;
+  uid_t  uid;
+  gid_t  gid;
 
   // soft
   __uint64_t size;
-  time_t atime, mtime;      // maybe atime different?  "lazy"?
+  time_t     atime, mtime;      // maybe atime different?  "lazy"?
 
   // special stuff
+  FileLayout    layout;  
   unsigned char hash_seed;  // 0 if not hashed.
-  int   nlink;
-  bool  anchored;
-  __uint64_t file_data_version;
+  int           nlink;
+  bool          anchored;
+  __uint64_t    file_data_version;
 };
 
 
@@ -134,6 +168,8 @@ struct inode_t {
 typedef __uint64_t repgroup_t;    // replica group
 typedef __uint64_t object_t;      // object id
 typedef __uint64_t coll_t;        // collection id
+
+#define RG_NONE    0xffffffffffffffffLL
 
 // client types
 typedef int        fh_t;          // file handle 

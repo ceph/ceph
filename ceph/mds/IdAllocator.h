@@ -21,14 +21,10 @@ class IdAllocator {
   
   bool opened, opening;
   
+  inode_t id_inode;
+
  public:
-  IdAllocator();
-  IdAllocator(MDS *mds) {
-	this->mds = mds;
-	opened = false;
-	opening = false;
-  }
-  //~InoAllocator();
+  IdAllocator(MDS *mds);
 
   idno_t get_id(int type);
   void reclaim_id(int type, idno_t id);

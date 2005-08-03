@@ -1,8 +1,6 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
-#include "Buffercache.h"
-
 #include "mds/MDCluster.h"
 #include "osd/OSDMap.h"
 
@@ -124,6 +122,8 @@ class Inode {
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
   }
+
+  inodeno_t ino() { return inode.ino; }
 
   bool is_dir() {
 	return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
@@ -322,7 +322,7 @@ class Client : public Dispatcher {
 
   
   // buffer cache
-  Buffercache *bc;
+  class Buffercache *bc;
   
   void flush_buffers(int ttl, size_t dirty_size);     // flush dirty buffers
   void trim_bcache();

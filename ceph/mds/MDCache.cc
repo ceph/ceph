@@ -133,6 +133,8 @@ CInode *MDCache::create_inode()
 
   in->inode.nlink = 1;   // FIXME
 
+  in->inode.layout = g_OSD_FileLayout;
+
   add_inode(in);  // add
   return in;
 }
@@ -504,9 +506,8 @@ bool MDCache::trim(int max) {
 
 	// last link?
 	if (in->inode.nlink == 0) {
-	  dout(7) << "last link, destroying inode " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
-	  mds->filer->remove(in->ino(), 
-						 g_OSD_FileLayout,
+	  dout(7) << "last link, removing file content " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
+	  mds->filer->remove(in->inode, 
 						 in->inode.size, 
 						 NULL);   // FIXME
 	}
@@ -757,6 +758,8 @@ int MDCache::open_root(Context *c)
 	root->inode.mtime = 0;
 
 	root->inode.nlink = 1;
+	root->inode.layout = g_OSD_MDDirLayout;
+
 	root->state_set(CINODE_STATE_ROOT);
 
 	set_root( root );

@@ -1,4 +1,5 @@
 #include "Buffercache.h"
+#include "Client.h"
 
 #include "config.h"
 #undef dout
@@ -6,24 +7,24 @@
 
 // -- Bufferhead methods
 
-Bufferhead::Bufferhead(inodeno_t ino, Buffercache *bc) : 
+Bufferhead::Bufferhead(Inode *inode, Buffercache *bc) : 
   ref(0), miss_len(0), dirty_since(0), visited(false) {
-  dout(10) << "bc: new bufferhead ino: " << ino << endl;
-  this->ino = ino;
+  dout(10) << "bc: new bufferhead ino: " << inode->ino() << endl;
+  this->inode = inode;
   state = BUFHD_STATE_CLEAN;
   this->bc = bc;
-  fc = bc->get_fc(ino);
+  fc = bc->get_fc(inode);
   bc->lru.lru_insert_top(this); //FIXME: parameterize whether top or mid
   // buffers are allocated later
 }
 
-Bufferhead::Bufferhead(inodeno_t ino, off_t off, Buffercache *bc) : 
+Bufferhead::Bufferhead(Inode *inode, off_t off, Buffercache *bc) : 
   ref(0), miss_len(0), dirty_since(0), visited(false) {
-  dout(10) << "bc: new bufferhead ino: " << ino << " offset: " << off << endl;
-  this->ino = ino;
+  dout(10) << "bc: new bufferhead ino: " << inode->ino() << " offset: " << off << endl;
+  this->inode = inode;
   state = BUFHD_STATE_CLEAN;
   this->bc = bc;
-  fc = bc->get_fc(ino);
+  fc = bc->get_fc(inode);
   bc->lru.lru_insert_top(this); //FIXME: parameterize whether top or mid
   set_offset(off);
   // buffers are allocated later
@@ -31,7 +32,7 @@ Bufferhead::Bufferhead(inodeno_t ino, off_t off, Buffercache *bc) :
 
 Bufferhead::~Bufferhead()
 {
-  dout(10) << "bc: destroying bufferhead ino: " << ino << " size: " << bl.length() << " offset: " << offset << endl;
+  dout(10) << "bc: destroying bufferhead ino: " << inode->ino() << " size: " << bl.length() << " offset: " << offset << endl;
   assert(state == BUFHD_STATE_CLEAN);
   assert(ref == 0);
   assert(lru_is_expireable());
@@ -194,7 +195,7 @@ void Bufferhead::claim_append(Bufferhead *other)
 
 void Dirtybuffers::erase(Bufferhead* bh) 
 {
-  dout(6) << "dirtybuffer: erase bh->ino: " << bh->ino << " offset: " << bh->offset << " len: " << bh->length() << endl;
+  dout(6) << "dirtybuffer: erase bh->ino: " << bh->inode->ino() << " offset: " << bh->offset << " len: " << bh->length() << endl;
   assert(exist(bh));
   unsigned osize = _dbufs.size();
   for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.lower_bound(bh->dirty_since);
@@ -210,7 +211,7 @@ void Dirtybuffers::erase(Bufferhead* bh)
 
 void Dirtybuffers::insert(Bufferhead* bh) 
 {
-  dout(6) << "dirtybuffer: insert bh->ino: " << bh->ino << " offset: " << bh->offset << " len: " << bh->length() << endl;
+  dout(6) << "dirtybuffer: insert bh->ino: " << bh->inode->ino() << " offset: " << bh->offset << " len: " << bh->length() << endl;
   _dbufs.insert(pair<time_t, Bufferhead*>(bh->dirty_since, bh));
 }
 
@@ -220,7 +221,7 @@ bool Dirtybuffers::exist(Bufferhead* bh)
       it != _dbufs.upper_bound(bh->dirty_since);
       it++ ) {
     if (it->second == bh) {
-      dout(10) << "dirtybuffer: found bh->ino: " << bh->ino << " offset: " << bh->offset << endl;
+      dout(10) << "dirtybuffer: found bh->ino: " << bh->inode->ino() << " offset: " << bh->offset << endl;
       return true;
     }
   }
@@ -235,37 +236,37 @@ void Dirtybuffers::get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& 
     dout(6) << "bc: get_expired: already less dirty than left_dirty!" << endl;
     return;
   }
-  map<inodeno_t, map<off_t, list<off_t> > > consolidation_map;
+  map<Inode*, map<off_t, list<off_t> > > consolidation_map;
   size_t cleaned = 0;
   if (cleaned < bc->get_dirty_size() - left_dirty) {
     time_t now = time(NULL);
     for (multimap<time_t, Bufferhead*>::iterator it = _dbufs.begin();
-      it != _dbufs.end();
-      it++) {
+		 it != _dbufs.end();
+		 it++) {
       if (!it->second->visited) {
-	if (ttl > now - it->second->dirty_since &&
-	    cleaned >= bc->get_dirty_size() - left_dirty) break;
-
-	// find consolidation opportunity
+		if (ttl > now - it->second->dirty_since &&
+			cleaned >= bc->get_dirty_size() - left_dirty) break;
+		
+		// find consolidation opportunity
         it->second->visited = true;
-	Filecache* fc = bc->get_fc(it->second->ino);
-	list<off_t> offlist;
-	size_t length = fc->consolidation_opp(now - ttl, bc->get_dirty_size() -
-				left_dirty - cleaned, 
-				it->second->offset, offlist);
-	if (offlist.size() > 1) {
-	  offlist.sort();
-	  off_t start_off = offlist.front();
-	  offlist.pop_front();
-	  consolidation_map[it->second->ino][start_off] = offlist;
-	  to_flush.insert(fc->buffer_map[start_off]);
-	} else {
-	  to_flush.insert(it->second);
-	}
-	cleaned += length;
+		Filecache* fc = bc->get_fc(it->second->inode);
+		list<off_t> offlist;
+		size_t length = fc->consolidation_opp(now - ttl, bc->get_dirty_size() -
+											  left_dirty - cleaned, 
+											  it->second->offset, offlist);
+		if (offlist.size() > 1) {
+		  offlist.sort();
+		  off_t start_off = offlist.front();
+		  offlist.pop_front();
+		  consolidation_map[it->second->inode][start_off] = offlist;
+		  to_flush.insert(fc->buffer_map[start_off]);
+		} else {
+		  to_flush.insert(it->second);
+		}
+		cleaned += length;
       }
     }
-
+	
     // consolidate
     bc->consolidate(consolidation_map);
     dout(6) << "bc: get_expired to_flush.size(): " << to_flush.size() << endl;
@@ -315,7 +316,7 @@ void Filecache::splice(off_t offset, size_t size)
       unsigned new_off = offset - curbuf->first + size;
       unsigned new_len = curbuf->second->length() - new_off;
       dout(6) << "bc: splice tail of 1st off: " << new_off << " len: " << new_len << endl;
-      Bufferhead* bh = new Bufferhead(ino, bc);
+      Bufferhead* bh = new Bufferhead(inode, bc);
       curbuf->second->bl.splice(new_off, new_len, &(bh->bl));
       bh->set_offset(offset + size);
       assert(bh->length() == new_len);
@@ -326,7 +327,7 @@ void Filecache::splice(off_t offset, size_t size)
     unsigned new_off = offset - curbuf->first;
     unsigned new_len = curbuf->second->length() - new_off; // length() takes tail split-off into account
     dout(6) << "bc: splice head of 1st off: " << new_off << " len: " << new_len << endl;
-    Bufferhead* bh = new Bufferhead(ino, bc);
+    Bufferhead* bh = new Bufferhead(inode, bc);
     curbuf->second->bl.splice(new_off, new_len, &(bh->bl));
     bh->set_offset(offset);
     assert(bh->length() == new_len);
@@ -343,7 +344,7 @@ void Filecache::splice(off_t offset, size_t size)
       unsigned new_off = offset + size - curbuf->first;
       unsigned new_len = curbuf->second->length() - new_off;
       dout(6) << "bc: splice tail of last off: " << new_off << " len: " << new_len << endl;
-      Bufferhead *bh = new Bufferhead(ino, bc);
+      Bufferhead *bh = new Bufferhead(inode, bc);
       curbuf->second->bl.splice(new_off, new_len, &(bh->bl));
       bh->set_offset(offset + size);
       assert(bh->length() == new_len);
@@ -604,11 +605,11 @@ int Filecache::copy_out(size_t size, off_t offset, char *dst)
 
 // -- Buffercache methods
 
-void Buffercache::dirty(inodeno_t ino, size_t size, off_t offset, const char *src) 
+void Buffercache::dirty(Inode *inode, size_t size, off_t offset, const char *src) 
 {
-  dout(6) << "bc: dirty ino: " << ino << " size: " << size << " offset: " << offset << endl;
-  assert(bcache_map.count(ino)); // filecache has to be already allocated!!
-  Filecache *fc = get_fc(ino);
+  dout(6) << "bc: dirty ino: " << inode->ino() << " size: " << size << " offset: " << offset << endl;
+  assert(bcache_map.count(inode->ino())); // filecache has to be already allocated!!
+  Filecache *fc = get_fc(inode);
   assert(offset >= 0);
   
   map<off_t, Bufferhead*>::iterator curbuf = fc->get_buf(offset);
@@ -667,13 +668,13 @@ size_t Buffercache::touch_continuous(map<off_t, Bufferhead*>& hits, size_t size,
   return (size_t)(next_off - offset) >= size ? size : (next_off - offset);
 }
 
-void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset, 
+void Buffercache::map_or_alloc(Inode *inode, size_t size, off_t offset, 
                                map<off_t, Bufferhead*>& buffers, 
                                map<off_t, Bufferhead*>& rx,
 			       map<off_t, Bufferhead*>& tx)
 {
   dout(7) << "bc: map_or_alloc len: " << size << " off: " << offset << endl;
-  Filecache *fc = get_fc(ino);
+  Filecache *fc = get_fc(inode);
   map<off_t, size_t> holes;
   holes.clear();
   fc->map_existing(size, offset, buffers, rx, tx, holes);
@@ -683,17 +684,17 @@ void Buffercache::map_or_alloc(inodeno_t ino, size_t size, off_t offset,
        hole++) {
     dout(10) << "bc: allocate hole " << hole->first << " " << hole->second << endl;
     assert(buffers.count(hole->first) == 0);
-    Bufferhead *bh = new Bufferhead(ino, hole->first, this);
+    Bufferhead *bh = new Bufferhead(inode, hole->first, this);
     buffers[hole->first] = bh;
     bh->alloc_buffers(hole->second);
   }
 }
 
-void Buffercache::consolidate(map<inodeno_t, map<off_t, list<off_t> > > cons_map)
+void Buffercache::consolidate(map<Inode*, map<off_t, list<off_t> > > cons_map)
 {
   dout(6) << "bc: consolidate" << endl;
   int deleted = 0;
-  for (map<inodeno_t, map<off_t, list<off_t> > >::iterator it_ino = cons_map.begin();
+  for (map<Inode*, map<off_t, list<off_t> > >::iterator it_ino = cons_map.begin();
        it_ino != cons_map.end();
        it_ino++) {
     Filecache *fc = get_fc(it_ino->first);
@@ -768,7 +769,7 @@ size_t Buffercache::reclaim(size_t min_size)
       assert(clean_size >= 0);
       bh->fc->buffer_map.erase(bh->offset);
       if (bh->fc->buffer_map.empty()) {
-        bcache_map.erase(bh->ino);
+        bcache_map.erase(bh->inode->ino());
 	delete bh->fc;
       }
       delete bh;

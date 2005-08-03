@@ -1,9 +1,9 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
-extern class OSDFileLayout g_OSD_FileLayout;
-extern class OSDFileLayout g_OSD_MDDirLayout;
-extern class OSDFileLayout g_OSD_MDLogLayout;
+extern class FileLayout g_OSD_FileLayout;
+extern class FileLayout g_OSD_MDDirLayout;
+extern class FileLayout g_OSD_MDLogLayout;
 
 struct md_config_t {
   int  num_mds;
@@ -73,7 +73,6 @@ struct md_config_t {
 
   // osd
   int   osd_num_rg;
-  int   osd_nrep;
   bool  osd_fsync;
   bool  osd_writesync;
   int   osd_maxthreads;

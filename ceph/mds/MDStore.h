@@ -30,7 +30,7 @@ class MDStore {
 					   Context *c,
 					   int hashcode = -1);
   void fetch_dir_hash_2( bufferlist &bl,
-						 inodeno_t ino,
+						 inode_t& inode,
 						 Context *c,
 						 int which);
   friend class C_MDS_Fetch;
@@ -45,13 +45,13 @@ class MDStore {
   
   // low level committers
   void commit_dir_slice( CDir *dir,
-						Context *c,
-						int hashcode = -1);
+						 Context *c,
+						 int hashcode = -1);
   void commit_dir_slice_2( int result,
-						  CDir *dir,
-						  Context *c,
-						  __uint64_t version,
-						  int hashcode );
+						   CDir *dir,
+						   Context *c,
+						   __uint64_t version,
+						   int hashcode );
   
   friend class C_MDS_CommitDirFinish;
   friend class C_MDS_CommitSlice;

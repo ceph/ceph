@@ -94,8 +94,7 @@ void Filer::send_outgoing()
 // read
 
 int
-Filer::read(inodeno_t ino,
-			OSDFileLayout& layout,
+Filer::read(inode_t& inode,
 			size_t len, 
 			size_t offset, 
 			bufferlist *bl,
@@ -109,9 +108,9 @@ Filer::read(inodeno_t ino,
   p->onfinish = onfinish;
 
   // map buffer into OSD extents
-  osdmap->file_to_extents(ino, layout, len, offset, p->extents);
+  osdmap->file_to_extents(inode, len, offset, p->extents);
 
-  dout(7) << "osd read ino " << ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
+  dout(7) << "osd read ino " << inode.ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
   // issue reads
   for (list<OSDExtent>::iterator it = p->extents.begin();
@@ -283,8 +282,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 // write
 
 int 
-Filer::write(inodeno_t ino,
-			 OSDFileLayout& layout,
+Filer::write(inode_t& inode,
 			 size_t len, 
 			 size_t offset, 
 			 bufferlist& bl,
@@ -299,9 +297,9 @@ Filer::write(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdmap->file_to_extents(ino, layout, len, offset, extents);
+  osdmap->file_to_extents(inode, len, offset, extents);
 
-  dout(7) << "osd write ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
+  dout(7) << "osd write ino " << inode.ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
   size_t off = 0;  // ptr into buffer
 
@@ -329,8 +327,6 @@ Filer::write(inodeno_t ino,
 	}
 	assert(cur.length() == it->len);
 	m->set_data(cur);//.claim(cur);
-
-	m->set_rg_nrep(g_conf.osd_nrep);
 
 	off += it->len;
 
@@ -443,8 +439,7 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-int Filer::truncate(inodeno_t ino, 
-					OSDFileLayout& layout,
+int Filer::truncate(inode_t& inode, 
 					size_t new_size, size_t old_size,
 					Context *onfinish)
 {
@@ -454,9 +449,9 @@ int Filer::truncate(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdmap->file_to_extents(ino, layout, old_size, new_size, extents);
+  osdmap->file_to_extents(inode, old_size, new_size, extents);
 
-  dout(7) << "osd truncate ino " << ino << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
+  dout(7) << "osd truncate ino " << inode.ino << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
 
   int n = 0;
   for (list<OSDExtent>::iterator it = extents.begin();

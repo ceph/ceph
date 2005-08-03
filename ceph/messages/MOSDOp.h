@@ -31,7 +31,7 @@ typedef struct {
 
   object_t oid;
   repgroup_t rg;
-  int rg_role, rg_nrep;
+  int rg_role;//, rg_nrep;
   __uint64_t map_version;
 
   int op;
@@ -53,7 +53,7 @@ class MOSDOp : public Message {
   object_t get_oid() { return st.oid; }
   repgroup_t get_rg() { return st.rg; }
   int        get_rg_role() { return st.rg_role; }  // who am i asking for?
-  int        get_rg_nrep() { return st.rg_nrep; }
+  //int        get_rg_nrep() { return st.rg_nrep; }
   __uint64_t get_map_version() { return st.map_version; }
 
   int get_op() { return st.op; }
@@ -89,7 +89,7 @@ class MOSDOp : public Message {
   MOSDOp() {}
 
   void set_rg_role(int r) { st.rg_role = r; }
-  void set_rg_nrep(int n) { st.rg_nrep = n; }
+  //void set_rg_nrep(int n) { st.rg_nrep = n; }
 
   void set_length(size_t l) { st.length = l; }
   void set_offset(size_t o) { st.offset = o; }

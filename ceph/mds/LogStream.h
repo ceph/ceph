@@ -19,7 +19,7 @@ class LogStream {
   MDS *mds;
   Filer *filer;
 
-  inodeno_t log_ino;
+  inode_t log_inode;
 
   // writing
   off_t sync_pos;        // first non-written byte
@@ -46,7 +46,11 @@ class LogStream {
   LogStream(MDS *mds, Filer *filer, inodeno_t log_ino) {
 	this->mds = mds;
 	this->filer = filer;
-	this->log_ino = log_ino;
+
+	// inode
+	memset(&log_inode, 0, sizeof(log_inode));
+	log_inode.ino = log_ino;
+	log_inode.layout = g_OSD_MDLogLayout;
 
 	// wr
 	sync_pos = flush_pos = append_pos = 0;

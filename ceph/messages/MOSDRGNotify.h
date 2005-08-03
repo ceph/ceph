@@ -28,6 +28,7 @@ class MOSDRGNotify : public Message {
   void decode_payload() {
 	int off = 0;
 	payload.copy(off, sizeof(map_version), (char*)&map_version);
+	off += sizeof(map_version);
 	_decode(rg_list, payload, off);
   }
 };

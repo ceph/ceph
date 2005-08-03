@@ -1,6 +1,7 @@
 
 // ceph stuff
 #include "Client.h"
+#include "Buffercache.h"
 
 // unix-ey fs stuff
 #include <unistd.h>
@@ -473,8 +474,8 @@ void Client::flush_inode_buffers(Inode *in)
     dout(7) << "inflight buffers flushed" << endl;
   } 
   else if (g_conf.client_bcache &&
-		   !bc->get_fc(in->inode.ino)->dirty_buffers.empty()) {
-    Filecache *fc = bc->get_fc(in->inode.ino);
+		   !bc->get_fc(in)->dirty_buffers.empty()) {
+    Filecache *fc = bc->get_fc(in);
     dout(7) << "bc: flush_inode_buffers: inode " << in->inode.ino << " has " << fc->dirty_buffers.size() << " dirty buffers" << endl;
     //fc->simplify();
     dout(10) << "bc: flush_inode_buffers: after simplify: inode " << in->inode.ino << " has " << fc->dirty_buffers.size() << " dirty buffers" << endl;
@@ -484,7 +485,7 @@ void Client::flush_inode_buffers(Inode *in)
          it++) {
       (*it)->flush_start(); // Note: invalidates dirty_buffer entries!!!
       C_Client_FileFlushFinish *onfinish = new C_Client_FileFlushFinish(*it);
-      filer->write(in->inode.ino, g_OSD_FileLayout, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
+      filer->write(in->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
     }
 #if 0    
     dout(7) << "flush_inode_buffers: dirty buffers, waiting" << endl;
@@ -523,7 +524,7 @@ void Client::flush_buffers(int ttl, size_t dirty_size)
 	 it++) {
       (*it)->flush_start();
       C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(*it);
-      filer->write((*it)->ino, g_OSD_FileLayout, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
+      filer->write((*it)->inode->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
     }
 #if 0
     dout(7) << "flush_buffers: dirty buffers, waiting" << endl;
@@ -593,7 +594,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   // flush buffers?
   if (in->file_caps & CAP_FILE_WRBUFFER == 0) {
 	flush_inode_buffers(in); 
-	Filecache *fc = bc->get_fc(in->inode.ino);
+	Filecache *fc = bc->get_fc(in);
 	fc->wait_for_inflight(client_lock);
   }
 
@@ -1467,7 +1468,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
     bufferlist blist;   // data will go here
 
     C_Client_Cond *onfinish = new C_Client_Cond(&cond, client_lock, &rvalue);
-    filer->read(in->inode.ino, g_OSD_FileLayout, size, offset, &blist, onfinish);
+    filer->read(in->inode, size, offset, &blist, onfinish);
     cond.Wait(*client_lock);
 
     // copy data into caller's buf
@@ -1482,7 +1483,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	map<off_t, size_t> holes;
 	map<off_t, size_t>::iterator hole;
 	
-	Filecache *fc = bc->get_fc(in->inode.ino);
+	Filecache *fc = bc->get_fc(in);
 	hits.clear(); rx.clear(); tx.clear(); holes.clear();
 	fc->map_existing(size, offset, hits, rx, tx, holes);  
 	
@@ -1507,13 +1508,13 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  assert(fc->buffer_map.count(hole_offset) == 0);
 	  
 	  // insert new bufferhead without allocating buffers (Filer::handle_osd_read_reply allocates them)
-	  Bufferhead *bh = new Bufferhead(in->inode.ino, hole_offset, bc);
+	  Bufferhead *bh = new Bufferhead(in, hole_offset, bc);
 	  
 	  // read into the buffercache: when finished transition state from
 	  // rx to clean
 	  bh->miss_start(hole_size);
 	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, client_lock, &hole_rvalue);	
-	  filer->read(in->inode.ino, g_OSD_FileLayout, hole_size, hole_offset, &(bh->bl), onfinish);
+	  filer->read(in->inode, hole_size, hole_offset, &(bh->bl), onfinish);
 	  dout(6) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
 	}
 	
@@ -1560,22 +1561,22 @@ public:
   Inode *in;
   bufferlist *blist;
   C_Client_WriteBuffer(Inode *in, bufferlist *blist) {
-        this->in = in;
-        this->blist = blist;
+	this->in = in;
+	this->blist = blist;
   }
   void finish(int r) {
-        in->inflight_buffers.erase(blist);
-        delete blist;
-
-        if (in->inflight_buffers.empty()) {
-          // wake up flush waiters
-          for (list<Cond*>::iterator it = in->waitfor_flushed.begin();
-                   it != in->waitfor_flushed.end();
-                   it++) {
-                (*it)->Signal();
-          }
-          in->waitfor_flushed.clear();
-        }
+	in->inflight_buffers.erase(blist);
+	delete blist;
+	
+	if (in->inflight_buffers.empty()) {
+	  // wake up flush waiters
+	  for (list<Cond*>::iterator it = in->waitfor_flushed.begin();
+		   it != in->waitfor_flushed.end();
+		   it++) {
+		(*it)->Signal();
+	  }
+	  in->waitfor_flushed.clear();
+	}
   }
 };
 
@@ -1616,7 +1617,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 	// map buffercache for writing
 	map<off_t, Bufferhead*> buffers, rx, tx;
 	buffers.clear(); rx.clear(); tx.clear();
-	bc->map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); 
+	bc->map_or_alloc(in, size, offset, buffers, rx, tx); 
 	
 	// wait for rx and tx buffers -- FIXME: don't need to wait for tx buffers
 	while (!(rx.empty() && tx.empty())) {
@@ -1626,9 +1627,9 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 		tx.begin()->second->wait_for_write(client_lock);
 	  }
 	  buffers.clear(); tx.clear(); rx.clear();
-	  bc->map_or_alloc(in->inode.ino, size, offset, buffers, rx, tx); // FIXME: overkill
+	  bc->map_or_alloc(in, size, offset, buffers, rx, tx); // FIXME: overkill
 	} 
-	bc->dirty(in->inode.ino, size, offset, buf);
+	bc->dirty(in, size, offset, buf);
 	
 	trim_bcache();
 	
@@ -1645,7 +1646,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 	   in->inflight_buffers.insert(blist);
 	   
 	   Context *onfinish = new C_Client_WriteBuffer( in, blist );
-	   filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, *blist, 0, onfinish);
+	   filer->write(in->inode, size, offset, *blist, 0, onfinish);
 	*/
 	
   } else {
@@ -1666,7 +1667,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 	  int rvalue;
 	  
 	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, client_lock, &rvalue);
-	  filer->write(in->inode.ino, g_OSD_FileLayout, size, offset, blist, 0, onfinish);
+	  filer->write(in->inode, size, offset, blist, 0, onfinish);
 	  
 	  cond.Wait(*client_lock);
 	}
@@ -1741,7 +1742,7 @@ int Client::fsync(fh_t fh, bool syncdataonly)
  
   // blocking flush
   flush_inode_buffers(in);
-  Filecache *fc = bc->get_fc(in->inode.ino);
+  Filecache *fc = bc->get_fc(in);
   fc->wait_for_inflight(client_lock);
 
   if (syncdataonly &&

@@ -12,7 +12,16 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "anchortable: "
 
-
+AnchorTable::AnchorTable(MDS *mds)
+{
+  this->mds = mds;
+  opening = false;
+  opened = false;
+  
+  memset(&table_inode, 0, sizeof(table_inode));
+  table_inode.ino = MDS_INO_ANCHORTABLE+mds->get_nodeid();
+  table_inode.layout = g_OSD_FileLayout;
+}
 
 /*
  * basic updates
@@ -350,8 +359,7 @@ void AnchorTable::save(Context *onfinish)
   // write!
   bufferlist bl;
   bl.append(tab.c_str(), tab.length());
-  mds->filer->write(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
-					g_OSD_FileLayout,
+  mds->filer->write(table_inode,
 					bl.length(), 0,
 					bl, 0, 
 					onfinish);
@@ -394,8 +402,7 @@ public:
 	cout << "r is " << r << " size is " << size << endl;
 	if (r > 0 && size > 0) {
 	  C_AT_Load *c = new C_AT_Load(size, at, onfinish);
-	  mds->filer->read(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
-					   g_OSD_FileLayout,
+	  mds->filer->read(at->table_inode,
 					   size, sizeof(size),
 					   &c->bl,
 					   c);
@@ -414,8 +421,7 @@ void AnchorTable::load(Context *onfinish)
   assert(!opened);
   
   C_AT_LoadSize *c = new C_AT_LoadSize(this, mds, onfinish);
-  mds->filer->read(MDS_INO_ANCHORTABLE+mds->get_nodeid(),
-				   g_OSD_FileLayout,
+  mds->filer->read(table_inode,
 				   sizeof(size_t), 0,
 				   &c->bl,
 				   c);

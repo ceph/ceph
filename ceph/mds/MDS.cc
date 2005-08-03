@@ -521,7 +521,7 @@ void MDS::my_dispatch(Message *m)
 	
 
 	// HACK to test hashing stuff
-	if (0) {
+	if (false) {
 	  static map<int,int> didhash;
 	  if (elapsed.sec() > 15 && !didhash[whoami]) {
 		CInode *in = mdcache->get_inode(100000010);
@@ -543,10 +543,11 @@ void MDS::my_dispatch(Message *m)
 
 
 	// HACK osd map change
-	if (0) {
+	if (false) {
 	  static int didit = 0;
 	  if (whoami == 0 && 
-		  elapsed.sec() > 10 && !didit) {
+		  elapsed.sec() > 10 && !didit &&
+		  osdmap->get_group(0).num_osds > 4) {
 		didit = 1;
 
 		dout(1) << "changing OSD map, removing one OSD" << endl;
@@ -2501,6 +2502,9 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_DIR;
   
+  // use dir layout
+  newi->inode.layout = g_OSD_MDDirLayout;
+
   // init dir to be empty
   assert(!newi->is_frozen_dir());  // bc mknod worked
   CDir *newdir = newi->get_or_open_dir(this);

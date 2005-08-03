@@ -361,7 +361,7 @@ void OSD::scan_rg()
   get_rg_list(ls);
   
   map< int, list<repgroup_t> > notify_list;
-  map< int, set<RG*> > start_set;
+  map< int, map<RG*,int> >   start_map;    // peer -> RG -> peer_role
 
   for (list<repgroup_t>::iterator it = ls.begin();
 	   it != ls.end();
@@ -371,8 +371,9 @@ void OSD::scan_rg()
 	assert(rg);
 
 	// get active rush mapping
-	int acting[NUM_RUSH_REPLICAS];
-	int nrep = osdmap->repgroup_to_acting_osds(rgid, acting, NUM_RUSH_REPLICAS);
+	vector<int> acting;
+	int nrep = osdmap->repgroup_to_acting_osds(rgid, acting);
+	assert(nrep > 0);
 	int primary = acting[0];
 	int role = -1;
 	for (int i=0; i<nrep; i++) 
@@ -399,6 +400,7 @@ void OSD::scan_rg()
 	  // we need to re-peer
 	  rg->state_clear(RG_STATE_PEERED);
 	  rg->set_role(role);
+	  rg->set_primary(primary);
 	  rg->store(store);
 
 	  if (role == 0) {
@@ -438,7 +440,7 @@ void OSD::scan_rg()
 	  for (int r=1; r<nrep; r++) {
 		if (rg->get_peer(r) == 0) {
 		  dout(10) << " rg " << rgid << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
-		  start_set[acting[r]].insert(rg);
+		  start_map[acting[r]][rg] = r;
 		} 
 	  }
 	}
@@ -452,8 +454,8 @@ void OSD::scan_rg()
 	peer_notify(pit->first, pit->second);
 
   // start peer?
-  for (map< int, set<RG*> >::iterator pit = start_set.begin();
-	   pit != start_set.end();
+  for (map< int, map<RG*, int> >::iterator pit = start_map.begin();
+	   pit != start_map.end();
 	   pit++)
 	peer_start(pit->first, pit->second);
 
@@ -468,19 +470,37 @@ void OSD::scan_rg()
 void OSD::peer_notify(int primary, list<repgroup_t>& rg_list)
 {
   dout(7) << "peer_notify osd" << primary << " on " << rg_list.size() << " RGs" << endl;
-  MOSDRGNotify *m = new MOSDRGNotify(primary, rg_list);
-  messenger->send_message(m, 
-						  MSG_ADDR_OSD(primary));
+  MOSDRGNotify *m = new MOSDRGNotify(osdmap->get_version(), rg_list);
+  messenger->send_message(m, MSG_ADDR_OSD(primary));
 }
 
 
 /** peer_start
  * initiate a peer session with a replica on given list of RGs
  */
-void OSD::peer_start(int replica, set<RG*>& rg_set)
+void OSD::peer_start(int replica, map<RG*,int>& rg_map)
 {
-  dout(7) << "peer_start with osd" << replica << " on " << rg_set.size() << " RGs" << endl;
+  dout(7) << "peer_start with osd" << replica << " on " << rg_map.size() << " RGs" << endl;
   
+  //MOSDRGPeerRequest *m = new MOSDRGPeerRequest(osdmap->get_version());
+
+  for (map<RG*,int>::iterator it = rg_map.begin();
+	   it != rg_map.end();
+	   it++) {
+	RG *rg = it->first;
+	int role = it->second;
+
+	RGPeer *rgp = rg->get_peer(replica);
+	if (!rgp) {
+	  rgp = rg->new_peer(replica, role);
+	} else {
+	  assert(rgp->get_role() == role);
+	}
+
+	
+	
+
+  }
   
 }
 
@@ -510,15 +530,16 @@ void OSD::handle_rg_notify(MOSDRGNotify *m)
   assert(m->get_version() == osdmap->get_version());
   
   // look for unknown RGs i'm primary for
-  map< int, set<RG*> > start_set;
+  map< int, map<RG*,int> > start_map;
 
   for (list<repgroup_t>::iterator it = m->get_rg_list().begin();
 	   it != m->get_rg_list().end();
 	   it++) {
 	repgroup_t rgid = *it;
 	
-	int acting[NUM_RUSH_REPLICAS];
-	int nrep = osdmap->repgroup_to_acting_osds(rgid, acting, NUM_RUSH_REPLICAS);
+	vector<int> acting;
+	int nrep = osdmap->repgroup_to_acting_osds(rgid, acting);
+	assert(nrep > 0);
 	assert(acting[0] == whoami);
 	
 	// get/open RG
@@ -530,25 +551,25 @@ void OSD::handle_rg_notify(MOSDRGNotify *m)
 	  for (int r=1; r<nrep; r++) {
 		if (rg->get_peer(r) == 0) {
 		  dout(10) << " rg " << rgid << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
-		  start_set[acting[r]].insert(rg);
+		  start_map[acting[r]][rg] = r;
 		} 
 	  }
 	}
 
 	// peered with this guy specifically?
 	RGPeer *rgp = rg->get_peer(from);
-	if (!rgp) {
-	  dout(7) << " not yet peered with osd" << from << " on rg " << rgid << endl;
-	  start_set[from].insert(rg);
+	if (!rgp && start_map[from].count(rg) == 0) {
+	  dout(7) << " rg " << rgid << " primary needs to peer with residual notifier osd" << from << endl;
+	  start_map[from][rg] = -1; 
 	}
   }
 
   // start peers?
-  if (start_set.empty()) {
+  if (start_map.empty()) {
 	dout(7) << " no new peers" << endl;
   } else {
-	for (map< int, set<RG*> >::iterator pit = start_set.begin();
-		 pit != start_set.end();
+	for (map< int, map<RG*,int> >::iterator pit = start_map.begin();
+		 pit != start_map.end();
 		 pit++)
 	  peer_start(pit->first, pit->second);
   }
@@ -698,7 +719,7 @@ void OSD::op_read(MOSDOp *r)
 
 void OSD::op_write(MOSDOp *op)
 {
-
+  /* this is old
   // replicated write?
   Cond *cond = 0;
   if (op->get_rg_role() == 0) {
@@ -706,9 +727,8 @@ void OSD::op_write(MOSDOp *op)
 	if (op->get_rg_nrep() > 1) {
 	  dout(7) << "op_write nrep=" << op->get_rg_nrep() << endl;
 	  int reps[op->get_rg_nrep()];
-	  osdmap->repgroup_to_osds(op->get_rg(),
-								   reps,
-								   op->get_rg_nrep());
+	  osdmap->repgroup_to_acting_osds(op->get_rg(),
+									  reps);
 
 	  replica_write_lock.Lock();
 	  for (int i=1; i<op->get_rg_nrep(); i++) {
@@ -733,7 +753,7 @@ void OSD::op_write(MOSDOp *op)
 	  replica_write_lock.Unlock();
 	}
   }
-
+  */
   bool write_sync = op->get_rg_role() == 0;  // primary writes synchronously, replicas don't.
 
   
@@ -776,6 +796,7 @@ void OSD::op_write(MOSDOp *op)
   // assume success.  FIXME.
 
   // wait for replicas?
+  /* old old old
   if (cond) {
 	replica_write_lock.Lock();
 	while (!replica_write_tids[op].empty()) {
@@ -790,6 +811,7 @@ void OSD::op_write(MOSDOp *op)
 	replica_write_cond.erase(op);
 	replica_write_lock.Unlock();
   }
+  */
 
   // reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);

@@ -55,13 +55,11 @@ class AnchorTable {
   hash_map<inodeno_t, Context*>  pending_lookup_context;
   hash_map<inodeno_t, vector<Anchor*>*>  pending_lookup_trace;
 
+ public:
+  inode_t table_inode;
 
  public:
-  AnchorTable(MDS *mds) {
-	this->mds = mds;
-	opening = false;
-	opened = false;
-  }
+  AnchorTable(MDS *mds); 
 
  protected:
   // 

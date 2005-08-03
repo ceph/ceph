@@ -119,7 +119,7 @@ void MDStore::fetch_dir_2( int result,
 class C_MDS_FetchHash : public Context {
 protected:
   MDS *mds;
-  inodeno_t ino;
+  inode_t inode;
   int hashcode;
   Context *context;
   
@@ -127,9 +127,9 @@ public:
   bufferlist bl;
   bufferlist bl2;
   
-  C_MDS_FetchHash(MDS *mds, inodeno_t ino, Context *c, int hashcode) : Context() {
+  C_MDS_FetchHash(MDS *mds, inode_t inode, Context *c, int hashcode) : Context() {
 	this->mds = mds;
-	this->ino = ino;
+	this->inode = inode;
 	this->hashcode = hashcode;
 	this->context = c;
   }
@@ -152,17 +152,16 @@ public:
 	
 	if (got >= size) {
 	  // done.
-	  mds->mdstore->fetch_dir_hash_2( bl, ino, context, hashcode );
+	  mds->mdstore->fetch_dir_hash_2( bl, inode, context, hashcode );
 	}
 	else {
 	  // read the rest!
 	  dout(12) << "fetch_dir_hash_2 dir size is " << size << ", got " << got << ", reading remaniing " << left << " from off " << from << endl;
 	  
 	  // create return context
-	  C_MDS_FetchHash *fin = new C_MDS_FetchHash( mds, ino, context, hashcode );
+	  C_MDS_FetchHash *fin = new C_MDS_FetchHash( mds, inode, context, hashcode );
 	  fin->bl.claim( bl );
-	  mds->filer->read(ino,
-					   g_OSD_MDDirLayout,
+	  mds->filer->read(inode,
 					   left, from,
 					   &fin->bl2,
 					   fin );
@@ -183,25 +182,24 @@ void MDStore::fetch_dir_hash( CDir *dir,
   dout(11) << "fetch_dir_hash hashcode " << hashcode << " " << *dir << endl;
   
   // create return context
-  C_MDS_FetchHash *fin = new C_MDS_FetchHash( mds, dir->ino(), c, hashcode );
+  C_MDS_FetchHash *fin = new C_MDS_FetchHash( mds, dir->get_inode()->inode, c, hashcode );
   
   // grab first stripe bit (which had better be more than 16 bytes!)
-  assert(g_OSD_MDDirLayout.stripe_size >= 16);
-  mds->filer->read(dir->ino(),
-				   g_OSD_MDDirLayout,
-				   g_OSD_MDDirLayout.stripe_size, get_hash_offset(hashcode),  
+  assert(dir->get_inode()->inode.layout.stripe_size >= 16);
+  mds->filer->read(dir->get_inode()->inode,
+				   dir->get_inode()->inode.layout.stripe_size, get_hash_offset(hashcode),  
 				   &fin->bl,
 				   fin );
 }
 
 void MDStore::fetch_dir_hash_2( bufferlist& bl,
-								inodeno_t ino,
+								inode_t& inode,
 								Context *c,						   
 								int hashcode)
 {
-  CInode *idir = mds->mdcache->get_inode(ino);
+  CInode *idir = mds->mdcache->get_inode(inode.ino);
   if (!idir) {
-	dout(7) << "fetch_dir_hash_2 on ino " << ino << " but no longer in our cache!" << endl;
+	dout(7) << "fetch_dir_hash_2 on ino " << inode.ino << " but no longer in our cache!" << endl;
 	c->finish(-1);
 	delete c;
 	return;
@@ -646,8 +644,7 @@ void MDStore::commit_dir_slice( CDir *dir,
   dir->auth_pin();
   
   // submit to osd
-  mds->filer->write( dir->ino(),
-					 g_OSD_MDDirLayout,
+  mds->filer->write( dir->get_inode()->inode,
 					 fin->bl.length(), 0,
 					 fin->bl,
 					 0, //OSD_OP_FLAGS_TRUNCATE, // truncate file/object after end of this write

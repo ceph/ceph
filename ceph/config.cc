@@ -1,7 +1,6 @@
 
 #include "config.h"
-#include "osd/OSDMap.h"
-
+#include "include/types.h"
 
 //#define MDS_CACHE_SIZE        4*10000   -> <20mb
 //#define MDS_CACHE_SIZE        80000         62mb
@@ -15,21 +14,22 @@
 
 
 // hack hack hack ugly FIXME
+#include "common/Mutex.h"
 long buffer_total_alloc = 0;
 Mutex bufferlock;
 
 
 
-OSDFileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20 );   // stripe files over whole objects
-//OSDFileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
+FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20 );   // stripe files over whole objects
+//FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
-OSDFileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19 );
+FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19 );
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-OSDFileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20 );  // new (good?) way
-//OSDFileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
-//OSDFileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
+FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20 );  // new (good?) way
+//FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
+//FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
 
 md_config_t g_conf = {
@@ -102,7 +102,6 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_num_rg: 10000,
-  osd_nrep: 1,
   osd_fsync: true,
   osd_writesync: false,
   osd_maxthreads: 10,
@@ -242,8 +241,6 @@ void parse_config_options(int argc, char **argv,
 
 	else if (strcmp(argv[i], "--osd_num_rg") == 0) 
 	  g_conf.osd_num_rg = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--osd_nrep") == 0) 
-	  g_conf.osd_nrep = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(argv[++i]);
 	else if (strcmp(argv[i], "--osd_writesync") == 0) 

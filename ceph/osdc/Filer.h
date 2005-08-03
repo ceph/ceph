@@ -91,33 +91,28 @@ class Filer : public Dispatcher {
   }
 
   // osd fun
-  int read(inodeno_t ino,
-		   OSDFileLayout& layout,
+  int read(inode_t& inode,
 		   size_t len, 
 		   size_t offset, 
 		   bufferlist *bl,   // ptr to data
 		   Context *c);
 
-  int write(inodeno_t ino,
-			OSDFileLayout& layout,
+  int write(inode_t& inode,
 			size_t len, 
 			size_t offset, 
 			bufferlist& bl,
 			int flags, 
 			Context *c);
 
-  int probe_size(inodeno_t ino, 
-				 OSDFileLayout& layout,
+  int probe_size(inode_t& inode, 
 				 size_t *size, Context *c);
 
-  int remove(inodeno_t ino,
-			 OSDFileLayout& layout,
+  int remove(inode_t& inode,
 			 size_t old_size,
 			 Context *c) {
-	return truncate(ino, layout, 0, old_size, c);
+	return truncate(inode, 0, old_size, c);
   }
-  int truncate(inodeno_t ino, 
-			   OSDFileLayout& layout,
+  int truncate(inode_t& ino, 
 			   size_t new_size, size_t old_size, 
 			   Context *c);
 

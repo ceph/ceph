@@ -21,51 +21,48 @@ class Message;
 typedef __uint64_t version_t;
 
 
-/** RGImport
- * state associated with import of RG contents from another 
- * OSD.
- */
-#define RG_IMPORT_STATE_STARTING    1   // fetching object, delete lists.
-#define RG_IMPORT_STATE_IMPORTING   2   // fetching replicas.
-#define RG_IMPORT_STATE_FINISHING   3   // got everything; telling old guy to hose residual state
-
-struct RGImport {
-  int                      peer;               // the peer
-  int                      peer_role;          // peer's role.  if <0, we should delete strays.
-  int                      import_state;
-
-  map<object_t,version_t>  remaining_objects;  // remote object list
-  map<object_t,version_t>  stray_objects;      // imported but not deleted. 
-
-  // FIXME: add destructive vs non-destructive.  maybe peer is a replica!
-};
-
 
 /** RGPeer
- * state associated with (possibly old) RG peers.
- * only used by primary?
- *
+ * state associated with non-primary OSDS with RG content.
+ * only used by primary.
  */
 
 // by primary
-#define RG_PEER_STATE_ACTIVE    1   // active peer
+#define RG_PEER_STATE_ACTIVE    1   // peer has acked our request, sent back RG state.
 #define RG_PEER_STATE_COMPLETE  2   // peer has everything replicated
 
-struct RGPeer {
+class RGPeer {
+ private:
   int       peer;
   int       role;    // 0 primary, 1+ replica, -1 residual
   int       state;
 
-  // used by primary for syncing (old) replicas
+  // active|residual: used by primary for syncing (old) replicas
   map<object_t,version_t>  objects;        // remote object list
   map<object_t,version_t>  deleted;        // remote delete list
   map<object_t,version_t>  fetching;       // objects i'm reading from replica
   map<object_t,version_t>  stray;          // objects that need to be deleted
   
-  // used by primary for normal replication stuff
+  // active: used by primary for normal replication stuff
   map<object_t,version_t>  writing;        // objects i've written to replica
   map<object_t,version_t>  flushing;       // objects i've written to remote buffer cache only
+
+ public:
+  RGPeer(int p, int r) : peer(p), role(r), state(0) { }
+
+  int get_role() { return role; }
+  int get_peer() { return peer; }
+  bool state_test(int m) { return state & m != 0; }
+  void state_set(int m) { state |= m; }
+  void state_clear(int m) { state &= ~m; }
+
+  bool is_active() { return state_test(RG_PEER_STATE_ACTIVE); }
+  bool is_complete() { return state_test(RG_PEER_STATE_COMPLETE); }
+
+  bool is_residual() { return role < 0; }
+  bool is_empty() { return is_active() && objects.empty(); }  // *** && peer_state & COMPLETE
 };
+
 
 
 
@@ -89,7 +86,7 @@ class RG {
   int        role;    // 0 = primary, 1 = secondary, etc.  -1=undef/none.
   int        state;   // see bit defns above
 
-  int        primary;     // replica: who the primary is (if not me)
+  int        primary;         // replica: who the primary is (if not me)
   set<int>   old_replica_set; // old primary: where replicas used to be
   
   map<int, RGPeer*>         peers;  // primary: (soft state) active peers
@@ -114,6 +111,10 @@ class RG {
 	if (peers.count(p)) return peers[p];
 	return 0;
   }
+  RGPeer* new_peer(int p, int r) {
+	return peers[p] = new RGPeer(p, r);
+  }
+
   set<int>   get_old_replica_set() { return old_replica_set; }
 
   int  get_state() { return state; }
@@ -223,7 +224,7 @@ class OSD : public Dispatcher {
 
   void scan_rg();
   void peer_notify(int primary, list<repgroup_t>& rg_list);
-  void peer_start(int replica, set<RG*>& rg_list);
+  void peer_start(int replica, map<RG*,int>& rg_map);
 
   void handle_rg_notify(class MOSDRGNotify *m);
   void handle_rg_peer(class MOSDRGPeer *m);

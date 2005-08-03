@@ -10,6 +10,8 @@
 #include "config.h"
 #include "common/Cond.h"
 
+#include "Client.h"
+
 // stl
 #include <list>
 #include <map>
@@ -44,7 +46,7 @@ class Bufferhead : public LRUObject {
   
   off_t offset;
   size_t miss_len;  // only valid during misses 
-  inodeno_t ino;
+  class Inode *inode;
   time_t dirty_since;
   int state; 
   bufferlist bl;
@@ -56,8 +58,8 @@ class Bufferhead : public LRUObject {
   bool visited;
   
   // cons/destructors
-  Bufferhead(inodeno_t ino, Buffercache *bc);
-  Bufferhead(inodeno_t ino, off_t off, Buffercache *bc);
+  Bufferhead(class Inode *inode, Buffercache *bc);
+  Bufferhead(class Inode *inode, off_t off, Buffercache *bc);
   ~Bufferhead(); 
   
   //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
@@ -160,15 +162,15 @@ class Filecache {
   list<Cond*> inflight_waiters;
 
  public: 
-  inodeno_t ino;
+  class Inode *inode;
   map<off_t, Bufferhead*> buffer_map;
   set<Bufferhead*> dirty_buffers;
   set<Bufferhead*> inflight_buffers;
   Buffercache *bc;
 
-  Filecache(Buffercache *bc, inodeno_t ino) { 
+  Filecache(Buffercache *bc, class Inode *inode) { 
     this->bc = bc;
-    this->ino = ino;
+    this->inode = inode;
     buffer_map.clear();
   }
   Filecache(const Filecache& other); 
@@ -253,11 +255,11 @@ class Buffercache {
   Buffercache(const Buffercache& other);
   Buffercache& operator=(const Buffercache& other);
   
-  Filecache *get_fc(inodeno_t ino) {
-    if (!bcache_map.count(ino)) {
-      bcache_map[ino] = new Filecache(this, ino);
+  Filecache *get_fc(Inode *inode) {
+    if (!bcache_map.count(inode->ino())) {
+      bcache_map[inode->ino()] = new Filecache(this, inode);
     } 
-    return bcache_map[ino];
+    return bcache_map[inode->ino()];
   }
       
   void wait_for_inflight(Mutex *lock) {
@@ -310,13 +312,13 @@ class Buffercache {
   void get_reclaimable(size_t min_size, list<Bufferhead*>&);
 
   void insert(Bufferhead *bh);
-  void dirty(inodeno_t ino, size_t size, off_t offset, const char *src);
+  void dirty(Inode *inode, size_t size, off_t offset, const char *src);
   size_t touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
-  void map_or_alloc(inodeno_t ino, size_t len, off_t off, 
+  void map_or_alloc(class Inode *inode, size_t len, off_t off, 
                     map<off_t, Bufferhead*>& buffers, 
 		    map<off_t, Bufferhead*>& rx,
 		    map<off_t, Bufferhead*>& tx);
-  void consolidate(map<inodeno_t, map<off_t, list<off_t> > > cons_map);
+  void consolidate(map<Inode*, map<off_t, list<off_t> > > cons_map);
   void release_file(inodeno_t ino);       
   size_t reclaim(size_t min_size);
 };
