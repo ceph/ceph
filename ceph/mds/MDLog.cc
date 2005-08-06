@@ -131,6 +131,12 @@ void MDLog::trim(Context *c)
 
   // trim!
   while (num_events > max_events) {
+	
+	if ((int)trimming.size() >= g_conf.mds_log_max_trimming) {
+	  dout(7) << "  already trimming max, waiting" << endl;
+	  return;
+	}
+
 	off_t gap = logstream->get_append_pos() - logstream->get_read_pos();
 	dout(5) << "trim: num_events " << num_events << " - trimming " << trimming.size() << " > max " << max_events << " .. gap " << gap << endl;
 	
@@ -146,17 +152,14 @@ void MDLog::trim(Context *c)
 		delete le;
 		logger->inc("obs");
 	  } else {
-		if ((int)trimming.size() < g_conf.mds_log_max_trimming) {
-		  // trim!
-		  dout(7) << "  trimming " << le << endl;
-		  trimming.insert(le);
-		  le->retire(mds, new C_MDL_Trimmed(this, le));
-		  logger->inc("retire");
-		  logger->set("trim", trimming.size());
-		} else {
-		  dout(7) << "  already trimming max, waiting" << endl;
-		  return;
-		}
+		assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
+
+		// trim!
+		dout(7) << "  trimming " << le << endl;
+		trimming.insert(le);
+		le->retire(mds, new C_MDL_Trimmed(this, le));
+		logger->inc("retire");
+		logger->set("trim", trimming.size());
 	  }
 	} else {
 	  // need to read!

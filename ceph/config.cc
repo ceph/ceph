@@ -149,118 +149,119 @@ md_config_t g_conf = {
 using namespace std;
 
 
-
-void parse_config_options(int argc, char **argv,
-						  int& nargc, char**&nargv,
-						  bool barf_on_extras)
+void argv_to_vec(int argc, char **argv,
+				 vector<char*>& args)
 {
-  // alloc new argc
-  nargv = (char**)malloc(sizeof(char*) * argc);
-  nargc = 0;
-  nargv[nargc++] = argv[0];
-  
-  int extras = 0;
+  for (int i=1; i<argc; i++)
+	args.push_back(argv[i]);
+}
 
-  for (int i=1; i<argc; i++) {
-	if (strcmp(argv[i], "--nummds") == 0) 
-	  g_conf.num_mds = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--numclient") == 0) 
-	  g_conf.num_client = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--numosd") == 0) 
-	  g_conf.num_osd = atoi(argv[++i]);
+void vec_to_argv(vector<char*>& args,
+				 int& argc, char **&argv)
+{
+  argv = (char**)malloc(sizeof(char*) * argc);
+  argc = 1;
+  argv[0] = "asdf";
 
-	else if (strcmp(argv[i], "--debug") == 0) 
-	  g_conf.debug = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--debug_mds_balancer") == 0) 
-	  g_conf.debug_mds_balancer = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--debug_mds_log") == 0) 
-	  g_conf.debug_mds_log = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--debug_buffer") == 0) 
-	  g_conf.debug_buffer = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--debug_filer") == 0) 
-	  g_conf.debug_filer = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--debug_client") == 0) 
-	  g_conf.debug_client = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--debug_osd") == 0) 
-	  g_conf.debug_osd = atoi(argv[++i]);
+  for (unsigned i=0; i<args.size(); i++) 
+	argv[argc++] = args[i];
+}
 
-	else if (strcmp(argv[i], "--log") == 0) 
-	  g_conf.log = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--log_name") == 0) 
-	  g_conf.log_name = argv[++i];
+void parse_config_options(vector<char*>& args)
+{
+  vector<char*> nargs;
 
-	else if (strcmp(argv[i], "--fakemessenger_serialize") == 0) 
-	  g_conf.fakemessenger_serialize = atoi(argv[++i]);
+  for (unsigned i=0; i<args.size(); i++) {
+	if (strcmp(args[i], "--nummds") == 0) 
+	  g_conf.num_mds = atoi(args[++i]);
+	else if (strcmp(args[i], "--numclient") == 0) 
+	  g_conf.num_client = atoi(args[++i]);
+	else if (strcmp(args[i], "--numosd") == 0) 
+	  g_conf.num_osd = atoi(args[++i]);
 
-	else if (strcmp(argv[i], "--mds_cache_size") == 0) 
-	  g_conf.mds_cache_size = atoi(argv[++i]);
+	else if (strcmp(args[i], "--debug") == 0) 
+	  g_conf.debug = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_mds_balancer") == 0) 
+	  g_conf.debug_mds_balancer = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_mds_log") == 0) 
+	  g_conf.debug_mds_log = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_buffer") == 0) 
+	  g_conf.debug_buffer = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_filer") == 0) 
+	  g_conf.debug_filer = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_client") == 0) 
+	  g_conf.debug_client = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_osd") == 0) 
+	  g_conf.debug_osd = atoi(args[++i]);
 
-	else if (strcmp(argv[i], "--mds_log") == 0) 
-	  g_conf.mds_log = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_log_before_reply") == 0) 
-	  g_conf.mds_log_before_reply = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_log_max_len") == 0) 
-	  g_conf.mds_log_max_len = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_log_read_inc") == 0) 
-	  g_conf.mds_log_read_inc = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_log_max_trimming") == 0) 
-	  g_conf.mds_log_max_trimming = atoi(argv[++i]);
+	else if (strcmp(args[i], "--log") == 0) 
+	  g_conf.log = atoi(args[++i]);
+	else if (strcmp(args[i], "--log_name") == 0) 
+	  g_conf.log_name = args[++i];
 
-	else if (strcmp(argv[i], "--mds_commit_on_shutdown") == 0) 
-	  g_conf.mds_commit_on_shutdown = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_log_flush_on_shutdown") == 0) 
-	  g_conf.mds_log_flush_on_shutdown = atoi(argv[++i]);
+	else if (strcmp(args[i], "--fakemessenger_serialize") == 0) 
+	  g_conf.fakemessenger_serialize = atoi(args[++i]);
 
-	else if (strcmp(argv[i], "--mds_bal_interval") == 0) 
-	  g_conf.mds_bal_interval = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_bal_replicate_threshold") == 0) 
-	  g_conf.mds_bal_replicate_threshold = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_bal_unreplicate_threshold") == 0) 
-	  g_conf.mds_bal_unreplicate_threshold = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_bal_max") == 0) 
-	  g_conf.mds_bal_max = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--mds_bal_max_until") == 0) 
-	  g_conf.mds_bal_max_until = atoi(argv[++i]);
+	else if (strcmp(args[i], "--mds_cache_size") == 0) 
+	  g_conf.mds_cache_size = atoi(args[++i]);
 
-	else if (strcmp(argv[i], "--client_cache_size") == 0)
-	  g_conf.client_cache_size = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--client_cache_stat_ttl") == 0)
-	  g_conf.client_cache_stat_ttl = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--client_trace") == 0)
-	  g_conf.client_trace = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--fuse_direct_io") == 0)
-	  g_conf.fuse_direct_io = atoi(argv[++i]);
+	else if (strcmp(args[i], "--mds_log") == 0) 
+	  g_conf.mds_log = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_log_before_reply") == 0) 
+	  g_conf.mds_log_before_reply = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_log_max_len") == 0) 
+	  g_conf.mds_log_max_len = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_log_read_inc") == 0) 
+	  g_conf.mds_log_read_inc = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_log_max_trimming") == 0) 
+	  g_conf.mds_log_max_trimming = atoi(args[++i]);
 
-	else if (strcmp(argv[i], "--client_sync_writes") == 0)
-	  g_conf.client_sync_writes = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--client_bcache") == 0)
-	  g_conf.client_bcache = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--client_bcache_ttl") == 0)
-	  g_conf.client_bcache_ttl = atoi(argv[++i]);
+	else if (strcmp(args[i], "--mds_commit_on_shutdown") == 0) 
+	  g_conf.mds_commit_on_shutdown = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
+	  g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--mds_bal_interval") == 0) 
+	  g_conf.mds_bal_interval = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_replicate_threshold") == 0) 
+	  g_conf.mds_bal_replicate_threshold = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_unreplicate_threshold") == 0) 
+	  g_conf.mds_bal_unreplicate_threshold = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_max") == 0) 
+	  g_conf.mds_bal_max = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
+	  g_conf.mds_bal_max_until = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--client_cache_size") == 0)
+	  g_conf.client_cache_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_cache_stat_ttl") == 0)
+	  g_conf.client_cache_stat_ttl = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_trace") == 0)
+	  g_conf.client_trace = atoi(args[++i]);
+	else if (strcmp(args[i], "--fuse_direct_io") == 0)
+	  g_conf.fuse_direct_io = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--client_sync_writes") == 0)
+	  g_conf.client_sync_writes = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_bcache") == 0)
+	  g_conf.client_bcache = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_bcache_ttl") == 0)
+	  g_conf.client_bcache_ttl = atoi(args[++i]);
 
 
-	else if (strcmp(argv[i], "--osd_num_rg") == 0) 
-	  g_conf.osd_num_rg = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--osd_fsync") == 0) 
-	  g_conf.osd_fsync = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--osd_writesync") == 0) 
-	  g_conf.osd_writesync = atoi(argv[++i]);
-	else if (strcmp(argv[i], "--osd_maxthreads") == 0) 
-	  g_conf.osd_maxthreads = atoi(argv[++i]);
+	else if (strcmp(args[i], "--osd_num_rg") == 0) 
+	  g_conf.osd_num_rg = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_fsync") == 0) 
+	  g_conf.osd_fsync = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_writesync") == 0) 
+	  g_conf.osd_writesync = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_maxthreads") == 0) 
+	  g_conf.osd_maxthreads = atoi(args[++i]);
 
 	else {
-	  nargv[nargc++] = argv[i];
-	  if (barf_on_extras) {
-		cerr << "extra arg " << argv[i] << endl;
-		extras++;
-	  } else {
-		dout(2) << "passing arg " << argv[i] << endl;
-	  }
+	  nargs.push_back(args[i]);
 	}
   }
 
-  if (barf_on_extras) {
-	cerr << extras << " extra args" << endl;
-	exit(0);
-  }
+  args = nargs;
 }

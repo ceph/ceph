@@ -29,88 +29,38 @@ public:
 };
 
 
-int main(int oargc, char **oargv) 
+int main(int argc, char **argv) 
 {
   cerr << "fakesyn starting" << endl;
 
-  int argc;
-  char **argv;
-  parse_config_options(oargc, oargv,
-					   argc, argv);
+  vector<char*> args;
+  argv_to_vec(argc, argv, args);
+
+  parse_config_options(args);
 
   int start = 0;
 
-  // build new argc+argv for fuse
-  typedef char* pchar;
-  int nargc = 0;
-  char **nargv = new pchar[argc];
-  nargv[nargc++] = argv[0];
+  parse_syn_options(args);
 
-  list<int> syn_modes;
-  list<int> syn_iargs;
-  list<string> syn_sargs;
+  vector<char*> nargs;
 
   int mkfs = 0;
-  for (int i=1; i<argc; i++) {
-	cout << "asdf" << endl;
-	if (strcmp(argv[i], "--fastmkfs") == 0) {
+  for (unsigned i=0; i<args.size(); i++) {
+	if (strcmp(args[i], "--fastmkfs") == 0) {
 	  mkfs = MDS_MKFS_FAST;
 	}
-	else if (strcmp(argv[i], "--fullmkfs") == 0) {
+	else if (strcmp(args[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
-	}
-
-	else if (strcmp(argv[i],"--syn") == 0) {
-	  ++i;
-	  if (strcmp(argv[i],"writefile") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"readfile") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"makedirs") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"fullwalk") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
-		//syn_sargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"randomwalk") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
-		syn_iargs.push_back( atoi(argv[++i]) );	   
-	  } else if (strcmp(argv[i],"trace_include") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEINCLUDE );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_lib") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACELIB );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_openssh") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSH );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_opensshlib") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSHLIB );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
-		syn_sargs.push_back( argv[++i] );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"until") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else {
-		cerr << "unknown syn mode " << argv[i] << endl;
-		return -1;
-	  }
 	}
 
 	else {
 	  // unknown arg, pass it on.
-	  nargv[nargc++] = argv[i];
+	  cerr << " stray arg " << args[i] << endl;
+	  nargs.push_back(args[i]);
 	}
   }
+  assert(nargs.empty());
+
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
@@ -140,7 +90,7 @@ int main(int oargc, char **oargv)
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	//cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	client[i] = new Client(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)));
+	client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(i)));
 	start++;
   }
 
@@ -168,9 +118,6 @@ int main(int oargc, char **oargv)
 	//cout << "starting synthetic client  " << endl;
 	syn[i] = new SyntheticClient(client[i]);
 
-	syn[i]->modes = syn_modes;
-	syn[i]->sargs = syn_sargs;
-	syn[i]->iargs = syn_iargs;
 	syn[i]->start_thread();
   }
   for (int i=0; i<NUMCLIENT; i++) {
@@ -200,8 +147,6 @@ int main(int oargc, char **oargv)
   }
   delete mdc;
 
-  free(argv);
-  delete[] nargv;
   cout << "fakesyn done" << endl;
   return 0;
 }

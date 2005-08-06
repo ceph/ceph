@@ -30,13 +30,15 @@ class Messenger {
   Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w), _last_pcid(1) { }
   virtual ~Messenger() { }
   
+  void       set_myaddr(msg_addr_t m) { _myaddr = m; }
   msg_addr_t get_myaddr() { return _myaddr; }
 
   virtual int shutdown() = 0;
   
   // setup
-  void set_dispatcher(Dispatcher *d) { dispatcher = d; }
+  void set_dispatcher(Dispatcher *d) { dispatcher = d; ready(); }
   Dispatcher *get_dispatcher() { return dispatcher; }
+  virtual void ready() { }
 
   // dispatch incoming messages
   virtual void dispatch(Message *m);

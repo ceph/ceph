@@ -21,6 +21,26 @@ class Message;
 typedef __uint64_t version_t;
 
 
+struct RGReplicaInfo {
+  int state;
+  map<object_t,version_t>  objects;        // remote object list
+  map<object_t,version_t>  deleted;        // remote delete list
+
+  void _encode(bufferlist& blist) {
+	blist.append((char*)&state, sizeof(state));
+	::_encode(objects, blist);
+	::_encode(deleted, blist);
+  }
+  void _decode(bufferlist& blist, int& off) {
+	blist.copy(off, sizeof(state), (char*)&state);
+	off += sizeof(state);
+	::_decode(objects, blist, off);
+	::_decode(deleted, blist, off);
+  }
+
+  RGReplicaInfo() : state(0) { }
+};
+
 
 /** RGPeer
  * state associated with non-primary OSDS with RG content.
@@ -37,9 +57,12 @@ class RGPeer {
   int       role;    // 0 primary, 1+ replica, -1 residual
   int       state;
 
+  // peer state
+ public:
+  RGReplicaInfo peer_state;
+
+ protected:
   // active|residual: used by primary for syncing (old) replicas
-  map<object_t,version_t>  objects;        // remote object list
-  map<object_t,version_t>  deleted;        // remote delete list
   map<object_t,version_t>  fetching;       // objects i'm reading from replica
   map<object_t,version_t>  stray;          // objects that need to be deleted
   
@@ -60,8 +83,10 @@ class RGPeer {
   bool is_complete() { return state_test(RG_PEER_STATE_COMPLETE); }
 
   bool is_residual() { return role < 0; }
-  bool is_empty() { return is_active() && objects.empty(); }  // *** && peer_state & COMPLETE
+  bool is_empty() { return is_active() && peer_state.objects.empty(); }  // *** && peer_state & COMPLETE
 };
+
+
 
 
 
@@ -82,7 +107,7 @@ class RGPeer {
 
 class RG {
  protected:
-  repgroup_t rg;
+  repgroup_t rgid;
   int        role;    // 0 = primary, 1 = secondary, etc.  -1=undef/none.
   int        state;   // see bit defns above
 
@@ -95,11 +120,12 @@ class RG {
   map<object_t, version_t>  deleted_objects;  // locally deleted objects
 
  public:  
-  RG(repgroup_t r) : rg(r),
+  RG(repgroup_t r) : rgid(r),
 	role(0),
-	state(0) { }
+	state(0),
+	primary(-1) { }
   
-  repgroup_t get_rg() { return rg; }
+  repgroup_t get_rgid() { return rgid; }
   int        get_role() { return role; }
   int        get_primary() { return primary; }
 
@@ -114,8 +140,15 @@ class RG {
   RGPeer* new_peer(int p, int r) {
 	return peers[p] = new RGPeer(p, r);
   }
+  void remove_peer(int p) {
+	assert(peers.count(p));
+	delete peers[p];
+	peers.erase(p);
+  }
 
-  set<int>   get_old_replica_set() { return old_replica_set; }
+  set<int>&                 get_old_replica_set() { return old_replica_set; }
+  map<object_t, version_t>& get_deleted_objects() { return deleted_objects; }
+
 
   int  get_state() { return state; }
   bool state_test(int m) { return (state & m) != 0; }
@@ -124,26 +157,26 @@ class RG {
   void state_clear(int m) { state &= ~m; }
   
   void store(ObjectStore *store) {
-	if (!store->collection_exists(rg))
-	  store->collection_create(rg);
-	store->collection_setattr(rg, "role", &role, sizeof(role));
-	store->collection_setattr(rg, "primary", &primary, sizeof(primary));
-	store->collection_setattr(rg, "state", &state, sizeof(state));	
+	if (!store->collection_exists(rgid))
+	  store->collection_create(rgid);
+	store->collection_setattr(rgid, "role", &role, sizeof(role));
+	store->collection_setattr(rgid, "primary", &primary, sizeof(primary));
+	store->collection_setattr(rgid, "state", &state, sizeof(state));	
   }
   void fetch(ObjectStore *store) {
-	store->collection_getattr(rg, "role", &role, sizeof(role));
-	store->collection_getattr(rg, "primary", &primary, sizeof(primary));
-	store->collection_getattr(rg, "state", &state, sizeof(state));	
+	store->collection_getattr(rgid, "role", &role, sizeof(role));
+	store->collection_getattr(rgid, "primary", &primary, sizeof(primary));
+	store->collection_getattr(rgid, "state", &state, sizeof(state));	
   }
 
   void add_object(ObjectStore *store, object_t oid) {
-	store->collection_add(rg, oid);
+	store->collection_add(rgid, oid);
   }
   void remove_object(ObjectStore *store, object_t oid) {
-	store->collection_remove(rg, oid);
+	store->collection_remove(rgid, oid);
   }
   void list_objects(ObjectStore *store, list<object_t>& ls) {
-	store->collection_list(rg, ls);
+	store->collection_list(rgid, ls);
   }
 };
 

@@ -2,13 +2,24 @@
 #ifndef __MESSAGE_H
 #define __MESSAGE_H
  
-#define MSG_PING        2
-#define MSG_PING_ACK    3
+#define MSG_NS_CONNECT     1
+#define MSG_NS_CONNECTACK  2
+#define MSG_NS_REGISTER    3
+#define MSG_NS_REGISTERACK 4
+#define MSG_NS_STARTED     5
+#define MSG_NS_UNREGISTER  6
+#define MSG_NS_LOOKUP      7
+#define MSG_NS_LOOKUPREPLY 8
 
-#define MSG_FAILURE     4
-#define MSG_FAILURE_ACK 5
 
-#define MSG_SHUTDOWN    6
+#define MSG_PING        10
+#define MSG_PING_ACK    11
+
+#define MSG_FAILURE     12
+#define MSG_FAILURE_ACK 13
+
+#define MSG_SHUTDOWN    99999
+
 
 #define MSG_OSD_OP           14    // delete, etc.
 #define MSG_OSD_OPREPLY      15    // delete, etc.
@@ -17,9 +28,9 @@
 #define MSG_OSD_GETMAP       17
 #define MSG_OSD_MAP          18
 
-#define MSG_OSD_RG_NOTIFY    50
-#define MSG_OSD_RG_PEER      51
-#define MSG_OSD_RG_PEERACK   52
+#define MSG_OSD_RG_NOTIFY      50
+#define MSG_OSD_RG_PEER        51
+#define MSG_OSD_RG_PEERACK     52
 
 
 #define MSG_CLIENT_REQUEST         60
@@ -101,27 +112,40 @@
 #define MSG_MDS_SHUTDOWNSTART  900
 #define MSG_MDS_SHUTDOWNFINISH 901
 
-//#include "config.h"
+
 
 #include "include/bufferlist.h"
 
 
-// mds's, client's share same (integer) namespace    ??????
-// osd's could be separate.
+// use fixed offsets and static entity -> logical addr mapping!
+#define MSG_ADDR_RANK_BASE    0x10000000 // per-rank messenger services
+#define MSG_ADDR_MDS_BASE     0x20000000
+#define MSG_ADDR_OSD_BASE     0x30000000
+#define MSG_ADDR_CLIENT_BASE  0x40000000
+#define MSG_ADDR_TYPE_MASK    0xf0000000
+#define MSG_ADDR_NUM_MASK     0x0fffffff
+#define MSG_ADDR_NEW          0x0fffffff
 
+#define MSG_ADDR_RANK(x)    (MSG_ADDR_RANK_BASE + (x))
+#define MSG_ADDR_MDS(x)     (MSG_ADDR_MDS_BASE + (x))
+#define MSG_ADDR_OSD(x)     (MSG_ADDR_OSD_BASE + (x))
+#define MSG_ADDR_CLIENT(x)  (MSG_ADDR_CLIENT_BASE + (x))
 
-/* sandwich mds's, then osd's, then clients */
-#define MSG_ADDR_MDS(x)     (x)
-#define MSG_ADDR_OSD(x)     (g_conf.num_mds+(x))
-#define MSG_ADDR_CLIENT(x)  (g_conf.num_mds+g_conf.num_osd+(x))
+#define MSG_ADDR_DIRECTORY   0
+#define MSG_ADDR_RANK_NEW    MSG_ADDR_RANK(MSG_ADDR_NEW)
+#define MSG_ADDR_MDS_NEW     MSG_ADDR_MDS(MSG_ADDR_NEW)
+#define MSG_ADDR_OSD_NEW     MSG_ADDR_OSD(MSG_ADDR_NEW)
+#define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(MSG_ADDR_NEW)
 
-#define MSG_ADDR_ISCLIENT(x)  ((x) >= g_conf.num_mds+g_conf.num_osd)
-
-#define MSG_ADDR_TYPE(x)    ((x)<g_conf.num_mds ? "mds":((x)<(g_conf.num_mds+g_conf.num_osd) ? "osd":"client"))
-#define MSG_ADDR_NUM(x)    ((x)<g_conf.num_mds ? (x) : \
-							((x)<(g_conf.num_mds+g_conf.num_osd) ? ((x)-g_conf.num_mds) : \
-							 ((x)-(g_conf.num_mds+g_conf.num_osd))))
+#define MSG_ADDR_ISCLIENT(x)  ((x) >= MSG_ADDR_CLIENT_BASE)
+#define MSG_ADDR_TYPE(x)    (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_RANK_BASE ? "rank": \
+							 (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_CLIENT_BASE ? "client": \
+							  (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_OSD_BASE ? "osd": \
+							   (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_MDS_BASE ? "mds": \
+                                ((x) == MSG_ADDR_DIRECTORY ? "namer":"unknown")))))
+#define MSG_ADDR_NUM(x)    ((x) & MSG_ADDR_NUM_MASK)
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
+
 
 #include <stdlib.h>
 #include <cassert>

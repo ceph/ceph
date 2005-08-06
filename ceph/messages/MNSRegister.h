@@ -1,0 +1,45 @@
+#ifndef __MNSREGISTER_H
+#define __MNSREGISTER_H
+
+#include "msg/Message.h"
+#include "msg/TCPMessenger.h"
+
+class MNSRegister : public Message {
+  msg_addr_t addr;
+  int rank;
+  long tid;
+
+ public:
+  MNSRegister() {}
+  MNSRegister(long a, int r, int ti) : 
+	Message(MSG_NS_REGISTER) { 
+	addr = a;
+	rank = r;
+	tid = ti;
+  }
+  
+  char *get_type_name() { return "NSReg"; }
+
+  int get_entity() { return addr; }
+  int get_rank() { return rank; }
+  long get_tid() { return tid; }
+
+  void encode_payload() {
+	payload.append((char*)&addr, sizeof(addr));
+	payload.append((char*)&rank, sizeof(rank));
+	payload.append((char*)&tid, sizeof(tid));
+  }
+  void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(addr), (char*)&addr);
+	off += sizeof(addr);
+	payload.copy(off, sizeof(rank), (char*)&rank);
+	off += sizeof(rank);
+	payload.copy(off, sizeof(tid), (char*)&tid);
+	off += sizeof(tid);
+  }
+};
+
+
+#endif
+

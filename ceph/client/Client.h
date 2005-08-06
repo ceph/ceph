@@ -1,7 +1,7 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
-#include "mds/MDCluster.h"
+//#include "mds/MDCluster.h"
 #include "osd/OSDMap.h"
 
 #include "msg/Message.h"
@@ -189,7 +189,7 @@ class Client : public Dispatcher {
   bool all_files_closed;
   
   // cluster descriptors
-  MDCluster             *mdcluster; 
+  //MDCluster             *mdcluster; 
   OSDMap                *osdmap;
   bool mounted;
   
@@ -332,7 +332,7 @@ class Client : public Dispatcher {
   friend class SyntheticClient;
 
  public:
-  Client(MDCluster *mdc, int id, Messenger *m);
+  Client(Messenger *m);
   ~Client();
   void tear_down_cache();   
 

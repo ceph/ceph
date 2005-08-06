@@ -28,103 +28,50 @@ public:
 };
 
 
-int main(int oargc, char **oargv) {
-
-  //cerr << "tcpsyn starting " << myrank << "/" << world << endl;
-  int argc;
-  char **argv;
-  parse_config_options(oargc, oargv,
-					   argc, argv);
-
-  int start = 0;
+#include "msg/mpistarter.cc"
 
 
+int main(int argc, char **argv) 
+{
+  vector<char*> args;
+  argv_to_vec(argc, argv, args);
 
-  // build new argc+argv for fuse
-  typedef char* pchar;
-  int nargc = 0;
-  char **nargv = new pchar[argc];
-  nargv[nargc++] = argv[0];
+  parse_config_options(args);
 
-  list<int> syn_modes;
-  list<int> syn_iargs;
-  list<string> syn_sargs;
-  
+  parse_syn_options(args);
+
   int mkfs = 0;
-  for (int i=1; i<argc; i++) {
-	//cout << "a " << argv[i] << endl;
-	if (strcmp(argv[i], "--fastmkfs") == 0) {
+  vector<char*> nargs;
+  for (unsigned i=0; i<args.size(); i++) {
+	//cout << "a " << args[i] << endl;
+	if (strcmp(args[i], "--fastmkfs") == 0) {
 	  mkfs = MDS_MKFS_FAST;
 	}
-	else if (strcmp(argv[i], "--fullmkfs") == 0) {
+	else if (strcmp(args[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
 	}
-	else if (strcmp(argv[i],"--syn") == 0) {
-	  ++i;
-	  if (strcmp(argv[i],"writefile") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"readfile") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"makedirs") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"fullwalk") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
-	  } else if (strcmp(argv[i],"repeatwalk") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_REPEATWALK );
-	  } else if (strcmp(argv[i],"randomwalk") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
-		syn_sargs.push_back( argv[++i] );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_include") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEINCLUDE );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_lib") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACELIB );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_openssh") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSH );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"trace_opensshlib") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSHLIB );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"randomsleep") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_RANDOMSLEEP );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else if (strcmp(argv[i],"until") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
-		syn_iargs.push_back( atoi(argv[++i]) );
-	  } else {
-		cerr << "unknown syn mode " << argv[i] << endl;
-		return -1;
-	  }
-	}
-
 	else {
 	  // unknown arg, pass it on.
-	  nargv[nargc++] = argv[i];
+	  nargs.push_back(args[i]);
 	}
   }
 
-  int myrank = tcpmessenger_init(argc, argv);
-  int world = tcpmessenger_world();
+  args = nargs;
+  if (!args.empty()) {
+	for (unsigned i=0; i<args.size(); i++)
+	  cout << "stray arg " << args[i] << endl;
+  }
+  assert(args.empty());
 
-  //cerr << "horrible hack remove me" << endl;
-  //if (myrank == 0) g_conf.debug = 10;
 
+  // start up tcp messenger via MPI
+  pair<int,int> mpiwho = mpi_bootstrap_tcp(argc, argv);
+  int myrank = mpiwho.first;
+  int world = mpiwho.second;
 
   if (myrank == 0)
 	cerr << "nummds " << NUMMDS << "  numosd " << NUMOSD << "  numclient " << NUMCLIENT << endl;
-  assert(NUMMDS + NUMOSD + 1 <= world);
+  assert(NUMMDS + NUMOSD + (NUMCLIENT?1:0) <= world);
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
@@ -133,107 +80,99 @@ int main(int oargc, char **oargv) {
   gethostname(hostname,100);
   int pid = getpid();
 
+  int started = 0;
+
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
+	if (myrank != i) continue;
 	cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
 	mds[i] = new MDS(mdc, i, new TCPMessenger(MSG_ADDR_MDS(i)));
-	start++;
+	mds[i]->init();
+	started++;
   }
   
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
+	if (myrank != NUMMDS + i) continue;
 	cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
 	osd[i] = new OSD(i, new TCPMessenger(MSG_ADDR_OSD(i)));
-	start++;
+	osd[i]->init();
+	started++;
   }
   
   // create client
+  int client_nodes = world - NUMMDS - NUMOSD;
+  int clients_per_node = 1;
+  if (NUMCLIENT) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
   set<int> clientlist;
   Client *client[NUMCLIENT];
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
+	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
+	if (myrank != NUMMDS + NUMOSD + i / clients_per_node) continue;
 	clientlist.insert(i);
-	client[i] = new Client(mdc, i, new TCPMessenger(MSG_ADDR_CLIENT(i)) );
-	start++;
-  }
-  if (clientlist.size())
-	cerr << "clients " << clientlist << " on rank " << myrank << " " << hostname << "." << pid << endl;
+	client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT(i)) );
 
-
-  // start message loop
-  if (start) {
-	tcpmessenger_start();
-    
-	// init
-	for (int i=0; i<NUMMDS; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	  mds[i]->init();
+	// logger?
+	if (client_logger == 0) {
+	  char s[80];
+	  sprintf(s,"clnode.%d", myrank);
+	  client_logger = new Logger(s, &client_logtype);
 	}
-	
-	for (int i=0; i<NUMOSD; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
-	  osd[i]->init();
-	}
-	
-	// create client
-	int nclients = 0;
-	for (int i=0; i<NUMCLIENT; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	  
-	  // logger?
-	  if (client_logger == 0) {
-		char s[80];
-		sprintf(s,"clnode.%d", myrank);
-		client_logger = new Logger(s, &client_logtype);
-	  }
 
-	  client[i]->init();
-	  
-	  // use my argc, argv (make sure you pass a mount point!)
-	  //cout << "mounting" << endl;
-	  client[i]->mount(mkfs);
-
-	  //cout << "starting synthetic client on rank " << myrank << endl;
-	  syn[i] = new SyntheticClient(client[i]);
-
-	  syn[i]->modes = syn_modes;
-	  syn[i]->sargs = syn_sargs;
-	  syn[i]->iargs = syn_iargs;
-	  syn[i]->start_thread();
-
-	  nclients++;
-	}
-	if (nclients) {
-	  cout << "waiting for " << nclients << " clients to finish" << endl;
-	}
-	for (int i=0; i<NUMCLIENT; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	  
-	  //	  cout << "waiting for synthetic client" << i << " to finish" << endl;
-	  syn[i]->join_thread();
-	  delete syn[i];
-
-	  client[i]->unmount();
-	  //cout << "client" << i << " unmounted" << endl;
-	  client[i]->shutdown();
-	}
-	
-		
-	// wait for it to finish
-	tcpmessenger_wait();
-
-	//assert(0);
-  } else {
-	cerr << "IDLE rank " << myrank << endl;
+	client[i]->init();
+	started++;
   }
 
+  int nclients = 0;
+  for (set<int>::iterator it = clientlist.begin();
+	   it != clientlist.end();
+	   it++) {
+	int i = *it;
+	// use my argc, argv (make sure you pass a mount point!)
+	//cout << "mounting" << endl;
+	client[i]->mount(mkfs);
+	
+	//cout << "starting synthetic client on rank " << myrank << endl;
+	syn[i] = new SyntheticClient(client[i]);
+	
+	syn[i]->start_thread();
+	
+	nclients++;
+  }
+  if (nclients) {
+	cerr << "waiting for " << nclients << " clients to finish" << endl;
+  }
+
+  for (set<int>::iterator it = clientlist.begin();
+	   it != clientlist.end();
+	   it++) {
+	int i = *it;
+
+	//	  cout << "waiting for synthetic client" << i << " to finish" << endl;
+	syn[i]->join_thread();
+	delete syn[i];
+	
+	client[i]->unmount();
+	//cout << "client" << i << " unmounted" << endl;
+	client[i]->shutdown();
+  }
+  
+
+  if (!started) {
+	dout(1) << "IDLE" << endl;
+	tcpmessenger_stop_rankserver();
+  }
+
+  // wait for everything to finish
+  tcpmessenger_wait();
+  
   tcpmessenger_shutdown(); 
   
+
+  /*
   // cleanup
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
@@ -247,6 +186,7 @@ int main(int oargc, char **oargv) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
 	delete client[i];
   }
+  */
   delete mdc;
   
   return 0;

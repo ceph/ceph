@@ -1,20 +1,30 @@
 
-I think the OSD stuff breaks down info a few different areas:
+IPDPS
 
-- Lay out OSD in-memory data structures.  I've started this based on the stuff I posted to the list.
+map/reduce refs
+12 huston:    diamond
+  - early discard    .. distributed filters to reduce data... ultra-parallel grep
+13 fischer: parallel prefix coputation.. N records in log N time?
 
-- The object store needs to be able to store the metadata for objects and replica groups, via the ObjectStore interface.  This boils down to collections and extended attributes (on both objects and collections).  The beginnings of both are are implemented in FakeStore, but untested and unfinished.  
-- OSD::op_write needs to put new objects in a rg collection. 
+15 riedel:fast01 active disks for large scale data processing
+  - nearest neighbor .. sort of a map only, no distributed reduce
+  - association rule .. successive passives over map
+16 condor - cluster mgmt
+17 bulk synchronous
 
-- Map the actual metadata we're keeping to object and collection xattrs.  Probably via fetch/store methods on the in-memory data structures.
 
-- When an OSD gets a new version of the map it needs to go through the process of checking it's active replica groups, seeing if its role has changed, etc.
 
-- The migration process itself.  Needs to be tunable somehow 
+o locality aware scheduling
+o fine partitioning -> balanced scheduling
+o redundant execution and re-execution
 
-- OSD::op_read needs to do the proxying sort of thing, where if it's is primary but !COMPLETE it needs to wait and fetch the object from the (old) replica it currently resides on, or block until old replicas are scanned.
 
-- OSD::op_write needs to do the replication thing.  I think replication should be implemented last, it's probably easier to add once the role changing stuff already works.
+
+REPLICATION
+
+requirements
+- We should support a fast succession of map updates, even when intermediate reorganizations are not allowed to complete before the next starts.
+- Reorganizations can be arbitrary, potentially involving a completely disparate set of OSDs in a RG between epochs.  (We will of course seek to minimize movement in practice.)
 
 
 
@@ -31,20 +41,14 @@ I think the OSD stuff breaks down info a few different areas:
 
 
 KNOWN BUGS to fix after fast
-- hard links!
+- fix softlock, stat
 - implement truncate() for real
+- hard links!
 
 
 UPCOMING TODOS:
-/- redo client capability stuff
-- finish buffer cache
-
-- plan out osd replication, recovery structures
-
 - redo CDir hash_map in terms of const char * in CDentry?
  - or try google's hash library!!
-
-- what to do about fuse direct_io and mmap()?
 
 
 finish HARD LINKS

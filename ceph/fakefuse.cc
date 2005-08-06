@@ -41,13 +41,12 @@ public:
 
 
 
-int main(int oargc, char **oargv) {
+int main(int argc, char **argv) {
   cerr << "fakefuse starting" << endl;
 
-  int argc;
-  char **argv;
-  parse_config_options(oargc, oargv,
-					   argc, argv);
+  vector<char*> args;
+  argv_to_vec(argc, argv, args);
+  parse_config_options(args);
 
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
@@ -57,21 +56,19 @@ int main(int oargc, char **oargv) {
   //g_timer.add_event_after(5.0, new C_Test2);
   //g_timer.add_event_after(10.0, new C_Test);
 
+  vector<char*> nargs;
   int mkfs = 0;
-  for (int i=1; i<argc; i++) {
-	if (strcmp(argv[i], "--fastmkfs") == 0) {
+  for (unsigned i=0; i<args.size(); i++) {
+	if (strcmp(args[i], "--fastmkfs") == 0) {
 	  mkfs = MDS_MKFS_FAST;
-	  argv[i] = 0;
-	  argc--;
-	  break;
 	}
-	if (strcmp(argv[i], "--fullmkfs") == 0) {
+	else if (strcmp(args[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
-	  argv[i] = 0;
-	  argc--;
-	  break;
-	}
+	} else
+	  nargs.push_back(args[i]);
   }
+  args = nargs;
+  vec_to_argv(args, argc, argv);
 
   // create osd
   OSD *osd[NUMOSD];
@@ -91,7 +88,7 @@ int main(int oargc, char **oargv) {
   // create client
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	client[i] = new Client(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(0)));
+	client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(0)));
 	client[i]->init();
 
 

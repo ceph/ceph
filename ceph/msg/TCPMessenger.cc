@@ -25,83 +25,236 @@ using namespace __gnu_cxx;
 #include <sys/types.h>
 
 #include <unistd.h>
-#include <mpi.h>
 
+#include "messages/MGenericMessage.h"
+#include "messages/MNSConnect.h"
+#include "messages/MNSConnectAck.h"
+#include "messages/MNSRegister.h"
+#include "messages/MNSRegisterAck.h"
+#include "messages/MNSLookup.h"
+#include "messages/MNSLookupReply.h"
+
+#include "TCPDirectory.h"
 
 #define DBL 18
 
-int tcp_port = 9876;
 
-/*
- * We make a directory, so that we can have multiple Messengers in the
- * same process (rank).  This is useful for benchmarking and creating lots of 
- * simulated clients, e.g.
- */
+TCPMessenger *rankmessenger = 0; // 
 
+TCPDirectory *nameserver = 0;    // only defined on rank 0
+TCPMessenger *nsmessenger = 0;
+
+
+
+// local directory
 hash_map<int, TCPMessenger*>  directory;  // local
 Mutex                         directory_lock;
+
+// connecting
+struct sockaddr_in listen_addr;     // my listen addr
+int                listen_sd = 0;
+int                my_rank = -1;
+Cond               waiting_for_rank;
+
+// register
+long regid = 0;
+map<int, Cond* >        waiting_for_register_cond;
+map<int, msg_addr_t >   waiting_for_register_result;
+
+// incoming messages
 list<Message*>                incoming;
 Mutex                         incoming_lock;
 Cond                          incoming_cond;
+
+// outgoing messages
 list<Message*>                outgoing;
 Mutex                         outgoing_lock;
 Cond                          outgoing_cond;
 
-struct sockaddr_in *remote_addr;
-int                *in_sd;     // incoming sockets
-pthread_t          *in_threads;
-int                *out_sd;    // outgoing sockets
-
-struct sockaddr_in listen_addr;
-int                listen_sd = 0;
-
+Mutex lookup_lock;  // 
+hash_map<msg_addr_t, int> entity_rank;      // entity -> rank
+hash_map<int, int>        rank_sd;   // outgoing sockets, rank -> sd
+hash_map<int, tcpaddr_t>  rank_addr; // rank -> tcpaddr
+map<msg_addr_t, list<Message*> > waiting_for_lookup;
 
 
 /* this process */
-int mpi_world;
-int mpi_rank;
 bool tcp_done = false;     // set this flag to stop the event loop
 
+
+// threads
 pthread_t dispatch_thread_id = 0;   // thread id of the event loop.  init value == nobody
-pthread_t out_thread_id = 0;   // thread id of the event loop.  init value == nobody
+pthread_t out_thread_id = 0;        // thread id of the event loop.  init value == nobody
 pthread_t listen_thread_id = 0;
-Mutex sender_lock;
+map<int, pthread_t>      in_threads;    // sd -> threadid
 
 bool pending_timer = false;
 
+// per-rank fun
 
 
 // debug
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "[TCP " << mpi_rank << "/" << mpi_world << " " << getpid() << "." << pthread_self() << "] "
+#define  dout(l)    if (l<=g_conf.debug) cout << "[TCP " << my_rank << " " << getpid() << "." << pthread_self() << "] "
 
-ostream& operator<<(ostream& out, struct sockaddr_in &a)
+
+
+
+// some declarations
+void tcp_open(int rank);
+int tcp_send(Message *m);
+void tcpmessenger_kick_dispatch_loop();
+
+
+
+
+/** rankserver
+ *
+ * one per rank.  handles entity->rank lookup replies.
+ */
+
+class RankServer : public Dispatcher {
+public:
+  void dispatch(Message *m) {
+	lookup_lock.Lock();
+
+	dout(DBL) << "rankserver dispatching " << *m << endl;
+
+	switch (m->get_type()) {
+	case MSG_NS_CONNECTACK:
+	  handle_connect_ack((MNSConnectAck*)m);
+	  break;
+
+	case MSG_NS_REGISTERACK:
+	  handle_register_ack((MNSRegisterAck*)m);
+	  break;
+
+	case MSG_NS_LOOKUPREPLY:
+	  handle_lookup_reply((MNSLookupReply*)m);
+	  break;
+
+	default:
+	  assert(0);
+	}
+
+	lookup_lock.Unlock();
+  }
+
+  void handle_connect_ack(MNSConnectAck *m) {
+	dout(DBL) << "my rank is " << m->get_rank();
+	my_rank = m->get_rank();
+
+	// now that i know my rank,
+	entity_rank[MSG_ADDR_RANK(my_rank)] = my_rank; 
+	rank_addr[my_rank] = listen_addr;
+	
+	waiting_for_rank.Signal();
+
+	delete m;
+  }
+
+  void handle_register_ack(MNSRegisterAck *m) {
+	long tid = m->get_tid();
+	waiting_for_register_result[tid] = m->get_entity();
+	waiting_for_register_cond[tid]->Signal();
+	delete m;
+  }
+  
+  void handle_lookup_reply(MNSLookupReply *m) {
+	list<Message*> waiting;
+	dout(DBL) << "got lookup reply" << endl;
+
+	for (map<msg_addr_t, int>::iterator it = m->entity_map.begin();
+		 it != m->entity_map.end();
+		 it++) {
+	  dout(DBL) << "lookup got " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
+	  entity_rank[it->first] = it->second;
+	  
+	  // take waiters
+	  waiting.splice(waiting.begin(), waiting_for_lookup[it->first]);
+	  waiting_for_lookup.erase(it->first);
+	}
+
+	for (map<int,tcpaddr_t>::iterator it = m->rank_addr.begin();
+		 it != m->rank_addr.end();
+		 it++) {
+	  dout(DBL) << "lookup got rank " << it->first << " addr " << it->second << endl;
+	  rank_addr[it->first] = it->second;
+
+	  // open it now
+	  tcp_open(it->first);
+	}
+
+	// send waiting messages
+	for (list<Message*>::iterator it = waiting.begin();
+		 it != waiting.end();
+		 it++) {
+	  tcp_send(*it);
+	}
+
+	delete m;
+  }
+  
+} rankserver;
+
+
+class C_TCPKicker : public Context {
+  void finish(int r) {
+	dout(DBL) << "timer kick" << endl;
+	tcpmessenger_kick_dispatch_loop();
+  }
+};
+
+
+extern int tcpmessenger_lookup(char *str, tcpaddr_t& ta)
 {
-  char addr[4];
-  memcpy((char*)addr, (char*)&a.sin_addr.s_addr, 4);
-  out << (unsigned)addr[0] << "."
-	  << (unsigned)addr[1] << "."
-	  << (unsigned)addr[2] << "."
-	  << (unsigned)addr[3] << ":"
-	  << (int)a.sin_port;
-  return out;
+  char *host = str;
+  char *port = 0;
+  
+  for (int i=0; str[i]; i++) {
+	if (str[i] == ':') {
+	  port = str+i+1;
+	  str[i] = 0;
+	  break;
+	}
+  }
+  if (!port) {
+	cerr << "addr '" << str << "' doesn't look like 'host:port'" << endl;
+	return -1;
+  } 
+  //cout << "host '" << host << "' port '" << port << "'" << endl;
+
+  int iport = atoi(port);
+  
+  struct hostent *myhostname = gethostbyname( host ); 
+  if (!myhostname) {
+	cerr << "host " << host << " not found" << endl;
+	return -1;
+  }
+
+  memset(&ta, 0, sizeof(ta));
+
+  //cout << "addrtype " << myhostname->h_addrtype << " len " << myhostname->h_length << endl;
+
+  ta.sin_family = myhostname->h_addrtype;
+  memcpy((char *)&ta.sin_addr,
+		 myhostname->h_addr, 
+		 myhostname->h_length);
+  ta.sin_port = iport;
+	
+  cout << "lookup '" << host << ":" << port << "' -> " << ta << endl;
+
+  return 0;
 }
 
 
+
 /*****
- * MPI global methods for process-wide startup, shutdown.
+ * global methods for process-wide startup, shutdown.
  */
 
-int tcpmessenger_init(int& argc, char**& argv)
+int tcpmessenger_init()
 {
-  // exhcnage addresses with other nodes
-  MPI_Init(&argc, &argv);
-  
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_world);
-  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-
-  dout(DBL) << "rank is " << mpi_rank << " / " << mpi_world << endl;
-
   // LISTEN
   dout(DBL) << "binding to listen " << endl;
   
@@ -124,81 +277,113 @@ int tcpmessenger_init(int& argc, char**& argv)
   int myport = listen_addr.sin_port;
 
   // listen!
-  rc = ::listen(listen_sd, 2*mpi_world);
+  rc = ::listen(listen_sd, 1000);
   assert(rc >= 0);
 
   dout(DBL) << "listening on " << myport << endl;
   
-  remote_addr = new sockaddr_in[mpi_world];
-  memset(remote_addr, 0, sizeof(sockaddr_in)*mpi_world);
-
   // my address is...
   char host[100];
   gethostname(host, 100);
   dout(DBL) << "my hostname is " << host << endl;
 
   struct hostent *myhostname = gethostbyname( host ); 
-  
-  struct sockaddr_in myaddr;
-  memset(&myaddr, 0, sizeof(myaddr));
 
-  myaddr.sin_family = myhostname->h_addrtype;
-  memcpy((char *) &myaddr.sin_addr.s_addr, 
+  struct sockaddr_in my_addr;  
+  memset(&my_addr, 0, sizeof(my_addr));
+
+  my_addr.sin_family = myhostname->h_addrtype;
+  memcpy((char *) &my_addr.sin_addr.s_addr, 
 		 myhostname->h_addr_list[0], 
 		 myhostname->h_length);
-  myaddr.sin_port = myport;
+  my_addr.sin_port = myport;
 
-  dout(DBL) << "my ip is " << myaddr << endl;
+  listen_addr = my_addr;
 
-  remote_addr[mpi_rank] = myaddr;
+  dout(DBL) << "listen addr is " << listen_addr << endl;
 
-  dout(DBL) << "MPI_Allgathering addrs" << endl;
-  MPI_Allgather( &myaddr, sizeof(struct sockaddr_in), MPI_CHAR,
-				 remote_addr, sizeof(struct sockaddr_in), MPI_CHAR,
-				 MPI_COMM_WORLD);
-
-  //  for (int i=0; i<mpi_world; i++) 
-  //dout(DBL) << "  addr of " << i << " is " << remote_addr[i] << endl;
-
-
-  // init socket arrays
-  in_sd = new int[mpi_world];
-  memset(in_sd, 0, sizeof(int)*mpi_world);
-  out_sd = new int[mpi_world];
-  memset(out_sd, 0, sizeof(int)*mpi_world);
-  in_threads = new pthread_t[mpi_world];
-  memset(in_threads, 0, sizeof(pthread_t)*mpi_world);
+  // register to execute timer events
+  g_timer.set_messenger_kicker(new C_TCPKicker());
 
   dout(DBL) << "init done" << endl;
-  return mpi_rank;
+  return 0;
 }
+
+
+// on first rank only
+void tcpmessenger_start_nameserver(tcpaddr_t& diraddr)
+{
+  dout(DBL) << "starting nameserver on " << MSG_ADDR_NICE(MSG_ADDR_DIRECTORY) << endl;
+
+  // i am rank 0.
+  nsmessenger = new TCPMessenger(MSG_ADDR_DIRECTORY);
+
+  // start name server
+  nameserver = new TCPDirectory(nsmessenger);
+
+  // diraddr is my addr!
+  diraddr = rank_addr[0] = listen_addr;
+  my_rank = 0;
+  entity_rank[MSG_ADDR_DIRECTORY] = 0;
+}
+void tcpmessenger_stop_nameserver()
+{
+  if (nsmessenger) {
+	dout(DBL) << "shutting down nsmessenger" << endl;
+	TCPMessenger *m = nsmessenger;
+	nsmessenger = 0;
+	m->shutdown();
+	delete m;
+  }
+}
+
+// on all ranks
+void tcpmessenger_start_rankserver(tcpaddr_t& ns)
+{
+  // connect to nameserver
+  entity_rank[MSG_ADDR_DIRECTORY] = 0;
+  rank_addr[0] = ns;
+  tcp_open(0);
+
+  if (my_rank >= 0) {
+	// i know my rank
+	rankmessenger = new TCPMessenger(MSG_ADDR_RANK(my_rank));
+  } else {
+	// start rank messenger, and discover my rank.
+	rankmessenger = new TCPMessenger(MSG_ADDR_RANK_NEW);
+  }
+}
+void tcpmessenger_stop_rankserver()
+{
+  if (rankmessenger) {
+	dout(DBL) << "shutting down rankmessenger" << endl;
+	rankmessenger->shutdown();
+	delete rankmessenger;
+	rankmessenger = 0;
+  }
+}
+
+
+
 
 
 
 int tcpmessenger_shutdown() 
 {
   dout(DBL) << "tcpmessenger_shutdown barrier" << endl;
-  MPI_Barrier (MPI_COMM_WORLD);
-  MPI_Finalize();
 
   dout(2) << "tcpmessenger_shutdown closing all sockets etc" << endl;
 
   // bleh
-  for (int i=0; i<mpi_world; i++) {
-	if (out_sd[i]) ::close(out_sd[i]);
+  for (hash_map<int,int>::iterator it = rank_sd.begin();
+	   it != rank_sd.end();
+	   it++) {
+	::close(it->second);
   }
 
-  delete[] remote_addr;
-  delete[] in_sd;
-  delete[] out_sd;
-  
   return 0;
 }
 
-int tcpmessenger_world()
-{
-  return mpi_world;
-}
 
 
 
@@ -243,39 +428,14 @@ void tcp_write(int sd, char *buf, int len)
  */
 
 
-/*
-void tcp_wait()
-{
-  fd_set fds;
-  FD_ZERO(&fds);
 
-  int n = 0;
-
-  for (int i=0; i<mpi_world; i++) {
-	if (in_sd[i] == 0) continue;
-	FD_SET(in_sd[i], &fds);
-	n++;
-  }
-  assert(n == mpi_world);
-
-  struct timeval tv;
-  tv.tv_sec = 10;        // time out every few seconds
-  tv.tv_usec = 0;
-  
-  dout(DBL) << "tcp_wait on " << n << endl;
-  int r = ::select(n, &fds, 0, &fds, 0);//&tv);
-  dout(DBL) << "select returned " << r << endl;
-}
-*/
-
-
-Message *tcp_recv(int from)
+Message *tcp_recv(int sd)
 {
   // envelope
-  dout(DBL) << "tcp_recv receiving message from " << from  << endl;
+  dout(DBL) << "tcp_recv receiving message from sd " << sd  << endl;
   
   msg_envelope_t env;
-  if (!tcp_read( in_sd[from], (char*)&env, sizeof(env) ))
+  if (!tcp_read( sd, (char*)&env, sizeof(env) ))
 	return 0;
 
   if (env.type == 0) {
@@ -289,30 +449,32 @@ Message *tcp_recv(int from)
   bufferlist blist;
   for (int i=0; i<env.nchunks; i++) {
 	int size;
-	tcp_read( in_sd[from], (char*)&size, sizeof(size) );
+	tcp_read( sd, (char*)&size, sizeof(size) );
 
 	bufferptr bp = new buffer(size);
 	
-	tcp_read( in_sd[from], bp.c_str(), size );
+	tcp_read( sd, bp.c_str(), size );
 
 	blist.push_back(bp);
 
 	dout(DBL) << "tcp_recv got frag " << i << " of " << env.nchunks << " len " << bp.length() << endl;
   }
   
-  dout(DBL) << "tcp_recv got " << blist.length() << " byte message" << endl;
-
   // unmarshall message
+  size_t s = blist.length();
   Message *m = decode_message(env, blist);
+
+  dout(DBL) << "tcp_recv got " << s << " byte message from " << MSG_ADDR_NICE(m->get_source()) << endl;
+
   return m;
 }
 
 
 
 
-void tcp_open(int who)
+void tcp_open(int rank)
 {
-  //dout(DBL) << "tcp_open " << who << " to " << remote_addr[who] << endl;
+  dout(DBL) << "tcp_open to rank " << rank << " at " << rank_addr[rank] << endl;
 
   // create socket?
   int sd = socket(AF_INET,SOCK_STREAM,0);
@@ -328,17 +490,42 @@ void tcp_open(int who)
   assert(rc>=0);
 
   // connect!
-  int r = connect(sd, (sockaddr*)&remote_addr[who], sizeof(myAddr));
+  int r = connect(sd, (sockaddr*)&rank_addr[rank], sizeof(myAddr));
   assert(r >= 0);
 
   //dout(DBL) << "tcp_open connected to " << who << endl;
-
-  int me = mpi_rank;
-  tcp_write(sd, (char*)&me, sizeof(me));
-
-  out_sd[who] = sd;
+  rank_sd[rank] = sd;
 }
 
+
+void tcp_marshall(Message *m)
+{
+  // marshall
+  if (m->empty_payload())
+	m->encode_payload();
+}
+
+bool tcp_lookup(Message *m)
+{
+  msg_addr_t addr = m->get_dest();
+
+  if (!entity_rank.count(m->get_dest())) {
+	// lookup and wait.
+	if (waiting_for_lookup.count(addr)) {
+	  dout(DBL) << "already looking up " << MSG_ADDR_NICE(addr) << endl;
+	} else {
+	  dout(DBL) << "lookup on " << MSG_ADDR_NICE(addr) << endl;
+	  MNSLookup *r = new MNSLookup(addr);
+	  rankmessenger->send_message(r, MSG_ADDR_DIRECTORY);
+	}
+	
+	// add waiter
+	waiting_for_lookup[addr].push_back(m);
+	return false;
+  }
+
+  return true;
+}
 
 
 /*
@@ -346,11 +533,13 @@ void tcp_open(int who)
  */
 int tcp_send(Message *m)
 {
-  int rank = MPI_DEST_TO_RANK(m->get_dest(), mpi_world);
+  int rank = entity_rank[m->get_dest()];
+  if (rank_sd.count(rank) == 0) tcp_open(rank);
 
-  // marshall
-  if (m->empty_payload())
-	m->encode_payload();
+  int sd = rank_sd[rank];
+  assert(sd);
+
+  // get envelope, buffers
   msg_envelope_t *env = &m->get_envelope();
   bufferlist blist;
   blist.claim( m->get_payload() );
@@ -361,15 +550,10 @@ int tcp_send(Message *m)
   env->nchunks = 1;
 #endif
 
-  dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(env->dest) << " (rank " << rank << ")" << endl;
+  dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << " rank " << rank << endl;//" sd " << sd << ")" << endl;
   
-  sender_lock.Lock();
-  
-  // open first?
-  if (out_sd[rank] == 0) tcp_open(rank);
-
   // send envelope
-  tcp_write( out_sd[rank], (char*)env, sizeof(*env) );
+  tcp_write( sd, (char*)env, sizeof(*env) );
 
   // payload
 #ifdef TCP_KEEP_CHUNKS
@@ -380,22 +564,20 @@ int tcp_send(Message *m)
 	   it++) {
 	dout(DBL) << "tcp_sending frag " << i << " len " << (*it).length() << endl;
 	int size = (*it).length();
-	tcp_write( out_sd[rank], (char*)&size, sizeof(size) );
-	tcp_write( out_sd[rank], (*it).c_str(), size );
+	tcp_write( sd, (char*)&size, sizeof(size) );
+	tcp_write( sd, (*it).c_str(), size );
 	i++;
   }
 #else
   // one big chunk
   int size = blist.length();
-  tcp_write( out_sd[rank], (char*)&size, sizeof(size) );
+  tcp_write( sd, (char*)&size, sizeof(size) );
   for (list<bufferptr>::iterator it = blist.buffers().begin();
 	   it != blist.buffers().end();
 	   it++) {
-	tcp_write( out_sd[rank], (*it).c_str(), (*it).length() );
+	tcp_write( sd, (*it).c_str(), (*it).length() );
   }
 #endif
-
-  sender_lock.Unlock();
 
   // hose message
   delete m;
@@ -425,6 +607,8 @@ void* tcp_outthread(void*)
 	  while (!out.empty()) {
 		Message *m = out.front();
 		out.pop_front();
+
+		tcp_marshall(m);
 		tcp_send(m);
 	  }
 
@@ -446,22 +630,15 @@ void* tcp_outthread(void*)
  */
 void *tcp_inthread(void *r)
 {
-  int who = (int)r;
+  int sd = (int)r;
+  int who = -1;
 
-  dout(DBL) << "tcp_inthread reading for " << who << endl;
+  dout(DBL) << "tcp_inthread reading on sd " << sd << " who is " << who << endl;
 
   while (!tcp_done) {
-	/*
-	fd_set fds;
-	FD_ZERO(&fds);
-	FD_SET(in_sd[who], &fds);
-	
-	dout(DBL) << "tcp_inthread waiting on socket" << endl;
-	::select(1, &fds, 0, &fds, 0);
-	*/
-
-	Message *m = tcp_recv(who);
+	Message *m = tcp_recv(sd);
 	if (!m) break;
+	who = m->get_source();
 
 	// give to dispatch loop
 	incoming_lock.Lock();
@@ -470,11 +647,9 @@ void *tcp_inthread(void *r)
 	incoming_lock.Unlock();
   }
 
-  dout(DBL) << "tcp_inthread closing " << who << endl;
+  dout(DBL) << "tcp_inthread closing " << sd << endl;
 
-  //::close(in_sd[who]);
-  //in_sd[who] = 0;
-
+  //::close(sd);
   return 0;  
 }
 
@@ -486,34 +661,26 @@ void *tcp_acceptthread(void *)
 {
   dout(DBL) << "tcp_acceptthread starting" << endl;
 
-  int left = mpi_world;
-  while (left > 0) {
+  while (!tcp_done) {
 	//dout(DBL) << "accepting, left = " << left << endl;
 
 	struct sockaddr_in addr;
 	socklen_t slen = sizeof(addr);
 	int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
 	if (sd > 0) {
-	  
-	  //dout(DBL) << "accepted incoming, reading who it is " << endl;
-	  
-	  int who;
-	  tcp_read(sd, (char*)&who, sizeof(who));
-	  
-	  in_sd[who] = sd;
-	  left--;
+	  dout(DBL) << "accepted incoming on sd " << sd << endl;
 
-	  dout(DBL) << "accepted incoming from " << who << ", left = " << left << endl;
-
-	  pthread_create(&in_threads[who],
+	  pthread_t th;
+	  pthread_create(&th,
 					 NULL,
 					 tcp_inthread,
-					 (void*)who);
+					 (void*)sd);
+	  in_threads[sd] = th;
 	} else {
 	  dout(DBL) << "no incoming connection?" << endl;
+	  break;
 	}
   }
-  dout(DBL) << "got incoming from everyone!" << endl;
   return 0;
 }
 
@@ -562,7 +729,18 @@ void* tcp_dispatchthread(void*)
 	  while (in.size()) {
 		Message *m = in.front();
 		in.pop_front();
+
+		dout(DBL) << "dispatch doing " << *m << endl;
 	  
+		// for rankserver?
+		if (m->get_type() == MSG_NS_CONNECTACK ||        // i just connected
+			m->get_dest() == MSG_ADDR_RANK(my_rank)) {
+		  dout(DBL) <<  " giving to rankserver" << endl;
+		  rankserver.dispatch(m);
+		  continue;
+		}
+
+		// ok
 		int dest = m->get_dest();
 		directory_lock.Lock();
 		if (directory.count(dest)) {
@@ -578,7 +756,7 @@ void* tcp_dispatchthread(void*)
 		  who->dispatch(m);
 		} else {
 		  directory_lock.Unlock();
-		  dout (1) << "---- i don't know who " << dest << " is." << endl;
+		  dout (1) << "---- i don't know who " << MSG_ADDR_NICE(dest) << " " << dest << " is." << endl;
 		  assert(0);
 		}
 	  }
@@ -658,21 +836,71 @@ void tcpmessenger_wait()
 
 
 
+msg_addr_t register_entity(msg_addr_t addr) 
+{
+  lookup_lock.Lock();
+  
+  // prepare to wait
+  long id = ++regid;
+  Cond cond;
+  waiting_for_register_cond[id] = &cond;
+
+  if (my_rank < 0) {
+	dout(DBL) << "register_entity don't know my rank, connecting" << endl;
+	
+	// connect to nameserver; discover my rank.
+	Message *m = new MNSConnect(listen_addr);
+	m->set_dest(MSG_ADDR_DIRECTORY, 0);
+	tcp_marshall(m);
+	tcp_send(m);
+	
+	// wait for reply
+	waiting_for_rank.Wait(lookup_lock);
+	assert(my_rank > 0);
+  }
+  
+  // send req
+  dout(DBL) << "register_entity " << MSG_ADDR_NICE(addr) << endl;
+  Message *m = new MNSRegister(addr, my_rank, id);
+  m->set_dest(MSG_ADDR_DIRECTORY, 0);
+  tcp_marshall(m);
+  tcp_send(m);
+  
+  // wait?
+  if (waiting_for_register_result.count(id)) {
+	// already here?
+  } else
+	cond.Wait(lookup_lock);
+
+  // get result, clean up
+  int entity = waiting_for_register_result[id];
+  waiting_for_register_result.erase(id);
+  waiting_for_register_cond.erase(id);
+  
+  dout(DBL) << "register_entity got " << MSG_ADDR_NICE(entity) << endl;
+
+  lookup_lock.Unlock();
+
+  // ok!
+  return entity;
+}
+
+
+
 /***********
  * Tcpmessenger class implementation
  */
 
-class C_TCPKicker : public Context {
-  void finish(int r) {
-	dout(DBL) << "timer kick" << endl;
-	tcpmessenger_kick_dispatch_loop();
-  }
-};
 
 TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
 {
+  if (myaddr != MSG_ADDR_DIRECTORY) {
+	// register!
+	myaddr = register_entity(myaddr);
+  }
+
   // my address
-  this->myaddr = myaddr;
+  set_myaddr( myaddr );
 
   // register myself in the messenger directory
   directory_lock.Lock();
@@ -681,6 +909,7 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
 
   // register to execute timer events
   g_timer.set_messenger_kicker(new C_TCPKicker());
+
 
   // logger
   /*
@@ -696,25 +925,80 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
   logger = new Logger(name, (LogType*)&mpimsg_logtype);
   loggers[ whoami ] = logger;
   */
+
 }
+
+
+void TCPMessenger::ready()
+{
+  if (get_myaddr() != MSG_ADDR_DIRECTORY) {
+	// started!  tell namer we are up and running.
+	lookup_lock.Lock();
+	Message *m = new MGenericMessage(MSG_NS_STARTED);
+	m->set_source(get_myaddr(), 0);
+	m->set_dest(MSG_ADDR_DIRECTORY, 0);
+	tcp_marshall(m);
+	tcp_send(m);
+	lookup_lock.Unlock();
+  }
+}
+
 
 TCPMessenger::~TCPMessenger()
 {
   //delete logger;
 }
 
+tcpaddr_t& TCPMessenger::get_tcpaddr() 
+{
+  return listen_addr;
+}
+
+void TCPMessenger::map_entity_rank(msg_addr_t e, int r)
+{
+  lookup_lock.Lock();
+  entity_rank[e] = r;
+  lookup_lock.Unlock();
+}
+
+void TCPMessenger::map_rank_addr(int r, tcpaddr_t a)
+{
+  lookup_lock.Lock();
+  rank_addr[r] = a;
+  lookup_lock.Unlock();
+}
+
+
 
 int TCPMessenger::shutdown()
 {
+  // dont' send unregistery from nsmessenger shutdown!
+  if (this != nsmessenger && 
+	  (my_rank > 0 || nsmessenger)) {
+	dout(DBL) << "sending unregister from " << MSG_ADDR_NICE(get_myaddr()) << " to ns" << endl;
+	send_message(new MGenericMessage(MSG_NS_UNREGISTER),
+				 MSG_ADDR_DIRECTORY);
+  }
+
   // remove me from the directory
   directory_lock.Lock();
-  directory.erase(myaddr);
-  bool lastone = directory.empty();
+  directory.erase(get_myaddr());
+  
+  // last one?
+  bool lastone = directory.empty();  
+
+  // or almost last one?
+  if (rankmessenger && directory.size() == 1) {
+	directory_lock.Unlock();
+	tcpmessenger_stop_rankserver();
+	directory_lock.Lock();
+  }
+
   directory_lock.Unlock();
 
   // last one?
-  if (lastone) {
-	dout(2) << "shutdown last tcpmessenger on rank " << mpi_rank << " shut down" << endl;
+	  if (lastone) {
+	dout(2) << "shutdown last tcpmessenger on rank " << my_rank << " shut down" << endl;
 	//pthread_t whoami = pthread_self();
 
 	// no more timer events
@@ -723,12 +1007,12 @@ int TCPMessenger::shutdown()
   
 	// close incoming sockets
 	//void *r;
-	for (int i=0; i<mpi_world; i++) {
-	  if (in_sd[i] == 0) continue;
-	  dout(DBL) << "closing reader on " << i << " sd " << in_sd[i] << endl;
-	  ::close(in_sd[i]);
-	  //dout(DBL) << "waiting for reader thread to close on " << i << endl;
-	  //pthread_join(in_threads[i], &r);
+	for (map<int,pthread_t>::iterator it = in_threads.begin();
+		 it != in_threads.end();
+		 it++) {
+	  dout(DBL) << "closing reader on sd " << it->first << endl;	  
+	  ::close(it->first);
+	  //pthread_join(it->second, &r);
 	}
 
 	dout(DBL) << "setting tcp_done" << endl;
@@ -750,9 +1034,7 @@ int TCPMessenger::shutdown()
 	  tcp_done = true;
 	}
 	*/
-  } else {
-	dout(10) << "shutdown still" /*<< directory.size()*/ << " other messengers on rank " << mpi_rank << endl;
-  }
+  } 
   return 0;
 }
 
@@ -768,14 +1050,19 @@ int TCPMessenger::shutdown()
 int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
   // set envelope
-  m->set_source(myaddr, fromport);
+  m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
 
   if (1) {
-	// der
-	tcp_send(m);
+	// serialize all output
+	tcp_marshall(m);
+
+	lookup_lock.Lock();
+	if (tcp_lookup(m))
+	  tcp_send(m);
+	lookup_lock.Unlock();
   } else {
-	// good way
+	// good way (that's actually similarly lame?)
 	outgoing_lock.Lock();
 	outgoing.push_back(m);
 	outgoing_cond.Signal();

@@ -188,7 +188,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
 			 bit != eit->buffer_extents.end();
 			 bit++) {
-		  dout(10) << "object " << eit->oid << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
+		  dout(21) << "object " << eit->oid << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
 		  by_off[bit->first] = new bufferlist;
 
 		  if (ox_off + bit->second <= ox_len) {
@@ -203,14 +203,14 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 			  p->bytes_read = bit->first + ox_len-ox_off;
 
 			// zero end of bx
-			dout(10) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << endl;
+			dout(21) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << endl;
 			bufferptr z = new buffer(ox_off + bit->second - ox_len);
 			memset(z.c_str(), 0, z.length());
 			by_off[bit->first]->append( z );
 		  } else {
 			// we got none of this bx.  zero whole thing.
 			assert(ox_off >= ox_len);
-			dout(10) << "  adding all zeros for this bit " << bit->second << endl;
+			dout(21) << "  adding all zeros for this bit " << bit->second << endl;
 			bufferptr z = new buffer(bit->second);
 			assert(z.length() == bit->second);
 			memset(z.c_str(), 0, z.length());
@@ -227,10 +227,10 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		   it++) {
 		assert(it->second->length());
 		if (it->first < p->bytes_read) {
-		  dout(10) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
+		  dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
 		  p->read_result->claim_append(*(it->second));
 		} else {
-		  dout(10) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << endl;		  
+		  dout(21) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << endl;		  
 		}
 		delete it->second;
 	  }

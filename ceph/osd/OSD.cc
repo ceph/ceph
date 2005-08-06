@@ -23,8 +23,11 @@
 #include "messages/MPingAck.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+
 #include "messages/MOSDMap.h"
 #include "messages/MOSDRGNotify.h"
+#include "messages/MOSDRGPeer.h"
+#include "messages/MOSDRGPeerAck.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -55,7 +58,6 @@ OSD::OSD(int id, Messenger *m)
   whoami = id;
 
   messenger = m;
-  messenger->set_dispatcher(this);
 
   osdmap = 0;
 
@@ -123,6 +125,10 @@ int OSD::init()
   monitor->init();
 
   osd_lock.Unlock();
+
+  // i'm ready!
+  messenger->set_dispatcher(this);
+
   return r;
 }
 
@@ -170,6 +176,12 @@ void OSD::dispatch(Message *m)
 	
   case MSG_OSD_RG_NOTIFY:
 	handle_rg_notify((MOSDRGNotify*)m);
+	break;
+  case MSG_OSD_RG_PEER:
+	handle_rg_peer((MOSDRGPeer*)m);
+	break;
+  case MSG_OSD_RG_PEERACK:
+	handle_rg_peer_ack((MOSDRGPeerAck*)m);
 	break;
 	
 	// osd
@@ -482,7 +494,7 @@ void OSD::peer_start(int replica, map<RG*,int>& rg_map)
 {
   dout(7) << "peer_start with osd" << replica << " on " << rg_map.size() << " RGs" << endl;
   
-  //MOSDRGPeerRequest *m = new MOSDRGPeerRequest(osdmap->get_version());
+  list<repgroup_t> rgids;
 
   for (map<RG*,int>::iterator it = rg_map.begin();
 	   it != rg_map.end();
@@ -497,10 +509,16 @@ void OSD::peer_start(int replica, map<RG*,int>& rg_map)
 	  assert(rgp->get_role() == role);
 	}
 
-	
-	
+	// set last_request stamp
+	//rgp->last
 
+	// add to list
+	rgids.push_back(rg->get_rgid());
   }
+
+  MOSDRGPeer *m = new MOSDRGPeer(osdmap->get_version(), rgids);
+  messenger->send_message(m,
+						  MSG_ADDR_OSD(replica));
   
 }
 
@@ -576,6 +594,136 @@ void OSD::handle_rg_notify(MOSDRGNotify *m)
   
   delete m;
 }
+
+void OSD::handle_rg_peer(MOSDRGPeer *m)
+{
+  int from = MSG_ADDR_NUM(m->get_source());
+  dout(7) << "handle_rg_peer from osd" << from << endl;
+
+  // older map?
+  if (m->get_version() < osdmap->get_version()) {
+	dout(7) << "  from old map version " << m->get_version() << " < " << osdmap->get_version() << endl;
+	delete m;   // discard and ignore.*
+	return;
+  }
+
+  // newer map?
+  if (m->get_version() > osdmap->get_version()) {
+	dout(7) << "  for newer map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	wait_for_new_map(m);
+	return;
+  }
+  
+  assert(m->get_version() == osdmap->get_version());
+
+  // go
+  MOSDRGPeerAck *ack = new MOSDRGPeerAck(osdmap->get_version());
+
+  for (list<repgroup_t>::iterator it = m->get_rg_list().begin();
+	   it != m->get_rg_list().end();
+	   it++) {
+	repgroup_t rgid = *it;
+	
+	// dne?
+	if (!rg_exists(rgid)) {
+	  dout(10) << " rg " << rgid << " dne" << endl;
+	  ack->rg_dne.push_back(rgid);
+	  continue;
+	}
+
+	// get/open RG
+	RG *rg = open_rg(rgid);
+
+	// report back state and rg content
+	ack->rg_state[rgid].state = rg->get_state();
+	ack->rg_state[rgid].deleted = rg->get_deleted_objects();
+
+	// list objects
+	list<object_t> olist;
+	rg->list_objects(store,olist);
+
+	dout(10) << " rg " << rgid << " has state " << rg->get_state() << ", " << olist.size() << " objects" << endl;
+
+	for (list<object_t>::iterator it = olist.begin();
+		 it != olist.end();
+		 it++) {
+	  version_t v = 0;
+	  store->getattr(*it, 
+					  "version",
+					  &v, sizeof(v));
+	  ack->rg_state[rgid].objects[*it] = v;
+	}
+  }
+
+  // reply
+  messenger->send_message(ack,
+						  MSG_ADDR_OSD(from));
+
+  delete m;
+}
+
+void OSD::handle_rg_peer_ack(MOSDRGPeerAck *m)
+{
+  int from = MSG_ADDR_NUM(m->get_source());
+  dout(7) << "handle_rg_peer_ack from osd" << from << endl;
+
+  // older map?
+  if (m->get_version() < osdmap->get_version()) {
+	dout(7) << "  from old map version " << m->get_version() << " < " << osdmap->get_version() << endl;
+	delete m;   // discard and ignore.*
+	return;
+  }
+
+  // newer map?
+  if (m->get_version() > osdmap->get_version()) {
+	dout(7) << "  for newer map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	wait_for_new_map(m);
+	return;
+  }
+  
+  assert(m->get_version() == osdmap->get_version());
+
+  // 
+  //list<repgroup_t>                rg_dne;   // rg dne
+  //map<repgroup_t, RGReplicaInfo > rg_state; // state, lists, etc.
+
+  // rg_dne first
+  for (list<repgroup_t>::iterator it = m->rg_dne.begin();
+	   it != m->rg_dne.end();
+	   it++) {
+	dout(10) << " rg " << *it << " dne on osd" << from << endl;
+	
+	RG *rg = open_rg(*it);
+	assert(rg);
+	RGPeer *rgp = rg->get_peer(from);
+	if (rgp) {
+	  rg->remove_peer(from);
+	} else {
+	  dout(10) << "  weird, i didn't have it!" << endl;   // multiple lagged peer requests?
+	}
+  }
+
+  // rg_state
+  for (map<repgroup_t, RGReplicaInfo>::iterator it = m->rg_state.begin();
+	   it != m->rg_state.end();
+	   it++) {
+	dout(10) << " rg " << it->first << " got state " << it->second.state 
+			 << " " << it->second.objects.size() << " objects, " 
+			 << it->second.deleted.size() << " deleted" << endl;
+
+	RG *rg = open_rg(it->first);
+	assert(rg);
+	RGPeer *rgp = rg->get_peer(from);
+	assert(rgp);
+
+	rgp->peer_state = it->second;
+  }
+
+  // done
+  delete m;
+}
+
+
 
 
 

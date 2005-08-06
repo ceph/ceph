@@ -24,6 +24,8 @@
 
 #define SYNCLIENT_MODE_RANDOMSLEEP  12
 
+void parse_syn_options(vector<char*>& args);
+
 class SyntheticClient {
   Client *client;
 
@@ -95,12 +97,7 @@ class SyntheticClient {
   }
 
  public:
-  SyntheticClient(Client *client) {
-	this->client = client;
-	thread_id = 0;
-
-	did_readdir = false;
-  }
+  SyntheticClient(Client *client);
 
   int start_thread();
   int join_thread();

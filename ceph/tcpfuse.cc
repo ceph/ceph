@@ -16,152 +16,94 @@ using namespace std;
 #include "msg/TCPMessenger.h"
 
 #include "common/Timer.h"
-
-#define NUMMDS g_conf.num_mds
-#define NUMOSD g_conf.num_osd
-#define NUMCLIENT g_conf.num_client
-
-class C_Test : public Context {
-public:
-  void finish(int r) {
-	cout << "C_Test->finish(" << r << ")" << endl;
-  }
-};
+       
+#include <envz.h>
 
 
-int main(int oargc, char **oargv) {
+int main(int argc, char **argv, char *envp[]) {
 
   //cerr << "tcpfuse starting " << myrank << "/" << world << endl;
-  int argc;
-  char **argv;
-  parse_config_options(oargc, oargv,
-					   argc, argv);
-
-  int start = 0;
-
-  // build new argc+argv for fuse
-  typedef char* pchar;
-  int nargc = 0;
-  char **nargv = new pchar[argc];
-  nargv[nargc++] = argv[0];
+  vector<char*> args;
+  argv_to_vec(argc, argv, args);
+  parse_config_options(args);
 
   int mkfs = 0;
-  for (int i=1; i<argc; i++) {
-	if (strcmp(argv[i], "--fastmkfs") == 0) {
+  vector<char*> nargs;
+  
+  char *nsaddr = 0;
+
+  for (unsigned i=0; i<args.size(); i++) {
+	if (strcmp(args[i], "--fastmkfs") == 0) {
 	  mkfs = MDS_MKFS_FAST;
 	}
-	else if (strcmp(argv[i], "--fullmkfs") == 0) {
+	else if (strcmp(args[i], "--fullmkfs") == 0) {
 	  mkfs = MDS_MKFS_FULL;
+	}
+	else if (strcmp(args[i], "--ns") == 0) {
+	  nsaddr = args[++i];
 	}
 	else {
 	  // unknown arg, pass it on.
-	  nargv[nargc++] = argv[i];
+	  nargs.push_back(args[i]);
+	  cout << "fuse arg: " << args[i] << endl;
 	}
-  }
-
-  int myrank = tcpmessenger_init(argc, argv);
-  int world = tcpmessenger_world();
-
-  assert(NUMMDS + NUMOSD + NUMCLIENT <= world);
-
-  MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
-
-
-  char hostname[100];
-  gethostname(hostname,100);
-  int pid = getpid();
-
-  // create mds
-  MDS *mds[NUMMDS];
-  for (int i=0; i<NUMMDS; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	mds[i] = new MDS(mdc, i, new TCPMessenger(MSG_ADDR_MDS(i)));
-	start++;
   }
   
-  // create osd
-  OSD *osd[NUMOSD];
-  for (int i=0; i<NUMOSD; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
-	cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	osd[i] = new OSD(i, new TCPMessenger(MSG_ADDR_OSD(i)));
-	start++;
+  if (nsaddr == 0) {
+	// env var
+	int e_len = 0;
+	for (int i=0; envp[i]; i++)
+	  e_len += strlen(envp[i]) + 1;
+	nsaddr = envz_entry(*envp, e_len, "CEPH_NAMESERVER");	
+	if (nsaddr) {
+	  while (nsaddr[0] != '=') nsaddr++;
+	  nsaddr++;
+	}
   }
+  if (!nsaddr) {
+	cerr << "i need ceph ns addr.. either CEPH_NAMESERVER env var or --ns blah" << endl;
+	exit(-1);
+  }
+  // look up nsaddr
+  tcpaddr_t nsa;
+  if (tcpmessenger_lookup(nsaddr, nsa) < 0) {
+	return 1;
+  }
+
+  cout << "ceph ns is " << nsaddr << " or " << nsa << endl;
+
+  // args for fuse
+  args = nargs;
+  vec_to_argv(args, argc, argv);
+
+
+  // start up tcpmessenger
+  tcpmessenger_init();
+  tcpmessenger_start();
+  tcpmessenger_start_rankserver(nsa);
   
-  // create client
-  Client *client[NUMCLIENT];
-  for (int i=0; i<NUMCLIENT; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	client[i] = new Client(mdc, i, new TCPMessenger(MSG_ADDR_CLIENT(i)));
-	start++;
-  }
-
-
-  // start message loop
-  if (start) {
-	tcpmessenger_start();
-    
-	// init
-	for (int i=0; i<NUMMDS; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	  mds[i]->init();
-	}
+  Client *client = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));
+  client->init();
 	
-	for (int i=0; i<NUMOSD; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
-	  osd[i]->init();
-	}
-	
-	// create client
-	for (int i=0; i<NUMCLIENT; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	  
-	  client[i]->init();
-	  
-	  // start up fuse
-	  // use my argc, argv (make sure you pass a mount point!)
-	  cout << "mounting" << endl;
-	  client[i]->mount(mkfs);
-
-	  cout << "starting fuse on rank " << myrank << " pid " << getpid() << endl;
-	  ceph_fuse_main(client[i], nargc, nargv);
-	  cout << "fuse finished on rank " << myrank << " pid " << getpid() << endl;
-	}
-	for (int i=0; i<NUMCLIENT; i++) {
-	  if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	  
-	  client[i]->unmount();
-	  cout << "unmounted" << endl;
-	  client[i]->shutdown();
-	}
-	
-		
-	// wait for it to finish
-	tcpmessenger_wait();
-
-  } else {
-	cerr << "IDLE rank " << myrank << endl;
-  }
-
+  // start up fuse
+  // use my argc, argv (make sure you pass a mount point!)
+  cout << "mounting" << endl;
+  client->mount(mkfs);
+  
+  cout << "starting fuse on pid " << getpid() << endl;
+  ceph_fuse_main(client, argc, argv);
+  cout << "fuse finished on pid " << getpid() << endl;
+  
+  client->unmount();
+  cout << "unmounted" << endl;
+  client->shutdown();
+  
+  delete client;
+  
+  // wait for it to finish
+  tcpmessenger_wait();
   tcpmessenger_shutdown();  // shutdown MPI
-  
-  // cleanup
-  for (int i=0; i<NUMMDS; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	delete mds[i];
-  }
-  for (int i=0; i<NUMOSD; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
-	delete osd[i];
-  }
-  for (int i=0; i<NUMCLIENT; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	delete client[i];
-  }
-  delete mdc;
-  
+
   return 0;
 }
 

@@ -38,10 +38,12 @@ Logger  *client_logger = 0;
 
 // cons/des
 
-Client::Client(MDCluster *mdc, int id, Messenger *m)
+Client::Client(Messenger *m)
 {
-  mdcluster = mdc;
-  whoami = id;
+  // which client am i?
+  whoami = MSG_ADDR_NUM(m->get_myaddr());
+  cout << "i am client " << whoami <<  " " << MSG_ADDR_NICE(m->get_myaddr()) << endl;
+
 
   mounted = false;
 
@@ -430,6 +432,10 @@ void Client::dispatch(Message *m)
 	// osd
   case MSG_OSD_OPREPLY:
 	filer->handle_osd_op_reply((MOSDOpReply*)m);
+	break;
+
+  case MSG_OSD_MAP:
+	filer->handle_osd_map((class MOSDMap*)m);
 	break;
 	
 	// client

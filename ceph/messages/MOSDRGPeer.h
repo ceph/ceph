@@ -1,10 +1,10 @@
-#ifndef __MOSDRGPEERNOTIFY_H
-#define __MOSDRGPEERNOTIFY_H
+#ifndef __MOSDRGPEER_H
+#define __MOSDRGPEER_H
 
 #include "msg/Message.h"
 
 
-class MOSDRGNotify : public Message {
+class MOSDRGPeer : public Message {
   __uint64_t       map_version;
   list<repgroup_t> rg_list;
 
@@ -12,14 +12,14 @@ class MOSDRGNotify : public Message {
   __uint64_t get_version() { return map_version; }
   list<repgroup_t>& get_rg_list() { return rg_list; }
 
-  MOSDRGNotify() {}
-  MOSDRGNotify(__uint64_t v, list<repgroup_t>& l) :
-	Message(MSG_OSD_RG_NOTIFY) {
+  MOSDRGPeer() {}
+  MOSDRGPeer(__uint64_t v, list<repgroup_t>& l) :
+	Message(MSG_OSD_RG_PEER) {
 	this->map_version = v;
 	rg_list.splice(rg_list.begin(), l);
   }
   
-  char *get_type_name() { return "RGnot"; }
+  char *get_type_name() { return "RGPeer"; }
 
   void encode_payload() {
 	payload.append((char*)&map_version, sizeof(map_version));

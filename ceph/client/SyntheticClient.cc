@@ -21,6 +21,84 @@
 //void trace_openssh(SyntheticClient *syn, Client *cl, string& prefix);
 
 
+list<int> syn_modes;
+list<int> syn_iargs;
+list<string> syn_sargs;
+
+void parse_syn_options(vector<char*>& args)
+{
+  vector<char*> nargs;
+
+  for (unsigned i=0; i<args.size(); i++) {
+	if (strcmp(args[i],"--syn") == 0) {
+	  ++i;
+	  if (strcmp(args[i],"writefile") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"readfile") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"makedirs") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"fullwalk") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
+		//syn_sargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"randomwalk") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
+		syn_iargs.push_back( atoi(args[++i]) );	   
+	  } else if (strcmp(args[i],"trace_include") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACEINCLUDE );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"trace_lib") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACELIB );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"trace_openssh") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSH );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"trace_opensshlib") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSHLIB );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"trace") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
+		syn_sargs.push_back( args[++i] );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"until") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else {
+		cerr << "unknown syn mode " << args[i] << endl;
+		assert(0);
+	  }
+	}
+	else {
+	  nargs.push_back(args[i]);
+	}
+  }
+
+  args = nargs;
+}
+
+
+SyntheticClient::SyntheticClient(Client *client) 
+{
+  this->client = client;
+  thread_id = 0;
+  
+  did_readdir = false;
+
+  this->modes = syn_modes;
+  this->iargs = syn_iargs;
+  this->sargs = syn_sargs;
+}
+
+
+
+
 #define DBL 2
 
 void *synthetic_client_thread_entry(void *ptr)

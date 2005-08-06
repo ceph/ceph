@@ -35,11 +35,11 @@ typedef __uint64_t object_t;
 #define MDS_PORT_OSDMON    300
 
 #define MDS_INO_ROOT              1
-#define MDS_INO_LOG_OFFSET        100
-#define MDS_INO_IDS_OFFSET        200
-#define MDS_INO_INODEFILE_OFFSET  300
-#define MDS_INO_ANCHORTABLE       400
-#define MDS_INO_BASE              1000
+#define MDS_INO_LOG_OFFSET        0x100
+#define MDS_INO_IDS_OFFSET        0x200
+#define MDS_INO_INODEFILE_OFFSET  0x300
+#define MDS_INO_ANCHORTABLE       0x400
+#define MDS_INO_BASE              0x1000
 
 #define MDS_MKFS_FAST      1   // fake new root inode+dir
 #define MDS_MKFS_FULL      2   // wipe osd's too

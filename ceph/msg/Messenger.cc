@@ -12,6 +12,13 @@ using namespace std;
 
 
 
+#include "messages/MNSConnect.h"
+#include "messages/MNSConnectAck.h"
+#include "messages/MNSRegister.h"
+#include "messages/MNSRegisterAck.h"
+#include "messages/MNSLookup.h"
+#include "messages/MNSLookupReply.h"
+
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MFailure.h"
@@ -22,6 +29,8 @@ using namespace std;
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDRGNotify.h"
+#include "messages/MOSDRGPeer.h"
+#include "messages/MOSDRGPeerAck.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -197,6 +206,25 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
 	// -- with payload --
 
+  case MSG_NS_CONNECT:
+	m = new MNSConnect();
+	break;
+  case MSG_NS_CONNECTACK:
+	m = new MNSConnectAck();
+	break;
+  case MSG_NS_REGISTER:
+	m = new MNSRegister();
+	break;
+  case MSG_NS_REGISTERACK:
+	m = new MNSRegisterAck();
+	break;
+  case MSG_NS_LOOKUP:
+	m = new MNSLookup();
+	break;
+  case MSG_NS_LOOKUPREPLY:
+	m = new MNSLookupReply();
+	break;
+
   case MSG_PING:
 	m = new MPing();
 	break;
@@ -224,6 +252,12 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 	break;
   case MSG_OSD_RG_NOTIFY:
 	m = new MOSDRGNotify();
+	break;
+  case MSG_OSD_RG_PEER:
+	m = new MOSDRGPeer();
+	break;
+  case MSG_OSD_RG_PEERACK:
+	m = new MOSDRGPeerAck();
 	break;
 
 	// clients
@@ -399,9 +433,11 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
 	// -- simple messages without payload --
 
+  case MSG_NS_STARTED:
+  case MSG_NS_UNREGISTER:
+  case MSG_SHUTDOWN:
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
-  case MSG_SHUTDOWN:
   case MSG_CLIENT_UNMOUNT:
   case MSG_OSD_GETMAP:
 	m = new MGenericMessage(env.type);

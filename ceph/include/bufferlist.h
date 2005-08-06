@@ -4,6 +4,7 @@
 #include "buffer.h"
 
 #include <list>
+#include <map>
 #include <set>
 #include <vector>
 using namespace std;
@@ -491,6 +492,39 @@ inline void _decode(list<__uint64_t>& s, bufferlist& bl, int& off)
 	bl.copy(off, sizeof(v), (char*)&v);
 	off += sizeof(v);
 	s.push_back(v);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// map<__uint64_t, __uint64_t>
+inline void _encode(map<__uint64_t,__uint64_t>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (map<__uint64_t,__uint64_t>::iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	__uint64_t k = it->first;
+	__uint64_t v = it->second;
+	bl.append((char*)&k, sizeof(k));
+	bl.append((char*)&v, sizeof(v));
+	n--;
+  }
+  assert(n==0);
+}
+inline void _decode(map<__uint64_t,__uint64_t>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+	__uint64_t k,v;
+	bl.copy(off, sizeof(k), (char*)&k);
+	off += sizeof(k);
+	bl.copy(off, sizeof(v), (char*)&v);
+	off += sizeof(v);
+	s[k] = v;
   }
   assert(s.size() == (unsigned)n);
 }

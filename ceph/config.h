@@ -5,6 +5,9 @@ extern class FileLayout g_OSD_FileLayout;
 extern class FileLayout g_OSD_MDDirLayout;
 extern class FileLayout g_OSD_MDLogLayout;
 
+#include <vector>
+using namespace std;
+
 struct md_config_t {
   int  num_mds;
   int  num_osd;
@@ -116,8 +119,11 @@ extern md_config_t g_conf;
 #define dout(x)  if ((x) <= g_conf.debug) cout
 #define dout2(x) if ((x) <= g_conf.debug) cout
 
-void parse_config_options(int argc, char **argv,
-						  int& nargc, char**&nargv,
-						  bool barf_on_extras=false);
+void argv_to_vec(int argc, char **argv,
+				 vector<char*>& args);
+void vec_to_argv(vector<char*>& args,
+				 int& argc, char **&argv);
+
+void parse_config_options(vector<char*>& args);
 
 #endif

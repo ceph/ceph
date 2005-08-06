@@ -80,7 +80,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdcluster = mdc;
 
   messenger = m;
-  messenger->set_dispatcher(this);
 
   mdcache = new MDCache(this);
   mdstore = new MDStore(this);
@@ -158,6 +157,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   // alloc
   idalloc = new IdAllocator(this);
 
+  // i'm ready!
+  messenger->set_dispatcher(this);
 }
 
 MDS::~MDS() {
@@ -256,6 +257,8 @@ void MDS::handle_shutdown_finish(Message *m)
 
 int MDS::shutdown_final()
 {
+  dout(1) << "shutdown" << endl;
+
   // shut down cache
   mdcache->shutdown();
   

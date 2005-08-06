@@ -55,8 +55,12 @@ SYN_OBJS = \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TEST_TARGETS = fakemds mpitest
-TARGETS = import singleclient mpifuse fakefuse mpisyn fakesyn tcpsyn
+TCP_OBJS = \
+	msg/TCPMessenger.o\
+	msg/TCPDirectory.o
+
+TEST_TARGETS = fakemds 
+TARGETS = fakefuse fakesyn tcpsyn tcpfuse
 
 SRCS=*.cc */*.cc
 
@@ -97,10 +101,10 @@ mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 fakefuse: fakefuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/TCPMessenger.cc ${COMMON_OBJS}
+tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/MPIMessenger.cc ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -111,7 +115,7 @@ fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o 
 mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/TCPMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
+tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # obfs + synthetic
