@@ -27,6 +27,8 @@ using namespace std;
 
 #define OID_ONO_BITS       30       // 1mb * 10^9 = 1 petabyte files
 #define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
+#define RG_NUM_BITS        32
+#define RG_REP_BITS        10
 
 //#define MAX_FILE_SIZE      (FILE_OBJECT_SIZE << OID_ONO_BITS)  // 1 PB
 
@@ -162,13 +164,13 @@ class OSDMap {
 	// hash (ino+ono).  nrep needs to be reversible (see repgroup_to_nrep).
 	static hash<int> H;
 	
-	return (H(inode.ino+ono) % g_conf.osd_num_rg) +
-	  ((inode.layout.num_rep-1) * g_conf.osd_num_rg);
+	return ((repgroup_t)(H(inode.ino+ono) % g_conf.osd_num_rg) & ((1LL<<RG_NUM_BITS)-1LL)) +
+	  ((repgroup_t)inode.layout.num_rep << RG_NUM_BITS);
   }
 
   /* get nrep from rgid */
   int repgroup_to_nrep(repgroup_t rg) {
-	return rg / g_conf.osd_num_rg;
+	return rg >> RG_NUM_BITS;
   }
 
   /* map (repgroup) to a raw list of osds.  

@@ -19,12 +19,19 @@
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
 
+#include "include/bufferlist.h"
+
+#include <map>
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 // crap-a-crap hash
 #define HASH_DIRS       128LL
 #define HASH_FUNC(x)    (((x) ^ ((x)>>30) ^ ((x)>>18) ^ ((x)>>45) ^ 0xdead1234) * 884811 % HASH_DIRS)
 // end crap hash
 
+
+map<int, hash_map<object_t, map<const char*, bufferptr> > > fakeattrs;
 
 
 FakeStore::FakeStore(char *base, int whoami) 
@@ -268,18 +275,43 @@ int FakeStore::write(object_t oid,
 int FakeStore::setattr(object_t oid, const char *name,
 					   void *value, size_t size)
 {
-  string fn;
-  get_oname(oid, fn);
-  return setxattr(fn.c_str(), name, value, size, 0);
+  if (1) {
+	bufferptr bp(new buffer((char*)value,size));
+	fakeattrs[whoami][oid][name] = bp;
+	return 0;
+  } else {
+	string fn;
+	get_oname(oid, fn);
+	int r = setxattr(fn.c_str(), name, value, size, 0);
+	if (r == -1) 
+	  cerr << " errno is " << errno << " " << strerror(errno) << endl;
+	assert(r == 0);
+	return r;
+  }
 }
 
 
 int FakeStore::getattr(object_t oid, const char *name,
 					   void *value, size_t size)
 {
-  string fn;
-  get_oname(oid, fn);
-  return getxattr(fn.c_str(), name, value, size);
+  if (1) {
+	if (fakeattrs[whoami][oid].count(name)) {
+	  size_t l = fakeattrs[whoami][oid][name].length();
+	  if (l > size) l = size;
+	  bufferlist bl;
+	  bl.append(fakeattrs[whoami][oid][name]);
+	  bl.copy(0, l, (char*)value);
+	  return l;
+	} else {
+	  return -1;
+	}
+  } else {
+	string fn;
+	get_oname(oid, fn);
+	int r = getxattr(fn.c_str(), name, value, size);
+	//	assert(r == 0);
+	return r;
+  }
 }
 
 int FakeStore::listattr(object_t oid, char *attrs, size_t size)

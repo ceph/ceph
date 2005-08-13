@@ -130,6 +130,8 @@ struct FileLayout {
 
 // -- inode --
 
+typedef __uint64_t version_t;
+
 typedef __uint64_t inodeno_t;   // ino
 
 #define INODE_MODE_FILE     0100000 // S_IFREG
@@ -147,20 +149,20 @@ struct inode_t {
   time_t    ctime;
 
   // hard (permissions)
-  mode_t mode;
-  uid_t  uid;
-  gid_t  gid;
+  mode_t     mode;
+  uid_t      uid;
+  gid_t      gid;
+  FileLayout layout;  
 
   // soft
   __uint64_t size;
   time_t     atime, mtime;      // maybe atime different?  "lazy"?
+  int        nlink;
 
   // special stuff
-  FileLayout    layout;  
-  unsigned char hash_seed;  // 0 if not hashed.
-  int           nlink;
-  bool          anchored;
-  __uint64_t    file_data_version;
+  unsigned char hash_seed;         // only defined for dir; 0 if not hashed.
+  bool          anchored;          // auth only
+  version_t     file_data_version; // auth only
 };
 
 
@@ -170,6 +172,16 @@ typedef __uint64_t object_t;      // object id
 typedef __uint64_t coll_t;        // collection id
 
 #define RG_NONE    0xffffffffffffffffLL
+
+struct onode_t {
+  object_t    oid;
+  repgroup_t  rgid;
+  version_t   version;
+  size_t      size;
+  //time_t      ctime, mtime;
+};
+
+
 
 // client types
 typedef int        fh_t;          // file handle 

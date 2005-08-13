@@ -63,6 +63,12 @@ OSD::OSD(int id, Messenger *m)
 
   last_tid = 0;
 
+  max_recovery_ops = 5;
+
+  pending_ops = 0;
+  waiting_for_no_ops = false;
+
+
   // use fake store
 #ifdef USE_OBFS
   store = new OBFSStore(whoami, NULL, "/dev/sdb3");
@@ -150,8 +156,44 @@ int OSD::shutdown()
 
 
 
+// object locks
 
+void OSD::lock_object(object_t oid) 
+{
+  osd_lock.Lock();
+  if (object_lock.count(oid)) {
+	Cond c;
+	dout(7) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
+	object_lock_waiters[oid].push_back(&c);
+	c.Wait(osd_lock);
+	assert(object_lock.count(oid));
+  } else {
+	dout(7) << "lock_object " << hex << oid << dec << endl;
+	object_lock.insert(oid);
+  }
+  osd_lock.Unlock();
+}
 
+void OSD::unlock_object(object_t oid) 
+{
+  osd_lock.Lock();
+  assert(object_lock.count(oid));
+  if (object_lock_waiters.count(oid)) {
+	// someone is in line
+	list<Cond*>& ls = object_lock_waiters[oid];
+	Cond *c = ls.front();
+	dout(7) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
+	ls.pop_front();
+	if (ls.empty()) 
+	  object_lock_waiters.erase(oid);
+	c->Signal();
+  } else {
+	// nobody waiting
+	dout(7) << "unlock_object " << hex << oid << dec << endl;
+	object_lock.erase(oid);
+  }
+  osd_lock.Unlock();
+}
 
 
 // --------------------------------------
@@ -213,20 +255,52 @@ void OSD::dispatch(Message *m)
 	dout(1) << " got unknown message " << m->get_type() << endl;
 	assert(0);
   }
+
+  if (!finished.empty()) {
+	list<Message*> waiting;
+	waiting.splice(waiting.begin(), finished);
+	for (list<Message*>::iterator it = waiting.begin();
+		 it != waiting.end();
+		 it++) {
+	  dispatch(*it);
+	}
+  }
+
 }
 
 
 void OSD::handle_op_reply(MOSDOpReply *m)
 {
-  replica_write_lock.Lock();
-  MOSDOp *op = replica_writes[m->get_tid()];
-  dout(7) << "got replica write ack tid " << m->get_tid() << " orig op " << op << endl;
+  switch (m->get_op()) {
+  case OSD_OP_REP_PULL:
+	op_rep_pull_reply(m);
+	break;
+  case OSD_OP_REP_PUSH:
+	op_rep_push_reply(m);
+	break;
+  case OSD_OP_REP_REMOVE:
+	op_rep_remove_reply(m);
+	break;
 
-  replica_write_tids[op].erase(m->get_tid());
-  if (replica_write_tids[op].empty())
-	replica_write_cond[op]->Signal();
+  case OSD_OP_REP_WRITE:
+	{ // oldcrap
+	  /*
+	  replica_write_lock.Lock();
+	  MOSDOp *op = replica_writes[m->get_tid()];
+	  dout(7) << "got replica write ack tid " << m->get_tid() << " orig op " << op << endl;
+	  
+	  replica_write_tids[op].erase(m->get_tid());
+	  if (replica_write_tids[op].empty())
+		replica_write_cond[op]->Signal();
+	  
+	  replica_write_lock.Unlock();
+	  */
+	}
+	break;
 
-  replica_write_lock.Unlock();
+  default:
+	assert(0);
+  }
 }
 
 
@@ -279,8 +353,10 @@ void OSD::update_map(bufferlist& state)
 
 void OSD::handle_osd_map(MOSDMap *m)
 {
-  // SAB
-  osd_lock.Lock();
+  // wait for ops to finish
+  wait_for_no_ops();
+
+  osd_lock.Lock();     // actually, don't need this if we finish all ops?
 
   if (!osdmap ||
 	  m->get_version() > osdmap->get_version()) {
@@ -294,20 +370,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 	delete m;
 
 	// process waiters
-	list<Message*> waiting;
-	waiting.splice(waiting.begin(), waiting_for_osdmap);
+	take_waiters(waiting_for_osdmap);
 
-	osd_lock.Unlock();
-	
-	for (list<Message*>::iterator it = waiting.begin();
-		 it != waiting.end();
-		 it++) {
-	  dispatch(*it);
-	}
   } else {
 	dout(3) << "handle_osd_map ignoring osd map version " << m->get_version() << " <= " << osdmap->get_version() << endl;
-	osd_lock.Unlock();
   }
+  
+  osd_lock.Unlock();
 }
 
 
@@ -326,36 +395,44 @@ void OSD::get_rg_list(list<repgroup_t>& ls)
 }
 
 
-bool OSD::rg_exists(repgroup_t rg) 
+bool OSD::rg_exists(repgroup_t rgid) 
 {
   struct stat st;
-  if (store->collection_stat(rg, &st) == 0) 
+  if (store->collection_stat(rgid, &st) == 0) 
 	return true;
   else
 	return false;
 }
 
 
-RG *OSD::open_rg(repgroup_t rg)
+RG *OSD::open_rg(repgroup_t rgid)
 {
   // already open?
-  if (rg_map.count(rg)) 
-	return rg_map[rg];
+  if (rg_map.count(rgid)) 
+	return rg_map[rgid];
 
-  // stat collection
-  RG *r = new RG(rg);
-  if (rg_exists(rg)) {
-	// exists
-	r->fetch(store);
-  } else {
-	// dne
-	r->store(store);
-  }
-  rg_map[rg] = r;
+  // exists?
+  if (!rg_exists(rgid))
+	return 0;
 
-  return r;
+  // open, stat collection
+  RG *rg = new RG(whoami, rgid);
+  rg->fetch(store);
+  rg_map[rgid] = rg;
+
+  return rg;
 }
  
+RG *OSD::new_rg(repgroup_t rgid)
+{
+  assert(rg_map.count(rgid) == 0);
+  assert(!rg_exists(rgid));
+
+  RG *rg = new RG(whoami, rgid);
+  rg->store(store);
+  rg_map[rgid] = rg;
+  return rg;
+}
 
 
 
@@ -387,14 +464,13 @@ void OSD::scan_rg()
 	int nrep = osdmap->repgroup_to_acting_osds(rgid, acting);
 	assert(nrep > 0);
 	int primary = acting[0];
-	int role = -1;
+	int role = -1;        // -1, 0, 1
 	for (int i=0; i<nrep; i++) 
-	  if (acting[i] == whoami) role = i;
+	  if (acting[i] == whoami) role = i>0 ? 1:0;
 	
-
 	if (role != rg->get_role()) {
 	  // role change.
-	  dout(10) << " rg " << rgid << " acting role change " << rg->get_role() << " -> " << role << endl; 
+	  dout(10) << " rg " << hex << rgid << dec << " acting role change " << rg->get_role() << " -> " << role << endl; 
 	  
 	  // am i old-primary?
 	  if (rg->get_role() == 0) {
@@ -402,7 +478,7 @@ void OSD::scan_rg()
 		for (map<int, RGPeer*>::iterator it = rg->get_peers().begin();
 			 it != rg->get_peers().end();
 			 it++) {
-		  dout(10) << " rg " << rgid << " old-primary, dropping old peer " << it->first << endl;
+		  dout(10) << " rg " << hex << rgid << dec << " old-primary, dropping old peer " << it->first << endl;
 		  rg->get_old_replica_set().insert(it->first);
 		  delete it->second;
 		}
@@ -431,7 +507,7 @@ void OSD::scan_rg()
 		
 		// did primary change?
 		if (primary != rg->get_primary()) {
-		  dout(10) << " rg " << rgid << " acting primary change " << rg->get_primary() << " -> " << primary << endl;
+		  dout(10) << " rg " << hex << rgid << dec << " acting primary change " << rg->get_primary() << " -> " << primary << endl;
 		  
 		  // re-peer
 		  rg->state_clear(RG_STATE_PEERED);
@@ -451,7 +527,7 @@ void OSD::scan_rg()
 	  // check replicas
 	  for (int r=1; r<nrep; r++) {
 		if (rg->get_peer(r) == 0) {
-		  dout(10) << " rg " << rgid << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
+		  dout(10) << " rg " << hex << rgid << dec << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
 		  start_map[acting[r]][rg] = r;
 		} 
 	  }
@@ -473,6 +549,7 @@ void OSD::scan_rg()
 
 
 }
+
 
 
 /** peer_notify
@@ -560,24 +637,23 @@ void OSD::handle_rg_notify(MOSDRGNotify *m)
 	assert(nrep > 0);
 	assert(acting[0] == whoami);
 	
-	// get/open RG
+	// open RG?
 	RG *rg = open_rg(rgid);
 
 	// previously unknown RG?
-	if (rg->get_peers().empty()) {
-	  dout(10) << " rg " << rgid << " is new" << endl;
+	if (!rg) {
+	  rg = new_rg(rgid);
+	  dout(10) << " rg " << hex << rgid << dec << " is new, nrep=" << nrep << endl;
 	  for (int r=1; r<nrep; r++) {
-		if (rg->get_peer(r) == 0) {
-		  dout(10) << " rg " << rgid << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
-		  start_map[acting[r]][rg] = r;
-		} 
+		dout(10) << " rg " << hex << rgid << dec << " primary needs to peer with replica " << r << " osd" << acting[r] << endl;
+		start_map[acting[r]][rg] = r;
 	  }
 	}
 
 	// peered with this guy specifically?
 	RGPeer *rgp = rg->get_peer(from);
 	if (!rgp && start_map[from].count(rg) == 0) {
-	  dout(7) << " rg " << rgid << " primary needs to peer with residual notifier osd" << from << endl;
+	  dout(7) << " rg " << hex << rgid << dec << " primary needs to peer with residual notifier osd" << from << endl;
 	  start_map[from][rg] = -1; 
 	}
   }
@@ -624,35 +700,39 @@ void OSD::handle_rg_peer(MOSDRGPeer *m)
 	   it++) {
 	repgroup_t rgid = *it;
 	
-	// dne?
-	if (!rg_exists(rgid)) {
-	  dout(10) << " rg " << rgid << " dne" << endl;
-	  ack->rg_dne.push_back(rgid);
-	  continue;
-	}
-
-	// get/open RG
+	// open RG
 	RG *rg = open_rg(rgid);
+
+	// dne?
+	if (!rg) {
+	  // get active rush mapping
+	  vector<int> acting;
+	  int nrep = osdmap->repgroup_to_acting_osds(rgid, acting);
+	  assert(nrep > 0);
+	  int role = -1;
+	  for (int i=0; i<nrep; i++) 
+		if (acting[i] == whoami) role = i>0 ? 1:0;
+	  assert(role != 0);
+
+	  if (role < 0) {
+		dout(10) << " rg " << hex << rgid << dec << " dne, and i am not an active replica" << endl;
+		ack->rg_dne.push_back(rgid);
+		continue;
+	  }
+	  
+	  dout(10) << " rg " << hex << rgid << dec << " dne (yet), but i am new active replica " << role << endl;
+	  rg = new_rg(rgid);
+	}
 
 	// report back state and rg content
 	ack->rg_state[rgid].state = rg->get_state();
 	ack->rg_state[rgid].deleted = rg->get_deleted_objects();
 
 	// list objects
-	list<object_t> olist;
-	rg->list_objects(store,olist);
-
-	dout(10) << " rg " << rgid << " has state " << rg->get_state() << ", " << olist.size() << " objects" << endl;
-
-	for (list<object_t>::iterator it = olist.begin();
-		 it != olist.end();
-		 it++) {
-	  version_t v = 0;
-	  store->getattr(*it, 
-					  "version",
-					  &v, sizeof(v));
-	  ack->rg_state[rgid].objects[*it] = v;
-	}
+	rg->scan_local_objects(store);
+	ack->rg_state[rgid].objects = rg->local_objects;
+	
+	dout(10) << " rg " << hex << rgid << dec << " has state " << rg->get_state() << ", " << ack->rg_state[rgid].objects.size() << " objects" << endl;
   }
 
   // reply
@@ -691,7 +771,7 @@ void OSD::handle_rg_peer_ack(MOSDRGPeerAck *m)
   for (list<repgroup_t>::iterator it = m->rg_dne.begin();
 	   it != m->rg_dne.end();
 	   it++) {
-	dout(10) << " rg " << *it << " dne on osd" << from << endl;
+	dout(10) << " rg " << hex << *it << dec << " dne on osd" << from << endl;
 	
 	RG *rg = open_rg(*it);
 	assert(rg);
@@ -707,7 +787,7 @@ void OSD::handle_rg_peer_ack(MOSDRGPeerAck *m)
   for (map<repgroup_t, RGReplicaInfo>::iterator it = m->rg_state.begin();
 	   it != m->rg_state.end();
 	   it++) {
-	dout(10) << " rg " << it->first << " got state " << it->second.state 
+	dout(10) << " rg " << hex << it->first << dec << " got state " << it->second.state 
 			 << " " << it->second.objects.size() << " objects, " 
 			 << it->second.deleted.size() << " deleted" << endl;
 
@@ -717,6 +797,23 @@ void OSD::handle_rg_peer_ack(MOSDRGPeerAck *m)
 	assert(rgp);
 
 	rgp->peer_state = it->second;
+	rgp->state_set(RG_PEER_STATE_ACTIVE);
+
+	// fully peered?
+	bool fully = true;
+	for (map<int, RGPeer*>::iterator pit = rg->get_peers().begin();
+		 pit != rg->get_peers().end();
+		 pit++) {
+	  if (!pit->second->is_active()) fully = false;
+	}
+
+	if (fully) {
+	  dout(10) << " rg " << hex << it->first << dec << " fully peered, analyzing" << endl;
+	  rg->mark_peered();
+	  rg->analyze_peers(store);
+
+	  do_recovery(rg);
+	}	  
   }
 
   // done
@@ -725,6 +822,348 @@ void OSD::handle_rg_peer_ack(MOSDRGPeerAck *m)
 
 
 
+// RECOVERY
+
+void OSD::do_recovery(RG *rg)
+{
+  // pull?
+  if (!rg->is_complete()) {
+	rg_pull(rg, max_recovery_ops);
+  } else {
+	if (!rg->is_clean()) {
+	  rg_push(rg, max_recovery_ops);
+	  rg_clean(rg, max_recovery_ops);
+	}
+  }
+}
+
+
+// pull
+
+void OSD::rg_pull(RG *rg, int maxops)
+{
+  int ops = rg->num_active_ops();
+
+  dout(7) << "rg_pull rg " << hex << rg->get_rgid() << dec << " " << ops << "/" << maxops << " active ops" <<  endl;
+  
+  while (ops < maxops) {
+	object_t oid;
+	version_t v;
+	int peer;
+	if (!rg->pull_plan.get_next(oid, v, peer)) break;
+	RGPeer *rgp = rg->get_proxy_peer(oid);
+	if (rgp == 0) {
+	  dout(7) << " apparently already pulled " << hex << oid << dec << endl;
+	  continue;
+	}
+	if (rgp->is_pulling(oid)) {
+	  dout(7) << " already pulling " << hex << oid << dec << endl;
+	  continue;
+	}
+	pull_replica(oid, v, rgp);
+	ops++;
+  }  
+}
+
+void OSD::pull_replica(object_t oid, version_t v, RGPeer *p)
+{
+  dout(7) << "pull_replica " << hex << oid << dec << " v " << v << " from osd" << p->get_peer() << endl;
+
+  // add to fetching list
+  p->pull(oid, v);
+
+  // send op
+  __uint64_t tid = ++last_tid;
+  MOSDOp *op = new MOSDOp(tid, messenger->get_myaddr(),
+						  oid, p->rg->get_rgid(),
+						  osdmap->get_version(),
+						  OSD_OP_REP_PULL);
+  op->set_version(v);
+  op->set_rg_role(-1);  // whatever, not 0
+  messenger->send_message(op, MSG_ADDR_OSD(p->get_peer()));
+
+  // register
+  pull_ops[tid] = p;
+}
+
+void OSD::op_rep_pull(MOSDOp *op)
+{
+  dout(7) << "rep_pull on " << hex << op->get_oid() << dec << " v " << op->get_version() << endl;
+  lock_object(op->get_oid());
+  
+  // get object size
+  struct stat st;
+  int r = store->stat(op->get_oid(), &st);
+  assert(r == 0);
+
+  // check version
+  version_t v = 0;
+  store->getattr(op->get_oid(), "version", &v, sizeof(v));
+  assert(v == op->get_version());
+  
+  // read
+  bufferptr bptr = new buffer(st.st_size);   // prealloc space for entire read
+  long got = store->read(op->get_oid(), 
+						 st.st_size, 0,
+						 bptr.c_str());
+  assert(got == st.st_size);
+  
+  // reply
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap); 
+  bptr.set_length(got);   // properly size the buffer
+  bufferlist bl;
+  bl.push_back( bptr );
+  reply->set_result(0);
+  reply->set_data(bl);
+  reply->set_length(got);
+  reply->set_offset(0);
+  
+  messenger->send_message(reply, op->get_asker());
+
+  unlock_object(op->get_oid());
+  delete op;
+}
+
+void OSD::op_rep_pull_reply(MOSDOpReply *op)
+{
+  dout(7) << "op_rep_pull_reply " << hex << op->get_oid() << dec << " size " << op->get_length() << endl;
+
+  osd_lock.Lock();
+  RGPeer *p = pull_ops[op->get_tid()];
+  RG *rg = p->rg;
+  assert(p);   // FIXME: how will this work?
+  assert(p->is_pulling(op->get_oid()));
+  assert(p->pulling_version(op->get_oid()) == op->get_version());
+  osd_lock.Unlock();
+
+  // write it and add it to the RG
+  store->write(op->get_oid(), op->get_length(), 0, op->get_data().c_str());
+  p->rg->add_object(store, op->get_oid());
+
+  // close out pull op.
+  osd_lock.Lock();
+  pull_ops.erase(op->get_tid());
+  rg->pulled(op->get_oid(), op->get_version(), p);
+
+  // finish waiters
+  if (waiting_for_object.count(op->get_oid())) 
+	take_waiters(waiting_for_object[op->get_oid()]);
+
+  // more?
+  do_recovery(rg);
+
+  osd_lock.Unlock();
+  
+  delete op;
+}
+
+
+// push
+
+void OSD::rg_push(RG *rg, int maxops)
+{
+  int ops = rg->num_active_ops();
+
+  dout(7) << "rg_push rg " << hex << rg->get_rgid() << dec << " " << ops << "/" << maxops << " active ops" <<  endl;
+  
+  while (ops < maxops) {
+	object_t oid;
+	version_t v;
+	int peer;
+	if (!rg->push_plan.get_next(oid, v, peer)) break;
+
+	RGPeer *p = rg->get_peer(peer);
+	assert(p);
+	push_replica(oid, v, p);
+	ops++;
+  }  
+  
+}
+
+void OSD::push_replica(object_t oid, version_t v, RGPeer *p)
+{
+  dout(7) << "push_replica " << hex << oid << dec << " v " << v << " to osd" << p->get_peer() << endl;
+
+  // add to list
+  p->push(oid, v);
+
+  // send op
+  __uint64_t tid = ++last_tid;
+  MOSDOp *op = new MOSDOp(tid, messenger->get_myaddr(),
+						  oid, p->rg->get_rgid(),
+						  osdmap->get_version(),
+						  OSD_OP_REP_PUSH);
+  op->set_version(v);
+  op->set_rg_role(-1);  // whatever, not 0
+
+  // include object content
+  struct stat st;
+  store->stat(oid, &st);
+  bufferptr b = new buffer(st.st_size);
+  store->read(oid, st.st_size, 0, b.c_str());
+  op->get_data().append(b);
+  op->set_length(st.st_size);
+  op->set_offset(0);
+
+  messenger->send_message(op, MSG_ADDR_OSD(p->get_peer()));
+
+  // register
+  push_ops[tid] = p;
+}
+
+void OSD::op_rep_push(MOSDOp *op)
+{
+  dout(7) << "rep_push on " << hex << op->get_oid() << dec << " v " << op->get_version() <<  endl;
+  lock_object(op->get_oid());
+
+  // exists?
+  if (store->exists(op->get_oid())) {
+	store->truncate(op->get_oid(), 0);
+
+	version_t ov = 0;
+	store->getattr(op->get_oid(), "version", &ov, sizeof(ov));
+	assert(ov <= op->get_version());
+  }
+
+  // write out buffers
+  bufferlist bl;
+  bl.claim( op->get_data() );
+
+  off_t off = 0;
+  for (list<bufferptr>::iterator it = bl.buffers().begin();
+	   it != bl.buffers().end();
+	   it++) {
+	int r = store->write(op->get_oid(),
+						 (*it).length(), off,
+						 (*it).c_str(), 
+						 false);  // write async, no rush
+	assert((unsigned)r == (*it).length());
+	off += (*it).length();
+  }
+
+  // set version
+  version_t v = op->get_version();
+  store->setattr(op->get_oid(), "version", &v, sizeof(v));
+
+  // reply
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);
+  messenger->send_message(reply, op->get_asker());
+  
+  unlock_object(op->get_oid());
+  delete op;
+}
+
+void OSD::op_rep_push_reply(MOSDOpReply *op)
+{
+  dout(7) << "op_rep_push_reply " << hex << op->get_oid() << dec << endl;
+
+  osd_lock.Lock();
+  RGPeer *p = push_ops[op->get_tid()];
+  RG *rg = p->rg;
+  assert(p);   // FIXME: how will this work?
+  assert(p->is_pushing(op->get_oid()));
+  assert(p->pushing_version(op->get_oid()) == op->get_version());
+
+  // close out push op.
+  push_ops.erase(op->get_tid());
+  rg->pushed(op->get_oid(), op->get_version(), p);
+
+  // more?
+  do_recovery(rg);
+
+  osd_lock.Unlock();
+  
+  delete op;
+}
+
+
+// clean
+
+void OSD::rg_clean(RG *rg, int maxops)
+{
+  int ops = rg->num_active_ops();
+
+  dout(7) << "rg_clean rg " << hex << rg->get_rgid() << dec << " " << ops << "/" << maxops << " active ops" <<  endl;
+  
+  while (ops < maxops) {
+	object_t oid;
+	version_t v;
+	int peer;
+	if (!rg->clean_plan.get_next(oid, v, peer)) break;
+
+	RGPeer *p = rg->get_peer(peer);
+	assert(p);
+	remove_replica(oid, v, p);
+	ops++;
+  }  
+}
+
+void OSD::remove_replica(object_t oid, version_t v, RGPeer *p)
+{
+  dout(7) << "remove_replica " << hex << oid << dec << " v " << v << " from osd" << p->get_peer() << endl;
+
+  p->remove(oid, v);
+  
+  // send op
+  __uint64_t tid = ++last_tid;
+  MOSDOp *op = new MOSDOp(tid, messenger->get_myaddr(),
+						  oid, p->rg->get_rgid(),
+						  osdmap->get_version(),
+						  OSD_OP_REP_REMOVE);
+  op->set_version(v);
+  op->set_rg_role(-1);  // whatever, not 0
+  messenger->send_message(op, MSG_ADDR_OSD(p->get_peer()));
+  
+  // register
+  remove_ops[tid] = p;
+}
+
+void OSD::op_rep_remove(MOSDOp *op)
+{
+  dout(7) << "rep_remove on " << hex << op->get_oid() << dec << " v " << op->get_version() <<  endl;
+  lock_object(op->get_oid());
+  
+  // sanity checks
+  assert(store->exists(op->get_oid()));
+
+  version_t v = 0;
+  store->getattr(op->get_oid(), "version", &v, sizeof(v));
+  assert(v == op->get_version());
+
+  // remove
+  int r = store->remove(op->get_oid());
+  assert(r == 0);
+
+  // reply
+  messenger->send_message(new MOSDOpReply(op, r, osdmap), 
+						  op->get_asker());
+
+  unlock_object(op->get_oid());
+  delete op;
+}
+
+void OSD::op_rep_remove_reply(MOSDOpReply *op)
+{
+  dout(7) << "op_rep_remove_reply " << hex << op->get_oid() << dec << endl;
+
+  osd_lock.Lock();
+  RGPeer *p = remove_ops[op->get_tid()];
+  RG *rg = p->rg;
+  assert(p);   // FIXME: how will this work?
+  assert(p->is_removing(op->get_oid()));
+  assert(p->removing_version(op->get_oid()) == op->get_version());
+
+  // close out push op.
+  remove_ops.erase(op->get_tid());
+  rg->removed(op->get_oid(), op->get_version(), p);
+
+  // more?
+  do_recovery(rg);
+
+  osd_lock.Unlock();
+  
+  delete op;
+}
 
 
 
@@ -765,13 +1204,19 @@ void OSD::handle_op(MOSDOp *op)
   if (op->get_map_version() < osdmap->get_version()) {
 	// op's is old
 	dout(7) << "op map " << op->get_map_version() << " < " << osdmap->get_version() << endl;
+	
+	if (op->get_rg_role() != 0) {
+	  dout(7) << " dropping rep op with old map" << endl;
+	  delete op;
+	  return;
+	}
   }
 
 
   // did this op go to the right OSD?
   if (op->get_rg_role() == 0) {
-    repgroup_t rg = op->get_rg();
-	int acting_primary = osdmap->get_rg_acting_primary( rg );
+    repgroup_t rgid = op->get_rg();
+	int acting_primary = osdmap->get_rg_acting_primary( rgid );
 	
 	if (acting_primary != whoami) {
 	  dout(7) << " acting primary is " << acting_primary << ", forwarding" << endl;
@@ -779,6 +1224,36 @@ void OSD::handle_op(MOSDOp *op)
 	  logger->inc("fwd");
 	  return;
 	}
+
+	// proxy?
+	RG *rg = open_rg(rgid);
+	if (!rg) {
+	  // fail now?
+	  dout(7) << "hit non-existent rg " << hex << op->get_rg() << dec << ", creating willy nilly for now" << endl;
+	  rg = new_rg(rgid);  // for now.. FIXME
+	}
+	else {
+	  if (!rg->is_complete()) {
+		// consult RG object map
+		RGPeer *rgp = rg->get_proxy_peer(op->get_oid());
+		version_t v = rg->get_proxy_version(op->get_oid());
+
+		if (op->get_op() == OSD_OP_WRITE && v == 0) {
+		  // totally new object.
+		}
+		else if (rgp) {
+		  // need to pull
+		  dout(7) << "need to pull object " << hex << op->get_oid() << dec << endl;
+		  RGPeer *rgp = rg->get_proxy_peer(op->get_oid());
+		  if (!rgp->is_pulling(op->get_oid())) {
+			pull_replica(op->get_oid(), v, rgp);
+		  }
+		  waiting_for_object[op->get_oid()].push_back(op);
+		  return;
+		}
+	  }
+	  
+	}	
   }
 
   // queue op
@@ -786,6 +1261,11 @@ void OSD::handle_op(MOSDOp *op)
 }
 
 void OSD::queue_op(MOSDOp *op) {
+  // inc pending count
+  osd_lock.Lock();
+  pending_ops++;
+  osd_lock.Unlock();
+
   threadpool->put_op(op);
 }
   
@@ -796,35 +1276,63 @@ void OSD::do_op(MOSDOp *op)
   // do the op
   switch (op->get_op()) {
 
-  case OSD_OP_READ:
-    op_read(op);
-    break;
-
-  case OSD_OP_WRITE:
-    op_write(op);
-    break;
-
   case OSD_OP_MKFS:
     op_mkfs(op);
     break;
 
+  case OSD_OP_READ:
+    op_read(op);
+    break;
+  case OSD_OP_WRITE:
+    op_write(op);
+    break;
   case OSD_OP_DELETE:
     op_delete(op);
     break;
-
   case OSD_OP_TRUNCATE:
     op_truncate(op);
     break;
-
   case OSD_OP_STAT:
     op_stat(op);
     break;
+
+	// replication/recovery
+  case OSD_OP_REP_PULL:
+	op_rep_pull(op);
+	break;
+  case OSD_OP_REP_PUSH:
+	op_rep_push(op);
+	break;
+  case OSD_OP_REP_REMOVE:
+	op_rep_remove(op);
+	break;
 	
   default:
     assert(0);
   }
+
+  // finish
+  osd_lock.Lock();
+  assert(pending_ops > 0);
+  pending_ops--;
+  if (pending_ops == 0 && waiting_for_no_ops)
+	no_pending_ops.Signal();
+  osd_lock.Unlock();
 }
 
+void OSD::wait_for_no_ops()
+{
+  osd_lock.Lock();
+  if (pending_ops > 0) {
+	dout(7) << "wait_for_no_ops - waiting for " << pending_ops << endl;
+	waiting_for_no_ops = true;
+	no_pending_ops.Wait(osd_lock);
+	waiting_for_no_ops = false;
+	assert(pending_ops == 0);
+  } 
+  dout(7) << "wait_for_no_ops - none" << endl;
+  osd_lock.Unlock();
+}
 
 void OSD::op_read(MOSDOp *r)
 {
@@ -851,7 +1359,7 @@ void OSD::op_read(MOSDOp *r)
 	reply->set_length(0);
   }
   
-  dout(10) << "read got " << got << " / " << r->get_length() << " bytes from " << r->get_oid() << endl;
+  dout(12) << "read got " << got << " / " << r->get_length() << " bytes from obj " << hex << r->get_oid() << dec << endl;
 
   logger->inc("rd");
   if (got >= 0) logger->inc("rdb", got);
@@ -924,19 +1432,28 @@ void OSD::op_write(MOSDOp *op)
 						 write_sync);  // write synchronously
 	off += (*it).length();
 	if (r < 0) {
-	  dout(1) << "write error on " << op->get_oid() << " len " << (*it).length() << "  off " << off << "  r = " << r << endl;
+	  dout(1) << "write error on " << hex << op->get_oid() << dec << " len " << (*it).length() << "  off " << off << "  r = " << r << endl;
 	  assert(r >= 0);
 	}
   }
 
   // update object metadata
-  if (!existed) {
+  osd_lock.Lock();
+  version_t v = 1;
+  if (op->get_rg_role() == -1) {
+	v = op->get_version();
+	store->setattr(op->get_oid(), "version", &v, sizeof(v));
+  } else if (existed) {
+	// get + inc version
+	store->getattr(op->get_oid(), "version", &v, sizeof(v));
+	v++;
+  } else {
 	// add to RG collection
-	osd_lock.Lock();
 	RG *r = open_rg(op->get_rg());
 	r->add_object(store, op->get_oid());
-	osd_lock.Unlock();
   }
+  store->setattr(op->get_oid(), "version", &v, sizeof(v));
+  osd_lock.Unlock();
 
   logger->inc("wr");
   logger->inc("wrb", op->get_length());
@@ -981,7 +1498,7 @@ void OSD::op_mkfs(MOSDOp *op)
 void OSD::op_delete(MOSDOp *op)
 {
   int r = store->remove(op->get_oid());
-  dout(3) << "delete on " << op->get_oid() << " r = " << r << endl;
+  dout(12) << "delete on " << hex << op->get_oid() << dec << " r = " << r << endl;
   
   // "ack"
   messenger->send_message(new MOSDOpReply(op, r, osdmap), op->get_asker());
@@ -993,7 +1510,7 @@ void OSD::op_delete(MOSDOp *op)
 void OSD::op_truncate(MOSDOp *op)
 {
   int r = store->truncate(op->get_oid(), op->get_offset());
-  dout(3) << "truncate on " << op->get_oid() << " at " << op->get_offset() << " r = " << r << endl;
+  dout(3) << "truncate on " << hex << op->get_oid() << dec << " at " << op->get_offset() << " r = " << r << endl;
   
   // "ack"
   messenger->send_message(new MOSDOpReply(op, r, osdmap), op->get_asker());
@@ -1009,7 +1526,7 @@ void OSD::op_stat(MOSDOp *op)
   memset(&st, sizeof(st), 0);
   int r = store->stat(op->get_oid(), &st);
   
-  dout(3) << "stat on " << op->get_oid() << " r = " << r << " size = " << st.st_size << endl;
+  dout(3) << "stat on " << hex << op->get_oid() << dec << " r = " << r << " size = " << st.st_size << endl;
 	  
   MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap);
   reply->set_object_size(st.st_size);

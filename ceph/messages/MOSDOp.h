@@ -9,18 +9,23 @@
  * oid - object id
  * op  - OSD_OP_DELETE, etc.
  *
- * rg_role  - who we want ... 0 == primary, this is what clients/mds will do.
- * rg_nrep  - how many replicas we want ... just for writes currently?
- *
  */
 
+#define OSD_OP_MKFS       20
+
+// client ops
 #define OSD_OP_READ       1
 #define OSD_OP_WRITE      2
 #define OSD_OP_STAT       10
 #define OSD_OP_DELETE     11
 #define OSD_OP_TRUNCATE   12
 #define OSD_OP_ZERORANGE  13
-#define OSD_OP_MKFS       20
+
+// replication/recovery -- these ops are relative to a specific object version #
+#define OSD_OP_REP_PULL    30   // whole object read
+#define OSD_OP_REP_PUSH    31   // whole object write
+#define OSD_OP_REP_REMOVE  32   // delete replica
+#define OSD_OP_REP_WRITE   33   // replicated (partial object) write
 
 #define OSD_OP_FLAG_TRUNCATE  1   // truncate object after end of write
 
@@ -32,10 +37,11 @@ typedef struct {
   object_t oid;
   repgroup_t rg;
   int rg_role;//, rg_nrep;
-  __uint64_t map_version;
+  version_t map_version;
 
   int op;
   size_t length, offset;
+  version_t version;
 
   size_t _data_len;
 } MOSDOp_st;
@@ -47,16 +53,17 @@ class MOSDOp : public Message {
   friend class MOSDOpReply;
 
  public:
-  long get_tid() { return st.tid; }
+  long       get_tid() { return st.tid; }
   msg_addr_t get_asker() { return st.asker; }
 
-  object_t get_oid() { return st.oid; }
+  object_t   get_oid() { return st.oid; }
   repgroup_t get_rg() { return st.rg; }
-  int        get_rg_role() { return st.rg_role; }  // who am i asking for?
-  //int        get_rg_nrep() { return st.rg_nrep; }
-  __uint64_t get_map_version() { return st.map_version; }
+  version_t  get_map_version() { return st.map_version; }
 
-  int get_op() { return st.op; }
+  int        get_rg_role() { return st.rg_role; }  // who am i asking for?
+  version_t  get_version() { return st.version; }
+
+  int    get_op() { return st.op; }
   size_t get_length() { return st.length; }
   size_t get_offset() { return st.offset; }
 
@@ -74,7 +81,7 @@ class MOSDOp : public Message {
   long get_pcid() { return st.pcid; }
 
   MOSDOp(long tid, msg_addr_t asker, 
-		 object_t oid, repgroup_t rg, __uint64_t mapversion, int op) :
+		 object_t oid, repgroup_t rg, version_t mapversion, int op) :
 	Message(MSG_OSD_OP) {
 	memset(&st, 0, sizeof(st));
 	this->st.tid = tid;
@@ -93,7 +100,7 @@ class MOSDOp : public Message {
 
   void set_length(size_t l) { st.length = l; }
   void set_offset(size_t o) { st.offset = o; }
-
+  void set_version(version_t v) { st.version = v; }
   
   // marshalling
   virtual void decode_payload() {

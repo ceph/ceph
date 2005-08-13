@@ -25,6 +25,8 @@ struct md_config_t {
   bool fake_clock;
   bool fakemessenger_serialize;
 
+  bool fake_osdmap_expand;
+
   int debug;
   int debug_mds_balancer;
   int debug_mds_log;
@@ -73,6 +75,7 @@ struct md_config_t {
 
   bool  mds_commit_on_shutdown;
   bool  mds_verify_export_dirauth;     // debug flag
+
 
   // osd
   int   osd_num_rg;

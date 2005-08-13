@@ -193,12 +193,12 @@ class bufferptr {
 	_buffer(other._buffer),
 	_len(other._len),
 	_off(other._off) {
-	_buffer->_get();	
+	if (_buffer) _buffer->_get();	
   }
 
   // assignment operator
   bufferptr& operator=(const bufferptr& other) {
-	assert(0);
+	//assert(0);
 	// discard old
 	discard_buffer();
 
@@ -206,7 +206,8 @@ class bufferptr {
 	_buffer = other._buffer;
 	_len = other._len;
 	_off = other._off;
-	_buffer->_get();
+	if (_buffer) _buffer->_get();
+	return *this;
   }
 
   ~bufferptr() {

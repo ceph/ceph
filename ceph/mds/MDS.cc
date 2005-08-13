@@ -546,7 +546,7 @@ void MDS::my_dispatch(Message *m)
 
 
 	// HACK osd map change
-	if (false) {
+	if (g_conf.fake_osdmap_expand) {
 	  static int didit = 0;
 	  if (whoami == 0 && 
 		  elapsed.sec() > 10 && !didit &&

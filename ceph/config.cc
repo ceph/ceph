@@ -47,6 +47,7 @@ md_config_t g_conf = {
 
   fake_clock: false,
   fakemessenger_serialize: true,
+  fake_osdmap_expand: false,
 
   debug: 1,
   debug_mds_balancer: 1,
@@ -179,6 +180,9 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.num_client = atoi(args[++i]);
 	else if (strcmp(args[i], "--numosd") == 0) 
 	  g_conf.num_osd = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
+	  g_conf.fake_osdmap_expand = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--debug") == 0) 
 	  g_conf.debug = atoi(args[++i]);

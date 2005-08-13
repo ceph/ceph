@@ -42,8 +42,6 @@ Client::Client(Messenger *m)
 {
   // which client am i?
   whoami = MSG_ADDR_NUM(m->get_myaddr());
-  cout << "i am client " << whoami <<  " " << MSG_ADDR_NICE(m->get_myaddr()) << endl;
-
 
   mounted = false;
 

@@ -45,6 +45,7 @@ COMMON_OBJS= \
 	osd/FakeStore.o\
 	osd/Filer.o\
 	osd/OSDMap.o\
+	osd/RG.o\
 	osd/rush.o\
 	common/Logger.o\
 	common/Clock.o\

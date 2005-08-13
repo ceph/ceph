@@ -28,6 +28,7 @@ typedef struct {
   int    result;
   size_t length, offset;
   size_t object_size;
+  version_t version;
 
   __uint64_t _new_map_version;
   size_t _data_len, _oc_len;
@@ -48,6 +49,7 @@ class MOSDOpReply : public Message {
   size_t get_length() { return st.length; }
   size_t get_offset() { return st.offset; }
   size_t get_object_size() { return st.object_size; }
+  version_t get_version() { return st.version; }
 
   void set_result(int r) { st.result = r; }
   void set_length(size_t s) { st.length = s; }
@@ -85,6 +87,7 @@ class MOSDOpReply : public Message {
 
 	this->st.length = req->st.length;   // speculative... OSD should ensure these are correct
 	this->st.offset = req->st.offset;
+	this->st.version = req->st.version;
 
 	// attach updated cluster spec?
 	if (oc &&
