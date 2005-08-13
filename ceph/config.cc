@@ -65,13 +65,14 @@ md_config_t g_conf = {
   client_sync_writes: 0,
 
   client_bcache: 1,
-  client_bcache_alloc_minsize: 1024,
-  client_bcache_alloc_maxsize: 262144,
+  client_bcache_alloc_minsize: 1<<10, // 1KB
+  client_bcache_alloc_maxsize: 1<<18, // 256KB
   client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
-  client_bcache_size: 2147483648, // 2GB
+  client_bcache_size: 2<<30, // 2GB
+  //client_bcache_size: 5<<20, // 5MB
   client_bcache_lowater: 60, // % of size
   client_bcache_hiwater: 80, // % of size
-  client_bcache_maxfrag: 10, // max actual relative # of bheads over opt rel # of bheads
+  client_bcache_splice: 1<<10, // min size of spliced buffers
 
   client_trace: 0,
   fuse_direct_io: 0,

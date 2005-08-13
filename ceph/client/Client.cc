@@ -77,7 +77,19 @@ Client::~Client()
   if (filer) { delete filer; filer = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
 
+  tear_down_bcache();
   tear_down_cache();
+}
+
+void Client::tear_down_bcache()
+{
+  // make sure all buffers are clean
+  if (!bc->dirty_buffers->empty()) {
+    flush_buffers(0, 0);
+    bc->wait_for_inflight(client_lock);
+    assert(bc->dirty_buffers->empty());
+  }
+  delete bc;
 }
 
 void Client::tear_down_cache()
@@ -443,6 +455,7 @@ void Client::dispatch(Message *m)
 	handle_file_caps((MClientFileCaps*)m);
 	break;
 
+
   default:
 	cout << "dispatch doesn't recognize message type " << m->get_type() << endl;
 	assert(0);  // fail loudly
@@ -481,11 +494,13 @@ void Client::flush_inode_buffers(Inode *in)
   } 
   else if (g_conf.client_bcache &&
 		   !bc->get_fc(in)->dirty_buffers.empty()) {
+    dout(3) << "bc: flush_inode_buffers begins" << endl;
     Filecache *fc = bc->get_fc(in);
-    dout(7) << "bc: flush_inode_buffers: inode " << in->inode.ino << " has " << fc->dirty_buffers.size() << " dirty buffers" << endl;
-    //fc->simplify();
-    dout(10) << "bc: flush_inode_buffers: after simplify: inode " << in->inode.ino << " has " << fc->dirty_buffers.size() << " dirty buffers" << endl;
-    set<Bufferhead*> to_flush = fc->dirty_buffers;
+    assert(!fc->buffer_map.empty());
+    set<Bufferhead*> to_flush;
+    fc->get_dirty(to_flush);
+    //DEBUG
+    //to_flush = fc->dirty_buffers;
     for (set<Bufferhead*>::iterator it = to_flush.begin();
          it != to_flush.end();
          it++) {
@@ -493,6 +508,7 @@ void Client::flush_inode_buffers(Inode *in)
       C_Client_FileFlushFinish *onfinish = new C_Client_FileFlushFinish(*it);
       filer->write(in->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
     }
+    dout(3) << "bc: flush_inode_buffers ends" << endl;
 #if 0    
     dout(7) << "flush_inode_buffers: dirty buffers, waiting" << endl;
     fc->wait_for_inflight(client_lock);
@@ -520,10 +536,10 @@ void Client::flush_buffers(int ttl, size_t dirty_size)
 {
   // ttl = 0 or dirty_size = 0: flush all
   if (!bc->dirty_buffers->empty()) {
-    dout(6) << "bc: flush_buffers ttl: " << ttl << " dirty_size: " << dirty_size << endl;
+    dout(3) << "bc: flush_buffers ttl: " << ttl << " dirty_size: " << dirty_size << endl;
     set<Bufferhead*> expired;
     bc->dirty_buffers->get_expired(ttl, dirty_size, expired);
-    assert(!expired.empty());
+    if(expired.empty()) dout(3) << "bc: flush_buffers expired.empty()" << endl;
 
     for (set<Bufferhead*>::iterator it = expired.begin();
 	 it != expired.end();
@@ -550,6 +566,7 @@ void Client::trim_bcache()
       // flush buffers until we have low water mark
       size_t want_target_size = (unsigned)g_conf.client_bcache_lowater *
       (unsigned)g_conf.client_bcache_size / 100UL;
+      dout(3) << "bc: flush_buffers started" << endl;
       flush_buffers(g_conf.client_bcache_ttl, want_target_size);
     }
     // Now reclaim buffers
@@ -559,6 +576,7 @@ void Client::trim_bcache()
     dout(6) << "bc: trim_bcache: reclaim: " << reclaim_size << endl;
     while (reclaim_size > 0 && bc->reclaim(reclaim_size) == 0) {
       // cannot reclaim any buffers: wait for inflight buffers
+      dout(3) << "bc: trim_bcache: waiting for inflight buffers" << endl;
       assert(!bc->inflight_buffers.empty());
       bc->wait_for_inflight(client_lock);
     }
@@ -570,13 +588,37 @@ void Client::trim_bcache()
 /*
  * release inode (read cached) buffers from memory
  */
-void Client::release_inode_buffers(Inode *in)
+void Client::release_inode_buffers(Inode *in) 
 {
-  if (g_conf.client_bcache) {
-	// Check first we actually cached the file
-	if (bc->bcache_map.count(in->inode.ino)) 
-	  bc->release_file(in->inode.ino);
+  dout(7) << "bc: release_inode_buffers ino: " << in->ino() << endl;
+
+  if (!g_conf.client_bcache || !bc->bcache_map.count(in->ino())) return;
+
+  Filecache *fc = bc->get_fc(in);
+  inodeno_t ino = in->ino();
+  if (fc->buffer_map.empty()) return;
+
+  map<off_t, Bufferhead*> to_release = fc->buffer_map;
+  for (map<off_t, Bufferhead*>::iterator it = to_release.begin();
+       it != to_release.end();
+       it++) {
+    Bufferhead *bh = it->second;
+    if (bh->state == BUFHD_STATE_RX || bh->state == BUFHD_STATE_TX) {
+      bh->wait_for_write(client_lock);
+    }
+    if (bh->state == BUFHD_STATE_DIRTY) {
+      bh->dirtybuffers_erase();
+      bh->state = BUFHD_STATE_CLEAN;
+    }
+    bc->decrease_size(bh->length());
+    dout(6) << "bc: release_file: clean_size: " << bc->get_clean_size() <<
+    " dirty_size: " << bc->get_dirty_size() << " rx_size: " <<
+    bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
+    fc->buffer_map.erase(bh->offset);
+    delete bh;
   }
+  bc->bcache_map.erase(ino);
+  delete fc;  
 }
 
 
@@ -637,6 +679,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   delete m;
 }
+
 
 
 
@@ -773,7 +816,10 @@ int Client::unlink(const char *path)
 	// remove from local cache
 	filepath fp(path);
 	Dentry *dn = lookup(fp);
-	if (dn) unlink(dn);
+	if (dn) {
+	  release_inode_buffers(dn->inode);
+	  unlink(dn);
+	}
   }
   this->insert_trace(reply->get_trace());
   delete reply;
@@ -1329,6 +1375,7 @@ int Client::close(fh_t fh)
   int result = 0;
 
   // release caps right away?
+  dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
   if (in->num_rd == 0 &&
 	  in->num_wr == 0) {
 	// synchronously; FIXME this is dumb
@@ -1344,23 +1391,19 @@ int Client::close(fh_t fh)
 	req->set_caller_uid(getuid());
 	req->set_caller_gid(getgid());
 
+	// release caps locally
+	in->file_caps_seq = 0;
+	in->file_caps = 0;
+	in->file_wr_mtime = 0;
+	in->file_wr_size = 0;
+
+ 	put_inode(in);
+	
+	// make the call .. FIXME there's no reason this has to block!
 	MClientReply *reply = make_request(req, true, mds_auth);
 	assert(reply);
 	int result = reply->get_result();
 	assert(result == 0);
-
-	// success?
-	if (in->file_caps_seq == reply->get_file_caps_seq()) {
-	  // yup.
-	  dout(5) << "successfully released caps" << endl;
-	  in->file_caps_seq = 0;
-	  in->file_caps = 0;
-	  in->file_wr_mtime = 0;
-	  in->file_wr_size = 0;
-	  put_inode(in);
-	} else {
-	  dout(5) << "failed to release caps; i had " << in->file_caps_seq << " mds had " << reply->get_file_caps_seq() << endl;
-	}
   
 	delete reply;
   }
@@ -1454,7 +1497,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  client_lock->Unlock();
 	  return 0;
 	}
-	if (size > in->inode.size) size = in->inode.size;
+	if (offset + size > (unsigned)in->inode.size) size = (unsigned)in->inode.size - offset;
 	
 	if (size == 0) {
 	  dout(10) << "read is size=0, returning 0" << endl;
@@ -1511,10 +1554,17 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  dout(6) << "read bc miss" << endl;
 	  off_t hole_offset = hole->first;
 	  size_t hole_size = hole->second;
-	  assert(fc->buffer_map.count(hole_offset) == 0);
 	  
-	  // insert new bufferhead without allocating buffers (Filer::handle_osd_read_reply allocates them)
-	  Bufferhead *bh = new Bufferhead(in, hole_offset, bc);
+	  // either get "hole" bufferhead or insert new bufferhead without
+	  // allocated buffers (Filer::handle_osd_read_reply allocates them)
+	  Bufferhead *bh;
+	  if (fc->buffer_map.count(hole_offset)) {
+	    // bufferhead represents hole
+	    bh = fc->buffer_map[hole_offset];
+	    assert(bh->is_hole);
+	  } else {
+	    bh = new Bufferhead(in, hole_offset, bc);
+	  }
 	  
 	  // read into the buffercache: when finished transition state from
 	  // rx to clean
@@ -1625,7 +1675,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 	buffers.clear(); rx.clear(); tx.clear();
 	bc->map_or_alloc(in, size, offset, buffers, rx, tx); 
 	
-	// wait for rx and tx buffers -- FIXME: don't need to wait for tx buffers
+	// wait for rx and tx buffers
 	while (!(rx.empty() && tx.empty())) {
 	  if (!rx.empty()) {
 		rx.begin()->second->wait_for_write(client_lock);

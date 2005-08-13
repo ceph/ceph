@@ -56,6 +56,7 @@ class Bufferhead : public LRUObject {
   Buffercache *bc;
   Filecache *fc;
   bool visited;
+  bool is_hole;
   
   // cons/destructors
   Bufferhead(class Inode *inode, Buffercache *bc);
@@ -68,7 +69,7 @@ class Bufferhead : public LRUObject {
   void set_offset(off_t offset);
 
   size_t length() {
-    if (state == BUFHD_STATE_RX) return miss_len;
+    if (is_hole || state == BUFHD_STATE_RX) return miss_len;
     return bl.length();
   }
 
@@ -119,27 +120,45 @@ class Bufferhead : public LRUObject {
   void flush_start();
   void flush_finish();
   void claim_append(Bufferhead* other);
+  void splice(off_t offset, size_t length, Bufferhead *claim_by);
+
+  friend ostream& operator<<(ostream& out, Bufferhead& bh);
 };
+
+inline ostream& operator<<(ostream& out, Bufferhead& bh) {
+  out << "Bufferhead(ino=" << bh.inode->ino() << endl;
+        out << "\t offset=" << bh.offset << endl;
+        out << "\t length=" << bh.length() << endl;
+        out << "\t state=" << bh.state << endl;
+        out << "\t visited=" << bh.visited << endl;
+        out << "\t is_hole=" << bh.is_hole << endl;
+        out << "\t bl=" << bh.bl << endl;
+  out << ")" << endl;
+  return out;
+}                                   
   
 
 class Dirtybuffers {
  private:
   multimap<time_t, Bufferhead*> _dbufs;
+  map<Bufferhead*, time_t> _revind;
   Buffercache *bc;
   // DEBUG
-  time_t former_age;
+  //time_t former_age;
 
  public:
   Dirtybuffers(Buffercache *bc) { 
-    former_age = 0;
-    dout(5) << "Dirtybuffers() former_age: " << former_age << endl; 
+    //former_age = 0;
+    //dout(5) << "Dirtybuffers() former_age: " << former_age << endl; 
     this->bc = bc;
   }
   Dirtybuffers(const Dirtybuffers& other);
   Dirtybuffers& operator=(const Dirtybuffers& other);
+  int size() { assert(_dbufs.size() == _revind.size()); return _dbufs.size(); }
+  multimap<time_t, Bufferhead*>::iterator find(Bufferhead *bh);
   void erase(Bufferhead* bh);
   void insert(Bufferhead* bh);
-  bool empty() { return _dbufs.empty(); }
+  bool empty() { assert(_revind.empty() == _dbufs.empty()); return _dbufs.empty(); }
   bool exist(Bufferhead* bh);
   void get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush);
   time_t get_age() { 
@@ -149,13 +168,23 @@ class Dirtybuffers {
     } else {
       age = time(NULL) - _dbufs.begin()->second->dirty_since;
     }
-    dout(10) << "former age: " << former_age << " age: " << age << endl;
+    //dout(10) << "former age: " << former_age << " age: " << age << endl;
     //assert((!(former_age > 30)) || (age > 0));
-    former_age = age;
+    //former_age = age;
     return age;
   }
+  friend ostream& operator<<(ostream& out, Dirtybuffers& db);
 };
 
+inline ostream& operator<<(ostream& out, Dirtybuffers& db) {
+  out << "Dirtybuffers(size=" << db.size() << endl;
+  for (multimap<time_t, Bufferhead*>::iterator it = db._dbufs.begin();
+           it != db._dbufs.end();
+           it++)
+        out << "\t" << it->first << ": " << *(it->second) << endl;
+  out << ")" << endl;
+  return out;
+}                                   
 
 class Filecache {
  private:
@@ -177,8 +206,11 @@ class Filecache {
   Filecache& operator=(const Filecache& other);
 
   ~Filecache() {
-    for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
-         it != buffer_map.end();
+    dout(6) << "bc: delete fc of ino: " << inode->ino() << endl;
+    map<off_t, Bufferhead*> to_delete = buffer_map;
+    buffer_map.clear();
+    for (map<off_t, Bufferhead*>::iterator it = to_delete.begin();
+         it != to_delete.end();
          it++) {
       delete it->second; 
     }
@@ -225,7 +257,7 @@ class Filecache {
                     map<off_t, size_t>& holes);
   size_t consolidation_opp(time_t ttl, size_t clean_goal, 
                            off_t offset, list<off_t>& offlist);
-  void simplify();
+  void get_dirty(set<Bufferhead*>& to_flush);
 };
 
 class Buffercache { 

@@ -81,6 +81,9 @@ OSD TODO
 
 CLIENT TODO
 - buffer cache
+  - set proper uid/gid 
+  - use unused buffer tail allocation before allocating new memory
+  - periodic trim_bcache calls
 - strong consistency
   - get short-term leases from MDS (for stat etc)
 - ditch FUSE for ____

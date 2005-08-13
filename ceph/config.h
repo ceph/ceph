@@ -47,7 +47,7 @@ struct md_config_t {
   int      client_bcache_size;
   int      client_bcache_lowater;
   int      client_bcache_hiwater;
-  int      client_bcache_maxfrag;
+  int      client_bcache_splice;
 
   int      client_trace;
   int      fuse_direct_io;
