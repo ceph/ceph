@@ -36,6 +36,11 @@ void parse_syn_options(vector<char*>& args)
 		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"writebatch") == 0) {
+	  	syn_modes.push_back( SYNCLIENT_MODE_WRITEBATCH );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
 	  } else if (strcmp(args[i],"readfile") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -108,7 +113,7 @@ void *synthetic_client_thread_entry(void *ptr)
   return (void*)r;
 }
 
-string SyntheticClient::get_sarg() 
+string SyntheticClient::get_sarg(int seq) 
 {
   string a;
   if (!sargs.empty()) {
@@ -117,7 +122,7 @@ string SyntheticClient::get_sarg()
   }
   if (a.length() == 0 || a == "~") {
 	char s[20];
-	sprintf(s,"syn.%d", client->whoami);
+	sprintf(s,"syn.%d.%d", client->whoami, seq);
 	a = s;
   } 
   //cout << "a is " << a << endl;
@@ -171,7 +176,7 @@ int SyntheticClient::run()
 
 	case SYNCLIENT_MODE_MAKEDIRS:
 	  {
-		string sarg1 = get_sarg();
+		string sarg1 = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		int iarg3 = iargs.front();  iargs.pop_front();
@@ -182,14 +187,14 @@ int SyntheticClient::run()
 
 	case SYNCLIENT_MODE_FULLWALK:
 	  {
-		string sarg1 = get_sarg();
+		string sarg1 = get_sarg(0);
 		dout(2) << "fullwalk" << sarg1 << endl;
 		full_walk(sarg1);
 	  }
 	  break;
 	case SYNCLIENT_MODE_REPEATWALK:
 	  {
-		string sarg1 = get_sarg();
+		string sarg1 = get_sarg(0);
 		dout(2) << "repeatwalk " << sarg1 << endl;
 		while (full_walk(sarg1) == 0) ;
 	  }
@@ -197,15 +202,25 @@ int SyntheticClient::run()
 
 	case SYNCLIENT_MODE_WRITEFILE:
 	  {
-		string sarg1 = get_sarg();
+		string sarg1 = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		write_file(sarg1, iarg1, iarg2);
 	  }
 	  break;
+	case SYNCLIENT_MODE_WRITEBATCH:
+	  {
+	  	int iarg1 = iargs.front(); iargs.pop_front();
+		int iarg2 = iargs.front(); iargs.pop_front();
+		int iarg3 = iargs.front(); iargs.pop_front();
+
+		write_batch(iarg1, iarg2, iarg3);
+	  }
+	  break;
+
 	case SYNCLIENT_MODE_READFILE:
 	  {
-		string sarg1 = get_sarg();
+		string sarg1 = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		read_file(sarg1, iarg1, iarg2);
@@ -214,10 +229,10 @@ int SyntheticClient::run()
 
 	case SYNCLIENT_MODE_TRACE:
 	  {
-		string tfile = get_sarg();
+		string tfile = get_sarg(0);
 		sargs.push_front(string("~"));
 		int iarg1 = iargs.front();  iargs.pop_front();
-		string prefix = get_sarg();
+		string prefix = get_sarg(0);
 
 		dout(3) << "trace " << tfile << " prefix " << prefix << " " << iarg1 << " times" << endl;
 
@@ -274,7 +289,7 @@ int SyntheticClient::run()
 	  break;
 	case SYNCLIENT_MODE_TRACEOPENSSH:
 	  {
-		string prefix = get_sarg();
+		string prefix = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 		
 		Trace t("traces/trace.openssh");
@@ -291,7 +306,7 @@ int SyntheticClient::run()
 	  break;
 	case SYNCLIENT_MODE_TRACEOPENSSHLIB:
 	  {
-		string prefix = get_sarg();
+		string prefix = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 
 		Trace t("traces/trace.openssh.lib");
@@ -619,6 +634,16 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   client->close(fd);
   delete[] buf;
 
+  return 0;
+}
+
+int SyntheticClient::write_batch(int nfile, int size, int wrsize)
+{
+  for (int i=0; i<nfile; i++) {
+  	string sarg1 = get_sarg(i);
+	dout(0) << "Write file " << sarg1 << endl;
+	write_file(sarg1, size, wrsize);
+  }
   return 0;
 }
 

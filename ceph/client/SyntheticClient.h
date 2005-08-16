@@ -15,6 +15,7 @@
 #define SYNCLIENT_MODE_READFILE    5
 #define SYNCLIENT_MODE_UNTIL       6
 #define SYNCLIENT_MODE_REPEATWALK  7
+#define SYNCLIENT_MODE_WRITEBATCH  21
 
 #define SYNCLIENT_MODE_TRACE       20
 #define SYNCLIENT_MODE_TRACEOPENSSH 8
@@ -111,7 +112,7 @@ class SyntheticClient {
   utime_t run_start;
   utime_t run_until;
 
-  string get_sarg();
+  string get_sarg(int seq);
 
   bool time_to_stop() {
 	if (run_until.sec() && g_clock.now() > run_until) 
@@ -128,6 +129,7 @@ class SyntheticClient {
   int random_walk(int n);
   int make_dirs(const char *basedir, int dirs, int files, int depth);
   int write_file(string& fn, int mb, int chunk);
+  int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk);
 
   int clean_dir(string& basedir);

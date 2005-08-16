@@ -136,7 +136,7 @@ int OBFSStore::finalize(void)
 
 bool OBFSStore::exists(object_t oid)
 {
-	dout(0) << "calling function exists!" << endl;
+	//dout(0) << "calling function exists!" << endl;
 	return uofs_exist(oid);
 }
 
