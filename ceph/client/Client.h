@@ -100,7 +100,7 @@ class Inode {
   long      file_caps_seq;
   int       file_mds;      // semi-hack
   time_t    file_wr_mtime;   // [writers] time of last write
-  size_t    file_wr_size;    // [writers] largest offset we've written to
+  unsigned long long    file_wr_size;    // [writers] largest offset we've written to
   int       num_rd, num_wr;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
@@ -324,7 +324,7 @@ class Client : public Dispatcher {
   // buffer cache
   class Buffercache *bc;
   
-  void flush_buffers(int ttl, size_t dirty_size);     // flush dirty buffers
+  void flush_buffers(int ttl, unsigned long long dirty_size);     // flush dirty buffers
   void trim_bcache();
   void flush_inode_buffers(Inode *in);     // flush buffered writes
   void release_inode_buffers(Inode *in);   // release cached reads
@@ -369,7 +369,7 @@ class Client : public Dispatcher {
   int rmdir(const char *path);
 
   // symlinks
-  int readlink(const char *path, char *buf, size_t size);
+  int readlink(const char *path, char *buf, unsigned long long size);
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
@@ -382,10 +382,10 @@ class Client : public Dispatcher {
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
   int close(fh_t fh);
-  int read(fh_t fh, char *buf, size_t size, off_t offset);
-  int write(fh_t fh, const char *buf, size_t size, off_t offset);
-  int truncate(const char *file, off_t size);
-	//int truncate(fh_t fh, off_t size);
+  int read(fh_t fh, char *buf, unsigned long long size, long long offset);
+  int write(fh_t fh, const char *buf, unsigned long long size, long long offset);
+  int truncate(const char *file, unsigned long long size);
+	//int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
 
 };

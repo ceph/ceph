@@ -73,7 +73,7 @@ md_config_t g_conf = {
   //client_bcache_size: 5<<20, // 5MB
   client_bcache_lowater: 60, // % of size
   client_bcache_hiwater: 80, // % of size
-  client_bcache_splice: 1<<10, // min size of spliced buffers
+  client_bcache_align: 1<<10, // 1KB splice alignment
 
   client_trace: 0,
   fuse_direct_io: 0,

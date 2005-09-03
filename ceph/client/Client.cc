@@ -530,7 +530,7 @@ public:
   }
 };
 
-void Client::flush_buffers(int ttl, size_t dirty_size)
+void Client::flush_buffers(int ttl, unsigned long long dirty_size)
 {
   // ttl = 0 or dirty_size = 0: flush all
   if (!bc->dirty_buffers->empty()) {
@@ -558,19 +558,22 @@ void Client::flush_buffers(int ttl, size_t dirty_size)
 
 void Client::trim_bcache()
 {
-  if (bc->get_total_size() > (unsigned) g_conf.client_bcache_size) {
+  if (bc->get_total_size() > g_conf.client_bcache_size) {
     // need to free buffers 
-    if (bc->get_dirty_size() > (unsigned)g_conf.client_bcache_hiwater * (unsigned)g_conf.client_bcache_size / 100UL) {
+    if (bc->get_dirty_size() > 
+        (unsigned long long)g_conf.client_bcache_hiwater * 
+	(unsigned long long)g_conf.client_bcache_size / 100ULL) {
       // flush buffers until we have low water mark
-      size_t want_target_size = (unsigned)g_conf.client_bcache_lowater *
-      (unsigned)g_conf.client_bcache_size / 100UL;
+      unsigned long long want_target_size = 
+	(unsigned long long)g_conf.client_bcache_lowater *
+	(unsigned long long)g_conf.client_bcache_size / 100ULL;
       dout(3) << "bc: flush_buffers started" << endl;
       flush_buffers(g_conf.client_bcache_ttl, want_target_size);
     }
     // Now reclaim buffers
-    size_t reclaim_size = bc->get_total_size() - 
-			  (unsigned)g_conf.client_bcache_size *
-			  (unsigned)g_conf.client_bcache_hiwater / 100UL;
+    unsigned long long reclaim_size = bc->get_total_size() - 
+      (unsigned long long)g_conf.client_bcache_size *
+      (unsigned long long)g_conf.client_bcache_hiwater / 100ULL;
     dout(6) << "bc: trim_bcache: reclaim: " << reclaim_size << endl;
     while (reclaim_size > 0 && bc->reclaim(reclaim_size) == 0) {
       // cannot reclaim any buffers: wait for inflight buffers
@@ -596,8 +599,8 @@ void Client::release_inode_buffers(Inode *in)
   inodeno_t ino = in->ino();
   if (fc->buffer_map.empty()) return;
 
-  map<off_t, Bufferhead*> to_release = fc->buffer_map;
-  for (map<off_t, Bufferhead*>::iterator it = to_release.begin();
+  map<long long, Bufferhead*> to_release = fc->buffer_map;
+  for (map<long long, Bufferhead*>::iterator it = to_release.begin();
        it != to_release.end();
        it++) {
     Bufferhead *bh = it->second;
@@ -960,7 +963,7 @@ int Client::symlink(const char *target, const char *link)
   return res;
 }
 
-int Client::readlink(const char *path, char *buf, size_t size) 
+int Client::readlink(const char *path, char *buf, unsigned long long size) 
 { 
   client_lock->Lock();
   dout(3) << "op: client->readlink(\"" << path << "\", readlinkbuf, readlinkbuf_len);" << endl;
@@ -1046,7 +1049,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	stbuf->st_ctime = inode.ctime;
 	stbuf->st_atime = inode.atime;
 	stbuf->st_mtime = inode.mtime;
-	stbuf->st_size = (off_t) inode.size; //FIXME off_t is signed 64 vs size is unsigned 64
+	stbuf->st_size = (long long) inode.size; //FIXME long long is signed 64 vs size is unsigned 64
 	stbuf->st_blocks = (inode.size - 1) / 1024 + 1;
 	stbuf->st_blksize = 1024;
 	//stbuf->st_flags =
@@ -1461,7 +1464,7 @@ public:
 };
 
 
-int Client::read(fh_t fh, char *buf, size_t size, off_t offset) 
+int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset) 
 {
   client_lock->Lock();
 
@@ -1491,7 +1494,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	// we're doing buffered i/o.  make sure we're inside the file.
 	// we can trust size info bc we get accurate info when buffering/caching caps are issued.
 	dout(10) << "file size: " << in->inode.size << endl;
-	if (offset > 0 && (size_t)offset >= in->inode.size) {
+	if (offset > 0 && (unsigned long long)offset >= in->inode.size) {
 	  client_lock->Unlock();
 	  return 0;
 	}
@@ -1525,10 +1528,10 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	// buffer cache ON
 
 	// map buffercache 
-	map<off_t, Bufferhead*> hits, rx, tx, hits_tx;
-	map<off_t, Bufferhead*>::iterator it;
-	map<off_t, size_t> holes;
-	map<off_t, size_t>::iterator hole;
+	map<long long, Bufferhead*> hits, rx, tx, hits_tx;
+	map<long long, Bufferhead*>::iterator it;
+	map<long long, unsigned long long> holes;
+	map<long long, unsigned long long>::iterator hole;
 	
 	Filecache *fc = bc->get_fc(in);
 	hits.clear(); rx.clear(); tx.clear(); holes.clear();
@@ -1540,18 +1543,18 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	if ((rvalue = (int)bc->touch_continuous(hits_tx, size, offset)) > 0) {
 	  // sweet -- we can return stuff immediately
 	  dout(6) << "read bc hit on clean, dirty, or tx  buffer, rvalue: " << rvalue << endl;
-	  rvalue = fc->copy_out((size_t)rvalue, offset, buf);
+	  rvalue = fc->copy_out((unsigned long long)rvalue, offset, buf);
 	  dout(6) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
 	  assert(rvalue > 0);
 	}
-	assert(!(rvalue >= 0 && (size_t)rvalue == size) || holes.empty());
+	assert(!(rvalue >= 0 && (unsigned long long)rvalue == size) || holes.empty());
 	
 	// issue reads for holes
 	int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
 	for (hole = holes.begin(); hole != holes.end(); hole++) {
 	  dout(6) << "read bc miss" << endl;
-	  off_t hole_offset = hole->first;
-	  size_t hole_size = hole->second;
+	  long long hole_offset = hole->first;
+	  unsigned long long hole_size = hole->second;
 	  
 	  // either get "hole" bufferhead or insert new bufferhead without
 	  // allocated buffers (Filer::handle_osd_read_reply allocates them)
@@ -1559,7 +1562,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	  if (fc->buffer_map.count(hole_offset)) {
 	    // bufferhead represents hole
 	    bh = fc->buffer_map[hole_offset];
-	    assert(bh->is_hole);
+	    assert(bh->is_hole());
 	  } else {
 	    bh = new Bufferhead(in, hole_offset, bc);
 	  }
@@ -1575,7 +1578,7 @@ int Client::read(fh_t fh, char *buf, size_t size, off_t offset)
 	if (rvalue == 0) {
 	  // we need to wait for the first buffer
 	  dout(7) << "read bc miss: waiting for first buffer" << endl;
-	  map<off_t, Bufferhead*>::iterator it = fc->get_buf(offset);
+	  map<long long, Bufferhead*>::iterator it = fc->get_buf(offset);
 	  assert(it != fc->buffer_map.end());
 	  Bufferhead *bh = it->second;
 #if 0
@@ -1635,7 +1638,7 @@ public:
 };
 
 
-int Client::write(fh_t fh, const char *buf, size_t size, off_t offset) 
+int Client::write(fh_t fh, const char *buf, unsigned long long size, long long offset) 
 {
   client_lock->Lock();
 
@@ -1669,7 +1672,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 	dout(7) << "buffered/async write" << endl;
 	
 	// map buffercache for writing
-	map<off_t, Bufferhead*> buffers, rx, tx;
+	map<long long, Bufferhead*> buffers, rx, tx;
 	buffers.clear(); rx.clear(); tx.clear();
 	bc->map_or_alloc(in, size, offset, buffers, rx, tx); 
 	
@@ -1730,10 +1733,10 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 
 
   // assume success for now.  FIXME.
-  size_t totalwritten = size;
+  unsigned long long totalwritten = size;
   
   // extend file?
-  if (totalwritten + (size_t)offset > in->inode.size) {
+  if (totalwritten + (unsigned long long)offset > in->inode.size) {
 	in->inode.size = in->file_wr_size = totalwritten + offset;
 	dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << endl;
   } else {
@@ -1749,7 +1752,7 @@ int Client::write(fh_t fh, const char *buf, size_t size, off_t offset)
 }
 
 
-int Client::truncate(const char *file, off_t size) 
+int Client::truncate(const char *file, unsigned long long size) 
 {
   client_lock->Lock();
   dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;

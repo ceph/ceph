@@ -44,8 +44,8 @@ class Bufferhead : public LRUObject {
 	return --ref;
   }
   
-  off_t offset;
-  size_t miss_len;  // only valid during misses 
+  long long offset;
+  unsigned long long miss_len;  // only valid during misses 
   class Inode *inode;
   time_t dirty_since;
   int state; 
@@ -56,24 +56,24 @@ class Bufferhead : public LRUObject {
   Buffercache *bc;
   Filecache *fc;
   bool visited;
-  bool is_hole;
+  bool is_hole() { return bl.length() == 0; }
   
   // cons/destructors
   Bufferhead(class Inode *inode, Buffercache *bc);
-  Bufferhead(class Inode *inode, off_t off, Buffercache *bc);
+  Bufferhead(class Inode *inode, long long off, Buffercache *bc);
   ~Bufferhead(); 
   
-  //Bufferhead(inodeno_t ino, off_t off, size_t len, int state);
+  //Bufferhead(inodeno_t ino, long long off, unsigned long long len, int state);
   // ~Bufferhead(); FIXME: need to mesh with allocator scheme
   
-  void set_offset(off_t offset);
+  void set_offset(long long offset);
 
-  size_t length() {
-    if (is_hole || state == BUFHD_STATE_RX) return miss_len;
+  unsigned long long length() {
+    if (is_hole() || state == BUFHD_STATE_RX) return miss_len;
     return bl.length();
   }
 
-  void alloc_buffers(size_t size);
+  void alloc_buffers(unsigned long long size);
 
   /** wait_for_(read|write) 
    * put Cond on local stack, block until woken up.
@@ -113,14 +113,14 @@ class Bufferhead : public LRUObject {
     write_waiters.clear(); 
   }
   
-  void miss_start(size_t miss_len);
+  void miss_start(unsigned long long miss_len);
   void miss_finish();
   void dirty();
   void dirtybuffers_erase();
   void flush_start();
   void flush_finish();
   void claim_append(Bufferhead* other);
-  void splice(off_t offset, size_t length, Bufferhead *claim_by);
+  void splice(long long offset, unsigned long long length, Bufferhead *claim_by);
 
   friend ostream& operator<<(ostream& out, Bufferhead& bh);
 };
@@ -131,7 +131,7 @@ inline ostream& operator<<(ostream& out, Bufferhead& bh) {
         out << "\t length=" << bh.length() << endl;
         out << "\t state=" << bh.state << endl;
         out << "\t visited=" << bh.visited << endl;
-        out << "\t is_hole=" << bh.is_hole << endl;
+        out << "\t is_hole=" << bh.is_hole() << endl;
         out << "\t bl=" << bh.bl << endl;
   out << ")" << endl;
   return out;
@@ -160,7 +160,7 @@ class Dirtybuffers {
   void insert(Bufferhead* bh);
   bool empty() { assert(_revind.empty() == _dbufs.empty()); return _dbufs.empty(); }
   bool exist(Bufferhead* bh);
-  void get_expired(time_t ttl, size_t left_dirty, set<Bufferhead*>& to_flush);
+  void get_expired(time_t ttl, unsigned long long left_dirty, set<Bufferhead*>& to_flush);
   time_t get_age() { 
     time_t age;
     if (_dbufs.empty()) {
@@ -192,7 +192,7 @@ class Filecache {
 
  public: 
   class Inode *inode;
-  map<off_t, Bufferhead*> buffer_map;
+  map<long long, Bufferhead*> buffer_map;
   set<Bufferhead*> dirty_buffers;
   set<Bufferhead*> inflight_buffers;
   Buffercache *bc;
@@ -207,9 +207,9 @@ class Filecache {
 
   ~Filecache() {
     dout(6) << "bc: delete fc of ino: " << inode->ino() << endl;
-    map<off_t, Bufferhead*> to_delete = buffer_map;
+    map<long long, Bufferhead*> to_delete = buffer_map;
     buffer_map.clear();
-    for (map<off_t, Bufferhead*>::iterator it = to_delete.begin();
+    for (map<long long, Bufferhead*>::iterator it = to_delete.begin();
          it != to_delete.end();
          it++) {
       delete it->second; 
@@ -217,9 +217,9 @@ class Filecache {
   }
 
 #if 0
-  size_t length() {
-    size_t len = 0;
-    for (map<off_t, Bufferhead*>::iterator it = buffer_map.begin();
+  unsigned long long length() {
+    unsigned long long len = 0;
+    for (map<long long, Bufferhead*>::iterator it = buffer_map.begin();
          it != buffer_map.end();
          it++) {
       len += it->second->bl.length();
@@ -228,9 +228,9 @@ class Filecache {
   }
 #endif
 
-  void insert(off_t offset, Bufferhead* bh);
+  void insert(long long offset, Bufferhead* bh);
 
-  void splice(off_t offset, size_t size);
+  void splice(long long offset, unsigned long long size);
 
   void wait_for_inflight(Mutex *lock) {
 	Cond cond;
@@ -247,22 +247,22 @@ class Filecache {
     inflight_waiters.clear(); 
   }
 
-  map<off_t, Bufferhead*>::iterator get_buf(off_t off);
-  map<off_t, Bufferhead*>::iterator overlap(size_t len, off_t off);
-  int copy_out(size_t size, off_t offset, char *dst);    
-  map<off_t, Bufferhead*>::iterator map_existing(size_t len, off_t start_off, 
-                    map<off_t, Bufferhead*>& hits, 
-		    map<off_t, Bufferhead*>& rx,
-		    map<off_t, Bufferhead*>& tx,
-                    map<off_t, size_t>& holes);
-  size_t consolidation_opp(time_t ttl, size_t clean_goal, 
-                           off_t offset, list<off_t>& offlist);
+  map<long long, Bufferhead*>::iterator get_buf(long long off);
+  map<long long, Bufferhead*>::iterator overlap(unsigned long long len, long long off);
+  int copy_out(unsigned long long size, long long offset, char *dst);    
+  map<long long, Bufferhead*>::iterator map_existing(unsigned long long len, long long start_off, 
+                    map<long long, Bufferhead*>& hits, 
+		    map<long long, Bufferhead*>& rx,
+		    map<long long, Bufferhead*>& tx,
+                    map<long long, unsigned long long>& holes);
+  unsigned long long consolidation_opp(time_t ttl, unsigned long long clean_goal, 
+                           long long offset, list<long long>& offlist);
   void get_dirty(set<Bufferhead*>& to_flush);
 };
 
 class Buffercache { 
  private:
-  size_t dirty_size, rx_size, tx_size, clean_size;
+  unsigned long long dirty_size, rx_size, tx_size, clean_size;
   list<Cond*> inflight_waiters;
 
  public:
@@ -309,50 +309,50 @@ class Buffercache {
     inflight_waiters.clear(); 
   }
 
-  void clean_to_dirty(size_t size) {
+  void clean_to_dirty(unsigned long long size) {
     clean_size -= size;
     assert(clean_size >= 0);
     dirty_size += size;
   }
-  void dirty_to_tx(size_t size) {
+  void dirty_to_tx(unsigned long long size) {
     dirty_size -= size;
     assert(dirty_size >= 0);
     tx_size += size;
   }
-  void tx_to_dirty(size_t size) {
+  void tx_to_dirty(unsigned long long size) {
     tx_size -= size;
     assert(tx_size >= 0);
     dirty_size += size;
   }
-  void tx_to_clean(size_t size) {
+  void tx_to_clean(unsigned long long size) {
     tx_size -= size;
     assert(tx_size >= 0);
     clean_size += size;
   }
-  void increase_size(size_t size) {
+  void increase_size(unsigned long long size) {
     clean_size += size;
   }
-  void decrease_size(size_t size) {
+  void decrease_size(unsigned long long size) {
     clean_size -= size;
     assert(clean_size >= 0);
   }
-  size_t get_clean_size() { return clean_size; }
-  size_t get_dirty_size() { return dirty_size; }
-  size_t get_rx_size() { return rx_size; }
-  size_t get_tx_size() { return tx_size; }
-  size_t get_total_size() { return clean_size + dirty_size + rx_size + tx_size; }
-  void get_reclaimable(size_t min_size, list<Bufferhead*>&);
+  unsigned long long get_clean_size() { return clean_size; }
+  unsigned long long get_dirty_size() { return dirty_size; }
+  unsigned long long get_rx_size() { return rx_size; }
+  unsigned long long get_tx_size() { return tx_size; }
+  unsigned long long get_total_size() { return clean_size + dirty_size + rx_size + tx_size; }
+  void get_reclaimable(unsigned long long min_size, list<Bufferhead*>&);
 
   void insert(Bufferhead *bh);
-  void dirty(Inode *inode, size_t size, off_t offset, const char *src);
-  size_t touch_continuous(map<off_t, Bufferhead*>& hits, size_t size, off_t offset);
-  void map_or_alloc(class Inode *inode, size_t len, off_t off, 
-                    map<off_t, Bufferhead*>& buffers, 
-		    map<off_t, Bufferhead*>& rx,
-		    map<off_t, Bufferhead*>& tx);
-  void consolidate(map<Inode*, map<off_t, list<off_t> > > cons_map);
+  void dirty(Inode *inode, unsigned long long size, long long offset, const char *src);
+  unsigned long long touch_continuous(map<long long, Bufferhead*>& hits, unsigned long long size, long long offset);
+  void map_or_alloc(class Inode *inode, unsigned long long len, long long off, 
+                    map<long long, Bufferhead*>& buffers, 
+		    map<long long, Bufferhead*>& rx,
+		    map<long long, Bufferhead*>& tx);
+  void consolidate(map<Inode*, map<long long, list<long long> > > cons_map);
   void release_file(inodeno_t ino);       
-  size_t reclaim(size_t min_size);
+  unsigned long long reclaim(unsigned long long min_size);
 };
 
      
