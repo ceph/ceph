@@ -679,6 +679,8 @@ void OSD::advance_map(list<pg_t>& ls)
 		// drop peers
 		pg->drop_peers();
 		pg->state_clear(PG_STATE_CLEAN);
+
+		pg->discard_recovery_plan();
 	  }
 
 	  // new primary?
@@ -811,7 +813,7 @@ void OSD::start_peers(PG *pg, map< int, map<PG*,int> >& start_map)
 
   if (!did_something) {
 	dout(10) << " " << *pg << " already has necessary peers, analyzing" << endl;
-	pg->analyze_peers(store);
+	pg->plan_recovery(store);
 	do_recovery(pg);
   }
 }
@@ -999,12 +1001,12 @@ void OSD::handle_pg_peer(MOSDPGPeer *m)
 
 	// report back state and pg content
 	ack->pg_state[pgid].state = pg->get_state();
-	ack->pg_state[pgid].deleted = pg->get_deleted_objects();
+	//ack->pg_state[pgid].deleted = pg->get_deleted_objects();
 
-	// list objects
-	pg->scan_local_objects(store);
-	ack->pg_state[pgid].objects = pg->local_objects;
+	// list my objects
+	pg->scan_local_objects(ack->pg_state[pgid].objects, store);
 	
+	// i am peered.  (FIXME?)
 	pg->state_set(PG_STATE_PEERED);
 
 	dout(10) << " " << *pg << " has state " << pg->get_state() << ", " << ack->pg_state[pgid].objects.size() << " objects" << endl;
@@ -1086,8 +1088,15 @@ void OSD::handle_pg_peer_ack(MOSDPGPeerAck *m)
 
 	if (fully) {
 	  pg->mark_peered();
+
+	  // waiters?
+	  if (waiting_for_pg_peered.count(pg->get_pgid())) {
+		take_waiters(waiting_for_pg_peered[pg->get_pgid()]);
+		waiting_for_pg_peered.erase(pg->get_pgid());
+	  }
+
 	  dout(10) << " " << *pg << " fully peered, analyzing" << endl;
-	  pg->analyze_peers(store);
+	  pg->plan_recovery(store);
 	  do_recovery(pg);
 	}	  
   }
@@ -1778,18 +1787,14 @@ void OSD::op_write(MOSDOp *op)
   lock_object(oid);
 
   // version
-  version_t v = 0;
+  version_t v = 0;  // 0 == dne (yet)
 
   if (pg->is_complete() && pg->is_clean()) {
 	// PG is complete+clean, easy shmeasy!
 	if (store->exists(oid)) {
 	  // inc version
 	  store->getattr(oid, "version", &v, sizeof(v));
-	  v++;
-	} else {
-	  // new object
-	  v = 1;
-	}
+	} 
   } else {
 	// PG is recovering|replicating, blech.
 	if (pg->is_complete()) {
@@ -1805,14 +1810,15 @@ void OSD::op_write(MOSDOp *op)
 	  }
 	}
 	if (v > 0) {
+	  dout(10) << " pg not clean, checking if " << hex << oid << dec << " v " << v << " is specifically clean yet!" << endl;
 	  // object (logically) exists
 	  if (!pg->existant_object_is_clean(oid, v)) {
 		dout(7) << "op_write " << hex << oid << dec << " v " << v << " in " << *pg 
 				<< " exists but is not clean" << endl;
 		waiting_for_clean_object[oid].push_back(op);
+		unlock_object(oid);
 		return;
 	  }
-	  v++;  // we're good!		  
 	} else {
 	  // object (logically) dne
 	  if (store->exists(oid) ||
@@ -1820,10 +1826,14 @@ void OSD::op_write(MOSDOp *op)
 		dout(7) << "op_write " << hex << oid << dec << " v " << v << " in " << *pg 
 				<< " dne but is not clean" << endl;
 		waiting_for_clean_object[oid].push_back(op);
+		unlock_object(oid);
 		return;
 	  }
 	}
   }
+
+  v++;  // we're good!		  
+
   dout(12) << "op_write " << hex << oid << dec << " v " << v << endl;  
 
   // issue replica writes

@@ -177,23 +177,47 @@ class PG {
  public:
   pginfo_t   info;
 
+
+
+  // -- recovery state (useful on primary only) --
+ public:
   PGQueue                   pull_plan; 
   PGQueue                   push_plan;
   PGQueue                   clean_plan;
-
+  
   list<class Message*>                 waiting_for_peered;   // any op will hang until peered
   map<object_t, list<class Message*> > waiting_for_object;   // ops waiting for specific objects.
 
   // recovery
-  map<object_t, version_t>  local_objects;
   map<object_t, version_t>  objects;          // what the current object set is
   map<object_t, int>        objects_loc;      // proxy map: where current non-local live
-
   map<object_t, set<int> >  objects_unrep;    // insufficiently replicated
   map<object_t, set<int> >  objects_stray;    // stray objects
-  
+  map<object_t, int>        objects_nrep;     // [temp] not quite accurate.  for pull.
+
   // for unstable states,
-  map<object_t, version_t>  deleted_objects;  // locally deleted objects
+  //map<object_t, version_t>  deleted_objects;  // locally deleted objects
+
+ public:
+  void plan_recovery(ObjectStore *store);
+  void plan_pull();
+  void plan_push_cleanup();
+
+  void discard_recovery_plan() {
+	pull_plan.clear(); 
+	push_plan.clear(); 
+	clean_plan.clear();
+
+	assert(waiting_for_peered.empty());
+	assert(waiting_for_object.empty());
+
+	objects.clear();
+	objects_loc.clear();
+	objects_unrep.clear();
+	objects_stray.clear();
+	objects_nrep.clear();
+  }
+
 
  public:  
   PG(int osd, pg_t p) : whoami(osd), pgid(p),
@@ -283,7 +307,7 @@ class PG {
   }
 
   //set<int>&                 get_old_replica_set() { return old_replica_set; }
-  map<object_t, version_t>& get_deleted_objects() { return deleted_objects; }
+  //map<object_t, version_t>& get_deleted_objects() { return deleted_objects; }
 
   
 
@@ -316,7 +340,7 @@ class PG {
 	store->collection_list(pgid, ls);
   }
 
-  void scan_local_objects(ObjectStore *store) {
+  void scan_local_objects(map<object_t, version_t>& local_objects, ObjectStore *store) {
 	list<object_t> olist;
 	local_objects.clear();
 	list_objects(store,olist);
@@ -344,8 +368,6 @@ class PG {
 	}
   }
 
-  void analyze_peers(ObjectStore *store);
-  void plan_push_cleanup();
 
 };
 
