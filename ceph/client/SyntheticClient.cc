@@ -75,6 +75,9 @@ void parse_syn_options(vector<char*>& args)
 	  } else if (strcmp(args[i],"until") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"sleep") == 0) { 
+		syn_modes.push_back( SYNCLIENT_MODE_SLEEP );
+		syn_iargs.push_back( atoi(args[++i]) );
 	  } else {
 		cerr << "unknown syn mode " << args[i] << endl;
 		assert(0);
@@ -147,6 +150,15 @@ int SyntheticClient::run()
 		iargs.pop_front();
 		srand(time(0) + getpid() + client->whoami);
 		sleep(rand() % iarg1);
+	  }
+	  break;
+
+	case SYNCLIENT_MODE_SLEEP:
+	  {
+		int iarg1 = iargs.front();
+		iargs.pop_front();
+		dout(3) << "sleep " << iarg1 << endl;
+		sleep(iarg1);
 	  }
 	  break;
 

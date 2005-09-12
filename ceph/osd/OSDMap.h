@@ -25,12 +25,14 @@ using namespace std;
  */
 #define NUM_RUSH_REPLICAS         4   // this should be big enough to cope w/ failing disks.
 
+// from LSB to MSB:
+
 #define OID_ONO_BITS       30       // 1mb * 10^9 = 1 petabyte files
 #define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
-#define RG_NUM_BITS        32
-#define RG_REP_BITS        10
 
-//#define MAX_FILE_SIZE      (FILE_OBJECT_SIZE << OID_ONO_BITS)  // 1 PB
+#define PG_PS_BITS         32       // max bits for placement seed/group portion of placement group
+#define PG_REP_BITS        10   
+#define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
 
 
 
@@ -69,11 +71,11 @@ class OSDExtent {
  public:
   int         osd;       // (acting) primary osd
   object_t    oid;       // object id
-  repgroup_t  rg;        // replica group
+  pg_t        pg;        // placement group
   size_t      offset, len;   // extent within the object
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
 
-  OSDExtent() : osd(0), oid(0), rg(0), offset(0), len(0) { }
+  OSDExtent() : osd(0), oid(0), pg(0), offset(0), len(0) { }
 };
 
 
@@ -81,6 +83,7 @@ class OSDExtent {
  */
 class OSDMap {
   __uint64_t version;           // what version of the osd cluster descriptor is this
+  int pg_bits;                  // placement group bits 
 
   // RUSH disk groups
   vector<OSDGroup> osd_groups;  // RUSH disk groups
@@ -113,13 +116,16 @@ class OSDMap {
 
 
  public:
-  OSDMap() : version(0), rush(0) { }
+  OSDMap() : version(0), pg_bits(5), rush(0) { }
   ~OSDMap() {
 	if (rush) { delete rush; rush = 0; }
   }
 
   __uint64_t get_version() { return version; }
   void inc_version() { version++; }
+
+  int get_pg_bits() { return pg_bits; }
+  void set_pg_bits(int b) { pg_bits = b; }
 
   // cluster state
   bool is_failed(int osd) { return failed_osds.count(osd) ? true:false; }
@@ -156,42 +162,55 @@ class OSDMap {
 
   /****   mapping facilities   ****/
 
-  /* map (ino, blockno, nrep) into a replica group */
-  repgroup_t file_to_repgroup(inode_t inode, 
-							  size_t ono) {
-	assert(inode.layout.policy == FILE_LAYOUT_RUSHSTRIPE);
+  /* map (ino, ono) to an object name
+	 (to be used on any osd in the proper replica group) */
+  object_t file_to_object(inodeno_t ino,
+						  size_t    ono) {  
+	assert(ino < (1LL<<OID_INO_BITS));       // legal ino can't be too big
+	assert(ono < (1LL<<OID_ONO_BITS));
+	return (ino << OID_INO_BITS) + ono;
+  }
 
-	// hash (ino+ono).  nrep needs to be reversible (see repgroup_to_nrep).
+  /* map (ino, blockno, nrep) into a placement group */
+  ps_t object_to_ps(object_t oid) {
 	static hash<int> H;
-	
-	return ((repgroup_t)(H(inode.ino+ono) % g_conf.osd_num_rg) & ((1LL<<RG_NUM_BITS)-1LL)) +
-	  ((repgroup_t)inode.layout.num_rep << RG_NUM_BITS);
+	return H(oid) & PG_PS_MASK;
   }
 
-  /* get nrep from rgid */
-  int repgroup_to_nrep(repgroup_t rg) {
-	return rg >> RG_NUM_BITS;
+  pg_t ps_nrep_to_pg(ps_t ps, int nrep) {
+	return ((pg_t)ps & ((1LL<<pg_bits)-1LL)) 
+	  | ((pg_t)nrep << PG_PS_BITS);
   }
 
+  pg_t file_to_pg(inode_t& inode, size_t ono) {
+	return ps_nrep_to_pg( object_to_ps( file_to_object(inode.ino, ono) ),
+						  inode.layout.num_rep );
+  }
+  
+  /* get nrep from pgid */
+  int pg_to_nrep(pg_t pg) {
+	return pg >> PG_PS_BITS;
+  }
+  
   /* map (repgroup) to a raw list of osds.  
 	 this is where we invoke RUSH. */
-  int repgroup_to_raw_osds(repgroup_t rg,
-						   int *osds) {       // list of osd addr's
+  int pg_to_raw_osds(pg_t pg,
+					 int *osds) {       // list of osd addr's
 	// get rush list
 	assert(rush);
-	int num_rep = repgroup_to_nrep(rg);
-	rush->GetServersByKey( rg, num_rep, osds );
+	int num_rep = pg_to_nrep(pg);
+	rush->GetServersByKey( pg, num_rep, osds );
 	return num_rep;
   }
 
-  int repgroup_to_nonfailed_osds(repgroup_t rg,
-								 vector<int>& osds) { // list of osd addr's
+  int pg_to_nonfailed_osds(pg_t pg,
+						   vector<int>& osds) { // list of osd addr's
 	// get rush list
 	assert(rush);
 	int raw[NUM_RUSH_REPLICAS];
-	repgroup_to_raw_osds(rg, raw);
-
-	int nrep = repgroup_to_nrep(rg);
+	pg_to_raw_osds(pg, raw);
+	
+	int nrep = pg_to_nrep(pg);
 	osds = vector<int>(nrep);
 	int o = 0;
 	for (int i=0; i<NUM_RUSH_REPLICAS && o<nrep; i++) {
@@ -201,14 +220,14 @@ class OSDMap {
 	return o;
   }
 
-  int repgroup_to_acting_osds(repgroup_t rg,
-							  vector<int>& osds) {         // list of osd addr's
+  int pg_to_acting_osds(pg_t pg,
+						vector<int>& osds) {         // list of osd addr's
 	// get rush list
 	assert(rush);
 	int raw[NUM_RUSH_REPLICAS];
-	repgroup_to_raw_osds(rg, raw);
+	pg_to_raw_osds(pg, raw);
 
-	int nrep = repgroup_to_nrep(rg);
+	int nrep = pg_to_nrep(pg);
 	osds = vector<int>(nrep);
 	int o = 0;
 	for (int i=0; i<NUM_RUSH_REPLICAS && o<nrep; i++) {
@@ -221,45 +240,37 @@ class OSDMap {
 
 
 
-  /* map (ino, ono) to an object name
-	 (to be used on any osd in the proper replica group) */
-  object_t file_to_object(inodeno_t ino,
-						  size_t    ono) {  
-	assert(ino < (1LL<<OID_INO_BITS));       // legal ino can't be too big
-	assert(ono < (1LL<<OID_ONO_BITS));
-	return (ino << OID_INO_BITS) + ono;
-  }
 
   
   /****  ****/
 
-  /* map rg to the primary osd */
-  int get_rg_primary(repgroup_t rg) {
+  /* map pg to the primary osd */
+  int get_pg_primary(pg_t pg) {
 	vector<int> group;
-	int nrep = repgroup_to_nonfailed_osds(rg, group);
+	int nrep = pg_to_nonfailed_osds(pg, group);
 	assert(nrep > 0);   // we fail!
 	return group[0];
   }
-  /* map rg to the _acting_ primary osd (primary may be down) */
-  int get_rg_acting_primary(repgroup_t rg) {
+  /* map pg to the _acting_ primary osd (primary may be down) */
+  int get_pg_acting_primary(pg_t pg) {
 	vector<int> group;
-	int nrep = repgroup_to_acting_osds(rg, group);
+	int nrep = pg_to_acting_osds(pg, group);
 	assert(nrep > 0);  // we fail!
 	return group[0];
   }
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
-  int get_rg_role(repgroup_t rg, int osd) {
+  int get_pg_role(pg_t pg, int osd) {
 	vector<int> group;
-	int nrep = repgroup_to_nonfailed_osds(rg, group);
+	int nrep = pg_to_nonfailed_osds(pg, group);
 	for (int i=0; i<nrep; i++) {
 	  if (group[i] == osd) return i;
 	}
 	return -1;  // none
   }
-  int get_rg_acting_role(repgroup_t rg, int osd) {
+  int get_pg_acting_role(pg_t pg, int osd) {
 	vector<int> group;
-	int nrep = repgroup_to_acting_osds(rg, group);
+	int nrep = pg_to_acting_osds(pg, group);
 	for (int i=0; i<nrep; i++) {
 	  if (group[i] == osd) return i;
 	}
@@ -301,8 +312,8 @@ class OSDMap {
 		else {
 		  ex = &object_extents[oid];
 		  ex->oid = oid;
-		  ex->rg = file_to_repgroup( inode, objectno );
-		  ex->osd = get_rg_acting_primary( ex->rg );
+		  ex->pg = file_to_pg( inode, objectno );
+		  ex->osd = get_pg_acting_primary( ex->pg );
 		}
 		
 		// map range into object
@@ -347,7 +358,7 @@ class OSDMap {
 	  OSDExtent ex;
 	  ex.osd = inode.layout.osd;
 	  ex.oid = file_to_object( inode.ino, 0 );
-	  ex.rg = RG_NONE;
+	  ex.pg = PG_NONE;
 	  ex.len = len;
 	  ex.offset = offset;
 	  ex.buffer_extents[0] = len;

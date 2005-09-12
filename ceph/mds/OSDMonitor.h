@@ -25,11 +25,14 @@ class OSDMonitor {
 	this->mds = mds;
   }
 
-  void init_my_stuff();
+  void init();
 
   void proc_message(Message *m);
   void handle_ping_ack(class MPingAck *m);
   void handle_failure(class MFailure *m);
+
+  // hack
+  void fake_reorg();
 
 };
 

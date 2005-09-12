@@ -28,9 +28,14 @@ using namespace std;
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDRGNotify.h"
-#include "messages/MOSDRGPeer.h"
-#include "messages/MOSDRGPeerAck.h"
+#include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGPeer.h"
+#include "messages/MOSDPGPeerAck.h"
+#include "messages/MOSDPGUpdate.h"
+
+//#include "messages/MOSDPGQuery.h"
+//#include "messages/MOSDPGQueryReply.h"
+
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -250,16 +255,26 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_OSD_MAP:
 	m = new MOSDMap();
 	break;
-  case MSG_OSD_RG_NOTIFY:
-	m = new MOSDRGNotify();
+  case MSG_OSD_PG_NOTIFY:
+	m = new MOSDPGNotify();
 	break;
-  case MSG_OSD_RG_PEER:
-	m = new MOSDRGPeer();
+  case MSG_OSD_PG_PEER:
+	m = new MOSDPGPeer();
 	break;
-  case MSG_OSD_RG_PEERACK:
-	m = new MOSDRGPeerAck();
+  case MSG_OSD_PG_PEERACK:
+	m = new MOSDPGPeerAck();
 	break;
-
+  case MSG_OSD_PG_UPDATE:
+	m = new MOSDPGUpdate();
+	break;
+	/*
+  case MSG_OSD_PG_QUERY:
+	m = new MOSDPGQuery();
+	break;
+  case MSG_OSD_PG_QUERYREPLY:
+	m = new MOSDPGQueryReply();
+	break;
+	*/
 	// clients
   case MSG_CLIENT_MOUNT:
 	m = new MClientMount();
@@ -440,6 +455,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_CLIENT_UNMOUNT:
   case MSG_OSD_GETMAP:
+  case MSG_OSD_MKFS_ACK:
 	m = new MGenericMessage(env.type);
 	break;
 

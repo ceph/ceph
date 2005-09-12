@@ -167,19 +167,30 @@ struct inode_t {
 
 
 // osd types
-typedef __uint64_t repgroup_t;    // replica group
+typedef __uint64_t ps_t;          // placement seed
+typedef __uint64_t pg_t;          // placement group
 typedef __uint64_t object_t;      // object id
 typedef __uint64_t coll_t;        // collection id
 
-#define RG_NONE    0xffffffffffffffffLL
+#define PG_NONE    0xffffffffffffffffLL
 
 struct onode_t {
   object_t    oid;
-  repgroup_t  rgid;
+  pg_t        pgid;
   version_t   version;
   size_t      size;
   //time_t      ctime, mtime;
 };
+
+class pginfo_t {
+ public:
+  version_t created;
+  version_t last_clean;
+  version_t last_complete;
+  version_t primary_since;
+
+  pginfo_t() : created(0), last_clean(0), last_complete(0), primary_since(0) { }
+} ;
 
 
 

@@ -25,7 +25,7 @@ struct md_config_t {
   bool fake_clock;
   bool fakemessenger_serialize;
 
-  bool fake_osdmap_expand;
+  int fake_osdmap_expand;
 
   int debug;
   int debug_mds_balancer;
@@ -78,7 +78,8 @@ struct md_config_t {
 
 
   // osd
-  int   osd_num_rg;
+  int   osd_pg_bits;
+  int   osd_max_rep;
   bool  osd_fsync;
   bool  osd_writesync;
   int   osd_maxthreads;

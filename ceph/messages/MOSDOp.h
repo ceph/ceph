@@ -11,7 +11,7 @@
  *
  */
 
-#define OSD_OP_MKFS       20
+//#define OSD_OP_MKFS       20
 
 // client ops
 #define OSD_OP_READ       1
@@ -35,8 +35,8 @@ typedef struct {
   msg_addr_t asker;
 
   object_t oid;
-  repgroup_t rg;
-  int rg_role;//, rg_nrep;
+  pg_t pg;
+  int        pg_role;//, rg_nrep;
   version_t map_version;
 
   int op;
@@ -57,10 +57,10 @@ class MOSDOp : public Message {
   msg_addr_t get_asker() { return st.asker; }
 
   object_t   get_oid() { return st.oid; }
-  repgroup_t get_rg() { return st.rg; }
+  pg_t get_pg() { return st.pg; }
   version_t  get_map_version() { return st.map_version; }
 
-  int        get_rg_role() { return st.rg_role; }  // who am i asking for?
+  int        get_pg_role() { return st.pg_role; }  // who am i asking for?
   version_t  get_version() { return st.version; }
 
   int    get_op() { return st.op; }
@@ -81,21 +81,21 @@ class MOSDOp : public Message {
   long get_pcid() { return st.pcid; }
 
   MOSDOp(long tid, msg_addr_t asker, 
-		 object_t oid, repgroup_t rg, version_t mapversion, int op) :
+		 object_t oid, pg_t pg, version_t mapversion, int op) :
 	Message(MSG_OSD_OP) {
 	memset(&st, 0, sizeof(st));
 	this->st.tid = tid;
 	this->st.asker = asker;
 
 	this->st.oid = oid;
-	this->st.rg = rg;
-	this->st.rg_role = 0;
+	this->st.pg = pg;
+	this->st.pg_role = 0;
 	this->st.map_version = mapversion;
 	this->st.op = op;
   }
   MOSDOp() {}
 
-  void set_rg_role(int r) { st.rg_role = r; }
+  void set_pg_role(int r) { st.pg_role = r; }
   //void set_rg_nrep(int n) { st.rg_nrep = n; }
 
   void set_length(size_t l) { st.length = l; }

@@ -24,6 +24,7 @@
 #define SYNCLIENT_MODE_TRACELIB 11
 
 #define SYNCLIENT_MODE_RANDOMSLEEP  12
+#define SYNCLIENT_MODE_SLEEP        13
 
 void parse_syn_options(vector<char*>& args);
 

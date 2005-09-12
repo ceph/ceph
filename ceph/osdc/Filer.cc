@@ -38,6 +38,10 @@ Filer::~Filer()
 void Filer::dispatch(Message *m)
 {
   switch (m->get_type()) {
+  case MSG_OSD_MKFS_ACK:
+	handle_osd_mkfs_ack(m);
+	break;
+	
   case MSG_OSD_OPREPLY:
 	handle_osd_op_reply((MOSDOpReply*)m);
 	break;
@@ -120,7 +124,7 @@ Filer::read(inode_t& inode,
 	
 	// issue read
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->rg, osdmap->get_version(), 
+						   it->oid, it->pg, osdmap->get_version(), 
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
@@ -310,7 +314,7 @@ Filer::write(inode_t& inode,
 	
 	// issue write
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->rg, osdmap->get_version(),
+						   it->oid, it->pg, osdmap->get_version(),
 						   OSD_OP_WRITE);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
@@ -463,12 +467,12 @@ int Filer::truncate(inode_t& inode,
 	if (it->offset == 0) {
 	  // issue delete
 	  m = new MOSDOp(last_tid, messenger->get_myaddr(),
-					 it->oid, it->rg, osdmap->get_version(),
+					 it->oid, it->pg, osdmap->get_version(),
 					 OSD_OP_DELETE);
 	} else {
 	  // issue a truncate
 	  m = new MOSDOp(last_tid, messenger->get_myaddr(),
-					 it->oid, it->rg, osdmap->get_version(),
+					 it->oid, it->pg, osdmap->get_version(),
 					 OSD_OP_TRUNCATE);
 	  m->set_length( it->offset );
 	}
@@ -536,19 +540,42 @@ int Filer::mkfs(Context *onfinish)
 	++last_tid;
 
 	// issue mkfs
+	messenger->send_message(new MOSDMap(osdmap, true),
+							MSG_ADDR_OSD(*it));
+	pending_mkfs.insert(*it);
+  }
+
+  waiting_for_mkfs = onfinish;
+
+	/*
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
 						   0, 0, osdmap->get_version(), 
 						   OSD_OP_MKFS);
 	messenger->send_message(m, MSG_ADDR_OSD(*it), 0);
-	
+
 	// add to gather set
 	p->outstanding_ops.insert(last_tid);
 	op_mkfs[last_tid] = p;
-  }
+	*/
 
   return 0;
 }
 
+
+void Filer::handle_osd_mkfs_ack(Message *m)
+{
+  int from = MSG_ADDR_NUM(m->get_source());
+
+  assert(pending_mkfs.count(from));
+  pending_mkfs.erase(from);
+
+  if (pending_mkfs.empty()) {
+	dout(2) << "done with mkfs" << endl;
+	waiting_for_mkfs->finish(0);
+	delete waiting_for_mkfs;
+	waiting_for_mkfs = 0;
+  }
+}
 
 
 /*
@@ -591,7 +618,7 @@ int Filer::zero(inodeno_t ino,
 	MOSDOp *m;
 	//if (it->len == 
 	m = new MOSDOp(last_tid, messenger->get_myaddr(),
-	it->oid, it->rg, osdmap->get_version(), 
+	it->oid, it->pg, osdmap->get_version(), 
 				   OSD_OP_DELETE);
 	it->len, it->offset);
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);

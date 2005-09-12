@@ -1,4 +1,119 @@
 
+osd fun
+- op_delete
+- pull plan items need to be removed when they're obsolete.  or, figure out what's old later.
+- osdmap history distribution
+- double commit?  what does 'complete' mean on a replica?
+
+- ordering writes.. right now it's a free for all in op thread pool
+
+- "same primary" logic needs to be historical unbroken chain of primary-ship... 
+    eg maphistory->same_pg_primary_since(pg, epoch)
+
+
+RUSH_P : prime numbers
+ draw K from expanding set of clusters
+
+RUSH_R : removal
+ draw K from expanding or contracting set of clusters
+
+RUSH_T : tree
+
+
+
+p 0 disk
+t 1 shelf
+t 2 cabinet
+t 3 row
+t 4 room
+
+R(5, 0, [ s1 s2 s3 s4 ... ])  -> [ d1 d2 d3 d4 ]
+= 5 disks
+
+R(3, 2, [ c1 c2 c3 .. ])' -> [ c8; c1; c3 ]
+R(3, 0, _)' -> [ d81 d11 d33 ; d82 d14 d31 ; d84 d15 d38 ]
+= 9 disks
+
+R(3, 2, cabs)' -> 3 cabs
+R(3, 1, _)'    -> 9 shelves
+R(1, 0, _)     -> 9 disks
+
+
+
+- weighting?
+- how to choose from sets (of sets (...))?
+
+
+
+
+R : choose K from set (K<=|set|, draw w/o relacement)
+T : choose K from set (K<=|set|, prime thing)
+P : choose K from set (prime thing, spillover)
+R : choose set from sequence (via hypergeometric, weights)
+T : choose set from tree (via hash, node weights+labels)
+
+
+
+
+
+
+
+
+T(3, 3, _)'   -> [ r1; r2; r3 ]
+R(3, 1, _)    -> [ s1 s2 s3; s4 s5 s6; s7 s8 s9 ]
+R(1, 0, _)    -> [ d1; d4; d7 ]
+
+
+
+
+
+
+s1 = [ 1 2 3 4 5 6 ]
+s2 = [ 7 8 9 10 11 12 13 ]
+s3 = 
+s4 = 
+
+c1 = [ s1 s2 ]
+c2 = [ s3 s4 ]
+c3 = [ s5 s6 ]
+c4 = [ s7 s8 ]
+
+row1 = [ c1 c2 c3 c4 ]
+row2 = [ ... ]
+
+room1 = [ row1 row2 ]
+
+choose(1, choose(4, rows))
+
+
+C(1, room1)   -> row2
+C(2, _)       -> [ r2 ; r3 ]
+C(1, _)       -> [ C(1, expand(r2)) ; C(1, expand(r3)) ]
+
+
+
+C(4, C(1, room1) )
+
+
+
+
+choose 
+C(4, expand(rows))
+
+
+
+
+
+C(3, rows) 
+
+
+
+
+
+
+
+
+
 IPDPS
 
 map/reduce refs

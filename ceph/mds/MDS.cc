@@ -16,6 +16,7 @@
 #include "IdAllocator.h"
 #include "AnchorTable.h"
 #include "OSDMonitor.h"
+//#include "PGManager.h"
 
 #include "include/filepath.h"
 
@@ -88,6 +89,11 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   anchormgr = new AnchorTable(this);
   osdmonitor = new OSDMonitor(this);
 
+  /*  if (whoami == 0) {
+	pgmanager = new PGManager(this);
+  } else {
+	pgmanager = 0;
+	}*/
 
   // <HACK set up OSDMap from g_conf>
   osdmap = new OSDMap();
@@ -97,6 +103,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   osdg.weight = 100;
   osdg.osd_size = 100;  // not used yet?
   osdmap->add_group(osdg);
+  osdmap->set_pg_bits(g_conf.osd_pg_bits);
   // </HACK>
 
   filer = new Filer(messenger, osdmap);
@@ -182,6 +189,9 @@ MDS::~MDS() {
 
 int MDS::init()
 {
+
+  osdmonitor->init();
+
   return 0;
 }
 
@@ -330,6 +340,9 @@ void MDS::proc_message(Message *m)
   
   switch (m->get_type()) {
 	// OSD ===============
+  case MSG_OSD_MKFS_ACK:
+	filer->handle_osd_mkfs_ack(m);
+	return;
   case MSG_OSD_OPREPLY:
 	filer->handle_osd_op_reply((class MOSDOpReply*)m);
 	return;
@@ -422,6 +435,10 @@ void MDS::my_dispatch(Message *m)
 
   switch (m->get_dest_port()) {
 	
+	/*  case MDS_PORT_PGMGR:
+	pgmanager->dispatch(m);
+	break;
+	*/
 	/*
   case MDS_PORT_STORE:
 	mdstore->proc_message(m);
@@ -545,23 +562,6 @@ void MDS::my_dispatch(Message *m)
 	}
 
 
-	// HACK osd map change
-	if (g_conf.fake_osdmap_expand) {
-	  static int didit = 0;
-	  if (whoami == 0 && 
-		  elapsed.sec() > 10 && !didit &&
-		  osdmap->get_group(0).num_osds > 4) {
-		didit = 1;
-
-		dout(1) << "changing OSD map, removing one OSD" << endl;
-		osdmap->get_group(0).num_osds--;
-		osdmap->init_rush();
-		osdmap->inc_version();
-		
-		// bcast
-		bcast_osd_map();
-	  }	  
-	}
 
   }
 
@@ -648,11 +648,11 @@ void MDS::handle_client_mount(MClientMount *m)
 
 	  // fake out idalloc (reset, pretend loaded)
 	  idalloc->reset();
+	  //if (pgmanager) pgmanager->mark_open();
 
 	  if (cmd == MDS_MKFS_FULL) {
 		// wipe osds too
 		dout(3) << "wiping osds too" << endl;
-		mds_paused = true;
 		filer->mkfs(new C_MDS_Unpause(this));
 	  	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
 	  	return;

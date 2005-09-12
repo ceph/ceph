@@ -47,7 +47,7 @@ md_config_t g_conf = {
 
   fake_clock: false,
   fakemessenger_serialize: true,
-  fake_osdmap_expand: false,
+  fake_osdmap_expand: 0,
 
   debug: 1,
   debug_mds_balancer: 1,
@@ -103,7 +103,8 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_num_rg: 10000,
+  osd_pg_bits: 6,
+  osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
   osd_maxthreads: 10,
@@ -254,8 +255,10 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.client_bcache_ttl = atoi(args[++i]);
 
 
-	else if (strcmp(args[i], "--osd_num_rg") == 0) 
-	  g_conf.osd_num_rg = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_pg_bits") == 0) 
+	  g_conf.osd_pg_bits = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_max_rep") == 0) 
+	  g_conf.osd_max_rep = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_fsync") == 0) 
 	  g_conf.osd_fsync = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_writesync") == 0) 

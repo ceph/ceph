@@ -31,9 +31,6 @@ public:
 
 int main(int argc, char **argv) 
 {
-  off_t a = 2 << 30;
-  cerr << "fakesyn starting: " << a << " " << a * 60ULL << endl;
-
   vector<char*> args;
   argv_to_vec(argc, argv, args);
 

@@ -33,8 +33,10 @@ typedef __uint64_t object_t;
 #define MDS_PORT_ANCHORMGR 200
 
 #define MDS_PORT_OSDMON    300
+#define MDS_PORT_PGMGR     301
 
 #define MDS_INO_ROOT              1
+#define MDS_INO_PGTABLE           2
 #define MDS_INO_LOG_OFFSET        0x100
 #define MDS_INO_IDS_OFFSET        0x200
 #define MDS_INO_INODEFILE_OFFSET  0x300
@@ -73,6 +75,7 @@ class MHashReaddirReply;
 class MDBalancer;
 class LogEvent;
 class IdAllocator;
+//class PGManager;
 
 
 // types
@@ -95,6 +98,7 @@ class MDS : public Dispatcher {
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
   OSDMonitor   *osdmonitor;
+  //  PGManager    *pgmanager;
  protected:
 
 

@@ -4,32 +4,32 @@
 #include "msg/Message.h"
 
 
-class MOSDRGPeerRequest : public Message {
+class MOSDPGPeerRequest : public Message {
   __uint64_t       map_version;
-  list<repgroup_t> rg_list;
+  list<repgroup_t> pg_list;
 
  public:
   __uint64_t get_version() { return map_version; }
-  list<repgroup_t>& get_rg_list() { return rg_list; }
+  list<repgroup_t>& get_pg_list() { return pg_list; }
 
-  MOSDRGPeerRequest() {}
-  MOSDRGPeerRequest(__uint64_t v, list<repgroup_t>& l) :
-	Message(MSG_OSD_RG_PEERREQUEST) {
+  MOSDPGPeerRequest() {}
+  MOSDPGPeerRequest(__uint64_t v, list<repgroup_t>& l) :
+	Message(MSG_OSD_PG_PEERREQUEST) {
 	this->map_version = v;
-	rg_list.splice(rg_list.begin(), l);
+	pg_list.splice(pg_list.begin(), l);
   }
   
-  char *get_type_name() { return "RGPR"; }
+  char *get_type_name() { return "PGPR"; }
 
   void encode_payload() {
 	payload.append((char*)&map_version, sizeof(map_version));
-	_encode(rg_list, payload);
+	_encode(pg_list, payload);
   }
   void decode_payload() {
 	int off = 0;
 	payload.copy(off, sizeof(map_version), (char*)&map_version);
 	off += sizeof(map_version);
-	_decode(rg_list, payload, off);
+	_decode(pg_list, payload, off);
   }
 };
 
