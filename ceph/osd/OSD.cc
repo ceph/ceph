@@ -1068,7 +1068,7 @@ void OSD::handle_pg_peer_ack(MOSDPGPeerAck *m)
 	PG *pg = open_pg(it->first);
 	assert(pg);
 
-	dout(10) << " " << *pg << " remote state " << it->second.state 
+	dout(10) << " " << *pg << " osd" << from << " remote state " << it->second.state 
 			 << " w/ " << it->second.objects.size() << " objects, " 
 			 << it->second.deleted.size() << " deleted" << endl;
 
@@ -1083,6 +1083,7 @@ void OSD::handle_pg_peer_ack(MOSDPGPeerAck *m)
 	for (map<int, PGPeer*>::iterator pit = pg->get_peers().begin();
 		 pit != pg->get_peers().end();
 		 pit++) {
+	  dout(10) << " " << *pg << "  peer osd" << pit->first << " state " << pit->second->get_state() << endl;
 	  if (!pit->second->is_active()) fully = false;
 	}
 
@@ -1636,43 +1637,63 @@ void OSD::do_op(MOSDOp *op)
 
   logger->inc("op");
 
-  // do the op
-  switch (op->get_op()) {
-
-	// normal
-	
-  case OSD_OP_READ:
-    op_read(op);
-    break;
-  case OSD_OP_WRITE:
-    op_write(op);
-    break;
-  case OSD_OP_DELETE:
-    op_delete(op);
-    break;
-  case OSD_OP_TRUNCATE:
-    op_truncate(op);
-    break;
-  case OSD_OP_STAT:
-    op_stat(op);
-    break;
-
+  // replication ops?
+  if (OSD_OP_IS_REP(op->get_op())) {
 	// replication/recovery
-  case OSD_OP_REP_PULL:
-	op_rep_pull(op);
-	break;
-  case OSD_OP_REP_PUSH:
-	op_rep_push(op);
-	break;
-  case OSD_OP_REP_REMOVE:
-	op_rep_remove(op);
-	break;
-  case OSD_OP_REP_WRITE:
-	op_rep_write(op);
-	break;
-	
-  default:
-    assert(0);
+	switch (op->get_op()) {
+	case OSD_OP_REP_PULL:
+	  op_rep_pull(op);
+	  break;
+	case OSD_OP_REP_PUSH:
+	  op_rep_push(op);
+	  break;
+	case OSD_OP_REP_REMOVE:
+	  op_rep_remove(op);
+	  break;
+	case OSD_OP_REP_WRITE:
+	  op_rep_write(op);
+	  break;
+	default:
+	  assert(0);	  
+	}
+  } else {
+	// regular op
+
+	pg_t pgid = op->get_pg();
+	PG *pg = open_pg(pgid);
+
+	// PG must be peered for all client ops.
+	if (!pg) {
+	  dout(7) << "op_write pg " << hex << pgid << dec << " dne (yet)" << endl;
+	  waiting_for_pg[pgid].push_back(op);
+	  return;
+	}	
+	if (!pg->is_peered()) {
+	  dout(7) << "op_write " << *pg << " not peered (yet)" << endl;
+	  waiting_for_pg_peered[pgid].push_back(op);
+	  return;
+	}
+
+	// do op
+	switch (op->get_op()) {
+	case OSD_OP_READ:
+	  op_read(op, pg);
+	  break;
+	case OSD_OP_WRITE:
+	  op_write(op, pg);
+	  break;
+	case OSD_OP_DELETE:
+	  op_delete(op, pg);
+	  break;
+	case OSD_OP_TRUNCATE:
+	  op_truncate(op, pg);
+	  break;
+	case OSD_OP_STAT:
+	  op_stat(op, pg);
+	  break;
+	default:
+	  assert(0);
+	}
   }
 
   // finish
@@ -1698,15 +1719,56 @@ void OSD::wait_for_no_ops()
   osd_lock.Unlock();
 }
 
-void OSD::op_read(MOSDOp *r)
+
+
+// READ OPS
+
+bool OSD::object_complete(PG *pg, object_t oid, Message *op)
 {
+  //v = 0;
+  
+  if (pg->is_complete()) {
+	/*
+	if (store->exists(oid)) {
+	  store->getattr(oid, "version", &v, sizeof(v));
+	  assert(v>0);
+	} 
+	*/
+  } else {
+	if (pg->objects.count(oid)) {
+	  //v = pg->objects[oid];
+
+	  if (pg->objects_loc.count(oid)) {
+		// proxying, wait.
+		dout(7) << "object " << hex << oid << dec << /*" v " << v << */" in " << *pg 
+				<< " exists but not local (yet)" << endl;
+		waiting_for_object[oid].push_back(op);
+		return false;
+	  }
+	}
+  }
+
+  return true;
+}
+
+void OSD::op_read(MOSDOp *op, PG *pg)
+{
+  object_t oid = op->get_oid();
+  lock_object(oid);
+  
+  // version?  clean?
+  if (!object_complete(pg, oid, op)) {
+	unlock_object(oid);
+	return;
+  }
+
   // read into a buffer
-  bufferptr bptr = new buffer(r->get_length());   // prealloc space for entire read
-  long got = store->read(r->get_oid(), 
-						 r->get_length(), r->get_offset(),
+  bufferptr bptr = new buffer(op->get_length());   // prealloc space for entire read
+  long got = store->read(oid, 
+						 op->get_length(), op->get_offset(),
 						 bptr.c_str());
   // set up reply
-  MOSDOpReply *reply = new MOSDOpReply(r, 0, osdmap); 
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap); 
   if (got >= 0) {
 	bptr.set_length(got);   // properly size the buffer
 
@@ -1723,20 +1785,49 @@ void OSD::op_read(MOSDOp *r)
 	reply->set_length(0);
   }
   
-  dout(12) << "read got " << got << " / " << r->get_length() << " bytes from obj " << hex << r->get_oid() << dec << endl;
+  dout(12) << "read got " << got << " / " << op->get_length() << " bytes from obj " << hex << oid << dec << endl;
 
   logger->inc("rd");
   if (got >= 0) logger->inc("rdb", got);
   
   // send it
-  messenger->send_message(reply, r->get_asker());
+  messenger->send_message(reply, op->get_asker());
 
-  delete r;
+  delete op;
+
+  unlock_object(oid);
+}
+
+void OSD::op_stat(MOSDOp *op, PG *pg)
+{
+  object_t oid = op->get_oid();
+  lock_object(oid);
+  
+  // version?  clean?
+  if (!object_complete(pg, oid, op)) {
+	unlock_object(oid);
+	return;
+  }
+
+  struct stat st;
+  memset(&st, sizeof(st), 0);
+  int r = store->stat(oid, &st);
+  
+  dout(3) << "stat on " << hex << oid << dec << " r = " << r << " size = " << st.st_size << endl;
+	  
+  MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap);
+  reply->set_object_size(st.st_size);
+  messenger->send_message(reply, op->get_asker());
+	  
+  logger->inc("stat");
+  delete op;
+
+  unlock_object(oid);
 }
 
 
-// -- osd_write
 
+// WRITE OPS
 
 void OSD::apply_write(MOSDOp *op, bool write_sync, version_t v)
 {
@@ -1765,35 +1856,15 @@ void OSD::apply_write(MOSDOp *op, bool write_sync, version_t v)
   store->setattr(op->get_oid(), "version", &v, sizeof(v));
 }
 
-
-void OSD::op_write(MOSDOp *op)
+bool OSD::object_clean(PG *pg, object_t oid, version_t& v, Message *op)
 {
-  // PG
-  pg_t pgid = op->get_pg();
-  PG *pg = open_pg(pgid);
-  if (!pg) {
-	dout(7) << "op_write pg " << hex << pgid << dec << " dne (yet)" << endl;
-	waiting_for_pg[pgid].push_back(op);
-	return;
-  }	
-  if (!pg->is_peered()) {
-	dout(7) << "op_write " << *pg << " not peered (yet)" << endl;
-	waiting_for_pg_peered[pgid].push_back(op);
-	return;
-  }
-
-  object_t oid = op->get_oid();
-
-  lock_object(oid);
-
-  // version
-  version_t v = 0;  // 0 == dne (yet)
-
+  v = 0;
+  
   if (pg->is_complete() && pg->is_clean()) {
 	// PG is complete+clean, easy shmeasy!
 	if (store->exists(oid)) {
-	  // inc version
 	  store->getattr(oid, "version", &v, sizeof(v));
+	  assert(v>0);
 	} 
   } else {
 	// PG is recovering|replicating, blech.
@@ -1813,25 +1884,38 @@ void OSD::op_write(MOSDOp *op)
 	  dout(10) << " pg not clean, checking if " << hex << oid << dec << " v " << v << " is specifically clean yet!" << endl;
 	  // object (logically) exists
 	  if (!pg->existant_object_is_clean(oid, v)) {
-		dout(7) << "op_write " << hex << oid << dec << " v " << v << " in " << *pg 
+		dout(7) << "object " << hex << oid << dec << " v " << v << " in " << *pg 
 				<< " exists but is not clean" << endl;
 		waiting_for_clean_object[oid].push_back(op);
-		unlock_object(oid);
-		return;
+		return false;
 	  }
 	} else {
 	  // object (logically) dne
 	  if (store->exists(oid) ||
 		  !pg->nonexistant_object_is_clean(oid)) {
-		dout(7) << "op_write " << hex << oid << dec << " v " << v << " in " << *pg 
+		dout(7) << "object " << hex << oid << dec << " v " << v << " in " << *pg 
 				<< " dne but is not clean" << endl;
 		waiting_for_clean_object[oid].push_back(op);
-		unlock_object(oid);
-		return;
+		return false;
 	  }
 	}
   }
 
+  return true;
+}
+
+void OSD::op_write(MOSDOp *op, PG *pg)
+{
+  object_t oid = op->get_oid();
+
+  lock_object(oid);
+
+  // version?  clean?
+  version_t v = 0;  // 0 == dne (yet)
+  if (!object_clean(pg, oid, v, op)) {
+	unlock_object(oid);
+	return;
+  }
   v++;  // we're good!		  
 
   dout(12) << "op_write " << hex << oid << dec << " v " << v << endl;  
@@ -1860,17 +1944,16 @@ void OSD::op_write(MOSDOp *op)
 	
 	replica_write_tids[op].insert(tid);
 	replica_writes[tid] = op;
-	replica_pg_osd_tids[pgid][osd].insert(tid);
+	replica_pg_osd_tids[pg->get_pgid()][osd].insert(tid);
   }
   replica_write_lock.Unlock();
   
   // write
   apply_write(op, true, v);
 
-  PG *r = open_pg(pgid);
   if (v == 1) {
 	// put new object in proper collection
-	r->add_object(store, oid);
+	pg->add_object(store, oid);
   }
 
   // reply?
@@ -1891,52 +1974,23 @@ void OSD::op_write(MOSDOp *op)
   unlock_object(oid);
 }
 
-/*
-void OSD::handle_mkfs(MOSDMkfs *op)
+
+
+void OSD::op_delete(MOSDOp *op, PG *pg)
 {
-  dout(3) << "MKFS" << endl;
+  object_t oid = op->get_oid();
 
-  // wipe store
-  int r = store->mkfs();	
-  
-  // create PGs
-  list<pg_t> pg_list;
-  for (int nrep = 2; nrep < 4; nrep++) {
-	ps_t maxps = 1LL << osdmap->get_pg_bits();
-	for (pg_t ps = 0; ps < maxps; ps++) {
-	  pg_t pgid = osdmap->ps_nrep_to_pg(ps, nrep);
-	  vector<int> acting;
-	  osdmap->pg_to_acting_osds(pgid, acting);
-	  
+  lock_object(oid);
 
-	  if (acting[0] == whoami) {
-		PG *pg = create_pg(pgid);
-		pg->acting = acting;
-		pg->calc_role(whoami);
-
-		pg->state_set(PG_STATE_COMPLETE);
-
-		dout(7) << "created " << *pg << endl;
-
-		pg_list.push_back(pgid);
-	  }
-	}
+  // version?  clean?
+  version_t v = 0;  // 0 == dne (yet)
+  if (!object_clean(pg, oid, v, op)) {
+	unlock_object(oid);
+	return;
   }
+  v++;  // we're good!		  
 
-  // activate!
-  if (osdmap)
-	activate_map(pg_list);
-
-  // reply!
-  messenger->send_message(new MOSDMkfsAck(op), op->get_asker());
-
-  delete op;
-}
-*/
-
-void OSD::op_delete(MOSDOp *op)
-{
-  int r = store->remove(op->get_oid());
+  int r = store->remove(oid);
   dout(12) << "delete on " << hex << op->get_oid() << dec << " r = " << r << endl;
   
   // "ack"
@@ -1944,11 +1998,25 @@ void OSD::op_delete(MOSDOp *op)
   
   logger->inc("rm");
   delete op;
+
+  unlock_object(oid);
 }
 
-void OSD::op_truncate(MOSDOp *op)
+void OSD::op_truncate(MOSDOp *op, PG *pg)
 {
-  int r = store->truncate(op->get_oid(), op->get_offset());
+  object_t oid = op->get_oid();
+
+  lock_object(oid);
+
+  // version?  clean?
+  version_t v = 0;  // 0 == dne (yet)
+  if (!object_clean(pg, oid, v, op)) {
+	unlock_object(oid);
+	return;
+  }
+  v++;  // we're good!		  
+
+  int r = store->truncate(oid, op->get_offset());
   dout(3) << "truncate on " << hex << op->get_oid() << dec << " at " << op->get_offset() << " r = " << r << endl;
   
   // "ack"
@@ -1957,22 +2025,8 @@ void OSD::op_truncate(MOSDOp *op)
   logger->inc("trunc");
 
   delete op;
-}
 
-void OSD::op_stat(MOSDOp *op)
-{
-  struct stat st;
-  memset(&st, sizeof(st), 0);
-  int r = store->stat(op->get_oid(), &st);
-  
-  dout(3) << "stat on " << hex << op->get_oid() << dec << " r = " << r << " size = " << st.st_size << endl;
-	  
-  MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap);
-  reply->set_object_size(st.st_size);
-  messenger->send_message(reply, op->get_asker());
-	  
-  logger->inc("stat");
-  delete op;
+  unlock_object(oid);
 }
 
 void doop(OSD *u, MOSDOp *p) {

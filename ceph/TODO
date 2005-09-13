@@ -1,6 +1,40 @@
+cluster issues
+- general problem: how to do posix ordering on object boundaries using an object store
+
+- osd states:
+   data placement vs liveness:  active, inactive, down, failed
+- failure model:
+   anything more than that?  "temporarily unavailable" type state (for, say, fsck)?
+
+- replication latency.   flush on replicas?
+- what does 'complete' mean on new primary?
+  - apparently _need_ to examine objects lists always?  would be nice if we didn't!
+- "lazy" flush mode, for (just) doing read/write or write/write sharing?
+
+
+- deleting objects
+ - osd's that rejoin
+ - must keep stray replicas clean
+ - 
+
+- communications failure model.. is it appropriate?
+  - reliable, ordered, buffered and flushed on 'down' boundaries?
+  - ordered, unreliable?
+- what about large messages?  :(
+
+
+distribution
+
+- osd imbalance?
+
+
+
+
+
 
 osd fun
-- op_delete
+//- generalize rep stuff (op_delete, op_truncate, etc.)
+
 - pull plan items need to be removed when they're obsolete.  or, figure out what's old later.
 - osdmap history distribution
 - double commit?  what does 'complete' mean on a replica?
@@ -11,6 +45,17 @@ osd fun
     eg maphistory->same_pg_primary_since(pg, epoch)
 
 
+
+- osd states
+
+                up   placing data
+ active         y    y 
+ inactive       y    n
+ down           n    y
+ failed         n    n
+
+
+
 RUSH_P : prime numbers
  draw K from expanding set of clusters
 
@@ -18,6 +63,30 @@ RUSH_R : removal
  draw K from expanding or contracting set of clusters
 
 RUSH_T : tree
+
+
+two types of buckets: 
+
+ edge bucket .. list of identical disks
+ bucket      .. list of whatever, structured as a tree.
+
+struct disk_set {
+  int id;
+  float disk_weight;
+  int ndisks;
+  vector<int> disks;
+};
+
+struct bucket {
+  int         id;
+  vector<int> contents;
+  map<int, float>  weight;
+};
+
+
+
+
+
 
 
 

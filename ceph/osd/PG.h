@@ -38,12 +38,11 @@ class PGPeer {
   class PG *pg;
  private:
   int       peer;
-  //int       role;    // 0 primary, 1+ replica, -1 residual
   int       state;
 
   // peer state
  public:
-  PGReplicaInfo peer_state;
+  PGReplicaInfo peer_state;          // only defined if active && !complete
 
  protected:
   // recovery: for pulling content from (old) replicas
@@ -59,20 +58,18 @@ class PGPeer {
   PGPeer(class PG *pg, int p/*, int ro*/) : 
 	pg(pg), 
 	peer(p), 
-	//role(ro), 
 	state(0) { }
 
-  //int get_role() { return role; }
   int get_peer() { return peer; }
-  bool state_test(int m) { return state & m != 0; }
+
+  int get_state() { return state; } 
+  bool state_test(int m) { return (state & m) != 0; }
   void state_set(int m) { state |= m; }
   void state_clear(int m) { state &= ~m; }
 
   bool is_active() { return state_test(PG_PEER_STATE_ACTIVE); }
   bool is_complete() { return state_test(PG_PEER_STATE_COMPLETE); }
-
-  //bool is_residual() { return role < 0; }
-  bool is_empty() { return is_active() && peer_state.objects.empty(); }  // *** && peer_state & COMPLETE
+  bool is_recovering() { return is_active() && !is_complete(); }
 
   bool has_latest(object_t o, version_t v) {
 	if (is_complete()) return true;
@@ -80,6 +77,7 @@ class PGPeer {
 	return peer_state.objects[o] == v;
   }
 
+  // actors
   void pull(object_t o, version_t v) { pulling[o] = v; }
   bool is_pulling(object_t o) { return pulling.count(o); }
   version_t pulling_version(object_t o) { return pulling[o]; }

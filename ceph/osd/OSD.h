@@ -51,8 +51,11 @@ class OSD : public Dispatcher {
   }
   
   // -- objects --
-  int read_onode(onode_t& onode);
-  int write_onode(onode_t& onode);
+  //int read_onode(onode_t& onode);
+  //int write_onode(onode_t& onode);
+
+  bool object_complete(PG *pg, object_t oid, Message *op);
+  bool object_clean(PG *pg, object_t oid, version_t& v, Message *op);
 
 
   // -- ops --
@@ -172,12 +175,14 @@ class OSD : public Dispatcher {
 
   void handle_ping(class MPing *m);
   void handle_op(class MOSDOp *m);
-  void op_read(class MOSDOp *m);
-  void op_write(class MOSDOp *m);
-  void op_mkfs(class MOSDOp *m);
-  void op_delete(class MOSDOp *m);
-  void op_truncate(class MOSDOp *m);
-  void op_stat(class MOSDOp *m);
+
+  void op_read(class MOSDOp *m, PG *pg);
+  void op_stat(class MOSDOp *m, PG *pg);
+  void op_write(class MOSDOp *m, PG *pg);
+  void op_delete(class MOSDOp *m, PG *pg);
+  void op_truncate(class MOSDOp *m, PG *pg);
+
+  //void op_mkfs(class MOSDOp *m);
 
   // for replication
   void handle_op_reply(class MOSDOpReply *m);

@@ -96,7 +96,7 @@ void PG::removed(object_t oid, version_t v, PGPeer *p)
 bool PG::existant_object_is_clean(object_t o, version_t v)
 {
   assert(is_peered() && !is_clean());
-
+  
   return objects_unrep.count(o) ? false:true;
 
   /*
@@ -122,6 +122,7 @@ bool PG::nonexistant_object_is_clean(object_t o)
 	   it != peers.end();
 	   it++) {
 	//if (!it->second->is_active()) continue;
+	if (it->second->is_complete()) continue;
 	if (it->second->peer_state.objects.count(o)) {
 	  return false;
 	}
@@ -142,60 +143,65 @@ void PG::plan_recovery(ObjectStore *store)
   map<object_t, version_t> local_objects;
   scan_local_objects(local_objects, store);
   
+  dout(10) << " " << local_objects.size() << " local objects" << endl;
+
   objects = local_objects;  // start w/ local object set.
   
-  // newest objects -> objects
-  for (map<int, PGPeer*>::iterator pit = peers.begin();
-	   pit != peers.end();
-	   pit++) {
-	for (map<object_t, version_t>::iterator oit = pit->second->peer_state.objects.begin();
-		 oit != pit->second->peer_state.objects.end();
-		 oit++) {
-	  // know this object?
-	  if (objects.count(oit->first)) {
-		object_t v = objects[oit->first];
-		if (oit->second < v)       // older?
-		  continue;                // useless
-		else if (oit->second == v) // same?
-		  objects_nrep[oit->first]++;     // not quite accurate bc local_objects isn't included in nrep
-		else {                     // newer!
+  if (!is_complete()) {
+	// newest objects -> objects
+	for (map<int, PGPeer*>::iterator pit = peers.begin();
+		 pit != peers.end();
+		 pit++) {
+	  for (map<object_t, version_t>::iterator oit = pit->second->peer_state.objects.begin();
+		   oit != pit->second->peer_state.objects.end();
+		   oit++) {
+		// know this object?
+		if (objects.count(oit->first)) {
+		  object_t v = objects[oit->first];
+		  if (oit->second < v)       // older?
+			continue;                // useless
+		  else if (oit->second == v) // same?
+			objects_nrep[oit->first]++;     // not quite accurate bc local_objects isn't included in nrep
+		  else {                     // newer!
+			objects[oit->first] = oit->second;
+			objects_nrep[oit->first] = 0;
+			objects_loc[oit->first] = pit->first; // note location. this will overwrite and be lame.
+		  }
+		} else {
+		  // newly seen object!
 		  objects[oit->first] = oit->second;
 		  objects_nrep[oit->first] = 0;
 		  objects_loc[oit->first] = pit->first; // note location. this will overwrite and be lame.
 		}
-	  } else {
-		// newly seen object!
-		objects[oit->first] = oit->second;
-		objects_nrep[oit->first] = 0;
-		objects_loc[oit->first] = pit->first; // note location. this will overwrite and be lame.
 	  }
 	}
-  }
 
-  /*
-  // remove deleted objects
-  assim_deleted_objects(deleted_objects);             // locally
+	/*
+	// remove deleted objects
+	assim_deleted_objects(deleted_objects);             // locally
   for (map<int, PGPeer*>::iterator pit = peers.begin();
-	   pit != peers.end();
+  pit != peers.end();
 	   pit++) 
 	assim_deleted_objects(pit->second->peer_state.deleted);  // on peers
   */
 
-  // just cleanup old local objects
-  // FIXME: do this async?
-  for (map<object_t, version_t>::iterator it = local_objects.begin();
-	   it != local_objects.end();
-	   it++) {
-	if (objects.count(it->first) && objects[it->first] == it->second) continue;  // same!
-	
-	dout(10) << " local o " << hex << it->first << dec << " v " << it->second << " old, removing" << endl;
-	store->remove(it->first);
-	local_objects.erase(it->first);
+	// just cleanup old local objects
+	// FIXME: do this async?
+	for (map<object_t, version_t>::iterator it = local_objects.begin();
+		 it != local_objects.end();
+		 it++) {
+	  if (objects.count(it->first) && objects[it->first] == it->second) continue;  // same!
+	  
+	  dout(10) << " local o " << hex << it->first << dec << " v " << it->second << " old, removing" << endl;
+	  store->remove(it->first);
+	  local_objects.erase(it->first);
+	}
+
+	// get complete PG
+	plan_pull();
   }
 
-
-  // make remote action plans!
-  plan_pull();
+  // sync up replicas
   plan_push_cleanup();
 }
 
@@ -225,7 +231,7 @@ void PG::plan_pull()
   }
   
   if (pull_plan.empty()) {
-	dout(10) << "nothing to pull, marking complete" << endl;
+	dout(10) << " nothing to pull, marking complete" << endl;
 	mark_complete();
   }
 }
@@ -247,6 +253,8 @@ void PG::plan_push_cleanup()
 	for (unsigned r = 1; r<acting.size(); r++) {
 	  PGPeer *pgp = peers[acting[r]];
 	  assert(pgp);
+
+	  if (pgp->is_complete()) continue;
 
 	  if (pgp->peer_state.objects.count(oit->first) == 0 || 
 		  oit->second < pgp->peer_state.objects[oit->first]) {
@@ -270,6 +278,13 @@ void PG::plan_push_cleanup()
 	if (role == 0) continue;   // skip primary
 	
 	PGPeer *pgp = pit->second;
+	assert(pgp->is_active());
+	if (pgp->is_complete()) {
+	  dout(12) << " peer osd" << pit->first << " is complete" << endl;
+	  continue;
+	}
+	dout(12) << " peer osd" << pit->first << " is !complete" << endl;
+
 	for (map<object_t, version_t>::iterator oit = pit->second->peer_state.objects.begin();
 		 oit != pit->second->peer_state.objects.end();
 		 oit++) {
@@ -286,7 +301,7 @@ void PG::plan_push_cleanup()
   }
 
   if (push_plan.empty() && clean_plan.empty()) {
-	dout(10) << "nothing to push|clean, marking clean" << endl;
+	dout(10) << " nothing to push|clean, marking clean" << endl;
 	mark_clean();
   }
 }

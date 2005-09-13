@@ -21,6 +21,8 @@
 #define OSD_OP_TRUNCATE   12
 #define OSD_OP_ZERORANGE  13
 
+#define OSD_OP_IS_REP(x)  ((x) >= 30)
+
 // replication/recovery -- these ops are relative to a specific object version #
 #define OSD_OP_REP_PULL    30   // whole object read
 #define OSD_OP_REP_PUSH    31   // whole object write
