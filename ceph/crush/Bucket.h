@@ -26,15 +26,15 @@ namespace crush {
 	  type(_type),
 	  weight(_weight) { }
 	
-	int          get_id() { return id; }
-	int          get_type() { return type; }
-	float        get_weight() { return weight; }
-	virtual int  get_size() = 0;
+	int          get_id() const { return id; } 
+	int          get_type() const { return type; }
+	float        get_weight() const { return weight; }
+	virtual int  get_size() const = 0;
 
-	void        set_weight(float w) { weight = w; }
+	void        set_weight(float w)  { weight = w; }
 
-	virtual bool is_uniform() = 0;
-	virtual int choose_r(int x, int r, Hash& h) = 0;
+	virtual bool is_uniform() const = 0;
+	virtual int choose_r(int x, int r, Hash& h) const = 0;
 
   };
 
@@ -58,18 +58,20 @@ namespace crush {
 	  items = _items;
 	}
 
-	int get_size() { return items.size(); }
-	//float       get_item_weight(int item) { return item_weight; }
-	bool        is_uniform() { return true; }
+	int get_size() const { return items.size(); }
+	int get_item_type() const { return item_type; }
+	float get_item_weight() const { return item_weight; }
+	bool is_uniform() const { return true; }
 
-	int get_prime(int j) {
+	int get_prime(int j) const {
 	  return primes[ j % primes.size() ];
 	}
 
 	void make_primes(Hash& h) {
 	  // start with odd number > num_items
-	  int x = items.size() + 1 + h(get_id()) % items.size();
-	  x |= 1; // odd
+	  int x = items.size() + 1;             // this is the minimum!
+	  x += h(get_id()) % (3*items.size());  // bump it up some
+	  x |= 1;                               // make it odd
 
 	  while (primes.size() < items.size()) {
 		int j;
@@ -82,7 +84,7 @@ namespace crush {
 	  }
 	}
 
-	int choose_r(int x, int r, Hash& h) {
+	int choose_r(int x, int r, Hash& h) const {
 	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
 	  int v = (h(x, get_id(), 1) % get_size()) * get_size();
@@ -109,8 +111,9 @@ namespace crush {
 	}
 
 	//float       get_item_weight(int i) { return item_weight[i]; }
-	bool        is_uniform() { return false; }
-	int get_size() { return node_map.size(); }
+	bool        is_uniform() const { return false; }
+	int get_size() const { return node_map.size(); }
+
 	/*
 	float calc_weight() {
 	  weight = 0;
@@ -143,7 +146,7 @@ namespace crush {
 	  weight += w;
 	}
 
-	int choose_r(int x, int r, Hash& h) {
+	int choose_r(int x, int r, Hash& h) const {
 	  int n = tree.root();
 	  while (!tree.terminal(n)) {
 		// pick a point in [0,w)
@@ -159,7 +162,7 @@ namespace crush {
 		  n = tree.right(n);
 	  }
 	  assert(node_map.count(n));
-	  return node_map[n];
+	  return ((map<int,int>)node_map)[n];
 	}
 
 

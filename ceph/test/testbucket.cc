@@ -28,15 +28,23 @@ int main()
   for (int i=0; i<20; i++)
 	disks.push_back(i);
 
+
   /*
-  UniformBucket b(10, 1, 0, 10, disks);
-  b.make_primes(h);
+  UniformBucket ub(1, 1, 0, 10, disks);
+  ub.make_primes(h);
   cout << "primes are " << ub.primes << endl;
   */
-  MixedBucket b(1, 1);
-  for (int i=0; i<20; i++)
-	b.add_item(i,20);
-  cout << b.tree << endl;
+
+  MixedBucket mb(2, 1);
+  for (int i=0;i<20;i++)
+	mb.add_item(i, 10);
+
+  /*
+  MixedBucket b(3, 1);
+  b.add_item(1, ub.get_weight());
+  b.add_item(2, mb.get_weight());
+  */
+  MixedBucket b= mb;
 
   vector<int> ocount(disks.size());
   int numrep = 3;

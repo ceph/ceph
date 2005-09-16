@@ -21,16 +21,16 @@ namespace crush {
 	BinaryTree() : root_node(0) {}
 	
 	// accessors
-	bool  empty() { return root_node == 0; }
-	bool  exists(int n) { return node_nested.count(n); }
-	int   nested(int n) { return exists(n) ? node_nested[n]:0; }
-	float weight(int n) { return exists(n) ? node_weight[n]:0; }
-	bool  complete(int n) { return node_complete.count(n); }
-	int   root() { return root_node; }
+	bool  empty() const { return root_node == 0; }
+	bool  exists(int n) const { return node_nested.count(n); }
+	int   nested(int n) const { return exists(n) ? ((map<int,int>)node_nested)[n]:0; }
+	float weight(int n) const { return exists(n) ? ((map<int,float>)node_weight)[n]:0; }
+	bool  complete(int n) const { return node_complete.count(n); }
+	int   root() const { return root_node; }
 	
 	// tree navigation
-	bool terminal(int n) { return n & 1; }  // odd nodes are leaves.
-	int height(int n) {
+	bool terminal(int n) const { return n & 1; }  // odd nodes are leaves.
+	int height(int n) const {
 	  assert(n);
 	  int h = 0;
 	  while ((n & 1) == 0) {
@@ -39,22 +39,22 @@ namespace crush {
 	  }
 	  return h;
 	}
-	int left(int n) { 
+	int left(int n) const { 
 	  int h = height(n);
 	  //cout << "left of " << n << " is " << (n - (1 << h)) << endl;
 	  return n - (1 << (h-1));
 	}
-	int right(int n) {
+	int right(int n) const {
 	  int h = height(n);
 	  //cout << "right of " << n << " is " << (n + (1 << h)) << endl;
 	  return n + (1 << (h-1));
 	}
-	bool on_right(int n, int h = -1) { 
+	bool on_right(int n, int h = -1) const { 
 	  if (h < 0) h = height(n);
 	  return n & (1 << (h+1)); 
 	}
-	bool on_left(int n) { return !on_right(n); }
-	int parent(int n) {
+	bool on_left(int n) const { return !on_right(n); }
+	int parent(int n) const {
 	  int h = height(n);
 	  if (on_right(n, h))
 		return n - (1<<h);
@@ -179,7 +179,7 @@ namespace crush {
 
 
   // print it out
-  void print_node(ostream& out, BinaryTree& tree, int n, int i) {
+  void print_node(ostream& out, const BinaryTree& tree, int n, int i) {
 	for (int t=i; t>0; t--) out << "  ";
 	if (tree.root() == n)
 	  out << "root  ";
@@ -200,7 +200,7 @@ namespace crush {
 	}
   }
   
-  ostream& operator<<(ostream& out, BinaryTree& tree) {
+  ostream& operator<<(ostream& out, const BinaryTree& tree) {
 	if (tree.empty()) 
 	  return out << "tree is empty";
 	print_node(out, tree, tree.root(), 0);	
