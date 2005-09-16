@@ -33,7 +33,7 @@ void make_disks(int n, int& no, vector<int>& d)
 int main() 
 {
   Hash h(73);
-  int numrep = 3;
+  int numrep = 5;
 
 
   // buckets
@@ -50,7 +50,7 @@ int main()
   ub2.make_primes(h);  
   cout << "ub2 primes are " << ub2.primes << endl;
 
-  make_disks(21, ndisks, disks);
+  make_disks(4, ndisks, disks);
   UniformBucket ub3(3, 1, 0, 30, disks);
   ub3.make_primes(h);  
   cout << "ub3 primes are " << ub3.primes << endl;
@@ -63,7 +63,14 @@ int main()
   // rule
   Rule rule;
   rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, 100));
-  rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 3, 0));
+  rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, numrep, 0));
+  CRule crule(numrep);
+  crule.nchoose = 2;
+  for (int j=0; j<numrep; j++) {
+	crule.steps[j].push_back(RuleStep(CRULE_TAKEB, 100));
+	crule.steps[j].push_back(RuleStep(CRULE_CHOOSER, j, numrep, 1));
+	crule.steps[j].push_back(RuleStep(CRULE_CHOOSER, j, numrep, 0));
+  }
 
   // crush
   Crush c;
@@ -72,6 +79,7 @@ int main()
   c.add_bucket(&ub3);
   c.add_bucket(&b);
   c.add_rule(numrep, rule);
+  c.add_crule(numrep, crule);
 
 
   
@@ -82,14 +90,22 @@ int main()
   cout << "placing " << numo << " logical,  " << numo*numrep << " total" << endl;
   for (int x=1; x<numo; x++) {
 	//cout << H(x) << "\t" << h(x) << endl;
-	v.clear();
-	c.choose(numrep, x, v);
+	c.crule_choose(numrep, x, v);
+	//cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
 
+	bool bad = false;
 	for (int i=0; i<numrep; i++) {
 	  //int d = b.choose_r(x, i, h);
 	  //v[i] = d;
 	  ocount[v[i]]++;
+	  for (int j=i+1; j<numrep; j++) {
+		if (v[i] == v[j]) 
+		  bad = true;
+	  }
 	}
+	if (bad)
+	  cout << "bad set " << x << ": " << v << endl;
+	  
 	//cout << v << "\t" << ocount << endl;
   }
 

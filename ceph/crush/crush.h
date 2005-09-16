@@ -10,11 +10,6 @@ namespace crush {
 
   // *** RULES ***
 
-  // rule commands
-  const int CRUSH_RULE_TAKE = 0;
-  const int CRUSH_RULE_CHOOSE = 1;
-  const int CRUSH_RULE_VERT = 2;
-
   class RuleStep {
   public:
 	int         cmd;
@@ -28,13 +23,37 @@ namespace crush {
 	  args.push_back(a);
 	  args.push_back(b);
 	}
+	RuleStep(int o, int a, int b, int c) : cmd(o) {
+	  args.push_back(a);
+	  args.push_back(b);
+	  args.push_back(c);
+	}
   };
+
+
+  // Rule
+  const int CRUSH_RULE_TAKE = 0;
+  const int CRUSH_RULE_CHOOSE = 1;
+  const int CRUSH_RULE_VERT = 2;
 
   class Rule {
   public:
 	vector< RuleStep > steps;
   };
 
+  // CRule
+  const int CRULE_TAKEB = 1;
+  const int CRULE_CHOOSER = 2;
+
+  class CRule {
+  public:
+	vector< vector<RuleStep> > steps;
+	int nchoose;
+	int nrep;
+
+	CRule() {}
+	CRule(int nr) : steps(nr), nrep(nr) {}
+  };
 
 
   // *** CRUSH ***
@@ -43,7 +62,10 @@ namespace crush {
   protected:
 	map<int, Bucket*>  buckets;
 	map<int, Rule>     rules;
+	map<int, CRule>     crules;
 	Hash h;
+
+	set<int>           failed;
 
   public:
 	Crush(int seed=123) : h(seed) {}
@@ -54,6 +76,102 @@ namespace crush {
 	void add_rule( int id, Rule& r ) {
 	  rules[id] = r;
 	}
+	void add_crule( int id, CRule& r ) {
+	  crules[id] = r;
+	}
+
+	void crule_choose(int ruleno, int x, vector<int>& result) {
+	  CRule& rule = crules[ruleno];
+	  
+	  // input
+	  Bucket *in = 0;
+	  int out = -1;
+	  
+	  // for replicas
+	  for (int rep=0; rep<rule.nrep; rep++) {
+		// initially zero
+		vector<int> add_r(rule.nchoose);
+		
+		for (int attempt=0; ; attempt++) {
+		  
+		  // steps
+		  int nchoose = 0;
+		  for (int pc=0; pc<rule.steps[rep].size(); pc++) {
+			switch (rule.steps[rep][pc].cmd) {
+			case CRULE_TAKEB:
+			  {
+				const int arg = rule.steps[rep][pc].args[0];
+				assert(buckets.count(arg));
+				in = buckets[arg];
+			  }
+			  break;
+			  
+			case CRULE_CHOOSER:
+			  {
+				int r = rule.steps[rep][pc].args[0];
+				const int rperiod = rule.steps[rep][pc].args[1];
+				const int type = rule.steps[rep][pc].args[2];
+				
+				// adjust to skip unusable
+				r += rperiod * add_r[nchoose];
+				nchoose++;
+				
+				//cout << "choose_r " << r << " type " << type << endl;
+				
+				// choose through any intervening buckets
+				while (1) {
+				  // choose in this bucket
+				  out = in->choose_r(x, r, h);
+
+				  if (in->is_uniform() && 
+					  ((UniformBucket*)in)->get_item_type() == type)
+					break;
+
+				  int itemtype = 0;  // 0 is a terminal type
+				  if (buckets.count(out)) {
+					in = buckets[out];
+					itemtype = in->get_type();
+				  } 
+				  if (itemtype == type) break;  // this is what we want!
+				}				
+				
+				if (type != 0) {  // translate back into a bucket
+				  assert(buckets.count(out));
+				  in = buckets[out];
+				}
+			  }
+			  break;
+			  
+			default:
+			  assert(0);
+			}
+		  }
+
+		  // disk failed?
+		  bool bad = false;
+		  if (failed.count(out)) 
+			bad = true;
+		  
+		  for (int prep=0; prep<rep; prep++) {
+			if (result[prep] == out) 
+			  bad = true;
+		  }
+
+		  if (bad) {
+			// bump an 'r'
+			//cout << "failed|repeat " << attempt << endl;
+			add_r[ rule.nchoose - 1 - ((attempt/2)%rule.nchoose) ]++;
+			continue;
+		  }
+
+		  break;		  // disk is fine.
+		}
+		
+		// ok!
+		result[rep] = out;
+	  }
+	}
+
 
 	void choose(int rno, int x, vector<int>& result) {
 	  assert(rules.count(rno));

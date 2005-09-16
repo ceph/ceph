@@ -31,7 +31,7 @@ namespace crush {
 	float        get_weight() const { return weight; }
 	virtual int  get_size() const = 0;
 
-	void        set_weight(float w)  { weight = w; }
+	void         set_weight(float w)  { weight = w; }
 
 	virtual bool is_uniform() const = 0;
 	virtual int choose_r(int x, int r, Hash& h) const = 0;
@@ -85,6 +85,7 @@ namespace crush {
 	}
 
 	int choose_r(int x, int r, Hash& h) const {
+	  //cout << "uniformbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
 	  int v = (h(x, get_id(), 1) % get_size()) * get_size();
@@ -147,6 +148,7 @@ namespace crush {
 	}
 
 	int choose_r(int x, int r, Hash& h) const {
+	  //cout << "mixedbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  int n = tree.root();
 	  while (!tree.terminal(n)) {
 		// pick a point in [0,w)
