@@ -1,81 +1,117 @@
 #ifndef __crush_BUCKET_H
 #define __crush_BUCKET_H
 
+#include "BinaryTree.h"
+#include "Hash.h"
+
+#include <vector>
+#include <map>
+using namespace std;
+
 namespace crush {
 
+  /** abstract bucket **/
 
   class Bucket {
   protected:
 	int         id;
 	int         type;
 	float       weight;
-	vector<int> items;
 
   public:
-	Bucket(int _id) : id(_id), weight(0) { }
-
-	int         get_id() { return id; }
-	int         get_type() { return type; }
-	float       get_weight() { return weight; }
-	vector<int> get_items() { return items; }
-	int         get_size() { return items.size(); }
-
-	float       get_item_weight() = 0;
-	bool        is_uniform() = 0;
-	float       calc_weight() = 0;
-
+	Bucket(int _id,
+		   int _type,
+		   float _weight) :
+	  id(_id), 
+	  type(_type),
+	  weight(_weight) { }
 	
-	void choose_r(int r, int type, vector<int>& in, vector<int>& out) = 0;
+	int          get_id() { return id; }
+	int          get_type() { return type; }
+	float        get_weight() { return weight; }
+	virtual int  get_size() = 0;
+
+	void        set_weight(float w) { weight = w; }
+
+	virtual bool is_uniform() = 0;
+	virtual int choose_r(int x, int r, Hash& h) = 0;
 
   };
 
 
- 
-  class UniformBucket : public Bucket {	void choose_r(int r, int type, vector<int>& in, vector<int>& out) = 0;
+  /** uniform bucket **/
+  class UniformBucket : public Bucket {	
   protected:
-	float  item_weight;
   public:
-	float       get_item_weight(int i) { return item_weight; }
+	vector<int> items;
+	int    item_type;
+	float  item_weight;
+
+	vector<int> primes;
+
+  public:
+	UniformBucket(int _id, int _type, int _item_type,
+				  float _item_weight, vector<int>& _items) :
+	  Bucket(_id, _type, _item_weight*_items.size()),
+	  item_type(_item_type),
+	  item_weight(_item_weight) {
+	  items = _items;
+	}
+
+	int get_size() { return items.size(); }
+	//float       get_item_weight(int item) { return item_weight; }
 	bool        is_uniform() { return true; }
 
-	float calc_weight() {
-	  if (item.empty())
-		weight = 0;
-	  else 
-		weight = items.size() * get_item_weight(item[0]);
-	  return weight;
+	int get_prime(int j) {
+	  return primes[ j % primes.size() ];
 	}
 
-	int choose_r(pg_t x, int r, Hash& h) {
-	  assert(type == get_type());
-	  if (r >= get_size()) cour << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
+	void make_primes(Hash& h) {
+	  // start with odd number > num_items
+	  int x = items.size() + 1 + h(get_id()) % items.size();
+	  x |= 1; // odd
+
+	  while (primes.size() < items.size()) {
+		int j;
+		for (j=2; j*j<=x; j++) 
+		  if (x % j == 0) break;
+		if (j*j > x) {
+		  primes.push_back(x);
+		}
+		x += 2;
+	  }
+	}
+
+	int choose_r(int x, int r, Hash& h) {
+	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
-	  int v = h(x, r, get_id(), 1) * get_size();
-	  int pmin = get_weight();
-	  int p = 0; // choose a prime based on hash(x, r, get_id(), 2)
-	  //int s = x + v + r *p(? % get_size())
-	  //return get_item[s % get_size()];
+	  int v = (h(x, get_id(), 1) % get_size()) * get_size();
+	  int p = get_prime( h(x, 2) );  // choose a prime based on hash(x, get_id(), 2)
+	  int s = (x + v + (r+1)*p) % get_size();
+	  return items[s];
 	}
   };
 
 
 
-  // mixed bucket.. RUSH_T
+  // mixed bucket, based on RUSH_T type binary tree
   
-
   class MixedBucket : public Bucket {
   protected:
 	vector<float>  item_weight;
 
+  public:
 	BinaryTree     tree;
 	map<int,int>   node_map;     // node id -> item
 
   public:
-	float       get_item_weight(int i) {
-	  return item_weight[i];
+	MixedBucket(int _id, int _type) : Bucket(_id, _type, 0) {
 	}
-	bool        is_uniform() { return false; }
 
+	//float       get_item_weight(int i) { return item_weight[i]; }
+	bool        is_uniform() { return false; }
+	int get_size() { return node_map.size(); }
+	/*
 	float calc_weight() {
 	  weight = 0;
 	  for (unsigned i=0; i<items.size(); i++) {
@@ -83,27 +119,46 @@ namespace crush {
 	  }
 	  return weight;
 	}
+	*/
 
-
-	void make_new_tree(vector<int>& items) {
+	/*
+	void make_new_tree(vector<int>& _items) {
+	  assert(items.empty());
 	  assert(tree.empty());
+	  
+	  items = _items;
 	  
 	  for (unsigned i=0; i<items.size(); i++) {
 		int n = tree.add_node(item_weight[i]);
 		node_map[n] = items[i];
 	  }
+
+	  //calc_weight();
+	}
+	*/
+
+	void add_item(int item, float w) {
+	  int n = tree.add_node(w);
+	  node_map[n] = item;
+	  weight += w;
 	}
 
-	int choose_r(pg_t x, int r, Hash& h) {
+	int choose_r(int x, int r, Hash& h) {
 	  int n = tree.root();
 	  while (!tree.terminal(n)) {
-		float f = h(x, n, r, 0);
-		if (tree.weight(tree.left(n)) <= f)
-		  node = tree.left(n);
+		// pick a point in [0,w)
+		float w = tree.weight(n);
+		float f = (float)(h(x, n, r) % 1000) * w / 1000.0;
+
+		// left or right?
+		int l = tree.left(n);
+		if (tree.exists(l) && 
+			f < tree.weight(l))
+		  n = l;
 		else
-		  node = tree.right(n);
+		  n = tree.right(n);
 	  }
-	
+	  assert(node_map.count(n));
 	  return node_map[n];
 	}
 

@@ -85,16 +85,59 @@ struct bucket {
 
 
 
+struct bucket {
+  int             id;
+  int             type;    // disk, shelf, etc.
+  vector<int>     contents;
+  float           fixed_weight;  // homogenous bucket, or
+  map<int, float> weight;        // mixed bucket
+}
+
+give each bucket "type" has a numerical id, whatever you want.  eg
+
+0 disk
+1 shelf
+2 cabinet
+3 row
+4 room
+
+take(root)
+choose(2, room)
+take_vert
+choose(2, cab)
+take_vert
+choose(1, disk)
+
+
+mirror(2):
+choose(1, room, root)       -> [ room1 ]
+choose(2, cabinet, _)       -> [ cab3 cab2 ]
+choose(1, disk, _)          -> [ somediskincab3or2, someotherdiskincab3or2 ]
+
+mirror(4):
+choose(2, room, root)       -> [ room1 room2 ]
+vert(_)                     -> [ room1; room2 ]
+choose(2, cabinet, _)       -> [ cab11 cab12; cab21 cab22 ]
+vert(_)                     -> [ cab11; cab12; cab21; cab22 ]
+choose(1, disk, _)          -> [ disk; disk; disk; disk ]
+horiz(_)                    -> [ disk disk disk disk ]
+
+two goals:
+ - separate replicas into failure domains... "floor" in hierarchy
+ - limit replica set to a single domain... "ceiling" in hierarchy
+
+additional tricks:
+ - explicitly choose disks from different storage pools
+
+mirror(3)
+choose(2, disk, primary)    -> [ d1 d2 ]    // fast scsi (or use more complex chooser as above.)
+choose(1, disk, tertiary)   -> [ d1 d2 d3 ] // ide 
+
+results are appended to _, unless _ is used as an input, in which case it is cleared.
 
 
 
 
-
-p 0 disk
-t 1 shelf
-t 2 cabinet
-t 3 row
-t 4 room
 
 R(5, 0, [ s1 s2 s3 s4 ... ])  -> [ d1 d2 d3 d4 ]
 = 5 disks
