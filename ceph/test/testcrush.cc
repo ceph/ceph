@@ -55,15 +55,24 @@ int main()
   ub3.make_primes(h);  
   cout << "ub3 primes are " << ub3.primes << endl;
 
+  /*
+  make_disks(20, ndisks, disks);
+  MixedBucket umb1(4, 1);
+  for (int i=0; i<20; i++)
+	umb1.add_item(disks[ndisks-i-1], 30);
+  */
+
   MixedBucket b(100, 1);
   b.add_item(1, ub1.get_weight());
   b.add_item(2, ub2.get_weight());
   b.add_item(3, ub3.get_weight());
+  //b.add_item(4, umb1.get_weight());
 
   // rule
   Rule rule;
   rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, 100));
   rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, numrep, 0));
+
   CRule crule(numrep);
   crule.nchoose = 2;
   for (int j=0; j<numrep; j++) {
@@ -77,6 +86,7 @@ int main()
   c.add_bucket(&ub1);
   c.add_bucket(&ub2);
   c.add_bucket(&ub3);
+  //c.add_bucket(&umb1);
   c.add_bucket(&b);
   c.add_rule(numrep, rule);
   c.add_crule(numrep, crule);
@@ -86,12 +96,12 @@ int main()
   vector<int> ocount(ndisks);
 
   vector<int> v(numrep);
-  int numo = 100000*ndisks/numrep;
+  int numo = 1000*ndisks/numrep;
   cout << "placing " << numo << " logical,  " << numo*numrep << " total" << endl;
   for (int x=1; x<numo; x++) {
 	//cout << H(x) << "\t" << h(x) << endl;
-	c.crule_choose(numrep, x, v);
-	//cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
+	c.newchoose(numrep, x, v);
+	cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
 
 	bool bad = false;
 	for (int i=0; i<numrep; i++) {

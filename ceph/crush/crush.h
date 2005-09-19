@@ -1,10 +1,24 @@
 #ifndef __crush_CRUSH_H
 #define __crush_CRUSH_H
 
-#include "Bucket.h"
-
+#include <iostream>
 #include <list>
 using namespace std;
+
+ostream& operator<<(ostream& out, vector<int>& v)
+{
+  out << "[";
+  for (int i=0; i<v.size(); i++) {
+	if (i) out << " ";
+	out << v[i];
+  }
+  out << "]";
+  return out;
+}
+
+
+#include "Bucket.h"
+
 
 namespace crush {
 
@@ -44,6 +58,8 @@ namespace crush {
   // CRule
   const int CRULE_TAKEB = 1;
   const int CRULE_CHOOSER = 2;
+  const int CRULE_CHOOSE_R = 10;
+  const int CRULE_CHOOSE_D = 11;
 
   class CRule {
   public:
@@ -54,6 +70,9 @@ namespace crush {
 	CRule() {}
 	CRule(int nr) : steps(nr), nrep(nr) {}
   };
+
+
+
 
 
   // *** CRUSH ***
@@ -112,8 +131,8 @@ namespace crush {
 				const int rperiod = rule.steps[rep][pc].args[1];
 				const int type = rule.steps[rep][pc].args[2];
 				
-				// adjust to skip unusable
-				r += rperiod * add_r[nchoose];
+				// adjust to skip unusable.  nonlinearly.
+				r += (rperiod + add_r[nchoose]) * add_r[nchoose];
 				nchoose++;
 				
 				//cout << "choose_r " << r << " type " << type << endl;
@@ -171,6 +190,148 @@ namespace crush {
 		result[rep] = out;
 	  }
 	}
+
+
+	void newchoose(int ruleno, int x, vector<int>& result) {
+	  assert(rules.count(ruleno));
+	  Rule& rule = rules[ruleno];
+
+	  int maxdepth = 20;
+
+	  // working variable
+	  vector< Bucket* >       in;
+	  vector< vector<int>  >  out;
+
+	  // go through each statement
+	  for (vector<RuleStep>::iterator pc = rule.steps.begin();
+		   pc != rule.steps.end();
+		   pc++) {
+		// move input?
+		
+		// do it
+		switch (pc->cmd) {
+		case CRUSH_RULE_TAKE:
+		  {
+			const int arg = pc->args[0];
+			cout << "take " << arg << endl;
+
+			// input is some explicit existing bucket
+			assert(buckets.count(arg));
+			
+			if (out.empty()) {
+			  // 1 row
+			  in.push_back( buckets[arg] );
+			} else {
+			  // match rows in output?
+			  for (vector< vector<int> >::iterator row = out.begin();
+				   row != out.end();
+				   row++) 
+				in.push_back( buckets[arg] );
+			}
+		  }
+		  break;
+
+		case CRUSH_RULE_VERT:
+		  {
+			in.clear();
+			
+			// input is (currently always) old output
+
+			for (vector< vector<int> >::iterator row = out.begin();
+				 row != out.end();
+				 row++) {
+			  for (int i=0; i<row->size(); i++) {
+				in.push_back( buckets[ (*row)[i] ] );
+			  }
+			}
+		  }
+		  break;
+		  
+		case CRUSH_RULE_CHOOSE:
+		  {
+			const int numrep = pc->args[0];
+			const int type = pc->args[1];
+
+			cout << "choose " << numrep << " of " << type << endl;
+
+			// reset output
+			out.clear();
+			
+			// do each row independently
+			for (vector< Bucket* >::iterator inrow = in.begin();
+				 inrow != in.end();
+				 inrow++) {
+			  // make new output row
+			  out.push_back( vector<int>() );
+			  vector<int>& outrow = out.back();
+			  
+			  // for each replica
+			  for (int rep=0; rep<numrep; rep++) {
+				vector<int> add_r(maxdepth);    // re-choosing; initially zero
+				int out = -1;                   // my result
+
+				// keep trying until we get a non-failed, non-colliding item
+				for (int attempt=0; ; attempt++) {
+				  
+				  // start with the input bucket
+				  Bucket *in = *inrow;
+				  int depth = 0;
+
+				  // choose through intervening buckets
+				  while (1) {
+					// r may be twiddled to avoid collision
+					int r = rep + (numrep + add_r[depth]) * add_r[depth];
+					out = in->choose_r(x, r, h); 
+					
+					if (in->is_uniform() && 
+						((UniformBucket*)in)->get_item_type() == type)
+					  break;
+					
+					int itemtype = 0;          // 0 is terminal type
+					if (buckets.count(out)) {  // another bucket
+					  in = buckets[out];
+					  itemtype = in->get_type();
+					} 
+					if (itemtype == type) break;  // this is what we want!
+					depth++;
+				  }
+				  
+				  // ok choice?
+				  bool bad = false;
+				  if (failed.count(out)) 
+					bad = true;
+				  for (int prep=0; prep<rep; prep++) 
+					if (outrow[prep] == out) 
+					  bad = true;
+				  if (bad) {
+					// bump an 'r'
+					int d = depth - 1 - ((attempt/2)%depth);
+					cout << "failed|repeat " << attempt << ", bumping r at depth " << d << endl;
+					add_r[d]++;
+					continue;
+				  }
+				  break;
+				}
+
+				outrow[rep] = out;
+			  } // for rep
+			  cout << "outrow is " << outrow << endl;
+			} // for inrow
+		  }
+		  break;
+
+		default:
+		  assert(0);
+		}
+	  }
+
+	  // assemble result
+	  int o = 0;
+	  for (int i=0; i<out.size(); i++)
+		for (int j=0; j<out[i].size(); j++)
+		  result[o++] = out[i][j];
+	}
+
 
 
 	void choose(int rno, int x, vector<int>& result) {
