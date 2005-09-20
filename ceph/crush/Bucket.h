@@ -88,8 +88,8 @@ namespace crush {
 	  //cout << "uniformbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
-	  int v = (h(x, get_id(), 1) % get_size()) * get_size();
-	  int p = get_prime( h(x, 2) );  // choose a prime based on hash(x, get_id(), 2)
+	  int v = h(x, get_id(), 1) % get_size();
+	  int p = get_prime( h(x, get_id(), 2) );  // choose a prime based on hash(x, get_id(), 2)
 	  int s = (x + v + (r+1)*p) % get_size();
 	  return items[s];
 	}
@@ -115,32 +115,6 @@ namespace crush {
 	bool        is_uniform() const { return false; }
 	int get_size() const { return node_map.size(); }
 
-	/*
-	float calc_weight() {
-	  weight = 0;
-	  for (unsigned i=0; i<items.size(); i++) {
-		weight += get_item_weight(i);
-	  }
-	  return weight;
-	}
-	*/
-
-	/*
-	void make_new_tree(vector<int>& _items) {
-	  assert(items.empty());
-	  assert(tree.empty());
-	  
-	  items = _items;
-	  
-	  for (unsigned i=0; i<items.size(); i++) {
-		int n = tree.add_node(item_weight[i]);
-		node_map[n] = items[i];
-	  }
-
-	  //calc_weight();
-	}
-	*/
-
 	void add_item(int item, float w) {
 	  int n = tree.add_node(w);
 	  node_map[n] = item;
@@ -153,7 +127,7 @@ namespace crush {
 	  while (!tree.terminal(n)) {
 		// pick a point in [0,w)
 		float w = tree.weight(n);
-		float f = (float)(h(x, n, r) % 1000) * w / 1000.0;
+		float f = (float)(h(x, n, r, get_id()) % 1000) * w / 1000.0;
 
 		// left or right?
 		int l = tree.left(n);

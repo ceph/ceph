@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <list>
+#include <vector>
 using namespace std;
 
 ostream& operator<<(ostream& out, vector<int>& v)
@@ -49,28 +50,12 @@ namespace crush {
   const int CRUSH_RULE_TAKE = 0;
   const int CRUSH_RULE_CHOOSE = 1;
   const int CRUSH_RULE_VERT = 2;
+  const int CRUSH_RULE_EMIT = 3;
 
   class Rule {
   public:
 	vector< RuleStep > steps;
   };
-
-  // CRule
-  const int CRULE_TAKEB = 1;
-  const int CRULE_CHOOSER = 2;
-  const int CRULE_CHOOSE_R = 10;
-  const int CRULE_CHOOSE_D = 11;
-
-  class CRule {
-  public:
-	vector< vector<RuleStep> > steps;
-	int nchoose;
-	int nrep;
-
-	CRule() {}
-	CRule(int nr) : steps(nr), nrep(nr) {}
-  };
-
 
 
 
@@ -81,13 +66,19 @@ namespace crush {
   protected:
 	map<int, Bucket*>  buckets;
 	map<int, Rule>     rules;
-	map<int, CRule>     crules;
 	Hash h;
 
 	set<int>           failed;
+  public:
+	map<int, float>    overload;
+	
 
   public:
-	Crush(int seed=123) : h(seed) {}
+	Crush(int seed=123) : h(seed), collisions(20), bumps(20) {}
+
+	vector<int> collisions;
+	vector<int> bumps;
+
 
 	void add_bucket( Bucket *b ) {
 	  buckets[b->get_id()] = b;
@@ -95,107 +86,13 @@ namespace crush {
 	void add_rule( int id, Rule& r ) {
 	  rules[id] = r;
 	}
-	void add_crule( int id, CRule& r ) {
-	  crules[id] = r;
-	}
-
-	void crule_choose(int ruleno, int x, vector<int>& result) {
-	  CRule& rule = crules[ruleno];
-	  
-	  // input
-	  Bucket *in = 0;
-	  int out = -1;
-	  
-	  // for replicas
-	  for (int rep=0; rep<rule.nrep; rep++) {
-		// initially zero
-		vector<int> add_r(rule.nchoose);
-		
-		for (int attempt=0; ; attempt++) {
-		  
-		  // steps
-		  int nchoose = 0;
-		  for (int pc=0; pc<rule.steps[rep].size(); pc++) {
-			switch (rule.steps[rep][pc].cmd) {
-			case CRULE_TAKEB:
-			  {
-				const int arg = rule.steps[rep][pc].args[0];
-				assert(buckets.count(arg));
-				in = buckets[arg];
-			  }
-			  break;
-			  
-			case CRULE_CHOOSER:
-			  {
-				int r = rule.steps[rep][pc].args[0];
-				const int rperiod = rule.steps[rep][pc].args[1];
-				const int type = rule.steps[rep][pc].args[2];
-				
-				// adjust to skip unusable.  nonlinearly.
-				r += (rperiod + add_r[nchoose]) * add_r[nchoose];
-				nchoose++;
-				
-				//cout << "choose_r " << r << " type " << type << endl;
-				
-				// choose through any intervening buckets
-				while (1) {
-				  // choose in this bucket
-				  out = in->choose_r(x, r, h);
-
-				  if (in->is_uniform() && 
-					  ((UniformBucket*)in)->get_item_type() == type)
-					break;
-
-				  int itemtype = 0;  // 0 is a terminal type
-				  if (buckets.count(out)) {
-					in = buckets[out];
-					itemtype = in->get_type();
-				  } 
-				  if (itemtype == type) break;  // this is what we want!
-				}				
-				
-				if (type != 0) {  // translate back into a bucket
-				  assert(buckets.count(out));
-				  in = buckets[out];
-				}
-			  }
-			  break;
-			  
-			default:
-			  assert(0);
-			}
-		  }
-
-		  // disk failed?
-		  bool bad = false;
-		  if (failed.count(out)) 
-			bad = true;
-		  
-		  for (int prep=0; prep<rep; prep++) {
-			if (result[prep] == out) 
-			  bad = true;
-		  }
-
-		  if (bad) {
-			// bump an 'r'
-			//cout << "failed|repeat " << attempt << endl;
-			add_r[ rule.nchoose - 1 - ((attempt/2)%rule.nchoose) ]++;
-			continue;
-		  }
-
-		  break;		  // disk is fine.
-		}
-		
-		// ok!
-		result[rep] = out;
-	  }
-	}
 
 
-	void newchoose(int ruleno, int x, vector<int>& result) {
+	void choose(int ruleno, int x, vector<int>& result) {
 	  assert(rules.count(ruleno));
 	  Rule& rule = rules[ruleno];
 
+	  int numresult = 0;
 	  int maxdepth = 20;
 
 	  // working variable
@@ -213,12 +110,13 @@ namespace crush {
 		case CRUSH_RULE_TAKE:
 		  {
 			const int arg = pc->args[0];
-			cout << "take " << arg << endl;
+			//cout << "take " << arg << endl;
 
 			// input is some explicit existing bucket
 			assert(buckets.count(arg));
 			
-			if (out.empty()) {
+			in.clear();
+			if (true || out.empty()) {
 			  // 1 row
 			  in.push_back( buckets[arg] );
 			} else {
@@ -252,7 +150,7 @@ namespace crush {
 			const int numrep = pc->args[0];
 			const int type = pc->args[1];
 
-			cout << "choose " << numrep << " of " << type << endl;
+			//cout << "choose " << numrep << " of type " << type << endl;
 
 			// reset output
 			out.clear();
@@ -262,7 +160,7 @@ namespace crush {
 				 inrow != in.end();
 				 inrow++) {
 			  // make new output row
-			  out.push_back( vector<int>() );
+			  out.push_back( vector<int>(numrep) );
 			  vector<int>& outrow = out.back();
 			  
 			  // for each replica
@@ -279,10 +177,30 @@ namespace crush {
 
 				  // choose through intervening buckets
 				  while (1) {
-					// r may be twiddled to avoid collision
-					int r = rep + (numrep + add_r[depth]) * add_r[depth];
-					out = in->choose_r(x, r, h); 
+					// r may be twiddled to (try to) avoid past collisions
+					int r = rep;
+					if (in->is_uniform()) {
+					  // uniform bucket; be careful!
+					  if (numrep >= in->get_size()) {
+						// uniform bucket is too small; just walk thru elements
+						r += add_r[depth];
+					  } else {
+						// make sure numrep is not a multple of bucket size
+						int add = numrep*add_r[depth];
+						if (in->get_size() % numrep == 0) {
+						  add += add/in->get_size();         // shift seq once per pass through the bucket
+						}
+						r += add;
+					  }
+					} else {
+					  // mixed bucket; just make a distinct-ish r sequence
+					  r += numrep * add_r[depth];
+					}
+
+					// choose
+					out = in->choose_r(x, r, h); 					
 					
+					// did we get the type we want?
 					if (in->is_uniform() && 
 						((UniformBucket*)in)->get_item_type() == type)
 					  break;
@@ -297,196 +215,69 @@ namespace crush {
 				  }
 				  
 				  // ok choice?
-				  bool bad = false;
-				  if (failed.count(out)) 
-					bad = true;
+				  int bad_localness = 0;     // 1 -> no locality in replacement, >1 more locality
+				  if (type == 0 && failed.count(out)) 
+					bad_localness = 1;         // no locality
+
+				  if (overload.count(out)) {
+					float f = (float)(h(x, out) % 1000) / 1000.0;
+					if (f > overload[out])
+					  bad_localness = 1;       // no locality
+				  }
+
 				  for (int prep=0; prep<rep; prep++) 
 					if (outrow[prep] == out) 
-					  bad = true;
-				  if (bad) {
+					  bad_localness = 4;       // local is better
+
+				  if (bad_localness) {
 					// bump an 'r'
-					int d = depth - 1 - ((attempt/2)%depth);
-					cout << "failed|repeat " << attempt << ", bumping r at depth " << d << endl;
-					add_r[d]++;
+					depth++;   // want actual depth, not array index
+					bad_localness--;
+					if (bad_localness) {
+					  // we want locality
+					  int d = depth - 1 - ((attempt/bad_localness)%(depth));
+					  add_r[d]++;
+					  collisions[attempt]++;
+					  bumps[d]++;
+					} else {
+					  // uniformly try a new disk; bump all r's
+					  for (int j=0; j<depth; j++) {
+						add_r[j]++;
+						bumps[j]++;
+					  }
+					  collisions[attempt]++;
+					}
 					continue;
 				  }
 				  break;
 				}
 
 				outrow[rep] = out;
+				//cout << "outrow[" << rep << "] = " << out << endl;
 			  } // for rep
-			  cout << "outrow is " << outrow << endl;
+			  //cout << "outrow is " << outrow << endl;
 			} // for inrow
 		  }
 		  break;
 
-		default:
-		  assert(0);
-		}
-	  }
-
-	  // assemble result
-	  int o = 0;
-	  for (int i=0; i<out.size(); i++)
-		for (int j=0; j<out[i].size(); j++)
-		  result[o++] = out[i][j];
-	}
-
-
-
-	void choose(int rno, int x, vector<int>& result) {
-	  assert(rules.count(rno));
-	  Rule& r = rules[rno];
-
-	  // working variable
-	  vector< Bucket* >       in;
-	  vector< vector<int>  >  out;
-
-	  list< MixedBucket >     temp_buckets;
-
-	  // go through each statement
-	  for (vector<RuleStep>::iterator pc = r.steps.begin();
-		   pc != r.steps.end();
-		   pc++) {
-		// move input?
-		
-		// do it
-		switch (pc->cmd) {
-		case CRUSH_RULE_TAKE:
+		case CRUSH_RULE_EMIT:
 		  {
-			const int arg = pc->args[0];
-			//cout << "take " << arg << endl;
-
-			in.clear();
-			temp_buckets.clear();
-
-			if (arg == 0) {  
-			  // input is old output
-
-			  for (vector< vector<int> >::iterator row = out.begin();
-				   row != out.end();
-				   row++) {
-				
-				if (row->size() == 1) {
-				  in.push_back( buckets[ (*row)[0] ] );
-				} else {
-				  // make a temp bucket!
-				  temp_buckets.push_back( MixedBucket( rno, -1 ) );
-				  in.push_back( &temp_buckets.back() );
-				  
-				  // put everything in.
-				  for (int j=0; j<row->size(); j++)
-					temp_buckets.back().add_item( (*row)[j],
-												  buckets[ (*row)[j] ]->get_weight() );
-				}
-			  }
-			  
-			  // reset output variable
-			  //out.clear();
-			  out = vector< vector<int> >(in.size());
-
-			} else {         
-			  // input is some explicit existing bucket
-			  assert(buckets.count(arg));
-
-			  if (out.empty()) {
-				// 1 row
-				in.push_back( buckets[arg] );
-			  } else {
-				// match rows in output?
-				for (vector< vector<int> >::iterator row = out.begin();
-					 row != out.end();
-					 row++) 
-				  in.push_back( buckets[arg] );
-			  }
-			}
-			
-			/*
-			cout << "take: in is [";
-			for (int i=0; i<in.size(); i++) 
-			  cout << " " << in[i]->get_id();
-			cout << "]" << endl;			  
-			*/
-		  }
-		  break;
-
-		case CRUSH_RULE_VERT:
-		  {
-			in.clear();
-			temp_buckets.clear();
-			
-			// input is (currently always) old output
-
-			for (vector< vector<int> >::iterator row = out.begin();
-				 row != out.end();
-				 row++) {
-			  for (int i=0; i<row->size(); i++) {
-				in.push_back( buckets[ (*row)[i] ] );
-			  }
-			}
-		  }
-		  break;
-		  
-		case CRUSH_RULE_CHOOSE:
-		  {
-			const int num = pc->args[0];
-			const int type = pc->args[1];
-			
-			// reset output
-			out.clear();
-			
-			// do each row independently
-			for (vector< Bucket* >::iterator row = in.begin();
-				 row != in.end();
-				 row++) {
-			  // make new output row
-			  out.push_back( vector<int>() );
-			  vector<int>& outrow = out.back();
-			  
-			  // for each replica
-			  for (int r=0; r<num; r++) {
-				// start with input bucket
-				const Bucket *b = *row;
-				
-				// choose through any intervening buckets
-				while (1) {
-				  if (b->is_uniform() && 
-					  ((UniformBucket*)b)->get_item_type() == type) 
-					break;
-				  
-				  int next = b->choose_r(x, r, h);
-				  int itemtype = 0;  // 0 is a terminal type
-				  if (buckets.count(next)) {
-					b = buckets[next];
-					itemtype = b->get_type();
-				  } 
-				  if (itemtype == type) break;  // this is what we want!
-				}
-
-				// choose in this bucket!
-				int item = b->choose_r(x, r, h);
-				outrow.push_back(item);
-			  }
-			}
+			int o = 0;
+			for (int i=0; i<out.size(); i++)
+			  for (int j=0; j<out[i].size(); j++)
+				result[numresult++] = out[i][j];
 		  }
 		  break;
 
 		default:
 		  assert(0);
 		}
-		
-		
 	  }
 
-	  // assemble result
-	  int o = 0;
-	  for (int i=0; i<out.size(); i++)
-		for (int j=0; j<out[i].size(); j++)
-		  result[o++] = out[i][j];
 	}
-	
+
   };
-  
+
 }
 
 #endif
