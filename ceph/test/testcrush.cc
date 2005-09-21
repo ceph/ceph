@@ -32,6 +32,41 @@ void make_disks(int n, int& no, vector<int>& d)
   }
 }
 
+
+Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks, int& nbuckets)
+{
+  if (h == 0) {
+	// uniform
+	Hash hash(123);
+	vector<int> disks;
+	for (int i=0; i<wid[h]; i++)
+	  disks.push_back(ndisks++);
+	UniformBucket *b = new UniformBucket(nbuckets--, 1, 0, 10, disks);
+	b->make_primes(hash);  
+	c.add_bucket(b);
+	//cout << h << " uniformbucket with " << wid[h] << " disks" << endl;
+	return b;
+  } else {
+	// mixed
+	MixedBucket *b = new MixedBucket(nbuckets--, h+1);
+	for (int i=0; i<wid[h]; i++) {
+	  Bucket *n = make_bucket(c, wid, h-1, ndisks, nbuckets);
+	  b->add_item(n->get_id(), n->get_weight());
+	}
+	c.add_bucket(b);
+	//cout << h << " mixedbucket with " << wid[h] << endl;
+	return b;
+  }
+}
+
+int make_hierarchy(Crush& c, vector<int>& wid, int& ndisks, int& nbuckets)
+{
+  Bucket *b = make_bucket(c, wid, wid.size()-1, ndisks, nbuckets);
+  return b->get_id();
+}
+
+
+
 int main() 
 {
   Hash h(73232313);
@@ -42,6 +77,8 @@ int main()
 
   // buckets
   vector<int> disks;
+  int root = -1;
+  int nbuckets = -1;
   int ndisks = 0;
   
   if (0) {
@@ -76,7 +113,7 @@ int main()
 	//b.add_item(-3, ub3.get_weight());
   }
 
-  if (1) {
+  if (0) {
 	int bucket = -1;
 	MixedBucket *root = new MixedBucket(bucket--, 2);
 
@@ -84,26 +121,46 @@ int main()
 	  MixedBucket *b = new MixedBucket(bucket--, 1);
 
 	  int n = 5;
-	  for (int j=0; j<n; j++) {
 
-		MixedBucket *d = new MixedBucket(bucket--, 1);
-
-		make_disks(n, ndisks, disks);
-		for (int k=0; k<n; k++)
-		  d->add_item(disks[k], 10);
+	  if (1) {
+		// add n buckets of n disks
+		for (int j=0; j<n; j++) {
+		  
+		  MixedBucket *d = new MixedBucket(bucket--, 1);
+		  
+		  make_disks(n, ndisks, disks);
+		  for (int k=0; k<n; k++)
+			d->add_item(disks[k], 10);
+		  
+		  //b->add_item(disks[j], 10);
+		  c.add_bucket(d);
+		  b->add_item(d->get_id(), d->get_weight());
+		}
 		
-		//b->add_item(disks[j], 10);
-		c.add_bucket(d);
-		b->add_item(d->get_id(), d->get_weight());
-	  }
+		c.add_bucket(b);
+		root->add_item(b->get_id(), b->get_weight());
+	  } else {
+		// add n*n disks
+		make_disks(n*n, ndisks, disks);
+		for (int k=0; k<n*n; k++)
+		  b->add_item(disks[k], 10);
 
-	  c.add_bucket(b);
-	  root->add_item(b->get_id(), b->get_weight());
+		c.add_bucket(b);
+		root->add_item(b->get_id(), b->get_weight());
+	  }
 	}
 
 	c.add_bucket(root);
   }
 
+
+  if (1) {
+	vector<int> wid;
+	for (int d=0; d<5; d++)
+	  wid.push_back(10);
+	root = make_hierarchy(c, wid, ndisks, nbuckets);
+  }
+  
 
 
   // rule
@@ -113,7 +170,6 @@ int main()
   if (0) {
 	rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, -100));
 	rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, numrep, 0));
-	c.add_rule(numrep, rule);
   }
   if (1) {
 	/*
@@ -121,60 +177,90 @@ int main()
 	rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 2, 0));
 	rule.steps.push_back(RuleStep(CRUSH_RULE_EMIT));
 	*/
-	rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, -1));
+	rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
 	rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));
 	rule.steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-	c.add_rule(numrep, rule);
   }
 
-  c.overload[10] = .1;
+  //c.overload[10] = .1;
 
+
+  int pg_per = 100;
+  int numpg = pg_per*ndisks/numrep;
   
   vector<int> ocount(ndisks);
+  cout << ndisks << " disks, " << 1-nbuckets << " buckets" << endl;
+  cout << pg_per << " pgs per disk" << endl;
+  cout << numpg << " logical pgs" << endl;
+  cout << "numrep is " << numrep << endl;
 
-  vector<int> v(numrep);
-  int numo = 10000*ndisks/numrep;
-  cout << "nrep is " << numrep << endl;
-  cout << "placing " << numo << " logical,  " << numo*numrep << " total" << endl;
-  for (int x=1; x<numo; x++) {
-	//cout << H(x) << "\t" << h(x) << endl;
-	c.choose(numrep, x, v);
-	//cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
 
-	bool bad = false;
-	for (int i=0; i<numrep; i++) {
-	  //int d = b.choose_r(x, i, h);
-	  //v[i] = d;
-	  ocount[v[i]]++;
-	  for (int j=i+1; j<numrep; j++) {
-		if (v[i] == v[j]) 
-		  bad = true;
-	  }
-	}
-	if (bad)
-	  cout << "bad set " << x << ": " << v << endl;
-	  
-	//cout << v << "\t" << ocount << endl;
-  }
+  int place = 1000000;
+  int times = place / numpg;
+  if (!times) times = 1;
 
-  for (int i=0; i<ocount.size(); i++) {
-	cout << "disk " << i << " has " << ocount[i] << endl;
-  }
-
-  cout << "collisions: " << c.collisions << endl;
-  cout << "r bumps: " << c.bumps << endl;
-
+  cout << "looping " << times << " times" << endl;
   
-  float avg = 0.0;
-  for (int i=0; i<ocount.size(); i++)
-	avg += ocount[i];
-  avg /= ocount.size();
-  float var = 0.0;
-  for (int i=0; i<ocount.size(); i++)
-	var += (ocount[i] - avg) * (ocount[i] - avg);
-  var /= ocount.size();
+  float tvar = 0;
+  int tvarnum = 0;
 
-  cout << "avg " << avg << "  var " << var << "   sd " << sqrt(var) << endl;
+  int x = 0;
+  for (int t=0; t<times; t++) {
+	vector<int> v(numrep);
+	
+	for (int z=0; z<ndisks; z++) ocount[z] = 0;
+
+	for (int xx=1; xx<numpg; xx++) {
+	  x++;
+
+	  //cout << H(x) << "\t" << h(x) << endl;
+	  c.do_rule(rule, x, v);
+	  //cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
+	  
+	  bool bad = false;
+	  for (int i=0; i<numrep; i++) {
+		//int d = b.choose_r(x, i, h);
+		//v[i] = d;
+		ocount[v[i]]++;
+		for (int j=i+1; j<numrep; j++) {
+		  if (v[i] == v[j]) 
+			bad = true;
+		}
+	  }
+	  if (bad)
+		cout << "bad set " << x << ": " << v << endl;
+	  
+	  //cout << v << "\t" << ocount << endl;
+	}
+	
+	/*
+	  for (int i=0; i<ocount.size(); i++) {
+	  cout << "disk " << i << " has " << ocount[i] << endl;
+	  }
+	*/
+	
+	cout << "collisions: " << c.collisions << endl;
+	cout << "r bumps: " << c.bumps << endl;
+	
+	
+	float avg = 0.0;
+	for (int i=0; i<ocount.size(); i++)
+	  avg += ocount[i];
+	avg /= ocount.size();
+	float var = 0.0;
+	for (int i=0; i<ocount.size(); i++)
+	  var += (ocount[i] - avg) * (ocount[i] - avg);
+	var /= ocount.size();
+	
+	cout << "avg " << avg << "  var " << var << "   sd " << sqrt(var) << endl;
+	
+	tvar += var;
+	tvarnum++;
+  }
+
+  tvar /= tvarnum;
+
+  cout << "total variance " << tvar << endl;
 
 
 }

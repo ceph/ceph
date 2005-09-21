@@ -17,6 +17,7 @@ int main()
 	cout << "adding " << i << endl;
 	int n = t.add_node(1);
 	nodes.push_back(n);
+	//cout << t << endl;
   }
   cout << t << endl;
 
@@ -29,7 +30,7 @@ int main()
 		//for (int i=0; i<nodes.size(); i++) {
 		int p = rand() % nodes.size();
 		int n = nodes[p];
-		assert(t.exists(n));
+		assert (t.exists(n));
 		cout << "removing " << n << endl;
 		t.remove_node(n);
 		

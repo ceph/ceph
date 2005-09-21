@@ -3,8 +3,9 @@
 
 #include <cassert>
 #include <iostream>
-#include <map>
-#include <set>
+//#include <map>
+#include <vector>
+//#include <set>
 using namespace std;
 
 namespace crush {
@@ -13,21 +14,31 @@ namespace crush {
   private:
 	// tree def
 	int             root_node;       // 0 for empty tree.
-	map<int, int>   node_nested;     // all existing nodes in this map
-	map<int, float> node_weight;     // and this one
-	set<int>        node_complete;   // only nodes with all possible children
+	int             alloc;
+	vector<int>     node_nested;     // all existing nodes in this map
+	vector<float>   node_weight;     // and this one
+	vector<int>     node_complete;   // only nodes with all possible children
 	
   public:
-	BinaryTree() : root_node(0) {}
+	BinaryTree() : root_node(0), alloc(0) {}
 	
 	// accessors
 	bool  empty() const { return root_node == 0; }
-	bool  exists(int n) const { return node_nested.count(n); }
-	int   nested(int n) const { return exists(n) ? ((map<int,int>)node_nested)[n]:0; }
-	float weight(int n) const { return exists(n) ? ((map<int,float>)node_weight)[n]:0; }
-	bool  complete(int n) const { return node_complete.count(n); }
+	bool  exists(int n) const { return n < alloc && node_nested[n]; }
+	int   nested(int n) const { return exists(n) ? node_nested[n]:0; }
+	float weight(int n) const { return exists(n) ? node_weight[n]:0; }
+	bool  complete(int n) const { return exists(n) ? node_complete[n]:false; }
 	int   root() const { return root_node; }
 	
+	int   realloc(int n) {
+	  while (alloc <= n) {
+		node_nested.push_back(0);
+		node_weight.push_back(0);
+		node_complete.push_back(0);
+		alloc++;
+	  }
+	}
+
 	// tree navigation
 	bool terminal(int n) const { return n & 1; }  // odd nodes are leaves.
 	int height(int n) const {
@@ -67,21 +78,21 @@ namespace crush {
 	  assert(exists(n));
 	  
 	  // erase node
-	  node_nested.erase(n);
-	  node_weight.erase(n);
+	  node_nested[n] = 0;
+	  node_weight[n] = 0;
 
 	  // adjust parents (!complete, -weight)
 	  int p = n;
 	  while (p != root_node) {
 		p = parent(p);
 
-		node_complete.erase(p);
+		node_complete[p] = 0;
 		node_weight[p] = weight(left(p)) + weight(right(p));
 		node_nested[p]--;
 
 		if (nested(p) == 0) {
-		  node_weight.erase(p);
-		  node_nested.erase(p);
+		  node_weight[p] = 0;
+		  node_nested[p] = 0;
 		}
 	  }
 	  
@@ -90,8 +101,8 @@ namespace crush {
 			 (nested(left(root_node)) == 0 ||
 			 nested(right(root_node)) == 0)) {
 		// root now one child..
-		node_weight.erase(root_node);
-		node_nested.erase(root_node);
+		node_weight[root_node] = 0;
+		node_nested[root_node] = 0;
 		if (nested(left(root_node)) == 0)
 		  root_node = right(root_node);
 		else 
@@ -101,8 +112,8 @@ namespace crush {
 	  if (terminal(root_node) && 
 		  nested(root_node) == 0) {
 		// empty!
-		node_weight.erase(root_node);
-		node_nested.erase(root_node);
+		node_weight[root_node] = 0;
+		node_nested[root_node] = 0;
 		root_node = 0;
 	  }
 
@@ -119,6 +130,7 @@ namespace crush {
 		if (complete(root_node)) {
 		  // add new root
 		  int newroot = parent(root_node);
+		  realloc(newroot);
 		  node_weight[newroot] = node_weight[root_node];
 		  node_nested[newroot] = nested(root_node);
 
@@ -151,20 +163,22 @@ namespace crush {
 	  
 	  // create at n
 	  //cout << "creating " << n << endl;
+	  realloc(n);
 	  node_weight[n] = w;
 	  node_nested[n] = 1;
-	  node_complete.insert(n);
+	  node_complete[n] = 1;
 
 	  // ancestors: create, adjust weight, complete as appropriate
 	  int p = n;
 	  while (p != root_node) {
 		p = parent(p);
+		realloc(p);
 
 		// complete?
 		if (!complete(p) &&
 			complete(left(p)) && 
 			complete(right(p))) 
-		  node_complete.insert(p);
+		  node_complete[p] = 1;
 		
 		// weight (and implicitly create)
 		node_weight[p] += w;

@@ -19,10 +19,9 @@ namespace crush {
 	float       weight;
 
   public:
-	Bucket(int _id,
-		   int _type,
+	Bucket(int _type,
 		   float _weight) :
-	  id(_id), 
+	  id(0),
 	  type(_type),
 	  weight(_weight) { }
 	
@@ -30,6 +29,8 @@ namespace crush {
 	int          get_type() const { return type; }
 	float        get_weight() const { return weight; }
 	virtual int  get_size() const = 0;
+
+	void         set_id(int i) { id = i; }
 
 	void         set_weight(float w)  { weight = w; }
 
@@ -50,9 +51,9 @@ namespace crush {
 	vector<int> primes;
 
   public:
-	UniformBucket(int _id, int _type, int _item_type,
+	UniformBucket(int _type, int _item_type,
 				  float _item_weight, vector<int>& _items) :
-	  Bucket(_id, _type, _item_weight*_items.size()),
+	  Bucket(_type, _item_weight*_items.size()),
 	  item_type(_item_type),
 	  item_weight(_item_weight) {
 	  items = _items;
@@ -108,7 +109,7 @@ namespace crush {
 	map<int,int>   node_map;     // node id -> item
 
   public:
-	MixedBucket(int _id, int _type) : Bucket(_id, _type, 0) {
+	MixedBucket(int _type) : Bucket(_type, 0) {
 	}
 
 	//float       get_item_weight(int i) { return item_weight[i]; }

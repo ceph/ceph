@@ -2,6 +2,18 @@
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#define hashmix(a,b,c) \
+		a=a-b;  a=a-c;  a=a^(c>>13); \
+		b=b-c;  b=b-a;  b=b^(a<<8);  \
+		c=c-a;  c=c-b;  c=c^(b>>13); \
+		a=a-b;  a=a-c;  a=a^(c>>12); \
+		b=b-c;  b=b-a;  b=b^(a<<16); \
+		c=c-a;  c=c-b;  c=c^(b>>5);  \
+		a=a-b;  a=a-c;  a=a^(c>>3); \
+		b=b-c;  b=b-a;  b=b^(a<<10); \
+		c=c-a;  c=c-b;  c=c^(b>>15); 
+
+
 namespace crush {
   
   class Hash {
@@ -15,6 +27,37 @@ namespace crush {
 	  if (0) 
 		return (n ^ 0xdead1234) * (884811920 * 3  + 1);
 	  
+	  // Robert jenkins' 96 bit mix
+	  //  sucks
+	  if (0) {
+		int c = n;
+		int a = 12378912;
+		int b = 2982827;
+		a=a-b;  a=a-c;  a=a^(c>>13); 
+		b=b-c;  b=b-a;  b=b^(a<<8);  
+		c=c-a;  c=c-b;  c=c^(b>>13); 
+		a=a-b;  a=a-c;  a=a^(c>>12); 
+		b=b-c;  b=b-a;  b=b^(a<<16); 
+		c=c-a;  c=c-b;  c=c^(b>>5);  
+		a=a-b;  a=a-c;  a=a^(c>>3); 
+		b=b-c;  b=b-a;  b=b^(a<<10); 
+		c=c-a;  c=c-b;  c=c^(b>>15); 
+		return c;
+	  }
+	  // robert jenkins 32-bit
+	  //  sucks
+	  if (0) {
+	    n += (n << 12);
+		n ^= (n >> 22);
+		n += (n << 4);
+		n ^= (n >> 9);
+		n += (n << 10);
+		n ^= (n >> 2);
+		n += (n << 7);
+		n ^= (n >> 12);
+		return n;
+	  }
+
 	  // djb2
 	  if (0) {
 		unsigned int hash = 5381;
@@ -25,14 +68,17 @@ namespace crush {
 		return hash;
 	  }
 
-	  // JS
+	  // JS (+ mixing -sage)
 	  //  a little better than RS
 	  if (1) {
 		unsigned int hash = 1315423911;
+		int a = 231232;
+		int b = 1232;
 		
 		for(unsigned int i = 0; i < 4; i++)
 		  {
 			hash ^= ((hash << 5) + (n&255) + (hash >> 2));
+			hashmix(a, b, hash);
 			n = n >> 8;
 		  }
 		
