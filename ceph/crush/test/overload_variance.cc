@@ -113,7 +113,7 @@ float go(int dep, int overloadcutoff)
 	b->make_primes(h);
 	root = c.add_bucket(b);
   }
-  cout << ndisks << " disks" << endl;
+  //cout << ndisks << " disks" << endl;
   
 
 

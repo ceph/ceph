@@ -3,7 +3,7 @@
 
 #include <cassert>
 #include <iostream>
-//#include <map>
+#include <map>
 #include <vector>
 //#include <set>
 using namespace std;
@@ -18,7 +18,7 @@ namespace crush {
 	vector<int>     node_nested;     // all existing nodes in this map
 	vector<float>   node_weight;     // and this one
 	vector<int>     node_complete;   // only nodes with all possible children
-	
+
   public:
 	BinaryTree() : root_node(0), alloc(0) {}
 	
@@ -28,14 +28,24 @@ namespace crush {
 	int   nested(int n) const { return exists(n) ? node_nested[n]:0; }
 	float weight(int n) const { return exists(n) ? node_weight[n]:0; }
 	bool  complete(int n) const { return exists(n) ? node_complete[n]:false; }
+
 	int   root() const { return root_node; }
 	
 	int   realloc(int n) {
-	  while (alloc <= n) {
-		node_nested.push_back(0);
-		node_weight.push_back(0);
-		node_complete.push_back(0);
-		alloc++;
+		/*
+		while (alloc <= n) {
+		  node_nested.push_back(0);
+		  node_weight.push_back(0);
+		  node_complete.push_back(0);
+		  alloc++;
+		}
+		*/
+	  if (alloc <= n) {
+		int add = n - alloc + 1;
+		node_nested.insert(node_nested.end(), add, 0);
+		node_weight.insert(node_weight.end(), add, 0);
+		node_complete.insert(node_complete.end(), add, 0);
+		alloc = n+1;
 	  }
 	}
 
@@ -74,6 +84,17 @@ namespace crush {
 	}
 	
 	// modifiers
+	void adjust_node_weight(int n, float w) {
+	  assert(exists(n));
+	  node_weight[n] += w;
+	 
+	  int p = n;
+	  while (p != root_node) {
+		p = parent(p);
+		node_weight[p] += w;
+	  }
+	}
+
 	void remove_node(int n) {
 	  assert(exists(n));
 	  
@@ -118,8 +139,12 @@ namespace crush {
 	  }
 
 	}
+
+	int add_node_root(float w) {
+	  return add_node(w, true);
+	}
 	
-	int add_node(float w) {
+	int add_node(float w, bool force_root=false) {
 	  int n;
 	  if (!root_node) {
 		// empty tree!
@@ -127,7 +152,7 @@ namespace crush {
 	  } else {
 		// existing tree.
 		// expand tree?
-		if (complete(root_node)) {
+		if (force_root || complete(root_node)) {
 		  // add new root
 		  int newroot = parent(root_node);
 		  realloc(newroot);
@@ -186,6 +211,7 @@ namespace crush {
 	  }
 
 	  return n;
+
 	}
 	
 

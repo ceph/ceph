@@ -19,13 +19,13 @@ Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks)
 	for (int i=0; i<wid[h]; i++)
 	  disks.push_back(ndisks++);
 	UniformBucket *b = new UniformBucket(1, 0, 10, disks);
-	b->make_primes(hash);  
+	//b->make_primes(hash);  
 	c.add_bucket(b);
 	//cout << h << " uniformbucket with " << wid[h] << " disks" << endl;
 	return b;
   } else {
 	// mixed
-	MixedBucket *b = new MixedBucket(h+1);
+	Bucket *b = new TreeBucket(h+1);
 	for (int i=0; i<wid[h]; i++) {
 	  Bucket *n = make_bucket(c, wid, h-1, ndisks);
 	  b->add_item(n->get_id(), n->get_weight());
@@ -56,26 +56,27 @@ float go(int dep)
   int ndisks = 0;
 
   vector<int> wid;
-  for (int d=0; d<dep; d++)
-	wid.push_back(10);
+  if (1) {
+	for (int d=0; d<dep; d++)
+	  wid.push_back(10);
+  }
+  if (0) {
+	if (dep == 0) 
+	  wid.push_back(1000);
+	if (dep == 1) {
+	  wid.push_back(1);
+	  wid.push_back(1000);
+	}
+	if (dep == 2) {
+	  wid.push_back(5);
+	  wid.push_back(5);
+	  wid.push_back(8);
+	  wid.push_back(5);
+	}	
+  }
 
   if (1) {
 	root = make_hierarchy(c, wid, ndisks);
-  }
-  if (0) {
-	MixedBucket *b = new MixedBucket(1);
-	for (int i=0; i<10000; i++)
-	  b->add_item(ndisks++, 10);
-	root = c.add_bucket(b);
-  }
-  if (0) {
-	vector<int> disks;
-	for (int i=0; i<10000; i++)
-	  disks.push_back(ndisks++);
-	UniformBucket *b = new UniformBucket(1, 0, 10000, disks);
-	Hash h(123);
-	b->make_primes(h);
-	root = c.add_bucket(b);
   }
   
 
@@ -100,14 +101,15 @@ float go(int dep)
   //cout << "numrep is " << numrep << endl;
 
 
-  int place = 1000000;
+  int place = 100000;
   int times = place / numpg;
   if (!times) times = 1;
 
-  //cout << "looping " << times << " times" << endl;
+  cout << "#looping " << times << " times" << endl;
   
   float tvar = 0;
   int tvarnum = 0;
+  float tavg = 0;
 
   int x = 0;
   for (int t=0; t<times; t++) {
@@ -132,8 +134,6 @@ float go(int dep)
 			bad = true;
 		}
 	  }
-	  if (bad)
-		cout << "bad set " << x << ": " << v << endl;
 	  
 	  //cout << v << "\t" << ocount << endl;
 	}
@@ -157,15 +157,19 @@ float go(int dep)
 	  var += (ocount[i] - avg) * (ocount[i] - avg);
 	var /= ocount.size();
 	
-	//cout << "avg " << avg << "  var " << var << "   sd " << sqrt(var) << endl;
+	if (times < 10) 
+	  cout << "avg " << avg << "   evar " << sqrt(avg) << "   sd " << sqrt(var) << endl;
+	//cout << avg << "\t";
 	
 	tvar += var;
+	tavg += avg;
 	tvarnum++;
   }
 
+  tavg /= tvarnum;
   tvar /= tvarnum;
 
-  //cout << "total variance " << tvar << endl;
+  cout << "total variance " << sqrt(tvar) << "   expected " << sqrt(tavg) << endl;
 
   return tvar;
 }
@@ -173,9 +177,9 @@ float go(int dep)
 
 int main() 
 {
-  for (int d=1; d<7; d++) {
+  for (int d=2; d<=5; d++) {
 	float var = go(d);
 	//cout << "## depth = " << d << endl;
-	cout << d << "\t" << var << endl;
+	//cout << d << "\t" << var << "\t" << sqrt(var) << endl;
   }
 }

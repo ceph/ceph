@@ -18,14 +18,16 @@ Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks)
 	vector<int> disks;
 	for (int i=0; i<wid[h]; i++)
 	  disks.push_back(ndisks++);
-	UniformBucket *b = new UniformBucket(1, 0, 10, disks);
-	b->make_primes(hash);  
+	float w = ((ndisks-1)/100+1)*10;
+	UniformBucket *b = new UniformBucket(1, 0, w, disks);
+	//b->make_primes(hash);  
 	c.add_bucket(b);
-	//cout << h << " uniformbucket with " << wid[h] << " disks" << endl;
+	//cout << h << " uniformbucket with " << wid[h] << " disks weight " << w << endl;
 	return b;
   } else {
 	// mixed
-	MixedBucket *b = new MixedBucket(h+1);
+	Bucket *b = new TreeBucket(h+1);
+	//Bucket *b = new StrawBucket(h+1);
 	for (int i=0; i<wid[h]; i++) {
 	  Bucket *n = make_bucket(c, wid, h-1, ndisks);
 	  b->add_item(n->get_id(), n->get_weight());
@@ -42,36 +44,6 @@ int make_hierarchy(Crush& c, vector<int>& wid, int& ndisks)
   return b->get_id();
 }
 
-
-Bucket *make_random(Crush& c, int wid, int height, int& ndisks)
-{
-  int w = rand() % (wid-1) + 2;
-
-  if (height == 0) {
-	// uniform
-	Hash hash(123);
-	vector<int> disks;
-	for (int i=0; i<w; i++)
-	  disks.push_back(ndisks++);
-	UniformBucket *b = new UniformBucket(1, 0, 10, disks);
-	b->make_primes(hash);  
-	c.add_bucket(b);
-	//cout << h << " uniformbucket with " << wid[h] << " disks" << endl;
-	return b;
-  } else {
-	// mixed
-	int h = rand() % height + 1;
-	MixedBucket *b = new MixedBucket(h+1);
-	for (int i=0; i<w; i++) {
-	  Bucket *n = make_random(c, wid, h-1, ndisks);
-	  b->add_item(n->get_id(), n->get_weight());
-	}
-	c.add_bucket(b);
-	//cout << h << " mixedbucket with " << wid[h] << endl;
-	return b;
-  }
-
-}
 
 
 float go(int dep, int overloadcutoff) 
@@ -90,32 +62,9 @@ float go(int dep, int overloadcutoff)
   for (int d=0; d<dep; d++)
 	wid.push_back(10);
 
-  if (0) {
+  if (1) {
 	root = make_hierarchy(c, wid, ndisks);
   }
-  if (1) {
-	srand(1);
-	Bucket *r = make_random(c, 20,  4, ndisks);
-	root = r->get_id();
-	//c.print(cout, root);
-  }
-  if (0) {
-	MixedBucket *b = new MixedBucket(1);
-	for (int i=0; i<10000; i++)
-	  b->add_item(ndisks++, 10);
-	root = c.add_bucket(b);
-  }
-  if (0) {
-	vector<int> disks;
-	for (int i=0; i<10000; i++)
-	  disks.push_back(ndisks++);
-	UniformBucket *b = new UniformBucket(1, 0, 10000, disks);
-	Hash h(123);
-	b->make_primes(h);
-	root = c.add_bucket(b);
-  }
-  cout << ndisks << " disks" << endl;
-  
 
 
   // rule
@@ -128,7 +77,8 @@ float go(int dep, int overloadcutoff)
   //c.overload[10] = .1;
 
 
-  int pg_per = 100;
+  int pg_per_base = 10;
+  int pg_per = pg_per_base*5.5;//100;
   int numpg = pg_per*ndisks/numrep;
   
   vector<int> ocount(ndisks);
@@ -138,14 +88,19 @@ float go(int dep, int overloadcutoff)
   //cout << "numrep is " << numrep << endl;
 
 
-  int place = 10000;
+  int place = 100000;
   int times = place / numpg;
   if (!times) times = 1;
   
 
   //cout << "looping " << times << " times" << endl;
   
-  float tvar = 0;
+  float tavg[10];
+  float tvar[10];
+  for (int j=0;j<10;j++) {
+	tvar[j] = 0;
+	tavg[j] = 0;
+  }
   int tvarnum = 0;
 
   float overloadsum = 0.0;
@@ -177,8 +132,8 @@ float go(int dep, int overloadcutoff)
 			bad = true;
 		}
 	  }
-	  if (bad)
-		cout << "bad set " << x << ": " << v << endl;
+	  //if (bad)
+	  //cout << "bad set " << x << ": " << v << endl;
 	  
 	  //cout << v << "\t" << ocount << endl;
 	}
@@ -187,12 +142,16 @@ float go(int dep, int overloadcutoff)
 	int overloaded = 0;
 	int adjusted = 0;
 	for (int i=0; i<ocount.size(); i++) {
-	  if (ocount[i] > overloadcutoff) 
+	  int target = (i/100+1)*10;
+	  int cutoff = target * overloadcutoff / 100;
+	  int adjoff = target + (cutoff - target)*3/4;
+	  if (ocount[i] > cutoff) 
 		overloaded++;
 
-	  if (ocount[i] > 100+(overloadcutoff-100)/2) {
+	  if (ocount[i] > adjoff) {
 		adjusted++;
-		c.overload[i] = 100.0 / (float)ocount[i];
+		c.overload[i] = (float)target / (float)ocount[i];
+		//cout << "setting overload " << i << " to " << c.overload[i] << endl;
 		//cout << "disk " << i << " has " << ocount[i] << endl;
 	  }
 	  ocount[i] = 0;
@@ -201,6 +160,49 @@ float go(int dep, int overloadcutoff)
 	overloadsum += (float)overloaded / (float)ndisks;
 	adjustsum += (float)adjusted / (float)ndisks;
 
+
+
+	if (1) {
+	  // second pass
+	  for (int x=xs; x<numpg+xs; x++) {
+		
+		//cout << H(x) << "\t" << h(x) << endl;
+		c.do_rule(rule, x, v);
+		//cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
+		
+		bool bad = false;
+		for (int i=0; i<numrep; i++) {
+		  //int d = b.choose_r(x, i, h);
+		  //v[i] = d;
+		  ocount[v[i]]++;
+		  for (int j=i+1; j<numrep; j++) {
+			if (v[i] == v[j]) 
+			  bad = true;
+		  }
+		}
+		
+		//cout << v << "\t" << ocount << endl;
+	  }
+
+	  for (int i=0; i<ocount.size(); i++) {
+		int target = (i/100+1)*10;
+		int cutoff = target * overloadcutoff / 100;
+		int adjoff = cutoff;//target + (cutoff - target)*3/4;
+
+		if (ocount[i] >= adjoff) {
+		  adjusted++;
+		  if (c.overload.count(i) == 0) {
+			c.overload[i] = 1.0;
+			adjusted++;
+		  }
+		  //else cout << "(re)adjusting " << i << endl;
+		  c.overload[i] *= (float)target / (float)ocount[i];
+		  //cout << "setting overload " << i << " to " << c.overload[i] << endl;
+		  //cout << "disk " << i << " has " << ocount[i] << endl;
+		}
+		ocount[i] = 0;
+	  }
+	}
 
 	for (int x=xs; x<numpg+xs; x++) {
 
@@ -218,19 +220,21 @@ float go(int dep, int overloadcutoff)
 			bad = true;
 		}
 	  }
-	  if (bad)
-		cout << "bad set " << x << ": " << v << endl;
-	  
 	  //cout << v << "\t" << ocount << endl;
 	}
 	xs += numpg;
 
 	int still = 0;
 	for (int i=0; i<ocount.size(); i++) {
-	  if (ocount[i] > overloadcutoff) {
+	  int target = (i/100+1)*10;
+	  int cutoff = target * overloadcutoff / 100;
+	  int adjoff = target + (cutoff - target)/3;
+
+	  if (ocount[i] > cutoff) {
 		still++;
 		//c.overload[ocount[i]] = 100.0 / (float)ocount[i];
-		//cout << "disk " << i << " has " << ocount[i] << endl;
+		if (c.overload.count(i)) cout << "[adjusted] ";
+		cout << "disk " << i << " has " << ocount[i] << endl;
 	  }
 	}
 	//if (still) cout << "overload was " << overloaded << " now " << still << endl;
@@ -239,41 +243,55 @@ float go(int dep, int overloadcutoff)
 	//cout << "collisions: " << c.collisions << endl;
 	//cout << "r bumps: " << c.bumps << endl;
 	
-	float avg = 0.0;
-	for (int i=0; i<ocount.size(); i++)
-	  avg += ocount[i];
-	avg /= ocount.size();
-	float var = 0.0;
-	for (int i=0; i<ocount.size(); i++)
-	  var += (ocount[i] - avg) * (ocount[i] - avg);
-	var /= ocount.size();
-	
+	int n = ndisks/10;
+	float avg[10];
+	float var[10];
+	for (int i=0;i<10;i++) {
+	  int s = n*i;
+	  avg[i] = 0.0;
+	  for (int j=0; j<n; j++)
+		avg[i] += ocount[j+s];
+	  avg[i] /= n;//ocount.size();
+	  var[i] = 0.0;
+	  for (int j=0; j<n; j++)
+		var[i] += (ocount[j+s] - avg[i]) * (ocount[j+s] - avg[i]);
+	  var[i] /= n;//ocount.size();
+
+	  tvar[i] += var[i];
+	  tavg[i] += avg[i];
+	}
 	//cout << "avg " << avg << "  var " << var << "   sd " << sqrt(var) << endl;
 	
-	tvar += var;
 	tvarnum++;
   }
 
   overloadsum /= tvarnum;
   adjustsum /= tvarnum;
-  tvar /= tvarnum;
+  for (int j=0;j<10;j++) {
+	tvar[j] /= tvarnum;
+	tavg[j] /= tvarnum;
+  }
   afteroverloadsum /= tvarnum;
 
-  int collisions = c.collisions[0] + c.collisions[1] + c.collisions[2] + c.collisions[3];
-  float crate = (float) collisions / (float)chooses;
+  //int collisions = c.collisions[0] + c.collisions[1] + c.collisions[2] + c.collisions[3];
+  //float crate = (float) collisions / (float)chooses;
   //cout << "collisions: " << c.collisions << endl;
 
 
   //cout << "total variance " << tvar << endl;
   //cout << " overlaod " << overloadsum << endl;
-
-  cout << overloadcutoff << "\t" << (10000.0 / (float)overloadcutoff) << "\t" << tvar << "\t" << overloadsum << "\t" << adjustsum << "\t" << afteroverloadsum << "\t" << crate << endl;
-  return tvar;
+  
+  cout << overloadcutoff << "\t" << (10000.0 / (float)overloadcutoff) << "\t" << overloadsum << "\t" << adjustsum << "\t" << afteroverloadsum;
+  for (int i=0;i<10;i++)
+	cout << "\t" << tavg[i] << "\t" << tvar[i];// << "\t" << tvar[i]/tavg[i];
+  cout << endl;
+  return tvar[0];
 }
 
 
 int main() 
 {
+  float var = go(3,200);
   for (int d=140; d>100; d -= 5) {
 	float var = go(3,d);
 	//cout << "## depth = " << d << endl;

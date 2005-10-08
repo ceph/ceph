@@ -4,40 +4,54 @@
 #include "BinaryTree.h"
 #include "Hash.h"
 
+#include <list>
 #include <vector>
 #include <map>
+#include <set>
 using namespace std;
 
 namespace crush {
 
   /** abstract bucket **/
-
   class Bucket {
   protected:
 	int         id;
+	int         parent;
 	int         type;
 	float       weight;
 
   public:
 	Bucket(int _type,
 		   float _weight) :
-	  id(0),
+	  id(0), parent(0),
 	  type(_type),
 	  weight(_weight) { }
 	
+	virtual const char *get_bucket_type() const = 0;
+	virtual bool is_uniform() const = 0;
+
 	int          get_id() const { return id; } 
 	int          get_type() const { return type; }
 	float        get_weight() const { return weight; }
+	int          get_parent() const { return parent; }
 	virtual int  get_size() const = 0;
 
 	void         set_id(int i) { id = i; }
-
+	void         set_parent(int p) { parent = p; }
 	void         set_weight(float w)  { weight = w; }
 
-	virtual bool is_uniform() const = 0;
-	virtual int choose_r(int x, int r, Hash& h) const = 0;
+	virtual void get_items(vector<int>& i) const = 0;
+	virtual float get_item_weight(int item) const = 0;
+	virtual void add_item(int item, float w) = 0;
+	virtual void adjust_item_weight(int item, float w) = 0;
+	virtual void set_item_weight(int item, float w) {
+	  adjust_item_weight(item, w - get_item_weight(item));
+	}
 
+	virtual int choose_r(int x, int r, Hash& h) const = 0;
   };
+
+
 
 
   /** uniform bucket **/
@@ -48,30 +62,21 @@ namespace crush {
 	int    item_type;
 	float  item_weight;
 
+	// primes
 	vector<int> primes;
-
-  public:
-	UniformBucket(int _type, int _item_type,
-				  float _item_weight, vector<int>& _items) :
-	  Bucket(_type, _item_weight*_items.size()),
-	  item_type(_item_type),
-	  item_weight(_item_weight) {
-	  items = _items;
-	}
-
-	int get_size() const { return items.size(); }
-	int get_item_type() const { return item_type; }
-	float get_item_weight() const { return item_weight; }
-	bool is_uniform() const { return true; }
 
 	int get_prime(int j) const {
 	  return primes[ j % primes.size() ];
 	}
+	void make_primes() {
+	  if (items.empty()) return;
 
-	void make_primes(Hash& h) {
+	  Hash h(123+get_id());
+	  primes.clear();
+
 	  // start with odd number > num_items
 	  int x = items.size() + 1;             // this is the minimum!
-	  x += h(get_id()) % (3*items.size());  // bump it up some
+	  x += h(items.size()) % (3*items.size());  // bump it up some
 	  x |= 1;                               // make it odd
 
 	  while (primes.size() < items.size()) {
@@ -85,12 +90,46 @@ namespace crush {
 	  }
 	}
 
-	int choose_r(int x, int r, Hash& h) const {
+  public:
+	UniformBucket(int _type, int _item_type,
+				  float _item_weight, vector<int>& _items) :
+	  Bucket(_type, _item_weight*_items.size()),
+	  item_type(_item_type),
+	  item_weight(_item_weight) {
+	  items = _items;
+	  make_primes();
+	}
+
+	const char *get_bucket_type() const { return "uniform"; }
+	bool is_uniform() const { return true; }
+
+	int get_size() const { return items.size(); }
+
+
+	// items
+	void get_items(vector<int>& i) const {
+	  i = items;
+	}
+	int get_item_type() const { return item_type; }
+	float get_item_weight(int item) const { return item_weight; }
+
+	void add_item(int item, float w) {
+	  if (items.empty())
+		item_weight = w;
+	  items.push_back(item);
+	  make_primes();
+	}
+
+	void adjust_item_weight(int item, float w) {
+	  assert(0);
+	}
+
+	int choose_r(int x, int r, Hash& hash) const {
 	  //cout << "uniformbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
-	  int v = h(x, get_id(), 1) % get_size();
-	  int p = get_prime( h(x, get_id(), 2) );  // choose a prime based on hash(x, get_id(), 2)
+	  int v = hash(x, get_id(), 1) % get_size();
+	  int p = get_prime( hash(x, get_id(), 2) );  // choose a prime based on hash(x, get_id(), 2)
 	  int s = (x + v + (r+1)*p) % get_size();
 	  return items[s];
 	}
@@ -98,37 +137,153 @@ namespace crush {
 
 
 
-  // mixed bucket, based on RUSH_T type binary tree
+
   
-  class MixedBucket : public Bucket {
+  // list bucket.. RUSH_P sorta
+  
+  class ListBucket : public Bucket {
   protected:
-	vector<float>  item_weight;
-
+	list<int>        items;
+	list<float>      item_weight;
+	list<float>      sum_weight;
+	
   public:
-	BinaryTree     tree;
-	map<int,int>   node_map;     // node id -> item
+	ListBucket(int _type) : Bucket(_type, 0) { }
 
-  public:
-	MixedBucket(int _type) : Bucket(_type, 0) {
-	}
-
-	//float       get_item_weight(int i) { return item_weight[i]; }
+	const char *get_bucket_type() const { return "list"; }
 	bool        is_uniform() const { return false; }
-	int get_size() const { return node_map.size(); }
+
+	int get_size() const { return items.size(); }
+
+	void get_items(vector<int>& i) const {
+	  for (list<int>::const_iterator it = items.begin();
+		   it != items.end();
+		   it++) 
+		i.push_back(*it);
+	}
+	float get_item_weight(int item) const {
+	  list<int>::const_iterator i = items.begin();
+	  list<float>::const_iterator w = item_weight.begin();
+	  while (i != items.end()) {
+		if (*i == item) return *w;
+		i++; w++;
+	  }
+	}
 
 	void add_item(int item, float w) {
-	  int n = tree.add_node(w);
-	  node_map[n] = item;
+	  items.push_front(item);
+	  item_weight.push_front(w);
 	  weight += w;
+	  sum_weight.push_front(weight);
 	}
 
+	void adjust_item_weight(int item, float dw) {
+	  // find it
+	  list<int>::iterator p = items.begin();
+	  list<float>::iterator pw = item_weight.begin();
+	  list<float>::iterator ps = sum_weight.begin();
+
+	  while (*p != item) {
+		*ps += dw;
+		p++; pw++; ps++;  // next!
+		assert(p != items.end());
+	  }
+
+	  assert(*p == item);
+	  *pw += dw;
+	  *ps += dw;
+	}
+
+	
+	int choose_r(int x, int r, Hash& h) const {
+	  //cout << "linearbucket.choose_r(" << x << ", " << r << ")" << endl;
+
+	  list<int>::const_iterator p = items.begin();
+	  list<float>::const_iterator pw = item_weight.begin();
+	  list<float>::const_iterator ps = sum_weight.begin();
+
+	  while (p != items.end()) {
+		const int item = *p;
+		const float iw = *pw;
+		const float tw = *ps;
+		const float f = (float)(h(x, item, r, get_id()) % 10000) * tw / 10000.0;
+		//cout << "item " << item << "  iw = " << iw << "  tw = " << tw << "  f = " << f << endl;
+		if (f < iw) {
+		  //cout << "linearbucket.choose_r(" << x << ", " << r << ") = " << item << endl;
+		  return item;
+		}
+		p++; pw++; ps++;  // next!
+	  }
+	  assert(0);
+	}	
+  };
+
+
+
+
+  // mixed bucket, based on RUSH_T type binary tree
+  
+  class TreeBucket : public Bucket {
+  protected:
+	//vector<float>  item_weight;
+
+	//  public:
+	BinaryTree     tree;
+	map<int,int>   node_item;     // node id -> item
+	vector<int>    node_item_vec; // fast version of above
+	map<int,int>   item_node;     // item -> node id
+	map<int,float> item_weight;
+
+  public:
+	TreeBucket(int _type) : Bucket(_type, 0) {
+	}
+
+	const char *get_bucket_type() const { return "tree"; }
+	bool        is_uniform() const { return false; }
+
+	int get_size() const { return node_item.size(); }
+
+	// items
+	void get_items(vector<int>& i) const {
+	  for (map<int,int>::const_iterator it = node_item.begin();
+		   it != node_item.end();
+		   it++) 
+		i.push_back(it->second);	
+	}
+	float get_item_weight(int i) const { 
+	  assert(item_weight.count(i));
+	  return ((map<int,float>)item_weight)[i]; 
+	}
+
+
+	void add_item(int item, float w) {
+	  item_weight[item] = w;
+	  weight += w;
+
+	  int n = tree.add_node(w);
+	  node_item[n] = item;
+	  item_node[item] = n;
+
+	  while (node_item_vec.size() <= n) node_item_vec.push_back(0);
+	  node_item_vec[n] = item;
+	}
+	
+	void adjust_item_weight(int item, float dw) {
+	  // adjust my weight
+	  weight += dw;
+	  item_weight[item] += dw;
+
+	  // adjust tree weights
+	  tree.adjust_node_weight(item_node[item], dw);
+	}
+	
 	int choose_r(int x, int r, Hash& h) const {
 	  //cout << "mixedbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  int n = tree.root();
 	  while (!tree.terminal(n)) {
 		// pick a point in [0,w)
 		float w = tree.weight(n);
-		float f = (float)(h(x, n, r, get_id()) % 1000) * w / 1000.0;
+		float f = (float)(h(x, n, r, get_id()) % 10000) * w / 10000.0;
 
 		// left or right?
 		int l = tree.left(n);
@@ -138,17 +293,178 @@ namespace crush {
 		else
 		  n = tree.right(n);
 	  }
-	  assert(node_map.count(n));
-	  return ((map<int,int>)node_map)[n];
+	  //assert(node_item.count(n));
+	  //return ((map<int,int>)node_item)[n];
+	  return node_item_vec[n];
 	}
-
-
   };
 
 
 
 
 
+  // straw bucket.. new thing!
+  
+  class StrawBucket : public Bucket {
+  protected:
+	map<int, float>  item_weight;
+	map<int, float>  item_straw;
+
+	list<int>   _items;
+	list<float> _straws;
+
+  public:
+	StrawBucket(int _type) : Bucket(_type, 0) { }
+
+	const char *get_bucket_type() const { return "straw"; }
+	bool is_uniform() const { return false; }
+
+	int get_size() const { return item_weight.size(); }
+
+
+	// items
+	void get_items(vector<int>& i) const {
+	  for (map<int,float>::const_iterator it = item_weight.begin();
+		   it != item_weight.end();
+		   it++) 
+		i.push_back(it->first);
+	}
+	float get_item_weight(int item) const {
+	  assert(item_weight.count(item));
+	  return ((map<int,float>)item_weight)[item];
+	}
+
+	void add_item(int item, float w) {
+	  item_weight[item] = w;
+	  weight += w;
+	  calc_straws();
+	}
+
+	void adjust_item_weight(int item, float dw) {
+	  //cout << "adjust " << item << " " << dw << endl;
+	  weight += dw;
+	  item_weight[item] += dw;
+	  calc_straws();
+	}
+	
+	
+	/* calculate straw lengths.
+	   this is kind of ugly.  not sure if there's a closed form way to calculate this or not!	
+	 */
+	void calc_straws() {
+	  //cout << get_id() << ": calc_straws ============" << endl;
+
+	  item_straw.clear();
+	  _items.clear();
+	  _straws.clear();
+
+	  // reverse sort by weight; skip zero weight items
+	  map<float, set<int> > reverse;
+	  for (map<int, float>::iterator p = item_weight.begin();
+		   p != item_weight.end();
+		   p++) {
+		//cout << get_id() << ":" << p->first << " " << p->second << endl;
+		if (p->second > 0) {
+		  //p->second /= minw;
+		  reverse[p->second].insert(p->first);
+		}
+	  }
+
+	  /* 1:2:7 
+		 item_straw[0] = 1.0;
+		 item_straw[1] = item_straw[0]*sqrt(1.0/.6);
+		 item_straw[2] = item_straw[1]*2.0;
+	  */
+
+	  // work from low to high weights
+	  float straw = 1.0;
+	  float numleft = item_weight.size();
+	  float wbelow = 0.0;
+	  float lastw = 0.0;
+	  
+	  map<float, set<int> >::iterator next = reverse.begin();
+	  //while (next != reverse.end()) {
+	  while (1) {
+		//cout << "hi " << next->first << endl;
+		map<float, set<int> >::iterator cur = next;
+		
+		// set straw length for this set
+		for (set<int>::iterator s = cur->second.begin();
+			 s != cur->second.end();
+			 s++) {
+		  item_straw[*s] = straw;
+		  //cout << "straw " << *s << " w " << item_weight[*s] << " -> " << straw << endl;
+		  _items.push_back(*s);
+		  _straws.push_back(straw);
+		}
+		
+		next++;
+		if (next == reverse.end()) break;
+		
+		wbelow += (cur->first-lastw) * numleft;
+		//cout << "wbelow " << wbelow << endl;
+		
+		numleft -= 1.0 * (float)cur->second.size();
+		//cout << "numleft now " << numleft << endl;
+		
+		
+		float wnext = numleft * (next->first - cur->first);
+		//cout << "wnext " << wnext << endl;
+		
+		float pbelow = wbelow / (wbelow+wnext);
+		//cout << "pbelow " << pbelow << endl;
+		
+		straw *= pow((double)(1.0/pbelow), (double)1.0/numleft);
+		
+		lastw = cur->first;
+	  }
+	  //cout << "============" << endl;
+	}
+
+	int choose_r(int x, int r, Hash& h) const {
+	  //cout << "strawbucket.choose_r(" << x << ", " << r << ")" << endl;
+
+	  float high_draw = -1;
+	  int high = 0;
+
+	  list<int>::const_iterator pi = _items.begin();
+	  list<float>::const_iterator ps = _straws.begin();
+	  while (pi != _items.end()) {
+		const int item = *pi;
+		const float rnd = (float)(h(x, item, r) % 1000000) / 1000000.0;
+		const float straw = *ps * rnd;
+		
+		if (high_draw < 0 ||
+			straw > high_draw) {
+		  high = *pi;
+		  high_draw = straw;
+		}
+
+		pi++;
+		ps++;
+	  }
+	  return high;
+
+	  /*
+	  for (map<int, float>::const_iterator p = item_weight.begin();
+		   p != item_weight.end();
+		   p++) {
+		if (p->second == 0) continue;  // skip zero weights
+
+		const int item = p->first;
+		const float rnd = (float)(h(x, item, r) % 1000000) / 1000000.0;
+		float s = rnd * (((map<int,float>)item_straw)[item]);
+		
+		if (high_draw < 0 ||
+			s > high_draw) {
+		  high = p->first;
+		  high_draw = s;
+		}
+	  } 
+      return high;
+      */
+	}	
+  };
 
 }
 

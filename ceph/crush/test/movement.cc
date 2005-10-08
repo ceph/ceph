@@ -151,11 +151,12 @@ float testmovement(int depth, int branching, int udisks)
 
   place(c, rule, numpg, numrep, placement1);
   
-  if (0) {
+  if (1) {
 	// failed
 
-	for (int i=500; i<1000; i++)
-	  c.failed.insert(i);
+	//for (int i=500; i<1000; i++)
+	//c.failed.insert(i);
+	c.failed.insert(0);
   }
 
   int olddisks = ndisks;

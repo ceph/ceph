@@ -5,24 +5,20 @@
 #include <list>
 #include <vector>
 #include <set>
+#include <map>
 using namespace std;
-
-ostream& operator<<(ostream& out, vector<int>& v)
-{
-  out << "[";
-  for (int i=0; i<v.size(); i++) {
-	if (i) out << " ";
-	out << v[i];
-  }
-  out << "]";
-  return out;
-}
+#include <ext/hash_map>
+#include <ext/hash_set>
+using namespace __gnu_cxx;
 
 
 #include "Bucket.h"
 
+#include "include/bufferlist.h"
+
 
 namespace crush {
+
 
   // *** RULES ***
 
@@ -44,18 +40,44 @@ namespace crush {
 	  args.push_back(b);
 	  args.push_back(c);
 	}
+
+	void _encode(bufferlist& bl) {
+	  bl.append((char*)&cmd, sizeof(cmd));
+	  ::_encode(args, bl);
+	}
+	void _decode(bufferlist& bl, int& off) {
+	  bl.copy(off, sizeof(cmd), (char*)&cmd);
+	  off += sizeof(cmd);
+	  ::_decode(args, bl, off);
+	}
   };
 
 
-  // Rule
+  // Rule operations
   const int CRUSH_RULE_TAKE = 0;
   const int CRUSH_RULE_CHOOSE = 1;
-  const int CRUSH_RULE_VERT = 2;
-  const int CRUSH_RULE_EMIT = 3;
+  const int CRUSH_RULE_EMIT = 2;
 
   class Rule {
   public:
 	vector< RuleStep > steps;
+
+	void _encode(bufferlist& bl) {
+	  int n = steps.size();
+	  bl.append((char*)&n, sizeof(n));
+	  for (int i=0; i<n; i++)
+		steps[i]._encode(bl);
+	}
+	void _decode(bufferlist& bl, int& off) {
+	  steps.clear();
+	  int n;
+	  bl.copy(off, sizeof(n), (char*)&n);
+	  off += sizeof(n);
+	  for (int i=0; i<n; i++) {
+		steps.push_back(RuleStep(0));
+		steps[i]._decode(bl, off);
+	  }
+	}
   };
 
 
@@ -67,18 +89,17 @@ namespace crush {
   protected:
 	map<int, Bucket*>  buckets;
 	int bucketno;
-
 	Hash h;
 
   public:
 	set<int>           failed;
 	map<int, float>    overload;
 
-	vector<int> collisions;
-	vector<int> bumps;	
+	//map<int,int> collisions;
+	//map<int,int> bumps;	
 
   public:
-	Crush(int seed=123) : bucketno(-1), h(seed), collisions(20), bumps(20) {}
+	Crush(int seed=123) : bucketno(-1), h(seed) {}
 	~Crush() {
 	  // hose buckets
 	  for (map<int, Bucket*>::iterator it = buckets.begin();
@@ -88,43 +109,100 @@ namespace crush {
 	  }
 	}
 
+	int print(ostream& out, int root, int indent=0) {
+	  for (int i=0; i<indent; i++) out << " ";
+	  Bucket *b = buckets[root];
+	  assert(b);
+	  out << b->get_weight() << "\t" << b->get_id() << "\t";
+	  for (int i=0; i<indent; i++) out << " ";
+	  out << b->get_bucket_type() << ": ";
 
+	  vector<int> items;
+	  b->get_items(items);
 
+	  if (buckets.count(items[0])) {
+		out << endl;
+		for (int i=0; i<items.size(); i++)
+		  print(out, items[i], indent+1);
+	  } else {
+		out << "[";
+		for (int i=0; i<items.size(); i++) {
+		  if (i) out << " ";
+		  out << items[i];
+		}
+		out << "]";
+	  }
+	}
 
 
 	int add_bucket( Bucket *b ) {
-	  b->set_id(bucketno);
-	  buckets[bucketno] = b;
 	  int n = bucketno;
 	  bucketno--;
+	  b->set_id(n);
+	  buckets[n] = b;
 	  return n;
 	}
+
+	int add_item(int parent, int item, float w) {
+	  // add item
+	  assert(!buckets[parent]->is_uniform());
+	  Bucket *p = buckets[parent];
+	  
+	  p->add_item(item, w);
+
+	  // set item's parent
+	  Bucket *n = buckets[item];
+	  if (n)
+		n->set_parent(parent);
+
+	  // update weights
+	  while (buckets.count(p->get_parent())) {
+		int child = p->get_id();
+		p = buckets[p->get_parent()];
+		p->adjust_item_weight(child, w);
+	  }
+	}
+
+
+	/*
+	this is a hack, fix me!  weights should be consistent throughout hierarchy!
+	
+	 */
+	void set_bucket_weight(int item, float w) {
+	  Bucket *b = buckets[item];
+	  float adj = w - b->get_weight();
+
+	  while (buckets.count(b->get_parent())) {
+		Bucket *p = buckets[b->get_parent()];
+		p->adjust_item_weight(b->get_id(), adj);
+		b = p;
+	  }
+	}
+
 
 	/*
 	 * choose numrep distinct items of type type
 	 */
-	
-	static const int maxdepth = 20;
-
 	void choose(int x,
 				int numrep,
 				int type,
 				Bucket *inbucket,
 				vector<int>& outvec) {
+	  int off = outvec.size();
 
 	  // for each replica
 	  for (int rep=0; rep<numrep; rep++) {
-		vector<int> add_r(maxdepth);    // re-choosing; initially zero
 		int out = -1;                   // my result
 		
 		// keep trying until we get a non-failed, non-colliding item
-		for (int attempt=0; ; attempt++) {
+		for (int addr=0; ; addr++) {
 		  
 		  // start with the input bucket
 		  Bucket *in = inbucket;
-		  int depth = 0;
+		  bool bad = false;       // 1 -> no locality in replacement, >1 more locality
 		  
 		  // choose through intervening buckets
+		  int localaddr = 0;
 		  while (1) {
 			// r may be twiddled to (try to) avoid past collisions
 			int r = rep;
@@ -132,10 +210,10 @@ namespace crush {
 			  // uniform bucket; be careful!
 			  if (numrep >= in->get_size()) {
 				// uniform bucket is too small; just walk thru elements
-				r += add_r[depth];
+				r += localaddr+addr;
 			  } else {
 				// make sure numrep is not a multple of bucket size
-				int add = numrep*add_r[depth];
+				int add = numrep*(localaddr+addr);
 				if (in->get_size() % numrep == 0) {
 				  add += add/in->get_size();         // shift seq once per pass through the bucket
 				}
@@ -143,76 +221,71 @@ namespace crush {
 			  }
 			} else {
 			  // mixed bucket; just make a distinct-ish r sequence
-			  r += numrep * add_r[depth];
+			  r += numrep * (localaddr+addr);
 			}
 			
 			// choose
 			out = in->choose_r(x, r, h); 					
 			
 			// did we get the type we want?
-			if (in->is_uniform() && 
-				((UniformBucket*)in)->get_item_type() == type)
-			  break;
-			
 			int itemtype = 0;          // 0 is terminal type
-			if (buckets.count(out)) {  // another bucket
-			  in = buckets[out];
-			  itemtype = in->get_type();
-			} 
-			if (itemtype == type) break;  // this is what we want!
-			depth++;
+			Bucket *newin = 0;         // remember bucket we hit
+			if (in->is_uniform()) {
+			  itemtype = ((UniformBucket*)in)->get_item_type();
+			} else {
+			  if (buckets.count(out)) {  // another bucket
+				newin = buckets[out];
+				itemtype = newin->get_type();
+			  } 
+			}
+			if (itemtype == type) { // this is what we want!
+			  // collision?
+			  bool collide = false;
+			  for (int prep=0; prep<rep; prep++) {
+				if (outvec[off+prep] == out) {
+				  collide = true;
+				  break;
+				}
+			  }
+			  if (collide && localaddr < 3) { // only try locally a few times!
+				localaddr++;
+				continue;
+				bad = true;
+			  }
+			  break;  // ok then!
+			}
+
+			// next
+			in = newin;
 		  }
 		  
 		  // ok choice?
-		  int bad_localness = 0;     // 1 -> no locality in replacement, >1 more locality
 		  if (type == 0 && failed.count(out)) 
-			bad_localness = 1;         // no locality
+			bad = true;
 		  
 		  if (overload.count(out)) {
 			float f = (float)(h(x, out) % 1000) / 1000.0;
 			if (f > overload[out])
-			  bad_localness = 1;       // no locality
+			  bad = true;
 		  }
 		  
-		  for (int prep=0; prep<rep; prep++) 
-			if (outvec[prep] == out) 
-			  bad_localness = 4;       // local is better
-		  
-		  if (bad_localness) {
-			// bump an 'r'
-			depth++;   // want actual depth, not array index
-			bad_localness--;
-			if (bad_localness) {
-			  // we want locality
-			  int d = depth - 1 - ((attempt/bad_localness)%(depth));
-			  add_r[d]++;
-			  collisions[attempt]++;
-			  bumps[d]++;
-			} else {
-			  // uniformly try a new disk; bump all r's
-			  for (int j=0; j<depth; j++) {
-				add_r[j]++;
-				bumps[j]++;
-			  }
-			  collisions[attempt]++;
-			}
-			continue;
-		  }
+		  if (bad)
+			continue;   // try again
+
 		  break;
 		}
-		
-		outvec[rep] = out;
-		//cout << "outrow[" << rep << "] = " << out << endl;
+
+		// output this value
+		outvec.push_back(out);
 	  } // for rep
 	}
 
 
 	void do_rule(Rule& rule, int x, vector<int>& result) {
 	  int numresult = 0;
-
-	  // working variable
-	  vector< Bucket* >       in;
-	  vector< vector<int>  >  out;
+	  
+	  // working vector
+	  vector<int> w;   // working variable
 
 	  // go through each statement
 	  for (vector<RuleStep>::iterator pc = rule.steps.begin();
@@ -227,36 +300,8 @@ namespace crush {
 			const int arg = pc->args[0];
 			//cout << "take " << arg << endl;
 
-			// input is some explicit existing bucket
-			assert(buckets.count(arg));
-			
-			in.clear();
-			if (true || out.empty()) {
-			  // 1 row
-			  in.push_back( buckets[arg] );
-			} else {
-			  // match rows in output?
-			  for (vector< vector<int> >::iterator row = out.begin();
-				   row != out.end();
-				   row++) 
-				in.push_back( buckets[arg] );
-			}
-		  }
-		  break;
-
-		case CRUSH_RULE_VERT:
-		  {
-			in.clear();
-			
-			// input is (currently always) old output
-
-			for (vector< vector<int> >::iterator row = out.begin();
-				 row != out.end();
-				 row++) {
-			  for (int i=0; i<row->size(); i++) {
-				in.push_back( buckets[ (*row)[i] ] );
-			  }
-			}
+			w.clear();
+			w.push_back(arg);
 		  }
 		  break;
 		  
@@ -267,29 +312,31 @@ namespace crush {
 
 			//cout << "choose " << numrep << " of type " << type << endl;
 
+			assert(!w.empty());
+
 			// reset output
-			out.clear();
+			vector<int> out;
 			
 			// do each row independently
-			for (vector< Bucket* >::iterator inrow = in.begin();
-				 inrow != in.end();
-				 inrow++) {
-			  // make new output row
-			  out.push_back( vector<int>(numrep) );
-			  vector<int>& outrow = out.back();
-			  
-			  choose(x, numrep, type, *inrow, outrow);
-			  //cout << "outrow is " << outrow << endl;
+			for (vector<int>::iterator i = w.begin();
+				 i != w.end();
+				 i++) {
+			  assert(buckets.count(*i));
+			  Bucket *b = buckets[*i];
+			  choose(x, numrep, type, b, out);
 			} // for inrow
+			
+			// put back into w
+			w.swap(out);
+			out.clear();
 		  }
 		  break;
 
 		case CRUSH_RULE_EMIT:
 		  {
-			int o = 0;
-			for (int i=0; i<out.size(); i++)
-			  for (int j=0; j<out[i].size(); j++)
-				result[numresult++] = out[i][j];
+			for (int i=0; i<w.size(); i++)
+			  result[numresult++] = w[i];
+			w.clear();
 		  }
 		  break;
 
@@ -301,6 +348,8 @@ namespace crush {
 	}
 
   };
+
+
 
 }
 
