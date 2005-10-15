@@ -36,15 +36,21 @@ void OSDMonitor::fake_reorg()
 {
   
   // HACK osd map change
-  dout(1) << "changing OSD map, removing one OSD" << endl;
-  mds->osdmap->get_group(0).num_osds--;
-  mds->osdmap->init_rush();
+  static int d = 0;
+  dout(1) << "changing OSD map, marking osd" << d << " out" << endl;
+  //mds->osdmap->get_group(0).num_osds--;
+  //mds->osdmap->init_rush();
+  mds->osdmap->out_osds.insert(d++);
   mds->osdmap->inc_version();
   
   // bcast
   mds->bcast_osd_map();
     
-  
+  // do it again?
+  if (g_conf.num_osd - d > 4 &&
+	  g_conf.num_osd - d > g_conf.num_osd/2)
+	g_timer.add_event_after(g_conf.fake_osdmap_expand,
+							new C_OM_Faker(this));
 }
 
 
@@ -52,7 +58,7 @@ void OSDMonitor::init()
 {
   
   if (mds->get_nodeid() == 0 &&
-	  mds->osdmap->get_group(0).num_osds > 4 &&
+	  g_conf.num_osd > 4 &&
 	  g_conf.fake_osdmap_expand) {
 	dout(1) << "scheduling OSD map reorg at " << g_conf.fake_osdmap_expand << endl;
 	g_timer.add_event_after(g_conf.fake_osdmap_expand,

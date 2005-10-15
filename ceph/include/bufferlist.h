@@ -408,28 +408,30 @@ inline void _decode(string& s, bufferlist& bl, int& off)
 }
 
 
-// set<int>
-inline void _encode(set<int>& s, bufferlist& bl)
+// set<T>
+template<class T>
+inline void _encode(set<T>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (set<int>::iterator it = s.begin();
+  for (typename set<T>::iterator it = s.begin();
 	   it != s.end();
 	   it++) {
-	int v = *it;
+	T v = *it;
 	bl.append((char*)&v, sizeof(v));
 	n--;
   }
   assert(n==0);
 }
-inline void _decode(set<int>& s, bufferlist& bl, int& off) 
+template<class T>
+inline void _decode(set<T>& s, bufferlist& bl, int& off) 
 {
   s.clear();
   int n;
   bl.copy(off, sizeof(n), (char*)&n);
   off += sizeof(n);
   for (int i=0; i<n; i++) {
-	int v;
+	T v;
 	bl.copy(off, sizeof(v), (char*)&v);
 	off += sizeof(v);
 	s.insert(v);
@@ -437,29 +439,31 @@ inline void _decode(set<int>& s, bufferlist& bl, int& off)
   assert(s.size() == (unsigned)n);
 }
 
-// vector<int>
-inline void _encode(vector<int>& s, bufferlist& bl)
+// vector<T>
+template<class T>
+inline void _encode(vector<T>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (vector<int>::iterator it = s.begin();
+  for (typename vector<T>::iterator it = s.begin();
 	   it != s.end();
 	   it++) {
-	int v = *it;
+	T v = *it;
 	bl.append((char*)&v, sizeof(v));
 	n--;
   }
   assert(n==0);
 }
-inline void _decode(vector<int>& s, bufferlist& bl, int& off) 
+template<class T>
+inline void _decode(vector<T>& s, bufferlist& bl, int& off) 
 {
   s.clear();
   int n;
   bl.copy(off, sizeof(n), (char*)&n);
   off += sizeof(n);
-  s = vector<int>(n);
+  s = vector<T>(n);
   for (int i=0; i<n; i++) {
-	int v;
+	T v;
 	bl.copy(off, sizeof(v), (char*)&v);
 	off += sizeof(v);
 	s[i] = v;
@@ -467,28 +471,30 @@ inline void _decode(vector<int>& s, bufferlist& bl, int& off)
   assert(s.size() == (unsigned)n);
 }
 
-// list<__uint64_t>
-inline void _encode(list<__uint64_t>& s, bufferlist& bl)
+// list<T>
+template<class T>
+inline void _encode(list<T>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (list<__uint64_t>::iterator it = s.begin();
+  for (typename list<T>::iterator it = s.begin();
 	   it != s.end();
 	   it++) {
-	__uint64_t v = *it;
+	T v = *it;
 	bl.append((char*)&v, sizeof(v));
 	n--;
   }
   assert(n==0);
 }
-inline void _decode(list<__uint64_t>& s, bufferlist& bl, int& off) 
+template<class T>
+inline void _decode(list<T>& s, bufferlist& bl, int& off) 
 {
   s.clear();
   int n;
   bl.copy(off, sizeof(n), (char*)&n);
   off += sizeof(n);
   for (int i=0; i<n; i++) {
-	__uint64_t v;
+	T v;
 	bl.copy(off, sizeof(v), (char*)&v);
 	off += sizeof(v);
 	s.push_back(v);
@@ -496,30 +502,33 @@ inline void _decode(list<__uint64_t>& s, bufferlist& bl, int& off)
   assert(s.size() == (unsigned)n);
 }
 
-// map<__uint64_t, __uint64_t>
-inline void _encode(map<__uint64_t,__uint64_t>& s, bufferlist& bl)
+// map<T,U>
+template<class T, class U>
+inline void _encode(map<T, U>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (map<__uint64_t,__uint64_t>::iterator it = s.begin();
+  for (typename map<T, U>::iterator it = s.begin();
 	   it != s.end();
 	   it++) {
-	__uint64_t k = it->first;
-	__uint64_t v = it->second;
+	T k = it->first;
+	U v = it->second;
 	bl.append((char*)&k, sizeof(k));
 	bl.append((char*)&v, sizeof(v));
 	n--;
   }
   assert(n==0);
 }
-inline void _decode(map<__uint64_t,__uint64_t>& s, bufferlist& bl, int& off) 
+template<class T, class U>
+inline void _decode(map<T,U>& s, bufferlist& bl, int& off) 
 {
   s.clear();
   int n;
   bl.copy(off, sizeof(n), (char*)&n);
   off += sizeof(n);
   for (int i=0; i<n; i++) {
-	__uint64_t k,v;
+	T k;
+	U v;
 	bl.copy(off, sizeof(k), (char*)&k);
 	off += sizeof(k);
 	bl.copy(off, sizeof(v), (char*)&v);

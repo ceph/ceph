@@ -93,23 +93,13 @@ class OSD : public Dispatcher {
   map<__uint64_t, MOSDOp*>       replica_writes;
   map<MOSDOp*, set<__uint64_t> > replica_write_tids;
   set<MOSDOp*>                   replica_write_local;
+  map<MOSDOp*, int>              replica_write_result;
   map<pg_t, map<int, set<__uint64_t> > > replica_pg_osd_tids; // pg -> osd -> tid
   // </hack>
 
 
   // -- replication --
 
-  // PS
-  /*
-  hash_map<ps_t, PS*>      ps_map;
-
-  void get_ps_list(list<ps_t>& ls);
-  bool ps_exists(ps_t ps);
-  PS *create_ps(ps_t ps);          // create new PS
-  PS *open_ps(ps_t ps);            // return existing PS, load state from store (if needed)
-  void close_ps(ps_t ps);          // close in-memory state
-  void remove_ps(ps_t ps);         // remove state from store
-  */
   // PG
   hash_map<pg_t, PG*>      pg_map;
   void get_pg_list(list<pg_t>& ls);
@@ -129,6 +119,7 @@ class OSD : public Dispatcher {
   hash_map<object_t, list<Message*> >  waiting_for_clean_object;
   hash_map<pg_t, list<Message*> >      waiting_for_pg;
   hash_map<pg_t, list<Message*> >      waiting_for_pg_peered;
+  //hash_map<pg_t, int>                  waiting_for_pg_flush;  // pg -> newprimary
 
 
   void advance_map(list<pg_t>& ls);

@@ -255,6 +255,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 {
   m->set_source(whoami, fromport);
   m->set_dest(dest, port);
+  m->set_lamport_stamp( get_lamport() );
 
   lock.Lock();
 
@@ -277,7 +278,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 	assert(dm);
 	dm->queue_incoming(m);
 
-	dout(10) << "sending " << m << " to " << dest << " m " << dm << " has " << dm->num_incoming() << " queued" << endl;
+	dout(5) << "--> sending " << m << " to " << MSG_ADDR_NICE(dest) << endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;
 	
   }
   catch (...) {

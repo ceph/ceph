@@ -11,7 +11,10 @@
 #include "include/types.h"
 #include "msg/Message.h"
 #include "common/Mutex.h"
-#include "rush.h"
+
+//#include "rush.h"
+#include "crush/crush.h"
+using namespace crush;
 
 #include <vector>
 #include <list>
@@ -39,6 +42,7 @@ using namespace std;
 /** OSDGroup
  * a group of identical disks added to the OSD cluster
  */
+/*
 class OSDGroup {
  public:
   int         num_osds; // num disks in this group           (aka num_disks_in_cluster[])
@@ -62,7 +66,7 @@ class OSDGroup {
 	::_decode(osds, bl, off);
   }
 };
-
+*/
 
 /** OSDExtent
  * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
@@ -85,41 +89,18 @@ class OSDMap {
   __uint64_t version;           // what version of the osd cluster descriptor is this
   int pg_bits;                  // placement group bits 
 
-  // RUSH disk groups
-  vector<OSDGroup> osd_groups;  // RUSH disk groups
-
+  set<int>         osds;
   set<int>         down_osds;   // list of down disks
-  set<int>         failed_osds; // list of failed disks
-
-  Rush             *rush;       // rush implementation
+  set<int>         out_osds;    // list of unused disks
+  Crush            crush;
 
   Mutex  osd_cluster_lock;
 
- public:
-  void init_rush() {
-
-    // SAB
-    osd_cluster_lock.Lock();
-
-	if (rush) delete rush;
-	rush = new Rush();
-	
-	int ngroups = osd_groups.size();
-	for (int i=0; i<ngroups; i++) {
-	  rush->AddCluster(osd_groups[i].num_osds,
-					   osd_groups[i].weight);
-	}
-
-    // SAB
-    osd_cluster_lock.Unlock();
-  }
-
+  friend class OSDMonitor;
+  friend class MDS;
 
  public:
-  OSDMap() : version(0), pg_bits(5), rush(0) { }
-  ~OSDMap() {
-	if (rush) { delete rush; rush = 0; }
-  }
+  OSDMap() : version(0), pg_bits(5) { }
 
   __uint64_t get_version() { return version; }
   void inc_version() { version++; }
@@ -128,30 +109,16 @@ class OSDMap {
   void set_pg_bits(int b) { pg_bits = b; }
 
   // cluster state
-  bool is_failed(int osd) { return failed_osds.count(osd) ? true:false; }
+  bool is_up(int osd) { return !is_down(osd); }
+  bool is_down(int osd) { return down_osds.count(osd); }
+  bool is_in(int osd) { return !is_in(osd); }
+  bool is_out(int osd) { return out_osds.count(osd); }
   
   int num_osds() {
-	int n = 0;
-	for (vector<OSDGroup>::iterator it = osd_groups.begin();
-		 it != osd_groups.end();
-		 it++) 
-	  n += it->num_osds;
-	return n;
+	return osds.size();
   }
   void get_all_osds(set<int>& ls) {
-	for (vector<OSDGroup>::iterator it = osd_groups.begin();
-		 it != osd_groups.end();
-		 it++) {
-	  for (unsigned i=0; i<it->osds.size(); i++)
-		ls.insert(it->osds[i]);
-	}
-  }
-
-  int get_num_groups() { return osd_groups.size(); }
-  OSDGroup& get_group(int i) { return osd_groups[i]; }
-  void add_group(OSDGroup& g) { 
-	osd_groups.push_back(g); 
-	init_rush();
+	ls = osds;
   }
 
   // serialize, unserialize
@@ -192,50 +159,30 @@ class OSDMap {
 	return pg >> PG_PS_BITS;
   }
   
+
   /* map (repgroup) to a raw list of osds.  
-	 this is where we invoke RUSH. */
-  int pg_to_raw_osds(pg_t pg,
-					 int *osds) {       // list of osd addr's
-	// get rush list
-	assert(rush);
+	 this is where we invoke CRUSH. */
+  int pg_to_osds(pg_t pg,
+				 vector<int>& osds) {       // list of osd addr's
 	int num_rep = pg_to_nrep(pg);
-	rush->GetServersByKey( pg, num_rep, osds );
-	return num_rep;
+	crush.do_rule(crush.rules[num_rep],
+				  pg,
+				  osds);
+	return osds.size();
   }
-
-  int pg_to_nonfailed_osds(pg_t pg,
-						   vector<int>& osds) { // list of osd addr's
-	// get rush list
-	assert(rush);
-	int raw[NUM_RUSH_REPLICAS];
-	pg_to_raw_osds(pg, raw);
-	
-	int nrep = pg_to_nrep(pg);
-	osds = vector<int>(nrep);
-	int o = 0;
-	for (int i=0; i<NUM_RUSH_REPLICAS && o<nrep; i++) {
-	  if (failed_osds.count(raw[i])) continue;
-	  osds[o++] = raw[i];
-	}
-	return o;
-  }
-
+  
   int pg_to_acting_osds(pg_t pg,
 						vector<int>& osds) {         // list of osd addr's
 	// get rush list
-	assert(rush);
-	int raw[NUM_RUSH_REPLICAS];
-	pg_to_raw_osds(pg, raw);
+	vector<int> raw;
+	pg_to_osds(pg, raw);
 
-	int nrep = pg_to_nrep(pg);
-	osds = vector<int>(nrep);
-	int o = 0;
-	for (int i=0; i<NUM_RUSH_REPLICAS && o<nrep; i++) {
-	  if (failed_osds.count(raw[i])) continue;
-	  if (down_osds.count(raw[i])) continue;
-	  osds[o++] = raw[i];
+	osds.clear();
+	for (unsigned i=0; i<raw.size(); i++) {
+	  if (is_down(raw[i])) continue;
+	  osds.push_back( raw[i] );
 	}
-	return o;
+	return osds.size();
   }
 
 
@@ -247,7 +194,7 @@ class OSDMap {
   /* map pg to the primary osd */
   int get_pg_primary(pg_t pg) {
 	vector<int> group;
-	int nrep = pg_to_nonfailed_osds(pg, group);
+	int nrep = pg_to_osds(pg, group);
 	assert(nrep > 0);   // we fail!
 	return group[0];
   }
@@ -262,7 +209,7 @@ class OSDMap {
   /* what replica # is a given osd? 0 primary, -1 for none. */
   int get_pg_role(pg_t pg, int osd) {
 	vector<int> group;
-	int nrep = pg_to_nonfailed_osds(pg, group);
+	int nrep = pg_to_osds(pg, group);
 	for (int i=0; i<nrep; i++) {
 	  if (group[i] == osd) return i;
 	}
@@ -276,6 +223,8 @@ class OSDMap {
 	}
 	return -1;  // none
   }
+
+
 
   /* map (ino, offset, len) to a (list of) OSDExtents 
 	 (byte ranges in objects on (primary) osds) */

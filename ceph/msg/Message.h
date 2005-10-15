@@ -171,6 +171,7 @@ typedef struct {
   msg_addr_t source, dest;
   int source_port, dest_port;
   int nchunks;
+  __uint64_t lamport_stamp;
 } msg_envelope_t;
 
 #define MSG_ENVELOPE_LEN  sizeof(msg_envelope_t)
@@ -190,15 +191,22 @@ class Message {
 	env.source_port = env.dest_port = -1;
 	env.source = env.dest = -1;
 	env.nchunks = 0;
+	env.lamport_stamp = 0;
   };
   Message(int t) {
 	env.source_port = env.dest_port = -1;
 	env.source = env.dest = -1;
 	env.nchunks = 0;
 	env.type = t;
+	env.lamport_stamp = 0;
   }
   virtual ~Message() {
   }
+
+  void set_lamport_stamp(__uint64_t t) {
+	env.lamport_stamp = t;
+  }
+  __uint64_t get_lamport_stamp() { return env.lamport_stamp; }
 
 
   // for rpc-type procedural messages (pcid = procedure call id)

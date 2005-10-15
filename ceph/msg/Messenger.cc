@@ -119,6 +119,8 @@ void Messenger::dispatch(Message *m)
 {
   assert(dispatcher);
   
+  bump_lamport(m->get_lamport_stamp());
+
   long pcid = m->get_pcid();
 
   _lock.Lock();

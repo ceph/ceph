@@ -1052,6 +1052,7 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   // set envelope
   m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
+  m->set_lamport_stamp( get_lamport() );
 
   if (1) {
 	// serialize all output

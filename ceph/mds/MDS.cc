@@ -97,13 +97,29 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   // <HACK set up OSDMap from g_conf>
   osdmap = new OSDMap();
-  OSDGroup osdg;
+  osdmap->set_pg_bits(g_conf.osd_pg_bits);
+
+  Bucket *b = new UniformBucket(1, 0);
+  for (int i=0; i<g_conf.num_osd; i++) {
+	osdmap->osds.insert(i);
+	b->add_item(i, 1);
+  }
+  int root = osdmap->crush.add_bucket(b);
+  
+  for (int i=2; i<5; i++) {
+	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
+	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+  }
+
+  /*OSDGroup osdg;
   osdg.num_osds = g_conf.num_osd;
   for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
   osdg.weight = 100;
   osdg.osd_size = 100;  // not used yet?
   osdmap->add_group(osdg);
-  osdmap->set_pg_bits(g_conf.osd_pg_bits);
+  */
+
   // </HACK>
 
   filer = new Filer(messenger, osdmap);
@@ -507,7 +523,7 @@ void MDS::my_dispatch(Message *m)
 	finish_contexts(ls);
   }
 
-  // periodic crap (second resolution)
+  // periodic crap (1-second resolution)
   static utime_t last_log = g_clock.recent_now();
   utime_t now = g_clock.recent_now();
   if (last_log.sec() != now.sec()) {

@@ -8,6 +8,8 @@
 //#include <set>
 using namespace std;
 
+#include "include/bufferlist.h"
+
 namespace crush {
 
   class BinaryTree {
@@ -22,6 +24,23 @@ namespace crush {
   public:
 	BinaryTree() : root_node(0), alloc(0) {}
 	
+	void _encode(bufferlist& bl) {
+	  bl.append((char*)&root_node, sizeof(root_node));
+	  bl.append((char*)&alloc, sizeof(alloc));
+	  ::_encode(node_nested, bl);
+	  ::_encode(node_weight, bl);
+	  ::_encode(node_complete, bl);
+	}
+	void _decode(bufferlist& bl, int& off) {
+	  bl.copy(off, sizeof(root_node), (char*)&root_node);
+	  off += sizeof(root_node);
+	  bl.copy(off, sizeof(alloc), (char*)&alloc);
+	  off += sizeof(alloc);
+	  ::_decode(node_nested, bl, off);
+	  ::_decode(node_weight, bl, off);
+	  ::_decode(node_complete, bl, off);
+	}
+
 	// accessors
 	bool  empty() const { return root_node == 0; }
 	bool  exists(int n) const { return n < alloc && node_nested[n]; }
@@ -31,7 +50,7 @@ namespace crush {
 
 	int   root() const { return root_node; }
 	
-	int   realloc(int n) {
+	void   realloc(int n) {
 		/*
 		while (alloc <= n) {
 		  node_nested.push_back(0);
@@ -219,7 +238,7 @@ namespace crush {
 
 
   // print it out
-  void print_node(ostream& out, const BinaryTree& tree, int n, int i) {
+  inline void print_binary_tree_node(ostream& out, const BinaryTree& tree, int n, int i) {
 	for (int t=i; t>0; t--) out << "  ";
 	if (tree.root() == n)
 	  out << "root  ";
@@ -234,16 +253,16 @@ namespace crush {
 	out << endl;
 	if (!tree.terminal(n)) {
 	  if (tree.exists(tree.left(n)))
-		print_node(out, tree, tree.left(n), i+2);
+		print_binary_tree_node(out, tree, tree.left(n), i+2);
 	  if (tree.exists(tree.right(n)))
-		print_node(out, tree, tree.right(n), i+2);
+		print_binary_tree_node(out, tree, tree.right(n), i+2);
 	}
   }
   
-  ostream& operator<<(ostream& out, const BinaryTree& tree) {
+  inline ostream& operator<<(ostream& out, const BinaryTree& tree) {
 	if (tree.empty()) 
 	  return out << "tree is empty";
-	print_node(out, tree, tree.root(), 0);	
+	print_binary_tree_node(out, tree, tree.root(), 0);	
 	return out;
   }
   

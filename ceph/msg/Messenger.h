@@ -19,6 +19,7 @@ class Messenger {
  private:
   Dispatcher          *dispatcher;
   msg_addr_t           _myaddr;
+  __uint64_t            lamport_clock;
 
   // procedure call fun
   long                   _last_pcid;
@@ -27,11 +28,18 @@ class Messenger {
   map<long, Message*>    call_reply;
 
  public:
-  Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w), _last_pcid(1) { }
+  Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w), lamport_clock(0), _last_pcid(1) { }
   virtual ~Messenger() { }
   
   void       set_myaddr(msg_addr_t m) { _myaddr = m; }
   msg_addr_t get_myaddr() { return _myaddr; }
+
+  __uint64_t get_lamport() { return lamport_clock++; }
+  __uint64_t peek_lamport() { return lamport_clock; }
+  void bump_lamport(__uint64_t other) { 
+	if (other >= lamport_clock)
+	  lamport_clock = other+1;
+  }
 
   virtual int shutdown() = 0;
   

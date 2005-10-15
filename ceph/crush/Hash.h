@@ -19,6 +19,9 @@ namespace crush {
 	int seed;
 
   public:
+	int get_seed() { return seed; }
+	void set_seed(int s) { seed = s; }
+
 	Hash(int s) {
 	  unsigned int hash = 1315423911;
 	  int x = 231232;

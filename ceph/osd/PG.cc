@@ -71,6 +71,8 @@ void PG::pushed(object_t oid, version_t v, PGPeer *p)
 	  objects_stray.empty()) {
 	assert(!is_clean());
 	mark_clean();
+  } else {
+	dout(10) << " still " << objects_unrep.size() << " unrep and " << objects_stray.size() << " stray" << endl;
   }
 }
 
@@ -90,7 +92,10 @@ void PG::removed(object_t oid, version_t v, PGPeer *p)
 	  objects_stray.empty()) {
 	assert(!is_clean());
 	mark_clean();
+  } else {
+	dout(10) << " still " << objects_unrep.size() << " unrep and " << objects_stray.size() << " stray" << endl;
   }
+
 }
 
 bool PG::existant_object_is_clean(object_t o, version_t v)
@@ -121,7 +126,6 @@ bool PG::nonexistant_object_is_clean(object_t o)
   for (map<int, PGPeer*>::iterator it = peers.begin();
 	   it != peers.end();
 	   it++) {
-	//if (!it->second->is_active()) continue;
 	if (it->second->is_complete()) continue;
 	if (it->second->peer_state.objects.count(o)) {
 	  return false;
@@ -300,7 +304,8 @@ void PG::plan_push_cleanup()
 	}
   }
 
-  if (push_plan.empty() && clean_plan.empty()) {
+  if (is_complete() && 
+	  push_plan.empty() && clean_plan.empty()) {
 	dout(10) << " nothing to push|clean, marking clean" << endl;
 	mark_clean();
   }

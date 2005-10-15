@@ -10,7 +10,15 @@
 #include <set>
 using namespace std;
 
+#include "include/bufferlist.h"
+
 namespace crush {
+
+
+  const int CRUSH_BUCKET_UNIFORM = 1;
+  const int CRUSH_BUCKET_TREE = 2;
+  const int CRUSH_BUCKET_LIST = 3;
+  const int CRUSH_BUCKET_STRAW = 4;
 
   /** abstract bucket **/
   class Bucket {
@@ -26,6 +34,19 @@ namespace crush {
 	  id(0), parent(0),
 	  type(_type),
 	  weight(_weight) { }
+
+	Bucket(bufferlist& bl, int& off) {
+	  bl.copy(off, sizeof(id), (char*)&id);
+	  off += sizeof(id);
+	  bl.copy(off, sizeof(parent), (char*)&parent);
+	  off += sizeof(parent);
+	  bl.copy(off, sizeof(type), (char*)&type);
+	  off += sizeof(type);
+	  bl.copy(off, sizeof(weight), (char*)&weight);
+	  off += sizeof(weight);
+	}
+
+	virtual ~Bucket() { }
 	
 	virtual const char *get_bucket_type() const = 0;
 	virtual bool is_uniform() const = 0;
@@ -49,6 +70,8 @@ namespace crush {
 	}
 
 	virtual int choose_r(int x, int r, Hash& h) const = 0;
+
+	virtual void _encode(bufferlist& bl) = 0;
   };
 
 
@@ -91,6 +114,9 @@ namespace crush {
 	}
 
   public:
+	UniformBucket(int _type, int _item_type) :
+	  Bucket(_type, 0),
+	  item_type(_item_type) { }
 	UniformBucket(int _type, int _item_type,
 				  float _item_weight, vector<int>& _items) :
 	  Bucket(_type, _item_weight*_items.size()),
@@ -100,11 +126,33 @@ namespace crush {
 	  make_primes();
 	}
 
+	UniformBucket(bufferlist& bl, int& off) : Bucket(bl, off) {
+	  bl.copy(off, sizeof(item_type), (char*)&item_type);
+	  off += sizeof(item_type);
+	  bl.copy(off, sizeof(item_weight), (char*)&item_weight);
+	  off += sizeof(item_weight);
+	  ::_decode(items, bl, off);
+	  make_primes();
+	}
+
+	void _encode(bufferlist& bl) {
+	  char t = CRUSH_BUCKET_UNIFORM;
+	  bl.append((char*)&t, sizeof(t));
+	  bl.append((char*)&id, sizeof(id));
+	  bl.append((char*)&parent, sizeof(parent));
+	  bl.append((char*)&type, sizeof(type));
+	  bl.append((char*)&weight, sizeof(weight));
+
+	  bl.append((char*)&item_type, sizeof(item_type));
+	  bl.append((char*)&item_weight, sizeof(item_weight));
+
+	  ::_encode(items, bl);
+	}
+
 	const char *get_bucket_type() const { return "uniform"; }
 	bool is_uniform() const { return true; }
 
 	int get_size() const { return items.size(); }
-
 
 	// items
 	void get_items(vector<int>& i) const {
@@ -133,6 +181,7 @@ namespace crush {
 	  int s = (x + v + (r+1)*p) % get_size();
 	  return items[s];
 	}
+
   };
 
 
@@ -149,6 +198,25 @@ namespace crush {
 	
   public:
 	ListBucket(int _type) : Bucket(_type, 0) { }
+
+	ListBucket(bufferlist& bl, int& off) : Bucket(bl, off) {
+	  ::_decode(items, bl, off);
+	  ::_decode(item_weight, bl, off);
+	  ::_decode(sum_weight, bl, off);
+	}
+
+	void _encode(bufferlist& bl) {
+	  char t = CRUSH_BUCKET_LIST;
+	  bl.append((char*)&t, sizeof(t));
+	  bl.append((char*)&id, sizeof(id));
+	  bl.append((char*)&parent, sizeof(parent));
+	  bl.append((char*)&type, sizeof(type));
+	  bl.append((char*)&weight, sizeof(weight));
+
+	  ::_encode(items, bl);
+	  ::_encode(item_weight, bl);
+	  ::_encode(sum_weight, bl);
+	}
 
 	const char *get_bucket_type() const { return "list"; }
 	bool        is_uniform() const { return false; }
@@ -168,6 +236,8 @@ namespace crush {
 		if (*i == item) return *w;
 		i++; w++;
 	  }
+	  assert(0);
+	  return 0;
 	}
 
 	void add_item(int item, float w) {
@@ -216,6 +286,8 @@ namespace crush {
 	  }
 	  assert(0);
 	}	
+
+
   };
 
 
@@ -235,7 +307,31 @@ namespace crush {
 	map<int,float> item_weight;
 
   public:
-	TreeBucket(int _type) : Bucket(_type, 0) {
+	TreeBucket(int _type) : Bucket(_type, 0) { }
+	
+	TreeBucket(bufferlist& bl, int& off) : Bucket(bl, off) {
+	  tree._decode(bl, off);
+	  
+	  ::_decode(node_item, bl, off);
+	  ::_decode(node_item_vec, bl, off);
+	  ::_decode(item_node, bl, off);
+	  ::_decode(item_weight, bl, off);
+	}
+
+	void _encode(bufferlist& bl) {
+	  char t = CRUSH_BUCKET_TREE;
+	  bl.append((char*)&t, sizeof(t));
+	  bl.append((char*)&id, sizeof(id));
+	  bl.append((char*)&parent, sizeof(parent));
+	  bl.append((char*)&type, sizeof(type));
+	  bl.append((char*)&weight, sizeof(weight));
+
+	  tree._encode(bl);
+
+	  ::_encode(node_item, bl);
+	  ::_encode(node_item_vec, bl);
+	  ::_encode(item_node, bl);
+	  ::_encode(item_weight, bl);
 	}
 
 	const char *get_bucket_type() const { return "tree"; }
@@ -260,11 +356,12 @@ namespace crush {
 	  item_weight[item] = w;
 	  weight += w;
 
-	  int n = tree.add_node(w);
+	  unsigned n = tree.add_node(w);
 	  node_item[n] = item;
 	  item_node[item] = n;
 
-	  while (node_item_vec.size() <= n) node_item_vec.push_back(0);
+	  while (node_item_vec.size() <= n) 
+		node_item_vec.push_back(0);
 	  node_item_vec[n] = item;
 	}
 	
@@ -315,6 +412,22 @@ namespace crush {
 
   public:
 	StrawBucket(int _type) : Bucket(_type, 0) { }
+
+	StrawBucket(bufferlist& bl, int& off) : Bucket(bl, off) {
+	  ::_decode(item_weight, bl, off);
+	  calc_straws();
+	}
+
+	void _encode(bufferlist& bl) {
+	  char t = CRUSH_BUCKET_TREE;
+	  bl.append((char*)&t, sizeof(t));
+	  bl.append((char*)&id, sizeof(id));
+	  bl.append((char*)&parent, sizeof(parent));
+	  bl.append((char*)&type, sizeof(type));
+	  bl.append((char*)&weight, sizeof(weight));
+
+	  ::_encode(item_weight, bl);
+	}
 
 	const char *get_bucket_type() const { return "straw"; }
 	bool is_uniform() const { return false; }
@@ -407,7 +520,6 @@ namespace crush {
 		numleft -= 1.0 * (float)cur->second.size();
 		//cout << "numleft now " << numleft << endl;
 		
-		
 		float wnext = numleft * (next->first - cur->first);
 		//cout << "wnext " << wnext << endl;
 		
@@ -444,27 +556,33 @@ namespace crush {
 		ps++;
 	  }
 	  return high;
-
-	  /*
-	  for (map<int, float>::const_iterator p = item_weight.begin();
-		   p != item_weight.end();
-		   p++) {
-		if (p->second == 0) continue;  // skip zero weights
-
-		const int item = p->first;
-		const float rnd = (float)(h(x, item, r) % 1000000) / 1000000.0;
-		float s = rnd * (((map<int,float>)item_straw)[item]);
-		
-		if (high_draw < 0 ||
-			s > high_draw) {
-		  high = p->first;
-		  high_draw = s;
-		}
-	  } 
-      return high;
-      */
 	}	
   };
+
+
+
+
+
+  inline Bucket* decode_bucket(bufferlist& bl, int& off) {
+	char t;
+	bl.copy(off, sizeof(t), (char*)&t);
+	off += sizeof(t);
+
+	switch (t) {
+	case CRUSH_BUCKET_UNIFORM:
+	  return new UniformBucket(bl, off);
+	case CRUSH_BUCKET_LIST:
+	  return new ListBucket(bl, off);
+	case CRUSH_BUCKET_TREE:
+	  return new TreeBucket(bl, off);
+	case CRUSH_BUCKET_STRAW:
+	  return new StrawBucket(bl, off);
+	default:
+	  assert(0);
+	}
+  }
+
+
 
 }
 

@@ -31,7 +31,7 @@ struct PGReplicaInfo {
 
 // by primary
 #define PG_PEER_STATE_ACTIVE    1   // peer has acked our request, sent back PG state.
-#define PG_PEER_STATE_COMPLETE  2   // peer has everything replicated
+#define PG_PEER_STATE_COMPLETE  2   // peer has everything replicated+clean
 
 class PGPeer {
  public:
@@ -143,15 +143,20 @@ class PGQueue {
  *
  */
 
-// bits used on any
-#define PG_STATE_COMPLETE    1  // i have full PG contents locally.
-#define PG_STATE_PEERED      2  // i have contacted prior primary and all
-                                // replica osds and/or fetched their 
-                                // content lists, and thus know what's up.
-                                // or, i have check in w/ new primary (on replica)
+// any
+#define PG_STATE_COMPLETE    1  // i have full PG contents locally
+#define PG_STATE_PEERED      2  // primary: peered with everybody
+                                // replica: peered with auth
 
-// on primary or old-primary only
-#define PG_STATE_CLEAN       4  // i am fully replicated
+// primary
+//#define PG_STATE_CROWNED     4  // i have the PG crown
+#define PG_STATE_CLEAN       8  // peers are fully replicated and clean of stray objects
+//#define PG_STATE_FLUSHING   16  // i am old primary, but flushing rep writes before peering
+
+// replica
+#define PG_STATE_STRAY      32  // i need to announce myself to new auth
+
+
 
 class PG {
  protected:
@@ -267,11 +272,15 @@ class PG {
   void state_set(int m) { state |= m; }
   void state_clear(int m) { state &= ~m; }
 
-  bool       is_peered() { return state_test(PG_STATE_PEERED); }
+  bool       is_complete()  { return state_test(PG_STATE_COMPLETE); }
+  bool       is_peered()    { return state_test(PG_STATE_PEERED); }
+  //bool       is_crowned()   { return state_test(PG_STATE_CROWNED); }
+  bool       is_clean()     { return state_test(PG_STATE_CLEAN); }
+  //bool       is_flushing() { return state_test(PG_STATE_FLUSHING); }
+  bool       is_stray() { return state_test(PG_STATE_STRAY); }
+
   void       mark_peered();
-  bool       is_complete() { return state_test(PG_STATE_COMPLETE); }
   void       mark_complete();
-  bool       is_clean() { return state_test(PG_STATE_CLEAN); }
   void       mark_clean();
 
   int num_active_ops() {
@@ -350,6 +359,7 @@ class PG {
 					 "version",
 					 &v, sizeof(v));
 	  local_objects[*it] = v;
+	  cout << " o " << hex << *it << dec << " v " << v << endl;
 	}
   }
 

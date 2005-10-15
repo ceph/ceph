@@ -10,10 +10,13 @@ Distribution file_size_distn; //kb
 list<int> object_queue;
 int max_object_size = 1024*1024*100;  //kb
 
+off_t no;
+
 int get_object()  //kb
 {
   if (object_queue.empty()) {
 	int max = file_size_distn.sample();
+	no++;
 	int filesize = max/2 + (rand() % 100) * max/200 + 1;
 	//cout << "file " << filesize << endl;
 	while (filesize > max_object_size) {
@@ -45,13 +48,15 @@ void getdist(vector<off_t>& v, float& avg, float& var)
 void testpgs(int n, // numpg
 			 off_t pggb,
 			 float& avg,
-			 float& var
+			 float& var,
+			 off_t& numo
 			 )
 {
   off_t dist = (off_t)n * 1024LL*1024LL * (off_t)pggb;  //kb
   vector<off_t> pgs(n);
   off_t did = 0;
   
+  no = 0;
   while (did < dist) {
 	off_t s = get_object();
 	pgs[rand()%n] += s;
@@ -60,6 +65,7 @@ void testpgs(int n, // numpg
   while (!object_queue.empty())
 	pgs[rand()%n] += get_object();
 
+  numo = no;
   //cout << did/n << endl; 
 
   //for (int i=0; i<n; i++) cout << pgs[i] << endl;
@@ -108,12 +114,13 @@ int main()
 	cout << pggb;
 	for (int max = 1; max <= 1024; max *= 2) {
 	  float avg, var, var2, var3;
+	  off_t no;
 	  max_object_size = max*1024;
-	  testpgs(100, pggb, avg, var);
-	  testpgs(100, pggb, avg, var2);
-	  testpgs(100, pggb, avg, var3);
+	  testpgs(100, pggb, avg, var, no);
+	  testpgs(100, pggb, avg, var2, no);
+	  testpgs(100, pggb, avg, var3, no);
 	  float dev = sqrt((var+var2+var3)/3.0);
-	  cout << "\t" << max << "\t" << dev;
+	  cout << "\t" << no << "\t" << max << "\t" << dev;
 	}
 	cout << endl;
   }

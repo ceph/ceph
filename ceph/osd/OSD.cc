@@ -332,10 +332,13 @@ void OSD::handle_op_reply(MOSDOpReply *m)
 		MOSDOp *op = replica_writes[m->get_tid()];
 		dout(7) << "rep_write_reply ack tid " << m->get_tid() << " orig op " << op << endl;
 		
+		int result = m->get_result();
+
 		replica_writes.erase(m->get_tid());
 		replica_write_tids[op].erase(m->get_tid());
 		
 		pg_t pgid = op->get_pg();
+		PG *pg = open_pg(pgid);
 		int osd = MSG_ADDR_NUM(m->get_source());
 		replica_pg_osd_tids[pgid][osd].erase(m->get_tid());
 		if (replica_pg_osd_tids[pgid][osd].empty()) replica_pg_osd_tids[pgid].erase(osd);
@@ -344,19 +347,28 @@ void OSD::handle_op_reply(MOSDOpReply *m)
 		if (replica_write_tids[op].empty()) {
 		  // reply?
 		  if (replica_write_local.count(op)) {
-			dout(7) << "last one, replying to write op" << endl;
 			replica_write_local.erase(op);
+			
+			if (result >= 0) {
+			  dout(7) << "last one, replying to write op" << endl;
 
-			// written locally too, reply
-			MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);
-			messenger->send_message(reply, op->get_asker());
-			delete op;
+			  // written locally too, reply
+			  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);
+			  messenger->send_message(reply, op->get_asker());
+			  delete op;
+			} else {
+			  dout(7) << "last one, but replica write failed, fw to new primary" << endl;
+			  messenger->send_message(op, MSG_ADDR_OSD(pg->get_primary()));
+			}
+			replica_write_result.erase(op);
 		  } else {
 			// not yet written locally.
 			dout(9) << "not yet written locally, still waiting for that" << endl;
+			replica_write_result[op] = -1;
 		  }
 		  replica_write_tids.erase(op);
 		}
+
 	  } else {
 		dout(7) << "not waiting for tid " << m->get_tid() << " rep_write reply, map must have changed, dropping." << endl;
 	  }
@@ -650,6 +662,7 @@ void OSD::advance_map(list<pg_t>& ls)
 {
   dout(7) << "advance_map version " << osdmap->get_version() << endl;
   
+  // scan pg's
   for (list<pg_t>::iterator it = ls.begin();
 	   it != ls.end();
 	   it++) {
@@ -681,23 +694,27 @@ void OSD::advance_map(list<pg_t>& ls)
 		pg->state_clear(PG_STATE_CLEAN);
 
 		pg->discard_recovery_plan();
+
+		// keep crown.
 	  }
 
 	  // new primary?
 	  if (role == 0) {
 		pg->set_primary_since(osdmap->get_version());
+		pg->state_clear(PG_STATE_PEERED);
+	  } else {
+		// we need to announce
+		pg->state_set(PG_STATE_STRAY);
 	  }
 	  
-	  // we need to re-peer
-	  pg->state_clear(PG_STATE_PEERED);
 	} else {
 	  // no role change.
 	  // did primary change?
 	  if (primary != pg->get_primary()) {
 		dout(10) << " " << *pg << " acting primary change " << pg->get_primary() << " -> " << primary << ", !peered" << endl;
 		
-		// re-peer
-		pg->state_clear(PG_STATE_PEERED);
+		// we need to announce
+		pg->state_set(PG_STATE_STRAY);
 	  } else {
 		// primary is the same.
 		if (role == 0) {
@@ -731,12 +748,11 @@ void OSD::activate_map(list<pg_t>& ls)
 	PG *pg = open_pg(pgid);
 	assert(pg);
 
-	if (pg->is_peered()) continue;
-	
 	if (pg->get_role() == 0) {
 	  // i am primary
 	  start_peers(pg, start_map);
-	} else {
+	} 
+	else if (pg->is_stray()) {
 	  // i am residual|replica
 	  notify_list[pg->get_primary()][pgid] = pg->get_last_complete();
 	}
@@ -802,7 +818,9 @@ void OSD::start_peers(PG *pg, map< int, map<PG*,int> >& start_map)
 	int who = it->first;
 	int role = it->second;
 	if (who == whoami) continue;      // nevermind me
-	if (pg->get_peer(who)) {
+
+	PGPeer *pgp = pg->get_peer(who);
+	if (pgp && pgp->is_active()) {
 	  dout(10) << " " << *pg << " already peered with osd" << who << " role " << role << endl;	  
 	} else {
 	  dout(10) << " " << *pg << " need to peer with osd" << who << " role " << role << endl;
@@ -811,11 +829,13 @@ void OSD::start_peers(PG *pg, map< int, map<PG*,int> >& start_map)
 	}
   }
 
+  /* wtf
   if (!did_something) {
 	dout(10) << " " << *pg << " already has necessary peers, analyzing" << endl;
 	pg->plan_recovery(store);
 	do_recovery(pg);
   }
+  */
 }
 
 
@@ -999,17 +1019,18 @@ void OSD::handle_pg_peer(MOSDPGPeer *m)
 	  }
 	}
 
+	// PEER
 	// report back state and pg content
 	ack->pg_state[pgid].state = pg->get_state();
-	//ack->pg_state[pgid].deleted = pg->get_deleted_objects();
-
+	
 	// list my objects
 	pg->scan_local_objects(ack->pg_state[pgid].objects, store);
 	
-	// i am peered.  (FIXME?)
+	// i am now peered
 	pg->state_set(PG_STATE_PEERED);
-
-	dout(10) << " " << *pg << " has state " << pg->get_state() << ", " << ack->pg_state[pgid].objects.size() << " objects" << endl;
+	pg->state_clear(PG_STATE_STRAY);
+	
+	dout(10) << "peer_ack: " << *pg << " has state " << pg->get_state() << ", " << ack->pg_state[pgid].objects.size() << " objects" << endl;
   }
 
   // reply
@@ -1018,6 +1039,7 @@ void OSD::handle_pg_peer(MOSDPGPeer *m)
 
   delete m;
 }
+
 
 void OSD::handle_pg_peer_ack(MOSDPGPeerAck *m)
 {
@@ -1166,9 +1188,14 @@ void OSD::pg_pull(PG *pg, int maxops)
 	object_t oid;
 	version_t v;
 	int peer;
-	if (!pg->pull_plan.get_next(oid, v, peer)) break;
+	if (!pg->pull_plan.get_next(oid, v, peer)) {
+	  dout(7) << "pg_pull done " << *pg << endl;
+	  break;
+	}
+
 	PGPeer *pgp = pg->get_proxy_peer(oid);
 	if (pgp == 0) {
+	  assert(0); // ??
 	  dout(7) << " apparently already pulled " << hex << oid << dec << endl;
 	  continue;
 	}
@@ -1295,10 +1322,20 @@ void OSD::pg_push(PG *pg, int maxops)
 	object_t oid;
 	version_t v;
 	int peer;
-	if (!pg->push_plan.get_next(oid, v, peer)) break;
+	if (!pg->push_plan.get_next(oid, v, peer)) {
+	  dout(7) << "pg_push done " << *pg << endl;
+	  break;
+	}
 
 	PGPeer *p = pg->get_peer(peer);
 	assert(p);
+
+	if (p->peer_state.objects.count(oid) &&
+		p->peer_state.objects[oid] >= v) {
+	  dout(10) << "pg_push not pushing " << hex << oid << dec << " to osd" << peer << " cuz it's already there" << endl;
+	  continue;
+	}
+
 	push_replica(oid, v, p);
 	ops++;
   }  
@@ -1422,15 +1459,19 @@ void OSD::pg_clean(PG *pg, int maxops)
 	object_t oid;
 	version_t v;
 	int peer;
-	if (!pg->clean_plan.get_next(oid, v, peer)) break;
-
-	if (pg->objects.count(oid)) {
-	  assert(0); // think about this: (recovery) -> delete -> create sequences.. where does the new version # start, etc.
-	  continue;
+	if (!pg->clean_plan.get_next(oid, v, peer)) {
+	  dout(7) << "pg_clean done " << *pg << endl;
+	  break;
 	}
 
 	PGPeer *p = pg->get_peer(peer);
 	assert(p);
+
+	if (p->peer_state.objects.count(oid)) {
+	  dout(10) << "pg_clean not removing " << hex << oid << dec << " from osd" << peer << " cuz it's not there" << endl;
+	  continue;
+	}
+
 	remove_replica(oid, v, p);
 	ops++;
   }  
@@ -1469,6 +1510,7 @@ void OSD::op_rep_remove(MOSDOp *op)
   assert(v == op->get_version());
 
   // remove
+  store->collection_remove(op->get_pg(), op->get_oid());
   int r = store->remove(op->get_oid());
   assert(r == 0);
 
@@ -1505,25 +1547,23 @@ void OSD::op_rep_remove_reply(MOSDOpReply *op)
 
 
 void OSD::op_rep_write(MOSDOp *op)
-{  
-  // check existing object; write must be applied in order!
+{ 
+  // when we introduce unordered messaging.. FIXME
   object_t oid = op->get_oid();
-  version_t v = 1;
-  if (store->exists(oid)) {
+  version_t v = 0;
+  if (store->exists(oid)) 
 	store->getattr(oid, "version", &v, sizeof(v));
-	++v;
-  } else {
-	// new
-  }
-  dout(12) << "rep_write to " << hex << oid << dec << " v " << op->get_version() << " (i have " << v << ")" << endl;
+  v++;
   assert(op->get_version() == v);
+  
+  dout(12) << "rep_write to " << hex << oid << dec << " v " << op->get_version() << " (i have " << v-1 << ")" << endl;
 
   // pre-ack
   //MOSDOpReply *ack1 = new MOSDOpReply(op, 0, osdmap);
   //messenger->send_message(ack1, op->get_asker());
 
   // write
-  apply_write(op, false, v);
+  apply_write(op, false, op->get_version());
   
   // ack
   MOSDOpReply *ack2 = new MOSDOpReply(op, 0, osdmap);
@@ -1540,8 +1580,11 @@ void OSD::op_rep_write(MOSDOp *op)
 
 void OSD::handle_op(MOSDOp *op)
 {
+  pg_t pgid = op->get_pg();
+  PG *pg = open_pg(pgid);
+
   // what kind of op?
-  if (op->get_pg_role() == 0) {
+  if (!OSD_OP_IS_REP(op->get_op())) {
 	// REGULAR OP (non-replication)
 
 	// is our map version up to date?
@@ -1553,7 +1596,6 @@ void OSD::handle_op(MOSDOp *op)
 	}
 
 	// am i the primary?
-    pg_t pgid = op->get_pg();
 	int acting_primary = osdmap->get_pg_acting_primary( pgid );
 	
 	if (acting_primary != whoami) {
@@ -1564,7 +1606,6 @@ void OSD::handle_op(MOSDOp *op)
 	}
 
 	// proxy?
-	PG *pg = open_pg(pgid);
 	if (!pg) {
 	  dout(7) << "hit non-existent pg " << hex << op->get_pg() << dec << ", waiting" << endl;
 	  waiting_for_pg[pgid].push_back(op);
@@ -1658,7 +1699,6 @@ void OSD::do_op(MOSDOp *op)
 	}
   } else {
 	// regular op
-
 	pg_t pgid = op->get_pg();
 	PG *pg = open_pg(pgid);
 
@@ -1666,35 +1706,36 @@ void OSD::do_op(MOSDOp *op)
 	if (!pg) {
 	  dout(7) << "op_write pg " << hex << pgid << dec << " dne (yet)" << endl;
 	  waiting_for_pg[pgid].push_back(op);
-	  return;
 	}	
-	if (!pg->is_peered()) {
+	else if (!pg->is_peered()) {
 	  dout(7) << "op_write " << *pg << " not peered (yet)" << endl;
 	  waiting_for_pg_peered[pgid].push_back(op);
-	  return;
 	}
-
-	// do op
-	switch (op->get_op()) {
-	case OSD_OP_READ:
-	  op_read(op, pg);
-	  break;
-	case OSD_OP_WRITE:
-	  op_write(op, pg);
-	  break;
-	case OSD_OP_DELETE:
-	  op_delete(op, pg);
-	  break;
-	case OSD_OP_TRUNCATE:
-	  op_truncate(op, pg);
-	  break;
-	case OSD_OP_STAT:
-	  op_stat(op, pg);
-	  break;
-	default:
-	  assert(0);
+	else {
+	  // do op
+	  switch (op->get_op()) {
+	  case OSD_OP_READ:
+		op_read(op, pg);
+		break;
+	  case OSD_OP_WRITE:
+		op_write(op, pg);
+		break;
+	  case OSD_OP_DELETE:
+		op_delete(op, pg);
+		break;
+	  case OSD_OP_TRUNCATE:
+		op_truncate(op, pg);
+		break;
+	  case OSD_OP_STAT:
+		op_stat(op, pg);
+		break;
+	  default:
+		assert(0);
+	  }
 	}
   }
+
+  //dout(12) << "finish op " << op << endl;
 
   // finish
   osd_lock.Lock();
@@ -1881,7 +1922,7 @@ bool OSD::object_clean(PG *pg, object_t oid, version_t& v, Message *op)
 	  }
 	}
 	if (v > 0) {
-	  dout(10) << " pg not clean, checking if " << hex << oid << dec << " v " << v << " is specifically clean yet!" << endl;
+	  dout(10) << " pg not clean, checking if " << hex << oid << dec << " v " << v << " is specifically clean yet! " << *pg << endl;
 	  // object (logically) exists
 	  if (!pg->existant_object_is_clean(oid, v)) {
 		dout(7) << "object " << hex << oid << dec << " v " << v << " in " << *pg 
@@ -1917,6 +1958,7 @@ void OSD::op_write(MOSDOp *op, PG *pg)
 	return;
   }
   v++;  // we're good!		  
+  //v = messenger->peek_lamport();
 
   dout(12) << "op_write " << hex << oid << dec << " v " << v << endl;  
 
@@ -1960,10 +2002,16 @@ void OSD::op_write(MOSDOp *op, PG *pg)
   replica_write_lock.Lock();
   if (replica_write_tids.count(op) == 0) {
 	// all replica writes completed.
-	dout(10) << "op_write wrote locally: rep writes already finished, replying" << endl;
-	MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);
-	messenger->send_message(reply, op->get_asker());
-	delete op;
+	if (replica_write_result[op] == 0) {
+	  dout(10) << "op_write wrote locally: rep writes already finished, replying" << endl;
+	  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap);
+	  messenger->send_message(reply, op->get_asker());
+	  delete op;
+	} else {
+	  dout(10) << "op_write wrote locally, but rep writes failed, fw to new primary" << endl;
+	  messenger->send_message(op, MSG_ADDR_OSD(pg->get_primary()));
+	}
+	replica_write_result.erase(op);
   } else {
 	// note that it's written locally
 	dout(10) << "op_write wrote locally: rep writes not yet finished, waiting" << endl;
@@ -1988,8 +2036,8 @@ void OSD::op_delete(MOSDOp *op, PG *pg)
 	unlock_object(oid);
 	return;
   }
-  v++;  // we're good!		  
 
+  store->collection_remove(pg->get_pgid(), op->get_oid());
   int r = store->remove(oid);
   dout(12) << "delete on " << hex << op->get_oid() << dec << " r = " << r << endl;
   
@@ -2015,6 +2063,7 @@ void OSD::op_truncate(MOSDOp *op, PG *pg)
 	return;
   }
   v++;  // we're good!		  
+  //v = messenger->peek_lamport();
 
   int r = store->truncate(oid, op->get_offset());
   dout(3) << "truncate on " << hex << op->get_oid() << dec << " at " << op->get_offset() << " r = " << r << endl;

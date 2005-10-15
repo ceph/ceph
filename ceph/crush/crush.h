@@ -92,11 +92,78 @@ namespace crush {
 	Hash h;
 
   public:
-	set<int>           failed;
+	set<int>           out;
 	map<int, float>    overload;
+	map<int, Rule>     rules;
 
 	//map<int,int> collisions;
 	//map<int,int> bumps;	
+
+	void _encode(bufferlist& bl) {
+	  // buckets
+	  int n = buckets.size();
+	  bl.append((char*)&n, sizeof(n));
+	  for (map<int, Bucket*>::const_iterator it = buckets.begin();
+		   it != buckets.end();
+		   it++) {
+		bl.append((char*)&it->first, sizeof(it->first));
+		it->second->_encode(bl);
+	  }
+	  bl.append((char*)&bucketno, sizeof(bucketno));
+
+	  // hash
+	  int s = h.get_seed();
+	  bl.append((char*)&s, sizeof(s));
+
+	  ::_encode(out, bl);
+	  ::_encode(overload, bl);
+
+	  // rules
+	  n = rules.size();
+	  bl.append((char*)&n, sizeof(n));
+	  for(map<int, Rule>::iterator it = rules.begin();
+		  it != rules.end();
+		  it++) {
+		bl.append((char*)&it->first, sizeof(it->first));
+		it->second._encode(bl);
+	  }
+		
+	}
+
+	void _decode(bufferlist& bl, int& off) {
+	  int n;
+	  bl.copy(off, sizeof(n), (char*)&n);
+	  off += sizeof(n);
+	  for (int i=0; i<n; i++) {
+		int bid;
+		bl.copy(off, sizeof(bid), (char*)&bid);
+		off += sizeof(bid);
+		Bucket *b = decode_bucket(bl, off);
+		buckets[bid] = b;
+	  }
+	  bl.copy(off, sizeof(bucketno), (char*)&bucketno);
+	  off += sizeof(bucketno);
+
+	  int s;
+	  bl.copy(off, sizeof(s), (char*)&s);
+	  off += sizeof(s);
+	  h.set_seed(s);
+
+	  ::_decode(out, bl, off);
+	  ::_decode(overload, bl, off);
+
+	  // rules
+	  bl.copy(off, sizeof(n), (char*)&n);
+	  off += sizeof(n);
+	  for (int i=0; i<n; i++) {
+		int r;
+		bl.copy(off, sizeof(r), (char*)&r);
+		off += sizeof(r);
+		rules[r]._decode(bl,off);
+	  }
+
+	}
+
 
   public:
 	Crush(int seed=123) : bucketno(-1), h(seed) {}
@@ -122,11 +189,11 @@ namespace crush {
 
 	  if (buckets.count(items[0])) {
 		out << endl;
-		for (int i=0; i<items.size(); i++)
+		for (unsigned i=0; i<items.size(); i++)
 		  print(out, items[i], indent+1);
 	  } else {
 		out << "[";
-		for (int i=0; i<items.size(); i++) {
+		for (unsigned i=0; i<items.size(); i++) {
 		  if (i) out << " ";
 		  out << items[i];
 		}
@@ -192,7 +259,7 @@ namespace crush {
 
 	  // for each replica
 	  for (int rep=0; rep<numrep; rep++) {
-		int out = -1;                   // my result
+		int outv = -1;                   // my result
 		
 		// keep trying until we get a non-failed, non-colliding item
 		for (int addr=0; ; addr++) {
@@ -225,7 +292,7 @@ namespace crush {
 			}
 			
 			// choose
-			out = in->choose_r(x, r, h); 					
+			outv = in->choose_r(x, r, h); 					
 			
 			// did we get the type we want?
 			int itemtype = 0;          // 0 is terminal type
@@ -233,8 +300,8 @@ namespace crush {
 			if (in->is_uniform()) {
 			  itemtype = ((UniformBucket*)in)->get_item_type();
 			} else {
-			  if (buckets.count(out)) {  // another bucket
-				newin = buckets[out];
+			  if (buckets.count(outv)) {  // another bucket
+				newin = buckets[outv];
 				itemtype = newin->get_type();
 			  } 
 			}
@@ -242,7 +309,7 @@ namespace crush {
 			  // collision?
 			  bool collide = false;
 			  for (int prep=0; prep<rep; prep++) {
-				if (outvec[off+prep] == out) {
+				if (outvec[off+prep] == outv) {
 				  collide = true;
 				  break;
 				}
@@ -260,12 +327,12 @@ namespace crush {
 		  }
 		  
 		  // ok choice?
-		  if (type == 0 && failed.count(out)) 
+		  if (type == 0 && out.count(outv)) 
 			bad = true;
 		  
-		  if (overload.count(out)) {
-			float f = (float)(h(x, out) % 1000) / 1000.0;
-			if (f > overload[out])
+		  if (overload.count(outv)) {
+			float f = (float)(h(x, outv) % 1000) / 1000.0;
+			if (f > overload[outv])
 			  bad = true;
 		  }
 		  
@@ -276,14 +343,15 @@ namespace crush {
 		}
 
 		// output this value
-		outvec.push_back(out);
+		outvec.push_back(outv);
 	  } // for rep
 	}
 
 
 	void do_rule(Rule& rule, int x, vector<int>& result) {
-	  int numresult = 0;
-	  
+	  //int numresult = 0;
+	  result.clear();
+
 	  // working vector
 	  vector<int> w;   // working variable
 
@@ -334,8 +402,9 @@ namespace crush {
 
 		case CRUSH_RULE_EMIT:
 		  {
-			for (int i=0; i<w.size(); i++)
-			  result[numresult++] = w[i];
+			for (unsigned i=0; i<w.size(); i++)
+			  result.push_back(w[i]);
+			//result[numresult++] = w[i];
 			w.clear();
 		  }
 		  break;
