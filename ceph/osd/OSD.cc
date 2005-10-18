@@ -1015,6 +1015,11 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	  }
 	}
 
+	if (pg->is_peered()) {
+	  // we're already peered.  what do we do with this guy?
+	  assert(0);
+	}
+
 	// peered with this guy specifically?
 	PGPeer *pgp = pg->get_peer(from);
 	if (!pgp && 
