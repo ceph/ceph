@@ -117,7 +117,7 @@ void LogStream::flush()
 					  writing_buffers[append_pos]->length(), flush_pos,
 					  *writing_buffers[append_pos],
 					  0,
-					  new C_LS_Append(this, append_pos));
+					  new C_LS_Append(this, append_pos), NULL); /// unsafe
 
 	flush_pos = append_pos;
   } else {

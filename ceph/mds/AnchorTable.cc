@@ -362,7 +362,7 @@ void AnchorTable::save(Context *onfinish)
   mds->filer->write(table_inode,
 					bl.length(), 0,
 					bl, 0, 
-					onfinish);
+					NULL, onfinish);
 }
 
 

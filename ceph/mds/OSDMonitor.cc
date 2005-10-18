@@ -37,11 +37,17 @@ void OSDMonitor::fake_reorg()
   
   // HACK osd map change
   static int d = 0;
-  dout(1) << "changing OSD map, marking osd" << d << " out" << endl;
-  //mds->osdmap->get_group(0).num_osds--;
-  //mds->osdmap->init_rush();
-  mds->osdmap->out_osds.insert(d++);
+
+  if (d > 0) {
+	dout(1) << "changing OSD map, marking osd" << d-1 << " out" << endl;
+	mds->osdmap->mark_out(d-1);
+  }
+
+  dout(1) << "changing OSD map, marking osd" << d << " down" << endl;
+  mds->osdmap->mark_down(d);
+
   mds->osdmap->inc_version();
+  d++;
   
   // bcast
   mds->bcast_osd_map();

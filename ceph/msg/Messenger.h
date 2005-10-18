@@ -11,6 +11,8 @@ using namespace std;
 #include "common/Cond.h"
 
 
+typedef __uint64_t lamport_t;
+
 
 class MDS;
 class Timer;
@@ -19,7 +21,7 @@ class Messenger {
  private:
   Dispatcher          *dispatcher;
   msg_addr_t           _myaddr;
-  __uint64_t            lamport_clock;
+  lamport_t            lamport_clock;
 
   // procedure call fun
   long                   _last_pcid;
@@ -34,9 +36,9 @@ class Messenger {
   void       set_myaddr(msg_addr_t m) { _myaddr = m; }
   msg_addr_t get_myaddr() { return _myaddr; }
 
-  __uint64_t get_lamport() { return lamport_clock++; }
-  __uint64_t peek_lamport() { return lamport_clock; }
-  void bump_lamport(__uint64_t other) { 
+  lamport_t get_lamport() { return lamport_clock++; }
+  lamport_t peek_lamport() { return lamport_clock; }
+  void bump_lamport(lamport_t other) { 
 	if (other >= lamport_clock)
 	  lamport_clock = other+1;
   }

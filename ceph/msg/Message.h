@@ -37,6 +37,7 @@
 #define MSG_OSD_PG_QUERY       55
 #define MSG_OSD_PG_QUERYREPLY  56
 #define MSG_OSD_PG_UPDATE      57
+#define MSG_OSD_PG_REMOVE      58
 
 #define MSG_CLIENT_REQUEST         60
 #define MSG_CLIENT_REPLY           61

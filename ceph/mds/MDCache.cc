@@ -509,7 +509,7 @@ bool MDCache::trim(int max) {
 	  dout(7) << "last link, removing file content " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
 	  mds->filer->remove(in->inode, 
 						 in->inode.size, 
-						 NULL);   // FIXME
+						 NULL, NULL);   // FIXME
 	}
 
 	// remove it

@@ -95,6 +95,7 @@ void Filer::send_outgoing()
 */
 
 
+// ------------------------------------------------------------
 // read
 
 int
@@ -112,7 +113,7 @@ Filer::read(inode_t& inode,
   p->onfinish = onfinish;
 
   // map buffer into OSD extents
-  osdmap->file_to_extents(inode, len, offset, p->extents);
+  file_to_extents(inode, len, offset, p->extents);
 
   dout(7) << "osd read ino " << inode.ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
@@ -283,6 +284,10 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 
 
 
+
+// ------------------------------------------------------------
+// modify ops
+
 // write
 
 int 
@@ -291,17 +296,19 @@ Filer::write(inode_t& inode,
 			 size_t offset, 
 			 bufferlist& bl,
 			 int flags, 
-			 Context *onfinish)
+			 Context *onack,
+			 Context *onsafe)
 {
   last_tid++;
 
   // pending write record
   PendingOSDOp_t *p = new PendingOSDOp_t;
-  p->onfinish = onfinish;
+  p->onack = onack;
+  p->onsafe = onsafe;
   
   // find data
   list<OSDExtent> extents;
-  osdmap->file_to_extents(inode, len, offset, extents);
+  file_to_extents(inode, len, offset, extents);
 
   dout(7) << "osd write ino " << inode.ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
@@ -335,8 +342,9 @@ Filer::write(inode_t& inode,
 	off += it->len;
 
 	// add to gather set
-	p->outstanding_ops.insert(last_tid);
-	op_writes[last_tid] = p;
+	p->waitfor_ack.insert(last_tid);
+	p->waitfor_safe.insert(last_tid);
+	op_modify[last_tid] = p;
 
 	// send
 	dout(15) << " write on " << last_tid << endl;
@@ -348,29 +356,50 @@ Filer::write(inode_t& inode,
 
 
 void
-Filer::handle_osd_write_reply(MOSDOpReply *m)
+Filer::handle_osd_modify_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
-  dout(15) << "handle_osd_write_reply on " << tid << endl;
+  assert(op_modify.count(tid));
+  PendingOSDOp_t *p = op_modify[ tid ];
 
-  assert(op_writes.count(tid));
-  PendingOSDOp_t *p = op_writes[ tid ];
-  op_writes.erase( tid );
+  Context *onack = 0;
+  Context *onsafe = 0;
 
-  // our op finished
-  p->outstanding_ops.erase(tid);
+  // ack or safe?
+  if (m->get_safe()) {
+	// safe.
+	dout(15) << "handle_osd_modify_reply safe on " << tid << endl;
+	op_modify.erase( tid );
+	p->waitfor_ack.erase(tid);
+	p->waitfor_safe.erase(tid);
 
-  if (p->outstanding_ops.empty()) {
-	// all done
-	Context *onfinish = p->onfinish;
-	delete p;
+	if (p->waitfor_safe.empty()) {
+	  onack = p->onack;
+	  onsafe = p->onsafe;
+	  delete p;
+	}
+  } else {
+	// ack.
+	dout(15) << "handle_osd_modify_reply ack on " << tid << endl;
+	p->waitfor_ack.erase(tid);
 
-	if (onfinish) {
-	  onfinish->finish(0);
-	  delete onfinish;
+	if (p->waitfor_ack.empty()) {
+	  onack = p->onack;
+	  p->onack = 0;
 	}
   }
+
+  // do callbacks
+  if (onack) {
+	onack->finish(0);
+	delete onack;
+  }
+  if (onsafe) {
+	onsafe->finish(0);
+	delete onsafe;
+  }
+
   delete m;
 }
 
@@ -394,66 +423,33 @@ Filer::handle_osd_op_reply(MOSDOpReply *m)
   case OSD_OP_READ:
 	handle_osd_read_reply(m);
 	return;
+
   case OSD_OP_WRITE:
-	handle_osd_write_reply(m);
+  case OSD_OP_TRUNCATE:
+  case OSD_OP_DELETE:
+	handle_osd_modify_reply(m);
 	return;
+
+  default:
+	assert(0);
   }
-
-
-  // get pio
-  tid_t tid = m->get_tid();
-  dout(15) << "handle_osd_op_reply on " << tid << endl;
-
-  PendingOSDOp_t *p = 0;
-
-  if (op_removes.count(tid)) {
-	// remove op
-	p = op_removes[tid];
-	op_removes.erase(tid);
-  }
-  else if (op_mkfs.count(tid)) {
-	// mkfs op
-	p = op_mkfs[tid];
-	op_mkfs.erase(tid);
-  }
-  else
-	assert(0); // why did i get this message?
-
-  if (p) {  
-	// our op finished
-	p->outstanding_ops.erase(tid);
-	
-	if (p->outstanding_ops.empty()) {
-	  dout(12) << "gather done, finishing" << endl;
-	  
-	  // all done
-	  Context *onfinish = p->onfinish;
-	  delete p;
-	  
-	  if (onfinish) {
-		onfinish->finish(0);
-		delete onfinish;
-	  }
-	} else {
-	  dout(12) << "still waiting on tids " << p->outstanding_ops << endl;
-	}
-
-  }
-  delete m;
+  
 }
 
 
 int Filer::truncate(inode_t& inode, 
 					size_t new_size, size_t old_size,
-					Context *onfinish)
+					Context *onack,
+					Context *onsafe)
 {
   // pending write record
   PendingOSDOp_t *p = new PendingOSDOp_t;
-  p->onfinish = onfinish;
+  p->onack = onack;
+  p->onsafe = onsafe;
   
   // find data
   list<OSDExtent> extents;
-  osdmap->file_to_extents(inode, old_size, new_size, extents);
+  file_to_extents(inode, old_size, new_size, extents);
 
   dout(7) << "osd truncate ino " << inode.ino << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
 
@@ -479,16 +475,21 @@ int Filer::truncate(inode_t& inode,
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 	
 	// add to gather set
-	p->outstanding_ops.insert(last_tid);
-	op_removes[last_tid] = p;
+	p->waitfor_ack.insert(last_tid);
+	p->waitfor_safe.insert(last_tid);
+	op_modify[last_tid] = p;
 	n++;
   }
 
   if (n == 0) {
 	delete p;
-	if (onfinish) {
-	  onfinish->finish(0);
-	  delete onfinish;
+	if (onack) {
+	  onack->finish(0);
+	  delete onack;
+	}
+	if (onsafe) {
+	  onsafe->finish(0);
+	  delete onsafe;
 	}
   }
 
@@ -496,39 +497,14 @@ int Filer::truncate(inode_t& inode,
 }
 
 
-/*
-int Filer::probe_size(inodeno_t ino, 
-					  OSDFileLayout& layout,
-					  size_t *size, 
-					  Context *onfinish)
-{
-  PendingOSDProbe_t *p = new PendingOSDProbe_t;
-  p->final_size = size;
-  p->onfinish = onfinish;
 
-  p->cur_offset = 0;   // start at the beginning
-
-  last_tid++;
-  op_probes[ last_tid ] = p;
-
-  // stat first object
-  
-
-  return 0;
-}
-*/
-
-
+// -------------------------------------------
 // mkfs on all osds, wipe everything.
 
 int Filer::mkfs(Context *onfinish)
 {
   dout(7) << "mkfs, wiping all OSDs" << endl;
 
-  // pending write record
-  PendingOSDOp_t *p = new PendingOSDOp_t;
-  p->onfinish = onfinish;
-  
   // send MKFS to osds
   set<int> ls;
   osdmap->get_all_osds(ls);
@@ -546,18 +522,6 @@ int Filer::mkfs(Context *onfinish)
   }
 
   waiting_for_mkfs = onfinish;
-
-	/*
-	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   0, 0, osdmap->get_version(), 
-						   OSD_OP_MKFS);
-	messenger->send_message(m, MSG_ADDR_OSD(*it), 0);
-
-	// add to gather set
-	p->outstanding_ops.insert(last_tid);
-	op_mkfs[last_tid] = p;
-	*/
-
   return 0;
 }
 
@@ -604,7 +568,7 @@ int Filer::zero(inodeno_t ino,
   
   // find data
   list<OSDExtent> extents;
-  osdmap->file_to_extents(ino, len, offset, num_rep, extents);
+  file_to_extents(ino, len, offset, num_rep, extents);
   
   dout(7) << "osd zero ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
   

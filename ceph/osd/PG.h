@@ -2,22 +2,27 @@
 #include "include/types.h"
 #include "include/bufferlist.h"
 #include "ObjectStore.h"
+#include "msg/Messenger.h"
+
+#include <ext/hash_map>
+using namespace __gnu_cxx;
+
 
 struct PGReplicaInfo {
   int state;
+  version_t last_complete;
   map<object_t,version_t>  objects;        // remote object list
-  map<object_t,version_t>  deleted;        // remote delete list
 
   void _encode(bufferlist& blist) {
 	blist.append((char*)&state, sizeof(state));
 	::_encode(objects, blist);
-	::_encode(deleted, blist);
+	//::_encode(deleted, blist);
   }
   void _decode(bufferlist& blist, int& off) {
 	blist.copy(off, sizeof(state), (char*)&state);
 	off += sizeof(state);
 	::_decode(objects, blist, off);
-	::_decode(deleted, blist, off);
+	//::_decode(deleted, blist, off);
   }
 
   PGReplicaInfo() : state(0) { }
@@ -38,29 +43,38 @@ class PGPeer {
   class PG *pg;
  private:
   int       peer;
+  int       role;
   int       state;
 
-  // peer state
  public:
-  PGReplicaInfo peer_state;          // only defined if active && !complete
+  // peer state
+  version_t     last_complete;
+  map<object_t,version_t>  objects;    // cleared after pg->is_peered()
 
- protected:
-  // recovery: for pulling content from (old) replicas
+ private:
+  // recovery todo
+  set<object_t>            missing;    // missing or old objects to push
+  set<object_t>            stray;      // extra objects to delete
+
+  // recovery in-flight
   map<object_t,version_t>  pulling;
   map<object_t,version_t>  pushing;
   map<object_t,version_t>  removing;
   
   // replication: for pushing replicas (new or old)
-  map<object_t,version_t>  writing;        // objects i've written to replica
-  map<object_t,version_t>  flushing;       // objects i've written to remote buffer cache only
+  //map<object_t,version_t>  writing;        // objects i've written to replica
+
+  friend class PG;
 
  public:
-  PGPeer(class PG *pg, int p/*, int ro*/) : 
+  PGPeer(class PG *pg, int p, int ro) : 
 	pg(pg), 
-	peer(p), 
+	peer(p),
+	role(ro),
 	state(0) { }
 
   int get_peer() { return peer; }
+  int get_role() { return role; }
 
   int get_state() { return state; } 
   bool state_test(int m) { return (state & m) != 0; }
@@ -71,10 +85,13 @@ class PGPeer {
   bool is_complete() { return state_test(PG_PEER_STATE_COMPLETE); }
   bool is_recovering() { return is_active() && !is_complete(); }
 
-  bool has_latest(object_t o, version_t v) {
-	if (is_complete()) return true;
-	if (peer_state.objects.count(o) == 0) return false;
-	return peer_state.objects[o] == v;
+  bool is_missing(object_t o) {
+	if (is_complete()) return false;
+	return missing.count(o);
+  }
+  bool is_stray(object_t o) {
+	if (is_complete()) return false;
+	return stray.count(o);
   }
 
   // actors
@@ -86,14 +103,21 @@ class PGPeer {
   void push(object_t o, version_t v) { pushing[o] = v; }
   bool is_pushing(object_t o) { return pushing.count(o); }
   version_t pushing_version(object_t o) { return pushing[o]; }
-  void pushed(object_t o) { pushing.erase(o); }
+  void pushed(object_t o) { 
+	pushing.erase(o); 
+	missing.erase(o);
+	if (missing.empty() && stray.empty()) 
+	  state_set(PG_PEER_STATE_COMPLETE);
+  }
 
   void remove(object_t o, version_t v) { removing[o] = v; }
   bool is_removing(object_t o) { return removing.count(o); }
   version_t removing_version(object_t o) { return removing[o]; }
   void removed(object_t o) { 
 	removing.erase(o); 
-	peer_state.objects.erase(o);
+	stray.erase(o);
+	if (missing.empty() && stray.empty()) 
+	  state_set(PG_PEER_STATE_COMPLETE);
   }
 
   int num_active_ops() {
@@ -139,7 +163,7 @@ class PGQueue {
 
 
 
-/** PG - Replica Group
+/** PG - Replica Placement Group
  *
  */
 
@@ -149,9 +173,7 @@ class PGQueue {
                                 // replica: peered with auth
 
 // primary
-//#define PG_STATE_CROWNED     4  // i have the PG crown
 #define PG_STATE_CLEAN       8  // peers are fully replicated and clean of stray objects
-//#define PG_STATE_FLUSHING   16  // i am old primary, but flushing rep writes before peering
 
 // replica
 #define PG_STATE_STRAY      32  // i need to announce myself to new auth
@@ -167,58 +189,125 @@ class PG {
   int         state;   // see bit defns above
   version_t   primary_since;  // (only defined if role==0)
 
+  map<int, PGPeer*>         peers;  // primary: (soft state) active peers
+
  public:
   vector<int> acting;
   //pginfo_t    info;
 
- protected:
-  version_t   last_complete;
-  //set<int>    old_replica_set; // old primary: where replicas used to be
-  
-  map<int, PGPeer*>         peers;  // primary: (soft state) active peers
+  version_t   last_complete;      // epoch
 
- public:
-  pginfo_t   info;
+  /*
+  lamport_t   last_complete_stamp;     // lamport timestamp of last complete op
+  lamport_t   last_modify_stamp;       // most recent modification
+  lamport_t   last_clean_stamp;
+  */
 
+  // pg waiters
+  list<class Message*>                      waiting_for_peered;   // any op will hang until peered
+  hash_map<object_t, list<class Message*> > waiting_for_missing_object;   
+  hash_map<object_t, list<class Message*> > waiting_for_clean_object;
 
-
-  // -- recovery state (useful on primary only) --
- public:
-  PGQueue                   pull_plan; 
-  PGQueue                   push_plan;
-  PGQueue                   clean_plan;
-  
-  list<class Message*>                 waiting_for_peered;   // any op will hang until peered
-  map<object_t, list<class Message*> > waiting_for_object;   // ops waiting for specific objects.
 
   // recovery
-  map<object_t, version_t>  objects;          // what the current object set is
-  map<object_t, int>        objects_loc;      // proxy map: where current non-local live
-  map<object_t, set<int> >  objects_unrep;    // insufficiently replicated
-  map<object_t, set<int> >  objects_stray;    // stray objects
-  map<object_t, int>        objects_nrep;     // [temp] not quite accurate.  for pull.
+  map<object_t, set<int> >  objects_missing;  // pull: missing locally
+  map<object_t, version_t > objects_missing_v; // stupid
+  map<object_t, set<int> >  objects_unrep;    // push: missing remotely
+  map<object_t, map<int, version_t> > objects_stray;    // clean: stray (remote) objects
 
-  // for unstable states,
-  //map<object_t, version_t>  deleted_objects;  // locally deleted objects
+  map<object_t, PGPeer*>       objects_pulling;
+  map<object_t, set<PGPeer*> > objects_pushing;
+  map<object_t, map<PGPeer*, version_t> > objects_removing;
+  
+ private:
+  map<object_t, set<int> >::iterator pull_pos;
+  map<object_t, set<int> >::iterator push_pos;
+  map<object_t, map<int, version_t> >::iterator remove_pos;
 
  public:
-  void plan_recovery(ObjectStore *store);
-  void plan_pull();
-  void plan_push_cleanup();
+  bool get_next_pull(object_t& oid) {
+	if (objects_missing.empty()) return false;
+	if (objects_missing.size() == objects_pulling.size()) return false;
+
+	while (objects_pulling.count(pull_pos->first)) {
+	  pull_pos++;
+	  if (pull_pos == objects_missing.end()) 
+		pull_pos = objects_missing.begin();
+	}
+	
+	oid = pull_pos->first;
+	pull_pos++;
+	return true;
+  }
+  bool get_next_push(object_t& oid) {
+	if (objects_unrep.empty()) return false;
+	if (objects_unrep.size() == objects_pushing.size()) return false;
+
+	while (objects_pushing.count(push_pos->first)) {
+	  push_pos++;
+	  if (push_pos == objects_unrep.end()) 
+		push_pos = objects_unrep.begin();
+	}
+	
+	oid = push_pos->first;
+	push_pos++;
+	return true;
+  }
+  bool get_next_remove(object_t& oid) {
+	if (objects_stray.empty()) return false;
+	if (objects_stray.size() == objects_removing.size()) return false;
+
+	while (objects_removing.count(remove_pos->first)) {
+	  remove_pos++;
+	  if (remove_pos == objects_stray.end()) 
+		remove_pos = objects_stray.begin();
+	}
+	
+	oid = remove_pos->first;
+	remove_pos++;
+	return true;
+  }
+
+  void pulled(object_t oid, version_t v, PGPeer *p);
+  void pushed(object_t oid, version_t v, PGPeer *p);
+  void removed(object_t oid, version_t v, PGPeer *p);
+
+
+  // log
+  map< version_t, set<object_t> > log_write_version_objects;
+  map< object_t, set<version_t> > log_write_object_versions;
+  map< version_t, set<object_t> > log_delete_version_objects;
+  map< object_t, set<version_t> > log_delete_object_versions;
+
+  void log_write(object_t o, version_t v) {
+	log_write_object_versions[o].insert(v);
+	log_write_version_objects[v].insert(o);
+  }
+  void unlog_write(object_t o, version_t v) {
+	log_write_object_versions[o].erase(v);
+	log_write_version_objects[v].erase(o);
+  }
+  void log_delete(object_t o, version_t v) {
+	log_delete_object_versions[o].insert(v);
+	log_delete_version_objects[v].insert(o);
+  }
+  void unlog_delete(object_t o, version_t v) {
+	log_write_object_versions[o].erase(v);
+	log_write_version_objects[v].erase(o);
+  }
+
+
+ public:
+  void plan_recovery(ObjectStore *store, version_t current_version);
 
   void discard_recovery_plan() {
-	pull_plan.clear(); 
-	push_plan.clear(); 
-	clean_plan.clear();
-
 	assert(waiting_for_peered.empty());
-	assert(waiting_for_object.empty());
+	assert(waiting_for_missing_object.empty());
 
-	objects.clear();
-	objects_loc.clear();
+	objects_missing.clear();
+	objects_missing_v.clear();
 	objects_unrep.clear();
 	objects_stray.clear();
-	objects_nrep.clear();
   }
 
 
@@ -226,7 +315,9 @@ class PG {
   PG(int osd, pg_t p) : whoami(osd), pgid(p),
 	role(0),
 	state(0),
-	last_complete(0) { }
+	last_complete(0)
+	//last_complete_stamp(0), last_modify_stamp(0), last_clean_stamp(0) 
+	{ }
   
   pg_t       get_pgid() { return pgid; }
   int        get_primary() { return acting[0]; }
@@ -248,24 +339,9 @@ class PG {
   bool       is_primary() { return role == 0; }
   bool       is_residual() { return role < 0; }
 
-  bool       is_pulling() { return !pull_plan.empty(); }
-  void       pulled(object_t oid, version_t v, PGPeer *p);
-  bool       is_pushing() { return !push_plan.empty(); }
-  void       pushed(object_t oid, version_t v, PGPeer *p);
-  bool       is_removing() { return !push_plan.empty(); }
-  void       removed(object_t oid, version_t v, PGPeer *p);
-
-
   bool existant_object_is_clean(object_t o, version_t v);
   bool nonexistant_object_is_clean(object_t o);
 
-  PGPeer*    get_proxy_peer(object_t o) { 
-	if (objects_loc.count(o))
-	  return get_peer(objects_loc[o]);
-	return 0;
-  }
-  version_t  get_proxy_version(object_t o) { return objects[o]; }
-  
   int  get_state() { return state; }
   bool state_test(int m) { return (state & m) != 0; }
   void set_state(int s) { state = s; }
@@ -297,8 +373,8 @@ class PG {
 	if (peers.count(p)) return peers[p];
 	return 0;
   }
-  PGPeer* new_peer(int p/*, int r*/) {
-	return peers[p] = new PGPeer(this, p/*, r*/);
+  PGPeer* new_peer(int p, int r) {
+	return peers[p] = new PGPeer(this, p, r);
   }
   void remove_peer(int p) {
 	assert(peers.count(p));
@@ -313,16 +389,6 @@ class PG {
 	peers.clear();
   }
 
-  //set<int>&                 get_old_replica_set() { return old_replica_set; }
-  //map<object_t, version_t>& get_deleted_objects() { return deleted_objects; }
-
-  
-
-  void assim_info(pginfo_t& i) {
-	if (i.created > info.created) info.created = i.created;
-	if (i.last_clean > info.last_clean) info.last_clean = i.last_clean;
-	if (i.last_complete > info.last_complete) info.last_complete = i.last_complete;
-  }
   
   void store(ObjectStore *store) {
 	if (!store->collection_exists(pgid))
@@ -364,18 +430,6 @@ class PG {
   }
 
 
-  void assim_deleted_objects(map<object_t,version_t>& dl) {
-	for (map<object_t, version_t>::iterator oit = dl.begin();
-		 oit != dl.end();
-		 oit++) {
-	  if (objects.count(oit->first) == 0) continue;  // dne
-	  if (objects[oit->first] < oit->second) {       // deleted.
-		objects.erase(oit->first);
-		objects_loc.erase(oit->first);
-	  }
-	}
-  }
-
 
 };
 
@@ -390,40 +444,3 @@ inline ostream& operator<<(ostream& out, PG& pg)
   return out;
 }
 
-
-/*
-class PS {
-  ps_t psid;
-  int  rank;
-  
- public:
-  map<int,PG*>  pg_map;
-
- public:
-  PS(ps_t p) : psid(p), rank(0) { }
-  
-  int        get_rank() { return rank; }
-  void       set_rank(int r) { rank = r; }
-
-  // PG
-  bool pg_exists(pg_t pg);
-  PG* get_pg(int r) {
-	if (pg_map.count(r)) return pg_map[r];
-	return 0;
-  }
-  PG* new_pg(int r) {
-	return pg_map[r] = new PG;
-  }
-
-  // store
-  void store(ObjectStore *store) {
-	if (!store->collection_exists(psid))
-	  store->collection_create(psid);
-	store->collection_setattr(psid, "rank", &rank, sizeof(rank));
-  }
-  void fetch(ObjectStore *store) {
-	store->collection_getattr(pgid, "rank", &rank, sizeof(rank));
-  }
-
-};
-*/

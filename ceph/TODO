@@ -23,50 +23,21 @@ cluster issues
 - what about large messages?  :(
 
 
-distribution
-
-- osd imbalance?
-- osd readjustment
 
 
 
 
-
-
-
-
-
-osd fun
-//- generalize rep stuff (op_delete, op_truncate, etc.)
-
-- pull plan items need to be removed when they're obsolete.  or, figure out what's old later.
+osd foo
 - osdmap history distribution
-- double commit?  what does 'complete' mean on a replica?
 
-- ordering writes.. right now it's a free for all in op thread pool
+- handle down osds
+- pg_bit changes
 
-- "same primary" logic needs to be historical unbroken chain of primary-ship... 
-    eg maphistory->same_pg_primary_since(pg, epoch)
+- thread (and unordered!) ops
+ - rep ops tricky
 
-
-
-- osd states
-
-                up   placing data
- active         y    y 
- inactive       y    n
- down           n    y
- failed         n    n
-
-
-a utonomic
-r eliable
-d istributed
-o bject
-s tore
-
-
-
+- 'dirty' log on primary
+- fast recovery from degraded mode
 
 
 
@@ -75,7 +46,6 @@ REPLICATION
 requirements
 - We should support a fast succession of map updates, even when intermediate reorganizations are not allowed to complete before the next starts.
 - Reorganizations can be arbitrary, potentially involving a completely disparate set of OSDs in a RG between epochs.  (We will of course seek to minimize movement in practice.)
-
 
 
 
@@ -90,15 +60,12 @@ requirements
 
 
 
-KNOWN BUGS to fix after fast
+KNOWN MDS BUGS to fix after fast
+- redo mds capabilities code ... distribute!!
 - fix softlock, stat
 - implement truncate() for real
 - hard links!
 
-
-UPCOMING TODOS:
-- redo CDir hash_map in terms of const char * in CDentry?
- - or try google's hash library!!
 
 
 finish HARD LINKS

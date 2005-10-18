@@ -67,7 +67,7 @@ class OSD : public Dispatcher {
   void queue_op(class MOSDOp *m);
   void wait_for_no_ops();
 
-  void apply_write(MOSDOp *op, bool write_sync, version_t v); // for op_write and op_rep_write
+  int apply_write(MOSDOp *op, bool write_sync, version_t v); // for op_write and op_rep_write
 
   
  public:
@@ -105,21 +105,16 @@ class OSD : public Dispatcher {
   void get_pg_list(list<pg_t>& ls);
   bool pg_exists(pg_t pg);
   PG *create_pg(pg_t pg);             // create new PG
-  PG *open_pg(pg_t pg);            // return existing PG, load state from store (if needed)
+  PG *get_pg(pg_t pg);             // return existing PG, load state from store (if needed)
   void close_pg(pg_t pg);          // close in-memory state
   void remove_pg(pg_t pg);         // remove state from store
 
-  set<PG*>                 pg_unstable;
   __uint64_t               last_tid;
   map<__uint64_t,PGPeer*>  pull_ops;   // tid -> PGPeer*
   map<__uint64_t,PGPeer*>  push_ops;   // tid -> PGPeer*
   map<__uint64_t,PGPeer*>  remove_ops; // tid -> PGPeer*
 
-  hash_map<object_t, list<Message*> >  waiting_for_object;
-  hash_map<object_t, list<Message*> >  waiting_for_clean_object;
   hash_map<pg_t, list<Message*> >      waiting_for_pg;
-  hash_map<pg_t, list<Message*> >      waiting_for_pg_peered;
-  //hash_map<pg_t, int>                  waiting_for_pg_flush;  // pg -> newprimary
 
 
   void advance_map(list<pg_t>& ls);
@@ -135,9 +130,12 @@ class OSD : public Dispatcher {
   void pg_push(PG *pg, int maxops);
   void pg_clean(PG *pg, int maxops);
 
-  void pull_replica(object_t oid, version_t v, PGPeer *p);
-  void push_replica(object_t oid, version_t v, PGPeer *p);
-  void remove_replica(object_t oid, version_t v, PGPeer *p);
+  void pull_replica(PG *pg, object_t oid);
+  void push_replica(PG *pg, object_t oid);
+  void remove_replica(PG *pg, object_t oid);
+
+  bool require_current_map(Message *m, version_t v);
+  bool require_current_pg_primary(Message *m, version_t v, PG *pg);
 
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_peer(class MOSDPGPeer *m);
@@ -151,7 +149,8 @@ class OSD : public Dispatcher {
   void op_rep_remove(class MOSDOp *op);
   void op_rep_remove_reply(class MOSDOpReply *op);
   
-  void op_rep_write(class MOSDOp *op);
+  void op_rep_modify(class MOSDOp *op);   // write, trucnate, delete
+  void ack_replica_op(__uint64_t tid, int result, int fromosd);
 
  public:
   OSD(int id, Messenger *m);
@@ -169,9 +168,9 @@ class OSD : public Dispatcher {
 
   void op_read(class MOSDOp *m, PG *pg);
   void op_stat(class MOSDOp *m, PG *pg);
-  void op_write(class MOSDOp *m, PG *pg);
-  void op_delete(class MOSDOp *m, PG *pg);
-  void op_truncate(class MOSDOp *m, PG *pg);
+  void op_modify(class MOSDOp *m, PG *pg);
+  //void op_delete(class MOSDOp *m, PG *pg);
+  //void op_truncate(class MOSDOp *m, PG *pg);
 
   //void op_mkfs(class MOSDOp *m);
 

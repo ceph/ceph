@@ -24,12 +24,15 @@
 #define OSD_OP_IS_REP(x)  ((x) >= 30)
 
 // replication/recovery -- these ops are relative to a specific object version #
-#define OSD_OP_REP_PULL    30   // whole object read
-#define OSD_OP_REP_PUSH    31   // whole object write
-#define OSD_OP_REP_REMOVE  32   // delete replica
-#define OSD_OP_REP_WRITE   33   // replicated (partial object) write
+#define OSD_OP_REP_WRITE    (100+OSD_OP_WRITE)     // replicated (partial object) write
+#define OSD_OP_REP_TRUNCATE (100+OSD_OP_TRUNCATE)  // replicated truncate
+#define OSD_OP_REP_DELETE   (100+OSD_OP_DELETE)
 
-#define OSD_OP_FLAG_TRUNCATE  1   // truncate object after end of write
+#define OSD_OP_REP_PULL     30   // whole object read
+#define OSD_OP_REP_PUSH     31   // whole object write
+#define OSD_OP_REP_REMOVE   32   // delete replica
+
+//#define OSD_OP_FLAG_TRUNCATE  1   // truncate object after end of write
 
 typedef struct {
   long tid;
@@ -44,6 +47,7 @@ typedef struct {
   int op;
   size_t length, offset;
   version_t version;
+  version_t old_version;
 
   size_t _data_len;
 } MOSDOp_st;
@@ -64,6 +68,7 @@ class MOSDOp : public Message {
 
   int        get_pg_role() { return st.pg_role; }  // who am i asking for?
   version_t  get_version() { return st.version; }
+  version_t  get_old_version() { return st.old_version; }
 
   int    get_op() { return st.op; }
   size_t get_length() { return st.length; }
@@ -103,6 +108,7 @@ class MOSDOp : public Message {
   void set_length(size_t l) { st.length = l; }
   void set_offset(size_t o) { st.offset = o; }
   void set_version(version_t v) { st.version = v; }
+  void set_old_version(version_t ov) { st.old_version = ov; }
   
   // marshalling
   virtual void decode_payload() {

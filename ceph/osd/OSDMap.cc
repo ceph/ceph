@@ -13,7 +13,7 @@ void OSDMap::encode(bufferlist& blist)
 
   _encode(osds, blist);
   _encode(down_osds, blist);
-  _encode(out_osds, blist);
+  //_encode(out_osds, blist);
 
   crush._encode(blist);
 }
@@ -28,7 +28,7 @@ void OSDMap::decode(bufferlist& blist)
 
   _decode(osds, blist, off);
   _decode(down_osds, blist, off);
-  _decode(out_osds, blist, off);
+  //_decode(out_osds, blist, off);
 
   crush._decode(blist, off);
 }

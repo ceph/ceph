@@ -504,7 +504,8 @@ void Client::flush_inode_buffers(Inode *in)
          it++) {
       (*it)->flush_start(); // Note: invalidates dirty_buffer entries!!!
       C_Client_FileFlushFinish *onfinish = new C_Client_FileFlushFinish(*it);
-      filer->write(in->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
+      filer->write(in->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, 
+				   NULL, onfinish); // safe
     }
     dout(3) << "bc: flush_inode_buffers ends" << endl;
 #if 0    
@@ -544,7 +545,8 @@ void Client::flush_buffers(int ttl, unsigned long long dirty_size)
 	 it++) {
       (*it)->flush_start();
       C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(*it);
-      filer->write((*it)->inode->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, onfinish);
+      filer->write((*it)->inode->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, 
+				   NULL, onfinish); // safe
     }
 #if 0
     dout(7) << "flush_buffers: dirty buffers, waiting" << endl;
@@ -1724,7 +1726,8 @@ int Client::write(fh_t fh, const char *buf, unsigned long long size, long long o
 	  int rvalue;
 	  
 	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, client_lock, &rvalue);
-	  filer->write(in->inode, size, offset, blist, 0, onfinish);
+	  filer->write(in->inode, size, offset, blist, 0, 
+				   NULL, onfinish); // safe
 	  
 	  cond.Wait(*client_lock);
 	}
