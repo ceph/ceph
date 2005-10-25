@@ -56,6 +56,14 @@ int FakeStore::init()
 	return r;
   }
 
+  {
+	char name[80];
+	sprintf(name,"osd%d.fakestore.threadpool", whoami);
+	fsync_threadpool = new ThreadPool<FakeStore, pair<int,Context*> >(name, g_conf.osd_fakestore_syncthreads, 
+																	  (void (*)(FakeStore*, pair<int,Context*>*))dofsync, 
+																	  this);
+  }
+
   // all okay.
   return 0;
 }
@@ -67,11 +75,24 @@ int FakeStore::finalize()
   // close collections db files
   close_collections();
 
+  delete fsync_threadpool;
+
   // nothing
   return 0;
 }
 
 
+
+///////////
+
+void FakeStore::do_fsync(int fd, Context *c)
+{
+  ::fsync(fd);
+  ::close(fd);
+  dout(10) << "do_fsync finished on " << fd << " context " << c << endl;
+  c->finish(0);
+  delete c;
+}
 
 
 ////
@@ -205,7 +226,7 @@ int FakeStore::truncate(object_t oid, off_t size)
 
 int FakeStore::read(object_t oid, 
 					size_t len, off_t offset,
-					char *buffer) {
+					bufferlist& bl) {
   dout(20) << "read " << oid << " len " << len << " off " << offset << endl;
 
   string fn;
@@ -221,7 +242,10 @@ int FakeStore::read(object_t oid,
   off_t actual = lseek(fd, offset, SEEK_SET);
   size_t got = 0;
   if (actual == offset) {
-	got = ::read(fd, buffer, len);
+	bufferptr bptr = new buffer(len);  // prealloc space for entire read
+	got = ::read(fd, bptr.c_str(), len);
+	bptr.set_length(got);   // properly size the buffer
+	bl.push_back( bptr );   // put it in the target bufferlist
   }
   ::flock(fd, LOCK_UN);
   ::close(fd);
@@ -230,7 +254,7 @@ int FakeStore::read(object_t oid,
 
 int FakeStore::write(object_t oid,
 					 size_t len, off_t offset,
-					 char *buffer,
+					 bufferlist& bl,
 					 bool do_fsync) {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
 
@@ -249,10 +273,23 @@ int FakeStore::write(object_t oid,
   ::flock(fd, LOCK_EX);    // lock for safety
   //::fchmod(fd, 0664);
   
+  // seek
   off_t actual = lseek(fd, offset, SEEK_SET);
   int did = 0;
   assert(actual == offset);
-  did = ::write(fd, buffer, len);
+
+  // write buffers
+  for (list<bufferptr>::iterator it = bl.buffers().begin();
+	   it != bl.buffers().end();
+	   it++) {
+	int r = ::write(fd, (*it).c_str(), (*it).length());
+	if (r > 0)
+	  did += r;
+	else {
+	  dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+	}
+  }
+  
   if (did < 0) {
 	dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
   }
@@ -266,6 +303,55 @@ int FakeStore::write(object_t oid,
   return did;
 }
 
+int FakeStore::write(object_t oid, 
+					 size_t len, off_t offset, 
+					 bufferlist& bl, 
+					 Context *onsafe)
+{
+  dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
+
+  string fn;
+  get_oname(oid,fn);
+  
+  ::mknod(fn.c_str(), 0644, 0);  // in case it doesn't exist yet.
+
+  int flags = O_WRONLY;//|O_CREAT;
+  int fd = ::open(fn.c_str(), flags);
+  if (fd < 0) {
+	dout(1) << "write couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
+	return fd;
+  }
+  ::flock(fd, LOCK_EX);    // lock for safety
+  //::fchmod(fd, 0664);
+  
+  // seek
+  off_t actual = lseek(fd, offset, SEEK_SET);
+  int did = 0;
+  assert(actual == offset);
+
+  // write buffers
+  for (list<bufferptr>::iterator it = bl.buffers().begin();
+	   it != bl.buffers().end();
+	   it++) {
+	int r = ::write(fd, (*it).c_str(), (*it).length());
+	if (r > 0)
+	  did += r;
+	else {
+	  dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+	}
+  }
+  
+  if (did < 0) {
+	dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+  }
+
+  ::flock(fd, LOCK_UN);
+
+  // schedule sync
+  queue_fsync(fd, onsafe);
+  
+  return did;
+}
 
 
 

@@ -33,6 +33,8 @@ map<int, FakeMessenger*>      directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
+set<FakeMessenger*>           shutdown_set;
+
 Mutex lock;
 Cond  cond;
 
@@ -47,15 +49,17 @@ class C_FakeKicker : public Context {
   void finish(int r) {
 	dout(18) << "timer kick" << endl;
 	pending_timer = true;
+	lock.Lock();
 	cond.Signal();  // why not
+	lock.Unlock();
   }
 };
 
-
 void *fakemessenger_thread(void *ptr) 
 {
-  dout(1) << "thread start, setting timer kicker" << endl;
-  g_timer.set_messenger_kicker(new C_FakeKicker());
+  //dout(1) << "thread start, setting timer kicker" << endl;
+  //g_timer.set_messenger_kicker(new C_FakeKicker());
+  msgr_callback_kicker = new C_FakeKicker();
 
   lock.Lock();
   while (1) {
@@ -73,8 +77,10 @@ void *fakemessenger_thread(void *ptr)
   }
   lock.Unlock();
 
-  cout << "unsetting messenger kicker" << endl;
-  g_timer.unset_messenger_kicker();
+  cout << "unsetting messenger" << endl;
+  //g_timer.unset_messenger_kicker();
+  g_timer.unset_messenger();
+  msgr_callback_kicker = 0;
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
   return 0;
@@ -128,12 +134,18 @@ int fakemessenger_do_loop_2()
 	
 	dout(18) << "do_loop top" << endl;
 
-	// timer?
+	/*// timer?
 	if (pending_timer) {
 	  pending_timer = false;
 	  dout(5) << "pending timer" << endl;
 	  g_timer.execute_pending();
 	}
+	*/
+
+	// callbacks
+	lock.Unlock();
+	messenger_do_callbacks();
+	lock.Lock();
 
 	// messages
 	map<int, FakeMessenger*>::iterator it = directory.begin();
@@ -176,10 +188,26 @@ int fakemessenger_do_loop_2()
 	  }
 	}
 	
+	// deal with shutdowns.. dleayed to avoid concurrent directory modification
+	if (!shutdown_set.empty()) {
+	  for (set<FakeMessenger*>::iterator it = shutdown_set.begin();
+		   it != shutdown_set.end();
+		   it++) {
+		dout(7) << "fakemessenger: removing " << MSG_ADDR_NICE((*it)->get_myaddr()) << " from directory" << endl;
+		assert(directory.count((*it)->get_myaddr()));
+		directory.erase((*it)->get_myaddr());
+		if (directory.empty()) {
+		  dout(1) << "fakemessenger: last shutdown" << endl;
+		  ::shutdown = true;
+		}
+	  }
+	  shutdown_set.clear();
+	}
 	
 	if (!didone)
 	  break;
   }
+
 
   dout(18) << "do_loop end (no more messages)." << endl;
   //lock.Unlock();
@@ -195,6 +223,8 @@ FakeMessenger::FakeMessenger(long me)  : Messenger(me)
   lock.Unlock();
 
   cout << "fakemessenger " << whoami << " messenger is " << this << endl;
+
+  g_timer.set_messenger(this);
 
   /*
   string name;
@@ -220,14 +250,17 @@ int FakeMessenger::shutdown()
 {
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   lock.Lock();
-
   assert(directory.count(whoami) == 1);
+  shutdown_set.insert(this);
+  
+  /*
   directory.erase(whoami);
   if (directory.empty()) {
 	dout(1) << "fakemessenger: last shutdown" << endl;
 	::shutdown = true;
 	cond.Signal();  // why not
   } 
+  */
 
   /*
   if (loggers[whoami]) {
@@ -275,7 +308,10 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 
 	// queue
 	FakeMessenger *dm = directory[dest];
-	assert(dm);
+	if (!dm) {
+	  dout(1) << "** destination " << MSG_ADDR_NICE(dest) << " (" << dest << ") dne" << endl;
+	  assert(dm);
+	}
 	dm->queue_incoming(m);
 
 	dout(5) << "--> sending " << m << " to " << MSG_ADDR_NICE(dest) << endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;

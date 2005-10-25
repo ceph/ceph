@@ -53,7 +53,7 @@ class ThreadPool {
 		//pthread_exit(0);
 		return 0;   // like this, i think!
       }
-      //tpdout(DBLVL) << "Thread "<< pthread_self() << " calling the function\n";
+      tpdout(DBLVL) << "Thread "<< pthread_self() << " calling the function on " << op << endl;
       func(u, op);
     }
 	return 0;
@@ -108,6 +108,7 @@ class ThreadPool {
 
   void put_op(T* op)
   {
+    tpdout(DBLVL) << "put_op " << op << endl;
     q_lock.Lock();
     q.push(op);
     num_ops++;

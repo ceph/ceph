@@ -59,20 +59,20 @@ class MOSDOp : public Message {
   friend class MOSDOpReply;
 
  public:
-  long       get_tid() { return st.tid; }
-  msg_addr_t get_asker() { return st.asker; }
+  const long       get_tid() { return st.tid; }
+  const msg_addr_t get_asker() { return st.asker; }
 
-  object_t   get_oid() { return st.oid; }
-  pg_t get_pg() { return st.pg; }
-  version_t  get_map_version() { return st.map_version; }
+  const object_t   get_oid() { return st.oid; }
+  const pg_t get_pg() { return st.pg; }
+  const version_t  get_map_version() { return st.map_version; }
 
-  int        get_pg_role() { return st.pg_role; }  // who am i asking for?
-  version_t  get_version() { return st.version; }
-  version_t  get_old_version() { return st.old_version; }
+  const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
+  const version_t  get_version() { return st.version; }
+  const version_t  get_old_version() { return st.old_version; }
 
-  int    get_op() { return st.op; }
-  size_t get_length() { return st.length; }
-  size_t get_offset() { return st.offset; }
+  const int    get_op() { return st.op; }
+  const size_t get_length() { return st.length; }
+  const size_t get_offset() { return st.offset; }
 
   void set_data(bufferlist &d) {
 	data.claim(d);

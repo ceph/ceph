@@ -53,6 +53,21 @@ void Filer::dispatch(Message *m)
 }
 
 
+bool Filer::is_active() 
+{
+  if (!op_reads.empty() ||
+	  !op_modify.empty() ||
+	  !op_probes.empty()) {
+	for (hash_map<tid_t,PendingOSDRead_t*>::iterator it = op_reads.begin();
+		 it != op_reads.end();
+		 it++) dout(10) << " pending read op " << it->first << endl;
+	for (hash_map<tid_t,PendingOSDOp_t*>::iterator it = op_modify.begin();
+		 it != op_modify.end();
+		 it++) dout(10) << " pending modify op " << it->first << endl;
+	return true;
+  }
+  return false;
+}
 
 void Filer::handle_osd_map(MOSDMap *m)
 {
@@ -115,7 +130,7 @@ Filer::read(inode_t& inode,
   // map buffer into OSD extents
   file_to_extents(inode, len, offset, p->extents);
 
-  dout(7) << "osd read ino " << inode.ino << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
+  dout(7) << "osd read ino " << hex << inode.ino << dec << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
   // issue reads
   for (list<OSDExtent>::iterator it = p->extents.begin();
@@ -129,7 +144,7 @@ Filer::read(inode_t& inode,
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
-	dout(15) << " read on " << last_tid << " from oid " << it->oid << " off " << it->offset << " len " << it->len << " (" << it->buffer_extents.size() << " buffer bits)" << endl;
+	dout(15) << " read on " << last_tid << " from oid " << hex << it->oid << dec  << " off " << it->offset << " len " << it->len << " (" << it->buffer_extents.size() << " buffer bits)" << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 
 	// add to gather set
@@ -193,7 +208,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
 			 bit != eit->buffer_extents.end();
 			 bit++) {
-		  dout(21) << "object " << eit->oid << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
+		  dout(21) << "object " << hex << eit->oid << dec << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
 		  by_off[bit->first] = new bufferlist;
 
 		  if (ox_off + bit->second <= ox_len) {
@@ -310,7 +325,7 @@ Filer::write(inode_t& inode,
   list<OSDExtent> extents;
   file_to_extents(inode, len, offset, extents);
 
-  dout(7) << "osd write ino " << inode.ino << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
+  dout(7) << "osd write ino " << hex << inode.ino << dec << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
 
   size_t off = 0;  // ptr into buffer
 
@@ -347,7 +362,7 @@ Filer::write(inode_t& inode,
 	op_modify[last_tid] = p;
 
 	// send
-	dout(15) << " write on " << last_tid << endl;
+	dout(15) << " write on " << last_tid << "  oid " << hex << it->oid << dec << " off " << it->offset << " len " << it->len << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
   }
 
@@ -451,7 +466,7 @@ int Filer::truncate(inode_t& inode,
   list<OSDExtent> extents;
   file_to_extents(inode, old_size, new_size, extents);
 
-  dout(7) << "osd truncate ino " << inode.ino << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
+  dout(7) << "osd truncate ino " << hex << inode.ino << dec << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
 
   int n = 0;
   for (list<OSDExtent>::iterator it = extents.begin();

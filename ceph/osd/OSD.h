@@ -22,6 +22,27 @@ class Messenger;
 class Message;
 
 
+class OSDReplicaOp {
+ public:
+  class MOSDOp        *op;
+  map<__uint64_t,int>  waitfor_ack;
+  map<__uint64_t,int>  waitfor_sync;
+  bool                 local_ack;
+  bool                 local_sync;
+  bool                 cancel;
+
+  set<int>         osds;
+  version_t        new_version, old_version;
+  
+  OSDReplicaOp(class MOSDOp *o, version_t nv, version_t ov) : 
+	op(o), 
+	local_ack(false), local_sync(false), cancel(false),
+	new_version(nv), old_version(ov)
+	{ }
+  bool can_send_ack() { return !cancel && local_ack && waitfor_ack.empty(); }
+  bool can_send_sync() { return !cancel && local_sync && waitfor_sync.empty(); }
+  bool can_delete() { return cancel || can_send_sync(); }
+};
 
 
 class OSD : public Dispatcher {
@@ -54,9 +75,6 @@ class OSD : public Dispatcher {
   //int read_onode(onode_t& onode);
   //int write_onode(onode_t& onode);
 
-  bool object_complete(PG *pg, object_t oid, Message *op);
-  bool object_clean(PG *pg, object_t oid, version_t& v, Message *op);
-
 
   // -- ops --
   class ThreadPool<class OSD, class MOSDOp>  *threadpool;
@@ -67,7 +85,9 @@ class OSD : public Dispatcher {
   void queue_op(class MOSDOp *m);
   void wait_for_no_ops();
 
-  int apply_write(MOSDOp *op, bool write_sync, version_t v); // for op_write and op_rep_write
+  int apply_write(MOSDOp *op, version_t v,
+				  Context *onsync = 0); 
+
 
   
  public:
@@ -83,48 +103,50 @@ class OSD : public Dispatcher {
   list<class Message*> waiting_for_osdmap;
   map<version_t, OSDMap*> osdmaps;
 
-  void update_map(bufferlist& state);
+  void update_map(bufferlist& state, bool mkfs=false);
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
   OSDMap *get_osd_map(version_t v);
   
-  // <old replica hack>
-  Mutex                          replica_write_lock;
-  map<__uint64_t, MOSDOp*>       replica_writes;
-  map<MOSDOp*, set<__uint64_t> > replica_write_tids;
-  set<MOSDOp*>                   replica_write_local;
-  map<MOSDOp*, int>              replica_write_result;
-  map<pg_t, map<int, set<__uint64_t> > > replica_pg_osd_tids; // pg -> osd -> tid
-  // </hack>
+  void advance_map(list<pg_t>& ls);
+  void activate_map(list<pg_t>& ls);
+
 
 
   // -- replication --
 
   // PG
   hash_map<pg_t, PG*>      pg_map;
-  void get_pg_list(list<pg_t>& ls);
-  bool pg_exists(pg_t pg);
-  PG *create_pg(pg_t pg);             // create new PG
-  PG *get_pg(pg_t pg);             // return existing PG, load state from store (if needed)
-  void close_pg(pg_t pg);          // close in-memory state
-  void remove_pg(pg_t pg);         // remove state from store
+
+  void  get_pg_list(list<pg_t>& ls);
+  bool  pg_exists(pg_t pg);
+  PG   *create_pg(pg_t pg);          // create new PG
+  PG   *get_pg(pg_t pg);             // return existing PG, load state from store (if needed)
+  void  close_pg(pg_t pg);          // close in-memory state
+  void  remove_pg(pg_t pg);         // remove state from store
 
   __uint64_t               last_tid;
+
+  hash_map<pg_t, list<Message*> >        waiting_for_pg;
+
+  // replica ops
+  map<__uint64_t, OSDReplicaOp*>         replica_ops;
+  map<pg_t, map<int, set<__uint64_t> > > replica_pg_osd_tids; // pg -> osd -> tid
+  
+  void issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd);
+  void ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd);
+
+  // recovery
   map<__uint64_t,PGPeer*>  pull_ops;   // tid -> PGPeer*
   map<__uint64_t,PGPeer*>  push_ops;   // tid -> PGPeer*
   map<__uint64_t,PGPeer*>  remove_ops; // tid -> PGPeer*
-
-  hash_map<pg_t, list<Message*> >      waiting_for_pg;
-
-
-  void advance_map(list<pg_t>& ls);
-  void activate_map(list<pg_t>& ls);
 
   void start_peers(PG *pg, map< int, map<PG*,int> >& start_map);
 
   void peer_notify(int primary, map<pg_t,version_t>& pg_list);
   void peer_start(int replica, map<PG*,int>& pg_map);
 
+  void plan_recovery(PG *pg);
   void do_recovery(PG *pg);
   void pg_pull(PG *pg, int maxops);
   void pg_push(PG *pg, int maxops);
@@ -150,7 +172,8 @@ class OSD : public Dispatcher {
   void op_rep_remove_reply(class MOSDOpReply *op);
   
   void op_rep_modify(class MOSDOp *op);   // write, trucnate, delete
-  void ack_replica_op(__uint64_t tid, int result, int fromosd);
+  void op_rep_modify_sync(class MOSDOp *op);
+  friend class C_OSD_RepModifySync;
 
  public:
   OSD(int id, Messenger *m);
@@ -166,13 +189,10 @@ class OSD : public Dispatcher {
   void handle_ping(class MPing *m);
   void handle_op(class MOSDOp *m);
 
-  void op_read(class MOSDOp *m, PG *pg);
-  void op_stat(class MOSDOp *m, PG *pg);
-  void op_modify(class MOSDOp *m, PG *pg);
-  //void op_delete(class MOSDOp *m, PG *pg);
-  //void op_truncate(class MOSDOp *m, PG *pg);
-
-  //void op_mkfs(class MOSDOp *m);
+  void op_read(class MOSDOp *m);
+  void op_stat(class MOSDOp *m);
+  void op_modify(class MOSDOp *m);
+  void op_modify_sync(class OSDReplicaOp *repop);
 
   // for replication
   void handle_op_reply(class MOSDOpReply *m);

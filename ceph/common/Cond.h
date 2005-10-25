@@ -20,7 +20,8 @@ class Cond
  public:
 
   Cond() {
-    pthread_cond_init(&C,NULL);
+    int r = pthread_cond_init(&C,NULL);
+	assert(r == 0);
   }
 
   virtual ~Cond() { 
@@ -53,7 +54,8 @@ class Cond
   }
 
   int Signal() { 
-	int r = pthread_cond_signal(&C);
+	//int r = pthread_cond_signal(&C);
+	int r = pthread_cond_broadcast(&C);
 	return r;
   }
 };

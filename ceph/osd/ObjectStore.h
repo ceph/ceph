@@ -2,6 +2,8 @@
 #define __OBJECTSTORE_H
 
 #include "include/types.h"
+#include "include/Context.h"
+#include "include/bufferlist.h"
 
 #include <sys/stat.h>
 
@@ -31,12 +33,17 @@ class ObjectStore {
 
   virtual int read(object_t oid, 
 				   size_t len, off_t offset,
-				   char *buffer) = 0;
+				   bufferlist& bl) = 0;
+
   virtual int write(object_t oid,
 					size_t len, off_t offset,
-					char *buffer,
-					bool fsync=true) = 0;
-  
+					bufferlist& bl,
+					bool fsync=true) = 0;     
+  virtual int write(object_t oid, 
+					size_t len, off_t offset, 
+					bufferlist& bl, 
+					Context *onsafe) { return -1; }
+
   virtual int setattr(object_t oid, const char *name,
 					  void *value, size_t size) {return 0;} //= 0;
   virtual int getattr(object_t oid, const char *name,
@@ -61,6 +68,8 @@ class ObjectStore {
   virtual int collection_getattr(object_t oid, const char *name,
 								 void *value, size_t size) {return 0;} //= 0;
   virtual int collection_listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
+  
+  
   
 };
 

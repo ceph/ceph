@@ -106,12 +106,7 @@ class Filer : public Dispatcher {
 
   void dispatch(Message *m);
 
-  bool is_active() {
-	if (!op_reads.empty() ||
-		!op_modify.empty() ||
-		!op_probes.empty()) return true;
-	return false;
-  }
+  bool is_active();
 
   // osd fun
   int read(inode_t& inode,

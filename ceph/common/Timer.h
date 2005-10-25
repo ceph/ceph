@@ -57,7 +57,9 @@ class Timer {
   pthread_t thread_id;
   bool      thread_stop;
   Mutex     lock;
-  Cond      cond;
+  bool      timed_sleep;
+  Cond      sleep_cond;
+  Cond      timeout_cond;
  public:
   void timer_thread();    // waiter thread (that wakes us up)
 
@@ -99,6 +101,10 @@ class Timer {
 
   void set_messenger_kicker(Context *c);
   void unset_messenger_kicker();
+
+  void set_messenger(Messenger *m);
+  void unset_messenger();
+
 
   // schedule events
   void add_event_after(float seconds,

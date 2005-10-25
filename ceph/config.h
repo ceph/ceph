@@ -26,6 +26,7 @@ struct md_config_t {
   bool fakemessenger_serialize;
 
   int fake_osdmap_expand;
+  bool fake_osd_sync;
 
   int debug;
   int debug_mds_balancer;
@@ -83,6 +84,8 @@ struct md_config_t {
   bool  osd_fsync;
   bool  osd_writesync;
   int   osd_maxthreads;
+
+  int osd_fakestore_syncthreads;
 
   // fake client
   int      num_fakeclient;

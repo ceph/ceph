@@ -98,6 +98,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   // <HACK set up OSDMap from g_conf>
   osdmap = new OSDMap();
   osdmap->set_pg_bits(g_conf.osd_pg_bits);
+  osdmap->inc_version();
 
   Bucket *b = new UniformBucket(1, 0);
   for (int i=0; i<g_conf.num_osd; i++) {
@@ -111,14 +112,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
   }
-
-  /*OSDGroup osdg;
-  osdg.num_osds = g_conf.num_osd;
-  for (int i=0; i<osdg.num_osds; i++) osdg.osds.push_back(i);
-  osdg.weight = 100;
-  osdg.osd_size = 100;  // not used yet?
-  osdmap->add_group(osdg);
-  */
 
   // </HACK>
 

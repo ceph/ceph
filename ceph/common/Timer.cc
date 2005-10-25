@@ -11,7 +11,7 @@
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "Timer: "
 
-#define DBL 20
+#define DBL 10
 
 #include <signal.h>
 #include <sys/time.h>
@@ -20,7 +20,8 @@
 // single global instance
 Timer      g_timer;
 
-Context *messenger_kicker = 0;
+//Context *messenger_kicker = 0;
+Messenger *messenger = 0;
 
 
 
@@ -55,16 +56,16 @@ void Timer::timer_thread()
 		utime_t t = it->first;
 		dout(DBL) << "queuing event(s) scheduled at " << t << endl;
 
-		pending[t] = it->second;
+		if (messenger) {
+		  for (set<Context*>::iterator cit = it->second.begin();
+			   cit != it->second.end();
+			   cit++)
+			messenger->queue_callback(*cit);
+		}
+
+		//pending[t] = it->second;
 		it++;
 		scheduled.erase(t);
-	  }
-
-	  if (messenger_kicker) {
-		dout(DBL) << "kicking messenger" << endl;
-		messenger_kicker->finish(0);
-	  } else {
-		dout(DBL) << "no messenger ot kick!" << endl;
 	  }
 
 	}
@@ -73,10 +74,23 @@ void Timer::timer_thread()
 	  // sleep
 	  if (event) {
 		dout(DBL) << "sleeping until " << next << endl;
-		cond.Wait(lock, next);  // wait for waker or time
+		timed_sleep = true;
+		timeout_cond.Wait(lock, next);  // wait for waker or time
+		utime_t now = g_clock.now();
+		dout(DBL) << "kicked or timed out at " << now << endl;
 	  } else {
 		dout(DBL) << "sleeping" << endl;
-		cond.Wait(lock);         // wait for waker
+
+		//wtf this isn't waking up! 
+		timed_sleep = false;
+		sleep_cond.Wait(lock);         // wait for waker
+		// setting a 1s limit works tho
+		//utime_t next = g_clock.now();
+		//next.sec_ref() += 10;
+		//cond.Wait(lock, next);         // wait for waker
+
+		utime_t now = g_clock.now();
+		dout(DBL) << "kicked at " << now << endl;
 	  }
 	}
   }
@@ -90,7 +104,7 @@ void Timer::timer_thread()
  * Timer bits
  */
 
-
+/*
 void Timer::set_messenger_kicker(Context *c)
 {
   dout(10) << "messenger kicker is " << c << endl;
@@ -106,12 +120,27 @@ void Timer::unset_messenger_kicker()
   }
   cancel_timer();
 }
+*/
+
+void Timer::set_messenger(Messenger *m)
+{
+  dout(10) << "set messenger " << m << endl;
+  messenger = m;
+}
+void Timer::unset_messenger()
+{
+  dout(10) << "unset messenger" << endl;
+  messenger = 0;
+}
 
 void Timer::register_timer()
 {
   if (thread_id) {
 	dout(DBL) << "register_timer kicking thread" << endl;
-	cond.Signal();
+	if (timed_sleep)
+	  timeout_cond.Signal();
+	else
+	  sleep_cond.Signal();
   } else {
 	dout(DBL) << "register_timer starting thread" << endl;
 	pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
@@ -125,7 +154,10 @@ void Timer::cancel_timer()
 	dout(10) << "setting thread_stop flag" << endl;
 	lock.Lock();
 	thread_stop = true;
-	cond.Signal();
+	if (timed_sleep)
+	  timeout_cond.Signal();
+	else
+	  sleep_cond.Signal();
 	lock.Unlock();
 	
 	dout(10) << "waiting for thread to finish" << endl;
@@ -159,10 +191,11 @@ void Timer::add_event_at(utime_t when,
   lock.Lock();
   scheduled[ when ].insert(callback);
   event_times[callback] = when;
-  lock.Unlock();
   
   // make sure i wake up
   register_timer();
+
+  lock.Unlock();
 }
 
 bool Timer::cancel_event(Context *callback) 
@@ -194,6 +227,7 @@ bool Timer::cancel_event(Context *callback)
  * this should be called by the Messenger in the proper thread (usually same as incoming messages)
  */
 
+/*
 void Timer::execute_pending()
 {
   lock.Lock();
@@ -215,3 +249,5 @@ void Timer::execute_pending()
 
   lock.Unlock();
 }
+
+*/

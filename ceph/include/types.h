@@ -6,6 +6,7 @@
 
 #include <string>
 #include <set>
+#include <map>
 #include <vector>
 #include <iostream>
 using namespace std;
@@ -241,8 +242,9 @@ inline ostream& operator<<(ostream& out, set<int>& iset) {
   return out;
 }
 
-inline ostream& operator<<(ostream& out, set<__uint64_t>& iset) {
-  for (set<__uint64_t>::iterator it = iset.begin();
+template<class A>
+inline ostream& operator<<(ostream& out, set<A>& iset) {
+  for (typename set<A>::iterator it = iset.begin();
 	   it != iset.end();
 	   it++) {
 	if (it != iset.begin()) out << ",";
@@ -251,13 +253,28 @@ inline ostream& operator<<(ostream& out, set<__uint64_t>& iset) {
   return out;
 }
 
-inline ostream& operator<<(ostream& out, multiset<int>& iset) {
-  for (multiset<int>::iterator it = iset.begin();
+template<class A>
+inline ostream& operator<<(ostream& out, multiset<A>& iset) {
+  for (typename multiset<A>::iterator it = iset.begin();
 	   it != iset.end();
 	   it++) {
 	if (it != iset.begin()) out << ",";
 	out << *it;
   }
+  return out;
+}
+
+template<class A,class B>
+inline ostream& operator<<(ostream& out, map<A,B>& m) 
+{
+  out << "{";
+  for (typename map<A,B>::const_iterator it = m.begin();
+	   it != m.end();
+	   it++) {
+	if (it != m.begin()) out << ",";
+	out << it->first << "=" << it->second;
+  }
+  out << "}";
   return out;
 }
 

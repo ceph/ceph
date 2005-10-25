@@ -9,6 +9,7 @@ using namespace std;
 #include "Dispatcher.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "include/Context.h"
 
 
 typedef __uint64_t lamport_t;
@@ -22,6 +23,8 @@ class Messenger {
   Dispatcher          *dispatcher;
   msg_addr_t           _myaddr;
   lamport_t            lamport_clock;
+
+  // callbacks
 
   // procedure call fun
   long                   _last_pcid;
@@ -45,6 +48,8 @@ class Messenger {
 
   virtual int shutdown() = 0;
   
+  void queue_callback(Context *c);
+
   // setup
   void set_dispatcher(Dispatcher *d) { dispatcher = d; ready(); }
   Dispatcher *get_dispatcher() { return dispatcher; }
@@ -59,6 +64,10 @@ class Messenger {
   // make a procedure call
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
 };
+
+// callbacks
+void messenger_do_callbacks();
+extern Context *msgr_callback_kicker;
 
 
 extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);

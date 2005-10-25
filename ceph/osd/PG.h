@@ -11,16 +11,23 @@ using namespace __gnu_cxx;
 struct PGReplicaInfo {
   int state;
   version_t last_complete;
+  version_t last_any_complete;
   map<object_t,version_t>  objects;        // remote object list
 
   void _encode(bufferlist& blist) {
 	blist.append((char*)&state, sizeof(state));
+	blist.append((char*)&last_complete, sizeof(last_complete));
+	blist.append((char*)&last_any_complete, sizeof(last_any_complete));
 	::_encode(objects, blist);
 	//::_encode(deleted, blist);
   }
   void _decode(bufferlist& blist, int& off) {
 	blist.copy(off, sizeof(state), (char*)&state);
 	off += sizeof(state);
+	blist.copy(off, sizeof(last_complete), (char*)&last_complete);
+	off += sizeof(last_complete);
+	blist.copy(off, sizeof(last_any_complete), (char*)&last_any_complete);
+	off += sizeof(last_any_complete);
 	::_decode(objects, blist, off);
 	//::_decode(deleted, blist, off);
   }
@@ -127,7 +134,7 @@ class PGPeer {
 
 
 
-
+/*
 // a task list for moving objects around
 class PGQueue {
   list<object_t>  objects;
@@ -160,6 +167,7 @@ class PGQueue {
   }
   bool empty() { return objects.empty(); }
 };
+*/
 
 
 
@@ -168,7 +176,7 @@ class PGQueue {
  */
 
 // any
-#define PG_STATE_COMPLETE    1  // i have full PG contents locally
+//#define PG_STATE_COMPLETE    1  // i have full PG contents locally
 #define PG_STATE_PEERED      2  // primary: peered with everybody
                                 // replica: peered with auth
 
@@ -189,13 +197,16 @@ class PG {
   int         state;   // see bit defns above
   version_t   primary_since;  // (only defined if role==0)
 
+  version_t   last_complete;      // me
+  version_t   last_any_complete;  // anybody in the set
+  
+ public:
   map<int, PGPeer*>         peers;  // primary: (soft state) active peers
 
  public:
   vector<int> acting;
   //pginfo_t    info;
 
-  version_t   last_complete;      // epoch
 
   /*
   lamport_t   last_complete_stamp;     // lamport timestamp of last complete op
@@ -229,6 +240,8 @@ class PG {
 	if (objects_missing.empty()) return false;
 	if (objects_missing.size() == objects_pulling.size()) return false;
 
+	if (objects_pulling.empty() || pull_pos == objects_missing.end()) 
+	  pull_pos = objects_missing.begin();
 	while (objects_pulling.count(pull_pos->first)) {
 	  pull_pos++;
 	  if (pull_pos == objects_missing.end()) 
@@ -243,6 +256,8 @@ class PG {
 	if (objects_unrep.empty()) return false;
 	if (objects_unrep.size() == objects_pushing.size()) return false;
 
+	if (objects_pushing.empty() || push_pos == objects_unrep.end()) 
+	  push_pos = objects_unrep.begin();
 	while (objects_pushing.count(push_pos->first)) {
 	  push_pos++;
 	  if (push_pos == objects_unrep.end()) 
@@ -257,6 +272,8 @@ class PG {
 	if (objects_stray.empty()) return false;
 	if (objects_stray.size() == objects_removing.size()) return false;
 
+	if (objects_removing.empty() || remove_pos == objects_stray.end()) 
+	  remove_pos = objects_stray.begin();
 	while (objects_removing.count(remove_pos->first)) {
 	  remove_pos++;
 	  if (remove_pos == objects_stray.end()) 
@@ -268,8 +285,22 @@ class PG {
 	return true;
   }
 
+  void pulling(object_t oid, version_t v, PGPeer *p) {
+	p->pull(oid, v);
+	objects_pulling[oid] = p;
+  }
   void pulled(object_t oid, version_t v, PGPeer *p);
+
+  void pushing(object_t oid, version_t v, PGPeer *p) {
+	p->push(oid, v);
+	objects_pushing[oid].insert(p);
+  }
   void pushed(object_t oid, version_t v, PGPeer *p);
+
+  void removing(object_t oid, version_t v, PGPeer *p) {
+	p->remove(oid, v);
+	objects_removing[oid][p] = v;
+  }
   void removed(object_t oid, version_t v, PGPeer *p);
 
 
@@ -298,7 +329,8 @@ class PG {
 
 
  public:
-  void plan_recovery(ObjectStore *store, version_t current_version);
+  void plan_recovery(ObjectStore *store, version_t current_version,
+					 list<PGPeer*>& complete_peers);
 
   void discard_recovery_plan() {
 	assert(waiting_for_peered.empty());
@@ -315,7 +347,8 @@ class PG {
   PG(int osd, pg_t p) : whoami(osd), pgid(p),
 	role(0),
 	state(0),
-	last_complete(0)
+	primary_since(0),
+	last_complete(0), last_any_complete(0)
 	//last_complete_stamp(0), last_modify_stamp(0), last_clean_stamp(0) 
 	{ }
   
@@ -324,7 +357,9 @@ class PG {
   int        get_nrep() { return acting.size(); }
 
   version_t  get_last_complete() { return last_complete; }
-  void       set_last_complete(version_t v) { last_complete = v; }
+  //void       set_last_complete(version_t v) { last_complete = v; }
+  version_t  get_last_any_complete() { return last_any_complete; }
+  //void       set_last_any_complete(version_t v) { last_any_complete = v; }
 
   version_t  get_primary_since() { return primary_since; }
   void       set_primary_since(version_t v) { primary_since = v; }
@@ -339,25 +374,35 @@ class PG {
   bool       is_primary() { return role == 0; }
   bool       is_residual() { return role < 0; }
 
-  bool existant_object_is_clean(object_t o, version_t v);
-  bool nonexistant_object_is_clean(object_t o);
-
   int  get_state() { return state; }
   bool state_test(int m) { return (state & m) != 0; }
   void set_state(int s) { state = s; }
   void state_set(int m) { state |= m; }
   void state_clear(int m) { state &= ~m; }
 
-  bool       is_complete()  { return state_test(PG_STATE_COMPLETE); }
+  bool       is_complete(version_t v)  { 
+	//return state_test(PG_STATE_COMPLETE); 
+	return v == last_complete;
+  }
   bool       is_peered()    { return state_test(PG_STATE_PEERED); }
   //bool       is_crowned()   { return state_test(PG_STATE_CROWNED); }
   bool       is_clean()     { return state_test(PG_STATE_CLEAN); }
   //bool       is_flushing() { return state_test(PG_STATE_FLUSHING); }
   bool       is_stray() { return state_test(PG_STATE_STRAY); }
 
-  void       mark_peered();
-  void       mark_complete();
-  void       mark_clean();
+  void       mark_peered() { 
+	state_set(PG_STATE_PEERED);
+  }
+  void       mark_complete(version_t v) {
+	last_complete = v;
+	if (v > last_any_complete) last_any_complete = v;
+  }
+  void       mark_any_complete(version_t v) {
+	if (v > last_any_complete) last_any_complete = v;
+  }
+  void       mark_clean() {
+	state_set(PG_STATE_CLEAN);
+  }
 
   int num_active_ops() {
 	int o = 0;
@@ -403,10 +448,10 @@ class PG {
 	store->collection_getattr(pgid, "state", &state, sizeof(state));	
   }
 
-  void add_object(ObjectStore *store, object_t oid) {
+  void add_object(ObjectStore *store, const object_t oid) {
 	store->collection_add(pgid, oid);
   }
-  void remove_object(ObjectStore *store, object_t oid) {
+  void remove_object(ObjectStore *store, const object_t oid) {
 	store->collection_remove(pgid, oid);
   }
   void list_objects(ObjectStore *store, list<object_t>& ls) {
@@ -437,9 +482,10 @@ class PG {
 inline ostream& operator<<(ostream& out, PG& pg)
 {
   out << "pg[" << hex << pg.get_pgid() << dec << " " << pg.get_role();
-  if (pg.is_complete()) out << " complete";
+  //if (pg.is_complete()) out << " complete";
   if (pg.is_peered()) out << " peered";
   if (pg.is_clean()) out << " clean";
+  out << " lc=" << pg.get_last_complete();
   out << "]";
   return out;
 }

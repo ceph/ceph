@@ -6,12 +6,6 @@
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << whoami << "  " << *this << " "
 
 
-void PG::mark_peered()
-{
-  dout(10) << "mark_peered" << endl;
-  state_set(PG_STATE_PEERED);
-}
-
 void PG::pulled(object_t oid, version_t v, PGPeer *p)
 {
   dout(10) << "pulled o " << hex << oid << dec << " v " << v << " from osd" << p->get_peer() << endl;
@@ -24,31 +18,8 @@ void PG::pulled(object_t oid, version_t v, PGPeer *p)
   // object is now local
   objects_missing.erase(oid);  
   objects_missing_v.erase(oid);
-  
-  if (objects_missing.empty()) {
-	assert(!is_complete());
-	mark_complete();
-  }
 }
 
-void PG::mark_complete()
-{
-  dout(10) << "mark_complete" << endl;
-
-  // done pulling objects!
-  state_set(PG_STATE_COMPLETE);
-}
-
-void PG::mark_clean()
-{
-  dout(10) << "mark_clean" << endl;
-  state_set(PG_STATE_CLEAN);
-
-  // drop residual peers
-
-  // discard peer state
-  
-}
 
 void PG::pushed(object_t oid, version_t v, PGPeer *p)
 {
@@ -100,6 +71,7 @@ void PG::removed(object_t oid, version_t v, PGPeer *p)
   }
 }
 
+/*
 bool PG::existant_object_is_clean(object_t o, version_t v)
 {
   assert(is_peered() && !is_clean());
@@ -124,12 +96,14 @@ bool PG::nonexistant_object_is_clean(object_t o)
   
   return true;
 }
+*/
 
 
 
-void PG::plan_recovery(ObjectStore *store, version_t current_version) 
+void PG::plan_recovery(ObjectStore *store, version_t current_version, 
+					   list<PGPeer*>& complete_peers) 
 {
-  dout(10) << "plan_recovery" << endl;
+  dout(10) << "plan_recovery " << current_version << endl;
   assert(is_peered());
 
   // choose newest last_complete epoch
@@ -137,15 +111,17 @@ void PG::plan_recovery(ObjectStore *store, version_t current_version)
   for (map<int, PGPeer*>::iterator pit = peers.begin();
 	   pit != peers.end();
 	   pit++) {
+	dout(10) << "  osd" << pit->first << " " 
+			 << pit->second->objects.size() << " objects, last_complete " << pit->second->last_complete << endl;
 	if (pit->second->last_complete > last)
 	  last = pit->second->last_complete;
   }
   dout(10) << " combined last_complete epoch is " << last << endl;
 
-  if (last < current_version-1) {
+  if (last+1 < current_version) {
 	dout(1) << "WARNING: last_complete skipped one or more epochs, we're possibly missing something" << endl;
   }
-  if (!last) {
+  if (!last) {  // bootstrap!
 	dout(1) << "WARNING: no complete peers available (yet), pg is crashed" << endl;
 	return;
   }
@@ -158,10 +134,8 @@ void PG::plan_recovery(ObjectStore *store, version_t current_version)
   scan_local_objects(local_objects, store);
   dout(10) << " " << local_objects.size() << " local objects" << endl;
 
-  if (last_complete == last) {
-	assert(is_complete());
+  if (last_complete == last) 
 	master = local_objects;
-  }
   
   for (map<int, PGPeer*>::iterator pit = peers.begin();
 	   pit != peers.end();
@@ -184,7 +158,7 @@ void PG::plan_recovery(ObjectStore *store, version_t current_version)
   dout(7) << " master list has " << master.size() << " objects" << endl;
 
   // local cleanup?
-  if (!is_complete()) {
+  if (!is_complete(current_version)) {
 	// just cleanup old local objects
 	// FIXME: do this async?
 
@@ -237,6 +211,10 @@ void PG::plan_recovery(ObjectStore *store, version_t current_version)
 	assert(local || !objects_missing[o].empty());  // pull
   }
 
+  if (objects_missing.empty()) {
+	mark_complete(current_version);
+  }
+
   // plan clean -> objects_stray
   for (map<int, PGPeer*>::iterator pit = peers.begin();
 	   pit != peers.end();
@@ -247,6 +225,11 @@ void PG::plan_recovery(ObjectStore *store, version_t current_version)
 	PGPeer *p = pit->second;
 	assert(p->is_active());
 
+	if (p->missing.empty() && p->stray.empty()) {
+	  p->state_set(PG_PEER_STATE_COMPLETE);
+	  complete_peers.push_back(p);
+	}
+	
 	if (p->is_complete()) {
 	  dout(12) << " peer osd" << pit->first << " is complete" << endl;
 	} else {
@@ -272,6 +255,9 @@ void PG::plan_recovery(ObjectStore *store, version_t current_version)
 	  p->stray.insert(o);
 	}
   }
+
+  if (objects_unrep.empty() && objects_stray.empty())
+	mark_clean();
 
   // clear peer content lists
   for (map<int, PGPeer*>::iterator pit = peers.begin();

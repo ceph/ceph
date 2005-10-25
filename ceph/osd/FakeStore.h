@@ -3,9 +3,11 @@
 
 #include "ObjectStore.h"
 #include "BDBMap.h"
+#include "common/ThreadPool.h"
 
 #include <map>
 using namespace std;
+
 
 class FakeStore : public ObjectStore {
   string basedir;
@@ -15,6 +17,19 @@ class FakeStore : public ObjectStore {
   void get_dir(string& dir);
   void get_oname(object_t oid, string& fn);
   void wipe_dir(string mydir);
+
+
+  // async fsync
+  class ThreadPool<class FakeStore, pair<int, class Context*> >  *fsync_threadpool;
+  void queue_fsync(int fd, class Context *c) {
+	fsync_threadpool->put_op(new pair<int, class Context*>(fd,c));
+  }
+ public:
+  void do_fsync(int fd, class Context *c);
+  static void dofsync(class FakeStore *f, pair<int, class Context*> *af) {
+	f->do_fsync(af->first, af->second);
+	delete af;
+  }
 
 
  public:
@@ -33,11 +48,15 @@ class FakeStore : public ObjectStore {
   int truncate(object_t oid, off_t size);
   int read(object_t oid, 
 		   size_t len, off_t offset,
-		   char *buffer);
+		   bufferlist& bl);
   int write(object_t oid,
 			size_t len, off_t offset,
-			char *buffer,
+			bufferlist& bl,
 			bool fsync);
+  int write(object_t oid, 
+			size_t len, off_t offset, 
+			bufferlist& bl, 
+			Context *onsafe);
 
   int setattr(object_t oid, const char *name,
 				void *value, size_t size);

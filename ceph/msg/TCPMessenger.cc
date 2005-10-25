@@ -698,6 +698,9 @@ void* tcp_dispatchthread(void*)
 
   while (1) {
 
+	// callbacks?
+	Messenger::do_callbacks();
+
 	// timer events?
 	if (pending_timer) {
 	  pending_timer = false;
