@@ -291,14 +291,6 @@ class MDCache {
   void handle_rename_notify(MRenameNotify *m);        // dest -> bystanders
 
 
-  // -- file i/o --
- public:
-  __uint64_t issue_file_data_version(CInode *in);
-  Capability* issue_file_caps(CInode *in, int mode, MClientRequest *req);
-  void eval_file_caps(CInode *in);
- protected:
-  void handle_client_file_caps(class MClientFileCaps *m);
-
 
   // -- misc auth --
   int ino_proxy_auth(inodeno_t ino, 
@@ -434,29 +426,43 @@ class MDCache {
   void inode_hard_read_finish(CInode *in);
   bool inode_hard_write_start(CInode *in, MClientRequest *m);
   void inode_hard_write_finish(CInode *in);
-  bool inode_soft_read_start(CInode *in, MClientRequest *m);
-  void inode_soft_read_finish(CInode *in);
-  bool inode_soft_write_start(CInode *in, MClientRequest *m);
-  void inode_soft_write_finish(CInode *in);
+  bool inode_file_read_start(CInode *in, MClientRequest *m);
+  void inode_file_read_finish(CInode *in);
+  bool inode_file_write_start(CInode *in, MClientRequest *m);
+  void inode_file_write_finish(CInode *in);
 
   void inode_hard_eval(CInode *in);
-  void inode_soft_eval(CInode *in);
+  void inode_file_eval(CInode *in);
 
  protected:
   void inode_hard_mode(CInode *in, int mode);
-  void inode_soft_mode(CInode *in, int mode);
+  void inode_file_mode(CInode *in, int mode);
 
   // low level triggers
   void inode_hard_sync(CInode *in);
   void inode_hard_lock(CInode *in);
-  bool inode_soft_sync(CInode *in);
-  void inode_soft_lock(CInode *in);
-  void inode_soft_async(CInode *in);
+  bool inode_file_sync(CInode *in);
+  void inode_file_lock(CInode *in);
+  void inode_file_mixed(CInode *in);
+  void inode_file_wronly(CInode *in);
 
   // messengers
   void handle_lock(MLock *m);
   void handle_lock_inode_hard(MLock *m);
-  void handle_lock_inode_soft(MLock *m);
+  void handle_lock_inode_file(MLock *m);
+
+  // -- file i/o --
+ public:
+  version_t issue_file_data_version(CInode *in);
+  Capability* issue_new_caps(CInode *in, int mode, MClientRequest *req);
+  bool issue_caps(CInode *in);
+
+ protected:
+  void handle_client_file_caps(class MClientFileCaps *m);
+
+  void request_inode_file_caps(CInode *in);
+  void handle_inode_file_caps(class MInodeFileCaps *m);
+
 
 
   // dirs

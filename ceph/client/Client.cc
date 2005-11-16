@@ -348,7 +348,7 @@ Dentry *Client::lookup(filepath& path)
 
 MClientReply *Client::make_request(MClientRequest *req, 
 								   bool auth_best, 
-								   int use_auth)  // this param is icky!
+								   int use_mds)  // this param is icky, debug weirdness!
 {
   // send to what MDS?  find deepest known prefix
   Inode *cur = root;
@@ -388,9 +388,8 @@ MClientReply *Client::make_request(MClientRequest *req,
 	dout(9) << "i have no idea where " << req->get_filepath() << " is" << endl;
   }
 
-  // force use of a particular mds auth?
-  if (use_auth >= 0)
-	mds = use_auth;
+  // force use of a particular mds?
+  if (use_mds >= 0) mds = use_mds;
 
   // drop mutex for duration of call
   client_lock->Unlock();  
@@ -627,18 +626,42 @@ void Client::release_inode_buffers(Inode *in)
 
 void Client::handle_file_caps(MClientFileCaps *m)
 {
+  if (inode_map.count(m->get_ino()) == 0) {
+	dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't have, releasing." << endl;
+	m->set_caps(0);
+	m->set_wanted(0);
+	messenger->send_message(m, m->get_source(), m->get_source_port());
+	return;
+  }
+
   Inode *in = inode_map[ m->get_ino() ];
   assert(in);
 
-  // auth?
+  if (in->file_caps_wanted() == 0) {
+	dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't want caps for, releasing." << endl;
+	m->set_caps(0);
+	m->set_wanted(0);
+	messenger->send_message(m, m->get_source(), m->get_source_port());
+	return;
+  }
+  if (m->get_seq() <= in->file_caps_seq) {
+	dout(5) << "handle_file_caps on ino " << m->get_ino() << " old seq " << m->get_seq() << " <= " << in->file_caps_seq << endl;
+	delete m;
+	return;
+  }
+
+  // new mds auth?
   if (m->get_mds() >= 0) {
 	in->file_mds = m->get_mds();
-	dout(5) << "handle_file_caps on in " << m->get_ino() << " mds now " << in->file_mds << endl;
+	dout(5) << "handle_file_caps on ino " << m->get_ino() << " mds now " << in->file_mds << endl;
   }
-	
+
+
+  int old_caps = in->file_caps;
   in->file_caps = m->get_caps();
-  dout(5) << "handle_file_caps on in " << m->get_ino() << " caps now " << in->file_caps << endl;
-	
+  in->file_caps_seq = m->get_seq();
+  dout(5) << "handle_file_caps on in " << m->get_ino() << " seq " << m->get_seq() << " caps now " << cap_string(in->file_caps) << " was " << cap_string(old_caps) << endl;
+  
   // update inode
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
 	
@@ -646,18 +669,17 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (in->file_caps & CAP_FILE_WRBUFFER == 0) {
 	flush_inode_buffers(in); 
 	Filecache *fc = bc->get_fc(in);
-	fc->wait_for_inflight(client_lock);
+	fc->wait_for_inflight(client_lock);       // FIXME: this isn't actually allowed to block is it?!?
   }
 
   // release buffers?
   if (in->file_caps & CAP_FILE_RDCACHE == 0)
 	release_inode_buffers(in);
   
-  // ack
-  if (m->needs_ack()) {
-	dout(5) << "acking" << endl;
+  // ack?
+  if (old_caps & ~in->file_caps) {
+	dout(5) << " we lost caps " << cap_string(old_caps & ~in->file_caps) << ", acking" << endl;
 	messenger->send_message(m, m->get_source(), m->get_source_port());
-	return;
   } 
 
   // wake up waiters?
@@ -684,6 +706,52 @@ void Client::handle_file_caps(MClientFileCaps *m)
 }
 
 
+void Client::release_caps(Inode *in,
+						  int retain)
+{
+  dout(5) << "releasing caps on ino " << in->inode.ino 
+		  << " had " << cap_string(in->file_caps)
+		  << " retaining " << cap_string(retain) 
+		  << endl;
+  
+  in->file_caps = retain;
+  
+  // release 
+  MClientFileCaps *m = new MClientFileCaps(in->inode, 
+										   in->file_caps_seq,
+										   in->file_caps,
+										   in->file_caps_wanted(),
+										   whoami);
+  messenger->send_message(m,
+						  MSG_ADDR_MDS(in->file_mds), MDS_PORT_CACHE);
+  
+  if ((in->file_caps & CAP_FILE_WR) == 0) {
+	in->file_wr_mtime = 0;
+	in->file_wr_size = 0;
+  }
+
+  // release caps completely?
+  if (in->file_caps == 0) {
+	in->file_caps_seq = 0;
+	in->file_mds = 0;
+	put_inode(in);
+  }
+}
+
+void Client::update_caps_wanted(Inode *in)
+{
+  dout(5) << "updating caps wanted on ino " << in->inode.ino 
+		  << " to " << cap_string(in->file_caps_wanted())
+		  << endl;
+  
+  MClientFileCaps *m = new MClientFileCaps(in->inode, 
+										   in->file_caps_seq,
+										   in->file_caps,
+										   in->file_caps_wanted(),
+										   whoami);
+  messenger->send_message(m,
+						  MSG_ADDR_MDS(in->file_mds), MDS_PORT_CACHE);
+}
 
 
 
@@ -1293,7 +1361,9 @@ int Client::open(const char *path, int mode)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, true);
+  MClientReply *reply = make_request(req, 
+									 mode & (O_RDWR|O_WRONLY)); // try auth if writer
+  
   assert(reply);
   dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
   tout << reply->get_result() << endl;
@@ -1314,19 +1384,37 @@ int Client::open(const char *path, int mode)
 	f->inode = inode_map[trace[trace.size()-1]->inode.ino];
 	assert(f->inode);
 	f->inode->get();
-	f->inode->file_mds = reply->get_source();
+	f->inode->file_mds = MSG_ADDR_NUM(reply->get_source());
 
 	if (cmode & FILE_MODE_R) 	
 	  f->inode->num_rd++;
 	if (cmode & FILE_MODE_W)
 	  f->inode->num_wr++;
 
-	// caps
-	if (f->inode->file_caps_seq == 0)
-	  f->inode->get();
-	f->inode->file_caps = reply->get_file_caps();
-	assert(f->inode->file_caps_seq < reply->get_file_caps_seq());   // ordered delivery
-	f->inode->file_caps_seq = reply->get_file_caps_seq();
+	// caps included?
+	assert(reply->get_file_caps_seq() >= f->inode->file_caps_seq);
+	if (reply->get_file_caps_seq() > f->inode->file_caps_seq) {   
+	  dout(7) << "open got caps " << cap_string(reply->get_file_caps()) << " seq " << reply->get_file_caps_seq() << endl;
+
+	  // first ones?
+	  if (f->inode->file_caps_seq == 0)
+		f->inode->get();
+	  
+	  int old_caps = f->inode->file_caps;
+	  f->inode->file_caps = reply->get_file_caps();
+	  f->inode->file_caps_seq = reply->get_file_caps_seq();
+
+	  // ack if we lost any caps
+	  if (old_caps & ~f->inode->file_caps) { 
+		dout(5) << " we lost caps " << cap_string(old_caps & ~f->inode->file_caps) << ", acking" << endl;
+		messenger->send_message(new MClientFileCaps(f->inode->inode, 
+													f->inode->file_caps_seq,
+													f->inode->file_caps,
+													f->inode->file_caps_wanted(),
+													whoami), 
+								reply->get_source(), reply->get_source_port());
+	  }
+	}
 	
 	// put in map
 	result = fh = get_fh();
@@ -1357,59 +1445,44 @@ int Client::close(fh_t fh)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
-  // Make sure buffers are all clean!
-  //flush_inode_buffers(in);
-
-  // update inode
+  // update inode rd/wr counts
+  int before = in->file_caps_wanted();
   if (f->mode & FILE_MODE_R) 	
 	in->num_rd--;
   if (f->mode & FILE_MODE_W)
 	in->num_wr--;
+  int after = in->file_caps_wanted();
+
+  // does this change what caps we want?
+  if (before != after && after)
+	update_caps_wanted(in);
 
   // hose fh
   fh_map.erase(fh);
   delete f;
 
-  // note mds auth.. we'll send the close there!  FIXME this is sort of icky
-  int mds_auth = in->authority();
-
-  //release_inode_buffers(in);
-  put_inode( in );
-  int result = 0;
-
   // release caps right away?
   dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
   if (in->num_rd == 0 &&
 	  in->num_wr == 0) {
-	// synchronously; FIXME this is dumb
 
-	MClientRequest *req = new MClientRequest(MDS_OP_RELEASE, whoami);
-	req->set_ino(in->inode.ino);
-	
-	req->set_iarg( in->file_caps_seq );
-	req->set_targ( in->file_wr_mtime );
-	req->set_sizearg( in->file_wr_size );
-	
-	// FIXME where does FUSE maintain user information
-	req->set_caller_uid(getuid());
-	req->set_caller_gid(getgid());
+	// FIXME THIS IS ALL WRONG!  
+	// this should happen _async_ when the buffers finally flush.. 
+	// _then_ release the caps, if they still need to be released
+	// also, retain read or write caps, if that's appropriate!!
 
-	// release caps locally
-	in->file_caps_seq = 0;
-	in->file_caps = 0;
-	in->file_wr_mtime = 0;
-	in->file_wr_size = 0;
+	// Make sure buffers are all clean!
+	//flush_inode_buffers(in);
 
- 	put_inode(in);
-	
-	// make the call .. FIXME there's no reason this has to block!
-	MClientReply *reply = make_request(req, true, mds_auth);
-	assert(reply);
-	int result = reply->get_result();
-	assert(result == 0);
-  
-	delete reply;
+	// bad bad..
+	release_caps(in);
+
+	// ech
+	release_inode_buffers(in);
   }
+
+  put_inode( in );
+  int result = 0;
 
   client_lock->Unlock();
   return result;

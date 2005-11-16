@@ -212,8 +212,7 @@ int MDS::shutdown_start()
 	if (i == whoami) continue;
 	dout(1) << "sending MShutdownStart to mds" << i << endl;
 	messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
-							i, MDS_PORT_MAIN,
-							MDS_PORT_MAIN);
+							MSG_ADDR_MDS(i), MDS_PORT_MAIN, MDS_PORT_MAIN);
   }
 
   if (idalloc) idalloc->shutdown();
@@ -653,7 +652,7 @@ void MDS::handle_client_mount(MClientMount *m)
 	  // force empty root dir
 	  CDir *dir = root->dir;
 	  dir->mark_complete();
-	  dir->mark_dirty();
+	  //dir->mark_dirty();
 
 	  // fake out idalloc (reset, pretend loaded)
 	  idalloc->reset();
@@ -996,9 +995,11 @@ void MDS::dispatch_request(Message *m, CInode *ref)
 	handle_client_fsync(req, ref);
 	break;
 	*/
+	/*
   case MDS_OP_RELEASE:
 	handle_client_release(req, ref);
 	break;
+	*/
 
 	// inodes
   case MDS_OP_STAT:
@@ -1059,7 +1060,7 @@ void MDS::dispatch_request(Message *m, CInode *ref)
 void MDS::handle_client_stat(MClientRequest *req,
 							 CInode *ref)
 {
-  if (!mdcache->inode_soft_read_start(ref, req))
+  if (!mdcache->inode_file_read_start(ref, req))
 	return;  // sync
 
   dout(10) << "reply to " << *req << " stat " << ref->inode.mtime << endl;
@@ -1067,7 +1068,7 @@ void MDS::handle_client_stat(MClientRequest *req,
 
   // inode info is in the trace
 
-  mdcache->inode_soft_read_finish(ref);
+  mdcache->inode_file_read_finish(ref);
 
   balancer->hit_inode(ref);   
 
@@ -1085,7 +1086,7 @@ void MDS::handle_client_utime(MClientRequest *req,
 							  CInode *cur)
 {
   // write
-  if (!mdcache->inode_soft_write_start(cur, req))
+  if (!mdcache->inode_file_write_start(cur, req))
 	return;  // fw or (wait for) sync
 
   // do update
@@ -1094,7 +1095,7 @@ void MDS::handle_client_utime(MClientRequest *req,
   if (cur->is_auth())
 	cur->mark_dirty();
 
-  mdcache->inode_soft_write_finish(cur);
+  mdcache->inode_file_write_finish(cur);
   
   balancer->hit_inode(cur);   
 
@@ -2631,21 +2632,15 @@ void MDS::handle_client_open(MClientRequest *req,
 
   dout(10) << " flags = " << flags << "  mode = " << mode << endl;
 
-  // auth only
-  if (!cur->is_auth()) {
+  // auth for write access
+  if (mode != FILE_MODE_R &&
+	  !cur->is_auth()) {
 	int auth = cur->authority();
 	assert(auth != whoami);
-	dout(9) << "open [replica] " << *cur << " on replica, fw to auth " << auth << endl;
+	dout(9) << "open writeable on replica for " << *cur << " fw to auth " << auth << endl;
 	
 	mdcache->request_forward(req, auth);
 	return;
-  }
-  assert(cur->is_auth());
-
-  // writer?
-  if (mode == FILE_MODE_W ||
-	  mode == FILE_MODE_RW) {
-	if (!mdcache->inode_soft_write_start(cur, req)) return;
   }
 
 
@@ -2654,16 +2649,11 @@ void MDS::handle_client_open(MClientRequest *req,
 
   // can we issue the caps they want?
   __uint64_t fdv = mdcache->issue_file_data_version(cur);
-  Capability *cap = mdcache->issue_file_caps(cur, mode, req);
+  Capability *cap = mdcache->issue_new_caps(cur, mode, req);
   if (!cap) return; // can't issue (yet), so wait!
 
-  dout(12) << "open gets caps " << cap->pending() << endl;
+  dout(12) << "open gets caps " << cap_string(cap->pending()) << endl;
 
-  if (mode == FILE_MODE_W ||
-	  mode == FILE_MODE_RW) {
-	mdcache->inode_soft_write_finish(cur);
-  }
-  
   balancer->hit_inode(cur);
 
   // reply
@@ -2691,95 +2681,6 @@ void MDS::handle_client_openc(MClientRequest *req, CInode *ref)
 
 
 
-
-void MDS::handle_client_release(MClientRequest *req, CInode *cur) 
-{
-  // auth only
-  if (!cur->is_auth()) {
-	int auth = cur->authority();
-	assert(auth != whoami);
-	dout(9) << "release " << *cur << " on replica, fw to auth " << auth << endl;
-	
-	mdcache->request_forward(req, auth);
-	return;
-  }
-  assert(cur->is_auth());
-
-  // verify on read or write list
-  int client = req->get_client();
-  Capability *cap = cur->get_cap(client);
-  if (!cap) {
-	dout(1) << "release on non-existant capability client " << client << " inode " << *cur << endl;
-	assert(0);
-  }
-  
-  dout(10) << "release on " << *cur << " client " << client << endl;
-
-  // update soft metadata
-  if (cap->issued() & CAP_FILE_WR) {
-
-	// FIXME THIS IS BROKEN
-	//assert(cur->softlock.can_write(true));   // otherwise we're toast???
-
-	/* FIXME THIS IS BROKEN
-	if (!mdcache->inode_soft_write_start(cur, req))
-	  return;  // wait
-	*/
-
-	// update size, mtime
-	time_t mtime = req->get_targ();
-	size_t size = req->get_sizearg();
-	dout(10) << "mtime is " << mtime << " size is " << size << endl;
-	if (mtime > cur->inode.mtime) {
-	  cur->inode.mtime = mtime;
-	  dout(10) << " extended mtime to " << mtime << endl;
-	  cur->mark_dirty();
-	}
-	if (size > cur->inode.size) {
-	  cur->inode.size = size;
-	  dout(10) << " extended size to " << size << endl;
-	  cur->mark_dirty();
-	}
-
-	// inc file_data_version
-	dout(7) << " incrementing file_data_version for " << *cur << endl;
-	cur->inode.file_data_version++;
-
-	/* FIXME THIS IS BROKEN
-
-	// release write
-	mdcache->inode_soft_write_finish(cur); 
-	*/
-
-	mdcache->inode_soft_eval(cur);
-  } else {
-	dout(10) << "no WR caps issued, not updating mtime/size" << endl;
-  }
-
-  // XXX what about atime?
-
-
-  // release it.
-  int had_caps = cap->issued();
-  long had_caps_seq = cap->get_last_seq();
-  cur->remove_cap(client);
-
-  // reeval caps
-  mdcache->eval_file_caps(cur);
-  
-
-
-  // give back a file_data_version to client
-  MClientReply *reply = new MClientReply(req, 0);
-  __uint64_t fdv = mdcache->issue_file_data_version(cur);
-  reply->set_file_caps(had_caps);
-  reply->set_file_caps_seq(had_caps_seq);
-  reply->set_file_data_version(fdv);
-  
-  // commit
-  commit_request(req, reply, cur,
-				 new EInodeUpdate(cur));               // FIXME wrong message?
-}
 
 
 

@@ -1,3 +1,9 @@
+- open -> export -> caps update race potential... 
+- caps from multiple mds's!
+- import/export of caps totally busted.. (merging??)
+
+
+
 cluster issues
 - general problem: how to do posix ordering on object boundaries using an object store
 

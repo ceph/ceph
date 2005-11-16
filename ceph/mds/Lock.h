@@ -7,56 +7,49 @@ using namespace std;
 
 #include "include/bufferlist.h"
 
+#include "Capability.h"
 
 // STATES
 // basic lock
-#define LOCK_SYNC     0
-#define LOCK_PRELOCK  1
-#define LOCK_LOCK     2
-#define LOCK_DELETING 3  // auth only
-#define LOCK_DELETED  4
+#define LOCK_SYNC     0  // AR 
+#define LOCK_LOCK     1  // AR
+#define LOCK_GLOCKR   2  // AR gather to lock from sync
 
-// async lock
-#define LOCK_ASYNC    5
-#define LOCK_GSYNC    6  // gather to sync
-#define LOCK_GLOCK    7  // gather to lock
-#define LOCK_GASYNC   8  // gather to async
+// file lock states
+#define LOCK_GLOCKW   3  // A  gather to lock from wronly
+#define LOCK_GLOCKM   4  // A  gather to lock from mixed
+#define LOCK_MIXED    5  // AR 
+#define LOCK_GMIXEDR  6  // AR gather to mixed from sync
+#define LOCK_GMIXEDW  7  // A  gather to mixed from wronly
 
-// waits (on replica)
-#define LOCK_WLOCKR   9
-#define LOCK_WLOCKW  10
-#define LOCK_WGASYNC 11
-#define LOCK_WGSYNC  12
+#define LOCK_WRONLY   8  // A
+#define LOCK_GWRONLYR 9  // A  gather to wronly from sync
+#define LOCK_GWRONLYM 10 // A  gather to wronly from mixed
 
-#define LOCK_TYPE_BASIC  0
-#define LOCK_TYPE_ASYNC  1
-
-#define LOCK_MODE_SYNC     0  // return to sync when writes finish (or read requested)
-#define LOCK_MODE_ASYNC    1  // return to async when reads finish (or write requested)
+#define LOCK_GSYNCW   11 // A  gather (clients) to sync from wronly
+#define LOCK_GSYNCM   12 // A  gather (clients) to sync from mixed
 
 
-// -- basic lock
+#define LOCK_TYPE_BASIC 0
+#define LOCK_TYPE_FILE  1
+
+
+// -- lock (basic or soft lock)
 
 class CLock {
  protected:
   // lock state
   char     type;
   char     state;
-  char     mode;
   set<int> gather_set;  // auth
   int      nread, nwrite;
 
-  // dual meaning: 
-  //  on replicas, whether we've requested; 
-  //  on auth, whether others have requested.
-  //bool     req_read, req_write;       // FIXME: roll these into state, use a mask, whatever.
   
  public:
   CLock() {}
   CLock(char t) : 
 	type(t),
 	state(LOCK_LOCK), 
-	mode(LOCK_MODE_SYNC),
 	nread(0), 
 	nwrite(0) {
   }
@@ -65,11 +58,8 @@ class CLock {
   void encode_state(bufferlist& bl) {
 	bl.append((char*)&type, sizeof(char));
 	bl.append((char*)&state, sizeof(state));
-	bl.append((char*)&mode, sizeof(mode));
 	bl.append((char*)&nread, sizeof(nread));
 	bl.append((char*)&nwrite, sizeof(nwrite));
-	//r.append((char*)&req_read, sizeof(req_read));
-	//r.append((char*)&req_write, sizeof(req_write));
 
 	_encode(gather_set, bl);
   }
@@ -78,16 +68,10 @@ class CLock {
 	off += sizeof(type);
 	bl.copy(off, sizeof(state), (char*)&state);
 	off += sizeof(state);
-	bl.copy(off, sizeof(mode), (char*)&mode);
-	off += sizeof(mode);
 	bl.copy(off, sizeof(nread), (char*)&nread);
 	off += sizeof(nread);
 	bl.copy(off, sizeof(nwrite), (char*)&nwrite);
 	off += sizeof(nwrite);
-	//r.copy(off, sizeof(req_read), (char*)&req_read);
-	//off += sizeof(req_read);
-	//r.copy(off, sizeof(req_write), (char*)&req_write);
-	//off += sizeof(req_write);
 
 	_decode(gather_set, bl, off);
   }
@@ -99,15 +83,32 @@ class CLock {
 	return s;
   };
 
-  char get_mode() { return mode; }
-  char set_mode(char m) {
-	return mode = m;
-  }
-
   char get_replica_state() {
-	if (state == LOCK_PRELOCK) return LOCK_LOCK;
-	if (state == LOCK_GLOCK) return LOCK_LOCK;
-	return state;  // SYNC, LOCK, GASYNC, GSYNC
+	switch (state) {
+	case LOCK_LOCK:
+	case LOCK_GLOCKM:
+	case LOCK_GLOCKW:
+	case LOCK_GLOCKR: 
+	case LOCK_WRONLY:
+	case LOCK_GWRONLYR:
+	case LOCK_GWRONLYM:
+	  return LOCK_LOCK;
+	case LOCK_MIXED:
+	case LOCK_GMIXEDR:
+	  return LOCK_MIXED;
+	case LOCK_SYNC:
+	  return LOCK_SYNC;
+
+	  // after gather auth will bc LOCK_AC_MIXED or whatever
+	case LOCK_GSYNCM:
+	  return LOCK_MIXED;
+	case LOCK_GSYNCW:
+	case LOCK_GMIXEDW:     // ** LOCK isn't exact right state, but works.
+	  return LOCK_LOCK;
+
+	default: 
+	  assert(0);
+	}
   }
 
   // gather set
@@ -117,6 +118,9 @@ class CLock {
   }
   bool is_gathering(int i) {
 	return gather_set.count(i);
+  }
+  void clear_gather() {
+	gather_set.clear();
   }
 
   // ref counting
@@ -137,65 +141,133 @@ class CLock {
 	return (nwrite+nread)>0 ? true:false;
   }
 
-  //bool get_req_read() { return req_read; }
-  //bool get_req_write() { return req_write; }
-  //void set_req_read(bool b) { req_read = b; }
-  //void set_req_write(bool b) { req_write = b; }
-
+  /*
   void twiddle_export() {  // was auth, now replica
 	gather_set.clear();
-	if (state == LOCK_PRELOCK ||
-		state == LOCK_GLOCK) state = LOCK_LOCK;
+	if (state == LOCK_GLOCK) state = LOCK_LOCK;
   }
   void twiddle_import() {  // was replica, now auth
 	
   }
+  */
   
   // stable
   bool is_stable() {
-	return (state == LOCK_SYNC) || (state == LOCK_LOCK) || (state == LOCK_ASYNC);
+	return (state == LOCK_SYNC) || 
+	  (state == LOCK_LOCK) || 
+	  (state == LOCK_MIXED) || 
+	  (state == LOCK_WRONLY);
   }
 
   // read/write access
-  bool could_read(bool auth) {
-	if (auth)
-	  return false;
-	else
-	  return (state == LOCK_WLOCKR) || (state == LOCK_WGASYNC);
-  }
   bool can_read(bool auth) {
 	if (auth)
-	  return (state == LOCK_SYNC) || (state == LOCK_PRELOCK) 
-		|| (state == LOCK_LOCK) || (state == LOCK_GASYNC);
+	  return (state == LOCK_SYNC) || (state == LOCK_GMIXEDR) 
+		|| (state == LOCK_GLOCKR) || (state == LOCK_LOCK);
 	else
 	  return (state == LOCK_SYNC);
   }
   bool can_read_soon(bool auth) {
 	if (auth)
-	  return (state == LOCK_GSYNC) || (state == LOCK_GLOCK);
+	  return (state == LOCK_GLOCKW);
 	else
-	  return (state == LOCK_GSYNC);
-  }
-  
-  bool could_write(bool auth) {
-	if (auth)
 	  return false;
-	else
-	  return (state == LOCK_WGSYNC) || (state == LOCK_WLOCKW);
   }
+
   bool can_write(bool auth) {
 	if (auth) 
-	  return (state == LOCK_LOCK) || (state == LOCK_ASYNC) || 
-		(state == LOCK_GLOCK) || (state == LOCK_GSYNC);
+	  return (state == LOCK_LOCK);
 	else
-	  return (state == LOCK_ASYNC);
+	  return false;
   }
   bool can_write_soon(bool auth) {
 	if (auth)
-	  return (state == LOCK_PRELOCK) || (state == LOCK_GASYNC);
+	  return (state == LOCK_GLOCKR) || (state == LOCK_GLOCKW)
+		|| (state == LOCK_GLOCKM);
 	else
-	  return (state == LOCK_GASYNC);
+	  return false;
   }
+
+  // client caps allowed
+  int caps_allowed(bool auth) {
+	if (auth)
+	  switch (state) {
+	  case LOCK_SYNC:
+		return CAP_FILE_RDCACHE | CAP_FILE_RD;
+	  case LOCK_GMIXEDR:
+	  case LOCK_GSYNCM:
+		return CAP_FILE_RD;
+	  case LOCK_MIXED:
+		return CAP_FILE_RD | CAP_FILE_WR;
+	  case LOCK_GMIXEDW:
+	  case LOCK_GWRONLYM:
+		return CAP_FILE_WR;
+	  case LOCK_WRONLY:
+		return CAP_FILE_WR | CAP_FILE_WRBUFFER;
+	  case LOCK_LOCK:
+	  case LOCK_GLOCKR:
+	  case LOCK_GLOCKW:
+	  case LOCK_GLOCKM:
+	  case LOCK_GWRONLYR:
+	  case LOCK_GSYNCW:
+		return 0;
+	  default:
+		assert(0);
+	  }
+	else
+	  switch (state) {
+	  case LOCK_SYNC:
+		return CAP_FILE_RDCACHE | CAP_FILE_RD;
+	  case LOCK_GMIXEDR:
+	  case LOCK_MIXED:
+		return CAP_FILE_RD;
+	  case LOCK_LOCK:
+	  case LOCK_GLOCKR:
+		return 0;
+	  }
+	assert(0);
+	return 0;
+  }
+  int caps_allowed_soon(bool auth) {
+	if (auth)
+	  switch (state) {
+	  case LOCK_GSYNCM:
+	  case LOCK_GSYNCW:
+	  case LOCK_SYNC:
+		return CAP_FILE_RDCACHE | CAP_FILE_RD;
+	  case LOCK_GMIXEDR:
+	  case LOCK_GMIXEDW:
+	  case LOCK_MIXED:
+		return CAP_FILE_RD | CAP_FILE_WR;
+	  case LOCK_GWRONLYM:
+	  case LOCK_GWRONLYR:
+	  case LOCK_WRONLY:
+		return CAP_FILE_WR | CAP_FILE_WRBUFFER;
+	  case LOCK_LOCK:
+	  case LOCK_GLOCKR:
+	  case LOCK_GLOCKW:
+	  case LOCK_GLOCKM:
+		return 0;
+	  default:
+		assert(0);
+	  }
+	else
+	  switch (state) {
+	  case LOCK_SYNC:
+		return CAP_FILE_RDCACHE | CAP_FILE_RD;
+	  case LOCK_GMIXEDR:
+	  case LOCK_MIXED:
+		return CAP_FILE_RD;
+	  case LOCK_LOCK:
+	  case LOCK_GLOCKR:
+		return 0;
+	  default:
+		assert(0);
+	  }
+	assert(0);
+	return 0;
+  }
+  
 
   friend class MDCache;
 };
@@ -205,18 +277,18 @@ inline ostream& operator<<(ostream& out, CLock& l)
 {
   static char* __lock_states[] = {
 	"sync",
-	"prelock",
 	"lock",
-	"deleting",
-	"deleted",
-	"async",
-	"gsync",
-	"glock",
-	"gasync",
-	"wlockr",
-	"wlockw",
-	"wgasync",
-	"wgsync"
+	"glockr",
+	"glockw",
+	"glockm",
+	"mixed",
+	"gmixedr",
+	"gmixedw",
+	"wronly",
+	"gwronlyr",
+	"gwronlym",
+	"gsyncw",
+	"gsyncm"
   }; 
 
   out << "(" << __lock_states[(int)l.get_state()];
@@ -227,11 +299,6 @@ inline ostream& operator<<(ostream& out, CLock& l)
 	out << " " << l.get_nread() << "r";
   if (l.get_nwrite())
 	out << " " << l.get_nwrite() << "w";
-
-  if (l.get_mode() == LOCK_MODE_SYNC)
-	out << " Sm";
-  if (l.get_mode() == LOCK_MODE_ASYNC)
-	out << " Am";
 
   // rw?
   /*

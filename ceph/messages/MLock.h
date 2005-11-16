@@ -4,41 +4,30 @@
 #include "msg/Message.h"
 
 #define LOCK_OTYPE_IHARD  1
-#define LOCK_OTYPE_ISOFT  2
+#define LOCK_OTYPE_IFILE  2
 #define LOCK_OTYPE_DIR    3
 #define LOCK_OTYPE_DN     4
 
 // for replicas
 #define LOCK_AC_SYNC          0
-#define LOCK_AC_ASYNC         1
+#define LOCK_AC_MIXED         1
+#define LOCK_AC_LOCK          2
 
-#define LOCK_AC_SYNC_MODE     2
-#define LOCK_AC_LOCK_MODE     3
-#define LOCK_AC_ASYNC_MODE    4
-
-#define LOCK_AC_LOCK          5  // nakable
-#define LOCK_AC_GSYNC         6  //  "
-#define LOCK_AC_GLOCK         7  //  "
-#define LOCK_AC_GASYNC        8  //  "
-
-#define LOCK_AC_REQXLOCKACK   9
-#define LOCK_AC_REQXLOCKNAK  10
+#define LOCK_AC_REQXLOCKACK   9  // req dentry xlock
+#define LOCK_AC_REQXLOCKNAK  10  // req dentry xlock
+#define LOCK_AC_LOCKNAK      12  // for dentry xlock
 
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) <= 10)
 #define LOCK_AC_FOR_AUTH(a)     ((a) >= 11)
 
-#define LOCK_AC_NAKOFFSET     4  // be careful with numbering!
-
 // for auth
-#define LOCK_AC_LOCKNAK      11
-#define LOCK_AC_GSYNCNAK     12
-#define LOCK_AC_GLOCKNAK     13
-#define LOCK_AC_GASYNCNAK    14
+
+#define LOCK_AC_SYNCACK      13
+#define LOCK_AC_MIXEDACK     14
 #define LOCK_AC_LOCKACK      15
-#define LOCK_AC_GSYNCACK     16
-#define LOCK_AC_GLOCKACK     17
-#define LOCK_AC_GASYNCACK    18
+
+
 #define LOCK_AC_REQREAD      19
 #define LOCK_AC_REQWRITE     20
 

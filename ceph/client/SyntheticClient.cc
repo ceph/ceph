@@ -78,6 +78,9 @@ void parse_syn_options(vector<char*>& args)
 	  } else if (strcmp(args[i],"sleep") == 0) { 
 		syn_modes.push_back( SYNCLIENT_MODE_SLEEP );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"opentest") == 0) { 
+		syn_modes.push_back( SYNCLIENT_MODE_OPENTEST );
+		syn_iargs.push_back( atoi(args[++i]) );
 	  } else {
 		cerr << "unknown syn mode " << args[i] << endl;
 		assert(0);
@@ -331,6 +334,16 @@ int SyntheticClient::run()
 		  if (time_to_stop()) break;
 		  clean_dir(prefix);
 		  cerr << "LOOP" << endl;
+		}
+	  }
+	  break;
+
+	case SYNCLIENT_MODE_OPENTEST:
+	  {
+		int count = iargs.front();  iargs.pop_front();
+		for (int i=0; i<count; i++) {
+		  int fd = client->open("test", rand()%2 ? (O_WRONLY|O_CREAT):O_RDONLY);
+		  if (fd > 0) client->close(fd);
 		}
 	  }
 	  break;

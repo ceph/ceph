@@ -129,6 +129,13 @@ class Inode {
 	return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
   }
 
+  int file_caps_wanted() {
+	int w = 0;
+	if (num_rd) w |= CAP_FILE_RD|CAP_FILE_RDCACHE;
+	if (num_wr) w |= CAP_FILE_WR|CAP_FILE_WRBUFFER;
+	return w;
+  }
+
   int authority() {
 	// my info valid?
 	if (mds_dir_auth >= 0)  
@@ -344,7 +351,11 @@ class Client : public Dispatcher {
 
   // messaging
   void dispatch(Message *m);
+
+  // file caps
   void handle_file_caps(class MClientFileCaps *m);
+  void release_caps(Inode *in, int retain=0);
+  void update_caps_wanted(Inode *in);
 
   // metadata cache
   Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);

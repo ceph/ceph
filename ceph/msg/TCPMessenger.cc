@@ -88,7 +88,7 @@ pthread_t out_thread_id = 0;        // thread id of the event loop.  init value 
 pthread_t listen_thread_id = 0;
 map<int, pthread_t>      in_threads;    // sd -> threadid
 
-bool pending_timer = false;
+//bool pending_timer = false;
 
 // per-rank fun
 
@@ -303,7 +303,8 @@ int tcpmessenger_init()
   dout(DBL) << "listen addr is " << listen_addr << endl;
 
   // register to execute timer events
-  g_timer.set_messenger_kicker(new C_TCPKicker());
+  //g_timer.set_messenger_kicker(new C_TCPKicker());
+  msgr_callback_kicker = new C_TCPKicker();
 
   dout(DBL) << "init done" << endl;
   return 0;
@@ -699,19 +700,21 @@ void* tcp_dispatchthread(void*)
   while (1) {
 
 	// callbacks?
-	Messenger::do_callbacks();
+	messenger_do_callbacks();
 
 	// timer events?
-	if (pending_timer) {
+	/*if (pending_timer) {
 	  pending_timer = false;
 	  dout(DBL) << "dispatch: pending timer" << endl;
 	  g_timer.execute_pending();
 	}
+	*/
 
 	// done?
 	if (tcp_done &&
-		incoming.empty() &&
-		!pending_timer) break;
+		incoming.empty()) break;
+		//&&
+		//!pending_timer) break;
 
 	// wait?
 	if (incoming.empty()) {
@@ -911,7 +914,8 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
   directory_lock.Unlock();
 
   // register to execute timer events
-  g_timer.set_messenger_kicker(new C_TCPKicker());
+  //g_timer.set_messenger_kicker(new C_TCPKicker());
+  g_timer.set_messenger(this);
 
 
   // logger
@@ -1005,7 +1009,8 @@ int TCPMessenger::shutdown()
 	//pthread_t whoami = pthread_self();
 
 	// no more timer events
-	g_timer.unset_messenger_kicker();
+	g_timer.unset_messenger();
+	msgr_callback_kicker = 0;
 
   
 	// close incoming sockets

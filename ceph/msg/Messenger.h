@@ -31,6 +31,7 @@ class Messenger {
   Mutex                  _lock;      // protect call_sem, call_reply
   map<long, Cond*>       call_cond;
   map<long, Message*>    call_reply;
+  Cond                   call_reply_finish_cond;
 
  public:
   Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w), lamport_clock(0), _last_pcid(1) { }

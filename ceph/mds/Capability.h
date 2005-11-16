@@ -33,73 +33,130 @@ inline string cap_string(int cap)
 
 
 class Capability {
-  int wanted_caps;     // what the client wants
+  int wanted_caps;     // what the client wants (ideally)
 
   map<long, int>  cap_history;  // seq -> cap
   long last_sent, last_recv;
     
+  bool suppress;
+
 public:
   Capability(int want=0) :
 	wanted_caps(want),
 	last_sent(0),
-	last_recv(0) { 
-	cap_history[last_sent] = 0;
+	last_recv(0),
+	suppress(false) { 
+	//cap_history[last_sent] = 0;
   }
 
+  
+  bool is_suppress() { return suppress; }
+  void set_suppress(bool b) { suppress = b; }
+
+  bool is_null() { return cap_history.empty(); }
 
   // most recently issued caps.
   int pending()   { 
-	return cap_history[ last_sent ];
+	if (cap_history.count(last_sent))
+	  return cap_history[ last_sent ];
+	return 0;
   }
   
   // caps client has confirmed receipt of
   int confirmed() { 
-	return cap_history[ last_recv ];
+	if (cap_history.count(last_recv))
+	  return cap_history[ last_recv ];
+	return 0;
   }
 
   // caps potentially issued
   int issued() { 
 	int c = 0;
 	for (long seq = last_recv; seq <= last_sent; seq++) {
-	  c |= cap_history[seq];
-	  dout(10) << "cap issued: " << seq << " " << cap_history[seq] << " -> " << c << endl;
+	  if (cap_history.count(seq)) {
+		c |= cap_history[seq];
+		dout(10) << " cap issued: seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(c) << endl;
+	  }
 	}
 	return c;
   }
 
   // caps this client wants to hold
-  int wanted()    { return wanted_caps; }
+  int wanted() { return wanted_caps; }
   void set_wanted(int w) {
 	wanted_caps = w;
   }
 
+  // needed
+  static int needed(int from) {
+	// strip out wrbuffer, rdcache
+	return from & (CAP_FILE_WR|CAP_FILE_RD);
+  }
+  int needed() { return needed(wanted_caps); }
+
   // conflicts
-  int conflicts(int from) {
+  static int conflicts(int from) {
 	int c = 0;
+	if (from & CAP_FILE_WRBUFFER) c |= CAP_FILE_RDCACHE|CAP_FILE_RD;
 	if (from & CAP_FILE_WR) c |= CAP_FILE_RDCACHE;
 	if (from & CAP_FILE_RD) c |= CAP_FILE_WRBUFFER;
+	if (from & CAP_FILE_RDCACHE) c |= CAP_FILE_WRBUFFER|CAP_FILE_WR;
 	return c;
   }
-  int wanted_conflicts() { 
-	return conflicts(wanted_caps);
-  }
-  int issued_conflicts() {
-	return conflicts(issued());
-  }
+  int wanted_conflicts() { return conflicts(wanted()); }
+  int needed_conflicts() { return conflicts(needed()); }
+  int issued_conflicts() { return conflicts(issued()); }
 
   // issue caps; return seq number.
   long issue(int c) {
+	//int was = pending();
+	//no!  if (c == was && last_sent) return -1;  // repeat of previous?
+	
 	++last_sent;
 	cap_history[last_sent] = c;
+
+	/* no!
+	// not recalling, just adding?
+	if (c & ~was &&
+		cap_history.count(last_sent-1)) { 
+	  cap_history.erase(last_sent-1);
+	}
+	*/
 	return last_sent;
   }
   long get_last_seq() { return last_sent; }
 
-  void confirm_receipt(long seq) {
+  // confirm receipt of a previous sent/issued seq.
+  int confirm_receipt(long seq, int caps) {
+	int r = 0;
+
+	// old seqs
 	while (last_recv < seq) {
+	  dout(10) << " cap.confirm_receipt forgetting seq " << last_recv << " " << cap_string(cap_history[last_recv]) << endl;
+	  r |= cap_history[last_recv];
 	  cap_history.erase(last_recv);
 	  ++last_recv;
 	}
+	
+	// release current?
+	if (cap_history.count(seq) &&
+		cap_history[seq] != caps) {
+	  dout(10) << " cap.confirm_receipt revising seq " << seq << " " << cap_string(cap_history[seq]) << " -> " << cap_string(caps) << endl;
+	  // note what we're releasing..
+	  assert(cap_history[seq] & ~caps);
+	  r |= cap_history[seq] & ~caps; 
+
+	  cap_history[seq] = caps; // confirmed() now less than before..
+	}
+
+	// null?
+	if (caps == 0 && 
+		cap_history.size() == 1 &&
+		cap_history.count(seq)) {
+	  cap_history.clear();  // viola, null!
+	}
+
+	return r;
   }
 
   // serializers
@@ -107,10 +164,7 @@ public:
 	bl.append((char*)&wanted_caps, sizeof(wanted_caps));
 	bl.append((char*)&last_sent, sizeof(last_sent));
 	bl.append((char*)&last_recv, sizeof(last_recv));
-	for (long seq = last_recv; seq <= last_sent; seq++) {
-	  int c = cap_history[seq];
-	  bl.append((char*)&c, sizeof(c));
-	}
+	::_encode(cap_history, bl);
   }
   void _decode(bufferlist& bl, int& off) {
 	bl.copy(off, sizeof(wanted_caps), (char*)&wanted_caps);
@@ -119,36 +173,12 @@ public:
 	off += sizeof(last_sent);
 	bl.copy(off, sizeof(last_recv), (char*)&last_recv);
 	off += sizeof(last_recv);
-	for (long seq=last_recv; seq<=last_sent; seq++) {
-	  int c;
-	  bl.copy(off, sizeof(c), (char*)&c);
-	  off += sizeof(c);
-	  cap_history[seq] = c;
-	}
+	::_decode(cap_history, bl, off);
   }
   
 };
 
 
-
-
-/*
-// capability helper functions!
-inline int file_mode_want_caps(int mode) {
-  int wants = 0;
-  if (mode == CFILE_MODE_W ) {
-	wants |= CFILE_CAP_WR | CFILE_CAP_WRBUFFER;
-  }
-  else if (mode == CFILE_MODE_RW) {
-	wants |= CFILE_CAP_RDCACHE | CFILE_CAP_RD | CFILE_CAP_WR | CFILE_CAP_WRBUFFER;
-  }
-  else if (mode == CFILE_MODE_R ) {
-	wants |= CFILE_CAP_RDCACHE | CFILE_CAP_RD;
-  } 
-  else assert(0);
-  return wants;
-}
-*/
 
 
 

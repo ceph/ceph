@@ -92,6 +92,7 @@ using namespace std;
 #include "messages/MInodeExpire.h"
 #include "messages/MDirExpire.h"
 #include "messages/MCacheExpire.h"
+#include "messages/MInodeFileCaps.h"
 
 #include "messages/MLock.h"
 
@@ -163,6 +164,10 @@ void Messenger::dispatch(Message *m)
 	dout(DEBUGLVL) << "dispatch got reply for " << pcid << " " << m << endl;
 	call_reply[pcid] = m;     // set reply
 	call_cond[pcid]->Signal();
+
+	// wait for delivery
+	call_reply_finish_cond.Wait(_lock);
+
 	_lock.Unlock();
   } else {
 	// no, this is an unsolicited message.
@@ -226,6 +231,7 @@ Message *Messenger::sendrecv(Message *m, msg_addr_t dest, int port)
   dout(DEBUGLVL) << "sendrecv got reply " << reply << " on pcid " << pcid << endl;
   //delete sem;
 
+  call_reply_finish_cond.Signal();
   _lock.Unlock();
   
   return reply;
@@ -469,6 +475,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
   case MSG_MDS_INODEEXPIRE:
 	m = new MInodeExpire();
+	break;
+
+  case MSG_MDS_INODEFILECAPS:
+	m = new MInodeFileCaps();
 	break;
 
   case MSG_MDS_DIREXPIRE:

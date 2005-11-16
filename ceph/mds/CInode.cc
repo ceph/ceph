@@ -41,7 +41,7 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_symlink()) out << " symlink";
 
   out << " hard=" << in.hardlock;
-  out << " soft=" << in.softlock;
+  out << " file=" << in.filelock;
 
   if (in.is_pinned()) {
     out << " |";
@@ -53,6 +53,18 @@ ostream& operator<<(ostream& out, CInode& in)
       else
         out << " " << *it;
   }
+
+  // hack: spit out crap on which clients have caps
+  if (!in.get_client_caps().empty()) {
+	out << " caps={";
+	for (map<int,Capability>::iterator it = in.get_client_caps().begin();
+		 it != in.get_client_caps().end();
+		 it++) {
+	  if (it != in.get_client_caps().begin()) out << ",";
+	  out << it->first;
+	}
+	out << "}";
+  }
   out << " " << &in;
   out << "]";
   return out;
@@ -62,7 +74,7 @@ ostream& operator<<(ostream& out, CInode& in)
 // ====== CInode =======
 CInode::CInode(bool auth) : LRUObject(),
 							hardlock(LOCK_TYPE_BASIC),
-							softlock(LOCK_TYPE_ASYNC) {
+							filelock(LOCK_TYPE_FILE) {
   ref = 0;
   
   parent = NULL;
@@ -197,7 +209,7 @@ void CInode::mark_dirty() {
 	updated below.
   */
   
-  // only auth can get dirty.  "dirty" async data in replicas is relative to (say) softlock state, not dirty flag.
+  // only auth can get dirty.  "dirty" async data in replicas is relative to (say) filelock state, not dirty flag.
   assert(is_auth());
 
   // touch my private version
@@ -226,14 +238,14 @@ void CInode::mark_dirty() {
 
 // new state encoders
 
-void CInode::encode_soft_state(crope& r) 
+void CInode::encode_file_state(crope& r) 
 {
   r.append((char*)&inode.size, sizeof(inode.size));
   r.append((char*)&inode.mtime, sizeof(inode.mtime));
   r.append((char*)&inode.atime, sizeof(inode.atime));  // ??
 }
 
-void CInode::decode_soft_state(crope& r, int& off)
+void CInode::decode_file_state(crope& r, int& off)
 {
   r.copy(off, sizeof(inode.size), (char*)&inode.size);
   off += sizeof(inode.size);
@@ -243,7 +255,8 @@ void CInode::decode_soft_state(crope& r, int& off)
   off += sizeof(inode.atime);
 }
 
-void CInode::decode_merge_soft_state(crope& r, int& off)
+/* not used currently
+void CInode::decode_merge_file_state(crope& r, int& off)
 {
   __uint64_t size;
   r.copy(off, sizeof(size), (char*)&size);
@@ -259,6 +272,7 @@ void CInode::decode_merge_soft_state(crope& r, int& off)
   off += sizeof(t);
   if (t > inode.atime) inode.atime = t;
 }
+*/
 
 void CInode::encode_hard_state(crope& r)
 {

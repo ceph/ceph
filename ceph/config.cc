@@ -104,7 +104,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 6,
+  osd_pg_bits: 2,
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
@@ -231,9 +231,9 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(args[++i]);
-	else if (strcmp(args[i], "--mds_bal_replicate_threshold") == 0) 
+	else if (strcmp(args[i], "--mds_bal_rep") == 0) 
 	  g_conf.mds_bal_replicate_threshold = atoi(args[++i]);
-	else if (strcmp(args[i], "--mds_bal_unreplicate_threshold") == 0) 
+	else if (strcmp(args[i], "--mds_bal_unrep") == 0) 
 	  g_conf.mds_bal_unreplicate_threshold = atoi(args[++i]);
 	else if (strcmp(args[i], "--mds_bal_max") == 0) 
 	  g_conf.mds_bal_max = atoi(args[++i]);

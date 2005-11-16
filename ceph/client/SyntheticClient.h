@@ -26,6 +26,8 @@
 #define SYNCLIENT_MODE_RANDOMSLEEP  12
 #define SYNCLIENT_MODE_SLEEP        13
 
+#define SYNCLIENT_MODE_OPENTEST     30
+
 void parse_syn_options(vector<char*>& args);
 
 class SyntheticClient {

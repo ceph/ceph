@@ -39,7 +39,7 @@ class c_inode_info {
   string ref_dn;    // referring dentry (blank if root)
   string symlink;   // symlink content (if symlink)
 
-  bool inode_soft_valid;  // true if inode info is valid (ie was readable on mds at the time)
+  bool inode_file_valid;  // true if inode info is valid (ie was readable on mds at the time)
   bool inode_hard_valid;  // true if inode info is valid (ie was readable on mds at the time)
 
   bool     spec_defined;
@@ -52,7 +52,7 @@ class c_inode_info {
   c_inode_info(CInode *in, int whoami, string ref_dn) {
 	// inode
 	this->inode = in->inode;
-	this->inode_soft_valid = in->softlock.can_read(in->is_auth());
+	this->inode_file_valid = in->filelock.can_read(in->is_auth());
 	this->inode_hard_valid = in->hardlock.can_read(in->is_auth());
 	
 	// symlink content?
@@ -71,7 +71,7 @@ class c_inode_info {
   
   void _encode(bufferlist &bl) {
 	bl.append((char*)&inode, sizeof(inode));
-	bl.append((char*)&inode_soft_valid, sizeof(inode_soft_valid));
+	bl.append((char*)&inode_file_valid, sizeof(inode_file_valid));
 	bl.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
 	bl.append((char*)&spec_defined, sizeof(spec_defined));
 	bl.append((char*)&dir_auth, sizeof(dir_auth));
@@ -84,8 +84,8 @@ class c_inode_info {
   void _decode(bufferlist &bl, int& off) {
 	bl.copy(off, sizeof(inode), (char*)&inode);
 	off += sizeof(inode);
-	bl.copy(off, sizeof(inode_soft_valid), (char*)&inode_soft_valid);
-	off += sizeof(inode_soft_valid);
+	bl.copy(off, sizeof(inode_file_valid), (char*)&inode_file_valid);
+	off += sizeof(inode_file_valid);
 	bl.copy(off, sizeof(inode_hard_valid), (char*)&inode_hard_valid);
 	off += sizeof(inode_hard_valid);
 	bl.copy(off, sizeof(spec_defined), (char*)&spec_defined);

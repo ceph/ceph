@@ -32,8 +32,7 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_PROXY     3   // can't expire yet
 #define CINODE_PIN_WAITER    4   // waiter
 
-#define CINODE_PIN_OPEN      5  // local fh's
-#define CINODE_PIN_OPENTOK   6  // fh tokens to replicas
+#define CINODE_PIN_CAPS      5  // local fh's
 
 #define CINODE_PIN_DNDIRTY   7  // dentry is dirty
 
@@ -42,6 +41,7 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_REQUEST   10  // request is logging, finishing
 #define CINODE_PIN_RENAMESRC 11  // pinned on dest for foreign rename
 #define CINODE_PIN_ANCHORING 12
+
 
 #define CINODE_PIN_DENTRYLOCK   14
 
@@ -53,8 +53,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "dirty",
   "proxy",
   "waiter",
-  "open",
-  "opentok",
+  "caps",
+  "--",
   "dndirty",
   "authpin",
   "imping",
@@ -72,7 +72,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 
 // wait reasons
 #define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
-    // waiters: write_hard_start, read_soft_start, write_soft_start  (mdcache)
+    // waiters: write_hard_start, read_file_start, write_file_start  (mdcache)
     //          handle_client_chmod, handle_client_touch             (mds)
     // trigger: (see CDIR_WAIT_UNFREEZE)
 #define CINODE_WAIT_GETREPLICA    (1<<11)  // update/replicate individual inode
@@ -93,13 +93,13 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_WAIT_HARDRWB      (CINODE_WAIT_HARDR|CINODE_WAIT_HARDW|CINODE_WAIT_HARDB)
 #define CINODE_WAIT_HARDSTABLE   (1<<20)
 #define CINODE_WAIT_HARDNORD     (1<<21)
-#define CINODE_WAIT_SOFTR        (1<<22)  
-#define CINODE_WAIT_SOFTW        (1<<23)
-#define CINODE_WAIT_SOFTB        (1<<24)
-#define CINODE_WAIT_SOFTRWB      (CINODE_WAIT_SOFTR|CINODE_WAIT_SOFTW|CINODE_WAIT_SOFTB)
-#define CINODE_WAIT_SOFTSTABLE   (1<<25)
-#define CINODE_WAIT_SOFTNORD     (1<<26)
-#define CINODE_WAIT_SOFTNOWR     (1<<27)
+#define CINODE_WAIT_FILER        (1<<22)  
+#define CINODE_WAIT_FILEW        (1<<23)
+#define CINODE_WAIT_FILEB        (1<<24)
+#define CINODE_WAIT_FILERWB      (CINODE_WAIT_FILER|CINODE_WAIT_FILEW|CINODE_WAIT_FILEB)
+#define CINODE_WAIT_FILESTABLE   (1<<25)
+#define CINODE_WAIT_FILENORD     (1<<26)
+#define CINODE_WAIT_FILENOWR     (1<<27)
 
 #define CINODE_WAIT_RENAMEACK       (1<<28)
 #define CINODE_WAIT_RENAMENOTIFYACK (1<<29)
@@ -160,7 +160,7 @@ class CInode : LRUObject {
 
   // inode metadata locks
   CLock        hardlock;
-  CLock        softlock;
+  CLock        filelock;
 
  protected:
   int              ref;       // reference count
@@ -190,10 +190,13 @@ class CInode : LRUObject {
   int              num_request_pins;
 
   // waiters
-  multimap<int,Context*>  waiting;
+  multimap<int, Context*>  waiting;
 
-  // issued client capabilities
-  map<int, Capability>  caps;    // client -> caps
+  // file capabilities
+  map<int, Capability>  client_caps;         // client -> caps
+
+  map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
+  int                   replica_caps_wanted; // [replica] what i've requested from auth
 
 
  private:
@@ -274,34 +277,13 @@ class CInode : LRUObject {
 
   crope encode_export_state();
 
-  void encode_soft_state(crope& r);
-  void decode_soft_state(crope& r, int& off);
-  void decode_merge_soft_state(crope& r, int& off);
+  void encode_file_state(crope& r);
+  void decode_file_state(crope& r, int& off);
+  void decode_merge_file_state(crope& r, int& off);
 
   void encode_hard_state(crope& r);
   void decode_hard_state(crope& r, int& off);
 
-  void replicate_relax_locks() {
-	assert(is_auth());
-	assert(!is_cached_by_anyone());
-	dout(10) << " relaxing locks on " << *this << endl;
-
-	if (hardlock.get_state() == LOCK_LOCK &&
-		!hardlock.is_used()) {
-	  dout(10) << " hard now sync " << *this << endl;
-	  hardlock.set_state(LOCK_SYNC);
-	}
-	if (softlock.get_state() == LOCK_LOCK &&
-		!softlock.is_used()) {
-	  if (softlock.get_mode() == LOCK_MODE_SYNC) {
-		softlock.set_state(LOCK_SYNC);
-		dout(10) << " soft now sync " << *this << endl;
-	  } else {
-		softlock.set_state(LOCK_ASYNC);
-		dout(10) << " soft now async " << *this << endl;
-	  }
-	}
-  }
   
   // -- dirtyness --
   __uint64_t get_version() { return version; }
@@ -384,40 +366,78 @@ class CInode : LRUObject {
 
 
   // -- caps -- (new)
-  bool is_caps_issued() { return !caps.empty(); }
-  void add_cap(int client, Capability& cap) {
-	assert(caps.count(client) == 0);
-	caps[client] = cap;
+  // client caps
+  map<int,Capability>& get_client_caps() { return client_caps; }
+  void add_client_cap(int client, Capability& cap) {
+	if (client_caps.empty())
+	  get(CINODE_PIN_CAPS);
+	assert(client_caps.count(client) == 0);
+	client_caps[client] = cap;
   }
-  void remove_cap(int client) {
-	assert(caps.count(client) == 1);
-	caps.erase(client);
+  void remove_client_cap(int client) {
+	assert(client_caps.count(client) == 1);
+	client_caps.erase(client);
+	if (client_caps.empty())
+	  put(CINODE_PIN_CAPS);
   }
-  Capability* get_cap(int client) {
-	if (caps.count(client))
-	  return &caps[client];
+  Capability* get_client_cap(int client) {
+	if (client_caps.count(client))
+	  return &client_caps[client];
 	return 0;
   }
-
-  void add_caps(map<int,Capability>& cl) {
-	caps.clear();
-	caps = cl;
+  void set_client_caps(map<int,Capability>& cl) {
+	if (client_caps.empty() && !cl.empty())
+	  get(CINODE_PIN_CAPS);
+	client_caps.clear();
+	client_caps = cl;
   }
-  void remove_caps(map<int,Capability>& cl) {
-	cl = caps;
-	caps.clear();
+  void take_client_caps(map<int,Capability>& cl) {
+	if (!client_caps.empty())
+	  put(CINODE_PIN_CAPS);
+	cl = client_caps;
+	client_caps.clear();
   }
 
+  // caps issued, wanted
   int get_caps_issued() {
 	int c = 0;
-	for (map<int,Capability>::iterator it = caps.begin();
-		 it != caps.end();
+	for (map<int,Capability>::iterator it = client_caps.begin();
+		 it != client_caps.end();
 		 it++) 
 	  c |= it->second.issued();
 	return c;
   }
-  bool is_write_caps() {
-	return get_caps_issued() & CAP_FILE_WR;
+  int get_caps_wanted() {
+	int w = 0;
+	for (map<int,Capability>::iterator it = client_caps.begin();
+		 it != client_caps.end();
+		 it++)
+	  w |= it->second.wanted();
+	if (is_auth())
+	  for (map<int,int>::iterator it = mds_caps_wanted.begin();
+		   it != mds_caps_wanted.end();
+		   it++) 
+		w |= it->second;
+	return w;
+  }
+
+
+  void replicate_relax_locks() {
+	assert(is_auth());
+	assert(!is_cached_by_anyone());
+	dout(10) << " relaxing locks on " << *this << endl;
+
+	if (hardlock.get_state() == LOCK_LOCK &&
+		!hardlock.is_used()) {
+	  dout(10) << " hard now sync " << *this << endl;
+	  hardlock.set_state(LOCK_SYNC);
+	}
+	if (filelock.get_state() == LOCK_LOCK &&
+		!filelock.is_used() &&
+		get_caps_issued() == 0) {
+	  filelock.set_state(LOCK_SYNC);
+	  dout(10) << " soft now sync " << *this << endl;
+	}
   }
 
 
@@ -537,7 +557,7 @@ class CInodeDiscover {
   int        replica_nonce;
   
   int        hardlock_state;
-  int        softlock_state;
+  int        filelock_state;
 
  public:
   CInodeDiscover() {}
@@ -546,7 +566,7 @@ class CInodeDiscover {
 	replica_nonce = nonce;
 
 	hardlock_state = in->hardlock.get_replica_state();
-	softlock_state = in->softlock.get_replica_state();
+	filelock_state = in->filelock.get_replica_state();
   }
 
   inodeno_t get_ino() { return inode.ino; }
@@ -557,14 +577,14 @@ class CInodeDiscover {
 
 	in->replica_nonce = replica_nonce;
 	in->hardlock.set_state(hardlock_state);
-	in->softlock.set_state(softlock_state);
+	in->filelock.set_state(filelock_state);
   }
   
   void _encode(bufferlist& bl) {
 	bl.append((char*)&inode, sizeof(inode));
 	bl.append((char*)&replica_nonce, sizeof(replica_nonce));
 	bl.append((char*)&hardlock_state, sizeof(hardlock_state));
-	bl.append((char*)&softlock_state, sizeof(softlock_state));
+	bl.append((char*)&filelock_state, sizeof(filelock_state));
   }
 
   void _decode(bufferlist& bl, int& off) {
@@ -574,8 +594,8 @@ class CInodeDiscover {
 	off += sizeof(int);
 	bl.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
 	off += sizeof(hardlock_state);
-	bl.copy(off, sizeof(softlock_state), (char*)&softlock_state);
-	off += sizeof(softlock_state);
+	bl.copy(off, sizeof(filelock_state), (char*)&filelock_state);
+	off += sizeof(filelock_state);
   }  
 
 };
@@ -602,7 +622,8 @@ class CInodeExport {
   map<int,int>  cached_by_nonce;
   map<int,Capability>  cap_map;
 
-  CLock         hardlock,softlock;
+  CLock         hardlock,filelock;
+  //int           remaining_issued;
 
 public:
   CInodeExport() {}
@@ -614,14 +635,15 @@ public:
 	cached_by_nonce = in->cached_by_nonce; 
 
 	hardlock = in->hardlock;
-	softlock = in->softlock;
+	filelock = in->filelock;
 
 	st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
 	st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
 	in->popularity[MDS_POP_ANYDOM].adjust_down(st.popularity_curdom);
 	
-	// steal caps from inode
-	in->remove_caps(cap_map);
+	// steal WRITER caps from inode
+	in->take_client_caps(cap_map);
+	//remaining_issued = in->get_caps_issued();
   }
   ~CInodeExport() {
   }
@@ -649,10 +671,10 @@ public:
 	  in->get(CINODE_PIN_CACHED);
 
 	in->hardlock = hardlock;
-	in->softlock = softlock;
+	in->filelock = filelock;
 
 	// caps
-	in->add_caps(cap_map);
+	in->set_client_caps(cap_map);
   }
 
   void _encode(bufferlist& bl) {
@@ -671,7 +693,7 @@ public:
     }
 
 	hardlock.encode_state(bl);
-	softlock.encode_state(bl);
+	filelock.encode_state(bl);
 
 	// caps
 	for (map<int,Capability>::iterator it = cap_map.begin();
@@ -697,7 +719,7 @@ public:
     }
 
 	hardlock.decode_state(bl, off);
-	softlock.decode_state(bl, off);
+	filelock.decode_state(bl, off);
 
 	// caps
 	for (int i=0; i<st.num_caps; i++) {
