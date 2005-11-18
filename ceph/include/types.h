@@ -156,7 +156,7 @@ struct inode_t {
   FileLayout layout;  
 
   // soft
-  __uint64_t size;
+  off_t      size;
   time_t     atime, mtime;      // maybe atime different?  "lazy"?
   int        nlink;
 

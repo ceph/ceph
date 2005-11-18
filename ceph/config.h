@@ -47,7 +47,7 @@ struct md_config_t {
   int      client_bcache_alloc_minsize;
   int      client_bcache_alloc_maxsize;
   int      client_bcache_ttl;
-  unsigned long long client_bcache_size;
+  off_t    client_bcache_size;
   int      client_bcache_lowater;
   int      client_bcache_hiwater;
   size_t   client_bcache_align;

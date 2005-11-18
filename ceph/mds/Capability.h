@@ -126,6 +126,17 @@ public:
   }
   long get_last_seq() { return last_sent; }
 
+  void merge(Capability& other) {
+	// issued + pending
+	int newpending = other.pending() | pending();
+	if (other.issued() & ~newpending)
+	  issue(other.issued() | newpending);
+	issue(newpending);
+
+	// wanted
+	wanted_caps = wanted_caps | other.wanted();
+  }
+
   // confirm receipt of a previous sent/issued seq.
   int confirm_receipt(long seq, int caps) {
 	int r = 0;

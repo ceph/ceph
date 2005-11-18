@@ -9,46 +9,45 @@ using namespace std;
 
 #include "Capability.h"
 
-// STATES
-// basic lock
-#define LOCK_SYNC     0  // AR 
-#define LOCK_LOCK     1  // AR
-#define LOCK_GLOCKR   2  // AR gather to lock from sync
+// states and such.
+//  C = cache reads, R = read, W = write, B = buffer writes
+
+// basic lock                    -----auth----   ---replica---
+#define LOCK_SYNC     0  // AR   R . / C R . .   R . / C R . .   stat()
+#define LOCK_LOCK     1  // AR   R W / C . . .   . . / C . . .   truncate()
+#define LOCK_GLOCKR   2  // AR   R . / C . . .   . . / C . . .
 
 // file lock states
-#define LOCK_GLOCKW   3  // A  gather to lock from wronly
-#define LOCK_GLOCKM   4  // A  gather to lock from mixed
-#define LOCK_MIXED    5  // AR 
-#define LOCK_GMIXEDR  6  // AR gather to mixed from sync
-#define LOCK_GMIXEDW  7  // A  gather to mixed from wronly
+#define LOCK_GLOCKW   3  // A    . . / . . . . 
+#define LOCK_GLOCKM   4  // A    . . / . . . .
+#define LOCK_MIXED    5  // AR   . . / . R W .   . . / . R . .
+#define LOCK_GMIXEDR  6  // AR   R . / . R . .   . . / . R . . 
+#define LOCK_GMIXEDW  7  // A    . . / . . W .   
 
-#define LOCK_WRONLY   8  // A
-#define LOCK_GWRONLYR 9  // A  gather to wronly from sync
-#define LOCK_GWRONLYM 10 // A  gather to wronly from mixed
+#define LOCK_WRONLY   8  // A    . . / . . W B      (lock)
+#define LOCK_GWRONLYR 9  // A    . . / . . . .
+#define LOCK_GWRONLYM 10 // A    . . / . . W .
 
-#define LOCK_GSYNCW   11 // A  gather (clients) to sync from wronly
-#define LOCK_GSYNCM   12 // A  gather (clients) to sync from mixed
+#define LOCK_GSYNCW   11 // A    . . / . . . .
+#define LOCK_GSYNCM   12 // A    . . / . R . .
+
+//   4 stable
+//  +9 transition
+//  13 total
 
 
-#define LOCK_TYPE_BASIC 0
-#define LOCK_TYPE_FILE  1
-
-
-// -- lock (basic or soft lock)
+// -- lock... hard or file
 
 class CLock {
  protected:
   // lock state
-  char     type;
   char     state;
   set<int> gather_set;  // auth
   int      nread, nwrite;
 
   
  public:
-  CLock() {}
-  CLock(char t) : 
-	type(t),
+  CLock() : 
 	state(LOCK_LOCK), 
 	nread(0), 
 	nwrite(0) {
@@ -56,7 +55,6 @@ class CLock {
   
   // encode/decode
   void encode_state(bufferlist& bl) {
-	bl.append((char*)&type, sizeof(char));
 	bl.append((char*)&state, sizeof(state));
 	bl.append((char*)&nread, sizeof(nread));
 	bl.append((char*)&nwrite, sizeof(nwrite));
@@ -64,8 +62,6 @@ class CLock {
 	_encode(gather_set, bl);
   }
   void decode_state(bufferlist& bl, int& off) {
-	bl.copy(off, sizeof(type), (char*)&type);
-	off += sizeof(type);
 	bl.copy(off, sizeof(state), (char*)&state);
 	off += sizeof(state);
 	bl.copy(off, sizeof(nread), (char*)&nread);
@@ -141,15 +137,6 @@ class CLock {
 	return (nwrite+nread)>0 ? true:false;
   }
 
-  /*
-  void twiddle_export() {  // was auth, now replica
-	gather_set.clear();
-	if (state == LOCK_GLOCK) state = LOCK_LOCK;
-  }
-  void twiddle_import() {  // was replica, now auth
-	
-  }
-  */
   
   // stable
   bool is_stable() {
@@ -189,6 +176,12 @@ class CLock {
   }
 
   // client caps allowed
+  int caps_allowed_ever(bool auth) {
+	if (auth)
+	  return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WRBUFFER;
+	else
+	  return CAP_FILE_RDCACHE | CAP_FILE_RD;
+  }
   int caps_allowed(bool auth) {
 	if (auth)
 	  switch (state) {
@@ -206,13 +199,12 @@ class CLock {
 		return CAP_FILE_WR | CAP_FILE_WRBUFFER;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
+		return CAP_FILE_RDCACHE;
 	  case LOCK_GLOCKW:
 	  case LOCK_GLOCKM:
 	  case LOCK_GWRONLYR:
 	  case LOCK_GSYNCW:
 		return 0;
-	  default:
-		assert(0);
 	  }
 	else
 	  switch (state) {
@@ -223,7 +215,7 @@ class CLock {
 		return CAP_FILE_RD;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
-		return 0;
+		return CAP_FILE_RDCACHE;
 	  }
 	assert(0);
 	return 0;
@@ -248,8 +240,6 @@ class CLock {
 	  case LOCK_GLOCKW:
 	  case LOCK_GLOCKM:
 		return 0;
-	  default:
-		assert(0);
 	  }
 	else
 	  switch (state) {
@@ -261,8 +251,6 @@ class CLock {
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
 		return 0;
-	  default:
-		assert(0);
 	  }
 	assert(0);
 	return 0;

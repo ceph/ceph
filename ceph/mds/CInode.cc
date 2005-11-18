@@ -72,9 +72,7 @@ ostream& operator<<(ostream& out, CInode& in)
 
 
 // ====== CInode =======
-CInode::CInode(bool auth) : LRUObject(),
-							hardlock(LOCK_TYPE_BASIC),
-							filelock(LOCK_TYPE_FILE) {
+CInode::CInode(bool auth) : LRUObject() {
   ref = 0;
   
   parent = NULL;

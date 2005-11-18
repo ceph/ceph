@@ -3524,8 +3524,7 @@ bool MDCache::issue_caps(CInode *in)
 		mds->messenger->send_message(new MClientFileCaps(in->inode,
 														 it->second.get_last_seq(),
 														 it->second.pending(),
-														 it->second.wanted(),
-														 it->first),
+														 it->second.wanted()),
 									 MSG_ADDR_CLIENT(it->first), 0, MDS_PORT_CACHE);
 	  }
 	}
@@ -3584,48 +3583,52 @@ void MDCache::handle_inode_file_caps(MInodeFileCaps *m)
  */
 void MDCache::handle_client_file_caps(MClientFileCaps *m)
 {
+  int client = MSG_ADDR_NUM(m->get_source());
   CInode *in = get_inode(m->get_ino());
   Capability *cap = 0;
   if (in) 
-	cap = in->get_client_cap(m->get_client());
+	cap = in->get_client_cap(client);
 
   if (!in || !cap) {
-	int next;
 	if (!in) {
-	  dout(7) << "handle_client_file_caps on unknown ino " << m->get_ino() << " passing buck" << endl;
+	  dout(7) << "handle_client_file_caps on unknown ino " << m->get_ino() << ", dropping" << endl;
 	} else {
-	  dout(7) << "handle_client_file_caps no cap for client" << m->get_client() << " on " << *in << endl;
-	  //next = in->authority();
+	  dout(7) << "handle_client_file_caps no cap for client" << client << " on " << *in << endl;
 	}
-	next = mds->get_nodeid() + 1;
-	if (next >= mds->get_cluster()->get_num_mds()) next = 0;
-	
-	mds->messenger->send_message(m,
-								 MSG_ADDR_MDS(next), m->get_dest_port());
+	delete m;
 	return;
   } 
   
   assert(cap);
 
+  // filter wanted based on what we could ever give out (given auth/replica status)
+  int wanted = m->get_wanted() & in->filelock.caps_allowed_ever(in->is_auth());
+  
   dout(7) << "handle_client_file_caps seq " << m->get_seq() 
 		  << " confirms caps " << cap_string(m->get_caps()) 
-		  << " wants " << cap_string(m->get_wanted())
-		  << " from client" << m->get_client() 
+		  << " wants " << cap_string(wanted)
+		  << " from client" << client
 		  << " on " << *in 
 		  << endl;  
   
   // update wanted
-  if (cap->wanted() != m->get_wanted())
-	cap->set_wanted(m->get_wanted());
+  if (cap->wanted() != wanted)
+	cap->set_wanted(wanted);
 
   // confirm caps
   int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
   int has = cap->confirmed();
   if (cap->is_null()) {
-	dout(7) << " cap for client" << m->get_client() << " is now null, removing from " << *in << endl;
-	in->remove_client_cap(m->get_client());
+	dout(7) << " cap for client" << client << " is now null, removing from " << *in << endl;
+	in->remove_client_cap(client);
 	if (!in->is_auth())
 	  request_inode_file_caps(in);
+
+	// tell client.
+	MClientFileCaps *r = new MClientFileCaps(in->inode, 
+											 0, 0, 0,
+											 MClientFileCaps::FILECAP_RELEASE);
+	mds->messenger->send_message(r, m->get_source());
   }
 
   // merge in atime?
@@ -5948,17 +5951,17 @@ void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_aut
 {
   in->version++;  // so local log entries are ignored, etc.  (FIXME ??)
   
-  // tell (all) clients about new inode auth
+  // tell (all) clients about migrating caps.. mark STALE
   for (map<int, Capability>::iterator it = in->client_caps.begin();
 	   it != in->client_caps.end();
 	   it++) {
-	dout(7) << "encode_export_inode " << *in << " telling client " << it->first << " new auth " << new_auth << endl;
-	mds->messenger->send_message(new MClientFileCaps(in->inode, 
-													 it->second.get_last_seq(), 
-													 it->second.pending(),
-													 it->second.wanted(),
-													 it->first, new_auth),
-								 MSG_ADDR_CLIENT(it->first));
+	dout(7) << "encode_export_inode " << *in << " telling client" << it->first << " stale caps" << endl;
+	MClientFileCaps *m = new MClientFileCaps(in->inode, 
+											 it->second.get_last_seq(), 
+											 it->second.pending(),
+											 it->second.wanted(),
+											 MClientFileCaps::FILECAP_STALE);
+	mds->messenger->send_message(m, MSG_ADDR_CLIENT(it->first));
   }
 
   // relax locks?
@@ -6735,7 +6738,8 @@ void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int old
   }
 
   // state after link
-  istate.update_inode(in);
+  set<int> merged_client_caps;
+  istate.update_inode(in, merged_client_caps);
  
  
   // add inode?
@@ -6762,7 +6766,19 @@ void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int old
 	  inode_hard_eval(in);
   }
 
-  // file
+  // caps
+  for (set<int>::iterator it = merged_client_caps.begin();
+	   it != merged_client_caps.end();
+	   it++) {
+	mds->messenger->send_message(new MClientFileCaps(in->inode,
+													 in->client_caps[*it].get_last_seq(),
+													 in->client_caps[*it].pending(),
+													 in->client_caps[*it].wanted(),
+													 MClientFileCaps::FILECAP_REAP),
+								 MSG_ADDR_CLIENT(*it));
+  }
+
+  // filelock
   if (!in->filelock.is_stable()) {
 	// take me and old auth out of gather set
 	in->filelock.gather_set.erase(mds->get_nodeid());

@@ -88,6 +88,13 @@ class Dir {
 };
 
 
+class InodeCap {
+ public:
+  int  caps;
+  long seq;
+  InodeCap() : caps(0), seq(0) {}
+};
+
 
 class Inode {
  public:
@@ -96,11 +103,12 @@ class Inode {
   set<int>	mds_contacts;
   time_t    last_updated;
 
-  int       file_caps;
-  long      file_caps_seq;
-  int       file_mds;      // semi-hack
+  // per-mds caps
+  map<int,InodeCap> caps;            // mds -> InodeCap
+  map<int,InodeCap> stale_caps;      // mds -> cap .. stale
+
   time_t    file_wr_mtime;   // [writers] time of last write
-  unsigned long long    file_wr_size;    // [writers] largest offset we've written to
+  off_t     file_wr_size;    // [writers] largest offset we've written to
   int       num_rd, num_wr;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
@@ -117,7 +125,7 @@ class Inode {
   void put() { ref--; assert(ref >= 0); }
 
   Inode() : mds_dir_auth(-1), last_updated(0),
-	file_caps(0), file_caps_seq(0), file_mds(0), file_wr_mtime(0), file_wr_size(0), num_rd(0), num_wr(0),
+	file_wr_mtime(0), file_wr_size(0), num_rd(0), num_wr(0),
 	ref(0), dir(0), dn(0), symlink(0) { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
@@ -127,6 +135,19 @@ class Inode {
 
   bool is_dir() {
 	return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
+  }
+
+  int file_caps() {
+	int c = 0;
+	for (map<int,InodeCap>::iterator it = caps.begin();
+		 it != caps.end();
+		 it++)
+	  c |= it->second.caps;
+	for (map<int,InodeCap>::iterator it = stale_caps.begin();
+		 it != stale_caps.end();
+		 it++)
+	  c |= it->second.caps;
+	return c;
   }
 
   int file_caps_wanted() {
@@ -206,6 +227,10 @@ class Client : public Dispatcher {
   hash_map<inodeno_t, Inode*> inode_map;
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
+
+  // cap weirdness
+  map<inodeno_t, map<int, class MClientFileCaps*> > cap_reap_queue;  // ino -> mds -> msg .. set of (would-be) stale caps to reap
+
 
   // file handles
   rangeset<fh_t>         free_fh_set;  // unused fh's
@@ -331,7 +356,7 @@ class Client : public Dispatcher {
   // buffer cache
   class Buffercache *bc;
   
-  void flush_buffers(int ttl, unsigned long long dirty_size);     // flush dirty buffers
+  void flush_buffers(int ttl, off_t dirty_size);     // flush dirty buffers
   void trim_bcache();
   void flush_inode_buffers(Inode *in);     // flush buffered writes
   void release_inode_buffers(Inode *in);   // release cached reads
@@ -380,7 +405,7 @@ class Client : public Dispatcher {
   int rmdir(const char *path);
 
   // symlinks
-  int readlink(const char *path, char *buf, unsigned long long size);
+  int readlink(const char *path, char *buf, off_t size);
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
@@ -393,9 +418,9 @@ class Client : public Dispatcher {
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
   int close(fh_t fh);
-  int read(fh_t fh, char *buf, unsigned long long size, long long offset);
-  int write(fh_t fh, const char *buf, unsigned long long size, long long offset);
-  int truncate(const char *file, unsigned long long size);
+  int read(fh_t fh, char *buf, off_t size, off_t offset);
+  int write(fh_t fh, const char *buf, off_t size, off_t offset);
+  int truncate(const char *file, off_t size);
 	//int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
 

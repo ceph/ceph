@@ -252,7 +252,14 @@ void MDS::handle_shutdown_finish(Message *m)
   dout(1) << " shut down so far: " << did_shut_down << endl;
   
   if (did_shut_down.size() == (unsigned)mdcluster->get_num_mds()) {
-	// MDS's all shut down!
+	// MDS's all ready to shut down!
+
+	/*
+	for (int i=1; i<g_conf.num_mds; i++) {
+	  dout(1) << "sending shutdown to mds" << i << endl;
+	  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
+							  MSG_ADDR_MDS(i), 0, 0);
+							  }*/
 
 	// shut down osd's
 	for (int i=0; i<g_conf.num_osd; i++) {

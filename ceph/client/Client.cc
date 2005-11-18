@@ -242,7 +242,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   dn->inode->inode = in_info->inode;
   
   // or do we have newer size/mtime from writing?
-  if (dn->inode->file_caps & CAP_FILE_WR) {
+  if (dn->inode->file_caps() & CAP_FILE_WR) {
 	if (dn->inode->file_wr_size > dn->inode->inode.size)
 	  dn->inode->inode.size = dn->inode->file_wr_size;
 	if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
@@ -530,7 +530,7 @@ public:
   }
 };
 
-void Client::flush_buffers(int ttl, unsigned long long dirty_size)
+void Client::flush_buffers(int ttl, off_t dirty_size)
 {
   // ttl = 0 or dirty_size = 0: flush all
   if (!bc->dirty_buffers->empty()) {
@@ -562,19 +562,19 @@ void Client::trim_bcache()
   if (bc->get_total_size() > g_conf.client_bcache_size) {
     // need to free buffers 
     if (bc->get_dirty_size() > 
-        (unsigned long long)g_conf.client_bcache_hiwater * 
-	(unsigned long long)g_conf.client_bcache_size / 100ULL) {
+        g_conf.client_bcache_hiwater * 
+		g_conf.client_bcache_size / 100LL) {
       // flush buffers until we have low water mark
-      unsigned long long want_target_size = 
-	(unsigned long long)g_conf.client_bcache_lowater *
-	(unsigned long long)g_conf.client_bcache_size / 100ULL;
+      off_t want_target_size = 
+	g_conf.client_bcache_lowater *
+	g_conf.client_bcache_size / 100LL;
       dout(3) << "bc: flush_buffers started" << endl;
       flush_buffers(g_conf.client_bcache_ttl, want_target_size);
     }
     // Now reclaim buffers
-    unsigned long long reclaim_size = bc->get_total_size() - 
-      (unsigned long long)g_conf.client_bcache_size *
-      (unsigned long long)g_conf.client_bcache_hiwater / 100ULL;
+    off_t reclaim_size = bc->get_total_size() - 
+      g_conf.client_bcache_size *
+      g_conf.client_bcache_hiwater / 100LL;
     dout(6) << "bc: trim_bcache: reclaim: " << reclaim_size << endl;
     while (reclaim_size > 0 && bc->reclaim(reclaim_size) == 0) {
       // cannot reclaim any buffers: wait for inflight buffers
@@ -600,8 +600,8 @@ void Client::release_inode_buffers(Inode *in)
   inodeno_t ino = in->ino();
   if (fc->buffer_map.empty()) return;
 
-  map<long long, Bufferhead*> to_release = fc->buffer_map;
-  for (map<long long, Bufferhead*>::iterator it = to_release.begin();
+  map<off_t, Bufferhead*> to_release = fc->buffer_map;
+  for (map<off_t, Bufferhead*>::iterator it = to_release.begin();
        it != to_release.end();
        it++) {
     Bufferhead *bh = it->second;
@@ -624,19 +624,82 @@ void Client::release_inode_buffers(Inode *in)
 }
 
 
+
+/****
+ * caps
+ */
+
+
 void Client::handle_file_caps(MClientFileCaps *m)
 {
-  if (inode_map.count(m->get_ino()) == 0) {
-	dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't have, releasing." << endl;
-	m->set_caps(0);
-	m->set_wanted(0);
-	messenger->send_message(m, m->get_source(), m->get_source_port());
+  int mds = MSG_ADDR_NUM(m->get_source());
+  Inode *in = 0;
+  if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
+
+  // reap?
+  if (m->get_special() == MClientFileCaps::FILECAP_REAP) {
+	int other = m->get_mds();
+
+	if (in && in->stale_caps.count(other)) {
+	  dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " reap on mds" << other << endl;
+
+	  // fresh from new mds?
+	  if (!in->caps.count(mds)) {
+		if (in->caps.empty()) in->get();
+		in->caps[mds].seq = m->get_seq();
+		in->caps[mds].caps = m->get_caps();
+	  }
+
+	  in->stale_caps.erase(other);
+	  if (in->stale_caps.empty()) put_inode(in); // note: this will never delete *in
+	  
+	  // fall-thru!
+	} else {
+	  dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) reap on mds" << other << endl;
+	  // delay!
+	  cap_reap_queue[in->ino()][other] = m;
+	  return;
+	}
+  }
+
+  assert(in);
+  
+  // stale?
+  if (m->get_special() == MClientFileCaps::FILECAP_STALE) {
+	dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " now stale" << endl;
+	
+	// put in stale list
+	assert(in->caps.count(mds));
+	if (in->stale_caps.empty()) in->get();
+	in->stale_caps[mds] = in->caps[mds];
+	in->caps.erase(mds);
+
+	// delayed reap?
+	if (cap_reap_queue.count(in->ino()) &&
+		cap_reap_queue[in->ino()].count(mds)) {
+	  dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << endl;
+	  
+	  // process delayed reap
+	  handle_file_caps( cap_reap_queue[in->ino()][mds] );
+
+	  cap_reap_queue[in->ino()].erase(mds);
+	  if (cap_reap_queue[in->ino()].empty())
+		cap_reap_queue.erase(in->ino());
+	}
 	return;
   }
 
-  Inode *in = inode_map[ m->get_ino() ];
-  assert(in);
+  // release?
+  if (m->get_special() == MClientFileCaps::FILECAP_RELEASE) {
+	dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
+	assert(in->caps.count(mds));
+	in->caps.erase(mds);
+	if (in->caps.empty()) put_inode(in);
+	return;
+  }
 
+
+  // don't want?
   if (in->file_caps_wanted() == 0) {
 	dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't want caps for, releasing." << endl;
 	m->set_caps(0);
@@ -644,46 +707,47 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	messenger->send_message(m, m->get_source(), m->get_source_port());
 	return;
   }
+
+  /*
   if (m->get_seq() <= in->file_caps_seq) {
+	assert(0); // no ooo support yet
 	dout(5) << "handle_file_caps on ino " << m->get_ino() << " old seq " << m->get_seq() << " <= " << in->file_caps_seq << endl;
 	delete m;
 	return;
   }
+  */
 
-  // new mds auth?
-  if (m->get_mds() >= 0) {
-	in->file_mds = m->get_mds();
-	dout(5) << "handle_file_caps on ino " << m->get_ino() << " mds now " << in->file_mds << endl;
-  }
+  assert(in->caps.count(mds));
 
-
-  int old_caps = in->file_caps;
-  in->file_caps = m->get_caps();
-  in->file_caps_seq = m->get_seq();
-  dout(5) << "handle_file_caps on in " << m->get_ino() << " seq " << m->get_seq() << " caps now " << cap_string(in->file_caps) << " was " << cap_string(old_caps) << endl;
+  // update caps
+  const int old_caps = in->caps[mds].caps;
+  const int new_caps = m->get_caps();
+  in->caps[mds].caps = new_caps;
+  in->caps[mds].seq = m->get_seq();
+  dout(5) << "handle_file_caps on in " << m->get_ino() << " seq " << m->get_seq() << " caps now " << cap_string(new_caps) << " was " << cap_string(old_caps) << endl;
   
   // update inode
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
-	
+  
   // flush buffers?
-  if (in->file_caps & CAP_FILE_WRBUFFER == 0) {
+  if (in->file_caps() & CAP_FILE_WRBUFFER == 0) {
 	flush_inode_buffers(in); 
 	Filecache *fc = bc->get_fc(in);
 	fc->wait_for_inflight(client_lock);       // FIXME: this isn't actually allowed to block is it?!?
   }
 
   // release buffers?
-  if (in->file_caps & CAP_FILE_RDCACHE == 0)
+  if (new_caps & CAP_FILE_RDCACHE == 0)
 	release_inode_buffers(in);
   
   // ack?
-  if (old_caps & ~in->file_caps) {
-	dout(5) << " we lost caps " << cap_string(old_caps & ~in->file_caps) << ", acking" << endl;
+  if (old_caps & ~new_caps) {
+	dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
 	messenger->send_message(m, m->get_source(), m->get_source_port());
   } 
 
   // wake up waiters?
-  if (in->file_caps & CAP_FILE_RD) {
+  if (new_caps & CAP_FILE_RD) {
 	for (list<Cond*>::iterator it = in->waitfor_read.begin();
 		 it != in->waitfor_read.end();
 		 it++) {
@@ -692,7 +756,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	}
 	in->waitfor_read.clear();
   }
-  if (in->file_caps & CAP_FILE_WR) {
+  if (new_caps & CAP_FILE_WR) {
 	for (list<Cond*>::iterator it = in->waitfor_write.begin();
 		 it != in->waitfor_write.end();
 		 it++) {
@@ -710,31 +774,29 @@ void Client::release_caps(Inode *in,
 						  int retain)
 {
   dout(5) << "releasing caps on ino " << in->inode.ino 
-		  << " had " << cap_string(in->file_caps)
+		  << " had " << cap_string(in->file_caps())
 		  << " retaining " << cap_string(retain) 
 		  << endl;
   
-  in->file_caps = retain;
+  for (map<int,InodeCap>::iterator it = in->caps.begin();
+	   it != in->caps.end();
+	   it++) {
+	//if (it->second.caps & ~retain) {
+	if (1) {
+	  // release (some of?) these caps
+	  it->second.caps = retain & it->second.caps;
+	  // note: tell mds _full_ wanted; it'll filter/behave based on what it is allowed to do
+	  MClientFileCaps *m = new MClientFileCaps(in->inode, 
+											   it->second.seq,
+											   it->second.caps,
+											   in->file_caps_wanted()); 
+	  messenger->send_message(m, MSG_ADDR_MDS(it->first), MDS_PORT_CACHE);
+	}
+  }
   
-  // release 
-  MClientFileCaps *m = new MClientFileCaps(in->inode, 
-										   in->file_caps_seq,
-										   in->file_caps,
-										   in->file_caps_wanted(),
-										   whoami);
-  messenger->send_message(m,
-						  MSG_ADDR_MDS(in->file_mds), MDS_PORT_CACHE);
-  
-  if ((in->file_caps & CAP_FILE_WR) == 0) {
+  if ((in->file_caps() & CAP_FILE_WR) == 0) {
 	in->file_wr_mtime = 0;
 	in->file_wr_size = 0;
-  }
-
-  // release caps completely?
-  if (in->file_caps == 0) {
-	in->file_caps_seq = 0;
-	in->file_mds = 0;
-	put_inode(in);
   }
 }
 
@@ -744,13 +806,17 @@ void Client::update_caps_wanted(Inode *in)
 		  << " to " << cap_string(in->file_caps_wanted())
 		  << endl;
   
-  MClientFileCaps *m = new MClientFileCaps(in->inode, 
-										   in->file_caps_seq,
-										   in->file_caps,
-										   in->file_caps_wanted(),
-										   whoami);
-  messenger->send_message(m,
-						  MSG_ADDR_MDS(in->file_mds), MDS_PORT_CACHE);
+  // FIXME: pick a single mds and let the others off the hook..
+  for (map<int,InodeCap>::iterator it = in->caps.begin();
+	   it != in->caps.end();
+	   it++) {
+	MClientFileCaps *m = new MClientFileCaps(in->inode, 
+											 it->second.seq,
+											 it->second.caps,
+											 in->file_caps_wanted());
+	messenger->send_message(m,
+							MSG_ADDR_MDS(it->first), MDS_PORT_CACHE);
+  }
 }
 
 
@@ -1033,7 +1099,7 @@ int Client::symlink(const char *target, const char *link)
   return res;
 }
 
-int Client::readlink(const char *path, char *buf, unsigned long long size) 
+int Client::readlink(const char *path, char *buf, off_t size) 
 { 
   client_lock->Lock();
   dout(3) << "op: client->readlink(\"" << path << "\", readlinkbuf, readlinkbuf_len);" << endl;
@@ -1119,8 +1185,8 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	stbuf->st_ctime = inode.ctime;
 	stbuf->st_atime = inode.atime;
 	stbuf->st_mtime = inode.mtime;
-	stbuf->st_size = (long long) inode.size; //FIXME long long is signed 64 vs size is unsigned 64
-	stbuf->st_blocks = (inode.size - 1) / 1024 + 1;
+	stbuf->st_size =  inode.size;
+	stbuf->st_blocks = inode.size ? ((inode.size - 1) / 1024 + 1):0;
 	stbuf->st_blksize = 1024;
 	//stbuf->st_flags =
 	//stbuf->st_gen =
@@ -1384,7 +1450,6 @@ int Client::open(const char *path, int mode)
 	f->inode = inode_map[trace[trace.size()-1]->inode.ino];
 	assert(f->inode);
 	f->inode->get();
-	f->inode->file_mds = MSG_ADDR_NUM(reply->get_source());
 
 	if (cmode & FILE_MODE_R) 	
 	  f->inode->num_rd++;
@@ -1392,24 +1457,25 @@ int Client::open(const char *path, int mode)
 	  f->inode->num_wr++;
 
 	// caps included?
-	assert(reply->get_file_caps_seq() >= f->inode->file_caps_seq);
-	if (reply->get_file_caps_seq() > f->inode->file_caps_seq) {   
+	int mds = MSG_ADDR_NUM(reply->get_source());
+
+	if (f->inode->caps.empty()) // first caps?
+	  f->inode->get();
+
+	assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
+	if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
 	  dout(7) << "open got caps " << cap_string(reply->get_file_caps()) << " seq " << reply->get_file_caps_seq() << endl;
 
-	  // first ones?
-	  if (f->inode->file_caps_seq == 0)
-		f->inode->get();
-	  
-	  int old_caps = f->inode->file_caps;
-	  f->inode->file_caps = reply->get_file_caps();
-	  f->inode->file_caps_seq = reply->get_file_caps_seq();
+	  int old_caps = f->inode->caps[mds].caps;
+	  f->inode->caps[mds].caps = reply->get_file_caps();
+	  f->inode->caps[mds].seq = reply->get_file_caps_seq();
 
 	  // ack if we lost any caps
-	  if (old_caps & ~f->inode->file_caps) { 
-		dout(5) << " we lost caps " << cap_string(old_caps & ~f->inode->file_caps) << ", acking" << endl;
+	  if (old_caps & ~f->inode->caps[mds].caps) { 
+		dout(5) << " we lost caps " << cap_string(old_caps & ~f->inode->caps[mds].caps) << ", acking" << endl;
 		messenger->send_message(new MClientFileCaps(f->inode->inode, 
-													f->inode->file_caps_seq,
-													f->inode->file_caps,
+													f->inode->caps[mds].seq,
+													f->inode->caps[mds].caps,
 													f->inode->file_caps_wanted(),
 													whoami), 
 								reply->get_source(), reply->get_source_port());
@@ -1421,7 +1487,7 @@ int Client::open(const char *path, int mode)
 	assert(fh_map.count(fh) == 0);
 	fh_map[fh] = f;
 	
-	dout(3) << "open success, fh is " << fh << " caps " << f->inode->file_caps << endl;//f->caps << "  fh size " << f->size << endl;
+	dout(3) << "open success, fh is " << fh << " combined caps " << cap_string(f->inode->file_caps()) << endl;
   }
 
   delete reply;
@@ -1539,7 +1605,7 @@ public:
 };
 
 
-int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset) 
+int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 
 {
   client_lock->Lock();
 
@@ -1555,7 +1621,7 @@ int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset)
   Inode *in = f->inode;
   
   // do we have read file cap?
-  while (in->file_caps & CAP_FILE_RD == 0) {
+  while ((in->file_caps() & CAP_FILE_RD) == 0) {
 	dout(7) << " don't have read cap, waiting" << endl;
 	Cond cond;
 	in->waitfor_read.push_back(&cond);
@@ -1565,11 +1631,11 @@ int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset)
   
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
-  if (in->file_caps & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE)) {
+  if (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE)) {
 	// we're doing buffered i/o.  make sure we're inside the file.
 	// we can trust size info bc we get accurate info when buffering/caching caps are issued.
 	dout(10) << "file size: " << in->inode.size << endl;
-	if (offset > 0 && (unsigned long long)offset >= in->inode.size) {
+	if (offset > 0 && offset >= in->inode.size) {
 	  client_lock->Unlock();
 	  return 0;
 	}
@@ -1603,10 +1669,10 @@ int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset)
 	// buffer cache ON
 
 	// map buffercache 
-	map<long long, Bufferhead*> hits, rx, tx, hits_tx;
-	map<long long, Bufferhead*>::iterator it;
-	map<long long, unsigned long long> holes;
-	map<long long, unsigned long long>::iterator hole;
+	map<off_t, Bufferhead*> hits, rx, tx, hits_tx;
+	map<off_t, Bufferhead*>::iterator it;
+	map<off_t, off_t> holes;
+	map<off_t, off_t>::iterator hole;
 	
 	Filecache *fc = bc->get_fc(in);
 	hits.clear(); rx.clear(); tx.clear(); holes.clear();
@@ -1618,18 +1684,18 @@ int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset)
 	if ((rvalue = (int)bc->touch_continuous(hits_tx, size, offset)) > 0) {
 	  // sweet -- we can return stuff immediately
 	  dout(6) << "read bc hit on clean, dirty, or tx  buffer, rvalue: " << rvalue << endl;
-	  rvalue = fc->copy_out((unsigned long long)rvalue, offset, buf);
+	  rvalue = fc->copy_out(rvalue, offset, buf);
 	  dout(6) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
 	  assert(rvalue > 0);
 	}
-	assert(!(rvalue >= 0 && (unsigned long long)rvalue == size) || holes.empty());
+	assert(!(rvalue >= 0 && rvalue == size) || holes.empty());
 	
 	// issue reads for holes
 	int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
 	for (hole = holes.begin(); hole != holes.end(); hole++) {
 	  dout(6) << "read bc miss" << endl;
-	  long long hole_offset = hole->first;
-	  unsigned long long hole_size = hole->second;
+	  off_t hole_offset = hole->first;
+	  off_t hole_size = hole->second;
 	  
 	  // either get "hole" bufferhead or insert new bufferhead without
 	  // allocated buffers (Filer::handle_osd_read_reply allocates them)
@@ -1653,7 +1719,7 @@ int Client::read(fh_t fh, char *buf, unsigned long long size, long long offset)
 	if (rvalue == 0) {
 	  // we need to wait for the first buffer
 	  dout(7) << "read bc miss: waiting for first buffer" << endl;
-	  map<long long, Bufferhead*>::iterator it = fc->get_buf(offset);
+	  map<off_t, Bufferhead*>::iterator it = fc->get_buf(offset);
 	  assert(it != fc->buffer_map.end());
 	  Bufferhead *bh = it->second;
 #if 0
@@ -1713,7 +1779,7 @@ public:
 };
 
 
-int Client::write(fh_t fh, const char *buf, unsigned long long size, long long offset) 
+int Client::write(fh_t fh, const char *buf, off_t size, off_t offset) 
 {
   client_lock->Lock();
 
@@ -1733,7 +1799,7 @@ int Client::write(fh_t fh, const char *buf, unsigned long long size, long long o
 
 
   // do we have write file cap?
-  while (in->file_caps & CAP_FILE_WR == 0) {
+  while ((in->file_caps() & CAP_FILE_WR) == 0) {
 	dout(7) << " don't have write cap, waiting" << endl;
 	Cond cond;
 	in->waitfor_write.push_back(&cond);
@@ -1742,12 +1808,12 @@ int Client::write(fh_t fh, const char *buf, unsigned long long size, long long o
 
 
   if (g_conf.client_bcache &&	        // buffer cache ON?
-	  in->file_caps & CAP_FILE_WRBUFFER) {   // caps buffered write?
+	  (in->file_caps() & CAP_FILE_WRBUFFER)) {   // caps buffered write?
 	// buffered write
 	dout(7) << "buffered/async write" << endl;
 	
 	// map buffercache for writing
-	map<long long, Bufferhead*> buffers, rx, tx;
+	map<off_t, Bufferhead*> buffers, rx, tx;
 	buffers.clear(); rx.clear(); tx.clear();
 	bc->map_or_alloc(in, size, offset, buffers, rx, tx); 
 	
@@ -1809,10 +1875,10 @@ int Client::write(fh_t fh, const char *buf, unsigned long long size, long long o
 
 
   // assume success for now.  FIXME.
-  unsigned long long totalwritten = size;
+  off_t totalwritten = size;
   
   // extend file?
-  if (totalwritten + (unsigned long long)offset > in->inode.size) {
+  if (totalwritten + offset > in->inode.size) {
 	in->inode.size = in->file_wr_size = totalwritten + offset;
 	dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << endl;
   } else {
@@ -1828,7 +1894,7 @@ int Client::write(fh_t fh, const char *buf, unsigned long long size, long long o
 }
 
 
-int Client::truncate(const char *file, unsigned long long size) 
+int Client::truncate(const char *file, off_t size) 
 {
   client_lock->Lock();
   dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;
@@ -1879,7 +1945,7 @@ int Client::fsync(fh_t fh, bool syncdataonly)
   fc->wait_for_inflight(client_lock);
 
   if (syncdataonly &&
-	  (in->file_caps & CAP_FILE_WR)) {
+	  (in->file_caps() & CAP_FILE_WR)) {
 	// flush metadata too.. size, mtime
 	// ...
   }

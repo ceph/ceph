@@ -385,17 +385,33 @@ class CInode : LRUObject {
 	  return &client_caps[client];
 	return 0;
   }
+  /*
   void set_client_caps(map<int,Capability>& cl) {
 	if (client_caps.empty() && !cl.empty())
 	  get(CINODE_PIN_CAPS);
 	client_caps.clear();
 	client_caps = cl;
   }
+  */
   void take_client_caps(map<int,Capability>& cl) {
 	if (!client_caps.empty())
 	  put(CINODE_PIN_CAPS);
 	cl = client_caps;
 	client_caps.clear();
+  }
+  void merge_client_caps(map<int,Capability>& cl, set<int>& new_client_caps) {
+	for (map<int,Capability>::iterator it = cl.begin();
+		 it != cl.end();
+		 it++) {
+	  new_client_caps.insert(it->first);
+	  if (client_caps.count(it->first)) {
+		// merge
+		client_caps[it->first].merge(it->second);
+	  } else {
+		// new
+		client_caps[it->first] = it->second;
+	  }
+	}	  
   }
 
   // caps issued, wanted
@@ -650,7 +666,7 @@ public:
   
   inodeno_t get_ino() { return st.inode.ino; }
 
-  void update_inode(CInode *in) {
+  void update_inode(CInode *in, set<int>& new_client_caps) {
 	in->inode = st.inode;
 
 	in->version = st.version;
@@ -674,7 +690,7 @@ public:
 	in->filelock = filelock;
 
 	// caps
-	in->set_client_caps(cap_map);
+	in->merge_client_caps(cap_map, new_client_caps);
   }
 
   void _encode(bufferlist& bl) {
