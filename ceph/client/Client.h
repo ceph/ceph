@@ -214,12 +214,14 @@ class Client : public Dispatcher {
  protected:
   Messenger *messenger;  
   int whoami;
-  bool all_files_closed;
   
   // cluster descriptors
   //MDCluster             *mdcluster; 
   OSDMap                *osdmap;
-  bool mounted;
+
+  bool   mounted;
+  bool   unmounting;
+  Cond   unmount_cond;  
   
   Filer                 *filer;  // (non-blocking) osd interface
   
@@ -246,11 +248,10 @@ class Client : public Dispatcher {
   }
 
 
-  // global (client) lock
-  Mutex                  *client_lock;
+  // global client lock
+  //  - protects Client and buffer cache both!
+  Mutex                  client_lock;
 
-  // global semaphore/mutex protecting cache+fh structures
-  // ??
 
   // -- metadata cache stuff
 
@@ -353,7 +354,7 @@ class Client : public Dispatcher {
   MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
 
   
-  // buffer cache
+  // -- buffer cache --
   class Buffercache *bc;
   
   void flush_buffers(int ttl, off_t dirty_size);     // flush dirty buffers
@@ -362,6 +363,8 @@ class Client : public Dispatcher {
   void release_inode_buffers(Inode *in);   // release cached reads
   void tear_down_bcache();
 		
+
+  // friends
   friend class SyntheticClient;
 
  public:

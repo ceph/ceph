@@ -44,11 +44,9 @@ Client::Client(Messenger *m)
   whoami = MSG_ADDR_NUM(m->get_myaddr());
 
   mounted = false;
-
-  client_lock = new Mutex();
+  unmounting = false;
 
   // 
-  all_files_closed = false;
   root = 0;
 
   set_cache_size(g_conf.client_cache_size);
@@ -103,15 +101,13 @@ void Client::tear_down_cache()
   }
   fh_map.clear();
 
+  // caps!
+  // *** FIXME ***
+
   // empty lru
   lru.lru_set_max(0);
-  unsigned last = 0;
-  while (lru.lru_get_size() != last) {
-	last = lru.lru_get_size();
-	dout(10) << "trim pass, size is " << last << endl;
-	//dump_cache();
-	trim_cache();
-  }
+  trim_cache();
+  assert(lru.lru_get_size() == 0);
 
   // close root ino
   assert(inode_map.size() <= 1);
@@ -181,10 +177,16 @@ void Client::shutdown() {
 
 void Client::trim_cache()
 {
-  while (lru.lru_get_size() > lru.lru_get_max()) {
+  unsigned last = 0;
+  while (lru.lru_get_size() != last) {
+	last = lru.lru_get_size();
+
+	if (lru.lru_get_size() <= lru.lru_get_max())  break;
+
+	// trim!
 	Dentry *dn = (Dentry*)lru.lru_expire();
 	if (!dn) break;  // done
-
+	
 	//dout(10) << "unlinking dn " << dn->name << " in dir " << dn->dir->inode->inode.ino << endl;
 	unlink(dn);
   }
@@ -392,7 +394,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   if (use_mds >= 0) mds = use_mds;
 
   // drop mutex for duration of call
-  client_lock->Unlock();  
+  client_lock.Unlock();  
   utime_t start = g_clock.now();
 
   
@@ -424,7 +426,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 	}
   }
 
-  client_lock->Lock();  
+  client_lock.Lock();  
   return reply;
 }
 
@@ -435,7 +437,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 
 void Client::dispatch(Message *m)
 {
-  client_lock->Lock();
+  client_lock.Lock();
 
   switch (m->get_type()) {
 	// osd
@@ -459,7 +461,21 @@ void Client::dispatch(Message *m)
 	break;
   }
 
-  client_lock->Unlock();
+  // unmounting?
+  if (unmounting) {
+	dout(10) << "unmounting: trim pass, size was " << lru.lru_get_size() 
+			 << "+" << inode_map.size() << endl;
+	trim_cache();
+	if (lru.lru_get_size() == 0 && inode_map.empty()) {
+	  dout(10) << "unmounting: trim pass, cache now empty, waking unmount()" << endl;
+	  unmount_cond.Signal();
+	} else {
+	  dout(10) << "unmounting: trim pass, size still " << lru.lru_get_size() 
+			   << "+" << inode_map.size() << endl;
+	}
+  }
+
+  client_lock.Unlock();
 }
 
 /*
@@ -485,7 +501,7 @@ void Client::flush_inode_buffers(Inode *in)
     dout(7) << "inflight buffers of sync write, waiting" << endl;
     Cond cond;
     in->waitfor_flushed.push_back(&cond);
-    cond.Wait(*client_lock);
+    cond.Wait(client_lock);
     assert(in->inflight_buffers.empty());
     dout(7) << "inflight buffers flushed" << endl;
   } 
@@ -629,7 +645,6 @@ void Client::release_inode_buffers(Inode *in)
  * caps
  */
 
-
 void Client::handle_file_caps(MClientFileCaps *m)
 {
   int mds = MSG_ADDR_NUM(m->get_source());
@@ -708,7 +723,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	return;
   }
 
-  /*
+  /* no ooo messages yet!
   if (m->get_seq() <= in->file_caps_seq) {
 	assert(0); // no ooo support yet
 	dout(5) << "handle_file_caps on ino " << m->get_ino() << " old seq " << m->get_seq() << " <= " << in->file_caps_seq << endl;
@@ -726,19 +741,29 @@ void Client::handle_file_caps(MClientFileCaps *m)
   in->caps[mds].seq = m->get_seq();
   dout(5) << "handle_file_caps on in " << m->get_ino() << " seq " << m->get_seq() << " caps now " << cap_string(new_caps) << " was " << cap_string(old_caps) << endl;
   
+  // did file size decrease?
+  if ((old_caps & new_caps & CAP_FILE_RDCACHE) &&
+	  in->inode.size > m->get_inode().size) {
+	// must have been a truncate() by someone.
+	// trim the buffer cache
+	// ***** write me ****
+  }
+
   // update inode
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
-  
+
   // flush buffers?
   if (in->file_caps() & CAP_FILE_WRBUFFER == 0) {
 	flush_inode_buffers(in); 
 	Filecache *fc = bc->get_fc(in);
 	fc->wait_for_inflight(client_lock);       // FIXME: this isn't actually allowed to block is it?!?
-  }
+  } 
 
-  // release buffers?
-  if (new_caps & CAP_FILE_RDCACHE == 0)
+  // release all buffers?
+  if ((old_caps & CAP_FILE_RDCACHE) &&
+	  !(new_caps & CAP_FILE_RDCACHE))
 	release_inode_buffers(in);
+
   
   // ack?
   if (old_caps & ~new_caps) {
@@ -826,7 +851,7 @@ void Client::update_caps_wanted(Inode *in)
 
 int Client::mount(int mkfs)
 {
-  client_lock->Lock();
+  client_lock.Lock();
 
   assert(!mounted);  // caller is confused?
 
@@ -834,9 +859,9 @@ int Client::mount(int mkfs)
   MClientMount *m = new MClientMount();
   if (mkfs) m->set_mkfs(mkfs);
 
-  client_lock->Unlock();
+  client_lock.Unlock();
   MClientMountAck *reply = (MClientMountAck*)messenger->sendrecv(m, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
-  client_lock->Lock();
+  client_lock.Lock();
   assert(reply);
 
   // we got osdmap!
@@ -847,7 +872,7 @@ int Client::mount(int mkfs)
 
   delete reply;
 
-  client_lock->Unlock();
+  client_lock.Unlock();
 
   /*
   dout(3) << "op: // client trace data structs" << endl;
@@ -864,31 +889,44 @@ int Client::mount(int mkfs)
 
 int Client::unmount()
 {
-  client_lock->Lock();
+  client_lock.Lock();
 
   assert(mounted);  // caller is confused?
 
   dout(2) << "unmounting" << endl;
+  unmounting = true;
 
   // make sure all buffers are clean
+  dout(3) << "flushing buffers" << endl;
   flush_buffers(0, 0);
-  dout(3) << "flush_buffers: dirty buffers, waiting" << endl;
-  if(!bc->inflight_buffers.empty()) {
+  if (!bc->inflight_buffers.empty()) {
     dout(3) << "flush_buffers: dirty buffers, waiting" << endl;
     bc->wait_for_inflight(client_lock);
   }
 
+  // empty lru cache
+  lru.lru_set_max(0);
+  trim_cache();
+
+  if (lru.lru_get_size() > 0 || !inode_map.empty()) {
+	dout(3) << "cache still has " << lru.lru_get_size() << "+" << inode_map.size() << " items, waiting (presumably for caps to be released?)" << endl;
+	unmount_cond.Wait(client_lock);
+  }
+  assert(lru.lru_get_size() == 0);
+  assert(inode_map.empty());
+  
+  // send unmount!
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
-  client_lock->Unlock();
+  client_lock.Unlock();
   Message *reply = messenger->sendrecv(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
-  client_lock->Lock();
+  client_lock.Lock();
   assert(reply);
   mounted = false;
   dout(2) << "unmounted" << endl;
 
   delete reply;
 
-  client_lock->Unlock();
+  client_lock.Unlock();
   return 0;
 }
 
@@ -898,7 +936,7 @@ int Client::unmount()
 
 int Client::link(const char *existing, const char *newname) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->link(\"" << existing << "\", \"" << newname << "\");" << endl;
   tout << "link" << endl;
   tout << existing << endl;
@@ -925,14 +963,14 @@ int Client::link(const char *existing, const char *newname)
   dout(10) << "link result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 
 int Client::unlink(const char *path)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->unlink\(\"" << path << "\");" << endl;
   tout << "unlink" << endl;
   tout << path << endl;
@@ -963,13 +1001,13 @@ int Client::unlink(const char *path)
   dout(10) << "unlink result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 int Client::rename(const char *from, const char *to)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->rename(\"" << from << "\", \"" << to << "\");" << endl;
   tout << "rename" << endl;
   tout << from << endl;
@@ -993,7 +1031,7 @@ int Client::rename(const char *from, const char *to)
   dout(10) << "rename result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
@@ -1001,7 +1039,7 @@ int Client::rename(const char *from, const char *to)
 
 int Client::mkdir(const char *path, mode_t mode)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->mkdir(\"" << path << "\", " << mode << ");" << endl;
   tout << "mkdir" << endl;
   tout << path << endl;
@@ -1025,13 +1063,13 @@ int Client::mkdir(const char *path, mode_t mode)
   dout(10) << "mkdir result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 int Client::rmdir(const char *path)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->rmdir(\"" << path << "\");" << endl;
   tout << "rmdir" << endl;
   tout << path << endl;
@@ -1063,7 +1101,7 @@ int Client::rmdir(const char *path)
   dout(10) << "rmdir result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
@@ -1071,7 +1109,7 @@ int Client::rmdir(const char *path)
   
 int Client::symlink(const char *target, const char *link)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->symlink(\"" << target << "\", \"" << link << "\");" << endl;
   tout << "symlink" << endl;
   tout << target << endl;
@@ -1095,24 +1133,24 @@ int Client::symlink(const char *target, const char *link)
   dout(10) << "symlink result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 int Client::readlink(const char *path, char *buf, off_t size) 
 { 
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->readlink(\"" << path << "\", readlinkbuf, readlinkbuf_len);" << endl;
   tout << "readlink" << endl;
   tout << path << endl;
-  client_lock->Unlock();
+  client_lock.Unlock();
 
   // stat first  (FIXME, PERF access cache directly) ****
   struct stat stbuf;
   int r = this->lstat(path, &stbuf);
   if (r != 0) return r;
 
-  client_lock->Lock();
+  client_lock.Lock();
 
   // pull symlink content from cache
   Inode *in = inode_map[stbuf.st_ino];
@@ -1124,7 +1162,7 @@ int Client::readlink(const char *path, char *buf, off_t size)
   memcpy(buf, in->symlink->c_str(), res);
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;  // return length in bytes (to mimic the system call)
 }
 
@@ -1134,7 +1172,7 @@ int Client::readlink(const char *path, char *buf, off_t size)
 
 int Client::lstat(const char *path, struct stat *stbuf)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->lstat(\"" << path << "\", &st);" << endl;
   tout << "lstat" << endl;
   tout << path << endl;
@@ -1195,7 +1233,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
   }
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
@@ -1203,7 +1241,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
 
 int Client::chmod(const char *path, mode_t mode)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->chmod(\"" << path << "\", " << mode << ");" << endl;
   tout << "chmod" << endl;
   tout << path << endl;
@@ -1225,13 +1263,13 @@ int Client::chmod(const char *path, mode_t mode)
   dout(10) << "chmod result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 int Client::chown(const char *path, uid_t uid, gid_t gid)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->chown(\"" << path << "\", " << uid << ", " << gid << ");" << endl;
   tout << "chown" << endl;
   tout << path << endl;
@@ -1257,13 +1295,13 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
   dout(10) << "chown result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 int Client::utime(const char *path, struct utimbuf *buf)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: utim.actime = " << buf->actime << "; utim.modtime = " << buf->modtime << ";" << endl;
   dout(3) << "op: client->utime(\"" << path << "\", &utim);" << endl;
   tout << "utime" << endl;
@@ -1290,7 +1328,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
   dout(10) << "utime result is " << res << endl;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
@@ -1298,7 +1336,7 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
 int Client::mknod(const char *path, mode_t mode) 
 { 
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->mknod(\"" << path << "\", " << mode << ");" << endl;
   tout << "mknod" << endl;
   tout << path << endl;
@@ -1324,7 +1362,7 @@ int Client::mknod(const char *path, mode_t mode)
   delete reply;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
@@ -1340,7 +1378,7 @@ int Client::mknod(const char *path, mode_t mode)
 
 int Client::getdir(const char *path, map<string,inode_t*>& contents) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->getdir(\"" << path << "\", dir_contents);" << endl;
   tout << "getdir" << endl;
   tout << path << endl;
@@ -1391,7 +1429,7 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 
   delete reply;     //fix thing above first
 
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
@@ -1402,7 +1440,7 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 
 int Client::open(const char *path, int mode) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: fh = client->open(\"" << path << "\", " << mode << ");" << endl;
   tout << "open" << endl;
   tout << path << endl;
@@ -1451,10 +1489,8 @@ int Client::open(const char *path, int mode)
 	assert(f->inode);
 	f->inode->get();
 
-	if (cmode & FILE_MODE_R) 	
-	  f->inode->num_rd++;
-	if (cmode & FILE_MODE_W)
-	  f->inode->num_wr++;
+	if (cmode & FILE_MODE_R) f->inode->num_rd++;
+	if (cmode & FILE_MODE_W) f->inode->num_wr++;
 
 	// caps included?
 	int mds = MSG_ADDR_NUM(reply->get_source());
@@ -1470,8 +1506,12 @@ int Client::open(const char *path, int mode)
 	  f->inode->caps[mds].caps = reply->get_file_caps();
 	  f->inode->caps[mds].seq = reply->get_file_caps_seq();
 
+	  // we shouldn't ever lose caps at this point.
+	  assert((old_caps & ~f->inode->caps[mds].caps) == 0);
+	  /*
 	  // ack if we lost any caps
 	  if (old_caps & ~f->inode->caps[mds].caps) { 
+		assert(0);  // this shouldn't happen?
 		dout(5) << " we lost caps " << cap_string(old_caps & ~f->inode->caps[mds].caps) << ", acking" << endl;
 		messenger->send_message(new MClientFileCaps(f->inode->inode, 
 													f->inode->caps[mds].seq,
@@ -1480,6 +1520,7 @@ int Client::open(const char *path, int mode)
 													whoami), 
 								reply->get_source(), reply->get_source_port());
 	  }
+	  */
 	}
 	
 	// put in map
@@ -1493,14 +1534,14 @@ int Client::open(const char *path, int mode)
   delete reply;
 
   trim_cache();
-  client_lock->Unlock();
+  client_lock.Unlock();
 
   return result;
 }
 
 int Client::close(fh_t fh)
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->close(open_files[ " << fh << " ]);" << endl;
   dout(3) << "op: open_files.erase( " << fh << " );" << endl;
   tout << "close" << endl;
@@ -1550,7 +1591,7 @@ int Client::close(fh_t fh)
   put_inode( in );
   int result = 0;
 
-  client_lock->Unlock();
+  client_lock.Unlock();
   return result;
 }
 
@@ -1607,7 +1648,7 @@ public:
 
 int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
 
   dout(3) << "op: client->read(" << fh << ", buf, " << size << ", " << offset << ");" << endl;
   tout << "read" << endl;
@@ -1625,7 +1666,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	dout(7) << " don't have read cap, waiting" << endl;
 	Cond cond;
 	in->waitfor_read.push_back(&cond);
-	cond.Wait(*client_lock);
+	cond.Wait(client_lock);
   }
   
   
@@ -1636,14 +1677,14 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	// we can trust size info bc we get accurate info when buffering/caching caps are issued.
 	dout(10) << "file size: " << in->inode.size << endl;
 	if (offset > 0 && offset >= in->inode.size) {
-	  client_lock->Unlock();
+	  client_lock.Unlock();
 	  return 0;
 	}
 	if (offset + size > (unsigned)in->inode.size) size = (unsigned)in->inode.size - offset;
 	
 	if (size == 0) {
 	  dout(10) << "read is size=0, returning 0" << endl;
-	  client_lock->Unlock();
+	  client_lock.Unlock();
 	  return 0;
 	}
   } else {
@@ -1657,10 +1698,10 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	// buffer cache OFF
     Cond cond;
     bufferlist blist;   // data will go here
-
-    C_Client_Cond *onfinish = new C_Client_Cond(&cond, client_lock, &rvalue);
+	
+    C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
     filer->read(in->inode, size, offset, &blist, onfinish);
-    cond.Wait(*client_lock);
+    cond.Wait(client_lock);
 
     // copy data into caller's buf
     blist.copy(0, blist.length(), buf);
@@ -1711,7 +1752,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	  // read into the buffercache: when finished transition state from
 	  // rx to clean
 	  bh->miss_start(hole_size);
-	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, client_lock, &hole_rvalue);	
+	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
 	  filer->read(in->inode, hole_size, hole_offset, &(bh->bl), onfinish);
 	  dout(6) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
 	}
@@ -1749,7 +1790,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   }
 
   // done!
-  client_lock->Unlock();
+  client_lock.Unlock();
   return rvalue;
 }
 
@@ -1781,7 +1822,7 @@ public:
 
 int Client::write(fh_t fh, const char *buf, off_t size, off_t offset) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
 
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << endl;
   dout(3) << "op: client->write(" << fh << ", buf, " << size << ", " << offset << ");" << endl;
@@ -1803,7 +1844,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	dout(7) << " don't have write cap, waiting" << endl;
 	Cond cond;
 	in->waitfor_write.push_back(&cond);
-	cond.Wait(*client_lock);
+	cond.Wait(client_lock);
   }
 
 
@@ -1864,11 +1905,11 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  Cond cond;
 	  int rvalue;
 	  
-	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, client_lock, &rvalue);
+	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
 	  filer->write(in->inode, size, offset, blist, 0, 
 				   NULL, onfinish); // safe
 	  
-	  cond.Wait(*client_lock);
+	  cond.Wait(client_lock);
 	}
   }
 
@@ -1889,14 +1930,14 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   in->file_wr_mtime = in->inode.mtime = g_clock.gettime();
 
   // ok!
-  client_lock->Unlock();
+  client_lock.Unlock();
   return totalwritten;  
 }
 
 
 int Client::truncate(const char *file, off_t size) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->truncate(\"" << file << "\", " << size << ");" << endl;
   tout << "truncate" << endl;
   tout << file << endl;
@@ -1918,14 +1959,14 @@ int Client::truncate(const char *file, off_t size)
 
   dout(10) << " truncate result is " << res << endl;
 
-  client_lock->Unlock();
+  client_lock.Unlock();
   return res;
 }
 
 
 int Client::fsync(fh_t fh, bool syncdataonly) 
 {
-  client_lock->Lock();
+  client_lock.Lock();
   dout(3) << "op: client->fsync(open_files[ " << fh << " ], " << syncdataonly << ");" << endl;
   tout << "fsync" << endl;
   tout << fh << endl;
@@ -1950,7 +1991,7 @@ int Client::fsync(fh_t fh, bool syncdataonly)
 	// ...
   }
 
-  client_lock->Unlock();
+  client_lock.Unlock();
   return r;
 }
 

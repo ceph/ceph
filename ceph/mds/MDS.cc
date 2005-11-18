@@ -232,7 +232,8 @@ void MDS::handle_shutdown_start(Message *m)
   mdcache->shutdown_start();
   
   // save anchor table
-  anchormgr->save(0);  // FIXME FIXME
+  if (whoami == 0)
+	anchormgr->save(0);  // FIXME FIXME
 
   // flush log
   mdlog->set_max_events(0);
@@ -243,6 +244,8 @@ void MDS::handle_shutdown_start(Message *m)
 
 void MDS::handle_shutdown_finish(Message *m)
 {
+  assert(whoami == 0);
+
   int mds = whoami;
   if (m) 
 	mds = m->get_source();
@@ -254,12 +257,11 @@ void MDS::handle_shutdown_finish(Message *m)
   if (did_shut_down.size() == (unsigned)mdcluster->get_num_mds()) {
 	// MDS's all ready to shut down!
 
-	/*
 	for (int i=1; i<g_conf.num_mds; i++) {
 	  dout(1) << "sending shutdown to mds" << i << endl;
 	  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
 							  MSG_ADDR_MDS(i), 0, 0);
-							  }*/
+	}
 
 	// shut down osd's
 	for (int i=0; i<g_conf.num_osd; i++) {
@@ -270,11 +272,20 @@ void MDS::handle_shutdown_finish(Message *m)
 
 	// shut myself down.
 	shutting_down = false;
+	shut_down = true;
 
 	shutdown_final();
   }
 
   // done
+  delete m;
+}
+
+void MDS::handle_shutdown(Message *m)
+{
+  dout(1) << "handle_shutdown" << endl;
+  assert(whoami > 0);
+  shutdown_final();
   delete m;
 }
 
@@ -286,7 +297,7 @@ int MDS::shutdown_final()
 
   // shut down cache
   mdcache->shutdown();
-  
+
   // shut down messenger
   messenger->shutdown();
 
@@ -370,13 +381,17 @@ void MDS::proc_message(Message *m)
 	return;
 
 	// MDS
-  case MSG_MDS_SHUTDOWNSTART:
+  case MSG_MDS_SHUTDOWNSTART:    // mds0 -> mds1+
 	handle_shutdown_start(m);
 	return;
-
-  case MSG_MDS_SHUTDOWNFINISH:
+  case MSG_MDS_SHUTDOWNFINISH:   // mds1+ -> mds0
 	handle_shutdown_finish(m);
 	return;
+  case MSG_SHUTDOWN:         // mds0 -> mds1+ (finally do it)
+	handle_shutdown(m);
+	return;
+
+
 
   case MSG_PING:
 	handle_ping((MPing*)m);
@@ -604,7 +619,6 @@ void MDS::my_dispatch(Message *m)
 	  dout(7) << "shutdown_pass=true, finished w/ shutdown" << endl;
 	  shutting_down = false;
 	  shut_down = true;
-	  if (whoami) shutdown_final();
 	}
   }
 

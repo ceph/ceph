@@ -187,6 +187,7 @@ class MDS : public Dispatcher {
 
   void handle_shutdown_start(Message *m);
   void handle_shutdown_finish(Message *m);
+  void handle_shutdown(Message *m);
 
   // osds
   void handle_osd_getmap(Message *m);

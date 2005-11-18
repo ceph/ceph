@@ -467,7 +467,7 @@ bool MDCache::trim(int max) {
 
   map<int, MCacheExpire*> expiremap;
 
-  dout(7) << "trim" << endl;
+  dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << endl;
   assert(expiremap.empty());
 
   while (lru.lru_get_size() > (unsigned)max) {

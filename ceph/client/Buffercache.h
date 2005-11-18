@@ -79,20 +79,20 @@ class Bufferhead : public LRUObject {
    * put Cond on local stack, block until woken up.
    * _caller_ pins to avoid any race weirdness
    */
-  void wait_for_read(Mutex *lock) {
+  void wait_for_read(Mutex& lock) {
 	assert(state == BUFHD_STATE_RX || state == BUFHD_STATE_TX);
 	Cond cond;
 	get();
 	read_waiters.push_back(&cond);
-	cond.Wait(*lock);
+	cond.Wait(lock);
 	put();
   }
-  void wait_for_write(Mutex *lock) {
+  void wait_for_write(Mutex& lock) {
 	assert(state == BUFHD_STATE_RX || state == BUFHD_STATE_TX);
 	Cond cond;
 	get();
 	write_waiters.push_back(&cond);
-	cond.Wait(*lock);
+	cond.Wait(lock);
 	put();
   }
   
@@ -232,10 +232,10 @@ class Filecache {
 
   void splice(off_t offset, off_t size);
 
-  void wait_for_inflight(Mutex *lock) {
+  void wait_for_inflight(Mutex& lock) {
 	Cond cond;
 	inflight_waiters.push_back(&cond);
-	cond.Wait(*lock);
+	cond.Wait(lock);
   }
 
   void wakeup_inflight_waiters() {
@@ -294,10 +294,10 @@ class Buffercache {
     return bcache_map[inode->ino()];
   }
       
-  void wait_for_inflight(Mutex *lock) {
+  void wait_for_inflight(Mutex& lock) {
 	Cond cond;
 	inflight_waiters.push_back(&cond);
-	cond.Wait(*lock);
+	cond.Wait(lock);
   }
 
   void wakeup_inflight_waiters() {
