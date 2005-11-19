@@ -384,6 +384,7 @@ class Client : public Dispatcher {
   void handle_file_caps(class MClientFileCaps *m);
   void release_caps(Inode *in, int retain=0);
   void update_caps_wanted(Inode *in);
+  void finish_flush(Inode *in);
 
   // metadata cache
   Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);

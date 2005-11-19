@@ -2,15 +2,6 @@ client
 - some heuristic behavior to consolidate caps to inode auth
 - client will re-tx anything it needed to say upon rx of new mds notification
 
-mds
-/- fold imported caps into existing caps
-/ - new auth sends notify
-/- old auth _drops_ stray Caps msgs
-
-
-
-???
-- open -> export -> caps update race potential... 
 
 
 

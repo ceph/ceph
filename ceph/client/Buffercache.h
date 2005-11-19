@@ -189,6 +189,7 @@ inline ostream& operator<<(ostream& out, Dirtybuffers& db) {
 class Filecache {
  private:
   list<Cond*> inflight_waiters;
+  list<Context*> inflight_waiter_callbacks;
 
  public: 
   class Inode *inode;
@@ -226,7 +227,11 @@ class Filecache {
     }
     return len;
   }
-#endif
+#endif 
+
+  bool is_dirty() { return !dirty_buffers.empty(); }
+  bool is_inflight() { return !inflight_buffers.empty(); }
+  bool is_flushed() { return !is_dirty() && !is_inflight(); }
 
   void insert(off_t offset, Bufferhead* bh);
 
@@ -237,8 +242,17 @@ class Filecache {
 	inflight_waiters.push_back(&cond);
 	cond.Wait(lock);
   }
+  void add_inflight_waiter(Context *c) {
+	inflight_waiter_callbacks.push_back(c);
+  }
 
   void wakeup_inflight_waiters() {
+	// callbacks first
+	list<Context*> ls;
+	ls.splice(ls.begin(), inflight_waiter_callbacks);
+	finish_contexts(ls, 0);
+
+	// then threads
     for (list<Cond*>::iterator it = inflight_waiters.begin();
 		 it != inflight_waiters.end();
 		 it++) {

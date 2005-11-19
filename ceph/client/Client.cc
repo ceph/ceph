@@ -645,6 +645,16 @@ void Client::release_inode_buffers(Inode *in)
  * caps
  */
 
+class C_Client_Flushed : public Context {
+  Client *client;
+  Inode *in;
+public:
+  C_Client_Flushed(Client *c, Inode *i) : client(c), in(i) {}
+  void finish(int r) {
+	client->finish_flush(in);
+  }
+};
+
 void Client::handle_file_caps(MClientFileCaps *m)
 {
   int mds = MSG_ADDR_NUM(m->get_source());
@@ -753,18 +763,28 @@ void Client::handle_file_caps(MClientFileCaps *m)
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
 
   // flush buffers?
-  if (in->file_caps() & CAP_FILE_WRBUFFER == 0) {
-	flush_inode_buffers(in); 
+  if (!(in->file_caps() & CAP_FILE_WRBUFFER)) {
 	Filecache *fc = bc->get_fc(in);
-	fc->wait_for_inflight(client_lock);       // FIXME: this isn't actually allowed to block is it?!?
+	if (!fc->is_flushed()) {
+	  if (fc->is_dirty()) {
+		dout(4) << " dirty buffers, flushing+waiting to ack" << endl;
+		flush_inode_buffers(in); 
+	  } else {
+		dout(4) << " inflight buffers, waiting to ack" << endl;
+	  }
+	  
+	  in->get();
+	  fc->add_inflight_waiter(  new C_Client_Flushed(this, in) );
+	  delete m;
+	  return;
+	}
   } 
-
+  
   // release all buffers?
   if ((old_caps & CAP_FILE_RDCACHE) &&
 	  !(new_caps & CAP_FILE_RDCACHE))
 	release_inode_buffers(in);
 
-  
   // ack?
   if (old_caps & ~new_caps) {
 	dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
@@ -792,6 +812,31 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   delete m;
+}
+
+void Client::finish_flush(Inode *in)
+{
+  dout(5) << "finish_flush on ino " << in->ino() << endl;
+
+  Filecache *fc = bc->get_fc(in);
+  assert(!fc->is_dirty() &&
+		 !fc->is_inflight());
+
+  // release all buffers?
+  if (!(in->file_caps() & CAP_FILE_RDCACHE)) {
+	dout(5) << "flush_finish releasing all buffers on ino " << in->ino() << endl;
+	release_inode_buffers(in);
+  }
+  
+  if (in->num_rd == 0 && in->num_wr == 0) {
+	dout(5) << "flush_finish ino " << in->ino() << " releasing remaining caps (no readers/writers)" << endl;
+	release_caps(in);
+  } else {
+	dout(5) << "finish_flush ino " << in->ino() << " acking" << endl;
+	release_caps(in, in->file_caps() & ~CAP_FILE_WRBUFFER);   // send whatever we have
+  }
+
+  put_inode(in);
 }
 
 
@@ -1508,19 +1553,6 @@ int Client::open(const char *path, int mode)
 
 	  // we shouldn't ever lose caps at this point.
 	  assert((old_caps & ~f->inode->caps[mds].caps) == 0);
-	  /*
-	  // ack if we lost any caps
-	  if (old_caps & ~f->inode->caps[mds].caps) { 
-		assert(0);  // this shouldn't happen?
-		dout(5) << " we lost caps " << cap_string(old_caps & ~f->inode->caps[mds].caps) << ", acking" << endl;
-		messenger->send_message(new MClientFileCaps(f->inode->inode, 
-													f->inode->caps[mds].seq,
-													f->inode->caps[mds].caps,
-													f->inode->file_caps_wanted(),
-													whoami), 
-								reply->get_source(), reply->get_source_port());
-	  }
-	  */
 	}
 	
 	// put in map
@@ -1570,22 +1602,26 @@ int Client::close(fh_t fh)
 
   // release caps right away?
   dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
-  if (in->num_rd == 0 &&
-	  in->num_wr == 0) {
+  if (in->num_rd == 0 && in->num_wr == 0) {
+	Filecache *fc = bc->get_fc(in);
 
-	// FIXME THIS IS ALL WRONG!  
-	// this should happen _async_ when the buffers finally flush.. 
-	// _then_ release the caps, if they still need to be released
-	// also, retain read or write caps, if that's appropriate!!
+	// flush anything?
+	if (fc->is_dirty()) {
+	  dout(10) << "  flushing dirty buffers on " << in->ino() << endl;
+	  flush_inode_buffers(in);
+	}
 
-	// Make sure buffers are all clean!
-	//flush_inode_buffers(in);
-
-	// bad bad..
-	release_caps(in);
-
-	// ech
-	release_inode_buffers(in);
+	if (fc->is_dirty() || fc->is_inflight()) {
+	  // flushing.
+	  dout(10) << "  waiting for inflight buffers on " << in->ino() << endl;
+	  in->get();
+	  fc->add_inflight_waiter(  new C_Client_Flushed(this, in) );
+	} else {
+	  // all clean!
+	  dout(10) << "  releasing buffers and caps on " << in->ino() << endl;
+	  release_inode_buffers(in);  // free buffers
+	  release_caps(in);        	  // release caps now.
+	}
   }
 
   put_inode( in );
