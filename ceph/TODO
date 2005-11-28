@@ -3,6 +3,15 @@ client
 - client will re-tx anything it needed to say upon rx of new mds notification
 
 
+ofs
+- object map : object_t -> block_t
+- col map  : coll_t -> block_t
+- freelists : block_t -> block_t
+
+- objects
+- collections  set<object_t>
+
+
 
 
 cluster issues
