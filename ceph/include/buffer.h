@@ -14,7 +14,10 @@ using namespace std;
 #define BUFFER_MODE_NOFREE 0
 #define BUFFER_MODE_FREE   2
 
+#define BUFFER_MODE_CUSTOMFREE 4
+
 #define BUFFER_MODE_DEFAULT 3//(BUFFER_MODE_COPY|BUFFER_MODE_FREE)
+
 
 // debug crap
 #include "config.h"
@@ -39,6 +42,8 @@ using namespace std;
 extern Mutex bufferlock;
 extern long buffer_total_alloc;
 
+
+typedef void (buffer_free_func_t)(void*,char*);
 
 
 /*
@@ -69,15 +74,19 @@ class buffer {
 	assert(_ref > 0);
 	return --_ref;
   }
+
+  // custom (de!)allocator
+  buffer_free_func_t *free_func;
+  void *free_func_arg;
   
   friend class bufferptr;
 
  public:
   // constructors
-  buffer() : _dataptr(0), _myptr(true), _len(0), _alloc_len(0), _ref(0) { 
+  buffer() : _dataptr(0), _myptr(true), _len(0), _alloc_len(0), _ref(0), free_func(0), free_func_arg(0) { 
 	bdbout(1) << "buffer.cons " << *this << endl;
   }
-  buffer(unsigned a) : _dataptr(0), _myptr(true), _len(a), _alloc_len(a), _ref(0) {
+  buffer(unsigned a) : _dataptr(0), _myptr(true), _len(a), _alloc_len(a), _ref(0), free_func(0), free_func_arg(0) {
 	bdbout(1) << "buffer.cons " << *this << endl;
 	_dataptr = new char[a];
 	bufferlock.Lock();
@@ -87,18 +96,24 @@ class buffer {
   }
   ~buffer() {
 	bdbout(1) << "buffer.des " << *this << endl;
-	if (_dataptr && _myptr) {
+	if (free_func) {
+	  bdbout(1) << "buffer.custom_free_func " << free_func_arg << " " << (void*)_dataptr << endl;
+	  free_func( free_func_arg, _dataptr );
+	}
+	else if (_dataptr && _myptr) {
 	  bdbout(1) << "buffer.free " << (void*)_dataptr << endl;
 	  delete[] _dataptr;
 	  buffer_total_alloc -= _alloc_len;
 	}
   }
   
-  buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT, int alloc_len=0) : 
+  buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT, int alloc_len=0,
+		 buffer_free_func_t free_func=0, void* free_func_arg=0) : 
 	_dataptr(0), 
 	_myptr(false),
 	_len(l), 
-	_ref(0) {
+	_ref(0), 
+	free_func(0), free_func_arg(0) {
 	
 	if (alloc_len) 
 	  _alloc_len = alloc_len;
@@ -118,6 +133,11 @@ class buffer {
 	} else {
 	  _dataptr = (char*)p;                              // ugly
 	  bdbout(1) << "buffer.claim " << *this << " myptr=" << _myptr << endl;
+	}
+
+	if (mode & BUFFER_MODE_CUSTOMFREE && free_func) {
+	  this->free_func = free_func;
+	  this->free_func_arg = free_func_arg;
 	}
   }
 
