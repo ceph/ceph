@@ -88,15 +88,16 @@ void BlockDevice::do_io(biovec *bio)
 	r = _read(bio->start, bio->length, bio->bl);
   } else assert(0);
 
-  dout(20) << "do_io finish " << (void*)bio << endl;
-  if (bio->context) {
-	bio->context->finish(r);
-	delete bio->context;
-	delete bio;
-  }
+  dout(20) << "do_io finish " << (void*)bio << " " << bio->start << "+" << bio->length << " " << (void*)bio->cond << " " << (void*)bio->context << endl;
+
   if (bio->cond) {
 	bio->cond->Signal();
 	bio->rval = r;
+  }
+  else if (bio->context) {
+	bio->context->finish(r);
+	delete bio->context;
+	delete bio;
   }
 }
 

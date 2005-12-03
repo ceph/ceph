@@ -150,6 +150,8 @@ class buffer {
 	return _dataptr;
   }
 
+  bool has_free_func() { return free_func != 0; }
+  
   // accessor
   unsigned alloc_length() {
 	return _alloc_len;
@@ -259,7 +261,7 @@ class bufferptr {
 
   // accessors for my subset
   char *c_str() {
-	return _buffer->_dataptr + _off;
+	return _buffer->c_str() + _off;
   }
   unsigned length() {
 	return _len;

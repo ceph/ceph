@@ -21,6 +21,11 @@ MPILIBS = ${LIBS}
 #MPICFLAGS = ${CFLAGS} -I/usr/lib/mpi/include -L/usr/lib/mpi/mpi_gnu/lib
 #MPILIBS = ${LIBS} -lelan -lmpi
 
+EBOFS_OBJS= \
+	ebofs/BlockDevice.o\
+	ebofs/BufferCache.o\
+	ebofs/Ebofs.o\
+	ebofs/Allocator.o
 
 MDS_OBJS= \
 	mds/MDS.o\
@@ -122,6 +127,10 @@ tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o ${
 # obfs + synthetic
 obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} $(SYN_OBJS)
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
+
+# ebofs
+mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ${EBOFS_OBJS}
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
 

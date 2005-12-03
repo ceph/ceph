@@ -69,11 +69,28 @@ public:
   void get() {
 	if (ref == 0) lru_pin();
 	ref++;
+	cout << "onode.get " << ref << endl;
   }
   void put() {
 	ref--;
 	if (ref == 0) lru_unpin();
+	cout << "onode.put " << ref << endl;
   }
+  
+  ObjectCache *get_oc(BufferCache *bc) {
+	if (!oc) {
+	  oc = new ObjectCache(object_id, bc);
+	  get();
+	}
+	return oc;
+  }
+  void close_oc() {
+	assert(oc);
+	delete oc;
+	oc = 0;
+	put();
+  }
+
 
   // allocation
   int map_extents(block_t start, block_t len, vector<Extent>& ls) {

@@ -35,8 +35,10 @@ int main(int argc, char **argv)
 
   fs.flush_all();
   fs.trim_buffer_cache();
+  fs.trim_onode_cache();
 
   fs.umount();
+  dev.close();
 }
 
 	

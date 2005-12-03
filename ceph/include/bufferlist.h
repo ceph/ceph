@@ -32,8 +32,8 @@ class bufferlist {
   bufferlist() : _len(0) {
 	bdbout(1) << "bufferlist.cons " << this << endl;
   }
-  bufferlist(bufferlist& bl) : _len(0) {
-	assert(0); // o(n) and stupid
+  bufferlist(const bufferlist& bl) : _len(0) {
+	//assert(0); // o(n) and stupid
 	bdbout(1) << "bufferlist.cons " << this << endl; 
 	_buffers = bl._buffers;
 	_len = bl._len;
@@ -44,6 +44,7 @@ class bufferlist {
   
   bufferlist& operator=(bufferlist& bl) {
 	//assert(0);  // actually, this should be fine, just slow (O(n)) and stupid.
+	bdbout(1) << "bufferlist.= " << this << endl; 
 	_buffers = bl._buffers;
 	_len = bl._len;
 	return *this;
@@ -207,6 +208,19 @@ class bufferlist {
 	  assert(curbuf != _buffers.end());
 	}
   }
+  void copy_in(unsigned off, unsigned len, bufferlist& bl) {
+	unsigned left = len;
+	for (list<bufferptr>::iterator i = bl._buffers.begin();
+		 i != bl._buffers.end();
+		 i++) {
+	  unsigned l = (*i).length();
+	  if (l > left) l = left;
+	  copy_in(off, l, (*i).c_str());
+	  left -= l;
+	  if (left == 0) break;
+	  off += l;
+	}
+  }
 
 
   void append(const char *data, unsigned len) {
@@ -265,6 +279,7 @@ class bufferlist {
 	  for (list<bufferptr>::iterator it = _buffers.begin();
 		   it != _buffers.end();
 		   it++) {
+		assert((*(*it)).has_free_func() == false);     // not allowed if there's a funky free_func.. -sage
 		memcpy(newbuf.c_str() + off,
 			   (*it).c_str(), (*it).length());
 		off += (*it).length();

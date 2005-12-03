@@ -61,8 +61,9 @@ class Ebofs {
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
 
+ public:
   void trim_onode_cache();
-
+ protected:
 
   // ** buffer cache **
   BufferCache bc;

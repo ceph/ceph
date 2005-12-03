@@ -129,6 +129,7 @@ int Ebofs::write_super()
   dout(1) << "write_super v" << super_version << " to b" << bno << endl;
 
   // fill in super
+  memset(&sb, 0, sizeof(sb));
   sb.s_magic = EBOFS_MAGIC;
   sb.version = super_version;
   sb.num_blocks = dev.get_num_blocks();
@@ -167,7 +168,6 @@ int Ebofs::write_super()
 Onode* Ebofs::new_onode(object_t oid)
 {
   Onode* on = new Onode(oid);
-  on->oc = new ObjectCache(oid, &bc);
 
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = on;
@@ -204,7 +204,6 @@ Onode* Ebofs::get_onode(object_t oid)
 
   // parse data block
   Onode *on = new Onode(oid);
-  on->oc = new ObjectCache(oid, &bc);
 
   struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
   on->onode_loc = eo->onode_loc;
@@ -228,6 +227,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	p += sizeof(Extent);
   }
 
+  on->get();
   return on;
 }
 
@@ -323,6 +323,8 @@ void Ebofs::trim_onode_cache()
 	onode_map.erase(on->object_id);
 	delete on;
   }
+
+  dout(10) << "trim_onode_cache " << onode_lru.lru_get_size() << " left" << endl;
 }
 
 
@@ -344,6 +346,7 @@ void Ebofs::trim_buffer_cache()
 	
 	Onode *on = get_onode( bh->oc->get_object_id() );
 	bh_write(on, bh);
+	put_onode(on);
   }
   
   // trim bufferheads
@@ -361,8 +364,7 @@ void Ebofs::trim_buffer_cache()
 	if (oc->is_empty()) {
 	  Onode *on = get_onode( oc->get_object_id() );
 	  dout(10) << "trim_buffer_cache closing oc on " << *on << endl;
-	  delete oc;
-	  on->oc = 0;
+	  on->close_oc();
 	  put_onode(on);
 	}
   }
@@ -401,6 +403,7 @@ void Ebofs::flush_all()
 	if (bh->ioh) continue;
 	Onode *on = get_onode(bh->oc->get_object_id());
 	bh_write(on, bh);
+	put_onode(on);
   }
   dout(1) << "flush_all submitted" << endl;
 
@@ -490,7 +493,7 @@ void Ebofs::bh_write(Onode *on, BufferHead *bh)
 
 void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 {
-  ObjectCache *oc = on->oc;
+  ObjectCache *oc = on->get_oc(&bc);
 
   // map into blocks
   off_t opos = off;         // byte pos in object

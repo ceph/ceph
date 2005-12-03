@@ -50,7 +50,7 @@ md_config_t g_conf = {
   fake_osdmap_expand: 0,
   fake_osd_sync: true,
 
-  debug: 1,
+  debug: 100,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   debug_buffer: 0,
