@@ -63,6 +63,7 @@ class AlignedBufferPool {
 
 	  char *n = new char[get];
 	  assert(n);
+	  memset(n, 0, get);
 	  allocated.push_back(n);
 	  
 	  // add items to freelist
@@ -97,6 +98,7 @@ class AlignedBufferPool {
 
   // bufferlists
   void alloc_list(int n, bufferlist& bl) {
+	bl.clear();
 	while (n--) {
 	  bl.push_back(alloc());
 	}

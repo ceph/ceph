@@ -2,8 +2,10 @@
 #define __EBOFS_BLOCKDEVICE_H
 
 #include "include/bufferlist.h"
+#include "include/Context.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/Thread.h"
 
 #include "types.h"
 
@@ -20,16 +22,71 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 
+typedef void *ioh_t;
+
+
 class BlockDevice {
   char   *dev;
   int     fd;
   block_t num_blocks;
 
   Mutex lock;
-  
- public:
-  BlockDevice(char *d) : dev(d), fd(0), num_blocks(0) {
+
+  // io queue
+  class biovec {
+  public:
+	static const char IO_WRITE = 1;
+	static const char IO_READ = 2;
+
+	char type;
+	block_t start, length;
+	bufferlist bl;
+	Context *context;
+	Cond *cond;
+	int rval;
+
+	biovec(char t, block_t s, block_t l, bufferlist& b, Context *c) :
+	  type(t), start(s), length(l), bl(b), context(c), cond(0), rval(0) {}
+	biovec(char t, block_t s, block_t l, bufferlist& b, Cond *c) :
+	  type(t), start(s), length(l), bl(b), context(0), cond(c), rval(0) {}
   };
+
+  multimap<block_t, biovec*> io_queue;
+  map<biovec*, block_t>      io_queue_map;
+  Cond                       io_wakeup;
+  bool                       io_stop;
+  
+  void _submit_io(biovec *b);
+  int _cancel_io(biovec *bio);
+  void do_io(biovec *b);
+   
+
+  // io_thread
+  int io_thread_entry();
+  
+  class IOThread : public Thread {
+	BlockDevice *dev;
+  public:
+	IOThread(BlockDevice *d) : dev(d) {}
+	void *entry() {
+	  return (void*)dev->io_thread_entry();
+	}
+  } io_thread;
+
+
+  // low level io
+  int _read(block_t bno, unsigned num, bufferlist& bl);
+  int _write(unsigned bno, unsigned num, bufferlist& bl);
+
+
+ public:
+  BlockDevice(char *d) : 
+	dev(d), fd(0), num_blocks(0),
+	io_stop(false), io_thread(this) 
+	{ };
+  ~BlockDevice() {
+	if (fd > 0) close();
+  }
 
   // get size in blocks
   block_t get_num_blocks() {
@@ -44,144 +101,68 @@ class BlockDevice {
 	return num_blocks;
   }
 
-  int open() {
-	fd = ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT);
-	if (fd < 0) return fd;
-	//dout(1) << "blockdevice.open " << dev << endl;
+  int open();
+  int close();
 
-	// figure size
-	__uint64_t bsize = 0;
-	//int r = 
-	ioctl(fd, BLKGETSIZE64, &bsize);
+
+  // ** blocking interface **
+
+  // read
+  int read(block_t bno, unsigned num, bufferptr& bptr) {
+	bufferlist bl;
+	bl.push_back(bptr);
+	return read(bno, num, bl);
+  }
+  int read(block_t bno, unsigned num, bufferlist& bl) {
+	Cond c;
+	biovec bio(biovec::IO_READ, bno, num, bl, &c);
 	
-	if (bsize == 0) {
-	  // try stat!
-	  struct stat st;
-	  fstat(fd, &st);
-	  bsize = st.st_size;
-	}	
-	num_blocks = bsize / (__uint64_t)EBOFS_BLOCK_SIZE;
-
-	dout(1) << "blockdevice.open " << dev << "  " << bsize << " bytes, " << num_blocks << " blocks" << endl;
-	return fd;
-  }
-  int close() {
-	return ::close(fd);
-  }
-
-
-  // single blocks
-  int read(block_t bno, unsigned num,
-		   bufferptr& bptr) {
 	lock.Lock();
-	assert(fd > 0);
-
-	off_t offset = bno * EBOFS_BLOCK_SIZE;
-	off_t actual = lseek(fd, offset, SEEK_SET);
-	assert(actual == offset);
-	
-	int len = num*EBOFS_BLOCK_SIZE;
-	assert((int)bptr.length() >= len);
-	int got = ::read(fd, bptr.c_str(), len);
-	assert(got <= len);
-
+	_submit_io(&bio);
+	c.Wait(lock);
 	lock.Unlock();
-	return 0;
+	return bio.rval;
   }
 
-  int write(unsigned bno, unsigned num,
-			bufferptr& bptr) {
+  // write
+  int write(unsigned bno, unsigned num, bufferptr& bptr) {
+	bufferlist bl;
+	bl.push_back(bptr);
+	return write(bno, num, bl);
+  }
+  int write(unsigned bno, unsigned num, bufferlist& bl) {
+	Cond c;
+	biovec bio(biovec::IO_WRITE, bno, num, bl, &c);
+
 	lock.Lock();
-	assert(fd > 0);
-
-	off_t offset = bno * EBOFS_BLOCK_SIZE;
-	off_t actual = lseek(fd, offset, SEEK_SET);
-	assert(actual == offset);
-
-	// write buffers
-	off_t len = num*EBOFS_BLOCK_SIZE;
-	off_t left = bptr.length();
-	if (left > len) left = len;
-	int r = ::write(fd, bptr.c_str(), left);
-	//dout(1) << "write " << fd << " " << (void*)bptr.c_str() << " " << left << endl;
-	if (r < 0) {
-	  dout(1) << "couldn't write bno " << bno << " num " << num << " (" << left << " bytes) r=" << r << " errno " << errno << " " << strerror(errno) << endl;
-	}
-	
+	_submit_io(&bio);
+	c.Wait(lock);
 	lock.Unlock();
-	return 0;
+	return bio.rval;
   }
 
-
-  // lists
-  int read(block_t bno, unsigned num,
-		   bufferlist& bl) {
+  // ** non-blocking interface **
+  ioh_t read(block_t bno, unsigned num, bufferlist& bl, Context *fin) {
+	biovec *pbio = new biovec(biovec::IO_READ, bno, num, bl, fin);
 	lock.Lock();
-	assert(fd > 0);
-
-	off_t offset = bno * EBOFS_BLOCK_SIZE;
-	off_t actual = lseek(fd, offset, SEEK_SET);
-	assert(actual == offset);
-	
-	off_t len = num*EBOFS_BLOCK_SIZE;
-	assert((int)bl.length() >= len);
-	
-	for (list<bufferptr>::iterator i = bl.buffers().begin();
-		 i != bl.buffers().end();
-		 i++) {
-	  assert(i->length() % EBOFS_BLOCK_SIZE == 0);
-	  
-	  int blen = i->length();
-	  if (blen > len) blen = len;
-	  
-	  int got = ::read(fd, i->c_str(), blen);
-	  assert(got <= blen);
-	  
-	  len -= blen;
-	  if (len == 0) break;
-	}
-
+	_submit_io(pbio);
 	lock.Unlock();
-	return 0;
+	return (ioh_t)pbio;
   }
-
-  int write(unsigned bno, unsigned num,
-			bufferlist& bl) {
+  ioh_t write(block_t bno, unsigned num, bufferlist& bl, Context *fin) {
+	biovec *pbio = new biovec(biovec::IO_WRITE, bno, num, bl, fin);
 	lock.Lock();
-	assert(fd > 0);
-	
-	off_t offset = bno * EBOFS_BLOCK_SIZE;
-	off_t actual = lseek(fd, offset, SEEK_SET);
-	assert(actual == offset);
-	
-	// write buffers
-	off_t len = num*EBOFS_BLOCK_SIZE;
-
-	for (list<bufferptr>::iterator i = bl.buffers().begin();
-		 i != bl.buffers().end();
-		 i++) {
-	  assert(i->length() % EBOFS_BLOCK_SIZE == 0);
-	  
-	  off_t left = i->length();
-	  if (left > len) left = len;
-	  int r = ::write(fd, i->c_str(), left);
-	  //dout(1) << "write " << fd << " " << (void*)bptr.c_str() << " " << left << endl;
-	  if (r < 0) {
-		dout(1) << "couldn't write bno " << bno << " num " << num << " (" << left << " bytes) r=" << r << " errno " << errno << " " << strerror(errno) << endl;
-	  } else {
-		assert(r == left);
-	  }
-	  
-	  len -= left;
-	  if (len == 0) break;
-	}
-
+	_submit_io(pbio);
 	lock.Unlock();
-	return 0;
+	return (ioh_t)pbio;
   }
+  int cancel_io(ioh_t ioh);
 
 
 
 };
+
+
+
 
 #endif

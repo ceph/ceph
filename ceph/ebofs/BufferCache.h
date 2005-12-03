@@ -2,37 +2,57 @@
 #define __EBOFS_BUFFERCACHE_H
 
 #include "include/lru.h"
+#include "include/Context.h"
+
+#include "common/Clock.h"
 
 #include "types.h"
 #include "AlignedBufferPool.h"
-
+#include "BlockDevice.h"
 
 #define BH_STATE_DIRTY  1
 
+class ObjectCache;
+class BufferCache;
+
 class BufferHead : public LRUObject {
  public:
-  //const static int STATUS_DNE = 0;     //     not in cache; undefined
+  const static int STATE_MISSING = 0; //     missing; data is on disk, but not loaded.
   const static int STATE_CLEAN = 1;   // Rw  clean
   const static int STATE_DIRTY = 2;   // RW  dirty
   const static int STATE_TX = 3;      // Rw  flushing to disk
   const static int STATE_RX = 4;      //  w  reading from disk
+  const static int STATE_PARTIAL = 5; // reading from disk, + partial content map.
+
+ public:
+  ObjectCache *oc;
+
+  bufferlist data;
 
  private:
-  bufferlist bl;
-  
+  map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
+
   int        ref;
   int        state;
-  version_t  version;
+  version_t  version;        // current version in cache
+  version_t  last_flushed;   // last version flushed to disk
   
   Extent     object_loc;     // block position _in_object_
+
+  utime_t    dirty_stamp;
+
+ public:
+  ioh_t      ioh;   // any pending read/write op
   
   list<Context*> waitfor_read;
   list<Context*> waitfor_flush;
-  
+
  public:
-  BufferHead() :
-	ref(0), state(STATE_CLEAN), version(0) {}
+  BufferHead(ObjectCache *o) :
+	oc(o), ref(0), state(STATE_MISSING), version(0), last_flushed(0), ioh(0) {}
   
+  ObjectCache *get_oc() { return oc; }
+
   int get() {
 	assert(ref >= 0);
 	if (ref == 0) lru_pin();
@@ -44,108 +64,292 @@ class BufferHead : public LRUObject {
 	return --ref;
   }
 
+  block_t start() { return object_loc.start; }
+  void set_start(block_t s) { object_loc.start = s; }
   block_t length() { return object_loc.length; }
+  void set_length(block_t l) { object_loc.length = l; }
+  block_t end() { return start() + length(); }
+  block_t last() { return end()-1; }
+  
+  version_t get_version() { return version; }
+  void set_version(version_t v) { version = v; }
+  version_t get_last_flushed() { return last_flushed; }
+  void set_last_flushed(version_t v) { 
+	assert(v > last_flushed);
+	last_flushed = v; 
+  }
+
+  utime_t get_dirty_stamp() { return dirty_stamp; }
+  void set_dirty_stamp(utime_t t) { dirty_stamp = t; }
 
   void set_state(int s) {
-	if (state == STATE_CLEAN && s != STATE_CLEAN) get();
-	if (state != STATE_CLEAN && s == STATE_CLEAN) put();
+	if (s == STATE_PARTIAL || s == STATE_RX || s == STATE_TX) get();
+	if (state == STATE_PARTIAL || state == STATE_RX || state == STATE_TX) put();
 	state = s;
   }
   int get_state() { return state; }
 
+  bool is_missing() { return state == STATE_MISSING; }
   bool is_dirty() { return state == STATE_DIRTY; }
   bool is_clean() { return state == STATE_CLEAN; }
-  bool is_rx() { return state == STATE_RX; }
   bool is_tx() { return state == STATE_TX; }
-
-
-  void substr(block_t off, block_t num, bufferlist& sub) {
+  bool is_rx() { return state == STATE_RX; }
+  bool is_partial() { return state == STATE_PARTIAL; }
+  
+  /*
+  void substr(block_t start, block_t len, bufferlist& sub) {
 	// determine offset in bufferlist
-	block_t start = object_loc - off;  
+	block_t start = object_loc.start - off;  
 	block_t len = num - start;
 	if (start+len > object_loc.length)
 	  len = object_loc.length - start;
 	
-	sub.substr_of(bl, start*EBOFS_BLOCK_SIZE, len*EBOFS_BLOCK_SIZE);
+	sub.substr_of(data, start*EBOFS_BLOCK_SIZE, len*EBOFS_BLOCK_SIZE);
+  }
+  */
+
+  bool partial_is_complete(off_t size) {
+	map<off_t, bufferlist>::iterator i = partial.begin();
+	if (i == partial.end()) return false;
+	if (i->first != (off_t)(object_loc.start * EBOFS_BLOCK_SIZE)) return false;
+	off_t pos = i->first + i->second.length();
+	for (i++; i != partial.end(); i++) {
+	  assert(pos <= i->first);
+	  if (pos < i->first) return false;
+	  assert(pos == i->first);
+	  pos = i->first + i->second.length();
+	}
+	off_t upto = MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) );
+	if (pos == upto) return true;
+	return false;
+  }
+  void apply_partial() {
+	const off_t bhstart = start() * EBOFS_BLOCK_SIZE;
+	//assert(partial_is_complete());
+	for (map<off_t, bufferlist>::iterator i = partial.begin();
+		 i != partial.end();
+		 i++) {
+	  int pos = i->first - bhstart;
+	  data.copy_in(pos, i->second.length(), i->second);
+	}
+	partial.clear();
+  }
+  void add_partial(off_t off, bufferlist& p) {
+	// trim overlap
+	unsigned len = p.length();
+	for (map<off_t, bufferlist>::iterator i = partial.begin();
+		 i != partial.end();
+		 ) {
+	  if (i->first > off+len) break;   // past affected area.
+
+	  // same?
+	  if (i->first == off && i->second.length() == len) {
+		// replace it.
+		partial.erase(i);   
+		break;
+	  }
+	  // overlap all?
+	  if (off < i->first && i->first + i->second.length() < off+len) {
+		// erase it and move on.
+		off_t dead = i->first;
+		i++;
+		partial.erase(dead);  
+		continue;
+	  }
+	  // overlap tail?
+	  if (i->first < off && i->first + i->second.length() > off) {
+		// shorten.
+		unsigned newlen = off - i->first;
+		bufferlist o = i->second;
+		i->second.substr_of(o, 0, newlen);
+	  }
+	  // overlap head?
+	  if (off < i->first && i->first < off+len) {
+		// move.
+		off_t oldoff = i->first;
+		off_t newoff = off+len;
+		unsigned trim = newoff - oldoff;
+		partial[newoff].substr_of(i->second, trim, i->second.length()-trim);
+		i++;  // should be at newoff!
+		partial.erase( oldoff );
+	  }
+	  i++;
+	}
+
+	// insert
+	partial[off] = p;
   }
 
+
 };
+
+inline ostream& operator<<(ostream& out, BufferHead& bh)
+{
+  out << "bufferhead(" << bh.start() << "+" << bh.length();
+  out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
+  if (bh.is_missing()) out << " missing";
+  if (bh.is_dirty()) out << " dirty";
+  if (bh.is_clean()) out << " clean";
+  if (bh.is_rx()) out << " rx";
+  if (bh.is_tx()) out << " tx";
+  if (bh.is_partial()) out << " partial";
+  out << ")";
+  return out;
+}
 
 
 class ObjectCache {
  private:
-  object_t oid;
-  class BufferCache *bc;
+  object_t object_id;
+  BufferCache *bc;
 
-  map<off_t, BufferHead*>  data;
+  map<block_t, BufferHead*>  data;
 
  public:
-  ObjectCache(object_t o, class BufferCache *b) : oid(o), bc(b) {}
+  ObjectCache(object_t o, BufferCache *b) : object_id(o), bc(b) {}
   
+  object_t get_object_id() { return object_id; }
+
+  void add_bh(BufferHead *bh, block_t at) {
+	data[at] = bh;
+  }
+  void remove_bh(BufferHead *bh) {
+	assert(data.count(bh->start()));
+	data.erase(bh->start());
+  }
+  bool is_empty() { return data.empty(); }
+
   int map_read(block_t start, block_t len, 
 			   map<block_t, BufferHead*>& hits,     // hits
 			   map<block_t, BufferHead*>& missing,  // read these from disk
-			   map<block_t, BufferHead*>& rx);      // wait for these to finish reading from disk
+			   map<block_t, BufferHead*>& rx,       // wait for these to finish reading from disk
+			   map<block_t, BufferHead*>& partial); // (maybe) wait for these to read from disk
   
   int map_write(block_t start, block_t len,
-				map<block_t, BufferHead*>& hits);   // write to these.
+				map<block_t, BufferHead*>& hits);   // can write to these.
+
+  BufferHead *split(BufferHead *bh, block_t off);
+
+  int scan_versions(block_t start, block_t len,
+					version_t& low, version_t& high);
+
+  void rx_finish(block_t start, block_t length);
+  void tx_finish(block_t start, block_t length, version_t v);
+
+};
+
+class C_OC_RxFinish : public Context {
+  ObjectCache *oc;
+  block_t start, length;
+public:
+  C_OC_RxFinish(ObjectCache *o, block_t s, block_t l) :
+	oc(o), start(s), length(l) {}
+  void finish(int r) {
+	if (r == 0) 
+	  oc->rx_finish(start, length);
+  }  
+};
+
+class C_OC_TxFinish : public Context {
+  ObjectCache *oc;
+  block_t start, length;
+  version_t version;
+public:
+  C_OC_TxFinish(ObjectCache *o, block_t s, block_t l, version_t v) :
+	oc(o), start(s), length(l), version(v) {}
+  void finish(int r) {
+	if (r == 0) 
+	  oc->tx_finish(start, length, version);
+  }  
 };
 
 
 class BufferCache {
- private:
+ public:
+  Mutex lock;
+
+  BlockDevice& dev;
   AlignedBufferPool& bufferpool;
 
+  set<BufferHead*> dirty_bh;
+
   LRU   lru_dirty, lru_rest;
+
+ private:
+  Cond  stat_cond;
+  int   stat_waiter;
+
   off_t stat_clean;
   off_t stat_dirty;
   off_t stat_rx;
   off_t stat_tx;
-  
+  off_t stat_partial;
+  off_t stat_missing;
+
  public:
-  BufferCache(AlignedBufferPool& bp) : bufferpool(bp),
-	stat_clean(0), stat_dirty(0),
-	stat_rx(0), stat_tx(0) {}
+  BufferCache(BlockDevice& d, AlignedBufferPool& bp) : dev(d), bufferpool(bp),
+	stat_waiter(0),
+	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
+	{}
 
   // bh's in cache
   void add_bh(BufferHead *bh) {
-	if (bh->is_dirty())
+	if (bh->is_dirty()) {
 	  lru_dirty.lru_insert_mid(bh);
-	else
+	  dirty_bh.insert(bh);
+	} else
 	  lru_rest.lru_insert_mid(bh);
 	stat_add(bh);
   }
   void touch(BufferHead *bh) {
-	if (bh->is_dirty())
+	if (bh->is_dirty()) {
 	  lru_dirty.lru_touch(bh);
-	else
+	} else
 	  lru_rest.lru_touch(bh);
   }
   void remove_bh(BufferHead *bh) {
 	stat_sub(bh);
-	if (bh->is_dirty())
+	if (bh->is_dirty()) {
 	  lru_dirty.lru_remove(bh);
-	else
+	  dirty_bh.erase(bh);
+	} else
 	  lru_rest.lru_remove(bh);
   }
 
   // stats
   void stat_add(BufferHead *bh) {
 	switch (bh->get_state()) {
+	case BufferHead::STATE_MISSING: stat_missing += bh->length(); break;
 	case BufferHead::STATE_CLEAN: stat_clean += bh->length(); break;
 	case BufferHead::STATE_DIRTY: stat_dirty += bh->length(); break;
-	case BufferHead::STATE_RX: stat_rx += bh->length(); break;
 	case BufferHead::STATE_TX: stat_tx += bh->length(); break;
+	case BufferHead::STATE_RX: stat_rx += bh->length(); break;
+	case BufferHead::STATE_PARTIAL: stat_partial += bh->length(); break;
 	}
+	if (stat_waiter) stat_cond.Signal();
   }
   void stat_sub(BufferHead *bh) {
 	switch (bh->get_state()) {
+	case BufferHead::STATE_MISSING: stat_missing -= bh->length(); break;
 	case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); break;
 	case BufferHead::STATE_DIRTY: stat_dirty -= bh->length(); break;
-	case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
 	case BufferHead::STATE_TX: stat_tx -= bh->length(); break;
+	case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
+	case BufferHead::STATE_PARTIAL: stat_partial -= bh->length(); break;
 	}
   }
+  off_t get_stat_tx() { return stat_tx; }
+  off_t get_stat_rx() { return stat_rx; }
+  off_t get_stat_dirty() { return stat_dirty; }
+  off_t get_stat_clean() { return stat_clean; }
+  off_t get_stat_partial() { return stat_partial; }
+
+  void waitfor_stat() {
+	stat_waiter++;
+	stat_cond.Wait(lock);
+	stat_waiter--;
+  }
+
 
   // bh state
   void set_state(BufferHead *bh, int s) {
@@ -153,10 +357,12 @@ class BufferCache {
 	if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
 	  lru_rest.lru_remove(bh);
 	  lru_dirty.lru_insert_top(bh);
+	  dirty_bh.insert(bh);
 	}
 	if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
 	  lru_dirty.lru_remove(bh);
 	  lru_rest.lru_insert_mid(bh);
+	  dirty_bh.erase(bh);
 	}
 
 	// set state
@@ -170,22 +376,20 @@ class BufferCache {
   }
   
   void mark_clean(BufferHead *bh) { set_state(bh, BufferHead::STATE_CLEAN); };
-  void mark_dirty(BufferHead *bh) { set_state(bh, BufferHead::STATE_DIRTY); };
   void mark_rx(BufferHead *bh) { set_state(bh, BufferHead::STATE_RX); };
+  void mark_partial(BufferHead *bh) { set_state(bh, BufferHead::STATE_PARTIAL); };
   void mark_tx(BufferHead *bh) { set_state(bh, BufferHead::STATE_TX); };
+  void mark_dirty(BufferHead *bh) { 
+	set_state(bh, BufferHead::STATE_DIRTY); 
+	bh->set_dirty_stamp(g_clock.now());
+  };
 
 
   BufferHead *split(BufferHead *orig, block_t after);
 
+
 };
 
-
-
-class FlushWaiter {
-  object_t oid;
-  map<off_t, version_t>  version_map;  // versions i need flushed
-  Context *onflush;
-};
 
 
 #endif

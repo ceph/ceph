@@ -14,6 +14,10 @@ using namespace __gnu_cxx;
 #define dbtout cout
 
 
+#define MIN(a,b)  ((a)<=(b) ? (a):(b))
+#define MAX(a,b)  ((a)>=(b) ? (a):(b))
+
+
 
 /*
 - this is to make some of the STL types work with 64 bit values, string hash keys, etc.
@@ -53,6 +57,7 @@ class Extent {
   Extent(block_t s, block_t l) : start(s), length(l) {}
 
   block_t last() const { return start + length - 1; }
+  block_t end() const { return start + length; }
 };
 
 inline ostream& operator<<(ostream& out, Extent& ex)

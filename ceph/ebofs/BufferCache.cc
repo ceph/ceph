@@ -1,6 +1,10 @@
 
 #include "BufferCache.h"
 
+#undef dout
+#define dout(x)  if (x <= g_conf.debug) cout << "bc."
+
+
 
 /*********** BufferHead **************/
 
@@ -17,12 +21,92 @@
 /************ ObjectCache **************/
 
 
+
+void ObjectCache::rx_finish(block_t start, block_t length)
+{
+  list<Context*> waiters;
+
+  bc->lock.Lock();
+
+  dout(10) << "rx_finish " << start << "+" << length << endl;
+  for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+	   p != data.end(); 
+	   p++) {
+	// past?
+	if (p->first >= start+length) break;
+	
+	if (p->second->is_rx()) {
+	  if (p->second->get_version() == 0) {
+		assert(p->second->end() <= start+length);
+		dout(10) << "rx_finish  rx -> clean on " << *p->second << endl;
+		bc->mark_clean(p->second);
+	  }
+	}
+	else if (p->second->is_partial()) {
+	  dout(10) << "rx_finish  partial -> dirty on " << *p->second << endl;	  
+	  p->second->apply_partial();
+	  bc->mark_dirty(p->second);
+	}
+	else {
+	  dout(10) << "rx_finish  ignoring " << *p->second << endl;
+	}
+
+	// trigger waiters
+	waiters.splice(waiters.begin(), p->second->waitfor_read);
+  }	
+
+  finish_contexts(waiters);
+
+  bc->lock.Unlock();
+}
+
+
+void ObjectCache::tx_finish(block_t start, block_t length, version_t version)
+{
+  list<Context*> waiters;
+
+  bc->lock.Lock();
+
+  dout(10) << "tx_finish " << start << "+" << length << " v" << version << endl;
+  for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+	   p != data.end(); 
+	   p++) {
+	dout(20) << "tx_finish ?bh " << *p->second << endl;
+	assert(p->first == p->second->start());
+	//dout(10) << "tx_finish  bh " << *p->second << endl;
+
+	// past?
+	if (p->first >= start+length) break;
+
+	if (!p->second->is_tx()) {
+	  dout(10) << "tx_finish  bh not marked tx, skipping" << endl;
+	  continue;
+	}
+
+	assert(p->second->is_tx());
+	assert(p->second->end() <= start+length);
+	
+	dout(10) << "tx_finish  tx -> clean on " << *p->second << endl;
+	p->second->set_last_flushed(version);
+	bc->mark_clean(p->second);
+
+	// trigger waiters
+	waiters.splice(waiters.begin(), p->second->waitfor_flush);
+  }	
+
+  finish_contexts(waiters);
+
+  bc->lock.Unlock();
+}
+
+
 int ObjectCache::map_read(block_t start, block_t len, 
 						  map<block_t, BufferHead*>& hits,
 						  map<block_t, BufferHead*>& missing,
-						  map<block_t, BufferHead*>& rx) {
+						  map<block_t, BufferHead*>& rx,
+						  map<block_t, BufferHead*>& partial) {
   
-  map<off_t, BufferHead*>::iterator p = data.lower_bound(start);
+  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
   // p->first >= start
 
   block_t cur = start;
@@ -30,7 +114,7 @@ int ObjectCache::map_read(block_t start, block_t len,
   
   if (p != data.begin() && p->first < cur) {
 	p--;     // might overlap!
-	if (p->first + p->second->object_loc.length <= cur) 
+	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
   }
 
@@ -38,12 +122,11 @@ int ObjectCache::map_read(block_t start, block_t len,
 	// at end?
 	if (p == data.end()) {
 	  // rest is a miss.
-	  BufferHead *n = new BufferHead();
+	  BufferHead *n = new BufferHead(this);
 	  bc->add_bh(n);
-	  n->object_loc.start = cur;
-	  n->object_loc.length = left;
+	  n->set_start( cur );
+	  n->set_length( left );
 	  data[cur] = n;
-	  bc->mark_rx(n);
 	  missing[cur] = n;
 	  break;
 	}
@@ -52,18 +135,22 @@ int ObjectCache::map_read(block_t start, block_t len,
 	  // have it (or part of it)
 	  BufferHead *e = p->second;
 	  
-	  if (e->get_state() == BufferHead::STATE_CLEAN ||
-		  e->get_state() == BufferHead::STATE_DIRTY ||
-		  e->get_state() == BufferHead::STATE_TX) {
+	  if (e->is_clean() ||
+		  e->is_dirty() ||
+		  e->is_tx()) {
 		hits[cur] = e;     // readable!
 	  } 
-	  else if (e->get_status() == BufferHead::STATE_RX) {
+	  else if (e->is_rx()) {
 		rx[cur] = e;       // missing, not readable.
 	  }
+	  else if (e->is_partial()) {
+		partial[cur] = e;
+	  }
+	  else assert(0);
 	  
-	  block_t lenfromcur = e->object_loc.length;
-	  if (e->object_loc.start < cur)
-		lenfromcur -= cur - e->object_loc.start;
+	  block_t lenfromcur = e->length();
+	  if (e->start() < cur)
+		lenfromcur -= cur - e->start();
 	  
 	  if (lenfromcur < left) {
 		cur += lenfromcur;
@@ -75,19 +162,18 @@ int ObjectCache::map_read(block_t start, block_t len,
 	} else if (p->first > cur) {
 	  // gap.. miss
 	  block_t next = p->first;
-	  BufferHead *n = new BufferHead();
+	  BufferHead *n = new BufferHead(this);
 	  bc->add_bh(n);
-	  n->object_loc.start = cur;
+	  n->set_start( cur );
 	  if (next - cur < left)
-		n->object_loc.length = next - cur;
+		n->set_length( next - cur );
 	  else
-		n->object_loc.length = left;
+		n->set_length( left );
 	  data[cur] = n;
-	  bc->mark_rx(n);
 	  missing[cur] = n;
 	  
-	  cur += object_loc.length;
-	  left -= object_loc.length;
+	  cur += n->length();
+	  left -= n->length();
 	  continue;    // more?
 	}
 	else 
@@ -100,7 +186,7 @@ int ObjectCache::map_read(block_t start, block_t len,
 int ObjectCache::map_write(block_t start, block_t len,
 						   map<block_t, BufferHead*>& hits) 
 {
-  map<off_t, BufferHead*>::iterator p = data.lower_bound(start);
+  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
   // p->first >= start
   
   block_t cur = start;
@@ -108,19 +194,18 @@ int ObjectCache::map_write(block_t start, block_t len,
   
   if (p != data.begin() && p->first < cur) {
 	p--;     // might overlap!
-	if (p->first + p->second->object_loc.length <= cur) 
+	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
   }
 
   for (; left > 0; p++) {
 	// at end?
 	if (p == data.end()) {
-	  BufferHead *n = new BufferHead();
+	  BufferHead *n = new BufferHead(this);
 	  bc->add_bh(n);
-	  n->object_loc.start = cur;
-	  n->object_loc.length = left;
+	  n->set_start( cur );
+	  n->set_length( left );
 	  data[cur] = n;
-	  bc->mark_dirty(n);
 	  hits[cur] = n;
 	  break;
 	}
@@ -129,40 +214,37 @@ int ObjectCache::map_write(block_t start, block_t len,
 	  // have it (or part of it)
 	  BufferHead *e = p->second;
 	  
-	  if (p->first == cur && p->second->object_loc.length <= left) {
+	  if (p->first == cur && p->second->length() <= left) {
 		// whole bufferhead, piece of cake.		
 	  } else {
-		if (e->get_status() == BufferHead::STATUS_CLEAN) {
+		if (e->is_clean()) {
 		  // we'll need to cut the buffer!  :(
-		  if (p->first == cur && p->second->object_loc.length > left) {
+		  if (p->first == cur && p->second->length() > left) {
 			// we want left bit (one splice)
-			data[cur+left] = bc->split(e, cur + left);
+			bc->split(e, cur+left);
 		  }
-		  else if (p->first < cur && cur+left >= p->first+p->second->object_loc.length) {
+		  else if (p->first < cur && cur+left >= p->first+p->second->length()) {
 			// we want right bit (one splice)
 			e = bc->split(e, cur);
-			data[cur] = e;
 			p++;
 			assert(p->second == e);
 		  } else {
 			// we want middle bit (two splices)
 			e = bc->split(e, cur);
-			data[cur] = e;
 			p++;
 			assert(p->second == e);
-			data[cur+left] = bc->split(e, cur+left);
+			bc->split(e, cur+left);
 		  }
 		}		
 	  }
 	  
 	  // FIXME
-	  e->set_status(BufferHead::STATUS_DIRTY);
 	  hits[cur] = e;
 	  	  
 	  // keep going.
-	  block_t lenfromcur = e->object_loc.length;
-	  if (e->object_loc.start < cur)
-		lenfromcur -= cur - e->object_loc.start;
+	  block_t lenfromcur = e->length();
+	  if (e->start() < cur)
+		lenfromcur -= cur - e->start();
 
 	  if (lenfromcur < left) {
 		cur += lenfromcur;
@@ -174,25 +256,54 @@ int ObjectCache::map_write(block_t start, block_t len,
 	} else {
 	  // gap!
 	  block_t next = p->first;
-	  BufferHead *n = new BufferHead();
+	  BufferHead *n = new BufferHead(this);
 	  bc->add_bh(n);
-	  n->object_loc.start = cur;
+	  n->set_start( cur );
 	  if (next - cur < left)
-		n->object_loc.length = next - cur;
+		n->set_length( next - cur );
 	  else
-		n->object_loc.length = left;
+		n->set_length( left );
 	  data[cur] = n;
-	  bc->mark_dirty(n);
 	  hits[cur] = n;
 	  
-	  cur += object_loc.length;
-	  left -= object_loc.length;
+	  cur += n->length();
+	  left -= n->length();
 	  continue;    // more?
 	}
   }
 
   return 0;
 }
+
+int ObjectCache::scan_versions(block_t start, block_t len,
+							   version_t& low, version_t& high)
+{
+  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+  // p->first >= start
+  
+  if (p != data.begin() && p->first > start) {
+	p--;     // might overlap?
+	if (p->first + p->second->length() <= start) 
+	  p++;   // doesn't overlap.
+  }
+  if (p->first >= start+len) 
+	return -1;  // to the right.  no hits.
+  
+  // start
+  low = high = p->second->get_version();
+
+  for (p++; p != data.end(); p++) {
+	// past?
+	if (p->first < start+len) break;
+	
+	const version_t v = p->second->get_version();
+	if (low > v) low = v;
+	if (high < v) high = v;
+  }	
+
+  return 0;
+}
+
 
 
 
@@ -201,18 +312,20 @@ int ObjectCache::map_write(block_t start, block_t len,
 
 BufferHead *BufferCache::split(BufferHead *orig, block_t after) 
 {
-  BufferHead *right = new BufferHead;
-  right->version(orig->get_version());
+  BufferHead *right = new BufferHead(orig->get_oc());
+  orig->get_oc()->add_bh(right, after);
+
+  right->set_version(orig->get_version());
   right->set_state(orig->get_state());
   
-  block_t mynewlen = after - orig->object_loc.start;
-  right->object_loc.start = after;
-  right->object_loc.length = orig->object_loc.length - mynewlen;
+  block_t mynewlen = after - orig->start();
+  right->set_start( after );
+  right->set_length( orig->length() - mynewlen );
 
   add_bh(right);
 
   stat_sub(orig);
-  orig->object_loc.length = mynewlen;
+  orig->set_length( mynewlen );
   stat_add(orig);
   
 
@@ -220,4 +333,7 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   
   return right;
 }
+
+
+
 

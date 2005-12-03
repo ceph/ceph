@@ -21,7 +21,7 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 	// look to the left
 	fs->free_tab[bucket]->find( near, cursor );
 
-	while (!found && cursor.move_left()) 
+	while (!found && cursor.move_left() > 0) 
 	  if (cursor.current().value >= num)
 		found = true;
   }
