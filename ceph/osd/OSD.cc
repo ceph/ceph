@@ -130,7 +130,7 @@ int OSD::init()
 {
   osd_lock.Lock();
 
-  int r = store->init();
+  int r = store->mount();
 
   monitor->init();
 
@@ -154,7 +154,7 @@ int OSD::shutdown()
   monitor->shutdown();
   messenger->shutdown();
 
-  int r = store->finalize();
+  int r = store->umount();
   return r;
 }
 

@@ -19,9 +19,8 @@ class ObjectStore {
   virtual ~ObjectStore() {}
 
   // mgmt
-  virtual int init() = 0;
-  virtual int finalize() = 0;
-
+  virtual int mount() = 0;
+  virtual int umount() = 0;
   virtual int mkfs() = 0;  // wipe
 
   // objects
@@ -39,10 +38,11 @@ class ObjectStore {
 					size_t len, off_t offset,
 					bufferlist& bl,
 					bool fsync=true) = 0;     
+
   virtual int write(object_t oid, 
 					size_t len, off_t offset, 
 					bufferlist& bl, 
-					Context *onsafe) { return -1; }
+					Context *onsafe) = 0;//{ return -1; }
 
   virtual int setattr(object_t oid, const char *name,
 					  void *value, size_t size) {return 0;} //= 0;
@@ -52,13 +52,10 @@ class ObjectStore {
   
   // collections
   virtual int list_collections(list<coll_t>& ls) {return 0;}//= 0;
-  virtual bool collection_exists(coll_t c) {
-	struct stat st;
-	return collection_stat(c, &st) == 0;
-  }
+  virtual int create_collection(coll_t c) {return 0;}//= 0;
+  virtual int destroy_collection(coll_t c) {return 0;}//= 0;
+  virtual bool collection_exists(coll_t c) {return 0;}
   virtual int collection_stat(coll_t c, struct stat *st) {return 0;}//= 0;
-  virtual int collection_create(coll_t c) {return 0;}//= 0;
-  virtual int collection_destroy(coll_t c) {return 0;}//= 0;
   virtual int collection_add(coll_t c, object_t o) {return 0;}//= 0;
   virtual int collection_remove(coll_t c, object_t o) {return 0;}// = 0;
   virtual int collection_list(coll_t c, list<object_t>& o) {return 0;}//= 0;

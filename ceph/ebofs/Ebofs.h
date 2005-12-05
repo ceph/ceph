@@ -17,6 +17,7 @@ using namespace __gnu_cxx;
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
+#include "osd/ObjectStore.h"
 
 typedef pair<object_t,coll_t> idpair_t;
 
@@ -25,7 +26,7 @@ inline ostream& operator<<(ostream& out, idpair_t oc) {
 }
 
 
-class Ebofs {
+class Ebofs : public ObjectStore {
  protected:
   Mutex        ebofs_lock;    // a beautiful global lock
 
@@ -127,7 +128,12 @@ class Ebofs {
   
 
   // object interface
+  bool exists(object_t);
+  int stat(object_t, struct stat*);
   int read(object_t, size_t len, off_t off, bufferlist& bl);
+  int write(object_t oid, 
+			size_t len, off_t off, 
+			bufferlist& bl, bool fsync=true);
   int write(object_t oid, 
 			size_t len, off_t offset, 
 			bufferlist& bl, 
@@ -138,6 +144,7 @@ class Ebofs {
   // object attr
   int setattr(object_t oid, const char *name, void *value, size_t size);
   int getattr(object_t oid, const char *name, void *value, size_t size);
+  int rmattr(object_t oid, const char *name);
   int listattr(object_t oid, vector<string>& attrs);
   
   // collections
@@ -153,6 +160,7 @@ class Ebofs {
   
   int collection_setattr(object_t oid, const char *name, void *value, size_t size);
   int collection_getattr(object_t oid, const char *name, void *value, size_t size);
+  int collection_rmattr(coll_t cid, const char *name);
   int collection_listattr(object_t oid, vector<string>& attrs);
   
 };

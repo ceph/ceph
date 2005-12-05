@@ -569,6 +569,8 @@ void Ebofs::flush_all()
 }
 
 
+
+
 // ? is this the best way ?
 class C_E_FlushPartial : public Context {
   Ebofs *ebofs;
@@ -671,6 +673,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	dout(10) << "apply_write extending object size " << on->object_size 
 			 << " -> " << off+len << endl;
 	on->object_size = off+len;
+	on->mark_dirty();
   }
   if (zleft)
 	dout(10) << "apply_write zeroing first " << zleft << " bytes" << endl;
@@ -995,6 +998,14 @@ int Ebofs::read(object_t oid,
 
 int Ebofs::write(object_t oid, 
 				 size_t len, off_t off, 
+				 bufferlist& bl, bool fsync)
+{
+  // FIXME
+  return write(oid, len, off, bl, (Context*)0);
+}
+
+int Ebofs::write(object_t oid, 
+				 size_t len, off_t off, 
 				 bufferlist& bl, Context *onflush)
 {
   assert(len > 0);
@@ -1003,9 +1014,6 @@ int Ebofs::write(object_t oid,
   Onode *on = get_onode(oid);
   if (!on) 
 	on = new_onode(oid);	// new inode!
-
-  // apply to buffer cache
-  apply_write(on, len, off, bl);
 
   // allocate more space?
   block_t bnum = (len+off-1) / EBOFS_BLOCK_SIZE + 1;
@@ -1026,6 +1034,9 @@ int Ebofs::write(object_t oid,
 	}	
   }
   
+  // apply to buffer cache
+  apply_write(on, len, off, bl);
+
 
   
   // attr changes
@@ -1044,6 +1055,106 @@ int Ebofs::write(object_t oid,
 }
 
 
+int Ebofs::remove(object_t oid)
+{
+  // get inode
+  Onode *on = get_onode(oid);
+  if (!on) return -1;
+
+  // FIXME locking, buffer, flushing etc.
+  assert(0);
+
+  remove_onode(on);  
+  return 0;
+}
+
+int Ebofs::truncate(object_t oid, off_t size)
+{
+  assert(0);
+}
+
+
+
+bool Ebofs::exists(object_t oid)
+{
+  Onode *on = get_onode(oid);
+  if (!on)
+	return false;
+  put_onode(on);
+  return true;
+}
+
+int Ebofs::stat(object_t oid, struct stat *st)
+{
+  Onode *on = get_onode(oid);
+  if (!on)
+	return -1;
+  
+  // ??
+  st->st_size = on->object_size;
+
+  put_onode(on);
+  return 0;
+}
+
+// attributes
+
+int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
+{
+  Onode *on = get_onode(oid);
+  if (!on) return -1;
+
+  string n(name);
+  AttrVal val((char*)value, size);
+  on->attr[n] = val;
+  on->mark_dirty();
+
+  put_onode(on);
+  return 0;
+}
+
+int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
+{
+  Onode *on = get_onode(oid);
+  if (!on) return -1;
+
+  string n(name);
+  if (on->attr.count(n) == 0) return -1;
+  memcpy(value, on->attr[n].data, MIN( on->attr[n].len, (int)size ));
+
+  on->mark_dirty();
+  put_onode(on);
+  return 0;
+}
+
+int Ebofs::rmattr(object_t oid, const char *name) 
+{
+  Onode *on = get_onode(oid);
+  if (!on) return -1;
+
+  string n(name);
+  on->attr.erase(n);
+
+  on->mark_dirty();
+  put_onode(on);
+  return 0;
+}
+
+int Ebofs::listattr(object_t oid, vector<string>& attrs)
+{
+  Onode *on = get_onode(oid);
+  if (!on) return -1;
+
+  attrs.clear();
+  for (map<string,AttrVal>::iterator i = on->attr.begin();
+	   i != on->attr.end();
+	   i++) {
+	attrs.push_back(i->first);
+  }
+
+  put_onode(on);
+  return 0;
+}
 
 
 
@@ -1136,4 +1247,63 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 
   return num;
 }
+
+
+int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t size)
+{
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -1;
+
+  string n(name);
+  AttrVal val((char*)value, size);
+  cn->attr[n] = val;
+  cn->mark_dirty();
+
+  put_cnode(cn);
+  return 0;
+}
+
+int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t size)
+{
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -1;
+
+  string n(name);
+  if (cn->attr.count(n) == 0) return -1;
+  memcpy(value, cn->attr[n].data, MIN( cn->attr[n].len, (int)size ));
+
+  cn->mark_dirty();
+  put_cnode(cn);
+  return 0;
+}
+
+int Ebofs::collection_rmattr(coll_t cid, const char *name) 
+{
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -1;
+
+  string n(name);
+  cn->attr.erase(n);
+
+  cn->mark_dirty();
+  put_cnode(cn);
+  return 0;
+}
+
+int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
+{
+  Cnode *cn = get_cnode(cid);
+  if (!cn) return -1;
+
+  attrs.clear();
+  for (map<string,AttrVal>::iterator i = cn->attr.begin();
+	   i != cn->attr.end();
+	   i++) {
+	attrs.push_back(i->first);
+  }
+
+  put_cnode(cn);
+  return 0;
+}
+
 

@@ -26,11 +26,11 @@ int main(int argc, char **argv)
 	char crap[10000];
 	memset(crap, 0, 10000);
 	bl.append(crap, 10000);
- 	fs.write(10, bl.length(), 200, bl, 0);
+ 	fs.write(10, bl.length(), 200, bl, (Context*)0);
 	fs.trim_buffer_cache();
- 	fs.write(10, bl.length(), 3222, bl, 0);
+ 	fs.write(10, bl.length(), 3222, bl, (Context*)0);
 	fs.trim_buffer_cache();
- 	fs.write(10, 5000, 3222, bl, 0);
+ 	fs.write(10, 5000, 3222, bl, (Context*)0);
   }
 
   // test small writes
@@ -46,7 +46,7 @@ int main(int argc, char **argv)
 	  off_t off = rand() % 1000000;
 	  size_t len = 100;
 	  cout << "writing bit at " << off << " len " << len << endl;
-	  fs.write(10, len, off, bl, 0);
+	  fs.write(10, len, off, bl, (Context*)0);
 	}
 	
 	if (0) {
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 	  off_t off = rand() % 1000000;
 	  size_t len = 100;
 	  cout << "writing bit at " << off << " len " << len << endl;
-	  fs.write(10, len, off, bl, 0);
+	  fs.write(10, len, off, bl, (Context*)0);
 	}
 
   }

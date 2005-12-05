@@ -437,7 +437,7 @@ class PG {
   
   void store(ObjectStore *store) {
 	if (!store->collection_exists(pgid))
-	  store->collection_create(pgid);
+	  store->create_collection(pgid);
 	store->collection_setattr(pgid, "role", &role, sizeof(role));
 	store->collection_setattr(pgid, "primary_since", &primary_since, sizeof(primary_since));
 	store->collection_setattr(pgid, "state", &state, sizeof(state));	

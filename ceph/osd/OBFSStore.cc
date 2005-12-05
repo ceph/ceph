@@ -36,7 +36,7 @@ OBFSStore::OBFSStore(int whoami, char *param, char *dev)
 		strcpy(this->param, param);
 }
 
-int OBFSStore::init(void)
+int OBFSStore::mount(void)
 {
 	dout(0) << "OBFS init!" << endl;
 	if ((this->bdev_id = device_open(this->dev, O_RDWR)) < 0) {
@@ -126,7 +126,7 @@ int OBFSStore::mkfs(void)
 	return 0;
 }
 
-int OBFSStore::finalize(void)
+int OBFSStore::umount(void)
 {
 	uofs_shutdown();
 	close(this->bdev_id);

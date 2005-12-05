@@ -25,6 +25,7 @@ using namespace __gnu_cxx;
   compile now?
 */
 
+/*
 namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
 	size_t operator()(unsigned long long __x) const { 
@@ -42,6 +43,7 @@ namespace __gnu_cxx {
     }
   };
 }
+*/
 
 
 // disk

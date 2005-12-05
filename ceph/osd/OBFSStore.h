@@ -14,8 +14,8 @@ class OBFSStore: public ObjectStore {
       public:
 	OBFSStore(int whoami, char *param, char *dev);
 
-	int init(void);
-	int finalize(void);
+	int mount(void);
+	int umount(void);
 	int mkfs(void);
 
 	bool exists(object_t oid);

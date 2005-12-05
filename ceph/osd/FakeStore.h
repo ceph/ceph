@@ -35,8 +35,8 @@ class FakeStore : public ObjectStore {
  public:
   FakeStore(char *base, int whoami);
 
-  int init();
-  int finalize();
+  int mount();
+  int umount();
   int mkfs();
 
 
@@ -81,9 +81,10 @@ class FakeStore : public ObjectStore {
 
  public:
   int list_collections(list<coll_t>& ls);
+  int create_collection(coll_t c);
+  int destroy_collection(coll_t c);
   int collection_stat(coll_t c, struct stat *st);
-  int collection_create(coll_t c);
-  int collection_destroy(coll_t c);
+  bool collection_exists(coll_t c);
   int collection_add(coll_t c, object_t o);
   int collection_remove(coll_t c, object_t o);
   int collection_list(coll_t c, list<object_t>& o);

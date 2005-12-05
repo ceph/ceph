@@ -41,7 +41,7 @@ FakeStore::FakeStore(char *base, int whoami)
 }
 
 
-int FakeStore::init() 
+int FakeStore::mount() 
 {
   string mydir;
   get_dir(mydir);
@@ -68,7 +68,7 @@ int FakeStore::init()
   return 0;
 }
 
-int FakeStore::finalize() 
+int FakeStore::umount() 
 {
   dout(5) << "finalize" << endl;
 
@@ -462,15 +462,7 @@ int FakeStore::list_collections(list<coll_t>& ls)
   return 0;
 }
 
-int FakeStore::collection_stat(coll_t c, struct stat *st) {
-  if (!collections.is_open()) open_collections();
-
-  string fn;
-  get_collfn(c,fn);
-  return ::stat(fn.c_str(), st);
-}
-
-int FakeStore::collection_create(coll_t c) {
+int FakeStore::create_collection(coll_t c) {
   if (!collections.is_open()) open_collections();
 
   collections.put(c, 1);
@@ -478,7 +470,7 @@ int FakeStore::collection_create(coll_t c) {
   return 0;
 }
 
-int FakeStore::collection_destroy(coll_t c) {
+int FakeStore::destroy_collection(coll_t c) {
   if (!collections.is_open()) open_collections();
 
   collections.del(c);
@@ -492,6 +484,19 @@ int FakeStore::collection_destroy(coll_t c) {
   delete collection_map[c];
   collection_map.erase(c);
   return 0;
+}
+
+int FakeStore::collection_stat(coll_t c, struct stat *st) {
+  if (!collections.is_open()) open_collections();
+
+  string fn;
+  get_collfn(c,fn);
+  return ::stat(fn.c_str(), st);
+}
+
+bool FakeStore::collection_exists(coll_t c) {
+  struct stat st;
+  return collection_stat(c, &st) == 0;
 }
 
 int FakeStore::collection_add(coll_t c, object_t o) {

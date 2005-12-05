@@ -52,10 +52,12 @@ public:
 
   ObjectCache  *oc;
 
+  bool          dirty;
 
  public:
   Onode(object_t oid) : ref(0), object_id(oid),
-	object_size(0), object_blocks(0), oc(0) { 
+	object_size(0), object_blocks(0), oc(0),
+	dirty(false) { 
 	onode_loc.length = 0;
   }
   ~Onode() {
@@ -76,6 +78,21 @@ public:
 	if (ref == 0) lru_unpin();
 	cout << "onode.put " << ref << endl;
   }
+
+  void mark_dirty() {
+	if (!dirty) {
+	  dirty = true;
+	  get();
+	}
+  }
+  void mark_clean() {
+	if (dirty) {
+	  dirty = false;
+	  put();
+	}
+  }
+  bool is_dirty() { return dirty; }
+
   
   ObjectCache *get_oc(BufferCache *bc) {
 	if (!oc) {
