@@ -95,7 +95,7 @@ void BlockDevice::do_io(biovec *bio)
 	bio->rval = r;
   }
   else if (bio->context) {
-	bio->context->finish(r);
+	bio->context->finish((int)bio);
 	delete bio->context;
 	delete bio;
   }
@@ -268,7 +268,7 @@ int BlockDevice::cancel_io(ioh_t ioh)
   
   // FIXME?
   if (r == 0 && pbio->context) {
-	pbio->context->finish(-1);
+	pbio->context->finish(0);
 	delete pbio->context;
 	delete pbio;
   }

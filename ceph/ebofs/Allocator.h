@@ -22,6 +22,8 @@ class Allocator {
 
   int find(Extent& ex, int bucket, block_t num, block_t near);
 
+  void dump_freelist();
+
  public:
   Allocator(Ebofs *f) : fs(f) {}
   

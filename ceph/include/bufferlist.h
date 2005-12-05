@@ -259,6 +259,10 @@ class bufferlist {
 	bufferptr tempbp(bp, len, off);
 	push_back(tempbp);
   }
+  void append(bufferlist& bl) {
+	bufferlist temp = bl;  // copy list
+	claim_append(temp);    // and append
+  }
   
   
   /*

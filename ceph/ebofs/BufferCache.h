@@ -108,7 +108,75 @@ class BufferHead : public LRUObject {
   }
   */
 
+  void copy_partial_substr(off_t start, off_t end, bufferlist& bl) {
+	map<off_t, bufferlist>::iterator i = partial.begin();
+	
+	// skip first bits (fully to left)
+	while ((i->first + i->second.length() < start) &&
+		   i != partial.end()) 
+	  i++;
+	assert(i != partial.end());
+	assert(i->first <= start);
+	
+	// first
+	unsigned bhoff = MAX(start, i->first) - i->first;
+	unsigned bhlen = MIN(end-start, i->second.length());
+	bl.substr_of( i->second, bhoff, bhlen );
+
+	off_t pos = i->first + i->second.length();
+	
+	// have continuous to end?
+	for (i++; i != partial.end(); i++) {
+	  if (pos >= end) break;
+	  assert(pos == i->first);
+
+	  pos = i->first + i->second.length();
+
+	  if (pos <= end) {	  // this whole frag
+		bl.append( i->second );
+	  } else {            // partial end
+		unsigned bhlen = end-start-bl.length();
+		bufferlist frag;
+		frag.substr_of( i->second, 0, bhlen );
+		bl.claim_append(frag);
+		break;  // done.
+	  }
+	}
+	
+	assert(pos >= end);
+	assert(bl.length() == (unsigned)(end-start));
+  }
+
+  bool have_partial_range(off_t start, off_t end) {
+	map<off_t, bufferlist>::iterator i = partial.begin();
+
+	// skip first bits (fully to left)
+	while ((i->first + i->second.length() < start) &&
+		   i != partial.end()) 
+	  i++;
+	if (i == partial.end()) return false;
+
+	// have start?
+	if (i->first > start) return false;
+	off_t pos = i->first + i->second.length();
+
+	// have continuous to end?
+	for (i++; i != partial.end(); i++) {
+	  assert(pos <= i->first);
+	  if (pos < i->first) return false;
+	  assert(pos == i->first);
+	  pos = i->first + i->second.length();
+	  if (pos >= end) break;  // gone far enough
+	}
+
+	if (pos >= end) return true;
+	return false;
+  }
+
   bool partial_is_complete(off_t size) {
+	return have_partial_range( (off_t)(start()*EBOFS_BLOCK_SIZE),
+							   MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) ) );
+	/*
 	map<off_t, bufferlist>::iterator i = partial.begin();
 	if (i == partial.end()) return false;
 	if (i->first != (off_t)(object_loc.start * EBOFS_BLOCK_SIZE)) return false;
@@ -122,6 +190,7 @@ class BufferHead : public LRUObject {
 	off_t upto = MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) );
 	if (pos == upto) return true;
 	return false;
+	*/
   }
   void apply_partial() {
 	const off_t bhstart = start() * EBOFS_BLOCK_SIZE;
@@ -233,8 +302,8 @@ class ObjectCache {
   int scan_versions(block_t start, block_t len,
 					version_t& low, version_t& high);
 
-  void rx_finish(block_t start, block_t length);
-  void tx_finish(block_t start, block_t length, version_t v);
+  void rx_finish(ioh_t ioh, block_t start, block_t length);
+  void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v);
 
 };
 
@@ -245,8 +314,9 @@ public:
   C_OC_RxFinish(ObjectCache *o, block_t s, block_t l) :
 	oc(o), start(s), length(l) {}
   void finish(int r) {
-	if (r == 0) 
-	  oc->rx_finish(start, length);
+	ioh_t ioh = (ioh_t)r;
+	if (ioh)
+	  oc->rx_finish(ioh, start, length);
   }  
 };
 
@@ -258,8 +328,9 @@ public:
   C_OC_TxFinish(ObjectCache *o, block_t s, block_t l, version_t v) :
 	oc(o), start(s), length(l), version(v) {}
   void finish(int r) {
-	if (r == 0) 
-	  oc->tx_finish(start, length, version);
+	ioh_t ioh = (ioh_t)r;
+	if (ioh) 
+	  oc->tx_finish(ioh, start, length, version);
   }  
 };
 

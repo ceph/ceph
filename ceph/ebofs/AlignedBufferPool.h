@@ -55,6 +55,7 @@ class AlignedBufferPool {
   }
 
 
+  // allocate a single buffer
   buffer* alloc() {
 	// get more memory?
 	if (freelist.empty()) {

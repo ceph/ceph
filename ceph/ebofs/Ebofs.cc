@@ -375,42 +375,37 @@ void Ebofs::trim_buffer_cache()
   bc.lock.Unlock();
 }
 
-class C_E_Flush : public Context {
-  int *i;
-  Mutex *m;
-  Cond *c;
-public:
-  C_E_Flush(int *_i, Mutex *_m, Cond *_c) : i(_i), m(_m), c(_c) {}
-  void finish(int r) {
-	(*i)--;
-	m->Lock();
-	c->Signal();
-	m->Unlock();
-  }
-};
 
 void Ebofs::flush_all()
 {
   // FIXME what about partial heads?
   
-  // write all dirty bufferheads
+  dout(1) << "flush_all" << endl;
+
   bc.lock.Lock();
 
-  dout(1) << "flush_all writing dirty bufferheads" << endl;
-  while (!bc.dirty_bh.empty()) {
-	set<BufferHead*>::iterator i = bc.dirty_bh.begin();
-	BufferHead *bh = *i;
-	if (bh->ioh) continue;
-	Onode *on = get_onode(bh->oc->get_object_id());
-	bh_write(on, bh);
-	put_onode(on);
-  }
-  dout(1) << "flush_all submitted" << endl;
+  while (bc.get_stat_dirty() > 0 ||  // not strictly necessary
+		 bc.get_stat_tx() > 0 ||
+		 bc.get_stat_partial() > 0 ||
+		 bc.get_stat_rx() > 0) {
 
-  
-  while (bc.get_stat_tx() > 0 ||
-		 bc.get_stat_partial() > 0) {
-	dout(1) << "flush_all waiting for " << bc.get_stat_tx() << " tx, " << bc.get_stat_partial() << " partial" << endl;
+	// write all dirty bufferheads
+	while (!bc.dirty_bh.empty()) {
+	  set<BufferHead*>::iterator i = bc.dirty_bh.begin();
+	  BufferHead *bh = *i;
+	  if (bh->ioh) continue;
+	  Onode *on = get_onode(bh->oc->get_object_id());
+	  bh_write(on, bh);
+	  put_onode(on);
+	}
+
+	// wait for all tx and partial buffers to flush
+	dout(1) << "flush_all waiting for " 
+			<< bc.get_stat_dirty() << " dirty, " 
+			<< bc.get_stat_tx() << " tx, " 
+			<< bc.get_stat_rx() << " rx, " 
+			<< bc.get_stat_partial() << " partial" 
+			<< endl;
 	bc.waitfor_stat();
   }
   bc.lock.Unlock();
@@ -434,28 +429,36 @@ public:
 void Ebofs::bh_read(Onode *on, BufferHead *bh)
 {
   dout(5) << "bh_read " << *on << " on " << *bh << endl;
-  assert(bh->get_version() == 0);
-  assert(bh->is_rx() || bh->is_partial());
+
+  if (bh->is_missing())	{
+	bc.mark_rx(bh);
+  } else {
+	assert(bh->is_partial());
+  }
   
   // get extents
   vector<Extent> ex;
   on->map_extents(bh->start(), bh->length(), ex);
+
+  // alloc new buffer
+  bc.bufferpool.alloc_list(bh->length(), bh->data);  // new buffers!
   
   // lay out on disk
-  block_t ooff = 0;
+  block_t bhoff = 0;
   for (unsigned i=0; i<ex.size(); i++) {
-	dout(10) << "bh_read  " << ooff << ": " << ex[i] << endl;
+	dout(10) << "bh_read  " << bhoff << ": " << ex[i] << endl;
 	bufferlist sub;
-	sub.substr_of(bh->data, ooff*EBOFS_BLOCK_SIZE, ex[i].length*EBOFS_BLOCK_SIZE);
+	sub.substr_of(bh->data, bhoff*EBOFS_BLOCK_SIZE, ex[i].length*EBOFS_BLOCK_SIZE);
 
-	if (bh->is_partial()) 
-	  bh->waitfor_read.push_back(new C_E_FlushPartial(this, on, bh));
+	//if (bh->is_partial())  
+	//bh->waitfor_read.push_back(new C_E_FlushPartial(this, on, bh));
 
 	assert(bh->ioh == 0);
 	bh->ioh = dev.read(ex[i].start, ex[i].length, sub,
-					   new C_OC_RxFinish(on->oc, ooff, ex[i].length));
-
-	ooff += ex[i].length;
+					   new C_OC_RxFinish(on->oc, 
+										 bhoff + bh->start(), ex[i].length));
+	
+	bhoff += ex[i].length;
   }
 }
 
@@ -548,7 +551,8 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 
 	// partial at head or tail?
 	if ((bh->start() == bstart && off % EBOFS_BLOCK_SIZE != 0) ||
-		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0)) {
+		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0) ||
+		(len % EBOFS_BLOCK_SIZE != 0)) {
 	  // locate ourselves in bh
 	  unsigned off_in_bh = opos - bh->start()*EBOFS_BLOCK_SIZE;
 	  assert(off_in_bh >= 0);
@@ -598,6 +602,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 		else if (bh->is_missing()) {
 		  dout(10) << "apply_write  missing -> partial " << *bh << endl;
 		  bh_read(on, bh);	
+		  bc.mark_partial(bh);
 		}
 		else if (bh->is_partial()) {
 		  if (bh->ioh == 0) {
@@ -635,11 +640,12 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	  continue;
 	}
 
-	// ok, we're talking full blocks now.
-
+	// ok, we're talking full block(s) now.
+	assert(opos % EBOFS_BLOCK_SIZE == 0);
+	assert(zleft+left >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()));
 
 	// alloc new buffers.
-	bc.bufferpool.alloc_list(len, bh->data);
+	bc.bufferpool.alloc_list(bh->length(), bh->data);
 	
 	// copy!
 	unsigned len_in_bh = bh->length()*EBOFS_BLOCK_SIZE;
@@ -683,10 +689,149 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 
 // *** file i/o ***
 
+class C_E_Cond : public Context {
+  Cond *cond;
+public:
+  C_E_Cond(Cond *c) : cond(c) {}
+  void finish(int r) {
+	cond->Signal();
+  }
+};
+
+bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on)
+{
+  dout(10) << "attempt_read " << *on << " len " << len << " off " << off << endl;
+  ObjectCache *oc = on->get_oc(&bc);
+
+  // map
+  block_t bstart = off / EBOFS_BLOCK_SIZE;
+  block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
+  block_t blen = blast-bstart+1;
+
+  map<block_t, BufferHead*> hits;
+  map<block_t, BufferHead*> missing;  // read these
+  map<block_t, BufferHead*> rx;       // wait for these
+  map<block_t, BufferHead*> partials;  // ??
+  oc->map_read(bstart, blen, hits, missing, rx, partials);
+
+  // missing buffers?
+  if (!missing.empty()) {
+	for (map<block_t,BufferHead*>::iterator i = missing.begin();
+		 i != missing.end();
+		 i++) {
+	  dout(15) <<"attempt_read missing buffer " << *(i->second) << endl;
+	  bh_read(on, i->second);
+	}
+	BufferHead *wait_on = missing.begin()->second;
+	wait_on->waitfor_read.push_back(new C_E_Cond(will_wait_on));
+	return false;
+  }
+  
+  // are partials sufficient?
+  bool partials_ok = true;
+  for (map<block_t,BufferHead*>::iterator i = partials.begin();
+	   i != partials.end();
+	   i++) {
+	off_t start = MAX( off, (off_t)(i->second->start()*EBOFS_BLOCK_SIZE) );
+	off_t end = MIN( off+len, (off_t)(i->second->end()*EBOFS_BLOCK_SIZE) );
+	
+	if (!i->second->have_partial_range(start, end)) {
+	  if (partials_ok) {
+		// wait on this one
+		dout(15) <<"attempt_read insufficient partial buffer " << *(i->second) << endl;
+		i->second->waitfor_read.push_back(new C_E_Cond(will_wait_on));
+	  }
+	  partials_ok = false;
+	}
+  }
+  if (!partials_ok) return false;
+
+  // wait on rx?
+  if (!rx.empty()) {
+	BufferHead *wait_on = rx.begin()->second;
+	dout(15) <<"attempt_read waiting for read to finish on " << *wait_on << endl;
+	wait_on->waitfor_read.push_back(new C_E_Cond(will_wait_on));
+	return false;
+  }
+
+  // yay, we have it all!
+  // concurrently walk thru hits, partials.
+  map<block_t,BufferHead*>::iterator h = hits.begin();
+  map<block_t,BufferHead*>::iterator p = partials.begin();
+
+  off_t pos = off;
+  block_t curblock = bstart;
+  while (curblock <= blast) {
+	BufferHead *bh = 0;
+	if (h->first == curblock) {
+	  bh = h->second;
+	  h++;
+	} else if (p->first == curblock) {
+	  bh = p->second;
+	  p++;
+	} else assert(0);
+	
+	off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
+	off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
+	off_t start = MAX( pos, bhstart );
+	off_t end = MIN( off+len, bhend );
+	
+	if (bh->is_partial()) {
+	  // copy from a partial block.  yuck!
+	  bufferlist frag;
+	  bh->copy_partial_substr( start, end, frag );
+	  bl.claim_append( frag );
+	  pos += frag.length();
+	} else {
+	  // copy from a full block.
+	  if (bhstart == start && bhend == end) {
+		bl.append( bh->data );
+		pos += bh->data.length();
+	  } else {
+		bufferlist frag;
+		frag.substr_of(bh->data, start-bhstart, end-start);
+		pos += frag.length();
+		bl.claim_append( frag );
+	  }
+	}
+
+	curblock = bh->end();
+	assert((off_t)(curblock*EBOFS_BLOCK_SIZE) == pos ||
+		   end != bhend);
+  }
+
+  assert(bl.length() == len);
+  return true;
+}
+
 int Ebofs::read(object_t oid, 
 				size_t len, off_t off, 
 				bufferlist& bl)
 {
+  
+  Onode *on = get_onode(oid);
+  if (!on) 
+	return -1;  // object dne?
+
+  // read data into bl.  block as necessary.
+  Cond cond;
+
+  bc.lock.Lock();
+  while (1) {
+	// check size bound
+	if (off >= on->object_size) {
+	  put_onode(on);
+	  break;
+	}
+	size_t will_read = MIN( off+len, on->object_size ) - off;
+	
+	if (attempt_read(on, will_read, off, bl, &cond))
+	  break;  // yay
+	
+	// wait
+	cond.Wait(bc.lock);
+  }
+  bc.lock.Unlock();
   
   return 0;
 }

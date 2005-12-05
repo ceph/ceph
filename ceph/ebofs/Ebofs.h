@@ -76,7 +76,7 @@ class Ebofs {
 
   void zero(Onode *on, size_t len, off_t off, off_t write_thru);
   void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
-  bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl);
+  bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on);
 
   // io
   void bh_read(Onode *on, BufferHead *bh);

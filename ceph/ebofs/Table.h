@@ -186,7 +186,7 @@ class Table : public _Table {
 		open[l+1] = table->pool.get_node( open[l].index_item(pos[l]).node );
 		pos[l+1] = open[l+1].size() - 1;
 	  }
-	  return 0;
+	  return 1;
 	}
 	int move_right() {
 	  if (table->depth == 0) return OOB; 
@@ -213,7 +213,7 @@ class Table : public _Table {
 		open[l+1] = table->pool.get_node( open[l].index_item(pos[l]).node );
 		pos[l+1] = 0;  // furthest left
 	  }
-	  return 0;
+	  return 1;
 	}
 
 	// ** modifications **

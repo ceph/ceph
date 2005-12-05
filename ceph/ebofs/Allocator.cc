@@ -3,6 +3,28 @@
 #include "Ebofs.h"
 
 
+#undef dout
+#define dout(x) if (x <= g_conf.debug) cout << "allocator." 
+
+
+void Allocator::dump_freelist()
+{
+  for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
+	cout << "bucket " << b << endl;
+	if (fs->free_tab[b]->get_num_keys() > 0) {
+	  Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
+	  fs->free_tab[b]->find(0, cursor);
+	  while (1) {
+		cout << "  ex " << cursor.current().key << " + " << cursor.current().value << endl;
+		if (cursor.move_right() < 0) break;
+	  }
+	} else {
+	  cout << "  empty" << endl;
+	}
+  }
+}
+
+
 int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 {
   Table<block_t,block_t>::Cursor cursor(fs->free_tab[bucket]);
@@ -14,14 +36,14 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 	do {
 	  if (cursor.current().value >= num)
 		found = true;
-	} while (!found && cursor.move_right() > 0);
+	} while (!found && cursor.move_right() >= 0);
   }
 
   if (!found) {
 	// look to the left
 	fs->free_tab[bucket]->find( near, cursor );
 
-	while (!found && cursor.move_left() > 0) 
+	while (!found && cursor.move_left() >= 0) 
 	  if (cursor.current().value >= num)
 		found = true;
   }
@@ -88,6 +110,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  }
 
 	  dout(1) << "allocator.alloc " << ex << " near " << near << endl;
+	  dump_freelist();
 	  return num;
 	}
   }
@@ -101,11 +124,14 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  
 	  fs->free_tab[bucket]->remove(ex.start);
 	  fs->free_blocks -= ex.length;
+	  dout(1) << "allocator.alloc partial " << ex << " near " << near << endl;
+	  dump_freelist();
 	  return ex.length;
 	}	
   }
 
   dout(1) << "allocate failed, fs full!  " << fs->free_blocks << endl;
+  dump_freelist();
   return -1;
 }
 
@@ -113,6 +139,8 @@ int Allocator::release(Extent& ex)
 {
   Extent newex = ex;
   
+  dout(1) << "release " << ex << endl;
+
   // one after us?
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
 	Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
@@ -132,7 +160,7 @@ int Allocator::release(Extent& ex)
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
 	Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
 	fs->free_tab[b]->find( newex.start+newex.length, cursor );
-	if (cursor.move_left() > 0 &&
+	if (cursor.move_left() >= 0 &&
 		(cursor.current().key + cursor.current().value == newex.start)) {
 	  // merge
 	  newex.start = cursor.current().key;
@@ -149,6 +177,8 @@ int Allocator::release(Extent& ex)
   // ok, insert newex
   int b = pick_bucket(ex.length);
   fs->free_tab[b]->insert(ex.start, ex.length);
+
+  dump_freelist();
   return 0;
 }
 

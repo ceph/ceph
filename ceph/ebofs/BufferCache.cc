@@ -22,7 +22,7 @@
 
 
 
-void ObjectCache::rx_finish(block_t start, block_t length)
+void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 {
   list<Context*> waiters;
 
@@ -50,6 +50,8 @@ void ObjectCache::rx_finish(block_t start, block_t length)
 	else {
 	  dout(10) << "rx_finish  ignoring " << *p->second << endl;
 	}
+	
+	if (p->second->ioh == ioh) p->second->ioh = 0;
 
 	// trigger waiters
 	waiters.splice(waiters.begin(), p->second->waitfor_read);
@@ -61,7 +63,7 @@ void ObjectCache::rx_finish(block_t start, block_t length)
 }
 
 
-void ObjectCache::tx_finish(block_t start, block_t length, version_t version)
+void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length, version_t version)
 {
   list<Context*> waiters;
 
@@ -90,6 +92,8 @@ void ObjectCache::tx_finish(block_t start, block_t length, version_t version)
 	p->second->set_last_flushed(version);
 	bc->mark_clean(p->second);
 
+	if (p->second->ioh == ioh) p->second->ioh = 0;
+
 	// trigger waiters
 	waiters.splice(waiters.begin(), p->second->waitfor_flush);
   }	
@@ -112,7 +116,8 @@ int ObjectCache::map_read(block_t start, block_t len,
   block_t cur = start;
   block_t left = len;
   
-  if (p != data.begin() && p->first < cur) {
+  if (p != data.begin() && 
+	  (p->first > cur || p == data.end())) {
 	p--;     // might overlap!
 	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
@@ -192,7 +197,8 @@ int ObjectCache::map_write(block_t start, block_t len,
   block_t cur = start;
   block_t left = len;
   
-  if (p != data.begin() && p->first < cur) {
+  if (p != data.begin() && 
+	  (p->first > cur || p == data.end())) {
 	p--;     // might overlap!
 	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
