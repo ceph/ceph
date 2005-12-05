@@ -10,16 +10,16 @@
 void Allocator::dump_freelist()
 {
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
-	cout << "bucket " << b << endl;
+	dout(20) << "dump bucket " << b << endl;
 	if (fs->free_tab[b]->get_num_keys() > 0) {
 	  Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
 	  fs->free_tab[b]->find(0, cursor);
 	  while (1) {
-		cout << "  ex " << cursor.current().key << " + " << cursor.current().value << endl;
-		if (cursor.move_right() < 0) break;
+		dout(20) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
+		if (cursor.move_right() <= 0) break;
 	  }
 	} else {
-	  cout << "  empty" << endl;
+	  //cout << "  empty" << endl;
 	}
   }
 }

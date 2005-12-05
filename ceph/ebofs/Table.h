@@ -683,6 +683,33 @@ class Table : public _Table {
 
   }
 
+  void clear(Cursor& cursor, int node_loc, int level) {
+	Nodeptr node = pool.get_node( node_loc );
+	cursor.open[level] = node;
+	
+	// hose children?
+	if (level < depth-1) {   
+	  for (int i=0; i<node.size(); i++) {
+		// index
+		cursor.pos[level] = i;
+		nodeid_t child = cursor.open[level].index_item(i).node;
+		clear( cursor, child, level+1 );
+	  }	  
+	}
+
+	// hose myself
+	pool.release( node_loc );
+  }
+  
+  void clear() {
+	int count = 0;
+	Cursor cursor(this);
+	if (root == -1 && depth == 0) return;   // already empty!
+	int err = clear(cursor, root, 0);
+	root = -1;
+	depth = 0;
+  }
+
   int verify(Cursor& cursor, int node_loc, int level, int& count) {
 	int err = 0;
 

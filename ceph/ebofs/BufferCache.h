@@ -254,7 +254,7 @@ class BufferHead : public LRUObject {
 
 inline ostream& operator<<(ostream& out, BufferHead& bh)
 {
-  out << "bufferhead(" << bh.start() << "+" << bh.length();
+  out << "bufferhead(" << bh.start() << "~" << bh.length();
   out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
   if (bh.is_missing()) out << " missing";
   if (bh.is_dirty()) out << " dirty";

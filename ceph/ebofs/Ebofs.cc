@@ -39,6 +39,10 @@ int Ebofs::mount()
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t, block_t>( table_nodepool, sb->free_tab[i] );
 
+  collection_tab = new Table<coll_t, Extent>( table_nodepool, sb->collection_tab );
+  oc_tab = new Table<idpair_t, bool>( table_nodepool, sb->oc_tab );
+  co_tab = new Table<idpair_t, bool>( table_nodepool, sb->co_tab );
+
   dout(2) << "mount mounted" << endl;
   mounted = true;
   return 0;
@@ -71,7 +75,9 @@ int Ebofs::mkfs()
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t,block_t>( table_nodepool, empty );
 
- 
+  oc_tab = new Table<idpair_t, bool>( table_nodepool, empty );
+  co_tab = new Table<idpair_t, bool>( table_nodepool, empty );
+
   // add free space
   Extent left;
   left.start = nr.start + nr.length;
@@ -110,9 +116,12 @@ int Ebofs::umount()
 
   // close tables
   delete object_tab;
-  delete collection_tab;
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	delete free_tab[i];
+
+  delete collection_tab;
+  delete oc_tab;
+  delete co_tab;
 
   return 0;
 }
@@ -147,6 +156,18 @@ int Ebofs::write_super()
 	sb.free_tab[i].root = free_tab[i]->get_root();
 	sb.free_tab[i].depth = free_tab[i]->get_depth();
   }
+
+  sb.collection_tab.num_keys = collection_tab->get_num_keys();
+  sb.collection_tab.root = collection_tab->get_root();
+  sb.collection_tab.depth = collection_tab->get_depth();
+
+  sb.oc_tab.num_keys = oc_tab->get_num_keys();
+  sb.oc_tab.root = oc_tab->get_root();
+  sb.oc_tab.depth = oc_tab->get_depth();
+
+  sb.co_tab.num_keys = co_tab->get_num_keys();
+  sb.co_tab.root = co_tab->get_root();
+  sb.co_tab.depth = co_tab->get_depth();
 
   // pools
   sb.table_nodepool.num_regions = table_nodepool.get_num_regions();
@@ -217,7 +238,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	p += key.length() + 1;
 	int len = *(int*)(p);
 	p += sizeof(len);
-	on->attr[key] = OnodeAttrVal(p, len);
+	on->attr[key] = AttrVal(p, len);
   }
 
   // parse extents
@@ -267,7 +288,7 @@ void Ebofs::write_onode(Onode *on)
   
   // attr
   unsigned off = sizeof(eo);
-  for (map<string, OnodeAttrVal >::iterator i = on->attr.begin();
+  for (map<string, AttrVal >::iterator i = on->attr.begin();
 	   i != on->attr.end();
 	   i++) {
 	bl.copy_in(off, i->first.length()+1, i->first.c_str());
@@ -326,6 +347,141 @@ void Ebofs::trim_onode_cache()
 
   dout(10) << "trim_onode_cache " << onode_lru.lru_get_size() << " left" << endl;
 }
+
+
+
+// *** cnodes ****
+
+Cnode* Ebofs::new_cnode(object_t cid)
+{
+  Cnode* cn = new Cnode(cid);
+
+  assert(cnode_map.count(cid) == 0);
+  cnode_map[cid] = cn;
+  cnode_lru.lru_insert_mid(cn);
+  
+  collection_tab->insert( cid, cn->cnode_loc );  // even tho i'm not placed yet
+  
+  cn->get();
+  return cn;
+}
+
+Cnode* Ebofs::get_cnode(object_t cid)
+{
+  // in cache?
+  if (cnode_map.count(cid)) {
+	// yay
+	Cnode *cn = cnode_map[cid];
+	cn->get();
+	return cn;   
+  }
+
+  // on disk?
+  Extent cnode_loc;
+  if (collection_tab->lookup(cid, cnode_loc) != Table<coll_t,Extent>::Cursor::MATCH) {
+	// object dne.
+	return 0;
+  }
+
+  // read it!
+  bufferlist bl;
+  bufferpool.alloc_list( cnode_loc.length, bl );
+  dev.read( cnode_loc.start, cnode_loc.length, bl );
+
+  // parse data block
+  Cnode *cn = new Cnode(cid);
+
+  struct ebofs_cnode *ec = (struct ebofs_cnode*)bl.c_str();
+  cn->cnode_loc = ec->cnode_loc;
+
+  // parse attributes
+  char *p = bl.c_str() + sizeof(*ec);
+  for (int i=0; i<ec->num_attr; i++) {
+	string key = p;
+	p += key.length() + 1;
+	int len = *(int*)(p);
+	p += sizeof(len);
+	cn->attr[key] = AttrVal(p, len);
+  }
+
+  cn->get();
+  return cn;
+}
+
+void Ebofs::write_cnode(Cnode *cn)
+{
+  // allocate
+  int bytes = sizeof(ebofs_cnode) + cn->get_attr_bytes();
+  unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
+
+  bufferlist bl;
+  bufferpool.alloc_list( blocks, bl );
+
+  // place on disk    
+  if (cn->cnode_loc.length < blocks) {
+	// relocate cnode!
+	if (cn->cnode_loc.length) 
+	  allocator.release(cn->cnode_loc);
+
+	allocator.allocate(cn->cnode_loc, blocks, 0);
+	collection_tab->remove( cn->coll_id );
+	collection_tab->insert( cn->coll_id, cn->cnode_loc );
+  }
+  
+  struct ebofs_cnode ec;
+  ec.cnode_loc = cn->cnode_loc;
+  ec.coll_id = cn->coll_id;
+  ec.num_attr = cn->attr.size();
+  
+  bl.copy_in(0, sizeof(ec), (char*)&ec);
+  
+  // attr
+  unsigned off = sizeof(ec);
+  for (map<string, AttrVal >::iterator i = cn->attr.begin();
+	   i != cn->attr.end();
+	   i++) {
+	bl.copy_in(off, i->first.length()+1, i->first.c_str());
+	off += i->first.length()+1;
+	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
+	off += sizeof(int);
+	bl.copy_in(off, i->second.len, i->second.data);
+	off += i->second.len;
+  }
+  
+  // write
+  dev.write( cn->cnode_loc.start, cn->cnode_loc.length, bl );
+}
+
+void Ebofs::remove_cnode(Cnode *cn)
+{
+  // remove from table
+  collection_tab->remove(cn->coll_id);
+
+  // free cnode space
+  if (cn->cnode_loc.length)
+	allocator.release(cn->cnode_loc);
+
+  // delete mappings
+  //cn->clear();
+
+  delete cn;
+}
+
+void Ebofs::put_cnode(Cnode *cn)
+{
+  cn->put();
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 // *** buffer cache ***
@@ -886,3 +1042,98 @@ int Ebofs::write(object_t oid,
 
   return 0;
 }
+
+
+
+
+
+/***************** collections ******************/
+
+int Ebofs::list_collections(list<coll_t>& ls)
+{
+  Table<coll_t, Extent>::Cursor cursor(collection_tab);
+
+  int num = 0;
+  if (collection_tab->find(0, cursor) >= 0) {
+	while (1) {
+	  ls.push_back(cursor.current().key);
+	  num++;
+	  if (cursor.move_right() < 0) break;
+	}
+  }
+
+  return num;
+}
+
+int Ebofs::create_collection(coll_t cid)
+{
+  if (collection_exists(cid)) return -1;
+  Cnode *cn = new_cnode(cid);
+  put_cnode(cn);
+  return 0;
+}
+
+int Ebofs::destroy_collection(coll_t cid)
+{
+  if (!collection_exists(cid)) return -1;
+  Cnode *cn = new_cnode(cid);
+  
+  // hose mappings
+  list<object_t> objects;
+  collection_list(cid, objects);
+  for (list<object_t>::iterator i = objects.begin(); 
+	   i != objects.end();
+	   i++) {
+	oc_tab->remove(idpair_t(*i,cid));
+	co_tab->remove(idpair_t(cid,*i));
+  }
+
+  remove_cnode(cn);
+  return 0;
+}
+
+bool Ebofs::collection_exists(coll_t cid)
+{
+  Table<coll_t, Extent>::Cursor cursor(collection_tab);
+  if (collection_tab->find(cid, cursor) == Table<coll_t, Extent>::Cursor::MATCH) 
+	return true;
+  return false;
+}
+
+int Ebofs::collection_add(coll_t cid, object_t oid)
+{
+  if (!collection_exists(cid)) return -1;
+  oc_tab->insert(idpair_t(oid,cid), true);
+  co_tab->insert(idpair_t(cid,oid), true);
+  return 0;
+}
+
+int Ebofs::collection_remove(coll_t cid, object_t oid)
+{
+  if (!collection_exists(cid)) return -1;
+  oc_tab->remove(idpair_t(oid,cid));
+  co_tab->remove(idpair_t(cid,oid));
+  return 0;
+}
+
+int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
+{
+  if (!collection_exists(cid)) return -1;
+  
+  Table<idpair_t, bool>::Cursor cursor(co_tab);
+
+  int num = 0;
+  if (co_tab->find(idpair_t(cid,0), cursor) >= 0) {
+	while (1) {
+	  const coll_t c = cursor.current().key.first;
+	  const object_t o = cursor.current().key.second;
+	  if (c != cid) break;   // end!
+	  ls.push_back(o);
+	  num++;
+	  if (cursor.move_right() < 0) break;
+	}
+  }
+
+  return num;
+}
+

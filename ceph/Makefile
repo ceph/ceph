@@ -129,7 +129,7 @@ obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 # ebofs
-mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ${EBOFS_OBJS}
+mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs/ebo.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
@@ -141,8 +141,11 @@ testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/cloc
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
+ebofs/ebo.o: ${EBOFS_OBJS}
+	ld -i -o $@ $^
+
 mds/allmds.o: ${MDS_OBJS}
-	ld -i -o mds/allmds.o $^
+	ld -i -o $@ $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@

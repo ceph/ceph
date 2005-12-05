@@ -7,6 +7,7 @@ using namespace __gnu_cxx;
 
 #include "types.h"
 #include "Onode.h"
+#include "Cnode.h"
 #include "BlockDevice.h"
 #include "nodes.h"
 #include "Allocator.h"
@@ -17,6 +18,11 @@ using namespace __gnu_cxx;
 #include "common/Cond.h"
 
 
+typedef pair<object_t,coll_t> idpair_t;
+
+inline ostream& operator<<(ostream& out, idpair_t oc) {
+  return out << hex << oc.first << "->" << oc.second << dec << endl;
+}
 
 
 class Ebofs {
@@ -45,10 +51,12 @@ class Ebofs {
 
   // tables
   Table<object_t, Extent>     *object_tab;
-  Table<coll_t, Extent>       *collection_tab;
   Table<block_t,block_t>      *free_tab[EBOFS_NUM_FREE_BUCKETS];
 
-  // sets?
+  // collections
+  Table<coll_t, Extent>       *collection_tab;
+  Table<idpair_t, bool>  *oc_tab;
+  Table<idpair_t, bool>  *co_tab;
 
 
   // ** onode cache **
@@ -60,6 +68,17 @@ class Ebofs {
   void write_onode(Onode *on);
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
+
+  // ** cnodes **
+  hash_map<coll_t, Cnode*>    cnode_map;
+  LRU                         cnode_lru;
+
+  Cnode* new_cnode(coll_t cid);
+  Cnode* get_cnode(coll_t cid);
+  void write_cnode(Cnode *cn);
+  void remove_cnode(Cnode *cn);
+  void put_cnode(Cnode *cn);
+
 
  public:
   void trim_onode_cache();
@@ -94,7 +113,7 @@ class Ebofs {
 	dev(d),
 	free_blocks(0), allocator(this),
 	bufferpool(EBOFS_BLOCK_SIZE),
-	object_tab(0), collection_tab(0),
+	object_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
 	bc(dev, bufferpool) {
 	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	  free_tab[i] = 0;
@@ -113,13 +132,27 @@ class Ebofs {
 			size_t len, off_t offset, 
 			bufferlist& bl, 
 			Context *onsafe);
+  int truncate(object_t oid, off_t size);
+  int remove(object_t oid);
 
-  // attr
+  // object attr
   int setattr(object_t oid, const char *name, void *value, size_t size);
   int getattr(object_t oid, const char *name, void *value, size_t size);
-  int listattr(object_t oid, char *attrs, size_t max);
+  int listattr(object_t oid, vector<string>& attrs);
   
   // collections
-  // ...  
+  int list_collections(list<coll_t>& ls);
+  //int collection_stat(coll_t c, struct stat *st);
+  int create_collection(coll_t c);
+  int destroy_collection(coll_t c);
 
+  bool collection_exists(coll_t c);
+  int collection_add(coll_t c, object_t o);
+  int collection_remove(coll_t c, object_t o);
+  int collection_list(coll_t c, list<object_t>& o);
+  
+  int collection_setattr(object_t oid, const char *name, void *value, size_t size);
+  int collection_getattr(object_t oid, const char *name, void *value, size_t size);
+  int collection_listattr(object_t oid, vector<string>& attrs);
+  
 };

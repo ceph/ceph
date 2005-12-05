@@ -7,29 +7,29 @@
 #include "types.h"
 #include "BufferCache.h"
 
-class OnodeAttrVal {
+class AttrVal {
  public:
   char *data;
   int len;
-  OnodeAttrVal() : data(0), len(0) {}
-  OnodeAttrVal(char *from, int l) : 
+  AttrVal() : data(0), len(0) {}
+  AttrVal(char *from, int l) : 
 	len(l) {
 	data = new char[len];
 	memcpy(data, from, len);
   }
-  OnodeAttrVal(const OnodeAttrVal &other) {
+  AttrVal(const AttrVal &other) {
 	len = other.len;
 	data = new char[len];
 	memcpy(data, other.data, len);
   }
-  OnodeAttrVal& operator=(const OnodeAttrVal &other) {
+  AttrVal& operator=(const AttrVal &other) {
 	if (data) delete[] data;
 	len = other.len;
 	data = new char[len];
 	memcpy(data, other.data, len);
 	return *this;
   }
-  ~OnodeAttrVal() {
+  ~AttrVal() {
 	delete[] data;
   }
 };
@@ -47,8 +47,8 @@ public:
   unsigned object_blocks;
 
   // onode
-  map<string, OnodeAttrVal > attr;
-  vector<Extent>             extents;
+  map<string, AttrVal > attr;
+  vector<Extent>        extents;
 
   ObjectCache  *oc;
 
@@ -127,7 +127,7 @@ public:
   // pack/unpack
   int get_attr_bytes() {
 	int s = 0;
-	for (map<string, OnodeAttrVal >::iterator i = attr.begin();
+	for (map<string, AttrVal >::iterator i = attr.begin();
 		 i != attr.end();
 		 i++) {
 	  s += i->first.length() + 1;

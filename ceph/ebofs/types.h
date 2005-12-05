@@ -62,7 +62,7 @@ class Extent {
 
 inline ostream& operator<<(ostream& out, Extent& ex)
 {
-  return out << ex.start << "+" << ex.length;
+  return out << ex.start << "~" << ex.length;
 }
 
 
@@ -93,6 +93,13 @@ struct ebofs_onode {
   int        num_attr;        // num attr in onode
   int        num_extents;     /* number of extents used.  if 0, data is in the onode */
 };
+
+struct ebofs_cnode {
+  Extent     cnode_loc;       /* this is actually the block we live in */
+  object_t   coll_id;
+  int        num_attr;        // num attr in cnode
+};
+
 
 //static const int EBOFS_MAX_DATA_IN_ONODE = (EBOFS_BLOCK_SIZE - sizeof(struct ebofs_onode));
 //static const int EBOFS_MAX_EXTENTS_IN_ONODE = (EBOFS_MAX_DATA_IN_ONODE / sizeof(Extent));
@@ -130,8 +137,11 @@ struct ebofs_super {
   unsigned  num_fragmented;
 
   struct ebofs_table object_tab;  // object directory
-  //struct ebofs_table cdir;  // collection directory
   struct ebofs_table free_tab[EBOFS_NUM_FREE_BUCKETS];
+
+  struct ebofs_table collection_tab;  // collection directory
+  struct ebofs_table oc_tab;
+  struct ebofs_table co_tab;
 
   struct ebofs_nodepool table_nodepool;
 };

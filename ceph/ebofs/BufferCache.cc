@@ -28,7 +28,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 
   bc->lock.Lock();
 
-  dout(10) << "rx_finish " << start << "+" << length << endl;
+  dout(10) << "rx_finish " << start << "~" << length << endl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 	   p != data.end(); 
 	   p++) {
@@ -69,7 +69,7 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length, version_t 
 
   bc->lock.Lock();
 
-  dout(10) << "tx_finish " << start << "+" << length << " v" << version << endl;
+  dout(10) << "tx_finish " << start << "~" << length << " v" << version << endl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 	   p != data.end(); 
 	   p++) {

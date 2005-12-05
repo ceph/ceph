@@ -88,7 +88,7 @@ void BlockDevice::do_io(biovec *bio)
 	r = _read(bio->start, bio->length, bio->bl);
   } else assert(0);
 
-  dout(20) << "do_io finish " << (void*)bio << " " << bio->start << "+" << bio->length << " " << (void*)bio->cond << " " << (void*)bio->context << endl;
+  dout(20) << "do_io finish " << (void*)bio << " " << bio->start << "~" << bio->length << " " << (void*)bio->cond << " " << (void*)bio->context << endl;
 
   if (bio->cond) {
 	bio->cond->Signal();
@@ -142,7 +142,7 @@ int BlockDevice::_cancel_io(biovec *bio)
 
 int BlockDevice::_read(block_t bno, unsigned num, bufferlist& bl) 
 {
-  dout(10) << "_read " << bno << "+" << num << endl;
+  dout(10) << "_read " << bno << "~" << num << endl;
 
   assert(fd > 0);
   
@@ -173,7 +173,7 @@ int BlockDevice::_read(block_t bno, unsigned num, bufferlist& bl)
 
 int BlockDevice::_write(unsigned bno, unsigned num, bufferlist& bl) 
 {
-  dout(10) << "_write " << bno << "+" << num << endl;
+  dout(10) << "_write " << bno << "~" << num << endl;
 
   assert(fd > 0);
   
