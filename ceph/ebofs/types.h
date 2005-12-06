@@ -18,7 +18,6 @@ using namespace __gnu_cxx;
 #define MAX(a,b)  ((a)>=(b) ? (a):(b))
 
 
-
 /*
 - this is to make some of the STL types work with 64 bit values, string hash keys, etc.
 - added when i was using an old STL.. maybe try taking these out and see if things 
@@ -148,6 +147,39 @@ struct ebofs_super {
   struct ebofs_nodepool table_nodepool;
 };
 
+
+
+/*
+ * really simple container for (collection|object) attribute values,
+ * which are a (void*,int) pair.  hide associated memory management
+ * ugliness.
+ */
+class AttrVal {
+ public:
+  char *data;
+  int len;
+  AttrVal() : data(0), len(0) {}
+  AttrVal(char *from, int l) : 
+	len(l) {
+	data = new char[len];
+	memcpy(data, from, len);
+  }
+  AttrVal(const AttrVal &other) {
+	len = other.len;
+	data = new char[len];
+	memcpy(data, other.data, len);
+  }
+  AttrVal& operator=(const AttrVal &other) {
+	if (data) delete[] data;
+	len = other.len;
+	data = new char[len];
+	memcpy(data, other.data, len);
+	return *this;
+  }
+  ~AttrVal() {
+	delete[] data;
+  }
+};
 
 
 

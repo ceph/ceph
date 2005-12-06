@@ -1,38 +1,22 @@
 #ifndef __EBOFS_ONODE_H
 #define __EBOFS_ONODE_H
 
-
 #include "include/lru.h"
 
 #include "types.h"
 #include "BufferCache.h"
 
-class AttrVal {
- public:
-  char *data;
-  int len;
-  AttrVal() : data(0), len(0) {}
-  AttrVal(char *from, int l) : 
-	len(l) {
-	data = new char[len];
-	memcpy(data, from, len);
-  }
-  AttrVal(const AttrVal &other) {
-	len = other.len;
-	data = new char[len];
-	memcpy(data, other.data, len);
-  }
-  AttrVal& operator=(const AttrVal &other) {
-	if (data) delete[] data;
-	len = other.len;
-	data = new char[len];
-	memcpy(data, other.data, len);
-	return *this;
-  }
-  ~AttrVal() {
-	delete[] data;
-  }
-};
+/*
+ * object node (like an inode)
+ *
+ * holds object metadata, including
+ *  size
+ *  allocation (extent list)
+ *  attributes
+ *
+ */
+
+
 
 class Onode : public LRUObject {
 private:

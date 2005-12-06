@@ -41,10 +41,10 @@ class Ebofs : public ObjectStore {
   block_t      free_blocks;
   Allocator    allocator;
   friend class Allocator;
-
+  
   // ** buffers **
   AlignedBufferPool bufferpool;
-
+  
 
   // ** tables and sets **
   // nodes

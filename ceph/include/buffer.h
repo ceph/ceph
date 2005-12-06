@@ -43,7 +43,7 @@ extern Mutex bufferlock;
 extern long buffer_total_alloc;
 
 
-typedef void (buffer_free_func_t)(void*,char*);
+typedef void (buffer_free_func_t)(void*,char*,unsigned);
 
 
 /*
@@ -98,7 +98,7 @@ class buffer {
 	bdbout(1) << "buffer.des " << *this << endl;
 	if (free_func) {
 	  bdbout(1) << "buffer.custom_free_func " << free_func_arg << " " << (void*)_dataptr << endl;
-	  free_func( free_func_arg, _dataptr );
+	  free_func( free_func_arg, _dataptr, _alloc_len );
 	}
 	else if (_dataptr && _myptr) {
 	  bdbout(1) << "buffer.free " << (void*)_dataptr << endl;

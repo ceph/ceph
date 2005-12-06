@@ -237,7 +237,7 @@ class NodePool {
 	  for (block_t boff = 0; boff < r->location.length; boff += EBOFS_NODE_BLOCKS) {
 		nodeid_t nid = NodeRegion::make_nodeid(r->get_region_id(), boff);
 		
-		bufferptr bp = bufferpool.alloc();
+		bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
 		dev.read(r->location.start + (block_t)boff, EBOFS_NODE_BLOCKS, 
 				 bp);
 		
@@ -296,7 +296,7 @@ class NodePool {
 	  r->committing = r->limbo;
 	  r->limbo.clear();
 	  
-	  bufferptr freebuffer = bufferpool.alloc();
+	  bufferptr freebuffer = bufferpool.alloc(EBOFS_NODE_BYTES);
 	  Node freenode(1, freebuffer);    
 	  freenode.set_status(Node::STATUS_FREE);
 	  for (set<int>::iterator i = r->committing.begin();
@@ -347,7 +347,7 @@ class NodePool {
 	return -1;
   }
   Node* new_node() {
-	bufferptr bp = bufferpool.alloc();
+	bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
 	Node *n = new Node(new_nodeid(), bp);
 	n->clear();
 	dbtout << "pool.new_node " << n->get_id() << endl;

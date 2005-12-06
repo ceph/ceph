@@ -175,7 +175,7 @@ int Ebofs::write_super()
 	sb.table_nodepool.region_loc[i] = table_nodepool.get_region_loc(i);
   }
 
-  bufferptr bp = bufferpool.alloc();
+  bufferptr bp = bufferpool.alloc(EBOFS_BLOCK_SIZE);
   memcpy(bp.c_str(), (const char*)&sb, sizeof(sb));
   dev.write(bno, 1, bp);
   return 0;
@@ -220,7 +220,7 @@ Onode* Ebofs::get_onode(object_t oid)
 
   // read it!
   bufferlist bl;
-  bufferpool.alloc_list( onode_loc.length, bl );
+  bufferpool.alloc( EBOFS_BLOCK_SIZE*onode_loc.length, bl );
   dev.read( onode_loc.start, onode_loc.length, bl );
 
   // parse data block
@@ -260,7 +260,7 @@ void Ebofs::write_onode(Onode *on)
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
 
   bufferlist bl;
-  bufferpool.alloc_list( blocks, bl );
+  bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
 
   // place on disk    
   if (on->onode_loc.length < blocks) {
@@ -385,7 +385,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 
   // read it!
   bufferlist bl;
-  bufferpool.alloc_list( cnode_loc.length, bl );
+  bufferpool.alloc( EBOFS_BLOCK_SIZE*cnode_loc.length, bl );
   dev.read( cnode_loc.start, cnode_loc.length, bl );
 
   // parse data block
@@ -415,7 +415,7 @@ void Ebofs::write_cnode(Cnode *cn)
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
 
   bufferlist bl;
-  bufferpool.alloc_list( blocks, bl );
+  bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
 
   // place on disk    
   if (cn->cnode_loc.length < blocks) {
@@ -599,7 +599,7 @@ void Ebofs::bh_read(Onode *on, BufferHead *bh)
   on->map_extents(bh->start(), bh->length(), ex);
 
   // alloc new buffer
-  bc.bufferpool.alloc_list(bh->length(), bh->data);  // new buffers!
+  bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
   
   // lay out on disk
   block_t bhoff = 0;
@@ -745,7 +745,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 
 		if (bh->partial_is_complete(on->object_size)) {
 		  dout(10) << "apply_write  completed partial " << *bh << endl;
-		  bc.bufferpool.alloc_list(bh->length(), bh->data);  // new buffers!
+		  bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
 		  bh->data.zero();
 		  bh->apply_partial();
 		  bc.mark_dirty(bh);
@@ -804,7 +804,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	assert(zleft+left >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()));
 
 	// alloc new buffers.
-	bc.bufferpool.alloc_list(bh->length(), bh->data);
+	bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
 	
 	// copy!
 	unsigned len_in_bh = bh->length()*EBOFS_BLOCK_SIZE;
