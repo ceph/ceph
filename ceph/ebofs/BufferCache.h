@@ -27,7 +27,12 @@ class BufferHead : public LRUObject {
  public:
   ObjectCache *oc;
 
-  bufferlist data;
+  bufferlist data, shadow_data;
+  ioh_t      ioh, shadow_ioh;   // any pending read/write op
+  version_t  tx_epoch;       // epoch this write is in
+
+  list<Context*> waitfor_read;
+  list<Context*> waitfor_flush;
 
  private:
   map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
@@ -36,20 +41,16 @@ class BufferHead : public LRUObject {
   int        state;
   version_t  version;        // current version in cache
   version_t  last_flushed;   // last version flushed to disk
-  
+ 
   Extent     object_loc;     // block position _in_object_
 
   utime_t    dirty_stamp;
 
  public:
-  ioh_t      ioh;   // any pending read/write op
-  
-  list<Context*> waitfor_read;
-  list<Context*> waitfor_flush;
-
- public:
   BufferHead(ObjectCache *o) :
-	oc(o), ref(0), state(STATE_MISSING), version(0), last_flushed(0), ioh(0) {}
+	oc(o), ioh(0), shadow_ioh(0), tx_epoch(0),
+	ref(0), state(STATE_MISSING), version(0), last_flushed(0)
+	{}
   
   ObjectCache *get_oc() { return oc; }
 
@@ -337,10 +338,9 @@ public:
 
 class BufferCache {
  public:
-  Mutex lock;
-
-  BlockDevice& dev;
-  AlignedBufferPool& bufferpool;
+  Mutex             &lock;          // hack: ref to global lock
+  BlockDevice       &dev;
+  AlignedBufferPool &bufferpool;
 
   set<BufferHead*> dirty_bh;
 
@@ -358,7 +358,8 @@ class BufferCache {
   off_t stat_missing;
 
  public:
-  BufferCache(BlockDevice& d, AlignedBufferPool& bp) : dev(d), bufferpool(bp),
+  BufferCache(BlockDevice& d, AlignedBufferPool& bp, Mutex& glock) : 
+	lock(glock), dev(d), bufferpool(bp),
 	stat_waiter(0),
 	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
 	{}

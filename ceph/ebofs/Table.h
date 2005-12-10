@@ -473,8 +473,7 @@ class Table : public _Table {
 	  // create a root node (leaf!)
 	  assert(root == -1);
 	  assert(depth == 0);
-	  Nodeptr newroot( pool.new_node() );
-	  newroot.set_type(Node::TYPE_LEAF);
+	  Nodeptr newroot( pool.new_node(Node::TYPE_LEAF) );
 	  root = newroot.get_id();
 	  depth++;
 	}
@@ -529,9 +528,8 @@ class Table : public _Table {
 	  cursor.dirty();
 	  
 	  // split
-	  Nodeptr newnode( pool.new_node() );
 	  Nodeptr leftnode = cursor.open[cursor.level];
-	  newnode.set_type( leftnode.node->get_type() );  
+	  Nodeptr newnode( pool.new_node(leftnode.node->get_type()) );
 	  leftnode.split( newnode );
 
 	  /* insert our item */
@@ -558,10 +556,9 @@ class Table : public _Table {
 	  if (cursor.level == 0) {
 		/* split root. */
 		dbtout << "that split was the root " << root << endl;
-		Nodeptr newroot( pool.new_node() );
+		Nodeptr newroot( pool.new_node(Node::TYPE_INDEX) );
 		
 		/* new root node */
-		newroot.set_type(Node::TYPE_INDEX);
 		newroot.set_size(2);
 		newroot.index_item(0).key = leftnode.key(0);
 		newroot.index_item(0).node = root;

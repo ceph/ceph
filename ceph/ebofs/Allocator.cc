@@ -85,7 +85,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 			ex.start += left.length;
 			ex.length -= left.length;
 			assert(ex.length == num);
-			release(left);
+			release_now(left);
 		  } else {
 			// take middle part.
 			Extent left,right;
@@ -95,8 +95,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 			right.start = ex.start + num;
 			right.length = ex.length - left.length - num;
 			ex.length = num;
-			release(left);
-			release(right);
+			release_now(left);
+			release_now(right);
 		  }
 		}
 		else {
@@ -105,7 +105,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 		  right.start = ex.start + num;
 		  right.length = ex.length - num;
 		  ex.length = num;
-		  release(right);
+		  release_now(right);
 		}
 	  }
 
@@ -135,7 +135,25 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
   return -1;
 }
 
-int Allocator::release(Extent& ex) 
+int Allocator::release(Extent& ex)
+{
+  dout(1) << "release " << ex << " (into limbo)" << endl;
+  limbo.insert(ex.start, ex.length);
+  return 0;
+}
+
+int Allocator::release_limbo()
+{
+  for (map<block_t,block_t>::iterator i = limbo.m.begin();
+	   i != limbo.m.end();
+	   i++) {
+	Extent ex(i->first, i->second);
+	release_now(ex);
+  }
+  return 0;
+}
+
+int Allocator::release_now(Extent& ex) 
 {
   Extent newex = ex;
   

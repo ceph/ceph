@@ -268,7 +268,7 @@ int BlockDevice::cancel_io(ioh_t ioh)
   
   // FIXME?
   if (r == 0 && pbio->context) {
-	pbio->context->finish(0);
+	//pbio->context->finish(0);                      ******HELP!!!
 	delete pbio->context;
 	delete pbio;
   }

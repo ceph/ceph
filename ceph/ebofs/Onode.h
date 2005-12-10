@@ -6,6 +6,9 @@
 #include "types.h"
 #include "BufferCache.h"
 
+#include "include/interval_set.h"
+
+
 /*
  * object node (like an inode)
  *
@@ -33,6 +36,8 @@ public:
   // onode
   map<string, AttrVal > attr;
   vector<Extent>        extents;
+
+  interval_set<block_t> uncommitted;
 
   ObjectCache  *oc;
 
@@ -94,6 +99,81 @@ public:
 
 
   // allocation
+  void _append_extent(Extent& ex) {
+	if (extents.size() &&
+		extents[extents.size()-1].end() == ex.start)
+	  extents[extents.size()-1].length += ex.length;
+	else
+	  extents.push_back(ex);		
+  }
+  void set_extent(block_t offset, Extent ex) {
+	assert(offset <= object_blocks);
+
+	// at the end?
+	if (offset == object_blocks) {
+	  _append_extent(ex);
+	  object_blocks += ex.length;
+	  return;
+	}
+
+	// nope.  ok, rebuild the extent list.
+	vector<Extent> old;
+	old.swap(extents);
+	assert(extents.empty());
+
+	unsigned oldex = 0;
+	block_t oldoff = 0;
+	block_t cur = 0;
+
+	// copy up to offset
+	while (cur < offset) {
+	  Extent t;
+	  t.start = old[oldex].start+oldoff;
+	  t.length = MIN(offset-cur, old[oldex].length-oldoff);
+	  _append_extent(t);
+
+	  oldoff += t.length;
+	  if (oldoff == old[oldex].length) {
+		oldex++;
+		oldoff = 0;
+	  }	  
+	}
+
+	// add our new extent
+	_append_extent(ex);
+	if (offset + ex.length > object_blocks)
+	  object_blocks = offset + ex.length;	
+
+	// skip past it in the old stuff
+	block_t sleft = ex.length;
+	while (sleft > 0) {
+	  block_t skip = MIN(ex.length, old[oldex].length-oldoff);
+	  sleft -= skip;
+	  oldoff += skip;
+	  if (oldoff == old[oldex].length) {
+		oldex++;
+		oldoff = 0;
+		if (oldex == old.size()) break;
+	  }
+	}
+
+	// copy anything left?
+	if (oldex < old.size()) {
+	  if (oldoff) {
+		Extent t;
+		t.start = old[oldex].start+oldoff;
+		t.length = old[oldex].length-oldoff;
+		_append_extent(t);
+	  } else {
+		_append_extent(old[oldex++]);
+	  }
+	}
+  }
+  
+
+  /* map_extents(start, len, ls)
+   *  map teh given page range into extents on disk.
+   */
   int map_extents(block_t start, block_t len, vector<Extent>& ls) {
 	block_t cur = 0;
 	for (unsigned i=0; i<extents.size(); i++) {
@@ -113,16 +193,86 @@ public:
 	return 0;
   }
 
-  // attr
-  int getxattr(char *name, void *value, int size) {
-	return 0;
+
+  /* map_alloc_regions(start, len, map)
+   *  map range into regions that need to be (re)allocated on disk
+   *  because they overlap "safe" (or unallocated) parts of the object
+   */
+  void map_alloc_regions(block_t start, block_t len, 
+						 interval_set<block_t>& alloc) {
+	interval_set<block_t> already_uncom;
+
+	alloc.insert(start, len);   // start with whole range
+	already_uncom.intersection_of(alloc, uncommitted);
+	alloc.subtract(already_uncom);   // take out the bits that aren't yet committed
   }
-  int setxattr(char *name, void *value, int size) {
-	return 0;	
+
+
+
+  /*
+  // (un)committed ranges
+  void dirty_range(block_t start, block_t len) {
+	// frame affected area (used for simplify later)
+	block_t first = start;
+	block_t last = start+len;
+
+	// put in uncommitted range
+	map<block_t,block_t>::iterator p = uncommitted.lower_bound(start);
+	if (p != uncommitted.begin() &&
+		(p->first > start || p == uncommitted.end())) {
+	  p--;
+	  first = p->first;
+	  if (p->first + p->second <= start) 
+		p++;
+	}
+
+	for (; len>0; p++) {
+	  if (p == uncommitted.end()) {
+		uncommitted[start] = len;
+		break;
+	  }
+	  
+	  if (p->first <= start) {
+		block_t skip = start - p->first;
+		block_t overlap = MIN( p->second - skip, len );
+		start += overlap;
+		len -= overlap;
+	  } else if (p->first > start) { 
+		block_t add = MIN(len, p->first - start);
+		uncommitted[start] = add;
+		start += add;
+		len -= add;
+	  }		
+	}
+
+	// simplify uncommitted
+	map<block_t,block_t>::iterator p = uncommitted.lower_bound(first);
+	block_t prevstart = p->first;
+	block_t prevend = p->first + p->second;
+	p++;
+	while (p != uncommitted.end()) {
+	  if (prevend == p->first) {
+		uncommitted[prevstart] += p->second;
+		prevend += p->second;
+		block_t t = p->first;
+		p++;
+		uncommitted.erase(t);
+	  } else {
+		prevstart = p->first;
+		prevend = p->first + p->second;
+		if (prevend >= last) break;        // we've gone past our updates
+		p++;
+	  }
+	}
   }
-  int removexattr(char *name) {
-	return 0;
+  void mark_committed() {
+	uncommitted.clear();
   }
+
+  bool is_uncommitted(block_t b) {
+	
+  }
+  */
 
 
   // pack/unpack

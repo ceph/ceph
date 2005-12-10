@@ -18,8 +18,12 @@ int main(int argc, char **argv)
   }
 
   // mkfs
+  Ebofs mfs(dev);
+  mfs.mkfs();
+
+  // test-o-rama!
   Ebofs fs(dev);
-  fs.mkfs();
+  fs.mount();
 
   if (0) {  // test
 	bufferlist bl;

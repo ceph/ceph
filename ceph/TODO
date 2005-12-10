@@ -4,12 +4,14 @@ client
 
 
 ofs
-- object map : object_t -> block_t
-- col map  : coll_t -> block_t
-- freelists : block_t -> block_t
+- on disk btree nodes need super_version
+- commit thread
+- reallocate on write
+- 
 
-- objects
-- collections  set<object_t>
+- Ebofs.free_blocks
+- Ebofs.readonly
+- real error codes
 
 
 

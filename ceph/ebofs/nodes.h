@@ -8,32 +8,34 @@
 #include "AlignedBufferPool.h"
 
 
-/* node status on disk, in memory
- *
- *  DISK      MEMORY          ON LISTS         EVENT
- *
- * claim cycle:
- *  free      free            free             -
- *  free      dirty           dirty            mark_dirty()
- *  free      dirty           committing       start commit
- *  inuse     dirty           committing       (write happens)
- *  inuse     clean           -                finish commit
- *
- * release cycle:
- *  inuse     clean           -                -
- *  inuse     free            limbo            release
- *  inuse     free            committing       start_write
- *  free      free            committing       (write happens)
- *  free      free            free             finish_write
- */
+/*
 
+     disk     wire    memory                
+
+     free             free    -> free             can alloc
+     free             used    -> dirty            can modify
+
+     free     used    used    -> tx
+     free     used    free    -> limbo 
+
+     used             used    -> clean
+     used             free    -> limbo
+
+
+	    // meaningless
+     used     free    free    -> free             can alloc
+     used     free    used    __DNE__
+
+
+*/
 
 
 class Node {
  public:
-  static const int STATUS_FREE = 0;
-  static const int STATUS_DIRTY = 1;
-  static const int STATUS_CLEAN = 2;
+  // bit fields
+  static const int STATE_CLEAN = 1;   
+  static const int STATE_DIRTY = 2; 
+  static const int STATE_TX = 3;
 
   static const int ITEM_LEN = EBOFS_NODE_BYTES - sizeof(int) - sizeof(int) - sizeof(int);
 
@@ -42,55 +44,91 @@ class Node {
 
  protected:
   nodeid_t    id;
+  int         state;     // use bit fields above!
+
   bufferptr   bptr;
-  int         *nrecs;
-  int         *status;
+  bufferptr   shadow_bptr;
+
+  // in disk buffer
   int         *type;
+  int         *nrecs;
 
  public:
-  Node(nodeid_t i) : id(i) {
-	bptr = new buffer(EBOFS_NODE_BYTES);
+  Node(nodeid_t i, bufferptr& b, int s) : id(i), state(s), bptr(b)  {
 	nrecs = (int*)(bptr.c_str());
-	status = (int*)(bptr.c_str() + sizeof(*nrecs));
-	type = (int*)(bptr.c_str() + sizeof(*status) + sizeof(*nrecs));
-	clear();
-  }
-  Node(nodeid_t i, bufferptr& b) : id(i), bptr(b) {
-	nrecs = (int*)(bptr.c_str());
-	status = (int*)(bptr.c_str() + sizeof(*nrecs));
-	type = (int*)(bptr.c_str() + sizeof(*status) + sizeof(*nrecs));
+	type = (int*)(bptr.c_str() + sizeof(*nrecs));
   }
 
-  void clear() {
-	*nrecs = 0;
-	*status = STATUS_FREE;
-	*type = 0;
-  }
   
+  // id
   nodeid_t get_id() const { return id; }
   void set_id(nodeid_t n) { id = n; }
 
+  // buffer
   bufferptr& get_buffer() { return bptr; }
 
+  char *item_ptr() { return bptr.c_str() + sizeof(*nrecs) + sizeof(*type); }
+
+  // size
   int size() { return *nrecs; }
   void set_size(int s) { *nrecs = s; }
   
-  char *item_ptr() { return bptr.c_str() + sizeof(*status) + sizeof(*nrecs) + sizeof(*type); }
-
-  int& get_status() { return *status; }
-  bool is_dirty() const { return *status == STATUS_DIRTY; }
-  void set_status(int s) { *status = s; }
-
+  // type
   int& get_type() { return *type; }
   void set_type(int t) { *type = t; }
   bool is_index() { return *type == TYPE_INDEX; }
   bool is_leaf() { return *type == TYPE_LEAF; } 
+
+
+  // state
+  bool is_dirty() { return state == STATE_DIRTY; }
+  bool is_tx() { return state == STATE_TX; }
+  bool is_clean() { return state == STATE_CLEAN; }
+
+  void set_state(int s) { state = s; }
+
+  void make_shadow(AlignedBufferPool& bufferpool) {
+	assert(is_tx());
+	
+	shadow_bptr = bptr;
+	
+	// new buffer
+	bptr = bufferpool.alloc(EBOFS_NODE_BYTES);
+	nrecs = (int*)(bptr.c_str());
+	type = (int*)(bptr.c_str() + sizeof(*nrecs));
+	
+	// copy contents!
+	memcpy(bptr.c_str(), shadow_bptr.c_str(), EBOFS_NODE_BYTES);
+  }
+
 };
 
 
 
-class NodeRegion {
+
+
+class NodePool {
+ protected:
+  AlignedBufferPool     bufferpool;    // our own memory allocator for node buffers
+
+  map<nodeid_t, Node*>  node_map;      // open node map
+  
  public:
+  vector<Extent> region_loc;    // region locations
+  Extent         usemap_even;
+  Extent         usemap_odd;
+  
+ protected:
+  // on-disk block states
+  set<nodeid_t> free;
+  set<nodeid_t> dirty;
+  set<nodeid_t> tx;
+  set<nodeid_t> clean;       // aka used
+  set<nodeid_t> limbo;
+  
+  Mutex         lock;
+  Cond          commit_cond;
+  int           flushing;
 
   static int make_nodeid(int region, int offset) {
 	return (region << 24) | offset;
@@ -101,219 +139,276 @@ class NodeRegion {
   static int nodeid_offset(nodeid_t nid) {
 	return nid & (0xffffffffUL >> 24);
   }
-  
- protected:
-  int          region_id;
-  int          num_nodes;
+
 
  public:
-  Extent       location;
-
-  //    free -> dirty -> committing -> clean
-  //      dirty -> free
-  //  or  !dirty -> limbo -> free
-  set<nodeid_t>     free;
-  set<nodeid_t>     dirty;
-  set<nodeid_t>     committing;
-  set<nodeid_t>     limbo;
-
- public:
-  NodeRegion(int id, Extent& loc) : region_id(id) {
-	location = loc;
-	num_nodes = location.length / EBOFS_NODE_BLOCKS;
-  }
-  
-  int get_region_id() const { return region_id; }
-
-  void init_all_free() {
-	for (unsigned i=0; i<location.length; i++) {
-	  nodeid_t nid = make_nodeid(region_id, i);
-	  free.insert(nid);
-	}
+  NodePool() : bufferpool(EBOFS_NODE_BYTES), 
+	flushing(0) {}
+  ~NodePool() {
+	// nodes
+	release_all();
   }
 
-  void induce_full_flush() {
-	// free -> limbo : so they get written out as such
-	for (set<nodeid_t>::iterator i = free.begin();
-		 i != free.end();
-		 i++)
-	  limbo.insert(*i);
-	free.clear();
-  }
-
-  int size() const {
-	return num_nodes;
-	//return (location.length / EBOFS_NODE_BLOCKS);   // FIXME THIS IS WRONG
-  }
-  int num_free() const {
+  int num_free() {
 	return free.size();
   }
 
-  // new/open node
-  nodeid_t new_nodeid() {
-	assert(num_free());
-	
-	nodeid_t nid = *(free.begin());
-	free.erase(nid);
-	dirty.insert(nid);
-
-	return nid;
-  }
-
-  void release(nodeid_t nid) {
-	if (dirty.count(nid)) {
-	  dirty.erase(nid);
-	  free.insert(nid);
-	} 
-	else {
-	  if (committing.count(nid))
-		committing.erase(nid);
-	  limbo.insert(nid);
+  // the caller had better adjust usemap locations...
+  void add_region(Extent ex) {
+	int region = region_loc.size();
+	region_loc.push_back(ex);
+	for (unsigned o = 0; o < ex.length; o++) {
+	  free.insert( make_nodeid(region, o) );
 	}
   }
-};
-
-
-
-class NodePool {
- protected:
-  int num_regions;
-  map<int, NodeRegion*> node_regions;  // regions
-  map<nodeid_t, Node*>  node_map;      // open node map
-  AlignedBufferPool     bufferpool;    // memory pool
-
- public:
-  NodePool() : num_regions(0), bufferpool(EBOFS_NODE_BYTES) {}
-  ~NodePool() {
-	// nodes
-	set<Node*> left;
-	for (map<nodeid_t,Node*>::iterator i = node_map.begin();
-		 i != node_map.end();
-		 i++) 
-	  left.insert(i->second);
-	for (set<Node*>::iterator i = left.begin();
-		 i != left.end();
-		 i++) 
-	  release( *i );
-	assert(node_map.empty());
-	
-	// regions
-	for (map<int,NodeRegion*>::iterator i = node_regions.begin();
-		 i != node_regions.end();
-		 i++) 
-	  delete i->second;
-	node_regions.clear();
-  }
-
-  void add_region(NodeRegion *r) {
-	node_regions[r->get_region_id()] = r;
-	num_regions++;
-  }
   
-  int get_num_regions() {
-	return num_regions;
-  }
-  Extent& get_region_loc(int r) {
-	return node_regions[r]->location;
-  }
-
-
-  int num_free() {
-	int f = 0;
-	for (map<int,NodeRegion*>::iterator i = node_regions.begin();
-		 i != node_regions.end();
-		 i++) 
-	  f += i->second->num_free();
-	return f;
-  }
-
-  // *** 
-  int read(BlockDevice& dev, struct ebofs_nodepool *np) {
+  int init(struct ebofs_nodepool *np) {
+	// regions
 	for (int i=0; i<np->num_regions; i++) {
-	  dout(3) << " region " << i << " at " << np->region_loc[i] << endl;
-	  NodeRegion *r = new NodeRegion(i, np->region_loc[i]);
-	  add_region(r);
-	  
-	  for (block_t boff = 0; boff < r->location.length; boff += EBOFS_NODE_BLOCKS) {
-		nodeid_t nid = NodeRegion::make_nodeid(r->get_region_id(), boff);
+	  dout(3) << "init region " << i << " at " << np->region_loc[i] << endl;
+	  region_loc.push_back( np->region_loc[i] );
+	}
+
+	// usemap
+	usemap_even = np->node_usemap_even;
+	usemap_odd = np->node_usemap_odd;
+	dout(3) << "init even map at " << usemap_even << endl;
+	dout(3) << "init  odd map at " << usemap_odd << endl;
+
+	return 0;
+  }
+
+
+  // *** blocking i/o routines ***
+
+  int read_usemap(BlockDevice& dev, version_t epoch) {
+	// read map
+	Extent loc;
+	if (epoch & 1) 
+	  loc = usemap_odd;
+	else 
+	  loc = usemap_even;
+
+	bufferptr bp = bufferpool.alloc(EBOFS_BLOCK_SIZE*loc.length);
+	dev.read(loc.start, loc.length, bp);
+	
+	// parse
+	unsigned region = 0;  // current region
+	unsigned roff = 0;    // offset in region
+	for (unsigned byte = 0; byte<bp.length(); byte++) {   // each byte
+	  // get byte
+	  int x = *(unsigned char*)(bp.c_str() + byte);
+	  int mask = 0x80;  // left-most bit
+	  for (unsigned bit=0; bit<8; bit++) {
+		nodeid_t nid = make_nodeid(region, roff);
 		
+		if (x & mask)
+		  clean.insert(nid);
+		else
+		  free.insert(nid);
+
+		mask = mask >> 1;  // move one bit right.
+		roff++;
+		if (roff == region_loc[region].length) {
+		  // next region!
+		  roff = 0;
+		  region++;
+		  break;
+		}
+	  }	 
+	  if (region == region_loc.size()) break;
+	}	
+	return 0;
+  }
+
+  int read_clean_nodes(BlockDevice& dev) {
+	/*
+	  this relies on the clean set begin defined so that we know which nodes
+	  to read.  so it only really works when called from mount()!
+	*/
+	for (unsigned r=0; r<region_loc.size(); r++) {
+	  dout(3) << "read region " << r << " at " << region_loc[r] << endl;
+	  
+	  for (block_t boff = 0; boff < region_loc[r].length; boff++) {
+		nodeid_t nid = make_nodeid(r, boff);
+		
+		if (!clean.count(nid)) continue;  
+		dout(20) << "read  node " << nid << endl;
+
 		bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
-		dev.read(r->location.start + (block_t)boff, EBOFS_NODE_BLOCKS, 
+		dev.read(region_loc[r].start + (block_t)boff, EBOFS_NODE_BLOCKS, 
 				 bp);
 		
-		Node *n = new Node(nid, bp);
-		if (n->get_status() == Node::STATUS_FREE) {
-		  dout(5) << "  node " << nid << " free" << endl;
-		  r->free.insert(nid);
-		  delete n;
-		} else {
-		  dout(5) << "  node " << nid << " in use" << endl;
-		  node_map[nid] = n;
-		}
+		Node *n = new Node(nid, bp, Node::STATE_CLEAN);
+		node_map[nid] = n;
 	  }
 	}
 	return 0;
   }
-  void init_all_free() {
-	for (map<int,NodeRegion*>::iterator i = node_regions.begin();
-		 i != node_regions.end();
-		 i++) {
-	  i->second->init_all_free();
+
+
+
+  // **** non-blocking i/o ****
+
+ private:
+  class C_NP_FlushUsemap : public Context {
+	NodePool *pool;
+  public:
+	C_NP_FlushUsemap(NodePool *p) : 
+	  pool(p) {}
+	void finish(int r) {
+	  pool->flushed_usemap();
 	}
+  };
+  
+  void flushed_usemap() {
+	lock.Lock();
+	flushing--;
+	if (flushing == 0) 
+	  commit_cond.Signal();
+	lock.Unlock();
   }
 
-  void induce_full_flush() {
-	for (map<int,NodeRegion*>::iterator i = node_regions.begin();
-		 i != node_regions.end();
-		 i++) {
-	  i->second->induce_full_flush();
-	}
-  }
+ public:
+  int write_usemap(BlockDevice& dev, version_t version) {
+	// alloc
+	Extent loc;
+	if (version & 1) 
+	  loc = usemap_odd;
+	else 
+	  loc = usemap_even;
+	
+	bufferptr bp = bufferpool.alloc(EBOFS_BLOCK_SIZE*loc.length);
 
-  void flush(BlockDevice& dev) {
-	// flush dirty items, change them to limbo status
-	for (map<int,NodeRegion*>::iterator i = node_regions.begin();
-		 i != node_regions.end();
-		 i++) {
-	  NodeRegion *r = i->second;
-	  
-	  // dirty -> clean
-	  r->committing = r->dirty;
-	  r->dirty.clear();
+	// fill in
+	unsigned region = 0;  // current region
+	unsigned roff = 0;    // offset in region
+	for (unsigned byte = 0; byte<bp.length(); byte++) {   // each byte
+	  int x = 0;        // start with empty byte
+	  int mask = 0x80;  // left-most bit
+	  for (unsigned bit=0; bit<8; bit++) {
+		nodeid_t nid = make_nodeid(region, roff);
+		
+		if (clean.count(nid) ||
+			dirty.count(nid))
+		  x |= mask;
 
-	  for (set<int>::iterator i = r->committing.begin();
-		   i != r->committing.end();
-		   i++) {
-		Node *n = get_node(*i);
-		assert(n);  // it's dirty, we better have it
-		n->set_status(Node::STATUS_CLEAN);
-		block_t off = NodeRegion::nodeid_offset(*i);
-		dev.write(r->location.start + off, EBOFS_NODE_BLOCKS, n->get_buffer());
+		roff++;
+		mask = mask >> 1;
+		if (roff == region_loc[region].length) {
+		  // next region!
+		  roff = 0;
+		  region++;
+		  break;
+		}
 	  }
-	  r->committing.clear();
 
-	  // limbo -> free
-	  r->committing = r->limbo;
-	  r->limbo.clear();
-	  
-	  bufferptr freebuffer = bufferpool.alloc(EBOFS_NODE_BYTES);
-	  Node freenode(1, freebuffer);    
-	  freenode.set_status(Node::STATUS_FREE);
-	  for (set<int>::iterator i = r->committing.begin();
-		   i != r->committing.end();
-		   i++) {
-		freenode.set_id( *i );
-		block_t off = NodeRegion::nodeid_offset(*i);
-		dev.write(r->location.start + off, EBOFS_NODE_BLOCKS, freenode.get_buffer());
-	  }
-	  
-	  for (set<int>::iterator i = r->committing.begin();
-		   i != r->committing.end();
-		   i++) 
-		r->free.insert(*i);
-	  r->committing.clear();
+	  *(unsigned char*)(bp.c_str() + byte) = x;
+	  if (region == region_loc.size()) break;
 	}
+
+
+	// write
+	bufferlist bl;
+	bl.append(bp);
+	dev.write(loc.start, loc.length, bl,
+			  new C_NP_FlushUsemap(this));
+	return 0;
   }
+
+
+
+  // *** node commit ***
+ private:
+  bool is_committing() {
+	return (flushing > 0);
+  }
+
+  class C_NP_FlushNode : public Context {
+	NodePool *pool;
+	nodeid_t nid;
+  public:
+	C_NP_FlushNode(NodePool *p, nodeid_t n) : 
+	  pool(p), nid(n) {}
+	void finish(int r) {
+	  pool->flushed_node(nid);
+	}
+  };
+
+  void flushed_node(nodeid_t nid) {
+	lock.Lock();
+	assert(tx.count(nid));
+	
+	if (tx.count(nid)) {
+	  tx.erase(nid);
+	  clean.insert(nid);
+	}
+	else {
+	  assert(limbo.count(nid));
+	}
+	
+	flushing--;
+	if (flushing == 0) 
+	  commit_cond.Signal();
+	lock.Unlock();
+  }
+
+ public:
+  void commit_start(BlockDevice& dev, version_t version) {
+	lock.Lock();
+	assert(!is_committing());
+
+	// write map
+	flushing++;
+	write_usemap(dev,version & 1);
+
+	// dirty -> tx  (write to disk)
+	for (set<nodeid_t>::iterator i = dirty.begin();
+		 i != dirty.end();
+		 i++) {
+	  Node *n = get_node(*i);
+	  assert(n);
+	  assert(n->is_dirty());
+	  n->set_state(Node::STATE_TX);
+
+	  unsigned region = nodeid_region(*i);
+	  block_t off = nodeid_offset(*i);
+
+	  bufferlist bl;
+	  bl.append(n->get_buffer());
+	  dev.write(region_loc[region].start + off, EBOFS_NODE_BLOCKS, 
+				bl,
+				new C_NP_FlushNode(this, *i));
+	  flushing++;
+
+	  tx.insert(*i);
+	}
+	dirty.clear();
+
+	// limbo -> free
+	for (set<nodeid_t>::iterator i = limbo.begin();
+		 i != limbo.end();
+		 i++) {
+	  free.insert(*i);
+	}
+	limbo.clear();
+
+	lock.Unlock();
+  }
+
+  void commit_wait() {
+	lock.Lock();
+	while (is_committing()) {
+	  commit_cond.Wait(lock);
+	}
+	lock.Unlock();
+  }
+
+
+
+
+
+
    
 
 
@@ -326,7 +421,7 @@ class NodePool {
   }
   
   // unopened node
-  /*
+  /*  not implemented yet!!
   Node* open_node(nodeid_t nid) {
 	Node *n = node_regions[ NodeRegion::nodeid_region(nid) ]->open_node(nid);
 	dbtout << "pool.open_node " << n->get_id() << endl;
@@ -335,47 +430,86 @@ class NodePool {
   }
   */
   
-  // new node
-  nodeid_t new_nodeid() {
-	for (map<int,NodeRegion*>::iterator i = node_regions.begin();
-		 i != node_regions.end();
-		 i++) {
-	  if (i->second->num_free()) 
-		return i->second->new_nodeid();
-	}
-	assert(0);  // full!
-	return -1;
+  // allocate id/block on disk.  always free -> dirty.
+  nodeid_t alloc_id() {
+	// pick node id
+	assert(!free.empty());
+	nodeid_t nid = *(free.begin());
+	free.erase(nid);
+	dirty.insert(nid);
+	return nid;
   }
-  Node* new_node() {
+  
+  // new node
+  Node* new_node(int type) {
+	nodeid_t nid = alloc_id();
+	dbtout << "pool.new_node " << nid << endl;
+	
+	// alloc node
 	bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
-	Node *n = new Node(new_nodeid(), bp);
-	n->clear();
-	dbtout << "pool.new_node " << n->get_id() << endl;
-	assert(node_map.count(n->get_id()) == 0);
-	node_map[n->get_id()] = n;
+	Node *n = new Node(nid, bp, Node::STATE_DIRTY);
+	n->set_type(type);
+	n->set_size(0);
+
+	assert(node_map.count(nid) == 0);
+	node_map[nid] = n;
 	return n;
   }
 
-  void release_nodeid(nodeid_t nid) {
-	dbtout << "pool.release_nodeid on " << nid << endl;
-	assert(node_map.count(nid) == 0);
-	node_regions[ NodeRegion::nodeid_region(nid) ]->release(nid);
-	return;
-  }
   void release(Node *n) {
-	dbtout << "pool.release on " << n->get_id() << endl;
-	node_map.erase(n->get_id());
-	release_nodeid(n->get_id());
+	const nodeid_t nid = n->get_id();
+	dbtout << "pool.release on " << nid << endl;
+	node_map.erase(nid);
+
+	if (n->is_dirty()) {
+	  dirty.erase(nid);
+	  free.insert(nid);
+	} else if (n->is_clean()) {
+	  clean.erase(nid);
+	  limbo.insert(nid);
+	} else 
+	  assert(0);
+
 	delete n;
   }
 
+  void release_all() {
+	set<Node*> left;
+	for (map<nodeid_t,Node*>::iterator i = node_map.begin();
+		 i != node_map.end();
+		 i++) 
+	  left.insert(i->second);
+	for (set<Node*>::iterator i = left.begin();
+		 i != left.end();
+		 i++) 
+	  release( *i );
+	assert(node_map.empty());
+  }
+
   void dirty_node(Node *n) {
-	assert(!n->is_dirty());
-	n->set_status(Node::STATUS_DIRTY);
-	nodeid_t newid = new_nodeid();
-	dbtout << "pool.dirty_node on " << n->get_id() << " now " << newid << endl;
-	node_map.erase(n->get_id());
-	release_nodeid(n->get_id());
+	// get new node id?
+	nodeid_t oldid = n->get_id();
+	nodeid_t newid = alloc_id();
+	dbtout << "pool.dirty_node on " << oldid << " now " << newid << endl;
+	
+	// release old block
+	if (n->is_clean()) {
+	  assert(clean.count(oldid));
+	  clean.erase(oldid);
+	} else {
+	  assert(n->is_tx());
+	  assert(tx.count(oldid));
+	  tx.erase(oldid);
+	  
+	  // move/copy current -> shadow buffer as necessary
+	  n->make_shadow(bufferpool);   
+	}
+	limbo.insert(oldid);
+	node_map.erase(oldid);
+	
+	n->set_state(Node::STATE_DIRTY);
+	
+	// move to new one!
 	n->set_id(newid);
 	node_map[newid] = n;
   }

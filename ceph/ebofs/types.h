@@ -75,6 +75,9 @@ static const int EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
 static const int EBOFS_MAX_NODE_REGIONS = 10;   // pick a better value!
 
 struct ebofs_nodepool {
+  Extent node_usemap_even;   // for even sb versions
+  Extent node_usemap_odd;    // for odd sb versions
+  
   int    num_regions;
   Extent region_loc[EBOFS_MAX_NODE_REGIONS];
 };
@@ -127,24 +130,23 @@ static const int EBOFS_NUM_FREE_BUCKETS = 16;   /* see alloc.h for bucket constr
 struct ebofs_super {
   unsigned s_magic;
   
-  unsigned version;     // version of this superblock.
+  unsigned epoch;             // version of this superblock.
 
   unsigned num_blocks;        /* # blocks in filesystem */
+
+  // basic stats, for kicks
   unsigned free_blocks;       /* unused blocks */
-  //unsigned num_btree_blocks;  /* blocks devoted to btrees (sum of chunks) */
   unsigned num_objects;
-
-  /* stupid stuff */
   unsigned  num_fragmented;
-
-  struct ebofs_table object_tab;  // object directory
-  struct ebofs_table free_tab[EBOFS_NUM_FREE_BUCKETS];
-
+  
+  struct ebofs_nodepool nodepool;
+  
+  // tables
+  struct ebofs_table free_tab[EBOFS_NUM_FREE_BUCKETS];  
+  struct ebofs_table object_tab;      // object directory
   struct ebofs_table collection_tab;  // collection directory
   struct ebofs_table oc_tab;
   struct ebofs_table co_tab;
-
-  struct ebofs_nodepool table_nodepool;
 };
 
 

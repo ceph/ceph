@@ -3,11 +3,15 @@
 
 #include "types.h"
 
+#include "include/interval_set.h"
+
 class Ebofs;
 
 class Allocator {
  protected:
   Ebofs *fs;
+
+  interval_set<block_t> limbo;
 
   static int pick_bucket(block_t num) {
 	int b = 0;
@@ -29,6 +33,9 @@ class Allocator {
   
   int allocate(Extent& ex, block_t num, block_t near=0);
   int release(Extent& ex);
+  int release_now(Extent& ex);
+
+  int release_limbo();
 };
 
 #endif

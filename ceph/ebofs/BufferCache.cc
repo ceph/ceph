@@ -92,7 +92,12 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length, version_t 
 	p->second->set_last_flushed(version);
 	bc->mark_clean(p->second);
 
-	if (p->second->ioh == ioh) p->second->ioh = 0;
+	if (p->second->ioh == ioh) {
+	  p->second->ioh = 0;
+	}
+	else if (p->second->shadow_ioh == ioh) {
+	  p->second->shadow_ioh = 0;
+	}
 
 	// trigger waiters
 	waiters.splice(waiters.begin(), p->second->waitfor_flush);
@@ -188,6 +193,12 @@ int ObjectCache::map_read(block_t start, block_t len,
   return 0;  
 }
 
+
+/*
+ * map a range of pages on an object's buffer cache.
+ *
+ * - break up bufferheads that don't fall completely within the range
+ */
 int ObjectCache::map_write(block_t start, block_t len,
 						   map<block_t, BufferHead*>& hits) 
 {

@@ -26,16 +26,35 @@ inline ostream& operator<<(ostream& out, idpair_t oc) {
 }
 
 
+const int EBOFS_COMMIT_INTERVAL = 10;  // whatever
+
+
 class Ebofs : public ObjectStore {
  protected:
   Mutex        ebofs_lock;    // a beautiful global lock
 
   // ** super **
-  bool         mounted;
   BlockDevice &dev;
-  version_t    super_version;
+  bool         mounted, unmounting;
+  bool         readonly;
+  version_t    super_epoch;
 
-  int write_super();
+  void prepare_super(version_t epoch, bufferptr& bp);
+  void write_super(version_t epoch, bufferptr& bp);
+
+  Cond         commit_cond;   // to wake up the commit thread
+  int commit_thread_entry();
+
+  class CommitThread : public Thread {
+	Ebofs *ebofs;
+  public:
+	CommitThread(Ebofs *e) : ebofs(e) {}
+	void *entry() {
+	  ebofs->commit_thread_entry();
+	  return 0;
+	}
+  } commit_thread;
+
 
   // ** allocator **
   block_t      free_blocks;
@@ -48,38 +67,50 @@ class Ebofs : public ObjectStore {
 
   // ** tables and sets **
   // nodes
-  NodePool     table_nodepool;   // for primary tables.
+  NodePool     nodepool;   // for all tables...
 
   // tables
-  Table<object_t, Extent>     *object_tab;
-  Table<block_t,block_t>      *free_tab[EBOFS_NUM_FREE_BUCKETS];
+  Table<object_t, Extent> *object_tab;
+  Table<block_t,block_t>  *free_tab[EBOFS_NUM_FREE_BUCKETS];
 
   // collections
-  Table<coll_t, Extent>       *collection_tab;
+  Table<coll_t, Extent>  *collection_tab;
   Table<idpair_t, bool>  *oc_tab;
   Table<idpair_t, bool>  *co_tab;
+
+  void close_tables();
 
 
   // ** onode cache **
   hash_map<object_t, Onode*>  onode_map;  // onode cache
   LRU                         onode_lru;
+  set<Onode*>                 dirty_onodes;
 
   Onode* new_onode(object_t oid);     // make new onode.  ref++.
   Onode* get_onode(object_t oid);     // get cached onode, or read from disk.  ref++.
-  void write_onode(Onode *on);
+  void write_onode(Onode *on, Context *c);
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
+  void dirty_onode(Onode* o);
 
   // ** cnodes **
   hash_map<coll_t, Cnode*>    cnode_map;
   LRU                         cnode_lru;
+  set<Cnode*>                 dirty_cnodes;
+  int                         inodes_flushing;
+  Cond                        inode_commit_cond;                    
 
   Cnode* new_cnode(coll_t cid);
   Cnode* get_cnode(coll_t cid);
-  void write_cnode(Cnode *cn);
+  void write_cnode(Cnode *cn, Context *c);
   void remove_cnode(Cnode *cn);
   void put_cnode(Cnode *cn);
+  void dirty_cnode(Cnode *cn);
 
+  void flush_inode_finish();
+  void commit_inodes_start();
+  void commit_inodes_wait();
+  friend class C_E_InodeFlush;
 
  public:
   void trim_onode_cache();
@@ -89,12 +120,17 @@ class Ebofs : public ObjectStore {
   BufferCache bc;
   pthread_t flushd_thread_id;
 
+  void commit_bc_wait(version_t epoch);
+
  public:
   void trim_buffer_cache();
   void flush_all();
  protected:
 
-  void zero(Onode *on, size_t len, off_t off, off_t write_thru);
+  //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
+  void alloc_write(Onode *on, 
+				   block_t start, block_t len, 
+				   map<block_t, BufferHead*>& hits);
   void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
   bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on);
 
@@ -111,11 +147,14 @@ class Ebofs : public ObjectStore {
 
  public:
   Ebofs(BlockDevice& d) : 
-	dev(d),
+	dev(d), 
+	mounted(false), unmounting(false), readonly(false), super_epoch(0),
+	commit_thread(this),
 	free_blocks(0), allocator(this),
 	bufferpool(EBOFS_BLOCK_SIZE),
 	object_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
-	bc(dev, bufferpool) {
+	inodes_flushing(0),
+	bc(dev, bufferpool, ebofs_lock) {
 	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	  free_tab[i] = 0;
   }
