@@ -10,10 +10,18 @@
 #include "types.h"
 
 
-typedef void *ioh_t;
+typedef void *ioh_t;    // opaque handle to an io request.  (in actuality, a biovec*)
 
 
 class BlockDevice {
+ public:
+  // callback type for io completion notification
+  class callback {
+  public:
+	virtual void finish(ioh_t ioh, int rval) = 0;
+  };
+
+ private:
   char   *dev;
   int     fd;
   block_t num_blocks;
@@ -29,14 +37,14 @@ class BlockDevice {
 	char type;
 	block_t start, length;
 	bufferlist bl;
-	Context *context;
+	callback *cb;
 	Cond *cond;
 	int rval;
 
-	biovec(char t, block_t s, block_t l, bufferlist& b, Context *c) :
-	  type(t), start(s), length(l), bl(b), context(c), cond(0), rval(0) {}
+	biovec(char t, block_t s, block_t l, bufferlist& b, callback *c) :
+	  type(t), start(s), length(l), bl(b), cb(c), cond(0), rval(0) {}
 	biovec(char t, block_t s, block_t l, bufferlist& b, Cond *c) :
-	  type(t), start(s), length(l), bl(b), context(0), cond(c), rval(0) {}
+	  type(t), start(s), length(l), bl(b), cb(0), cond(c), rval(0) {}
   };
 
   multimap<block_t, biovec*> io_queue;
@@ -133,14 +141,14 @@ class BlockDevice {
   }
 
   // ** non-blocking interface **
-  ioh_t read(block_t bno, unsigned num, bufferlist& bl, Context *fin) {
+  ioh_t read(block_t bno, unsigned num, bufferlist& bl, callback *fin) {
 	biovec *pbio = new biovec(biovec::IO_READ, bno, num, bl, fin);
 	lock.Lock();
 	_submit_io(pbio);
 	lock.Unlock();
 	return (ioh_t)pbio;
   }
-  ioh_t write(block_t bno, unsigned num, bufferlist& bl, Context *fin) {
+  ioh_t write(block_t bno, unsigned num, bufferlist& bl, callback *fin) {
 	biovec *pbio = new biovec(biovec::IO_WRITE, bno, num, bl, fin);
 	lock.Lock();
 	_submit_io(pbio);

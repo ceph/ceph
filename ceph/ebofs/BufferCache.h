@@ -331,20 +331,18 @@ class ObjectCache {
   void tear_down();
 };
 
-class C_OC_RxFinish : public Context {
+class C_OC_RxFinish : public BlockDevice::callback {
   ObjectCache *oc;
   block_t start, length;
 public:
   C_OC_RxFinish(ObjectCache *o, block_t s, block_t l) :
 	oc(o), start(s), length(l) {}
-  void finish(int r) {
-	ioh_t ioh = (ioh_t)r;
-	if (ioh)
-	  oc->rx_finish(ioh, start, length);
-  }  
+  void finish(ioh_t ioh, int r) {
+	oc->rx_finish(ioh, start, length);
+  }
 };
 
-class C_OC_TxFinish : public Context {
+class C_OC_TxFinish : public BlockDevice::callback {
   ObjectCache *oc;
   block_t start, length;
   version_t version;
@@ -352,25 +350,19 @@ class C_OC_TxFinish : public Context {
 public:
   C_OC_TxFinish(ObjectCache *o, block_t s, block_t l, version_t v, version_t e) :
 	oc(o), start(s), length(l), version(v), epoch(e) {}
-  void finish(int r) {
-	ioh_t ioh = (ioh_t)r;
-	if (ioh) {
-	  oc->tx_finish(ioh, start, length, version, epoch);
-	}
+  void finish(ioh_t ioh, int r) {
+	oc->tx_finish(ioh, start, length, version, epoch);
   }  
 };
 
-class C_OC_PartialTxFinish : public Context {
+class C_OC_PartialTxFinish : public BlockDevice::callback {
   ObjectCache *oc;
   version_t epoch;
 public:
   C_OC_PartialTxFinish(ObjectCache *o, version_t e) :
 	oc(o), epoch(e) {}
-  void finish(int r) {
-	ioh_t ioh = (ioh_t)r;
-	if (ioh) {
-	  oc->partial_tx_finish(epoch);
-	}
+  void finish(ioh_t ioh, int r) {
+	oc->partial_tx_finish(epoch);
   }  
 };
 

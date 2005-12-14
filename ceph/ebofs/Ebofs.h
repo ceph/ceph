@@ -91,7 +91,7 @@ class Ebofs : public ObjectStore {
 
   Onode* new_onode(object_t oid);     // make new onode.  ref++.
   Onode* get_onode(object_t oid);     // get cached onode, or read from disk.  ref++.
-  void write_onode(Onode *on, Context *c);
+  void write_onode(Onode *on);
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
   void dirty_onode(Onode* o);
@@ -105,7 +105,7 @@ class Ebofs : public ObjectStore {
 
   Cnode* new_cnode(coll_t cid);
   Cnode* get_cnode(coll_t cid);
-  void write_cnode(Cnode *cn, Context *c);
+  void write_cnode(Cnode *cn);
   void remove_cnode(Cnode *cn);
   void put_cnode(Cnode *cn);
   void dirty_cnode(Cnode *cn);

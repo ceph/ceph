@@ -366,7 +366,16 @@ Onode* Ebofs::get_onode(object_t oid)
 }
 
 
-void Ebofs::write_onode(Onode *on, Context *c)
+class C_E_InodeFlush : public BlockDevice::callback {
+  Ebofs *ebofs;
+public:
+  C_E_InodeFlush(Ebofs *e) : ebofs(e) {}
+  void finish(ioh_t ioh, int r) {
+	ebofs->flush_inode_finish();
+  }
+};
+
+void Ebofs::write_onode(Onode *on)
 {
   // buffer
   int bytes = sizeof(ebofs_onode) + on->get_attr_bytes() + on->get_extent_bytes();
@@ -418,7 +427,8 @@ void Ebofs::write_onode(Onode *on, Context *c)
   }
 
   // write
-  dev.write( on->onode_loc.start, on->onode_loc.length, bl, c );
+  dev.write( on->onode_loc.start, on->onode_loc.length, bl, 
+			 new C_E_InodeFlush(this) );
 }
 
 void Ebofs::remove_onode(Onode *on)
@@ -552,7 +562,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
   return cn;
 }
 
-void Ebofs::write_cnode(Cnode *cn, Context *c)
+void Ebofs::write_cnode(Cnode *cn)
 {
   // allocate buffer
   int bytes = sizeof(ebofs_cnode) + cn->get_attr_bytes();
@@ -592,7 +602,8 @@ void Ebofs::write_cnode(Cnode *cn, Context *c)
   }
   
   // write
-  dev.write( cn->cnode_loc.start, cn->cnode_loc.length, bl, c );
+  dev.write( cn->cnode_loc.start, cn->cnode_loc.length, bl, 
+			 new C_E_InodeFlush(this) );
 }
 
 void Ebofs::remove_cnode(Cnode *cn)
@@ -626,14 +637,6 @@ void Ebofs::dirty_cnode(Cnode *cn)
 
 
 
-class C_E_InodeFlush : public Context {
-  Ebofs *ebofs;
-public:
-  C_E_InodeFlush(Ebofs *e) : ebofs(e) {}
-  void finish(int r) {
-	ebofs->flush_inode_finish();
-  }
-};
 
 void Ebofs::flush_inode_finish()
 {
@@ -656,7 +659,7 @@ void Ebofs::commit_inodes_start()
 	   i++) {
 	Onode *on = *i;
 	inodes_flushing++;
-	write_onode(on, new C_E_InodeFlush(this));
+	write_onode(on);
 	on->mark_clean();
 	on->uncommitted.clear();   // commit allocated blocks
   }
@@ -668,7 +671,7 @@ void Ebofs::commit_inodes_start()
 	   i++) {
 	Cnode *cn = *i;
 	inodes_flushing++;
-	write_cnode(cn, new C_E_InodeFlush(this));
+	write_cnode(cn);
 	cn->mark_clean();
   }
   dirty_cnodes.clear();

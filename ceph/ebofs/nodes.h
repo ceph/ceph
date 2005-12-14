@@ -254,12 +254,12 @@ class NodePool {
   // **** non-blocking i/o ****
 
  private:
-  class C_NP_FlushUsemap : public Context {
+  class C_NP_FlushUsemap : public BlockDevice::callback {
 	NodePool *pool;
   public:
 	C_NP_FlushUsemap(NodePool *p) : 
 	  pool(p) {}
-	void finish(int r) {
+	void finish(ioh_t ioh, int r) {
 	  pool->flushed_usemap();
 	}
   };
@@ -327,13 +327,13 @@ class NodePool {
 	return (flushing > 0);
   }
 
-  class C_NP_FlushNode : public Context {
+  class C_NP_FlushNode : public BlockDevice::callback {
 	NodePool *pool;
 	nodeid_t nid;
   public:
 	C_NP_FlushNode(NodePool *p, nodeid_t n) : 
 	  pool(p), nid(n) {}
-	void finish(int r) {
+	void finish(ioh_t ioh, int r) {
 	  pool->flushed_node(nid);
 	}
   };

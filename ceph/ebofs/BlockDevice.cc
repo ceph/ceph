@@ -195,9 +195,9 @@ int BlockDevice::complete_thread_entry()
 		if (bio->cond) {
 		  bio->cond->Signal();
 		}
-		else if (bio->context) {
-		  bio->context->finish((int)bio);    // FIXME do i need to pass this??
-		  delete bio->context;
+		else if (bio->cb) {
+		  bio->cb->finish((ioh_t)bio, bio->rval);
+		  delete bio->cb;
 		  delete bio;
 		}
 	  }
@@ -405,9 +405,9 @@ int BlockDevice::cancel_io(ioh_t ioh)
   lock.Unlock();
   
   // FIXME?
-  if (r == 0 && pbio->context) {
-	//pbio->context->finish(0);
-	delete pbio->context;
+  if (r == 0 && pbio->cb) {
+	//pbio->cb->finish(ioh, 0);
+	delete pbio->cb;
 	delete pbio;
   }
   
