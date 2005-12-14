@@ -358,7 +358,7 @@ int ObjectCache::map_write(Onode *on,
 			bh = right;
 		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh)) {
 			BufferHead *right = bc->split(bh, cur);
-			bc->bh_write(on, bh);          // reread left bit
+			bc->bh_write(on, bh);          // rewrite left bit
 			bh = right;
 		  } else {
 			bh = bc->split(bh, cur);   // just split it
@@ -485,12 +485,14 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 
 BufferHead *BufferCache::split(BufferHead *orig, block_t after) 
 {
+  dout(20) << "split " << *orig << " at " << after << endl;
+
   BufferHead *right = new BufferHead(orig->get_oc());
   orig->get_oc()->add_bh(right, after);
 
   right->set_version(orig->get_version());
   right->set_state(orig->get_state());
-  
+
   block_t mynewlen = after - orig->start();
   right->set_start( after );
   right->set_length( orig->length() - mynewlen );
@@ -500,7 +502,15 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   stat_sub(orig);
   orig->set_length( mynewlen );
   stat_add(orig);
-  
+
+  // buffers!
+  bufferlist bl;
+  bl.claim(orig->data);
+  if (bl.length()) {
+	assert(bl.length() == (orig->length()+right->length())*EBOFS_BLOCK_SIZE);
+	right->data.substr_of(bl, orig->length()*EBOFS_BLOCK_SIZE, right->length()*EBOFS_BLOCK_SIZE);
+	orig->data.substr_of(bl, 0, orig->length()*EBOFS_BLOCK_SIZE);
+  }
 
   // FIXME: waiters?
   
@@ -583,7 +593,7 @@ bool BufferCache::bh_cancel_write(BufferHead *bh)
   if (dev.cancel_io(bh->tx_ioh) >= 0) {
 	dout(10) << "bh_cancel_write on " << *bh << endl;
 	bh->tx_ioh = 0;
-	mark_missing(bh);
+	mark_dirty(bh);
 	epoch_unflushed[ bh->epoch_modified ]--;   // assert.. this should be the same epoch!
 	return true;
   }

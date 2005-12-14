@@ -214,7 +214,7 @@ class bufferlist {
 		 i != bl._buffers.end();
 		 i++) {
 	  unsigned l = (*i).length();
-	  if (l > left) l = left;
+	  if (left < l) l = left;
 	  copy_in(off, l, (*i).c_str());
 	  left -= l;
 	  if (left == 0) break;

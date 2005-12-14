@@ -182,11 +182,13 @@ class interval_set {
 	
 	while (pa != a.m.end() || pb != b.m.end()) {
 	  // passing?
-	  if (pb == b.m.end() || pa->first + pa->second <= pb->first) {
+	  if (pb == b.m.end() || 
+		  (pa != a.m.end() && pa->first + pa->second <= pb->first)) {
 		insert(pa->first, pa->second);
 		pa++;  continue; 
 	  }
-	  if (pa == a.m.end() || pb->first + pb->second <= pa->first) {
+	  if (pa == a.m.end() || 
+		  (pb != b.m.end() && pb->first + pb->second <= pa->first)) {
 		insert(pb->first, pb->second);
 		pb++;  continue; 
 	  }

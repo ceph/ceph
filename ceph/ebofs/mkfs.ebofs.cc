@@ -32,21 +32,21 @@ int main(int argc, char **argv)
 	Ebofs fs(dev);
 	fs.mount();
 	
-	if (1) {  // test
+	if (0) {  // test
 	  bufferlist bl;
 	  char crap[10000];
 	  memset(crap, 0, 10000);
 	  bl.append(crap, 10000);
 	  fs.write(10, bl.length(), 200, bl, (Context*)0);
-	  sleep(1);
 	  fs.trim_buffer_cache();
 	  fs.write(10, bl.length(), 5222, bl, (Context*)0);
+	  sleep(1);
 	  fs.trim_buffer_cache();
-	  //fs.write(10, 5000, 3222, bl, (Context*)0);
+	  fs.write(10, 5000, 3222, bl, (Context*)0);
 	}
 	
 	// test small writes
-	if (0) {
+	if (1) {
 	  char crap[10000];
 	  memset(crap, 0, 10000);
 	  bufferlist bl;
@@ -57,7 +57,7 @@ int main(int argc, char **argv)
 	  for (int i=0; i<100; i++) {
 		off_t off = rand() % 1000000;
 		size_t len = 100;
-		cout << "writing bit at " << off << " len " << len << endl;
+		cout << endl << "writing bit at " << off << " len " << len << endl;
 		fs.write(10, len, off, bl, (Context*)0);
 	  }
 	  
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 		  bufferlist bl;
 		  off_t off = rand() % 1000000;
 		  size_t len = 100;
-		  cout << "read bit at " << off << " len " << len << endl;
+		  cout << endl << "read bit at " << off << " len " << len << endl;
 		  int r = fs.read(10, len, off, bl);
 		  assert(bl.length() == len);
 		  assert(r == 0);
@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 		  bufferlist bl;
 		  off_t off = rand() % 1000000;
 		  size_t len = 100;
-		  cout << "read bit at " << off << " len " << len << endl;
+		  cout << endl << "read bit at " << off << " len " << len << endl;
 		  int r = fs.read(10, len, off, bl);
 		  assert(bl.length() == len);
 		  assert(r == 0);
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
 	  for (int i=0; i<100; i++) {
 		off_t off = rand() % 1000000;
 		size_t len = 100;
-		cout << "writing bit at " << off << " len " << len << endl;
+		cout << endl <<  "writing bit at " << off << " len " << len << endl;
 		fs.write(10, len, off, bl, (Context*)0);
 	  }
 	  

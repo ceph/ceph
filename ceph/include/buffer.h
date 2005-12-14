@@ -56,6 +56,11 @@ typedef void (buffer_free_func_t)(void*,char*,unsigned);
  *  _len <= _alloc_len
  */
 class buffer {
+ protected:
+  //wtf
+  //static Mutex bufferlock;
+  //static long buffer_total_alloc;// = 0;
+
  private:
   // raw buffer alloc
   char *_dataptr;

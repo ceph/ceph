@@ -754,6 +754,7 @@ void Ebofs::alloc_write(Onode *on,
   dout(10) << "alloc_write need to (re)alloc " << alloc << endl;
 
   // merge alloc into onode uncommitted map
+  //dout(10) << " union of " << on->uncommitted << " and " << alloc << endl;
   on->uncommitted.union_of(alloc);
   dout(10) << "alloc_write onode.uncommitted is now " << on->uncommitted << endl;
 
@@ -934,6 +935,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 		if (z) {
 		  bufferlist zb;
 		  zb.push_back(new buffer(z));
+		  zb.zero();
 		  bh->data.copy_in(off_in_bh, z, zb);
 		  zleft -= z;
 		  opos += z;
@@ -963,7 +965,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	
 	// copy!
 	unsigned len_in_bh = bh->length()*EBOFS_BLOCK_SIZE;
-	assert(len_in_bh >= zleft+left);
+	assert(len_in_bh <= zleft+left);
 	
 	dout(10) << "apply_write writing into " << *bh << ":"
 			 << " len_in_bh " << len_in_bh
@@ -1124,7 +1126,8 @@ int Ebofs::read(object_t oid,
 				bufferlist& bl)
 {
   ebofs_lock.Lock();
-  
+  dout(7) << "read " << hex << oid << dec << " len " << len << " off " << off << endl;
+
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
@@ -1177,7 +1180,7 @@ int Ebofs::write(object_t oid,
 				 bufferlist& bl, Context *onflush)
 {
   ebofs_lock.Lock();
-
+  dout(7) << "write " << hex << oid << dec << " len " << len << " off " << off << endl;
   assert(len > 0);
   
   // get inode
@@ -1209,6 +1212,7 @@ int Ebofs::write(object_t oid,
 int Ebofs::remove(object_t oid)
 {
   ebofs_lock.Lock();
+  dout(7) << "remove " << hex << oid << dec << endl;
   
   // get inode
   Onode *on = get_onode(oid);

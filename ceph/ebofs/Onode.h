@@ -104,8 +104,16 @@ public:
 	else
 	  extents.push_back(ex);		
   }
+  void verify_extents() {
+	block_t count = 0;;
+	for (unsigned i=0; i<extents.size(); i++) {
+	  count +=  extents[i].length;
+	}
+	assert(count == object_blocks);
+  }
   void set_extent(block_t offset, Extent ex) {
 	assert(offset <= object_blocks);
+	verify_extents();
 
 	// at the end?
 	if (offset == object_blocks) {
@@ -130,6 +138,7 @@ public:
 	  t.length = MIN(offset-cur, old[oldex].length-oldoff);
 	  _append_extent(t);
 
+	  cur += t.length;
 	  oldoff += t.length;
 	  if (oldoff == old[oldex].length) {
 		oldex++;
@@ -145,7 +154,7 @@ public:
 	// skip past it in the old stuff
 	block_t sleft = ex.length;
 	while (sleft > 0) {
-	  block_t skip = MIN(ex.length, old[oldex].length-oldoff);
+	  block_t skip = MIN(sleft, old[oldex].length-oldoff);
 	  sleft -= skip;
 	  oldoff += skip;
 	  if (oldoff == old[oldex].length) {
@@ -156,16 +165,20 @@ public:
 	}
 
 	// copy anything left?
-	if (oldex < old.size()) {
+	while (oldex < old.size()) {
 	  if (oldoff) {
 		Extent t;
 		t.start = old[oldex].start+oldoff;
 		t.length = old[oldex].length-oldoff;
 		_append_extent(t);
+		oldoff = 0;
+		oldex++;
 	  } else {
 		_append_extent(old[oldex++]);
 	  }
 	}
+
+	verify_extents();
   }
   
 
@@ -173,6 +186,7 @@ public:
    *  map teh given page range into extents on disk.
    */
   int map_extents(block_t start, block_t len, vector<Extent>& ls) {
+	verify_extents();
 	block_t cur = 0;
 	for (unsigned i=0; i<extents.size(); i++) {
 	  if (cur >= start+len) break;
@@ -206,71 +220,6 @@ public:
   }
 
 
-
-  /*
-  // (un)committed ranges
-  void dirty_range(block_t start, block_t len) {
-	// frame affected area (used for simplify later)
-	block_t first = start;
-	block_t last = start+len;
-
-	// put in uncommitted range
-	map<block_t,block_t>::iterator p = uncommitted.lower_bound(start);
-	if (p != uncommitted.begin() &&
-		(p->first > start || p == uncommitted.end())) {
-	  p--;
-	  first = p->first;
-	  if (p->first + p->second <= start) 
-		p++;
-	}
-
-	for (; len>0; p++) {
-	  if (p == uncommitted.end()) {
-		uncommitted[start] = len;
-		break;
-	  }
-	  
-	  if (p->first <= start) {
-		block_t skip = start - p->first;
-		block_t overlap = MIN( p->second - skip, len );
-		start += overlap;
-		len -= overlap;
-	  } else if (p->first > start) { 
-		block_t add = MIN(len, p->first - start);
-		uncommitted[start] = add;
-		start += add;
-		len -= add;
-	  }		
-	}
-
-	// simplify uncommitted
-	map<block_t,block_t>::iterator p = uncommitted.lower_bound(first);
-	block_t prevstart = p->first;
-	block_t prevend = p->first + p->second;
-	p++;
-	while (p != uncommitted.end()) {
-	  if (prevend == p->first) {
-		uncommitted[prevstart] += p->second;
-		prevend += p->second;
-		block_t t = p->first;
-		p++;
-		uncommitted.erase(t);
-	  } else {
-		prevstart = p->first;
-		prevend = p->first + p->second;
-		if (prevend >= last) break;        // we've gone past our updates
-		p++;
-	  }
-	}
-  }
-  void mark_committed() {
-	uncommitted.clear();
-  }
-
-  bool is_uncommitted(block_t b) {
-	
-  }
-  */
 
 
   // pack/unpack

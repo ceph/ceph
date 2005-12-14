@@ -279,6 +279,7 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
   if (bh.is_rx()) out << " rx";
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";
+  out << " " << bh.data.length();
   out << ")";
   return out;
 }

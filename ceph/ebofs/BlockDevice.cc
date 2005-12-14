@@ -343,7 +343,7 @@ int BlockDevice::close()
   lock.Unlock();	
   io_thread.join();
 
-  dout(1) << "close" << endl;
+  dout(1) << "close " << dev << endl;
   ::close(fd);
   fd = 0;
 
