@@ -56,18 +56,18 @@ int main(int argc, char **argv)
 	  srand(0);
 	  for (int i=0; i<100; i++) {
 		off_t off = rand() % 1000000;
-		size_t len = 100;
+		size_t len = rand() % 10000;
 		cout << endl << "writing bit at " << off << " len " << len << endl;
 		fs.write(10, len, off, bl, (Context*)0);
 	  }
 	  
-	  if (0) {
+	  if (1) {
 		// read
 		srand(0);
 		for (int i=0; i<100; i++) {
 		  bufferlist bl;
 		  off_t off = rand() % 1000000;
-		  size_t len = 100;
+		  size_t len = rand() % 1000;
 		  cout << endl << "read bit at " << off << " len " << len << endl;
 		  int r = fs.read(10, len, off, bl);
 		  assert(bl.length() == len);
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 	  fs.trim_buffer_cache();
 	  //fs.trim_buffer_cache();
 	  
-	  if (0) {
+	  if (1) {
 		// read again
 		srand(0);
 		for (int i=0; i<100; i++) {

@@ -463,7 +463,7 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 
   for (p++; p != data.end(); p++) {
 	// past?
-	if (p->first < start+len) break;
+	if (p->first >= start+len) break;
 	
 	const version_t v = p->second->get_version();
 	if (low > v) low = v;
@@ -514,6 +514,10 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 
   // FIXME: waiters?
   
+  dout(20) << "split    left is " << *orig << endl;
+  dout(20) << "split   right is " << *right << endl;
+
+
   return right;
 }
 
@@ -549,8 +553,7 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh)
 
 bool BufferCache::bh_cancel_read(BufferHead *bh)
 {
-  assert(bh->rx_ioh);
-  if (dev.cancel_io(bh->rx_ioh) >= 0) {
+  if (bh->rx_ioh && dev.cancel_io(bh->rx_ioh) >= 0) {
 	dout(10) << "bh_cancel_read on " << *bh << endl;
 	bh->rx_ioh = 0;
 	mark_missing(bh);
@@ -589,8 +592,7 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh)
 
 bool BufferCache::bh_cancel_write(BufferHead *bh)
 {
-  assert(bh->tx_ioh);
-  if (dev.cancel_io(bh->tx_ioh) >= 0) {
+  if (bh->tx_ioh && dev.cancel_io(bh->tx_ioh) >= 0) {
 	dout(10) << "bh_cancel_write on " << *bh << endl;
 	bh->tx_ioh = 0;
 	mark_dirty(bh);
