@@ -10,35 +10,54 @@
 #include "AlignedBufferPool.h"
 #include "BlockDevice.h"
 
-#define BH_STATE_DIRTY  1
+#include "include/interval_set.h"
 
 class ObjectCache;
 class BufferCache;
+class Onode;
 
 class BufferHead : public LRUObject {
  public:
+  /*
+   * - buffer_heads should always break across disk extent boundaries
+   * - partial buffer_heads are always 1 block.
+   */
   const static int STATE_MISSING = 0; //     missing; data is on disk, but not loaded.
   const static int STATE_CLEAN = 1;   // Rw  clean
   const static int STATE_DIRTY = 2;   // RW  dirty
   const static int STATE_TX = 3;      // Rw  flushing to disk
   const static int STATE_RX = 4;      //  w  reading from disk
-  const static int STATE_PARTIAL = 5; // reading from disk, + partial content map.
+  const static int STATE_PARTIAL = 5; // reading from disk, + partial content map.  always 1 block.
+
+  class PartialWrite {
+  public:
+	map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
+	block_t                block;
+	version_t              epoch;
+  };
 
  public:
   ObjectCache *oc;
 
-  bufferlist data, shadow_data;
-  ioh_t      ioh, shadow_ioh;   // any pending read/write op
-  version_t  tx_epoch;       // epoch this write is in
+  bufferlist data;
+
+  ioh_t     rx_ioh;         // 
+  ioh_t     tx_ioh;         // 
 
   list<Context*> waitfor_read;
   list<Context*> waitfor_flush;
 
  private:
-  map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
+  map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
+
+  map<block_t, PartialWrite> partial_write;  // queued writes w/ partial content
 
   int        ref;
   int        state;
+
+ public:
+  version_t  epoch_modified;
+  
   version_t  version;        // current version in cache
   version_t  last_flushed;   // last version flushed to disk
  
@@ -48,8 +67,9 @@ class BufferHead : public LRUObject {
 
  public:
   BufferHead(ObjectCache *o) :
-	oc(o), ioh(0), shadow_ioh(0), tx_epoch(0),
-	ref(0), state(STATE_MISSING), version(0), last_flushed(0)
+	oc(o), //cancellable_ioh(0), tx_epoch(0),
+	rx_ioh(0), tx_ioh(0), 
+	ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0)
 	{}
   
   ObjectCache *get_oc() { return oc; }
@@ -97,17 +117,10 @@ class BufferHead : public LRUObject {
   bool is_rx() { return state == STATE_RX; }
   bool is_partial() { return state == STATE_PARTIAL; }
   
-  /*
-  void substr(block_t start, block_t len, bufferlist& sub) {
-	// determine offset in bufferlist
-	block_t start = object_loc.start - off;  
-	block_t len = num - start;
-	if (start+len > object_loc.length)
-	  len = object_loc.length - start;
-	
-	sub.substr_of(data, start*EBOFS_BLOCK_SIZE, len*EBOFS_BLOCK_SIZE);
-  }
-  */
+  bool is_partial_writes() { return !partial_write.empty(); }
+  void finish_partials();
+  void queue_partial_write(block_t b);
+
 
   void copy_partial_substr(off_t start, off_t end, bufferlist& bl) {
 	map<off_t, bufferlist>::iterator i = partial.begin();
@@ -194,15 +207,18 @@ class BufferHead : public LRUObject {
 	*/
   }
   void apply_partial() {
+	apply_partial(data, partial);
+  }
+  void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
 	const off_t bhstart = start() * EBOFS_BLOCK_SIZE;
 	//assert(partial_is_complete());
-	for (map<off_t, bufferlist>::iterator i = partial.begin();
-		 i != partial.end();
+	for (map<off_t, bufferlist>::iterator i = pm.begin();
+		 i != pm.end();
 		 i++) {
 	  int pos = i->first - bhstart;
-	  data.copy_in(pos, i->second.length(), i->second);
+	  bl.copy_in(pos, i->second.length(), i->second);
 	}
-	partial.clear();
+	pm.clear();
   }
   void add_partial(off_t off, bufferlist& p) {
 	// trim overlap
@@ -269,10 +285,11 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
 
 
 class ObjectCache {
- private:
+ public:
   object_t object_id;
   BufferCache *bc;
 
+ private:
   map<block_t, BufferHead*>  data;
 
  public:
@@ -289,13 +306,16 @@ class ObjectCache {
   }
   bool is_empty() { return data.empty(); }
 
-  int map_read(block_t start, block_t len, 
+  int map_read(Onode *on,
+			   block_t start, block_t len, 
 			   map<block_t, BufferHead*>& hits,     // hits
 			   map<block_t, BufferHead*>& missing,  // read these from disk
 			   map<block_t, BufferHead*>& rx,       // wait for these to finish reading from disk
 			   map<block_t, BufferHead*>& partial); // (maybe) wait for these to read from disk
   
-  int map_write(block_t start, block_t len,
+  int map_write(Onode *on,
+				block_t start, block_t len,
+				interval_set<block_t>& alloc,
 				map<block_t, BufferHead*>& hits);   // can write to these.
 
   BufferHead *split(BufferHead *bh, block_t off);
@@ -304,8 +324,8 @@ class ObjectCache {
 					version_t& low, version_t& high);
 
   void rx_finish(ioh_t ioh, block_t start, block_t length);
-  void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v);
-
+  void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
+  void partial_tx_finish(version_t epoch);
 };
 
 class C_OC_RxFinish : public Context {
@@ -325,20 +345,36 @@ class C_OC_TxFinish : public Context {
   ObjectCache *oc;
   block_t start, length;
   version_t version;
+  version_t epoch;
 public:
-  C_OC_TxFinish(ObjectCache *o, block_t s, block_t l, version_t v) :
-	oc(o), start(s), length(l), version(v) {}
+  C_OC_TxFinish(ObjectCache *o, block_t s, block_t l, version_t v, version_t e) :
+	oc(o), start(s), length(l), version(v), epoch(e) {}
   void finish(int r) {
 	ioh_t ioh = (ioh_t)r;
-	if (ioh) 
-	  oc->tx_finish(ioh, start, length, version);
+	if (ioh) {
+	  oc->tx_finish(ioh, start, length, version, epoch);
+	}
+  }  
+};
+
+class C_OC_PartialTxFinish : public Context {
+  ObjectCache *oc;
+  version_t epoch;
+public:
+  C_OC_PartialTxFinish(ObjectCache *o, version_t e) :
+	oc(o), epoch(e) {}
+  void finish(int r) {
+	ioh_t ioh = (ioh_t)r;
+	if (ioh) {
+	  oc->partial_tx_finish(epoch);
+	}
   }  
 };
 
 
 class BufferCache {
  public:
-  Mutex             &lock;          // hack: ref to global lock
+  Mutex             &ebofs_lock;          // hack: this is a ref to global ebofs_lock
   BlockDevice       &dev;
   AlignedBufferPool &bufferpool;
 
@@ -357,9 +393,11 @@ class BufferCache {
   off_t stat_partial;
   off_t stat_missing;
 
+  map<version_t, int> epoch_unflushed;
+
  public:
-  BufferCache(BlockDevice& d, AlignedBufferPool& bp, Mutex& glock) : 
-	lock(glock), dev(d), bufferpool(bp),
+  BufferCache(BlockDevice& d, AlignedBufferPool& bp, Mutex& el) : 
+	ebofs_lock(el), dev(d), bufferpool(bp),
 	stat_waiter(0),
 	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
 	{}
@@ -416,9 +454,22 @@ class BufferCache {
   off_t get_stat_clean() { return stat_clean; }
   off_t get_stat_partial() { return stat_partial; }
 
+  int get_unflushed(version_t epoch) {
+	return epoch_unflushed[epoch];
+  }
+  void inc_unflushed(version_t epoch) {
+	epoch_unflushed[epoch]++;
+  }
+  void dec_unflushed(version_t epoch) {
+	epoch_unflushed[epoch]--;
+	if (stat_waiter && 
+		epoch_unflushed[epoch] == 0) 
+	  stat_cond.Signal();
+  }
+
   void waitfor_stat() {
 	stat_waiter++;
-	stat_cond.Wait(lock);
+	stat_cond.Wait(ebofs_lock);
 	stat_waiter--;
   }
 
@@ -447,6 +498,7 @@ class BufferCache {
 	set_state(bh2, bh1->get_state());
   }
   
+  void mark_missing(BufferHead *bh) { set_state(bh, BufferHead::STATE_MISSING); };
   void mark_clean(BufferHead *bh) { set_state(bh, BufferHead::STATE_CLEAN); };
   void mark_rx(BufferHead *bh) { set_state(bh, BufferHead::STATE_RX); };
   void mark_partial(BufferHead *bh) { set_state(bh, BufferHead::STATE_PARTIAL); };
@@ -455,6 +507,17 @@ class BufferCache {
 	set_state(bh, BufferHead::STATE_DIRTY); 
 	bh->set_dirty_stamp(g_clock.now());
   };
+
+
+  // io
+  void bh_read(Onode *on, BufferHead *bh);
+  void bh_write(Onode *on, BufferHead *bh);
+  void bh_queue_partial_write(Onode *on, BufferHead *bh);
+
+  bool bh_cancel_read(BufferHead *bh);
+  bool bh_cancel_write(BufferHead *bh);
+
+  friend class C_E_FlushPartial;
 
 
   BufferHead *split(BufferHead *orig, block_t after);

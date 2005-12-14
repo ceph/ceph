@@ -4,11 +4,12 @@
 
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug) cout << "allocator." 
+#define dout(x) if (x <= g_conf.debug) cout << "ebofs.allocator." 
 
 
 void Allocator::dump_freelist()
 {
+  if (0)
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
 	dout(20) << "dump bucket " << b << endl;
 	if (fs->free_tab[b]->get_num_keys() > 0) {
@@ -59,9 +60,11 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 
 int Allocator::allocate(Extent& ex, block_t num, block_t near)
 {
+  /*
   if (!near) {
 	near = num/2;  // this is totally wrong and stupid.
   }
+  */
 
   int bucket;
 
@@ -109,7 +112,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 		}
 	  }
 
-	  dout(1) << "allocator.alloc " << ex << " near " << near << endl;
+	  dout(10) << "allocate " << ex << " near " << near << endl;
 	  dump_freelist();
 	  return num;
 	}
@@ -124,7 +127,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  
 	  fs->free_tab[bucket]->remove(ex.start);
 	  fs->free_blocks -= ex.length;
-	  dout(1) << "allocator.alloc partial " << ex << " near " << near << endl;
+	  dout(10) << "allocate partial " << ex << " near " << near << endl;
 	  dump_freelist();
 	  return ex.length;
 	}	
@@ -137,7 +140,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
 int Allocator::release(Extent& ex)
 {
-  dout(1) << "release " << ex << " (into limbo)" << endl;
+  dout(10) << "release " << ex << " (into limbo)" << endl;
   limbo.insert(ex.start, ex.length);
   return 0;
 }
@@ -157,7 +160,7 @@ int Allocator::release_now(Extent& ex)
 {
   Extent newex = ex;
   
-  dout(1) << "release " << ex << endl;
+  dout(10) << "release " << ex << endl;
 
   // one after us?
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {

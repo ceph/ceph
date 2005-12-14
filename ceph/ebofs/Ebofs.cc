@@ -11,6 +11,8 @@ int Ebofs::mount()
   // note: this will fail in mount -> unmount -> mount type situations, bc
   //       prior state isn't fully cleaned up.
 
+  dout(1) << "mount" << endl;
+
   ebofs_lock.Lock();
   assert(!mounted);
 
@@ -22,8 +24,8 @@ int Ebofs::mount()
 
   struct ebofs_super *sb1 = (struct ebofs_super*)bp1.c_str();
   struct ebofs_super *sb2 = (struct ebofs_super*)bp2.c_str();
-  dout(2) << "mount super @0 epoch " << sb1->epoch << endl;
-  dout(2) << "mount super @1 epoch " << sb2->epoch << endl;
+  dout(3) << "mount super @0 epoch " << sb1->epoch << endl;
+  dout(3) << "mount super @1 epoch " << sb2->epoch << endl;
 
   // pick newest super
   struct ebofs_super *sb = 0;
@@ -32,17 +34,17 @@ int Ebofs::mount()
   else
 	sb = sb2;
   super_epoch = sb->epoch;
-  dout(2) << "mount epoch " << super_epoch << endl;
+  dout(3) << "mount epoch " << super_epoch << endl;
   assert(super_epoch == sb->epoch);
 
   // init node pools
-  dout(2) << "mount nodepool" << endl;
+  dout(3) << "mount nodepool" << endl;
   nodepool.init( &sb->nodepool );
   nodepool.read_usemap( dev, super_epoch );
   nodepool.read_clean_nodes( dev );
   
   // open tables
-  dout(2) << "mount opening tables" << endl;
+  dout(3) << "mount opening tables" << endl;
   object_tab = new Table<object_t, Extent>( nodepool, sb->object_tab );
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t, block_t>( nodepool, sb->free_tab[i] );
@@ -51,10 +53,10 @@ int Ebofs::mount()
   oc_tab = new Table<idpair_t, bool>( nodepool, sb->oc_tab );
   co_tab = new Table<idpair_t, bool>( nodepool, sb->co_tab );
   
-  dout(2) << "mount starting commit thread" << endl;
+  dout(3) << "mount starting commit thread" << endl;
   commit_thread.create();
   
-  dout(2) << "mount mounted" << endl;
+  dout(1) << "mount mounted" << endl;
   mounted = true;
 
   ebofs_lock.Unlock();
@@ -124,7 +126,7 @@ int Ebofs::mkfs()
   write_super(1, superbp1);
   
   // free memory
-  dout(1) << "mkfs: cleaning up" << endl;
+  dout(3) << "mkfs: cleaning up" << endl;
   close_tables();
 
   dout(1) << "mkfs: done" << endl;
@@ -149,6 +151,7 @@ int Ebofs::umount()
   ebofs_lock.Lock();
   
   // mark unmounting
+  dout(1) << "umount start" << endl;
   readonly = true;
   unmounting = true;
   
@@ -156,12 +159,16 @@ int Ebofs::umount()
   commit_cond.Signal();
 
   // wait 
+  dout(2) << "umount stopping commit thread" << endl;
   ebofs_lock.Unlock();
   commit_thread.join();
+  ebofs_lock.Lock();
 
   // free memory
+  dout(2) << "umount cleaning up" << endl;
   close_tables();
 
+  dout(1) << "umount done" << endl;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -172,7 +179,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
 {
   struct ebofs_super sb;
   
-  dout(1) << "prepare_super v" << epoch << endl;
+  dout(10) << "prepare_super v" << epoch << endl;
 
   // fill in super
   memset(&sb, 0, sizeof(sb));
@@ -223,16 +230,18 @@ void Ebofs::write_super(version_t epoch, bufferptr& bp)
 {
   block_t bno = epoch & 1;
   
-  dout(1) << "write_super v" << epoch << " to b" << bno << endl;
+  dout(10) << "write_super v" << epoch << " to b" << bno << endl;
 
   dev.write(bno, 1, bp);
 }
 
 int Ebofs::commit_thread_entry()
-{
-  dout(10) << "commit_thread start" << endl;
-  
+{  
   ebofs_lock.Lock();
+  dout(10) << "commit_thread start" << endl;
+
+  commit_thread_started = true;
+  sync_cond.Signal();
 
   while (mounted) {
 	
@@ -272,13 +281,14 @@ int Ebofs::commit_thread_entry()
 	ebofs_lock.Unlock();
 	write_super(super_epoch, superbp);	
 	ebofs_lock.Lock();
-	
+
+	sync_cond.Signal();
+
 	dout(10) << "commit_thread commit finish" << endl;
   }
   
-  ebofs_lock.Unlock();
-
   dout(10) << "commit_thread finish" << endl;
+  ebofs_lock.Unlock();
   return 0;
 }
 
@@ -386,7 +396,7 @@ void Ebofs::write_onode(Onode *on, Context *c)
   
   // attr
   unsigned off = sizeof(eo);
-  for (map<string, AttrVal >::iterator i = on->attr.begin();
+  for (map<string, AttrVal>::iterator i = on->attr.begin();
 	   i != on->attr.end();
 	   i++) {
 	bl.copy_in(off, i->first.length()+1, i->first.c_str());
@@ -618,7 +628,9 @@ void Ebofs::commit_inodes_start()
 	inodes_flushing++;
 	write_onode(on, new C_E_InodeFlush(this));
 	on->mark_clean();
+	on->uncommitted.clear();   // commit allocated blocks
   }
+  dirty_onodes.clear();
 
   // cnodes
   for (set<Cnode*>::iterator i = dirty_cnodes.begin();
@@ -629,6 +641,7 @@ void Ebofs::commit_inodes_start()
 	write_cnode(cn, new C_E_InodeFlush(this));
 	cn->mark_clean();
   }
+  dirty_cnodes.clear();
 
   dout(10) << "commit_inodes_start writing " << inodes_flushing << " onodes+cnodes" << endl;
 }
@@ -637,7 +650,7 @@ void Ebofs::commit_inodes_wait()
 {
   // caller must hold ebofs_lock
   while (inodes_flushing > 0) {
-	dout(10) << "commit_inodes_wait for " << inodes_flushing << " onodes+cnodes to flush" << endl;
+	dout(10) << "commit_inodes_wait waiting for " << inodes_flushing << " onodes+cnodes to flush" << endl;
 	inode_commit_cond.Wait(ebofs_lock);
   }
   dout(10) << "commit_inodes_wait all flushed" << endl;
@@ -651,32 +664,19 @@ void Ebofs::commit_inodes_wait()
 
 // *** buffer cache ***
 
-// ... should already hold lock ...
 void Ebofs::trim_buffer_cache()
 {
-  //ebofs_lock.Lock();
+  ebofs_lock.Lock();
+  dout(10) << "trim_buffer_cache start: " 
+		   << bc.lru_rest.lru_get_size() << " rest + " 
+		   << bc.lru_dirty.lru_get_size() << " dirty " << endl;
 
-  // flush any dirty items?
-  while (bc.lru_dirty.lru_get_size() > bc.lru_dirty.lru_get_max()) {
-	BufferHead *bh = (BufferHead*) bc.lru_dirty.lru_expire();
-	if (!bh) break;
-
-	bc.lru_dirty.lru_insert_bot(bh);
-
-	dout(10) << "trim_buffer_cache dirty " << *bh << endl;
-	assert(bh->is_dirty());
-	
-	Onode *on = get_onode( bh->oc->get_object_id() );
-	bh_write(on, bh);
-	put_onode(on);
-  }
-  
-  // trim bufferheads
+  // trim trimmable bufferheads
   while (bc.lru_rest.lru_get_size() > bc.lru_rest.lru_get_max()) {
 	BufferHead *bh = (BufferHead*) bc.lru_rest.lru_expire();
 	if (!bh) break;
-
-	dout(10) << "trim_buffer_cache rest " << *bh << endl;
+	
+	dout(10) << "trim_buffer_cache trimming " << *bh << endl;
 	assert(bh->is_clean());
 	
 	ObjectCache *oc = bh->oc;
@@ -690,161 +690,72 @@ void Ebofs::trim_buffer_cache()
 	  put_onode(on);
 	}
   }
-  dout(10) << "trim_buffer_cache " 
+  dout(10) << "trim_buffer_cache finish: " 
 		   << bc.lru_rest.lru_get_size() << " rest + " 
 		   << bc.lru_dirty.lru_get_size() << " dirty " << endl;
-
-  //ebofs_lock.Unlock();
+  
+  ebofs_lock.Unlock();
 }
 
+
+void Ebofs::sync()
+{
+  ebofs_lock.Lock();
+  dout(3) << "sync in " << super_epoch << endl;
+  
+  if (!commit_thread_started) {
+	dout(10) << "sync waiting for commit thread to start" << endl;
+	sync_cond.Wait(ebofs_lock);
+  }
+
+  if (mid_commit) {
+	dout(10) << "sync waiting for commit in progress" << endl;
+	sync_cond.Wait(ebofs_lock);
+  }
+  
+  commit_cond.Signal();  // trigger a commit
+  
+  sync_cond.Wait(ebofs_lock);  // wait
+
+  dout(3) << "sync finish in " << super_epoch << endl;
+  ebofs_lock.Unlock();
+}
 
 
 void Ebofs::commit_bc_wait(version_t epoch)
 {
-  dout(1) << "commit_bc_wait" << endl;  
-}
-
-void Ebofs::flush_all()
-{
-  // FIXME what about partial heads?
+  dout(10) << "commit_bc_wait on epoch " << epoch << endl;  
   
-  dout(1) << "flush_all" << endl;
-
-  bc.lock.Lock();
-
-  while (bc.get_stat_dirty() > 0 ||  // not strictly necessary
-		 bc.get_stat_tx() > 0 ||
-		 bc.get_stat_partial() > 0 ||
-		 bc.get_stat_rx() > 0) {
-
-	// write all dirty bufferheads
-	while (!bc.dirty_bh.empty()) {
-	  set<BufferHead*>::iterator i = bc.dirty_bh.begin();
-	  BufferHead *bh = *i;
-	  if (bh->ioh) continue;
-	  Onode *on = get_onode(bh->oc->get_object_id());
-	  bh_write(on, bh);
-	  put_onode(on);
-	}
-
-	// wait for all tx and partial buffers to flush
-	dout(1) << "flush_all waiting for " 
-			<< bc.get_stat_dirty() << " dirty, " 
-			<< bc.get_stat_tx() << " tx, " 
-			<< bc.get_stat_rx() << " rx, " 
-			<< bc.get_stat_partial() << " partial" 
-			<< endl;
+  while (bc.get_unflushed(epoch) > 0) {
+	dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << endl;
 	bc.waitfor_stat();
   }
-  bc.lock.Unlock();
-  dout(1) << "flush_all done" << endl;
+
+  dout(10) << "commit_bc_wait all flushed for epoch " << epoch << endl;  
 }
 
 
 
 
-// ? is this the best way ?
-class C_E_FlushPartial : public Context {
-  Ebofs *ebofs;
-  Onode *on;
-  BufferHead *bh;
-public:
-  C_E_FlushPartial(Ebofs *e, Onode *o, BufferHead *b) : ebofs(e), on(o), bh(b) {}
-  void finish(int r) {
-	if (r == 0) ebofs->bh_write(on, bh);
-  }
-};
-
-
-void Ebofs::bh_read(Onode *on, BufferHead *bh)
-{
-  dout(5) << "bh_read " << *on << " on " << *bh << endl;
-
-  if (bh->is_missing())	{
-	bc.mark_rx(bh);
-  } else {
-	assert(bh->is_partial());
-  }
-  
-  // get extents
-  vector<Extent> ex;
-  on->map_extents(bh->start(), bh->length(), ex);
-
-  // alloc new buffer
-  bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
-  
-  // lay out on disk
-  block_t bhoff = 0;
-  for (unsigned i=0; i<ex.size(); i++) {
-	dout(10) << "bh_read  " << bhoff << ": " << ex[i] << endl;
-	bufferlist sub;
-	sub.substr_of(bh->data, bhoff*EBOFS_BLOCK_SIZE, ex[i].length*EBOFS_BLOCK_SIZE);
-
-	//if (bh->is_partial())  
-	//bh->waitfor_read.push_back(new C_E_FlushPartial(this, on, bh));
-
-	assert(bh->ioh == 0);
-	bh->ioh = dev.read(ex[i].start, ex[i].length, sub,
-					   new C_OC_RxFinish(on->oc, 
-										 bhoff + bh->start(), ex[i].length));
-	
-	bhoff += ex[i].length;
-  }
-}
-
-void Ebofs::bh_write(Onode *on, BufferHead *bh)
-{
-  dout(5) << "bh_write " << *on << " on " << *bh << endl;
-  assert(bh->get_version() > 0);
-
-  assert(bh->is_dirty());
-  bc.mark_tx(bh);
-  bh->tx_epoch = super_epoch;   // note the epoch!
-
-  // get extents
-  vector<Extent> ex;
-  on->map_extents(bh->start(), bh->length(), ex);
-
-  // lay out on disk
-  block_t bhoff = 0;
-  for (unsigned i=0; i<ex.size(); i++) {
-	dout(10) << "bh_write  bh off " << bhoff << ": " << ex[i] << endl;
-
-	bufferlist sub;
-	sub.substr_of(bh->data, bhoff*EBOFS_BLOCK_SIZE, ex[i].length*EBOFS_BLOCK_SIZE);
-
-	assert(bh->ioh == 0);
-	bh->ioh = dev.write(ex[i].start, ex[i].length, sub,
-						new C_OC_TxFinish(on->oc, 
-										  bhoff + bh->start(), ex[i].length, 
-										  bh->get_version()));
-
-	bhoff += ex[i].length;
-  }
-}
 
 
 /*
  * allocate a write to blocks on disk.
- * take care to not overwrite any "safe" data blocks.
- * break up bufferheads in bh_hits that span realloc boundaries.
- * final bufferhead set stored in final!
+ * - take care to not overwrite any "safe" data blocks.
+ *  - allocate/map new extents on disk as necessary
  */
 void Ebofs::alloc_write(Onode *on, 
-						block_t start, block_t len, 
-						map<block_t, BufferHead*>& hits)
+						block_t start, block_t len,
+						interval_set<block_t>& alloc)
 {
   // first decide what pages to (re)allocate
-  interval_set<block_t> alloc;
   on->map_alloc_regions(start, len, alloc);
 
-  dout(10) << "alloc_write need to alloc " << alloc << endl;
+  dout(10) << "alloc_write need to (re)alloc " << alloc << endl;
 
   // merge alloc into onode uncommitted map
-  cout << "union of " << on->uncommitted << " and " << alloc << endl;
   on->uncommitted.union_of(alloc);
-
-  dout(10) << "alloc_write onode uncommitted now " << on->uncommitted << endl;
+  dout(10) << "alloc_write onode.uncommitted is now " << on->uncommitted << endl;
 
   // allocate the space
   for (map<block_t,block_t>::iterator i = alloc.m.begin();
@@ -868,55 +779,8 @@ void Ebofs::alloc_write(Onode *on,
 	  cur += ex.length;
 	}
   }
-  
-  // now break up the bh's as necessary
-  block_t cur = start;
-  block_t left = len;
-
-  map<block_t,BufferHead*>::iterator bhp = hits.begin();
-  map<block_t,block_t>::iterator ap = alloc.m.begin();
-  
-  block_t aoff = 0;
-  while (left > 0) {
-	assert(cur == bhp->first);
-	BufferHead *bh = bhp->second;
-	assert(cur == bh->start());
-	assert(left >= bh->length());
-	
-	assert(ap->first+aoff == bh->start());
-	if (ap->second-aoff == bh->length()) {
-	  // perfect.
-	  cur += bh->length();
-	  left -= bh->length();
-	  ap++;
-	  aoff = 0;
-	  bhp++;
-	  continue;
-	}
-
-	if (bh->length() < ap->second-aoff) {
-	  // bh is within alloc range.
-	  cur += bh->length();
-	  left -= bh->length();
-	  aoff += bh->length();
-	  bhp++;
-	  continue;
-	}
-	
-	// bh spans alloc boundary, split it!
-	assert(bh->length() > ap->second - aoff);
-	BufferHead *n = bc.split(bh, bh->start() + ap->second-aoff);
-	hits[n->start()] = n;   // add new guy to hit map
-
-	// bh is now shortened...
-	cur += bh->length();
-	left -= bh->length();
-	assert(ap->second == aoff + bh->length());
-	aoff = 0;
-	ap++;
-	continue;
-  }
 }
+
 
 
 
@@ -949,12 +813,13 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
 
+  // allocate write on disk.
+  interval_set<block_t> alloc;
+  alloc_write(on, bstart, blen, alloc);
+
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
-  oc->map_write(bstart, blen, hits);
-  
-  // allocate write on disk.  break buffer_heads across realloc/no realloc boundaries
-  alloc_write(on, bstart, blen, hits);
+  oc->map_write(on, bstart, blen, alloc, hits);
   
   // get current versions
   version_t lowv, highv;
@@ -970,28 +835,35 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	   i++) {
 	BufferHead *bh = i->second;
 	bh->set_version(highv+1);
+	bh->epoch_modified = super_epoch;
 	
-	// cancel old io?
-	if (bh->is_tx()) {
-	  if (bh->tx_epoch == super_epoch) {
-		// try to cancel the old io (just bc it's a waste)
-		dout(10) << "apply_write canceling old io on " << *bh << endl;
-		bc.dev.cancel_io(bh->ioh);
-		bh->ioh = 0;
-	  } else {
-		// this tx is from prior epoch!  shadow+copy the buffer before we modify it.
-		bh->shadow_data.claim(bh->data);
-		bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
-		bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, bh->shadow_data);
-		bh->shadow_ioh = bh->ioh;
-		bh->ioh = 0;
-	  }
+	// old write in progress?
+	if (bh->is_tx()) {	  // copy the buffer to avoid munging up in-flight write
+	  dout(10) << "apply_write tx pending, copying buffer on " << *bh << endl;
+	  bufferlist temp;
+	  temp.claim(bh->data);
+	  bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+	  bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
+	}
+
+	// need to split off partial?
+	if (bh->is_missing() && bh->length() > 1 &&
+		(bh->start() == bstart && off % EBOFS_BLOCK_SIZE != 0)) {
+	  BufferHead *right = bc.split(bh, bh->start()+1);
+	  hits[right->start()] = right;
+	  dout(10) << "apply_write split off left block for partial write; rest is " << *right << endl;
+	}
+	if (bh->is_missing() && bh->length() > 1 &&
+		(bh->last() == blast && len+off % EBOFS_BLOCK_SIZE != 0) &&
+		(len+off < on->object_size)) {
+	  BufferHead *right = bc.split(bh, bh->last());
+	  hits[right->start()] = right;
+	  dout(10) << "apply_write split off right block for upcoming partial write; rest is " << *right << endl;
 	}
 
 	// partial at head or tail?
 	if ((bh->start() == bstart && off % EBOFS_BLOCK_SIZE != 0) ||
-		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0) ||
-		(len % EBOFS_BLOCK_SIZE != 0)) {
+		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0)) {
 	  // locate ourselves in bh
 	  unsigned off_in_bh = opos - bh->start()*EBOFS_BLOCK_SIZE;
 	  assert(off_in_bh >= 0);
@@ -1029,27 +901,27 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 		  bh->data.zero();
 		  bh->apply_partial();
 		  bc.mark_dirty(bh);
-		  if (bh->ioh) {
-			bc.dev.cancel_io( bh->ioh );
-			bh->ioh = 0;
-		  }
-		  bh_write(on, bh);
+		  bc.bh_write(on, bh);
 		} 
 		else if (bh->is_rx()) {
 		  dout(10) << "apply_write  rx -> partial " << *bh << endl;
+		  assert(bh->length() == 1);
 		  bc.mark_partial(bh);
+		  bc.bh_queue_partial_write(on, bh);		  // queue the eventual write
 		}
 		else if (bh->is_missing()) {
 		  dout(10) << "apply_write  missing -> partial " << *bh << endl;
-		  bh_read(on, bh);	
+		  assert(bh->length() == 1);
 		  bc.mark_partial(bh);
+		  bc.bh_read(on, bh);	
+		  bc.bh_queue_partial_write(on, bh);		  // queue the eventual write
 		}
 		else if (bh->is_partial()) {
-		  if (bh->ioh == 0) {
-			dout(10) << "apply_write  submitting rx for partial " << *bh << endl;
-			bh_read(on, bh);	
-		  }
+		  dout(10) << "apply_write  already partial, no need to submit rx on " << *bh << endl;
+		  bc.bh_queue_partial_write(on, bh);		  // queue the eventual write
 		}
+
+
 	  } else {
 		assert(bh->is_clean() || bh->is_dirty() || bh->is_tx());
 		
@@ -1077,7 +949,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 		if (!bh->is_dirty())
 		  bc.mark_dirty(bh);
 
-		bh_write(on, bh);
+		bc.bh_write(on, bh);
 	  }
 	  continue;
 	}
@@ -1118,7 +990,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	if (!bh->is_dirty())
 	  bc.mark_dirty(bh);
 
-	bh_write(on, bh);
+	bc.bh_write(on, bh);
   }
 
   assert(zleft == 0);
@@ -1155,7 +1027,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
   map<block_t, BufferHead*> missing;  // read these
   map<block_t, BufferHead*> rx;       // wait for these
   map<block_t, BufferHead*> partials;  // ??
-  oc->map_read(bstart, blen, hits, missing, rx, partials);
+  oc->map_read(on, bstart, blen, hits, missing, rx, partials);
 
   // missing buffers?
   if (!missing.empty()) {
@@ -1163,7 +1035,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 		 i != missing.end();
 		 i++) {
 	  dout(15) <<"attempt_read missing buffer " << *(i->second) << endl;
-	  bh_read(on, i->second);
+	  bc.bh_read(on, i->second);
 	}
 	BufferHead *wait_on = missing.begin()->second;
 	wait_on->waitfor_read.push_back(new C_E_Cond(will_wait_on));

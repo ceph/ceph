@@ -9,18 +9,6 @@
 
 #include "types.h"
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <iostream>
-#include <cassert>
-#include <errno.h>
-
-#include <sys/ioctl.h>
-#include <linux/fs.h>
 
 typedef void *ioh_t;
 
@@ -58,7 +46,7 @@ class BlockDevice {
   
   void _submit_io(biovec *b);
   int _cancel_io(biovec *bio);
-  void do_io(biovec *b);
+  void do_io(list<biovec*>& biols);
    
 
   // io_thread
@@ -89,17 +77,7 @@ class BlockDevice {
   }
 
   // get size in blocks
-  block_t get_num_blocks() {
-	if (!num_blocks) {
-	  // stat
-	  struct stat st;
-	  assert(fd > 0);
-	  int r = ::fstat(fd, &st);
-	  assert(r == 0);
-	  num_blocks = st.st_size / (block_t)EBOFS_BLOCK_SIZE;
-	}
-	return num_blocks;
-  }
+  block_t get_num_blocks();
 
   int open();
   int close();

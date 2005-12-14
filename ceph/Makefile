@@ -129,8 +129,14 @@ obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 # ebofs
+ebofs: mkfs.ebofs test.ebofs
+
 mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs/ebo.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+
+test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs/ebo.o
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+
 
 
 

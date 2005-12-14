@@ -19,8 +19,6 @@
  *
  */
 
-
-
 class Onode : public LRUObject {
 private:
   int ref;
@@ -60,12 +58,12 @@ public:
   void get() {
 	if (ref == 0) lru_pin();
 	ref++;
-	cout << "onode.get " << ref << endl;
+	//cout << "ebofs.onode.get " << ref << endl;
   }
   void put() {
 	ref--;
 	if (ref == 0) lru_unpin();
-	cout << "onode.put " << ref << endl;
+	//cout << "ebofs.onode.put " << ref << endl;
   }
 
   void mark_dirty() {
@@ -289,7 +287,6 @@ public:
   int get_extent_bytes() {
 	return sizeof(Extent) * extents.size();
   }
-
 
 };
 

@@ -11,8 +11,6 @@
 using namespace std;
 using namespace __gnu_cxx;
 
-#define dbtout cout
-
 
 #define MIN(a,b)  ((a)<=(b) ? (a):(b))
 #define MAX(a,b)  ((a)>=(b) ? (a):(b))

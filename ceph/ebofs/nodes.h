@@ -126,7 +126,7 @@ class NodePool {
   set<nodeid_t> clean;       // aka used
   set<nodeid_t> limbo;
   
-  Mutex         lock;
+  Mutex        &ebofs_lock;
   Cond          commit_cond;
   int           flushing;
 
@@ -142,7 +142,9 @@ class NodePool {
 
 
  public:
-  NodePool() : bufferpool(EBOFS_NODE_BYTES), 
+  NodePool(Mutex &el) : 
+	bufferpool(EBOFS_NODE_BYTES), 
+	ebofs_lock(el),
 	flushing(0) {}
   ~NodePool() {
 	// nodes
@@ -227,13 +229,13 @@ class NodePool {
 	  to read.  so it only really works when called from mount()!
 	*/
 	for (unsigned r=0; r<region_loc.size(); r++) {
-	  dout(3) << "read region " << r << " at " << region_loc[r] << endl;
+	  dout(3) << "ebofs.nodepool.read region " << r << " at " << region_loc[r] << endl;
 	  
 	  for (block_t boff = 0; boff < region_loc[r].length; boff++) {
 		nodeid_t nid = make_nodeid(r, boff);
 		
 		if (!clean.count(nid)) continue;  
-		dout(20) << "read  node " << nid << endl;
+		dout(20) << "ebofs.nodepool.read  node " << nid << endl;
 
 		bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
 		dev.read(region_loc[r].start + (block_t)boff, EBOFS_NODE_BLOCKS, 
@@ -241,6 +243,7 @@ class NodePool {
 		
 		Node *n = new Node(nid, bp, Node::STATE_CLEAN);
 		node_map[nid] = n;
+		dout(10) << "ebofs.nodepool.read  node " << n << " at " << (void*)n << endl;
 	  }
 	}
 	return 0;
@@ -262,11 +265,11 @@ class NodePool {
   };
   
   void flushed_usemap() {
-	lock.Lock();
+	ebofs_lock.Lock();
 	flushing--;
 	if (flushing == 0) 
 	  commit_cond.Signal();
-	lock.Unlock();
+	ebofs_lock.Unlock();
   }
 
  public:
@@ -336,26 +339,29 @@ class NodePool {
   };
 
   void flushed_node(nodeid_t nid) {
-	lock.Lock();
+	ebofs_lock.Lock();
 	assert(tx.count(nid));
 	
+	// mark nid clean|limbo
 	if (tx.count(nid)) {
 	  tx.erase(nid);
 	  clean.insert(nid);
+
+	  // make node itself clean
+	  node_map[nid]->set_state(Node::STATE_CLEAN);
 	}
 	else {
 	  assert(limbo.count(nid));
 	}
-	
+
 	flushing--;
 	if (flushing == 0) 
 	  commit_cond.Signal();
-	lock.Unlock();
+	ebofs_lock.Unlock();
   }
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-	lock.Lock();
 	assert(!is_committing());
 
 	// write map
@@ -392,16 +398,12 @@ class NodePool {
 	  free.insert(*i);
 	}
 	limbo.clear();
-
-	lock.Unlock();
   }
 
   void commit_wait() {
-	lock.Lock();
 	while (is_committing()) {
-	  commit_cond.Wait(lock);
+	  commit_cond.Wait(ebofs_lock);
 	}
-	lock.Unlock();
   }
 
 
@@ -443,7 +445,7 @@ class NodePool {
   // new node
   Node* new_node(int type) {
 	nodeid_t nid = alloc_id();
-	dbtout << "pool.new_node " << nid << endl;
+	dout(15) << "ebofs.nodepool.new_node " << nid << endl;
 	
 	// alloc node
 	bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
@@ -458,7 +460,7 @@ class NodePool {
 
   void release(Node *n) {
 	const nodeid_t nid = n->get_id();
-	dbtout << "pool.release on " << nid << endl;
+	dout(15) << "ebofs.nodepool.release on " << nid << endl;
 	node_map.erase(nid);
 
 	if (n->is_dirty()) {
@@ -474,15 +476,11 @@ class NodePool {
   }
 
   void release_all() {
-	set<Node*> left;
-	for (map<nodeid_t,Node*>::iterator i = node_map.begin();
-		 i != node_map.end();
-		 i++) 
-	  left.insert(i->second);
-	for (set<Node*>::iterator i = left.begin();
-		 i != left.end();
-		 i++) 
-	  release( *i );
+	while (!node_map.empty()) {
+	  map<nodeid_t,Node*>::iterator i = node_map.begin();
+	  dout(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << endl;
+	  release( i->second );
+	}
 	assert(node_map.empty());
   }
 
@@ -490,7 +488,7 @@ class NodePool {
 	// get new node id?
 	nodeid_t oldid = n->get_id();
 	nodeid_t newid = alloc_id();
-	dbtout << "pool.dirty_node on " << oldid << " now " << newid << endl;
+	dout(2) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << endl;
 	
 	// release old block
 	if (n->is_clean()) {

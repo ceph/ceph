@@ -38,11 +38,12 @@ class Ebofs : public ObjectStore {
   bool         mounted, unmounting;
   bool         readonly;
   version_t    super_epoch;
+  bool         commit_thread_started, mid_commit;
+  Cond         commit_cond;   // to wake up the commit thread
+  Cond         sync_cond;
 
   void prepare_super(version_t epoch, bufferptr& bp);
   void write_super(version_t epoch, bufferptr& bp);
-
-  Cond         commit_cond;   // to wake up the commit thread
   int commit_thread_entry();
 
   class CommitThread : public Thread {
@@ -120,25 +121,21 @@ class Ebofs : public ObjectStore {
   BufferCache bc;
   pthread_t flushd_thread_id;
 
+  version_t trigger_commit();
   void commit_bc_wait(version_t epoch);
 
  public:
+  void sync();
   void trim_buffer_cache();
-  void flush_all();
+
  protected:
 
   //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
   void alloc_write(Onode *on, 
 				   block_t start, block_t len, 
-				   map<block_t, BufferHead*>& hits);
+				   interval_set<block_t>& alloc);
   void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
   bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on);
-
-  // io
-  void bh_read(Onode *on, BufferHead *bh);
-  void bh_write(Onode *on, BufferHead *bh);
-
-  friend class C_E_FlushPartial;
 
   int flushd_thread();
   static int flusd_thread_entry(void *p) {
@@ -148,10 +145,12 @@ class Ebofs : public ObjectStore {
  public:
   Ebofs(BlockDevice& d) : 
 	dev(d), 
-	mounted(false), unmounting(false), readonly(false), super_epoch(0),
+	mounted(false), unmounting(false), readonly(false), 
+	super_epoch(0), commit_thread_started(false), mid_commit(false),
 	commit_thread(this),
 	free_blocks(0), allocator(this),
 	bufferpool(EBOFS_BLOCK_SIZE),
+	nodepool(ebofs_lock),
 	object_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
 	inodes_flushing(0),
 	bc(dev, bufferpool, ebofs_lock) {

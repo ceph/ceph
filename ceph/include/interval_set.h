@@ -44,7 +44,7 @@ class interval_set {
 
   bool contains(T i) {
 	typename map<T,T>::iterator p = find_inc(i);
-	if (p == end()) return false;
+	if (p == m.end()) return false;
 	if (p->first > i) return false;
 	if (p->first+p->second <= i) return false;
 	assert(p->first <= i && p->first+p->second > i);
@@ -52,12 +52,48 @@ class interval_set {
   }
   bool contains(T start, T len) {
 	typename map<T,T>::iterator p = find_inc(start);
-	if (p == end()) return false;
+	if (p == m.end()) return false;
 	if (p->first > start) return false;
 	if (p->first+p->second <= start) return false;
 	assert(p->first <= start && p->first+p->second > start);
 	if (p->first+p->second < start+len) return false;
 	return true;
+  }
+
+  // outer range of set
+  bool empty() {
+	return m.empty();
+  }
+  T start() {
+	assert(!empty());
+	typename map<T,T>::iterator p = m.begin();
+	return p->first;
+  }
+  T end() {
+	assert(!empty());
+	typename map<T,T>::iterator p = m.end();
+	p--;
+	return p->first+p->second;
+  }
+
+  // interval start after p (where p not in set)
+  bool starts_after(T i) {
+	assert(!contains(i));
+	typename map<T,T>::iterator p = find_inc(i);
+	if (p == m.end()) return false;
+	return true;
+  }
+  T start_after(T i) {
+	assert(!contains(i));
+	typename map<T,T>::iterator p = find_inc(i);
+	return p->first;
+  }
+
+  // interval end that contains start
+  T end_after(T start) {
+	assert(contains(start));
+	typename map<T,T>::iterator p = find_inc(start);
+	return p->first+p->second;
   }
   
   void insert(T start, T len) {

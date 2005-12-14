@@ -6,13 +6,11 @@
 
 /** table **/
 
-class _Table {
-  int asdfasdfasdf;
-};
+#define dbtout dout(20)
 
 
 template<class K, class V>
-class Table : public _Table {
+class Table {
  private:
   NodePool &pool;
   
