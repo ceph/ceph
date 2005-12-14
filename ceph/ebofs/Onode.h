@@ -25,6 +25,7 @@ private:
 
 public:
   object_t object_id;
+  version_t version;      // incremented on each modify.
 
   // data
   Extent   onode_loc;
@@ -40,21 +41,24 @@ public:
   ObjectCache  *oc;
 
   bool          dirty;
+  bool          deleted;
+
+  list<Context*>   commit_waiters;
 
  public:
-  Onode(object_t oid) : ref(0), object_id(oid),
+  Onode(object_t oid) : ref(0), object_id(oid), version(0),
 	object_size(0), object_blocks(0), oc(0),
-	dirty(false) { 
+	dirty(false), deleted(false) { 
 	onode_loc.length = 0;
   }
   ~Onode() {
-	delete oc;
-	// lose the attrs
+	if (oc) delete oc;
   }
 
   block_t get_onode_id() { return onode_loc.start; }
   int get_onode_len() { return onode_loc.length; }
 
+  int get_ref_count() { return ref; }
   void get() {
 	if (ref == 0) lru_pin();
 	ref++;

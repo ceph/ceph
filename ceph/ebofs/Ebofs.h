@@ -26,7 +26,7 @@ inline ostream& operator<<(ostream& out, idpair_t oc) {
 }
 
 
-const int EBOFS_COMMIT_INTERVAL = 10;  // whatever
+const int EBOFS_COMMIT_INTERVAL = 3;  // whatever
 
 
 class Ebofs : public ObjectStore {
@@ -41,6 +41,8 @@ class Ebofs : public ObjectStore {
   bool         commit_thread_started, mid_commit;
   Cond         commit_cond;   // to wake up the commit thread
   Cond         sync_cond;
+
+  map<version_t, list<Context*> > commit_waiters;
 
   void prepare_super(version_t epoch, bufferptr& bp);
   void write_super(version_t epoch, bufferptr& bp);

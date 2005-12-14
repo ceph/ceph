@@ -19,7 +19,7 @@ class BlockDevice {
   block_t num_blocks;
 
   Mutex lock;
-
+  
   // io queue
   class biovec {
   public:
@@ -48,29 +48,42 @@ class BlockDevice {
   int _cancel_io(biovec *bio);
   void do_io(list<biovec*>& biols);
    
-
-  // io_thread
+  // io thread
   int io_thread_entry();
-  
   class IOThread : public Thread {
 	BlockDevice *dev;
   public:
 	IOThread(BlockDevice *d) : dev(d) {}
-	void *entry() {
-	  return (void*)dev->io_thread_entry();
-	}
+	void *entry() { return (void*)dev->io_thread_entry(); }
   } io_thread;
-
 
   // low level io
   int _read(block_t bno, unsigned num, bufferlist& bl);
   int _write(unsigned bno, unsigned num, bufferlist& bl);
 
 
+  // complete queue
+  Mutex          complete_lock;
+  Cond           complete_wakeup;
+  list<biovec*>  complete_queue;
+  
+  // complete thread
+  int complete_thread_entry();
+  class CompleteThread : public Thread {
+	BlockDevice *dev;
+  public:
+	CompleteThread(BlockDevice *d) : dev(d) {}
+	void *entry() { return (void*)dev->complete_thread_entry(); }
+  } complete_thread;
+
+
+
+
  public:
   BlockDevice(char *d) : 
 	dev(d), fd(0), num_blocks(0),
-	io_stop(false), io_thread(this) 
+	io_stop(false), 
+	io_thread(this), complete_thread(this) 
 	{ };
   ~BlockDevice() {
 	if (fd > 0) close();

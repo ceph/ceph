@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 		  cout << endl << "read bit at " << off << " len " << len << endl;
 		  int r = fs.read(10, len, off, bl);
 		  assert(bl.length() == len);
-		  assert(r == 0);
+		  assert(r == (int)len);
 		}
 	  }
 	  
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 		  cout << endl << "read bit at " << off << " len " << len << endl;
 		  int r = fs.read(10, len, off, bl);
 		  assert(bl.length() == len);
-		  assert(r == 0);
+		  assert(r == (int)len);
 		}
 		
 		// flush

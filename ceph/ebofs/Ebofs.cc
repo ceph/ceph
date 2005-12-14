@@ -282,6 +282,10 @@ int Ebofs::commit_thread_entry()
 	write_super(super_epoch, superbp);	
 	ebofs_lock.Lock();
 
+	// kick waiters
+	dout(10) << "commit_thread kicking commit+sync waiters" << endl;
+	finish_contexts(commit_waiters[super_epoch], 0);
+	commit_waiters.erase(super_epoch);
 	sync_cond.Signal();
 
 	dout(10) << "commit_thread commit finish" << endl;
@@ -419,23 +423,49 @@ void Ebofs::write_onode(Onode *on, Context *c)
 
 void Ebofs::remove_onode(Onode *on)
 {
-  // remove from table
-  object_tab->remove(on->object_id);
+  // tear down buffer cache
+  ObjectCache *oc = on->get_oc(&bc);
+  oc->tear_down();                 // this will kick readers, flush waiters along the way.
 
+  // cancel commit waiters
+  while (!on->commit_waiters.empty()) {
+	Context *c = on->commit_waiters.front();
+	on->commit_waiters.pop_front();
+	commit_waiters[super_epoch+1].remove(c);   // FIXME slow, O(n)
+	c->finish(-ENOENT);
+	delete c;
+  }
+
+  // mark onode deleted
+  on->deleted = true;
+  
+  // remove from object table
+  object_tab->remove(on->object_id);
+  
   // free onode space
   if (on->onode_loc.length)
 	allocator.release(on->onode_loc);
-
+  
   // free data space
   for (unsigned i=0; i<on->extents.size(); i++)
 	allocator.release(on->extents[i]);
 
-  delete on;
+  // remove from onode map
+  onode_map.erase(on->object_id);
+  if (on->is_dirty()) 
+	dirty_onodes.erase(on);
+
+  put_onode(on);
 }
 
 void Ebofs::put_onode(Onode *on)
 {
   on->put();
+  
+  if (on->get_ref_count() == 0 &&
+	  on->deleted) {
+	delete on;
+  }
 }
 
 void Ebofs::dirty_onode(Onode *on)
@@ -931,6 +961,14 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 				 << " off_in_bh " << off_in_bh 
 				 << " len_in_bh " << len_in_bh
 				 << endl;
+
+		// copy data into new buffers first (copy on write!)
+		//  FIXME: only do the modified pages?  this might be a big bh!
+		bufferlist temp;
+		temp.claim(bh->data);
+		bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+		bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
+
 		unsigned z = MIN( zleft, len_in_bh );
 		if (z) {
 		  bufferlist zb;
@@ -1006,15 +1044,6 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 
 // *** file i/o ***
 
-class C_E_Cond : public Context {
-  Cond *cond;
-public:
-  C_E_Cond(Cond *c) : cond(c) {}
-  void finish(int r) {
-	cond->Signal();
-  }
-};
-
 bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on)
 {
   dout(10) << "attempt_read " << *on << " len " << len << " off " << off << endl;
@@ -1040,7 +1069,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	  bc.bh_read(on, i->second);
 	}
 	BufferHead *wait_on = missing.begin()->second;
-	wait_on->waitfor_read.push_back(new C_E_Cond(will_wait_on));
+	wait_on->waitfor_read.push_back(new C_Cond(will_wait_on));
 	return false;
   }
   
@@ -1056,7 +1085,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	  if (partials_ok) {
 		// wait on this one
 		dout(15) <<"attempt_read insufficient partial buffer " << *(i->second) << endl;
-		i->second->waitfor_read.push_back(new C_E_Cond(will_wait_on));
+		i->second->waitfor_read.push_back(new C_Cond(will_wait_on));
 	  }
 	  partials_ok = false;
 	}
@@ -1067,7 +1096,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
   if (!rx.empty()) {
 	BufferHead *wait_on = rx.begin()->second;
 	dout(15) <<"attempt_read waiting for read to finish on " << *wait_on << endl;
-	wait_on->waitfor_read.push_back(new C_E_Cond(will_wait_on));
+	wait_on->waitfor_read.push_back(new C_Cond(will_wait_on));
 	return false;
   }
 
@@ -1137,10 +1166,13 @@ int Ebofs::read(object_t oid,
   // read data into bl.  block as necessary.
   Cond cond;
 
+  int r = 0;
   while (1) {
 	// check size bound
-	if (off >= on->object_size) 
+	if (off >= on->object_size) {
+	  r = -ESPIPE;   // FIXME better errno?
 	  break;
+	}
 
 	size_t will_read = MIN(off+len, on->object_size) - off;
 	
@@ -1149,12 +1181,19 @@ int Ebofs::read(object_t oid,
 	
 	// wait
 	cond.Wait(ebofs_lock);
+
+	if (on->deleted) {
+	  r = -ENOENT;
+	  break;
+	}
   }
 
   put_onode(on);
 
   ebofs_lock.Unlock();
-  return 0;
+
+  if (r < 0) return r;   // return error,
+  return bl.length();    // or bytes read.
 }
 
 
@@ -1165,19 +1204,24 @@ int Ebofs::write(object_t oid,
   // wait?
   if (fsync) {
 	// wait for flush.
-
-	// FIXME.  wait on a Cond or whatever!  be careful about ebofs_lock.
-
-	return write(oid, len, off, bl, (Context*)0);
+	Cond cond;
+	int flush = 0;
+	int r = write(oid, len, off, bl, new C_Cond(&cond));
+	if (r < 0) return r;
+	
+	cond.Wait(ebofs_lock);
+	
+	if (flush < 0) return flush;
+	return r;
   } else {
-	// don't wait.
+	// don't wait for flush.
 	return write(oid, len, off, bl, (Context*)0);
   }
 }
 
 int Ebofs::write(object_t oid, 
 				 size_t len, off_t off, 
-				 bufferlist& bl, Context *onflush)
+				 bufferlist& bl, Context *onsafe)
 {
   ebofs_lock.Lock();
   dout(7) << "write " << hex << oid << dec << " len " << len << " off " << off << endl;
@@ -1194,11 +1238,14 @@ int Ebofs::write(object_t oid,
   // apply attribute changes
   // ***
 
-  // prepare (eventual) journal entry.
+  // prepare (eventual) journal entry?
 
-  // set up onfinish waiter
-  if (onflush) {
-	
+  // set up commit waiter
+  if (onsafe) {
+	// commit on next full fs commit.
+	// FIXME when we add journaling.
+	commit_waiters[super_epoch+1].push_back(onsafe);
+	on->commit_waiters.push_back(onsafe);        // in case we delete the object.
   }
 
   // done
@@ -1221,10 +1268,8 @@ int Ebofs::remove(object_t oid)
 	return -1;
   }
 
-  // FIXME locking, buffer, flushing etc.
-  assert(0);
-
-  remove_onode(on);  
+  // ok remove it!
+  remove_onode(on);
 
   ebofs_lock.Unlock();
   return 0;

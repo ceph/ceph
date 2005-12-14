@@ -474,6 +474,27 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 }
 
 
+void ObjectCache::tear_down()
+{
+  dout(15) << "tear_down " << hex << object_id << dec << endl;
+  for (map<block_t, BufferHead*>::iterator it = data.begin();
+	   it != data.end();
+	   it++) {
+	BufferHead *bh = it->second;
+
+	if (bh->is_tx()) 
+	  bc->bh_cancel_write(bh);
+	if (bh->is_rx())
+	  bc->bh_cancel_read(bh);
+	
+	finish_contexts(bh->waitfor_read, -1);
+	finish_contexts(bh->waitfor_flush, -1);
+	
+	delete bh;
+  }
+  data.clear();
+}
+
 
 
 /************** BufferCache ***************/
@@ -606,13 +627,13 @@ bool BufferCache::bh_cancel_write(BufferHead *bh)
 
 void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
 {
-  dout(5) << "bh_queue_partial_write " << *on << " on " << *bh << endl;
+  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << endl;
   assert(bh->get_version() > 0);
 
   assert(bh->is_partial());
   assert(bh->length() == 1);
   
-  // get the block
+  // get the block no
   vector<Extent> exv;
   on->map_extents(bh->start(), bh->length(), exv);
   assert(exv.size() == 1);

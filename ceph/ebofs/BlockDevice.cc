@@ -161,22 +161,62 @@ void BlockDevice::do_io(list<biovec*>& biols)
   dout(20) << "do_io finish " << (type==biovec::IO_WRITE?"write":"read") 
 		   << " " << start << "~" << length << endl;
   
-  // finish
-  for (p = biols.begin(); p != biols.end(); p++) {
-	biovec *bio = *p;
-	if (bio->cond) {
-	  //lock.Lock();
-	  bio->rval = r;
-	  bio->cond->Signal();
-	  //lock.Unlock();
-	}
-	else if (bio->context) {
-	  bio->context->finish((int)bio);
-	  delete bio->context;
-	  delete bio;
-	}
-  }
+  // set rval
+  for (p = biols.begin(); p != biols.end(); p++)
+	(*p)->rval = r;
+
+  // put in completion queue
+  complete_lock.Lock();
+  complete_queue.splice( complete_queue.end(), biols );
+  complete_wakeup.Signal();
+  complete_lock.Unlock();
 }
+
+
+int BlockDevice::complete_thread_entry()
+{
+  complete_lock.Lock();
+  dout(10) << "complete_thread start" << endl;
+
+  while (!io_stop) {
+
+	if (!complete_queue.empty()) {
+	  list<biovec*> ls;
+	  ls.swap(complete_queue);
+	  
+	  complete_lock.Unlock();
+	  
+	  // finish
+	  for (list<biovec*>::iterator p = ls.begin(); 
+		   p != ls.end(); 
+		   p++) {
+		biovec *bio = *p;
+		dout(20) << "complete_thread finishing " << (void*)bio << endl;
+		if (bio->cond) {
+		  bio->cond->Signal();
+		}
+		else if (bio->context) {
+		  bio->context->finish((int)bio);    // FIXME do i need to pass this??
+		  delete bio->context;
+		  delete bio;
+		}
+	  }
+	  
+	  complete_lock.Lock();
+
+	  if (io_stop) break;
+	}
+	
+	dout(25) << "complete_thread sleeping" << endl;
+	complete_wakeup.Wait(complete_lock);
+  }
+
+  dout(10) << "complete_thread finish" << endl;
+  complete_lock.Unlock();
+  return 0;
+}
+
+  
 
 
 // io queue
@@ -326,6 +366,7 @@ int BlockDevice::open()
   
   // start thread
   io_thread.create();
+  complete_thread.create();
  
   return fd;
 }
@@ -336,12 +377,17 @@ int BlockDevice::close()
   assert(fd>0);
 
   // shut down io thread
-  dout(10) << "close stopping io thread" << endl;
+  dout(10) << "close stopping io+complete threads" << endl;
   lock.Lock();
+  complete_lock.Lock();
   io_stop = true;
   io_wakeup.Signal();
+  complete_wakeup.Signal();
+  complete_lock.Unlock();
   lock.Unlock();	
+  
   io_thread.join();
+  complete_thread.join();
 
   dout(1) << "close " << dev << endl;
   ::close(fd);

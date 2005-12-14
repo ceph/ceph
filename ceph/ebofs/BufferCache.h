@@ -327,6 +327,8 @@ class ObjectCache {
   void rx_finish(ioh_t ioh, block_t start, block_t length);
   void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
   void partial_tx_finish(version_t epoch);
+
+  void tear_down();
 };
 
 class C_OC_RxFinish : public Context {

@@ -3,6 +3,8 @@
 
 #include <cassert>
 #include "include/buffer.h"
+#include "include/Context.h"
+#include "common/Cond.h"
 
 #include <ext/hash_map>
 #include <set>
@@ -14,6 +16,19 @@ using namespace __gnu_cxx;
 
 #define MIN(a,b)  ((a)<=(b) ? (a):(b))
 #define MAX(a,b)  ((a)>=(b) ? (a):(b))
+
+
+
+class C_Cond : public Context {
+  Cond *cond;
+  int *rval;
+public:
+  C_Cond(Cond *c, int *r=0) : cond(c), rval(r) {}
+  void finish(int r) {
+	if (rval) *rval = r;
+	cond->Signal();
+  }
+};
 
 
 /*
