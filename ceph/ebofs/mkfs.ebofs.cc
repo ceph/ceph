@@ -47,13 +47,13 @@ int main(int argc, char **argv)
 	
 	// test small writes
 	if (1) {
-	  char crap[10000];
-	  memset(crap, 0, 10000);
+	  char crap[1024*1024];
+	  memset(crap, 0, 1024*1024);
 	  bufferlist bl;
-	  bl.append(crap, 10000);
+	  bl.append(crap, 1024*1024);
 	  
 	  // reandom write
-	  if (0) {
+	  if (1) {
 		srand(0);
 		for (int i=0; i<10000; i++) {
 		  off_t off = rand() % 1000000;
@@ -63,14 +63,23 @@ int main(int argc, char **argv)
 		  //fs.sync();
 		  //fs.trim_buffer_cache();
 		}
+		fs.remove(10);
+		for (int i=0; i<100; i++) {
+		  off_t off = rand() % 1000000;
+		  size_t len = 1+rand() % 10000;
+		  cout << endl << i << " writing bit at " << off << " len " << len << endl;
+		  fs.write(10, len, off, bl, (Context*)0);
+		  //fs.sync();
+		  //fs.trim_buffer_cache();
+		}
 	  }
 	  
-	  if (1) {
+	  if (0) {
 		// sequential write
 		srand(0);
 		off_t off = 0;
 		for (int i=0; i<10000; i++) {
-		  size_t len = 1+rand() % 10000;
+		  size_t len = 1024*1024;//1+rand() % 10000;
 		  cout << endl << i << " writing bit at " << off << " len " << len << endl;
 		  fs.write(10, len, off, bl, (Context*)0);
 		  off += len;

@@ -7,8 +7,7 @@
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "ebofs.bh."
-
+#define dout(x)  if (x <= g_conf.debug_ebofs) cout << "ebofs.bh."
 
 
 void BufferHead::finish_partials()
@@ -31,6 +30,16 @@ void BufferHead::finish_partials()
 					   new C_OC_PartialTxFinish( oc, p->second.epoch ));
   }
   partial_write.clear();
+}
+
+void BufferHead::cancel_partials()
+{
+  dout(10) << "cancel_partials on " << *this << endl;
+  for (map<block_t, PartialWrite>::iterator p = partial_write.begin();
+	   p != partial_write.end();
+	   p++) {
+ 	oc->bc->dec_unflushed( p->second.epoch );
+  }
 }
 
 void BufferHead::queue_partial_write(block_t b)
@@ -57,7 +66,7 @@ void BufferHead::queue_partial_write(block_t b)
 
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "ebofs.oc."
+#define dout(x)  if (x <= g_conf.debug_ebofs) cout << "ebofs.oc."
 
 
 void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
@@ -496,10 +505,13 @@ void ObjectCache::tear_down()
 	   it++) {
 	BufferHead *bh = it->second;
 
+	// cancel any pending/queued io, if possible.
 	if (bh->is_tx()) 
 	  bc->bh_cancel_write(bh);
 	if (bh->is_rx())
 	  bc->bh_cancel_read(bh);
+	if (bh->is_partial_writes()) 
+	  bh->cancel_partials();
 	
 	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
 		 p != bh->waitfor_read.end();
@@ -508,6 +520,7 @@ void ObjectCache::tear_down()
 	}
 	//finish_contexts(bh->waitfor_flush, -1);
 	
+	bc->remove_bh(bh);
 	delete bh;
   }
   data.clear();
@@ -518,7 +531,7 @@ void ObjectCache::tear_down()
 /************** BufferCache ***************/
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "ebofs.bc."
+#define dout(x)  if (x <= g_conf.debug_ebofs) cout << "ebofs.bc."
 
 
 

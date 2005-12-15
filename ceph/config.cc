@@ -57,6 +57,7 @@ md_config_t g_conf = {
   debug_filer: 0,
   debug_client: 0,
   debug_osd: 0,
+  debug_ebofs: 1,
   debug_bdev: 1,         // block device
   
   // --- client ---
@@ -113,7 +114,7 @@ md_config_t g_conf = {
   
   osd_fakestore_syncthreads: 4,
 
-  ebofs_bc_size: 100,    // measured in 4k blocks
+  ebofs_bc_size: (50 *256),    // measured in 4k blocks, or *256 for MB
 
 
   // --- fakeclient (mds regression testing) ---
@@ -204,6 +205,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.debug_client = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_osd") == 0) 
 	  g_conf.debug_osd = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_ebofs") == 0) 
+	  g_conf.debug_ebofs = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_bdev") == 0) 
 	  g_conf.debug_bdev = atoi(args[++i]);
 

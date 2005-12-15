@@ -6,7 +6,7 @@
 
 /** table **/
 
-#define dbtout dout(10)
+#define dbtout if (10 < g_conf.debug_ebofs) cout
 
 
 template<class K, class V>
@@ -463,7 +463,7 @@ class Table {
   }
 
   int insert(K key, V value) {
-	dbtout << "insert " << key << " -> " << value << endl;
+	//dbtout << "insert " << key << " -> " << value << endl;
 	if (almost_full()) return -1;
 	
 	// empty?

@@ -4,7 +4,7 @@
 // *******************
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug) cout << "ebofs."
+#define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs."
 
 int Ebofs::mount()
 {
@@ -116,7 +116,8 @@ int Ebofs::mkfs()
   left.length = num_blocks - left.start;
   dout(1) << "mkfs: free data blocks at " << left << endl;
   allocator.release( left );
-  allocator.release_limbo();
+  allocator.commit_limbo();   // -> limbo_tab
+  allocator.release_limbo();  // -> free_tab
 
   // write nodes, super, 2x
   dout(1) << "mkfs: flushing nodepool and superblocks (2x)" << endl;
@@ -276,12 +277,19 @@ int Ebofs::commit_thread_entry()
 	}
 
 	super_epoch++;
-	dout(10) << "commit_thread commit start, new epoch " << super_epoch 
-			 << ".  " << get_free_blocks() << " free in " << get_free_extents() << ", " 
-			 << get_limbo_blocks() << " limbo in " << get_limbo_extents() << endl;
+	dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
+	dout(10) << "commit_thread   data: " 
+			 << get_free_blocks() << " free in " << get_free_extents() 
+			 << ", " << get_limbo_blocks() << " limbo in " << get_limbo_extents() << endl;
+	dout(10) << "commit_thread  nodes: " 
+			 << nodepool.num_free() << " free, " 
+			 << nodepool.num_limbo() << " limbo, " 
+			 << nodepool.num_total() << " total." << endl;
 
 	// (async) write onodes+condes  (do this first; it currently involves inode reallocation)
 	commit_inodes_start();
+
+	allocator.commit_limbo();   // limbo -> limbo_tab
 
 	// (async) write btree nodes
 	nodepool.commit_start( dev, super_epoch );
@@ -301,8 +309,17 @@ int Ebofs::commit_thread_entry()
 	write_super(super_epoch, superbp);	
 	ebofs_lock.Lock();
 
-	// free limbo space now (since we're done allocating things, AND we've flushed all previous epoch data)
-	allocator.release_limbo();
+	// free limbo space now 
+	// (since we're done allocating things, 
+	//  AND we've flushed all previous epoch data)
+	allocator.release_limbo();   // limbo_tab -> free_tabs
+	
+	// do we need more node space?
+	if (nodepool.num_free() < nodepool.num_total() / 3) {
+	  dout(1) << "commit_thread running low on node space, allocating more." << endl;
+	  assert(0);
+	  //alloc_more_node_space();
+	}
 
 	// kick waiters
 	dout(10) << "commit_thread kicking commit+sync waiters" << endl;
@@ -1219,7 +1236,7 @@ int Ebofs::read(object_t oid,
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
-	return -1;  // object dne?
+	return -ENOENT;  // object dne?
   }
 
   // read data into bl.  block as necessary.
@@ -1285,11 +1302,18 @@ int Ebofs::write(object_t oid,
   ebofs_lock.Lock();
   dout(7) << "write " << hex << oid << dec << " len " << len << " off " << off << endl;
   assert(len > 0);
+
+  // out of space?
+  if (len / EBOFS_BLOCK_SIZE + 10 >= free_blocks) {
+	dout(1) << "write failing, only " << free_blocks << " blocks free" << endl;
+	if (onsafe) delete onsafe;
+	ebofs_lock.Unlock();
+	return -ENOSPC;
+  }
   
-  // get inode
+  // get|create inode
   Onode *on = get_onode(oid);
-  if (!on) 
-	on = new_onode(oid);	// new inode!
+  if (!on) on = new_onode(oid);	// new inode!
   
   // apply write to buffer cache
   apply_write(on, len, off, bl);
@@ -1324,7 +1348,7 @@ int Ebofs::remove(object_t oid)
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
-	return -1;
+	return -ENOENT;
   }
 
   // ok remove it!
@@ -1357,7 +1381,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
-	return -1;
+	return -ENOENT;
   }
   
   // ??
@@ -1373,7 +1397,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
 int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
 {
   Onode *on = get_onode(oid);
-  if (!on) return -1;
+  if (!on) return -ENOENT;
 
   string n(name);
   AttrVal val((char*)value, size);
@@ -1387,7 +1411,7 @@ int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
 int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
   Onode *on = get_onode(oid);
-  if (!on) return -1;
+  if (!on) return -ENOENT;
 
   string n(name);
   if (on->attr.count(n) == 0) return -1;
@@ -1401,7 +1425,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 int Ebofs::rmattr(object_t oid, const char *name) 
 {
   Onode *on = get_onode(oid);
-  if (!on) return -1;
+  if (!on) return -ENOENT;
 
   string n(name);
   on->attr.erase(n);
@@ -1414,7 +1438,7 @@ int Ebofs::rmattr(object_t oid, const char *name)
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
 {
   Onode *on = get_onode(oid);
-  if (!on) return -1;
+  if (!on) return -ENOENT;
 
   attrs.clear();
   for (map<string,AttrVal>::iterator i = on->attr.begin();
@@ -1457,7 +1481,7 @@ int Ebofs::create_collection(coll_t cid)
 
 int Ebofs::destroy_collection(coll_t cid)
 {
-  if (!collection_exists(cid)) return -1;
+  if (!collection_exists(cid)) return -ENOENT;
   Cnode *cn = new_cnode(cid);
   
   // hose mappings
@@ -1484,7 +1508,7 @@ bool Ebofs::collection_exists(coll_t cid)
 
 int Ebofs::collection_add(coll_t cid, object_t oid)
 {
-  if (!collection_exists(cid)) return -1;
+  if (!collection_exists(cid)) return -ENOENT;
   oc_tab->insert(idpair_t(oid,cid), true);
   co_tab->insert(idpair_t(cid,oid), true);
   return 0;
@@ -1492,7 +1516,7 @@ int Ebofs::collection_add(coll_t cid, object_t oid)
 
 int Ebofs::collection_remove(coll_t cid, object_t oid)
 {
-  if (!collection_exists(cid)) return -1;
+  if (!collection_exists(cid)) return -ENOENT;
   oc_tab->remove(idpair_t(oid,cid));
   co_tab->remove(idpair_t(cid,oid));
   return 0;
@@ -1500,7 +1524,7 @@ int Ebofs::collection_remove(coll_t cid, object_t oid)
 
 int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 {
-  if (!collection_exists(cid)) return -1;
+  if (!collection_exists(cid)) return -ENOENT;
   
   Table<idpair_t, bool>::Cursor cursor(co_tab);
 
@@ -1523,7 +1547,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t size)
 {
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -1;
+  if (!cn) return -ENOENT;
 
   string n(name);
   AttrVal val((char*)value, size);
@@ -1537,7 +1561,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t 
 int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t size)
 {
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -1;
+  if (!cn) return -ENOENT;
 
   string n(name);
   if (cn->attr.count(n) == 0) return -1;
@@ -1550,7 +1574,7 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
 int Ebofs::collection_rmattr(coll_t cid, const char *name) 
 {
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -1;
+  if (!cn) return -ENOENT;
 
   string n(name);
   cn->attr.erase(n);
@@ -1563,7 +1587,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name)
 int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 {
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -1;
+  if (!cn) return -ENOENT;
 
   attrs.clear();
   for (map<string,AttrVal>::iterator i = cn->attr.begin();

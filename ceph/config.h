@@ -35,6 +35,7 @@ struct md_config_t {
   int debug_filer;
   int debug_client;
   int debug_osd;
+  int debug_ebofs;
   int debug_bdev;
 
   // client

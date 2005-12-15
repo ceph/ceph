@@ -11,7 +11,7 @@ class Allocator {
  protected:
   Ebofs *fs;
 
-  //interval_set<block_t> limbo;
+  interval_set<block_t> limbo;
 
   static int pick_bucket(block_t num) {
 	int b = 0;
@@ -35,7 +35,11 @@ class Allocator {
   
   int allocate(Extent& ex, block_t num, block_t near=0);
   int release(Extent& ex);
-  int release_limbo();
+
+  int commit_limbo();  // limbo -> fs->limbo_tab
+  int release_limbo(); // fs->limbo_tab -> free_tabs
+
+
 };
 
 #endif

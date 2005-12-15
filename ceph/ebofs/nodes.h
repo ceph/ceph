@@ -29,6 +29,9 @@
 
 */
 
+#undef debofs
+#define debofs(x) if (x < g_conf.debug_ebofs) cout
+
 
 class Node {
  public:
@@ -120,6 +123,7 @@ class NodePool {
   
  protected:
   // on-disk block states
+  int num_nodes;
   set<nodeid_t> free;
   set<nodeid_t> dirty;
   set<nodeid_t> tx;
@@ -144,6 +148,7 @@ class NodePool {
  public:
   NodePool(Mutex &el) : 
 	bufferpool(EBOFS_NODE_BYTES), 
+	num_nodes(0),
 	ebofs_lock(el),
 	flushing(0) {}
   ~NodePool() {
@@ -151,9 +156,12 @@ class NodePool {
 	release_all();
   }
 
-  int num_free() {
-	return free.size();
-  }
+  int num_free() { return free.size(); }
+  int num_dirty() { return dirty.size(); }
+  int num_limbo() { return limbo.size(); }
+  int num_tx() { return tx.size(); }
+  int num_clean() { return clean.size(); }
+  int num_total() { return num_nodes; }
 
   // the caller had better adjust usemap locations...
   void add_region(Extent ex) {
@@ -162,20 +170,22 @@ class NodePool {
 	for (unsigned o = 0; o < ex.length; o++) {
 	  free.insert( make_nodeid(region, o) );
 	}
+	num_nodes += ex.length;
   }
   
   int init(struct ebofs_nodepool *np) {
 	// regions
 	for (int i=0; i<np->num_regions; i++) {
-	  dout(3) << "init region " << i << " at " << np->region_loc[i] << endl;
+	  debofs(3) << "init region " << i << " at " << np->region_loc[i] << endl;
 	  region_loc.push_back( np->region_loc[i] );
+	  num_nodes += np->region_loc[i].length;
 	}
 
 	// usemap
 	usemap_even = np->node_usemap_even;
 	usemap_odd = np->node_usemap_odd;
-	dout(3) << "init even map at " << usemap_even << endl;
-	dout(3) << "init  odd map at " << usemap_odd << endl;
+	debofs(3) << "init even map at " << usemap_even << endl;
+	debofs(3) << "init  odd map at " << usemap_odd << endl;
 
 	return 0;
   }
@@ -229,13 +239,13 @@ class NodePool {
 	  to read.  so it only really works when called from mount()!
 	*/
 	for (unsigned r=0; r<region_loc.size(); r++) {
-	  dout(3) << "ebofs.nodepool.read region " << r << " at " << region_loc[r] << endl;
+	  debofs(3) << "ebofs.nodepool.read region " << r << " at " << region_loc[r] << endl;
 	  
 	  for (block_t boff = 0; boff < region_loc[r].length; boff++) {
 		nodeid_t nid = make_nodeid(r, boff);
 		
 		if (!clean.count(nid)) continue;  
-		dout(20) << "ebofs.nodepool.read  node " << nid << endl;
+		debofs(20) << "ebofs.nodepool.read  node " << nid << endl;
 
 		bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
 		dev.read(region_loc[r].start + (block_t)boff, EBOFS_NODE_BLOCKS, 
@@ -243,7 +253,7 @@ class NodePool {
 		
 		Node *n = new Node(nid, bp, Node::STATE_CLEAN);
 		node_map[nid] = n;
-		dout(10) << "ebofs.nodepool.read  node " << n << " at " << (void*)n << endl;
+		debofs(10) << "ebofs.nodepool.read  node " << n << " at " << (void*)n << endl;
 	  }
 	}
 	return 0;
@@ -444,7 +454,7 @@ class NodePool {
   // new node
   Node* new_node(int type) {
 	nodeid_t nid = alloc_id();
-	dout(15) << "ebofs.nodepool.new_node " << nid << endl;
+	debofs(15) << "ebofs.nodepool.new_node " << nid << endl;
 	
 	// alloc node
 	bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
@@ -459,7 +469,7 @@ class NodePool {
 
   void release(Node *n) {
 	const nodeid_t nid = n->get_id();
-	dout(15) << "ebofs.nodepool.release on " << nid << endl;
+	debofs(15) << "ebofs.nodepool.release on " << nid << endl;
 	node_map.erase(nid);
 
 	if (n->is_dirty()) {
@@ -477,7 +487,7 @@ class NodePool {
   void release_all() {
 	while (!node_map.empty()) {
 	  map<nodeid_t,Node*>::iterator i = node_map.begin();
-	  dout(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << endl;
+	  debofs(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << endl;
 	  release( i->second );
 	}
 	assert(node_map.empty());
@@ -487,7 +497,7 @@ class NodePool {
 	// get new node id?
 	nodeid_t oldid = n->get_id();
 	nodeid_t newid = alloc_id();
-	dout(2) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << endl;
+	debofs(2) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << endl;
 	
 	// release old block
 	if (n->is_clean()) {
