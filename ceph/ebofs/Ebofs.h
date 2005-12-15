@@ -26,7 +26,7 @@ inline ostream& operator<<(ostream& out, idpair_t oc) {
 }
 
 
-const int EBOFS_COMMIT_INTERVAL = 3;  // whatever
+const int EBOFS_COMMIT_INTERVAL = 2;  // 0 == never
 
 
 class Ebofs : public ObjectStore {
@@ -60,10 +60,21 @@ class Ebofs : public ObjectStore {
 
 
   // ** allocator **
-  block_t      free_blocks;
+  block_t      free_blocks, limbo_blocks;
   Allocator    allocator;
   friend class Allocator;
   
+  block_t get_free_blocks() { return free_blocks; }
+  block_t get_limbo_blocks() { return limbo_blocks; }
+  block_t get_free_extents() { 
+	int n = 0;
+	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++) 
+	  n += free_tab[i]->get_num_keys();
+	return n;
+  }
+  block_t get_limbo_extents() { return limbo_tab->get_num_keys(); }
+
+
   // ** buffers **
   AlignedBufferPool bufferpool;
   
@@ -75,6 +86,7 @@ class Ebofs : public ObjectStore {
   // tables
   Table<object_t, Extent> *object_tab;
   Table<block_t,block_t>  *free_tab[EBOFS_NUM_FREE_BUCKETS];
+  Table<block_t,block_t>  *limbo_tab;
 
   // collections
   Table<coll_t, Extent>  *collection_tab;
@@ -125,6 +137,7 @@ class Ebofs : public ObjectStore {
 
   version_t trigger_commit();
   void commit_bc_wait(version_t epoch);
+  void trim_bc();
 
  public:
   void sync();
@@ -153,7 +166,7 @@ class Ebofs : public ObjectStore {
 	free_blocks(0), allocator(this),
 	bufferpool(EBOFS_BLOCK_SIZE),
 	nodepool(ebofs_lock),
-	object_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
+	object_tab(0), limbo_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
 	inodes_flushing(0),
 	bc(dev, bufferpool, ebofs_lock) {
 	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)

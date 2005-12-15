@@ -33,7 +33,7 @@ public:
   unsigned object_blocks;
 
   // onode
-  map<string, AttrVal > attr;
+  map<string, AttrVal>  attr;
   vector<Extent>        extents;
 
   interval_set<block_t> uncommitted;
@@ -109,13 +109,26 @@ public:
 	  extents.push_back(ex);		
   }
   void verify_extents() {
-	block_t count = 0;;
+	block_t count = 0;
+	interval_set<block_t> is;	
+	set<block_t> s;
 	for (unsigned i=0; i<extents.size(); i++) {
-	  count +=  extents[i].length;
+	  //cout << "verify_extents " << i << " off " << count << " " << extents[i] << endl;
+	  count += extents[i].length;
+
+	  //assert(!is.contains(extents[i].start, extents[i].length));
+	  //is.insert(extents[i].start, extents[i].length);
+
+	  for (unsigned j=0;j<extents[i].length;j++) {
+		assert(s.count(extents[i].start+j) == 0);
+		s.insert(extents[i].start+j);
+	  }
 	}
 	assert(count == object_blocks);
+	assert(s.size() == count);
   }
   void set_extent(block_t offset, Extent ex) {
+	//cout << "set_extent " << offset << " " << ex << " ... " << object_blocks << endl;
 	assert(offset <= object_blocks);
 	verify_extents();
 

@@ -9,19 +9,34 @@
 
 void Allocator::dump_freelist()
 {
-  if (0)
-  for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
-	dout(20) << "dump bucket " << b << endl;
-	if (fs->free_tab[b]->get_num_keys() > 0) {
-	  Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
-	  fs->free_tab[b]->find(0, cursor);
-	  while (1) {
-		dout(20) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
-		if (cursor.move_right() <= 0) break;
+  if (1) {
+	interval_set<block_t> free;     // validate too
+	
+	for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
+	  Table<block_t,block_t> *tab;
+	  if (b < EBOFS_NUM_FREE_BUCKETS) {
+		dout(30) << "dump bucket " << b << endl;
+		tab = fs->free_tab[b];
+	  } else {
+		dout(30) << "dump limbo" << endl;
+		tab = fs->limbo_tab;
 	  }
-	} else {
-	  //cout << "  empty" << endl;
+	  
+	  if (tab->get_num_keys() > 0) {
+		Table<block_t,block_t>::Cursor cursor(tab);
+		tab->find(0, cursor);
+		while (1) {
+		  dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
+		  assert(!free.contains( cursor.current().key, cursor.current().value ));
+		  free.insert( cursor.current().key, cursor.current().value );
+		  if (cursor.move_right() <= 0) break;
+		}
+	  } else {
+		//cout << "  empty" << endl;
+	  }
 	}
+	
+	dout(31) << "dump combined freelist is " << free << endl;
   }
 }
 
@@ -37,7 +52,7 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 	do {
 	  if (cursor.current().value >= num)
 		found = true;
-	} while (!found && cursor.move_right() >= 0);
+	} while (!found && cursor.move_right() > 0);
   }
 
   if (!found) {
@@ -60,6 +75,8 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 
 int Allocator::allocate(Extent& ex, block_t num, block_t near)
 {
+  dump_freelist();
+
   /*
   if (!near) {
 	near = num/2;  // this is totally wrong and stupid.
@@ -75,7 +92,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
 	  // remove original
 	  fs->free_tab[bucket]->remove( ex.start );
-	  fs->free_blocks += ex.length;
+	  fs->free_blocks -= ex.length;
 
 	  if (ex.length > num) {
 		if (ex.start < near) {
@@ -88,7 +105,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 			ex.start += left.length;
 			ex.length -= left.length;
 			assert(ex.length == num);
-			release_now(left);
+			_release(left);
 		  } else {
 			// take middle part.
 			Extent left,right;
@@ -98,8 +115,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 			right.start = ex.start + num;
 			right.length = ex.length - left.length - num;
 			ex.length = num;
-			release_now(left);
-			release_now(right);
+			_release(left);
+			_release(right);
 		  }
 		}
 		else {
@@ -108,7 +125,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 		  right.start = ex.start + num;
 		  right.length = ex.length - num;
 		  ex.length = num;
-		  release_now(right);
+		  _release(right);
 		}
 	  }
 
@@ -141,26 +158,35 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 int Allocator::release(Extent& ex)
 {
   dout(10) << "release " << ex << " (into limbo)" << endl;
-  limbo.insert(ex.start, ex.length);
+  fs->limbo_tab->insert(ex.start, ex.length);
+  fs->limbo_blocks += ex.length;
   return 0;
 }
 
 int Allocator::release_limbo()
 {
-  for (map<block_t,block_t>::iterator i = limbo.m.begin();
-	   i != limbo.m.end();
-	   i++) {
-	Extent ex(i->first, i->second);
-	release_now(ex);
+  if (fs->limbo_tab->get_num_keys() > 0) {
+	Table<block_t,block_t>::Cursor cursor(fs->limbo_tab);
+	fs->limbo_tab->find(0, cursor);
+	while (1) {
+	  Extent ex(cursor.current().key, cursor.current().value);
+	  dout(20) << "release_limbo  ex " << ex << endl;
+	  _release(ex);
+	  if (cursor.move_right() <= 0) break;
+	}
   }
+  fs->limbo_tab->clear();
+  fs->limbo_blocks = 0;
   return 0;
 }
 
-int Allocator::release_now(Extent& ex) 
+int Allocator::_release(Extent& ex) 
 {
   Extent newex = ex;
   
-  dout(10) << "release " << ex << endl;
+  dout(15) << "_release " << ex << endl;
+
+  fs->free_blocks += ex.length;
 
   // one after us?
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
@@ -193,13 +219,9 @@ int Allocator::release_now(Extent& ex)
 	}
   }
   
-  fs->free_blocks += ex.length;
-  
   // ok, insert newex
   int b = pick_bucket(ex.length);
   fs->free_tab[b]->insert(ex.start, ex.length);
-
-  dump_freelist();
   return 0;
 }
 

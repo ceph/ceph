@@ -37,6 +37,9 @@ int Ebofs::mount()
   dout(3) << "mount epoch " << super_epoch << endl;
   assert(super_epoch == sb->epoch);
 
+  free_blocks = sb->free_blocks;
+  limbo_blocks = sb->limbo_blocks;
+
   // init node pools
   dout(3) << "mount nodepool" << endl;
   nodepool.init( &sb->nodepool );
@@ -48,11 +51,14 @@ int Ebofs::mount()
   object_tab = new Table<object_t, Extent>( nodepool, sb->object_tab );
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t, block_t>( nodepool, sb->free_tab[i] );
+  limbo_tab = new Table<block_t, block_t>( nodepool, sb->limbo_tab );
   
   collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
   oc_tab = new Table<idpair_t, bool>( nodepool, sb->oc_tab );
   co_tab = new Table<idpair_t, bool>( nodepool, sb->co_tab );
-  
+
+  allocator.release_limbo();
+
   dout(3) << "mount starting commit thread" << endl;
   commit_thread.create();
   
@@ -74,7 +80,7 @@ int Ebofs::mkfs()
   // create first noderegion
   Extent nr;
   nr.start = 2;
-  nr.length = num_blocks / 10000;
+  nr.length = num_blocks / 100;
   if (nr.length < 10) nr.length = 10;
   nodepool.add_region(nr);
   dout(1) << "mkfs: first node region at " << nr << endl;
@@ -99,6 +105,7 @@ int Ebofs::mkfs()
   
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t,block_t>( nodepool, empty );
+  limbo_tab = new Table<block_t,block_t>( nodepool, empty );
   
   oc_tab = new Table<idpair_t, bool>( nodepool, empty );
   co_tab = new Table<idpair_t, bool>( nodepool, empty );
@@ -107,8 +114,9 @@ int Ebofs::mkfs()
   Extent left;
   left.start = nodepool.usemap_odd.end();
   left.length = num_blocks - left.start;
-  dout(1) << "mkfs: free blocks at " << left << endl;
-  allocator.release_now( left );
+  dout(1) << "mkfs: free data blocks at " << left << endl;
+  allocator.release( left );
+  allocator.release_limbo();
 
   // write nodes, super, 2x
   dout(1) << "mkfs: flushing nodepool and superblocks (2x)" << endl;
@@ -141,6 +149,7 @@ void Ebofs::close_tables()
   delete object_tab;
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	delete free_tab[i];
+  delete limbo_tab;
   delete collection_tab;
   delete oc_tab;
   delete co_tab;
@@ -187,6 +196,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb.epoch = epoch;
   sb.num_blocks = dev.get_num_blocks();
   sb.free_blocks = free_blocks;
+  sb.limbo_blocks = limbo_blocks;
   //sb.num_objects = num_objects;
 
 
@@ -200,6 +210,9 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
 	sb.free_tab[i].root = free_tab[i]->get_root();
 	sb.free_tab[i].depth = free_tab[i]->get_depth();
   }
+  sb.limbo_tab.num_keys = limbo_tab->get_num_keys();
+  sb.limbo_tab.root = limbo_tab->get_root();
+  sb.limbo_tab.depth = limbo_tab->get_depth();
 
   sb.collection_tab.num_keys = collection_tab->get_num_keys();
   sb.collection_tab.root = collection_tab->get_root();
@@ -240,14 +253,20 @@ int Ebofs::commit_thread_entry()
   ebofs_lock.Lock();
   dout(10) << "commit_thread start" << endl;
 
+  assert(!commit_thread_started); // there can be only one
   commit_thread_started = true;
   sync_cond.Signal();
 
   while (mounted) {
 	
-	// wait
-	//commit_cond.Wait(ebofs_lock, utime_t(EBOFS_COMMIT_INTERVAL,0));   // wait for kick, or 10s.
-	commit_cond.Wait(ebofs_lock);//, utime_t(EBOFS_COMMIT_INTERVAL,0));   // wait for kick, or 10s.
+	// wait for kick, or timeout
+	if (EBOFS_COMMIT_INTERVAL) {
+	  commit_cond.Wait(ebofs_lock, utime_t(EBOFS_COMMIT_INTERVAL,0));   
+	} else {
+	  // DEBUG.. wait until kicked
+	  dout(10) << "commit_thread no commit_interval, waiting until kicked" << endl;
+	  commit_cond.Wait(ebofs_lock);
+	}
 
 	if (unmounting) {
 	  dout(10) << "commit_thread unmounting: final commit pass" << endl;
@@ -257,12 +276,12 @@ int Ebofs::commit_thread_entry()
 	}
 
 	super_epoch++;
-	dout(10) << "commit_thread commit start, new epoch is " << super_epoch << endl;
+	dout(10) << "commit_thread commit start, new epoch " << super_epoch 
+			 << ".  " << get_free_blocks() << " free in " << get_free_extents() << ", " 
+			 << get_limbo_blocks() << " limbo in " << get_limbo_extents() << endl;
 
 	// (async) write onodes+condes  (do this first; it currently involves inode reallocation)
 	commit_inodes_start();
-	
-	allocator.release_limbo();
 
 	// (async) write btree nodes
 	nodepool.commit_start( dev, super_epoch );
@@ -271,10 +290,10 @@ int Ebofs::commit_thread_entry()
 	bufferptr superbp;
 	prepare_super(super_epoch, superbp);
 
-	// wait it all to flush (drops global lock)
+	// wait for it all to flush (drops global lock)
+	commit_bc_wait(super_epoch-1);
 	commit_inodes_wait();
 	nodepool.commit_wait();
-	commit_bc_wait(super_epoch-1);
 	
 	// ok, now (synchronously) write the prior super!
 	dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
@@ -282,11 +301,17 @@ int Ebofs::commit_thread_entry()
 	write_super(super_epoch, superbp);	
 	ebofs_lock.Lock();
 
+	// free limbo space now (since we're done allocating things, AND we've flushed all previous epoch data)
+	allocator.release_limbo();
+
 	// kick waiters
 	dout(10) << "commit_thread kicking commit+sync waiters" << endl;
-	finish_contexts(commit_waiters[super_epoch], 0);
-	commit_waiters.erase(super_epoch);
+	finish_contexts(commit_waiters[super_epoch-1], 0);
+	commit_waiters.erase(super_epoch-1);
 	sync_cond.Signal();
+
+	// trim bc?
+	trim_bc();
 
 	dout(10) << "commit_thread commit finish" << endl;
   }
@@ -441,7 +466,7 @@ void Ebofs::remove_onode(Onode *on)
   while (!on->commit_waiters.empty()) {
 	Context *c = on->commit_waiters.front();
 	on->commit_waiters.pop_front();
-	commit_waiters[super_epoch+1].remove(c);   // FIXME slow, O(n)
+	commit_waiters[super_epoch].remove(c);   // FIXME slow, O(n)
 	c->finish(-ENOENT);
 	delete c;
   }
@@ -700,34 +725,42 @@ void Ebofs::commit_inodes_wait()
 void Ebofs::trim_buffer_cache()
 {
   ebofs_lock.Lock();
-  dout(10) << "trim_buffer_cache start: " 
-		   << bc.lru_rest.lru_get_size() << " rest + " 
-		   << bc.lru_dirty.lru_get_size() << " dirty " << endl;
+  trim_bc();
+  ebofs_lock.Unlock();
+}
 
-  // trim trimmable bufferheads
-  while (bc.lru_rest.lru_get_size() > bc.lru_rest.lru_get_max()) {
+void Ebofs::trim_bc()
+{
+  off_t max = g_conf.ebofs_bc_size;
+  dout(10) << "trim_bc start: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
+
+  while (bc.get_size() > max &&
+		 bc.get_trimmable()) {
 	BufferHead *bh = (BufferHead*) bc.lru_rest.lru_expire();
 	if (!bh) break;
 	
-	dout(10) << "trim_buffer_cache trimming " << *bh << endl;
+	dout(25) << "trim_bc trimming " << *bh << endl;
 	assert(bh->is_clean());
 	
 	ObjectCache *oc = bh->oc;
-	oc->remove_bh(bh);
+	bc.remove_bh(bh);
 	delete bh;
 	
 	if (oc->is_empty()) {
 	  Onode *on = get_onode( oc->get_object_id() );
-	  dout(10) << "trim_buffer_cache closing oc on " << *on << endl;
+	  dout(10) << "trim_bc  closing oc on " << *on << endl;
 	  on->close_oc();
 	  put_onode(on);
 	}
   }
+
+  dout(10) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
+
+  /*
   dout(10) << "trim_buffer_cache finish: " 
 		   << bc.lru_rest.lru_get_size() << " rest + " 
 		   << bc.lru_dirty.lru_get_size() << " dirty " << endl;
-  
-  ebofs_lock.Unlock();
+  */
 }
 
 
@@ -784,21 +817,42 @@ void Ebofs::alloc_write(Onode *on,
   // first decide what pages to (re)allocate
   on->map_alloc_regions(start, len, alloc);
 
-  dout(10) << "alloc_write need to (re)alloc " << alloc << endl;
+  dout(10) << "alloc_write need to (re)alloc " << alloc << " on " << *on << endl;
 
+  if (alloc.empty()) return;
+  
   // merge alloc into onode uncommitted map
-  //dout(10) << " union of " << on->uncommitted << " and " << alloc << endl;
+  dout(10) << " union of " << on->uncommitted << " and " << alloc << endl;
+  interval_set<block_t> old = on->uncommitted;
   on->uncommitted.union_of(alloc);
+  
   dout(10) << "alloc_write onode.uncommitted is now " << on->uncommitted << endl;
+
+  if (0) {
+	// verify
+	interval_set<block_t> ta;
+	ta.intersection_of(on->uncommitted, alloc);
+	cout << " ta " << ta << endl;
+	assert(alloc == ta);
+
+	interval_set<block_t> tb;
+	tb.intersection_of(on->uncommitted, old);
+	cout << " tb " << tb << endl;
+	assert(old == tb);
+  }
+
+  dirty_onode(on);
 
   // allocate the space
   for (map<block_t,block_t>::iterator i = alloc.m.begin();
 	   i != alloc.m.end();
 	   i++) {
+	dout(15) << "alloc_write need to (re)alloc " << i->first << "~" << i->second << endl;
+	
 	// get old region
 	vector<Extent> old;
 	on->map_extents(i->first, i->second, old);
-	for (unsigned o=0; o<old.size(); o++)
+	for (unsigned o=0; o<old.size(); o++) 
 	  allocator.release(old[o]);
 	
 	// allocate new space
@@ -1072,7 +1126,8 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	  bc.bh_read(on, i->second);
 	}
 	BufferHead *wait_on = missing.begin()->second;
-	wait_on->waitfor_read.push_back(new C_Cond(will_wait_on));
+	block_t b = MAX(wait_on->start(), bstart);
+	wait_on->waitfor_read[b].push_back(new C_Cond(will_wait_on));
 	return false;
   }
   
@@ -1088,7 +1143,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	  if (partials_ok) {
 		// wait on this one
 		dout(15) <<"attempt_read insufficient partial buffer " << *(i->second) << endl;
-		i->second->waitfor_read.push_back(new C_Cond(will_wait_on));
+		i->second->waitfor_read[i->second->start()].push_back(new C_Cond(will_wait_on));
 	  }
 	  partials_ok = false;
 	}
@@ -1099,7 +1154,8 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
   if (!rx.empty()) {
 	BufferHead *wait_on = rx.begin()->second;
 	dout(15) <<"attempt_read waiting for read to finish on " << *wait_on << endl;
-	wait_on->waitfor_read.push_back(new C_Cond(will_wait_on));
+	block_t b = MAX(wait_on->start(), bstart);
+	wait_on->waitfor_read[b].push_back(new C_Cond(will_wait_on));
 	return false;
   }
 
@@ -1247,7 +1303,7 @@ int Ebofs::write(object_t oid,
   if (onsafe) {
 	// commit on next full fs commit.
 	// FIXME when we add journaling.
-	commit_waiters[super_epoch+1].push_back(onsafe);
+	commit_waiters[super_epoch].push_back(onsafe);
 	on->commit_waiters.push_back(onsafe);        // in case we delete the object.
   }
 

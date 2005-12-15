@@ -19,7 +19,7 @@
 #include <linux/fs.h>
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug) cout << "dev."
+#define dout(x) if (x <= g_conf.debug_bdev) cout << "dev."
 
 
 block_t BlockDevice::get_num_blocks() 
@@ -165,13 +165,31 @@ void BlockDevice::do_io(list<biovec*>& biols)
   for (p = biols.begin(); p != biols.end(); p++)
 	(*p)->rval = r;
 
-  // put in completion queue
-  complete_lock.Lock();
-  complete_queue.splice( complete_queue.end(), biols );
-  complete_wakeup.Signal();
-  complete_lock.Unlock();
+  if (1) {
+	// put in completion queue
+	complete_lock.Lock();
+	complete_queue.splice( complete_queue.end(), biols );
+	complete_wakeup.Signal();
+	complete_lock.Unlock();
+  } else {
+	// be slow and finish synchronously
+	for (p = biols.begin(); p != biols.end(); p++)
+	  finish_io(*p);
+  }
 }
 
+
+void BlockDevice::finish_io(biovec *bio)
+{
+  if (bio->cond) {
+	bio->cond->Signal();
+  }
+  else if (bio->cb) {
+	bio->cb->finish((ioh_t)bio, bio->rval);
+	delete bio->cb;
+	delete bio;
+  }
+}
 
 int BlockDevice::complete_thread_entry()
 {
@@ -180,7 +198,7 @@ int BlockDevice::complete_thread_entry()
 
   while (!io_stop) {
 
-	if (!complete_queue.empty()) {
+	while (!complete_queue.empty()) {
 	  list<biovec*> ls;
 	  ls.swap(complete_queue);
 	  
@@ -192,20 +210,12 @@ int BlockDevice::complete_thread_entry()
 		   p++) {
 		biovec *bio = *p;
 		dout(20) << "complete_thread finishing " << (void*)bio << endl;
-		if (bio->cond) {
-		  bio->cond->Signal();
-		}
-		else if (bio->cb) {
-		  bio->cb->finish((ioh_t)bio, bio->rval);
-		  delete bio->cb;
-		  delete bio;
-		}
+		finish_io(bio);
 	  }
 	  
 	  complete_lock.Lock();
-
-	  if (io_stop) break;
 	}
+	if (io_stop) break;
 	
 	dout(25) << "complete_thread sleeping" << endl;
 	complete_wakeup.Wait(complete_lock);
@@ -341,7 +351,6 @@ int BlockDevice::_write(unsigned bno, unsigned num, bufferlist& bl)
 
 int BlockDevice::open() 
 {
-  dout(1) << "open " << dev << endl;
   assert(fd == 0);
 
   fd = ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT);

@@ -147,15 +147,17 @@ struct ebofs_super {
 
   unsigned num_blocks;        /* # blocks in filesystem */
 
-  // basic stats, for kicks
+  // some basic stats, for kicks
   unsigned free_blocks;       /* unused blocks */
-  unsigned num_objects;
-  unsigned  num_fragmented;
+  unsigned limbo_blocks;      /* limbo blocks */
+  //unsigned num_objects;
+  //unsigned num_fragmented;
   
   struct ebofs_nodepool nodepool;
   
   // tables
   struct ebofs_table free_tab[EBOFS_NUM_FREE_BUCKETS];  
+  struct ebofs_table limbo_tab;
   struct ebofs_table object_tab;      // object directory
   struct ebofs_table collection_tab;  // collection directory
   struct ebofs_table oc_tab;

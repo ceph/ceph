@@ -35,6 +35,7 @@ struct md_config_t {
   int debug_filer;
   int debug_client;
   int debug_osd;
+  int debug_bdev;
 
   // client
   int      client_cache_size;
@@ -86,6 +87,8 @@ struct md_config_t {
   int   osd_maxthreads;
 
   int osd_fakestore_syncthreads;
+
+  off_t ebofs_bc_size;
 
   // fake client
   int      num_fakeclient;

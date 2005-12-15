@@ -44,8 +44,8 @@ class BufferHead : public LRUObject {
   ioh_t     rx_ioh;         // 
   ioh_t     tx_ioh;         // 
 
-  list<Context*> waitfor_read;
-  list<Context*> waitfor_flush;
+  map< block_t, list<Context*> > waitfor_read;
+  //list<Context*> waitfor_flush;
 
  private:
   map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
@@ -272,14 +272,15 @@ class BufferHead : public LRUObject {
 inline ostream& operator<<(ostream& out, BufferHead& bh)
 {
   out << "bufferhead(" << bh.start() << "~" << bh.length();
-  out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
+  //out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
   if (bh.is_missing()) out << " missing";
   if (bh.is_dirty()) out << " dirty";
   if (bh.is_clean()) out << " clean";
   if (bh.is_rx()) out << " rx";
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";
-  out << " " << bh.data.length();
+  //out << " " << bh.data.length();
+  //out << " " << &bh;
   out << ")";
   return out;
 }
@@ -298,8 +299,28 @@ class ObjectCache {
   
   object_t get_object_id() { return object_id; }
 
-  void add_bh(BufferHead *bh, block_t at) {
-	data[at] = bh;
+  void add_bh(BufferHead *bh) {
+	// add to my map
+	assert(data.count(bh->start()) == 0);
+
+	if (1) {  // sanity check     FIXME DEBUG
+	  //cout << "add_bh " << bh->start() << "~" << bh->length() << endl;
+	  map<block_t,BufferHead*>::iterator p = data.lower_bound(bh->start());
+	  if (p != data.end()) {
+		//cout << " after " << *p->second << endl;
+		//cout << " after starts at " << p->first << endl;
+		assert(p->first >= bh->end());
+	  }
+	  if (p != data.begin()) {
+		p--;
+		//cout << " before starts at " << p->second->start() 
+		//<< " and ends at " << p->second->end() << endl;
+		//cout << " before " << *p->second << endl;
+		assert(p->second->end() <= bh->start());
+	  }
+	}
+
+	data[bh->start()] = bh;
   }
   void remove_bh(BufferHead *bh) {
 	assert(data.count(bh->start()));
@@ -327,6 +348,13 @@ class ObjectCache {
   void rx_finish(ioh_t ioh, block_t start, block_t length);
   void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
   void partial_tx_finish(version_t epoch);
+
+  void dump() {
+	for (map<block_t,BufferHead*>::iterator i = data.begin();
+		 i != data.end();
+		 i++)
+	  cout << "dump: " << i->first << ": " << *i->second << endl;
+  }
 
   void tear_down();
 };
@@ -397,8 +425,18 @@ class BufferCache {
 	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
 	{}
 
+
+  off_t get_size() {
+	return stat_clean+stat_dirty+stat_rx+stat_tx+stat_partial;
+  }
+  off_t get_trimmable() {
+	return stat_clean;
+  }
+
+
   // bh's in cache
   void add_bh(BufferHead *bh) {
+	bh->get_oc()->add_bh(bh);
 	if (bh->is_dirty()) {
 	  lru_dirty.lru_insert_mid(bh);
 	  dirty_bh.insert(bh);
@@ -413,6 +451,7 @@ class BufferCache {
 	  lru_rest.lru_touch(bh);
   }
   void remove_bh(BufferHead *bh) {
+	bh->get_oc()->remove_bh(bh);
 	stat_sub(bh);
 	if (bh->is_dirty()) {
 	  lru_dirty.lru_remove(bh);
@@ -514,10 +553,8 @@ class BufferCache {
 
   friend class C_E_FlushPartial;
 
-
+  // bh fun
   BufferHead *split(BufferHead *orig, block_t after);
-
-
 };
 
 

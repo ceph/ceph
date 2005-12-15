@@ -52,16 +52,34 @@ int main(int argc, char **argv)
 	  bufferlist bl;
 	  bl.append(crap, 10000);
 	  
-	  // write
-	  srand(0);
-	  for (int i=0; i<100; i++) {
-		off_t off = rand() % 1000000;
-		size_t len = rand() % 10000;
-		cout << endl << "writing bit at " << off << " len " << len << endl;
-		fs.write(10, len, off, bl, (Context*)0);
+	  // reandom write
+	  if (0) {
+		srand(0);
+		for (int i=0; i<10000; i++) {
+		  off_t off = rand() % 1000000;
+		  size_t len = 1+rand() % 10000;
+		  cout << endl << i << " writing bit at " << off << " len " << len << endl;
+		  fs.write(10, len, off, bl, (Context*)0);
+		  //fs.sync();
+		  //fs.trim_buffer_cache();
+		}
 	  }
 	  
 	  if (1) {
+		// sequential write
+		srand(0);
+		off_t off = 0;
+		for (int i=0; i<10000; i++) {
+		  size_t len = 1+rand() % 10000;
+		  cout << endl << i << " writing bit at " << off << " len " << len << endl;
+		  fs.write(10, len, off, bl, (Context*)0);
+		  off += len;
+		}
+
+	  }
+	  
+	  
+	  if (0) {
 		// read
 		srand(0);
 		for (int i=0; i<100; i++) {
@@ -80,7 +98,7 @@ int main(int argc, char **argv)
 	  fs.trim_buffer_cache();
 	  //fs.trim_buffer_cache();
 	  
-	  if (1) {
+	  if (0) {
 		// read again
 		srand(0);
 		for (int i=0; i<100; i++) {
@@ -98,13 +116,15 @@ int main(int argc, char **argv)
 		fs.trim_buffer_cache();
 	  }
 	  
-	  // write on empty cache
-	  srand(0);
-	  for (int i=0; i<100; i++) {
-		off_t off = rand() % 1000000;
-		size_t len = 100;
-		cout << endl <<  "writing bit at " << off << " len " << len << endl;
-		fs.write(10, len, off, bl, (Context*)0);
+	  if (0) {
+		// write on empty cache
+		srand(0);
+		for (int i=0; i<100; i++) {
+		  off_t off = rand() % 1000000;
+		  size_t len = 100;
+		  cout << endl <<  "writing bit at " << off << " len " << len << endl;
+		  fs.write(10, len, off, bl, (Context*)0);
+		}
 	  }
 	  
 	}

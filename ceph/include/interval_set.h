@@ -14,10 +14,10 @@ class interval_set {
 
   // helpers
  private:
-  typename map<T,T>::iterator find_inc(T start) {
-	typename map<T,T>::iterator p = m.lower_bound(start);
+  typename map<T,T>::const_iterator find_inc(T start) const {
+	typename map<T,T>::const_iterator p = m.lower_bound(start);  // p->first >= start
 	if (p != m.begin() &&
-		(p->first > start || p == m.end())) {
+		(p == m.end() || p->first > start)) {
 	  p--;   // might overlap?
 	  if (p->first + p->second <= start)
 		p++; // it doesn't.
@@ -25,10 +25,32 @@ class interval_set {
 	return p;
   }
   
-  typename map<T,T>::iterator find_adj(T start) {
+  typename map<T,T>::iterator find_inc_m(T start) {
 	typename map<T,T>::iterator p = m.lower_bound(start);
 	if (p != m.begin() &&
-		(p->first > start || p == m.end())) {
+		(p == m.end() || p->first > start)) {
+	  p--;   // might overlap?
+	  if (p->first + p->second <= start)
+		p++; // it doesn't.
+	}
+	return p;
+  }
+  
+  typename map<T,T>::const_iterator find_adj(T start) const {
+	typename map<T,T>::const_iterator p = m.lower_bound(start);
+	if (p != m.begin() &&
+		(p == m.end() || p->first > start)) {
+	  p--;   // might touch?
+	  if (p->first + p->second < start)
+		p++; // it doesn't.
+	}
+	return p;
+  }
+  
+  typename map<T,T>::iterator find_adj_m(T start) {
+	typename map<T,T>::iterator p = m.lower_bound(start);
+	if (p != m.begin() &&
+		(p == m.end() || p->first > start)) {
 	  p--;   // might touch?
 	  if (p->first + p->second < start)
 		p++; // it doesn't.
@@ -37,21 +59,24 @@ class interval_set {
   }
   
  public:
+  bool operator==(const interval_set& other) const {
+	return m == other.m;
+  }
 
   void clear() {
 	m.clear();
   }
 
-  bool contains(T i) {
-	typename map<T,T>::iterator p = find_inc(i);
+  bool contains(T i) const {
+	typename map<T,T>::const_iterator p = find_inc(i);
 	if (p == m.end()) return false;
 	if (p->first > i) return false;
 	if (p->first+p->second <= i) return false;
 	assert(p->first <= i && p->first+p->second > i);
 	return true;
   }
-  bool contains(T start, T len) {
-	typename map<T,T>::iterator p = find_inc(start);
+  bool contains(T start, T len) const {
+	typename map<T,T>::const_iterator p = find_inc(start);
 	if (p == m.end()) return false;
 	if (p->first > start) return false;
 	if (p->first+p->second <= start) return false;
@@ -61,47 +86,54 @@ class interval_set {
   }
 
   // outer range of set
-  bool empty() {
+  bool empty() const {
 	return m.empty();
   }
-  T start() {
+  T start() const {
 	assert(!empty());
-	typename map<T,T>::iterator p = m.begin();
+	typename map<T,T>::const_iterator p = m.begin();
 	return p->first;
   }
-  T end() {
+  T end() const {
 	assert(!empty());
-	typename map<T,T>::iterator p = m.end();
+	typename map<T,T>::const_iterator p = m.end();
 	p--;
 	return p->first+p->second;
   }
 
   // interval start after p (where p not in set)
-  bool starts_after(T i) {
+  bool starts_after(T i) const {
 	assert(!contains(i));
-	typename map<T,T>::iterator p = find_inc(i);
+	typename map<T,T>::const_iterator p = find_inc(i);
 	if (p == m.end()) return false;
 	return true;
   }
-  T start_after(T i) {
+  T start_after(T i) const {
 	assert(!contains(i));
-	typename map<T,T>::iterator p = find_inc(i);
+	typename map<T,T>::const_iterator p = find_inc(i);
 	return p->first;
   }
 
   // interval end that contains start
-  T end_after(T start) {
+  T end_after(T start) const {
 	assert(contains(start));
-	typename map<T,T>::iterator p = find_inc(start);
+	typename map<T,T>::const_iterator p = find_inc(start);
 	return p->first+p->second;
   }
   
   void insert(T start, T len) {
-	typename map<T,T>::iterator p = find_adj(start);
+	//cout << "insert " << start << "~" << len << endl;
+	typename map<T,T>::iterator p = find_adj_m(start);
 	if (p == m.end()) {
 	  m[start] = len;                  // new interval
 	} else {
 	  if (p->first < start) {
+		
+        if (p->first + p->second != start) {
+		  cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
+		  assert(0);
+		}
+        
 		assert(p->first + p->second == start);
 		p->second += len;		       // append to end
 		
@@ -124,7 +156,7 @@ class interval_set {
   }
   
   void erase(T start, T len) {
-	typename map<T,T>::iterator p = find_inc(start);
+	typename map<T,T>::iterator p = find_inc_m(start);
 
 	assert(p != m.end());
 	assert(p->first <= start);
@@ -142,24 +174,28 @@ class interval_set {
   }
 
 
-  void subtract(interval_set &a) {
-	for (typename map<T,T>::iterator p = a.m.begin();
+  void subtract(const interval_set &a) {
+	for (typename map<T,T>::const_iterator p = a.m.begin();
 		 p != a.m.end();
 		 p++)
 	  erase(p->first, p->second);
   }
 
-  void insert(interval_set &a) {
-	for (typename map<T,T>::iterator p = a.m.begin();
+  void insert(const interval_set &a) {
+	for (typename map<T,T>::const_iterator p = a.m.begin();
 		 p != a.m.end();
 		 p++)
 	  insert(p->first, p->second);
   }
 
 
-  void intersection_of(interval_set &a, interval_set &b) {
-	typename map<T,T>::iterator pa = a.m.begin();
-	typename map<T,T>::iterator pb = b.m.begin();
+  void intersection_of(const interval_set &a, const interval_set &b) {
+	assert(&a != this);
+	assert(&b != this);
+	clear();
+
+	typename map<T,T>::const_iterator pa = a.m.begin();
+	typename map<T,T>::const_iterator pb = b.m.begin();
 	
 	while (pa != a.m.end() && pb != b.m.end()) {
 	  // passing?
@@ -171,42 +207,93 @@ class interval_set {
 	  T end = MIN(pa->first+pa->second, pb->first+pb->second);
 	  assert(end > start);
 	  insert(start, end-start);
-	  pa++; 
-	  pb++;
+	  if (pa->first+pa->second > pb->first+pb->second)
+		pb++;
+	  else
+		pa++; 
 	}
   }
 
-  void union_of(interval_set &a, interval_set &b) {
-	typename map<T,T>::iterator pa = a.m.begin();
-	typename map<T,T>::iterator pb = b.m.begin();
+  void union_of(const interval_set &a, const interval_set &b) {
+	assert(&a != this);
+	assert(&b != this);
+	clear();
 	
+	//cout << "union_of" << endl;
+
+	// a
+	m = a.m;
+
+	// - (a*b)
+	interval_set ab;
+	ab.intersection_of(a, b);
+	subtract(ab);
+
+	// + b
+	insert(b);
+	return;
+
+
+	/* i think this is correct?
+	typename map<T,T>::const_iterator pa = a.m.begin();
+	typename map<T,T>::const_iterator pb = b.m.begin();
+	
+	T upto = 0;
 	while (pa != a.m.end() || pb != b.m.end()) {
-	  // passing?
+	  // passed?
+	  if (pa != a.m.end() && pa->first + pa->second <= upto) 
+		{ pa++; continue; }
+	  if (pb != b.m.end() && pb->first + pb->second <= upto) 
+		{ pb++; continue; }
+		
+	  // extending?
+	  if (pa != a.m.end() && pa->first <= upto && pa->first+pa->second > upto) {
+		insert( upto, pa->first+pa->second - upto );
+		upto = pa->first+pa->second;
+		pa++;
+		continue;
+	  }
+	  if (pb != b.m.end() && pb->first <= upto && pb->first+pb->second > upto) {
+		insert( upto, pb->first+pb->second - upto );
+		upto = pb->first+pb->second;
+		pb++;
+		continue;
+	  }
+
+	  // gap!
+
+	  // non-overlapping?
 	  if (pb == b.m.end() || 
 		  (pa != a.m.end() && pa->first + pa->second <= pb->first)) {
 		insert(pa->first, pa->second);
+		upto = pa->first + pa->second;
 		pa++;  continue; 
 	  }
 	  if (pa == a.m.end() || 
 		  (pb != b.m.end() && pb->first + pb->second <= pa->first)) {
 		insert(pb->first, pb->second);
+		upto = pb->first + pb->second;
 		pb++;  continue; 
 	  }
-	  T start = MIN(pa->first, pb->first);
-	  T end = MAX(pa->first+pa->second, pb->first+pb->second);
-	  insert(start, end-start);
+
+	  // overlapping!
+	  const T start = MIN(pa->first, pb->first);
+	  upto = MAX(pa->first+pa->second, pb->first+pb->second);
+	  insert(start, upto-start);
 	  pa++; 
 	  pb++;
 	}
+	*/
+
   }
-  void union_of(interval_set &a) {
-	interval_set b;
-	b.m.swap(m);
+  void union_of(const interval_set &b) {
+	interval_set a;
+	a.m.swap(m);
 	union_of(a, b);
   }
 
-  bool subset_of(interval_set &big) {
-	for (typename map<T,T>::iterator i = m.begin();
+  bool subset_of(const interval_set &big) const {
+	for (typename map<T,T>::const_iterator i = m.begin();
 		 i != m.end();
 		 i++) 
 	  if (!big.contains(i->first, i->second)) return false;
@@ -216,9 +303,9 @@ class interval_set {
 };
 
 template<class T>
-inline ostream& operator<<(ostream& out, interval_set<T> &s) {
+inline ostream& operator<<(ostream& out, const interval_set<T> &s) {
   out << "[";
-  for (typename map<T,T>::iterator i = s.m.begin();
+  for (typename map<T,T>::const_iterator i = s.m.begin();
 	   i != s.m.end();
 	   i++) {
 	if (i != s.m.begin()) out << ",";

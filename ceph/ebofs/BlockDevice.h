@@ -75,6 +75,8 @@ class BlockDevice {
   Cond           complete_wakeup;
   list<biovec*>  complete_queue;
   
+  void finish_io(biovec *bio);
+
   // complete thread
   int complete_thread_entry();
   class CompleteThread : public Thread {

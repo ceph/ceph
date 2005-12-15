@@ -60,7 +60,6 @@ void BufferHead::queue_partial_write(block_t b)
 #define dout(x)  if (x <= g_conf.debug) cout << "ebofs.oc."
 
 
-
 void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 {
   list<Context*> waiters;
@@ -71,41 +70,51 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 	   p != data.end(); 
 	   p++) {
-	dout(10) << "rx_finish ?" << *p->second << endl;
+	BufferHead *bh = p->second;
+	dout(10) << "rx_finish ?" << *bh << endl;
+	assert(p->first == bh->start());
 
 	// past?
 	if (p->first >= start+length) break;
-	if (p->second->end() > start+length) break;  // past
+	if (bh->end() > start+length) break;  // past
 	
 	assert(p->first >= start);
-	assert(p->second->end() <= start+length);
+	assert(bh->end() <= start+length);
 
-	dout(10) << "rx_finish !" << *p->second << endl;
+	dout(10) << "rx_finish !" << *bh << endl;
 
-	if (p->second->rx_ioh == ioh)
-	  p->second->rx_ioh = 0;
+	if (bh->rx_ioh == ioh)
+	  bh->rx_ioh = 0;
 
-	if (p->second->is_partial_writes())
-	  p->second->finish_partials();
+	if (bh->is_partial_writes())
+	  bh->finish_partials();
 	
-	if (p->second->is_rx()) {
-	  assert(p->second->get_version() == 0);
-	  assert(p->second->end() <= start+length);
-	  dout(10) << "rx_finish  rx -> clean on " << *p->second << endl;
-	  bc->mark_clean(p->second);
+	if (bh->is_rx()) {
+	  assert(bh->get_version() == 0);
+	  assert(bh->end() <= start+length);
+	  dout(10) << "rx_finish  rx -> clean on " << *bh << endl;
+	  bc->mark_clean(bh);
 	}
-	else if (p->second->is_partial()) {
-	  dout(10) << "rx_finish  partial -> clean on " << *p->second << endl;	  
-	  p->second->apply_partial();
-	  bc->mark_clean(p->second);
+	else if (bh->is_partial()) {
+	  dout(10) << "rx_finish  partial -> clean on " << *bh << endl;	  
+	  bh->apply_partial();
+	  bc->mark_clean(bh);
 	}
 	else {
-	  dout(10) << "rx_finish  ignoring status on (dirty|tx) " << *p->second << endl;
-	  assert(p->second->is_dirty() || p->second->is_tx());
+	  dout(10) << "rx_finish  ignoring status on (dirty|tx|clean) " << *bh << endl;
+	  assert(bh->is_dirty() ||  // was overwritten
+			 bh->is_tx() ||     // was overwritten and queued
+			 bh->is_clean());   // was overwritten, queued, _and_ flushed to disk
 	}
 
 	// trigger waiters
-	waiters.splice(waiters.begin(), p->second->waitfor_read);
+	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
+		 p != bh->waitfor_read.end();
+		 p++) {
+	  assert(p->first >= bh->start() && p->first < bh->end());
+	  waiters.splice(waiters.begin(), p->second);
+	}
+	bh->waitfor_read.clear();
   }	
 
   finish_contexts(waiters);
@@ -117,7 +126,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length, 
 							version_t version, version_t epoch)
 {
-  list<Context*> waiters;
+  //list<Context*> waiters;
   
   bc->ebofs_lock.Lock();
   
@@ -125,37 +134,38 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 	   p != data.end(); 
 	   p++) {
-	dout(20) << "tx_finish ?bh " << *p->second << endl;
-	assert(p->first == p->second->start());
+	BufferHead *bh = p->second;
+	dout(30) << "tx_finish ?bh " << *bh << endl;
+	assert(p->first == bh->start());
 
 	// past?
 	if (p->first >= start+length) break;
 
-	if (p->second->tx_ioh == ioh)
-	  p->second->tx_ioh = 0;
+	if (bh->tx_ioh == ioh)
+	  bh->tx_ioh = 0;
 
-	if (!p->second->is_tx()) {
+	if (!bh->is_tx()) {
 	  dout(10) << "tx_finish  bh not marked tx, skipping" << endl;
 	  continue;
 	}
 
-	assert(p->second->is_tx());
-	assert(p->second->end() <= start+length);
+	assert(bh->is_tx());
+	assert(bh->end() <= start+length);
 	
-	if (version == p->second->version) {
-	  dout(10) << "tx_finish  tx -> clean on " << *p->second << endl;
-	  p->second->set_last_flushed(version);
-	  bc->mark_clean(p->second);
+	if (version == bh->version) {
+	  dout(10) << "tx_finish  tx -> clean on " << *bh << endl;
+	  bh->set_last_flushed(version);
+	  bc->mark_clean(bh);
 
 	  // trigger waiters
-	  waiters.splice(waiters.begin(), p->second->waitfor_flush);
+	  //waiters.splice(waiters.begin(), bh->waitfor_flush);
 	} else {
-	  dout(10) << "tx_finish  leaving tx, " << p->second->version << " > " << version 
-			   << " on " << *p->second << endl;
+	  dout(10) << "tx_finish  leaving tx, " << bh->version << " > " << version 
+			   << " on " << *bh << endl;
 	}
   }	
 
-  finish_contexts(waiters);
+  //finish_contexts(waiters);
 
   // update unflushed counter
   assert(bc->get_unflushed(epoch) > 0);
@@ -211,10 +221,9 @@ int ObjectCache::map_read(Onode *on,
 	  on->map_extents(cur, left, exv);          // we might consider some prefetch here.
 	  for (unsigned i=0; i<exv.size(); i++) {
 		BufferHead *n = new BufferHead(this);
-		bc->add_bh(n);
 		n->set_start( cur );
 		n->set_length( exv[i].length );
-		data[cur] = n;
+		bc->add_bh(n);
 		missing[cur] = n;
 		cur += exv[i].length;
 	  }
@@ -257,10 +266,9 @@ int ObjectCache::map_read(Onode *on,
 
 	  for (unsigned i=0; i<exv.size(); i++) {
 		BufferHead *n = new BufferHead(this);
-		bc->add_bh(n);
 		n->set_start( cur );
 		n->set_length( exv[i].length );
-		data[cur] = n;
+		bc->add_bh(n);
 		missing[cur] = n;
 		cur += n->length();
 		left -= n->length();
@@ -291,6 +299,8 @@ int ObjectCache::map_write(Onode *on,
 						   map<block_t, BufferHead*>& hits)
 {
   map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+
+  dout(10) << "map_write " << *on << " " << start << "~" << len << " ... alloc " << alloc << endl;
   // p->first >= start
   
   block_t cur = start;
@@ -303,7 +313,9 @@ int ObjectCache::map_write(Onode *on,
 	  p++;   // doesn't overlap.
   }
 
-  for (; left > 0; p++) {
+  //dump();
+
+  while (left > 0) {
 	// max for this bh (bc of (re)alloc on disk)
 	block_t max = left;
 	bool newalloc = false;
@@ -337,13 +349,17 @@ int ObjectCache::map_write(Onode *on,
 	// at end?
 	if (p == data.end()) {
 	  BufferHead *n = new BufferHead(this);
-	  bc->add_bh(n);
 	  n->set_start( cur );
 	  n->set_length( max );
-	  data[cur] = n;
+	  bc->add_bh(n);
 	  hits[cur] = n;
-	  break;
+	  left -= max;
+	  cur += max;
+	  continue;
 	}
+	
+	dout(10) << "p is " << *p->second << endl;
+
 
 	if (p->first <= cur) {
 	  BufferHead *bh = p->second;
@@ -416,23 +432,19 @@ int ObjectCache::map_write(Onode *on,
 	  if (bh->start() < cur)
 		lenfromcur -= cur - bh->start();
 
-	  if (lenfromcur < left) {
-		cur += lenfromcur;
-		left -= lenfromcur;
-		continue;  // more!
-	  } else {
-		break;     // done.
-	  }		
+	  cur += lenfromcur;
+	  left -= lenfromcur;
+	  p++;
+	  continue; 
 	} else {
 	  // gap!
 	  block_t next = p->first;
 	  block_t glen = MIN(next-cur, max);
 	  dout(10) << "map_write gap " << cur << "~" << glen << endl;
 	  BufferHead *n = new BufferHead(this);
-	  bc->add_bh(n);
 	  n->set_start( cur );
 	  n->set_length( glen );
-	  data[cur] = n;
+	  bc->add_bh(n);
 	  hits[cur] = n;
 	  
 	  cur += glen;
@@ -441,6 +453,8 @@ int ObjectCache::map_write(Onode *on,
 	}
   }
 
+  assert(left == 0);
+  assert(cur == start+len);
   return 0;
 }
 
@@ -487,8 +501,12 @@ void ObjectCache::tear_down()
 	if (bh->is_rx())
 	  bc->bh_cancel_read(bh);
 	
-	finish_contexts(bh->waitfor_read, -1);
-	finish_contexts(bh->waitfor_flush, -1);
+	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
+		 p != bh->waitfor_read.end();
+		 p++) {
+	  finish_contexts(p->second, -1);
+	}
+	//finish_contexts(bh->waitfor_flush, -1);
 	
 	delete bh;
   }
@@ -508,23 +526,23 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 {
   dout(20) << "split " << *orig << " at " << after << endl;
 
+  // split off right
   BufferHead *right = new BufferHead(orig->get_oc());
-  orig->get_oc()->add_bh(right, after);
-
   right->set_version(orig->get_version());
   right->set_state(orig->get_state());
-
-  block_t mynewlen = after - orig->start();
+  block_t newleftlen = after - orig->start();
   right->set_start( after );
-  right->set_length( orig->length() - mynewlen );
+  right->set_length( orig->length() - newleftlen );
 
-  add_bh(right);
-
+  // shorten left
   stat_sub(orig);
-  orig->set_length( mynewlen );
+  orig->set_length( newleftlen );
   stat_add(orig);
 
-  // buffers!
+  // add right
+  add_bh(right);
+
+  // split buffers too
   bufferlist bl;
   bl.claim(orig->data);
   if (bl.length()) {
@@ -533,12 +551,22 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 	orig->data.substr_of(bl, 0, orig->length()*EBOFS_BLOCK_SIZE);
   }
 
-  // FIXME: waiters?
+  // move read waiters
+  if (!orig->waitfor_read.empty()) {
+	map<block_t, list<Context*> >::iterator o, p = orig->waitfor_read.end();
+	p--;
+	while (p != orig->waitfor_read.begin()) {
+	  if (p->first < right->start()) break;	  
+	  dout(20) << "split  moving waiters at block " << p->first << " to right bh" << endl;
+	  right->waitfor_read[p->first].swap( p->second );
+	  o = p;
+	  p--;
+	  orig->waitfor_read.erase(o);
+	}
+  }
   
   dout(20) << "split    left is " << *orig << endl;
   dout(20) << "split   right is " << *right << endl;
-
-
   return right;
 }
 
@@ -627,7 +655,6 @@ bool BufferCache::bh_cancel_write(BufferHead *bh)
 
 void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
 {
-  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << endl;
   assert(bh->get_version() > 0);
 
   assert(bh->is_partial());
@@ -640,7 +667,13 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   block_t b = exv[0].start;
   assert(exv[0].length == 1);
 
+  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << endl;
+
+
   // copy map state, queue for this block
   bh->queue_partial_write( b );
 }
+
+
+
 

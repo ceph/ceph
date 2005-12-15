@@ -44,11 +44,16 @@ class Cond
 	return Wait(mutex, utime_t(tv->tv_sec, tv->tv_usec));
   }
   int Wait(Mutex &mutex,
-		   utime_t when) {
+		   utime_t wait) {
+	utime_t when = g_clock.now();
+	when += wait;
+
 	// timeval -> timespec
 	struct timespec ts;
+	memset(&ts, 0, sizeof(ts));
 	ts.tv_sec = when.sec();
 	ts.tv_nsec = when.nsec();
+	//cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
 	int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
 	return r;
   }

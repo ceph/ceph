@@ -6,6 +6,12 @@
 #include <list>
 using namespace std;
 
+// for posix_memalign
+#define _XOPEN_SOURCE 600
+#include <stdlib.h>
+#include <malloc.h>
+
+// for mmap
 #include <sys/mman.h>
 
 #include "include/buffer.h"
@@ -13,17 +19,23 @@ using namespace std;
 
 
 
+
 class AlignedBufferPool {
   int alignment;              // err, this isn't actually enforced!  we just use mmap.
 
+  bool dommap;
+
  public:
-  AlignedBufferPool(int a) : alignment(a) {}
+  AlignedBufferPool(int a) : alignment(a), dommap(false) {}
   ~AlignedBufferPool() {
   }
 
   void free(char *p, unsigned len) {
-	dout(10) << "bufferpool.free " << (void*)p << " len " << len << endl;
-	munmap(p, len);
+	dout(30) << "bufferpool.free " << (void*)p << " len " << len << endl;
+	if (dommap)
+	  munmap(p, len);
+	else 
+	  ::free((void*)p);
   }
 
   static void aligned_buffer_free_func(void *arg, char *ptr, unsigned len) {
@@ -33,10 +45,16 @@ class AlignedBufferPool {
 
   buffer *alloc(int bytes) {
 	assert(bytes % alignment == 0);
-	char *p = (char*)mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	char *p = 0;
+	if (dommap)
+	  p = (char*)mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	else 
+	  ::posix_memalign((void**)&p, alignment, bytes);
 	assert(p);
+	
+	::memset(p, 0, bytes);  // only to shut up valgrind
 
-	dout(10) << "bufferpool.alloc " << (void*)p << endl;
+	dout(30) << "bufferpool.alloc " << (void*)p << endl;
 
 	return new buffer(p, bytes, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE|BUFFER_MODE_CUSTOMFREE,
 					  bytes,

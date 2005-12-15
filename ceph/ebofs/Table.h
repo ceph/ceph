@@ -6,7 +6,7 @@
 
 /** table **/
 
-#define dbtout dout(20)
+#define dbtout dout(10)
 
 
 template<class K, class V>
@@ -579,11 +579,17 @@ class Table {
 
 
   int remove(K key) {
-	if (almost_full()) return -1;
+	if (almost_full()) {
+	  cout << "table almost full, failing" << endl;
+	  assert(0);
+	  return -1;
+	}
 	
 	Cursor cursor(this);
-	if (find(key, cursor) <= 0) 
+	if (find(key, cursor) <= 0) {
+	  assert(0);
 	  return -1;  // key dne
+	}
 
 
 	while (1) {
@@ -693,16 +699,16 @@ class Table {
 	}
 
 	// hose myself
-	pool.release( node_loc );
+	pool.release( node.node );
   }
   
   void clear() {
-	int count = 0;
 	Cursor cursor(this);
 	if (root == -1 && depth == 0) return;   // already empty!
-	int err = clear(cursor, root, 0);
+	clear(cursor, root, 0);
 	root = -1;
 	depth = 0;
+	nkeys = 0;
   }
 
   int verify(Cursor& cursor, int node_loc, int level, int& count) {

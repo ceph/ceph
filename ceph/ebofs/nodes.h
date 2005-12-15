@@ -340,7 +340,6 @@ class NodePool {
 
   void flushed_node(nodeid_t nid) {
 	ebofs_lock.Lock();
-	assert(tx.count(nid));
 	
 	// mark nid clean|limbo
 	if (tx.count(nid)) {
