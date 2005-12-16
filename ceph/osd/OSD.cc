@@ -86,7 +86,10 @@ OSD::OSD(int id, Messenger *m)
 # ifdef USE_EBOFS
   storedev = 0;
   if (g_conf.osd_ebofs) {
-	sprintf(ebofs_path, "%s/%d", ebofs_base_path, whoami);
+	char hostname[100];
+	hostname[0] = 0;
+	gethostname(hostname,100);
+	sprintf(ebofs_path, "%s/%s", ebofs_base_path, hostname);
 	storedev = new BlockDevice(ebofs_path);
     store = new Ebofs(*storedev);
   } else 

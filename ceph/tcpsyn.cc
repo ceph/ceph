@@ -120,6 +120,15 @@ int main(int argc, char **argv)
 	  char s[80];
 	  sprintf(s,"clnode.%d", myrank);
 	  client_logger = new Logger(s, &client_logtype);
+
+	  client_logtype.add_inc("lsum");
+	  client_logtype.add_inc("lnum");
+	  client_logtype.add_inc("lwsum");
+	  client_logtype.add_inc("lwnum");
+	  client_logtype.add_inc("lrsum");
+	  client_logtype.add_inc("lrnum");
+	  client_logtype.add_inc("trsum");
+	  client_logtype.add_inc("trnum");
 	}
 
 	client[i]->init();
@@ -131,12 +140,16 @@ int main(int argc, char **argv)
 	   it != clientlist.end();
 	   it++) {
 	int i = *it;
-	// use my argc, argv (make sure you pass a mount point!)
-	//cout << "mounting" << endl;
+
+
 	client[i]->mount(mkfs);
 	
 	//cout << "starting synthetic client on rank " << myrank << endl;
 	syn[i] = new SyntheticClient(client[i]);
+
+	syn[i]->modes = syn_modes;
+	syn[i]->sargs = syn_sargs;
+	syn[i]->iargs = syn_iargs;
 	
 	syn[i]->start_thread();
 	

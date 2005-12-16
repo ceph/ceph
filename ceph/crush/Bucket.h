@@ -10,6 +10,8 @@
 #include <set>
 using namespace std;
 
+#include <math.h>
+
 #include "include/bufferlist.h"
 
 namespace crush {

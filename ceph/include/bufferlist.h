@@ -132,7 +132,10 @@ class bufferlist {
   void copy(unsigned off, unsigned len, char *dest) {
 	assert(off >= 0);
 	assert(off + len <= length());
-
+	/*assert(off < length());
+	if (off + len > length()) 
+	  len = length() - off;
+	*/
 	// advance to off
 	list<bufferptr>::iterator curbuf = _buffers.begin();
 

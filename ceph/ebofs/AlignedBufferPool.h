@@ -26,12 +26,12 @@ class AlignedBufferPool {
   bool dommap;
 
  public:
-  AlignedBufferPool(int a) : alignment(a), dommap(false) {}
+  AlignedBufferPool(int a) : alignment(a), dommap(true) {}
   ~AlignedBufferPool() {
   }
 
   void free(char *p, unsigned len) {
-	dout(30) << "bufferpool.free " << (void*)p << " len " << len << endl;
+	dout(1) << "bufferpool.free " << (void*)p << " len " << len << endl;
 	if (dommap)
 	  munmap(p, len);
 	else 
@@ -54,7 +54,7 @@ class AlignedBufferPool {
 	
 	::memset(p, 0, bytes);  // only to shut up valgrind
 
-	dout(30) << "bufferpool.alloc " << (void*)p << endl;
+	dout(1) << "bufferpool.alloc " << (void*)p << endl;
 
 	return new buffer(p, bytes, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE|BUFFER_MODE_CUSTOMFREE,
 					  bytes,

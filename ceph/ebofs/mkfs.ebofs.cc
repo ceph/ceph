@@ -31,6 +31,31 @@ int main(int argc, char **argv)
 	// test-o-rama!
 	Ebofs fs(dev);
 	fs.mount();
+
+	if (1) { // big writes
+	  bufferlist bl;
+	  char crap[1024*1024];
+	  memset(crap, 0, 1024*1024);
+	  bl.append(crap, 1024*1024);
+	  
+	  int megs = 10000;
+
+	  utime_t start = g_clock.now();
+
+	  for (off_t m=0; m<megs; m++) {
+		cout << m << " / " << megs << endl;
+		fs.write(10, bl.length(), 1024LL*1024LL*m, bl, (Context*)0);
+	  }	  
+	  fs.sync();
+
+	  utime_t end = g_clock.now();
+	  end -= start;
+
+	  dout(1) << "elapsed " << end << endl;
+	  
+	  float mbs = (float)megs / (float)end;
+	  dout(1) << "mb/s " << mbs << endl;
+	}
 	
 	if (0) {  // test
 	  bufferlist bl;
@@ -46,7 +71,7 @@ int main(int argc, char **argv)
 	}
 	
 	// test small writes
-	if (1) {
+	if (0) {
 	  char crap[1024*1024];
 	  memset(crap, 0, 1024*1024);
 	  bufferlist bl;

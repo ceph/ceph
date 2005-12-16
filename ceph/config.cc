@@ -116,8 +116,9 @@ md_config_t g_conf = {
   osd_fakestore_syncthreads: 4,
   osd_ebofs: 0,
 
-  ebofs_bc_size:      (50 *256),           // measured in 4k blocks, or *256 for MB
-  ebofs_bc_max_dirty: ebofs_bc_size*8/10,  // before write() will wait for data to flush
+  ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
+  ebofs_bc_size:      (50 *256),  // measured in 4k blocks, or *256 for MB
+  ebofs_bc_max_dirty: (40 *256),  // before write() will wait for data to flush
 
 
   // --- fakeclient (mds regression testing) (ancient history) ---

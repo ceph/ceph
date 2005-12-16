@@ -1,6 +1,9 @@
 
 #include "Ebofs.h"
 
+#include <errno.h>
+
+
 // *******************
 
 #undef dout
@@ -84,7 +87,7 @@ int Ebofs::mkfs()
   // create first noderegion
   Extent nr;
   nr.start = 2;
-  nr.length = num_blocks / 100;
+  nr.length = 10+ (num_blocks / 1000);
   if (nr.length < 10) nr.length = 10;
   nodepool.add_region(nr);
   dout(1) << "mkfs: first node region at " << nr << endl;
@@ -271,7 +274,7 @@ int Ebofs::commit_thread_entry()
   while (mounted) {
 	
 	// wait for kick, or timeout
-	if (EBOFS_COMMIT_INTERVAL) {
+	if (g_conf.ebofs_commit_interval) {
 	  commit_cond.WaitInterval(ebofs_lock, utime_t(EBOFS_COMMIT_INTERVAL,0));   
 	} else {
 	  // DEBUG.. wait until kicked
@@ -1364,6 +1367,20 @@ int Ebofs::read(object_t oid,
 }
 
 
+bool Ebofs::_write_will_block()
+{
+  return (bc.get_stat_dirty()+bc.get_stat_tx() > g_conf.ebofs_bc_max_dirty);
+}
+
+bool Ebofs::write_will_block()
+{
+  ebofs_lock.Lock();
+  bool b = _write_will_block();
+  ebofs_lock.Unlock();
+  return b;
+}
+
+
 int Ebofs::write(object_t oid, 
 				 size_t len, off_t off, 
 				 bufferlist& bl, bool fsync)
@@ -1400,6 +1417,12 @@ int Ebofs::write(object_t oid,
 	if (onsafe) delete onsafe;
 	ebofs_lock.Unlock();
 	return -ENOSPC;
+  }
+
+  // too much unflushed dirty data?  (if so, block!)
+  while (_write_will_block()) {
+	dout(1) << "write blocking on write" << endl;
+	bc.waitfor_stat();
   }
   
   // get|create inode

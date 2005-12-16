@@ -170,6 +170,8 @@ class Ebofs : public ObjectStore {
 	void* entry() { return (void*)ebofs->finisher_thread_entry(); }
   } finisher_thread;
 
+  bool _write_will_block();
+
  public:
   Ebofs(BlockDevice& d) : 
 	dev(d), 
@@ -208,6 +210,8 @@ class Ebofs : public ObjectStore {
 			Context *onsafe);
   int truncate(object_t oid, off_t size);
   int remove(object_t oid);
+
+  bool write_will_block();
 
   // object attr
   int setattr(object_t oid, const char *name, void *value, size_t size);
