@@ -31,6 +31,8 @@ public:
 
 int main(int argc, char **argv) 
 {
+  cerr << "fakesyn start" << endl;
+
   vector<char*> args;
   argv_to_vec(argc, argv, args);
 

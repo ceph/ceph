@@ -10,6 +10,11 @@
 # include "FakeStore.h"
 #endif
 
+#ifdef USE_EBOFS
+# include "ebofs/Ebofs.h"
+# include "ebofs/BlockDevice.h"
+#endif
+
 
 #include "mds/MDS.h"
 
@@ -46,7 +51,8 @@
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << whoami << " "
 
 char *osd_base_path = "./osddata";
-
+char *ebofs_base_path = "./ebofsdev";
+char ebofs_path[100];
 
 #define ROLE_TYPE(x)   ((x)>0 ? 1:(x))
 
@@ -77,7 +83,16 @@ OSD::OSD(int id, Messenger *m)
 #ifdef USE_OBFS
   store = new OBFSStore(whoami, NULL, "/dev/sdb3");
 #else
-  store = new FakeStore(osd_base_path, whoami);
+# ifdef USE_EBOFS
+  storedev = 0;
+  if (g_conf.osd_ebofs) {
+	sprintf(ebofs_path, "%s/%d", ebofs_base_path, whoami);
+	storedev = new BlockDevice(ebofs_path);
+    store = new Ebofs(*storedev);
+  } else 
+# endif
+	store = new FakeStore(osd_base_path, whoami);
+  
 #endif
 
   // monitor
@@ -124,12 +139,21 @@ OSD::~OSD()
   if (messenger) { delete messenger; messenger = 0; }
   if (logger) { delete logger; logger = 0; }
   if (store) { delete store; store = 0; }
+#ifdef USE_EBOFS
+  if (storedev) { delete storedev; storedev = 0; }
+#endif
+
 }
 
 int OSD::init()
 {
   osd_lock.Lock();
 
+#ifdef USE_EBOFS
+  if (storedev) 
+	storedev->open();
+#endif
+  if (g_conf.osd_mkfs) store->mkfs();
   int r = store->mount();
 
   monitor->init();
@@ -155,6 +179,9 @@ int OSD::shutdown()
   messenger->shutdown();
 
   int r = store->umount();
+#ifdef USE_EBOFS
+  if (storedev) storedev->close();
+#endif
   return r;
 }
 
@@ -368,8 +395,10 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 
 	  // send 'safe' to client?
 	  if (repop->can_send_sync()) {
-		MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
-		messenger->send_message(reply, op->get_asker());
+		if (op->wants_safe()) {
+		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
+		  messenger->send_message(reply, op->get_asker());
+		}
 		delete op;
 		delete repop;
 	  }
@@ -379,8 +408,10 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 
 	  // send 'ack' to client?
 	  if (repop->can_send_ack()) {
-		MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
-		messenger->send_message(reply, op->get_asker());
+		if (op->wants_ack()) {
+		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
+		  messenger->send_message(reply, op->get_asker());
+		}
 	  }
 	}
 
@@ -452,16 +483,20 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	  
 	  // send 'safe' to client?
 	  if (repop->can_send_sync()) {
-		MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
-		messenger->send_message(reply, op->get_asker());
+		if (op->wants_safe()) {
+		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
+		  messenger->send_message(reply, op->get_asker());
+		}
 		delete op;
 		delete repop;
 	  }
 	  
 	  // send 'ack' to client?
 	  else if (repop->can_send_ack()) {
-		MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
-		messenger->send_message(reply, op->get_asker());
+		if (op->wants_ack()) {
+		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
+		  messenger->send_message(reply, op->get_asker());
+		}
 	  }	  
 	}
 
@@ -579,7 +614,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (m->is_mkfs()) {
 	dout(1) << "MKFS" << endl;
-	store->mkfs();
+	if (!g_conf.osd_mkfs)
+	  store->mkfs();
   }
 
   if (!osdmap ||
@@ -698,11 +734,13 @@ void OSD::get_pg_list(list<pg_t>& ls)
 
 bool OSD::pg_exists(pg_t pgid) 
 {
-  struct stat st;
+  return store->collection_exists(pgid);
+  /*struct stat st;
   if (store->collection_stat(pgid, &st) == 0) 
 	return true;
   else
 	return false;
+  */
 }
 
 PG *OSD::create_pg(pg_t pgid)
@@ -2215,8 +2253,10 @@ void OSD::op_modify_sync(OSDReplicaOp *repop)
 	repop->local_sync = true;
 	if (repop->can_send_sync()) {
 	  dout(2) << "op_modify_sync on " << hex << repop->op->get_oid() << dec << " op " << repop->op << endl;
-	  MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
-	  messenger->send_message(reply, repop->op->get_asker());
+	  if (repop->op->wants_safe()) {
+		MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
+		messenger->send_message(reply, repop->op->get_asker());
+	  }
 	  delete repop->op;
 	}
 	if (repop->can_delete()) {

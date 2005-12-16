@@ -59,9 +59,10 @@ int Ebofs::mount()
 
   allocator.release_limbo();
 
-  dout(3) << "mount starting commit thread" << endl;
+  dout(3) << "mount starting commit+finisher threads" << endl;
   commit_thread.create();
-  
+  finisher_thread.create();
+
   dout(1) << "mount mounted" << endl;
   mounted = true;
 
@@ -76,6 +77,9 @@ int Ebofs::mkfs()
   assert(!mounted);
 
   block_t num_blocks = dev.get_num_blocks();
+
+  free_blocks = 0;
+  limbo_blocks = 0;
 
   // create first noderegion
   Extent nr;
@@ -166,13 +170,19 @@ int Ebofs::umount()
   unmounting = true;
   
   // kick commit thread
-  commit_cond.Signal();
-
-  // wait 
   dout(2) << "umount stopping commit thread" << endl;
+  commit_cond.Signal();
   ebofs_lock.Unlock();
   commit_thread.join();
   ebofs_lock.Lock();
+
+  // kick finisher thread
+  dout(2) << "umount stopping finisher thread" << endl;
+  finisher_lock.Lock();
+  finisher_stop = true;
+  finisher_cond.Signal();
+  finisher_lock.Unlock();
+  finisher_thread.join();
 
   // free memory
   dout(2) << "umount cleaning up" << endl;
@@ -196,9 +206,9 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb.s_magic = EBOFS_MAGIC;
   sb.epoch = epoch;
   sb.num_blocks = dev.get_num_blocks();
+
   sb.free_blocks = free_blocks;
   sb.limbo_blocks = limbo_blocks;
-  //sb.num_objects = num_objects;
 
 
   // tables
@@ -262,7 +272,7 @@ int Ebofs::commit_thread_entry()
 	
 	// wait for kick, or timeout
 	if (EBOFS_COMMIT_INTERVAL) {
-	  commit_cond.Wait(ebofs_lock, utime_t(EBOFS_COMMIT_INTERVAL,0));   
+	  commit_cond.WaitInterval(ebofs_lock, utime_t(EBOFS_COMMIT_INTERVAL,0));   
 	} else {
 	  // DEBUG.. wait until kicked
 	  dout(10) << "commit_thread no commit_interval, waiting until kicked" << endl;
@@ -322,9 +332,14 @@ int Ebofs::commit_thread_entry()
 	}
 
 	// kick waiters
-	dout(10) << "commit_thread kicking commit+sync waiters" << endl;
-	finish_contexts(commit_waiters[super_epoch-1], 0);
+	dout(10) << "commit_thread queueing commit + kicking sync waiters" << endl;
+
+	finisher_lock.Lock();
+	finisher_queue.splice(finisher_queue.end(), commit_waiters[super_epoch-1]);
 	commit_waiters.erase(super_epoch-1);
+	finisher_cond.Signal();
+	finisher_lock.Unlock();
+
 	sync_cond.Signal();
 
 	// trim bc?
@@ -335,6 +350,32 @@ int Ebofs::commit_thread_entry()
   
   dout(10) << "commit_thread finish" << endl;
   ebofs_lock.Unlock();
+  return 0;
+}
+
+
+int Ebofs::finisher_thread_entry()
+{
+  finisher_lock.Lock();
+  dout(10) << "finisher_thread start" << endl;
+
+  while (!finisher_stop) {
+	while (!finisher_queue.empty()) {
+	  list<Context*> ls;
+	  ls.swap(finisher_queue);
+
+	  finisher_lock.Unlock();
+	  finish_contexts(ls, 0);
+	  finisher_lock.Lock();
+	}
+	if (finisher_stop) break;
+	
+	dout(30) << "finisher_thread sleeping" << endl;
+	finisher_cond.Wait(finisher_lock);
+  }
+
+  dout(10) << "finisher_thread start" << endl;
+  finisher_lock.Unlock();
   return 0;
 }
 
@@ -358,53 +399,78 @@ Onode* Ebofs::new_onode(object_t oid)
 
 Onode* Ebofs::get_onode(object_t oid)
 {
-  // in cache?
-  if (onode_map.count(oid)) {
-	// yay
-	Onode *on = onode_map[oid];
+  while (1) {
+	// in cache?
+	if (onode_map.count(oid)) {
+	  // yay
+	  Onode *on = onode_map[oid];
+	  on->get();
+	  return on;   
+	}
+	
+	// on disk?
+	Extent onode_loc;
+	if (object_tab->lookup(oid, onode_loc) != Table<object_t,Extent>::Cursor::MATCH) {
+	  // object dne.
+	  return 0;
+	}
+	
+	// already loading?
+	if (waitfor_onode.count(oid)) {
+	  // yep, just wait.
+	  Cond c;
+	  waitfor_onode[oid].push_back(&c);
+	  dout(10) << "get_onode " << oid << " already loading, waiting" << endl;
+	  c.Wait(ebofs_lock);
+	  continue;
+	}
+
+	assert(waitfor_onode.count(oid) == 0);
+	waitfor_onode[oid].clear();  // this should be empty initially. 
+
+	// read it!
+	bufferlist bl;
+	bufferpool.alloc( EBOFS_BLOCK_SIZE*onode_loc.length, bl );
+
+	ebofs_lock.Unlock();
+	dev.read( onode_loc.start, onode_loc.length, bl );
+	ebofs_lock.Lock();
+	
+	// parse data block
+	Onode *on = new Onode(oid);
+	
+	struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
+	on->onode_loc = eo->onode_loc;
+	on->object_size = eo->object_size;
+	on->object_blocks = eo->object_blocks;
+	
+	// parse attributes
+	char *p = bl.c_str() + sizeof(*eo);
+	for (int i=0; i<eo->num_attr; i++) {
+	  string key = p;
+	  p += key.length() + 1;
+	  int len = *(int*)(p);
+	  p += sizeof(len);
+	  on->attr[key] = AttrVal(p, len);
+	}
+	
+	// parse extents
+	on->extents.clear();
+	for (int i=0; i<eo->num_extents; i++) {
+	  on->extents.push_back( *(Extent*)(p) );
+	  p += sizeof(Extent);
+	}
+
+	// wake up other waiters
+	for (list<Cond*>::iterator i = waitfor_onode[oid].begin();
+		 i != waitfor_onode[oid].end();
+		 i++)
+	  (*i)->Signal();
+	waitfor_onode.erase(oid);   // remove Cond list
+	
 	on->get();
-	return on;   
+	return on;
   }
-
-  // on disk?
-  Extent onode_loc;
-  if (object_tab->lookup(oid, onode_loc) != Table<object_t,Extent>::Cursor::MATCH) {
-	// object dne.
-	return 0;
-  }
-
-  // read it!
-  bufferlist bl;
-  bufferpool.alloc( EBOFS_BLOCK_SIZE*onode_loc.length, bl );
-  dev.read( onode_loc.start, onode_loc.length, bl );
-
-  // parse data block
-  Onode *on = new Onode(oid);
-
-  struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
-  on->onode_loc = eo->onode_loc;
-  on->object_size = eo->object_size;
-  on->object_blocks = eo->object_blocks;
-
-  // parse attributes
-  char *p = bl.c_str() + sizeof(*eo);
-  for (int i=0; i<eo->num_attr; i++) {
-	string key = p;
-	p += key.length() + 1;
-	int len = *(int*)(p);
-	p += sizeof(len);
-	on->attr[key] = AttrVal(p, len);
-  }
-
-  // parse extents
-  on->extents.clear();
-  for (int i=0; i<eo->num_extents; i++) {
-	on->extents.push_back( *(Extent*)(p) );
-	p += sizeof(Extent);
-  }
-
-  on->get();
-  return on;
 }
 
 
@@ -564,44 +630,69 @@ Cnode* Ebofs::new_cnode(object_t cid)
 
 Cnode* Ebofs::get_cnode(object_t cid)
 {
-  // in cache?
-  if (cnode_map.count(cid)) {
-	// yay
-	Cnode *cn = cnode_map[cid];
+  while (1) {
+	// in cache?
+	if (cnode_map.count(cid)) {
+	  // yay
+	  Cnode *cn = cnode_map[cid];
+	  cn->get();
+	  return cn;   
+	}
+	
+	// on disk?
+	Extent cnode_loc;
+	if (collection_tab->lookup(cid, cnode_loc) != Table<coll_t,Extent>::Cursor::MATCH) {
+	  // object dne.
+	  return 0;
+	}
+	
+	// already loading?
+	if (waitfor_cnode.count(cid)) {
+	  // yep, just wait.
+	  Cond c;
+	  waitfor_cnode[cid].push_back(&c);
+	  dout(10) << "get_cnode " << cid << " already loading, waiting" << endl;
+	  c.Wait(ebofs_lock);
+	  continue;
+	}
+
+	assert(waitfor_cnode.count(cid) == 0);
+	waitfor_cnode[cid].clear();  // this should be empty initially. 
+
+	// read it!
+	bufferlist bl;
+	bufferpool.alloc( EBOFS_BLOCK_SIZE*cnode_loc.length, bl );
+
+	ebofs_lock.Unlock();
+	dev.read( cnode_loc.start, cnode_loc.length, bl );
+	ebofs_lock.Lock();
+
+	// parse data block
+	Cnode *cn = new Cnode(cid);
+	
+	struct ebofs_cnode *ec = (struct ebofs_cnode*)bl.c_str();
+	cn->cnode_loc = ec->cnode_loc;
+	
+	// parse attributes
+	char *p = bl.c_str() + sizeof(*ec);
+	for (int i=0; i<ec->num_attr; i++) {
+	  string key = p;
+	  p += key.length() + 1;
+	  int len = *(int*)(p);
+	  p += sizeof(len);
+	  cn->attr[key] = AttrVal(p, len);
+	}
+	
+	// wake up other waiters
+	for (list<Cond*>::iterator i = waitfor_cnode[cid].begin();
+		 i != waitfor_cnode[cid].end();
+		 i++)
+	  (*i)->Signal();
+	waitfor_cnode.erase(cid);   // remove Cond list
+
 	cn->get();
-	return cn;   
+	return cn;
   }
-
-  // on disk?
-  Extent cnode_loc;
-  if (collection_tab->lookup(cid, cnode_loc) != Table<coll_t,Extent>::Cursor::MATCH) {
-	// object dne.
-	return 0;
-  }
-
-  // read it!
-  bufferlist bl;
-  bufferpool.alloc( EBOFS_BLOCK_SIZE*cnode_loc.length, bl );
-  dev.read( cnode_loc.start, cnode_loc.length, bl );
-
-  // parse data block
-  Cnode *cn = new Cnode(cid);
-
-  struct ebofs_cnode *ec = (struct ebofs_cnode*)bl.c_str();
-  cn->cnode_loc = ec->cnode_loc;
-
-  // parse attributes
-  char *p = bl.c_str() + sizeof(*ec);
-  for (int i=0; i<ec->num_attr; i++) {
-	string key = p;
-	p += key.length() + 1;
-	int len = *(int*)(p);
-	p += sizeof(len);
-	cn->attr[key] = AttrVal(p, len);
-  }
-
-  cn->get();
-  return cn;
 }
 
 void Ebofs::write_cnode(Cnode *cn)
@@ -1396,8 +1487,12 @@ int Ebofs::stat(object_t oid, struct stat *st)
 
 int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
 {
+  ebofs_lock.Lock();
   Onode *on = get_onode(oid);
-  if (!on) return -ENOENT;
+  if (!on) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   string n(name);
   AttrVal val((char*)value, size);
@@ -1405,13 +1500,18 @@ int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
   dirty_onode(on);
 
   put_onode(on);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
+  ebofs_lock.Lock();
   Onode *on = get_onode(oid);
-  if (!on) return -ENOENT;
+  if (!on) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   string n(name);
   if (on->attr.count(n) == 0) return -1;
@@ -1419,26 +1519,36 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 
   dirty_onode(on);
   put_onode(on);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::rmattr(object_t oid, const char *name) 
 {
+  ebofs_lock.Lock();
   Onode *on = get_onode(oid);
-  if (!on) return -ENOENT;
+  if (!on) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   string n(name);
   on->attr.erase(n);
 
   dirty_onode(on);
   put_onode(on);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
 {
+  ebofs_lock.Lock();
   Onode *on = get_onode(oid);
-  if (!on) return -ENOENT;
+  if (!on) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   attrs.clear();
   for (map<string,AttrVal>::iterator i = on->attr.begin();
@@ -1448,6 +1558,7 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
   }
 
   put_onode(on);
+  ebofs_lock.Unlock();
   return 0;
 }
 
@@ -1457,6 +1568,8 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
 
 int Ebofs::list_collections(list<coll_t>& ls)
 {
+  ebofs_lock.Lock();
+
   Table<coll_t, Extent>::Cursor cursor(collection_tab);
 
   int num = 0;
@@ -1468,22 +1581,38 @@ int Ebofs::list_collections(list<coll_t>& ls)
 	}
   }
 
+  ebofs_lock.Unlock();
   return num;
 }
 
 int Ebofs::create_collection(coll_t cid)
 {
-  if (collection_exists(cid)) return -1;
+  ebofs_lock.Lock();
+
+  if (_collection_exists(cid)) {
+	ebofs_lock.Unlock();
+	return -EEXIST;
+  }
+
   Cnode *cn = new_cnode(cid);
   put_cnode(cn);
+
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::destroy_collection(coll_t cid)
 {
-  if (!collection_exists(cid)) return -ENOENT;
-  Cnode *cn = new_cnode(cid);
-  
+  ebofs_lock.Lock();
+
+  if (!_collection_exists(cid)) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
+
+  Cnode *cn = get_cnode(cid);
+  assert(cn);
+
   // hose mappings
   list<object_t> objects;
   collection_list(cid, objects);
@@ -1495,10 +1624,18 @@ int Ebofs::destroy_collection(coll_t cid)
   }
 
   remove_cnode(cn);
+  ebofs_lock.Lock();
   return 0;
 }
 
 bool Ebofs::collection_exists(coll_t cid)
+{
+  ebofs_lock.Lock();
+  bool r = _collection_exists(cid);
+  ebofs_lock.Unlock();
+  return r;
+}
+bool Ebofs::_collection_exists(coll_t cid)
 {
   Table<coll_t, Extent>::Cursor cursor(collection_tab);
   if (collection_tab->find(cid, cursor) == Table<coll_t, Extent>::Cursor::MATCH) 
@@ -1508,23 +1645,37 @@ bool Ebofs::collection_exists(coll_t cid)
 
 int Ebofs::collection_add(coll_t cid, object_t oid)
 {
-  if (!collection_exists(cid)) return -ENOENT;
+  ebofs_lock.Lock();
+  if (!_collection_exists(cid)) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
   oc_tab->insert(idpair_t(oid,cid), true);
   co_tab->insert(idpair_t(cid,oid), true);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::collection_remove(coll_t cid, object_t oid)
 {
-  if (!collection_exists(cid)) return -ENOENT;
+  ebofs_lock.Lock();
+  if (!_collection_exists(cid)) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
   oc_tab->remove(idpair_t(oid,cid));
   co_tab->remove(idpair_t(cid,oid));
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 {
-  if (!collection_exists(cid)) return -ENOENT;
+  ebofs_lock.Lock();
+  if (!_collection_exists(cid)) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
   
   Table<idpair_t, bool>::Cursor cursor(co_tab);
 
@@ -1540,14 +1691,20 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 	}
   }
 
+  ebofs_lock.Unlock();
   return num;
 }
 
 
 int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t size)
 {
+  ebofs_lock.Lock();
+
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -ENOENT;
+  if (!cn) {
+	ebofs_lock.Unlock();
+  	return -ENOENT;
+  }
 
   string n(name);
   AttrVal val((char*)value, size);
@@ -1555,39 +1712,54 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t 
   dirty_cnode(cn);
 
   put_cnode(cn);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t size)
 {
+  ebofs_lock.Lock();
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -ENOENT;
+  if (!cn) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   string n(name);
   if (cn->attr.count(n) == 0) return -1;
   memcpy(value, cn->attr[n].data, MIN( cn->attr[n].len, (int)size ));
 
   put_cnode(cn);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::collection_rmattr(coll_t cid, const char *name) 
 {
+  ebofs_lock.Lock();
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -ENOENT;
+  if (!cn) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   string n(name);
   cn->attr.erase(n);
 
   dirty_cnode(cn);
   put_cnode(cn);
+  ebofs_lock.Unlock();
   return 0;
 }
 
 int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 {
+  ebofs_lock.Lock();
   Cnode *cn = get_cnode(cid);
-  if (!cn) return -ENOENT;
+  if (!cn) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
 
   attrs.clear();
   for (map<string,AttrVal>::iterator i = cn->attr.begin();
@@ -1597,6 +1769,7 @@ int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
   }
 
   put_cnode(cn);
+  ebofs_lock.Unlock();
   return 0;
 }
 

@@ -9,7 +9,7 @@
 
 Bufferhead::Bufferhead(Inode *inode, Buffercache *bc) : 
   ref(0), miss_len(0), dirty_since(0), visited(false) {
-  dout(10) << "bc: new bufferhead ino: " << inode->ino() << endl;
+  dout(10) << "bc: new bufferhead ino: " << hex << inode->ino() << dec << endl;
   this->inode = inode;
   inode->get();
   state = BUFHD_STATE_CLEAN;
@@ -21,7 +21,7 @@ Bufferhead::Bufferhead(Inode *inode, Buffercache *bc) :
 
 Bufferhead::Bufferhead(Inode *inode, off_t off, Buffercache *bc) : 
   ref(0), miss_len(0), dirty_since(0), visited(false) {
-  dout(10) << "bc: new bufferhead ino: " << inode->ino() << " offset: " << off << endl;
+  dout(10) << "bc: new bufferhead ino: " << hex << inode->ino() << dec << " offset: " << off << endl;
   this->inode = inode;
   inode->get();
   state = BUFHD_STATE_CLEAN;
@@ -34,7 +34,7 @@ Bufferhead::Bufferhead(Inode *inode, off_t off, Buffercache *bc) :
 
 Bufferhead::~Bufferhead()
 {
-  dout(10) << "bc: destroying bufferhead ino: " << inode->ino() << " size: " << bl.length() << " offset: " << offset << endl;
+  dout(10) << "bc: destroying bufferhead ino: " << hex << inode->ino() << dec << " size: " << bl.length() << " offset: " << offset << endl;
   assert(state == BUFHD_STATE_CLEAN);
   assert(ref == 0);
   assert(lru_is_expireable());
@@ -719,7 +719,7 @@ int Filecache::copy_out(off_t size, off_t offset, char *dst)
 
 void Buffercache::dirty(Inode *inode, off_t size, off_t offset, const char *src) 
 {
-  dout(6) << "bc: dirty ino: " << inode->ino() << " size: " << size << " offset: " << offset << endl;
+  dout(6) << "bc: dirty ino: " << hex << inode->ino() << dec << " size: " << size << " offset: " << offset << endl;
   assert(bcache_map.count(inode->ino())); // filecache has to be already allocated!!
   Filecache *fc = get_fc(inode);
   assert(offset >= 0);
@@ -876,7 +876,7 @@ off_t Buffercache::reclaim(off_t min_size)
       delete bh;
       if (fc->buffer_map.empty()) {
         bcache_map.erase(ino);
-	dout(6) << "bc: delete fc of ino: " << ino << endl;
+		dout(6) << "bc: delete fc of ino: " << hex << ino << dec << endl;
 	delete fc;
       }
     }

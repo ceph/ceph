@@ -348,7 +348,10 @@ int FakeStore::write(object_t oid,
   ::flock(fd, LOCK_UN);
 
   // schedule sync
-  queue_fsync(fd, onsafe);
+  if (onsafe)
+	queue_fsync(fd, onsafe);
+  else
+	::close(fd);
   
   return did;
 }

@@ -3,15 +3,9 @@ client
 - client will re-tx anything it needed to say upon rx of new mds notification
 
 
-ofs
-- on disk btree nodes need super_version
-- commit thread
-- reallocate on write
-- 
-
-- Ebofs.free_blocks
+ebofs
+- non-blocking get_onode and get_cnode
 - Ebofs.readonly
-- real error codes
 
 
 

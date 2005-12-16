@@ -649,7 +649,7 @@ bool MDCache::shutdown_pass()
   // (wait for) flush log?
   if (g_conf.mds_log_flush_on_shutdown &&
 	  mds->mdlog->get_num_events()) {
-	dout(7) << "waiting for log to flush" << endl;
+	dout(7) << "waiting for log to flush .. " << mds->mdlog->get_num_events() << endl;
 	return false;
   } 
   

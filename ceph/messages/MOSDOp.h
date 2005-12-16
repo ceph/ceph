@@ -49,6 +49,9 @@ typedef struct {
   version_t version;
   version_t old_version;
 
+  bool   want_ack;
+  bool   want_safe;
+
   size_t _data_len;
 } MOSDOp_st;
 
@@ -73,6 +76,9 @@ class MOSDOp : public Message {
   const int    get_op() { return st.op; }
   const size_t get_length() { return st.length; }
   const size_t get_offset() { return st.offset; }
+
+  const bool wants_ack() { return st.want_ack; }
+  const bool wants_safe() { return st.want_safe; }
 
   void set_data(bufferlist &d) {
 	data.claim(d);
@@ -99,6 +105,9 @@ class MOSDOp : public Message {
 	this->st.pg_role = 0;
 	this->st.map_version = mapversion;
 	this->st.op = op;
+
+	this->st.want_ack = true;
+	this->st.want_safe = true;
   }
   MOSDOp() {}
 
@@ -110,6 +119,9 @@ class MOSDOp : public Message {
   void set_version(version_t v) { st.version = v; }
   void set_old_version(version_t ov) { st.old_version = ov; }
   
+  void set_want_ack(bool b) { st.want_ack = b; }
+  void set_want_safe(bool b) { st.want_safe = b; }
+
   // marshalling
   virtual void decode_payload() {
 	payload.copy(0, sizeof(st), (char*)&st);

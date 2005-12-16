@@ -1943,7 +1943,8 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  
 	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
 	  filer->write(in->inode, size, offset, blist, 0, 
-				   NULL, onfinish); // safe
+				   onfinish, NULL);   // applied
+				   //NULL, onfinish); // safe on disk
 	  
 	  cond.Wait(client_lock);
 	}

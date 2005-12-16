@@ -96,10 +96,11 @@ class Ebofs : public ObjectStore {
   void close_tables();
 
 
-  // ** onode cache **
+  // ** onodes **
   hash_map<object_t, Onode*>  onode_map;  // onode cache
   LRU                         onode_lru;
   set<Onode*>                 dirty_onodes;
+  map<object_t, list<Cond*> > waitfor_onode;
 
   Onode* new_onode(object_t oid);     // make new onode.  ref++.
   Onode* get_onode(object_t oid);     // get cached onode, or read from disk.  ref++.
@@ -112,8 +113,7 @@ class Ebofs : public ObjectStore {
   hash_map<coll_t, Cnode*>    cnode_map;
   LRU                         cnode_lru;
   set<Cnode*>                 dirty_cnodes;
-  int                         inodes_flushing;
-  Cond                        inode_commit_cond;                    
+  map<object_t, list<Cond*> > waitfor_cnode;
 
   Cnode* new_cnode(coll_t cid);
   Cnode* get_cnode(coll_t cid);
@@ -121,6 +121,10 @@ class Ebofs : public ObjectStore {
   void remove_cnode(Cnode *cn);
   void put_cnode(Cnode *cn);
   void dirty_cnode(Cnode *cn);
+
+  // ** onodes+cnodes = inodes **
+  int                         inodes_flushing;
+  Cond                        inode_commit_cond;                    
 
   void flush_inode_finish();
   void commit_inodes_start();
@@ -144,7 +148,6 @@ class Ebofs : public ObjectStore {
   void trim_buffer_cache();
 
  protected:
-
   //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
   void alloc_write(Onode *on, 
 				   block_t start, block_t len, 
@@ -152,10 +155,20 @@ class Ebofs : public ObjectStore {
   void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
   bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on);
 
-  int flushd_thread();
-  static int flusd_thread_entry(void *p) {
-	return ((Ebofs*)p)->flushd_thread();
-  }
+  // ** finisher **
+  // async write notification to users
+  Mutex          finisher_lock;
+  Cond           finisher_cond;
+  bool           finisher_stop;
+  list<Context*> finisher_queue;
+
+  int finisher_thread_entry();
+  class FinisherThread : public Thread {
+	Ebofs *ebofs;
+  public:
+	FinisherThread(Ebofs *e) : ebofs(e) {}
+	void* entry() { return (void*)ebofs->finisher_thread_entry(); }
+  } finisher_thread;
 
  public:
   Ebofs(BlockDevice& d) : 
@@ -169,7 +182,8 @@ class Ebofs : public ObjectStore {
 	nodepool(ebofs_lock),
 	object_tab(0), limbo_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
 	inodes_flushing(0),
-	bc(dev, bufferpool, ebofs_lock) {
+	bc(dev, bufferpool, ebofs_lock),
+	finisher_stop(false), finisher_thread(this) {
 	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	  free_tab[i] = 0;
   }
@@ -207,6 +221,7 @@ class Ebofs : public ObjectStore {
   int create_collection(coll_t c);
   int destroy_collection(coll_t c);
 
+  bool _collection_exists(coll_t c);
   bool collection_exists(coll_t c);
   int collection_add(coll_t c, object_t o);
   int collection_remove(coll_t c, object_t o);

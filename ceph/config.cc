@@ -20,14 +20,14 @@ Mutex bufferlock;
 
 
 
-FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 3 );   // stripe files over whole objects
+FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );   // stripe files over whole objects
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
 FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // new (good?) way
+FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 2 );  // new (good?) way
 //FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
@@ -50,7 +50,7 @@ md_config_t g_conf = {
   fake_osdmap_expand: 0,
   fake_osd_sync: true,
 
-  debug: 30,
+  debug: 10,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   debug_buffer: 0,
@@ -111,8 +111,10 @@ md_config_t g_conf = {
   osd_fsync: true,
   osd_writesync: false,
   osd_maxthreads: 0,   // 0 == no threading!
+  osd_mkfs: false,
   
   osd_fakestore_syncthreads: 4,
+  osd_ebofs: 0,
 
   ebofs_bc_size: (50 *256),    // measured in 4k blocks, or *256 for MB
 
@@ -190,6 +192,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
+	else if (strcmp(args[i], "--fake_osd_sync") == 0) 
+	  g_conf.fake_osd_sync = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--debug") == 0) 
 	  g_conf.debug = atoi(args[++i]);
@@ -265,6 +269,10 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.client_bcache_ttl = atoi(args[++i]);
 
 
+	else if (strcmp(args[i], "--osd_ebofs") == 0) 
+	  g_conf.osd_ebofs = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_mkfs") == 0) 
+	  g_conf.osd_mkfs = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_pg_bits") == 0) 
 	  g_conf.osd_pg_bits = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_max_rep") == 0) 

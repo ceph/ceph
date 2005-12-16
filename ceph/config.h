@@ -86,8 +86,10 @@ struct md_config_t {
   bool  osd_fsync;
   bool  osd_writesync;
   int   osd_maxthreads;
+  bool  osd_mkfs;
 
-  int osd_fakestore_syncthreads;
+  int   osd_fakestore_syncthreads;   // such crap
+  int   osd_ebofs;
 
   off_t ebofs_bc_size;
 

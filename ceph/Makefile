@@ -8,7 +8,7 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DUSE_EBOFS
 LIBS = -lpthread  -lrt -ldb
 
 #for normal mpich2 machines
@@ -52,6 +52,7 @@ COMMON_OBJS= \
 	osd/OSDMap.o\
 	osd/PG.o\
 	osd/rush.o\
+	ebofs/ebo.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\

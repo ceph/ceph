@@ -144,7 +144,9 @@ Filer::read(inode_t& inode,
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
-	dout(15) << " read on " << last_tid << " from oid " << hex << it->oid << dec  << " off " << it->offset << " len " << it->len << " (" << it->buffer_extents.size() << " buffer bits)" << endl;
+	dout(15) << " read tid " << last_tid << " from osd" << it->osd 
+			 << " oid " << hex << it->oid << dec  << " off " << it->offset << " len " << it->len 
+			 << " (" << it->buffer_extents.size() << " buffer fragments)" << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
 
 	// add to gather set
@@ -357,12 +359,21 @@ Filer::write(inode_t& inode,
 	off += it->len;
 
 	// add to gather set
-	p->waitfor_ack.insert(last_tid);
-	p->waitfor_safe.insert(last_tid);
+	if (true||onack)          // not impl. on OSD yet.
+	  p->waitfor_ack.insert(last_tid);
+	else
+	  m->set_want_ack(false);
+
+	if (onsafe) 
+	  p->waitfor_safe.insert(last_tid);
+	else
+	  m->set_want_safe(false);
+
 	op_modify[last_tid] = p;
 
 	// send
-	dout(15) << " write on " << last_tid << "  oid " << hex << it->oid << dec << " off " << it->offset << " len " << it->len << endl;
+	dout(15) << " write tid " << last_tid << " osd" << it->osd 
+			 << "  oid " << hex << it->oid << dec << " off " << it->offset << " len " << it->len << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
   }
 
@@ -398,10 +409,16 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
 	// ack.
 	dout(15) << "handle_osd_modify_reply ack on " << tid << endl;
 	p->waitfor_ack.erase(tid);
+	if (p->waitfor_safe.empty())
+	  op_modify.erase( tid );      // not safe requested
 
 	if (p->waitfor_ack.empty()) {
 	  onack = p->onack;
 	  p->onack = 0;
+	  if (p->waitfor_safe.empty()) {
+		assert(p->onsafe == 0);   // should be null.. no safe requested    (FIXME unless ooo delivery!)
+		delete p;
+	  }
 	}
   }
 

@@ -107,7 +107,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   }
   int root = osdmap->crush.add_bucket(b);
   
-  for (int i=2; i<5; i++) {
+  for (int i=1; i<5; i++) {
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));

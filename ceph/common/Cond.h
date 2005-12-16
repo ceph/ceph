@@ -39,15 +39,12 @@ class Cond
 	return r;
   }
 
-  int Wait(Mutex &mutex,
+  int WaitUntil(Mutex &mutex,
 		   struct timeval *tv) {
-	return Wait(mutex, utime_t(tv->tv_sec, tv->tv_usec));
+	return WaitUntil(mutex, utime_t(tv->tv_sec, tv->tv_usec));
   }
-  int Wait(Mutex &mutex,
-		   utime_t wait) {
-	utime_t when = g_clock.now();
-	when += wait;
 
+  int WaitUntil(Mutex &mutex, utime_t when) {
 	// timeval -> timespec
 	struct timespec ts;
 	memset(&ts, 0, sizeof(ts));
@@ -56,6 +53,11 @@ class Cond
 	//cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
 	int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
 	return r;
+  }
+  int WaitInterval(Mutex &mutex, utime_t interval) {
+	utime_t when = g_clock.now();
+	when += interval;
+	return WaitUntil(mutex, when);
   }
 
   int Signal() { 

@@ -494,11 +494,11 @@ class BufferCache {
   }
   void inc_unflushed(version_t epoch) {
 	epoch_unflushed[epoch]++;
-	cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
+	//cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
   }
   void dec_unflushed(version_t epoch) {
 	epoch_unflushed[epoch]--;
-	cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
+	//cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
 	if (stat_waiter && 
 		epoch_unflushed[epoch] == 0) 
 	  stat_cond.Signal();

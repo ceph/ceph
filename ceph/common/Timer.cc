@@ -75,7 +75,7 @@ void Timer::timer_thread()
 	  if (event) {
 		dout(DBL) << "sleeping until " << next << endl;
 		timed_sleep = true;
-		timeout_cond.Wait(lock, next);  // wait for waker or time
+		timeout_cond.WaitUntil(lock, next);  // wait for waker or time
 		utime_t now = g_clock.now();
 		dout(DBL) << "kicked or timed out at " << now << endl;
 	  } else {

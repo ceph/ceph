@@ -171,7 +171,7 @@ int fakemessenger_do_loop_2()
 		  msg_envelope_t env = m->get_envelope();
 		  bufferlist bl;
 		  bl.claim( m->get_payload() );
-		  bl.c_str();   // condense into 1 buffer
+		  //bl.c_str();   // condense into 1 buffer
 
 		  delete m;
 		  
