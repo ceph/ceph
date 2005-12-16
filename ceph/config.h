@@ -92,6 +92,7 @@ struct md_config_t {
   int   osd_ebofs;
 
   off_t ebofs_bc_size;
+  off_t ebofs_bc_max_dirty;
 
   // fake client
   int      num_fakeclient;
