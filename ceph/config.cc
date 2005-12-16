@@ -116,10 +116,14 @@ md_config_t g_conf = {
   osd_fakestore_syncthreads: 4,
   osd_ebofs: 0,
 
+  // --- ebofs ---
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
   ebofs_bc_size:      (50 *256),  // measured in 4k blocks, or *256 for MB
-  ebofs_bc_max_dirty: (40 *256),  // before write() will wait for data to flush
+  ebofs_bc_max_dirty: (10 *256),  // before write() will wait for data to flush
 
+  // --- block device ---
+  bdev_max_el_ms: 1000,         // restart elevator at least once every 1000 ms
+  
 
   // --- fakeclient (mds regression testing) (ancient history) ---
   num_fakeclient: 100,

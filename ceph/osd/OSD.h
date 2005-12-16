@@ -50,9 +50,6 @@ class OSD : public Dispatcher {
   int whoami;
 
   class ObjectStore *store;
-#ifdef USE_EBOFS
-  class BlockDevice *storedev;      // for ebofs
-#endif
   class HostMonitor *monitor;
   class Logger      *logger;
 

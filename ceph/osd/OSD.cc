@@ -12,7 +12,6 @@
 
 #ifdef USE_EBOFS
 # include "ebofs/Ebofs.h"
-# include "ebofs/BlockDevice.h"
 #endif
 
 
@@ -84,14 +83,12 @@ OSD::OSD(int id, Messenger *m)
   store = new OBFSStore(whoami, NULL, "/dev/sdb3");
 #else
 # ifdef USE_EBOFS
-  storedev = 0;
   if (g_conf.osd_ebofs) {
 	char hostname[100];
 	hostname[0] = 0;
 	gethostname(hostname,100);
 	sprintf(ebofs_path, "%s/%s", ebofs_base_path, hostname);
-	storedev = new BlockDevice(ebofs_path);
-    store = new Ebofs(*storedev);
+    store = new Ebofs(ebofs_path);
   } else 
 # endif
 	store = new FakeStore(osd_base_path, whoami);
@@ -142,9 +139,6 @@ OSD::~OSD()
   if (messenger) { delete messenger; messenger = 0; }
   if (logger) { delete logger; logger = 0; }
   if (store) { delete store; store = 0; }
-#ifdef USE_EBOFS
-  if (storedev) { delete storedev; storedev = 0; }
-#endif
 
 }
 
@@ -152,10 +146,6 @@ int OSD::init()
 {
   osd_lock.Lock();
 
-#ifdef USE_EBOFS
-  if (storedev) 
-	storedev->open();
-#endif
   if (g_conf.osd_mkfs) store->mkfs();
   int r = store->mount();
 
@@ -182,9 +172,6 @@ int OSD::shutdown()
   messenger->shutdown();
 
   int r = store->umount();
-#ifdef USE_EBOFS
-  if (storedev) storedev->close();
-#endif
   return r;
 }
 

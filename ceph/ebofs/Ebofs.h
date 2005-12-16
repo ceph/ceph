@@ -26,15 +26,13 @@ inline ostream& operator<<(ostream& out, idpair_t oc) {
 }
 
 
-const int EBOFS_COMMIT_INTERVAL = 2;  // 0 == never
-
 
 class Ebofs : public ObjectStore {
  protected:
   Mutex        ebofs_lock;    // a beautiful global lock
 
   // ** super **
-  BlockDevice &dev;
+  BlockDevice  dev;
   bool         mounted, unmounting;
   bool         readonly;
   version_t    super_epoch;
@@ -173,8 +171,8 @@ class Ebofs : public ObjectStore {
   bool _write_will_block();
 
  public:
-  Ebofs(BlockDevice& d) : 
-	dev(d), 
+  Ebofs(char *devfn) : 
+	dev(devfn), 
 	mounted(false), unmounting(false), readonly(false), 
 	super_epoch(0), commit_thread_started(false), mid_commit(false),
 	commit_thread(this),

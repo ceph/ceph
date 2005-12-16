@@ -19,6 +19,12 @@ int Ebofs::mount()
   ebofs_lock.Lock();
   assert(!mounted);
 
+  int r = dev.open();
+  if (r < 0) {
+	ebofs_lock.Unlock();
+	return r;
+  }
+
   // read super
   bufferptr bp1 = bufferpool.alloc(EBOFS_BLOCK_SIZE);
   bufferptr bp2 = bufferpool.alloc(EBOFS_BLOCK_SIZE);
@@ -78,6 +84,12 @@ int Ebofs::mkfs()
 {
   ebofs_lock.Lock();
   assert(!mounted);
+
+  int r = dev.open();
+  if (r < 0) {
+	ebofs_lock.Unlock();
+	return r;
+  }
 
   block_t num_blocks = dev.get_num_blocks();
 
@@ -145,8 +157,9 @@ int Ebofs::mkfs()
   dout(3) << "mkfs: cleaning up" << endl;
   close_tables();
 
-  dout(1) << "mkfs: done" << endl;
+  dev.close();
 
+  dout(1) << "mkfs: done" << endl;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -190,6 +203,7 @@ int Ebofs::umount()
   // free memory
   dout(2) << "umount cleaning up" << endl;
   close_tables();
+  dev.close();
 
   dout(1) << "umount done" << endl;
   ebofs_lock.Unlock();
@@ -275,7 +289,8 @@ int Ebofs::commit_thread_entry()
 	
 	// wait for kick, or timeout
 	if (g_conf.ebofs_commit_interval) {
-	  commit_cond.WaitInterval(ebofs_lock, utime_t(EBOFS_COMMIT_INTERVAL,0));   
+	  dout(10) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_interval << " seconds" << endl;
+	  commit_cond.WaitInterval(ebofs_lock, utime_t(g_conf.ebofs_commit_interval,0));   
 	} else {
 	  // DEBUG.. wait until kicked
 	  dout(10) << "commit_thread no commit_interval, waiting until kicked" << endl;
@@ -865,7 +880,7 @@ void Ebofs::trim_bc()
 	}
   }
 
-  dout(10) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
+  dout(1) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
 
   /*
   dout(10) << "trim_buffer_cache finish: " 

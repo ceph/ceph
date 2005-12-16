@@ -16,20 +16,14 @@ int main(int argc, char **argv)
   }
   char *filename = args[0];
 
-  // device
-  BlockDevice dev(filename);
-  if (dev.open() < 0) {
-	cerr << "couldn't open " << filename << endl;
-	return -1;
-  }
-
   // mkfs
-  Ebofs mfs(dev);
-  mfs.mkfs();
+  Ebofs mfs(filename);
+  int r = mfs.mkfs();
+  if (r < 0) exit(r);
 
   if (1) {
 	// test-o-rama!
-	Ebofs fs(dev);
+	Ebofs fs(filename);
 	fs.mount();
 
 	if (1) { // big writes
@@ -169,7 +163,6 @@ int main(int argc, char **argv)
 	
 	fs.umount();
   }
-  dev.close();
 }
 
 	

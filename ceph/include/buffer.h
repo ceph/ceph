@@ -100,7 +100,7 @@ class buffer {
 	bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
-	bdbout(1) << "buffer.des " << *this << endl;
+	bdbout(1) << "buffer.des " << *this << " " << (void*)free_func << endl;
 	if (free_func) {
 	  bdbout(1) << "buffer.custom_free_func " << free_func_arg << " " << (void*)_dataptr << endl;
 	  free_func( free_func_arg, _dataptr, _alloc_len );

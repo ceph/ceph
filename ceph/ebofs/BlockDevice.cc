@@ -49,6 +49,10 @@ int BlockDevice::io_thread_entry()
 	// queue?
 	if (!io_queue.empty()) {
 	  
+	  utime_t stop = g_clock.now();
+	  utime_t max(0, 1000*g_conf.bdev_max_el_ms);  // (s,us), convert ms -> us!
+	  stop += max;
+
 	  if (dir_forward) {
 		// forward sweep
 		dout(20) << "io_thread forward sweep" << endl;
@@ -81,6 +85,9 @@ int BlockDevice::io_thread_entry()
 		  lock.Unlock();
 		  do_io(biols);
 		  lock.Lock();
+
+		  utime_t now = g_clock.now();
+		  if (now > stop) break;
 		}
 	  } else {
 		// reverse sweep
@@ -115,6 +122,9 @@ int BlockDevice::io_thread_entry()
 		  lock.Unlock();
 		  do_io(biols);
 		  lock.Lock();
+
+		  utime_t now = g_clock.now();
+		  if (now > stop) break;
 		}
 	  }
 	  dir_forward = !dir_forward;
