@@ -13,6 +13,7 @@ struct md_config_t {
   int  num_osd;
   int  num_client;
 
+  bool mkfs;
 
   // profiling
   bool  log;
@@ -97,8 +98,9 @@ struct md_config_t {
   off_t ebofs_bc_max_dirty;
 
   // block device
-  int   bdev_max_el_ms;  
-  
+  int   bdev_el_fw_max_ms;  
+  int   bdev_el_bw_max_ms;
+  bool  bdev_el_bidir;
 
   // fake client
   int      num_fakeclient;

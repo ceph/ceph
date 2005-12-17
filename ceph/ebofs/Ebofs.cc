@@ -880,7 +880,7 @@ void Ebofs::trim_bc()
 	}
   }
 
-  dout(1) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
+  dout(10) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
 
   /*
   dout(10) << "trim_buffer_cache finish: " 
@@ -1436,7 +1436,7 @@ int Ebofs::write(object_t oid,
 
   // too much unflushed dirty data?  (if so, block!)
   while (_write_will_block()) {
-	dout(1) << "write blocking on write" << endl;
+	dout(10) << "write blocking on write" << endl;
 	bc.waitfor_stat();
   }
   

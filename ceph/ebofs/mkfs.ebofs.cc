@@ -21,12 +21,12 @@ int main(int argc, char **argv)
   int r = mfs.mkfs();
   if (r < 0) exit(r);
 
-  if (1) {
+  if (0) {
 	// test-o-rama!
 	Ebofs fs(filename);
 	fs.mount();
 
-	if (1) { // big writes
+	if (1) { // big write speed test
 	  bufferlist bl;
 	  char crap[1024*1024];
 	  memset(crap, 0, 1024*1024);
@@ -37,7 +37,8 @@ int main(int argc, char **argv)
 	  utime_t start = g_clock.now();
 
 	  for (off_t m=0; m<megs; m++) {
-		cout << m << " / " << megs << endl;
+		if (m%100 == 0)
+		  cout << m << " / " << megs << endl;
 		fs.write(10, bl.length(), 1024LL*1024LL*m, bl, (Context*)0);
 	  }	  
 	  fs.sync();

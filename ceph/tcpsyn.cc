@@ -147,10 +147,6 @@ int main(int argc, char **argv)
 	//cout << "starting synthetic client on rank " << myrank << endl;
 	syn[i] = new SyntheticClient(client[i]);
 
-	syn[i]->modes = syn_modes;
-	syn[i]->sargs = syn_sargs;
-	syn[i]->iargs = syn_iargs;
-	
 	syn[i]->start_thread();
 	
 	nclients++;

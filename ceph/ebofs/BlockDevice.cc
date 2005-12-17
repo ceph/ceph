@@ -50,13 +50,14 @@ int BlockDevice::io_thread_entry()
 	if (!io_queue.empty()) {
 	  
 	  utime_t stop = g_clock.now();
-	  utime_t max(0, 1000*g_conf.bdev_max_el_ms);  // (s,us), convert ms -> us!
-	  stop += max;
 
 	  if (dir_forward) {
 		// forward sweep
 		dout(20) << "io_thread forward sweep" << endl;
 		pos = 0;
+
+		utime_t max(0, 1000*g_conf.bdev_el_fw_max_ms);  // (s,us), convert ms -> us!
+		stop += max;
 
 		while (1) {
 		  // find i >= pos
@@ -94,6 +95,9 @@ int BlockDevice::io_thread_entry()
 		dout(20) << "io_thread reverse sweep" << endl;
 		pos = get_num_blocks();
 
+		utime_t max(0, 1000*g_conf.bdev_el_bw_max_ms);  // (s,us), convert ms -> us!
+		stop += max;
+
 		while (1) {
 		  // find i > pos
 		  multimap<block_t,biovec*>::iterator i = io_queue.upper_bound(pos);
@@ -127,7 +131,9 @@ int BlockDevice::io_thread_entry()
 		  if (now > stop) break;
 		}
 	  }
-	  dir_forward = !dir_forward;
+
+	  if (g_conf.bdev_el_bidir)
+		dir_forward = !dir_forward;
 
 	} else {
 	  // sleep

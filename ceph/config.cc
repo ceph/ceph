@@ -20,14 +20,14 @@ Mutex bufferlock;
 
 
 
-FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );   // stripe files over whole objects
+FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe files over whole objects
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
 FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 2 );  // new (good?) way
+FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // new (good?) way
 //FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
@@ -36,6 +36,8 @@ md_config_t g_conf = {
   num_mds: 1,
   num_osd: 4,
   num_client: 1,
+
+  mkfs: false,
 
   // profiling and debugging
   log: true,
@@ -50,7 +52,7 @@ md_config_t g_conf = {
   fake_osdmap_expand: 0,
   fake_osd_sync: true,
 
-  debug: 10,
+  debug: 0,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   debug_buffer: 0,
@@ -122,8 +124,9 @@ md_config_t g_conf = {
   ebofs_bc_max_dirty: (10 *256),  // before write() will wait for data to flush
 
   // --- block device ---
-  bdev_max_el_ms: 1000,         // restart elevator at least once every 1000 ms
-  
+  bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
+  bdev_el_bw_max_ms: 300,       // restart elevator at least once every 1000 ms
+  bdev_el_bidir: true,          // bidirectional elevator?
 
   // --- fakeclient (mds regression testing) (ancient history) ---
   num_fakeclient: 100,
@@ -195,6 +198,10 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.num_client = atoi(args[++i]);
 	else if (strcmp(args[i], "--numosd") == 0) 
 	  g_conf.num_osd = atoi(args[++i]);
+
+
+	else if (strcmp(args[i], "--mkfs") == 0) 
+	  g_conf.osd_mkfs = g_conf.mkfs = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
