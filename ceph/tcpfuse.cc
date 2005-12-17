@@ -27,19 +27,12 @@ int main(int argc, char **argv, char *envp[]) {
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
-  int mkfs = 0;
   vector<char*> nargs;
   
   char *nsaddr = 0;
 
   for (unsigned i=0; i<args.size(); i++) {
-	if (strcmp(args[i], "--fastmkfs") == 0) {
-	  mkfs = MDS_MKFS_FAST;
-	}
-	else if (strcmp(args[i], "--fullmkfs") == 0) {
-	  mkfs = MDS_MKFS_FULL;
-	}
-	else if (strcmp(args[i], "--ns") == 0) {
+	if (strcmp(args[i], "--ns") == 0) {
 	  nsaddr = args[++i];
 	}
 	else {
@@ -88,7 +81,7 @@ int main(int argc, char **argv, char *envp[]) {
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
   cout << "mounting" << endl;
-  client->mount(mkfs);
+  client->mount();
   
   cout << "starting fuse on pid " << getpid() << endl;
   ceph_fuse_main(client, argc, argv);

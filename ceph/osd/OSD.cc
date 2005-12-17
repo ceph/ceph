@@ -88,6 +88,11 @@ OSD::OSD(int id, Messenger *m)
 	hostname[0] = 0;
 	gethostname(hostname,100);
 	sprintf(ebofs_path, "%s/%s", ebofs_base_path, hostname);
+	
+	struct stat st;
+	if (::stat(ebofs_path, &st) != 0)
+	  sprintf(ebofs_path, "%s/%d", ebofs_base_path, whoami);
+
     store = new Ebofs(ebofs_path);
   } else 
 # endif
@@ -604,8 +609,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (m->is_mkfs()) {
 	dout(1) << "MKFS" << endl;
+  /* done on init() now
 	if (!g_conf.osd_mkfs)
 	  store->mkfs();
+  */
   }
 
   if (!osdmap ||

@@ -40,20 +40,11 @@ int main(int argc, char **argv)
 
   parse_syn_options(args);
 
-  int mkfs = 0;
   vector<char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
 	//cout << "a " << args[i] << endl;
-	if (strcmp(args[i], "--fastmkfs") == 0) {
-	  mkfs = MDS_MKFS_FAST;
-	}
-	else if (strcmp(args[i], "--fullmkfs") == 0) {
-	  mkfs = MDS_MKFS_FULL;
-	}
-	else {
-	  // unknown arg, pass it on.
-	  nargs.push_back(args[i]);
-	}
+	// unknown arg, pass it on.
+	nargs.push_back(args[i]);
   }
 
   args = nargs;
@@ -142,7 +133,7 @@ int main(int argc, char **argv)
 	int i = *it;
 
 
-	client[i]->mount(mkfs);
+	client[i]->mount();
 	
 	//cout << "starting synthetic client on rank " << myrank << endl;
 	syn[i] = new SyntheticClient(client[i]);

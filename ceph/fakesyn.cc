@@ -44,20 +44,10 @@ int main(int argc, char **argv)
 
   vector<char*> nargs;
 
-  int mkfs = 0;
   for (unsigned i=0; i<args.size(); i++) {
-	if (strcmp(args[i], "--fastmkfs") == 0) {
-	  mkfs = MDS_MKFS_FAST;
-	}
-	else if (strcmp(args[i], "--fullmkfs") == 0) {
-	  mkfs = MDS_MKFS_FULL;
-	}
-
-	else {
-	  // unknown arg, pass it on.
-	  cerr << " stray arg " << args[i] << endl;
-	  nargs.push_back(args[i]);
-	}
+	// unknown arg, pass it on.
+	cerr << " stray arg " << args[i] << endl;
+	nargs.push_back(args[i]);
   }
   assert(nargs.empty());
 
@@ -113,7 +103,7 @@ int main(int argc, char **argv)
 	
 	// use my argc, argv (make sure you pass a mount point!)
 	//cout << "mounting" << endl;
-	client[i]->mount(mkfs);
+	client[i]->mount();
 	
 	//cout << "starting synthetic client  " << endl;
 	syn[i] = new SyntheticClient(client[i]);

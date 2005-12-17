@@ -659,7 +659,8 @@ void MDS::handle_osd_map(MOSDMap *m)
 void MDS::handle_client_mount(MClientMount *m)
 {
   // mkfs?  (sorta hack!)
-  if (int cmd = m->get_mkfs()) {
+  //if (int cmd = m->get_mkfs()) {
+  if (g_conf.mkfs) {
 	dout(3) << "MKFS flag is set" << endl;
 	if (mdcache->get_root()) {
 	  dout(3) << "   root inode is already open" << endl;
@@ -679,13 +680,11 @@ void MDS::handle_client_mount(MClientMount *m)
 	  idalloc->reset();
 	  //if (pgmanager) pgmanager->mark_open();
 
-	  if (cmd == MDS_MKFS_FULL) {
-		// wipe osds too
-		dout(3) << "wiping osds too" << endl;
-		filer->mkfs(new C_MDS_Unpause(this));
-	  	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
-	  	return;
-	  }
+	  // init osds too
+	  dout(3) << "wiping osds too" << endl;
+	  filer->mkfs(new C_MDS_Unpause(this));
+	  waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
+	  return;
 	  
 	}
   }

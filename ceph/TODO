@@ -1,3 +1,11 @@
+fw only
+48.3
+48.1
+
+bidir
+47.7
+
+
 client
 - some heuristic behavior to consolidate caps to inode auth
 - client will re-tx anything it needed to say upon rx of new mds notification

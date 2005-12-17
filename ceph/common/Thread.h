@@ -28,7 +28,10 @@ class Thread {
   int join(void **prval = 0) {
 	if (thread_id == 0) return -1;   // never started.
 	int status = pthread_join(thread_id, prval);
-	if (status == 0) thread_id = 0;
+	if (status == 0) 
+	  thread_id = 0;
+	else
+	  cout << "join status = " << status << endl;
 	return status;
   }
 };

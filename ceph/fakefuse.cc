@@ -57,15 +57,8 @@ int main(int argc, char **argv) {
   //g_timer.add_event_after(10.0, new C_Test);
 
   vector<char*> nargs;
-  int mkfs = 0;
   for (unsigned i=0; i<args.size(); i++) {
-	if (strcmp(args[i], "--fastmkfs") == 0) {
-	  mkfs = MDS_MKFS_FAST;
-	}
-	else if (strcmp(args[i], "--fullmkfs") == 0) {
-	  mkfs = MDS_MKFS_FULL;
-	} else
-	  nargs.push_back(args[i]);
+	nargs.push_back(args[i]);
   }
   args = nargs;
   vec_to_argv(args, argc, argv);
@@ -95,7 +88,7 @@ int main(int argc, char **argv) {
 	// start up fuse
 	// use my argc, argv (make sure you pass a mount point!)
 	cout << "starting fuse on pid " << getpid() << endl;
-	client[i]->mount(mkfs);
+	client[i]->mount();
 	ceph_fuse_main(client[i], argc, argv);
 	client[i]->unmount();
 	cout << "fuse finished on pid " << getpid() << endl;

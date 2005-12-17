@@ -50,7 +50,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
   fake_osdmap_expand: 0,
-  fake_osd_sync: true,
+  fake_osd_sync: false,//true,
 
   debug: 0,
   debug_mds_balancer: 1,
@@ -201,7 +201,7 @@ void parse_config_options(vector<char*>& args)
 
 
 	else if (strcmp(args[i], "--mkfs") == 0) 
-	  g_conf.osd_mkfs = g_conf.mkfs = atoi(args[++i]);
+	  g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);

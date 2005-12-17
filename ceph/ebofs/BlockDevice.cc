@@ -371,7 +371,7 @@ int BlockDevice::open()
 
   fd = ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT);
   if (fd < 0) {
-	dout(1) << "open failed, r = " << fd << " " << strerror(errno) << endl;
+	dout(1) << "open " << dev << " failed, r = " << fd << " " << strerror(errno) << endl;
 	fd = 0;
 	return -1;
   }
@@ -413,6 +413,8 @@ int BlockDevice::close()
   
   io_thread.join();
   complete_thread.join();
+
+  io_stop = false;   // in case we start again
 
   dout(1) << "close " << dev << endl;
   ::close(fd);
