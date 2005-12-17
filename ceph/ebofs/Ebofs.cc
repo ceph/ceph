@@ -1493,14 +1493,13 @@ int Ebofs::truncate(object_t oid, off_t size)
 }
 
 
-
 bool Ebofs::exists(object_t oid)
 {
   ebofs_lock.Lock();
-  Onode *on = get_onode(oid);
-  if (on) put_onode(on);
+  Extent loc;
+  bool e = (object_tab->lookup(oid, loc) == 0);
   ebofs_lock.Unlock();
-  return on ? true:false;
+  return e;
 }
 
 int Ebofs::stat(object_t oid, struct stat *st)
@@ -1544,6 +1543,7 @@ int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
 
 int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
+  int r = 0;
   ebofs_lock.Lock();
   Onode *on = get_onode(oid);
   if (!on) {
@@ -1552,13 +1552,14 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
   }
 
   string n(name);
-  if (on->attr.count(n) == 0) return -1;
-  memcpy(value, on->attr[n].data, MIN( on->attr[n].len, (int)size ));
-
-  dirty_onode(on);
+  if (on->attr.count(n) == 0) {
+	r = -1;
+  } else {
+	memcpy(value, on->attr[n].data, MIN( on->attr[n].len, (int)size ));
+  }
   put_onode(on);
   ebofs_lock.Unlock();
-  return 0;
+  return r;
 }
 
 int Ebofs::rmattr(object_t oid, const char *name) 
@@ -1675,10 +1676,8 @@ bool Ebofs::collection_exists(coll_t cid)
 }
 bool Ebofs::_collection_exists(coll_t cid)
 {
-  Table<coll_t, Extent>::Cursor cursor(collection_tab);
-  if (collection_tab->find(cid, cursor) == Table<coll_t, Extent>::Cursor::MATCH) 
-	return true;
-  return false;
+  Extent loc;
+  return (collection_tab->lookup(cid, loc) == 0);
 }
 
 int Ebofs::collection_add(coll_t cid, object_t oid)

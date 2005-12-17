@@ -6,7 +6,7 @@
 
 /** table **/
 
-#define dbtout if (10 < g_conf.debug_ebofs) cout
+#define dbtout if (10 <= g_conf.debug_ebofs) cout << "table(" << this << ")."
 
 
 template<class K, class V>
@@ -22,7 +22,9 @@ class Table {
   Table(NodePool &p,
 		struct ebofs_table& bts) : 
 	pool(p),
-	root(bts.root), nkeys(bts.num_keys), depth(bts.depth) {}
+	root(bts.root), nkeys(bts.num_keys), depth(bts.depth) {
+	dbtout << "cons" << endl;
+  }
   
   nodeid_t get_root() { return root; }
   int get_num_keys() { return nkeys; }
@@ -361,7 +363,7 @@ class Table {
   }
   
   int find(K key, Cursor& cursor) {
-	//dbtout << "find " << key << endl;
+	dbtout << "find " << key << endl;
 
 	if (depth == 0)
 	  return Cursor::OOB;
@@ -454,6 +456,7 @@ class Table {
   }
 
   int lookup(K key, V& value) {
+	dbtout << "lookup" << endl;
 	Cursor cursor(this);
 	if (find(key, cursor) == Cursor::MATCH) {
 	  value = cursor.current().value;
@@ -463,7 +466,7 @@ class Table {
   }
 
   int insert(K key, V value) {
-	//dbtout << "insert " << key << " -> " << value << endl;
+	dbtout << "insert " << key << " -> " << value << endl;
 	if (almost_full()) return -1;
 	
 	// empty?
@@ -579,6 +582,8 @@ class Table {
 
 
   int remove(K key) {
+	dbtout << "remove " << key << endl;
+
 	if (almost_full()) {
 	  cout << "table almost full, failing" << endl;
 	  assert(0);
@@ -685,6 +690,8 @@ class Table {
   }
 
   void clear(Cursor& cursor, int node_loc, int level) {
+	dbtout << "clear" << endl;
+
 	Nodeptr node = pool.get_node( node_loc );
 	cursor.open[level] = node;
 	

@@ -659,7 +659,6 @@ void MDS::handle_osd_map(MOSDMap *m)
 void MDS::handle_client_mount(MClientMount *m)
 {
   // mkfs?  (sorta hack!)
-  //if (int cmd = m->get_mkfs()) {
   if (g_conf.mkfs) {
 	dout(3) << "MKFS flag is set" << endl;
 	if (mdcache->get_root()) {

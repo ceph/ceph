@@ -123,10 +123,17 @@ OSD::OSD(int id, Messenger *m)
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
   osd_logtype.add_inc("op");
-  osd_logtype.add_inc("rd");
-  osd_logtype.add_inc("rdb");
-  osd_logtype.add_inc("wr");
-  osd_logtype.add_inc("wrb");
+  osd_logtype.add_inc("c_rd");
+  osd_logtype.add_inc("c_rdb");
+  osd_logtype.add_inc("c_wr");
+  osd_logtype.add_inc("c_wrb");
+
+  osd_logtype.add_inc("r_pull");
+  osd_logtype.add_inc("r_pullb");
+  osd_logtype.add_inc("r_push");
+  osd_logtype.add_inc("r_pushb");
+  osd_logtype.add_inc("r_wr");
+  osd_logtype.add_inc("r_wrb");
 
   // Thread pool
   {
@@ -151,7 +158,10 @@ int OSD::init()
 {
   osd_lock.Lock();
 
-  if (g_conf.osd_mkfs) store->mkfs();
+  if (g_conf.osd_mkfs) {
+	dout(1) << "mkfs" << endl;
+	store->mkfs();
+  }
   int r = store->mount();
 
   monitor->init();
@@ -1480,6 +1490,9 @@ void OSD::op_rep_pull(MOSDOp *op)
 
   unlock_object(op->get_oid());
   delete op;
+
+  logger->inc("r_pull");
+  logger->inc("r_pullb", got);
 }
 
 void OSD::op_rep_pull_reply(MOSDOpReply *op)
@@ -1622,6 +1635,9 @@ void OSD::op_rep_push(MOSDOp *op)
 	store->getattr(op->get_oid(), "version", &ov, sizeof(ov));
 	assert(ov <= op->get_version());
   }
+
+  logger->inc("r_push");
+  logger->inc("r_pushb", op->get_length());
 
   // write out buffers
   int r = store->write(op->get_oid(),
@@ -1818,7 +1834,7 @@ void OSD::op_rep_modify(MOSDOp *op)
   version_t ov = 0;
   if (store->exists(oid)) 
 	store->getattr(oid, "version", &ov, sizeof(ov));
-
+  //dout(15) << "rep_modify old versoin is " << ov << "  msg sez " << op->get_old_version() << endl;
   assert(op->get_old_version() == ov);
 
   // PG
@@ -1835,6 +1851,9 @@ void OSD::op_rep_modify(MOSDOp *op)
 	onsync = new C_OSD_RepModifySync(this, op);
 	r = apply_write(op, op->get_version(), onsync);
 	if (ov == 0) pg->add_object(store, oid);
+
+	logger->inc("r_wr");
+	logger->inc("r_wrb", op->get_length());
   } else if (op->get_op() == OSD_OP_REP_DELETE) {
 	// delete
 	store->collection_remove(pg->get_pgid(), op->get_oid());
@@ -2113,6 +2132,10 @@ void OSD::op_read(MOSDOp *op)
 	reply->set_result(0);
 	reply->set_data(bl);
 	reply->set_length(got);
+
+	logger->inc("c_rd");
+	logger->inc("c_rdb", got);
+
   } else {
 	reply->set_result(got);   // error
 	reply->set_length(0);
@@ -2308,6 +2331,9 @@ void OSD::op_modify(MOSDOp *op)
 	if (ov == 0) pg->add_object(store, oid);
 
 	repop->local_ack = true;
+
+	logger->inc("c_wr");
+	logger->inc("c_wrb", op->get_length());
   } 
   else if (op->get_op() == OSD_OP_TRUNCATE) {
 	// truncate
