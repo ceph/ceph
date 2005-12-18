@@ -162,6 +162,7 @@ class NodePool {
   int num_tx() { return tx.size(); }
   int num_clean() { return clean.size(); }
   int num_total() { return num_nodes; }
+  int num_used() { return num_clean() + num_dirty() + num_tx(); }
 
   // the caller had better adjust usemap locations...
   void add_region(Extent ex) {

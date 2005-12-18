@@ -2,7 +2,7 @@
 #include "Ebofs.h"
 
 #include <errno.h>
-
+#include <sys/vfs.h>
 
 // *******************
 
@@ -206,7 +206,7 @@ int Ebofs::umount()
   for (hash_map<object_t,Onode*>::iterator i = onode_map.begin();
 	   i != onode_map.end();
 	   i++) {
-	dout(1) << "leftover: " << i->first << "   " << *(i->second) << endl;
+	dout(1) << "umount *** leftover: " << i->first << "   " << *(i->second) << endl;
   }
 
   // free memory
@@ -316,14 +316,16 @@ int Ebofs::commit_thread_entry()
 	super_epoch++;
 	dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
 	dout(10) << "commit_thread   data: " 
-			 << get_free_blocks() << " free in " << get_free_extents() 
-			 << " (" << 100*get_free_blocks()/dev.get_num_blocks() << "%)"
-			 << ", " << get_limbo_blocks() << " limbo in " << get_limbo_extents() 
-			 << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() << "%)"
+			 << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
+			 << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
+			 << "%) free in " << get_free_extents() 
+			 << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
+			 << "%) limbo in " << get_limbo_extents() 
 			 << endl;
 	dout(10) << "commit_thread  nodes: " 
+			 << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
 			 << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
-			 << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) free, " 
+			 << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
 			 << nodepool.num_total() << " total." << endl;
 
 	// (async) write onodes+condes  (do this first; it currently involves inode reallocation)
@@ -611,7 +613,26 @@ void Ebofs::remove_onode(Onode *on)
   for (unsigned i=0; i<on->extents.size(); i++)
 	allocator.release(on->extents[i]);
 
+  // remove from collections
+  Table<idpair_t, bool>::Cursor cursor(oc_tab);
+  list<coll_t> cls;
+  if (oc_tab->find(idpair_t(on->object_id,0), cursor) >= 0) {
+	while (1) {
+	  const object_t o = cursor.current().key.first;
+	  const coll_t c = cursor.current().key.second;
+	  if (o != on->object_id) break;   // end!
+	  cls.push_back(c);
+	  if (cursor.move_right() < 0) break;
+	}
+  }
+  for (list<coll_t>::iterator i = cls.begin();
+	   i != cls.end();
+	   i++) {
+	oc_tab->remove(idpair_t(on->object_id,*i));
+	co_tab->remove(idpair_t(*i,on->object_id));
+  }
 
+  // dirty -> clean?
   if (on->is_dirty()) {
 	on->mark_clean();         // this unpins *on
 	dirty_onodes.erase(on);
@@ -990,6 +1011,23 @@ void Ebofs::commit_bc_wait(version_t epoch)
 }
 
 
+
+int Ebofs::statfs(struct statfs *buf)
+{
+  dout(7) << "statfs" << endl;
+
+  buf->f_type = EBOFS_MAGIC;             /* type of filesystem */
+  buf->f_bsize = 4096;                   /* optimal transfer block size */
+  buf->f_blocks = dev.get_num_blocks();  /* total data blocks in file system */
+  buf->f_bfree = free_blocks;            /* free blocks in fs */
+  buf->f_bavail = free_blocks;           /* free blocks avail to non-superuser */
+  buf->f_files = nodepool.num_total();   /* total file nodes in file system */
+  buf->f_ffree = nodepool.num_free();    /* free file nodes in fs */
+  //buf->f_fsid = 0;                       /* file system id */
+  buf->f_namelen = 8;                    /* maximum length of filenames */
+
+  return 0;
+}
 
 
 
@@ -1557,6 +1595,7 @@ int Ebofs::remove(object_t oid)
 
 int Ebofs::truncate(object_t oid, off_t size)
 {
+  dout(7) << "truncate " << hex << oid << dec << " size " << size << endl;
   assert(0);
 }
 
@@ -1564,6 +1603,7 @@ int Ebofs::truncate(object_t oid, off_t size)
 bool Ebofs::exists(object_t oid)
 {
   ebofs_lock.Lock();
+  dout(7) << "exists " << hex << oid << dec << endl;
   Extent loc;
   bool e = (object_tab->lookup(oid, loc) == 0);
   ebofs_lock.Unlock();
@@ -1573,7 +1613,8 @@ bool Ebofs::exists(object_t oid)
 int Ebofs::stat(object_t oid, struct stat *st)
 {
   ebofs_lock.Lock();
-  
+  dout(7) << "stat " << hex << oid << dec << endl;
+
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
@@ -1593,6 +1634,8 @@ int Ebofs::stat(object_t oid, struct stat *st)
 int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
+  dout(7) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
+
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
@@ -1613,6 +1656,8 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
   int r = 0;
   ebofs_lock.Lock();
+  dout(7) << "getattr " << hex << oid << dec << " '" << name << "' maxlen " << size << endl;
+
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
@@ -1633,6 +1678,8 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 int Ebofs::rmattr(object_t oid, const char *name) 
 {
   ebofs_lock.Lock();
+  dout(7) << "rmattr " << hex << oid << dec << " '" << name << "'" << endl;
+
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
@@ -1651,6 +1698,8 @@ int Ebofs::rmattr(object_t oid, const char *name)
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
+  dout(7) << "listattr " << hex << oid << dec << endl;
+
   Onode *on = get_onode(oid);
   if (!on) {
 	ebofs_lock.Unlock();
@@ -1676,6 +1725,7 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
 int Ebofs::list_collections(list<coll_t>& ls)
 {
   ebofs_lock.Lock();
+  dout(7) << "list_collections " << endl;
 
   Table<coll_t, Extent>::Cursor cursor(collection_tab);
 
@@ -1695,7 +1745,8 @@ int Ebofs::list_collections(list<coll_t>& ls)
 int Ebofs::create_collection(coll_t cid)
 {
   ebofs_lock.Lock();
-
+  dout(7) << "create_collection " << hex << cid << dec << endl;
+  
   if (_collection_exists(cid)) {
 	ebofs_lock.Unlock();
 	return -EEXIST;
@@ -1711,6 +1762,7 @@ int Ebofs::create_collection(coll_t cid)
 int Ebofs::destroy_collection(coll_t cid)
 {
   ebofs_lock.Lock();
+  dout(7) << "destroy_collection " << hex << cid << dec << endl;
 
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
@@ -1738,6 +1790,8 @@ int Ebofs::destroy_collection(coll_t cid)
 bool Ebofs::collection_exists(coll_t cid)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_exists " << hex << cid << dec << endl;
+
   bool r = _collection_exists(cid);
   ebofs_lock.Unlock();
   return r;
@@ -1751,12 +1805,17 @@ bool Ebofs::_collection_exists(coll_t cid)
 int Ebofs::collection_add(coll_t cid, object_t oid)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_add " << hex << cid << " object " << oid << dec << endl;
+
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
 	return -ENOENT;
   }
-  oc_tab->insert(idpair_t(oid,cid), true);
-  co_tab->insert(idpair_t(cid,oid), true);
+  bool a;
+  if (oc_tab->lookup(idpair_t(oid,cid), a) < 0) {
+	oc_tab->insert(idpair_t(oid,cid), true);
+	co_tab->insert(idpair_t(cid,oid), true);
+  }
   ebofs_lock.Unlock();
   return 0;
 }
@@ -1764,6 +1823,8 @@ int Ebofs::collection_add(coll_t cid, object_t oid)
 int Ebofs::collection_remove(coll_t cid, object_t oid)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_remove " << hex << cid << " object " << oid << dec << endl;
+
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
 	return -ENOENT;
@@ -1786,6 +1847,8 @@ int Ebofs::collection_remove(coll_t cid, object_t oid)
 int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_list " << hex << cid << dec << endl;
+
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
 	return -ENOENT;
@@ -1813,6 +1876,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {
@@ -1833,6 +1897,8 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t 
 int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_setattr " << hex << cid << dec << " '" << name << "' maxlen " << size << endl;
+
   Cnode *cn = get_cnode(cid);
   if (!cn) {
 	ebofs_lock.Unlock();
@@ -1851,6 +1917,8 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
 int Ebofs::collection_rmattr(coll_t cid, const char *name) 
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_rmattr " << hex << cid << dec << " '" << name << "'" << endl;
+
   Cnode *cn = get_cnode(cid);
   if (!cn) {
 	ebofs_lock.Unlock();
@@ -1869,6 +1937,8 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name)
 int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
+  dout(7) << "collection_listattr " << hex << cid << dec << endl;
+
   Cnode *cn = get_cnode(cid);
   if (!cn) {
 	ebofs_lock.Unlock();

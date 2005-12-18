@@ -28,7 +28,10 @@ void Allocator::dump_freelist()
 		assert(tab->find(0, cursor) >= 0);
 		while (1) {
 		  dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
-		  n += cursor.current().value;
+
+		  if (b < EBOFS_NUM_FREE_BUCKETS)
+			n += cursor.current().value;
+
 		  assert(!free.contains( cursor.current().key, cursor.current().value ));
 		  free.insert( cursor.current().key, cursor.current().value );
 		  if (cursor.move_right() <= 0) break;
@@ -173,10 +176,10 @@ int Allocator::commit_limbo()
 	   i != limbo.m.end();
 	   i++) {
 	fs->limbo_tab->insert(i->first, i->second);
-	fs->free_blocks += i->second;
+	//fs->free_blocks += i->second;
   }
   limbo.clear();
-  fs->limbo_blocks = 0;
+  //fs->limbo_blocks = 0;
   dump_freelist();
   return 0;
 }
@@ -191,7 +194,7 @@ int Allocator::release_limbo()
 	  Extent ex(cursor.current().key, cursor.current().value);
 	  dout(20) << "release_limbo  ex " << ex << endl;
 
-	  fs->free_blocks -= ex.length;
+	  fs->limbo_blocks -= ex.length;
 	  _release(ex);
 
 	  if (cursor.move_right() <= 0) break;

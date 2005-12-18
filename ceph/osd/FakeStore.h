@@ -39,6 +39,7 @@ class FakeStore : public ObjectStore {
   int umount();
   int mkfs();
 
+  int statfs(struct statfs *buf);
 
   // ------------------
   // objects

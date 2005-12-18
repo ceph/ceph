@@ -194,6 +194,8 @@ class Ebofs : public ObjectStore {
   int mount();
   int umount();
   
+  int statfs(struct statfs *buf);
+
 
   // object interface
   bool exists(object_t);

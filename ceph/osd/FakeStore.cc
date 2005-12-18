@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/xattr.h>
+#include <sys/vfs.h>
 
 #include "config.h"
 #undef dout
@@ -82,6 +83,12 @@ int FakeStore::umount()
 }
 
 
+int FakeStore::statfs(struct statfs *buf)
+{
+  string mydir;
+  get_dir(mydir);
+  return ::statfs(mydir.c_str(), buf);
+}
 
 ///////////
 

@@ -23,6 +23,8 @@ class ObjectStore {
   virtual int umount() = 0;
   virtual int mkfs() = 0;  // wipe
 
+  virtual int statfs(struct statfs *buf) = 0;
+
   // objects
   virtual bool exists(object_t oid) = 0;                   // useful?
   virtual int stat(object_t oid, struct stat *st) = 0;     // struct stat?

@@ -473,9 +473,9 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 void ObjectCache::tear_down()
 {
   dout(15) << "tear_down " << hex << object_id << dec << endl;
-  for (map<block_t, BufferHead*>::iterator it = data.begin();
-	   it != data.end();
-	   it++) {
+
+  while (!data.empty()) {
+	map<block_t, BufferHead*>::iterator it = data.begin();
 	BufferHead *bh = it->second;
 
 	// cancel any pending/queued io, if possible.
@@ -496,7 +496,6 @@ void ObjectCache::tear_down()
 	bc->remove_bh(bh);
 	delete bh;
   }
-  data.clear();
 }
 
 

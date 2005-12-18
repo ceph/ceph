@@ -33,18 +33,26 @@ class Table {
 
   /*
    */
+  class _IndexItem {     // i just need a struct size for below
+	K k;
+	nodeid_t n;
+  };
   class IndexItem {
   public:
 	K        key;
 	nodeid_t node;
-	static const int MAX = Node::ITEM_LEN / (sizeof(K) + sizeof(nodeid_t));
+	static const int MAX = Node::ITEM_LEN / (sizeof(_IndexItem));
 	static const int MIN = MAX/2;
+  };
+  class _LeafItem {     // i just need a struct size for below
+	K k;
+	V v;
   };
   class LeafItem {
   public:
 	K key;
 	V value;
-	static const int MAX = Node::ITEM_LEN / (sizeof(K) + sizeof(V));
+	static const int MAX = Node::ITEM_LEN / (sizeof(_LeafItem));
 	static const int MIN = MAX/2;
   };
   
