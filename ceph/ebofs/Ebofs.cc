@@ -1428,8 +1428,11 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	}
 
 	curblock = bh->end();
-	assert((off_t)(curblock*EBOFS_BLOCK_SIZE) == pos ||
-		   end != bhend);
+	/* this assert is more trouble than it's worth
+	assert((off_t)(curblock*EBOFS_BLOCK_SIZE) == pos ||   // should be aligned with next block
+		   end != bhend ||                                // or we ended midway through bh
+		   (bh->last() == blast && end == bhend));        // ended last block       ** FIXME WRONG???
+	*/
   }
 
   assert(bl.length() == len);
