@@ -41,14 +41,15 @@ public:
   ObjectCache  *oc;
 
   bool          dirty;
-  bool          deleted;
+  bool          dangling;   // not in onode_map
+  bool          deleted;    // deleted
 
   list<Context*>   commit_waiters;
 
  public:
   Onode(object_t oid) : ref(0), object_id(oid), version(0),
 	object_size(0), object_blocks(0), oc(0),
-	dirty(false), deleted(false) { 
+	dirty(false), dangling(false), deleted(false) { 
 	onode_loc.length = 0;
   }
   ~Onode() {
@@ -62,12 +63,12 @@ public:
   void get() {
 	if (ref == 0) lru_pin();
 	ref++;
-	//cout << "ebofs.onode.get " << ref << endl;
+	//cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << endl;
   }
   void put() {
 	ref--;
 	if (ref == 0) lru_unpin();
-	//cout << "ebofs.onode.put " << ref << endl;
+	//cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << endl;
   }
 
   void mark_dirty() {
@@ -83,20 +84,29 @@ public:
 	}
   }
   bool is_dirty() { return dirty; }
+  bool is_deleted() { return deleted; }
+  bool is_dangling() { return dangling; }
 
   
   ObjectCache *get_oc(BufferCache *bc) {
 	if (!oc) {
 	  oc = new ObjectCache(object_id, bc);
+	  oc->get();
 	  get();
 	}
 	return oc;
   }
   void close_oc() {
-	assert(oc);
-	delete oc;
-	oc = 0;
-	put();
+	if (oc) {
+	  //cout << "close_oc on " << object_id << endl;
+	  assert(oc->is_empty());
+	  if (oc->put() == 0){
+		//cout << "************************* hosing oc" << endl;
+		delete oc;
+	  }
+	  oc = 0;
+	  put();
+	}
   }
 
 
@@ -264,7 +274,12 @@ public:
 
 inline ostream& operator<<(ostream& out, Onode& on)
 {
-  out << "onode(" << hex << on.object_id << dec << " len=" << on.object_size << ")";
+  out << "onode(" << hex << on.object_id << dec << " len=" << on.object_size;
+  out << " ref=" << on.get_ref_count();
+  if (on.is_dirty()) out << " dirty";
+  if (on.is_dangling()) out << " dangling";
+  if (on.is_deleted()) out << " deleted";
+  out << ")";
   return out;
 }
 

@@ -129,9 +129,7 @@ class Ebofs : public ObjectStore {
   void commit_inodes_wait();
   friend class C_E_InodeFlush;
 
- public:
-  void trim_onode_cache();
- protected:
+  void trim_inodes(int max = -1);
 
   // ** buffer cache **
   BufferCache bc;
@@ -139,7 +137,7 @@ class Ebofs : public ObjectStore {
 
   version_t trigger_commit();
   void commit_bc_wait(version_t epoch);
-  void trim_bc();
+  void trim_bc(off_t max = -1);
 
  public:
   void sync();
@@ -181,6 +179,8 @@ class Ebofs : public ObjectStore {
 	bufferpool(EBOFS_BLOCK_SIZE),
 	nodepool(ebofs_lock),
 	object_tab(0), limbo_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
+	onode_lru(g_conf.ebofs_oc_size),
+	cnode_lru(g_conf.ebofs_cc_size),
 	inodes_flushing(0),
 	bc(dev, bufferpool, ebofs_lock),
 	finisher_stop(false), finisher_thread(this) {

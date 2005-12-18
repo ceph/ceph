@@ -139,7 +139,8 @@ class interval_set {
 		
 		typename map<T,T>::iterator n = p;
 		n++;
-		if (start+len == n->first) {   // combine with next, too!
+		if (n != m.end() && 
+			start+len == n->first) {   // combine with next, too!
 		  p->second += n->second;
 		  m.erase(n);
 		}
@@ -232,59 +233,6 @@ class interval_set {
 	// + b
 	insert(b);
 	return;
-
-
-	/* i think this is correct?
-	typename map<T,T>::const_iterator pa = a.m.begin();
-	typename map<T,T>::const_iterator pb = b.m.begin();
-	
-	T upto = 0;
-	while (pa != a.m.end() || pb != b.m.end()) {
-	  // passed?
-	  if (pa != a.m.end() && pa->first + pa->second <= upto) 
-		{ pa++; continue; }
-	  if (pb != b.m.end() && pb->first + pb->second <= upto) 
-		{ pb++; continue; }
-		
-	  // extending?
-	  if (pa != a.m.end() && pa->first <= upto && pa->first+pa->second > upto) {
-		insert( upto, pa->first+pa->second - upto );
-		upto = pa->first+pa->second;
-		pa++;
-		continue;
-	  }
-	  if (pb != b.m.end() && pb->first <= upto && pb->first+pb->second > upto) {
-		insert( upto, pb->first+pb->second - upto );
-		upto = pb->first+pb->second;
-		pb++;
-		continue;
-	  }
-
-	  // gap!
-
-	  // non-overlapping?
-	  if (pb == b.m.end() || 
-		  (pa != a.m.end() && pa->first + pa->second <= pb->first)) {
-		insert(pa->first, pa->second);
-		upto = pa->first + pa->second;
-		pa++;  continue; 
-	  }
-	  if (pa == a.m.end() || 
-		  (pb != b.m.end() && pb->first + pb->second <= pa->first)) {
-		insert(pb->first, pb->second);
-		upto = pb->first + pb->second;
-		pb++;  continue; 
-	  }
-
-	  // overlapping!
-	  const T start = MIN(pa->first, pb->first);
-	  upto = MAX(pa->first+pa->second, pb->first+pb->second);
-	  insert(start, upto-start);
-	  pa++; 
-	  pb++;
-	}
-	*/
-
   }
   void union_of(const interval_set &b) {
 	interval_set a;

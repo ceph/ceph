@@ -27,7 +27,8 @@ void BufferHead::finish_partials()
 	apply_partial( bl, p->second.partial );
 	
 	oc->bc->dev.write( p->second.block, 1, bl,
-					   new C_OC_PartialTxFinish( oc, p->second.epoch ));
+					   new C_OC_PartialTxFinish( oc->bc, p->second.epoch ));
+	//oc->get();  // don't need OC for completion func!
   }
   partial_write.clear();
 }
@@ -69,11 +70,10 @@ void BufferHead::queue_partial_write(block_t b)
 #define dout(x)  if (x <= g_conf.debug_ebofs) cout << "ebofs.oc."
 
 
+
 void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 {
   list<Context*> waiters;
-
-  bc->ebofs_lock.Lock();
 
   dout(10) << "rx_finish " << start << "~" << length << endl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
@@ -127,8 +127,6 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
   }	
 
   finish_contexts(waiters);
-
-  bc->ebofs_lock.Unlock();
 }
 
 
@@ -136,8 +134,6 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
 							version_t version, version_t epoch)
 {
   //list<Context*> waiters;
-  
-  bc->ebofs_lock.Lock();
   
   dout(10) << "tx_finish " << start << "~" << length << " v" << version << endl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
@@ -175,25 +171,6 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
   }	
 
   //finish_contexts(waiters);
-
-  // update unflushed counter
-  assert(bc->get_unflushed(epoch) > 0);
-  bc->dec_unflushed(epoch);
-
-  bc->ebofs_lock.Unlock();
-}
-
-void ObjectCache::partial_tx_finish(version_t epoch) 
-{
-  bc->ebofs_lock.Lock();
-
-  dout(10) << "partial_tx_finish in epoch " << epoch << endl;
-
-  // update unflushed counter
-  assert(bc->get_unflushed(epoch) > 0);
-  bc->dec_unflushed(epoch);
-
-  bc->ebofs_lock.Unlock();
 }
 
 
@@ -216,13 +193,13 @@ int ObjectCache::map_read(Onode *on,
   block_t left = len;
   
   if (p != data.begin() && 
-	  (p->first > cur || p == data.end())) {
+	  (p == data.end() || p->first > cur)) {
 	p--;     // might overlap!
 	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
   }
 
-  for (; left > 0; p++) {
+  while (left > 0) {
 	// at end?
 	if (p == data.end()) {
 	  // rest is a miss.
@@ -235,7 +212,10 @@ int ObjectCache::map_read(Onode *on,
 		bc->add_bh(n);
 		missing[cur] = n;
 		cur += exv[i].length;
+		left -= exv[i].length;
 	  }
+	  assert(left == 0);
+	  assert(cur == start+len);
 	  break;
 	}
 	
@@ -256,17 +236,11 @@ int ObjectCache::map_read(Onode *on,
 	  }
 	  else assert(0);
 	  
-	  block_t lenfromcur = e->length();
-	  if (e->start() < cur)
-		lenfromcur -= cur - e->start();
-	  
-	  if (lenfromcur < left) {
-		cur += lenfromcur;
-		left -= lenfromcur;
-		continue;  // more!
-	  } else {
-		break;     // done.
-	  }		
+	  block_t lenfromcur = MIN(e->end() - cur, left);
+	  cur += lenfromcur;
+	  left -= lenfromcur;
+	  p++;
+	  continue;  // more?
 	} else if (p->first > cur) {
 	  // gap.. miss
 	  block_t next = p->first;
@@ -288,6 +262,8 @@ int ObjectCache::map_read(Onode *on,
 	  assert(0);
   }
 
+  assert(left == 0);
+  assert(cur == start+len);
   return 0;  
 }
 
@@ -316,7 +292,7 @@ int ObjectCache::map_write(Onode *on,
   block_t left = len;
   
   if (p != data.begin() && 
-	  (p->first > cur || p == data.end())) {
+	  (p == data.end() || p->first > cur)) {
 	p--;     // might overlap!
 	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
@@ -437,10 +413,7 @@ int ObjectCache::map_write(Onode *on,
 	  hits[cur] = bh;
 	  	  
 	  // keep going.
-	  block_t lenfromcur = bh->length();
-	  if (bh->start() < cur)
-		lenfromcur -= cur - bh->start();
-
+	  block_t lenfromcur = bh->end() - cur;
 	  cur += lenfromcur;
 	  left -= lenfromcur;
 	  p++;
@@ -609,8 +582,10 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh)
   dout(20) << "bh_read  " << *bh << " from " << ex << endl;
   
   bh->rx_ioh = dev.read(ex.start, ex.length, bh->data,
-						new C_OC_RxFinish(on->oc, 
+						new C_OC_RxFinish(ebofs_lock, on->oc, 
 										  bh->start(), bh->length()));
+  on->oc->get();
+
 }
 
 bool BufferCache::bh_cancel_read(BufferHead *bh)
@@ -619,6 +594,8 @@ bool BufferCache::bh_cancel_read(BufferHead *bh)
 	dout(10) << "bh_cancel_read on " << *bh << endl;
 	bh->rx_ioh = 0;
 	mark_missing(bh);
+	int l = bh->oc->put();
+	assert(l);
 	return true;
   }
   return false;
@@ -643,12 +620,12 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh)
   //assert(bh->tx_ioh == 0);
 
   bh->tx_ioh = dev.write(ex.start, ex.length, bh->data,
-						 new C_OC_TxFinish(on->oc, 
+						 new C_OC_TxFinish(ebofs_lock, on->oc, 
 										   bh->start(), bh->length(),
 										   bh->get_version(),
 										   bh->epoch_modified));
-
-  epoch_unflushed[ bh->epoch_modified ]++;
+  on->oc->get();
+  inc_unflushed( bh->epoch_modified );
 }
 
 
@@ -658,11 +635,65 @@ bool BufferCache::bh_cancel_write(BufferHead *bh)
 	dout(10) << "bh_cancel_write on " << *bh << endl;
 	bh->tx_ioh = 0;
 	mark_dirty(bh);
-	epoch_unflushed[ bh->epoch_modified ]--;   // assert.. this should be the same epoch!
+	dec_unflushed( bh->epoch_modified );   // assert.. this should be the same epoch!
+	int l = bh->oc->put();
+	assert(l);
 	return true;
   }
   return false;
 }
+
+void BufferCache::tx_finish(ObjectCache *oc, 
+							ioh_t ioh, block_t start, block_t length, 
+							version_t version, version_t epoch)
+{
+  ebofs_lock.Lock();
+
+  // finish oc
+  if (oc->put() == 0) {
+	delete oc;
+  } else
+	oc->tx_finish(ioh, start, length, version, epoch);
+  
+  // update unflushed counter
+  assert(get_unflushed(epoch) > 0);
+  dec_unflushed(epoch);
+
+  ebofs_lock.Unlock();
+}
+
+void BufferCache::rx_finish(ObjectCache *oc,
+							ioh_t ioh, block_t start, block_t length)
+{
+  ebofs_lock.Lock();
+
+  // oc
+  if (oc->put() == 0) {
+	delete oc;
+  } else
+	oc->rx_finish(ioh, start, length);
+
+  // 
+  ebofs_lock.Unlock();
+}
+
+void BufferCache::partial_tx_finish(version_t epoch)
+{
+  ebofs_lock.Lock();
+
+  /* don't need oc!
+  // oc?
+  if (oc->put() == 0) 
+	delete oc;
+  */
+
+  // update unflushed counter
+  assert(get_unflushed(epoch) > 0);
+  dec_unflushed(epoch);
+
+  ebofs_lock.Unlock();
+}
+
 
 
 

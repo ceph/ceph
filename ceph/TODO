@@ -12,9 +12,9 @@ client
 
 
 ebofs
-- non-blocking get_onode and get_cnode
+/- non-blocking get_onode and get_cnode
 - Ebofs.readonly
-
+- trim onode cache?
 
 
 
@@ -44,7 +44,8 @@ cluster issues
 
 
 
-
+fakestore
+- sync notification is totally broken, use '--fake_osd_sync 1' for now
 
 
 osd foo
@@ -56,7 +57,7 @@ osd foo
 - thread (and unordered!) ops
  - rep ops tricky
 
-- 'dirty' log on primary
+- 'dirty' log on primary?
 - fast recovery from degraded mode
 
 

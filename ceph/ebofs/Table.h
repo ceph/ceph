@@ -6,7 +6,7 @@
 
 /** table **/
 
-#define dbtout if (10 <= g_conf.debug_ebofs) cout << "table(" << this << ")."
+#define dbtout if (25 <= g_conf.debug_ebofs) cout << "ebofs.table(" << this << ")."
 
 
 template<class K, class V>

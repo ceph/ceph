@@ -82,7 +82,8 @@ class BufferHead : public LRUObject {
   int put() {
 	assert(ref > 0);
 	if (ref == 1) lru_unpin();
-	return --ref;
+	--ref;
+	return ref;
   }
 
   block_t start() { return object_loc.start; }
@@ -191,21 +192,6 @@ class BufferHead : public LRUObject {
   bool partial_is_complete(off_t size) {
 	return have_partial_range( (off_t)(start()*EBOFS_BLOCK_SIZE),
 							   MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) ) );
-	/*
-	map<off_t, bufferlist>::iterator i = partial.begin();
-	if (i == partial.end()) return false;
-	if (i->first != (off_t)(object_loc.start * EBOFS_BLOCK_SIZE)) return false;
-	off_t pos = i->first + i->second.length();
-	for (i++; i != partial.end(); i++) {
-	  assert(pos <= i->first);
-	  if (pos < i->first) return false;
-	  assert(pos == i->first);
-	  pos = i->first + i->second.length();
-	}
-	off_t upto = MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) );
-	if (pos == upto) return true;
-	return false;
-	*/
   }
   void apply_partial() {
 	apply_partial(data, partial);
@@ -294,9 +280,26 @@ class ObjectCache {
 
  private:
   map<block_t, BufferHead*>  data;
+  int ref;
 
  public:
-  ObjectCache(object_t o, BufferCache *b) : object_id(o), bc(b) {}
+  ObjectCache(object_t o, BufferCache *b) : object_id(o), bc(b), ref(0) {}
+  ~ObjectCache() {
+	assert(data.empty());
+	assert(ref == 0);
+  }
+
+  int get() { 
+	++ref;
+	//cout << "oc.get " << object_id << " " << ref << endl;
+	return ref; 
+  }
+  int put() { 
+	assert(ref > 0); 
+	--ref;
+	//cout << "oc.put " << object_id << " " << ref << endl;
+	return ref; 
+  }
   
   object_t get_object_id() { return object_id; }
 
@@ -348,7 +351,6 @@ class ObjectCache {
 
   void rx_finish(ioh_t ioh, block_t start, block_t length);
   void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
-  void partial_tx_finish(version_t epoch);
 
   void dump() {
 	for (map<block_t,BufferHead*>::iterator i = data.begin();
@@ -360,40 +362,6 @@ class ObjectCache {
   void tear_down();
 };
 
-class C_OC_RxFinish : public BlockDevice::callback {
-  ObjectCache *oc;
-  block_t start, length;
-public:
-  C_OC_RxFinish(ObjectCache *o, block_t s, block_t l) :
-	oc(o), start(s), length(l) {}
-  void finish(ioh_t ioh, int r) {
-	oc->rx_finish(ioh, start, length);
-  }
-};
-
-class C_OC_TxFinish : public BlockDevice::callback {
-  ObjectCache *oc;
-  block_t start, length;
-  version_t version;
-  version_t epoch;
-public:
-  C_OC_TxFinish(ObjectCache *o, block_t s, block_t l, version_t v, version_t e) :
-	oc(o), start(s), length(l), version(v), epoch(e) {}
-  void finish(ioh_t ioh, int r) {
-	oc->tx_finish(ioh, start, length, version, epoch);
-  }  
-};
-
-class C_OC_PartialTxFinish : public BlockDevice::callback {
-  ObjectCache *oc;
-  version_t epoch;
-public:
-  C_OC_PartialTxFinish(ObjectCache *o, version_t e) :
-	oc(o), epoch(e) {}
-  void finish(ioh_t ioh, int r) {
-	oc->partial_tx_finish(epoch);
-  }  
-};
 
 
 class BufferCache {
@@ -554,12 +522,53 @@ class BufferCache {
   bool bh_cancel_read(BufferHead *bh);
   bool bh_cancel_write(BufferHead *bh);
 
+  void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len);
+  void tx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, version_t v, version_t e);
+  void partial_tx_finish(version_t epoch);
+
   friend class C_E_FlushPartial;
 
   // bh fun
   BufferHead *split(BufferHead *orig, block_t after);
 };
 
+
+class C_OC_RxFinish : public BlockDevice::callback {
+  Mutex &lock;
+  ObjectCache *oc;
+  block_t start, length;
+public:
+  C_OC_RxFinish(Mutex &m, ObjectCache *o, block_t s, block_t l) :
+	lock(m), oc(o), start(s), length(l) {}
+  void finish(ioh_t ioh, int r) {
+	oc->bc->rx_finish(oc, ioh, start, length);
+  }
+};
+
+class C_OC_TxFinish : public BlockDevice::callback {
+  Mutex &lock;
+  ObjectCache *oc;
+  block_t start, length;
+  version_t version;
+  version_t epoch;
+ public:
+  C_OC_TxFinish(Mutex &m, ObjectCache *o, block_t s, block_t l, version_t v, version_t e) :
+	lock(m), oc(o), start(s), length(l), version(v), epoch(e) {}
+  void finish(ioh_t ioh, int r) {
+	oc->bc->tx_finish(oc, ioh, start, length, version, epoch);
+  }  
+};
+
+class C_OC_PartialTxFinish : public BlockDevice::callback {
+  BufferCache *bc;
+  version_t epoch;
+public:
+  C_OC_PartialTxFinish(BufferCache *b, version_t e) :
+	bc(b), epoch(e) {}
+  void finish(ioh_t ioh, int r) {
+	bc->partial_tx_finish(epoch);
+  }  
+};
 
 
 #endif

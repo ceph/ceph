@@ -26,6 +26,7 @@ public:
   C_Cond(Cond *c, int *r=0) : cond(c), rval(r) {}
   void finish(int r) {
 	if (rval) *rval = r;
+	//cout << "C_Cond signal " << this << " cond " << (void*)cond << " rval " << (void*)rval << " r " << r  << endl;
 	cond->Signal();
   }
 };

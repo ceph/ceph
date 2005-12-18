@@ -83,7 +83,7 @@ OSD::OSD(int id, Messenger *m)
   store = new OBFSStore(whoami, NULL, "/dev/sdb3");
 #else
 # ifdef USE_EBOFS
-  if (g_conf.osd_ebofs) {
+  if (g_conf.ebofs) {
 	char hostname[100];
 	hostname[0] = 0;
 	gethostname(hostname,100);

@@ -16,16 +16,16 @@ void Allocator::dump_freelist()
 	for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
 	  Table<block_t,block_t> *tab;
 	  if (b < EBOFS_NUM_FREE_BUCKETS) {
-		dout(30) << "dump bucket " << b << endl;
 		tab = fs->free_tab[b];
+		dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
 	  } else {
-		dout(30) << "dump limbo" << endl;
 		tab = fs->limbo_tab;
+		dout(30) << "dump limbo  " << tab->get_num_keys() << endl;;
 	  }
 
 	  if (tab->get_num_keys() > 0) {
 		Table<block_t,block_t>::Cursor cursor(tab);
-		tab->find(0, cursor);
+		assert(tab->find(0, cursor) >= 0);
 		while (1) {
 		  dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
 		  n += cursor.current().value;

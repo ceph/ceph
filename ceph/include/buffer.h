@@ -203,24 +203,29 @@ class bufferptr {
 	_buffer(b),
 	_len(b->_len),
 	_off(0) {
-	_buffer->_get();
+	assert(_buffer->_ref == 0);
+	_buffer->_get();   // this is always the first one.
   }
   // subset cons - a subset of another bufferptr (subset)
-  bufferptr(const bufferptr& bp, unsigned len, unsigned off) : 
-	_buffer(bp._buffer), 
-	_len(len) {
+  bufferptr(const bufferptr& bp, unsigned len, unsigned off) {
+	bufferlock.Lock();
+	_buffer = bp._buffer;
+	_len = len;
 	_off = bp._off + off;
 	_buffer->_get();
 	assert(_off < _buffer->_len);          // sanity checks
 	assert(_off + _len <= _buffer->_len);
+	bufferlock.Unlock();
   }
 
   // copy cons
-  bufferptr(const bufferptr &other) : 
-	_buffer(other._buffer),
-	_len(other._len),
-	_off(other._off) {
+  bufferptr(const bufferptr &other) {
+	bufferlock.Lock();
+	_buffer = other._buffer;
+	_len = other._len;
+	_off = other._off;
 	if (_buffer) _buffer->_get();	
+	bufferlock.Unlock();
   }
 
   // assignment operator
@@ -229,11 +234,13 @@ class bufferptr {
 	// discard old
 	discard_buffer();
 
-	// new
+	// point to other
+	bufferlock.Lock();
 	_buffer = other._buffer;
 	_len = other._len;
 	_off = other._off;
 	if (_buffer) _buffer->_get();
+	bufferlock.Unlock();
 	return *this;
   }
 
@@ -246,6 +253,7 @@ class bufferptr {
 	  bufferlock.Lock();
 	  if (_buffer->_put() == 0) 
 		delete _buffer;
+	  _buffer = 0;
 	  bufferlock.Unlock();
 	}
   }

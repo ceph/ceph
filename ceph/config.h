@@ -90,10 +90,12 @@ struct md_config_t {
   bool  osd_mkfs;
 
   int   osd_fakestore_syncthreads;   // such crap
-  int   osd_ebofs;
 
   // ebofs
+  int   ebofs;
   int   ebofs_commit_interval;
+  int   ebofs_oc_size;
+  int   ebofs_cc_size;
   off_t ebofs_bc_size;
   off_t ebofs_bc_max_dirty;
 

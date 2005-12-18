@@ -116,13 +116,15 @@ md_config_t g_conf = {
   osd_mkfs: false,
   
   osd_fakestore_syncthreads: 4,
-  osd_ebofs: 0,
 
   // --- ebofs ---
+  ebofs: 0,
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
-  ebofs_bc_size:      (50 *256),  // measured in 4k blocks, or *256 for MB
-  ebofs_bc_max_dirty: (10 *256),  // before write() will wait for data to flush
-
+  ebofs_oc_size:      100,
+  ebofs_cc_size:      100,
+  ebofs_bc_size:      (5 *256),  // measured in 4k blocks, or *256 for MB
+  ebofs_bc_max_dirty: (1 *256),  // before write() will wait for data to flush
+  
   // --- block device ---
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 1000 ms
@@ -282,8 +284,9 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.client_bcache_ttl = atoi(args[++i]);
 
 
-	else if (strcmp(args[i], "--osd_ebofs") == 0) 
-	  g_conf.osd_ebofs = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs") == 0) 
+	  g_conf.ebofs = atoi(args[++i]);
+
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_pg_bits") == 0) 

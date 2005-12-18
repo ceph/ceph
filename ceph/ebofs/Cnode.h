@@ -73,4 +73,12 @@ class Cnode : public LRUObject
   
 };
 
+inline ostream& operator<<(ostream& out, Cnode& cn)
+{
+  out << "cnode(" << hex << cn.coll_id << dec;
+  if (cn.is_dirty()) out << " dirty";
+  out << ")";
+  return out;
+}
+
 #endif

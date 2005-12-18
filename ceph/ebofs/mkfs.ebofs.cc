@@ -32,12 +32,12 @@ int main(int argc, char **argv)
 	  memset(crap, 0, 1024*1024);
 	  bl.append(crap, 1024*1024);
 	  
-	  int megs = 10000;
+	  int megs = 1000;
 
 	  utime_t start = g_clock.now();
 
 	  for (off_t m=0; m<megs; m++) {
-		if (m%100 == 0)
+		//if (m%100 == 0)
 		  cout << m << " / " << megs << endl;
 		fs.write(10, bl.length(), 1024LL*1024LL*m, bl, (Context*)0);
 	  }	  
@@ -160,10 +160,11 @@ int main(int argc, char **argv)
 	
 	fs.sync();
 	fs.trim_buffer_cache();
-	fs.trim_onode_cache();
 	
 	fs.umount();
   }
+
+  return 0;
 }
 
 	

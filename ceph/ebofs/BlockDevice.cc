@@ -369,7 +369,7 @@ int BlockDevice::open()
 {
   assert(fd == 0);
 
-  fd = ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT);
+  fd = ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT, 0);
   if (fd < 0) {
 	dout(1) << "open " << dev << " failed, r = " << fd << " " << strerror(errno) << endl;
 	fd = 0;
