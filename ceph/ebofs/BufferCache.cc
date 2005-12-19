@@ -558,7 +558,7 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 
 void BufferCache::bh_read(Onode *on, BufferHead *bh)
 {
-  dout(5) << "bh_read " << *on << " on " << *bh << endl;
+  dout(10) << "bh_read " << *on << " on " << *bh << endl;
 
   if (bh->is_missing())	{
 	mark_rx(bh);
@@ -602,7 +602,7 @@ bool BufferCache::bh_cancel_read(BufferHead *bh)
 
 void BufferCache::bh_write(Onode *on, BufferHead *bh)
 {
-  dout(5) << "bh_write " << *on << " on " << *bh << endl;
+  dout(10) << "bh_write " << *on << " on " << *bh << endl;
   assert(bh->get_version() > 0);
 
   assert(bh->is_dirty());

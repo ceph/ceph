@@ -498,7 +498,7 @@ class NodePool {
 	// get new node id?
 	nodeid_t oldid = n->get_id();
 	nodeid_t newid = alloc_id();
-	debofs(2) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << endl;
+	debofs(15) << "ebofs.nodepool.dirty_node on " << oldid << " now " << newid << endl;
 	
 	// release old block
 	if (n->is_clean()) {

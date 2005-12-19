@@ -16,10 +16,10 @@ public:
   void *entry() {
 
 	while (!stop) {
-	  object_t oid = rand() % 100;
-	  coll_t cid = rand() % 5;
+	  object_t oid = rand() % 1000;
+	  coll_t cid = rand() % 50;
 	  off_t off = rand() % 1000000;
-	  off_t len = rand() % 100000;
+	  off_t len = 1+rand() % 100000;
 	  bufferlist bl;
 	  char *a = "one";
 	  if (rand() % 2) a = "two";
