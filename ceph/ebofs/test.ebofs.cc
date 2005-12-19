@@ -4,36 +4,57 @@
 
 bool stop = false;
 
-bufferlist w;
-char blah[1024*1024];
 
 int nt = 0;
 class Tester : public Thread {
   Ebofs &fs;
   int t;
+  
+  char b[1024*1024];
+
 public:
   Tester(Ebofs &e) : fs(e), t(nt) { nt++; }
   void *entry() {
 
 	while (!stop) {
-	  object_t oid = rand() % 1000;
-	  coll_t cid = rand() % 50;
-	  off_t off = rand() % 1000000;
+	  object_t oid = rand() % 10;
+	  coll_t cid = rand() % 5;
+	  off_t off = 0;//rand() % 1000000;
 	  off_t len = 1+rand() % 100000;
-	  bufferlist bl;
 	  char *a = "one";
 	  if (rand() % 2) a = "two";
 	  int l = 3;//rand() % 10;
 
 	  switch (rand() % 8) {
 	  case 0:
-		cout << t << " read " << oid << " at " << off << " len " << len << endl;
-		fs.read(oid, len, off, bl);
+		{
+		  cout << t << " read " << oid << " at " << off << " len " << len << endl;
+		  bufferlist bl;
+		  fs.read(oid, len, off, bl);
+		  int l = MIN(len,bl.length());
+		  if (l) {
+			cout << t << " got " << l << endl;
+			bl.copy(0, l, b);
+			char *p = b;
+			while (l--) {
+			  assert(//*p == 0 ||
+					 *p == (char)(off ^ oid));
+			  off++;
+			  p++;
+			}
+		  }
+		}
 		break;
 
 	  case 1:
-		cout << t << " write " << oid <<" at " << off << " len " << len << endl;
-		fs.write(oid, len, off, w);
+		{
+		  cout << t << " write " << oid <<" at " << off << " len " << len << endl;
+		  for (int j=0;j<len;j++) 
+			b[j] = (char)(oid^(off+j));
+		  bufferlist w;
+		  w.append(b,len);
+		  fs.write(oid, len, off, w);
+		}
 		break;
 
 	  case 2:
@@ -47,7 +68,7 @@ public:
 		break;
 
 	  case 4:
-		cout << t << " collection_remove " << oid << " to " << cid << endl;
+		cout << t << " collection_remove " << oid << " from " << cid << endl;
 		fs.collection_remove(cid, oid);
 		break;
 
@@ -82,8 +103,6 @@ public:
 
 int main(int argc, char **argv)
 {
-  w.append(blah, 1024*1024);
-
   vector<char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
