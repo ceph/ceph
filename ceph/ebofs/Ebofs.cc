@@ -1178,7 +1178,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 
 	// partial at head or tail?
 	if ((bh->start() == bstart && opos % EBOFS_BLOCK_SIZE != 0) ||   // opos, not off, in case we're zeroing...
-		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0)) {
+		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0 && (len+off) < on->object_size)) {
 	  // locate ourselves in bh
 	  unsigned off_in_bh = opos - bh->start()*EBOFS_BLOCK_SIZE;
 	  assert(off_in_bh >= 0);
@@ -1187,6 +1187,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	  
 	  if (bh->is_partial() || bh->is_rx() || bh->is_missing()) {
 		assert(bh->is_partial() || bh->is_rx() || bh->is_missing());
+		assert(bh->length() == 1);
 
 		// add frag to partial
 		dout(10) << "apply_write writing into partial " << *bh << ":"
@@ -1278,15 +1279,16 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	  continue;
 	}
 
-	// ok, we're talking full block(s) now.
+	// ok, we're talking full block(s) now (modulo last block of the object)
 	assert(opos % EBOFS_BLOCK_SIZE == 0);
-	assert(zleft+left >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()));
+	assert(zleft+left >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
+		   opos+zleft+left == on->object_size);
 
 	// alloc new buffers.
 	bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
 	
 	// copy!
-	unsigned len_in_bh = bh->length()*EBOFS_BLOCK_SIZE;
+	unsigned len_in_bh = MIN(bh->length()*EBOFS_BLOCK_SIZE, zleft+left);
 	assert(len_in_bh <= zleft+left);
 	
 	dout(10) << "apply_write writing into " << *bh << ":"

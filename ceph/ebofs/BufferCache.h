@@ -208,21 +208,23 @@ class BufferHead : public LRUObject {
 	pm.clear();
   }
   void add_partial(off_t off, bufferlist& p) {
-	// trim overlap
 	unsigned len = p.length();
+	assert(len <= (unsigned)EBOFS_BLOCK_SIZE);
+	assert(off >= (off_t)(start()*EBOFS_BLOCK_SIZE));
+	assert(off + len <= (off_t)(end()*EBOFS_BLOCK_SIZE));
+
+	// trim any existing that overlaps
 	for (map<off_t, bufferlist>::iterator i = partial.begin();
 		 i != partial.end();
 		 ) {
-	  if (i->first > off+len) break;   // past affected area.
-
-	  // same?
-	  if (i->first == off && i->second.length() == len) {
-		// replace it.
-		partial.erase(i);   
-		break;
+	  if (i->first + i->second.length() <= off) {  // before
+		i++; 
+		continue; 
 	  }
+	  if (i->first >= off+len) break;   // past affected area.
+
 	  // overlap all?
-	  if (off < i->first && i->first + i->second.length() < off+len) {
+	  if (off <= i->first && i->first + i->second.length() <= off+len) {
 		// erase it and move on.
 		off_t dead = i->first;
 		i++;
@@ -230,14 +232,17 @@ class BufferHead : public LRUObject {
 		continue;
 	  }
 	  // overlap tail?
-	  if (i->first < off && i->first + i->second.length() > off) {
+	  else if (i->first < off && off < i->first + i->second.length()) {
 		// shorten.
 		unsigned newlen = off - i->first;
-		bufferlist o = i->second;
+		bufferlist o;
+		o.claim( i->second );
 		i->second.substr_of(o, 0, newlen);
+		i++;
+		continue;
 	  }
 	  // overlap head?
-	  if (off < i->first && i->first < off+len) {
+	  else if (off < i->first && off+len < i->first + i->second.length()) {
 		// move.
 		off_t oldoff = i->first;
 		off_t newoff = off+len;
@@ -245,8 +250,10 @@ class BufferHead : public LRUObject {
 		partial[newoff].substr_of(i->second, trim, i->second.length()-trim);
 		i++;  // should be at newoff!
 		partial.erase( oldoff );
-	  }
-	  i++;
+		i++;
+		continue;
+	  } else
+		assert(0);
 	}
 
 	// insert
