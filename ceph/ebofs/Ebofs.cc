@@ -1538,9 +1538,11 @@ int Ebofs::write(object_t oid,
   assert(len > 0);
 
   // too much unflushed dirty data?  (if so, block!)
-  while (_write_will_block()) {
+  if (_write_will_block()) {
 	dout(10) << "write blocking on write" << endl;
-	bc.waitfor_stat();  // waits on ebofs_lock
+	while (_write_will_block()) 
+	  bc.waitfor_stat();  // waits on ebofs_lock
+	dout(7) << "write unblocked " << hex << oid << dec << " len " << len << " off " << off << endl;
   }
 
   // out of space?
