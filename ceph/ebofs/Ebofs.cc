@@ -1039,7 +1039,8 @@ int Ebofs::statfs(struct statfs *buf)
  */
 void Ebofs::alloc_write(Onode *on, 
 						block_t start, block_t len,
-						interval_set<block_t>& alloc)
+						interval_set<block_t>& alloc,
+						block_t& old_bfirst, block_t& old_blast)
 {
   // first decide what pages to (re)allocate
   on->map_alloc_regions(start, len, alloc);
@@ -1074,14 +1075,26 @@ void Ebofs::alloc_write(Onode *on,
   for (map<block_t,block_t>::iterator i = alloc.m.begin();
 	   i != alloc.m.end();
 	   i++) {
-	dout(15) << "alloc_write need to (re)alloc " << i->first << "~" << i->second << endl;
+	dout(15) << "alloc_write need to (re)alloc " << i->first << "~" << i->second << " (of " << start << "~" << len << ")" << endl;
 	
 	// get old region
 	vector<Extent> old;
 	on->map_extents(i->first, i->second, old);
 	for (unsigned o=0; o<old.size(); o++) 
 	  allocator.release(old[o]);
-	
+
+	// take note if first/last blocks in write range are remapped.. in case we need to do a partial read/write thing
+	if (!old.empty()) {
+	  if (i->first == start) {
+		old_bfirst = old[0].start;
+		dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0] << endl;
+	  }
+	  if (i->first+i->second == start+len) {
+		old_blast = old[old.size()-1].last();
+		dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] << endl;
+	  }
+	}
+
 	// allocate new space
 	block_t left = i->second;
 	block_t cur = i->first;
@@ -1117,20 +1130,23 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
   if (bl.length() == 0) 
 	zleft += len;
   if (off+len > on->object_size) {
-	dout(10) << "apply_write extending object size " << on->object_size 
+	dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
 			 << " -> " << off+len << endl;
 	on->object_size = off+len;
 	dirty_onode(on);
   }
   if (zleft)
-	dout(10) << "apply_write zeroing first " << zleft << " bytes" << endl;
+	dout(10) << "apply_write zeroing first " << zleft << " bytes of " << *on << endl;
 
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
 
   // allocate write on disk.
   interval_set<block_t> alloc;
-  alloc_write(on, bstart, blen, alloc);
+  block_t old_bfirst = 0;  // zero means not defined here (since we ultimately pass to bh_read)
+  block_t old_blast = 0; 
+  alloc_write(on, bstart, blen, alloc, old_bfirst, old_blast);
+  dout(20) << "apply_write  old_bfirst " << old_bfirst << ", old_blast " << old_blast << endl;
 
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
@@ -1229,7 +1245,14 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 		  dout(10) << "apply_write  missing -> partial " << *bh << endl;
 		  assert(bh->length() == 1);
 		  bc.mark_partial(bh);
-		  bc.bh_read(on, bh);	
+
+		  // take care to read from _old_ disk block locations!
+		  if (bh->start() == bstart)
+			bc.bh_read(on, bh, old_bfirst);
+		  else if (bh->start() == blast)
+			bc.bh_read(on, bh, old_blast);
+		  else assert(0);
+
 		  bc.bh_queue_partial_write(on, bh);		  // queue the eventual write
 		}
 		else if (bh->is_partial()) {
@@ -1539,7 +1562,7 @@ int Ebofs::write(object_t oid,
 
   // too much unflushed dirty data?  (if so, block!)
   if (_write_will_block()) {
-	dout(10) << "write blocking on write" << endl;
+	dout(10) << "write blocking" << endl;
 	while (_write_will_block()) 
 	  bc.waitfor_stat();  // waits on ebofs_lock
 	dout(7) << "write unblocked " << hex << oid << dec << " len " << len << " off " << off << endl;

@@ -53,6 +53,7 @@ void BufferHead::queue_partial_write(block_t b)
   } else {
 	oc->bc->inc_unflushed( epoch_modified );
   }
+  
   partial_write[ b ].partial = partial;
   partial_write[ b ].block = b;
   partial_write[ b ].epoch = epoch_modified;
@@ -211,6 +212,7 @@ int ObjectCache::map_read(Onode *on,
 		n->set_length( exv[i].length );
 		bc->add_bh(n);
 		missing[cur] = n;
+		dout(20) << "map_read miss " << *n << endl;
 		cur += exv[i].length;
 		left -= exv[i].length;
 	  }
@@ -227,12 +229,15 @@ int ObjectCache::map_read(Onode *on,
 		  e->is_dirty() ||
 		  e->is_tx()) {
 		hits[cur] = e;     // readable!
+		dout(20) << "map_read hit " << *e << endl;
 	  } 
 	  else if (e->is_rx()) {
 		rx[cur] = e;       // missing, not readable.
+		dout(20) << "map_read rx " << *e << endl;
 	  }
 	  else if (e->is_partial()) {
 		partial[cur] = e;
+		dout(20) << "map_read partial " << *e << endl;
 	  }
 	  else assert(0);
 	  
@@ -255,6 +260,7 @@ int ObjectCache::map_read(Onode *on,
 		missing[cur] = n;
 		cur += n->length();
 		left -= n->length();
+		dout(20) << "map_read gap " << *n << endl;
 	  }
 	  continue;    // more?
 	}
@@ -556,7 +562,7 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 }
 
 
-void BufferCache::bh_read(Onode *on, BufferHead *bh)
+void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
 {
   dout(10) << "bh_read " << *on << " on " << *bh << endl;
 
@@ -571,6 +577,12 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh)
   on->map_extents(bh->start(), bh->length(), exv);
   assert(exv.size() == 1);
   Extent ex = exv[0];
+
+  if (from) {  // force behavior, used for reading partials
+	dout(10) << "bh_read  forcing read from block " << from << " (for a partial)" << endl;
+	ex.start = from;
+	ex.length = 1;
+  }
   
   // alloc new buffer
   bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!

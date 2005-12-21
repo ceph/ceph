@@ -195,14 +195,18 @@ class BufferHead : public LRUObject {
   }
   void apply_partial() {
 	apply_partial(data, partial);
+	partial.clear();
   }
   void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
+	assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
 	const off_t bhstart = start() * EBOFS_BLOCK_SIZE;
 	//assert(partial_is_complete());
+	//cout << "apply_partial" << endl;
 	for (map<off_t, bufferlist>::iterator i = pm.begin();
 		 i != pm.end();
 		 i++) {
 	  int pos = i->first - bhstart;
+	  //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << endl;
 	  bl.copy_in(pos, i->second.length(), i->second);
 	}
 	pm.clear();
@@ -274,7 +278,7 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
   if (bh.is_tx()) out << " tx";
   if (bh.is_partial()) out << " partial";
   //out << " " << bh.data.length();
-  //out << " " << &bh;
+  out << " " << &bh;
   out << ")";
   return out;
 }
@@ -522,7 +526,7 @@ class BufferCache {
 
 
   // io
-  void bh_read(Onode *on, BufferHead *bh);
+  void bh_read(Onode *on, BufferHead *bh, block_t from=0);
   void bh_write(Onode *on, BufferHead *bh);
   void bh_queue_partial_write(Onode *on, BufferHead *bh);
 

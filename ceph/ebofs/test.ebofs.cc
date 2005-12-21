@@ -17,9 +17,9 @@ public:
   void *entry() {
 
 	while (!stop) {
-	  object_t oid = rand() % 10;
-	  coll_t cid = rand() % 5;
-	  off_t off = 0;//rand() % 1000000;
+	  object_t oid = rand() % 1000;
+	  coll_t cid = rand() % 50;
+	  off_t off = rand() % 10000;//0;//rand() % 1000000;
 	  off_t len = 1+rand() % 100000;
 	  char *a = "one";
 	  if (rand() % 2) a = "two";
@@ -37,7 +37,7 @@ public:
 			bl.copy(0, l, b);
 			char *p = b;
 			while (l--) {
-			  assert(//*p == 0 ||
+			  assert(*p == 0 ||
 					 *p == (char)(off ^ oid));
 			  off++;
 			  p++;

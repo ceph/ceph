@@ -147,7 +147,8 @@ class Ebofs : public ObjectStore {
   //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
   void alloc_write(Onode *on, 
 				   block_t start, block_t len, 
-				   interval_set<block_t>& alloc);
+				   interval_set<block_t>& alloc,
+				   block_t& old_bfirst, block_t& old_blast);
   void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
   bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on);
 
