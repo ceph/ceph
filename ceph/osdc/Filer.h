@@ -88,7 +88,7 @@ typedef struct {
 /**** Filer interface ***/
 
 class Filer : public Dispatcher {
-  OSDMap *osdmap;     // what osds am i dealing with?
+  OSDMap     *osdmap;     // what osds am i dealing with?
   Messenger  *messenger;
   
   __uint64_t         last_tid;

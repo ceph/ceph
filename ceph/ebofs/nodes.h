@@ -30,7 +30,7 @@
 */
 
 #undef debofs
-#define debofs(x) if (x < g_conf.debug_ebofs) cout
+#define debofs(x) if (x < g_conf.debug_ebofs) cout << "ebofs.nodepool."
 
 
 class Node {
@@ -189,6 +189,19 @@ class NodePool {
 	debofs(3) << "init  odd map at " << usemap_odd << endl;
 
 	return 0;
+  }
+
+  void close() {
+	release_all();
+	
+	region_loc.clear();
+	free.clear();
+	dirty.clear();
+	tx.clear();
+	clean.clear();
+	limbo.clear();
+	flushing = 0;
+	node_map.clear();
   }
 
 

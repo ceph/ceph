@@ -51,7 +51,6 @@
 
 char *osd_base_path = "./osddata";
 char *ebofs_base_path = "./ebofsdev";
-char ebofs_path[100];
 
 #define ROLE_TYPE(x)   ((x)>0 ? 1:(x))
 
@@ -85,15 +84,16 @@ OSD::OSD(int id, Messenger *m)
 # ifdef USE_EBOFS
   if (g_conf.ebofs) {
 	char hostname[100];
+
 	hostname[0] = 0;
 	gethostname(hostname,100);
-	sprintf(ebofs_path, "%s/%s", ebofs_base_path, hostname);
+	sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);
 	
 	struct stat st;
-	if (::stat(ebofs_path, &st) != 0)
-	  sprintf(ebofs_path, "%s/%d", ebofs_base_path, whoami);
+	if (::stat(dev_path, &st) != 0)
+	  sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
 
-    store = new Ebofs(ebofs_path);
+    store = new Ebofs(dev_path);
   } else 
 # endif
 	store = new FakeStore(osd_base_path, whoami);

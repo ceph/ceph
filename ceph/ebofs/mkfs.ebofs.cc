@@ -21,12 +21,73 @@ int main(int argc, char **argv)
   int r = mfs.mkfs();
   if (r < 0) exit(r);
 
-  if (0) {
+  if (1) {
 	// test-o-rama!
 	Ebofs fs(filename);
 	fs.mount();
+	
+	if (1) { // onode write+read test
+	  bufferlist bl;
+	  char crap[1024*1024];
+	  memset(crap, 0, 1024*1024);
+	  bl.append(crap, 10);
 
-	if (1) { // big write speed test
+	  fs.write(10, 10, 0, bl, (Context*)0);
+	  fs.umount();
+
+	  Ebofs fs2(filename);
+	  fs2.mount();
+	  fs2.read(10, 10, 0, bl);
+	  fs2.umount();
+
+	  return 0;
+	}
+
+
+	if (1) {  // small write + read test
+	  bufferlist bl;
+	  char crap[1024*1024];
+	  memset(crap, 0, 1024*1024);
+
+	  object_t oid = 10;
+	  int n = 10000;
+	  int l = 128;
+	  bl.append(crap, l);
+
+
+	  char *p = bl.c_str();
+	  off_t o = 0;
+	  for (int i=0; i<n; i++) {
+		cout << "write at " << o << endl;
+		for (int j=0;j<l;j++) 
+		  p[j] = (char)(oid^(o+j));
+		fs.write(oid, l, o, bl, (Context*)0);
+		o += l;
+	  }
+
+	  fs.sync();
+	  fs.trim_buffer_cache();
+
+	  o = 0;
+	  for (int i=0; i<n; i++) {
+		cout << "read at " << o << endl;
+		bl.clear();
+		fs.read(oid, l, o, bl);
+		
+		char b[l];
+		bl.copy(0, l, b);
+		char *p = b;
+		int left = l;
+		while (left--) {
+		  assert(*p == (char)(o ^ oid));
+		  o++;
+		  p++;
+		}
+	  }
+
+	}
+
+	if (0) { // big write speed test
 	  bufferlist bl;
 	  char crap[1024*1024];
 	  memset(crap, 0, 1024*1024);

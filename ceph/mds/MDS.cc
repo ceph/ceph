@@ -101,11 +101,11 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   osdmap->inc_version();
 
   Bucket *b = new UniformBucket(1, 0);
+  int root = osdmap->crush.add_bucket(b);
   for (int i=0; i<g_conf.num_osd; i++) {
 	osdmap->osds.insert(i);
 	b->add_item(i, 1);
   }
-  int root = osdmap->crush.add_bucket(b);
   
   for (int i=1; i<5; i++) {
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));

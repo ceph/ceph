@@ -49,6 +49,8 @@ class OSD : public Dispatcher {
   Messenger *messenger;
   int whoami;
 
+  char dev_path[100];
+
   class ObjectStore *store;
   class HostMonitor *monitor;
   class Logger      *logger;

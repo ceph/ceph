@@ -173,7 +173,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
   p->outstanding_ops.erase(tid);
   
   // what buffer offset are we?
-  dout(7) << "got frag from " << m->get_oid() << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
+  dout(7) << "got frag from " << hex << m->get_oid() << dec << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
   
   if (p->outstanding_ops.empty()) {
 	// all done

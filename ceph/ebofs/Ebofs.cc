@@ -174,6 +174,8 @@ void Ebofs::close_tables()
   delete collection_tab;
   delete oc_tab;
   delete co_tab;
+
+  nodepool.close();
 }
 
 int Ebofs::umount()
@@ -314,7 +316,7 @@ int Ebofs::commit_thread_entry()
 	}
 
 	super_epoch++;
-	dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
+	dout(7) << "commit_thread commit start, new epoch " << super_epoch << endl;
 	dout(10) << "commit_thread   data: " 
 			 << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
 			 << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
@@ -423,9 +425,14 @@ Onode* Ebofs::new_onode(object_t oid)
   onode_map[oid] = on;
   onode_lru.lru_insert_mid(on);
   
+  assert(object_tab->lookup(oid) < 0);
   object_tab->insert( oid, on->onode_loc );  // even tho i'm not placed yet
 
   on->get();
+
+  dirty_onode(on);
+
+  dout(7) << "new_onode " << *on << endl;
   return on;
 }
 
@@ -444,7 +451,8 @@ Onode* Ebofs::get_onode(object_t oid)
 	
 	// on disk?
 	Extent onode_loc;
-	if (object_tab->lookup(oid, onode_loc) != Table<object_t,Extent>::Cursor::MATCH) {
+	if (object_tab->lookup(oid, onode_loc) < 0) {
+	  dout(10) << "onode lookup failed on " << hex << oid << dec << endl;
 	  // object dne.
 	  return 0;
 	}
@@ -458,6 +466,8 @@ Onode* Ebofs::get_onode(object_t oid)
 	  c.Wait(ebofs_lock);
 	  continue;
 	}
+
+	dout(10) << "get_onode reading " << hex << oid << dec << " from " << onode_loc << endl;
 
 	assert(waitfor_onode.count(oid) == 0);
 	waitfor_onode[oid].clear();  // this should be empty initially. 
@@ -475,6 +485,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	onode_map[oid] = on;
 	
 	struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
+	assert(eo->object_id == oid);
 	on->onode_loc = eo->onode_loc;
 	on->object_size = eo->object_size;
 	on->object_blocks = eo->object_blocks;
@@ -487,14 +498,21 @@ Onode* Ebofs::get_onode(object_t oid)
 	  int len = *(int*)(p);
 	  p += sizeof(len);
 	  on->attr[key] = AttrVal(p, len);
+	  p += len;
+	  dout(20) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
 	}
 	
 	// parse extents
 	on->extents.clear();
+	block_t n = 0;
 	for (int i=0; i<eo->num_extents; i++) {
-	  on->extents.push_back( *(Extent*)(p) );
+	  Extent ex = *((Extent*)p);
+	  on->extents.push_back(ex);
+	  dout(20) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
+	  n += ex.length;
 	  p += sizeof(Extent);
 	}
+	assert(n == on->object_blocks);
 
 	// wake up other waiters
 	for (list<Cond*>::iterator i = waitfor_onode[oid].begin();
@@ -542,17 +560,18 @@ void Ebofs::write_onode(Onode *on)
 	object_tab->insert( on->object_id, on->onode_loc );
   }
 
-  struct ebofs_onode eo;
-  eo.onode_loc = on->onode_loc;
-  eo.object_id = on->object_id;
-  eo.object_size = on->object_size;
-  eo.object_blocks = on->object_blocks;
-  eo.num_attr = on->attr.size();
-  eo.num_extents = on->extents.size();
-  bl.copy_in(0, sizeof(eo), (char*)&eo);
+  dout(10) << "write_onode " << *on << " to " << on->onode_loc << endl;
+
+  struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
+  eo->onode_loc = on->onode_loc;
+  eo->object_id = on->object_id;
+  eo->object_size = on->object_size;
+  eo->object_blocks = on->object_blocks;
+  eo->num_attr = on->attr.size();
+  eo->num_extents = on->extents.size();
   
   // attr
-  unsigned off = sizeof(eo);
+  unsigned off = sizeof(*eo);
   for (map<string, AttrVal>::iterator i = on->attr.begin();
 	   i != on->attr.end();
 	   i++) {
@@ -562,12 +581,14 @@ void Ebofs::write_onode(Onode *on)
 	off += sizeof(int);
 	bl.copy_in(off, i->second.len, i->second.data);
 	off += i->second.len;
+	dout(20) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
   }
   
   // extents
   for (unsigned i=0; i<on->extents.size(); i++) {
 	bl.copy_in(off, sizeof(Extent), (char*)&on->extents[i]);
 	off += sizeof(Extent);
+	dout(20) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
   }
 
   // write
@@ -722,9 +743,13 @@ Cnode* Ebofs::new_cnode(object_t cid)
   cnode_map[cid] = cn;
   cnode_lru.lru_insert_mid(cn);
   
+  assert(collection_tab->lookup(cid) < 0);
   collection_tab->insert( cid, cn->cnode_loc );  // even tho i'm not placed yet
   
   cn->get();
+
+  dirty_cnode(cn);
+
   return cn;
 }
 
@@ -741,7 +766,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 	
 	// on disk?
 	Extent cnode_loc;
-	if (collection_tab->lookup(cid, cnode_loc) != Table<coll_t,Extent>::Cursor::MATCH) {
+	if (collection_tab->lookup(cid, cnode_loc) < 0) {
 	  // object dne.
 	  return 0;
 	}
@@ -1127,8 +1152,10 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	opos = on->object_size;
 	bstart = on->object_size / EBOFS_BLOCK_SIZE;
   }
-  if (bl.length() == 0) 
+  if (bl.length() == 0) {
 	zleft += len;
+	len = 0;
+  }
   if (off+len > on->object_size) {
 	dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
 			 << " -> " << off+len << endl;
@@ -1416,6 +1443,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
   map<block_t,BufferHead*>::iterator h = hits.begin();
   map<block_t,BufferHead*>::iterator p = partials.begin();
 
+  bl.clear();
   off_t pos = off;
   block_t curblock = bstart;
   while (curblock <= blast) {
@@ -1473,6 +1501,7 @@ int Ebofs::read(object_t oid,
 
   Onode *on = get_onode(oid);
   if (!on) {
+	dout(7) << "read " << hex << oid << dec << " len " << len << " off " << off << " ... dne " << endl;
 	ebofs_lock.Unlock();
 	return -ENOENT;  // object dne?
   }
@@ -1484,6 +1513,7 @@ int Ebofs::read(object_t oid,
   while (1) {
 	// check size bound
 	if (off >= on->object_size) {
+	  dout(7) << "read " << hex << oid << dec << " len " << len << " off " << off << " ... off past eof " << on->object_size << endl;
 	  r = -ESPIPE;   // FIXME better errno?
 	  break;
 	}
@@ -1497,6 +1527,7 @@ int Ebofs::read(object_t oid,
 	cond.Wait(ebofs_lock);
 
 	if (on->deleted) {
+	  dout(7) << "read " << hex << oid << dec << " len " << len << " off " << off << " ... object deleted" << endl;
 	  r = -ENOENT;
 	  break;
 	}
@@ -1507,6 +1538,7 @@ int Ebofs::read(object_t oid,
   ebofs_lock.Unlock();
 
   if (r < 0) return r;   // return error,
+  dout(7) << "read " << hex << oid << dec << " len " << len << " off " << off << " ... got " << bl.length() << endl;
   return bl.length();    // or bytes read.
 }
 
@@ -1579,6 +1611,8 @@ int Ebofs::write(object_t oid,
   // get|create inode
   Onode *on = get_onode(oid);
   if (!on) on = new_onode(oid);	// new inode!
+
+  dirty_onode(on);  // dirty onode!
   
   // apply write to buffer cache
   apply_write(on, len, off, bl);
@@ -1634,8 +1668,7 @@ bool Ebofs::exists(object_t oid)
 {
   ebofs_lock.Lock();
   dout(7) << "exists " << hex << oid << dec << endl;
-  Extent loc;
-  bool e = (object_tab->lookup(oid, loc) == 0);
+  bool e = (object_tab->lookup(oid) == 0);
   ebofs_lock.Unlock();
   return e;
 }
@@ -1828,8 +1861,7 @@ bool Ebofs::collection_exists(coll_t cid)
 }
 bool Ebofs::_collection_exists(coll_t cid)
 {
-  Extent loc;
-  return (collection_tab->lookup(cid, loc) == 0);
+  return (collection_tab->lookup(cid) == 0);
 }
 
 int Ebofs::collection_add(coll_t cid, object_t oid)
@@ -1841,8 +1873,7 @@ int Ebofs::collection_add(coll_t cid, object_t oid)
 	ebofs_lock.Unlock();
 	return -ENOENT;
   }
-  bool a;
-  if (oc_tab->lookup(idpair_t(oid,cid), a) < 0) {
+  if (oc_tab->lookup(idpair_t(oid,cid)) < 0) {
 	oc_tab->insert(idpair_t(oid,cid), true);
 	co_tab->insert(idpair_t(cid,oid), true);
   }

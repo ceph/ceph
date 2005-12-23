@@ -232,6 +232,17 @@ class mds_load_t {
 
 // -- io helpers --
 
+template<class A>
+inline ostream& operator<<(ostream& out, vector<A>& v) {
+  out << "[";
+  for (unsigned i=0; i<v.size(); i++) {
+	if (i) out << ",";
+	out << v[i];
+  }
+  out << "]";
+  return out;
+}
+
 inline ostream& operator<<(ostream& out, set<int>& iset) {
   for (set<int>::iterator it = iset.begin();
 	   it != iset.end();

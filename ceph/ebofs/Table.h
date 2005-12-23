@@ -463,6 +463,14 @@ class Table {
 	return Cursor::OOB;  /* it's the end of the btree (also a valid insertion point) */
   }
 
+  int lookup(K key) {
+	dbtout << "lookup" << endl;
+	Cursor cursor(this);
+	if (find(key, cursor) == Cursor::MATCH) 
+	  return 0;
+	return -1;
+  }
+
   int lookup(K key, V& value) {
 	dbtout << "lookup" << endl;
 	Cursor cursor(this);

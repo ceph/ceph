@@ -96,6 +96,7 @@ namespace crush {
 	void make_primes() {
 	  if (items.empty()) return;
 
+	  //cout << "make_primes " << get_id() << " " << items.size() << endl;
 	  Hash h(123+get_id());
 	  primes.clear();
 
@@ -110,6 +111,7 @@ namespace crush {
 		  if (x % j == 0) break;
 		if (j*j > x) {
 		  primes.push_back(x);
+		  //cout << "prime " << x << endl;
 		}
 		x += 2;
 	  }
