@@ -429,6 +429,8 @@ Onode* Ebofs::new_onode(object_t oid)
   object_tab->insert( oid, on->onode_loc );  // even tho i'm not placed yet
 
   on->get();
+  on->onode_loc.start = 0;
+  on->onode_loc.length = 0;
 
   dirty_onode(on);
 
@@ -747,6 +749,8 @@ Cnode* Ebofs::new_cnode(object_t cid)
   collection_tab->insert( cid, cn->cnode_loc );  // even tho i'm not placed yet
   
   cn->get();
+  cn->cnode_loc.start = 0;
+  cn->cnode_loc.length = 0;
 
   dirty_cnode(cn);
 
@@ -796,6 +800,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 
 	// parse data block
 	Cnode *cn = new Cnode(cid);
+	cnode_map[cid] = cn;
 	
 	struct ebofs_cnode *ec = (struct ebofs_cnode*)bl.c_str();
 	cn->cnode_loc = ec->cnode_loc;

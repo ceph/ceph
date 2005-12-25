@@ -77,6 +77,7 @@ inline ostream& operator<<(ostream& out, Cnode& cn)
 {
   out << "cnode(" << hex << cn.coll_id << dec;
   if (cn.is_dirty()) out << " dirty";
+  out << " " << &cn;
   out << ")";
   return out;
 }
