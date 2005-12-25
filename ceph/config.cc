@@ -108,7 +108,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 2,
+  osd_pg_bits: 8,
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,

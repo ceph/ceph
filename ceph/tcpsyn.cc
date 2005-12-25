@@ -73,6 +73,8 @@ int main(int argc, char **argv)
 
   int started = 0;
 
+  if (myrank == 0) g_conf.debug = 20;
+
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
@@ -168,6 +170,8 @@ int main(int argc, char **argv)
 
   // wait for everything to finish
   tcpmessenger_wait();
+
+  if (started) cerr << "tcpsyn finishing" << endl;
   
   tcpmessenger_shutdown(); 
   
@@ -188,6 +192,7 @@ int main(int argc, char **argv)
   }
   */
   delete mdc;
+
   
   return 0;
 }

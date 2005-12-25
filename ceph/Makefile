@@ -9,7 +9,7 @@
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
 CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DUSE_EBOFS
-LIBS = -lpthread  -lrt -ldb
+LIBS = -lpthread -lrt -ldb
 
 #for normal mpich2 machines
 MPICC = mpicxx

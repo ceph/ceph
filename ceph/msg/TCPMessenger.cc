@@ -407,20 +407,23 @@ bool tcp_read(int sd, char *buf, int len)
   return true;
 }
 
-void tcp_write(int sd, char *buf, int len)
+int tcp_write(int sd, char *buf, int len)
 {
   //dout(DBL) << "tcp_write writing " << len << endl;
+  assert(len > 0);
   while (len > 0) {
 	int did = ::send( sd, buf, len, 0 );
 	if (did < 0) {
 	  dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
+	  cerr << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << endl;
 	}
-	assert(did >= 0);
+	//assert(did >= 0);
+	if (did < 0) return did;
 	len -= did;
 	buf += did;
 	dout(DBL) << "tcp_write did " << did << ", " << len << " left" << endl;
   }
-
+  return 0;
 }
 
 
@@ -554,7 +557,8 @@ int tcp_send(Message *m)
   dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << " rank " << rank << endl;//" sd " << sd << ")" << endl;
   
   // send envelope
-  tcp_write( sd, (char*)env, sizeof(*env) );
+  int r = tcp_write( sd, (char*)env, sizeof(*env) );
+  if (r < 0) { cerr << "error sending envelope for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
 
   // payload
 #ifdef TCP_KEEP_CHUNKS
@@ -565,18 +569,22 @@ int tcp_send(Message *m)
 	   it++) {
 	dout(DBL) << "tcp_sending frag " << i << " len " << (*it).length() << endl;
 	int size = (*it).length();
-	tcp_write( sd, (char*)&size, sizeof(size) );
-	tcp_write( sd, (*it).c_str(), size );
+	r = tcp_write( sd, (char*)&size, sizeof(size) );
+	if (r < 0) { cerr << "error sending chunk len for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
+	r = tcp_write( sd, (*it).c_str(), size );
+	if (r < 0) { cerr << "error sending data chunk for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
 	i++;
   }
 #else
   // one big chunk
   int size = blist.length();
-  tcp_write( sd, (char*)&size, sizeof(size) );
+  r = tcp_write( sd, (char*)&size, sizeof(size) );
+  if (r < 0) { cerr << "error sending data len for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
   for (list<bufferptr>::iterator it = blist.buffers().begin();
 	   it != blist.buffers().end();
 	   it++) {
-	tcp_write( sd, (*it).c_str(), (*it).length() );
+	r = tcp_write( sd, (*it).c_str(), (*it).length() );
+	if (r < 0) { cerr << "error sending data megachunk for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << " : len " << (*it).length() << endl; assert(0); }
   }
 #endif
 

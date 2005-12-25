@@ -160,6 +160,7 @@ int OSD::init()
 
   if (g_conf.osd_mkfs) {
 	dout(1) << "mkfs" << endl;
+
 	store->mkfs();
   }
   int r = store->mount();
@@ -1820,10 +1821,12 @@ public:
 void OSD::op_rep_modify_sync(MOSDOp *op)
 {
   osd_lock.Lock();
-  dout(2) << "rep_modify_sync on op " << op << endl;
-  MOSDOpReply *ack2 = new MOSDOpReply(op, 0, osdmap, true);
-  messenger->send_message(ack2, op->get_asker());
-  delete op;
+  {
+	dout(2) << "rep_modify_sync on op " << op << endl;
+	MOSDOpReply *ack2 = new MOSDOpReply(op, 0, osdmap, true);
+	messenger->send_message(ack2, op->get_asker());
+	delete op;
+  }
   osd_lock.Unlock();
 }
 
@@ -2266,10 +2269,10 @@ public:
 
 void OSD::op_modify_sync(OSDReplicaOp *repop)
 {
-  dout(2) << "op_modify_sync on op " << repop->op << endl;
-
   osd_lock.Lock();
   {
+	dout(2) << "op_modify_sync on op " << repop->op << endl;
+
 	repop->local_sync = true;
 	if (repop->can_send_sync()) {
 	  dout(2) << "op_modify_sync on " << hex << repop->op->get_oid() << dec << " op " << repop->op << endl;
