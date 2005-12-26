@@ -102,6 +102,8 @@ class BlockDevice {
   // get size in blocks
   block_t get_num_blocks();
 
+  char *get_device_name() const { return dev; }
+
   int open();
   int close();
 

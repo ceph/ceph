@@ -21,7 +21,7 @@ int main(int argc, char **argv)
   int r = mfs.mkfs();
   if (r < 0) exit(r);
 
-  if (1) {
+  if (args.size() > 1) {   // pass an extra arg of some sort to trigger the test crapola
 	// test-o-rama!
 	Ebofs fs(filename);
 	fs.mount();

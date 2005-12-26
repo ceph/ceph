@@ -415,9 +415,12 @@ int ObjectCache::map_write(Onode *on,
 		}
 	  }
 	  
+	  // try to cancel tx?
+	  if (bh->is_tx() && !newalloc) bc->bh_cancel_write(bh);
+	  	  
 	  // put in our map
 	  hits[cur] = bh;
-	  	  
+
 	  // keep going.
 	  block_t lenfromcur = bh->end() - cur;
 	  cur += lenfromcur;

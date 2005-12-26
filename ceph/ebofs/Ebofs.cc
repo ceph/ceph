@@ -14,7 +14,7 @@ int Ebofs::mount()
   // note: this will fail in mount -> unmount -> mount type situations, bc
   //       prior state isn't fully cleaned up.
 
-  dout(1) << "mount" << endl;
+  dout(1) << "mount " << dev.get_device_name() << endl;
 
   ebofs_lock.Lock();
   assert(!mounted);
@@ -72,7 +72,7 @@ int Ebofs::mount()
   commit_thread.create();
   finisher_thread.create();
 
-  dout(1) << "mount mounted" << endl;
+  dout(1) << "mount mounted " << dev.get_device_name() << endl;
   mounted = true;
 
   ebofs_lock.Unlock();
@@ -216,7 +216,7 @@ int Ebofs::umount()
   close_tables();
   dev.close();
 
-  dout(1) << "umount done" << endl;
+  dout(1) << "umount done on " << dev.get_device_name() << endl;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -423,7 +423,7 @@ Onode* Ebofs::new_onode(object_t oid)
 
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = on;
-  onode_lru.lru_insert_mid(on);
+  onode_lru.lru_insert_top(on);
   
   assert(object_tab->lookup(oid) < 0);
   object_tab->insert( oid, on->onode_loc );  // even tho i'm not placed yet
@@ -464,12 +464,12 @@ Onode* Ebofs::get_onode(object_t oid)
 	  // yep, just wait.
 	  Cond c;
 	  waitfor_onode[oid].push_back(&c);
-	  dout(7) << "get_onode " << oid << " already loading, waiting" << endl;
+	  dout(10) << "get_onode " << oid << " already loading, waiting" << endl;
 	  c.Wait(ebofs_lock);
 	  continue;
 	}
 
-	dout(7) << "get_onode reading " << hex << oid << dec << " from " << onode_loc << endl;
+	dout(10) << "get_onode reading " << hex << oid << dec << " from " << onode_loc << endl;
 
 	assert(waitfor_onode.count(oid) == 0);
 	waitfor_onode[oid].clear();  // this should be empty initially. 
@@ -485,6 +485,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	// parse data block
 	Onode *on = new Onode(oid);
 	onode_map[oid] = on;
+	onode_lru.lru_insert_top(on);
 	
 	struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
 	assert(eo->object_id == oid);
@@ -501,7 +502,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	  p += sizeof(len);
 	  on->attr[key] = AttrVal(p, len);
 	  p += len;
-	  dout(7) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
+	  dout(10) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
 	}
 	
 	// parse extents
@@ -510,7 +511,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	for (int i=0; i<eo->num_extents; i++) {
 	  Extent ex = *((Extent*)p);
 	  on->extents.push_back(ex);
-	  dout(7) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
+	  dout(10) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
 	  n += ex.length;
 	  p += sizeof(Extent);
 	}
@@ -562,7 +563,7 @@ void Ebofs::write_onode(Onode *on)
 	object_tab->insert( on->object_id, on->onode_loc );
   }
 
-  dout(7) << "write_onode " << *on << " to " << on->onode_loc << endl;
+  dout(10) << "write_onode " << *on << " to " << on->onode_loc << endl;
 
   struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
   eo->onode_loc = on->onode_loc;
@@ -583,14 +584,14 @@ void Ebofs::write_onode(Onode *on)
 	off += sizeof(int);
 	bl.copy_in(off, i->second.len, i->second.data);
 	off += i->second.len;
-	dout(7) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
+	dout(10) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
   }
   
   // extents
   for (unsigned i=0; i<on->extents.size(); i++) {
 	bl.copy_in(off, sizeof(Extent), (char*)&on->extents[i]);
 	off += sizeof(Extent);
-	dout(7) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
+	dout(10) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
   }
 
   // write
@@ -743,7 +744,7 @@ Cnode* Ebofs::new_cnode(object_t cid)
 
   assert(cnode_map.count(cid) == 0);
   cnode_map[cid] = cn;
-  cnode_lru.lru_insert_mid(cn);
+  cnode_lru.lru_insert_top(cn);
   
   assert(collection_tab->lookup(cid) < 0);
   collection_tab->insert( cid, cn->cnode_loc );  // even tho i'm not placed yet
@@ -785,7 +786,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 	  continue;
 	}
 
-	dout(7) << "get_cnode reading " << hex << cid << dec << " from " << cnode_loc << endl;
+	dout(10) << "get_cnode reading " << hex << cid << dec << " from " << cnode_loc << endl;
 
 	assert(waitfor_cnode.count(cid) == 0);
 	waitfor_cnode[cid].clear();  // this should be empty initially. 
@@ -800,7 +801,9 @@ Cnode* Ebofs::get_cnode(object_t cid)
 
 	// parse data block
 	Cnode *cn = new Cnode(cid);
+
 	cnode_map[cid] = cn;
+	cnode_lru.lru_insert_top(cn);
 	
 	struct ebofs_cnode *ec = (struct ebofs_cnode*)bl.c_str();
 	cn->cnode_loc = ec->cnode_loc;
@@ -814,7 +817,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 	  p += sizeof(len);
 	  cn->attr[key] = AttrVal(p, len);
 	  p += len;
-	  dout(7) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
+	  dout(10) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
 	}
 	
 	// wake up other waiters
@@ -848,7 +851,7 @@ void Ebofs::write_cnode(Cnode *cn)
 	collection_tab->insert( cn->coll_id, cn->cnode_loc );
   }
   
-  dout(7) << "write_cnode " << *cn << " to " << cn->cnode_loc << endl;
+  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << endl;
 
   struct ebofs_cnode ec;
   ec.cnode_loc = cn->cnode_loc;
@@ -869,7 +872,7 @@ void Ebofs::write_cnode(Cnode *cn)
 	bl.copy_in(off, i->second.len, i->second.data);
 	off += i->second.len;
 
-	dout(7) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
+	dout(10) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
   }
   
   // write
