@@ -255,6 +255,20 @@ void BlockDevice::_submit_io(biovec *b)
   // wake up thread?
   if (io_queue.empty()) io_wakeup.Signal();
 
+  // check for overlapping ios
+  {
+	multimap<block_t, biovec*>::iterator p = io_queue.lower_bound(b->start);
+	if ((p != io_queue.end() &&
+		 p->first < b->start+b->length) ||
+		(p != io_queue.begin() && 
+		 (p--, p->second->start + p->second->length > b->start))) {
+	  dout(1) << "_submit_io new io " << b << b->start << "~" << b->length 
+			  << " overlaps with existing " << p->second << " " << p->second->start << "~" << p->second->length << endl;
+	  cerr << "_submit_io new io " << b << b->start << "~" << b->length 
+		   << " overlaps with existing " << p->second << " " << p->second->start << "~" << p->second->length << endl;
+	}
+  }
+
   // queue anew
   io_queue.insert(pair<block_t,biovec*>(b->start, b));
   io_queue_map[b] = b->start;

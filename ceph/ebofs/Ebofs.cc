@@ -482,11 +482,12 @@ Onode* Ebofs::get_onode(object_t oid)
 	dev.read( onode_loc.start, onode_loc.length, bl );
 	ebofs_lock.Lock();
 	
-	// parse data block
+	// add onode
 	Onode *on = new Onode(oid);
 	onode_map[oid] = on;
 	onode_lru.lru_insert_top(on);
 	
+	// parse data block
 	struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
 	assert(eo->object_id == oid);
 	on->onode_loc = eo->onode_loc;
