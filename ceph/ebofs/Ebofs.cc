@@ -1271,9 +1271,11 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 		  opos += z;
 		}
 
-		bufferlist p;
-		p.substr_of(bl, blpos, len_in_bh-z);
-		bh->add_partial(opos, p);
+		bufferlist sb;
+		sb.substr_of(bl, blpos, len_in_bh-z);  // substr in existing buffer
+		bufferlist cp;
+		cp.append(sb.c_str(), len_in_bh-z);    // copy the partial bit!
+		bh->add_partial(opos, cp);
 		left -= len_in_bh-z;
 		blpos += len_in_bh-z;
 		opos += len_in_bh-z;
