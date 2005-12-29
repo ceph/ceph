@@ -142,7 +142,7 @@ void TCPDirectory::handle_lookup(MNSLookup *m)
   // have it?
   if (dir.count(m->get_entity()) == 0 ||
 	  hold.count(m->get_entity())) {
-	dout(2) << "lookup " << MSG_ADDR_NICE(m->get_entity()) << " by " << MSG_ADDR_NICE(m->get_source()) << " dne or on hold" << endl;
+	dout(2) << MSG_ADDR_NICE(m->get_source()) << " lookup '" << MSG_ADDR_NICE(m->get_entity()) << "' -> dne or on hold" << endl;
 	waiting[m->get_entity()].push_back(m);
 	return;
   }
@@ -154,7 +154,7 @@ void TCPDirectory::handle_lookup(MNSLookup *m)
   reply->entity_map[m->get_entity()] = rank;
   reply->rank_addr[rank] = rank_addr[rank];
 
-  dout(2) << "lookup " << MSG_ADDR_NICE(m->get_entity()) << " by " << MSG_ADDR_NICE(m->get_source()) << " is on rank " << rank << endl;
+  dout(2) << MSG_ADDR_NICE(m->get_source()) << " lookup '" << MSG_ADDR_NICE(m->get_entity()) << "' -> rank " << rank << endl;
 
   messenger->send_message(reply,
 						  m->get_source(), m->get_source_port());

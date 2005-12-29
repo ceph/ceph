@@ -489,7 +489,14 @@ Onode* Ebofs::get_onode(object_t oid)
 	
 	// parse data block
 	struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
-	assert(eo->object_id == oid);
+	if (eo->object_id != oid) {
+	  cerr << " wrong oid in onode block: " << hex << eo->object_id << " != " << oid << dec << endl;
+	  cerr << " onode_loc is " << eo->onode_loc << endl;
+	  cerr << " object_size " << eo->object_size << endl;
+	  cerr << " object_blocks " << eo->object_blocks << endl;
+	  cerr << " " << eo->num_attr << " attr + " << eo->num_extents << " extents" << endl;
+	  assert(eo->object_id == oid);
+	}
 	on->onode_loc = eo->onode_loc;
 	on->object_size = eo->object_size;
 	on->object_blocks = eo->object_blocks;

@@ -389,6 +389,14 @@ int BlockDevice::open()
 	fd = 0;
 	return -1;
   }
+
+  // lock
+  int r = ::flock(fd, LOCK_EX);
+  if (r < 0) {
+	dout(1) << "open " << dev << " failed to get LOCK_EX" << endl;
+	assert(0);
+	return -1;
+  }
   
   // figure size
   __uint64_t bsize = 0;
@@ -431,6 +439,8 @@ int BlockDevice::close()
   io_stop = false;   // in case we start again
 
   dout(1) << "close " << dev << endl;
+
+  ::flock(fd, LOCK_UN);
   ::close(fd);
   fd = 0;
 
