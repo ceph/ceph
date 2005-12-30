@@ -604,7 +604,7 @@ void Ebofs::write_onode(Onode *on)
 
   // write
   dev.write( on->onode_loc.start, on->onode_loc.length, bl, 
-			 new C_E_InodeFlush(this) );
+			 new C_E_InodeFlush(this), "write_onode" );
 }
 
 void Ebofs::remove_onode(Onode *on)
@@ -885,7 +885,7 @@ void Ebofs::write_cnode(Cnode *cn)
   
   // write
   dev.write( cn->cnode_loc.start, cn->cnode_loc.length, bl, 
-			 new C_E_InodeFlush(this) );
+			 new C_E_InodeFlush(this), "write_cnode" );
 }
 
 void Ebofs::remove_cnode(Cnode *cn)

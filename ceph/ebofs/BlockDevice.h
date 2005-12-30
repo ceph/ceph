@@ -40,12 +40,15 @@ class BlockDevice {
 	callback *cb;
 	Cond *cond;
 	int rval;
+	char *note;
 
-	biovec(char t, block_t s, block_t l, bufferlist& b, callback *c) :
-	  type(t), start(s), length(l), bl(b), cb(c), cond(0), rval(0) {}
-	biovec(char t, block_t s, block_t l, bufferlist& b, Cond *c) :
-	  type(t), start(s), length(l), bl(b), cb(0), cond(c), rval(0) {}
+	biovec(char t, block_t s, block_t l, bufferlist& b, callback *c, char *n=0) :
+	  type(t), start(s), length(l), bl(b), cb(c), cond(0), rval(0), note(n) {}
+	biovec(char t, block_t s, block_t l, bufferlist& b, Cond *c, char *n=0) :
+	  type(t), start(s), length(l), bl(b), cb(0), cond(c), rval(0), note(n) {}
   };
+  friend ostream& operator<<(ostream& out, biovec &bio);
+
 
   multimap<block_t, biovec*> io_queue;
   map<biovec*, block_t>      io_queue_map;
@@ -145,15 +148,15 @@ class BlockDevice {
   }
 
   // ** non-blocking interface **
-  ioh_t read(block_t bno, unsigned num, bufferlist& bl, callback *fin) {
-	biovec *pbio = new biovec(biovec::IO_READ, bno, num, bl, fin);
+  ioh_t read(block_t bno, unsigned num, bufferlist& bl, callback *fin, char *n=0) {
+	biovec *pbio = new biovec(biovec::IO_READ, bno, num, bl, fin, n);
 	lock.Lock();
 	_submit_io(pbio);
 	lock.Unlock();
 	return (ioh_t)pbio;
   }
-  ioh_t write(block_t bno, unsigned num, bufferlist& bl, callback *fin) {
-	biovec *pbio = new biovec(biovec::IO_WRITE, bno, num, bl, fin);
+  ioh_t write(block_t bno, unsigned num, bufferlist& bl, callback *fin, char *n=0) {
+	biovec *pbio = new biovec(biovec::IO_WRITE, bno, num, bl, fin, n);
 	lock.Lock();
 	_submit_io(pbio);
 	lock.Unlock();

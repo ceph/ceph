@@ -27,7 +27,8 @@ void BufferHead::finish_partials()
 	apply_partial( bl, p->second.partial );
 	
 	oc->bc->dev.write( p->second.block, 1, bl,
-					   new C_OC_PartialTxFinish( oc->bc, p->second.epoch ));
+					   new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
+					   "finish_partials");
 	//oc->get();  // don't need OC for completion func!
   }
   partial_write.clear();
@@ -637,7 +638,8 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh)
 						 new C_OC_TxFinish(ebofs_lock, on->oc, 
 										   bh->start(), bh->length(),
 										   bh->get_version(),
-										   bh->epoch_modified));
+										   bh->epoch_modified),
+						 "bh_write");
   on->oc->get();
   inc_unflushed( bh->epoch_modified );
 }

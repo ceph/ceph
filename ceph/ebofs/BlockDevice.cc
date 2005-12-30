@@ -22,6 +22,18 @@
 #define dout(x) if (x <= g_conf.debug_bdev) cout << "dev."
 
 
+inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
+{
+  out << "bio(";
+  if (bio.type == BlockDevice::biovec::IO_READ) out << "rd ";
+  if (bio.type == BlockDevice::biovec::IO_WRITE) out << "wr ";
+  out << bio.start << "~" << bio.length;
+  if (bio.note) out << " " << bio.note;
+  out << " " << &bio;
+  out << ")";
+  return out;
+}
+
 block_t BlockDevice::get_num_blocks() 
 {
   if (!num_blocks) {
@@ -70,7 +82,7 @@ int BlockDevice::io_thread_entry()
 		  pos = i->first;
 		  while (pos == i->first && 
 				 type == i->second->type) {
-			dout(20) << "io_thread dequeue io at " << pos << " " << (void*)i->second << endl;
+			dout(20) << "io_thread dequeue io at " << pos << " " << *i->second << endl;
 			biovec *bio = i->second;
 			biols.push_back(bio);
 			pos += bio->length;
@@ -80,7 +92,7 @@ int BlockDevice::io_thread_entry()
 			io_queue_map.erase(bio);
 			io_queue.erase(prev);
 
-			if (true || i == io_queue.end()) break;
+			if (i == io_queue.end()) break;
 		  }
 
 		  lock.Unlock();
@@ -109,7 +121,7 @@ int BlockDevice::io_thread_entry()
 		  char type = i->second->type;
 		  pos = i->first;
 		  while (pos == i->first && type == i->second->type) {
-			dout(20) << "io_thread dequeue io at " << pos << " " << (void*)i->second << endl;
+			dout(20) << "io_thread dequeue io at " << pos << " " << *i->second << endl;
 			biovec *bio = i->second;
 			biols.push_back(bio);
 			pos += bio->length;
@@ -120,7 +132,7 @@ int BlockDevice::io_thread_entry()
 			io_queue_map.erase(bio);
 			io_queue.erase(prev);
 
-			if (true || begin) break;
+			if (begin) break;
 		  }
 			
 		  lock.Unlock();
@@ -250,7 +262,7 @@ int BlockDevice::complete_thread_entry()
 void BlockDevice::_submit_io(biovec *b) 
 {
   // NOTE: lock must be held
-  dout(15) << "_submit_io " << (void*)b << endl;
+  dout(15) << "_submit_io " << *b << endl;
   
   // wake up thread?
   if (io_queue.empty()) io_wakeup.Signal();
@@ -262,10 +274,10 @@ void BlockDevice::_submit_io(biovec *b)
 		 p->first < b->start+b->length) ||
 		(p != io_queue.begin() && 
 		 (p--, p->second->start + p->second->length > b->start))) {
-	  dout(1) << "_submit_io new io " << b << b->start << "~" << b->length 
-			  << " overlaps with existing " << p->second << " " << p->second->start << "~" << p->second->length << endl;
-	  cerr << "_submit_io new io " << b << b->start << "~" << b->length 
-		   << " overlaps with existing " << p->second << " " << p->second->start << "~" << p->second->length << endl;
+	  dout(1) << "_submit_io new io " << *b 
+			  << " overlaps with existing " << *p->second << endl;
+	  cerr << "_submit_io new io " << *b 
+			  << " overlaps with existing " << *p->second << endl;
 	}
   }
 
@@ -278,11 +290,11 @@ int BlockDevice::_cancel_io(biovec *bio)
 {
   // NOTE: lock must be held
   if (io_queue_map.count(bio) == 0) {
-	dout(15) << "_cancel_io " << (void*)bio << " FAILED" << endl;
+	dout(15) << "_cancel_io " << *bio << " FAILED" << endl;
 	return -1;
   }
   
-  dout(15) << "_cancel_io " << (void*)bio << endl;
+  dout(15) << "_cancel_io " << *bio << endl;
 
   block_t b = io_queue_map[bio];
   multimap<block_t,biovec*>::iterator p = io_queue.lower_bound(b);
