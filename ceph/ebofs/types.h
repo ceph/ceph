@@ -63,6 +63,7 @@ namespace __gnu_cxx {
 typedef __uint64_t block_t;        // disk location/sector/block
 
 static const int EBOFS_BLOCK_SIZE = 4096;
+static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
 
 class Extent {
  public:

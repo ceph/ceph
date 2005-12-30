@@ -642,8 +642,8 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
 {
   //__uint64_t wrsize = 1024*256;
-  char *buf = new char[wrsize];   // 1 MB
-  memset(buf, 1, wrsize);
+  char *buf = new char[wrsize+100];   // 1 MB
+  memset(buf, 7, wrsize);
   __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)wrsize;
 
   int fd = client->open(fn.c_str(), O_WRONLY|O_CREAT);
@@ -653,6 +653,20 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   for (unsigned i=0; i<chunks; i++) {
 	if (time_to_stop()) break;
 	dout(2) << "writing block " << i << "/" << chunks << endl;
+	
+	// fill buf with a fingerprint
+	int *p = (int*)buf;
+	while ((char*)p < buf + wrsize) {
+	  *p = (char*)p - buf;	  
+	  p++;
+	  *p = i;
+	  p++;
+	  *p = client->get_nodeid();
+	  p++;
+	  *p = 0;
+	  p++;
+	}
+
 	client->write(fd, buf, wrsize, i*wrsize);
   }
   

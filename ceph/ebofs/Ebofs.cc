@@ -510,7 +510,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	  p += sizeof(len);
 	  on->attr[key] = AttrVal(p, len);
 	  p += len;
-	  dout(10) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
+	  dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
 	}
 	
 	// parse extents
@@ -519,7 +519,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	for (int i=0; i<eo->num_extents; i++) {
 	  Extent ex = *((Extent*)p);
 	  on->extents.push_back(ex);
-	  dout(10) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
+	  dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
 	  n += ex.length;
 	  p += sizeof(Extent);
 	}
@@ -592,14 +592,14 @@ void Ebofs::write_onode(Onode *on)
 	off += sizeof(int);
 	bl.copy_in(off, i->second.len, i->second.data);
 	off += i->second.len;
-	dout(10) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
+	dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
   }
   
   // extents
   for (unsigned i=0; i<on->extents.size(); i++) {
 	bl.copy_in(off, sizeof(Extent), (char*)&on->extents[i]);
 	off += sizeof(Extent);
-	dout(10) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
+	dout(15) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
   }
 
   // write
@@ -825,7 +825,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 	  p += sizeof(len);
 	  cn->attr[key] = AttrVal(p, len);
 	  p += len;
-	  dout(10) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
+	  dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
 	}
 	
 	// wake up other waiters
@@ -880,7 +880,7 @@ void Ebofs::write_cnode(Cnode *cn)
 	bl.copy_in(off, i->second.len, i->second.data);
 	off += i->second.len;
 
-	dout(10) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
+	dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
   }
   
   // write

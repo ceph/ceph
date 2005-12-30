@@ -80,7 +80,7 @@ int BlockDevice::io_thread_entry()
 			io_queue_map.erase(bio);
 			io_queue.erase(prev);
 
-			if (i == io_queue.end()) break;
+			if (true || i == io_queue.end()) break;
 		  }
 
 		  lock.Unlock();
@@ -120,7 +120,7 @@ int BlockDevice::io_thread_entry()
 			io_queue_map.erase(bio);
 			io_queue.erase(prev);
 
-			if (begin) break;
+			if (true || begin) break;
 		  }
 			
 		  lock.Unlock();
@@ -338,7 +338,8 @@ int BlockDevice::_write(unsigned bno, unsigned num, bufferlist& bl)
 
   assert(fd > 0);
   
-  off_t offset = bno * EBOFS_BLOCK_SIZE;
+  off_t offset = (off_t)bno << EBOFS_BLOCK_BITS;
+  assert((off_t)bno * (off_t)EBOFS_BLOCK_SIZE == offset);
   off_t actual = lseek(fd, offset, SEEK_SET);
   assert(actual == offset);
   
