@@ -105,7 +105,7 @@ int Ebofs::mkfs()
   dout(1) << "mkfs: first node region at " << nr << endl;
 
   // allocate two usemaps
-  block_t usemap_len = ((nr.length-1) / 8 / EBOFS_BLOCK_SIZE) + 1;
+  block_t usemap_len = nodepool.get_usemap_len();
   nodepool.usemap_even.start = nr.end();
   nodepool.usemap_even.length = usemap_len;
   nodepool.usemap_odd.start = nodepool.usemap_even.end();
@@ -284,7 +284,7 @@ void Ebofs::write_super(version_t epoch, bufferptr& bp)
   
   dout(10) << "write_super v" << epoch << " to b" << bno << endl;
 
-  dev.write(bno, 1, bp);
+  dev.write(bno, 1, bp, "write_super");
 }
 
 int Ebofs::commit_thread_entry()
@@ -316,15 +316,15 @@ int Ebofs::commit_thread_entry()
 	}
 
 	super_epoch++;
-	dout(7) << "commit_thread commit start, new epoch " << super_epoch << endl;
-	dout(10) << "commit_thread   data: " 
+	dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
+	dout(2) << "commit_thread   data: " 
 			 << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
 			 << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
 			 << "%) free in " << get_free_extents() 
 			 << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
 			 << "%) limbo in " << get_limbo_extents() 
 			 << endl;
-	dout(10) << "commit_thread  nodes: " 
+	dout(2) << "commit_thread  nodes: " 
 			 << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
 			 << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
 			 << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
@@ -360,9 +360,8 @@ int Ebofs::commit_thread_entry()
 	
 	// do we need more node space?
 	if (nodepool.num_free() < nodepool.num_total() / 3) {
-	  dout(1) << "commit_thread running low on node space, allocating more." << endl;
-	  assert(0);
-	  //alloc_more_node_space();
+	  dout(2) << "commit_thread running low on node space, allocating more." << endl;
+	  alloc_more_node_space();
 	}
 
 	// kick waiters
@@ -386,6 +385,41 @@ int Ebofs::commit_thread_entry()
   dout(10) << "commit_thread finish" << endl;
   ebofs_lock.Unlock();
   return 0;
+}
+
+
+void Ebofs::alloc_more_node_space()
+{
+  dout(10) << "alloc_more_node_space free " << nodepool.num_free() << "/" << nodepool.num_total() << endl;
+  
+  if (nodepool.num_regions() < EBOFS_MAX_NODE_REGIONS) {
+	int want = nodepool.num_total();
+
+	Extent ex;
+	allocator.allocate(ex, want, 0);
+
+	Extent even, odd;
+	unsigned ulen = nodepool.get_usemap_len(nodepool.num_total() + ex.length);
+	allocator.allocate(even, want, 0);
+	allocator.allocate(odd, want, 0);
+
+	if (even.length == ulen && odd.length == ulen) {
+	  dout(2) << "alloc_more_node_space got " << ex << ", new usemaps at even " << even << " odd " << odd << endl;
+	  allocator.release(nodepool.usemap_even);
+	  allocator.release(nodepool.usemap_odd);
+	  nodepool.add_region(ex);
+	  nodepool.usemap_even = even;
+	  nodepool.usemap_odd = odd;
+	} else {
+	  dout (1) << "alloc_more_node_space failed to get space for new usemaps" << endl;
+	  allocator.release(ex);
+	  allocator.release(even);
+	  allocator.release(odd);
+	}
+  } else {
+	dout(1) << "alloc_more_node_space already have max node regions!" << endl;
+	assert(0);
+  }
 }
 
 
@@ -1561,6 +1595,8 @@ int Ebofs::read(object_t oid,
 
   put_onode(on);
 
+  trim_bc();
+
   ebofs_lock.Unlock();
 
   if (r < 0) return r;   // return error,
@@ -1658,6 +1694,8 @@ int Ebofs::write(object_t oid,
 
   // done
   put_onode(on);
+
+  trim_bc();
 
   ebofs_lock.Unlock();
   return 0;

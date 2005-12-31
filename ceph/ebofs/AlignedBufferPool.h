@@ -17,7 +17,7 @@ using namespace std;
 #include "include/buffer.h"
 #include "include/bufferlist.h"
 
-
+#include "config.h"
 
 
 class AlignedBufferPool {
@@ -36,7 +36,7 @@ class AlignedBufferPool {
 	dout(20) << "bufferpool(" << (void*)this << ").free " << (void*)p << " len " << len << " ... total " << talloc << endl;
 	talloc -= len;
 	if (dommap)
-	  munmap(p, len);
+	  ::munmap(p, len);
 	else 
 	  ::free((void*)p);
   }
@@ -46,17 +46,19 @@ class AlignedBufferPool {
 	pool->free(ptr, len);
   }
 
-  buffer *alloc(int bytes) {
+  buffer *alloc(size_t bytes) {
 	assert(bytes % alignment == 0);
 	char *p = 0;
 	if (dommap)
-	  p = (char*)mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	  p = (char*)::mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 	else 
 	  ::posix_memalign((void**)&p, alignment, bytes);
 	assert(p);
 	
 	talloc += bytes;
-	::memset(p, 0, bytes);  // only to shut up valgrind
+
+	if (g_conf.ebofs_abp_zero)
+	  ::bzero(p, bytes);  // only to shut up valgrind
 
 	dout(20) << "bufferpool(" << (void*)this << ").alloc " << (void*)p << " len " << bytes << " ... total " << talloc << endl;
 
@@ -72,9 +74,15 @@ class AlignedBufferPool {
 
 
   // bufferlists
-  void alloc(int bytes, bufferlist& bl) {
+  void alloc(size_t bytes, bufferlist& bl) {
 	bl.clear();
-	bl.push_back( alloc(bytes) );
+
+	// keep allocations reasonably small to avoid fragmenting memory
+	while (bytes > 0) {
+	  size_t max = MIN(bytes, g_conf.ebofs_abp_max_alloc);
+	  bl.push_back( alloc(max) );
+	  bytes -= max;
+	}
   }
 
 

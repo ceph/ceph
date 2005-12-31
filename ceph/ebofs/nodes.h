@@ -141,7 +141,7 @@ class NodePool {
 	return nid >> 24;
   }
   static int nodeid_offset(nodeid_t nid) {
-	return nid & (0xffffffffUL >> 24);
+	return nid & ((1 << 24) - 1);
   }
 
 
@@ -164,9 +164,17 @@ class NodePool {
   int num_total() { return num_nodes; }
   int num_used() { return num_clean() + num_dirty() + num_tx(); }
 
+  int get_usemap_len(int n=0) {
+	if (n == 0) n = num_nodes;
+	return ((n-1) / 8 / EBOFS_BLOCK_SIZE) + 1;
+  }
+
+  int num_regions() { return region_loc.size(); }
+
   // the caller had better adjust usemap locations...
   void add_region(Extent ex) {
 	int region = region_loc.size();
+	assert(ex.length <= (1 << 24));
 	region_loc.push_back(ex);
 	for (unsigned o = 0; o < ex.length; o++) {
 	  free.insert( make_nodeid(region, o) );
@@ -339,7 +347,7 @@ class NodePool {
 	bufferlist bl;
 	bl.append(bp);
 	dev.write(loc.start, loc.length, bl,
-			  new C_NP_FlushUsemap(this));
+			  new C_NP_FlushUsemap(this), "usemap");
 	return 0;
   }
 
@@ -347,10 +355,7 @@ class NodePool {
 
   // *** node commit ***
  private:
-  bool is_committing() {
-	return (flushing > 0);
-  }
-
+ 
   class C_NP_FlushNode : public BlockDevice::callback {
 	NodePool *pool;
 	nodeid_t nid;
@@ -366,14 +371,14 @@ class NodePool {
 	ebofs_lock.Lock();
 	
 	// mark nid clean|limbo
-	if (tx.count(nid)) {
+	if (tx.count(nid)) {  // tx -> clean
 	  tx.erase(nid);
 	  clean.insert(nid);
 
 	  // make node itself clean
 	  node_map[nid]->set_state(Node::STATE_CLEAN);
 	}
-	else {
+	else {  // already limbo  (was dirtied)
 	  assert(limbo.count(nid));
 	}
 
@@ -385,13 +390,23 @@ class NodePool {
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-	assert(!is_committing());
+	dout(1) << "ebofs.nodepool.commit_start start" << endl;
+
+	assert(flushing == 0);
+	if (1)
+	  for (unsigned i=0; i<region_loc.size(); i++) {
+		int c = dev.count_io(region_loc[i].start, region_loc[i].length);
+		dout(1) << "ebofs.nodepool.commit_start  region " << region_loc[i] << " has " << c << " ios" << endl;
+		assert(c == 0);
+	  }
 
 	// write map
 	flushing++;
 	write_usemap(dev,version & 1);
 
 	// dirty -> tx  (write to disk)
+	assert(tx.empty());
+	set<block_t> didb;
 	for (set<nodeid_t>::iterator i = dirty.begin();
 		 i != dirty.end();
 		 i++) {
@@ -402,12 +417,15 @@ class NodePool {
 
 	  unsigned region = nodeid_region(*i);
 	  block_t off = nodeid_offset(*i);
+	  block_t b = region_loc[region].start + off;
+	  assert(didb.count(b) == 0);
+	  didb.insert(b);
 
 	  bufferlist bl;
 	  bl.append(n->get_buffer());
-	  dev.write(region_loc[region].start + off, EBOFS_NODE_BLOCKS, 
+	  dev.write(b, EBOFS_NODE_BLOCKS, 
 				bl,
-				new C_NP_FlushNode(this, *i));
+				new C_NP_FlushNode(this, *i), "node");
 	  flushing++;
 
 	  tx.insert(*i);
@@ -421,12 +439,15 @@ class NodePool {
 	  free.insert(*i);
 	}
 	limbo.clear();
+
+	dout(1) << "ebofs.nodepool.commit_start finish" << endl;
   }
 
   void commit_wait() {
-	while (is_committing()) {
+	while (flushing > 0) {
 	  commit_cond.Wait(ebofs_lock);
 	}
+	dout(1) << "ebofs.nodepool.commit_wait finish" << endl;
   }
 
 
@@ -487,9 +508,11 @@ class NodePool {
 	node_map.erase(nid);
 
 	if (n->is_dirty()) {
+	  assert(dirty.count(nid));
 	  dirty.erase(nid);
 	  free.insert(nid);
 	} else if (n->is_clean()) {
+	  assert(clean.count(nid));
 	  clean.erase(nid);
 	  limbo.insert(nid);
 	} else 

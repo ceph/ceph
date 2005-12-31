@@ -99,6 +99,9 @@ struct md_config_t {
   off_t ebofs_bc_size;
   off_t ebofs_bc_max_dirty;
 
+  bool   ebofs_abp_zero;
+  size_t ebofs_abp_max_alloc;
+
   // block device
   int   bdev_el_fw_max_ms;  
   int   bdev_el_bw_max_ms;

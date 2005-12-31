@@ -110,18 +110,21 @@ class BlockDevice {
   int open();
   int close();
 
+  // 
+  int count_io(block_t start, block_t len);
+
 
   // ** blocking interface **
 
   // read
-  int read(block_t bno, unsigned num, bufferptr& bptr) {
+  int read(block_t bno, unsigned num, bufferptr& bptr, char *n=0) {
 	bufferlist bl;
 	bl.push_back(bptr);
-	return read(bno, num, bl);
+	return read(bno, num, bl, n);
   }
-  int read(block_t bno, unsigned num, bufferlist& bl) {
+  int read(block_t bno, unsigned num, bufferlist& bl, char *n=0) {
 	Cond c;
-	biovec bio(biovec::IO_READ, bno, num, bl, &c);
+	biovec bio(biovec::IO_READ, bno, num, bl, &c, n);
 	
 	lock.Lock();
 	_submit_io(&bio);
@@ -131,14 +134,14 @@ class BlockDevice {
   }
 
   // write
-  int write(unsigned bno, unsigned num, bufferptr& bptr) {
+  int write(unsigned bno, unsigned num, bufferptr& bptr, char *n=0) {
 	bufferlist bl;
 	bl.push_back(bptr);
-	return write(bno, num, bl);
+	return write(bno, num, bl, n);
   }
-  int write(unsigned bno, unsigned num, bufferlist& bl) {
+  int write(unsigned bno, unsigned num, bufferlist& bl, char *n=0) {
 	Cond c;
-	biovec bio(biovec::IO_WRITE, bno, num, bl, &c);
+	biovec bio(biovec::IO_WRITE, bno, num, bl, &c, n);
 
 	lock.Lock();
 	_submit_io(&bio);

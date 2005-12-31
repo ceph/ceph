@@ -14,6 +14,8 @@ void BufferHead::finish_partials()
 {
   dout(10) << "finish_partials on " << *this << endl;
 
+  block_t cur_block = 0;
+
   // submit partial writes
   for (map<block_t, PartialWrite>::iterator p = partial_write.begin();
 	   p != partial_write.end();
@@ -26,12 +28,34 @@ void BufferHead::finish_partials()
 	bl.copy_in(0, EBOFS_BLOCK_SIZE, data);
 	apply_partial( bl, p->second.partial );
 	
-	oc->bc->dev.write( p->second.block, 1, bl,
-					   new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
-					   "finish_partials");
-	//oc->get();  // don't need OC for completion func!
+	if (tx_ioh && tx_block == p->first) {
+	  assert(is_tx());
+	  oc->bc->bh_cancel_write(this);
+	}
+
+	if (p->second.epoch == epoch_modified) {  // FIXME: this'll break when we add journaling!  ick.
+	  // current epoch!  make like a bh_write.
+	  cur_block = p->first;
+	  dout(10) << "finish_partials  same epoch, doing a bh_write" << endl;
+	} else {
+	  // past epoch.  just write.
+	  oc->bc->dev.write( p->second.block, 1, bl,
+						 new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
+						 "finish_partials");
+	  //oc->get();  // don't need OC for completion func!
+	}
+
   }
   partial_write.clear();
+
+  if (cur_block) {
+	// same as epoch_modified, so do a normal bh_write.  
+	// assert: this should match the current onode's block
+	apply_partial();
+	oc->bc->mark_dirty(this);
+	oc->bc->bh_write(oc->on, this);
+	oc->bc->dec_unflushed(epoch_modified);  // undo the queued partial inc
+  }
 }
 
 void BufferHead::cancel_partials()
@@ -107,9 +131,12 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 	  bc->mark_clean(bh);
 	}
 	else if (bh->is_partial()) {
+	  assert(0);
+	  /*
 	  dout(10) << "rx_finish  partial -> clean on " << *bh << endl;	  
 	  bh->apply_partial();
 	  bc->mark_clean(bh);
+	  */
 	}
 	else {
 	  dout(10) << "rx_finish  ignoring status on (dirty|tx|clean) " << *bh << endl;
@@ -634,12 +661,14 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh)
 
   //assert(bh->tx_ioh == 0);
 
+  bh->tx_block = ex.start;
   bh->tx_ioh = dev.write(ex.start, ex.length, bh->data,
 						 new C_OC_TxFinish(ebofs_lock, on->oc, 
 										   bh->start(), bh->length(),
 										   bh->get_version(),
 										   bh->epoch_modified),
 						 "bh_write");
+
   on->oc->get();
   inc_unflushed( bh->epoch_modified );
 }

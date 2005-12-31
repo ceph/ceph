@@ -43,6 +43,7 @@ class BufferHead : public LRUObject {
 
   ioh_t     rx_ioh;         // 
   ioh_t     tx_ioh;         // 
+  block_t   tx_block;
 
   map< block_t, list<Context*> > waitfor_read;
   //list<Context*> waitfor_flush;
@@ -287,6 +288,7 @@ inline ostream& operator<<(ostream& out, BufferHead& bh)
 class ObjectCache {
  public:
   object_t object_id;
+  Onode *on;
   BufferCache *bc;
 
  private:
@@ -294,7 +296,7 @@ class ObjectCache {
   int ref;
 
  public:
-  ObjectCache(object_t o, BufferCache *b) : object_id(o), bc(b), ref(0) {}
+  ObjectCache(object_t o, Onode *_on, BufferCache *b) : object_id(o), on(_on), bc(b), ref(0) {}
   ~ObjectCache() {
 	assert(data.empty());
 	assert(ref == 0);

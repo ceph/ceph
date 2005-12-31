@@ -167,7 +167,9 @@ class Ebofs : public ObjectStore {
 	void* entry() { return (void*)ebofs->finisher_thread_entry(); }
   } finisher_thread;
 
+
   bool _write_will_block();
+  void alloc_more_node_space();
 
  public:
   Ebofs(char *devfn) : 

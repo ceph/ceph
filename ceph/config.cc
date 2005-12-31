@@ -125,6 +125,9 @@ md_config_t g_conf = {
   ebofs_bc_size:      (5 *256),  // measured in 4k blocks, or *256 for MB
   ebofs_bc_max_dirty: (1 *256),  // before write() will wait for data to flush
   
+  ebofs_abp_zero: false,
+  ebofs_abp_max_alloc: 4096*32,
+
   // --- block device ---
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 1000 ms

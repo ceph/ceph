@@ -269,6 +269,7 @@ void BlockDevice::_submit_io(biovec *b)
 
   // check for overlapping ios
   {
+	// BUG: this doesn't catch everything!  eg 1~10000000 will be missed....
 	multimap<block_t, biovec*>::iterator p = io_queue.lower_bound(b->start);
 	if ((p != io_queue.end() &&
 		 p->first < b->start+b->length) ||
@@ -305,6 +306,19 @@ int BlockDevice::_cancel_io(biovec *bio)
   return 0;
 }
 
+
+
+int BlockDevice::count_io(block_t start, block_t len)
+{
+  int n = 0;
+  multimap<block_t,biovec*>::iterator p = io_queue.lower_bound(start);
+  while (p != io_queue.end() && p->first < start+len) {
+	dout(1) << "count_io in " << start << "~" << len << " : " << *p->second << endl;
+	n++;
+	p++;
+  }
+  return n;
+}
 
 
 // low level io

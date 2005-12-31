@@ -90,7 +90,7 @@ public:
   
   ObjectCache *get_oc(BufferCache *bc) {
 	if (!oc) {
-	  oc = new ObjectCache(object_id, bc);
+	  oc = new ObjectCache(object_id, this, bc);
 	  oc->get();
 	  get();
 	}
