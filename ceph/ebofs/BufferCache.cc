@@ -37,10 +37,10 @@ void BufferHead::finish_partials()
 	  // current epoch!  make like a bh_write.
 	  assert(cur_block == 0);
 	  cur_block = p->first;
-	  dout(1) << "finish_partials  same epoch, doing a bh_write on " << p->first << endl;
+	  dout(1) << "finish_partials  same epoch, doing a bh_write on " << p->first << " on " << *this << endl;
 	} else {
 	  // past epoch.  just write.
-	  dout(1) << "finish_partials  prior epoch, writing to " << p->first << endl;
+	  dout(1) << "finish_partials  prior epoch, writing to " << p->first << " on " << *this << endl;
 	  oc->bc->dev.write( p->second.block, 1, bl,
 						 new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
 						 "finish_partials");
@@ -763,7 +763,7 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   block_t b = exv[0].start;
   assert(exv[0].length == 1);
 
-  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << endl;
+  dout(1) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << endl;
 
 
   // copy map state, queue for this block
