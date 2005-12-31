@@ -35,27 +35,29 @@ void BufferHead::finish_partials()
 
 	if (p->second.epoch == epoch_modified) {  // FIXME: this'll break when we add journaling!  ick.
 	  // current epoch!  make like a bh_write.
+	  assert(cur_block == 0);
 	  cur_block = p->first;
 	  dout(1) << "finish_partials  same epoch, doing a bh_write on " << p->first << endl;
 	} else {
 	  // past epoch.  just write.
+	  dout(1) << "finish_partials  prior epoch, writing to " << p->first << endl;
 	  oc->bc->dev.write( p->second.block, 1, bl,
 						 new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
 						 "finish_partials");
 	  //oc->get();  // don't need OC for completion func!
 	}
-
   }
   partial_write.clear();
 
+  apply_partial();
   if (cur_block) {
 	// same as epoch_modified, so do a normal bh_write.  
 	// assert: this should match the current onode's block
-	apply_partial();
 	oc->bc->mark_dirty(this);
 	oc->bc->bh_write(oc->on, this, cur_block);
 	oc->bc->dec_unflushed(epoch_modified);  // undo the queued partial inc
-  }
+  } else 
+	oc->bc->mark_clean(this);
 }
 
 void BufferHead::cancel_partials()
@@ -663,6 +665,8 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   dout(20) << "bh_write  " << *bh << " to " << ex << endl;
 
   //assert(bh->tx_ioh == 0);
+
+  assert(bh->get_last_flushed() < bh->get_version());
 
   bh->tx_block = ex.start;
   bh->tx_ioh = dev.write(ex.start, ex.length, bh->data,
