@@ -390,13 +390,13 @@ class NodePool {
 
  public:
   void commit_start(BlockDevice& dev, version_t version) {
-	dout(1) << "ebofs.nodepool.commit_start start" << endl;
+	dout(20) << "ebofs.nodepool.commit_start start" << endl;
 
 	assert(flushing == 0);
 	if (1)
 	  for (unsigned i=0; i<region_loc.size(); i++) {
 		int c = dev.count_io(region_loc[i].start, region_loc[i].length);
-		dout(1) << "ebofs.nodepool.commit_start  region " << region_loc[i] << " has " << c << " ios" << endl;
+		dout(20) << "ebofs.nodepool.commit_start  region " << region_loc[i] << " has " << c << " ios" << endl;
 		assert(c == 0);
 	  }
 
@@ -418,8 +418,11 @@ class NodePool {
 	  unsigned region = nodeid_region(*i);
 	  block_t off = nodeid_offset(*i);
 	  block_t b = region_loc[region].start + off;
-	  assert(didb.count(b) == 0);
-	  didb.insert(b);
+
+	  if (1) {  // sanity check debug FIXME
+		assert(didb.count(b) == 0);
+		didb.insert(b);
+	  }
 
 	  bufferlist bl;
 	  bl.append(n->get_buffer());
@@ -440,14 +443,14 @@ class NodePool {
 	}
 	limbo.clear();
 
-	dout(1) << "ebofs.nodepool.commit_start finish" << endl;
+	dout(20) << "ebofs.nodepool.commit_start finish" << endl;
   }
 
   void commit_wait() {
 	while (flushing > 0) {
 	  commit_cond.Wait(ebofs_lock);
 	}
-	dout(1) << "ebofs.nodepool.commit_wait finish" << endl;
+	dout(20) << "ebofs.nodepool.commit_wait finish" << endl;
   }
 
 

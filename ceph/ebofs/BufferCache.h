@@ -98,6 +98,7 @@ class BufferHead : public LRUObject {
   void set_version(version_t v) { version = v; }
   version_t get_last_flushed() { return last_flushed; }
   void set_last_flushed(version_t v) { 
+	if (v <= last_flushed) cout << "last_flushed begin set to " << v << ", was " << last_flushed << endl;
 	assert(v > last_flushed);
 	last_flushed = v; 
   }
