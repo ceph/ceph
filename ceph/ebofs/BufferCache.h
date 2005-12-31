@@ -50,8 +50,9 @@ class BufferHead : public LRUObject {
 
  private:
   map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
-
+ public:
   map<block_t, PartialWrite> partial_write;  // queued writes w/ partial content
+ private:
 
   int        ref;
   int        state;
@@ -272,7 +273,7 @@ class BufferHead : public LRUObject {
 inline ostream& operator<<(ostream& out, BufferHead& bh)
 {
   out << "bufferhead(" << bh.start() << "~" << bh.length();
-  //out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
+  out << " v" << bh.get_version() << "/" << bh.get_last_flushed();
   if (bh.is_missing()) out << " missing";
   if (bh.is_dirty()) out << " dirty";
   if (bh.is_clean()) out << " clean";

@@ -1202,6 +1202,7 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
   // map into blocks
   off_t opos = off;         // byte pos in object
   size_t zleft = 0;         // zeros left to write
+  size_t left = len;        // bytes left
 
   block_t bstart = off / EBOFS_BLOCK_SIZE;
 
@@ -1210,15 +1211,15 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 	opos = on->object_size;
 	bstart = on->object_size / EBOFS_BLOCK_SIZE;
   }
-  if (bl.length() == 0) {
-	zleft += len;
-	len = 0;
-  }
   if (off+len > on->object_size) {
 	dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
 			 << " -> " << off+len << endl;
 	on->object_size = off+len;
 	dirty_onode(on);
+  }
+  if (bl.length() == 0) {
+	zleft += len;
+	left = 0;
   }
   if (zleft)
 	dout(10) << "apply_write zeroing first " << zleft << " bytes of " << *on << endl;
@@ -1243,7 +1244,6 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
   
   // copy from bl into buffer cache
   unsigned blpos = 0;       // byte pos in input buffer
-  size_t left = len;        // bytes left
 
   // write data into buffers
   for (map<block_t, BufferHead*>::iterator i = hits.begin();

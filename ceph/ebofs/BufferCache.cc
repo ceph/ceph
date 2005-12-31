@@ -32,15 +32,18 @@ void BufferHead::finish_partials()
 	  assert(is_tx());
 	  oc->bc->bh_cancel_write(this);
 	}
-
-	if (p->second.epoch == epoch_modified) {  // FIXME: this'll break when we add journaling!  ick.
-	  // current epoch!  make like a bh_write.
+	
+	vector<Extent> exv;
+	oc->on->map_extents(object_loc.start, 1, exv);
+	assert(exv.size() == 1);
+	if (exv[0].start == p->first) {
+	  // current block!  make like a bh_write.
 	  assert(cur_block == 0);
 	  cur_block = p->first;
-	  dout(1) << "finish_partials  same epoch, doing a bh_write on " << p->first << " on " << *this << endl;
+	  dout(10) << "finish_partials  same block, doing a bh_write on " << p->first << " on " << *this << endl;
 	} else {
 	  // past epoch.  just write.
-	  dout(1) << "finish_partials  prior epoch, writing to " << p->first << " on " << *this << endl;
+	  dout(10) << "finish_partials  different block, writing to " << p->first << " on " << *this << endl;
 	  oc->bc->dev.write( p->second.block, 1, bl,
 						 new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
 						 "finish_partials");
@@ -54,8 +57,10 @@ void BufferHead::finish_partials()
 	// same as epoch_modified, so do a normal bh_write.  
 	// assert: this should match the current onode's block
 	oc->bc->mark_dirty(this);
+	if (tx_ioh) 
+	  oc->bc->bh_cancel_write(this);
 	oc->bc->bh_write(oc->on, this, cur_block);
-	oc->bc->dec_unflushed(epoch_modified);  // undo the queued partial inc
+	oc->bc->dec_unflushed(epoch_modified);  // undo the queued partial inc.  (bh_write just inced it)
   } else 
 	oc->bc->mark_clean(this);
 }
@@ -553,7 +558,10 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   // split off right
   BufferHead *right = new BufferHead(orig->get_oc());
   right->set_version(orig->get_version());
+  right->epoch_modified = orig->epoch_modified;
+  right->last_flushed = orig->last_flushed;
   right->set_state(orig->get_state());
+
   block_t newleftlen = after - orig->start();
   right->set_start( after );
   right->set_length( orig->length() - newleftlen );
@@ -678,6 +686,13 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 
   on->oc->get();
   inc_unflushed( bh->epoch_modified );
+
+  // hose any partial on the same block
+  if (bh->partial_write.count(ex.start)) {
+	dout(10) << "bh_write hosing parital write on same block " << ex.start << " " << *bh << endl;
+	dec_unflushed( bh->partial_write[ex.start].epoch );
+	bh->partial_write.erase(ex.start);
+  }
 }
 
 
@@ -763,7 +778,7 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   block_t b = exv[0].start;
   assert(exv[0].length == 1);
 
-  dout(1) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << endl;
+  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
 
 
   // copy map state, queue for this block
