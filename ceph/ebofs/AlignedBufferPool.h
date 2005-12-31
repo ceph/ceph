@@ -33,7 +33,7 @@ class AlignedBufferPool {
   }
 
   void free(char *p, unsigned len) {
-	dout(20) << "bufferpool(" << (void*)this << ").free " << (void*)p << " len " << len << " ... total " << talloc << endl;
+	dout(10) << "bufferpool(" << (void*)this << ").free " << (void*)p << " len " << len << " ... total " << talloc << endl;
 	talloc -= len;
 	if (dommap)
 	  ::munmap(p, len);
@@ -60,7 +60,7 @@ class AlignedBufferPool {
 	if (g_conf.ebofs_abp_zero)
 	  ::bzero(p, bytes);  // only to shut up valgrind
 
-	dout(20) << "bufferpool(" << (void*)this << ").alloc " << (void*)p << " len " << bytes << " ... total " << talloc << endl;
+	dout(10) << "bufferpool(" << (void*)this << ").alloc " << (void*)p << " len " << bytes << " ... total " << talloc << endl;
 
 	return new buffer(p, bytes, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE|BUFFER_MODE_CUSTOMFREE,
 					  bytes,

@@ -529,7 +529,7 @@ class BufferCache {
 
   // io
   void bh_read(Onode *on, BufferHead *bh, block_t from=0);
-  void bh_write(Onode *on, BufferHead *bh);
+  void bh_write(Onode *on, BufferHead *bh, block_t shouldbe=0);
   void bh_queue_partial_write(Onode *on, BufferHead *bh);
 
   bool bh_cancel_read(BufferHead *bh);

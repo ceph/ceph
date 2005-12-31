@@ -36,7 +36,7 @@ void BufferHead::finish_partials()
 	if (p->second.epoch == epoch_modified) {  // FIXME: this'll break when we add journaling!  ick.
 	  // current epoch!  make like a bh_write.
 	  cur_block = p->first;
-	  dout(10) << "finish_partials  same epoch, doing a bh_write" << endl;
+	  dout(1) << "finish_partials  same epoch, doing a bh_write on " << p->first << endl;
 	} else {
 	  // past epoch.  just write.
 	  oc->bc->dev.write( p->second.block, 1, bl,
@@ -53,7 +53,7 @@ void BufferHead::finish_partials()
 	// assert: this should match the current onode's block
 	apply_partial();
 	oc->bc->mark_dirty(this);
-	oc->bc->bh_write(oc->on, this);
+	oc->bc->bh_write(oc->on, this, cur_block);
 	oc->bc->dec_unflushed(epoch_modified);  // undo the queued partial inc
   }
 }
@@ -643,7 +643,7 @@ bool BufferCache::bh_cancel_read(BufferHead *bh)
   return false;
 }
 
-void BufferCache::bh_write(Onode *on, BufferHead *bh)
+void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 {
   dout(10) << "bh_write " << *on << " on " << *bh << endl;
   assert(bh->get_version() > 0);
@@ -656,6 +656,9 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh)
   on->map_extents(bh->start(), bh->length(), exv);
   assert(exv.size() == 1);
   Extent ex = exv[0];
+
+  if (shouldbe)
+	assert(ex.length == 1 && ex.start == shouldbe);
 
   dout(20) << "bh_write  " << *bh << " to " << ex << endl;
 
