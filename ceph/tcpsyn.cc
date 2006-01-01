@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 
   int started = 0;
 
-  if (myrank == 0) g_conf.debug = 20;
+  //if (myrank == 0) g_conf.debug = 20;
 
   // create mds
   MDS *mds[NUMMDS];

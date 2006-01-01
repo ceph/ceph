@@ -50,9 +50,9 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
   fake_osdmap_expand: 0,
-  fake_osd_sync: false,//true,
+  fake_osd_sync: false,
 
-  debug: 0,
+  debug: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   debug_buffer: 0,
