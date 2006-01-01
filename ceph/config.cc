@@ -20,7 +20,7 @@ Mutex bufferlock;
 
 
 
-FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe files over whole objects
+FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
@@ -120,10 +120,10 @@ md_config_t g_conf = {
   // --- ebofs ---
   ebofs: 0,
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
-  ebofs_oc_size:      10,
-  ebofs_cc_size:      10,
-  ebofs_bc_size:      (5 *256),  // measured in 4k blocks, or *256 for MB
-  ebofs_bc_max_dirty: (1 *256),  // before write() will wait for data to flush
+  ebofs_oc_size:      1000,
+  ebofs_cc_size:      1000,
+  ebofs_bc_size:      (150 *256),  // measured in 4k blocks, or *256 for MB
+  ebofs_bc_max_dirty: (110 *256),  // before write() will wait for data to flush
   
   ebofs_abp_zero: false,
   ebofs_abp_max_alloc: 4096*32,
@@ -288,7 +288,7 @@ void parse_config_options(vector<char*>& args)
 
 
 	else if (strcmp(args[i], "--ebofs") == 0) 
-	  g_conf.ebofs = atoi(args[++i]);
+	  g_conf.ebofs = 1;
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);
