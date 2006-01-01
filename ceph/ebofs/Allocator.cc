@@ -156,7 +156,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	}	
   }
 
-  dout(1) << "allocate failed, fs full!  " << fs->free_blocks << endl;
+  dout(1) << "allocate failed, fs completely full!  " << fs->free_blocks << endl;
+  assert(0);
   dump_freelist();
   return -1;
 }

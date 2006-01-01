@@ -45,6 +45,15 @@ void parse_syn_options(vector<char*>& args)
 		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"rw") == 0) {
+		int a = atoi(args[++i]);
+		int b = atoi(args[++i]);
+		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
+		syn_iargs.push_back( a );
+		syn_iargs.push_back( b );
+		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
+		syn_iargs.push_back( a );
+		syn_iargs.push_back( b );
 	  } else if (strcmp(args[i],"makedirs") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -700,6 +709,20 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
 	if (time_to_stop()) break;
 	dout(2) << "reading block " << i << "/" << chunks << endl;
 	client->read(fd, buf, rdsize, i*rdsize);
+
+	// verify fingerprint
+	int *p = (int*)buf;
+	while ((char*)p < buf + rdsize) {
+	  assert(*p == (char*)p - buf);
+	  p++;
+	  assert(*p == (int)i);
+	  p++;
+	  assert(*p == client->get_nodeid());
+	  p++;
+	  assert(*p == 0);
+	  p++;
+	}
+
   }
   
   client->close(fd);

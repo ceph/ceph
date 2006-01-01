@@ -28,6 +28,8 @@
 
 #define SYNCLIENT_MODE_OPENTEST     30
 
+
+
 void parse_syn_options(vector<char*>& args);
 
 class SyntheticClient {

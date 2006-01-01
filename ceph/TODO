@@ -5,8 +5,25 @@ client
 
 
 ebofs
+- full fs
+- zero regions?
 - journaling
 - combine inodes into same blocks
+
+osd
+- unordered ops
+- rep ops trickyness?
+
+- ardos validation
+ - what happens if entire pg set changes, recovery doesn't finish, modifications are made, and pg set changes again?  is anybody "complete" anymore?
+
+- osdmap history distribution
+
+- handle down osds
+- pg_bit changes
+
+- 'dirty' log on primary?
+- fast recovery from degraded mode
 
 
 cluster issues
@@ -26,7 +43,6 @@ cluster issues
 - deleting objects
  - osd's that rejoin
  - must keep stray replicas clean
- - 
 
 - communications failure model.. is it appropriate?
   - reliable, ordered, buffered and flushed on 'down' boundaries?
@@ -40,16 +56,6 @@ fakestore
 
 
 osd foo
-- osdmap history distribution
-
-- handle down osds
-- pg_bit changes
-
-- thread (and unordered!) ops
- - rep ops tricky
-
-- 'dirty' log on primary?
-- fast recovery from degraded mode
 
 
 

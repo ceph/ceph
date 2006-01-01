@@ -582,6 +582,41 @@ public:
   }
 };
 
+
+void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
+{
+  // onode
+  struct ebofs_onode eo;
+  eo.onode_loc = on->onode_loc;
+  eo.object_id = on->object_id;
+  eo.object_size = on->object_size;
+  eo.object_blocks = on->object_blocks;
+  eo.num_attr = on->attr.size();
+  eo.num_extents = on->extents.size();
+  bl.copy_in(off, sizeof(eo), (char*)&eo);
+  off += sizeof(eo);
+
+  // attr
+  for (map<string, AttrVal>::iterator i = on->attr.begin();
+	   i != on->attr.end();
+	   i++) {
+	bl.copy_in(off, i->first.length()+1, i->first.c_str());
+	off += i->first.length()+1;
+	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
+	off += sizeof(int);
+	bl.copy_in(off, i->second.len, i->second.data);
+	off += i->second.len;
+	dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
+  }
+  
+  // extents
+  for (unsigned i=0; i<on->extents.size(); i++) {
+	bl.copy_in(off, sizeof(Extent), (char*)&on->extents[i]);
+	off += sizeof(Extent);
+	dout(15) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
+  }
+}
+
 void Ebofs::write_onode(Onode *on)
 {
   // buffer
@@ -607,34 +642,9 @@ void Ebofs::write_onode(Onode *on)
 
   dout(10) << "write_onode " << *on << " to " << on->onode_loc << endl;
 
-  struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
-  eo->onode_loc = on->onode_loc;
-  eo->object_id = on->object_id;
-  eo->object_size = on->object_size;
-  eo->object_blocks = on->object_blocks;
-  eo->num_attr = on->attr.size();
-  eo->num_extents = on->extents.size();
-  
-  // attr
-  unsigned off = sizeof(*eo);
-  for (map<string, AttrVal>::iterator i = on->attr.begin();
-	   i != on->attr.end();
-	   i++) {
-	bl.copy_in(off, i->first.length()+1, i->first.c_str());
-	off += i->first.length()+1;
-	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
-	off += sizeof(int);
-	bl.copy_in(off, i->second.len, i->second.data);
-	off += i->second.len;
-	dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
-  }
-  
-  // extents
-  for (unsigned i=0; i<on->extents.size(); i++) {
-	bl.copy_in(off, sizeof(Extent), (char*)&on->extents[i]);
-	off += sizeof(Extent);
-	dout(15) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
-  }
+  unsigned off = 0;
+  encode_onode(on, bl, off);
+  assert(off == bytes);
 
   // write
   dev.write( on->onode_loc.start, on->onode_loc.length, bl, 
@@ -874,6 +884,31 @@ Cnode* Ebofs::get_cnode(object_t cid)
   }
 }
 
+void Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
+{
+  // cnode
+  struct ebofs_cnode ec;
+  ec.cnode_loc = cn->cnode_loc;
+  ec.coll_id = cn->coll_id;
+  ec.num_attr = cn->attr.size();
+  bl.copy_in(off, sizeof(ec), (char*)&ec);
+  off += sizeof(ec);
+  
+  // attr
+  for (map<string, AttrVal >::iterator i = cn->attr.begin();
+	   i != cn->attr.end();
+	   i++) {
+	bl.copy_in(off, i->first.length()+1, i->first.c_str());
+	off += i->first.length()+1;
+	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
+	off += sizeof(int);
+	bl.copy_in(off, i->second.len, i->second.data);
+	off += i->second.len;
+
+	dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
+  }
+}
+
 void Ebofs::write_cnode(Cnode *cn)
 {
   // allocate buffer
@@ -895,28 +930,10 @@ void Ebofs::write_cnode(Cnode *cn)
   
   dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << endl;
 
-  struct ebofs_cnode ec;
-  ec.cnode_loc = cn->cnode_loc;
-  ec.coll_id = cn->coll_id;
-  ec.num_attr = cn->attr.size();
-  
-  bl.copy_in(0, sizeof(ec), (char*)&ec);
-  
-  // attr
-  unsigned off = sizeof(ec);
-  for (map<string, AttrVal >::iterator i = cn->attr.begin();
-	   i != cn->attr.end();
-	   i++) {
-	bl.copy_in(off, i->first.length()+1, i->first.c_str());
-	off += i->first.length()+1;
-	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
-	off += sizeof(int);
-	bl.copy_in(off, i->second.len, i->second.data);
-	off += i->second.len;
+  unsigned off = 0;
+  encode_cnode(cn, bl, off);
+  assert(off == bytes);
 
-	dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
-  }
-  
   // write
   dev.write( cn->cnode_loc.start, cn->cnode_loc.length, bl, 
 			 new C_E_InodeFlush(this), "write_cnode" );

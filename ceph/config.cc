@@ -120,8 +120,8 @@ md_config_t g_conf = {
   // --- ebofs ---
   ebofs: 0,
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
-  ebofs_oc_size:      100,
-  ebofs_cc_size:      100,
+  ebofs_oc_size:      10,
+  ebofs_cc_size:      10,
   ebofs_bc_size:      (5 *256),  // measured in 4k blocks, or *256 for MB
   ebofs_bc_max_dirty: (1 *256),  // before write() will wait for data to flush
   
