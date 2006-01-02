@@ -2165,32 +2165,38 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsync)
   //bl.claim( op->get_data() );
   
   // write 
+  int r = 0;
   if (onsync) {
 	if (g_conf.fake_osd_sync) {
 	  // fake a delayed sync
-	  store->write(op->get_oid(),
-				   op->get_length(),
-				   op->get_offset(),
-				   bl,
-				   false);
+	  r = store->write(op->get_oid(),
+					   op->get_length(),
+					   op->get_offset(),
+					   bl,
+					   false);
 	  g_timer.add_event_after(1.0,
 							  onsync);
 	} else {
 	  // for real
-	  store->write(op->get_oid(),
-				   op->get_length(),
-				   op->get_offset(),
-				   bl,
-				   onsync);
+	  r = store->write(op->get_oid(),
+					   op->get_length(),
+					   op->get_offset(),
+					   bl,
+					   onsync);
 	}
   } else {
 	// normal business
-	store->write(op->get_oid(),
-				 op->get_length(),
-				 op->get_offset(),
-				 bl,
-				 false);
+	r = store->write(op->get_oid(),
+					 op->get_length(),
+					 op->get_offset(),
+					 bl,
+					 false);
   }
+
+  if (r < 0) {
+	dout(0) << "apply_write failed with r = " << r << "... disk full?" << endl;
+  }
+  assert(r >= 0);   // disk full?
 
   // set version
   store->setattr(op->get_oid(), "version", &v, sizeof(v));

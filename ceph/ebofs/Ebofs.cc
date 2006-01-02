@@ -1681,7 +1681,8 @@ int Ebofs::write(object_t oid,
   }
 
   // out of space?
-  unsigned max = len / EBOFS_BLOCK_SIZE + 10;
+  //unsigned max = ((len+off) - MIN(off, on->object_size)) / EBOFS_BLOCK_SIZE + 10;
+  unsigned max = (len+off) / EBOFS_BLOCK_SIZE + 10;  // very conservative; assumes we have to rewrite
   max += dirty_onodes.size() + dirty_cnodes.size();
   if (max >= free_blocks) {
 	dout(1) << "write failing, only " << free_blocks << " blocks free, may need up to " << max << endl;
