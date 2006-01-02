@@ -70,7 +70,7 @@ md_config_t g_conf = {
 
   client_sync_writes: 0,
 
-  client_bcache: 1,
+  client_bcache: 0,
   client_bcache_alloc_minsize: 1<<10, // 1KB
   client_bcache_alloc_maxsize: 1<<18, // 256KB
   client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
@@ -108,7 +108,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 4,
+  osd_pg_bits: 10,
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
