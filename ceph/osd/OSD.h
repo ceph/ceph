@@ -93,8 +93,12 @@ class OSD : public Dispatcher {
   
  public:
   void do_op(class MOSDOp *m);
-  static void doop(OSD *o, MOSDOp *op) {
+  static void static_doop(OSD *o, MOSDOp *op) {
 	o->do_op(op);
+  };
+  void dequeue_op(class MOSDOp *m);
+  static void static_dequeueop(OSD *o, MOSDOp *op) {
+	o->dequeue_op(op);
   };
 
  protected:

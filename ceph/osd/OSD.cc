@@ -139,7 +139,10 @@ OSD::OSD(int id, Messenger *m)
   {
 	char name[80];
 	sprintf(name,"osd%d.threadpool", whoami);
-	threadpool = new ThreadPool<OSD, MOSDOp>(name, g_conf.osd_maxthreads, (void (*)(OSD*, MOSDOp*))doop, this);
+	threadpool = new ThreadPool<OSD, MOSDOp>(name, g_conf.osd_maxthreads, 
+											 static_doop,
+											 this,
+											 static_dequeueop);
   }
 }
 
@@ -1460,7 +1463,7 @@ void OSD::pull_replica(PG *pg, object_t oid)
 void OSD::op_rep_pull(MOSDOp *op)
 {
   long got = 0;
-  lock_object(op->get_oid());
+  //lock_object(op->get_oid());
   {
 	dout(7) << "rep_pull on " << hex << op->get_oid() << dec << " v " << op->get_version() << endl;
 	
@@ -1490,7 +1493,7 @@ void OSD::op_rep_pull(MOSDOp *op)
 	
 	messenger->send_message(reply, op->get_asker());
   }
-  unlock_object(op->get_oid());
+  //unlock_object(op->get_oid());
   delete op;
 
   logger->inc("r_pull");
@@ -1618,7 +1621,7 @@ void OSD::push_replica(PG *pg, object_t oid)
 
 void OSD::op_rep_push(MOSDOp *op)
 {
-  lock_object(op->get_oid());
+  //lock_object(op->get_oid());
   {
 	dout(7) << "rep_push on " << hex << op->get_oid() << dec << " v " << op->get_version() <<  endl;
 	
@@ -1654,7 +1657,7 @@ void OSD::op_rep_push(MOSDOp *op)
 	messenger->send_message(reply, op->get_asker());
 	
   }
-  unlock_object(op->get_oid());
+  //unlock_object(op->get_oid());
   delete op;
 }
 
@@ -1748,7 +1751,7 @@ void OSD::remove_replica(PG *pg, object_t oid)
 
 void OSD::op_rep_remove(MOSDOp *op)
 {
-  lock_object(op->get_oid());
+  //lock_object(op->get_oid());
   {
 	dout(7) << "rep_remove on " << hex << op->get_oid() << dec << " v " << op->get_version() <<  endl;
 	
@@ -1768,7 +1771,7 @@ void OSD::op_rep_remove(MOSDOp *op)
 	messenger->send_message(new MOSDOpReply(op, r, osdmap, true), 
 							op->get_asker());
   }
-  unlock_object(op->get_oid());
+  //unlock_object(op->get_oid());
   delete op;
 }
 
@@ -1829,7 +1832,7 @@ void OSD::op_rep_modify(MOSDOp *op)
   // when we introduce unordered messaging.. FIXME
   object_t oid = op->get_oid();
 
-  lock_object(oid);
+  //lock_object(oid);
   {
 	version_t ov = 0;
 	if (store->exists(oid)) 
@@ -1874,7 +1877,7 @@ void OSD::op_rep_modify(MOSDOp *op)
 	  delete op;
 	}
   }
-  unlock_object(oid);
+  //unlock_object(oid);
 }
 
 
@@ -2003,22 +2006,41 @@ void OSD::handle_op(MOSDOp *op)
   pending_ops++;
   if (g_conf.osd_maxthreads < 1) {
 	osd_lock.Unlock();
-	do_op(op);   // or, just do it now
+	{
+	  dequeue_op(op);
+	  do_op(op);      
+	}
 	osd_lock.Lock();
   } else {
-	threadpool->put_op(op);
+	osd_lock.Unlock();    // because put_op might block, bc threadpool may be calling dequeue_op w/ q_lock
+	{
+	  threadpool->put_op(op);
+	}
+	osd_lock.Lock();
   }
 }
 
-void doop(OSD *u, MOSDOp *p) {
-  u->do_op(p);
+
+/*
+ * called serially (but in worker thread) as items are dequeued from the threadpool
+ */
+void OSD::dequeue_op(MOSDOp *op)
+{
+  dout(12) << "dequeue_op " << op << endl;
+  lock_object(op->get_oid());
 }
 
+/*
+ * called asynchronously by worker thread after items are dequeued
+ */
 void OSD::do_op(MOSDOp *op) 
 {
   dout(12) << "do_op " << op << endl;
 
   logger->inc("op");
+
+  object_t oid = op->get_oid();
+  //lock_object(oid);  // dequeue_op does this now
 
   // replication ops?
   if (OSD_OP_IS_REP(op->get_op())) {
@@ -2063,6 +2085,8 @@ void OSD::do_op(MOSDOp *op)
 	}
   }
 
+  unlock_object(oid);
+  
   //dout(12) << "finish op " << op << endl;
 
   // finish
@@ -2100,7 +2124,7 @@ void OSD::wait_for_no_ops()
 void OSD::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
-  lock_object(oid);
+  //lock_object(oid);
   {
 	// read into a buffer
 	bufferlist bl;
@@ -2130,14 +2154,14 @@ void OSD::op_read(MOSDOp *op)
 	// send it
 	messenger->send_message(reply, op->get_asker());
   }
-  unlock_object(oid);
+  //unlock_object(oid);
   delete op;
 }
 
 void OSD::op_stat(MOSDOp *op)
 {
   object_t oid = op->get_oid();
-  lock_object(oid);
+  //lock_object(oid);
   {
 	struct stat st;
 	memset(&st, sizeof(st), 0);
@@ -2151,7 +2175,7 @@ void OSD::op_stat(MOSDOp *op)
 	
 	logger->inc("stat");
   }
-  unlock_object(oid);
+  //unlock_object(oid);
 
   delete op;
 }
@@ -2283,7 +2307,7 @@ void OSD::op_modify(MOSDOp *op)
   if (op->get_op() == OSD_OP_DELETE) opname = "op_delete";
   if (op->get_op() == OSD_OP_TRUNCATE) opname = "op_truncate";
 
-  lock_object(oid);
+  //lock_object(oid);
   {
 	// version?  clean?
 	version_t ov = 0;  // 0 == dne (yet)
@@ -2348,7 +2372,7 @@ void OSD::op_modify(MOSDOp *op)
 	  messenger->send_message(reply, op->get_asker());
 	}
   }
-  unlock_object(oid);
+  //unlock_object(oid);
 }
 
 

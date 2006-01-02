@@ -112,7 +112,7 @@ md_config_t g_conf = {
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
-  osd_maxthreads: 0,   // 0 == no threading!
+  osd_maxthreads: 1,   // 0 == no threading!
   osd_mkfs: false,
   
   osd_fakestore_syncthreads: 4,
@@ -122,8 +122,8 @@ md_config_t g_conf = {
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
   ebofs_oc_size:      1000,
   ebofs_cc_size:      1000,
-  ebofs_bc_size:      (150 *256),  // measured in 4k blocks, or *256 for MB
-  ebofs_bc_max_dirty: (110 *256),  // before write() will wait for data to flush
+  ebofs_bc_size:      (15 *256),  // 4k blocks, or *256 for MB
+  ebofs_bc_max_dirty: (10 *256),  // before write() will block
   
   ebofs_abp_zero: false,
   ebofs_abp_max_alloc: 4096*32,
@@ -289,6 +289,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--ebofs") == 0) 
 	  g_conf.ebofs = 1;
+	else if (strcmp(args[i], "--fakestore") == 0) 
+	  g_conf.ebofs = 0;
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);

@@ -5,13 +5,14 @@ client
 
 
 ebofs
-- full fs
+- combine inodes into same blocks
 - zero regions?
 - journaling
-- combine inodes into same blocks
+- clone()
+
 
 osd
-- unordered ops
+- thread queue + object locks... need to be ordered!
 - rep ops trickyness?
 
 - ardos validation
@@ -24,6 +25,11 @@ osd
 
 - 'dirty' log on primary?
 - fast recovery from degraded mode
+
+
+ardos
+- watch osd utilization; adjust cluster map
+
 
 
 cluster issues
@@ -51,20 +57,12 @@ cluster issues
 
 
 
-fakestore
-- sync notification is totally broken, use '--fake_osd_sync 1' for now
-
-
-osd foo
-
-
 
 REPLICATION
 
 requirements
 - We should support a fast succession of map updates, even when intermediate reorganizations are not allowed to complete before the next starts.
 - Reorganizations can be arbitrary, potentially involving a completely disparate set of OSDs in a RG between epochs.  (We will of course seek to minimize movement in practice.)
-
 
 
 
@@ -79,16 +77,12 @@ requirements
 
 
 KNOWN MDS BUGS to fix after fast
-- redo mds capabilities code ... distribute!!
-- fix softlock, stat
+- posix extensions
+ - softstat
 - implement truncate() for real
-- hard links!
-
-
-
-finish HARD LINKS
-- reclaim danglers from inode file on discover...
-- fix rename
+- finish hard links!
+ - reclaim danglers from inode file on discover...
+ - fix rename wrt hard links
 
 
 

@@ -10,8 +10,8 @@
 
 // debug output
 #include "config.h"
-#define tpdout(x) if (x <= g_conf.debug) cout << myname << " "
-#define DBLVL 10
+#define tpdout(x) if (x <= g_conf.debug) cout << myname 
+#define DBLVL 15
 
 
 using namespace std;
@@ -25,11 +25,14 @@ class ThreadPool {
   queue<T *> q;
   Mutex q_lock;
   Semaphore q_sem;
-  pthread_t *thread;
+
   int num_ops;
   int num_threads;
-  void (*func)(U*,T*);
+  vector<pthread_t> thread;
+
   U *u;
+  void (*func)(U*,T*);
+  void (*prefunc)(U*,T*);
   string myname;
 
   static void *foo(void *arg)
@@ -39,21 +42,17 @@ class ThreadPool {
 	return 0;
   }
 
-  void * do_ops(void *nothing)
+  void *do_ops(void *nothing)
   {
-    T* op;
-	
-    tpdout(DBLVL) << "Thread "<< pthread_self() << " ready for action\n";
-    while(1) {
+	tpdout(DBLVL) << ".do_ops starting " << pthread_self() << endl;
+    while (1) {
       q_sem.Get();
-      op = get_op();
-	  
-      if(op == NULL) {
-		tpdout(DBLVL) << "Thread exiting\n";
-		//pthread_exit(0);
+      if (q.empty()) {
+		tpdout(DBLVL) << ".do_ops thread exiting" << pthread_self() << endl;
 		return 0;   // like this, i think!
       }
-      tpdout(DBLVL) << "Thread "<< pthread_self() << " calling the function on " << op << endl;
+	  T *op = get_op();
+      tpdout(DBLVL) << ".func thread "<< pthread_self() << " on " << op << endl;
       func(u, op);
     }
 	return 0;
@@ -63,11 +62,17 @@ class ThreadPool {
   T* get_op()
   {
     T* op;
-
     q_lock.Lock();
-    op = q.front();
-    q.pop();
-    num_ops--;
+	{
+	  op = q.front();
+	  q.pop();
+	  num_ops--;
+	  
+	  if (prefunc && op) {
+		tpdout(DBLVL) << ".prefunc thread "<< pthread_self() << " on " << op << endl;
+		prefunc(u, op);
+	  }
+	}
     q_lock.Unlock();
 
     return op;
@@ -75,40 +80,35 @@ class ThreadPool {
 
  public:
 
-  ThreadPool(char *myname, int howmany, void (*f)(U*,T*), U *obj)
-  {
-    int status;
-
-	this->myname = myname;
-    u = obj;
-    num_ops = 0;
-    func = f;
-    num_threads = howmany;
-    thread = new pthread_t[num_threads];
-
-    for(int i = 0; i < howmany; i++) {
+  ThreadPool(char *myname, int howmany, void (*f)(U*,T*), U *obj, void (*pf)(U*,T*) = 0) :
+	num_ops(0), num_threads(howmany), 
+	thread(num_threads),
+	u(obj),
+	func(f), prefunc(pf), 
+	myname(myname) {
+	// start threads
+	int status;
+	for(int i = 0; i < howmany; i++) {
       status = pthread_create(&thread[i], NULL, (void*(*)(void *))&ThreadPool::foo, this);
+	  assert(status == 0);
     }
   }
-
-  ~ThreadPool()
-  {
-	// put null ops to make threads exit cleanly
-    for(int i = 0; i < num_threads; i++) 
-	  put_op(0);
-
+  
+  ~ThreadPool() {
+	// bump sem to make threads exit cleanly
+	for(int i = 0; i < num_threads; i++) 
+	  q_sem.Put();
+	
 	// wait for them to die
     for(int i = 0; i < num_threads; i++) {
-      tpdout(DBLVL) << "Joining thread " << i << "\n";
+      tpdout(DBLVL) << ".des joining thread " << thread[i] << endl;
 	  void *rval = 0;  // we don't actually care
       pthread_join(thread[i], &rval);
     }
-    delete[] thread;
   }
-
-  void put_op(T* op)
-  {
-    tpdout(DBLVL) << "put_op " << op << endl;
+  
+  void put_op(T* op) {
+    tpdout(DBLVL) << ".put_op " << op << endl;
     q_lock.Lock();
     q.push(op);
     num_ops++;
