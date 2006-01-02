@@ -136,4 +136,9 @@ class MOSDOp : public Message {
   virtual char *get_type_name() { return "oop"; }
 };
 
+inline ostream& operator<<(ostream& out, MOSDOp& op)
+{
+  return out << "MOSDOp(" << MSG_ADDR_NICE(op.get_asker()) << "." << op.get_tid() << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
+}
+
 #endif

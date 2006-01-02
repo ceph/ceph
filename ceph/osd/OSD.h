@@ -24,6 +24,7 @@ class Message;
 class OSDReplicaOp {
  public:
   class MOSDOp        *op;
+  Mutex                lock;
   map<__uint64_t,int>  waitfor_ack;
   map<__uint64_t,int>  waitfor_sync;
   bool                 local_ack;
@@ -40,9 +41,19 @@ class OSDReplicaOp {
 	{ }
   bool can_send_ack() { return !cancel && local_ack && waitfor_ack.empty(); }
   bool can_send_sync() { return !cancel && local_sync && waitfor_sync.empty(); }
-  bool can_delete() { return cancel || can_send_sync(); }
+  bool can_delete() { return local_sync && (cancel || waitfor_sync.empty()); } // ??
 };
 
+inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
+{
+  out << "repop(wfack=" << repop.waitfor_ack << " wfsync=" << repop.waitfor_sync;
+  if (repop.local_ack) out << " local_ack";
+  if (repop.local_sync) out << " local_sync";
+  if (repop.cancel) out << " cancel";
+  out << " op=" << repop.op;
+  out << ")";
+  return out;
+}
 
 class OSD : public Dispatcher {
  protected:
@@ -90,6 +101,8 @@ class OSD : public Dispatcher {
 				  Context *onsync = 0); 
 
 
+  void get_repop(OSDReplicaOp*);
+  void put_repop(OSDReplicaOp*);   // will send ack/safe msgs, and delete as necessary.
   
  public:
   void do_op(class MOSDOp *m);

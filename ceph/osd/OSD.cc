@@ -382,13 +382,10 @@ void OSD::handle_op_reply(MOSDOpReply *m)
 
 void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 {
-  //replica_write_lock.Lock();
-
   if (!replica_ops.count(tid)) {
 	dout(7) << "not waiting for tid " << tid << " replica op reply, map must have changed, dropping." << endl;
 	return;
   }
-  
   
   OSDReplicaOp *repop = replica_ops[tid];
   MOSDOp *op = repop->op;
@@ -397,10 +394,10 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
   dout(7) << "ack_replica_op " << tid << " op " << op << " result " << result << " safe " << safe << " from osd" << fromosd << endl;
   dout(15) << " repop was: op " << repop->op << " waitfor ack=" << repop->waitfor_ack << " sync=" << repop->waitfor_sync << " localsync=" << repop->local_sync << " cancel=" << repop->cancel << "  osd=" << repop->osds << endl;
 
-
   if (result >= 0) {
 	// success
-	
+	get_repop(repop);
+
 	if (safe) {
 	  // sync
 	  repop->waitfor_sync.erase(tid);
@@ -410,32 +407,17 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	  replica_pg_osd_tids[pgid][fromosd].erase(tid);
 	  if (replica_pg_osd_tids[pgid][fromosd].empty()) replica_pg_osd_tids[pgid].erase(fromosd);
 	  if (replica_pg_osd_tids[pgid].empty()) replica_pg_osd_tids.erase(pgid);
-
-	  // send 'safe' to client?
-	  if (repop->can_send_sync()) {
-		if (op->wants_safe()) {
-		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
-		  messenger->send_message(reply, op->get_asker());
-		}
-		delete op;
-		delete repop;
-	  }
 	} else {
 	  // ack
 	  repop->waitfor_ack.erase(tid);
-
-	  // send 'ack' to client?
-	  if (repop->can_send_ack()) {
-		if (op->wants_ack()) {
-		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
-		  messenger->send_message(reply, op->get_asker());
-		}
-	  }
 	}
+
+	put_repop(repop);
 
   } else {
 	// failure
-	
+	get_repop(repop);
+
 	// forget about this failed attempt..
 	repop->osds.erase(fromosd);
 	repop->waitfor_ack.erase(tid);
@@ -446,6 +428,7 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	replica_pg_osd_tids[pgid][fromosd].erase(tid);
 	if (replica_pg_osd_tids[pgid][fromosd].empty()) replica_pg_osd_tids[pgid].erase(fromosd);
 	if (replica_pg_osd_tids[pgid].empty()) replica_pg_osd_tids.erase(pgid);
+
 
 	bool did = false;
 	PG *pg = get_pg(pgid);
@@ -475,11 +458,14 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	  }
 	  if (replica_pg_osd_tids[pgid].empty()) replica_pg_osd_tids.erase(pgid);
 
-	  if (repop->local_sync)
+	  assert(0); // this is all busted
+	  if (repop->local_sync) {
+		repop->lock.Unlock();
 		delete repop;
-	  else {
+	  } else {
 		repop->op = 0;      // we're forwarding it
 		repop->cancel = true;     // will get deleted by local sync callback
+		repop->lock.Unlock();
 	  }
 	  did = true;
 	}
@@ -498,25 +484,11 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 
 	if (!did) {
 	  // an osd musta just gone down or somethin.  are we "done" now?
-	  
-	  // send 'safe' to client?
-	  if (repop->can_send_sync()) {
-		if (op->wants_safe()) {
-		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
-		  messenger->send_message(reply, op->get_asker());
-		}
-		delete op;
-		delete repop;
-	  }
-	  
-	  // send 'ack' to client?
-	  else if (repop->can_send_ack()) {
-		if (op->wants_ack()) {
-		  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
-		  messenger->send_message(reply, op->get_asker());
-		}
-	  }	  
+	  assert(0); // fix me all fuddup
 	}
+
+
+	put_repop(repop);
 
   }
 
@@ -1819,7 +1791,7 @@ void OSD::op_rep_modify_sync(MOSDOp *op)
   object_t oid = op->get_oid();
   lock_object(oid);
   {
-	dout(2) << "rep_modify_sync on op " << op << endl;
+	dout(2) << "rep_modify_sync on op " << *op << endl;
 	MOSDOpReply *ack2 = new MOSDOpReply(op, 0, osdmap, true);
 	messenger->send_message(ack2, op->get_asker());
 	delete op;
@@ -2035,7 +2007,7 @@ void OSD::dequeue_op(MOSDOp *op)
  */
 void OSD::do_op(MOSDOp *op) 
 {
-  dout(12) << "do_op " << op << endl;
+  dout(2) << "do_op " << op << endl;
 
   logger->inc("op");
 
@@ -2265,6 +2237,45 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
 }
 
 
+void OSD::get_repop(OSDReplicaOp *repop)
+{
+  dout(2) << "get_repop " << *repop << endl;
+  repop->lock.Lock();
+}
+
+void OSD::put_repop(OSDReplicaOp *repop)
+{
+  dout(15) << "put_repop " << *repop << endl;
+
+  // safe?
+  if (repop->can_send_sync()) {
+	if (repop->op->wants_safe()) {
+	  dout(2) << "put_repop sending safe on " << *repop << endl;
+	  MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
+	  messenger->send_message(reply, repop->op->get_asker());
+	}
+  }
+
+  // ack?
+  else if (repop->can_send_ack()) {
+	//if (repop->op->wants_ack()) {
+	  dout(2) << "put_repop sending ack on " << *repop << endl;
+	  MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
+	  messenger->send_message(reply, repop->op->get_asker());
+	  //}
+  }
+
+  // done.
+  if (repop->can_delete()) {
+	dout(2) << "put_repop deleting " << *repop << endl;
+	repop->lock.Unlock();  
+	delete repop->op;
+	delete repop;
+  } else {
+	repop->lock.Unlock();
+  }
+}
+
 class C_OSD_WriteSync : public Context {
 public:
   OSD *osd;
@@ -2277,25 +2288,10 @@ public:
 
 void OSD::op_modify_sync(OSDReplicaOp *repop)
 {
-  object_t oid = repop->op->get_oid();
-  lock_object(oid);
-  {
-	dout(2) << "op_modify_sync on op " << repop->op << endl;
-
-	repop->local_sync = true;
-	if (repop->can_send_sync()) {
-	  dout(2) << "op_modify_sync on " << hex << oid << dec << " op " << repop->op << endl;
-	  if (repop->op->wants_safe()) {
-		MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
-		messenger->send_message(reply, repop->op->get_asker());
-	  }
-	  delete repop->op;
-	}
-	if (repop->can_delete()) {
-	  delete repop;
-	}
-  }
-  unlock_object(oid);
+  dout(2) << "op_modify_sync on op " << *repop->op << endl;
+  get_repop(repop);
+  repop->local_sync = true;
+  put_repop(repop);
 }
 
 void OSD::op_modify(MOSDOp *op)
@@ -2320,10 +2316,15 @@ void OSD::op_modify(MOSDOp *op)
 	// issue replica writes
 	OSDReplicaOp *repop = new OSDReplicaOp(op, nv, ov);
 	
-	PG *pg = get_pg(op->get_pg());
-	for (unsigned i=1; i<pg->acting.size(); i++) {
-	  issue_replica_op(pg, repop, pg->acting[i]);
+	PG *pg;
+	osd_lock.Lock();
+	{
+	  pg = get_pg(op->get_pg());
+	  for (unsigned i=1; i<pg->acting.size(); i++) {
+		issue_replica_op(pg, repop, pg->acting[i]);
+	  }
 	}
+	osd_lock.Unlock();
 	
 	// pre-ack
 	//MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
@@ -2338,39 +2339,35 @@ void OSD::op_modify(MOSDOp *op)
 	  r = apply_write(op, nv, onsync);
 	  
 	  // put new object in proper collection
-	  if (ov == 0) pg->add_object(store, oid);
+	  if (ov == 0) 
+		pg->add_object(store, oid);          // FIXME : be careful w/ locking
 	  
+	  get_repop(repop);
 	  repop->local_ack = true;
-	  
+	  put_repop(repop);
+
 	  logger->inc("c_wr");
 	  logger->inc("c_wrb", op->get_length());
 	} 
 	else if (op->get_op() == OSD_OP_TRUNCATE) {
 	  // truncate
 	  r = store->truncate(oid, op->get_offset());
+	  get_repop(repop);
 	  repop->local_ack = true;
 	  repop->local_sync = true;
+	  put_repop(repop);
 	}
 	else if (op->get_op() == OSD_OP_DELETE) {
 	  // delete
-	  pg->remove_object(store, op->get_oid());
+	  pg->remove_object(store, op->get_oid());  // be careful with locking
 	  r = store->remove(oid);
+	  get_repop(repop);
 	  repop->local_ack = true;
 	  repop->local_sync = true;
+	  put_repop(repop);
 	}
 	else assert(0);
 	
-	// can we reply yet?
-	if (repop->can_send_sync()) {
-	  dout(10) << opname << " sending sync on " << op << endl;
-	  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true);
-	  messenger->send_message(reply, op->get_asker());
-	}
-	else if (repop->can_send_ack()) {
-	  dout(10) << opname << " sending ack on " << op << endl;
-	  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
-	  messenger->send_message(reply, op->get_asker());
-	}
   }
   //unlock_object(oid);
 }

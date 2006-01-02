@@ -108,7 +108,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 8,
+  osd_pg_bits: 4,
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
@@ -122,8 +122,8 @@ md_config_t g_conf = {
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
   ebofs_oc_size:      1000,
   ebofs_cc_size:      1000,
-  ebofs_bc_size:      (15 *256),  // 4k blocks, or *256 for MB
-  ebofs_bc_max_dirty: (10 *256),  // before write() will block
+  ebofs_bc_size:      (150 *256),  // 4k blocks, or *256 for MB
+  ebofs_bc_max_dirty: (100 *256),  // before write() will block
   
   ebofs_abp_zero: false,
   ebofs_abp_max_alloc: 4096*32,
@@ -289,8 +289,11 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--ebofs") == 0) 
 	  g_conf.ebofs = 1;
-	else if (strcmp(args[i], "--fakestore") == 0) 
+	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
+	  g_conf.fake_osd_sync = 2;
+	  g_conf.osd_pg_bits = 3;
+	}
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);

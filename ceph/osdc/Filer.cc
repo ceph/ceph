@@ -18,7 +18,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << "filer: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << MSG_ADDR_NICE(messenger->get_myaddr()) << ".filer "
 
 
 
@@ -386,6 +386,7 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+  dout(7) << "handle_osd_modify_reply " << tid << " safe " << m->get_safe() << endl;//" from " << MSG_ADDR_NICE(m->get_source()) << endl;
   assert(op_modify.count(tid));
   PendingOSDOp_t *p = op_modify[ tid ];
 
@@ -574,82 +575,3 @@ void Filer::handle_osd_mkfs_ack(Message *m)
 }
 
 
-/*
-
-
-int Filer::zero(inodeno_t ino, 
-				size_t len, 
-				size_t offset, 
-				Context *onfinish)
-{
-
-  // search and destroy, if len==offset==0
-  if (len == 0 && offset == 0) {
-	// search and destroy
-
-	assert(0);
-  }
-
-  // zero/delete
-  last_tid++;
-  int num_rep = 1;
-  
-  // pending write record
-  PendingOSDOp_t *p = new PendingOSDOp_t;
-  p->onfinish = onfinish;
-  
-  // find data
-  list<OSDExtent> extents;
-  file_to_extents(ino, len, offset, num_rep, extents);
-  
-  dout(7) << "osd zero ino " << ino << " len " << len << " off " << offset << " in " << extents.size() << " extents on " << num_rep << " replicas" << endl;
-  
-  for (list<OSDExtent>::iterator it = extents.begin();
-	   it != extents.end();
-	   it++) {
-	int r = 0;   // pick a replica
-	last_tid++;
-	
-	// issue zero
-	MOSDOp *m;
-	//if (it->len == 
-	m = new MOSDOp(last_tid, messenger->get_myaddr(),
-	it->oid, it->pg, osdmap->get_version(), 
-				   OSD_OP_DELETE);
-	it->len, it->offset);
-	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
-	
-	// add to gather set
-	p->outstanding_ops.insert(last_tid);
-	op_zeros[last_tid] = p;
-  }
-}
-
-
-void
-Filer::handle_osd_op_reply(MOSDOpReply *m)
-{
-  // get pio
-  tid_t tid = m->get_tid();
-
-  
-  if (PendingOSDOp_t *p = op_zeros[ tid ])
-  op_zeros.erase( tid );
-
-  // our op finished
-  p->outstanding_ops.erase(tid);
-
-  if (p->outstanding_ops.empty()) {
-	// all done
-	Context *onfinish = p->onfinish;
-	delete p;
-
-	if (onfinish) {
-	  onfinish->finish(0);
-	  delete onfinish;
-	}
-  }
-  delete m;
-}
-
-*/
