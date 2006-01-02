@@ -383,6 +383,9 @@ int BlockDevice::_write(unsigned bno, unsigned num, bufferlist& bl)
 
 	iov[n].iov_base = i->c_str();
 	iov[n].iov_len = MIN(left, i->length());
+
+	assert((((unsigned)iov[n].iov_base) & 4095) == 0);
+	assert((iov[n].iov_len & 4095) == 0);
 	
 	left -= iov[n].iov_len;
 	n++;
@@ -393,8 +396,10 @@ int BlockDevice::_write(unsigned bno, unsigned num, bufferlist& bl)
   
   if (r < 0) {
 	dout(1) << "couldn't write bno " << bno << " num " << num 
-			<< " (" << num << " bytes) r=" << r 
+			<< " (" << len << " bytes) in " << n << " iovs,  r=" << r 
 			<< " errno " << errno << " " << strerror(errno) << endl;
+	dout(1) << "bl is " << bl << endl;
+	assert(0);
   } else {
 	assert(r == (int)len);
   }
