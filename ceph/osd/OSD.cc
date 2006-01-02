@@ -179,6 +179,9 @@ int OSD::shutdown()
 {
   dout(1) << "shutdown" << endl;
 
+  // finish ops
+  wait_for_no_ops();
+
   // stop threads
   delete threadpool;
   threadpool = 0;

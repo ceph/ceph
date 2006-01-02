@@ -712,7 +712,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
 
 	// verify fingerprint
 	int *p = (int*)buf;
-	while ((char*)p < buf + rdsize) {
+	while ((char*)p + 32 < buf + rdsize) {
 	  assert(*p == (char*)p - buf);
 	  p++;
 	  assert(*p == (int)i);
