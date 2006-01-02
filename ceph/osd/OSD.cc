@@ -187,7 +187,9 @@ int OSD::shutdown()
   monitor->shutdown();
   messenger->shutdown();
 
+  osd_lock.Unlock();
   int r = store->umount();
+  osd_lock.Lock();
   return r;
 }
 

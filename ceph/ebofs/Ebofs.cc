@@ -200,6 +200,7 @@ int Ebofs::umount()
   finisher_stop = true;
   finisher_cond.Signal();
   finisher_lock.Unlock();
+
   finisher_thread.join();
 
   trim_bc(0);
