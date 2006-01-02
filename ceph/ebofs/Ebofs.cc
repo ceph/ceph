@@ -620,7 +620,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 void Ebofs::write_onode(Onode *on)
 {
   // buffer
-  int bytes = sizeof(ebofs_onode) + on->get_attr_bytes() + on->get_extent_bytes();
+  unsigned bytes = sizeof(ebofs_onode) + on->get_attr_bytes() + on->get_extent_bytes();
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
 
   bufferlist bl;
@@ -912,7 +912,7 @@ void Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
 void Ebofs::write_cnode(Cnode *cn)
 {
   // allocate buffer
-  int bytes = sizeof(ebofs_cnode) + cn->get_attr_bytes();
+  unsigned bytes = sizeof(ebofs_cnode) + cn->get_attr_bytes();
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
   
   bufferlist bl;
@@ -1680,8 +1680,10 @@ int Ebofs::write(object_t oid,
   }
 
   // out of space?
-  if (len / EBOFS_BLOCK_SIZE + 10 >= free_blocks) {
-	dout(1) << "write failing, only " << free_blocks << " blocks free" << endl;
+  unsigned max = len / EBOFS_BLOCK_SIZE + 10;
+  max += dirty_onodes.size() + dirty_cnodes.size();
+  if (max >= free_blocks) {
+	dout(1) << "write failing, only " << free_blocks << " blocks free, may need up to " << max << endl;
 	if (onsafe) delete onsafe;
 	ebofs_lock.Unlock();
 	return -ENOSPC;
