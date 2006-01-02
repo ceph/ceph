@@ -112,7 +112,7 @@ md_config_t g_conf = {
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
-  osd_maxthreads: 1,   // 0 == no threading!
+  osd_maxthreads: 10,   // 0 == no threading!
   osd_mkfs: false,
   
   osd_fakestore_syncthreads: 4,
