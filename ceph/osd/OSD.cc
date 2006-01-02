@@ -392,15 +392,14 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
   pg_t pgid = op->get_pg();
 
   dout(7) << "ack_replica_op " << tid << " op " << op << " result " << result << " safe " << safe << " from osd" << fromosd << endl;
-  dout(15) << " repop was: op " << repop->op << " waitfor ack=" << repop->waitfor_ack << " sync=" << repop->waitfor_sync << " localsync=" << repop->local_sync << " cancel=" << repop->cancel << "  osd=" << repop->osds << endl;
 
   if (result >= 0) {
 	// success
 	get_repop(repop);
 
 	if (safe) {
-	  // sync
-	  repop->waitfor_sync.erase(tid);
+	  // safe
+	  repop->waitfor_safe.erase(tid);
 	  repop->waitfor_ack.erase(tid);
 	  replica_ops.erase(tid);
 	  
@@ -421,7 +420,7 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	// forget about this failed attempt..
 	repop->osds.erase(fromosd);
 	repop->waitfor_ack.erase(tid);
-	repop->waitfor_sync.erase(tid);
+	repop->waitfor_safe.erase(tid);
 
 	replica_ops.erase(tid);
 
@@ -449,8 +448,8 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 		replica_pg_osd_tids[pgid][it->second].erase(it->first);
 		if (replica_pg_osd_tids[pgid][it->second].empty()) replica_pg_osd_tids[pgid].erase(it->second);
 	  }
-	  for (map<__uint64_t,int>::iterator it = repop->waitfor_sync.begin();
-		   it != repop->waitfor_sync.end();
+	  for (map<__uint64_t,int>::iterator it = repop->waitfor_safe.begin();
+		   it != repop->waitfor_safe.end();
 		   it++) {
 		replica_ops.erase(it->first);
 		replica_pg_osd_tids[pgid][it->second].erase(it->first);
@@ -459,12 +458,12 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	  if (replica_pg_osd_tids[pgid].empty()) replica_pg_osd_tids.erase(pgid);
 
 	  assert(0); // this is all busted
-	  if (repop->local_sync) {
+	  if (repop->local_safe) {
 		repop->lock.Unlock();
 		delete repop;
 	  } else {
 		repop->op = 0;      // we're forwarding it
-		repop->cancel = true;     // will get deleted by local sync callback
+		repop->cancel = true;     // will get deleted by local safe callback
 		repop->lock.Unlock();
 	  }
 	  did = true;
@@ -1776,22 +1775,22 @@ void OSD::op_rep_remove_reply(MOSDOpReply *op)
 }
 
 
-class C_OSD_RepModifySync : public Context {
+class C_OSD_RepModifySafe : public Context {
 public:
   OSD *osd;
   MOSDOp *op;
-  C_OSD_RepModifySync(OSD *o, MOSDOp *oo) : osd(o), op(oo) { }
+  C_OSD_RepModifySafe(OSD *o, MOSDOp *oo) : osd(o), op(oo) { }
   void finish(int r) {
-	osd->op_rep_modify_sync(op);
+	osd->op_rep_modify_safe(op);
   }
 };
 
-void OSD::op_rep_modify_sync(MOSDOp *op)
+void OSD::op_rep_modify_safe(MOSDOp *op)
 {
   object_t oid = op->get_oid();
   lock_object(oid);
   {
-	dout(2) << "rep_modify_sync on op " << *op << endl;
+	dout(2) << "rep_modify_safe on op " << *op << endl;
 	MOSDOpReply *ack2 = new MOSDOpReply(op, 0, osdmap, true);
 	messenger->send_message(ack2, op->get_asker());
 	delete op;
@@ -1819,12 +1818,12 @@ void OSD::op_rep_modify(MOSDOp *op)
 	dout(12) << "rep_modify in " << *pg << " o " << hex << oid << dec << " v " << op->get_version() << " (i have " << ov << ")" << endl;
 	
 	int r = 0;
-	Context *onsync = 0;
+	Context *onsafe = 0;
 	if (op->get_op() == OSD_OP_REP_WRITE) {
 	  // write
 	  assert(op->get_data().length() == op->get_length());
-	  onsync = new C_OSD_RepModifySync(this, op);
-	  r = apply_write(op, op->get_version(), onsync);
+	  onsafe = new C_OSD_RepModifySafe(this, op);
+	  r = apply_write(op, op->get_version(), onsafe);
 	  if (ov == 0) pg->add_object(store, oid);
 	  
 	  logger->inc("r_wr");
@@ -1838,12 +1837,12 @@ void OSD::op_rep_modify(MOSDOp *op)
 	  r = store->truncate(oid, op->get_offset());
 	} else assert(0);
 	
-	if (onsync) {
+	if (onsafe) {
 	  // ack
 	  MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap, false);
 	  messenger->send_message(ack, op->get_asker());
 	} else {
-	  // sync, safe
+	  // safe, safe
 	  MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap, true);
 	  messenger->send_message(ack, op->get_asker());
 	  delete op;
@@ -2156,7 +2155,7 @@ void OSD::op_stat(MOSDOp *op)
 
 // WRITE OPS
 
-int OSD::apply_write(MOSDOp *op, version_t v, Context *onsync)
+int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
 {
   // take buffers from the message
   bufferlist bl;
@@ -2165,23 +2164,23 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsync)
   
   // write 
   int r = 0;
-  if (onsync) {
+  if (onsafe) {
 	if (g_conf.fake_osd_sync) {
-	  // fake a delayed sync
+	  // fake a delayed safe
 	  r = store->write(op->get_oid(),
 					   op->get_length(),
 					   op->get_offset(),
 					   bl,
 					   false);
 	  g_timer.add_event_after(1.0,
-							  onsync);
+							  onsafe);
 	} else {
 	  // for real
 	  r = store->write(op->get_oid(),
 					   op->get_length(),
 					   op->get_offset(),
 					   bl,
-					   onsync);
+					   onsafe);
 	}
   } else {
 	// normal business
@@ -2229,8 +2228,9 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
   messenger->send_message(wr, MSG_ADDR_OSD(osd));
   
   repop->osds.insert(osd);
+
   repop->waitfor_ack[tid] = osd;
-  repop->waitfor_sync[tid] = osd;
+  repop->waitfor_safe[tid] = osd;
 
   replica_ops[tid] = repop;
   replica_pg_osd_tids[pg->get_pgid()][osd].insert(tid);
@@ -2248,21 +2248,21 @@ void OSD::put_repop(OSDReplicaOp *repop)
   dout(15) << "put_repop " << *repop << endl;
 
   // safe?
-  if (repop->can_send_sync()) {
-	if (repop->op->wants_safe()) {
-	  dout(2) << "put_repop sending safe on " << *repop << endl;
-	  MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
-	  messenger->send_message(reply, repop->op->get_asker());
-	}
+  if (repop->can_send_safe() &&
+	  repop->op->wants_safe()) {
+	dout(2) << "put_repop sending safe on " << *repop << endl;
+	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
+	messenger->send_message(reply, repop->op->get_asker());
+	repop->sent_safe = true;
   }
 
   // ack?
-  else if (repop->can_send_ack()) {
-	//if (repop->op->wants_ack()) {
-	  dout(2) << "put_repop sending ack on " << *repop << endl;
-	  MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
-	  messenger->send_message(reply, repop->op->get_asker());
-	  //}
+  else if (repop->can_send_ack() &&
+		   repop->op->wants_ack()) {
+	dout(2) << "put_repop sending ack on " << *repop << endl;
+	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
+	messenger->send_message(reply, repop->op->get_asker());
+	repop->sent_ack = true;
   }
 
   // done.
@@ -2276,21 +2276,21 @@ void OSD::put_repop(OSDReplicaOp *repop)
   }
 }
 
-class C_OSD_WriteSync : public Context {
+class C_OSD_WriteSafe : public Context {
 public:
   OSD *osd;
   OSDReplicaOp *repop;
-  C_OSD_WriteSync(OSD *o, OSDReplicaOp *op) : osd(o), repop(op) {}
+  C_OSD_WriteSafe(OSD *o, OSDReplicaOp *op) : osd(o), repop(op) {}
   void finish(int r) {
-	osd->op_modify_sync(repop);
+	osd->op_modify_safe(repop);
   }
 };
 
-void OSD::op_modify_sync(OSDReplicaOp *repop)
+void OSD::op_modify_safe(OSDReplicaOp *repop)
 {
-  dout(2) << "op_modify_sync on op " << *repop->op << endl;
+  dout(2) << "op_modify_safe on op " << *repop->op << endl;
   get_repop(repop);
-  repop->local_sync = true;
+  repop->local_safe = true;
   put_repop(repop);
 }
 
@@ -2335,8 +2335,8 @@ void OSD::op_modify(MOSDOp *op)
 	if (op->get_op() == OSD_OP_WRITE) {
 	  // write
 	  assert(op->get_data().length() == op->get_length());
-	  Context *onsync = new C_OSD_WriteSync(this, repop);
-	  r = apply_write(op, nv, onsync);
+	  Context *onsafe = new C_OSD_WriteSafe(this, repop);
+	  r = apply_write(op, nv, onsafe);
 	  
 	  // put new object in proper collection
 	  if (ov == 0) 
@@ -2354,7 +2354,7 @@ void OSD::op_modify(MOSDOp *op)
 	  r = store->truncate(oid, op->get_offset());
 	  get_repop(repop);
 	  repop->local_ack = true;
-	  repop->local_sync = true;
+	  repop->local_safe = true;
 	  put_repop(repop);
 	}
 	else if (op->get_op() == OSD_OP_DELETE) {
@@ -2363,7 +2363,7 @@ void OSD::op_modify(MOSDOp *op)
 	  r = store->remove(oid);
 	  get_repop(repop);
 	  repop->local_ack = true;
-	  repop->local_sync = true;
+	  repop->local_safe = true;
 	  put_repop(repop);
 	}
 	else assert(0);

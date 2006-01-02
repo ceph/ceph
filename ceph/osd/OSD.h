@@ -26,29 +26,32 @@ class OSDReplicaOp {
   class MOSDOp        *op;
   Mutex                lock;
   map<__uint64_t,int>  waitfor_ack;
-  map<__uint64_t,int>  waitfor_sync;
+  map<__uint64_t,int>  waitfor_safe;
   bool                 local_ack;
-  bool                 local_sync;
+  bool                 local_safe;
   bool                 cancel;
+  bool sent_ack;
+  bool sent_safe;
 
   set<int>         osds;
   version_t        new_version, old_version;
   
   OSDReplicaOp(class MOSDOp *o, version_t nv, version_t ov) : 
 	op(o), 
-	local_ack(false), local_sync(false), cancel(false),
+	local_ack(false), local_safe(false), cancel(false),
+	sent_ack(false), sent_safe(false),
 	new_version(nv), old_version(ov)
 	{ }
-  bool can_send_ack() { return !cancel && local_ack && waitfor_ack.empty(); }
-  bool can_send_sync() { return !cancel && local_sync && waitfor_sync.empty(); }
-  bool can_delete() { return local_sync && (cancel || waitfor_sync.empty()); } // ??
+  bool can_send_ack() { return !sent_ack && !cancel && local_ack && waitfor_ack.empty(); }
+  bool can_send_safe() { return !sent_safe && !cancel && local_safe && waitfor_safe.empty(); }
+  bool can_delete() { return local_safe && (cancel || waitfor_safe.empty()); }
 };
 
 inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
 {
-  out << "repop(wfack=" << repop.waitfor_ack << " wfsync=" << repop.waitfor_sync;
+  out << "repop(wfack=" << repop.waitfor_ack << " wfsafe=" << repop.waitfor_safe;
   if (repop.local_ack) out << " local_ack";
-  if (repop.local_sync) out << " local_sync";
+  if (repop.local_safe) out << " local_safe";
   if (repop.cancel) out << " cancel";
   out << " op=" << repop.op;
   out << ")";
@@ -98,7 +101,7 @@ class OSD : public Dispatcher {
   void wait_for_no_ops();
 
   int apply_write(MOSDOp *op, version_t v,
-				  Context *onsync = 0); 
+				  Context *onsafe = 0); 
 
 
   void get_repop(OSDReplicaOp*);
@@ -190,8 +193,8 @@ class OSD : public Dispatcher {
   void op_rep_remove_reply(class MOSDOpReply *op);
   
   void op_rep_modify(class MOSDOp *op);   // write, trucnate, delete
-  void op_rep_modify_sync(class MOSDOp *op);
-  friend class C_OSD_RepModifySync;
+  void op_rep_modify_safe(class MOSDOp *op);
+  friend class C_OSD_RepModifySafe;
 
  public:
   OSD(int id, Messenger *m);
@@ -210,7 +213,7 @@ class OSD : public Dispatcher {
   void op_read(class MOSDOp *m);
   void op_stat(class MOSDOp *m);
   void op_modify(class MOSDOp *m);
-  void op_modify_sync(class OSDReplicaOp *repop);
+  void op_modify_safe(class OSDReplicaOp *repop);
 
   // for replication
   void handle_op_reply(class MOSDOpReply *m);

@@ -327,7 +327,12 @@ Filer::write(inode_t& inode,
   list<OSDExtent> extents;
   file_to_extents(inode, len, offset, extents);
 
-  dout(7) << "osd write ino " << hex << inode.ino << dec << " len " << len << " off " << offset << " in " << extents.size() << " extents" << endl;
+  //assert(onack || onsafe);
+
+  dout(7) << "osd write ino " << hex << inode.ino << dec << " len " << len << " off " << offset 
+		  << " in " << extents.size() << " extents " 
+	//<< onack << "/" << onsafe 
+		  << endl;
 
   size_t off = 0;  // ptr into buffer
 
@@ -359,12 +364,12 @@ Filer::write(inode_t& inode,
 	off += it->len;
 
 	// add to gather set
-	if (true||onack)          // not impl. on OSD yet.
+	if (onack)
 	  p->waitfor_ack.insert(last_tid);
 	else
 	  m->set_want_ack(false);
 
-	if (onsafe) 
+	if (onsafe || !onack)        // wait for safe if neither callback is provided (sloppy user)           
 	  p->waitfor_safe.insert(last_tid);
 	else
 	  m->set_want_safe(false);
@@ -409,20 +414,22 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
   } else {
 	// ack.
 	dout(15) << "handle_osd_modify_reply ack on " << tid << endl;
+	assert(p->waitfor_ack.count(tid));
 	p->waitfor_ack.erase(tid);
-	if (p->waitfor_safe.empty())
-	  op_modify.erase( tid );      // not safe requested
 
+	if (p->waitfor_safe.empty()) {
+	  op_modify.erase( tid );      // no safe requested  (FIXME or ooo delivery)
+	  assert(p->onsafe == 0);
+	}
+	
 	if (p->waitfor_ack.empty()) {
 	  onack = p->onack;
 	  p->onack = 0;
-	  if (p->waitfor_safe.empty()) {
-		assert(p->onsafe == 0);   // should be null.. no safe requested    (FIXME unless ooo delivery!)
+	  if (p->waitfor_safe.empty()) 
 		delete p;
-	  }
 	}
   }
-
+  
   // do callbacks
   if (onack) {
 	onack->finish(0);

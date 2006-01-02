@@ -44,17 +44,16 @@ class ThreadPool {
 
   void *do_ops(void *nothing)
   {
-	tpdout(DBLVL) << ".do_ops starting " << pthread_self() << endl;
+	tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " starting" << endl;
     while (1) {
       q_sem.Get();
-      if (q.empty()) {
-		tpdout(DBLVL) << ".do_ops thread exiting" << pthread_self() << endl;
-		return 0;   // like this, i think!
-      }
+      if (q.empty()) break;
+
 	  T *op = get_op();
       tpdout(DBLVL) << ".func thread "<< pthread_self() << " on " << op << endl;
       func(u, op);
     }
+	tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " exiting" << endl;
 	return 0;
   }
 
@@ -86,6 +85,8 @@ class ThreadPool {
 	u(obj),
 	func(f), prefunc(pf), 
 	myname(myname) {
+	tpdout(DBLVL) << ".cons num_threads " << num_threads << endl;
+	
 	// start threads
 	int status;
 	for(int i = 0; i < howmany; i++) {
