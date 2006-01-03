@@ -112,7 +112,7 @@ md_config_t g_conf = {
   osd_max_rep: 4,
   osd_fsync: true,
   osd_writesync: false,
-  osd_maxthreads: 10,   // 0 == no threading!
+  osd_maxthreads: 10,    // 0 == no threading
   osd_mkfs: false,
   
   osd_fakestore_syncthreads: 4,
@@ -132,6 +132,7 @@ md_config_t g_conf = {
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 1000 ms
   bdev_el_bidir: true,          // bidirectional elevator?
+  bdev_iov_max: 512,
 
   // --- fakeclient (mds regression testing) (ancient history) ---
   num_fakeclient: 100,

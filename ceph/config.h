@@ -106,6 +106,7 @@ struct md_config_t {
   int   bdev_el_fw_max_ms;  
   int   bdev_el_bw_max_ms;
   bool  bdev_el_bidir;
+  int   bdev_iov_max;
 
   // fake client
   int      num_fakeclient;

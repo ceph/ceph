@@ -78,10 +78,12 @@ int BlockDevice::io_thread_entry()
 		  
 		  // merge contiguous ops
 		  list<biovec*> biols;
+		  int n = 0;
 		  char type = i->second->type;
 		  pos = i->first;
 		  while (pos == i->first && 
-				 type == i->second->type) {
+				 type == i->second->type &&
+				 ++n <= g_conf.bdev_iov_max) {
 			dout(20) << "io_thread dequeue io at " << pos << " " << *i->second << endl;
 			biovec *bio = i->second;
 			biols.push_back(bio);
@@ -119,8 +121,10 @@ int BlockDevice::io_thread_entry()
 		  // merge continguous ops
 		  list<biovec*> biols;   
 		  char type = i->second->type;
+		  int n = 0;
 		  pos = i->first;
-		  while (pos == i->first && type == i->second->type) {
+		  while (pos == i->first && type == i->second->type &&
+				 ++n <= g_conf.bdev_iov_max) {
 			dout(20) << "io_thread dequeue io at " << pos << " " << *i->second << endl;
 			biovec *bio = i->second;
 			biols.push_back(bio);
@@ -393,7 +397,7 @@ int BlockDevice::_write(unsigned bno, unsigned num, bufferlist& bl)
   }
 
   int r = ::writev(fd, iov, n);
-  
+
   if (r < 0) {
 	dout(1) << "couldn't write bno " << bno << " num " << num 
 			<< " (" << len << " bytes) in " << n << " iovs,  r=" << r 
