@@ -1,7 +1,7 @@
 
 client
 - some heuristic behavior to consolidate caps to inode auth
-- client will re-tx anything it needed to say upon rx of new mds notification
+- client will re-tx anything it needed to say upon rx of new mds notification (?)
 
 
 ebofs
@@ -12,9 +12,6 @@ ebofs
 
 
 osd
-- thread queue + object locks... need to be ordered!
-- rep ops trickyness?
-
 - ardos validation
  - what happens if entire pg set changes, recovery doesn't finish, modifications are made, and pg set changes again?  is anybody "complete" anymore?
 

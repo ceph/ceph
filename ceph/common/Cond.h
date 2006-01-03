@@ -65,6 +65,15 @@ class Cond
 	int r = pthread_cond_broadcast(&C);
 	return r;
   }
+  int SignalOne() { 
+	int r = pthread_cond_signal(&C);
+	return r;
+  }
+  int SignalAll() { 
+	//int r = pthread_cond_signal(&C);
+	int r = pthread_cond_broadcast(&C);
+	return r;
+  }
 };
 
 #endif // !_Cond_Posix_

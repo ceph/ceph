@@ -103,6 +103,7 @@ struct md_config_t {
   size_t ebofs_abp_max_alloc;
 
   // block device
+  int   bdev_iothreads;
   int   bdev_el_fw_max_ms;  
   int   bdev_el_bw_max_ms;
   bool  bdev_el_bidir;

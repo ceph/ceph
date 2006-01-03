@@ -54,11 +54,18 @@ class BlockDevice {
   map<biovec*, block_t>      io_queue_map;
   Cond                       io_wakeup;
   bool                       io_stop;
+  int                        io_threads_started;
   
   void _submit_io(biovec *b);
   int _cancel_io(biovec *bio);
-  void do_io(list<biovec*>& biols);
-   
+  void do_io(int fd, list<biovec*>& biols);
+
+  // elevator scheduler
+  bool    el_dir_forward;
+  block_t el_pos;
+  utime_t el_stop;
+
+
   // io thread
   int io_thread_entry();
   class IOThread : public Thread {
@@ -66,11 +73,12 @@ class BlockDevice {
   public:
 	IOThread(BlockDevice *d) : dev(d) {}
 	void *entry() { return (void*)dev->io_thread_entry(); }
-  } io_thread;
+  } ;
+  vector<IOThread> io_threads;
 
   // low level io
-  int _read(block_t bno, unsigned num, bufferlist& bl);
-  int _write(unsigned bno, unsigned num, bufferlist& bl);
+  int _read(int fd, block_t bno, unsigned num, bufferlist& bl);
+  int _write(int fd, unsigned bno, unsigned num, bufferlist& bl);
 
 
   // complete queue
@@ -90,13 +98,14 @@ class BlockDevice {
   } complete_thread;
 
 
-
+  int open_fd();  // get an fd
 
  public:
   BlockDevice(char *d) : 
 	dev(d), fd(0), num_blocks(0),
-	io_stop(false), 
-	io_thread(this), complete_thread(this) 
+	io_stop(false), io_threads_started(0),
+	el_dir_forward(true), el_pos(0),
+	complete_thread(this) 
 	{ };
   ~BlockDevice() {
 	if (fd > 0) close();

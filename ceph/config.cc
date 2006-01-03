@@ -129,6 +129,7 @@ md_config_t g_conf = {
   ebofs_abp_max_alloc: 4096*32,
 
   // --- block device ---
+  bdev_iothreads:    2,
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 1000 ms
   bdev_el_bidir: true,          // bidirectional elevator?
