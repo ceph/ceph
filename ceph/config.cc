@@ -125,15 +125,15 @@ md_config_t g_conf = {
   ebofs_bc_size:      (150 *256),  // 4k blocks, or *256 for MB
   ebofs_bc_max_dirty: (100 *256),  // before write() will block
   
-  ebofs_abp_zero: false,
-  ebofs_abp_max_alloc: 4096*32,
+  ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
+  ebofs_abp_max_alloc: 4096*32,   // max size of new buffers (larger may induce fragmentation)
 
   // --- block device ---
-  bdev_iothreads:    2,
+  bdev_iothreads:    2,         // number of ios to queue with kernel
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
-  bdev_el_bw_max_ms: 300,       // restart elevator at least once every 1000 ms
+  bdev_el_bw_max_ms: 300,       // restart elevator at least once every 300 ms
   bdev_el_bidir: true,          // bidirectional elevator?
-  bdev_iov_max: 512,
+  bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
 
   // --- fakeclient (mds regression testing) (ancient history) ---
   num_fakeclient: 100,
