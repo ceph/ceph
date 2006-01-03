@@ -126,10 +126,10 @@ md_config_t g_conf = {
   ebofs_bc_max_dirty: (100 *256),  // before write() will block
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
-  ebofs_abp_max_alloc: 4096*32,   // max size of new buffers (larger may induce fragmentation)
+  ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger may induce fragmentation)
 
   // --- block device ---
-  bdev_iothreads:    2,         // number of ios to queue with kernel
+  bdev_iothreads:    1,         // number of ios to queue with kernel
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 300 ms
   bdev_el_bidir: true,          // bidirectional elevator?
