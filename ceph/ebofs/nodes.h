@@ -184,6 +184,8 @@ class NodePool {
   
   int init(struct ebofs_nodepool *np) {
 	// regions
+	assert(region_loc.empty());
+	num_nodes = 0;
 	for (int i=0; i<np->num_regions; i++) {
 	  debofs(3) << "init region " << i << " at " << np->region_loc[i] << endl;
 	  region_loc.push_back( np->region_loc[i] );
