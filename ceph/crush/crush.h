@@ -210,12 +210,12 @@ namespace crush {
 	  return n;
 	}
 
-	int add_item(int parent, int item, float w) {
+	int add_item(int parent, int item, float w, bool back=false) {
 	  // add item
 	  assert(!buckets[parent]->is_uniform());
 	  Bucket *p = buckets[parent];
 	  
-	  p->add_item(item, w);
+	  p->add_item(item, w, back);
 
 	  // set item's parent
 	  Bucket *n = buckets[item];

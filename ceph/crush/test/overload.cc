@@ -25,7 +25,7 @@ Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks)
 	  disks.push_back(ndisks++);
 	float w = ((ndisks-1)/100+1)*10;
 	UniformBucket *b = new UniformBucket(1, 0, w, disks);
-	b->make_primes(hash);  
+	//b->make_primes(hash);  
 	c.add_bucket(b);
 	//cout << h << " uniformbucket with " << wid[h] << " disks weight " << w << endl;
 	return b;

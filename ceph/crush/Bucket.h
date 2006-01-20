@@ -65,7 +65,7 @@ namespace crush {
 
 	virtual void get_items(vector<int>& i) const = 0;
 	virtual float get_item_weight(int item) const = 0;
-	virtual void add_item(int item, float w) = 0;
+	virtual void add_item(int item, float w, bool back=false) = 0;
 	virtual void adjust_item_weight(int item, float w) = 0;
 	virtual void set_item_weight(int item, float w) {
 	  adjust_item_weight(item, w - get_item_weight(item));
@@ -165,7 +165,7 @@ namespace crush {
 	int get_item_type() const { return item_type; }
 	float get_item_weight(int item) const { return item_weight; }
 
-	void add_item(int item, float w) {
+	void add_item(int item, float w, bool back=false) {
 	  if (items.empty())
 		item_weight = w;
 	  items.push_back(item);
@@ -244,11 +244,26 @@ namespace crush {
 	  return 0;
 	}
 
-	void add_item(int item, float w) {
-	  items.push_front(item);
-	  item_weight.push_front(w);
-	  weight += w;
-	  sum_weight.push_front(weight);
+	void add_item(int item, float w, bool back=false) {
+	  if (back) {
+		items.push_back(item);
+		item_weight.push_back(w);
+		sum_weight.clear();
+		float s = 0.0;
+		for (list<float>::reverse_iterator i = item_weight.rbegin();
+			 i != item_weight.rend();
+			 i++) {
+		  s += *i;
+		  sum_weight.push_front(s);
+		}
+		weight += w;
+		assert(weight == s);
+	  } else {
+		items.push_front(item);
+		item_weight.push_front(w);
+		weight += w;
+		sum_weight.push_front(weight);
+	  }
 	}
 
 	void adjust_item_weight(int item, float dw) {
@@ -356,7 +371,7 @@ namespace crush {
 	}
 
 
-	void add_item(int item, float w) {
+	void add_item(int item, float w, bool back=false) {
 	  item_weight[item] = w;
 	  weight += w;
 
@@ -451,7 +466,7 @@ namespace crush {
 	  return ((map<int,float>)item_weight)[item];
 	}
 
-	void add_item(int item, float w) {
+	void add_item(int item, float w, bool back=false) {
 	  item_weight[item] = w;
 	  weight += w;
 	  calc_straws();

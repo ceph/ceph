@@ -13,8 +13,9 @@ Clock g_clock;
 using namespace std;
 
 
+int uniform = 10;
 int branching = 10;
-bool linear = false;
+int buckettype = 0;
 int numrep = 1;
 
 Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks)
@@ -33,10 +34,12 @@ Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks)
   } else {
 	// mixed
 	Bucket *b;
-	if (linear)
-	  b = new ListBucket(h+1);
-	else
+	if (buckettype == 0)
 	  b = new TreeBucket(h+1);
+	else if (buckettype == 1 || buckettype == 2)
+	  b = new ListBucket(h+1);
+	else if (buckettype == 3)
+	  b = new StrawBucket(h+1);
 	for (int i=0; i<wid[h]; i++) {
 	  Bucket *n = make_bucket(c, wid, h-1, ndisks);
 	  b->add_item(n->get_id(), n->get_weight());
@@ -54,7 +57,7 @@ int make_hierarchy(Crush& c, vector<int>& wid, int& ndisks)
 }
 
 
-double go(int dep) 
+double go(int dep, int per) 
 {
   Hash h(73232313);
 
@@ -68,8 +71,9 @@ double go(int dep)
 
   vector<int> wid;
   if (1) {
-	for (int d=0; d<dep; d++)
-	  wid.push_back(branching);
+	wid.push_back(uniform);
+	for (int d=1; d<dep; d++)
+	  wid.push_back(per);
   }
   if (0) {
 	if (dep == 0) 
@@ -114,7 +118,7 @@ double go(int dep)
   end -= start;
   double el = (double)end;
 
-  cout << "\t" << ndisks;
+  //cout << "\t" << ndisks;
 
   return el;
 }
@@ -122,18 +126,46 @@ double go(int dep)
 
 int main() 
 {
-  branching = 8;
+  uniform = branching = 8;
+
+  cout << "// dep\tuniform\tbranch\tndisks" << endl;
 
   for (int d=2; d<=5; d++) {
-	cout << d << "\t" << branching;
-	for (numrep = 1; numrep <= 3; numrep++) {
-	  cout << "\t" << numrep;
+	cout << d;// << "\t" << branching;
+	cout << "\t" << uniform;
+	cout << "\t" << branching;
+
+	int n = 1;
+	for (int i=0; i<d; i++)
+	  n *= branching;
+	cout << "\t" << n;
+
+	numrep = 2;
+
+	// crush
+	for (buckettype = 0; buckettype <= 3; buckettype++) {
+	  switch (buckettype) {
+	  case 0: cout << "\ttree"; break;
+	  case 1: cout << "\tlist"; break;
+	  case 2: continue;
+	  case 3: cout << "\tstraw"; break;
+	  }
+
+	  //for (numrep = 1; numrep <= 3; numrep++) {
+	  //cout << "\t" << numrep;
 	  
-	  //for (linear = false; 1; linear = true) {
-	  double el = go(d);
+	  double el = go(d, branching);
 	  cout << "\t" << el;
-	  //if (linear) break;
 	}
+
+	// rush
+
+	buckettype = 0;
+	cout << "\trush_T\t" << go(2, n/uniform);
+
+	buckettype = 1;
+	cout << "\trush_P\t" << go(2, n/uniform);
+
 	cout << endl;
   }
 }

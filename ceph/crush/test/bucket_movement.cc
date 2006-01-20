@@ -31,8 +31,8 @@ void place(Crush& c, Rule& rule, int numpg, int numrep, map<int, vector<int> >& 
 		  bad = true;
 	  }
 	}
-	if (bad)
-	  cout << "bad set " << x << ": " << v << endl;
+	//if (bad)
+	// cout << "bad set " << x << ": " << v << endl;
 	
 	placement[x] = v;
 
