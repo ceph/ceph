@@ -9,6 +9,8 @@
 #include <map>
 using namespace std;
 
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 
 // fake attributes in memory, if we need to.
 
@@ -16,7 +18,7 @@ class FakeAttrSet {
  public:
   map<const char*, bufferptr> attrs;
 
-  int getattr(char *name, void *value, size_t size) {
+  int getattr(const char *name, void *value, size_t size) {
 	if (attrs.count(name)) {
 	  size_t l = attrs[name].length();
 	  if (l > size) l = size;
@@ -28,7 +30,7 @@ class FakeAttrSet {
 	return -1;
   }
 
-  int setattr(char *name, void *value, size_t size) {
+  int setattr(const char *name, void *value, size_t size) {
 	bufferptr bp(new buffer((char*)value,size));
 	attrs[name] = bp;
 	return 0;

@@ -102,7 +102,7 @@ int Ebofs::mkfs()
   nr.length = 10+ (num_blocks / 1000);
   if (nr.length < 10) nr.length = 10;
   nodepool.add_region(nr);
-  dout(1) << "mkfs: first node region at " << nr << endl;
+  dout(10) << "mkfs: first node region at " << nr << endl;
 
   // allocate two usemaps
   block_t usemap_len = nodepool.get_usemap_len();
@@ -110,8 +110,8 @@ int Ebofs::mkfs()
   nodepool.usemap_even.length = usemap_len;
   nodepool.usemap_odd.start = nodepool.usemap_even.end();
   nodepool.usemap_odd.length = usemap_len;
-  dout(1) << "mkfs: even usemap at " << nodepool.usemap_even << endl;
-  dout(1) << "mkfs:  odd usemap at " << nodepool.usemap_odd << endl;
+  dout(10) << "mkfs: even usemap at " << nodepool.usemap_even << endl;
+  dout(10) << "mkfs:  odd usemap at " << nodepool.usemap_odd << endl;
   
   // init tables
   struct ebofs_table empty;
@@ -133,13 +133,13 @@ int Ebofs::mkfs()
   Extent left;
   left.start = nodepool.usemap_odd.end();
   left.length = num_blocks - left.start;
-  dout(1) << "mkfs: free data blocks at " << left << endl;
+  dout(10) << "mkfs: free data blocks at " << left << endl;
   allocator.release( left );
   allocator.commit_limbo();   // -> limbo_tab
   allocator.release_limbo();  // -> free_tab
 
   // write nodes, super, 2x
-  dout(1) << "mkfs: flushing nodepool and superblocks (2x)" << endl;
+  dout(10) << "mkfs: flushing nodepool and superblocks (2x)" << endl;
 
   nodepool.commit_start( dev, 0 );
   nodepool.commit_wait();
@@ -154,7 +154,7 @@ int Ebofs::mkfs()
   write_super(1, superbp1);
   
   // free memory
-  dout(3) << "mkfs: cleaning up" << endl;
+  dout(10) << "mkfs: cleaning up" << endl;
   close_tables();
 
   dev.close();
@@ -188,14 +188,14 @@ int Ebofs::umount()
   unmounting = true;
   
   // kick commit thread
-  dout(2) << "umount stopping commit thread" << endl;
+  dout(5) << "umount stopping commit thread" << endl;
   commit_cond.Signal();
   ebofs_lock.Unlock();
   commit_thread.join();
   ebofs_lock.Lock();
 
   // kick finisher thread
-  dout(2) << "umount stopping finisher thread" << endl;
+  dout(5) << "umount stopping finisher thread" << endl;
   finisher_lock.Lock();
   finisher_stop = true;
   finisher_cond.Signal();
@@ -213,7 +213,7 @@ int Ebofs::umount()
   }
 
   // free memory
-  dout(2) << "umount cleaning up" << endl;
+  dout(5) << "umount cleaning up" << endl;
   close_tables();
   dev.close();
 

@@ -409,7 +409,7 @@ int FakeStore::listattr(object_t oid, char *attrs, size_t size)
 {
   if (g_conf.fakestore_fakeattr) {
 	lock.Lock();
-	int r = fakeoattr[oid].listattr(attrs,size);
+	int r = fakeoattrs[oid].listattr(attrs,size);
 	lock.Unlock();
 	return r;
   } else {
@@ -558,7 +558,7 @@ int FakeStore::collection_setattr(coll_t cid, const char *name,
   lock.Lock();
   if (!collections.is_open()) open_collections();
   if (g_conf.fakestore_fakeattr) {
-	r = fakeoattrs[oid].setattr(name, value, size);
+	r = fakecattrs[cid].setattr(name, value, size);
   } else {
 	string fn;
 	get_collfn(cid,fn);
@@ -593,7 +593,7 @@ int FakeStore::collection_listattr(coll_t cid, char *attrs, size_t size)
   if (!collections.is_open()) open_collections();
 
   if (g_conf.fakestore_fakeattr) {
-	r = fakecattr[cid].listattr(attrs,size);
+	r = fakecattrs[cid].listattr(attrs,size);
   } else {
 	string fn;
 	get_collfn(cid, fn);
