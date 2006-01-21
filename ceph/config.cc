@@ -110,23 +110,24 @@ md_config_t g_conf = {
   // --- osd ---
   osd_pg_bits: 10,
   osd_max_rep: 4,
-  osd_fsync: true,
-  osd_writesync: false,
   osd_maxthreads: 10,    // 0 == no threading
   osd_mkfs: false,
   
-  osd_fakestore_syncthreads: 4,
+  fakestore_fsync: true,
+  fakestore_writesync: false,
+  fakestore_syncthreads: 4,
+  fakestore_fakeattr: true,   
 
   // --- ebofs ---
   ebofs: 0,
   ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
   ebofs_oc_size:      1000,
   ebofs_cc_size:      1000,
-  ebofs_bc_size:      (150 *256),  // 4k blocks, or *256 for MB
+  ebofs_bc_size:      (150 *256),  // 4k blocks, *256 for MB
   ebofs_bc_max_dirty: (100 *256),  // before write() will block
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
-  ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger may induce fragmentation)
+  ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
 
   // --- block device ---
   bdev_iothreads:    1,         // number of ios to queue with kernel
@@ -291,11 +292,16 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--ebofs") == 0) 
 	  g_conf.ebofs = 1;
+
 	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
 	  g_conf.fake_osd_sync = 2;
 	  g_conf.osd_pg_bits = 3;
 	}
+	else if (strcmp(args[i], "--fakestore_fsync") == 0) 
+	  g_conf.fakestore_fsync = atoi(args[++i]);
+	else if (strcmp(args[i], "--fakestore_writesync") == 0) 
+	  g_conf.fakestore_writesync = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);
@@ -303,10 +309,6 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.osd_pg_bits = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_max_rep") == 0) 
 	  g_conf.osd_max_rep = atoi(args[++i]);
-	else if (strcmp(args[i], "--osd_fsync") == 0) 
-	  g_conf.osd_fsync = atoi(args[++i]);
-	else if (strcmp(args[i], "--osd_writesync") == 0) 
-	  g_conf.osd_writesync = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_maxthreads") == 0) 
 	  g_conf.osd_maxthreads = atoi(args[++i]);
 

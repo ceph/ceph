@@ -1808,7 +1808,8 @@ void OSD::op_rep_modify(MOSDOp *op)
 	version_t ov = 0;
 	if (store->exists(oid)) 
 	  store->getattr(oid, "version", &ov, sizeof(ov));
-	//dout(15) << "rep_modify old versoin is " << ov << "  msg sez " << op->get_old_version() << endl;
+	if (op->get_old_version() != ov) 
+	  dout(0) << "rep_modify old version is " << ov << "  msg sez " << op->get_old_version() << endl;
 	assert(op->get_old_version() == ov);
 	
 	// PG

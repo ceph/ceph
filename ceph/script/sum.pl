@@ -91,6 +91,7 @@ my $rows = $n;
 my $files = $tcount{$starttime};
 
 print "\n";
+print join("\t",'#', map { $col{$_} } @c) . "\n";
 print join("\t", '#minval', map { $min{$col{$_}} } @c ) . "\n";
 print join("\t", '#maxval', map { $max{$col{$_}} } @c ) . "\n";
 print join("\t", '#rows', map { $rows } @c) . "\n";

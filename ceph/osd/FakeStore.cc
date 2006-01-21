@@ -32,7 +32,7 @@ using namespace __gnu_cxx;
 // end crap hash
 
 
-map<int, hash_map<object_t, map<const char*, bufferptr> > > fakeattrs;
+ 
 
 
 FakeStore::FakeStore(char *base, int whoami) 
@@ -60,7 +60,7 @@ int FakeStore::mount()
   {
 	char name[80];
 	sprintf(name,"osd%d.fakestore.threadpool", whoami);
-	fsync_threadpool = new ThreadPool<FakeStore, pair<int,Context*> >(name, g_conf.osd_fakestore_syncthreads, 
+	fsync_threadpool = new ThreadPool<FakeStore, pair<int,Context*> >(name, g_conf.fakestore_syncthreads, 
 																	  (void (*)(FakeStore*, pair<int,Context*>*))dofsync, 
 																	  this);
   }
@@ -271,7 +271,7 @@ int FakeStore::write(object_t oid,
   ::mknod(fn.c_str(), 0644, 0);  // in case it doesn't exist yet.
 
   int flags = O_WRONLY;//|O_CREAT;
-  if (do_fsync && g_conf.osd_writesync) flags |= O_SYNC;
+  if (do_fsync && g_conf.fakestore_writesync) flags |= O_SYNC;
   int fd = ::open(fn.c_str(), flags);
   if (fd < 0) {
 	dout(1) << "write couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
@@ -302,7 +302,7 @@ int FakeStore::write(object_t oid,
   }
 
   // sync to to disk?
-  if (do_fsync && g_conf.osd_fsync) ::fsync(fd); // fsync or fdatasync?
+  if (do_fsync && g_conf.fakestore_fsync) ::fsync(fd); // fsync or fdatasync?
 
   ::flock(fd, LOCK_UN);
   ::close(fd);
@@ -371,10 +371,11 @@ int FakeStore::write(object_t oid,
 int FakeStore::setattr(object_t oid, const char *name,
 					   void *value, size_t size)
 {
-  if (1) {
-	bufferptr bp(new buffer((char*)value,size));
-	fakeattrs[whoami][oid][name] = bp;
-	return 0;
+  if (g_conf.fakestore_fakeattr) {
+	lock.Lock();
+	int r = fakeoattrs[oid].setattr(name, value, size);
+	lock.Unlock();
+	return r;
   } else {
 	string fn;
 	get_oname(oid, fn);
@@ -390,17 +391,11 @@ int FakeStore::setattr(object_t oid, const char *name,
 int FakeStore::getattr(object_t oid, const char *name,
 					   void *value, size_t size)
 {
-  if (1) {
-	if (fakeattrs[whoami][oid].count(name)) {
-	  size_t l = fakeattrs[whoami][oid][name].length();
-	  if (l > size) l = size;
-	  bufferlist bl;
-	  bl.append(fakeattrs[whoami][oid][name]);
-	  bl.copy(0, l, (char*)value);
-	  return l;
-	} else {
-	  return -1;
-	}
+  if (g_conf.fakestore_fakeattr) {
+	lock.Lock();
+	int r = fakeoattrs[oid].getattr(name, value, size);
+	lock.Unlock();
+	return r;
   } else {
 	string fn;
 	get_oname(oid, fn);
@@ -412,9 +407,16 @@ int FakeStore::getattr(object_t oid, const char *name,
 
 int FakeStore::listattr(object_t oid, char *attrs, size_t size)
 {
-  string fn;
-  get_oname(oid, fn);
-  return listxattr(fn.c_str(), attrs, size);
+  if (g_conf.fakestore_fakeattr) {
+	lock.Lock();
+	int r = fakeoattr[oid].listattr(attrs,size);
+	lock.Unlock();
+	return r;
+  } else {
+	string fn;
+	get_oname(oid, fn);
+	return listxattr(fn.c_str(), attrs, size);
+  }
 }
 
 
@@ -465,22 +467,27 @@ int FakeStore::open_collection(coll_t c) {
 // public
 int FakeStore::list_collections(list<coll_t>& ls)
 {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   ls.clear();
   collections.list_keys(ls);
+  lock.Unlock();
   return 0;
 }
 
 int FakeStore::create_collection(coll_t c) {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   collections.put(c, 1);
   open_collection(c);
+  lock.Unlock();
   return 0;
 }
 
 int FakeStore::destroy_collection(coll_t c) {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   collections.del(c);
@@ -493,72 +500,107 @@ int FakeStore::destroy_collection(coll_t c) {
   collection_map[c]->remove(fn.c_str());
   delete collection_map[c];
   collection_map.erase(c);
+  lock.Unlock();
   return 0;
 }
 
 int FakeStore::collection_stat(coll_t c, struct stat *st) {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   string fn;
   get_collfn(c,fn);
-  return ::stat(fn.c_str(), st);
+  int r = ::stat(fn.c_str(), st);
+  lock.Unlock();
+  return r;
 }
 
 bool FakeStore::collection_exists(coll_t c) {
+  lock.Lock();
   struct stat st;
-  return collection_stat(c, &st) == 0;
+  int r = collection_stat(c, &st) == 0;
+  lock.Unlock();
+  return r;
 }
 
 int FakeStore::collection_add(coll_t c, object_t o) {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   open_collection(c);
   collection_map[c]->put(o,1);
+  lock.Unlock();
   return 0;
 }
 int FakeStore::collection_remove(coll_t c, object_t o) {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   open_collection(c);
   collection_map[c]->del(o);
+  lock.Unlock();
   return 0;
 }
 int FakeStore::collection_list(coll_t c, list<object_t>& o) {
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
   open_collection(c);
   collection_map[c]->list_keys(o);
+  lock.Unlock();
   return 0;
 }
 
 int FakeStore::collection_setattr(coll_t cid, const char *name,
 								  void *value, size_t size)
 {
+  int r;
+  lock.Lock();
   if (!collections.is_open()) open_collections();
-
-  string fn;
-  get_collfn(cid,fn);
-  return setxattr(fn.c_str(), name, value, size, 0);
+  if (g_conf.fakestore_fakeattr) {
+	r = fakeoattrs[oid].setattr(name, value, size);
+  } else {
+	string fn;
+	get_collfn(cid,fn);
+	r = setxattr(fn.c_str(), name, value, size, 0);
+  }
+  lock.Unlock();
+  return r;
 }
 
 
 int FakeStore::collection_getattr(coll_t cid, const char *name,
 					   void *value, size_t size)
 {
+  int r;
+  lock.Lock();
   if (!collections.is_open()) open_collections();
-
-  string fn;
-  get_collfn(cid,fn);
-  return getxattr(fn.c_str(), name, value, size);
+  if (g_conf.fakestore_fakeattr) {
+	r = fakecattrs[cid].getattr(name, value, size);
+  } else {
+	string fn;
+	get_collfn(cid,fn);
+	r = getxattr(fn.c_str(), name, value, size);
+  }
+  lock.Unlock();
+  return r;
 }
 
 int FakeStore::collection_listattr(coll_t cid, char *attrs, size_t size)
 {
+  int r;
+  lock.Lock();
   if (!collections.is_open()) open_collections();
 
-  string fn;
-  get_collfn(cid, fn);
-  return listxattr(fn.c_str(), attrs, size);
+  if (g_conf.fakestore_fakeattr) {
+	r = fakecattr[cid].listattr(attrs,size);
+  } else {
+	string fn;
+	get_collfn(cid, fn);
+	r = listxattr(fn.c_str(), attrs, size);
+  }
+  lock.Unlock();
+  return r;
 }
 
 

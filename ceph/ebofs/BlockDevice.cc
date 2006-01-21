@@ -88,12 +88,15 @@ int BlockDevice::io_thread_entry()
 		// merge contiguous ops
 		list<biovec*> biols;
 		char type = i->second->type;
-		int n = 0;
+		int n = 0;  // count eventual iov's for readv/writev
 
 		el_pos = i->first;
-		while (el_pos == i->first && type == i->second->type &&  // while (contiguous)
-			   ++n <= g_conf.bdev_iov_max) {                     //  and not too big
+		while (el_pos == i->first && type == i->second->type) {  // while (contiguous)
 		  biovec *bio = i->second;
+
+		  int nv = bio->bl.buffers().size();     // how many iov's in this bio's bufferlist?
+		  if (n + nv >= g_conf.bdev_iov_max) break;
+		  n += nv;
 
 		  if (el_dir_forward) {
 			dout(20) << "io_thread" << whoami << " fw dequeue io at " << el_pos << " " << *i->second << endl;
@@ -469,9 +472,10 @@ int BlockDevice::open()
   
   // start thread
   io_threads_started = 0;
+  io_threads.clear();
   for (int i=0; i<g_conf.bdev_iothreads; i++) {
-	io_threads.push_back(IOThread(this));
-	io_threads.back().create();
+	io_threads.push_back(new IOThread(this));
+	io_threads.back()->create();
   }
   complete_thread.create();
  
@@ -494,8 +498,11 @@ int BlockDevice::close()
   lock.Unlock();	
   
   
-  for (int i=0; i<g_conf.bdev_iothreads; i++) 
-	io_threads[i].join();
+  for (int i=0; i<g_conf.bdev_iothreads; i++) {
+	io_threads[i]->join();
+	delete io_threads[i];
+  }
+  io_threads.clear();
 
   complete_thread.join();
 

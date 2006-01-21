@@ -74,7 +74,7 @@ class BlockDevice {
 	IOThread(BlockDevice *d) : dev(d) {}
 	void *entry() { return (void*)dev->io_thread_entry(); }
   } ;
-  vector<IOThread> io_threads;
+  vector<IOThread*> io_threads;
 
   // low level io
   int _read(int fd, block_t bno, unsigned num, bufferlist& bl);
