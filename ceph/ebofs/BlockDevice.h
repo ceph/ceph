@@ -2,6 +2,7 @@
 #define __EBOFS_BLOCKDEVICE_H
 
 #include "include/bufferlist.h"
+#include "include/interval_set.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -50,11 +51,12 @@ class BlockDevice {
   friend ostream& operator<<(ostream& out, biovec &bio);
 
 
+  interval_set<block_t>       io_block_lock;    // blocks currently dispatched to kernel
   multimap<block_t, biovec*> io_queue;
   map<biovec*, block_t>      io_queue_map;
   Cond                       io_wakeup;
   bool                       io_stop;
-  int                        io_threads_started;
+  int                        io_threads_started, io_threads_running;
   
   void _submit_io(biovec *b);
   int _cancel_io(biovec *bio);
@@ -103,7 +105,7 @@ class BlockDevice {
  public:
   BlockDevice(char *d) : 
 	dev(d), fd(0), num_blocks(0),
-	io_stop(false), io_threads_started(0),
+	io_stop(false), io_threads_started(0), io_threads_running(0),
 	el_dir_forward(true), el_pos(0),
 	complete_thread(this) 
 	{ };

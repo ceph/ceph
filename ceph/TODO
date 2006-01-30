@@ -7,6 +7,7 @@ client
 
 bdev
 - multiple io_threads.. need block-range locks
+  - threads may need to sleep.. need to be woken up, etc..
 
 ebofs
 - combine inodes into same blocks
@@ -27,9 +28,11 @@ osd
 - 'dirty' log on primary?
 - fast recovery from degraded mode
 
-
-ardos
 - watch osd utilization; adjust cluster map
+
+
+lazy posix
+- softstat, etc.
 
 
 

@@ -14,39 +14,40 @@ using namespace __gnu_cxx;
 
 // fake attributes in memory, if we need to.
 
-class FakeAttrSet {
- public:
-  map<const char*, bufferptr> attrs;
-
-  int getattr(const char *name, void *value, size_t size) {
-	if (attrs.count(name)) {
-	  size_t l = attrs[name].length();
-	  if (l > size) l = size;
-	  bufferlist bl;
-	  bl.append(attrs[name]);
-	  bl.copy(0, l, (char*)value);
-	  return l;
-	}
-	return -1;
-  }
-
-  int setattr(const char *name, void *value, size_t size) {
-	bufferptr bp(new buffer((char*)value,size));
-	attrs[name] = bp;
-	return 0;
-  }
-
-  int listattr(char *attrs, size_t size) {
-	assert(0);
-  }
-
-  bool empty() { return attrs.empty(); }
-};
-
 
 class FakeStore : public ObjectStore {
   string basedir;
   int whoami;
+
+
+  class FakeAttrSet {
+  public:
+	map<const char*, bufferptr> attrs;
+	
+	int getattr(const char *name, void *value, size_t size) {
+	  if (attrs.count(name)) {
+		size_t l = attrs[name].length();
+		if (l > size) l = size;
+		bufferlist bl;
+		bl.append(attrs[name]);
+		bl.copy(0, l, (char*)value);
+		return l;
+	  }
+	  return -1;
+	}
+	
+	int setattr(const char *name, void *value, size_t size) {
+	  bufferptr bp(new buffer((char*)value,size));
+	  attrs[name] = bp;
+	  return 0;
+	}
+	
+	int listattr(char *attrs, size_t size) {
+	  assert(0);
+	}
+	
+	bool empty() { return attrs.empty(); }
+  };
 
   Mutex lock;
   hash_map<object_t, FakeAttrSet> fakeoattrs;

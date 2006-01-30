@@ -6,6 +6,13 @@
 #include <cassert>
 using namespace std;
 
+#ifndef MIN
+# define MIN(a,b)  ((a)<=(b) ? (a):(b))
+#endif
+#ifndef MAX
+# define MAX(a,b)  ((a)>=(b) ? (a):(b))
+#endif
+
 
 template<typename T>
 class interval_set {
@@ -82,6 +89,14 @@ class interval_set {
 	if (p->first+p->second <= start) return false;
 	assert(p->first <= start && p->first+p->second > start);
 	if (p->first+p->second < start+len) return false;
+	return true;
+  }
+  bool intersects(T start, T len) const {
+	interval_set a;
+	a.insert(start, len);
+	interval_set i;
+	i.intersection_of( *this, a );
+	if (i.empty()) return false;
 	return true;
   }
 

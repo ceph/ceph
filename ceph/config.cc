@@ -323,6 +323,10 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--osd_maxthreads") == 0) 
 	  g_conf.osd_maxthreads = atoi(args[++i]);
 
+	else if (strcmp(args[i], "--bdev_iothreads") == 0) 
+	  g_conf.bdev_iothreads = atoi(args[++i]);
+
+
 	else {
 	  nargs.push_back(args[i]);
 	}
