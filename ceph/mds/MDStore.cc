@@ -648,7 +648,8 @@ void MDStore::commit_dir_slice( CDir *dir,
 					 fin->bl.length(), 0,
 					 fin->bl,
 					 0, //OSD_OP_FLAGS_TRUNCATE, // truncate file/object after end of this write
-					 NULL, fin ); // on safe
+					 //NULL, fin ); // on safe
+					 fin, NULL );   // on sync... until we pay attention to BOTH
 }
 
 

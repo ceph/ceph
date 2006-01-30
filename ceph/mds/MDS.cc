@@ -2598,16 +2598,16 @@ void MDS::handle_client_symlink(MClientRequest *req, CInode *diri)
 void MDS::handle_client_truncate(MClientRequest *req, CInode *cur)
 {
   // write
-  if (!mdcache->inode_hard_write_start(cur, req))
+  if (!mdcache->inode_file_write_start(cur, req))
 	return;  // fw or (wait for) lock
 
-   // check permissions
+  // check permissions
   
   // do update
   cur->inode.size = req->get_sizearg();
   cur->mark_dirty();
 
-  mdcache->inode_hard_write_finish(cur);
+  mdcache->inode_file_write_finish(cur);
 
   balancer->hit_inode(cur);   
 
