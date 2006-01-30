@@ -11,13 +11,13 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)   if (x <= g_conf.debug) cout << "nameserver: " 
+#define dout(x)   if (x <= g_conf.debug || x <= g_conf.debug_ns) cout << "nameserver: " 
 
 
 void TCPDirectory::handle_connect(MNSConnect *m)
 {
   int rank = nrank++;
-  dout(2) << "connect from new rank " << rank << endl;
+  dout(2) << "connect from new rank " << rank << " " << m->get_addr() << endl;
 
   dir[MSG_ADDR_RANK(rank)] = rank;
   messenger->map_entity_rank(MSG_ADDR_RANK(rank), rank);

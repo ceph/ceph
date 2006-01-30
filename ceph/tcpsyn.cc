@@ -78,7 +78,7 @@ int main(int argc, char **argv)
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-	if (myrank != i) continue;
+	if (myrank != g_conf.tcp_skip_rank0+i) continue;
 	cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
 	mds[i] = new MDS(mdc, i, new TCPMessenger(MSG_ADDR_MDS(i)));
 	mds[i]->init();
@@ -88,7 +88,7 @@ int main(int argc, char **argv)
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-	if (myrank != NUMMDS + i) continue;
+	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + i) continue;
 	cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
 	osd[i] = new OSD(i, new TCPMessenger(MSG_ADDR_OSD(i)));
 	osd[i]->init();
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
-	if (myrank != NUMMDS + NUMOSD + i / clients_per_node) continue;
+	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + NUMOSD + i / clients_per_node) continue;
 	clientlist.insert(i);
 	client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT(i)) );
 
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
   }
   
 
-  if (!started) {
+  if (myrank && !started) {
 	dout(1) << "IDLE" << endl;
 	tcpmessenger_stop_rankserver();
   }

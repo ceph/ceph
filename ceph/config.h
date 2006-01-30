@@ -38,6 +38,9 @@ struct md_config_t {
   int debug_osd;
   int debug_ebofs;
   int debug_bdev;
+  int debug_ns;
+
+  bool tcp_skip_rank0;
 
   // client
   int      client_cache_size;

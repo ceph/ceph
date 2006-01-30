@@ -248,7 +248,7 @@ void MDS::handle_shutdown_finish(Message *m)
 
   int mds = whoami;
   if (m) 
-	mds = m->get_source();
+	mds = MSG_ADDR_NUM(m->get_source());
 						 
   dout(1) << "handle_shutdown_finish from " << mds << endl;
   did_shut_down.insert(mds);

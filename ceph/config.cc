@@ -10,7 +10,7 @@
 
 //#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
 //#define MDS_CACHE_SIZE 1500000
-#define MDS_CACHE_SIZE 150000
+#define MDS_CACHE_SIZE 1500//00
 
 
 // hack hack hack ugly FIXME
@@ -24,7 +24,8 @@ FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
-FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
+//FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
+FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
 FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // new (good?) way
@@ -61,7 +62,10 @@ md_config_t g_conf = {
   debug_osd: 0,
   debug_ebofs: 1,
   debug_bdev: 1,         // block device
+  debug_ns: 0,
   
+  tcp_skip_rank0: false,
+
   // --- client ---
   client_cache_size: 300,
   client_cache_mid: .5,
@@ -90,7 +94,7 @@ md_config_t g_conf = {
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 256,
-  mds_log_read_inc: 1024,//1<<20,
+  mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
@@ -207,6 +211,8 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--numosd") == 0) 
 	  g_conf.num_osd = atoi(args[++i]);
 
+	else if (strcmp(args[i], "--tcp_skip_rank0") == 0)
+	  g_conf.tcp_skip_rank0 = true;
 
 	else if (strcmp(args[i], "--mkfs") == 0) 
 	  g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
@@ -234,6 +240,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.debug_ebofs = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_bdev") == 0) 
 	  g_conf.debug_bdev = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_ns") == 0) 
+	  g_conf.debug_ns = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--log") == 0) 
 	  g_conf.log = atoi(args[++i]);
@@ -292,6 +300,9 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--ebofs") == 0) 
 	  g_conf.ebofs = 1;
+	else if (strcmp(args[i], "--ebofs_commit_interval") == 0)
+	  g_conf.ebofs_commit_interval = atoi(args[++i]);
+
 
 	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
