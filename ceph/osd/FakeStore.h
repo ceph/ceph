@@ -15,43 +15,10 @@ using namespace __gnu_cxx;
 // fake attributes in memory, if we need to.
 
 
-class FakeStore : public ObjectStore {
+class FakeStore : public ObjectStore, public FakeAttrs {
   string basedir;
   int whoami;
 
-
-  class FakeAttrSet {
-  public:
-	map<const char*, bufferptr> attrs;
-	
-	int getattr(const char *name, void *value, size_t size) {
-	  if (attrs.count(name)) {
-		size_t l = attrs[name].length();
-		if (l > size) l = size;
-		bufferlist bl;
-		bl.append(attrs[name]);
-		bl.copy(0, l, (char*)value);
-		return l;
-	  }
-	  return -1;
-	}
-	
-	int setattr(const char *name, void *value, size_t size) {
-	  bufferptr bp(new buffer((char*)value,size));
-	  attrs[name] = bp;
-	  return 0;
-	}
-	
-	int listattr(char *attrs, size_t size) {
-	  assert(0);
-	}
-	
-	bool empty() { return attrs.empty(); }
-  };
-
-  Mutex lock;
-  hash_map<object_t, FakeAttrSet> fakeoattrs;
-  hash_map<object_t, FakeAttrSet> fakecattrs;
 
   // fns
   void get_dir(string& dir);
@@ -99,12 +66,13 @@ class FakeStore : public ObjectStore {
 			bufferlist& bl, 
 			Context *onsafe);
 
+  /*
   int setattr(object_t oid, const char *name,
 				void *value, size_t size);
   int getattr(object_t oid, const char *name,
 			  void *value, size_t size);
   int listattr(object_t oid, char *attrs, size_t size);
-
+  */
 
   // -------------------
   // collections
@@ -130,12 +98,13 @@ class FakeStore : public ObjectStore {
   int collection_remove(coll_t c, object_t o);
   int collection_list(coll_t c, list<object_t>& o);
 
+  /*
   int collection_setattr(coll_t c, const char *name,
 						 void *value, size_t size);
   int collection_getattr(coll_t c, const char *name,
 						 void *value, size_t size);
   int collection_listattr(coll_t c, char *attrs, size_t size);
-  
+  */
 
 };
 

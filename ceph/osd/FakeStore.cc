@@ -368,6 +368,8 @@ int FakeStore::write(object_t oid,
 // ------------------
 // attributes
 
+
+/*
 int FakeStore::setattr(object_t oid, const char *name,
 					   void *value, size_t size)
 {
@@ -418,7 +420,7 @@ int FakeStore::listattr(object_t oid, char *attrs, size_t size)
 	return listxattr(fn.c_str(), attrs, size);
   }
 }
-
+*/
 
 
 
@@ -551,6 +553,7 @@ int FakeStore::collection_list(coll_t c, list<object_t>& o) {
   return 0;
 }
 
+/*
 int FakeStore::collection_setattr(coll_t cid, const char *name,
 								  void *value, size_t size)
 {
@@ -603,4 +606,4 @@ int FakeStore::collection_listattr(coll_t cid, char *attrs, size_t size)
   return r;
 }
 
-
+*/
