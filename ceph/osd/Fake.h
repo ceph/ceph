@@ -115,6 +115,7 @@ class FakeStoreAttrs {
 	
 	int listattr(char *attrs, size_t size) {
 	  assert(0);
+	  return 0;
 	}
 	
 	bool empty() { return attrs.empty(); }

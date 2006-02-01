@@ -26,12 +26,12 @@ class utime_t {
   
   // accessors
   time_t        sec()  const { return tv.tv_sec; } 
-  __suseconds_t usec() const { return tv.tv_usec; }
+  long          usec() const { return tv.tv_usec; }
   int           nsec() const { return tv.tv_usec*1000; }
 
   // ref accessors/modifiers
   time_t&         sec_ref()  { return tv.tv_sec; } 
-  __suseconds_t&  usec_ref() { return tv.tv_usec; }
+  long&           usec_ref() { return tv.tv_usec; }
 
   struct timeval& timeval()  { return tv; }
 

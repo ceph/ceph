@@ -105,6 +105,7 @@ class CLock {
 	default: 
 	  assert(0);
 	}
+	return 0;
   }
 
   // gather set

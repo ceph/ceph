@@ -304,6 +304,7 @@ namespace crush {
 		p++; pw++; ps++;  // next!
 	  }
 	  assert(0);
+	  return 0;
 	}	
 
 
@@ -599,6 +600,7 @@ namespace crush {
 	default:
 	  assert(0);
 	}
+	return 0;
   }
 
 

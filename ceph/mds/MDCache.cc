@@ -4583,6 +4583,8 @@ bool MDCache::inode_file_sync(CInode *in)
   }
   else 
 	assert(0); // wtf.
+
+  return false;
 }
 
 

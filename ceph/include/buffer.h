@@ -149,6 +149,7 @@ class buffer {
   // operators
   buffer& operator=(buffer& other) {
 	assert(0);  // not implemented, no reasonable assignment semantics.
+	return *this;
   }
 
   char *c_str() {

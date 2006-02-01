@@ -199,6 +199,7 @@ namespace crush {
 		}
 		out << "]";
 	  }
+	  return 0;
 	}
 
 
@@ -210,7 +211,7 @@ namespace crush {
 	  return n;
 	}
 
-	int add_item(int parent, int item, float w, bool back=false) {
+	void add_item(int parent, int item, float w, bool back=false) {
 	  // add item
 	  assert(!buckets[parent]->is_uniform());
 	  Bucket *p = buckets[parent];

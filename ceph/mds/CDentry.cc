@@ -89,6 +89,7 @@ void CDentry::unlink_remote()
 // =
 const CDentry& CDentry::operator= (const CDentry& right) {
   assert(0); //std::cerr << "copy op called, implement me" << endl;
+  return *this;
 }
 
   // comparisons

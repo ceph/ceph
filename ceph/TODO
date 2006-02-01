@@ -5,10 +5,6 @@ client
 - client will re-tx anything it needed to say upon rx of new mds notification (?)
 
 
-bdev
-- multiple io_threads.. need block-range locks
-  - threads may need to sleep.. need to be woken up, etc..
-
 ebofs
 - combine inodes into same blocks
 - zero regions?
