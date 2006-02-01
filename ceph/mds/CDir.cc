@@ -71,6 +71,11 @@ ostream& operator<<(ostream& out, CDir& dir)
 
   out << " state=" << dir.get_state();
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
+
+  out << " v=" << dir.get_version();
+  out << " cv=" << dir.get_committing_version();
+  out << " lastcv=" << dir.get_last_committed_version();
+
   out << " " << &dir;
   return out << "]";
 }

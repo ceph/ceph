@@ -31,6 +31,17 @@ MDLog::MDLog(MDS *m)
   char name[80];
   sprintf(name, "mds%d.log", mds->get_nodeid());
   logger = new Logger(name, (LogType*)&mdlog_logtype);
+
+  static bool didit = false;
+  if (!didit) {
+	mdlog_logtype.add_inc("add");
+	mdlog_logtype.add_inc("retire");	
+	mdlog_logtype.add_inc("obs");	
+	mdlog_logtype.add_inc("trim");	
+	mdlog_logtype.add_set("size");
+	mdlog_logtype.add_set("read");
+	mdlog_logtype.add_set("append");
+  }
 }
 
 

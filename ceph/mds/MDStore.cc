@@ -658,7 +658,7 @@ void MDStore::commit_dir_slice_2( int result,
 								 __uint64_t committed_version,
 								 int hashcode )
 {
-  dout(11) << "commit_dir_slice_2 hashcode " << hashcode << " " << *dir << endl;
+  dout(11) << "commit_dir_slice_2 hashcode " << hashcode << " " << *dir << " v " << committed_version << endl;
   
   // mark inodes and dentries clean too (if we committed them!)
   list<CDentry*> null_clean;
@@ -690,7 +690,7 @@ void MDStore::commit_dir_slice_2( int result,
 	} else {
 	  dout(15) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
 	  assert(committed_version < dn->get_parent_dir_version());
-	  assert(dn->is_dirty() || !dn->is_sync());
+	  //assert(dn->is_dirty() || !dn->is_sync());  // -OR- we did a fetch_dir in order to do a newer commit...
 	}
 
 	// only do primary...

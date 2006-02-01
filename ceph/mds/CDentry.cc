@@ -19,6 +19,9 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_dirty()) out << " dirty";
   if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock=" << dn.get_xlockedby() << " g=" << dn.get_gather_set();
   if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock=" << dn.get_xlockedby();
+
+  out << " dirv=" << dn.get_parent_dir_version();
+
   out << " inode=" << dn.get_inode();
   out << " " << &dn;
   out << " in " << *dn.get_dir();
@@ -48,6 +51,8 @@ void CDentry::mark_dirty()
 }
 void CDentry::mark_clean() {
   dout(10) << " mark_clean " << *this << endl;
+  assert(parent_dir_version <= dir->get_version());
+  assert(parent_dir_version >= dir->get_last_committed_version());
 
   if (is_primary() && dirty && inode) inode->put(CINODE_PIN_DNDIRTY);
   dirty = false;
