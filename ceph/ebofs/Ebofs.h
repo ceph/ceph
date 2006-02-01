@@ -33,7 +33,7 @@ class Ebofs : public ObjectStore {
 
   // ** super **
   BlockDevice  dev;
-  bool         mounted, unmounting;
+  bool         mounted, unmounting, dirty;
   bool         readonly;
   version_t    super_epoch;
   bool         commit_thread_started, mid_commit;
@@ -55,6 +55,8 @@ class Ebofs : public ObjectStore {
 	  return 0;
 	}
   } commit_thread;
+
+  
 
 
   // ** allocator **
@@ -142,8 +144,17 @@ class Ebofs : public ObjectStore {
   void trim_bc(off_t max = -1);
 
  public:
+  void kick_idle();
   void sync();
   void trim_buffer_cache();
+
+  class IdleKicker : public BlockDevice::kicker {
+	Ebofs *ebo;
+  public:
+	IdleKicker(Ebofs *t) : ebo(t) {}
+	void kick() { ebo->kick_idle(); }
+  } idle_kicker;
+
 
  protected:
   //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
@@ -176,7 +187,7 @@ class Ebofs : public ObjectStore {
  public:
   Ebofs(char *devfn) : 
 	dev(devfn), 
-	mounted(false), unmounting(false), readonly(false), 
+	mounted(false), unmounting(false), dirty(false), readonly(false), 
 	super_epoch(0), commit_thread_started(false), mid_commit(false),
 	commit_thread(this),
 	free_blocks(0), limbo_blocks(0),
@@ -188,6 +199,7 @@ class Ebofs : public ObjectStore {
 	cnode_lru(g_conf.ebofs_cc_size),
 	inodes_flushing(0),
 	bc(dev, bufferpool, ebofs_lock),
+	idle_kicker(this),
 	finisher_stop(false), finisher_thread(this) {
 	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	  free_tab[i] = 0;

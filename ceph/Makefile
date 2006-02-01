@@ -52,7 +52,7 @@ COMMON_OBJS= \
 	osd/OSDMap.o\
 	osd/PG.o\
 	osd/rush.o\
-	ebofs/ebo.o\
+	ebofs.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
@@ -82,10 +82,10 @@ gprof-helper.so: test/gprof-helper.c
 
 
 # old test crap
-import: mds/allmds.o osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
+import: mds. osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-singleclient: mds/allmds.o osd/OSD.o fakesingleclient.o client/Client.o client/Buffercache.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
+singleclient: mds.o osd/OSD.o fakesingleclient.o client/Client.o client/Buffercache.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 tp: osd/tp.o
@@ -132,10 +132,10 @@ obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc
 # ebofs
 ebofs: mkfs.ebofs test.ebofs
 
-mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs/ebo.o
+mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs/ebo.o
+test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
@@ -148,7 +148,7 @@ testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/cloc
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
-ebofs/ebo.o: ${EBOFS_OBJS}
+ebofs.o: ${EBOFS_OBJS}
 	ld -i -o $@ $^
 
 mds/allmds.o: ${MDS_OBJS}

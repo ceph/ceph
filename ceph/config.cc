@@ -10,7 +10,7 @@
 
 //#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
 //#define MDS_CACHE_SIZE 1500000
-#define MDS_CACHE_SIZE 1500//00
+#define MDS_CACHE_SIZE 15000//0
 
 
 // hack hack hack ugly FIXME
@@ -112,7 +112,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 10,
+  osd_pg_bits: 6,
   osd_max_rep: 4,
   osd_maxthreads: 10,    // 0 == no threading
   osd_mkfs: false,
@@ -306,8 +306,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
+	  g_conf.osd_pg_bits = 5;
 	  g_conf.fake_osd_sync = 2;
-	  g_conf.osd_pg_bits = 3;
 	}
 	else if (strcmp(args[i], "--fakestore_fsync") == 0) 
 	  g_conf.fakestore_fsync = atoi(args[++i]);

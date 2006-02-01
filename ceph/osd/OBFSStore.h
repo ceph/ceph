@@ -1,4 +1,3 @@
-
 #ifndef _OBFSSTORE_H_
 #define _OBFSSTORE_H_
 
@@ -6,9 +5,8 @@
 #include "Fake.h"
 
 class OBFSStore : public ObjectStore, 
-  public FakeAttrs, 
-  public FakeCollections {
-
+				  public FakeStoreAttrs, 
+				  public FakeStoreCollections {
   int	whoami;
   int	bdev_id;
   int	mounted;

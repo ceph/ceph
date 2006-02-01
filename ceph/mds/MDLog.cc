@@ -54,6 +54,7 @@ void MDLog::submit_entry( LogEvent *e,
 
 	logger->inc("add");
 	logger->set("size", num_events);
+	logger->set("append", logstream->get_append_pos());
 
 	if (c) 
 	  logstream->wait_for_sync(c, off);
@@ -161,6 +162,8 @@ void MDLog::trim(Context *c)
 		logger->inc("retire");
 		logger->set("trim", trimming.size());
 	  }
+	  logger->set("read", logstream->get_read_pos());
+	  logger->set("size", num_events);
 	} else {
 	  // need to read!
 	  if (!waiting_for_read) {
@@ -188,6 +191,7 @@ void MDLog::_trimmed(LogEvent *le)
   delete le;
  
   logger->set("trim", trimming.size());
+  logger->set("read", logstream->get_read_pos());
  
   trim(0);
 }

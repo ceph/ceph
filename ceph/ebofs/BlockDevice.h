@@ -22,12 +22,20 @@ class BlockDevice {
 	virtual void finish(ioh_t ioh, int rval) = 0;
   };
 
+  // kicker for idle notification
+  class kicker {
+  public:
+	virtual void kick() = 0;
+  };
+
  private:
   char   *dev;
   int     fd;
   block_t num_blocks;
 
   Mutex lock;
+
+  kicker *idle_kicker;
   
   // io queue
   class biovec {
@@ -105,6 +113,7 @@ class BlockDevice {
  public:
   BlockDevice(char *d) : 
 	dev(d), fd(0), num_blocks(0),
+	idle_kicker(0),
 	io_stop(false), io_threads_started(0), io_threads_running(0),
 	el_dir_forward(true), el_pos(0),
 	complete_thread(this) 
@@ -118,7 +127,7 @@ class BlockDevice {
 
   char *get_device_name() const { return dev; }
 
-  int open();
+  int open(kicker *idle = 0);
   int close();
 
   // 

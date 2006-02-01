@@ -19,7 +19,7 @@ int Ebofs::mount()
   ebofs_lock.Lock();
   assert(!mounted);
 
-  int r = dev.open();
+  int r = dev.open(&idle_kicker);
   if (r < 0) {
 	ebofs_lock.Unlock();
 	return r;
@@ -314,73 +314,82 @@ int Ebofs::commit_thread_entry()
 	  assert(readonly);
 	  unmounting = false;
 	  mounted = false;
+	  dirty = true;
 	}
-
-	super_epoch++;
-	dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
-	dout(2) << "commit_thread   data: " 
-			 << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
-			 << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
-			 << "%) free in " << get_free_extents() 
-			 << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
-			 << "%) limbo in " << get_limbo_extents() 
-			 << endl;
-	dout(2) << "commit_thread  nodes: " 
-			 << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
-			 << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
-			 << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
-			 << nodepool.num_total() << " total." << endl;
-
-	// (async) write onodes+condes  (do this first; it currently involves inode reallocation)
-	commit_inodes_start();
-
-	allocator.commit_limbo();   // limbo -> limbo_tab
-
-	// (async) write btree nodes
-	nodepool.commit_start( dev, super_epoch );
 	
-	// prepare super (before any changes get made!)
-	bufferptr superbp;
-	prepare_super(super_epoch, superbp);
-
-	// wait for it all to flush (drops global lock)
-	commit_bc_wait(super_epoch-1);
-	commit_inodes_wait();
-	nodepool.commit_wait();
-	
-	// ok, now (synchronously) write the prior super!
-	dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
-	ebofs_lock.Unlock();
-	write_super(super_epoch, superbp);	
-	ebofs_lock.Lock();
-
-	// free limbo space now 
-	// (since we're done allocating things, 
-	//  AND we've flushed all previous epoch data)
-	allocator.release_limbo();   // limbo_tab -> free_tabs
-	
-	// do we need more node space?
-	if (nodepool.num_free() < nodepool.num_total() / 3) {
-	  dout(2) << "commit_thread running low on node space, allocating more." << endl;
-	  alloc_more_node_space();
+	if (!dirty) {
+	  dout(10) << "commit_thread not dirty" << endl;
 	}
+	else {
+	  super_epoch++;
+	  dirty = false;
 
-	// kick waiters
-	dout(10) << "commit_thread queueing commit + kicking sync waiters" << endl;
+	  dout(10) << "commit_thread commit start, new epoch " << super_epoch << endl;
+	  dout(2) << "commit_thread   data: " 
+			  << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
+			  << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
+			  << "%) free in " << get_free_extents() 
+			  << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
+			  << "%) limbo in " << get_limbo_extents() 
+			  << endl;
+	  dout(2) << "commit_thread  nodes: " 
+			  << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
+			  << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
+			  << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
+			  << nodepool.num_total() << " total." << endl;
+	  
+	  // (async) write onodes+condes  (do this first; it currently involves inode reallocation)
+	  commit_inodes_start();
+	  
+	  allocator.commit_limbo();   // limbo -> limbo_tab
+	  
+	  // (async) write btree nodes
+	  nodepool.commit_start( dev, super_epoch );
+	  
+	  // prepare super (before any changes get made!)
+	  bufferptr superbp;
+	  prepare_super(super_epoch, superbp);
+	  
+	  // wait for it all to flush (drops global lock)
+	  commit_bc_wait(super_epoch-1);
+	  commit_inodes_wait();
+	  nodepool.commit_wait();
+	  
+	  // ok, now (synchronously) write the prior super!
+	  dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+	  ebofs_lock.Unlock();
+	  write_super(super_epoch, superbp);	
+	  ebofs_lock.Lock();
+	  
+	  // free limbo space now 
+	  // (since we're done allocating things, 
+	  //  AND we've flushed all previous epoch data)
+	  allocator.release_limbo();   // limbo_tab -> free_tabs
+	  
+	  // do we need more node space?
+	  if (nodepool.num_free() < nodepool.num_total() / 3) {
+		dout(2) << "commit_thread running low on node space, allocating more." << endl;
+		alloc_more_node_space();
+	  }
+	  
+	  // kick waiters
+	  dout(10) << "commit_thread queueing commit + kicking sync waiters" << endl;
+	  
+	  finisher_lock.Lock();
+	  finisher_queue.splice(finisher_queue.end(), commit_waiters[super_epoch-1]);
+	  commit_waiters.erase(super_epoch-1);
+	  finisher_cond.Signal();
+	  finisher_lock.Unlock();
 
-	finisher_lock.Lock();
-	finisher_queue.splice(finisher_queue.end(), commit_waiters[super_epoch-1]);
-	commit_waiters.erase(super_epoch-1);
-	finisher_cond.Signal();
-	finisher_lock.Unlock();
+	  sync_cond.Signal();
 
-	sync_cond.Signal();
+	  dout(10) << "commit_thread commit finish" << endl;
+	}
 
 	// trim bc?
 	trim_bc();
 	trim_inodes();
 
-	dout(10) << "commit_thread commit finish" << endl;
   }
   
   dout(10) << "commit_thread finish" << endl;
@@ -737,6 +746,7 @@ void Ebofs::dirty_onode(Onode *on)
 	on->mark_dirty();
 	dirty_onodes.insert(on);
   }
+  dirty = true;
 }
 
 void Ebofs::trim_inodes(int max)
@@ -966,6 +976,7 @@ void Ebofs::dirty_cnode(Cnode *cn)
 	cn->mark_dirty();
 	dirty_cnodes.insert(cn);
   }
+  dirty = true;
 }
 
 
@@ -1075,26 +1086,47 @@ void Ebofs::trim_bc(off_t max)
 }
 
 
+void Ebofs::kick_idle()
+{
+  dout(20) << "kick_idle" << endl;
+  commit_cond.Signal();
+
+  /*
+  ebofs_lock.Lock();
+  if (mounted && !unmounting && dirty) {
+	dout(0) << "kick_idle dirty, doing commit" << endl;
+	commit_cond.Signal();
+  } else {
+	dout(0) << "kick_idle !dirty or !mounted or unmounting, doing nothing" << endl;
+  }
+  ebofs_lock.Unlock();
+  */
+}
+
 void Ebofs::sync()
 {
   ebofs_lock.Lock();
-  dout(3) << "sync in " << super_epoch << endl;
-  
-  if (!commit_thread_started) {
-	dout(10) << "sync waiting for commit thread to start" << endl;
-	sync_cond.Wait(ebofs_lock);
+  if (!dirty) {
+	dout(3) << "sync in " << super_epoch << ", not dirty" << endl;
+  } else {
+	dout(3) << "sync in " << super_epoch << endl;
+	
+	if (!commit_thread_started) {
+	  dout(10) << "sync waiting for commit thread to start" << endl;
+	  sync_cond.Wait(ebofs_lock);
+	}
+	
+	if (mid_commit) {
+	  dout(10) << "sync waiting for commit in progress" << endl;
+	  sync_cond.Wait(ebofs_lock);
+	}
+	
+	commit_cond.Signal();  // trigger a commit
+	
+	sync_cond.Wait(ebofs_lock);  // wait
+	
+	dout(3) << "sync finish in " << super_epoch << endl;
   }
-
-  if (mid_commit) {
-	dout(10) << "sync waiting for commit in progress" << endl;
-	sync_cond.Wait(ebofs_lock);
-  }
-  
-  commit_cond.Signal();  // trigger a commit
-  
-  sync_cond.Wait(ebofs_lock);  // wait
-
-  dout(3) << "sync finish in " << super_epoch << endl;
   ebofs_lock.Unlock();
 }
 

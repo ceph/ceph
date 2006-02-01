@@ -2,6 +2,7 @@
 #define __FAKESTORE_H
 
 #include "ObjectStore.h"
+#include "Fake.h"
 #include "BDBMap.h"
 #include "common/ThreadPool.h"
 #include "common/Mutex.h"
@@ -15,10 +16,12 @@ using namespace __gnu_cxx;
 // fake attributes in memory, if we need to.
 
 
-class FakeStore : public ObjectStore, public FakeAttrs {
+class FakeStore : public ObjectStore, 
+				  public FakeStoreAttrs {
   string basedir;
   int whoami;
-
+  
+  Mutex lock;
 
   // fns
   void get_dir(string& dir);

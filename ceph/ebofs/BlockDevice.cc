@@ -216,7 +216,13 @@ int BlockDevice::io_thread_entry()
 	  // sleep
 	  io_threads_running--;
 	  dout(20) << "io_thread" << whoami << " sleeping, " << io_threads_running << " threads now running" << endl;
+
+	  if (io_threads_running == 0 && idle_kicker) 
+		idle_kicker->kick();
+	  //complete_wakeup.Signal();
+
 	  io_wakeup.Wait(lock);
+
 	  io_threads_running++;
 	  assert(io_threads_running <= g_conf.bdev_iothreads);
 	  dout(20) << "io_thread" << whoami << " woke up, " << io_threads_running << " threads now running" << endl;
@@ -320,6 +326,16 @@ int BlockDevice::complete_thread_entry()
 	}
 	if (io_stop) break;
 	
+	/*
+	if (io_threads_running == 0 && idle_kicker) {
+	  complete_lock.Unlock();
+	  idle_kicker->kick();
+	  complete_lock.Lock();
+	  if (!complete_queue.empty() || io_stop) 
+		continue;
+	}
+	*/
+
 	dout(25) << "complete_thread sleeping" << endl;
 	complete_wakeup.Wait(complete_lock);
   }
@@ -495,10 +511,11 @@ int BlockDevice::open_fd()
   return ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT, 0);
 }
 
-int BlockDevice::open() 
+int BlockDevice::open(kicker *idle) 
 {
   assert(fd == 0);
 
+  // open?
   fd = open_fd();
   if (fd < 0) {
 	dout(1) << "open " << dev << " failed, r = " << fd << " " << strerror(errno) << endl;
@@ -536,6 +553,9 @@ int BlockDevice::open()
   }
   complete_thread.create();
  
+  // idle kicker?
+  idle_kicker = idle;
+
   return fd;
 }
 
@@ -543,6 +563,8 @@ int BlockDevice::open()
 int BlockDevice::close() 
 {
   assert(fd>0);
+  
+  idle_kicker = 0;
 
   // shut down io thread
   dout(10) << "close stopping io+complete threads" << endl;
