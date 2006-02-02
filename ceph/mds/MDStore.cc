@@ -710,7 +710,7 @@ void MDStore::commit_dir_slice_2( int result,
 	} else {
 	  dout(15) << " dir " << committed_version << " < inode " << in->get_parent_dir_version() << " still dirty " << *(in) << endl;
 	  assert(committed_version < in->get_parent_dir_version());
-	  assert(in->is_dirty());
+	  //assert(in->is_dirty());  // -OR- we did a fetch_dir in order to do a newer commit...
 	}
   }
 

@@ -10,7 +10,7 @@
 
 //#define MDS_CACHE_SIZE       MDS_CACHE_MB_TO_INODES( 50 )
 //#define MDS_CACHE_SIZE 1500000
-#define MDS_CACHE_SIZE 15000//0
+#define MDS_CACHE_SIZE 150000
 
 
 // hack hack hack ugly FIXME
@@ -24,11 +24,12 @@ FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
-//FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
-FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
+FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
+//FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // new (good?) way
+FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 3 );  // new (good?) way
+//FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // new (good?) way
 //FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
@@ -93,9 +94,9 @@ md_config_t g_conf = {
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
-  mds_log_max_trimming: 256,
+  mds_log_max_trimming: 5000,//25600,
   mds_log_read_inc: 1<<20,
-  mds_log_pad_entry: 64,
+  mds_log_pad_entry: 256,//64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
 
@@ -135,6 +136,7 @@ md_config_t g_conf = {
 
   // --- block device ---
   bdev_iothreads:    1,         // number of ios to queue with kernel
+  bdev_idle_kick_after_ms: 100, // ms
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 300 ms
   bdev_el_bidir: true,          // bidirectional elevator?

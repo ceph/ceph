@@ -213,15 +213,26 @@ int BlockDevice::io_thread_entry()
 
 	if (do_sleep) {
 	  do_sleep = false;
+	  
 	  // sleep
 	  io_threads_running--;
 	  dout(20) << "io_thread" << whoami << " sleeping, " << io_threads_running << " threads now running" << endl;
 
-	  if (io_threads_running == 0 && idle_kicker) 
-		idle_kicker->kick();
-	  //complete_wakeup.Signal();
+	  if (g_conf.bdev_idle_kick_after_ms > 0 &&
+		  io_threads_running == 0 && 
+		  idle_kicker) {
+		// first wait for signal | timeout
+		io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));   
 
-	  io_wakeup.Wait(lock);
+		// should we still be sleeping?  (did we get woken up, or did timer expire?
+		if (io_queue.empty()) {
+		  idle_kicker->kick();		  // kick
+		  io_wakeup.Wait(lock);		  // and wait
+		}
+	  } else {
+		// normal, just wait.
+		io_wakeup.Wait(lock);
+	  }
 
 	  io_threads_running++;
 	  assert(io_threads_running <= g_conf.bdev_iothreads);

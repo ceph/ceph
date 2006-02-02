@@ -1088,7 +1088,7 @@ void Ebofs::trim_bc(off_t max)
 
 void Ebofs::kick_idle()
 {
-  dout(20) << "kick_idle" << endl;
+  dout(10) << "kick_idle" << endl;
   commit_cond.Signal();
 
   /*
