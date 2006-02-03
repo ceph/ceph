@@ -45,20 +45,29 @@ int OBFSStore::mount(void)
 	}
 
 	this->mkfs();
-	this->mounted = uofs_mount(this->bdev_id, this->whoami);
+	this->mounted = uofs_mount(this->bdev_id, 
+							   g_conf.uofs_cache_size,
+							   g_conf.uofs_min_flush_pages,
+							   this->whoami);
 	switch (this->mounted) {
 		case -1:
 			this->mkfs();
 			//retry to mount
 			dout(0) << "remount the OBFS" << endl;
-			this->mounted = uofs_mount(this->bdev_id, this->whoami);
+			this->mounted = uofs_mount(this->bdev_id, 
+									   g_conf.uofs_cache_size,
+									   g_conf.uofs_min_flush_pages,
+									   this->whoami);
 			assert(this->mounted >= 0);
 			break;
 		case -2: 
 			//fsck
 			dout(0) << "Need fsck! Simply formatted for now!" << endl;
 			this->mkfs();
-			this->mounted = uofs_mount(this->bdev_id, this->whoami);
+			this->mounted = uofs_mount(this->bdev_id, 
+									   g_conf.uofs_cache_size,
+									   g_conf.uofs_min_flush_pages,
+									   this->whoami);
 			assert(this->mounted >= 0);
 			break;
 		case 0:
@@ -78,21 +87,23 @@ int OBFSStore::mount(void)
 
 int OBFSStore::mkfs(void)
 {
-	int	donode_size_byte 	= 1024,
+  /*int	donode_size_byte 	= 1024,
 		bd_ratio                = 10,
 		reg_size_mb             = 256,
 		sb_size_kb              = 4,
 		lb_size_kb              = 1024,
-		nr_hash_table_buckets   = 1023,
-		delay_allocation        = 1,
-		flush_interval		= 5;
+	  nr_hash_table_buckets   = 1023,
+	  delay_allocation        = 1,
+	  flush_interval		= 5;
 	FILE	*param;
+  */
 	
-
+	
 	if (this->mounted >= 0)
-		return 0;
+	  return 0;
 
 	dout(0) << "OBFS.mkfs!" << endl;
+	/*
 	if (strlen(this->param) > 0) {
 		param = fopen(this->param, "r");
 		if (param) {
@@ -110,6 +121,7 @@ int OBFSStore::mkfs(void)
 		}
 	} else
 		dout(0) << "use default parameters" << endl;
+	*/
 
 	if (this->bdev_id <= 0)
 		if ((this->bdev_id = device_open(this->dev, O_RDWR)) < 0) {
@@ -119,8 +131,17 @@ int OBFSStore::mkfs(void)
 	
 	dout(0) << "start formating!" << endl;
 
-	uofs_format(this->bdev_id, donode_size_byte, bd_ratio, (reg_size_mb << 20), (sb_size_kb << 10), 
-			(lb_size_kb << 10), nr_hash_table_buckets, delay_allocation, flush_interval, this->whoami);
+	uofs_format(this->bdev_id,
+				g_conf.uofs_onode_size, 
+				g_conf.uofs_block_meta_ratio, 
+				g_conf.uofs_segment_size,
+				g_conf.uofs_small_block_size,
+				g_conf.uofs_large_block_size,
+				g_conf.uofs_nr_hash_buckets,
+				g_conf.uofs_delay_allocation, 
+				0,//g_conf.uofs_dev_force_size,
+				g_conf.uofs_flush_interval, 
+				0);
 
 	dout(0) << "formatting complete!" << endl;
 	return 0;
@@ -134,6 +155,11 @@ int OBFSStore::umount(void)
 	return 0;
 }
 
+int OBFSStore::statfs(struct statfs *sfs) 
+{
+  return 0;
+}
+
 bool OBFSStore::exists(object_t oid)
 {
 	//dout(0) << "calling function exists!" << endl;
@@ -143,6 +169,8 @@ bool OBFSStore::exists(object_t oid)
 int OBFSStore::stat(object_t oid, struct stat *st)
 {
 	dout(0) << "calling function stat!" << endl;
+	if (uofs_exist(oid)) return 0;
+	return -1;
 }
 
 int OBFSStore::remove(object_t oid)
@@ -155,18 +183,22 @@ int OBFSStore::truncate(object_t oid, off_t size)
 {
 	dout(0) << "calling truncate function!" << endl;
 	//return uofs_truncate(oid, size);
+	return -1;
 }
 
 int OBFSStore::read(object_t oid, size_t len, 
-		    off_t offset, char *buffer)
+		    off_t offset, bufferlist &bl)
 {
 	//dout(0) << "calling read function!" << endl;
 	//dout(0) << oid << " 0  " << len << " " << offset << " 100" << endl;
-	return uofs_read(oid, buffer, offset, len);
+
+  // FIXME: page-align this and we can avoid a memcpy...
+  bl.push_back(new buffer(len));
+  return uofs_read(oid, bl.c_str(), offset, len);
 }
 
 int OBFSStore::write(object_t oid, size_t len,
-		     off_t offset, char *buffer, bool fsync)
+					 off_t offset, bufferlist& bl, bool fsync)
 {
 	int ret;//, sync = 0;
 	
@@ -174,7 +206,14 @@ int OBFSStore::write(object_t oid, size_t len,
 	//if (whoami == 0)
 	//	dout(0) << oid << " 0  " << len << " " << offset << " 101" << endl;
 	//if (fsync) sync = 1;
-	ret = uofs_write(oid, buffer, offset, len, 0);
+
+	ret = 0;
+	for (list<bufferptr>::iterator p = bl.buffers().begin();
+		 p != bl.buffers().end();
+		 p++) {
+	  ret += uofs_write(oid, (*p).c_str(), offset, len, 0);
+	}
+
 	if (fsync)
 		ret += uofs_sync(oid);
 	
@@ -182,4 +221,10 @@ int OBFSStore::write(object_t oid, size_t len,
 }
 
 
-
+int OBFSStore::write(object_t oid, size_t len,
+		     off_t offset, bufferlist& bl, Context *onflush)
+{
+  // implement me later.. fake for now!
+  assert(0);
+  return 0;
+}

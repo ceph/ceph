@@ -79,7 +79,19 @@ OSD::OSD(int id, Messenger *m)
 
   // use fake store
 #ifdef USE_OBFS
-  store = new OBFSStore(whoami, NULL, "/dev/sdb3");
+  if (g_conf.uofs) {
+	char hostname[100];
+
+	hostname[0] = 0;
+	gethostname(hostname,100);
+	sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);
+	
+	struct stat st;
+	if (::stat(dev_path, &st) != 0)
+	  sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
+	
+	store = new OBFSStore(whoami, NULL, dev_path);
+  }
 #else
 # ifdef USE_EBOFS
   if (g_conf.ebofs) {

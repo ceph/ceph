@@ -149,15 +149,18 @@ struct inode_t {
   inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
   time_t    ctime;
 
-  // hard (permissions)
+  FileLayout layout;  // ?immutable?
+
+  // hard (namespace permissions)
   mode_t     mode;
   uid_t      uid;
   gid_t      gid;
-  FileLayout layout;  
 
-  // soft
+  // file (data access)
   off_t      size;
   time_t     atime, mtime;      // maybe atime different?  "lazy"?
+  
+  // other
   int        nlink;
 
   // special stuff
@@ -174,6 +177,15 @@ typedef __uint64_t object_t;      // object id
 typedef __uint64_t coll_t;        // collection id
 
 #define PG_NONE    0xffffffffffffffffLL
+
+
+struct ostat {
+  object_t   object_id;
+  size_t     size;
+  time_t     ctime;
+  time_t     mtime;
+};
+
 
 struct onode_t {
   object_t    oid;

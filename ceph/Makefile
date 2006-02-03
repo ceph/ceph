@@ -94,10 +94,10 @@ tp: osd/tp.o
 fuseclient: client/Client.o client/Buffercache.o client/fuse.o msg/FakeMessenger.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds/allmds.o ${COMMON_OBJS} 
+fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds.o ${COMMON_OBJS} 
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-mpitest: test/mpitest.o msg/MPIMessenger.cc mds/allmds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
+mpitest: test/mpitest.o msg/MPIMessenger.cc mds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
 	${MPICC} ${CFLAGS} $^ -o $@
 
 mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
@@ -105,29 +105,30 @@ mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
 
 
 # fuse
-fakefuse: fakefuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
+fakefuse: fakefuse.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-tcpfuse: tcpfuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
+tcpfuse: tcpfuse.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-mpifuse: mpifuse.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
 # synthetic workload
-fakesyn: fakesyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS}
+fakesyn: fakesyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS}
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-mpisyn: mpisyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
+mpisyn: mpisyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
+tcpsyn: tcpsyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-# obfs + synthetic
-tcpsynobfs: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} $(SYN_OBJS)
+# + obfs
+tcpsynobfs: tcpsyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
+
 
 # ebofs
 ebofs: mkfs.ebofs test.ebofs
@@ -151,7 +152,7 @@ clean:
 ebofs.o: ${EBOFS_OBJS}
 	ld -i -o $@ $^
 
-mds/allmds.o: ${MDS_OBJS}
+mds.o: ${MDS_OBJS}
 	ld -i -o $@ $^
 
 %.o: %.cc

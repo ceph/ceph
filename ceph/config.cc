@@ -134,6 +134,19 @@ md_config_t g_conf = {
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
 
+  uofs: 0,
+  uofs_cache_size: 1<<18,       // 256MB
+  uofs_onode_size:             (int)1024,
+  uofs_small_block_size:       (int)4096,      //4KB
+  uofs_large_block_size:       (int)524288,    //512KB
+  uofs_segment_size:           (int)268435456, //256MB
+  uofs_block_meta_ratio:       (int)10,
+  uofs_sync_write:             (int)0,
+  uofs_nr_hash_buckets:        (int)1023,
+  uofs_flush_interval:         (int)5,         //seconds
+  uofs_min_flush_pages:        (int)1024,      //4096 4k-pages
+  uofs_delay_allocation:       (int)1,         //true
+
   // --- block device ---
   bdev_iothreads:    1,         // number of ios to queue with kernel
   bdev_idle_kick_after_ms: 100, // ms
@@ -315,6 +328,11 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.fakestore_fsync = atoi(args[++i]);
 	else if (strcmp(args[i], "--fakestore_writesync") == 0) 
 	  g_conf.fakestore_writesync = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--obfs") == 0) {
+	  g_conf.uofs = 1;
+	  g_conf.fake_osd_sync = 2;
+	}
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);

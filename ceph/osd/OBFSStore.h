@@ -20,6 +20,8 @@ class OBFSStore : public ObjectStore,
   int umount(void);
   int mkfs(void);
   
+  int statfs(struct statfs *);
+
   bool exists(object_t oid);
   int stat(object_t oid, struct stat *st);
   
@@ -27,10 +29,13 @@ class OBFSStore : public ObjectStore,
   int truncate(object_t oid, off_t size);
   
   int read(object_t oid, size_t len, 
-		   off_t offset, char *buffer);
+		   off_t offset, bufferlist& bl);
   int write(object_t oid, size_t len, 
-			off_t offset,char *buffer,
+			off_t offset, bufferlist& bl,
 			bool fsync);
+  int write(object_t oid, size_t len, 
+			off_t offset, bufferlist& bl,
+			Context *onflush);
   
 };
 

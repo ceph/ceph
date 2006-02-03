@@ -106,6 +106,20 @@ struct md_config_t {
   bool   ebofs_abp_zero;
   size_t ebofs_abp_max_alloc;
 
+  int uofs;
+  int     uofs_cache_size;
+  int     uofs_onode_size;
+  int     uofs_small_block_size;
+  int     uofs_large_block_size;
+  int     uofs_segment_size;
+  int     uofs_block_meta_ratio;
+  int     uofs_sync_write;
+  
+  int     uofs_nr_hash_buckets;
+  int     uofs_flush_interval;
+  int     uofs_min_flush_pages;
+  int     uofs_delay_allocation;
+
   // block device
   int   bdev_iothreads;
   int   bdev_idle_kick_after_ms;
