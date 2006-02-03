@@ -24,7 +24,7 @@ FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
-FileLayout g_OSD_MDDirLayout( 1<<14, 1<<2, 1<<19, 3 );
+FileLayout g_OSD_MDDirLayout( 1<<8, 1<<2, 1<<19, 3 );
 //FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)

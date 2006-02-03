@@ -126,7 +126,7 @@ tcpsyn: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.o ${
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # obfs + synthetic
-obfstest: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} $(SYN_OBJS)
+tcpsynobfs: tcpsyn.cc mds/allmds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o msg/TCPMessenger.cc ${COMMON_OBJS} $(SYN_OBJS)
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 # ebofs
