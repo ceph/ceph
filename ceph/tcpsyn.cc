@@ -96,7 +96,7 @@ int main(int argc, char **argv)
   }
   
   // create client
-  int client_nodes = world - NUMMDS - NUMOSD;
+  int client_nodes = world - NUMMDS - NUMOSD - g_conf.tcp_skip_rank0;
   int clients_per_node = 1;
   if (NUMCLIENT) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
   set<int> clientlist;
