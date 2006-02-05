@@ -138,6 +138,7 @@ class interval_set {
   
   void insert(T start, T len) {
 	//cout << "insert " << start << "~" << len << endl;
+	assert(len > 0);
 	typename map<T,T>::iterator p = find_adj_m(start);
 	if (p == m.end()) {
 	  m[start] = len;                  // new interval

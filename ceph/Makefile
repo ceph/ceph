@@ -8,7 +8,7 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
-CFLAGS = -pg -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DUSE_EBOFS
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DUSE_EBOFS
 LIBS = -lpthread -lrt -ldb
 
 #for normal mpich2 machines
@@ -126,12 +126,14 @@ tcpsyn: tcpsyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o ${TCP_OBJ
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs
+fakesynobfs: fakesyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS} 
+	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@ ../uofs/uofs.a
+
 tcpsynobfs: tcpsyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 
 # ebofs
-ebofs: mkfs.ebofs test.ebofs
 
 mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
@@ -139,6 +141,7 @@ mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
+ebofs: mkfs.ebofs test.ebofs
 
 
 

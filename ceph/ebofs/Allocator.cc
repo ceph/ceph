@@ -9,7 +9,7 @@
 
 void Allocator::dump_freelist()
 {
-  if (1) {
+  if (0) {
 	interval_set<block_t> free;     // validate too
 	
 	block_t n = 0;
@@ -28,10 +28,13 @@ void Allocator::dump_freelist()
 		assert(tab->find(0, cursor) >= 0);
 		while (1) {
 		  dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
+		  assert(cursor.current().value > 0);
 
 		  if (b < EBOFS_NUM_FREE_BUCKETS)
 			n += cursor.current().value;
 
+		  if (free.contains( cursor.current().key, cursor.current().value )) 
+			dout(0) << "dump   bad " << cursor.current().key << "~" << cursor.current().value << endl;
 		  assert(!free.contains( cursor.current().key, cursor.current().value ));
 		  free.insert( cursor.current().key, cursor.current().value );
 		  if (cursor.move_right() <= 0) break;
@@ -135,7 +138,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 		}
 	  }
 
-	  dout(10) << "allocate " << ex << " near " << near << endl;
+	  dout(20) << "allocate " << ex << " near " << near << endl;
 	  dump_freelist();
 	  return num;
 	}
@@ -150,7 +153,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  
 	  fs->free_tab[bucket]->remove(ex.start);
 	  fs->free_blocks -= ex.length;
-	  dout(10) << "allocate partial " << ex << " near " << near << endl;
+	  dout(20) << "allocate partial " << ex << " near " << near << endl;
 	  dump_freelist();
 	  return ex.length;
 	}	
@@ -164,7 +167,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
 int Allocator::release(Extent& ex)
 {
-  dout(10) << "release " << ex << " (into limbo)" << endl;
+  dout(20) << "release " << ex << " (into limbo)" << endl;
+  assert(ex.length > 0);
   limbo.insert(ex.start, ex.length);
   fs->limbo_blocks += ex.length;
   return 0;
@@ -209,6 +213,7 @@ int Allocator::release_limbo()
 int Allocator::_release(Extent& orig) 
 {
   dout(15) << "_release " << orig << endl;
+  assert(orig.length > 0);
   fs->free_blocks += orig.length;
 
   Extent newex = orig;
@@ -245,6 +250,7 @@ int Allocator::_release(Extent& orig)
   }
   
   // ok, insert newex
+  assert(newex.length > 0);
   int b = pick_bucket(newex.length);
   fs->free_tab[b]->insert(newex.start, newex.length);
   return 0;

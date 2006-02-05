@@ -1497,7 +1497,7 @@ void OSD::op_rep_pull_reply(MOSDOpReply *op)
   assert(p->pulling_version(o) == v);
 
   // write it and add it to the PG
-  store->write(o, op->get_length(), 0, op->get_data());
+  store->write(o, op->get_length(), 0, op->get_data(), true);
   p->pg->add_object(store, o);
   
   store->setattr(o, "version", &v, sizeof(v));
@@ -2197,6 +2197,7 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
 	}
   } else {
 	// normal business
+	assert(0);  // no more!
 	r = store->write(op->get_oid(),
 					 op->get_length(),
 					 op->get_offset(),

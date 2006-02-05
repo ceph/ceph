@@ -34,7 +34,8 @@ public:
 
   // onode
   map<string, AttrVal>  attr;
-  vector<Extent>        extents;
+  //vector<Extent>        extents;
+  map<block_t, Extent>  extent_map;
 
   interval_set<block_t> uncommitted;
 
@@ -111,105 +112,99 @@ public:
 
 
   // allocation
-  void _append_extent(Extent& ex) {
-	if (extents.size() &&
-		extents[extents.size()-1].end() == ex.start)
-	  extents[extents.size()-1].length += ex.length;
-	else
-	  extents.push_back(ex);		
-  }
   void verify_extents() {
 	block_t count = 0;
 	interval_set<block_t> is;	
 
+	
 	if (0) {  // do crazy stupid sanity checking
 	  set<block_t> s;
 	  cout << "verifying" << endl;
-	  for (unsigned i=0; i<extents.size(); i++) {
-		//cout << "verify_extents " << i << " off " << count << " " << extents[i] << endl;
-		count += extents[i].length;
-		
-		//assert(!is.contains(extents[i].start, extents[i].length));
-		//is.insert(extents[i].start, extents[i].length);
-		
-		for (unsigned j=0;j<extents[i].length;j++) {
-		  assert(s.count(extents[i].start+j) == 0);
-		  s.insert(extents[i].start+j);
+
+	  for (map<block_t,Extent>::iterator p = extent_map.begin();
+		   p != extent_map.end();
+		   p++) {
+		cout << " " << p->first << ": " << p->second << endl;
+		assert(count == p->first);
+		count += p->second.length;
+		for (unsigned j=0;j<p->second.length;j++) {
+		  assert(s.count(p->second.start+j) == 0);
+		  s.insert(p->second.start+j);
 		}
 	  }
-	  cout << "verified " << extents.size() << " extents" << endl;
+
 	  assert(s.size() == count);
 	  assert(count == object_blocks);
 	}
   }
   void set_extent(block_t offset, Extent ex) {
-	//cout << "set_extent " << offset << " " << ex << " ... " << object_blocks << endl;
+	//cout << "set_extent " << offset << " -> " << ex << " ... " << object_blocks << endl;
 	assert(offset <= object_blocks);
 	verify_extents();
 
 	// at the end?
 	if (offset == object_blocks) {
-	  _append_extent(ex);
+	  //cout << " appending " << ex << endl;
+	  if (!extent_map.empty() && extent_map.end()->second.end() == ex.start) 
+		extent_map.end()->second.length += ex.length;
+	  else
+		extent_map[object_blocks] = ex;
 	  object_blocks += ex.length;
 	  return;
 	}
 
-	// nope.  ok, rebuild the extent list.
-	vector<Extent> old;
-	old.swap(extents);
-	assert(extents.empty());
-
-	unsigned oldex = 0;
-	block_t oldoff = 0;
-	block_t cur = 0;
-
-	// copy up to offset
-	while (cur < offset) {
-	  Extent t;
-	  t.start = old[oldex].start+oldoff;
-	  t.length = MIN(offset-cur, old[oldex].length-oldoff);
-	  _append_extent(t);
-
-	  cur += t.length;
-	  oldoff += t.length;
-	  if (oldoff == old[oldex].length) {
-		oldex++;
-		oldoff = 0;
+	// removing any extent bits we overwrite
+	if (!extent_map.empty()) {
+	  // preceeding extent?
+	  map<block_t,Extent>::iterator p = extent_map.lower_bound(offset);
+	  if (p != extent_map.begin()) {
+		p--;
+		if (p->first + p->second.length > offset) {
+		  //cout << " preceeding was " << p->second << endl;
+		  if (p->first + p->second.length > offset+ex.length) {
+			// cutting chunk out of middle, add last bit
+			Extent &n = extent_map[offset+ex.length] = p->second;
+			n.start += offset+ex.length - p->first;
+			n.length -= offset+ex.length - p->first;
+			//cout << " tail frag is " << n << endl;
+		  } 
+		  p->second.length = offset - p->first;     // cut tail off preceeding extent
+		  //cout << " preceeding now " << p->second << endl;
+		}
+		p++;
 	  }	  
+	  
+	  // overlapping extents
+	  while (p != extent_map.end() &&
+			 p->first < offset + ex.length) {
+		map<block_t,Extent>::iterator next = p;
+		next++;
+
+		// completely subsumed?
+		if (p->first + p->second.length <= offset+ex.length) {
+		  //cout << " erasing " << p->second << endl;
+		  extent_map.erase(p);
+		  p = next;
+		  continue;
+		}
+
+		// spans new extent, cut off head
+		Extent &n = extent_map[ offset+ex.length ] = p->second;
+		//cout << " cut head off " << p->second;
+		n.start += offset+ex.length - p->first;
+		n.length -= offset+ex.length - p->first;
+		extent_map.erase(p);
+		//cout << ", now " << n << endl;
+		break;
+	  }
 	}
 
-	// add our new extent
-	_append_extent(ex);
+	extent_map[ offset ] = ex;
+
+	// extend object?
 	if (offset + ex.length > object_blocks)
-	  object_blocks = offset + ex.length;	
-
-	// skip past it in the old stuff
-	block_t sleft = ex.length;
-	while (sleft > 0) {
-	  block_t skip = MIN(sleft, old[oldex].length-oldoff);
-	  sleft -= skip;
-	  oldoff += skip;
-	  if (oldoff == old[oldex].length) {
-		oldex++;
-		oldoff = 0;
-		if (oldex == old.size()) break;
-	  }
-	}
-
-	// copy anything left?
-	while (oldex < old.size()) {
-	  if (oldoff) {
-		Extent t;
-		t.start = old[oldex].start+oldoff;
-		t.length = old[oldex].length-oldoff;
-		_append_extent(t);
-		oldoff = 0;
-		oldex++;
-	  } else {
-		_append_extent(old[oldex++]);
-	  }
-	}
-
+	  object_blocks = offset+ex.length;
+	
 	verify_extents();
   }
   
@@ -218,22 +213,41 @@ public:
    *  map teh given page range into extents on disk.
    */
   int map_extents(block_t start, block_t len, vector<Extent>& ls) {
+	//cout << "map_extents " << start << " " << len << endl;
 	verify_extents();
-	block_t cur = 0;
-	for (unsigned i=0; i<extents.size(); i++) {
-	  if (cur >= start+len) break;
-	  if (cur + extents[i].length > start) {
+
+	//assert(start+len <= object_blocks);
+
+	map<block_t,Extent>::iterator p = extent_map.lower_bound(start);
+	if (p != extent_map.begin() &&
+		(p == extent_map.end() || p->first > start && p->first)) {
+	  p--;
+	  if (p->second.length > start - p->first) {
 		Extent ex;
-		block_t headskip = start-cur;
-		ex.start = extents[i].start + headskip;
-		ex.length = MIN(len, extents[i].length - headskip);
+		ex.start = p->second.start + (start - p->first);
+		ex.length = MIN(len, p->second.length - (start - p->first));
 		ls.push_back(ex);
+		
+		//cout << " got (tail of?) " << p->second << " : " << ex << endl;
+		
 		start += ex.length;
 		len -= ex.length;
-		if (len == 0) break;
 	  }
-	  cur += extents[i].length;
+	  p++;
 	}
+
+	while (len > 0 &&
+		   p != extent_map.end()) {
+	  assert(p->first == start);
+	  Extent ex = p->second;
+	  ex.length = MIN(len, ex.length);
+	  ls.push_back(ex);
+	  //cout << " got (head of?) " << p->second << " : " << ex << endl;
+	  start += ex.length;
+	  len -= ex.length;
+	  p++;
+	}	
+
 	return 0;
   }
 
@@ -266,7 +280,7 @@ public:
 	return s;
   }
   int get_extent_bytes() {
-	return sizeof(Extent) * extents.size();
+	return sizeof(Extent) * extent_map.size();
   }
 
 };

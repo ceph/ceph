@@ -303,22 +303,23 @@ int Ebofs::commit_thread_entry()
 	if (g_conf.ebofs_commit_ms) {
 	  if (g_conf.ebofs_idle_commit_ms > 0) {
 		// periodically check for idle block device
-		dout(10) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms," 
+		dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms, " 
 				 << g_conf.ebofs_idle_commit_ms << " ms if idle" << endl;
-		long left = g_conf.ebofs_commit_ms*1000;
+		long left = g_conf.ebofs_commit_ms;
 		while (left > 0) {
-		  long next = MIN(left, g_conf.ebofs_idle_commit_ms*1000);
-		  if (commit_cond.WaitInterval(ebofs_lock, utime_t(0, left)) != ETIMEDOUT) 
+		  long next = MIN(left, g_conf.ebofs_idle_commit_ms);
+		  if (commit_cond.WaitInterval(ebofs_lock, utime_t(0, next*1000)) != ETIMEDOUT) 
 			break;   // we got kicked
 		  if (dev.is_idle()) {
-			dout(10) << "commit_thread bdev is idle, early commit" << endl;
+			dout(20) << "commit_thread bdev is idle, early commit" << endl;
 			break;  // dev is idle
 		  }
 		  left -= next;
+		  dout(20) << "commit_thread " << left << " ms left" << endl;
 		}
 	  } else {
 		// normal wait+timeout
-		dout(10) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << endl;
+		dout(20) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << endl;
 		commit_cond.WaitInterval(ebofs_lock, utime_t(0, g_conf.ebofs_commit_ms*1000));   
 	  }
 
@@ -577,11 +578,11 @@ Onode* Ebofs::get_onode(object_t oid)
 	}
 	
 	// parse extents
-	on->extents.clear();
+	on->extent_map.clear();
 	block_t n = 0;
 	for (int i=0; i<eo->num_extents; i++) {
 	  Extent ex = *((Extent*)p);
-	  on->extents.push_back(ex);
+	  on->extent_map[n] = ex;
 	  dout(15) << "get_onode " << *on  << " ex " << i << ": " << ex << endl;
 	  n += ex.length;
 	  p += sizeof(Extent);
@@ -621,7 +622,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   eo.object_size = on->object_size;
   eo.object_blocks = on->object_blocks;
   eo.num_attr = on->attr.size();
-  eo.num_extents = on->extents.size();
+  eo.num_extents = on->extent_map.size();
   bl.copy_in(off, sizeof(eo), (char*)&eo);
   off += sizeof(eo);
 
@@ -639,10 +640,12 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   }
   
   // extents
-  for (unsigned i=0; i<on->extents.size(); i++) {
-	bl.copy_in(off, sizeof(Extent), (char*)&on->extents[i]);
+  for (map<block_t,Extent>::iterator i = on->extent_map.begin();
+	   i != on->extent_map.end();
+	   i++) {
+	bl.copy_in(off, sizeof(Extent), (char*)&(i->second));
 	off += sizeof(Extent);
-	dout(15) << "write_onode " << *on  << " ex " << i << ": " << on->extents[i] << endl;
+	dout(15) << "write_onode " << *on  << " ex " << i->first << ": " << i->second << endl;
   }
 }
 
@@ -661,8 +664,8 @@ void Ebofs::write_onode(Onode *on)
 	  allocator.release(on->onode_loc);
 	
 	block_t first = 0;
-	if (on->extents.size()) 
-	  first = on->extents[0].start;
+	if (on->extent_map.size()) 
+	  first = on->extent_map.begin()->second.start;
 	
 	allocator.allocate(on->onode_loc, blocks, first);
 	object_tab->remove( on->object_id );
@@ -715,8 +718,11 @@ void Ebofs::remove_onode(Onode *on)
 	allocator.release(on->onode_loc);
   
   // free data space
-  for (unsigned i=0; i<on->extents.size(); i++)
-	allocator.release(on->extents[i]);
+  for (map<block_t,Extent>::iterator i = on->extent_map.begin();
+	   i != on->extent_map.end();
+	   i++)
+	allocator.release(i->second);
+  on->extent_map.clear();
 
   // remove from collections
   Table<idpair_t, bool>::Cursor cursor(oc_tab);
