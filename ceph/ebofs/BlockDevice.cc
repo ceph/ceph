@@ -382,7 +382,7 @@ void BlockDevice::_submit_io(biovec *b)
 	io_wakeup.SignalAll();
 
   // [DEBUG] check for overlapping ios
-  {
+  if (0) {
 	// BUG: this doesn't catch everything!  eg 1~10000000 will be missed....
 	multimap<block_t, biovec*>::iterator p = io_queue.lower_bound(b->start);
 	if ((p != io_queue.end() &&
@@ -538,7 +538,7 @@ int BlockDevice::open(kicker *idle)
   // open?
   fd = open_fd();
   if (fd < 0) {
-	dout(1) << "open " << dev << " failed, r = " << fd << " " << strerror(errno) << endl;
+	dout(1) << "open failed, r = " << fd << " " << strerror(errno) << endl;
 	fd = 0;
 	return -1;
   }
@@ -562,7 +562,7 @@ int BlockDevice::open(kicker *idle)
   }	
   num_blocks = bsize / (__uint64_t)EBOFS_BLOCK_SIZE;
   
-  dout(1) << "open " << dev << " is " << bsize << " bytes, " << num_blocks << " blocks" << endl;
+  dout(2) << "open " << bsize << " bytes, " << num_blocks << " blocks" << endl;
   
   // start thread
   io_threads_started = 0;
@@ -607,7 +607,7 @@ int BlockDevice::close()
 
   io_stop = false;   // in case we start again
 
-  dout(1) << "close " << dev << endl;
+  dout(2) << "close " << endl;
 
   //::flock(fd, LOCK_UN);
   ::close(fd);

@@ -322,7 +322,7 @@ class ObjectCache {
 	// add to my map
 	assert(data.count(bh->start()) == 0);
 
-	if (1) {  // sanity check     FIXME DEBUG
+	if (0) {  // sanity check     FIXME DEBUG
 	  //cout << "add_bh " << bh->start() << "~" << bh->length() << endl;
 	  map<block_t,BufferHead*>::iterator p = data.lower_bound(bh->start());
 	  if (p != data.end()) {

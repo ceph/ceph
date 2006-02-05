@@ -17,7 +17,7 @@ class Allocator {
 	int b = 0;
 	while (num > 1) {
 	  b++;
-	  num = num >> 1;
+	  num = num >> EBOFS_FREE_BUCKET_BITS;
 	}
 	if (b >= EBOFS_NUM_FREE_BUCKETS)
 	  b = EBOFS_NUM_FREE_BUCKETS-1;

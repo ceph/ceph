@@ -164,6 +164,8 @@ class Table {
 	Table              *table;
 	vector<Nodeptr>     open;  // open nodes
 	vector<int>         pos;   // position within the node
+	//Nodeptr             open[20];
+	//int                 pos[20];
 	int                 level;
 
 	Cursor(Table *t) : table(t), open(t->depth), pos(t->depth), level(0) {}

@@ -113,11 +113,10 @@ public:
 
   // allocation
   void verify_extents() {
-	block_t count = 0;
-	interval_set<block_t> is;	
-
-	
 	if (0) {  // do crazy stupid sanity checking
+	  block_t count = 0;
+	  interval_set<block_t> is;	
+	  	
 	  set<block_t> s;
 	  cout << "verifying" << endl;
 

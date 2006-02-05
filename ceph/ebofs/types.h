@@ -139,10 +139,9 @@ struct ebofs_table {
 typedef __uint64_t version_t;
 
 static const unsigned EBOFS_MAGIC = 0x000EB0F5;
-static const unsigned EBOFS_ROOT_INODE = 1;
-static const unsigned EBOFS_ROOT_BLOCK = 0;
 
-static const int EBOFS_NUM_FREE_BUCKETS = 16;   /* see alloc.h for bucket constraints */
+static const int EBOFS_NUM_FREE_BUCKETS = 8;   /* see alloc.h for bucket constraints */
+static const int EBOFS_FREE_BUCKET_BITS = 2;
 
 
 struct ebofs_super {

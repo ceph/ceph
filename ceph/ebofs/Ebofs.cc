@@ -9,12 +9,22 @@
 #undef dout
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs."
 
+char *nice_blocks(block_t b) 
+{
+  static char s[20];
+  float sz = b*4.0;
+  if (sz > (10 << 20)) 
+	sprintf(s,"%.1f GB", sz / (1024.0*1024.0));
+  else if (sz > (10 << 10)) 
+	sprintf(s,"%.1f MB", sz / (1024.0));
+  else 
+	sprintf(s,"%llu KB", b*4);
+  return s;
+}
+
 int Ebofs::mount()
 {
-  // note: this will fail in mount -> unmount -> mount type situations, bc
-  //       prior state isn't fully cleaned up.
-
-  dout(1) << "mount " << dev.get_device_name() << endl;
+  dout(2) << "mounting " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
 
   ebofs_lock.Lock();
   assert(!mounted);
@@ -72,7 +82,7 @@ int Ebofs::mount()
   commit_thread.create();
   finisher_thread.create();
 
-  dout(1) << "mount mounted " << dev.get_device_name() << endl;
+  dout(1) << "mounted " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   mounted = true;
 
   ebofs_lock.Unlock();
@@ -159,7 +169,7 @@ int Ebofs::mkfs()
 
   dev.close();
 
-  dout(1) << "mkfs: done" << endl;
+  dout(1) << "mkfs: " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   ebofs_lock.Unlock();
   return 0;
 }
