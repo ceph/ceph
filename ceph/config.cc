@@ -125,11 +125,12 @@ md_config_t g_conf = {
 
   // --- ebofs ---
   ebofs: 0,
-  ebofs_commit_interval: 2,    // seconds.  0 = no timeout (for debugging/tracing)
-  ebofs_oc_size:      1000,
-  ebofs_cc_size:      1000,
-  ebofs_bc_size:      (150 *256),  // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty: (100 *256),  // before write() will block
+  ebofs_commit_ms:      10000,      // 0 = no forced commit timeout (for debugging/tracing)
+  ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_oc_size:        10000,      // onode cache
+  ebofs_cc_size:        10000,      // cnode cache
+  ebofs_bc_size:        (150 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (100 *256), // before write() will block
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
@@ -149,7 +150,7 @@ md_config_t g_conf = {
 
   // --- block device ---
   bdev_iothreads:    1,         // number of ios to queue with kernel
-  bdev_idle_kick_after_ms: 100, // ms
+  bdev_idle_kick_after_ms: 0,//100, // ms   ** FIXME ** this seems to break things, not sure why yet **
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 300 ms
   bdev_el_bidir: true,          // bidirectional elevator?
@@ -315,8 +316,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--ebofs") == 0) 
 	  g_conf.ebofs = 1;
-	else if (strcmp(args[i], "--ebofs_commit_interval") == 0)
-	  g_conf.ebofs_commit_interval = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_commit_ms") == 0)
+	  g_conf.ebofs_commit_ms = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--fakestore") == 0) {
@@ -345,6 +346,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--bdev_iothreads") == 0) 
 	  g_conf.bdev_iothreads = atoi(args[++i]);
+	else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 
+	  g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
 
 
 	else {

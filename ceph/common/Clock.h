@@ -19,10 +19,17 @@ class utime_t {
  private:
   struct timeval tv;
 
+  void normalize() {
+	if (tv.tv_usec > 1000*1000) {
+	  tv.tv_sec += tv.tv_usec / (1000*1000);
+	  tv.tv_usec %= 1000*1000;
+	}
+  }
+
  public:
   // cons
-  utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; }
-  utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; }
+  utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
+  utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
   
   // accessors
   time_t        sec()  const { return tv.tv_sec; } 

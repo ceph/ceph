@@ -225,7 +225,7 @@ int BlockDevice::io_thread_entry()
 		io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));   
 
 		// should we still be sleeping?  (did we get woken up, or did timer expire?
-		if (io_queue.empty()) {
+		if (io_queue.empty() && io_threads_running == 0) {
 		  idle_kicker->kick();		  // kick
 		  io_wakeup.Wait(lock);		  // and wait
 		}
@@ -247,6 +247,15 @@ int BlockDevice::io_thread_entry()
 
   dout(10) << "io_thread" << whoami << " finish" << endl;
   return 0;
+}
+
+bool BlockDevice::is_idle()
+{
+  
+  lock.Lock();
+  bool idle = (io_threads_running == 0) && io_queue.empty();
+  lock.Unlock();
+  return idle;
 }
 
 void BlockDevice::do_io(int fd, list<biovec*>& biols)

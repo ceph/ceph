@@ -300,12 +300,31 @@ int Ebofs::commit_thread_entry()
   while (mounted) {
 	
 	// wait for kick, or timeout
-	if (g_conf.ebofs_commit_interval) {
-	  dout(10) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_interval << " seconds" << endl;
-	  commit_cond.WaitInterval(ebofs_lock, utime_t(g_conf.ebofs_commit_interval,0));   
+	if (g_conf.ebofs_commit_ms) {
+	  if (g_conf.ebofs_idle_commit_ms > 0) {
+		// periodically check for idle block device
+		dout(10) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms," 
+				 << g_conf.ebofs_idle_commit_ms << " ms if idle" << endl;
+		long left = g_conf.ebofs_commit_ms*1000;
+		while (left > 0) {
+		  long next = MIN(left, g_conf.ebofs_idle_commit_ms*1000);
+		  if (commit_cond.WaitInterval(ebofs_lock, utime_t(0, left)) != ETIMEDOUT) 
+			break;   // we got kicked
+		  if (dev.is_idle()) {
+			dout(10) << "commit_thread bdev is idle, early commit" << endl;
+			break;  // dev is idle
+		  }
+		  left -= next;
+		}
+	  } else {
+		// normal wait+timeout
+		dout(10) << "commit_thread sleeping (up to) " << g_conf.ebofs_commit_ms << " ms" << endl;
+		commit_cond.WaitInterval(ebofs_lock, utime_t(0, g_conf.ebofs_commit_ms*1000));   
+	  }
+
 	} else {
 	  // DEBUG.. wait until kicked
-	  dout(10) << "commit_thread no commit_interval, waiting until kicked" << endl;
+	  dout(10) << "commit_thread no commit_ms, waiting until kicked" << endl;
 	  commit_cond.Wait(ebofs_lock);
 	}
 

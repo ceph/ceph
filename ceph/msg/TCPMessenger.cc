@@ -740,7 +740,7 @@ void* tcp_dispatchthread(void*)
 	  // drop lock while we deliver
 	  incoming_lock.Unlock();
 
-	  while (in.size()) {
+	  while (!in.empty()) {
 		Message *m = in.front();
 		in.pop_front();
 

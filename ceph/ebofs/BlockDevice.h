@@ -133,6 +133,8 @@ class BlockDevice {
   // 
   int count_io(block_t start, block_t len);
 
+  bool is_idle();
+
 
   // ** blocking interface **
 
