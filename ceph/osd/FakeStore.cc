@@ -355,10 +355,17 @@ int FakeStore::write(object_t oid,
   ::flock(fd, LOCK_UN);
 
   // schedule sync
-  if (onsafe)
-	queue_fsync(fd, onsafe);
-  else
+  if (onsafe) {
+	if (g_conf.fakestore_fake_sync) {
+	  g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
+							  onsafe);
+	  ::close(fd);
+	} else { 
+	  queue_fsync(fd, onsafe);
+	}
+  } else {
 	::close(fd);
+  }
   
   return did;
 }

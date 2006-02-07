@@ -2178,7 +2178,7 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
   // write 
   int r = 0;
   if (onsafe) {
-	if (g_conf.fake_osd_sync) {
+	/*if (g_conf.fake_osd_sync) {
 	  // fake a delayed safe
 	  r = store->write(op->get_oid(),
 					   op->get_length(),
@@ -2187,14 +2187,14 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
 					   false);
 	  g_timer.add_event_after(1.0,
 							  onsafe);
-	} else {
-	  // for real
-	  r = store->write(op->get_oid(),
-					   op->get_length(),
-					   op->get_offset(),
-					   bl,
-					   onsafe);
-	}
+							  } else {
+	*/
+	// for real
+	r = store->write(op->get_oid(),
+					 op->get_length(),
+					 op->get_offset(),
+					 bl,
+					 onsafe);
   } else {
 	// normal business
 	assert(0);  // no more!

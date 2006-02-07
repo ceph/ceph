@@ -33,7 +33,7 @@ class OSDMap;
 /*** types ***/
 typedef __uint64_t tid_t;
 
-#define FILER_FLAG_TRUNCATE_AFTER_WRITE  1
+//#define FILER_FLAG_TRUNCATE_AFTER_WRITE  1
 
 
 // from LSB to MSB

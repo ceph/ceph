@@ -52,7 +52,6 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
   fake_osdmap_expand: 0,
-  fake_osd_sync: false,
 
   debug: 1,
   debug_mds_balancer: 1,
@@ -117,7 +116,9 @@ md_config_t g_conf = {
   osd_max_rep: 4,
   osd_maxthreads: 10,    // 0 == no threading
   osd_mkfs: false,
+  osd_fake_sync: false,
   
+  fakestore_fake_sync: 2,    // 2 seconds
   fakestore_fsync: true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
@@ -235,8 +236,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
-	else if (strcmp(args[i], "--fake_osd_sync") == 0) 
-	  g_conf.fake_osd_sync = atoi(args[++i]);
+	//else if (strcmp(args[i], "--fake_osd_sync") == 0) 
+	//g_conf.fake_osd_sync = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--debug") == 0) 
 	  g_conf.debug = atoi(args[++i]);
@@ -323,7 +324,7 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
 	  g_conf.osd_pg_bits = 5;
-	  g_conf.fake_osd_sync = 2;
+	  //g_conf.fake_osd_sync = 2;
 	}
 	else if (strcmp(args[i], "--fakestore_fsync") == 0) 
 	  g_conf.fakestore_fsync = atoi(args[++i]);
@@ -332,7 +333,7 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--obfs") == 0) {
 	  g_conf.uofs = 1;
-	  g_conf.fake_osd_sync = 2;
+	  //g_conf.fake_osd_sync = 2;
 	}
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 

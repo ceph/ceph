@@ -224,7 +224,9 @@ int OBFSStore::write(object_t oid, size_t len,
 int OBFSStore::write(object_t oid, size_t len,
 		     off_t offset, bufferlist& bl, Context *onflush)
 {
-  // implement me later.. fake for now!
-  assert(0);
+  write(oid, len, offset, bl, false);
+
+  g_timer.add_event_after((float)g_conf.uofs_fake_sync,
+						  onsafe);
   return 0;
 }

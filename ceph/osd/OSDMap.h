@@ -4,7 +4,6 @@
 /*
  * describe properties of the OSD cluster.
  *   disks, disk groups, total # osds,
- *   whether we're in limbo/recovery state, etc.
  *
  */
 #include "config.h"
@@ -27,11 +26,9 @@ using namespace std;
  */
 
 // from LSB to MSB,
-#define PG_PS_BITS         32   // max bits for placement seed/group portion of placement group
+#define PG_PS_BITS         32   // max bits for placement seed/group portion of PG
 #define PG_REP_BITS        10   
 #define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
-
-
 
 
 /** OSDMap
@@ -91,12 +88,12 @@ class OSDMap {
   // oid -> ps
   ps_t object_to_ps(object_t oid) {
 	static crush::Hash H(777);
-	return H( (oid & 0xffffffff) ^ (oid >> 32) ) & PG_PS_MASK;
+	return H( (oid & 0xffffffffUL) ^ (oid >> 32) ) & PG_PS_MASK;
   }
 
   // (ps, nrep) -> pg
   pg_t ps_nrep_to_pg(ps_t ps, int nrep) {
-	return ((pg_t)ps & ((1LL<<pg_bits)-1LL)) 
+	return ((pg_t)ps & ((1ULL<<pg_bits)-1ULL)) 
 	  | ((pg_t)nrep << PG_PS_BITS);
   }
 
