@@ -109,7 +109,9 @@ sub run {
 	system "rm -r log/$fn" if -d "log/$fn";
 	system "mkdir log/$fn" unless -d "log/$fn";
 
-	my $c = "mpiexec -l -n $h->{'n'} ./tcpsyn --mkfs --nummds $h->{'nummds'} --numclient $h->{'numclient'} --numosd $h->{'numosd'}";
+	my $e = './tcpsyn';
+	$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
+	my $c = "mpiexec -l -n $h->{'n'} $e --mkfs --nummds $h->{'nummds'} --numclient $h->{'numclient'} --numosd $h->{'numosd'}";
 	$c .= " --$h->{'fs'}";
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
