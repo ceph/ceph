@@ -114,7 +114,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 			ex.start += left.length;
 			ex.length -= left.length;
 			assert(ex.length == num);
-			_release(left);
+			_release_loner(left);
 		  } else {
 			// take middle part.
 			Extent left,right;
@@ -124,8 +124,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 			right.start = ex.start + num;
 			right.length = ex.length - left.length - num;
 			ex.length = num;
-			_release(left);
-			_release(right);
+			_release_loner(left);
+			_release_loner(right);
 		  }
 		}
 		else {
@@ -134,7 +134,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 		  right.start = ex.start + num;
 		  right.length = ex.length - num;
 		  ex.length = num;
-		  _release(right);
+		  _release_loner(right);
 		}
 	  }
 
@@ -200,7 +200,7 @@ int Allocator::release_limbo()
 	  dout(20) << "release_limbo  ex " << ex << endl;
 
 	  fs->limbo_blocks -= ex.length;
-	  _release(ex);
+	  _release_merge(ex);
 
 	  if (cursor.move_right() <= 0) break;
 	}
@@ -210,9 +210,27 @@ int Allocator::release_limbo()
   return 0;
 }
 
-int Allocator::_release(Extent& orig) 
+
+
+/*
+ * release extent into freelist
+ * WARNING: *ONLY* use this if you _know_ there are no adjacent free extents
+ */
+int Allocator::_release_loner(Extent& ex) 
 {
-  dout(15) << "_release " << orig << endl;
+  assert(ex.length > 0);
+  int b = pick_bucket(ex.length);
+  fs->free_tab[b]->insert(ex.start, ex.length);
+  return 0;
+}
+
+/*
+ * release extent into freelist
+ * look for any adjacent extents and merge with them!
+ */
+int Allocator::_release_merge(Extent& orig) 
+{
+  dout(15) << "_release_merge " << orig << endl;
   assert(orig.length > 0);
   fs->free_blocks += orig.length;
 
@@ -250,10 +268,6 @@ int Allocator::_release(Extent& orig)
   }
   
   // ok, insert newex
-  assert(newex.length > 0);
-  int b = pick_bucket(newex.length);
-  fs->free_tab[b]->insert(newex.start, newex.length);
+  _release_loner(newex);
   return 0;
 }
-
-

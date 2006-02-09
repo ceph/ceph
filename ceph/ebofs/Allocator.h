@@ -28,7 +28,8 @@ class Allocator {
 
   void dump_freelist();
 
-  int _release(Extent& ex);
+  int _release_loner(Extent& ex);  // release loner extent
+  int _release_merge(Extent& ex);  // release any extent (searches for adjacent)
 
  public:
   Allocator(Ebofs *f) : fs(f) {}
@@ -38,7 +39,6 @@ class Allocator {
 
   int commit_limbo();  // limbo -> fs->limbo_tab
   int release_limbo(); // fs->limbo_tab -> free_tabs
-
 
 };
 
