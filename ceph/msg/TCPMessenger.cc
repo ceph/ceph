@@ -36,6 +36,9 @@ using namespace __gnu_cxx;
 
 #include "TCPDirectory.h"
 
+#include "common/Logger.h"
+
+
 #define DBL 18
 
 
@@ -44,6 +47,15 @@ TCPMessenger *rankmessenger = 0; //
 TCPDirectory *nameserver = 0;    // only defined on rank 0
 TCPMessenger *nsmessenger = 0;
 
+
+/***************************/
+LogType rank_logtype;
+Logger *logger;
+
+int stat_num = 0;
+off_t stat_inq = 0, stat_inqb = 0;
+off_t stat_outq = 0, stat_outqb = 0;
+/***************************/
 
 
 // local directory
@@ -151,6 +163,22 @@ public:
 	waiting_for_rank.SignalAll();
 
 	delete m;
+
+	// logger!
+	dout(DBL) << "logger" << endl;
+	char names[100];
+	sprintf(names, "rank%d", my_rank);
+	string name = names;
+
+	logger = new Logger(name, (LogType*)&rank_logtype);
+	rank_logtype.add_set("num");
+	rank_logtype.add_inc("in");
+	rank_logtype.add_inc("dis");
+	rank_logtype.add_set("inq");
+	rank_logtype.add_set("inqb");
+	rank_logtype.add_set("outq");
+	rank_logtype.add_set("outqb");
+
   }
 
   void handle_register_ack(MNSRegisterAck *m) {
@@ -305,6 +333,7 @@ int tcpmessenger_init()
   // register to execute timer events
   //g_timer.set_messenger_kicker(new C_TCPKicker());
   msgr_callback_kicker = new C_TCPKicker();
+
 
   dout(DBL) << "init done" << endl;
   return 0;
@@ -651,9 +680,19 @@ void *tcp_inthread(void *r)
 
 	// give to dispatch loop
 	incoming_lock.Lock();
+
+	stat_inq++;
+	stat_inqb += m->get_payload().length();
+
 	incoming.push_back(m);
 	incoming_cond.Signal();
 	incoming_lock.Unlock();
+
+	if (logger) {
+	  logger->set("inqb", stat_inqb);
+	  logger->set("inq", stat_inq);
+	  logger->inc("in");
+	}
   }
 
   dout(DBL) << "tcp_inthread closing " << sd << endl;
@@ -740,9 +779,18 @@ void* tcp_dispatchthread(void*)
 	  // drop lock while we deliver
 	  incoming_lock.Unlock();
 
+
 	  while (!in.empty()) {
 		Message *m = in.front();
 		in.pop_front();
+
+		stat_inq--;
+		stat_inqb -= m->get_payload().length();
+		if (logger) {
+		  logger->set("inq", stat_inq);
+		  logger->set("inqb", stat_inqb);
+		  logger->inc("dis");
+		}
 
 		dout(DBL) << "dispatch doing " << *m << endl;
 	  
@@ -917,29 +965,17 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
 
   // register myself in the messenger directory
   directory_lock.Lock();
-  directory[myaddr] = this;
+  {
+	directory[myaddr] = this;
+	
+	stat_num++;
+	if (logger) logger->set("num", stat_num);
+  }
   directory_lock.Unlock();
 
   // register to execute timer events
   //g_timer.set_messenger_kicker(new C_TCPKicker());
   g_timer.set_messenger(this);
-
-
-  // logger
-  /*
-  string name;
-  name = "m.";
-  name += MSG_ADDR_TYPE(whoami);
-  int w = MSG_ADDR_NUM(whoami);
-  if (w >= 1000) name += ('0' + ((w/1000)%10));
-  if (w >= 100) name += ('0' + ((w/100)%10));
-  if (w >= 10) name += ('0' + ((w/10)%10));
-  name += ('0' + ((w/1)%10));
-
-  logger = new Logger(name, (LogType*)&mpimsg_logtype);
-  loggers[ whoami ] = logger;
-  */
-
 }
 
 
@@ -948,11 +984,13 @@ void TCPMessenger::ready()
   if (get_myaddr() != MSG_ADDR_DIRECTORY) {
 	// started!  tell namer we are up and running.
 	lookup_lock.Lock();
-	Message *m = new MGenericMessage(MSG_NS_STARTED);
-	m->set_source(get_myaddr(), 0);
-	m->set_dest(MSG_ADDR_DIRECTORY, 0);
-	tcp_marshall(m);
-	tcp_send(m);
+	{
+	  Message *m = new MGenericMessage(MSG_NS_STARTED);
+	  m->set_source(get_myaddr(), 0);
+	  m->set_dest(MSG_ADDR_DIRECTORY, 0);
+	  tcp_marshall(m);
+	  tcp_send(m);
+	}
 	lookup_lock.Unlock();
   }
 }
@@ -1007,6 +1045,9 @@ int TCPMessenger::shutdown()
 	tcpmessenger_stop_rankserver();
 	directory_lock.Lock();
   }
+
+  stat_num--;
+  if (logger) logger->set("num", stat_num);
 
   directory_lock.Unlock();
 

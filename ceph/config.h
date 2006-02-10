@@ -40,6 +40,7 @@ struct md_config_t {
   int debug_ns;
 
   bool tcp_skip_rank0;
+  bool tcp_log;
 
   // client
   int      client_cache_size;
