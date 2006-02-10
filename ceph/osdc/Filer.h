@@ -180,7 +180,7 @@ class Filer : public Dispatcher {
 	map< object_t, OSDExtent > object_extents;
 
 	// RUSHSTRIPE?
-	if (inode.layout.policy == FILE_LAYOUT_RUSHSTRIPE) {
+	if (inode.layout.policy == FILE_LAYOUT_CRUSH) {
 	  // layout constant
 	  size_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_size;
 	  
@@ -243,7 +243,7 @@ class Filer : public Dispatcher {
 		extents.push_back(it->second);
 	  }
 	}
-	else if (inode.layout.policy == FILE_LAYOUT_OSDLOCAL) {
+	/*else if (inode.layout.policy == FILE_LAYOUT_OSDLOCAL) {
 	  // all in one object, on a specific OSD.
 	  OSDExtent ex;
 	  ex.osd = inode.layout.osd;
@@ -254,7 +254,7 @@ class Filer : public Dispatcher {
 	  ex.buffer_extents[0] = len;
 
 	  extents.push_back(ex);
-	}
+	  }*/
 	else {
 	  assert(0);
 	}

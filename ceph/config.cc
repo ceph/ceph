@@ -66,6 +66,7 @@ md_config_t g_conf = {
   
   tcp_skip_rank0: false,
 
+
   // --- client ---
   client_cache_size: 300,
   client_cache_mid: .5,
@@ -113,6 +114,8 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_pg_bits: 6,
+  osd_object_layout_linear: false,   // don't hash oids into pg's
+  osd_pg_layout_linear:     false,   // don't use CRUSH for pg layout
   osd_max_rep: 4,
   osd_maxthreads: 2,    // 0 == no threading
   osd_mkfs: false,
@@ -351,6 +354,11 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.bdev_iothreads = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 
 	  g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--osd_object_layout_linear") == 0) 
+	  g_conf.osd_object_layout_linear = 1;
+	else if (strcmp(args[i], "--osd_pg_layout_linear") == 0) 
+	  g_conf.osd_pg_layout_linear = 1;
 
 
 	else {

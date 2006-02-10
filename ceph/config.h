@@ -85,10 +85,13 @@ struct md_config_t {
 
   // osd
   int   osd_pg_bits;
+  bool  osd_object_layout_linear;
+  bool  osd_pg_layout_linear;
   int   osd_max_rep;
   int   osd_maxthreads;
   bool  osd_mkfs;
   bool  osd_fake_sync;
+
 
   int   fakestore_fake_sync;
   bool  fakestore_fsync;

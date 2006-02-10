@@ -1,3 +1,18 @@
+OSDI
+
+- osd write tests
+ - get obfs working
+ - ebofs threading?
+
+- crush vs linear
+
+- mds scaling
+ - shared /lib, /include  .. verify fixed open() behavior works!
+
+- client buffer cache
+
+- tcp recv throttling
+
 
 client
 - test client caps with meta exports

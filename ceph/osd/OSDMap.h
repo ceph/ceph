@@ -87,8 +87,12 @@ class OSDMap {
 
   // oid -> ps
   ps_t object_to_ps(object_t oid) {
-	static crush::Hash H(777);
-	return H( oid ^ (oid >> 32) ) & PG_PS_MASK;
+	if (g_conf.osd_object_layout_linear) {
+	  return (oid + (oid >> 30)) & PG_PS_MASK;   // 30 == OID_ONO_BITS
+	} else {
+	  static crush::Hash H(777);
+	  return H( oid ^ (oid >> 32) ) & PG_PS_MASK;
+	}
   }
 
   // (ps, nrep) -> pg
@@ -113,9 +117,14 @@ class OSDMap {
 				 vector<int>& osds) {       // list of osd addr's
 	int num_rep = pg_to_nrep(pg);
 	pg_t ps = pg_to_ps(pg);
-	crush.do_rule(crush.rules[num_rep],
-				  ps ^ (ps >> 32),
-				  osds);
+	if (g_conf.osd_pg_layout_linear) {
+	  for (int i=0; i<num_rep; i++) 
+		osds.push_back( ((pg_t)i+ps) % g_conf.num_osd );
+	} else {
+	  crush.do_rule(crush.rules[num_rep],
+					ps ^ (ps >> 32),
+					osds);
+	}
 	return osds.size();
   }
 

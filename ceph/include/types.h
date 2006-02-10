@@ -98,8 +98,8 @@ struct ltstr
  * specifies a striping and replication strategy
  */
 
-#define FILE_LAYOUT_RUSHSTRIPE  0  // stripe via rush
-#define FILE_LAYOUT_OSDLOCAL    1  // local to a specific osd
+#define FILE_LAYOUT_CRUSH    0    // stripe via crush
+#define FILE_LAYOUT_LINEAR   1    // stripe linearly across cluster
 
 struct FileLayout {
   // layout
@@ -118,13 +118,14 @@ struct FileLayout {
 
   FileLayout() { }
   FileLayout(int ss, int sc, int os, int nr=2) :
-	policy(FILE_LAYOUT_RUSHSTRIPE),
+	policy(FILE_LAYOUT_CRUSH),
 	   stripe_size(ss), stripe_count(sc), object_size(os), 
 	   num_rep(nr) { }
-  FileLayout(int o) :
+  /*FileLayout(int o) :
 	policy(FILE_LAYOUT_OSDLOCAL),
 	   osd(o),
 	   num_rep(1) { }
+  */
 };
 
 
