@@ -82,7 +82,7 @@ int Ebofs::mount()
   commit_thread.create();
   finisher_thread.create();
 
-  dout(1) << "mounted " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(1) << "mounted " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   mounted = true;
 
   ebofs_lock.Unlock();
@@ -169,7 +169,7 @@ int Ebofs::mkfs()
 
   dev.close();
 
-  dout(1) << "mkfs: " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(1) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -1811,8 +1811,41 @@ int Ebofs::remove(object_t oid)
 
 int Ebofs::truncate(object_t oid, off_t size)
 {
+  ebofs_lock.Lock();
   dout(7) << "truncate " << hex << oid << dec << " size " << size << endl;
-  assert(0);
+  
+  Onode *on = get_onode(oid);
+  if (!on) {
+	ebofs_lock.Unlock();
+	return -ENOENT;
+  }
+  
+  int r = 0;
+  if (size > on->object_size) {
+	r = -EINVAL;  // whatever
+  } 
+  else if (size < on->object_size) {
+	// change size
+	on->object_size = size;
+	dirty_onode(on);
+	
+	// free blocks
+	block_t nblocks = 0;
+	if (size) nblocks = 1 + (size-1) / EBOFS_BLOCK_SIZE;
+	if (on->object_blocks > nblocks) {
+	  vector<Extent> extra;
+	  on->truncate_extents(nblocks, extra);
+	  for (unsigned i=0; i<extra.size(); i++)
+		allocator.release(extra[i]);
+	}
+  }
+  else {
+	assert(size == on->object_size);
+  }
+  
+  put_onode(on);
+  ebofs_lock.Unlock();
+  return r;
 }
 
 

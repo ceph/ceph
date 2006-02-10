@@ -25,7 +25,7 @@ public:
 	  if (rand() % 2) a = "two";
 	  int l = 3;//rand() % 10;
 
-	  switch (rand() % 8) {
+	  switch (rand() % 9) {
 	  case 0:
 		{
 		  cout << t << " read " << oid << " at " << off << " len " << len << endl;
@@ -90,6 +90,13 @@ public:
 			v[3] = 0;
 			assert(strcmp(v,a) == 0);
 		  }
+		}
+		break;
+		
+	  case 8:
+		{
+		  cout << t << " truncate " << oid << " " << off << endl;
+		  fs.truncate(oid, 0);
 		}
 		break;
 	  }

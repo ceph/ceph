@@ -250,6 +250,41 @@ public:
 	return 0;
   }
 
+  int truncate_extents(block_t len, vector<Extent>& extra) {
+	verify_extents();
+
+	map<block_t,Extent>::iterator p = extent_map.lower_bound(len);
+	if (p != extent_map.begin() &&
+		(p == extent_map.end() || p->first > len && p->first)) {
+	  p--;
+	  if (p->second.length > len - p->first) {
+		Extent ex;
+		ex.start = p->second.start + (len - p->first);
+		ex.length = p->second.length - (len - p->first);
+		extra.push_back(ex);
+
+		p->second.length = len - p->first;
+		assert(p->second.length > 0);
+		
+		//cout << " got (tail of?) " << p->second << " : " << ex << endl;
+	  }
+	  p++;
+	}
+	
+	while (p != extent_map.end()) {
+	  assert(p->first >= len);
+	  extra.push_back(p->second);
+	  map<block_t,Extent>::iterator n = p;
+	  n++;
+	  extent_map.erase(p);
+	  p = n;
+	}	
+	
+	object_blocks = len;
+	verify_extents();
+	return 0;
+  }
+
 
   /* map_alloc_regions(start, len, map)
    *  map range into regions that need to be (re)allocated on disk
