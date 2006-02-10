@@ -1799,15 +1799,19 @@ public:
 
 void OSD::op_rep_modify_safe(MOSDOp *op)
 {
-  object_t oid = op->get_oid();
-  lock_object(oid);      // ... just to make sure the original write is finished with *op
+  //object_t oid = op->get_oid();
+  if (op->hack_blah) {
+	dout(0) << "got rep_modify_safe before rep_modify applied, waiting" << endl;
+	g_timer.add_event_after(1, new C_OSD_RepModifySafe(this, op));
+  } else 
+	//lock_object(oid);      // ... just to make sure the original write is finished with *op
   {
 	dout(10) << "rep_modify_safe on op " << *op << endl;
 	MOSDOpReply *ack2 = new MOSDOpReply(op, 0, osdmap, true);
 	messenger->send_message(ack2, op->get_asker());
 	delete op;
   }
-  unlock_object(oid);
+  //unlock_object(oid);
 }
 
 void OSD::op_rep_modify(MOSDOp *op)
@@ -1836,11 +1840,13 @@ void OSD::op_rep_modify(MOSDOp *op)
 	  // write
 	  assert(op->get_data().length() == op->get_length());
 	  onsafe = new C_OSD_RepModifySafe(this, op);
+	  op->hack_blah = true;
 	  r = apply_write(op, op->get_version(), onsafe);
 	  if (ov == 0) pg->add_object(store, oid);
 	  
 	  logger->inc("r_wr");
 	  logger->inc("r_wrb", op->get_length());
+	  op->hack_blah = false;
 	} else if (op->get_op() == OSD_OP_REP_DELETE) {
 	  // delete
 	  store->collection_remove(pg->get_pgid(), op->get_oid());

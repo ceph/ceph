@@ -62,6 +62,8 @@ class MOSDOp : public Message {
   friend class MOSDOpReply;
 
  public:
+  bool hack_blah;
+
   const long       get_tid() { return st.tid; }
   const msg_addr_t get_asker() { return st.asker; }
 

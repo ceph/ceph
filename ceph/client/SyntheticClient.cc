@@ -715,16 +715,37 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize)   // size is in
 
 	// verify fingerprint
 	int *p = (int*)buf;
+	int bad = 0;
+	int boff, bgoff, bchunk, bclient, bzero;
 	while ((char*)p + 32 < buf + rdsize) {
-	  assert(*p == (char*)p - buf);
+	  boff = *p;
+	  bgoff = (int)((char*)p - buf);
 	  p++;
-	  assert(*p == (int)i);
+	  bchunk = *p;
 	  p++;
-	  assert(*p == client->get_nodeid());
+	  bclient = *p;
 	  p++;
-	  assert(*p == 0);
+	  bzero = *p;
 	  p++;
+	  if (boff != bgoff ||
+		  bchunk != (int)i ||
+		  bclient != client->get_nodeid() ||
+		  bzero != 0) {
+		if (!bad)
+		  dout(0) << "WARNING: wrong data from OSD, it should be " 
+				  << "(block=" << i 
+				  << " offset=" << bgoff
+				  << " client=" << client->get_nodeid() << ")"
+				  << " .. but i read back .. " 
+				  << "(block=" << bchunk
+				  << " offset=" << boff
+				  << " client=" << bclient << " zero=" << bzero << ")" << endl;
+
+		bad++;
+	  }
 	}
+	if (bad) 
+	  dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << endl;
 
   }
   
