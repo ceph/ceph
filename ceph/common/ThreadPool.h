@@ -22,7 +22,7 @@ template <class U, class T>
 class ThreadPool {
 
  private:
-  queue<T *> q;
+  queue<T> q;
   Mutex q_lock;
   Semaphore q_sem;
 
@@ -30,9 +30,9 @@ class ThreadPool {
   int num_threads;
   vector<pthread_t> thread;
 
-  U *u;
-  void (*func)(U*,T*);
-  void (*prefunc)(U*,T*);
+  U u;
+  void (*func)(U,T);
+  void (*prefunc)(U,T);
   string myname;
 
   static void *foo(void *arg)
@@ -49,7 +49,7 @@ class ThreadPool {
       q_sem.Get();
       if (q.empty()) break;
 
-	  T *op = get_op();
+	  T op = get_op();
       tpdout(DBLVL) << ".func thread "<< pthread_self() << " on " << op << endl;
       func(u, op);
     }
@@ -58,9 +58,9 @@ class ThreadPool {
   }
 
 
-  T* get_op()
+  T get_op()
   {
-    T* op;
+    T op;
     q_lock.Lock();
 	{
 	  op = q.front();
@@ -79,7 +79,7 @@ class ThreadPool {
 
  public:
 
-  ThreadPool(char *myname, int howmany, void (*f)(U*,T*), U *obj, void (*pf)(U*,T*) = 0) :
+  ThreadPool(char *myname, int howmany, void (*f)(U,T), U obj, void (*pf)(U,T) = 0) :
 	num_ops(0), num_threads(howmany), 
 	thread(num_threads),
 	u(obj),
@@ -108,7 +108,7 @@ class ThreadPool {
     }
   }
   
-  void put_op(T* op) {
+  void put_op(T op) {
     tpdout(DBLVL) << ".put_op " << op << endl;
     q_lock.Lock();
     q.push(op);
