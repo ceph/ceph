@@ -24,7 +24,7 @@ char *nice_blocks(block_t b)
 
 int Ebofs::mount()
 {
-  dout(2) << "mounting " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
 
   ebofs_lock.Lock();
   assert(!mounted);

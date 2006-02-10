@@ -50,11 +50,12 @@ class BlockDevice {
 	Cond *cond;
 	int rval;
 	char *note;
+	bool done;
 
 	biovec(char t, block_t s, block_t l, bufferlist& b, callback *c, char *n=0) :
-	  type(t), start(s), length(l), bl(b), cb(c), cond(0), rval(0), note(n) {}
+	  type(t), start(s), length(l), bl(b), cb(c), cond(0), rval(0), note(n), done(false) {}
 	biovec(char t, block_t s, block_t l, bufferlist& b, Cond *c, char *n=0) :
-	  type(t), start(s), length(l), bl(b), cb(0), cond(c), rval(0), note(n) {}
+	  type(t), start(s), length(l), bl(b), cb(0), cond(c), rval(0), note(n), done(false) {}
   };
   friend ostream& operator<<(ostream& out, biovec &bio);
 
@@ -124,7 +125,6 @@ class BlockDevice {
 
   // get size in blocks
   block_t get_num_blocks();
-
   char *get_device_name() const { return dev; }
 
   int open(kicker *idle = 0);
@@ -150,7 +150,8 @@ class BlockDevice {
 	
 	lock.Lock();
 	_submit_io(&bio);
-	c.Wait(lock);
+	while (!bio.done) 
+	  c.Wait(lock);
 	lock.Unlock();
 	return bio.rval;
   }
@@ -167,7 +168,8 @@ class BlockDevice {
 
 	lock.Lock();
 	_submit_io(&bio);
-	c.Wait(lock);
+	while (!bio.done) 
+	  c.Wait(lock);
 	lock.Unlock();
 	return bio.rval;
   }

@@ -449,9 +449,8 @@ class NodePool {
   }
 
   void commit_wait() {
-	while (flushing > 0) {
+	while (flushing > 0) 
 	  commit_cond.Wait(ebofs_lock);
-	}
 	dout(20) << "ebofs.nodepool.commit_wait finish" << endl;
   }
 

@@ -1,17 +1,27 @@
 OSDI
 
+- fix Cond predicates
+
+- tcpmessenger stats
+- tcp recv throttling
+
+- vary osd_maxthreads, [ ebofs, fakestore ], write_size
+
+- osd streaming small writes (mds log)
+
+- crush vs linear
+
 - osd write tests
  - get obfs working
  - ebofs threading?
 
-- crush vs linear
-
 - mds scaling
  - shared /lib, /include  .. verify fixed open() behavior works!
 
-- client buffer cache
+- client buffer cache!
 
-- tcp recv throttling
+- ld_preload?
+
 
 
 client
@@ -32,12 +42,14 @@ filer
 
 
 ebofs
-- change Onode vector<Extent> extents to map<block_t,Extent> extent_map
 - combine inodes into same blocks
 - zero regions?
 - journaling
 - clone(), and/or snapshots
+- truncate
 
+mds
+- implement/test truncate
 
 osd
 - ardos validation

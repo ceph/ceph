@@ -310,6 +310,7 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
 
 void BlockDevice::finish_io(biovec *bio)
 {
+  bio->done = true;
   if (bio->cond) {
 	bio->cond->Signal();
   }
