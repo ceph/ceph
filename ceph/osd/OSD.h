@@ -78,6 +78,7 @@ class OSD : public Dispatcher {
   hash_set<object_t>               object_lock;
   hash_map<object_t, list<Cond*> > object_lock_waiters;  
   void lock_object(object_t oid);
+  void _lock_object(object_t oid);
   void unlock_object(object_t oid);
 
   // finished waiting messages, that will go at tail of dispatch()
@@ -92,12 +93,12 @@ class OSD : public Dispatcher {
 
 
   // -- ops --
-  class ThreadPool<class OSD, class MOSDOp>  *threadpool;
+  class ThreadPool<class OSD*, object_t> *threadpool;
+  hash_map<object_t, list<MOSDOp*> >      op_queue;
   int   pending_ops;
   bool  waiting_for_no_ops;
   Cond  no_pending_ops;
 
-  void queue_op(class MOSDOp *m);
   void wait_for_no_ops();
 
   int apply_write(MOSDOp *op, version_t v,
@@ -107,14 +108,12 @@ class OSD : public Dispatcher {
   void get_repop(OSDReplicaOp*);
   void put_repop(OSDReplicaOp*);   // will send ack/safe msgs, and delete as necessary.
   
- public:
   void do_op(class MOSDOp *m);
-  static void static_doop(OSD *o, MOSDOp *op) {
-	o->do_op(op);
-  };
-  void dequeue_op(class MOSDOp *m);
-  static void static_dequeueop(OSD *o, MOSDOp *op) {
-	o->dequeue_op(op);
+
+ public:
+  void dequeue_op(object_t oid);
+  static void static_dequeueop(OSD *o, object_t oid) {
+	o->dequeue_op(oid);
   };
 
  protected:

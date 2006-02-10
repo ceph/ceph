@@ -151,10 +151,9 @@ OSD::OSD(int id, Messenger *m)
   {
 	char name[80];
 	sprintf(name,"osd%d.threadpool", whoami);
-	threadpool = new ThreadPool<OSD, MOSDOp>(name, g_conf.osd_maxthreads, 
-											 static_doop,
-											 this,
-											 static_dequeueop);
+	threadpool = new ThreadPool<OSD*, object_t>(name, g_conf.osd_maxthreads, 
+												static_dequeueop,
+												this);
   }
 }
 
@@ -218,6 +217,12 @@ int OSD::shutdown()
 void OSD::lock_object(object_t oid) 
 {
   osd_lock.Lock();
+  _lock_object(oid);
+  osd_lock.Unlock();
+}
+
+void OSD::_lock_object(object_t oid)
+{
   if (object_lock.count(oid)) {
 	Cond c;
 	dout(0) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
@@ -228,7 +233,6 @@ void OSD::lock_object(object_t oid)
 	dout(15) << "lock_object " << hex << oid << dec << endl;
 	object_lock.insert(oid);
   }
-  osd_lock.Unlock();
 }
 
 void OSD::unlock_object(object_t oid) 
@@ -1993,32 +1997,49 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   // queue op
+  object_t oid = op->get_oid();
+  op_queue[oid].push_back(op);
   pending_ops++;
+
   if (g_conf.osd_maxthreads < 1) {
+	// do it now
 	osd_lock.Unlock();
 	{
-	  dequeue_op(op);
-	  do_op(op);      
+	  dequeue_op(oid);
 	}
 	osd_lock.Lock();
   } else {
-	osd_lock.Unlock();    // because put_op might block, bc threadpool may be calling dequeue_op w/ q_lock
-	{
-	  threadpool->put_op(op);
-	}
-	osd_lock.Lock();
+	threadpool->put_op(oid);
   }
 }
 
 
 /*
- * called serially (but in worker thread) as items are dequeued from the threadpool
  */
-void OSD::dequeue_op(MOSDOp *op)
+void OSD::dequeue_op(object_t oid)
 {
-  dout(10) << "dequeue_op " << op << endl;
-  lock_object(op->get_oid());
+  MOSDOp *op;
+
+  osd_lock.Lock();
+  {
+	// lock oid
+	_lock_object(oid);  
+
+	// get pending op
+	list<MOSDOp*> &ls  = op_queue[oid];
+	assert(!ls.empty());
+	op = ls.front();
+	ls.pop_front();
+	if (ls.empty())
+	  op_queue.erase(oid);
+  }
+  osd_lock.Unlock();
+  
+  dout(10) << "dequeue_op " << hex << oid << dec << " op " << op << ", " << (pending_ops-1) << " others pending" << endl;
+  do_op(op);
 }
+
+
 
 /*
  * called asynchronously by worker thread after items are dequeued
@@ -2030,7 +2051,7 @@ void OSD::do_op(MOSDOp *op)
   logger->inc("op");
 
   object_t oid = op->get_oid();
-  //lock_object(oid);  // dequeue_op does this now
+  //lock_object(oid);  // done by dequeue_op now
 
   // replication ops?
   if (OSD_OP_IS_REP(op->get_op())) {
