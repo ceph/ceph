@@ -170,14 +170,16 @@ public:
 	sprintf(names, "rank%d", my_rank);
 	string name = names;
 
-	logger = new Logger(name, (LogType*)&rank_logtype);
-	rank_logtype.add_set("num");
-	rank_logtype.add_inc("in");
-	rank_logtype.add_inc("dis");
-	rank_logtype.add_set("inq");
-	rank_logtype.add_set("inqb");
-	rank_logtype.add_set("outq");
-	rank_logtype.add_set("outqb");
+	if (g_conf.tcp_log) {
+	  logger = new Logger(name, (LogType*)&rank_logtype);
+	  rank_logtype.add_set("num");
+	  rank_logtype.add_inc("in");
+	  rank_logtype.add_inc("dis");
+	  rank_logtype.add_set("inq");
+	  rank_logtype.add_set("inqb");
+	  rank_logtype.add_set("outq");
+	  rank_logtype.add_set("outqb");
+	}
 
   }
 
