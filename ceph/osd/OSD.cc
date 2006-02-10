@@ -226,33 +226,43 @@ void OSD::_lock_object(object_t oid)
   if (object_lock.count(oid)) {
 	Cond c;
 	dout(0) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
-	object_lock_waiters[oid].push_back(&c);
-	c.Wait(osd_lock);
-	assert(object_lock.count(oid));
-  } else {
-	dout(15) << "lock_object " << hex << oid << dec << endl;
-	object_lock.insert(oid);
+
+	list<Cond*>& ls = object_lock_waiters[oid];   // this is safe, right?
+	ls.push_back(&c);
+	
+	while (object_lock.count(oid) ||
+		   ls.front() != &c)
+	  c.Wait(osd_lock);
+
+	assert(ls.front() == &c);
+	ls.pop_front();
+	if (ls.empty())
+	  object_lock_waiters.erase(oid);
   }
+
+  dout(15) << "lock_object " << hex << oid << dec << endl;
+  object_lock.insert(oid);
 }
 
 void OSD::unlock_object(object_t oid) 
 {
   osd_lock.Lock();
+
+  // unlock
   assert(object_lock.count(oid));
+  object_lock.erase(oid);
+
   if (object_lock_waiters.count(oid)) {
 	// someone is in line
-	list<Cond*>& ls = object_lock_waiters[oid];
-	Cond *c = ls.front();
-	ls.pop_front();
-	dout(15) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
-	if (ls.empty()) 
-	  object_lock_waiters.erase(oid);
+	Cond *c = object_lock_waiters[oid].front();
+	assert(c);
+	dout(0) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
 	c->Signal();
   } else {
 	// nobody waiting
 	dout(15) << "unlock_object " << hex << oid << dec << endl;
-	object_lock.erase(oid);
   }
+
   osd_lock.Unlock();
 }
 
@@ -2122,7 +2132,8 @@ void OSD::wait_for_no_ops()
   if (pending_ops > 0) {
 	dout(7) << "wait_for_no_ops - waiting for " << pending_ops << endl;
 	waiting_for_no_ops = true;
-	no_pending_ops.Wait(osd_lock);
+	while (pending_ops > 0)
+	  no_pending_ops.Wait(osd_lock);
 	waiting_for_no_ops = false;
 	assert(pending_ops == 0);
   } 

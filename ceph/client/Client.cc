@@ -501,8 +501,8 @@ void Client::flush_inode_buffers(Inode *in)
     dout(7) << "inflight buffers of sync write, waiting" << endl;
     Cond cond;
     in->waitfor_flushed.push_back(&cond);
-    cond.Wait(client_lock);
-    assert(in->inflight_buffers.empty());
+	while (!in->inflight_buffers.empty())
+	  cond.Wait(client_lock);
     dout(7) << "inflight buffers flushed" << endl;
   } 
   else if (g_conf.client_bcache &&
@@ -953,7 +953,7 @@ int Client::unmount()
   lru.lru_set_max(0);
   trim_cache();
 
-  if (lru.lru_get_size() > 0 || !inode_map.empty()) {
+  while (lru.lru_get_size() > 0 || !inode_map.empty()) {
 	dout(3) << "cache still has " << lru.lru_get_size() << "+" << inode_map.size() << " items, waiting (presumably for caps to be released?)" << endl;
 	unmount_cond.Wait(client_lock);
   }
@@ -1641,20 +1641,21 @@ int Client::close(fh_t fh)
 
 class C_Client_Cond : public Context {
 public:
+  bool *done;
   Cond *cond;
   Mutex *mutex;
   int *rvalue;
-  bool finished;
-  C_Client_Cond(Cond *cond, Mutex *mutex, int *rvalue) {
+  C_Client_Cond(bool *d, Cond *cond, Mutex *mutex, int *rvalue) {
+	this->done = d;
     this->cond = cond;
     this->mutex = mutex;
     this->rvalue = rvalue;
-    this->finished = false;
+    *done = false;
   }
   void finish(int r) {
     //mutex->Lock();
     *rvalue = r;
-    finished = true;
+	*done = true;
     cond->Signal();
     //mutex->Unlock();
   }
@@ -1735,9 +1736,11 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
     Cond cond;
     bufferlist blist;   // data will go here
 	
-    C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+	bool done = false;
+    C_Client_Cond *onfinish = new C_Client_Cond(&done, &cond, &client_lock, &rvalue);
     filer->read(in->inode, size, offset, &blist, onfinish);
-    cond.Wait(client_lock);
+	while (!done)
+	  cond.Wait(client_lock);
 
     // copy data into caller's buf
     blist.copy(0, blist.length(), buf);
@@ -1941,13 +1944,14 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  Cond cond;
 	  int rvalue = 0;
 	  
-	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &client_lock, &rvalue);
+	  bool done = false;
+	  C_Client_Cond *onfinish = new C_Client_Cond(&done, &cond, &client_lock, &rvalue);
 	  filer->write(in->inode, size, offset, blist, 0, 
 				   //NULL,NULL);  // no wait hack
 				   onfinish, NULL);   // applied
 				   //NULL, onfinish); // safe on disk
-	  
-	  cond.Wait(client_lock);
+	  while (!done)
+		cond.Wait(client_lock);
 	}
   }
 

@@ -148,7 +148,7 @@ public:
 	entity_rank[MSG_ADDR_RANK(my_rank)] = my_rank; 
 	rank_addr[my_rank] = listen_addr;
 	
-	waiting_for_rank.Signal();
+	waiting_for_rank.SignalAll();
 
 	delete m;
   }
@@ -869,7 +869,8 @@ msg_addr_t register_entity(msg_addr_t addr)
 	tcp_send(m);
 	
 	// wait for reply
-	waiting_for_rank.Wait(lookup_lock);
+	while (my_rank < 0) 
+	  waiting_for_rank.Wait(lookup_lock);
 	assert(my_rank > 0);
   }
   
@@ -881,9 +882,7 @@ msg_addr_t register_entity(msg_addr_t addr)
   tcp_send(m);
   
   // wait?
-  if (waiting_for_register_result.count(id)) {
-	// already here?
-  } else
+  while (!waiting_for_register_result.count(id)) 
 	cond.Wait(lookup_lock);
 
   // get result, clean up

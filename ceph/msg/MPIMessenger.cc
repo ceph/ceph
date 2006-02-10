@@ -6,7 +6,6 @@
 #include "common/Mutex.h"
 
 #include "MPIMessenger.h"
-#include "CheesySerializer.h"
 #include "Message.h"
 
 #include <iostream>

@@ -43,7 +43,7 @@ class OSDReplicaOp {
 	new_version(nv), old_version(ov)
 	{ }
   bool can_send_ack() { return !sent_ack && !cancel && local_ack && waitfor_ack.empty(); }
-  bool can_send_safe() { return !sent_safe && !cancel && local_safe && waitfor_safe.empty(); }
+  bool can_send_safe() { return !sent_safe && !cancel && local_ack && local_safe && waitfor_safe.empty(); }
   bool can_delete() { return local_safe && (cancel || waitfor_safe.empty()); }
 };
 

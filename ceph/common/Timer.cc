@@ -138,9 +138,9 @@ void Timer::register_timer()
   if (thread_id) {
 	dout(DBL) << "register_timer kicking thread" << endl;
 	if (timed_sleep)
-	  timeout_cond.Signal();
+	  timeout_cond.SignalAll();
 	else
-	  sleep_cond.Signal();
+	  sleep_cond.SignalAll();
   } else {
 	dout(DBL) << "register_timer starting thread" << endl;
 	pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
@@ -155,9 +155,9 @@ void Timer::cancel_timer()
 	lock.Lock();
 	thread_stop = true;
 	if (timed_sleep)
-	  timeout_cond.Signal();
+	  timeout_cond.SignalAll();
 	else
-	  sleep_cond.Signal();
+	  sleep_cond.SignalAll();
 	lock.Unlock();
 	
 	dout(10) << "waiting for thread to finish" << endl;

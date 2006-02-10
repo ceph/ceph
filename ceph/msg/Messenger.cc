@@ -165,8 +165,9 @@ void Messenger::dispatch(Message *m)
 	call_reply[pcid] = m;     // set reply
 	call_cond[pcid]->Signal();
 
-	// wait for delivery
-	call_reply_finish_cond.Wait(_lock);
+	// wait for sendrecv to wake up
+	while (call_cond.count(pcid))
+	  call_reply_finish_cond.Wait(_lock);
 
 	_lock.Unlock();
   } else {
@@ -213,18 +214,14 @@ Message *Messenger::sendrecv(Message *m, msg_addr_t dest, int port)
   _lock.Lock();
 
   // wait?
-  if (call_reply[pcid] == 0) {
+  while (call_reply[pcid] == 0) {
 	dout(DEBUGLVL) << "sendrecv waiting for reply on pcid " << pcid << endl;
-	//cout << "wait start, value = " << sem->Value() << endl;
-	
 	cond.Wait(_lock);
-  } else {
-	dout(DEBUGLVL) << "sendrecv reply is already here on pcid " << pcid << endl;
-  }
+  } 
 
   // pick up reply
   Message *reply = call_reply[pcid];
-  //assert(reply);
+  assert(reply);
   call_reply.erase(pcid);   // remove from call map
   call_cond.erase(pcid);
 
