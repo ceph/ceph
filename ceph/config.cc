@@ -114,7 +114,7 @@ md_config_t g_conf = {
   // --- osd ---
   osd_pg_bits: 6,
   osd_max_rep: 4,
-  osd_maxthreads: 10,    // 0 == no threading
+  osd_maxthreads: 2,    // 0 == no threading
   osd_mkfs: false,
   osd_fake_sync: false,
   
@@ -325,8 +325,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
-	  g_conf.osd_pg_bits = 5;
-	  g_conf.osd_maxthreads = 1;   // fucking hell
+	  //g_conf.osd_pg_bits = 5;
+	  //g_conf.osd_maxthreads = 1;   // fucking hell
 	}
 	else if (strcmp(args[i], "--fakestore_fsync") == 0) 
 	  g_conf.fakestore_fsync = atoi(args[++i]);

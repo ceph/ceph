@@ -111,6 +111,7 @@ class OSD : public Dispatcher {
   void do_op(class MOSDOp *m);
 
  public:
+  void enqueue_op(object_t oid, MOSDOp *op);
   void dequeue_op(object_t oid);
   static void static_dequeueop(OSD *o, object_t oid) {
 	o->dequeue_op(oid);

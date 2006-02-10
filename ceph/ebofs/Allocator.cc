@@ -221,6 +221,7 @@ int Allocator::_release_loner(Extent& ex)
   assert(ex.length > 0);
   int b = pick_bucket(ex.length);
   fs->free_tab[b]->insert(ex.start, ex.length);
+  fs->free_blocks += ex.length;
   return 0;
 }
 
@@ -232,7 +233,6 @@ int Allocator::_release_merge(Extent& orig)
 {
   dout(15) << "_release_merge " << orig << endl;
   assert(orig.length > 0);
-  fs->free_blocks += orig.length;
 
   Extent newex = orig;
   
@@ -246,6 +246,7 @@ int Allocator::_release_merge(Extent& orig)
 	  newex.length += cursor.current().value;
 	  
 	  // remove it
+	  fs->free_blocks -= cursor.current().value;
 	  fs->free_tab[b]->remove( cursor.current().key );
 	  break;
 	}
@@ -260,8 +261,9 @@ int Allocator::_release_merge(Extent& orig)
 	  // merge
 	  newex.start = cursor.current().key;
 	  newex.length += cursor.current().value;
-	  
+
 	  // remove it
+	  fs->free_blocks -= cursor.current().value;
 	  fs->free_tab[b]->remove( cursor.current().key );
 	  break;
 	}

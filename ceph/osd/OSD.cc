@@ -243,8 +243,8 @@ void OSD::unlock_object(object_t oid)
 	// someone is in line
 	list<Cond*>& ls = object_lock_waiters[oid];
 	Cond *c = ls.front();
-	dout(15) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
 	ls.pop_front();
+	dout(15) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
 	if (ls.empty()) 
 	  object_lock_waiters.erase(oid);
 	c->Signal();
@@ -1996,25 +1996,27 @@ void OSD::handle_op(MOSDOp *op)
 	}  
   }
 
-  // queue op
-  object_t oid = op->get_oid();
-  op_queue[oid].push_back(op);
-  pending_ops++;
-
   if (g_conf.osd_maxthreads < 1) {
-	// do it now
-	osd_lock.Unlock();
-	{
-	  dequeue_op(oid);
-	}
-	osd_lock.Lock();
+	do_op(op); // do it now
   } else {
-	threadpool->put_op(oid);
+	enqueue_op(op->get_oid(), op); 	// queue for worker threads
   }
 }
 
 
 /*
+ * enqueue called with osd_lock held
+ */
+void OSD::enqueue_op(object_t oid, MOSDOp *op)
+{
+  op_queue[oid].push_back(op);
+  pending_ops++;
+  
+  threadpool->put_op(oid);
+}
+
+/*
+ * dequeue called in worker thread, without osd_lock
  */
 void OSD::dequeue_op(object_t oid)
 {
@@ -2030,28 +2032,45 @@ void OSD::dequeue_op(object_t oid)
 	assert(!ls.empty());
 	op = ls.front();
 	ls.pop_front();
+
+	dout(10) << "dequeue_op " << hex << oid << dec << " op " << op << ", " << ls.size() << " / " << (pending_ops-1) << " more pending" << endl;
+	
 	if (ls.empty())
 	  op_queue.erase(oid);
   }
   osd_lock.Unlock();
   
-  dout(10) << "dequeue_op " << hex << oid << dec << " op " << op << ", " << (pending_ops-1) << " others pending" << endl;
+  // do it
   do_op(op);
+
+  // unlock
+  unlock_object(oid);
+  
+  // finish
+  dout(10) << "finish op " << op << endl;
+  osd_lock.Lock();
+  {
+	assert(pending_ops > 0);
+	pending_ops--;
+	if (pending_ops == 0 && waiting_for_no_ops)
+	  no_pending_ops.Signal();
+  }
+  osd_lock.Unlock();
 }
 
 
 
 /*
- * called asynchronously by worker thread after items are dequeued
+ * do an op
+ *
+ * object lock may be held (if multithreaded)
+ * osd_lock NOT held.
  */
 void OSD::do_op(MOSDOp *op) 
 {
-  dout(10) << "do_op " << op << endl;
+  dout(10) << "do_op " << op << " " << op->get_op() << endl;
 
   logger->inc("op");
-
-  object_t oid = op->get_oid();
-  //lock_object(oid);  // done by dequeue_op now
 
   // replication ops?
   if (OSD_OP_IS_REP(op->get_op())) {
@@ -2096,17 +2115,6 @@ void OSD::do_op(MOSDOp *op)
 	}
   }
 
-  unlock_object(oid);
-  
-  //dout(12) << "finish op " << op << endl;
-
-  // finish
-  osd_lock.Lock();
-  assert(pending_ops > 0);
-  pending_ops--;
-  if (pending_ops == 0 && waiting_for_no_ops)
-	no_pending_ops.Signal();
-  osd_lock.Unlock();
 }
 
 void OSD::wait_for_no_ops()
