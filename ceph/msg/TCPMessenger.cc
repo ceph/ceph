@@ -1069,6 +1069,12 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_dest(dest, port);
   m->set_lamport_stamp( get_lamport() );
 
+  dout(4) << "--> '" << m->get_type_name() << 
+	"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+	" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+		  << m 
+		  << endl;
+  
   if (1) {
 	// serialize all output
 	tcp_marshall(m);
