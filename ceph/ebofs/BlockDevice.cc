@@ -382,7 +382,7 @@ void BlockDevice::_submit_io(biovec *b)
 	io_wakeup.SignalAll();
 
   // [DEBUG] check for overlapping ios
-  if (0) {
+  if (g_conf.bdev_debug_check_io_overlap) {
 	// BUG: this doesn't catch everything!  eg 1~10000000 will be missed....
 	multimap<block_t, biovec*>::iterator p = io_queue.lower_bound(b->start);
 	if ((p != io_queue.end() &&

@@ -129,6 +129,7 @@ struct md_config_t {
   int   bdev_el_bw_max_ms;
   bool  bdev_el_bidir;
   int   bdev_iov_max;
+  bool  bdev_debug_check_io_overlap;
 
   // fake client
   int      num_fakeclient;

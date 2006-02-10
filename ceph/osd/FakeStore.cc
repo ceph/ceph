@@ -2,6 +2,7 @@
 #include "FakeStore.h"
 #include "include/types.h"
 
+#include "common/Timer.h"
 
 #include <unistd.h>
 #include <stdlib.h>

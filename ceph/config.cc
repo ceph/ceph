@@ -156,6 +156,7 @@ md_config_t g_conf = {
   bdev_el_bw_max_ms: 300,       // restart elevator at least once every 300 ms
   bdev_el_bidir: true,          // bidirectional elevator?
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
+  bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
 
   // --- fakeclient (mds regression testing) (ancient history) ---
   num_fakeclient: 100,
