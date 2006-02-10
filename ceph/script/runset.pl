@@ -111,14 +111,20 @@ sub run {
 
 	my $e = './tcpsyn';
 	$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
-	my $c = "mpiexec -l -n $h->{'n'} $e --mkfs --nummds $h->{'nummds'} --numclient $h->{'numclient'} --numosd $h->{'numosd'}";
+	my $c = "mpiexec -l -n $h->{'n'} $e --mkfs";
 	$c .= " --$h->{'fs'}";
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
-	$c .= ' ' . $h->{'custom'} if $h->{'custom'};
 
-	# HACKS
-	#$c .= " --osd_maxthreads 0" if $h->{'fs'} ne 'ebofs';
+	for my $k ('nummds', 'numclient', 'numosd',
+			   'osd_maxthreads') {
+		$c .= " --$k $h->{$k}" if $h->{$k};
+	}
+
+	$c .= " --osd_object_layout_linear" if $h->{'object_layout'} eq 'linear';
+	$c .= " --osd_pg_layout_linear" if $h->{'pg_layout'} eq 'linear';
+
+	$c .= ' ' . $h->{'custom'} if $h->{'custom'};
 
 	$c .= " --log_name $fn";
 
