@@ -109,6 +109,7 @@ struct md_config_t {
   size_t ebofs_abp_max_alloc;
 
   int uofs;
+  int uofs_fake_sync;
   int     uofs_cache_size;
   int     uofs_onode_size;
   int     uofs_small_block_size;

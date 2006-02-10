@@ -33,7 +33,7 @@ using namespace __gnu_cxx;
 // end crap hash
 
 
- 
+
 
 
 FakeStore::FakeStore(char *base, int whoami) 
@@ -75,7 +75,7 @@ int FakeStore::umount()
   dout(5) << "finalize" << endl;
 
   // close collections db files
-  close_collections();
+  //close_collections();
 
   delete fsync_threadpool;
 
@@ -116,11 +116,11 @@ void FakeStore::get_oname(object_t oid, string& fn) {
   fn = basedir + "/" + s;
   //  dout(1) << "oname is " << fn << endl;
 }
-void FakeStore::get_collfn(coll_t c, string &fn) {
+/*void FakeStore::get_collfn(coll_t c, string &fn) {
   char s[100];
   sprintf(s, "%d/%02llx/%016llx.co", whoami, HASH_FUNC(c), c);
   fn = basedir + "/" + s;
-}
+  }*/
 
 
 
@@ -153,7 +153,7 @@ int FakeStore::mkfs()
 
   dout(1) << "mkfs in " << mydir << endl;
 
-  close_collections();
+  //close_collections();
 
   // make sure my dir exists
   r = ::stat(mydir.c_str(), &st);
@@ -437,129 +437,6 @@ int FakeStore::listattr(object_t oid, char *attrs, size_t size)
 
 // helpers
 
-void FakeStore::open_collections() 
-{
-  string cfn;
-  get_dir(cfn);
-  cfn += "/collections";
-  collections.open(cfn.c_str());  
-  list<coll_t> ls;
-  collections.list_keys(ls);
-}
-
-void FakeStore::close_collections()
-{
-  if (collections.is_open())
-	collections.close();
-
-  for (map<coll_t, BDBMap<object_t, int>*>::iterator it = collection_map.begin();
-	   it != collection_map.end();
-	   it++) {
-	it->second->close();
-  }
-  collection_map.clear();
-}
-
-
-int FakeStore::open_collection(coll_t c) {
-  if (collection_map.count(c))
-	return 0;  // already open.
-
-  string fn;
-  get_collfn(c,fn);
-  collection_map[c] = new BDBMap<coll_t,int>;
-  int r = collection_map[c]->open(fn.c_str());
-  if (r != 0)
-	collection_map.erase(c);  // failed
-  return r;
-}
-
-// public
-int FakeStore::list_collections(list<coll_t>& ls)
-{
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  ls.clear();
-  collections.list_keys(ls);
-  lock.Unlock();
-  return 0;
-}
-
-int FakeStore::create_collection(coll_t c) {
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  collections.put(c, 1);
-  open_collection(c);
-  lock.Unlock();
-  return 0;
-}
-
-int FakeStore::destroy_collection(coll_t c) {
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  collections.del(c);
-  
-  open_collection(c);
-  collection_map[c]->close();
-  
-  string fn;
-  get_collfn(c,fn);
-  collection_map[c]->remove(fn.c_str());
-  delete collection_map[c];
-  collection_map.erase(c);
-  lock.Unlock();
-  return 0;
-}
-
-int FakeStore::collection_stat(coll_t c, struct stat *st) {
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  string fn;
-  get_collfn(c,fn);
-  int r = ::stat(fn.c_str(), st);
-  lock.Unlock();
-  return r;
-}
-
-bool FakeStore::collection_exists(coll_t c) {
-  lock.Lock();
-  struct stat st;
-  int r = collection_stat(c, &st) == 0;
-  lock.Unlock();
-  return r;
-}
-
-int FakeStore::collection_add(coll_t c, object_t o) {
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  open_collection(c);
-  collection_map[c]->put(o,1);
-  lock.Unlock();
-  return 0;
-}
-int FakeStore::collection_remove(coll_t c, object_t o) {
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  open_collection(c);
-  collection_map[c]->del(o);
-  lock.Unlock();
-  return 0;
-}
-int FakeStore::collection_list(coll_t c, list<object_t>& o) {
-  lock.Lock();
-  if (!collections.is_open()) open_collections();
-
-  open_collection(c);
-  collection_map[c]->list_keys(o);
-  lock.Unlock();
-  return 0;
-}
 
 /*
 int FakeStore::collection_setattr(coll_t cid, const char *name,
