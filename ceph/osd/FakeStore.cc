@@ -58,13 +58,13 @@ int FakeStore::mount()
 	return r;
   }
 
-  {
+  /*{
 	char name[80];
 	sprintf(name,"osd%d.fakestore.threadpool", whoami);
 	fsync_threadpool = new ThreadPool<FakeStore, pair<int,Context*> >(name, g_conf.fakestore_syncthreads, 
 																	  (void (*)(FakeStore*, pair<int,Context*>*))dofsync, 
 																	  this);
-  }
+																	  }*/
 
   // all okay.
   return 0;
@@ -77,7 +77,7 @@ int FakeStore::umount()
   // close collections db files
   //close_collections();
 
-  delete fsync_threadpool;
+  //delete fsync_threadpool;
 
   // nothing
   return 0;
@@ -93,14 +93,14 @@ int FakeStore::statfs(struct statfs *buf)
 
 ///////////
 
-void FakeStore::do_fsync(int fd, Context *c)
+/*void FakeStore::do_fsync(int fd, Context *c)
 {
   ::fsync(fd);
   ::close(fd);
   dout(10) << "do_fsync finished on " << fd << " context " << c << endl;
   c->finish(0);
   delete c;
-}
+}*/
 
 
 ////
@@ -362,7 +362,7 @@ int FakeStore::write(object_t oid,
 							  onsafe);
 	  ::close(fd);
 	} else { 
-	  queue_fsync(fd, onsafe);
+	  assert(0); //queue_fsync(fd, onsafe);
 	}
   } else {
 	::close(fd);

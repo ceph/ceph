@@ -5,6 +5,8 @@ extern "C" {
 #include "../../uofs/uofs.h"
 }
 
+#include "common/Timer.h"
+
 #include "include/types.h"
 
 #include <unistd.h>
@@ -21,7 +23,7 @@ extern "C" {
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".obfsstore "
+#define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".obfs "
 
 OBFSStore::OBFSStore(int whoami, char *param, char *dev)
 {
@@ -200,14 +202,12 @@ int OBFSStore::read(object_t oid, size_t len,
 int OBFSStore::write(object_t oid, size_t len,
 					 off_t offset, bufferlist& bl, bool fsync)
 {
-	int ret;//, sync = 0;
+	int ret = 0;
 	
 	//dout(0) << "calling write function!" << endl;
 	//if (whoami == 0)
 	//	dout(0) << oid << " 0  " << len << " " << offset << " 101" << endl;
-	//if (fsync) sync = 1;
 
-	ret = 0;
 	for (list<bufferptr>::iterator p = bl.buffers().begin();
 		 p != bl.buffers().end();
 		 p++) {
@@ -224,9 +224,7 @@ int OBFSStore::write(object_t oid, size_t len,
 int OBFSStore::write(object_t oid, size_t len,
 		     off_t offset, bufferlist& bl, Context *onflush)
 {
-  write(oid, len, offset, bl, false);
-
-  g_timer.add_event_after((float)g_conf.uofs_fake_sync,
-						  onsafe);
-  return 0;
+  int r = write(oid, len, offset, bl, false);
+  g_timer.add_event_after((float)g_conf.uofs_fake_sync, onflush);
+  return r;
 }

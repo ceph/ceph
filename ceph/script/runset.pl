@@ -116,7 +116,12 @@ sub run {
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
 	$c .= ' ' . $h->{'custom'} if $h->{'custom'};
+
+	# HACKS
+	#$c .= " --osd_maxthreads 0" if $h->{'fs'} ne 'ebofs';
+
 	$c .= " --log_name $fn";
+
 	
 	print "-> $c\n";
 	my $r;

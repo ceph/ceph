@@ -220,7 +220,7 @@ void OSD::lock_object(object_t oid)
   osd_lock.Lock();
   if (object_lock.count(oid)) {
 	Cond c;
-	dout(15) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
+	dout(0) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
 	object_lock_waiters[oid].push_back(&c);
 	c.Wait(osd_lock);
 	assert(object_lock.count(oid));

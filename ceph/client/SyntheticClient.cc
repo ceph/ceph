@@ -660,7 +660,10 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   if (fd < 0) return fd;
 
   for (unsigned i=0; i<chunks; i++) {
-	if (time_to_stop()) break;
+	if (time_to_stop()) {
+	  dout(0) << "stopping" << endl;
+	  break;
+	}
 	dout(2) << "writing block " << i << "/" << chunks << endl;
 	
 	// fill buf with a fingerprint

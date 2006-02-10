@@ -326,7 +326,7 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--fakestore") == 0) {
 	  g_conf.ebofs = 0;
 	  g_conf.osd_pg_bits = 5;
-	  //g_conf.fake_osd_sync = 2;
+	  g_conf.osd_maxthreads = 1;   // fucking hell
 	}
 	else if (strcmp(args[i], "--fakestore_fsync") == 0) 
 	  g_conf.fakestore_fsync = atoi(args[++i]);
@@ -335,7 +335,7 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--obfs") == 0) {
 	  g_conf.uofs = 1;
-	  //g_conf.fake_osd_sync = 2;
+	  g_conf.osd_maxthreads = 1;   // until feng merges joel's fixes
 	}
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 

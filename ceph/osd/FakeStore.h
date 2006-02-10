@@ -15,6 +15,7 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+
 // fake attributes in memory, if we need to.
 
 
@@ -32,6 +33,7 @@ class FakeStore : public ObjectStore,
   void wipe_dir(string mydir);
 
 
+  /*
   // async fsync
   class ThreadPool<class FakeStore, pair<int, class Context*> >  *fsync_threadpool;
   void queue_fsync(int fd, class Context *c) {
@@ -43,7 +45,7 @@ class FakeStore : public ObjectStore,
 	f->do_fsync(af->first, af->second);
 	delete af;
   }
-
+  */
 
  public:
   FakeStore(char *base, int whoami);
