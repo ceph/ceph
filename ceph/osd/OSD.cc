@@ -225,7 +225,7 @@ void OSD::_lock_object(object_t oid)
 {
   if (object_lock.count(oid)) {
 	Cond c;
-	dout(0) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
+	dout(15) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
 
 	list<Cond*>& ls = object_lock_waiters[oid];   // this is safe, right?
 	ls.push_back(&c);
@@ -256,7 +256,7 @@ void OSD::unlock_object(object_t oid)
 	// someone is in line
 	Cond *c = object_lock_waiters[oid].front();
 	assert(c);
-	dout(0) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
+	dout(15) << "unlock_object " << hex << oid << dec << " waking up next guy " << c << endl;
 	c->Signal();
   } else {
 	// nobody waiting
