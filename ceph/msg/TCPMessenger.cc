@@ -174,6 +174,7 @@ public:
 	  logger = new Logger(name, (LogType*)&rank_logtype);
 	  rank_logtype.add_set("num");
 	  rank_logtype.add_inc("in");
+	  rank_logtype.add_inc("inb");
 	  rank_logtype.add_inc("dis");
 	  rank_logtype.add_set("inq");
 	  rank_logtype.add_set("inqb");
@@ -684,16 +685,18 @@ void *tcp_inthread(void *r)
 	incoming_lock.Lock();
 
 	stat_inq++;
-	stat_inqb += m->get_payload().length();
+	size_t sz = m->get_payload().length();
+	stat_inqb += sz;
 
 	incoming.push_back(m);
 	incoming_cond.Signal();
 	incoming_lock.Unlock();
 
 	if (logger) {
+	  logger->inc("in");
+	  logger->inc("inb", sz);
 	  logger->set("inqb", stat_inqb);
 	  logger->set("inq", stat_inq);
-	  logger->inc("in");
 	}
   }
 
@@ -1054,7 +1057,7 @@ int TCPMessenger::shutdown()
   directory_lock.Unlock();
 
   // last one?
-	  if (lastone) {
+  if (lastone) {
 	dout(2) << "shutdown last tcpmessenger on rank " << my_rank << " shut down" << endl;
 	//pthread_t whoami = pthread_self();
 
