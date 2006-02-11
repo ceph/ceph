@@ -52,6 +52,7 @@ extern void tcpmessenger_stop_nameserver();   // on rank 0
 extern void tcpmessenger_start_rankserver(tcpaddr_t& ta);  // on all ranks
 extern void tcpmessenger_stop_rankserver();   // on all ranks
 
+extern int tcpmessenger_get_rank();
 
 inline ostream& operator<<(ostream& out, struct sockaddr_in &a)
 {

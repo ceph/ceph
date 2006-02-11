@@ -46,7 +46,9 @@ void Timer::timer_thread()
 	// any events due?
 	utime_t next;
 	Context *event = get_next_scheduled(next);
-	  
+	
+	list<Context*> pending;
+	
 	if (event && now > next) {
 	  // move to pending list
 	  map< utime_t, set<Context*> >::iterator it = scheduled.begin();
@@ -60,12 +62,24 @@ void Timer::timer_thread()
 		  for (set<Context*>::iterator cit = it->second.begin();
 			   cit != it->second.end();
 			   cit++)
-			messenger->queue_callback(*cit);
+			pending.push_back(*cit);
 		}
 
 		//pending[t] = it->second;
 		it++;
 		scheduled.erase(t);
+	  }
+
+	  if (!pending.empty()) {
+		lock.Unlock();
+		{ // make sure we're not holding any locks whil we talk to the messenger
+		  for (list<Context*>::iterator cit = pending.begin();
+			   cit != pending.end();
+			   cit++)
+			messenger->queue_callback(*cit);
+		  pending.clear();
+		}
+		lock.Lock();
 	  }
 
 	}

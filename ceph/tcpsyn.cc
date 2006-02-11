@@ -79,8 +79,9 @@ int main(int argc, char **argv)
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != g_conf.tcp_skip_rank0+i) continue;
-	cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	mds[i] = new MDS(mdc, i, new TCPMessenger(MSG_ADDR_MDS(i)));
+	TCPMessenger *m = new TCPMessenger(MSG_ADDR_MDS(i));
+	cerr << "mds" << i << " on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl;
+	mds[i] = new MDS(mdc, i, m);
 	mds[i]->init();
 	started++;
   }
@@ -89,8 +90,9 @@ int main(int argc, char **argv)
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
 	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + i) continue;
-	cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	osd[i] = new OSD(i, new TCPMessenger(MSG_ADDR_OSD(i)));
+	TCPMessenger *m = new TCPMessenger(MSG_ADDR_OSD(i));
+	cerr << "osd" << i << " on tcprank " << tcpmessenger_get_rank() <<  " " << hostname << "." << pid << endl;
+	osd[i] = new OSD(i, m);
 	osd[i]->init();
 	started++;
   }
@@ -145,7 +147,7 @@ int main(int argc, char **argv)
 	nclients++;
   }
   if (nclients) {
-	cerr << "waiting for " << nclients << " clients to finish" << endl;
+	cerr << nclients << " clients on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl;
   }
 
   for (set<int>::iterator it = clientlist.begin();
@@ -164,7 +166,8 @@ int main(int argc, char **argv)
   
 
   if (myrank && !started) {
-	dout(1) << "IDLE" << endl;
+	//dout(1) << "IDLE" << endl;
+	cerr << "idle on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl; 
 	tcpmessenger_stop_rankserver();
   }
 

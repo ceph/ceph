@@ -65,7 +65,7 @@ md_config_t g_conf = {
   debug_ns: 0,
   
   tcp_skip_rank0: false,
-  tcp_log: true,
+  tcp_log: false,
 
 
   // --- client ---

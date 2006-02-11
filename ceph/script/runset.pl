@@ -65,8 +65,8 @@ sub iterate {
 	my @r;
 
 	my $this;
-	for my $k (keys %$sim) {
-		if ($fix->{$k}) {
+	for my $k (sort keys %$sim) {
+		if (defined $fix->{$k}) {
 			$this->{$k} = $fix->{$k};
 		}
 		elsif (!(ref $sim->{$k})) {
@@ -94,7 +94,7 @@ sub run {
 	my $h = shift @_;
 
 	my @fn;
-	for my $k (keys %$sim) {
+	for my $k (sort keys %$sim) {
 		next unless ref $sim->{$k};
 		push(@fn, "$k=$h->{$k}");
 	}
@@ -130,6 +130,7 @@ sub run {
 
 	
 	print "-> $c\n";
+	print "   " . `date`;
 	my $r;
 	unless ($fake) {
 		$r = system "$c > log/$fn/o";
