@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
 
 #include <assert.h>
 
@@ -130,7 +131,7 @@ Filer::read(inode_t& inode,
   // map buffer into OSD extents
   file_to_extents(inode, len, offset, p->extents);
 
-  dout(7) << "osd read ino " << hex << inode.ino << dec << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
+  dout(7) << "read ino " << hex << inode.ino << dec << " len " << len << " off " << offset << " in " << p->extents.size() << " object extents" << endl;
 
   // issue reads
   for (list<OSDExtent>::iterator it = p->extents.begin();
@@ -173,14 +174,14 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
   p->outstanding_ops.erase(tid);
   
   // what buffer offset are we?
-  dout(7) << "got frag from " << hex << m->get_oid() << dec << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
+  dout(7) << " got frag from " << hex << m->get_oid() << dec << " len " << m->get_length() << ", still have " << p->outstanding_ops.size() << " more ops" << endl;
   
   if (p->outstanding_ops.empty()) {
 	// all done
 	p->bytes_read = 0;
 	p->read_result->clear();
 	if (p->read_data.size()) {
-	  dout(15) << "assembling frags" << endl;
+	  dout(15) << " assembling frags" << endl;
 
 	  /** FIXME This doesn't handle holes efficiently.
 	   * It allocates zero buffers to fill whole buffer, and
@@ -210,7 +211,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 		for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
 			 bit != eit->buffer_extents.end();
 			 bit++) {
-		  dout(21) << "object " << hex << eit->oid << dec << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
+		  dout(21) << " object " << hex << eit->oid << dec << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
 		  by_off[bit->first] = new bufferlist;
 
 		  if (ox_off + bit->second <= ox_len) {
@@ -282,7 +283,7 @@ Filer::handle_osd_read_reply(MOSDOpReply *m)
 	Context *onfinish = p->onfinish;
 	int result = p->bytes_read;
 
-	dout(7) << "read " << result << " bytes " << p->read_result->length() << endl;
+	dout(7) << " " << result << " bytes " << p->read_result->length() << endl;
 
 	// done
 	delete p;   // del pendingOsdRead_t
@@ -329,7 +330,7 @@ Filer::write(inode_t& inode,
 
   //assert(onack || onsafe);
 
-  dout(7) << "osd write ino " << hex << inode.ino << dec << " len " << len << " off " << offset 
+  dout(7) << "write ino " << hex << inode.ino << dec << " len " << len << " off " << offset 
 		  << " in " << extents.size() << " extents " 
 	//<< onack << "/" << onsafe 
 		  << endl;
@@ -401,7 +402,7 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
   // ack or safe?
   if (m->get_safe()) {
 	// safe.
-	dout(15) << "handle_osd_modify_reply safe on " << tid << endl;
+	dout(15) << " handle_osd_modify_reply safe on " << tid << endl;
 	op_modify.erase( tid );
 	p->waitfor_ack.erase(tid);
 	p->waitfor_safe.erase(tid);
@@ -413,7 +414,7 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
 	}
   } else {
 	// ack.
-	dout(15) << "handle_osd_modify_reply ack on " << tid << endl;
+	dout(15) << " handle_osd_modify_reply ack on " << tid << endl;
 	assert(p->waitfor_ack.count(tid));
 	p->waitfor_ack.erase(tid);
 
@@ -491,7 +492,7 @@ int Filer::truncate(inode_t& inode,
   list<OSDExtent> extents;
   file_to_extents(inode, old_size, new_size, extents);
 
-  dout(7) << "osd truncate ino " << hex << inode.ino << dec << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
+  dout(7) << "truncate ino " << hex << inode.ino << dec << " to new size " << new_size << " from old_size " << old_size << " in " << extents.size() << " extents" << endl;
 
   int n = 0;
   for (list<OSDExtent>::iterator it = extents.begin();

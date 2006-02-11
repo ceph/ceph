@@ -1,7 +1,5 @@
 OSDI
 
-- fix Cond predicates
-
 - tcpmessenger stats
 - tcp recv throttling
 
@@ -29,9 +27,11 @@ client
 - some heuristic behavior to consolidate caps to inode auth
 - client will re-tx anything it needed to say upon rx of new mds notification (?)
 
-- readv+writev
+- readv+writev, readx+writex
   - serialized!
-- lazy posix
+- O_LAZY 
+  - synchronize_*
+- statlite
 
 - LD_PRELOAD
 
@@ -39,29 +39,27 @@ client
 filer
 - (optional) serial behavior when read spans objects
   - (altho we still can't get atomicity)
+  - ...do a short return in those cases? ..maybe a 'bool atomic' flag..
+
+mds
+- implement/test truncate()
 
 
 ebofs
-- combine inodes into same blocks
-- zero regions?
+- combine inodes into same blocks?
 - journaling
 - clone(), and/or snapshots
-- truncate
-
-mds
-- implement/test truncate
 
 osd
-- ardos validation
- - what happens if entire pg set changes, recovery doesn't finish, modifications are made, and pg set changes again?  is anybody "complete" anymore?
-
+- new ardos scheme
+  - directory!
 - osdmap history distribution
 
 - handle down osds
 - pg_bit changes
 
 - 'dirty' log on primary?
-- fast recovery from degraded mode
+  - fast recovery from degraded mode
 
 - watch osd utilization; adjust cluster map
 

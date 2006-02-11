@@ -142,7 +142,7 @@ md_config_t g_conf = {
 
   uofs: 0,
   uofs_fake_sync: 2,      // 2 seconds
-  uofs_cache_size:             1 << 28,       // ~256000000 (KB)
+  uofs_cache_size:             1 << 28,        //256MB
   uofs_onode_size:             (int)1024,
   uofs_small_block_size:       (int)4096,      //4KB
   uofs_large_block_size:       (int)524288,    //512KB
