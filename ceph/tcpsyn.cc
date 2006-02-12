@@ -39,6 +39,16 @@ public:
   }
 };
 
+class C_Debug : public Context {
+  public:
+  void finish(int) {
+	int size = &g_conf.debug_after - &g_conf.debug;
+	memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
+	dout(0) << "debug_after flipping debug settings" << endl;
+  }
+};
+
+
 int main(int argc, char **argv) 
 {
   vector<char*> args;
@@ -50,6 +60,8 @@ int main(int argc, char **argv)
 
   if (g_conf.kill_after) 
 	g_timer.add_event_after(g_conf.kill_after, new C_Die);
+  if (g_conf.debug_after) 
+	g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
   vector<char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {

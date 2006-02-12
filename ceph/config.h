@@ -40,6 +40,7 @@ struct md_config_t {
   int debug_ebofs;
   int debug_bdev;
   int debug_ns;
+  int debug_after;
 
   bool tcp_skip_rank0;
   bool tcp_log;
@@ -173,6 +174,7 @@ struct md_config_t {
 };
 
 extern md_config_t g_conf;	 
+extern md_config_t g_debug_after_conf;	 
 
 #define dout(x)  if ((x) <= g_conf.debug) cout
 #define dout2(x) if ((x) <= g_conf.debug) cout

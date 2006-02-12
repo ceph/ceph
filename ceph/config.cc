@@ -33,6 +33,7 @@ FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 3 );  // new (good?) way
 //FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
+md_config_t g_debug_after_conf;
 
 md_config_t g_conf = {
   num_mds: 1,
@@ -66,6 +67,8 @@ md_config_t g_conf = {
   debug_bdev: 1,         // block device
   debug_ns: 0,
   
+  debug_after: 0,
+
   tcp_skip_rank0: false,
   tcp_log: false,
 
@@ -248,25 +251,60 @@ void parse_config_options(vector<char*>& args)
 	//g_conf.fake_osd_sync = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--debug") == 0) 
-	  g_conf.debug = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_mds_balancer") == 0) 
-	  g_conf.debug_mds_balancer = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_mds_balancer = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_mds_balancer = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_mds_log") == 0) 
-	  g_conf.debug_mds_log = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_mds_log = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_mds_log = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_buffer") == 0) 
-	  g_conf.debug_buffer = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_buffer = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_buffer = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_filer") == 0) 
-	  g_conf.debug_filer = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_filer = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_filer = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_client") == 0) 
-	  g_conf.debug_client = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_client = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_client = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_osd") == 0) 
-	  g_conf.debug_osd = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_osd = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_osd = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_ebofs") == 0) 
-	  g_conf.debug_ebofs = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_ebofs = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_ebofs = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_bdev") == 0) 
-	  g_conf.debug_bdev = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_bdev = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_bdev = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_ns") == 0) 
-	  g_conf.debug_ns = atoi(args[++i]);
+	  if (!g_conf.debug_after) 
+		g_conf.debug_ns = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_ns = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--debug_after") == 0) {
+	  g_conf.debug_after = atoi(args[++i]);
+	  g_debug_after_conf = g_conf;
+	}
 
 	else if (strcmp(args[i], "--log") == 0) 
 	  g_conf.log = atoi(args[++i]);
