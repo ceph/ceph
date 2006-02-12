@@ -356,18 +356,23 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 
 	  g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
 
-	else if (strcmp(args[i], "--osd_object_layout_linear") == 0) 
-	  g_conf.osd_object_layout = OBJECT_LAYOUT_LINEAR;
-	else if (strcmp(args[i], "--osd_object_layout_hashino") == 0) 
-	  g_conf.osd_object_layout = OBJECT_LAYOUT_HASHINO;
+	else if (strcmp(args[i], "--osd_object_layout") == 0) {
+	  i++;
+	  if (strcmp(args[i], "linear") == 0) g_conf.osd_object_layout = OBJECT_LAYOUT_LINEAR;
+	  else if (strcmp(args[i], "hashino") == 0) g_conf.osd_object_layout = OBJECT_LAYOUT_HASHINO;
+	  else if (strcmp(args[i], "hash") == 0) g_conf.osd_object_layout = OBJECT_LAYOUT_HASH;
+	  else assert(0);
+	}
 	
-	else if (strcmp(args[i], "--osd_pg_layout_linear") == 0) 
-	  g_conf.osd_pg_layout = PG_LAYOUT_LINEAR;
-	else if (strcmp(args[i], "--osd_pg_layout_hash") == 0) 
-	  g_conf.osd_pg_layout = PG_LAYOUT_HASH;
-	else if (strcmp(args[i], "--osd_pg_layout_hybrid") == 0) 
-	  g_conf.osd_pg_layout = PG_LAYOUT_HYBRID;
-
+	else if (strcmp(args[i], "--osd_pg_layout") == 0) {
+	  i++;
+	  if (strcmp(args[i], "linear") == 0) g_conf.osd_pg_layout = PG_LAYOUT_LINEAR;
+	  else if (strcmp(args[i], "hash") == 0) g_conf.osd_pg_layout = PG_LAYOUT_HASH;
+	  else if (strcmp(args[i], "hybrid") == 0) g_conf.osd_pg_layout = PG_LAYOUT_HYBRID;
+	  else if (strcmp(args[i], "crush") == 0) g_conf.osd_pg_layout = PG_LAYOUT_CRUSH;
+	  else assert(0);
+	}
+	
 	else {
 	  nargs.push_back(args[i]);
 	}
