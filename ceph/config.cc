@@ -114,10 +114,9 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 6,
-  osd_object_layout_linear: false,   // don't hash oids into pg's
-  osd_pg_layout_linear:     false,   // don't use CRUSH for pg layout
-  osd_pg_layout_hash:       false,   // don't use crash, use basic hash
+  osd_pg_bits: 10,
+  osd_object_layout: OBJECT_LAYOUT_LINEAR,
+  osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,
   osd_maxthreads: 2,    // 0 == no threading
   osd_mkfs: false,
@@ -358,12 +357,16 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--osd_object_layout_linear") == 0) 
-	  g_conf.osd_object_layout_linear = 1;
+	  g_conf.osd_object_layout = OBJECT_LAYOUT_LINEAR;
+	else if (strcmp(args[i], "--osd_object_layout_hashino") == 0) 
+	  g_conf.osd_object_layout = OBJECT_LAYOUT_HASHINO;
+	
 	else if (strcmp(args[i], "--osd_pg_layout_linear") == 0) 
-	  g_conf.osd_pg_layout_linear = 1;
-	else if (strcmp(args[i], "--osd_pg_layout_linear") == 0) 
-	  g_conf.osd_pg_layout_hash = 1;
-
+	  g_conf.osd_pg_layout = PG_LAYOUT_LINEAR;
+	else if (strcmp(args[i], "--osd_pg_layout_hash") == 0) 
+	  g_conf.osd_pg_layout = PG_LAYOUT_HASH;
+	else if (strcmp(args[i], "--osd_pg_layout_hybrid") == 0) 
+	  g_conf.osd_pg_layout = PG_LAYOUT_HYBRID;
 
 	else {
 	  nargs.push_back(args[i]);

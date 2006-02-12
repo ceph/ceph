@@ -1,13 +1,25 @@
 OSDI
 
+- tune ebofs
+ - bc size
+ - max dirty
+ - idle timeout
+ - 
+
+
 - tcpmessenger stats
 - tcp recv throttling
 
 - vary osd_maxthreads, [ ebofs, fakestore ], write_size
+    medium, large writes: ebofs 10% faster
+    small writes: fake 20% faster
 
-- osd streaming small writes (mds log)
 
 - crush vs linear
+
+- makedirs vs ebo/fake. 
+  - streaming small writes (mds log)
+
 
 - osd write tests
  - get obfs working
@@ -47,6 +59,8 @@ mds
 
 ebofs
 - combine inodes into same blocks?
+- delay allocation
+  - actually, reallocate if dirty is cancelable
 - journaling
 - clone(), and/or snapshots
 

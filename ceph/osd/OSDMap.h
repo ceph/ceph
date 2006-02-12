@@ -1,3 +1,24 @@
+// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ * 
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
 #ifndef __OSDMAP_H
 #define __OSDMAP_H
 
@@ -29,6 +50,7 @@ using namespace std;
 #define PG_PS_BITS         32   // max bits for placement seed/group portion of PG
 #define PG_REP_BITS        10   
 #define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
+
 
 
 /** OSDMap
@@ -87,12 +109,30 @@ class OSDMap {
 
   // oid -> ps
   ps_t object_to_ps(object_t oid) {
-	if (g_conf.osd_object_layout_linear) {
-	  return (oid + (oid >> 30)) & PG_PS_MASK;   // 30 == OID_ONO_BITS
-	} else {
-	  static crush::Hash H(777);
-	  return H( oid ^ (oid >> 32) ) & PG_PS_MASK;
+	static crush::Hash H(777);
+		
+	switch (g_conf.osd_object_layout) {
+	case OBJECT_LAYOUT_LINEAR:
+	  {
+		const object_t ono = oid & ((1 << OID_ONO_BITS)-1);
+		const inodeno_t ino = oid >> OID_ONO_BITS;
+		return (ono + ino) & PG_PS_MASK;
+	  }
+
+	case OBJECT_LAYOUT_HASHINO:
+	  {
+		const object_t ono = oid & ((1 << OID_ONO_BITS)-1);
+		const inodeno_t ino = oid >> OID_ONO_BITS;
+		return (ono + H(ino)) & PG_PS_MASK;
+	  }
+
+	case OBJECT_LAYOUT_HASH:
+	  {
+		return H( oid ^ (oid >> 32) ) & PG_PS_MASK;
+	  }
 	}
+	assert(0);
+	return 0;
   }
 
   // (ps, nrep) -> pg
@@ -117,13 +157,48 @@ class OSDMap {
 				 vector<int>& osds) {       // list of osd addr's
 	int num_rep = pg_to_nrep(pg);
 	pg_t ps = pg_to_ps(pg);
-	if (g_conf.osd_pg_layout_linear) {
-	  for (int i=0; i<num_rep; i++) 
-		osds.push_back( ((pg_t)i+ps) % g_conf.num_osd );
-	} else {
+	
+	switch(g_conf.osd_pg_layout) {
+	case PG_LAYOUT_CRUSH:
 	  crush.do_rule(crush.rules[num_rep],
 					ps ^ (ps >> 32),
 					osds);
+	  break;
+
+	case PG_LAYOUT_LINEAR:
+	  for (int i=0; i<num_rep; i++) 
+		osds.push_back( ((pg_t)i + ps*num_rep) % g_conf.num_osd );
+	  break;
+
+	case PG_LAYOUT_HYBRID:
+	  {
+		static crush::Hash H(1066);
+		int h = H(ps ^ (ps >> 32));
+		for (int i=0; i<num_rep; i++) 
+		  osds.push_back( (h+i) % g_conf.num_osd );
+	  }
+	  break;
+
+	case PG_LAYOUT_HASH:
+	  {
+		static crush::Hash H(1066);
+		for (int i=0; i<num_rep; i++) {
+		  int t = 1;
+		  int osd = 0;
+		  while (t++) {
+			osd = H(i, pg^(pg>>32), t) % g_conf.num_osd;
+			int j = 0;
+			for (; j<i; j++) 
+			  if (osds[j] == osd) break;
+			if (j == i) break;
+		  }
+		  osds.push_back(osd);
+		}	  
+	  }
+	  break;
+
+	default:
+	  assert(0);
 	}
 	return osds.size();
   }

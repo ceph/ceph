@@ -1,3 +1,24 @@
+// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ * 
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
 #ifndef __FILER_H
 #define __FILER_H
 
@@ -35,10 +56,6 @@ typedef __uint64_t tid_t;
 
 //#define FILER_FLAG_TRUNCATE_AFTER_WRITE  1
 
-
-// from LSB to MSB
-#define OID_ONO_BITS       30       // 1mb * 10^9 = 1 petabyte files
-#define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
 
 
 /** OSDExtent
@@ -158,7 +175,7 @@ class Filer : public Dispatcher {
 						  size_t    ono) {  
 	assert(ino < (1LL<<OID_INO_BITS));       // legal ino can't be too big
 	assert(ono < (1LL<<OID_ONO_BITS));
-	return (ino << OID_INO_BITS) + ono;
+	return ono + (ino << OID_ONO_BITS);
   }
 
   pg_t file_to_pg(inode_t& inode, size_t ono) {
