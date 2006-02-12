@@ -88,6 +88,7 @@ struct md_config_t {
   int   osd_pg_bits;
   bool  osd_object_layout_linear;
   bool  osd_pg_layout_linear;
+  bool  osd_pg_layout_hash;
   int   osd_max_rep;
   int   osd_maxthreads;
   bool  osd_mkfs;
