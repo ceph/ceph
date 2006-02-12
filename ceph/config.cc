@@ -53,6 +53,8 @@ md_config_t g_conf = {
   fakemessenger_serialize: true,
   fake_osdmap_expand: 0,
 
+  kill_after: 0,
+
   debug: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
@@ -373,6 +375,9 @@ void parse_config_options(vector<char*>& args)
 	  else assert(0);
 	}
 	
+	else if (strcmp(args[i], "--kill_after") == 0) 
+	  g_conf.kill_after = atoi(args[++i]);
+
 	else {
 	  nargs.push_back(args[i]);
 	}

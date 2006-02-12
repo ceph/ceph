@@ -28,6 +28,8 @@ struct md_config_t {
 
   int fake_osdmap_expand;
 
+  int kill_after;
+
   int debug;
   int debug_mds_balancer;
   int debug_mds_log;

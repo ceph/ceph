@@ -31,6 +31,14 @@ public:
 #include "msg/mpistarter.cc"
 
 
+class C_Die : public Context {
+public:
+  void finish(int) {
+	cerr << "die" << endl;
+	exit(0);
+  }
+};
+
 int main(int argc, char **argv) 
 {
   vector<char*> args;
@@ -39,6 +47,9 @@ int main(int argc, char **argv)
   parse_config_options(args);
 
   parse_syn_options(args);
+
+  if (g_conf.kill_after) 
+	g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
   vector<char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
