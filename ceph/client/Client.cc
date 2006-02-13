@@ -1908,7 +1908,7 @@ void Client::hack_sync_write_safe()
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
   if (unmounting) {
-	cerr << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << endl;
+	dout(10) << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << endl;
 	unmount_cond.Signal();
   }
   client_lock.Unlock();
