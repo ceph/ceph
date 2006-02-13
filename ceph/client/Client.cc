@@ -101,11 +101,11 @@ Client::~Client()
 void Client::tear_down_bcache()
 {
   // make sure all buffers are clean
-  if (!bc->dirty_buffers->empty()) {
+  while (!bc->dirty_buffers->empty()) {
     flush_buffers(0, 0);
     bc->wait_for_inflight(client_lock);
-    assert(bc->dirty_buffers->empty());
   }
+  assert(bc->dirty_buffers->empty());
   delete bc;
 }
 
@@ -293,6 +293,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 
   return dn->inode;
 }
+
 
 // insert trace of reply into metadata cache
 
@@ -498,6 +499,7 @@ void Client::dispatch(Message *m)
 
   client_lock.Unlock();
 }
+
 
 /*
  * flush inode (write cached) buffers to disk
