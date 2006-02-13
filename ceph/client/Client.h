@@ -243,6 +243,11 @@ class Client : public Dispatcher {
   bool   mounted;
   bool   unmounting;
   Cond   unmount_cond;  
+
+  int    unsafe_sync_write;
+public:
+  void hack_sync_write_safe();
+protected:
   
   Filer                 *filer;  // (non-blocking) osd interface
   

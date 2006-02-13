@@ -93,19 +93,19 @@ void Bufferhead::alloc_buffers(off_t size)
   assert(size > 0);
   while (size > 0) {
     if (size <= (unsigned)g_conf.client_bcache_alloc_maxsize) {
-          off_t k = g_conf.client_bcache_alloc_minsize;
-          off_t asize = size - size % k + (size % k > 0) * k;
+	  off_t k = g_conf.client_bcache_alloc_minsize;
+	  off_t asize = size - size % k + (size % k > 0) * k;
 	  buffer *b = new buffer(asize);
 	  b->set_length(size);
 	  bl.push_back(b);
 	  bc->increase_size(size);
-          dout(10) << "bc: new buffer(" << asize << "), total: " << bl.length() << endl;
+	  dout(10) << "bc: new buffer(" << asize << "), total: " << bl.length() << endl;
 	  break;
 	}
-        buffer *b = new buffer(g_conf.client_bcache_alloc_maxsize);
+	buffer *b = new buffer(g_conf.client_bcache_alloc_maxsize);
 	b->set_length(g_conf.client_bcache_alloc_maxsize);
 	bl.push_back(b);
-        dout(10) << "bc: new buffer(" << g_conf.client_bcache_alloc_maxsize << "), total: " << bl.length() << endl;
+	dout(10) << "bc: new buffer(" << g_conf.client_bcache_alloc_maxsize << "), total: " << bl.length() << endl;
 	size -= g_conf.client_bcache_alloc_maxsize;
 	bc->increase_size(g_conf.client_bcache_alloc_maxsize);
   }

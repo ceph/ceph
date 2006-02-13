@@ -67,6 +67,8 @@ Client::Client(Messenger *m)
   mounted = false;
   unmounting = false;
 
+  unsafe_sync_write = 0;
+
   // 
   root = 0;
 
@@ -976,8 +978,12 @@ int Client::unmount()
   lru.lru_set_max(0);
   trim_cache();
 
-  while (lru.lru_get_size() > 0 || !inode_map.empty()) {
-	dout(3) << "cache still has " << lru.lru_get_size() << "+" << inode_map.size() << " items, waiting (presumably for caps to be released?)" << endl;
+  while (lru.lru_get_size() > 0 || 
+		 !inode_map.empty() ||
+		 unsafe_sync_write > 0) {
+	dout(3) << "cache still has " << lru.lru_get_size() 
+			<< "+" << inode_map.size() << " items + " 
+			<< unsafe_sync_write << " unsafe_sync_writes, waiting (presumably for caps to be released?)" << endl;
 	unmount_cond.Wait(client_lock);
   }
   assert(lru.lru_get_size() == 0);
@@ -1882,6 +1888,32 @@ public:
 };
 
 
+/*
+ * hack -- 
+ *  until we properly implement synchronous writes wrt buffer cache,
+ *  make sure we delay shutdown until they're all safe on disk!
+ */
+class C_Client_HackUnsafe : public Context {
+  Client *cl;
+public:
+  C_Client_HackUnsafe(Client *c) : cl(c) {}
+  void finish(int) {
+	cl->hack_sync_write_safe();
+  }
+};
+
+void Client::hack_sync_write_safe()
+{
+  client_lock.Lock();
+  assert(unsafe_sync_write > 0);
+  unsafe_sync_write--;
+  if (unmounting) {
+	cerr << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << endl;
+	unmount_cond.Signal();
+  }
+  client_lock.Unlock();
+}
+
 int Client::write(fh_t fh, const char *buf, off_t size, off_t offset) 
 {
   client_lock.Lock();
@@ -1969,10 +2001,14 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  
 	  bool done = false;
 	  C_Client_Cond *onfinish = new C_Client_Cond(&done, &cond, &client_lock, &rvalue);
+	  C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
+	  unsafe_sync_write++;
+
 	  filer->write(in->inode, size, offset, blist, 0, 
 				   //NULL,NULL);  // no wait hack
-				   onfinish, NULL);   // applied
-				   //NULL, onfinish); // safe on disk
+				   onfinish, onsafe);
+	  
+
 	  while (!done)
 		cond.Wait(client_lock);
 	}
