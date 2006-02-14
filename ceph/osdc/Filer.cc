@@ -397,7 +397,7 @@ Filer::write(inode_t& inode,
 	op_modify[last_tid] = p;
 
 	// send
-	dout(15) << " write tid " << last_tid << " osd" << it->osd 
+	dout(10) << " write tid " << last_tid << " osd" << it->osd 
 			 << "  oid " << hex << it->oid << dec << " off " << it->offset << " len " << it->len << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(it->osd), 0);
   }

@@ -2316,8 +2316,8 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
 
 void OSD::get_repop(OSDReplicaOp *repop)
 {
-  dout(15) << "get_repop " << *repop << endl;
   repop->lock.Lock();
+  dout(15) << "get_repop " << *repop << endl;
 }
 
 void OSD::put_repop(OSDReplicaOp *repop)
