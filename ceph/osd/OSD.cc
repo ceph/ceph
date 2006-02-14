@@ -446,6 +446,7 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 
 	if (safe) {
 	  // safe
+	  assert(repop->waitfor_safe.count(tid));	  
 	  repop->waitfor_safe.erase(tid);
 	  repop->waitfor_ack.erase(tid);
 	  replica_ops.erase(tid);
@@ -507,14 +508,16 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
 	  if (replica_pg_osd_tids[pgid].empty()) replica_pg_osd_tids.erase(pgid);
 
 	  assert(0); // this is all busted
+	  /*
 	  if (repop->local_safe) {
 		repop->lock.Unlock();
 		delete repop;
 	  } else {
+		assert(0);
 		repop->op = 0;      // we're forwarding it
 		repop->cancel = true;     // will get deleted by local safe callback
 		repop->lock.Unlock();
-	  }
+		}*/
 	  did = true;
 	}
 
@@ -2364,8 +2367,8 @@ void OSD::op_modify_safe(OSDReplicaOp *repop)
 {
   dout(10) << "op_modify_safe on op " << *repop->op << endl;
   get_repop(repop);
-  assert(!repop->local_safe);
-  repop->local_safe = true;
+  assert(repop->waitfor_safe.count(0));
+  repop->waitfor_safe.erase(0);
   put_repop(repop);
 }
 
@@ -2390,7 +2393,9 @@ void OSD::op_modify(MOSDOp *op)
 	
 	// issue replica writes
 	OSDReplicaOp *repop = new OSDReplicaOp(op, nv, ov);
-	
+	repop->waitfor_ack[0] = whoami;    // will need local ack, safe
+	repop->waitfor_safe[0] = whoami;
+
 	PG *pg;
 	osd_lock.Lock();
 	{
@@ -2418,8 +2423,8 @@ void OSD::op_modify(MOSDOp *op)
 		pg->add_object(store, oid);          // FIXME : be careful w/ locking
 	  
 	  get_repop(repop);
-	  assert(!repop->local_ack);
-	  repop->local_ack = true;
+	  assert(repop->waitfor_ack.count(0));
+	  repop->waitfor_ack.erase(0);
 	  put_repop(repop);
 
 	  logger->inc("c_wr");
@@ -2429,10 +2434,10 @@ void OSD::op_modify(MOSDOp *op)
 	  // truncate
 	  r = store->truncate(oid, op->get_offset());
 	  get_repop(repop);
-	  assert(!repop->local_ack);
-	  assert(!repop->local_safe);
-	  repop->local_ack = true;
-	  repop->local_safe = true;
+	  assert(repop->waitfor_ack.count(0));
+	  assert(repop->waitfor_safe.count(0));
+	  repop->waitfor_ack.erase(0);
+	  repop->waitfor_safe.erase(0);
 	  put_repop(repop);
 	}
 	else if (op->get_op() == OSD_OP_DELETE) {
@@ -2440,10 +2445,10 @@ void OSD::op_modify(MOSDOp *op)
 	  pg->remove_object(store, op->get_oid());  // be careful with locking
 	  r = store->remove(oid);
 	  get_repop(repop);
-	  assert(!repop->local_ack);
-	  assert(!repop->local_safe);
-	  repop->local_ack = true;
-	  repop->local_safe = true;
+	  assert(repop->waitfor_ack.count(0));
+	  assert(repop->waitfor_safe.count(0));
+	  repop->waitfor_ack.erase(0);
+	  repop->waitfor_safe.erase(0);
 	  put_repop(repop);
 	}
 	else assert(0);

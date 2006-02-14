@@ -48,37 +48,32 @@ class OSDReplicaOp {
   Mutex                lock;
   map<__uint64_t,int>  waitfor_ack;
   map<__uint64_t,int>  waitfor_safe;
-  bool                 local_ack;
-  bool                 local_safe;
-  bool                 cancel;
-  bool sent_ack;
-  bool sent_safe;
+
+  bool cancel;
+  bool sent_ack, sent_safe;
 
   set<int>         osds;
   version_t        new_version, old_version;
   
   OSDReplicaOp(class MOSDOp *o, version_t nv, version_t ov) : 
 	op(o), 
-	local_ack(false), local_safe(false), cancel(false),
+	//local_ack(false), local_safe(false), 
+	cancel(false),
 	sent_ack(false), sent_safe(false),
 	new_version(nv), old_version(ov)
 	{ }
-  bool can_send_ack() { return !sent_ack && !cancel && 
-						  local_ack && 
+  bool can_send_ack() { return !sent_ack &&   //!cancel && 
 						  waitfor_ack.empty(); }
-  bool can_send_safe() { return !sent_safe && !cancel && 
-						   local_ack && local_safe && 
+  bool can_send_safe() { return !sent_safe &&    //!cancel && 
 						   waitfor_ack.empty() && waitfor_safe.empty(); }
-  bool can_delete() { return local_ack && local_safe && 
-						(cancel || 
-						 (waitfor_ack.empty() && waitfor_safe.empty())); }
+  bool can_delete() { return waitfor_ack.empty() && waitfor_safe.empty(); }
 };
 
 inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
 {
   out << "repop(wfack=" << repop.waitfor_ack << " wfsafe=" << repop.waitfor_safe;
-  if (repop.local_ack) out << " local_ack";
-  if (repop.local_safe) out << " local_safe";
+  //if (repop.local_ack) out << " local_ack";
+  //if (repop.local_safe) out << " local_safe";
   if (repop.cancel) out << " cancel";
   out << " op=" << repop.op;
   out << " repop=" << &repop;
