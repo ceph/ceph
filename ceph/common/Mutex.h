@@ -71,9 +71,10 @@ class Mutex
   }
 
   int Lock()  { 
-	if (tag) cout << this << " " << pthread_self() << endl; 
+	int t = tag;
+	if (t) cout << this << " " << pthread_self() << endl; 
 	int r = pthread_mutex_lock(&M);
-	if (tag) cout << "lock = " << r << endl;
+	if (t) cout << "lock = " << r << endl;
 	return r;
   }
 
@@ -91,9 +92,10 @@ class Mutex
 
   int Unlock() 
   { 
-	if (tag) cout << this << " " << pthread_self() << endl;
+	int t = tag;
+	if (t) cout << this << " " << pthread_self() << endl;
 	int r = pthread_mutex_unlock(&M);
-	if (tag) cout << "lock = " << r << endl;
+	if (t) cout << "lock = " << r << endl;
 	return r;
   }
 

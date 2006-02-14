@@ -62,7 +62,7 @@ class OSDReplicaOp {
 	sent_ack(false), sent_safe(false),
 	new_version(nv), old_version(ov)
 	{ }
-  bool can_send_ack() { return !sent_ack &&   //!cancel && 
+  bool can_send_ack() { return !sent_ack && !sent_safe &&   //!cancel && 
 						  waitfor_ack.empty(); }
   bool can_send_safe() { return !sent_safe &&    //!cancel && 
 						   waitfor_ack.empty() && waitfor_safe.empty(); }
