@@ -165,9 +165,10 @@ public:
 	// at the end?
 	if (offset == object_blocks) {
 	  //cout << " appending " << ex << endl;
-	  if (!extent_map.empty() && extent_map.rbegin()->second.end() == ex.start) 
+	  if (!extent_map.empty() && extent_map.rbegin()->second.end() == ex.start) {
+		//cout << "appending " << ex << " to " << extent_map.rbegin()->second << endl;
 		extent_map.rbegin()->second.length += ex.length;
-	  else
+	  } else
 		extent_map[object_blocks] = ex;
 	  object_blocks += ex.length;
 	  return;

@@ -180,8 +180,8 @@ namespace crush {
 	  //cout << "uniformbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
-	  int v = hash(x, get_id(), 1) % get_size();
-	  int p = get_prime( hash(x, get_id(), 2) );  // choose a prime based on hash(x, get_id(), 2)
+	  int v = hash(x, get_id());// % get_size();
+	  int p = get_prime( hash(get_id(), x) );  // choose a prime based on hash(x, get_id(), 2)
 	  int s = (x + v + (r+1)*p) % get_size();
 	  return items[s];
 	}
