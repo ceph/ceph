@@ -69,7 +69,7 @@ class OSDReplicaOp {
   bool can_send_safe() { return !sent_safe && !cancel && 
 						   local_ack && local_safe && 
 						   waitfor_ack.empty() && waitfor_safe.empty(); }
-  bool can_delete() { return local_safe && 
+  bool can_delete() { return local_ack && local_safe && 
 						(cancel || 
 						 (waitfor_ack.empty() && waitfor_safe.empty())); }
 };
