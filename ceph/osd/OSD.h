@@ -63,9 +63,15 @@ class OSDReplicaOp {
 	sent_ack(false), sent_safe(false),
 	new_version(nv), old_version(ov)
 	{ }
-  bool can_send_ack() { return !sent_ack && !cancel && local_ack && waitfor_ack.empty(); }
-  bool can_send_safe() { return !sent_safe && !cancel && local_ack && local_safe && waitfor_safe.empty(); }
-  bool can_delete() { return local_safe && (cancel || waitfor_safe.empty()); }
+  bool can_send_ack() { return !sent_ack && !cancel && 
+						  local_ack && 
+						  waitfor_ack.empty(); }
+  bool can_send_safe() { return !sent_safe && !cancel && 
+						   local_ack && local_safe && 
+						   waitfor_ack.empty() && waitfor_safe.empty(); }
+  bool can_delete() { return local_safe && 
+						(cancel || 
+						 (waitfor_ack.empty() && waitfor_safe.empty())); }
 };
 
 inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
@@ -75,6 +81,7 @@ inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
   if (repop.local_safe) out << " local_safe";
   if (repop.cancel) out << " cancel";
   out << " op=" << repop.op;
+  out << " repop=" << &repop;
   out << ")";
   return out;
 }
