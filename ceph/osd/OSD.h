@@ -38,6 +38,7 @@ using namespace std;
 #include <ext/hash_set>
 using namespace __gnu_cxx;
 
+#include "messages/MOSDOp.h"
 
 class Messenger;
 class Message;
@@ -75,7 +76,7 @@ inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
   //if (repop.local_ack) out << " local_ack";
   //if (repop.local_safe) out << " local_safe";
   if (repop.cancel) out << " cancel";
-  out << " op=" << repop.op;
+  out << " op=" << *(repop.op);
   out << " repop=" << &repop;
   out << ")";
   return out;

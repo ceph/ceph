@@ -158,22 +158,26 @@ class OSDMap {
 	int num_rep = pg_to_nrep(pg);
 	pg_t ps = pg_to_ps(pg);
 	
+	// spread "on" ps bits around a bit (usually only low bits are set bc of pg_bits)
+	int hps = ((ps >> 32) ^ ps);
+	hps = hps ^ (hps >> 16);
+	
 	switch(g_conf.osd_pg_layout) {
 	case PG_LAYOUT_CRUSH:
 	  crush.do_rule(crush.rules[num_rep],
-					ps ^ (ps >> 32),
+					hps,
 					osds);
 	  break;
 
 	case PG_LAYOUT_LINEAR:
 	  for (int i=0; i<num_rep; i++) 
-		osds.push_back( ((pg_t)i + ps*num_rep) % g_conf.num_osd );
+		osds.push_back( (i + ps*num_rep) % g_conf.num_osd );
 	  break;
 
 	case PG_LAYOUT_HYBRID:
 	  {
-		static crush::Hash H(1066);
-		int h = H(ps ^ (ps >> 32));
+		static crush::Hash H(777);
+		int h = H(hps);
 		for (int i=0; i<num_rep; i++) 
 		  osds.push_back( (h+i) % g_conf.num_osd );
 	  }
@@ -181,12 +185,12 @@ class OSDMap {
 
 	case PG_LAYOUT_HASH:
 	  {
-		static crush::Hash H(1066);
+		static crush::Hash H(777);
 		for (int i=0; i<num_rep; i++) {
 		  int t = 1;
 		  int osd = 0;
 		  while (t++) {
-			osd = H(i, pg^(pg>>32), t) % g_conf.num_osd;
+			osd = H(i, hps, t) % g_conf.num_osd;
 			int j = 0;
 			for (; j<i; j++) 
 			  if (osds[j] == osd) break;

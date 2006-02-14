@@ -194,7 +194,7 @@ int OSD::init()
   osd_lock.Lock();
 
   if (g_conf.osd_mkfs) {
-	dout(1) << "mkfs" << endl;
+	dout(2) << "mkfs" << endl;
 
 	store->mkfs();
   }
@@ -650,7 +650,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   wait_for_no_ops();
 
   if (m->is_mkfs()) {
-	dout(1) << "MKFS" << endl;
+	dout(2) << "MKFS" << endl;
   }
 
   if (!osdmap ||
@@ -2317,17 +2317,17 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
 void OSD::get_repop(OSDReplicaOp *repop)
 {
   repop->lock.Lock();
-  dout(15) << "get_repop " << *repop << endl;
+  dout(1) << "get_repop " << *repop << endl;
 }
 
 void OSD::put_repop(OSDReplicaOp *repop)
 {
-  dout(15) << "put_repop " << *repop << endl;
+  dout(1) << "put_repop " << *repop << endl;
 
   // safe?
   if (repop->can_send_safe() &&
 	  repop->op->wants_safe()) {
-	dout(15) << "put_repop sending safe on " << *repop << endl;
+	dout(1) << "put_repop sending safe on " << *repop << endl;
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_safe = true;
@@ -2336,7 +2336,7 @@ void OSD::put_repop(OSDReplicaOp *repop)
   // ack?
   else if (repop->can_send_ack() &&
 		   repop->op->wants_ack()) {
-	dout(15) << "put_repop sending ack on " << *repop << endl;
+	dout(1) << "put_repop sending ack on " << *repop << endl;
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_ack = true;
@@ -2344,7 +2344,7 @@ void OSD::put_repop(OSDReplicaOp *repop)
 
   // done.
   if (repop->can_delete()) {
-	dout(15) << "put_repop deleting " << *repop << endl;
+	dout(1) << "put_repop deleting " << *repop << endl;
 	repop->lock.Unlock();  
 	delete repop->op;
 	delete repop;
@@ -2398,12 +2398,14 @@ void OSD::op_modify(MOSDOp *op)
 
 	PG *pg;
 	osd_lock.Lock();
+	repop->lock.Lock();
 	{
 	  pg = get_pg(op->get_pg());
 	  for (unsigned i=1; i<pg->acting.size(); i++) {
 		issue_replica_op(pg, repop, pg->acting[i]);
 	  }
 	}
+	repop->lock.Unlock();
 	osd_lock.Unlock();
 	
 	// pre-ack
