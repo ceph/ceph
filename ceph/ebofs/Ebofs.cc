@@ -190,7 +190,7 @@ int Ebofs::mkfs()
 
   dev.close();
 
-  dout(1) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
+  dout(2) << "mkfs: " << dev.get_device_name() << " "  << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
   ebofs_lock.Unlock();
   return 0;
 }

@@ -26,6 +26,10 @@
 
 #include <cassert>
 
+#undef dout
+#define dout(x) if ((x) <= g_conf.debug) cout << "mds.dentry "
+
+
 // CDentry
 
 ostream& operator<<(ostream& out, CDentry& dn)

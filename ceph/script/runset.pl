@@ -53,6 +53,10 @@ open(W, "log/$out/in");
 print W $raw;
 close W;
 
+my $comb = $sim->{'comb'};
+delete $sim->{'comb'};
+my %filters;
+my @fulldirs;
 
 # prep output
 system "mkdir log/$out" unless -d "log/$out";
@@ -69,10 +73,15 @@ sub iterate {
 		if (defined $fix->{$k}) {
 			$this->{$k} = $fix->{$k};
 		}
+		elsif (ref $sim->{$k} eq 'HASH') {
+			#print "ignore $k\n";
+			# ignore
+		}
 		elsif (!(ref $sim->{$k})) {
 			$this->{$k} = $sim->{$k};
 		}
 		else {
+			#print ref $sim->{$k};
 			if (!(defined $vary)) {
 				$vary = $k;
 			}
@@ -80,6 +89,7 @@ sub iterate {
 	}
 
 	if ($vary) {
+		#print "vary $vary\n";
 		for my $v (@{$sim->{$vary}}) {
 			$this->{$vary} = $v;
 			push(@r, &iterate($sim, $this));
@@ -94,17 +104,26 @@ sub run {
 	my $h = shift @_;
 
 	my @fn;
+	my @filt;
 	for my $k (sort keys %$sim) {
-		next unless ref $sim->{$k};
+		next unless ref $sim->{$k} eq 'ARRAY';
 		push(@fn, "$k=$h->{$k}");
+		next if $comb && $k eq $comb->{'x'};
+		push(@filt, "$k=$h->{$k}");
 	}
 	my $fn = join(",", @fn);
 	$fn =~ s/ /_/g;
 	$fn = $out . '/' . $fn if $out;
+	push( @fulldirs, "log/" . $fn );
+
+	
+	# filters
+	$filters{ join(',', @filt) } = 1;
+
 
 	if (-e "log/$fn/.done") {
 		print "already done.\n";
-		return 1;
+		return;
 	}
 	system "rm -r log/$fn" if -d "log/$fn";
 	system "mkdir log/$fn" unless -d "log/$fn";
@@ -116,13 +135,12 @@ sub run {
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
 
-	for my $k ('nummds', 'numclient', 'numosd',
-			   'osd_maxthreads') {
-		$c .= " --$k $h->{$k}" if $h->{$k};
+	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
+			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
+			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
+			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc') {
+		$c .= " --$k $h->{$k}" if defined $h->{$k};
 	}
-
-	$c .= " --osd_object_layout_linear" if $h->{'object_layout'} eq 'linear';
-	$c .= " --osd_pg_layout_linear" if $h->{'pg_layout'} eq 'linear';
 
 	$c .= ' ' . $h->{'custom'} if $h->{'custom'};
 
@@ -130,8 +148,7 @@ sub run {
 
 	
 	print "-> $c\n";
-	print "   " . `date`;
-	my $r;
+	my $r = 0;
 	unless ($fake) {
 		$r = system "$c > log/$fn/o";
 		system "script/sum.pl -start $h->{'start'} -end $h->{'end'} log/$fn/osd* > log/$fn/sum.osd";
@@ -149,27 +166,64 @@ sub run {
 }
 
 
+
 my @r = &iterate($sim);
 my $n = scalar(@r);
 my $c = 1;
 my %r;
 my $nfailed = 0;
 for my $h (@r) {
+	my $d = `date`;
+	chomp($d);
+	$d =~ s/ P.T .*//;
 	print "$c/$n";
 	print " ($nfailed failed)" if $nfailed;
-	print ": ";
+	print " $d: ";
 	my $r = &run($h);
 
-	if ($r != 1) {
+	if (!(defined $r)) {
+		# already done
+	} else {
+		if ($r) {
+			$nfailed++;
+		}
 		print "sleep $h->{'sleep'}\n";
 		sleep $h->{'sleep'};
-	} elsif ($r == 1) {
-		# already done
-	} elsif ($r) {
-		$nfailed++;
 	}
 
 	$c++;
 }
 print "$nfailed failed\n";
+
+
+my @comb;
+if ($comb) {
+	my $x = $comb->{'x'};
+	my @vars = @{$comb->{'vars'}};
+
+	my @filters = sort keys %filters;
+	my $cmd = "script/comb.pl $x @vars - @fulldirs - @filters > log/$out/c";
+	print "\n$c\n";
+	system $cmd;
+
+	print "set data style linespoints;\n";
+	my $s = 2;
+	for my $v (@vars) {
+		my $c = $s;
+		$s++;
+		my @p;
+		for my $f (@filters) {
+			my $t = $f;
+			if ($comb->{'maptitle'}) {
+				for my $a (keys %{$comb->{'maptitle'}}) {
+					my $b = $comb->{'maptitle'}->{$a};
+					$t =~ s/$a/$b/;
+				}
+			}
+			push (@p, "\"log/$out/c\" u 1:$c t \"$t\"" );
+			$c += scalar(@vars);
+		}
+		print "# $v\nplot " . join(", ", @p) . ";\n\n";
+	}
+}
 
