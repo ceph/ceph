@@ -34,6 +34,8 @@
 #undef dout
 #define dout(x)   if (x <= g_conf.debug || x <= g_conf.debug_ns) cout << "nameserver: " 
 
+void tcp_open(int rank);
+
 
 void TCPDirectory::handle_connect(MNSConnect *m)
 {

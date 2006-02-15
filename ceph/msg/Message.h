@@ -208,16 +208,20 @@ class Message {
   msg_envelope_t  env;    // envelope
   bufferlist      payload;        // payload
   
+  int tcp_sd;
   friend class Messenger;
+public:
+  int get_tcp_sd() { return tcp_sd; }
+  void set_tcp_sd(int s) { tcp_sd = s; }
 
  public:
-  Message() { 
+  Message() : tcp_sd(0) { 
 	env.source_port = env.dest_port = -1;
 	env.source = env.dest = -1;
 	env.nchunks = 0;
 	env.lamport_stamp = 0;
   };
-  Message(int t) {
+  Message(int t) : tcp_sd(0) {
 	env.source_port = env.dest_port = -1;
 	env.source = env.dest = -1;
 	env.nchunks = 0;

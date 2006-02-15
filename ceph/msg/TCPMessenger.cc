@@ -139,7 +139,7 @@ map<int, pthread_t>      in_threads;    // sd -> threadid
 void tcp_open(int rank);
 int tcp_send(Message *m);
 void tcpmessenger_kick_dispatch_loop();
-
+bool tcp_lookup(Message *m);
 
 int tcpmessenger_get_rank()
 {
@@ -240,7 +240,8 @@ public:
 	  rank_addr[it->first] = it->second;
 
 	  // open it now
-	  tcp_open(it->first);
+	  if (rank_sd.count(it->first) == 0)
+            tcp_open(it->first);
 	}
 
 	// send waiting messages
@@ -248,11 +249,20 @@ public:
 	for (list<Message*>::iterator it = waiting.begin();
 		 it != waiting.end();
 		 it++) {
+	  bool ok = tcp_lookup(*it);
+          assert(ok);
 	  tcp_send(*it);
 	}
 #else
+	for (list<Message*>::iterator it = waiting.begin();
+		 it != waiting.end();
+		 it++) {
+	  bool ok = tcp_lookup(*it);
+	  assert(ok);
+	  dout(0) << "lookup done, splicing in " << *it << endl;
+	}
 	outgoing_lock.Lock();
-	outgoing.splice(outgoing.end(), waiting);
+	outgoing.splice(outgoing.begin(), waiting);
 	outgoing_cond.Signal();
 	outgoing_lock.Unlock();
 #endif
@@ -552,7 +562,7 @@ Message *tcp_recv(int sd)
 
 void tcp_open(int rank)
 {
-  dout(DBL) << "tcp_open to rank " << rank << " at " << rank_addr[rank] << endl;
+  dout(1) << "tcp_open to rank " << rank << " at " << rank_addr[rank] << endl;
 
   // create socket?
   int sd = socket(AF_INET,SOCK_STREAM,0);
@@ -572,6 +582,7 @@ void tcp_open(int rank)
   assert(r >= 0);
 
   //dout(DBL) << "tcp_open connected to " << who << endl;
+  assert(rank_sd.count(rank) == 0);
   rank_sd[rank] = sd;
 }
 
@@ -592,7 +603,7 @@ bool tcp_lookup(Message *m)
 	if (waiting_for_lookup.count(addr)) {
 	  dout(DBL) << "already looking up " << MSG_ADDR_NICE(addr) << endl;
 	} else {
-	  dout(DBL) << "lookup on " << MSG_ADDR_NICE(addr) << endl;
+	  dout(1L) << "lookup on " << MSG_ADDR_NICE(addr) << " for " << m << endl;
 	  MNSLookup *r = new MNSLookup(addr);
 	  rankmessenger->send_message(r, MSG_ADDR_DIRECTORY);
 	}
@@ -602,6 +613,13 @@ bool tcp_lookup(Message *m)
 	return false;
   }
 
+  int rank = entity_rank[m->get_dest()];
+
+  if (rank_sd.count(rank) == 0) { // should only happen on rank0?
+    tcp_open(rank);
+  } 
+  assert(rank_sd.count(rank));
+  m->set_tcp_sd( rank_sd[rank] );
   return true;
 }
 
@@ -611,10 +629,14 @@ bool tcp_lookup(Message *m)
  */
 int tcp_send(Message *m)
 {
-  int rank = entity_rank[m->get_dest()];
-  if (rank_sd.count(rank) == 0) tcp_open(rank);
+  /*int rank = entity_rank[m->get_dest()];
+  //if (rank_sd.count(rank) == 0) tcp_open(rank);
+  assert(rank_sd.count(rank));
 
   int sd = rank_sd[rank];
+  assert(sd);
+  */
+  int sd = m->get_tcp_sd();
   assert(sd);
 
   // get envelope, buffers
@@ -628,7 +650,12 @@ int tcp_send(Message *m)
   env->nchunks = 1;
 #endif
 
-  dout(7) << "sending " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << " rank " << rank << endl;//" sd " << sd << ")" << endl;
+  // HACK osd -> client only
+  if (m->get_source() >= MSG_ADDR_OSD(0) && m->get_source() < MSG_ADDR_CLIENT(0) &&
+  m->get_dest() >= MSG_ADDR_CLIENT(0))
+	dout(1) << "sending " << m << " " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) 
+	  //<< " rank " << rank 
+			<< " sd " << sd << endl;
   
   // send envelope
   int r = tcp_write( sd, (char*)env, sizeof(*env) );
@@ -699,10 +726,7 @@ void* tcp_outthread(void*)
 		if (!g_conf.tcp_serial_marshall) 
 		  tcp_marshall(m);
 
-		lookup_lock.Lock();
-		if (tcp_lookup(m))
-		  tcp_send(m);
-		lookup_lock.Unlock();
+		tcp_send(m);
 	  }
 	  
 	  outgoing_lock.Lock();
@@ -735,6 +759,8 @@ void *tcp_inthread(void *r)
 	Message *m = tcp_recv(sd);
 	if (!m) break;
 	who = m->get_source();
+
+	dout(1) << "inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
 	// give to dispatch loop
 	size_t sz;
@@ -967,6 +993,8 @@ msg_addr_t register_entity(msg_addr_t addr)
 	Message *m = new MNSConnect(listen_addr);
 	m->set_dest(MSG_ADDR_DIRECTORY, 0);
 	tcp_marshall(m);
+	bool ok = tcp_lookup(m);
+        assert(ok);
 	tcp_send(m);
 	
 	// wait for reply
@@ -980,6 +1008,8 @@ msg_addr_t register_entity(msg_addr_t addr)
   Message *m = new MNSRegister(addr, my_rank, id);
   m->set_dest(MSG_ADDR_DIRECTORY, 0);
   tcp_marshall(m);
+  bool ok = tcp_lookup(m);
+  assert(ok);
   tcp_send(m);
   
   // wait?
@@ -1043,6 +1073,8 @@ void TCPMessenger::ready()
 	  m->set_source(get_myaddr(), 0);
 	  m->set_dest(MSG_ADDR_DIRECTORY, 0);
 	  tcp_marshall(m);
+	  bool ok = tcp_lookup(m);
+          assert(ok);
 	  tcp_send(m);
 	}
 	lookup_lock.Unlock();
@@ -1183,17 +1215,21 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 	tcp_marshall(m);
 
   if (g_conf.tcp_serial_out) {
-	// send in this thread
 	lookup_lock.Lock();
+	// send in this thread
 	if (tcp_lookup(m))
 	  tcp_send(m);
 	lookup_lock.Unlock();
   } else {
-	// give to sender thread
-	outgoing_lock.Lock();
-	outgoing.push_back(m);
-	outgoing_cond.Signal();
-	outgoing_lock.Unlock();
+	lookup_lock.Lock();
+	if (tcp_lookup(m)) {
+	  // give to sender thread now
+	  outgoing_lock.Lock();
+	  outgoing.push_back(m);
+	  outgoing_cond.Signal();
+	  outgoing_lock.Unlock();
+	}
+	lookup_lock.Unlock();
   }
 
   return 0;
