@@ -70,12 +70,12 @@ sub iterate {
 
 	my $this;
 	for my $k (sort keys %$sim) {
+		next if $k =~ /^_/;
 		if (defined $fix->{$k}) {
 			$this->{$k} = $fix->{$k};
 		}
 		elsif (ref $sim->{$k} eq 'HASH') {
-			#print "ignore $k\n";
-			# ignore
+			# nothing
 		}
 		elsif (!(ref $sim->{$k})) {
 			$this->{$k} = $sim->{$k};
@@ -95,6 +95,19 @@ sub iterate {
 			push(@r, &iterate($sim, $this));
 		}
 	} else {
+
+		if ($sim->{'_dep'}) {
+			my @s = @{$sim->{'_dep'}};
+			while (@s) {
+				my $dv = shift @s;
+				my $eq = shift @s;
+
+				$eq =~ s/\$(\w+)/"\$this->{'$1'}"/eg;
+				$this->{$dv} = eval $eq;
+				#print "$dv : $eq -> $this->{$dv}\n";
+			}
+		}
+
 		push(@r, $this);
 	}
 	return @r;
