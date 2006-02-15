@@ -2317,18 +2317,18 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
 void OSD::get_repop(OSDReplicaOp *repop)
 {
   repop->lock.Lock();
-  dout(1) << "get_repop " << *repop << endl;
+  dout(15) << "get_repop " << *repop << endl;
 }
 
 void OSD::put_repop(OSDReplicaOp *repop)
 {
-  dout(1) << "put_repop " << *repop << endl;
+  dout(15) << "put_repop " << *repop << endl;
 
   // safe?
   if (repop->can_send_safe() &&
 	  repop->op->wants_safe()) {
-	dout(1) << "put_repop sending safe on " << *repop << endl;
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
+	dout(15) << "put_repop sending safe on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_safe = true;
   }
@@ -2336,15 +2336,15 @@ void OSD::put_repop(OSDReplicaOp *repop)
   // ack?
   else if (repop->can_send_ack() &&
 		   repop->op->wants_ack()) {
-	dout(1) << "put_repop sending ack on " << *repop << endl;
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
+	dout(15) << "put_repop sending ack on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_ack = true;
   }
 
   // done.
   if (repop->can_delete()) {
-	dout(1) << "put_repop deleting " << *repop << endl;
+	dout(15) << "put_repop deleting " << *repop << endl;
 	repop->lock.Unlock();  
 	delete repop->op;
 	delete repop;

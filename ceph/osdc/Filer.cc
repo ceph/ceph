@@ -411,7 +411,7 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
-  dout(7) << "handle_osd_modify_reply " << tid << " safe " << m->get_safe() << endl;//" from " << MSG_ADDR_NICE(m->get_source()) << endl;
+  dout(7) << "handle_osd_modify_reply " << tid << " safe " << m->get_safe() << endl;
   assert(op_modify.count(tid));
   PendingOSDOp_t *p = op_modify[ tid ];
 
@@ -421,7 +421,7 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
   // ack or safe?
   if (m->get_safe()) {
 	// safe.
-	dout(15) << " handle_osd_modify_reply safe on " << tid << endl;
+	//dout(15) << " handle_osd_modify_reply safe on " << tid << endl;
 	op_modify.erase( tid );
 	p->waitfor_ack.erase(tid);
 	p->waitfor_safe.erase(tid);
@@ -433,7 +433,7 @@ Filer::handle_osd_modify_reply(MOSDOpReply *m)
 	}
   } else {
 	// ack.
-	dout(15) << " handle_osd_modify_reply ack on " << tid << endl;
+	//dout(15) << " handle_osd_modify_reply ack on " << tid << endl;
 	assert(p->waitfor_ack.count(tid));
 	p->waitfor_ack.erase(tid);
 

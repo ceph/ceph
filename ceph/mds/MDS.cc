@@ -229,6 +229,7 @@ int MDS::init()
 int MDS::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
+  cerr << "mds shutdown start" << endl;
   for (int i=0; i<mdcluster->get_num_mds(); i++) {
 	if (i == whoami) continue;
 	dout(1) << "sending MShutdownStart to mds" << i << endl;
@@ -277,6 +278,7 @@ void MDS::handle_shutdown_finish(Message *m)
   
   if (did_shut_down.size() == (unsigned)mdcluster->get_num_mds()) {
 	// MDS's all ready to shut down!
+	cerr << "mds shutdown final" << endl;
 
 	dout(1) << "sending shutdown to remaining MDSs, OSDs" << endl;
 	for (int i=1; i<g_conf.num_mds; i++) {

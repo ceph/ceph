@@ -259,7 +259,7 @@ public:
 		 it++) {
 	  bool ok = tcp_lookup(*it);
 	  assert(ok);
-	  dout(0) << "lookup done, splicing in " << *it << endl;
+//	  dout(0) << "lookup done, splicing in " << *it << endl;
 	}
 	outgoing_lock.Lock();
 	outgoing.splice(outgoing.begin(), waiting);
@@ -562,7 +562,7 @@ Message *tcp_recv(int sd)
 
 void tcp_open(int rank)
 {
-  dout(1) << "tcp_open to rank " << rank << " at " << rank_addr[rank] << endl;
+  dout(DBL) << "tcp_open to rank " << rank << " at " << rank_addr[rank] << endl;
 
   // create socket?
   int sd = socket(AF_INET,SOCK_STREAM,0);
@@ -603,7 +603,7 @@ bool tcp_lookup(Message *m)
 	if (waiting_for_lookup.count(addr)) {
 	  dout(DBL) << "already looking up " << MSG_ADDR_NICE(addr) << endl;
 	} else {
-	  dout(1L) << "lookup on " << MSG_ADDR_NICE(addr) << " for " << m << endl;
+	  dout(DBL) << "lookup on " << MSG_ADDR_NICE(addr) << " for " << m << endl;
 	  MNSLookup *r = new MNSLookup(addr);
 	  rankmessenger->send_message(r, MSG_ADDR_DIRECTORY);
 	}
@@ -651,9 +651,9 @@ int tcp_send(Message *m)
 #endif
 
   // HACK osd -> client only
-  if (m->get_source() >= MSG_ADDR_OSD(0) && m->get_source() < MSG_ADDR_CLIENT(0) &&
-  m->get_dest() >= MSG_ADDR_CLIENT(0))
-	dout(1) << "sending " << m << " " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) 
+  //if (m->get_source() >= MSG_ADDR_OSD(0) && m->get_source() < MSG_ADDR_CLIENT(0) &&
+ // m->get_dest() >= MSG_ADDR_CLIENT(0))
+	dout(DBL) << "sending " << m << " " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) 
 	  //<< " rank " << rank 
 			<< " sd " << sd << endl;
   
@@ -760,7 +760,7 @@ void *tcp_inthread(void *r)
 	if (!m) break;
 	who = m->get_source();
 
-	dout(1) << "inthread got " << m << " from sd " << sd << " who is " << who << endl;
+	//dout(1) << "inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
 	// give to dispatch loop
 	size_t sz;
