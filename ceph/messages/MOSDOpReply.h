@@ -78,6 +78,7 @@ class MOSDOpReply : public Message {
   void set_length(size_t s) { st.length = s; }
   void set_offset(size_t o) { st.offset = o; }
   void set_object_size(size_t s) { st.object_size = s; }
+  void set_version(version_t v) { st.version = v; }
 
   // data payload
   void set_data(bufferlist &d) {

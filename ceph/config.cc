@@ -121,14 +121,15 @@ md_config_t g_conf = {
 
 
   // --- osd ---
-  osd_pg_bits: 10,
-  osd_object_layout: OBJECT_LAYOUT_LINEAR,
+  osd_pg_bits: 12,
+  osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,
   osd_maxthreads: 2,    // 0 == no threading
   osd_mkfs: false,
   osd_fake_sync: false,
   
+  // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
   fakestore_fsync: true,
   fakestore_writesync: false,
@@ -141,12 +142,13 @@ md_config_t g_conf = {
   ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (150 *256), // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty:   (100 *256), // before write() will block
+  ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (200 *256), // before write() will block
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
 
+  // --- obfs ---
   uofs: 0,
   uofs_fake_sync: 2,      // 2 seconds
   uofs_cache_size:             1 << 28,        //256MB
@@ -367,6 +369,18 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.ebofs = 1;
 	else if (strcmp(args[i], "--ebofs_commit_ms") == 0)
 	  g_conf.ebofs_commit_ms = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_idle_commit_ms") == 0)
+	  g_conf.ebofs_idle_commit_ms = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_oc_size") == 0)
+	  g_conf.ebofs_oc_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_cc_size") == 0)
+	  g_conf.ebofs_cc_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_bc_size") == 0)
+	  g_conf.ebofs_bc_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_bc_max_dirty") == 0)
+	  g_conf.ebofs_bc_max_dirty = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_abp_max_alloc") == 0)
+	  g_conf.ebofs_abp_max_alloc = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--fakestore") == 0) {
@@ -393,6 +407,9 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--osd_maxthreads") == 0) 
 	  g_conf.osd_maxthreads = atoi(args[++i]);
 
+
+	else if (strcmp(args[i], "--bdev_el_bidir") == 0) 
+	  g_conf.bdev_el_bidir = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_iothreads") == 0) 
 	  g_conf.bdev_iothreads = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 

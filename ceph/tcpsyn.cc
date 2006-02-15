@@ -35,7 +35,7 @@ class C_Die : public Context {
 public:
   void finish(int) {
 	cerr << "die" << endl;
-	exit(0);
+	exit(1);
   }
 };
 
