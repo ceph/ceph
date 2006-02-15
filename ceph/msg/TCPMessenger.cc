@@ -61,6 +61,8 @@ using namespace __gnu_cxx;
 
 #define DBL 18
 
+//#define TCP_SERIALMARSHALL  // do NOT turn this off until you check messages/* encode_payload methods
+//#define TCP_SERIALOUT       // be paranoid/annoying and send messages in same thread
 
 
 TCPMessenger *rankmessenger = 0; // 
@@ -242,11 +244,18 @@ public:
 	}
 
 	// send waiting messages
+#ifdef TCP_SERIALOUT
 	for (list<Message*>::iterator it = waiting.begin();
 		 it != waiting.end();
 		 it++) {
 	  tcp_send(*it);
 	}
+#else
+	outgoing_lock.Lock();
+	outgoing.splice(outgoing.end(), waiting);
+	outgoing_cond.Signal();
+	outgoing_lock.Unlock();
+#endif
 
 	delete m;
   }
@@ -430,6 +439,7 @@ int tcpmessenger_shutdown()
 {
   dout(DBL) << "tcpmessenger_shutdown barrier" << endl;
 
+
   dout(2) << "tcpmessenger_shutdown closing all sockets etc" << endl;
 
   // bleh
@@ -455,6 +465,10 @@ bool tcp_read(int sd, char *buf, int len)
 {
   while (len > 0) {
 	int got = ::recv( sd, buf, len, 0 );
+	if (got == 0) {
+	  dout(DBL) << "tcp_read socket " << sd << " closed" << endl;
+	  return false;
+	}
 	if (got < 0) {
 	  dout(DBL) << "tcp_read bailing with " << got << endl;
 	  return false;
@@ -663,32 +677,45 @@ int tcp_send(Message *m)
 void* tcp_outthread(void*)
 {
   outgoing_lock.Lock();
-  while (!outgoing.empty() || !tcp_done) {
+  dout(DBL) << "outthread start" << endl;
+  while (1) {
 	
-	if (!outgoing.empty()) {
+	while (!outgoing.empty()) {
+	  dout(DBL) << "outthread grabbing message(s)" << endl;
+
 	  // grab outgoing list
 	  list<Message*> out;
 	  out.splice(out.begin(), outgoing);
-
+	  
 	  // drop lock while i send these
 	  outgoing_lock.Unlock();
-
+	  
 	  while (!out.empty()) {
 		Message *m = out.front();
 		out.pop_front();
+		
+		dout(DBL) << "outthread sending " << m << endl;
 
-		tcp_marshall(m);
-		tcp_send(m);
+		if (!g_conf.tcp_serial_marshall) 
+		  tcp_marshall(m);
+
+		lookup_lock.Lock();
+		if (tcp_lookup(m))
+		  tcp_send(m);
+		lookup_lock.Unlock();
 	  }
-
+	  
 	  outgoing_lock.Lock();
 	}
+	
+	if (tcp_done) break;
 
 	// wait
-	if (outgoing.empty())
-	  outgoing_cond.Wait(outgoing_lock);
-	
+	dout(DBL) << "outthread sleeping" << endl;
+	outgoing_cond.Wait(outgoing_lock);
   }
+  dout(DBL) << "outthread done" << endl;
+
   outgoing_lock.Unlock();
   return 0;
 }
@@ -1051,6 +1078,8 @@ void TCPMessenger::map_rank_addr(int r, tcpaddr_t a)
 
 int TCPMessenger::shutdown()
 {
+  dout(DBL) << "shutdown by " << MSG_ADDR_NICE(get_myaddr()) << endl;
+
   // dont' send unregistery from nsmessenger shutdown!
   if (this != nsmessenger && 
 	  (my_rank > 0 || nsmessenger)) {
@@ -1065,6 +1094,8 @@ int TCPMessenger::shutdown()
   
   // last one?
   bool lastone = directory.empty();  
+  //dout(1) << "lastone = " << lastone << " .. " << directory.size() << endl;
+  
 
   // or almost last one?
   if (rankmessenger && directory.size() == 1) {
@@ -1099,12 +1130,18 @@ int TCPMessenger::shutdown()
 
 	dout(DBL) << "setting tcp_done" << endl;
 
+	// kick incoming thread
 	incoming_lock.Lock();
 	tcp_done = true;
 	incoming_cond.Signal();
 	incoming_lock.Unlock();
 
+	// finish off outgoing thread
 	tcpmessenger_kick_outgoing_loop();
+
+	void *returnval;
+	dout(10) << "waiting for outgoing to finish" << endl;
+	pthread_join(out_thread_id, &returnval);
 
 	
 	/*
@@ -1136,27 +1173,29 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_dest(dest, port);
   m->set_lamport_stamp( get_lamport() );
 
-  dout(4) << "--> '" << m->get_type_name() << 
-	"' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-	" to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
-		  << m 
+  dout(4) << "--> " << m->get_type_name() 
+		  << " from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() 
+		  << " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() 
+		  << " ---- " << m 
 		  << endl;
-  
-  if (1) {
-	// serialize all output
+
+  if (g_conf.tcp_serial_marshall)
 	tcp_marshall(m);
 
+  if (g_conf.tcp_serial_out) {
+	// send in this thread
 	lookup_lock.Lock();
 	if (tcp_lookup(m))
 	  tcp_send(m);
 	lookup_lock.Unlock();
   } else {
-	// good way (that's actually similarly lame?)
+	// give to sender thread
 	outgoing_lock.Lock();
 	outgoing.push_back(m);
 	outgoing_cond.Signal();
 	outgoing_lock.Unlock();
   }
+
   return 0;
 }
 

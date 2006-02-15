@@ -20,7 +20,7 @@ Mutex bufferlock;
 
 
 
-FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 1 );  // stripe over 1M objects, 2x replication
+FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4
 
 // ??
@@ -28,8 +28,8 @@ FileLayout g_OSD_MDDirLayout( 1<<8, 1<<2, 1<<19, 3 );
 //FileLayout g_OSD_MDDirLayout( 1<<20, 1, 1<<20, 2 );  // stripe over 1M objects, 2x replication
 
 // stripe mds log over 128 byte bits (see mds_log_pad_entry below to match!)
-FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 3 );  // new (good?) way
-//FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // new (good?) way
+FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 3 );  // 1M objects
+//FileLayout g_OSD_MDLogLayout( 1<<7, 32, 1<<20, 3 );  // 128 byte stripes over 32 1M objects
 //FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
@@ -71,6 +71,8 @@ md_config_t g_conf = {
 
   tcp_skip_rank0: false,
   tcp_log: false,
+  tcp_serial_marshall: true,
+  tcp_serial_out: false,
 
 
   // --- client ---
