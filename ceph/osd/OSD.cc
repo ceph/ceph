@@ -623,6 +623,7 @@ void OSD::update_map(bufferlist& state, bool mkfs)
   advance_map(pg_list);
   activate_map(pg_list);
   
+  /*
   if (mkfs) {
 	// mark all peers complete
 	for (list<pg_t>::iterator pgid = pg_list.begin();
@@ -639,7 +640,8 @@ void OSD::update_map(bufferlist& state, bool mkfs)
 								MSG_ADDR_OSD(p->get_peer()));
 	  }
 	}
-  }
+	}*/
+
 
   // process waiters
   take_waiters(waiting_for_osdmap);
@@ -1277,6 +1279,10 @@ void OSD::handle_pg_peer(MOSDPGPeer *m)
 	// i am now peered
 	pg->state_set(PG_STATE_PEERED);
 	pg->state_clear(PG_STATE_STRAY);
+
+	if (m->get_version() == 1) {
+	  pg->mark_complete( m->get_version() ); // it's a mkfs.. mark pg complete too
+	}
 	
 	dout(10) << "sending peer ack " << *pg << " " << ack->pg_state[pgid].objects.size() << " objects" << endl;
   }
