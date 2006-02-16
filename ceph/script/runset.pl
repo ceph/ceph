@@ -25,31 +25,41 @@ use Data::Dumper;
 
 	# for final summation (script/sum.pl)
 	'start' => 30,
-	'end' => 120
+	'end' => 120,
+
+	'_psub' => 'alc.tp'   # switch to psub mode!
 };
 
 =cut
 
-my $in = shift || die;
-my $out = shift || die;
-$out = $in . "." . $out;
+my $usage = "script/runset.pl jobs/some/job blah\n";
+
+my $in = shift || die $usage;
+my $tag = shift || die $usage;
 my $fake = shift;
 
-print "in $in
-out $out/
-";
+
+my ($job) = $in =~ /^jobs\/(.*)/;
+my ($jname) = $job =~ /\/(\w+)$/;
+$jname ||= $job;
+die "not jobs/?" unless defined $job;
+my $out = "log/$job.$tag";
+
+
+
+print "--- job $job, tag $tag ---\n";
 
 
 # get input
-my $raw = `cat log/$in`;
+my $raw = `cat $in`;
 my $sim = eval $raw;
 unless (ref $sim) {
-	print "bad input: log/$in\n";
-	system "perl -c log/$in";
+	print "bad input: $in\n";
+	system "perl -c $in";
 	exit 1;
 }
 
-open(W, "log/$out/in");
+open(W, "$out/in");
 print W $raw;
 close W;
 
@@ -59,7 +69,7 @@ my %filters;
 my @fulldirs;
 
 # prep output
-system "mkdir log/$out" unless -d "log/$out";
+system "mkdir -p $out" unless -d "$out";
 
 
 sub iterate {
@@ -119,27 +129,30 @@ sub run {
 	my @fn;
 	my @filt;
 	for my $k (sort keys %$sim) {
+		next if $k =~ /^_/;
 		next unless ref $sim->{$k} eq 'ARRAY';
 		push(@fn, "$k=$h->{$k}");
 		next if $comb && $k eq $comb->{'x'};
 		push(@filt, "$k=$h->{$k}");
 	}
-	my $fn = join(",", @fn);
-	$fn =~ s/ /_/g;
-	$fn = $out . '/' . $fn if $out;
-	push( @fulldirs, "log/" . $fn );
+	my $keys = join(",", @fn);
+	$keys =~ s/ /_/g;
+	my $fn = $out . '/' . $keys;
+	my $name = $jname . '_' . $tag . '_' . $keys;
+
+	push( @fulldirs, "" . $fn );
 
 	
 	# filters
 	$filters{ join(',', @filt) } = 1;
 
 
-	if (-e "log/$fn/.done") {
+	if (-e "$fn/.done") {
 		print "already done.\n";
 		return;
 	}
-	system "rm -r log/$fn" if -d "log/$fn";
-	system "mkdir log/$fn" unless -d "log/$fn";
+	system "rm -r $fn" if -d "$fn";
+	system "mkdir $fn" unless -d "$fn";
 
 	my $e = './tcpsyn';
 	$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
@@ -160,22 +173,36 @@ sub run {
 	$c .= " --log_name $fn";
 
 	
-	print "-> $c\n";
-	my $r = 0;
-	unless ($fake) {
-		$r = system "$c > log/$fn/o";
-		system "script/sum.pl -start $h->{'start'} -end $h->{'end'} log/$fn/osd* > log/$fn/sum.osd";
-		system "script/sum.pl -start $h->{'start'} -end $h->{'end'} log/$fn/mds* > log/$fn/sum.mds"
-			if -e "log/$fn/mds1";
-		system "script/sum.pl -start $h->{'start'} -end $h->{'end'} log/$fn/clnode* > log/$fn/sum.cl"
-			if -e "log/$fn/clnode.1";
-		if ($r) {
-			print "r = $r\n";
-		} else {
-			system "touch log/$fn/.done";
+	if ($sim->{'_psub'}) {
+		# template!
+		my $tp = `cat $sim->{'_psub'}`;
+		$tp =~ s/\$NAME/$name/g;
+		$tp =~ s/\$NUM/$h->{'n'}/g;
+		$tp =~ s/\$OUT/$fn\/o/g;
+		$tp =~ s/\$CMD/$c/g;
+		open(O,">$out/psub.$name");
+		print O $tp;
+		close O;
+		return;
+	} else {
+		# run
+		print "-> $c\n";
+		my $r = 0;
+		unless ($fake) {
+			$r = system "$c > $fn/o";
+			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd* > $fn/sum.osd";
+			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds* > $fn/sum.mds"
+				if -e "$fn/mds1";
+			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl"
+				if -e "$fn/clnode.1";
+			if ($r) {
+				print "r = $r\n";
+			} else {
+				system "touch $fn/.done";
+			}
 		}
+		return $r;
 	}
-	return $r;
 }
 
 
@@ -189,7 +216,7 @@ for my $h (@r) {
 	my $d = `date`;
 	chomp($d);
 	$d =~ s/ P.T .*//;
-	print "$c/$n";
+	print "=== $c/$n";
 	print " ($nfailed failed)" if $nfailed;
 	print " $d: ";
 	my $r = &run($h);
@@ -215,7 +242,7 @@ if ($comb) {
 	my @vars = @{$comb->{'vars'}};
 
 	my @filters = sort keys %filters;
-	my $cmd = "script/comb.pl $x @vars - @fulldirs - @filters > log/$out/c";
+	my $cmd = "script/comb.pl $x @vars - @fulldirs - @filters > $out/c";
 	print "\n$c\n";
 	system $cmd;
 
@@ -233,7 +260,7 @@ if ($comb) {
 					$t =~ s/$a/$b/;
 				}
 			}
-			push (@p, "\"log/$out/c\" u 1:$c t \"$t\"" );
+			push (@p, "\"$out/c\" u 1:$c t \"$t\"" );
 			$c += scalar(@vars);
 		}
 		print "# $v\nplot " . join(", ", @p) . ";\n\n";
