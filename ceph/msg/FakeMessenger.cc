@@ -50,7 +50,7 @@ using namespace __gnu_cxx;
 
 // global queue.
 
-map<int, FakeMessenger*>      directory;
+map<msg_addr_t, FakeMessenger*>      directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
@@ -169,7 +169,7 @@ int fakemessenger_do_loop_2()
 	lock.Lock();
 
 	// messages
-	map<int, FakeMessenger*>::iterator it = directory.begin();
+	map<msg_addr_t, FakeMessenger*>::iterator it = directory.begin();
 	while (it != directory.end()) {
 
 	  dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has " << it->second->num_incoming() << " queued" << endl;
@@ -236,28 +236,28 @@ int fakemessenger_do_loop_2()
 }
 
 
-FakeMessenger::FakeMessenger(long me)  : Messenger(me)
+FakeMessenger::FakeMessenger(msg_addr_t me)  : Messenger(me)
 {
-  whoami = me;
+  myaddr = me;
   lock.Lock();
-  directory[ whoami ] = this;
+  directory[ myaddr ] = this;
   lock.Unlock();
 
-  cout << "fakemessenger " << whoami << " messenger is " << this << endl;
+  cout << "fakemessenger " << myaddr << " messenger is " << this << endl;
 
   g_timer.set_messenger(this);
 
   /*
   string name;
   name = "m.";
-  name += MSG_ADDR_TYPE(whoami);
-  int w = MSG_ADDR_NUM(whoami);
+  name += MSG_ADDR_TYPE(myaddr);
+  int w = MSG_ADDR_NUM(myaddr);
   if (w >= 1000) name += ('0' + ((w/1000)%10));
   if (w >= 100) name += ('0' + ((w/100)%10));
   if (w >= 10) name += ('0' + ((w/10)%10));
   name += ('0' + ((w/1)%10));
 
-  loggers[ whoami ] = new Logger(name, (LogType*)&fakemsg_logtype);
+  loggers[ myaddr ] = new Logger(name, (LogType*)&fakemsg_logtype);
   */
 }
 
@@ -271,11 +271,11 @@ int FakeMessenger::shutdown()
 {
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   lock.Lock();
-  assert(directory.count(whoami) == 1);
+  assert(directory.count(myaddr) == 1);
   shutdown_set.insert(this);
   
   /*
-  directory.erase(whoami);
+  directory.erase(myaddr);
   if (directory.empty()) {
 	dout(1) << "fakemessenger: last shutdown" << endl;
 	::shutdown = true;
@@ -284,9 +284,9 @@ int FakeMessenger::shutdown()
   */
 
   /*
-  if (loggers[whoami]) {
-	delete loggers[whoami];
-	loggers.erase(whoami);
+  if (loggers[myaddr]) {
+	delete loggers[myaddr];
+	loggers.erase(myaddr);
   }
   */
 
@@ -307,7 +307,7 @@ void FakeMessenger::trigger_timer(Timer *t)
 
 int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
-  m->set_source(whoami, fromport);
+  m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
   m->set_lamport_stamp( get_lamport() );
 
@@ -317,12 +317,12 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   try {
 #ifdef LOG_MESSAGES
 	// stats
-	loggers[whoami]->inc("+send",1);
+	loggers[myaddr]->inc("+send",1);
 	loggers[dest]->inc("-recv",1);
 
 	char s[20];
 	sprintf(s,"+%s", m->get_type_name());
-	loggers[whoami]->inc(s);
+	loggers[myaddr]->inc(s);
 	sprintf(s,"-%s", m->get_type_name());
 	loggers[dest]->inc(s);
 #endif

@@ -33,14 +33,14 @@ class Timer;
 
 class FakeMessenger : public Messenger {
  protected:
-  int whoami;
+  msg_addr_t myaddr;
 
   class Logger *logger;
 
   list<Message*>       incoming;        // incoming queue
 
  public:
-  FakeMessenger(long me);
+  FakeMessenger(msg_addr_t me);
   ~FakeMessenger();
 
   virtual int shutdown();

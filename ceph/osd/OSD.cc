@@ -611,7 +611,7 @@ void OSD::update_map(bufferlist& state, bool mkfs)
 		  dout(7) << "created " << *pg << endl;
 		  
 		  pg_list.push_back(pgid);
-		}
+		} 
 	  }
 	}
   } else {
@@ -634,6 +634,7 @@ void OSD::update_map(bufferlist& state, bool mkfs)
 		   it++) {
 		PGPeer *p = it->second;
 		//dout(7) << " " << *pg << " telling peer osd" << p->get_peer() << " they are complete" << endl;
+		
 		messenger->send_message(new MOSDPGUpdate(osdmap->get_version(), pg->get_pgid(), true, osdmap->get_version()),
 								MSG_ADDR_OSD(p->get_peer()));
 	  }

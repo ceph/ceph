@@ -82,7 +82,7 @@ off_t stat_outq = 0, stat_outqb = 0;
 
 
 // local directory
-hash_map<int, TCPMessenger*>  directory;  // local
+hash_map<msg_addr_t, TCPMessenger*>  directory;  // local
 Mutex                         directory_lock;
 
 // connecting
@@ -751,14 +751,13 @@ void* tcp_outthread(void*)
 void *tcp_inthread(void *r)
 {
   int sd = (int)r;
-  int who = -1;
 
-  dout(DBL) << "tcp_inthread reading on sd " << sd << " who is " << who << endl;
+  dout(DBL) << "tcp_inthread reading on sd " << sd << endl;
 
   while (!tcp_done) {
 	Message *m = tcp_recv(sd);
 	if (!m) break;
-	who = m->get_source();
+	msg_addr_t who = m->get_source();
 
 	//dout(1) << "inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
@@ -882,7 +881,7 @@ void* tcp_dispatchthread(void*)
 	  }
 	  
 	  // ok
-	  int dest = m->get_dest();
+	  msg_addr_t dest = m->get_dest();
 	  directory_lock.Lock();
 	  if (directory.count(dest)) {
 		Messenger *who = directory[ dest ];
@@ -1017,7 +1016,7 @@ msg_addr_t register_entity(msg_addr_t addr)
 	cond.Wait(lookup_lock);
 
   // get result, clean up
-  int entity = waiting_for_register_result[id];
+  msg_addr_t entity = waiting_for_register_result[id];
   waiting_for_register_result.erase(id);
   waiting_for_register_cond.erase(id);
   

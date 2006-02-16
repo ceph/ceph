@@ -61,25 +61,25 @@ void TCPDirectory::handle_register(MNSRegister *m)
   
   // pick id
   int rank = m->get_rank();
-  int entity = m->get_entity();
+  msg_addr_t entity = m->get_entity();
 
-  if ((entity & MSG_ADDR_NUM_MASK) == MSG_ADDR_NEW) {
+  if (entity.is_new()) {
 	// make up a new address!
-	switch (entity) {
+	switch (entity.type()) {
 	  
-	case MSG_ADDR_RANK_NEW:         // stupid client should be able to figure this out
+	case MSG_ADDR_RANK_BASE:         // stupid client should be able to figure this out
 	  entity = MSG_ADDR_RANK(rank);
 	  break;
 	  
-	case MSG_ADDR_MDS_NEW:
+	case MSG_ADDR_MDS_BASE:
 	  entity = MSG_ADDR_MDS(nmds++);
 	  break;
 	  
-	case MSG_ADDR_OSD_NEW:
+	case MSG_ADDR_OSD_BASE:
 	  entity = MSG_ADDR_OSD(nosd++);
 	  break;
 	  
-	case MSG_ADDR_CLIENT_NEW:
+	case MSG_ADDR_CLIENT_BASE:
 	  entity = MSG_ADDR_CLIENT(nclient++);
 	  break;
 	  
@@ -135,7 +135,7 @@ void TCPDirectory::handle_started(Message *m)
 
 void TCPDirectory::handle_unregister(Message *m)
 {
-  int who = m->get_source();
+  msg_addr_t who = m->get_source();
   dout(2) << "unregister from entity " << MSG_ADDR_NICE(who) << endl;
   
   assert(dir.count(who));

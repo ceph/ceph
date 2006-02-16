@@ -1,36 +1,36 @@
 OSDI
 
-- tune ebofs
- - bc size
- - max dirty
- - idle timeout
- - 
+- stability
+
+- fix mds balancer
 
 
-- tcpmessenger stats
 - tcp recv throttling
 
-- vary osd_maxthreads, [ ebofs, fakestore ], write_size
-    medium, large writes: ebofs 10% faster
-    small writes: fake 20% faster
+- tune ebofs
 
+- vary osd_maxthreads, [ ebofs, fakestore ], write_size 
+  -> medium, large writes: ebofs 10% faster
+  -> small writes: fake 20% faster
+- obfs?
 
-- crush vs linear
+/- crush vs linear
 
 - makedirs vs ebo/fake. 
   - streaming small writes (mds log)
 
-
 - osd write tests
  - get obfs working
- - ebofs threading?
 
 - mds scaling
  - shared /lib, /include  .. verify fixed open() behavior works!
 
+
 - client buffer cache!
 
 - ld_preload?
+
+- msg_addr_t class
 
 
 
@@ -55,7 +55,8 @@ filer
 
 mds
 - implement/test truncate()
-
+- chdir
+  - client handles for directories!
 
 ebofs
 - combine inodes into same blocks?

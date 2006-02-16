@@ -47,7 +47,7 @@ class TCPDirectory : public Dispatcher {
   hash_map<int, tcpaddr_t>  rank_addr;  // rank -> ADDR (e.g. host:port)
   
   __uint64_t                version;
-  map<__uint64_t, int>      update_log;
+  map<__uint64_t, msg_addr_t>  update_log;
   
   int                       nrank;
   int                       nclient, nmds, nosd;

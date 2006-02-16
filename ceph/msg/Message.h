@@ -147,13 +147,21 @@
 
 
 // use fixed offsets and static entity -> logical addr mapping!
-#define MSG_ADDR_RANK_BASE    0x10000000 // per-rank messenger services
+#define MSG_ADDR_DIRECTORY_BASE  0
+#define MSG_ADDR_RANK_BASE    0x10000000    // per-rank messenger services
 #define MSG_ADDR_MDS_BASE     0x20000000
 #define MSG_ADDR_OSD_BASE     0x30000000
 #define MSG_ADDR_CLIENT_BASE  0x40000000
+
 #define MSG_ADDR_TYPE_MASK    0xf0000000
 #define MSG_ADDR_NUM_MASK     0x0fffffff
+
 #define MSG_ADDR_NEW          0x0fffffff
+#define MSG_ADDR_UNDEF_BASE   0xffffffff
+
+
+/* old int way, which lacked type safety...
+typedef int  msg_addr_t;
 
 #define MSG_ADDR_RANK(x)    (MSG_ADDR_RANK_BASE + (x))
 #define MSG_ADDR_MDS(x)     (MSG_ADDR_MDS_BASE + (x))
@@ -174,6 +182,77 @@
                                 ((x) == MSG_ADDR_DIRECTORY ? "namer":"unknown")))))
 #define MSG_ADDR_NUM(x)    ((x) & MSG_ADDR_NUM_MASK)
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
+*/
+
+// new typed msg_addr_t way!
+class msg_addr_t {
+public:
+  int _addr;
+
+  msg_addr_t() : _addr(MSG_ADDR_UNDEF_BASE) {}
+  msg_addr_t(int t, int n) : _addr(t | n) {}
+  
+  int num() const { return _addr & MSG_ADDR_NUM_MASK; }
+  int type() const { return _addr & MSG_ADDR_TYPE_MASK; }
+  const char *type_str() const {
+	switch (type()) {
+	case MSG_ADDR_RANK_BASE: return "rank";
+	case MSG_ADDR_MDS_BASE: return "mds"; 
+	case MSG_ADDR_OSD_BASE: return "osd"; 
+	case MSG_ADDR_CLIENT_BASE: return "client"; 
+	case MSG_ADDR_DIRECTORY_BASE: return "namer";
+	}
+	return "unknown";
+  }
+
+  bool is_new() const { return num() == MSG_ADDR_NEW; }
+
+  bool is_client() const { return type() == MSG_ADDR_CLIENT_BASE; }
+  bool is_mds() const { return type() == MSG_ADDR_MDS_BASE; }
+  bool is_osd() const { return type() == MSG_ADDR_OSD_BASE; }
+  bool is_namer() const { return type() == MSG_ADDR_DIRECTORY_BASE; }
+};
+
+inline bool operator== (const msg_addr_t& l, const msg_addr_t& r) { return l._addr == r._addr; }
+inline bool operator!= (const msg_addr_t& l, const msg_addr_t& r) { return l._addr != r._addr; }
+inline bool operator< (const msg_addr_t& l, const msg_addr_t& r) { return l._addr < r._addr; }
+
+//typedef struct msg_addr msg_addr_t;
+
+inline ostream& operator<<(ostream& out, const msg_addr_t& addr) {
+  if (addr.is_namer()) return out << "namer";
+  return out << addr.type_str() << addr.num();
+}
+
+namespace __gnu_cxx {
+  template<> struct hash< msg_addr_t >
+  {
+    size_t operator()( const msg_addr_t m ) const
+    {
+	  static hash<int> H;
+      return H(m._addr);
+    }
+  };
+}
+
+#define MSG_ADDR_RANK(x)    msg_addr_t(MSG_ADDR_RANK_BASE,x)
+#define MSG_ADDR_MDS(x)     msg_addr_t(MSG_ADDR_MDS_BASE,x)
+#define MSG_ADDR_OSD(x)     msg_addr_t(MSG_ADDR_OSD_BASE,x)
+#define MSG_ADDR_CLIENT(x)  msg_addr_t(MSG_ADDR_CLIENT_BASE,x)
+
+#define MSG_ADDR_UNDEF       msg_addr_t()
+#define MSG_ADDR_DIRECTORY   msg_addr_t(MSG_ADDR_DIRECTORY_BASE,0)
+
+#define MSG_ADDR_RANK_NEW    MSG_ADDR_RANK(MSG_ADDR_NEW)
+#define MSG_ADDR_MDS_NEW     MSG_ADDR_MDS(MSG_ADDR_NEW)
+#define MSG_ADDR_OSD_NEW     MSG_ADDR_OSD(MSG_ADDR_NEW)
+#define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(MSG_ADDR_NEW)
+
+#define MSG_ADDR_ISCLIENT(x)  x.is_client()
+#define MSG_ADDR_TYPE(x)      x.type_str()
+#define MSG_ADDR_NUM(x)       x.num()
+#define MSG_ADDR_NICE(x)      x.type_str() << x.num()
+
 
 
 #include <stdlib.h>
@@ -188,7 +267,8 @@ using namespace __gnu_cxx;
 
 
 // abstract Message class
-typedef int  msg_addr_t;
+
+
 
 typedef struct {
   int type;
@@ -217,13 +297,13 @@ public:
  public:
   Message() : tcp_sd(0) { 
 	env.source_port = env.dest_port = -1;
-	env.source = env.dest = -1;
+	env.source = env.dest = MSG_ADDR_UNDEF;
 	env.nchunks = 0;
 	env.lamport_stamp = 0;
   };
   Message(int t) : tcp_sd(0) {
 	env.source_port = env.dest_port = -1;
-	env.source = env.dest = -1;
+	env.source = env.dest = MSG_ADDR_UNDEF;
 	env.nchunks = 0;
 	env.type = t;
 	env.lamport_stamp = 0;
@@ -264,11 +344,11 @@ public:
   virtual char *get_type_name() = 0;
 
   // source/dest
-  msg_addr_t get_dest() { return env.dest; }
+  msg_addr_t& get_dest() { return env.dest; }
   void set_dest(msg_addr_t a, int p) { env.dest = a; env.dest_port = p; }
   int get_dest_port() { return env.dest_port; }
   
-  msg_addr_t get_source() { return env.source; }
+  msg_addr_t& get_source() { return env.source; }
   void set_source(msg_addr_t a, int p) { env.source = a; env.source_port = p; }
   int get_source_port() { return env.source_port; }
 

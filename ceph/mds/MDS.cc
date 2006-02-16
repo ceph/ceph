@@ -152,7 +152,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   // log
   string name;
   name = "mds";
-  int w = MSG_ADDR_NUM(whoami);
+  int w = whoami;
   if (w >= 1000) name += ('0' + ((w/1000)%10));
   if (w >= 100) name += ('0' + ((w/100)%10));
   if (w >= 10) name += ('0' + ((w/10)%10));

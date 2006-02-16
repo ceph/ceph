@@ -32,7 +32,7 @@ class MNSRegister : public Message {
 
  public:
   MNSRegister() {}
-  MNSRegister(long a, int r, int ti) : 
+  MNSRegister(msg_addr_t a, int r, int ti) : 
 	Message(MSG_NS_REGISTER) { 
 	addr = a;
 	rank = r;
@@ -41,7 +41,7 @@ class MNSRegister : public Message {
   
   char *get_type_name() { return "NSReg"; }
 
-  int get_entity() { return addr; }
+  msg_addr_t get_entity() { return addr; }
   int get_rank() { return rank; }
   long get_tid() { return tid; }
 
