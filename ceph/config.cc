@@ -57,6 +57,7 @@ md_config_t g_conf = {
   kill_after: 0,
 
   debug: 1,
+  debug_mds: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
   debug_buffer: 0,
@@ -259,6 +260,11 @@ void parse_config_options(vector<char*>& args)
 		g_conf.debug = atoi(args[++i]);
 	  else 
 		g_debug_after_conf.debug = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_mds") == 0) 
+	  if (!g_conf.debug_after) 
+		g_conf.debug_mds = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_mds = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_mds_balancer") == 0) 
 	  if (!g_conf.debug_after) 
 		g_conf.debug_mds_balancer = atoi(args[++i]);
