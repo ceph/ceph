@@ -1,0 +1,37 @@
+#PSUB -s /bin/bash  # Sets your shell in batch
+#PSUB -c alc       # Where to run the job
+
+#PSUB -eo          # Send std error & std out to the same file
+
+#PSUB -ln  $NUM       # Number of nodes to use
+#PSUB -g   $NUM       # Total Number of tasks to use
+#PSUB -cpn 1       # cpus per node
+
+####PSUB -c 1024Mb     # 128Mb memory limit
+#PSUB -lc 1000        # Core file size per process
+#PSUB -nr          # Do not automatically resubmit job
+#PSUB -tM 10m      # Select time limit. The default time limit
+                   # is only 30 minutes! Time can be HH:MM:SS or HH:MM
+
+#PSUB -o /home/weil2/csl/obsd/src/pmds/log/three/out.$MDS   # filename for output
+
+# Put your commands here. Remember to 'cd' to the appropriate
+# directory, because the job will initially be in your home directory.
+# To run a parallel job, you need to use the srun.
+
+
+
+echo job $PSUB_JOBID nodes $NUM mds $MDS osd $OSD client $CLIENT
+
+# environment
+cd /home/weil2/csl/obsd/src/pmds
+export LD_LIBRARY_PATH=/usr/lib/mpi/mpi_gnu/lib
+
+# create osddata dirs
+srun -l -N $NUM -ppbatch bash -c "test -d tmp/osddata || mkdir tmp/osddata || echo cant make osddata"
+
+# go
+srun -l -N $NUM -ppbatch ./tcpsyn --nummds $MDS --numosd $OSD --numclient $CLIENT --log_name three/$MDS --fullmkfs --syn trace_include 10 --syn randomsleep 90 --syn until 500 --syn trace_openssh 1000 --osd_fsync 0 --mds_log_max_len 100000 --mds_cache_size 500000 --debug_mds_balancer 10
+
+# clean up object store
+srun -l -N $NUM -ppbatch bash -c 'rm -r tmp/osddata/*'
