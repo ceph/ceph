@@ -30,6 +30,8 @@ struct md_config_t {
 
   int kill_after;
 
+  int tick;
+
   int debug;
   int debug_mds;
   int debug_mds_balancer;

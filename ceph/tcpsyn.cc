@@ -30,6 +30,16 @@ public:
 
 #include "msg/mpistarter.cc"
 
+utime_t tick_start;
+
+class C_Tick : public Context {
+public:
+  void finish(int) {
+	utime_t now = g_clock.now() - tick_start;
+	dout(0) << "tick +" << g_conf.tick << " -> " << now << endl;
+	g_timer.add_event_after(g_conf.tick, new C_Tick);
+  }
+};
 
 class C_Die : public Context {
 public:
@@ -62,6 +72,11 @@ int main(int argc, char **argv)
 	g_timer.add_event_after(g_conf.kill_after, new C_Die);
   if (g_conf.debug_after) 
 	g_timer.add_event_after(g_conf.debug_after, new C_Debug);
+
+  if (g_conf.tick) {
+	tick_start = g_clock.now();
+	g_timer.add_event_after(g_conf.tick, new C_Tick);
+  }
 
   vector<char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {

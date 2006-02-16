@@ -56,6 +56,8 @@ md_config_t g_conf = {
 
   kill_after: 0,
 
+  tick: 0,
+
   debug: 1,
   debug_mds: 1,
   debug_mds_balancer: 1,
@@ -440,6 +442,8 @@ void parse_config_options(vector<char*>& args)
 	
 	else if (strcmp(args[i], "--kill_after") == 0) 
 	  g_conf.kill_after = atoi(args[++i]);
+	else if (strcmp(args[i], "--tick") == 0) 
+	  g_conf.tick = atoi(args[++i]);
 
 	else {
 	  nargs.push_back(args[i]);
