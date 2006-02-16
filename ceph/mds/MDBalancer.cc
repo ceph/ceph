@@ -145,15 +145,17 @@ void MDBalancer::send_heartbeat()
 
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  dout(5) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source() << " " << m->get_load() << endl;
+  dout(5) << "=== got heartbeat " << m->get_beat() << " from " << MSG_ADDR_NICE(m->get_source()) << " " << m->get_load() << endl;
   
   if (!mds->mdcache->get_root()) {
 	dout(10) << "no root on handle" << endl;
 	mds->mdcache->open_root(new C_MDS_RetryMessage(mds, m));
 	return;
   }
+
+  int who = MSG_ADDR_NUM(m->get_source());
   
-  if (m->get_source() == 0) {
+  if (who == 0) {
 	dout(10) << " from mds0, new epoch" << endl;
 	beat_epoch = m->get_beat();
 	send_heartbeat();
@@ -161,8 +163,8 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 	show_imports();
   }
   
-  mds_load[ m->get_source() ] = m->get_load();
-  mds_import_map[ m->get_source() ] = m->get_import_map();
+  mds_load[ who ] = m->get_load();
+  mds_import_map[ who ] = m->get_import_map();
 
   //cout << "  load is " << load << " have " << mds_load.size() << endl;
   

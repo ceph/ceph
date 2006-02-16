@@ -44,6 +44,7 @@ my ($jname) = $job =~ /\/(\w+)$/;
 $jname ||= $job;
 die "not jobs/?" unless defined $job;
 my $out = "log/$job.$tag";
+my $relout = "$job.$tag";
 
 
 
@@ -172,7 +173,7 @@ sub run {
 
 	$c .= ' ' . $h->{'custom'} if $h->{'custom'};
 
-	$c .= " --log_name $fn";
+	$c .= " --log_name $relout/$keys";
 
 	
 	if ($sim->{'_psub'}) {

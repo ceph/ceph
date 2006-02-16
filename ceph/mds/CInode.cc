@@ -31,7 +31,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "cinode: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << "cinode: "
 
 
 int cinode_pins[CINODE_NUM_PINS];  // counts

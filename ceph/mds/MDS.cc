@@ -75,20 +75,22 @@ LogType mds_logtype, mds_cache_logtype;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << whoami << " "
-#define  dout3(l,mds)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << "mds" << whoami << " "
+#define  dout3(l,mds)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << "mds" << mds->get_nodeid() << " "
 
 
 
+/*
 void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 {
   // forward message to new mds
   dout3(5,mds) << "redelegating context " << this << " by forwarding message " << m << " to mds" << newmds << endl;
 
   mds->messenger->send_message(m,
-							   newmds, m->get_dest_port(),
+							   MSG_ADDR_MDS(newmds), m->get_dest_port(),
 							   MDS_PORT_MAIN);  // mostly meaningless
 }
+*/
 
 
 
@@ -1324,7 +1326,7 @@ void MDS::handle_hash_readdir_reply(MHashReaddirReply *m)
   assert(dir->is_hashed());
   
   // move items to hashed_readdir gather
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(dir->hashed_readdir.count(from) == 0);
   dir->hashed_readdir[from].splice(dir->hashed_readdir[from].begin(),
 								   m->get_items());

@@ -105,7 +105,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".cache "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << "mds" << mds->get_nodeid() << ".cache "
 
 
 
@@ -2310,12 +2310,13 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 void MDCache::handle_cache_expire(MCacheExpire *m)
 {
   int from = m->get_from();
+  int source = MSG_ADDR_NUM(m->get_source());
   map<int, MCacheExpire*> proxymap;
   
-  if (m->get_from() == m->get_source()) {
+  if (m->get_from() == source) {
 	dout(7) << "cache_expire from " << from << endl;
   } else {
-	dout(7) << "cache_expire from " << from << " via " << m->get_source() << endl;
+	dout(7) << "cache_expire from " << from << " via " << source << endl;
   }
 
   // inodes
@@ -3092,7 +3093,8 @@ void MDCache::handle_rename_notify_ack(MRenameNotifyAck *m)
   assert(in);
   dout(7) << "handle_rename_notify_ack on " << *in << endl;
 
-  in->rename_waiting_for_ack.erase(m->get_source());
+  int source = MSG_ADDR_NUM(m->get_source());
+  in->rename_waiting_for_ack.erase(source);
   if (in->rename_waiting_for_ack.empty()) {
 	// last one!
 	in->finish_waiting(CINODE_WAIT_RENAMENOTIFYACK, 0);
@@ -3219,7 +3221,7 @@ void MDCache::handle_rename(MRename *m)
   // HACK
   bufferlist bufstate;
   bufstate.claim_append(m->get_inode_state());
-  decode_import_inode(destdn, bufstate, off, m->get_source());
+  decode_import_inode(destdn, bufstate, off, MSG_ADDR_NUM(m->get_source()));
 
   CInode *in = destdn->inode;
   assert(in);
@@ -3241,11 +3243,11 @@ void MDCache::handle_rename(MRename *m)
   // ok, send notifies.
   set<int> notify;
   for (int i=0; i<mds->get_cluster()->get_num_mds(); i++) {
-	if (i != m->get_source() &&  // except the source
+	if (i != MSG_ADDR_NUM(m->get_source()) &&  // except the source
 		i != mds->get_nodeid())  // and the dest
 	  notify.insert(i);
   }
-  file_rename_notify(in, srcdir, srcname, destdir, destname, notify, m->get_source());
+  file_rename_notify(in, srcdir, srcname, destdir, destname, notify, MSG_ADDR_NUM(m->get_source()));
 
   delete m;
 }
@@ -5713,7 +5715,7 @@ void MDCache::export_dir(CDir *dir,
   // send ExportDirDiscover (ask target)
   export_gather[dir].insert(dest);
   mds->messenger->send_message(new MExportDirDiscover(dir->inode),
-							   dest, MDS_PORT_CACHE, MDS_PORT_CACHE);
+							   MSG_ADDR_MDS(dest), MDS_PORT_CACHE, MDS_PORT_CACHE);
   dir->auth_pin();   // pin dir, to hang up our freeze  (unpin on prep ack)
 
   // take away the popularity we're sending.   FIXME: do this later?
@@ -5736,7 +5738,7 @@ void MDCache::handle_export_dir_discover_ack(MExportDirDiscoverAck *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(export_gather[dir].count(from));
   export_gather[dir].erase(from);
 
@@ -5836,7 +5838,7 @@ void MDCache::handle_export_dir_prep_ack(MExportDirPrepAck *m)
   dout(7) << "export_dir_prep_ack " << *dir << ", starting export" << endl;
   
   // start export.
-  export_dir_go(dir, m->get_source());
+  export_dir_go(dir, MSG_ADDR_NUM(m->get_source()));
 
   // done
   delete m;
@@ -6181,7 +6183,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
   assert(dir->is_frozen_tree_root());  // i'm exporting!
 
   // remove from waiting list
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(export_notify_ack_waiting[dir].count(from));
   export_notify_ack_waiting[dir].erase(from);
 
@@ -6304,7 +6306,7 @@ public:
 
 void MDCache::handle_export_dir_discover(MExportDirDiscover *m)
 {
-  assert(m->get_source() != mds->get_nodeid());
+  assert(MSG_ADDR_NUM(m->get_source()) != mds->get_nodeid());
 
   dout(7) << "handle_export_dir_discover on " << m->get_path() << endl;
 
@@ -6362,7 +6364,7 @@ void MDCache::handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, in
 
 void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 {
-  assert(m->get_source() != mds->get_nodeid());
+  assert(MSG_ADDR_NUM(m->get_source()) != mds->get_nodeid());
 
   CInode *diri = get_inode(m->get_ino());
   assert(diri);
@@ -6537,7 +6539,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   CDir *dir = diri->dir;
   assert(dir);
 
-  int oldauth = m->get_source();
+  int oldauth = MSG_ADDR_NUM(m->get_source());
   dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
@@ -6652,7 +6654,7 @@ void MDCache::handle_export_dir(MExportDir *m)
   mds->balancer->add_import(dir);
 
   // send notify's etc.
-  dout(7) << "sending notifyack for " << *dir << " to old auth " << m->get_source() << endl;
+  dout(7) << "sending notifyack for " << *dir << " to old auth " << MSG_ADDR_NUM(m->get_source()) << endl;
   mds->messenger->send_message(new MExportDirNotifyAck(dir->inode->ino()),
 							   m->get_source(), MDS_PORT_CACHE,
 							   MDS_PORT_CACHE);
@@ -6662,9 +6664,9 @@ void MDCache::handle_export_dir(MExportDir *m)
 	   it != dir->open_by.end();
 	   it++) {
 	assert( *it != mds->get_nodeid() );
-	if ( *it == m->get_source() ) continue;  // not to old auth.
+	if ( *it == MSG_ADDR_NUM(m->get_source()) ) continue;  // not to old auth.
 
-	MExportDirNotify *notify = new MExportDirNotify(dir->ino(), m->get_source(), mds->get_nodeid());
+	MExportDirNotify *notify = new MExportDirNotify(dir->ino(), MSG_ADDR_NUM(m->get_source()), mds->get_nodeid());
 	notify->copy_exports(m->get_exports());
 
 	if (g_conf.mds_verify_export_dirauth)
@@ -7230,7 +7232,7 @@ void MDCache::hash_dir(CDir *dir)
 	if (i == mds->get_nodeid()) continue;  // except me
 	hash_gather[dir].insert(i);
 	mds->messenger->send_message(new MHashDirDiscover(dir->inode),
-								 i, MDS_PORT_CACHE, MDS_PORT_CACHE);
+								 MSG_ADDR_MDS(i), MDS_PORT_CACHE, MDS_PORT_CACHE);
   }
   dir->auth_pin();  // pin until discovers are all acked.
   
@@ -7258,7 +7260,7 @@ void MDCache::handle_hash_dir_discover_ack(MHashDirDiscoverAck *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(hash_gather[dir].count(from));
   hash_gather[dir].erase(from);
   
@@ -7368,7 +7370,7 @@ void MDCache::handle_hash_dir_prep_ack(MHashDirPrepAck *m)
   CDir *dir = in->dir;
   assert(dir);
 
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
 
   assert(hash_gather[dir].count(from) == 1);
   hash_gather[dir].erase(from);
@@ -7578,7 +7580,7 @@ void MDCache::handle_hash_dir_ack(MHashDirAck *m)
   assert(dir->is_hashed());
   assert(dir->is_hashing());
 
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(hash_gather[dir].count(from) == 1);
   hash_gather[dir].erase(from);
   
@@ -7655,12 +7657,13 @@ void MDCache::handle_hash_dir_notify(MHashDirNotify *m)
   dout(5) << "handle_hash_dir_notify " << *dir << endl;
   int from = m->get_from();
 
+  int source = MSG_ADDR_NUM(m->get_source());
   if (dir->is_auth()) {
 	// gather notifies
 	assert(dir->is_hashed());
 	
-	assert(	hash_notify_gather[dir][from].count(m->get_source()) );
-	hash_notify_gather[dir][from].erase(m->get_source());
+	assert(	hash_notify_gather[dir][from].count(source) );
+	hash_notify_gather[dir][from].erase(source);
 	
 	if (hash_notify_gather[dir][from].empty()) {
 	  dout(7) << "last notify from " << from << endl;
@@ -7756,7 +7759,7 @@ public:
 
 void MDCache::handle_hash_dir_discover(MHashDirDiscover *m)
 {
-  assert(m->get_source() != mds->get_nodeid());
+  assert(MSG_ADDR_NUM(m->get_source()) != mds->get_nodeid());
 
   dout(7) << "handle_hash_dir_discover on " << m->get_path() << endl;
 
@@ -7911,7 +7914,7 @@ void MDCache::handle_hash_dir(MHashDir *m)
   assert(dir->is_hashing());
 
   dout(5) << "handle_hash_dir " << *dir << endl;
-  int oldauth = m->get_source();
+  int oldauth = MSG_ADDR_NUM(m->get_source());
 
   // content
   import_hashed_content(dir, m->get_state(), m->get_nden(), oldauth);
@@ -7933,7 +7936,7 @@ void MDCache::handle_hash_dir(MHashDir *m)
   dout(7) << "sending notifies" << endl;
   for (int i=0; i<mds->get_cluster()->get_num_mds(); i++) {
 	if (i == mds->get_nodeid()) continue;
-	if (i == m->get_source()) continue;
+	if (i == MSG_ADDR_NUM(m->get_source())) continue;
 	mds->messenger->send_message(new MHashDirNotify(dir->ino(), mds->get_nodeid()),
 								 MSG_ADDR_MDS(i), MDS_PORT_CACHE, MDS_PORT_CACHE);
   }
@@ -8063,7 +8066,7 @@ void MDCache::handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   dout(7) << "handle_unhash_dir_prep_ack from " << from << " " << *dir << endl;
 
   if (!m->did_assim()) {
@@ -8176,7 +8179,7 @@ void MDCache::handle_unhash_dir_ack(MUnhashDirAck *m)
   assert(dir->is_hashed());
 
   // assimilate content
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   import_hashed_content(dir, m->get_state(), m->get_nden(), from);
   delete m;
 
@@ -8251,7 +8254,7 @@ void MDCache::handle_unhash_dir_notify_ack(MUnhashDirNotifyAck *m)
   assert(dir->is_frozen_dir());
 
   // done?
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(hash_gather[dir].count(from));
   hash_gather[dir].erase(from);
   delete m;
@@ -8580,7 +8583,7 @@ void MDCache::handle_unhash_dir_notify(MUnhashDirNotify *m)
   assert(dir->is_unhashing());
   assert(!dir->is_auth());
   
-  int from = m->get_source();
+  int from = MSG_ADDR_NUM(m->get_source());
   assert(hash_gather[dir].count(from) == 1);
   hash_gather[dir].erase(from);
   delete m;

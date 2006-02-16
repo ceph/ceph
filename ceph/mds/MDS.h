@@ -304,9 +304,9 @@ class C_MDS_RetryRequest : public Context {
 	mds->dispatch_request(req, ref);
   }
   
-  virtual bool can_redelegate() {
+  /*virtual bool can_redelegate() {
 	return true;
-  }
+	}*/
 };
 
 
@@ -323,11 +323,13 @@ public:
 	mds->my_dispatch(m);
   }
   
+  /*
   virtual bool can_redelegate() {
 	return true;
   }
   
   virtual void redelegate(MDS *mds, int newmds);
+  */
 };
 
 
