@@ -159,7 +159,9 @@ sub run {
 	my $c = "mpiexec -l -n $h->{'n'} $e --mkfs";
 	$c .= " --$h->{'fs'}";
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
+
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
+	$c .= " --syn makedirs $h->{'makedirs_dirs'} $h->{'makedirs_files'} $h->{'makedirs_depth'}" if $h->{'makedirs'};
 
 	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
