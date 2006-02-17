@@ -2394,6 +2394,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	if (!dir->is_auth()) {
 	  int newauth = dir->authority();
 	  dout(7) << "proxy dir expire on " << *dir << " to " << newauth << endl;
+	  if (!dir->is_proxy())
+		dout(0) << "nonproxy dir expire? " << *dir << " .. auth is " << newauth << " .. expire is from " << from << endl;
 	  assert(dir->is_proxy());
 	  assert(newauth >= 0);
 	  assert(dir->state_test(CDIR_STATE_PROXY));
@@ -6209,6 +6211,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 		 it++) {
 	  CInode *in = get_inode(*it);
 	  in->put(CINODE_PIN_PROXY);
+	  assert(in->state_test(CINODE_STATE_PROXY));
 	  in->state_clear(CINODE_STATE_PROXY);
 	}
 	export_proxy_inos.erase(dir);
@@ -6219,6 +6222,7 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 		 it++) {
 	  CDir *dir = get_inode(*it)->dir;
 	  dir->put(CDIR_PIN_PROXY);
+	  assert(dir->state_test(CDIR_STATE_PROXY));
 	  dir->state_clear(CDIR_STATE_PROXY);
 
 	  // hose neg dentries, too, since we're no longer auth
@@ -6230,8 +6234,9 @@ void MDCache::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
 		  assert(dn->is_sync());
 		  dir->remove_dentry(dn);
 		} else {
-		  dout(10) << "export_dir_notify_ack leaving xlocked neg " << *dn << endl;
-		  dn->mark_clean();
+		  //dout(10) << "export_dir_notify_ack leaving xlocked neg " << *dn << endl;
+		  if (dn->is_dirty())
+			dn->mark_clean();
 		}
 	  }
 	}
@@ -7620,6 +7625,7 @@ void MDCache::hash_dir_finish(CDir *dir)
 	   it != hash_proxy_inos[dir].end();
 	   it++) {
 	CInode *in = *it;
+	assert(in->state_test(CINODE_STATE_PROXY));
 	in->state_clear(CINODE_STATE_PROXY);
 	in->put(CINODE_PIN_PROXY);
   }
@@ -8614,6 +8620,7 @@ void MDCache::handle_unhash_dir_notify(MUnhashDirNotify *m)
 	   it != hash_proxy_inos[dir].end();
 	   it++) {
 	CInode *in = *it;
+	assert(in->state_test(CINODE_STATE_PROXY));
 	in->state_clear(CINODE_STATE_PROXY);
 	in->put(CINODE_PIN_PROXY);
   }

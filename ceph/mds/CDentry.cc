@@ -76,7 +76,12 @@ void CDentry::mark_dirty()
 }
 void CDentry::mark_clean() {
   dout(10) << " mark_clean " << *this << endl;
+  assert(dirty);
   assert(parent_dir_version <= dir->get_version());
+
+  if (parent_dir_version < dir->get_last_committed_version())
+	cerr << " bad mark_clean " << *this << endl;	
+
   assert(parent_dir_version >= dir->get_last_committed_version());
 
   if (is_primary() && dirty && inode) inode->put(CINODE_PIN_DNDIRTY);

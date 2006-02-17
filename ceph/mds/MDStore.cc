@@ -700,7 +700,8 @@ void MDStore::commit_dir_slice_2( int result,
 	}
 	else if (dn->get_parent_dir_version() == committed_version) {
 	  dout(15) << " dir " << committed_version << " == dn " << dn->get_parent_dir_version() << " now clean " << *dn << endl;
-	  dn->mark_clean();     // might not but could be dirty
+	  if (dn->is_dirty())
+		dn->mark_clean();     // might not but could be dirty
 	  
 	  // remove, if it's null and unlocked
 	  if (dn->is_null() && dn->is_sync()) {

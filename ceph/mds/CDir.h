@@ -97,7 +97,8 @@ class Context;
 #define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
                                     |CDIR_STATE_FROZENTREE\
                                     |CDIR_STATE_FROZENDIR\
-                                    |CDIR_STATE_EXPORT)
+                                    |CDIR_STATE_EXPORT\
+									 |CDIR_STATE_PROXY)
 
 // common states
 #define CDIR_STATE_CLEAN   0

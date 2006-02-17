@@ -690,7 +690,7 @@ void MDBalancer::add_import(CDir *dir)
 
 void MDBalancer::show_imports(bool external)
 {
-  int db = 7; //debug level
+  int db = 20; //debug level
 
   
   if (mds->mdcache->imports.empty() &&
