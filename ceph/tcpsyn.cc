@@ -31,13 +31,17 @@ public:
 #include "msg/mpistarter.cc"
 
 utime_t tick_start;
+int tick_count = 0;
 
 class C_Tick : public Context {
 public:
   void finish(int) {
 	utime_t now = g_clock.now() - tick_start;
-	dout(0) << "tick +" << g_conf.tick << " -> " << now << endl;
-	g_timer.add_event_after(g_conf.tick, new C_Tick);
+	dout(0) << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << endl;
+	tick_count += g_conf.tick;
+	utime_t next = tick_start;
+	next.sec_ref() += tick_count;
+	g_timer.add_event_at(next, new C_Tick);
   }
 };
 
