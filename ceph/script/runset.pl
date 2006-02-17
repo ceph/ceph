@@ -167,7 +167,10 @@ sub run {
 	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
-			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc') {
+			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
+			   'file_layout_ssize','file_layout_scount','file_layout_osize',
+			   'meta_dir_layout_ssize','meta_dir_layout_scount','meta_dir_layout_osize',
+			   'meta_log_layout_ssize','meta_log_layout_scount','meta_log_layout_osize') {
 		$c .= " --$k $h->{$k}" if defined $h->{$k};
 	}
 

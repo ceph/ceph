@@ -77,7 +77,6 @@ md_config_t g_conf = {
   tcp_serial_marshall: true,
   tcp_serial_out: false,
 
-
   // --- client ---
   client_cache_size: 300,
   client_cache_mid: .5,
@@ -444,6 +443,25 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.kill_after = atoi(args[++i]);
 	else if (strcmp(args[i], "--tick") == 0) 
 	  g_conf.tick = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--file_layout_ssize") == 0) 
+	  g_OSD_FileLayout.stripe_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--file_layout_scount") == 0) 
+	  g_OSD_FileLayout.stripe_count = atoi(args[++i]);
+	else if (strcmp(args[i], "--file_layout_osize") == 0) 
+	  g_OSD_FileLayout.object_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--meta_dir_layout_ssize") == 0) 
+	  g_OSD_MDDirLayout.stripe_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--meta_dir_layout_scount") == 0) 
+	  g_OSD_MDDirLayout.stripe_count = atoi(args[++i]);
+	else if (strcmp(args[i], "--meta_dir_layout_osize") == 0) 
+	  g_OSD_MDDirLayout.object_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--meta_log_layout_ssize") == 0) 
+	  g_OSD_MDLogLayout.stripe_size = atoi(args[++i]);
+	else if (strcmp(args[i], "--meta_log_layout_scount") == 0) 
+	  g_OSD_MDLogLayout.stripe_count = atoi(args[++i]);
+	else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
+	  g_OSD_MDLogLayout.object_size = atoi(args[++i]);
 
 	else {
 	  nargs.push_back(args[i]);
