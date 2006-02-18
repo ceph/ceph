@@ -699,8 +699,12 @@ void Ebofs::write_onode(Onode *on)
 	  first = on->extent_map.begin()->second.start;
 	
 	allocator.allocate(on->onode_loc, blocks, first);
+	//if ((on->object_id & 0xffff) == 2)
+	if (on->object_id == 0x105b4a400000002ULL)
+	  dout(0) << "write_onode (re)alloc " << *on << " to " << on->onode_loc << endl;
 	object_tab->remove( on->object_id );
 	object_tab->insert( on->object_id, on->onode_loc );
+	//object_tab->verify();
   }
 
   dout(10) << "write_onode " << *on << " to " << on->onode_loc << endl;
@@ -716,7 +720,7 @@ void Ebofs::write_onode(Onode *on)
 
 void Ebofs::remove_onode(Onode *on)
 {
-  //cout << "remove_onode " << *on << endl;
+  dout(8) << "remove_onode " << *on << endl;
 
   assert(on->get_ref_count() >= 1);  // caller
 
@@ -742,6 +746,7 @@ void Ebofs::remove_onode(Onode *on)
   on->dangling = true;
   
   // remove from object table
+  dout(0) << "remove_onode on " << *on << endl;
   object_tab->remove(on->object_id);
   
   // free onode space
@@ -1873,7 +1878,7 @@ int Ebofs::truncate(object_t oid, off_t size)
 bool Ebofs::exists(object_t oid)
 {
   ebofs_lock.Lock();
-  dout(7) << "exists " << hex << oid << dec << endl;
+  dout(8) << "exists " << hex << oid << dec << endl;
   bool e = (object_tab->lookup(oid) == 0);
   ebofs_lock.Unlock();
   return e;
@@ -1903,7 +1908,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
 int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
-  dout(7) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
+  dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
 
   Onode *on = get_onode(oid);
   if (!on) {
@@ -1925,7 +1930,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 {
   int r = 0;
   ebofs_lock.Lock();
-  dout(7) << "getattr " << hex << oid << dec << " '" << name << "' maxlen " << size << endl;
+  dout(8) << "getattr " << hex << oid << dec << " '" << name << "' maxlen " << size << endl;
 
   Onode *on = get_onode(oid);
   if (!on) {
@@ -1947,7 +1952,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 int Ebofs::rmattr(object_t oid, const char *name) 
 {
   ebofs_lock.Lock();
-  dout(7) << "rmattr " << hex << oid << dec << " '" << name << "'" << endl;
+  dout(8) << "rmattr " << hex << oid << dec << " '" << name << "'" << endl;
 
   Onode *on = get_onode(oid);
   if (!on) {
@@ -1967,7 +1972,7 @@ int Ebofs::rmattr(object_t oid, const char *name)
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
-  dout(7) << "listattr " << hex << oid << dec << endl;
+  dout(8) << "listattr " << hex << oid << dec << endl;
 
   Onode *on = get_onode(oid);
   if (!on) {
@@ -1994,7 +1999,7 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
 int Ebofs::list_collections(list<coll_t>& ls)
 {
   ebofs_lock.Lock();
-  dout(7) << "list_collections " << endl;
+  dout(9) << "list_collections " << endl;
 
   Table<coll_t, Extent>::Cursor cursor(collection_tab);
 
@@ -2014,7 +2019,7 @@ int Ebofs::list_collections(list<coll_t>& ls)
 int Ebofs::create_collection(coll_t cid)
 {
   ebofs_lock.Lock();
-  dout(7) << "create_collection " << hex << cid << dec << endl;
+  dout(9) << "create_collection " << hex << cid << dec << endl;
   
   if (_collection_exists(cid)) {
 	ebofs_lock.Unlock();
@@ -2031,7 +2036,7 @@ int Ebofs::create_collection(coll_t cid)
 int Ebofs::destroy_collection(coll_t cid)
 {
   ebofs_lock.Lock();
-  dout(7) << "destroy_collection " << hex << cid << dec << endl;
+  dout(9) << "destroy_collection " << hex << cid << dec << endl;
 
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
@@ -2059,7 +2064,7 @@ int Ebofs::destroy_collection(coll_t cid)
 bool Ebofs::collection_exists(coll_t cid)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_exists " << hex << cid << dec << endl;
+  dout(10) << "collection_exists " << hex << cid << dec << endl;
 
   bool r = _collection_exists(cid);
   ebofs_lock.Unlock();
@@ -2073,7 +2078,7 @@ bool Ebofs::_collection_exists(coll_t cid)
 int Ebofs::collection_add(coll_t cid, object_t oid)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_add " << hex << cid << " object " << oid << dec << endl;
+  dout(9) << "collection_add " << hex << cid << " object " << oid << dec << endl;
 
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
@@ -2090,7 +2095,7 @@ int Ebofs::collection_add(coll_t cid, object_t oid)
 int Ebofs::collection_remove(coll_t cid, object_t oid)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_remove " << hex << cid << " object " << oid << dec << endl;
+  dout(9) << "collection_remove " << hex << cid << " object " << oid << dec << endl;
 
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
@@ -2114,7 +2119,7 @@ int Ebofs::collection_remove(coll_t cid, object_t oid)
 int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_list " << hex << cid << dec << endl;
+  dout(9) << "collection_list " << hex << cid << dec << endl;
 
   if (!_collection_exists(cid)) {
 	ebofs_lock.Unlock();
@@ -2143,7 +2148,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {
@@ -2164,7 +2169,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t 
 int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_setattr " << hex << cid << dec << " '" << name << "' maxlen " << size << endl;
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' maxlen " << size << endl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {
@@ -2184,7 +2189,7 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
 int Ebofs::collection_rmattr(coll_t cid, const char *name) 
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_rmattr " << hex << cid << dec << " '" << name << "'" << endl;
+  dout(10) << "collection_rmattr " << hex << cid << dec << " '" << name << "'" << endl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {
@@ -2204,7 +2209,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name)
 int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
-  dout(7) << "collection_listattr " << hex << cid << dec << endl;
+  dout(10) << "collection_listattr " << hex << cid << dec << endl;
 
   Cnode *cn = get_cnode(cid);
   if (!cn) {

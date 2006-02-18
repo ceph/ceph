@@ -114,14 +114,14 @@ class OSDMap {
 	switch (g_conf.osd_object_layout) {
 	case OBJECT_LAYOUT_LINEAR:
 	  {
-		const object_t ono = oid & ((1 << OID_ONO_BITS)-1);
+		const object_t ono = oid & ((1ULL << OID_ONO_BITS)-1ULL);
 		const inodeno_t ino = oid >> OID_ONO_BITS;
 		return (ono + ino) & PG_PS_MASK;
 	  }
 
 	case OBJECT_LAYOUT_HASHINO:
 	  {
-		const object_t ono = oid & ((1 << OID_ONO_BITS)-1);
+		const object_t ono = oid & ((1ULL << OID_ONO_BITS)-1ULL);
 		const inodeno_t ino = oid >> OID_ONO_BITS;
 		return (ono + H(ino)) & PG_PS_MASK;
 	  }

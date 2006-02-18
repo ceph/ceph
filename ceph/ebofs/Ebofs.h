@@ -43,7 +43,7 @@ using namespace __gnu_cxx;
 typedef pair<object_t,coll_t> idpair_t;
 
 inline ostream& operator<<(ostream& out, idpair_t oc) {
-  return out << hex << oc.first << "->" << oc.second << dec << endl;
+  return out << hex << oc.first << "->" << oc.second << dec;
 }
 
 

@@ -355,14 +355,16 @@ class Table {
 	  
 	  if (pos[level] == here.size()) {
 		/* let's just move the cursor over! */
-		dbtout << "shifting cursor right from " << here.get_id() << " to less-full node " << right.get_id() << endl;
+		//if (sizeof(K) == 8)
+		  dbtout << "shifting cursor right from " << here.get_id() << " to less-full node " << right.get_id() << endl;
 		open[level] = right;
 		pos[level] = 0;
 		pos[level-1]++;
 		return 0;
 	  }
 
-	  dbtout << "rotating item " << here.key(here.size()-1) << " right from " 
+	  //if (sizeof(K) == 8)
+	  dbtout << "rotating item " << hex << here.key(here.size()-1) << dec << " right from "
 			 << here.get_id() << " to " << right.get_id() << endl;
 	  
 	  /* add */
@@ -553,6 +555,7 @@ class Table {
 			// indices are already dirty
 			cursor.open[cursor.level].insert_at_index_pos(cursor.pos[cursor.level], key, nodevalue);
 		  }
+		  //if (sizeof(K) == 8) verify();
 		  return 0;
 		}
 	  }
@@ -631,6 +634,9 @@ class Table {
 	
 	Cursor cursor(this);
 	if (find(key, cursor) <= 0) {
+	  cerr << "remove " << key << " 0x" << hex << key << dec << " .. dne" << endl;
+	  g_conf.debug_ebofs = 33;
+	  verify();
 	  assert(0);
 	  return -1;  // key dne
 	}
@@ -757,19 +763,20 @@ class Table {
 	nkeys = 0;
   }
 
-  int verify(Cursor& cursor, int node_loc, int level, int& count) {
+  int verify_sub(Cursor& cursor, int node_loc, int level, int& count, K& last) {
 	int err = 0;
 
 	Nodeptr node = pool.get_node( node_loc );
 	cursor.open[level] = node;
 	
 	// identify max, min, and validate key range
-	int min = node.key(0);
-	int max = min;
-	int j = min;
+	K min = node.key(0);
+	last = min;
+	K max = min;
 	for (int i=0; i<node.size(); i++) {
-	  if (node.key(i) < j) {
-		dbtout << ":: key " << i << " in node " << node_loc << " is out of order" << endl;
+	  if (i && node.key(i) <= last) {
+		dbtout << ":: key " << i << " " << hex << node.key(i) << dec << " in node " << node_loc 
+			   << " is out of order, last is " << hex << last << dec << endl;
 		err++;
 	  }
 	  if (node.key(i) > max)
@@ -778,10 +785,11 @@ class Table {
 	  if (level < depth-1) {   
 		// index
 		cursor.pos[level] = i;
-		err += verify( cursor, cursor.open[level].index_item(i).node, level+1, count );
+		err += verify_sub( cursor, cursor.open[level].index_item(i).node, level+1, count, last );
 	  } else {
 		// leaf
 		count++;
+		last = node.key(i);
 	  }
 	}
 	
@@ -790,16 +798,16 @@ class Table {
 	  if (min != cursor.open[level-1].index_item(cursor.pos[level-1]).key) {
 		dbtout << ":: key in index node " << cursor.open[level-1].get_id()
 			   << " != min in child " << node_loc 
-			   << "(key is " << cursor.open[level-1].index_item(cursor.pos[level-1]).key
-			   << ", min is " << min << ")" << endl;
+			   << "(key is " << hex << cursor.open[level-1].index_item(cursor.pos[level-1]).key
+			   << ", min is " << min << ")" << dec << endl;
 		err++;
 	  }
 	  if (cursor.pos[level-1] < cursor.open[level-1].size()-1) {
 		if (max > cursor.open[level-1].index_item(1+cursor.pos[level-1]).key) {
 		  dbtout << ":: next key in index node " << cursor.open[level-1].get_id()
 				 << " != max in child " << node_loc 
-				 << "(key is " << cursor.open[level-1].index_item(1+cursor.pos[level-1]).key
-				 << ", max is " << max << ")" << endl;
+				 << "(key is " << hex << cursor.open[level-1].index_item(1+cursor.pos[level-1]).key
+				 << ", max is " << max << ")" << dec << endl;
 		  err++;
 		}
 	  }
@@ -814,21 +822,21 @@ class Table {
 	if (1) {
 	  if (root == node_loc) {
 		dbtout << s << "root " << node_loc << ": "
-			   << node.size() << " / " << node.max_items() << " keys, " << min << "-" << max << endl;
+			   << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << endl;
 	  } else if (level == depth-1) {
 		dbtout << s << "leaf " << node_loc << ": "
-			   << node.size() << " / " << node.max_items() << " keys, " << min << "-" << max << endl;
+			   << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << endl;
 	  } else {
 		dbtout << s << "indx " << node_loc << ": "
-			   << node.size() << " / " << node.max_items() << " keys, " << min << "-" << max << endl;
+			   << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << endl;
 	  }
 
 	  if (0) {
 		for (int i=0; i<node.size(); i++) {
 		  if (level < depth-1) {		  // index
-			dbtout << s << "   " << node.key(i) << " [" << node.index_item(i).node << "]" << endl;
+			dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << endl;
 		  } else {		  // leaf
-			dbtout << s << "   " << node.key(i) << " -> " << node.leaf_item(i).value << endl;
+			dbtout << s << "   " << hex << node.key(i) << " -> " << node.leaf_item(i).value << dec << endl;
 		  }
 		}
 	  }
@@ -843,7 +851,8 @@ class Table {
 	if (root == -1 && depth == 0) {
 	  return;   // empty!
 	}
-	int err = verify(cursor, root, 0, count);
+	K last;
+	int err = verify_sub(cursor, root, 0, count, last);
 	assert(err == 0);
 	if (count != nkeys) {
 	  dbtout << "** count " << count << " != nkeys " << nkeys << endl;
