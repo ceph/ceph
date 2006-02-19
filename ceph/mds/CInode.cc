@@ -41,7 +41,7 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   string path;
   in.make_path(path);
-  out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/ ":" ");
+  out << "[inode " << hex << in.inode.ino << dec << " " << path << (in.is_dir() ? "/ ":" ");
   if (in.is_auth()) {
 	out << "auth";
 	if (in.is_cached_by_anyone()) {
@@ -194,13 +194,13 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
   if (parent) {
 	parent->dir->inode->make_anchor_trace(trace);
 	
-	dout(7) << "make_anchor_trace adding " << ino() << " dirino " << parent->dir->inode->ino() << " dn " << parent->name << endl;
+	dout(7) << "make_anchor_trace adding " << hex << ino() << " dirino " << parent->dir->inode->ino() << dec << " dn " << parent->name << endl;
 	trace.push_back( new Anchor(ino(), 
 								parent->dir->inode->ino(),
 								parent->name) );
   }
   else if (state_test(CINODE_STATE_DANGLING)) {
-	dout(7) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
+	dout(7) << "make_anchor_trace dangling " << hex << ino() << dec << " on mds " << dangling_auth << endl;
 	string ref_dn;
 	trace.push_back( new Anchor(ino(),
 								MDS_INO_INODEFILE_OFFSET+dangling_auth,

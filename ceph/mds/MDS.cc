@@ -264,6 +264,8 @@ void MDS::handle_shutdown_start(Message *m)
   mdlog->trim(NULL);
 
   if (m) delete m;
+
+  //g_conf.debug_mds = 10;
 }
 
 void MDS::handle_shutdown_finish(Message *m)
@@ -278,6 +280,8 @@ void MDS::handle_shutdown_finish(Message *m)
   did_shut_down.insert(mds);
   dout(1) << " shut down so far: " << did_shut_down << endl;
   
+  //g_conf.debug_mds = 2;
+
   if (did_shut_down.size() == (unsigned)mdcluster->get_num_mds()) {
 	// MDS's all ready to shut down!
 	cerr << "mds shutdown final" << endl;

@@ -196,8 +196,8 @@ sub run {
 		my $r = 0;
 		unless ($fake) {
 			$r = system "$c > $fn/o";
-			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd* > $fn/sum.osd";
-			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds* > $fn/sum.mds"
+			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd?? > $fn/sum.osd";
+			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds"
 				if -e "$fn/mds1";
 			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl"
 				if -e "$fn/clnode.1";
@@ -249,7 +249,7 @@ if ($comb) {
 
 	my @filters = sort keys %filters;
 	my $cmd = "script/comb.pl $x @vars - @fulldirs - @filters > $out/c";
-	print "\n$c\n";
+	print "\n$cmd\n";
 	system $cmd;
 
 	print "set data style linespoints;\n";

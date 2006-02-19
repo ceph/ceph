@@ -96,6 +96,8 @@
 
 #include "IdAllocator.h"
 
+#include "common/Timer.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <iostream>
@@ -499,7 +501,7 @@ bool MDCache::trim(int max) {
 	  // notify dir authority?
 	  int auth = in->dir->authority();
 	  if (auth != mds->get_nodeid()) {
-		dout(7) << "sending expire to mds" << auth << " on   " << *in->dir << endl;
+		dout(17) << "sending expire to mds" << auth << " on   " << *in->dir << endl;
 		if (expiremap.count(auth) == 0) expiremap[auth] = new MCacheExpire(mds->get_nodeid());
 		expiremap[auth]->add_dir(in->ino(), in->dir->replica_nonce);
 	  }
@@ -510,7 +512,7 @@ bool MDCache::trim(int max) {
 	  int auth = in->authority();
 	  if (auth != mds->get_nodeid()) {
 		assert(!in->is_auth());
-		dout(7) << "sending expire to mds" << auth << " on " << *in << endl;
+		dout(17) << "sending expire to mds" << auth << " on " << *in << endl;
 		if (expiremap.count(auth) == 0) expiremap[auth] = new MCacheExpire(mds->get_nodeid());
 		expiremap[auth]->add_inode(in->ino(), in->replica_nonce);
 	  }	else {
@@ -529,14 +531,14 @@ bool MDCache::trim(int max) {
 
 	// last link?
 	if (in->inode.nlink == 0) {
-	  dout(7) << "last link, removing file content " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
+	  dout(17) << "last link, removing file content " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
 	  mds->filer->remove(in->inode, 
 						 in->inode.size, 
 						 NULL, NULL);   // FIXME
 	}
 
 	// remove it
-	dout(5) << "trim removing " << *in << " " << in << endl;
+	dout(15) << "trim removing " << *in << " " << in << endl;
 	remove_inode(in);
 	delete in;
 
@@ -602,11 +604,28 @@ public:
   }
 };
 
+class C_MDC_ShutdownCheck : public Context {
+  MDCache *mdc;
+public:
+  C_MDC_ShutdownCheck(MDCache *m) : mdc(m) {}
+  void finish(int) {
+	cout << "shutdown_check at " << g_clock.now() << endl;
+	int o = g_conf.debug_mds;
+	g_conf.debug_mds = 10;
+	mdc->show_cache();
+	g_conf.debug_mds = o;
+	g_timer.add_event_after(10, new C_MDC_ShutdownCheck(mdc));
+  }
+};
+
 void MDCache::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
 
+  g_timer.add_event_after(30, new C_MDC_ShutdownCheck(this));
 }
+
+
 
 bool MDCache::shutdown_pass()
 {
@@ -698,7 +717,7 @@ bool MDCache::shutdown_pass()
   // waiting for imports?  (e.g. root?)
   if (exports.size()) {
 	dout(7) << "still have " << exports.size() << " exports" << endl;
-	show_cache();
+	//show_cache();
 	return false;
   }
 
@@ -733,7 +752,7 @@ bool MDCache::shutdown_pass()
   // imports?
   if (!imports.empty()) {
 	dout(7) << "still have " << imports.size() << " imports" << endl;
-	show_cache();
+	//show_cache();
 	return false;
   }
   
@@ -1246,7 +1265,7 @@ int MDCache::path_traverse(filepath& origpath,
 		  dout(7) << "linking in remote in " << *in << endl;
 		  dn->link_remote(in);
 		} else {
-		  dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << endl;
+		  dout(7) << "remote link to " << hex << dn->get_remote_ino() << dec << ", which i don't have" << endl;
 		  open_remote_ino(dn->get_remote_ino(), req,
 						  ondelay);
 		  return 1;
@@ -2102,7 +2121,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	cur = get_inode(m->get_base_ino());
 	
 	if (!cur) {
-	  dout(7) << "discover_reply don't have base ino " << m->get_base_ino() << ", dropping" << endl;
+	  dout(7) << "discover_reply don't have base ino " << hex << m->get_base_ino() << dec << ", dropping" << endl;
 	  delete m;
 	  return;
 	}
@@ -2280,7 +2299,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   CInode *in = get_inode(m->get_ino());
   if (!in) {
 	//dout(7) << "inode_update on " << m->get_ino() << ", don't have it, ignoring" << endl;
-	dout(7) << "inode_update on " << m->get_ino() << ", don't have it, sending expire" << endl;
+	dout(7) << "inode_update on " << hex << m->get_ino() << dec << ", don't have it, sending expire" << endl;
 	MCacheExpire *expire = new MCacheExpire(mds->get_nodeid());
 	expire->add_inode(m->get_ino(), m->get_nonce());
 	mds->messenger->send_message(expire,
@@ -2394,8 +2413,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	if (!dir->is_auth()) {
 	  int newauth = dir->authority();
 	  dout(7) << "proxy dir expire on " << *dir << " to " << newauth << endl;
-	  if (!dir->is_proxy())
-		dout(0) << "nonproxy dir expire? " << *dir << " .. auth is " << newauth << " .. expire is from " << from << endl;
+	  if (!dir->is_proxy()) dout(0) << "nonproxy dir expire? " << *dir << " .. auth is " << newauth << " .. expire is from " << from << endl;
 	  assert(dir->is_proxy());
 	  assert(newauth >= 0);
 	  assert(dir->state_test(CDIR_STATE_PROXY));
@@ -2473,7 +2491,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 {
   CInode *in = get_inode(m->get_ino());
   if (!in || !in->dir) {
-	dout(5) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
+	dout(5) << "dir_update on " << hex << m->get_ino() << dec << ", don't have it" << endl;
 
 	// discover it?
 	if (m->should_discover()) {
@@ -2681,7 +2699,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
   CDir *dir;
   if (diri) dir = diri->dir;
   if (!diri || !dir) {
-	dout(7) << "handle_dentry_unlink don't have dir " << m->get_dirino() << endl;
+	dout(7) << "handle_dentry_unlink don't have dir " << hex << m->get_dirino() << dec << endl;
 	delete m;
 	return;
   }
@@ -5759,7 +5777,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 								int dest)
 {
   // subtree is now frozen!
-  dout(5) << "export_dir_frozen on " << *dir << " to " << dest << endl;
+  dout(7) << "export_dir_frozen on " << *dir << " to " << dest << endl;
 
   show_imports();
 
@@ -5782,7 +5800,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 	   it++) {
 	CDir *exp = *it;
     
-	dout(5) << " including nested export " << *exp << " in prep" << endl;
+	dout(7) << " including nested export " << *exp << " in prep" << endl;
 
 	prep->add_export( exp->ino() );
 
@@ -5801,13 +5819,13 @@ void MDCache::export_dir_frozen(CDir *dir,
       // inode?
       assert(cur->inode->is_auth());
 	  inode_trace.push_front(cur->inode);
-      dout(5) << "  will add " << *cur->inode << endl;
+      dout(7) << "  will add " << *cur->inode << endl;
       
       // include dir? note: this'll include everything except the nested exports themselves, 
 	  // since someone else is obviously auth.
       if (cur->is_auth()) {
         prep->add_dir( new CDirDiscover(cur, cur->open_by_add(dest)) );  // yay!
-        dout(5) << "  added " << *cur << endl;
+        dout(7) << "  added " << *cur << endl;
       }
       
       cur = parent_dir;      
@@ -5817,7 +5835,7 @@ void MDCache::export_dir_frozen(CDir *dir,
 		 it != inode_trace.end();
 		 it++) {
 	  CInode *in = *it;
-      dout(5) << "  added " << *in << endl;
+      dout(7) << "  added " << *in << endl;
       prep->add_inode( in->parent->dir->ino(),
 					   in->parent->name,
 					   in->replicate_to(dest) );
@@ -6379,7 +6397,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
   // assimilate root dir.
   CDir *dir = diri->dir;
   if (dir) {
-    dout(5) << "handle_export_dir_prep on " << *dir << " (had dir)" << endl;
+    dout(7) << "handle_export_dir_prep on " << *dir << " (had dir)" << endl;
 
 	if (!m->did_assim())
 	  m->get_dir(diri->ino())->update_dir(dir);
@@ -6391,7 +6409,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
     dir = diri->dir;
     m->get_dir(diri->ino())->update_dir(dir);
     
-    dout(5) << "handle_export_dir_prep on " << *dir << " (opening dir)" << endl;
+    dout(7) << "handle_export_dir_prep on " << *dir << " (opening dir)" << endl;
 
 	diri->take_waiting(CINODE_WAIT_DIR, finished);
   }
@@ -6401,7 +6419,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
 
   // assimilate contents?
   if (!m->did_assim()) {
-	dout(5) << "doing assim" << endl;
+	dout(7) << "doing assim on " << *dir << endl;
     m->mark_assim();  // only do this the first time!
 
 	// move pin to dir
@@ -6420,7 +6438,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
       CInode *in = get_inode( (*it)->get_ino() );
       if (in) {
         (*it)->update_inode(in);
-        dout(5) << " updated " << *in << endl;
+        dout(7) << " updated " << *in << endl;
       } else {
         in = new CInode(false);
         (*it)->update_inode(in);
@@ -6431,7 +6449,7 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
         add_inode( in );
         condiri->dir->add_dentry( m->get_dentry(in->ino()), in );
         
-        dout(5) << "   added " << *in << endl;
+        dout(7) << "   added " << *in << endl;
       }
       
       assert( in->get_parent_dir()->ino() == m->get_containing_dirino(in->ino()) );
@@ -6440,11 +6458,11 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
       if (m->have_dir(in->ino())) {
         if (in->dir) {
           m->get_dir(in->ino())->update_dir(in->dir);
-          dout(5) << " updated " << *in->dir << endl;
+          dout(7) << " updated " << *in->dir << endl;
         } else {
           in->set_dir( new CDir(in, mds, false) );
           m->get_dir(in->ino())->update_dir(in->dir);
-          dout(5) << "   added " << *in->dir << endl;
+          dout(7) << "   added " << *in->dir << endl;
 		  in->take_waiting(CINODE_WAIT_DIR, finished);
         }
       }
@@ -6454,17 +6472,22 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
     for (list<inodeno_t>::iterator it = m->get_exports().begin();
          it != m->get_exports().end();
          it++) {
+	  dout(7) << "  checking dir " << hex << *it << dec << endl;
       CInode *in = get_inode(*it);
       assert(in);
       
       if (!in->dir) {
-        dout(5) << "  opening nested export on " << *in << endl;
+        dout(7) << "  opening nested export on " << *in << endl;
 		open_remote_dir(in,
 						new C_MDS_RetryMessage(mds, m));
+
+		// pin it!
+		in->get(CINODE_PIN_OPENINGDIR);
+		in->state_set(CINODE_STATE_OPENINGDIR);
       }
     }
   } else {
-	dout(5) << " not doing assim" << endl;
+	dout(7) << " not doing assim on " << *dir << endl;
   }
   
 
@@ -6475,25 +6498,31 @@ void MDCache::handle_export_dir_prep(MExportDirPrep *m)
        it++) {
 	inodeno_t ino = *it;
     CInode *in = get_inode(ino);
+	if (!in) dout(0) << "** missing ino " << hex << ino << dec << endl;
 	assert(in);
     if (in->dir) {
 	  if (!in->dir->state_test(CDIR_STATE_IMPORTINGEXPORT)) {
-		dout(5) << "  pinning nested export " << *in->dir << endl;
+		dout(7) << "  pinning nested export " << *in->dir << endl;
 		in->dir->get(CDIR_PIN_IMPORTINGEXPORT);
 		in->dir->state_set(CDIR_STATE_IMPORTINGEXPORT);
+
+		if (in->state_test(CINODE_STATE_OPENINGDIR)) {
+		  in->put(CINODE_PIN_OPENINGDIR);
+		  in->state_clear(CINODE_STATE_OPENINGDIR);
+		}
 	  } else {
-		dout(5) << "  already pinned nested export " << *in << endl;
+		dout(7) << "  already pinned nested export " << *in << endl;
 	  }
 	} else {
-	  dout(5) << "  waiting for nested export dir on " << *in << endl;
+	  dout(7) << "  waiting for nested export dir on " << *in << endl;
 	  waiting_for++;
 	}
   }
   if (waiting_for) {
-    dout(5) << " waiting for " << waiting_for << " nested export dir opens" << endl;
+    dout(7) << " waiting for " << waiting_for << " nested export dir opens" << endl;
   } else {
 	// ok!
-	dout(5) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
+	dout(7) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
 	mds->messenger->send_message(new MExportDirPrepAck(dir->ino()),
 								 m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
 	
@@ -8664,16 +8693,21 @@ void MDCache::show_cache()
   for (inode_map_t::iterator it = inode_map.begin();
 	   it != inode_map.end();
 	   it++) {
-	dout(7) << "cache " << *((*it).second);
-	/*
-	if ((*it).second->ref) 
-	  dout2(7) << " pin " << (*it).second->ref_set;
-	if ((*it).second->cached_by.size())
-	  dout2(7) << " cache_by " << (*it).second->cached_by;
-	*/
-	if ((*it).second->dir)
-	  dout2(7) << " ... " << *(*it).second->dir;
-	dout2(7) << endl;
+	CDentry *dn = (*it).second->get_parent_dn();
+	if (dn) { 
+	  if ((*it).second->dir) {
+		dout(7) << "cache " << *dn << " -> " << *((*it).second) << " ... " << *(*it).second->dir << endl;
+	  } else {
+		dout(7) << "cache " << *dn << " -> " << *((*it).second) << endl;
+	  }
+	} else {
+	  if ((*it).second->dir) {
+		dout(7) << "cache " << *((*it).second) << " ... " << *(*it).second->dir << endl;
+	  } else {
+		dout(7) << "cache " << *((*it).second) << endl;
+	  }
+	}
+
   }
 }
 

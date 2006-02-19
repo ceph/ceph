@@ -3,9 +3,8 @@
 # hi there
 {
 	'sleep' => 3,
-	'kill_after' => 700,
 
-	'nummds' => [2, 4, 6, 8, 10, 12],
+	'nummds' => [1, 2, 4, 6],
 
 	'cper' => 50,
 	'_dep' => [ 'cnode' => '$nummds',
@@ -16,7 +15,8 @@
 	# parameters
 	'fs' => 'ebofs',
 
-	'until' => 600,     # --syn until $n    ... when to stop clients
+	'until' => 300,     # --syn until $n    ... when to stop clients
+	'kill_after' => 400,
 	
 	'makedirs' => 1,
 	'makedirs_dirs' => 10,

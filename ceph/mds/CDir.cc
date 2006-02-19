@@ -61,7 +61,7 @@ ostream& operator<<(ostream& out, CDir& dir)
 {
   string path;
   dir.get_inode()->make_path(path);
-  out << "[dir " << dir.ino() << " " << path << "/";
+  out << "[dir " << hex << dir.ino() << dec << " " << path << "/";
   if (dir.is_dirty()) out << " dirty";
   if (dir.is_import()) out << " import";
   if (dir.is_export()) out << " export";

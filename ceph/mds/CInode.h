@@ -63,6 +63,7 @@ using namespace __gnu_cxx;
 #define CINODE_PIN_RENAMESRC 11  // pinned on dest for foreign rename
 #define CINODE_PIN_ANCHORING 12
 
+#define CINODE_PIN_OPENINGDIR 13
 
 #define CINODE_PIN_DENTRYLOCK   14
 
@@ -82,7 +83,7 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
   "request",
   "rensrc",
   "anching",
-  "--",
+  "opdir",
   "dnlock"
 };
 
@@ -145,6 +146,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 #define CINODE_STATE_EXPORTING   (1<<7)   // on nonauth bystander.
 
 #define CINODE_STATE_ANCHORING   (1<<8)
+
+#define CINODE_STATE_OPENINGDIR  (1<<9)
 
 //#define CINODE_STATE_RENAMING    (1<<8)  // moving me
 //#define CINODE_STATE_RENAMINGTO  (1<<9)  // rename target (will be unlinked)

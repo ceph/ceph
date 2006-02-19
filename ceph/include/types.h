@@ -174,8 +174,8 @@ struct FileLayout {
  * from LSB to MSB 
  */
 
-#define OID_ONO_BITS       30       // 1mb * 10^9 = 1 petabyte files
-#define OID_INO_BITS       (64-30)  // 2^34 =~ 16 billion files
+#define OID_ONO_BITS       32        // 1mb * 10^9 = 1 petabyte files
+#define OID_INO_BITS       (64-32)   // 2^34 =~ 16 billion files
 
 typedef __uint64_t inodeno_t;   // 34-bit ino (for now!)
 
