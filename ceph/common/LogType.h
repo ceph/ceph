@@ -33,6 +33,7 @@ using namespace __gnu_cxx;
 
 #include "Mutex.h"
 
+
 class LogType {
  protected:
   hash_map<__uint32_t, int> keymap;  
@@ -41,11 +42,22 @@ class LogType {
 
   int version;
 
+  // HACK to avoid the hash table as often as possible...
+  // cache recent key name lookups in a small ring buffer
+  const static int cache_keys = 10;
+  __uint32_t kc_ptr[cache_keys];
+  int kc_val[cache_keys];
+  int kc_pos;
+
   friend class Logger;
 
  public:
   LogType() {
 	version = 1;
+
+	for (int i=0;i<cache_keys;i++)
+	  kc_ptr[i] = 0;
+	kc_pos = 0;
   }
   int add_key(const char* key, bool is_inc) {
 	int i = lookup_key(key);
@@ -78,9 +90,24 @@ class LogType {
 	if (keymap.count(p)) 
 	  return keymap[p];
 
+	// try kc ringbuffer
+	int pos = kc_pos-1;
+	for (int j=0; j<cache_keys; j++) {
+	  if (pos < 0) pos = cache_keys - 1;
+	  if (kc_ptr[pos] == p) return kc_val[pos];
+	  pos--;
+	}
+
 	for (unsigned i=0; i<keys.size(); i++)
 	  if (strcmp(keys[i], key) == 0) {
 		keymap[p] = i;
+
+		// put in kc ringbuffer
+		kc_ptr[kc_pos] = p;
+		kc_val[kc_pos] = i;
+		kc_pos++;
+		if (kc_pos == cache_keys) kc_pos = 0;
+
 		return i; 
 	  }
 	return -1;

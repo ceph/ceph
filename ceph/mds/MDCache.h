@@ -105,7 +105,16 @@ typedef struct {
 } active_request_t;
 
 
+class Message;
 
+namespace __gnu_cxx {
+  template<> struct hash<Message*> {
+	size_t operator()(const Message *p) const { 
+	  static hash<unsigned long> H;
+	  return H((unsigned long)p); 
+	}
+  };
+}
 
 class MDCache {
  protected:
@@ -150,7 +159,8 @@ class MDCache {
 
  public:
   // active MDS requests
-  map<Message*, active_request_t>   active_requests;
+  //map<Message*, active_request_t>   active_requests;
+  hash_map<Message*, active_request_t>   active_requests;
 
   int shutdown_commits;
   bool did_shutdown_exports;
