@@ -267,7 +267,7 @@ int FakeStore::read(object_t oid,
 	bufferptr bptr = new buffer(len);  // prealloc space for entire read
 	got = ::read(fd, bptr.c_str(), len);
 	bptr.set_length(got);   // properly size the buffer
-	bl.push_back( bptr );   // put it in the target bufferlist
+	if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
   }
   ::flock(fd, LOCK_UN);
   ::close(fd);
