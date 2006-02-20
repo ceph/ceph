@@ -49,6 +49,8 @@ class Logger {
 
   string filename;
 
+  int version;
+
   ofstream out;
   bool open;
 

@@ -48,6 +48,8 @@ Logger::Logger(string fn, LogType *type)
   this->type = type;
   wrote_header_last = 0;
 
+  version = 0;
+
   flush(false);
 }
 
@@ -125,10 +127,13 @@ void Logger::flush(bool force)
   if (!g_conf.log) return;
   logger_lock.Lock();
 
-  while (type->keys.size() > vals.size())
-	vals.push_back(0);
-  while (type->keys.size() > fvals.size())
-	fvals.push_back(0);
+  if (version != type->version) {
+	while (type->keys.size() > vals.size())
+	  vals.push_back(0);
+	while (type->keys.size() > fvals.size())
+	  fvals.push_back(0);
+	version = type->version;
+  }
 
   if (!open) {
 	out.open(filename.c_str(), ofstream::out);
