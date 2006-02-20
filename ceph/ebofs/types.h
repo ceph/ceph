@@ -55,6 +55,21 @@ public:
   }
 };
 
+class C_SafeCond : public Context {
+  Mutex *lock;
+  Cond *cond;
+  int *rval;
+public:
+  C_SafeCond(Mutex *l, Cond *c, int *r=0) : lock(l), cond(c), rval(r) {}
+  void finish(int r) {
+	if (rval) *rval = r;
+	lock->Lock();
+	//cout << "C_Cond signal " << this << " cond " << (void*)cond << " rval " << (void*)rval << " r " << r  << endl;
+	cond->Signal();
+	lock->Unlock();
+  }
+};
+
 
 /*
 - this is to make some of the STL types work with 64 bit values, string hash keys, etc.

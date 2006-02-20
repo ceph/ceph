@@ -805,7 +805,7 @@ class Table {
 	  if (cursor.pos[level-1] < cursor.open[level-1].size()-1) {
 		if (max > cursor.open[level-1].index_item(1+cursor.pos[level-1]).key) {
 		  dbtout << ":: next key in index node " << cursor.open[level-1].get_id()
-				 << " != max in child " << node_loc 
+				 << " < max in child " << node_loc 
 				 << "(key is " << hex << cursor.open[level-1].index_item(1+cursor.pos[level-1]).key
 				 << ", max is " << max << ")" << dec << endl;
 		  err++;

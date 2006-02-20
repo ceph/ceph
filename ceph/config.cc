@@ -119,12 +119,13 @@ md_config_t g_conf = {
   mds_bal_max_until: -1,
 
   mds_commit_on_shutdown: true,
+  mds_shutdown_check: 0, //30,
 
   mds_verify_export_dirauth: true,
 
 
   // --- osd ---
-  osd_pg_bits: 12,
+  osd_pg_bits: 8,
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,
@@ -342,6 +343,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--mds_commit_on_shutdown") == 0) 
 	  g_conf.mds_commit_on_shutdown = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_shutdown_check") == 0) 
+	  g_conf.mds_shutdown_check = atoi(args[++i]);
 	else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
 	  g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
 

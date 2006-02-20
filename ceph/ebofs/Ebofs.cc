@@ -451,21 +451,23 @@ int Ebofs::commit_thread_entry()
 
 void Ebofs::alloc_more_node_space()
 {
-  dout(10) << "alloc_more_node_space free " << nodepool.num_free() << "/" << nodepool.num_total() << endl;
+  dout(1) << "alloc_more_node_space free " << nodepool.num_free() << "/" << nodepool.num_total() << endl;
   
   if (nodepool.num_regions() < EBOFS_MAX_NODE_REGIONS) {
 	int want = nodepool.num_total();
 
 	Extent ex;
 	allocator.allocate(ex, want, 0);
+	dout(1) << "alloc_more_node_space wants " << want << " more, got " << ex << endl;
 
 	Extent even, odd;
 	unsigned ulen = nodepool.get_usemap_len(nodepool.num_total() + ex.length);
-	allocator.allocate(even, want, 0);
-	allocator.allocate(odd, want, 0);
+	allocator.allocate(even, ulen, 0);
+	allocator.allocate(odd, ulen, 0);
+	dout(1) << "alloc_more_node_space maps need " << ulen << " x2, got " << even << " " << odd << endl;
 
 	if (even.length == ulen && odd.length == ulen) {
-	  dout(2) << "alloc_more_node_space got " << ex << ", new usemaps at even " << even << " odd " << odd << endl;
+	  dout(1) << "alloc_more_node_space got " << ex << ", new usemaps at even " << even << " odd " << odd << endl;
 	  allocator.release(nodepool.usemap_even);
 	  allocator.release(nodepool.usemap_odd);
 	  nodepool.add_region(ex);
@@ -476,6 +478,7 @@ void Ebofs::alloc_more_node_space()
 	  allocator.release(ex);
 	  allocator.release(even);
 	  allocator.release(odd);
+	  assert(0);
 	}
   } else {
 	dout(1) << "alloc_more_node_space already have max node regions!" << endl;
@@ -495,7 +498,11 @@ int Ebofs::finisher_thread_entry()
 	  ls.swap(finisher_queue);
 
 	  finisher_lock.Unlock();
+
+	  ebofs_lock.Lock();
 	  finish_contexts(ls, 0);
+	  ebofs_lock.Unlock();
+
 	  finisher_lock.Lock();
 	}
 	if (finisher_stop) break;
@@ -1572,7 +1579,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	for (map<block_t,BufferHead*>::iterator i = missing.begin();
 		 i != missing.end();
 		 i++) {
-	  dout(15) <<"attempt_read missing buffer " << *(i->second) << endl;
+	  dout(1) << "attempt_read missing buffer " << *(i->second) << endl;
 	  bc.bh_read(on, i->second);
 	}
 	BufferHead *wait_on = missing.begin()->second;
@@ -1592,8 +1599,9 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	if (!i->second->have_partial_range(start, end)) {
 	  if (partials_ok) {
 		// wait on this one
-		dout(15) <<"attempt_read insufficient partial buffer " << *(i->second) << endl;
-		i->second->waitfor_read[i->second->start()].push_back(new C_Cond(will_wait_on));
+		Context *c = new C_Cond(will_wait_on);
+		dout(1) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << endl;
+		i->second->waitfor_read[i->second->start()].push_back(c);
 	  }
 	  partials_ok = false;
 	}
@@ -1603,9 +1611,10 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
   // wait on rx?
   if (!rx.empty()) {
 	BufferHead *wait_on = rx.begin()->second;
-	dout(15) <<"attempt_read waiting for read to finish on " << *wait_on << endl;
+	Context *c = new C_Cond(will_wait_on);
+	dout(1) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << endl;
 	block_t b = MAX(wait_on->start(), bstart);
-	wait_on->waitfor_read[b].push_back(new C_Cond(will_wait_on));
+	wait_on->waitfor_read[b].push_back(c);
 	return false;
   }
 

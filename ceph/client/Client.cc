@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 
 // ceph stuff
@@ -118,7 +111,7 @@ void Client::tear_down_cache()
 	   it != fh_map.end();
 	   it++) {
 	Fh *fh = it->second;
-	dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
+	dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << hex << fh->inode->inode.ino << dec << endl;
 	put_inode(fh->inode);
 	delete fh;
   }
@@ -149,7 +142,7 @@ void Client::tear_down_cache()
 
 void Client::dump_inode(Inode *in, set<Inode*>& did)
 {
-  dout(1) << "inode " << in << " ref " << in->ref << " dir " << in->dir << endl;
+  dout(1) << "inode " << in << " " << hex << in->ino() << dec << " ref " << in->ref << " dir " << in->dir << endl;
 
   if (in->dir) {
 	dout(1) << "  dir size " << in->dir->dentries.size() << endl;
@@ -174,7 +167,9 @@ void Client::dump_cache()
 	   it++) {
 	if (did.count(it->second)) continue;
 	
-	dout(1) << "inode " << it->first << " ref " << it->second->ref << " dir " << it->second->dir << endl;
+	dout(1) << "inode " << hex << it->first << dec
+			<< " ref " << it->second->ref 
+			<< " dir " << it->second->dir << endl;
 	if (it->second->dir) {
 	  dout(1) << "  dir size " << it->second->dir->dentries.size() << endl;
 	}
@@ -210,7 +205,7 @@ void Client::trim_cache()
 	Dentry *dn = (Dentry*)lru.lru_expire();
 	if (!dn) break;  // done
 	
-	//dout(10) << "unlinking dn " << dn->name << " in dir " << dn->dir->inode->inode.ino << endl;
+	//dout(10) << "unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << dec << endl;
 	unlink(dn);
   }
 }
@@ -223,14 +218,14 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
 	dn = dir->dentries[dname];
-  dout(12) << "insert_inode_info " << dname << " ino " << in_info->inode.ino << "  size " << in_info->inode.size << endl;
+  dout(12) << "insert_inode_info " << dname << " ino " << hex << in_info->inode.ino << dec << "  size " << in_info->inode.size << endl;
   
   if (dn) {
 	if (dn->inode->inode.ino == in_info->inode.ino) {
 	  touch_dn(dn);
-	  dout(12) << " had dentry " << dname << " with correct ino " << dn->inode->inode.ino << endl;
+	  dout(12) << " had dentry " << dname << " with correct ino " << hex << dn->inode->inode.ino << dec << endl;
 	} else {
-	  dout(12) << " had dentry " << dname << " with WRONG ino " << dn->inode->inode.ino << endl;
+	  dout(12) << " had dentry " << dname << " with WRONG ino " << hex << dn->inode->inode.ino << dec << endl;
 	  unlink(dn);
 	  dn = NULL;
 	}
@@ -243,11 +238,11 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 	  assert(in);
 
 	  if (in->dn) {
-		dout(12) << " had ino " << in->inode.ino << " linked at wrong position, unlinking" << endl;
+		dout(12) << " had ino " << hex << in->inode.ino << dec << " linked at wrong position, unlinking" << endl;
 		dn = relink(in->dn, dir, dname);
 	  } else {
 		// link
-		dout(12) << " had ino " << in->inode.ino << " unlinked, linking" << endl;
+		dout(12) << " had ino " << hex << in->inode.ino << dec << " unlinked, linking" << endl;
 		dn = link(dir, dname, in);
 	  }
 	}
@@ -256,15 +251,16 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   if (!dn) {
 	Inode *in = new Inode;
 	inode_map[in_info->inode.ino] = in;
+	in->inode = in_info->inode;   // actually update indoe info
 	dn = link(dir, dname, in);
-	dout(12) << " new dentry+node with ino " << in_info->inode.ino << endl;
+	dout(12) << " new dentry+node with ino " << hex << in_info->inode.ino << dec << endl;
+  } else {
+	// actually update info
+	dn->inode->inode = in_info->inode;
   }
 
   // OK, we found it!
   assert(dn && dn->inode);
-
-  // actually update info
-  dn->inode->inode = in_info->inode;
   
   // or do we have newer size/mtime from writing?
   if (dn->inode->file_caps() & CAP_FILE_WR) {
@@ -284,10 +280,10 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   // take note of latest distribution on mds's
   if (in_info->spec_defined) {
 	if (in_info->dist.empty() && !dn->inode->mds_contacts.empty()) {
-	  dout(9) << "lost dist spec for " << dn->inode->inode.ino << " " << in_info->dist << endl;
+	  dout(9) << "lost dist spec for " << hex << dn->inode->inode.ino << dec << " " << in_info->dist << endl;
 	}
 	if (!in_info->dist.empty() && dn->inode->mds_contacts.empty()) {
-	  dout(9) << "got dist spec for " << dn->inode->inode.ino << " " << in_info->dist << endl;
+	  dout(9) << "got dist spec for " << hex << dn->inode->inode.ino << dec << " " << in_info->dist << endl;
 	}
 	dn->inode->mds_contacts = in_info->dist;
 	dn->inode->mds_dir_auth = in_info->dir_auth;
@@ -364,7 +360,7 @@ Dentry *Client::lookup(filepath& path)
   }
   
   if (dn) {
-	dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " last_updated " << dn->inode->last_updated<< endl;
+	dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << hex << dn->inode->inode.ino << dec << " last_updated " << dn->inode->last_updated<< endl;
   }
 
   return dn;
@@ -384,7 +380,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  if (dir->dentries.count( req->get_filepath()[i] ) == 0) 
 		break;
 	  
-	  dout(7) << " have path seg " << i << " on " << cur->mds_dir_auth << " ino " << cur->inode.ino << " " << req->get_filepath()[i] << endl;
+	  dout(7) << " have path seg " << i << " on " << cur->mds_dir_auth << " ino " << hex << cur->inode.ino << dec << " " << req->get_filepath()[i] << endl;
 	  cur = dir->dentries[ req->get_filepath()[i] ]->inode;
 	  assert(cur);
 	} else
@@ -395,7 +391,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   if (cur) {
 	if (!auth_best && cur->get_replicas().size()) {
 	  // try replica(s)
-	  dout(9) << "contacting replica from deepest inode " << cur->inode.ino << " " << req->get_filepath() << ": " << cur->get_replicas() << endl;
+	  dout(9) << "contacting replica from deepest inode " << hex << cur->inode.ino << dec << " " << req->get_filepath() << ": " << cur->get_replicas() << endl;
 	  set<int>::iterator it = cur->get_replicas().begin();
 	  if (cur->get_replicas().size() == 1)
 		mds = *it;
@@ -686,12 +682,14 @@ void Client::handle_file_caps(MClientFileCaps *m)
   Inode *in = 0;
   if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
 
+  m->clear_payload();  // for when we send back to MDS
+
   // reap?
   if (m->get_special() == MClientFileCaps::FILECAP_REAP) {
 	int other = m->get_mds();
 
 	if (in && in->stale_caps.count(other)) {
-	  dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " reap on mds" << other << endl;
+	  dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " reap on mds" << other << endl;
 
 	  // fresh from new mds?
 	  if (!in->caps.count(mds)) {
@@ -699,13 +697,14 @@ void Client::handle_file_caps(MClientFileCaps *m)
 		in->caps[mds].seq = m->get_seq();
 		in->caps[mds].caps = m->get_caps();
 	  }
-
+	  
+	  assert(in->stale_caps.count(other));
 	  in->stale_caps.erase(other);
 	  if (in->stale_caps.empty()) put_inode(in); // note: this will never delete *in
 	  
 	  // fall-thru!
 	} else {
-	  dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) reap on mds" << other << endl;
+	  dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " premature (!!) reap on mds" << other << endl;
 	  // delay!
 	  cap_reap_queue[in->ino()][other] = m;
 	  return;
@@ -716,18 +715,21 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   // stale?
   if (m->get_special() == MClientFileCaps::FILECAP_STALE) {
-	dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " now stale" << endl;
+	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " now stale" << endl;
 	
-	// put in stale list
+	// move to stale list
 	assert(in->caps.count(mds));
 	if (in->stale_caps.empty()) in->get();
 	in->stale_caps[mds] = in->caps[mds];
+
+	assert(in->caps.count(mds));
 	in->caps.erase(mds);
+	if (in->caps.empty()) in->put();
 
 	// delayed reap?
 	if (cap_reap_queue.count(in->ino()) &&
 		cap_reap_queue[in->ino()].count(mds)) {
-	  dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << endl;
+	  dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " delayed reap on mds" << m->get_mds() << endl;
 	  
 	  // process delayed reap
 	  handle_file_caps( cap_reap_queue[in->ino()][mds] );
@@ -741,17 +743,35 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   // release?
   if (m->get_special() == MClientFileCaps::FILECAP_RELEASE) {
-	dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
+	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " release" << endl;
 	assert(in->caps.count(mds));
 	in->caps.erase(mds);
-	if (in->caps.empty()) put_inode(in);
+	if (in->caps.empty()) {
+	  dout(0) << "did put_inode" << endl;
+	  put_inode(in);
+	} else {
+	  dout(0) << "didn't put_inode" << endl;
+	}
+	for (map<int,InodeCap>::iterator p = in->caps.begin();
+		 p != in->caps.end();
+		 p++)
+	  dout(0) << "  cap " << p->first << " " 
+			  << cap_string(p->second.caps) << " " 
+			  << p->second.seq << endl;
+	for (map<int,InodeCap>::iterator p = in->stale_caps.begin();
+		 p != in->stale_caps.end();
+		 p++)
+	  dout(0) << "  stale cap " << p->first << " " 
+			  << cap_string(p->second.caps) << " " 
+			  << p->second.seq << endl;
+	
 	return;
   }
 
 
   // don't want?
   if (in->file_caps_wanted() == 0) {
-	dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't want caps for, releasing." << endl;
+	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't want caps for, releasing." << endl;
 	m->set_caps(0);
 	m->set_wanted(0);
 	messenger->send_message(m, m->get_source(), m->get_source_port());
@@ -761,7 +781,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   /* no ooo messages yet!
   if (m->get_seq() <= in->file_caps_seq) {
 	assert(0); // no ooo support yet
-	dout(5) << "handle_file_caps on ino " << m->get_ino() << " old seq " << m->get_seq() << " <= " << in->file_caps_seq << endl;
+	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " old seq " << m->get_seq() << " <= " << in->file_caps_seq << endl;
 	delete m;
 	return;
   }
@@ -774,7 +794,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   const int new_caps = m->get_caps();
   in->caps[mds].caps = new_caps;
   in->caps[mds].seq = m->get_seq();
-  dout(5) << "handle_file_caps on in " << m->get_ino() << " seq " << m->get_seq() << " caps now " << cap_string(new_caps) << " was " << cap_string(old_caps) << endl;
+  dout(5) << "handle_file_caps on in " << hex << m->get_ino() << dec << " seq " << m->get_seq() << " caps now " << cap_string(new_caps) << " was " << cap_string(old_caps) << endl;
   
   // did file size decrease?
   if ((old_caps & new_caps & CAP_FILE_RDCACHE) &&
@@ -849,15 +869,15 @@ void Client::finish_flush(Inode *in)
 
   // release all buffers?
   if (!(in->file_caps() & CAP_FILE_RDCACHE)) {
-	dout(5) << "flush_finish releasing all buffers on ino " << in->ino() << endl;
+	dout(5) << "flush_finish releasing all buffers on ino " << hex << in->ino() << dec << endl;
 	release_inode_buffers(in);
   }
   
   if (in->num_rd == 0 && in->num_wr == 0) {
-	dout(5) << "flush_finish ino " << in->ino() << " releasing remaining caps (no readers/writers)" << endl;
+	dout(5) << "flush_finish ino " << hex << in->ino() << dec << " releasing remaining caps (no readers/writers)" << endl;
 	release_caps(in);
   } else {
-	dout(5) << "finish_flush ino " << in->ino() << " acking" << endl;
+	dout(5) << "finish_flush ino " << hex << in->ino() << dec << " acking" << endl;
 	release_caps(in, in->file_caps() & ~CAP_FILE_WRBUFFER);   // send whatever we have
   }
 
@@ -868,7 +888,7 @@ void Client::finish_flush(Inode *in)
 void Client::release_caps(Inode *in,
 						  int retain)
 {
-  dout(5) << "releasing caps on ino " << in->inode.ino 
+  dout(5) << "releasing caps on ino " << hex << in->inode.ino << dec
 		  << " had " << cap_string(in->file_caps())
 		  << " retaining " << cap_string(retain) 
 		  << endl;
@@ -984,6 +1004,9 @@ int Client::unmount()
 	dout(3) << "cache still has " << lru.lru_get_size() 
 			<< "+" << inode_map.size() << " items + " 
 			<< unsafe_sync_write << " unsafe_sync_writes, waiting (presumably for caps to be released?)" << endl;
+	
+	dump_cache();
+	
 	unmount_cond.Wait(client_lock);
   }
   assert(lru.lru_get_size() == 0);
@@ -1303,7 +1326,7 @@ int Client::lstat(const char *path, struct stat *stbuf)
 	//stbuf->st_flags =
 	//stbuf->st_gen =
 	
-	dout(10) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << stbuf->st_ino << endl;
+	dout(10) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << hex << stbuf->st_ino << dec << endl;
   }
 
   trim_cache();
@@ -1636,18 +1659,18 @@ int Client::close(fh_t fh)
 
 	// flush anything?
 	if (fc->is_dirty()) {
-	  dout(10) << "  flushing dirty buffers on " << in->ino() << endl;
+	  dout(10) << "  flushing dirty buffers on " << hex << in->ino() << dec << endl;
 	  flush_inode_buffers(in);
 	}
 
 	if (fc->is_dirty() || fc->is_inflight()) {
 	  // flushing.
-	  dout(10) << "  waiting for inflight buffers on " << in->ino() << endl;
+	  dout(10) << "  waiting for inflight buffers on " << hex << in->ino() << dec << endl;
 	  in->get();
 	  fc->add_inflight_waiter(  new C_Client_Flushed(this, in) );
 	} else {
 	  // all clean!
-	  dout(10) << "  releasing buffers and caps on " << in->ino() << endl;
+	  dout(10) << "  releasing buffers and caps on " << hex << in->ino() << dec << endl;
 	  release_inode_buffers(in);  // free buffers
 	  release_caps(in);        	  // release caps now.
 	}
@@ -2079,7 +2102,7 @@ int Client::fsync(fh_t fh, bool syncdataonly)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
-  dout(3) << "fsync fh " << fh << " ino " << in->inode.ino << " syncdataonly " << syncdataonly << endl;
+  dout(3) << "fsync fh " << fh << " ino " << hex << in->inode.ino << dec << " syncdataonly " << syncdataonly << endl;
  
   // blocking flush
   flush_inode_buffers(in);

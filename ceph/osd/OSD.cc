@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 
 #include "include/types.h"
@@ -418,7 +411,7 @@ void OSD::handle_op_reply(MOSDOpReply *m)
   case OSD_OP_REP_WRITE:
   case OSD_OP_REP_TRUNCATE:
   case OSD_OP_REP_DELETE:
-	ack_replica_op(m->get_tid(), m->get_result(), m->get_safe(), MSG_ADDR_NUM(m->get_source()));
+	handle_rep_op_ack(m->get_tid(), m->get_result(), m->get_safe(), MSG_ADDR_NUM(m->get_source()));
 	delete m;
 	break;
 
@@ -427,7 +420,7 @@ void OSD::handle_op_reply(MOSDOpReply *m)
   }
 }
 
-void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
+void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd)
 {
   if (!replica_ops.count(tid)) {
 	dout(7) << "not waiting for tid " << tid << " replica op reply, map must have changed, dropping." << endl;
@@ -438,7 +431,7 @@ void OSD::ack_replica_op(__uint64_t tid, int result, bool safe, int fromosd)
   MOSDOp *op = repop->op;
   pg_t pgid = op->get_pg();
 
-  dout(7) << "ack_replica_op " << tid << " op " << op << " result " << result << " safe " << safe << " from osd" << fromosd << endl;
+  dout(7) << "handle_rep_op_ack " << tid << " op " << op << " result " << result << " safe " << safe << " from osd" << fromosd << endl;
 
   if (result >= 0) {
 	// success
@@ -924,7 +917,7 @@ void OSD::advance_map(list<pg_t>& ls)
 		for (set<__uint64_t>::iterator tid = s.begin();
 			 tid != s.end();
 			 tid++)
-		  ack_replica_op(*tid, -1, false, *down);
+		  handle_rep_op_ack(*tid, -1, false, *down);
 	  }
 	}
 
@@ -2324,18 +2317,18 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
 void OSD::get_repop(OSDReplicaOp *repop)
 {
   repop->lock.Lock();
-  dout(15) << "get_repop " << *repop << endl;
+  dout(10) << "get_repop " << *repop << endl;
 }
 
 void OSD::put_repop(OSDReplicaOp *repop)
 {
-  dout(15) << "put_repop " << *repop << endl;
+  dout(10) << "put_repop " << *repop << endl;
 
   // safe?
   if (repop->can_send_safe() &&
 	  repop->op->wants_safe()) {
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
-	dout(15) << "put_repop sending safe on " << *repop << " " << reply << endl;
+	dout(10) << "put_repop sending safe on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_safe = true;
   }
@@ -2344,14 +2337,14 @@ void OSD::put_repop(OSDReplicaOp *repop)
   else if (repop->can_send_ack() &&
 		   repop->op->wants_ack()) {
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
-	dout(15) << "put_repop sending ack on " << *repop << " " << reply << endl;
+	dout(10) << "put_repop sending ack on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_ack = true;
   }
 
   // done.
   if (repop->can_delete()) {
-	dout(15) << "put_repop deleting " << *repop << endl;
+	dout(10) << "put_repop deleting " << *repop << endl;
 	repop->lock.Unlock();  
 	delete repop->op;
 	delete repop;

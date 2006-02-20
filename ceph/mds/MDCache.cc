@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 
 #include "MDCache.h"
@@ -614,7 +607,7 @@ public:
 	g_conf.debug_mds = 10;
 	mdc->show_cache();
 	g_conf.debug_mds = o;
-	g_timer.add_event_after(10, new C_MDC_ShutdownCheck(mdc));
+	g_timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(mdc));
   }
 };
 
@@ -622,7 +615,8 @@ void MDCache::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
 
-  g_timer.add_event_after(30, new C_MDC_ShutdownCheck(this));
+  if (g_conf.mds_shutdown_check)
+	g_timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 }
 
 
@@ -3671,7 +3665,7 @@ void MDCache::handle_client_file_caps(MClientFileCaps *m)
 	MClientFileCaps *r = new MClientFileCaps(in->inode, 
 											 0, 0, 0,
 											 MClientFileCaps::FILECAP_RELEASE);
-	mds->messenger->send_message(r, m->get_source());
+	mds->messenger->send_message(r, m->get_source(), 0, MDS_PORT_CACHE);
   }
 
   // merge in atime?
@@ -4272,6 +4266,12 @@ bool MDCache::inode_file_write_start(CInode *in, MClientRequest *m)
 	if (in->filelock.can_write_soon(in->is_auth())) {
 	  // just wait
 	} else {
+	  if (!in->filelock.is_stable()) {
+		dout(7) << "inode_file_write_start on auth, waiting for stable on " << *in << endl;
+		in->add_waiter(CINODE_WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+		return false;
+	  }
+	  
 	  // initiate lock 
 	  inode_file_lock(in);
 
@@ -4692,15 +4692,25 @@ void MDCache::inode_file_lock(CInode *in)
 									 MDS_PORT_CACHE);
 	  }
 	  in->filelock.init_gather(in->get_cached_by());
+
+	  // change lock
+	  in->filelock.set_state(LOCK_GLOCKM);
+	  
+	  // call back caps
+	  issue_caps(in);
 	} else {
-	  assert(issued);
+	  //assert(issued);  // ??? -sage 2/19/06
+	  if (issued) {
+		// change lock
+		in->filelock.set_state(LOCK_GLOCKM);
+		
+		// call back caps
+		issue_caps(in);
+	  } else {
+		in->filelock.set_state(LOCK_LOCK);
+	  }
 	}
 	  
-	// change lock
-	in->filelock.set_state(LOCK_GLOCKM);
-	
-	// call back caps
-	issue_caps(in);
   }
   else if (in->filelock.get_state() == LOCK_WRONLY) {
 	if (issued & CAP_FILE_WR) {
@@ -6006,7 +6016,7 @@ void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_aut
 											 it->second.pending(),
 											 it->second.wanted(),
 											 MClientFileCaps::FILECAP_STALE);
-	mds->messenger->send_message(m, MSG_ADDR_CLIENT(it->first));
+	mds->messenger->send_message(m, MSG_ADDR_CLIENT(it->first), 0, MDS_PORT_CACHE);
   }
 
   // relax locks?
@@ -6038,7 +6048,8 @@ void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_aut
 	  in->filelock.get_state() == LOCK_GLOCKM ||
 	  in->filelock.get_state() == LOCK_GLOCKW ||
 	  in->filelock.get_state() == LOCK_GWRONLYR ||
-	  in->filelock.get_state() == LOCK_GWRONLYM)
+	  in->filelock.get_state() == LOCK_GWRONLYM ||
+	  in->filelock.get_state() == LOCK_WRONLY)
 	in->filelock.set_state(LOCK_LOCK);
   if (in->filelock.get_state() == LOCK_GMIXEDR)
 	in->filelock.set_state(LOCK_MIXED);
@@ -6775,8 +6786,7 @@ void MDCache::handle_export_dir_finish(MExportDirFinish *m)
 
 
 void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth)
-{
-  
+{  
   CInodeExport istate;
   off = istate._decode(bl, off);
   dout(15) << "got a cinodeexport " << endl;
@@ -6829,12 +6839,14 @@ void MDCache::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int old
   for (set<int>::iterator it = merged_client_caps.begin();
 	   it != merged_client_caps.end();
 	   it++) {
-	mds->messenger->send_message(new MClientFileCaps(in->inode,
-													 in->client_caps[*it].get_last_seq(),
-													 in->client_caps[*it].pending(),
-													 in->client_caps[*it].wanted(),
-													 MClientFileCaps::FILECAP_REAP),
-								 MSG_ADDR_CLIENT(*it));
+	MClientFileCaps *caps = new MClientFileCaps(in->inode,
+												in->client_caps[*it].get_last_seq(),
+												in->client_caps[*it].pending(),
+												in->client_caps[*it].wanted(),
+												MClientFileCaps::FILECAP_REAP);
+	caps->set_mds( oldauth ); // reap from whom?
+	mds->messenger->send_message(caps,
+								 MSG_ADDR_CLIENT(*it), 0, MDS_PORT_CACHE);
   }
 
   // filelock

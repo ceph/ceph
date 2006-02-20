@@ -610,7 +610,7 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 	p--;
 	while (p != orig->waitfor_read.begin()) {
 	  if (p->first < right->start()) break;	  
-	  dout(20) << "split  moving waiters at block " << p->first << " to right bh" << endl;
+	  dout(0) << "split  moving waiters at block " << p->first << " to right bh" << endl;
 	  right->waitfor_read[p->first].swap( p->second );
 	  o = p;
 	  p--;

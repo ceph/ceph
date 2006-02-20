@@ -89,6 +89,7 @@ struct md_config_t {
   int   mds_bal_max_until;
 
   bool  mds_commit_on_shutdown;
+  int   mds_shutdown_check;
   bool  mds_verify_export_dirauth;     // debug flag
 
 

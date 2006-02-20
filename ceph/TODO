@@ -1,9 +1,32 @@
-OSDI
+
+
+llnl direct deposit  fax 925 424 2663
+
+
+
+MAR 1
+
+
 
 - stability
+ - ebofs table.remove() thing
+ - dentry dirty, but not inode, on shutdown..
+   ... dropped osd op?
+ 
+- mds
+ - vary log stripe size, count  (on ebofs and fakestore)
 
-- fix mds balancer
+- makedirs vs ebo/fake. 
+  - streaming small writes (mds log)
 
+- mds scaling
+ - shared /lib, /include  .. verify fixed open() behavior works!
+
+- quick retest of crush vs linear
+
+
+
+OSDI
 
 - tcp recv throttling
 
@@ -14,23 +37,13 @@ OSDI
   -> small writes: fake 20% faster
 - obfs?
 
-/- crush vs linear
-
-- makedirs vs ebo/fake. 
-  - streaming small writes (mds log)
-
 - osd write tests
  - get obfs working
-
-- mds scaling
- - shared /lib, /include  .. verify fixed open() behavior works!
-
 
 - client buffer cache!
 
 - ld_preload?
 
-- msg_addr_t class
 
 
 

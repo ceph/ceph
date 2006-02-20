@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 	//cout << "mounting" << endl;
 	client[i]->mount();
 	
-	//cout << "starting synthetic client  " << endl;
+	cout << "starting synthetic client  " << endl;
 	syn[i] = new SyntheticClient(client[i]);
 
 	syn[i]->start_thread();

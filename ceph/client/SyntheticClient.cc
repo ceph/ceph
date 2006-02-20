@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 
 #include "SyntheticClient.h"
@@ -86,18 +79,6 @@ void parse_syn_options(vector<char*>& args)
 	  } else if (strcmp(args[i],"randomwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
 		syn_iargs.push_back( atoi(args[++i]) );	   
-	  } else if (strcmp(args[i],"trace_include") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEINCLUDE );
-		syn_iargs.push_back( atoi(args[++i]) );
-	  } else if (strcmp(args[i],"trace_lib") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACELIB );
-		syn_iargs.push_back( atoi(args[++i]) );
-	  } else if (strcmp(args[i],"trace_openssh") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSH );
-		syn_iargs.push_back( atoi(args[++i]) );
-	  } else if (strcmp(args[i],"trace_opensshlib") == 0) {
-		syn_modes.push_back( SYNCLIENT_MODE_TRACEOPENSSHLIB );
-		syn_iargs.push_back( atoi(args[++i]) );
 	  } else if (strcmp(args[i],"trace") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
 		syn_sargs.push_back( args[++i] );
@@ -169,6 +150,7 @@ int SyntheticClient::run()
 { 
   run_start = g_clock.now();
   run_until = utime_t(0,0);
+  dout(5) << "run" << endl;
 
   for (list<int>::iterator it = modes.begin();
 	   it != modes.end();
@@ -308,65 +290,6 @@ int SyntheticClient::run()
 	  }
 	  break;
 
-	case SYNCLIENT_MODE_TRACEINCLUDE:
-	  {
-		int iarg1 = iargs.front();  iargs.pop_front();
-		string prefix;
-		if (client->whoami == 0) {
-		  Trace t("traces/trace.include");
-		  play_trace(t, prefix);
-		} else {
-		  sleep(iarg1);
-		}
-	  }
-	  break;
-	case SYNCLIENT_MODE_TRACELIB:
-	  {
-		int iarg1 = iargs.front();  iargs.pop_front();
-		string prefix;
-		if (client->whoami == 0) {
-		  Trace t("traces/trace.lib");
-		  play_trace(t, prefix);
-		} else {
-		  sleep(iarg1);
-		}
-	  }
-	  break;
-	case SYNCLIENT_MODE_TRACEOPENSSH:
-	  {
-		string prefix = get_sarg(0);
-		int iarg1 = iargs.front();  iargs.pop_front();
-		
-		Trace t("traces/trace.openssh");
-
-		client->mkdir(prefix.c_str(), 0755);
-		
-		for (int i=0; i<iarg1; i++) {
-		  if (time_to_stop()) break;
-		  play_trace(t, prefix);
-		  if (time_to_stop()) break;
-		  clean_dir(prefix);
-		}
-	  }
-	  break;
-	case SYNCLIENT_MODE_TRACEOPENSSHLIB:
-	  {
-		string prefix = get_sarg(0);
-		int iarg1 = iargs.front();  iargs.pop_front();
-
-		Trace t("traces/trace.openssh.lib");
-
-		client->mkdir(prefix.c_str(), 0755);
-		
-		for (int i=0; i<iarg1; i++) {
-		  if (time_to_stop()) break;
-		  play_trace(t, prefix);
-		  if (time_to_stop()) break;
-		  clean_dir(prefix);
-		  cerr << "LOOP" << endl;
-		}
-	  }
-	  break;
 
 	case SYNCLIENT_MODE_OPENTEST:
 	  {
