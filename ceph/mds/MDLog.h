@@ -48,11 +48,24 @@ prepare + commit versions of many of these?
 
 using namespace std;
 
+#include <ext/hash_set>
+using namespace __gnu_cxx;
+
 class LogStream;
 class LogEvent;
 class MDS;
 
 class Logger;
+
+
+namespace __gnu_cxx {
+  template<> struct hash<LogEvent*> {
+	size_t operator()(const LogEvent *p) const { 
+	  static hash<unsigned long> H;
+	  return H((unsigned long)p); 
+	}
+  };
+}
 
 class MDLog {
  protected:
@@ -62,8 +75,8 @@ class MDLog {
 
   LogStream *logstream;
   
-  set<LogEvent*>  trimming;     // events currently being trimmed
-  list<Context*>  trim_waiters; // contexts waiting for trim
+  hash_set<LogEvent*>  trimming;     // events currently being trimmed
+  list<Context*>  trim_waiters;   // contexts waiting for trim
   bool            trim_reading;
 
   bool waiting_for_read;

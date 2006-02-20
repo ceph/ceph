@@ -40,8 +40,10 @@ using namespace __gnu_cxx;
 
 class Logger {
  protected:
-  hash_map<const char*, long, hash<const char*>, eqstr> vals;
-  hash_map<const char*, double, hash<const char*>, eqstr> fvals;
+  //hash_map<const char*, long, hash<const char*>, eqstr> vals;
+  //hash_map<const char*, double, hash<const char*>, eqstr> fvals;
+  vector<long> vals;
+  vector<double> fvals;
 
   //Mutex lock;
   LogType *type;

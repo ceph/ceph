@@ -28,16 +28,16 @@
 #include <fstream>
 using namespace std;
 #include <ext/hash_map>
+#include <ext/hash_set>
 using namespace __gnu_cxx;
 
 #include "Mutex.h"
 
 class LogType {
  protected:
-  set<const char*, ltstr>   keyset;
+  hash_map<__uint32_t, int> keymap;  
   vector<const char*>   keys;
-  vector<const char*>   inc_keys;
-  vector<const char*>   set_keys;
+  set<int>              inc_keys;
 
   int version;
 
@@ -47,24 +47,43 @@ class LogType {
   LogType() {
 	version = 1;
   }
-  void add_inc(const char* key) {
-    if (!have_key(key)) {
-	  keys.push_back(key);
-	  keyset.insert(key);
-	  inc_keys.push_back(key);
-	  version++;
-	}
+  int add_key(const char* key, bool is_inc) {
+	int i = lookup_key(key);
+	if (i >= 0) return i;
+
+	i = keys.size();
+	keys.push_back(key);
+
+	__uint32_t p = (__uint32_t)key;
+	keymap[p] = i;
+	if (is_inc) inc_keys.insert(i);
+
+	version++;
+	return i;
   }
-  void add_set(const char* key){
-	if (!have_key(key)) {
-	  keys.push_back(key);
-	  keyset.insert(key);
-	  set_keys.push_back(key);
-	  version++;
-	}
+  int add_inc(const char* key) {
+	return add_key(key, true);
   }
+  int add_set(const char *key) {
+	return add_key(key, false);
+  }
+  
   bool have_key(const char* key) {
-	return keyset.count(key) ? true:false;
+	return lookup_key(key) < 0;
+  }
+
+  int lookup_key(const char* key) {
+	__uint32_t p = (__uint32_t)key;
+
+	if (keymap.count(p)) 
+	  return keymap[p];
+
+	for (unsigned i=0; i<keys.size(); i++)
+	  if (strcmp(keys[i], key) == 0) {
+		keymap[p] = i;
+		return i; 
+	  }
+	return -1;
   }
 
 };

@@ -68,11 +68,11 @@ long Logger::inc(const char *key, long v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
-  if (!type->have_key(key)) 
-	type->add_inc(key);
+  int i = type->lookup_key(key);
+  if (i < 0) i = type->add_inc(key);
   flush();
-  vals[key] += v;
-  long r = vals[key];
+  vals[i] += v;
+  long r = vals[i];
   logger_lock.Unlock();
   return r;
 }
@@ -81,11 +81,11 @@ double Logger::finc(const char *key, double v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
-  if (!type->have_key(key)) 
-	type->add_inc(key);
+  int i = type->lookup_key(key);
+  if (i < 0) i = type->add_inc(key);
   flush();
-  fvals[key] += v;
-  double r = vals[key];
+  fvals[i] += v;
+  double r = fvals[i];
   logger_lock.Unlock();
   return r;
 }
@@ -94,26 +94,23 @@ long Logger::set(const char *key, long v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
-  if (!type->have_key(key)) 
-	type->add_set(key);
-
+  int i = type->lookup_key(key);
+  if (i < 0) i = type->add_set(key);
   flush();
-  vals[key] = v;
-  long r = vals[key];
+  long r = vals[i] = v;
   logger_lock.Unlock();
   return r;
 }
+
 
 double Logger::fset(const char *key, double v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
-  if (!type->have_key(key)) 
-	type->add_set(key);
-
+  int i = type->lookup_key(key);
+  if (i < 0) i = type->add_set(key);
   flush();
-  fvals[key] = v;
-  double r = vals[key];
+  double r = fvals[i] = v;
   logger_lock.Unlock();
   return r;
 }
@@ -122,7 +119,10 @@ long Logger::get(const char* key)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
-  long r = vals[key];
+  int i = type->lookup_key(key);
+  long r = 0;
+  if (i >= 0)
+	r = vals[i];
   logger_lock.Unlock();
   return r;
 }
@@ -131,6 +131,11 @@ void Logger::flush(bool force)
 {
   if (!g_conf.log) return;
   logger_lock.Lock();
+
+  while (type->keys.size() > vals.size())
+	vals.push_back(0);
+  while (type->keys.size() > fvals.size())
+	fvals.push_back(0);
 
   if (!open) {
 	out.open(filename.c_str(), ofstream::out);
@@ -158,31 +163,30 @@ void Logger::flush(bool force)
 	wrote_header_last++;
 	if (wrote_header != type->version ||
 		wrote_header_last > 10) {
-	  out << "#";
-	  for (vector<const char*>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
-		out << "\t" << *it;
-	  }
-	  out << endl;
+	  out << "#" << type->keymap.size();
+	  for (unsigned i=0; i<type->keys.size(); i++) 
+		out << "\t" << type->keys[i];
+	  out << endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
 	  wrote_header = type->version;
 	  wrote_header_last = 0;
 	}
 
 	// write line to log
 	out << last_logged;
-	for (vector<const char*>::iterator it = type->keys.begin(); it != type->keys.end(); it++) {
-	  if (fvals.count(*it))
-		out << "\t" << fvals[*it];
+	for (unsigned i=0; i<type->keys.size(); i++) {
+	  if (fvals[i] > 0 && vals[i] == 0)
+		out << "\t" << fvals[i];
 	  else
-		out << "\t" << vals[*it];
+		out << "\t" << vals[i];
 	}
 	out << endl;
 
 	// reset the counters
-	for (vector<const char*>::iterator it = type->inc_keys.begin(); it != type->inc_keys.end(); it++) {
-	  if (this->vals.count(*it)) 
-		this->vals[*it] = 0;
-	  if (this->fvals.count(*it)) 
-		this->fvals[*it] = 0;
+	for (unsigned i=0; i<type->keys.size(); i++) {
+	  if (type->inc_keys.count(i)) {
+		this->vals[i] = 0;
+		this->fvals[i] = 0;
+	  }
 	}
   }
 
