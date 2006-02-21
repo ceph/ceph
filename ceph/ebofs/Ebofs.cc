@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 
 #include "Ebofs.h"
@@ -457,13 +450,13 @@ void Ebofs::alloc_more_node_space()
 	int want = nodepool.num_total();
 
 	Extent ex;
-	allocator.allocate(ex, want, 0);
+	allocator.allocate(ex, want, 2);
 	dout(1) << "alloc_more_node_space wants " << want << " more, got " << ex << endl;
 
 	Extent even, odd;
 	unsigned ulen = nodepool.get_usemap_len(nodepool.num_total() + ex.length);
-	allocator.allocate(even, ulen, 0);
-	allocator.allocate(odd, ulen, 0);
+	allocator.allocate(even, ulen, 2);
+	allocator.allocate(odd, ulen, 2);
 	dout(1) << "alloc_more_node_space maps need " << ulen << " x2, got " << even << " " << odd << endl;
 
 	if (even.length == ulen && odd.length == ulen) {
@@ -753,7 +746,7 @@ void Ebofs::remove_onode(Onode *on)
   on->dangling = true;
   
   // remove from object table
-  dout(0) << "remove_onode on " << *on << endl;
+  //dout(0) << "remove_onode on " << *on << endl;
   object_tab->remove(on->object_id);
   
   // free onode space
@@ -1002,7 +995,7 @@ void Ebofs::write_cnode(Cnode *cn)
 	if (cn->cnode_loc.length) 
 	  allocator.release(cn->cnode_loc);
 	
-	allocator.allocate(cn->cnode_loc, blocks, 0);
+	allocator.allocate(cn->cnode_loc, blocks, Allocator::NEAR_LAST_FWD);
 	collection_tab->remove( cn->coll_id );
 	collection_tab->insert( cn->coll_id, cn->cnode_loc );
   }
@@ -1301,7 +1294,7 @@ void Ebofs::alloc_write(Onode *on,
 	block_t cur = i->first;
 	while (left > 0) {
 	  Extent ex;
-	  allocator.allocate(ex, left, 0);
+	  allocator.allocate(ex, left, Allocator::NEAR_LAST_FWD);
 	  dout(10) << "alloc_write got " << ex << " for object offset " << cur << endl;
 	  on->set_extent(cur, ex);      // map object to new region
 	  left -= ex.length;

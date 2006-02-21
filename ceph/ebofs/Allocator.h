@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 #ifndef __EBOFS_ALLOCATOR_H
 #define __EBOFS_ALLOCATOR_H
@@ -29,8 +22,14 @@
 class Ebofs;
 
 class Allocator {
- protected:
+public:
+  const static block_t NEAR_LAST = 0;     
+  const static block_t NEAR_LAST_FWD = 1;   
+  
+protected:
   Ebofs *fs;
+  block_t      last_pos;
+  
 
   interval_set<block_t> limbo;
 
@@ -45,7 +44,7 @@ class Allocator {
 	return b;
   }
 
-  int find(Extent& ex, int bucket, block_t num, block_t near);
+  int find(Extent& ex, int bucket, block_t num, block_t near, bool fwdonly=false);
 
   void dump_freelist();
 
@@ -53,9 +52,9 @@ class Allocator {
   int _release_merge(Extent& ex);  // release any extent (searches for adjacent)
 
  public:
-  Allocator(Ebofs *f) : fs(f) {}
+  Allocator(Ebofs *f) : fs(f), last_pos(0) {}
   
-  int allocate(Extent& ex, block_t num, block_t near=0);
+  int allocate(Extent& ex, block_t num, block_t near=NEAR_LAST);
   int release(Extent& ex);
 
   int commit_limbo();  // limbo -> fs->limbo_tab

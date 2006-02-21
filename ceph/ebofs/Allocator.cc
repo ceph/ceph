@@ -4,20 +4,13 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
- * This library is free software; you can redistribute it and/or
+ * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
  * 
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- * 
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
 
 
 #include "Allocator.h"
@@ -71,11 +64,10 @@ void Allocator::dump_freelist()
 }
 
 
-int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
+int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, bool fwdonly)
 {
   Table<block_t,block_t>::Cursor cursor(fs->free_tab[bucket]);
   bool found = false;
-
 
   if (fs->free_tab[bucket]->find( near, cursor ) >= 0) {
 	// look to the right
@@ -85,7 +77,7 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near)
 	} while (!found && cursor.move_right() > 0);
   }
 
-  if (!found) {
+  if (!found && !fwdonly) {
 	// look to the left
 	fs->free_tab[bucket]->find( near, cursor );
 
@@ -107,62 +99,71 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 {
   dump_freelist();
 
-  /*
-  if (!near) {
-	near = num/2;  // this is totally wrong and stupid.
+  bool fwd = false;
+  if (near == NEAR_LAST_FWD) {
+	near = last_pos;
+	fwd = true;
   }
-  */
+  else if (near == NEAR_LAST)
+	near = last_pos;
 
   int bucket;
 
-  // look for contiguous extent
-  for (bucket = pick_bucket(num); bucket < EBOFS_NUM_FREE_BUCKETS; bucket++) {
-	if (find(ex, bucket, num, near) >= 0) {
-	  // yay!
+  while (1) {  // try twice, if fwd = true
 
-	  // remove original
-	  fs->free_tab[bucket]->remove( ex.start );
-	  fs->free_blocks -= ex.length;
-
-	  if (ex.length > num) {
-		if (ex.start < near) {
-		  // to the left
-		  if (ex.start + ex.length - num <= near) {
-			// by a lot.  take right-most portion.
-			Extent left;
-			left.start = ex.start;
-			left.length = ex.length - num;
-			ex.start += left.length;
-			ex.length -= left.length;
-			assert(ex.length == num);
-			_release_loner(left);
-		  } else {
-			// take middle part.
-			Extent left,right;
-			left.start = ex.start;
-			left.length = near - ex.start;
-			ex.start = near;
+	// look for contiguous extent
+	for (bucket = pick_bucket(num); bucket < EBOFS_NUM_FREE_BUCKETS; bucket++) {
+	  if (find(ex, bucket, num, near, fwd) >= 0) {
+		// yay!
+		
+		// remove original
+		fs->free_tab[bucket]->remove( ex.start );
+		fs->free_blocks -= ex.length;
+		
+		if (ex.length > num) {
+		  if (ex.start < near) {
+			// to the left
+			if (ex.start + ex.length - num <= near) {
+			  // by a lot.  take right-most portion.
+			  Extent left;
+			  left.start = ex.start;
+			  left.length = ex.length - num;
+			  ex.start += left.length;
+			  ex.length -= left.length;
+			  assert(ex.length == num);
+			  _release_loner(left);
+			} else {
+			  // take middle part.
+			  Extent left,right;
+			  left.start = ex.start;
+			  left.length = near - ex.start;
+			  ex.start = near;
+			  right.start = ex.start + num;
+			  right.length = ex.length - left.length - num;
+			  ex.length = num;
+			  _release_loner(left);
+			  _release_loner(right);
+			}
+		  }
+		  else {
+			// to the right.  take left-most part.
+			Extent right;
 			right.start = ex.start + num;
-			right.length = ex.length - left.length - num;
+			right.length = ex.length - num;
 			ex.length = num;
-			_release_loner(left);
 			_release_loner(right);
 		  }
 		}
-		else {
-		  // to the right.  take left-most part.
-		  Extent right;
-		  right.start = ex.start + num;
-		  right.length = ex.length - num;
-		  ex.length = num;
-		  _release_loner(right);
-		}
+		
+		dout(20) << "allocate " << ex << " near " << near << endl;
+		last_pos = ex.end();
+		dump_freelist();
+		return num;
 	  }
-
-	  dout(20) << "allocate " << ex << " near " << near << endl;
-	  dump_freelist();
-	  return num;
 	}
+
+	if (!fwd) break;
+	fwd = false;
   }
 
   // ok, find partial extent instead.
@@ -174,6 +175,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  
 	  fs->free_tab[bucket]->remove(ex.start);
 	  fs->free_blocks -= ex.length;
+	  last_pos = ex.end();
 	  dout(20) << "allocate partial " << ex << " near " << near << endl;
 	  dump_freelist();
 	  return ex.length;
