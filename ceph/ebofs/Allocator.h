@@ -26,6 +26,10 @@ public:
   const static block_t NEAR_LAST = 0;     
   const static block_t NEAR_LAST_FWD = 1;   
   
+  const static int DIR_ANY = 0;
+  const static int DIR_FWD = 2;
+  const static int DIR_BACK = 1;
+
 protected:
   Ebofs *fs;
   block_t      last_pos;
@@ -44,7 +48,7 @@ protected:
 	return b;
   }
 
-  int find(Extent& ex, int bucket, block_t num, block_t near, bool fwdonly=false);
+  int find(Extent& ex, int bucket, block_t num, block_t near, int dir = DIR_ANY);
 
   void dump_freelist();
 

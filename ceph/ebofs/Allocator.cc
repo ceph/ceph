@@ -64,12 +64,13 @@ void Allocator::dump_freelist()
 }
 
 
-int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, bool fwdonly)
+int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, int dir)
 {
   Table<block_t,block_t>::Cursor cursor(fs->free_tab[bucket]);
   bool found = false;
 
-  if (fs->free_tab[bucket]->find( near, cursor ) >= 0) {
+  if ((dir == DIR_ANY || dir == DIR_FWD) && 
+	  fs->free_tab[bucket]->find( near, cursor ) >= 0) {
 	// look to the right
 	do {
 	  if (cursor.current().value >= num)
@@ -77,7 +78,8 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, bool fwdo
 	} while (!found && cursor.move_right() > 0);
   }
 
-  if (!found && !fwdonly) {
+  if ((dir == DIR_ANY || dir == DIR_BACK) && 
+	  !found) {
 	// look to the left
 	fs->free_tab[bucket]->find( near, cursor );
 
@@ -99,10 +101,10 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 {
   dump_freelist();
 
-  bool fwd = false;
+  int dir = DIR_ANY; // no dir
   if (near == NEAR_LAST_FWD) {
 	near = last_pos;
-	fwd = true;
+	dir = DIR_FWD;  // fwd
   }
   else if (near == NEAR_LAST)
 	near = last_pos;
@@ -113,7 +115,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
 	// look for contiguous extent
 	for (bucket = pick_bucket(num); bucket < EBOFS_NUM_FREE_BUCKETS; bucket++) {
-	  if (find(ex, bucket, num, near, fwd) >= 0) {
+	  if (find(ex, bucket, num, near, dir) >= 0) {
 		// yay!
 		
 		// remove original
@@ -162,8 +164,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  }
 	}
 
-	if (!fwd) break;
-	fwd = false;
+	if (dir == DIR_BACK || dir == DIR_ANY) break;
+	dir = DIR_BACK;
   }
 
   // ok, find partial extent instead.
