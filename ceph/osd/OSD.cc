@@ -2042,7 +2042,7 @@ void OSD::handle_op(MOSDOp *op)
 void OSD::enqueue_op(object_t oid, MOSDOp *op)
 {
   while (pending_ops > g_conf.osd_max_opq) {
-	dout(0) << "enqueue_op waiting for pending_ops " << pending_ops << " to drop to " << g_conf.osd_max_opq << endl;
+	dout(10) << "enqueue_op waiting for pending_ops " << pending_ops << " to drop to " << g_conf.osd_max_opq << endl;
 	op_queue_cond.Wait(osd_lock);
   }
 
@@ -2244,8 +2244,8 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
 {
   // take buffers from the message
   bufferlist bl;
-  bl = op->get_data();
-  //bl.claim( op->get_data() );
+  //bl = op->get_data();
+  bl.claim( op->get_data() );  // save some memory?
   
   // write 
   int r = 0;
