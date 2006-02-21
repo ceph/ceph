@@ -99,6 +99,7 @@ struct md_config_t {
   int   osd_pg_layout;
   int   osd_max_rep;
   int   osd_maxthreads;
+  int   osd_max_opq;
   bool  osd_mkfs;
   bool  osd_fake_sync;
 

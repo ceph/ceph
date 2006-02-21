@@ -2041,6 +2041,11 @@ void OSD::handle_op(MOSDOp *op)
  */
 void OSD::enqueue_op(object_t oid, MOSDOp *op)
 {
+  while (pending_ops > g_conf.osd_max_opq) {
+	dout(0) << "enqueue_op waiting for pending_ops " << pending_ops << " to drop to " << g_conf.osd_max_opq << endl;
+	op_queue_cond.Wait(osd_lock);
+  }
+
   op_queue[oid].push_back(op);
   pending_ops++;
   
@@ -2083,6 +2088,10 @@ void OSD::dequeue_op(object_t oid)
   {
 	dout(10) << "dequeue_op finish op " << op << endl;
 	assert(pending_ops > 0);
+
+	if (pending_ops > g_conf.osd_max_opq) 
+	  op_queue_cond.Signal();
+	
 	pending_ops--;
 	if (pending_ops == 0 && waiting_for_no_ops)
 	  no_pending_ops.Signal();
@@ -2386,7 +2395,7 @@ void OSD::op_modify(MOSDOp *op)
 	// version?  clean?
 	version_t ov = 0;  // 0 == dne (yet)
 	store->getattr(oid, "version", &ov, sizeof(ov));
-	version_t nv = messenger->peek_lamport();
+	version_t nv = op->get_lamport_stamp();
 	assert(nv > ov);
 	
 	dout(12) << opname << " " << hex << oid << dec << " v " << nv << "  off " << op->get_offset() << " len " << op->get_length() << endl;  
