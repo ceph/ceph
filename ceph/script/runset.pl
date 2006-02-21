@@ -168,9 +168,9 @@ sub run {
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
 			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
-			   'file_layout_ssize','file_layout_scount','file_layout_osize',
-			   'meta_dir_layout_ssize','meta_dir_layout_scount','meta_dir_layout_osize',
-			   'meta_log_layout_ssize','meta_log_layout_scount','meta_log_layout_osize') {
+			   'file_layout_ssize','file_layout_scount','file_layout_osize','file_layout_num_rep',
+			   'meta_dir_layout_ssize','meta_dir_layout_scount','meta_dir_layout_osize','meta_dir_layout_num_rep',
+			   'meta_log_layout_ssize','meta_log_layout_scount','meta_log_layout_osize','meta_log_layout_num_rep') {
 		$c .= " --$k $h->{$k}" if defined $h->{$k};
 	}
 
@@ -197,8 +197,8 @@ sub run {
 		unless ($fake) {
 			$r = system "$c > $fn/o";
 			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd?? > $fn/sum.osd";
-			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds"
-				if -e "$fn/mds1";
+			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds";
+#				if -e "$fn/mds1";
 			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl"
 				if -e "$fn/clnode.1";
 			if ($r) {
@@ -250,9 +250,13 @@ if ($comb) {
 	my @filters = sort keys %filters;
 	my $cmd = "script/comb.pl $x @vars - @fulldirs - @filters > $out/c";
 	print "\n$cmd\n";
+	open(O,">$out/comb");
+	print O "$cmd\n";
+	close O;
 	system $cmd;
 
-	print "set data style linespoints;\n";
+	my $plot;
+	$plot .= "set data style linespoints;\n";
 	my $s = 2;
 	for my $v (@vars) {
 		my $c = $s;
@@ -269,7 +273,11 @@ if ($comb) {
 			push (@p, "\"$out/c\" u 1:$c t \"$t\"" );
 			$c += scalar(@vars);
 		}
-		print "# $v\nplot " . join(", ", @p) . ";\n\n";
+		$plot .= "# $v\nplot " . join(", ", @p) . ";\n\n";
 	}
+	print $plot;
+	open(O,">$out/plot");
+	print O $plot;
+	close O;
 }
 

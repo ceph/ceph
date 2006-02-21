@@ -1,3 +1,4 @@
+#!/usr/bin/perl
 # hi there
 {
 	# startup
@@ -11,27 +12,32 @@
 
 	# parameters
 	'fs' => [ 
-			  'obfs',
-			  'fakestore',
+#			  'obfs',
+#			  'fakestore',
 			  'ebofs' 
 			  ],
 	'until' => 100,     # --syn until $n    ... when to stop clients
 	'writefile' => 1,
 	'writefile_size' => [ 
-						  2560000,
-						  1024000,
-						  262144,
-#						  131072,
-#						  98304,
-						  65536,
-#						  16384,
+#						  2048*1024,
+						  1024*1024,
+						  512*1024,
+						  256*1024,
+						  128*1024,
+						  64*1024,
+						  32*1024,
+						  16*1024,
+						  8*1024,
 						  4096,
-						  256,
+#						  256,
 #						  16,
 #						  1
 						  ],
 	'writefile_mb' => 1000,
 	
+	'file_layout_num_rep'=> [1],
+
+
 #	'ebofs_idle_commit_ms' => [ 100, 500 ],
 #	'ebofs_abp_max_alloc' => [ 4096*16, 4096*64 ],
 

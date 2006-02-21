@@ -42,7 +42,7 @@ for (@data) {
 	my $r = shift @r;
 	
 	# column headings?
-	if ($r eq '#') {
+	if ($r =~ /^\#/) {
 		my $num = 0;
 		while (my $name = shift @r) {
 			$col{$num} = $name;
