@@ -8705,21 +8705,13 @@ void MDCache::show_cache()
   for (inode_map_t::iterator it = inode_map.begin();
 	   it != inode_map.end();
 	   it++) {
+	dout(7) << *((*it).second) << endl;
+	
 	CDentry *dn = (*it).second->get_parent_dn();
-	if (dn) { 
-	  if ((*it).second->dir) {
-		dout(7) << "cache " << *dn << " -> " << *((*it).second) << " ... " << *(*it).second->dir << endl;
-	  } else {
-		dout(7) << "cache " << *dn << " -> " << *((*it).second) << endl;
-	  }
-	} else {
-	  if ((*it).second->dir) {
-		dout(7) << "cache " << *((*it).second) << " ... " << *(*it).second->dir << endl;
-	  } else {
-		dout(7) << "cache " << *((*it).second) << endl;
-	  }
-	}
-
+	if (dn) 
+	  dout(7) << "       dn " << dn << endl;
+	if ((*it).second->dir) 
+	  dout(7) << "   subdir " << *(*it).second->dir << endl;
   }
 }
 
