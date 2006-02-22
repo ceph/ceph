@@ -80,13 +80,14 @@ void Timer::timer_thread()
 		}
 
 		//pending[t] = it->second;
+		map< utime_t, set<Context*> >::iterator previt = it;
 		it++;
-		scheduled.erase(t);
+		scheduled.erase(previt);
 	  }
 
 	  if (!pending.empty()) {
 		lock.Unlock();
-		{ // make sure we're not holding any locks whil we talk to the messenger
+		{ // make sure we're not holding any locks while we talk to the messenger
 		  for (list<Context*>::iterator cit = pending.begin();
 			   cit != pending.end();
 			   cit++)
