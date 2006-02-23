@@ -19,6 +19,9 @@ using namespace std;
        
 #include <envz.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 int main(int argc, char **argv, char *envp[]) {
 
@@ -30,6 +33,8 @@ int main(int argc, char **argv, char *envp[]) {
   vector<char*> nargs;
   
   char *nsaddr = 0;
+  tcpaddr_t nsa;
+  bool have_nsa = false;
 
   for (unsigned i=0; i<args.size(); i++) {
 	if (strcmp(args[i], "--ns") == 0) {
@@ -43,7 +48,7 @@ int main(int argc, char **argv, char *envp[]) {
   }
   
   if (nsaddr == 0) {
-	// env var
+	// env var?
 	int e_len = 0;
 	for (int i=0; envp[i]; i++)
 	  e_len += strlen(envp[i]) + 1;
@@ -53,13 +58,25 @@ int main(int argc, char **argv, char *envp[]) {
 	  nsaddr++;
 	}
   }
+
   if (!nsaddr) {
+	// file?
+	int fd = ::open(".ceph_ns",O_RDONLY);
+	if (fd > 0) {
+	  ::read(fd, (void*)&nsa, sizeof(nsa));
+	  ::close(fd);
+	  have_nsa = true;
+	  nsaddr = "from .ceph_ns";
+	}
+  }
+
+  if (!nsaddr && !have_nsa) {
 	cerr << "i need ceph ns addr.. either CEPH_NAMESERVER env var or --ns blah" << endl;
 	exit(-1);
   }
-  // look up nsaddr
-  tcpaddr_t nsa;
-  if (tcpmessenger_lookup(nsaddr, nsa) < 0) {
+
+  // look up nsaddr?
+  if (!have_nsa && tcpmessenger_lookup(nsaddr, nsa) < 0) {
 	return 1;
   }
 
@@ -83,9 +100,9 @@ int main(int argc, char **argv, char *envp[]) {
   cout << "mounting" << endl;
   client->mount();
   
-  cout << "starting fuse on pid " << getpid() << endl;
+  cerr << "starting fuse on pid " << getpid() << endl;
   ceph_fuse_main(client, argc, argv);
-  cout << "fuse finished on pid " << getpid() << endl;
+  cerr << "fuse finished on pid " << getpid() << endl;
   
   client->unmount();
   cout << "unmounted" << endl;

@@ -219,8 +219,11 @@ class Inode {
 
 struct Fh {
   Inode    *inode;
+  off_t     pos;
   int       mds;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
+
+  Fh() : inode(0), pos(0), mds(0), mode(0) {}
 };
 
 
@@ -243,11 +246,13 @@ class Client : public Dispatcher {
   bool   unmounting;
   Cond   unmount_cond;  
 
+
   int    unsafe_sync_write;
 public:
+  msg_addr_t get_myaddr() { return messenger->get_myaddr(); } 
   void hack_sync_write_safe();
+
 protected:
-  
   Filer                 *filer;  // (non-blocking) osd interface
   
   // cache
@@ -259,7 +264,8 @@ protected:
   map<inodeno_t, map<int, class MClientFileCaps*> > cap_reap_queue;  // ino -> mds -> msg .. set of (would-be) stale caps to reap
 
 
-  // file handles
+  // file handles, etc.
+  string                 cwd;
   rangeset<fh_t>         free_fh_set;  // unused fh's
   hash_map<fh_t, Fh*>    fh_map;
   
@@ -270,6 +276,16 @@ protected:
   }
   void put_fh(fh_t fh) {
 	free_fh_set.insert(fh);
+  }
+
+  void mkabspath(const char *rel, string& abs) {
+	if (rel[0] == '/') {
+	  abs = rel;
+	} else {
+	  abs = cwd;
+	  abs += "/";
+	  abs += rel;
+	}
   }
 
 
@@ -423,6 +439,9 @@ protected:
   // these shoud (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statfs *stbuf);
 
+  // crap
+  int chdir(const char *s);
+
   // namespace ops
   int getdir(const char *path, map<string,inode_t*>& contents);
   int link(const char *existing, const char *newname);
@@ -447,8 +466,8 @@ protected:
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
   int close(fh_t fh);
-  int read(fh_t fh, char *buf, off_t size, off_t offset);
-  int write(fh_t fh, const char *buf, off_t size, off_t offset);
+  int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
+  int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
   int truncate(const char *file, off_t size);
 	//int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);

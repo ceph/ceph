@@ -148,6 +148,7 @@ OSD::OSD(int id, Messenger *m)
   char name[80];
   sprintf(name, "osd%02d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
+  osd_logtype.add_set("opq");
   osd_logtype.add_inc("op");
   osd_logtype.add_inc("c_rd");
   osd_logtype.add_inc("c_rdb");
@@ -2048,6 +2049,7 @@ void OSD::enqueue_op(object_t oid, MOSDOp *op)
 
   op_queue[oid].push_back(op);
   pending_ops++;
+  logger->set("opq", pending_ops);
   
   threadpool->put_op(oid);
 }
@@ -2093,6 +2095,7 @@ void OSD::dequeue_op(object_t oid)
 	  op_queue_cond.Signal();
 	
 	pending_ops--;
+	logger->set("opq", pending_ops);
 	if (pending_ops == 0 && waiting_for_no_ops)
 	  no_pending_ops.Signal();
   }

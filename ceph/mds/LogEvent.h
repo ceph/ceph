@@ -23,8 +23,9 @@ using namespace std;
 
 #define EVENT_STRING       1
 #define EVENT_INODEUPDATE  2
-#define EVENT_UNLINK       3
-#define EVENT_ALLOC        4
+#define EVENT_DIRUPDATE    3
+#define EVENT_UNLINK       4
+#define EVENT_ALLOC        5
 
 #include "config.h"
 

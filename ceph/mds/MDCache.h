@@ -237,7 +237,8 @@ class MDCache {
   int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
 					Message *req, Context *ondelay,
 					int onfail,
-					Context *onfinish=0);
+					Context *onfinish=0,
+					bool is_client_req = false);
   void open_remote_dir(CInode *diri, Context *fin);
   void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
   void open_remote_ino_2(inodeno_t ino, Message *req,

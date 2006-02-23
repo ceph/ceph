@@ -55,6 +55,7 @@
 #include "messages/MInodeLink.h"
 
 #include "events/EInodeUpdate.h"
+#include "events/EDirUpdate.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -944,7 +945,9 @@ void MDS::handle_client_request(MClientRequest *req)
 	// do trace
 	int r = mdcache->path_traverse(refpath, trace, follow_trailing_symlink,
 								   req, ondelay,
-								   MDS_TRAVERSE_FORWARD);
+								   MDS_TRAVERSE_FORWARD,
+								   0,
+								   true); // is MClientRequest
 	
 	if (r > 0) return; // delayed
 	if (r == -ENOENT ||
@@ -2570,7 +2573,8 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
 
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
-				 new EInodeUpdate(newi));                  // FIXME should be differnet log entry
+				 new EInodeUpdate(newi),
+				 new EDirUpdate(newdir)); 
   
   // schedule a commit for good measure 
   // NOTE: not strictly necessary.. it's in the log!

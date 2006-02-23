@@ -142,7 +142,7 @@ void Client::tear_down_cache()
 
 void Client::dump_inode(Inode *in, set<Inode*>& did)
 {
-  dout(1) << "inode " << in << " " << hex << in->ino() << dec << " ref " << in->ref << " dir " << in->dir << endl;
+  dout(1) << "dump_inode: inode " << hex << in->ino() << dec << " ref " << in->ref << " dir " << in->dir << endl;
 
   if (in->dir) {
 	dout(1) << "  dir size " << in->dir->dentries.size() << endl;
@@ -167,7 +167,7 @@ void Client::dump_cache()
 	   it++) {
 	if (did.count(it->second)) continue;
 	
-	dout(1) << "inode " << hex << it->first << dec
+	dout(1) << "dump_cache: inode " << hex << it->first << dec
 			<< " ref " << it->second->ref 
 			<< " dir " << it->second->dir << endl;
 	if (it->second->dir) {
@@ -207,6 +207,13 @@ void Client::trim_cache()
 	
 	//dout(10) << "unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << dec << endl;
 	unlink(dn);
+  }
+
+  // hose root?
+  if (lru.lru_get_size() == 0 && root && inode_map.size() == 1) {
+	delete root;
+	root = 0;
+	inode_map.clear();
   }
 }
 
@@ -747,10 +754,10 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	assert(in->caps.count(mds));
 	in->caps.erase(mds);
 	if (in->caps.empty()) {
-	  dout(0) << "did put_inode" << endl;
+	  //dout(0) << "did put_inode" << endl;
 	  put_inode(in);
 	} else {
-	  dout(0) << "didn't put_inode" << endl;
+	  //dout(0) << "didn't put_inode" << endl;
 	}
 	for (map<int,InodeCap>::iterator p = in->caps.begin();
 		 p != in->caps.end();
@@ -808,7 +815,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
 
   // flush buffers?
-  if (!(in->file_caps() & CAP_FILE_WRBUFFER)) {
+  if (g_conf.client_bcache &&
+	  !(in->file_caps() & CAP_FILE_WRBUFFER)) {
 	Filecache *fc = bc->get_fc(in);
 	if (!fc->is_flushed()) {
 	  if (fc->is_dirty()) {
@@ -1001,7 +1009,7 @@ int Client::unmount()
   while (lru.lru_get_size() > 0 || 
 		 !inode_map.empty() ||
 		 unsafe_sync_write > 0) {
-	dout(3) << "cache still has " << lru.lru_get_size() 
+	dout(0) << "cache still has " << lru.lru_get_size() 
 			<< "+" << inode_map.size() << " items + " 
 			<< unsafe_sync_write << " unsafe_sync_writes, waiting (presumably for caps to be released?)" << endl;
 	
@@ -1578,7 +1586,6 @@ int Client::open(const char *path, int mode)
   if (result >= 0) {
 	// yay
 	Fh *f = new Fh;
-	memset(f, 0, sizeof(*f));
 	f->mode = cmode;
 
 	// inode
@@ -1663,7 +1670,8 @@ int Client::close(fh_t fh)
 	  flush_inode_buffers(in);
 	}
 
-	if (fc->is_dirty() || fc->is_inflight()) {
+	if (g_conf.client_bcache && 
+		(fc->is_dirty() || fc->is_inflight())) {
 	  // flushing.
 	  dout(10) << "  waiting for inflight buffers on " << hex << in->ino() << dec << endl;
 	  in->get();
@@ -1749,6 +1757,9 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   assert(fh_map.count(fh));
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
+
+  if (offset < 0) 
+	offset = f->pos;
   
   // do we have read file cap?
   while ((in->file_caps() & CAP_FILE_RD) == 0) {
@@ -1758,7 +1769,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	cond.Wait(client_lock);
   }
   
-  
+ 
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
   if (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE)) {
@@ -1782,6 +1793,9 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   }
   
   int rvalue = 0;
+
+  // adjust fd pos
+  f->pos = offset+size;
 
   if (!g_conf.client_bcache) {
 	// buffer cache OFF
@@ -1953,6 +1967,9 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
+  if (offset < 0) 
+	offset = f->pos;
+
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
 
@@ -1964,6 +1981,8 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	cond.Wait(client_lock);
   }
 
+  // adjust fd pos
+  f->pos = offset+size;
 
   if (g_conf.client_bcache &&	        // buffer cache ON?
 	  (in->file_caps() & CAP_FILE_WRBUFFER)) {   // caps buffered write?
@@ -2031,7 +2050,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 				   //NULL,NULL);  // no wait hack
 				   onfinish, onsafe);
 	  
-
 	  while (!done)
 		cond.Wait(client_lock);
 	}
@@ -2121,6 +2139,16 @@ int Client::fsync(fh_t fh, bool syncdataonly)
 
 
 // not written yet, but i want to link!
+
+int Client::chdir(const char *path)
+{
+  // fake it for now!
+  string abs;
+  mkabspath(path, abs);
+  dout(3) << "chdir " << path << " -> cwd now " << abs << endl;
+  cwd = abs;
+  return 0;
+}
 
 int Client::statfs(const char *path, struct statfs *stbuf) 
 {

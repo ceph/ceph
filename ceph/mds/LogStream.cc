@@ -21,6 +21,7 @@
 
 #include "events/EString.h"
 #include "events/EInodeUpdate.h"
+#include "events/EDirUpdate.h"
 #include "events/EUnlink.h"
 #include "events/EAlloc.h"
 
@@ -179,6 +180,10 @@ LogEvent *LogStream::get_next_event()
 	
   case EVENT_INODEUPDATE:
 	le = new EInodeUpdate();
+	break;
+	
+  case EVENT_DIRUPDATE:
+	le = new EDirUpdate();
 	break;
 	
   case EVENT_UNLINK:

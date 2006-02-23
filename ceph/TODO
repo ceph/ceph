@@ -4,17 +4,22 @@ llnl direct deposit  fax 925 424 2663
 
 
 
+541 488 0496  warren
+
+
+
 MAR 1
 
-
+- ldceph + mdtest
 
 - stability
  - ebofs table.remove() thing
- - dentry dirty, but not inode, on shutdown..
-   ... dropped osd op?
- 
+
+
 - mds
  - vary log stripe size, count  (on ebofs and fakestore)
+  ?  4k for ebofs, 64k for fakestore
+  ?  scount=4... or 2?
 
 - makedirs vs ebo/fake. 
   - streaming small writes (mds log)
@@ -23,6 +28,18 @@ MAR 1
  - shared /lib, /include  .. verify fixed open() behavior works!
 
 - quick retest of crush vs linear
+
+
+- workloads
+  - makedirs
+
+
+  - kernel compile?
+
+
+
+- MDS mkdir needs EDirUpdate event
+  ...or else we can get unlogged leftover dirty dirs 
 
 
 
@@ -72,6 +89,7 @@ mds
   - client handles for directories!
 
 ebofs
+- fix NEAR_LAST_FWD 
 - combine inodes into same blocks?
 - delay allocation
   - actually, reallocate if dirty is cancelable

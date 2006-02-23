@@ -38,6 +38,16 @@ class filepath {
   string path;
   vector<string> bits;
 
+  void rebuild() {
+	if (absolute()) 
+	  path = "/";
+	else 
+	  path.clear();
+	for (unsigned i=0; i<bits.size(); i++) {
+	  if (i) path += "/";
+	  path += bits[i];
+	}
+  }
   void parse() {
 	bits.clear();
 	int off = 0;
@@ -65,6 +75,9 @@ class filepath {
 	set_path(s);
   }
 
+  bool absolute() { return path[0] == '/'; }
+  bool relative() { return !absolute(); }
+  
   void set_path(const string& s) {
 	path = s;
 	parse();
@@ -108,6 +121,12 @@ class filepath {
 	for (unsigned i=0; i<a.depth(); i++) 
 	  add_dentry(a[i]);
   }
+
+  void pop_dentry() {
+	bits.pop_back();
+	rebuild();
+  }	
+	
 
 
   void clear() {

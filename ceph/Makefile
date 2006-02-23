@@ -65,8 +65,7 @@ TCP_OBJS = \
 	msg/TCPMessenger.o\
 	msg/TCPDirectory.o
 
-TEST_TARGETS = fakemds 
-TARGETS = fakefuse fakesyn tcpsyn tcpfuse
+TARGETS = fakefuse fakesyn tcpsyn tcpfuse client/ldceph.o
 
 SRCS=*.cc */*.cc
 
@@ -76,8 +75,11 @@ test: depend ${TEST_TARGETS}
 
 obfs: depend obfstest
 
+
+# misc
 gprof-helper.so: test/gprof-helper.c
 	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
+
 
 
 # old test crap
@@ -142,6 +144,11 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 
 ebofs: mkfs.ebofs test.ebofs
 
+
+#
+
+%.so: %.cc
+	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
 
 testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/clock.o msg/Messenger.o msg/Dispatcher.o msg/error.o

@@ -113,6 +113,8 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 1000,
+  //mds_bal_hash_threshold: 20000,
+  //mds_bal_unhash_threshold: 2000,
   mds_bal_interval: 30,           // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,

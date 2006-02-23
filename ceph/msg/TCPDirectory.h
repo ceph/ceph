@@ -30,6 +30,10 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 class TCPDirectory : public Dispatcher {
  protected:
   // how i communicate
@@ -61,11 +65,22 @@ class TCPDirectory : public Dispatcher {
 	version(0),
 	nrank(0), nclient(0), nmds(0), nosd(0) { 
 	messenger->set_dispatcher(this);
+
 	// i am rank 0!
 	dir[MSG_ADDR_DIRECTORY] = 0;
 	rank_addr[0] = m->get_tcpaddr();
-	cout << "export CEPH_NAMESERVER=" << m->get_tcpaddr() << endl;
 	++nrank;
+
+	// announce nameserver
+	cout << "export CEPH_NAMESERVER=" << m->get_tcpaddr() << endl;
+
+	int fd = ::open(".ceph_ns", O_WRONLY|O_CREAT);
+	::write(fd, (void*)&m->get_tcpaddr(), sizeof(tcpaddr_t));
+	::fchmod(fd, 0755);
+	::close(fd);
+  }
+  ~TCPDirectory() {
+	::unlink(".ceph_ns");
   }
 
   void dispatch(Message *m) {

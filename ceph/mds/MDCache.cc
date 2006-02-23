@@ -31,6 +31,7 @@
 #include "osd/Filer.h"
 
 #include "events/EInodeUpdate.h"
+#include "events/EDirUpdate.h"
 #include "events/EUnlink.h"
 
 #include "messages/MGenericMessage.h"
@@ -1124,7 +1125,8 @@ int MDCache::path_traverse(filepath& origpath,
 						   Message *req,
 						   Context *ondelay,
 						   int onfail,
-						   Context *onfinish)   // use this instead of return value, if specified
+						   Context *onfinish,
+						   bool is_client_req)  // true if req is MClientRequest .. gross, FIXME
 {
   int whoami = mds->get_nodeid();
   set< pair<CInode*, string> > symlinks_resolved; // keep a list of symlinks we touch to avoid loops
@@ -1152,6 +1154,7 @@ int MDCache::path_traverse(filepath& origpath,
   while (depth < path.depth()) {
 	dout(12) << "traverse: path seg depth " << depth << " = " << path[depth] << endl;
 	
+	// ENOTDIR?
 	if (!cur->is_dir()) {
 	  dout(7) << "traverse: " << *cur << " not a dir " << endl;
 	  delete ondelay;
@@ -1303,6 +1306,32 @@ int MDCache::path_traverse(filepath& origpath,
 		continue;		
 	  } else {
 		// keep going.
+
+		// forwarder wants replicas?
+		if (is_client_req && ((MClientRequest*)req)->get_mds_wants_replica_in_dirino()) {
+		  dout(30) << "traverse: REP is here, " << hex << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << cur->dir->ino() << dec << endl;
+		  
+		  if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == cur->dir->ino() &&
+			  cur->dir->is_auth() && 
+			  cur->dir->is_rep() &&
+			  cur->dir->is_open_by(req->get_source().num())) {
+			assert(req->get_source().is_mds());
+			int from = req->get_source().num();
+			
+			if (dn->get_inode()->is_cached_by(from)) {
+			  dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
+					   << MSG_ADDR_NICE(req->get_source()) << " dn " << *dn << endl; 
+			} else {
+			  dout(10) << "traverse: REP replicating to " << MSG_ADDR_NICE(req->get_source()) << " dn " << *dn << endl;
+			  MDiscoverReply *reply = new MDiscoverReply(cur->dir->ino());
+			  reply->add_dentry( dn->get_name(), !dn->can_read());
+			  reply->add_inode( dn->inode->replicate_to( from ) );
+			  mds->messenger->send_message(reply,
+										   req->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+			}
+		  }
+		}
+			
 		trace.push_back(dn);
 		cur = dn->inode;
 		touch_inode(cur);
@@ -1318,7 +1347,7 @@ int MDCache::path_traverse(filepath& origpath,
 	
 
 	if (dauth == whoami) {
-	  // mine.
+	  // dentry is mine.
 	  if (cur->dir->is_complete()) {
 		// file not found
 		delete ondelay;
@@ -1344,14 +1373,16 @@ int MDCache::path_traverse(filepath& origpath,
 		return 1;
 	  }
 	} else {
-	  // not mine.
+	  // dentry is not mine.
 	  
+	  /* no, let's let auth handle the discovery/replication ..
 	  if (onfail == MDS_TRAVERSE_FORWARD && 
 		  onfinish == 0 &&   // no funnyness
 		  cur->dir->is_rep()) {
 		dout(5) << "trying to discover in popular dir " << *cur->dir << endl;
 		onfail = MDS_TRAVERSE_DISCOVER;
 	  }
+	  */
 
 	  if ((onfail == MDS_TRAVERSE_DISCOVER ||
 		   onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
@@ -1387,6 +1418,13 @@ int MDCache::path_traverse(filepath& origpath,
 	  if (onfail == MDS_TRAVERSE_FORWARD) {
 		// forward
 		dout(7) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
+
+		if (is_client_req && cur->dir->is_rep()) {
+		  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *cur->dir << endl;
+		  ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(cur->dir->ino());
+		  req->clear_payload();  // reencode!
+		}
+
 		mds->messenger->send_message(req,
 									 MSG_ADDR_MDS(dauth), req->get_dest_port(),
 									 req->get_dest_port());
@@ -1400,7 +1438,7 @@ int MDCache::path_traverse(filepath& origpath,
 	  if (onfail == MDS_TRAVERSE_FAIL) {
 		delete ondelay;
 		if (onfinish) {
-		  onfinish->finish(-ENOENT);  // -ENOENT, but only because i'm not the authority
+		  onfinish->finish(-ENOENT);  // -ENOENT, but only because i'm not the authority!
 		  delete onfinish;
 		}
 		return -ENOENT;  // not necessarily exactly true....
@@ -6969,6 +7007,10 @@ int MDCache::import_dir_block(bufferlist& bl,
 	  if (dirty == 'D') dn->mark_dirty();
 	  
 	}
+
+	if (dir->is_dirty()) 
+	  mds->mdlog->submit_entry(new EDirUpdate(dir));
+
 	return num_imported;
   }
 }
@@ -8709,7 +8751,7 @@ void MDCache::show_cache()
 	
 	CDentry *dn = (*it).second->get_parent_dn();
 	if (dn) 
-	  dout(7) << "       dn " << dn << endl;
+	  dout(7) << "       dn " << *dn << endl;
 	if ((*it).second->dir) 
 	  dout(7) << "   subdir " << *(*it).second->dir << endl;
   }

@@ -83,12 +83,21 @@ void parse_syn_options(vector<char*>& args)
 		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
 		syn_sargs.push_back( args[++i] );
 		syn_iargs.push_back( atoi(args[++i]) );
+
 	  } else if (strcmp(args[i],"until") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"only") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_ONLY );
+		syn_iargs.push_back( atoi(args[++i]) );
+
 	  } else if (strcmp(args[i],"sleep") == 0) { 
 		syn_modes.push_back( SYNCLIENT_MODE_SLEEP );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"randomsleep") == 0) { 
+		syn_modes.push_back( SYNCLIENT_MODE_RANDOMSLEEP );
+		syn_iargs.push_back( atoi(args[++i]) );
+
 	  } else if (strcmp(args[i],"opentest") == 0) { 
 		syn_modes.push_back( SYNCLIENT_MODE_OPENTEST );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -112,6 +121,8 @@ SyntheticClient::SyntheticClient(Client *client)
   thread_id = 0;
   
   did_readdir = false;
+
+  run_only = -1;
 
   this->modes = syn_modes;
   this->iargs = syn_iargs;
@@ -163,8 +174,10 @@ int SyntheticClient::run()
 	  {
 		int iarg1 = iargs.front();
 		iargs.pop_front();
-		srand(time(0) + getpid() + client->whoami);
-		sleep(rand() % iarg1);
+		if (run_me()) {
+		  srand(time(0) + getpid() + client->whoami);
+		  sleep(rand() % iarg1);
+		}
 	  }
 	  break;
 
@@ -172,8 +185,19 @@ int SyntheticClient::run()
 	  {
 		int iarg1 = iargs.front();
 		iargs.pop_front();
-		dout(3) << "sleep " << iarg1 << endl;
-		sleep(iarg1);
+		if (run_me()) {
+		  dout(3) << "sleep " << iarg1 << endl;
+		  sleep(iarg1);
+		}
+	  }
+	  break;
+
+	case SYNCLIENT_MODE_ONLY:
+	  {
+		int run_only = iargs.front();
+		iargs.pop_front();
+		if (run_only == client->get_nodeid())
+		  dout(2) << "only " << run_only << endl;
 	  }
 	  break;
 
@@ -196,8 +220,10 @@ int SyntheticClient::run()
 	  {
 		int iarg1 = iargs.front();
 		iargs.pop_front();
-		dout(2) << "randomwalk " << iarg1 << endl;
-		random_walk(iarg1);
+		if (run_me()) {
+		  dout(2) << "randomwalk " << iarg1 << endl;
+		  random_walk(iarg1);
+		}
 	  }
 	  break;
 
@@ -207,23 +233,29 @@ int SyntheticClient::run()
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		int iarg3 = iargs.front();  iargs.pop_front();
-		dout(2) << "makedirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
-		make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+		if (run_me()) {
+		  dout(2) << "makedirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+		  make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+		}
 	  }
 	  break;
 
 	case SYNCLIENT_MODE_FULLWALK:
 	  {
 		string sarg1 = get_sarg(0);
-		dout(2) << "fullwalk" << sarg1 << endl;
-		full_walk(sarg1);
+		if (run_me()) {
+		  dout(2) << "fullwalk" << sarg1 << endl;
+		  full_walk(sarg1);
+		}
 	  }
 	  break;
 	case SYNCLIENT_MODE_REPEATWALK:
 	  {
 		string sarg1 = get_sarg(0);
-		dout(2) << "repeatwalk " << sarg1 << endl;
-		while (full_walk(sarg1) == 0) ;
+		if (run_me()) {
+		  dout(2) << "repeatwalk " << sarg1 << endl;
+		  while (full_walk(sarg1) == 0) ;
+		}
 	  }
 	  break;
 
@@ -232,7 +264,8 @@ int SyntheticClient::run()
 		string sarg1 = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
-		write_file(sarg1, iarg1, iarg2);
+		if (run_me())
+		  write_file(sarg1, iarg1, iarg2);
 	  }
 	  break;
 	case SYNCLIENT_MODE_WRITEBATCH:
@@ -241,7 +274,8 @@ int SyntheticClient::run()
 		int iarg2 = iargs.front(); iargs.pop_front();
 		int iarg3 = iargs.front(); iargs.pop_front();
 
-		write_batch(iarg1, iarg2, iarg3);
+		if (run_me())
+		  write_batch(iarg1, iarg2, iarg3);
 	  }
 	  break;
 
@@ -250,7 +284,8 @@ int SyntheticClient::run()
 		string sarg1 = get_sarg(0);
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
-		read_file(sarg1, iarg1, iarg2);
+		if (run_me())
+		  read_file(sarg1, iarg1, iarg2);
 	  }
 	  break;
 
@@ -261,30 +296,32 @@ int SyntheticClient::run()
 		int iarg1 = iargs.front();  iargs.pop_front();
 		string prefix = get_sarg(0);
 
-		dout(3) << "trace " << tfile << " prefix " << prefix << " " << iarg1 << " times" << endl;
-
-		Trace t(tfile.c_str());
-		
-		client->mkdir(prefix.c_str(), 0755);
-		
-		for (int i=0; i<iarg1; i++) {
-		  utime_t start = g_clock.now();
+		if (run_me()) {
+		  dout(2) << "trace " << tfile << " prefix " << prefix << " ... " << iarg1 << " times" << endl;
 		  
-		  if (time_to_stop()) break;
-		  play_trace(t, prefix);
-		  if (time_to_stop()) break;
-		  clean_dir(prefix);
-
-		  utime_t lat = g_clock.now();
-		  lat -= start;
-
-		  dout(1) << " trace loop " << i << " in " << (double)lat << " seconds" << endl;
-		  if (client_logger 
-			  && i > 0
-			  && i < iarg1-1
-			  ) {
-			client_logger->finc("trsum", (double)lat);
-			client_logger->inc("trnum");
+		  Trace t(tfile.c_str());
+		  
+		  client->mkdir(prefix.c_str(), 0755);
+		  
+		  for (int i=0; i<iarg1; i++) {
+			utime_t start = g_clock.now();
+			
+			if (time_to_stop()) break;
+			play_trace(t, prefix);
+			if (time_to_stop()) break;
+			clean_dir(prefix);
+			
+			utime_t lat = g_clock.now();
+			lat -= start;
+			
+			dout(1) << " trace loop " << (i+1) << "/" << iarg1 << " done in " << (double)lat << " seconds" << endl;
+			if (client_logger 
+				&& i > 0
+				&& i < iarg1-1
+				) {
+			  client_logger->finc("trsum", (double)lat);
+			  client_logger->inc("trnum");
+			}
 		  }
 		}
 	  }
@@ -294,9 +331,11 @@ int SyntheticClient::run()
 	case SYNCLIENT_MODE_OPENTEST:
 	  {
 		int count = iargs.front();  iargs.pop_front();
-		for (int i=0; i<count; i++) {
-		  int fd = client->open("test", rand()%2 ? (O_WRONLY|O_CREAT):O_RDONLY);
-		  if (fd > 0) client->close(fd);
+		if (run_me()) {
+		  for (int i=0; i<count; i++) {
+			int fd = client->open("test", rand()%2 ? (O_WRONLY|O_CREAT):O_RDONLY);
+			if (fd > 0) client->close(fd);
+		  }
 		}
 	  }
 	  break;

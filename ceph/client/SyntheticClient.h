@@ -27,20 +27,19 @@
 #define SYNCLIENT_MODE_MAKEDIRS    3
 #define SYNCLIENT_MODE_WRITEFILE   4
 #define SYNCLIENT_MODE_READFILE    5
-#define SYNCLIENT_MODE_UNTIL       6
 #define SYNCLIENT_MODE_REPEATWALK  7
-#define SYNCLIENT_MODE_WRITEBATCH  21
+#define SYNCLIENT_MODE_WRITEBATCH  8
 
 #define SYNCLIENT_MODE_TRACE       20
-#define SYNCLIENT_MODE_TRACEOPENSSH 8
-#define SYNCLIENT_MODE_TRACEOPENSSHLIB 9
-#define SYNCLIENT_MODE_TRACEINCLUDE 10
-#define SYNCLIENT_MODE_TRACELIB 11
-
-#define SYNCLIENT_MODE_RANDOMSLEEP  12
-#define SYNCLIENT_MODE_SLEEP        13
 
 #define SYNCLIENT_MODE_OPENTEST     30
+
+#define SYNCLIENT_MODE_ONLY        50
+#define SYNCLIENT_MODE_UNTIL       51
+
+#define SYNCLIENT_MODE_RANDOMSLEEP  61
+#define SYNCLIENT_MODE_SLEEP        62
+
 
 
 
@@ -124,12 +123,26 @@ class SyntheticClient {
 
   int run();
 
+  bool run_me() {
+	if (run_only >= 0) {
+	  if (run_only == client->get_nodeid()) {
+		run_only = -1;
+		return true;
+	  }
+	  run_only = -1;
+	  return false;
+	}
+	return true;
+  }
+
   // run() will do one of these things:
   list<int> modes;
   list<string> sargs;
   list<int> iargs;
   utime_t run_start;
   utime_t run_until;
+
+  int     run_only;
 
   string get_sarg(int seq);
 

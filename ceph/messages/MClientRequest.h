@@ -59,6 +59,8 @@ typedef struct {
   int    iarg, iarg2;
   time_t targ, targ2;
 
+  inodeno_t  mds_wants_replica_in_dirino;
+
   size_t sizearg;
 } MClientRequest_st;
 
@@ -99,6 +101,8 @@ class MClientRequest : public Message {
   void set_sarg(const char *arg) { this->sarg = arg; }
   void set_sarg2(string& arg) { this->sarg2 = arg; }
   void set_sizearg(size_t s) { st.sizearg = s; }
+  void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
+	st.mds_wants_replica_in_dirino = dirino; }
 
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
@@ -115,6 +119,8 @@ class MClientRequest : public Message {
   string& get_sarg() { return sarg; }
   string& get_sarg2() { return sarg2; }
   size_t get_sizearg() { return st.sizearg; }
+  inodeno_t get_mds_wants_replica_in_dirino() { 
+	return st.mds_wants_replica_in_dirino; }
 
   virtual void decode_payload() {
 	int off = 0;
