@@ -302,7 +302,7 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 {
   m->set_source(myaddr, fromport);
   m->set_dest(dest, port);
-  m->set_lamport_stamp( get_lamport() );
+  m->set_lamport_send_stamp( get_lamport() );
 
   lock.Lock();
 

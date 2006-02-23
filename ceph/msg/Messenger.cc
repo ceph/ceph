@@ -166,7 +166,8 @@ void Messenger::dispatch(Message *m)
 {
   assert(dispatcher);
   
-  bump_lamport(m->get_lamport_stamp());
+  bump_lamport(m->get_lamport_send_stamp());
+  m->set_lamport_recv_stamp(peek_lamport());
 
   long pcid = m->get_pcid();
 

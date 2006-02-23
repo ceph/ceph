@@ -2398,7 +2398,11 @@ void OSD::op_modify(MOSDOp *op)
 	// version?  clean?
 	version_t ov = 0;  // 0 == dne (yet)
 	store->getattr(oid, "version", &ov, sizeof(ov));
-	version_t nv = op->get_lamport_stamp();
+	version_t nv = messenger->get_lamport();//op->get_lamport_recv_stamp();
+	if (nv <= ov) 
+	  cerr << opname << " " << hex << oid << dec << " ov " << ov << " nv " << nv 
+		   << " ... wtf?  msg sent " << op->get_lamport_send_stamp() 
+		   << " recv " << op->get_lamport_recv_stamp() << endl;
 	assert(nv > ov);
 	
 	dout(12) << opname << " " << hex << oid << dec << " v " << nv << "  off " << op->get_offset() << " len " << op->get_length() << endl;  

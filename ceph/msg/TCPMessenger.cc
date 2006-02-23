@@ -1195,7 +1195,7 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   // set envelope
   m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
-  m->set_lamport_stamp( get_lamport() );
+  m->set_lamport_send_stamp( get_lamport() );
 
   dout(4) << "--> " << m->get_type_name() 
 		  << " from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() 
