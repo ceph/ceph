@@ -838,12 +838,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	  !(new_caps & CAP_FILE_RDCACHE))
 	release_inode_buffers(in);
 
-  // ack?
-  if (old_caps & ~new_caps) {
-	dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
-	messenger->send_message(m, m->get_source(), m->get_source_port());
-  } 
-
   // wake up waiters?
   if (new_caps & CAP_FILE_RD) {
 	for (list<Cond*>::iterator it = in->waitfor_read.begin();
@@ -864,7 +858,15 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	in->waitfor_write.clear();
   }
 
-  delete m;
+  // ack?
+  if (old_caps & ~new_caps) {
+	// send back to mds
+	dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
+	messenger->send_message(m, m->get_source(), m->get_source_port());
+  } else {
+	// discard
+	delete m;
+  }
 }
 
 void Client::finish_flush(Inode *in)
