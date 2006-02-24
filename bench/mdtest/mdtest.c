@@ -632,7 +632,7 @@ int main(int argc, char **argv) {
 
     valid_tests();
 
-    if (rank == 0) {
+    if (rank == 0 && 0) {
         fprintf(stdout, "Command line used:");
         for (i = 0; i < argc; i++) {
             fprintf(stdout, " %s", argv[i]);
