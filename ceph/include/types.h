@@ -267,7 +267,8 @@ typedef int        fh_t;          // file handle
 #define MDS_POP_NESTED  1   // me + children, auth or not
 #define MDS_POP_CURDOM  2   // me + children in current domain
 #define MDS_POP_ANYDOM  3   // me + children in any (nested) domain
-#define MDS_NPOP        4
+#define MDS_POP_DIRMOD  4   // just this dir, modifications only
+#define MDS_NPOP        5
 
 class mds_load_t {
  public:

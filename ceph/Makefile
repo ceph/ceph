@@ -51,6 +51,7 @@ COMMON_OBJS= \
 	osd/Filer.o\
 	osd/OSDMap.o\
 	osd/PG.o\
+	osd/ObjectStore.o\
 	ebofs.o\
 	common/Logger.o\
 	common/Clock.o\

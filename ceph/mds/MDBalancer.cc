@@ -217,6 +217,33 @@ double MDBalancer::try_match(int ex, double& maxex,
 
 
 
+void MDBalancer::do_hashing()
+{
+  if (hash_queue.empty()) {
+	dout(20) << "do_hashing has nothing to do" << endl;
+	return;
+  }
+
+  dout(0) << "do_hashing " << hash_queue.size() << " dirs marked for possible hashing" << endl;
+  
+  for (set<inodeno_t>::iterator i = hash_queue.begin();
+	   i != hash_queue.end();
+	   i++) {
+	inodeno_t dirino = *i;
+	CInode *in = mds->mdcache->get_inode(dirino);
+	if (!in) continue;
+	CDir *dir = in->dir;
+	if (!dir) continue;
+	if (!dir->is_auth()) continue;
+
+	dout(0) << "do_hashing hashing " << *dir << endl;
+	mds->mdcache->hash_dir(dir);
+  }
+  hash_queue.clear();
+}
+
+
+
 void MDBalancer::do_rebalance(int beat)
 {
   int cluster_size = mds->get_cluster()->get_num_mds();
@@ -563,13 +590,27 @@ void MDBalancer::hit_inode(CInode *in)
 }
 
 
-void MDBalancer::hit_dir(CDir *dir) 
+void MDBalancer::hit_dir(CDir *dir, bool modify) 
 {
   // hit me
   dir->popularity[MDS_POP_JUSTME].hit();
-  
-  hit_recursive(dir);
 
+  // hit modify counter, if this was a modify
+  if (modify) {
+	float p = dir->popularity[MDS_POP_DIRMOD].hit();
+
+	if (dir->is_auth()) {
+	  // hash this dir?  (later?)
+	  if (p > g_conf.mds_bal_hash_threshold &&
+		  !(dir->is_hashed() || dir->is_hashing()) &&
+		  hash_queue.count(dir->ino()) == 0) {
+		dout(0) << "hit_dir DIRMOD pop is " << p << ", putting in hash_queue: " << *dir << endl;
+		hash_queue.insert(dir->ino());
+	  }
+	}
+  }
+
+  hit_recursive(dir);
 }
 
 

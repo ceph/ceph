@@ -141,7 +141,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_paused = false;
 
   stat_ops = 0;
-  last_balancer_heartbeat = g_clock.recent_now();
+  last_balancer_hash = last_balancer_heartbeat = g_clock.recent_now();
 
   // log
   string name;
@@ -592,6 +592,14 @@ void MDS::my_dispatch(Message *m)
 	  balancer->send_heartbeat();
 	  num_bal_times--;
 	}
+
+	// hash?
+	if (true &&
+		now.sec() - last_balancer_hash.sec() > g_conf.mds_bal_hash_interval) {
+	  last_balancer_hash = now;
+	  balancer->do_hashing();
+	}
+	
 	
 
 	// HACK to test hashing stuff
@@ -1250,7 +1258,7 @@ int MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items)
 	
 	// hashed?
 	if (dir->is_hashed() &&
-		whoami != get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first ))
+		whoami != get_cluster()->hash_dentry( dir->ino(), it->first ))
 	  continue;
 	
 	// is dentry readable?
@@ -1619,6 +1627,9 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
 	dn = dir->add_dentry(name, newi);
   else
 	dir->link_inode(dn, newi);
+  
+  // bump modify pop
+  balancer->hit_dir(dir, true);
   
   // mark dirty
   dn->mark_dirty();

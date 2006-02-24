@@ -24,15 +24,21 @@
 
 #define SYNCLIENT_MODE_RANDOMWALK  1
 #define SYNCLIENT_MODE_FULLWALK    2
-#define SYNCLIENT_MODE_MAKEDIRS    3
-#define SYNCLIENT_MODE_WRITEFILE   4
-#define SYNCLIENT_MODE_READFILE    5
 #define SYNCLIENT_MODE_REPEATWALK  7
-#define SYNCLIENT_MODE_WRITEBATCH  8
 
-#define SYNCLIENT_MODE_TRACE       20
+#define SYNCLIENT_MODE_MAKEDIRS     10     // dirs files depth
+#define SYNCLIENT_MODE_MAKEFILES    11     // num count private
+#define SYNCLIENT_MODE_MAKEFILES2   12     // num count private
+#define SYNCLIENT_MODE_CREATESHARED 13     // num
+#define SYNCLIENT_MODE_OPENSHARED   14     // num count
 
-#define SYNCLIENT_MODE_OPENTEST     30
+#define SYNCLIENT_MODE_WRITEFILE   20
+#define SYNCLIENT_MODE_READFILE    21
+#define SYNCLIENT_MODE_WRITEBATCH  22
+
+#define SYNCLIENT_MODE_TRACE       30
+
+#define SYNCLIENT_MODE_OPENTEST     40
 
 #define SYNCLIENT_MODE_ONLY        50
 #define SYNCLIENT_MODE_UNTIL       51
@@ -159,7 +165,13 @@ class SyntheticClient {
 
   int full_walk(string& fromdir);
   int random_walk(int n);
+
   int make_dirs(const char *basedir, int dirs, int files, int depth);
+  int make_files(int num, int count, int priv, bool more);
+
+  int create_shared(int num);
+  int open_shared(int num, int count);
+
   int write_file(string& fn, int mb, int chunk);
   int write_batch(int nfile, int mb, int chunk);
   int read_file(string& fn, int mb, int chunk);

@@ -56,8 +56,10 @@ class c_inode_info {
   bool inode_file_valid;  // true if inode info is valid (ie was readable on mds at the time)
   bool inode_hard_valid;  // true if inode info is valid (ie was readable on mds at the time)
 
-  bool     spec_defined;
   int      dir_auth;
+  bool     hashed, replicated;
+
+  bool     spec_defined;
   set<int> dist;    // where am i replicated?
 
 
@@ -76,11 +78,16 @@ class c_inode_info {
 	this->ref_dn = ref_dn;
 	
 	// replicated where?
-	spec_defined = in->dir && in->dir->is_auth();
-	if (spec_defined) {
-	  dir_auth = in->dir->get_dir_auth();
+	if (in->dir && in->dir->is_auth()) {
+	  spec_defined = true;
 	  in->dir->get_dist_spec(this->dist, whoami);
-	} 
+	} else 
+	  spec_defined = false;
+
+	// dir info
+	dir_auth = (in->dir && in->dir->get_dir_auth());
+	hashed = (in->dir && in->dir->is_hashed());   // FIXME not quite right.
+	replicated = (in->dir && in->dir->is_rep());
   }
   
   void _encode(bufferlist &bl) {
@@ -89,6 +96,8 @@ class c_inode_info {
 	bl.append((char*)&inode_hard_valid, sizeof(inode_hard_valid));
 	bl.append((char*)&spec_defined, sizeof(spec_defined));
 	bl.append((char*)&dir_auth, sizeof(dir_auth));
+	bl.append((char*)&hashed, sizeof(hashed));
+	bl.append((char*)&replicated, sizeof(replicated));
 
 	::_encode(ref_dn, bl);
 	::_encode(symlink, bl);
@@ -106,6 +115,10 @@ class c_inode_info {
 	off += sizeof(spec_defined);
 	bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
 	off += sizeof(dir_auth);
+	bl.copy(off, sizeof(hashed), (char*)&hashed);
+	off += sizeof(hashed);
+	bl.copy(off, sizeof(replicated), (char*)&replicated);
+	off += sizeof(replicated);
 
 	::_decode(ref_dn, bl, off);
 	::_decode(symlink, bl, off);

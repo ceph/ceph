@@ -45,7 +45,7 @@ class EDirUpdate : public LogEvent {
 	CDir *dir = in->dir;
 	if (!dir) return true;
 
-	dout(0) << "EDirUpdate v " << version << " on dir " << *dir << endl;
+	dout(10) << "EDirUpdate v " << version << " on dir " << *dir << endl;
 
 	if (!dir->is_auth()) return true;     // not mine!
 	if (dir->is_frozen()) return true;    // frozen -> exporting -> obsolete? FIXME
@@ -65,7 +65,7 @@ class EDirUpdate : public LogEvent {
 	CDir *dir = in->dir;
 	assert(dir);
 
-	dout(0) << "EDirUpdate committing dir " << *dir << endl;
+	dout(10) << "EDirUpdate committing dir " << *dir << endl;
 	mds->mdstore->commit_dir(dir, c);
   }
   

@@ -225,7 +225,7 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
 	dn = dir->dentries[dname];
-  dout(12) << "insert_inode_info " << dname << " ino " << hex << in_info->inode.ino << dec << "  size " << in_info->inode.size << endl;
+  dout(12) << "insert_inode_info " << dname << " ino " << hex << in_info->inode.ino << dec << "  size " << in_info->inode.size << "  hashed " << in_info->hashed << endl;
   
   if (dn) {
 	if (dn->inode->inode.ino == in_info->inode.ino) {
@@ -284,16 +284,20 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
 	*(dn->inode->symlink) = in_info->symlink;
   }
 
-  // take note of latest distribution on mds's
+  // dir info
+  dn->inode->dir_auth = in_info->dir_auth;
+  dn->inode->dir_hashed = in_info->hashed;  
+  dn->inode->dir_replicated = in_info->replicated;  
+
+  // dir replication
   if (in_info->spec_defined) {
-	if (in_info->dist.empty() && !dn->inode->mds_contacts.empty()) {
-	  dout(9) << "lost dist spec for " << hex << dn->inode->inode.ino << dec << " " << in_info->dist << endl;
-	}
-	if (!in_info->dist.empty() && dn->inode->mds_contacts.empty()) {
-	  dout(9) << "got dist spec for " << hex << dn->inode->inode.ino << dec << " " << in_info->dist << endl;
-	}
-	dn->inode->mds_contacts = in_info->dist;
-	dn->inode->mds_dir_auth = in_info->dir_auth;
+	if (in_info->dist.empty() && !dn->inode->dir_contacts.empty())
+	  dout(9) << "lost dist spec for " << hex << dn->inode->inode.ino << dec 
+			  << " " << in_info->dist << endl;
+	if (!in_info->dist.empty() && dn->inode->dir_contacts.empty()) 
+	  dout(9) << "got dist spec for " << hex << dn->inode->inode.ino << dec 
+			  << " " << in_info->dist << endl;
+	dn->inode->dir_contacts = in_info->dist;
   }
 
   return dn->inode;
@@ -307,21 +311,29 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
   Inode *cur = root;
   time_t now = time(NULL);
 
-  if (trace.empty()) return;
+  if (trace.empty()) {
+	return;
+  }
   
   for (unsigned i=0; i<trace.size(); i++) {
     if (i == 0) {
+	  c_inode_info *in_info = trace[0];
+
       if (!root) {
         cur = root = new Inode();
-        root->inode = trace[i]->inode;
-        inode_map[root->inode.ino] = root;
+        root->inode = in_info->inode;
+		inode_map[root->inode.ino] = root;
       }
-	  if (trace[i]->spec_defined) {
-		root->mds_contacts = trace[i]->dist;
-		root->mds_dir_auth = trace[i]->dir_auth;
-	  }
+
 	  root->last_updated = now;
-      dout(12) << "insert_trace trace " << i << " root" << endl;
+
+	  root->dir_auth = in_info->dir_auth;
+	  root->dir_hashed = in_info->hashed;  
+	  root->dir_replicated = in_info->replicated;  
+	  if (in_info->spec_defined) 
+		root->dir_contacts = in_info->dist;
+
+      dout(12) << "insert_trace trace " << i << " root .. rep=" << root->dir_replicated << endl;
     } else {
       dout(12) << "insert_trace trace " << i << endl;
       Dir *dir = cur->open_dir();
@@ -379,42 +391,60 @@ MClientReply *Client::make_request(MClientRequest *req,
 								   bool auth_best, 
 								   int use_mds)  // this param is icky, debug weirdness!
 {
-  // send to what MDS?  find deepest known prefix
-  Inode *cur = root;
-  for (unsigned i=0; i<req->get_filepath().depth(); i++) {
-	if (cur && cur->inode.mode & INODE_MODE_DIR && cur->dir) {
-	  Dir *dir = cur->dir;
-	  if (dir->dentries.count( req->get_filepath()[i] ) == 0) 
-		break;
-	  
-	  dout(7) << " have path seg " << i << " on " << cur->mds_dir_auth << " ino " << hex << cur->inode.ino << dec << " " << req->get_filepath()[i] << endl;
-	  cur = dir->dentries[ req->get_filepath()[i] ]->inode;
-	  assert(cur);
-	} else
-	  break;
-  }
+  // find deepest known prefix
+  Inode *diri = root;   // the deepest known containing dir
+  Inode *item = 0;      // the actual item... if we know it
+  int missing_dn = -1;  // which dn we miss on (if we miss)
   
+  unsigned depth = req->get_filepath().depth();
+  for (unsigned i=0; i<depth; i++) {
+	// dir?
+	if (diri && diri->inode.mode & INODE_MODE_DIR && diri->dir) {
+	  Dir *dir = diri->dir;
+
+	  // do we have the next dentry?
+	  if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
+		missing_dn = i;  // no.
+		break;
+	  }
+	  
+	  dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << hex << diri->inode.ino << dec << " " << req->get_filepath()[i] << endl;
+
+	  if (i == depth-1) {  // last one!
+		item = dir->dentries[ req->get_filepath()[i] ]->inode;
+		break;
+	  } 
+
+	  // continue..
+	  diri = dir->dentries[ req->get_filepath()[i] ]->inode;
+	  assert(diri);
+	} else {
+	  missing_dn = i;
+	  break;
+	}
+  }
+
+  // choose an mds
   int mds = 0;
-  if (cur) {
-	if (!auth_best && cur->get_replicas().size()) {
-	  // try replica(s)
-	  dout(9) << "contacting replica from deepest inode " << hex << cur->inode.ino << dec << " " << req->get_filepath() << ": " << cur->get_replicas() << endl;
-	  set<int>::iterator it = cur->get_replicas().begin();
-	  if (cur->get_replicas().size() == 1)
-		mds = *it;
-	  else {
-		int r = rand() % cur->get_replicas().size();
-		while (r--) it++;
-		mds = *it;
+  if (diri) {
+	if (auth_best) {
+	  // pick the actual auth (as best we can)
+	  if (item) {
+		mds = item->authority(mdcluster);
+	  } else if (diri->dir_hashed) {
+		mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+									 mdcluster);
+	  } else {
+		mds = diri->authority(mdcluster);
 	  }
 	} else {
-	  // try auth
-	  mds = cur->authority();
-	  //if (!auth_best && req->get_filepath().get_path()[0] == '/')
-		dout(9) << "contacting auth mds " << mds << " auth_best " << auth_best << " for " << req->get_filepath() << endl;
+	  // balance our traffic!
+	  if (diri->dir_hashed) 
+		mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
+									 mdcluster);
+	  else 
+		mds = diri->pick_replica(mdcluster);
 	}
-  } else {
-	dout(9) << "i have no idea where " << req->get_filepath() << " is" << endl;
   }
 
   // force use of a particular mds?
@@ -762,13 +792,13 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	for (map<int,InodeCap>::iterator p = in->caps.begin();
 		 p != in->caps.end();
 		 p++)
-	  dout(0) << "  cap " << p->first << " " 
+	  dout(20) << " left cap " << p->first << " " 
 			  << cap_string(p->second.caps) << " " 
 			  << p->second.seq << endl;
 	for (map<int,InodeCap>::iterator p = in->stale_caps.begin();
 		 p != in->stale_caps.end();
 		 p++)
-	  dout(0) << "  stale cap " << p->first << " " 
+	  dout(20) << " left stale cap " << p->first << " " 
 			  << cap_string(p->second.caps) << " " 
 			  << p->second.seq << endl;
 	
@@ -963,6 +993,9 @@ int Client::mount(int mkfs)
   MClientMountAck *reply = (MClientMountAck*)messenger->sendrecv(m, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
   client_lock.Lock();
   assert(reply);
+
+  // mdcluster!
+  mdcluster = new MDCluster(g_conf.num_mds, g_conf.num_osd);  // FIXME this is stoopid
 
   // we got osdmap!
   osdmap->decode(reply->get_osd_map_state());

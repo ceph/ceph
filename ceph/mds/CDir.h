@@ -369,6 +369,7 @@ class CDir {
 	if (( popularity[MDS_POP_CURDOM].get() > g_conf.mds_bal_replicate_threshold)) {
 	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
 	  ls = open_by;
+	  if (!ls.empty()) ls.insert(auth);
 	}
   }
 

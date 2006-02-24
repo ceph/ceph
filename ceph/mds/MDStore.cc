@@ -574,10 +574,10 @@ void MDStore::commit_dir_slice( CDir *dir,
 {
   if (hashcode >= 0) {
 	assert(dir->is_hashed());
-	dout(11) << "commit_dir_slice hashcode " << hashcode << " " << *dir << " version " << dir->get_version() << endl;
+	dout(10) << "commit_dir_slice hashcode " << hashcode << " " << *dir << " version " << dir->get_version() << endl;
   } else {
 	assert(dir->is_auth());
-	dout(11) << "commit_dir_slice (whole dir) " << *dir << " version " << dir->get_version() << endl;
+	dout(10) << "commit_dir_slice (whole dir) " << *dir << " version " << dir->get_version() << endl;
   }
   
   // get continuation ready

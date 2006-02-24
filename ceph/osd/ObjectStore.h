@@ -19,17 +19,32 @@
 #include "include/Context.h"
 #include "include/bufferlist.h"
 
+#include "include/Distribution.h"
+
 #include <sys/stat.h>
+#include <sys/vfs.h>    /* or <sys/statfs.h> */
 
 #include <list>
 using namespace std;
+
+#ifndef MIN
+# define MIN(a,b) ((a) < (b) ? (a):(b))
+#endif
 
 /*
  * low-level interface to the local OSD file system
  */
 
 class ObjectStore {
+private:
+  list<object_t>           age_free_oids;
+  object_t                 age_cur_oid;
+  vector< list<object_t> > age_objects;
+  Distribution file_size_distn; //kb
+  bool         did_distn;
+
  public:
+  ObjectStore() : did_distn(false) {}
   virtual ~ObjectStore() {}
 
   // mgmt
@@ -84,6 +99,20 @@ class ObjectStore {
   
   
   
+  // age store
+private:
+  void age_empty(float pc);
+  void age_fill(float pc);
+  ssize_t age_pick_size();
+  object_t age_get_oid();
+
+public:
+  void age(float high_water,    // fill to this %
+		  float low_water,     // then empty to this %
+		  int count,         // this many times
+		  float final_water,   // and end here ( <= low_water)
+		  int fake_size_mb=0);
+
 };
 
 #endif

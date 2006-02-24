@@ -76,7 +76,7 @@ int MDCluster::hash_dentry( inodeno_t dirino, const string& dn )
 
   r %= num_mds;
 
-  dout(22) << "hash_dentry(" << dirino << ", " << dn << ") -> " << r << endl;
+  dout(30) << "hash_dentry(" << dirino << ", " << dn << ") -> " << r << endl;
   return r;
 }
 

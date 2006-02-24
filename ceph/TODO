@@ -14,32 +14,45 @@ MAR 1
 
 - stability
  - ebofs table.remove() thing
+ - fakestore crapping out.. missing timer events?
 
 
 - mds
  - vary log stripe size, count  (on ebofs and fakestore)
   ?  4k for ebofs, 64k for fakestore
   ?  scount=4... or 2?
+     -> striping mostly useless
 
 - makedirs vs ebo/fake. 
   - streaming small writes (mds log)
-
-- mds scaling
- - shared /lib, /include  .. verify fixed open() behavior works!
+     -> ebofs needs 200 clients per MDS to get close to fakestore (compensate for latency?)
 
 - quick retest of crush vs linear
 
 
-- workloads
+- scaling (scale mds+osd+clients together)
+ - metadata
   - makedirs
+**     100 c per mds is good on googoo ... testing on alc as mds_log.1
+
+  - creates in same dir
+       --syn makefiles 10000 10 0 
+  - repeat creat+stat+unlink 
+  - creates in private dir
+  - repeat creat+stat+unlink
+
+  - zillion opens of the same file
+       --syn only 0 --syn createshared 10 --syn openshared 10 1000
+
+  - local compile
+  - shared compile (/lib, /include)
+
+ - data scaling
+  - writes to local files
+  - strided write to shared file
+  - strided write with O_SYNC
 
 
-  - kernel compile?
-
-
-
-- MDS mkdir needs EDirUpdate event
-  ...or else we can get unlogged leftover dirty dirs 
 
 
 
@@ -55,7 +68,9 @@ OSDI
 - obfs?
 
 - osd write tests
- - get obfs working
+ - ebofs vs fakestore:
+      plot "log/osd/write_sizes.swap1.block/c" u 1:2 t "fs=ebofs", "log/osd/write_sizes.sdb2.ext3.fake/c" u 1:2 t "fs=fakestore.sdb2", "log/osd/write_sizes.sdb2.ext3.fake2/c" u 1:2 t "fs=fakestore.sdb2.again", "log/osd/write_sizes.sdb2.ebo/c" u 1:2 t "fs=ebofs.again"
+ - get obfs working?
 
 - client buffer cache!
 

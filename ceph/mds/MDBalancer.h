@@ -39,6 +39,9 @@ class MDBalancer {
   
   int beat_epoch;
 
+  // todo
+  set<inodeno_t>   hash_queue;
+
   // per-epoch scatter/gathered info
   hash_map<int, mds_load_t>  mds_load;
   map<int, map<int, float> > mds_import_map;
@@ -69,6 +72,8 @@ class MDBalancer {
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
 
+  void do_hashing();
+
   void export_empties();
   void do_rebalance(int beat);
   void find_exports(CDir *dir, 
@@ -82,7 +87,7 @@ class MDBalancer {
   void add_import(class CDir *im);
 
   void hit_inode(class CInode *in);
-  void hit_dir(class CDir *dir);
+  void hit_dir(class CDir *dir, bool modify=false);
   void hit_recursive(class CDir *dir);
 
 

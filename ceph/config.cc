@@ -113,9 +113,10 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 1000,
-  //mds_bal_hash_threshold: 20000,
-  //mds_bal_unhash_threshold: 2000,
+  mds_bal_hash_threshold: 2000,
+  mds_bal_unhash_threshold: 250,
   mds_bal_interval: 30,           // seconds
+  mds_bal_hash_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
@@ -135,6 +136,7 @@ md_config_t g_conf = {
   osd_max_opq: 10,
   osd_mkfs: false,
   osd_fake_sync: false,
+  osd_age: 0.0,
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
@@ -414,6 +416,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_age") == 0) 
+	  g_conf.osd_age = atof(args[++i]);
 	else if (strcmp(args[i], "--osd_pg_bits") == 0) 
 	  g_conf.osd_pg_bits = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_max_rep") == 0) 

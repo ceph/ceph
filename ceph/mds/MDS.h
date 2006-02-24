@@ -152,7 +152,7 @@ class MDS : public Dispatcher {
 
  protected:
   __uint64_t   stat_ops;
-  utime_t   last_balancer_heartbeat;
+  utime_t   last_balancer_heartbeat, last_balancer_hash;
   
  public:
   MDS(MDCluster *mdc, int whoami, Messenger *m);

@@ -1168,17 +1168,17 @@ void Ebofs::sync()
 {
   ebofs_lock.Lock();
   if (!dirty) {
-	dout(3) << "sync in " << super_epoch << ", not dirty" << endl;
+	dout(0) << "sync in " << super_epoch << ", not dirty" << endl;
   } else {
-	dout(3) << "sync in " << super_epoch << endl;
+	dout(0) << "sync in " << super_epoch << endl;
 	
 	if (!commit_thread_started) {
-	  dout(10) << "sync waiting for commit thread to start" << endl;
+	  dout(0) << "sync waiting for commit thread to start" << endl;
 	  sync_cond.Wait(ebofs_lock);
 	}
 	
 	if (mid_commit) {
-	  dout(10) << "sync waiting for commit in progress" << endl;
+	  dout(0) << "sync waiting for commit in progress" << endl;
 	  sync_cond.Wait(ebofs_lock);
 	}
 	
@@ -1186,7 +1186,7 @@ void Ebofs::sync()
 	
 	sync_cond.Wait(ebofs_lock);  // wait
 	
-	dout(3) << "sync finish in " << super_epoch << endl;
+	dout(0) << "sync finish in " << super_epoch << endl;
   }
   ebofs_lock.Unlock();
 }
@@ -1213,8 +1213,8 @@ int Ebofs::statfs(struct statfs *buf)
   buf->f_type = EBOFS_MAGIC;             /* type of filesystem */
   buf->f_bsize = 4096;                   /* optimal transfer block size */
   buf->f_blocks = dev.get_num_blocks();  /* total data blocks in file system */
-  buf->f_bfree = free_blocks;            /* free blocks in fs */
-  buf->f_bavail = free_blocks;           /* free blocks avail to non-superuser */
+  buf->f_bfree = free_blocks + limbo_blocks;            /* free blocks in fs */
+  buf->f_bavail = free_blocks + limbo_blocks;           /* free blocks avail to non-superuser */
   buf->f_files = nodepool.num_total();   /* total file nodes in file system */
   buf->f_ffree = nodepool.num_free();    /* free file nodes in fs */
   //buf->f_fsid = 0;                       /* file system id */

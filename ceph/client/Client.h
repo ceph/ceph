@@ -15,7 +15,7 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
-//#include "mds/MDCluster.h"
+#include "mds/MDCluster.h"
 #include "osd/OSDMap.h"
 
 #include "msg/Message.h"
@@ -80,6 +80,7 @@ class Dentry : public LRUObject {
   void put() { assert(ref == 1); ref--; lru_unpin(); }
   
   Dentry() : dir(0), inode(0), ref(0) { }
+
   /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
   Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
 	name = new char[n.length()+1];
@@ -113,9 +114,12 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  int       mds_dir_auth;
-  set<int>	mds_contacts;
   time_t    last_updated;
+
+  // about the dir (if this is one!)
+  int       dir_auth;
+  set<int>	dir_contacts;
+  bool      dir_hashed, dir_replicated;
 
   // per-mds caps
   map<int,InodeCap> caps;            // mds -> InodeCap
@@ -144,7 +148,9 @@ class Inode {
 	//cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
   }
 
-  Inode() : mds_dir_auth(-1), last_updated(0),
+  Inode() : 
+	last_updated(0),
+	dir_auth(-1), dir_hashed(false), dir_replicated(false), 
 	file_wr_mtime(0), file_wr_size(0), num_rd(0), num_wr(0),
 	ref(0), dir(0), dn(0), symlink(0) { }
   ~Inode() {
@@ -177,29 +183,52 @@ class Inode {
 	return w;
   }
 
-  int authority() {
-	// my info valid?
-	if (mds_dir_auth >= 0)  
-	  return mds_dir_auth;
-	
-	// otherwise try parent
-	if (dn && dn->dir && dn->dir->parent_inode) 
-	  return dn->dir->parent_inode->authority();
-
-	return 0;  // who knows!
-  }
-  set<int>& get_replicas() {
-	if (mds_contacts.size())
-	  return mds_contacts;
-	if (is_dir()) {
-	  return mds_contacts;
-	} 
+  int authority(MDCluster *mdcluster) {
+	// parent?
 	if (dn && dn->dir && dn->dir->parent_inode) {
-	  return dn->dir->parent_inode->get_replicas();
+	  // parent hashed?
+	  if (dn->dir->parent_inode->dir_hashed) {
+		// hashed
+		return mdcluster->hash_dentry( dn->dir->parent_inode->ino(),
+									   dn->name );
+	  }
+
+	  if (dir_auth >= 0)
+		return dir_auth;
+	  else
+		return dn->dir->parent_inode->authority(mdcluster);
 	}
-	return mds_contacts;
+
+	if (dir_auth >= 0)
+	  return dir_auth;
+
+	assert(0);	// !!!
+	return 0;
   }
-  
+  int dentry_authority(const char *dn,
+					   MDCluster *mdcluster) {
+	return mdcluster->hash_dentry( ino(),
+								   dn );
+  }
+  int pick_replica(MDCluster *mdcluster) {
+	// replicas?
+	if (dir_contacts.size()) {
+	  set<int>::iterator it = dir_contacts.begin();
+	  if (dir_contacts.size() == 1)
+		return *it;
+	  else {
+		int r = rand() % dir_contacts.size();
+		while (r--) it++;
+		return *it;
+	  }
+	}
+
+	if (dir_replicated) 
+	  return rand() % mdcluster->get_num_mds();  // huh.. pick a random mds!
+	else
+	  return authority(mdcluster);
+  }
+
 
   // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
   Dir *open_dir() {
@@ -239,7 +268,7 @@ class Client : public Dispatcher {
   int whoami;
   
   // cluster descriptors
-  //MDCluster             *mdcluster; 
+  MDCluster             *mdcluster; 
   OSDMap                *osdmap;
 
   bool   mounted;

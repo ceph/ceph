@@ -191,8 +191,13 @@ int OSD::init()
 	dout(2) << "mkfs" << endl;
 
 	store->mkfs();
+
   }
   int r = store->mount();
+
+  if (g_conf.osd_age > 0.0) 
+	store->age(g_conf.osd_age, g_conf.osd_age / 2.0, 2, g_conf.osd_age);
+
 
   monitor->init();
 

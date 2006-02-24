@@ -7420,7 +7420,7 @@ void MDCache::hash_dir_frozen(CDir *dir)
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;
 	
-	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first );
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	if (dentryhashcode == mds->get_nodeid()) continue;
 
 	// msg?
@@ -7496,7 +7496,7 @@ void MDCache::hash_dir_go(CDir *dir)
   }
 
   // pick a hash seed.
-  dir->inode->inode.hash_seed = dir->ino();
+  dir->inode->inode.hash_seed = 1;//dir->ino();
 
   // suck up all waiters
   C_Contexts *fin = new C_Contexts;
@@ -7515,7 +7515,7 @@ void MDCache::hash_dir_go(CDir *dir)
 	CDentry *dn = it->second;
 	CInode *in = dn->inode;
 
-	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first );
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	if (dentryhashcode == mds->get_nodeid()) {
 	  continue;      // still mine!
 	}
@@ -7679,7 +7679,7 @@ void MDCache::handle_hash_dir_ack(MHashDirAck *m)
 	  dout(7) << "got notifies too, all done" << endl;
 	  hash_dir_finish(dir);
 	} else {
-	  dout(7) << "waiting on notifies" << endl;
+	  dout(7) << "waiting on notifies " << endl;
 	}
 
   } else {
@@ -7791,7 +7791,7 @@ void MDCache::handle_hash_dir_notify(MHashDirNotify *m)
 	  if (!in) continue;
 	  if (!in->dir) continue;
 	  
-	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first );
+	  int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	  if (dentryhashcode != from) continue;   // we'll import these in a minute
 	  
 	  if (in->dir->authority() != dentryhashcode)
@@ -7889,7 +7889,7 @@ void MDCache::handle_hash_dir_discover_2(MHashDirDiscover *m, CInode *in, int r)
   assert(dir->hashed_subset.empty());
   
   // inode state
-  dir->inode->inode.hash_seed = dir->ino();
+  dir->inode->inode.hash_seed = 1;// dir->ino();
   if (dir->inode->is_auth()) 
 	dir->inode->mark_dirty();
 
@@ -8504,7 +8504,7 @@ void MDCache::unhash_dir_prep_finish(CDir *dir)
 	if (!in->is_dir()) continue;
 	if (!in->dir) continue;
 	
-	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first );
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	if (dentryhashcode != mds->get_nodeid()) continue;
 	
 	// msg?
@@ -8529,7 +8529,7 @@ void MDCache::handle_unhash_dir(MUnhashDir *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  dout(7) << "handle_unhash_dir " << *dir << endl;
+  dout(7) << "handle_unhash_dir " << *dir << endl;//" .. hash_seed is " << dir->inode->inode.hash_seed << endl;
   assert(dir->is_hashed());
   assert(dir->is_unhashing());
   assert(!dir->is_auth());
@@ -8551,7 +8551,7 @@ void MDCache::handle_unhash_dir(MUnhashDir *m)
 	CDentry *dn = it->second;
 	CInode *in = dn->inode;
 
-	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->inode->inode.hash_seed, it->first );
+	int dentryhashcode = mds->get_cluster()->hash_dentry( dir->ino(), it->first );
 	if (dentryhashcode != mds->get_nodeid()) {
 	  // not mine!
 	  // twiddle dir_auth?

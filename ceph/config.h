@@ -83,7 +83,10 @@ struct md_config_t {
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
+  float mds_bal_hash_threshold;
+  float mds_bal_unhash_threshold;
   int   mds_bal_interval;
+  int   mds_bal_hash_interval;
   float mds_bal_idle_threshold;
   int   mds_bal_max;
   int   mds_bal_max_until;
@@ -102,6 +105,7 @@ struct md_config_t {
   int   osd_max_opq;
   bool  osd_mkfs;
   bool  osd_fake_sync;
+  float   osd_age;
 
 
   int   fakestore_fake_sync;

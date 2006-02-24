@@ -46,6 +46,7 @@ void parse_syn_options(vector<char*>& args)
   for (unsigned i=0; i<args.size(); i++) {
 	if (strcmp(args[i],"--syn") == 0) {
 	  ++i;
+
 	  if (strcmp(args[i],"writefile") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -68,17 +69,32 @@ void parse_syn_options(vector<char*>& args)
 		syn_modes.push_back( SYNCLIENT_MODE_READFILE );
 		syn_iargs.push_back( a );
 		syn_iargs.push_back( b );
+
 	  } else if (strcmp(args[i],"makedirs") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"makefiles") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_MAKEFILES );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"createshared") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_CREATESHARED );
+		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"openshared") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_OPENSHARED );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+
 	  } else if (strcmp(args[i],"fullwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
 		//syn_sargs.push_back( atoi(args[++i]) );
 	  } else if (strcmp(args[i],"randomwalk") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_RANDOMWALK );
 		syn_iargs.push_back( atoi(args[++i]) );	   
+
 	  } else if (strcmp(args[i],"trace") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_TRACE );
 		syn_sargs.push_back( args[++i] );
@@ -101,6 +117,7 @@ void parse_syn_options(vector<char*>& args)
 	  } else if (strcmp(args[i],"opentest") == 0) { 
 		syn_modes.push_back( SYNCLIENT_MODE_OPENTEST );
 		syn_iargs.push_back( atoi(args[++i]) );
+
 	  } else {
 		cerr << "unknown syn mode " << args[i] << endl;
 		assert(0);
@@ -236,6 +253,49 @@ int SyntheticClient::run()
 		if (run_me()) {
 		  dout(2) << "makedirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
 		  make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_MAKEFILES:
+	  {
+		int num = iargs.front();  iargs.pop_front();
+		int count = iargs.front();  iargs.pop_front();
+		int priv = iargs.front();  iargs.pop_front();
+		if (run_me()) {
+		  dout(2) << "makefiles " << num << " " << count << " " << priv << endl;
+		  make_files(num, count, priv, false);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_MAKEFILES2:
+	  {
+		int num = iargs.front();  iargs.pop_front();
+		int count = iargs.front();  iargs.pop_front();
+		int priv = iargs.front();  iargs.pop_front();
+		if (run_me()) {
+		  dout(2) << "makefiles2 " << num << " " << count << " " << priv << endl;
+		  make_files(num, count, priv, true);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_CREATESHARED:
+	  {
+		string sarg1 = get_sarg(0);
+		int num = iargs.front();  iargs.pop_front();
+		if (run_me()) {
+		  dout(2) << "createshared " << num << endl;
+		  create_shared(num);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_OPENSHARED:
+	  {
+		string sarg1 = get_sarg(0);
+		int num = iargs.front();  iargs.pop_front();
+		int count = iargs.front();  iargs.pop_front();
+		if (run_me()) {
+		  dout(2) << "openshared " << num << endl;
+		  open_shared(num, count);
 		}
 	  }
 	  break;
@@ -629,6 +689,86 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
   return 0;
 }
 
+
+int SyntheticClient::make_files(int num, int count, int priv, bool more)
+{
+  int whoami = client->get_nodeid();
+  char d[255];
+
+  if (priv) {
+	for (int c=0; c<count; c++) {
+	  sprintf(d,"dir.%d.run%d", whoami, c);
+	  client->mkdir(d, 0755);
+	}
+  } else {
+	// shared
+	if (whoami == 0) {
+	  for (int c=0; c<count; c++) {
+		sprintf(d,"dir.%d.run%d", 0, c);
+		client->mkdir(d, 0755);
+	  }
+	} else {
+	  sleep(5);
+	}
+  }
+  
+  // files
+  struct stat st;
+  for (int c=0; c<count; c++) {
+	for (int n=0; n<num; n++) {
+	  sprintf(d,"dir.%d.run%d/file.client%d.%d", priv ? whoami:0, c, whoami, n);
+
+	  client->mknod(d, 0644);
+
+	  if (more) {
+		client->lstat(d, &st);
+		int fd = client->open(d, O_RDONLY);
+		client->unlink(d);
+		client->close(fd);
+	  }
+
+	  if (time_to_stop()) return 0;
+	}
+  }
+  
+  return 0;
+}
+
+
+int SyntheticClient::create_shared(int num)
+{
+  // files
+  char d[255];
+  for (int n=0; n<num; n++) {
+	sprintf(d,"file.%d", n);
+	client->mknod(d, 0644);
+  }
+  
+  return 0;
+}
+
+int SyntheticClient::open_shared(int num, int count)
+{
+  // files
+  char d[255];
+  for (int c=0; c<count; c++) {
+	// open
+	list<int> fds;
+	for (int n=0; n<num; n++) {
+	  sprintf(d,"file.%d", n);
+	  int fd = client->open(d,O_RDONLY);
+	  fds.push_back(fd);
+	}
+
+	while (!fds.empty()) {
+	  int fd = fds.front();
+	  fds.pop_front();
+	  client->close(fd);
+	}
+  }
+  
+  return 0;
+}
 
 
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes

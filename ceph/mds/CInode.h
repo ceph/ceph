@@ -261,10 +261,6 @@ class CInode : LRUObject {
   CDir *get_or_open_dir(MDS *mds);
   CDir *set_dir(CDir *newdir);
   
-  bool dir_is_hashed() { 
-	if (inode.hash_seed) return true;
-	return false; 
-  }
   bool dir_is_auth();
 
 
