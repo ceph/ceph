@@ -26,12 +26,25 @@
 #include <set>
 using namespace std;
 
+#include <ext/hash_map>
+using namespace __gnu_cxx;
+
 
 /*** Timer
  * schedule callbacks
  */
 
 class Messenger;
+
+
+namespace __gnu_cxx {
+  template<> struct hash<Context*> {
+	size_t operator()(const Context *p) const { 
+	  static hash<unsigned long> H;
+	  return H((unsigned long)p); 
+	}
+  };
+}
 
 
 class Timer {
