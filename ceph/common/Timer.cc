@@ -63,7 +63,7 @@ void Timer::timer_thread()
 	
 	list<Context*> pending;
 	
-	if (event && now > next) {
+	if (event && now >= next) {
 	  // move to pending list
 	  map< utime_t, set<Context*> >::iterator it = scheduled.begin();
 	  while (it != scheduled.end()) {
@@ -75,8 +75,10 @@ void Timer::timer_thread()
 		if (messenger) {
 		  for (set<Context*>::iterator cit = it->second.begin();
 			   cit != it->second.end();
-			   cit++)
+			   cit++) {
 			pending.push_back(*cit);
+			event_times.erase(*cit);
+		  }
 		}
 
 		//pending[t] = it->second;
@@ -109,15 +111,8 @@ void Timer::timer_thread()
 		dout(DBL) << "kicked or timed out at " << now << endl;
 	  } else {
 		dout(DBL) << "sleeping" << endl;
-
-		//wtf this isn't waking up! 
 		timed_sleep = false;
 		sleep_cond.Wait(lock);         // wait for waker
-		// setting a 1s limit works tho
-		//utime_t next = g_clock.now();
-		//next.sec_ref() += 10;
-		//cond.Wait(lock, next);         // wait for waker
-
 		utime_t now = g_clock.now();
 		dout(DBL) << "kicked at " << now << endl;
 	  }
@@ -132,24 +127,6 @@ void Timer::timer_thread()
 /**
  * Timer bits
  */
-
-/*
-void Timer::set_messenger_kicker(Context *c)
-{
-  dout(10) << "messenger kicker is " << c << endl;
-  messenger_kicker = c;
-}
-
-void Timer::unset_messenger_kicker() 
-{
-  dout(10) << "unset messenger" << endl;
-  if (messenger_kicker) {
-	delete messenger_kicker;
-	messenger_kicker = 0;
-  }
-  cancel_timer();
-}
-*/
 
 void Timer::set_messenger(Messenger *m)
 {
@@ -241,42 +218,11 @@ bool Timer::cancel_event(Context *callback)
   }
 
   utime_t tp = event_times[callback];
+  assert(scheduled.count(tp));
+  scheduled[tp].erase(callback);
 
   event_times.erase(callback);
-  scheduled.erase(tp);
-  pending.erase(tp);
   
   lock.Unlock();
   return true;
 }
-
-/***
- * do user callbacks
- *
- * this should be called by the Messenger in the proper thread (usually same as incoming messages)
- */
-
-/*
-void Timer::execute_pending()
-{
-  lock.Lock();
-
-  while (pending.size()) {
-	utime_t when;
-	Context *event = take_next_pending(when);
-
-	lock.Unlock();
-
-	dout(DBL) << "executing event " << event << " scheduled for " << when << endl;
-	event->finish(0);
-	delete event;
-	
-	lock.Lock();
-  }
-
-  dout(DBL) << "no more events for now" << endl;
-
-  lock.Unlock();
-}
-
-*/

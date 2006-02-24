@@ -37,8 +37,7 @@ class Messenger;
 class Timer {
  private:
   map< utime_t, set<Context*> >  scheduled;    // time -> (context ...)
-  map< utime_t, set<Context*> >  pending;      // time -> (context ...)  
-  map< Context*, utime_t >       event_times;  // event -> time
+  hash_map< Context*, utime_t >  event_times;  // event -> time
 
   // get time of the next event
   Context* get_next_scheduled(utime_t& when) {
@@ -47,22 +46,6 @@ class Timer {
 	when = it->first;
 	set<Context*>::iterator sit = it->second.begin();
 	return *sit;
-  }
-
-  // get next pending event
-  Context* take_next_pending(utime_t& when) {
-	if (pending.empty()) return 0;
-	
-	map< utime_t, set<Context*> >::iterator it = pending.begin();
-	when = it->first;
-
-	// take and remove
-	set<Context*>::iterator sit = it->second.begin();
-	Context *event = *sit;
-	it->second.erase(sit);
-	if (it->second.empty()) pending.erase(it);
-
-	return event;
   }
 
   void register_timer();  // make sure i get a callback
@@ -93,17 +76,6 @@ class Timer {
 		delete *sit;
 	}
 	scheduled.clear();
-
-	// pending
-	for (map< utime_t, set<Context*> >::iterator it = pending.begin();
-		 it != pending.end();
-		 it++) {
-	  for (set<Context*>::iterator sit = it->second.begin();
-		   sit != it->second.end();
-		   sit++)
-		delete *sit;
-	}
-	pending.clear();
   }
   
   void init() {
