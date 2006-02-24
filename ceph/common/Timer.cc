@@ -70,7 +70,7 @@ void Timer::timer_thread()
 		if (it->first > now) break;
 
 		utime_t t = it->first;
-		dout(DBL) << "queuing event(s) scheduled at " << t << endl;
+		dout(DBL) << "queueing event(s) scheduled at " << t << endl;
 
 		if (messenger) {
 		  for (set<Context*>::iterator cit = it->second.begin();
@@ -78,6 +78,7 @@ void Timer::timer_thread()
 			   cit++) {
 			pending.push_back(*cit);
 			event_times.erase(*cit);
+			num_event--;
 		  }
 		}
 
@@ -92,8 +93,10 @@ void Timer::timer_thread()
 		{ // make sure we're not holding any locks while we talk to the messenger
 		  for (list<Context*>::iterator cit = pending.begin();
 			   cit != pending.end();
-			   cit++)
+			   cit++) {
+			dout(DBL) << "queue callback " << *cit << endl;
 			messenger->queue_callback(*cit);
+		  }
 		  pending.clear();
 		}
 		lock.Lock();
@@ -198,6 +201,8 @@ void Timer::add_event_at(utime_t when,
   scheduled[ when ].insert(callback);
   event_times[callback] = when;
   
+  num_event++;
+
   // make sure i wake up
   register_timer();
 

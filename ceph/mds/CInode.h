@@ -20,7 +20,7 @@
 #include "include/types.h"
 #include "include/lru.h"
 #include "common/DecayCounter.h"
-#include <sys/stat.h>
+//#include <sys/stat.h>
 
 #include "CDentry.h"
 #include "Lock.h"

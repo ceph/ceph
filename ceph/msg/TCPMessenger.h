@@ -56,6 +56,8 @@ class TCPMessenger : public Messenger {
 
 extern int tcpmessenger_lookup(char *str, tcpaddr_t& ta);
 
+extern int tcpmessenger_findns(tcpaddr_t &nsa);
+
 extern int tcpmessenger_init();
 extern int tcpmessenger_start();   // start thread
 extern void tcpmessenger_wait();    // wait for thread to finish.

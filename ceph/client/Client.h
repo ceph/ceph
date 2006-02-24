@@ -184,6 +184,7 @@ class Inode {
   }
 
   int authority(MDCluster *mdcluster) {
+	//cout << "authority on " << inode.ino << " .. dir_auth is " << dir_auth<< endl;
 	// parent?
 	if (dn && dn->dir && dn->dir->parent_inode) {
 	  // parent hashed?
@@ -213,6 +214,7 @@ class Inode {
   int pick_replica(MDCluster *mdcluster) {
 	// replicas?
 	if (dir_contacts.size()) {
+	  cout << "dir_contacts if " << dir_contacts << endl;
 	  set<int>::iterator it = dir_contacts.begin();
 	  if (dir_contacts.size() == 1)
 		return *it;
@@ -223,8 +225,10 @@ class Inode {
 	  }
 	}
 
-	if (dir_replicated) 
+	if (dir_replicated) {
+	  cout << "num_mds is " << mdcluster->get_num_mds() << endl;
 	  return rand() % mdcluster->get_num_mds();  // huh.. pick a random mds!
+	}
 	else
 	  return authority(mdcluster);
   }

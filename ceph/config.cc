@@ -222,6 +222,31 @@ md_config_t g_conf = {
 using namespace std;
 
 
+void env_to_vec(vector<char*>& args) 
+{
+  const char *p = getenv("CEPH_ARGS");
+  if (!p) return;
+  
+  static char buf[1000];  
+  int len = strlen(p);
+  memcpy(buf, p, len);
+  buf[len] = 0;
+  cout << "args " << buf << endl;
+
+  int l = 0;
+  for (int i=0; i<len; i++) {
+	if (buf[i] == ' ') {
+	  buf[i] = 0;
+	  args.push_back(buf+l);
+	  cout << "arg " << (buf+l) << endl;
+	  l = i+1;
+	}
+  }
+  args.push_back(buf+l);
+  cout << "arg " << (buf+l) << endl;
+}
+
+
 void argv_to_vec(int argc, char **argv,
 				 vector<char*>& args)
 {

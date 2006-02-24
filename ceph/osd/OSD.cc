@@ -211,7 +211,7 @@ int OSD::init()
 
 int OSD::shutdown()
 {
-  dout(1) << "shutdown" << endl;
+  dout(1) << "shutdown, timer has " << g_timer.num_event << endl;
 
   // finish ops
   wait_for_no_ops();

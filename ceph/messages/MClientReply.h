@@ -84,8 +84,12 @@ class c_inode_info {
 	} else 
 	  spec_defined = false;
 
+	if (in->dir)
+	  dir_auth = in->dir->get_dir_auth();
+	else
+	  dir_auth = -1;
+
 	// dir info
-	dir_auth = (in->dir && in->dir->get_dir_auth());
 	hashed = (in->dir && in->dir->is_hashed());   // FIXME not quite right.
 	replicated = (in->dir && in->dir->is_rep());
   }

@@ -140,6 +140,50 @@ int tcpmessenger_get_rank()
 }
 
 
+int tcpmessenger_findns(tcpaddr_t &nsa)
+{
+  char *nsaddr = 0;
+  bool have_nsa = false;
+
+  // env var?
+  /*int e_len = 0;
+  for (int i=0; envp[i]; i++)
+	e_len += strlen(envp[i]) + 1;
+  */
+  nsaddr = getenv("CEPH_NAMESERVER");////envz_entry(*envp, e_len, "CEPH_NAMESERVER");	
+  if (nsaddr) {
+	while (nsaddr[0] != '=') nsaddr++;
+	nsaddr++;
+  }
+
+  else {
+	// file?
+	int fd = ::open(".ceph_ns",O_RDONLY);
+	if (fd > 0) {
+	  ::read(fd, (void*)&nsa, sizeof(nsa));
+	  ::close(fd);
+	  have_nsa = true;
+	  nsaddr = "from .ceph_ns";
+	}
+  }
+
+  if (!nsaddr && !have_nsa) {
+	cerr << "i need ceph ns addr.. either CEPH_NAMESERVER env var or --ns blah" << endl;
+	return -1;
+	//exit(-1);
+  }
+  
+  // look up nsaddr?
+  if (!have_nsa && tcpmessenger_lookup(nsaddr, nsa) < 0) {
+	return -1;
+  }
+
+  cout << "ceph ns is " << nsaddr << " or " << nsa << endl;
+  return 0;
+}
+
+
+
 /** rankserver
  *
  * one per rank.  handles entity->rank lookup replies.

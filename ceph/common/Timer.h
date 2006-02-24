@@ -64,19 +64,25 @@ class Timer {
   void register_timer();  // make sure i get a callback
   void cancel_timer();    // make sure i get a callback
 
+
   pthread_t thread_id;
   bool      thread_stop;
   Mutex     lock;
   bool      timed_sleep;
   Cond      sleep_cond;
   Cond      timeout_cond;
+
  public:
   void timer_thread();    // waiter thread (that wakes us up)
+
+  int num_event;
+
 
  public:
   Timer() { 
 	thread_id = 0;
 	thread_stop = false;
+	num_event = 0;
   }
   ~Timer() { 
 	// scheduled

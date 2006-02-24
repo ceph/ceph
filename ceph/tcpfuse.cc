@@ -30,64 +30,12 @@ int main(int argc, char **argv, char *envp[]) {
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
-  vector<char*> nargs;
-  
-  char *nsaddr = 0;
-  tcpaddr_t nsa;
-  bool have_nsa = false;
-
-  for (unsigned i=0; i<args.size(); i++) {
-	if (strcmp(args[i], "--ns") == 0) {
-	  nsaddr = args[++i];
-	}
-	else {
-	  // unknown arg, pass it on.
-	  nargs.push_back(args[i]);
-	  cout << "fuse arg: " << args[i] << endl;
-	}
-  }
-  
-  if (nsaddr == 0) {
-	// env var?
-	int e_len = 0;
-	for (int i=0; envp[i]; i++)
-	  e_len += strlen(envp[i]) + 1;
-	nsaddr = envz_entry(*envp, e_len, "CEPH_NAMESERVER");	
-	if (nsaddr) {
-	  while (nsaddr[0] != '=') nsaddr++;
-	  nsaddr++;
-	}
-  }
-
-  if (!nsaddr) {
-	// file?
-	int fd = ::open(".ceph_ns",O_RDONLY);
-	if (fd > 0) {
-	  ::read(fd, (void*)&nsa, sizeof(nsa));
-	  ::close(fd);
-	  have_nsa = true;
-	  nsaddr = "from .ceph_ns";
-	}
-  }
-
-  if (!nsaddr && !have_nsa) {
-	cerr << "i need ceph ns addr.. either CEPH_NAMESERVER env var or --ns blah" << endl;
-	exit(-1);
-  }
-
-  // look up nsaddr?
-  if (!have_nsa && tcpmessenger_lookup(nsaddr, nsa) < 0) {
-	return 1;
-  }
-
-  cout << "ceph ns is " << nsaddr << " or " << nsa << endl;
-
   // args for fuse
-  args = nargs;
   vec_to_argv(args, argc, argv);
 
-
   // start up tcpmessenger
+  tcpaddr_t nsa;
+  if (tcpmessenger_findns(nsa) < 0) exit(1);
   tcpmessenger_init();
   tcpmessenger_start();
   tcpmessenger_start_rankserver(nsa);

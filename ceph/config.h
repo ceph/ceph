@@ -190,6 +190,7 @@ extern md_config_t g_debug_after_conf;
 #define dout(x)  if ((x) <= g_conf.debug) cout
 #define dout2(x) if ((x) <= g_conf.debug) cout
 
+void env_to_vec(vector<char*>& args);
 void argv_to_vec(int argc, char **argv,
 				 vector<char*>& args);
 void vec_to_argv(vector<char*>& args,

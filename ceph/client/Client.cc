@@ -328,6 +328,7 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
 	  root->last_updated = now;
 
 	  root->dir_auth = in_info->dir_auth;
+	  assert(root->dir_auth == 0);
 	  root->dir_hashed = in_info->hashed;  
 	  root->dir_replicated = in_info->replicated;  
 	  if (in_info->spec_defined) 
@@ -446,6 +447,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 		mds = diri->pick_replica(mdcluster);
 	}
   }
+  //cout << "mds is " << mds << endl;
 
   // force use of a particular mds?
   if (use_mds >= 0) mds = use_mds;

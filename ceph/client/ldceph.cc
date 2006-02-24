@@ -123,7 +123,20 @@ public:
 	mount_point(0), mount_point_parent(0),
 	mount_point_len(0),
 	cwd_above_mp(false), cwd_in_mp(false) {
-	
+
+	// args
+	vector<char *> args;
+	env_to_vec(args);
+	parse_config_options(args);
+  
+
+	tcpaddr_t nsa;
+	if (tcpmessenger_findns(nsa) < 0) 
+	  return;
+	tcpmessenger_init();
+	tcpmessenger_start();
+	tcpmessenger_start_rankserver(nsa);
+
 	client = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));
 	client->init();
 	int r = client->mount();
@@ -142,10 +155,20 @@ public:
 	  fp_mount_point = mount_point;
 
 	  cerr << "ldceph mounted on " << mount_point << " as " << client->get_myaddr() << endl;
+
+	  refresh_cwd();
 	}
   }
   ~LdCeph() {
 	cout << "ldceph fini" << endl;
+	if (false && client) {   // no unmount for now..
+	  client->unmount();
+	  client->shutdown();
+	  delete client;
+	  client = 0;
+	  tcpmessenger_wait();
+	  tcpmessenger_shutdown(); 
+	}
   }	
 
 } ldceph;
@@ -215,7 +238,7 @@ extern "C" {
   }
   int mkdir(const char *pathname, mode_t mode) {
 	char buf[255];
-	if (const char *c = ldceph.get_ceph_path(pathname, buf))
+	if (const char *c = ldceph.get_ceph_path(pathname, buf)) 
 	  return ldceph.client->mkdir(c, mode);
 	else
 	  return syscall(SYS_mkdir, pathname, mode);
@@ -228,8 +251,9 @@ extern "C" {
 	  return syscall(SYS_unlink, pathname);
   }
 
-  //int stat(const char *pathname, struct stat *st) {
-  int __xstat(int __ver, const char *pathname, struct stat *st) {  // stoopid GLIBC
+  int stat(const char *pathname, struct stat *st) {
+	//int __xstat64(int __ver, const char *pathname, struct stat64 *st64) {  // stoopid GLIBC
+	//struct stat *st = (struct stat*)st64;
 	char buf[255];
 	if (const char *c = ldceph.get_ceph_path(pathname, buf))
 	  return ldceph.client->lstat(c, st);   // FIXME
@@ -243,7 +267,7 @@ extern "C" {
 	char buf[255];
 	if (const char *c = ldceph.get_ceph_path(pathname, buf)) {
 	  int r = ldceph.client->chdir(c);
-	  if (r) {
+	  if (r == 0) {
 		if (!ldceph.cwd_in_mp)
 		  syscall(SYS_chdir, ldceph.mount_point_parent);
 		ldceph.cwd_in_mp = true;

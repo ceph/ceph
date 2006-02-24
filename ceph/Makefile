@@ -39,7 +39,6 @@ MDS_OBJS= \
 	mds/LogStream.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o\
-	mds/MDCluster.o\
 	mds/OSDMonitor.o
 
 COMMON_OBJS= \
@@ -52,6 +51,7 @@ COMMON_OBJS= \
 	osd/OSDMap.o\
 	osd/PG.o\
 	osd/ObjectStore.o\
+	mds/MDCluster.o\
 	ebofs.o\
 	common/Logger.o\
 	common/Clock.o\
@@ -66,7 +66,7 @@ TCP_OBJS = \
 	msg/TCPMessenger.o\
 	msg/TCPDirectory.o
 
-TARGETS = fakefuse fakesyn tcpsyn tcpfuse client/ldceph.o
+TARGETS = fakefuse fakesyn tcpsyn tcpfuse libceph.o
 
 SRCS=*.cc */*.cc
 
@@ -146,6 +146,10 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 ebofs: mkfs.ebofs test.ebofs
 
 
+# libceph
+libceph.o: client/ldceph.o client/Client.o client/Buffercache.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
+	ld -i ${LIBS} $^ -o $@
+
 #
 
 %.so: %.cc
@@ -167,6 +171,9 @@ mds.o: ${MDS_OBJS}
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@
+
+%.po: %.cc
+	${CC} -fPIC ${CFLAGS} -c $< -o $@
 
 count:
 	cat *.cc */*.cc */*.h */*/*.h | wc -l
