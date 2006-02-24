@@ -214,7 +214,7 @@ class Inode {
   int pick_replica(MDCluster *mdcluster) {
 	// replicas?
 	if (dir_contacts.size()) {
-	  cout << "dir_contacts if " << dir_contacts << endl;
+	  //cout << "dir_contacts if " << dir_contacts << endl;
 	  set<int>::iterator it = dir_contacts.begin();
 	  if (dir_contacts.size() == 1)
 		return *it;
@@ -226,7 +226,7 @@ class Inode {
 	}
 
 	if (dir_replicated) {
-	  cout << "num_mds is " << mdcluster->get_num_mds() << endl;
+	  //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
 	  return rand() % mdcluster->get_num_mds();  // huh.. pick a random mds!
 	}
 	else

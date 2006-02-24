@@ -114,7 +114,7 @@ public:
 		}
 	  }
 	}
-	cout << "refresh_cwd '" << cwd << "', above=" << cwd_above_mp << ", in=" << cwd_in_mp << endl;
+	//cout << "refresh_cwd '" << cwd << "', above=" << cwd_above_mp << ", in=" << cwd_in_mp << endl;
   }
   
   
@@ -142,7 +142,7 @@ public:
 	int r = client->mount();
 	if (r < 0) {
 	  // failure
-	  cerr << "ld ceph init: mount failed " << r << endl;
+	  cerr << "ldceph init: mount failed " << r << endl;
 	  delete client;
 	  client = 0;
 	} else {
@@ -154,7 +154,7 @@ public:
 
 	  fp_mount_point = mount_point;
 
-	  cerr << "ldceph mounted on " << mount_point << " as " << client->get_myaddr() << endl;
+	  cerr << "ldceph init: mounted on " << mount_point << " as " << client->get_myaddr() << endl;
 
 	  refresh_cwd();
 	}
