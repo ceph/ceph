@@ -6091,10 +6091,14 @@ void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_aut
 	in->filelock.set_state(LOCK_LOCK);
   if (in->filelock.get_state() == LOCK_GMIXEDR)
 	in->filelock.set_state(LOCK_MIXED);
+  // this looks like a step backwards, but it's what we want!
   if (in->filelock.get_state() == LOCK_GSYNCM)
-	in->filelock.set_state(LOCK_SYNC);
-  if (in->filelock.get_state() == LOCK_GMIXEDW)
 	in->filelock.set_state(LOCK_MIXED);
+  if (in->filelock.get_state() == LOCK_GSYNCW)
+	in->filelock.set_state(LOCK_LOCK);
+  if (in->filelock.get_state() == LOCK_GMIXEDW)
+	in->filelock.set_state(LOCK_LOCK);
+	//in->filelock.set_state(LOCK_MIXED);
   
   // mark auth
   assert(in->is_auth());
