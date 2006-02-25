@@ -91,8 +91,9 @@ mds_load_t MDBalancer::get_load()
 {
   mds_load_t load;
   if (mds->mdcache->get_root()) 
-	//load.root_pop = mds->mdcache->get_root()->popularity[MDS_POP_ANYDOM].get();
-	load.root_pop = mds->mdcache->get_root()->popularity[MDS_POP_NESTED].get();
+	load.root_pop = 
+	  mds->mdcache->get_root()->popularity[MDS_POP_ANYDOM].get() +
+	  mds->mdcache->get_root()->popularity[MDS_POP_NESTED].get();
   else
 	load.root_pop = 0;
   return load;
