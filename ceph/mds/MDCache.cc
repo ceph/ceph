@@ -1417,7 +1417,7 @@ int MDCache::path_traverse(filepath& origpath,
 	  } 
 	  if (onfail == MDS_TRAVERSE_FORWARD) {
 		// forward
-		dout(7) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
+		dout(0) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
 
 		if (is_client_req && cur->dir->is_rep()) {
 		  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *cur->dir << endl;
@@ -3955,7 +3955,7 @@ bool MDCache::inode_hard_write_start(CInode *in, MClientRequest *m)
 	// replica
 	// fw to auth
 	int auth = in->authority();
-	dout(5) << "inode_hard_write_start " << *in << " on replica, fw to auth " << auth << endl;
+	dout(0) << "inode_hard_write_start " << *in << " on replica, fw to auth " << auth << endl;
 	assert(auth != mds->get_nodeid());
 	request_forward(m, auth);
 	return false;
@@ -4253,7 +4253,7 @@ bool MDCache::inode_file_read_start(CInode *in, MClientRequest *m)
 
 		// fw to auth
 		int auth = in->authority();
-		dout(5) << "inode_file_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
+		dout(0) << "inode_file_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
 		assert(auth != mds->get_nodeid());
 		request_forward(m, auth);
 		return false;
@@ -4330,7 +4330,7 @@ bool MDCache::inode_file_write_start(CInode *in, MClientRequest *m)
 	// replica
 	// fw to auth
 	int auth = in->authority();
-	dout(5) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
+	dout(0) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
 	assert(auth != mds->get_nodeid());
 	request_forward(m, auth);
 	return false;
