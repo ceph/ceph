@@ -106,7 +106,7 @@ void parse_syn_options(vector<char*>& args)
 	  } else if (strcmp(args[i],"only") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_ONLY );
 		syn_iargs.push_back( atoi(args[++i]) );
-
+		
 	  } else if (strcmp(args[i],"sleep") == 0) { 
 		syn_modes.push_back( SYNCLIENT_MODE_SLEEP );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -119,7 +119,7 @@ void parse_syn_options(vector<char*>& args)
 		syn_iargs.push_back( atoi(args[++i]) );
 
 	  } else {
-		cerr << "unknown syn mode " << args[i] << endl;
+		cerr << "unknown syn arg " << args[i] << endl;
 		assert(0);
 	  }
 	}
@@ -374,7 +374,7 @@ int SyntheticClient::run()
 			utime_t lat = g_clock.now();
 			lat -= start;
 			
-			dout(1) << " trace loop " << (i+1) << "/" << iarg1 << " done in " << (double)lat << " seconds" << endl;
+			dout(1) << " trace " << tfile << " loop " << (i+1) << "/" << iarg1 << " done in " << (double)lat << " seconds" << endl;
 			if (client_logger 
 				&& i > 0
 				&& i < iarg1-1

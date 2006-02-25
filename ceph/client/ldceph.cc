@@ -161,7 +161,7 @@ public:
   }
   ~LdCeph() {
 	cout << "ldceph fini" << endl;
-	if (false && client) {   // no unmount for now..
+	if (false && client) {  
 	  client->unmount();
 	  client->shutdown();
 	  delete client;

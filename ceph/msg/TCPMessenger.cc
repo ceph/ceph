@@ -178,7 +178,7 @@ int tcpmessenger_findns(tcpaddr_t &nsa)
 	return -1;
   }
 
-  cout << "ceph ns is " << nsaddr << " or " << nsa << endl;
+  dout(2) << "ceph ns is " << nsaddr << " or " << nsa << endl;
   return 0;
 }
 

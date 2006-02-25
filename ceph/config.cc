@@ -81,7 +81,7 @@ md_config_t g_conf = {
   // --- client ---
   client_cache_size: 300,
   client_cache_mid: .5,
-  client_cache_stat_ttl: 10, // seconds until cached stat results become invalid
+  client_cache_stat_ttl: 0, // seconds until cached stat results become invalid
   client_use_random_mds:  false,
 
   client_sync_writes: 0,
@@ -231,19 +231,19 @@ void env_to_vec(vector<char*>& args)
   int len = strlen(p);
   memcpy(buf, p, len);
   buf[len] = 0;
-  cout << "args " << buf << endl;
+  //cout << "CEPH_ARGS " << buf << endl;
 
   int l = 0;
   for (int i=0; i<len; i++) {
 	if (buf[i] == ' ') {
 	  buf[i] = 0;
 	  args.push_back(buf+l);
-	  cout << "arg " << (buf+l) << endl;
+	  //cout << "arg " << (buf+l) << endl;
 	  l = i+1;
 	}
   }
   args.push_back(buf+l);
-  cout << "arg " << (buf+l) << endl;
+  //cout << "arg " << (buf+l) << endl;
 }
 
 

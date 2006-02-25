@@ -67,6 +67,8 @@ class MDBalancer {
 	beat_epoch = 0;
   }
   
+  mds_load_t get_load();
+
   int proc_message(Message *m);
   
   void send_heartbeat();

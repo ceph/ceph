@@ -164,8 +164,6 @@ class MDS : public Dispatcher {
   MDCluster *get_mds_cluster() { return mdcluster; }
   OSDMap *get_osd_map() { return osdmap; }
 
-  mds_load_t get_load();
-
   // start up, shutdown
   bool is_shutting_down() { return shutting_down; }
   bool is_shut_down(int who=-1) { 

@@ -150,6 +150,15 @@ ebofs: mkfs.ebofs test.ebofs
 libceph.o: client/ldceph.o client/Client.o client/Buffercache.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
 	ld -i ${LIBS} $^ -o $@
 
+bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
+	mpicc -c $^ -o $@
+
+mdtest: bench/mdtest/mdtest.o
+	mpicxx $^ -o $@
+
+mdtest.ceph: bench/mdtest/mdtest.o libceph.o
+	mpicxx $^ -o $@
+
 #
 
 %.so: %.cc

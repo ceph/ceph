@@ -158,7 +158,9 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("reply");
   mds_logtype.add_inc("fw");
   mds_logtype.add_inc("cfw");
-  mds_logtype.add_set("rootpop");
+
+  mds_logtype.add_set("popanyd");
+  mds_logtype.add_set("popnest");
 
   mds_logtype.add_set("c");
   mds_logtype.add_set("ctop");
@@ -361,16 +363,6 @@ void MDS::bcast_osd_map()
 
 
 
-mds_load_t MDS::get_load()
-{
-  mds_load_t l;
-  if (mdcache->get_root()) {
-	l.root_pop = mdcache->get_root()->popularity[MDS_POP_ANYDOM].get();
-  } else
-	l.root_pop = 0;
-  return l;
-}
-
 
 class C_MDS_Unpause : public Context {
 public:
@@ -568,9 +560,11 @@ void MDS::my_dispatch(Message *m)
 
 	// log
 	last_log = now;
-	mds_load_t load = get_load();
-
-	logger->set("rootpop", (int)load.root_pop);
+	//mds_load_t load = balancer->get_load();
+	if (mdcache->get_root()) {
+	  logger->set("popanyd", (int)mdcache->get_root()->popularity[MDS_POP_ANYDOM].get());
+	  logger->set("popnest", (int)mdcache->get_root()->popularity[MDS_POP_NESTED].get());
+	}
 	logger->set("c", mdcache->lru.lru_get_size());
 	logger->set("cpin", mdcache->lru.lru_get_num_pinned());
 	logger->set("ctop", mdcache->lru.lru_get_top());
@@ -595,6 +589,7 @@ void MDS::my_dispatch(Message *m)
 
 	// hash?
 	if (true &&
+		g_conf.num_mds > 1 &&
 		now.sec() - last_balancer_hash.sec() > g_conf.mds_bal_hash_interval) {
 	  last_balancer_hash = now;
 	  balancer->do_hashing();

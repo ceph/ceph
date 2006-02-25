@@ -87,6 +87,17 @@ public:
   }
 };
 
+mds_load_t MDBalancer::get_load()
+{
+  mds_load_t load;
+  if (mds->mdcache->get_root()) 
+	//load.root_pop = mds->mdcache->get_root()->popularity[MDS_POP_ANYDOM].get();
+	load.root_pop = mds->mdcache->get_root()->popularity[MDS_POP_NESTED].get();
+  else
+	load.root_pop = 0;
+  return load;
+}
+
 void MDBalancer::send_heartbeat()
 {
   if (!mds->mdcache->get_root()) {
@@ -100,7 +111,7 @@ void MDBalancer::send_heartbeat()
 	beat_epoch++;
 
   // load
-  mds_load_t load = mds->get_load();
+  mds_load_t load = get_load();
   mds_load[ mds->get_nodeid() ] = load;
 
   // import_map
@@ -599,7 +610,8 @@ void MDBalancer::hit_dir(CDir *dir, bool modify)
   if (modify) {
 	float p = dir->popularity[MDS_POP_DIRMOD].hit();
 
-	if (dir->is_auth()) {
+	if (g_conf.num_mds > 1 &&
+		dir->is_auth()) {
 	  // hash this dir?  (later?)
 	  if (p > g_conf.mds_bal_hash_threshold &&
 		  !(dir->is_hashed() || dir->is_hashing()) &&

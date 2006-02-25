@@ -19,6 +19,7 @@ MAR 1
 - stability
  - ebofs table.remove() thing
  - fakestore crapping out.. missing timer events?
+mpiexec -l -n 30 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 65536 --nummds 1 --numclient 100 --numosd 6 --kill_after 300 --file_layout_num_rep 1 --debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5 --mds_shutdown_check 60 --log_name osd/write_sizes.sdb2.ebo.file2/fs=ebofs,writefile_size=65536
 
 
 - mds
@@ -38,25 +39,37 @@ MAR 1
  - metadata
   - makedirs
 **     100 c per mds is good on googoo ... testing on alc as mds_log.1
+     alc: 4 osd, 200 client per mds   (osd/mds_log.1 .. makedirs)
 
   - creates in same dir
-       --syn makefiles 10000 10 0 
+       --syn makefiles 10000 1000 0 
   - repeat creat+stat+unlink 
-  - creates in private dir
-  - repeat creat+stat+unlink
+  - creates in private dir            ??? easy?
+  - repeat creat+stat+unlink          ??? easy?
+       --syn makefiles 10000 1000 1
 
   - zillion opens of the same file
        --syn only 0 --syn createshared 10 --syn openshared 10 1000
 
   - local compile
+       openssh again?
   - shared compile (/lib, /include)
+       need something with shared files.. so not a linux kernel :(
 
- - data scaling
+ - data scaling .. aggregate tput
   - writes to local files
-  - strided write to shared file
-  - strided write with O_SYNC
+  - strided write to shared file     ??? meaningless?
+  - strided write with O_LAZY        ???
 
+ - tput per client
+  - local file
+  - strided to shared file
+  - strided w/ O_LAZY
 
+ - crush vs linear
+  - at a large scale!
+
+  
 
 
 
