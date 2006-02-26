@@ -211,7 +211,7 @@ int SyntheticClient::run()
 
 	case SYNCLIENT_MODE_ONLY:
 	  {
-		int run_only = iargs.front();
+		run_only = iargs.front();
 		iargs.pop_front();
 		if (run_only == client->get_nodeid())
 		  dout(2) << "only " << run_only << endl;
