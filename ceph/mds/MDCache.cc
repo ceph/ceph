@@ -1417,7 +1417,7 @@ int MDCache::path_traverse(filepath& origpath,
 	  } 
 	  if (onfail == MDS_TRAVERSE_FORWARD) {
 		// forward
-		dout(7) << "traverse: not auth for " << path[depth] << ", fwd to mds" << dauth << endl;
+		dout(7) << "traverse: not auth for " << path << " at " << path[depth] << ", fwd to mds" << dauth << endl;
 
 		if (is_client_req && cur->dir->is_rep()) {
 		  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *cur->dir << endl;

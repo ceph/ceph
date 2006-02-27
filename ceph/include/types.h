@@ -29,6 +29,13 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+#ifndef MIN
+# define MIN(a,b) ((a) < (b) ? (a):(b))
+#endif
+#ifndef MAX
+# define MAX(a,b) ((a) > (b) ? (a):(b))
+#endif
+
 
 // md ops
 #define MDS_OP_STATFS   1

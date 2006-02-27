@@ -105,7 +105,7 @@ md_config_t g_conf = {
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
-  mds_log_max_trimming: 20000,
+  mds_log_max_trimming: 10000,
   mds_log_read_inc: 1<<20,
   mds_log_pad_entry: 256,//64,
   mds_log_before_reply: true,
@@ -113,7 +113,7 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 4000,
   mds_bal_unreplicate_threshold: 500,
-  mds_bal_hash_rd: 1500,
+  mds_bal_hash_rd: 5000,
   mds_bal_unhash_rd: 500,
   mds_bal_hash_wr: 2000,
   mds_bal_unhash_wr: 250,

@@ -471,11 +471,14 @@ class CInode : LRUObject {
 	  dout(10) << " hard now sync " << *this << endl;
 	  hardlock.set_state(LOCK_SYNC);
 	}
-	if (filelock.get_state() == LOCK_LOCK &&
-		!filelock.is_used() &&
-		get_caps_issued() == 0) {
-	  filelock.set_state(LOCK_SYNC);
-	  dout(10) << " soft now sync " << *this << endl;
+	if (filelock.get_state() == LOCK_LOCK) {
+	  if (!filelock.is_used() &&
+		  (get_caps_issued() & CAP_FILE_WR) == 0) {
+		filelock.set_state(LOCK_SYNC);
+		dout(10) << " file now sync " << *this << endl;
+	  } else {
+		dout(10) << " can't relax filelock on " << *this << endl;
+	  }
 	}
   }
 

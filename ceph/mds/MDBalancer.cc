@@ -183,15 +183,11 @@ void MDBalancer::export_empties()
 
 
 double MDBalancer::try_match(int ex, double& maxex, 
-							int im, double& maxim)
+							 int im, double& maxim)
 {
   if (maxex <= 0 || maxim <= 0) return 0.0;
   
-  double howmuch = -1;
-  if (maxim < maxex)                // import takes it all
-	howmuch = maxim;
-  else if (maxim >= maxex)          // export all
-	howmuch = maxim;
+  double howmuch = MIN(maxex, maxim);
   if (howmuch <= 0) return 0.0;
   
   dout(5) << "   - mds" << ex << " exports " << howmuch << " to mds" << im << endl;
@@ -249,24 +245,27 @@ void MDBalancer::do_rebalance(int beat)
 
   dout(5) << " do_rebalance: cluster loads are" << endl;
 
-  double total_load;
+  double total_load = 0;
   multimap<double,int> load_map;
   for (int i=0; i<cluster_size; i++) {
 	double l = mds_load[i].mds_load();
 	dout(5) << "  mds" << i << " load " << mds_load[i] << " -> " << l << endl;
 	total_load += l;
+	if (whoami == i) my_load = l;
 
 	load_map.insert(pair<double,int>( l, i ));
   }
-
   dout(5) << "  total load " << total_load << endl;
+
+  // my load
+  dout(5) << "  my load " << my_load << endl;
 
   // target load
   target_load = total_load / (double)cluster_size;
   dout(5) << "  target load " << target_load << endl;
   
   // under or over?
-  if (mds_load[whoami].mds_load() < target_load) {
+  if (my_load < target_load) {
 	dout(5) << "  i am underloaded, doing nothing." << endl;
 	show_imports();
 	return;
@@ -285,11 +284,11 @@ void MDBalancer::do_rebalance(int beat)
 	   it != load_map.end();
 	   it++) {
 	if (it->first < target_load) {
-	  //dout(5) << "   mds" << it->second << " is importer" << endl;
+	  dout(15) << "   mds" << it->second << " is importer" << endl;
 	  importers.insert(pair<double,int>(it->first,it->second));
 	  importer_set.insert(it->second);
 	} else {
-	  //dout(5) << "   mds" << it->second << " is exporter" << endl;
+	  dout(15) << "   mds" << it->second << " is exporter" << endl;
 	  exporters.insert(pair<double,int>(it->first,it->second));
 	  exporter_set.insert(it->second);
 	}
@@ -750,9 +749,9 @@ void MDBalancer::show_imports(bool external)
 		 p++) {
 	  CDir *exp = *p;
 	  if (exp->is_hashed()) {
-		assert(0);  // we don't do it this way actually
+		//assert(0);  // we don't do it this way actually
 		dout(db) << "      - hash (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-		assert( exp->is_auth() );
+		assert( !exp->is_auth() );
 	  } else {
 		dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
 		assert( exp->is_export() );

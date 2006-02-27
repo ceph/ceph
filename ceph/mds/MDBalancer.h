@@ -50,7 +50,7 @@ class MDBalancer {
   map<int, map<int, float> > mds_import_map;
 
   // per-epoch state
-  double          target_load;
+  double          my_load, target_load;
   map<int,double> my_targets;
   map<int,double> imported;
   map<int,double> exported;
