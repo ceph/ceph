@@ -432,7 +432,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  // pick the actual auth (as best we can)
 	  if (item) {
 		mds = item->authority(mdcluster);
-	  } else if (diri->dir_hashed) {
+	  } else if (diri->dir_hashed && missing_dn >= 0) {
 		mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
 									 mdcluster);
 	  } else {
@@ -440,7 +440,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  }
 	} else {
 	  // balance our traffic!
-	  if (diri->dir_hashed) 
+	  if (diri->dir_hashed && missing_dn >= 0) 
 		mds = diri->dentry_authority(req->get_filepath()[missing_dn].c_str(),
 									 mdcluster);
 	  else 

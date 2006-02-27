@@ -7849,7 +7849,12 @@ public:
   }
   void finish(int r) {
 	CInode *in = 0;
-	if (r >= 0) in = trace[trace.size()-1]->get_inode();
+	if (r >= 0) {
+	  if (trace.size())
+		in = trace[trace.size()-1]->get_inode();
+	  else
+		in = mdc->get_root();
+	}
 	mdc->handle_hash_dir_discover_2(m, in, r);
   }
 };  

@@ -390,7 +390,7 @@ void MDBalancer::do_rebalance(int beat)
 
 	if (amount < MIN_OFFLOAD) continue;
 
-	dout(5) << " sending " << amount << " to " << target << endl;
+	dout(5) << " sending " << amount << " to mds" << target << endl;
 	
 	show_imports();
 
@@ -553,7 +553,7 @@ void MDBalancer::find_exports(CDir *dir,
 	   it != smaller.rend();
 	   it++) {
 
-	dout(7) << " taking (much) smaller " << *(*it).second << endl;
+	dout(7) << " taking (much) smaller " << it->first << " " << *(*it).second << endl;
 
 	exports.push_back((*it).second);
 	already_exporting.insert((*it).second);
@@ -580,7 +580,7 @@ void MDBalancer::hit_inode(CInode *in, int type)
   
   // hit auth up to import
   CDir *dir = in->get_parent_dir();
-  if (dir) hit_recursive(dir, type);
+  if (dir) hit_dir(dir, type);
 }
 
 
@@ -590,14 +590,15 @@ void MDBalancer::hit_dir(CDir *dir, int type)
   float v = dir->popularity[MDS_POP_JUSTME].pop[type].hit();
 
   // hit modify counter, if this was a modify
-  if (type == META_POP_WR &&
-	  g_conf.num_mds > 1 &&
-	  dir->is_auth()) {
+  if (g_conf.num_mds > 1 &&
+	  dir->is_auth() && 
+	  !dir->inode->is_root()) {         // not root (for now at least)
 	// hash this dir?  (later?)
-	if (v > g_conf.mds_bal_hash_threshold &&
+	if (((v > g_conf.mds_bal_hash_rd && type == META_POP_RD) ||
+		 (v > g_conf.mds_bal_hash_wr && type == META_POP_WR)) &&
 		!(dir->is_hashed() || dir->is_hashing()) &&
 		hash_queue.count(dir->ino()) == 0) {
-	  dout(0) << "hit_dir WR pop is " << v << ", putting in hash_queue: " << *dir << endl;
+	  dout(0) << "hit_dir " << type << " pop is " << v << ", putting in hash_queue: " << *dir << endl;
 	  hash_queue.insert(dir->ino());
 	}
   }

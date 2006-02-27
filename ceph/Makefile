@@ -50,7 +50,6 @@ OSD_OBJS= \
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Dispatcher.o\
-	msg/error.o\
 	msg/HostMonitor.o\
 	osd/Filer.o\
 	osd/OSDMap.o\

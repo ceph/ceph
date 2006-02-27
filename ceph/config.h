@@ -83,13 +83,17 @@ struct md_config_t {
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
-  float mds_bal_hash_threshold;
-  float mds_bal_unhash_threshold;
+  float mds_bal_hash_rd;
+  float mds_bal_unhash_rd;
+  float mds_bal_hash_wr;
+  float mds_bal_unhash_wr;
   int   mds_bal_interval;
   int   mds_bal_hash_interval;
   float mds_bal_idle_threshold;
   int   mds_bal_max;
   int   mds_bal_max_until;
+
+  int   mds_bal_mode;
   float mds_bal_min_start;
   float mds_bal_need_min;
   float mds_bal_need_max;

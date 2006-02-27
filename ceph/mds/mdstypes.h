@@ -6,6 +6,7 @@
 #include <ostream>
 using namespace std;
 
+#include "config.h"
 #include "common/DecayCounter.h"
 
 
@@ -83,9 +84,17 @@ class mds_load_t {
 	req_rate(0), cache_hit_rate(0), queue_len(0) { }	
 
   double mds_load() {
-	return root.pop[META_POP_RD].get() 
-	  + root.pop[META_POP_WR].get()
-	  + 100*queue_len;
+	switch(g_conf.mds_bal_mode) {
+	case 0: 
+	  return root.pop[META_POP_RD].get() 
+		+ 2.0*root.pop[META_POP_WR].get()
+		+ 10.0*queue_len;
+
+	case 1:
+	  return req_rate + 10.0*queue_len;
+
+	}
+	return 0;
   }
 
 };
