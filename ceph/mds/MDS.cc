@@ -159,6 +159,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_inc("fw");
   mds_logtype.add_inc("cfw");
 
+  mds_logtype.add_set("l");
+  mds_logtype.add_set("q");
   mds_logtype.add_set("popanyd");
   mds_logtype.add_set("popnest");
 
@@ -560,10 +562,13 @@ void MDS::my_dispatch(Message *m)
 
 	// log
 	last_log = now;
-	//mds_load_t load = balancer->get_load();
+	mds_load_t load = balancer->get_load();
+
+	logger->set("l", (int)load.mds_load());
+	logger->set("q", messenger->get_dispatch_queue_len());
 	if (mdcache->get_root()) {
-	  logger->set("popanyd", (int)mdcache->get_root()->popularity[MDS_POP_ANYDOM].get());
-	  logger->set("popnest", (int)mdcache->get_root()->popularity[MDS_POP_NESTED].get());
+	  logger->set("popanyd", (int)mdcache->get_root()->popularity[MDS_POP_ANYDOM].meta_load());
+	  logger->set("popnest", (int)mdcache->get_root()->popularity[MDS_POP_NESTED].meta_load());
 	}
 	logger->set("c", mdcache->lru.lru_get_size());
 	logger->set("cpin", mdcache->lru.lru_get_num_pinned());
@@ -1118,7 +1123,7 @@ void MDS::handle_client_stat(MClientRequest *req,
 
   mdcache->inode_file_read_finish(ref);
 
-  balancer->hit_inode(ref);   
+  balancer->hit_inode(ref, META_POP_RD);   
 
   // reply
   reply_request(req, reply, ref);
@@ -1145,7 +1150,7 @@ void MDS::handle_client_utime(MClientRequest *req,
 
   mdcache->inode_file_write_finish(cur);
   
-  balancer->hit_inode(cur);   
+  balancer->hit_inode(cur, META_POP_WR);   
 
   // init reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1180,7 +1185,7 @@ void MDS::handle_client_chmod(MClientRequest *req,
 
   mdcache->inode_hard_write_finish(cur);
 
-  balancer->hit_inode(cur);   
+  balancer->hit_inode(cur, META_POP_WR);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1210,7 +1215,7 @@ void MDS::handle_client_chown(MClientRequest *req,
 
   mdcache->inode_hard_write_finish(cur);
 
-  balancer->hit_inode(cur);   
+  balancer->hit_inode(cur, META_POP_WR);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1524,7 +1529,7 @@ void MDS::handle_client_mknod(MClientRequest *req, CInode *ref)
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
   
-  balancer->hit_inode(newi);
+  balancer->hit_inode(newi, META_POP_WR);
 
   // commit
   commit_request(req, new MClientReply(req, 0), ref,
@@ -2608,7 +2613,7 @@ void MDS::handle_client_symlink(MClientRequest *req, CInode *diri)
   // set target
   newi->symlink = req->get_sarg();
   
-  balancer->hit_inode(newi);
+  balancer->hit_inode(newi, META_POP_WR);
 
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
@@ -2642,7 +2647,7 @@ void MDS::handle_client_truncate(MClientRequest *req, CInode *cur)
 
   mdcache->inode_file_write_finish(cur);
 
-  balancer->hit_inode(cur);   
+  balancer->hit_inode(cur, META_POP_WR);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -2706,7 +2711,7 @@ void MDS::handle_client_open(MClientRequest *req,
 
   dout(12) << "open gets caps " << cap_string(cap->pending()) << endl;
 
-  balancer->hit_inode(cur);
+  balancer->hit_inode(cur, META_POP_RD);
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);   // fh # is return code

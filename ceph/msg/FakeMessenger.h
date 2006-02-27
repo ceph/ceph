@@ -30,6 +30,7 @@ class FakeMessenger : public Messenger {
 
   class Logger *logger;
 
+  int    qlen;
   list<Message*>       incoming;        // incoming queue
 
  public:
@@ -44,6 +45,7 @@ class FakeMessenger : public Messenger {
   // events
   //virtual void trigger_timer(Timer *t);
 
+  int get_dispatch_queue_len() { return qlen; }
 
   // -- incoming queue --
   // (that nothing uses)
@@ -51,16 +53,19 @@ class FakeMessenger : public Messenger {
 	if (!incoming.empty()) {
 	  Message *m = incoming.front();
 	  incoming.pop_front();
+	  qlen--;
 	  return m;
 	}
 	return NULL;
   }
   bool queue_incoming(Message *m) {
 	incoming.push_back(m);
+	qlen++;
 	return true;
   }
   int num_incoming() {
-	return incoming.size();
+	//return incoming.size();
+	return qlen;
   }
 
 };

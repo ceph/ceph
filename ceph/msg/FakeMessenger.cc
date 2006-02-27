@@ -240,6 +240,8 @@ FakeMessenger::FakeMessenger(msg_addr_t me)  : Messenger(me)
 
   g_timer.set_messenger(this);
 
+  qlen = 0;
+
   /*
   string name;
   name = "m.";

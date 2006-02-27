@@ -43,6 +43,8 @@ class TCPMessenger : public Messenger {
   void map_entity_rank(msg_addr_t e, int r);
   void map_rank_addr(int r, tcpaddr_t a);
 
+  int get_dispatch_queue_len();
+
   // init, shutdown MPI and associated event loop thread.
   virtual int shutdown();
 

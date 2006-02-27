@@ -65,6 +65,8 @@ class Messenger {
   
   void queue_callback(Context *c);
 
+  virtual int get_dispatch_queue_len() { return 0; };
+
   // setup
   void set_dispatcher(Dispatcher *d) { dispatcher = d; ready(); }
   Dispatcher *get_dispatcher() { return dispatcher; }

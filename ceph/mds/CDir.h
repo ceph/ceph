@@ -244,7 +244,7 @@ class CDir {
   set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
 
   // popularity
-  DecayCounter popularity[MDS_NPOP];
+  meta_load_t popularity[MDS_NPOP];
 
   // friends
   friend class CInode;
@@ -366,7 +366,7 @@ class CDir {
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-	if (( popularity[MDS_POP_CURDOM].get() > g_conf.mds_bal_replicate_threshold)) {
+	if (( popularity[MDS_POP_CURDOM].pop[META_POP_RD].get() > g_conf.mds_bal_replicate_threshold)) {
 	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
 	  ls = open_by;
 	  if (!ls.empty()) ls.insert(auth);
@@ -572,8 +572,8 @@ typedef struct {
   __uint64_t     nden;   // num dentries (including null ones)
   __uint64_t     version;
   unsigned       state;
-  DecayCounter   popularity_justme;
-  DecayCounter   popularity_curdom;
+  meta_load_t   popularity_justme;
+  meta_load_t   popularity_curdom;
   int            dir_auth;
   int            dir_rep;
   int            nopen_by;
@@ -602,7 +602,8 @@ class CDirExport {
 
     st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( dir->popularity[MDS_POP_CURDOM] );
-	dir->popularity[MDS_POP_ANYDOM].adjust_down(st.popularity_curdom);
+	dir->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
+	dir->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
 
     rep_by = dir->dir_rep_by;
 	open_by = dir->open_by;
@@ -625,10 +626,10 @@ class CDirExport {
 	dir->dir_auth = st.dir_auth;
 	dir->dir_rep = st.dir_rep;
 
-	double newcurdom = st.popularity_curdom.get() - dir->popularity[MDS_POP_CURDOM].get();
-	dir->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
-	dir->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
-	dir->popularity[MDS_POP_ANYDOM].adjust(newcurdom);
+	dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;
+	dir->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
+	dir->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
+	dir->popularity[MDS_POP_NESTED] += st.popularity_curdom;
 
 	dir->replica_nonce = 0;  // no longer defined
 

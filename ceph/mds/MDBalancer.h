@@ -12,6 +12,7 @@
  */
 
 
+
 #ifndef __MDBALANCER_H
 #define __MDBALANCER_H
 
@@ -25,6 +26,8 @@ using namespace __gnu_cxx;
 
 #include "include/types.h"
 #include "common/Clock.h"
+#include "CInode.h"
+
 
 class MDS;
 class Message;
@@ -47,7 +50,7 @@ class MDBalancer {
   map<int, map<int, float> > mds_import_map;
 
   // per-epoch state
-  mds_load_t      target_load;
+  double          target_load;
   map<int,double> my_targets;
   map<int,double> imported;
   map<int,double> exported;
@@ -55,10 +58,10 @@ class MDBalancer {
   double try_match(int ex, double& maxex,
 				   int im, double& maxim);
   double get_maxim(int im) {
-	return target_load.root_pop - mds_load[im].root_pop - imported[im];
+	return target_load - mds_load[im].mds_load() - imported[im];
   }
   double get_maxex(int ex) {
-	return mds_load[ex].root_pop - target_load.root_pop - exported[ex];	
+	return mds_load[ex].mds_load() - target_load - exported[ex];	
   }
 
  public:
@@ -88,9 +91,9 @@ class MDBalancer {
   void subtract_export(class CDir *ex);
   void add_import(class CDir *im);
 
-  void hit_inode(class CInode *in);
-  void hit_dir(class CDir *dir, bool modify=false);
-  void hit_recursive(class CDir *dir);
+  void hit_inode(class CInode *in, int type=0);
+  void hit_dir(class CDir *dir, int type=0);
+  void hit_recursive(class CDir *dir, int type=0);
 
 
   void show_imports(bool external=false);
@@ -98,6 +101,5 @@ class MDBalancer {
 };
 
 
-ostream& operator<<( ostream& out, mds_load_t& load );
 
 #endif

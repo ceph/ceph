@@ -26,6 +26,8 @@
 #include "Lock.h"
 #include "Capability.h"
 
+#include "mdstypes.h"
+
 #include <cassert>
 #include <list>
 #include <vector>
@@ -36,6 +38,8 @@ using namespace std;
 
 #include <ext/rope>
 using namespace __gnu_cxx;
+
+
 
 
 
@@ -222,7 +226,7 @@ class CInode : LRUObject {
   int nested_auth_pins;
 
  public:
-  DecayCounter popularity[MDS_NPOP];
+  meta_load_t popularity[MDS_NPOP];
 
   // friends
   friend class MDCache;
@@ -442,13 +446,17 @@ class CInode : LRUObject {
 	int w = 0;
 	for (map<int,Capability>::iterator it = client_caps.begin();
 		 it != client_caps.end();
-		 it++)
+		 it++) {
 	  w |= it->second.wanted();
+	  //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
+	}
 	if (is_auth())
 	  for (map<int,int>::iterator it = mds_caps_wanted.begin();
 		   it != mds_caps_wanted.end();
-		   it++) 
+		   it++) {
 		w |= it->second;
+		//cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
+	  }
 	return w;
   }
 
@@ -637,8 +645,8 @@ class CInodeDiscover {
 typedef struct {
   inode_t        inode;
   __uint64_t     version;
-  DecayCounter   popularity_justme;
-  DecayCounter   popularity_curdom;
+  meta_load_t    popularity_justme;
+  meta_load_t    popularity_curdom;
   bool           is_dirty;       // dirty inode?
 
   int            ncached_by;  // int pairs follow
@@ -670,7 +678,8 @@ public:
 
 	st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
 	st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
-	in->popularity[MDS_POP_ANYDOM].adjust_down(st.popularity_curdom);
+	in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
+	in->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
 	
 	// steal WRITER caps from inode
 	in->take_client_caps(cap_map);
@@ -686,10 +695,10 @@ public:
 
 	in->version = st.version;
 
-	double newcurdom = st.popularity_curdom.get() - in->popularity[MDS_POP_CURDOM].get();
-	in->popularity[MDS_POP_JUSTME].take( st.popularity_justme );
-	in->popularity[MDS_POP_CURDOM].take( st.popularity_curdom );
-	in->popularity[MDS_POP_ANYDOM].adjust(newcurdom);
+	in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
+	in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
+	in->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
+	in->popularity[MDS_POP_NESTED] += st.popularity_curdom;
 
 	if (st.is_dirty) {
 	  in->mark_dirty();

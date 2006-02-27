@@ -257,30 +257,6 @@ typedef int        fh_t;          // file handle
 
 
 
-// -- load balancing stuff --
-
-
-
-
-// popularity
-#define MDS_POP_JUSTME  0   // just me
-#define MDS_POP_NESTED  1   // me + children, auth or not
-#define MDS_POP_CURDOM  2   // me + children in current domain
-#define MDS_POP_ANYDOM  3   // me + children in any (nested) domain
-#define MDS_POP_DIRMOD  4   // just this dir, modifications only
-#define MDS_NPOP        5
-
-class mds_load_t {
- public:
-  double root_pop;
-  double req_rate, rd_rate, wr_rate;
-  double cache_hit_rate;
-  
-  mds_load_t() : 
-	root_pop(0), req_rate(0), rd_rate(0), wr_rate(0), cache_hit_rate(0) { }
-	
-};
-
 
 
 // -- io helpers --

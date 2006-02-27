@@ -1143,6 +1143,11 @@ void TCPMessenger::map_rank_addr(int r, tcpaddr_t a)
 }
 
 
+int TCPMessenger::get_dispatch_queue_len() 
+{
+  return stat_inq;
+}
+
 
 int TCPMessenger::shutdown()
 {
