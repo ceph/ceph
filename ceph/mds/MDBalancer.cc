@@ -366,6 +366,7 @@ void MDBalancer::do_rebalance(int beat)
   for (set<CDir*>::iterator it = mds->mdcache->imports.begin();
 	   it != mds->mdcache->imports.end();
 	   it++) {
+	if ((*it)->is_hashed()) continue;
 	double pop = (*it)->popularity[MDS_POP_CURDOM].meta_load();
 	if (pop < g_conf.mds_bal_idle_threshold &&
 		(*it)->inode != mds->mdcache->get_root()) {
@@ -404,6 +405,7 @@ void MDBalancer::do_rebalance(int beat)
 		multimap<int,CDir*>::iterator plast = p.first++;
 		
 		if (dir->inode->is_root()) continue;
+		if (dir->is_hashed()) continue;
 		if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
 		double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
 		assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy

@@ -43,7 +43,7 @@ size_t get_hash_offset(int hashcode) {
   if (hashcode < 0)   
 	return 0;  // not hashed
   else
-	return (size_t)(1<<30) * (size_t)hashcode;
+	return (size_t)(1<<30) * (size_t)(1+hashcode);
 }
 
 
