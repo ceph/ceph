@@ -7614,6 +7614,7 @@ void MDCache::hash_dir_go(CDir *dir)
   dir->get(CDIR_PIN_HASHED);
   hashdirs.insert(dir);
   dir->mark_dirty();
+  mds->mdlog->submit_entry(new EDirUpdate(dir));
 
   // inode state
   if (dir->inode->is_auth()) {
@@ -7903,8 +7904,10 @@ void MDCache::handle_hash_dir_discover_2(MHashDirDiscover *m, CInode *in, int r)
   
   // inode state
   dir->inode->inode.hash_seed = 1;// dir->ino();
-  if (dir->inode->is_auth()) 
+  if (dir->inode->is_auth()) {
 	dir->inode->mark_dirty();
+	mds->mdlog->submit_entry(new EInodeUpdate(dir->inode));
+  }
 
   // get gather set ready for notifies
   assert(hash_gather[dir].empty());
@@ -8030,6 +8033,7 @@ void MDCache::handle_hash_dir(MHashDir *m)
   // dir is complete
   dir->mark_complete();
   dir->mark_dirty();
+  mds->mdlog->submit_entry(new EDirUpdate(dir));
 
   // commit
   mds->mdstore->commit_dir(dir, 0);
