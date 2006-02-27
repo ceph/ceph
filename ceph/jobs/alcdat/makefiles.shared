@@ -21,13 +21,7 @@
 	'start' => 100,
 	'end' => 300,
 	
-	#'makedirs' => 1,
-	#'makedirs_dirs' => 10,
-	#'makedirs_files' => 10,
-	#'makedirs_depth' => 3,
-		
 	'custom' => '--tcp_skip_rank0 --mds_shutdown_check 60 --syn makefiles 10000 1000 0',
-	#'custom' => '--debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5',
 	
 	'comb' => {
 		'x' => 'nummds',
