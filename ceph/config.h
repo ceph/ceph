@@ -90,6 +90,11 @@ struct md_config_t {
   float mds_bal_idle_threshold;
   int   mds_bal_max;
   int   mds_bal_max_until;
+  float mds_bal_min_start;
+  float mds_bal_need_min;
+  float mds_bal_need_max;
+  float mds_bal_midchunk;
+  float mds_bal_minchunk;
 
   bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;

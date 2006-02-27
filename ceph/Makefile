@@ -41,26 +41,31 @@ MDS_OBJS= \
 	mds/MDLog.o\
 	mds/OSDMonitor.o
 
+OSD_OBJS= \
+	osd/PG.o\
+	osd/ObjectStore.o\
+	osd/FakeStore.o\
+	osd/OSD.o
+
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Dispatcher.o\
 	msg/error.o\
 	msg/HostMonitor.o\
-	osd/FakeStore.o\
 	osd/Filer.o\
 	osd/OSDMap.o\
-	osd/PG.o\
-	osd/ObjectStore.o\
 	mds/MDCluster.o\
-	ebofs.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
+	ebofs.o\
 	config.o
 
-SYN_OBJS = \
+CLIENT_OBJS= \
+	client/Client.o\
 	client/SyntheticClient.o\
-	client/Trace.o
+	client/Trace.o\
+	client/Buffercache.o
 
 TCP_OBJS = \
 	msg/TCPMessenger.o\
@@ -83,56 +88,33 @@ gprof-helper.so: test/gprof-helper.c
 
 
 
-# old test crap
-import: mds. osd/OSD.o msg/FakeMessenger.o import.cc ${COMMON_OBJS} 
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
-
-singleclient: mds.o osd/OSD.o fakesingleclient.o client/Client.o client/Buffercache.o msg/FakeMessenger.o fsck.o ${COMMON_OBJS} 
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
-
-tp: osd/tp.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
-
-fuseclient: client/Client.o client/Buffercache.o client/fuse.o msg/FakeMessenger.o ${COMMON_OBJS} 
-	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
-
-fakemds: test/fakemds.cc msg/FakeMessenger.o fakeclient/FakeClient.o osd/OSD.o mds.o ${COMMON_OBJS} 
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
-
-mpitest: test/mpitest.o msg/MPIMessenger.cc mds.o osd/OSD.o fakeclient/FakeClient.o ${COMMON_OBJS} 
-	${MPICC} ${CFLAGS} $^ -o $@
-
-mttest: test/mttest.cc msg/MTMessenger.cc ${COMMON_OBJS}
-	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
-
-
 # fuse
-fakefuse: fakefuse.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o msg/FakeMessenger.cc ${COMMON_OBJS}
+fakefuse: fakefuse.cc mds.o client.o osd.o client/fuse.o msg/FakeMessenger.cc common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-tcpfuse: tcpfuse.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
+tcpfuse: tcpfuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-mpifuse: mpifuse.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o client/fuse.o ${TCP_OBJS} ${COMMON_OBJS}
+mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
 # synthetic workload
-fakesyn: fakesyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS}
+fakesyn: fakesyn.cc mds.o client.o osd.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-mpisyn: mpisyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o msg/MPIMessenger.cc ${COMMON_OBJS} ${SYN_OBJS}
+mpisyn: mpisyn.cc mds.o client.o osd.o msg/MPIMessenger.cc common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
+tcpsyn: tcpsyn.cc mds.o client.o osd.o ${TCP_OBJS} common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs
-fakesynobfs: fakesyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o msg/FakeMessenger.o ${COMMON_OBJS} ${SYN_OBJS} 
-	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@ ../uofs/uofs.a
+fakesynobfs: fakesyn.cc mds.o client.o osd_obfs.o msg/FakeMessenger.o common.o
+	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@
 
-tcpsynobfs: tcpsyn.cc mds.o client/Client.o client/Buffercache.o osd/OSD.cc osd/OBFSStore.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
+tcpsynobfs: tcpsyn.cc mds.o client.o osd_obfs.o ${TCP_OBJS} common.o
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ 
 
 
 # ebofs
@@ -144,6 +126,7 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 ebofs: mkfs.ebofs test.ebofs
+
 
 
 # libceph
@@ -172,8 +155,20 @@ testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/cloc
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
+common.o: ${COMMON_OBJS}
+	ld -i -o $@ $^
+
 ebofs.o: ${EBOFS_OBJS}
 	ld -i -o $@ $^
+
+client.o: ${CLIENT_OBJS}
+	ld -i -o $@ $^
+
+osd.o: ${OSD_OBJS}
+	ld -i -o $@ $^
+
+osd_obfs.o: osd/OBFSStore.o osd/OSD.ccosd/PG.o osd/ObjectStore.o osd/FakeStore.o
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 mds.o: ${MDS_OBJS}
 	ld -i -o $@ $^

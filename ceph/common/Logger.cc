@@ -116,7 +116,7 @@ long Logger::get(const char* key)
   logger_lock.Lock();
   int i = type->lookup_key(key);
   long r = 0;
-  if (i >= 0)
+  if (i >= 0 && (int)vals.size() > i)
 	r = vals[i];
   logger_lock.Unlock();
   return r;

@@ -474,12 +474,12 @@ void MDBalancer::find_exports(CDir *dir,
 							  set<CDir*>& already_exporting)
 {
   double need = amount - have;
-  if (need < amount / 5)
+  if (need < amount * g_conf.mds_bal_min_start)
 	return;   // good enough!
-  double needmax = need * 1.2;
-  double needmin = need * .8;
-  double midchunk = need * .3;
-  double minchunk = need * .001;
+  double needmax = need * g_conf.mds_bal_need_max;
+  double needmin = need * g_conf.mds_bal_need_min;
+  double midchunk = need * g_conf.mds_bal_midchunk;
+  double minchunk = need * g_conf.mds_bal_minchunk;
 
   list<CDir*> bigger;
   multimap<double, CDir*> smaller;

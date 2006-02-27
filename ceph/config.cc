@@ -113,13 +113,19 @@ md_config_t g_conf = {
 
   mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 1000,
-  mds_bal_hash_threshold: 2000,
+  mds_bal_hash_threshold: 1000,//2000,
   mds_bal_unhash_threshold: 250,
   mds_bal_interval: 30,           // seconds
   mds_bal_hash_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
+
+  mds_bal_min_start: .2,      // if we need less than this, we don't do anything
+  mds_bal_need_min: .8,       // take within this range of what we need
+  mds_bal_need_max: 1.2,
+  mds_bal_midchunk: .3,       // any sub bigger than this taken in full
+  mds_bal_minchunk: .001,     // never take anything smaller than this
 
   mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
@@ -388,6 +394,17 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.mds_bal_max = atoi(args[++i]);
 	else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
 	  g_conf.mds_bal_max_until = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--mds_bal_min_start") == 0) 
+	  g_conf.mds_bal_min_start = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_need_min") == 0) 
+	  g_conf.mds_bal_need_min = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_need_max") == 0) 
+	  g_conf.mds_bal_need_max = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_midchunk") == 0) 
+	  g_conf.mds_bal_midchunk = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_minchunk") == 0) 
+	  g_conf.mds_bal_minchunk = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--client_cache_size") == 0)
 	  g_conf.client_cache_size = atoi(args[++i]);
