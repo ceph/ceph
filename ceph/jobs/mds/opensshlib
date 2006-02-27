@@ -4,9 +4,10 @@
 {
 	'sleep' => 3,
 
-	'nummds' => [1, 2, 4, 6, 8, 12, 16, 24, 32, 40, 48, 64],
+	'nummds' => [1, 2, 3, 4, 5, 6, 7], # googoo
+	#'nummds' => [1, 2, 4, 6, 8, 12, 16, 24, 32, 40, 48, 64], # alc
 
-	'cper' => 50,
+	'cper' => 200,#[50, 100, 200],
 	'_dep' => [ 'cnode' => '$nummds',
 				'numclient' => '$cnode * $cper',
 				'numosd' => '$nummds * 2',
@@ -16,17 +17,17 @@
 	#'fs' => 'ebofs',
 	'fs' => 'fakestore',
 
-	'until' => 400,     # --syn until $n    ... when to stop clients
-	'kill_after' => 600,
-	'start' => 200,
-	'end' => 400,
+	'until' => 300,     # --syn until $n    ... when to stop clients
+	'kill_after' => 400,
+	'start' => 100,
+	'end' => 300,
 	
 	#	'makedirs' => 1,
 	#'makedirs_dirs' => 10,
 	#'makedirs_files' => 10,
 	#'makedirs_depth' => 3,
 		
-	'custom' => '--tcp_skip_rank0 --syn only 0 --syn trace traces/trace.lib 1 --sleep 10 --randomsleep 60 --syn trace traces/trace.openssh.lib',
+	'custom' => '--tcp_skip_rank0 --syn only 0 --syn trace traces/trace.lib 1 --syn sleep 10 --syn randomsleep 30 --syn trace traces/trace.openssh.lib 100 --debug_mds_balancer 10 --mds_bal_max 2',
 	#'custom' => '--debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5',
 	
 	# for final summation (script/sum.pl)
