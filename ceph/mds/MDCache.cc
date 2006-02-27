@@ -4098,6 +4098,8 @@ void MDCache::handle_lock_inode_hard(MLock *m)
 {
   assert(m->get_otype() == LOCK_OTYPE_IHARD);
   
+  mds->logger->inc("lih");
+
   int from = m->get_asker();
   CInode *in = get_inode(m->get_ino());
   
@@ -4253,7 +4255,7 @@ bool MDCache::inode_file_read_start(CInode *in, MClientRequest *m)
 
 		// fw to auth
 		int auth = in->authority();
-		dout(0) << "inode_file_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
+		dout(7) << "inode_file_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
 		assert(auth != mds->get_nodeid());
 		request_forward(m, auth);
 		return false;
@@ -4330,7 +4332,7 @@ bool MDCache::inode_file_write_start(CInode *in, MClientRequest *m)
 	// replica
 	// fw to auth
 	int auth = in->authority();
-	dout(0) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
+	dout(7) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
 	assert(auth != mds->get_nodeid());
 	request_forward(m, auth);
 	return false;
@@ -4947,6 +4949,8 @@ void MDCache::handle_lock_inode_file(MLock *m)
 {
   assert(m->get_otype() == LOCK_OTYPE_IFILE);
   
+  mds->logger->inc("lif");
+
   CInode *in = get_inode(m->get_ino());
   int from = m->get_asker();
 

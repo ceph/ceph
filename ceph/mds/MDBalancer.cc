@@ -71,9 +71,11 @@ mds_load_t MDBalancer::get_load()
   mds_load_t load;
   if (mds->mdcache->get_root()) 
 	load.root = 
-	  //mds->mdcache->get_root()->popularity[MDS_POP_ANYDOM] +
-	  mds->mdcache->get_root()->popularity[MDS_POP_NESTED];
+	  mds->mdcache->get_root()->popularity[MDS_POP_ANYDOM];
+  // +
+  //  mds->mdcache->get_root()->popularity[MDS_POP_NESTED];
 
+  load.req_rate = mds->get_req_rate();
   load.queue_len = mds->messenger->get_dispatch_queue_len();
   return load;
 }

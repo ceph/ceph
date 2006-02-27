@@ -106,6 +106,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   anchormgr = new AnchorTable(this);
   osdmonitor = new OSDMonitor(this);
 
+  req_rate = 0;
+
   /*  if (whoami == 0) {
 	pgmanager = new PGManager(this);
   } else {
@@ -163,6 +165,9 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mds_logtype.add_set("q");
   mds_logtype.add_set("popanyd");
   mds_logtype.add_set("popnest");
+
+  mds_logtype.add_inc("lih");
+  mds_logtype.add_inc("lif");
 
   mds_logtype.add_set("c");
   mds_logtype.add_set("ctop");
@@ -563,6 +568,8 @@ void MDS::my_dispatch(Message *m)
 	// log
 	last_log = now;
 	mds_load_t load = balancer->get_load();
+
+	req_rate = logger->get("req");
 
 	logger->set("l", (int)load.mds_load());
 	logger->set("q", messenger->get_dispatch_queue_len());

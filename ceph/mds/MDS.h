@@ -125,9 +125,14 @@ class MDS : public Dispatcher {
   list<Context*> waiting_for_unpause;
   friend class C_MDS_Unpause;
 
+  int req_rate;
+
   // ino's and fh's
  public:
   class IdAllocator  *idalloc;
+
+  int get_req_rate() { return req_rate; }
+
  protected:
 
   friend class MDStore;
