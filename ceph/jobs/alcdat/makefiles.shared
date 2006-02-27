@@ -19,7 +19,7 @@
 	'until' => 300,     # --syn until $n    ... when to stop clients
 	'kill_after' => 400,
 	'start' => 100,
-	'end' => 550,
+	'end' => 300,
 	
 	#'makedirs' => 1,
 	#'makedirs_dirs' => 10,
