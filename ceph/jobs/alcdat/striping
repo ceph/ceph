@@ -1,0 +1,43 @@
+#!/usr/bin/perl
+
+# hi there
+{
+	'sleep' => 3,
+
+	'nummds' => 1,
+	'numosd' => 300,
+
+	'cnode' => 90,
+	'cper' => 50,
+
+	'_dep' => [ 'n' => '1 + $cnode + $nummds + $numosd' ],
+	
+	# parameters
+	#'fs' => 'ebofs',
+	'fs' => 'fakestore',
+	
+	'until' => 300,     # --syn until $n    ... when to stop clients
+	'kill_after' => 400,
+	'start' => 100,
+	'end' => 300,
+	
+	'writefile' => 1,
+	'writefile_size' => [ 1024*1024,
+#						  512*1024,
+						  256*1024,
+						  64*1024,
+						  16*1024 ],
+	'writefile_mb' => 1000,
+
+	'osd_pg_bits' => [ 16, 20 ],
+	
+	'osd_object_layout' => [ 'hash', 'hashino', 'linear' ],
+	'osd_pg_layout' => [ 'crush', 'linear', 'hash' ],
+
+	'custom' => '--tcp_skip_rank0 --mds_shutdown_check 60',
+	
+	'comb' => {
+		'x' => 'writefile_size',
+		'vars' => [ 'osd.c_wrb', 'osd.c_wr' ],
+	}
+};
