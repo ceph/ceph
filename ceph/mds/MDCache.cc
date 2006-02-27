@@ -8411,8 +8411,10 @@ void MDCache::unhash_dir_complete(CDir *dir)
 	   it != dir->end(); 
 	   it++) {
 	CInode *in = it->second->inode;
-	if (in->is_auth())
+	if (in->is_auth()) {
 	  in->mark_dirty();
+	  mds->mdlog->submit_entry(new EInodeUpdate(in));
+	}
   }
   
   if (!dir->is_frozen_dir()) {
@@ -8651,8 +8653,10 @@ void MDCache::handle_unhash_dir(MUnhashDir *m)
 
   // inode state
   dir->inode->inode.hash_seed = 0;
-  if (dir->inode->is_auth())
+  if (dir->inode->is_auth()) {
 	dir->inode->mark_dirty();
+	mds->mdlog->submit_entry(new EInodeUpdate(dir->inode));
+  }
 
   // init gather set
   hash_gather[dir] = mds->get_cluster()->get_mds_set();
