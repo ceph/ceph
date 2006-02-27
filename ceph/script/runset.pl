@@ -32,9 +32,14 @@ use Data::Dumper;
 
 =cut
 
-my $usage = "script/runset.pl jobs/some/job blah\n";
+my $usage = "script/runset.pl [--clean] jobs/some/job blah\n";
 
+my $clean;
 my $in = shift || die $usage;
+if ($in eq '--clean') {
+	$clean = 1;
+	$in = shift | die $usage;
+}
 my $tag = shift || die $usage;
 my $fake = shift;
 
@@ -47,8 +52,12 @@ my $out = "log/$job.$tag";
 my $relout = "$job.$tag";
 
 
+my $cwd = `/bin/pwd`;
+chomp($cwd);
 
-print "--- job $job, tag $tag ---\n";
+
+
+print "# --- job $job, tag $tag ---\n";
 
 
 # get input
@@ -71,6 +80,12 @@ my @fulldirs;
 
 # prep output
 system "mkdir -p $out" unless -d "$out";
+
+
+if (`hostname` =~ /alc/) {
+	print "# this looks like alc\n";
+	$sim->{'_psub'} = 'jobs/alc.tp';
+}
 
 
 sub iterate {
@@ -129,17 +144,19 @@ sub run {
 
 	my @fn;
 	my @filt;
+	my @vals;
 	for my $k (sort keys %$sim) {
 		next if $k =~ /^_/;
 		next unless ref $sim->{$k} eq 'ARRAY';
 		push(@fn, "$k=$h->{$k}");
+		push(@vals, $h->{$k});
 		next if $comb && $k eq $comb->{'x'};
 		push(@filt, "$k=$h->{$k}");
 	}
 	my $keys = join(",", @fn);
 	$keys =~ s/ /_/g;
 	my $fn = $out . '/' . $keys;
-	my $name = $jname . '_' . $tag . '_' . $keys;
+	my $name = $jname . '_' . join('_',@vals); #$tag . '_' . $keys;
 
 	push( @fulldirs, "" . $fn );
 
@@ -150,14 +167,15 @@ sub run {
 
 	if (-e "$fn/.done") {
 		print "already done.\n";
+		system "sh $fn/sh.post" if -e "$fn/sh.post";# && !(-e "$fn/.post");
 		return;
 	}
-	system "rm -r $fn" if -d "$fn";
+	system "rm -r $fn" if $clean && -d "$fn";
 	system "mkdir $fn" unless -d "$fn";
 
 	my $e = './tcpsyn';
 	$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
-	my $c = "mpiexec -l -n $h->{'n'} $e --mkfs";
+	my $c = "$e --mkfs";
 	$c .= " --$h->{'fs'}";
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 
@@ -178,34 +196,43 @@ sub run {
 
 	$c .= " --log_name $relout/$keys";
 
+	my $post = "#!/bin/sh
+script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd?? > $fn/sum.osd
+script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds
+test -e $fn/clnode.1 && script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl
+touch $fn/.post
+";
+	open(O,">$fn/sh.post");
+	print O $post;
+	close O;
 	
 	if ($sim->{'_psub'}) {
 		# template!
 		my $tp = `cat $sim->{'_psub'}`;
+		$tp =~ s/\$CWD/$cwd/g;
 		$tp =~ s/\$NAME/$name/g;
 		$tp =~ s/\$NUM/$h->{'n'}/g;
 		$tp =~ s/\$OUT/$fn\/o/g;
+		$tp =~ s/\$DONE/$fn\/.done/g;
 		$tp =~ s/\$CMD/$c/g;
-		open(O,">$out/psub.$name");
+		open(O,">$out/$name");
 		print O $tp;
 		close O;
+		print "\npsub $out/$name\n";
 		return;
 	} else {
 		# run
-		print "-> $c\n";
+		my $l = "mpiexec -l -n $h->{'n'}";
+		print "-> $l $c\n";
 		my $r = 0;
 		unless ($fake) {
-			$r = system "$c > $fn/o";
-			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd?? > $fn/sum.osd";
-			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds";
-#				if -e "$fn/mds1";
-			system "script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl"
-				if -e "$fn/clnode.1";
+			$r = system "$l $c > $fn/o";
 			if ($r) {
 				print "r = $r\n";
 			} else {
 				system "touch $fn/.done";
 			}
+			system "sh $fn/sh.post";
 		}
 		return $r;
 	}
@@ -222,7 +249,7 @@ for my $h (@r) {
 	my $d = `date`;
 	chomp($d);
 	$d =~ s/ P.T .*//;
-	print "=== $c/$n";
+	print "# === $c/$n";
 	print " ($nfailed failed)" if $nfailed;
 	print " $d: ";
 	my $r = &run($h);
