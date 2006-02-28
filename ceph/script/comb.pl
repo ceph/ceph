@@ -52,9 +52,22 @@ my %res;
 my @key;
 my %didkey;
 for my $f (@filt) {
-	for my $d (@dirs) {
-		next if ($f ne '.' && $d !~ /$f/);			
-
+	my @reg = split(/,/, $f);
+	#print "reg @reg\n";
+   	for my $d (@dirs) {
+		if ($f ne '.') {
+			my $r = (split(/\//,$d))[-1];
+			my @db = split(/,/, $r);
+			#print "db @db\n";
+			my $ok = 1;
+			for my $r (@reg) {
+				
+				$ok = 0 unless grep {$_ eq $r} @db;
+			}
+			next unless $ok;
+		}
+		#next if ($f ne '.' && $d !~ /$reg/);			
+		#print "$d\n";
 		my ($x) = $d =~ /$xaxis=(\d+)/;
 		
 		for my $v (@vars) {

@@ -205,6 +205,13 @@ touch $fn/.post
 	open(O,">$fn/sh.post");
 	print O $post;
 	close O;
+
+	my $killmin = 1 + $h->{'kill_after'} / 60;
+	my $srun = "srun -l -t $killmin -N $h->{'n'} -p ltest $c > $fn/o && touch $fn/.done
+";
+	open(O,">$fn/sh.srun");
+	print O $srun;
+	close O;
 	
 	if ($sim->{'_psub'}) {
 		# template!
