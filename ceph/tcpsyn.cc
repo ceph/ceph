@@ -102,10 +102,19 @@ int main(int argc, char **argv)
   int myrank = mpiwho.first;
   int world = mpiwho.second;
 
-  if (myrank == 0)
-	cerr << "nummds " << NUMMDS << "  numosd " << NUMOSD << "  numclient " << NUMCLIENT << endl;
-  assert(NUMMDS + NUMOSD + (NUMCLIENT?1:0) <= world);
+  int need = 0;
+  if (g_conf.tcp_skip_rank0) need++;
+  need += NUMMDS;
+  need += NUMOSD;
+  if (NUMCLIENT) {
+	if (!g_conf.tcp_overlay_clients)
+	  need += 1;
+  }
+  assert(need <= world);
 
+  if (myrank == 0)
+	cerr << "nummds " << NUMMDS << "  numosd " << NUMOSD << "  numclient " << NUMCLIENT << " .. need " << need << ", have " << world << endl;
+  
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
 
@@ -140,7 +149,10 @@ int main(int argc, char **argv)
   }
   
   // create client
-  int client_nodes = world - NUMMDS - NUMOSD - g_conf.tcp_skip_rank0;
+  int skip_osd = NUMOSD;
+  if (g_conf.tcp_overlay_clients) 
+	skip_osd = 0;        // put clients with osds too!
+  int client_nodes = world - NUMMDS - skip_osd - g_conf.tcp_skip_rank0;
   int clients_per_node = 1;
   if (NUMCLIENT) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
   set<int> clientlist;
@@ -148,7 +160,7 @@ int main(int argc, char **argv)
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
-	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + NUMOSD + i / clients_per_node) continue;
+	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
 	clientlist.insert(i);
 	client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));//(i)) );
 

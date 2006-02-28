@@ -74,6 +74,7 @@ md_config_t g_conf = {
   debug_after: 0,
 
   tcp_skip_rank0: false,
+  tcp_overlay_clients: false,  // over osds!
   tcp_log: false,
   tcp_serial_marshall: true,
   tcp_serial_out: false,
@@ -290,6 +291,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--tcp_skip_rank0") == 0)
 	  g_conf.tcp_skip_rank0 = true;
+	else if (strcmp(args[i], "--tcp_overlay_clients") == 0)
+	  g_conf.tcp_overlay_clients = true;
 
 	else if (strcmp(args[i], "--mkfs") == 0) 
 	  g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);

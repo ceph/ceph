@@ -46,6 +46,7 @@ struct md_config_t {
   int debug_after;
 
   bool tcp_skip_rank0;
+  bool tcp_overlay_clients;
   bool tcp_log;
   bool tcp_serial_marshall;
   bool tcp_serial_out;
