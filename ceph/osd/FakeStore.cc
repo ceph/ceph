@@ -256,7 +256,7 @@ int FakeStore::read(object_t oid,
   
   int fd = ::open(fn.c_str(), O_RDONLY);
   if (fd < 0) {
-	dout(1) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
+	dout(10) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
 	return fd;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
