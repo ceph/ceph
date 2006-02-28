@@ -70,6 +70,7 @@ Logger *logger;
 
 int stat_num = 0;
 off_t stat_inq = 0, stat_inqb = 0;
+off_t stat_disq = 0, stat_disqb = 0;
 off_t stat_outq = 0, stat_outqb = 0;
 /***************************/
 
@@ -814,8 +815,6 @@ void *tcp_inthread(void *r)
 	if (logger) {
 	  logger->inc("in");
 	  logger->inc("inb", sz);
-	  logger->set("inqb", stat_inqb);
-	  logger->set("inq", stat_inq);
 	}
   }
 
@@ -891,6 +890,12 @@ void* tcp_dispatchthread(void*)
 	list<Message*> in;
 	in.splice(in.begin(), incoming);
 
+	assert(stat_disq == 0);
+	stat_disq = stat_inq;
+	stat_disqb = stat_inqb;
+	stat_inq = 0;
+	stat_inqb = 0;
+
 	// drop lock while we deliver
 	incoming_lock.Unlock();
 
@@ -899,11 +904,11 @@ void* tcp_dispatchthread(void*)
 	  Message *m = in.front();
 	  in.pop_front();
 	  
-	  stat_inq--;
-	  stat_inqb -= m->get_payload().length();
+	  stat_disq--;
+	  stat_disqb -= m->get_payload().length();
 	  if (logger) {
-		logger->set("inq", stat_inq);
-		logger->set("inqb", stat_inqb);
+		logger->set("inq", stat_inq+stat_disq);
+		logger->set("inqb", stat_inqb+stat_disq);
 		logger->inc("dis");
 	  }
 	  
@@ -1145,7 +1150,7 @@ void TCPMessenger::map_rank_addr(int r, tcpaddr_t a)
 
 int TCPMessenger::get_dispatch_queue_len() 
 {
-  return stat_inq;
+  return stat_inq+stat_disq;
 }
 
 
