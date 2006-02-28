@@ -32,13 +32,15 @@ class DecayCounter {
 
  public:
   DecayCounter() : val(0) {
-	set_halflife( g_conf.mds_bal_interval );
+	set_halflife( g_conf.mds_decay_halflife );
 	reset();
   }
+  /*
   DecayCounter(double hl) : val(0) {
 	set_halflife(hl);
 	reset();
   }
+  */
   
   void adjust(double a) {
 	decay();

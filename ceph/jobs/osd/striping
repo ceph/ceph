@@ -1,3 +1,4 @@
+#!/usr/bin/perl
 # hi there
 {
 	# startup
@@ -23,7 +24,7 @@
 #						 ],
 	'writefile_mb' => 1000,
 		
-	'osd_pg_bits' => [6, 8, 10, 12, 14],
+		'osd_pg_bits' => 12,#[6, 8, 10, 12, 14],
 
 		#	'osd_object_layout' => [ 'hash', 'hashino', 'linear' ],
 	'osd_pg_layout' => [ 'crush', 'linear', 'hash' ],
@@ -37,7 +38,7 @@
 	'end' => 90,
 
 	'comb' => {
-		'x' => 'osd_pg_bits',
+		'x' => 'numosd',#'osd_pg_bits',
 		'vars' => [ 'osd.c_wrb', 'osd.c_wr' ],
 #			'maptitle' => { 'osd_object_layout=' => '',
 #							',osd_pg_layout=' => ' + '}

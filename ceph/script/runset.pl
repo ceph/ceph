@@ -82,6 +82,12 @@ my @fulldirs;
 system "mkdir -p $out" unless -d "$out";
 
 
+sub reset {
+	print "reset: restarting mpd in 3 seconds\n";
+	system "sleep 3 && (mpiexec -l -n 32 killall tcpsyn ; restartmpd.sh)";
+	print "reset: done\n";
+}
+
 if (`hostname` =~ /alc/) {
 	print "# this looks like alc\n";
 	$sim->{'_psub'} = 'jobs/alc.tp';
@@ -184,6 +190,8 @@ sub run {
 
 	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
+			   'mds_bal_rep', 'mds_bal_interval', 'mds_bal_max','mds_decay_halflife',
+			   'mds_bal_hash_rd','mds_bal_hash_wr','mds_bal_unhash_rd','mds_bal_unhash_wr',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
 			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
 			   'file_layout_ssize','file_layout_scount','file_layout_osize','file_layout_num_rep',
@@ -236,6 +244,7 @@ touch $fn/.post
 			$r = system "$l $c > $fn/o";
 			if ($r) {
 				print "r = $r\n";
+				&reset;
 			} else {
 				system "touch $fn/.done";
 			}

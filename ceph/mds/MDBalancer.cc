@@ -249,7 +249,8 @@ void MDBalancer::do_rebalance(int beat)
   multimap<double,int> load_map;
   for (int i=0; i<cluster_size; i++) {
 	double l = mds_load[i].mds_load();
-	dout(5) << "  mds" << i << " load " << mds_load[i] << " -> " << l << endl;
+	if (whoami == 0)
+	  dout(-5) << "  mds" << i << " load " << mds_load[i] << " -> " << l << endl;
 	total_load += l;
 	if (whoami == i) my_load = l;
 
@@ -493,7 +494,7 @@ void MDBalancer::find_exports(CDir *dir,
 	CInode *in = it->second->get_inode();
 	if (!in) continue;
 	if (!in->is_dir()) continue;
-	if (!in->dir) continue;  // clearly not popular
+	if (!in->dir) continue;       // clearly not popular
 	
 	if (in->dir->is_export()) continue;
 	if (in->dir->is_hashed()) continue;
@@ -504,7 +505,7 @@ void MDBalancer::find_exports(CDir *dir,
 	
 	// how popular?
 	double pop = in->dir->popularity[MDS_POP_CURDOM].meta_load();
-	//cout << "   in " << in->inode.ino << " " << pop << endl;
+	dout(20) << "   pop " << pop << " " << *in->dir << endl;
 
 	if (pop < minchunk) continue;
 
@@ -539,10 +540,11 @@ void MDBalancer::find_exports(CDir *dir,
 	  return;
   }
   
-  // apprently not enough; drill deeper into the hierarchy
+  // apprently not enough; drill deeper into the hierarchy (if non-replicated)
   for (list<CDir*>::iterator it = bigger.begin();
 	   it != bigger.end();
 	   it++) {
+	if ((*it)->is_rep()) continue;
 	dout(7) << " descending into " << **it << endl;
 	find_exports(*it, amount, exports, have, already_exporting);
 	if (have > needmin)
@@ -563,6 +565,16 @@ void MDBalancer::find_exports(CDir *dir,
 	  return;
   }
 
+  // ok fine, drill inot replicated dirs
+  for (list<CDir*>::iterator it = bigger.begin();
+	   it != bigger.end();
+	   it++) {
+	if (!(*it)->is_rep()) continue;
+	dout(7) << " descending into replicated " << **it << endl;
+	find_exports(*it, amount, exports, have, already_exporting);
+	if (have > needmin)
+	  return;
+  }
 
 }
 
@@ -591,7 +603,7 @@ void MDBalancer::hit_dir(CDir *dir, int type)
   float v = dir->popularity[MDS_POP_JUSTME].pop[type].hit();
 
   // hit modify counter, if this was a modify
-  if (g_conf.num_mds > 1 &&
+  if (g_conf.num_mds > 2 &&             // FIXME >2 thing
 	  dir->is_auth() && 
 	  !dir->inode->is_root()) {         // not root (for now at least)
 	// hash this dir?  (later?)
@@ -614,6 +626,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
   bool anydom = dir->is_auth();
   bool curdom = dir->is_auth();
 
+  float rd_adj = 0.0;
 
   // replicate?
   float dir_pop = dir->popularity[MDS_POP_CURDOM].pop[type].get();    // hmm??
@@ -622,10 +635,17 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 	if (!dir->is_rep() &&
 		dir_pop >= g_conf.mds_bal_replicate_threshold) {
 	  // replicate
-	  dout(1) << "replicating dir " << *dir << " pop " << dir_pop << endl;
+	  float rdp = dir->popularity[MDS_POP_JUSTME].pop[META_POP_RD].get();
+	  rd_adj = rdp / mds->get_cluster()->get_num_mds() - rdp; 
+	  rd_adj /= 2.0;  // temper somewhat
+
+	  dout(1) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << endl;
 		  
 	  dir->dir_rep = CDIR_REP_ALL;
 	  mds->mdcache->send_dir_updates(dir, true);
+
+	  dir->popularity[MDS_POP_JUSTME].pop[META_POP_RD].adjust(rd_adj);
+	  dir->popularity[MDS_POP_CURDOM].pop[META_POP_RD].adjust(rd_adj);
 	}
 		
 	if (dir->is_rep() &&
@@ -645,6 +665,8 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 	dir->popularity[MDS_POP_NESTED].pop[type].hit();
 	in->popularity[MDS_POP_NESTED].pop[type].hit();
 	
+	if (rd_adj != 0.0) dir->popularity[MDS_POP_NESTED].pop[META_POP_RD].adjust(rd_adj);
+
 	if (anydom) {
 	  dir->popularity[MDS_POP_ANYDOM].pop[type].hit();
 	  in->popularity[MDS_POP_ANYDOM].pop[type].hit();

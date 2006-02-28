@@ -88,6 +88,7 @@ class mds_load_t {
 	case 0: 
 	  return root.pop[META_POP_RD].get() 
 		+ 2.0*root.pop[META_POP_WR].get()
+		+ req_rate
 		+ 10.0*queue_len;
 
 	case 1:

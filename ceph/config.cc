@@ -103,6 +103,8 @@ md_config_t g_conf = {
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
+  mds_decay_halflife: 30,
+
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 10000,
@@ -111,12 +113,12 @@ md_config_t g_conf = {
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
 
-  mds_bal_replicate_threshold: 4000,
-  mds_bal_unreplicate_threshold: 500,
-  mds_bal_hash_rd: 5000,
-  mds_bal_unhash_rd: 500,
-  mds_bal_hash_wr: 2000,
-  mds_bal_unhash_wr: 250,
+  mds_bal_replicate_threshold: 2000,
+  mds_bal_unreplicate_threshold: 0,//500,
+  mds_bal_hash_rd: 10000,
+  mds_bal_unhash_rd: 1000,
+  mds_bal_hash_wr: 10000,
+  mds_bal_unhash_wr: 1000,
   mds_bal_interval: 30,           // seconds
   mds_bal_hash_interval: 5,      // seconds
   mds_bal_idle_threshold: .1,
@@ -387,6 +389,9 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
 	  g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
 
+	else if (strcmp(args[i], "--mds_decay_halflife") == 0) 
+	  g_conf.mds_decay_halflife = atoi(args[++i]);
+
 	else if (strcmp(args[i], "--mds_bal_interval") == 0) 
 	  g_conf.mds_bal_interval = atoi(args[++i]);
 	else if (strcmp(args[i], "--mds_bal_rep") == 0) 
@@ -397,6 +402,15 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.mds_bal_max = atoi(args[++i]);
 	else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
 	  g_conf.mds_bal_max_until = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--mds_bal_hash_rd") == 0) 
+	  g_conf.mds_bal_hash_rd = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_hash_wr") == 0) 
+	  g_conf.mds_bal_hash_wr = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_unhash_rd") == 0) 
+	  g_conf.mds_bal_unhash_rd = atoi(args[++i]);
+	else if (strcmp(args[i], "--mds_bal_unhash_wr") == 0) 
+	  g_conf.mds_bal_unhash_wr = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--mds_bal_mode") == 0) 
 	  g_conf.mds_bal_mode = atoi(args[++i]);

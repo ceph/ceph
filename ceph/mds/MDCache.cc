@@ -603,14 +603,32 @@ class C_MDC_ShutdownCheck : public Context {
 public:
   C_MDC_ShutdownCheck(MDCache *m) : mdc(m) {}
   void finish(int) {
-	cout << "shutdown_check at " << g_clock.now() << endl;
-	int o = g_conf.debug_mds;
-	g_conf.debug_mds = 10;
-	mdc->show_cache();
-	g_conf.debug_mds = o;
-	g_timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(mdc));
+	mdc->shutdown_check();
   }
 };
+
+void MDCache::shutdown_check()
+{
+  dout(0) << "shutdown_check at " << g_clock.now() << endl;
+
+  // cache
+  int o = g_conf.debug_mds;
+  g_conf.debug_mds = 10;
+  show_cache();
+  g_conf.debug_mds = o;
+  g_timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+
+  // this
+  dout(0) << "lru size now " << lru.lru_get_size() << endl;
+  dout(0) << "log len " << mds->mdlog->get_num_events() << endl;
+
+
+  if (exports.size()) 
+	dout(0) << "still have " << exports.size() << " exports" << endl;
+
+  if (mds->filer->is_active()) 
+	dout(0) << "filer still active" << endl;
+}
 
 void MDCache::shutdown_start()
 {
@@ -1420,7 +1438,7 @@ int MDCache::path_traverse(filepath& origpath,
 		dout(7) << "traverse: not auth for " << path << " at " << path[depth] << ", fwd to mds" << dauth << endl;
 
 		if (is_client_req && cur->dir->is_rep()) {
-		  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *cur->dir << endl;
+		  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under " << *cur->dir << " req " << *(MClientRequest*)req << endl;
 		  ((MClientRequest*)req)->set_mds_wants_replica_in_dirino(cur->dir->ino());
 		  req->clear_payload();  // reencode!
 		}
@@ -2378,13 +2396,14 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	int nonce = it->second;
 	
 	if (!in) {
-	  dout(7) << "inode_expire on " << it->first << " from " << from << ", don't have it" << endl;
-	  assert(in);  // OOPS  i should be authority, or recent authority (and thus frozen).
+	  dout(0) << "inode_expire on " << hex << it->first << dec << " from " << from << ", don't have it" << endl;
+	  assert(in);  // i should be authority, or proxy .. and pinned
 	}  
 	if (!in->is_auth()) {
 	  int newauth = in->authority();
 	  dout(7) << "proxy inode expire on " << *in << " to " << newauth << endl;
 	  assert(newauth >= 0);
+	  if (!in->state_test(CINODE_STATE_PROXY)) dout(0) << "missing proxy bit on " << *in << endl;
 	  assert(in->state_test(CINODE_STATE_PROXY));
 	  if (proxymap.count(newauth) == 0) proxymap[newauth] = new MCacheExpire(from);
 	  proxymap[newauth]->add_inode(it->first, it->second);
@@ -2439,8 +2458,8 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	int nonce = it->second;
 	
 	if (!dir) {
-	  dout(7) << "dir_expire on " << it->first << " from " << from << ", don't have it" << endl;
-	  assert(dir);  // OOPS  i should be authority, or recent authority (and thus frozen).
+	  dout(0) << "dir_expire on " << it->first << " from " << from << ", don't have it" << endl;
+	  assert(dir);  // i should be authority, or proxy ... and pinned
 	}  
 	if (!dir->is_auth()) {
 	  int newauth = dir->authority();
@@ -2550,7 +2569,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
   }
 
   // update
-  dout(1) << "dir_update on " << *in->dir << endl;
+  dout(5) << "dir_update on " << *in->dir << endl;
   in->dir->dir_rep = m->get_dir_rep();
   in->dir->dir_rep_by = m->get_dir_rep_by();
   
@@ -7298,7 +7317,7 @@ public:
  */
 void MDCache::hash_dir(CDir *dir)
 {
-  dout(7) << "hash_dir " << *dir << endl;
+  dout(-7) << "hash_dir " << *dir << endl;
 
   assert(!dir->is_hashed());
   assert(dir->is_auth());
@@ -8093,7 +8112,7 @@ public:
 
 void MDCache::unhash_dir(CDir *dir)
 {
-  dout(7) << "unhash_dir " << *dir << endl;
+  dout(-7) << "unhash_dir " << *dir << endl;
 
   assert(dir->is_hashed());
   assert(!dir->is_unhashing());

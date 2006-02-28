@@ -203,7 +203,7 @@ int SyntheticClient::run()
 		int iarg1 = iargs.front();
 		iargs.pop_front();
 		if (run_me()) {
-		  dout(3) << "sleep " << iarg1 << endl;
+		  dout(2) << "sleep " << iarg1 << endl;
 		  sleep(iarg1);
 		}
 	  }

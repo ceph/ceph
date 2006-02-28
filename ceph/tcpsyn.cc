@@ -92,7 +92,7 @@ int main(int argc, char **argv)
   args = nargs;
   if (!args.empty()) {
 	for (unsigned i=0; i<args.size(); i++)
-	  cout << "stray arg " << args[i] << endl;
+	  cerr << "stray arg " << args[i] << endl;
   }
   assert(args.empty());
 

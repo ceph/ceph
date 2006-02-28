@@ -58,6 +58,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.is_dirty()) out << " dirty";
   if (dir.is_import()) out << " import";
   if (dir.is_export()) out << " export";
+  if (dir.is_rep()) out << " repl";
   if (dir.is_hashed()) out << " hashed"; //=" << (int)dir.get_inode()->inode.hash_seed;
   if (dir.is_auth()) {
 	out << " auth";

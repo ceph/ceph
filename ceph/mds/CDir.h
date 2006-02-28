@@ -356,7 +356,7 @@ class CDir {
 	  put(CDIR_PIN_OPENED);	  
   }
   void open_by_clear() {
-	if (open_by.size())
+	if (!open_by.empty())
 	  put(CDIR_PIN_OPENED);
 	open_by.clear();
     open_by_nonce.clear();
@@ -632,6 +632,9 @@ class CDirExport {
 	dir->popularity[MDS_POP_NESTED] += st.popularity_curdom;
 
 	dir->replica_nonce = 0;  // no longer defined
+
+	if (!dir->open_by.empty())
+	  dout(0) << "open_by not empty non import, " << *dir << ", " << dir->open_by << endl;
 
 	dir->dir_rep_by = rep_by;
 	dir->open_by = open_by;

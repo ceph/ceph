@@ -181,6 +181,7 @@ class MDCache {
 
   // shutdown
   void shutdown_start();
+  void shutdown_check();
   bool shutdown_pass();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
