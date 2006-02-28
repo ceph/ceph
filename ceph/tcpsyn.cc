@@ -150,7 +150,7 @@ int main(int argc, char **argv)
 	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
 	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + NUMOSD + i / clients_per_node) continue;
 	clientlist.insert(i);
-	client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT(i)) );
+	client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));//(i)) );
 
 	// logger?
 	if (client_logger == 0) {
