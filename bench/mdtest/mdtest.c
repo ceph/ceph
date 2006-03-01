@@ -641,7 +641,6 @@ int main(int argc, char **argv) {
         fflush(stdout);
 
         /* display disk usage */
-		mkdir(testdir, DIRMODE);
         sprintf(dfCall, "df %s\n", testdir);
         system(dfCall);
     }
@@ -653,6 +652,7 @@ int main(int argc, char **argv) {
     }
 
     if (testdir != NULL) {
+		mkdir(testdir, DIRMODE);
         if (chdir(testdir) == -1) {
             FAIL("Unable to chdir to test directory");
         }
