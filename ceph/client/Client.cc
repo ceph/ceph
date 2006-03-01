@@ -1110,9 +1110,14 @@ int Client::link(const char *existing, const char *newname)
 }
 
 
-int Client::unlink(const char *path)
+int Client::unlink(const char *relpath)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->unlink\(\"" << path << "\");" << endl;
   tout << "unlink" << endl;
   tout << path << endl;
@@ -1147,9 +1152,17 @@ int Client::unlink(const char *path)
   return res;
 }
 
-int Client::rename(const char *from, const char *to)
+int Client::rename(const char *relfrom, const char *relto)
 {
   client_lock.Lock();
+
+  string absfrom;
+  mkabspath(relfrom, absfrom);
+  const char *from = absfrom.c_str();
+  string absto;
+  mkabspath(relto, absto);
+  const char *to = absto.c_str();
+
   dout(3) << "op: client->rename(\"" << from << "\", \"" << to << "\");" << endl;
   tout << "rename" << endl;
   tout << from << endl;
@@ -1179,9 +1192,14 @@ int Client::rename(const char *from, const char *to)
 
 // dirs
 
-int Client::mkdir(const char *path, mode_t mode)
+int Client::mkdir(const char *relpath, mode_t mode)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->mkdir(\"" << path << "\", " << mode << ");" << endl;
   tout << "mkdir" << endl;
   tout << path << endl;
@@ -1209,9 +1227,14 @@ int Client::mkdir(const char *path, mode_t mode)
   return res;
 }
 
-int Client::rmdir(const char *path)
+int Client::rmdir(const char *relpath)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->rmdir(\"" << path << "\");" << endl;
   tout << "rmdir" << endl;
   tout << path << endl;
@@ -1249,9 +1272,17 @@ int Client::rmdir(const char *path)
 
 // symlinks
   
-int Client::symlink(const char *target, const char *link)
+int Client::symlink(const char *reltarget, const char *rellink)
 {
   client_lock.Lock();
+
+  string abstarget;
+  mkabspath(reltarget, abstarget);
+  const char *target = abstarget.c_str();
+  string abslink;
+  mkabspath(rellink, abslink);
+  const char *link = abslink.c_str();
+
   dout(3) << "op: client->symlink(\"" << target << "\", \"" << link << "\");" << endl;
   tout << "symlink" << endl;
   tout << target << endl;
@@ -1279,9 +1310,14 @@ int Client::symlink(const char *target, const char *link)
   return res;
 }
 
-int Client::readlink(const char *path, char *buf, off_t size) 
+int Client::readlink(const char *relpath, char *buf, off_t size) 
 { 
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->readlink(\"" << path << "\", readlinkbuf, readlinkbuf_len);" << endl;
   tout << "readlink" << endl;
   tout << path << endl;
@@ -1312,9 +1348,14 @@ int Client::readlink(const char *path, char *buf, off_t size)
 
 // inode stuff
 
-int Client::lstat(const char *path, struct stat *stbuf)
+int Client::lstat(const char *relpath, struct stat *stbuf)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->lstat(\"" << path << "\", &st);" << endl;
   tout << "lstat" << endl;
   tout << path << endl;
@@ -1381,9 +1422,14 @@ int Client::lstat(const char *path, struct stat *stbuf)
 
 
 
-int Client::chmod(const char *path, mode_t mode)
+int Client::chmod(const char *relpath, mode_t mode)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->chmod(\"" << path << "\", " << mode << ");" << endl;
   tout << "chmod" << endl;
   tout << path << endl;
@@ -1409,9 +1455,14 @@ int Client::chmod(const char *path, mode_t mode)
   return res;
 }
 
-int Client::chown(const char *path, uid_t uid, gid_t gid)
+int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->chown(\"" << path << "\", " << uid << ", " << gid << ");" << endl;
   tout << "chown" << endl;
   tout << path << endl;
@@ -1441,9 +1492,14 @@ int Client::chown(const char *path, uid_t uid, gid_t gid)
   return res;
 }
 
-int Client::utime(const char *path, struct utimbuf *buf)
+int Client::utime(const char *relpath, struct utimbuf *buf)
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: utim.actime = " << buf->actime << "; utim.modtime = " << buf->modtime << ";" << endl;
   dout(3) << "op: client->utime(\"" << path << "\", &utim);" << endl;
   tout << "utime" << endl;
@@ -1476,9 +1532,14 @@ int Client::utime(const char *path, struct utimbuf *buf)
 
 
 
-int Client::mknod(const char *path, mode_t mode) 
+int Client::mknod(const char *relpath, mode_t mode) 
 { 
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->mknod(\"" << path << "\", " << mode << ");" << endl;
   tout << "mknod" << endl;
   tout << path << endl;
@@ -1518,9 +1579,14 @@ int Client::mknod(const char *path, mode_t mode)
 
 // fyi: typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
 
-int Client::getdir(const char *path, map<string,inode_t*>& contents) 
+int Client::getdir(const char *relpath, map<string,inode_t*>& contents) 
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: client->getdir(\"" << path << "\", dir_contents);" << endl;
   tout << "getdir" << endl;
   tout << path << endl;
@@ -1580,9 +1646,14 @@ int Client::getdir(const char *path, map<string,inode_t*>& contents)
 
 /****** file i/o **********/
 
-int Client::open(const char *path, int mode) 
+int Client::open(const char *relpath, int mode) 
 {
   client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
   dout(3) << "op: fh = client->open(\"" << path << "\", " << mode << ");" << endl;
   tout << "open" << endl;
   tout << path << endl;
