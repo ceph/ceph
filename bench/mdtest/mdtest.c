@@ -641,6 +641,7 @@ int main(int argc, char **argv) {
         fflush(stdout);
 
         /* display disk usage */
+		mkdir(testdir, DIRMODE);
         sprintf(dfCall, "df %s\n", testdir);
         system(dfCall);
     }
