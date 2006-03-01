@@ -471,7 +471,7 @@ void Ebofs::alloc_more_node_space()
 	  allocator.release(ex);
 	  allocator.release(even);
 	  allocator.release(odd);
-	  assert(0);
+	  //assert(0);
 	}
   } else {
 	dout(1) << "alloc_more_node_space already have max node regions!" << endl;

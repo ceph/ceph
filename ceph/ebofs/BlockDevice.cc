@@ -557,7 +557,7 @@ int BlockDevice::open(kicker *idle)
 	fd = 0;
 	return -1;
   }
-  cout << fd << endl;
+
   // lock
   /*int r = ::flock(fd, LOCK_EX);
   if (r < 0) {
