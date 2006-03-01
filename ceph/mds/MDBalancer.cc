@@ -393,7 +393,8 @@ void MDBalancer::do_rebalance(int beat)
 	double fac = 1.0;
 	if (total_goal > 0 && total_sent > 0) {
 	  fac = total_goal / total_sent;
-	  dout(5) << " total sent is " << total_goal << " / " << total_sent << " -> fac " << fac << endl;
+	  dout(5) << " total sent is " << total_sent << " / " << total_goal << " -> fac 1/ " << fac << endl;
+	  if (fac > 1.0) fac = 1.0;
 	}
 
 	int target = (*it).first;
