@@ -38,8 +38,6 @@ char *nice_blocks(block_t b)
 
 int Ebofs::mount()
 {
-  dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
-
   ebofs_lock.Lock();
   assert(!mounted);
 
@@ -48,6 +46,8 @@ int Ebofs::mount()
 	ebofs_lock.Unlock();
 	return r;
   }
+
+  dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
 
   // read super
   bufferptr bp1 = bufferpool.alloc(EBOFS_BLOCK_SIZE);
@@ -1866,6 +1866,16 @@ int Ebofs::truncate(object_t oid, off_t size)
 	  for (unsigned i=0; i<extra.size(); i++)
 		allocator.release(extra[i]);
 	}
+
+	// update uncommitted
+	interval_set<block_t> uncom;
+	if (nblocks > 0) {
+	  interval_set<block_t> left;
+	  left.insert(0, nblocks);
+	  uncom.intersection_of(left, on->uncommitted);
+	}
+	dout(10) << "uncommitted was " << on->uncommitted << "  now " << uncom << endl;
+	on->uncommitted = uncom;
   }
   else {
 	assert(size == on->object_size);

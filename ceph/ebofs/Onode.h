@@ -342,6 +342,7 @@ inline ostream& operator<<(ostream& out, Onode& on)
   if (on.is_dirty()) out << " dirty";
   if (on.is_dangling()) out << " dangling";
   if (on.is_deleted()) out << " deleted";
+  out << " uncom=" << on.uncommitted;
   //  out << " " << &on;
   out << ")";
   return out;
