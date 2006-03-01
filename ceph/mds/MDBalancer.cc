@@ -246,11 +246,14 @@ void MDBalancer::do_rebalance(int beat)
   dout(5) << " do_rebalance: cluster loads are" << endl;
 
   // rescale!  turn my mds_load back into meta_load units
-  double load_fac = mds_load[whoami].root.meta_load() / mds_load[whoami].mds_load();
-  dout(-7) << " load_fac is " << load_fac 
-		   << " <- " << mds_load[whoami].root.meta_load() << " / " << mds_load[whoami].mds_load()
-		   << endl;
-
+  double load_fac = 1.0;
+  if (mds_load[whoami].mds_load() > 0) {
+	load_fac = mds_load[whoami].root.meta_load() / mds_load[whoami].mds_load();
+	dout(-7) << " load_fac is " << load_fac 
+			 << " <- " << mds_load[whoami].root.meta_load() << " / " << mds_load[whoami].mds_load()
+			 << endl;
+  }
+  
   double total_load = 0;
   multimap<double,int> load_map;
   for (int i=0; i<cluster_size; i++) {
