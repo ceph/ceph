@@ -537,7 +537,6 @@ class NodePool {
 	  assert(tx.count(nid));      // i guess htis happens? -sage
 	  tx.erase(nid);
 	  limbo.insert(nid);
-	  assert(0);
 	}
 
 	delete n;
