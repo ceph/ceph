@@ -394,7 +394,7 @@ class NodePool {
 	  // make node itself clean
 	  node_map[nid]->set_state(Node::STATE_CLEAN);
 	}
-	else {  // already limbo  (was dirtied)
+	else {  // already limbo  (was dirtied, or released)
 	  assert(limbo.count(nid));
 	}
 
@@ -533,8 +533,12 @@ class NodePool {
 	  assert(clean.count(nid));
 	  clean.erase(nid);
 	  limbo.insert(nid);
-	} else 
+	} else if (n->is_tx()) {
+	  assert(tx.count(nid));      // i guess htis happens? -sage
+	  tx.erase(nid);
+	  limbo.insert(nid);
 	  assert(0);
+	}
 
 	delete n;
   }
