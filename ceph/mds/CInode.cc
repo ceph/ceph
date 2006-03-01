@@ -480,6 +480,8 @@ int CInode::authority() {
 
 CInodeDiscover* CInode::replicate_to( int rep )
 {
+  assert(is_auth());
+
   // relax locks?
   if (!is_cached_by_anyone())
 	replicate_relax_locks();

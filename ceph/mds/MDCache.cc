@@ -1332,7 +1332,9 @@ int MDCache::path_traverse(filepath& origpath,
 		  if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == cur->dir->ino() &&
 			  cur->dir->is_auth() && 
 			  cur->dir->is_rep() &&
-			  cur->dir->is_open_by(req->get_source().num())) {
+			  cur->dir->is_open_by(req->get_source().num()) &&
+			  dn->get_inode()->is_auth()
+			  ) {
 			assert(req->get_source().is_mds());
 			int from = req->get_source().num();
 			

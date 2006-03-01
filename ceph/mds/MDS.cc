@@ -560,6 +560,17 @@ void MDS::my_dispatch(Message *m)
 	finish_contexts(ls);
   }
 
+  // hash root?
+  if (false &&
+	  mdcache->get_root() &&
+	  mdcache->get_root()->dir &&
+	  !(mdcache->get_root()->dir->is_hashed() || 
+		mdcache->get_root()->dir->is_hashing())) {
+	dout(0) << "hashing root" << endl;
+	mdcache->hash_dir(mdcache->get_root()->dir);
+  }
+
+
   // periodic crap (1-second resolution)
   static utime_t last_log = g_clock.recent_now();
   utime_t now = g_clock.recent_now();
@@ -2588,6 +2599,17 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   newdir->mark_dirty();
   
   balancer->hit_dir(newdir, META_POP_DWR);
+
+  if (diri->dir->is_auth() &&
+	  diri->dir->is_rep() &&
+	  newdir->is_auth() &&
+	  !newdir->is_hashing()) {
+	int dest = rand() % mdcluster->get_num_mds();
+	if (dest != whoami) {
+	  dout(-10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << endl;
+	  mdcache->export_dir(newdir, dest);
+	}
+  }
 
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
