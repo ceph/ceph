@@ -131,7 +131,7 @@ void MDBalancer::send_heartbeat()
 
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  dout(5) << "=== got heartbeat " << m->get_beat() << " from " << MSG_ADDR_NICE(m->get_source()) << " " << m->get_load() << endl;
+  dout(25) << "=== got heartbeat " << m->get_beat() << " from " << MSG_ADDR_NICE(m->get_source()) << " " << m->get_load() << endl;
   
   if (!mds->mdcache->get_root()) {
 	dout(10) << "no root on handle" << endl;
@@ -142,7 +142,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   int who = MSG_ADDR_NUM(m->get_source());
   
   if (who == 0) {
-	dout(10) << " from mds0, new epoch" << endl;
+	dout(20) << " from mds0, new epoch" << endl;
 	beat_epoch = m->get_beat();
 	send_heartbeat();
 
@@ -391,11 +391,12 @@ void MDBalancer::do_rebalance(int beat)
 	   it++) {
 
 	double fac = 1.0;
-	if (total_goal > 0 && total_sent > 0) {
+	if (false && total_goal > 0 && total_sent > 0) {
 	  fac = total_goal / total_sent;
-	  dout(5) << " total sent is " << total_sent << " / " << total_goal << " -> fac 1/ " << fac << endl;
+	  dout(-5) << " total sent is " << total_sent << " / " << total_goal << " -> fac 1/ " << fac << endl;
 	  if (fac > 1.0) fac = 1.0;
 	}
+	fac = .9 - .4 * ((float)g_conf.num_mds / 128.0);  // hack magic fixme
 
 	int target = (*it).first;
 	double amount = (*it).second * fac;
@@ -403,7 +404,7 @@ void MDBalancer::do_rebalance(int beat)
 
 	if (amount < MIN_OFFLOAD) continue;
 
-	dout(5) << " sending " << amount << " to mds" << target 
+	dout(-5) << " sending " << amount << " to mds" << target 
 			<< " .. " << (*it).second << " * " << fac << " -> " << amount
 			<< endl;//" .. fudge is " << fudge << endl;
 	double have = 0;
@@ -481,7 +482,7 @@ void MDBalancer::do_rebalance(int beat)
 	total_sent += have;
 	
 	for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() << endl;
+	  dout(-5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
@@ -510,7 +511,9 @@ void MDBalancer::find_exports(CDir *dir,
   list<CDir*> bigger;
   multimap<double, CDir*> smaller;
 
-  dout(7) << " find_exports in " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << endl;
+  double dirpop = dir->popularity[MDS_POP_CURDOM].meta_load();
+  dout(-7) << " find_exports .. pop is " << dirpop << " in " << *dir << " .. i need " << need << " (" << needmin << " - " << needmax << ")" << endl;
+  double dirsum = 0.0;
 
   for (CDir_map_t::iterator it = dir->begin();
 	   it != dir->end();
@@ -525,10 +528,11 @@ void MDBalancer::find_exports(CDir *dir,
 	if (already_exporting.count(in->dir)) continue;
 
 	if (in->dir->is_frozen()) continue;  // can't export this right now!
-	if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
+	//if (in->dir->get_size() == 0) continue;  // don't export empty dirs, even if they're not complete.  for now!
 	
 	// how popular?
 	double pop = in->dir->popularity[MDS_POP_CURDOM].meta_load();
+	dirsum += pop;
 	dout(20) << "   pop " << pop << " " << *in->dir << endl;
 
 	if (pop < minchunk) continue;
@@ -545,6 +549,7 @@ void MDBalancer::find_exports(CDir *dir,
 	else
 	  smaller.insert(pair<double,CDir*>(pop, in->dir));
   }
+  dout(-20) << " .. sum is " << dirsum << " / " << dirpop << endl;
 
   // grab some sufficiently big small items
   multimap<double,CDir*>::reverse_iterator it;
