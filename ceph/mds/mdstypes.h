@@ -9,23 +9,26 @@ using namespace std;
 #include "config.h"
 #include "common/DecayCounter.h"
 
+#include <cassert>
+
 
 /* meta_load_t
  * hierarchical load for an inode/dir and it's children
  */
-#define META_POP_RD    0
-#define META_POP_WR    1
-#define META_POP_LOG   2
-#define META_POP_FDIR  3
-#define META_POP_CDIR  4
-#define META_NPOP      5
+#define META_POP_IRD    0
+#define META_POP_IWR    1
+#define META_POP_DWR    2
+//#define META_POP_LOG   3
+//#define META_POP_FDIR  4
+//#define META_POP_CDIR  4
+#define META_NPOP      3
 
 class meta_load_t {
  public:
   DecayCounter pop[META_NPOP];
 
   double meta_load() {
-	return pop[META_POP_RD].get() + pop[META_POP_WR].get();
+	return pop[META_POP_IRD].get() + 2*pop[META_POP_IWR].get();
   }
 
   void take(meta_load_t& other) {
@@ -38,8 +41,8 @@ class meta_load_t {
 
 inline ostream& operator<<( ostream& out, meta_load_t& load )
 {
-  return out << "metaload<rd " << load.pop[META_POP_RD].get()
-			 << ", wr " << load.pop[META_POP_WR].get()
+  return out << "metaload<rd " << load.pop[META_POP_IRD].get()
+			 << ", wr " << load.pop[META_POP_IWR].get()
 			 << ">";
 }
 
@@ -86,15 +89,14 @@ class mds_load_t {
   double mds_load() {
 	switch(g_conf.mds_bal_mode) {
 	case 0: 
-	  return root.pop[META_POP_RD].get() 
-		+ 2.0*root.pop[META_POP_WR].get()
+	  return root.meta_load()
 		+ req_rate
 		+ 10.0*queue_len;
 
 	case 1:
 	  return req_rate + 10.0*queue_len;
-
 	}
+	assert(0);
 	return 0;
   }
 

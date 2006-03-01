@@ -1130,7 +1130,7 @@ void MDS::handle_client_stat(MClientRequest *req,
 
   mdcache->inode_file_read_finish(ref);
 
-  balancer->hit_inode(ref, META_POP_RD);   
+  balancer->hit_inode(ref, META_POP_IRD);   
 
   // reply
   reply_request(req, reply, ref);
@@ -1157,7 +1157,7 @@ void MDS::handle_client_utime(MClientRequest *req,
 
   mdcache->inode_file_write_finish(cur);
   
-  balancer->hit_inode(cur, META_POP_WR);   
+  balancer->hit_inode(cur, META_POP_IWR);   
 
   // init reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1192,7 +1192,7 @@ void MDS::handle_client_chmod(MClientRequest *req,
 
   mdcache->inode_hard_write_finish(cur);
 
-  balancer->hit_inode(cur, META_POP_WR);   
+  balancer->hit_inode(cur, META_POP_IWR);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1222,7 +1222,7 @@ void MDS::handle_client_chown(MClientRequest *req,
 
   mdcache->inode_hard_write_finish(cur);
 
-  balancer->hit_inode(cur, META_POP_WR);   
+  balancer->hit_inode(cur, META_POP_IWR);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -1516,7 +1516,7 @@ void MDS::handle_client_readdir(MClientRequest *req,
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
   reply->set_result(0);
   
-  balancer->hit_dir(cur->dir);
+  //balancer->hit_dir(cur->dir);
 
   // reply
   reply_request(req, reply, cur);
@@ -1536,7 +1536,7 @@ void MDS::handle_client_mknod(MClientRequest *req, CInode *ref)
   newi->inode.mode &= ~INODE_TYPE_MASK;
   newi->inode.mode |= INODE_MODE_FILE;
   
-  balancer->hit_inode(newi, META_POP_WR);
+  balancer->hit_inode(newi, META_POP_IWR);
 
   // commit
   commit_request(req, new MClientReply(req, 0), ref,
@@ -1636,7 +1636,7 @@ CInode *MDS::mknod(MClientRequest *req, CInode *diri, bool okexist)
 	dir->link_inode(dn, newi);
   
   // bump modify pop
-  balancer->hit_dir(dir, true);
+  balancer->hit_dir(dir, META_POP_DWR);
   
   // mark dirty
   dn->mark_dirty();
@@ -1859,7 +1859,7 @@ void MDS::handle_client_link_finish(MClientRequest *req, CInode *ref,
   dn->link_remote( targeti );   // since we have it
   dn->mark_dirty();
   
-  balancer->hit_dir(dn->dir);
+  balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // done!
   commit_request(req, new MClientReply(req, 0), ref,
@@ -2044,7 +2044,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
   }
 
 	
-  balancer->hit_dir(dn->dir);
+  balancer->hit_dir(dn->dir, META_POP_DWR);
 
   // it's locked, unlink!
   MClientReply *reply = new MClientReply(req,0);
@@ -2548,8 +2548,8 @@ void MDS::handle_client_rename_local(MClientRequest *req,
 	}
   }
   
-  balancer->hit_dir(srcdn->dir);
-  balancer->hit_dir(destdn->dir);
+  balancer->hit_dir(srcdn->dir, META_POP_DWR);
+  balancer->hit_dir(destdn->dir, META_POP_DWR);
 
   // we're golden.
   // everything is xlocked by us, we rule, etc.
@@ -2587,7 +2587,7 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   newdir->mark_complete();
   newdir->mark_dirty();
   
-  balancer->hit_dir(newdir);
+  balancer->hit_dir(newdir, META_POP_DWR);
 
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
@@ -2620,7 +2620,7 @@ void MDS::handle_client_symlink(MClientRequest *req, CInode *diri)
   // set target
   newi->symlink = req->get_sarg();
   
-  balancer->hit_inode(newi, META_POP_WR);
+  balancer->hit_dir(diri->dir, META_POP_DWR);
 
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
@@ -2654,7 +2654,7 @@ void MDS::handle_client_truncate(MClientRequest *req, CInode *cur)
 
   mdcache->inode_file_write_finish(cur);
 
-  balancer->hit_inode(cur, META_POP_WR);   
+  balancer->hit_inode(cur, META_POP_IWR);   
 
   // start reply
   MClientReply *reply = new MClientReply(req, 0);
@@ -2716,12 +2716,12 @@ void MDS::handle_client_open(MClientRequest *req,
   Capability *cap = mdcache->issue_new_caps(cur, mode, req);
   if (!cap) return; // can't issue (yet), so wait!
 
-  dout(12) << "open gets caps " << cap_string(cap->pending()) << endl;
+  dout(12) << "open gets caps " << cap_string(cap->pending()) << " for " << req->get_source() << " on " << *cur << endl;
 
-  balancer->hit_inode(cur, META_POP_RD);
+  balancer->hit_inode(cur, META_POP_IRD);
 
   // reply
-  MClientReply *reply = new MClientReply(req, 0);   // fh # is return code
+  MClientReply *reply = new MClientReply(req, 0);
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_data_version(fdv);

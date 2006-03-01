@@ -47,6 +47,7 @@ class MDBalancer {
 
   // per-epoch scatter/gathered info
   hash_map<int, mds_load_t>  mds_load;
+  hash_map<int, float>       mds_meta_load;
   map<int, map<int, float> > mds_import_map;
 
   // per-epoch state
@@ -58,10 +59,10 @@ class MDBalancer {
   double try_match(int ex, double& maxex,
 				   int im, double& maxim);
   double get_maxim(int im) {
-	return target_load - mds_load[im].mds_load() - imported[im];
+	return target_load - mds_meta_load[im] - imported[im];
   }
   double get_maxex(int ex) {
-	return mds_load[ex].mds_load() - target_load - exported[ex];	
+	return mds_meta_load[ex] - target_load - exported[ex];	
   }
 
  public:

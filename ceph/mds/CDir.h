@@ -366,7 +366,7 @@ class CDir {
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-	if (( popularity[MDS_POP_CURDOM].pop[META_POP_RD].get() > g_conf.mds_bal_replicate_threshold)) {
+	if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > g_conf.mds_bal_replicate_threshold)) {
 	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
 	  ls = open_by;
 	  if (!ls.empty()) ls.insert(auth);

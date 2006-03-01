@@ -245,25 +245,36 @@ void MDBalancer::do_rebalance(int beat)
 
   dout(5) << " do_rebalance: cluster loads are" << endl;
 
+  // rescale!  turn my mds_load back into meta_load units
+  double load_fac = mds_load[whoami].root.meta_load() / mds_load[whoami].mds_load();
+  dout(-7) << " load_fac is " << load_fac 
+		   << " <- " << mds_load[whoami].root.meta_load() << " / " << mds_load[whoami].mds_load()
+		   << endl;
+
   double total_load = 0;
   multimap<double,int> load_map;
   for (int i=0; i<cluster_size; i++) {
-	double l = mds_load[i].mds_load();
+	double l = mds_load[i].mds_load() * load_fac;
+	mds_meta_load[i] = l;
+
 	if (whoami == 0)
-	  dout(-5) << "  mds" << i << " load " << mds_load[i] << " -> " << l << endl;
-	total_load += l;
+	  dout(-5) << "  mds" << i 
+			   << " meta load " << mds_load[i] 
+			   << " = " << mds_load[i].mds_load() 
+			   << " --> " << l << endl;
+
 	if (whoami == i) my_load = l;
+	total_load += l;
 
 	load_map.insert(pair<double,int>( l, i ));
   }
-  dout(5) << "  total load " << total_load << endl;
-
-  // my load
-  dout(5) << "  my load " << my_load << endl;
 
   // target load
   target_load = total_load / (double)cluster_size;
-  dout(5) << "  target load " << target_load << endl;
+  dout(5) << "do_rebalance:  my load " << my_load 
+		  << "   target " << target_load 
+		  << "   total " << total_load 
+		  << endl;
   
   // under or over?
   if (my_load < target_load) {
@@ -361,6 +372,7 @@ void MDBalancer::do_rebalance(int beat)
   }
 
 
+
   // make a sorted list of my imports
   map<double,CDir*>    import_pop_map;
   multimap<int,CDir*>  import_from_map;
@@ -381,6 +393,8 @@ void MDBalancer::do_rebalance(int beat)
 	import_from_map.insert(pair<int,CDir*>(from, *it));
   }
   
+
+
   // do my exports!
   set<CDir*> already_exporting;
   double total_sent = 0;
@@ -390,22 +404,25 @@ void MDBalancer::do_rebalance(int beat)
 	   it != my_targets.end();
 	   it++) {
 
-	double fac = 1.0;
+	/*
+    double fac = 1.0;
 	if (false && total_goal > 0 && total_sent > 0) {
 	  fac = total_goal / total_sent;
 	  dout(-5) << " total sent is " << total_sent << " / " << total_goal << " -> fac 1/ " << fac << endl;
 	  if (fac > 1.0) fac = 1.0;
 	}
 	fac = .9 - .4 * ((float)g_conf.num_mds / 128.0);  // hack magic fixme
-
+	*/
+	
 	int target = (*it).first;
-	double amount = (*it).second * fac;
+	double amount = (*it).second;// * load_fac;
 	total_goal += amount;
 
 	if (amount < MIN_OFFLOAD) continue;
 
-	dout(-5) << " sending " << amount << " to mds" << target 
-			<< " .. " << (*it).second << " * " << fac << " -> " << amount
+	dout(5) << " sending " << amount << " to mds" << target 
+	  //<< " .. " << (*it).second << " * " << load_fac 
+			<< " -> " << amount
 			<< endl;//" .. fudge is " << fudge << endl;
 	double have = 0;
 	
@@ -511,9 +528,9 @@ void MDBalancer::find_exports(CDir *dir,
   list<CDir*> bigger;
   multimap<double, CDir*> smaller;
 
-  double dirpop = dir->popularity[MDS_POP_CURDOM].meta_load();
-  dout(-7) << " find_exports .. pop is " << dirpop << " in " << *dir << " .. i need " << need << " (" << needmin << " - " << needmax << ")" << endl;
-  double dirsum = 0.0;
+  double dir_pop = dir->popularity[MDS_POP_CURDOM].meta_load();
+  double dir_sum = 0;
+  dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << endl;
 
   for (CDir_map_t::iterator it = dir->begin();
 	   it != dir->end();
@@ -532,7 +549,7 @@ void MDBalancer::find_exports(CDir *dir,
 	
 	// how popular?
 	double pop = in->dir->popularity[MDS_POP_CURDOM].meta_load();
-	dirsum += pop;
+	dir_sum += pop;
 	dout(20) << "   pop " << pop << " " << *in->dir << endl;
 
 	if (pop < minchunk) continue;
@@ -549,7 +566,7 @@ void MDBalancer::find_exports(CDir *dir,
 	else
 	  smaller.insert(pair<double,CDir*>(pop, in->dir));
   }
-  dout(-20) << " .. sum is " << dirsum << " / " << dirpop << endl;
+  dout(-7) << " .. sum " << dir_sum << " / " << dir_pop << endl;
 
   // grab some sufficiently big small items
   multimap<double,CDir*>::reverse_iterator it;
@@ -636,8 +653,8 @@ void MDBalancer::hit_dir(CDir *dir, int type)
 	  dir->is_auth() && 
 	  !dir->inode->is_root()) {         // not root (for now at least)
 	// hash this dir?  (later?)
-	if (((v > g_conf.mds_bal_hash_rd && type == META_POP_RD) ||
-		 (v > g_conf.mds_bal_hash_wr && type == META_POP_WR)) &&
+	if (((v > g_conf.mds_bal_hash_rd && type == META_POP_IRD) ||
+		 (v > g_conf.mds_bal_hash_wr && type == META_POP_IWR)) &&
 		!(dir->is_hashed() || dir->is_hashing()) &&
 		hash_queue.count(dir->ino()) == 0) {
 	  dout(0) << "hit_dir " << type << " pop is " << v << ", putting in hash_queue: " << *dir << endl;
@@ -664,7 +681,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 	if (!dir->is_rep() &&
 		dir_pop >= g_conf.mds_bal_replicate_threshold) {
 	  // replicate
-	  float rdp = dir->popularity[MDS_POP_JUSTME].pop[META_POP_RD].get();
+	  float rdp = dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].get();
 	  rd_adj = rdp / mds->get_cluster()->get_num_mds() - rdp; 
 	  rd_adj /= 2.0;  // temper somewhat
 
@@ -673,8 +690,8 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 	  dir->dir_rep = CDIR_REP_ALL;
 	  mds->mdcache->send_dir_updates(dir, true);
 
-	  dir->popularity[MDS_POP_JUSTME].pop[META_POP_RD].adjust(rd_adj);
-	  dir->popularity[MDS_POP_CURDOM].pop[META_POP_RD].adjust(rd_adj);
+	  dir->popularity[MDS_POP_JUSTME].pop[META_POP_IRD].adjust(rd_adj);
+	  dir->popularity[MDS_POP_CURDOM].pop[META_POP_IRD].adjust(rd_adj);
 	}
 		
 	if (dir->is_rep() &&
@@ -694,7 +711,7 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 	dir->popularity[MDS_POP_NESTED].pop[type].hit();
 	in->popularity[MDS_POP_NESTED].pop[type].hit();
 	
-	if (rd_adj != 0.0) dir->popularity[MDS_POP_NESTED].pop[META_POP_RD].adjust(rd_adj);
+	if (rd_adj != 0.0) dir->popularity[MDS_POP_NESTED].pop[META_POP_IRD].adjust(rd_adj);
 
 	if (anydom) {
 	  dir->popularity[MDS_POP_ANYDOM].pop[type].hit();
