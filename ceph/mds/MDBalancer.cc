@@ -383,15 +383,29 @@ void MDBalancer::do_rebalance(int beat)
   
   // do my exports!
   set<CDir*> already_exporting;
+  double total_sent = 0;
+  double total_goal = 0;
+
   for (map<int,double>::iterator it = my_targets.begin();
 	   it != my_targets.end();
 	   it++) {
+
+	double fac = 1.0;
+	if (total_goal > 0 && total_sent > 0) {
+	  fac = total_goal / total_sent;
+	  dout(5) << " total sent is " << total_goal << " / " << total_sent << " -> fac " << fac << endl;
+	}
+
 	int target = (*it).first;
-	double amount = (*it).second;
+	double amount = (*it).second * fac;
+	total_goal += amount;
 
 	if (amount < MIN_OFFLOAD) continue;
 
-	dout(5) << " sending " << amount << " to mds" << target << endl;
+	dout(5) << " sending " << amount << " to mds" << target 
+			<< " .. " << (*it).second << " * " << fac << " -> " << amount
+			<< endl;//" .. fudge is " << fudge << endl;
+	double have = 0;
 	
 	show_imports();
 
@@ -411,19 +425,22 @@ void MDBalancer::do_rebalance(int beat)
 		double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
 		assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
 		
-		if (pop <= amount) {
+		if (pop <= amount-have) {
 		  dout(5) << "reexporting " << *dir << " pop " << pop << " back to " << target << endl;
 		  mds->mdcache->export_dir(dir, target);
-		  amount -= pop;
+		  have += pop;
 		  import_from_map.erase(plast);
 		  import_pop_map.erase(pop);
 		} else {
 		  dout(5) << "can't reexport " << *dir << ", too big " << pop << endl;
 		}
-		if (amount < MIN_OFFLOAD) break;
+		if (amount-have < MIN_OFFLOAD) break;
 	  }
 	}
-	if (amount < MIN_OFFLOAD) break;
+	if (amount-have < MIN_OFFLOAD) {
+	  total_sent += have;
+	  continue;
+	}
 	
 	// any other imports
 	for (map<double,CDir*>::iterator import = import_pop_map.begin();
@@ -433,28 +450,34 @@ void MDBalancer::do_rebalance(int beat)
 	  if (imp->inode->is_root()) continue;
 	  
 	  double pop = (*import).first;
-	  if (pop < amount ||
-		  pop < MIN_REEXPORT) {
+	  if (pop < amount-have || pop < MIN_REEXPORT) {
 		dout(5) << "reexporting " << *imp << " pop " << pop << endl;
-		amount -= pop;
+		have += pop;
 		mds->mdcache->export_dir(imp, imp->inode->authority());
 	  }
-	  if (amount < MIN_OFFLOAD) break;
+	  if (amount-have < MIN_OFFLOAD) break;
 	}
-	if (amount < MIN_OFFLOAD) break;
+	if (amount-have < MIN_OFFLOAD) {
+	  //fudge = amount-have;
+	  total_sent += have;
+	  continue;
+	}
 
 	// okay, search for fragments of my workload
 	set<CDir*> candidates = mds->mdcache->imports;
 
 	list<CDir*> exports;
-	double have = 0;
 	
 	for (set<CDir*>::iterator pot = candidates.begin();
 		 pot != candidates.end();
 		 pot++) {
 	  find_exports(*pot, amount, exports, have, already_exporting);
-	  if (have > amount-MIN_OFFLOAD) break;
+	  if (have > amount-MIN_OFFLOAD) {
+		break;
+	  }
 	}
+	//fudge = amount - have;
+	total_sent += have;
 	
 	for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
 	  dout(5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() << endl;
