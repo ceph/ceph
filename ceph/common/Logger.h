@@ -58,6 +58,8 @@ class Logger {
   Logger(string fn, LogType *type);
   ~Logger();
 
+  utime_t& get_start() { return start; }
+
   long inc(const char *s, long v = 1);
   long set(const char *s, long v);
   long get(const char *s);

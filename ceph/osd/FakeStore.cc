@@ -201,6 +201,8 @@ int FakeStore::mkfs()
 	  wipe_dir( subdir );
   }
   
+  dout(1) << "mkfs done in " << mydir << endl;
+
   return r;
 }
 

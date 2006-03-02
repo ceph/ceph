@@ -87,7 +87,7 @@ for my $k (sort {$a <=> $b} keys %sum) {
 	$n++;
 }
 
-my $rows = $n;
+my $rows = $n || 1;
 my $files = $tcount{$starttime};
 
 print "\n";

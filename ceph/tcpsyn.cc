@@ -148,6 +148,8 @@ int main(int argc, char **argv)
 	started++;
   }
   
+  if (g_conf.tcp_overlay_clients) sleep(5);
+
   // create client
   int skip_osd = NUMOSD;
   if (g_conf.tcp_overlay_clients) 

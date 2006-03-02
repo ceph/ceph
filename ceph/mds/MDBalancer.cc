@@ -30,7 +30,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << "mds" << mds->get_nodeid() << ".bal "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << "mds" << mds->get_nodeid() << ".bal " << (g_clock.recent_now() - mds->logger->get_start()) << " "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
@@ -157,7 +157,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   unsigned cluster_size = mds->get_cluster()->get_num_mds();
   if (mds_load.size() == cluster_size) {
 	// let's go!
-	export_empties();
+	//export_empties();  // no!
 	do_rebalance(m->get_beat());
   }
   
@@ -249,7 +249,7 @@ void MDBalancer::do_rebalance(int beat)
   double load_fac = 1.0;
   if (mds_load[whoami].mds_load() > 0) {
 	load_fac = mds_load[whoami].root.meta_load() / mds_load[whoami].mds_load();
-	dout(-7) << " load_fac is " << load_fac 
+	dout(7) << " load_fac is " << load_fac 
 			 << " <- " << mds_load[whoami].root.meta_load() << " / " << mds_load[whoami].mds_load()
 			 << endl;
   }
@@ -386,7 +386,9 @@ void MDBalancer::do_rebalance(int beat)
 	double pop = (*it)->popularity[MDS_POP_CURDOM].meta_load();
 	if (pop < g_conf.mds_bal_idle_threshold &&
 		(*it)->inode != mds->mdcache->get_root()) {
-	  dout(5) << " exporting idle import " << **it << endl;
+	  dout(-5) << " exporting idle import " << **it 
+			   << " back to mds" << (*it)->inode->authority()
+			   << endl;
 	  mds->mdcache->export_dir(*it, (*it)->inode->authority());
 	  continue;
 	}
@@ -423,7 +425,7 @@ void MDBalancer::do_rebalance(int beat)
 
 	if (amount < MIN_OFFLOAD) continue;
 
-	dout(5) << " sending " << amount << " to mds" << target 
+	dout(-5) << " sending " << amount << " to mds" << target 
 	  //<< " .. " << (*it).second << " * " << load_fac 
 			<< " -> " << amount
 			<< endl;//" .. fudge is " << fudge << endl;
@@ -448,7 +450,9 @@ void MDBalancer::do_rebalance(int beat)
 		assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
 		
 		if (pop <= amount-have) {
-		  dout(5) << "reexporting " << *dir << " pop " << pop << " back to " << target << endl;
+		  dout(-5) << "reexporting " << *dir 
+				   << " pop " << pop 
+				   << " back to mds" << target << endl;
 		  mds->mdcache->export_dir(dir, target);
 		  have += pop;
 		  import_from_map.erase(plast);
@@ -465,6 +469,7 @@ void MDBalancer::do_rebalance(int beat)
 	}
 	
 	// any other imports
+	if (false)
 	for (map<double,CDir*>::iterator import = import_pop_map.begin();
 		 import != import_pop_map.end();
 		 import++) {
@@ -473,7 +478,10 @@ void MDBalancer::do_rebalance(int beat)
 	  
 	  double pop = (*import).first;
 	  if (pop < amount-have || pop < MIN_REEXPORT) {
-		dout(5) << "reexporting " << *imp << " pop " << pop << endl;
+		dout(-5) << "reexporting " << *imp 
+				 << " pop " << pop 
+				 << " back to mds" << imp->inode->authority()
+				 << endl;
 		have += pop;
 		mds->mdcache->export_dir(imp, imp->inode->authority());
 	  }
@@ -502,7 +510,10 @@ void MDBalancer::do_rebalance(int beat)
 	total_sent += have;
 	
 	for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	  dout(-5) << " exporting fragment " << **it << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() << endl;
+	  dout(-5) << " exporting to mds" << target 
+			   << " fragment " << **it 
+			   << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() 
+			   << endl;
 	  mds->mdcache->export_dir(*it, target);
 	}
   }
@@ -569,7 +580,7 @@ void MDBalancer::find_exports(CDir *dir,
 	else
 	  smaller.insert(pair<double,CDir*>(pop, in->dir));
   }
-  dout(-7) << " .. sum " << dir_sum << " / " << dir_pop << endl;
+  dout(7) << " .. sum " << dir_sum << " / " << dir_pop << endl;
 
   // grab some sufficiently big small items
   multimap<double,CDir*>::reverse_iterator it;
@@ -701,7 +712,8 @@ void MDBalancer::hit_recursive(CDir *dir, int type)
 	  dir->popularity[MDS_POP_CURDOM].pop[META_POP_IRD].adjust(rd_adj);
 	}
 		
-	if (dir->is_rep() &&
+	if (!dir->ino() != 1 &&
+		dir->is_rep() &&
 		dir_pop < g_conf.mds_bal_unreplicate_threshold) {
 	  // unreplicate
 	  dout(1) << "unreplicating dir " << *dir << " pop " << dir_pop << endl;

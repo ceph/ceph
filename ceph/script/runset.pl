@@ -35,10 +35,20 @@ use Data::Dumper;
 my $usage = "script/runset.pl [--clean] jobs/some/job blah\n";
 
 my $clean;
+my $use_srun;
+my $nobg = '&';
 my $in = shift || die $usage;
 if ($in eq '--clean') {
 	$clean = 1;
-	$in = shift | die $usage;
+	$in = shift || die $usage;
+}
+if ($in eq '--srun') {
+	$use_srun = 1;
+	$in = shift || die $usage;
+}
+if ($in eq '--nobg') {
+	$nobg = '';
+	$in = shift || die $usage;
 }
 my $tag = shift || die $usage;
 my $fake = shift;
@@ -88,7 +98,8 @@ sub reset {
 	print "reset: done\n";
 }
 
-if (`hostname` =~ /alc/) {
+
+if (`hostname` =~ /alc/ && !$use_srun) {
 	print "# this looks like alc\n";
 	$sim->{'_psub'} = 'jobs/alc.tp';
 }
@@ -145,6 +156,8 @@ sub iterate {
 	return @r;
 }
 
+
+
 sub run {
 	my $h = shift @_;
 
@@ -171,9 +184,9 @@ sub run {
 	$filters{ join(',', @filt) } = 1;
 
 
+	#system "sh $fn/sh.post" if -e "$fn/sh.post";# && !(-e "$fn/.post");
 	if (-e "$fn/.done") {
 		print "already done.\n";
-		system "sh $fn/sh.post" if -e "$fn/sh.post";# && !(-e "$fn/.post");
 		return;
 	}
 	system "rm -r $fn" if $clean && -d "$fn";
@@ -207,19 +220,23 @@ sub run {
 	my $post = "#!/bin/sh
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd?? > $fn/sum.osd
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds
-test -e $fn/clnode.1 && script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl
+script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl
 touch $fn/.post
 ";
 	open(O,">$fn/sh.post");
 	print O $post;
 	close O;
 
-	my $killmin = 1 + $h->{'kill_after'} / 60;
-	my $srun = "srun -l -t $killmin -N $h->{'n'} -p ltest $c > $fn/o && touch $fn/.done
-";
-	open(O,">$fn/sh.srun");
-	print O $srun;
-	close O;
+	my $killmin = 1 + int ($h->{'kill_after'} / 60);
+
+	my $srun = "srun --wait=600 --exclude=jobs/ltest.ignore -l -t $killmin -N $h->{'n'} -p ltest";
+	my $mpiexec = "mpiexec -l -n $h->{'n'}";
+	my $launch;
+	if ($use_srun)  {
+		$launch = $srun;
+	} else {
+		$launch = $mpiexec;
+	}
 	
 	if ($sim->{'_psub'}) {
 		# template!
@@ -237,16 +254,14 @@ touch $fn/.post
 		return;
 	} else {
 		# run
-		my $l = "mpiexec -l -n $h->{'n'}";
-		print "-> $l $c\n";
-		my $r = 0;
+		my $cmd = "\n$launch $c > $fn/o && touch $fn/.done";
+		print "$cmd $nobg\n";
+		my $r = undef;
 		unless ($fake) {
-			$r = system "$l $c > $fn/o";
+			$r = system $cmd;
 			if ($r) {
 				print "r = $r\n";
-				&reset;
-			} else {
-				system "touch $fn/.done";
+				#&reset;
 			}
 			system "sh $fn/sh.post";
 		}
@@ -290,13 +305,20 @@ if ($comb) {
 	my $x = $comb->{'x'};
 	my @vars = @{$comb->{'vars'}};
 
+	print "\n\n# post\n";
+	for my $p (@fulldirs) {
+		print "sh $p/sh.post\n";
+	}
+
 	my @filters = sort keys %filters;
 	my $cmd = "script/comb.pl $x @vars - @fulldirs - @filters > $out/c";
-	print "\n$cmd\n";
+	print "$cmd\n";
 	open(O,">$out/comb");
 	print O "$cmd\n";
 	close O;
 	system $cmd;
+
+	print "\n\n";
 
 	my $plot;
 	$plot .= "set data style linespoints;\n";

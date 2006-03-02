@@ -43,6 +43,13 @@ sub load_sum {
 		for my $f (@k) {
 			$s->{$k}->{$f} = shift @l;
 		}
+
+		# clnode latency?
+		if ($fn =~ /cl/) {
+			$s->{$k}->{'lat'} = $s->{$k}->{'lsum'} / $s->{$k}->{'lnum'} if $s->{$k}->{'lnum'} > 0;
+			$s->{$k}->{'latw'} = $s->{$k}->{'lwsum'} / $s->{$k}->{'lwnum'} if $s->{$k}->{'lwnum'} > 0;
+			$s->{$k}->{'latr'} = $s->{$k}->{'lrsum'} / $s->{$k}->{'lrnum'} if $s->{$k}->{'lrnum'} > 0;
+		}
 	}		
 	return $s;
 }

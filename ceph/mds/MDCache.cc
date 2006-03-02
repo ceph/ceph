@@ -544,7 +544,7 @@ bool MDCache::trim(int max) {
 	  diri->dir->state_clear(CDIR_STATE_COMPLETE);
 
 	  // reexport?
-	  if (false && diri->dir->is_import() &&             // import
+	  if (diri->dir->is_import() &&             // import
 		  diri->dir->get_size() == 0 &&         // no children
 		  !diri->is_root())                   // not root
 		export_empty_import(diri->dir);
@@ -3638,16 +3638,48 @@ void MDCache::request_inode_file_caps(CInode *in)
 {
   int wanted = in->get_caps_wanted();
   if (wanted != in->replica_caps_wanted) {
-	in->replica_caps_wanted = wanted;
+
+	if (wanted == 0) {
+	  if (in->replica_caps_wanted_keep_until > g_clock.recent_now()) {
+		// ok, release them finally!
+		in->replica_caps_wanted_keep_until.sec_ref() = 0;
+		dout(7) << "request_inode_file_caps " << cap_string(wanted)
+				 << " was " << cap_string(in->replica_caps_wanted) 
+				 << " no keeping anymore " 
+				 << " on " << *in 
+				 << endl;
+	  }
+	  else if (in->replica_caps_wanted_keep_until.sec() == 0) {
+		in->replica_caps_wanted_keep_until = g_clock.recent_now();
+		in->replica_caps_wanted_keep_until.sec_ref() += 2;
+		
+		dout(7) << "request_inode_file_caps " << cap_string(wanted)
+				 << " was " << cap_string(in->replica_caps_wanted) 
+				 << " keeping until " << in->replica_caps_wanted_keep_until
+				 << " on " << *in 
+				 << endl;
+		return;
+	  } else {
+		// wait longer
+		return;
+	  }
+	} else {
+	  in->replica_caps_wanted_keep_until.sec_ref() = 0;
+	}
+	assert(!in->is_auth());
 
 	int auth = in->authority();
-	dout(7) << "request_inode_file_caps " << cap_string(in->replica_caps_wanted) 
+	dout(7) << "request_inode_file_caps " << cap_string(wanted)
+			<< " was " << cap_string(in->replica_caps_wanted) 
 			<< " on " << *in << " to mds" << auth << endl;
 	assert(!in->is_auth());
-	
+
+	in->replica_caps_wanted = wanted;
 	mds->messenger->send_message(new MInodeFileCaps(in->ino(), mds->get_nodeid(),
 													in->replica_caps_wanted),
 								 MSG_ADDR_MDS(auth), MDS_PORT_CACHE, MDS_PORT_CACHE);
+  } else {
+	in->replica_caps_wanted_keep_until.sec_ref() = 0;
   }
 }
 
@@ -6799,8 +6831,7 @@ void MDCache::handle_export_dir(MExportDir *m)
 
 
   // is it empty?
-  if (false &&
-	  dir->get_size() == 0 &&
+  if (dir->get_size() == 0 &&
 	  !dir->inode->is_auth()) {
 	// reexport!
 	export_empty_import(dir);

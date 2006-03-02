@@ -560,6 +560,9 @@ void MDS::my_dispatch(Message *m)
 	finish_contexts(ls);
   }
 
+
+  
+
   // hash root?
   if (false &&
 	  mdcache->get_root() &&
@@ -2600,13 +2603,14 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
   
   balancer->hit_dir(newdir, META_POP_DWR);
 
-  if (diri->dir->is_auth() &&
+  if (
+	  diri->dir->is_auth() &&
 	  diri->dir->is_rep() &&
 	  newdir->is_auth() &&
 	  !newdir->is_hashing()) {
 	int dest = rand() % mdcluster->get_num_mds();
 	if (dest != whoami) {
-	  dout(-10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << endl;
+	  dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << endl;
 	  mdcache->export_dir(newdir, dest);
 	}
   }

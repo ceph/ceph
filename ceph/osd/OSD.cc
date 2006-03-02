@@ -91,39 +91,36 @@ OSD::OSD(int id, Messenger *m)
   waiting_for_no_ops = false;
 
 
-  // use fake store
+
+
+  // try in this order:
+  // ebofsdev/all
+  // ebofsdev/$num
+  // ebofsdev/$hostname
+
+  char hostname[100];
+  hostname[0] = 0;
+  gethostname(hostname,100);
+  sprintf(dev_path, "%s/all", ebofs_base_path);
+  
+  struct stat sta;
+  if (::lstat(dev_path, &sta) != 0)
+	sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
+  
+  if (::lstat(dev_path, &sta) != 0)
+	sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);	
+  
 #ifdef USE_OBFS
   if (g_conf.uofs) {
-	char hostname[100];
-
-	hostname[0] = 0;
-	gethostname(hostname,100);
-	sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);
-	
-	struct stat st;
-	if (::stat(dev_path, &st) != 0)
-	  sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
-	
 	store = new OBFSStore(whoami, NULL, dev_path);
   }
 #else
 # ifdef USE_EBOFS
   if (g_conf.ebofs) {
-	char hostname[100];
-
-	hostname[0] = 0;
-	gethostname(hostname,100);
-	sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);
-	
-	struct stat st;
-	if (::stat(dev_path, &st) != 0)
-	  sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
-
     store = new Ebofs(dev_path);
   } else 
 # endif
-	store = new FakeStore(osd_base_path, whoami);
-  
+	store = new FakeStore(osd_base_path, whoami);  
 #endif
 
   // monitor
@@ -2403,7 +2400,10 @@ void OSD::op_modify(MOSDOp *op)
 	// version?  clean?
 	version_t ov = 0;  // 0 == dne (yet)
 	store->getattr(oid, "version", &ov, sizeof(ov));
-	version_t nv = messenger->get_lamport();//op->get_lamport_recv_stamp();
+
+	//version_t nv = messenger->get_lamport();//op->get_lamport_recv_stamp();
+	version_t nv = ov + 1;   //FIXME later
+
 	if (nv <= ov) 
 	  cerr << opname << " " << hex << oid << dec << " ov " << ov << " nv " << nv 
 		   << " ... wtf?  msg sent " << op->get_lamport_send_stamp() 

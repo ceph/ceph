@@ -5,7 +5,8 @@
 	'sleep' => 10,
 
 	#'nummds' => [1, 2, 4, 8, 16, 32, 48, 64, 80, 96, 128],
-	'nummds' => [2, 4, 8, 16, 32, 48, 64, 80, 96, 128],
+	#'nummds' => [2, 4, 8, 16, 32, 48, 64, 80, 96, 128],
+	'nummds' => [160,200],
 	
 	#'nummds' => [1, 2, 4, 6, 7], # googoo
 	#'trace' => ['make.lib', 'make.include'],
@@ -15,12 +16,12 @@
 	
 	'mds_decay_halflife' => 30,
 	'mds_bal_rep' => 1500,
-	'cper' => [10, 16], #50,#[25, 50, 75, 100],#50,# [ 50, 100 ],
+	'cper' => [25, 50, 100], #50,#[25, 50, 75, 100],#50,# [ 50, 100 ],
 
-	'_dep' => [ 'cnode' => '$nummds',
+	'_dep' => [ 'cnode' => 0,#'30',
 				'numclient' => '$nummds * $cper',
-				'numosd' => '$nummds',
-				'n' => '1 + $cnode + $nummds + $numosd' ],
+				'numosd' => '$nummds * .6',
+				'n' => '415'],#'1 + $cnode + $nummds + $numosd' ],
 
 
 	'custom' => '--tcp_skip_rank0 --debug_mds_balancer 1 --mds_shutdown_check 60 --syn only 0 --syn trace traces/openssh/untar.lib 1 --syn sleep 10 --syn trace traces/openssh/make.lib 1000',

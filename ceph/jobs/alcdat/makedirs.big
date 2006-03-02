@@ -5,13 +5,13 @@
 	'sleep' => 3,
 
 	#'nummds' => [1, 2, 4, 8, 16, 32, 48, 64, 80, 96, 128, 160, 192],
-	'nummds' => [1, 2, 8, 16, 32, 48, 64, 80, 96, 112, 128],#144, 160, 192, 208],
+	'nummds' => [160, 200],#[1, 2, 8, 16, 32, 48, 64, 80, 96, 112, 128],#144, 160, 192, 208],
 
 	'cper' => [15,20],
-	'_dep' => [ 'cnode' => '$nummds',# / 4 + 1',
+	'_dep' => [ 'cnode' => '40',#$nummds',# / 4 + 1',
 				'numclient' => '$nummds * $cper',
-				'numosd' => '$nummds > 1 ? $nummds:2',
-				'n' => '1 + $cnode + $nummds + $numosd' ],
+				'numosd' => '$nummds * .8',
+				'n' => '415'],#1 + $cnode + $nummds + $numosd' ],
 	
 	# parameters
 	'fs' => 'ebofs',
@@ -21,7 +21,7 @@
 	'mds_decay_halflife' => 30,
 
 	'mds_bal_interval' => 45,
-	'mds_bal_max' => [2],
+	'mds_bal_max' => 2,
 
 	'until' => 300,     # --syn until $n    ... when to stop clients
 	'kill_after' => 400,

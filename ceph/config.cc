@@ -110,7 +110,7 @@ md_config_t g_conf = {
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
   mds_log_max_trimming: 10000,
   mds_log_read_inc: 1<<20,
-  mds_log_pad_entry: 256,//64,
+  mds_log_pad_entry: 128,//256,//64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
 
@@ -152,7 +152,7 @@ md_config_t g_conf = {
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
-  fakestore_fsync: true,
+  fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
   fakestore_fakeattr: true,   

@@ -446,6 +446,8 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  else 
 		mds = diri->pick_replica(mdcluster);
 	}
+  } else {
+	mds = rand() % mdcluster->get_num_mds();
   }
   //cout << "mds is " << mds << endl;
 

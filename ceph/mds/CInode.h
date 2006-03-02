@@ -218,6 +218,7 @@ class CInode : LRUObject {
 
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
+  utime_t               replica_caps_wanted_keep_until;
 
 
  private:
