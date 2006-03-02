@@ -441,6 +441,8 @@ void MDCache::export_empty_import(CDir *dir)
 {
   dout(7) << "export_empty_import " << *dir << endl;
   
+  return;  // hack fixme
+
   if (!dir->is_import()) {
 	dout(7) << "not import (anymore?)" << endl;
 	return;
@@ -471,7 +473,8 @@ void MDCache::export_empty_import(CDir *dir)
   dout(7) << "really empty, exporting to " << dest << endl;
   assert (dest != mds->get_nodeid());
   
-  dout(7) << "exporting empty import " << *dir << " to " << dest << endl;
+  dout(-7) << "exporting to mds" << dest 
+		   << " empty import " << *dir << endl;
   export_dir( dir, dest );
 }
 
@@ -541,7 +544,7 @@ bool MDCache::trim(int max) {
 	  diri->dir->state_clear(CDIR_STATE_COMPLETE);
 
 	  // reexport?
-	  if (diri->dir->is_import() &&             // import
+	  if (false && diri->dir->is_import() &&             // import
 		  diri->dir->get_size() == 0 &&         // no children
 		  !diri->is_root())                   // not root
 		export_empty_import(diri->dir);
@@ -823,7 +826,7 @@ int MDCache::open_root(Context *c)
 	assert(root->dir == NULL);
 	root->set_dir( new CDir(root, mds, true) );
 	root->dir->set_dir_auth( 0 );  // me!
-	root->dir->dir_rep = CDIR_REP_NONE;
+	root->dir->dir_rep = CDIR_REP_ALL;   //NONE;
 
 	// root is sort of technically an import (from a vacuum)
 	imports.insert( root->dir );
@@ -6796,7 +6799,8 @@ void MDCache::handle_export_dir(MExportDir *m)
 
 
   // is it empty?
-  if (dir->get_size() == 0 &&
+  if (false &&
+	  dir->get_size() == 0 &&
 	  !dir->inode->is_auth()) {
 	// reexport!
 	export_empty_import(dir);
