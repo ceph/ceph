@@ -117,7 +117,11 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   // <HACK set up OSDMap from g_conf>
   osdmap = new OSDMap();
   osdmap->set_pg_bits(g_conf.osd_pg_bits);
-  osdmap->inc_version();
+  osdmap->inc_version();  // version = 1
+  assert(osdmap->get_version() == 1);
+
+  if (!g_conf.mkfs) 
+	osdmap->inc_version();   // 1 -> mkfs, we want something bigger or else OSDs will recreate PGs
 
   Bucket *b = new UniformBucket(1, 0);
   int root = osdmap->crush.add_bucket(b);

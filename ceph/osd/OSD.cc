@@ -588,6 +588,8 @@ void OSD::update_map(bufferlist& state, bool mkfs)
   list<pg_t> pg_list;
   
   if (mkfs) {
+	assert(osdmap->get_version() == 1);
+
 	// create PGs
 	for (int nrep = 1; nrep <= g_conf.osd_max_rep; nrep++) {
 	  ps_t maxps = 1LL << osdmap->get_pg_bits();
@@ -1414,13 +1416,17 @@ void OSD::plan_recovery(PG *pg)
   list<PGPeer*> complete_peers;
   pg->plan_recovery(store, current_version, complete_peers);
 
-  for (list<PGPeer*>::iterator it = complete_peers.begin();
-	   it != complete_peers.end();
-	   it++) {
-	PGPeer *p = *it;
-	dout(7) << " " << *pg << " telling peer osd" << p->get_peer() << " they are complete" << endl;
-	messenger->send_message(new MOSDPGUpdate(osdmap->get_version(), pg->get_pgid(), true, osdmap->get_version()),
-							MSG_ADDR_OSD(p->get_peer()));
+  if (current_version > 1) {
+	for (list<PGPeer*>::iterator it = complete_peers.begin();
+		 it != complete_peers.end();
+		 it++) {
+	  PGPeer *p = *it;
+	  dout(7) << " " << *pg << " telling peer osd" << p->get_peer() << " they are complete" << endl;
+	  messenger->send_message(new MOSDPGUpdate(osdmap->get_version(), pg->get_pgid(), true, osdmap->get_version()),
+							  MSG_ADDR_OSD(p->get_peer()));
+	}
+  } else {
+	dout(7) << "not sending PGUpdates since this is a mkfs (current_version==1)" << endl;
   }
 }
 
