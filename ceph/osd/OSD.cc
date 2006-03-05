@@ -591,7 +591,9 @@ void OSD::update_map(bufferlist& state, bool mkfs)
 	assert(osdmap->get_version() == 1);
 
 	// create PGs
-	for (int nrep = 1; nrep <= g_conf.osd_max_rep; nrep++) {
+	for (int nrep = 1; 
+		 nrep <= MIN(g_conf.num_osd, g_conf.osd_max_rep);    // for low osd counts..  hackish bleh
+		 nrep++) {
 	  ps_t maxps = 1LL << osdmap->get_pg_bits();
 	  for (pg_t ps = 0; ps < maxps; ps++) {
 		pg_t pgid = osdmap->ps_nrep_to_pg(ps, nrep);
