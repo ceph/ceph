@@ -447,9 +447,10 @@ MClientReply *Client::make_request(MClientRequest *req,
 		mds = diri->pick_replica(mdcluster);
 	}
   } else {
+	// no root info, pick a random MDS
 	mds = rand() % mdcluster->get_num_mds();
   }
-  //cout << "mds is " << mds << endl;
+  dout(20) << "mds is " << mds << endl;
 
   // force use of a particular mds?
   if (use_mds >= 0) mds = use_mds;
@@ -756,7 +757,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   // stale?
   if (m->get_special() == MClientFileCaps::FILECAP_STALE) {
-	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " now stale" << endl;
+	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
 	
 	// move to stale list
 	assert(in->caps.count(mds));
@@ -1714,7 +1715,7 @@ int Client::open(const char *relpath, int mode)
 
 	assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
 	if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
-	  dout(7) << "open got caps " << cap_string(reply->get_file_caps()) << " seq " << reply->get_file_caps_seq() << endl;
+	  dout(7) << "open got caps " << cap_string(reply->get_file_caps()) << " for " << hex << f->inode->ino() << dec << " seq " << reply->get_file_caps_seq() << " from mds" << mds << endl;
 
 	  int old_caps = f->inode->caps[mds].caps;
 	  f->inode->caps[mds].caps = reply->get_file_caps();
@@ -1722,6 +1723,8 @@ int Client::open(const char *relpath, int mode)
 
 	  // we shouldn't ever lose caps at this point.
 	  assert((old_caps & ~f->inode->caps[mds].caps) == 0);
+	} else {
+	  dout(7) << "open got SAME caps " << cap_string(reply->get_file_caps()) << " for " << hex << f->inode->ino() << dec << " seq " << reply->get_file_caps_seq() << " from mds" << mds << endl;
 	}
 	
 	// put in map
@@ -1730,6 +1733,8 @@ int Client::open(const char *relpath, int mode)
 	fh_map[fh] = f;
 	
 	dout(3) << "open success, fh is " << fh << " combined caps " << cap_string(f->inode->file_caps()) << endl;
+  } else {
+	dout(0) << "open failure result " << result << endl;
   }
 
   delete reply;
@@ -1811,11 +1816,30 @@ int Client::close(fh_t fh)
 
 class C_Client_Cond : public Context {
 public:
+  Cond *cond;
+  bool *done;
+  int *rvalue;
+  C_Client_Cond(Cond *cond, bool *d, int *rvalue) {
+	this->done = d;
+    this->cond = cond;
+    this->rvalue = rvalue;
+    *done = false;
+  }
+  void finish(int r) {
+    *rvalue = r;
+	*done = true;
+    cond->Signal();
+  }
+};
+
+
+class C_Client_LockedCond : public Context {
+public:
   bool *done;
   Cond *cond;
   Mutex *mutex;
   int *rvalue;
-  C_Client_Cond(bool *d, Cond *cond, Mutex *mutex, int *rvalue) {
+  C_Client_LockedCond(Cond *cond, Mutex *mutex, bool *d, int *rvalue) {
 	this->done = d;
     this->cond = cond;
     this->mutex = mutex;
@@ -1823,11 +1847,11 @@ public:
     *done = false;
   }
   void finish(int r) {
-    //mutex->Lock();
+    mutex->Lock();
     *rvalue = r;
 	*done = true;
     cond->Signal();
-    //mutex->Unlock();
+    mutex->Unlock();
   }
 };
 
@@ -1913,7 +1937,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
     bufferlist blist;   // data will go here
 	
 	bool done = false;
-    C_Client_Cond *onfinish = new C_Client_Cond(&done, &cond, &client_lock, &rvalue);
+    C_Client_Cond *onfinish = new C_Client_Cond(&cond, &done, &rvalue);
     filer->read(in->inode, size, offset, &blist, onfinish);
 	while (!done)
 	  cond.Wait(client_lock);
@@ -2152,16 +2176,22 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  int rvalue = 0;
 	  
 	  bool done = false;
-	  C_Client_Cond *onfinish = new C_Client_Cond(&done, &cond, &client_lock, &rvalue);
+	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &done, &rvalue);
 	  C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
 	  unsafe_sync_write++;
+
+	  dout(-20) << " sync write start " << onfinish << endl;
 
 	  filer->write(in->inode, size, offset, blist, 0, 
 				   //NULL,NULL);  // no wait hack
 				   onfinish, onsafe);
 	  
-	  while (!done)
+	  while (!done) {
 		cond.Wait(client_lock);
+		dout(-20) << " sync write bump " << onfinish << endl;
+	  }
+
+	  dout(-20) << " sync write done " << onfinish << endl;
 	}
   }
 
