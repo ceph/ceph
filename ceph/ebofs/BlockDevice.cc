@@ -51,12 +51,23 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
 block_t BlockDevice::get_num_blocks() 
 {
   if (!num_blocks) {
-	// stat
-	struct stat st;
 	assert(fd > 0);
-	int r = ::fstat(fd, &st);
-	assert(r == 0);
-	num_blocks = st.st_size / (block_t)EBOFS_BLOCK_SIZE;
+	
+	// ioctl block device?
+	ioctl(fd, BLKGETSIZE64, &num_blocks);
+	
+	if (!num_blocks) {
+	  // hmm, try stat!
+	  struct stat st;
+	  fstat(fd, &st);
+	  num_blocks = st.st_size / (__uint64_t)EBOFS_BLOCK_SIZE;
+	}	
+
+	if (g_conf.bdev_fake_max_mb &&
+		num_blocks > (block_t)g_conf.bdev_fake_max_mb * 256ULL) {
+	  dout(0) << "faking dev size " << g_conf.bdev_fake_max_mb << " mb" << endl;
+	  num_blocks = g_conf.bdev_fake_max_mb * 256;
+	}
   }
   return num_blocks;
 }
@@ -567,15 +578,7 @@ int BlockDevice::open(kicker *idle)
 	}*/
   
   // figure size
-  __uint64_t bsize = 0;
-  ioctl(fd, BLKGETSIZE64, &bsize);
-  if (bsize == 0) {
-	// hmm, try stat!
-	struct stat st;
-	fstat(fd, &st);
-	bsize = st.st_size;
-  }	
-  num_blocks = bsize / (__uint64_t)EBOFS_BLOCK_SIZE;
+  __uint64_t bsize = get_num_blocks();
   
   dout(2) << "open " << bsize << " bytes, " << num_blocks << " blocks" << endl;
   

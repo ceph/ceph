@@ -1814,7 +1814,7 @@ int Ebofs::write(object_t oid,
   trim_bc();
 
   ebofs_lock.Unlock();
-  return 0;
+  return len;
 }
 
 
