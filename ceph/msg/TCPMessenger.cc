@@ -590,6 +590,11 @@ Message *tcp_recv(int sd)
   size_t s = blist.length();
   Message *m = decode_message(env, blist);
 
+  if (logger) {
+	logger->inc("in");
+	logger->inc("inb", s+sizeof(env));
+  }
+
   dout(DBL) << "tcp_recv got " << s << " byte message from " << MSG_ADDR_NICE(m->get_source()) << endl;
 
   return m;
@@ -800,21 +805,20 @@ void *tcp_inthread(void *r)
 	//dout(1) << "inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
 	// give to dispatch loop
-	size_t sz;
+	size_t sz = m->get_payload().length();
 	incoming_lock.Lock();
 	{
 	  incoming.push_back(m);
 	  incoming_cond.Signal();
 
 	  stat_inq++;
-	  sz = m->get_payload().length();
 	  stat_inqb += sz;
 	}
 	incoming_lock.Unlock();
 
 	if (logger) {
-	  logger->inc("in");
-	  logger->inc("inb", sz);
+	  //logger->inc("in");
+	  //logger->inc("inb", sz);
 	}
   }
 

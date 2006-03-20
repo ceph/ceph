@@ -71,6 +71,9 @@ using namespace std;
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
 
+#include "messages/MHashReaddir.h"
+#include "messages/MHashReaddirReply.h"
+
 #include "messages/MHashDirDiscover.h"
 #include "messages/MHashDirDiscoverAck.h"
 #include "messages/MHashDirPrep.h"
@@ -392,6 +395,13 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 	break;
 
 
+  case MSG_MDS_HASHREADDIR:
+	m = new MHashReaddir();
+	break;
+  case MSG_MDS_HASHREADDIRREPLY:
+	m = new MHashReaddirReply();
+	break;
+	
   case MSG_MDS_HASHDIRDISCOVER:
 	m = new MHashDirDiscover();
 	break;

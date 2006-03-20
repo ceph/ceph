@@ -97,6 +97,6 @@ print join("\t", '#maxval', map { $max{$col{$_}} } @c ) . "\n";
 print join("\t", '#rows', map { $rows } @c) . "\n";
 print join("\t", '#files', map { $files } @c) . "\n";
 print join("\t", '#avgval', #map int, 
-		   map { $_ / ($rows*$files) } map { $avg{$col{$_}} } @c ) . "\n";
+		   map { ($rows*$files) ? ($_ / ($rows*$files)):0 } map { $avg{$col{$_}} } @c ) . "\n";
 print join("\t", '#avgsum', #map int, 
 		   map { $_ / $rows } map { $avg{$col{$_}} } @c ) . "\n";

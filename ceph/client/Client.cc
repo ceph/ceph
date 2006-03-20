@@ -2175,12 +2175,14 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  Cond cond;
 	  int rvalue = 0;
 	  
+	  utime_t start = g_clock.now();
+
 	  bool done = false;
 	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &done, &rvalue);
 	  C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
 	  unsafe_sync_write++;
 
-	  dout(-20) << " sync write start " << onfinish << endl;
+	  dout(20) << " sync write start " << onfinish << endl;
 
 	  filer->write(in->inode, size, offset, blist, 0, 
 				   //NULL,NULL);  // no wait hack
@@ -2188,10 +2190,16 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  
 	  while (!done) {
 		cond.Wait(client_lock);
-		dout(-20) << " sync write bump " << onfinish << endl;
+		dout(20) << " sync write bump " << onfinish << endl;
 	  }
 
-	  dout(-20) << " sync write done " << onfinish << endl;
+	  // time
+	  utime_t lat = g_clock.now();
+	  lat -= start;
+	  client_logger->finc("wrlsum",(double)lat);
+	  client_logger->inc("wrlnum");
+
+	  dout(20) << " sync write done " << onfinish << endl;
 	}
   }
 

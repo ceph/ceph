@@ -79,7 +79,7 @@ unless (ref $sim) {
 	exit 1;
 }
 
-open(W, "$out/in");
+open(W, ">$out/in");
 print W $raw;
 close W;
 
