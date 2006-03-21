@@ -205,6 +205,8 @@ sub run {
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
 			   'mds_bal_rep', 'mds_bal_interval', 'mds_bal_max','mds_decay_halflife',
 			   'mds_bal_hash_rd','mds_bal_hash_wr','mds_bal_unhash_rd','mds_bal_unhash_wr',
+			   'mds_local_osd',
+			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
 			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
 			   'file_layout_ssize','file_layout_scount','file_layout_osize','file_layout_num_rep',

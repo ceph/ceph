@@ -80,6 +80,12 @@ void parse_syn_options(vector<char*>& args)
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"readdirs") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_READDIRS );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+
 	  } else if (strcmp(args[i],"makefiles") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_MAKEFILES );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -731,6 +737,34 @@ int SyntheticClient::stat_dirs(const char *basedir, int dirs, int files, int dep
   for (int i=0; i<dirs; i++) {
 	sprintf(d, "%s/dir.%d", basedir, i);
 	stat_dirs(d, dirs, files, depth-1);
+  }
+  
+  return 0;
+}
+int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int depth)
+{
+  if (time_to_stop()) return 0;
+
+  struct stat st;
+
+  // children
+  char d[500];
+  dout(3) << "stat_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
+
+  map<string,inode_t*> contents;
+  int r = client->getdir(basedir, contents);
+  if (r < 0) dout(0) << "stat_dirs couldn't readdir " << basedir << endl;
+
+  for (int i=0; i<files; i++) {
+	sprintf(d,"%s/file.%d", basedir, i);
+	client->lstat(d, &st);
+  }
+
+  if (depth == 0) return 0;
+
+  for (int i=0; i<dirs; i++) {
+	sprintf(d, "%s/dir.%d", basedir, i);
+	read_dirs(d, dirs, files, depth-1);
   }
   
   return 0;

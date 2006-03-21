@@ -1,0 +1,39 @@
+#!/usr/bin/perl
+
+# hi there
+{
+	'_psub' => 'jobs/alc.tp',
+
+	'sleep' => 3,
+
+	'nummds' => 1,
+	'numosd' => 8,
+	'numclient' => [5, 10, 20, 40, 80, 160 ],
+	'n' => 20,
+
+	# parameters
+	'fs' => 'ebofs',
+
+	'start' => 100,
+	'end' => 200,
+	'until' => 200,  
+	'kill_after' => 300,
+	
+	'makedirs' => 1,
+	'makedirs_dirs' => 10,
+	'makedirs_files' => 10,
+	'makedirs_depth' => 3,
+
+	'mds_local_osd' => [ 0, 1 ],
+	'meta_log_layout_num_rep' => [1, 2, 3],
+		
+	'custom' => '--tcp_skip_rank0',
+	#'custom' => '--debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5',
+	
+	# for final summation (script/sum.pl)
+
+	'comb' => {
+		'x' => 'nummds',
+		'vars' => [ 'mds.req' ]
+	}
+};
