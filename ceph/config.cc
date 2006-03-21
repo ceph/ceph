@@ -78,6 +78,7 @@ md_config_t g_conf = {
   tcp_log: false,
   tcp_serial_marshall: true,
   tcp_serial_out: false,
+  tcp_multi_out: true,
 
   // --- client ---
   client_cache_size: 300,

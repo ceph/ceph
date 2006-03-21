@@ -17,7 +17,7 @@
 
 #include "Messenger.h"
 #include "Dispatcher.h"
-
+#include "common/Thread.h"
 
 # include <sys/socket.h>
 # include <netinet/in.h>
@@ -33,6 +33,34 @@ class TCPMessenger : public Messenger {
 
   //class Logger *logger;  // for logging
   
+  bool           incoming_stop;
+  Mutex          incoming_lock;
+  list<Message*> incoming;
+  Cond           incoming_cond;
+
+  class DispatchThread : public Thread {
+	TCPMessenger *m;
+  public:
+	DispatchThread(TCPMessenger *_m) : m(_m) {}
+	void *entry() {
+	  m->dispatch_entry();
+	  return 0;
+	}
+  } dispatch_thread;
+
+  void dispatch_entry();
+  void dispatch_start() {
+	incoming_stop = false;
+	dispatch_thread.create();
+  }
+  void dispatch_stop() {
+	incoming_lock.Lock();
+	incoming_stop = true;
+	incoming_cond.Signal();
+	incoming_lock.Unlock();
+	dispatch_thread.join();
+  }
+
  public:
   TCPMessenger(msg_addr_t myaddr);
   ~TCPMessenger();

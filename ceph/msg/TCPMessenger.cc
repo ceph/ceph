@@ -96,13 +96,44 @@ Mutex                         incoming_lock;
 Cond                          incoming_cond;
 
 // outgoing messages
+/*
 list<Message*>                outgoing;
 Mutex                         outgoing_lock;
 Cond                          outgoing_cond;
+*/
+
+class OutThread : public Thread {
+public:
+  Mutex lock;
+  Cond cond;
+  list<Message*> q;
+  bool done;
+
+  OutThread() : done(false) {}
+  virtual ~OutThread() {}
+
+  void *entry();
+  
+  void stop() {
+	lock.Lock();
+	done = true;
+	cond.Signal();
+	lock.Unlock();
+	join();
+  }
+
+  void send(Message *m) {
+	lock.Lock();
+	q.push_back(m);
+	cond.Signal();
+	lock.Unlock();
+  }
+} single_out_thread;
 
 Mutex lookup_lock;  // 
 hash_map<msg_addr_t, int> entity_rank;      // entity -> rank
 hash_map<int, int>        rank_sd;   // outgoing sockets, rank -> sd
+hash_map<int, OutThread*> rank_out;
 hash_map<int, tcpaddr_t>  rank_addr; // rank -> tcpaddr
 map<msg_addr_t, list<Message*> > waiting_for_lookup;
 
@@ -133,7 +164,7 @@ map<int, pthread_t>      in_threads;    // sd -> threadid
 void tcp_open(int rank);
 int tcp_send(Message *m);
 void tcpmessenger_kick_dispatch_loop();
-bool tcp_lookup(Message *m);
+OutThread *tcp_lookup(Message *m);
 
 int tcpmessenger_get_rank()
 {
@@ -287,22 +318,19 @@ public:
 	for (list<Message*>::iterator it = waiting.begin();
 		 it != waiting.end();
 		 it++) {
-	  bool ok = tcp_lookup(*it);
-          assert(ok);
+	  OutThread *outt = tcp_lookup(*it);
+	  assert(outt);
 	  tcp_send(*it);
 	}
 #else
 	for (list<Message*>::iterator it = waiting.begin();
 		 it != waiting.end();
 		 it++) {
-	  bool ok = tcp_lookup(*it);
-	  assert(ok);
+	  OutThread *outt = tcp_lookup(*it);
+	  assert(outt);
+	  outt->send(*it);
 //	  dout(0) << "lookup done, splicing in " << *it << endl;
 	}
-	outgoing_lock.Lock();
-	outgoing.splice(outgoing.begin(), waiting);
-	outgoing_cond.Signal();
-	outgoing_lock.Unlock();
 #endif
 
 	delete m;
@@ -631,6 +659,15 @@ void tcp_open(int rank)
   //dout(DBL) << "tcp_open connected to " << who << endl;
   assert(rank_sd.count(rank) == 0);
   rank_sd[rank] = sd;
+
+  if (g_conf.tcp_multi_out) {
+	rank_out[rank] = new OutThread();
+	rank_out[rank]->create();
+  } else {
+	rank_out[rank] = &single_out_thread;
+	if (!single_out_thread.is_started())
+	  single_out_thread.create();
+  }
 }
 
 
@@ -641,7 +678,7 @@ void tcp_marshall(Message *m)
 	m->encode_payload();
 }
 
-bool tcp_lookup(Message *m)
+OutThread *tcp_lookup(Message *m)
 {
   msg_addr_t addr = m->get_dest();
 
@@ -657,7 +694,7 @@ bool tcp_lookup(Message *m)
 	
 	// add waiter
 	waiting_for_lookup[addr].push_back(m);
-	return false;
+	return 0;
   }
 
   int rank = entity_rank[m->get_dest()];
@@ -667,7 +704,7 @@ bool tcp_lookup(Message *m)
   } 
   assert(rank_sd.count(rank));
   m->set_tcp_sd( rank_sd[rank] );
-  return true;
+  return rank_out[rank];
 }
 
 
@@ -748,6 +785,49 @@ int tcp_send(Message *m)
 /** tcp_outthread
  * this thread watching the outgoing queue, and encodes+sends any queued messages
  */
+
+void* OutThread::entry() 
+{
+  lock.Lock();
+  while (!q.empty() || !done) {
+	
+	if (!q.empty()) {
+	  dout(DBL) << "outthread grabbing message(s)" << endl;
+	  
+	  // grab outgoing list
+	  list<Message*> out;
+	  out.splice(out.begin(), q);
+	  
+	  // drop lock while i send these
+	  lock.Unlock();
+	  
+	  while (!out.empty()) {
+		Message *m = out.front();
+		out.pop_front();
+		
+		dout(DBL) << "outthread sending " << m << endl;
+		
+		if (!g_conf.tcp_serial_marshall) 
+		  tcp_marshall(m);
+		
+		tcp_send(m);
+	  }
+	  
+	  lock.Lock();
+	  continue;
+	}
+	
+	// wait
+	dout(DBL) << "outthread sleeping" << endl;
+	cond.Wait(lock);
+  }
+  dout(DBL) << "outthread done" << endl;
+  
+  lock.Unlock();  
+  return 0;
+}
+
+/*
 void* tcp_outthread(void*)
 {
   outgoing_lock.Lock();
@@ -790,6 +870,7 @@ void* tcp_outthread(void*)
   outgoing_lock.Unlock();
   return 0;
 }
+*/
 
 /** tcp_inthread
  * read incoming messages from a given peer.
@@ -869,14 +950,63 @@ void *tcp_acceptthread(void *)
 /** tcp_dispatchthread
  * wait for pending timers, incoming messages.  dispatch them.
  */
+void TCPMessenger::dispatch_entry()
+{
+  incoming_lock.Lock();
+  while (!incoming.empty() || !incoming_stop) {
+	if (!incoming.empty()) {
+	  // grab incoming messages  
+	  list<Message*> in;
+	  in.splice(in.begin(), incoming);
+
+	  assert(stat_disq == 0);
+	  stat_disq = stat_inq;
+	  stat_disqb = stat_inqb;
+	  stat_inq = 0;
+	  stat_inqb = 0;
+	
+	  // drop lock while we deliver
+	  incoming_lock.Unlock();
+
+	  // dispatch!
+	  while (!in.empty()) {
+		Message *m = in.front();
+		in.pop_front();
+	  
+		stat_disq--;
+		stat_disqb -= m->get_payload().length();
+		if (logger) {
+		  logger->set("inq", stat_inq+stat_disq);
+		  logger->set("inqb", stat_inqb+stat_disq);
+		  logger->inc("dis");
+		}
+	  	
+		dout(4) << "---- '" << m->get_type_name() << 
+		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+				<< m 
+				<< endl;
+		
+		dispatch(m);
+	  }
+
+	  continue;
+	}
+
+	// sleep
+	dout(DBL) << "dispatch: waiting for incoming messages" << endl;
+	incoming_cond.Wait(incoming_lock);
+	dout(DBL) << "dispatch: woke up" << endl;
+  }
+  incoming_lock.Unlock();
+}
+
+
 void* tcp_dispatchthread(void*)
 {
   dout(5) << "tcp_dispatchthread start pid " << getpid() << endl;
 
   while (1) {
-	// any pending callbacks?
-	Messenger::do_callbacks();
-
 	// inq?
 	incoming_lock.Lock();
 
@@ -978,11 +1108,15 @@ int tcpmessenger_start()
 				 0);
 
 
+  /*
   dout(5) << "starting outgoing thread" << endl;
   pthread_create(&out_thread_id, 
 				 NULL, 
 				 tcp_outthread,
 				 0);
+  */
+  if (!g_conf.tcp_multi_out)
+	single_out_thread.create();
   return 0;
 }
 
@@ -1001,12 +1135,14 @@ void tcpmessenger_kick_dispatch_loop()
   dout(DBL) << "kicked" << endl;
 }
 
+/*
 void tcpmessenger_kick_outgoing_loop()
 {
   outgoing_lock.Lock();
   outgoing_cond.Signal();
   outgoing_lock.Unlock();
 }
+*/
 
 
 // wait for thread to finish
@@ -1042,8 +1178,8 @@ msg_addr_t register_entity(msg_addr_t addr)
 	Message *m = new MNSConnect(listen_addr);
 	m->set_dest(MSG_ADDR_DIRECTORY, 0);
 	tcp_marshall(m);
-	bool ok = tcp_lookup(m);
-        assert(ok);
+	OutThread *outt = tcp_lookup(m);
+	assert(outt);
 	tcp_send(m);
 	
 	// wait for reply
@@ -1057,8 +1193,8 @@ msg_addr_t register_entity(msg_addr_t addr)
   Message *m = new MNSRegister(addr, my_rank, id);
   m->set_dest(MSG_ADDR_DIRECTORY, 0);
   tcp_marshall(m);
-  bool ok = tcp_lookup(m);
-  assert(ok);
+  OutThread *outt = tcp_lookup(m);
+  assert(outt);
   tcp_send(m);
   
   // wait?
@@ -1085,7 +1221,9 @@ msg_addr_t register_entity(msg_addr_t addr)
  */
 
 
-TCPMessenger::TCPMessenger(msg_addr_t myaddr) : Messenger(myaddr)
+TCPMessenger::TCPMessenger(msg_addr_t myaddr) : 
+  Messenger(myaddr), 
+  dispatch_thread(this)
 {
   if (myaddr != MSG_ADDR_DIRECTORY) {
 	// register!
@@ -1122,8 +1260,8 @@ void TCPMessenger::ready()
 	  m->set_source(get_myaddr(), 0);
 	  m->set_dest(MSG_ADDR_DIRECTORY, 0);
 	  tcp_marshall(m);
-	  bool ok = tcp_lookup(m);
-          assert(ok);
+	  OutThread *outt = tcp_lookup(m);
+	  assert(outt);
 	  tcp_send(m);
 	}
 	lookup_lock.Unlock();
@@ -1222,11 +1360,17 @@ int TCPMessenger::shutdown()
 	incoming_lock.Unlock();
 
 	// finish off outgoing thread
-	tcpmessenger_kick_outgoing_loop();
-
-	void *returnval;
 	dout(10) << "waiting for outgoing to finish" << endl;
-	pthread_join(out_thread_id, &returnval);
+	if (g_conf.tcp_multi_out) {
+	  for (hash_map<int,OutThread*>::iterator it = rank_out.begin();
+		   it != rank_out.end();
+		   it++) {
+		it->second->stop();
+		delete it->second;
+	  }
+	} else {
+	  single_out_thread.stop();
+	}
 
 	
 	/*
@@ -1275,14 +1419,10 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 	lookup_lock.Unlock();
   } else {
 	lookup_lock.Lock();
-	if (tcp_lookup(m)) {
-	  // give to sender thread now
-	  outgoing_lock.Lock();
-	  outgoing.push_back(m);
-	  outgoing_cond.Signal();
-	  outgoing_lock.Unlock();
-	}
+	OutThread *outt = tcp_lookup(m);
 	lookup_lock.Unlock();
+
+	if (outt) outt->send(m);
   }
 
   return 0;

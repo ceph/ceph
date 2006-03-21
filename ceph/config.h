@@ -50,6 +50,7 @@ struct md_config_t {
   bool tcp_log;
   bool tcp_serial_marshall;
   bool tcp_serial_out;
+  bool tcp_multi_out;
 
   // client
   int      client_cache_size;
