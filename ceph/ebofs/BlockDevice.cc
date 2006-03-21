@@ -60,8 +60,10 @@ block_t BlockDevice::get_num_blocks()
 	  // hmm, try stat!
 	  struct stat st;
 	  fstat(fd, &st);
-	  num_blocks = st.st_size / (__uint64_t)EBOFS_BLOCK_SIZE;
-	}	
+	  num_blocks = st.st_size;
+	}
+	
+	num_blocks /= (__uint64_t)EBOFS_BLOCK_SIZE;
 
 	if (g_conf.bdev_fake_max_mb &&
 		num_blocks > (block_t)g_conf.bdev_fake_max_mb * 256ULL) {
