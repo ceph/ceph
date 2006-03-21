@@ -83,6 +83,7 @@ md_config_t g_conf = {
   client_cache_size: 300,
   client_cache_mid: .5,
   client_cache_stat_ttl: 0, // seconds until cached stat results become invalid
+  client_cache_readdir_ttl: 1,  // 1 second only
   client_use_random_mds:  false,
 
   client_sync_writes: 0,
@@ -138,6 +139,8 @@ md_config_t g_conf = {
 
   mds_verify_export_dirauth: true,
 
+  mds_local_osd: false,
+
 
   // --- osd ---
   osd_pg_bits: 8,
@@ -192,6 +195,7 @@ md_config_t g_conf = {
   bdev_el_bidir: true,          // bidirectional elevator?
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
   bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
+  bdev_fake_max_mb:  0,
 
   // --- fakeclient (mds regression testing) (ancient history) ---
   num_fakeclient: 100,
@@ -428,11 +432,15 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--mds_bal_minchunk") == 0) 
 	  g_conf.mds_bal_minchunk = atoi(args[++i]);
 	
+	else if (strcmp(args[i], "--mds_local_osd") == 0) 
+	  g_conf.mds_local_osd = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--client_cache_size") == 0)
 	  g_conf.client_cache_size = atoi(args[++i]);
 	else if (strcmp(args[i], "--client_cache_stat_ttl") == 0)
 	  g_conf.client_cache_stat_ttl = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_cache_readdir_ttl") == 0)
+	  g_conf.client_cache_readdir_ttl = atoi(args[++i]);
 	else if (strcmp(args[i], "--client_trace") == 0)
 	  g_conf.client_trace = atoi(args[++i]);
 	else if (strcmp(args[i], "--fuse_direct_io") == 0)
@@ -497,6 +505,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.bdev_iothreads = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 
 	  g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
+	else if (strcmp(args[i], "--bdev_fake_max_mb") == 0) 
+	  g_conf.bdev_fake_max_mb = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--osd_object_layout") == 0) {
 	  i++;

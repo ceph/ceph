@@ -172,10 +172,12 @@ class Filer : public Dispatcher {
 	return ono + (ino << OID_ONO_BITS);
   }
 
+  /*
   pg_t file_to_pg(inode_t& inode, size_t ono) {
 	return osdmap->ps_nrep_to_pg( osdmap->object_to_ps( file_to_object(inode.ino, ono) ),
 								  inode.layout.num_rep );
   }
+  */
 
 
   /* map (ino, offset, len) to a (list of) OSDExtents 
@@ -191,7 +193,7 @@ class Filer : public Dispatcher {
 	map< object_t, OSDExtent > object_extents;
 
 	// RUSHSTRIPE?
-	if (inode.layout.policy == FILE_LAYOUT_CRUSH) {
+	//if (inode.layout.policy == FILE_LAYOUT_CRUSH) {
 	  // layout constant
 	  size_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_size;
 	  
@@ -213,7 +215,7 @@ class Filer : public Dispatcher {
 		else {
 		  ex = &object_extents[oid];
 		  ex->oid = oid;
-		  ex->pg = file_to_pg( inode, objectno );
+		  ex->pg = osdmap->object_to_pg( oid, inode.layout );
 		  ex->osd = osdmap->get_pg_acting_primary( ex->pg );
 		}
 		
@@ -253,7 +255,7 @@ class Filer : public Dispatcher {
 		   it++) {
 		extents.push_back(it->second);
 	  }
-	}
+	  //}
 	/*else if (inode.layout.policy == FILE_LAYOUT_OSDLOCAL) {
 	  // all in one object, on a specific OSD.
 	  OSDExtent ex;
@@ -265,10 +267,11 @@ class Filer : public Dispatcher {
 	  ex.buffer_extents[0] = len;
 
 	  extents.push_back(ex);
-	  }*/
-	else {
+	  }
+	  else {
 	  assert(0);
 	}
+	*/
   }
 
 };

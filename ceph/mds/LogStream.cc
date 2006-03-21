@@ -35,6 +35,30 @@ using namespace std;
 
 
 
+LogStream::LogStream(MDS *mds, Filer *filer, inodeno_t log_ino) 
+{
+  this->mds = mds;
+  this->filer = filer;
+  
+  // inode
+  memset(&log_inode, 0, sizeof(log_inode));
+  log_inode.ino = log_ino;
+  log_inode.layout = g_OSD_MDLogLayout;
+  
+  if (g_conf.mds_local_osd) {
+	log_inode.layout.object_layout = OBJECT_LAYOUT_STARTOSD;
+	log_inode.layout.osd = mds->get_nodeid() + 10000;   // hack
+  }
+  
+  // wr
+  sync_pos = flush_pos = append_pos = 0;
+  autoflush = true;
+  
+  // rd
+  read_pos = 0;
+  reading = false;
+}
+
 
 
 // ----------------------------

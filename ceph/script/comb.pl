@@ -86,6 +86,12 @@ for my $f (@filt) {
 			push( @{$res{$x}}, $s->{'avgval'}->{$field} );
 			push( @key, "$f.$field" ) unless $didkey{"$f.$field"};
 			$didkey{"$f.$field"} = 1;
+
+			if (exists $s->{'avgvaldevt'}) {
+				push( @{$res{$x}}, $s->{'avgvaldevt'}->{$field} );
+				push( @key, "$f.$field.dev" ) unless $didkey{"$f.$field.dev"};
+				$didkey{"$f.$field.dev"} = 1;
+			}
 		}
 	}
 }

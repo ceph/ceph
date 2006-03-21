@@ -119,9 +119,11 @@ struct ltstr
 /** object layout
  * how objects are mapped into PGs
  */
-#define OBJECT_LAYOUT_HASH    1
-#define OBJECT_LAYOUT_LINEAR  2
-#define OBJECT_LAYOUT_HASHINO 3
+#define OBJECT_LAYOUT_DEFAULT  0  // see g_conf
+#define OBJECT_LAYOUT_HASH     1
+#define OBJECT_LAYOUT_LINEAR   2
+#define OBJECT_LAYOUT_HASHINO  3
+#define OBJECT_LAYOUT_STARTOSD 4
 
 /** pg layout
  * how PGs are mapped into (sets of) OSDs
@@ -135,12 +137,12 @@ struct ltstr
  * specifies a striping and replication strategy
  */
 
-#define FILE_LAYOUT_CRUSH    0    // stripe via crush
-#define FILE_LAYOUT_LINEAR   1    // stripe linearly across cluster
+//#define FILE_LAYOUT_CRUSH    0    // stripe via crush
+//#define FILE_LAYOUT_LINEAR   1    // stripe linearly across cluster
 
 struct FileLayout {
   // layout
-  int policy;          // FILE_LAYOUT_*
+  int object_layout;
 
   // FIXME: make this a union?
   // rushstripe
@@ -154,15 +156,12 @@ struct FileLayout {
   int num_rep;  // replication
 
   FileLayout() { }
-  FileLayout(int ss, int sc, int os, int nr=2) :
-	policy(FILE_LAYOUT_CRUSH),
-	   stripe_size(ss), stripe_count(sc), object_size(os), 
-	   num_rep(nr) { }
-  /*FileLayout(int o) :
-	policy(FILE_LAYOUT_OSDLOCAL),
-	   osd(o),
-	   num_rep(1) { }
-  */
+  FileLayout(int ss, int sc, int os, int nr=2, int o=-1) :
+	object_layout(o < 0 ? OBJECT_LAYOUT_DEFAULT:OBJECT_LAYOUT_STARTOSD),
+	stripe_size(ss), stripe_count(sc), object_size(os), 
+	osd(o),
+	num_rep(nr) { }
+
 };
 
 

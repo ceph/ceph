@@ -1,14 +1,162 @@
 
 
+make graphs from dat runs:
+
+ /makedirs
+ /ossh.lib
+ /ossh.include
+
+ makedirs tput vs lat
+
+ openshared
+ writefiles
+
+
+
+
+
 llnl direct deposit  fax 925 424 2663
+
+
+mpiexec -l -n 28 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 1048576 --nummds 1 --numclient 112 --numosd 7 --kill_after 120 --osd_object_layout hashino --osd_pg_layout hash --osd_pg_bits 12 --file_layout_num_rep 1 --debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5 --log_name osd/striping.cperbig/cper=16,osd_object_layout=hashino,osd_pg_layout=hash,writefile_size=1048576 > log/osd/striping.cperbig/cper=16,osd_object_layout=hashino,osd_pg_layout=hash,writefile_size=1048576/o && touch log/osd/striping.cperbig/cper=16,osd_object_layout=hashino,osd_pg_layout=hash,writefile_size=1048576/.done &
+
+mpiexec -l -n 28 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 1048576 --nummds 1 --numclient 896 --numosd 7 --kill_after 120 --osd_object_layout hashino --osd_pg_layout crush --osd_pg_bits 12 --file_layout_num_rep 1 --debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5 --log_name osd/striping.cperbig/cper=128,osd_object_layout=hashino,osd_pg_layout=crush,writefile_size=1048576 > log/osd/striping.cperbig/cper=128,osd_object_layout=hashino,osd_pg_layout=crush,writefile_size=1048576/o && touch log/osd/striping.cperbig/cper=128,osd_object_layout=hashino,osd_pg_layout=crush,writefile_size=1048576/.done &
+
+mpiexec -l -n 28 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 1048576 --nummds 1 --numclient 448 --numosd 7 --kill_after 120 --osd_object_layout hashino --osd_pg_layout hash --osd_pg_bits 12 --file_layout_num_rep 1 --debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5 --log_name osd/striping.cperbig/cper=64,osd_object_layout=hashino,osd_pg_layout=hash,writefile_size=1048576 > log/osd/striping.cperbig/cper=64,osd_object_layout=hashino,osd_pg_layout=hash,writefile_size=1048576/o && touch log/osd/striping.cperbig/cper=64,osd_object_layout=hashino,osd_pg_layout=hash,writefile_size=1048576/.done &
+
 
 
 
 541 488 0496  warren
 
 
+TONIGHT TODO
+
+/make comb calc latency
+
+/finish openshared run
+
+vary cper on makedirs mds=96, make a nice tput/lat curve
+do big makedirs run w/ smaller set of mds sizes
+
+fill out ossh.lib  (read to go, just exclude cper 50 .. or adjust bc of above)
+
+
+FINAL data sets...
+
+makedirs
+  n1 good.
+  n3 is skewed down.. not clear why?
+  big has low cper values!  doh.       **rerun if possible?**
+
+makedirs.tput
+
+
+
+
+
 
 MAR 1
+
+makedirs
+ final --> 12  
+ fixed lb -> m2
+
+	 -> do it again with cper 50,100 , max 2,3   .. ready!   ->  all about the same.
+plot "log/alcdat/makedirs.n1/c" u 1:2 t "cper=100,mds_bal_max=2", "log/alcdat/makedirs.n1/c" u 1:3 t "cper=100,mds_bal_max=3", "log/alcdat/makedirs.n1/c" u 1:4 t "cper=50,mds_bal_max=2", "log/alcdat/makedirs.n1/c" u 1:5 t "cper=50,mds_bal_max=3";
+
+	/**-> bal_max=1, cper=100   (n2)
+plot "log/alcdat/makedirs.n2/c" u 1:2 t "cper=100,mds_bal_max=1";
+   .. same same
+
+	**-> bal_max=2  cper=15,25  (n3)  ready   Q/
+
+makedirs.big
+
+	**-> nbig1 .. flop!  overlay no worky
+	**-> nbig4 ..                             Q/
+
+	
+makedirs.tput
+ finalish -> 1
+
+	**-> ready.. run (last!) to fill in gaps ..   (2)   Q
+
+  ** running subset of points tho, as (2)!  be careful merging results, not all data points for all runs!!
+	
+
+ossh.lib
+ cper 50 looks good when nummds=48..
+
+  f14 is ok...
+    repeat w/ range of cper (besides just 50)
+
+	-> run with cper range              .. ready
+plot "log/alcdat/ossh.lib.n1/c" u 1:2 t "cper=100", "log/alcdat/ossh.lib.n1/c" u 1:3 t "cper=25", "log/alcdat/ossh.lib.n1/c" u 1:4 t "cper=50";
+  .. only 25 is good at scale!
+
+	**-> cper=10,16     (n2)  ready                 Q
+
+
+ossh.lib.big
+
+	**-> ready
+
+
+
+ossh.include
+ max 2 @ 80, cper 75
+
+ best so far is d12.  
+ no, f13 is better.
+
+d9 80 was good too?   cper=50 : log/alcdat/ossh.include.d9/cper=50,nummds=128/o   ... srun --wait=120 --exclude=jobs/ltest.ignore -l -t 7 -N 385 -p ltest ./tcpsyn --mkfs --ebofs --syn until 300 --nummds 128 --numclient 6400 --numosd 128 --kill_after 400 --mds_bal_rep 1700 --mds_bal_interval 45 --mds_bal_max 2 --mds_decay_halflife 30 --mds_bal_hash_rd 100000 --tcp_skip_rank0 --mds_shutdown_check 60 --syn only 0 --syn trace traces/openssh/untar.include 1 --syn sleep 30 --syn trace traces/openssh/make.include 1000 --log_name alcdat/ossh.include.d9/cper=50,nummds=128 > log/alcdat/ossh.include.d9/cper=50,nummds=128/o && touch log/alcdat/ossh.include.d9/cper=50,nummds=128/.done &
+
+	-> run with cper range   ... ready  (n1 good!)
+plot "log/alcdat/ossh.include.n1/c" u 1:2 t "cper=100", "log/alcdat/ossh.include.n1/c" u 1:3 t "cper=25", "log/alcdat/ossh.include.n1/c" u 1:4 t "cper=50";
+
+
+	**-> extend w/ cper 15,20  (n2)   ..only if time..
+
+
+ossh.include.big
+
+	**-> nbig2 ready
+
+
+
+makefiles
+ cper + nummds   ... ok, 4   ... go back and fill in data points if time!
+ 150 > 100. check 200 if time
+
+
+openshared
+ f3 .. has various cper
+
+
+
+mdtest
+
+
+
+
+striping
+ light vs saturated vs supersaturated?
+ stripe size
+
+
+
+gotchas
+ - watch out for cper too large.. bogs down mds0, fucks load balancer
+
+
+
+opensshinclude
+ choose osdfac  -> 1
+ test overlay_clients  .. scale nummds
+ or condense clients into fewer nodes?
+ fix up ossh.include
+
 
 
 
@@ -23,8 +171,17 @@ MAR 1
  - fakestore crapping out.. missing timer events?
 mpiexec -l -n 30 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 65536 --nummds 1 --numclient 100 --numosd 6 --kill_after 300 --file_layout_num_rep 1 --debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5 --mds_shutdown_check 60 --log_name osd/write_sizes.sdb2.ebo.file2/fs=ebofs,writefile_size=65536
 
+2: tcpsyn: mds/MDCache.cc:2388: void MDCache::handle_cache_expire(MCacheExpire*): Assertion `in->state_test((1<<6))' failed.
+2: tcpsyn: mds/MDCache.cc:2388: void MDCache::handle_cache_expire(MCacheExpire*): Assertion `in->state_test((1<<6))' failed.
+2: mds1 on tcprank 3 googoo-27.2013
+2: mds1 on tcprank 2 googoo-27.1693
+
+1: tcpsyn: mds/MDCache.cc:2382: void MDCache::handle_cache_expire(MCacheExpire*): Assertion `in' failed.
+0 on tcprank 24 googoo-17.21123
 
 
+
+ - tcpmessenger inq count
 
 
 - mds
@@ -61,10 +218,13 @@ mpiexec -l -n 30 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 65
   - shared compile (/lib, /include)
        need something with shared files.. so not a linux kernel :(
 
+* get rid of randomsleep?
+
+
  - data scaling .. aggregate tput
-  - writes to local files
-  - strided write to shared file     ??? meaningless?
-  - strided write with O_LAZY        ???
+  - scale_wr - writes to local files
+  - strided write to shared file     ??? meaningless?  (later!)
+  - strided write with O_LAZY        ???                later!
 
  - tput per client
   - local file
@@ -74,6 +234,7 @@ mpiexec -l -n 30 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 65
  - crush vs linear
   - at a large scale!
 
+
   
 
 
@@ -81,6 +242,8 @@ mpiexec -l -n 30 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 65
 OSDI
 
 - tcp recv throttling
+
+- fix object ov/nv thing?  (tcpmessenger locking bug?)
 
 - tune ebofs
 
@@ -98,6 +261,26 @@ OSDI
 
 - ld_preload?
 
+
+- crush creeping performance degradation due to dead nodes    -- richard g.
+
+
+
+need post osdi:
+
+mds
+ statlite
+ stat single writer
+
+client
+ flesh out posix layer
+ statlite
+ readdir + stat
+ readdirplus
+ lazy_*
+
+osd
+ new rados mech
 
 
 
@@ -121,6 +304,7 @@ filer
   - ...do a short return in those cases? ..maybe a 'bool atomic' flag..
 
 mds
+- delayed replica caps release... we need to set a timer event!  (and cancel it when appropriate)
 - implement/test truncate()
 - chdir
   - client handles for directories!
@@ -383,3 +567,4 @@ IMPLEMENT
 
 - anchors
 - hard links
+

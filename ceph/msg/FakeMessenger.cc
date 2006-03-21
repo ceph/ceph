@@ -69,11 +69,19 @@ class C_FakeKicker : public Context {
   }
 };
 
+void FakeMessenger::callback_kick() 
+{
+  pending_timer = true;
+  lock.Lock();
+  cond.Signal();  // why not
+  lock.Unlock();
+}
+
 void *fakemessenger_thread(void *ptr) 
 {
   //dout(1) << "thread start, setting timer kicker" << endl;
   //g_timer.set_messenger_kicker(new C_FakeKicker());
-  msgr_callback_kicker = new C_FakeKicker();
+  //msgr_callback_kicker = new C_FakeKicker();
 
   lock.Lock();
   while (1) {
@@ -94,7 +102,7 @@ void *fakemessenger_thread(void *ptr)
   cout << "unsetting messenger" << endl;
   //g_timer.unset_messenger_kicker();
   g_timer.unset_messenger();
-  msgr_callback_kicker = 0;
+  //msgr_callback_kicker = 0;
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
   return 0;
@@ -158,7 +166,7 @@ int fakemessenger_do_loop_2()
 
 	// callbacks
 	lock.Unlock();
-	messenger_do_callbacks();
+	Messenger::do_callbacks();
 	lock.Lock();
 
 	// messages

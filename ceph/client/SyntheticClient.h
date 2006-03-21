@@ -26,7 +26,8 @@
 #define SYNCLIENT_MODE_FULLWALK    2
 #define SYNCLIENT_MODE_REPEATWALK  7
 
-#define SYNCLIENT_MODE_MAKEDIRS     10     // dirs files depth
+#define SYNCLIENT_MODE_MAKEDIRS     9      // dirs files depth
+#define SYNCLIENT_MODE_STATDIRS     10     // dirs files depth
 #define SYNCLIENT_MODE_MAKEFILES    11     // num count private
 #define SYNCLIENT_MODE_MAKEFILES2   12     // num count private
 #define SYNCLIENT_MODE_CREATESHARED 13     // num
@@ -167,6 +168,7 @@ class SyntheticClient {
   int random_walk(int n);
 
   int make_dirs(const char *basedir, int dirs, int files, int depth);
+  int stat_dirs(const char *basedir, int dirs, int files, int depth);
   int make_files(int num, int count, int priv, bool more);
 
   int create_shared(int num);

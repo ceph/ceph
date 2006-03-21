@@ -114,7 +114,7 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  time_t    last_updated;
+  time_t    valid_until;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -149,7 +149,7 @@ class Inode {
   }
 
   Inode() : 
-	last_updated(0),
+	valid_until(0),
 	dir_auth(-1), dir_hashed(false), dir_replicated(false), 
 	file_wr_mtime(0), file_wr_size(0), num_rd(0), num_wr(0),
 	ref(0), dir(0), dn(0), symlink(0) { }

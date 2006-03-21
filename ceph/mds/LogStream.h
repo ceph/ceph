@@ -57,23 +57,7 @@ class LogStream {
   bool autoflush;
   
  public:
-  LogStream(MDS *mds, Filer *filer, inodeno_t log_ino) {
-	this->mds = mds;
-	this->filer = filer;
-
-	// inode
-	memset(&log_inode, 0, sizeof(log_inode));
-	log_inode.ino = log_ino;
-	log_inode.layout = g_OSD_MDLogLayout;
-
-	// wr
-	sync_pos = flush_pos = append_pos = 0;
-	autoflush = true;
-
-	// rd
-	read_pos = 0;
-	reading = false;
-  }
+  LogStream(MDS *mds, Filer *filer, inodeno_t log_ino);
 
   off_t get_read_pos() { return read_pos; }
   off_t get_append_pos() { return append_pos; }

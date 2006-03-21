@@ -41,14 +41,7 @@ Messenger *messenger = 0;
 
 /**** thread solution *****/
 
-void *timer_thread_entrypoint(void *arg) 
-{
-  Timer *t = (Timer*)arg;
-  t->timer_thread();
-  return 0;
-}
-
-void Timer::timer_thread()
+void Timer::timer_entry()
 {
   lock.Lock();
   
@@ -65,7 +58,7 @@ void Timer::timer_thread()
 	
 	if (event && now >= next) {
 	  // move to pending list
-	  map< utime_t, set<Context*> >::iterator it = scheduled.begin();
+	  map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
 	  while (it != scheduled.end()) {
 		if (it->first > now) break;
 
@@ -73,7 +66,7 @@ void Timer::timer_thread()
 		dout(DBL) << "queueing event(s) scheduled at " << t << endl;
 
 		if (messenger) {
-		  for (set<Context*>::iterator cit = it->second.begin();
+		  for (multiset<Context*>::iterator cit = it->second.begin();
 			   cit != it->second.end();
 			   cit++) {
 			pending.push_back(*cit);
@@ -83,21 +76,27 @@ void Timer::timer_thread()
 		}
 
 		//pending[t] = it->second;
-		map< utime_t, set<Context*> >::iterator previt = it;
+		map< utime_t, multiset<Context*> >::iterator previt = it;
 		it++;
 		scheduled.erase(previt);
 	  }
 
 	  if (!pending.empty()) {
+		sleeping = false;
 		lock.Unlock();
-		{ // make sure we're not holding any locks while we talk to the messenger
-		  for (list<Context*>::iterator cit = pending.begin();
-			   cit != pending.end();
-			   cit++) {
-			dout(DBL) << "queue callback " << *cit << endl;
-			messenger->queue_callback(*cit);
+		{ // make sure we're not holding any locks while we do callbacks (or talk to the messenger)
+		  if (1) {
+			// make the callbacks myself.
+			for (list<Context*>::iterator cit = pending.begin();
+				 cit != pending.end();
+				 cit++) 
+			  (*cit)->finish(0);
+			pending.clear();
+		  } else {
+			// give them to the messenger
+			messenger->queue_callbacks(pending);
 		  }
-		  pending.clear();
+		  assert(pending.empty());
 		}
 		lock.Lock();
 	  }
@@ -109,12 +108,14 @@ void Timer::timer_thread()
 	  if (event) {
 		dout(DBL) << "sleeping until " << next << endl;
 		timed_sleep = true;
+		sleeping = true;
 		timeout_cond.WaitUntil(lock, next);  // wait for waker or time
 		utime_t now = g_clock.now();
 		dout(DBL) << "kicked or timed out at " << now << endl;
 	  } else {
 		dout(DBL) << "sleeping" << endl;
 		timed_sleep = false;
+		sleeping = true;
 		sleep_cond.Wait(lock);         // wait for waker
 		utime_t now = g_clock.now();
 		dout(DBL) << "kicked at " << now << endl;
@@ -144,22 +145,28 @@ void Timer::unset_messenger()
 
 void Timer::register_timer()
 {
-  if (thread_id) {
-	dout(DBL) << "register_timer kicking thread" << endl;
-	if (timed_sleep)
-	  timeout_cond.SignalAll();
-	else
-	  sleep_cond.SignalAll();
+  if (timer_thread.is_started()) {
+	if (sleeping) {
+	  dout(DBL) << "register_timer kicking thread" << endl;
+	  if (timed_sleep)
+		timeout_cond.SignalAll();
+	  else
+		sleep_cond.SignalAll();
+	} else {
+	  dout(DBL) << "register_timer doing nothing; thread is alive but not sleeping" << endl;
+	  // it's probably delivering callbacks to the messenger loop
+	}
   } else {
 	dout(DBL) << "register_timer starting thread" << endl;
-	pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
+	timer_thread.create();
+	//pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
   }
 }
 
 void Timer::cancel_timer()
 {
   // clear my callback pointers
-  if (thread_id) {
+  if (timer_thread.is_started()) {
 	dout(10) << "setting thread_stop flag" << endl;
 	lock.Lock();
 	thread_stop = true;
@@ -171,7 +178,7 @@ void Timer::cancel_timer()
 	
 	dout(10) << "waiting for thread to finish" << endl;
 	void *ptr;
-	pthread_join(thread_id, &ptr);
+	timer_thread.join(&ptr);//pthread_join(thread_id, &ptr);
 	
 	dout(10) << "thread finished, exit code " << ptr << endl;
   }
@@ -199,6 +206,7 @@ void Timer::add_event_at(utime_t when,
 
   lock.Lock();
   scheduled[ when ].insert(callback);
+  assert(event_times.count(callback) == 0);     // err.. there can be only one (for now!)
   event_times[callback] = when;
   
   num_event++;
@@ -224,7 +232,10 @@ bool Timer::cancel_event(Context *callback)
 
   utime_t tp = event_times[callback];
   assert(scheduled.count(tp));
-  scheduled[tp].erase(callback);
+
+  multiset<Context*>::iterator p = scheduled[tp].find(callback);  // there may be more than one?
+  assert(p != scheduled[tp].end());
+  scheduled[tp].erase(p);
 
   event_times.erase(callback);
   

@@ -136,6 +136,12 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
   }
 
+  if (g_conf.mds_local_osd) {
+	// add mds osds, but don't put them in the crush mapping func
+	for (int i=0; i<g_conf.num_mds; i++) 
+	  osdmap->osds.insert(i+10000);
+  }
+
   // </HACK>
 
   filer = new Filer(messenger, osdmap);
@@ -298,13 +304,20 @@ void MDS::handle_shutdown_finish(Message *m)
 	  dout(10) << "sending shutdown to mds" << i << endl;
 	  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
 							  MSG_ADDR_MDS(i), 0, 0);
+	  if (g_conf.mds_local_osd) 
+		messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
+								MSG_ADDR_OSD(i+10000), 0, 0);
 	}
 
 	// shut down osd's
-	for (int i=0; i<g_conf.num_osd; i++) {
-	  dout(10) << "sending shutdown to osd" << i << endl;
+	set<int> osds;
+	osdmap->get_all_osds(osds);
+	for (set<int>::iterator it = osds.begin();
+		 it != osds.end();
+		 it++) {
+	  dout(10) << "sending shutdown to osd" << *it << endl;
 	  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-							  MSG_ADDR_OSD(i), 0, 0);
+							  MSG_ADDR_OSD(*it), 0, 0);
 	}
 
 	// shut myself down.

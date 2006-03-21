@@ -75,6 +75,11 @@ void parse_syn_options(vector<char*>& args)
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"statdirs") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_STATDIRS );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
 	  } else if (strcmp(args[i],"makefiles") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_MAKEFILES );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -253,6 +258,18 @@ int SyntheticClient::run()
 		if (run_me()) {
 		  dout(2) << "makedirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
 		  make_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+		}
+	  }
+	  break;
+	case SYNCLIENT_MODE_STATDIRS:
+	  {
+		string sarg1 = get_sarg(0);
+		int iarg1 = iargs.front();  iargs.pop_front();
+		int iarg2 = iargs.front();  iargs.pop_front();
+		int iarg3 = iargs.front();  iargs.pop_front();
+		if (run_me()) {
+		  dout(2) << "statdirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+		  stat_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
 		}
 	  }
 	  break;
@@ -684,6 +701,36 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
   for (int i=0; i<dirs; i++) {
 	sprintf(d, "%s/dir.%d", basedir, i);
 	make_dirs(d, dirs, files, depth-1);
+  }
+  
+  return 0;
+}
+
+int SyntheticClient::stat_dirs(const char *basedir, int dirs, int files, int depth)
+{
+  if (time_to_stop()) return 0;
+
+  // make sure base dir exists
+  struct stat st;
+  int r = client->lstat(basedir, &st);
+  if (r != 0) {
+	dout(1) << "can't make base dir? " << basedir << endl;
+	return -1;
+  }
+
+  // children
+  char d[500];
+  dout(3) << "stat_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
+  for (int i=0; i<files; i++) {
+	sprintf(d,"%s/file.%d", basedir, i);
+	client->lstat(d, &st);
+  }
+
+  if (depth == 0) return 0;
+
+  for (int i=0; i<dirs; i++) {
+	sprintf(d, "%s/dir.%d", basedir, i);
+	stat_dirs(d, dirs, files, depth-1);
   }
   
   return 0;

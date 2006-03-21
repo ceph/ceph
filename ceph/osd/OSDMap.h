@@ -42,8 +42,11 @@ using namespace std;
 // from LSB to MSB,
 #define PG_PS_BITS         32   // max bits for placement seed/group portion of PG
 #define PG_REP_BITS        10   
+#define PG_TYPE_BITS       2
 #define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
 
+#define PG_TYPE_RAND     1   // default: distribution randomly
+#define PG_TYPE_STARTOSD 2   // place primary on a specific OSD (named by the pg_bits)
 
 
 /** OSDMap
@@ -101,102 +104,155 @@ class OSDMap {
   /****   mapping facilities   ****/
 
   // oid -> ps
-  ps_t object_to_ps(object_t oid) {
+  ps_t object_to_pg(object_t oid, FileLayout& layout) {
 	static crush::Hash H(777);
 		
-	switch (g_conf.osd_object_layout) {
+	int policy = layout.object_layout;
+	if (policy == 0) 
+	  policy = g_conf.osd_object_layout;
+
+	int type = PG_TYPE_RAND;
+	pg_t ps;
+
+	switch (policy) {
 	case OBJECT_LAYOUT_LINEAR:
 	  {
 		const object_t ono = oid & ((1ULL << OID_ONO_BITS)-1ULL);
 		const inodeno_t ino = oid >> OID_ONO_BITS;
-		return (ono + ino) & PG_PS_MASK;
+		ps = (ono + ino) & PG_PS_MASK;
+		ps &= ((1ULL<<pg_bits)-1ULL);
 	  }
-
+	  break;
+	  
 	case OBJECT_LAYOUT_HASHINO:
 	  {
 		const object_t ono = oid & ((1ULL << OID_ONO_BITS)-1ULL);
 		const inodeno_t ino = oid >> OID_ONO_BITS;
-		return (ono + H(ino)) & PG_PS_MASK;
+		ps = (ono + H(ino)) & PG_PS_MASK;
+		ps &= ((1ULL<<pg_bits)-1ULL);
 	  }
+	  break;
 
 	case OBJECT_LAYOUT_HASH:
 	  {
-		return H( oid ^ (oid >> 32) ) & PG_PS_MASK;
+		ps = H( oid ^ (oid >> 32) ) & PG_PS_MASK;
+		ps &= ((1ULL<<pg_bits)-1ULL);
 	  }
+	  break;
+
+	case OBJECT_LAYOUT_STARTOSD:
+	  {
+		ps = layout.osd;
+		type = PG_TYPE_STARTOSD;
+	  }
+	  break;
 	}
-	assert(0);
-	return 0;
+
+	// construct final PG
+	pg_t pg = type;
+	pg = (pg << PG_REP_BITS) | (pg_t)layout.num_rep;
+	pg = (pg << PG_PS_BITS) | ps;
+	//cout << "pg " << hex << pg << dec << endl;
+	return pg;
   }
 
   // (ps, nrep) -> pg
   pg_t ps_nrep_to_pg(ps_t ps, int nrep) {
 	return ((pg_t)ps & ((1ULL<<pg_bits)-1ULL)) 
-	  | ((pg_t)nrep << PG_PS_BITS);
+	  | ((pg_t)nrep << PG_PS_BITS)
+	  | ((pg_t)PG_TYPE_RAND << (PG_PS_BITS+PG_REP_BITS));
+  }
+  pg_t osd_nrep_to_pg(int osd, int nrep) {
+	return ((pg_t)osd)
+	  | ((pg_t)nrep << PG_PS_BITS)
+	  | ((pg_t)PG_TYPE_STARTOSD << (PG_PS_BITS+PG_REP_BITS));
+
   }
 
   // pg -> nrep
   int pg_to_nrep(pg_t pg) {
-	return pg >> PG_PS_BITS;
+	return (pg >> PG_PS_BITS) & ((1ULL << PG_REP_BITS)-1);
   }
 
   // pg -> ps
   int pg_to_ps(pg_t pg) {
 	return pg & PG_PS_MASK;
   }
+
+  // pg -> pg_type
+  int pg_to_type(pg_t pg) {
+	return pg >> (PG_PS_BITS + PG_REP_BITS);
+  }
   
 
   // pg -> (osd list)
   int pg_to_osds(pg_t pg,
 				 vector<int>& osds) {       // list of osd addr's
-	int num_rep = pg_to_nrep(pg);
 	pg_t ps = pg_to_ps(pg);
-	
+	int num_rep = pg_to_nrep(pg);
+	assert(num_rep > 0);
+	int type = pg_to_type(pg);
+
+	//cout << hex << "pg " << pg << " ps " << ps << " num_rep " << num_rep << " type " << type << dec << endl;
+	if (type == PG_TYPE_STARTOSD) {
+	  //cout << "type startosd " << num_rep << " osd" << ps << endl;
+	  num_rep--;
+	}
+
 	// spread "on" ps bits around a bit (usually only low bits are set bc of pg_bits)
 	int hps = ((ps >> 32) ^ ps);
 	hps = hps ^ (hps >> 16);
 	
-	switch(g_conf.osd_pg_layout) {
-	case PG_LAYOUT_CRUSH:
-	  crush.do_rule(crush.rules[num_rep],
-					hps,
-					osds);
-	  break;
-
-	case PG_LAYOUT_LINEAR:
-	  for (int i=0; i<num_rep; i++) 
-		osds.push_back( (i + ps*num_rep) % g_conf.num_osd );
-	  break;
-
-	case PG_LAYOUT_HYBRID:
-	  {
-		static crush::Hash H(777);
-		int h = H(hps);
+	if (num_rep > 0) {
+	  switch(g_conf.osd_pg_layout) {
+	  case PG_LAYOUT_CRUSH:
+		crush.do_rule(crush.rules[num_rep],
+					  hps,
+					  osds);
+		break;
+		
+	  case PG_LAYOUT_LINEAR:
 		for (int i=0; i<num_rep; i++) 
-		  osds.push_back( (h+i) % g_conf.num_osd );
+		  osds.push_back( (i + ps*num_rep) % g_conf.num_osd );
+		break;
+		
+	  case PG_LAYOUT_HYBRID:
+		{
+		  static crush::Hash H(777);
+		  int h = H(hps);
+		  for (int i=0; i<num_rep; i++) 
+			osds.push_back( (h+i) % g_conf.num_osd );
+		}
+		break;
+		
+	  case PG_LAYOUT_HASH:
+		{
+		  static crush::Hash H(777);
+		  for (int i=0; i<num_rep; i++) {
+			int t = 1;
+			int osd = 0;
+			while (t++) {
+			  osd = H(i, hps, t) % g_conf.num_osd;
+			  int j = 0;
+			  for (; j<i; j++) 
+				if (osds[j] == osd) break;
+			  if (j == i) break;
+			}
+			osds.push_back(osd);
+		  }	  
+		}
+		break;
+		
+	  default:
+		assert(0);
 	  }
-	  break;
-
-	case PG_LAYOUT_HASH:
-	  {
-		static crush::Hash H(777);
-		for (int i=0; i<num_rep; i++) {
-		  int t = 1;
-		  int osd = 0;
-		  while (t++) {
-			osd = H(i, hps, t) % g_conf.num_osd;
-			int j = 0;
-			for (; j<i; j++) 
-			  if (osds[j] == osd) break;
-			if (j == i) break;
-		  }
-		  osds.push_back(osd);
-		}	  
-	  }
-	  break;
-
-	default:
-	  assert(0);
 	}
+
+	if (type == PG_TYPE_STARTOSD) {
+	  //cout << "putting in osd" << ps << endl;
+	  osds.insert(osds.begin(), (int)ps);
+	}
+
 	return osds.size();
   }
 

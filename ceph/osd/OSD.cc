@@ -590,11 +590,12 @@ void OSD::update_map(bufferlist& state, bool mkfs)
   if (mkfs) {
 	assert(osdmap->get_version() == 1);
 
+	ps_t maxps = 1LL << osdmap->get_pg_bits();
+
 	// create PGs
 	for (int nrep = 1; 
 		 nrep <= MIN(g_conf.num_osd, g_conf.osd_max_rep);    // for low osd counts..  hackish bleh
 		 nrep++) {
-	  ps_t maxps = 1LL << osdmap->get_pg_bits();
 	  for (pg_t ps = 0; ps < maxps; ps++) {
 		pg_t pgid = osdmap->ps_nrep_to_pg(ps, nrep);
 		vector<int> acting;
@@ -613,7 +614,26 @@ void OSD::update_map(bufferlist& state, bool mkfs)
 		  pg_list.push_back(pgid);
 		} 
 	  }
+
+	  // local PG too
+	  pg_t pgid = osdmap->osd_nrep_to_pg(whoami, nrep);
+	  vector<int> acting;
+	  osdmap->pg_to_acting_osds(pgid, acting);
+	  
+	  if (acting[0] == whoami) {
+		PG *pg = create_pg(pgid);
+		pg->acting = acting;
+		pg->set_role(0);
+		pg->set_primary_since(osdmap->get_version());
+		pg->mark_complete( osdmap->get_version() );
+		
+		dout(7) << "created " << *pg << endl;
+		pg_list.push_back(pgid);
+	  }
+
 	}
+	
+
   } else {
 	// get pg list
 	get_pg_list(pg_list);

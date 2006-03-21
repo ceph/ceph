@@ -21,6 +21,7 @@
 
 #include "Mutex.h"
 #include "Cond.h"
+#include "Thread.h"
 
 #include <map>
 #include <set>
@@ -49,47 +50,62 @@ namespace __gnu_cxx {
 
 class Timer {
  private:
-  map< utime_t, set<Context*> >  scheduled;    // time -> (context ...)
+  map< utime_t, multiset<Context*> >  scheduled;    // time -> (context ...)
   hash_map< Context*, utime_t >  event_times;  // event -> time
 
   // get time of the next event
   Context* get_next_scheduled(utime_t& when) {
 	if (scheduled.empty()) return 0;
-	map< utime_t, set<Context*> >::iterator it = scheduled.begin();
+	map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
 	when = it->first;
-	set<Context*>::iterator sit = it->second.begin();
+	multiset<Context*>::iterator sit = it->second.begin();
 	return *sit;
   }
 
   void register_timer();  // make sure i get a callback
   void cancel_timer();    // make sure i get a callback
 
-
-  pthread_t thread_id;
+  //pthread_t thread_id;
   bool      thread_stop;
   Mutex     lock;
   bool      timed_sleep;
+  bool      sleeping;
   Cond      sleep_cond;
   Cond      timeout_cond;
 
  public:
-  void timer_thread();    // waiter thread (that wakes us up)
+  void timer_entry();    // waiter thread (that wakes us up)
+
+  class TimerThread : public Thread {
+	Timer *t;
+  public:
+	void *entry() {
+	  t->timer_entry();
+	  return 0;
+	}
+	TimerThread(Timer *_t) : t(_t) {}
+  } timer_thread;
+
 
   int num_event;
 
 
  public:
-  Timer() { 
-	thread_id = 0;
-	thread_stop = false;
-	num_event = 0;
+  Timer() :
+	//thread_id0),
+	thread_stop(false),
+	timed_sleep(false),
+	sleeping(false),
+	timer_thread(this),
+	num_event(0)
+  { 
   }
   ~Timer() { 
 	// scheduled
-	for (map< utime_t, set<Context*> >::iterator it = scheduled.begin();
+	for (map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
 		 it != scheduled.end();
 		 it++) {
-	  for (set<Context*>::iterator sit = it->second.begin();
+	  for (multiset<Context*>::iterator sit = it->second.begin();
 		   sit != it->second.end();
 		   sit++)
 		delete *sit;

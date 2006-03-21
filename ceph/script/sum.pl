@@ -89,6 +89,24 @@ for my $k (sort {$a <=> $b} keys %sum) {
 
 my $rows = $n || 1;
 my $files = $tcount{$starttime};
+my %avgval;
+
+## devt
+my %avgvalvart;  # std dev of each col avg, over time
+for my $k (keys %avg) {
+	my $av = $avgval{$k} = $avg{$k} / ($rows*$files);
+
+	my $var = 0.0;
+	for my $t (sort {$a <=> $b} keys %sum) {
+		my $a = $sum{$t}->{$k} / $files;
+		$var += ($a - $av) * ($a - $av);
+	}
+	
+	$avgvalvart{$k} = $var / $rows;
+}
+
+
+
 
 print "\n";
 print join("\t",'#', map { $col{$_} } @c) . "\n";
@@ -97,6 +115,13 @@ print join("\t", '#maxval', map { $max{$col{$_}} } @c ) . "\n";
 print join("\t", '#rows', map { $rows } @c) . "\n";
 print join("\t", '#files', map { $files } @c) . "\n";
 print join("\t", '#avgval', #map int, 
-		   map { ($rows*$files) ? ($_ / ($rows*$files)):0 } map { $avg{$col{$_}} } @c ) . "\n";
+		   map { $avgval{$col{$_}} } @c ) . "\n";
+#		   map { ($rows*$files) ? ($_ / ($rows*$files)):0 } map { $avg{$col{$_}} } @c ) . "\n";
+
+print join("\t", '#avgvalvart',
+		   map { $avgvalvart{$col{$_}} } @c ) . "\n";
+print join("\t", '#avgvaldevt',
+		   map { sqrt($_) } map { $avgvalvart{$col{$_}} } @c ) . "\n";
+
 print join("\t", '#avgsum', #map int, 
 		   map { $_ / $rows } map { $avg{$col{$_}} } @c ) . "\n";

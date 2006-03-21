@@ -324,8 +324,9 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
         root->inode = in_info->inode;
 		inode_map[root->inode.ino] = root;
       }
-
-	  root->last_updated = now;
+	  
+	  if (g_conf.client_cache_stat_ttl)
+		root->valid_until = now + g_conf.client_cache_stat_ttl;
 
 	  root->dir_auth = in_info->dir_auth;
 	  assert(root->dir_auth == 0);
@@ -339,7 +340,9 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
       dout(12) << "insert_trace trace " << i << endl;
       Dir *dir = cur->open_dir();
 	  cur = this->insert_inode_info(dir, trace[i]);
-	  cur->last_updated = now;
+	  
+	  if (g_conf.client_cache_stat_ttl)
+		cur->valid_until = now + g_conf.client_cache_stat_ttl;
 
 	  // move to top of lru!
 	  if (cur->dn) lru.lru_touch(cur->dn);
@@ -367,7 +370,7 @@ Dentry *Client::lookup(filepath& path)
 	  Dir *dir = cur->dir;
 	  if (dir->dentries.count(path[i])) {
 		dn = dir->dentries[path[i]];
-		dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " last_updated " << dn->inode->last_updated<< endl;
+		dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " valid_until " << dn->inode->valid_until << endl;
 	  } else {
 		dout(14) << " dentry " << path[i] << " dne" << endl;
 		return NULL;
@@ -380,7 +383,7 @@ Dentry *Client::lookup(filepath& path)
   }
   
   if (dn) {
-	dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << hex << dn->inode->inode.ino << dec << " last_updated " << dn->inode->last_updated<< endl;
+	dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << hex << dn->inode->inode.ino << dec << " valid_until " << dn->inode->valid_until<< endl;
   }
 
   return dn;
@@ -464,7 +467,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   if (req->get_op() == MDS_OP_STAT ||
 	  req->get_op() == MDS_OP_LSTAT ||
 	  req->get_op() == MDS_OP_READDIR ||
-	  req->get_op() == MDS_OP_OPEN ||    // not quite true!  a lie actually!
+	  req->get_op() == MDS_OP_OPEN ||
 	  req->get_op() == MDS_OP_RELEASE)
 	nojournal = true;
 
@@ -1373,15 +1376,19 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
   Dentry *dn = lookup(req->get_filepath());
   inode_t inode;
   time_t now = time(NULL);
-  if (dn && 
-	  ((now - dn->inode->last_updated) < g_conf.client_cache_stat_ttl)) {
+  if (dn && now <= dn->inode->valid_until) {
 	inode = dn->inode->inode;
-	dout(10) << "lstat cache hit, age is " << (now - dn->inode->last_updated) << endl;
+	dout(10) << "lstat cache hit, valid until " << dn->inode->valid_until << endl;
+	
+	if (g_conf.client_cache_stat_ttl == 0)
+	  dn->inode->valid_until = 0;           // only one stat allowed after each readdir
+
 	delete req;  // don't need this
   } else {  
 	// FIXME where does FUSE maintain user information
-	req->set_caller_uid(getuid());
-	req->set_caller_gid(getgid());
+	//struct fuse_context *fc = fuse_get_context();
+	//req->set_caller_uid(fc->uid);
+	//req->set_caller_gid(fc->gid);
 	
 	MClientReply *reply = make_request(req);
 	res = reply->get_result();
@@ -1627,14 +1634,18 @@ int Client::getdir(const char *relpath, map<string,inode_t*>& contents)
 		   it++) {
 		// put in cache
 		Inode *in = this->insert_inode_info(dir, *it);
-		in->last_updated = now;
+		
+		if (g_conf.client_cache_stat_ttl)
+		  in->valid_until = now + g_conf.client_cache_stat_ttl;
+		else if (g_conf.client_cache_readdir_ttl)
+		  in->valid_until = now + g_conf.client_cache_readdir_ttl;
 		
 		// contents to caller too!
 		contents[(*it)->ref_dn] = &in->inode;
 	  }
 	}
 
-	// FIXME: remove items in cache that weren't in my readdir
+	// FIXME: remove items in cache that weren't in my readdir?
 	// ***
   }
 
@@ -2196,8 +2207,10 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  // time
 	  utime_t lat = g_clock.now();
 	  lat -= start;
-	  client_logger->finc("wrlsum",(double)lat);
-	  client_logger->inc("wrlnum");
+	  if (client_logger) {
+		client_logger->finc("wrlsum",(double)lat);
+		client_logger->inc("wrlnum");
+	  }
 
 	  dout(20) << " sync write done " << onfinish << endl;
 	}

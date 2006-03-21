@@ -45,6 +45,8 @@ class TCPMessenger : public Messenger {
 
   int get_dispatch_queue_len();
 
+  void callback_kick();
+
   // init, shutdown MPI and associated event loop thread.
   virtual int shutdown();
 

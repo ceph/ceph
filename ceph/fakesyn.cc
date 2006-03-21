@@ -33,6 +33,8 @@ int main(int argc, char **argv)
 {
   cerr << "fakesyn start" << endl;
 
+  //cerr << "inode_t " << sizeof(inode_t) << endl;
+
   vector<char*> args;
   argv_to_vec(argc, argv, args);
 
@@ -61,9 +63,12 @@ int main(int argc, char **argv)
 
   // create mds
   MDS *mds[NUMMDS];
+  OSD *mdsosd[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
 	//cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
 	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
+	if (g_conf.mds_local_osd)
+	  mdsosd[i] = new OSD(i+10000, new FakeMessenger(MSG_ADDR_OSD(i+10000)));
 	start++;
   }
   
@@ -91,6 +96,8 @@ int main(int argc, char **argv)
   // init
   for (int i=0; i<NUMMDS; i++) {
 	mds[i]->init();
+	if (g_conf.mds_local_osd)
+	  mdsosd[i]->init();
   }
   
   for (int i=0; i<NUMOSD; i++) {

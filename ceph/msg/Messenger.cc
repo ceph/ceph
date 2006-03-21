@@ -134,17 +134,24 @@ ostream& operator<<(ostream& out, Message& m)
 
 Mutex                msgr_callback_lock;
 list<Context*>       msgr_callback_queue;
-Context*             msgr_callback_kicker = 0;
+//Context*             msgr_callback_kicker = 0;
 
 void Messenger::queue_callback(Context *c) {
   msgr_callback_lock.Lock();
   msgr_callback_queue.push_back(c);
   msgr_callback_lock.Unlock();
 
-  msgr_callback_kicker->finish(0);
+  callback_kick();
+}
+void Messenger::queue_callbacks(list<Context*>& ls) {
+  msgr_callback_lock.Lock();
+  msgr_callback_queue.splice(msgr_callback_queue.end(), ls);
+  msgr_callback_lock.Unlock();
+
+  callback_kick();
 }
 
-void messenger_do_callbacks() {
+void Messenger::do_callbacks() {
   // take list
   msgr_callback_lock.Lock();
   list<Context*> ls;

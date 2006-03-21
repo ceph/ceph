@@ -63,7 +63,14 @@ class Messenger {
 
   virtual int shutdown() = 0;
   
+  // callbacks
+  //static Mutex                callback_lock;
+  //static list<Context*>       callback_queue;
+  static void do_callbacks();
+
   void queue_callback(Context *c);
+  void queue_callbacks(list<Context*>& ls);
+  virtual void callback_kick() = 0;
 
   virtual int get_dispatch_queue_len() { return 0; };
 
@@ -80,11 +87,9 @@ class Messenger {
 
   // make a procedure call
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
-};
 
-// callbacks
-void messenger_do_callbacks();
-extern Context *msgr_callback_kicker;
+
+};
 
 
 extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);

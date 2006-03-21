@@ -128,6 +128,7 @@ int main(int argc, char **argv)
 
   // create mds
   MDS *mds[NUMMDS];
+  OSD *mdsosd[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != g_conf.tcp_skip_rank0+i) continue;
 	TCPMessenger *m = new TCPMessenger(MSG_ADDR_MDS(i));
@@ -135,6 +136,11 @@ int main(int argc, char **argv)
 	mds[i] = new MDS(mdc, i, m);
 	mds[i]->init();
 	started++;
+
+	if (g_conf.mds_local_osd) {
+	  mdsosd[i] = new OSD(i+10000, new TCPMessenger(MSG_ADDR_OSD(i+10000)));
+	  mdsosd[i]->init();													
+	}
   }
   
   // create osd

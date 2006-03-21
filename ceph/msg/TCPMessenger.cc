@@ -318,6 +318,11 @@ class C_TCPKicker : public Context {
   }
 };
 
+void TCPMessenger::callback_kick()
+{
+  tcpmessenger_kick_dispatch_loop();
+}
+
 
 extern int tcpmessenger_lookup(char *str, tcpaddr_t& ta)
 {
@@ -417,7 +422,6 @@ int tcpmessenger_init()
 
   // register to execute timer events
   //g_timer.set_messenger_kicker(new C_TCPKicker());
-  msgr_callback_kicker = new C_TCPKicker();
 
 
   dout(DBL) << "init done" << endl;
@@ -871,7 +875,7 @@ void* tcp_dispatchthread(void*)
 
   while (1) {
 	// any pending callbacks?
-	messenger_do_callbacks();
+	Messenger::do_callbacks();
 
 	// inq?
 	incoming_lock.Lock();
@@ -1198,7 +1202,6 @@ int TCPMessenger::shutdown()
 	
 	// no more timer events
 	g_timer.unset_messenger();
-	msgr_callback_kicker = 0;
 	
 	// close incoming sockets
 	//void *r;

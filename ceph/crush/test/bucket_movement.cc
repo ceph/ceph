@@ -65,6 +65,8 @@ float testmovement(int n, float f, int buckettype)
 	b = new ListBucket(1);
   else if (buckettype == 3)
 	b = new StrawBucket(1);
+  else if (buckettype == 4)
+	b = new UniformBucket(0,0);
 
   for (int i=0; i<n; i++)
 	b->add_item(ndisks++,1);
@@ -149,14 +151,14 @@ float testmovement(int n, float f, int buckettype)
 int main() 
 {
   //cout << "//  " << depth << ",  modifydepth " << modifydepth << ",  branching " << branching << ",  disks " << n << endl;
-  cout << "n\ttree\tlhead\tltail\tstraw" << endl;
+  cout << "n\ttree\tlhead\tltail\tstraw\tuniform" << endl;
 
   //for (int s=2; s<=64; s+= (s<4?1:(s<16?2:4))) {
   for (int s=2; s<=64; s+= (s<4?1:4)) {
 	float f = 1.0 / (float)s;
 	//cout << f << "\t" << s;
 	cout << s;
-	for (int buckettype=0; buckettype<4; buckettype++)
+	for (int buckettype=0; buckettype<5; buckettype++)
 	  testmovement(s, f, buckettype);
 	cout << endl;
   }

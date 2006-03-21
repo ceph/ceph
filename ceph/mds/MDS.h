@@ -101,10 +101,11 @@ void split_path(string& path,
 
 
 class MDS : public Dispatcher {
+ public:
+  Mutex        mds_lock;
+
  protected:
   int          whoami;
-
-  Mutex        mds_lock;
 
   MDCluster    *mdcluster;
  public:

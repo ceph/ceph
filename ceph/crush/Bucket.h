@@ -88,7 +88,7 @@ namespace crush {
 	float  item_weight;
 
 	// primes
-	vector<int> primes;
+	vector<unsigned> primes;
 
 	int get_prime(int j) const {
 	  return primes[ j % primes.size() ];
@@ -101,12 +101,12 @@ namespace crush {
 	  primes.clear();
 
 	  // start with odd number > num_items
-	  int x = items.size() + 1;             // this is the minimum!
+	  unsigned x = items.size() + 1;             // this is the minimum!
 	  x += h(items.size()) % (3*items.size());  // bump it up some
 	  x |= 1;                               // make it odd
 
 	  while (primes.size() < items.size()) {
-		int j;
+		unsigned j;
 		for (j=2; j*j<=x; j++) 
 		  if (x % j == 0) break;
 		if (j*j > x) {
@@ -180,9 +180,9 @@ namespace crush {
 	  //cout << "uniformbucket.choose_r(" << x << ", " << r << ")" << endl;
 	  //if (r >= get_size()) cout << "warning: r " << r << " >= " << get_size() << " uniformbucket.size" << endl;
 	  
-	  int v = hash(x, get_id());// % get_size();
-	  int p = get_prime( hash(get_id(), x) );  // choose a prime based on hash(x, get_id(), 2)
-	  int s = (x + v + (r+1)*p) % get_size();
+	  unsigned v = hash(x, get_id());// % get_size();
+	  unsigned p = get_prime( hash(get_id(), x) );  // choose a prime based on hash(x, get_id(), 2)
+	  unsigned s = (x + v + (r+1)*p) % get_size();
 	  return items[s];
 	}
 

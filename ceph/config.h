@@ -55,6 +55,7 @@ struct md_config_t {
   int      client_cache_size;
   float    client_cache_mid;
   int      client_cache_stat_ttl;
+  int      client_cache_readdir_ttl;
   bool     client_use_random_mds;          // debug flag
 
   bool     client_sync_writes;
@@ -106,6 +107,8 @@ struct md_config_t {
   bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;
   bool  mds_verify_export_dirauth;     // debug flag
+
+  bool  mds_local_osd;
 
 
   // osd
@@ -161,6 +164,7 @@ struct md_config_t {
   bool  bdev_el_bidir;
   int   bdev_iov_max;
   bool  bdev_debug_check_io_overlap;
+  int   bdev_fake_max_mb;
 
   // fake client
   int      num_fakeclient;

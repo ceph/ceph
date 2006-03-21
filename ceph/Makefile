@@ -45,6 +45,7 @@ OSD_OBJS= \
 	osd/PG.o\
 	osd/ObjectStore.o\
 	osd/FakeStore.o\
+	ebofs.o\
 	osd/OSD.o
 
 COMMON_OBJS= \
@@ -57,7 +58,6 @@ COMMON_OBJS= \
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
-	ebofs.o\
 	config.o
 
 CLIENT_OBJS= \
