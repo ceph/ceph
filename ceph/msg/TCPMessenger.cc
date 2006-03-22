@@ -77,6 +77,7 @@ off_t stat_outq = 0, stat_outqb = 0;
 
 // local directory
 hash_map<msg_addr_t, TCPMessenger*>  directory;  // local
+hash_set<msg_addr_t>                 directory_ready;
 Mutex                         directory_lock;
 
 // connecting
@@ -297,9 +298,27 @@ public:
 	  dout(DBL) << "lookup got " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
 	  entity_rank[it->first] = it->second;
 	  
-	  // take waiters
-	  waiting.splice(waiting.begin(), waiting_for_lookup[it->first]);
+	  if (it->second == my_rank) {
+		// deliver locally
+		dout(-DBL) << "delivering lookup results locally" << endl;
+		incoming_lock.Lock();
+		
+		for (list<Message*>::iterator i = waiting_for_lookup[it->first].begin();
+			 i != waiting_for_lookup[it->first].end();
+			 i++) {
+		  stat_inq++;
+		  stat_inqb += (*i)->get_payload().length();
+		  (*i)->decode_payload();
+		  incoming.push_back(*i);
+		}
+		incoming_cond.Signal();
+		incoming_lock.Unlock();
+	  } else {
+		// take waiters
+		waiting.splice(waiting.begin(), waiting_for_lookup[it->first]);
+	  }
 	  waiting_for_lookup.erase(it->first);
+	  
 	}
 
 	for (map<int,tcpaddr_t>::iterator it = m->rank_addr.begin();
@@ -827,50 +846,7 @@ void* OutThread::entry()
   return 0;
 }
 
-/*
-void* tcp_outthread(void*)
-{
-  outgoing_lock.Lock();
-  dout(DBL) << "outthread start" << endl;
-  while (1) {
-	
-	while (!outgoing.empty()) {
-	  dout(DBL) << "outthread grabbing message(s)" << endl;
 
-	  // grab outgoing list
-	  list<Message*> out;
-	  out.splice(out.begin(), outgoing);
-	  
-	  // drop lock while i send these
-	  outgoing_lock.Unlock();
-	  
-	  while (!out.empty()) {
-		Message *m = out.front();
-		out.pop_front();
-		
-		dout(DBL) << "outthread sending " << m << endl;
-
-		if (!g_conf.tcp_serial_marshall) 
-		  tcp_marshall(m);
-
-		tcp_send(m);
-	  }
-	  
-	  outgoing_lock.Lock();
-	}
-	
-	if (tcp_done) break;
-
-	// wait
-	dout(DBL) << "outthread sleeping" << endl;
-	outgoing_cond.Wait(outgoing_lock);
-  }
-  dout(DBL) << "outthread done" << endl;
-
-  outgoing_lock.Unlock();
-  return 0;
-}
-*/
 
 /** tcp_inthread
  * read incoming messages from a given peer.
@@ -891,15 +867,34 @@ void *tcp_inthread(void *r)
 
 	// give to dispatch loop
 	size_t sz = m->get_payload().length();
-	incoming_lock.Lock();
-	{
-	  incoming.push_back(m);
-	  incoming_cond.Signal();
 
-	  stat_inq++;
-	  stat_inqb += sz;
+	if (g_conf.tcp_multi_dispatch) {
+	  const msg_addr_t dest = m->get_dest();
+	  directory_lock.Lock();
+	  TCPMessenger *messenger = directory[ dest ];
+	  directory_lock.Unlock();
+
+	  if (messenger) 
+		messenger->dispatch_queue(m);
+	  else
+		dout(0) << "dest " << dest << " dne" << endl;
+
+	} else {
+	  // single dispatch queue
+	  incoming_lock.Lock();
+	  {
+		//dout(-20) << "in1 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+		//assert(stat_inq == incoming.size());
+		incoming.push_back(m);
+		incoming_cond.Signal();
+		
+		stat_inq++;
+		//assert(stat_inq == incoming.size());
+		//dout(-20) << "in2 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+		stat_inqb += sz;
+	  }
+	  incoming_lock.Unlock();
 	}
-	incoming_lock.Unlock();
 
 	if (logger) {
 	  //logger->inc("in");
@@ -966,6 +961,7 @@ void TCPMessenger::dispatch_entry()
 	  stat_inqb = 0;
 	
 	  // drop lock while we deliver
+	  //assert(stat_inq == incoming.size());
 	  incoming_lock.Unlock();
 
 	  // dispatch!
@@ -1019,12 +1015,15 @@ void* tcp_dispatchthread(void*)
 	// wait?
 	if (incoming.empty()) {
 	  // wait
-	  dout(DBL) << "dispatch: waiting for incoming messages" << endl;
+	  dout(DBL) << "dispatch: incoming empty, waiting for incoming messages" << endl;
 	  incoming_cond.Wait(incoming_lock);
 	  dout(DBL) << "dispatch: woke up" << endl;
 	}
 
 	// grab incoming messages  
+	//dout(-20) << "dis1 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+	//assert(stat_inq == incoming.size());
+
 	list<Message*> in;
 	in.splice(in.begin(), incoming);
 
@@ -1033,6 +1032,8 @@ void* tcp_dispatchthread(void*)
 	stat_disqb = stat_inqb;
 	stat_inq = 0;
 	stat_inqb = 0;
+	//assert(stat_inq == incoming.size());
+	//dout(-20) << "dis2 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
 
 	// drop lock while we deliver
 	incoming_lock.Unlock();
@@ -1080,6 +1081,8 @@ void* tcp_dispatchthread(void*)
 		assert(0);
 	  }
 	}
+	assert(stat_disq == 0);
+
   }
 
 
@@ -1127,12 +1130,23 @@ int tcpmessenger_start()
 
 void tcpmessenger_kick_dispatch_loop()
 {
-  dout(DBL) << "kicking" << endl;
-  incoming_lock.Lock();
-  dout(DBL) << "prekick" << endl;
-  incoming_cond.Signal();
-  incoming_lock.Unlock();
-  dout(DBL) << "kicked" << endl;
+  if (g_conf.tcp_multi_dispatch) {
+	assert(0);
+	// all of them
+	/*for (hash_map<msg_addr_t, TCPMessenger*>::iterator i = directory.begin();
+		 i != directory.end();
+		 i++)
+	  i->second->dispatch_kick();
+	*/
+  } else {
+	// just one
+	dout(DBL) << "kicking" << endl;
+	incoming_lock.Lock();
+	dout(DBL) << "prekick" << endl;
+	incoming_cond.Signal();
+	incoming_lock.Unlock();
+	dout(DBL) << "kicked" << endl;
+  }
 }
 
 /*
@@ -1149,14 +1163,22 @@ void tcpmessenger_kick_outgoing_loop()
 
 void tcpmessenger_wait()
 {
-  dout(10) << "tcpmessenger_wait waking up dispatch loop" << endl;
-  tcpmessenger_kick_dispatch_loop();
-
-  void *returnval;
-  dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
-  pthread_join(dispatch_thread_id, &returnval);
-  dout(10) << "tcpmessenger_wait thread finished." << endl;
-
+  if (g_conf.tcp_multi_dispatch) {
+	// new way
+	incoming_lock.Lock();
+	while (!tcp_done)
+	  incoming_cond.Wait(incoming_lock);
+	incoming_lock.Unlock();
+  } else {
+	// old way
+	dout(10) << "tcpmessenger_wait waking up dispatch loop" << endl;
+	tcpmessenger_kick_dispatch_loop();
+	
+	void *returnval;
+	dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
+	pthread_join(dispatch_thread_id, &returnval);
+	dout(10) << "tcpmessenger_wait thread finished." << endl;
+  }
 }
 
 
@@ -1252,6 +1274,10 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) :
 
 void TCPMessenger::ready()
 {
+  directory_lock.Lock();
+  directory_ready.insert(get_myaddr());
+  directory_lock.Unlock();
+
   if (get_myaddr() != MSG_ADDR_DIRECTORY) {
 	// started!  tell namer we are up and running.
 	lookup_lock.Lock();
@@ -1351,9 +1377,18 @@ int TCPMessenger::shutdown()
 	  //pthread_join(it->second, &r);
 	}
 
+	if (g_conf.tcp_multi_dispatch) {
+	  // kill off dispatch threads
+	  dout(DBL) << "killing dispatch threads" << endl;
+	  for (hash_map<msg_addr_t,TCPMessenger*>::iterator it = directory.begin();
+		   it != directory.end();
+		   it++) 
+		it->second->dispatch_stop();
+	}
+
 	dout(DBL) << "setting tcp_done" << endl;
 
-	// kick incoming thread
+	// kick/kill incoming thread
 	incoming_lock.Lock();
 	tcp_done = true;
 	incoming_cond.Signal();
@@ -1408,21 +1443,46 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
 		  << " ---- " << m 
 		  << endl;
 
-  if (g_conf.tcp_serial_marshall)
-	tcp_marshall(m);
-
-  if (g_conf.tcp_serial_out) {
-	lookup_lock.Lock();
-	// send in this thread
-	if (tcp_lookup(m))
-	  tcp_send(m);
-	lookup_lock.Unlock();
+  // local?
+  TCPMessenger *entity = 0;
+  directory_lock.Lock();
+  if (directory.count(dest) &&
+	  directory_ready.count(dest)) entity = directory[dest];
+  directory_lock.Unlock();
+  
+  if (entity) {  
+	// local!
+	::incoming_lock.Lock();
+	{
+	  dout(20) << " queueing locally for " << dest << " " << m << endl;  //", stat_inq " << stat_inq << ", incomign " << ::incoming.size() << endl;
+	  //assert(stat_inq == ::incoming.size());
+	  ::incoming.push_back(m);
+	  ::incoming_cond.Signal();
+	  stat_inq++;
+	  //assert(stat_inq == ::incoming.size());
+	  //dout(-20) << " stat_inq " << stat_inq << ", incoming " << ::incoming.size() << endl;
+	  stat_inqb += m->get_payload().length();
+	}
+	::incoming_lock.Unlock();
   } else {
-	lookup_lock.Lock();
-	OutThread *outt = tcp_lookup(m);
-	lookup_lock.Unlock();
+	// remote!
 
-	if (outt) outt->send(m);
+	if (g_conf.tcp_serial_marshall)
+	  tcp_marshall(m);
+	
+	if (g_conf.tcp_serial_out) {
+	  lookup_lock.Lock();
+	  // send in this thread
+	  if (tcp_lookup(m))
+		tcp_send(m);
+	  lookup_lock.Unlock();
+	} else {
+	  lookup_lock.Lock();
+	  OutThread *outt = tcp_lookup(m);
+	  lookup_lock.Unlock();
+	  
+	  if (outt) outt->send(m);
+	}
   }
 
   return 0;

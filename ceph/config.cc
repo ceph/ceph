@@ -79,6 +79,7 @@ md_config_t g_conf = {
   tcp_serial_marshall: true,
   tcp_serial_out: false,
   tcp_multi_out: true,
+  tcp_multi_dispatch: false,  // not fully implemented yet
 
   // --- client ---
   client_cache_size: 300,

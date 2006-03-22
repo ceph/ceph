@@ -49,16 +49,29 @@ class TCPMessenger : public Messenger {
   } dispatch_thread;
 
   void dispatch_entry();
+
+public:
   void dispatch_start() {
 	incoming_stop = false;
 	dispatch_thread.create();
   }
+  /*  void dispatch_kick() {
+	incoming_lock.Lock();
+	incoming_cond.Signal();
+	incoming_lock.Unlock();
+	}*/
   void dispatch_stop() {
 	incoming_lock.Lock();
 	incoming_stop = true;
 	incoming_cond.Signal();
 	incoming_lock.Unlock();
 	dispatch_thread.join();
+  }
+  void dispatch_queue(Message *m) {
+	incoming_lock.Lock();
+	incoming.push_back(m);
+	incoming_cond.Signal();
+	incoming_lock.Unlock();
   }
 
  public:
