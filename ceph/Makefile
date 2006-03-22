@@ -43,7 +43,7 @@ MDS_OBJS= \
 
 OSD_OBJS= \
 	osd/PG.o\
-	osd/ObjectStore.o\
+	osd/Ager.o\
 	osd/FakeStore.o\
 	ebofs.o\
 	osd/OSD.o

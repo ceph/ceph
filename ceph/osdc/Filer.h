@@ -172,107 +172,14 @@ class Filer : public Dispatcher {
 	return ono + (ino << OID_ONO_BITS);
   }
 
-  /*
-  pg_t file_to_pg(inode_t& inode, size_t ono) {
-	return osdmap->ps_nrep_to_pg( osdmap->object_to_ps( file_to_object(inode.ino, ono) ),
-								  inode.layout.num_rep );
-  }
-  */
-
 
   /* map (ino, offset, len) to a (list of) OSDExtents 
 	 (byte ranges in objects on (primary) osds) */
   void file_to_extents(inode_t inode,
 					   size_t len,
 					   size_t offset,
-					   list<OSDExtent>& extents) {
-	/* we want only one extent per object!
-	 * this means that each extent we read may map into different bits of the 
-	 * final read buffer.. hence OSDExtent.buffer_extents
-	 */
-	map< object_t, OSDExtent > object_extents;
-
-	// RUSHSTRIPE?
-	//if (inode.layout.policy == FILE_LAYOUT_CRUSH) {
-	  // layout constant
-	  size_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_size;
-	  
-	  size_t cur = offset;
-	  size_t left = len;
-	  while (left > 0) {
-		// layout into objects
-		size_t blockno = cur / inode.layout.stripe_size;
-		size_t stripeno = blockno / inode.layout.stripe_count;
-		size_t stripepos = blockno % inode.layout.stripe_count;
-		size_t objectsetno = stripeno / stripes_per_object;
-		size_t objectno = objectsetno * inode.layout.stripe_count + stripepos;
-		
-		// find oid, extent
-		OSDExtent *ex = 0;
-		object_t oid = file_to_object( inode.ino, objectno );
-		if (object_extents.count(oid)) 
-		  ex = &object_extents[oid];
-		else {
-		  ex = &object_extents[oid];
-		  ex->oid = oid;
-		  ex->pg = osdmap->object_to_pg( oid, inode.layout );
-		  ex->osd = osdmap->get_pg_acting_primary( ex->pg );
-		}
-		
-		// map range into object
-		size_t block_start = (stripeno % stripes_per_object)*inode.layout.stripe_size;
-		size_t block_off = cur % inode.layout.stripe_size;
-		size_t max = inode.layout.stripe_size - block_off;
-		
-		size_t x_offset = block_start + block_off;
-		size_t x_len;
-		if (left > max)
-		  x_len = max;
-		else
-		  x_len = left;
-		
-		if (ex->offset + ex->len == x_offset) {
-		  // add to extent
-		  ex->len += x_len;
-		} else {
-		  // new extent
-		  assert(ex->len == 0);
-		  assert(ex->offset == 0);
-		  ex->offset = x_offset;
-		  ex->len = x_len;
-		}
-		ex->buffer_extents[cur-offset] = x_len;
-		
-		//cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
-		
-		left -= x_len;
-		cur += x_len;
-	  }
-	  
-	  // make final list
-	  for (map<object_t, OSDExtent>::iterator it = object_extents.begin();
-		   it != object_extents.end();
-		   it++) {
-		extents.push_back(it->second);
-	  }
-	  //}
-	/*else if (inode.layout.policy == FILE_LAYOUT_OSDLOCAL) {
-	  // all in one object, on a specific OSD.
-	  OSDExtent ex;
-	  ex.osd = inode.layout.osd;
-	  ex.oid = file_to_object( inode.ino, 0 );
-	  ex.pg = PG_NONE;
-	  ex.len = len;
-	  ex.offset = offset;
-	  ex.buffer_extents[0] = len;
-
-	  extents.push_back(ex);
-	  }
-	  else {
-	  assert(0);
-	}
-	*/
-  }
+					   list<OSDExtent>& extents);
+  
 
 };
 

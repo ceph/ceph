@@ -2,6 +2,7 @@
 #include "ObjectStore.h"
 
 #include "config.h"
+#include "common/Clock.h"
 
 
 object_t ObjectStore::age_get_oid() {
@@ -18,11 +19,13 @@ object_t ObjectStore::age_get_oid() {
 	return max/2 + (rand() % 100) * max/200 + 1;
   }
 
-  void ObjectStore::age_fill(float pc) {
+  void ObjectStore::age_fill(float pc, utime_t until) {
 	static char buf[1024*1024];
 	bufferlist bl;
 	bl.push_back(new buffer(buf, 1024*1024));
 	while (1) {
+	  if (g_clock.now() > until) break;
+
 	  struct statfs st;
 	  statfs(&st);
 	  float a = (float)(st.f_blocks-st.f_bavail) / (float)st.f_blocks;
@@ -83,11 +86,15 @@ object_t ObjectStore::age_get_oid() {
   }
 
 
-  void ObjectStore::age(float high_water,    // fill to this %
+  void ObjectStore::age(int time,
+						float high_water,    // fill to this %
 		  float low_water,     // then empty to this %
 		  int count,         // this many times
 		  float final_water,   // and end here ( <= low_water)
 		  int fake_size_mb) { 
+	utime_t until = g_clock.now();
+	until.sec_ref() += time;
+
 	while (age_objects.size() < 10) age_objects.push_back( list<object_t>() );
 
 	if (fake_size_mb) {
@@ -124,8 +131,10 @@ object_t ObjectStore::age_get_oid() {
 	  age_objects[i].clear();
 
 	for (int c=1; c<=count; c++) {
+	  if (g_clock.now() > until) break;
+
 	  dout(1) << "age " << c << "/" << count << " filling to " << high_water << endl;
-	  age_fill(high_water);
+	  age_fill(high_water, until);
 	  if (c == count) {
 		dout(1) << "age final empty to " << final_water << endl;
 		age_empty(final_water);	

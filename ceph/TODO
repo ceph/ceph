@@ -262,7 +262,13 @@ OSDI
 - ld_preload?
 
 
-- crush creeping performance degradation due to dead nodes    -- richard g.
+
+
+- clean up tcpmessenger
+
+- fix possible race when Cond uses relative now instead of real_now
+
+- figure out weird 40ms latency with double log entries
 
 
 

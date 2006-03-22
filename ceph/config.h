@@ -123,6 +123,7 @@ struct md_config_t {
   bool  osd_mkfs;
   bool  osd_fake_sync;
   float   osd_age;
+  int   osd_age_time;
 
 
   int   fakestore_fake_sync;

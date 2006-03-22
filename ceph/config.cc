@@ -153,7 +153,8 @@ md_config_t g_conf = {
   osd_max_opq: 10,
   osd_mkfs: false,
   osd_fake_sync: false,
-  osd_age: 0.0,
+  osd_age: .8,
+  osd_age_time: 0,
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
@@ -493,6 +494,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.osd_mkfs = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_age") == 0) 
 	  g_conf.osd_age = atof(args[++i]);
+	else if (strcmp(args[i], "--osd_age_time") == 0) 
+	  g_conf.osd_age_time = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_pg_bits") == 0) 
 	  g_conf.osd_pg_bits = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_max_rep") == 0) 
