@@ -55,8 +55,10 @@ namespace crush {
 
   // Rule operations
   const int CRUSH_RULE_TAKE = 0;
-  const int CRUSH_RULE_CHOOSE = 1;
-  const int CRUSH_RULE_EMIT = 2;
+  const int CRUSH_RULE_CHOOSE = 1;         // first n by default
+  const int CRUSH_RULE_CHOOSE_FIRSTN = 1;
+  const int CRUSH_RULE_CHOOSE_INDEP = 2;
+  const int CRUSH_RULE_EMIT = 3;
 
   class Rule {
   public:
@@ -255,7 +257,8 @@ namespace crush {
 				int numrep,
 				int type,
 				Bucket *inbucket,
-				vector<int>& outvec) {
+				vector<int>& outvec,
+				bool firstn) {
 	  int off = outvec.size();
 
 	  // for each replica
@@ -263,25 +266,25 @@ namespace crush {
 		int outv = -1;                   // my result
 		
 		// keep trying until we get a non-failed, non-colliding item
-		for (int addr=0; ; addr++) {
-		  
+		int ftotal = 0;
+		while (1) {
 		  // start with the input bucket
 		  Bucket *in = inbucket;
 		  bool bad = false;       // 1 -> no locality in replacement, >1 more locality
 		  
 		  // choose through intervening buckets
-		  int localaddr = 0;
+		  int flocal = 0;
 		  while (1) {
 			// r may be twiddled to (try to) avoid past collisions
 			int r = rep;
 			if (in->is_uniform()) {
 			  // uniform bucket; be careful!
-			  if (numrep >= in->get_size()) {
+			  if (firstn || numrep >= in->get_size()) {
 				// uniform bucket is too small; just walk thru elements
-				r += localaddr+addr;
+				r += ftotal;                    // r' = r + f_total (first n)
 			  } else {
 				// make sure numrep is not a multple of bucket size
-				int add = numrep*(localaddr+addr);
+				int add = numrep*flocal;        // r' = r + n*f_local
 				if (in->get_size() % numrep == 0) {
 				  add += add/in->get_size();         // shift seq once per pass through the bucket
 				}
@@ -289,7 +292,10 @@ namespace crush {
 			  }
 			} else {
 			  // mixed bucket; just make a distinct-ish r sequence
-			  r += numrep * (localaddr+addr);
+			  if (firstn)
+				r += ftotal;          // r' = r + f_total
+			  else
+				r += numrep * flocal; // r' = r + n*f_local
 			}
 			
 			// choose
@@ -315,8 +321,9 @@ namespace crush {
 				  break;
 				}
 			  }
-			  if (collide && localaddr < 3) { // only try locally a few times!
-				localaddr++;
+			  if (collide && flocal < 3) { // only try locally a few times!
+				flocal++;
+				ftotal++;
 				continue;
 				bad = true;
 			  }
@@ -374,8 +381,10 @@ namespace crush {
 		  }
 		  break;
 		  
-		case CRUSH_RULE_CHOOSE:
+		case CRUSH_RULE_CHOOSE_FIRSTN:
+		case CRUSH_RULE_CHOOSE_INDEP:
 		  {
+			const bool firstn = pc->cmd == CRUSH_RULE_CHOOSE_FIRSTN;
 			const int numrep = pc->args[0];
 			const int type = pc->args[1];
 
@@ -392,7 +401,7 @@ namespace crush {
 				 i++) {
 			  assert(buckets.count(*i));
 			  Bucket *b = buckets[*i];
-			  choose(x, numrep, type, b, out);
+			  choose(x, numrep, type, b, out, firstn);
 			} // for inrow
 			
 			// put back into w
