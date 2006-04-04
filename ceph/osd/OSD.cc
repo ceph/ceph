@@ -195,7 +195,7 @@ int OSD::init()
 
   if (g_conf.osd_age_time > 0) {
 	Ager ager(store);
-	ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 2, g_conf.osd_age);
+	ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 5, g_conf.osd_age);
   }
 
   monitor->init();
