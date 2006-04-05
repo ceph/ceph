@@ -197,13 +197,15 @@ int main(int argc, char **argv)
 	   it != clientlist.end();
 	   it++) {
 	int i = *it;
+	syn[i] = new SyntheticClient(client[i]);
+  }
 
+  for (set<int>::iterator it = clientlist.begin();
+	   it != clientlist.end();
+	   it++) {
+	int i = *it;
 
 	client[i]->mount();
-	
-	//cout << "starting synthetic client on rank " << myrank << endl;
-	syn[i] = new SyntheticClient(client[i]);
-
 	syn[i]->start_thread();
 	
 	nclients++;
