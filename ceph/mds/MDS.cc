@@ -2634,8 +2634,8 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
 
   // commit
   commit_request(req, new MClientReply(req, 0), diri,
-				 new EInodeUpdate(newi),
-				 new EDirUpdate(newdir)); 
+				 new EInodeUpdate(newi));
+  //,				 new EDirUpdate(newdir)); 
   
   // schedule a commit for good measure 
   // NOTE: not strictly necessary.. it's in the log!

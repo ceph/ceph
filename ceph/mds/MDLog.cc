@@ -40,11 +40,11 @@ MDLog::MDLog(MDS *m)
 
   waiting_for_read = false;
 
-  logstream = new LogStream(mds, mds->filer, MDS_INO_LOG_OFFSET + mds->get_nodeid());
-
   char name[80];
   sprintf(name, "mds%d.log", mds->get_nodeid());
   logger = new Logger(name, (LogType*)&mdlog_logtype);
+
+  logstream = new LogStream(mds, mds->filer, MDS_INO_LOG_OFFSET + mds->get_nodeid(), logger);
 
   static bool didit = false;
   if (!didit) {
@@ -55,6 +55,8 @@ MDLog::MDLog(MDS *m)
 	mdlog_logtype.add_set("size");
 	mdlog_logtype.add_set("read");
 	mdlog_logtype.add_set("append");
+	mdlog_logtype.add_inc("lsum");
+	mdlog_logtype.add_inc("lnum");
   }
 }
 

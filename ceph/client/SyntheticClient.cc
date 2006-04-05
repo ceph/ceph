@@ -155,6 +155,8 @@ SyntheticClient::SyntheticClient(Client *client)
   this->modes = syn_modes;
   this->iargs = syn_iargs;
   this->sargs = syn_sargs;
+
+  run_start = g_clock.now();
 }
 
 
@@ -187,7 +189,7 @@ string SyntheticClient::get_sarg(int seq)
 
 int SyntheticClient::run()
 { 
-  run_start = g_clock.now();
+  //run_start = g_clock.now();
   run_until = utime_t(0,0);
   dout(5) << "run" << endl;
 

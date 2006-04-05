@@ -756,7 +756,7 @@ int tcp_send(Message *m)
   // HACK osd -> client only
   //if (m->get_source() >= MSG_ADDR_OSD(0) && m->get_source() < MSG_ADDR_CLIENT(0) &&
  // m->get_dest() >= MSG_ADDR_CLIENT(0))
-	dout(DBL) << "sending " << m << " " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) 
+  dout(DBL) << g_clock.now() << " sending " << m << " " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) 
 	  //<< " rank " << rank 
 			<< " sd " << sd << endl;
   
@@ -863,7 +863,7 @@ void *tcp_inthread(void *r)
 	if (!m) break;
 	msg_addr_t who = m->get_source();
 
-	//dout(1) << "inthread got " << m << " from sd " << sd << " who is " << who << endl;
+	dout(20) << g_clock.now() <<  " inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
 	// give to dispatch loop
 	size_t sz = m->get_payload().length();
@@ -977,7 +977,7 @@ void TCPMessenger::dispatch_entry()
 		  logger->inc("dis");
 		}
 	  	
-		dout(4) << "---- '" << m->get_type_name() << 
+		dout(4) << g_clock.now() << " ---- '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
 				<< m 
@@ -1068,10 +1068,10 @@ void* tcp_dispatchthread(void*)
 		Messenger *who = directory[ dest ];
 		directory_lock.Unlock();		  
 		
-		dout(4) << "---- '" << m->get_type_name() << 
+		dout(4) << g_clock.now() << " ---- '" << m->get_type_name() << 
 		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
 		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
-				<< m 
+				<< *m 
 				<< endl;
 		
 		who->dispatch(m);

@@ -160,6 +160,9 @@ OSD::OSD(int id, Messenger *m)
   osd_logtype.add_inc("r_wr");
   osd_logtype.add_inc("r_wrb");
 
+  osd_logtype.add_inc("rlsum");
+  osd_logtype.add_inc("rlnum");
+
   // Thread pool
   {
 	char name[80];
@@ -293,7 +296,8 @@ void OSD::unlock_object(object_t oid)
 void OSD::dispatch(Message *m) 
 {
   // check clock regularly
-  g_clock.now();
+  utime_t now = g_clock.now();
+  //dout(-20) << now << endl;
 
   osd_lock.Lock();
 
@@ -2297,11 +2301,17 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
 							  } else {
 	*/
 	// for real
-	r = store->write(op->get_oid(),
-					 op->get_length(),
-					 op->get_offset(),
-					 bl,
-					 onsafe);
+	if (1) {
+	//if (!op->get_source().is_client()) {   // don't write client?
+	  r = store->write(op->get_oid(),
+					   op->get_length(),
+					   op->get_offset(),
+					   bl,
+					   onsafe);
+	} else {
+	  // don't actually write, but say we did, for network throughput testing...
+	  g_timer.add_event_after(2.0, onsafe);
+	}
   } else {
 	// normal business
 	assert(0);  // no more!
@@ -2384,6 +2394,11 @@ void OSD::put_repop(OSDReplicaOp *repop)
 	dout(10) << "put_repop sending ack on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_ack = true;
+
+	utime_t now = g_clock.now();
+	now -= repop->start;
+	logger->finc("rlsum", now);
+	logger->inc("rlnum", 1);
   }
 
   // done.
@@ -2440,10 +2455,11 @@ void OSD::op_modify(MOSDOp *op)
 		   << " recv " << op->get_lamport_recv_stamp() << endl;
 	assert(nv > ov);
 	
-	dout(12) << opname << " " << hex << oid << dec << " v " << nv << "  off " << op->get_offset() << " len " << op->get_length() << endl;  
+	dout(12) << " " << opname << " " << hex << oid << dec << " v " << nv << "  off " << op->get_offset() << " len " << op->get_length() << endl;  
 	
 	// issue replica writes
 	OSDReplicaOp *repop = new OSDReplicaOp(op, nv, ov);
+	repop->start = g_clock.now();
 	repop->waitfor_ack[0] = whoami;    // will need local ack, safe
 	repop->waitfor_safe[0] = whoami;
 

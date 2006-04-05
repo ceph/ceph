@@ -43,6 +43,8 @@ class OSDReplicaOp {
   map<__uint64_t,int>  waitfor_ack;
   map<__uint64_t,int>  waitfor_safe;
 
+  utime_t   start;
+
   bool cancel;
   bool sent_ack, sent_safe;
 

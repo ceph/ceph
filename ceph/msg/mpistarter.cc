@@ -53,6 +53,7 @@ pair<int,int> mpi_bootstrap_tcp(int& argc, char**& argv)
   tcpmessenger_start_rankserver(ta);
   
   MPI_Barrier(MPI_COMM_WORLD);
+  //g_clock.tare();
   MPI_Finalize();
 
   return pair<int,int>(mpi_rank, mpi_world);

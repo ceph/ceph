@@ -19,6 +19,8 @@
 
 #include "osd/Filer.h"
 
+#include "common/Logger.h"
+
 #include "events/EString.h"
 #include "events/EInodeUpdate.h"
 #include "events/EDirUpdate.h"
@@ -35,10 +37,11 @@ using namespace std;
 
 
 
-LogStream::LogStream(MDS *mds, Filer *filer, inodeno_t log_ino) 
+LogStream::LogStream(MDS *mds, Filer *filer, inodeno_t log_ino, Logger *l) 
 {
   this->mds = mds;
   this->filer = filer;
+  this->logger = l;
   
   // inode
   memset(&log_inode, 0, sizeof(log_inode));
@@ -101,7 +104,7 @@ off_t LogStream::append(LogEvent *e)
 
 void LogStream::_append_2(off_t off)
 {
-  dout(15) << "sync_pos now " << off << " skew " << off % g_conf.mds_log_pad_entry << endl;
+  dout(15) << g_clock.now() << " sync_pos now " << off << " skew " << off % g_conf.mds_log_pad_entry << endl;
   sync_pos = off;
 
   // discard written bufferlist
@@ -109,6 +112,12 @@ void LogStream::_append_2(off_t off)
   delete writing_buffers[off];
   writing_buffers.erase(off);
   
+  utime_t now = g_clock.now();
+  now -= writing_latency[off];
+  writing_latency.erase(off);
+  logger->finc("lsum", (double)now);
+  logger->inc("lnum", 1);
+
   // wake up waiters
   map< off_t, list<Context*> >::iterator it = waiting_for_sync.begin();
   while (it != waiting_for_sync.end()) {
@@ -150,6 +159,8 @@ void LogStream::flush()
 	// tuck writing buffer away until write finishes
 	writing_buffers[append_pos] = new bufferlist;
 	writing_buffers[append_pos]->claim(write_buf);
+
+	writing_latency[append_pos] = g_clock.now();
 
 	// write it
 	mds->filer->write(log_inode, 

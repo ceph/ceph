@@ -21,17 +21,21 @@
 #include "include/buffer.h"
 #include "include/bufferlist.h"
 
+#include "common/Clock.h"
+
 #include <map>
 #include <list>
 
 class LogEvent;
 class Filer;
 class MDS;
+class Logger;
 
 class LogStream {
  protected:
   MDS *mds;
   Filer *filer;
+  Logger *logger;
 
   inode_t log_inode;
 
@@ -42,7 +46,7 @@ class LogStream {
   bufferlist write_buf;  // unwritten (between flush_pos and append_pos)
 
   std::map< off_t, bufferlist* >   writing_buffers;
-
+  std::map< off_t, utime_t >       writing_latency;
 
   // reading
   off_t read_pos;        // abs position in file
@@ -57,7 +61,7 @@ class LogStream {
   bool autoflush;
   
  public:
-  LogStream(MDS *mds, Filer *filer, inodeno_t log_ino);
+  LogStream(MDS *mds, Filer *filer, inodeno_t log_ino, Logger *l);
 
   off_t get_read_pos() { return read_pos; }
   off_t get_append_pos() { return append_pos; }
