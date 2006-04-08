@@ -489,6 +489,16 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  client_logger->finc("lwsum",(double)lat);
 	  client_logger->inc("lwnum");
 	}
+	
+	if (req->get_op() == MDS_OP_STAT) {
+	  client_logger->finc("lstatsum",(double)lat);
+	  client_logger->inc("lstatnum");
+	}
+	else if (req->get_op() == MDS_OP_READDIR) {
+	  client_logger->finc("ldirsum",(double)lat);
+	  client_logger->inc("ldirnum");
+	}
+
   }
 
   client_lock.Lock();  

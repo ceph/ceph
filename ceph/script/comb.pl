@@ -50,6 +50,8 @@ sub load_sum {
 			$s->{$k}->{'lat'} = $s->{$k}->{'lsum'} / $s->{$k}->{'lnum'} if $s->{$k}->{'lnum'} > 0;
 			$s->{$k}->{'latw'} = $s->{$k}->{'lwsum'} / $s->{$k}->{'lwnum'} if $s->{$k}->{'lwnum'} > 0;
 			$s->{$k}->{'latr'} = $s->{$k}->{'lrsum'} / $s->{$k}->{'lrnum'} if $s->{$k}->{'lrnum'} > 0;
+			$s->{$k}->{'statlat'} = $s->{$k}->{'lstatsum'} / $s->{$k}->{'lstatnum'} if $s->{$k}->{'lstatnum'} > 0;
+			$s->{$k}->{'dirlat'} = $s->{$k}->{'ldirsum'} / $s->{$k}->{'ldirnum'} if $s->{$k}->{'ldirnum'} > 0;
 		}
 	}		
 	return $s;

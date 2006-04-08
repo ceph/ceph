@@ -186,6 +186,10 @@ int main(int argc, char **argv)
 	  client_logtype.add_inc("lrnum");
 	  client_logtype.add_inc("trsum");
 	  client_logtype.add_inc("trnum");
+	  client_logtype.add_inc("lstatsum");
+	  client_logtype.add_inc("lstatnum");
+	  client_logtype.add_inc("ldirsum");
+	  client_logtype.add_inc("ldirnum");
 	}
 
 	client[i]->init();
