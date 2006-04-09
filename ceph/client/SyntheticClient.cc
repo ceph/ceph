@@ -281,6 +281,20 @@ int SyntheticClient::run()
 		}
 	  }
 	  break;
+	case SYNCLIENT_MODE_READDIRS:
+	  {
+		string sarg1 = get_sarg(0);
+		int iarg1 = iargs.front();  iargs.pop_front();
+		int iarg2 = iargs.front();  iargs.pop_front();
+		int iarg3 = iargs.front();  iargs.pop_front();
+		if (run_me()) {
+		  dout(2) << "readdirs " << sarg1 << " " << iarg1 << " " << iarg2 << " " << iarg3 << endl;
+		  read_dirs(sarg1.c_str(), iarg1, iarg2, iarg3);
+		}
+	  }
+	  break;
+
+
 	case SYNCLIENT_MODE_MAKEFILES:
 	  {
 		int num = iargs.front();  iargs.pop_front();
@@ -751,24 +765,29 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
 
   // children
   char d[500];
-  dout(3) << "stat_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
+  dout(3) << "read_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
 
   map<string,inode_t*> contents;
   int r = client->getdir(basedir, contents);
-  if (r < 0) dout(0) << "stat_dirs couldn't readdir " << basedir << endl;
+  if (r < 0) {
+	dout(0) << "read_dirs couldn't readdir " << basedir << ", stopping" << endl;
+	return -1;
+  }
+
+  if (depth > 0) 
+	for (int i=0; i<dirs; i++) {
+	  sprintf(d, "%s/dir.%d", basedir, i);
+	  if (read_dirs(d, dirs, files, depth-1) < 0) return -1;
+	}
 
   for (int i=0; i<files; i++) {
 	sprintf(d,"%s/file.%d", basedir, i);
-	client->lstat(d, &st);
+	if (client->lstat(d, &st) < 0) {
+	  dout(2) << "read_dirs failed stat on " << d << ", stopping" << endl;
+	  return -1;
+	}
   }
 
-  if (depth == 0) return 0;
-
-  for (int i=0; i<dirs; i++) {
-	sprintf(d, "%s/dir.%d", basedir, i);
-	read_dirs(d, dirs, files, depth-1);
-  }
-  
   return 0;
 }
 
