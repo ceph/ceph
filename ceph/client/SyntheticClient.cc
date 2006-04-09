@@ -768,7 +768,11 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   dout(3) << "read_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
 
   map<string,inode_t*> contents;
+  utime_t s = g_clock.now();
   int r = client->getdir(basedir, contents);
+  utime_t e = g_clock.now();
+  e -= s;
+  if (client_logger) client_logger->finc("readdir", e);
   if (r < 0) {
 	dout(0) << "read_dirs couldn't readdir " << basedir << ", stopping" << endl;
 	return -1;
@@ -776,10 +780,14 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
 
   for (int i=0; i<files; i++) {
 	sprintf(d,"%s/file.%d", basedir, i);
+	utime_t s = g_clock.now();
 	if (client->lstat(d, &st) < 0) {
 	  dout(2) << "read_dirs failed stat on " << d << ", stopping" << endl;
 	  return -1;
 	}
+	utime_t e = g_clock.now();
+	e -= s;
+	if (client_logger) client_logger->finc("stat", e);
   }
 
   if (depth > 0) 
