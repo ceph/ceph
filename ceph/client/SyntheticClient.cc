@@ -774,12 +774,6 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
 	return -1;
   }
 
-  if (depth > 0) 
-	for (int i=0; i<dirs; i++) {
-	  sprintf(d, "%s/dir.%d", basedir, i);
-	  if (read_dirs(d, dirs, files, depth-1) < 0) return -1;
-	}
-
   for (int i=0; i<files; i++) {
 	sprintf(d,"%s/file.%d", basedir, i);
 	if (client->lstat(d, &st) < 0) {
@@ -787,6 +781,12 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
 	  return -1;
 	}
   }
+
+  if (depth > 0) 
+	for (int i=0; i<dirs; i++) {
+	  sprintf(d, "%s/dir.%d", basedir, i);
+	  if (read_dirs(d, dirs, files, depth-1) < 0) return -1;
+	}
 
   return 0;
 }
