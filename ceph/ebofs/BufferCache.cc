@@ -299,16 +299,20 @@ int ObjectCache::map_read(Onode *on,
 	  // gap.. miss
 	  block_t next = p->first;
 	  vector<Extent> exv;
-	  on->map_extents(cur, MIN(next-cur, left), exv);   // we might consider some prefetch here
+	  on->map_extents(cur, 
+					  MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
+										on->object_blocks-(next-cur))),  
+					  //MIN(next-cur, left),   // no prefetch
+					  exv);
 
-	  for (unsigned i=0; i<exv.size(); i++) {
+	  for (unsigned i=0; i<exv.size() && left>0; i++) {
 		BufferHead *n = new BufferHead(this);
 		n->set_start( cur );
 		n->set_length( exv[i].length );
 		bc->add_bh(n);
 		missing[cur] = n;
-		cur += n->length();
-		left -= n->length();
+		cur += MIN(left, n->length());
+		left -= MIN(left, n->length());
 		dout(20) << "map_read gap " << *n << endl;
 	  }
 	  continue;    // more?

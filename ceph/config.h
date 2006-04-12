@@ -140,6 +140,7 @@ struct md_config_t {
   int   ebofs_cc_size;
   off_t ebofs_bc_size;
   off_t ebofs_bc_max_dirty;
+  unsigned ebofs_max_prefetch;
 
   bool   ebofs_abp_zero;
   size_t ebofs_abp_max_alloc;

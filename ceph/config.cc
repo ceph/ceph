@@ -171,6 +171,7 @@ md_config_t g_conf = {
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB
   ebofs_bc_max_dirty:   (200 *256), // before write() will block
+  ebofs_max_prefetch: 100, // 4k blocks
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
