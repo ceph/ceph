@@ -1213,7 +1213,7 @@ int Ebofs::statfs(struct statfs *buf)
   buf->f_type = EBOFS_MAGIC;             /* type of filesystem */
   buf->f_bsize = 4096;                   /* optimal transfer block size */
   buf->f_blocks = dev.get_num_blocks();  /* total data blocks in file system */
-  buf->f_bfree = get_free_blocks();// + get_limbo_blocks();            /* free blocks in fs */
+  buf->f_bfree = get_free_blocks() + get_limbo_blocks();            /* free blocks in fs */
   buf->f_bavail = get_free_blocks();// + get_limbo_blocks();           /* free blocks avail to non-superuser */
   buf->f_files = nodepool.num_total();   /* total file nodes in file system */
   buf->f_ffree = nodepool.num_free();    /* free file nodes in fs */
