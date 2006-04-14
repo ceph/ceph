@@ -479,6 +479,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   if (client_logger) {
 	utime_t lat = g_clock.now();
 	lat -= start;
+	dout(20) << "lat " << lat << endl;
 	client_logger->finc("lsum",(double)lat);
 	client_logger->inc("lnum");
 

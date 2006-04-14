@@ -156,7 +156,12 @@ class SyntheticClient {
   string get_sarg(int seq);
 
   bool time_to_stop() {
-	if (run_until.sec() && g_clock.now() > run_until) 
+	utime_t now = g_clock.now();
+	if (0) cout << "time_to_stop .. now " << now 
+		 << " until " << run_until 
+		 << " start " << run_start 
+		 << endl;
+	if (run_until.sec() && now > run_until) 
 	  return true;
 	else
 	  return false;

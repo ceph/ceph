@@ -254,16 +254,21 @@ int ObjectCache::map_read(Onode *on,
 	if (p == data.end()) {
 	  // rest is a miss.
 	  vector<Extent> exv;
-	  on->map_extents(cur, left, exv);          // we might consider some prefetch here.
-	  for (unsigned i=0; i<exv.size(); i++) {
+	  //on->map_extents(cur, left, exv);          // we might consider some prefetch here.
+	  on->map_extents(cur, 
+					  MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
+						  on->object_blocks-cur),  
+					  //left,   // no prefetch
+					  exv);
+	  for (unsigned i=0; i<exv.size() && left > 0; i++) {
 		BufferHead *n = new BufferHead(this);
 		n->set_start( cur );
 		n->set_length( exv[i].length );
 		bc->add_bh(n);
 		missing[cur] = n;
-		dout(20) << "map_read miss " << *n << endl;
-		cur += exv[i].length;
-		left -= exv[i].length;
+		dout(20) << "map_read miss " << left << " left, " << *n << endl;
+		cur += MIN(left,exv[i].length);
+		left -= MIN(left,exv[i].length);
 	  }
 	  assert(left == 0);
 	  assert(cur == start+len);
@@ -301,10 +306,10 @@ int ObjectCache::map_read(Onode *on,
 	  vector<Extent> exv;
 	  on->map_extents(cur, 
 					  MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
-										on->object_blocks-(next-cur))),  
+										on->object_blocks-cur)),  
 					  //MIN(next-cur, left),   // no prefetch
 					  exv);
-
+	  
 	  for (unsigned i=0; i<exv.size() && left>0; i++) {
 		BufferHead *n = new BufferHead(this);
 		n->set_start( cur );

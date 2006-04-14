@@ -90,6 +90,7 @@ class ObjectStore {
 								 void *value, size_t size) {return 0;} //= 0;
   virtual int collection_listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
   
+  virtual void sync() {};
   
   
 };

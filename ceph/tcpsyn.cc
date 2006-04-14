@@ -186,29 +186,31 @@ int main(int argc, char **argv)
 	  client_logtype.add_inc("lrnum");
 	  client_logtype.add_inc("trsum");
 	  client_logtype.add_inc("trnum");
+	  client_logtype.add_inc("wrlsum");
+	  client_logtype.add_inc("wrlnum");
 	  client_logtype.add_inc("lstatsum");
 	  client_logtype.add_inc("lstatnum");
 	  client_logtype.add_inc("ldirsum");
 	  client_logtype.add_inc("ldirnum");
+	  client_logtype.add_inc("readdir");
+	  client_logtype.add_inc("stat");
 	}
 
 	client[i]->init();
 	started++;
+
+	syn[i] = new SyntheticClient(client[i]);
   }
+
+  if (!clientlist.empty()) dout(2) << "i have " << clientlist << endl;
 
   int nclients = 0;
   for (set<int>::iterator it = clientlist.begin();
 	   it != clientlist.end();
 	   it++) {
 	int i = *it;
-	syn[i] = new SyntheticClient(client[i]);
-  }
 
-  for (set<int>::iterator it = clientlist.begin();
-	   it != clientlist.end();
-	   it++) {
-	int i = *it;
-
+	//cerr << "starting synthetic client" << i << " on rank " << myrank << endl;
 	client[i]->mount();
 	syn[i]->start_thread();
 	

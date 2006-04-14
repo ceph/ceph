@@ -36,6 +36,7 @@ my %min;
 my %max;
 my %avg;
 my %tcount;
+my $files;
 for (@data) {
 	chomp;
 	my @r = split(/\s+/,$_);
@@ -56,6 +57,7 @@ for (@data) {
 	next if $endtime > 0 && $r > $endtime;
 
 	$tcount{$r}++;
+	$files = $tcount{$r} if $tcount{$r} > $files;
 	#print "$r: @r\n";
 	my $i = 0;
 	while (@r) {
@@ -88,10 +90,11 @@ for my $k (sort {$a <=> $b} keys %sum) {
 }
 
 my $rows = $n || 1;
-my $files = $tcount{$starttime};
+#my $files = $tcount{$starttime};
 my %avgval;
 
 ## devt
+#warn "rows $rows, files $files\n";
 my %avgvalvart;  # std dev of each col avg, over time
 for my $k (keys %avg) {
 	my $av = $avgval{$k} = $avg{$k} / ($rows*$files);
@@ -114,6 +117,8 @@ print join("\t", '#minval', map { $min{$col{$_}} } @c ) . "\n";
 print join("\t", '#maxval', map { $max{$col{$_}} } @c ) . "\n";
 print join("\t", '#rows', map { $rows } @c) . "\n";
 print join("\t", '#files', map { $files } @c) . "\n";
+print join("\t", '#sum', 
+		   map { $avg{$col{$_}} } @c ) . "\n";
 print join("\t", '#avgval', #map int, 
 		   map { $avgval{$col{$_}} } @c ) . "\n";
 #		   map { ($rows*$files) ? ($_ / ($rows*$files)):0 } map { $avg{$col{$_}} } @c ) . "\n";

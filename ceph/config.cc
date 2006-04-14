@@ -474,6 +474,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.ebofs_bc_max_dirty = atoi(args[++i]);
 	else if (strcmp(args[i], "--ebofs_abp_max_alloc") == 0)
 	  g_conf.ebofs_abp_max_alloc = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_max_prefetch") == 0)
+	  g_conf.ebofs_max_prefetch = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--fakestore") == 0) {

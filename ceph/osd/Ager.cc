@@ -148,6 +148,8 @@ void Ager::age(int time,
 	  age_empty(low_water);
 	}
   }
+  store->sync();
+  store->sync();
   dout(1) << "age finished" << endl;
 }  
 

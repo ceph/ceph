@@ -79,6 +79,9 @@ unless (ref $sim) {
 	exit 1;
 }
 
+# prep output
+system "mkdir -p $out" unless -d "$out";
+
 open(W, ">$out/in");
 print W $raw;
 close W;
@@ -88,8 +91,6 @@ delete $sim->{'comb'};
 my %filters;
 my @fulldirs;
 
-# prep output
-system "mkdir -p $out" unless -d "$out";
 
 
 sub reset {
@@ -194,18 +195,24 @@ sub run {
 
 	my $e = './tcpsyn';
 	$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
-	my $c = "$e --mkfs";
+	my $c = "$e";
+	$c .= " --mkfs" unless $h->{'no_mkfs'};
 	$c .= " --$h->{'fs'}";
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
+	$c .= " --syn rw $h->{'rw_mb'} $h->{'rw_size'}" if $h->{'rw'};
+	$c .= " --syn readfile $h->{'readfile_mb'} $h->{'readfile_size'}" if $h->{'readfile'};
 	$c .= " --syn makedirs $h->{'makedirs_dirs'} $h->{'makedirs_files'} $h->{'makedirs_depth'}" if $h->{'makedirs'};
 
 	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
 			   'mds_bal_rep', 'mds_bal_interval', 'mds_bal_max','mds_decay_halflife',
 			   'mds_bal_hash_rd','mds_bal_hash_wr','mds_bal_unhash_rd','mds_bal_unhash_wr',
+			   'mds_cache_size','mds_log_max_len',
 			   'mds_local_osd',
+			   'osd_age_time','osd_age',
+			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
 			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
@@ -220,8 +227,9 @@ sub run {
 	$c .= " --log_name $relout/$keys";
 
 	my $post = "#!/bin/sh
-script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd?? > $fn/sum.osd
+script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd* > $fn/sum.osd
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds
+script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds*.log > $fn/sum.mds.log
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl
 touch $fn/.post
 ";

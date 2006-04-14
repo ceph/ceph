@@ -47,6 +47,7 @@ sub load_sum {
 		# clnode latency?
 		if ($fn =~ /cl/) {
 			$s->{$k}->{'wrlat'} = $s->{$k}->{'wrlsum'} / $s->{$k}->{'wrlnum'} if $s->{$k}->{'wrlnum'} > 0;
+			$s->{$k}->{'rlat'} = $s->{$k}->{'rlsum'} / $s->{$k}->{'rlnum'} if $s->{$k}->{'rlnum'} > 0;
 			$s->{$k}->{'lat'} = $s->{$k}->{'lsum'} / $s->{$k}->{'lnum'} if $s->{$k}->{'lnum'} > 0;
 			$s->{$k}->{'latw'} = $s->{$k}->{'lwsum'} / $s->{$k}->{'lwnum'} if $s->{$k}->{'lwnum'} > 0;
 			$s->{$k}->{'latr'} = $s->{$k}->{'lrsum'} / $s->{$k}->{'lrnum'} if $s->{$k}->{'lrnum'} > 0;
@@ -81,15 +82,22 @@ for my $f (@filt) {
 		my ($x) = $d =~ /$xaxis=(\d+)/;
 		
 		for my $v (@vars) {
-			my ($what, $field) = split(/\./, $v);
+			my ($what, $field) = $v =~ /^(.+)\.([^\.]+)$/;
+			#print "$what $field .. $v\n";
 			my $s = &load_sum("$d/sum.$what");
 			
 			#print "\t$v";
-			push( @{$res{$x}}, $s->{'avgval'}->{$field} );
+			if ($field =~ /^sum=/) {
+				#warn "SUM field $field\n";
+				push( @{$res{$x}}, $s->{'sum'}->{$'} ); #'});
+			} else {
+				#warn "avg field $field\n";
+				push( @{$res{$x}}, $s->{'avgval'}->{$field} );
+			}
 			push( @key, "$f.$field" ) unless $didkey{"$f.$field"};
 			$didkey{"$f.$field"} = 1;
 
-			if (exists $s->{'avgvaldevt'}) {
+			if (0 && exists $s->{'avgvaldevt'}) {
 				push( @{$res{$x}}, $s->{'avgvaldevt'}->{$field} );
 				push( @key, "$f.$field.dev" ) unless $didkey{"$f.$field.dev"};
 				$didkey{"$f.$field.dev"} = 1;
