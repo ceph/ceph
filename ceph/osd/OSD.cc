@@ -70,6 +70,28 @@ char *ebofs_base_path = "./ebofsdev";
 #define ROLE_TYPE(x)   ((x)>0 ? 1:(x))
 
 
+class C_Remount : public Context {
+  OSD *osd;
+public:
+  C_Remount(OSD *o) : osd(o) {}
+  void finish(int) {
+	osd->force_remount();
+  }
+};
+
+void OSD::force_remount()
+{
+  dout(0) << "forcing remount" << endl;
+  osd_lock.Lock();
+  {
+	store->umount();
+	store->mount();
+  }
+  osd_lock.Unlock();
+  dout(0) << "finished remount" << endl;
+}
+
+
 
 // cons/des
 

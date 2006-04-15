@@ -55,6 +55,8 @@ md_config_t g_conf = {
   fakemessenger_serialize: true,
   fake_osdmap_expand: 0,
 
+  osd_remount_at: 0,
+
   kill_after: 0,
 
   tick: 0,
@@ -162,6 +164,7 @@ md_config_t g_conf = {
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
   fakestore_fakeattr: true,   
+  fakestore_dev: 0,
 
   // --- ebofs ---
   ebofs: 0,
@@ -307,6 +310,8 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_remount_at") == 0) 
+	  g_conf.osd_remount_at = atoi(args[++i]);
 	//else if (strcmp(args[i], "--fake_osd_sync") == 0) 
 	//g_conf.fake_osd_sync = atoi(args[++i]);
 
@@ -487,6 +492,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.fakestore_fsync = atoi(args[++i]);
 	else if (strcmp(args[i], "--fakestore_writesync") == 0) 
 	  g_conf.fakestore_writesync = atoi(args[++i]);
+	else if (strcmp(args[i], "--fakestore_dev") == 0) 
+	  g_conf.fakestore_dev = args[++i];
 
 	else if (strcmp(args[i], "--obfs") == 0) {
 	  g_conf.uofs = 1;

@@ -237,6 +237,8 @@ class OSD : public Dispatcher {
 
   // for replication
   void handle_op_reply(class MOSDOpReply *m);
+
+  void force_remount();
 };
 
 #endif

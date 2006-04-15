@@ -28,6 +28,8 @@ struct md_config_t {
 
   int fake_osdmap_expand;
 
+  int osd_remount_at;
+
   int kill_after;
 
   int tick;
@@ -131,6 +133,7 @@ struct md_config_t {
   bool  fakestore_writesync;
   int   fakestore_syncthreads;   // such crap
   bool  fakestore_fakeattr;
+  char  *fakestore_dev;
 
   // ebofs
   int   ebofs;

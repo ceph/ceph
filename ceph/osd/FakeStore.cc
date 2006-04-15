@@ -59,6 +59,12 @@ FakeStore::FakeStore(char *base, int whoami)
 
 int FakeStore::mount() 
 {
+  if (g_conf.fakestore_dev) {
+	char cmd[100];
+	sprintf(cmd,"mount %s", g_conf.fakestore_dev);
+	system(cmd);
+  }
+
   string mydir;
   get_dir(mydir);
 
@@ -92,6 +98,12 @@ int FakeStore::umount()
   //close_collections();
 
   //delete fsync_threadpool;
+
+  if (g_conf.fakestore_dev) {
+	char cmd[100];
+	sprintf(cmd,"umount %s", g_conf.fakestore_dev);
+	system(cmd);
+  }
 
   // nothing
   return 0;
