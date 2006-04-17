@@ -60,6 +60,7 @@ FakeStore::FakeStore(char *base, int whoami)
 int FakeStore::mount() 
 {
   if (g_conf.fakestore_dev) {
+	dout(0) << "mounting" << endl;
 	char cmd[100];
 	sprintf(cmd,"mount %s", g_conf.fakestore_dev);
 	system(cmd);
@@ -101,6 +102,7 @@ int FakeStore::umount()
 
   if (g_conf.fakestore_dev) {
 	char cmd[100];
+	dout(0) << "umounting" << endl;
 	sprintf(cmd,"umount %s", g_conf.fakestore_dev);
 	system(cmd);
   }
@@ -172,6 +174,14 @@ void FakeStore::wipe_dir(string mydir)
 
 int FakeStore::mkfs()
 {
+  if (g_conf.fakestore_dev) {
+	dout(0) << "mounting" << endl;
+	char cmd[100];
+	sprintf(cmd,"mount %s", g_conf.fakestore_dev);
+	system(cmd);
+  }
+
+
   int r = 0;
   struct stat st;
   string mydir;
@@ -213,6 +223,13 @@ int FakeStore::mkfs()
 	  wipe_dir( subdir );
   }
   
+  if (g_conf.fakestore_dev) {
+	char cmd[100];
+	dout(0) << "umounting" << endl;
+	sprintf(cmd,"umount %s", g_conf.fakestore_dev);
+	system(cmd);
+  }
+
   dout(1) << "mkfs done in " << mydir << endl;
 
   return r;

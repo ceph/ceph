@@ -113,7 +113,8 @@ OSD::OSD(int id, Messenger *m)
   pending_ops = 0;
   waiting_for_no_ops = false;
 
-
+  if (g_conf.osd_remount_at) 
+	g_timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
 
 
   // try in this order:
