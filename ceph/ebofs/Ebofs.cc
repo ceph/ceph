@@ -233,7 +233,7 @@ int Ebofs::umount()
   for (hash_map<object_t,Onode*>::iterator i = onode_map.begin();
 	   i != onode_map.end();
 	   i++) {
-	dout(1) << "umount *** leftover: " << i->first << "   " << *(i->second) << endl;
+	dout(0) << "umount *** leftover: " << i->first << "   " << *(i->second) << endl;
   }
 
   // free memory
@@ -242,6 +242,7 @@ int Ebofs::umount()
   dev.close();
 
   dout(1) << "umount done on " << dev.get_device_name() << endl;
+  readonly = unmounting = mounted = false;
   ebofs_lock.Unlock();
   return 0;
 }
