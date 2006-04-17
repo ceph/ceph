@@ -114,6 +114,9 @@ void parse_syn_options(vector<char*>& args)
 	  } else if (strcmp(args[i],"until") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_UNTIL );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"sleepuntil") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_SLEEPUNTIL );
+		syn_iargs.push_back( atoi(args[++i]) );
 	  } else if (strcmp(args[i],"only") == 0) {
 		syn_modes.push_back( SYNCLIENT_MODE_ONLY );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -242,6 +245,19 @@ int SyntheticClient::run()
 		} else {
 		  dout(2) << "until " << iarg1 << " (no limit)" << endl;
 		  run_until = utime_t(0,0);
+		}
+	  }
+	  break;
+
+	case SYNCLIENT_MODE_SLEEPUNTIL:
+	  {
+		int iarg1 = iargs.front();
+		iargs.pop_front();
+		if (iarg1) {
+		  dout(2) << "sleepuntil " << iarg1 << endl;
+		  utime_t at = g_clock.now() - run_start;
+		  if (at.sec() < iarg1) 
+			sleep(iarg1 - at.sec());
 		}
 	  }
 	  break;
