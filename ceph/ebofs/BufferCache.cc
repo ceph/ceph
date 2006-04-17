@@ -256,9 +256,9 @@ int ObjectCache::map_read(Onode *on,
 	  vector<Extent> exv;
 	  //on->map_extents(cur, left, exv);          // we might consider some prefetch here.
 	  on->map_extents(cur, 
-					  MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
-						  on->object_blocks-cur),  
-					  //left,   // no prefetch
+					  //MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
+					  //on->object_blocks-cur),  
+					  left,   // no prefetch
 					  exv);
 	  for (unsigned i=0; i<exv.size() && left > 0; i++) {
 		BufferHead *n = new BufferHead(this);
@@ -305,9 +305,9 @@ int ObjectCache::map_read(Onode *on,
 	  block_t next = p->first;
 	  vector<Extent> exv;
 	  on->map_extents(cur, 
-					  MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
-										on->object_blocks-cur)),  
-					  //MIN(next-cur, left),   // no prefetch
+					  //MIN(next-cur, MIN(left + g_conf.ebofs_max_prefetch,   // prefetch
+					  //				on->object_blocks-cur)),  
+					  MIN(next-cur, left),   // no prefetch
 					  exv);
 	  
 	  for (unsigned i=0; i<exv.size() && left>0; i++) {

@@ -437,6 +437,7 @@ int Ebofs::commit_thread_entry()
   }
   
   dout(10) << "commit_thread finish" << endl;
+  commit_thread_started = false;
   ebofs_lock.Unlock();
   return 0;
 }
@@ -1572,7 +1573,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	for (map<block_t,BufferHead*>::iterator i = missing.begin();
 		 i != missing.end();
 		 i++) {
-	  dout(1) << "attempt_read missing buffer " << *(i->second) << endl;
+	  dout(10) << "attempt_read missing buffer " << *(i->second) << endl;
 	  bc.bh_read(on, i->second);
 	}
 	BufferHead *wait_on = missing.begin()->second;
@@ -1593,7 +1594,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	  if (partials_ok) {
 		// wait on this one
 		Context *c = new C_Cond(will_wait_on);
-		dout(1) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << endl;
+		dout(10) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << endl;
 		i->second->waitfor_read[i->second->start()].push_back(c);
 	  }
 	  partials_ok = false;
