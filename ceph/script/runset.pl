@@ -268,7 +268,15 @@ touch $fn/.post
 		print "$cmd $nobg\n";
 		my $r = undef;
 		unless ($fake) {
+			if ($sim->{'_pre'}) {
+				print "pre: $launch $sim->{'_pre'}\n";
+				system "$launch $sim->{'_pre'}";
+			}
 			$r = system $cmd;
+			if ($sim->{'_post'}) {
+				print "post: $launch $sim->{'_post'}\n";
+				system "$launch $sim->{'_post'}";
+			}
 			if ($r) {
 				print "r = $r\n";
 				#&reset;

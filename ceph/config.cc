@@ -174,7 +174,7 @@ md_config_t g_conf = {
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB
   ebofs_bc_max_dirty:   (200 *256), // before write() will block
-  ebofs_max_prefetch: 100, // 4k blocks
+  ebofs_max_prefetch: 1000, // 4k blocks
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
@@ -304,6 +304,10 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.tcp_skip_rank0 = true;
 	else if (strcmp(args[i], "--tcp_overlay_clients") == 0)
 	  g_conf.tcp_overlay_clients = true;
+	else if (strcmp(args[i], "--tcp_log") == 0)
+	  g_conf.tcp_log = true;
+	else if (strcmp(args[i], "--tcp_multi_out") == 0)
+	  g_conf.tcp_multi_out = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--mkfs") == 0) 
 	  g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
@@ -567,8 +571,11 @@ void parse_config_options(vector<char*>& args)
 	  g_OSD_MDLogLayout.stripe_count = atoi(args[++i]);
 	else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
 	  g_OSD_MDLogLayout.object_size = atoi(args[++i]);
-	else if (strcmp(args[i], "--meta_log_layout_num_rep") == 0) 
+	else if (strcmp(args[i], "--meta_log_layout_num_rep") == 0) {
 	  g_OSD_MDLogLayout.num_rep = atoi(args[++i]);
+	  if (!g_OSD_MDLogLayout.num_rep)
+		g_conf.mds_log = false;
+	}
 
 	else {
 	  nargs.push_back(args[i]);
