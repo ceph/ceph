@@ -22,6 +22,18 @@
 using namespace __gnu_cxx;
 
 
+struct PGSummary {
+  pg_t pgid;
+  version_t version,mtime;
+  version_t last_epoch_started;
+};
+
+struct PGContentSummary {
+  map<object_t,version_t> objects;
+};
+
+
+
 struct PGReplicaInfo {
   int state;
   version_t last_complete;

@@ -37,127 +37,57 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "include/types.h"
-#include "msg/Dispatcher.h"
+
 #include "OSDMap.h"
+#include "Objecter.h"
 
 class Context;
 class Messenger;
 class OSDMap;
 
-/*** types ***/
-typedef __uint64_t tid_t;
-
-//#define FILER_FLAG_TRUNCATE_AFTER_WRITE  1
-
-
-
-/** OSDExtent
- * for mapping (ino, offset, len) to a (list of) byte extents in objects on osds
- */
-class OSDExtent {
- public:
-  int         osd;       // (acting) primary osd
-  object_t    oid;       // object id
-  pg_t        pg;        // placement group
-  size_t      offset, len;   // extent within the object
-  map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
-
-  OSDExtent() : osd(0), oid(0), pg(0), offset(0), len(0) { }
-};
-
-
-
-
-/*** track pending operations ***/
-typedef struct {
-  set<tid_t>           outstanding_ops;
-  size_t               orig_offset;
-  list<OSDExtent>      extents;
-  map<object_t, bufferlist*> read_data;  // bits of data as they come back
-
-  bufferlist          *read_result;      // eventaully condensed into here.
-
-  size_t               bytes_read;
-  Context             *onfinish;
-} PendingOSDRead_t;
-
-typedef struct {
-  set<tid_t>  waitfor_ack;
-  Context    *onack;
-  set<tid_t>  waitfor_safe;
-  Context    *onsafe;
-} PendingOSDOp_t;
-
-typedef struct {
-  size_t     *final_size;
-  size_t     cur_offset;
-  Context    *onfinish;
-} PendingOSDProbe_t;
-
 
 /**** Filer interface ***/
 
-class Filer : public Dispatcher {
-  OSDMap     *osdmap;     // what osds am i dealing with?
-  Messenger  *messenger;
+class Filer { //: public Dispatcher {
+  Objecter   *objecter;
   
-  __uint64_t         last_tid;
-  hash_map<tid_t,PendingOSDRead_t*>  op_reads;
-  hash_map<tid_t,PendingOSDOp_t*>    op_modify;
-
-  hash_map<tid_t,PendingOSDOp_t*>    op_probes;   
-
-  set<int>   pending_mkfs;
-  Context    *waiting_for_mkfs;
-
  public:
-  Filer(Messenger *m, OSDMap *o);
-  ~Filer();
+  Filer(Objecter *o) : objecter(o) {}
+  ~Filer() {}
 
-  void dispatch(Message *m);
+  bool is_active() {
+	return objecter->is_active();
+  }
 
-  bool is_active();
-
-  // osd fun
+  // ** async file interface **
   int read(inode_t& inode,
 		   size_t len, 
-		   size_t offset, 
+		   off_t offset, 
 		   bufferlist *bl,   // ptr to data
-		   Context *c);
-
-  int probe_size(inode_t& inode, 
-				 size_t *size, Context *c);
+		   Context *onfinish) {
+	Objecter::OSDRead *rd = prepare_read(inode, len, offset, bl);
+	return objecter->readx(rd, onfinish);
+  }
 
   int write(inode_t& inode,
 			size_t len, 
-			size_t offset, 
+			off_t offset, 
 			bufferlist& bl,
 			int flags, 
 			Context *onack,
-			Context *onsafe);
-
-  int remove(inode_t& inode,
-			 size_t old_size,
-			 Context *onack,
-			 Context *onsafe) {
-	return truncate(inode, 0, old_size, onack, onsafe);
+			Context *oncommit) {
+	Objecter::OSDWrite *wr = prepare_write(inode, len, offset, bl);
+	return objecter->writex(wr, onack, oncommit);
   }
-  int truncate(inode_t& ino, 
-			   size_t new_size, size_t old_size, 
-			   Context *onack,
-			   Context *onsafe);
 
-  //int zero(inodeno_t ino, size_t len, size_t offset, Context *c);   
-
-  int mkfs(Context *c);
-  void handle_osd_mkfs_ack(Message *m);
-
-  void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_read_reply(class MOSDOpReply *m);
-  void handle_osd_modify_reply(class MOSDOpReply *m);
-
-  void handle_osd_map(class MOSDMap *m);
-  
+  int zero(inode_t& inode,
+		   size_t len,
+		   off_t offset,
+		   Context *onack,
+		   Context *oncommit) {
+	Objecter::OSDZero *z = prepare_zero(inode, len, offset);
+	return objecter->zerox(z, onack, oncommit);
+  }
 
 
   /***** mapping *****/
@@ -177,9 +107,37 @@ class Filer : public Dispatcher {
 	 (byte ranges in objects on (primary) osds) */
   void file_to_extents(inode_t inode,
 					   size_t len,
-					   size_t offset,
-					   list<OSDExtent>& extents);
+					   off_t offset,
+					   list<ObjectExtent>& extents);
   
+  Objecter::OSDRead*
+  prepare_read(inode_t& inode,
+			   size_t len, 
+			   off_t offset, 
+			   bufferlist *bl) {  // result goes here
+	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+	file_to_extents(inode, len, offset, rd->extents);
+	return rd;
+  }
+  
+  Objecter::OSDWrite*
+  prepare_write(inode_t& inode,
+				size_t len, 
+				off_t offset, 
+				bufferlist& bl) {
+	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+	file_to_extents(inode, len, offset, wr->extents);
+	return wr;
+  }
+
+  Objecter::OSDZero*
+  prepare_zero(inode_t& inode,
+			   size_t len, 
+			   off_t offset) {
+	Objecter::OSDZero *z = new Objecter::OSDZero;
+	file_to_extents(inode, len, offset, z->extents);
+	return z;
+  }
 
 };
 

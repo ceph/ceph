@@ -20,7 +20,7 @@
 #include "config.h"
 #include "include/Context.h"
 
-#include "msg/Messenger.h"
+//#include "msg/Messenger.h"
 
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "Timer: "
@@ -35,7 +35,7 @@
 Timer      g_timer;
 
 //Context *messenger_kicker = 0;
-Messenger *messenger = 0;
+//Messenger *messenger = 0;
 
 
 
@@ -65,7 +65,7 @@ void Timer::timer_entry()
 		utime_t t = it->first;
 		dout(DBL) << "queueing event(s) scheduled at " << t << endl;
 
-		if (messenger) {
+		/*if (messenger) {
 		  for (multiset<Context*>::iterator cit = it->second.begin();
 			   cit != it->second.end();
 			   cit++) {
@@ -74,6 +74,7 @@ void Timer::timer_entry()
 			num_event--;
 		  }
 		}
+		*/
 
 		//pending[t] = it->second;
 		map< utime_t, multiset<Context*> >::iterator previt = it;
@@ -94,7 +95,7 @@ void Timer::timer_entry()
 			pending.clear();
 		  } else {
 			// give them to the messenger
-			messenger->queue_callbacks(pending);
+			//messenger->queue_callbacks(pending);
 		  }
 		  assert(pending.empty());
 		}
@@ -132,6 +133,7 @@ void Timer::timer_entry()
  * Timer bits
  */
 
+/*
 void Timer::set_messenger(Messenger *m)
 {
   dout(10) << "set messenger " << m << endl;
@@ -142,6 +144,7 @@ void Timer::unset_messenger()
   dout(10) << "unset messenger" << endl;
   messenger = 0;
 }
+*/
 
 void Timer::register_timer()
 {
@@ -154,7 +157,7 @@ void Timer::register_timer()
 		sleep_cond.SignalAll();
 	} else {
 	  dout(DBL) << "register_timer doing nothing; thread is alive but not sleeping" << endl;
-	  // it's probably delivering callbacks to the messenger loop
+	  // it's probably doing callbacks.
 	}
   } else {
 	dout(DBL) << "register_timer starting thread" << endl;

@@ -33,7 +33,7 @@
 #define OSD_OP_STAT       10
 #define OSD_OP_DELETE     11
 #define OSD_OP_TRUNCATE   12
-#define OSD_OP_ZERORANGE  13
+#define OSD_OP_ZERO       13
 
 #define OSD_OP_IS_REP(x)  ((x) >= 30)
 
@@ -64,7 +64,7 @@ typedef struct {
   version_t old_version;
 
   bool   want_ack;
-  bool   want_safe;
+  bool   want_commit;
 
   size_t _data_len;
 } MOSDOp_st;
@@ -94,7 +94,7 @@ class MOSDOp : public Message {
   const size_t get_offset() { return st.offset; }
 
   const bool wants_ack() { return st.want_ack; }
-  const bool wants_safe() { return st.want_safe; }
+  const bool wants_commit() { return st.want_commit; }
 
   void set_data(bufferlist &d) {
 	data.claim(d);
@@ -123,7 +123,7 @@ class MOSDOp : public Message {
 	this->st.op = op;
 
 	this->st.want_ack = true;
-	this->st.want_safe = true;
+	this->st.want_commit = true;
   }
   MOSDOp() {}
 
@@ -136,7 +136,7 @@ class MOSDOp : public Message {
   void set_old_version(version_t ov) { st.old_version = ov; }
   
   void set_want_ack(bool b) { st.want_ack = b; }
-  void set_want_safe(bool b) { st.want_safe = b; }
+  void set_want_commit(bool b) { st.want_commit = b; }
 
   // marshalling
   virtual void decode_payload() {

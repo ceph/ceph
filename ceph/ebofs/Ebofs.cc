@@ -240,9 +240,9 @@ int Ebofs::umount()
   dout(5) << "umount cleaning up" << endl;
   close_tables();
   dev.close();
+  readonly = unmounting = mounted = false;
 
   dout(1) << "umount done on " << dev.get_device_name() << endl;
-  readonly = unmounting = mounted = false;
   ebofs_lock.Unlock();
   return 0;
 }

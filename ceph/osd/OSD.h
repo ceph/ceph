@@ -41,35 +41,35 @@ class OSDReplicaOp {
   class MOSDOp        *op;
   Mutex                lock;
   map<__uint64_t,int>  waitfor_ack;
-  map<__uint64_t,int>  waitfor_safe;
+  map<__uint64_t,int>  waitfor_commit;
 
   utime_t   start;
 
   bool cancel;
-  bool sent_ack, sent_safe;
+  bool sent_ack, sent_commit;
 
   set<int>         osds;
   version_t        new_version, old_version;
   
   OSDReplicaOp(class MOSDOp *o, version_t nv, version_t ov) : 
 	op(o), 
-	//local_ack(false), local_safe(false), 
+	//local_ack(false), local_commit(false), 
 	cancel(false),
-	sent_ack(false), sent_safe(false),
+	sent_ack(false), sent_commit(false),
 	new_version(nv), old_version(ov)
 	{ }
-  bool can_send_ack() { return !sent_ack && !sent_safe &&   //!cancel && 
+  bool can_send_ack() { return !sent_ack && !sent_commit &&   //!cancel && 
 						  waitfor_ack.empty(); }
-  bool can_send_safe() { return !sent_safe &&    //!cancel && 
-						   waitfor_ack.empty() && waitfor_safe.empty(); }
-  bool can_delete() { return waitfor_ack.empty() && waitfor_safe.empty(); }
+  bool can_send_commit() { return !sent_commit &&    //!cancel && 
+						   waitfor_ack.empty() && waitfor_commit.empty(); }
+  bool can_delete() { return waitfor_ack.empty() && waitfor_commit.empty(); }
 };
 
 inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
 {
-  out << "repop(wfack=" << repop.waitfor_ack << " wfsafe=" << repop.waitfor_safe;
+  out << "repop(wfack=" << repop.waitfor_ack << " wfcommit=" << repop.waitfor_commit;
   //if (repop.local_ack) out << " local_ack";
-  //if (repop.local_safe) out << " local_safe";
+  //if (repop.local_commit) out << " local_commit";
   if (repop.cancel) out << " cancel";
   out << " op=" << *(repop.op);
   out << " repop=" << &repop;
@@ -122,11 +122,11 @@ class OSD : public Dispatcher {
   void wait_for_no_ops();
 
   int apply_write(MOSDOp *op, version_t v,
-				  Context *onsafe = 0); 
+				  Context *oncommit = 0); 
 
 
   void get_repop(OSDReplicaOp*);
-  void put_repop(OSDReplicaOp*);   // will send ack/safe msgs, and delete as necessary.
+  void put_repop(OSDReplicaOp*);   // will send ack/commit msgs, and delete as necessary.
   
   void do_op(class MOSDOp *m);
 
@@ -175,7 +175,7 @@ class OSD : public Dispatcher {
   map<pg_t, map<int, set<__uint64_t> > > replica_pg_osd_tids; // pg -> osd -> tid
   
   void issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd);
-  void handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd);
+  void handle_rep_op_ack(__uint64_t tid, int result, bool commit, int fromosd);
 
   // recovery
   map<__uint64_t,PGPeer*>  pull_ops;   // tid -> PGPeer*
@@ -213,8 +213,8 @@ class OSD : public Dispatcher {
   void op_rep_remove_reply(class MOSDOpReply *op);
   
   void op_rep_modify(class MOSDOp *op);   // write, trucnate, delete
-  void op_rep_modify_safe(class MOSDOp *op);
-  friend class C_OSD_RepModifySafe;
+  void op_rep_modify_commit(class MOSDOp *op);
+  friend class C_OSD_RepModifyCommit;
 
  public:
   OSD(int id, Messenger *m);
@@ -233,7 +233,7 @@ class OSD : public Dispatcher {
   void op_read(class MOSDOp *m);
   void op_stat(class MOSDOp *m);
   void op_modify(class MOSDOp *m);
-  void op_modify_safe(class OSDReplicaOp *repop);
+  void op_modify_commit(class OSDReplicaOp *repop);
 
   // for replication
   void handle_op_reply(class MOSDOpReply *m);

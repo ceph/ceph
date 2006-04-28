@@ -19,6 +19,7 @@
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
+#include "osd/Objecter.h"
 #include "osd/Filer.h"
 
 #include "MDS.h"
@@ -144,7 +145,8 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   // </HACK>
 
-  filer = new Filer(messenger, osdmap);
+  objecter = new Objecter(messenger, osdmap);
+  filer = new Filer(objecter);
 
   mdlog->set_max_events(g_conf.mds_log_max_len);
 
@@ -224,6 +226,7 @@ MDS::~MDS() {
   if (osdmap) { delete osdmap; osdmap = 0; }
 
   if (filer) { delete filer; filer = 0; }
+  if (objecter) { delete objecter; objecter = 0; }
   if (messenger) { delete messenger; messenger = NULL; }
 
   if (logger) { delete logger; logger = 0; }
@@ -407,10 +410,10 @@ void MDS::proc_message(Message *m)
   switch (m->get_type()) {
 	// OSD ===============
   case MSG_OSD_MKFS_ACK:
-	filer->handle_osd_mkfs_ack(m);
+	handle_osd_mkfs_ack(m);
 	return;
   case MSG_OSD_OPREPLY:
-	filer->handle_osd_op_reply((class MOSDOpReply*)m);
+	objecter->handle_osd_op_reply((class MOSDOpReply*)m);
 	return;
   case MSG_OSD_MAP:
 	handle_osd_map((MOSDMap*)m);
@@ -726,6 +729,44 @@ void MDS::handle_osd_map(MOSDMap *m)
 }
 
 
+void MDS::mkfs(Context *onfinish)
+{
+  dout(7) << "mkfs, wiping all OSDs" << endl;
+
+  // send MKFS to osds
+  set<int> ls;
+  osdmap->get_all_osds(ls);
+  
+  for (set<int>::iterator it = ls.begin();
+	   it != ls.end();
+	   it++) {
+	
+	// issue mkfs
+	messenger->send_message(new MOSDMap(osdmap, true),
+							MSG_ADDR_OSD(*it));
+	pending_mkfs.insert(*it);
+  }
+
+  waiting_for_mkfs = onfinish;
+}
+
+void MDS::handle_osd_mkfs_ack(Message *m)
+{
+  int from = MSG_ADDR_NUM(m->get_source());
+
+  assert(pending_mkfs.count(from));
+  pending_mkfs.erase(from);
+
+  if (pending_mkfs.empty()) {
+	dout(2) << "done with mkfs" << endl;
+	waiting_for_mkfs->finish(0);
+	delete waiting_for_mkfs;
+	waiting_for_mkfs = 0;
+  }
+}
+
+
+
 void MDS::handle_client_mount(MClientMount *m)
 {
   // mkfs?  (sorta hack!)
@@ -751,7 +792,7 @@ void MDS::handle_client_mount(MClientMount *m)
 
 	  // init osds too
 	  dout(3) << "wiping osds too" << endl;
-	  filer->mkfs(new C_MDS_Unpause(this));
+	  mkfs(new C_MDS_Unpause(this));
 	  waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
 	  return;
 	  

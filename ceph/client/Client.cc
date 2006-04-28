@@ -32,6 +32,7 @@
 #include "messages/MGenericMessage.h"
 
 #include "osd/Filer.h"
+#include "osd/Objecter.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -76,7 +77,8 @@ Client::Client(Messenger *m)
 
   // osd interfaces
   osdmap = new OSDMap();     // initially blank.. see mount()
-  filer = new Filer(messenger, osdmap);
+  objecter = new Objecter(messenger, osdmap);
+  filer = new Filer(objecter);
 
   // Buffercache
   bc = new Buffercache();
@@ -87,6 +89,7 @@ Client::~Client()
 {
   if (messenger) { delete messenger; messenger = 0; }
   if (filer) { delete filer; filer = 0; }
+  if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
 
   tear_down_bcache();
@@ -518,11 +521,11 @@ void Client::dispatch(Message *m)
   switch (m->get_type()) {
 	// osd
   case MSG_OSD_OPREPLY:
-	filer->handle_osd_op_reply((MOSDOpReply*)m);
+	objecter->handle_osd_op_reply((MOSDOpReply*)m);
 	break;
 
   case MSG_OSD_MAP:
-	filer->handle_osd_map((class MOSDMap*)m);
+	objecter->handle_osd_map((class MOSDMap*)m);
 	break;
 	
 	// client

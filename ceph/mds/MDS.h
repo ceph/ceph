@@ -69,6 +69,7 @@ typedef __uint64_t object_t;
 class filepath;
 
 class OSDMap;
+class Objecter;
 class Filer;
 
 class AnchorTable;
@@ -110,6 +111,7 @@ class MDS : public Dispatcher {
   MDCluster    *mdcluster;
  public:
   OSDMap       *osdmap;
+  Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
   OSDMonitor   *osdmonitor;
@@ -182,6 +184,13 @@ class MDS : public Dispatcher {
   int shutdown_start();
   int shutdown_final();
 
+  // osd fun
+private:
+  set<int>   pending_mkfs;
+  Context    *waiting_for_mkfs;
+public:
+  void mkfs(Context *onfinish);
+  void handle_osd_mkfs_ack(Message *m);
   void bcast_osd_map();
 
   // messages

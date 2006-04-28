@@ -35,7 +35,7 @@ using namespace __gnu_cxx;
  * schedule callbacks
  */
 
-class Messenger;
+//class Messenger;
 
 
 namespace __gnu_cxx {
@@ -120,12 +120,13 @@ class Timer {
 	cancel_timer();
   }
 
+  /*
   void set_messenger_kicker(Context *c);
   void unset_messenger_kicker();
 
   void set_messenger(Messenger *m);
   void unset_messenger();
-
+  */
 
   // schedule events
   void add_event_after(float seconds,

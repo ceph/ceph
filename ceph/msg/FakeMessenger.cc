@@ -99,9 +99,9 @@ void *fakemessenger_thread(void *ptr)
   }
   lock.Unlock();
 
-  cout << "unsetting messenger" << endl;
+  //cout << "unsetting messenger" << endl;
   //g_timer.unset_messenger_kicker();
-  g_timer.unset_messenger();
+  //g_timer.unset_messenger();
   //msgr_callback_kicker = 0;
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
@@ -246,7 +246,7 @@ FakeMessenger::FakeMessenger(msg_addr_t me)  : Messenger(me)
 
   cout << "fakemessenger " << myaddr << " messenger is " << this << endl;
 
-  g_timer.set_messenger(this);
+  //g_timer.set_messenger(this);
 
   qlen = 0;
 

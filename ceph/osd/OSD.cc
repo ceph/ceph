@@ -272,7 +272,7 @@ void OSD::_lock_object(object_t oid)
 	Cond c;
 	dout(15) << "lock_object " << hex << oid << dec << " waiting as " << &c << endl;
 
-	list<Cond*>& ls = object_lock_waiters[oid];   // this is safe, right?
+	list<Cond*>& ls = object_lock_waiters[oid];   // this is commit, right?
 	ls.push_back(&c);
 	
 	while (object_lock.count(oid) ||
@@ -443,7 +443,7 @@ void OSD::handle_op_reply(MOSDOpReply *m)
   case OSD_OP_REP_WRITE:
   case OSD_OP_REP_TRUNCATE:
   case OSD_OP_REP_DELETE:
-	handle_rep_op_ack(m->get_tid(), m->get_result(), m->get_safe(), MSG_ADDR_NUM(m->get_source()));
+	handle_rep_op_ack(m->get_tid(), m->get_result(), m->get_commit(), MSG_ADDR_NUM(m->get_source()));
 	delete m;
 	break;
 
@@ -452,7 +452,7 @@ void OSD::handle_op_reply(MOSDOpReply *m)
   }
 }
 
-void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd)
+void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool commit, int fromosd)
 {
   if (!replica_ops.count(tid)) {
 	dout(7) << "not waiting for tid " << tid << " replica op reply, map must have changed, dropping." << endl;
@@ -463,16 +463,16 @@ void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd)
   MOSDOp *op = repop->op;
   pg_t pgid = op->get_pg();
 
-  dout(7) << "handle_rep_op_ack " << tid << " op " << op << " result " << result << " safe " << safe << " from osd" << fromosd << endl;
+  dout(7) << "handle_rep_op_ack " << tid << " op " << op << " result " << result << " commit " << commit << " from osd" << fromosd << endl;
 
   if (result >= 0) {
 	// success
 	get_repop(repop);
 
-	if (safe) {
-	  // safe
-	  assert(repop->waitfor_safe.count(tid));	  
-	  repop->waitfor_safe.erase(tid);
+	if (commit) {
+	  // commit
+	  assert(repop->waitfor_commit.count(tid));	  
+	  repop->waitfor_commit.erase(tid);
 	  repop->waitfor_ack.erase(tid);
 	  replica_ops.erase(tid);
 	  
@@ -495,7 +495,7 @@ void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd)
 	// forget about this failed attempt..
 	repop->osds.erase(fromosd);
 	repop->waitfor_ack.erase(tid);
-	repop->waitfor_safe.erase(tid);
+	repop->waitfor_commit.erase(tid);
 
 	replica_ops.erase(tid);
 
@@ -523,8 +523,8 @@ void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd)
 		replica_pg_osd_tids[pgid][it->second].erase(it->first);
 		if (replica_pg_osd_tids[pgid][it->second].empty()) replica_pg_osd_tids[pgid].erase(it->second);
 	  }
-	  for (map<__uint64_t,int>::iterator it = repop->waitfor_safe.begin();
-		   it != repop->waitfor_safe.end();
+	  for (map<__uint64_t,int>::iterator it = repop->waitfor_commit.begin();
+		   it != repop->waitfor_commit.end();
 		   it++) {
 		replica_ops.erase(it->first);
 		replica_pg_osd_tids[pgid][it->second].erase(it->first);
@@ -534,13 +534,13 @@ void OSD::handle_rep_op_ack(__uint64_t tid, int result, bool safe, int fromosd)
 
 	  assert(0); // this is all busted
 	  /*
-	  if (repop->local_safe) {
+	  if (repop->local_commit) {
 		repop->lock.Unlock();
 		delete repop;
 	  } else {
 		assert(0);
 		repop->op = 0;      // we're forwarding it
-		repop->cancel = true;     // will get deleted by local safe callback
+		repop->cancel = true;     // will get deleted by local commit callback
 		repop->lock.Unlock();
 		}*/
 	  did = true;
@@ -736,78 +736,9 @@ OSDMap* OSD::get_osd_map(version_t v)
 }
 
 
+
 // ======================================================
 // REPLICATION
-
-
-
-
-// ------------------------------------
-// placement supersets
-/*
-void OSD::get_ps_list(list<pg_t>& ls)
-{
-  list<coll_t>& cl;
-  store->list_collections(cl);
-  
-  for (list<coll_t>::iterator it = cl.begin();
-	   it != cl.end();
-	   it++) {
-	// is it a PS (and not a PG)?
-	if (*it & PG_PS_MASK == *it)
-	  ls.push_back(*it);
-  }
-}
-
-bool OSD::ps_exists(ps_t psid)
-{
-  struct stat st;
-  if (store->collection_stat(psid, &st) == 0) 
-	return true;
-  else
-	return false;
-}
-
-PS* OSD::create_ps(ps_t psid)
-{
-  assert(ps_map.count(psid) == 0);
-  assert(!ps_exists(psid));
-
-  PS *ps = new PS(psid);
-  ps->store(store);
-  ps_map[psid] = ps;
-  return ps;
-}
-
-PS* OSD::open_ps(ps_t psid)
-{
-  // already open?
-  if (ps_map.count(psid)) 
-	return ps_map[psid];
-
-  // exists?
-  if (!ps_exists(psid))
-	return 0;
-
-  // open, stat collection
-  PS *ps = new PS(whoami, psid);
-  ps->fetch(store);
-  ps_map[psid] = ps;
-
-  return ps;
-}
-
-void OSD::close_ps(ps_t psid)
-{
-  assert(0);
-}
-
-void OSD::remove_ps(ps_t psid) 
-{
-  assert(0);
-}
-*/
-
 
 // PG
 
@@ -820,12 +751,6 @@ void OSD::get_pg_list(list<pg_t>& ls)
 bool OSD::pg_exists(pg_t pgid) 
 {
   return store->collection_exists(pgid);
-  /*struct stat st;
-  if (store->collection_stat(pgid, &st) == 0) 
-	return true;
-  else
-	return false;
-  */
 }
 
 PG *OSD::create_pg(pg_t pgid)
@@ -1887,26 +1812,26 @@ void OSD::op_rep_remove_reply(MOSDOpReply *op)
 }
 
 
-class C_OSD_RepModifySafe : public Context {
+class C_OSD_RepModifyCommit : public Context {
 public:
   OSD *osd;
   MOSDOp *op;
-  C_OSD_RepModifySafe(OSD *o, MOSDOp *oo) : osd(o), op(oo) { }
+  C_OSD_RepModifyCommit(OSD *o, MOSDOp *oo) : osd(o), op(oo) { }
   void finish(int r) {
-	osd->op_rep_modify_safe(op);
+	osd->op_rep_modify_commit(op);
   }
 };
 
-void OSD::op_rep_modify_safe(MOSDOp *op)
+void OSD::op_rep_modify_commit(MOSDOp *op)
 {
   // hack: hack_blah is true until 'ack' has been sent.
   if (op->hack_blah) {
-	dout(0) << "got rep_modify_safe before rep_modify applied, waiting" << endl;
-	g_timer.add_event_after(1, new C_OSD_RepModifySafe(this, op));
+	dout(0) << "got rep_modify_commit before rep_modify applied, waiting" << endl;
+	g_timer.add_event_after(1, new C_OSD_RepModifyCommit(this, op));
   } else {
-	dout(10) << "rep_modify_safe on op " << *op << endl;
-	MOSDOpReply *safe = new MOSDOpReply(op, 0, osdmap, true);
-	messenger->send_message(safe, op->get_asker());
+	dout(10) << "rep_modify_commit on op " << *op << endl;
+	MOSDOpReply *commit = new MOSDOpReply(op, 0, osdmap, true);
+	messenger->send_message(commit, op->get_asker());
 	delete op;
   }
 }
@@ -1930,15 +1855,15 @@ void OSD::op_rep_modify(MOSDOp *op)
   dout(12) << "rep_modify in " << *pg << " o " << hex << oid << dec << " v " << op->get_version() << " (i have " << ov << ")" << endl;
   
   int r = 0;
-  Context *onsafe = 0;
+  Context *oncommit = 0;
   
-  op->hack_blah = true;  // hack: make sure any 'safe' goes out _after_ our ack
+  op->hack_blah = true;  // hack: make sure any 'commit' goes out _after_ our ack
   
   if (op->get_op() == OSD_OP_REP_WRITE) {
 	// write
 	assert(op->get_data().length() == op->get_length());
-	onsafe = new C_OSD_RepModifySafe(this, op);
-	r = apply_write(op, op->get_version(), onsafe);
+	oncommit = new C_OSD_RepModifyCommit(this, op);
+	r = apply_write(op, op->get_version(), oncommit);
 	if (ov == 0) pg->add_object(store, oid);
 	
 	logger->inc("r_wr");
@@ -1952,18 +1877,18 @@ void OSD::op_rep_modify(MOSDOp *op)
 	r = store->truncate(oid, op->get_offset());
   } else assert(0);
   
-  if (onsafe) {
+  if (oncommit) {
 	// ack
 	MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap, false);
 	messenger->send_message(ack, op->get_asker());
   } else {
-	// safe, safe
+	// commit, commit
 	MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap, true);
 	messenger->send_message(ack, op->get_asker());
 	delete op;
   }
   
-  op->hack_blah = false;  // hack: make sure any 'safe' goes out _after_ our ack
+  op->hack_blah = false;  // hack: make sure any 'commit' goes out _after_ our ack
 }
 
 
@@ -2302,7 +2227,7 @@ void OSD::op_stat(MOSDOp *op)
 
 // WRITE OPS
 
-int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
+int OSD::apply_write(MOSDOp *op, version_t v, Context *oncommit)
 {
   // take buffers from the message
   bufferlist bl;
@@ -2311,16 +2236,16 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
   
   // write 
   int r = 0;
-  if (onsafe) {
+  if (oncommit) {
 	/*if (g_conf.fake_osd_sync) {
-	  // fake a delayed safe
+	  // fake a delayed commit
 	  r = store->write(op->get_oid(),
 					   op->get_length(),
 					   op->get_offset(),
 					   bl,
 					   false);
 	  g_timer.add_event_after(1.0,
-							  onsafe);
+							  oncommit);
 							  } else {
 	*/
 	// for real
@@ -2330,10 +2255,10 @@ int OSD::apply_write(MOSDOp *op, version_t v, Context *onsafe)
 					   op->get_length(),
 					   op->get_offset(),
 					   bl,
-					   onsafe);
+					   oncommit);
 	} else {
 	  // don't actually write, but say we did, for network throughput testing...
-	  g_timer.add_event_after(2.0, onsafe);
+	  g_timer.add_event_after(2.0, oncommit);
 	}
   } else {
 	// normal business
@@ -2384,7 +2309,7 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
   repop->osds.insert(osd);
 
   repop->waitfor_ack[tid] = osd;
-  repop->waitfor_safe[tid] = osd;
+  repop->waitfor_commit[tid] = osd;
 
   replica_ops[tid] = repop;
   replica_pg_osd_tids[pg->get_pgid()][osd].insert(tid);
@@ -2401,13 +2326,13 @@ void OSD::put_repop(OSDReplicaOp *repop)
 {
   dout(10) << "put_repop " << *repop << endl;
 
-  // safe?
-  if (repop->can_send_safe() &&
-	  repop->op->wants_safe()) {
+  // commit?
+  if (repop->can_send_commit() &&
+	  repop->op->wants_commit()) {
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
-	dout(10) << "put_repop sending safe on " << *repop << " " << reply << endl;
+	dout(10) << "put_repop sending commit on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
-	repop->sent_safe = true;
+	repop->sent_commit = true;
   }
 
   // ack?
@@ -2435,22 +2360,22 @@ void OSD::put_repop(OSDReplicaOp *repop)
   }
 }
 
-class C_OSD_WriteSafe : public Context {
+class C_OSD_WriteCommit : public Context {
 public:
   OSD *osd;
   OSDReplicaOp *repop;
-  C_OSD_WriteSafe(OSD *o, OSDReplicaOp *op) : osd(o), repop(op) {}
+  C_OSD_WriteCommit(OSD *o, OSDReplicaOp *op) : osd(o), repop(op) {}
   void finish(int r) {
-	osd->op_modify_safe(repop);
+	osd->op_modify_commit(repop);
   }
 };
 
-void OSD::op_modify_safe(OSDReplicaOp *repop)
+void OSD::op_modify_commit(OSDReplicaOp *repop)
 {
-  dout(10) << "op_modify_safe on op " << *repop->op << endl;
+  dout(10) << "op_modify_commit on op " << *repop->op << endl;
   get_repop(repop);
-  assert(repop->waitfor_safe.count(0));
-  repop->waitfor_safe.erase(0);
+  assert(repop->waitfor_commit.count(0));
+  repop->waitfor_commit.erase(0);
   put_repop(repop);
 }
 
@@ -2483,8 +2408,8 @@ void OSD::op_modify(MOSDOp *op)
 	// issue replica writes
 	OSDReplicaOp *repop = new OSDReplicaOp(op, nv, ov);
 	repop->start = g_clock.now();
-	repop->waitfor_ack[0] = whoami;    // will need local ack, safe
-	repop->waitfor_safe[0] = whoami;
+	repop->waitfor_ack[0] = whoami;    // will need local ack, commit
+	repop->waitfor_commit[0] = whoami;
 
 	PG *pg;
 	osd_lock.Lock();
@@ -2507,8 +2432,8 @@ void OSD::op_modify(MOSDOp *op)
 	if (op->get_op() == OSD_OP_WRITE) {
 	  // write
 	  assert(op->get_data().length() == op->get_length());
-	  Context *onsafe = new C_OSD_WriteSafe(this, repop);
-	  r = apply_write(op, nv, onsafe);
+	  Context *oncommit = new C_OSD_WriteCommit(this, repop);
+	  r = apply_write(op, nv, oncommit);
 	  
 	  // put new object in proper collection
 	  if (ov == 0) 
@@ -2527,9 +2452,9 @@ void OSD::op_modify(MOSDOp *op)
 	  r = store->truncate(oid, op->get_offset());
 	  get_repop(repop);
 	  assert(repop->waitfor_ack.count(0));
-	  assert(repop->waitfor_safe.count(0));
+	  assert(repop->waitfor_commit.count(0));
 	  repop->waitfor_ack.erase(0);
-	  repop->waitfor_safe.erase(0);
+	  repop->waitfor_commit.erase(0);
 	  put_repop(repop);
 	}
 	else if (op->get_op() == OSD_OP_DELETE) {
@@ -2538,9 +2463,9 @@ void OSD::op_modify(MOSDOp *op)
 	  r = store->remove(oid);
 	  get_repop(repop);
 	  assert(repop->waitfor_ack.count(0));
-	  assert(repop->waitfor_safe.count(0));
+	  assert(repop->waitfor_commit.count(0));
 	  repop->waitfor_ack.erase(0);
-	  repop->waitfor_safe.erase(0);
+	  repop->waitfor_commit.erase(0);
 	  put_repop(repop);
 	}
 	else assert(0);

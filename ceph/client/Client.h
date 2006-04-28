@@ -43,8 +43,11 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#define O_LAZY 01000000
+
 
 class Filer;
+class Objecter;
 
 extern class LogType client_logtype;
 extern class Logger  *client_logger;
@@ -256,6 +259,8 @@ struct Fh {
   int       mds;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
 
+  bool is_lazy() { return mode & O_LAZY; }
+
   Fh() : inode(0), pos(0), mds(0), mode(0) {}
 };
 
@@ -286,7 +291,8 @@ public:
   void hack_sync_write_safe();
 
 protected:
-  Filer                 *filer;  // (non-blocking) osd interface
+  Filer                 *filer;     
+  Objecter              *objecter;  // (non-blocking) osd interface
   
   // cache
   hash_map<inodeno_t, Inode*> inode_map;
@@ -504,6 +510,11 @@ protected:
   int truncate(const char *file, off_t size);
 	//int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
+
+  // hpc extensions
+  int lazyio_propogate(int fd, off_t offset, size_t count);
+  int lazyio_synchronize(int fd, off_t offset, size_t count);
+  //int lstatlite(const char *path, struct statlite *buf);
 
 };
 

@@ -40,7 +40,7 @@ typedef struct {
   
   // reply
   int    result;
-  bool   safe;
+  bool   commit;
   size_t length, offset;
   size_t object_size;
   version_t version;
@@ -59,7 +59,7 @@ class MOSDOpReply : public Message {
   long     get_tid() { return st.tid; }
   object_t get_oid() { return st.oid; }
   int      get_op()  { return st.op; }
-  bool     get_safe() { return st.safe; }
+  bool     get_commit() { return st.commit; }
   
   int    get_result() { return st.result; }
   size_t get_length() { return st.length; }
@@ -92,7 +92,7 @@ class MOSDOpReply : public Message {
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid()          { return st.pcid; }
 
-  MOSDOpReply(MOSDOp *req, int result, OSDMap *oc, bool safe) :
+  MOSDOpReply(MOSDOp *req, int result, OSDMap *oc, bool commit) :
 	Message(MSG_OSD_OPREPLY) {
 	memset(&st, 0, sizeof(st));
 	this->st.pcid = req->st.pcid;
@@ -101,7 +101,7 @@ class MOSDOpReply : public Message {
 	this->st.oid = req->st.oid;
 	this->st.op = req->st.op;
 	this->st.result = result;
-	this->st.safe = safe;
+	this->st.commit = commit;
 
 	this->st.length = req->st.length;   // speculative... OSD should ensure these are correct
 	this->st.offset = req->st.offset;
