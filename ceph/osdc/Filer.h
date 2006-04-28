@@ -44,29 +44,36 @@ using namespace __gnu_cxx;
 class Context;
 class Messenger;
 class OSDMap;
+class ObjectCacher;
 
 
 /**** Filer interface ***/
 
 class Filer { //: public Dispatcher {
   Objecter   *objecter;
+  ObjectCacher *oc;
   
  public:
-  Filer(Objecter *o) : objecter(o) {}
+  Filer(Objecter *o, ObjectCacher *c=0) : objecter(o), oc(c) {}
   ~Filer() {}
 
   bool is_active() {
-	return objecter->is_active();
+	return objecter->is_active(); // || (oc && oc->is_active());
   }
 
-  // ** async file interface **
+  /*** async file interface ***/
   int read(inode_t& inode,
 		   size_t len, 
 		   off_t offset, 
 		   bufferlist *bl,   // ptr to data
 		   Context *onfinish) {
 	Objecter::OSDRead *rd = prepare_read(inode, len, offset, bl);
-	return objecter->readx(rd, onfinish);
+	if (oc == 0) {
+	  return objecter->readx(rd, onfinish);
+	} else {
+	  // use cache
+	  return 0;
+	}
   }
 
   int write(inode_t& inode,
@@ -77,7 +84,12 @@ class Filer { //: public Dispatcher {
 			Context *onack,
 			Context *oncommit) {
 	Objecter::OSDWrite *wr = prepare_write(inode, len, offset, bl);
-	return objecter->writex(wr, onack, oncommit);
+	if (oc == 0) {
+	  return objecter->writex(wr, onack, oncommit);
+	} else {
+	  // use cache
+	  return 0;
+	}
   }
 
   int zero(inode_t& inode,
@@ -86,8 +98,34 @@ class Filer { //: public Dispatcher {
 		   Context *onack,
 		   Context *oncommit) {
 	Objecter::OSDZero *z = prepare_zero(inode, len, offset);
-	return objecter->zerox(z, onack, oncommit);
+	if (oc == 0) {
+	  return objecter->zerox(z, onack, oncommit);
+	} else {
+	  // mds should never do this, and clients don't do zero().
+	  assert(0);
+	  return 0;
+	}
   }
+
+
+  /*** sync+blocking file interface ***/
+  
+  int atomic_sync_read(inode_t& inode,
+					   size_t len, off_t offset,
+					   bufferlist& bl) {
+	return 0;
+  }
+
+  int atomic_sync_write(inode_t& inode,
+						size_t len, off_t offset,
+						bufferlist& bl,
+						Context *oncommit) {
+	return 0;
+  }
+
+
+
+
 
 
   /***** mapping *****/
