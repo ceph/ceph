@@ -49,18 +49,17 @@ class ObjectCacher {
 };
 
 
-
-// sync write (relaxed consistency, bypass cache)
-Filer->prepare_write();
-Objecter->writex(...);         // make async call
-cond.Wait();                   // wait for ack
-
+/*
 // sync write (correct)
-Filer->prepare_write();
-ObjectCache->atomic_sync_writex(...);  // blocks until sync write happens, or i get write locks
+Filer->atomic_sync_write();
+   map
+   ObjectCache->atomic_sync_writex(...);  // blocks until sync write happens, or i get write locks
 
 // async write
-Filer->prepare_write();
-ObjectCache->writex(...);      // non-blocking.  update cache.
+Filer->write();
+   map
+   ObjectCache->writex(...);      // non-blocking.  update cache.
  or
-Objecter->writex(...);         // non-blocking.  don't update cache.
+   map
+   Objecter->writex(...);         // non-blocking.  no cache.  (MDS)
+*/

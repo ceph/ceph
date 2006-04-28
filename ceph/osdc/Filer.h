@@ -49,7 +49,7 @@ class ObjectCacher;
 
 /**** Filer interface ***/
 
-class Filer { //: public Dispatcher {
+class Filer {
   Objecter   *objecter;
   ObjectCacher *oc;
   
@@ -67,13 +67,16 @@ class Filer { //: public Dispatcher {
 		   off_t offset, 
 		   bufferlist *bl,   // ptr to data
 		   Context *onfinish) {
-	Objecter::OSDRead *rd = prepare_read(inode, len, offset, bl);
-	if (oc == 0) {
+	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+	file_to_extents(inode, len, offset, rd->extents);
+
+	// cacheless async?
+	if (oc == 0) 
 	  return objecter->readx(rd, onfinish);
-	} else {
-	  // use cache
-	  return 0;
-	}
+
+	// write me
+
+	return 0;
   }
 
   int write(inode_t& inode,
@@ -83,13 +86,16 @@ class Filer { //: public Dispatcher {
 			int flags, 
 			Context *onack,
 			Context *oncommit) {
-	Objecter::OSDWrite *wr = prepare_write(inode, len, offset, bl);
-	if (oc == 0) {
+	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+	file_to_extents(inode, len, offset, wr->extents);
+
+	// cacheles async?
+	if (oc == 0) 
 	  return objecter->writex(wr, onack, oncommit);
-	} else {
-	  // use cache
-	  return 0;
-	}
+
+	// write me
+
+	return 0;
   }
 
   int zero(inode_t& inode,
@@ -97,15 +103,18 @@ class Filer { //: public Dispatcher {
 		   off_t offset,
 		   Context *onack,
 		   Context *oncommit) {
-	Objecter::OSDZero *z = prepare_zero(inode, len, offset);
-	if (oc == 0) {
+	Objecter::OSDZero *z = new Objecter::OSDZero;
+	file_to_extents(inode, len, offset, z->extents);
+
+	// cacheless async?
+	if (oc == 0) 
 	  return objecter->zerox(z, onack, oncommit);
-	} else {
-	  // mds should never do this, and clients don't do zero().
-	  assert(0);
-	  return 0;
-	}
+
+	// actually: mds should never do this, and clients don't do zero().
+	assert(0);
+	return 0;
   }
+
 
 
   /*** sync+blocking file interface ***/
@@ -113,6 +122,10 @@ class Filer { //: public Dispatcher {
   int atomic_sync_read(inode_t& inode,
 					   size_t len, off_t offset,
 					   bufferlist& bl) {
+	assert(oc);
+
+	// write me
+
 	return 0;
   }
 
@@ -120,6 +133,10 @@ class Filer { //: public Dispatcher {
 						size_t len, off_t offset,
 						bufferlist& bl,
 						Context *oncommit) {
+	assert(oc);
+
+	// write me
+
 	return 0;
   }
 
@@ -148,35 +165,6 @@ class Filer { //: public Dispatcher {
 					   off_t offset,
 					   list<ObjectExtent>& extents);
   
-  Objecter::OSDRead*
-  prepare_read(inode_t& inode,
-			   size_t len, 
-			   off_t offset, 
-			   bufferlist *bl) {  // result goes here
-	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-	file_to_extents(inode, len, offset, rd->extents);
-	return rd;
-  }
-  
-  Objecter::OSDWrite*
-  prepare_write(inode_t& inode,
-				size_t len, 
-				off_t offset, 
-				bufferlist& bl) {
-	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-	file_to_extents(inode, len, offset, wr->extents);
-	return wr;
-  }
-
-  Objecter::OSDZero*
-  prepare_zero(inode_t& inode,
-			   size_t len, 
-			   off_t offset) {
-	Objecter::OSDZero *z = new Objecter::OSDZero;
-	file_to_extents(inode, len, offset, z->extents);
-	return z;
-  }
-
 };
 
 
