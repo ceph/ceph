@@ -53,6 +53,7 @@ COMMON_OBJS= \
 	msg/Dispatcher.o\
 	msg/HostMonitor.o\
 	osd/Filer.o\
+	osd/ObjectCacher.o\
 	osd/Objecter.o\
 	osd/OSDMap.o\
 	mds/MDCluster.o\

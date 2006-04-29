@@ -20,8 +20,6 @@
 #include "config.h"
 #include "include/Context.h"
 
-//#include "msg/Messenger.h"
-
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << "Timer: "
 
@@ -33,10 +31,6 @@
 
 // single global instance
 Timer      g_timer;
-
-//Context *messenger_kicker = 0;
-//Messenger *messenger = 0;
-
 
 
 /**** thread solution *****/
@@ -65,18 +59,14 @@ void Timer::timer_entry()
 		utime_t t = it->first;
 		dout(DBL) << "queueing event(s) scheduled at " << t << endl;
 
-		/*if (messenger) {
-		  for (multiset<Context*>::iterator cit = it->second.begin();
-			   cit != it->second.end();
-			   cit++) {
-			pending.push_back(*cit);
-			event_times.erase(*cit);
-			num_event--;
-		  }
+		for (multiset<Context*>::iterator cit = it->second.begin();
+			 cit != it->second.end();
+			 cit++) {
+		  pending.push_back(*cit);
+		  event_times.erase(*cit);
+		  num_event--;
 		}
-		*/
 
-		//pending[t] = it->second;
 		map< utime_t, multiset<Context*> >::iterator previt = it;
 		it++;
 		scheduled.erase(previt);
@@ -86,17 +76,14 @@ void Timer::timer_entry()
 		sleeping = false;
 		lock.Unlock();
 		{ // make sure we're not holding any locks while we do callbacks (or talk to the messenger)
-		  if (1) {
-			// make the callbacks myself.
-			for (list<Context*>::iterator cit = pending.begin();
-				 cit != pending.end();
-				 cit++) 
-			  (*cit)->finish(0);
-			pending.clear();
-		  } else {
-			// give them to the messenger
-			//messenger->queue_callbacks(pending);
+		  // make the callbacks myself.
+		  for (list<Context*>::iterator cit = pending.begin();
+			   cit != pending.end();
+			   cit++) {
+			dout(DBL) << "doing callback " << *cit << endl;
+			(*cit)->finish(0);
 		  }
+		  pending.clear();
 		  assert(pending.empty());
 		}
 		lock.Lock();
@@ -132,19 +119,6 @@ void Timer::timer_entry()
 /**
  * Timer bits
  */
-
-/*
-void Timer::set_messenger(Messenger *m)
-{
-  dout(10) << "set messenger " << m << endl;
-  messenger = m;
-}
-void Timer::unset_messenger()
-{
-  dout(10) << "unset messenger" << endl;
-  messenger = 0;
-}
-*/
 
 void Timer::register_timer()
 {

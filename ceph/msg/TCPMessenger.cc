@@ -1268,7 +1268,7 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) :
 
   // register to execute timer events
   //g_timer.set_messenger_kicker(new C_TCPKicker());
-  g_timer.set_messenger(this);
+  //  g_timer.set_messenger(this);
 }
 
 
@@ -1365,7 +1365,7 @@ int TCPMessenger::shutdown()
 	//pthread_t whoami = pthread_self();
 	
 	// no more timer events
-	g_timer.unset_messenger();
+	//g_timer.unset_messenger();
 	
 	// close incoming sockets
 	//void *r;
