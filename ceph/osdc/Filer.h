@@ -72,7 +72,7 @@ class Filer {
 	file_to_extents(inode, len, offset, rd->extents);
 
 	// cacheless async?
-	if (1 || oc == 0) 
+	if (oc == 0) 
 	  return objecter->readx(rd, onfinish);
 
 	// use cache
@@ -91,7 +91,7 @@ class Filer {
 	file_to_extents(inode, len, offset, wr->extents);
 
 	// cacheles async?
-	if (1 || oc == 0) 
+	if (oc == 0) 
 	  return objecter->writex(wr, onack, oncommit);
 
 	// use cache

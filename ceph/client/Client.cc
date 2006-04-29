@@ -78,7 +78,8 @@ Client::Client(Messenger *m)
   // osd interfaces
   osdmap = new OSDMap();     // initially blank.. see mount()
   objecter = new Objecter(messenger, osdmap);
-  filer = new Filer(objecter);
+  objectcacher = new ObjectCacher(objecter);
+  filer = new Filer(objecter); //, objectcacher);
 
   // Buffercache
   bc = new Buffercache();

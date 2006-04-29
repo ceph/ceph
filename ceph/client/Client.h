@@ -48,6 +48,7 @@ using namespace __gnu_cxx;
 
 class Filer;
 class Objecter;
+class ObjectCacher;
 
 extern class LogType client_logtype;
 extern class Logger  *client_logger;
@@ -292,7 +293,8 @@ public:
 
 protected:
   Filer                 *filer;     
-  Objecter              *objecter;  // (non-blocking) osd interface
+  ObjectCacher          *objectcacher;
+  Objecter              *objecter;     // (non-blocking) osd interface
   
   // cache
   hash_map<inodeno_t, Inode*> inode_map;

@@ -14,12 +14,10 @@ class Objecter::OSDWrite;
 
 class ObjectCacher {
  private:
-  Objecter *objecter;
-  
   // ******* Object *********
   class Object {
+
   public:
-	
 	// ******* Object::BufferHead *********
 	class BufferHead : public LRUObject {
 	public:
@@ -30,17 +28,40 @@ class ObjectCacher {
 	  static const int STATE_RX = 3;
 	  static const int STATE_TX = 4;
 	  
+	private:
 	  // my fields
 	  int state;
 	  int ref;
+	  struct {
+		off_t start, length;   // bh extent in object
+	  } ex;
 
-	  version_t version;      // version of object (if non-zero)
+	  version_t version;      // version of cached object (if non-zero)
+
+	public:
 	  bufferlist  bl;
 
-	  map<size_t, list<Context*> > waitfor_read;
+	  map<off_t, list<Context*> > waitfor_read;
 
-	  size_t length() { return bl.length(); }
+	public:
+	  // cons
+	  BufferHead() : 
+		state(STATE_MISSING),
+		ref(0),
+		version(0) {}
 
+	  // extent
+	  off_t start() { return ex.start; }
+	  void set_start(off_t s) { ex.start = s; }
+	  off_t length() { return ex.length; }
+	  void set_length(off_t l) { ex.length = l; }
+	  off_t end() { return ex.start + ex.length; }
+	  off_t last() { return end() - 1; }
+
+	  // version
+	  version_t get_version() { return version; }
+	  void set_version(version_t v) { version = v; }
+	  
 	  // states
 	  void set_state(int s) {
 		if (s == STATE_RX || s == STATE_TX) get();
@@ -67,28 +88,77 @@ class ObjectCacher {
 		--ref;
 		return ref;
 	  }
-
-	  BufferHead() : 
-		state(STATE_MISSING),
-		ref(0),
-		version(0) {}
 	};
 
+  private:
 	// ObjectCacher::Object fields
 	object_t  oid;
 	inodeno_t ino;
 
-	map<size_t, BufferHead*>     bh_map;
+  public:
+	map<off_t, BufferHead*>     data;
 
-	Object(object_t o, inodeno_t i) : oid(o), ino(i) {}
+	// lock
+	static const int LOCK_NONE = 0;
+	static const int LOCK_WRLOCK = 1;
+	static const int LOCK_RDLOCK = 2;
+	int lock_state;
+
+  public:
+	Object(object_t o, inodeno_t i) : 
+	  oid(o), ino(i), 
+	  lock_state(LOCK_NONE) 
+	  {}
+
+	object_t get_oid() { return oid; }
+	inodeno_t get_ino() { return ino; }
+
+
+	// bh
+	void add_bh(BufferHead *bh) {
+	  // add to my map
+	  assert(data.count(bh->start()) == 0);
+	  
+	  if (0) {  // sanity check     FIXME DEBUG
+		//cout << "add_bh " << bh->start() << "~" << bh->length() << endl;
+		map<off_t,BufferHead*>::iterator p = data.lower_bound(bh->start());
+		if (p != data.end()) {
+		  //cout << " after " << *p->second << endl;
+		  //cout << " after starts at " << p->first << endl;
+		  assert(p->first >= bh->end());
+		}
+		if (p != data.begin()) {
+		  p--;
+		  //cout << " before starts at " << p->second->start() 
+		  //<< " and ends at " << p->second->end() << endl;
+		  //cout << " before " << *p->second << endl;
+		  assert(p->second->end() <= bh->start());
+		}
+	  }
+
+	  data[bh->start()] = bh;
+	}
+	void remove_bh(BufferHead *bh) {
+	  assert(data.count(bh->start()));
+	  data.erase(bh->start());
+	}
+	bool is_empty() { return data.empty(); }
+
+	// mid-level
+	BufferHead *split(BufferHead *bh, off_t off);
+	int map_read(Objecter::OSDRead *rd);
+	int map_write(Objecter::OSDWrite *wr);
   };
 
   // ObjectCacher fields
+ private:
+  Objecter *objecter;
+
   hash_map<object_t, Object*> objects;
+  hash_map<inodeno_t, set<Object*> > objects_by_ino;
 
-  set<Object::BufferHead*> dirty_bh;
+  set<Object::BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
-
 
   // bh stats
   Cond  stat_cond;
@@ -98,7 +168,6 @@ class ObjectCacher {
   off_t stat_dirty;
   off_t stat_rx;
   off_t stat_tx;
-  off_t stat_partial;
   off_t stat_missing;
 
   void bh_stat_add(Object::BufferHead *bh) {
@@ -124,7 +193,6 @@ class ObjectCacher {
   off_t get_stat_rx() { return stat_rx; }
   off_t get_stat_dirty() { return stat_dirty; }
   off_t get_stat_clean() { return stat_clean; }
-  off_t get_stat_partial() { return stat_partial; }
 
   // bh states
   void bh_set_state(Object::BufferHead *bh, int s) {
@@ -159,13 +227,18 @@ class ObjectCacher {
 	//bh->set_dirty_stamp(g_clock.now());
   };
 
+  // io
+  void bh_read(Object *ob, Object::BufferHead *bh);
+  void bh_write(Object *ob, Object::BufferHead *bh);
 
-
-
-  int map_read(Objecter::OSDRead *rd);
-  int map_write(Objecter::OSDWrite *wr);
 
  public:
+  ObjectCacher(Objecter *o) : 
+	objecter(o),
+	stat_waiter(0),
+	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0)
+	{}
+
   // blocking.  async.
   int readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish);
   int writex(Objecter::OSDWrite *wr, inodeno_t ino, Context *onack, Context *oncommit);
