@@ -437,14 +437,13 @@ protected:
 
   
   // -- buffer cache --
-  class Buffercache *bc;
-  
-  void flush_buffers(int ttl, off_t dirty_size);     // flush dirty buffers
-  void trim_bcache();
-  void flush_inode_buffers(Inode *in);     // flush buffered writes
-  void release_inode_buffers(Inode *in);   // release cached reads
-  void tear_down_bcache();
-		
+  void flush_inode_buffers(Inode *in) {     // flush buffered writes
+	// write me
+  }
+  void release_inode_buffers(Inode *in) {   // release cached reads
+	// write me
+  }
+  		
 
   // friends
   friend class SyntheticClient;

@@ -15,7 +15,6 @@
 
 // ceph stuff
 #include "Client.h"
-#include "Buffercache.h"
 
 // unix-ey fs stuff
 #include <unistd.h>
@@ -80,9 +79,6 @@ Client::Client(Messenger *m)
   objecter = new Objecter(messenger, osdmap);
   objectcacher = new ObjectCacher(objecter);
   filer = new Filer(objecter); //, objectcacher);
-
-  // Buffercache
-  bc = new Buffercache();
 }
 
 
@@ -90,23 +86,13 @@ Client::~Client()
 {
   if (messenger) { delete messenger; messenger = 0; }
   if (filer) { delete filer; filer = 0; }
+  if (objectcacher) { delete objectcacher; objectcacher = 0; }
   if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
 
-  tear_down_bcache();
   tear_down_cache();
 }
 
-void Client::tear_down_bcache()
-{
-  // make sure all buffers are clean
-  while (!bc->dirty_buffers->empty()) {
-    flush_buffers(0, 0);
-    bc->wait_for_inflight(client_lock);
-  }
-  assert(bc->dirty_buffers->empty());
-  delete bc;
-}
 
 void Client::tear_down_cache()
 {
@@ -559,166 +545,6 @@ void Client::dispatch(Message *m)
 }
 
 
-/*
- * flush inode (write cached) buffers to disk
- */
-class C_Client_FileFlushFinish : public Context {
-public:
-  Bufferhead *bh;
-  C_Client_FileFlushFinish(Bufferhead *bh) {
-	this->bh = bh;
-  }
-  void finish(int r) {
-    bh->flush_finish();
-    if (bh->fc->inflight_buffers.empty()) 
-	  bh->fc->wakeup_inflight_waiters();
-  }
-};
-
-
-void Client::flush_inode_buffers(Inode *in)
-{
-  if (!in->inflight_buffers.empty()) {
-    dout(7) << "inflight buffers of sync write, waiting" << endl;
-    Cond cond;
-    in->waitfor_flushed.push_back(&cond);
-	while (!in->inflight_buffers.empty())
-	  cond.Wait(client_lock);
-    dout(7) << "inflight buffers flushed" << endl;
-  } 
-  else if (g_conf.client_bcache &&
-		   !bc->get_fc(in)->dirty_buffers.empty()) {
-    dout(3) << "bc: flush_inode_buffers begins" << endl;
-    Filecache *fc = bc->get_fc(in);
-    assert(!fc->buffer_map.empty());
-    set<Bufferhead*> to_flush;
-    fc->get_dirty(to_flush);
-    //DEBUG
-    //to_flush = fc->dirty_buffers;
-    for (set<Bufferhead*>::iterator it = to_flush.begin();
-         it != to_flush.end();
-         it++) {
-      (*it)->flush_start(); // Note: invalidates dirty_buffer entries!!!
-      C_Client_FileFlushFinish *onfinish = new C_Client_FileFlushFinish(*it);
-      filer->write(in->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, 
-				   NULL, onfinish); // safe
-    }
-    dout(3) << "bc: flush_inode_buffers ends" << endl;
-#if 0    
-    dout(7) << "flush_inode_buffers: dirty buffers, waiting" << endl;
-    fc->wait_for_inflight(client_lock);
-#endif
-  } 
-  else {
-	dout(7) << "no inflight buffers" << endl;
-  }
-}
-
-class C_Client_FlushFinish : public Context {
-public:
-  Bufferhead *bh;
-  C_Client_FlushFinish(Bufferhead *bh) {
-    this->bh = bh;
-  }
-  void finish(int r) {
-    bh->flush_finish();
-    if (bh->bc->inflight_buffers.empty()) 
-	  bh->bc->wakeup_inflight_waiters();
-  }
-};
-
-void Client::flush_buffers(int ttl, off_t dirty_size)
-{
-  // ttl = 0 or dirty_size = 0: flush all
-  if (!bc->dirty_buffers->empty()) {
-    dout(3) << "bc: flush_buffers ttl: " << ttl << " dirty_size: " << dirty_size << endl;
-    set<Bufferhead*> expired;
-    bc->dirty_buffers->get_expired(ttl, dirty_size, expired);
-    if(expired.empty()) dout(3) << "bc: flush_buffers expired.empty()" << endl;
-
-    for (set<Bufferhead*>::iterator it = expired.begin();
-	 it != expired.end();
-	 it++) {
-      (*it)->flush_start();
-      C_Client_FlushFinish *onfinish = new C_Client_FlushFinish(*it);
-      filer->write((*it)->inode->inode, (*it)->bl.length(), (*it)->offset, (*it)->bl, 0, 
-				   NULL, onfinish); // safe
-    }
-#if 0
-    dout(7) << "flush_buffers: dirty buffers, waiting" << endl;
-    assert(!bc->inflight_buffers.empty());
-    bc->wait_for_inflight(client_lock);
-#endif
-  } else {
-	dout(7) << "no dirty buffers" << endl;
-  }
-}
-
-void Client::trim_bcache()
-{
-  if (bc->get_total_size() > g_conf.client_bcache_size) {
-    // need to free buffers 
-    if (bc->get_dirty_size() > 
-        g_conf.client_bcache_hiwater * 
-		g_conf.client_bcache_size / 100LL) {
-      // flush buffers until we have low water mark
-      off_t want_target_size = 
-	g_conf.client_bcache_lowater *
-	g_conf.client_bcache_size / 100LL;
-      dout(3) << "bc: flush_buffers started" << endl;
-      flush_buffers(g_conf.client_bcache_ttl, want_target_size);
-    }
-    // Now reclaim buffers
-    off_t reclaim_size = bc->get_total_size() - 
-      g_conf.client_bcache_size *
-      g_conf.client_bcache_hiwater / 100LL;
-    dout(6) << "bc: trim_bcache: reclaim: " << reclaim_size << endl;
-    while (reclaim_size > 0 && bc->reclaim(reclaim_size) == 0) {
-      // cannot reclaim any buffers: wait for inflight buffers
-      dout(3) << "bc: trim_bcache: waiting for inflight buffers" << endl;
-      assert(!bc->inflight_buffers.empty());
-      bc->wait_for_inflight(client_lock);
-    }
-  }
-}
-      
-                                                                                  
-
-/*
- * release inode (read cached) buffers from memory
- */
-void Client::release_inode_buffers(Inode *in) 
-{
-  dout(7) << "bc: release_inode_buffers ino: " << in->ino() << endl;
-
-  if (!g_conf.client_bcache || !bc->bcache_map.count(in->ino())) return;
-
-  Filecache *fc = bc->get_fc(in);
-  inodeno_t ino = in->ino();
-  if (fc->buffer_map.empty()) return;
-
-  map<off_t, Bufferhead*> to_release = fc->buffer_map;
-  for (map<off_t, Bufferhead*>::iterator it = to_release.begin();
-       it != to_release.end();
-       it++) {
-    Bufferhead *bh = it->second;
-    if (bh->state == BUFHD_STATE_RX || bh->state == BUFHD_STATE_TX) {
-      bh->wait_for_write(client_lock);
-    }
-    if (bh->state == BUFHD_STATE_DIRTY) {
-      bh->dirtybuffers_erase();
-      bh->state = BUFHD_STATE_CLEAN;
-    }
-    bc->decrease_size(bh->length());
-    dout(6) << "bc: release_file: clean_size: " << bc->get_clean_size() <<
-    " dirty_size: " << bc->get_dirty_size() << " rx_size: " <<
-    bc->get_rx_size() << " tx_size: " << bc->get_tx_size() << " age: " << bc->dirty_buffers->get_age() << endl;
-    fc->buffer_map.erase(bh->offset);
-    delete bh;
-  }
-  bc->bcache_map.erase(ino);
-  delete fc;  
-}
 
 
 
@@ -870,20 +696,9 @@ void Client::handle_file_caps(MClientFileCaps *m)
   // flush buffers?
   if (g_conf.client_bcache &&
 	  !(in->file_caps() & CAP_FILE_WRBUFFER)) {
-	Filecache *fc = bc->get_fc(in);
-	if (!fc->is_flushed()) {
-	  if (fc->is_dirty()) {
-		dout(4) << " dirty buffers, flushing+waiting to ack" << endl;
-		flush_inode_buffers(in); 
-	  } else {
-		dout(4) << " inflight buffers, waiting to ack" << endl;
-	  }
-	  
-	  in->get();
-	  fc->add_inflight_waiter(  new C_Client_Flushed(this, in) );
-	  delete m;
-	  return;
-	}
+
+	// **** write me ****
+
   } 
   
   // release all buffers?
@@ -926,14 +741,15 @@ void Client::finish_flush(Inode *in)
 {
   dout(5) << "finish_flush on ino " << in->ino() << endl;
 
-  Filecache *fc = bc->get_fc(in);
+  /*Filecache *fc = bc->get_fc(in);
   assert(!fc->is_dirty() &&
 		 !fc->is_inflight());
+  */
 
   // release all buffers?
   if (!(in->file_caps() & CAP_FILE_RDCACHE)) {
 	dout(5) << "flush_finish releasing all buffers on ino " << hex << in->ino() << dec << endl;
-	release_inode_buffers(in);
+	//release_inode_buffers(in);
   }
   
   if (in->num_rd == 0 && in->num_wr == 0) {
@@ -1054,11 +870,8 @@ int Client::unmount()
 
   // make sure all buffers are clean
   dout(3) << "flushing buffers" << endl;
-  flush_buffers(0, 0);
-  if (!bc->inflight_buffers.empty()) {
-    dout(3) << "flush_buffers: dirty buffers, waiting" << endl;
-    bc->wait_for_inflight(client_lock);
-  }
+
+  // *** WRITE ME ****
 
   // empty lru cache
   lru.lru_set_max(0);
@@ -1803,26 +1616,24 @@ int Client::close(fh_t fh)
   // release caps right away?
   dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
   if (in->num_rd == 0 && in->num_wr == 0) {
-	Filecache *fc = bc->get_fc(in);
-
+	
 	// flush anything?
-	if (fc->is_dirty()) {
-	  dout(10) << "  flushing dirty buffers on " << hex << in->ino() << dec << endl;
-	  flush_inode_buffers(in);
-	}
+	// ** WRITE ME **
+	dout(10) << "  flushing dirty buffers on " << hex << in->ino() << dec << endl;
+	
 
-	if (g_conf.client_bcache && 
+	/*if (g_conf.client_bcache && 
 		(fc->is_dirty() || fc->is_inflight())) {
 	  // flushing.
 	  dout(10) << "  waiting for inflight buffers on " << hex << in->ino() << dec << endl;
 	  in->get();
 	  fc->add_inflight_waiter(  new C_Client_Flushed(this, in) );
-	} else {
+	  } else {*/
 	  // all clean!
-	  dout(10) << "  releasing buffers and caps on " << hex << in->ino() << dec << endl;
+	dout(10) << "  releasing buffers and caps on " << hex << in->ino() << dec << endl;
 	  release_inode_buffers(in);  // free buffers
 	  release_caps(in);        	  // release caps now.
-	}
+	  //}
   }
 
   put_inode( in );
@@ -1878,27 +1689,6 @@ public:
 	*done = true;
     cond->Signal();
     mutex->Unlock();
-  }
-};
-
-class C_Client_MissFinish : public Context {
-public:
-  Bufferhead *bh;
-  Mutex *mutex;
-  int *rvalue;
-  bool finished;
-  C_Client_MissFinish(Bufferhead *bh, Mutex *mutex, int *rvalue) { 
-	this->bh = bh; 
-	this->mutex = mutex;
-	this->rvalue = rvalue;
-	this->finished = false;
-  }
-  void finish(int r) {
-	//mutex->Lock();
-	*rvalue += r;
-	finished = true;
-    bh->miss_finish();
-	//mutex->Unlock();
   }
 };
 
@@ -1974,84 +1764,6 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   else {
 	// buffer cache ON
 
-	// map buffercache 
-	map<off_t, Bufferhead*> hits, rx, tx, hits_tx;
-	map<off_t, Bufferhead*>::iterator it;
-	map<off_t, off_t> holes;
-	map<off_t, off_t>::iterator hole;
-	
-	Filecache *fc = bc->get_fc(in);
-	hits.clear(); rx.clear(); tx.clear(); holes.clear();
-	fc->map_existing(size, offset, hits, rx, tx, holes);  
-	
-	// see whether there are initial buffer that can be read immmediately
-	hits_tx = hits;
-	for (it = tx.begin(); it != tx.end(); it++) hits_tx[it->first] = it->second;
-	if ((rvalue = (int)bc->touch_continuous(hits_tx, size, offset)) > 0) {
-	  // sweet -- we can return stuff immediately
-	  dout(6) << "read bc hit on clean, dirty, or tx  buffer, rvalue: " << rvalue << endl;
-	  rvalue = fc->copy_out(rvalue, offset, buf);
-	  dout(6) << "read bc hit: immediately returning " << rvalue << " bytes" << endl;
-	  assert(rvalue > 0);
-	}
-	assert(!(rvalue >= 0 && rvalue == size) || holes.empty());
-	
-	// issue reads for holes
-	int hole_rvalue = 0; //FIXME: don't really need to track rvalue in MissFinish context
-	for (hole = holes.begin(); hole != holes.end(); hole++) {
-	  dout(6) << "read bc miss" << endl;
-	  off_t hole_offset = hole->first;
-	  off_t hole_size = hole->second;
-	  
-	  // either get "hole" bufferhead or insert new bufferhead without
-	  // allocated buffers (Filer::handle_osd_read_reply allocates them)
-	  Bufferhead *bh;
-	  if (fc->buffer_map.count(hole_offset)) {
-	    // bufferhead represents hole
-	    bh = fc->buffer_map[hole_offset];
-	    assert(bh->is_hole());
-	  } else {
-	    bh = new Bufferhead(in, hole_offset, bc);
-	  }
-	  
-	  // read into the buffercache: when finished transition state from
-	  // rx to clean
-	  bh->miss_start(hole_size);
-	  C_Client_MissFinish *onfinish = new C_Client_MissFinish(bh, &client_lock, &hole_rvalue);	
-	  filer->read(in->inode, hole_size, hole_offset, &(bh->bl), onfinish);
-	  dout(6) << "read bc miss: issued osd read len: " << hole_size << " off: " << hole_offset << endl;
-	}
-	
-	if (rvalue == 0) {
-	  // we need to wait for the first buffer
-	  dout(7) << "read bc miss: waiting for first buffer" << endl;
-	  map<off_t, Bufferhead*>::iterator it = fc->get_buf(offset);
-	  assert(it != fc->buffer_map.end());
-	  Bufferhead *bh = it->second;
-#if 0
-	  Bufferhead *bh;
-	  if (curbuf == fc->buffer_map.end() && fc->buffer_map.count(offset)) {
-		dout(10) << "first buffer is currently read in" << endl;
-		bh = fc->buffer_map[offset];
-	  } else {
-		dout(10) << "first buffer is either hit or inflight" << endl;
-		bh = curbuf->second;  
-	  }
-#endif
-	  if (bh->state == BUFHD_STATE_RX || bh->state == BUFHD_STATE_TX) {
-		dout(10) << "waiting for first buffer" << endl;
-		bh->wait_for_read(client_lock);
-	  }
-	  
-	  // buffer is filled -- see how much we can return
-	  hits.clear(); rx.clear(); tx.clear(); holes.clear();
-	  fc->map_existing(size, offset, hits, rx, tx, holes); // FIXME: overkill
-	  rvalue = (int)bc->touch_continuous(hits, size, offset);
-	  fc->copy_out(rvalue, offset, buf);
-	  dout(7) << "read bc no hit: returned first " << rvalue << " bytes" << endl;
-	  
-	  trim_bcache();
-	}
   }
 
   // done!
@@ -2059,30 +1771,6 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   return rvalue;
 }
 
-// hack.. see async write() below
-class C_Client_WriteBuffer : public Context {
-public:
-  Inode *in;
-  bufferlist *blist;
-  C_Client_WriteBuffer(Inode *in, bufferlist *blist) {
-	this->in = in;
-	this->blist = blist;
-  }
-  void finish(int r) {
-	in->inflight_buffers.erase(blist);
-	delete blist;
-	
-	if (in->inflight_buffers.empty()) {
-	  // wake up flush waiters
-	  for (list<Cond*>::iterator it = in->waitfor_flushed.begin();
-		   it != in->waitfor_flushed.end();
-		   it++) {
-		(*it)->Signal();
-	  }
-	  in->waitfor_flushed.clear();
-	}
-  }
-};
 
 
 /*
@@ -2146,44 +1834,9 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 
   if (g_conf.client_bcache &&	        // buffer cache ON?
 	  (in->file_caps() & CAP_FILE_WRBUFFER)) {   // caps buffered write?
-	// buffered write
-	dout(7) << "buffered/async write" << endl;
 	
-	// map buffercache for writing
-	map<off_t, Bufferhead*> buffers, rx, tx;
-	buffers.clear(); rx.clear(); tx.clear();
-	bc->map_or_alloc(in, size, offset, buffers, rx, tx); 
-	
-	// wait for rx and tx buffers
-	while (!(rx.empty() && tx.empty())) {
-	  if (!rx.empty()) {
-		rx.begin()->second->wait_for_write(client_lock);
-	  } else {
-		tx.begin()->second->wait_for_write(client_lock);
-	  }
-	  buffers.clear(); tx.clear(); rx.clear();
-	  bc->map_or_alloc(in, size, offset, buffers, rx, tx); // FIXME: overkill
-	} 
-	bc->dirty(in, size, offset, buf);
-	
-	trim_bcache();
-	
-	/*
-	  hack for now.. replace this with a real buffer cache
-	  
-	  just copy the buffer, send the write off, and return immediately.  
-	  flush() will block until all outstanding writes complete.
-	*/
-	/* this totally sucks, just do synchronous writes!
-	   bufferlist *blist = new bufferlist;
-	   blist->push_back( new buffer(buf, size, BUFFER_MODE_COPY|BUFFER_MODE_FREE) );
-	   
-	   in->inflight_buffers.insert(blist);
-	   
-	   Context *onfinish = new C_Client_WriteBuffer( in, blist );
-	   filer->write(in->inode, size, offset, *blist, 0, onfinish);
-	*/
-	
+	// ***
+
   } else {
 	// synchronous write
     // FIXME: do not bypass buffercache
@@ -2230,8 +1883,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  dout(20) << " sync write done " << onfinish << endl;
 	}
   }
-
-
 
   // assume success for now.  FIXME.
   off_t totalwritten = size;
@@ -2299,14 +1950,13 @@ int Client::fsync(fh_t fh, bool syncdataonly)
   dout(3) << "fsync fh " << fh << " ino " << hex << in->inode.ino << dec << " syncdataonly " << syncdataonly << endl;
  
   // blocking flush
-  flush_inode_buffers(in);
-  Filecache *fc = bc->get_fc(in);
-  fc->wait_for_inflight(client_lock);
+
+  assert(0);  // WRITE ME
 
   if (syncdataonly &&
 	  (in->file_caps() & CAP_FILE_WR)) {
 	// flush metadata too.. size, mtime
-	// ...
+	// ... WRITE ME ...
   }
 
   client_lock.Unlock();

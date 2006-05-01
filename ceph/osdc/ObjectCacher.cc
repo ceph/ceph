@@ -2,6 +2,14 @@
 #include "ObjectCacher.h"
 #include "Objecter.h"
 
+/*** ObjectCacher::BufferHead ***/
+
+
+/*** ObjectCacher::Object ***/
+
+
+
+/*** ObjectCacher ***/
 
 int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 {
