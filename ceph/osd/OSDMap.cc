@@ -22,12 +22,14 @@
 
 void OSDMap::encode(bufferlist& blist)
 {
-  blist.append((char*)&version, sizeof(version));
+  blist.append((char*)&epoch, sizeof(epoch));
   blist.append((char*)&pg_bits, sizeof(pg_bits));
+  blist.append((char*)&mkfs, sizeof(mkfs));
 
   _encode(osds, blist);
   _encode(down_osds, blist);
-  //_encode(out_osds, blist);
+  _encode(out_osds, blist);
+  _encode(overload_osds, blist);
 
   crush._encode(blist);
 }
@@ -35,14 +37,17 @@ void OSDMap::encode(bufferlist& blist)
 void OSDMap::decode(bufferlist& blist)
 {
   int off = 0;
-  blist.copy(off, sizeof(version), (char*)&version);
-  off += sizeof(version);
+  blist.copy(off, sizeof(epoch), (char*)&epoch);
+  off += sizeof(epoch);
   blist.copy(off, sizeof(pg_bits), (char*)&pg_bits);
   off += sizeof(pg_bits);
+  blist.copy(off, sizeof(mkfs), (char*)&mkfs);
+  off += sizeof(mkfs);
 
   _decode(osds, blist, off);
   _decode(down_osds, blist, off);
-  //_decode(out_osds, blist, off);
+  _decode(out_osds, blist, off);
+  _decode(overload_osds, blist, off);
 
   crush._decode(blist, off);
 }

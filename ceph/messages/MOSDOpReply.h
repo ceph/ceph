@@ -35,6 +35,7 @@ typedef struct {
   long pcid;
 
   object_t oid;
+  pg_t pg;
 
   int op;
   
@@ -45,7 +46,7 @@ typedef struct {
   size_t object_size;
   version_t version;
 
-  __uint64_t _new_map_version;
+  epoch_t _new_map_epoch;
   size_t _data_len, _oc_len;
 } MOSDOpReply_st;
 
@@ -58,6 +59,7 @@ class MOSDOpReply : public Message {
  public:
   long     get_tid() { return st.tid; }
   object_t get_oid() { return st.oid; }
+  pg_t     get_pg() { return st.pg; }
   int      get_op()  { return st.op; }
   bool     get_commit() { return st.commit; }
   
@@ -83,7 +85,7 @@ class MOSDOpReply : public Message {
   }
 
   // osdmap
-  __uint64_t get_map_version() { return st._new_map_version; }
+  epoch_t get_map_epoch() { return st._new_map_epoch; }
   bufferlist& get_osdmap() { 
 	return osdmap;
   }
@@ -99,6 +101,7 @@ class MOSDOpReply : public Message {
 	this->st.tid = req->st.tid;
 
 	this->st.oid = req->st.oid;
+	this->st.pg = req->st.pg;
 	this->st.op = req->st.op;
 	this->st.result = result;
 	this->st.commit = commit;
@@ -109,9 +112,9 @@ class MOSDOpReply : public Message {
 
 	// attach updated cluster spec?
 	if (oc &&
-		req->get_map_version() < oc->get_version()) {
+		req->get_map_epoch() < oc->get_epoch()) {
 	  oc->encode(osdmap);
-	  st._new_map_version = oc->get_version();
+	  st._new_map_epoch = oc->get_epoch();
 	  st._oc_len = osdmap.length();
 	}
   }

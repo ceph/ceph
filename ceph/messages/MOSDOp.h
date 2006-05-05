@@ -17,6 +17,8 @@
 
 #include "msg/Message.h"
 
+#include "osd/OSDMap.h"
+
 /*
  * OSD op
  *
@@ -56,7 +58,7 @@ typedef struct {
   object_t oid;
   pg_t pg;
   int        pg_role;//, rg_nrep;
-  version_t map_version;
+  epoch_t map_epoch;
 
   int op;
   size_t length, offset;
@@ -83,7 +85,7 @@ class MOSDOp : public Message {
 
   const object_t   get_oid() { return st.oid; }
   const pg_t get_pg() { return st.pg; }
-  const version_t  get_map_version() { return st.map_version; }
+  const epoch_t  get_map_epoch() { return st.map_epoch; }
 
   const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
   const version_t  get_version() { return st.version; }
@@ -110,7 +112,7 @@ class MOSDOp : public Message {
   long get_pcid() { return st.pcid; }
 
   MOSDOp(long tid, msg_addr_t asker, 
-		 object_t oid, pg_t pg, version_t mapversion, int op) :
+		 object_t oid, pg_t pg, epoch_t mapepoch, int op) :
 	Message(MSG_OSD_OP) {
 	memset(&st, 0, sizeof(st));
 	this->st.tid = tid;
@@ -119,7 +121,7 @@ class MOSDOp : public Message {
 	this->st.oid = oid;
 	this->st.pg = pg;
 	this->st.pg_role = 0;
-	this->st.map_version = mapversion;
+	this->st.map_epoch = mapepoch;
 	this->st.op = op;
 
 	this->st.want_ack = true;

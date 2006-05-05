@@ -33,12 +33,12 @@ void Objecter::dispatch(Message *m)
 void Objecter::handle_osd_map(MOSDMap *m)
 {
   if (!osdmap ||
-	  m->get_version() > osdmap->get_version()) {
+	  m->get_epoch() > osdmap->get_epoch()) {
 	if (osdmap) {
-	  dout(3) << "handle_osd_map got osd map version " << m->get_version() 
-			  << " > " << osdmap->get_version() << endl;
+	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() 
+			  << " > " << osdmap->get_epoch() << endl;
 	} else {
-	  dout(3) << "handle_osd_map got osd map version " << m->get_version() 
+	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() 
 			  << endl;
 	}
 	
@@ -48,8 +48,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	// ** FIXME **
 	
   } else {
-	dout(3) << "handle_osd_map ignoring osd map version " << m->get_version() 
-			<< " <= " << osdmap->get_version() << endl;
+	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() 
+			<< " <= " << osdmap->get_epoch() << endl;
   }
 }
 
@@ -57,9 +57,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
   // updated cluster info?
-  if (m->get_map_version() && 
-	  m->get_map_version() > osdmap->get_version()) {
-	dout(3) << "op reply has newer map " << m->get_map_version() << " > " << osdmap->get_version() << endl;
+  if (m->get_map_epoch() && 
+	  m->get_map_epoch() > osdmap->get_epoch()) {
+	dout(3) << "op reply has newer map " << m->get_map_epoch() << " > " << osdmap->get_epoch() << endl;
 	osdmap->decode( m->get_osdmap() );
   }
 
@@ -111,7 +111,7 @@ int Objecter::readx(OSDRead *rd, Context *onfinish)
 	// send
 	last_tid++;
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->pgid, osdmap->get_version(), 
+						   it->oid, it->pgid, osdmap->get_epoch(), 
 						   OSD_OP_READ);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
@@ -299,7 +299,7 @@ int Objecter::writex(OSDWrite *wr, Context *onack, Context *oncommit)
 	// send
 	last_tid++;
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->pgid, osdmap->get_version(),
+						   it->oid, it->pgid, osdmap->get_epoch(),
 						   OSD_OP_WRITE);
 	m->set_length(it->len);
 	m->set_offset(it->offset);
@@ -429,7 +429,7 @@ int Objecter::zerox(OSDZero *z, Context *onack, Context *oncommit)
 	// send
 	last_tid++;
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->pgid, osdmap->get_version(),
+						   it->oid, it->pgid, osdmap->get_epoch(),
 						   OSD_OP_ZERO);
 	m->set_length(it->len);
 	m->set_offset(it->offset);

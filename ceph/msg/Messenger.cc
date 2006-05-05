@@ -43,9 +43,9 @@ using namespace std;
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGNotify.h"
-#include "messages/MOSDPGPeer.h"
-#include "messages/MOSDPGPeerAck.h"
-#include "messages/MOSDPGUpdate.h"
+#include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGSummary.h"
+//#include "messages/MOSDPGUpdate.h"
 
 //#include "messages/MOSDPGQuery.h"
 //#include "messages/MOSDPGQueryReply.h"
@@ -320,14 +320,11 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_OSD_PG_NOTIFY:
 	m = new MOSDPGNotify();
 	break;
-  case MSG_OSD_PG_PEER:
-	m = new MOSDPGPeer();
+  case MSG_OSD_PG_QUERY:
+	m = new MOSDPGQuery();
 	break;
-  case MSG_OSD_PG_PEERACK:
-	m = new MOSDPGPeerAck();
-	break;
-  case MSG_OSD_PG_UPDATE:
-	m = new MOSDPGUpdate();
+  case MSG_OSD_PG_SUMMARY:
+	m = new MOSDPGSummary();
 	break;
 	/*
   case MSG_OSD_PG_QUERY:

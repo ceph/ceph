@@ -49,15 +49,21 @@ using namespace std;
 #define PG_TYPE_STARTOSD 2   // place primary on a specific OSD (named by the pg_bits)
 
 
+typedef __uint64_t epoch_t;
+
+
 /** OSDMap
  */
 class OSDMap {
-  version_t version;     // what version of the osd cluster descriptor is this
+  epoch_t   epoch;         // what epoch of the osd cluster descriptor is this
   int       pg_bits;     // placement group bits 
 
   set<int>  osds;        // all osds
   set<int>  down_osds;   // list of down disks
-  //set<int>  out_osds;    // list of unmapped disks
+  set<int>  out_osds;    // list of unmapped disks
+  map<int,float> overload_osds; 
+
+  bool  mkfs;
 
  public:
   Crush     crush;       // hierarchical map
@@ -66,15 +72,17 @@ class OSDMap {
   friend class MDS;
 
  public:
-  OSDMap() : version(0), pg_bits(5) { }
+  OSDMap() : epoch(0), pg_bits(5), mkfs(false) { }
 
   // map info
-  version_t get_version() { return version; }
-  void inc_version() { version++; }
+  epoch_t get_epoch() { return epoch; }
+  void inc_epoch() { epoch++; }
 
   int get_pg_bits() { return pg_bits; }
   void set_pg_bits(int b) { pg_bits = b; }
 
+  bool is_mkfs() { return mkfs; }
+  void set_mkfs() { mkfs = true; }
 
   /****  cluster state *****/
   int num_osds() { return osds.size(); }
@@ -82,17 +90,18 @@ class OSDMap {
 
   const set<int>& get_osds() { return osds; }
   const set<int>& get_down_osds() { return down_osds; }
-  const set<int>& get_out_osds() { return crush.out; }
+  const set<int>& get_out_osds() { return out_osds; }
+  const map<int,float>& get_overload_osds() { return overload_osds; }
   
   bool is_down(int osd) { return down_osds.count(osd); }
   bool is_up(int osd) { return !is_down(osd); }
-  bool is_out(int osd) { return crush.out.count(osd); }
+  bool is_out(int osd) { return out_osds.count(osd); }
   bool is_in(int osd) { return !is_in(osd); }
   
   void mark_down(int o) { down_osds.insert(o); }
   void mark_up(int o) { down_osds.erase(o); }
-  void mark_out(int o) { crush.out.insert(o); }
-  void mark_in(int o) { crush.out.erase(o); }
+  void mark_out(int o) { out_osds.insert(o); }
+  void mark_in(int o) { out_osds.erase(o); }
 
   // serialize, unserialize
   void encode(bufferlist& blist);
@@ -208,7 +217,8 @@ class OSDMap {
 	  case PG_LAYOUT_CRUSH:
 		crush.do_rule(crush.rules[num_rep],
 					  hps,
-					  osds);
+					  osds,
+					  out_osds, overload_osds);
 		break;
 		
 	  case PG_LAYOUT_LINEAR:

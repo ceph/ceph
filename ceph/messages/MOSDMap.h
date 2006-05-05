@@ -21,8 +21,8 @@
 
 class MOSDMap : public Message {
   bufferlist osdmap;
-  __uint64_t version;
-  bool mkfs;
+  epoch_t epoch;
+  //bool mkfs;
 
  public:
   // osdmap
@@ -30,14 +30,13 @@ class MOSDMap : public Message {
 	return osdmap;
   }
 
-  __uint64_t get_version() { return version; }
-  bool is_mkfs() { return mkfs; }
+  epoch_t get_epoch() { return epoch; }
+  //bool is_mkfs() { return mkfs; }
 
-  MOSDMap(OSDMap *oc, bool mkfs=false) :
+  MOSDMap(OSDMap *oc) :
 	Message(MSG_OSD_MAP) {
 	oc->encode(osdmap);
-	version = oc->get_version();
-	this->mkfs = mkfs;
+	epoch = oc->get_epoch();
   }
   MOSDMap() {}
 
@@ -45,16 +44,16 @@ class MOSDMap : public Message {
   // marshalling
   virtual void decode_payload() {
 	int off = 0;
-	payload.copy(off, sizeof(version), (char*)&version);
-	off += sizeof(version);
-	payload.copy(off, sizeof(mkfs), (char*)&mkfs);
-	off += sizeof(mkfs);
+	payload.copy(off, sizeof(epoch), (char*)&epoch);
+	off += sizeof(epoch);
+	//payload.copy(off, sizeof(mkfs), (char*)&mkfs);
+	//off += sizeof(mkfs);
 	payload.splice(0, off);
 	osdmap.claim(payload);
   }
   virtual void encode_payload() {
-	payload.append((char*)&version, sizeof(version));
-	payload.append((char*)&mkfs, sizeof(mkfs));
+	payload.append((char*)&epoch, sizeof(epoch));
+	//payload.append((char*)&mkfs, sizeof(mkfs));
 	payload.claim_append(osdmap);
   }
 

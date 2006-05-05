@@ -45,11 +45,9 @@
 #define MSG_OSD_MKFS_ACK     19
 
 #define MSG_OSD_PG_NOTIFY      50
-#define MSG_OSD_PG_PEER        51
-#define MSG_OSD_PG_PEERACK     52
+#define MSG_OSD_PG_QUERY        51
+#define MSG_OSD_PG_SUMMARY     52
 
-#define MSG_OSD_PG_QUERY       55
-#define MSG_OSD_PG_QUERYREPLY  56
 #define MSG_OSD_PG_UPDATE      57
 #define MSG_OSD_PG_REMOVE      58
 

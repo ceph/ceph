@@ -60,7 +60,7 @@ void OSDMonitor::fake_reorg()
   dout(1) << "changing OSD map, marking osd" << d << " down" << endl;
   mds->osdmap->mark_down(d);
 
-  mds->osdmap->inc_version();
+  mds->osdmap->inc_epoch();
   d++;
   
   // bcast

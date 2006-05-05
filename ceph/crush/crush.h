@@ -94,8 +94,6 @@ namespace crush {
 	Hash h;
 
   public:
-	set<int>           out;
-	map<int, float>    overload;
 	map<int, Rule>     rules;
 
 	//map<int,int> collisions;
@@ -117,9 +115,9 @@ namespace crush {
 	  int s = h.get_seed();
 	  bl.append((char*)&s, sizeof(s));
 
-	  ::_encode(out, bl);
-	  ::_encode(overload, bl);
-
+	  //::_encode(out, bl);
+	  //::_encode(overload, bl);
+	  
 	  // rules
 	  n = rules.size();
 	  bl.append((char*)&n, sizeof(n));
@@ -151,8 +149,8 @@ namespace crush {
 	  off += sizeof(s);
 	  h.set_seed(s);
 
-	  ::_decode(out, bl, off);
-	  ::_decode(overload, bl, off);
+	  //::_decode(out, bl, off);
+	  //::_decode(overload, bl, off);
 
 	  // rules
 	  bl.copy(off, sizeof(n), (char*)&n);
@@ -258,7 +256,8 @@ namespace crush {
 				int type,
 				Bucket *inbucket,
 				vector<int>& outvec,
-				bool firstn) {
+				bool firstn,
+				set<int>& outset, map<int,float>& overloadmap) {
 	  int off = outvec.size();
 
 	  // for each replica
@@ -335,12 +334,12 @@ namespace crush {
 		  }
 		  
 		  // ok choice?
-		  if (type == 0 && out.count(outv)) 
+		  if (type == 0 && outset.count(outv)) 
 			bad = true;
 		  
-		  if (overload.count(outv)) {
+		  if (overloadmap.count(outv)) {
 			float f = (float)(h(x, outv) % 1000) / 1000.0;
-			if (f > overload[outv])
+			if (f > overloadmap[outv])
 			  bad = true;
 		  }
 		  
@@ -356,7 +355,8 @@ namespace crush {
 	}
 
 
-	void do_rule(Rule& rule, int x, vector<int>& result) {
+	void do_rule(Rule& rule, int x, vector<int>& result,
+				 set<int>& outset, map<int,float>& overloadmap) {
 	  //int numresult = 0;
 	  result.clear();
 
@@ -401,7 +401,8 @@ namespace crush {
 				 i++) {
 			  assert(buckets.count(*i));
 			  Bucket *b = buckets[*i];
-			  choose(x, numrep, type, b, out, firstn);
+			  choose(x, numrep, type, b, out, firstn,
+					 outset, overloadmap);
 			} // for inrow
 			
 			// put back into w

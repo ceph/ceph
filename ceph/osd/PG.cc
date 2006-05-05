@@ -15,267 +15,90 @@
 
 #include "PG.h"
 #include "config.h"
+#include "OSD.h"
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << whoami << "  " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << osd->whoami << " " << *this << " "
 
 
-void PG::pulled(object_t oid, version_t v, PGPeer *p)
-{
-  dout(10) << "pulled o " << hex << oid << dec << " v " << v << " from osd" << p->get_peer() << endl;
 
-  objects_pulling.erase(oid);
+void PG::generate_content_summary()
+{  
+  dout(10) << "generating summary" << endl;
 
-  // update peer state
-  p->pulled(oid);
+  list<object_t> olist;
+  osd->store->collection_list(info.pgid, olist);
   
-  // object is now local
-  objects_missing.erase(oid);  
-  objects_missing_v.erase(oid);
-}
+  content_summary = new PGContentSummary;
 
-
-void PG::pushed(object_t oid, version_t v, PGPeer *p)
-{
-  dout(10) << "pushed o " << hex << oid << dec << " v " << v << " to osd" << p->get_peer() << endl;
-
-  objects_pushing[oid].erase(p);
-  if (objects_pushing[oid].empty())
-	objects_pushing.erase(oid);
-
-  // update peer state
-  p->pushed(oid);
-  
-  objects_unrep[oid].erase(p->get_peer());
-  if (objects_unrep[oid].empty())
-	objects_unrep.erase(oid);
-
-  // pg clean now?
-  if (objects_unrep.empty() &&
-	  objects_stray.empty()) {
-	assert(!is_clean());
-	mark_clean();
-  } else {
-	dout(10) << " still " << objects_unrep.size() << " unrep and " << objects_stray.size() << " stray" << endl;
-  }
-}
-
-void PG::removed(object_t oid, version_t v, PGPeer *p)
-{
-  dout(10) << "removed o " << hex << oid << dec << " v " << v << " from osd" << p->get_peer() << endl;
-
-  objects_removing[oid].erase(p);
-  if (objects_removing[oid].empty())
-	objects_removing.erase(oid);
-
-  // update peer state
-  p->removed(oid);
-  
-  objects_stray[oid].erase(p->get_peer());
-  if (objects_stray[oid].empty())
-	objects_stray.erase(oid);
-
-  // clean now?
-  if (objects_unrep.empty() &&
-	  objects_stray.empty()) {
-	assert(!is_clean());
-	mark_clean();
-  } else {
-	dout(10) << " still " << objects_unrep.size() << " unrep and " << objects_stray.size() << " stray" << endl;
-  }
-}
-
-/*
-bool PG::existant_object_is_clean(object_t o, version_t v)
-{
-  assert(is_peered() && !is_clean());
-  return objects_unrep.count(o) ? false:true;
-}
-
-bool PG::nonexistant_object_is_clean(object_t o)
-{
-  assert(is_peered() && !is_clean());
-
-  // FIXME?
-
-  // removed from peers?
-  for (map<int, PGPeer*>::iterator it = peers.begin();
-	   it != peers.end();
+  for (list<object_t>::iterator it = olist.begin();
+	   it != olist.end();
 	   it++) {
-	if (it->second->get_role() != 1) continue;  // only care about active set
-	if (it->second->is_complete()) continue;
-	if (it->second->is_stray(o)) 
-	  return false;
+	ObjectInfo item(*it);
+	osd->store->getattr(item.oid, 
+						"version",
+						&item.version, sizeof(item.version));
+	item.osd = osd->whoami;
+	content_summary->ls.push_back(item);
   }
-  
-  return true;
 }
-*/
 
 
 
-void PG::plan_recovery(ObjectStore *store, version_t current_version, 
-					   list<PGPeer*>& complete_peers) 
+void PG::plan_recovery()
 {
-  dout(10) << "plan_recovery " << current_version << endl;
-  assert(is_peered());
-
-  // choose newest last_complete epoch
-  version_t last = last_complete;
-  for (map<int, PGPeer*>::iterator pit = peers.begin();
-	   pit != peers.end();
-	   pit++) {
-	dout(10) << "  osd" << pit->first << " " 
-			 << pit->second->objects.size() << " objects, last_complete " << pit->second->last_complete << endl;
-	if (pit->second->last_complete > last)
-	  last = pit->second->last_complete;
-  }
-  dout(10) << " combined last_complete epoch is " << last << endl;
-
-  if (last+1 < current_version) {
-	dout(1) << "WARNING: last_complete skipped one or more epochs, we're possibly missing something" << endl;
-  }
-  if (!last) {  // bootstrap!
-	dout(1) << "WARNING: no complete peers available (yet), pg is crashed" << endl;
-	return;
-  }
-
-  // build the object map
-  // ... OR of complete OSDs' content
-  map<object_t, version_t> master;          // what the current object set is
-
-  map<object_t, version_t> local_objects;
-  scan_local_objects(local_objects, store);
-  dout(10) << " " << local_objects.size() << " local objects" << endl;
-
-  if (last_complete == last) 
-	master = local_objects;
+  dout(10) << "plan_recovery " << endl;  
   
-  for (map<int, PGPeer*>::iterator pit = peers.begin();
-	   pit != peers.end();
-	   pit++) {
-	for (map<object_t, version_t>::iterator oit = pit->second->objects.begin();
-		 oit != pit->second->objects.end();
-		 oit++) {
-	  // know this object?
-	  if (master.count(oit->first)) {
-		if (oit->second > master[oit->first])   // newer
-		  master[oit->first] = oit->second;
-	  } else {
-		// newly seen object!
-		master[oit->first] = oit->second;
-	  }
-	}
+  assert(is_active());
+  assert(content_summary);
+  
+  // load local contents
+  list<object_t> olist;
+  osd->store->collection_list(info.pgid, olist);
+  
+  // check versions
+  map<object_t, version_t> vmap;
+  for (list<object_t>::iterator it = olist.begin();
+	   it != olist.end();
+	   it++) {
+	version_t v;
+	osd->store->getattr(*it, 
+						"version",
+						&v, sizeof(v));
+	vmap[*it] = v;
   }
-
-  // ok, we have a master list.
-  dout(7) << " master list has " << master.size() << " objects" << endl;
-
-  // local cleanup?
-  if (!is_complete(current_version)) {
-	// just cleanup old local objects
-	// FIXME: do this async?
-
-	for (map<object_t, version_t>::iterator it = local_objects.begin();
-		 it != local_objects.end();
+  
+  // scan summary
+  content_summary->remote = 0;
+  content_summary->missing = 0;
+  for (list<ObjectInfo>::iterator it = content_summary->ls.begin();
+		 it != content_summary->ls.end();
 		 it++) {
-	  if (master.count(it->first) && 
-		  master[it->first] == it->second) continue;  // same!
-	  
-	  dout(10) << " local o " << hex << it->first << dec << " v " << it->second << " old, removing" << endl;
-	  store->remove(it->first);
-	  local_objects.erase(it->first);
+	if (vmap.count(it->oid) &&
+		vmap[it->oid] == it->version) {
+	  // have latest.
+	  vmap.erase(it->oid);
+	  continue;
 	}
+
+	// need it
+	dout(20) << "need " << hex << it->oid << dec 
+			 << " v " << it->version << endl;
+	objects_missing[it->oid] = it->version;
+	recovery_queue[it->version] = *it;
   }
 
-
-  // plan pull -> objects_missing
-  // plan push -> objects_unrep
-  for (map<object_t, version_t>::iterator it = master.begin();
-	   it != master.end();
+  // hose stray
+  for (map<object_t,version_t>::iterator it = vmap.begin();
+	   it != vmap.end();
 	   it++) {
-	const object_t o = it->first;
-	const version_t v = it->second;
-
-	// already have it locally?
-	bool local = false;
-	if (local_objects.count(o) &&
-		local_objects[o] == v) local = true;   // we have it.
-
-	for (map<int, PGPeer*>::iterator pit = peers.begin();
-		 pit != peers.end();
-		 pit++) {
-	  // pull?
-	  if (!local &&
-		  pit->second->objects.count(o) &&
-		  pit->second->objects[o] == v) {
-		objects_missing[o].insert(pit->first);
-		objects_missing_v[o] = v;
-	  }
-	  
-	  // push? 
-	  if (pit->second->get_role() == 1 &&
-		  (pit->second->objects.count(o) == 0 ||
-		   pit->second->objects[o] < v)) {
-		objects_unrep[o].insert(pit->first);
-		pit->second->missing.insert(o);
-	  }
-	}
-
-	assert(local || !objects_missing[o].empty());  // pull
+	dout(20) << "removing stray " << hex << it->first << dec 
+			 << " v " << it->second << endl;
+	osd->store->remove(it->first);
   }
+}
 
-  if (objects_missing.empty()) {
-	mark_complete(current_version);
-  }
-
-  // plan clean -> objects_stray
-  for (map<int, PGPeer*>::iterator pit = peers.begin();
-	   pit != peers.end();
-	   pit++) {
-	const int role = pit->second->get_role();
-	assert(role != 0);  // duh
-	
-	PGPeer *p = pit->second;
-	assert(p->is_active());
-
-	if (p->missing.empty() && p->stray.empty()) {
-	  p->state_set(PG_PEER_STATE_COMPLETE);
-	  complete_peers.push_back(p);
-	}
-	
-	if (p->is_complete()) {
-	  dout(12) << " peer osd" << pit->first << " is complete" << endl;
-	} else {
-	  dout(12) << " peer osd" << pit->first << " is !complete" << endl;
-	}
-	
-	for (map<object_t, version_t>::iterator oit = pit->second->objects.begin();
-		 oit != pit->second->objects.end();
-		 oit++) {
-	  const object_t o = oit->first;
-	  const version_t v = oit->second;
-
-	  if (role < 0) {
-		dout(10) << " remote o " << hex << o << dec << " v " << v << " on osd" << p->get_peer() << " stray, removing" << endl;
-	  } 
-	  else if (master.count(oit->first) == 0) {
-		dout(10) << " remote o " << hex << o << dec << " v " << v << " on osd" << p->get_peer() << " deleted/stray, removing" << endl;
-	  } 
-	  else 
-		continue;
-	  
-	  objects_stray[o][pit->first] = v;
-	  p->stray.insert(o);
-	}
-  }
-
-  if (objects_unrep.empty() && objects_stray.empty())
-	mark_clean();
-
-  // clear peer content lists
-  for (map<int, PGPeer*>::iterator pit = peers.begin();
-	   pit != peers.end();
-	   pit++) 
-	pit->second->objects.clear();
+void PG::do_recovery()
+{
+  dout(0) << "do_recovery - implement me" << endl;
 }

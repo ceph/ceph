@@ -118,11 +118,10 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   // <HACK set up OSDMap from g_conf>
   osdmap = new OSDMap();
   osdmap->set_pg_bits(g_conf.osd_pg_bits);
-  osdmap->inc_version();  // version = 1
-  assert(osdmap->get_version() == 1);
+  osdmap->inc_epoch();  // = 1
+  assert(osdmap->get_epoch() == 1);
 
-  if (!g_conf.mkfs) 
-	osdmap->inc_version();   // 1 -> mkfs, we want something bigger or else OSDs will recreate PGs
+  if (g_conf.mkfs) osdmap->set_mkfs();
 
   Bucket *b = new UniformBucket(1, 0);
   int root = osdmap->crush.add_bucket(b);
@@ -360,7 +359,7 @@ int MDS::shutdown_final()
 
 void MDS::bcast_osd_map()
 {
-  dout(1) << "bcast_osd_map version " << osdmap->get_version() << endl;
+  dout(1) << "bcast_osd_map epoch " << osdmap->get_epoch() << endl;
   assert(get_nodeid() == 0);
 
   // tell mds
@@ -711,11 +710,11 @@ void MDS::handle_osd_getmap(Message *m)
 void MDS::handle_osd_map(MOSDMap *m)
 {
   if (!osdmap ||
-	  m->get_version() > osdmap->get_version()) {
+	  m->get_epoch() > osdmap->get_epoch()) {
 	if (osdmap) {
-	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << " > " << osdmap->get_version() << endl;
+	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << " > " << osdmap->get_epoch() << endl;
 	} else {
-	  dout(3) << "handle_osd_map got osd map version " << m->get_version() << endl;
+	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << endl;
 	}
 	
 	osdmap->decode(m->get_osdmap());
@@ -724,7 +723,7 @@ void MDS::handle_osd_map(MOSDMap *m)
 	// ** FIXME **
 	
   } else {
-	dout(3) << "handle_osd_map ignoring osd map version " << m->get_version() << " <= " << osdmap->get_version() << endl;
+	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() << " <= " << osdmap->get_epoch() << endl;
   }
 }
 
@@ -735,18 +734,18 @@ void MDS::mkfs(Context *onfinish)
 
   // send MKFS to osds
   set<int> ls;
+  assert(osdmap);
   osdmap->get_all_osds(ls);
   
   for (set<int>::iterator it = ls.begin();
 	   it != ls.end();
 	   it++) {
-	
 	// issue mkfs
-	messenger->send_message(new MOSDMap(osdmap, true),
+	messenger->send_message(new MOSDMap(osdmap),
 							MSG_ADDR_OSD(*it));
 	pending_mkfs.insert(*it);
   }
-
+  
   waiting_for_mkfs = onfinish;
 }
 
@@ -769,9 +768,9 @@ void MDS::handle_osd_mkfs_ack(Message *m)
 
 void MDS::handle_client_mount(MClientMount *m)
 {
-  // mkfs?  (sorta hack!)
+  // mkfs?
   if (g_conf.mkfs) {
-	dout(3) << "MKFS flag is set" << endl;
+	dout(3) << "MKFS" << endl;
 	if (mdcache->get_root()) {
 	  dout(3) << "   root inode is already open" << endl;
 	} else {
@@ -791,11 +790,9 @@ void MDS::handle_client_mount(MClientMount *m)
 	  //if (pgmanager) pgmanager->mark_open();
 
 	  // init osds too
-	  dout(3) << "wiping osds too" << endl;
 	  mkfs(new C_MDS_Unpause(this));
 	  waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
-	  return;
-	  
+	  return;	  
 	}
   }
 
@@ -804,8 +801,6 @@ void MDS::handle_client_mount(MClientMount *m)
   mounted_clients.insert(n);
 
   assert(whoami == 0);  // mds0 mounts/unmounts
-
-
 
   // ack
   messenger->send_message(new MClientMountAck(m, osdmap), 
