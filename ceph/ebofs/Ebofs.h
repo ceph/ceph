@@ -239,8 +239,21 @@ class Ebofs : public ObjectStore {
 			size_t len, off_t offset, 
 			bufferlist& bl, 
 			Context *onsafe);
+  int write_transaction(object_t oid, 
+						size_t len, off_t offset, 
+						bufferlist& bl, 
+						map<const char*, pair<void*,int> > setattrs,
+						set<const char*> rmattrs,
+						set<coll_t> collection_adds,
+						Context *onsafe);
+
   int truncate(object_t oid, off_t size,
 			   Context *onsafe=0);
+  int truncate_transaction(object_t oid, off_t size, 
+						   map<const char*, pair<void*,int> > setattrs,
+						   set<const char*> rmattrs,
+						   Context *onsafe);
+
   int remove(object_t oid,
 			 Context *onsafe=0);
 

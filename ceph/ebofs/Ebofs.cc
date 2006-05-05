@@ -1765,6 +1765,20 @@ int Ebofs::write(object_t oid,
 				 size_t len, off_t off, 
 				 bufferlist& bl, Context *onsafe)
 {
+  map<const char*, pair<void*,int> > setattrs;
+  set<const char*> rmattrs;
+  set<pg_t> collection_adds;
+  return write_transaction(oid, len, off, bl, setattrs, rmattrs, collection_adds, onsafe);
+}
+
+int Ebofs::write_transaction(object_t oid, 
+							 size_t len, off_t off, 
+							 bufferlist& bl, 
+							 map<const char*, pair<void*,int> > setattrs,
+							 set<const char*> rmattrs,
+							 set<coll_t> collection_adds,
+							 Context *onsafe) 
+{
   ebofs_lock.Lock();
   dout(7) << "write " << hex << oid << dec << " len " << len << " off " << off << endl;
   assert(len > 0);
@@ -1798,7 +1812,32 @@ int Ebofs::write(object_t oid,
   apply_write(on, len, off, bl);
 
   // apply attribute changes
-  // ***
+  for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
+	   it != setattrs.end();
+	   it++) {
+	AttrVal val((char*)it->second.first, it->second.second);
+	string n(it->first);
+	on->attr[n] = val;
+  }
+  for (set<const char*>::iterator it = rmattrs.begin();
+	   it != rmattrs.end();
+	   it++) {
+	string n(*it);
+	on->attr.erase(n);
+  }
+  
+  // apply collection changes.
+  for (set<coll_t>::iterator it = collection_adds.begin();
+	   it != collection_adds.end();
+	   it++) {
+	const coll_t cid = *it;
+	if (_collection_exists(cid)) {
+	  if (oc_tab->lookup(idpair_t(oid,cid)) < 0) {
+		oc_tab->insert(idpair_t(oid,cid), true);
+		co_tab->insert(idpair_t(cid,oid), true);
+	  }
+	}
+  }
 
   // prepare (eventual) journal entry?
 
@@ -1818,6 +1857,7 @@ int Ebofs::write(object_t oid,
   ebofs_lock.Unlock();
   return len;
 }
+
 
 
 int Ebofs::remove(object_t oid, Context *onsafe)
@@ -1847,6 +1887,16 @@ int Ebofs::remove(object_t oid, Context *onsafe)
 }
 
 int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
+{
+  map<const char*, pair<void*,int> > setattrs;
+  set<const char*> rmattrs;
+  return truncate_transaction(oid, size, setattrs, rmattrs, onsafe);
+}
+
+int Ebofs::truncate_transaction(object_t oid, off_t size,
+								map<const char*, pair<void*,int> > setattrs,
+								set<const char*> rmattrs,
+								Context *onsafe)
 {
   ebofs_lock.Lock();
   dout(7) << "truncate " << hex << oid << dec << " size " << size << endl;

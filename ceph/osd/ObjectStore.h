@@ -55,7 +55,11 @@ class ObjectStore {
 					 Context *onsafe=0) = 0;
   virtual int truncate(object_t oid, off_t size,
 					   Context *onsafe=0) = 0;
-
+  virtual int truncate_transaction(object_t oid, off_t size, 
+								   map<const char*, pair<void*,int> > setattrs,
+								   set<const char*> rmattrs,
+								   Context *onsafe) { return 0; }
+  
   virtual int read(object_t oid, 
 				   size_t len, off_t offset,
 				   bufferlist& bl) = 0;
@@ -69,6 +73,13 @@ class ObjectStore {
 					size_t len, off_t offset, 
 					bufferlist& bl, 
 					Context *onsafe) = 0;//{ return -1; }
+  virtual int write_transaction(object_t oid, 
+								size_t len, off_t offset, 
+								bufferlist& bl, 
+								map<const char*, pair<void*,int> > setattrs,
+								set<const char*> rmattrs,
+								set<coll_t> collection_adds,
+								Context *onsafe) { return 0; }
 
   virtual int setattr(object_t oid, const char *name,
 					  void *value, size_t size,
