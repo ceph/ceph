@@ -51,8 +51,10 @@ class ObjectStore {
   virtual bool exists(object_t oid) = 0;                   // useful?
   virtual int stat(object_t oid, struct stat *st) = 0;     // struct stat?
 
-  virtual int remove(object_t oid) = 0;
-  virtual int truncate(object_t oid, off_t size) = 0;
+  virtual int remove(object_t oid,
+					 Context *onsafe=0) = 0;
+  virtual int truncate(object_t oid, off_t size,
+					   Context *onsafe=0) = 0;
 
   virtual int read(object_t oid, 
 				   size_t len, off_t offset,
@@ -69,9 +71,12 @@ class ObjectStore {
 					Context *onsafe) = 0;//{ return -1; }
 
   virtual int setattr(object_t oid, const char *name,
-					  void *value, size_t size) {return 0;} //= 0;
+					  void *value, size_t size,
+					  Context *onsafe=0) {return 0;} //= 0;
   virtual int getattr(object_t oid, const char *name,
 					  void *value, size_t size) {return 0;} //= 0;
+  virtual int rmattr(object_t oid, const char *name,
+					 Context *onsafe=0) {return 0;}
   virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
   
   // collections

@@ -239,15 +239,19 @@ class Ebofs : public ObjectStore {
 			size_t len, off_t offset, 
 			bufferlist& bl, 
 			Context *onsafe);
-  int truncate(object_t oid, off_t size);
-  int remove(object_t oid);
+  int truncate(object_t oid, off_t size,
+			   Context *onsafe=0);
+  int remove(object_t oid,
+			 Context *onsafe=0);
 
   bool write_will_block();
 
   // object attr
-  int setattr(object_t oid, const char *name, void *value, size_t size);
+  int setattr(object_t oid, const char *name, void *value, size_t size,
+			  Context *onsafe=0);
   int getattr(object_t oid, const char *name, void *value, size_t size);
-  int rmattr(object_t oid, const char *name);
+  int rmattr(object_t oid, const char *name,
+			 Context *onsafe=0);
   int listattr(object_t oid, vector<string>& attrs);
   
   // collections

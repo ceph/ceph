@@ -17,6 +17,8 @@
 
 #include "include/types.h"
 
+#include "common/Timer.h"
+
 #include <list>
 #include <set>
 #include <ext/hash_map>
@@ -131,6 +133,11 @@ class FakeStoreAttrs {
 	  assert(0);
 	  return 0;
 	}
+
+	int rmattr(const char *name) {
+	  attrs.erase(name);
+	  return 0;
+	}
 	
 	bool empty() { return attrs.empty(); }
   };
@@ -141,9 +148,11 @@ class FakeStoreAttrs {
 
  public:
   int setattr(object_t oid, const char *name,
-			  void *value, size_t size) {
+			  void *value, size_t size,
+			  Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakeoattrs[oid].setattr(name, value, size);
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
 	faker_lock.Unlock();
 	return r;
   }
@@ -154,6 +163,15 @@ class FakeStoreAttrs {
 	faker_lock.Unlock();
 	return r;
   }
+  int rmattr(object_t oid, const char *name,
+			 Context *onsafe=0) {
+	faker_lock.Lock();
+	int r = fakeoattrs[oid].rmattr(name);
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	faker_lock.Unlock();
+	return r;
+  }
+
   int listattr(object_t oid, char *attrs, size_t size) {
 	faker_lock.Lock();
 	int r = fakeoattrs[oid].listattr(attrs,size);

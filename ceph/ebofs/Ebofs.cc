@@ -1807,7 +1807,7 @@ int Ebofs::write(object_t oid,
 	// commit on next full fs commit.
 	// FIXME when we add journaling.
 	commit_waiters[super_epoch].push_back(onsafe);
-	on->commit_waiters.push_back(onsafe);        // in case we delete the object.
+	//on->commit_waiters.push_back(onsafe);        // in case we delete the object.
   }
 
   // done
@@ -1820,7 +1820,7 @@ int Ebofs::write(object_t oid,
 }
 
 
-int Ebofs::remove(object_t oid)
+int Ebofs::remove(object_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
   dout(7) << "remove " << hex << oid << dec << endl;
@@ -1835,11 +1835,18 @@ int Ebofs::remove(object_t oid)
   // ok remove it!
   remove_onode(on);
 
+  // set up commit waiter
+  if (onsafe) {
+	// commit on next full fs commit.
+	// FIXME when we add journaling.
+	commit_waiters[super_epoch].push_back(onsafe);
+  }
+
   ebofs_lock.Unlock();
   return 0;
 }
 
-int Ebofs::truncate(object_t oid, off_t size)
+int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   dout(7) << "truncate " << hex << oid << dec << " size " << size << endl;
@@ -1882,6 +1889,10 @@ int Ebofs::truncate(object_t oid, off_t size)
   else {
 	assert(size == on->object_size);
   }
+
+  // set up commit waiter
+  if (onsafe) 
+	commit_waiters[super_epoch].push_back(onsafe);
   
   put_onode(on);
   ebofs_lock.Unlock();
@@ -1919,7 +1930,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
 
 // attributes
 
-int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
+int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
@@ -1934,6 +1945,9 @@ int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size)
   AttrVal val((char*)value, size);
   on->attr[n] = val;
   dirty_onode(on);
+
+  if (onsafe) 
+	commit_waiters[super_epoch].push_back(onsafe);
 
   put_onode(on);
   ebofs_lock.Unlock();
@@ -1963,7 +1977,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
   return r;
 }
 
-int Ebofs::rmattr(object_t oid, const char *name) 
+int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe) 
 {
   ebofs_lock.Lock();
   dout(8) << "rmattr " << hex << oid << dec << " '" << name << "'" << endl;
@@ -1976,6 +1990,9 @@ int Ebofs::rmattr(object_t oid, const char *name)
 
   string n(name);
   on->attr.erase(n);
+
+  if (onsafe) 
+	commit_waiters[super_epoch].push_back(onsafe);
 
   dirty_onode(on);
   put_onode(on);
