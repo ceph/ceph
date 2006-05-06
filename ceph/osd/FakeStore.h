@@ -74,8 +74,8 @@ class FakeStore : public ObjectStore,
   // objects
   bool exists(object_t oid);
   int stat(object_t oid, struct stat *st);
-  int remove(object_t oid);
-  int truncate(object_t oid, off_t size);
+  int remove(object_t oid, Context *onsafe);
+  int truncate(object_t oid, off_t size, Context *onsafe);
   int read(object_t oid, 
 		   size_t len, off_t offset,
 		   bufferlist& bl);

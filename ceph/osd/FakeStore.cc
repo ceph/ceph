@@ -259,22 +259,29 @@ int FakeStore::stat(object_t oid,
  
  
 
-int FakeStore::remove(object_t oid) 
+int FakeStore::remove(object_t oid, Context *onsafe) 
 {
   dout(20) << "remove " << oid << endl;
   string fn;
   get_oname(oid,fn);
   int r = ::unlink(fn.c_str());
+  if (onsafe)
+	g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
+							onsafe);
   return r;
 }
 
-int FakeStore::truncate(object_t oid, off_t size)
+int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
 {
   dout(20) << "truncate " << oid << " size " << size << endl;
 
   string fn;
   get_oname(oid,fn);
-  return ::truncate(fn.c_str(), size);
+  int r = ::truncate(fn.c_str(), size);
+  if (onsafe)
+	g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
+							onsafe);
+  return r;
 }
 
 int FakeStore::read(object_t oid, 
