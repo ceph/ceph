@@ -53,12 +53,44 @@ class ObjectStore {
 
   virtual int remove(object_t oid,
 					 Context *onsafe=0) = 0;
+  virtual int remove_transaction(object_t oid,
+								 map<coll_t, map<const char*, pair<void*,int> > >& cmods,					 
+								 Context *onsafe=0) {
+	int r = remove(oid, onsafe);
+	for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
+		 cit != cmods.end();
+		 cit++) {
+	  collection_add(cit->first, oid);
+	  for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
+		   ait != cit->second.end();
+		   ait++) 
+		collection_setattr(cit->first, ait->first, ait->second.first, ait->second.second);
+	}
+	return r;
+  }
+
   virtual int truncate(object_t oid, off_t size,
 					   Context *onsafe=0) = 0;
   virtual int truncate_transaction(object_t oid, off_t size, 
-								   map<const char*, pair<void*,int> > setattrs,
-								   set<const char*> rmattrs,
-								   Context *onsafe) { return 0; }
+								   map<const char*, pair<void*,int> >& setattrs,
+								   map<coll_t, map<const char*, pair<void*,int> > >& cmods,
+								   Context *onsafe) { 
+	int r = truncate(oid, size, onsafe);
+	for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
+		 it != setattrs.end();
+		 it++) 
+	  setattr(oid, it->first, it->second.first, it->second.second);
+	for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
+		 cit != cmods.end();
+		 cit++) {
+	  collection_add(cit->first, oid);
+	  for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
+		   ait != cit->second.end();
+		   ait++) 
+		collection_setattr(cit->first, ait->first, ait->second.first, ait->second.second);
+	}  
+	return r;
+  }
   
   virtual int read(object_t oid, 
 				   size_t len, off_t offset,
@@ -68,7 +100,6 @@ class ObjectStore {
 					size_t len, off_t offset,
 					bufferlist& bl,
 					bool fsync=true) = 0;     
-
   virtual int write(object_t oid, 
 					size_t len, off_t offset, 
 					bufferlist& bl, 
@@ -76,10 +107,26 @@ class ObjectStore {
   virtual int write_transaction(object_t oid, 
 								size_t len, off_t offset, 
 								bufferlist& bl, 
-								map<const char*, pair<void*,int> > setattrs,
-								set<const char*> rmattrs,
-								set<coll_t> collection_adds,
-								Context *onsafe) { return 0; }
+								map<const char*, pair<void*,int> >& setattrs,
+								map<coll_t, map<const char*, pair<void*,int> > >& cmods,
+								Context *onsafe) { 
+	int r = write(oid, len, offset, bl, onsafe);
+	for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
+		 it != setattrs.end();
+		 it++) 
+	  setattr(oid, it->first, it->second.first, it->second.second);
+	
+	for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
+		 cit != cmods.end();
+		 cit++) {
+	  collection_add(cit->first, oid);
+	  for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
+		   ait != cit->second.end();
+		   ait++) 
+		collection_setattr(cit->first, ait->first, ait->second.first, ait->second.second);
+	}
+	return r;
+  }
 
   virtual int setattr(object_t oid, const char *name,
 					  void *value, size_t size,
@@ -102,11 +149,11 @@ class ObjectStore {
   virtual int collection_remove(coll_t c, object_t o) {return 0;}// = 0;
   virtual int collection_list(coll_t c, list<object_t>& o) {return 0;}//= 0;
 
-  virtual int collection_setattr(object_t oid, const char *name,
+  virtual int collection_setattr(coll_t cid, const char *name,
 								 void *value, size_t size) {return 0;} //= 0;
-  virtual int collection_getattr(object_t oid, const char *name,
+  virtual int collection_getattr(coll_t cid, const char *name,
 								 void *value, size_t size) {return 0;} //= 0;
-  virtual int collection_listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
+  virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;
   
   virtual void sync() {};
   

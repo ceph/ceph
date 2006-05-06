@@ -1765,18 +1765,16 @@ int Ebofs::write(object_t oid,
 				 size_t len, off_t off, 
 				 bufferlist& bl, Context *onsafe)
 {
-  map<const char*, pair<void*,int> > setattrs;
-  set<const char*> rmattrs;
-  set<pg_t> collection_adds;
-  return write_transaction(oid, len, off, bl, setattrs, rmattrs, collection_adds, onsafe);
+  static map<const char*, pair<void*,int> > null_setattrs;
+  static map<coll_t, map<const char*, pair<void*,int> > > null_cmods;
+  return write_transaction(oid, len, off, bl, null_setattrs, null_cmods, onsafe);
 }
 
 int Ebofs::write_transaction(object_t oid, 
 							 size_t len, off_t off, 
 							 bufferlist& bl, 
-							 map<const char*, pair<void*,int> > setattrs,
-							 set<const char*> rmattrs,
-							 set<coll_t> collection_adds,
+							 map<const char*, pair<void*,int> >& setattrs,
+							 map<coll_t, map<const char*, pair<void*,int> > >& cmods,
 							 Context *onsafe) 
 {
   ebofs_lock.Lock();
@@ -1811,26 +1809,11 @@ int Ebofs::write_transaction(object_t oid,
   // apply write to buffer cache
   apply_write(on, len, off, bl);
 
-  // apply attribute changes
-  for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
-	   it != setattrs.end();
-	   it++) {
-	AttrVal val((char*)it->second.first, it->second.second);
-	string n(it->first);
-	on->attr[n] = val;
-  }
-  for (set<const char*>::iterator it = rmattrs.begin();
-	   it != rmattrs.end();
-	   it++) {
-	string n(*it);
-	on->attr.erase(n);
-  }
-  
-  // apply collection changes.
-  for (set<coll_t>::iterator it = collection_adds.begin();
-	   it != collection_adds.end();
-	   it++) {
-	const coll_t cid = *it;
+  // join collections?
+  for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
+	   cit != cmods.end();
+	   cit++) {
+	const coll_t cid = cit->first;
 	if (_collection_exists(cid)) {
 	  if (oc_tab->lookup(idpair_t(oid,cid)) < 0) {
 		oc_tab->insert(idpair_t(oid,cid), true);
@@ -1838,6 +1821,10 @@ int Ebofs::write_transaction(object_t oid,
 	  }
 	}
   }
+
+  // apply attribute changes
+  do_setattrs(on, setattrs);
+  do_csetattrs(cmods);
 
   // prepare (eventual) journal entry?
 
@@ -1862,6 +1849,14 @@ int Ebofs::write_transaction(object_t oid,
 
 int Ebofs::remove(object_t oid, Context *onsafe)
 {
+  static map<coll_t, map<const char*, pair<void*,int> > > null_cmods;
+  return remove_transaction(oid, null_cmods, onsafe);
+}
+
+int Ebofs::remove_transaction(object_t oid, 
+							  map<coll_t, map<const char*, pair<void*,int> > >& cmods,
+							  Context *onsafe)
+{
   ebofs_lock.Lock();
   dout(7) << "remove " << hex << oid << dec << endl;
   
@@ -1874,6 +1869,9 @@ int Ebofs::remove(object_t oid, Context *onsafe)
 
   // ok remove it!
   remove_onode(on);
+
+  // do collection mods
+  do_csetattrs(cmods);
 
   // set up commit waiter
   if (onsafe) {
@@ -1888,14 +1886,14 @@ int Ebofs::remove(object_t oid, Context *onsafe)
 
 int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
 {
-  map<const char*, pair<void*,int> > setattrs;
-  set<const char*> rmattrs;
-  return truncate_transaction(oid, size, setattrs, rmattrs, onsafe);
+  static map<const char*, pair<void*,int> > null_setattrs;
+  static map<coll_t, map<const char*, pair<void*,int> > > null_cmods;
+  return truncate_transaction(oid, size, null_setattrs, null_cmods, onsafe);
 }
 
 int Ebofs::truncate_transaction(object_t oid, off_t size,
-								map<const char*, pair<void*,int> > setattrs,
-								set<const char*> rmattrs,
+								map<const char*, pair<void*,int> >& setattrs,
+								map<coll_t, map<const char*, pair<void*,int> > >& cmods,
 								Context *onsafe)
 {
   ebofs_lock.Lock();
@@ -1940,6 +1938,10 @@ int Ebofs::truncate_transaction(object_t oid, off_t size,
 	assert(size == on->object_size);
   }
 
+  // apply attribute changes
+  do_setattrs(on, setattrs);
+  do_csetattrs(cmods);
+
   // set up commit waiter
   if (onsafe) 
 	commit_waiters[super_epoch].push_back(onsafe);
@@ -1979,6 +1981,52 @@ int Ebofs::stat(object_t oid, struct stat *st)
 }
 
 // attributes
+
+void Ebofs::do_setattrs(Onode *on, map<const char*, pair<void*,int> > &setattrs)
+{
+  for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
+	   it != setattrs.end();
+	   it++) {
+	string n(it->first);
+	if (it->second.first) {
+	  AttrVal val((char*)it->second.first, it->second.second);
+	  on->attr[n] = val;
+	} else {
+	  on->attr.erase(n);
+	}
+  }
+}
+						
+void Ebofs::do_csetattrs(map<coll_t, map<const char*, pair<void*,int> > > &cmods)
+{
+  for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
+	   cit != cmods.end();
+	   cit++) {
+	const coll_t cid = cit->first;
+
+	if (!cit->second.empty()) {
+	  // attrs
+	  Cnode *cn = get_cnode(cid);
+	  if (cn) {
+		for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
+			 ait != cit->second.end();
+			 ait++) {
+		  string n(ait->first);
+		  if (ait->second.first) {
+			AttrVal val((char*)ait->second.first, ait->second.second);
+			cn->attr[n] = val;
+		  } else {
+			cn->attr.erase(n);
+		  }
+		}
+		dirty_cnode(cn);
+		put_cnode(cn);
+	  } else {
+		dout(0) << "warning: collection " << hex << cid << dec << " dne for csetattrs" << endl;
+	  }
+	}	
+  }
+}
 
 int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size, Context *onsafe)
 {

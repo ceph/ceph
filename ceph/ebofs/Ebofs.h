@@ -198,6 +198,10 @@ class Ebofs : public ObjectStore {
   bool _write_will_block();
   void alloc_more_node_space();
 
+  void do_csetattrs(map<coll_t, map<const char*, pair<void*,int> > > &cmods);
+  void do_setattrs(Onode *on, map<const char*, pair<void*,int> > &setattrs);
+
+
  public:
   Ebofs(char *devfn) : 
 	dev(devfn), 
@@ -242,20 +246,22 @@ class Ebofs : public ObjectStore {
   int write_transaction(object_t oid, 
 						size_t len, off_t offset, 
 						bufferlist& bl, 
-						map<const char*, pair<void*,int> > setattrs,
-						set<const char*> rmattrs,
-						set<coll_t> collection_adds,
+						map<const char*, pair<void*,int> >& setattrs,
+						map<coll_t, map<const char*, pair<void*,int> > >& cmods,
 						Context *onsafe);
 
   int truncate(object_t oid, off_t size,
 			   Context *onsafe=0);
   int truncate_transaction(object_t oid, off_t size, 
-						   map<const char*, pair<void*,int> > setattrs,
-						   set<const char*> rmattrs,
+						   map<const char*, pair<void*,int> >& setattrs,
+						   map<coll_t, map<const char*, pair<void*,int> > >& cmods,
 						   Context *onsafe);
 
   int remove(object_t oid,
 			 Context *onsafe=0);
+  int remove_transaction(object_t,
+						 map<coll_t, map<const char*, pair<void*,int> > >& cmods,
+						 Context *onsafe=0);
 
   bool write_will_block();
 

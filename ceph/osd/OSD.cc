@@ -1598,7 +1598,7 @@ void OSD::op_rep_modify(MOSDOp *op)
 	logger->inc("r_wrb", op->get_length());
   }
 
-  // update pg version too
+  // update pg version too ... FIXME
   pg->info.last_update = op->get_version();
   if (pg->info.last_complete == ov)
 	pg->info.last_complete = op->get_version();
@@ -2131,6 +2131,7 @@ void OSD::op_modify(MOSDOp *op)
   
   // do it
   Context *oncommit = new C_OSD_WriteCommit(this, repop);
+
   op_apply(op, nv, oncommit);
 
   get_repop(repop);
@@ -2138,52 +2139,89 @@ void OSD::op_modify(MOSDOp *op)
   repop->waitfor_ack.erase(0);
   put_repop(repop);
 
-  if (op->get_op() == OSD_OP_WRITE)
-	{
-	  logger->inc("c_wr");
-	  logger->inc("c_wrb", op->get_length());
-	}
-  
-  //unlock_object(oid);
+  if (op->get_op() == OSD_OP_WRITE) {
+	logger->inc("c_wr");
+	logger->inc("c_wrb", op->get_length());
+  }
 }
 
 
 
 void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
 {
-   object_t oid = op->get_oid();
-   pg_t pgid = op->get_pg();
-   int r;
+  object_t oid = op->get_oid();
+  pg_t pgid = op->get_pg();
+  int r;
+  
+  // everybody will want to update the version.
+  map<const char*, pair<void*,int> > setattrs;
+  setattrs["version"] = pair<void*,int>(&version, sizeof(version));
 
-  if ((op->get_op() == OSD_OP_WRLOCK)||
-	  (op->get_op() == OSD_OP_REP_WRLOCK)){
-	//lock object
+  // and pg also gets version update.
+  map<coll_t, map<const char*, pair<void*,int> > > cmods;
+  cmods[pgid] = setattrs;
+
+  // do the op!
+  switch (op->get_op()) {
+  case OSD_OP_WRLOCK:
+  case OSD_OP_REP_WRLOCK:
+	// lock object
 	r = store->setattr(oid, "wrlock", &op->get_source(), sizeof(msg_addr_t), oncommit);
-  }
-  else if ((op->get_op() == OSD_OP_WRUNLOCK) ||
-		   (op->get_op() == OSD_OP_REP_WRUNLOCK)) {	
-	//unlock object
+	break;
+
+  case OSD_OP_WRUNLOCK:
+  case OSD_OP_REP_WRUNLOCK:
+	// unlock objects
 	r = store->rmattr(oid, "wrlock", oncommit);
-  }
-  else if ((op->get_op() == OSD_OP_WRITE) ||
-		   (op->get_op() == OSD_OP_REP_WRITE)){
-	// write
-	assert(op->get_data().length() == op->get_length());
-	r = apply_write(op, version, oncommit);
+	break;
+
+  case OSD_OP_WRITE:
+  case OSD_OP_REP_WRITE:
+	{ // write
+	  assert(op->get_data().length() == op->get_length());
+	  bufferlist bl;
+	  //bl = op->get_data();
+	  bl.claim( op->get_data() );
+	  
+	  /* old way
+		r = store->write(op->get_oid(),
+		op->get_length(),
+		op->get_offset(),
+		bl,
+		oncommit);
+		store->setattr(op->get_oid(), "version", &v, sizeof(v));
+		store->collection_add(pgid, oid);        // FIXME : be careful w/ locking
+	  */
+	  
+	  // go
+	  r = store->write_transaction(op->get_oid(),
+								   op->get_length(), op->get_offset(),
+								   bl,
+								   setattrs, cmods,
+								   oncommit);
+	}
+	break;
+
+  case OSD_OP_TRUNCATE:
+  case OSD_OP_REP_TRUNCATE:
+	{	// truncate
+	  map<const char*, pair<void*,int> > setattrs;
+	  setattrs["version"] = pair<void*,int>(&version, sizeof(version));
+	  r = store->truncate_transaction(oid, op->get_offset(), 
+									  setattrs, cmods, 
+									  oncommit);
+	}
+	break;
 	
-	// put new object in proper collection
-	store->collection_add(pgid, oid);        // FIXME : be careful w/ locking
-  } 
-  else if ((op->get_op() == OSD_OP_TRUNCATE)||
-		   (op->get_op() == OSD_OP_REP_TRUNCATE)) {
-	// truncate
-	r = store->truncate(oid, op->get_offset(), oncommit);
-  }
-  else if ((op->get_op() == OSD_OP_DELETE)||
-		   (op->get_op() == OSD_OP_REP_DELETE)) {
+  case OSD_OP_DELETE:
+  case OSD_OP_REP_DELETE:
 	// delete
-	store->collection_remove(pgid, oid);  // be careful with locking
-	r = store->remove(oid, oncommit);
+	r = store->remove_transaction(oid, 
+								  cmods,
+								  oncommit);
+	break;
+
+  default:
+	assert(0);
   }
-  else assert(0);
 }
