@@ -129,7 +129,7 @@ public:
 
   int apply_write(MOSDOp *op, version_t v,
 				  Context *oncommit = 0); 
-  
+  void op_apply(MOSDOp* op, version_t version, Context* oncommit = 0);
   
   
   friend class PG;

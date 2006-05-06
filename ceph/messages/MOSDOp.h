@@ -36,6 +36,8 @@
 #define OSD_OP_DELETE     11
 #define OSD_OP_TRUNCATE   12
 #define OSD_OP_ZERO       13
+#define OSD_OP_WRLOCK     14
+#define OSD_OP_WRUNLOCK   15
 
 #define OSD_OP_IS_REP(x)  ((x) >= 30)
 
@@ -43,6 +45,8 @@
 #define OSD_OP_REP_WRITE    (100+OSD_OP_WRITE)     // replicated (partial object) write
 #define OSD_OP_REP_TRUNCATE (100+OSD_OP_TRUNCATE)  // replicated truncate
 #define OSD_OP_REP_DELETE   (100+OSD_OP_DELETE)
+#define OSD_OP_REP_WRLOCK   (100+OSD_OP_WRLOCK)
+#define OSD_OP_REP_WRUNLOCK (100+OSD_OP_WRUNLOCK)
 
 #define OSD_OP_REP_PULL     30   // whole object read
 #define OSD_OP_REP_PUSH     31   // whole object write

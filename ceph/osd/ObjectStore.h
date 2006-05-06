@@ -86,8 +86,10 @@ class ObjectStore {
 					  Context *onsafe=0) {return 0;} //= 0;
   virtual int getattr(object_t oid, const char *name,
 					  void *value, size_t size) {return 0;} //= 0;
+
   virtual int rmattr(object_t oid, const char *name,
 					 Context *onsafe=0) {return 0;}
+
   virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
   
   // collections
