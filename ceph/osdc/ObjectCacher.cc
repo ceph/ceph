@@ -299,13 +299,25 @@ int ObjectCacher::Object::map_write(Objecter::OSDWrite *wr)
 
 /* private */
 
-void bh_read(Object *ob, BufferHead *bh)
+bool ObjectCacher::bh_cancel_read(BufferHead *bh)
 {
   assert(0);
   return(0);
 }
 
-void bh_write(Object *ob, BufferHead *bh)
+bool ObjectCacher::bh_cancel_write(BufferHead *bh)
+{
+  assert(0);
+  return(0);
+}
+
+void ObjectCacher::bh_read(Object *ob, BufferHead *bh)
+{
+  assert(0);
+  return(0);
+}
+
+void ObjectCacher::bh_write(Object *ob, BufferHead *bh)
 {
   assert(0);
   return(0);

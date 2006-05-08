@@ -228,6 +228,8 @@ class ObjectCacher {
   };
 
   // io
+  bool bh_cancel_read(BufferHead *bh);
+  bool bh_cancel_write(BufferHead *bh);
   void bh_read(Object *ob, BufferHead *bh);
   void bh_write(Object *ob, BufferHead *bh);
 
