@@ -113,10 +113,10 @@ int Objecter::readx(OSDRead *rd, Context *onfinish)
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
 						   it->oid, it->pgid, osdmap->get_epoch(), 
 						   OSD_OP_READ);
-	m->set_length(it->len);
-	m->set_offset(it->offset);
+	m->set_length(it->length);
+	m->set_offset(it->start);
 	dout(15) << " read tid " << last_tid << " from osd" << osd 
-			 << " oid " << hex << it->oid << dec  << " off " << it->offset << " len " << it->len 
+			 << " oid " << hex << it->oid << dec  << " " << it->start << "~" << it->length
 			 << " (" << it->buffer_extents.size() << " buffer fragments)" << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
 	
@@ -174,13 +174,13 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 		bufferlist *ox_buf = rd->read_data[eit->oid];
 		unsigned ox_len = ox_buf->length();
 		unsigned ox_off = 0;
-		assert(ox_len <= eit->len);           
+		assert(ox_len <= eit->length);           
 
 		// for each buffer extent we're mapping into...
 		for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
 			 bit != eit->buffer_extents.end();
 			 bit++) {
-		  dout(21) << " object " << hex << eit->oid << dec << " extent " << eit->offset << " len " << eit->len << " : ox offset " << ox_off << " -> buffer extent " << bit->first << " len " << bit->second << endl;
+		  dout(21) << " object " << hex << eit->oid << dec << " extent " << eit->start << "~" << eit->length << " : ox offset " << ox_off << " -> buffer extent " << bit->first << "~" << bit->second << endl;
 		  by_off[bit->first] = new bufferlist;
 
 		  if (ox_off + bit->second <= ox_len) {
@@ -210,7 +210,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 		  }
 		  ox_off += bit->second;
 		}
-		assert(ox_off == eit->len);
+		assert(ox_off == eit->length);
 	  }
 
 	  // sort and string bits together
@@ -301,8 +301,8 @@ int Objecter::writex(OSDWrite *wr, Context *onack, Context *oncommit)
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
 						   it->oid, it->pgid, osdmap->get_epoch(),
 						   OSD_OP_WRITE);
-	m->set_length(it->len);
-	m->set_offset(it->offset);
+	m->set_length(it->length);
+	m->set_offset(it->start);
 	
 	// map buffer segments into this extent
 	// (may be fragmented bc of striping)
@@ -314,10 +314,10 @@ int Objecter::writex(OSDWrite *wr, Context *onack, Context *oncommit)
 	  thisbit.substr_of(wr->bl, bit->first, bit->second);
 	  cur.claim_append(thisbit);
 	}
-	assert(cur.length() == it->len);
+	assert(cur.length() == it->length);
 	m->set_data(cur);//.claim(cur);
 
-	off += it->len;
+	off += it->length;
 
 	// add to gather set
 	if (onack)
@@ -334,7 +334,7 @@ int Objecter::writex(OSDWrite *wr, Context *onack, Context *oncommit)
 
 	// send
 	dout(10) << " write tid " << last_tid << " osd" << osd 
-			 << "  oid " << hex << it->oid << dec << " off " << it->offset << " len " << it->len << endl;
+			 << "  oid " << hex << it->oid << dec << " " << it->start << "~" << it->length << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
   }
 
@@ -431,10 +431,10 @@ int Objecter::zerox(OSDZero *z, Context *onack, Context *oncommit)
 	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
 						   it->oid, it->pgid, osdmap->get_epoch(),
 						   OSD_OP_ZERO);
-	m->set_length(it->len);
-	m->set_offset(it->offset);
+	m->set_length(it->length);
+	m->set_offset(it->start);
 	
-	off += it->len;
+	off += it->length;
 
 	// add to gather set
 	if (onack)
@@ -451,7 +451,7 @@ int Objecter::zerox(OSDZero *z, Context *onack, Context *oncommit)
 
 	// send
 	dout(10) << " zero tid " << last_tid << " osd" << osd 
-			 << "  oid " << hex << it->oid << dec << " off " << it->offset << " len " << it->len << endl;
+			 << "  oid " << hex << it->oid << dec << " " << it->start << "~" << it->length << endl;
 	messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
   }
 

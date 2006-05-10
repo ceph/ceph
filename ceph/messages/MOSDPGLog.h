@@ -12,38 +12,36 @@
  */
 
 
-#ifndef __MOSDPGQUERYREPLY_H
-#define __MOSDPGQUERYREPLY_H
+#ifndef __MOSDPGLOG_H
+#define __MOSDPGLOG_H
 
 #include "msg/Message.h"
 
-class MOSDPGSummary : public Message {
+class MOSDPGLog : public Message {
   epoch_t epoch;
-  pg_t pgid;
-  bufferlist    sumbl;
+  pg_t    pgid;
 
 public:
+  PG::PGLog log;
+  PG::PGInfo info;
+
   epoch_t get_epoch() { return epoch; }
-  
-  MOSDPGSummary() {}
-  MOSDPGSummary(version_t mv, pg_t pgid, PG::PGSummary &summary) :
-	Message(MSG_OSD_PG_SUMMARY) {
+  pg_t get_pgid() { return pgid; }
+
+  MOSDPGLog() {}
+  MOSDPGLog(version_t mv, pg_t pgid) :
+	Message(MSG_OSD_PG_LOG) {
 	this->epoch = mv;
 	this->pgid = pgid;
-	summary._encode(sumbl);
   }
 
-  pg_t get_pgid() { return pgid; }
-  bufferlist& get_summary_bl() {
-	return sumbl;
-  }
-  
-  char *get_type_name() { return "PGsum"; }
+  char *get_type_name() { return "PGlog"; }
 
   void encode_payload() {
 	payload.append((char*)&epoch, sizeof(epoch));
 	payload.append((char*)&pgid, sizeof(pgid));
-	payload.claim_append(sumbl);
+	payload.append((char*)&info, sizeof(info));
+	log._encode(payload);
   }
   void decode_payload() {
 	int off = 0;
@@ -51,9 +49,9 @@ public:
 	off += sizeof(epoch);
 	payload.copy(off, sizeof(pgid), (char*)&pgid);
 	off += sizeof(pgid);
-
-	payload.splice(0, off);
-	sumbl.claim(payload);
+	payload.copy(off, sizeof(info), (char*)&info);
+	off += sizeof(info);
+	log._decode(payload, off);
   }
 };
 

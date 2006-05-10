@@ -63,6 +63,11 @@ struct md_config_t {
   bool     client_use_random_mds;          // debug flag
 
   bool     client_sync_writes;
+
+  bool     client_oc;
+  int      client_oc_max_dirty;
+
+  /*
   bool     client_bcache;
   int      client_bcache_alloc_minsize;
   int      client_bcache_alloc_maxsize;
@@ -71,6 +76,7 @@ struct md_config_t {
   int      client_bcache_lowater;
   int      client_bcache_hiwater;
   size_t   client_bcache_align;
+  */
 
   int      client_trace;
   int      fuse_direct_io;

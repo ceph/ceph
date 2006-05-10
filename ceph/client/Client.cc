@@ -78,7 +78,7 @@ Client::Client(Messenger *m)
   osdmap = new OSDMap();     // initially blank.. see mount()
   objecter = new Objecter(messenger, osdmap);
   objectcacher = new ObjectCacher(objecter);
-  filer = new Filer(objecter); //, objectcacher);
+  filer = new Filer(objecter, objectcacher);
 }
 
 
@@ -694,7 +694,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
 
   // flush buffers?
-  if (g_conf.client_bcache &&
+  if (g_conf.client_oc &&
 	  !(in->file_caps() & CAP_FILE_WRBUFFER)) {
 
 	// **** write me ****
@@ -1622,7 +1622,7 @@ int Client::close(fh_t fh)
 	dout(10) << "  flushing dirty buffers on " << hex << in->ino() << dec << endl;
 	
 
-	/*if (g_conf.client_bcache && 
+	/*if (g_conf.client_oc && 
 		(fc->is_dirty() || fc->is_inflight())) {
 	  // flushing.
 	  dout(10) << "  waiting for inflight buffers on " << hex << in->ino() << dec << endl;
@@ -1648,50 +1648,7 @@ int Client::close(fh_t fh)
 // ------------
 // read, write
 
-// ------------------------
 // blocking osd interface
-
-class C_Client_Cond : public Context {
-public:
-  Cond *cond;
-  bool *done;
-  int *rvalue;
-  C_Client_Cond(Cond *cond, bool *d, int *rvalue) {
-	this->done = d;
-    this->cond = cond;
-    this->rvalue = rvalue;
-    *done = false;
-  }
-  void finish(int r) {
-    *rvalue = r;
-	*done = true;
-    cond->Signal();
-  }
-};
-
-
-class C_Client_LockedCond : public Context {
-public:
-  bool *done;
-  Cond *cond;
-  Mutex *mutex;
-  int *rvalue;
-  C_Client_LockedCond(Cond *cond, Mutex *mutex, bool *d, int *rvalue) {
-	this->done = d;
-    this->cond = cond;
-    this->mutex = mutex;
-    this->rvalue = rvalue;
-    *done = false;
-  }
-  void finish(int r) {
-    mutex->Lock();
-    *rvalue = r;
-	*done = true;
-    cond->Signal();
-    mutex->Unlock();
-  }
-};
-
 
 int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 
 {
@@ -1747,13 +1704,13 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   // adjust fd pos
   f->pos = offset+size;
 
-  if (!g_conf.client_bcache) {
+  if (!g_conf.client_oc) {
 	// buffer cache OFF
     Cond cond;
     bufferlist blist;   // data will go here
 	
 	bool done = false;
-    C_Client_Cond *onfinish = new C_Client_Cond(&cond, &done, &rvalue);
+    C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
     filer->read(in->inode, size, offset, &blist, onfinish);
 	while (!done)
 	  cond.Wait(client_lock);
@@ -1832,58 +1789,62 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   // adjust fd pos
   f->pos = offset+size;
 
-  if (g_conf.client_bcache &&	        // buffer cache ON?
-	  (in->file_caps() & CAP_FILE_WRBUFFER)) {   // caps buffered write?
+  // time it.
+  utime_t start = g_clock.now();
 	
-	// ***
+  if (g_conf.client_oc) { // buffer cache ON?
+	assert(objectcacher);
 
-  } else {
-	// synchronous write
-    // FIXME: do not bypass buffercache
-	//if (g_conf.client_bcache) {
-	  // write me
-	//} else
-	{
-	  dout(7) << "synchronous write" << endl;
-	  
-	  // create a buffer that refers to *buf, but doesn't try to free it when it's done.
-	  bufferlist blist;
-	  blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
-	  
-	  // issue write
-	  Cond cond;
-	  int rvalue = 0;
-	  
-	  utime_t start = g_clock.now();
+	bufferlist blist;
+	blist.push_back( new buffer(buf, size) );
 
-	  bool done = false;
-	  C_Client_Cond *onfinish = new C_Client_Cond(&cond, &done, &rvalue);
-	  C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
-	  unsafe_sync_write++;
-
-	  dout(20) << " sync write start " << onfinish << endl;
-
-	  filer->write(in->inode, size, offset, blist, 0, 
-				   //NULL,NULL);  // no wait hack
-				   onfinish, onsafe);
-	  
-	  while (!done) {
-		cond.Wait(client_lock);
-		dout(20) << " sync write bump " << onfinish << endl;
-	  }
-
-	  // time
-	  utime_t lat = g_clock.now();
-	  lat -= start;
-	  if (client_logger) {
-		client_logger->finc("wrlsum",(double)lat);
-		client_logger->inc("wrlnum");
-	  }
-
-	  dout(20) << " sync write done " << onfinish << endl;
+	// wait?  (this may block!)
+	objectcacher->wait_for_write(size, client_lock);
+	
+	if (in->file_caps() & CAP_FILE_WRBUFFER) {   // caps buffered write?
+	  // async, caching, non-blocking.
+	  filer->caching_write(in->inode, size, offset, blist);
+	} else {
+	  // atomic, synchronous, blocking.
+	  filer->atomic_sync_write(in->inode, size, offset, blist, client_lock);	  
 	}
+  } else {
+	// legacy, inconsistent synchronous write.
+	dout(7) << "synchronous write" << endl;
+	  
+	// create a buffer that refers to *buf, but doesn't try to free it when it's done.
+	bufferlist blist;
+	blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
+	  
+	// issue write
+	Cond cond;
+	int rvalue = 0;
+	
+	bool done = false;
+	C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
+	C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
+	unsafe_sync_write++;
+	
+	dout(20) << " sync write start " << onfinish << endl;
+	
+	filer->write(in->inode, size, offset, blist, 0, 
+				 onfinish, onsafe);
+	
+	while (!done) {
+	  cond.Wait(client_lock);
+	  dout(20) << " sync write bump " << onfinish << endl;
+	}
+	dout(20) << " sync write done " << onfinish << endl;
   }
 
+  // time
+  utime_t lat = g_clock.now();
+  lat -= start;
+  if (client_logger) {
+	client_logger->finc("wrlsum",(double)lat);
+	client_logger->inc("wrlnum");
+  }
+	
   // assume success for now.  FIXME.
   off_t totalwritten = size;
   

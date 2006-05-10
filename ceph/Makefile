@@ -9,7 +9,7 @@
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 CC = g++
 CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread -lrt -ldb
+LIBS = -lpthread -lrt 
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -65,8 +65,7 @@ COMMON_OBJS= \
 CLIENT_OBJS= \
 	client/Client.o\
 	client/SyntheticClient.o\
-	client/Trace.o\
-	client/Buffercache.o
+	client/Trace.o
 
 TCP_OBJS = \
 	msg/TCPMessenger.o\
@@ -131,7 +130,7 @@ ebofs: mkfs.ebofs test.ebofs
 
 
 # libceph
-libceph.o: client/ldceph.o client/Client.o client/Buffercache.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
+libceph.o: client/ldceph.o client/Client.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
 	ld -i $^ -o $@
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c

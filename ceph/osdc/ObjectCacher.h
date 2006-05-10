@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "include/lru.h"
+#include "include/Context.h"
 
 #include "common/Cond.h"
 
@@ -13,7 +14,7 @@ class Objecter::OSDRead;
 class Objecter::OSDWrite;
 
 class ObjectCacher {
- private:
+ public:
   // ******* BufferHead *********
   class BufferHead : public LRUObject {
   public:
@@ -91,6 +92,7 @@ class ObjectCacher {
   class Object {
   private:
 	// ObjectCacher::Object fields
+	ObjectCacher *oc;
 	object_t  oid;
 	inodeno_t ino;
 	
@@ -104,7 +106,8 @@ class ObjectCacher {
 	int lock_state;
 
   public:
-	Object(object_t o, inodeno_t i) : 
+	Object(ObjectCacher *_oc, object_t o, inodeno_t i) : 
+	  oc(_oc),
 	  oid(o), ino(i), 
 	  lock_state(LOCK_NONE) 
 	  {}
@@ -144,9 +147,17 @@ class ObjectCacher {
 	bool is_empty() { return data.empty(); }
 
 	// mid-level
+	int scan_versions(off_t start, off_t len,
+					  version_t& low, version_t& high);
 	BufferHead *split(BufferHead *bh, off_t off);
-	int map_read(Objecter::OSDRead *rd);
-	int map_write(Objecter::OSDWrite *wr);
+	void merge(BufferHead *left, BufferHead *right);
+
+	int map_read(Objecter::OSDRead *rd,
+				 map<off_t, BufferHead*>& hits,
+				 map<off_t, BufferHead*>& missing,
+				 map<off_t, BufferHead*>& rx);
+	BufferHead *map_write(Objecter::OSDWrite *wr);
+
   };
 
   // ******* ObjectCacher *********
@@ -194,6 +205,13 @@ class ObjectCacher {
   off_t get_stat_dirty() { return stat_dirty; }
   off_t get_stat_clean() { return stat_clean; }
 
+  void touch_bh(BufferHead *bh) {
+	if (bh->is_dirty())
+	  lru_dirty.lru_touch(bh);
+	else
+	  lru_rest.lru_touch(bh);
+  }
+
   // bh states
   void bh_set_state(BufferHead *bh, int s) {
 	// move between lru lists?
@@ -227,11 +245,29 @@ class ObjectCacher {
 	//bh->set_dirty_stamp(g_clock.now());
   };
 
+
+
   // io
-  bool bh_cancel_read(BufferHead *bh);
-  bool bh_cancel_write(BufferHead *bh);
   void bh_read(Object *ob, BufferHead *bh);
   void bh_write(Object *ob, BufferHead *bh);
+
+ public:
+  void bh_read_finish(object_t oid, off_t offset, size_t length, bufferlist &bl);
+  void bh_write_finish(object_t oid, off_t offset, size_t length, version_t v);
+
+  class C_ReadFinish : public Context {
+	ObjectCacher *oc;
+	object_t oid;
+	off_t start;
+	size_t length;
+  public:
+	bufferlist bl;
+	C_ReadFinish(ObjectCacher *c, object_t o, off_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+	void finish(int r) {
+	  oc->bh_read_finish(oid, start, length, bl);
+	}
+  };
+
 
 
  public:
@@ -241,13 +277,29 @@ class ObjectCacher {
 	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0)
 	{}
 
-  // blocking.  async.
+
+  class C_RetryRead : public Context {
+	ObjectCacher *oc;
+	Objecter::OSDRead *rd;
+	inodeno_t ino;
+	Context *onfinish;
+  public:
+	C_RetryRead(ObjectCacher *_oc, Objecter::OSDRead *r, inodeno_t i, Context *c) : oc(_oc), rd(r), ino(i), onfinish(c) {}
+	void finish(int) {
+	  oc->readx(rd, ino, onfinish);
+	}
+  };
+
+  // non-blocking.  async.
   int readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish);
-  int writex(Objecter::OSDWrite *wr, inodeno_t ino, Context *onack, Context *oncommit);
+  int writex(Objecter::OSDWrite *wr, inodeno_t ino);
+
+  // write blocking
+  void wait_for_write(size_t len, Mutex& lock);
   
   // blocking.  atomic+sync.
-  int atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish);
-  int atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Context *onack, Context *oncommit);
+  int atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock);
+  int atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock);
 
   void flush_set(inodeno_t ino, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
@@ -256,5 +308,19 @@ class ObjectCacher {
   void commit_all(Context *oncommit=0);
 };
 
+
+inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
+{
+  out << "bh["
+	  << bh.start() << "~" << bh.end()
+	  << " v " << bh.get_version();
+  if (bh.is_tx()) out << " tx";
+  if (bh.is_rx()) out << " rx";
+  if (bh.is_dirty()) out << " dirty";
+  if (bh.is_clean()) out << " clean";
+  if (bh.is_missing()) out << " missing";
+  out << "]";
+  return out;
+}
 
 #endif

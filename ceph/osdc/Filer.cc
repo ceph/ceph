@@ -82,15 +82,15 @@ void Filer::file_to_extents(inode_t inode,
 	else
 	  x_len = left;
 	
-	if (ex->offset + ex->len == x_offset) {
+	if (ex->start + ex->length == x_offset) {
 	  // add to extent
-	  ex->len += x_len;
+	  ex->length += x_len;
 	} else {
 	  // new extent
-	  assert(ex->len == 0);
-	  assert(ex->offset == 0);
-	  ex->offset = x_offset;
-	  ex->len = x_len;
+	  assert(ex->length == 0);
+	  assert(ex->start == 0);
+	  ex->start = x_offset;
+	  ex->length = x_len;
 	}
 	ex->buffer_extents[cur-offset] = x_len;
 		

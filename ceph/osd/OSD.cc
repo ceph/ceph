@@ -45,6 +45,7 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGSummary.h"
+#include "messages/MOSDPGLog.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -632,7 +633,7 @@ void OSD::update_map(bufferlist& state)
 		pg->last_epoch_started_any = osdmap->get_epoch();
 		pg->mark_complete();
 		pg->mark_active();
-		  
+		
 		dout(7) << "created " << *pg << endl;
 		pg_list.push_back(pgid);
 	  }
@@ -724,16 +725,18 @@ void OSD::advance_map(list<pg_t>& ls)
 		pg->waiting_for_missing_object.clear();
 
 		// drop peers
-		pg->drop_peers();
+		pg->clear_content_recovery_state();
 		pg->state_clear(PG::STATE_CLEAN);
 	  }
 	  
 	  // new primary?
 	  if (role == 0) {
+		// i am new primary
 		pg->state_clear(PG::STATE_ACTIVE);
 	  } else {
-		// we need to announce
-		pg->state_set(PG::STATE_ACTIVE);
+		// i am now replica|stray.  we need to send a notify.
+		pg->state_clear(PG::STATE_ACTIVE);
+		pg->state_set(PG::STATE_STRAY);
 
 		if (nrep == 0) 
 		  dout(1) << "crashed pg " << *pg << endl;
@@ -769,11 +772,9 @@ void OSD::advance_map(list<pg_t>& ls)
 	for (set<int>::const_iterator down = osdmap->get_down_osds().begin();
 		 down != osdmap->get_down_osds().end();
 		 down++) {
-	  PG::PGPeer *pgp = pg->get_peer(*down);
-	  if (!pgp) continue;
+	  if (!pg->is_acting(*down)) continue;
 	  
-	  dout(10) << " " << *pg << " peer osd" << *down << " is down, removing" << endl;
-	  pg->remove_peer(*down);
+	  dout(10) << " " << *pg << " peer osd" << *down << " is down" << endl;
 	  
 	  // NAK any ops to the down osd
 	  if (replica_pg_osd_tids[pgid].count(*down)) {
@@ -805,7 +806,8 @@ void OSD::activate_map(list<pg_t>& ls)
 
 	if (pg->get_role() == 0) {
 	  // i am primary
-	  repeer(pg, query_map);
+	  pg->build_prior();
+	  pg->peer(query_map);
 	}
 	else if (pg->is_stray()) {
 	  // i am residual|replica
@@ -1003,170 +1005,13 @@ void OSD::do_queries(map< int, map<pg_t,version_t> >& query_map)
 	int who = pit->first;
 	dout(7) << "do_queries querying osd" << who
 			<< " on " << pit->second.size() << " PGs" << endl;
-	
+
 	MOSDPGQuery *m = new MOSDPGQuery(osdmap->get_epoch(),
 									 pit->second);
 	messenger->send_message(m,
 							MSG_ADDR_OSD(who));
   }
 }
-
-
-/** repeer()
- * primary: check, query whatever replicas i need to.
- */
-void OSD::repeer(PG *pg, map< int, map<pg_t,version_t> >& query_map) 
-{
-  dout(10) << "repeer " << *pg << endl;
-
-  // determine initial peer set
-  map<int,int> peerset;  // peer -> role
-  
-  // prior map(s), if OSDs are still up
-  for (version_t epoch = pg->last_epoch_started_any;
-	   epoch < osdmap->get_epoch();
-	   epoch++) {
-	OSDMap *omap = get_osd_map(epoch);
-	assert(omap);
-	
-	vector<int> acting;
-	omap->pg_to_acting_osds(pg->get_pgid(), acting);
-	
-	for (unsigned i=0; i<acting.size(); i++) 
-	  if (osdmap->is_up(acting[i]))
-		peerset[acting[i]] = -1;
-  }
-  
-  // current map
-  for (unsigned i=1; i<pg->acting.size(); i++)
-	peerset[pg->acting[i]] = i>0 ? 1:0;
-
-
-  // -- query info from everyone.
-  bool haveallinfo = true;
-  for (map<int,int>::iterator it = peerset.begin();
-	   it != peerset.end();
-	   it++) {
-	int who = it->first;
-	int role = it->second;
-	if (who == whoami) continue;      // nevermind me
-
-	PG::PGPeer *pgp = pg->get_peer(who);
-	if (pgp && pgp->have_info()) {
-	  dout(10) << *pg << " have info from osd" << who << " role " << role << endl;
-	  continue;
-	} 
-	if (pgp && pgp->state_test(PG::PGPeer::STATE_QINFO)) {
-	  dout(10) << *pg << " waiting for osd" << who << " role " << role << endl;
-	} else {
-	  dout(10) << *pg << " querying info from osd" << who << " role " << role << endl;
-	  query_map[who][pg->get_pgid()] = 0;
-	}
-	haveallinfo = false;
-  }
-  if (!haveallinfo) return;
-  
-
-  // -- ok, we have all info.  who has latest PG content summary?
-  version_t newest_update = pg->info.last_update;
-  int       newest_update_osd = whoami;
-  version_t oldest_update = pg->info.last_update;
-  PG::PGPeer   *newest_update_peer = 0;
-  
-  for (map<int,PG::PGPeer*>::iterator it = pg->peers.begin();
-	   it != pg->peers.end();
-	   it++) {
-	PG::PGPeer *pgp = it->second;
-	assert(pgp->have_info());
-	
-	if (pgp->info.last_update > newest_update) {
-	  newest_update = pgp->info.last_update;
-	  newest_update_osd = it->first;
-	  newest_update_peer = pgp;
-	}
-	if (pgp->get_role() == 1 &&
-		pgp->info.last_update < oldest_update) 
-	  oldest_update = pgp->info.last_update;
-  }
-
-  if (newest_update_peer) {
-	// get contents from newest.
-	assert(!newest_update_peer->have_summary());
-	
-	dout(10) << *pg << " newest PG on osd" << newest_update_osd
-			 << " v " << newest_update 
-			 << ", querying summary"
-			 << endl;
-	query_map[newest_update_osd][pg->get_pgid()] = 1;
-	return;
-  } else {
-	dout(10) << *pg << " i have the latest: " << pg->info.last_update << endl;
-  }
- 
-
-  // -- find pg contents?
-  if (pg->info.last_complete < pg->info.last_update) {
-	if (pg->content_summary->missing > 0) {
-	  // search!
-	  dout(10) << *pg << " searching for PG contents, querying all peers" << endl;
-	  bool didquery = false;
-	  for (map<int,PG::PGPeer*>::iterator it = pg->peers.begin();
-		   it != pg->peers.end();
-		   it++) {
-		PG::PGPeer *pgp = it->second;
-		if (pgp->have_summary()) continue;
-		query_map[it->first][pg->get_pgid()] = 1;
-		didquery = true;
-	  }
-	  
-	  if (didquery) return;
-	} else {
-	  dout(10) << *pg << " i have located all objects" << endl;
-	}
-  } else {
-	dout(10) << *pg << " i have all objects" << endl;
-  }
-
-
-  // -- distribute summary?
-  
-  // does anyone need it?
-  //if (oldest_update < pg->info.last_update) {
-  
-  // generate summary?
-  if (pg->content_summary == 0) 
-	pg->generate_content_summary();
-  
-  // distribute summary!
-  for (map<int,PG::PGPeer*>::iterator it = pg->peers.begin();
-	   it != pg->peers.end();
-	   it++) {
-	PG::PGPeer *pgp = it->second;
-	if (pgp->get_role() != 1) continue;
-	
-	pgp->state_clear(PG::PGPeer::STATE_WAITING);
-	pgp->state_set(PG::PGPeer::STATE_ACTIVE);
-	
-	//if (pgp->info.last_update < pg->info.last_update) {
-	dout(10) << *pg << " sending summary to osd" << it->first << endl;
-	MOSDPGSummary *m = new MOSDPGSummary(osdmap->get_epoch(), pg->get_pgid(), pg->content_summary);
-	messenger->send_message(m, MSG_ADDR_OSD(it->first));
-	//}
-  }
-  //} else {
-  //dout(10) << *pg << " nobody needs the summary" << endl;
-  //}
-  
-  // plan my own recovery
-  pg->plan_recovery();
-  
-  // i am active!
-  pg->state_set(PG::STATE_ACTIVE);
-
-  take_waiters(pg->waiting_for_active);
-
-}
-
 
 
 /** PGNotify
@@ -1198,37 +1043,39 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	  assert(pg->acting[0] == whoami);
 	  pg->info.same_primary_since = it->same_primary_since;
 	  pg->set_role(0);
-	  
-	  dout(10) << " " << *pg << " is new, nrep=" << nrep << endl;	  
 
-	  // start peers
-	  repeer(pg, query_map);
+	  pg->last_epoch_started_any = it->last_epoch_started;
+	  pg->build_prior();
 
+	  dout(10) << " " << *pg << " is new" << endl;
+	
 	  // kick any waiters
 	  if (waiting_for_pg.count(pgid)) {
 		take_waiters(waiting_for_pg[pgid]);
 		waiting_for_pg.erase(pgid);
 	  }
-	} else {
-	  // already had pg.
-
-	  // peered with this guy specifically?
-	  PG::PGPeer *pgp = pg->get_peer(from);
-	  if (!pgp) {
-		int role = osdmap->get_pg_role(pg->get_pgid(), from);
-		pgp = pg->new_peer(from, role);
-	  }
-
-	  pgp->info = *it;
-	  pgp->state_set(PG::PGPeer::STATE_INFO);
-
-	  repeer(pg, query_map);
 	}
+
+	// save info.
+	pg->peer_info[from] = *it;
+
+	// adjust prior?
+	if (it->last_epoch_started > pg->last_epoch_started_any) 
+	  pg->adjust_prior();
+
+	// peer
+	pg->peer(query_map);
   }
   
   do_queries(query_map);
   
   delete m;
+}
+
+void OSD::handle_pg_log(MOSDPGLog *m) 
+{
+
+
 }
 
 
@@ -1274,31 +1121,37 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  dout(10) << *pg << " dne (before), but i am role " << role << endl;
 	}
 
-	if (it->second) {
+	if (it->second == 0) {
+	  // info
+	  dout(10) << *pg << " sending info" << endl;
+	  notify_list[from].push_back(pg->info);
+	} else if (it->second == 1) {
 	  // summary
-	  MOSDPGSummary *m;
-	  if (pg->content_summary == 0) {
-		pg->generate_content_summary();
-		m = new MOSDPGSummary(osdmap->get_epoch(), pg->get_pgid(), pg->content_summary);
-		delete pg->content_summary;
-		pg->content_summary = 0;
-	  } else {
-		m = new MOSDPGSummary(osdmap->get_epoch(), pg->get_pgid(), pg->content_summary);
-	  }
+	  dout(10) << *pg << " sending content summary" << endl;
+	  PG::PGSummary summary;
+	  pg->generate_summary(summary);
+	  MOSDPGSummary *m = new MOSDPGSummary(osdmap->get_epoch(), pg->get_pgid(), summary);
 	  messenger->send_message(m, MSG_ADDR_OSD(from));
 	} else {
-	  // notify
-	  notify_list[from].push_back(pg->info);
+	  // log + info
+	  dout(10) << *pg << " sending info+log since " << it->second << endl;
+	  MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->get_pgid());
+	  m->info = pg->info;
+	  m->log.copy_after(pg->log, it->second);
+	  messenger->send_message(m, MSG_ADDR_OSD(from));
 	}	
   }
   
-  do_notifies(notify_list);
+  do_notifies(notify_list);   
 
   delete m;
 }
 
+
+
 void OSD::handle_pg_summary(MOSDPGSummary *m)
 {
+  /*
   dout(7) << "handle_pg_summary from " << m->get_source() << endl;
   int from = MSG_ADDR_NUM(m->get_source());
 
@@ -1307,7 +1160,7 @@ void OSD::handle_pg_summary(MOSDPGSummary *m)
   map< int, map<pg_t,version_t> > query_map;    // peer -> PG -> get_summary_since
 
   pg_t pgid = m->get_pgid();
-  PG::PGContentSummary *sum = m->get_summary();
+  PG::PGSummary *sum = m->get_summary();
   PG *pg = get_pg(pgid);
   assert(pg);
 
@@ -1381,7 +1234,7 @@ void OSD::handle_pg_summary(MOSDPGSummary *m)
 	// initiate any recovery?
 	pg->plan_recovery();
   }
-  
+  */
   delete m;
 }
 
@@ -1404,9 +1257,10 @@ void OSD::pg_pull(PG *pg, int maxops)
   int ops = pg->num_active_ops();
 
   dout(7) << "pg_pull pg " << *pg 
-		  << " " << pg->objects_missing.size() << " to do, " 
+		  << " " << pg->missing.num_missing() << " to do, " 
 		  << ops << "/" << maxops << " active" <<  endl;
   
+  /*
   while (ops < maxops &&
 		 !pg->recovery_queue.empty()) {
 	map<version_t, PG::ObjectInfo>::iterator first = pg->recovery_queue.upper_bound(pg->requested_through);
@@ -1415,12 +1269,13 @@ void OSD::pg_pull(PG *pg, int maxops)
 	pg->requested_through = first->first;
 
 	ops++;
-  }  
+  } 
+  */ 
 }
 
-void OSD::pull_replica(PG *pg, PG::ObjectInfo& oi)
+void OSD::pull_replica(PG *pg, object_t oid, version_t v)
 {
-  // get peer
+/*  // get peer
   dout(7) << "pull_replica " << hex << oi.oid << dec 
 		  << " v " << oi.version 
 		  << " from osd" << oi.osd << endl;
@@ -1438,7 +1293,9 @@ void OSD::pull_replica(PG *pg, PG::ObjectInfo& oi)
   // take note
   pull_ops[tid] = oi;
   pg->objects_pulling[oi.oid] = oi;
+*/
 }
+
 
 void OSD::op_rep_pull(MOSDOp *op)
 {
@@ -1481,6 +1338,7 @@ void OSD::op_rep_pull(MOSDOp *op)
 
 void OSD::op_rep_pull_reply(MOSDOpReply *op)
 {
+  /*
   object_t o = op->get_oid();
   version_t v = op->get_version();
 
@@ -1529,6 +1387,7 @@ void OSD::op_rep_pull_reply(MOSDOpReply *op)
 	take_waiters(pg->waiting_for_missing_object[o]);
 
   delete op;
+  */
 }
 
 
@@ -1677,13 +1536,13 @@ void OSD::handle_op(MOSDOp *op)
 
 	  if (!pg->is_complete()) {
 		// consult PG object map
-		if (pg->objects_missing.count(oid)) {
+		if (pg->missing.missing.count(oid)) {
 		  // need to pull
-		  version_t v = pg->objects_missing[oid];
+		  version_t v = pg->missing.missing[oid];
 		  dout(7) << "need to pull object " << hex << oid << dec 
 				  << " v " << v << endl;
 		  if (!pg->objects_pulling.count(oid)) 
-			pull_replica(pg, pg->recovery_queue[v]);
+			pull_replica(pg, oid, v);
 		  pg->waiting_for_missing_object[oid].push_back(op);
 		  return;
 		}
@@ -2131,9 +1990,9 @@ void OSD::op_modify(MOSDOp *op)
   
   // do it
   Context *oncommit = new C_OSD_WriteCommit(this, repop);
-
   op_apply(op, nv, oncommit);
 
+  // local ack
   get_repop(repop);
   assert(repop->waitfor_ack.count(0));
   repop->waitfor_ack.erase(0);

@@ -71,13 +71,7 @@ class Filer {
 	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
 	file_to_extents(inode, len, offset, rd->extents);
 
-	// cacheless async?
-	if (oc == 0) 
-	  return objecter->readx(rd, onfinish);
-
-	// use cache
-	oc->readx(rd, inode.ino, onfinish);
-	return 0;
+	return objecter->readx(rd, onfinish);
   }
 
   int write(inode_t& inode,
@@ -90,13 +84,7 @@ class Filer {
 	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
 	file_to_extents(inode, len, offset, wr->extents);
 
-	// cacheles async?
-	if (oc == 0) 
-	  return objecter->writex(wr, onack, oncommit);
-
-	// use cache
-	oc->writex(wr, inode.ino, onack, oncommit);
-	return 0;
+	return objecter->writex(wr, onack, oncommit);
   }
 
   int zero(inode_t& inode,
@@ -107,13 +95,28 @@ class Filer {
 	Objecter::OSDZero *z = new Objecter::OSDZero;
 	file_to_extents(inode, len, offset, z->extents);
 
-	// cacheless async?
-	if (oc == 0) 
-	  return objecter->zerox(z, onack, oncommit);
+	return objecter->zerox(z, onack, oncommit);
+  }
 
-	// actually: mds should never do this, and clients don't do zero().
-	assert(0);
-	return 0;
+
+  /*** async+caching (non-blocking) file interface ***/
+  int caching_read(inode_t& inode,
+				   size_t len, 
+				   off_t offset, 
+				   bufferlist *bl,
+				   Context *onfinish) {
+	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+	file_to_extents(inode, len, offset, rd->extents);
+	return oc->readx(rd, inode.ino, onfinish);
+  }
+
+  int caching_write(inode_t& inode,
+					size_t len, 
+					off_t offset, 
+					bufferlist& bl) {
+	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+	file_to_extents(inode, len, offset, wr->extents);
+	return oc->writex(wr, inode.ino);
   }
 
 
@@ -122,27 +125,25 @@ class Filer {
   
   int atomic_sync_read(inode_t& inode,
 					   size_t len, off_t offset,
-					   bufferlist *bl) {
+					   bufferlist *bl,
+					   Mutex &lock) {
 	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
 	file_to_extents(inode, len, offset, rd->extents);
 
 	assert(oc);
-	int r = oc->atomic_sync_readx(rd, inode.ino, 
-								  0);  // block.
+	int r = oc->atomic_sync_readx(rd, inode.ino, lock);
 	return r;
   }
 
   int atomic_sync_write(inode_t& inode,
 						size_t len, off_t offset,
 						bufferlist& bl,
-						Context *oncommit) {
+						Mutex &lock) {
 	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
 	file_to_extents(inode, len, offset, wr->extents);
 
 	assert(oc);
-	int r = oc->atomic_sync_writex(wr, inode.ino, 
-								   0,  // block
-								   oncommit);
+	int r = oc->atomic_sync_writex(wr, inode.ino, lock);
 	return r;
   }
 

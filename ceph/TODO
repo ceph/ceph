@@ -1,4 +1,6 @@
 
+
+
 - stability
  - ebofs table.remove() thing
  - fakestore crapping out.. missing timer events?
@@ -54,6 +56,7 @@ filer/osd
 
 
 ebofs
+- hey.. why do we drop on->commit_waiters on delete?  that's stupid!
 - fix NEAR_LAST_FWD   (?)
 - combine inodes into same blocks?
 - delay allocation

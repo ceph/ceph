@@ -92,6 +92,10 @@ md_config_t g_conf = {
 
   client_sync_writes: 0,
 
+  client_oc: false,
+  client_oc_max_dirty: 1024*1024* 100, 
+
+  /*
   client_bcache: 0,
   client_bcache_alloc_minsize: 1<<10, // 1KB
   client_bcache_alloc_maxsize: 1<<18, // 256KB
@@ -101,6 +105,7 @@ md_config_t g_conf = {
   client_bcache_lowater: 60, // % of size
   client_bcache_hiwater: 80, // % of size
   client_bcache_align: 1<<10, // 1KB splice alignment
+  */
 
   client_trace: 0,
   fuse_direct_io: 0,
@@ -461,10 +466,10 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--client_sync_writes") == 0)
 	  g_conf.client_sync_writes = atoi(args[++i]);
-	else if (strcmp(args[i], "--client_bcache") == 0)
-	  g_conf.client_bcache = atoi(args[++i]);
-	else if (strcmp(args[i], "--client_bcache_ttl") == 0)
-	  g_conf.client_bcache_ttl = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_oc") == 0)
+	  g_conf.client_oc = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_oc_max_dirty") == 0)
+	  g_conf.client_oc_max_dirty = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--ebofs") == 0) 

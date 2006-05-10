@@ -177,7 +177,8 @@ class Ebofs : public ObjectStore {
 				   interval_set<block_t>& alloc,
 				   block_t& old_bfirst, block_t& old_blast);
   void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
-  bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on);
+  bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, 
+					Cond *will_wait_on, bool *will_wait_on_bool);
 
   // ** finisher **
   // async write notification to users

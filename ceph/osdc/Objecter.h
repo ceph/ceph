@@ -17,17 +17,25 @@ class Message;
 
 
 // new types
-typedef __uint64_t tid_t;
+typedef __uint64_t tid_t;   // transaction id
 
 class ObjectExtent {
  public:
   object_t    oid;       // object id
-  pg_t        pgid; 
-  size_t      offset, len;   // extent within the object
+  pg_t        pgid;     
+  off_t       start;     // in object
+  size_t      length;    // in object
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
-
-  ObjectExtent(object_t o=0, off_t off=0, size_t l=0) : oid(o), offset(off), len(l) { }
+  
+  ObjectExtent(object_t o=0, off_t s=0, size_t l=0) : oid(o), start(s), length(l) { }
 };
+
+inline ostream& operator<<(ostream& out, ObjectExtent &ex)
+{
+  return out << "extent(" 
+			 << hex << ex.oid << " in " << ex.pgid << dec
+			 << " " << ex.start << "~" << ex.length;
+}
 
 class Objecter {
  public:  

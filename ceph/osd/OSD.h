@@ -176,14 +176,14 @@ public:
   void handle_rep_op_ack(__uint64_t tid, int result, bool commit, int fromosd);
 
   // recovery
-  map<tid_t,PG::ObjectInfo>  pull_ops;   // tid -> PGPeer*
+  //map<tid_t,PG::ObjectInfo>  pull_ops;   // tid -> PGPeer*
 
   void do_notifies(map< int, list<PG::PGInfo> >& notify_list);
   void do_queries(map< int, map<pg_t,version_t> >& query_map);
   void repeer(PG *pg, map< int, map<pg_t,version_t> >& query_map);
 
   void pg_pull(PG *pg, int maxops);
-  void pull_replica(PG *pg, PG::ObjectInfo& oi);
+  void pull_replica(PG *pg, object_t, version_t);
 
   bool require_current_map(Message *m, version_t v);
   bool require_same_or_newer_map(Message *m, epoch_t e);
@@ -191,6 +191,7 @@ public:
   void handle_pg_query(class MOSDPGQuery *m);
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_summary(class MOSDPGSummary *m);
+  void handle_pg_log(class MOSDPGLog *m);
 
   void op_rep_pull(class MOSDOp *op);
   void op_rep_pull_reply(class MOSDOpReply *op);

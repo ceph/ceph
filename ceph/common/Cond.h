@@ -21,6 +21,8 @@
 #include "Mutex.h"
 #include "Clock.h"
 
+#include "include/Context.h"
+
 #include <pthread.h>
 #include <cassert>
 
@@ -87,6 +89,39 @@ class Cond
 	//int r = pthread_cond_signal(&C);
 	int r = pthread_cond_broadcast(&C);
 	return r;
+  }
+};
+
+class C_Cond : public Context {
+  Cond *cond;
+  bool *done;
+  int *rval;
+public:
+  C_Cond(Cond *c, bool *d, int *r=0) : cond(c), done(d), rval(r) {
+	*done = false;
+  }
+  void finish(int r) {
+	if (rval) *rval = r;
+	*done = true;
+	cond->Signal();
+  }
+};
+
+class C_SafeCond : public Context {
+  Mutex *lock;
+  Cond *cond;
+  bool *done;
+  int *rval;
+public:
+  C_SafeCond(Mutex *l, Cond *c, bool *d, int *r=0) : lock(l), cond(c), done(d), rval(r) {
+	*done = false;
+  }
+  void finish(int r) {
+	lock->Lock();
+	if (rval) *rval = r;
+	*done = false;
+	cond->Signal();
+	lock->Unlock();
   }
 };
 

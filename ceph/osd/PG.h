@@ -39,111 +39,151 @@ class OSD;
 class PG {
 public:
   
-  /** ObjectInfo
-   * summary info about an object (replica)
+  /*
+   * PGInfo - summary of PG statistics.
    */
-  struct ObjectInfo {
-	object_t oid;
-	version_t version;
-	int osd;   // -1 = unknown.  if local, osd == whoami.
-	ObjectInfo(object_t o=0, version_t v=0, int os=-1) : oid(o), version(v), osd(os) {}
-  };
-  
   struct PGInfo {
 	pg_t pgid;
-	version_t last_update;    // last object version applied.
-	version_t last_complete;  // last pg version pg was complete.
+	version_t last_update;    // last object version logged/updated.
+	version_t last_complete;  // last version pg was complete through.
+	version_t log_floor;      // oldest log entry.
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
-	epoch_t same_primary_since;  // 
+	epoch_t same_primary_since;  // first epoch the current primary was primary.
 	PGInfo(pg_t p=0) : pgid(p), 
 					   last_update(0), last_complete(0),
 					   last_epoch_started(0), last_epoch_finished(0),
 					   same_primary_since(0) {}
   };
   
-  struct PGContentSummary {
-	//version_t since;
-	int remote, missing;
-	list<ObjectInfo> ls;
-
+  /*
+   * PGSummary - snapshot of full pg contents
+   */
+  class PGSummary {
+  public:
+	map<object_t, version_t> objects;  // objects i currently store.
+	//PGMissing                missing;  // objects i am missing (to get thru info.last_update).
+	
 	void _encode(bufferlist& blist) {
-	  //blist.append((char*)&since, sizeof(since));
-	  blist.append((char*)&remote, sizeof(remote));
-	  blist.append((char*)&missing, sizeof(missing));
-	  ::_encode(ls, blist);
+	  ::_encode(objects, blist);
+	  //missing._encode(blist);
 	}
 	void _decode(bufferlist& blist, int& off) {
-	  //blist.copy(off, sizeof(since), (char*)&since);
-	  //off += sizeof(since);
-	  blist.copy(off, sizeof(remote), (char*)&remote);
-	  off += sizeof(remote);
-	  blist.copy(off, sizeof(missing), (char*)&missing);
-	  off += sizeof(missing);
-	  ::_decode(ls, blist, off);
+	  ::_decode(objects, blist, off);
+	  //missing._decode(blist, off);
 	}
-
-	PGContentSummary() : remote(0), missing(0) {}
   };
 
-  
-  /** PGPeer
-   * state associated with non-primary OSDS with PG content.
-   * only used by primary.
+  /*
+   * PGMissing - summary of missing objects.
+   *  kept in memory, as a supplement to PGLog.
+   *  also used to pass missing info in messages.
    */
-  
-  class PGPeer {
+  class PGMissing {
   public:
-	// bits
-	static const int STATE_INFO      = 1;  // we have info
-	static const int STATE_SUMMARY  = 2;  // we have summary
-	static const int STATE_QINFO     = 4;  // we are querying info|summary.
-	static const int STATE_QSUMMARY = 8;  // we are querying info|summary.
-	static const int STATE_WAITING   = 16; // peer is waiting for go.
-	static const int STATE_ACTIVE    = 32; // peer is active.
-	//static const int STATE_COMPLETE  = 64; // peer is complete.
+	map<object_t, version_t> missing;   // oid -> v
+	map<version_t, object_t> rmissing;  // v -> oid
 
-	class PG *pg;
-  private:
-	int       peer;
-	int       role;
-	int       state;
-	
-  public:
-	// peer state
-	PGInfo            info;
-	PGContentSummary *content_summary;
-	
-	friend class PG;
-	
-  public:
-	PGPeer(class PG *pg, int p, int ro) : 
-	  pg(pg), 
-	  peer(p),
-	  role(ro),
-	  state(0),
-	  content_summary(NULL) { }
-	~PGPeer() {
-	  if (content_summary) delete content_summary;
+	map<object_t, int>       loc;       // where i think i can get them.
+
+	int num_lost() { return missing.size() - loc.size(); }
+	int num_missing() { return missing.size(); }
+
+	void _encode(bufferlist& blist) {
+	  ::_encode(missing, blist);
+	  ::_encode(loc, blist);
 	}
-	
-	int get_peer() { return peer; }
-	int get_role() { return role; }
-	
-	int get_state() { return state; } 
-	bool state_test(int m) { return (state & m) != 0; }
-	void state_set(int m) { state |= m; }
-	void state_clear(int m) { state &= ~m; }
-	
-	bool have_info() { return state_test(STATE_INFO); }
-	bool have_summary() { return state_test(STATE_SUMMARY); }
+	void _decode(bufferlist& blist, int& off) {
+	  ::_decode(missing, blist, off);
+	  ::_decode(loc, blist, off);
 
-	bool is_waiting() { return state_test(STATE_WAITING); }
-	bool is_active() { return state_test(STATE_ACTIVE); }
-	bool is_complete() { return have_info() &&
-						   info.last_update == info.last_complete; }
+	  for (map<object_t,version_t>::iterator it = missing.begin();
+		   it != missing.end();
+		   it++) 
+		rmissing[it->second] = it->first;
+	}
+  };
+
+  /*
+   * PGLog - incremental log of recent pg changes.
+   *  summary of persistent on-disk copy:
+   *   multiply-modified objects are implicitly trimmed from in-memory log.
+   *  also, serves as a recovery queue.
+   */
+  class PGLog {
+  public:
+	version_t top;           // corresponds to newest entry.
+	version_t bottom;        // corresponds to entry prio to oldest entry (t=bottom is trimmed).
+	map<object_t, version_t> updated;  // oid -> v. items > bottom, + version.
+	map<version_t, object_t> rupdated; // v -> oid.
+	map<object_t, version_t> deleted;  // oid -> when.  items <= bottom that no longer exist
+	map<version_t, object_t> rdeleted; // when -> oid.
+	
+	PGLog() : top(0), bottom(0) {}
+
+	void _reverse(map<object_t, version_t> &fw, map<version_t, object_t> &bw) {
+	  for (map<object_t,version_t>::iterator it = fw.begin();
+		   it != fw.end();
+		   it++) 
+		bw[it->second] = it->first;
+	}
+	void _encode(bufferlist& blist) const {
+	  blist.append((char*)&top, sizeof(top));
+	  blist.append((char*)&bottom, sizeof(bottom));
+	  ::_encode(updated, blist);
+	  ::_encode(deleted, blist);
+	}
+	void _decode(bufferlist& blist, int& off) {
+	  blist.copy(off, sizeof(top), (char*)&top);
+	  off += sizeof(top);
+	  blist.copy(off, sizeof(bottom), (char*)&bottom);
+	  off += sizeof(bottom);
+	  ::_decode(updated, blist, off);
+	  ::_decode(deleted, blist, off);
+
+	  _reverse(updated, rupdated);
+	  _reverse(deleted, rdeleted);
+	}
+
+
+
+	// accessors
+	version_t is_updated(object_t oid) {
+	  if (updated.count(oid)) return updated[oid];
+	  return 0;
+	}
+	version_t is_deleted(object_t oid) {
+	  if (deleted.count(oid)) return deleted[oid];
+	  return 0;
+	}
+
+	// actors
+	void add_update(object_t oid, version_t v) {
+	  updated[oid] = v;
+	  rupdated[v] = oid;
+	  if (deleted.count(oid)) {
+		assert(v > deleted[oid]);      // future deletions or past mods impossible.
+		rdeleted.erase(deleted[oid]);
+		deleted.erase(oid);
+	  }
+	  assert(v > top);
+	  top = v;
+	}
+	void add_delete(object_t oid, version_t when) {
+	  deleted[oid] = when;
+	  rdeleted[when] = oid;
+	  assert(when > top);
+	  top = when;
+	}
+
+	void trim(version_t s);
+	void copy_after(const PGLog &other, version_t v);
+	void merge_after(version_t after, const PGLog &other);
+	void print(ostream& out) const;
   };
   
+
+
 
   /*** PG ****/
 public:
@@ -161,22 +201,57 @@ public:
  protected:
   OSD *osd;
 
-  // generic state
 public:
+  // pg state
   PGInfo      info;
-  PGContentSummary *content_summary;
+  PGLog       log;
+  PGMissing   missing;
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   int         state;   // see bit defns above
 
   // primary state
-public:
-  epoch_t           last_epoch_started_any;
-  map<int, PGPeer*> peers;  // primary: (soft state) active peers
-
  public:
   vector<int> acting;
+  epoch_t     last_epoch_started_any;
+
+ protected:
+  // [primary only] content recovery state
+  set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
+  set<int>    stray_set;   // non-acting osds that have PG data.
+  map<int, PGInfo>      peer_info;  // info from peers (stray or prior)
+  set<int>              peer_info_requested;
+  map<int, PGLog*>      peer_log;   // logs from peers (for recovering pg content)
+  map<int, PGMissing*>  peer_missing;
+  set<int>              peer_log_requested;
+  map<int, PGSummary*>  peer_summary;   // full contents of peers
+  set<int>              peer_summary_requested;
+  friend class OSD;
+
+public:
+  void clear_content_recovery_state() {
+	prior_set.clear();
+	stray_set.clear();
+	peer_info.clear();
+	peer_info_requested.clear();
+	peer_log.clear();
+	peer_missing.clear();
+	peer_log_requested.clear();
+	peer_summary.clear();
+  }
+
+ public:
+  bool is_acting(int osd) const { 
+	for (unsigned i=0; i<acting.size(); i++)
+	  if (acting[i] == osd) return true;
+	return false;
+  }
+  bool is_prior(int osd) const { return prior_set.count(osd); }
+  bool is_stray(int osd) const { return stray_set.count(osd); }
+
+  void build_prior();
+  void adjust_prior();  // based on new peer_info.last_epoch_started_any
 
   // pg waiters
   list<class Message*>            waiting_for_active;
@@ -184,20 +259,21 @@ public:
 		   list<class Message*> > waiting_for_missing_object;   
 
   // recovery
-  map<object_t, version_t>   objects_missing;  // objects (versions) i need
-  map<version_t, ObjectInfo> recovery_queue;   // objects i need to pull (in order)
-  version_t requested_through;
-  map<object_t, ObjectInfo>  objects_pulling;  // which objects are currently being pulled
+  version_t                requested_thru;
+  map<object_t, version_t> objects_pulling;  // which objects are currently being pulled
   
+  void peer(map< int, map<pg_t,version_t> >& query_map);
+  void generate_summary(PGSummary &summary);
+
   void plan_recovery();
-  void generate_content_summary();
   void do_recovery();
+  void do_clean();
 
 
  public:  
   PG(OSD *o, pg_t p) : 
 	osd(o), 
-	info(p), content_summary(0),
+	info(p),
 	role(0),
 	state(0)
   { }
@@ -240,28 +316,7 @@ public:
 	return objects_pulling.size();
   }
 
-  // peers
-  map<int, PGPeer*>& get_peers() { return peers; }
-  PGPeer* get_peer(int p) {
-	if (peers.count(p)) return peers[p];
-	return 0;
-  }
-  PGPeer* new_peer(int p, int r) {
-	return peers[p] = new PGPeer(this, p, r);
-  }
-  void remove_peer(int p) {
-	assert(peers.count(p));
-	delete peers[p];
-	peers.erase(p);
-  }
-  void drop_peers() {
-	for (map<int,PGPeer*>::iterator it = peers.begin();
-		 it != peers.end();
-		 it++)
-	  delete it->second;
-	peers.clear();
-  }
-
+ 
 
   // pg state storage
   /*
@@ -283,20 +338,18 @@ public:
 };
 
 
-inline ostream& operator<<(ostream& out, PG::ObjectInfo& oi) 
-{
-  return out << "object[" << hex << oi.oid << dec 
-			 << " v " << oi.version 
-			 << " osd" << oi.osd
-			 << "]";
-}
-
 inline ostream& operator<<(ostream& out, PG::PGInfo& pgi) 
 {
   return out << "pgi(" << hex << pgi.pgid << dec 
 			 << " v " << pgi.last_update << "/" << pgi.last_complete
 			 << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
 			 << ")";
+}
+
+inline ostream& operator<<(ostream& out, PG::PGLog& log) 
+{
+  log.print(out);
+  return out;
 }
 
 inline ostream& operator<<(ostream& out, PG& pg)

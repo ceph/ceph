@@ -1553,7 +1553,8 @@ void Ebofs::apply_write(Onode *on, size_t len, off_t off, bufferlist& bl)
 
 // *** file i/o ***
 
-bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond *will_wait_on)
+bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, 
+						 Cond *will_wait_on, bool *will_wait_on_bool)
 {
   dout(10) << "attempt_read " << *on << " len " << len << " off " << off << endl;
   ObjectCache *oc = on->get_oc(&bc);
@@ -1579,7 +1580,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	}
 	BufferHead *wait_on = missing.begin()->second;
 	block_t b = MAX(wait_on->start(), bstart);
-	wait_on->waitfor_read[b].push_back(new C_Cond(will_wait_on));
+	wait_on->waitfor_read[b].push_back(new C_Cond(will_wait_on, will_wait_on_bool));
 	return false;
   }
   
@@ -1594,7 +1595,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
 	if (!i->second->have_partial_range(start, end)) {
 	  if (partials_ok) {
 		// wait on this one
-		Context *c = new C_Cond(will_wait_on);
+		Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
 		dout(10) << "attempt_read insufficient partial buffer " << *(i->second) << " c " << c << endl;
 		i->second->waitfor_read[i->second->start()].push_back(c);
 	  }
@@ -1606,7 +1607,7 @@ bool Ebofs::attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, Cond 
   // wait on rx?
   if (!rx.empty()) {
 	BufferHead *wait_on = rx.begin()->second;
-	Context *c = new C_Cond(will_wait_on);
+	Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
 	dout(1) << "attempt_read waiting for read to finish on " << *wait_on << " c " << c << endl;
 	block_t b = MAX(wait_on->start(), bstart);
 	wait_on->waitfor_read[b].push_back(c);
@@ -1695,11 +1696,13 @@ int Ebofs::read(object_t oid,
 
 	size_t will_read = MIN(off+len, on->object_size) - off;
 	
-	if (attempt_read(on, will_read, off, bl, &cond))
+	bool done;
+	if (attempt_read(on, will_read, off, bl, &cond, &done))
 	  break;  // yay
 	
 	// wait
-	cond.Wait(ebofs_lock);
+	while (!done) 
+	  cond.Wait(ebofs_lock);
 
 	if (on->deleted) {
 	  dout(7) << "read " << hex << oid << dec << " len " << len << " off " << off << " ... object deleted" << endl;
@@ -1742,14 +1745,16 @@ int Ebofs::write(object_t oid,
   if (fsync) {
 	// wait for flush.
 	Cond cond;
+	bool done;
 	int flush = 1;    // write never returns positive
-	Context *c = new C_Cond(&cond, &flush);
+	Context *c = new C_Cond(&cond, &done, &flush);
 	int r = write(oid, len, off, bl, c);
 	if (r < 0) return r;
 	
 	ebofs_lock.Lock();
-	if (flush == 1) { // write never returns positive
-	  cond.Wait(ebofs_lock);
+	{
+	  while (!done) 
+		cond.Wait(ebofs_lock);
 	  assert(flush <= 0);
 	}
 	ebofs_lock.Unlock();

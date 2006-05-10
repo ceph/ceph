@@ -509,11 +509,11 @@ inline void _decode(vector<T>& s, bufferlist& bl, int& off)
 
 // list<T>
 template<class T>
-inline void _encode(list<T>& s, bufferlist& bl)
+inline void _encode(const list<T>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (typename list<T>::iterator it = s.begin();
+  for (typename list<T>::const_iterator it = s.begin();
 	   it != s.end();
 	   it++) {
 	T v = *it;
@@ -540,11 +540,11 @@ inline void _decode(list<T>& s, bufferlist& bl, int& off)
 
 // map<T,U>
 template<class T, class U>
-inline void _encode(map<T, U>& s, bufferlist& bl)
+inline void _encode(const map<T, U>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (typename map<T, U>::iterator it = s.begin();
+  for (typename map<T, U>::const_iterator it = s.begin();
 	   it != s.end();
 	   it++) {
 	T k = it->first;

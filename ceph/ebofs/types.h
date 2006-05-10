@@ -36,32 +36,6 @@ using namespace __gnu_cxx;
 #endif
 
 
-class C_Cond : public Context {
-  Cond *cond;
-  int *rval;
-public:
-  C_Cond(Cond *c, int *r=0) : cond(c), rval(r) {}
-  void finish(int r) {
-	if (rval) *rval = r;
-	//cout << "C_Cond signal " << this << " cond " << (void*)cond << " rval " << (void*)rval << " r " << r  << endl;
-	cond->Signal();
-  }
-};
-
-class C_SafeCond : public Context {
-  Mutex *lock;
-  Cond *cond;
-  int *rval;
-public:
-  C_SafeCond(Mutex *l, Cond *c, int *r=0) : lock(l), cond(c), rval(r) {}
-  void finish(int r) {
-	if (rval) *rval = r;
-	lock->Lock();
-	//cout << "C_Cond signal " << this << " cond " << (void*)cond << " rval " << (void*)rval << " r " << r  << endl;
-	cond->Signal();
-	lock->Unlock();
-  }
-};
 
 
 /*
