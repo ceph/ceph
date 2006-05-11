@@ -109,6 +109,11 @@ public:
 	finished.splice(finished.end(), ls);
   }
   
+  //object locking
+  hash_map<object_t, list<Message*> > waiting_for_wr_unlock; /** list of operations for each object waiting for 'wrunlock' */
+
+  bool block_if_wrlocked(MOSDOp* op);
+
   // -- ops --
   class ThreadPool<class OSD*, object_t> *threadpool;
   hash_map<object_t, list<MOSDOp*> >      op_queue;
@@ -132,7 +137,7 @@ public:
   void op_apply(MOSDOp* op, version_t version, Context* oncommit = 0);
   
   
-  friend class PG;
+ friend class PG;
 
  protected:
 

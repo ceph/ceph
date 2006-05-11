@@ -1720,8 +1720,31 @@ void OSD::wait_for_no_ops()
 }
 
 
+// ==============================
+// Object locking
 
+//
+// If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
+// returns true if object was locked, otherwise returns false
+// 
+bool OSD::block_if_wrlocked(MOSDOp* op)
+{
+  object_t oid = op->get_oid();
+  msg_addr_t source;
+  int r;
+  
+  r = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
+  /*
+  if ((r >= 0) && (MSG_ADDR_NUM(source) != MSG_ADDR_NUM(op->get_source())))
+	{
+	  //the object is locked for writing by another client -- add the op to the waiting queue	  
+	  waiting_for_wr_unlock[oid].push_back(op);	  
 
+	  return true;
+	} 
+  */
+  return false; //the object wasn't locked, so the operation can be handled right away
+}
 
 
 
@@ -1733,7 +1756,12 @@ void OSD::wait_for_no_ops()
 void OSD::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
-
+ 
+  //if the target object is locked for writing by another client, put 'op' to the waiting queue
+  if (block_if_wrlocked(op)) {
+	  return; //read will be handled later, after the object becomes unlocked
+	}
+ 
   // read into a buffer
   bufferlist bl;
   long got = store->read(oid, 
@@ -1949,6 +1977,8 @@ void OSD::op_modify(MOSDOp *op)
   if (op->get_op() == OSD_OP_ZERO) opname = "op_zero";
   if (op->get_op() == OSD_OP_DELETE) opname = "op_delete";
   if (op->get_op() == OSD_OP_TRUNCATE) opname = "op_truncate";
+  if (op->get_op() == OSD_OP_WRLOCK) opname = "op_wrlock";
+  if (op->get_op() == OSD_OP_WRUNLOCK) opname = "op_wrunlock";
 
   // version?  clean?
   version_t ov = 0;  // 0 == dne (yet)
@@ -2010,7 +2040,23 @@ void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
 {
   object_t oid = op->get_oid();
   pg_t pgid = op->get_pg();
+  int optype = op->get_op();
   int r;
+  
+  if ((optype == OSD_OP_WRITE) ||
+	  (optype == OSD_OP_REP_WRITE) ||
+	  (optype == OSD_OP_DELETE) ||
+	  (optype == OSD_OP_REP_DELETE) ||
+	  (optype == OSD_OP_TRUNCATE) ||
+	  (optype == OSD_OP_REP_TRUNCATE) ||
+	  (optype == OSD_OP_WRLOCK) ||
+	  (optype == OSD_OP_REP_WRLOCK))
+	{  
+	  //if the target object is locked for writing by another client, put 'op' to the waiting queue
+	  if (block_if_wrlocked(op)) {
+		return; //op will be handled later, after the object becomes unlocked
+	  }
+	}
   
   // everybody will want to update the version.
   map<const char*, pair<void*,int> > setattrs;
@@ -2020,18 +2066,25 @@ void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
   map<coll_t, map<const char*, pair<void*,int> > > cmods;
   cmods[pgid] = setattrs;
 
+
   // do the op!
   switch (op->get_op()) {
   case OSD_OP_WRLOCK:
   case OSD_OP_REP_WRLOCK:
 	// lock object
 	r = store->setattr(oid, "wrlock", &op->get_source(), sizeof(msg_addr_t), oncommit);
-	break;
+	break;  
 
   case OSD_OP_WRUNLOCK:
   case OSD_OP_REP_WRUNLOCK:
 	// unlock objects
 	r = store->rmattr(oid, "wrlock", oncommit);
+
+	//unblock all operations that were waiting for this object to become unlocked
+	if (waiting_for_wr_unlock.count(oid)) {
+		take_waiters(waiting_for_wr_unlock[oid]);
+		waiting_for_wr_unlock.erase(oid);		
+	  }
 	break;
 
   case OSD_OP_WRITE:
