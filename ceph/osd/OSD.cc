@@ -1734,10 +1734,8 @@ bool OSD::block_if_wrlocked(MOSDOp* op)
   object_t oid = op->get_oid();
 
   msg_addr_t source;
-  int len;
-  
-  len = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
-  cout << "getattr returns " << len << " on " << hex << oid << dec << endl;
+  int len = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
+  //cout << "getattr returns " << len << " on " << hex << oid << dec << endl;
 
   if (len == sizeof(source) &&
 	  source != op->get_asker()) {
@@ -1762,8 +1760,8 @@ void OSD::op_read(MOSDOp *op)
  
   //if the target object is locked for writing by another client, put 'op' to the waiting queue
   if (block_if_wrlocked(op)) {
-	  return; //read will be handled later, after the object becomes unlocked
-	}
+	return; //read will be handled later, after the object becomes unlocked
+  }
  
   // read into a buffer
   bufferlist bl;
