@@ -2033,7 +2033,7 @@ void Ebofs::do_csetattrs(map<coll_t, map<const char*, pair<void*,int> > > &cmods
   }
 }
 
-int Ebofs::setattr(object_t oid, const char *name, void *value, size_t size, Context *onsafe)
+int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
@@ -2073,7 +2073,8 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
   if (on->attr.count(n) == 0) {
 	r = -1;
   } else {
-	memcpy(value, on->attr[n].data, MIN( on->attr[n].len, (int)size ));
+	r = MIN( on->attr[n].len, (int)size );
+	memcpy(value, on->attr[n].data, r );
   }
   put_onode(on);
   ebofs_lock.Unlock();
@@ -2279,7 +2280,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 }
 
 
-int Ebofs::collection_setattr(coll_t cid, const char *name, void *value, size_t size)
+int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, size_t size)
 {
   ebofs_lock.Lock();
   dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
@@ -2312,12 +2313,17 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   }
 
   string n(name);
-  if (cn->attr.count(n) == 0) return -1;
-  memcpy(value, cn->attr[n].data, MIN( cn->attr[n].len, (int)size ));
-
+  int r;
+  if (cn->attr.count(n) == 0) {
+	r = -1;
+  } else {
+	r = MIN( cn->attr[n].len, (int)size );
+	memcpy(value, cn->attr[n].data, r);
+  }
+  
   put_cnode(cn);
   ebofs_lock.Unlock();
-  return 0;
+  return r;
 }
 
 int Ebofs::collection_rmattr(coll_t cid, const char *name) 

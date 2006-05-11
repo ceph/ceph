@@ -109,7 +109,7 @@ public:
 	finished.splice(finished.end(), ls);
   }
   
-  //object locking
+  // object locking
   hash_map<object_t, list<Message*> > waiting_for_wr_unlock; /** list of operations for each object waiting for 'wrunlock' */
 
   bool block_if_wrlocked(MOSDOp* op);
@@ -155,7 +155,6 @@ public:
   void activate_map(list<pg_t>& ls);
 
 
-
   // -- replication --
 
   // PG
@@ -167,7 +166,7 @@ public:
   void  close_pg(pg_t pg);           // close in-memory state
   void  remove_pg(pg_t pg);          // remove state from store
 
-  __uint64_t               last_tid;
+  tid_t               last_tid;
 
   hash_map<pg_t, list<Message*> >        waiting_for_pg;
 

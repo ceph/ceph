@@ -32,21 +32,20 @@ class ObjectCacher {
 	struct {
 	  off_t start, length;   // bh extent in object
 	} ex;
-	
-	version_t version;      // version of cached object (if non-zero)
-	
+		
   public:
 	bufferlist  bl;
+	tid_t last_write_tid;  // version of bh (if non-zero)
 	
-	map<off_t, list<Context*> > waitfor_read;
+	map< off_t, list<Context*> > waitfor_read;
 	
   public:
 	// cons
 	BufferHead() : 
 	  state(STATE_MISSING),
 	  ref(0),
-	  version(0) {}
-	
+	  last_write_tid(0) {}
+  
 	// extent
 	off_t start() { return ex.start; }
 	void set_start(off_t s) { ex.start = s; }
@@ -54,11 +53,7 @@ class ObjectCacher {
 	void set_length(off_t l) { ex.length = l; }
 	off_t end() { return ex.start + ex.length; }
 	off_t last() { return end() - 1; }
-	
-	// version
-	version_t get_version() { return version; }
-	void set_version(version_t v) { version = v; }
-	
+
 	// states
 	void set_state(int s) {
 	  if (s == STATE_RX || s == STATE_TX) get();
@@ -99,6 +94,12 @@ class ObjectCacher {
   public:
 	map<off_t, BufferHead*>     data;
 
+	tid_t last_ack_tid;    // last update acked.
+	tid_t last_commit_tid; // last update commited.
+
+	map< tid_t, list<Context*> > waitfor_ack;
+	map< tid_t, list<Context*> > waitfor_commit;
+
 	// lock
 	static const int LOCK_NONE = 0;
 	static const int LOCK_WRLOCK = 1;
@@ -109,6 +110,7 @@ class ObjectCacher {
 	Object(ObjectCacher *_oc, object_t o, inodeno_t i) : 
 	  oc(_oc),
 	  oid(o), ino(i), 
+	  last_ack_tid(0), last_commit_tid(0),
 	  lock_state(LOCK_NONE) 
 	  {}
 
@@ -147,8 +149,6 @@ class ObjectCacher {
 	bool is_empty() { return data.empty(); }
 
 	// mid-level
-	int scan_versions(off_t start, off_t len,
-					  version_t& low, version_t& high);
 	BufferHead *split(BufferHead *bh, off_t off);
 	void merge(BufferHead *left, BufferHead *right);
 
@@ -157,14 +157,15 @@ class ObjectCacher {
 				 map<off_t, BufferHead*>& missing,
 				 map<off_t, BufferHead*>& rx);
 	BufferHead *map_write(Objecter::OSDWrite *wr);
-
+	
   };
-
+  
   // ******* ObjectCacher *********
   // ObjectCacher fields
  private:
   Objecter *objecter;
-
+  Mutex& lock;
+  
   hash_map<object_t, Object*> objects;
   hash_map<inodeno_t, set<Object*> > objects_by_ino;
 
@@ -253,7 +254,8 @@ class ObjectCacher {
 
  public:
   void bh_read_finish(object_t oid, off_t offset, size_t length, bufferlist &bl);
-  void bh_write_finish(object_t oid, off_t offset, size_t length, version_t v);
+  void bh_write_ack(object_t oid, off_t offset, size_t length, tid_t t);
+  void bh_write_commit(object_t oid, off_t offset, size_t length, tid_t t);
 
   class C_ReadFinish : public Context {
 	ObjectCacher *oc;
@@ -268,11 +270,36 @@ class ObjectCacher {
 	}
   };
 
+  class C_WriteAck : public Context {
+	ObjectCacher *oc;
+	object_t oid;
+	off_t start;
+	size_t length;
+  public:
+	tid_t tid;
+	C_WriteAck(ObjectCacher *c, object_t o, off_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+	void finish(int r) {
+	  oc->bh_write_ack(oid, start, length, tid);
+	}
+  };
+  class C_WriteCommit : public Context {
+	ObjectCacher *oc;
+	object_t oid;
+	off_t start;
+	size_t length;
+  public:
+	tid_t tid;
+	C_WriteCommit(ObjectCacher *c, object_t o, off_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+	void finish(int r) {
+	  oc->bh_write_commit(oid, start, length, tid);
+	}
+  };
+
 
 
  public:
-  ObjectCacher(Objecter *o) : 
-	objecter(o),
+  ObjectCacher(Objecter *o, Mutex& l) : 
+	objecter(o), lock(l),
 	stat_waiter(0),
 	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0)
 	{}
@@ -304,6 +331,7 @@ class ObjectCacher {
   void flush_set(inodeno_t ino, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
+  // help.. need to figure out how to handle this wrt BufferHeads, etc..
   void commit_set(inodeno_t ino, Context *oncommit=0);
   void commit_all(Context *oncommit=0);
 };
@@ -313,7 +341,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 {
   out << "bh["
 	  << bh.start() << "~" << bh.end()
-	  << " v " << bh.get_version();
+	  << " v " << bh.last_write_tid;
   if (bh.is_tx()) out << " tx";
   if (bh.is_rx()) out << " rx";
   if (bh.is_dirty()) out << " dirty";

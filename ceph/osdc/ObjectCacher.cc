@@ -2,6 +2,10 @@
 #include "ObjectCacher.h"
 #include "Objecter.h"
 
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "ocacher." << pthread_self() << " "
+
+
 /*** ObjectCacher::BufferHead ***/
 
 
@@ -13,7 +17,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
   
   // split off right
   ObjectCacher::BufferHead *right = new BufferHead();
-  right->set_version(bh->get_version());
+  right->last_write_tid = bh->last_write_tid;
   right->set_state(bh->get_state());
   
   off_t newleftlen = off - bh->start();
@@ -43,7 +47,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
 	p--;
 	while (p != bh->waitfor_read.begin()) {
 	  if (p->first < right->start()) break;	  
-	  dout(0) << "split  moving waiters at block " << p->first << " to right bh" << endl;
+	  dout(0) << "split  moving waiters at byte " << p->first << " to right bh" << endl;
 	  right->waitfor_read[p->first].swap( p->second );
 	  o = p;
 	  p--;
@@ -68,8 +72,9 @@ void ObjectCacher::Object::merge(BufferHead *left, BufferHead *right)
   // data
   left->bl.claim_append(right->bl);
   
-  // version
-  left->set_version( MAX( left->get_version(), right->get_version() ) );
+  // version 
+  // note: this is sorta busted, but shouldn't be used, cuz we're pbly about to write.. right?
+  left->last_write_tid =  MAX( left->last_write_tid, right->last_write_tid );
 
   // waiters
   for (map<off_t, list<Context*> >::iterator p = right->waitfor_read.begin();
@@ -178,12 +183,10 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
  * map a range of extents on an object's buffer cache.
  * - combine any bh's we're writing into one
  * - break up bufferheads that don't fall completely within the range
- * - increase the bh version number (to be larger than any it subsumes)
  */
 ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr)
 {
   BufferHead *final = 0;
-  version_t   max_version = 0;
 
   for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
@@ -191,7 +194,8 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 	
     if (ex_it->oid != oid) continue;
     
-    dout(10) << "map_write " << ex_it->oid << " " << ex_it->start << "~" << ex_it->length << endl;
+    dout(10) << "map_write oex " << hex << ex_it->oid << dec
+			 << " " << ex_it->start << "~" << ex_it->length << endl;
     
     map<off_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
     // p->first >= start
@@ -225,10 +229,6 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
       }
       
       dout(10) << "p is " << *p->second << endl;
-
-	  // note highest version we see
-	  if (max_version < p->second->get_version()) 
-		max_version = p->second->get_version();
 
       if (p->first <= cur) {
         BufferHead *bh = p->second;
@@ -290,10 +290,9 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
   
   // set versoin
   assert(final);
-  final->set_version(max_version+1);
   dout(10) << "map_write final is " << *final << endl;
 
-  return 0;
+  return final;
 }
 
 /*** ObjectCacher ***/
@@ -305,22 +304,16 @@ void ObjectCacher::bh_read(Object *ob, BufferHead *bh)
   dout(7) << "bh_read on " << *bh << endl;
 
   // finisher
-  C_ReadFinish *fin = new C_ReadFinish(this, ob->get_oid(), bh->start(), bh->length());
+  C_ReadFinish *onfinish = new C_ReadFinish(this, ob->get_oid(), bh->start(), bh->length());
 
-  // read req
-  Objecter::OSDRead *rd = new Objecter::OSDRead(&fin->bl);
-  
-  // object extent
-  ObjectExtent ex(ob->get_oid(), bh->start(), bh->length());
-  ex.buffer_extents[0] = bh->length();
-  rd->extents.push_back(ex);
-  
   // go
-  objecter->readx(rd, fin);
+  objecter->read(ob->get_oid(), bh->start(), bh->length(), &onfinish->bl,
+				 onfinish);
 }
 
 void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, bufferlist &bl)
 {
+  lock.Lock();
   dout(7) << "bh_read_finish " 
 		  << hex << oid << dec 
 		  << " " << start << "~" << length
@@ -328,49 +321,165 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
   
   if (objects.count(oid) == 0) {
 	dout(7) << "bh_read_finish no object cache" << endl;
-	return;
-  }
-  Object *ob = objects[oid];
+  } else {
+	Object *ob = objects[oid];
+	
+	// apply to bh's!
+	off_t opos = start;
+	map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
+	
+	while (p != ob->data.end() &&
+		   opos < start+length) {
+	  BufferHead *bh = p->second;
+	  
+	  if (bh->start() > opos) {
+		dout(1) << "weirdness: gap when applying read results, " 
+				<< opos << "~" << bh->start() - opos 
+				<< endl;
+		opos = bh->start();
+		p++;
+		continue;
+	  }
+	  
+	  if (!bh->is_rx()) {
+		dout(10) << "bh_read_finish skipping non-rx " << *bh << endl;
+		continue;
+	  }
+	  
+	  assert(bh->start() == opos);   // we don't merge rx bh's... yet!
+	  assert(bh->length() < start+length-opos);
+	  
+	  bh->bl.substr_of(bl,
+					   start+length-opos,
+					   bh->length());
+	  mark_clean(bh);
+	  dout(10) << "bh_read_finish read " << *bh << endl;
 
-  // apply to bh's!
-  off_t opos = start;
-  map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
-  
-  while (p != ob->data.end() &&
-		 opos < start+length) {
-	BufferHead *bh = p->second;
-
-	if (bh->start() > opos) {
-	  dout(1) << "weirdness: gap when applying read results, " 
-			  << opos << "~" << bh->start() - opos 
-			  << endl;
-	  opos = bh->start();
-	  p++;
-	  continue;
+	  // finishers?
+	  // called with lock held.
+	  list<Context*> ls;
+	  for (map<off_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
+		   p != bh->waitfor_read.end();
+		   p++)
+		ls.splice(ls.end(), p->second);
+	  bh->waitfor_read.clear();
+	  finish_contexts(ls);
 	}
-
-	if (!bh->is_rx()) {
-	  dout(10) << "bh_read_finish skipping non-rx " << *bh << endl;
-	  continue;
-	}
-
-	assert(bh->start() == opos);   // we don't merge rx bh's... yet!
-	assert(bh->length() < start+length-opos);
-
-	bh->bl.substr_of(bl,
-					 start+length-opos,
-					 bh->length());
-	bh->set_version(1);
-	mark_clean(bh);
-	dout(10) << "bh_read_finish read " << *bh << endl;
   }
+  lock.Unlock();
 }
 
 
 void ObjectCacher::bh_write(Object *ob, BufferHead *bh)
 {
-  assert(0);
+  dout(7) << "bh_write " << *bh << endl;
+  
+  // finishers
+  C_WriteAck *onack = new C_WriteAck(this, ob->get_oid(), bh->start(), bh->length());
+  C_WriteCommit *oncommit = new C_WriteCommit(this, ob->get_oid(), bh->start(), bh->length());
+
+  // go
+  tid_t tid = objecter->write(ob->get_oid(), bh->start(), bh->length(), bh->bl,
+							  onack, oncommit);
+
+  // set bh last_write_tid
+  onack->tid = tid;
+  oncommit->tid = tid;
+  bh->last_write_tid = tid;
 }
+
+void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t tid)
+{
+  lock.Lock();
+  
+  dout(7) << "bh_write_ack " 
+		  << hex << oid << dec 
+		  << " tid " << tid
+		  << " " << start << "~" << length
+		  << endl;
+  if (objects.count(oid) == 0) {
+	dout(7) << "bh_write_ack no object cache" << endl;
+	assert(0);
+  } else {
+	Object *ob = objects[oid];
+	
+	// apply to bh's!
+	off_t opos = start;
+	map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
+	
+	while (p != ob->data.end() &&
+		   opos < start+length) {
+	  BufferHead *bh = p->second;
+	  
+	  if (bh->start() < start &&
+		  bh->end() > start+length) {
+		dout(20) << "bh_write_ack skipping " << *bh << endl;
+		continue;
+	  }
+	  
+	  // make sure bh is tx
+	  if (!bh->is_tx()) {
+		dout(10) << "bh_write_ack skipping non-tx " << *bh << endl;
+		continue;
+	  }
+	  
+	  // make sure bh tid matches
+	  if (bh->last_write_tid != tid) {
+		assert(bh->last_write_tid > tid);
+		dout(10) << "bh_write_ack newer tid on " << *bh << endl;
+		continue;
+	  }
+	  
+	  // ok!  mark bh clean.
+	  mark_clean(bh);
+	}
+	
+	// update object last_ack.
+	assert(ob->last_ack_tid < tid);
+	ob->last_ack_tid = tid;
+	
+	// waiters?
+	if (ob->waitfor_ack.count(tid)) {
+	  list<Context*> ls;
+	  ls.splice(ls.begin(), ob->waitfor_ack[tid]);
+	  ob->waitfor_ack.erase(tid);
+	  finish_contexts(ls);
+	}
+  }
+  lock.Unlock();
+}
+
+void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid_t tid)
+{
+  lock.Lock();
+  
+  // update object last_commit
+  dout(7) << "bh_write_commit " 
+		  << hex << oid << dec 
+		  << " tid " << tid
+		  << " " << start << "~" << length
+		  << endl;
+  if (objects.count(oid) == 0) {
+	dout(7) << "bh_write_commit no object cache" << endl;
+	assert(0);
+  } else {
+	Object *ob = objects[oid];
+	
+	// update last_commit.
+	ob->last_commit_tid = tid;
+	
+	// waiters?
+	if (ob->waitfor_commit.count(tid)) {
+	  list<Context*> ls;
+	  ls.splice(ls.begin(), ob->waitfor_commit[tid]);
+	  ob->waitfor_commit.erase(tid);
+	  finish_contexts(ls);
+	}
+  }
+
+  lock.Unlock();
+}
+
 
 /* public */
 
@@ -522,11 +631,12 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 		 f_it != ex_it->buffer_extents.end();
 		 f_it++) {
 	  size_t bhoff = bh->start() - opos;
-	  assert(f_it->second < bh->length() - bhoff);
+	  assert(f_it->second <= bh->length() - bhoff);
 
-	  bufferlist frag;
+	  bufferlist frag; 
 	  frag.substr_of(wr->bl, 
 					 f_it->first, f_it->second);
+
 	  bh->bl.claim_append(frag);
 	  opos += f_it->second;
 	}

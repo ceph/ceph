@@ -88,13 +88,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-int Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
+tid_t  Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
 				   Context *onfinish)
 {
   OSDRead *rd = new OSDRead(bl);
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
-  return readx(rd, onfinish);
+  readx(rd, onfinish);
+  return last_tid;
 }
 
 int Objecter::readx(OSDRead *rd, Context *onfinish)
@@ -273,13 +274,14 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-int Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl, 
 				   Context *onack, Context *oncommit)
 {
   OSDWrite *wr = new OSDWrite(bl);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
-  return writex(wr, onack, oncommit);
+  writex(wr, onack, oncommit);
+  return last_tid;
 }
 
 int Objecter::writex(OSDWrite *wr, Context *onack, Context *oncommit)
@@ -403,13 +405,14 @@ void Objecter::handle_osd_write_reply(MOSDOpReply *m)
 
 // zero ---------------------------------------------------
 
-int Objecter::zero(object_t oid, off_t off, size_t len,  
+tid_t Objecter::zero(object_t oid, off_t off, size_t len,  
 				   Context *onack, Context *oncommit)
 {
   OSDZero *z = new OSDZero;
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
-  return zerox(z, onack, oncommit);
+  zerox(z, onack, oncommit);
+  return last_tid;
 }
 
 int Objecter::zerox(OSDZero *z, Context *onack, Context *oncommit)

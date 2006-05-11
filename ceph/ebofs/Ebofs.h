@@ -267,7 +267,7 @@ class Ebofs : public ObjectStore {
   bool write_will_block();
 
   // object attr
-  int setattr(object_t oid, const char *name, void *value, size_t size,
+  int setattr(object_t oid, const char *name, const void *value, size_t size,
 			  Context *onsafe=0);
   int getattr(object_t oid, const char *name, void *value, size_t size);
   int rmattr(object_t oid, const char *name,
@@ -286,7 +286,7 @@ class Ebofs : public ObjectStore {
   int collection_remove(coll_t c, object_t o);
   int collection_list(coll_t c, list<object_t>& o);
   
-  int collection_setattr(object_t oid, const char *name, void *value, size_t size);
+  int collection_setattr(object_t oid, const char *name, const void *value, size_t size);
   int collection_getattr(object_t oid, const char *name, void *value, size_t size);
   int collection_rmattr(coll_t cid, const char *name);
   int collection_listattr(object_t oid, vector<string>& attrs);

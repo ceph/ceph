@@ -109,23 +109,24 @@ class FakeStoreAttrs {
   
   class FakeAttrSet {
   public:
-	map<const char*, bufferptr> attrs;
+	map<string, bufferptr> attrs;
 	
 	int getattr(const char *name, void *value, size_t size) {
-	  if (attrs.count(name)) {
-		size_t l = attrs[name].length();
-		if (l > size) l = size;
+	  string n = name;
+	  if (attrs.count(n)) {
+		size_t l = MIN( attrs[n].length(), size );
 		bufferlist bl;
-		bl.append(attrs[name]);
+		bl.append(attrs[n]);
 		bl.copy(0, l, (char*)value);
 		return l;
 	  }
 	  return -1;
 	}
 	
-	int setattr(const char *name, void *value, size_t size) {
+	int setattr(const char *name, const void *value, size_t size) {
+	  string n = name;
 	  bufferptr bp(new buffer((char*)value,size));
-	  attrs[name] = bp;
+	  attrs[n] = bp;
 	  return 0;
 	}
 	
@@ -135,7 +136,8 @@ class FakeStoreAttrs {
 	}
 
 	int rmattr(const char *name) {
-	  attrs.erase(name);
+	  string n = name;
+	  attrs.erase(n);
 	  return 0;
 	}
 	
@@ -148,7 +150,7 @@ class FakeStoreAttrs {
 
  public:
   int setattr(object_t oid, const char *name,
-			  void *value, size_t size,
+			  const void *value, size_t size,
 			  Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakeoattrs[oid].setattr(name, value, size);

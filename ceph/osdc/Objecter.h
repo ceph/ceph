@@ -123,12 +123,12 @@ class Objecter {
   int writex(OSDWrite *write, Context *onack, Context *oncommit);
   int zerox(OSDZero *zero, Context *onack, Context *oncommit);
 
-  int read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-		   Context *onfinish);
-  int write(object_t oid, off_t off, size_t len, bufferlist &bl, 
-			Context *onack, Context *oncommit);
-  int zero(object_t oid, off_t off, size_t len,  
-		   Context *onack, Context *oncommit);
+  tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
+			 Context *onfinish);
+  tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
+			  Context *onack, Context *oncommit);
+  tid_t zero(object_t oid, off_t off, size_t len,  
+			 Context *onack, Context *oncommit);
 };
 
 #endif

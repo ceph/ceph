@@ -84,8 +84,8 @@ class MOSDOp : public Message {
  public:
   bool hack_blah;
 
-  const long       get_tid() { return st.tid; }
-  const msg_addr_t get_asker() { return st.asker; }
+  const long        get_tid() { return st.tid; }
+  const msg_addr_t& get_asker() { return st.asker; }
 
   const object_t   get_oid() { return st.oid; }
   const pg_t get_pg() { return st.pg; }

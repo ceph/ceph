@@ -216,11 +216,31 @@ struct inode_t {
 };
 
 
+
+// lame 128-bit value class.
+class lame128_t {
+public:
+  __uint64_t hi, lo;
+  lame128_t(__uint64_t h=0, __uint64_t l=0) : hi(h), lo(l) {}
+};
+
+inline ostream& operator<<(ostream& out, lame128_t& oid) {
+  return out << oid.hi << "." << oid.lo;
+}
+
+
 // osd types
 typedef __uint64_t ps_t;          // placement seed
 typedef __uint64_t pg_t;          // placement group
-typedef __uint64_t object_t;      // object id
 typedef __uint64_t coll_t;        // collection id
+
+#ifdef OBJECT128
+typedef lame128_t object_t;
+#else
+typedef __uint64_t object_t;      // object id
+#endif
+
+
 
 #define PG_NONE    0xffffffffffffffffLL
 

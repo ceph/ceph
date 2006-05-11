@@ -948,11 +948,13 @@ PG *OSD::create_pg(pg_t pgid)
   assert(!pg_exists(pgid));
 
   PG *pg = new PG(this, pgid);
+  pg_map[pgid] = pg;
+
+  store->create_collection(pgid);
 
   //pg->info.created = osdmap->get_epoch();
   //pg->store(store);
 
-  pg_map[pgid] = pg;
   return pg;
 }
 
@@ -1730,19 +1732,20 @@ void OSD::wait_for_no_ops()
 bool OSD::block_if_wrlocked(MOSDOp* op)
 {
   object_t oid = op->get_oid();
-  msg_addr_t source;
-  int r;
-  
-  r = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
-  /*
-  if ((r >= 0) && (MSG_ADDR_NUM(source) != MSG_ADDR_NUM(op->get_source())))
-	{
-	  //the object is locked for writing by another client -- add the op to the waiting queue	  
-	  waiting_for_wr_unlock[oid].push_back(op);	  
 
-	  return true;
-	} 
-  */
+  msg_addr_t source;
+  int len;
+  
+  len = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
+  cout << "getattr returns " << len << " on " << hex << oid << dec << endl;
+
+  if (len == sizeof(source) &&
+	  source != op->get_asker()) {
+	//the object is locked for writing by someone else -- add the op to the waiting queue	  
+	waiting_for_wr_unlock[oid].push_back(op);
+	return true;
+  }
+
   return false; //the object wasn't locked, so the operation can be handled right away
 }
 
@@ -2040,29 +2043,19 @@ void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
 {
   object_t oid = op->get_oid();
   pg_t pgid = op->get_pg();
-  int optype = op->get_op();
   int r;
   
-  if ((optype == OSD_OP_WRITE) ||
-	  (optype == OSD_OP_REP_WRITE) ||
-	  (optype == OSD_OP_DELETE) ||
-	  (optype == OSD_OP_REP_DELETE) ||
-	  (optype == OSD_OP_TRUNCATE) ||
-	  (optype == OSD_OP_REP_TRUNCATE) ||
-	  (optype == OSD_OP_WRLOCK) ||
-	  (optype == OSD_OP_REP_WRLOCK))
-	{  
-	  //if the target object is locked for writing by another client, put 'op' to the waiting queue
-	  if (block_if_wrlocked(op)) {
-		return; //op will be handled later, after the object becomes unlocked
-	  }
-	}
+  // if the target object is locked for writing by another client, put 'op' to the waiting queue
+  // for _any_ op type -- eg only the locker can unlock!
+  if (block_if_wrlocked(op)) 
+	return; // op will be handled later, after the object becomes unlocked
+
   
   // everybody will want to update the version.
   map<const char*, pair<void*,int> > setattrs;
   setattrs["version"] = pair<void*,int>(&version, sizeof(version));
 
-  // and pg also gets version update.
+  // and pg also gets matching version update.
   map<coll_t, map<const char*, pair<void*,int> > > cmods;
   cmods[pgid] = setattrs;
 
@@ -2072,7 +2065,7 @@ void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
   case OSD_OP_WRLOCK:
   case OSD_OP_REP_WRLOCK:
 	// lock object
-	r = store->setattr(oid, "wrlock", &op->get_source(), sizeof(msg_addr_t), oncommit);
+	r = store->setattr(oid, "wrlock", &op->get_asker(), sizeof(msg_addr_t), oncommit);
 	break;  
 
   case OSD_OP_WRUNLOCK:
@@ -2082,9 +2075,9 @@ void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
 
 	//unblock all operations that were waiting for this object to become unlocked
 	if (waiting_for_wr_unlock.count(oid)) {
-		take_waiters(waiting_for_wr_unlock[oid]);
-		waiting_for_wr_unlock.erase(oid);		
-	  }
+	  take_waiters(waiting_for_wr_unlock[oid]);
+	  waiting_for_wr_unlock.erase(oid);		
+	}
 	break;
 
   case OSD_OP_WRITE:

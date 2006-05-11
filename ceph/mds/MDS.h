@@ -34,7 +34,6 @@ using namespace __gnu_cxx;
 #include "common/Logger.h"
 #include "common/Mutex.h"
 
-typedef __uint64_t object_t;
 
 
 

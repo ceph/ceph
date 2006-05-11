@@ -129,7 +129,7 @@ class ObjectStore {
   }
 
   virtual int setattr(object_t oid, const char *name,
-					  void *value, size_t size,
+					  const void *value, size_t size,
 					  Context *onsafe=0) {return 0;} //= 0;
   virtual int getattr(object_t oid, const char *name,
 					  void *value, size_t size) {return 0;} //= 0;
@@ -150,7 +150,7 @@ class ObjectStore {
   virtual int collection_list(coll_t c, list<object_t>& o) {return 0;}//= 0;
 
   virtual int collection_setattr(coll_t cid, const char *name,
-								 void *value, size_t size) {return 0;} //= 0;
+								 const void *value, size_t size) {return 0;} //= 0;
   virtual int collection_getattr(coll_t cid, const char *name,
 								 void *value, size_t size) {return 0;} //= 0;
   virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;
