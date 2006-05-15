@@ -8,6 +8,7 @@
 #include "common/Cond.h"
 
 #include "Objecter.h"
+#include "Filer.h"
 
 class Objecter;
 class Objecter::OSDRead;
@@ -94,6 +95,7 @@ class ObjectCacher {
   public:
 	map<off_t, BufferHead*>     data;
 
+	tid_t last_write_tid;  // version of bh (if non-zero)
 	tid_t last_ack_tid;    // last update acked.
 	tid_t last_commit_tid; // last update commited.
 
@@ -110,7 +112,7 @@ class ObjectCacher {
 	Object(ObjectCacher *_oc, object_t o, inodeno_t i) : 
 	  oc(_oc),
 	  oid(o), ino(i), 
-	  last_ack_tid(0), last_commit_tid(0),
+	  last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
 	  lock_state(LOCK_NONE) 
 	  {}
 
@@ -164,6 +166,7 @@ class ObjectCacher {
   // ObjectCacher fields
  private:
   Objecter *objecter;
+  Filer filer;
   Mutex& lock;
   
   hash_map<object_t, Object*> objects;
@@ -299,10 +302,10 @@ class ObjectCacher {
 
  public:
   ObjectCacher(Objecter *o, Mutex& l) : 
-	objecter(o), lock(l),
+	objecter(o), filer(o), lock(l),
 	stat_waiter(0),
-	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0)
-	{}
+	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
+  }
 
 
   class C_RetryRead : public Context {
@@ -313,7 +316,11 @@ class ObjectCacher {
   public:
 	C_RetryRead(ObjectCacher *_oc, Objecter::OSDRead *r, inodeno_t i, Context *c) : oc(_oc), rd(r), ino(i), onfinish(c) {}
 	void finish(int) {
-	  oc->readx(rd, ino, onfinish);
+	  int r = oc->readx(rd, ino, onfinish);
+	  if (r > 0) {
+		onfinish->finish(0);
+		delete onfinish;
+	  }
 	}
   };
 
@@ -328,12 +335,56 @@ class ObjectCacher {
   int atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock);
   int atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock);
 
-  void flush_set(inodeno_t ino, Context *onfinish=0);
+  bool flush_set(inodeno_t ino, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
-  // help.. need to figure out how to handle this wrt BufferHeads, etc..
-  void commit_set(inodeno_t ino, Context *oncommit=0);
+  bool commit_set(inodeno_t ino, Context *oncommit);
   void commit_all(Context *oncommit=0);
+
+  // file functions
+
+  /*** async+caching (non-blocking) file interface ***/
+  int file_read(inode_t& inode,
+				size_t len, 
+				off_t offset, 
+				bufferlist *bl,
+				Context *onfinish) {
+	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+	filer.file_to_extents(inode, len, offset, rd->extents);
+	return readx(rd, inode.ino, onfinish);
+  }
+
+  int file_write(inode_t& inode,
+					size_t len, 
+					off_t offset, 
+					bufferlist& bl) {
+	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+	filer.file_to_extents(inode, len, offset, wr->extents);
+	return writex(wr, inode.ino);
+  }
+
+
+
+  /*** sync+blocking file interface ***/
+  
+  int file_atomic_sync_read(inode_t& inode,
+					   size_t len, off_t offset,
+					   bufferlist *bl,
+					   Mutex &lock) {
+	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+	filer.file_to_extents(inode, len, offset, rd->extents);
+	return atomic_sync_readx(rd, inode.ino, lock);
+  }
+
+  int file_atomic_sync_write(inode_t& inode,
+						size_t len, off_t offset,
+						bufferlist& bl,
+						Mutex &lock) {
+	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+	filer.file_to_extents(inode, len, offset, wr->extents);
+	return atomic_sync_writex(wr, inode.ino, lock);
+  }
+
 };
 
 
@@ -348,6 +399,16 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.is_clean()) out << " clean";
   if (bh.is_missing()) out << " missing";
   out << "]";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
+{
+  out << "object["
+	  << hex << ob.get_oid() << " ino " << ob.get_ino() << dec
+	  << " wr " << ob.last_write_tid << "/" << ob.last_ack_tid << "/" << ob.last_commit_tid
+	  << " lock " << ob.lock_state
+	  << "]";
   return out;
 }
 

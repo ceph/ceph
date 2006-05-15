@@ -105,7 +105,8 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
     
     if (ex_it->oid != oid) continue;
     
-    dout(10) << "map_read " << ex_it->oid << " " << ex_it->start << "~" << ex_it->length << endl;
+    dout(10) << "map_read " << hex << ex_it->oid << dec 
+			 << " " << ex_it->start << "~" << ex_it->length << endl;
     
     map<off_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
     // p->first >= start
@@ -313,7 +314,7 @@ void ObjectCacher::bh_read(Object *ob, BufferHead *bh)
 
 void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, bufferlist &bl)
 {
-  lock.Lock();
+  //lock.Lock();
   dout(7) << "bh_read_finish " 
 		  << hex << oid << dec 
 		  << " " << start << "~" << length
@@ -366,7 +367,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 	  finish_contexts(ls);
 	}
   }
-  lock.Unlock();
+  //lock.Unlock();
 }
 
 
@@ -385,12 +386,13 @@ void ObjectCacher::bh_write(Object *ob, BufferHead *bh)
   // set bh last_write_tid
   onack->tid = tid;
   oncommit->tid = tid;
+  ob->last_write_tid = tid;
   bh->last_write_tid = tid;
 }
 
 void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t tid)
 {
-  lock.Lock();
+  //lock.Lock();
   
   dout(7) << "bh_write_ack " 
 		  << hex << oid << dec 
@@ -446,12 +448,12 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
 	  finish_contexts(ls);
 	}
   }
-  lock.Unlock();
+  //lock.Unlock();
 }
 
 void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid_t tid)
 {
-  lock.Lock();
+  //lock.Lock();
   
   // update object last_commit
   dout(7) << "bh_write_commit " 
@@ -477,7 +479,7 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
 	}
   }
 
-  lock.Unlock();
+  //  lock.Unlock();
 }
 
 
@@ -492,7 +494,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
   for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ex_it++) {
-	dout(10) << "readx ex " << *ex_it << endl;
+	dout(10) << "readx " << *ex_it << endl;
 
 	// get Object cache
 	Object *o;
@@ -538,6 +540,12 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 		}
 	  }	  
 	} else {
+	  // make a plain list
+	  for (map<off_t, BufferHead*>::iterator bh_it = hits.begin();
+		   bh_it != hits.end();
+		   bh_it++) 
+		hit_ls.push_back(bh_it->second);
+
 	  // create reverse map of buffer offset -> object for the eventual result.
 	  // this is over a single ObjectExtent, so we know that
 	  //  - the bh's are contiguous
@@ -550,6 +558,12 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	  while (1) {
 		BufferHead *bh = bh_it->second;
 		assert(opos == bh->start() + bhoff);
+
+		dout(10) << "readx rmap opos " << opos
+				 << ": " << *bh << " +" << bhoff
+				 << " frag " << f_it->first << "~" << f_it->second << " +" << foff
+				 << endl;
+
 		size_t len = MIN(f_it->second - foff,
 						 bh->length() - bhoff);
 		stripe_map[f_it->first].substr_of(bh->bl,
@@ -561,13 +575,13 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 		if (opos == bh->end()) {
 		  bh_it++;
 		  bhoff = 0;
-		  if (bh_it == hits.end()) break;
 		}
 		if (foff == f_it->second) {
 		  f_it++;
 		  foff = 0;
-		  if (f_it == ex_it->buffer_extents.end()) break;
 		}
+		if (bh_it == hits.end()) break;
+		if (f_it == ex_it->buffer_extents.end()) break;
 	  }
 	  assert(f_it == ex_it->buffer_extents.end());
 	  assert(bh_it == hits.end());
@@ -581,8 +595,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	   bhit++) 
 	touch_bh(*bhit);
   
-  if (!success) 
-	return -1;
+  if (!success) return 0;  // wait!
 
   // no misses... success!  do the read.
   assert(!hit_ls.empty());
@@ -599,7 +612,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	rd->bl->claim_append(i->second);
   }
   
-  return 0;
+  return pos;
 }
 
 
@@ -673,3 +686,74 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
   return 0;
 }
  
+
+
+// flush.  non-blocking, takes callback.
+// returns true if already flushed, and deletes the callback.
+bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
+{
+  if (objects.count(ino) == 0) {
+	dout(10) << "flush_set on " << hex << ino << dec << " dne" << endl;
+	delete onfinish;
+	return true;
+  }
+
+  Object *ob = objects[ino];
+  dout(10) << "flush_set " << *ob << endl;
+
+  bool any_tx = false;
+  for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
+	   p != ob->data.end();
+	   p++) {
+	BufferHead *bh = p->second;
+	if (bh->is_tx()) {
+	  any_tx = true;
+	  continue;
+	}
+	if (!bh->is_dirty()) continue;
+
+	bh_write(ob, bh);
+  }
+
+  if (!any_tx) {
+	dout(10) << "flush_set " << *ob << " has no dirty|tx bhs" << endl;
+	delete onfinish;
+	return true;
+  }
+
+  dout(10) << "flush_set " << *ob << " will finish on ack tid " << ob->last_write_tid << endl;
+  ob->waitfor_ack[ob->last_write_tid].push_back(onfinish);
+  return false;
+}
+
+
+// commit.  non-blocking, takes callback.
+// return true if already flushed.
+bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
+{
+  assert(onfinish);  // doesn't make any sense otherwise.
+
+  if (objects.count(ino) == 0) {
+	dout(10) << "commit_set on " << hex << ino << dec << " dne" << endl;
+	delete onfinish;
+	return true;
+  }
+
+  Object *ob = objects[ino];
+  dout(10) << "commit_set " << *ob << endl;
+
+  // make sure it's flushing.
+  flush_set(ino);
+
+  if (ob->last_write_tid < ob->last_commit_tid) {
+	dout(10) << "commit_set " << *ob << " will finish on commit tid " << ob->last_write_tid << endl;
+	ob->waitfor_commit[ob->last_write_tid].push_back(onfinish);
+	return false;
+  } else {
+	dout(10) << "commit_set " << *ob << " all committed" << endl;
+	delete onfinish;
+	return true;
+  }
+}
+
+

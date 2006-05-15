@@ -34,7 +34,8 @@ inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
 			 << hex << ex.oid << " in " << ex.pgid << dec
-			 << " " << ex.start << "~" << ex.length;
+			 << " " << ex.start << "~" << ex.length
+			 << ")";
 }
 
 class Objecter {

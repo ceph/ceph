@@ -40,22 +40,19 @@ using namespace __gnu_cxx;
 
 #include "OSDMap.h"
 #include "Objecter.h"
-#include "ObjectCacher.h"
 
 class Context;
 class Messenger;
 class OSDMap;
-class ObjectCacher;
 
 
 /**** Filer interface ***/
 
 class Filer {
   Objecter   *objecter;
-  ObjectCacher *oc;
   
  public:
-  Filer(Objecter *o, ObjectCacher *c=0) : objecter(o), oc(c) {}
+  Filer(Objecter *o) : objecter(o) {}
   ~Filer() {}
 
   bool is_active() {
@@ -97,58 +94,6 @@ class Filer {
 
 	return objecter->zerox(z, onack, oncommit);
   }
-
-
-  /*** async+caching (non-blocking) file interface ***/
-  int caching_read(inode_t& inode,
-				   size_t len, 
-				   off_t offset, 
-				   bufferlist *bl,
-				   Context *onfinish) {
-	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-	file_to_extents(inode, len, offset, rd->extents);
-	return oc->readx(rd, inode.ino, onfinish);
-  }
-
-  int caching_write(inode_t& inode,
-					size_t len, 
-					off_t offset, 
-					bufferlist& bl) {
-	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-	file_to_extents(inode, len, offset, wr->extents);
-	return oc->writex(wr, inode.ino);
-  }
-
-
-
-  /*** sync+blocking file interface ***/
-  
-  int atomic_sync_read(inode_t& inode,
-					   size_t len, off_t offset,
-					   bufferlist *bl,
-					   Mutex &lock) {
-	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-	file_to_extents(inode, len, offset, rd->extents);
-
-	assert(oc);
-	int r = oc->atomic_sync_readx(rd, inode.ino, lock);
-	return r;
-  }
-
-  int atomic_sync_write(inode_t& inode,
-						size_t len, off_t offset,
-						bufferlist& bl,
-						Mutex &lock) {
-	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-	file_to_extents(inode, len, offset, wr->extents);
-
-	assert(oc);
-	int r = oc->atomic_sync_writex(wr, inode.ino, lock);
-	return r;
-  }
-
-
-
 
 
 

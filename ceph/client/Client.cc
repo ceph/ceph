@@ -32,6 +32,7 @@
 
 #include "osd/Filer.h"
 #include "osd/Objecter.h"
+#include "osd/ObjectCacher.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -78,7 +79,7 @@ Client::Client(Messenger *m)
   osdmap = new OSDMap();     // initially blank.. see mount()
   objecter = new Objecter(messenger, osdmap);
   objectcacher = new ObjectCacher(objecter, client_lock);
-  filer = new Filer(objecter, objectcacher);
+  filer = new Filer(objecter);
 }
 
 
@@ -1704,24 +1705,31 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   // adjust fd pos
   f->pos = offset+size;
 
-  if (!g_conf.client_oc) {
-	// buffer cache OFF
-    Cond cond;
-    bufferlist blist;   // data will go here
-	
-	bool done = false;
-    C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
-    filer->read(in->inode, size, offset, &blist, onfinish);
+  Cond cond;
+  bufferlist blist;   // data will go here
+  bool done = false;
+  C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
+
+  int r = 0;
+  if (g_conf.client_oc) {
+	// object cache ON
+	r = objectcacher->file_read(in->inode, size, offset, &blist, onfinish);
+  } else {
+	// object cache OFF -- legacy inconsistent way.
+    r = filer->read(in->inode, size, offset, &blist, onfinish);
+  }
+
+  if (r == 0) {
+	// wait!
 	while (!done)
 	  cond.Wait(client_lock);
-
-    // copy data into caller's buf
-    blist.copy(0, blist.length(), buf);
+  } else {
+	// had it cached, apparently!
+	assert(r > 0);
+	delete onfinish;
   }
-  else {
-	// buffer cache ON
-
-  }
+  // copy data into caller's buf
+  blist.copy(0, blist.length(), buf);
 
   // done!
   client_lock.Unlock();
@@ -1803,10 +1811,10 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	
 	if (in->file_caps() & CAP_FILE_WRBUFFER) {   // caps buffered write?
 	  // async, caching, non-blocking.
-	  filer->caching_write(in->inode, size, offset, blist);
+	  objectcacher->file_write(in->inode, size, offset, blist);
 	} else {
 	  // atomic, synchronous, blocking.
-	  filer->atomic_sync_write(in->inode, size, offset, blist, client_lock);	  
+	  objectcacher->file_atomic_sync_write(in->inode, size, offset, blist, client_lock);	  
 	}
   } else {
 	// legacy, inconsistent synchronous write.
