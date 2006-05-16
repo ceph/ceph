@@ -21,7 +21,7 @@
 #include "CDentry.h"
 #include "MDCluster.h"
 
-#include "osd/Filer.h"
+#include "client/Filer.h"
 #include "osd/OSDMap.h"
 
 #include "msg/Message.h"

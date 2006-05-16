@@ -38,7 +38,7 @@ using namespace __gnu_cxx;
 
 #include "include/types.h"
 
-#include "OSDMap.h"
+#include "osd/OSDMap.h"
 #include "Objecter.h"
 
 class Context;

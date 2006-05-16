@@ -1,6 +1,6 @@
 
 #include "Objecter.h"
-#include "OSDMap.h"
+#include "osd/OSDMap.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"

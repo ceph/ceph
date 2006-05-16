@@ -15,7 +15,7 @@
 #include <assert.h>
 
 #include "Filer.h"
-#include "OSDMap.h"
+#include "osd/OSDMap.h"
 
 //#include "messages/MOSDRead.h"
 //#include "messages/MOSDReadReply.h"

@@ -17,7 +17,7 @@
 #include "MDS.h"
 #include "LogEvent.h"
 
-#include "osd/Filer.h"
+#include "client/Filer.h"
 
 #include "common/Logger.h"
 

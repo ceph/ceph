@@ -20,8 +20,7 @@
 #include "MDLog.h"
 #include "events/EAlloc.h"
 
-#include "osd/Filer.h"
-#include "osd/OSDMap.h"
+#include "client/Filer.h"
 
 #include "include/types.h"
 

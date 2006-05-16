@@ -19,7 +19,6 @@
 #include "common/Mutex.h"
 #include "common/ThreadPool.h"
 
-#include "Objecter.h"
 #include "ObjectStore.h"
 #include "PG.h"
 

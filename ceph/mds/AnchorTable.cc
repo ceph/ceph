@@ -16,7 +16,7 @@
 #include "AnchorTable.h"
 #include "MDS.h"
 
-#include "osd/Filer.h"
+#include "client/Filer.h"
 
 #include "msg/Messenger.h"
 #include "messages/MAnchorRequest.h"

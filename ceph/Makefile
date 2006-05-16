@@ -52,9 +52,9 @@ COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Dispatcher.o\
 	msg/HostMonitor.o\
-	osd/Filer.o\
-	osd/ObjectCacher.o\
-	osd/Objecter.o\
+	client/Filer.o\
+	client/ObjectCacher.o\
+	client/Objecter.o\
 	osd/OSDMap.o\
 	mds/MDCluster.o\
 	common/Logger.o\
