@@ -30,7 +30,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
   oc->bh_stat_add(bh);
   
   // add right
-  add_bh(right);
+  oc->bh_add(this, right);
   
   // split buffers too
   bufferlist bl;
@@ -67,7 +67,10 @@ void ObjectCacher::Object::merge(BufferHead *left, BufferHead *right)
   assert(left->get_state() == right->get_state());
 
   dout(10) << "merge " << *left << " + " << *right << endl;
+  oc->bh_remove(this, right);
+  oc->bh_stat_sub(left);
   left->set_length( left->length() + right->length());
+  oc->bh_stat_add(left);
 
   // data
   left->bl.claim_append(right->bl);
@@ -84,7 +87,6 @@ void ObjectCacher::Object::merge(BufferHead *left, BufferHead *right)
 										 p->second );
   
   // hose right
-  data.erase(right->start());
   delete right;
 
   dout(10) << "merge result " << *left << endl;
@@ -128,7 +130,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
 		BufferHead *n = new BufferHead();
 		n->set_start( cur );
 		n->set_length( left );
-		add_bh(n);
+		oc->bh_add(this, n);
 		missing[cur] = n;
 		dout(20) << "map_read miss " << left << " left, " << *n << endl;
 		cur += left;
@@ -166,7 +168,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
 		BufferHead *n = new BufferHead();
 		n->set_start( cur );
 		n->set_length( MIN(next - cur, left) );
-		add_bh(n);
+		oc->bh_add(this,n);
 		missing[cur] = n;
 		cur += MIN(left, n->length());
 		left -= MIN(left, n->length());
@@ -220,7 +222,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
           final = new BufferHead();
           final->set_start( cur );
           final->set_length( max );
-          add_bh(final);
+          oc->bh_add(this, final);
         } else {
           final->set_length( final->length() + max );
         }
@@ -279,7 +281,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 		  final = new BufferHead();
 		  final->set_start( cur );
 		  final->set_length( glen );
-		  add_bh(final);
+		  oc->bh_add(this, final);
 		}
         
         cur += glen;
@@ -757,3 +759,33 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 }
 
 
+int ObjectCacher::release_set(inodeno_t ino)
+{
+  // return # bytes not clean (and thus not released).
+  int unclean = 0;
+
+  if (objects.count(ino) == 0) {
+	dout(10) << "release_set on " << hex << ino << dec << " dne" << endl;
+	return 0;
+  }
+
+  Object *ob = objects[ino];
+  dout(10) << "release_set " << *ob << endl;
+
+  for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
+	   p != ob->data.end();
+	   p++) {
+	BufferHead *bh = p->second;
+	if (bh->is_clean()) 
+	  bh_remove(ob, bh);
+	else 
+	  unclean += bh->length();
+  }
+
+  if (unclean) {
+	dout(10) << "release_set " << *ob 
+			 << ", " << unclean << " bytes left" << endl;
+  }
+
+  return unclean;
+}

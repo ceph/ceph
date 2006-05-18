@@ -138,10 +138,10 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
 
+  //FileCache *fc;
+
   list<Cond*>       waitfor_write;
   list<Cond*>       waitfor_read;
-  list<Cond*>       waitfor_flushed;
-  set<bufferlist*>  inflight_buffers;
 
   void get() { 
 	ref++; 
@@ -156,7 +156,8 @@ class Inode {
 	valid_until(0),
 	dir_auth(-1), dir_hashed(false), dir_replicated(false), 
 	file_wr_mtime(0), file_wr_size(0), num_rd(0), num_wr(0),
-	ref(0), dir(0), dn(0), symlink(0) { }
+	ref(0), dir(0), dn(0), symlink(0)
+  { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
   }
@@ -247,6 +248,7 @@ class Inode {
 	}
 	return dir;
   }
+
 };
 
 
@@ -431,20 +433,9 @@ protected:
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
 
-
-  // blocking mds call
+  // make blocking mds request
   MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
-
   
-  // -- buffer cache --
-  void flush_inode_buffers(Inode *in) {     // flush buffered writes
-	// write me
-  }
-  void release_inode_buffers(Inode *in) {   // release cached reads
-	// write me
-  }
-  		
-
   // friends
   friend class SyntheticClient;
 
@@ -465,11 +456,17 @@ protected:
   void handle_file_caps(class MClientFileCaps *m);
   void release_caps(Inode *in, int retain=0);
   void update_caps_wanted(Inode *in);
+
+  // data cache
+  void async_flush_inode_buffers(Inode *in);  // start flushing buffered writes.  won't block.
+  void flush_inode_buffers(Inode *in);   // flush buffered writes.  may block.
+  void release_inode_buffers(Inode *in); // release cached reads, +flush as necessary.  may block.
   void finish_flush(Inode *in);
 
   // metadata cache
   Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);
   void insert_trace(const vector<c_inode_info*>& trace);
+
 
   // ----------------------
   // fs ops.

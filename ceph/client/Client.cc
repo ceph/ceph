@@ -698,7 +698,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (g_conf.client_oc &&
 	  !(in->file_caps() & CAP_FILE_WRBUFFER)) {
 
-	// **** write me ****
+	//in->fc->flush_dirty();  // FIXME don't block
 
   } 
   
@@ -738,19 +738,45 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 }
 
+void Client::async_flush_inode_buffers(Inode *in)
+{
+  dout(5) << "async_flush_inode_buffers " << hex << in->ino() << dec << endl;
+  
+  in->get();
+  if (objectcacher->flush_set(in->ino(),
+							  new C_Client_Flushed(this, in)))
+	finish_flush(in);
+}
+
+void Client::flush_inode_buffers(Inode *in)
+{
+  dout(5) << "flush_inode_buffers " << hex << in->ino() << dec << endl;
+
+  Cond cond;
+  bool done = false;
+  if (!objectcacher->flush_set(in->ino(),
+							   new C_Cond(&cond, &done))) {
+	// wait for callback
+	while (!done) cond.Wait(client_lock);
+  }
+}
+
+void Client::release_inode_buffers(Inode *in)
+{
+  dout(5) << "release_inode_buffers " << hex << in->ino() << dec << endl;
+  flush_inode_buffers(in);
+  int left = objectcacher->release_set(in->ino());
+  assert(left == 0);
+}
+
 void Client::finish_flush(Inode *in)
 {
-  dout(5) << "finish_flush on ino " << in->ino() << endl;
-
-  /*Filecache *fc = bc->get_fc(in);
-  assert(!fc->is_dirty() &&
-		 !fc->is_inflight());
-  */
-
+  dout(5) << "finish_flush " << hex << in->ino() << dec << endl;
+  
   // release all buffers?
   if (!(in->file_caps() & CAP_FILE_RDCACHE)) {
 	dout(5) << "flush_finish releasing all buffers on ino " << hex << in->ino() << dec << endl;
-	//release_inode_buffers(in);
+	release_inode_buffers(in);
   }
   
   if (in->num_rd == 0 && in->num_wr == 0) {
@@ -1585,6 +1611,9 @@ int Client::open(const char *relpath, int mode)
   return result;
 }
 
+
+
+
 int Client::close(fh_t fh)
 {
   client_lock.Lock();
@@ -1616,27 +1645,16 @@ int Client::close(fh_t fh)
 
   // release caps right away?
   dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
-  if (in->num_rd == 0 && in->num_wr == 0) {
-	
-	// flush anything?
-	// ** WRITE ME **
-	dout(10) << "  flushing dirty buffers on " << hex << in->ino() << dec << endl;
-	
-
-	/*if (g_conf.client_oc && 
-		(fc->is_dirty() || fc->is_inflight())) {
-	  // flushing.
-	  dout(10) << "  waiting for inflight buffers on " << hex << in->ino() << dec << endl;
-	  in->get();
-	  fc->add_inflight_waiter(  new C_Client_Flushed(this, in) );
-	  } else {*/
-	  // all clean!
-	dout(10) << "  releasing buffers and caps on " << hex << in->ino() << dec << endl;
-	  release_inode_buffers(in);  // free buffers
-	  release_caps(in);        	  // release caps now.
-	  //}
+  if (in->num_wr == 0) {
+	//dout(10) << "  starting flush of dirty buffers on " << hex << in->ino() << dec << endl;
+	async_flush_inode_buffers(in);
   }
-
+  if (in->num_rd == 0) {
+	//dout(10) << "  releasing buffers and caps on " << hex << in->ino() << dec << endl;
+	release_inode_buffers(in);
+	release_caps(in);        	  // release caps now.
+  }
+	
   put_inode( in );
   int result = 0;
 
@@ -1917,15 +1935,19 @@ int Client::fsync(fh_t fh, bool syncdataonly)
   Inode *in = f->inode;
 
   dout(3) << "fsync fh " << fh << " ino " << hex << in->inode.ino << dec << " syncdataonly " << syncdataonly << endl;
- 
-  // blocking flush
 
-  assert(0);  // WRITE ME
+  // metadata?
+  if (!syncdataonly) {
+	dout(0) << "fsync - not syncing metadata yet.. implement me" << endl;
+  }
 
-  if (syncdataonly &&
-	  (in->file_caps() & CAP_FILE_WR)) {
-	// flush metadata too.. size, mtime
-	// ... WRITE ME ...
+  // data?
+  Cond cond;
+  bool done = false;
+  if (!objectcacher->commit_set(in->ino(),
+								new C_Cond(&cond, &done))) {
+	// wait for callback
+	while (!done) cond.Wait(client_lock);
   }
 
   client_lock.Unlock();

@@ -249,7 +249,22 @@ class ObjectCacher {
 	//bh->set_dirty_stamp(g_clock.now());
   };
 
-
+  void bh_add(Object *ob, BufferHead *bh) {
+	ob->add_bh(bh);
+	if (bh->is_dirty())
+	  lru_dirty.lru_insert_top(bh);
+	else
+	  lru_rest.lru_insert_top(bh);
+	bh_stat_add(bh);
+  }
+  void bh_remove(Object *ob, BufferHead *bh) {
+	ob->remove_bh(bh);
+	if (bh->is_dirty())
+	  lru_dirty.lru_remove(bh);
+	else
+	  lru_rest.lru_remove(bh);
+	bh_stat_sub(bh);
+  }
 
   // io
   void bh_read(Object *ob, BufferHead *bh);
@@ -340,6 +355,9 @@ class ObjectCacher {
 
   bool commit_set(inodeno_t ino, Context *oncommit);
   void commit_all(Context *oncommit=0);
+
+  int release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
+
 
   // file functions
 
