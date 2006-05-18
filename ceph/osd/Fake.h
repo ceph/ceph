@@ -45,19 +45,23 @@ class FakeStoreCollections {
 	return r;
   }
 
-  int create_collection(coll_t c) {
+  int create_collection(coll_t c,
+						Context *onsafe=0) {
 	faker_lock.Lock();
 	fakecollections[c].size();
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
 	faker_lock.Unlock();
 	return 0;
   }
 
-  int destroy_collection(coll_t c) {
+  int destroy_collection(coll_t c,
+						 Context *onsafe=0) {
 	int r = 0;
 	faker_lock.Lock();
 	if (fakecollections.count(c)) {
 	  fakecollections.erase(c);
 	  //fakecattr.erase(c);
+	  if (onsafe) g_timer.add_event_after(2.0,onsafe);
 	} else 
 	  r = -1;
 	faker_lock.Unlock();
@@ -75,16 +79,20 @@ class FakeStoreCollections {
 	return r;
   }
 
-  int collection_add(coll_t c, object_t o) {
+  int collection_add(coll_t c, object_t o,
+					 Context *onsafe=0) {
 	faker_lock.Lock();
 	fakecollections[c].insert(o);
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
 	faker_lock.Unlock();
 	return 0;
   }
 
-  int collection_remove(coll_t c, object_t o) {
+  int collection_remove(coll_t c, object_t o,
+						Context *onsafe=0) {
 	faker_lock.Lock();
 	fakecollections[c].erase(o);
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
 	faker_lock.Unlock();
 	return 0;
   }
@@ -182,9 +190,19 @@ class FakeStoreAttrs {
   }
 
   int collection_setattr(coll_t c, const char *name,
-						 void *value, size_t size) {
+						 void *value, size_t size,
+						 Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakecattrs[c].setattr(name, value, size);
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	faker_lock.Unlock();
+	return r;
+  }
+  int collection_rmattr(coll_t c, const char *name,
+						Context *onsafe=0) {
+	faker_lock.Lock();
+	int r = fakecattrs[c].rmattr(name);
+	if (onsafe) g_timer.add_event_after(2.0,onsafe);
 	faker_lock.Unlock();
 	return r;
   }

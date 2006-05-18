@@ -35,7 +35,224 @@ using namespace std;
  * low-level interface to the local OSD file system
  */
 
+
+
 class ObjectStore {
+public:
+
+  /*********************************
+   * transaction
+   */
+  class Transaction {
+  public:
+	static const int OP_WRITE =         1;  // oid, offset, len, bl
+	static const int OP_TRUNCATE =      2;  // oid, len
+	static const int OP_REMOVE =        3;  // oid
+	static const int OP_SETATTR =       4;  // oid, attrname, attrval
+	static const int OP_RMATTR =        5;  // oid, attrname
+	static const int OP_MKCOLL =        6;  // cid
+	static const int OP_RMCOLL =        7;  // cid
+	static const int OP_COLL_ADD =      8;  // cid, oid
+	static const int OP_COLL_REMOVE =   9;  // cid, oid
+	static const int OP_COLL_SETATTR = 10;  // cid, attrname, attrval
+	static const int OP_COLL_RMATTR =  11;  // cid, attrname
+
+	list<int> ops;
+	list<bufferlist> bls;
+	list<object_t> oids;
+	list<coll_t>   cids;
+	list<off_t>    offsets;
+	list<size_t>   lengths;
+	list<const char*> attrnames;
+	list< pair<const void*,int> > attrvals;
+
+	void write(object_t oid, off_t off, size_t len, bufferlist& bl) {
+	  int op = OP_WRITE;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  offsets.push_back(off);
+	  lengths.push_back(len);
+	  bls.push_back(bl);
+	}
+	void truncate(object_t oid, off_t off) {
+	  int op = OP_TRUNCATE;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  offsets.push_back(off);
+	}
+	void remove(object_t oid) {
+	  int op = OP_REMOVE;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	}
+	void setattr(object_t oid, const char* name, const void* val, int len) {
+	  int op = OP_SETATTR;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  attrnames.push_back(name);
+	  attrvals.push_back(pair<const void*,int>(val,len));
+	}
+	void rmattr(object_t oid, const char* name) {
+	  int op = OP_RMATTR;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  attrnames.push_back(name);
+	}
+	void create_collection(coll_t cid) {
+	  int op = OP_MKCOLL;
+	  ops.push_back(op);
+	  cids.push_back(cid);
+	}
+	void remove_collection(coll_t cid) {
+	  int op = OP_RMCOLL;
+	  ops.push_back(op);
+	  cids.push_back(cid);
+	}
+	void collection_add(coll_t cid, object_t oid) {
+	  int op = OP_COLL_ADD;
+	  ops.push_back(op);
+	  cids.push_back(cid);
+	  oids.push_back(oid);
+	}
+	void collection_remove(coll_t cid, object_t oid) {
+	  int op = OP_COLL_REMOVE;
+	  ops.push_back(op);
+	  cids.push_back(cid);
+	  oids.push_back(oid);
+	}
+	void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
+	  int op = OP_COLL_SETATTR;
+	  ops.push_back(op);
+	  cids.push_back(cid);
+	  attrnames.push_back(name);
+	  attrvals.push_back(pair<const void*,int>(val,len));
+	}
+	void collection_rmattr(coll_t cid, const char* name) {
+	  int op = OP_COLL_RMATTR;
+	  ops.push_back(op);
+	  cids.push_back(cid);
+	  attrnames.push_back(name);
+	}
+
+	// etc.
+  };
+
+
+
+  /* this implementation is here only for naive ObjectStores that
+   * do not do atomic transactions natively.  it is not atomic.
+   */
+  virtual unsigned apply_transaction(Transaction& t, Context *onsafe) {
+	// non-atomic implementation
+	for (list<int>::iterator p = t.ops.begin();
+		 p != t.ops.end();
+		 p++) {
+	  Context *last = 0;
+	  if (p == t.ops.end()) last = onsafe;
+
+	  switch (*p) {
+	  case Transaction::OP_WRITE:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  off_t offset = t.offsets.front(); t.offsets.pop_front();
+		  size_t len = t.lengths.front(); t.lengths.pop_front();
+		  bufferlist bl = t.bls.front(); t.bls.pop_front();
+		  write(oid, len, offset, bl, last);
+		}
+		break;
+
+	  case Transaction::OP_TRUNCATE:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  size_t len = t.lengths.front(); t.lengths.pop_front();
+		  truncate(oid, len, last);
+		}
+		break;
+
+	  case Transaction::OP_REMOVE:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  remove(oid, last);
+		}
+		break;
+
+	  case Transaction::OP_SETATTR:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		  setattr(oid, attrname, attrval.first, attrval.second, last);
+		}
+		break;
+
+	  case Transaction::OP_RMATTR:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		  rmattr(oid, attrname, last);
+		}
+		break;
+
+	  case Transaction::OP_MKCOLL:
+		{
+		  coll_t cid = t.cids.front(); t.cids.pop_front();
+		  create_collection(cid, last);
+		}
+		break;
+
+	  case Transaction::OP_RMCOLL:
+		{
+		  coll_t cid = t.cids.front(); t.cids.pop_front();
+		  destroy_collection(cid, last);
+		}
+		break;
+
+	  case Transaction::OP_COLL_ADD:
+		{
+		  coll_t cid = t.cids.front(); t.cids.pop_front();
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  collection_add(cid, oid, last);
+		}
+		break;
+
+	  case Transaction::OP_COLL_REMOVE:
+		{
+		  coll_t cid = t.cids.front(); t.cids.pop_front();
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  collection_remove(cid, oid, last);
+		}
+		break;
+
+	  case Transaction::OP_COLL_SETATTR:
+		{
+		  coll_t cid = t.cids.front(); t.cids.pop_front();
+		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		  collection_setattr(cid, attrname, attrval.first, attrval.second, last);
+		}
+		break;
+
+	  case Transaction::OP_COLL_RMATTR:
+		{
+		  coll_t cid = t.cids.front(); t.cids.pop_front();
+		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		  collection_rmattr(cid, attrname, last);
+		}
+		break;
+
+
+	  default:
+		cerr << "bad op " << *p << endl;
+		assert(0);
+	  }
+	}
+	return 0;  // FIXME count errors
+  }
+
+  /*********************************************/
+
+
+
  public:
   ObjectStore() {}
   virtual ~ObjectStore() {}
@@ -141,16 +358,23 @@ class ObjectStore {
   
   // collections
   virtual int list_collections(list<coll_t>& ls) {return 0;}//= 0;
-  virtual int create_collection(coll_t c) {return 0;}//= 0;
-  virtual int destroy_collection(coll_t c) {return 0;}//= 0;
+  virtual int create_collection(coll_t c,
+								Context *onsafe=0) {return 0;}//= 0;
+  virtual int destroy_collection(coll_t c,
+								 Context *onsafe=0) {return 0;}//= 0;
   virtual bool collection_exists(coll_t c) {return 0;}
   virtual int collection_stat(coll_t c, struct stat *st) {return 0;}//= 0;
-  virtual int collection_add(coll_t c, object_t o) {return 0;}//= 0;
-  virtual int collection_remove(coll_t c, object_t o) {return 0;}// = 0;
+  virtual int collection_add(coll_t c, object_t o,
+							 Context *onsafe=0) {return 0;}//= 0;
+  virtual int collection_remove(coll_t c, object_t o,
+								Context *onsafe=0) {return 0;}// = 0;
   virtual int collection_list(coll_t c, list<object_t>& o) {return 0;}//= 0;
 
   virtual int collection_setattr(coll_t cid, const char *name,
-								 const void *value, size_t size) {return 0;} //= 0;
+								 const void *value, size_t size,
+								 Context *onsafe=0) {return 0;} //= 0;
+  virtual int collection_rmattr(coll_t cid, const char *name,
+								Context *onsafe=0) {return 0;} //= 0;
   virtual int collection_getattr(coll_t cid, const char *name,
 								 void *value, size_t size) {return 0;} //= 0;
   virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;

@@ -196,7 +196,6 @@ class Ebofs : public ObjectStore {
   } finisher_thread;
 
 
-  bool _write_will_block();
   void alloc_more_node_space();
 
   void do_csetattrs(map<coll_t, map<const char*, pair<void*,int> > > &cmods);
@@ -232,63 +231,56 @@ class Ebofs : public ObjectStore {
   
   int statfs(struct statfs *buf);
 
+  // atomic transaction
+  unsigned apply_transaction(Transaction& t, Context *onsafe);
 
   // object interface
   bool exists(object_t);
   int stat(object_t, struct stat*);
   int read(object_t, size_t len, off_t off, bufferlist& bl);
-  int write(object_t oid, 
-			size_t len, off_t off, 
-			bufferlist& bl, bool fsync=true);
-  int write(object_t oid, 
-			size_t len, off_t offset, 
-			bufferlist& bl, 
-			Context *onsafe);
-  int write_transaction(object_t oid, 
-						size_t len, off_t offset, 
-						bufferlist& bl, 
-						map<const char*, pair<void*,int> >& setattrs,
-						map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-						Context *onsafe);
-
-  int truncate(object_t oid, off_t size,
-			   Context *onsafe=0);
-  int truncate_transaction(object_t oid, off_t size, 
-						   map<const char*, pair<void*,int> >& setattrs,
-						   map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-						   Context *onsafe);
-
-  int remove(object_t oid,
-			 Context *onsafe=0);
-  int remove_transaction(object_t,
-						 map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-						 Context *onsafe=0);
-
+  int write(object_t oid, size_t len, off_t off, bufferlist& bl, bool fsync=true);
+  int write(object_t oid, size_t len, off_t offset, bufferlist& bl, Context *onsafe);
+  int truncate(object_t oid, off_t size, Context *onsafe=0);
+  int remove(object_t oid, Context *onsafe=0);
   bool write_will_block();
 
   // object attr
-  int setattr(object_t oid, const char *name, const void *value, size_t size,
-			  Context *onsafe=0);
+  int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int getattr(object_t oid, const char *name, void *value, size_t size);
-  int rmattr(object_t oid, const char *name,
-			 Context *onsafe=0);
+  int rmattr(object_t oid, const char *name, Context *onsafe=0);
   int listattr(object_t oid, vector<string>& attrs);
-  
+
   // collections
   int list_collections(list<coll_t>& ls);
-  //int collection_stat(coll_t c, struct stat *st);
-  int create_collection(coll_t c);
-  int destroy_collection(coll_t c);
-
-  bool _collection_exists(coll_t c);
   bool collection_exists(coll_t c);
-  int collection_add(coll_t c, object_t o);
-  int collection_remove(coll_t c, object_t o);
+
+  int create_collection(coll_t c, Context *onsafe);
+  int destroy_collection(coll_t c, Context *onsafe);
+  int collection_add(coll_t c, object_t o, Context *onsafe);
+  int collection_remove(coll_t c, object_t o, Context *onsafe);
+
   int collection_list(coll_t c, list<object_t>& o);
   
-  int collection_setattr(object_t oid, const char *name, const void *value, size_t size);
+  int collection_setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe);
   int collection_getattr(object_t oid, const char *name, void *value, size_t size);
-  int collection_rmattr(coll_t cid, const char *name);
+  int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
   int collection_listattr(object_t oid, vector<string>& attrs);
+  
+
+private:
+  // private interface -- use if caller already holds lock
+  bool _write_will_block();
+  int _write(object_t oid, size_t len, off_t offset, bufferlist& bl);
+  int _truncate(object_t oid, off_t size);
+  int _remove(object_t oid);
+  int _setattr(object_t oid, const char *name, const void *value, size_t size);
+  int _rmattr(object_t oid, const char *name);
+  bool _collection_exists(coll_t c);
+  int _create_collection(coll_t c);
+  int _destroy_collection(coll_t c);
+  int _collection_add(coll_t c, object_t o);
+  int _collection_remove(coll_t c, object_t o);
+  int _collection_setattr(object_t oid, const char *name, const void *value, size_t size);
+  int _collection_rmattr(coll_t cid, const char *name);
   
 };

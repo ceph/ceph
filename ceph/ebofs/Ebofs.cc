@@ -1737,6 +1737,192 @@ bool Ebofs::write_will_block()
 }
 
 
+unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  dout(7) << "apply_transaction start (" << t.ops.size() << " ops)" << endl;
+
+  // do ops
+  unsigned r = 0;  // bit fields indicate which ops failed.
+  int bit = 1;
+  for (list<int>::iterator p = t.ops.begin();
+	   p != t.ops.end();
+	   p++) {
+	switch (*p) {
+	case Transaction::OP_WRITE:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		off_t offset = t.offsets.front(); t.offsets.pop_front();
+		size_t len = t.lengths.front(); t.lengths.pop_front();
+		bufferlist bl = t.bls.front(); t.bls.pop_front();
+		if (_write(oid, len, offset, bl) < 0) {
+		  dout(7) << "apply_transaction fail on _write" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+
+	case Transaction::OP_TRUNCATE:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		size_t len = t.lengths.front(); t.lengths.pop_front();
+		if (_truncate(oid, len) < 0) {
+		  dout(7) << "apply_transaction fail on _truncate" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_REMOVE:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		if (_remove(oid) < 0) {
+		  dout(7) << "apply_transaction fail on _remove" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_SETATTR:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		if (_setattr(oid, attrname, attrval.first, attrval.second) < 0) {
+		  dout(7) << "apply_transaction fail on _setattr" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_RMATTR:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		if (_rmattr(oid, attrname) < 0) {
+		  dout(7) << "apply_transaction fail on _rmattr" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+
+	case Transaction::OP_MKCOLL:
+	  {
+		coll_t cid = t.cids.front(); t.cids.pop_front();
+		if (_create_collection(cid) < 0) {
+		  dout(7) << "apply_transaction fail on _create_collection" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_RMCOLL:
+	  {
+		coll_t cid = t.cids.front(); t.cids.pop_front();
+		if (_destroy_collection(cid) < 0) {
+		  dout(7) << "apply_transaction fail on _remove_collection" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_COLL_ADD:
+	  {
+		coll_t cid = t.cids.front(); t.cids.pop_front();
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		if (_collection_add(cid, oid) < 0) {
+		  //dout(7) << "apply_transaction fail on _collection_add" << endl;
+		  //r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_COLL_REMOVE:
+	  {
+		coll_t cid = t.cids.front(); t.cids.pop_front();
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		if (_collection_remove(cid, oid) < 0) {
+		  dout(7) << "apply_transaction fail on _collection_remove" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_COLL_SETATTR:
+	  {
+		coll_t cid = t.cids.front(); t.cids.pop_front();
+		const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		if (_collection_setattr(cid, attrname, attrval.first, attrval.second) < 0) {
+		  dout(7) << "apply_transaction fail on _collection_setattr" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	case Transaction::OP_COLL_RMATTR:
+	  {
+		coll_t cid = t.cids.front(); t.cids.pop_front();
+		const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		if (_collection_rmattr(cid, attrname) < 0) {
+		  dout(7) << "apply_transaction fail on _collection_rmattr" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+	  
+	default:
+	  cerr << "bad op " << *p << endl;
+	  assert(0);
+	}
+
+	bit = bit << 1;
+  }
+  
+  dout(7) << "apply_transaction finish (r = " << r << ")" << endl;
+  
+  // set up commit waiter
+  if (r == 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+  
+  ebofs_lock.Unlock();
+  return r;
+}
+
+
+
+int Ebofs::_write(object_t oid, size_t length, off_t offset, bufferlist& bl)
+{
+  dout(7) << "_write " << hex << oid << dec << " len " << length << " off " << offset << endl;
+
+  // out of space?
+  unsigned max = (length+offset) / EBOFS_BLOCK_SIZE + 10;  // very conservative; assumes we have to rewrite
+  max += dirty_onodes.size() + dirty_cnodes.size();
+  if (max >= free_blocks) {
+	dout(1) << "write failing, only " << free_blocks << " blocks free, may need up to " << max << endl;
+	return -ENOSPC;
+  }
+  
+  // get|create inode
+  Onode *on = get_onode(oid);
+  if (!on) on = new_onode(oid);	// new inode!
+
+  dirty_onode(on);  // dirty onode!
+  
+  // apply write to buffer cache
+  apply_write(on, length, offset, bl);
+
+  // done.
+  put_onode(on);
+  trim_bc();
+
+  return length;
+}
+
+
 int Ebofs::write(object_t oid, 
 				 size_t len, off_t off, 
 				 bufferlist& bl, bool fsync)
@@ -1770,145 +1956,77 @@ int Ebofs::write(object_t oid,
 				 size_t len, off_t off, 
 				 bufferlist& bl, Context *onsafe)
 {
-  static map<const char*, pair<void*,int> > null_setattrs;
-  static map<coll_t, map<const char*, pair<void*,int> > > null_cmods;
-  return write_transaction(oid, len, off, bl, null_setattrs, null_cmods, onsafe);
-}
-
-int Ebofs::write_transaction(object_t oid, 
-							 size_t len, off_t off, 
-							 bufferlist& bl, 
-							 map<const char*, pair<void*,int> >& setattrs,
-							 map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-							 Context *onsafe) 
-{
   ebofs_lock.Lock();
-  dout(7) << "write " << hex << oid << dec << " len " << len << " off " << off << endl;
   assert(len > 0);
 
   // too much unflushed dirty data?  (if so, block!)
   if (_write_will_block()) {
-	dout(10) << "write blocking" << endl;
+	dout(10) << "write blocking " 
+			 << hex << oid << dec << " len " << len << " off " << off << endl;
+
 	while (_write_will_block()) 
 	  bc.waitfor_stat();  // waits on ebofs_lock
-	dout(7) << "write unblocked " << hex << oid << dec << " len " << len << " off " << off << endl;
+
+	dout(7) << "write unblocked " 
+			<< hex << oid << dec << " len " << len << " off " << off << endl;
   }
 
-  // out of space?
-  //unsigned max = ((len+off) - MIN(off, on->object_size)) / EBOFS_BLOCK_SIZE + 10;
-  unsigned max = (len+off) / EBOFS_BLOCK_SIZE + 10;  // very conservative; assumes we have to rewrite
-  max += dirty_onodes.size() + dirty_cnodes.size();
-  if (max >= free_blocks) {
-	dout(1) << "write failing, only " << free_blocks << " blocks free, may need up to " << max << endl;
+  // go
+  int r = _write(oid, len, off, bl);
+
+  // commit waiter
+  if (r > 0) {
+	assert((size_t)r == len);
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
 	if (onsafe) delete onsafe;
-	ebofs_lock.Unlock();
-	return -ENOSPC;
   }
-  
-  // get|create inode
-  Onode *on = get_onode(oid);
-  if (!on) on = new_onode(oid);	// new inode!
-
-  dirty_onode(on);  // dirty onode!
-  
-  // apply write to buffer cache
-  apply_write(on, len, off, bl);
-
-  // join collections?
-  for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
-	   cit != cmods.end();
-	   cit++) {
-	const coll_t cid = cit->first;
-	if (_collection_exists(cid)) {
-	  if (oc_tab->lookup(idpair_t(oid,cid)) < 0) {
-		oc_tab->insert(idpair_t(oid,cid), true);
-		co_tab->insert(idpair_t(cid,oid), true);
-	  }
-	}
-  }
-
-  // apply attribute changes
-  do_setattrs(on, setattrs);
-  do_csetattrs(cmods);
-
-  // prepare (eventual) journal entry?
-
-  // set up commit waiter
-  if (onsafe) {
-	// commit on next full fs commit.
-	// FIXME when we add journaling.
-	commit_waiters[super_epoch].push_back(onsafe);
-	//on->commit_waiters.push_back(onsafe);        // in case we delete the object.
-  }
-
-  // done
-  put_onode(on);
-
-  trim_bc();
 
   ebofs_lock.Unlock();
-  return len;
+  return r;
 }
 
 
-
-int Ebofs::remove(object_t oid, Context *onsafe)
+int Ebofs::_remove(object_t oid)
 {
-  static map<coll_t, map<const char*, pair<void*,int> > > null_cmods;
-  return remove_transaction(oid, null_cmods, onsafe);
-}
+  dout(7) << "_remove " << hex << oid << dec << endl;
 
-int Ebofs::remove_transaction(object_t oid, 
-							  map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-							  Context *onsafe)
-{
-  ebofs_lock.Lock();
-  dout(7) << "remove " << hex << oid << dec << endl;
-  
   // get inode
   Onode *on = get_onode(oid);
-  if (!on) {
-	ebofs_lock.Unlock();
-	return -ENOENT;
-  }
+  if (!on) return -ENOENT;
 
   // ok remove it!
   remove_onode(on);
 
-  // do collection mods
-  do_csetattrs(cmods);
-
-  // set up commit waiter
-  if (onsafe) {
-	// commit on next full fs commit.
-	// FIXME when we add journaling.
-	commit_waiters[super_epoch].push_back(onsafe);
-  }
-
-  ebofs_lock.Unlock();
   return 0;
 }
 
-int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
-{
-  static map<const char*, pair<void*,int> > null_setattrs;
-  static map<coll_t, map<const char*, pair<void*,int> > > null_cmods;
-  return truncate_transaction(oid, size, null_setattrs, null_cmods, onsafe);
-}
 
-int Ebofs::truncate_transaction(object_t oid, off_t size,
-								map<const char*, pair<void*,int> >& setattrs,
-								map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-								Context *onsafe)
+int Ebofs::remove(object_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
-  dout(7) << "truncate " << hex << oid << dec << " size " << size << endl;
-  
-  Onode *on = get_onode(oid);
-  if (!on) {
-	ebofs_lock.Unlock();
-	return -ENOENT;
+
+  // do it
+  int r = _remove(oid);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
   }
+
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_truncate(object_t oid, off_t size)
+{
+  dout(7) << "_truncate " << hex << oid << dec << " size " << size << endl;
+
+  Onode *on = get_onode(oid);
+  if (!on) 
+	return -ENOENT;
   
   int r = 0;
   if (size > on->object_size) {
@@ -1943,15 +2061,24 @@ int Ebofs::truncate_transaction(object_t oid, off_t size,
 	assert(size == on->object_size);
   }
 
-  // apply attribute changes
-  do_setattrs(on, setattrs);
-  do_csetattrs(cmods);
+  put_onode(on);
+  return r;
+}
+
+
+int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  
+  int r = _truncate(oid, size);
 
   // set up commit waiter
-  if (onsafe) 
-	commit_waiters[super_epoch].push_back(onsafe);
-  
-  put_onode(on);
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
   ebofs_lock.Unlock();
   return r;
 }
@@ -1985,76 +2112,36 @@ int Ebofs::stat(object_t oid, struct stat *st)
   return 0;
 }
 
-// attributes
 
-void Ebofs::do_setattrs(Onode *on, map<const char*, pair<void*,int> > &setattrs)
+int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t size) 
 {
-  for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
-	   it != setattrs.end();
-	   it++) {
-	string n(it->first);
-	if (it->second.first) {
-	  AttrVal val((char*)it->second.first, it->second.second);
-	  on->attr[n] = val;
-	} else {
-	  on->attr.erase(n);
-	}
-  }
-}
-						
-void Ebofs::do_csetattrs(map<coll_t, map<const char*, pair<void*,int> > > &cmods)
-{
-  for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
-	   cit != cmods.end();
-	   cit++) {
-	const coll_t cid = cit->first;
-
-	if (!cit->second.empty()) {
-	  // attrs
-	  Cnode *cn = get_cnode(cid);
-	  if (cn) {
-		for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
-			 ait != cit->second.end();
-			 ait++) {
-		  string n(ait->first);
-		  if (ait->second.first) {
-			AttrVal val((char*)ait->second.first, ait->second.second);
-			cn->attr[n] = val;
-		  } else {
-			cn->attr.erase(n);
-		  }
-		}
-		dirty_cnode(cn);
-		put_cnode(cn);
-	  } else {
-		dout(0) << "warning: collection " << hex << cid << dec << " dne for csetattrs" << endl;
-	  }
-	}	
-  }
-}
-
-int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe)
-{
-  ebofs_lock.Lock();
   dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
 
   Onode *on = get_onode(oid);
-  if (!on) {
-	ebofs_lock.Unlock();
-	return -ENOENT;
-  }
+  if (!on) return -ENOENT;
 
   string n(name);
   AttrVal val((char*)value, size);
   on->attr[n] = val;
   dirty_onode(on);
-
-  if (onsafe) 
-	commit_waiters[super_epoch].push_back(onsafe);
-
   put_onode(on);
-  ebofs_lock.Unlock();
   return 0;
+}
+
+int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  int r = _setattr(oid, name, value, size);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
 }
 
 int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
@@ -2081,27 +2168,36 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
   return r;
 }
 
-int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe) 
+
+int Ebofs::_rmattr(object_t oid, const char *name) 
 {
-  ebofs_lock.Lock();
-  dout(8) << "rmattr " << hex << oid << dec << " '" << name << "'" << endl;
+  dout(8) << "_rmattr " << hex << oid << dec << " '" << name << "'" << endl;
 
   Onode *on = get_onode(oid);
-  if (!on) {
-	ebofs_lock.Unlock();
-	return -ENOENT;
-  }
+  if (!on) return -ENOENT;
 
   string n(name);
   on->attr.erase(n);
-
-  if (onsafe) 
-	commit_waiters[super_epoch].push_back(onsafe);
-
   dirty_onode(on);
   put_onode(on);
-  ebofs_lock.Unlock();
   return 0;
+}
+
+int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe) 
+{
+  ebofs_lock.Lock();
+
+  int r = _rmattr(oid, name);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
 }
 
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
@@ -2151,32 +2247,42 @@ int Ebofs::list_collections(list<coll_t>& ls)
   return num;
 }
 
-int Ebofs::create_collection(coll_t cid)
+int Ebofs::_create_collection(coll_t cid)
 {
-  ebofs_lock.Lock();
-  dout(9) << "create_collection " << hex << cid << dec << endl;
+  dout(9) << "_create_collection " << hex << cid << dec << endl;
   
-  if (_collection_exists(cid)) {
-	ebofs_lock.Unlock();
+  if (_collection_exists(cid)) 
 	return -EEXIST;
-  }
 
   Cnode *cn = new_cnode(cid);
   put_cnode(cn);
-
-  ebofs_lock.Unlock();
-  return 0;
+  
+  return 0;  
 }
 
-int Ebofs::destroy_collection(coll_t cid)
+int Ebofs::create_collection(coll_t cid, Context *onsafe)
 {
   ebofs_lock.Lock();
-  dout(9) << "destroy_collection " << hex << cid << dec << endl;
 
-  if (!_collection_exists(cid)) {
-	ebofs_lock.Unlock();
-	return -ENOENT;
+  int r = _create_collection(cid);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
   }
+
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_destroy_collection(coll_t cid)
+{
+  dout(9) << "_destroy_collection " << hex << cid << dec << endl;
+
+  if (!_collection_exists(cid)) 
+	return -ENOENT;
 
   Cnode *cn = get_cnode(cid);
   assert(cn);
@@ -2192,15 +2298,30 @@ int Ebofs::destroy_collection(coll_t cid)
   }
 
   remove_cnode(cn);
-  ebofs_lock.Lock();
   return 0;
+}
+
+int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
+{
+  ebofs_lock.Lock();
+
+  int r = _destroy_collection(cid);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
 }
 
 bool Ebofs::collection_exists(coll_t cid)
 {
   ebofs_lock.Lock();
   dout(10) << "collection_exists " << hex << cid << dec << endl;
-
   bool r = _collection_exists(cid);
   ebofs_lock.Unlock();
   return r;
@@ -2210,32 +2331,46 @@ bool Ebofs::_collection_exists(coll_t cid)
   return (collection_tab->lookup(cid) == 0);
 }
 
-int Ebofs::collection_add(coll_t cid, object_t oid)
+int Ebofs::_collection_add(coll_t cid, object_t oid)
 {
-  ebofs_lock.Lock();
-  dout(9) << "collection_add " << hex << cid << " object " << oid << dec << endl;
+  dout(9) << "_collection_add " << hex << cid << " object " << oid << dec << endl;
 
-  if (!_collection_exists(cid)) {
-	ebofs_lock.Unlock();
+  if (!_collection_exists(cid)) 
 	return -ENOENT;
-  }
+
   if (oc_tab->lookup(idpair_t(oid,cid)) < 0) {
 	oc_tab->insert(idpair_t(oid,cid), true);
 	co_tab->insert(idpair_t(cid,oid), true);
+	return 0;
+  } else {
+	return -ENOENT;  // FIXME?
   }
+}
+
+int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
+{
+  ebofs_lock.Lock();
+
+  int r = _collection_add(cid, oid);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
   ebofs_lock.Unlock();
   return 0;
 }
 
-int Ebofs::collection_remove(coll_t cid, object_t oid)
+int Ebofs::_collection_remove(coll_t cid, object_t oid)
 {
-  ebofs_lock.Lock();
-  dout(9) << "collection_remove " << hex << cid << " object " << oid << dec << endl;
+  dout(9) << "_collection_remove " << hex << cid << " object " << oid << dec << endl;
 
-  if (!_collection_exists(cid)) {
-	ebofs_lock.Unlock();
+  if (!_collection_exists(cid)) 
 	return -ENOENT;
-  }
+
   oc_tab->remove(idpair_t(oid,cid));
   co_tab->remove(idpair_t(cid,oid));
 
@@ -2245,6 +2380,23 @@ int Ebofs::collection_remove(coll_t cid, object_t oid)
 	cnode_map.erase(cid);
 	cnode_lru.lru_remove(cn);
 	delete cn;
+	return 0;
+  } else {
+	return -ENOENT;  // FIXME?
+  } 
+}
+
+int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)
+{
+  ebofs_lock.Lock();
+
+  int r = _collection_remove(cid, oid);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
   }
 
   ebofs_lock.Unlock();
@@ -2280,23 +2432,36 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 }
 
 
-int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, size_t size)
+int Ebofs::_collection_setattr(coll_t cid, const char *name, const void *value, size_t size)
 {
-  ebofs_lock.Lock();
-  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
+  dout(10) << "_collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
 
   Cnode *cn = get_cnode(cid);
-  if (!cn) {
-	ebofs_lock.Unlock();
-  	return -ENOENT;
-  }
+  if (!cn) return -ENOENT;
 
   string n(name);
   AttrVal val((char*)value, size);
   cn->attr[n] = val;
   dirty_cnode(cn);
-
   put_cnode(cn);
+
+  return 0;
+}
+
+int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << "' len " << size << endl;
+
+  int r = _collection_setattr(cid, name, value, size);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
   ebofs_lock.Unlock();
   return 0;
 }
@@ -2326,22 +2491,35 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   return r;
 }
 
-int Ebofs::collection_rmattr(coll_t cid, const char *name) 
+int Ebofs::_collection_rmattr(coll_t cid, const char *name) 
 {
-  ebofs_lock.Lock();
-  dout(10) << "collection_rmattr " << hex << cid << dec << " '" << name << "'" << endl;
+  dout(10) << "_collection_rmattr " << hex << cid << dec << " '" << name << "'" << endl;
 
   Cnode *cn = get_cnode(cid);
-  if (!cn) {
-	ebofs_lock.Unlock();
-	return -ENOENT;
-  }
+  if (!cn) return -ENOENT;
 
   string n(name);
   cn->attr.erase(n);
 
   dirty_cnode(cn);
   put_cnode(cn);
+
+  return 0;
+}
+
+int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe) 
+{
+  ebofs_lock.Lock();
+
+  int r = _collection_rmattr(cid, name);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
   ebofs_lock.Unlock();
   return 0;
 }
