@@ -196,7 +196,7 @@ void Client::trim_cache()
 	Dentry *dn = (Dentry*)lru.lru_expire();
 	if (!dn) break;  // done
 	
-	//dout(10) << "unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << dec << endl;
+	//dout(10) << "trim_cache unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << dec << endl;
 	unlink(dn);
   }
 
@@ -247,9 +247,8 @@ Inode* Client::insert_inode_info(Dir *dir, c_inode_info *in_info)
   }
   
   if (!dn) {
-	Inode *in = new Inode;
+	Inode *in = new Inode(in_info->inode, objectcacher);
 	inode_map[in_info->inode.ino] = in;
-	in->inode = in_info->inode;   // actually update indoe info
 	dn = link(dir, dname, in);
 	dout(12) << " new dentry+node with ino " << hex << in_info->inode.ino << dec << endl;
   } else {
@@ -311,8 +310,7 @@ void Client::insert_trace(const vector<c_inode_info*>& trace)
 	  c_inode_info *in_info = trace[0];
 
       if (!root) {
-        cur = root = new Inode();
-        root->inode = in_info->inode;
+        cur = root = new Inode(in_info->inode, objectcacher);
 		inode_map[root->inode.ino] = root;
       }
 	  
@@ -553,23 +551,28 @@ void Client::dispatch(Message *m)
  * caps
  */
 
-class C_Client_Flushed : public Context {
+
+class C_Client_ImplementedCaps : public Context {
   Client *client;
-  Inode *in;
+  MClientFileCaps *msg;
 public:
-  C_Client_Flushed(Client *c, Inode *i) : client(c), in(i) {}
+  C_Client_ImplementedCaps(Client *c, MClientFileCaps *m) : client(c), msg(m) {}
   void finish(int r) {
-	client->finish_flush(in);
+	client->implemented_caps(msg);
   }
 };
 
+/** handle_file_caps
+ * handle caps update from mds.  including mds to mds caps transitions.
+ * do not block.
+ */
 void Client::handle_file_caps(MClientFileCaps *m)
 {
   int mds = MSG_ADDR_NUM(m->get_source());
   Inode *in = 0;
   if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
 
-  m->clear_payload();  // for when we send back to MDS
+  m->clear_payload();  // for if/when we send back to MDS
 
   // reap?
   if (m->get_special() == MClientFileCaps::FILECAP_REAP) {
@@ -658,136 +661,91 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   // don't want?
   if (in->file_caps_wanted() == 0) {
-	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " seq " << m->get_seq() << " " << cap_string(m->get_caps()) << ", which we don't want caps for, releasing." << endl;
+	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec 
+			<< " seq " << m->get_seq() 
+			<< " " << cap_string(m->get_caps()) 
+			<< ", which we don't want caps for, releasing." << endl;
 	m->set_caps(0);
 	m->set_wanted(0);
 	messenger->send_message(m, m->get_source(), m->get_source_port());
 	return;
   }
 
-  /* no ooo messages yet!
-  if (m->get_seq() <= in->file_caps_seq) {
-	assert(0); // no ooo support yet
-	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " old seq " << m->get_seq() << " <= " << in->file_caps_seq << endl;
-	delete m;
-	return;
-  }
-  */
-
   assert(in->caps.count(mds));
 
-  // update caps
+  // update per-mds caps
   const int old_caps = in->caps[mds].caps;
   const int new_caps = m->get_caps();
   in->caps[mds].caps = new_caps;
   in->caps[mds].seq = m->get_seq();
-  dout(5) << "handle_file_caps on in " << hex << m->get_ino() << dec << " seq " << m->get_seq() << " caps now " << cap_string(new_caps) << " was " << cap_string(old_caps) << endl;
+  dout(5) << "handle_file_caps on in " << hex << m->get_ino() << dec 
+		  << " mds" << mds << " seq " << m->get_seq() 
+		  << " caps now " << cap_string(new_caps) 
+		  << " was " << cap_string(old_caps) << endl;
   
   // did file size decrease?
   if ((old_caps & new_caps & CAP_FILE_RDCACHE) &&
 	  in->inode.size > m->get_inode().size) {
 	// must have been a truncate() by someone.
 	// trim the buffer cache
-	// ***** write me ****
+	// ***** fixme write me ****
   }
 
   // update inode
   in->inode = m->get_inode();      // might have updated size... FIXME this is overkill!
 
-  // flush buffers?
-  if (g_conf.client_oc &&
-	  !(in->file_caps() & CAP_FILE_WRBUFFER)) {
-
-	//in->fc->flush_dirty();  // FIXME don't block
-
-  } 
-  
-  // release all buffers?
-  if ((old_caps & CAP_FILE_RDCACHE) &&
-	  !(new_caps & CAP_FILE_RDCACHE))
-	release_inode_buffers(in);
-
-  // wake up waiters?
-  if (new_caps & CAP_FILE_RD) {
-	for (list<Cond*>::iterator it = in->waitfor_read.begin();
-		 it != in->waitfor_read.end();
-		 it++) {
-	  dout(5) << "signaling read waiter " << *it << endl;
-	  (*it)->Signal();
+  if (g_conf.client_oc) {
+	// caching on, use FileCache.
+	Context *onimplement = 0;
+	if (old_caps & ~new_caps) {     // this mds is revoking caps
+	  if (in->fc.get_caps() & ~(in->file_caps()))   // net revocation
+		onimplement = new C_Client_ImplementedCaps(this, m);
+	  else {
+		implemented_caps(m);		// ack now.
+	  }
 	}
-	in->waitfor_read.clear();
-  }
-  if (new_caps & CAP_FILE_WR) {
-	for (list<Cond*>::iterator it = in->waitfor_write.begin();
-		 it != in->waitfor_write.end();
-		 it++) {
-	  dout(5) << "signaling write waiter " << *it << endl;
-	  (*it)->Signal();
+	in->fc.set_caps(new_caps, onimplement);
+
+  } else {
+	// caching off.
+
+	// wake up waiters?
+	if (new_caps & CAP_FILE_RD) {
+	  for (list<Cond*>::iterator it = in->waitfor_read.begin();
+		   it != in->waitfor_read.end();
+		   it++) {
+		dout(5) << "signaling read waiter " << *it << endl;
+		(*it)->Signal();
+	  }
+	  in->waitfor_read.clear();
 	}
-	in->waitfor_write.clear();
-  }
+	if (new_caps & CAP_FILE_WR) {
+	  for (list<Cond*>::iterator it = in->waitfor_write.begin();
+		   it != in->waitfor_write.end();
+		   it++) {
+		dout(5) << "signaling write waiter " << *it << endl;
+		(*it)->Signal();
+	  }
+	  in->waitfor_write.clear();
+	}
 
-  // ack?
-  if (old_caps & ~new_caps) {
-	// send back to mds
-	dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
-	messenger->send_message(m, m->get_source(), m->get_source_port());
-  } else {
-	// discard
-	delete m;
-  }
-}
-
-void Client::async_flush_inode_buffers(Inode *in)
-{
-  dout(5) << "async_flush_inode_buffers " << hex << in->ino() << dec << endl;
-  
-  in->get();
-  if (objectcacher->flush_set(in->ino(),
-							  new C_Client_Flushed(this, in)))
-	finish_flush(in);
-}
-
-void Client::flush_inode_buffers(Inode *in)
-{
-  dout(5) << "flush_inode_buffers " << hex << in->ino() << dec << endl;
-
-  Cond cond;
-  bool done = false;
-  if (!objectcacher->flush_set(in->ino(),
-							   new C_Cond(&cond, &done))) {
-	// wait for callback
-	while (!done) cond.Wait(client_lock);
+	// ack?
+	if (old_caps & ~new_caps) {
+	  // send back to mds
+	  dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
+	  messenger->send_message(m, m->get_source(), m->get_source_port());
+	} else {
+	  // discard
+	  delete m;
+	}
   }
 }
 
-void Client::release_inode_buffers(Inode *in)
+void Client::implemented_caps(MClientFileCaps *m)
 {
-  dout(5) << "release_inode_buffers " << hex << in->ino() << dec << endl;
-  flush_inode_buffers(in);
-  int left = objectcacher->release_set(in->ino());
-  assert(left == 0);
-}
-
-void Client::finish_flush(Inode *in)
-{
-  dout(5) << "finish_flush " << hex << in->ino() << dec << endl;
-  
-  // release all buffers?
-  if (!(in->file_caps() & CAP_FILE_RDCACHE)) {
-	dout(5) << "flush_finish releasing all buffers on ino " << hex << in->ino() << dec << endl;
-	release_inode_buffers(in);
-  }
-  
-  if (in->num_rd == 0 && in->num_wr == 0) {
-	dout(5) << "flush_finish ino " << hex << in->ino() << dec << " releasing remaining caps (no readers/writers)" << endl;
-	release_caps(in);
-  } else {
-	dout(5) << "finish_flush ino " << hex << in->ino() << dec << " acking" << endl;
-	release_caps(in, in->file_caps() & ~CAP_FILE_WRBUFFER);   // send whatever we have
-  }
-
-  put_inode(in);
+  dout(5) << "implemented_caps " << cap_string(m->get_caps()) 
+		  << ", acking to " << m->get_source() << endl;
+  messenger->send_message(m, m->get_source(), m->get_source_port());
 }
 
 
@@ -895,28 +853,33 @@ int Client::unmount()
   dout(2) << "unmounting" << endl;
   unmounting = true;
 
-  // make sure all buffers are clean
-  dout(3) << "flushing buffers" << endl;
-
-  // *** WRITE ME ****
+  // NOTE: i'm assuming all caches are already flushing (because all files are closed).
+  assert(fh_map.empty());
 
   // empty lru cache
   lru.lru_set_max(0);
   trim_cache();
 
   while (lru.lru_get_size() > 0 || 
-		 !inode_map.empty() ||
-		 unsafe_sync_write > 0) {
+		 !inode_map.empty()) {
 	dout(0) << "cache still has " << lru.lru_get_size() 
-			<< "+" << inode_map.size() << " items + " 
-			<< unsafe_sync_write << " unsafe_sync_writes, waiting (presumably for caps to be released?)" << endl;
-	
+			<< "+" << inode_map.size() << " items" 
+			<< ", waiting (presumably for safe or for caps to be released?)"
+			<< endl;
 	dump_cache();
-	
 	unmount_cond.Wait(client_lock);
   }
   assert(lru.lru_get_size() == 0);
   assert(inode_map.empty());
+  
+  // unsafe writes
+  if (!g_conf.client_oc) {
+	while (unsafe_sync_write > 0) {
+	  dout(0) << unsafe_sync_write << " unsafe_sync_writes, waiting" 
+			  << endl;
+	  unmount_cond.Wait(client_lock);
+	}
+  }
   
   // send unmount!
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
@@ -1000,7 +963,7 @@ int Client::unlink(const char *relpath)
 	filepath fp(path);
 	Dentry *dn = lookup(fp);
 	if (dn) {
-	  release_inode_buffers(dn->inode);
+	  assert(dn->inode);
 	  unlink(dn);
 	}
   }
@@ -1570,8 +1533,8 @@ int Client::open(const char *relpath, int mode)
 	assert(f->inode);
 	f->inode->get();
 
-	if (cmode & FILE_MODE_R) f->inode->num_rd++;
-	if (cmode & FILE_MODE_W) f->inode->num_wr++;
+	if (cmode & FILE_MODE_R) f->inode->num_open_rd++;
+	if (cmode & FILE_MODE_W) f->inode->num_open_wr++;
 
 	// caps included?
 	int mds = MSG_ADDR_NUM(reply->get_source());
@@ -1579,18 +1542,31 @@ int Client::open(const char *relpath, int mode)
 	if (f->inode->caps.empty()) // first caps?
 	  f->inode->get();
 
+	int new_caps = reply->get_file_caps();
+
 	assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
 	if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
-	  dout(7) << "open got caps " << cap_string(reply->get_file_caps()) << " for " << hex << f->inode->ino() << dec << " seq " << reply->get_file_caps_seq() << " from mds" << mds << endl;
+	  dout(7) << "open got caps " << cap_string(new_caps)
+			  << " for " << hex << f->inode->ino() << dec 
+			  << " seq " << reply->get_file_caps_seq() 
+			  << " from mds" << mds << endl;
 
 	  int old_caps = f->inode->caps[mds].caps;
-	  f->inode->caps[mds].caps = reply->get_file_caps();
+	  f->inode->caps[mds].caps = new_caps;
 	  f->inode->caps[mds].seq = reply->get_file_caps_seq();
 
 	  // we shouldn't ever lose caps at this point.
+	  // actually, we might...?
 	  assert((old_caps & ~f->inode->caps[mds].caps) == 0);
+
+	  if (g_conf.client_oc)
+		f->inode->fc.set_caps(new_caps);
+
 	} else {
-	  dout(7) << "open got SAME caps " << cap_string(reply->get_file_caps()) << " for " << hex << f->inode->ino() << dec << " seq " << reply->get_file_caps_seq() << " from mds" << mds << endl;
+	  dout(7) << "open got SAME caps " << cap_string(new_caps) 
+			  << " for " << hex << f->inode->ino() << dec 
+			  << " seq " << reply->get_file_caps_seq() 
+			  << " from mds" << mds << endl;
 	}
 	
 	// put in map
@@ -1613,6 +1589,42 @@ int Client::open(const char *relpath, int mode)
 
 
 
+class C_Client_CloseRelease : public Context {
+  Client *cl;
+  Inode *in;
+public:
+  C_Client_CloseRelease(Client *c, Inode *i) : cl(c), in(i) {}
+  void finish(int) {
+	cl->close_release(in);
+  }
+};
+
+class C_Client_CloseSafe : public Context {
+  Client *cl;
+  Inode *in;
+public:
+  C_Client_CloseSafe(Client *c, Inode *i) : cl(c), in(i) {}
+  void finish(int) {
+	cl->close_safe(in);
+  }
+};
+
+void Client::close_release(Inode *in)
+{
+  dout(10) << "close_release on " << hex << in->ino() << dec << endl;
+  int retain = 0;
+  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
+  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_RD | CAP_FILE_RDCACHE;
+  release_caps(in, retain);        	  // release caps now.
+}
+
+void Client::close_safe(Inode *in)
+{
+  dout(10) << "close_safe on " << hex << in->ino() << dec << endl;
+  put_inode(in);
+  if (unmounting) 
+	unmount_cond.Signal();
+}
 
 int Client::close(fh_t fh)
 {
@@ -1630,9 +1642,9 @@ int Client::close(fh_t fh)
   // update inode rd/wr counts
   int before = in->file_caps_wanted();
   if (f->mode & FILE_MODE_R) 	
-	in->num_rd--;
+	in->num_open_rd--;
   if (f->mode & FILE_MODE_W)
-	in->num_wr--;
+	in->num_open_wr--;
   int after = in->file_caps_wanted();
 
   // does this change what caps we want?
@@ -1644,17 +1656,35 @@ int Client::close(fh_t fh)
   delete f;
 
   // release caps right away?
-  dout(10) << "num_rd " << in->num_rd << "  num_wr " << in->num_wr << endl;
-  if (in->num_wr == 0) {
-	//dout(10) << "  starting flush of dirty buffers on " << hex << in->ino() << dec << endl;
-	async_flush_inode_buffers(in);
+  dout(10) << "num_open_rd " << in->num_open_rd << "  num_open_wr " << in->num_open_wr << endl;
+
+  if (g_conf.client_oc) {
+	// caching on.
+	if (in->num_open_rd == 0 && in->num_open_wr == 0) {
+	  in->fc.empty(new C_Client_CloseRelease(this, in));
+	} 
+	else if (in->num_open_rd == 0) {
+	  in->fc.release_clean();
+	  close_release(in);
+	} 
+	else if (in->num_open_wr == 0) {
+	  in->fc.flush_dirty(new C_Client_CloseRelease(this,in));
+	}
+
+	// pin until safe?
+	if (in->num_open_wr == 0 && !in->fc.all_safe()) {
+	  dout(10) << "pinning ino " << hex << in->ino() << dec << " until safe" << endl;
+	  in->get();
+	  in->fc.add_safe_waiter(new C_Client_CloseSafe(this, in));
+	}
+  } else {
+	// caching off.
+	if (in->num_open_rd == 0 && in->num_open_wr == 0) {
+	  dout(10) << "  releasing caps on " << hex << in->ino() << dec << endl;
+	  release_caps(in);        	  // release caps now.
+	}
   }
-  if (in->num_rd == 0) {
-	//dout(10) << "  releasing buffers and caps on " << hex << in->ino() << dec << endl;
-	release_inode_buffers(in);
-	release_caps(in);        	  // release caps now.
-  }
-	
+  
   put_inode( in );
   int result = 0;
 
@@ -1723,30 +1753,32 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   // adjust fd pos
   f->pos = offset+size;
 
-  Cond cond;
   bufferlist blist;   // data will go here
-  bool done = false;
-  C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
   int r = 0;
   if (g_conf.client_oc) {
 	// object cache ON
-	r = objectcacher->file_read(in->inode, size, offset, &blist, onfinish);
+	r = in->fc.read(size, offset, blist, client_lock);  // may block.
   } else {
 	// object cache OFF -- legacy inconsistent way.
-    r = filer->read(in->inode, size, offset, &blist, onfinish);
-  }
+	Cond cond;
+	bool done = false;
+	C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-  if (r == 0) {
-	// wait!
-	while (!done)
-	  cond.Wait(client_lock);
-  } else {
-	// had it cached, apparently!
-	assert(r > 0);
-	delete onfinish;
+    r = filer->read(in->inode, size, offset, &blist, onfinish);
+
+	if (r == 0) {
+	  // wait!
+	  while (!done)
+		cond.Wait(client_lock);
+	} else {
+	  // had it cached, apparently!
+	  assert(r > 0);
+	  delete onfinish;
+	}
   }
-  // copy data into caller's buf
+  
+  // copy data into caller's char* buf
   blist.copy(0, blist.length(), buf);
 
   // done!
@@ -1824,16 +1856,9 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	bufferlist blist;
 	blist.push_back( new buffer(buf, size) );
 
-	// wait?  (this may block!)
-	objectcacher->wait_for_write(size, client_lock);
-	
-	if (in->file_caps() & CAP_FILE_WRBUFFER) {   // caps buffered write?
-	  // async, caching, non-blocking.
-	  objectcacher->file_write(in->inode, size, offset, blist);
-	} else {
-	  // atomic, synchronous, blocking.
-	  objectcacher->file_atomic_sync_write(in->inode, size, offset, blist, client_lock);	  
-	}
+	// write (this may block!)
+	in->fc.write(size, offset, blist, client_lock);
+
   } else {
 	// legacy, inconsistent synchronous write.
 	dout(7) << "synchronous write" << endl;
@@ -1844,10 +1869,8 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  
 	// issue write
 	Cond cond;
-	int rvalue = 0;
-	
 	bool done = false;
-	C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
+	C_Cond *onfinish = new C_Cond(&cond, &done);
 	C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
 	unsafe_sync_write++;
 	

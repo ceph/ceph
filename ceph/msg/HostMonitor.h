@@ -25,6 +25,7 @@ using namespace std;
 #include "msg/Message.h"
 
 class Message;
+class Messenger;
 
 typedef struct {
   time_t last_heard_from;

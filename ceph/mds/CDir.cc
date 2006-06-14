@@ -443,7 +443,7 @@ void CDir::take_waiting(int mask,
   if (waiting_on_dentry.size()) {
 	// try each dentry
 	hash_map<string, multimap<int,Context*> >::iterator it = 
-	  it = waiting_on_dentry.begin(); 
+	  waiting_on_dentry.begin(); 
 	while (it != waiting_on_dentry.end()) {
 	  take_waiting(mask, (it++)->first, ls);   // not post-inc
 	}

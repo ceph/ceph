@@ -2069,7 +2069,7 @@ void OSD::op_apply(MOSDOp *op, version_t version, Context* oncommit)
 	  // unblock all operations that were waiting for this object to become unlocked
 	  if (waiting_for_wr_unlock.count(oid)) {
 		take_waiters(waiting_for_wr_unlock[oid]);
-		waiting_for_wr_unlock.erase(oid);		
+		waiting_for_wr_unlock.erase(oid);
 	  }
 	}
 	break;

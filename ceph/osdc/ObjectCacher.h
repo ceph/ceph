@@ -350,13 +350,16 @@ class ObjectCacher {
   int atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock);
   int atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock);
 
+  bool set_is_cached(inodeno_t ino);
+  bool set_is_dirty_or_committing(inodeno_t ino);
+
   bool flush_set(inodeno_t ino, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
   bool commit_set(inodeno_t ino, Context *oncommit);
   void commit_all(Context *oncommit=0);
 
-  int release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
+  off_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
 
 
   // file functions

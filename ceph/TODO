@@ -1,18 +1,8 @@
 
 
-
 - stability
  - ebofs table.remove() thing
  - fakestore crapping out.. missing timer events?
-mpiexec -l -n 30 ./tcpsyn --mkfs --ebofs --syn until 100 --syn writefile 1000 65536 --nummds 1 --numclient 100 --numosd 6 --kill_after 300 --file_layout_num_rep 1 --debug_after 110 --debug_osd 15 --debug_filer 15 --debug 5 --mds_shutdown_check 60 --log_name osd/write_sizes.sdb2.ebo.file2/fs=ebofs,writefile_size=65536
-
-2: tcpsyn: mds/MDCache.cc:2388: void MDCache::handle_cache_expire(MCacheExpire*): Assertion `in->state_test((1<<6))' failed.
-2: tcpsyn: mds/MDCache.cc:2388: void MDCache::handle_cache_expire(MCacheExpire*): Assertion `in->state_test((1<<6))' failed.
-2: mds1 on tcprank 3 googoo-27.2013
-2: mds1 on tcprank 2 googoo-27.1693
-
-1: tcpsyn: mds/MDCache.cc:2382: void MDCache::handle_cache_expire(MCacheExpire*): Assertion `in' failed.
-0 on tcprank 24 googoo-17.21123
 
 
 
@@ -35,6 +25,7 @@ mds
 - truncate()
 - chdir (directory opens!)
 - delayed replica caps release... we need to set a timer event!  (and cancel it when appropriate)
+- review caps logic versus singular
 
 client
 - flesh out posix layer

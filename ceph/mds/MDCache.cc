@@ -3574,22 +3574,28 @@ Capability* MDCache::issue_new_caps(CInode *in,
 
 bool MDCache::issue_caps(CInode *in)
 {
-  int allowed = in->filelock.caps_allowed(in->is_auth());
-  dout(7) << "issue_caps filelock allows=" << cap_string(allowed) << " on " << *in << endl;
+  bool singular = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
+  int allowed = in->filelock.caps_allowed(in->is_auth(), singular);
+  dout(7) << "issue_caps filelock allows=" << cap_string(allowed) 
+		  << " singular=" << singular
+		  << " on " << *in << endl;
 
   // look at what allowed, needed caps conflict with
+  // .. ONLY if more than one client w/ caps! ..
   int need_conflicts = 0;
   int issued_conflicts = 0;  
-  for (map<int, Capability>::iterator it = in->client_caps.begin();
-	   it != in->client_caps.end();
-	   it++) {
-	need_conflicts |= it->second.needed_conflicts();
-	issued_conflicts |= it->second.issued_conflicts();
-  }
-  for (map<int, int>::iterator it = in->mds_caps_wanted.begin();
-	   it != in->mds_caps_wanted.end();
-	   it++) {
-	need_conflicts |= Capability::conflicts( Capability::needed( it->second ) );
+  if (!singular) {  // ONLY if >1 client ...
+	for (map<int, Capability>::iterator it = in->client_caps.begin();
+		 it != in->client_caps.end();
+		 it++) {
+	  need_conflicts |= it->second.needed_conflicts();
+	  issued_conflicts |= it->second.issued_conflicts();
+	}
+	for (map<int, int>::iterator it = in->mds_caps_wanted.begin();
+		 it != in->mds_caps_wanted.end();
+		 it++) {
+	  need_conflicts |= Capability::conflicts( Capability::needed( it->second ) );
+	}
   }
   dout(10) << "  need conflicts: " << cap_string(need_conflicts) << endl;
   dout(10) << "issued conflicts: " << cap_string(issued_conflicts) << endl;
@@ -4578,7 +4584,11 @@ void MDCache::inode_file_eval(CInode *in)
   if (in->is_auth()) {
 	// [auth]
 	int wanted = in->get_caps_wanted();
-	dout(7) << "inode_file_eval wanted=" << cap_string(wanted) << "  filelock=" << in->filelock << endl;
+	bool singular = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
+	dout(7) << "inode_file_eval wanted=" << cap_string(wanted)
+			<< "  filelock=" << in->filelock 
+			<< "  singular=" << singular
+			<< endl;
 
 	// * -> wronly?
 	if (in->filelock.get_nread() == 0 &&
@@ -4595,6 +4605,7 @@ void MDCache::inode_file_eval(CInode *in)
 			 in->filelock.get_nwrite() == 0 &&
 			 (wanted & CAP_FILE_RD) &&
 			 (wanted & CAP_FILE_WR) &&
+			 !(singular && in->filelock.get_state() == LOCK_WRONLY) &&
 			 in->filelock.get_state() != LOCK_MIXED) {
 	  dout(7) << "inode_file_eval stable, bump to mixed " << *in << ", filelock=" << in->filelock << endl;
 	  inode_file_mixed(in);

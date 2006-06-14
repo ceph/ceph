@@ -23,6 +23,7 @@ class Thread {
 
  public:
   Thread() : thread_id(0) {}
+  virtual ~Thread() {}
 
   pthread_t &get_thread_id() { return thread_id; }
   bool is_started() { return thread_id != 0; }

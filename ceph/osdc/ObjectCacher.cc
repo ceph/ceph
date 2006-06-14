@@ -487,6 +487,10 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
 
 /* public */
 
+/*
+ * returns # bytes read (if in cache).  onfinish is untouched (caller must delete it)
+ * returns 0 if doing async read
+ */
 int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 {
   bool success = true;
@@ -690,6 +694,37 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
  
 
 
+bool ObjectCacher::set_is_cached(inodeno_t ino)
+{
+  if (objects.count(ino) == 0) 
+	return false;
+  
+  Object *ob = objects[ino];
+
+  if (ob->data.begin() == ob->data.end())
+	return false;
+  return true;
+}
+
+bool ObjectCacher::set_is_dirty_or_committing(inodeno_t ino)
+{
+  if (objects.count(ino) == 0) 
+	return false;
+  
+  Object *ob = objects[ino];
+
+  for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
+	   p != ob->data.end();
+	   p++) {
+	BufferHead *bh = p->second;
+	if (bh->is_dirty() || bh->is_tx()) 
+	  return true;
+  }
+  
+  return false;
+}
+
+
 // flush.  non-blocking, takes callback.
 // returns true if already flushed, and deletes the callback.
 bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
@@ -759,10 +794,10 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 }
 
 
-int ObjectCacher::release_set(inodeno_t ino)
+off_t ObjectCacher::release_set(inodeno_t ino)
 {
   // return # bytes not clean (and thus not released).
-  int unclean = 0;
+  off_t unclean = 0;
 
   if (objects.count(ino) == 0) {
 	dout(10) << "release_set on " << hex << ino << dec << " dne" << endl;

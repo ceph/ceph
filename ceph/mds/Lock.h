@@ -197,7 +197,7 @@ class CLock {
 	else
 	  return CAP_FILE_RDCACHE | CAP_FILE_RD;
   }
-  int caps_allowed(bool auth) {
+  int caps_allowed(bool auth, bool singular=false) {
 	if (auth)
 	  switch (state) {
 	  case LOCK_SYNC:
@@ -211,6 +211,7 @@ class CLock {
 	  case LOCK_GWRONLYM:
 		return CAP_FILE_WR;
 	  case LOCK_WRONLY:
+		if (singular) return CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_RD | CAP_FILE_RDCACHE;
 		return CAP_FILE_WR | CAP_FILE_WRBUFFER;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:

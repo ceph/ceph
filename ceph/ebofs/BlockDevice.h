@@ -33,12 +33,14 @@ class BlockDevice {
   // callback type for io completion notification
   class callback {
   public:
+	virtual ~callback() {}
 	virtual void finish(ioh_t ioh, int rval) = 0;
   };
 
   // kicker for idle notification
   class kicker {
   public:
+	virtual ~kicker() {}
 	virtual void kick() = 0;
   };
 

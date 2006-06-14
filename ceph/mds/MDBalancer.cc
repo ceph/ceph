@@ -437,7 +437,7 @@ void MDBalancer::do_rebalance(int beat)
 	if (import_from_map.count(target)) {
 	  dout(5) << " aha, looking through imports from target mds" << target << endl;
 	  pair<multimap<int,CDir*>::iterator, multimap<int,CDir*>::iterator> p =
-		p = import_from_map.equal_range(target);
+		import_from_map.equal_range(target);
 	  while (p.first != p.second) {
 		CDir *dir = (*p.first).second;
 		dout(5) << "considering " << *dir << " from " << (*p.first).first << endl;

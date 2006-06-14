@@ -1,5 +1,5 @@
 
-# mpicxx must be on your path; on Szilard and googoo, this means that
+# mpicxx must be on your path; on googoo, this means that
 # /usr/local/mpich2-1.0.2/bin must be on your path.
 
 # For now, use g++ most of the time.
@@ -7,6 +7,7 @@
 # invoked instead of the generic .o rule (or it'll use g++).
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
+
 CC = g++
 CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread -lrt 
@@ -53,6 +54,7 @@ COMMON_OBJS= \
 	msg/Dispatcher.o\
 	msg/HostMonitor.o\
 	client/Filer.o\
+	client/FileCache.o\
 	client/ObjectCacher.o\
 	client/Objecter.o\
 	osd/OSDMap.o\
