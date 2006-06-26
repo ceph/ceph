@@ -232,7 +232,7 @@ class Ebofs : public ObjectStore {
   int statfs(struct statfs *buf);
 
   // atomic transaction
-  unsigned apply_transaction(Transaction& t, Context *onsafe);
+  unsigned apply_transaction(Transaction& t, Context *onsafe=0);
 
   // object interface
   bool exists(object_t);

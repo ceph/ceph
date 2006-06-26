@@ -22,8 +22,9 @@ class MOSDPGLog : public Message {
   pg_t    pgid;
 
 public:
-  PG::PGLog log;
   PG::PGInfo info;
+  PG::PGLog log;
+  PG::PGMissing missing;
 
   epoch_t get_epoch() { return epoch; }
   pg_t get_pgid() { return pgid; }
@@ -42,6 +43,7 @@ public:
 	payload.append((char*)&pgid, sizeof(pgid));
 	payload.append((char*)&info, sizeof(info));
 	log._encode(payload);
+	missing._encode(payload);
   }
   void decode_payload() {
 	int off = 0;
@@ -52,6 +54,7 @@ public:
 	payload.copy(off, sizeof(info), (char*)&info);
 	off += sizeof(info);
 	log._decode(payload, off);
+	missing._decode(payload, off);
   }
 };
 

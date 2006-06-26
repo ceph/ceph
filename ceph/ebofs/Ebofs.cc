@@ -732,6 +732,7 @@ void Ebofs::remove_onode(Onode *on)
 	on->close_oc();
   }
 
+  /* um, this is stupid.. why would we do this?
   // cancel commit waiters
   while (!on->commit_waiters.empty()) {
 	Context *c = on->commit_waiters.front();
@@ -740,6 +741,7 @@ void Ebofs::remove_onode(Onode *on)
 	c->finish(-ENOENT);
 	delete c;
   }
+  */
 
   // remove from onode map, mark dangling/deleted
   onode_map.erase(on->object_id);
@@ -2239,7 +2241,7 @@ int Ebofs::list_collections(list<coll_t>& ls)
 	while (1) {
 	  ls.push_back(cursor.current().key);
 	  num++;
-	  if (cursor.move_right() < 0) break;
+	  if (cursor.move_right() <= 0) break;
 	}
   }
 

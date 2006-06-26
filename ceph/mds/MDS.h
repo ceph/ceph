@@ -191,6 +191,7 @@ public:
   void mkfs(Context *onfinish);
   void handle_osd_mkfs_ack(Message *m);
   void bcast_osd_map();
+  void fake_osd_failure(int osd, bool d);
 
   // messages
   void proc_message(Message *m);

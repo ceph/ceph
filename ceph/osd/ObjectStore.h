@@ -142,7 +142,7 @@ public:
   /* this implementation is here only for naive ObjectStores that
    * do not do atomic transactions natively.  it is not atomic.
    */
-  virtual unsigned apply_transaction(Transaction& t, Context *onsafe) {
+  virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) {
 	// non-atomic implementation
 	for (list<int>::iterator p = t.ops.begin();
 		 p != t.ops.end();

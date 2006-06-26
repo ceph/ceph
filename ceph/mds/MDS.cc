@@ -38,6 +38,8 @@
 #include "common/Logger.h"
 #include "common/LogType.h"
 
+#include "common/Timer.h"
+
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
@@ -57,6 +59,7 @@
 
 #include "events/EInodeUpdate.h"
 #include "events/EDirUpdate.h"
+
 
 #include <errno.h>
 #include <fcntl.h>
@@ -91,6 +94,18 @@ void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 
 // extern 
 //MDS *g_mds;
+
+
+class C_FakeOSDFailure : public Context {
+  MDS *mds;
+  int osd;
+  bool down;
+public:
+  C_FakeOSDFailure(MDS *m, int o, bool d) : mds(m), osd(o), down(d) {}
+  void finish(int r) {
+	mds->fake_osd_failure(osd,down);
+  }
+};
 
 
 // cons/des
@@ -140,6 +155,22 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 	// add mds osds, but don't put them in the crush mapping func
 	for (int i=0; i<g_conf.num_mds; i++) 
 	  osdmap->osds.insert(i+10000);
+  }
+
+  if (whoami == 0) {
+	// fake osd failures
+	for (map<int,float>::iterator i = g_fake_osd_down.begin();
+		 i != g_fake_osd_down.end();
+		 i++) {
+	  dout(0) << "osd" << i->first << " DOWN after " << i->second << endl;
+	  g_timer.add_event_after(i->second, new C_FakeOSDFailure(this, i->first, 1));
+	}
+	for (map<int,float>::iterator i = g_fake_osd_out.begin();
+		 i != g_fake_osd_out.end();
+		 i++) {
+	  dout(0) << "osd" << i->first << " OUT after " << i->second << endl;
+	  g_timer.add_event_after(i->second, new C_FakeOSDFailure(this, i->first, 0));
+	}
   }
 
   // </HACK>
@@ -356,6 +387,19 @@ int MDS::shutdown_final()
   return 0;
 }
 
+
+void MDS::fake_osd_failure(int osd, bool down) 
+{
+  if (down) {
+	dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
+	osdmap->down_osds.insert(osd);
+  } else {
+	dout(1) << "fake_osd_failure OUT osd" << osd << endl;
+	osdmap->out_osds.insert(osd);
+  }
+  osdmap->inc_epoch();
+  bcast_osd_map();
+}
 
 void MDS::bcast_osd_map()
 {

@@ -6,7 +6,12 @@ extern class FileLayout g_OSD_MDDirLayout;
 extern class FileLayout g_OSD_MDLogLayout;
 
 #include <vector>
+#include <map>
 using namespace std;
+
+extern map<int,float> g_fake_osd_down;
+extern map<int,float> g_fake_osd_out;
+
 
 struct md_config_t {
   int  num_mds;

@@ -1,33 +1,56 @@
 
 
+osd/rados
+- down recv behavior
+  - clarify powercycle process
+- recovery finish.. "clean" state?
+- pg log trim
+  - replica feedback to primary
+  - primary trim floor to replicas
+- handle down osds
+- detect crashed PGs
+- osdmap history?
+ - keep maps on disk?
+ - incremental maps?
+- pg_bit changes
+- watch osd utilization; adjust cluster map
+
+
+reliability
+- heartbeat vs ping
+- how to choose peer sets
+- osdmonitor, filter
+
+
 - stability
  - ebofs table.remove() thing
  - fakestore crapping out.. missing timer events?
 
 
 
-- rados
- - redo all the recovery stuff
- - fix object ov/nv thing?  (tcpmessenger locking bug?)
-   (object version AND mtime?)
-
-- client OBJECT cache
- - lazyio_*
-
-- clean up tcpmessenger
-
 - mds
  - figure out weird 40ms latency with double log entries
+
+
+general
+- timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
+- clean up tcpmessenger
+
+crush
+- needs to detect when there are insufficient non-out osds (infinite loop bad)
 
 mds
 - statlite
 - stat single writer
 - truncate()
 - chdir (directory opens!)
-- delayed replica caps release... we need to set a timer event!  (and cancel it when appropriate)
+- delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
 - review caps logic versus singular
 
 client
+- lazyio_*
+- flush objectcacher
+- atomic sync writes
 - flesh out posix layer
 - statlite
 /- readdir + stat
@@ -41,28 +64,14 @@ client
 - readv+writev, readx+writex
   - serialized!
 
-
-filer/osd
-- atomic write spanning objects...
-
-
 ebofs
-- hey.. why do we drop on->commit_waiters on delete?  that's stupid!
 - fix NEAR_LAST_FWD   (?)
 - combine inodes into same blocks?
 - delay allocation
-  - actually, reallocate if dirty is cancelable
-- journaling
+  - or actually, reallocate if dirty is cancelable
+- journaling?  in NVRAM?
 - nix oc_tab, move into onode.
 - clone()
-
-osd
-- osdmap history distribution
-
-- handle down osds
-- pg_bit changes
-
-- watch osd utilization; adjust cluster map
 
 
 
@@ -136,12 +145,6 @@ MDS TODO
 - btree directories (for efficient large directories)
 - consistency points/snapshots
 
-OSD TODO
-- heartbeat
-- collaborative write replication/commit protocol
-- collections
-- osd failure recovery
-- osd cluster expansion
 
 CLIENT TODO
 - buffer cache

@@ -22,6 +22,8 @@
 #include "ObjectStore.h"
 #include "msg/Messenger.h"
 
+#include "include/types.h"
+
 #include <list>
 using namespace std;
 
@@ -30,6 +32,10 @@ using namespace __gnu_cxx;
 
 
 class OSD;
+
+
+#define PG_QUERY_INFO      ((version_t)0xffffffffffffffffULL)
+#define PG_QUERY_SUMMARY   ((version_t)0xfffffffffffffffeULL)
 
 
 /** PG - Replica Placement Group
@@ -49,7 +55,7 @@ public:
 	version_t log_floor;      // oldest log entry.
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
-	epoch_t same_primary_since;  // first epoch the current primary was primary.
+	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
 	PGInfo(pg_t p=0) : pgid(p), 
 					   last_update(0), last_complete(0),
 					   last_epoch_started(0), last_epoch_finished(0),
@@ -62,7 +68,6 @@ public:
   class PGSummary {
   public:
 	map<object_t, version_t> objects;  // objects i currently store.
-	//PGMissing                missing;  // objects i am missing (to get thru info.last_update).
 	
 	void _encode(bufferlist& blist) {
 	  ::_encode(objects, blist);
@@ -86,8 +91,45 @@ public:
 
 	map<object_t, int>       loc;       // where i think i can get them.
 
-	int num_lost() { return missing.size() - loc.size(); }
-	int num_missing() { return missing.size(); }
+	int num_lost() const { return missing.size() - loc.size(); }
+	int num_missing() const { return missing.size(); }
+
+	bool is_missing(object_t oid, version_t v) {
+	  return missing.count(oid) && missing[oid] == v;
+	}
+	void add(object_t oid, version_t v) {
+	  if (missing.count(oid)) rmissing.erase(missing[oid]);
+	  missing[oid] = v;
+	  rmissing[v] = oid;
+	}
+	void rm(object_t oid, version_t when) {
+	  if (missing.count(oid) && missing[oid] < when) {
+		rmissing.erase(missing[oid]);
+		missing.erase(oid);
+		loc.erase(oid);
+	  }		
+	}
+	void got(object_t oid, version_t v) {
+	  assert(missing.count(oid));
+	  assert(missing[oid] <= v);
+	  loc.erase(oid);
+	  rmissing.erase(missing[oid]);
+	  missing.erase(oid);
+	}
+
+	void merge_loc(PGMissing &other) {
+	  if (num_lost() > 0) {
+		// see if we can find anything new!
+		cout << "merge_loc " << endl;//*this << " from " << other << endl;
+		for (map<object_t,version_t>::iterator p = missing.begin();
+			 p != missing.end();
+			 p++) {
+		  assert(other.missing[p->first] >= missing[p->first]);
+		  if (other.loc.count(p->first)) 
+			loc[p->first] = other.loc[p->first];
+		}
+	  }
+	}
 
 	void _encode(bufferlist& blist) {
 	  ::_encode(missing, blist);
@@ -112,14 +154,28 @@ public:
    */
   class PGLog {
   public:
+	// single entry in the written on-disk log.
+	class Entry {   
+	public:
+	  object_t oid;
+	  version_t version;
+	  bool deleted;
+	  Entry(object_t o, version_t v, bool d=false) :
+		oid(o), version(v), deleted(d) {}
+	};
+
 	version_t top;           // corresponds to newest entry.
-	version_t bottom;        // corresponds to entry prio to oldest entry (t=bottom is trimmed).
+	version_t bottom;        // corresponds to entry prev to oldest entry (t=bottom is trimmed).
 	map<object_t, version_t> updated;  // oid -> v. items > bottom, + version.
 	map<version_t, object_t> rupdated; // v -> oid.
 	map<object_t, version_t> deleted;  // oid -> when.  items <= bottom that no longer exist
 	map<version_t, object_t> rdeleted; // when -> oid.
 	
 	PGLog() : top(0), bottom(0) {}
+
+	bool empty() const {
+	  return top == 0;
+	}
 
 	void _reverse(map<object_t, version_t> &fw, map<version_t, object_t> &bw) {
 	  for (map<object_t,version_t>::iterator it = fw.begin();
@@ -159,13 +215,23 @@ public:
 
 	// actors
 	void add_update(object_t oid, version_t v) {
-	  updated[oid] = v;
-	  rupdated[v] = oid;
+	  // superceding older update?
+	  if (updated.count(oid)) {
+		assert(v > updated[oid]);
+		rupdated.erase(updated[oid]);
+	  }
+
+	  // superceding older delete?
 	  if (deleted.count(oid)) {
 		assert(v > deleted[oid]);      // future deletions or past mods impossible.
 		rdeleted.erase(deleted[oid]);
 		deleted.erase(oid);
 	  }
+
+	  // add this item
+	  updated[oid] = v;
+	  rupdated[v] = oid;
+
 	  assert(v > top);
 	  top = v;
 	}
@@ -178,11 +244,24 @@ public:
 
 	void trim(version_t s);
 	void copy_after(const PGLog &other, version_t v);
-	void merge_after(version_t after, const PGLog &other);
-	void print(ostream& out) const;
+	void merge(const PGLog &other, PGMissing &missing);
+	void assimilate_summary(const PGSummary &sum, version_t last_complete);
+	ostream& print(ostream& out) const;
   };
   
 
+  class PGOndiskLog {
+	off_t pos;
+  public:
+	PGOndiskLog() : pos(0) {}
+
+	off_t get_write_pos() {
+	  return pos;
+	}
+	void inc_write_pos(int i) {
+	  pos += i;
+	}
+  };
 
 
   /*** PG ****/
@@ -193,7 +272,7 @@ public:
   //static const int STATE_COMPLETE = 4; // i am complete.
 
   // primary
-  static const int STATE_CLEAN = 8;  // peers are complete, clean of stray replicas.
+  //static const int STATE_CLEAN = 8;  // peers are complete, clean of stray replicas.
  
   // non-primary
   static const int STATE_STRAY = 16;  // i haven't sent notify yet.  primary may not know i exist.
@@ -205,6 +284,7 @@ public:
   // pg state
   PGInfo      info;
   PGLog       log;
+  PGOndiskLog ondisklog;
   PGMissing   missing;
 
 protected:
@@ -222,23 +302,24 @@ protected:
   set<int>    stray_set;   // non-acting osds that have PG data.
   map<int, PGInfo>      peer_info;  // info from peers (stray or prior)
   set<int>              peer_info_requested;
-  map<int, PGLog*>      peer_log;   // logs from peers (for recovering pg content)
-  map<int, PGMissing*>  peer_missing;
-  set<int>              peer_log_requested;
-  map<int, PGSummary*>  peer_summary;   // full contents of peers
+  //map<int, PGLog*>      peer_log;   // logs from peers (for recovering pg content)
+  map<int, PGMissing>   peer_missing;
+  map<int, version_t>   peer_log_requested;  // logs i've requested (and start stamps)
+  //map<int, PGSummary*>  peer_summary;   // full contents of peers
   set<int>              peer_summary_requested;
   friend class OSD;
 
 public:
-  void clear_content_recovery_state() {
+  void clear_primary_recovery_state() {
+	peer_info.clear();
+	peer_missing.clear();
+  }
+  void clear_primary_state() {
 	prior_set.clear();
 	stray_set.clear();
-	peer_info.clear();
 	peer_info_requested.clear();
-	peer_log.clear();
-	peer_missing.clear();
 	peer_log_requested.clear();
-	peer_summary.clear();
+	clear_primary_recovery_state();
   }
 
  public:
@@ -265,10 +346,12 @@ public:
   void peer(map< int, map<pg_t,version_t> >& query_map);
   void generate_summary(PGSummary &summary);
 
-  void plan_recovery();
-  void do_recovery();
-  void do_clean();
+  bool do_recovery();
+  void clean_up();
 
+  off_t get_log_write_pos() {
+	return 0;
+  }
 
  public:  
   PG(OSD *o, pg_t p) : 
@@ -278,41 +361,33 @@ public:
 	state(0)
   { }
   
-  pg_t       get_pgid() { return info.pgid; }
+  pg_t       get_pgid() const { return info.pgid; }
   int        get_primary() { return acting[0]; }
-  int        get_nrep() { return acting.size(); }
+  int        get_nrep() const { return acting.size(); }
 
-  int        get_role() { return role; }
+  int        get_role() const { return role; }
   void       set_role(int r) { role = r; }
   void       calc_role(int whoami) {
 	role = -1;
 	for (unsigned i=0; i<acting.size(); i++)
 	  if (acting[i] == whoami) role = i>0 ? 1:0;
   }
-  bool       is_primary() { return role == 0; }
-  bool       is_residual() { return role < 0; }
+  bool       is_primary() const { return role == 0; }
+  bool       is_residual() const { return role < 0; }
   
-  int  get_state() { return state; }
-  bool state_test(int m) { return (state & m) != 0; }
-  void set_state(int s) { state = s; }
+  //int  get_state() const { return state; }
+  bool state_test(int m) const { return (state & m) != 0; }
   void state_set(int m) { state |= m; }
   void state_clear(int m) { state &= ~m; }
 
-  bool is_complete() { return info.last_complete == info.last_update; }
+  bool is_complete() const { return info.last_complete == info.last_update; }
 
-  bool       is_active()    { return state_test(STATE_ACTIVE); }
+  bool       is_active() const { return state_test(STATE_ACTIVE); }
   //bool       is_complete()    { return state_test(STATE_COMPLETE); }
-  bool       is_clean()     { return state_test(STATE_CLEAN); }
-  bool       is_stray() { return state_test(STATE_STRAY); }
+  //bool       is_clean() const { return state_test(STATE_CLEAN); }
+  bool       is_stray() const { return state_test(STATE_STRAY); }
 
-  void mark_complete() {
-	info.last_complete = info.last_update;
-  }
-  void mark_active() {
-	state_set(STATE_ACTIVE);
-  }
-
-  int num_active_ops() {
+  int num_active_ops() const {
 	return objects_pulling.size();
   }
 
@@ -338,27 +413,37 @@ public:
 };
 
 
-inline ostream& operator<<(ostream& out, PG::PGInfo& pgi) 
+inline ostream& operator<<(ostream& out, const PG::PGInfo& pgi) 
 {
-  return out << "pgi(" << hex << pgi.pgid << dec 
+  return out << "pginfo(" << hex << pgi.pgid << dec 
 			 << " v " << pgi.last_update << "/" << pgi.last_complete
 			 << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
 			 << ")";
 }
 
-inline ostream& operator<<(ostream& out, PG::PGLog& log) 
+inline ostream& operator<<(ostream& out, const PG::PGLog& log) 
 {
-  log.print(out);
+  return out << "log(" << log.bottom << "," << log.top << "]";
+}
+
+inline ostream& operator<<(ostream& out, const PG::PGMissing& missing) 
+{
+  out << "missing(" << missing.num_missing();
+  if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
+  out << ")";
   return out;
 }
 
-inline ostream& operator<<(ostream& out, PG& pg)
+inline ostream& operator<<(ostream& out, const PG& pg)
 {
   out << "pg[" << pg.info 
-	  << " " << pg.get_role();
+	  << " r=" << pg.get_role();
   if (pg.is_active()) out << " active";
-  if (pg.is_clean()) out << " clean";
+  //if (pg.is_clean()) out << " clean";
   if (pg.is_stray()) out << " stray";
+  out << " (" << pg.log.bottom << "," << pg.log.top << "]";
+  if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
+  if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
   out << "]";
   return out;
 }

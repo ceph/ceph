@@ -34,6 +34,10 @@ FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects
 //FileLayout g_OSD_MDLogLayout( 57, 32, 1<<20 );  // pathological case to test striping buffer mapping
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
+// fake osd failures: osd -> time
+map<int,float> g_fake_osd_down;
+map<int,float> g_fake_osd_out;
+
 md_config_t g_debug_after_conf;
 
 md_config_t g_conf = {
@@ -319,6 +323,16 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
+	else if (strcmp(args[i], "--fake_osd_down") == 0) {
+	  int osd = atoi(args[++i]);
+	  float when = atof(args[++i]);
+	  g_fake_osd_down[osd] = when;
+	}
+	else if (strcmp(args[i], "--fake_osd_out") == 0) {
+	  int osd = atoi(args[++i]);
+	  float when = atof(args[++i]);
+	  g_fake_osd_out[osd] = when;
+	}
 	else if (strcmp(args[i], "--osd_remount_at") == 0) 
 	  g_conf.osd_remount_at = atoi(args[++i]);
 	//else if (strcmp(args[i], "--fake_osd_sync") == 0) 

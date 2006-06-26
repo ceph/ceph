@@ -324,8 +324,10 @@ namespace crush {
 				flocal++;
 				ftotal++;
 				continue;
-				bad = true;
 			  }
+			  if (collide)
+				bad = true;
+
 			  break;  // ok then!
 			}
 
@@ -343,8 +345,10 @@ namespace crush {
 			  bad = true;
 		  }
 		  
-		  if (bad)
+		  if (bad) {
+			ftotal++;
 			continue;   // try again
+		  }
 
 		  break;
 		}
@@ -352,6 +356,13 @@ namespace crush {
 		// output this value
 		outvec.push_back(outv);
 	  } // for rep
+
+	  // double check!
+	  if (0) {
+		for (unsigned i=1; i<outvec.size(); i++) 
+		  for (unsigned j=0; j<i; j++)
+			assert(outvec[i] != outvec[j]);
+	  }
 	}
 
 

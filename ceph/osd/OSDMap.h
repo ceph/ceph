@@ -75,16 +75,16 @@ class OSDMap {
   OSDMap() : epoch(0), pg_bits(5), mkfs(false) { }
 
   // map info
-  epoch_t get_epoch() { return epoch; }
-  void inc_epoch() { epoch++; }
+  epoch_t get_epoch() const { return epoch; }
+  void inc_epoch() { epoch++; mkfs = false; }
 
-  int get_pg_bits() { return pg_bits; }
+  int get_pg_bits() const { return pg_bits; }
   void set_pg_bits(int b) { pg_bits = b; }
 
-  bool is_mkfs() { return mkfs; }
+  bool is_mkfs() const { return mkfs; }
   void set_mkfs() { mkfs = true; }
 
-  /****  cluster state *****/
+  /***** cluster state *****/
   int num_osds() { return osds.size(); }
   void get_all_osds(set<int>& ls) { ls = osds; }
 
@@ -202,12 +202,6 @@ class OSDMap {
 	assert(num_rep > 0);
 	int type = pg_to_type(pg);
 
-	//cout << hex << "pg " << pg << " ps " << ps << " num_rep " << num_rep << " type " << type << dec << endl;
-	if (type == PG_TYPE_STARTOSD) {
-	  //cout << "type startosd " << num_rep << " osd" << ps << endl;
-	  num_rep--;
-	}
-
 	// spread "on" ps bits around a bit (usually only low bits are set bc of pg_bits)
 	int hps = ((ps >> 32) ^ ps);
 	hps = hps ^ (hps >> 16);
@@ -259,8 +253,13 @@ class OSDMap {
 	}
 
 	if (type == PG_TYPE_STARTOSD) {
-	  //cout << "putting in osd" << ps << endl;
-	  osds.insert(osds.begin(), (int)ps);
+	  // already in there?
+	  for (int i=1; i<num_rep; i++)
+		if (osds[i] == (int)ps) {
+		  // swap with position 0
+		  osds[i] = osds[0];
+		}
+	  osds[0] = (int)ps;
 	}
 
 	return osds.size();
@@ -311,11 +310,22 @@ class OSDMap {
 	}
 	return -1;  // none
   }
-  int get_pg_acting_role(pg_t pg, int osd) {
+
+  /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
+  int get_pg_acting_rank(pg_t pg, int osd) {
 	vector<int> group;
 	int nrep = pg_to_acting_osds(pg, group);
 	for (int i=0; i<nrep; i++) {
 	  if (group[i] == osd) return i;
+	}
+	return -1;  // none
+  }
+  /* role is -1 (stray), 0 (primary), 1 (replica) */
+  int get_pg_acting_role(pg_t pg, int osd) {
+	vector<int> group;
+	int nrep = pg_to_acting_osds(pg, group);
+	for (int i=0; i<nrep; i++) {
+	  if (group[i] == osd) return i>0 ? 1:0;
 	}
 	return -1;  // none
   }

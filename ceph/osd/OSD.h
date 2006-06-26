@@ -36,13 +36,29 @@ class Message;
 
 
 
-
 /**
  *
  */
 
 class OSD : public Dispatcher {
 public:
+
+  /** superblock
+   */
+  const static object_t SUPERBLOCK_OBJECT = 0;
+  
+  class Superblock {
+  public:
+	int        whoami;
+	epoch_t    current_epoch;
+	epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
+	Superblock(int w=0) : whoami(w), current_epoch(0), oldest_map(0), newest_map(0) {}
+  } superblock;
+
+  object_t get_osdmap_object_name(epoch_t epoch) { return (object_t)epoch; }
+
+  void write_superblock();
+
 
   /** OSDReplicaOp
    * state associated with an in-progress replicated update.
@@ -95,12 +111,13 @@ public:
   // global lock
   Mutex osd_lock;                          
 
-  // per-object locking (serializing)
-  hash_set<object_t>               object_lock;
-  hash_map<object_t, list<Cond*> > object_lock_waiters;  
-  void lock_object(object_t oid);
-  void _lock_object(object_t oid);
-  void unlock_object(object_t oid);
+  // per-pg locking (serializing)
+  hash_set<pg_t>               pg_lock;
+  hash_map<pg_t, list<Cond*> > pg_lock_waiters;  
+  PG *lock_pg(pg_t pgid);
+  PG *_lock_pg(pg_t pgid);
+  void unlock_pg(pg_t pgid);
+  void _unlock_pg(pg_t pgid);
 
   // finished waiting messages, that will go at tail of dispatch()
   list<class Message*> finished;
@@ -115,7 +132,7 @@ public:
 
   // -- ops --
   class ThreadPool<class OSD*, object_t> *threadpool;
-  hash_map<object_t, list<MOSDOp*> >      op_queue;
+  hash_map<pg_t, list<MOSDOp*> >         op_queue;
   int   pending_ops;
   bool  waiting_for_no_ops;
   Cond  no_pending_ops;
@@ -123,17 +140,17 @@ public:
   
   void wait_for_no_ops();
 
-  void enqueue_op(object_t oid, MOSDOp *op);
-  void dequeue_op(object_t oid);
-  static void static_dequeueop(OSD *o, object_t oid) {
-	o->dequeue_op(oid);
+  void enqueue_op(pg_t pgid, MOSDOp *op);
+  void dequeue_op(pg_t pgid);
+  static void static_dequeueop(OSD *o, pg_t pgid) {
+	o->dequeue_op(pgid);
   };
 
-  void do_op(class MOSDOp *m);  // actually do it
+  void do_op(class MOSDOp *m, PG *pg);  // actually do it
 
   int apply_write(MOSDOp *op, version_t v,
 				  Context *oncommit = 0); 
-  void op_apply(MOSDOp* op, version_t version, Context* oncommit = 0);
+  void op_apply(MOSDOp* op, version_t version, PG *pg, Context* oncommit = 0);
   
   
  friend class PG;
@@ -165,6 +182,8 @@ public:
   void  close_pg(pg_t pg);           // close in-memory state
   void  remove_pg(pg_t pg);          // remove state from store
 
+  epoch_t calc_pg_primary_since(int primary, pg_t pgid, epoch_t start);
+
   tid_t               last_tid;
 
   hash_map<pg_t, list<Message*> >        waiting_for_pg;
@@ -179,14 +198,11 @@ public:
   void handle_rep_op_ack(__uint64_t tid, int result, bool commit, int fromosd);
 
   // recovery
-  //map<tid_t,PG::ObjectInfo>  pull_ops;   // tid -> PGPeer*
-
   void do_notifies(map< int, list<PG::PGInfo> >& notify_list);
   void do_queries(map< int, map<pg_t,version_t> >& query_map);
   void repeer(PG *pg, map< int, map<pg_t,version_t> >& query_map);
 
-  void pg_pull(PG *pg, int maxops);
-  void pull_replica(PG *pg, object_t, version_t);
+  void pull(PG *pg, object_t, version_t);
 
   bool require_current_map(Message *m, version_t v);
   bool require_same_or_newer_map(Message *m, epoch_t e);
@@ -196,10 +212,10 @@ public:
   void handle_pg_summary(class MOSDPGSummary *m);
   void handle_pg_log(class MOSDPGLog *m);
 
-  void op_rep_pull(class MOSDOp *op);
+  void op_rep_pull(class MOSDOp *op, PG *pg);
   void op_rep_pull_reply(class MOSDOpReply *op);
   
-  void op_rep_modify(class MOSDOp *op);   // write, trucnate, delete
+  void op_rep_modify(class MOSDOp *op, PG *pg);   // write, trucnate, delete
   void op_rep_modify_commit(class MOSDOp *op);
   friend class C_OSD_RepModifyCommit;
 
@@ -220,7 +236,7 @@ public:
 
   void op_read(class MOSDOp *m);
   void op_stat(class MOSDOp *m);
-  void op_modify(class MOSDOp *m);
+  void op_modify(class MOSDOp *m, PG *pg);
   void op_modify_commit(class OSDReplicaOp *repop);
 
   // for replication
