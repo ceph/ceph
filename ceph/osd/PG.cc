@@ -23,7 +23,7 @@
 #include "messages/MOSDPGRemove.h"
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << osd->whoami << " " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 
 /******* PGLog ********/
@@ -563,4 +563,6 @@ void PG::clean_replicas()
 	MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
 	osd->messenger->send_message(m, MSG_ADDR_OSD(*p));
   }
+
+  stray_set.clear();
 }

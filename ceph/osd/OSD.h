@@ -49,10 +49,12 @@ public:
   
   class Superblock {
   public:
-	int        whoami;
-	epoch_t    current_epoch;
+	__uint64_t fsid;      // unique fs id (random number)
+	int        whoami;    // my role in this fs.
+	epoch_t    current_epoch;             // most recent epoch
 	epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
-	Superblock(int w=0) : whoami(w), current_epoch(0), oldest_map(0), newest_map(0) {}
+	Superblock(__uint64_t f=0, int w=0) : fsid(f), whoami(w), 
+										  current_epoch(0), oldest_map(0), newest_map(0) {}
   } superblock;
 
   object_t get_osdmap_object_name(epoch_t epoch) { return (object_t)epoch; }

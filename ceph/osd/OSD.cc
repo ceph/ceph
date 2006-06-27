@@ -61,7 +61,7 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << whoami << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
 char *osd_base_path = "./osddata";
 char *ebofs_base_path = "./ebofsdev";
@@ -1186,20 +1186,19 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	// ok!
 	
 	// stray?
-	if (!pg->is_acting(from) &&
-		(*it).last_update > 0) {
+	bool acting = pg->is_acting(from);
+	if (!acting && (*it).last_update > 0) {
 	  dout(10) << *pg << " osd" << from << " has stray content: " << *it << endl;
 	  pg->stray_set.insert(from);
 	  pg->state_clear(PG::STATE_CLEAN);
 	}
 
-	bool had = pg->peer_info.count(from);
-
 	// save info.
+	bool had = pg->peer_info.count(from);
 	pg->peer_info[from] = *it;
 
 	if (had) {
-	  if ((*it).is_clean()) {
+	  if ((*it).is_clean() && acting) {
 		pg->clean_set.insert(from);
 		dout(10) << *pg << " osd" << from << " now clean (" << pg->clean_set  
 				 << "): " << *it << endl;
@@ -1207,8 +1206,10 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 		  pg->state_set(PG::STATE_CLEAN);
 		  pg->clean_replicas();
 		}
-	  } else
+	  } else {
+		// hmm, maybe keep an eye out for cases where we see this, but peer should happen.
 		dout(10) << *pg << " already had notify info from osd" << from << ": " << *it << endl;
+	  }
 	} else {
 	  // adjust prior?
 	  if (it->last_epoch_started > pg->last_epoch_started_any) 
@@ -1843,39 +1844,35 @@ void OSD::handle_op(MOSDOp *op)
 {
   const object_t oid = op->get_oid();
   const pg_t pgid = op->get_pg();
+  int acting_primary = osdmap->get_pg_acting_primary( pgid );
   PG *pg = get_pg(pgid);
+
+  // require same or newer map
+  if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+
+  // crashed?
+  if (acting_primary < 0) {
+	dout(1) << "crashed pg " << hex << pgid << dec << endl;
+	messenger->send_message(new MOSDOpReply(op, -EAGAIN, osdmap, true),
+							op->get_asker());
+	delete op;
+	return;
+  }
   
   // what kind of op?
   if (!OSD_OP_IS_REP(op->get_op())) {
 	// REGULAR OP (non-replication)
 
-	// is our map version up to date?
-	if (op->get_map_epoch() > osdmap->get_epoch()) {
-	  // op's is newer
-	  dout(7) << "op map " << op->get_map_epoch() << " > " << osdmap->get_epoch() << endl;
-	  wait_for_new_map(op);
-	  return;
-	}
-
-	// am i the primary?
-	int acting_primary = osdmap->get_pg_acting_primary( pgid );
-	
+	// forward?
 	if (acting_primary != whoami) {
-	  if (acting_primary >= 0) {
-		dout(7) << " acting primary is " << acting_primary 
-				<< ", forwarding" << endl;
-		messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
-		logger->inc("fwd");
-	  } else {
-		dout(1) << "crashed pg " << *pg << endl;
-		messenger->send_message(new MOSDOpReply(op, -EIO, osdmap, true),
-								op->get_asker());
-		delete op;
-	  }
+	  dout(7) << "acting primary is osd" << acting_primary 
+			  << ", forwarding" << endl;
+	  messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
+	  logger->inc("fwd");
 	  return;
 	}
 
-	// proxy?
+	// have pg?
 	if (!pg) {
 	  dout(7) << "hit non-existent pg " 
 			  << hex << pgid << dec 
@@ -1883,48 +1880,52 @@ void OSD::handle_op(MOSDOp *op)
 	  waiting_for_pg[pgid].push_back(op);
 	  return;
 	}
-	else {
-	  dout(7) << "handle_op " << op << " in " << *pg << endl;
-	  
-	  // must be active.
-	  if (!pg->is_active()) {
-		dout(7) << *pg << " not active (yet)" << endl;
-		pg->waiting_for_active.push_back(op);
-		return;
-	  }
-	}	
+	
+	// must be active.
+	if (!pg->is_active()) {
+	  dout(7) << *pg << " not active (yet)" << endl;
+	  pg->waiting_for_active.push_back(op);
+	  return;
+	}
+
+	dout(7) << "handle_op " << op << " in " << *pg << endl;
 	
   } else {
 	// REPLICATION OP
-	if (pg) {
-	  dout(7) << "handle_rep_op " << op 
-			  << " in " << *pg << endl;
-	} else {
+
+	// have pg?
+	if (!pg) {
 	  dout(7) << "handle_rep_op " << op 
 			  << " in pgid " << hex << pgid << dec << endl;
 	  waiting_for_pg[pgid].push_back(op);
 	  return;
 	}
-	
-    // check osd map
+
+    // check osd map.  same primary?
 	if (op->get_map_epoch() != osdmap->get_epoch()) {
 	  // make sure source is still primary
-	  int curprimary = osdmap->get_pg_acting_primary(op->get_pg());
 	  int myrole = osdmap->get_pg_acting_role(op->get_pg(), whoami);
 	  
-	  if (curprimary != MSG_ADDR_NUM(op->get_source()) ||
-		  myrole <= 0) {
-		dout(5) << "op map " << op->get_map_epoch() << " != " << osdmap->get_epoch() << ", primary changed on pg " << hex << op->get_pg() << dec << endl;
-		MOSDOpReply *fail = new MOSDOpReply(op, -1, osdmap, true);
+	  if (acting_primary != MSG_ADDR_NUM(op->get_source()) ||
+		  myrole <= 0 ||
+		  op->get_map_epoch() < pg->info.same_primary_since) {
+		dout(5) << "op map " << op->get_map_epoch() << " != " << osdmap->get_epoch()
+				<< ", primary changed on pg " << hex << op->get_pg() << dec
+				<< endl;
+		MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap, true);  // FIXME error code?
 		messenger->send_message(fail, op->get_asker());
 		return;
-	  } else {
-		dout(5) << "op map " << op->get_map_epoch() << " != " << osdmap->get_epoch() << ", primary same on pg " << hex << op->get_pg() << dec << endl;
 	  }
-	}  
+	  
+	  dout(5) << "op map " << op->get_map_epoch() << " != " << osdmap->get_epoch()
+			  << ", primary same on pg " << hex << op->get_pg() << dec
+			  << endl;
+	}
+	
+	dout(7) << "handle_rep_op " << op << " in " << *pg << endl;
   }
-
-  // do we have it?
+  
+  // are we missing the object?
   if (pg->missing.missing.count(oid)) {
 	// NO.  we don't have it (yet).
 	version_t v = pg->missing.missing[oid];

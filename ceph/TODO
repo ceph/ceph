@@ -1,19 +1,24 @@
 
 
 osd/rados
+- handle down osds
 - down recv behavior
   - clarify powercycle process
-- recovery finish.. "clean" state?
+- osd restart
+  - save pg state in store
+- add pg->info.pg_member_since.  wrt replication ops.
 - pg log trim
   - replica feedback to primary
   - primary trim floor to replicas
-- handle down osds
-- detect crashed PGs
 - osdmap history?
  - keep maps on disk?
  - incremental maps?
 - pg_bit changes
 - watch osd utilization; adjust cluster map
+
+
+objecter
+- detect, cope with crashed PGs, wait for map updates, etc.
 
 
 reliability
@@ -22,19 +27,15 @@ reliability
 - osdmonitor, filter
 
 
-- stability
- - ebofs table.remove() thing
- - fakestore crapping out.. missing timer events?
-
-
-
-- mds
- - figure out weird 40ms latency with double log entries
+bugs/stability
+- fakestore crapping out.. missing timer events?
+- figure out weird 40ms latency with double log entries
 
 
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
 - clean up tcpmessenger
+ - dropped connections, reconnects
 
 crush
 - needs to detect when there are insufficient non-out osds (infinite loop bad)
@@ -70,7 +71,6 @@ ebofs
 - delay allocation
   - or actually, reallocate if dirty is cancelable
 - journaling?  in NVRAM?
-- nix oc_tab, move into onode.
 - clone()
 
 

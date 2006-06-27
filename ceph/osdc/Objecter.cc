@@ -88,7 +88,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t  Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
+tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
 				   Context *onfinish)
 {
   OSDRead *rd = new OSDRead(bl);
