@@ -389,19 +389,26 @@ void OSD::dispatch(Message *m)
 	delete m;
 	break;
 	
+	
   case MSG_PING:
 	// take note.
 	monitor->host_is_alive(m->get_source());
 	handle_ping((MPing*)m);
 	break;
-	
 
 	// -- need OSDMap --
 
   default:
 	{
-	  // no map?  starting up?
-	  if (!osdmap) {
+	  if (osdmap) {
+		// down?
+		if (osdmap->is_down(whoami)) {
+		  dout(7) << "i am marked down, dropping " << *m << endl;
+		  delete m;
+		  break;
+		}
+	  } else {
+		// no map?  starting up?
 		dout(7) << "no OSDMap, asking MDS" << endl;
 		if (waiting_for_osdmap.empty()) 
 		  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
@@ -473,6 +480,13 @@ void OSD::handle_op_reply(MOSDOpReply *m)
   if (m->get_map_epoch() > osdmap->get_epoch()) {
 	dout(3) << "replica op reply includes a new osd map" << endl;
 	update_map(m->get_osdmap());
+  }
+  
+  if (m->get_source().is_osd() &&
+	  osdmap->is_down(m->get_source().num())) {
+	dout(3) << "ignoring reply from down " << m->get_source() << endl;
+	delete m;
+	return;
   }
 
   // handle op
@@ -573,9 +587,10 @@ void OSD::handle_ping(MPing *m)
 void OSD::wait_for_new_map(Message *m)
 {
   // ask MDS
-  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
-						  MSG_ADDR_MDS(0), MDS_PORT_MAIN);
-
+  if (waiting_for_osdmap.empty())
+	messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
+							MSG_ADDR_MDS(0), MDS_PORT_MAIN);
+  
   waiting_for_osdmap.push_back(m);
 }
 
@@ -970,12 +985,17 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 	return false;
   }
 
-  // down?
-  if (osdmap->is_down(from)) {
-	dout(7) << "  from down OSD osd" << from 
-			<< ", pinging?" << endl;
-	assert(epoch < osdmap->get_epoch());
-	// FIXME
+  // down osd?
+  if (m->get_source().is_osd() &&
+	  osdmap->is_down(m->get_source().num())) {
+	if (m->get_map_epoch() > osdmap->get_epoch()) {
+	  dout(7) << "msg from down " << m->get_source()
+			  << ", waiting for new map" << endl;
+	  wait_for_new_map(m);
+	} else {
+	  dout(7) << "msg from down " << m->get_source()
+			  << ", dropping" << endl;
+	}
 	return false;
   }
 
@@ -1750,24 +1770,39 @@ class C_OSD_RepModifyCommit : public Context {
 public:
   OSD *osd;
   MOSDOp *op;
-  C_OSD_RepModifyCommit(OSD *o, MOSDOp *oo) : osd(o), op(oo) { }
+
+  Mutex lock;
+  Cond cond;
+  bool ack;
+  bool waiting;
+
+  C_OSD_RepModifyCommit(OSD *o, MOSDOp *oo) : osd(o), op(oo),
+											  ack(false), waiting(false) { }
   void finish(int r) {
+	lock.Lock();
+	while (!ack) {
+	  waiting = true;
+	  cond.Wait(lock);
+	}
+	assert(ack);
+	lock.Unlock();
 	osd->op_rep_modify_commit(op);
+  }
+  void ack() {
+	lock.Lock();
+	ack = true;
+	if (waiting) cond.Signal();
+	lock.Unlock();
   }
 };
 
 void OSD::op_rep_modify_commit(MOSDOp *op)
 {
   // hack: hack_blah is true until 'ack' has been sent.
-  if (op->hack_blah) {
-	dout(0) << "got rep_modify_commit before rep_modify applied, waiting" << endl;
-	g_timer.add_event_after(1, new C_OSD_RepModifyCommit(this, op));
-  } else {
-	dout(10) << "rep_modify_commit on op " << *op << endl;
-	MOSDOpReply *commit = new MOSDOpReply(op, 0, osdmap, true);
-	messenger->send_message(commit, op->get_asker());
-	delete op;
-  }
+  dout(10) << "rep_modify_commit on op " << *op << endl;
+  MOSDOpReply *commit = new MOSDOpReply(op, 0, osdmap, true);
+  messenger->send_message(commit, op->get_asker());
+  delete op;
 }
 
 // process a modification operation
@@ -1781,7 +1816,7 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
   object_t oid = op->get_oid();
   version_t nv = op->get_version();
 
-  op->hack_blah = true;  // hack: make sure any 'commit' goes out _after_ our ack
+  Context *oncommit = new C_OSD_RepModifyCommit(this, op);
   
   // check current version
   version_t myv = 0;
@@ -1801,7 +1836,7 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 	// this is overkill if we pulled this object earlier, but chances are it was very recent
 	// if we're receiving this replicated op.
 	ObjectStore::Transaction t;
-	store->apply_transaction(t, new C_OSD_RepModifyCommit(this, op));
+	store->apply_transaction(t, oncommit);
   }
   else if (myv < op->get_old_version()) {
 	dout(0) << "rep_modify " << hex << oid << dec 
@@ -1818,9 +1853,6 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 			 << endl;
 	assert(op->get_old_version() == myv);
 	
-	Context *oncommit = 0;
-	
-	oncommit = new C_OSD_RepModifyCommit(this, op);
 	op_apply(op, op->get_version(), pg, oncommit); 
 	
 	if (op->get_op() == OSD_OP_REP_WRITE) {
@@ -1832,8 +1864,7 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
   // ack
   MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap, false);
   messenger->send_message(ack, op->get_asker());
-  
-  op->hack_blah = false;  // hack: make sure any 'commit' goes out _after_ our ack
+  oncommit->ack();
 }
 
 
