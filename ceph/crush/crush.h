@@ -264,15 +264,18 @@ namespace crush {
 	  for (int rep=0; rep<numrep; rep++) {
 		int outv = -1;                   // my result
 		
-		// keep trying until we get a non-failed, non-colliding item
+		// keep trying until we get a non-out, non-colliding item
 		int ftotal = 0;
+		bool skip_rep = false;
+
 		while (1) {
 		  // start with the input bucket
 		  Bucket *in = inbucket;
-		  bool bad = false;       // 1 -> no locality in replacement, >1 more locality
 		  
 		  // choose through intervening buckets
 		  int flocal = 0;
+		  bool retry_rep = false;
+
 		  while (1) {
 			// r may be twiddled to (try to) avoid past collisions
 			int r = rep;
@@ -320,13 +323,32 @@ namespace crush {
 				  break;
 				}
 			  }
-			  if (collide && flocal < 3) { // only try locally a few times!
-				flocal++;
-				ftotal++;
-				continue;
-			  }
-			  if (collide)
+
+			  // ok choice?
+			  bool bad = false;
+			  if (type == 0 && outset.count(outv)) 
 				bad = true;
+			  if (overloadmap.count(outv)) {
+				float f = (float)(h(x, outv) % 1000) / 1000.0;
+				if (f > overloadmap[outv])
+				  bad = true;
+			  }
+
+			  if (collide || bad) {
+				ftotal++;
+				flocal++;
+				
+				if (collide && flocal < 3) 
+				  continue;  // try locally a few times!
+				
+				if (ftotal >= 10) {
+				  // ok fine, just ignore dup.  FIXME.
+				  skip_rep = true;
+				  break;
+				}
+				
+				retry_rep = true;
+			  }
 
 			  break;  // ok then!
 			}
@@ -335,23 +357,13 @@ namespace crush {
 			in = newin;
 		  }
 		  
-		  // ok choice?
-		  if (type == 0 && outset.count(outv)) 
-			bad = true;
-		  
-		  if (overloadmap.count(outv)) {
-			float f = (float)(h(x, outv) % 1000) / 1000.0;
-			if (f > overloadmap[outv])
-			  bad = true;
-		  }
-		  
-		  if (bad) {
-			ftotal++;
-			continue;   // try again
-		  }
+		  if (retry_rep) continue;  // try again
 
 		  break;
 		}
+
+		// skip this rep? (e.g. too many collisions, we give up)
+		if (skip_rep) continue; 
 
 		// output this value
 		outvec.push_back(outv);

@@ -115,6 +115,7 @@ struct ebofs_onode {
   off_t      object_size;     /* file size in bytes.  should this be 64-bit? */
   unsigned   object_blocks;
   
+  int        num_collections;
   int        num_attr;        // num attr in onode
   int        num_extents;     /* number of extents used.  if 0, data is in the onode */
 };
@@ -167,7 +168,6 @@ struct ebofs_super {
   struct ebofs_table limbo_tab;
   struct ebofs_table object_tab;      // object directory
   struct ebofs_table collection_tab;  // collection directory
-  struct ebofs_table oc_tab;
   struct ebofs_table co_tab;
 };
 

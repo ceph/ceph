@@ -180,7 +180,7 @@ public:
   PG   *create_pg(pg_t pg);          // create new PG
   PG   *get_pg(pg_t pg);             // return existing PG, load state from store (if needed)
   void  close_pg(pg_t pg);           // close in-memory state
-  void  remove_pg(pg_t pg);          // remove state from store
+  void  _remove_pg(pg_t pg);         // remove from store and memory
 
   epoch_t calc_pg_primary_since(int primary, pg_t pgid, epoch_t start);
 
@@ -211,6 +211,7 @@ public:
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_summary(class MOSDPGSummary *m);
   void handle_pg_log(class MOSDPGLog *m);
+  void handle_pg_remove(class MOSDPGRemove *m);
 
   void op_rep_pull(class MOSDOp *op, PG *pg);
   void op_rep_pull_reply(class MOSDOpReply *op);

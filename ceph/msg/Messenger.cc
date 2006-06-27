@@ -46,6 +46,7 @@ using namespace std;
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGSummary.h"
+#include "messages/MOSDPGRemove.h"
 //#include "messages/MOSDPGUpdate.h"
 
 //#include "messages/MOSDPGQuery.h"
@@ -329,6 +330,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 	break;
   case MSG_OSD_PG_SUMMARY:
 	m = new MOSDPGSummary();
+	break;
+  case MSG_OSD_PG_REMOVE:
+	m = new MOSDPGRemove();
 	break;
 	/*
   case MSG_OSD_PG_QUERY:

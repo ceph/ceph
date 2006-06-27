@@ -104,7 +104,6 @@ class Ebofs : public ObjectStore {
 
   // collections
   Table<coll_t, Extent>  *collection_tab;
-  Table<idpair_t, bool>  *oc_tab;
   Table<idpair_t, bool>  *co_tab;
 
   void close_tables();
@@ -212,7 +211,7 @@ class Ebofs : public ObjectStore {
 	allocator(this),
 	bufferpool(EBOFS_BLOCK_SIZE),
 	nodepool(ebofs_lock),
-	object_tab(0), limbo_tab(0), collection_tab(0), oc_tab(0), co_tab(0),
+	object_tab(0), limbo_tab(0), collection_tab(0), co_tab(0),
 	onode_lru(g_conf.ebofs_oc_size),
 	cnode_lru(g_conf.ebofs_cc_size),
 	inodes_flushing(0),

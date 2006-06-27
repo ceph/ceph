@@ -160,7 +160,9 @@ class MOSDOp : public Message {
 
 inline ostream& operator<<(ostream& out, MOSDOp& op)
 {
-  return out << "MOSDOp(" << MSG_ADDR_NICE(op.get_asker()) << "." << op.get_tid() << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
+  return out << "MOSDOp(" << MSG_ADDR_NICE(op.get_asker()) << "." << op.get_tid() 
+			 << " op " << op.get_op()
+			 << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
 }
 
 #endif

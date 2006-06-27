@@ -60,6 +60,7 @@ public:
 					   last_update(0), last_complete(0),
 					   last_epoch_started(0), last_epoch_finished(0),
 					   same_primary_since(0) {}
+	bool is_clean() { return last_update == last_complete; }
   };
   
   /*
@@ -71,11 +72,9 @@ public:
 	
 	void _encode(bufferlist& blist) {
 	  ::_encode(objects, blist);
-	  //missing._encode(blist);
 	}
 	void _decode(bufferlist& blist, int& off) {
 	  ::_decode(objects, blist, off);
-	  //missing._decode(blist, off);
 	}
   };
 
@@ -272,7 +271,7 @@ public:
   //static const int STATE_COMPLETE = 4; // i am complete.
 
   // primary
-  //static const int STATE_CLEAN = 8;  // peers are complete, clean of stray replicas.
+  static const int STATE_CLEAN = 8;  // peers are complete, clean of stray replicas.
  
   // non-primary
   static const int STATE_STRAY = 16;  // i haven't sent notify yet.  primary may not know i exist.
@@ -300,6 +299,7 @@ protected:
   // [primary only] content recovery state
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
+  set<int>    clean_set;   // current OSDs that are clean
   map<int, PGInfo>      peer_info;  // info from peers (stray or prior)
   set<int>              peer_info_requested;
   //map<int, PGLog*>      peer_log;   // logs from peers (for recovering pg content)
@@ -317,6 +317,7 @@ public:
   void clear_primary_state() {
 	prior_set.clear();
 	stray_set.clear();
+	clean_set.clear();
 	peer_info_requested.clear();
 	peer_log_requested.clear();
 	clear_primary_recovery_state();
@@ -330,6 +331,8 @@ public:
   }
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
+  
+  bool is_all_clean() const { return clean_set.size() == acting.size(); }
 
   void build_prior();
   void adjust_prior();  // based on new peer_info.last_epoch_started_any
@@ -347,7 +350,9 @@ public:
   void generate_summary(PGSummary &summary);
 
   bool do_recovery();
-  void clean_up();
+
+  void clean_up_local();
+  void clean_replicas();
 
   off_t get_log_write_pos() {
 	return 0;
@@ -384,7 +389,7 @@ public:
 
   bool       is_active() const { return state_test(STATE_ACTIVE); }
   //bool       is_complete()    { return state_test(STATE_COMPLETE); }
-  //bool       is_clean() const { return state_test(STATE_CLEAN); }
+  bool       is_clean() const { return state_test(STATE_CLEAN); }
   bool       is_stray() const { return state_test(STATE_STRAY); }
 
   int num_active_ops() const {
@@ -439,7 +444,7 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   out << "pg[" << pg.info 
 	  << " r=" << pg.get_role();
   if (pg.is_active()) out << " active";
-  //if (pg.is_clean()) out << " clean";
+  if (pg.is_clean()) out << " clean";
   if (pg.is_stray()) out << " stray";
   out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();

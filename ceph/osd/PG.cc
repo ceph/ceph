@@ -20,7 +20,7 @@
 
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGSummary.h"
-
+#include "messages/MOSDPGRemove.h"
 
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << "osd" << osd->whoami << " " << *this << " "
@@ -364,10 +364,7 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 		 it != peer_info.end();
 		 it++) {
 	  int peer = it->first;
-	  /*if (peer_summary.count(peer)) {
-		dout(10) << " have summary from osd" << peer << endl;
-		continue;
-		}*/
+
 	  if (peer_summary_requested.count(peer)) {
 		dout(10) << " already requested summary from osd" << peer << endl;
 		waiting = true;
@@ -401,11 +398,17 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   info.last_epoch_started = osd->osdmap->get_epoch();
   state_set(PG::STATE_ACTIVE);  // i am active!
 
-  bool allclean = true;
+  clean_set.clear();
+  if (info.is_clean()) 
+	clean_set.insert(osd->whoami);
+
   for (unsigned i=1; i<acting.size(); i++) {
 	int peer = acting[i];
 	assert(peer_info.count(peer));
 	
+	if (peer_info[peer].is_clean()) 
+	  clean_set.insert(peer);
+
 	if (peer_info[peer].last_update < log.bottom) {
 	  // need full summary
 	  dout(10) << "sending complete summary to osd" << peer
@@ -414,7 +417,6 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 	  MOSDPGSummary *m = new MOSDPGSummary(osd->osdmap->get_epoch(),
 										   info.pgid,
 										   summary);
-	  allclean = false;
 	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
 	} else {
 	  // need incremental (or no) log update.
@@ -443,14 +445,17 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 		  }
 		}
 
-		allclean = false;
 	  }
 	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
 	}
   }
 
-  // do anything about allclean?
-  // ???
+  // all clean?
+  if (is_all_clean()) {
+	state_set(STATE_CLEAN);
+	dout(10) << "all replicas clean" << endl;
+  	clean_replicas();	
+  }
   
   osd->take_waiters(waiting_for_active);
 }
@@ -515,13 +520,13 @@ bool PG::do_recovery()
 }
 
 
-/** clean_up
+/** clean_up_local
  * remove any objects that we're storing but shouldn't.
  * as determined by log.
  */
-void PG::clean_up()
+void PG::clean_up_local()
 {
-  dout(10) << "clean_up" << endl;
+  dout(10) << "clean_up_local" << endl;
 
   assert(info.last_update >= log.bottom);  // otherwise we need some help!
 
@@ -542,5 +547,20 @@ void PG::clean_up()
 				 << " v " << ov << " >= " << when << endl;
 	  }
 	}
+  }
+}
+
+void PG::clean_replicas()
+{
+  dout(10) << "clean_replicas.  strays are " << stray_set << endl;
+  
+  for (set<int>::iterator p = stray_set.begin();
+	   p != stray_set.end();
+	   p++) {
+	dout(10) << "sending PGRemove to osd" << *p << endl;
+	set<pg_t> ls;
+	ls.insert(info.pgid);
+	MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
+	osd->messenger->send_message(m, MSG_ADDR_OSD(*p));
   }
 }

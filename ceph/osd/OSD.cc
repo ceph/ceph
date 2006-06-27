@@ -46,6 +46,7 @@
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGSummary.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGRemove.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -334,6 +335,26 @@ void OSD::_unlock_pg(pg_t pgid)
   }
 }
 
+void OSD::_remove_pg(pg_t pgid) 
+{
+  // remove from store
+  list<object_t> olist;
+  store->collection_list(pgid, olist);
+  
+  ObjectStore::Transaction t;
+  for (list<object_t>::iterator p = olist.begin();
+	   p != olist.end();
+	   p++)
+	t.remove(*p);
+  t.remove_collection(pgid);
+  store->apply_transaction(t);
+  
+  // hose from memory
+  delete pg_map[pgid];
+  pg_map.erase(pgid);
+}
+
+
 
 
 // --------------------------------------
@@ -403,6 +424,9 @@ void OSD::dispatch(Message *m)
 		break;
 	  case MSG_OSD_PG_LOG:
 		handle_pg_log((MOSDPGLog*)m);
+		break;
+	  case MSG_OSD_PG_REMOVE:
+		handle_pg_remove((MOSDPGRemove*)m);
 		break;
 
 	  case MSG_OSD_OP:
@@ -722,6 +746,8 @@ void OSD::advance_map(list<pg_t>& ls)
 	  if (role != oldrole) {
 		// old primary?
 		if (oldrole == 0) {
+		  pg->state_clear(PG::STATE_CLEAN);
+
 		  // take waiters
 		  take_waiters(pg->waiting_for_active);
 		  for (hash_map<object_t, list<Message*> >::iterator it = pg->waiting_for_missing_object.begin();
@@ -768,6 +794,8 @@ void OSD::advance_map(list<pg_t>& ls)
 		  if (role == 0) {
 			// i am (still) primary. but my replica set changed.
 			pg->state_clear(PG::STATE_ACTIVE);
+			pg->state_clear(PG::STATE_CLEAN);
+
 			dout(10) << *pg << " " << oldacting << " -> " << acting
 					 << ", replicas changed" << endl;
 
@@ -1156,12 +1184,32 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	}
 
 	// ok!
-	if (pg->peer_info.count(from)) {
-	  dout(10) << *pg << " already had notify info from osd" << from << endl;
+	
+	// stray?
+	if (!pg->is_acting(from) &&
+		(*it).last_update > 0) {
+	  dout(10) << *pg << " osd" << from << " has stray content: " << *it << endl;
+	  pg->stray_set.insert(from);
+	  pg->state_clear(PG::STATE_CLEAN);
+	}
+
+	bool had = pg->peer_info.count(from);
+
+	// save info.
+	pg->peer_info[from] = *it;
+
+	if (had) {
+	  if ((*it).is_clean()) {
+		pg->clean_set.insert(from);
+		dout(10) << *pg << " osd" << from << " now clean (" << pg->clean_set  
+				 << "): " << *it << endl;
+		if (pg->is_all_clean()) {
+		  pg->state_set(PG::STATE_CLEAN);
+		  pg->clean_replicas();
+		}
+	  } else
+		dout(10) << *pg << " already had notify info from osd" << from << ": " << *it << endl;
 	} else {
-	  // save info.
-	  pg->peer_info[from] = *it;
-	  
 	  // adjust prior?
 	  if (it->last_epoch_started > pg->last_epoch_started_any) 
 		pg->adjust_prior();
@@ -1232,7 +1280,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	
 	dout(10) << " after " << pg->log << " " << pg->missing << endl;
 	
-	pg->clean_up();
+	pg->clean_up_local();
 
 	pg->info.last_update = pg->log.top;
 	pg->info.log_floor = pg->log.bottom;
@@ -1256,7 +1304,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	assert(pg->missing.num_lost() == 0);
 
 	// clean up any stray objects
-	pg->clean_up();
+	pg->clean_up_local();
 
 	// ok active!
 	pg->info.last_update = pg->log.top;
@@ -1355,6 +1403,9 @@ void OSD::handle_pg_summary(MOSDPGSummary *m)
 
 	// deleted items?
 	
+
+
+	pg->clean_up_local();
 	
 
 	pg->info.last_epoch_started = osdmap->get_epoch();
@@ -1483,7 +1534,37 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 }
 
 
+void OSD::handle_pg_remove(MOSDPGRemove *m)
+{
+  dout(7) << "handle_pg_query from " << m->get_source() << endl;
+  
+  if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
+  for (set<pg_t>::iterator it = m->pg_list.begin();
+	   it != m->pg_list.end();
+	   it++) {
+	pg_t pgid = *it;
+	PG *pg;
+
+	if (pg_map.count(pgid) == 0) {
+	  dout(10) << " don't have pg " << hex << pgid << dec << endl;
+	  continue;
+	}
+
+	pg = _lock_pg(pgid);
+
+	dout(10) << *pg << " removing." << endl;
+	assert(pg->get_role() == -1);
+	
+	_remove_pg(pgid);
+
+	// unlock.  there shouldn't be any waiters, since we're a stray, and pg is presumably clean.
+	assert(pg_lock_waiters.count(pgid) == 0);
+	_unlock_pg(pgid);
+  }
+
+  delete m;
+}
 
 
 
@@ -1628,7 +1709,14 @@ void OSD::op_rep_pull_reply(MOSDOpReply *op)
   if (pg->missing.num_missing() == 0) {
 	assert(pg->info.last_complete == pg->info.last_update);
 	
-	if (!pg->is_primary()) {
+	if (pg->is_primary()) {
+	  // i am primary
+	  pg->clean_set.insert(whoami);
+	  if (pg->is_all_clean()) {
+		pg->state_set(PG::STATE_CLEAN);
+		pg->clean_replicas();
+	  }
+	} else {
 	  // tell primary
 	  dout(7) << *pg << " recovery complete, telling primary" << endl;
 	  list<PG::PGInfo> ls;
@@ -1707,6 +1795,12 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 			 << " <= nv " << nv
 			 << ", noop"
 			 << endl;
+
+	// do a null op, with a commit waiter.  
+	// this is overkill if we pulled this object earlier, but chances are it was very recent
+	// if we're receiving this replicated op.
+	ObjectStore::Transaction t;
+	store->apply_transaction(t, new C_OSD_RepModifyCommit(this, op));
   }
   else if (myv < op->get_old_version()) {
 	dout(0) << "rep_modify " << hex << oid << dec 
@@ -1806,9 +1900,10 @@ void OSD::handle_op(MOSDOp *op)
 	  dout(7) << "handle_rep_op " << op 
 			  << " in " << *pg << endl;
 	} else {
-	  assert(0);
 	  dout(7) << "handle_rep_op " << op 
 			  << " in pgid " << hex << pgid << dec << endl;
+	  waiting_for_pg[pgid].push_back(op);
+	  return;
 	}
 	
     // check osd map
@@ -2365,6 +2460,8 @@ void OSD::op_apply(MOSDOp *op, version_t version, PG *pg, Context* oncommit)
   } else {
 	pg->log.add_update(oid, version);
   }
+  if (pg->info.last_complete == pg->info.last_update)
+	pg->info.last_complete = version;
   pg->info.last_update = version;
 
   // write log to disk

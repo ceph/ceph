@@ -87,7 +87,6 @@ int Ebofs::mount()
   limbo_tab = new Table<block_t, block_t>( nodepool, sb->limbo_tab );
   
   collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
-  oc_tab = new Table<idpair_t, bool>( nodepool, sb->oc_tab );
   co_tab = new Table<idpair_t, bool>( nodepool, sb->co_tab );
 
   allocator.release_limbo();
@@ -150,7 +149,6 @@ int Ebofs::mkfs()
 	free_tab[i] = new Table<block_t,block_t>( nodepool, empty );
   limbo_tab = new Table<block_t,block_t>( nodepool, empty );
   
-  oc_tab = new Table<idpair_t, bool>( nodepool, empty );
   co_tab = new Table<idpair_t, bool>( nodepool, empty );
 
   // add free space
@@ -196,7 +194,6 @@ void Ebofs::close_tables()
 	delete free_tab[i];
   delete limbo_tab;
   delete collection_tab;
-  delete oc_tab;
   delete co_tab;
 
   nodepool.close();
@@ -233,7 +230,7 @@ int Ebofs::umount()
   for (hash_map<object_t,Onode*>::iterator i = onode_map.begin();
 	   i != onode_map.end();
 	   i++) {
-	dout(0) << "umount *** leftover: " << i->first << "   " << *(i->second) << endl;
+	dout(0) << "umount *** leftover: " << hex << i->first << dec << "   " << *(i->second) << endl;
   }
 
   // free memory
@@ -282,10 +279,6 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb.collection_tab.num_keys = collection_tab->get_num_keys();
   sb.collection_tab.root = collection_tab->get_root();
   sb.collection_tab.depth = collection_tab->get_depth();
-
-  sb.oc_tab.num_keys = oc_tab->get_num_keys();
-  sb.oc_tab.root = oc_tab->get_root();
-  sb.oc_tab.depth = oc_tab->get_depth();
 
   sb.co_tab.num_keys = co_tab->get_num_keys();
   sb.co_tab.root = co_tab->get_root();
@@ -591,15 +584,26 @@ Onode* Ebofs::get_onode(object_t oid)
 	  cerr << " onode_loc is " << eo->onode_loc << endl;
 	  cerr << " object_size " << eo->object_size << endl;
 	  cerr << " object_blocks " << eo->object_blocks << endl;
-	  cerr << " " << eo->num_attr << " attr + " << eo->num_extents << " extents" << endl;
+	  cerr << " " << eo->num_collections << " coll + " 
+		   << eo->num_attr << " attr + " 
+		   << eo->num_extents << " extents" << endl;
 	  assert(eo->object_id == oid);
 	}
 	on->onode_loc = eo->onode_loc;
 	on->object_size = eo->object_size;
 	on->object_blocks = eo->object_blocks;
-	
-	// parse attributes
+
+	// parse
 	char *p = bl.c_str() + sizeof(*eo);
+
+	// parse collection list
+	for (int i=0; i<eo->num_collections; i++) {
+	  coll_t c = *((coll_t*)p);
+	  p += sizeof(c);
+	  on->collections.insert(c);
+	}
+
+	// parse attributes
 	for (int i=0; i<eo->num_attr; i++) {
 	  string key = p;
 	  p += key.length() + 1;
@@ -654,11 +658,20 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   eo.object_id = on->object_id;
   eo.object_size = on->object_size;
   eo.object_blocks = on->object_blocks;
+  eo.num_collections = on->collections.size();
   eo.num_attr = on->attr.size();
   eo.num_extents = on->extent_map.size();
   bl.copy_in(off, sizeof(eo), (char*)&eo);
   off += sizeof(eo);
 
+  // collections
+  for (set<coll_t>::iterator i = on->collections.begin();
+	   i != on->collections.end();
+	   i++) {
+	bl.copy_in(off, sizeof(*i), (char*)&(*i));
+	off += sizeof(*i);
+  }	
+  
   // attr
   for (map<string, AttrVal>::iterator i = on->attr.begin();
 	   i != on->attr.end();
@@ -685,7 +698,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 void Ebofs::write_onode(Onode *on)
 {
   // buffer
-  unsigned bytes = sizeof(ebofs_onode) + on->get_attr_bytes() + on->get_extent_bytes();
+  unsigned bytes = sizeof(ebofs_onode) + on->get_collection_bytes() + on->get_attr_bytes() + on->get_extent_bytes();
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
 
   bufferlist bl;
@@ -765,23 +778,12 @@ void Ebofs::remove_onode(Onode *on)
   on->extent_map.clear();
 
   // remove from collections
-  Table<idpair_t, bool>::Cursor cursor(oc_tab);
-  list<coll_t> cls;
-  if (oc_tab->find(idpair_t(on->object_id,0), cursor) >= 0) {
-	while (1) {
-	  const object_t o = cursor.current().key.first;
-	  const coll_t c = cursor.current().key.second;
-	  if (o != on->object_id) break;   // end!
-	  cls.push_back(c);
-	  if (cursor.move_right() < 0) break;
-	}
-  }
-  for (list<coll_t>::iterator i = cls.begin();
-	   i != cls.end();
+  for (set<coll_t>::iterator i = on->collections.begin();
+	   i != on->collections.end();
 	   i++) {
-	oc_tab->remove(idpair_t(on->object_id,*i));
 	co_tab->remove(idpair_t(*i,on->object_id));
   }
+  on->collections.clear();
 
   // dirty -> clean?
   if (on->is_dirty()) {
@@ -789,7 +791,7 @@ void Ebofs::remove_onode(Onode *on)
 	dirty_onodes.erase(on);
   }
 
-  //if (on->get_ref_count() > 1) cout << "remove_onode **** will survive " << *on << endl;
+  if (on->get_ref_count() > 1) cout << "remove_onode **** will survive " << *on << endl;
   put_onode(on);
 }
 
@@ -800,7 +802,6 @@ void Ebofs::put_onode(Onode *on)
   
   if (on->get_ref_count() == 0 && on->dangling) {
 	//cout << " *** hosing on " << *on << endl;
-	on->close_oc();
 	delete on;
   }
 }
@@ -1024,9 +1025,13 @@ void Ebofs::remove_cnode(Cnode *cn)
   if (cn->cnode_loc.length)
 	allocator.release(cn->cnode_loc);
 
-  // delete mappings
-  //cn->clear();
+  // count down refs
+  cn->mark_clean();
+  cn->put();
+  assert(cn->get_ref_count() == 0);
 
+  // hose.
+  cnode_lru.lru_remove(cn);
   delete cn;
 }
 
@@ -2295,8 +2300,14 @@ int Ebofs::_destroy_collection(coll_t cid)
   for (list<object_t>::iterator i = objects.begin(); 
 	   i != objects.end();
 	   i++) {
-	oc_tab->remove(idpair_t(*i,cid));
 	co_tab->remove(idpair_t(cid,*i));
+
+	Onode *on = get_onode(*i);
+	if (on) {
+	  on->collections.erase(cid);
+	  dirty_onode(on);
+	  put_onode(on);
+	}
   }
 
   remove_cnode(cn);
@@ -2340,13 +2351,21 @@ int Ebofs::_collection_add(coll_t cid, object_t oid)
   if (!_collection_exists(cid)) 
 	return -ENOENT;
 
-  if (oc_tab->lookup(idpair_t(oid,cid)) < 0) {
-	oc_tab->insert(idpair_t(oid,cid), true);
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+  
+  int r = 0;
+
+  if (on->collections.count(cid) == 0) {
+	on->collections.insert(cid);
+	dirty_onode(on);
 	co_tab->insert(idpair_t(cid,oid), true);
-	return 0;
   } else {
-	return -ENOENT;  // FIXME?
+	r = -ENOENT;  // FIXME?  already in collection.
   }
+  
+  put_onode(on);
+  return r;
 }
 
 int Ebofs::collection_add(coll_t cid, object_t oid, Context *onsafe)
@@ -2373,19 +2392,21 @@ int Ebofs::_collection_remove(coll_t cid, object_t oid)
   if (!_collection_exists(cid)) 
 	return -ENOENT;
 
-  oc_tab->remove(idpair_t(oid,cid));
-  co_tab->remove(idpair_t(cid,oid));
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
 
-  // hose cnode?
-  if (cnode_map.count(cid)) {
-	Cnode *cn = cnode_map[cid];
-	cnode_map.erase(cid);
-	cnode_lru.lru_remove(cn);
-	delete cn;
-	return 0;
+  int r = 0;
+
+  if (on->collections.count(cid)) {
+	on->collections.erase(cid);
+	dirty_onode(on);
+	co_tab->remove(idpair_t(cid,oid));
   } else {
-	return -ENOENT;  // FIXME?
+	r = -ENOENT;  // FIXME?
   } 
+  
+  put_onode(on);
+  return r;
 }
 
 int Ebofs::collection_remove(coll_t cid, object_t oid, Context *onsafe)

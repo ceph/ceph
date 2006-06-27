@@ -45,12 +45,10 @@
 #define MSG_OSD_MKFS_ACK     19
 
 #define MSG_OSD_PG_NOTIFY      50
-#define MSG_OSD_PG_QUERY        51
+#define MSG_OSD_PG_QUERY       51
 #define MSG_OSD_PG_SUMMARY     52
-#define MSG_OSD_PG_LOG     53
-
-#define MSG_OSD_PG_UPDATE      57
-#define MSG_OSD_PG_REMOVE      58
+#define MSG_OSD_PG_LOG         53
+#define MSG_OSD_PG_REMOVE      54
 
 #define MSG_CLIENT_REQUEST         60
 #define MSG_CLIENT_REPLY           61

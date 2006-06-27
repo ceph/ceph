@@ -54,6 +54,7 @@ class Cnode : public LRUObject
 	ref--;
 	if (ref == 0) lru_unpin();
   }
+  int get_ref_count() { return ref; }
 
   void mark_dirty() {
 	if (!dirty) {

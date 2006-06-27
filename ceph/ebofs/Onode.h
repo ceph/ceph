@@ -47,6 +47,7 @@ public:
   unsigned object_blocks;
 
   // onode
+  set<coll_t>           collections;
   map<string, AttrVal>  attr;
   //vector<Extent>        extents;
   map<block_t, Extent>  extent_map;
@@ -318,6 +319,9 @@ public:
 
 
   // pack/unpack
+  int get_collection_bytes() {
+	return sizeof(coll_t) * collections.size();
+  }
   int get_attr_bytes() {
 	int s = 0;
 	for (map<string, AttrVal >::iterator i = attr.begin();
