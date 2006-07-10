@@ -1,15 +1,16 @@
 
 
 osd/rados
+- rewrite tcpmessenger
+- osd query to osdmon on startup
+- add pg->info.pg_member_since.  wrt replication ops.
+- write log to store
+  - backlog?
 - handle down osds
 - down recv behavior
   - clarify powercycle process
 - osd restart
   - save pg state in store
-- add pg->info.pg_member_since.  wrt replication ops.
-- pg log trim
-  - replica feedback to primary
-  - primary trim floor to replicas
 - osdmap history?
  - keep maps on disk?
  - incremental maps?

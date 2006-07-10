@@ -19,7 +19,6 @@
 
 
 #include "messages/MOSDPGLog.h"
-#include "messages/MOSDPGSummary.h"
 #include "messages/MOSDPGRemove.h"
 
 #undef dout
@@ -28,8 +27,7 @@
 
 /******* PGLog ********/
 
-
-void PG::PGLog::trim(version_t s) 
+void PG::PGLog::trim(ObjectStore::Transaction& t, version_t s) 
 {
   // trim updated
   while (!updated.empty()) {
@@ -47,7 +45,11 @@ void PG::PGLog::trim(version_t s)
 	rdeleted.erase(rit);
   }
   
-  bottom = s;
+  // raise bottom?
+  if (bottom < s) {
+	bottom = s;
+	backlog = false;
+  }
 }
 
 
@@ -73,110 +75,210 @@ void PG::PGLog::copy_after(const PGLog &other, version_t v)
 }
 
 
-
-void PG::PGLog::merge(const PGLog &other, PGMissing &missing)
+void PG::merge_log(const PGLog &olog)
 {
-  if (empty()) {
+  dout(10) << "merge_log " << olog << " into " << log << endl;
+
+  if (is_empty()) {
 	// special (easy) case
-	updated = other.updated;
-	rupdated = other.rupdated;
-	deleted = other.deleted;
-	rdeleted = other.rdeleted;
-	top = other.top;
-	bottom = other.bottom;
+	assert(info.last_complete == 0);
+	assert(log.empty());
+
+	// copy the log.
+	log = olog;
+	info.last_update = log.top;
+	info.log_floor = log.bottom;
 
 	// add all to missing
-	for (map<object_t,version_t>::const_iterator pu = updated.begin();
-		 pu != updated.end();
+	for (map<object_t,version_t>::const_iterator pu = log.updated.begin();
+		 pu != log.updated.end();
 		 pu++)
 	  missing.add(pu->first, pu->second);
-	
+
+	dout(10) << "merge_log  result " << log << endl;
 	return;
   }
 
   // extend on bottom?
-  if (other.bottom < bottom) {
-	version_t newbottom = other.bottom;
+  if (olog.bottom < log.bottom &&
+	  olog.top >= log.bottom) {
+	version_t newbottom = olog.bottom;
+	dout(10) << "merge_log  extending bottom to " << newbottom << endl;
 	
 	// updated
-	for (map<version_t,object_t>::const_iterator p = other.rupdated.begin();
-		 p != other.rupdated.end();
+	for (map<version_t,object_t>::const_iterator p = olog.rupdated.upper_bound(olog.bottom);
+		 p != olog.rupdated.end();
 		 p++) {
-	  if (p->first > bottom) break;
-	  if (updated.count(p->second) || deleted.count(p->second)) continue;
-	  updated[p->second] = p->first;
-	  rupdated[p->first] = p->second;
+	  // verify?
+	  if (p->first > log.bottom) break;
+	  if (log.backlog)
+		assert((log.updated.count(p->second) && log.updated[p->second] >= p->first) ||
+			   (log.deleted.count(p->second) && log.deleted[p->second] > p->first));
+
+	  if (log.updated.count(p->second) || log.deleted.count(p->second)) continue;
+	  log.updated[p->second] = p->first;
+	  log.rupdated[p->first] = p->second;
+	  if (is_empty())
+		missing.add(p->second, p->first);
 	}
 	
 	// deleted
-	for (map<version_t,object_t>::const_iterator p = other.rdeleted.begin();
-		 p != other.rdeleted.end();
+ 	for (map<version_t,object_t>::const_iterator p = olog.rdeleted.begin();
+		 p != olog.rdeleted.end();
 		 p++) {
-	  if (p->first > bottom) break;
-	  if (updated.count(p->second) || deleted.count(p->second)) continue;
-	  deleted[p->second] = p->first;
-	  rdeleted[p->first] = p->second;
+	  assert(p->first >= olog.bottom);
+	  if (p->first > log.bottom) break;
+	  if (log.updated.count(p->second) || log.deleted.count(p->second)) continue;
+	  log.deleted[p->second] = p->first;
+	  log.rdeleted[p->first] = p->second;
 	}
-	bottom = newbottom;
+	info.log_floor = log.bottom = newbottom;
   }
   
+  // backlog?
+  if (olog.backlog && !log.backlog &&
+	  olog.top >= log.bottom) {
+	dout(10) << "merge_log  filling in backlog" << endl;
+
+	for (map<version_t,object_t>::const_iterator p = olog.rupdated.begin();
+		 p != olog.rupdated.end();
+		 p++) {
+	  if (p->first >= olog.bottom) break;
+	  if (log.deleted.count(p->second)) {
+		assert(log.deleted[p->second] > p->first);   // delete must happen later..
+		assert(log.top > olog.top);                  // our log must have more new stuff..
+		continue;  // gets deleted later.
+	  }
+	  log.updated[p->second] = p->first;
+	  log.rupdated[p->first] = p->second;
+	}
+	log.backlog = true;
+  }
+
   // extend on top?
-  if (other.top > top) {
-	map<version_t,object_t>::const_iterator pu = other.rupdated.lower_bound(top);
-	map<version_t,object_t>::const_iterator pd = other.rdeleted.lower_bound(top);
+  if (olog.top > log.top &&
+	  olog.bottom <= log.top) {
+	dout(10) << "merge_log  extending top to " << olog.top << endl;
+	map<version_t,object_t>::const_iterator pu = olog.rupdated.upper_bound(log.top);
+	map<version_t,object_t>::const_iterator pd = olog.rdeleted.upper_bound(log.top);
 	
 	// both
-	while (pu != other.rupdated.end() && pd != other.rdeleted.end()) {
+	while (pu != olog.rupdated.end() && pd != olog.rdeleted.end()) {
 	  assert(pd->first != pu->first);
 	  if (pu->first > pd->first) {
-		add_update(pu->second, pu->first);
+		log.add_update(pu->second, pu->first);
 		missing.add(pu->second, pu->first);
 		pu++;
 	  } else {
-		add_delete(pd->second, pd->first);
+		log.add_delete(pd->second, pd->first);
 		missing.rm(pu->second, pu->first);
 		pd++;
 	  }
 	}
 	// tail
-	while (pu != other.rupdated.end()) {
-	  add_update(pu->second, pu->first);
+	while (pu != olog.rupdated.end()) {
+	  log.add_update(pu->second, pu->first);
 	  missing.add(pu->second, pu->first);
 	  pu++;
 	}
-	while (pd != other.rdeleted.end()) {
-	  add_delete(pd->second, pd->first);
+	while (pd != olog.rdeleted.end()) {
+	  log.add_delete(pd->second, pd->first);
 	  missing.rm(pu->second, pu->first);
 	  pd++;
 	}
-	top = other.top;
+
+	info.last_update = log.top = olog.top;
   }
+
+  dout(10) << "merge_log  result " << log << endl;
+}
+
+
+
+
+void PG::generate_backlog(PGLog& log)
+{
+  dout(10) << "generate_backlog to " << log << endl;
+  
+  assert(!log.backlog);
+  log.backlog = true;
+
+  list<object_t> olist;
+  osd->store->collection_list(info.pgid, olist);
+  
+  int local = 0;
+  for (list<object_t>::iterator it = olist.begin();
+	   it != olist.end();
+	   it++) {
+	local++;
+	assert(log.deleted.count(*it) == 0);
+
+	if (log.updated.count(*it)) continue;
+	
+	version_t v;
+	osd->store->getattr(*it, 
+						"version",
+						&v, sizeof(v));
+	log.updated[*it] = v;
+  }
+
+  dout(10) << local << " local objects, "
+		   << log.updated.size() << " in pg" << endl;
 }
 
 /** assumilate_summary
- * reconstruct "complete" log based on a summary
- * ie we have recent history (as log) and a summary
- * want a log that takes us up to present.
+ * assimilate recovery info into a log based on a summary.
+ * ie we have recent history (as log) and a summary of an older pg state.
+ *
+ * NOTE: this does NOT give us a complete log that we can share, because it omits
+ * deletion info.  ie log.bottom is NOT adjusted down.  but it is sufficient for us
+ * to get to the correct state.
+ *
  */
-void PG::PGLog::assimilate_summary(const PGSummary &sum, version_t last_complete)
-{
-  assert(last_complete >= bottom);
-  assert(top > last_complete);
-  
-  // updated
+/*
+void PG::PGLog::assimilate_summary(const PGSummary &sum)
+{ 
+  dout(10) << "assimilate_summary" << endl;
+
+  // merge in the summary.  do not adjust log top/bottom.
   for (map<object_t,version_t>::const_iterator p = sum.objects.begin();
 	   p != sum.objects.end();
 	   p++) {
-	if (deleted.count(p->first) &&
-		deleted[p->first] > p->second) continue;
-	if (updated.count(p->first)) continue;
+	if (deleted.count(p->first)) {
+	  if (deleted[p->first] >= p->second) continue;  // it gets deleted later.
+	  rdeleted.erase(deleted[p->first]);             // hose old deletion
+	  deleted.erase(p->first);
+	}
+	if (updated.count(p->first)) {
+	  if (updated[p->first] > p->second) continue;   // we logged newer version.
+	  rupdated.erase(updated[p->first]);             // hose older update
+	}
+	dout(10) << "assimilate_summary " << hex << p->first << dec
+			 << " v " << p->second << endl;
+	assert(log.bottom == 0 || p->second < log.bottom);
 	updated[p->first] = p->second;
 	rupdated[p->second] = p->first;
   }
+  
+  // at this point, 'updated' should reflect the correct object set.
 
-  bottom = 0;
+  // fetch local object set
+  PGSummary local;
+  generate_summary(local);
+  
+  // look for things we have but shouldn't!
+  for (map<object_t,version_t>::const_iterator p = local.objects.begin();
+	   p != local.objects.end();
+	   p++) {
+	if (updated.count(p->first) == 0) {
+	  assert(p->second <= last_complete);
+	  dout(10) << "assimilate_summary removing " << hex << oid << dec
+			   << " v " << ov << " < " << last_complete << endl;
+	  osd->store->remove(oid);
+	}
+  }
 }
-
+*/
 
 ostream& PG::PGLog::print(ostream& out) const 
 {
@@ -301,6 +403,7 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   version_t newest_update = info.last_update;
   int       newest_update_osd = osd->whoami;
   version_t oldest_update_needed = info.last_update;  // only of acting (current) osd set
+  version_t peers_complete_thru = info.last_complete;
   
   for (map<int,PGInfo>::iterator it = peer_info.begin();
 	   it != peer_info.end();
@@ -309,9 +412,12 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 	  newest_update = it->second.last_update;
 	  newest_update_osd = it->first;
 	}
-	if (is_acting(it->first) &&
-		it->second.last_update < oldest_update_needed) 
-	  oldest_update_needed = it->second.last_update;
+	if (is_acting(it->first)) {
+	  if (it->second.last_update < oldest_update_needed) 
+		oldest_update_needed = it->second.last_update;
+	  if (it->second.last_complete < peers_complete_thru)
+		peers_complete_thru = it->second.last_complete;
+	}	
   }
   
   // get log?
@@ -333,19 +439,21 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   } else {
 	dout(10) << " i have the most up-to-date pg v " << info.last_update << endl;
   }
+  dout(10) << " peers_complete_thru " << peers_complete_thru << endl;
+  dout(10) << " oldest_update_needed " << oldest_update_needed << endl;
 
   // -- is that the whole story?  (is my log sufficient?)
-  if (info.last_complete < log.bottom) {
-	// nope.  fetch a summary from someone.
+  if (info.last_complete < log.bottom && !log.backlog) {
+	// nope.  fetch backlog from someone.
 	if (peer_summary_requested.count(newest_update_osd)) {
 	  dout(10) << "i am complete thru " << info.last_complete
 			   << ", but my log starts at " << log.bottom 
-			   << ".  already waiting for summary from osd" << newest_update_osd
+			   << ".  already waiting for summary/backlog from osd" << newest_update_osd
 			   << endl;
 	} else {
 	  dout(10) << "i am complete thru " << info.last_complete
 			   << ", but my log starts at " << log.bottom 
-			   << ".  fetching summary from osd" << newest_update_osd
+			   << ".  fetching summary/backlog from osd" << newest_update_osd
 			   << endl;
 	  assert(newest_update_osd != osd->whoami);  // can't be me!
 	  query_map[newest_update_osd][info.pgid] = PG_QUERY_SUMMARY;
@@ -366,31 +474,33 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 	  int peer = it->first;
 
 	  if (peer_summary_requested.count(peer)) {
-		dout(10) << " already requested summary from osd" << peer << endl;
+		dout(10) << " already requested summary/backlog from osd" << peer << endl;
 		waiting = true;
 		continue;
 	  }
 
-	  dout(10) << " requesting summary from osd" << peer << endl;	  
+	  dout(10) << " requesting summary/backlog from osd" << peer << endl;	  
 	  query_map[peer][info.pgid] = PG_QUERY_INFO;
 	  peer_summary_requested.insert(peer);
 	  waiting = true;
 	}
-
+	
 	if (!waiting) {
 	  dout(10) << missing.num_lost() << " objects are still lost, waiting+hoping for a notify from someone else!" << endl;
 	}
 	return;
   }
 
+  // sanity check
+  assert(missing.num_lost() == 0);
+  assert(info.last_complete >= log.bottom || log.backlog);
 
-  // -- do i need to generate a larger log for any of my peers?
-  PGSummary summary;
-  if (oldest_update_needed > log.bottom) {
-	dout(10) << "my log isn't long enough for all peers: bottom " 
+  // -- do i need to generate backlog for any of my peers?
+  if (oldest_update_needed < log.bottom && !log.backlog) {
+	dout(10) << "generating backlog for some peers, bottom " 
 			 << log.bottom << " > " << oldest_update_needed
 			 << endl;
-	generate_summary(summary);
+	generate_backlog(log);
   }
 
 
@@ -409,45 +519,44 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 	if (peer_info[peer].is_clean()) 
 	  clean_set.insert(peer);
 
-	if (peer_info[peer].last_update < log.bottom) {
-	  // need full summary
-	  dout(10) << "sending complete summary to osd" << peer
-			   << ", their last_update was " << peer_info[peer].last_update 
-			   << endl;
-	  MOSDPGSummary *m = new MOSDPGSummary(osd->osdmap->get_epoch(),
-										   info.pgid,
-										   summary);
-	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
-	} else {
-	  // need incremental (or no) log update.
-	  dout(10) << "sending incremental|empty log (" 
-			   << peer_info[peer].last_update << "," << info.last_update
-			   << "] to osd" << peer << endl;
-	  dout(20) << " btw my whole log is " << log.print(cout) << endl;
-	  MOSDPGLog *m = new MOSDPGLog(osd->osdmap->get_epoch(), 
-								   info.pgid);
-	  m->info = info;
-	  if (peer_info[peer].last_update < info.last_update) {
-		m->log.copy_after(log, peer_info[peer].last_update);
-		
-		// build missing list for them too
-		for (map<object_t, version_t>::iterator p = m->log.updated.begin();
-			 p != m->log.updated.end();
-			 p++) {
-		  const object_t oid = p->first;
-		  const version_t v = p->second;
-		  m->missing.add(oid, v);
-		  if (missing.is_missing(oid, v)) {   // we don't have it?
-			assert(missing.loc.count(oid));  // nothing should be lost!
-			m->missing.loc[oid] = missing.loc[oid];
-		  } else {
-			m->missing.loc[oid] = osd->whoami;       // we have it.
-		  }
-		}
+	
+	MOSDPGLog *m = new MOSDPGLog(osd->osdmap->get_epoch(), 
+								 info.pgid);
+	m->info = info;
 
-	  }
-	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
+	if (peer_info[peer].last_update == info.last_update) {
+	  // empty log
+	} 
+	else if (peer_info[peer].last_update < log.bottom) {
+	  // summary/backlog
+	  assert(log.backlog);
+	  m->log = log;
+	} 
+	else {
+	  // incremental log
+	  assert(peer_info[peer].last_update < info.last_update);
+	  m->log.copy_after(log, peer_info[peer].last_update);
 	}
+		
+	// build missing list for them too
+	for (map<object_t, version_t>::iterator p = m->log.updated.begin();
+		 p != m->log.updated.end();
+		 p++) {
+	  const object_t oid = p->first;
+	  const version_t v = p->second;
+	  if (missing.is_missing(oid, v)) {   // we don't have it?
+		assert(missing.loc.count(oid));   // nothing should be lost!
+		m->missing.add(oid, v);
+		m->missing.loc[oid] = missing.loc[oid];
+	  } 
+	  // note: peer will assume we have it if we don't say otherwise.
+	  // else m->missing.loc[oid] = osd->whoami;       // we have it.
+	}
+
+	dout(10) << "sending " << m->log << " " << m->missing
+			 << " to osd" << peer << endl;
+
+	osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
   }
 
   // all clean?
@@ -459,29 +568,6 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   
   osd->take_waiters(waiting_for_active);
 }
-
-
-void PG::generate_summary(PGSummary &summary)
-{  
-  dout(10) << "generating summary" << endl;
-
-  list<object_t> olist;
-  osd->store->collection_list(info.pgid, olist);
-  
-  for (list<object_t>::iterator it = olist.begin();
-	   it != olist.end();
-	   it++) {
-	version_t v;
-	osd->store->getattr(*it, 
-						"version",
-						&v, sizeof(v));
-	summary.objects[*it] = v;
-  }
-
-  dout(10) << summary.objects.size() << " local objects.  " << endl;
-}
-
-
 
 
 
@@ -501,7 +587,7 @@ bool PG::do_recovery()
 	  return false;
 	}
 	
-	if (!objects_pulling.count(p->second) &&       // not already pulling
+	if (!objects_pulling.count(p->second) &&      // not already pulling
 		missing.is_missing(p->second, p->first))  // and missing
 	  break;
 
@@ -566,3 +652,60 @@ void PG::clean_replicas()
 
   stray_set.clear();
 }
+
+
+void PG::append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, version_t trim_to)
+{
+  // write entry
+  bufferlist bl;
+  bl.append( (char*)&logentry, sizeof(logentry) );
+  t.write( info.pgid, ondisklog.top, bl.length(), bl );
+  
+  // update block map?
+  if (ondisklog.top % 4096 == 0) 
+	ondisklog.block_map[ondisklog.top] = logentry.version;
+  
+  ondisklog.top += bl.length();
+  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  
+  // trim?
+  if (trim_to > log.bottom) {
+	dout(10) << " trimming " << log << " to " << trim_to << endl;
+	log.trim(t, trim_to);
+	if (ondisklog.trim_to(trim_to))
+	  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  }
+  dout(10) << " ondisklog bytes [" << ondisklog.bottom << "," << ondisklog.top << ")" << endl;
+}
+
+void PG::read_log(ObjectStore *store)
+{
+  // load bounds
+  store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+
+  // read
+  bufferlist bl;
+  store->read(info.pgid, ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+  
+  off_t pos = ondisklog.bottom;
+  while (pos < ondisklog.top) {
+	PG::PGLog::Entry e;
+	bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
+
+	if (pos % 4096 == 0)
+	  ondisklog.block_map[pos] = e.version;
+	
+	if (e.deleted)
+	  log.add_delete(e.oid, e.version);
+	else
+	  log.add_update(e.oid, e.version);
+	
+	pos += sizeof(e);
+  }
+
+  store->collection_getattr(info.pgid, "top", &log.top, sizeof(log.top));
+  store->collection_getattr(info.pgid, "bottom", &log.bottom, sizeof(log.bottom));
+  store->collection_getattr(info.pgid, "backlog", &log.backlog, sizeof(log.backlog));
+}
+

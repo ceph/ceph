@@ -10,6 +10,7 @@ using namespace std;
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
+#include "mds/OSDMonitor.h"
 #include "client/Client.h"
 #include "client/SyntheticClient.h"
 
@@ -61,6 +62,10 @@ int main(int argc, char **argv)
   gethostname(hostname,100);
   //int pid = getpid();
 
+  // create mon
+  OSDMonitor *mon = new OSDMonitor(0, new FakeMessenger(MSG_ADDR_MON(0)));
+  mon->init();
+
   // create mds
   MDS *mds[NUMMDS];
   OSD *mdsosd[NUMMDS];
@@ -103,8 +108,9 @@ int main(int argc, char **argv)
   for (int i=0; i<NUMOSD; i++) {
 	osd[i]->init();
   }
+
   
-  // create client
+  // create client(s)
   for (int i=0; i<NUMCLIENT; i++) {
 	client[i]->init();
 	
@@ -117,6 +123,8 @@ int main(int argc, char **argv)
 
 	syn[i]->start_thread();
   }
+
+
   for (int i=0; i<NUMCLIENT; i++) {
 	
 	cout << "waiting for synthetic client " << i << " to finish" << endl;

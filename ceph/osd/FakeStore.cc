@@ -285,7 +285,7 @@ int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
 }
 
 int FakeStore::read(object_t oid, 
-					size_t len, off_t offset,
+					off_t offset, size_t len,
 					bufferlist& bl) {
   dout(20) << "read " << oid << " len " << len << " off " << offset << endl;
 

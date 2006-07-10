@@ -556,7 +556,7 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
 
 int BlockDevice::open_fd()
 {
-  return ::open(dev, O_CREAT|O_RDWR|O_SYNC|O_DIRECT, 0);
+  return ::open(dev, O_RDWR|O_SYNC|O_DIRECT, 0);
 }
 
 int BlockDevice::open(kicker *idle) 

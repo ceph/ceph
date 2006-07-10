@@ -72,7 +72,6 @@ class Objecter;
 class Filer;
 
 class AnchorTable;
-class OSDMonitor;
 class MDCluster;
 class CInode;
 class CDir;
@@ -113,7 +112,6 @@ class MDS : public Dispatcher {
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
-  OSDMonitor   *osdmonitor;
   //  PGManager    *pgmanager;
  protected:
 
@@ -190,8 +188,6 @@ private:
 public:
   void mkfs(Context *onfinish);
   void handle_osd_mkfs_ack(Message *m);
-  void bcast_osd_map();
-  void fake_osd_failure(int osd, bool d);
 
   // messages
   void proc_message(Message *m);

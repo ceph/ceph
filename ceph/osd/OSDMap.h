@@ -49,7 +49,6 @@ using namespace std;
 #define PG_TYPE_STARTOSD 2   // place primary on a specific OSD (named by the pg_bits)
 
 
-typedef __uint64_t epoch_t;
 
 
 /** OSDMap

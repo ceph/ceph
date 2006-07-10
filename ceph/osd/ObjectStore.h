@@ -45,17 +45,20 @@ public:
    */
   class Transaction {
   public:
-	static const int OP_WRITE =         1;  // oid, offset, len, bl
-	static const int OP_TRUNCATE =      2;  // oid, len
-	static const int OP_REMOVE =        3;  // oid
-	static const int OP_SETATTR =       4;  // oid, attrname, attrval
-	static const int OP_RMATTR =        5;  // oid, attrname
-	static const int OP_MKCOLL =        6;  // cid
-	static const int OP_RMCOLL =        7;  // cid
-	static const int OP_COLL_ADD =      8;  // cid, oid
-	static const int OP_COLL_REMOVE =   9;  // cid, oid
-	static const int OP_COLL_SETATTR = 10;  // cid, attrname, attrval
-	static const int OP_COLL_RMATTR =  11;  // cid, attrname
+	static const int OP_READ =          1;  // oid, offset, len, pbl
+	static const int OP_STAT =          2;  // oid, pstat
+	static const int OP_GETATTR =       3;  // oid, attrname, pattrval
+	static const int OP_WRITE =        10;  // oid, offset, len, bl
+	static const int OP_TRUNCATE =     11;  // oid, len
+	static const int OP_REMOVE =       12;  // oid
+	static const int OP_SETATTR =      13;  // oid, attrname, attrval
+	static const int OP_RMATTR =       14;  // oid, attrname
+	static const int OP_MKCOLL =       20;  // cid
+	static const int OP_RMCOLL =       21;  // cid
+	static const int OP_COLL_ADD =     22;  // cid, oid
+	static const int OP_COLL_REMOVE =  23;  // cid, oid
+	static const int OP_COLL_SETATTR = 24;  // cid, attrname, attrval
+	static const int OP_COLL_RMATTR =  25;  // cid, attrname
 
 	list<int> ops;
 	list<bufferlist> bls;
@@ -65,6 +68,32 @@ public:
 	list<size_t>   lengths;
 	list<const char*> attrnames;
 	list< pair<const void*,int> > attrvals;
+
+	list<bufferlist*> pbls;
+	list<struct stat*> psts;
+	list< pair<void*,int*> > pattrvals;
+
+	void read(object_t oid, off_t off, size_t len, bufferlist *pbl) {
+	  int op = OP_READ;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  offsets.push_back(off);
+	  lengths.push_back(len);
+	  pbls.push_back(pbl);
+	}
+	void stat(object_t oid, struct stat *st) {
+	  int op = OP_STAT;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  psts.push_back(st);
+	}
+	void getattr(object_t oid, const char* name, void* val, int *plen) {
+	  int op = OP_GETATTR;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  attrnames.push_back(name);
+	  pattrvals.push_back(pair<void*,int*>(val,plen));
+	}
 
 	void write(object_t oid, off_t off, size_t len, bufferlist& bl) {
 	  int op = OP_WRITE;
@@ -151,6 +180,31 @@ public:
 	  if (p == t.ops.end()) last = onsafe;
 
 	  switch (*p) {
+	  case Transaction::OP_READ:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  off_t offset = t.offsets.front(); t.offsets.pop_front();
+		  size_t len = t.lengths.front(); t.lengths.pop_front();
+		  bufferlist *pbl = t.pbls.front(); t.pbls.pop_front();
+		  read(oid, offset, len, *pbl);
+		}
+		break;
+	  case Transaction::OP_STAT:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  struct stat *st = t.psts.front(); t.psts.pop_front();
+		  stat(oid, st);
+		}
+		break;
+	  case Transaction::OP_GETATTR:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
+		  pair<void*,int*> pattrval = t.pattrvals.front(); t.pattrvals.pop_front();
+		  *pattrval.second = getattr(oid, attrname, pattrval.first, *pattrval.second);
+		}
+		break;
+
 	  case Transaction::OP_WRITE:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
@@ -310,7 +364,7 @@ public:
   }
   
   virtual int read(object_t oid, 
-				   size_t len, off_t offset,
+				   off_t offset, size_t len,
 				   bufferlist& bl) = 0;
 
   virtual int write(object_t oid,

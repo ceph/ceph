@@ -175,8 +175,8 @@ class Ebofs : public ObjectStore {
 				   block_t start, block_t len, 
 				   interval_set<block_t>& alloc,
 				   block_t& old_bfirst, block_t& old_blast);
-  void apply_write(Onode *on, size_t len, off_t off, bufferlist& bl);
-  bool attempt_read(Onode *on, size_t len, off_t off, bufferlist& bl, 
+  void apply_write(Onode *on, off_t off, size_t len, bufferlist& bl);
+  bool attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
 					Cond *will_wait_on, bool *will_wait_on_bool);
 
   // ** finisher **
@@ -236,7 +236,7 @@ class Ebofs : public ObjectStore {
   // object interface
   bool exists(object_t);
   int stat(object_t, struct stat*);
-  int read(object_t, size_t len, off_t off, bufferlist& bl);
+  int read(object_t, off_t off, size_t len, bufferlist& bl);
   int write(object_t oid, size_t len, off_t off, bufferlist& bl, bool fsync=true);
   int write(object_t oid, size_t len, off_t offset, bufferlist& bl, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
@@ -268,6 +268,10 @@ class Ebofs : public ObjectStore {
 
 private:
   // private interface -- use if caller already holds lock
+  int _read(object_t oid, off_t off, size_t len, bufferlist& bl);
+  int _stat(object_t oid, struct stat *st);
+  int _getattr(object_t oid, const char *name, void *value, size_t size);
+
   bool _write_will_block();
   int _write(object_t oid, size_t len, off_t offset, bufferlist& bl);
   int _truncate(object_t oid, off_t size);

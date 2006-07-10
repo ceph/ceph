@@ -33,7 +33,6 @@ using namespace __gnu_cxx;
 
 class OSD;
 
-
 #define PG_QUERY_INFO      ((version_t)0xffffffffffffffffULL)
 #define PG_QUERY_SUMMARY   ((version_t)0xfffffffffffffffeULL)
 
@@ -56,10 +55,11 @@ public:
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
 	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
+	epoch_t same_role_since;     // upper bound: i have held same role since
 	PGInfo(pg_t p=0) : pgid(p), 
-					   last_update(0), last_complete(0),
+					   last_update(0), last_complete(0), 
 					   last_epoch_started(0), last_epoch_finished(0),
-					   same_primary_since(0) {}
+					   same_primary_since(0), same_role_since(0) {}
 	bool is_clean() { return last_update == last_complete; }
   };
   
@@ -116,20 +116,6 @@ public:
 	  missing.erase(oid);
 	}
 
-	void merge_loc(PGMissing &other) {
-	  if (num_lost() > 0) {
-		// see if we can find anything new!
-		cout << "merge_loc " << endl;//*this << " from " << other << endl;
-		for (map<object_t,version_t>::iterator p = missing.begin();
-			 p != missing.end();
-			 p++) {
-		  assert(other.missing[p->first] >= missing[p->first]);
-		  if (other.loc.count(p->first)) 
-			loc[p->first] = other.loc[p->first];
-		}
-	  }
-	}
-
 	void _encode(bufferlist& blist) {
 	  ::_encode(missing, blist);
 	  ::_encode(loc, blist);
@@ -159,18 +145,34 @@ public:
 	  object_t oid;
 	  version_t version;
 	  bool deleted;
+	  Entry() {}
 	  Entry(object_t o, version_t v, bool d=false) :
 		oid(o), version(v), deleted(d) {}
 	};
 
-	version_t top;           // corresponds to newest entry.
-	version_t bottom;        // corresponds to entry prev to oldest entry (t=bottom is trimmed).
-	map<object_t, version_t> updated;  // oid -> v. items > bottom, + version.
-	map<version_t, object_t> rupdated; // v -> oid.
-	map<object_t, version_t> deleted;  // oid -> when.  items <= bottom that no longer exist
+	/** top, bottom
+	 *    top - newest entry (update|delete)
+	 * bottom - entry previous to oldest (update|delete) for which we have
+	 *          complete negative information.  
+	 * i.e. we can infer pg contents for any store whose last_update >= bottom.
+	 */
+	version_t top;       // newest entry (update|delete)
+	version_t bottom;    // version prior to oldest (update|delete) 
+
+	/** backlog - true if log is a complete summary of pg contents.  
+	 * updated will include all items in pg, but deleted will not include
+	 * negative entries for items deleted prior to 'bottom'.
+	 */
+	bool      backlog;
+
+	/** update, deleted maps **/
+	map<object_t, version_t> updated;  //  oid -> v. 
+	map<version_t, object_t> rupdated; //    v -> oid.
+	map<object_t, version_t> deleted;  //  oid -> when.  
 	map<version_t, object_t> rdeleted; // when -> oid.
 	
-	PGLog() : top(0), bottom(0) {}
+	/****/
+	PGLog() : top(0), bottom(0), backlog(false) {}
 
 	bool empty() const {
 	  return top == 0;
@@ -185,6 +187,7 @@ public:
 	void _encode(bufferlist& blist) const {
 	  blist.append((char*)&top, sizeof(top));
 	  blist.append((char*)&bottom, sizeof(bottom));
+	  blist.append((char*)&backlog, sizeof(backlog));
 	  ::_encode(updated, blist);
 	  ::_encode(deleted, blist);
 	}
@@ -193,6 +196,9 @@ public:
 	  off += sizeof(top);
 	  blist.copy(off, sizeof(bottom), (char*)&bottom);
 	  off += sizeof(bottom);
+	  blist.copy(off, sizeof(backlog), (char*)&backlog);
+	  off += sizeof(backlog);
+
 	  ::_decode(updated, blist, off);
 	  ::_decode(deleted, blist, off);
 
@@ -241,24 +247,32 @@ public:
 	  top = when;
 	}
 
-	void trim(version_t s);
+	void trim(ObjectStore::Transaction &t, version_t s);
 	void copy_after(const PGLog &other, version_t v);
-	void merge(const PGLog &other, PGMissing &missing);
-	void assimilate_summary(const PGSummary &sum, version_t last_complete);
 	ostream& print(ostream& out) const;
   };
   
 
   class PGOndiskLog {
-	off_t pos;
   public:
-	PGOndiskLog() : pos(0) {}
+	off_t bottom, top;
+	map<off_t,version_t> block_map;  // block -> first stamp logged there
 
-	off_t get_write_pos() {
-	  return pos;
-	}
-	void inc_write_pos(int i) {
-	  pos += i;
+	PGOndiskLog() : bottom(0), top(0) {}
+
+	bool trim_to(version_t v) {
+	  map<off_t,version_t>::iterator p = block_map.upper_bound(v);
+	  if (p == block_map.begin()) return false;
+	  p--;
+	  if (p == block_map.begin()) return false;
+
+	  while (1) {
+		map<off_t,version_t>::iterator t = block_map.begin();
+		if (t == p) break;
+		block_map.erase(t);
+	  }
+	  bottom = p->first;
+	  return true;	  
 	}
   };
 
@@ -286,6 +300,7 @@ public:
   PGOndiskLog ondisklog;
   PGMissing   missing;
 
+
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   int         state;   // see bit defns above
@@ -294,9 +309,11 @@ protected:
  public:
   vector<int> acting;
   epoch_t     last_epoch_started_any;
+  version_t   last_complete_commit;
 
  protected:
   // [primary only] content recovery state
+  version_t   peers_complete_thru;
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    clean_set;   // current OSDs that are clean
@@ -309,6 +326,20 @@ protected:
   set<int>              peer_summary_requested;
   friend class OSD;
 
+  map<__uint64_t, class OSDReplicaOp*> replica_ops;
+  map<int, set<__uint64_t> > replica_tids_by_osd; // osd -> (tid,...)
+
+
+  // [primary|replica]
+  // pg waiters
+  list<class Message*>            waiting_for_active;
+  hash_map<object_t, 
+		   list<class Message*> > waiting_for_missing_object;   
+  
+  // recovery
+  version_t                requested_thru;
+  map<object_t, version_t> objects_pulling;  // which objects are currently being pulled
+  
 public:
   void clear_primary_recovery_state() {
 	peer_info.clear();
@@ -321,6 +352,7 @@ public:
 	peer_info_requested.clear();
 	peer_log_requested.clear();
 	clear_primary_recovery_state();
+	peers_complete_thru = 0;
   }
 
  public:
@@ -337,19 +369,28 @@ public:
   void build_prior();
   void adjust_prior();  // based on new peer_info.last_epoch_started_any
 
-  // pg waiters
-  list<class Message*>            waiting_for_active;
-  hash_map<object_t, 
-		   list<class Message*> > waiting_for_missing_object;   
+  bool adjust_peers_complete_thru() {
+	version_t t = info.last_complete;
+	for (unsigned i=1; i<acting.size(); i++) 
+	  if (peer_info[i].last_complete < t)
+		t = peer_info[i].last_complete;
+	if (t > peers_complete_thru) {
+	  peers_complete_thru = t;
+	  return true;
+	}
+	return false;
+  }
+ 
+  void generate_backlog(PGLog& log);      // generate summary backlog by scanning store.
+  void merge_log(const PGLog &olog);
 
-  // recovery
-  version_t                requested_thru;
-  map<object_t, version_t> objects_pulling;  // which objects are currently being pulled
-  
   void peer(map< int, map<pg_t,version_t> >& query_map);
-  void generate_summary(PGSummary &summary);
 
   bool do_recovery();
+  void start_recovery() {
+	requested_thru = 0;
+	do_recovery();
+  }
 
   void clean_up_local();
   void clean_replicas();
@@ -363,7 +404,11 @@ public:
 	osd(o), 
 	info(p),
 	role(0),
-	state(0)
+	state(0),
+	last_epoch_started_any(0),
+	last_complete_commit(0),
+	peers_complete_thru(0),
+	requested_thru(0)
   { }
   
   pg_t       get_pgid() const { return info.pgid; }
@@ -392,28 +437,16 @@ public:
   bool       is_clean() const { return state_test(STATE_CLEAN); }
   bool       is_stray() const { return state_test(STATE_STRAY); }
 
+  bool  is_empty() const { return info.last_complete == 0; }
+
   int num_active_ops() const {
 	return objects_pulling.size();
   }
 
- 
 
-  // pg state storage
-  /*
-  void store() {
-	if (!osd->store->collection_exists(pgid))
-	  osd->store->create_collection(pgid);
-	// ***
-  }
-  void fetch() {
-	//osd->store->collection_getattr(pgid, "role", &role, sizeof(role));
-	//osd->store->collection_getattr(pgid, "primary_since", &primary_since, sizeof(primary_since));
-	//osd->store->collection_getattr(pgid, "state", &state, sizeof(state));	
-  }
-
-  void list_objects(list<object_t>& ls) {
-	osd->store->collection_list(pgid, ls);
-	}*/
+  // pg on-disk state
+  void append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, version_t trim_to);
+  void read_log(ObjectStore *store);
 
 };
 
@@ -428,7 +461,9 @@ inline ostream& operator<<(ostream& out, const PG::PGInfo& pgi)
 
 inline ostream& operator<<(ostream& out, const PG::PGLog& log) 
 {
-  return out << "log(" << log.bottom << "," << log.top << "]";
+  out << "log(" << log.bottom << "," << log.top << "]";
+  if (log.backlog) out << "+backlog";
+  return out;
 }
 
 inline ostream& operator<<(ostream& out, const PG::PGMissing& missing) 

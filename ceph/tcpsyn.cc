@@ -9,6 +9,7 @@ using namespace std;
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
+#include "mds/OSDMonitor.h"
 #include "client/Client.h"
 #include "client/SyntheticClient.h"
 
@@ -125,6 +126,12 @@ int main(int argc, char **argv)
   int started = 0;
 
   //if (myrank == 0) g_conf.debug = 20;
+  
+  // create mon
+  if (myrank == 0) {
+	OSDMonitor *mon = new OSDMonitor(0, new TCPMessenger(MSG_ADDR_MON(0)));
+	mon->init();
+  }
 
   // create mds
   MDS *mds[NUMMDS];

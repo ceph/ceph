@@ -38,6 +38,7 @@ using namespace std;
 #include "messages/MFailure.h"
 #include "messages/MFailureAck.h"
 
+#include "messages/MOSDBoot.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -307,6 +308,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 	m = new MFailureAck();
 	break;
 
+  case MSG_OSD_BOOT:
+	m = new MOSDBoot();
+	break;
   case MSG_OSD_PING:
 	m = new MOSDPing();
 	break;
@@ -334,14 +338,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_OSD_PG_REMOVE:
 	m = new MOSDPGRemove();
 	break;
-	/*
-  case MSG_OSD_PG_QUERY:
-	m = new MOSDPGQuery();
-	break;
-  case MSG_OSD_PG_QUERYREPLY:
-	m = new MOSDPGQueryReply();
-	break;
-	*/
+
 	// clients
   case MSG_CLIENT_MOUNT:
 	m = new MClientMount();

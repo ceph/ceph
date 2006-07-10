@@ -77,7 +77,7 @@ class FakeStore : public ObjectStore,
   int remove(object_t oid, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe);
   int read(object_t oid, 
-		   size_t len, off_t offset,
+		   off_t offset, size_t len,
 		   bufferlist& bl);
   int write(object_t oid,
 			size_t len, off_t offset,

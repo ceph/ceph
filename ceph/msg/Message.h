@@ -35,14 +35,15 @@
 #define MSG_SHUTDOWN    99999
 
 
-#define MSG_OSD_OP           14    // delete, etc.
-#define MSG_OSD_OPREPLY      15    // delete, etc.
-#define MSG_OSD_PING         16
+#define MSG_OSD_OP           20    // delete, etc.
+#define MSG_OSD_OPREPLY      21    // delete, etc.
+#define MSG_OSD_PING         22
 
-#define MSG_OSD_GETMAP       17
-#define MSG_OSD_MAP          18
+#define MSG_OSD_GETMAP       23
+#define MSG_OSD_MAP          24
 
-#define MSG_OSD_MKFS_ACK     19
+#define MSG_OSD_BOOT         25
+#define MSG_OSD_MKFS_ACK     26
 
 #define MSG_OSD_PG_NOTIFY      50
 #define MSG_OSD_PG_QUERY       51
@@ -137,11 +138,12 @@
 
 
 // use fixed offsets and static entity -> logical addr mapping!
-#define MSG_ADDR_DIRECTORY_BASE  0
+#define MSG_ADDR_NAMER_BASE   0
 #define MSG_ADDR_RANK_BASE    0x10000000    // per-rank messenger services
 #define MSG_ADDR_MDS_BASE     0x20000000
 #define MSG_ADDR_OSD_BASE     0x30000000
-#define MSG_ADDR_CLIENT_BASE  0x40000000
+#define MSG_ADDR_MON_BASE     0x40000000
+#define MSG_ADDR_CLIENT_BASE  0x50000000
 
 #define MSG_ADDR_TYPE_MASK    0xf0000000
 #define MSG_ADDR_NUM_MASK     0x0fffffff
@@ -189,8 +191,9 @@ public:
 	case MSG_ADDR_RANK_BASE: return "rank";
 	case MSG_ADDR_MDS_BASE: return "mds"; 
 	case MSG_ADDR_OSD_BASE: return "osd"; 
+	case MSG_ADDR_MON_BASE: return "mon"; 
 	case MSG_ADDR_CLIENT_BASE: return "client"; 
-	case MSG_ADDR_DIRECTORY_BASE: return "namer";
+	case MSG_ADDR_NAMER_BASE: return "namer";
 	}
 	return "unknown";
   }
@@ -200,7 +203,8 @@ public:
   bool is_client() const { return type() == MSG_ADDR_CLIENT_BASE; }
   bool is_mds() const { return type() == MSG_ADDR_MDS_BASE; }
   bool is_osd() const { return type() == MSG_ADDR_OSD_BASE; }
-  bool is_namer() const { return type() == MSG_ADDR_DIRECTORY_BASE; }
+  bool is_mon() const { return type() == MSG_ADDR_MON_BASE; }
+  bool is_namer() const { return type() == MSG_ADDR_NAMER_BASE; }
 };
 
 inline bool operator== (const msg_addr_t& l, const msg_addr_t& r) { return l._addr == r._addr; }
@@ -228,15 +232,18 @@ namespace __gnu_cxx {
 #define MSG_ADDR_RANK(x)    msg_addr_t(MSG_ADDR_RANK_BASE,x)
 #define MSG_ADDR_MDS(x)     msg_addr_t(MSG_ADDR_MDS_BASE,x)
 #define MSG_ADDR_OSD(x)     msg_addr_t(MSG_ADDR_OSD_BASE,x)
+#define MSG_ADDR_MON(x)     msg_addr_t(MSG_ADDR_MON_BASE,x)
 #define MSG_ADDR_CLIENT(x)  msg_addr_t(MSG_ADDR_CLIENT_BASE,x)
+#define MSG_ADDR_NAMER(x)   msg_addr_t(MSG_ADDR_NAMER_BASE,x)
 
 #define MSG_ADDR_UNDEF       msg_addr_t()
-#define MSG_ADDR_DIRECTORY   msg_addr_t(MSG_ADDR_DIRECTORY_BASE,0)
+#define MSG_ADDR_DIRECTORY   MSG_ADDR_NAMER(0)
 
 #define MSG_ADDR_RANK_NEW    MSG_ADDR_RANK(MSG_ADDR_NEW)
 #define MSG_ADDR_MDS_NEW     MSG_ADDR_MDS(MSG_ADDR_NEW)
 #define MSG_ADDR_OSD_NEW     MSG_ADDR_OSD(MSG_ADDR_NEW)
 #define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(MSG_ADDR_NEW)
+#define MSG_ADDR_NAMER_NEW   MSG_ADDR_NAMER(MSG_ADDR_NEW)
 
 #define MSG_ADDR_ISCLIENT(x)  x.is_client()
 #define MSG_ADDR_TYPE(x)      x.type_str()

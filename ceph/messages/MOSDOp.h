@@ -64,6 +64,8 @@ typedef struct {
   int        pg_role;//, rg_nrep;
   epoch_t map_epoch;
 
+  version_t pg_trim_to;   // primary->replica: trim to here
+
   int op;
   size_t length, offset;
   version_t version;
@@ -95,6 +97,9 @@ class MOSDOp : public Message {
   const version_t  get_version() { return st.version; }
   const version_t  get_old_version() { return st.old_version; }
 
+  const version_t get_pg_trim_to() { return st.pg_trim_to; }
+  void set_pg_trim_to(version_t v) { st.pg_trim_to = v; }
+  
   const int    get_op() { return st.op; }
   const size_t get_length() { return st.length; }
   const size_t get_offset() { return st.offset; }
@@ -102,6 +107,7 @@ class MOSDOp : public Message {
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
 
+  
   void set_data(bufferlist &d) {
 	data.claim(d);
 	st._data_len = data.length();

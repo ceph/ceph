@@ -46,6 +46,8 @@ typedef struct {
   size_t object_size;
   version_t version;
 
+  version_t pg_complete_thru;
+
   epoch_t _new_map_epoch;
   size_t _data_len, _oc_len;
 } MOSDOpReply_st;
@@ -68,6 +70,9 @@ class MOSDOpReply : public Message {
   size_t get_offset() { return st.offset; }
   size_t get_object_size() { return st.object_size; }
   version_t get_version() { return st.version; }
+
+  version_t get_pg_complete_thru() { return st.pg_complete_thru; }
+  void set_pg_complete_thru(version_t v) { st.pg_complete_thru = v; }
 
   void set_result(int r) { st.result = r; }
   void set_length(size_t s) { st.length = s; }

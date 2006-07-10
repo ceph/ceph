@@ -233,6 +233,8 @@ inline ostream& operator<<(ostream& out, lame128_t& oid) {
 typedef __uint64_t ps_t;          // placement seed
 typedef __uint64_t pg_t;          // placement group
 typedef __uint64_t coll_t;        // collection id
+typedef __uint64_t epoch_t;       // map epoch
+typedef __uint64_t tid_t;         // transaction id
 
 #ifdef OBJECT128
 typedef lame128_t object_t;
@@ -240,11 +242,22 @@ typedef lame128_t object_t;
 typedef __uint64_t object_t;      // object id
 #endif
 
-
 #define PG_NONE    0xffffffffffffffffLL
 
+
+class OSDSuperblock {
+public:
+  __uint64_t fsid;      // unique fs id (random number)
+  int        whoami;    // my role in this fs.
+  epoch_t    current_epoch;             // most recent epoch
+  epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
+  OSDSuperblock(__uint64_t f=0, int w=0) : 
+	fsid(f), whoami(w), 
+	current_epoch(0), oldest_map(0), newest_map(0) {}
+};
+
+
 // new types
-typedef __uint64_t tid_t;   // transaction id
 
 class ObjectExtent {
  public:
@@ -265,22 +278,6 @@ inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 			 << ")";
 }
 
-/*
-struct ostat {
-  object_t   object_id;
-  size_t     size;
-  time_t     ctime;
-  time_t     mtime;
-};
-*/
-
-struct onode_t {
-  object_t    oid;
-  pg_t        pgid;
-  version_t   version;
-  size_t      size;
-  //time_t      ctime, mtime;
-};
 
 
 // client types

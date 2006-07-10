@@ -30,8 +30,6 @@
 #include "MDBalancer.h"
 #include "IdAllocator.h"
 #include "AnchorTable.h"
-#include "OSDMonitor.h"
-//#include "PGManager.h"
 
 #include "include/filepath.h"
 
@@ -96,17 +94,6 @@ void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
 //MDS *g_mds;
 
 
-class C_FakeOSDFailure : public Context {
-  MDS *mds;
-  int osd;
-  bool down;
-public:
-  C_FakeOSDFailure(MDS *m, int o, bool d) : mds(m), osd(o), down(d) {}
-  void finish(int r) {
-	mds->fake_osd_failure(osd,down);
-  }
-};
-
 
 // cons/des
 MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
@@ -120,7 +107,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
   anchormgr = new AnchorTable(this);
-  osdmonitor = new OSDMonitor(this);
 
   req_rate = 0;
 
@@ -130,50 +116,7 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 	pgmanager = 0;
 	}*/
 
-  // <HACK set up OSDMap from g_conf>
-  osdmap = new OSDMap();
-  osdmap->set_pg_bits(g_conf.osd_pg_bits);
-  osdmap->inc_epoch();  // = 1
-  assert(osdmap->get_epoch() == 1);
-
-  if (g_conf.mkfs) osdmap->set_mkfs();
-
-  Bucket *b = new UniformBucket(1, 0);
-  int root = osdmap->crush.add_bucket(b);
-  for (int i=0; i<g_conf.num_osd; i++) {
-	osdmap->osds.insert(i);
-	b->add_item(i, 1);
-  }
-  
-  for (int i=1; i<5; i++) {
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
-  }
-
-  if (g_conf.mds_local_osd) {
-	// add mds osds, but don't put them in the crush mapping func
-	for (int i=0; i<g_conf.num_mds; i++) 
-	  osdmap->osds.insert(i+10000);
-  }
-
-  if (whoami == 0) {
-	// fake osd failures
-	for (map<int,float>::iterator i = g_fake_osd_down.begin();
-		 i != g_fake_osd_down.end();
-		 i++) {
-	  dout(0) << "osd" << i->first << " DOWN after " << i->second << endl;
-	  g_timer.add_event_after(i->second, new C_FakeOSDFailure(this, i->first, 1));
-	}
-	for (map<int,float>::iterator i = g_fake_osd_out.begin();
-		 i != g_fake_osd_out.end();
-		 i++) {
-	  dout(0) << "osd" << i->first << " OUT after " << i->second << endl;
-	  g_timer.add_event_after(i->second, new C_FakeOSDFailure(this, i->first, 0));
-	}
-  }
-
-  // </HACK>
+  osdmap = 0;
 
   objecter = new Objecter(messenger, osdmap);
   filer = new Filer(objecter);
@@ -250,7 +193,6 @@ MDS::~MDS() {
   if (mdstore) { delete mdstore; mdstore = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
-  if (osdmonitor) { delete osdmonitor; osdmonitor = 0; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
   if (anchormgr) { delete anchormgr; anchormgr = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
@@ -267,9 +209,9 @@ MDS::~MDS() {
 
 int MDS::init()
 {
-
-  osdmonitor->init();
-
+  // request osd map
+  dout(5) << "requesting osdmap from mon0" << endl;
+  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), MSG_ADDR_MON(0));
   return 0;
 }
 
@@ -381,6 +323,9 @@ int MDS::shutdown_final()
   // shut down cache
   mdcache->shutdown();
 
+  // tell monitor to die
+  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), MSG_ADDR_MON(0));
+
   // shut down messenger
   messenger->shutdown();
 
@@ -388,48 +333,7 @@ int MDS::shutdown_final()
 }
 
 
-void MDS::fake_osd_failure(int osd, bool down) 
-{
-  if (down) {
-	dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
-	osdmap->down_osds.insert(osd);
-  } else {
-	dout(1) << "fake_osd_failure OUT osd" << osd << endl;
-	osdmap->out_osds.insert(osd);
-  }
-  osdmap->inc_epoch();
-  bcast_osd_map();
-}
 
-void MDS::bcast_osd_map()
-{
-  dout(1) << "bcast_osd_map epoch " << osdmap->get_epoch() << endl;
-  assert(get_nodeid() == 0);
-
-  // tell mds
-  for (int i=0; i<get_cluster()->get_num_mds(); i++) {
-	messenger->send_message(new MOSDMap(osdmap),
-							MSG_ADDR_MDS(i));
-  }
-  
-  // tell osds
-  set<int> osds;
-  osdmap->get_all_osds(osds);
-  for (set<int>::iterator it = osds.begin();
-	   it != osds.end();
-	   it++) {
-	messenger->send_message(new MOSDMap(osdmap),
-							MSG_ADDR_OSD(*it));
-  }
-  
-  // tell clients
-  for (set<int>::iterator it = mounted_clients.begin();
-	   it != mounted_clients.end();
-	   it++) {
-	messenger->send_message(new MOSDMap(osdmap),
-							MSG_ADDR_CLIENT(*it));
-  }
-}
 
 
 
@@ -452,9 +356,11 @@ void MDS::proc_message(Message *m)
   
   switch (m->get_type()) {
 	// OSD ===============
+	/*
   case MSG_OSD_MKFS_ACK:
 	handle_osd_mkfs_ack(m);
 	return;
+	*/
   case MSG_OSD_OPREPLY:
 	objecter->handle_osd_op_reply((class MOSDOpReply*)m);
 	return;
@@ -462,9 +368,6 @@ void MDS::proc_message(Message *m)
 	handle_osd_map((MOSDMap*)m);
 	return;
 
-  case MSG_OSD_GETMAP:
-	handle_osd_getmap(m);
-	return;
 
 	// MDS
   case MSG_MDS_SHUTDOWNSTART:    // mds0 -> mds1+
@@ -486,6 +389,11 @@ void MDS::proc_message(Message *m)
 
 
   // paused?
+  if (!osdmap) {
+	dout(3) << "no osdmap yet, waiting" << endl;
+	mds_paused = true;
+  }
+
   if (mds_paused) {
 	dout(3) << "paused" << endl;
 	waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
@@ -565,10 +473,6 @@ void MDS::my_dispatch(Message *m)
 	anchormgr->proc_message(m);
 	break;
 	
-  case MDS_PORT_OSDMON:
-	osdmonitor->proc_message(m);
-	break;
-
   case MDS_PORT_CACHE:
 	mdcache->proc_message(m);
 	break;
@@ -741,14 +645,6 @@ void MDS::my_dispatch(Message *m)
 }
 
 
-void MDS::handle_osd_getmap(Message *m)
-{
-  dout(7) << "osd_getmap from " << MSG_ADDR_NICE(m->get_source()) << endl;
-  
-  messenger->send_message(new MOSDMap(osdmap),
-						  m->get_source());
-  delete m;
-}
 
 
 void MDS::handle_osd_map(MOSDMap *m)
@@ -758,7 +654,12 @@ void MDS::handle_osd_map(MOSDMap *m)
 	if (osdmap) {
 	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << " > " << osdmap->get_epoch() << endl;
 	} else {
-	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << endl;
+	  dout(3) << "handle_osd_map got first osd map epoch " << m->get_epoch() << endl;
+	  objecter->osdmap = osdmap = new OSDMap;
+
+	  // unpause
+	  mds_paused = false;
+	  queue_finished(waiting_for_unpause);
 	}
 	
 	osdmap->decode(m->get_osdmap());
@@ -766,12 +667,21 @@ void MDS::handle_osd_map(MOSDMap *m)
 	// kick requests who might be timing out on the wrong osds
 	// ** FIXME **
 	
+	// tell clients
+	for (set<int>::iterator it = mounted_clients.begin();
+		 it != mounted_clients.end();
+		 it++) {
+	  messenger->send_message(new MOSDMap(osdmap),
+							  MSG_ADDR_CLIENT(*it));
+	}
+	
   } else {
 	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() << " <= " << osdmap->get_epoch() << endl;
   }
 }
 
 
+/*
 void MDS::mkfs(Context *onfinish)
 {
   dout(7) << "mkfs, wiping all OSDs" << endl;
@@ -807,6 +717,7 @@ void MDS::handle_osd_mkfs_ack(Message *m)
 	waiting_for_mkfs = 0;
   }
 }
+*/
 
 
 
@@ -831,12 +742,10 @@ void MDS::handle_client_mount(MClientMount *m)
 
 	  // fake out idalloc (reset, pretend loaded)
 	  idalloc->reset();
-	  //if (pgmanager) pgmanager->mark_open();
 
 	  // init osds too
-	  mkfs(new C_MDS_Unpause(this));
-	  waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
-	  return;	  
+	  //mkfs(new C_MDS_Unpause(this));
+	  //waiting_for_unpause.push_back(new C_MDS_RetryMessage(this, m));
 	}
   }
 

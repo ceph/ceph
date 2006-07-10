@@ -21,12 +21,21 @@
 #include <set>
 using namespace std;
 
-class MDS;
-class Message;
+#include "include/types.h"
+#include "msg/Messenger.h"
 
-class OSDMonitor {
-  MDS *mds;
+class OSDMap;
 
+class OSDMonitor : public Dispatcher {
+  // me
+  int whoami;
+  Messenger *messenger;
+
+  // maps
+  OSDMap *osdmap;
+  map<epoch_t, OSDMap*> osdmaps;
+
+  // monitoring
   map<int,time_t>  last_heard_from_osd;
   map<int,time_t>  last_pinged_osd; 
   // etc..
@@ -35,17 +44,28 @@ class OSDMonitor {
   set<int>         my_osds;
 
  public:
-  OSDMonitor(MDS *mds) {
-	this->mds = mds;
+  OSDMonitor(int w, Messenger *m) : 
+	whoami(w),
+	messenger(m),
+	osdmap(0) {
   }
 
   void init();
 
-  void proc_message(Message *m);
+  void dispatch(Message *m);
+  void handle_shutdown(Message *m);
+
+  void handle_osd_boot(class MOSDBoot *m);
+  void handle_osd_getmap(Message *m);
+
   void handle_ping_ack(class MPingAck *m);
   void handle_failure(class MFailure *m);
 
+  void bcast_osd_map();
+
+
   // hack
+  void fake_osd_failure(int osd, bool down);
   void fake_reorg();
 
 };

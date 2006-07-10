@@ -20,11 +20,13 @@
 class MOSDPGSummary : public Message {
   epoch_t epoch;
   pg_t pgid;
-  bufferlist    sumbl;
 
 public:
+  PG::PGInfo info;
+  bufferlist    sumbl;
+
   epoch_t get_epoch() { return epoch; }
-  
+
   MOSDPGSummary() {}
   MOSDPGSummary(version_t mv, pg_t pgid, PG::PGSummary &summary) :
 	Message(MSG_OSD_PG_SUMMARY) {
@@ -43,6 +45,7 @@ public:
   void encode_payload() {
 	payload.append((char*)&epoch, sizeof(epoch));
 	payload.append((char*)&pgid, sizeof(pgid));
+	payload.append((char*)&info, sizeof(info));
 	payload.claim_append(sumbl);
   }
   void decode_payload() {
@@ -51,6 +54,8 @@ public:
 	off += sizeof(epoch);
 	payload.copy(off, sizeof(pgid), (char*)&pgid);
 	off += sizeof(pgid);
+	payload.copy(off, sizeof(info), (char*)&info);
+	off += sizeof(info);
 
 	payload.splice(0, off);
 	sumbl.claim(payload);
