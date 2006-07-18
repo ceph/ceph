@@ -19,13 +19,9 @@
 #include "Dispatcher.h"
 #include "common/Thread.h"
 
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <arpa/inet.h>
+#include "tcp.h"
 
 class Timer;
-
-typedef struct sockaddr_in tcpaddr_t;
 
 
 class TCPMessenger : public Messenger {
@@ -114,18 +110,6 @@ extern void tcpmessenger_start_rankserver(tcpaddr_t& ta);  // on all ranks
 extern void tcpmessenger_stop_rankserver();   // on all ranks
 
 extern int tcpmessenger_get_rank();
-
-inline ostream& operator<<(ostream& out, struct sockaddr_in &a)
-{
-  unsigned char addr[4];
-  memcpy((char*)addr, (char*)&a.sin_addr.s_addr, 4);
-  out << (unsigned)addr[0] << "."
-	  << (unsigned)addr[1] << "."
-	  << (unsigned)addr[2] << "."
-	  << (unsigned)addr[3] << ":"
-	  << (int)a.sin_port;
-  return out;
-}
 
 
 #endif
