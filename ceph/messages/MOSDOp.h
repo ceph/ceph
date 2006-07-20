@@ -74,12 +74,15 @@ typedef struct {
   bool   want_ack;
   bool   want_commit;
 
-  size_t _data_len;
+  epoch_t _included_map_epoch;
+  size_t _data_len, _osdmap_len;
+
 } MOSDOp_st;
 
 class MOSDOp : public Message {
   MOSDOp_st st;
   bufferlist data;
+  bufferlist osdmap;
 
   friend class MOSDOpReply;
 
@@ -110,12 +113,23 @@ class MOSDOp : public Message {
   
   void set_data(bufferlist &d) {
 	data.claim(d);
-	st._data_len = data.length();
   }
   bufferlist& get_data() {
 	return data;
   }
   size_t get_data_len() { return st._data_len; }
+
+  void attach_map(OSDMap *o) {
+	o->encode(osdmap);
+	st._included_map_epoch = o->get_epoch();
+  }
+  epoch_t get_osdmap_epoch() {
+	return st._included_map_epoch;
+  }
+  bufferlist& get_osdmap_bl() { 
+	return osdmap;
+  }
+
 
   // keep a pcid (procedure call id) to match up request+reply
   void set_pcid(long pcid) { this->st.pcid = pcid; }
@@ -154,11 +168,15 @@ class MOSDOp : public Message {
   virtual void decode_payload() {
 	payload.copy(0, sizeof(st), (char*)&st);
 	payload.splice(0, sizeof(st));
-	data.claim(payload);
+	if (st._data_len) payload.splice(0, st._data_len, &data);
+	if (st._osdmap_len) payload.splice(0, st._osdmap_len, &osdmap);
   }
   virtual void encode_payload() {
+	st._data_len = data.length();
+	st._osdmap_len = osdmap.length();
 	payload.push_back( new buffer((char*)&st, sizeof(st)) );
 	payload.claim_append( data );
+	payload.claim_append( osdmap );
   }
 
   virtual char *get_type_name() { return "oop"; }

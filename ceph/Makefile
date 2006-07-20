@@ -73,7 +73,7 @@ TCP_OBJS = \
 	msg/TCPMessenger.o\
 	msg/TCPDirectory.o
 
-TARGETS = fakefuse fakesyn tcpsyn tcpfuse libceph.o
+TARGETS = fakefuse fakesyn tcpsyn newsyn tcpfuse libceph.o
 
 SRCS=*.cc */*.cc
 
@@ -109,6 +109,9 @@ mpisyn: mpisyn.cc mds.o client.o osd.o msg/MPIMessenger.cc common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 tcpsyn: tcpsyn.cc mds.o client.o osd.o ${TCP_OBJS} common.o
+	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
+
+newsyn: newsyn.cc mds.o client.o osd.o msg/NewMessenger.o common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs

@@ -9,6 +9,7 @@
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
 
+#include <errno.h>
 
 #include "config.h"
 #undef dout
@@ -32,7 +33,9 @@ void Objecter::dispatch(Message *m)
 
 void Objecter::handle_osd_map(MOSDMap *m)
 {
-  if (!osdmap ||
+  assert(osdmap);  // ??
+
+  if (//!osdmap ||
 	  m->get_epoch() > osdmap->get_epoch()) {
 	if (osdmap) {
 	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() 
@@ -41,18 +44,94 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() 
 			  << endl;
 	}
-	
+
+	set<int> down = osdmap->get_down_osds();
+
 	osdmap->decode(m->get_osdmap());
 	
 	// kick requests who might be timing out on the wrong osds
-	// ** FIXME **
-	
+	set<int> new_down;
+	for (set<int>::iterator p = osdmap->get_down_osds().begin();
+		 p != osdmap->get_down_osds().end();
+		 p++)
+	  if (down.count(*p) == 0) 
+		new_down.insert(*p);
+	kick_requests(new_down);
   } else {
 	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() 
 			<< " <= " << osdmap->get_epoch() << endl;
   }
 }
 
+
+void Objecter::kick_requests(set<int> &kick)
+{
+  dout(0) << "kick_requests on osds " << kick << endl;
+
+  for (set<int>::iterator k = kick.begin();
+	   k != kick.end();
+	   k++) {
+	int osd = *k;
+	hash_map<int, set<tid_t> >::iterator ti = osd_tids.find(osd);
+	if (ti == osd_tids.end()) continue;
+
+	for (set<tid_t>::iterator p = ti->second.begin();
+		 p != ti->second.end();
+		 p++) {
+	  tid_t tid = *p;
+	  tid_osd.erase(tid);
+
+	  if (op_write.count(tid)) {
+		OSDWrite *wr = op_write[tid];
+		op_write.erase(tid);
+		
+		// WRITE
+		if (wr->waitfor_ack.count(tid)) {
+		  // resubmit
+		  dout(0) << "kick_requests resub write " << tid << endl;
+		  writex_submit(wr, wr->waitfor_ack[tid]);
+		  wr->waitfor_ack.erase(tid);
+		  wr->waitfor_commit.erase(tid);
+		}
+		else if (wr->waitfor_commit.count(tid)) {
+		  // fake it.  FIXME.
+		  dout(0) << "kick_requests faking commit on write " << tid << endl;
+		  wr->waitfor_ack.erase(tid);
+		  if (wr->waitfor_ack.empty() && wr->onack) {
+			wr->onack->finish(0);
+			delete wr->onack;
+			wr->onack = 0;
+		  }
+		  wr->waitfor_commit.erase(tid);
+		  if (wr->waitfor_commit.empty()) {
+			if (wr->oncommit) {
+			  wr->oncommit->finish(0);
+			  delete wr->oncommit;
+			}
+			delete wr;
+		  }
+		}
+	  }
+
+	  else if (op_read.count(tid)) {
+		// READ
+		OSDRead *rd = op_read[tid];
+		op_read.erase(tid);
+		dout(0) << "kick_requests resub read " << tid << endl;
+
+		// resubmit
+		readx_submit(rd, rd->ops[tid]);
+		rd->ops.erase(tid);
+	  }
+
+	  //else if (op_zero.count(tid)) {
+	  // }
+	  else 
+		assert(0);
+	}
+	osd_tids.erase(osd);
+  }
+}
 
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
@@ -105,29 +184,36 @@ int Objecter::readx(OSDRead *rd, Context *onfinish)
   // issue reads
   for (list<ObjectExtent>::iterator it = rd->extents.begin();
 	   it != rd->extents.end();
-	   it++) {
-	// find OSD
-	int osd = osdmap->get_pg_acting_primary( it->pgid );
+	   it++) 
+	readx_submit(rd, *it);
 
-	// send
-	last_tid++;
-	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->pgid, osdmap->get_epoch(), 
-						   OSD_OP_READ);
-	m->set_length(it->length);
-	m->set_offset(it->start);
-	dout(15) << " read tid " << last_tid << " from osd" << osd 
-			 << " oid " << hex << it->oid << dec  << " " << it->start << "~" << it->length
-			 << " (" << it->buffer_extents.size() << " buffer fragments)" << endl;
-	messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
-	
-	// add to gather set
-	rd->ops[last_tid] = *it;
-	op_read[last_tid] = rd;	
-  }
-  
   return 0;
 }
+
+void Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex) 
+{
+  // find OSD
+  int osd = osdmap->get_pg_acting_primary( ex.pgid );
+
+  // send
+  last_tid++;
+  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+						 ex.oid, ex.pgid, osdmap->get_epoch(), 
+						 OSD_OP_READ);
+  m->set_length(ex.length);
+  m->set_offset(ex.start);
+  dout(15) << "readx_submit tid " << last_tid << " from osd" << osd 
+		   << " oid " << hex << ex.oid << dec  << " " << ex.start << "~" << ex.length
+		   << " (" << ex.buffer_extents.size() << " buffer fragments)" << endl;
+  messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
+	
+  // add to gather set
+  rd->ops[last_tid] = ex;
+  op_read[last_tid] = rd;	
+  tid_osd[last_tid] = osd;
+  osd_tids[osd].insert(last_tid);
+}
+
 
 void Objecter::handle_osd_read_reply(MOSDOpReply *m) 
 {
@@ -139,9 +225,24 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   OSDRead *rd = op_read[ tid ];
   op_read.erase( tid );
 
+  // remove from osd/tid maps
+  assert(tid_osd.count(tid));
+  assert(osd_tids[tid_osd[tid]].count(tid));
+  osd_tids[ tid_osd[tid] ].erase(tid);
+  tid_osd.erase(tid);
+
   // our op finished
   rd->ops.erase(tid);
-  
+
+  // success?
+  if (m->get_result() == -EAGAIN) {
+	dout(7) << " got -EAGAIN, resubmitting" << endl;
+	readx_submit(rd, rd->ops[tid]);
+	delete m;
+	return;
+  }
+  assert(m->get_result() >= 0);
+
   // what buffer offset are we?
   dout(7) << " got frag from " << hex << m->get_oid() << dec << " len " << m->get_length() << ", still have " << rd->ops.size() << " more ops" << endl;
   
@@ -289,58 +390,60 @@ int Objecter::writex(OSDWrite *wr, Context *onack, Context *oncommit)
   wr->onack = onack;
   wr->oncommit = oncommit;
 
-  size_t off = 0;  // ptr into buffer
-
   // issue writes
   for (list<ObjectExtent>::iterator it = wr->extents.begin();
 	   it != wr->extents.end();
-	   it++) {
-	// find
-	int osd = osdmap->get_pg_acting_primary( it->pgid );
-	
-	// send
-	last_tid++;
-	MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
-						   it->oid, it->pgid, osdmap->get_epoch(),
-						   OSD_OP_WRITE);
-	m->set_length(it->length);
-	m->set_offset(it->start);
-	
-	// map buffer segments into this extent
-	// (may be fragmented bc of striping)
-	bufferlist cur;
-	for (map<size_t,size_t>::iterator bit = it->buffer_extents.begin();
-		 bit != it->buffer_extents.end();
-		 bit++) {
-	  bufferlist thisbit;
-	  thisbit.substr_of(wr->bl, bit->first, bit->second);
-	  cur.claim_append(thisbit);
-	}
-	assert(cur.length() == it->length);
-	m->set_data(cur);//.claim(cur);
-
-	off += it->length;
-
-	// add to gather set
-	if (onack)
-	  wr->waitfor_ack[last_tid] = *it;
-	else
-	  m->set_want_ack(false);
-
-	if (oncommit || !onack)    // wait for commit if neither callback is provided (sloppy user)           
-	  wr->waitfor_commit[last_tid] = *it;
-	else
-	  m->set_want_commit(false);
-
-	op_write[last_tid] = wr;
-
-	// send
-	dout(10) << " write tid " << last_tid << " osd" << osd 
-			 << "  oid " << hex << it->oid << dec << " " << it->start << "~" << it->length << endl;
-	messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
-  }
+	   it++) 
+	writex_submit(wr, *it);
 
   return 0;
+}
+
+void Objecter::writex_submit(OSDWrite *wr, ObjectExtent &ex)
+{
+  // find
+  int osd = osdmap->get_pg_acting_primary( ex.pgid );
+	
+  // send
+  last_tid++;
+  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+						 ex.oid, ex.pgid, osdmap->get_epoch(),
+						 OSD_OP_WRITE);
+  m->set_length(ex.length);
+  m->set_offset(ex.start);
+	
+  // map buffer segments into this extent
+  // (may be fragmented bc of striping)
+  bufferlist cur;
+  for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
+	   bit != ex.buffer_extents.end();
+	   bit++) {
+	bufferlist thisbit;
+	thisbit.substr_of(wr->bl, bit->first, bit->second);
+	cur.claim_append(thisbit);
+  }
+  assert(cur.length() == ex.length);
+  m->set_data(cur);//.claim(cur);
+  
+  // add to gather set
+  if (wr->onack)
+	wr->waitfor_ack[last_tid] = ex;
+  else
+	m->set_want_ack(false);
+  
+  if (wr->oncommit || !wr->onack)    // wait for commit if neither callback is provided (sloppy user)           
+	wr->waitfor_commit[last_tid] = ex;
+  else
+	m->set_want_commit(false);
+  
+  op_write[last_tid] = wr;
+  tid_osd[last_tid] = osd;
+  osd_tids[osd].insert(last_tid);
+  
+  // send
+  dout(10) << "writex_submit tid " << last_tid << " osd" << osd 
+		   << "  oid " << hex << ex.oid << dec << " " << ex.start << "~" << ex.length << endl;
+  messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
 }
 
 
@@ -355,6 +458,30 @@ void Objecter::handle_osd_write_reply(MOSDOpReply *m)
 
   Context *onack = 0;
   Context *oncommit = 0;
+
+  if (m->get_commit() ||            // commit closes out tid
+	  wr->oncommit == 0 ||          // .. or ack if no commit is needed
+	  m->get_result() == -EAGAIN) { // or if we got EAGAIN
+	// remove from tid/osd maps
+	assert(tid_osd.count(tid));
+	assert(osd_tids[tid_osd[tid]].count(tid));
+	osd_tids[ tid_osd[tid] ].erase(tid);
+	tid_osd.erase(tid);
+  }
+
+  // success?
+  if (m->get_result() == -EAGAIN) {
+	dout(7) << " got -EAGAIN, resubmitting" << endl;
+	if (wr->waitfor_ack.count(tid)) 
+	  writex_submit(wr, wr->waitfor_ack[tid]);
+	else if (wr->waitfor_commit.count(tid)) 
+	  writex_submit(wr, wr->waitfor_commit[tid]);
+	else assert(0);
+	delete m;
+	return;
+  }
+  assert(m->get_result() >= 0);
+
 
   // ack or commit?
   if (m->get_commit()) {
@@ -472,6 +599,12 @@ void Objecter::handle_osd_zero_reply(MOSDOpReply *m)
 
   Context *onack = 0;
   Context *oncommit = 0;
+
+  // remove from tid/osd maps
+  assert(tid_osd.count(tid));
+  assert(osd_tids[tid_osd[tid]].count(tid));
+  osd_tids[ tid_osd[tid] ].erase(tid);
+  tid_osd.erase(tid);
 
   // ack or commit?
   if (m->get_commit()) {

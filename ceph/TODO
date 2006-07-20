@@ -2,18 +2,17 @@
 
 osd/rados
 - rewrite tcpmessenger
-- osd query to osdmon on startup
+  - wait for non-existant entities
+  - reconnect?
+- osd boot
+- incremental osd maps
+- old osdmaps on disk
 - add pg->info.pg_member_since.  wrt replication ops.
-- write log to store
-  - backlog?
-- handle down osds
+- mon: restarting osds
+- mon: get_map should take version
+- mon: incremental maps
 - down recv behavior
   - clarify powercycle process
-- osd restart
-  - save pg state in store
-- osdmap history?
- - keep maps on disk?
- - incremental maps?
 - pg_bit changes
 - watch osd utilization; adjust cluster map
 

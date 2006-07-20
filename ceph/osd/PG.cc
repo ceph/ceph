@@ -226,59 +226,7 @@ void PG::generate_backlog(PGLog& log)
 		   << log.updated.size() << " in pg" << endl;
 }
 
-/** assumilate_summary
- * assimilate recovery info into a log based on a summary.
- * ie we have recent history (as log) and a summary of an older pg state.
- *
- * NOTE: this does NOT give us a complete log that we can share, because it omits
- * deletion info.  ie log.bottom is NOT adjusted down.  but it is sufficient for us
- * to get to the correct state.
- *
- */
-/*
-void PG::PGLog::assimilate_summary(const PGSummary &sum)
-{ 
-  dout(10) << "assimilate_summary" << endl;
 
-  // merge in the summary.  do not adjust log top/bottom.
-  for (map<object_t,version_t>::const_iterator p = sum.objects.begin();
-	   p != sum.objects.end();
-	   p++) {
-	if (deleted.count(p->first)) {
-	  if (deleted[p->first] >= p->second) continue;  // it gets deleted later.
-	  rdeleted.erase(deleted[p->first]);             // hose old deletion
-	  deleted.erase(p->first);
-	}
-	if (updated.count(p->first)) {
-	  if (updated[p->first] > p->second) continue;   // we logged newer version.
-	  rupdated.erase(updated[p->first]);             // hose older update
-	}
-	dout(10) << "assimilate_summary " << hex << p->first << dec
-			 << " v " << p->second << endl;
-	assert(log.bottom == 0 || p->second < log.bottom);
-	updated[p->first] = p->second;
-	rupdated[p->second] = p->first;
-  }
-  
-  // at this point, 'updated' should reflect the correct object set.
-
-  // fetch local object set
-  PGSummary local;
-  generate_summary(local);
-  
-  // look for things we have but shouldn't!
-  for (map<object_t,version_t>::const_iterator p = local.objects.begin();
-	   p != local.objects.end();
-	   p++) {
-	if (updated.count(p->first) == 0) {
-	  assert(p->second <= last_complete);
-	  dout(10) << "assimilate_summary removing " << hex << oid << dec
-			   << " v " << ov << " < " << last_complete << endl;
-	  osd->store->remove(oid);
-	}
-  }
-}
-*/
 
 ostream& PG::PGLog::print(ostream& out) const 
 {

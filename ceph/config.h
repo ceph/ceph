@@ -51,6 +51,7 @@ struct md_config_t {
   int debug_bdev;
   int debug_ns;
   int debug_after;
+  int debug_ms;
 
   bool tcp_skip_rank0;
   bool tcp_overlay_clients;
@@ -59,6 +60,8 @@ struct md_config_t {
   bool tcp_serial_out;
   bool tcp_multi_out;
   bool tcp_multi_dispatch;
+
+  bool ms_single_dispatch;
 
   // client
   int      client_cache_size;

@@ -33,10 +33,11 @@ class Mutex
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
   bool tag;
+  int locked;
 
   public:
 
-  Mutex() : tag(false)
+  Mutex() : tag(false), locked(0)
   {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -57,8 +58,12 @@ class Mutex
     pthread_mutexattr_destroy(&attr);
   }
 
+  bool is_locked() { return locked > 0; }
+  int get_lock_count() { return locked; }
+
   virtual ~Mutex()
   { 
+	if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").destructor locked = " << locked << " < 0" << endl;
 	//pthread_mutex_unlock(&M); 
 	pthread_mutex_destroy(&M); 
   }
@@ -68,6 +73,7 @@ class Mutex
 	if (t) cout << this << " " << pthread_self() << endl; 
 	int r = pthread_mutex_lock(&M);
 	if (t) cout << "lock = " << r << endl;
+	locked++;
 	return r;
   }
 
@@ -75,6 +81,7 @@ class Mutex
 	cout << "Lock: " << s << endl;
 	int r = pthread_mutex_lock(&M);
 	cout << this << " " << pthread_self() << " lock = " << r << endl;
+	locked++;
 	return r;
   }
 
@@ -86,6 +93,8 @@ class Mutex
   int Unlock() 
   { 
 	int t = tag;
+	locked--;
+	if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
 	if (t) cout << this << " " << pthread_self() << endl;
 	int r = pthread_mutex_unlock(&M);
 	if (t) cout << "lock = " << r << endl;
@@ -95,6 +104,8 @@ class Mutex
   int Unlock(char *s) 
   { 
 	cout << "Unlock: " << s << endl;
+	locked--;
+	if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
 	int r = pthread_mutex_unlock(&M);
 	cout << this << " " << pthread_self() << " unlock = " << r << endl;
 	return r;

@@ -76,6 +76,7 @@ md_config_t g_conf = {
   debug_ebofs: 1,
   debug_bdev: 1,         // block device
   debug_ns: 0,
+  debug_ms: 0,
   
   debug_after: 0,
 
@@ -86,6 +87,8 @@ md_config_t g_conf = {
   tcp_serial_out: false,
   tcp_multi_out: true,
   tcp_multi_dispatch: false,  // not fully implemented yet
+
+  ms_single_dispatch: false,
 
   // --- client ---
   client_cache_size: 300,
@@ -318,6 +321,9 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--tcp_multi_out") == 0)
 	  g_conf.tcp_multi_out = atoi(args[++i]);
 
+	else if (strcmp(args[i], "--ms_single_dispatch") == 0) 
+	  g_conf.ms_single_dispatch = atoi(args[++i]);
+
 	else if (strcmp(args[i], "--mkfs") == 0) 
 	  g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
 
@@ -393,6 +399,11 @@ void parse_config_options(vector<char*>& args)
 		g_conf.debug_ns = atoi(args[++i]);
 	  else 
 		g_debug_after_conf.debug_ns = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_ms") == 0) 
+	  if (!g_conf.debug_after) 
+		g_conf.debug_ms = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_ms = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--debug_after") == 0) {
 	  g_conf.debug_after = atoi(args[++i]);

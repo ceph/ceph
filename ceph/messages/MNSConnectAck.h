@@ -20,23 +20,31 @@
 
 class MNSConnectAck : public Message {
   int rank;
+  int gen;
 
  public:
   MNSConnectAck() {}
-  MNSConnectAck(int r) : 
+  MNSConnectAck(int r, int g=0) : 
 	Message(MSG_NS_CONNECTACK) { 
 	rank = r;
+	gen = g;
   }
   
   char *get_type_name() { return "NSConA"; }
 
   int get_rank() { return rank; }
+  int get_gen() { return gen; }
 
   void encode_payload() {
 	payload.append((char*)&rank, sizeof(rank));
+	payload.append((char*)&gen, sizeof(gen));
   }
   void decode_payload() {
-	payload.copy(0, sizeof(rank), (char*)&rank);
+	unsigned off = 0;
+	payload.copy(off, sizeof(rank), (char*)&rank);
+	off += sizeof(rank);
+	payload.copy(off, sizeof(gen), (char*)&gen);
+	off += sizeof(gen);
   }
 };
 

@@ -78,6 +78,7 @@ class Messenger {
   void set_dispatcher(Dispatcher *d) { dispatcher = d; ready(); }
   Dispatcher *get_dispatcher() { return dispatcher; }
   virtual void ready() { }
+  bool is_ready() { return dispatcher != 0; }
 
   // dispatch incoming messages
   virtual void dispatch(Message *m);

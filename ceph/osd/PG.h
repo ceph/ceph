@@ -64,21 +64,6 @@ public:
   };
   
   /*
-   * PGSummary - snapshot of full pg contents
-   */
-  class PGSummary {
-  public:
-	map<object_t, version_t> objects;  // objects i currently store.
-	
-	void _encode(bufferlist& blist) {
-	  ::_encode(objects, blist);
-	}
-	void _decode(bufferlist& blist, int& off) {
-	  ::_decode(objects, blist, off);
-	}
-  };
-
-  /*
    * PGMissing - summary of missing objects.
    *  kept in memory, as a supplement to PGLog.
    *  also used to pass missing info in messages.
@@ -136,6 +121,10 @@ public:
    *  summary of persistent on-disk copy:
    *   multiply-modified objects are implicitly trimmed from in-memory log.
    *  also, serves as a recovery queue.
+   *
+   * when backlog is true, 
+   *  deleted is not defined before bottom, 
+   *  but updated is complete in that it includes all PG objects.
    */
   class PGLog {
   public:
@@ -319,10 +308,8 @@ protected:
   set<int>    clean_set;   // current OSDs that are clean
   map<int, PGInfo>      peer_info;  // info from peers (stray or prior)
   set<int>              peer_info_requested;
-  //map<int, PGLog*>      peer_log;   // logs from peers (for recovering pg content)
   map<int, PGMissing>   peer_missing;
   map<int, version_t>   peer_log_requested;  // logs i've requested (and start stamps)
-  //map<int, PGSummary*>  peer_summary;   // full contents of peers
   set<int>              peer_summary_requested;
   friend class OSD;
 

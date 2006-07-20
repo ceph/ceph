@@ -205,7 +205,6 @@ public:
 
   void handle_pg_query(class MOSDPGQuery *m);
   void handle_pg_notify(class MOSDPGNotify *m);
-  void handle_pg_summary(class MOSDPGSummary *m);
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_remove(class MOSDPGRemove *m);
 

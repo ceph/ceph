@@ -44,7 +44,6 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
-#include "messages/MOSDPGSummary.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 
@@ -262,6 +261,15 @@ int OSD::shutdown()
   delete threadpool;
   threadpool = 0;
 
+  // close pgs
+  ObjectStore::Transaction t;
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+	   p != pg_map.end();
+	   p++) {
+	delete p->second;
+  }
+  pg_map.clear();
+
   // shut everything else down
   monitor->shutdown();
   messenger->shutdown();
@@ -366,11 +374,14 @@ void OSD::_remove_pg(pg_t pgid)
   store->collection_list(pgid, olist);
   
   ObjectStore::Transaction t;
-  for (list<object_t>::iterator p = olist.begin();
-	   p != olist.end();
-	   p++)
-	t.remove(*p);
-  t.remove_collection(pgid);
+  {
+	for (list<object_t>::iterator p = olist.begin();
+		 p != olist.end();
+		 p++)
+	  t.remove(*p);
+	t.remove_collection(pgid);
+	t.remove(pgid);  // log too
+  }
   store->apply_transaction(t);
   
   // hose from memory
@@ -424,20 +435,20 @@ void OSD::dispatch(Message *m)
 
   default:
 	{
-	  if (osdmap) {
-		// down?
-		if (osdmap->is_down(whoami)) {
-		  dout(7) << "i am marked down, dropping " << *m << endl;
-		  delete m;
-		  break;
-		}
-	  } else {
-		// no map?  starting up?
+	  // no map?  starting up?
+	  if (!osdmap) {
 		dout(7) << "no OSDMap, asking monitor" << endl;
 		if (waiting_for_osdmap.empty()) 
 		  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
 								  MSG_ADDR_MON(0));
 		waiting_for_osdmap.push_back(m);
+		break;
+	  }
+	  
+	  // down?
+	  if (osdmap->is_down(whoami)) {
+		dout(7) << "i am marked down, dropping " << *m << endl;
+		delete m;
 		break;
 	  }
 
@@ -449,9 +460,6 @@ void OSD::dispatch(Message *m)
 		break;
 	  case MSG_OSD_PG_QUERY:
 		handle_pg_query((MOSDPGQuery*)m);
-		break;
-	  case MSG_OSD_PG_SUMMARY:
-		handle_pg_summary((MOSDPGSummary*)m);
 		break;
 	  case MSG_OSD_PG_LOG:
 		handle_pg_log((MOSDPGLog*)m);
@@ -1040,6 +1048,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 	} else {
 	  dout(7) << "msg from down " << m->get_source()
 			  << ", dropping" << endl;
+	  delete m;
 	}
 	return false;
   }
@@ -1406,149 +1415,6 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   delete m;
 }
 
-/** PGSummary
- * from non-primary to primary, or primary to non-primary
- * includes summary of entire PG contents
- * NOTE: called with opqueue active.
- */
-void OSD::handle_pg_summary(MOSDPGSummary *m)
-{
-/*
-  int from = MSG_ADDR_NUM(m->get_source());
-  pg_t pgid = m->get_pgid();
- 
-  if (!require_same_or_newer_map(m, m->get_epoch())) return;
-  if (pg_map.count(pgid) == 0) {
-	assert(m->get_epoch() < osdmap->get_epoch());
-	dout(10) << "handle_pg_summary don't have pg " << hex << pgid << dec << ", dropping" << endl;
-	delete m;
-	return;
-  }
-
-  PG *pg = _lock_pg(pgid);
-  assert(pg);
-
-  dout(7) << "handle_pg_summary " << *pg << " from " << m->get_source() << endl;
-
-  PG::PGSummary sum;
-  int off = 0;
-  sum._decode(m->get_summary_bl(), off);
-
-  if (pg->is_primary()) {
-	// PRIMARY
-	dout(10) << *pg << " got summary from osd" << from
-			 << endl;
-  
-	assert(pg->peer_info.count(from));
-	version_t last_complete = pg->peer_info[from].last_complete;
-	
-	dout(10) << "summary last_complete " << last_complete 
-			 << ", my log bottom " << pg->log.bottom
-			 << endl;
-	
-	// merge into my (recovery) log!
-	assert(last_complete >= pg->log.bottom);  // FIXME?
-	assert(pg->log.top > last_complete);
-
-	for (map<object_t,version_t>::const_iterator p = sum.objects.begin();
-		 p != sum.objects.end();
-		 p++) {
-	  // merge into log
-	  if (pg->log.deleted.count(p->first) &&
-		  pg->log.deleted[p->first] > p->second) continue;
-	  if (pg->log.updated.count(p->first)) continue;
-	  pg->log.updated[p->first] = p->second;
-	  pg->log.rupdated[p->second] = p->first;
-
-	  // did i find any missing items?
-	  if (pg->missing.missing.count(p->first) &&
-		  pg->missing.missing[p->first] == p->second) 
-		pg->missing.loc[p->first] = from;
-   	    //pg->missing.loc[p->first].insert(from);
-	}
-
-	map< int, map<pg_t,version_t> > query_map;
-	pg->peer(query_map);
-	do_queries(query_map);
-	
-  } else {
-	// REPLICA
-	dout(10) << *pg << " got current summary from primary osd" << from 
-			 << endl;
-	assert(from == pg->acting[0]);
-
-	// fetch local object set
-	PGSummary local;
-	generate_summary(local);
-	
-	// merge current summary into recovery log, missing map.
-	for (map<object_t,version_t>::const_iterator p = m->summary.objects.begin();
-		 p != m->summary.objects.end();
-		 p++) {
-	  assert(pg->log.deleted.count(p->first) == 0);   /// this summary should be up-to-date.
-	  if (pg->log.updated.count(p->first)) {
-		assert(pg->log.updated[p->first] <= p->second);
-		if (pg->log.updated[p->first] == p->second) continue; // already logged.
-		pg->log.rupdated.erase(pg->log.updated[p->first]);             // hose older update
-	  }
-	  dout(10) << " from summary " << hex << p->first << dec
-			   << " v " << p->second << endl;
-	  assert(log.bottom == 0 || p->second < log.bottom);
-	  updated[p->first] = p->second;
-	  rupdated[p->second] = p->first;
-
-	  // missing?
-	  // FIXME: should we hose old version at this point?
-	  if (local.objects.count(p->first) == 0 ||
-		  local.objects[p->first] < p->second) {
-		dout(10) << " missing " << hex << p->first << dec
-				 << " v " << p->second << endl;
-		pg->missing.missing[p->first] = p->second;
-		pg->missing.rmissing[p->second] = p->first;
-		if (m->missing.loc.count(p->first))     // did primary tell us where to get it?
-		  pg->missing.loc[p->first] = m->missing.loc[p->first];
-		else
-		  pg->missing.loc[p->first] = from;     // ok, then primary has it.
-	  }
-	}
-	// at this point, pg->log.updated should reflect the correct object set.
-
-	// fix up log top/bottom, info
-	assert(pg->log.top <= m->info.last_updated);
-	pg->log.top = m->info.last_updated;
-	if (pg->log.bottom == 0)
-	  pg->log.bottom = pg->log.top;   // bottom == top; we can't share this log.
-
-	// hose extra objects
-	for (map<object_t,version_t>::const_iterator p = local.objects.begin();
-		 p != local.objects.end();
-		 p++) {
-	  if (pg->log.updated.count(p->first) == 0) {
-		dout(10) << " removing stray " << hex << oid << dec
-				 << " v " << ov << " < " << last_complete << endl;
-		osd->store->remove(oid);
-	  }
-	}
-
-	// ok go!	
-	pg->info.last_epoch_started = osdmap->get_epoch();
-	pg->info.same_primary_since = m->info.same_primary_since;
-	pg->state_set(PG::STATE_ACTIVE);
-
-	// take any waiters
-	take_waiters(pg->waiting_for_active);
-	
-	// kickstart recovery.
-	pg->start_recovery();
-  }
-
-  _unlock_pg(pgid);
-
-  delete m;
-*/
-}
-
-
 
 /** PGQuery
  * from primary to replica | other
@@ -1577,8 +1443,11 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  int role = -1;
 	  for (unsigned i=0; i<acting.size(); i++)
 		if (acting[i] == whoami) role = i>0 ? 1:0;
-	  assert(role != 0);
-	  
+
+	  if (role == 0) {
+		dout(10) << " pg " << hex << pgid << dec << " dne, and i am primary.  just waiting for notify." << endl;
+		continue;
+	  }
 	  if (role < 0) {
 		dout(10) << " pg " << hex << pgid << dec << " dne, and i am not an active replica" << endl;
 		PG::PGInfo empty(pgid);
@@ -2021,13 +1890,21 @@ void OSD::handle_op(MOSDOp *op)
   int acting_primary = osdmap->get_pg_acting_primary( pgid );
   PG *pg = get_pg(pgid);
 
+  // newer map included?
+  if (op->get_osdmap_epoch() > osdmap->get_epoch()) {
+	dout(7) << "  op includes newer osdmap " 
+			<< op->get_osdmap_epoch() << " > " << osdmap->get_epoch() 
+			<< endl;
+	update_map( op->get_osdmap_bl() );
+  }
+
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
 
   // crashed?
   if (acting_primary < 0) {
 	dout(1) << "crashed pg " << hex << pgid << dec << endl;
-	messenger->send_message(new MOSDOpReply(op, -EAGAIN, osdmap, true),
+	messenger->send_message(new MOSDOpReply(op, -EIO, osdmap, true),
 							op->get_asker());
 	delete op;
 	return;
@@ -2037,12 +1914,22 @@ void OSD::handle_op(MOSDOp *op)
   if (!OSD_OP_IS_REP(op->get_op())) {
 	// REGULAR OP (non-replication)
 
-	// forward?
+	// am i the primary?
 	if (acting_primary != whoami) {
+	  dout(7) << "acting primary is osd" << acting_primary
+			  << ", replying with -EAGAIN" << endl;
+	  assert(op->get_map_epoch() < osdmap->get_epoch());
+	  
+	  // tell client.
+	  MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap, true);  // FIXME error code?
+	  messenger->send_message(fail, op->get_asker());
+
+	  /*
 	  dout(7) << "acting primary is osd" << acting_primary 
 			  << ", forwarding" << endl;
 	  messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
 	  logger->inc("fwd");
+	  */
 	  return;
 	}
 

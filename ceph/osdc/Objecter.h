@@ -66,7 +66,10 @@ class Objecter {
   // pending ops
   hash_map<tid_t,OSDRead*>  op_read;
   hash_map<tid_t,OSDWrite*> op_write;
-  hash_map<tid_t,OSDZero*> op_zero;
+  hash_map<tid_t,OSDZero*>  op_zero;
+
+  hash_map<int, set<tid_t> > osd_tids;
+  hash_map<tid_t, int>       tid_osd;
 
 
  public:
@@ -89,6 +92,10 @@ class Objecter {
   void handle_osd_map(class MOSDMap *m);
 
  private:
+
+  void readx_submit(OSDRead *rd, ObjectExtent& ex);
+  void writex_submit(OSDWrite *wr, ObjectExtent& ex);
+  void kick_requests(set<int> &kick);
 
 
   // public interface

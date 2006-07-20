@@ -42,32 +42,11 @@ class Rank : public Dispatcher {
 
 	void handle_connect(class MNSConnect*);
 	void handle_register(class MNSRegister *m);
-	//void handle_started(Message *m);
+	void handle_started(Message *m);
 	void handle_lookup(class MNSLookup *m);
 	void handle_unregister(Message *m);
 
-	void dispatch(Message *m) {
-	  switch (m->get_type()) {
-	  case MSG_NS_CONNECT:
-		handle_connect((class MNSConnect*)m);
-		break;
-	  case MSG_NS_REGISTER:
-		handle_register((class MNSRegister*)m);
-		break;
-		//case MSG_NS_STARTED:
-		//handle_started(m);
-		//break;
-	  case MSG_NS_UNREGISTER:
-		handle_unregister(m);
-		break;
-	  case MSG_NS_LOOKUP:
-		handle_lookup((class MNSLookup*)m);
-		break;
-		
-	  default:
-		assert(0);
-	  }
-	}
+	void dispatch(Message *m); 
 	
   };
 
@@ -102,7 +81,7 @@ class Rank : public Dispatcher {
 	void stop() {
 	  done = true;
 	  ::close(sd);
-	  join();
+	  //join();
 	}
 	Message *read_message();
   };
@@ -112,6 +91,7 @@ class Rank : public Dispatcher {
   // outgoing
   class Sender : public Thread {
   public:
+	int dest_rank;
 	tcpaddr_t tcpaddr;
 	bool done;
 	int sd;
@@ -122,7 +102,7 @@ class Rank : public Dispatcher {
 	Mutex lock;
 	Cond cond;
 	
-	Sender(tcpaddr_t a) : tcpaddr(a), done(false), sd(0) {}
+	Sender(int r, tcpaddr_t a) : dest_rank(r), tcpaddr(a), done(false), sd(0) {}
 	virtual ~Sender() {}
 	
 	void *entry();
@@ -131,7 +111,7 @@ class Rank : public Dispatcher {
 	  done = true;
 	  cond.Signal();
 	  lock.Unlock();
-	  join();
+	  //	  join();
 	}
 	
 	int connect();	
@@ -150,6 +130,7 @@ class Rank : public Dispatcher {
 
 	void write_message(Message *m);
   };
+
 
 
   // messenger interface
@@ -189,16 +170,42 @@ class Rank : public Dispatcher {
 	~EntityMessenger();
 
 	void ready();
+	bool is_stopped() { return stop; }
 
+	void wait() {
+	  dispatch_thread.join();
+	}
+	
 	virtual void callback_kick() {} 
 	virtual int shutdown();
 	virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
   };
 
 
+  class SingleDispatcher : public Thread {
+	Rank *rank;
+  public:
+	SingleDispatcher(Rank *r) : rank(r) {}
+	void *entry() {
+	  rank->single_dispatcher_entry();
+	  return 0;
+	}
+  } single_dispatcher;
+
+  Cond            single_dispatch_cond;
+  bool            single_dispatch_stop;
+  list<Message*>  single_dispatch_queue;
+
+  map<msg_addr_t, list<Message*> > waiting_for_ready;
+
+  void single_dispatcher_entry();
+  void _submit_single_dispatch(Message *m);
+
+
   // Rank stuff
  public:
   Mutex lock;
+  Cond  wait_cond;  // for wait()
   
   // rank
   int   my_rank;
@@ -207,6 +214,7 @@ class Rank : public Dispatcher {
   // lookup
   map<msg_addr_t, int>    entity_rank;
   map<int, tcpaddr_t>     rank_addr;
+  set<msg_addr_t>         entity_unstarted;
   
   map<msg_addr_t, list<Message*> > waiting_for_lookup;
   set<msg_addr_t>         looking_up;
@@ -222,11 +230,16 @@ class Rank : public Dispatcher {
   map<int, Sender*> rank_sender;
   
   set<Receiver*>    receivers;   
+
+  list<Sender*>     sender_reap_queue;
+  list<Receiver*>   receiver_reap_queue;
 	
   EntityMessenger *messenger;   // rankN
   Namer           *namer;
 
-  // constructor
+
+  void show_dir();
+
   void lookup(msg_addr_t addr);
   
   void dispatch(Message *m);
@@ -236,12 +249,16 @@ class Rank : public Dispatcher {
   
   Sender *connect_rank(int r);
 
+  tcpaddr_t get_listen_addr() { return accepter.listen_addr; }
+
+  void reaper();
+
 public:
   Rank(int r=-1);
   ~Rank();
 
   int start_rank(tcpaddr_t& ns);
-  void stop_rank();
+  void wait();
 
   EntityMessenger *register_entity(msg_addr_t addr);
   void unregister_entity(EntityMessenger *ms);
@@ -251,8 +268,8 @@ public:
   // create a new messenger
   EntityMessenger *new_entity(msg_addr_t addr);
 
-} rank;
+} ;
 
-
+extern Rank rank;
 
 #endif

@@ -20,7 +20,7 @@ bool tcp_read(int sd, char *buf, int len)
 	assert(got >= 0);
 	len -= got;
 	buf += got;
-	dout(DBL) << "tcp_read got " << got << ", " << len << " left" << endl;
+	//dout(DBL) << "tcp_read got " << got << ", " << len << " left" << endl;
   }
   return true;
 }
@@ -39,7 +39,7 @@ int tcp_write(int sd, char *buf, int len)
 	if (did < 0) return did;
 	len -= did;
 	buf += did;
-	dout(DBL) << "tcp_write did " << did << ", " << len << " left" << endl;
+	//dout(DBL) << "tcp_write did " << did << ", " << len << " left" << endl;
   }
   return 0;
 }

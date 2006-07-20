@@ -214,7 +214,7 @@ inline bool operator< (const msg_addr_t& l, const msg_addr_t& r) { return l._add
 //typedef struct msg_addr msg_addr_t;
 
 inline ostream& operator<<(ostream& out, const msg_addr_t& addr) {
-  if (addr.is_namer()) return out << "namer";
+  //if (addr.is_namer()) return out << "namer";
   return out << addr.type_str() << addr.num();
 }
 

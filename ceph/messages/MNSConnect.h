@@ -16,7 +16,7 @@
 #define __MNSCONNECT_H
 
 #include "msg/Message.h"
-#include "msg/TCPMessenger.h"
+#include "msg/tcp.h"
 
 class MNSConnect : public Message {
   tcpaddr_t tcpaddr;
