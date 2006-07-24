@@ -90,6 +90,10 @@ class Messenger {
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
 
 
+  virtual void mark_down(msg_addr_t a, entity_inst_t& i) {}
+  virtual void mark_up(msg_addr_t a, entity_inst_t& i) {}
+  //virtual void reset(msg_addr_t a) { mark_down(a); mark_up(a); }
+
 };
 
 

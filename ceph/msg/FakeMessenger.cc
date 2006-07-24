@@ -55,7 +55,7 @@ Cond  cond;
 bool pending_timer = false;
 
 bool      awake = false;
-bool      shutdown = false;
+bool      fm_shutdown = false;
 pthread_t thread_id;
 
 
@@ -86,12 +86,12 @@ void *fakemessenger_thread(void *ptr)
   lock.Lock();
   while (1) {
 	dout(20) << "thread waiting" << endl;
-	if (shutdown) break;
+	if (fm_shutdown) break;
 	awake = false;
 	cond.Wait(lock);
 	awake = true;
 	dout(20) << "thread woke up" << endl;
-	if (shutdown) break;
+	if (fm_shutdown) break;
 
 	fakemessenger_do_loop_2();
 
@@ -116,7 +116,7 @@ void fakemessenger_startthread() {
 void fakemessenger_stopthread() {
   cout << "fakemessenger_stopthread setting stop flag" << endl;
   lock.Lock();  
-  shutdown = true;
+  fm_shutdown = true;
   lock.Unlock();
   cond.Signal();
   
@@ -220,7 +220,7 @@ int fakemessenger_do_loop_2()
 		directory.erase((*it)->get_myaddr());
 		if (directory.empty()) {
 		  dout(1) << "fakemessenger: last shutdown" << endl;
-		  ::shutdown = true;
+		  ::fm_shutdown = true;
 		}
 	  }
 	  shutdown_set.clear();
@@ -281,7 +281,7 @@ int FakeMessenger::shutdown()
   directory.erase(myaddr);
   if (directory.empty()) {
 	dout(1) << "fakemessenger: last shutdown" << endl;
-	::shutdown = true;
+	::fm_shutdown = true;
 	cond.Signal();  // why not
   } 
   */

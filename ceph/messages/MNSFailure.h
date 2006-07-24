@@ -12,37 +12,36 @@
  */
 
 
-#ifndef __MNSCONNECTACK_H
-#define __MNSCONNECTACK_H
+#ifndef __MNSFAILURE_H
+#define __MNSFAILURE_H
 
 #include "msg/Message.h"
-#include "msg/TCPMessenger.h"
+#include "msg/tcp.h"
 
-class MNSConnectAck : public Message {
-  int rank;
-  int inst;
+class MNSFailure : public Message {
+  //msg_addr_t    entity;
+  entity_inst_t inst;
 
  public:
-  MNSConnectAck() {}
-  MNSConnectAck(int r, int g=0) : 
-	Message(MSG_NS_CONNECTACK) { 
-	rank = r;
-	inst = g;
-  }
+  MNSFailure() {}
+  MNSFailure(entity_inst_t& i) :
+	Message(MSG_NS_FAILURE),
+	//entity(w), 
+	inst(i) {}
   
-  char *get_type_name() { return "NSConA"; }
+  char *get_type_name() { return "NSFail"; }
 
-  int get_rank() { return rank; }
-  int get_inst() { return inst; }
+  //msg_addr_t &get_entity() { return entity; }
+  entity_inst_t &get_inst() { return inst; }
 
   void encode_payload() {
-	payload.append((char*)&rank, sizeof(rank));
+	//payload.append((char*)&entity, sizeof(entity));
 	payload.append((char*)&inst, sizeof(inst));
   }
   void decode_payload() {
 	unsigned off = 0;
-	payload.copy(off, sizeof(rank), (char*)&rank);
-	off += sizeof(rank);
+	//payload.copy(off, sizeof(entity), (char*)&entity);
+	//off += sizeof(entity);
 	payload.copy(off, sizeof(inst), (char*)&inst);
 	off += sizeof(inst);
   }

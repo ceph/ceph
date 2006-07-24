@@ -20,41 +20,47 @@
 
 
 class MOSDMap : public Message {
-  bufferlist osdmap;
-  epoch_t epoch;
-  //bool mkfs;
-
  public:
-  // osdmap
-  bufferlist& get_osdmap() { 
-	return osdmap;
+  map<epoch_t, bufferlist> maps;
+  map<epoch_t, bufferlist> incremental_maps;
+
+  epoch_t get_first() {
+	epoch_t e = 0;
+	map<epoch_t, bufferlist>::iterator i = maps.begin();
+	if (i != maps.end())  e = i->first;
+	i = incremental_maps.begin();	
+	if (i != incremental_maps.end() &&
+		(e == 0 || i->first < e)) e = i->first;
+	return e;
+  }
+  epoch_t get_last() {
+	epoch_t e = 0;
+	map<epoch_t, bufferlist>::reverse_iterator i = maps.rbegin();
+	if (i != maps.rend())  e = i->first;
+	i = incremental_maps.rbegin();	
+	if (i != incremental_maps.rend() &&
+		(e == 0 || i->first > e)) e = i->first;
+	return e;
   }
 
-  epoch_t get_epoch() { return epoch; }
-  //bool is_mkfs() { return mkfs; }
 
+  MOSDMap() : 
+	Message(MSG_OSD_MAP) {}
   MOSDMap(OSDMap *oc) :
 	Message(MSG_OSD_MAP) {
-	oc->encode(osdmap);
-	epoch = oc->get_epoch();
+	oc->encode(maps[oc->get_epoch()]);
   }
-  MOSDMap() {}
 
 
   // marshalling
   virtual void decode_payload() {
 	int off = 0;
-	payload.copy(off, sizeof(epoch), (char*)&epoch);
-	off += sizeof(epoch);
-	//payload.copy(off, sizeof(mkfs), (char*)&mkfs);
-	//off += sizeof(mkfs);
-	payload.splice(0, off);
-	osdmap.claim(payload);
+	::_decode(maps, payload, off);
+	::_decode(incremental_maps, payload, off);
   }
   virtual void encode_payload() {
-	payload.append((char*)&epoch, sizeof(epoch));
-	//payload.append((char*)&mkfs, sizeof(mkfs));
-	payload.claim_append(osdmap);
+	::_encode(maps, payload);
+	::_encode(incremental_maps, payload);
   }
 
   virtual char *get_type_name() { return "omap"; }

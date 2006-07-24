@@ -42,6 +42,7 @@
 #include "messages/MOSDBoot.h"
 
 #include "messages/MOSDMap.h"
+#include "messages/MOSDGetMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -98,13 +99,14 @@ void OSD::force_remount()
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m) 
+OSD::OSD(int id, Messenger *m, char *dev) 
 {
   whoami = id;
 
   messenger = m;
 
   osdmap = 0;
+  boot_epoch = 0;
 
   last_tid = 0;
 
@@ -123,18 +125,22 @@ OSD::OSD(int id, Messenger *m)
   // ebofsdev/$num
   // ebofsdev/$hostname
 
-  char hostname[100];
-  hostname[0] = 0;
-  gethostname(hostname,100);
-  sprintf(dev_path, "%s/all", ebofs_base_path);
-  
-  struct stat sta;
-  if (::lstat(dev_path, &sta) != 0)
-	sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
-  
-  if (::lstat(dev_path, &sta) != 0)
-	sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);	
-  
+  if (dev) {
+	strcpy(dev_path,dev);
+  } else {
+	char hostname[100];
+	hostname[0] = 0;
+	gethostname(hostname,100);
+	sprintf(dev_path, "%s/all", ebofs_base_path);
+	
+	struct stat sta;
+	if (::lstat(dev_path, &sta) != 0)
+	  sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
+	
+	if (::lstat(dev_path, &sta) != 0)
+	  sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);	
+  }
+
   if (g_conf.ebofs) {
     store = new Ebofs(dev_path);
   }
@@ -147,53 +153,6 @@ OSD::OSD(int id, Messenger *m)
 	store = new FakeStore(osd_base_path, whoami); 
   }
 
-  // monitor
-  char s[80];
-  sprintf(s, "osd%d", whoami);
-  string st = s;
-  monitor = new HostMonitor(m, st);
-  
-  // <hack> for testing monitoring
-  int i = whoami;
-  if (++i == g_conf.num_osd) i = 0;
-  monitor->get_hosts().insert(MSG_ADDR_OSD(i));
-  if (++i == g_conf.num_osd) i = 0;
-  monitor->get_hosts().insert(MSG_ADDR_OSD(i));
-  if (++i == g_conf.num_osd) i = 0;  
-  monitor->get_hosts().insert(MSG_ADDR_OSD(i));
-  
-  monitor->get_notify().insert(MSG_ADDR_MON(0));
-  // </hack>
-
-  // log
-  char name[80];
-  sprintf(name, "osd%02d", whoami);
-  logger = new Logger(name, (LogType*)&osd_logtype);
-  osd_logtype.add_set("opq");
-  osd_logtype.add_inc("op");
-  osd_logtype.add_inc("c_rd");
-  osd_logtype.add_inc("c_rdb");
-  osd_logtype.add_inc("c_wr");
-  osd_logtype.add_inc("c_wrb");
-
-  osd_logtype.add_inc("r_pull");
-  osd_logtype.add_inc("r_pullb");
-  osd_logtype.add_inc("r_push");
-  osd_logtype.add_inc("r_pushb");
-  osd_logtype.add_inc("r_wr");
-  osd_logtype.add_inc("r_wrb");
-
-  osd_logtype.add_inc("rlsum");
-  osd_logtype.add_inc("rlnum");
-
-  // request thread pool
-  {
-	char name[80];
-	sprintf(name,"osd%d.threadpool", whoami);
-	threadpool = new ThreadPool<OSD*, object_t>(name, g_conf.osd_maxthreads, 
-												static_dequeueop,
-												this);
-  }
 }
 
 OSD::~OSD()
@@ -214,9 +173,14 @@ int OSD::init()
 	if (g_conf.osd_mkfs) {
 	  dout(2) << "mkfs" << endl;
 	  store->mkfs();
+
+	  // make up a superblock
+	  //superblock.fsid = ???;
+	  superblock.whoami = whoami;
 	}
 	
 	// mount.
+	dout(2) << "mounting " << dev_path << endl;
 	int r = store->mount();
 	assert(r>=0);
 
@@ -233,11 +197,63 @@ int OSD::init()
 	  
 	  // read superblock
 	  read_superblock();
+
+	  // load up pgs (as they previously existed)
+	  load_pgs();
+
+	  dout(2) << "superblock: i am osd" << superblock.whoami << endl;
+	  assert(whoami == superblock.whoami);
 	}
 
-	// monitor.
-	monitor->init();
+	// monitor
+	char s[80];
+	sprintf(s, "osd%d", whoami);
+	string st = s;
+	monitor = new HostMonitor(messenger, st);
+  	monitor->init();
 
+	// <hack> for testing monitoring
+	int i = whoami;
+	if (++i == g_conf.num_osd) i = 0;
+	monitor->get_hosts().insert(MSG_ADDR_OSD(i));
+	if (++i == g_conf.num_osd) i = 0;
+	monitor->get_hosts().insert(MSG_ADDR_OSD(i));
+	if (++i == g_conf.num_osd) i = 0;  
+	monitor->get_hosts().insert(MSG_ADDR_OSD(i));
+	
+	monitor->get_notify().insert(MSG_ADDR_MON(0));
+	// </hack>
+	
+	// log
+	char name[80];
+	sprintf(name, "osd%02d", whoami);
+	logger = new Logger(name, (LogType*)&osd_logtype);
+	osd_logtype.add_set("opq");
+	osd_logtype.add_inc("op");
+	osd_logtype.add_inc("c_rd");
+	osd_logtype.add_inc("c_rdb");
+	osd_logtype.add_inc("c_wr");
+	osd_logtype.add_inc("c_wrb");
+	
+	osd_logtype.add_inc("r_pull");
+	osd_logtype.add_inc("r_pullb");
+	osd_logtype.add_inc("r_push");
+	osd_logtype.add_inc("r_pushb");
+	osd_logtype.add_inc("r_wr");
+	osd_logtype.add_inc("r_wrb");
+	
+	osd_logtype.add_inc("rlsum");
+	osd_logtype.add_inc("rlnum");
+	
+	// request thread pool
+	{
+	  char name[80];
+	  sprintf(name,"osd%d.threadpool", whoami);
+	  threadpool = new ThreadPool<OSD*, object_t>(name, g_conf.osd_maxthreads, 
+												  static_dequeueop,
+												  this);
+	}
+	
 	// i'm ready!
 	messenger->set_dispatcher(this);
 	
@@ -282,24 +298,37 @@ int OSD::shutdown()
 
 
 
-void OSD::write_superblock()
+void OSD::write_superblock(ObjectStore::Transaction& t)
 {
-  dout(10) << "write_superblock" << endl;
+  dout(10) << "write_superblock " << superblock << endl;
 
   bufferlist bl;
   bl.append((char*)&superblock, sizeof(superblock));
-  int r = store->write(SUPERBLOCK_OBJECT, 0, sizeof(superblock), bl, false);
-  assert(r >= 0);
+  t.write(SUPERBLOCK_OBJECT, 0, sizeof(superblock), bl);
 }
 
-void OSD::read_superblock()
+int OSD::read_superblock()
 {
-  dout(10) << "read_superblock" << endl;
-
   bufferlist bl;
-  store->read(SUPERBLOCK_OBJECT, 0, sizeof(superblock), bl);
+  int r = store->read(SUPERBLOCK_OBJECT, 0, sizeof(superblock), bl);
+  if (bl.length() != sizeof(superblock)) {
+	dout(10) << "read_superblock failed, r = " << r << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << endl;
+	return -1;
+  }
+
+  bl.copy(0, sizeof(superblock), (char*)&superblock);
+  
+  dout(10) << "read_superblock " << superblock << endl;
+
+  // load up "current" osdmap
+  assert(!osdmap);
+  osdmap = new OSDMap;
+  bl.clear();
+  get_map_bl(superblock.current_epoch, bl);
+  osdmap->decode(bl);
 
   assert(whoami == superblock.whoami);  // fixme!
+  return 0;
 }
 
 
@@ -437,10 +466,11 @@ void OSD::dispatch(Message *m)
 	{
 	  // no map?  starting up?
 	  if (!osdmap) {
-		dout(7) << "no OSDMap, asking monitor" << endl;
-		if (waiting_for_osdmap.empty()) 
-		  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
+		dout(7) << "no OSDMap, not booted" << endl;
+		/*if (waiting_for_osdmap.empty()) 
+		  messenger->send_message(new MOSDGetMap(sb.current_map),
 								  MSG_ADDR_MON(0));
+		*/
 		waiting_for_osdmap.push_back(m);
 		break;
 	  }
@@ -508,10 +538,10 @@ void OSD::dispatch(Message *m)
 
 void OSD::handle_op_reply(MOSDOpReply *m)
 {
-  // did i get a new osdmap?
-  if (m->get_map_epoch() > osdmap->get_epoch()) {
-	dout(3) << "replica op reply includes a new osd map" << endl;
-	update_map(m->get_osdmap());
+  if (m->get_map_epoch() < boot_epoch) {
+	dout(3) << "replica op reply from before boot" << endl;
+	delete m;
+	return;
   }
   
   if (m->get_source().is_osd() &&
@@ -520,6 +550,7 @@ void OSD::handle_op_reply(MOSDOpReply *m)
 	delete m;
 	return;
   }
+  
 
   // handle op
   switch (m->get_op()) {
@@ -615,15 +646,9 @@ void OSD::handle_rep_op_ack(PG *pg, __uint64_t tid, int result, bool commit, int
 
 void OSD::handle_ping(MPing *m)
 {
-  // play dead?
-  if (whoami == 1) {
-	dout(7) << "playing dead" << endl;
-  } else {
-	dout(7) << "got ping, replying" << endl;
-	messenger->send_message(new MPingAck(m),
-							m->get_source(), m->get_source_port(), 0);
-  }
-  
+  dout(7) << "got ping, replying" << endl;
+  messenger->send_message(new MPingAck(m),
+						  m->get_source(), m->get_source_port(), 0);
   delete m;
 }
 
@@ -636,7 +661,7 @@ void OSD::wait_for_new_map(Message *m)
 {
   // ask 
   if (waiting_for_osdmap.empty())
-	messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), 
+	messenger->send_message(new MOSDGetMap(osdmap->get_epoch()),
 							MSG_ADDR_MON(0));
   
   waiting_for_osdmap.push_back(m);
@@ -644,59 +669,161 @@ void OSD::wait_for_new_map(Message *m)
 
 
 /** update_map
- * assimilate a new OSDMap.  scan pgs.
+ * assimilate new OSDMap(s).  scan pgs, etc.
  */
-void OSD::update_map(bufferlist& state)
+void OSD::handle_osd_map(MOSDMap *m)
 {
-  // decode new map
-  OSDMap *newmap = new OSDMap();
-  newmap->decode(state);
-  epoch_t new_epoch = newmap->get_epoch();
-
-  if (osdmaps.count(new_epoch)) {
-	dout(7) << "update_map already had osd map epoch " << new_epoch << endl;
-	return;
+  ObjectStore::Transaction t;
+  
+  if (osdmap) {
+	dout(3) << "handle_osd_map epochs [" 
+			<< m->get_first() << "," << m->get_last() 
+			<< "], i have " << osdmap->get_epoch()
+			<< endl;
+  } else {
+	dout(3) << "handle_osd_map epochs [" 
+			<< m->get_first() << "," << m->get_last() 
+			<< "], i have none"
+			<< endl;
+	osdmap = new OSDMap;
+	boot_epoch = m->get_last(); // hrm...?
   }
 
-  // store it.
-  dout(7) << "update_map got osd map epoch " << new_epoch << endl;
-  osdmaps[new_epoch] = newmap;
-  store->write(get_osdmap_object_name(new_epoch), state.length(), 0, state, false);
+  // store them?
+  for (map<epoch_t,bufferlist>::iterator p = m->maps.begin();
+	   p != m->maps.end();
+	   p++) {
+	object_t oid = get_osdmap_object_name(p->first);
+	if (store->exists(oid)) {
+	  dout(10) << "handle_osd_map already had full map epoch " << p->first << endl;
+	  bufferlist bl;
+	  get_map_bl(p->first, bl);
+	  dout(10) << " .. it is " << bl.length() << " bytes" << endl;
+	  continue;
+	}
 
-  // twiddle superblock map bounds
-  if (new_epoch > superblock.newest_map)
-	superblock.newest_map = new_epoch;
-  if (new_epoch < superblock.oldest_map ||
-	  superblock.oldest_map == 0)
-	superblock.oldest_map = new_epoch;
+	dout(10) << "handle_osd_map got full map epoch " << p->first << endl;
+	t.write(oid, 0, p->second.length(), p->second);
 
-  // determine current and newest
-  epoch_t current_map = superblock.current_epoch;
-  dout(7) << "update_map  current " << current_map
-		  << ", newest " << superblock.newest_map << endl;
-  
+	if (p->first > superblock.newest_map)
+	  superblock.newest_map = p->first;
+	if (p->first < superblock.oldest_map ||
+		superblock.oldest_map == 0)
+	  superblock.oldest_map = p->first;
+  }
+  for (map<epoch_t,bufferlist>::iterator p = m->incremental_maps.begin();
+	   p != m->incremental_maps.end();
+	   p++) {
+	object_t oid = get_inc_osdmap_object_name(p->first);
+	if (store->exists(oid)) {
+	  dout(10) << "handle_osd_map already had incremental map epoch " << p->first << endl;
+	  bufferlist bl;
+	  get_inc_map_bl(p->first, bl);
+	  dout(10) << " .. it is " << bl.length() << " bytes" << endl;
+	  continue;
+	}
+
+	dout(10) << "handle_osd_map got incremental map epoch " << p->first << endl;
+	t.write(oid, 0, p->second.length(), p->second);
+
+	if (p->first > superblock.newest_map)
+	  superblock.newest_map = p->first;
+	if (p->first < superblock.oldest_map ||
+		superblock.oldest_map == 0)
+	  superblock.oldest_map = p->first;
+  }
+
   // advance if we can
-  list<pg_t> pg_list;
-  while (osdmaps.count(current_map+1)) {
-	current_map++;
-	osdmap = osdmaps[current_map];
-	superblock.current_epoch = current_map;
-	advance_map(pg_list);
+  bool advanced = false;
+  epoch_t cur = superblock.current_epoch;
+  while (cur < superblock.newest_map) {
+	bufferlist bl;
+	if (m->incremental_maps.count(cur+1) ||
+		store->exists(get_inc_osdmap_object_name(cur+1))) {
+	  dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << endl;
+	  
+	  bufferlist bl;
+	  if (m->incremental_maps.count(cur+1))
+		bl = m->incremental_maps[cur+1];
+	  else
+		get_inc_map_bl(cur+1, bl);
+
+	  OSDMap::Incremental inc;
+	  int off = 0;
+	  inc.decode(bl, off);
+
+	  osdmap->apply_incremental(inc);
+
+	  // archive the full map
+	  bl.clear();
+	  osdmap->encode(bl);
+	  t.write( get_osdmap_object_name(cur+1), 0, bl.length(), bl);
+
+	  // notify messenger
+	  for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
+		   i != inc.new_down.end();
+		   i++) {
+		if (i->first == whoami) continue;
+		messenger->mark_down(MSG_ADDR_OSD(i->first), i->second);
+		peer_map_epoch.erase(MSG_ADDR_OSD(i->first));
+	  }
+	  for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
+		   i != inc.new_up.end();
+		   i++) {
+		if (i->first == whoami) continue;
+		messenger->mark_up(MSG_ADDR_OSD(i->first), i->second);
+		peer_map_epoch.erase(MSG_ADDR_OSD(i->first));
+	  }
+	}
+	else if (m->maps.count(cur+1) ||
+			 store->exists(get_osdmap_object_name(cur+1))) {
+	  dout(10) << "handle_osd_map decoding full map epoch " << cur+1 << endl;
+	  bufferlist bl;
+	  if (m->maps.count(cur+1))
+		bl = m->maps[cur+1];
+	  else
+		get_map_bl(cur+1, bl);
+	  osdmap->decode(bl);
+
+	  // FIXME BUG: need to notify messenger of ups/downs!!
+	}
+	else {
+	  dout(10) << "handle_osd_map missing epoch " << cur+1 << endl;
+	  messenger->send_message(new MOSDGetMap(cur), MSG_ADDR_MON(0));
+	  break;
+	}
+
+	cur++;
+	superblock.current_epoch = cur;
+	advance_map(t);
+	advanced = true;
   }
 
   // all the way?
-  if (current_map == superblock.newest_map) {
+  if (advanced && cur == superblock.newest_map) {
 	// yay!
-	activate_map(pg_list);
-
+	activate_map();
+	
 	// process waiters
 	take_waiters(waiting_for_osdmap);
-
-  } else {
-	// cruddy.  request missing map(s?)
-	dout(7) << "update_map missing map " << current_map+1 << endl;
-	assert(0);
   }
+
+  // write updated pg state to store
+  for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
+	   i != pg_map.end();
+	   i++) {
+	pg_t pgid = i->first;
+	PG *pg = i->second;
+	t.collection_setattr( pgid, "info", &pg->info, sizeof(pg->info));
+  }
+
+  // superblock and commit
+  write_superblock(t);
+  store->apply_transaction(t);
+
+  //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
+
+  delete m;
 }
 
 
@@ -704,9 +831,11 @@ void OSD::update_map(bufferlist& state)
  * scan placement groups, initiate any replication
  * activities.
  */
-void OSD::advance_map(list<pg_t>& ls)
+void OSD::advance_map(ObjectStore::Transaction& t)
 {
-  dout(7) << "advance_map epoch " << osdmap->get_epoch() << endl;
+  dout(7) << "advance_map epoch " << osdmap->get_epoch() 
+		  << "  " << pg_map.size() << " pgs"
+		  << endl;
   
   if (osdmap->is_mkfs()) {
 	dout(1) << "mkfs" << endl;
@@ -723,7 +852,7 @@ void OSD::advance_map(list<pg_t>& ls)
 		int role = osdmap->get_pg_acting_role(pgid, whoami);
 		if (role < 0) continue;
 		
-		PG *pg = create_pg(pgid);
+		PG *pg = create_pg(pgid, t);
 		osdmap->pg_to_acting_osds(pgid, pg->acting);
 		pg->set_role(role);
 		pg->last_epoch_started_any = 
@@ -733,7 +862,6 @@ void OSD::advance_map(list<pg_t>& ls)
 		pg->state_set(PG::STATE_ACTIVE);  
 		
 		dout(7) << "created " << *pg << endl;
-		ls.push_back(pgid);
 	  }
 
 	  // local PG too
@@ -741,7 +869,7 @@ void OSD::advance_map(list<pg_t>& ls)
 	  int role = osdmap->get_pg_acting_role(pgid, whoami);
 	  if (role < 0) continue;
 
-	  PG *pg = create_pg(pgid);
+	  PG *pg = create_pg(pgid, t);
 	  osdmap->pg_to_acting_osds(pgid, pg->acting);
 	  pg->set_role(role);
 	  pg->last_epoch_started_any = 
@@ -751,27 +879,21 @@ void OSD::advance_map(list<pg_t>& ls)
 	  pg->state_set(PG::STATE_ACTIVE);  
 	  
 	  dout(7) << "created " << *pg << endl;
-	  ls.push_back(pgid);
 	}
-  } else {
-	// get pg list
-	if (ls.empty())
-	  get_pg_list(ls);
 
+  } else {
 	// scan existing pg's
-	for (list<pg_t>::iterator it = ls.begin();
-		 it != ls.end();
+	for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+		 it != pg_map.end();
 		 it++) {
-	  pg_t pgid = *it;
-	  PG *pg = get_pg(pgid);
-	  assert(pg);
+	  pg_t pgid = it->first;
+	  PG *pg = it->second;
 	  
 	  // did i finish this epoch?
 	  if (pg->is_active()) {
-		assert(pg->info.last_epoch_started == osdmap->get_epoch()-1);
 		pg->info.last_epoch_finished = osdmap->get_epoch()-1;
-	  }
-	  
+	  }	  
+
 	  // get new acting set
 	  vector<int> acting;
 	  int nrep = osdmap->pg_to_acting_osds(pgid, acting);
@@ -795,9 +917,6 @@ void OSD::advance_map(list<pg_t>& ls)
 	  // update PG
 	  pg->acting = acting;
 	  pg->calc_role(whoami);
-	  
-	  //pg->store();
-	  
 	  
 	  // did primary change?
 	  if (oldprimary != primary) {
@@ -888,13 +1007,17 @@ void OSD::advance_map(list<pg_t>& ls)
 		}
 	  }
 	  
-	  // scan down osds
+	  // scan (FIXME newly!) down osds  
 	  for (set<int>::const_iterator down = osdmap->get_down_osds().begin();
 		   down != osdmap->get_down_osds().end();
 		   down++) {
-		if (!pg->is_acting(*down)) continue;
+		// old peer?
+		bool have = false;
+		for (unsigned i=0; i<oldacting.size(); i++)
+		  if (oldacting[i] == *down) have = true;
+		if (!have) continue;
 		
-		dout(10) << *pg << " peer osd" << *down << " is down" << endl;
+		dout(10) << *pg << " old peer osd" << *down << " is down" << endl;
 		
 		// NAK any ops to the down osd
 		if (pg->replica_tids_by_osd.count(*down)) {
@@ -910,24 +1033,19 @@ void OSD::advance_map(list<pg_t>& ls)
   }
 }
 
-void OSD::activate_map(list<pg_t>& ls)
+void OSD::activate_map()
 {
   dout(7) << "activate_map version " << osdmap->get_epoch() << endl;
-
-  if (osdmap->is_mkfs()) {   // hack: skip the queries/summaries if it's a mkfs
-	return;
-  }
 
   map< int, list<PG::PGInfo> >  notify_list;  // primary -> list
   map< int, map<pg_t,version_t> > query_map;    // peer -> PG -> get_summary_since
 
   // scan pg's
-  for (list<pg_t>::iterator it = ls.begin();
-	   it != ls.end();
+  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	   it != pg_map.end();
 	   it++) {
-	pg_t pgid = *it;
-	PG *pg = get_pg(pgid);
-	assert(pg);
+	//pg_t pgid = it->first;
+	PG *pg = it->second;
 
 	if (pg->is_active()) {
 	  // update started counter
@@ -942,7 +1060,11 @@ void OSD::activate_map(list<pg_t>& ls)
 	  // i am residual|replica
 	  notify_list[pg->get_primary()].push_back(pg->info);
 	}
+
   }  
+
+  if (osdmap->is_mkfs())    // hack: skip the queries/summaries if it's a mkfs
+	return;
 
   // notify? (residual|replica)
   do_notifies(notify_list);
@@ -952,43 +1074,58 @@ void OSD::activate_map(list<pg_t>& ls)
 }
 
 
-
-
-void OSD::handle_osd_map(MOSDMap *m)
+void OSD::send_incremental_map(epoch_t since, msg_addr_t dest, bool full)
 {
-  // wait for ops to finish
-  wait_for_no_ops();
-
-  if (!osdmap ||
-	  m->get_epoch() > osdmap->get_epoch()) {
-	if (osdmap) {
-	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << " > " << osdmap->get_epoch() << endl;
-	} else {
-	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << endl;
-	}
-
-	update_map(m->get_osdmap());
-
-  } else {
-	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() << " <= " << osdmap->get_epoch() << endl;
-  }
+  dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
+		   << " to " << dest << endl;
   
-  /*
-  if (osdmap->is_mkfs()) {
-	// ack
-	messenger->send_message(new MGenericMessage(MSG_OSD_MKFS_ACK),
-							MSG_ADDR_MDS(0));
+  MOSDMap *m = new MOSDMap;
+  
+  for (epoch_t e = osdmap->get_epoch();
+	   e > since;
+	   e--) {
+	bufferlist bl;
+	if (get_inc_map_bl(e,bl)) {
+	  m->incremental_maps[e].claim(bl);
+	} else if (get_map_bl(e,bl)) {
+	  m->maps[e].claim(bl);
+	  if (!full) break;
+	}
+	else {
+	  assert(0);  // we should have all maps.
+	}
   }
-  */
 
-  delete m;
+  messenger->send_message(m, dest);
 }
 
-
-OSDMap* OSD::get_osd_map(version_t v)
+bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
-  assert(osdmaps[v]);
-  return osdmaps[v];
+  return store->read(get_osdmap_object_name(e), 0, 0, bl) >= 0;
+}
+
+bool OSD::get_map(epoch_t e, OSDMap &m)
+{
+  bufferlist bl;
+  if (!get_map_bl(e, bl)) 
+	return false;
+  m.decode(bl);
+  return true;
+}
+
+bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
+{
+  return store->read(get_inc_osdmap_object_name(e), 0, 0, bl) >= 0;
+}
+
+bool OSD::get_inc_map(epoch_t e, OSDMap::Incremental &inc)
+{
+  bufferlist bl;
+  if (!get_inc_map_bl(e, bl)) 
+	return false;
+  int off = 0;
+  inc.decode(bl, off);
+  return true;
 }
 
 
@@ -1038,6 +1175,12 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 	return false;
   }
 
+  if (epoch < boot_epoch) {
+	dout(7) << "  from pre-boot epoch " << epoch << " < " << boot_epoch << endl;
+	delete m;
+	return false;
+  }
+
   // down osd?
   if (m->get_source().is_osd() &&
 	  osdmap->is_down(m->get_source().num())) {
@@ -1064,18 +1207,12 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 
 // PG
 
-void OSD::get_pg_list(list<pg_t>& ls)
-{
-  // just list collections; assume they're all pg's (for now)
-  store->list_collections(ls);
-}
-
 bool OSD::pg_exists(pg_t pgid) 
 {
   return store->collection_exists(pgid);
 }
 
-PG *OSD::create_pg(pg_t pgid)
+PG *OSD::create_pg(pg_t pgid, ObjectStore::Transaction& t)
 {
   assert(pg_map.count(pgid) == 0);
   assert(!pg_exists(pgid));
@@ -1083,12 +1220,17 @@ PG *OSD::create_pg(pg_t pgid)
   PG *pg = new PG(this, pgid);
   pg_map[pgid] = pg;
 
-  store->create_collection(pgid);
-
-  //pg->info.created = osdmap->get_epoch();
-  //pg->store(store);
+  t.create_collection(pgid);
 
   return pg;
+}
+
+
+/*
+void OSD::get_pg_list(list<pg_t>& ls)
+{
+  // just list collections; assume they're all pg's (for now)
+  store->list_collections(ls);
 }
 
 PG *OSD::get_pg(pg_t pgid)
@@ -1113,7 +1255,48 @@ PG *OSD::get_pg(pg_t pgid)
 
   return pg;
 }
+*/
 
+PG *OSD::get_pg(pg_t pgid)
+{
+  if (pg_map.count(pgid))
+	return pg_map[pgid];
+  return 0;
+}
+
+void OSD::load_pgs()
+{
+  dout(10) << "load_pgs" << endl;
+  assert(pg_map.empty());
+
+  list<pg_t> ls;
+  store->list_collections(ls);
+
+  for (list<pg_t>::iterator it = ls.begin();
+	   it != ls.end();
+	   it++) {
+	pg_t pgid = *it;
+
+	PG *pg = new PG(this, pgid);
+	pg_map[pgid] = pg;
+
+	// read pg info
+	store->collection_getattr(pgid, "info", &pg->info, sizeof(pg->info));
+	
+	// read pg log
+	pg->read_log(store);
+
+	// generate state for current mapping
+	int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);
+	assert(nrep > 0);
+	int role = -1;
+	for (unsigned i=0; i<pg->acting.size(); i++)
+	  if (pg->acting[i] == whoami) role = i>0 ? 1:0;
+	pg->set_role(role);
+
+	dout(10) << "load_pgs loaded " << *pg << endl;
+  }
+}
  
 /**
  * check epochs starting from start to verify the primary hasn't changed
@@ -1126,8 +1309,11 @@ epoch_t OSD::calc_pg_primary_since(int primary, pg_t pgid, epoch_t start)
 	   e--) {
 	// verify during intermediate epoch
 	vector<int> acting;
-	assert(osdmaps[e]);  // FIXME!
-	osdmaps[e]->pg_to_acting_osds(pgid, acting);
+	
+	OSDMap oldmap;
+	get_map(e, oldmap);
+	oldmap.pg_to_acting_osds(pgid, acting);
+
 	if (acting[0] != primary) 
 	  return e+1;  // nope, primary only goes back through e!
   }
@@ -1226,7 +1412,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	  }
 	  
 	  // ok, create PG!
-	  pg = create_pg(pgid);
+	  ObjectStore::Transaction t;
+	  pg = create_pg(pgid, t);
 	  pg->acting = acting;
 	  pg->info.same_primary_since = it->same_primary_since;
 	  pg->set_role(0);
@@ -1235,6 +1422,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	  pg->last_epoch_started_any = it->last_epoch_started;
 	  pg->build_prior();
 
+	  t.collection_setattr(pgid, "info", (char*)&pg->info, sizeof(pg->info));
+	  store->apply_transaction(t);
+	  
 	  dout(10) << *pg << " is new" << endl;
 	
 	  // kick any waiters
@@ -1360,7 +1550,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 		pg->missing.loc[oid] = from;               // ...then they have it!
 	  }
 	}
-	dout(10) << " missing now " << pg->missing << endl;
+	dout(10) << *pg << " missing now " << pg->missing << endl;
 	
 	pg->clean_up_local();
 	
@@ -1455,12 +1645,16 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 		continue;
 	  }
 	  
-	  PG *pg = create_pg(pgid);
+	  ObjectStore::Transaction t;
+	  PG *pg = create_pg(pgid, t);
 	  pg->acting = acting;
 	  pg->set_role(role);
 	  
 	  pg->info.same_primary_since = calc_pg_primary_since(acting[0], pgid, m->get_epoch());
 	  pg->info.same_role_since = osdmap->get_epoch();
+
+	  t.collection_setattr(pgid, "info", (char*)&pg->info, sizeof(pg->info));
+	  store->apply_transaction(t);
 
 	  dout(10) << *pg << " dne (before), but i am role " << role << endl;
 	}
@@ -1612,7 +1806,7 @@ void OSD::op_rep_pull(MOSDOp *op, PG *pg)
 	if (r < 0) {
 	  // reply with -EEXIST
 	  dout(7) << "rep_pull don't have " << hex << oid << dec << endl;  
-	  MOSDOpReply *reply = new MOSDOpReply(op, -EEXIST, osdmap, true); 
+	  MOSDOpReply *reply = new MOSDOpReply(op, -EEXIST, osdmap->get_epoch(), true); 
 	  messenger->send_message(reply, op->get_asker());
 	  delete op;
 	  return;
@@ -1642,7 +1836,7 @@ void OSD::op_rep_pull(MOSDOp *op, PG *pg)
   assert(v >= op->get_version());
 
   // reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true); 
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), true); 
   reply->set_result(0);
   reply->set_data(bl);
   reply->set_length(got);
@@ -1784,7 +1978,7 @@ void OSD::op_rep_modify_commit(MOSDOp *op, version_t last_complete)
 {
   // send commit.
   dout(10) << "rep_modify_commit on op " << *op << endl;
-  MOSDOpReply *commit = new MOSDOpReply(op, 0, osdmap, true);
+  MOSDOpReply *commit = new MOSDOpReply(op, 0, osdmap->get_epoch(), true);
   commit->set_pg_complete_thru(last_complete);
   messenger->send_message(commit, op->get_asker());
   delete op;
@@ -1874,7 +2068,7 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
   // ack?
   if (oncommit) {
 	// ack
-	MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap, false);
+	MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap->get_epoch(), false);
 	messenger->send_message(ack, op->get_asker());
 	oncommit->ack(); 
   }
@@ -1890,21 +2084,35 @@ void OSD::handle_op(MOSDOp *op)
   int acting_primary = osdmap->get_pg_acting_primary( pgid );
   PG *pg = get_pg(pgid);
 
-  // newer map included?
-  if (op->get_osdmap_epoch() > osdmap->get_epoch()) {
-	dout(7) << "  op includes newer osdmap " 
-			<< op->get_osdmap_epoch() << " > " << osdmap->get_epoch() 
-			<< endl;
-	update_map( op->get_osdmap_bl() );
-  }
-
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+
+  // does client have old map?
+  if (op->get_source().is_client()) {
+	if (op->get_map_epoch() < osdmap->get_epoch()) {
+	  dout(10) << "handle_op client has old map " << op->get_map_epoch() << " < " << osdmap->get_epoch() << endl;
+	  send_incremental_map(op->get_map_epoch(), op->get_source(), false);
+	}
+  }
+
+  // does peer have old map?
+  if (op->get_source().is_osd()) {
+	// remember
+	if (peer_map_epoch[op->get_source()] < op->get_map_epoch())
+	  peer_map_epoch[op->get_source()] = op->get_map_epoch();
+	  
+	// older?
+	if (peer_map_epoch[op->get_source()] < osdmap->get_epoch()) {
+	  dout(10) << "handle_op osd has old map " << op->get_map_epoch() << " < " << osdmap->get_epoch() << endl;
+	  send_incremental_map(op->get_map_epoch(), op->get_source(), true);
+	  peer_map_epoch[op->get_source()] = osdmap->get_epoch();  // so we don't send it again.
+	}
+  }
 
   // crashed?
   if (acting_primary < 0) {
 	dout(1) << "crashed pg " << hex << pgid << dec << endl;
-	messenger->send_message(new MOSDOpReply(op, -EIO, osdmap, true),
+	messenger->send_message(new MOSDOpReply(op, -EIO, osdmap->get_epoch(), true),
 							op->get_asker());
 	delete op;
 	return;
@@ -1921,7 +2129,7 @@ void OSD::handle_op(MOSDOp *op)
 	  assert(op->get_map_epoch() < osdmap->get_epoch());
 	  
 	  // tell client.
-	  MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap, true);  // FIXME error code?
+	  MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap->get_epoch(), true);  // FIXME error code?
 	  messenger->send_message(fail, op->get_asker());
 
 	  /*
@@ -1973,7 +2181,7 @@ void OSD::handle_op(MOSDOp *op)
 		dout(5) << "op map " << op->get_map_epoch() << " != " << osdmap->get_epoch()
 				<< ", primary changed on pg " << hex << op->get_pg() << dec
 				<< endl;
-		MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap, true);  // FIXME error code?
+		MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap->get_epoch(), true);  // FIXME error code?
 		messenger->send_message(fail, op->get_asker());
 		return;
 	  }
@@ -2218,7 +2426,7 @@ void OSD::op_read(MOSDOp *op, PG *pg)
 						 op->get_offset(), op->get_length(),
 						 bl);
   // set up reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, true); 
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), true); 
   if (got >= 0) {
 	reply->set_result(0);
 	reply->set_data(bl);
@@ -2263,7 +2471,7 @@ void OSD::op_stat(MOSDOp *op, PG *pg)
   
   dout(3) << "stat on " << hex << oid << dec << " r = " << r << " size = " << st.st_size << endl;
   
-  MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap, true);
+  MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap->get_epoch(), true);
   reply->set_object_size(st.st_size);
   messenger->send_message(reply, op->get_asker());
   
@@ -2327,7 +2535,7 @@ void OSD::put_repop(OSDReplicaOp *repop)
   // commit?
   if (repop->can_send_commit() &&
 	  repop->op->wants_commit()) {
-	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, true);
+	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap->get_epoch(), true);
 	dout(10) << "put_repop sending commit on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_commit = true;
@@ -2336,7 +2544,7 @@ void OSD::put_repop(OSDReplicaOp *repop)
   // ack?
   else if (repop->can_send_ack() &&
 		   repop->op->wants_ack()) {
-	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap, false);
+	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap->get_epoch(), false);
 	dout(10) << "put_repop sending ack on " << *repop << " " << reply << endl;
 	messenger->send_message(reply, repop->op->get_asker());
 	repop->sent_ack = true;
@@ -2361,8 +2569,8 @@ void OSD::put_repop(OSDReplicaOp *repop)
 	  
 	  pg_t pgid = repop->op->get_pg();
 	  osd_lock.Lock();
-	  if (pg_map.count(pgid)) {
-		PG *pg = pg_map[pgid]; //_lock_pg(pgid);
+	  PG *pg = get_pg(pgid);
+	  if (pg) {
 		if (min > pg->peers_complete_thru) {
 		  //dout(10) << *pg << "put_repop peers_complete_thru " << pg->peers_complete_thru << " -> " << min << endl;
 		  pg->peers_complete_thru = min;
@@ -2453,7 +2661,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   repop->lock.Unlock();
   
   // pre-ack
-  //MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap, false);
+  //MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), false);
   //messenger->send_message(reply, op->get_asker());
   
   // prepare
@@ -2570,9 +2778,6 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
 	  bufferlist bl;
 	  bl.claim( op->get_data() );  // give buffers to store; we keep *op in memory for a long time!
 	  
-	  //r = store->write(op->get_oid(),
-	  //						   op->get_length(), op->get_offset(),
-	  //						   bl, oncommit);
 	  t.write( oid, op->get_offset(), op->get_length(), bl );
 	}
 	break;

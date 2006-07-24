@@ -21,19 +21,26 @@
 class MFailure : public Message {
  public:
   msg_addr_t failed;
-  MFailure(msg_addr_t failed) : Message(MSG_FAILURE) {
-	this->failed = failed;
-  }
+  entity_inst_t inst;
+
   MFailure() {}
+  MFailure(msg_addr_t f, entity_inst_t& i) : 
+	Message(MSG_FAILURE),
+	failed(f), inst(i) {}
  
   msg_addr_t get_failed() { return failed; }
+  entity_inst_t& get_inst() { return inst; }
 
-  virtual void decode_payload(crope& s, int& off) {
-	s.copy(0, sizeof(failed), (char*)&failed);
+  void decode_payload() {
+	int off = 0;
+	payload.copy(off, sizeof(failed), (char*)&failed);
 	off += sizeof(failed);
+	payload.copy(off, sizeof(inst), (char*)&inst);
+	off += sizeof(inst);
   }
-  virtual void encode_payload(crope& s) {
-	s.append((char*)&failed, sizeof(failed));
+  void encode_payload() {
+	payload.append((char*)&failed, sizeof(failed));
+	payload.append((char*)&inst, sizeof(inst));
   }
 
   virtual char *get_type_name() { return "fail"; }

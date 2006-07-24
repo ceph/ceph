@@ -8,6 +8,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
+#include "messages/MOSDGetMap.h"
 
 #include <errno.h>
 
@@ -33,34 +34,62 @@ void Objecter::dispatch(Message *m)
 
 void Objecter::handle_osd_map(MOSDMap *m)
 {
-  assert(osdmap);  // ??
+  assert(osdmap); 
 
-  if (//!osdmap ||
-	  m->get_epoch() > osdmap->get_epoch()) {
-	if (osdmap) {
-	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() 
-			  << " > " << osdmap->get_epoch() << endl;
-	} else {
-	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() 
-			  << endl;
+  if (m->get_last() <= osdmap->get_epoch()) {
+	dout(3) << "handle_osd_map ignoring epochs [" 
+			<< m->get_first() << "," << m->get_last() 
+			<< "] <= " << osdmap->get_epoch() << endl;
+  } 
+  else {
+	dout(3) << "handle_osd_map got epochs [" 
+			<< m->get_first() << "," << m->get_last() 
+			<< "] > " << osdmap->get_epoch()
+			<< endl;
+
+	set<int> kick;
+
+	for (epoch_t e = osdmap->get_epoch() + 1;
+		 e <= m->get_last();
+		 e++) {
+	  if (m->incremental_maps.count(e)) {
+		dout(3) << "handle_osd_map decoding incremental epoch " << e << endl;
+		OSDMap::Incremental inc;
+		int off = 0;
+		inc.decode(m->incremental_maps[e], off);
+		osdmap->apply_incremental(inc);
+		
+		// notify messenger
+		for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
+			 i != inc.new_down.end();
+			 i++) {
+		  kick.insert(i->first);
+		  messenger->mark_down(MSG_ADDR_OSD(i->first), i->second);
+		}
+		for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
+			 i != inc.new_up.end();
+			 i++) 
+		  messenger->mark_up(MSG_ADDR_OSD(i->first), i->second);
+		
+	  }
+	  else if (m->maps.count(e)) {
+		dout(3) << "handle_osd_map decoding full epoch " << e << endl;
+		osdmap->decode(m->maps[e]);
+	  }
+	  else {
+		dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << endl;
+		messenger->send_message(new MOSDGetMap(osdmap->get_epoch()), MSG_ADDR_MON(0));
+		break;
+	  }
+
+	  assert(e == osdmap->get_epoch());
 	}
 
-	set<int> down = osdmap->get_down_osds();
-
-	osdmap->decode(m->get_osdmap());
-	
 	// kick requests who might be timing out on the wrong osds
-	set<int> new_down;
-	for (set<int>::iterator p = osdmap->get_down_osds().begin();
-		 p != osdmap->get_down_osds().end();
-		 p++)
-	  if (down.count(*p) == 0) 
-		new_down.insert(*p);
-	kick_requests(new_down);
-  } else {
-	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() 
-			<< " <= " << osdmap->get_epoch() << endl;
+	kick_requests(kick);
   }
+  
+  delete m;
 }
 
 
@@ -135,13 +164,13 @@ void Objecter::kick_requests(set<int> &kick)
 
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
-  // updated cluster info?
+  /*// updated cluster info?
   if (m->get_map_epoch() && 
 	  m->get_map_epoch() > osdmap->get_epoch()) {
 	dout(3) << "op reply has newer map " << m->get_map_epoch() << " > " << osdmap->get_epoch() << endl;
 	osdmap->decode( m->get_osdmap() );
   }
-
+  */
 
   // read or write?
   switch (m->get_op()) {

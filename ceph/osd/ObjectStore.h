@@ -211,7 +211,7 @@ public:
 		  off_t offset = t.offsets.front(); t.offsets.pop_front();
 		  size_t len = t.lengths.front(); t.lengths.pop_front();
 		  bufferlist bl = t.bls.front(); t.bls.pop_front();
-		  write(oid, len, offset, bl, last);
+		  write(oid, offset, len, bl, last);
 		}
 		break;
 
@@ -368,36 +368,13 @@ public:
 				   bufferlist& bl) = 0;
 
   virtual int write(object_t oid,
-					size_t len, off_t offset,
+					off_t offset, size_t len, 
 					bufferlist& bl,
 					bool fsync=true) = 0;     
   virtual int write(object_t oid, 
-					size_t len, off_t offset, 
+					off_t offset, size_t len,
 					bufferlist& bl, 
 					Context *onsafe) = 0;//{ return -1; }
-  virtual int write_transaction(object_t oid, 
-								size_t len, off_t offset, 
-								bufferlist& bl, 
-								map<const char*, pair<void*,int> >& setattrs,
-								map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-								Context *onsafe) { 
-	int r = write(oid, len, offset, bl, onsafe);
-	for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
-		 it != setattrs.end();
-		 it++) 
-	  setattr(oid, it->first, it->second.first, it->second.second);
-	
-	for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
-		 cit != cmods.end();
-		 cit++) {
-	  collection_add(cit->first, oid);
-	  for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
-		   ait != cit->second.end();
-		   ait++) 
-		collection_setattr(cit->first, ait->first, ait->second.first, ait->second.second);
-	}
-	return r;
-  }
 
   virtual int setattr(object_t oid, const char *name,
 					  const void *value, size_t size,

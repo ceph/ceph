@@ -1,21 +1,18 @@
 
+- mon: mark osds out
+- osd restart
+- gzip in messenger?
+
+
 
 osd/rados
-- rewrite tcpmessenger
-  - wait for non-existant entities
-  - reconnect?
-- osd boot
-- incremental osd maps
-- old osdmaps on disk
 - add pg->info.pg_member_since.  wrt replication ops.
-- mon: restarting osds
-- mon: get_map should take version
-- mon: incremental maps
 - down recv behavior
   - clarify powercycle process
 - pg_bit changes
 - watch osd utilization; adjust cluster map
-
+- fix/clean: pg state 'backlog' on disk.. hmm do i even need the bool?
+- pull need sto pull attributes and values!
 
 objecter
 - detect, cope with crashed PGs, wait for map updates, etc.
@@ -66,6 +63,7 @@ client
   - serialized!
 
 ebofs
+- verify LRU behavior sensible: writes go to mid, not top!
 - fix NEAR_LAST_FWD   (?)
 - combine inodes into same blocks?
 - delay allocation

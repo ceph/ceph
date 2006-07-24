@@ -82,11 +82,14 @@ public:
    */
   const static object_t SUPERBLOCK_OBJECT = 0;
   OSDSuperblock superblock;
+  epoch_t  boot_epoch;      
 
-  object_t get_osdmap_object_name(epoch_t epoch) { return (object_t)epoch; }
+  object_t get_osdmap_object_name(epoch_t epoch) { return (object_t)(epoch << 1); }
+  object_t get_inc_osdmap_object_name(epoch_t epoch) { return (object_t)((epoch << 1) + 1); }
 
   void write_superblock();
-  void read_superblock();
+  void write_superblock(ObjectStore::Transaction& t);
+  int read_superblock();
 
 
   /** OSD **/
@@ -158,26 +161,34 @@ public:
   // -- osd map --
   class OSDMap  *osdmap;
   list<class Message*> waiting_for_osdmap;
-  map<version_t, OSDMap*> osdmaps;
+  //map<version_t, OSDMap*> osdmaps;
+
+  hash_map<msg_addr_t, epoch_t>  peer_map_epoch;
   
-  void update_map(bufferlist& state);
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
-  OSDMap *get_osd_map(version_t v);
   
-  void advance_map(list<pg_t>& ls);
-  void activate_map(list<pg_t>& ls);
+  void advance_map(ObjectStore::Transaction& t);
+  void activate_map();
+
+  bool get_map_bl(epoch_t e, bufferlist& bl);
+  bool get_map(epoch_t e, OSDMap &m);
+  bool get_inc_map_bl(epoch_t e, bufferlist& bl);
+  bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
+  
+  void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
 
 
   // -- replication --
 
   // PG
   hash_map<pg_t, PG*>      pg_map;
-  void  get_pg_list(list<pg_t>& ls);
+  //void  get_pg_list(list<pg_t>& ls);
+  void  load_pgs();
   bool  pg_exists(pg_t pg);
-  PG   *create_pg(pg_t pg);          // create new PG
-  PG   *get_pg(pg_t pg);             // return existing PG, load state from store (if needed)
-  void  close_pg(pg_t pg);           // close in-memory state
+  PG   *create_pg(pg_t pg, ObjectStore::Transaction& t);          // create new PG
+  PG   *get_pg(pg_t pg);             // return existing PG, or null
+  //void  close_pg(pg_t pg);           // close in-memory state
   void  _remove_pg(pg_t pg);         // remove from store and memory
 
   epoch_t calc_pg_primary_since(int primary, pg_t pgid, epoch_t start);
@@ -217,7 +228,7 @@ public:
 
 
  public:
-  OSD(int id, Messenger *m);
+  OSD(int id, Messenger *m, char *dev = 0);
   ~OSD();
   
   // startup/shutdown

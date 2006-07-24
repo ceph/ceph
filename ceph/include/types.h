@@ -256,6 +256,15 @@ public:
 	current_epoch(0), oldest_map(0), newest_map(0) {}
 };
 
+inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
+{
+  return out << "sb(fsid " << sb.fsid
+			 << " osd" << sb.whoami
+			 << " e" << sb.current_epoch
+			 << " [" << sb.oldest_map << "," << sb.newest_map
+			 << "])";
+}
+
 
 // new types
 

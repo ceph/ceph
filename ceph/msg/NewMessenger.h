@@ -6,6 +6,7 @@
 #include <map>
 using namespace std;
 #include <ext/hash_map>
+#include <ext/hash_set>
 using namespace __gnu_cxx;
 
 
@@ -18,6 +19,9 @@ using namespace __gnu_cxx;
 #include "Messenger.h"
 #include "Message.h"
 #include "tcp.h"
+
+
+
 
 /* Rank - per-process
  */
@@ -45,6 +49,7 @@ class Rank : public Dispatcher {
 	void handle_started(Message *m);
 	void handle_lookup(class MNSLookup *m);
 	void handle_unregister(Message *m);
+	void handle_failure(class MNSFailure *m);
 
 	void dispatch(Message *m); 
 	
@@ -91,8 +96,7 @@ class Rank : public Dispatcher {
   // outgoing
   class Sender : public Thread {
   public:
-	int dest_rank;
-	tcpaddr_t tcpaddr;
+	entity_inst_t inst;
 	bool done;
 	int sd;
 
@@ -102,19 +106,22 @@ class Rank : public Dispatcher {
 	Mutex lock;
 	Cond cond;
 	
-	Sender(int r, tcpaddr_t a) : dest_rank(r), tcpaddr(a), done(false), sd(0) {}
+	Sender(entity_inst_t& i) : inst(i), done(false), sd(0) {}
 	virtual ~Sender() {}
 	
 	void *entry();
+
+	int connect();
+	void fail_and_requeue(list<Message*>& ls);
+	void finish();
+
 	void stop() {
 	  lock.Lock();
 	  done = true;
 	  cond.Signal();
 	  lock.Unlock();
-	  //	  join();
 	}
 	
-	int connect();	
 	void send(Message *m) {
 	  lock.Lock();
 	  q.push_back(m);
@@ -128,7 +135,7 @@ class Rank : public Dispatcher {
 	  lock.Unlock();
 	}
 
-	void write_message(Message *m);
+	int write_message(Message *m);
   };
 
 
@@ -179,6 +186,10 @@ class Rank : public Dispatcher {
 	virtual void callback_kick() {} 
 	virtual int shutdown();
 	virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+
+	virtual void mark_down(msg_addr_t a, entity_inst_t& i);
+	virtual void mark_up(msg_addr_t a, entity_inst_t& i);
+	//virtual void reset(msg_addr_t a);
   };
 
 
@@ -207,17 +218,21 @@ class Rank : public Dispatcher {
   Mutex lock;
   Cond  wait_cond;  // for wait()
   
-  // rank
+  // my rank
   int   my_rank;
   Cond  waiting_for_rank;
+
+  // my instance
+  entity_inst_t my_inst;
   
   // lookup
-  map<msg_addr_t, int>    entity_rank;
-  map<int, tcpaddr_t>     rank_addr;
-  set<msg_addr_t>         entity_unstarted;
+  hash_map<msg_addr_t, entity_inst_t> entity_map;
+  hash_set<msg_addr_t>                entity_unstarted;
   
   map<msg_addr_t, list<Message*> > waiting_for_lookup;
-  set<msg_addr_t>         looking_up;
+  set<msg_addr_t>                  looking_up;
+
+  hash_set<msg_addr_t>            down;
   
   // register
   map<int, Cond* >        waiting_for_register_cond;
@@ -227,7 +242,7 @@ class Rank : public Dispatcher {
   map<msg_addr_t, EntityMessenger*> local;
   
   // remote
-  map<int, Sender*> rank_sender;
+  hash_map<int, Sender*> rank_sender;
   
   set<Receiver*>    receivers;   
 
@@ -247,15 +262,21 @@ class Rank : public Dispatcher {
   void handle_register_ack(class MNSRegisterAck *m);
   void handle_lookup_reply(class MNSLookupReply *m);
   
-  Sender *connect_rank(int r);
+  Sender *connect_rank(entity_inst_t& inst);
+
+  void mark_down(msg_addr_t addr, entity_inst_t& i);
+  void mark_up(msg_addr_t addr, entity_inst_t& i);
 
   tcpaddr_t get_listen_addr() { return accepter.listen_addr; }
 
   void reaper();
 
+
 public:
   Rank(int r=-1);
   ~Rank();
+
+  int find_ns_addr(tcpaddr_t &tcpaddr);
 
   int start_rank(tcpaddr_t& ns);
   void wait();

@@ -15,12 +15,16 @@
 #include "messages/MNSRegisterAck.h"
 #include "messages/MNSLookup.h"
 #include "messages/MNSLookupReply.h"
+#include "messages/MNSFailure.h"
+
+#include "messages/MFailure.h"
 
 #include <netdb.h>
 
 
 #undef dout
-#define dout(l)  if (l<=g_conf.debug_ms) cout << "rank" << rank.my_rank << " "
+#define dout(l)  if (l<=g_conf.debug_ms) cout << "-- rank" << rank.my_rank << " "
+#define derr(l)  if (l<=g_conf.debug_ms) cerr << "-- rank" << rank.my_rank << " "
 
 
 
@@ -54,7 +58,7 @@ Rank::Namer::Namer(EntityMessenger *msgr) :
 
 Rank::Namer::~Namer()
 {
-  ::unlink(".ceph_ns");
+  //::unlink(".ceph_ns");
 }
 
 
@@ -78,7 +82,14 @@ void Rank::Namer::dispatch(Message *m)
   case MSG_NS_LOOKUP:
 	handle_lookup((class MNSLookup*)m);
 	break;
+  case MSG_NS_FAILURE:
+	handle_failure((class MNSFailure*)m);
+	break;
 	
+  case MSG_FAILURE_ACK:
+	delete m;
+	break;
+
   default:
 	assert(0);
   }
@@ -88,35 +99,28 @@ void Rank::Namer::dispatch(Message *m)
 void Rank::Namer::handle_connect(MNSConnect *m)
 {
   int newrank = nrank++;
-  dout(2) << "namer.handle_connect from new rank " << newrank << " " << m->get_addr() << endl;
+  dout(2) << "namer.handle_connect from new rank" << newrank << " " << m->get_addr() << endl;
   
-  rank.entity_rank[MSG_ADDR_RANK(newrank)] = newrank;
+  rank.entity_map[MSG_ADDR_RANK(newrank)].addr = m->get_addr();
+  rank.entity_map[MSG_ADDR_RANK(newrank)].rank = newrank;
   rank.entity_unstarted.insert(MSG_ADDR_RANK(newrank));
-  rank.rank_addr[newrank] = m->get_addr();
 
   messenger->send_message(new MNSConnectAck(newrank),
-							   MSG_ADDR_RANK(newrank));
+						  MSG_ADDR_RANK(newrank));
   delete m;
 }
 
 void Rank::Namer::handle_register(MNSRegister *m)
 {
   dout(10) << "namer.handle_register from rank " << m->get_rank()
-		  << " addr " << MSG_ADDR_NICE(m->get_entity()) << endl;
+		  << " addr " << m->get_entity() << endl;
   
   // pick id
-  int newrank = m->get_rank();
   msg_addr_t entity = m->get_entity();
 
   if (entity.is_new()) {
 	// make up a new address!
 	switch (entity.type()) {
-	  
-	  /*case MSG_ADDR_RANK_BASE:         // stupid client should be able to figure this out
-	  entity = MSG_ADDR_RANK(newrank);
-	  break;
-	  */
-
 	case MSG_ADDR_MDS_BASE:
 	  entity = MSG_ADDR_MDS(nmds++);
 	  break;
@@ -136,20 +140,25 @@ void Rank::Namer::handle_register(MNSRegister *m)
 	// specific address!
   }
 
-  dout(2) << "namer.handle_register registering " << entity << endl;
 
   // register
-  assert(rank.entity_rank.count(entity) == 0);  // make sure it doesn't exist yet.
-  rank.entity_rank[entity] = newrank;
+  if (rank.entity_map.count(entity)) {
+	dout(0) << "namer.handle_register re-registering " << entity
+			<< " inst " << m->get_source_inst()
+			<< " (was " << rank.entity_map[entity] << ")"
+			<< endl;
+  } else {
+	dout(0) << "namer.handle_register registering " << entity
+			<< " inst " << m->get_source_inst()
+			<< endl;
+  }
+  rank.entity_map[entity] = m->get_source_inst();
   rank.entity_unstarted.insert(entity);
-
-  //++version;
-  //update_log[version] = entity;
   
   // reply w/ new id
   messenger->send_message(new MNSRegisterAck(m->get_tid(), entity), 
-						  MSG_ADDR_RANK(newrank));
-
+						  m->get_source());
+  
   delete m;
 }
 
@@ -160,13 +169,13 @@ void Rank::Namer::handle_started(Message *m)
 
   assert(rank.entity_unstarted.count(who));
   rank.entity_unstarted.erase(who);
-
+  
   // anybody waiting?
   if (waiting.count(who)) {
 	list<Message*> ls;
 	ls.swap(waiting[who]);
 	waiting.erase(who);
-
+	
 	dout(10) << "doing waiters on " << who << endl;
 	for (list<Message*>::iterator it = ls.begin();
 		 it != ls.end();
@@ -179,17 +188,17 @@ void Rank::Namer::handle_started(Message *m)
 void Rank::Namer::handle_unregister(Message *m)
 {
   msg_addr_t who = m->get_source();
-  dout(2) << "namer.handle_unregister from entity " << who << endl;
+  dout(0) << "namer.handle_unregister entity " << who << endl;
 
   rank.show_dir();
   
-  assert(rank.entity_rank.count(who));
-  rank.entity_rank.erase(who);
+  assert(rank.entity_map.count(who));
+  rank.entity_map.erase(who);
 
   rank.show_dir();
 
   // shut myself down?  kick watcher.
-  if (rank.entity_rank.size() == 2) {
+  if (rank.entity_map.size() == 2) {
 	dout(10) << "namer.handle_unregister stopping namer" << endl;
 	rank.lock.Unlock();
 	messenger->shutdown();
@@ -203,7 +212,7 @@ void Rank::Namer::handle_unregister(Message *m)
 void Rank::Namer::handle_lookup(MNSLookup *m) 
 {
   // have it?
-  if (rank.entity_rank.count(m->get_entity()) == 0) {
+  if (rank.entity_map.count(m->get_entity()) == 0) {
 	dout(10) << "namer " << m->get_source() << " lookup '" << m->get_entity() << "' -> dne" << endl;
 	waiting[m->get_entity()].push_back(m);
 	return;
@@ -218,14 +227,44 @@ void Rank::Namer::handle_lookup(MNSLookup *m)
   // look it up!  
   MNSLookupReply *reply = new MNSLookupReply(m);
 
-  int trank = rank.entity_rank[m->get_entity()];
-  reply->entity_rank[m->get_entity()] = trank;
-  reply->rank_addr[trank] = rank.rank_addr[trank];
+  reply->entity_map[m->get_entity()] = rank.entity_map[m->get_entity()];
 
-  dout(10) << "namer " << m->get_source() << " lookup '" << m->get_entity() << "' -> rank " << trank << endl;
+  dout(10) << "namer " << m->get_source()
+		   << " lookup '" << m->get_entity() 
+		   << "' -> " << rank.entity_map[m->get_entity()] << endl;
+  
+  messenger->send_message(reply, m->get_source());
+  delete m;
+}
 
-  messenger->send_message(reply,
-						  m->get_source(), m->get_source_port());
+void Rank::Namer::handle_failure(MNSFailure *m)
+{
+  dout(10) << "namer.handle_failure inst " << m->get_inst()
+		   << endl;
+
+  // search for entities on this instance
+  list<msg_addr_t> rm;
+  for (hash_map<msg_addr_t,entity_inst_t>::iterator i = rank.entity_map.begin();
+	   i != rank.entity_map.end();
+	   i++) {
+	if (i->second != m->get_inst()) continue;
+	rm.push_back(i->first);
+  }
+  for (list<msg_addr_t>::iterator i = rm.begin();
+	   i != rm.end();
+	   i++) {
+	dout(10) << "namer.handle_failure inst " << m->get_inst()
+			 << ", removing " << *i << endl;
+	
+	rank.entity_map.erase(*i);
+	rank.entity_unstarted.erase(*i);
+	
+	if ((*i).is_osd()) {
+	  // tell the monitor
+	  messenger->send_message(new MFailure(*i, m->get_inst()), MSG_ADDR_MON(0));
+	}
+  }
+
   delete m;
 }
 
@@ -266,6 +305,7 @@ int Rank::Accepter::start()
   
   // my address is...
   char host[100];
+  bzero(host, 100);
   gethostname(host, 100);
   //dout(10) << "accepter.start my hostname is " << host << endl;
 
@@ -333,33 +373,58 @@ void *Rank::Receiver::entry()
 	
 	dout(10) << "receiver.entry got message for " << m->get_dest() << endl;
 
-	if (g_conf.ms_single_dispatch) {
-	  // submit to single dispatch queue
-	  rank.lock.Lock();
-	  if (m->get_dest().type() == MSG_ADDR_RANK_BASE) 
-		rank.dispatch(m);  
-	  else 
-		rank._submit_single_dispatch(m);
-	  rank.lock.Unlock();
-	} else {
-	  // find entity
-	  EntityMessenger *entity = 0;
-	  rank.lock.Lock();
-	  {
-		if (m->get_dest().type() == MSG_ADDR_RANK_BASE) 
+	EntityMessenger *entity = 0;
+
+	rank.lock.Lock();
+	{
+	  if (rank.down.count(m->get_dest())) {
+		dout(0) << "receiver.entry dest " << m->get_dest() << " down, dropping " << *m << endl;
+		delete m;
+
+		if (rank.looking_up.count(m->get_dest()) == 0) 
+		  rank.lookup(m->get_dest());
+	  }
+	  else if (rank.entity_map.count(m->get_source()) &&
+			   rank.entity_map[m->get_source()] > m->get_source_inst()) {
+		derr(0) << "receiver.entry source " << m->get_source() 
+				<< " inst " << m->get_source_inst() 
+				<< " < " << rank.entity_map[m->get_source()] 
+				<< ", dropping " << *m << endl;
+		delete m;
+	  }
+	  else {
+		if (rank.entity_map.count(m->get_source()) &&
+			rank.entity_map[m->get_source()] > m->get_source_inst()) {
+		  derr(0) << "receiver.entry source " << m->get_source() 
+				  << " inst " << m->get_source_inst() 
+				  << " > " << rank.entity_map[m->get_source()] 
+				  << ", WATCH OUT " << *m << endl;
+		  //rank.entity_map[m->get_source()] = m->get_source_inst();
+		}
+
+		if (m->get_dest().type() == MSG_ADDR_RANK_BASE) {
+		  // ours.
 		  rank.dispatch(m);
-		else if (rank.local.count(m->get_dest()))
-		  entity = rank.local[m->get_dest()];
-		else {
-		  dout(10) << "got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
-		  assert(0);
+		} else {
+		  if (g_conf.ms_single_dispatch) {
+			// submit to single dispatch queue
+			rank._submit_single_dispatch(m);
+		  } else {
+			if (rank.local.count(m->get_dest())) {
+			  // find entity
+			  entity = rank.local[m->get_dest()];
+			} else {
+			  dout(10) << "got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
+			  assert(0);
+			}
+		  }
 		}
 	  }
-	  rank.lock.Unlock();
-	  
-	  if (entity) 
-		entity->queue_message(m);		// queue
 	}
+	rank.lock.Unlock();
+	  
+	if (entity) 
+	  entity->queue_message(m);		// queue
   }
 
   // add to reap queue
@@ -402,7 +467,7 @@ Message *Rank::Receiver::read_message()
 	
 	blist.push_back(bp);
 	
-	dout(DBL+10) << "receiver got frag " << i << " of " << env.nchunks 
+	dout(20) << "receiver got frag " << i << " of " << env.nchunks 
 				 << " len " << bp.length() << endl;
   }
   
@@ -410,7 +475,7 @@ Message *Rank::Receiver::read_message()
   size_t s = blist.length();
   Message *m = decode_message(env, blist);
   
-  dout(20) << "reciever got " << s << " byte message from " 
+  dout(20) << "receiver got " << s << " byte message from " 
 			   << m->get_source() << endl;
   
   return m;
@@ -423,7 +488,7 @@ Message *Rank::Receiver::read_message()
 
 int Rank::Sender::connect()
 {
-  dout(10) << "sender.connect to " << tcpaddr << endl;
+  dout(10) << "sender(" << inst << ").connect" << endl;
 
   // create socket?
   sd = socket(AF_INET,SOCK_STREAM,0);
@@ -439,8 +504,8 @@ int Rank::Sender::connect()
   assert(rc>=0);
 
   // connect!
-  int r = ::connect(sd, (sockaddr*)&tcpaddr, sizeof(myAddr));
-  assert(r >= 0);
+  int r = ::connect(sd, (sockaddr*)&inst.addr, sizeof(myAddr));
+  if (r < 0) return r;
 
   // identify myself
   // FIXME
@@ -448,13 +513,80 @@ int Rank::Sender::connect()
   return 0;
 }
 
+
+void Rank::Sender::finish()
+{
+  dout(10) << "sender(" << inst << ").finish" << endl;
+
+  // make sure i get reaped.
+  rank.lock.Lock();
+  rank.sender_reap_queue.push_back(this);
+  rank.wait_cond.Signal();
+  rank.lock.Unlock();
+}
+
+void Rank::Sender::fail_and_requeue(list<Message*>& out)
+{
+  dout(10) << "sender(" << inst << ").fail and requeue" << endl;
+
+  // tell namer
+  rank.messenger->send_message(new MNSFailure(inst),
+							   MSG_ADDR_NAMER(0));
+
+  // FIXME: possible race before i reclaim lock here?
+  
+  // requeue my messages
+  rank.lock.Lock();
+  lock.Lock();
+  {
+	// include out at front of queue
+	q.splice(q.begin(), out);  
+	dout(10) << "sender(" << inst << ").fail " 
+			 << q.size() << " messages" << endl;
+	
+	// resubmit!
+	while (!q.empty()) {
+	  // don't keep reconnecting..
+	  if (rank.entity_map.count(q.front()->get_dest()) &&
+		  rank.entity_map[q.front()->get_dest()] == inst)
+		rank.entity_map.erase(q.front()->get_dest());
+	  
+	  if (g_conf.ms_requeue_on_sender_fail)
+		rank.submit_message( q.front() );
+	  else
+		delete q.front();
+	  q.pop_front();
+	}
+	
+	// deactivate myself
+	if (rank.rank_sender.count(inst.rank) &&
+		rank.rank_sender[inst.rank] == this)
+	  rank.rank_sender.erase(inst.rank);
+
+	// stop sender loop
+	done = true;
+  }
+  lock.Unlock();
+  rank.lock.Unlock();
+}
+
 void *Rank::Sender::entry()
 {
+  // connect
+  int rc = connect();
+  if (rc < 0) {
+	list<Message*> out;
+	derr(0) << "error connecting to " << inst << endl;
+	fail_and_requeue(out);
+	finish();
+	return 0;
+  }
+  
   lock.Lock();
   while (!q.empty() || !done) {
 	
 	if (!q.empty()) {
-	  dout(20) << "sender(to rank" << dest_rank << ") grabbing message(s)" << endl;
+	  dout(20) << "sender(" << inst << ") grabbing message(s)" << endl;
 	  
 	  // grab outgoing list
 	  list<Message*> out;
@@ -466,36 +598,41 @@ void *Rank::Sender::entry()
 	  while (!out.empty()) {
 		Message *m = out.front();
 		out.pop_front();
+
+		dout(20) << "sender(" << inst << ") sending " << *m << endl;
+
+		// stamp.
+		m->set_source_inst(rank.my_inst);
 		
 		// marshall
 		if (m->empty_payload())
 		  m->encode_payload();
-
-		write_message(m);
+		
+		if (write_message(m) < 0) {
+		  // failed!
+		  derr(0) << "error sending to " << m->get_dest() << " on " << inst << endl;
+		  out.push_front(m);
+		  fail_and_requeue(out);
+		  break;
+		}
 	  }
-	  
+
 	  lock.Lock();
 	  continue;
 	}
 	
 	// wait
-	dout(20) << "sender sleeping" << endl;
+	dout(20) << "sender(" << inst << ") sleeping" << endl;
 	cond.Wait(lock);
   }
-  dout(10) << "sender(to rank" << dest_rank << ") done" << endl;
+  lock.Unlock(); 
   
-  lock.Unlock();  
-
-  rank.lock.Lock();
-  rank.sender_reap_queue.push_back(this);
-  rank.wait_cond.Signal();
-  rank.lock.Unlock();
-
+  finish();
   return 0;
 }
 
 
-void Rank::Sender::write_message(Message *m)
+int Rank::Sender::write_message(Message *m)
 {
   // get envelope, buffers
   msg_envelope_t *env = &m->get_envelope();
@@ -516,8 +653,9 @@ void Rank::Sender::write_message(Message *m)
   // send envelope
   int r = tcp_write( sd, (char*)env, sizeof(*env) );
   if (r < 0) { 
-	cerr << "error sending envelope for " << *m
-		 << " to " << m->get_dest() << endl; assert(0); 
+	derr(20) << "error sending envelope for " << *m
+			 << " to " << m->get_dest() << endl; 
+	return -1;
   }
 
   // payload
@@ -530,26 +668,39 @@ void Rank::Sender::write_message(Message *m)
 	dout(10) << "tcp_sending frag " << i << " len " << (*it).length() << endl;
 	int size = (*it).length();
 	r = tcp_write( sd, (char*)&size, sizeof(size) );
-	if (r < 0) { cerr << "error sending chunk len for " << *m << " to " << m->get_dest() << endl; assert(0); }
+	if (r < 0) { 
+	  derr(20) << "error sending chunk len for " << *m << " to " << m->get_dest() << endl; 
+	  return -1;
+	}
 	r = tcp_write( sd, (*it).c_str(), size );
-	if (r < 0) { cerr << "error sending data chunk for " << *m << " to " << m->get_dest() << endl; assert(0); }
+	if (r < 0) { 
+	  derr(20) << "error sending data chunk for " << *m << " to " << m->get_dest() << endl; 
+	  return -1;
+	}
 	i++;
   }
 #else
   // one big chunk
   int size = blist.length();
   r = tcp_write( sd, (char*)&size, sizeof(size) );
-  if (r < 0) { cerr << "error sending data len for " << *m << " to " << m->get_dest() << endl; assert(0); }
+  if (r < 0) { 
+	derr(20) << "error sending data len for " << *m << " to " << m->get_dest() << endl; 
+	return -1;
+  }
   for (list<bufferptr>::iterator it = blist.buffers().begin();
 	   it != blist.buffers().end();
 	   it++) {
 	r = tcp_write( sd, (*it).c_str(), (*it).length() );
-	if (r < 0) { cerr << "error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; assert(0); }
+	if (r < 0) { 
+	  derr(20) << "error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; 
+	  return -1;
+	}
   }
 #endif
   
   // delete message
   delete m;
+  return 0;
 }
 
 
@@ -599,14 +750,19 @@ void Rank::single_dispatcher_entry()
 		  ls.pop_front();
 		  
 		  dout(1) //<< g_clock.now() 
-				  << "---- " << m->get_type_name() 
-				  << " from " << m->get_source() << ':' << m->get_source_port() 
+				  << "---- " 
+				  << m->get_source() << ':' << m->get_source_port() 
 				  << " to " << m->get_dest() << ':' << m->get_dest_port()
+				  << " ---- " << m->get_type_name() 
 				  << " ---- " << m 
 				  << endl;
 		  
-		  assert(local.count(m->get_dest()));
-		  local[m->get_dest()]->dispatch(m);
+		  if (m->get_dest().type() == MSG_ADDR_RANK_BASE)
+			rank.dispatch(m);
+		  else {
+			assert(local.count(m->get_dest()));
+			local[m->get_dest()]->dispatch(m);
+		  }
 		}
 	  }
 	  lock.Lock();
@@ -639,12 +795,12 @@ void Rank::reaper()
 	Sender *s = sender_reap_queue.front();
 	sender_reap_queue.pop_front();
 	//dout(10) << "reaper reaping sender rank " << s->dest_rank << " at " << s->tcpaddr << endl;
-	if (rank_sender.count(s->dest_rank) &&
-		rank_sender[s->dest_rank] == s)
-	  rank_sender.erase(s->dest_rank);
+	if (rank_sender.count(s->inst.rank) &&
+		rank_sender[s->inst.rank] == s)
+	  rank_sender.erase(s->inst.rank);
 	s->join();
 	delete s;
-	dout(10) << "reaper reaped sender rank " << s->dest_rank << " at " << s->tcpaddr << endl;
+	dout(10) << "reaper reaped sender " << s->inst << endl;
   }
 }
 
@@ -667,29 +823,33 @@ int Rank::start_rank(tcpaddr_t& ns)
 
   assert(my_rank <= 0);
   if (my_rank == 0) {
-	rank_addr[0] = accepter.listen_addr;
+	// my_inst
+	my_inst.addr = accepter.listen_addr;
+	my_inst.rank = 0;
 
 	// create namer0
 	msg_addr_t naddr = MSG_ADDR_NAMER(0);
-	entity_rank[naddr] = 0;
+	entity_map[naddr] = my_inst;
 	local[naddr] = new EntityMessenger(naddr);
 	namer = new Namer(local[naddr]);
 
 	// create rank0
 	msg_addr_t raddr = MSG_ADDR_RANK(0);
-	entity_rank[raddr] = 0;
+	entity_map[raddr] = my_inst;
 	entity_unstarted.insert(raddr);
 	local[raddr] = messenger = new EntityMessenger(raddr);
 	messenger->set_dispatcher(this);
+	
+	dout(0) << "start_rank with namer0 at " << my_inst << endl;
   } 
   else {
 	assert(my_rank < 0);
 	dout(10) << "start_rank connecting to namer0" << endl;
 	
 	// connect to namer
-	entity_rank[MSG_ADDR_NAMER(0)] = 0;
-	rank_addr[0] = ns;
-	Sender *sender = connect_rank(0);
+	entity_map[MSG_ADDR_NAMER(0)].addr = ns;
+	entity_map[MSG_ADDR_NAMER(0)].rank = 0;
+	Sender *sender = connect_rank(entity_map[MSG_ADDR_NAMER(0)]);
 	
 	// send
 	Message *m = new MNSConnect(accepter.listen_addr);
@@ -704,7 +864,7 @@ int Rank::start_rank(tcpaddr_t& ns)
 	dout(10) << "start_rank got rank " << my_rank << endl;
     
 	// create rank entity
-	entity_rank[MSG_ADDR_RANK(my_rank)] = my_rank;
+	entity_map[MSG_ADDR_RANK(my_rank)] = my_inst;
 	local[MSG_ADDR_RANK(my_rank)] = messenger = new EntityMessenger(MSG_ADDR_RANK(my_rank));
 	messenger->set_dispatcher(this);
   }
@@ -716,28 +876,28 @@ int Rank::start_rank(tcpaddr_t& ns)
 /* connect_rank
  * NOTE: assumes rank.lock held.
  */
-Rank::Sender *Rank::connect_rank(int r)
+Rank::Sender *Rank::connect_rank(entity_inst_t& inst)
 {
   assert(rank.lock.is_locked());
-  assert(r >= 0);
-  assert(r != rank.my_rank);
+  assert(inst != rank.my_inst);
   
-  dout(10) << "connect_rank to " << r << " at " << rank.rank_addr[r] << endl;
+  dout(10) << "connect_rank to " << inst << endl;
   
-  // create+connect sender
-  Sender *sender = new Sender(r, rank.rank_addr[r]);
-  int rc = sender->connect();
-  assert(rc >= 0);
+  // create sender
+  Sender *sender = new Sender(inst);
+  //int rc = sender->connect();
+  //assert(rc >= 0);
 
-  // old sender?
-  if (rank.rank_sender.count(r))
-	rank.rank_sender[r]->stop();
-  
   // start thread.
   sender->create();
 
+  // old sender?
+  assert(rank.rank_sender.count(inst.rank) == 0);
+  //if (rank.rank_sender.count(r))
+  //rank.rank_sender[r]->stop();  
+
   // ok!
-  rank.rank_sender[r] = sender;
+  rank.rank_sender[inst.rank] = sender;
   return sender;
 }
 
@@ -747,15 +907,15 @@ Rank::Sender *Rank::connect_rank(int r)
 
 void Rank::show_dir()
 {
-  dout(10) << "show_dir ---" << endl;
+  dout(-10) << "show_dir ---" << endl;
   
-  for (map<msg_addr_t, int>::iterator i = entity_rank.begin();
-	   i != entity_rank.end();
+  for (hash_map<msg_addr_t, entity_inst_t>::iterator i = entity_map.begin();
+	   i != entity_map.end();
 	   i++) {
 	if (local.count(i->first)) {
-	  dout(10) << "show_dir entity_rank " << i->first << " -> rank" << i->second << " local " << endl;
+	  dout(-10) << "show_dir entity_map " << i->first << " -> " << i->second << " local " << endl;
 	} else {
-	  dout(10) << "show_dir entity_rank " << i->first << " -> rank" << i->second << endl;
+	  dout(-10) << "show_dir entity_map " << i->first << " -> " << i->second << endl;
 	}
   }
 }
@@ -790,6 +950,7 @@ Rank::EntityMessenger *Rank::register_entity(msg_addr_t addr)
   long id = ++reg_attempt;
   
   Message *reg = new MNSRegister(addr, my_rank, id);
+  reg->set_source(MSG_ADDR_RANK(my_rank), 0);
   reg->set_dest(MSG_ADDR_DIRECTORY, 0);
   
   // prepare cond
@@ -817,7 +978,7 @@ Rank::EntityMessenger *Rank::register_entity(msg_addr_t addr)
   EntityMessenger *msgr = new EntityMessenger(addr);
 
   // add to directory
-  entity_rank[addr] = my_rank;
+  entity_map[addr] = my_inst;
   local[addr] = msgr;
 
   lock.Unlock();
@@ -834,8 +995,8 @@ void Rank::unregister_entity(EntityMessenger *msgr)
   local.erase(msgr->get_myaddr());
 
   if (my_rank > 0) {
-	assert(entity_rank.count(msgr->get_myaddr()));
-	entity_rank.erase(msgr->get_myaddr());
+	assert(entity_map.count(msgr->get_myaddr()));
+	entity_map.erase(msgr->get_myaddr());
   } // else namer will do it.
 
   // tell namer.
@@ -862,26 +1023,45 @@ void Rank::submit_message(Message *m)
 
   lock.Lock();
   {
-	if (local.count(dest)) {
+	if (down.count(dest)) {
+	  // black hole.
+	  dout(0) << "submit_message " << *m << " dest " << dest << " down, dropping" << endl;
+	  delete m;
+
+	  if (looking_up.count(dest) == 0) 
+		lookup(dest);
+
+	} else if (local.count(dest)) {
+	  dout(20) << "submit_message " << *m << " dest " << dest << " local" << endl;
+
 	  // local
 	  if (g_conf.ms_single_dispatch) {
 		_submit_single_dispatch(m);
 	  } else {
 		entity = local[dest];
 	  }
-	} else if (entity_rank.count( dest )) {
-	  // remote.
-	  if (rank_sender.count( entity_rank[dest] )) {
+	} else if (entity_map.count( dest )) {
+	  // remote, known rank addr.
+	  entity_inst_t inst = entity_map[dest];
+
+	  if (rank_sender.count( inst.rank ) &&
+		  rank_sender[inst.rank]->inst == inst) {
+		dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << inst << ", connected." << endl;
 		// connected.
-		sender = rank_sender[ entity_rank[dest] ];
+		sender = rank_sender[ inst.rank ];
 	  } else {
+		dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << inst << ", connecting." << endl;
 		// not connected.
-		sender = connect_rank( entity_rank[dest] );
+		sender = connect_rank( inst );
 	  }
 	} else {
-	  // unknown dest addr.
-	  if (looking_up.count(dest) == 0) 
+	  // unknown dest rank or rank addr.
+	  if (looking_up.count(dest) == 0) {
+		dout(20) << "submit_message " << *m << " dest " << dest << " remote, unknown addr, looking up" << endl;
 		lookup(dest);
+	  } else {
+		dout(20) << "submit_message " << *m << " dest " << dest << " remote, unknown addr, already looking up" << endl;
+	  }
 	  waiting_for_lookup[dest].push_back(m);
 	}
   }
@@ -890,10 +1070,12 @@ void Rank::submit_message(Message *m)
   // do it
   if (entity) {  
 	// local!
+	dout(20) << "submit_message " << *m << " dest " << dest << " local, queueing" << endl;
 	entity->queue_message(m);
   } 
   else if (sender) {
 	// remote!
+	dout(20) << "submit_message " << *m << " dest " << dest << " remote, sending" << endl;
 	sender->send(m);
   } 
 }
@@ -929,8 +1111,12 @@ void Rank::dispatch(Message *m)
 
 void Rank::handle_connect_ack(MNSConnectAck *m) 
 {
-  dout(10) << "handle_connect_ack, my rank is " << m->get_rank();
+  dout(10) << "handle_connect_ack, my rank is " << m->get_rank() << endl;
   my_rank = m->get_rank();
+
+  my_inst.addr = accepter.listen_addr;
+  my_inst.rank = my_rank;
+
   waiting_for_rank.SignalAll();
   delete m;
 
@@ -970,26 +1156,26 @@ void Rank::handle_lookup_reply(MNSLookupReply *m)
   list<Message*> waiting;
   dout(10) << "got lookup reply" << endl;
   
-  for (map<int,tcpaddr_t>::iterator it = m->rank_addr.begin();
-	   it != m->rank_addr.end();
+  for (map<msg_addr_t,entity_inst_t>::iterator it = m->entity_map.begin();
+	   it != m->entity_map.end();
 	   it++) {
-	dout(10) << "lookup got rank " << it->first << " addr " << it->second << endl;
-
-	rank_addr[it->first] = it->second;
-	connect_rank(it->first);
-  }
-
-  for (map<msg_addr_t, int>::iterator it = m->entity_rank.begin();
-	   it != m->entity_rank.end();
-	   it++) {
+	dout(10) << "lookup got " << it->first << " at " << it->second << endl;
 	msg_addr_t addr = it->first;
-	int r = it->second;
+	entity_inst_t inst = it->second;
 
-	dout(10) << "lookup got " << addr << " on rank " << r << endl;
-	
-	if (r == my_rank) {
-	  // deliver locally
-	  dout(-DBL) << "delivering lookup results locally" << endl;
+	if (down.count(addr)) {
+	  // ignore
+	  dout(10) << "ignoring lookup results for " << addr << ", who is down" << endl;
+	  assert(entity_map.count(addr) == 0);
+	  continue;
+	}
+
+	// update map.
+	entity_map[addr] = inst;
+
+	if (inst.rank == my_rank) {
+	  // local
+	  dout(10) << "delivering lookup results locally" << endl;
 	  if (local.count(addr)) {
 		if (g_conf.ms_single_dispatch) {
 		  single_dispatch_queue.splice(single_dispatch_queue.end(),
@@ -1000,10 +1186,21 @@ void Rank::handle_lookup_reply(MNSLookupReply *m)
 		waiting_for_lookup.erase(addr);
 	  } else
 		lookup(addr);  // try again!
+
 	} else {
+	  // remote
+	  if (rank_sender.count(inst.rank) == 0) 
+		connect_rank(inst);
+	  else if (rank_sender[inst.rank]->inst != inst) {
+		dout(0) << "lookup got rank addr change, WATCH OUT" << endl;
+		// FIXME BUG possible message loss weirdness?
+		rank_sender[inst.rank]->stop();
+		rank_sender.erase(inst.rank);
+		connect_rank(inst);
+	  }
+	  
 	  // take waiters
-	  entity_rank[addr] = r;
-	  Sender *sender = rank_sender[r];
+	  Sender *sender = rank_sender[inst.rank];
 	  assert(sender);
 	  
 	  if (waiting_for_lookup.count(addr)) {
@@ -1056,7 +1253,7 @@ void Rank::wait()
   lock.Lock();
   {
 	dout(10) << "wait: stopping senders" << endl;
-	for (map<int,Sender*>::iterator i = rank_sender.begin();
+	for (hash_map<int,Sender*>::iterator i = rank_sender.begin();
 		 i != rank_sender.end();
 		 i++)
 	  i->second->stop();
@@ -1081,6 +1278,38 @@ void Rank::wait()
   lock.Unlock();
 
   dout(10) << "wait: done." << endl;
+}
+
+
+
+int Rank::find_ns_addr(tcpaddr_t &nsa)
+{
+  // file?
+  int fd = ::open(".ceph_ns",O_RDONLY);
+  if (fd > 0) {
+	::read(fd, (void*)&nsa, sizeof(nsa));
+	::close(fd);
+	cout << "ceph ns is " << nsa << endl;
+	return 0;
+  }
+
+  // env var?
+  char *nsaddr = getenv("CEPH_NAMESERVER");////envz_entry(*envp, e_len, "CEPH_NAMESERVER");	
+  if (nsaddr) {
+	while (nsaddr[0] != '=') nsaddr++;
+	nsaddr++;
+	
+	if (tcp_hostlookup(nsaddr, nsa) < 0) {
+	  cout << "can't resolve " << nsaddr << endl;
+	  return -1;
+	}
+
+	cout << "ceph ns is " << nsa << endl;
+	return 0;
+  }
+
+  cerr << "i can't find ceph ns addr in .ceph_ns or CEPH_NAMESERVER" << endl;
+  return -1;
 }
 
 
@@ -1114,9 +1343,11 @@ void Rank::EntityMessenger::dispatch_entry()
 		  Message *m = ls.front();
 		  ls.pop_front();
 		  dout(1) //<< g_clock.now()
-				  << "---- " << m->get_type_name() 
-				  << " from " << m->get_source() << ':' << m->get_source_port() 
+				  << "---- " 
+				  << m->get_source() << ':' << m->get_source_port() 
 				  << " to " << m->get_dest() << ':' << m->get_dest_port()
+				  << " ---- " << m->get_type_name() 
+				  << " ---- " << m->get_source_inst()
 				  << " ---- " << m 
 				  << endl;
 		  dispatch(m);
@@ -1178,9 +1409,11 @@ int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, int port, i
   m->set_dest(dest, port);
   m->set_lamport_send_stamp( get_lamport() );
   
-  dout(1) << "--> " << m->get_type_name() 
-		  << " from " << m->get_source() << ':' << m->get_source_port() 
-		  << " to " << m->get_dest() << ':' << m->get_dest_port() 
+  dout(1) << "--> " 
+		  << m->get_source() << ':' << m->get_source_port() 
+		  << " to " << m->get_dest() << ':' << m->get_dest_port()
+		  << " ---- " << m->get_type_name() 
+		  << " ---- " << rank.my_inst
 		  << " ---- " << m 
 		  << endl;
 
@@ -1190,4 +1423,86 @@ int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, int port, i
 }
 
 
+void Rank::EntityMessenger::mark_down(msg_addr_t a, entity_inst_t& i)
+{
+  assert(a != get_myaddr());
+  rank.mark_down(a,i);
+}
+
+void Rank::mark_down(msg_addr_t a, entity_inst_t& inst)
+{
+  if (my_rank == 0) return;   // ugh.. rank0 already handles this stuff in the namer
+  lock.Lock();
+  if (down.count(a) == 0) {
+	if (entity_map.count(a) &&
+		entity_map[a] > inst) {
+	  dout(-10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
+	  derr(-10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
+	  // do nothing!
+	} else {
+	  down.insert(a);
+
+	  if (entity_map.count(a) == 0) {
+		// don't know it
+		dout(-10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
+		derr(-10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
+
+		waiting_for_lookup.erase(a);
+		looking_up.erase(a);
+	  } else {
+		// know it
+		assert(entity_map[a] <= inst);
+		dout(-10) << "mark_down " << a << " inst " << inst << endl;
+		derr(-10) << "mark_down " << a << " inst " << inst << endl;
+		
+		entity_map.erase(a);
+		
+		if (rank_sender.count(inst.rank)) {
+		  rank_sender[inst.rank]->stop();
+		  rank_sender.erase(inst.rank);
+		}
+	  }
+	}
+  }
+  lock.Unlock();
+}
+
+void Rank::EntityMessenger::mark_up(msg_addr_t a, entity_inst_t& i)
+{
+  assert(a != get_myaddr());
+  rank.mark_up(a, i);
+}
+
+void Rank::mark_up(msg_addr_t a, entity_inst_t& i)
+{
+  if (my_rank == 0) return;
+  lock.Lock();
+  {
+	dout(10) << "mark_up " << a << " inst " << i << endl;
+	derr(10) << "mark_up " << a << " inst " << i << endl;
+
+	down.erase(a);
+
+	assert(i.rank != my_rank);     // hrm?
+	
+	assert(entity_map.count(a) == 0);
+	entity_map[a] = i;
+	connect_rank(i);
+
+	//if (waiting_for_lookup.count(a))
+	//lookup(a);
+  }
+  lock.Unlock();
+}
+
+/*void Rank::EntityMessenger::reset(msg_addr_t a) 
+{
+  assert(a != get_myaddr());
+  if (rank.my_rank == 0) return;
+  rank.lock.Lock();
+  rank.down.erase(a);
+  rank.reset_peer(a);
+  rank.lock.Unlock();
+}
+*/
 

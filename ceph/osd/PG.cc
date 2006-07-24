@@ -275,16 +275,16 @@ void PG::build_prior()
   for (version_t epoch = MAX(1, last_epoch_started_any);
 	   epoch < osd->osdmap->get_epoch();
 	   epoch++) {
-	OSDMap *omap = osd->get_osd_map(epoch);
-	assert(omap);
+	OSDMap omap;
+	osd->get_map(epoch, omap);
 	
 	vector<int> acting;
-	omap->pg_to_acting_osds(get_pgid(), acting);
+	omap.pg_to_acting_osds(get_pgid(), acting);
 	
 	for (unsigned i=0; i<acting.size(); i++) {
 	  //dout(10) << "build prior considering epoch " << epoch << " osd" << acting[i] << endl;
 	  if (osd->osdmap->is_up(acting[i]) &&  // is up now
-		  omap->is_up(acting[i]) &&         // and was up then
+		  omap.is_up(acting[i]) &&          // and was up then
 		  acting[i] != osd->whoami)         // and is not me
 		prior_set.insert(acting[i]);
 	}
@@ -609,6 +609,9 @@ void PG::append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, ver
   bl.append( (char*)&logentry, sizeof(logentry) );
   t.write( info.pgid, ondisklog.top, bl.length(), bl );
   
+  t.collection_setattr(info.pgid, "top", &log.top, sizeof(log.top));
+  t.collection_setattr(info.pgid, "bottom", &log.bottom, sizeof(log.bottom));
+
   // update block map?
   if (ondisklog.top % 4096 == 0) 
 	ondisklog.block_map[ondisklog.top] = logentry.version;
@@ -629,29 +632,34 @@ void PG::append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, ver
 void PG::read_log(ObjectStore *store)
 {
   // load bounds
+  ondisklog.top = ondisklog.bottom = 0;
   store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-
-  // read
-  bufferlist bl;
-  store->read(info.pgid, ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
   
-  off_t pos = ondisklog.bottom;
-  while (pos < ondisklog.top) {
-	PG::PGLog::Entry e;
-	bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
-
-	if (pos % 4096 == 0)
-	  ondisklog.block_map[pos] = e.version;
+  if (ondisklog.top > ondisklog.bottom) {
+	// read
+	bufferlist bl;
+	store->read(info.pgid, ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
 	
-	if (e.deleted)
-	  log.add_delete(e.oid, e.version);
-	else
-	  log.add_update(e.oid, e.version);
-	
-	pos += sizeof(e);
+	off_t pos = ondisklog.bottom;
+	while (pos < ondisklog.top) {
+	  PG::PGLog::Entry e;
+	  bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
+	  
+	  if (pos % 4096 == 0)
+		ondisklog.block_map[pos] = e.version;
+	  
+	  if (e.deleted)
+		log.add_delete(e.oid, e.version);
+	  else
+		log.add_update(e.oid, e.version);
+	  
+	  pos += sizeof(e);
+	}
   }
 
+  log.top = log.bottom = 0;
+  log.backlog = false;
   store->collection_getattr(info.pgid, "top", &log.top, sizeof(log.top));
   store->collection_getattr(info.pgid, "bottom", &log.bottom, sizeof(log.bottom));
   store->collection_getattr(info.pgid, "backlog", &log.backlog, sizeof(log.backlog));

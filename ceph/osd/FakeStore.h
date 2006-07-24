@@ -80,11 +80,11 @@ class FakeStore : public ObjectStore,
 		   off_t offset, size_t len,
 		   bufferlist& bl);
   int write(object_t oid,
-			size_t len, off_t offset,
+			off_t offset, size_t len,
 			bufferlist& bl,
 			bool fsync);
   int write(object_t oid, 
-			size_t len, off_t offset, 
+			off_t offset, size_t len,
 			bufferlist& bl, 
 			Context *onsafe);
 

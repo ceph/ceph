@@ -43,6 +43,7 @@
 #include "messages/MGenericMessage.h"
 
 #include "messages/MOSDMap.h"
+#include "messages/MOSDGetMap.h"
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -76,23 +77,6 @@ LogType mds_logtype, mds_cache_logtype;
 
 
 
-/*
-void C_MDS_RetryMessage::redelegate(MDS *mds, int newmds)
-{
-  // forward message to new mds
-  dout3(5,mds) << "redelegating context " << this << " by forwarding message " << m << " to mds" << newmds << endl;
-
-  mds->messenger->send_message(m,
-							   MSG_ADDR_MDS(newmds), m->get_dest_port(),
-							   MDS_PORT_MAIN);  // mostly meaningless
-}
-*/
-
-
-
-// extern 
-//MDS *g_mds;
-
 
 
 // cons/des
@@ -110,11 +94,6 @@ MDS::MDS(MDCluster *mdc, int whoami, Messenger *m) {
 
   req_rate = 0;
 
-  /*  if (whoami == 0) {
-	pgmanager = new PGManager(this);
-  } else {
-	pgmanager = 0;
-	}*/
 
   osdmap = 0;
 
@@ -211,7 +190,7 @@ int MDS::init()
 {
   // request osd map
   dout(5) << "requesting osdmap from mon0" << endl;
-  messenger->send_message(new MGenericMessage(MSG_OSD_GETMAP), MSG_ADDR_MON(0));
+  messenger->send_message(new MOSDGetMap, MSG_ADDR_MON(0));
   return 0;
 }
 
@@ -290,6 +269,7 @@ void MDS::handle_shutdown_finish(Message *m)
 	for (set<int>::iterator it = osds.begin();
 		 it != osds.end();
 		 it++) {
+	  if (osdmap->is_down(*it)) continue;
 	  dout(10) << "sending shutdown to osd" << *it << endl;
 	  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
 							  MSG_ADDR_OSD(*it), 0, 0);
@@ -649,75 +629,27 @@ void MDS::my_dispatch(Message *m)
 
 void MDS::handle_osd_map(MOSDMap *m)
 {
-  if (!osdmap ||
-	  m->get_epoch() > osdmap->get_epoch()) {
-	if (osdmap) {
-	  dout(3) << "handle_osd_map got osd map epoch " << m->get_epoch() << " > " << osdmap->get_epoch() << endl;
-	} else {
-	  dout(3) << "handle_osd_map got first osd map epoch " << m->get_epoch() << endl;
-	  objecter->osdmap = osdmap = new OSDMap;
-
-	  // unpause
-	  mds_paused = false;
-	  queue_finished(waiting_for_unpause);
-	}
+  if (!osdmap) {
+	objecter->osdmap = osdmap = new OSDMap;
 	
-	osdmap->decode(m->get_osdmap());
-	
-	// kick requests who might be timing out on the wrong osds
-	// ** FIXME **
-	
-	// tell clients
-	for (set<int>::iterator it = mounted_clients.begin();
-		 it != mounted_clients.end();
-		 it++) {
-	  messenger->send_message(new MOSDMap(osdmap),
-							  MSG_ADDR_CLIENT(*it));
-	}
-	
-  } else {
-	dout(3) << "handle_osd_map ignoring osd map epoch " << m->get_epoch() << " <= " << osdmap->get_epoch() << endl;
+	// unpause
+	mds_paused = false;
+	queue_finished(waiting_for_unpause);
   }
-}
-
-
-/*
-void MDS::mkfs(Context *onfinish)
-{
-  dout(7) << "mkfs, wiping all OSDs" << endl;
-
-  // send MKFS to osds
-  set<int> ls;
-  assert(osdmap);
-  osdmap->get_all_osds(ls);
   
-  for (set<int>::iterator it = ls.begin();
-	   it != ls.end();
+  // pass on to clients
+  for (set<int>::iterator it = mounted_clients.begin();
+	   it != mounted_clients.end();
 	   it++) {
-	// issue mkfs
-	messenger->send_message(new MOSDMap(osdmap),
-							MSG_ADDR_OSD(*it));
-	pending_mkfs.insert(*it);
+	MOSDMap *n = new MOSDMap;
+	n->maps = m->maps;
+	n->incremental_maps = m->incremental_maps;
+	messenger->send_message(n, MSG_ADDR_CLIENT(*it));
   }
-  
-  waiting_for_mkfs = onfinish;
+
+  // process locally
+  objecter->handle_osd_map(m);
 }
-
-void MDS::handle_osd_mkfs_ack(Message *m)
-{
-  int from = MSG_ADDR_NUM(m->get_source());
-
-  assert(pending_mkfs.count(from));
-  pending_mkfs.erase(from);
-
-  if (pending_mkfs.empty()) {
-	dout(2) << "done with mkfs" << endl;
-	waiting_for_mkfs->finish(0);
-	delete waiting_for_mkfs;
-	waiting_for_mkfs = 0;
-  }
-}
-*/
 
 
 

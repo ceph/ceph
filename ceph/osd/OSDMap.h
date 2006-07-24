@@ -54,6 +54,40 @@ using namespace std;
 /** OSDMap
  */
 class OSDMap {
+
+public:
+  class Incremental {
+  public:
+	version_t epoch;   // new epoch; this is diff from epoch-1.
+	map<int,entity_inst_t> new_up;
+	map<int,entity_inst_t> new_down;
+	list<int> new_in;
+	list<int> new_out;
+	map<int,float> new_overload;  // updated overload value
+	list<int>      old_overload;  // no longer overload
+	
+	void encode(bufferlist& bl) {
+	  bl.append((char*)&epoch, sizeof(epoch));
+	  ::_encode(new_up, bl);
+	  ::_encode(new_down, bl);
+	  ::_encode(new_in, bl);
+	  ::_encode(new_out, bl);
+	  ::_encode(new_overload, bl);
+	}
+	void decode(bufferlist& bl, int& off) {
+	  bl.copy(off, sizeof(epoch), (char*)&epoch);
+	  off += sizeof(epoch);
+	  ::_decode(new_up, bl, off);
+	  ::_decode(new_down, bl, off);
+	  ::_decode(new_in, bl, off);
+	  ::_decode(new_out, bl, off);
+	  ::_decode(new_overload, bl, off);
+	}
+
+	Incremental(epoch_t e=0) : epoch(e) {}
+  };
+
+private:
   epoch_t   epoch;         // what epoch of the osd cluster descriptor is this
   int       pg_bits;     // placement group bits 
 
@@ -61,8 +95,9 @@ class OSDMap {
   set<int>  down_osds;   // list of down disks
   set<int>  out_osds;    // list of unmapped disks
   map<int,float> overload_osds; 
+  map<int,entity_inst_t> osd_inst;
 
-  bool  mkfs;
+  //bool  mkfs;
 
  public:
   Crush     crush;       // hierarchical map
@@ -71,17 +106,17 @@ class OSDMap {
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), pg_bits(5), mkfs(false) { }
+  OSDMap() : epoch(0), pg_bits(5) {} //, mkfs(false) { }
 
   // map info
   epoch_t get_epoch() const { return epoch; }
-  void inc_epoch() { epoch++; mkfs = false; }
+  void inc_epoch() { epoch++; }//mkfs = false; }
 
   int get_pg_bits() const { return pg_bits; }
   void set_pg_bits(int b) { pg_bits = b; }
 
-  bool is_mkfs() const { return mkfs; }
-  void set_mkfs() { mkfs = true; }
+  bool is_mkfs() const { return epoch == 1; } //mkfs; }
+  void set_mkfs() { assert(epoch == 1); /*mkfs = true;*/ }
 
   /***** cluster state *****/
   int num_osds() { return osds.size(); }
@@ -102,10 +137,87 @@ class OSDMap {
   void mark_out(int o) { out_osds.insert(o); }
   void mark_in(int o) { out_osds.erase(o); }
 
-  // serialize, unserialize
-  void encode(bufferlist& blist);
-  void decode(bufferlist& blist);
 
+  void apply_incremental(Incremental &inc) {
+	assert(inc.epoch == epoch+1);
+	epoch++;
+	//mkfs = false;
+
+	for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
+		 i != inc.new_up.end(); 
+		 i++) {
+	  assert(down_osds.count(i->first));
+	  down_osds.erase(i->first);
+	  assert(osd_inst.count(i->first) == 0);
+	  osd_inst[i->first] = i->second;
+	}
+	for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
+		 i != inc.new_down.end();
+		 i++) {
+	  assert(down_osds.count(i->first) == 0);
+	  down_osds.insert(i->first);
+	  assert(osd_inst.count(i->first) == 0 ||
+			 osd_inst[i->first] == i->second);
+	  osd_inst.erase(i->first);
+	}
+	for (list<int>::iterator i = inc.new_in.begin();
+		 i != inc.new_in.end();
+		 i++) {
+	  assert(out_osds.count(*i));
+	  out_osds.erase(*i);
+	}
+	for (list<int>::iterator i = inc.new_out.begin();
+		 i != inc.new_out.end();
+		 i++) {
+	  assert(out_osds.count(*i) == 0);
+	  out_osds.insert(*i);
+	}
+	for (map<int,float>::iterator i = inc.new_overload.begin();
+		 i != inc.new_overload.end();
+		 i++) {
+	  overload_osds[i->first] = i->second;
+	}
+	for (list<int>::iterator i = inc.old_overload.begin();
+		 i != inc.old_overload.end();
+		 i++) {
+	  assert(overload_osds.count(*i));
+	  overload_osds.erase(*i);
+	}
+  }
+
+  // serialize, unserialize
+  void encode(bufferlist& blist) {
+	blist.append((char*)&epoch, sizeof(epoch));
+	blist.append((char*)&pg_bits, sizeof(pg_bits));
+	//blist.append((char*)&mkfs, sizeof(mkfs));
+	
+	_encode(osds, blist);
+	_encode(down_osds, blist);
+	_encode(out_osds, blist);
+	_encode(overload_osds, blist);
+	_encode(osd_inst, blist);
+	
+	crush._encode(blist);
+  }
+  
+  void decode(bufferlist& blist) {
+	int off = 0;
+	blist.copy(off, sizeof(epoch), (char*)&epoch);
+	off += sizeof(epoch);
+	blist.copy(off, sizeof(pg_bits), (char*)&pg_bits);
+	off += sizeof(pg_bits);
+	//blist.copy(off, sizeof(mkfs), (char*)&mkfs);
+	//off += sizeof(mkfs);
+	
+	_decode(osds, blist, off);
+	_decode(down_osds, blist, off);
+	_decode(out_osds, blist, off);
+	_decode(overload_osds, blist, off);
+	_decode(osd_inst, blist, off);
+	
+	crush._decode(blist, off);
+  }
+ 
 
 
 
@@ -253,14 +365,21 @@ class OSDMap {
 
 	if (type == PG_TYPE_STARTOSD) {
 	  // already in there?
-	  for (int i=1; i<num_rep; i++)
-		if (osds[i] == (int)ps) {
-		  // swap with position 0
-		  osds[i] = osds[0];
-		}
-	  osds[0] = (int)ps;
-	}
+	  if (osds.empty()) {
+		osds.push_back((int)ps);
+	  } else {
+		for (int i=1; i<num_rep; i++)
+		  if (osds[i] == (int)ps) {
+			// swap with position 0
+			osds[i] = osds[0];
+		  }
+		osds[0] = (int)ps;
+	  }
 
+	  if (is_out((int)ps)) 
+		osds.erase(osds.begin());  // oops, but it's down!
+	}
+	
 	return osds.size();
   }
 

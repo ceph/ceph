@@ -424,7 +424,7 @@ public:
   bool       is_clean() const { return state_test(STATE_CLEAN); }
   bool       is_stray() const { return state_test(STATE_STRAY); }
 
-  bool  is_empty() const { return info.last_complete == 0; }
+  bool  is_empty() const { return info.last_update == 0; }
 
   int num_active_ops() const {
 	return objects_pulling.size();

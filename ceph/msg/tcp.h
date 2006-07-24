@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <string.h>
 
 typedef struct sockaddr_in tcpaddr_t;
 
@@ -21,6 +22,14 @@ inline ostream& operator<<(ostream& out, tcpaddr_t &a)
 
 extern bool tcp_read(int sd, char *buf, int len);
 extern int tcp_write(int sd, char *buf, int len);
+extern int tcp_hostlookup(char *str, tcpaddr_t& ta);
+
+inline bool operator==(const tcpaddr_t& a, const tcpaddr_t& b) {
+  return strncmp((const char*)&a, (const char*)&b, sizeof(a)) == 0;
+}
+inline bool operator!=(const tcpaddr_t& a, const tcpaddr_t& b) {
+  return strncmp((const char*)&a, (const char*)&b, sizeof(a)) != 0;
+}
 
 
 #endif

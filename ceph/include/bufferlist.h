@@ -72,7 +72,7 @@ class bufferlist {
   //list<buffer*>::iterator begin() { return _buffers.begin(); }
   //list<buffer*>::iterator end() { return _buffers.end(); }
 
-  unsigned length() {
+  unsigned length() const {
 #if 0
 	{ // DEBUG: verify _len
 	  int len = 0;
@@ -276,7 +276,7 @@ class bufferlist {
 	bufferptr tempbp(bp, len, off);
 	push_back(tempbp);
   }
-  void append(bufferlist& bl) {
+  void append(const bufferlist& bl) {
 	bufferlist temp = bl;  // copy list
 	claim_append(temp);    // and append
   }
@@ -443,6 +443,22 @@ inline void _decode(string& s, bufferlist& bl, int& off)
   off += s.length() + 1;
 }
 
+// bufferlist (encapsulated)
+inline void _encode(const bufferlist& s, bufferlist& bl) 
+{
+  size_t len = s.length();
+  bl.append((char*)&len, sizeof(len));
+  bl.append(s);
+}
+inline void _decode(bufferlist& s, bufferlist& bl, int& off)
+{
+  size_t len;
+  bl.copy(off, sizeof(len), (char*)&len);
+  off += sizeof(len);
+  s.substr_of(bl, off, len);
+  off += len;
+}
+
 
 // set<T>
 template<class T>
@@ -534,6 +550,40 @@ inline void _decode(list<T>& s, bufferlist& bl, int& off)
 	bl.copy(off, sizeof(v), (char*)&v);
 	off += sizeof(v);
 	s.push_back(v);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// map<T,bufferlist>
+template<class T>
+inline void _encode(const map<T, bufferlist>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename map<T, bufferlist>::const_iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	T k = it->first;
+	bl.append((char*)&k, sizeof(k));
+	_encode(it->second, bl);
+	n--;
+  }
+  assert(n==0);
+}
+template<class T>
+inline void _decode(map<T,bufferlist>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+	T k;
+	bl.copy(off, sizeof(k), (char*)&k);
+	off += sizeof(k);
+	bufferlist b;
+	_decode(b, bl, off);
+	s[k] = b;
   }
   assert(s.size() == (unsigned)n);
 }

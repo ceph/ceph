@@ -50,7 +50,7 @@ void Ager::age_fill(float pc, utime_t until) {
 	off_t off = 0;
 	while (s) {
 	  ssize_t t = MIN(s, 1024*1024);
-	  store->write(oid, t, off, bl, false);
+	  store->write(oid, off, t, bl, false);
 	  off += t;
 	  s -= t;
 	}

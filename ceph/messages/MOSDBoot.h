@@ -6,9 +6,9 @@
 #include "include/types.h"
 
 class MOSDBoot : public Message {
+ public:
   OSDSuperblock sb;
 
- public:
   MOSDBoot() {}
   MOSDBoot(OSDSuperblock& s) : 
 	Message(MSG_OSD_BOOT),

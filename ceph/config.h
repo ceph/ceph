@@ -50,8 +50,9 @@ struct md_config_t {
   int debug_ebofs;
   int debug_bdev;
   int debug_ns;
-  int debug_after;
   int debug_ms;
+
+  int debug_after;
 
   bool tcp_skip_rank0;
   bool tcp_overlay_clients;
@@ -62,6 +63,7 @@ struct md_config_t {
   bool tcp_multi_dispatch;
 
   bool ms_single_dispatch;
+  bool ms_requeue_on_sender_fail;
 
   // client
   int      client_cache_size;

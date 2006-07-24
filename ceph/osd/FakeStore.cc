@@ -301,6 +301,13 @@ int FakeStore::read(object_t oid,
   
   off_t actual = lseek(fd, offset, SEEK_SET);
   size_t got = 0;
+
+  if (len == 0) {
+	struct stat st;
+	fstat(fd, &st);
+	len = st.st_size;
+  }
+
   if (actual == offset) {
 	bufferptr bptr = new buffer(len);  // prealloc space for entire read
 	got = ::read(fd, bptr.c_str(), len);
@@ -313,7 +320,7 @@ int FakeStore::read(object_t oid,
 }
 
 int FakeStore::write(object_t oid,
-					 size_t len, off_t offset,
+					 off_t offset, size_t len,
 					 bufferlist& bl,
 					 bool do_fsync) {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
@@ -364,7 +371,7 @@ int FakeStore::write(object_t oid,
 }
 
 int FakeStore::write(object_t oid, 
-					 size_t len, off_t offset, 
+					 off_t offset, size_t len,
 					 bufferlist& bl, 
 					 Context *onsafe)
 {

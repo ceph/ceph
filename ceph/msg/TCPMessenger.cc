@@ -292,8 +292,8 @@ public:
 	list<Message*> waiting;
 	dout(DBL) << "got lookup reply" << endl;
 
-	for (map<msg_addr_t, int>::iterator it = m->entity_map.begin();
-		 it != m->entity_map.end();
+	for (map<msg_addr_t, int>::iterator it = m->entity_rank.begin();
+		 it != m->entity_rank.end();
 		 it++) {
 	  dout(DBL) << "lookup got " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
 	  entity_rank[it->first] = it->second;

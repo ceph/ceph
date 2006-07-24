@@ -24,7 +24,7 @@ using namespace std;
 #include "include/types.h"
 #include "msg/Messenger.h"
 
-class OSDMap;
+#include "osd/OSDMap.h"
 
 class OSDMonitor : public Dispatcher {
   // me
@@ -33,7 +33,10 @@ class OSDMonitor : public Dispatcher {
 
   // maps
   OSDMap *osdmap;
-  map<epoch_t, OSDMap*> osdmaps;
+  map<epoch_t, bufferlist> maps;
+  map<epoch_t, bufferlist> inc_maps;
+
+  OSDMap::Incremental pending;
 
   // monitoring
   map<int,time_t>  last_heard_from_osd;
@@ -42,6 +45,8 @@ class OSDMonitor : public Dispatcher {
 
   set<int>         failed_osds;
   set<int>         my_osds;
+
+  void accept_pending();   // accept pending, new map.
 
  public:
   OSDMonitor(int w, Messenger *m) : 
@@ -56,12 +61,14 @@ class OSDMonitor : public Dispatcher {
   void handle_shutdown(Message *m);
 
   void handle_osd_boot(class MOSDBoot *m);
-  void handle_osd_getmap(Message *m);
+  void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);
   void handle_failure(class MFailure *m);
 
-  void bcast_osd_map();
+  void send_full_map(msg_addr_t dest);
+  void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
+  void bcast_latest_osd_map();
 
 
   // hack

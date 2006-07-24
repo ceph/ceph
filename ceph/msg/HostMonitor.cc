@@ -77,7 +77,7 @@ void HostMonitor::init()
   notify_retry_interval = 10;
   
   // schedule first hb
-  //schedule_heartbeat();
+  schedule_heartbeat();
 }
 
 
@@ -172,12 +172,14 @@ void HostMonitor::check_heartbeat()
 		  unacked_failures.insert(*it);
 		}
 		
+		/*if (false)   // do this in NewMessenger for now!  FIXME
 		for (set<msg_addr_t>::iterator nit = notify.begin();
 			 nit != notify.end();
 			 nit++) {
-		  messenger->send_message(new MFailure(*it),
+		  messenger->send_message(new MFailure(*it, messenger->get_inst(*it)),
 								  *nit, notify_port, 0);
 		}
+		*/
 	  }
 	}
   }

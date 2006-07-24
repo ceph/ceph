@@ -89,6 +89,7 @@ md_config_t g_conf = {
   tcp_multi_dispatch: false,  // not fully implemented yet
 
   ms_single_dispatch: false,
+  ms_requeue_on_sender_fail: false,
 
   // --- client ---
   client_cache_size: 300,
@@ -179,7 +180,7 @@ md_config_t g_conf = {
   fakestore_dev: 0,
 
   // --- ebofs ---
-  ebofs: 0,
+  ebofs: 1,
   ebofs_commit_ms:      10000,      // 0 = no forced commit timeout (for debugging/tracing)
   ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache

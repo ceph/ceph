@@ -57,7 +57,6 @@ COMMON_OBJS= \
 	client/FileCache.o\
 	client/ObjectCacher.o\
 	client/Objecter.o\
-	osd/OSDMap.o\
 	mds/MDCluster.o\
 	common/Logger.o\
 	common/Clock.o\
@@ -73,7 +72,7 @@ TCP_OBJS = \
 	msg/TCPMessenger.o\
 	msg/TCPDirectory.o
 
-TARGETS = fakefuse fakesyn tcpsyn newsyn tcpfuse libceph.o
+TARGETS = cosd cfuse newsyn fakesyn
 
 SRCS=*.cc */*.cc
 
@@ -82,6 +81,14 @@ all: depend ${TARGETS}
 test: depend ${TEST_TARGETS}
 
 obfs: depend obfstest
+
+
+# real bits
+cosd: cosd.cc osd.o msg/NewMessenger.o common.o
+	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+
+cfuse: cfuse.cc client.o client/fuse.o msg/NewMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
 # misc

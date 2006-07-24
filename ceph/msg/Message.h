@@ -24,6 +24,7 @@
 #define MSG_NS_UNREGISTER  6
 #define MSG_NS_LOOKUP      7
 #define MSG_NS_LOOKUPREPLY 8
+#define MSG_NS_FAILURE     9
 
 
 #define MSG_PING        10
@@ -262,6 +263,30 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+#include "tcp.h"
+
+
+class entity_inst_t {
+ public:
+  tcpaddr_t addr;
+  int       rank;
+
+  entity_inst_t() : rank(-1) {}
+  entity_inst_t(tcpaddr_t& a, int r) : addr(a), rank(r) {}
+};
+
+inline bool operator==(entity_inst_t& a, entity_inst_t& b) { return a.rank == b.rank && a.addr == b.addr; }
+inline bool operator!=(entity_inst_t& a, entity_inst_t& b) { return !(a == b); }
+inline bool operator>(entity_inst_t& a, entity_inst_t& b) { return a.rank > b.rank; }
+inline bool operator>=(entity_inst_t& a, entity_inst_t& b) { return a.rank >= b.rank; }
+inline bool operator<(entity_inst_t& a, entity_inst_t& b) { return a.rank < b.rank; }
+inline bool operator<=(entity_inst_t& a, entity_inst_t& b) { return a.rank <= b.rank; }
+
+inline ostream& operator<<(ostream& out, entity_inst_t &i)
+{
+  return out << "rank" << i.rank << "_" << i.addr;
+}
+
 
 // abstract Message class
 
@@ -270,6 +295,7 @@ using namespace __gnu_cxx;
 typedef struct {
   int type;
   msg_addr_t source, dest;
+  entity_inst_t source_inst;
   int source_port, dest_port;
   int nchunks;
   __uint64_t lamport_send_stamp;
@@ -353,6 +379,8 @@ public:
   void set_source(msg_addr_t a, int p) { env.source = a; env.source_port = p; }
   int get_source_port() { return env.source_port; }
 
+  entity_inst_t& get_source_inst() { return env.source_inst; }
+  void set_source_inst(entity_inst_t &i) { env.source_inst = i; }
 
   // PAYLOAD ----
   void reset_payload() {

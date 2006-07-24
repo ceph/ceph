@@ -48,8 +48,9 @@ typedef struct {
 
   version_t pg_complete_thru;
 
-  epoch_t _new_map_epoch;
-  size_t _data_len, _oc_len;
+  epoch_t map_epoch;
+
+  size_t _data_len;//, _oc_len;
 } MOSDOpReply_st;
 
 
@@ -83,23 +84,20 @@ class MOSDOpReply : public Message {
   // data payload
   void set_data(bufferlist &d) {
 	data.claim(d);
-	st._data_len = data.length();
+	//st._data_len = data.length();
   }
   bufferlist& get_data() {
 	return data;
   }
 
   // osdmap
-  epoch_t get_map_epoch() { return st._new_map_epoch; }
-  bufferlist& get_osdmap() { 
-	return osdmap;
-  }
+  epoch_t get_map_epoch() { return st.map_epoch; }
 
   // keep a pcid (procedure call id) to match up request+reply
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid()          { return st.pcid; }
 
-  MOSDOpReply(MOSDOp *req, int result, OSDMap *oc, bool commit) :
+  MOSDOpReply(MOSDOp *req, int result, epoch_t e, /*OSDMap *oc, */bool commit) :
 	Message(MSG_OSD_OPREPLY) {
 	memset(&st, 0, sizeof(st));
 	this->st.pcid = req->st.pcid;
@@ -115,13 +113,17 @@ class MOSDOpReply : public Message {
 	this->st.offset = req->st.offset;
 	this->st.version = req->st.version;
 
+	this->st.map_epoch = e;
+
 	// attach updated cluster spec?
+	/*
 	if (oc &&
 		req->get_map_epoch() < oc->get_epoch()) {
 	  oc->encode(osdmap);
 	  st._new_map_epoch = oc->get_epoch();
 	  st._oc_len = osdmap.length();
 	}
+	*/
   }
   MOSDOpReply() {}
 
@@ -131,12 +133,13 @@ class MOSDOpReply : public Message {
 	payload.copy(0, sizeof(st), (char*)&st);
 	payload.splice(0, sizeof(st));
 	if (st._data_len) payload.splice(0, st._data_len, &data);
-	if (st._oc_len) payload.splice(0, st._oc_len, &osdmap);
+	//if (st._oc_len) payload.splice(0, st._oc_len, &osdmap);
   }
   virtual void encode_payload() {
+	st._data_len = data.length();
 	payload.push_back( new buffer((char*)&st, sizeof(st)) );
 	payload.claim_append( data );
-	payload.claim_append( osdmap );
+	//payload.claim_append( osdmap );
   }
 
   virtual char *get_type_name() { return "oopr"; }

@@ -32,6 +32,7 @@ using namespace std;
 #include "messages/MNSRegisterAck.h"
 #include "messages/MNSLookup.h"
 #include "messages/MNSLookupReply.h"
+#include "messages/MNSFailure.h"
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
@@ -43,6 +44,7 @@ using namespace std;
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
+#include "messages/MOSDGetMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -288,6 +290,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_NS_LOOKUPREPLY:
 	m = new MNSLookupReply();
 	break;
+  case MSG_NS_FAILURE:
+	m = new MNSFailure();
+	break;
 
   case MSG_PING:
 	m = new MPing();
@@ -314,9 +319,14 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_OSD_OPREPLY:
 	m = new MOSDOpReply();
 	break;
+
   case MSG_OSD_MAP:
 	m = new MOSDMap();
 	break;
+  case MSG_OSD_GETMAP:
+	m = new MOSDGetMap();
+	break;
+
   case MSG_OSD_PG_NOTIFY:
 	m = new MOSDPGNotify();
 	break;
@@ -520,7 +530,6 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_SHUTDOWNSTART:
   case MSG_MDS_SHUTDOWNFINISH:
   case MSG_CLIENT_UNMOUNT:
-  case MSG_OSD_GETMAP:
   case MSG_OSD_MKFS_ACK:
 	m = new MGenericMessage(env.type);
 	break;

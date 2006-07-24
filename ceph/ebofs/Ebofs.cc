@@ -1707,7 +1707,8 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
 	  break;
 	}
 
-	size_t will_read = MIN(off+len, on->object_size) - off;
+	size_t try_len = len ? len:on->object_size;
+	size_t will_read = MIN(off+try_len, on->object_size) - off;
 	
 	bool done;
 	if (attempt_read(on, off, will_read, bl, &cond, &done))
@@ -1803,7 +1804,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 		off_t offset = t.offsets.front(); t.offsets.pop_front();
 		size_t len = t.lengths.front(); t.lengths.pop_front();
 		bufferlist bl = t.bls.front(); t.bls.pop_front();
-		if (_write(oid, len, offset, bl) < 0) {
+		if (_write(oid, offset, len, bl) < 0) {
 		  dout(7) << "apply_transaction fail on _write" << endl;
 		  r &= bit;
 		}
@@ -1942,7 +1943,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 
 
 
-int Ebofs::_write(object_t oid, size_t length, off_t offset, bufferlist& bl)
+int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 {
   dout(7) << "_write " << hex << oid << dec << " len " << length << " off " << offset << endl;
 
@@ -1972,7 +1973,7 @@ int Ebofs::_write(object_t oid, size_t length, off_t offset, bufferlist& bl)
 
 
 int Ebofs::write(object_t oid, 
-				 size_t len, off_t off, 
+				 off_t off, size_t len,
 				 bufferlist& bl, bool fsync)
 {
   // wait?
@@ -1982,7 +1983,7 @@ int Ebofs::write(object_t oid,
 	bool done;
 	int flush = 1;    // write never returns positive
 	Context *c = new C_Cond(&cond, &done, &flush);
-	int r = write(oid, len, off, bl, c);
+	int r = write(oid, off, len, bl, c);
 	if (r < 0) return r;
 	
 	ebofs_lock.Lock();
@@ -1996,12 +1997,12 @@ int Ebofs::write(object_t oid,
 	return r;
   } else {
 	// don't wait for flush.
-	return write(oid, len, off, bl, (Context*)0);
+	return write(oid, off, len, bl, (Context*)0);
   }
 }
 
 int Ebofs::write(object_t oid, 
-				 size_t len, off_t off, 
+				 off_t off, size_t len,
 				 bufferlist& bl, Context *onsafe)
 {
   ebofs_lock.Lock();
@@ -2020,7 +2021,7 @@ int Ebofs::write(object_t oid,
   }
 
   // go
-  int r = _write(oid, len, off, bl);
+  int r = _write(oid, off, len, bl);
 
   // commit waiter
   if (r > 0) {
