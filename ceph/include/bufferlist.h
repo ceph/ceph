@@ -443,6 +443,28 @@ inline void _decode(string& s, bufferlist& bl, int& off)
   off += s.length() + 1;
 }
 
+// bufferptr (encapsulated)
+inline void _encode(bufferptr& bp, bufferlist& bl) 
+{
+  size_t len = bp.length();
+  bl.append((char*)&len, sizeof(len));
+  bl.append(bp);
+}
+inline void _decode(bufferptr& bp, bufferlist& bl, int& off)
+{
+  size_t len;
+  bl.copy(off, sizeof(len), (char*)&len);
+  off += sizeof(len);
+  bufferlist s;
+  s.substr_of(bl, off, len);
+  off += len;
+
+  if (s.buffers().size() == 1)
+	bp = s.buffers().front();
+  else
+	bp = new buffer(s.c_str(), s.length());
+}
+
 // bufferlist (encapsulated)
 inline void _encode(const bufferlist& s, bufferlist& bl) 
 {
@@ -553,6 +575,35 @@ inline void _decode(list<T>& s, bufferlist& bl, int& off)
   }
   assert(s.size() == (unsigned)n);
 }
+
+// map<string,bufferptr>
+inline void _encode(map<string, bufferptr>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (map<string, bufferptr>::iterator it = s.begin();
+	   it != s.end();
+	   it++) {
+	_encode(it->first, bl);
+	_encode(it->second, bl);
+	n--;
+  }
+  assert(n==0);
+}
+inline void _decode(map<string,bufferptr>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+	string k;
+	_decode(k, bl, off);
+	_decode(s[k], bl, off);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
 
 // map<T,bufferlist>
 template<class T>

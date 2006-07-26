@@ -1,22 +1,51 @@
 
-- mon: mark osds out
-- osd restart
-- gzip in messenger?
 
+fast/rados
+
+
+cluster map
+- map distribution
+
+data distribution
+ placement groups
+
+replication operation
+
+failure detection
+ osd monitor
+ up/down/in/out
+
+pg logging
+ top, bottom, trimming
+
+pg recovery
+ wrt logs, objects
+ wrt active ops
+
+
+ebofs
+ on disk layout
+ data safety
+ storage interface
+
+ 
+
+
+
+
+
+- gzip in messenger?
 
 
 osd/rados
 - add pg->info.pg_member_since.  wrt replication ops.
-- down recv behavior
-  - clarify powercycle process
+- fix/clean: pg state 'backlog' on disk.. hmm do i even need the bool?
 - pg_bit changes
 - watch osd utilization; adjust cluster map
-- fix/clean: pg state 'backlog' on disk.. hmm do i even need the bool?
-- pull need sto pull attributes and values!
 
 objecter
 - detect, cope with crashed PGs, wait for map updates, etc.
-
+- filer read/write, flip offset,size args
 
 reliability
 - heartbeat vs ping
@@ -31,11 +60,10 @@ bugs/stability
 
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
-- clean up tcpmessenger
- - dropped connections, reconnects
+
 
 crush
-- needs to detect when there are insufficient non-out osds (infinite loop bad)
+- more efficient failure when all/too many osds are down
 
 mds
 - statlite
@@ -44,6 +72,14 @@ mds
 - chdir (directory opens!)
 - delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
 - review caps logic versus singular
+- finish hard links!
+ - reclaim danglers from inode file on discover...
+ - fix rename wrt hard links
+- interactive hash/unhash interface
+- test hashed readdir
+- make logstream.flush align itself to stripes
+
+- carefully define/document frozen wrt dir_auth vs hashing
 
 client
 - lazyio_*
@@ -75,23 +111,6 @@ ebofs
 
 
 cluster issues
-- general problem: how to do posix ordering on object boundaries using an object store
-
-- osd states:
-   data placement vs liveness:  active, inactive, down, failed
-- failure model:
-   anything more than that?  "temporarily unavailable" type state (for, say, fsck)?
-
-- replication latency.   flush on replicas?
-- what does 'complete' mean on new primary?
-  - apparently _need_ to examine objects lists always?  would be nice if we didn't!
-- "lazy" flush mode, for (just) doing read/write or write/write sharing?
-
-
-- deleting objects
- - osd's that rejoin
- - must keep stray replicas clean
-
 - communications failure model.. is it appropriate?
   - reliable, ordered, buffered and flushed on 'down' boundaries?
   - ordered, unreliable?
@@ -108,28 +127,8 @@ requirements
 
 
 
-- interactive hash/unhash interface
-- test hashed readdir
-- make logstream.flush align itself to stipes
-
-- carefully define/document frozen wrt dir_auth vs hashing
-
-
-
-
-
-KNOWN MDS BUGS to fix after fast
-- posix extensions
- - softstat
-- implement truncate() for real
-- finish hard links!
- - reclaim danglers from inode file on discover...
- - fix rename wrt hard links
-
-
-
 MDS TODO
-- fix hashed readdir: should (optionally) do a lock on dir namespace
+- fix hashed readdir: should (optionally) do a lock on dir namespace?
 - fix hard links
   - they mostly work, but they're fragile
 - sync clients on stat
@@ -143,20 +142,11 @@ MDS TODO
 - btree directories (for efficient large directories)
 - consistency points/snapshots
 
-
-CLIENT TODO
-- buffer cache
-  - set proper uid/gid 
-  - use unused buffer tail allocation before allocating new memory
-  - periodic trim_bcache calls
-- strong consistency
-  - get short-term leases from MDS (for stat etc)
-- ditch FUSE for ____
-
-
-
 - fix MExportAck and others to use dir+dentry, not inode
   (otherwise this all breaks with hard links.. altho it probably needs reworking already?)
+
+
+
 
 
 why qsync could be wrong (for very strict POSIX) : varying mds -> client message transit or processing times.
@@ -173,24 +163,12 @@ why qsync could be wrong (for very strict POSIX) : varying mds -> client message
 
 SAGE:
 
-- figure out threading, locking stuff in client
-
 - global sync (to be used by shutdown)
   - flush all dirty data to disk
   - flush logs/journals
 
-- scatter/gather parallel sendrecv (for client file i/o)?
-  - use Filer, Cond's
-- prefetch?
-
-- sync clients on stat
-  - truncate
-
 - readdir
  - set up waiters for pending xlocks
-
-fully document export process
- - including the whole warning business.. wtf is that about again?
 
 - string table?
 
@@ -200,49 +178,13 @@ fully document export process
 
 - do real permission checks?
 
-- journal entries, recovery system
 
 
 CLIENT TODO
 
 - statfs
 - readdir content only optionally includes valid inode info
-- pay attention to file_caps on read, write
-  - block on lacking caps
 
-
-
-FILE STUFF (old)
-
-- send all file writers to auth
-  - migrate open file ppl w/ export
-  - simplify replica softlock craziness!
-
-- locks versus import.. big mess!
-  - consider active reader+writer on auth at time of export.  how to relax?
-  - relaxation in general is tricky..
-  - assimilating auth state on importer also tricky.  gather_set weirdness.
-
-- half-assed async for file writers
- - auth needs to know about replicas with writers...
-   - opens go to auth
-   - auth has set of replica_writers
-   - on close, replica tells auth
-- replace replica_writers open/close bit will full-blown soft_start/soft_finish hooks?
-- need to sync or qsync clients!
-
-- import port soft writer on dir mtime/size...
-
-- recall messages?
-- lazy flag?  make a table!
-- state diagram for master?  _eval() functions?
-
-
-- think about softlock.mode versus shutdown
-- qsync
-
-- freeze interaction.....  test!
-  - freeze state diagram?
 
 
 
@@ -281,15 +223,6 @@ TEST
 
 IMPLEMENT
 
-- truncate
-
-- hash + unhash!
-
-- dir sync
- - stat of a dir should return dir mtime?
- - readdir of hashed dir
-
-
 - smarter balancing
   - popularity calculation and management is inconsistent/wrong.
   - does it work?
@@ -297,6 +230,4 @@ IMPLEMENT
 - instrumentation!
 - dump active config in run output somewhere
 
-- anchors
-- hard links
 

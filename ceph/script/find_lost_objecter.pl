@@ -9,8 +9,8 @@ while (<>) {
 	#print "$line: $_";
 	$line++;
 
-	#client1.objecter  write tid 305 osd1  oid 100000100000002 922848~10000
-	if (my ($who, $tid) = /^(\S+)\.objecter  write tid\D+(\d+)\D+osd/) {
+	#client0.objecter writex_submit tid 21 osd0  oid 100000000000001 851424~100000
+	if (my ($who, $tid) = /(\S+)\.objecter writex_submit tid\D+(\d+)\D+osd/) {
 #		print "$who.$tid\n";
 		$ack{"$who.$tid"} = $line;
 		$commit{"$who.$tid"} = $line;
@@ -18,7 +18,7 @@ while (<>) {
 
 	#client1.objecter handle_osd_write_reply 304 commit 0
 	#client1.objecter handle_osd_write_reply 777 commit 1
-	if (my ($who, $tid, $commit) = /^(\S+)\.objecter handle_osd_write_reply\D+(\d+)\D+commit\D+(\d)/) {
+	if (my ($who, $tid, $commit) = /(\S+)\.objecter handle_osd_write_reply\D+(\d+)\D+commit\D+(\d)/) {
 #		print "$who.$tid\n";
 		delete $ack{"$who.$tid"};
 		delete $commit{"$who.$tid"} if $commit;

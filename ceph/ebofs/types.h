@@ -178,6 +178,7 @@ struct ebofs_super {
  * which are a (void*,int) pair.  hide associated memory management
  * ugliness.
  */
+/* nevermind, i'm going to use bufferptr instead! der.
 class AttrVal {
  public:
   char *data;
@@ -204,7 +205,7 @@ class AttrVal {
 	delete[] data;
   }
 };
-
+*/
 
 
 

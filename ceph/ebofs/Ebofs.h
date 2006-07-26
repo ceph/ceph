@@ -245,7 +245,9 @@ class Ebofs : public ObjectStore {
 
   // object attr
   int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
+  int setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
   int getattr(object_t oid, const char *name, void *value, size_t size);
+  int getattrs(object_t oid, map<string,bufferptr> &aset);
   int rmattr(object_t oid, const char *name, Context *onsafe=0);
   int listattr(object_t oid, vector<string>& attrs);
 
@@ -271,12 +273,14 @@ private:
   int _read(object_t oid, off_t off, size_t len, bufferlist& bl);
   int _stat(object_t oid, struct stat *st);
   int _getattr(object_t oid, const char *name, void *value, size_t size);
+  int _getattrs(object_t oid, map<string,bufferptr> &aset);
 
   bool _write_will_block();
   int _write(object_t oid, off_t off, size_t len, bufferlist& bl);
   int _truncate(object_t oid, off_t size);
   int _remove(object_t oid);
   int _setattr(object_t oid, const char *name, const void *value, size_t size);
+  int _setattrs(object_t oid, map<string,bufferptr>& attrset);
   int _rmattr(object_t oid, const char *name);
   bool _collection_exists(coll_t c);
   int _create_collection(coll_t c);

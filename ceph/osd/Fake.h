@@ -130,6 +130,14 @@ class FakeStoreAttrs {
 	  }
 	  return -1;
 	}
+	int getattrs(map<string,bufferptr>& aset) {
+	  aset = attrs;
+	  return 0;
+	}
+	int setattrs(map<string,bufferptr>& aset) {
+	  attrs = aset;
+	  return 0;
+	}
 	
 	int setattr(const char *name, const void *value, size_t size) {
 	  string n = name;
@@ -166,10 +174,22 @@ class FakeStoreAttrs {
 	faker_lock.Unlock();
 	return r;
   }
+  int setattrs(object_t oid, map<string,bufferptr>& aset) {
+	faker_lock.Lock();
+	int r = fakeoattrs[oid].setattrs(aset);
+	faker_lock.Unlock();
+	return r;
+  }
   int getattr(object_t oid, const char *name,
 			  void *value, size_t size) {
 	faker_lock.Lock();
 	int r = fakeoattrs[oid].getattr(name, value, size);
+	faker_lock.Unlock();
+	return r;
+  }
+  int getattrs(object_t oid, map<string,bufferptr>& aset) {
+	faker_lock.Lock();
+	int r = fakeoattrs[oid].getattrs(aset);
 	faker_lock.Unlock();
 	return r;
   }

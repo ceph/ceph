@@ -148,7 +148,7 @@ public:
 
   void do_op(class MOSDOp *m, PG *pg);  // actually do it
 
-  void prepare_log_transaction(ObjectStore::Transaction& t, MOSDOp* op, version_t& version, PG *pg);
+  void prepare_log_transaction(ObjectStore::Transaction& t, MOSDOp* op, version_t& version, PG *pg, version_t trim_to);
   void prepare_op_transaction(ObjectStore::Transaction& t, MOSDOp* op, version_t& version, PG *pg);
   
   bool waitfor_missing_object(MOSDOp *op, PG *pg);

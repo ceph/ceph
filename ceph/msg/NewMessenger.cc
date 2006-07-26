@@ -46,6 +46,7 @@ Rank::Namer::Namer(EntityMessenger *msgr) :
   nrank = 1;
   
   // announce myself
+  cerr << "ceph ns is " << rank.accepter.listen_addr << endl;
   cout << "export CEPH_NAMESERVER=" << rank.accepter.listen_addr << endl;
   int fd = ::open(".ceph_ns", O_WRONLY|O_CREAT);
   ::write(fd, (void*)&rank.accepter.listen_addr, sizeof(tcpaddr_t));

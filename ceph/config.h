@@ -51,6 +51,7 @@ struct md_config_t {
   int debug_bdev;
   int debug_ns;
   int debug_ms;
+  int debug_mon;
 
   int debug_after;
 
@@ -64,6 +65,10 @@ struct md_config_t {
 
   bool ms_single_dispatch;
   bool ms_requeue_on_sender_fail;
+
+  // mon
+  int mon_tick_interval;
+  int mon_osd_down_out_interval;
 
   // client
   int      client_cache_size;

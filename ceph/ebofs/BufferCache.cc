@@ -284,6 +284,7 @@ int ObjectCache::map_read(Onode *on,
 		  e->is_tx()) {
 		hits[cur] = e;     // readable!
 		dout(20) << "map_read hit " << *e << endl;
+		bc->touch(e);
 	  } 
 	  else if (e->is_rx()) {
 		rx[cur] = e;       // missing, not readable.

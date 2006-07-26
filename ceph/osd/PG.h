@@ -46,6 +46,9 @@ public:
   
   /*
    * PGInfo - summary of PG statistics.
+   *
+   * some notes: 
+   *  - if last_complete >= log.bottom, then we know pg contents thru log.top.
    */
   struct PGInfo {
 	pg_t pgid;
@@ -57,7 +60,7 @@ public:
 	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
 	epoch_t same_role_since;     // upper bound: i have held same role since
 	PGInfo(pg_t p=0) : pgid(p), 
-					   last_update(0), last_complete(0), 
+					   last_update(0), last_complete(0), log_floor(0), 
 					   last_epoch_started(0), last_epoch_finished(0),
 					   same_primary_since(0), same_role_since(0) {}
 	bool is_clean() { return last_update == last_complete; }
@@ -442,6 +445,7 @@ inline ostream& operator<<(ostream& out, const PG::PGInfo& pgi)
 {
   return out << "pginfo(" << hex << pgi.pgid << dec 
 			 << " v " << pgi.last_update << "/" << pgi.last_complete
+			 << " (" << pgi.log_floor << "," << pgi.last_update << "]"
 			 << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
 			 << ")";
 }
@@ -468,7 +472,7 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   if (pg.is_active()) out << " active";
   if (pg.is_clean()) out << " clean";
   if (pg.is_stray()) out << " stray";
-  out << " (" << pg.log.bottom << "," << pg.log.top << "]";
+  //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
   out << "]";

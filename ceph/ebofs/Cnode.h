@@ -34,7 +34,7 @@ class Cnode : public LRUObject
   coll_t coll_id;
   Extent cnode_loc;
 
-  map<string,AttrVal> attr;
+  map<string,bufferptr> attr;
 
  public:
   Cnode(coll_t cid) : ref(0), dirty(false), coll_id(cid) {
@@ -73,11 +73,11 @@ class Cnode : public LRUObject
 
   int get_attr_bytes() {
 	int s = 0;
-	for (map<string, AttrVal >::iterator i = attr.begin();
+	for (map<string, bufferptr>::iterator i = attr.begin();
 		 i != attr.end();
 		 i++) {
 	  s += i->first.length() + 1;
-	  s += i->second.len + sizeof(int);
+	  s += i->second.length() + sizeof(int);
 	}
 	return s;
   }

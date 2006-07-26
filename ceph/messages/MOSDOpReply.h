@@ -19,6 +19,7 @@
 #include "osd/OSDMap.h"
 
 #include "MOSDOp.h"
+#include "osd/ObjectStore.h"
 
 /*
  * OSD op reply
@@ -58,6 +59,7 @@ class MOSDOpReply : public Message {
   MOSDOpReply_st st;
   bufferlist data;
   bufferlist osdmap;
+  map<string,bufferptr> attrset;
 
  public:
   long     get_tid() { return st.tid; }
@@ -71,6 +73,7 @@ class MOSDOpReply : public Message {
   size_t get_offset() { return st.offset; }
   size_t get_object_size() { return st.object_size; }
   version_t get_version() { return st.version; }
+  map<string,bufferptr>& get_attrset() { return attrset; }
 
   version_t get_pg_complete_thru() { return st.pg_complete_thru; }
   void set_pg_complete_thru(version_t v) { st.pg_complete_thru = v; }
@@ -80,6 +83,7 @@ class MOSDOpReply : public Message {
   void set_offset(size_t o) { st.offset = o; }
   void set_object_size(size_t s) { st.object_size = s; }
   void set_version(version_t v) { st.version = v; }
+  void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
   // data payload
   void set_data(bufferlist &d) {
@@ -132,14 +136,15 @@ class MOSDOpReply : public Message {
   virtual void decode_payload() {
 	payload.copy(0, sizeof(st), (char*)&st);
 	payload.splice(0, sizeof(st));
-	if (st._data_len) payload.splice(0, st._data_len, &data);
-	//if (st._oc_len) payload.splice(0, st._oc_len, &osdmap);
+	int off = 0;
+	::_decode(attrset, payload, off);
+	if (st._data_len) payload.splice(off, st._data_len, &data);
   }
   virtual void encode_payload() {
 	st._data_len = data.length();
 	payload.push_back( new buffer((char*)&st, sizeof(st)) );
+	::_encode(attrset, payload);
 	payload.claim_append( data );
-	//payload.claim_append( osdmap );
   }
 
   virtual char *get_type_name() { return "oopr"; }

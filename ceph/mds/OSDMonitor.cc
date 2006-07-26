@@ -33,10 +33,18 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "mon" << whoami << " e" << (osdmap ? osdmap->get_epoch():0) << " "
-#define  derr(l)    if (l<=g_conf.debug) cerr << "mon" << whoami << " e" << (osdmap ? osdmap->get_epoch():0) << " "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << "mon" << whoami << " e" << (osdmap ? osdmap->get_epoch():0) << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << "mon" << whoami << " e" << (osdmap ? osdmap->get_epoch():0) << " "
 
 
+class C_OM_PingTick : public Context {
+public:
+  Messenger *msgr;
+  C_OM_PingTick(Messenger *m) : msgr(m) {}
+  void finish(int r) {
+	msgr->send_message(new MPing, MSG_ADDR_MON(0));
+  }
+};
 
 class C_OM_Faker : public Context {
 public:
@@ -81,7 +89,7 @@ void OSDMonitor::fake_reorg()
   d++;
   
   // bcast
-  bcast_latest_osd_map();
+  bcast_latest_osd_map_osd();
     
   // do it again?
   if (g_conf.num_osd - d > 4 &&
@@ -154,9 +162,12 @@ void OSDMonitor::init()
 	}
   }
 
-
+  
   // i'm ready!
   messenger->set_dispatcher(this);
+  
+  // start ticker
+  g_timer.add_event_after(g_conf.mon_tick_interval, new C_OM_PingTick(messenger));
 }
 
 
@@ -166,7 +177,7 @@ void OSDMonitor::dispatch(Message *m)
   case MSG_FAILURE:
 	handle_failure((MFailure*)m);
 	break;
-
+	
   case MSG_PING_ACK:
 	handle_ping_ack((MPingAck*)m);
 	break;
@@ -181,6 +192,11 @@ void OSDMonitor::dispatch(Message *m)
 
   case MSG_SHUTDOWN:
 	handle_shutdown(m);
+	return;
+
+  case MSG_PING:
+	tick();
+	delete m;
 	return;
 
   default:
@@ -220,8 +236,13 @@ void OSDMonitor::handle_failure(MFailure *m)
 	   osdmap->osd_inst[from] == m->get_inst())) {
 	pending.new_down[from] = m->get_inst();
 	accept_pending();
+
+	if (osdmap->is_in(from))
+	  pending_out[from] = g_clock.now();
 	
-	bcast_latest_osd_map();
+	bcast_latest_osd_map_mds();   
+	bcast_latest_osd_map_osd();   // FIXME: which osds can i tell?
+
 	//send_incremental_map(osdmap->get_epoch()-1, m->get_source(), true);
   }
 
@@ -240,7 +261,8 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
 	pending.new_out.push_back(osd);
   }
   accept_pending();
-  bcast_latest_osd_map();
+  bcast_latest_osd_map_osd();
+  bcast_latest_osd_map_mds();
 }
 
 
@@ -262,14 +284,24 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 	  accept_pending();
 	}
 
-	// mark up
+	// mark up.
+	pending_out.erase(from);
 	assert(osdmap->is_down(from));
 	pending.new_up[from] = m->get_source_inst();
+
+	// mark in?
+	if (osdmap->out_osds.count(from)) 
+	  pending.new_in.push_back(from);
+
 	accept_pending();
   }
 
+  // booting osd will spread word
   send_incremental_map(m->sb.current_epoch, m->get_source(), true);
   delete m;
+
+  // tell mds
+  bcast_latest_osd_map_mds();
 }
 
 void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
@@ -364,18 +396,23 @@ void OSDMonitor::send_incremental_map(epoch_t since, msg_addr_t dest, bool full)
 
 
 
-
-void OSDMonitor::bcast_latest_osd_map()
+void OSDMonitor::bcast_latest_osd_map_mds()
 {
   epoch_t e = osdmap->get_epoch();
-  dout(1) << "bcast_latest_osd_map epoch " << e << endl;
-
+  dout(1) << "bcast_latest_osd_map_mds epoch " << e << endl;
+  
   // tell mds
   for (int i=0; i<g_conf.num_mds; i++) {
 	//send_full_map(MSG_ADDR_MDS(i));
 	send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_MDS(i), false);
   }
-  
+}
+
+void OSDMonitor::bcast_latest_osd_map_osd()
+{
+  epoch_t e = osdmap->get_epoch();
+  dout(1) << "bcast_latest_osd_map_osd epoch " << e << endl;
+
   // tell osds
   set<int> osds;
   osdmap->get_all_osds(osds);
@@ -388,3 +425,34 @@ void OSDMonitor::bcast_latest_osd_map()
   }  
 }
 
+
+
+void OSDMonitor::tick()
+{
+  dout(10) << "tick" << endl;
+
+  // mark down osds out?
+  utime_t now = g_clock.now();
+  list<int> mark_out;
+  for (map<int,utime_t>::iterator i = pending_out.begin();
+	   i != pending_out.end();
+	   i++) {
+	utime_t down = now;
+	down -= i->second;
+
+	if (down.sec() >= g_conf.mon_osd_down_out_interval) {
+	  dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << endl;
+	  mark_out.push_back(i->first);
+	}
+  }
+  for (list<int>::iterator i = mark_out.begin();
+	   i != mark_out.end();
+	   i++) {
+	pending_out.erase(*i);
+	pending.new_out.push_back( *i );
+	accept_pending();
+  }
+  
+  // next!
+  g_timer.add_event_after(g_conf.mon_tick_interval, new C_OM_PingTick(messenger));
+}

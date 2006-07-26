@@ -38,15 +38,19 @@ class OSDMonitor : public Dispatcher {
 
   OSDMap::Incremental pending;
 
-  // monitoring
-  map<int,time_t>  last_heard_from_osd;
-  map<int,time_t>  last_pinged_osd; 
-  // etc..
+  // osd monitoring
+  map<int,utime_t>  pending_out;
 
-  set<int>         failed_osds;
-  set<int>         my_osds;
+  
+  void tick();  // check state, take actions
 
+  // maps
   void accept_pending();   // accept pending, new map.
+  void send_full_map(msg_addr_t dest);
+  void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
+  void bcast_latest_osd_map_mds();
+  void bcast_latest_osd_map_osd();
+
 
  public:
   OSDMonitor(int w, Messenger *m) : 
@@ -60,16 +64,12 @@ class OSDMonitor : public Dispatcher {
   void dispatch(Message *m);
   void handle_shutdown(Message *m);
 
+  void handle_failure(class MFailure *m);
+
   void handle_osd_boot(class MOSDBoot *m);
   void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);
-  void handle_failure(class MFailure *m);
-
-  void send_full_map(msg_addr_t dest);
-  void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
-  void bcast_latest_osd_map();
-
 
   // hack
   void fake_osd_failure(int osd, bool down);

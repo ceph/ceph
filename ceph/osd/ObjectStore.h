@@ -40,6 +40,9 @@ using namespace std;
 class ObjectStore {
 public:
 
+  
+  
+
   /*********************************
    * transaction
    */
@@ -48,11 +51,13 @@ public:
 	static const int OP_READ =          1;  // oid, offset, len, pbl
 	static const int OP_STAT =          2;  // oid, pstat
 	static const int OP_GETATTR =       3;  // oid, attrname, pattrval
+	static const int OP_GETATTRS =      4;  // oid, pattrset
 	static const int OP_WRITE =        10;  // oid, offset, len, bl
 	static const int OP_TRUNCATE =     11;  // oid, len
 	static const int OP_REMOVE =       12;  // oid
 	static const int OP_SETATTR =      13;  // oid, attrname, attrval
-	static const int OP_RMATTR =       14;  // oid, attrname
+	static const int OP_SETATTRS =     14;  // oid, attrset
+	static const int OP_RMATTR =       15;  // oid, attrname
 	static const int OP_MKCOLL =       20;  // cid
 	static const int OP_RMCOLL =       21;  // cid
 	static const int OP_COLL_ADD =     22;  // cid, oid
@@ -72,6 +77,7 @@ public:
 	list<bufferlist*> pbls;
 	list<struct stat*> psts;
 	list< pair<void*,int*> > pattrvals;
+	list< map<string,bufferptr>* > pattrsets;
 
 	void read(object_t oid, off_t off, size_t len, bufferlist *pbl) {
 	  int op = OP_READ;
@@ -93,6 +99,12 @@ public:
 	  oids.push_back(oid);
 	  attrnames.push_back(name);
 	  pattrvals.push_back(pair<void*,int*>(val,plen));
+	}
+	void getattrs(object_t oid, map<string,bufferptr>& aset) {
+	  int op = OP_GETATTRS;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  pattrsets.push_back(&aset);
 	}
 
 	void write(object_t oid, off_t off, size_t len, bufferlist& bl) {
@@ -120,6 +132,12 @@ public:
 	  oids.push_back(oid);
 	  attrnames.push_back(name);
 	  attrvals.push_back(pair<const void*,int>(val,len));
+	}
+	void setattrs(object_t oid, map<string,bufferptr>& attrset) {
+	  int op = OP_SETATTRS;
+	  ops.push_back(op);
+	  oids.push_back(oid);
+	  pattrsets.push_back(&attrset);
 	}
 	void rmattr(object_t oid, const char* name) {
 	  int op = OP_RMATTR;
@@ -204,6 +222,13 @@ public:
 		  *pattrval.second = getattr(oid, attrname, pattrval.first, *pattrval.second);
 		}
 		break;
+	  case Transaction::OP_GETATTRS:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  map<string,bufferptr> *pset = t.pattrsets.front(); t.pattrsets.pop_front();
+		  getattrs(oid, *pset);
+		}
+		break;
 
 	  case Transaction::OP_WRITE:
 		{
@@ -236,6 +261,13 @@ public:
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
 		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
 		  setattr(oid, attrname, attrval.first, attrval.second, last);
+		}
+		break;
+	  case Transaction::OP_SETATTRS:
+		{
+		  object_t oid = t.oids.front(); t.oids.pop_front();
+		  map<string,bufferptr> *pattrset = t.pattrsets.front(); t.pattrsets.pop_front();
+		  setattrs(oid, *pattrset, last);
 		}
 		break;
 
@@ -379,8 +411,11 @@ public:
   virtual int setattr(object_t oid, const char *name,
 					  const void *value, size_t size,
 					  Context *onsafe=0) {return 0;} //= 0;
+  virtual int setattrs(object_t oid, map<string,bufferptr>& aset,
+					  Context *onsafe=0) {return 0;} //= 0;
   virtual int getattr(object_t oid, const char *name,
 					  void *value, size_t size) {return 0;} //= 0;
+  virtual int getattrs(object_t oid, map<string,bufferptr>& aset) {return 0;};
 
   virtual int rmattr(object_t oid, const char *name,
 					 Context *onsafe=0) {return 0;}

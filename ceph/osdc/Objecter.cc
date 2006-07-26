@@ -101,11 +101,15 @@ void Objecter::kick_requests(set<int> &kick)
 	   k != kick.end();
 	   k++) {
 	int osd = *k;
-	hash_map<int, set<tid_t> >::iterator ti = osd_tids.find(osd);
-	if (ti == osd_tids.end()) continue;
 
-	for (set<tid_t>::iterator p = ti->second.begin();
-		 p != ti->second.end();
+	if (osd_tids.count(osd) == 0) continue;
+
+	set<tid_t> tids;
+	tids.swap( osd_tids[osd] );
+	osd_tids.erase(osd);
+
+	for (set<tid_t>::iterator p = tids.begin();
+		 p != tids.end();
 		 p++) {
 	  tid_t tid = *p;
 	  tid_osd.erase(tid);
@@ -158,7 +162,6 @@ void Objecter::kick_requests(set<int> &kick)
 	  else 
 		assert(0);
 	}
-	osd_tids.erase(osd);
   }
 }
 
@@ -231,7 +234,7 @@ void Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
 						 OSD_OP_READ);
   m->set_length(ex.length);
   m->set_offset(ex.start);
-  dout(15) << "readx_submit tid " << last_tid << " from osd" << osd 
+  dout(10) << "readx_submit tid " << last_tid << " to osd" << osd 
 		   << " oid " << hex << ex.oid << dec  << " " << ex.start << "~" << ex.length
 		   << " (" << ex.buffer_extents.size() << " buffer fragments)" << endl;
   messenger->send_message(m, MSG_ADDR_OSD(osd), 0);
@@ -248,7 +251,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
-  dout(15) << "handle_osd_read_reply on " << tid << endl;
+  dout(7) << "handle_osd_read_reply " << tid << endl;
   
   assert(op_read.count(tid));
   OSDRead *rd = op_read[ tid ];
@@ -273,7 +276,9 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   assert(m->get_result() >= 0);
 
   // what buffer offset are we?
-  dout(7) << " got frag from " << hex << m->get_oid() << dec << " len " << m->get_length() << ", still have " << rd->ops.size() << " more ops" << endl;
+  dout(7) << " got frag from " << hex << m->get_oid() << dec << " "
+		  << m->get_offset() << "~" << m->get_length()
+		  << ", still have " << rd->ops.size() << " more ops" << endl;
   
   if (rd->ops.empty()) {
 	// all done
@@ -383,7 +388,9 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 	// finish, clean up
 	Context *onfinish = rd->onfinish;
 
-	dout(7) << " " << bytes_read << " bytes " << rd->bl->length() << endl;
+	dout(7) << " " << bytes_read << " bytes " 
+	  //<< rd->bl->length()
+			<< endl;
 	
 	// done
 	delete rd;
@@ -501,10 +508,13 @@ void Objecter::handle_osd_write_reply(MOSDOpReply *m)
   // success?
   if (m->get_result() == -EAGAIN) {
 	dout(7) << " got -EAGAIN, resubmitting" << endl;
-	if (wr->waitfor_ack.count(tid)) 
+	if (wr->waitfor_ack.count(tid)) {
 	  writex_submit(wr, wr->waitfor_ack[tid]);
-	else if (wr->waitfor_commit.count(tid)) 
+	  wr->waitfor_ack.erase(tid);
+	} else if (wr->waitfor_commit.count(tid)) {
 	  writex_submit(wr, wr->waitfor_commit[tid]);
+	  wr->waitfor_commit.erase(tid);
+	}
 	else assert(0);
 	delete m;
 	return;

@@ -79,23 +79,24 @@ void PG::merge_log(const PGLog &olog)
 {
   dout(10) << "merge_log " << olog << " into " << log << endl;
 
-  if (is_empty()) {
+  if (is_empty() ||
+	  (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog
 	// special (easy) case
-	assert(info.last_complete == 0);
-	assert(log.empty());
+	//assert(info.last_complete == 0);
+	//assert(log.empty());
+
+	// add all to missing  (anything above our log.top)
+	for (map<object_t,version_t>::const_iterator pu = olog.updated.upper_bound(log.top);
+		 pu != olog.updated.end();
+		 pu++)
+	  missing.add(pu->first, pu->second);
 
 	// copy the log.
 	log = olog;
 	info.last_update = log.top;
 	info.log_floor = log.bottom;
 
-	// add all to missing
-	for (map<object_t,version_t>::const_iterator pu = log.updated.begin();
-		 pu != log.updated.end();
-		 pu++)
-	  missing.add(pu->first, pu->second);
-
-	dout(10) << "merge_log  result " << log << endl;
+	dout(10) << "merge_log  result " << log << ", " << missing << endl;
 	return;
   }
 
@@ -190,7 +191,7 @@ void PG::merge_log(const PGLog &olog)
 	info.last_update = log.top = olog.top;
   }
 
-  dout(10) << "merge_log  result " << log << endl;
+  dout(10) << "merge_log  result " << log << ", " << missing << endl;
 }
 
 
@@ -370,18 +371,30 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   
   // get log?
   if (newest_update_osd != osd->whoami) {
-	if (peer_log_requested.count(newest_update_osd)) {
+	if (peer_log_requested.count(newest_update_osd) ||
+		peer_summary_requested.count(newest_update_osd)) {
 	  dout(10) << " newest update on osd" << newest_update_osd
 			   << " v " << newest_update 
 			   << ", already queried" 
 			   << endl;
 	} else {
-	  dout(10) << " newest update on osd" << newest_update_osd
-			   << " v " << newest_update 
-			   << ", querying since " << oldest_update_needed
-			   << endl;
-	  query_map[newest_update_osd][info.pgid] = oldest_update_needed;
-	  peer_log_requested[newest_update_osd] = oldest_update_needed;
+	  if (peer_info[newest_update_osd].log_floor < log.top) {
+		dout(10) << " newest update on osd" << newest_update_osd
+				 << " v " << newest_update 
+				 << ", querying since " << oldest_update_needed
+				 << endl;
+		query_map[newest_update_osd][info.pgid] = oldest_update_needed;
+		peer_log_requested[newest_update_osd] = oldest_update_needed;
+	  } else {
+		assert(peer_info[newest_update_osd].last_complete >= 
+			   peer_info[newest_update_osd].log_floor);  // or else we're in trouble.
+		dout(10) << " newest update on osd" << newest_update_osd
+				 << " v " << newest_update 
+				 << ", querying entire summary/backlog"
+				 << endl;
+		query_map[newest_update_osd][info.pgid] = PG_QUERY_SUMMARY;
+		peer_summary_requested.insert(newest_update_osd);
+	  }
 	}
 	return;
   } else {
@@ -399,13 +412,28 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 			   << ".  already waiting for summary/backlog from osd" << newest_update_osd
 			   << endl;
 	} else {
+	  // who to fetch from?
+	  int who = newest_update_osd;
+	  if (who == osd->whoami) {  // er, pick someone else!
+		// pick someone who has (back)log through my log.bottom
+		for (map<int,PGInfo>::iterator it = peer_info.begin();
+			 it != peer_info.end();
+			 it++) {
+		  if (it->first == osd->whoami) continue;
+		  if (it->second.last_complete >= it->second.log_floor &&  // they store backlog
+			  it->second.last_update >= log.bottom) {              // thru my log.bottom
+			who = it->first;
+			break;
+		  }
+		}
+	  }
+	  assert(who != osd->whoami); // can't be me!
 	  dout(10) << "i am complete thru " << info.last_complete
 			   << ", but my log starts at " << log.bottom 
-			   << ".  fetching summary/backlog from osd" << newest_update_osd
+			   << ".  fetching summary/backlog from osd" << who
 			   << endl;
-	  assert(newest_update_osd != osd->whoami);  // can't be me!
-	  query_map[newest_update_osd][info.pgid] = PG_QUERY_SUMMARY;
-	  peer_summary_requested.insert(newest_update_osd);
+	  query_map[who][info.pgid] = PG_QUERY_SUMMARY;
+	  peer_summary_requested.insert(who);
 	}
 	return;
   }
@@ -455,6 +483,7 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   // -- ok, activate!
   info.last_epoch_started = osd->osdmap->get_epoch();
   state_set(PG::STATE_ACTIVE);  // i am active!
+  dout(10) << "marking active" << endl;
 
   clean_set.clear();
   if (info.is_clean()) 
@@ -623,6 +652,7 @@ void PG::append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, ver
   if (trim_to > log.bottom) {
 	dout(10) << " trimming " << log << " to " << trim_to << endl;
 	log.trim(t, trim_to);
+	info.log_floor = log.bottom;
 	if (ondisklog.trim_to(trim_to))
 	  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   }

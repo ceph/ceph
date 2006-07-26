@@ -130,7 +130,7 @@ private:
   bool is_down(int osd) { return down_osds.count(osd); }
   bool is_up(int osd) { return !is_down(osd); }
   bool is_out(int osd) { return out_osds.count(osd); }
-  bool is_in(int osd) { return !is_in(osd); }
+  bool is_in(int osd) { return !is_out(osd); }
   
   void mark_down(int o) { down_osds.insert(o); }
   void mark_up(int o) { down_osds.erase(o); }

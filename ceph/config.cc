@@ -77,6 +77,7 @@ md_config_t g_conf = {
   debug_bdev: 1,         // block device
   debug_ns: 0,
   debug_ms: 0,
+  debug_mon: 0,
   
   debug_after: 0,
 
@@ -90,6 +91,10 @@ md_config_t g_conf = {
 
   ms_single_dispatch: false,
   ms_requeue_on_sender_fail: false,
+
+  // --- mon ---
+  mon_tick_interval: 5,
+  mon_osd_down_out_interval: 10,  // seconds
 
   // --- client ---
   client_cache_size: 300,
@@ -395,16 +400,16 @@ void parse_config_options(vector<char*>& args)
 		g_conf.debug_bdev = atoi(args[++i]);
 	  else 
 		g_debug_after_conf.debug_bdev = atoi(args[++i]);
-	else if (strcmp(args[i], "--debug_ns") == 0) 
-	  if (!g_conf.debug_after) 
-		g_conf.debug_ns = atoi(args[++i]);
-	  else 
-		g_debug_after_conf.debug_ns = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_ms") == 0) 
 	  if (!g_conf.debug_after) 
 		g_conf.debug_ms = atoi(args[++i]);
 	  else 
 		g_debug_after_conf.debug_ms = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_mon") == 0) 
+	  if (!g_conf.debug_after) 
+		g_conf.debug_mon = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_mon = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--debug_after") == 0) {
 	  g_conf.debug_after = atoi(args[++i]);
@@ -489,6 +494,9 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.client_trace = atoi(args[++i]);
 	else if (strcmp(args[i], "--fuse_direct_io") == 0)
 	  g_conf.fuse_direct_io = atoi(args[++i]);
+
+	else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
+	  g_conf.mon_osd_down_out_interval = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--client_sync_writes") == 0)
 	  g_conf.client_sync_writes = atoi(args[++i]);

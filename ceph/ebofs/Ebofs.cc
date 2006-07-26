@@ -609,7 +609,7 @@ Onode* Ebofs::get_onode(object_t oid)
 	  p += key.length() + 1;
 	  int len = *(int*)(p);
 	  p += sizeof(len);
-	  on->attr[key] = AttrVal(p, len);
+	  on->attr[key] = new buffer(p, len);
 	  p += len;
 	  dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
 	}
@@ -673,16 +673,17 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   }	
   
   // attr
-  for (map<string, AttrVal>::iterator i = on->attr.begin();
+  for (map<string, bufferptr>::iterator i = on->attr.begin();
 	   i != on->attr.end();
 	   i++) {
 	bl.copy_in(off, i->first.length()+1, i->first.c_str());
 	off += i->first.length()+1;
-	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
+	int l = i->second.length();
+	bl.copy_in(off, sizeof(int), (char*)&l);
 	off += sizeof(int);
-	bl.copy_in(off, i->second.len, i->second.data);
-	off += i->second.len;
-	dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << i->second.len << endl;
+	bl.copy_in(off, l, i->second.c_str());
+	off += l;
+	dout(15) << "write_onode " << *on  << " attr " << i->first << " len " << l << endl;
   }
   
   // extents
@@ -944,7 +945,7 @@ Cnode* Ebofs::get_cnode(object_t cid)
 	  p += key.length() + 1;
 	  int len = *(int*)(p);
 	  p += sizeof(len);
-	  cn->attr[key] = AttrVal(p, len);
+	  cn->attr[key] = new buffer(p, len);
 	  p += len;
 	  dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
 	}
@@ -972,17 +973,18 @@ void Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
   off += sizeof(ec);
   
   // attr
-  for (map<string, AttrVal >::iterator i = cn->attr.begin();
+  for (map<string, bufferptr >::iterator i = cn->attr.begin();
 	   i != cn->attr.end();
 	   i++) {
 	bl.copy_in(off, i->first.length()+1, i->first.c_str());
 	off += i->first.length()+1;
-	bl.copy_in(off, sizeof(int), (char*)&i->second.len);
+	int len = i->second.length();
+	bl.copy_in(off, sizeof(int), (char*)&len);
 	off += sizeof(int);
-	bl.copy_in(off, i->second.len, i->second.data);
-	off += i->second.len;
+	bl.copy_in(off, len, i->second.c_str());
+	off += len;
 
-	dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << i->second.len << endl;
+	dout(15) << "write_cnode " << *cn  << " attr " << i->first << " len " << len << endl;
   }
 }
 
@@ -1024,6 +1026,10 @@ void Ebofs::remove_cnode(Cnode *cn)
   // free cnode space
   if (cn->cnode_loc.length)
 	allocator.release(cn->cnode_loc);
+
+  // remove from dirty list?
+  if (cn->is_dirty())
+	dirty_cnodes.erase(cn);
 
   // count down refs
   cn->mark_clean();
@@ -1797,6 +1803,17 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 	  }
 	  break;
 
+	case Transaction::OP_GETATTRS:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		map<string,bufferptr> *pset = t.pattrsets.front(); t.pattrsets.pop_front();
+		if (_getattrs(oid, *pset) < 0) {
+		  dout(7) << "apply_transaction fail on _getattrs" << endl;
+		  r &= bit;
+		}		
+	  }
+	  break;
+
 
 	case Transaction::OP_WRITE:
 	  {
@@ -1839,6 +1856,17 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 		pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
 		if (_setattr(oid, attrname, attrval.first, attrval.second) < 0) {
 		  dout(7) << "apply_transaction fail on _setattr" << endl;
+		  r &= bit;
+		}
+	  }
+	  break;
+
+	case Transaction::OP_SETATTRS:
+	  {
+		object_t oid = t.oids.front(); t.oids.pop_front();
+		map<string,bufferptr> *pattrset = t.pattrsets.front(); t.pattrsets.pop_front();
+		if (_setattrs(oid, *pattrset) < 0) {
+		  dout(7) << "apply_transaction fail on _setattrs" << endl;
 		  r &= bit;
 		}
 	  }
@@ -2173,8 +2201,7 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
   if (!on) return -ENOENT;
 
   string n(name);
-  AttrVal val((char*)value, size);
-  on->attr[n] = val;
+  on->attr[n] = new buffer((char*)value, size);
   dirty_onode(on);
   put_onode(on);
   return 0;
@@ -2184,6 +2211,35 @@ int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t siz
 {
   ebofs_lock.Lock();
   int r = _setattr(oid, name, value, size);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_setattrs(object_t oid, map<string,bufferptr>& attrset)
+{
+  dout(8) << "setattrs " << hex << oid << dec << endl;
+
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+
+  on->attr = attrset;
+  dirty_onode(on);
+  put_onode(on);
+  return 0;
+}
+
+int Ebofs::setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  int r = _setattrs(oid, attrset);
 
   // set up commit waiter
   if (r >= 0) {
@@ -2216,12 +2272,32 @@ int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
   if (on->attr.count(n) == 0) {
 	r = -1;
   } else {
-	r = MIN( on->attr[n].len, (int)size );
-	memcpy(value, on->attr[n].data, r );
+	r = MIN( on->attr[n].length(), size );
+	memcpy(value, on->attr[n].c_str(), r );
   }
   put_onode(on);
   return r;
 }
+
+int Ebofs::getattrs(object_t oid, map<string,bufferptr> &aset)
+{
+  ebofs_lock.Lock();
+  int r = _getattrs(oid, aset);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
+{
+  dout(8) << "_getattrs " << hex << oid << dec << endl;
+
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+  aset = on->attr;
+  put_onode(on);
+  return 0;
+}
+
 
 
 int Ebofs::_rmattr(object_t oid, const char *name) 
@@ -2267,7 +2343,7 @@ int Ebofs::listattr(object_t oid, vector<string>& attrs)
   }
 
   attrs.clear();
-  for (map<string,AttrVal>::iterator i = on->attr.begin();
+  for (map<string,bufferptr>::iterator i = on->attr.begin();
 	   i != on->attr.end();
 	   i++) {
 	attrs.push_back(i->first);
@@ -2511,8 +2587,7 @@ int Ebofs::_collection_setattr(coll_t cid, const char *name, const void *value, 
   if (!cn) return -ENOENT;
 
   string n(name);
-  AttrVal val((char*)value, size);
-  cn->attr[n] = val;
+  cn->attr[n] = new buffer((char*)value, size);
   dirty_cnode(cn);
   put_cnode(cn);
 
@@ -2553,8 +2628,8 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   if (cn->attr.count(n) == 0) {
 	r = -1;
   } else {
-	r = MIN( cn->attr[n].len, (int)size );
-	memcpy(value, cn->attr[n].data, r);
+	r = MIN( cn->attr[n].length(), size );
+	memcpy(value, cn->attr[n].c_str(), r);
   }
   
   put_cnode(cn);
@@ -2607,7 +2682,7 @@ int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
   }
 
   attrs.clear();
-  for (map<string,AttrVal>::iterator i = cn->attr.begin();
+  for (map<string,bufferptr>::iterator i = cn->attr.begin();
 	   i != cn->attr.end();
 	   i++) {
 	attrs.push_back(i->first);

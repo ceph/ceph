@@ -280,10 +280,10 @@ class bufferptr {
   }
 
 
-  bool at_buffer_head() {
+  bool at_buffer_head() const {
 	return _off == 0;
   }
-  bool at_buffer_tail() {
+  bool at_buffer_tail() const {
 	return _off + _len == _buffer->_len;
   }
 
@@ -291,10 +291,10 @@ class bufferptr {
   char *c_str() {
 	return _buffer->c_str() + _off;
   }
-  unsigned length() {
+  unsigned length() const {
 	return _len;
   }
-  unsigned offset() {
+  unsigned offset() const {
 	return _off;
   }
   unsigned unused_tail_length() {
