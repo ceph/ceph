@@ -1,6 +1,6 @@
 
 
-fast/rados
+FAST rados paper
 
 
 cluster map
@@ -16,7 +16,7 @@ failure detection
  up/down/in/out
 
 pg logging
- top, bottom, trimming
+ top, bottom, trimming, truncate_front, etc.
 
 pg recovery
  wrt logs, objects
@@ -37,15 +37,22 @@ ebofs
 - gzip in messenger?
 
 
+remaining hard problems
+- how to cope with file size changes and read/write sharing
+- how to choose osd monitor peer sets
+- mds failure recovery (of course)
+
 osd/rados
-- add pg->info.pg_member_since.  wrt replication ops.
-- fix/clean: pg state 'backlog' on disk.. hmm do i even need the bool?
 - pg_bit changes
-- watch osd utilization; adjust cluster map
+- add pg->info.pg_member_since?  wrt replication ops.
+- report crashed pgs?
+
+osdmonitor
+- watch osd utilization; adjust overload in cluster map
 
 objecter
 - detect, cope with crashed PGs, wait for map updates, etc.
-- filer read/write, flip offset,size args
+- filer read/write: flip offset,size args
 
 reliability
 - heartbeat vs ping

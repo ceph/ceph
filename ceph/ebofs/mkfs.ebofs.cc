@@ -40,7 +40,60 @@ int main(int argc, char **argv)
 	Ebofs fs(filename);
 	fs.mount();
 	
-	if (1) { // onode write+read test
+
+	if (1) {
+	  // partial write tests
+	  char crap[1024*1024];
+	  memset(crap, 0, 1024*1024);
+
+	  bufferlist small;
+	  small.append(crap, 10);
+	  bufferlist med;
+	  med.append(crap, 1000);
+	  bufferlist big;
+	  big.append(crap, 1024*1024);
+
+	  cout << "0" << endl;
+	  fs.write(10, 0, 1024*1024, big, (Context*)0);
+	  fs.sync();
+	  fs.trim_buffer_cache();
+
+	  cout << "1" << endl;
+	  fs.write(10, 10, 10, small, 0);
+	  fs.write(10, 1, 1000, med, 0);
+	  fs.sync();
+	  fs.trim_buffer_cache();
+
+	  cout << "2" << endl;
+	  fs.write(10, 10, 10, small, 0);
+	  //fs.sync();
+	  fs.write(10, 1, 1000, med, 0);
+	  fs.sync();
+	  fs.trim_buffer_cache();
+
+	  cout << "3" << endl;
+	  fs.write(10, 1, 1000, med, 0);
+	  fs.write(10, 10000, 10, small, 0);
+	  fs.truncate(10, 100, 0);
+	  fs.sync();
+	  fs.trim_buffer_cache();
+
+	  cout << "4" << endl;
+	  fs.remove(10);
+	  fs.sync();
+	  fs.write(10, 10, 10, small, 0);
+	  fs.sync();
+	  fs.write(10, 1, 1000, med, 0);
+	  fs.sync();
+	  fs.truncate(10, 100, 0);
+	  fs.write(10, 10, 10, small, 0);
+	  fs.trim_buffer_cache();
+
+	  
+
+	}
+
+	if (0) { // onode write+read test
 	  bufferlist bl;
 	  char crap[1024*1024];
 	  memset(crap, 0, 1024*1024);
@@ -58,7 +111,7 @@ int main(int argc, char **argv)
 	}
 
 
-	if (1) {  // small write + read test
+	if (0) {  // small write + read test
 	  bufferlist bl;
 	  char crap[1024*1024];
 	  memset(crap, 0, 1024*1024);

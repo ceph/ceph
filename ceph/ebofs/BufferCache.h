@@ -43,31 +43,23 @@ class BufferHead : public LRUObject {
   const static int STATE_RX = 4;      //  w  reading from disk
   const static int STATE_PARTIAL = 5; // reading from disk, + partial content map.  always 1 block.
 
-  class PartialWrite {
-  public:
-	map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
-	block_t                block;
-	version_t              epoch;
-  };
-
  public:
   ObjectCache *oc;
 
   bufferlist data;
 
   ioh_t     rx_ioh;         // 
+  Extent    rx_from;
   ioh_t     tx_ioh;         // 
   block_t   tx_block;
+  block_t   partial_tx_to;
+  version_t partial_tx_epoch;
+
+  map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
 
   map< block_t, list<Context*> > waitfor_read;
-  //list<Context*> waitfor_flush;
 
  private:
-  map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
- public:
-  map<block_t, PartialWrite> partial_write;  // queued writes w/ partial content
- private:
-
   int        ref;
   int        state;
 
@@ -84,7 +76,7 @@ class BufferHead : public LRUObject {
  public:
   BufferHead(ObjectCache *o) :
 	oc(o), //cancellable_ioh(0), tx_epoch(0),
-	rx_ioh(0), tx_ioh(0), 
+	rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
 	ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0)
 	{}
   
@@ -135,10 +127,10 @@ class BufferHead : public LRUObject {
   bool is_rx() { return state == STATE_RX; }
   bool is_partial() { return state == STATE_PARTIAL; }
   
-  bool is_partial_writes() { return !partial_write.empty(); }
-  void finish_partials();
-  void cancel_partials();
-  void queue_partial_write(block_t b);
+  //bool is_partial_writes() { return !partial_write.empty(); }
+  //void finish_partials();
+  //void cancel_partials();
+  //void queue_partial_write(block_t b);
 
 
   void copy_partial_substr(off_t start, off_t end, bufferlist& bl) {
@@ -207,22 +199,22 @@ class BufferHead : public LRUObject {
   }
 
   bool partial_is_complete(off_t size) {
-	return have_partial_range( (off_t)(start()*EBOFS_BLOCK_SIZE),
-							   MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) ) );
+	return have_partial_range( 0, MIN(size, EBOFS_BLOCK_SIZE) );
+	//(off_t)(start()*EBOFS_BLOCK_SIZE),
+	//MIN( size, (off_t)(end()*EBOFS_BLOCK_SIZE) ) );
   }
   void apply_partial() {
 	apply_partial(data, partial);
 	partial.clear();
   }
-  void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
+  static void apply_partial(bufferlist& bl, map<off_t, bufferlist>& pm) {
 	assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
-	const off_t bhstart = start() * EBOFS_BLOCK_SIZE;
 	//assert(partial_is_complete());
 	//cout << "apply_partial" << endl;
 	for (map<off_t, bufferlist>::iterator i = pm.begin();
 		 i != pm.end();
 		 i++) {
-	  int pos = i->first - bhstart;
+	  int pos = i->first;
 	  //cout << " frag at opos " << i->first << " bhpos " << pos << " len " << i->second.length() << endl;
 	  bl.copy_in(pos, i->second.length(), i->second);
 	}
@@ -231,8 +223,10 @@ class BufferHead : public LRUObject {
   void add_partial(off_t off, bufferlist& p) {
 	unsigned len = p.length();
 	assert(len <= (unsigned)EBOFS_BLOCK_SIZE);
-	assert(off >= (off_t)(start()*EBOFS_BLOCK_SIZE));
-	assert(off + len <= (off_t)(end()*EBOFS_BLOCK_SIZE));
+	//assert(off >= (off_t)(start()*EBOFS_BLOCK_SIZE));
+	//assert(off + len <= (off_t)(end()*EBOFS_BLOCK_SIZE));
+	assert(off >= 0);
+	assert(off + len <= EBOFS_BLOCK_SIZE);
 
 	// trim any existing that overlaps
 	for (map<off_t, bufferlist>::iterator i = partial.begin();
@@ -312,7 +306,13 @@ class ObjectCache {
   int ref;
 
  public:
-  ObjectCache(object_t o, Onode *_on, BufferCache *b) : object_id(o), on(_on), bc(b), ref(0) {}
+  version_t write_count;
+
+
+ public:
+  ObjectCache(object_t o, Onode *_on, BufferCache *b) : 
+	object_id(o), on(_on), bc(b), ref(0),
+	write_count(0) { }
   ~ObjectCache() {
 	assert(data.empty());
 	assert(ref == 0);
@@ -375,11 +375,15 @@ class ObjectCache {
 
   BufferHead *split(BufferHead *bh, block_t off);
 
-  int scan_versions(block_t start, block_t len,
+  /*int scan_versions(block_t start, block_t len,
 					version_t& low, version_t& high);
+  */
 
-  void rx_finish(ioh_t ioh, block_t start, block_t length);
+  void rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist& bl);
   void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
+
+  void truncate(block_t blocks);
+  //  void tear_down();
 
   void dump() {
 	for (map<block_t,BufferHead*>::iterator i = data.begin();
@@ -388,7 +392,6 @@ class ObjectCache {
 	  cout << "dump: " << i->first << ": " << *i->second << endl;
   }
 
-  void tear_down();
 };
 
 
@@ -415,6 +418,25 @@ class BufferCache {
   off_t stat_missing;
 
   map<version_t, int> epoch_unflushed;
+  
+  /* partial writes - incomplete blocks that can't be written until
+   *  their prior content is read and overlayed with the new data.
+   *
+   * we put partial block management here because objects may be deleted
+   * before the read completes, but the write may have been committed in a 
+   * prior epoch.
+   *
+   * we map: src block -> dest block -> PartialWrite
+   *
+   * really, at most there will only ever be two of these, for current+previous epochs.
+   */
+  class PartialWrite {
+  public:
+	map<off_t, bufferlist> partial;   // partial dirty content overlayed onto incoming data
+	version_t              epoch;
+  };
+
+  map<block_t, map<block_t, PartialWrite> > partial_write;  // queued writes w/ partial content
 
  public:
   BufferCache(BlockDevice& d, AlignedBufferPool& bp, Mutex& el) : 
@@ -546,12 +568,17 @@ class BufferCache {
   // io
   void bh_read(Onode *on, BufferHead *bh, block_t from=0);
   void bh_write(Onode *on, BufferHead *bh, block_t shouldbe=0);
-  void bh_queue_partial_write(Onode *on, BufferHead *bh);
 
   bool bh_cancel_read(BufferHead *bh);
   bool bh_cancel_write(BufferHead *bh);
 
-  void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len);
+  void bh_queue_partial_write(Onode *on, BufferHead *bh);
+  void bh_cancel_partial_write(BufferHead *bh);
+
+  void queue_partial(block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
+  void cancel_partial(block_t from, block_t to, version_t epoch);
+
+  void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, bufferlist& bl);
   void tx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, version_t v, version_t e);
   void partial_tx_finish(version_t epoch);
 
@@ -567,10 +594,11 @@ class C_OC_RxFinish : public BlockDevice::callback {
   ObjectCache *oc;
   block_t start, length;
 public:
+  bufferlist bl;
   C_OC_RxFinish(Mutex &m, ObjectCache *o, block_t s, block_t l) :
 	lock(m), oc(o), start(s), length(l) {}
   void finish(ioh_t ioh, int r) {
-	oc->bc->rx_finish(oc, ioh, start, length);
+	oc->bc->rx_finish(oc, ioh, start, length, bl);
   }
 };
 

@@ -52,15 +52,16 @@ public:
    */
   struct PGInfo {
 	pg_t pgid;
-	version_t last_update;    // last object version logged/updated.
+	version_t last_update;    // (aka log.top) last object version logged/updated.
 	version_t last_complete;  // last version pg was complete through.
-	version_t log_floor;      // oldest log entry.
+	version_t log_bottom;     // oldest log entry.
+	bool      log_backlog;    // do we store a complete log?
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
 	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
 	epoch_t same_role_since;     // upper bound: i have held same role since
 	PGInfo(pg_t p=0) : pgid(p), 
-					   last_update(0), last_complete(0), log_floor(0), 
+					   last_update(0), last_complete(0), log_bottom(0), log_backlog(false),
 					   last_epoch_started(0), last_epoch_finished(0),
 					   same_primary_since(0), same_role_since(0) {}
 	bool is_clean() { return last_update == last_complete; }
@@ -131,17 +132,6 @@ public:
    */
   class PGLog {
   public:
-	// single entry in the written on-disk log.
-	class Entry {   
-	public:
-	  object_t oid;
-	  version_t version;
-	  bool deleted;
-	  Entry() {}
-	  Entry(object_t o, version_t v, bool d=false) :
-		oid(o), version(v), deleted(d) {}
-	};
-
 	/** top, bottom
 	 *    top - newest entry (update|delete)
 	 * bottom - entry previous to oldest (update|delete) for which we have
@@ -247,25 +237,26 @@ public:
 
   class PGOndiskLog {
   public:
-	off_t bottom, top;
+	// single entry in the written on-disk log.
+	class Entry {   
+	public:
+	  object_t oid;
+	  version_t version;
+	  bool deleted;
+	  int blah;
+	  Entry() {}
+	  Entry(object_t o, version_t v, bool d=false) :
+		oid(o), version(v), deleted(d) {}
+	};
+
+	// ok
+	off_t bottom;                    // first byte of log. 
+	off_t top;                       // byte following end of log.
 	map<off_t,version_t> block_map;  // block -> first stamp logged there
 
 	PGOndiskLog() : bottom(0), top(0) {}
 
-	bool trim_to(version_t v) {
-	  map<off_t,version_t>::iterator p = block_map.upper_bound(v);
-	  if (p == block_map.begin()) return false;
-	  p--;
-	  if (p == block_map.begin()) return false;
-
-	  while (1) {
-		map<off_t,version_t>::iterator t = block_map.begin();
-		if (t == p) break;
-		block_map.erase(t);
-	  }
-	  bottom = p->first;
-	  return true;	  
-	}
+	bool trim_to(version_t v, ObjectStore::Transaction& t);
   };
 
 
@@ -435,8 +426,12 @@ public:
 
 
   // pg on-disk state
-  void append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, version_t trim_to);
+  void write_log(ObjectStore::Transaction& t);
+  void append_log(ObjectStore::Transaction& t, 
+				  PG::PGOndiskLog::Entry& logentry, 
+				  version_t trim_to);
   void read_log(ObjectStore *store);
+  void trim_ondisklog_to(ObjectStore::Transaction& t, version_t v);
 
 };
 
@@ -445,7 +440,8 @@ inline ostream& operator<<(ostream& out, const PG::PGInfo& pgi)
 {
   return out << "pginfo(" << hex << pgi.pgid << dec 
 			 << " v " << pgi.last_update << "/" << pgi.last_complete
-			 << " (" << pgi.log_floor << "," << pgi.last_update << "]"
+			 << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
+			 << (pgi.log_backlog ? "+backlog":"")
 			 << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
 			 << ")";
 }

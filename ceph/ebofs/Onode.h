@@ -301,6 +301,33 @@ public:
 	return 0;
   }
 
+  int truncate_front_extents(block_t len, vector<Extent>& extra) {
+	verify_extents();
+	
+	while (len > 0) {
+	  Extent& ex = extent_map.begin()->second;  // look, this is a reference!
+	  if (ex.length > len) {
+		// partial first extent
+		Extent frontbit( ex.start, len );
+		extra.push_back(frontbit);
+		ex.length -= len;
+		ex.start += len;
+		break;
+	  }
+
+	  // pull off entire first extent.
+	  assert(ex.length <= len);
+	  len -= ex.length;
+	  extra.push_back(ex);
+	  extent_map.erase(extent_map.begin());
+	}
+
+	object_blocks -= len;
+	verify_extents();
+	return 0;
+  }
+
+
 
   /* map_alloc_regions(start, len, map)
    *  map range into regions that need to be (re)allocated on disk

@@ -453,11 +453,12 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   
   bool nojournal = false;
-  if (req->get_op() == MDS_OP_STAT ||
-	  req->get_op() == MDS_OP_LSTAT ||
-	  req->get_op() == MDS_OP_READDIR ||
-	  req->get_op() == MDS_OP_OPEN ||
-	  req->get_op() == MDS_OP_RELEASE)
+  int op = req->get_op();
+  if (op == MDS_OP_STAT ||
+	  op == MDS_OP_LSTAT ||
+	  op == MDS_OP_READDIR ||
+	  op == MDS_OP_OPEN ||
+	  op == MDS_OP_RELEASE)
 	nojournal = true;
 
   MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
@@ -480,11 +481,11 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  client_logger->inc("lwnum");
 	}
 	
-	if (req->get_op() == MDS_OP_STAT) {
+	if (op == MDS_OP_STAT) {
 	  client_logger->finc("lstatsum",(double)lat);
 	  client_logger->inc("lstatnum");
 	}
-	else if (req->get_op() == MDS_OP_READDIR) {
+	else if (op == MDS_OP_READDIR) {
 	  client_logger->finc("ldirsum",(double)lat);
 	  client_logger->inc("ldirnum");
 	}
@@ -636,12 +637,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " release" << endl;
 	assert(in->caps.count(mds));
 	in->caps.erase(mds);
-	if (in->caps.empty()) {
-	  //dout(0) << "did put_inode" << endl;
-	  put_inode(in);
-	} else {
-	  //dout(0) << "didn't put_inode" << endl;
-	}
 	for (map<int,InodeCap>::iterator p = in->caps.begin();
 		 p != in->caps.end();
 		 p++)
@@ -654,6 +649,13 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	  dout(20) << " left stale cap " << p->first << " " 
 			  << cap_string(p->second.caps) << " " 
 			  << p->second.seq << endl;
+
+	if (in->caps.empty()) {
+	  //dout(0) << "did put_inode" << endl;
+	  put_inode(in);
+	} else {
+	  //dout(0) << "didn't put_inode" << endl;
+	}
 	
 	return;
   }

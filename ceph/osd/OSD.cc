@@ -278,7 +278,6 @@ int OSD::shutdown()
   threadpool = 0;
 
   // close pgs
-  ObjectStore::Transaction t;
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
 	   p != pg_map.end();
 	   p++) {
@@ -1383,6 +1382,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   int from = MSG_ADDR_NUM(m->get_source());
 
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
+
+  ObjectStore::Transaction t;
   
   // look for unknown PGs i'm primary for
   map< int, map<pg_t,version_t> > query_map;
@@ -1417,7 +1418,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	  }
 	  
 	  // ok, create PG!
-	  ObjectStore::Transaction t;
 	  pg = create_pg(pgid, t);
 	  pg->acting = acting;
 	  pg->info.same_primary_since = it->same_primary_since;
@@ -1428,7 +1428,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	  pg->build_prior();
 
 	  t.collection_setattr(pgid, "info", (char*)&pg->info, sizeof(pg->info));
-	  store->apply_transaction(t);
 	  
 	  dout(10) << *pg << " is new" << endl;
 	
@@ -1497,6 +1496,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	_unlock_pg(pgid);
   }
   
+  unsigned tr = store->apply_transaction(t);
+  assert(tr == 0);
+
   do_queries(query_map);
   
   delete m;
@@ -1531,6 +1533,8 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   dout(7) << "handle_pg_log " << *pg 
 		  << " got " << m->log
 		  << " from " << m->get_source() << endl;
+
+  ObjectStore::Transaction t;
 
   if (pg->acting[0] == whoami) {
 	// i am PRIMARY
@@ -1606,6 +1610,10 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	pg->start_recovery();
   }
 
+  pg->write_log(t);
+  unsigned tr = store->apply_transaction(t);
+  assert(tr == 0);
+
   _unlock_pg(pgid);
 
   delete m;
@@ -1613,7 +1621,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 
 
 /** PGQuery
- * from primary to replica | other
+ * from primary to replica | stray
  * NOTE: called with opqueue active.
  */
 void OSD::handle_pg_query(MOSDPGQuery *m) 
@@ -2708,7 +2716,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   const object_t oid = op->get_oid();
   const pg_t pgid = op->get_pg();
   
-  PG::PGLog::Entry logentry(op->get_oid(), version);
+  PG::PGOndiskLog::Entry logentry(op->get_oid(), version);
 
   // raise last_complete?
   if (pg->info.last_complete == pg->log.top)

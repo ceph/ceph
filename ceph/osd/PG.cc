@@ -29,6 +29,9 @@
 
 void PG::PGLog::trim(ObjectStore::Transaction& t, version_t s) 
 {
+  if (backlog && s < bottom)
+	s = bottom;
+
   // trim updated
   while (!updated.empty()) {
 	map<version_t,object_t>::iterator rit = rupdated.begin();
@@ -46,10 +49,8 @@ void PG::PGLog::trim(ObjectStore::Transaction& t, version_t s)
   }
   
   // raise bottom?
-  if (bottom < s) {
-	bottom = s;
-	backlog = false;
-  }
+  if (backlog) backlog = false;
+  if (bottom < s) bottom = s;
 }
 
 
@@ -94,7 +95,8 @@ void PG::merge_log(const PGLog &olog)
 	// copy the log.
 	log = olog;
 	info.last_update = log.top;
-	info.log_floor = log.bottom;
+	info.log_bottom = log.bottom;
+	info.log_backlog = log.backlog;
 
 	dout(10) << "merge_log  result " << log << ", " << missing << endl;
 	return;
@@ -133,7 +135,7 @@ void PG::merge_log(const PGLog &olog)
 	  log.deleted[p->second] = p->first;
 	  log.rdeleted[p->first] = p->second;
 	}
-	info.log_floor = log.bottom = newbottom;
+	info.log_bottom = log.bottom = newbottom;
   }
   
   // backlog?
@@ -153,7 +155,7 @@ void PG::merge_log(const PGLog &olog)
 	  log.updated[p->second] = p->first;
 	  log.rupdated[p->first] = p->second;
 	}
-	log.backlog = true;
+	info.log_backlog = log.backlog = true;
   }
 
   // extend on top?
@@ -299,7 +301,7 @@ void PG::adjust_prior()
   assert(!prior_set.empty());
 
   // raise last_epoch_started_any
-  epoch_t max;
+  epoch_t max = 0;
   for (map<int,PGInfo>::iterator it = peer_info.begin();
 	   it != peer_info.end();
 	   it++) {
@@ -369,7 +371,7 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 	}	
   }
   
-  // get log?
+  // gather log?
   if (newest_update_osd != osd->whoami) {
 	if (peer_log_requested.count(newest_update_osd) ||
 		peer_summary_requested.count(newest_update_osd)) {
@@ -378,7 +380,7 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 			   << ", already queried" 
 			   << endl;
 	} else {
-	  if (peer_info[newest_update_osd].log_floor < log.top) {
+	  if (peer_info[newest_update_osd].log_bottom < log.top) {
 		dout(10) << " newest update on osd" << newest_update_osd
 				 << " v " << newest_update 
 				 << ", querying since " << oldest_update_needed
@@ -386,12 +388,13 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 		query_map[newest_update_osd][info.pgid] = oldest_update_needed;
 		peer_log_requested[newest_update_osd] = oldest_update_needed;
 	  } else {
-		assert(peer_info[newest_update_osd].last_complete >= 
-			   peer_info[newest_update_osd].log_floor);  // or else we're in trouble.
 		dout(10) << " newest update on osd" << newest_update_osd
 				 << " v " << newest_update 
 				 << ", querying entire summary/backlog"
 				 << endl;
+		assert((peer_info[newest_update_osd].last_complete >= 
+				peer_info[newest_update_osd].log_bottom) ||
+			   peer_info[newest_update_osd].log_backlog);  // or else we're in trouble.
 		query_map[newest_update_osd][info.pgid] = PG_QUERY_SUMMARY;
 		peer_summary_requested.insert(newest_update_osd);
 	  }
@@ -404,7 +407,8 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
   dout(10) << " oldest_update_needed " << oldest_update_needed << endl;
 
   // -- is that the whole story?  (is my log sufficient?)
-  if (info.last_complete < log.bottom && !log.backlog) {
+  if (info.last_complete < log.bottom &&    // i don't have enough to recovery
+	  !log.backlog) {                       // and i don't have the backlog
 	// nope.  fetch backlog from someone.
 	if (peer_summary_requested.count(newest_update_osd)) {
 	  dout(10) << "i am complete thru " << info.last_complete
@@ -420,18 +424,18 @@ void PG::peer(map< int, map<pg_t,version_t> >& query_map)
 			 it != peer_info.end();
 			 it++) {
 		  if (it->first == osd->whoami) continue;
-		  if (it->second.last_complete >= it->second.log_floor &&  // they store backlog
+		  if (it->second.last_complete >= it->second.log_bottom &&  // they store backlog
 			  it->second.last_update >= log.bottom) {              // thru my log.bottom
 			who = it->first;
 			break;
 		  }
 		}
 	  }
-	  assert(who != osd->whoami); // can't be me!
 	  dout(10) << "i am complete thru " << info.last_complete
 			   << ", but my log starts at " << log.bottom 
 			   << ".  fetching summary/backlog from osd" << who
 			   << endl;
+	  assert(who != osd->whoami); // can't be me, or we're in trouble.
 	  query_map[who][info.pgid] = PG_QUERY_SUMMARY;
 	  peer_summary_requested.insert(who);
 	}
@@ -631,16 +635,102 @@ void PG::clean_replicas()
 }
 
 
-void PG::append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, version_t trim_to)
+
+void PG::write_log(ObjectStore::Transaction& t)
+{
+  // assemble buffer
+  bufferlist bl;
+  
+  map<version_t,object_t>::const_iterator pu = log.rupdated.begin();
+  map<version_t,object_t>::const_iterator pd = log.rdeleted.begin();
+
+  ondisklog.bottom = 0;
+  ondisklog.block_map.clear();
+  
+  // both
+  while (pu != log.rupdated.end() && pd != log.rdeleted.end()) {
+	assert(pd->first != pu->first);
+	if (pu->first > pd->first) {
+	  PGOndiskLog::Entry e( pu->second, pu->first );
+	  if (bl.length() % 4096 == 0)
+		ondisklog.block_map[bl.length()] = pu->first;
+	  bl.append((char*)&e, sizeof(e));
+	  pu++;
+	} else {
+	  PGOndiskLog::Entry e( pd->second, pd->first, true );
+	  if (bl.length() % 4096 == 0)
+		ondisklog.block_map[bl.length()] = pd->first;
+	  bl.append((char*)&e, sizeof(e));
+	  pd++;
+	}
+  }
+  // tail
+  while (pu != log.rupdated.end()) {
+	PGOndiskLog::Entry e( pu->second, pu->first );
+	if (bl.length() % 4096 == 0)
+	  ondisklog.block_map[bl.length()] = pu->first;
+	bl.append((char*)&e, sizeof(e));
+	pu++;
+  }
+  while (pd != log.rdeleted.end()) {
+	PGOndiskLog::Entry e( pd->second, pd->first, true );
+	if (bl.length() % 4096 == 0)
+	  ondisklog.block_map[bl.length()] = pd->first;
+	bl.append((char*)&e, sizeof(e));
+	pd++;
+  }
+  
+  ondisklog.top = bl.length();
+  
+  // write it
+  t.remove( info.pgid );
+  t.write( info.pgid, 0, bl.length(), bl);
+  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+
+  t.collection_setattr(info.pgid, "info", &info, sizeof(info)); 
+}
+
+void PG::trim_ondisklog_to(ObjectStore::Transaction& t, version_t v) 
+{
+  dout(15) << "  trim_ondisk_log_to v " << v << endl;
+
+  map<off_t,version_t>::iterator p = ondisklog.block_map.begin();
+  while (p != ondisklog.block_map.end()) {
+	dout(15) << "    " << p->first << " -> " << p->second << endl;
+	p++;
+	if (p == ondisklog.block_map.end() ||
+		p->second > v) {  // too far!
+	  p--;                // back up
+	  break;
+	}
+  }
+  dout(15) << "  * " << p->first << " -> " << p->second << endl;
+  if (p == ondisklog.block_map.begin()) 
+	return;  // can't trim anything!
+  
+  // we can trim!
+  off_t trim = p->first;
+  dout(10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << endl;
+
+  ondisklog.bottom = trim;
+  
+  // adjust block_map
+  while (p != ondisklog.block_map.begin()) 
+	ondisklog.block_map.erase(ondisklog.block_map.begin());
+  
+  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+}
+
+
+void PG::append_log(ObjectStore::Transaction& t, PG::PGOndiskLog::Entry& logentry, version_t trim_to)
 {
   // write entry
   bufferlist bl;
   bl.append( (char*)&logentry, sizeof(logentry) );
   t.write( info.pgid, ondisklog.top, bl.length(), bl );
   
-  t.collection_setattr(info.pgid, "top", &log.top, sizeof(log.top));
-  t.collection_setattr(info.pgid, "bottom", &log.bottom, sizeof(log.bottom));
-
   // update block map?
   if (ondisklog.top % 4096 == 0) 
 	ondisklog.block_map[ondisklog.top] = logentry.version;
@@ -652,46 +742,45 @@ void PG::append_log(ObjectStore::Transaction& t, PG::PGLog::Entry& logentry, ver
   if (trim_to > log.bottom) {
 	dout(10) << " trimming " << log << " to " << trim_to << endl;
 	log.trim(t, trim_to);
-	info.log_floor = log.bottom;
-	if (ondisklog.trim_to(trim_to))
-	  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+	info.log_bottom = log.bottom;
+	info.log_backlog = log.backlog;
+	trim_ondisklog_to(t, trim_to);
   }
-  dout(10) << " ondisklog bytes [" << ondisklog.bottom << "," << ondisklog.top << ")" << endl;
+  dout(10) << " ondisklog [" << ondisklog.bottom << "," << ondisklog.top << ")" << endl;
 }
 
 void PG::read_log(ObjectStore *store)
 {
   // load bounds
-  ondisklog.top = ondisklog.bottom = 0;
-  store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  ondisklog.bottom = ondisklog.top = 0;
   store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  if (ondisklog.top > ondisklog.bottom) {
+  log.backlog = info.log_backlog;
+  log.bottom = info.log_bottom;
+  
+  if (ondisklog.top > 0) {
 	// read
 	bufferlist bl;
 	store->read(info.pgid, ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
 	
+	PG::PGOndiskLog::Entry e;
 	off_t pos = ondisklog.bottom;
 	while (pos < ondisklog.top) {
-	  PG::PGLog::Entry e;
 	  bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
-	  
-	  if (pos % 4096 == 0)
-		ondisklog.block_map[pos] = e.version;
-	  
-	  if (e.deleted)
-		log.add_delete(e.oid, e.version);
-	  else
-		log.add_update(e.oid, e.version);
+	
+	  if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
+		if (pos % 4096 == 0)
+		  ondisklog.block_map[pos] = e.version;
+		if (e.deleted)
+		  log.add_delete(e.oid, e.version);
+		else
+		  log.add_update(e.oid, e.version);
+	  }
 	  
 	  pos += sizeof(e);
 	}
   }
-
-  log.top = log.bottom = 0;
-  log.backlog = false;
-  store->collection_getattr(info.pgid, "top", &log.top, sizeof(log.top));
-  store->collection_getattr(info.pgid, "bottom", &log.bottom, sizeof(log.bottom));
-  store->collection_getattr(info.pgid, "backlog", &log.backlog, sizeof(log.backlog));
+  log.top = info.last_update;
 }
 

@@ -31,7 +31,7 @@ public:
   void *entry() {
 
 	while (!stop) {
-	  object_t oid = rand() % 1000;
+	  object_t oid = (rand() % 2) + 0x10000000;
 	  coll_t cid = rand() % 50;
 	  off_t off = rand() % 10000;//0;//rand() % 1000000;
 	  off_t len = 1+rand() % 100000;
@@ -42,9 +42,9 @@ public:
 	  switch (rand() % 9) {
 	  case 0:
 		{
-		  cout << t << " read " << oid << " at " << off << " len " << len << endl;
+		  cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << endl;
 		  bufferlist bl;
-		  fs.read(oid, len, off, bl);
+		  fs.read(oid, off, len, bl);
 		  int l = MIN(len,bl.length());
 		  if (l) {
 			cout << t << " got " << l << endl;
@@ -62,44 +62,44 @@ public:
 
 	  case 1:
 		{
-		  cout << t << " write " << oid <<" at " << off << " len " << len << endl;
+		  cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << endl;
 		  for (int j=0;j<len;j++) 
 			b[j] = (char)(oid^(off+j));
 		  bufferlist w;
 		  w.append(b,len);
-		  fs.write(oid, len, off, w);
+		  fs.write(oid, off, len, w, 0);
 		}
 		break;
 
 	  case 2:
-		cout << t << " remove " << oid << endl;
+		cout << t << " remove " << hex << oid << dec <<  endl;
 		fs.remove(oid);
 		break;
 
 	  case 3:
-		cout << t << " collection_add " << oid << " to " << cid << endl;
-		fs.collection_add(cid, oid);
+		cout << t << " collection_add " << hex << oid << dec <<  " to " << cid << endl;
+		fs.collection_add(cid, oid, 0);
 		break;
 
 	  case 4:
-		cout << t << " collection_remove " << oid << " from " << cid << endl;
-		fs.collection_remove(cid, oid);
+		cout << t << " collection_remove " << hex << oid << dec <<  " from " << cid << endl;
+		fs.collection_remove(cid, oid, 0);
 		break;
 
 	  case 5:
-		cout << t << " setattr " << oid << " " << a << " len " << l << endl;
-		fs.setattr(oid, a, (void*)a, l);
+		cout << t << " setattr " << hex << oid << dec <<  " " << a << " len " << l << endl;
+		fs.setattr(oid, a, (void*)a, l, 0);
 		break;
 		
 	  case 6:
-		cout << t << " rmattr " << oid << " " << a << endl;
+		cout << t << " rmattr " << hex << oid << dec <<  " " << a << endl;
 		fs.rmattr(oid,a);
 		break;
 
 	  case 7:
 		{
 		  char v[4];
-		  cout << t << " getattr " << oid << " " << a << endl;
+		  cout << t << " getattr " << hex << oid << dec <<  " " << a << endl;
 		  if (fs.getattr(oid,a,(void*)v,3) == 0) {
 			v[3] = 0;
 			assert(strcmp(v,a) == 0);
@@ -109,7 +109,7 @@ public:
 		
 	  case 8:
 		{
-		  cout << t << " truncate " << oid << " " << off << endl;
+		  cout << t << " truncate " << hex << oid << dec <<  " " << off << endl;
 		  fs.truncate(oid, 0);
 		}
 		break;

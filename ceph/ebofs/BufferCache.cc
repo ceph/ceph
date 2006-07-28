@@ -24,6 +24,7 @@
 #define dout(x)  if (x <= g_conf.debug_ebofs) cout << "ebofs.bh."
 
 
+/*
 void BufferHead::finish_partials()
 {
   dout(10) << "finish_partials on " << *this << endl;
@@ -91,20 +92,19 @@ void BufferHead::cancel_partials()
 
 void BufferHead::queue_partial_write(block_t b)
 {
-  if (partial_write.count(b)) {
+  if (oc->bc->partial_write[bh->start()].count(b)) {
 	// overwrite previous partial write
 	// note that it better be same epoch if it's the same block!!
-	assert( partial_write[b].epoch == epoch_modified );
-	partial_write.erase(b);
+	assert( bc.partial_write[bh->start()].[b].epoch == epoch_modified );
   } else {
 	oc->bc->inc_unflushed( epoch_modified );
   }
   
-  partial_write[ b ].partial = partial;
-  partial_write[ b ].block = b;
-  partial_write[ b ].epoch = epoch_modified;
+  oc->bc->partial_write[bh->start()].[ b ].partial = partial;
+  oc->bc->partial_write[bh->start()].[ b ].epoch = epoch_modified;
 }
 
+*/
 
 
 
@@ -118,7 +118,7 @@ void BufferHead::queue_partial_write(block_t b)
 
 
 
-void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
+void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist& bl)
 {
   list<Context*> waiters;
 
@@ -142,22 +142,43 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 	if (bh->rx_ioh == ioh)
 	  bh->rx_ioh = 0;
 
-	if (bh->is_partial_writes())
-	  bh->finish_partials();
-	
 	if (bh->is_rx()) {
 	  assert(bh->get_version() == 0);
 	  assert(bh->end() <= start+length);
+	  assert(bh->start() >= start);
 	  dout(10) << "rx_finish  rx -> clean on " << *bh << endl;
+	  bh->data.substr_of(bl, (bh->start()-start)*EBOFS_BLOCK_SIZE, bh->length()*EBOFS_BLOCK_SIZE);
 	  bc->mark_clean(bh);
 	}
 	else if (bh->is_partial()) {
-	  assert(0);
-	  /*
-	  dout(10) << "rx_finish  partial -> clean on " << *bh << endl;	  
+	  dout(10) << "rx_finish  partial -> tx on " << *bh << endl;	  
+
+	  if (1) {
+		// double-check what block i am
+		vector<Extent> exv;
+		on->map_extents(bh->start(), 1, exv);
+		assert(exv.size() == 1);
+		block_t cur_block = exv[0].start;
+		assert(cur_block == bh->partial_tx_to);
+	  }
+	  
+	  // ok, cancel my low-level partial (since we're still here, and can bh_write ourselves)
+	  bc->cancel_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial_tx_epoch );
+	  
+	  // apply partial to myself
+	  assert(bh->data.length() == 0);
+	  bh->data.push_back( bc->bufferpool.alloc(EBOFS_BLOCK_SIZE) );
+	  bh->data.copy_in(0, EBOFS_BLOCK_SIZE, bl);
 	  bh->apply_partial();
-	  bc->mark_clean(bh);
-	  */
+	  
+	  // write "normally"
+	  bc->mark_dirty(bh);
+	  bc->bh_write(on, bh, bh->partial_tx_to);//cur_block);
+
+	  // clean up a bit
+	  bh->partial_tx_to = 0;
+	  bh->partial_tx_epoch = 0;
+	  bh->partial.clear();
 	}
 	else {
 	  dout(10) << "rx_finish  ignoring status on (dirty|tx|clean) " << *bh << endl;
@@ -183,8 +204,6 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length)
 void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length, 
 							version_t version, version_t epoch)
 {
-  //list<Context*> waiters;
-  
   dout(10) << "tx_finish " << start << "~" << length << " v" << version << endl;
   for (map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 	   p != data.end(); 
@@ -203,24 +222,19 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
 	  dout(10) << "tx_finish  bh not marked tx, skipping" << endl;
 	  continue;
 	}
-
 	assert(bh->is_tx());
-	assert(bh->end() <= start+length);
 	
 	if (version == bh->version) {
 	  dout(10) << "tx_finish  tx -> clean on " << *bh << endl;
+	  assert(bh->end() <= start+length);
 	  bh->set_last_flushed(version);
 	  bc->mark_clean(bh);
-
-	  // trigger waiters
-	  //waiters.splice(waiters.begin(), bh->waitfor_flush);
 	} else {
 	  dout(10) << "tx_finish  leaving tx, " << bh->version << " > " << version 
 			   << " on " << *bh << endl;
+	  assert(bh->version > version);
 	}
   }	
-
-  //finish_contexts(waiters);
 }
 
 
@@ -508,6 +522,7 @@ int ObjectCache::map_write(Onode *on,
   return 0;
 }
 
+/* don't need this.
 int ObjectCache::scan_versions(block_t start, block_t len,
 							   version_t& low, version_t& high)
 {
@@ -536,31 +551,56 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 
   return 0;
 }
+*/
 
-
-void ObjectCache::tear_down()
+void ObjectCache::truncate(block_t blocks)
 {
-  dout(15) << "tear_down " << hex << object_id << dec << endl;
+  dout(7) << "truncate " << hex << object_id << dec 
+		   << " " << blocks << " blocks"
+		   <<  endl;
 
   while (!data.empty()) {
-	map<block_t, BufferHead*>::iterator it = data.begin();
-	BufferHead *bh = it->second;
+	block_t bhoff = data.rbegin()->first;
+	BufferHead *bh = data.rbegin()->second;
 
-	// cancel any pending/queued io, if possible.
-	if (bh->is_tx()) 
-	  bc->bh_cancel_write(bh);
-	if (bh->is_rx())
-	  bc->bh_cancel_read(bh);
-	if (bh->is_partial_writes()) 
-	  bh->cancel_partials();
+	if (bh->end() <= blocks) break;
+
+	bool uncom = on->uncommitted.contains(bh->start(), bh->length());
+	dout(10) << "truncate " << *bh << " uncom " << uncom 
+			 << " of " << on->uncommitted
+			 << endl;
+	
+	if (bhoff < blocks) {
+	  // we want right bit (one splice)
+	  if (bh->is_rx() && bc->bh_cancel_read(bh)) {
+		BufferHead *right = bc->split(bh, blocks);
+		bc->bh_read(on, bh);          // reread left bit
+		bh = right;
+	  } else if (bh->is_tx() && uncom && bc->bh_cancel_write(bh)) {
+		BufferHead *right = bc->split(bh, blocks);
+		bc->bh_write(on, bh);          // rewrite left bit
+		bh = right;
+	  } else {
+		bh = bc->split(bh, blocks);   // just split it
+	  }
+	  // no worries about partials up here, they're always 1 block (and thus never split)
+	} else {
+	  // whole thing
+	  // cancel any pending/queued io, if possible.
+	  if (bh->is_rx())
+		bc->bh_cancel_read(bh);
+	  if (bh->is_tx() && uncom) 
+		bc->bh_cancel_write(bh);
+	  if (bh->is_partial() && uncom)
+		bc->bh_cancel_partial_write(bh);
+	}
 	
 	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
 		 p != bh->waitfor_read.end();
 		 p++) {
 	  finish_contexts(p->second, -1);
 	}
-	//finish_contexts(bh->waitfor_flush, -1);
-	
+
 	bc->remove_bh(bh);
 	delete bh;
   }
@@ -597,6 +637,14 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
 
   // add right
   add_bh(right);
+
+  // adjust rx_from
+  if (orig->is_rx()) {
+	right->rx_from = orig->rx_from;
+	orig->rx_from.length = newleftlen;
+	right->rx_from.length -= newleftlen;
+	right->rx_from.start += newleftlen;
+  }
 
   // split buffers too
   bufferlist bl;
@@ -648,18 +696,20 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
 	ex.start = from;
 	ex.length = 1;
   }
-  
-  // alloc new buffer
-  bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
-  
+    
   // this should be empty!!
   assert(bh->rx_ioh == 0);
   
   dout(20) << "bh_read  " << *bh << " from " << ex << endl;
   
-  bh->rx_ioh = dev.read(ex.start, ex.length, bh->data,
-						new C_OC_RxFinish(ebofs_lock, on->oc, 
-										  bh->start(), bh->length()));
+  C_OC_RxFinish *fin = new C_OC_RxFinish(ebofs_lock, on->oc, 
+										 bh->start(), bh->length());
+
+  bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), fin->bl);  // new buffers!
+
+  bh->rx_ioh = dev.read(ex.start, ex.length, fin->bl,
+						fin);
+  bh->rx_from = ex;
   on->oc->get();
 
 }
@@ -711,12 +761,15 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
   on->oc->get();
   inc_unflushed( bh->epoch_modified );
 
+  /*
+  // assert: no partials on the same block
   // hose any partial on the same block
   if (bh->partial_write.count(ex.start)) {
 	dout(10) << "bh_write hosing parital write on same block " << ex.start << " " << *bh << endl;
 	dec_unflushed( bh->partial_write[ex.start].epoch );
 	bh->partial_write.erase(ex.start);
   }
+  */
 }
 
 
@@ -754,15 +807,54 @@ void BufferCache::tx_finish(ObjectCache *oc,
 }
 
 void BufferCache::rx_finish(ObjectCache *oc,
-							ioh_t ioh, block_t start, block_t length)
+							ioh_t ioh, block_t start, block_t length,
+							bufferlist& bl)
 {
   ebofs_lock.Lock();
+  dout(10) << "rx_finish ioh " << ioh << " on " << start << "~" << length << endl;
 
   // oc
-  if (oc->put() == 0) {
+  if (oc->put() == 0) 
 	delete oc;
-  } else
-	oc->rx_finish(ioh, start, length);
+  else
+	oc->rx_finish(ioh, start, length, bl);
+
+  // finish any partials?
+  map<block_t, map<block_t, PartialWrite> >::iterator sp = partial_write.lower_bound(start);
+  while (sp != partial_write.end()) {
+	if (sp->first >= start+length) break;
+	assert(sp->first >= start);
+
+	block_t pstart;
+	map<block_t, PartialWrite> writes;
+	writes.swap( sp->second );
+
+	map<block_t, map<block_t, PartialWrite> >::iterator t = sp;
+	sp++;
+	partial_write.erase(t);
+
+	for (map<block_t, PartialWrite>::iterator p = writes.begin();
+		 p != writes.end();
+		 p++) {
+	  dout(-10) << "rx_finish partial from " << pstart << " to " << p->first
+				<< " for epoch " << p->second.epoch
+		//<< " (last_modified is now " << bh->super_epoch << ")"
+				<< endl;
+	  // this had better be a past epoch
+	  //assert(p->epoch == epoch_modified - 1);  // ??
+	  
+	  // make the combined block
+	  bufferlist combined;
+	  combined.push_back( oc->bc->bufferpool.alloc(EBOFS_BLOCK_SIZE) );
+	  combined.copy_in((pstart-start)*EBOFS_BLOCK_SIZE, (pstart-start+1)*EBOFS_BLOCK_SIZE, bl);
+	  BufferHead::apply_partial( combined, p->second.partial );
+
+	  // write it!
+	  dev.write( pstart, 1, combined,
+				 new C_OC_PartialTxFinish( this, p->second.epoch ),
+				 "finish_partials");
+	}
+  }
 
   // 
   ebofs_lock.Unlock();
@@ -801,14 +893,61 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   assert(exv.size() == 1);
   block_t b = exv[0].start;
   assert(exv[0].length == 1);
+  bh->partial_tx_to = exv[0].start;
+  bh->partial_tx_epoch = bh->epoch_modified;
 
   dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
 
 
   // copy map state, queue for this block
-  bh->queue_partial_write( b );
+  assert(bh->rx_from.length == 1);
+  queue_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial, bh->partial_tx_epoch );
 }
 
+void BufferCache::bh_cancel_partial_write(BufferHead *bh)
+{
+  assert(bh->is_partial());
+  assert(bh->length() == 1);
+
+  cancel_partial( bh->rx_from.start, bh->partial_tx_to, bh->partial_tx_epoch );
+}
+
+
+void BufferCache::queue_partial(block_t from, block_t to, 
+								map<off_t, bufferlist>& partial, version_t epoch)
+{
+  dout(10) << "queue_partial " << from << " -> " << to
+		   << " in epoch " << epoch 
+		   << endl;
+  
+  if (partial_write[from].count(to)) {
+	// this should be in the same epoch.
+	assert( partial_write[from][to].epoch == epoch);
+	assert(0); // actually.. no!
+  } else {
+	inc_unflushed( epoch );
+  }
+  
+  partial_write[from][to].partial = partial;
+  partial_write[from][to].epoch = epoch;
+}
+
+void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
+{
+  assert(partial_write.count(from));
+  assert(partial_write[from].count(to));
+  assert(partial_write[from][to].epoch == epoch);
+
+  dout(10) << "cancel_partial " << from << " -> " << to 
+		   << "  (was epoch " << partial_write[from][to].epoch << ")"
+		   << endl;
+
+  partial_write[from].erase(to);
+  if (partial_write[from].empty())
+	partial_write.erase(from);
+
+  dec_unflushed( epoch );
+}
 
 
 

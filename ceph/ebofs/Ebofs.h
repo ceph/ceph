@@ -237,9 +237,10 @@ class Ebofs : public ObjectStore {
   bool exists(object_t);
   int stat(object_t, struct stat*);
   int read(object_t, off_t off, size_t len, bufferlist& bl);
-  int write(object_t oid, off_t off, size_t len, bufferlist& bl, bool fsync=true);
+  //int write(object_t oid, off_t off, size_t len, bufferlist& bl, bool fsync=true);
   int write(object_t oid, off_t off, size_t len, bufferlist& bl, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
+  int truncate_front(object_t oid, off_t size, Context *onsafe=0);
   int remove(object_t oid, Context *onsafe=0);
   bool write_will_block();
 
@@ -278,6 +279,7 @@ private:
   bool _write_will_block();
   int _write(object_t oid, off_t off, size_t len, bufferlist& bl);
   int _truncate(object_t oid, off_t size);
+  int _truncate_front(object_t oid, off_t size);
   int _remove(object_t oid);
   int _setattr(object_t oid, const char *name, const void *value, size_t size);
   int _setattrs(object_t oid, map<string,bufferptr>& attrset);

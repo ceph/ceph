@@ -203,6 +203,7 @@ void Rank::Namer::handle_unregister(Message *m)
 	dout(10) << "namer.handle_unregister stopping namer" << endl;
 	rank.lock.Unlock();
 	messenger->shutdown();
+	delete messenger;
 	rank.lock.Lock();
   }
 
@@ -531,6 +532,10 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
   dout(10) << "sender(" << inst << ").fail and requeue" << endl;
 
   // tell namer
+  if (!rank.messenger) {
+	derr(0) << "FATAL error: can't send failure to namer0, not connected yet" << endl;
+	assert(0);
+  }
   rank.messenger->send_message(new MNSFailure(inst),
 							   MSG_ADDR_NAMER(0));
 
@@ -788,8 +793,8 @@ void Rank::reaper()
 	//dout(10) << "reaper reaping receiver sd " << r->sd << endl;
 	receivers.erase(r);
 	r->join();
-	delete r;
 	dout(10) << "reaper reaped receiver sd " << r->sd << endl;
+	delete r;
   }
 
   while (!sender_reap_queue.empty()) {
@@ -800,8 +805,8 @@ void Rank::reaper()
 		rank_sender[s->inst.rank] == s)
 	  rank_sender.erase(s->inst.rank);
 	s->join();
-	delete s;
 	dout(10) << "reaper reaped sender " << s->inst << endl;
+	delete s;
   }
 }
 
@@ -952,6 +957,7 @@ Rank::EntityMessenger *Rank::register_entity(msg_addr_t addr)
   
   Message *reg = new MNSRegister(addr, my_rank, id);
   reg->set_source(MSG_ADDR_RANK(my_rank), 0);
+  reg->set_source_inst(my_inst);
   reg->set_dest(MSG_ADDR_DIRECTORY, 0);
   
   // prepare cond
@@ -981,6 +987,12 @@ Rank::EntityMessenger *Rank::register_entity(msg_addr_t addr)
   // add to directory
   entity_map[addr] = my_inst;
   local[addr] = msgr;
+
+  // was anyone waiting?
+  if (waiting_for_lookup.count(addr)) {
+	submit_messages(waiting_for_lookup[addr]);
+	waiting_for_lookup.erase(addr);
+  }
 
   lock.Unlock();
   return msgr;
@@ -1014,6 +1026,13 @@ void Rank::unregister_entity(EntityMessenger *msgr)
 }
 
 
+void Rank::submit_messages(list<Message*>& ls)
+{
+  for (list<Message*>::iterator i = ls.begin(); i != ls.end(); i++)
+	submit_message(*i);
+  ls.clear();
+}
+
 void Rank::submit_message(Message *m)
 {
   const msg_addr_t dest = m->get_dest();
@@ -1045,7 +1064,11 @@ void Rank::submit_message(Message *m)
 	  // remote, known rank addr.
 	  entity_inst_t inst = entity_map[dest];
 
-	  if (rank_sender.count( inst.rank ) &&
+	  if (inst == my_inst) {
+		dout(20) << "submit_message " << *m << " dest " << dest << " local but mid-register, waiting." << endl;
+		waiting_for_lookup[dest].push_back(m);
+	  }
+	  else if (rank_sender.count( inst.rank ) &&
 		  rank_sender[inst.rank]->inst == inst) {
 		dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << inst << ", connected." << endl;
 		// connected.
@@ -1232,6 +1255,7 @@ void Rank::wait()
 	  dout(10) << "wait: stopping rank" << endl;
 	  lock.Unlock();
 	  messenger->shutdown();
+	  delete messenger;
 	  lock.Lock();
 	  continue;
 	}
@@ -1239,6 +1263,8 @@ void Rank::wait()
 	wait_cond.Wait(lock);
   }
   lock.Unlock();
+
+  // done!  clean up.
 
   // stop dispatch thread
   if (g_conf.ms_single_dispatch) {
@@ -1263,7 +1289,7 @@ void Rank::wait()
 	  reaper();
 	}
 
-	if (0) {  // stop() no worky
+	if (0) {  // stop() no worky on receivers!  we leak, but who cares.
 	  dout(10) << "wait: stopping receivers" << endl;
 	  for (set<Receiver*>::iterator i = receivers.begin();
 		   i != receivers.end();

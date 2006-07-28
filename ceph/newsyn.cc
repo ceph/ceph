@@ -134,8 +134,8 @@ int main(int argc, char **argv)
   }
 
   // create mds
-  MDS *mds[NUMMDS];
-  OSD *mdsosd[NUMMDS];
+  map<int,MDS*> mds;
+  map<int,OSD*> mdsosd;
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != g_conf.tcp_skip_rank0+i) continue;
 	Messenger *m = rank.register_entity(MSG_ADDR_MDS(i));
@@ -151,7 +151,7 @@ int main(int argc, char **argv)
   }
   
   // create osd
-  OSD *osd[NUMOSD];
+  map<int, OSD *> osd;
   for (int i=0; i<NUMOSD; i++) {
 	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + i) continue;
 	Messenger *m = rank.register_entity(MSG_ADDR_OSD(i));
@@ -171,8 +171,8 @@ int main(int argc, char **argv)
   int clients_per_node = 1;
   if (NUMCLIENT) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
   set<int> clientlist;
-  Client *client[NUMCLIENT];
-  SyntheticClient *syn[NUMCLIENT];
+  map<int,Client *> client;//[NUMCLIENT];
+  map<int,SyntheticClient *> syn;//[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
 	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
@@ -239,6 +239,8 @@ int main(int argc, char **argv)
 	client[i]->unmount();
 	//cout << "client" << i << " unmounted" << endl;
 	client[i]->shutdown();
+
+	delete client[i];
   }
   
 
@@ -255,8 +257,20 @@ int main(int argc, char **argv)
 
   
 
-  /*
   // cleanup
+  for (map<int,MDS*>::iterator i = mds.begin(); i != mds.end(); i++)
+	delete i->second;
+  for (map<int,OSD*>::iterator i = mdsosd.begin(); i != mdsosd.end(); i++)
+	delete i->second;
+  for (map<int,OSD*>::iterator i = osd.begin(); i != osd.end(); i++)
+	delete i->second;
+  /*
+  for (map<int,Client*>::iterator i = client.begin(); i != client.end(); i++)
+	delete i->second;
+  for (map<int,SyntheticClient*>::iterator i = syn.begin(); i != syn.end(); i++)
+	delete i->second;
+  */
+  /*
   for (int i=0; i<NUMMDS; i++) {
 	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
 	delete mds[i];

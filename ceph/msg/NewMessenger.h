@@ -285,6 +285,7 @@ public:
   void unregister_entity(EntityMessenger *ms);
 
   void submit_message(Message *m);  
+  void submit_messages(list<Message*>& ls);  
 
   // create a new messenger
   EntityMessenger *new_entity(msg_addr_t addr);

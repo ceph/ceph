@@ -176,6 +176,13 @@ int fakemessenger_do_loop_2()
 	  dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has " << it->second->num_incoming() << " queued" << endl;
 
 	  FakeMessenger *mgr = it->second;
+
+	  if (!mgr->is_ready()) {
+		dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has no dispatcher, skipping" << endl;
+		it++;
+		continue;
+	  }
+
 	  Message *m = mgr->get_message();
 	  it++;
 	  

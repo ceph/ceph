@@ -82,7 +82,6 @@ int main(int argc, char **argv)
   rank.wait();
 
   // done
-  osd->shutdown();
   delete osd;
 
   return 0;

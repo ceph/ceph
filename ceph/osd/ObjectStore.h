@@ -52,12 +52,14 @@ public:
 	static const int OP_STAT =          2;  // oid, pstat
 	static const int OP_GETATTR =       3;  // oid, attrname, pattrval
 	static const int OP_GETATTRS =      4;  // oid, pattrset
+
 	static const int OP_WRITE =        10;  // oid, offset, len, bl
 	static const int OP_TRUNCATE =     11;  // oid, len
-	static const int OP_REMOVE =       12;  // oid
-	static const int OP_SETATTR =      13;  // oid, attrname, attrval
-	static const int OP_SETATTRS =     14;  // oid, attrset
-	static const int OP_RMATTR =       15;  // oid, attrname
+	static const int OP_REMOVE =       13;  // oid
+	static const int OP_SETATTR =      14;  // oid, attrname, attrval
+	static const int OP_SETATTRS =     15;  // oid, attrset
+	static const int OP_RMATTR =       16;  // oid, attrname
+
 	static const int OP_MKCOLL =       20;  // cid
 	static const int OP_RMCOLL =       21;  // cid
 	static const int OP_COLL_ADD =     22;  // cid, oid
@@ -243,7 +245,7 @@ public:
 	  case Transaction::OP_TRUNCATE:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
-		  size_t len = t.lengths.front(); t.lengths.pop_front();
+		  off_t len = t.offsets.front(); t.offsets.pop_front();
 		  truncate(oid, len, last);
 		}
 		break;
@@ -356,53 +358,19 @@ public:
 
   virtual int remove(object_t oid,
 					 Context *onsafe=0) = 0;
-  virtual int remove_transaction(object_t oid,
-								 map<coll_t, map<const char*, pair<void*,int> > >& cmods,					 
-								 Context *onsafe=0) {
-	int r = remove(oid, onsafe);
-	for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
-		 cit != cmods.end();
-		 cit++) {
-	  collection_add(cit->first, oid);
-	  for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
-		   ait != cit->second.end();
-		   ait++) 
-		collection_setattr(cit->first, ait->first, ait->second.first, ait->second.second);
-	}
-	return r;
-  }
 
   virtual int truncate(object_t oid, off_t size,
 					   Context *onsafe=0) = 0;
-  virtual int truncate_transaction(object_t oid, off_t size, 
-								   map<const char*, pair<void*,int> >& setattrs,
-								   map<coll_t, map<const char*, pair<void*,int> > >& cmods,
-								   Context *onsafe) { 
-	int r = truncate(oid, size, onsafe);
-	for (map<const char*, pair<void*,int> >::iterator it = setattrs.begin();
-		 it != setattrs.end();
-		 it++) 
-	  setattr(oid, it->first, it->second.first, it->second.second);
-	for (map<coll_t, map<const char*, pair<void*,int> > >::iterator cit = cmods.begin();
-		 cit != cmods.end();
-		 cit++) {
-	  collection_add(cit->first, oid);
-	  for (map<const char*, pair<void*,int> >::iterator ait = cit->second.begin();
-		   ait != cit->second.end();
-		   ait++) 
-		collection_setattr(cit->first, ait->first, ait->second.first, ait->second.second);
-	}  
-	return r;
-  }
   
   virtual int read(object_t oid, 
 				   off_t offset, size_t len,
 				   bufferlist& bl) = 0;
 
-  virtual int write(object_t oid,
+  /*virtual int write(object_t oid,
 					off_t offset, size_t len, 
 					bufferlist& bl,
 					bool fsync=true) = 0;     
+  */
   virtual int write(object_t oid, 
 					off_t offset, size_t len,
 					bufferlist& bl, 

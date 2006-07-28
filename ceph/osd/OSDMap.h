@@ -88,7 +88,7 @@ public:
   };
 
 private:
-  epoch_t   epoch;         // what epoch of the osd cluster descriptor is this
+  epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
   int       pg_bits;     // placement group bits 
 
   set<int>  osds;        // all osds
@@ -368,6 +368,7 @@ private:
 	  if (osds.empty()) {
 		osds.push_back((int)ps);
 	  } else {
+		assert(num_rep > 0);
 		for (int i=1; i<num_rep; i++)
 		  if (osds[i] == (int)ps) {
 			// swap with position 0

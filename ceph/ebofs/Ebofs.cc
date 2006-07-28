@@ -389,7 +389,7 @@ int Ebofs::commit_thread_entry()
 	  prepare_super(super_epoch, superbp);
 	  
 	  // wait for it all to flush (drops global lock)
-	  commit_bc_wait(super_epoch-1);
+	  commit_bc_wait(super_epoch-1);  
 	  commit_inodes_wait();
 	  nodepool.commit_wait();
 	  
@@ -742,20 +742,9 @@ void Ebofs::remove_onode(Onode *on)
 
   // tear down buffer cache
   if (on->oc) {
-	on->oc->tear_down();                 // this will kick readers, flush waiters along the way.
+	on->oc->truncate(0);         // this will kick readers along the way.
 	on->close_oc();
   }
-
-  /* um, this is stupid.. why would we do this?
-  // cancel commit waiters
-  while (!on->commit_waiters.empty()) {
-	Context *c = on->commit_waiters.front();
-	on->commit_waiters.pop_front();
-	commit_waiters[super_epoch].remove(c);     // FIXME slow, O(n), though rare...
-	c->finish(-ENOENT);
-	delete c;
-  }
-  */
 
   // remove from onode map, mark dangling/deleted
   onode_map.erase(on->object_id);
@@ -1122,7 +1111,7 @@ void Ebofs::commit_inodes_wait()
 void Ebofs::trim_buffer_cache()
 {
   ebofs_lock.Lock();
-  trim_bc();
+  trim_bc(0);
   ebofs_lock.Unlock();
 }
 
@@ -1365,8 +1354,10 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
   oc->map_write(on, bstart, blen, alloc, hits);
   
   // get current versions
-  version_t lowv, highv;
-  oc->scan_versions(bstart, blen, lowv, highv);
+  //version_t lowv, highv;
+  //oc->scan_versions(bstart, blen, lowv, highv);
+  //highv++;
+  version_t highv = ++oc->write_count;
   
   // copy from bl into buffer cache
   unsigned blpos = 0;       // byte pos in input buffer
@@ -1376,7 +1367,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 	   i != hits.end(); 
 	   i++) {
 	BufferHead *bh = i->second;
-	bh->set_version(highv+1);
+	bh->set_version(highv);
 	bh->epoch_modified = super_epoch;
 	
 	// old write in progress?
@@ -1426,7 +1417,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 		  bufferlist zb;
 		  zb.push_back(new buffer(z));
 		  zb.zero();
-		  bh->add_partial(opos, zb);
+		  bh->add_partial(off_in_bh, zb);
  		  zleft -= z;
 		  opos += z;
 		}
@@ -1435,12 +1426,12 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 		sb.substr_of(bl, blpos, len_in_bh-z);  // substr in existing buffer
 		bufferlist cp;
 		cp.append(sb.c_str(), len_in_bh-z);    // copy the partial bit!
-		bh->add_partial(opos, cp);
+		bh->add_partial(off_in_bh, cp);
 		left -= len_in_bh-z;
 		blpos += len_in_bh-z;
 		opos += len_in_bh-z;
 
-		if (bh->partial_is_complete(on->object_size)) {
+		if (bh->partial_is_complete(on->object_size - bh->start()*EBOFS_BLOCK_SIZE)) {
 		  dout(10) << "apply_write  completed partial " << *bh << endl;
 		  bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
 		  bh->data.zero();
@@ -1470,6 +1461,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 		}
 		else if (bh->is_partial()) {
 		  dout(10) << "apply_write  already partial, no need to submit rx on " << *bh << endl;
+		  if (bh->partial_tx_epoch == super_epoch)
+			bc.bh_cancel_partial_write(bh);
 		  bc.bh_queue_partial_write(on, bh);		  // queue the eventual write
 		}
 
@@ -1548,6 +1541,11 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 	left -= len_in_bh-z;
 	opos += len_in_bh;
 
+	// old partial?
+	if (bh->is_partial() &&
+		bh->partial_tx_epoch == super_epoch) 
+	  bc.bh_cancel_partial_write(bh);
+
 	// mark dirty
 	if (!bh->is_dirty())
 	  bc.mark_dirty(bh);
@@ -1602,10 +1600,13 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   for (map<block_t,BufferHead*>::iterator i = partials.begin();
 	   i != partials.end();
 	   i++) {
-	off_t start = MAX( off, (off_t)(i->second->start()*EBOFS_BLOCK_SIZE) );
-	off_t end = MIN( off+len, (off_t)(i->second->end()*EBOFS_BLOCK_SIZE) );
+	BufferHead *bh = i->second;
+	off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
+	off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
+	off_t start = MAX( off, bhstart );
+	off_t end = MIN( off+len, bhend );
 	
-	if (!i->second->have_partial_range(start, end)) {
+	if (!i->second->have_partial_range(start-bhstart, end-bhend)) {
 	  if (partials_ok) {
 		// wait on this one
 		Context *c = new C_Cond(will_wait_on, will_wait_on_bool);
@@ -1653,7 +1654,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
 	if (bh->is_partial()) {
 	  // copy from a partial block.  yuck!
 	  bufferlist frag;
-	  bh->copy_partial_substr( start, end, frag );
+	  bh->copy_partial_substr( start-bhstart, end-bhstart, frag );
 	  bl.claim_append( frag );
 	  pos += frag.length();
 	} else {
@@ -1663,6 +1664,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
 		pos += bh->data.length();
 	  } else {
 		bufferlist frag;
+		dout(0) << "substr of " << bh->data.length() << " in " << *bh << endl;
 		frag.substr_of(bh->data, start-bhstart, end-start);
 		pos += frag.length();
 		bl.claim_append( frag );
@@ -1831,14 +1833,14 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 	case Transaction::OP_TRUNCATE:
 	  {
 		object_t oid = t.oids.front(); t.oids.pop_front();
-		size_t len = t.lengths.front(); t.lengths.pop_front();
+		off_t len = t.offsets.front(); t.offsets.pop_front();
 		if (_truncate(oid, len) < 0) {
 		  dout(7) << "apply_transaction fail on _truncate" << endl;
 		  r &= bit;
 		}
 	  }
 	  break;
-	  
+
 	case Transaction::OP_REMOVE:
 	  {
 		object_t oid = t.oids.front(); t.oids.pop_front();
@@ -1974,6 +1976,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 {
   dout(7) << "_write " << hex << oid << dec << " len " << length << " off " << offset << endl;
+  assert(bl.length() == length);
 
   // out of space?
   unsigned max = (length+offset) / EBOFS_BLOCK_SIZE + 10;  // very conservative; assumes we have to rewrite
@@ -2000,7 +2003,7 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 }
 
 
-int Ebofs::write(object_t oid, 
+/*int Ebofs::write(object_t oid, 
 				 off_t off, size_t len,
 				 bufferlist& bl, bool fsync)
 {
@@ -2028,6 +2031,7 @@ int Ebofs::write(object_t oid,
 	return write(oid, off, len, bl, (Context*)0);
   }
 }
+*/
 
 int Ebofs::write(object_t oid, 
 				 off_t off, size_t len,
@@ -2124,6 +2128,10 @@ int Ebofs::_truncate(object_t oid, off_t size)
 		allocator.release(extra[i]);
 	}
 
+	// truncate buffer cache
+	if (on->oc)
+	  on->oc->truncate(on->object_blocks);
+
 	// update uncommitted
 	interval_set<block_t> uncom;
 	if (nblocks > 0) {
@@ -2133,6 +2141,7 @@ int Ebofs::_truncate(object_t oid, off_t size)
 	}
 	dout(10) << "uncommitted was " << on->uncommitted << "  now " << uncom << endl;
 	on->uncommitted = uncom;
+
   }
   else {
 	assert(size == on->object_size);
@@ -2159,6 +2168,7 @@ int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
   ebofs_lock.Unlock();
   return r;
 }
+
 
 
 bool Ebofs::exists(object_t oid)

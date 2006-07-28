@@ -210,6 +210,7 @@ void OSDMonitor::handle_shutdown(Message *m)
 {
   dout(1) << "shutdown from " << m->get_source() << endl;
   messenger->shutdown();
+  delete messenger;
   delete m;
 }
 
