@@ -19,7 +19,6 @@
 
 /*
  * PGQuery - query another OSD as to the contents of their PGs
- *  (i.e. ask for a PGContentSummary)
  */
 
 class MOSDPGQuery : public Message {
@@ -27,13 +26,12 @@ class MOSDPGQuery : public Message {
 
  public:
   version_t get_epoch() { return epoch; }
-  map<pg_t,version_t>  pg_list;
+  map<pg_t,PG::Query>  pg_list;
 
   MOSDPGQuery() {}
-  MOSDPGQuery(epoch_t e, map<pg_t,version_t>& ls) :
-	Message(MSG_OSD_PG_QUERY) {
-	this->epoch = e;
-	this->pg_list = ls;
+  MOSDPGQuery(epoch_t e, map<pg_t,PG::Query>& ls) :
+	Message(MSG_OSD_PG_QUERY),
+	epoch(e), pg_list(ls) {
   }
   
   char *get_type_name() { return "PGq"; }

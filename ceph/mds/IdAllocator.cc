@@ -112,8 +112,7 @@ void IdAllocator::save(Context *onfinish)
 
   // write (async)
   mds->filer->write(id_inode,
-					data.length(),
-					0,
+					0, data.length(),
 					bl,
 					0,
 					onfinish, NULL);  // onack, UNSAFE, FIXME
@@ -161,8 +160,7 @@ void IdAllocator::load(Context *onfinish)
   opening = true;
 
   mds->filer->read(id_inode,
-				   id_inode.layout.stripe_size,
-				   0,
+				   0, id_inode.layout.stripe_size,
 				   &c->bl,
 				   c);
 }

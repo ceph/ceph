@@ -583,7 +583,8 @@ void OSD::handle_op_reply(MOSDOpReply *m)
 /*
  * NOTE: called holding pg lock      /////osd_lock, opqueue active.
  */
-void OSD::handle_rep_op_ack(PG *pg, __uint64_t tid, int result, bool commit, int fromosd, version_t pg_complete_thru)
+void OSD::handle_rep_op_ack(PG *pg, __uint64_t tid, int result, bool commit, 
+							int fromosd, eversion_t pg_complete_thru)
 {
   if (!pg->replica_ops.count(tid)) {
 	dout(7) << "not waiting for repop reply tid " << tid << " in " << *pg 
@@ -925,7 +926,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 		// forget about where missing items are, or anything we're pulling
 		pg->missing.loc.clear();
 		pg->objects_pulling.clear();
-		pg->requested_thru = 0;
 	  }
 	  
 	  if (role != oldrole) {
@@ -1040,8 +1040,8 @@ void OSD::activate_map()
 {
   dout(7) << "activate_map version " << osdmap->get_epoch() << endl;
 
-  map< int, list<PG::PGInfo> >  notify_list;  // primary -> list
-  map< int, map<pg_t,version_t> > query_map;    // peer -> PG -> get_summary_since
+  map< int, list<PG::Info> >  notify_list;  // primary -> list
+  map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
 
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -1333,9 +1333,9 @@ epoch_t OSD::calc_pg_primary_since(int primary, pg_t pgid, epoch_t start)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, list<PG::PGInfo> >& notify_list) 
+void OSD::do_notifies(map< int, list<PG::Info> >& notify_list) 
 {
-  for (map< int, list<PG::PGInfo> >::iterator it = notify_list.begin();
+  for (map< int, list<PG::Info> >::iterator it = notify_list.begin();
 	   it != notify_list.end();
 	   it++) {
 	if (it->first == whoami) {
@@ -1352,9 +1352,9 @@ void OSD::do_notifies(map< int, list<PG::PGInfo> >& notify_list)
 /** do_queries
  * send out pending queries for info | summaries
  */
-void OSD::do_queries(map< int, map<pg_t,version_t> >& query_map)
+void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
 {
-  for (map< int, map<pg_t, version_t> >::iterator pit = query_map.begin();
+  for (map< int, map<pg_t,PG::Query> >::iterator pit = query_map.begin();
 	   pit != query_map.end();
 	   pit++) {
 	int who = pit->first;
@@ -1373,7 +1373,7 @@ void OSD::do_queries(map< int, map<pg_t,version_t> >& query_map)
 
 /** PGNotify
  * from non-primary to primary
- * includes PGInfo.
+ * includes PG::Info.
  * NOTE: called with opqueue active.
  */
 void OSD::handle_pg_notify(MOSDPGNotify *m)
@@ -1386,9 +1386,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   ObjectStore::Transaction t;
   
   // look for unknown PGs i'm primary for
-  map< int, map<pg_t,version_t> > query_map;
+  map< int, map<pg_t,PG::Query> > query_map;
 
-  for (list<PG::PGInfo>::iterator it = m->get_pg_list().begin();
+  for (list<PG::Info>::iterator it = m->get_pg_list().begin();
 	   it != m->get_pg_list().end();
 	   it++) {
 	pg_t pgid = it->pgid;
@@ -1545,27 +1545,12 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	pg->peer_missing[from] = m->missing;
 
 	// merge into our own log
-	pg->merge_log(m->log);
-	
-	// and did i find anything?
-	for (map<object_t, version_t>::iterator p = pg->missing.missing.begin();
-		 p != pg->missing.missing.end();
-		 p++) {
-	  const object_t oid = p->first;
-	  const version_t v = p->second;
-	  if (v <= m->info.last_complete ||            // peer is complete through stamp?
-		  (m->log.updated.count(oid) && 
-		   m->log.updated[oid] == v &&  
-		   m->missing.missing.count(oid) == 0)) {  // or logged it and aren't missing it?
-		pg->missing.loc[oid] = from;               // ...then they have it!
-	  }
-	}
-	dout(10) << *pg << " missing now " << pg->missing << endl;
-	
+	pg->merge_log(m->log, m->missing, from);
+
 	pg->clean_up_local();
 	
 	// peer
-	map< int, map<pg_t,version_t> > query_map;
+	map< int, map<pg_t,PG::Query> > query_map;
 	pg->peer(query_map);
 	do_queries(query_map);
 
@@ -1574,25 +1559,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	dout(10) << *pg << " got " << m->log << " " << m->missing << endl;
 
 	// merge log
-	pg->merge_log(m->log);
-
-	// locate missing items
-	if (pg->missing.num_lost() > 0) {
-	  // see if we can find anything new!
-	  for (map<object_t,version_t>::iterator p = pg->missing.missing.begin();
-		   p != pg->missing.missing.end();
-		   p++) {
-		const object_t oid = p->first;
-		if (m->missing.loc.count(oid)) {
-		  assert(m->missing.missing[oid] >= pg->missing.missing[oid]);
-		  pg->missing.loc[oid] = m->missing.loc[oid];
-		} else {
-		  pg->missing.loc[oid] = from;
-		}
-	  }
-	}
-
-	dout(10) << *pg << " missing now " << pg->missing << endl;
+	pg->merge_log(m->log, m->missing, from);
 	assert(pg->missing.num_lost() == 0);
 
 	// clean up any stray objects
@@ -1631,9 +1598,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
-  map< int, list<PG::PGInfo> > notify_list;
+  map< int, list<PG::Info> > notify_list;
   
-  for (map<pg_t,version_t>::iterator it = m->pg_list.begin();
+  for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
 	   it != m->pg_list.end();
 	   it++) {
 	pg_t pgid = it->first;
@@ -1655,7 +1622,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  }
 	  if (role < 0) {
 		dout(10) << " pg " << hex << pgid << dec << " dne, and i am not an active replica" << endl;
-		PG::PGInfo empty(pgid);
+		PG::Info empty(pgid);
 		notify_list[from].push_back(empty);
 		continue;
 	  }
@@ -1665,7 +1632,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  pg->acting = acting;
 	  pg->set_role(role);
 	  
-	  pg->info.same_primary_since = calc_pg_primary_since(acting[0], pgid, m->get_epoch());
+	  pg->info.same_primary_since = it->second.same_primary_since;  //calc_pg_primary_since(acting[0], pgid, m->get_epoch());
 	  pg->info.same_role_since = osdmap->get_epoch();
 
 	  t.collection_setattr(pgid, "info", (char*)&pg->info, sizeof(pg->info));
@@ -1695,7 +1662,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  }
 	}
 
-	if (it->second == PG_QUERY_INFO) {
+	if (it->second.type == PG::Query::INFO) {
 	  // info
 	  dout(10) << *pg << " sending info" << endl;
 	  notify_list[from].push_back(pg->info);
@@ -1703,19 +1670,24 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->get_pgid());
 	  m->info = pg->info;
 	  
-	  if (it->second == PG_QUERY_SUMMARY) {
+	  if (it->second.type == PG::Query::BACKLOG) {
 		dout(10) << *pg << " sending info+summary/backlog" << endl;
-		m->log = pg->log;
-		if (!m->log.backlog) pg->generate_backlog(m->log);
+		if (pg->log.backlog) {
+		  m->log = pg->log;
+		} else {
+		  pg->generate_backlog();
+		  m->log = pg->log;
+		  pg->drop_backlog();
+		}
 	  } 
-	  else if (it->second == 0) {
+	  else if (it->second.version == 0) {
 		dout(10) << *pg << " sending info+entire log" << endl;
 		m->log = pg->log;
 	  } 
 	  else {
-		version_t since = MAX(it->second, pg->log.bottom);
+		eversion_t since = MAX(it->second.version, pg->log.bottom);
 		dout(10) << *pg << " sending info+log since " << since
-				 << " (asked since " << it->second << ")" << endl;
+				 << " (asked since " << it->second.version << ")" << endl;
 		m->log.copy_after(pg->log, since);
 	  }
 	  m->missing = pg->missing;
@@ -1779,7 +1751,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 // pull
 
 
-void OSD::pull(PG *pg, object_t oid, version_t v)
+void OSD::pull(PG *pg, object_t oid, eversion_t v)
 {
   assert(pg->missing.loc.count(oid));
   int osd = pg->missing.loc[oid];
@@ -1820,7 +1792,7 @@ void OSD::op_rep_pull(MOSDOp *op, PG *pg)
 
   // read data+attrs
   bufferlist bl;
-  version_t v;
+  eversion_t v;
   int vlen = sizeof(v);
   map<string,bufferptr> attrset;
 
@@ -1871,7 +1843,7 @@ void OSD::op_rep_pull(MOSDOp *op, PG *pg)
 void OSD::op_rep_pull_reply(MOSDOpReply *op)
 {
   object_t oid = op->get_oid();
-  version_t v = op->get_version();
+  eversion_t v = op->get_version();
   pg_t pgid = op->get_pg();
 
   if (pg_map.count(pgid) == 0) {
@@ -1914,12 +1886,11 @@ void OSD::op_rep_pull_reply(MOSDOpReply *op)
 	take_waiters(pg->waiting_for_missing_object[oid]);
 
   // raise last_complete?
-  map<version_t, object_t>::iterator p;
-  for (p = pg->log.rupdated.lower_bound(pg->info.last_complete);
-	   p != pg->log.rupdated.end() && pg->missing.missing.count(p->second) == 0;
-	   p++) 
-	if (p->first > pg->info.last_complete) 
-	  pg->info.last_complete = p->first;
+  while (pg->log.complete_to != pg->log.log.end()) {
+	if (pg->missing.missing.count(pg->log.complete_to->oid)) break;
+	pg->info.last_complete = pg->log.complete_to->version;
+	pg++;
+  }
   dout(10) << *pg << " last_complete now " << pg->info.last_complete << endl;
   
   if (pg->missing.num_missing() == 0) {
@@ -1935,7 +1906,7 @@ void OSD::op_rep_pull_reply(MOSDOpReply *op)
 	} else {
 	  // tell primary
 	  dout(7) << *pg << " recovery complete, telling primary" << endl;
-	  list<PG::PGInfo> ls;
+	  list<PG::Info> ls;
 	  ls.push_back(pg->info);
 	  messenger->send_message(new MOSDPGNotify(osdmap->get_epoch(),
 											   ls),
@@ -1962,14 +1933,14 @@ public:
   OSD *osd;
   MOSDOp *op;
 
-  version_t pg_last_complete;
+  eversion_t pg_last_complete;
 
   Mutex lock;
   Cond cond;
   bool acked;
   bool waiting;
 
-  C_OSD_RepModifyCommit(OSD *o, MOSDOp *oo, version_t lc) : osd(o), op(oo), pg_last_complete(lc),
+  C_OSD_RepModifyCommit(OSD *o, MOSDOp *oo, eversion_t lc) : osd(o), op(oo), pg_last_complete(lc),
 															acked(false), waiting(false) { }
   void finish(int r) {
 	lock.Lock();
@@ -1989,7 +1960,7 @@ public:
   }
 };
 
-void OSD::op_rep_modify_commit(MOSDOp *op, version_t last_complete)
+void OSD::op_rep_modify_commit(MOSDOp *op, eversion_t last_complete)
 {
   // send commit.
   dout(10) << "rep_modify_commit on op " << *op << endl;
@@ -2005,8 +1976,8 @@ class C_OSD_WriteCommit : public Context {
 public:
   OSD *osd;
   OSDReplicaOp *repop;
-  version_t pg_last_complete;
-  C_OSD_WriteCommit(OSD *o, OSDReplicaOp *op, version_t lc) : osd(o), repop(op), pg_last_complete(lc) {}
+  eversion_t pg_last_complete;
+  C_OSD_WriteCommit(OSD *o, OSDReplicaOp *op, eversion_t lc) : osd(o), repop(op), pg_last_complete(lc) {}
   void finish(int r) {
 	osd->op_modify_commit(repop, pg_last_complete);
   }
@@ -2020,28 +1991,30 @@ public:
 void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 { 
   object_t oid = op->get_oid();
-  version_t nv = op->get_version();
+  eversion_t nv = op->get_version();
 
   ObjectStore::Transaction t;
 
-  // update PG log
-  if (pg->info.last_update < nv)
-	prepare_log_transaction(t, op, nv, pg, op->get_pg_trim_to());
-  // else, we are playing catch-up, don't update pg metadata!  (FIXME?)
-
+  if (op->get_op() != OSD_OP_WRNOOP) {
+	// update PG log
+	if (pg->info.last_update < nv)
+	  prepare_log_transaction(t, op, nv, pg, op->get_pg_trim_to());
+	// else, we are playing catch-up, don't update pg metadata!  (FIXME?)
+  }
+  
   // do op?
   C_OSD_RepModifyCommit *oncommit = 0;
   
   // check current version
-  version_t myv = 0;
+  eversion_t myv = 0;
   store->getattr(oid, "version", &myv, sizeof(myv));  // this is a noop if oid dne
   dout(10) << "op_rep_modify existing " << hex << oid << dec << " v " << myv << endl;
 
-  // is this an old update?
-  if (nv <= myv) {
+  // is this an old update?  or WRNOOP?
+  if (nv <= myv || op->get_op() == OSD_OP_WRNOOP) {
 	// we have a newer version.  pretend we do a regular commit!
 	dout(10) << "op_rep_modify on " << hex << oid << dec 
-			 << " v " << nv << " <= myv, noop"
+			 << " v " << nv << " <= myv | wrnoop, noop"
 			 << " in " << *pg 
 			 << endl;
 	oncommit = new C_OSD_RepModifyCommit(this, op,
@@ -2137,9 +2110,11 @@ void OSD::handle_op(MOSDOp *op)
   if (!OSD_OP_IS_REP(op->get_op())) {
 	// REGULAR OP (non-replication)
 
-	// am i the primary?
-	if (acting_primary != whoami) {
+	// am i the (same) primary?
+	if (acting_primary != whoami ||
+		op->get_map_epoch() < pg->info.same_primary_since) {
 	  dout(7) << "acting primary is osd" << acting_primary
+			  << " since " << pg->info.same_primary_since 
 			  << ", replying with -EAGAIN" << endl;
 	  assert(op->get_map_epoch() < osdmap->get_epoch());
 	  
@@ -2389,7 +2364,7 @@ bool OSD::waitfor_missing_object(MOSDOp *op, PG *pg)
   // are we missing the object?
   if (pg->missing.missing.count(oid)) {
 	// we don't have it (yet).
-	version_t v = pg->missing.missing[oid];
+	eversion_t v = pg->missing.missing[oid];
 	if (pg->objects_pulling.count(oid)) {
 	  dout(7) << "missing "
 			  << hex << oid << dec 
@@ -2523,6 +2498,8 @@ void OSD::issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd)
   wr->set_old_version(repop->old_version);
   wr->set_pg_role(1); // replica
   wr->set_pg_trim_to(pg->peers_complete_thru);
+  wr->set_orig_asker(op->get_asker());
+  wr->set_orig_tid(op->get_tid());
   messenger->send_message(wr, MSG_ADDR_OSD(osd));
   
   repop->osds.insert(osd);
@@ -2574,8 +2551,8 @@ void OSD::put_repop(OSDReplicaOp *repop)
   if (repop->can_delete()) {
 	// adjust peers_complete_thru
 	if (!repop->pg_complete_thru.empty()) {
-	  map<int,version_t>::iterator p = repop->pg_complete_thru.begin();
-	  version_t min = p->second;
+	  map<int,eversion_t>::iterator p = repop->pg_complete_thru.begin();
+	  eversion_t min = p->second;
 	  p++;
 	  while (p != repop->pg_complete_thru.end()) {
 		if (p->second < min) min = p->second;
@@ -2605,7 +2582,7 @@ void OSD::put_repop(OSDReplicaOp *repop)
 }
 
 
-void OSD::op_modify_commit(OSDReplicaOp *repop, version_t pg_complete_thru)
+void OSD::op_modify_commit(OSDReplicaOp *repop, eversion_t pg_complete_thru)
 {
   dout(10) << "op_modify_commit on op " << *repop->op << endl;
   get_repop(repop);
@@ -2625,28 +2602,43 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 {
   object_t oid = op->get_oid();
 
+  const char *opname = MOSDOp::get_opname(op->get_op());
+
+  // missing?
   if (waitfor_missing_object(op, pg)) return;
-
-  // if the target object is locked for writing by another client, put 'op' to the waiting queue
-  // for _any_ op type -- eg only the locker can unlock!
-  if (block_if_wrlocked(op)) return; // op will be handled later, after the object unlocks
-
-  char *opname = 0;
-  switch (op->get_op()) {
-  case OSD_OP_WRITE: opname = "write"; break;
-  case OSD_OP_ZERO: opname = "zero"; break;
-  case OSD_OP_DELETE: opname = "delete"; break;
-  case OSD_OP_TRUNCATE: opname = "truncate"; break;
-  case OSD_OP_WRLOCK: opname = "wrlock"; break;
-  case OSD_OP_WRUNLOCK: opname = "wrunlock"; break;
-  default: assert(0);
+  
+  // dup op?
+  reqid_t reqid(op->get_asker(), op->get_tid());
+  if (pg->log.logged_req(reqid)) {
+	dout(-3) << "op_modify " << opname << " dup op " << reqid
+			 << ", doing WRNOOP" << endl;
+	op->set_op(OSD_OP_WRNOOP);
+	opname = MOSDOp::get_opname(op->get_op());
   }
 
-  // bump version.
-  version_t ov = 0;  // 0 == dne (yet)
-  store->getattr(oid, "version", &ov, sizeof(ov));
-  version_t nv = messenger->get_lamport();
+  // locked by someone else?
+  // for _any_ op type -- eg only the locker can unlock!
+  if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
+	  block_if_wrlocked(op)) 
+	return; // op will be handled later, after the object unlocks
 
+
+  // old version
+  eversion_t ov = 0;  // 0 == dne (yet)
+  store->getattr(oid, "version", &ov, sizeof(ov));
+  
+  // new version
+  eversion_t nv;
+  if (op->get_op() == OSD_OP_WRNOOP)
+	nv = ov;
+  else {
+	nv = pg->info.last_update;
+	nv.epoch = osdmap->get_epoch();
+	nv.version++;
+	assert(nv > pg->info.last_update);
+	assert(nv > ov);
+  }
+  
   dout(10) << "op_modify " << opname 
 		   << " " << hex << oid << dec 
 		   << " v " << nv 
@@ -2654,13 +2646,6 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 		   << "  off " << op->get_offset() << " len " << op->get_length() 
 		   << endl;  
  
-  if (ov && nv <= ov) 
-	cerr << opname << " " << hex << oid << dec << " ov " << ov << " nv " << nv 
-		 << " ... wtf?  msg sent " << op->get_lamport_send_stamp() 
-		 << " recv " << op->get_lamport_recv_stamp() << endl;
-  assert(nv > ov);
-  
-
   // issue replica writes
   OSDReplicaOp *repop = new OSDReplicaOp(op, nv, ov);
   repop->start = g_clock.now();
@@ -2681,9 +2666,11 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   
   // prepare
   ObjectStore::Transaction t;
-  prepare_log_transaction(t, op, nv, pg, pg->peers_complete_thru);
-  prepare_op_transaction(t, op, nv, pg);
-
+  if (op->get_op() != OSD_OP_WRNOOP) {
+	prepare_log_transaction(t, op, nv, pg, pg->peers_complete_thru);
+	prepare_op_transaction(t, op, nv, pg);
+  }
+  
   // go
   Context *oncommit = new C_OSD_WriteCommit(this, repop, pg->info.last_complete);
   unsigned r = store->apply_transaction(t, oncommit);
@@ -2710,36 +2697,32 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 
 
 void OSD::prepare_log_transaction(ObjectStore::Transaction& t, 
-								  MOSDOp *op, version_t& version, PG *pg,
-								  version_t trim_to)
+								  MOSDOp *op, eversion_t& version, PG *pg,
+								  eversion_t trim_to)
 {
   const object_t oid = op->get_oid();
   const pg_t pgid = op->get_pg();
   
-  PG::PGOndiskLog::Entry logentry(op->get_oid(), version);
+  int opcode = PG::Log::Entry::UPDATE;
+  if (op->get_op() == OSD_OP_DELETE ||
+	  op->get_op() == OSD_OP_REP_DELETE) opcode = PG::Log::Entry::DELETE;
+  PG::Log::Entry logentry(opcode, op->get_oid(), version,
+						  op->get_orig_asker(), op->get_orig_tid());
+
+  dout(10) << "prepare_log_transaction " << op->get_op()
+		   << (logentry.is_delete() ? " - ":" + ")
+		   << hex << oid << dec 
+		   << " v " << version
+		   << " in " << *pg << endl;
 
   // raise last_complete?
   if (pg->info.last_complete == pg->log.top)
 	pg->info.last_complete = version;
-
+  
   // update pg log
   assert(version > pg->log.top);
   assert(pg->info.last_update == pg->log.top);
-  if (op->get_op() == OSD_OP_DELETE ||
-  	  op->get_op() == OSD_OP_REP_DELETE) {
-	dout(10) << "prepare_log_transaction " << op->get_op()
-			 << " - " << hex << oid << dec 
-			 << " v " << version
-			 << " in " << *pg << endl;
-	pg->log.add_delete(oid, version);
-	logentry.deleted = true;
-  } else {
-	dout(10) << "prepare_log_transaction " << op->get_op()
-			 << " + " << hex << oid << dec 
-			 << " v " << version
-			 << " in " << *pg << endl;
-	pg->log.add_update(oid, version);
-  }
+  pg->log.add(logentry);
   assert(pg->log.top == version);
   pg->info.last_update = version;
 
@@ -2755,7 +2738,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
  * apply an op to the store wrapped in a transaction.
  */
 void OSD::prepare_op_transaction(ObjectStore::Transaction& t, 
-								 MOSDOp *op, version_t& version, PG *pg)
+								 MOSDOp *op, eversion_t& version, PG *pg)
 {
   const object_t oid = op->get_oid();
   const pg_t pgid = op->get_pg();

@@ -24,14 +24,14 @@
 
 class MOSDPGNotify : public Message {
   epoch_t      epoch;
-  list<PG::PGInfo> pg_list;   // pgid -> version
+  list<PG::Info> pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
-  list<PG::PGInfo>& get_pg_list() { return pg_list; }
+  list<PG::Info>& get_pg_list() { return pg_list; }
 
   MOSDPGNotify() {}
-  MOSDPGNotify(epoch_t e, list<PG::PGInfo>& l) :
+  MOSDPGNotify(epoch_t e, list<PG::Info>& l) :
 	Message(MSG_OSD_PG_NOTIFY) {
 	this->epoch = e;
 	pg_list.splice(pg_list.begin(),l);

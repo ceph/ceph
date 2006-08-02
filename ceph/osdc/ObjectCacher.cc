@@ -503,20 +503,10 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	dout(10) << "readx " << *ex_it << endl;
 
 	// get Object cache
-	Object *o;
-    if (objects.count(ex_it->oid) == 0) {
-	  // create it.
-      Object *o = new Object(this, ex_it->oid, ino);
-      objects[ex_it->oid] = o;
-      objects_by_ino[ino].insert(o);
-    } else {
-	  // had it.
-	  o = objects[ex_it->oid];
-	}
+	Object *o = get_object(ex_it->oid, ino);
 	
 	// map extent into bufferheads
 	map<off_t, BufferHead*> hits, missing, rx;
-
     o->map_read(rd, hits, missing, rx);
 	
 	if (!missing.empty() && !rx.empty()) {
@@ -627,17 +617,10 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
   for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
 	   ex_it != wr->extents.end();
        ex_it++) {
-	// create object cache?
-	Object *o = 0;
-    if (objects.count(ex_it->oid) == 0) {
-      o = new Object(this, ex_it->oid, ino);
-      objects[ex_it->oid] = o;
-      objects_by_ino[ino].insert(o);
-    } else {
-	  o = objects[ex_it->oid];
-	}
+	// get object cache
+	Object *o = get_object(ex_it->oid, ino);
 
-	// map into a single bufferhead.
+	// map it all into a single bufferhead.
     BufferHead *bh = o->map_write(wr);
 	
 	// adjust buffer pointers (ie "copy" data into my cache)
@@ -660,6 +643,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 	  opos += f_it->second;
 	}
 
+	// it's dirty.
 	mark_dirty(bh);
   }
   return 0;
@@ -688,6 +672,8 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 
 int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock)
 {
+  // first, lock.
+
   assert(0);
   return 0;
 }

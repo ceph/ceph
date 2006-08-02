@@ -28,8 +28,8 @@
 #include <cassert>
 #include <errno.h>
 #include <dirent.h>
-#include <sys/xattr.h>
-#include <sys/vfs.h>
+//#include <sys/xattr.h>
+//#include <sys/vfs.h>
 
 #include "config.h"
 #undef dout

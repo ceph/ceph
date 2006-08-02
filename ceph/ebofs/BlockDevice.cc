@@ -30,7 +30,10 @@
 #include <sys/uio.h>
 
 #include <sys/ioctl.h>
+
+#ifndef __CYGWIN__
 #include <linux/fs.h>
+#endif
 
 #undef dout
 #define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ")."
@@ -53,9 +56,11 @@ block_t BlockDevice::get_num_blocks()
   if (!num_blocks) {
 	assert(fd > 0);
 	
+#ifdef BLKGETSIZE64
 	// ioctl block device?
 	ioctl(fd, BLKGETSIZE64, &num_blocks);
-	
+#endif
+
 	if (!num_blocks) {
 	  // hmm, try stat!
 	  struct stat st;

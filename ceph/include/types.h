@@ -236,6 +236,37 @@ typedef __uint64_t coll_t;        // collection id
 typedef __uint64_t epoch_t;       // map epoch
 typedef __uint64_t tid_t;         // transaction id
 
+// compound rados version type
+class eversion_t {
+public:
+  epoch_t epoch;
+  version_t version;
+  eversion_t(epoch_t e=0, version_t v=0) : epoch(e), version(v) {}
+};
+
+inline bool operator==(const eversion_t& l, const eversion_t& r) {
+  return (l.epoch == r.epoch) && (l.version == r.version);
+}
+inline bool operator!=(const eversion_t& l, const eversion_t& r) {
+  return (l.epoch != r.epoch) || (l.version != r.version);
+}
+inline bool operator<(const eversion_t& l, const eversion_t& r) {
+  return (l.epoch == r.epoch) ? (l.version < r.version):(l.epoch < r.epoch);
+}
+inline bool operator<=(const eversion_t& l, const eversion_t& r) {
+  return (l.epoch == r.epoch) ? (l.version <= r.version):(l.epoch <= r.epoch);
+}
+inline bool operator>(const eversion_t& l, const eversion_t& r) {
+  return (l.epoch == r.epoch) ? (l.version > r.version):(l.epoch > r.epoch);
+}
+inline bool operator>=(const eversion_t& l, const eversion_t& r) {
+  return (l.epoch == r.epoch) ? (l.version >= r.version):(l.epoch >= r.epoch);
+}
+inline ostream& operator<<(ostream& out, const eversion_t e) {
+  return out << e.epoch << "." << e.version;
+}
+
+
 #ifdef OBJECT128
 typedef lame128_t object_t;
 #else

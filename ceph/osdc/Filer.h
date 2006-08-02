@@ -61,38 +61,38 @@ class Filer {
 
   /*** async file interface ***/
   int read(inode_t& inode,
-		   size_t len, 
 		   off_t offset, 
+		   size_t len, 
 		   bufferlist *bl,   // ptr to data
 		   Context *onfinish) {
 	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-	file_to_extents(inode, len, offset, rd->extents);
+	file_to_extents(inode, offset, len, rd->extents);
 
 	return objecter->readx(rd, onfinish);
   }
 
   int write(inode_t& inode,
-			size_t len, 
 			off_t offset, 
+			size_t len, 
 			bufferlist& bl,
 			int flags, 
 			Context *onack,
 			Context *oncommit) {
 	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-	file_to_extents(inode, len, offset, wr->extents);
+	file_to_extents(inode, offset, len, wr->extents);
 
-	return objecter->writex(wr, onack, oncommit);
+	return objecter->modifyx(wr, onack, oncommit);
   }
 
   int zero(inode_t& inode,
-		   size_t len,
 		   off_t offset,
+		   size_t len,
 		   Context *onack,
 		   Context *oncommit) {
-	Objecter::OSDZero *z = new Objecter::OSDZero;
-	file_to_extents(inode, len, offset, z->extents);
+	Objecter::OSDModify *z = new Objecter::OSDModify(OSD_OP_ZERO);
+	file_to_extents(inode, offset, len, z->extents);
 
-	return objecter->zerox(z, onack, oncommit);
+	return objecter->modifyx(z, onack, oncommit);
   }
 
 
@@ -113,8 +113,8 @@ class Filer {
   /* map (ino, offset, len) to a (list of) OSDExtents 
 	 (byte ranges in objects on (primary) osds) */
   void file_to_extents(inode_t inode,
-					   size_t len,
 					   off_t offset,
+					   size_t len,
 					   list<ObjectExtent>& extents);
   
 };

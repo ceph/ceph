@@ -167,7 +167,8 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 	  
 	  // apply partial to myself
 	  assert(bh->data.length() == 0);
-	  bh->data.push_back( bc->bufferpool.alloc(EBOFS_BLOCK_SIZE) );
+	  bufferptr bp = bc->bufferpool.alloc(EBOFS_BLOCK_SIZE);
+	  bh->data.push_back( bp );
 	  bh->data.copy_in(0, EBOFS_BLOCK_SIZE, bl);
 	  bh->apply_partial();
 	  
@@ -845,7 +846,8 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	  
 	  // make the combined block
 	  bufferlist combined;
-	  combined.push_back( oc->bc->bufferpool.alloc(EBOFS_BLOCK_SIZE) );
+	  bufferptr bp = oc->bc->bufferpool.alloc(EBOFS_BLOCK_SIZE);
+	  combined.push_back( bp );
 	  combined.copy_in((pstart-start)*EBOFS_BLOCK_SIZE, (pstart-start+1)*EBOFS_BLOCK_SIZE, bl);
 	  BufferHead::apply_partial( combined, p->second.partial );
 

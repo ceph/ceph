@@ -45,9 +45,9 @@ typedef struct {
   bool   commit;
   size_t length, offset;
   size_t object_size;
-  version_t version;
+  eversion_t version;
 
-  version_t pg_complete_thru;
+  eversion_t pg_complete_thru;
 
   epoch_t map_epoch;
 
@@ -72,17 +72,17 @@ class MOSDOpReply : public Message {
   size_t get_length() { return st.length; }
   size_t get_offset() { return st.offset; }
   size_t get_object_size() { return st.object_size; }
-  version_t get_version() { return st.version; }
+  eversion_t get_version() { return st.version; }
   map<string,bufferptr>& get_attrset() { return attrset; }
 
-  version_t get_pg_complete_thru() { return st.pg_complete_thru; }
-  void set_pg_complete_thru(version_t v) { st.pg_complete_thru = v; }
+  eversion_t get_pg_complete_thru() { return st.pg_complete_thru; }
+  void set_pg_complete_thru(eversion_t v) { st.pg_complete_thru = v; }
 
   void set_result(int r) { st.result = r; }
   void set_length(size_t s) { st.length = s; }
   void set_offset(size_t o) { st.offset = o; }
   void set_object_size(size_t s) { st.object_size = s; }
-  void set_version(version_t v) { st.version = v; }
+  void set_version(eversion_t v) { st.version = v; }
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
   // data payload

@@ -1760,14 +1760,14 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
   int r = 0;
   if (g_conf.client_oc) {
 	// object cache ON
-	r = in->fc.read(size, offset, blist, client_lock);  // may block.
+	r = in->fc.read(offset, size, blist, client_lock);  // may block.
   } else {
 	// object cache OFF -- legacy inconsistent way.
 	Cond cond;
 	bool done = false;
 	C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-    r = filer->read(in->inode, size, offset, &blist, onfinish);
+    r = filer->read(in->inode, offset, size, &blist, onfinish);
 
 	if (r == 0) {
 	  // wait!
@@ -1859,7 +1859,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	blist.push_back( new buffer(buf, size) );
 
 	// write (this may block!)
-	in->fc.write(size, offset, blist, client_lock);
+	in->fc.write(offset, size, blist, client_lock);
 
   } else {
 	// legacy, inconsistent synchronous write.
@@ -1878,7 +1878,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	
 	dout(20) << " sync write start " << onfinish << endl;
 	
-	filer->write(in->inode, size, offset, blist, 0, 
+	filer->write(in->inode, offset, size, blist, 0, 
 				 onfinish, onsafe);
 	
 	while (!done) {

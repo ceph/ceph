@@ -104,8 +104,12 @@ class ObjectCacher {
 
 	// lock
 	static const int LOCK_NONE = 0;
-	static const int LOCK_WRLOCK = 1;
-	static const int LOCK_RDLOCK = 2;
+	static const int LOCK_WRLOCKING = 1;
+	static const int LOCK_WRLOCK = 2;
+	static const int LOCK_WRUNLOCKING = 3;
+	static const int LOCK_RDLOCKING = 4;
+	static const int LOCK_RDLOCK = 5;
+	static const int LOCK_RDUNLOCKING = 6;
 	int lock_state;
 
   public:
@@ -174,6 +178,19 @@ class ObjectCacher {
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
+
+  // objects
+  Object *get_object(object_t oid, inodeno_t ino) {
+	// have it?
+	if (objects.count(oid))
+	  return objects[oid];
+
+	// create it.
+	Object *o = new Object(this, oid, ino);
+	objects[oid] = o;
+	objects_by_ino[ino].insert(o);
+	return o;
+  }
 
   // bh stats
   Cond  stat_cond;
@@ -366,21 +383,19 @@ class ObjectCacher {
 
   /*** async+caching (non-blocking) file interface ***/
   int file_read(inode_t& inode,
-				size_t len, 
-				off_t offset, 
+				off_t offset, size_t len, 
 				bufferlist *bl,
 				Context *onfinish) {
 	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-	filer.file_to_extents(inode, len, offset, rd->extents);
+	filer.file_to_extents(inode, offset, len, rd->extents);
 	return readx(rd, inode.ino, onfinish);
   }
 
   int file_write(inode_t& inode,
-					size_t len, 
-					off_t offset, 
-					bufferlist& bl) {
+				 off_t offset, size_t len, 
+				 bufferlist& bl) {
 	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-	filer.file_to_extents(inode, len, offset, wr->extents);
+	filer.file_to_extents(inode, offset, len, wr->extents);
 	return writex(wr, inode.ino);
   }
 
@@ -389,20 +404,20 @@ class ObjectCacher {
   /*** sync+blocking file interface ***/
   
   int file_atomic_sync_read(inode_t& inode,
-					   size_t len, off_t offset,
-					   bufferlist *bl,
-					   Mutex &lock) {
+							off_t offset, size_t len, 
+							bufferlist *bl,
+							Mutex &lock) {
 	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-	filer.file_to_extents(inode, len, offset, rd->extents);
+	filer.file_to_extents(inode, offset, len, rd->extents);
 	return atomic_sync_readx(rd, inode.ino, lock);
   }
 
   int file_atomic_sync_write(inode_t& inode,
-						size_t len, off_t offset,
-						bufferlist& bl,
-						Mutex &lock) {
+							 off_t offset, size_t len, 
+							 bufferlist& bl,
+							 Mutex &lock) {
 	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-	filer.file_to_extents(inode, len, offset, wr->extents);
+	filer.file_to_extents(inode, offset, len, wr->extents);
 	return atomic_sync_writex(wr, inode.ino, lock);
   }
 
@@ -427,9 +442,15 @@ inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
 {
   out << "object["
 	  << hex << ob.get_oid() << " ino " << ob.get_ino() << dec
-	  << " wr " << ob.last_write_tid << "/" << ob.last_ack_tid << "/" << ob.last_commit_tid
-	  << " lock " << ob.lock_state
-	  << "]";
+	  << " wr " << ob.last_write_tid << "/" << ob.last_ack_tid << "/" << ob.last_commit_tid;
+
+  switch (ob.lock_state) {
+  case ObjectCacher::Object::LOCK_WRLOCKING: out << " wrlocking"; break;
+  case ObjectCacher::Object::LOCK_WRLOCK: out << " wrlock"; break;
+  case ObjectCacher::Object::LOCK_WRUNLOCKING: out << " wrunlocking"; break;
+  }
+
+  out << "]";
   return out;
 }
 

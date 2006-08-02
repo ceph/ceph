@@ -33,9 +33,35 @@ using namespace __gnu_cxx;
 
 class OSD;
 
-#define PG_QUERY_INFO      ((version_t)0xffffffffffffffffULL)
-#define PG_QUERY_SUMMARY   ((version_t)0xfffffffffffffffeULL)
+/* reqid_t - caller + tid to unique identify this request
+ */
+class reqid_t {
+public:
+  msg_addr_t addr;
+  tid_t      tid;
+  reqid_t() : tid(0) {}
+  reqid_t(const msg_addr_t& a, tid_t t) : addr(a), tid(t) {}
+};
 
+inline ostream& operator<<(ostream& out, const reqid_t& r) {
+  return out << r.addr << "." << r.tid;
+}
+inline bool operator==(const reqid_t& l, const reqid_t& r) {
+  return (l.addr == r.addr) && (l.tid == r.tid);
+}
+inline bool operator!=(const reqid_t& l, const reqid_t& r) {
+  return (l.addr != r.addr) || (l.tid != r.tid);
+}
+
+namespace __gnu_cxx {
+  template<> struct hash<reqid_t> {
+	size_t operator()(const reqid_t &r) const { 
+	  static hash<unsigned long> H;
+	  static hash<__uint64_t>    I;
+	  return H(r.addr._addr) ^ I(r.tid);
+	}
+  };
+}
 
 /** PG - Replica Placement Group
  *
@@ -45,59 +71,91 @@ class PG {
 public:
   
   /*
-   * PGInfo - summary of PG statistics.
+   * PG::Info - summary of PG statistics.
    *
    * some notes: 
+   *  - last_complete implies we have all objects that existed as of that
+   *    stamp, OR a newer object, OR have already applied a later delete.
    *  - if last_complete >= log.bottom, then we know pg contents thru log.top.
+   *    otherwise, we have no idea what the pg is supposed to contain.
    */
-  struct PGInfo {
+  struct Info {
 	pg_t pgid;
-	version_t last_update;    // (aka log.top) last object version logged/updated.
-	version_t last_complete;  // last version pg was complete through.
-	version_t log_bottom;     // oldest log entry.
+	eversion_t last_update;    // (aka log.top) last object version logged/updated.
+	eversion_t last_complete;  // last version pg was complete through.
+	eversion_t log_bottom;     // oldest log entry.
 	bool      log_backlog;    // do we store a complete log?
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
 	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
 	epoch_t same_role_since;     // upper bound: i have held same role since
-	PGInfo(pg_t p=0) : pgid(p), 
-					   last_update(0), last_complete(0), log_bottom(0), log_backlog(false),
+	Info(pg_t p=0) : pgid(p), 
+					   //last_update(0), last_complete(0), log_bottom(0), 
+					   log_backlog(false),
 					   last_epoch_started(0), last_epoch_finished(0),
 					   same_primary_since(0), same_role_since(0) {}
 	bool is_clean() { return last_update == last_complete; }
   };
+
+
+  /** 
+   * Query - used to ask a peer for information about a pg.
+   *
+   * note: if version=0, type=LOG, then we just provide our full log.
+   *   only if type=BACKLOG do we generate a backlog and provide that too.
+   */
+  struct Query {
+	const static int INFO = 0;
+	const static int LOG = 1;
+	const static int BACKLOG = 2;
+
+	int type;
+	eversion_t version;
+	epoch_t same_primary_since;
+
+	Query() : type(-1), same_primary_since(0) {}
+	Query(int t, epoch_t s) : type(t), same_primary_since(s) {}
+	Query(int t, eversion_t v, epoch_t s) : type(t), version(v), same_primary_since(s) {}
+  };
+  
   
   /*
-   * PGMissing - summary of missing objects.
-   *  kept in memory, as a supplement to PGLog.
+   * Missing - summary of missing objects.
+   *  kept in memory, as a supplement to Log.
    *  also used to pass missing info in messages.
    */
-  class PGMissing {
+  class Missing {
   public:
-	map<object_t, version_t> missing;   // oid -> v
-	map<version_t, object_t> rmissing;  // v -> oid
+	map<object_t, eversion_t> missing;   // oid -> v
+	map<eversion_t, object_t> rmissing;  // v -> oid
 
 	map<object_t, int>       loc;       // where i think i can get them.
 
 	int num_lost() const { return missing.size() - loc.size(); }
 	int num_missing() const { return missing.size(); }
 
-	bool is_missing(object_t oid, version_t v) {
-	  return missing.count(oid) && missing[oid] == v;
+	bool is_missing(object_t oid) {
+	  return missing.count(oid);
 	}
-	void add(object_t oid, version_t v) {
-	  if (missing.count(oid)) rmissing.erase(missing[oid]);
+	bool is_missing(object_t oid, eversion_t v) {
+	  return missing.count(oid) && missing[oid] <= v;
+	}
+	void add(object_t oid, eversion_t v) {
+	  if (missing.count(oid)) {
+		if (missing[oid] > v) return;   // already missing newer.
+		rmissing.erase(missing[oid]);
+	  }
 	  missing[oid] = v;
 	  rmissing[v] = oid;
 	}
-	void rm(object_t oid, version_t when) {
+	void rm(object_t oid, eversion_t when) {
 	  if (missing.count(oid) && missing[oid] < when) {
 		rmissing.erase(missing[oid]);
 		missing.erase(oid);
 		loc.erase(oid);
 	  }		
 	}
-	void got(object_t oid, version_t v) {
+	void got(object_t oid, eversion_t v) {
 	  assert(missing.count(oid));
 	  assert(missing[oid] <= v);
 	  loc.erase(oid);
@@ -113,24 +171,24 @@ public:
 	  ::_decode(missing, blist, off);
 	  ::_decode(loc, blist, off);
 
-	  for (map<object_t,version_t>::iterator it = missing.begin();
+	  for (map<object_t,eversion_t>::iterator it = missing.begin();
 		   it != missing.end();
 		   it++) 
 		rmissing[it->second] = it->first;
 	}
   };
 
+
   /*
-   * PGLog - incremental log of recent pg changes.
-   *  summary of persistent on-disk copy:
-   *   multiply-modified objects are implicitly trimmed from in-memory log.
+   * Log - incremental log of recent pg changes.
    *  also, serves as a recovery queue.
    *
    * when backlog is true, 
-   *  deleted is not defined before bottom, 
-   *  but updated is complete in that it includes all PG objects.
+   *  objects with versions <= bottom are in log.
+   *  we do not have any deletion info before that time, however.
+   *  log is a "summary" in that it contains all objects in the PG.
    */
-  class PGLog {
+  class Log {
   public:
 	/** top, bottom
 	 *    top - newest entry (update|delete)
@@ -138,40 +196,52 @@ public:
 	 *          complete negative information.  
 	 * i.e. we can infer pg contents for any store whose last_update >= bottom.
 	 */
-	version_t top;       // newest entry (update|delete)
-	version_t bottom;    // version prior to oldest (update|delete) 
+	eversion_t top;       // newest entry (update|delete)
+	eversion_t bottom;    // version prior to oldest (update|delete) 
 
 	/** backlog - true if log is a complete summary of pg contents.  
 	 * updated will include all items in pg, but deleted will not include
 	 * negative entries for items deleted prior to 'bottom'.
 	 */
 	bool      backlog;
-
-	/** update, deleted maps **/
-	map<object_t, version_t> updated;  //  oid -> v. 
-	map<version_t, object_t> rupdated; //    v -> oid.
-	map<object_t, version_t> deleted;  //  oid -> when.  
-	map<version_t, object_t> rdeleted; // when -> oid.
 	
-	/****/
-	PGLog() : top(0), bottom(0), backlog(false) {}
+	/** Entry
+	 * mapped from the eversion_t, so don't include that.
+	 */
+	class Entry {
+	public:
+	  const static int UPDATE = 1;
+	  const static int DELETE = 2;
+
+	  int        op;   // write, zero, trunc, remove
+	  object_t   oid;
+	  eversion_t version;
+	  reqid_t    reqid;  // caller+tid to uniquely identify request
+	  //msg_addr_t who;  // who did this op,
+	  //tid_t      tid;  // and their tid.
+
+	  Entry() : op(0), oid(0) {}
+	  Entry(int _op, object_t _oid, const eversion_t& v, 
+			const msg_addr_t& a, tid_t t) : 
+		op(_op), oid(_oid), version(v), reqid(a,t) {}
+	  
+	  bool is_delete() const { return op == DELETE; }
+	  bool is_update() const { return !is_delete(); }
+	};
+
+	list<Entry> log;  // the actual log.
+
+	Log() : backlog(false) {}
 
 	bool empty() const {
-	  return top == 0;
+	  return top.version == 0 && top.epoch == 0;
 	}
 
-	void _reverse(map<object_t, version_t> &fw, map<version_t, object_t> &bw) {
-	  for (map<object_t,version_t>::iterator it = fw.begin();
-		   it != fw.end();
-		   it++) 
-		bw[it->second] = it->first;
-	}
 	void _encode(bufferlist& blist) const {
 	  blist.append((char*)&top, sizeof(top));
 	  blist.append((char*)&bottom, sizeof(bottom));
 	  blist.append((char*)&backlog, sizeof(backlog));
-	  ::_encode(updated, blist);
-	  ::_encode(deleted, blist);
+	  ::_encode(log, blist);
 	}
 	void _decode(bufferlist& blist, int& off) {
 	  blist.copy(off, sizeof(top), (char*)&top);
@@ -181,107 +251,122 @@ public:
 	  blist.copy(off, sizeof(backlog), (char*)&backlog);
 	  off += sizeof(backlog);
 
-	  ::_decode(updated, blist, off);
-	  ::_decode(deleted, blist, off);
-
-	  _reverse(updated, rupdated);
-	  _reverse(deleted, rdeleted);
+	  ::_decode(log, blist, off);
 	}
 
+	void copy_after(const Log &other, eversion_t v);
+	ostream& print(ostream& out) const;
+  };
 
+  /**
+   * IndexLog - adds in-memory index of the log, by oid.
+   * plus some methods to manipulate it all.
+   */
+  class IndexedLog : public Log {
+  public:
+	hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
+	hash_set<reqid_t>         caller_ops;
+
+	// recovery pointers
+	bool recovery_valid;
+	list<Entry>::iterator requested_to; // not inclusive of referenced item
+	list<Entry>::iterator complete_to;  // not inclusive of referenced item
+	
+	/****/
+	IndexedLog() : recovery_valid(false) {}
+
+	bool logged_object(object_t oid) {
+	  return objects.count(oid);
+	}
+	bool logged_req(reqid_t &r) {
+	  return caller_ops.count(r);
+	}
+
+	void index() {
+	  objects.clear();
+	  for (list<Entry>::iterator i = log.begin();
+		   i != log.end();
+		   i++) {
+		objects[i->oid] = &(*i);
+		caller_ops.insert(i->reqid);
+	  }
+	}
+
+	void index(Entry& e) {
+	  if (objects.count(e.oid) == 0 || 
+		  objects[e.oid]->version < e.version)
+		objects[e.oid] = &e;
+	  caller_ops.insert(e.reqid);
+	}
+	void unindex(Entry& e) {
+	  // NOTE: this only works if we remove from the _bottom_ of the log!
+	  assert(objects.count(e.oid));
+	  if (objects[e.oid]->version == e.version)
+		objects.erase(e.oid);
+	}
 
 	// accessors
-	version_t is_updated(object_t oid) {
-	  if (updated.count(oid)) return updated[oid];
+	Entry *is_updated(object_t oid) {
+	  if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
 	  return 0;
 	}
-	version_t is_deleted(object_t oid) {
-	  if (deleted.count(oid)) return deleted[oid];
+	Entry *is_deleted(object_t oid) {
+	  if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
 	  return 0;
 	}
-
+	
 	// actors
-	void add_update(object_t oid, version_t v) {
-	  // superceding older update?
-	  if (updated.count(oid)) {
-		assert(v > updated[oid]);
-		rupdated.erase(updated[oid]);
-	  }
+	void add(Entry& e) {
+	  // add to log
+	  log.push_back(e);
+	  assert(e.version > top);
+	  top = e.version;
 
-	  // superceding older delete?
-	  if (deleted.count(oid)) {
-		assert(v > deleted[oid]);      // future deletions or past mods impossible.
-		rdeleted.erase(deleted[oid]);
-		deleted.erase(oid);
-	  }
-
-	  // add this item
-	  updated[oid] = v;
-	  rupdated[v] = oid;
-
-	  assert(v > top);
-	  top = v;
-	}
-	void add_delete(object_t oid, version_t when) {
-	  deleted[oid] = when;
-	  rdeleted[when] = oid;
-	  assert(when > top);
-	  top = when;
+	  // to our index
+	  objects[e.oid] = &(*log.rbegin());
+	  caller_ops.insert(e.reqid);
 	}
 
-	void trim(ObjectStore::Transaction &t, version_t s);
-	void copy_after(const PGLog &other, version_t v);
-	ostream& print(ostream& out) const;
+	void trim(ObjectStore::Transaction &t, eversion_t s);
   };
   
 
-  class PGOndiskLog {
+  /**
+   * OndiskLog - some info about how we store the log on disk.
+   */
+  class OndiskLog {
   public:
-	// single entry in the written on-disk log.
-	class Entry {   
-	public:
-	  object_t oid;
-	  version_t version;
-	  bool deleted;
-	  int blah;
-	  Entry() {}
-	  Entry(object_t o, version_t v, bool d=false) :
-		oid(o), version(v), deleted(d) {}
-	};
-
 	// ok
-	off_t bottom;                    // first byte of log. 
-	off_t top;                       // byte following end of log.
-	map<off_t,version_t> block_map;  // block -> first stamp logged there
+	off_t bottom;                     // first byte of log. 
+	off_t top;                        // byte following end of log.
+	map<off_t,eversion_t> block_map;  // block -> first stamp logged there
 
-	PGOndiskLog() : bottom(0), top(0) {}
+	OndiskLog() : bottom(0), top(0) {}
 
-	bool trim_to(version_t v, ObjectStore::Transaction& t);
+	bool trim_to(eversion_t v, ObjectStore::Transaction& t);
   };
 
 
   /*** PG ****/
 public:
   // any
-  //static const int STATE_SUMMARY = 1;  // i have a content summary.
-  static const int STATE_ACTIVE = 2;   // i am active.  (primary: replicas too)
-  //static const int STATE_COMPLETE = 4; // i am complete.
+  static const int STATE_ACTIVE = 1; // i am active.  (primary: replicas too)
 
   // primary
-  static const int STATE_CLEAN = 8;  // peers are complete, clean of stray replicas.
+  static const int STATE_CLEAN = 2;  // peers are complete, clean of stray replicas.
  
   // non-primary
-  static const int STATE_STRAY = 16;  // i haven't sent notify yet.  primary may not know i exist.
+  static const int STATE_STRAY = 4; // i must notify the primary i exist.
 
  protected:
   OSD *osd;
 
 public:
   // pg state
-  PGInfo      info;
-  PGLog       log;
-  PGOndiskLog ondisklog;
-  PGMissing   missing;
+  Info        info;
+  IndexedLog  log;
+  OndiskLog   ondisklog;
+  Missing     missing;
 
 
 protected:
@@ -292,23 +377,23 @@ protected:
  public:
   vector<int> acting;
   epoch_t     last_epoch_started_any;
-  version_t   last_complete_commit;
+  eversion_t  last_complete_commit;
 
  protected:
   // [primary only] content recovery state
-  version_t   peers_complete_thru;
+  eversion_t  peers_complete_thru;
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    clean_set;   // current OSDs that are clean
-  map<int, PGInfo>      peer_info;  // info from peers (stray or prior)
-  set<int>              peer_info_requested;
-  map<int, PGMissing>   peer_missing;
-  map<int, version_t>   peer_log_requested;  // logs i've requested (and start stamps)
-  set<int>              peer_summary_requested;
+  map<int,Info>        peer_info;  // info from peers (stray or prior)
+  set<int>             peer_info_requested;
+  map<int, Missing>    peer_missing;
+  map<int, eversion_t> peer_log_requested;  // logs i've requested (and start stamps)
+  set<int>             peer_summary_requested;
   friend class OSD;
 
-  map<__uint64_t, class OSDReplicaOp*> replica_ops;
-  map<int, set<__uint64_t> > replica_tids_by_osd; // osd -> (tid,...)
+  map<tid_t, class OSDReplicaOp*> replica_ops;
+  map<int, set<tid_t> >           replica_tids_by_osd; // osd -> (tid,...)
 
 
   // [primary|replica]
@@ -318,8 +403,8 @@ protected:
 		   list<class Message*> > waiting_for_missing_object;   
   
   // recovery
-  version_t                requested_thru;
-  map<object_t, version_t> objects_pulling;  // which objects are currently being pulled
+  //eversion_t                requested_thru;
+  map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
 public:
   void clear_primary_recovery_state() {
@@ -351,7 +436,7 @@ public:
   void adjust_prior();  // based on new peer_info.last_epoch_started_any
 
   bool adjust_peers_complete_thru() {
-	version_t t = info.last_complete;
+	eversion_t t = info.last_complete;
 	for (unsigned i=1; i<acting.size(); i++) 
 	  if (peer_info[i].last_complete < t)
 		t = peer_info[i].last_complete;
@@ -361,15 +446,19 @@ public:
 	}
 	return false;
   }
- 
-  void generate_backlog(PGLog& log);      // generate summary backlog by scanning store.
-  void merge_log(const PGLog &olog);
 
-  void peer(map< int, map<pg_t,version_t> >& query_map);
+  void merge_log(Log &olog, Missing& omissing, int from);
+  void generate_backlog();
+  void drop_backlog();
+
+  void peer(map< int, map<pg_t,Query> >& query_map);
 
   bool do_recovery();
   void start_recovery() {
-	requested_thru = 0;
+	log.recovery_valid = true;
+	log.requested_to = log.log.begin();
+	log.complete_to = log.log.begin();
+
 	do_recovery();
   }
 
@@ -388,8 +477,7 @@ public:
 	state(0),
 	last_epoch_started_any(0),
 	last_complete_commit(0),
-	peers_complete_thru(0),
-	requested_thru(0)
+	peers_complete_thru(0)
   { }
   
   pg_t       get_pgid() const { return info.pgid; }
@@ -428,15 +516,15 @@ public:
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction& t, 
-				  PG::PGOndiskLog::Entry& logentry, 
-				  version_t trim_to);
+				  PG::Log::Entry& logentry, 
+				  eversion_t trim_to);
   void read_log(ObjectStore *store);
-  void trim_ondisklog_to(ObjectStore::Transaction& t, version_t v);
+  void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
 };
 
 
-inline ostream& operator<<(ostream& out, const PG::PGInfo& pgi) 
+inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
   return out << "pginfo(" << hex << pgi.pgid << dec 
 			 << " v " << pgi.last_update << "/" << pgi.last_complete
@@ -446,14 +534,14 @@ inline ostream& operator<<(ostream& out, const PG::PGInfo& pgi)
 			 << ")";
 }
 
-inline ostream& operator<<(ostream& out, const PG::PGLog& log) 
+inline ostream& operator<<(ostream& out, const PG::Log& log) 
 {
   out << "log(" << log.bottom << "," << log.top << "]";
   if (log.backlog) out << "+backlog";
   return out;
 }
 
-inline ostream& operator<<(ostream& out, const PG::PGMissing& missing) 
+inline ostream& operator<<(ostream& out, const PG::Missing& missing) 
 {
   out << "missing(" << missing.num_missing();
   if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";

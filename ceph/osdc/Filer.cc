@@ -31,12 +31,11 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << MSG_ADDR_NICE(messenger->get_myaddr()) << ".filer "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << messenger->get_myaddr() << ".filer "
 
 
 void Filer::file_to_extents(inode_t inode,
-							size_t len,
-							off_t offset,
+							off_t offset, size_t len,
 							list<ObjectExtent>& extents) 
 {
   /* we want only one extent per object!

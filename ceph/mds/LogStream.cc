@@ -164,7 +164,7 @@ void LogStream::flush()
 
 	// write it
 	mds->filer->write(log_inode, 
-					  writing_buffers[append_pos]->length(), flush_pos,
+					  flush_pos, writing_buffers[append_pos]->length(), 
 					  *writing_buffers[append_pos],
 					  0,
 					  new C_LS_Append(this, append_pos), // on ack
@@ -289,7 +289,7 @@ void LogStream::wait_for_next_event(Context *c)
   dout(15) << "wait_for_next_event reading from pos " << tail << " len " << size << endl;
   C_LS_ReadChunk *readc = new C_LS_ReadChunk(this);
   mds->filer->read(log_inode,  
-				   g_conf.mds_log_read_inc, tail,
+				   tail, g_conf.mds_log_read_inc, 
 				   &readc->bl,
 				   readc);
 }

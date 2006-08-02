@@ -530,8 +530,7 @@ bool MDCache::trim(int max) {
 	if (in->inode.nlink == 0) {
 	  dout(17) << "last link, removing file content " << *in << endl;             // FIXME THIS IS WRONG PLACE FOR THIS!
 	  mds->filer->zero(in->inode, 
-					   in->inode.size, 
-					   0,
+					   0, in->inode.size, 
 					   NULL, NULL);   // FIXME
 	}
 

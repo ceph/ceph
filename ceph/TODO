@@ -17,6 +17,7 @@ failure detection
 
 pg logging
  top, bottom, trimming, truncate_front, etc.
+ caller stamps -> idempotent operations
 
 pg recovery
  wrt logs, objects
@@ -30,29 +31,83 @@ ebofs
 
  
 
+why do we want client op ordering?
+- simpler logic in objectcacher
+- can pipeline lock + write + unlock, etc.
+  - (at least, wrt to single objects..)
+- all complexity is in Objecter
+  - barrier: waitfor outstanding acks whenever primary osd shifts.
+
+why don't we need it?
+- can make compound write+unlock...
+- don't actually need ordering for concurrent client ops..
+
+---> we want it.
+
+
+* ObjectCacher currently assumes reads+acks+commits over an _object_ are ordered.
+ -> they are.
+
+- primary changes by pg
+- actual discontinuity is over disks
+- but the ordering is over objects .. not pgs (bc of missing objects, recovery, etc.)
+
+Objecter:
+- should order acks over objects, because we want to order the updates (see below)
+
+- on map update and primary change,
+ - no failure
+   - mod: wait for acks for flush to ensure ordering.
+   - mod: or, resubmit to new primary.
+     - resubmit as WRNOOP instead of original op.
+   - read: nothing special.
+ - failure
+   - mod: immediately resubmit pending ops (in order) to new primary
+   - read: resubmit.
+
+ -> this orders acks, but not commits.
+
+- accept acks from current|prior primary.
+- only accept commits from current primary.
+
+- need pg map
+  - to detect primary changes,
+  - pg crashes
+
+
 
 
 
 
 - gzip in messenger?
 
-
 remaining hard problems
 - how to cope with file size changes and read/write sharing
 - how to choose osd monitor peer sets
 - mds failure recovery (of course)
 
+
 osd/rados
+/- add caller to log
+/- make modify ops idempotent
 - pg_bit changes
-- add pg->info.pg_member_since?  wrt replication ops.
+- use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
 
 osdmonitor
 - watch osd utilization; adjust overload in cluster map
 
 objecter
-- detect, cope with crashed PGs, wait for map updates, etc.
-- filer read/write: flip offset,size args
+/- order ops by object
+/- detect, cope with crashed PGs, wait for map updates, etc.
+/- filer read/write: flip offset,size args
+- replay ops (in order) after pg crash
+
+objectcacher
+- locking
+- atomic read/write ops
+- flusher
+
 
 reliability
 - heartbeat vs ping
@@ -108,7 +163,7 @@ client
 ebofs
 - verify LRU behavior sensible: writes go to mid, not top!
 - fix NEAR_LAST_FWD   (?)
-- combine inodes into same blocks?
+- combine inodes and/or cnodes into same blocks
 - delay allocation
   - or actually, reallocate if dirty is cancelable
 - journaling?  in NVRAM?

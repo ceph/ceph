@@ -374,7 +374,7 @@ void AnchorTable::save(Context *onfinish)
   bufferlist bl;
   bl.append(tab.c_str(), tab.length());
   mds->filer->write(table_inode,
-					bl.length(), 0,
+					0, bl.length(),
 					bl, 0, 
 					NULL, onfinish);
 }
@@ -417,7 +417,7 @@ public:
 	if (r > 0 && size > 0) {
 	  C_AT_Load *c = new C_AT_Load(size, at, onfinish);
 	  mds->filer->read(at->table_inode,
-					   size, sizeof(size),
+					   sizeof(size), size,
 					   &c->bl,
 					   c);
 	} else {
@@ -436,7 +436,7 @@ void AnchorTable::load(Context *onfinish)
   
   C_AT_LoadSize *c = new C_AT_LoadSize(this, mds, onfinish);
   mds->filer->read(table_inode,
-				   sizeof(size_t), 0,
+				   0, sizeof(size_t),
 				   &c->bl,
 				   c);
 }

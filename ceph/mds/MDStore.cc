@@ -176,7 +176,7 @@ public:
 	  C_MDS_FetchHash *fin = new C_MDS_FetchHash( mds, inode, context, hashcode );
 	  fin->bl.claim( bl );
 	  mds->filer->read(inode,
-					   left, from,
+					   from, left, 
 					   &fin->bl2,
 					   fin );
 	  return;
@@ -201,7 +201,7 @@ void MDStore::fetch_dir_hash( CDir *dir,
   // grab first stripe bit (which had better be more than 16 bytes!)
   assert(dir->get_inode()->inode.layout.stripe_size >= 16);
   mds->filer->read(dir->get_inode()->inode,
-				   dir->get_inode()->inode.layout.stripe_size, get_hash_offset(hashcode),  
+				   get_hash_offset(hashcode), dir->get_inode()->inode.layout.stripe_size, 
 				   &fin->bl,
 				   fin );
 }
@@ -659,7 +659,7 @@ void MDStore::commit_dir_slice( CDir *dir,
   
   // submit to osd
   mds->filer->write( dir->get_inode()->inode,
-					 fin->bl.length(), 0,
+					 0, fin->bl.length(), 
 					 fin->bl,
 					 0, //OSD_OP_FLAGS_TRUNCATE, // truncate file/object after end of this write
 					 NULL, fin ); // on safe

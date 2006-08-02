@@ -90,7 +90,7 @@ void FileCache::check_caps()
 
 // read/write
 
-int FileCache::read(size_t size, off_t offset, bufferlist& blist, Mutex& client_lock)
+int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
 {
   int r = 0;
 
@@ -103,7 +103,7 @@ int FileCache::read(size_t size, off_t offset, bufferlist& blist, Mutex& client_
 	bool done = false;
 	C_Cond *onfinish = new C_Cond(&cond, &done);
 	
-	r = oc->file_read(inode, size, offset, &blist, onfinish);
+	r = oc->file_read(inode, offset, size, &blist, onfinish);
 	
 	if (r == 0) {
 	  // block
@@ -114,7 +114,7 @@ int FileCache::read(size_t size, off_t offset, bufferlist& blist, Mutex& client_
 	  delete onfinish;
 	}
   } else {
-	r = oc->file_atomic_sync_read(inode, size, offset, &blist, client_lock);
+	r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock);
   }
 
   // dec reading counter
@@ -126,7 +126,7 @@ int FileCache::read(size_t size, off_t offset, bufferlist& blist, Mutex& client_
   return r;
 }
 
-void FileCache::write(size_t size, off_t offset, bufferlist& blist, Mutex& client_lock)
+void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
 {
   // inc writing counter
   num_writing++;
@@ -136,10 +136,10 @@ void FileCache::write(size_t size, off_t offset, bufferlist& blist, Mutex& clien
 	oc->wait_for_write(size, client_lock);
 
 	// async, caching, non-blocking.
-	oc->file_write(inode, size, offset, blist);
+	oc->file_write(inode, offset, size, blist);
   } else {
 	// atomic, synchronous, blocking.
-	oc->file_atomic_sync_write(inode, size, offset, blist, client_lock);	  
+	oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);	  
   }	
 	
   // dec writing counter

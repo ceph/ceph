@@ -22,9 +22,9 @@ class MOSDPGLog : public Message {
   pg_t    pgid;
 
 public:
-  PG::PGInfo info;
-  PG::PGLog log;
-  PG::PGMissing missing;
+  PG::Info info;
+  PG::Log log;
+  PG::Missing missing;
 
   epoch_t get_epoch() { return epoch; }
   pg_t get_pgid() { return pgid; }

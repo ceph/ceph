@@ -31,45 +31,53 @@
 
 // client ops
 #define OSD_OP_READ       1
-#define OSD_OP_WRITE      2
-#define OSD_OP_STAT       10
-#define OSD_OP_DELETE     11
-#define OSD_OP_TRUNCATE   12
-#define OSD_OP_ZERO       13
-#define OSD_OP_WRLOCK     14
-#define OSD_OP_WRUNLOCK   15
+#define OSD_OP_STAT       2
+
+#define OSD_OP_WRNOOP     10
+#define OSD_OP_WRITE      11
+#define OSD_OP_DELETE     12
+#define OSD_OP_TRUNCATE   13
+#define OSD_OP_ZERO       14
+
+#define OSD_OP_WRLOCK     20
+#define OSD_OP_WRUNLOCK   21
+
 
 #define OSD_OP_IS_REP(x)  ((x) >= 30)
 
 // replication/recovery -- these ops are relative to a specific object version #
 #define OSD_OP_REP_WRITE    (100+OSD_OP_WRITE)     // replicated (partial object) write
+#define OSD_OP_REP_WRNOOP   (100+OSD_OP_WRNOOP)     // replicated (partial object) write
 #define OSD_OP_REP_TRUNCATE (100+OSD_OP_TRUNCATE)  // replicated truncate
 #define OSD_OP_REP_DELETE   (100+OSD_OP_DELETE)
 #define OSD_OP_REP_WRLOCK   (100+OSD_OP_WRLOCK)
 #define OSD_OP_REP_WRUNLOCK (100+OSD_OP_WRUNLOCK)
 
 #define OSD_OP_REP_PULL     30   // whole object read
-#define OSD_OP_REP_PUSH     31   // whole object write
-#define OSD_OP_REP_REMOVE   32   // delete replica
+//#define OSD_OP_REP_PUSH     31   // whole object write
+//#define OSD_OP_REP_REMOVE   32   // delete replica
 
 //#define OSD_OP_FLAG_TRUNCATE  1   // truncate object after end of write
 
 typedef struct {
-  long tid;
+  tid_t tid;
   long pcid;
   msg_addr_t asker;
+
+  tid_t      orig_tid;
+  msg_addr_t orig_asker;
 
   object_t oid;
   pg_t pg;
   int        pg_role;//, rg_nrep;
   epoch_t map_epoch;
 
-  version_t pg_trim_to;   // primary->replica: trim to here
+  eversion_t pg_trim_to;   // primary->replica: trim to here
 
   int op;
   size_t length, offset;
-  version_t version;
-  version_t old_version;
+  eversion_t version;
+  eversion_t old_version;
 
   bool   want_ack;
   bool   want_commit;
@@ -80,6 +88,22 @@ typedef struct {
 } MOSDOp_st;
 
 class MOSDOp : public Message {
+public:
+  static const char* get_opname(int op) {
+	switch (op) {
+	case OSD_OP_WRITE: return "write"; 
+	case OSD_OP_ZERO: return "zero"; 
+	case OSD_OP_DELETE: return "delete"; 
+	case OSD_OP_TRUNCATE: return "truncate"; 
+	case OSD_OP_WRLOCK: return "wrlock"; 
+	case OSD_OP_WRUNLOCK: return "wrunlock"; 
+	case OSD_OP_WRNOOP: return "wrnoop"; 
+	default: assert(0);
+	}
+	return 0;
+  }
+
+private:
   MOSDOp_st st;
   bufferlist data;
   //bufferlist osdmap;
@@ -87,23 +111,29 @@ class MOSDOp : public Message {
   friend class MOSDOpReply;
 
  public:
-  bool hack_blah;
 
-  const long        get_tid() { return st.tid; }
+  const tid_t       get_tid() { return st.tid; }
   const msg_addr_t& get_asker() { return st.asker; }
+
+  const tid_t       get_orig_tid() { return st.orig_tid; }
+  const msg_addr_t& get_orig_asker() { return st.orig_asker; }
+  void set_orig_tid(tid_t t) { st.orig_tid = t; }
+  void set_orig_asker(const msg_addr_t& a) { st.orig_asker = a; }
 
   const object_t   get_oid() { return st.oid; }
   const pg_t get_pg() { return st.pg; }
   const epoch_t  get_map_epoch() { return st.map_epoch; }
 
   const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
-  const version_t  get_version() { return st.version; }
-  const version_t  get_old_version() { return st.old_version; }
+  const eversion_t  get_version() { return st.version; }
+  const eversion_t  get_old_version() { return st.old_version; }
 
-  const version_t get_pg_trim_to() { return st.pg_trim_to; }
-  void set_pg_trim_to(version_t v) { st.pg_trim_to = v; }
+  const eversion_t get_pg_trim_to() { return st.pg_trim_to; }
+  void set_pg_trim_to(eversion_t v) { st.pg_trim_to = v; }
   
   const int    get_op() { return st.op; }
+  void set_op(int o) { st.op = o; }
+
   const size_t get_length() { return st.length; }
   const size_t get_offset() { return st.offset; }
 
@@ -139,8 +169,8 @@ class MOSDOp : public Message {
 		 object_t oid, pg_t pg, epoch_t mapepoch, int op) :
 	Message(MSG_OSD_OP) {
 	memset(&st, 0, sizeof(st));
-	this->st.tid = tid;
-	this->st.asker = asker;
+	this->st.orig_tid = this->st.tid = tid;
+	this->st.orig_asker = this->st.asker = asker;
 
 	this->st.oid = oid;
 	this->st.pg = pg;
@@ -158,8 +188,8 @@ class MOSDOp : public Message {
 
   void set_length(size_t l) { st.length = l; }
   void set_offset(size_t o) { st.offset = o; }
-  void set_version(version_t v) { st.version = v; }
-  void set_old_version(version_t ov) { st.old_version = ov; }
+  void set_version(eversion_t v) { st.version = v; }
+  void set_old_version(eversion_t ov) { st.old_version = ov; }
   
   void set_want_ack(bool b) { st.want_ack = b; }
   void set_want_commit(bool b) { st.want_commit = b; }
