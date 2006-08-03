@@ -455,7 +455,8 @@ class ObjectCacher {
 inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 {
   out << "bh["
-	  << bh.start() << "~" << bh.end()
+	  << bh.start() << "~" << bh.length()
+	  << " (" << bh.bl.length() << ")"
 	  << " v " << bh.last_write_tid;
   if (bh.is_tx()) out << " tx";
   if (bh.is_rx()) out << " rx";

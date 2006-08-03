@@ -56,6 +56,8 @@
 #define OSD_OP_REP_DELETE   (100+OSD_OP_DELETE)
 #define OSD_OP_REP_WRLOCK   (100+OSD_OP_WRLOCK)
 #define OSD_OP_REP_WRUNLOCK (100+OSD_OP_WRUNLOCK)
+#define OSD_OP_REP_RDLOCK   (100+OSD_OP_RDLOCK)
+#define OSD_OP_REP_RDUNLOCK (100+OSD_OP_RDUNLOCK)
 
 #define OSD_OP_REP_PULL     30   // whole object read
 //#define OSD_OP_REP_PUSH     31   // whole object write

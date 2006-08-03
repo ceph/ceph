@@ -119,7 +119,7 @@ public:
   void finish(int r) {
 	lock->Lock();
 	if (rval) *rval = r;
-	*done = false;
+	*done = true;
 	cond->Signal();
 	lock->Unlock();
   }

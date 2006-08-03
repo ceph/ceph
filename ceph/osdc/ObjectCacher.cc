@@ -1,15 +1,18 @@
 
+#include "msg/Messenger.h"
 #include "ObjectCacher.h"
 #include "Objecter.h"
 
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "ocacher." << pthread_self() << " "
 
 
 /*** ObjectCacher::BufferHead ***/
 
 
 /*** ObjectCacher::Object ***/
+
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << oc->objecter->messenger->get_myaddr() << ".objectcacher.object(" << hex << oid << dec << ") "
+
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
 {
@@ -223,6 +226,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
           final->set_start( cur );
           final->set_length( max );
           oc->bh_add(this, final);
+		  dout(10) << "map_write adding trailing bh " << *final << endl;
         } else {
           final->set_length( final->length() + max );
         }
@@ -298,7 +302,13 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
   return final;
 }
 
+
+
 /*** ObjectCacher ***/
+
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << objecter->messenger->get_myaddr() << ".objectcacher "
+
 
 /* private */
 
@@ -390,6 +400,8 @@ void ObjectCacher::bh_write(Object *ob, BufferHead *bh)
   oncommit->tid = tid;
   ob->last_write_tid = tid;
   bh->last_write_tid = tid;
+
+  mark_tx(bh);
 }
 
 void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
@@ -461,10 +473,10 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
 	
 	// apply to bh's!
 	off_t opos = start;
-	map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
 	
-	while (p != ob->data.end() &&
-		   opos < start+length) {
+	for (map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
+		 p != ob->data.end() && opos < start+length;
+		 p++) {
 	  BufferHead *bh = p->second;
 	  
 	  if (bh->start() < start &&
@@ -488,6 +500,7 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
 	  
 	  // ok!  mark bh clean.
 	  mark_clean(bh);
+	  dout(10) << "bh_write_ack clean " << *bh << endl;
 	}
 	
 	// update object last_ack.
@@ -722,36 +735,49 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 		   << " in " << hex << ino << dec
 		   << endl;
 
-  // sort by object...
-  map<object_t,ObjectExtent> by_oid;
-  for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
-	   ex_it != rd->extents.end();
-	   ex_it++) 
-	by_oid[ex_it->oid] = *ex_it;
+  if (rd->extents.size() == 1) {
+	// single object.
+	// just write synchronously.
+	Cond cond;
+	bool done = false;
+	objecter->readx(rd, new C_SafeCond(&lock, &cond, &done));
 
-  // lock
-  for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
-	   i != by_oid.end();
-	   i++) {
-	Object *o = get_object(i->first, ino);
-	rdlock(o);
-  }
-  
-  // do the read, into our cache
-  Cond cond;
-  bool done = false;
-  readx(rd, ino, new C_SafeCond(&lock, &cond, &done));
+	// block
+	while (!done) cond.Wait(lock);
+  } else {
+	// spans multiple objects.
 
-  // block
-  while (!done) cond.Wait(lock);
-  
-  // release the locks
-  for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
-	   ex_it != rd->extents.end();
-	   ex_it++) {
-	assert(objects.count(ex_it->oid));
-	Object *o = objects[ex_it->oid];
-	rdunlock(o);
+	// sort by object...
+	map<object_t,ObjectExtent> by_oid;
+	for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
+		 ex_it != rd->extents.end();
+		 ex_it++) 
+	  by_oid[ex_it->oid] = *ex_it;
+	
+	// lock
+	for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
+		 i != by_oid.end();
+		 i++) {
+	  Object *o = get_object(i->first, ino);
+	  rdlock(o);
+	}
+	
+	// do the read, into our cache
+	Cond cond;
+	bool done = false;
+	readx(rd, ino, new C_SafeCond(&lock, &cond, &done));
+	
+	// block
+	while (!done) cond.Wait(lock);
+	
+	// release the locks
+	for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
+		 ex_it != rd->extents.end();
+		 ex_it++) {
+	  assert(objects.count(ex_it->oid));
+	  Object *o = objects[ex_it->oid];
+	  rdunlock(o);
+	}
   }
 
   return 0;
@@ -763,13 +789,42 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 		   << " in " << hex << ino << dec
 		   << endl;
 
+  if (wr->extents.size() == 1 &&
+	  wr->extents.front().length <= g_conf.client_oc_max_sync_write) {
+	// single object.
+	
+	// make sure we aren't already locking/locked...
+	object_t oid = wr->extents.front()->oid;
+	Object *o = 0;
+	if (objects.count(oid)) o = get_object(iod, ino);
+	if (!o || 
+		(o->lock_state != Object::LOCK_WRLOCK &&
+		 o->lock_state != Object::LOCK_WRLOCKING &&
+		 o->lock_state != Object::LOCK_UPGRADING)) {
+	  // just write synchronously.
+	  dout(10) << "atomic_sync_writex " << wr
+			   << " in " << hex << ino << dec
+			   << " doing sync write"
+			   << endl;
+
+	  Cond cond;
+	  bool done = false;
+	  objecter->modifyx(wr, new C_SafeCond(&lock, &cond, &done), 0);
+	  
+	  // block
+	  while (!done) cond.Wait(lock);
+	  return 0;
+	}
+  } 
+
+  // spans multiple objects.
   // sort by object...
   map<object_t,ObjectExtent> by_oid;
   for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
 	   ex_it != wr->extents.end();
 	   ex_it++) 
 	by_oid[ex_it->oid] = *ex_it;
-
+  
   // wrlock
   for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
 	   i != by_oid.end();
@@ -791,7 +846,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 	
 	wrunlock(o);
   }
-
+  
   return 0;
 }
  
@@ -810,7 +865,7 @@ void ObjectCacher::rdlock(Object *o)
 	o->lock_state = Object::LOCK_RDLOCKING;
 	
 	C_LockAck *ack = new C_LockAck(this, o->get_oid());
-	C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 1);
+	C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 0);
 	
 	commit->tid = 
 	  ack->tid = 
@@ -854,7 +909,7 @@ void ObjectCacher::wrlock(Object *o)
 	}
 	
 	C_LockAck *ack = new C_LockAck(this, o->get_oid());
-	C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 1);
+	C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 0);
 	
 	commit->tid = 
 	  ack->tid = 
@@ -899,7 +954,7 @@ void ObjectCacher::rdunlock(Object *o)
   o->lock_state = Object::LOCK_RDUNLOCKING;
 
   C_LockAck *lockack = new C_LockAck(this, o->get_oid());
-  C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 1);
+  C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 0);
   commit->tid = 
 	lockack->tid = 
 	o->last_write_tid = 
@@ -932,7 +987,7 @@ void ObjectCacher::wrunlock(Object *o)
   }
 
   C_LockAck *lockack = new C_LockAck(this, o->get_oid());
-  C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 1);
+  C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 0);
   commit->tid = 
 	lockack->tid = 
 	o->last_write_tid = 

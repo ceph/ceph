@@ -51,6 +51,10 @@ void parse_syn_options(vector<char*>& args)
 		syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
 		syn_iargs.push_back( atoi(args[++i]) );
 		syn_iargs.push_back( atoi(args[++i]) );
+	  } else if (strcmp(args[i],"wrshared") == 0) {
+		syn_modes.push_back( SYNCLIENT_MODE_WRSHARED );
+		syn_iargs.push_back( atoi(args[++i]) );
+		syn_iargs.push_back( atoi(args[++i]) );
 	  } else if (strcmp(args[i],"writebatch") == 0) {
 	  	syn_modes.push_back( SYNCLIENT_MODE_WRITEBATCH );
 		syn_iargs.push_back( atoi(args[++i]) );
@@ -377,6 +381,15 @@ int SyntheticClient::run()
 	case SYNCLIENT_MODE_WRITEFILE:
 	  {
 		string sarg1 = get_sarg(0);
+		int iarg1 = iargs.front();  iargs.pop_front();
+		int iarg2 = iargs.front();  iargs.pop_front();
+		if (run_me())
+		  write_file(sarg1, iarg1, iarg2);
+	  }
+	  break;
+	case SYNCLIENT_MODE_WRSHARED:
+	  {
+		string sarg1 = "shared";
 		int iarg1 = iargs.front();  iargs.pop_front();
 		int iarg2 = iargs.front();  iargs.pop_front();
 		if (run_me())

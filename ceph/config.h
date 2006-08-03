@@ -45,6 +45,7 @@ struct md_config_t {
   int debug_mds_log;
   int debug_buffer;
   int debug_filer;
+  int debug_objectcacher;
   int debug_client;
   int debug_osd;
   int debug_ebofs;
@@ -81,6 +82,8 @@ struct md_config_t {
 
   bool     client_oc;
   int      client_oc_max_dirty;
+  size_t   client_oc_max_sync_write;
+
 
   /*
   bool     client_bcache;

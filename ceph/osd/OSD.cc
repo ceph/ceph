@@ -560,6 +560,10 @@ void OSD::handle_op_reply(MOSDOpReply *m)
   case OSD_OP_REP_WRITE:
   case OSD_OP_REP_TRUNCATE:
   case OSD_OP_REP_DELETE:
+  case OSD_OP_REP_WRLOCK:
+  case OSD_OP_REP_WRUNLOCK:
+  case OSD_OP_REP_RDLOCK:
+  case OSD_OP_REP_RDUNLOCK:
 	{
 	  const pg_t pgid = m->get_pg();
 	  if (pg_map.count(pgid)) {
@@ -2292,6 +2296,10 @@ void OSD::do_op(MOSDOp *op, PG *pg)
 	case OSD_OP_REP_WRITE:
 	case OSD_OP_REP_TRUNCATE:
 	case OSD_OP_REP_DELETE:
+	case OSD_OP_REP_WRLOCK:
+	case OSD_OP_REP_WRUNLOCK:
+	case OSD_OP_REP_RDLOCK:
+	case OSD_OP_REP_RDUNLOCK:
 	  op_rep_modify(op, pg);
 	  break;
 
@@ -2311,6 +2319,10 @@ void OSD::do_op(MOSDOp *op, PG *pg)
 	case OSD_OP_ZERO:
 	case OSD_OP_DELETE:
 	case OSD_OP_TRUNCATE:
+	case OSD_OP_WRLOCK:
+	case OSD_OP_WRUNLOCK:
+	case OSD_OP_RDLOCK:
+	case OSD_OP_RDUNLOCK:
 	  op_modify(op, pg);
 	  break;
 	default:

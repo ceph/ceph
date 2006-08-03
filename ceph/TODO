@@ -90,6 +90,7 @@ remaining hard problems
 osd/rados
 /- add caller to log
 /- make modify ops idempotent
+- rdlocks
 - pg_bit changes
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?

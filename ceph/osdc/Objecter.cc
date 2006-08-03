@@ -432,11 +432,12 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 // write ------------------------------------
 
 tid_t Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl, 
-				   Context *onack, Context *oncommit)
+					  Context *onack, Context *oncommit)
 {
   OSDWrite *wr = new OSDWrite(bl);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  wr->extents.front().buffer_extents[0] = len;
   modifyx(wr, onack, oncommit);
   return last_tid;
 }
@@ -460,7 +461,7 @@ tid_t Objecter::lock(int op, object_t oid,
 					 Context *onack, Context *oncommit)
 {
   OSDModify *l = new OSDModify(op);
-  l->extents.push_back(ObjectExtent(oid, 0, 1));
+  l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
   modifyx(l, onack, oncommit);
   return last_tid;
