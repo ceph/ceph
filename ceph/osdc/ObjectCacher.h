@@ -101,6 +101,8 @@ class ObjectCacher {
 
 	map< tid_t, list<Context*> > waitfor_ack;
 	map< tid_t, list<Context*> > waitfor_commit;
+	list<Context*> waitfor_rd;
+	list<Context*> waitfor_wr;
 
 	// lock
 	static const int LOCK_NONE = 0;
@@ -110,14 +112,18 @@ class ObjectCacher {
 	static const int LOCK_RDLOCKING = 4;
 	static const int LOCK_RDLOCK = 5;
 	static const int LOCK_RDUNLOCKING = 6;
+	static const int LOCK_UPGRADING = 7;    // rd -> wr
+	static const int LOCK_DOWNGRADING = 8;  // wr -> rd
 	int lock_state;
+	int wrlock_ref;  // how many ppl want or are using a WRITE lock
+	int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
 	Object(ObjectCacher *_oc, object_t o, inodeno_t i) : 
 	  oc(_oc),
 	  oid(o), ino(i), 
 	  last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
-	  lock_state(LOCK_NONE) 
+	  lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0)
 	  {}
 
 	object_t get_oid() { return oid; }
@@ -287,10 +293,19 @@ class ObjectCacher {
   void bh_read(Object *ob, BufferHead *bh);
   void bh_write(Object *ob, BufferHead *bh);
 
+  bool flush(Object *o);
+  off_t release(Object *o);
+
+  void rdlock(Object *o);
+  void rdunlock(Object *o);
+  void wrlock(Object *o);
+  void wrunlock(Object *o);
+
  public:
   void bh_read_finish(object_t oid, off_t offset, size_t length, bufferlist &bl);
   void bh_write_ack(object_t oid, off_t offset, size_t length, tid_t t);
   void bh_write_commit(object_t oid, off_t offset, size_t length, tid_t t);
+  void lock_ack(list<object_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
 	ObjectCacher *oc;
@@ -327,6 +342,19 @@ class ObjectCacher {
 	C_WriteCommit(ObjectCacher *c, object_t o, off_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
 	void finish(int r) {
 	  oc->bh_write_commit(oid, start, length, tid);
+	}
+  };
+
+  class C_LockAck : public Context {
+	ObjectCacher *oc;
+  public:
+	list<object_t> oids;
+	tid_t tid;
+	C_LockAck(ObjectCacher *c, object_t o) : oc(c) {
+	  oids.push_back(o);
+	}
+	void finish(int r) {
+	  oc->lock_ack(oids, tid);
 	}
   };
 
@@ -448,6 +476,9 @@ inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
   case ObjectCacher::Object::LOCK_WRLOCKING: out << " wrlocking"; break;
   case ObjectCacher::Object::LOCK_WRLOCK: out << " wrlock"; break;
   case ObjectCacher::Object::LOCK_WRUNLOCKING: out << " wrunlocking"; break;
+  case ObjectCacher::Object::LOCK_RDLOCKING: out << " rdlocking"; break;
+  case ObjectCacher::Object::LOCK_RDLOCK: out << " rdlock"; break;
+  case ObjectCacher::Object::LOCK_RDUNLOCKING: out << " rdunlocking"; break;
   }
 
   out << "]";

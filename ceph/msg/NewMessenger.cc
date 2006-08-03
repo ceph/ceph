@@ -416,8 +416,8 @@ void *Rank::Receiver::entry()
 			  // find entity
 			  entity = rank.local[m->get_dest()];
 			} else {
-			  dout(10) << "got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
-			  assert(0);
+			  derr(0) << "got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
+			  rank.waiting_for_lookup[m->get_dest()].push_back(m);
 			}
 		  }
 		}

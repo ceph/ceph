@@ -2113,21 +2113,28 @@ void OSD::handle_op(MOSDOp *op)
 	// am i the (same) primary?
 	if (acting_primary != whoami ||
 		op->get_map_epoch() < pg->info.same_primary_since) {
+	  
 	  dout(7) << "acting primary is osd" << acting_primary
 			  << " since " << pg->info.same_primary_since 
-			  << ", replying with -EAGAIN" << endl;
+			  << ", dropping" << endl;
 	  assert(op->get_map_epoch() < osdmap->get_epoch());
 	  
-	  // tell client.
-	  MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap->get_epoch(), true);  // FIXME error code?
-	  messenger->send_message(fail, op->get_asker());
-
-	  /*
-	  dout(7) << "acting primary is osd" << acting_primary 
-			  << ", forwarding" << endl;
-	  messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
-	  logger->inc("fwd");
-	  */
+	  if (0) {
+		dout(7) << "acting primary is osd" << acting_primary
+				<< " since " << pg->info.same_primary_since 
+				<< ", replying with -EAGAIN" << endl;
+		assert(op->get_map_epoch() < osdmap->get_epoch());
+		
+		// tell client.
+		MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap->get_epoch(), true);  // FIXME error code?
+		messenger->send_message(fail, op->get_asker());
+	  }
+	  if (0) {
+		dout(7) << "acting primary is osd" << acting_primary 
+				<< ", forwarding" << endl;
+		messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
+		logger->inc("fwd");
+	  }
 	  return;
 	}
 

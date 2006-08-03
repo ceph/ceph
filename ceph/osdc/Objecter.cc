@@ -199,15 +199,15 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   switch (m->get_op()) {
   case OSD_OP_READ:
 	handle_osd_read_reply(m);
-	return;
+	break;
 	
   case OSD_OP_WRITE:
   case OSD_OP_ZERO:
-  case OSD_OP_WRLOCK:
   case OSD_OP_WRUNLOCK:
+  case OSD_OP_WRLOCK:
 	handle_osd_modify_reply(m);
-	return;
-	
+	break;
+
   default:
 	assert(0);
   }
@@ -227,7 +227,7 @@ tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl,
   return last_tid;
 }
 
-int Objecter::readx(OSDRead *rd, Context *onfinish)
+tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 {
   rd->onfinish = onfinish;
   
@@ -237,7 +237,7 @@ int Objecter::readx(OSDRead *rd, Context *onfinish)
 	   it++) 
 	readx_submit(rd, *it);
 
-  return 0;
+  return last_tid;
 }
 
 void Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex) 
@@ -454,12 +454,23 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len,
   return last_tid;
 }
 
+// lock ops
+
+tid_t Objecter::lock(int op, object_t oid, 
+					 Context *onack, Context *oncommit)
+{
+  OSDModify *l = new OSDModify(op);
+  l->extents.push_back(ObjectExtent(oid, 0, 1));
+  l->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  modifyx(l, onack, oncommit);
+  return last_tid;
+}
 
 
 
 // generic modify -----------------------------------
 
-int Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
+tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 {
   wr->onack = onack;
   wr->oncommit = oncommit;
@@ -470,7 +481,7 @@ int Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 	   it++) 
 	modifyx_submit(wr, *it);
 
-  return 0;
+  return last_tid;
 }
 
 
@@ -601,6 +612,16 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 	assert(wr->waitfor_ack.count(tid));
 	wr->waitfor_ack.erase(tid);
 
+	/*
+	if (wr->op == OSD_OP_WRLOCK) {
+	  OSDLock *l = (OSDLock*)wr;
+	  if (l->next != l->by_osd.end()) {
+		// submit next lock!
+		modifyx_submit(l, l->next->second);
+	  }
+	}
+	*/
+
 	if (wr->waitfor_commit.empty()) {
 	  op_modify.erase( tid );      // no commit requested  (FIXME or ooo delivery)
 	  assert(wr->oncommit == 0);
@@ -626,5 +647,31 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   delete m;
 }
+
+
+
+/* busted
+// lock acquisition -----------------------
+
+tid_t Objecter::lockx(OSDLock *l, Context *onack, Context *oncommit)
+{
+  l->onack = onack;
+  l->oncommit = 0;
+
+  // sort locks by osd
+  for (list<ObjectExtent>::iterator i = l->extents.begin();
+	   i != l->extents.end();
+	   i++)
+	l->by_osd[i->osd] = *i;
+
+  // issue first lock.
+  l->next = l->by_osd.begin();
+  lockx_submit(l, l->next->second);
+  l->next++;
+
+  return last_tid;
+}
+*/
+
 
 

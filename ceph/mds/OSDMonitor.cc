@@ -151,13 +151,13 @@ void OSDMonitor::init()
 	for (map<int,float>::iterator i = g_fake_osd_down.begin();
 		 i != g_fake_osd_down.end();
 		 i++) {
-	  dout(0) << "osd" << i->first << " DOWN after " << i->second << endl;
+	  dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
 	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
 	}
 	for (map<int,float>::iterator i = g_fake_osd_out.begin();
 		 i != g_fake_osd_out.end();
 		 i++) {
-	  dout(0) << "osd" << i->first << " OUT after " << i->second << endl;
+	  dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
 	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
 	}
   }
@@ -274,7 +274,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   int from = m->get_source().num();
 
   if (osdmap->get_epoch() == 1) {
-	// initial boot.  hackish.
+	// initial boot.  hackish.  FIXME.
 	osdmap->osd_inst[from] = m->get_source_inst();
   } else {
  
@@ -297,7 +297,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 	accept_pending();
   }
 
-  // booting osd will spread word
+  // the booting osd will spread word
   send_incremental_map(m->sb.current_epoch, m->get_source(), true);
   delete m;
 

@@ -41,6 +41,10 @@
 
 #define OSD_OP_WRLOCK     20
 #define OSD_OP_WRUNLOCK   21
+#define OSD_OP_RDLOCK     22
+#define OSD_OP_RDUNLOCK   23
+#define OSD_OP_UPLOCK     24
+#define OSD_OP_DNLOCK     25
 
 
 #define OSD_OP_IS_REP(x)  ((x) >= 30)

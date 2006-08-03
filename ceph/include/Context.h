@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include <list>
+#include <set>
 #include <iostream>
 using namespace std;
 
@@ -69,5 +70,46 @@ public:
   }
 };
 
+
+/*
+ * C_Gather
+ *
+ * BUG: does not report errors.
+ */
+class C_Gather : public Context {
+public:
+  class C_GatherSub : public Context {
+	C_Gather *gather;
+	int num;
+  public:
+	C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
+	void finish(int r) {
+	  gather->finish(num);
+	}
+  };
+
+private:
+  Context *onfinish;
+  set<int> waitfor;
+  int num;
+
+public:
+  C_Gather(Context *f) : onfinish(f), num(0) {}
+
+  void finish(int r) {
+	assert(waitfor.count(r));
+	waitfor.erase(r);
+	if (waitfor.empty()) {
+	  onfinish->finish(0);
+	  delete onfinish;
+	}
+  }
+
+  Context *new_sub() {
+	num++;
+	waitfor.insert(num);
+	return new C_GatherSub(this, num);
+  }
+};
 
 #endif

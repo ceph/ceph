@@ -1134,7 +1134,7 @@ void Ebofs::trim_bc(off_t max)
 	delete bh;
 	
 	if (oc->is_empty()) {
-	  Onode *on = get_onode( oc->get_object_id() );
+	  Onode *on = oc->on;
 	  dout(10) << "trim_bc  closing oc on " << *on << endl;
 	  on->close_oc();
 	  put_onode(on);
@@ -1142,12 +1142,6 @@ void Ebofs::trim_bc(off_t max)
   }
 
   dout(10) << "trim_bc finish: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << endl;
-
-  /*
-  dout(10) << "trim_buffer_cache finish: " 
-		   << bc.lru_rest.lru_get_size() << " rest + " 
-		   << bc.lru_dirty.lru_get_size() << " dirty " << endl;
-  */
 }
 
 
@@ -1650,7 +1644,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
 	off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
 	off_t start = MAX( pos, bhstart );
 	off_t end = MIN( off+len, bhend );
-	
+
 	if (bh->is_partial()) {
 	  // copy from a partial block.  yuck!
 	  bufferlist frag;
@@ -1664,7 +1658,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
 		pos += bh->data.length();
 	  } else {
 		bufferlist frag;
-		dout(0) << "substr of " << bh->data.length() << " in " << *bh << endl;
+		dout(10) << "substr " << (start-bhstart) << "~" << (end-start) << " of " << bh->data.length() << " in " << *bh << endl;
 		frag.substr_of(bh->data, start-bhstart, end-start);
 		pos += frag.length();
 		bl.claim_append( frag );

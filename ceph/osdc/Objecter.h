@@ -63,19 +63,24 @@ class Objecter {
 	OSDWrite(bufferlist &b) : OSDModify(OSD_OP_WRITE), bl(b) {}
   };
 
+  /*
+  class OSDLock : public OSDModify {
+  public:
+	map<int,ObjectExtent> by_osd;
+	map<int,ObjectExtent>::iterator next;
+	OSDLock(int o) : OSDModify(o) {}
+  };
+  */
+
 
  private:
   // pending ops
   hash_map<tid_t,OSDRead*>   op_read;
   hash_map<tid_t,OSDModify*> op_modify;
 
-  // for failures
-  //hash_map<int, set<tid_t> > osd_tids;
-  //hash_map<tid_t, int>       tid_osd;
-
- 
   /**
    * track pending ops by pg
+   *  ...so we can cope with failures, map changes
    */
   class PG {
   public:
@@ -127,6 +132,7 @@ class Objecter {
   void handle_osd_op_reply(class MOSDOpReply *m);
   void handle_osd_read_reply(class MOSDOpReply *m);
   void handle_osd_modify_reply(class MOSDOpReply *m);
+  void handle_osd_lock_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
 
  private:
@@ -143,8 +149,9 @@ class Objecter {
   }
 
   // med level
-  int readx(OSDRead *read, Context *onfinish);
-  int modifyx(OSDModify *wr, Context *onack, Context *oncommit);
+  tid_t readx(OSDRead *read, Context *onfinish);
+  tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
+  //tid_t lockx(OSDLock *l, Context *onack, Context *oncommit);
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
@@ -153,6 +160,8 @@ class Objecter {
 			  Context *onack, Context *oncommit);
   tid_t zero(object_t oid, off_t off, size_t len,  
 			 Context *onack, Context *oncommit);
+
+  tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
 };
 
 #endif

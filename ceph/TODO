@@ -93,6 +93,7 @@ osd/rados
 - pg_bit changes
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
+- recover period for crashed pgs
 
 osdmonitor
 - watch osd utilization; adjust overload in cluster map
@@ -102,6 +103,7 @@ objecter
 /- detect, cope with crashed PGs, wait for map updates, etc.
 /- filer read/write: flip offset,size args
 - replay ops (in order) after pg crash
+- sequential lock acquisition
 
 objectcacher
 - locking
