@@ -105,8 +105,17 @@ public:
   char dev_path[100];
   class ObjectStore *store;
 
-  // failure monitoring
-  class HostMonitor *monitor;
+  // heartbeat
+  void heartbeat();
+
+  class C_Heartbeat : public Context {
+	OSD *osd;
+  public:
+	C_Heartbeat(OSD *o) : osd(o) {}
+	void finish(int r) {
+	  osd->heartbeat();
+	}
+  } *next_heartbeat;
 
   // global lock
   Mutex osd_lock;                          
@@ -161,15 +170,15 @@ public:
   // -- osd map --
   class OSDMap  *osdmap;
   list<class Message*> waiting_for_osdmap;
-  //map<version_t, OSDMap*> osdmaps;
 
   hash_map<msg_addr_t, epoch_t>  peer_map_epoch;
-  
+  void share_map(msg_addr_t who, epoch_t epoch);
+
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
   
   void advance_map(ObjectStore::Transaction& t);
-  void activate_map();
+  void activate_map(ObjectStore::Transaction& t);
 
   bool get_map_bl(epoch_t e, bufferlist& bl);
   bool get_map(epoch_t e, OSDMap &m);
@@ -238,7 +247,7 @@ public:
   // messages
   virtual void dispatch(Message *m);
 
-  void handle_ping(class MPing *m);
+  //void handle_ping(class MPing *m);
   void handle_op(class MOSDOp *m);
 
   void op_read(class MOSDOp *m, PG *pg);

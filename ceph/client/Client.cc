@@ -1770,15 +1770,11 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 
     r = filer->read(in->inode, offset, size, &blist, onfinish);
 
-	if (r == 0) {
-	  // wait!
-	  while (!done)
-		cond.Wait(client_lock);
-	} else {
-	  // had it cached, apparently!
-	  assert(r > 0);
-	  delete onfinish;
-	}
+	assert(r >= 0);
+
+	// wait!
+	while (!done)
+	  cond.Wait(client_lock);
   }
   
   // copy data into caller's char* buf

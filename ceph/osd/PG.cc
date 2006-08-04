@@ -18,6 +18,7 @@
 #include "OSD.h"
 
 
+#include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 
@@ -38,8 +39,8 @@ void PG::Log::copy_after(const Log &other, eversion_t v)
 	   i++) {
 	if (i->version <= v) break;
 	log.push_front(*i);
-	bottom = i->version;
   }
+  bottom = v;
 }
 
 
@@ -51,8 +52,8 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   while (!log.empty()) {
 	Entry &e = *log.begin();
 	
-	assert(requested_to != log.begin());
 	assert(complete_to != log.begin());
+	assert(requested_to != log.begin());
 
 	// remove from index,
 	unindex(e);
@@ -71,6 +72,11 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
 		   << " into " << log << endl;
+
+  cout << "log" << endl;
+  log.print(cout);
+  cout << "olog" << endl;
+  olog.print(cout);
 
   if (log.empty() ||
 	  (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
@@ -98,13 +104,16 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	
 	// take the whole thing.
 	log.log.swap(olog.log);
-	log.top = olog.top;
-	log.bottom = olog.bottom;
-	log.backlog = olog.backlog;
+
+	info.last_update = log.top = olog.top;
+	info.log_bottom = log.bottom = olog.bottom;
+	info.log_backlog = log.backlog = olog.backlog;
 	
 	log.index();
 
 	dout(10) << "merge_log  result " << log << " " << missing << endl;
+	log.print(cout);
+	dout(10) << "missing " << hex << missing.missing << dec << endl;
 	return;
   }
 
@@ -162,8 +171,9 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	list<Log::Entry>::iterator to = olog.log.end();
 	list<Log::Entry>::iterator from = olog.log.end();
 	while (1) {
+	  if (from == olog.log.begin()) break;
 	  from--;
-	  if (from->version > log.top) {
+	  if (from->version < log.top) {
 		from++;
 		break;
 	  }
@@ -185,12 +195,14 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	
 	// splice
 	log.log.splice(log.log.end(), 
-				   log.log, from, to);
+				   olog.log, from, to);
 	
-	log.top = olog.top;
+	info.last_update = log.top = olog.top;
   }
   
   dout(10) << "merge_log  result " << log << " " << missing << endl;
+  log.print(cout);
+  dout(10) << "missing " << hex << missing.missing << dec << endl;
 }
 
 
@@ -205,6 +217,7 @@ void PG::generate_backlog()
   osd->store->collection_list(info.pgid, olist);
   
   int local = 0;
+  map<eversion_t,Log::Entry> add;
   for (list<object_t>::iterator it = olist.begin();
 	   it != olist.end();
 	   it++) {
@@ -219,28 +232,34 @@ void PG::generate_backlog()
 	osd->store->getattr(*it, 
 						"version",
 						&e.version, sizeof(e.version));
-	log.log.push_front(e);
+	add[e.version] = e;
+  }
 
-	// index
-	log.index( *log.log.begin() );
+  for (map<eversion_t,Log::Entry>::iterator i = add.begin();
+	   i != add.end();
+	   i++) {
+	log.log.push_front(i->second);
+	log.index( *log.log.begin() );	// index
   }
 
   dout(10) << local << " local objects, "
+		   << add.size() << " objects added to backlog, " 
 		   << log.objects.size() << " in pg" << endl;
 }
 
 void PG::drop_backlog()
 {
-  dout(10) << "dropping backlog for " << log << endl;
+  dout(10) << "drop_backlog for " << log << endl;
+  log.print(cout);
 
   assert(log.backlog);
   log.backlog = false;
   
   while (!log.log.empty()) {
 	Log::Entry &e = *log.log.begin();
-	if (e.version == log.bottom) break;
-	assert(e.version < log.bottom);
+	if (e.version > log.bottom) break;
 
+	dout(10) << "drop_backlog trimming " << e.version << endl;
 	log.unindex(e);
 	log.log.pop_front();
   }
@@ -322,7 +341,8 @@ void PG::adjust_prior()
 }
 
 
-void PG::peer(map< int, map<pg_t,Query> >& query_map)
+void PG::peer(ObjectStore::Transaction& t, 
+			  map< int, map<pg_t,Query> >& query_map)
 {
   dout(10) << "peer.  acting is " << acting 
 		   << ", prior_set is " << prior_set << endl;
@@ -357,7 +377,7 @@ void PG::peer(map< int, map<pg_t,Query> >& query_map)
   eversion_t newest_update = info.last_update;
   int        newest_update_osd = osd->whoami;
   eversion_t oldest_update_needed = info.last_update;  // only of acting (current) osd set
-  eversion_t peers_complete_thru = info.last_complete;
+  peers_complete_thru = info.last_complete;
   
   for (map<int,Info>::iterator it = peer_info.begin();
 	   it != peer_info.end();
@@ -488,9 +508,7 @@ void PG::peer(map< int, map<pg_t,Query> >& query_map)
 
 
   // -- ok, activate!
-  info.last_epoch_started = osd->osdmap->get_epoch();
-  state_set(PG::STATE_ACTIVE);  // i am active!
-  dout(10) << "marking active" << endl;
+  activate(t);
 
   clean_set.clear();
   if (info.is_clean()) 
@@ -543,6 +561,8 @@ void PG::peer(map< int, map<pg_t,Query> >& query_map)
 	dout(10) << "sending " << m->log << " " << m->missing
 			 << " to osd" << peer << endl;
 
+	m->log.print(cout);
+
 	osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
   }
 
@@ -553,9 +573,121 @@ void PG::peer(map< int, map<pg_t,Query> >& query_map)
   	clean_replicas();	
   }
   
+  // waiters
   osd->take_waiters(waiting_for_active);
 }
 
+
+void PG::activate(ObjectStore::Transaction& t)
+{
+  // twiddle pg state
+  state_set(STATE_ACTIVE);
+  state_clear(PG::STATE_STRAY);
+  info.last_epoch_started = osd->osdmap->get_epoch();
+
+  if (role == 0) {	// primary state
+	peers_complete_thru = 0;  // we don't know (yet)!
+  }
+
+  assert(info.last_complete >= log.bottom || log.backlog);
+
+  // write pg info
+  t.collection_setattr(info.pgid, "info", (char*)&info, sizeof(info));
+  
+  // write log
+  write_log(t);
+
+  // clean up stray objects
+  clean_up_local(t); 
+
+  // init complete pointer
+  if (info.last_complete == info.last_update) {
+	dout(10) << "activate - complete" << endl;
+	log.complete_to == log.log.end();
+	log.requested_to = log.log.end();
+  } else {
+	dout(10) << "activate - not complete, starting recovery" << endl;
+
+	// init complete_to
+	log.complete_to = log.log.begin();
+	while (log.complete_to->version < info.last_complete) {
+	  log.complete_to++;
+	  assert(log.complete_to != log.log.end());
+	}
+
+	// start recovery
+	log.requested_to = log.log.begin();
+    do_recovery();
+  }
+}
+
+/** clean_up_local
+ * remove any objects that we're storing but shouldn't.
+ * as determined by log.
+ */
+void PG::clean_up_local(ObjectStore::Transaction& t)
+{
+  dout(10) << "clean_up_local" << endl;
+
+  assert(info.last_update >= log.bottom);  // otherwise we need some help!
+
+  if (log.backlog) {
+	// be thorough.
+	list<object_t> ls;
+	osd->store->collection_list(info.pgid, ls);
+	set<object_t> s;
+	
+	for (list<object_t>::iterator i = ls.begin();
+		 i != ls.end();
+		 i++) 
+	  s.insert(*i);
+
+	set<object_t> did;
+	for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
+		 p != log.log.rend();
+		 p++) {
+	  if (did.count(p->oid)) continue;
+	  did.insert(p->oid);
+	  
+	  if (p->is_delete()) {
+		if (s.count(p->oid)) {
+		  dout(10) << " deleting " << hex << p->oid << dec
+				   << " when " << p->version << endl;
+		  t.remove(p->oid);
+		}
+		s.erase(p->oid);
+	  } else {
+		// just leave old objects.. they're missing or whatever
+		s.erase(p->oid);
+	  }
+	}
+
+	for (set<object_t>::iterator i = s.begin(); 
+		 i != s.end();
+		 i++) {
+	  dout(10) << " deleting stray " << hex << *i << dec << endl;
+	  t.remove(*i);
+	}
+
+  } else {
+	// just scan the log.
+    set<object_t> did;
+	for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
+		 p != log.log.rend();
+		 p++) {
+	  if (did.count(p->oid)) continue;
+	  did.insert(p->oid);
+
+	  if (p->is_delete()) {
+		dout(10) << " deleting " << hex << p->oid << dec
+				 << " when " << p->version << endl;
+		t.remove(p->oid);
+	  } else {
+		// keep old(+missing) objects, just for kicks.
+	  }
+	}
+  }
+}
 
 
 /**
@@ -569,59 +701,52 @@ bool PG::do_recovery()
   // look at log!
   Log::Entry *latest = 0;
 
-  while (1) {
-	if (log.requested_to == log.log.end()) {
-	  dout(10) << "already requested everything in log" << endl;
-	  return false;
-	}
+  while (log.requested_to != log.log.end()) {
+	dout(10) << "do_recovery "
+			 << log.requested_to->version
+			 << (log.requested_to->is_update() ? " update":" delete")
+			 << " " << hex << log.requested_to->oid << dec 
+			 << endl;
 
+	assert(log.objects.count(log.requested_to->oid));
 	latest = log.objects[log.requested_to->oid];
+
 	if (latest->is_update() &&
 		!objects_pulling.count(latest->oid) &&
-		missing.is_missing(latest->oid))
-	  break;
+		missing.is_missing(latest->oid)) {
+	  osd->pull(this, latest->oid, latest->version);
+	  return true;
+	}
 	
 	log.requested_to++;
   }
 
-  osd->pull(this, latest->oid, latest->version);
+  // done!
+  assert(missing.num_missing() == 0);
+  assert(info.last_complete == info.last_update);
   
-  return true;
-}
-
-
-/** clean_up_local
- * remove any objects that we're storing but shouldn't.
- * as determined by log.
- */
-void PG::clean_up_local()
-{
-  dout(10) << "clean_up_local" << endl;
-
-  assert(info.last_update >= log.bottom);  // otherwise we need some help!
-
-  set<object_t> did;
-  for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
-	   p != log.log.rend();
-	   p++) {
-	if (!p->is_delete()) continue;
-	if (did.count(p->oid)) continue;
-	did.insert(p->oid);
-
-	if (osd->store->exists(p->oid)) {
-	  eversion_t ov = 0;
-	  osd->store->getattr(p->oid, "version", &ov, sizeof(ov));
-	  if (ov < p->version) {
-		dout(10) << " removing " << hex << p->oid << dec
-				 << " v " << ov << " < " << p->version << endl;
-		osd->store->remove(p->oid);
-	  } else {
-		dout(10) << "  keeping " << hex << p->oid << dec
-				 << " v " << ov << " >= " << p->version << endl;
-	  }
+  if (is_primary()) {
+	// i am primary
+	clean_set.insert(osd->whoami);
+	if (is_all_clean()) {
+	  state_set(PG::STATE_CLEAN);
+	  clean_replicas();
 	}
+  } else {
+	// tell primary
+	dout(7) << "do_recovery complete, telling primary" << endl;
+	list<PG::Info> ls;
+	ls.push_back(info);
+	osd->messenger->send_message(new MOSDPGNotify(osd->osdmap->get_epoch(),
+												  ls),
+								 MSG_ADDR_OSD(get_primary()));
   }
+
+  return false;
 }
+
+
+
 
 void PG::clean_replicas()
 {
@@ -704,7 +829,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry, 
 					eversion_t trim_to)
 {
-  // write entry
+  // write entry on disk
   bufferlist bl;
   bl.append( (char*)&logentry, sizeof(logentry) );
   t.write( info.pgid, ondisklog.top, bl.length(), bl );
@@ -756,5 +881,23 @@ void PG::read_log(ObjectStore *store)
 	}
   }
   log.top = info.last_update;
+  log.index();
+
+  // build missing
+  set<object_t> did;
+  for (list<Log::Entry>::reverse_iterator i = log.log.rbegin();
+	   i != log.log.rend();
+	   i++) {
+	if (i->version <= info.last_complete) break;
+	if (did.count(i->oid)) continue;
+	did.insert(i->oid);
+
+	if (i->is_delete()) continue;
+
+	eversion_t v;
+	int r = osd->store->getattr(i->oid, "version", &v, sizeof(v));
+	if (r < 0 || v < i->version) 
+	  missing.add(i->oid, i->version);
+  }
 }
 

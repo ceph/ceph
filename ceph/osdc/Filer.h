@@ -68,7 +68,7 @@ class Filer {
 	Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
 	file_to_extents(inode, offset, len, rd->extents);
 
-	return objecter->readx(rd, onfinish);
+	return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 
   int write(inode_t& inode,
@@ -81,7 +81,7 @@ class Filer {
 	Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
 	file_to_extents(inode, offset, len, wr->extents);
 
-	return objecter->modifyx(wr, onack, oncommit);
+	return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
   int zero(inode_t& inode,
@@ -92,7 +92,7 @@ class Filer {
 	Objecter::OSDModify *z = new Objecter::OSDModify(OSD_OP_ZERO);
 	file_to_extents(inode, offset, len, z->extents);
 
-	return objecter->modifyx(z, onack, oncommit);
+	return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
 

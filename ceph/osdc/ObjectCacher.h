@@ -406,6 +406,9 @@ class ObjectCacher {
 
   off_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
 
+  void kick_sync_writers(inodeno_t ino);
+  void kick_sync_readers(inodeno_t ino);
+
 
   // file functions
 

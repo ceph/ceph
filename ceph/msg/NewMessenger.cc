@@ -401,7 +401,7 @@ void *Rank::Receiver::entry()
 				  << " inst " << m->get_source_inst() 
 				  << " > " << rank.entity_map[m->get_source()] 
 				  << ", WATCH OUT " << *m << endl;
-		  //rank.entity_map[m->get_source()] = m->get_source_inst();
+		  rank.entity_map[m->get_source()] = m->get_source_inst();
 		}
 
 		if (m->get_dest().type() == MSG_ADDR_RANK_BASE) {
@@ -1512,9 +1512,17 @@ void Rank::mark_up(msg_addr_t a, entity_inst_t& i)
 
 	assert(i.rank != my_rank);     // hrm?
 	
-	assert(entity_map.count(a) == 0);
-	entity_map[a] = i;
-	connect_rank(i);
+	if (entity_map.count(a) == 0 ||
+		entity_map[a] < i) {
+	  entity_map[a] = i;
+	  connect_rank(i);
+	} else if (entity_map[a] == i) {
+	  dout(10) << "mark_up " << a << " inst " << i << " ... knew it" << endl;
+	  derr(10) << "mark_up " << a << " inst " << i << " ... knew it" << endl;
+	} else {
+	  dout(-10) << "mark_up " << a << " inst " << i << " < " << entity_map[a] << endl;
+	  derr(-10) << "mark_up " << a << " inst " << i << " < " << entity_map[a] << endl;
+	}
 
 	//if (waiting_for_lookup.count(a))
 	//lookup(a);

@@ -174,9 +174,9 @@ md_config_t g_conf = {
   osd_maxthreads: 2,    // 0 == no threading
   osd_max_opq: 10,
   osd_mkfs: false,
-  osd_fake_sync: false,
   osd_age: .8,
   osd_age_time: 0,
+  osd_heartbeat_interval: 10,
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds

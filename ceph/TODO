@@ -1,6 +1,6 @@
 
 
-FAST rados paper
+== FAST rados paper
 
 
 cluster map
@@ -30,6 +30,10 @@ ebofs
  storage interface
 
  
+
+
+
+== rados client nodes
 
 why do we want client op ordering?
 - simpler logic in objectcacher
@@ -69,7 +73,6 @@ Objecter:
 
 - accept acks from current|prior primary.
 - only accept commits from current primary.
-
 - need pg map
   - to detect primary changes,
   - pg crashes
@@ -77,26 +80,26 @@ Objecter:
 
 
 
+== todo
+
+
+
 
 
 - gzip in messenger?
-
-remaining hard problems
-- how to cope with file size changes and read/write sharing
-- how to choose osd monitor peer sets
-- mds failure recovery (of course)
-
 
 osd/rados
 /- add caller to log
 /- make modify ops idempotent
 - rdlocks
+- test wrnoop
 - pg_bit changes
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
 - recover period for crashed pgs
 
 osdmonitor
+- monitor pgs
 - watch osd utilization; adjust overload in cluster map
 
 objecter
@@ -104,12 +107,11 @@ objecter
 /- detect, cope with crashed PGs, wait for map updates, etc.
 /- filer read/write: flip offset,size args
 - replay ops (in order) after pg crash
-- sequential lock acquisition
 
 objectcacher
-- locking
-- atomic read/write ops
-- flusher
+- ocacher caps transitions vs locks
+- ocacher flushing, pin Objects* while locks held
+- test read locks
 
 
 reliability
@@ -125,6 +127,10 @@ bugs/stability
 
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
+
+remaining hard problems
+- how to cope with file size changes and read/write sharing
+- mds failure recovery (of course)
 
 
 crush

@@ -268,12 +268,11 @@ public:
 	hash_set<reqid_t>         caller_ops;
 
 	// recovery pointers
-	bool recovery_valid;
 	list<Entry>::iterator requested_to; // not inclusive of referenced item
 	list<Entry>::iterator complete_to;  // not inclusive of referenced item
 	
 	/****/
-	IndexedLog() : recovery_valid(false) {}
+	IndexedLog() {}
 
 	bool logged_object(object_t oid) {
 	  return objects.count(oid);
@@ -284,6 +283,7 @@ public:
 
 	void index() {
 	  objects.clear();
+	  caller_ops.clear();
 	  for (list<Entry>::iterator i = log.begin();
 		   i != log.end();
 		   i++) {
@@ -303,6 +303,7 @@ public:
 	  assert(objects.count(e.oid));
 	  if (objects[e.oid]->version == e.version)
 		objects.erase(e.oid);
+	  caller_ops.erase(e.reqid);
 	}
 
 	// accessors
@@ -367,7 +368,7 @@ public:
   IndexedLog  log;
   OndiskLog   ondisklog;
   Missing     missing;
-
+  utime_t     last_heartbeat;  // 
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
@@ -379,9 +380,9 @@ protected:
   epoch_t     last_epoch_started_any;
   eversion_t  last_complete_commit;
 
- protected:
   // [primary only] content recovery state
   eversion_t  peers_complete_thru;
+ protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    clean_set;   // current OSDs that are clean
@@ -403,7 +404,6 @@ protected:
 		   list<class Message*> > waiting_for_missing_object;   
   
   // recovery
-  //eversion_t                requested_thru;
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
 public:
@@ -418,7 +418,6 @@ public:
 	peer_info_requested.clear();
 	peer_log_requested.clear();
 	clear_primary_recovery_state();
-	peers_complete_thru = 0;
   }
 
  public:
@@ -451,18 +450,12 @@ public:
   void generate_backlog();
   void drop_backlog();
 
-  void peer(map< int, map<pg_t,Query> >& query_map);
+  void peer(ObjectStore::Transaction& t, map< int, map<pg_t,Query> >& query_map);
+
+  void activate(ObjectStore::Transaction& t);
 
   bool do_recovery();
-  void start_recovery() {
-	log.recovery_valid = true;
-	log.requested_to = log.log.begin();
-	log.complete_to = log.log.begin();
 
-	do_recovery();
-  }
-
-  void clean_up_local();
   void clean_replicas();
 
   off_t get_log_write_pos() {
@@ -513,6 +506,9 @@ public:
   }
 
 
+  // pg on-disk content
+  void clean_up_local(ObjectStore::Transaction& t);
+
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction& t, 
@@ -553,6 +549,7 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 {
   out << "pg[" << pg.info 
 	  << " r=" << pg.get_role();
+  if (pg.get_role() == 0) out << " pct " << pg.peers_complete_thru;
   if (pg.is_active()) out << " active";
   if (pg.is_clean()) out << " clean";
   if (pg.is_stray()) out << " stray";

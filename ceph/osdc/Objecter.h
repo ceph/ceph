@@ -40,7 +40,9 @@ class Objecter {
 	map<tid_t, ObjectExtent> ops;
 	map<object_t, bufferlist*> read_data;  // bits of data as they come back
 
-	OSDRead(bufferlist *b) : bl(b), onfinish(0) {}
+	OSDRead(bufferlist *b) : bl(b), onfinish(0) {
+	  bl->clear();
+	}
   };
 
   // generic modify
@@ -89,12 +91,8 @@ class Objecter {
 
 	PG() : primary(-1) {}
 
-	bool calc_primary(pg_t pgid, OSDMap *osdmap) {  // return true if change
-	  int n = osdmap->get_pg_acting_primary(pgid);
-	  if (n == primary) 
-		return false;
-	  primary = n;
-	  return true;	  
+	void calc_primary(pg_t pgid, OSDMap *osdmap) {  // return true if change
+	  primary = osdmap->get_pg_acting_primary(pgid);
 	}
   };
 

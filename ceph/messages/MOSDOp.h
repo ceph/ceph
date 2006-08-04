@@ -58,6 +58,8 @@
 #define OSD_OP_REP_WRUNLOCK (100+OSD_OP_WRUNLOCK)
 #define OSD_OP_REP_RDLOCK   (100+OSD_OP_RDLOCK)
 #define OSD_OP_REP_RDUNLOCK (100+OSD_OP_RDUNLOCK)
+#define OSD_OP_REP_UPLOCK   (100+OSD_OP_UPLOCK)
+#define OSD_OP_REP_DNLOCK   (100+OSD_OP_DNLOCK)
 
 #define OSD_OP_REP_PULL     30   // whole object read
 //#define OSD_OP_REP_PUSH     31   // whole object write
@@ -103,6 +105,10 @@ public:
 	case OSD_OP_TRUNCATE: return "truncate"; 
 	case OSD_OP_WRLOCK: return "wrlock"; 
 	case OSD_OP_WRUNLOCK: return "wrunlock"; 
+	case OSD_OP_RDLOCK: return "rdlock"; 
+	case OSD_OP_RDUNLOCK: return "rdunlock"; 
+	case OSD_OP_UPLOCK: return "uplock"; 
+	case OSD_OP_DNLOCK: return "dnlock"; 
 	case OSD_OP_WRNOOP: return "wrnoop"; 
 	default: assert(0);
 	}

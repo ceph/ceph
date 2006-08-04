@@ -794,9 +794,9 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 	// single object.
 	
 	// make sure we aren't already locking/locked...
-	object_t oid = wr->extents.front()->oid;
+	object_t oid = wr->extents.front().oid;
 	Object *o = 0;
-	if (objects.count(oid)) o = get_object(iod, ino);
+	if (objects.count(oid)) o = get_object(oid, ino);
 	if (!o || 
 		(o->lock_state != Object::LOCK_WRLOCK &&
 		 o->lock_state != Object::LOCK_WRLOCKING &&
@@ -1194,4 +1194,51 @@ off_t ObjectCacher::release_set(inodeno_t ino)
   }
 
   return unclean;
+}
+
+
+void ObjectCacher::kick_sync_writers(inodeno_t ino)
+{
+  if (objects_by_ino.count(ino) == 0) {
+	dout(10) << "kick_sync_writers on " << hex << ino << dec << " dne" << endl;
+	return;
+  }
+
+  dout(10) << "kick_sync_writers on " << hex << ino << dec << endl;
+
+  list<Context*> ls;
+
+  set<Object*>& s = objects_by_ino[ino];
+  for (set<Object*>::iterator i = s.begin();
+	   i != s.end();
+	   i++) {
+	Object *ob = *i;
+	
+	ls.splice(ls.begin(), ob->waitfor_wr);
+  }
+
+  finish_contexts(ls);
+}
+
+void ObjectCacher::kick_sync_readers(inodeno_t ino)
+{
+  if (objects_by_ino.count(ino) == 0) {
+	dout(10) << "kick_sync_readers on " << hex << ino << dec << " dne" << endl;
+	return;
+  }
+
+  dout(10) << "kick_sync_readers on " << hex << ino << dec << endl;
+
+  list<Context*> ls;
+
+  set<Object*>& s = objects_by_ino[ino];
+  for (set<Object*>::iterator i = s.begin();
+	   i != s.end();
+	   i++) {
+	Object *ob = *i;
+	
+	ls.splice(ls.begin(), ob->waitfor_rd);
+  }
+
+  finish_contexts(ls);
 }

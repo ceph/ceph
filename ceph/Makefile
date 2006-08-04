@@ -49,21 +49,24 @@ OSD_OBJS= \
 	ebofs.o\
 	osd/OSD.o
 
+OSDC_OBJS= \
+	client/Filer.o\
+	client/ObjectCacher.o\
+	client/Objecter.o
+
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Dispatcher.o\
 	msg/HostMonitor.o\
-	client/Filer.o\
-	client/FileCache.o\
-	client/ObjectCacher.o\
-	client/Objecter.o\
 	mds/MDCluster.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
 	config.o
 
+
 CLIENT_OBJS= \
+	client/FileCache.o\
 	client/Client.o\
 	client/SyntheticClient.o\
 	client/Trace.o
@@ -87,7 +90,10 @@ obfs: depend obfstest
 cosd: cosd.cc osd.o msg/NewMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o client/fuse.o msg/NewMessenger.o common.o
+cmds: cmds.cc mds.o osdc.o msg/NewMessenger.o common.o
+	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+
+cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/NewMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -109,16 +115,16 @@ mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 
 
 # synthetic workload
-fakesyn: fakesyn.cc mds.o client.o osd.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.cc mds.o client.o osd.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-mpisyn: mpisyn.cc mds.o client.o osd.o msg/MPIMessenger.cc common.o
+mpisyn: mpisyn.cc mds.o client.o osd.o osdc.o msg/MPIMessenger.cc common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds.o client.o osd.o ${TCP_OBJS} common.o
+tcpsyn: tcpsyn.cc mds.o client.o osd.o osdc.o ${TCP_OBJS} common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn: newsyn.cc mds.o client.o osd.o msg/NewMessenger.o common.o
+newsyn: newsyn.cc mds.o client.o osd.o osdc.o msg/NewMessenger.o common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs
@@ -142,7 +148,7 @@ ebofs: mkfs.ebofs test.ebofs
 
 
 # libceph
-libceph.o: client/ldceph.o client/Client.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS}
+libceph.o: client/ldceph.o client/Client.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
 	ld -i $^ -o $@
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
@@ -173,10 +179,13 @@ common.o: ${COMMON_OBJS}
 ebofs.o: ${EBOFS_OBJS}
 	ld -i -o $@ $^
 
-client.o: ${CLIENT_OBJS}
+client.o: ${CLIENT_OBJS} 
 	ld -i -o $@ $^
 
 osd.o: ${OSD_OBJS}
+	ld -i -o $@ $^
+
+osdc.o: ${OSDC_OBJS}
 	ld -i -o $@ $^
 
 osd_obfs.o: osd/OBFSStore.o osd/OSD.ccosd/PG.o osd/ObjectStore.o osd/FakeStore.o

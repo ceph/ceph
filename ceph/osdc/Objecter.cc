@@ -100,6 +100,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::scan_pgs(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
 {
+  dout(10) << "scan_pgs" << endl;
+
   for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
 	   i != pg_map.end();
 	   i++) {
@@ -107,12 +109,22 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
 	PG& pg = i->second;
 
 	int old = pg.primary;
-	if (pg.calc_primary(pgid, osdmap)) {
+	pg.calc_primary(pgid, osdmap);
+
+	if (old != pg.primary) {
 	  if (osdmap->is_down(old)) {
-		dout(10) << "scan_pgs pg " << hex << pgid << dec << " went down" << endl;
+		dout(10) << "scan_pgs pg " << hex << pgid << dec 
+				 << " (" << pg.active_tids << ")"
+				 << " primary " << old << " -> " << pg.primary
+				 << " (went down)"
+				 << endl;
 		down_pgs.insert(pgid);
 	  } else {
-		dout(10) << "scan_pgs pg " << hex << pgid << dec << " changed" << endl;
+		dout(10) << "scan_pgs pg " << hex << pgid << dec 
+				 << " (" << pg.active_tids << ")"
+				 << " primary " << old << " -> " << pg.primary
+				 << " (changed)"
+				 << endl;
 	  }
 	  changed_pgs.insert(pgid);
 	}
@@ -121,6 +133,10 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
 
 void Objecter::kick_requests(set<pg_t>& changed_pgs, set<pg_t>& down_pgs) 
 {
+  dout(10) << "kick_requests changed " << hex << changed_pgs
+		   << ", down " << down_pgs << dec
+		   << endl;
+
   for (set<pg_t>::iterator i = changed_pgs.begin();
 	   i != changed_pgs.end();
 	   i++) {
@@ -143,34 +159,20 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
 		
 		// WRITE
 		if (wr->waitfor_ack.count(tid)) {
-		  // resubmit
 		  if (down_pgs.count(pgid) == 0) {
-			dout(0) << "kick_requests resub WRNOOP " << tid << endl;
+			dout(0) << "kick_requests missing ack, resub WRNOOP " << tid << endl;
 			modifyx_submit(wr, wr->waitfor_ack[tid], true);
 		  } else {
-			dout(0) << "kick_requests resub write " << tid << endl;
+			dout(0) << "kick_requests missing ack, resub write " << tid << endl;
 			modifyx_submit(wr, wr->waitfor_ack[tid]);
 		  }
 		  wr->waitfor_ack.erase(tid);
 		  wr->waitfor_commit.erase(tid);
 		}
 		else if (wr->waitfor_commit.count(tid)) {
-		  // fake it.  FIXME.
-		  dout(0) << "kick_requests faking commit on write " << tid << endl;
-		  wr->waitfor_ack.erase(tid);
-		  if (wr->waitfor_ack.empty() && wr->onack) {
-			wr->onack->finish(0);
-			delete wr->onack;
-			wr->onack = 0;
-		  }
+		  dout(0) << "kick_requests missing commit, resub WRNOOP " << tid << endl;
+		  modifyx_submit(wr, wr->waitfor_commit[tid], true);
 		  wr->waitfor_commit.erase(tid);
-		  if (wr->waitfor_commit.empty()) {
-			if (wr->oncommit) {
-			  wr->oncommit->finish(0);
-			  delete wr->oncommit;
-			}
-			delete wr;
-		  }
 		}
 	  }
 
@@ -201,10 +203,15 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	handle_osd_read_reply(m);
 	break;
 	
+  case OSD_OP_WRNOOP:
   case OSD_OP_WRITE:
   case OSD_OP_ZERO:
   case OSD_OP_WRUNLOCK:
   case OSD_OP_WRLOCK:
+  case OSD_OP_RDLOCK:
+  case OSD_OP_RDUNLOCK:
+  case OSD_OP_UPLOCK:
+  case OSD_OP_DNLOCK:
 	handle_osd_modify_reply(m);
 	break;
 
@@ -218,7 +225,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 
 tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-				   Context *onfinish)
+					 Context *onfinish)
 {
   OSDRead *rd = new OSDRead(bl);
   rd->extents.push_back(ObjectExtent(oid, off, len));
@@ -252,9 +259,12 @@ void Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
 						 OSD_OP_READ);
   m->set_length(ex.length);
   m->set_offset(ex.start);
-  dout(10) << "readx_submit tid " << last_tid << " to osd" << pg.primary
+  dout(10) << "readx_submit " << rd << " tid " << last_tid
 		   << " oid " << hex << ex.oid << dec  << " " << ex.start << "~" << ex.length
-		   << " (" << ex.buffer_extents.size() << " buffer fragments)" << endl;
+		   << " (" << ex.buffer_extents.size() << " buffer fragments)" 
+		   << " pg " << hex << ex.pgid << dec
+		   << " osd" << pg.primary 
+		   << endl;
 
   if (pg.primary >= 0) 
 	messenger->send_message(m, MSG_ADDR_OSD(pg.primary), 0);
@@ -271,9 +281,14 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+
+  if (op_read.count(tid) == 0) {
+	dout(7) << "handle_osd_read_reply " << tid << " ... stray" << endl;
+	delete m;
+	return;
+  }
+
   dout(7) << "handle_osd_read_reply " << tid << endl;
-  
-  assert(op_read.count(tid));
   OSDRead *rd = op_read[ tid ];
   op_read.erase( tid );
 
@@ -303,7 +318,6 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   if (rd->ops.empty()) {
 	// all done
 	size_t bytes_read = 0;
-	rd->bl->clear();
 	
 	if (rd->read_data.size()) {
 	  dout(15) << " assembling frags" << endl;
@@ -409,7 +423,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 	Context *onfinish = rd->onfinish;
 
 	dout(7) << " " << bytes_read << " bytes " 
-	  //<< rd->bl->length()
+			<< rd->bl->length()
 			<< endl;
 	
 	// done
@@ -536,9 +550,12 @@ void Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, bool wrnoop)
   pg.active_tids.insert(last_tid);
   
   // send
-  dout(10) << "modifyx_submit op " << wr->op << " tid " << last_tid
-		   << " osd" << pg.primary << "  oid " << hex << ex.oid << dec 
-		   << " " << ex.start << "~" << ex.length << endl;
+  dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << last_tid
+		   << "  oid " << hex << ex.oid << dec 
+		   << " " << ex.start << "~" << ex.length 
+		   << " pg " << hex << ex.pgid << dec 
+		   << " osd" << pg.primary 
+		   << endl;
   if (pg.primary >= 0)
 	messenger->send_message(m, MSG_ADDR_OSD(pg.primary), 0);
 }
@@ -549,8 +566,14 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
+
+  if (op_modify.count(tid) == 0) {
+	dout(7) << "handle_osd_modify_reply " << tid << " commit " << m->get_commit() << " ... stray" << endl;
+	delete m;
+	return;
+  }
+
   dout(7) << "handle_osd_modify_reply " << tid << " commit " << m->get_commit() << endl;
-  assert(op_modify.count(tid));
   OSDModify *wr = op_modify[ tid ];
 
   Context *onack = 0;

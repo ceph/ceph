@@ -147,10 +147,9 @@ struct md_config_t {
   int   osd_maxthreads;
   int   osd_max_opq;
   bool  osd_mkfs;
-  bool  osd_fake_sync;
   float   osd_age;
   int   osd_age_time;
-
+  int   osd_heartbeat_interval;
 
   int   fakestore_fake_sync;
   bool  fakestore_fsync;
