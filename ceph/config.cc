@@ -107,6 +107,7 @@ md_config_t g_conf = {
   client_sync_writes: 0,
 
   client_oc: false,
+  client_oc_size:      1024*1024* 128,
   client_oc_max_dirty: 1024*1024* 100, 
   client_oc_max_sync_write: 1024*1024,  // writes >= this use wrlock
 
@@ -510,6 +511,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.client_sync_writes = atoi(args[++i]);
 	else if (strcmp(args[i], "--client_oc") == 0)
 	  g_conf.client_oc = atoi(args[++i]);
+	else if (strcmp(args[i], "--client_oc_size") == 0)
+	  g_conf.client_oc_size = atoi(args[++i]);
 	else if (strcmp(args[i], "--client_oc_max_dirty") == 0)
 	  g_conf.client_oc_max_dirty = atoi(args[++i]);
 

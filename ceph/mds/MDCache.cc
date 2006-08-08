@@ -28,7 +28,7 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "client/Filer.h"
+#include "osdc/Filer.h"
 
 #include "events/EInodeUpdate.h"
 #include "events/EDirUpdate.h"

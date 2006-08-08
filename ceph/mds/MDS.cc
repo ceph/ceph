@@ -19,8 +19,8 @@
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
-#include "client/Objecter.h"
-#include "client/Filer.h"
+#include "osdc/Objecter.h"
+#include "osdc/Filer.h"
 
 #include "MDS.h"
 #include "MDCache.h"

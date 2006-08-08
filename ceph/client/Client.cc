@@ -30,9 +30,9 @@
 
 #include "messages/MGenericMessage.h"
 
-#include "Filer.h"
-#include "Objecter.h"
-#include "ObjectCacher.h"
+#include "osdc/Filer.h"
+#include "osdc/Objecter.h"
+#include "osdc/ObjectCacher.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"

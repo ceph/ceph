@@ -50,9 +50,9 @@ OSD_OBJS= \
 	osd/OSD.o
 
 OSDC_OBJS= \
-	client/Filer.o\
-	client/ObjectCacher.o\
-	client/Objecter.o
+	osdc/Filer.o\
+	osdc/ObjectCacher.o\
+	osdc/Objecter.o
 
 COMMON_OBJS= \
 	msg/Messenger.o\

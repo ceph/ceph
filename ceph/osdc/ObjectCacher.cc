@@ -19,7 +19,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
   dout(20) << "split " << *bh << " at " << off << endl;
   
   // split off right
-  ObjectCacher::BufferHead *right = new BufferHead();
+  ObjectCacher::BufferHead *right = new BufferHead(this);
   right->last_write_tid = bh->last_write_tid;
   right->set_state(bh->get_state());
   
@@ -130,7 +130,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
       // at end?
       if (p == data.end()) {
         // rest is a miss.
-		BufferHead *n = new BufferHead();
+		BufferHead *n = new BufferHead(this);
 		n->set_start( cur );
 		n->set_length( left );
 		oc->bh_add(this, n);
@@ -168,7 +168,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
       } else if (p->first > cur) {
         // gap.. miss
         off_t next = p->first;
-		BufferHead *n = new BufferHead();
+		BufferHead *n = new BufferHead(this);
 		n->set_start( cur );
 		n->set_length( MIN(next - cur, left) );
 		oc->bh_add(this,n);
@@ -222,7 +222,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
       // at end ?
       if (p == data.end()) {
         if (final == NULL) {
-          final = new BufferHead();
+          final = new BufferHead(this);
           final->set_start( cur );
           final->set_length( max );
           oc->bh_add(this, final);
@@ -282,7 +282,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 		if (final) {
 		  final->set_length( final->length() + glen );
 		} else {
-		  final = new BufferHead();
+		  final = new BufferHead(this);
 		  final->set_start( cur );
 		  final->set_length( glen );
 		  oc->bh_add(this, final);
@@ -550,6 +550,39 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
 }
 
 
+void ObjectCacher::trim(off_t max)
+{
+  if (max < 0) 
+	max = g_conf.client_oc_size;
+  
+  dout(10) << "trim  start: max " << max 
+		   << "  clean " << get_stat_clean()
+		   << endl;
+
+  while (get_stat_clean() > max) {
+	BufferHead *bh = (BufferHead*) lru_rest.lru_expire();
+	if (!bh) break;
+	
+	dout(10) << "trim trimming " << *bh << endl;
+	assert(bh->is_clean());
+	
+	Object *ob = bh->ob;
+	bh_remove(ob, bh);
+	delete bh;
+	
+	if (ob->is_empty()) {
+	  dout(10) << "trim trimming " << *ob << endl;
+	  close_object(ob);
+	}
+  }
+  
+  dout(10) << "trim finish: max " << max 
+		   << "  clean " << get_stat_clean()
+		   << endl;
+}
+
+
+
 /* public */
 
 /*
@@ -672,6 +705,8 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	pos += i->second.length();
 	rd->bl->claim_append(i->second);
   }
+
+  trim();
   
   return pos;
 }
@@ -711,6 +746,8 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 	// it's dirty.
 	mark_dirty(bh);
   }
+
+  trim();
   return 0;
 }
  

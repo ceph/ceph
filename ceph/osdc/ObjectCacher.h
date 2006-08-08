@@ -16,6 +16,9 @@ class Objecter::OSDWrite;
 
 class ObjectCacher {
  public:
+
+  class Object;
+
   // ******* BufferHead *********
   class BufferHead : public LRUObject {
   public:
@@ -35,6 +38,7 @@ class ObjectCacher {
 	} ex;
 		
   public:
+	Object *ob;
 	bufferlist  bl;
 	tid_t last_write_tid;  // version of bh (if non-zero)
 	
@@ -42,9 +46,10 @@ class ObjectCacher {
 	
   public:
 	// cons
-	BufferHead() : 
+	BufferHead(Object *o) : 
 	  state(STATE_MISSING),
 	  ref(0),
+	  ob(o),
 	  last_write_tid(0) {}
   
 	// extent
@@ -197,6 +202,13 @@ class ObjectCacher {
 	objects_by_ino[ino].insert(o);
 	return o;
   }
+  void close_object(Object *ob) {
+	objects.erase(ob->get_oid());
+	objects_by_ino[ob->get_ino()].erase(ob);
+	if (objects_by_ino[ob->get_ino()].empty())
+	  objects_by_ino.erase(ob->get_ino());
+	delete ob;
+  }
 
   // bh stats
   Cond  stat_cond;
@@ -292,6 +304,8 @@ class ObjectCacher {
   // io
   void bh_read(Object *ob, BufferHead *bh);
   void bh_write(Object *ob, BufferHead *bh);
+
+  void trim(off_t max=-1);
 
   bool flush(Object *o);
   off_t release(Object *o);

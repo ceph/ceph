@@ -3,7 +3,7 @@
 #include "include/types.h"
 
 #include "FileCache.h"
-#include "ObjectCacher.h"
+#include "osdc/ObjectCacher.h"
 
 
 // flush/release/clean

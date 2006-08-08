@@ -5,7 +5,6 @@
 using namespace std;
 
 #include "common/Cond.h"
-#include "Filer.h"
 #include "mds/Capability.h"
 
 class ObjectCacher;

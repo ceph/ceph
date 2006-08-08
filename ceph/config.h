@@ -81,6 +81,7 @@ struct md_config_t {
   bool     client_sync_writes;
 
   bool     client_oc;
+  int      client_oc_size;
   int      client_oc_max_dirty;
   size_t   client_oc_max_sync_write;
 
