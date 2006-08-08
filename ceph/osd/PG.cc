@@ -688,13 +688,12 @@ void PG::activate(ObjectStore::Transaction& t)
   if (!replay_queue.empty()) {
 	eversion_t c = info.last_update;
 	list<Message*> replay;
-	list<Message*> after;
 	for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
 		 p != replay_queue.end();
 		 p++) {
 	  if (p->first <= info.last_update) {
 		dout(10) << "activate will WRNOOP " << p->first << " " << *p->second << endl;
-		after.push_back(p->second);
+		replay.push_back(p->second);
 		continue;
 	  }
 	  if (p->first.version != c.version+1) {
@@ -709,7 +708,6 @@ void PG::activate(ObjectStore::Transaction& t)
 	}
 	replay_queue.clear();
 	osd->take_waiters(replay);
-	osd->take_waiters(after);
   }
 
   // waiters

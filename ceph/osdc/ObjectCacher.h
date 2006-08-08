@@ -134,6 +134,9 @@ class ObjectCacher {
 	object_t get_oid() { return oid; }
 	inodeno_t get_ino() { return ino; }
 
+	bool can_close() {
+	  return data.empty() && lock_state == LOCK_NONE;
+	}
 
 	// bh
 	void add_bh(BufferHead *bh) {
@@ -203,6 +206,9 @@ class ObjectCacher {
 	return o;
   }
   void close_object(Object *ob) {
+	assert(ob->can_close());
+
+	// ok!
 	objects.erase(ob->get_oid());
 	objects_by_ino[ob->get_ino()].erase(ob);
 	if (objects_by_ino[ob->get_ino()].empty())

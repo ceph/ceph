@@ -97,8 +97,8 @@ osdmonitor
 objecter
 
 objectcacher
+- ocacher flushing
 - ocacher caps transitions vs locks
-- ocacher flushing, pin Objects* while locks held
 - test read locks
 
 

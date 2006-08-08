@@ -449,6 +449,9 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
 	  ob->last_ack_tid = tid;
 	  
 	  finish_contexts(ls);
+
+	  if (ob->can_close())
+		close_object(ob);
 	} else {
 	  dout(10) << "lock_ack " << *ob 
 			   << " tid " << tid << " obsolete" << endl;
@@ -570,7 +573,7 @@ void ObjectCacher::trim(off_t max)
 	bh_remove(ob, bh);
 	delete bh;
 	
-	if (ob->is_empty()) {
+	if (ob->can_close()) {
 	  dout(10) << "trim trimming " << *ob << endl;
 	  close_object(ob);
 	}
