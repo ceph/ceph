@@ -307,7 +307,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 /*** ObjectCacher ***/
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << objecter->messenger->get_myaddr() << ".objectcacher "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << objecter->messenger->get_myaddr() << ".objectcacher "
 
 
 /* private */
@@ -418,7 +418,7 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
 	
 	Object *ob = objects[oid];
 	
-	assert(tid >= ob->last_write_tid);
+	assert(tid <= ob->last_write_tid);
 	if (ob->last_write_tid == tid) {
 	  dout(10) << "lock_ack " << *ob
 			   << " tid " << tid << endl;
@@ -533,7 +533,7 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
 		  << endl;
   if (objects.count(oid) == 0) {
 	dout(7) << "bh_write_commit no object cache" << endl;
-	assert(0);
+	//assert(0);
   } else {
 	Object *ob = objects[oid];
 	
@@ -785,7 +785,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 	// block
 	while (!done) cond.Wait(lock);
   } else {
-	// spans multiple objects.
+	// spans multiple objects, or is big.
 
 	// sort by object...
 	map<object_t,ObjectExtent> by_oid;
@@ -857,7 +857,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 	}
   } 
 
-  // spans multiple objects.
+  // spans multiple objects, or is big.
   // sort by object...
   map<object_t,ObjectExtent> by_oid;
   for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();

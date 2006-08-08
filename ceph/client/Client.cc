@@ -1545,7 +1545,7 @@ int Client::open(const char *relpath, int mode)
 	  f->inode->get();
 
 	int new_caps = reply->get_file_caps();
-	new_caps &= CAP_FILE_WR|CAP_FILE_RD;
+	new_caps &= CAP_FILE_WR|CAP_FILE_RD;    // HACK: test synchronous read/write
 
 	assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
 	if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   

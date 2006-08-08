@@ -135,7 +135,9 @@ class ObjectCacher {
 	inodeno_t get_ino() { return ino; }
 
 	bool can_close() {
-	  return data.empty() && lock_state == LOCK_NONE;
+	  return data.empty() && lock_state == LOCK_NONE &&
+		waitfor_ack.empty() && waitfor_commit.empty() &&
+		waitfor_rd.empty() && waitfor_wr.empty();
 	}
 
 	// bh

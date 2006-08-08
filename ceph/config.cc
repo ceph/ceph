@@ -107,9 +107,9 @@ md_config_t g_conf = {
   client_sync_writes: 0,
 
   client_oc: false,
-  client_oc_size:      1024*1024* 128,
-  client_oc_max_dirty: 1024*1024* 100, 
-  client_oc_max_sync_write: 1024*1024,  // writes >= this use wrlock
+  client_oc_size:      1024*1024* 20,
+  client_oc_max_dirty: 1024*1024* 10, 
+  client_oc_max_sync_write: 128*1024,  // writes >= this use wrlock
 
   /*
   client_bcache: 0,
@@ -191,7 +191,7 @@ md_config_t g_conf = {
   // --- ebofs ---
   ebofs: 1,
   ebofs_commit_ms:      10000,      // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 2000,//100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_idle_commit_ms: 100,//100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB

@@ -121,6 +121,7 @@ class Clock {
   //utime_t start_offset;
   //utime_t abs_last;
   utime_t last;
+  utime_t zero;
 
  public:
   Clock() {
@@ -131,12 +132,22 @@ class Clock {
   // relative time (from startup)
   const utime_t& now() {
 	gettimeofday(&last.timeval(), NULL);
+	last -= zero;
 	//last = abs_last - start_offset;
 	return last;
+  }
+  const utime_t real_now() {
+	utime_t now;
+	gettimeofday(&now.timeval(), NULL);
+	return now;
   }
 
   const utime_t& recent_now() {
 	return last;
+  }
+
+  void tare() {
+	gettimeofday(&zero.timeval(), NULL);
   }
 
   // absolute time

@@ -95,7 +95,7 @@ my @fulldirs;
 
 sub reset {
 	print "reset: restarting mpd in 3 seconds\n";
-	system "sleep 3 && (mpiexec -l -n 32 killall tcpsyn ; restartmpd.sh)";
+	system "sleep 3 && (mpiexec -l -n 32 killall newsyn ; restartmpd.sh)";
 	print "reset: done\n";
 }
 
@@ -193,8 +193,8 @@ sub run {
 	system "rm -r $fn" if $clean && -d "$fn";
 	system "mkdir $fn" unless -d "$fn";
 
-	my $e = './tcpsyn';
-	$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
+	my $e = './newsyn';
+	#$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
 	my $c = "$e";
 	$c .= " --mkfs" unless $h->{'no_mkfs'};
 	$c .= " --$h->{'fs'}";
@@ -214,6 +214,7 @@ sub run {
 			   'osd_age_time','osd_age',
 			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
+			   'client_oc',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
 			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
 			   'file_layout_ssize','file_layout_scount','file_layout_osize','file_layout_num_rep',

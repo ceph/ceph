@@ -71,7 +71,7 @@ class Cond
 	return r;
   }
   int WaitInterval(Mutex &mutex, utime_t interval) {
-	utime_t when = g_clock.now();
+	utime_t when = g_clock.real_now();
 	when += interval;
 	return WaitUntil(mutex, when);
   }
