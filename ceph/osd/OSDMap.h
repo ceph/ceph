@@ -150,6 +150,7 @@ private:
 	  down_osds.erase(i->first);
 	  assert(osd_inst.count(i->first) == 0);
 	  osd_inst[i->first] = i->second;
+	  //cout << "epoch " << epoch << " up osd" << i->first << endl;
 	}
 	for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
 		 i != inc.new_down.end();
@@ -159,18 +160,21 @@ private:
 	  assert(osd_inst.count(i->first) == 0 ||
 			 osd_inst[i->first] == i->second);
 	  osd_inst.erase(i->first);
+	  //cout << "epoch " << epoch << " down osd" << i->first << endl;
 	}
 	for (list<int>::iterator i = inc.new_in.begin();
 		 i != inc.new_in.end();
 		 i++) {
 	  assert(out_osds.count(*i));
 	  out_osds.erase(*i);
+	  //cout << "epoch " << epoch << " in osd" << *i << endl;
 	}
 	for (list<int>::iterator i = inc.new_out.begin();
 		 i != inc.new_out.end();
 		 i++) {
 	  assert(out_osds.count(*i) == 0);
 	  out_osds.insert(*i);
+	  //cout << "epoch " << epoch << " out osd" << *i << endl;
 	}
 	for (map<int,float>::iterator i = inc.new_overload.begin();
 		 i != inc.new_overload.end();

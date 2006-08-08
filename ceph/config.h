@@ -150,6 +150,7 @@ struct md_config_t {
   float   osd_age;
   int   osd_age_time;
   int   osd_heartbeat_interval;
+  int   osd_replay_window;
 
   int   fakestore_fake_sync;
   bool  fakestore_fsync;

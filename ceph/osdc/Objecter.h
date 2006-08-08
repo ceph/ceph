@@ -53,6 +53,7 @@ class Objecter {
 	Context *onack;
 	Context *oncommit;
 	map<tid_t, ObjectExtent> waitfor_ack;
+	map<tid_t, eversion_t>   tid_version;
 	map<tid_t, ObjectExtent> waitfor_commit;
 
 	OSDModify(int o) : op(o), onack(0), oncommit(0) {}
@@ -109,9 +110,8 @@ class Objecter {
 	assert(pg_map[pgid].active_tids.empty());
 	pg_map.erase(pgid);
   }
-  void scan_pgs(set<pg_t>& chnaged_pgs, set<pg_t>& down_pgs);
-  
-  void kick_requests(set<pg_t>& changed_pgs, set<pg_t>& down_pgs);
+  void scan_pgs(set<pg_t>& chnaged_pgs);//, set<pg_t>& down_pgs);
+  void kick_requests(set<pg_t>& changed_pgs);//, set<pg_t>& down_pgs);
 	
 
  public:
@@ -135,8 +135,8 @@ class Objecter {
 
  private:
 
-  void readx_submit(OSDRead *rd, ObjectExtent& ex);
-  void modifyx_submit(OSDModify *wr, ObjectExtent& ex, bool wrnoop=false);
+  tid_t readx_submit(OSDRead *rd, ObjectExtent& ex);
+  tid_t modifyx_submit(OSDModify *wr, ObjectExtent& ex, tid_t tid=0);
 
 
 

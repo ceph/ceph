@@ -426,6 +426,30 @@ void OSD::_remove_pg(pg_t pgid)
 }
 
 
+void OSD::activate_pg(pg_t pgid, epoch_t epoch)
+{
+  osd_lock.Lock();
+  {
+	if (pg_map.count(pgid)) {
+	  PG *pg = _lock_pg(pgid);
+	  if (pg->is_crashed() &&
+		  pg->is_replay() &&
+		  pg->get_role() == 0 &&
+		  pg->info.same_primary_since <= epoch) {
+		ObjectStore::Transaction t;
+		pg->activate(t);
+		store->apply_transaction(t);
+	  }
+	  _unlock_pg(pgid);
+	}
+  }
+  osd_lock.Unlock();
+
+  // kick myself w/ a ping .. HACK
+  messenger->send_message(new MPing, MSG_ADDR_OSD(whoami));
+}
+
+
 // -------------------------------------
 
 void OSD::heartbeat()
@@ -504,20 +528,23 @@ void OSD::dispatch(Message *m)
   //utime_t now = g_clock.now();
   //dout(-20) << now << endl;
 
-  // -- don't need lock --
+  /*// -- don't need lock --
   switch (m->get_type()) {
-  case MSG_PING:
-	dout(10) << "ping from " << m->get_source() << endl;
-	delete m;
 	return;
-
   }
+  */
 
 
   // lock!
   osd_lock.Lock();
 
   switch (m->get_type()) {
+
+	// -- don't need lock -- 
+  case MSG_PING:
+	dout(10) << "ping from " << m->get_source() << endl;
+	delete m;
+	break;
 
 	// -- don't need OSDMap --
 
@@ -804,7 +831,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	}
 
 	dout(10) << "handle_osd_map got full map epoch " << p->first << endl;
-	t.write(oid, 0, p->second.length(), p->second);
+	//t.write(oid, 0, p->second.length(), p->second);
+	store->write(oid, 0, p->second.length(), p->second, 0);
 
 	if (p->first > superblock.newest_map)
 	  superblock.newest_map = p->first;
@@ -825,7 +853,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	}
 
 	dout(10) << "handle_osd_map got incremental map epoch " << p->first << endl;
-	t.write(oid, 0, p->second.length(), p->second);
+	//t.write(oid, 0, p->second.length(), p->second);
+	store->write(oid, 0, p->second.length(), p->second, 0);
 
 	if (p->first > superblock.newest_map)
 	  superblock.newest_map = p->first;
@@ -1035,14 +1064,25 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 		if (oldrole == 0) {
 		  pg->state_clear(PG::STATE_CLEAN);
 
-		  // take waiters
+		  // take replay queue waiters
+		  list<Message*> ls;
+		  for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
+			   it != pg->replay_queue.end();
+			   it++)
+			ls.push_back(it->second);
+		  pg->replay_queue.clear();
+		  take_waiters(ls);
+
+		  // take active waiters
 		  take_waiters(pg->waiting_for_active);
+		  
+		  // take object waiters
 		  for (hash_map<object_t, list<Message*> >::iterator it = pg->waiting_for_missing_object.begin();
 			   it != pg->waiting_for_missing_object.end();
 			   it++)
 			take_waiters(it->second);
 		  pg->waiting_for_missing_object.clear();
-		  
+
 		  // drop peers
 		  pg->clear_primary_state();
 		}
@@ -1052,13 +1092,16 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 		  // i am new primary
 		  pg->state_clear(PG::STATE_ACTIVE);
 		  pg->state_clear(PG::STATE_STRAY);
+		  pg->last_epoch_started_any = pg->info.last_epoch_started;
 		} else {
 		  // i am now replica|stray.  we need to send a notify.
 		  pg->state_clear(PG::STATE_ACTIVE);
 		  pg->state_set(PG::STATE_STRAY);
-		  
-		  if (nrep == 0) 
+
+		  if (nrep == 0) {
+			pg->state_set(PG::STATE_CRASHED);
 			dout(1) << *pg << " is crashed" << endl;
+		  }
 		}
 		
 		// my role changed.
@@ -1083,6 +1126,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 			// i am (still) primary. but my replica set changed.
 			pg->state_clear(PG::STATE_ACTIVE);
 			pg->state_clear(PG::STATE_CLEAN);
+			pg->state_clear(PG::STATE_REPLAY);
 
 			dout(10) << *pg << " " << oldacting << " -> " << acting
 					 << ", replicas changed" << endl;
@@ -1207,19 +1251,39 @@ bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
   return store->read(get_osdmap_object_name(e), 0, 0, bl) >= 0;
 }
 
-bool OSD::get_map(epoch_t e, OSDMap &m)
-{
-  bufferlist bl;
-  if (!get_map_bl(e, bl)) 
-	return false;
-  m.decode(bl);
-  return true;
-}
-
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
   return store->read(get_inc_osdmap_object_name(e), 0, 0, bl) >= 0;
 }
+
+void OSD::get_map(epoch_t epoch, OSDMap &m)
+{
+  // find a complete map
+  list<OSDMap::Incremental> incs;
+  epoch_t e;
+  for (e = epoch; e > 0; e--) {
+	bufferlist bl;
+	if (get_map_bl(e, bl)) {
+	  //dout(10) << "get_map " << epoch << " full " << e << endl;
+	  m.decode(bl);
+	  break;
+	} else {
+	  OSDMap::Incremental inc;
+	  bool got = get_inc_map(e, inc);
+	  assert(got);
+	  incs.push_front(inc);
+	}
+  }
+  assert(e > 0);
+
+  // apply incrementals
+  for (e++; e <= epoch; e++) {
+	//dout(10) << "get_map " << epoch << " inc " << e << endl;
+	m.apply_incremental( incs.front() );
+	incs.pop_front();
+  }
+}
+
 
 bool OSD::get_inc_map(epoch_t e, OSDMap::Incremental &inc)
 {
@@ -1475,13 +1539,11 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	if (pg_map.count(pgid) == 0) {
 	  // check mapping.
 	  vector<int> acting;
-	  //int nrep = 
 	  osdmap->pg_to_acting_osds(pgid, acting);
-	  //assert(nrep > 0);
 	  
 	  // am i still the primary?
 	  assert(it->same_primary_since <= osdmap->get_epoch());
-	  if (acting[0] != whoami) {
+	  if (acting.empty() || acting[0] != whoami) {
 		// not primary now, so who cares!
 		dout(10) << "handle_pg_notify pg " << hex << pgid << dec << " dne, and i'm not the primary" << endl;
 		continue;
@@ -1641,9 +1703,6 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	// ok active!
 	pg->info.same_primary_since = m->info.same_primary_since;
  	pg->activate(t);
-
-	// take any waiters
-	take_waiters(pg->waiting_for_active);
   }
 
   unsigned tr = store->apply_transaction(t);
@@ -2130,46 +2189,9 @@ void OSD::handle_op(MOSDOp *op)
 
   share_map(op->get_source(), op->get_map_epoch());
 
-  // crashed?
-  if (acting_primary < 0) {
-	dout(1) << "crashed pg " << hex << pgid << dec << endl;
-	messenger->send_message(new MOSDOpReply(op, -EIO, osdmap->get_epoch(), true),
-							op->get_asker());
-	delete op;
-	return;
-  }
-  
   // what kind of op?
   if (!OSD_OP_IS_REP(op->get_op())) {
 	// REGULAR OP (non-replication)
-
-	// am i the (same) primary?
-	if (acting_primary != whoami ||
-		op->get_map_epoch() < pg->info.same_primary_since) {
-	  
-	  dout(7) << "acting primary is osd" << acting_primary
-			  << " since " << pg->info.same_primary_since 
-			  << ", dropping" << endl;
-	  assert(op->get_map_epoch() < osdmap->get_epoch());
-	  
-	  if (0) {
-		dout(7) << "acting primary is osd" << acting_primary
-				<< " since " << pg->info.same_primary_since 
-				<< ", replying with -EAGAIN" << endl;
-		assert(op->get_map_epoch() < osdmap->get_epoch());
-		
-		// tell client.
-		MOSDOpReply *fail = new MOSDOpReply(op, -EAGAIN, osdmap->get_epoch(), true);  // FIXME error code?
-		messenger->send_message(fail, op->get_asker());
-	  }
-	  if (0) {
-		dout(7) << "acting primary is osd" << acting_primary 
-				<< ", forwarding" << endl;
-		messenger->send_message(op, MSG_ADDR_OSD(acting_primary), 0);
-		logger->inc("fwd");
-	  }
-	  return;
-	}
 
 	// have pg?
 	if (!pg) {
@@ -2179,9 +2201,31 @@ void OSD::handle_op(MOSDOp *op)
 	  waiting_for_pg[pgid].push_back(op);
 	  return;
 	}
-	
+		
+	// am i the (same) primary?
+	if (acting_primary != whoami ||
+		op->get_map_epoch() < pg->info.same_primary_since) {
+	  dout(7) << "acting primary is osd" << acting_primary
+			  << " since " << pg->info.same_primary_since 
+			  << ", dropping" << endl;
+	  assert(op->get_map_epoch() < osdmap->get_epoch());
+	  return;
+	}
+
 	// must be active.
 	if (!pg->is_active()) {
+	  // replay?
+	  if (op->get_version().version > 0) {
+		if (op->get_version() > pg->info.last_update) {
+		  dout(7) << *pg << " queueing replay at " << op->get_version() << " for " << *op << endl;
+		  pg->replay_queue[op->get_version()] = op;
+		  return;
+		} else {
+		  dout(7) << *pg << " replay at " << op->get_version() << " <= " << pg->info.last_update 
+				  << ", will queue for WRNOOP" << endl;
+		}
+	  }
+	  
 	  dout(7) << *pg << " not active (yet)" << endl;
 	  pg->waiting_for_active.push_back(op);
 	  return;
@@ -2689,6 +2733,15 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	nv.version++;
 	assert(nv > pg->info.last_update);
 	assert(nv > ov);
+
+	if (op->get_version().version) {
+	  // replay
+	  if (nv.version < op->get_version().version)
+		nv.version = op->get_version().version; 
+	} 
+
+	// set version in op, for benefit of client and our eventual reply
+	op->set_version(nv);
   }
   
   dout(10) << "op_modify " << opname 

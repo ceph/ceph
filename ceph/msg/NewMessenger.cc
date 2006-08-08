@@ -529,7 +529,7 @@ void Rank::Sender::finish()
 
 void Rank::Sender::fail_and_requeue(list<Message*>& out)
 {
-  dout(10) << "sender(" << inst << ").fail and requeue" << endl;
+  dout(10) << "sender(" << inst << ").fail" << endl;// and requeue" << endl;
 
   // tell namer
   if (!rank.messenger) {
@@ -555,7 +555,8 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
 	  // don't keep reconnecting..
 	  if (rank.entity_map.count(q.front()->get_dest()) &&
 		  rank.entity_map[q.front()->get_dest()] == inst)
-		rank.entity_map.erase(q.front()->get_dest());
+		rank.down.insert(q.front()->get_dest());
+	  //rank.entity_map.erase(q.front()->get_dest());
 	  
 	  if (g_conf.ms_requeue_on_sender_fail)
 		rank.submit_message( q.front() );
@@ -1190,7 +1191,14 @@ void Rank::handle_lookup_reply(MNSLookupReply *m)
 	if (down.count(addr)) {
 	  // ignore
 	  dout(10) << "ignoring lookup results for " << addr << ", who is down" << endl;
-	  assert(entity_map.count(addr) == 0);
+	  //assert(entity_map.count(addr) == 0);
+	  continue;
+	}
+
+	if (entity_map.count(addr) &&
+		entity_map[addr] > inst) {
+	  dout(10) << "ignoring lookup results for " << addr << ", " \
+			   << entity_map[addr] << " > " << inst << endl;
 	  continue;
 	}
 

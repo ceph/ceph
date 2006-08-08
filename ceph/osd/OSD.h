@@ -180,8 +180,8 @@ public:
   void advance_map(ObjectStore::Transaction& t);
   void activate_map(ObjectStore::Transaction& t);
 
+  void get_map(epoch_t e, OSDMap &m);
   bool get_map_bl(epoch_t e, bufferlist& bl);
-  bool get_map(epoch_t e, OSDMap &m);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
@@ -201,6 +201,19 @@ public:
   void  _remove_pg(pg_t pg);         // remove from store and memory
 
   epoch_t calc_pg_primary_since(int primary, pg_t pgid, epoch_t start);
+  void activate_pg(pg_t pgid, epoch_t epoch);
+
+  class C_Activate : public Context {
+	OSD *osd;
+	pg_t pgid;
+	epoch_t epoch;
+  public:
+	C_Activate(OSD *o, pg_t p, epoch_t e) : osd(o), pgid(p), epoch(e) {}
+	void finish(int r) {
+	  osd->activate_pg(pgid, epoch);
+	}
+  };
+
 
   tid_t               last_tid;
 

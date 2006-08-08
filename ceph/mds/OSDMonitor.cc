@@ -269,11 +269,12 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
 
 void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 {
-  dout(-7) << "osd_boot from " << m->get_source() << endl;
+  dout(7) << "osd_boot from " << m->get_source() << endl;
   assert(m->get_source().is_osd());
   int from = m->get_source().num();
 
-  if (osdmap->get_epoch() == 1) {
+  if (osdmap->get_epoch() == 1 &&
+	  osdmap->osd_inst.count(from) == 0) {
 	// initial boot.  hackish.  FIXME.
 	osdmap->osd_inst[from] = m->get_source_inst();
   } else {

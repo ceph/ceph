@@ -52,7 +52,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
 			<< endl;
 
 	set<pg_t> changed_pgs;
-	set<pg_t> down_pgs;
 
 	for (epoch_t e = osdmap->get_epoch() + 1;
 		 e <= m->get_last();
@@ -86,19 +85,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  }
 	  
 	  // scan pgs for changes
-	  scan_pgs(changed_pgs, down_pgs);
+	  scan_pgs(changed_pgs);
 		
 	  assert(e == osdmap->get_epoch());
 	}
 
 	// kick requests who might be timing out on the wrong osds
-	kick_requests(changed_pgs, down_pgs);
+	if (!changed_pgs.empty())
+	  kick_requests(changed_pgs);
   }
   
   delete m;
 }
 
-void Objecter::scan_pgs(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
+void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 {
   dout(10) << "scan_pgs" << endl;
 
@@ -112,18 +112,27 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
 	pg.calc_primary(pgid, osdmap);
 
 	if (old != pg.primary) {
-	  if (osdmap->is_down(old)) {
+	  if (old < 0) {
 		dout(10) << "scan_pgs pg " << hex << pgid << dec 
 				 << " (" << pg.active_tids << ")"
 				 << " primary " << old << " -> " << pg.primary
-				 << " (went down)"
+				 << " (was crashed)"
 				 << endl;
-		down_pgs.insert(pgid);
-	  } else {
+		//recovering_pgs.insert(pgid);
+	  }
+	  else if (osdmap->is_down(old)) {
 		dout(10) << "scan_pgs pg " << hex << pgid << dec 
 				 << " (" << pg.active_tids << ")"
 				 << " primary " << old << " -> " << pg.primary
-				 << " (changed)"
+				 << " (primary went down)"
+				 << endl;
+		//down_pgs.insert(pgid);
+	  } 
+	  else {
+		dout(10) << "scan_pgs pg " << hex << pgid << dec 
+				 << " (" << pg.active_tids << ")"
+				 << " primary " << old << " -> " << pg.primary
+				 << " (primary changed)"
 				 << endl;
 	  }
 	  changed_pgs.insert(pgid);
@@ -131,11 +140,11 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
   }
 }
 
-void Objecter::kick_requests(set<pg_t>& changed_pgs, set<pg_t>& down_pgs) 
+void Objecter::kick_requests(set<pg_t>& changed_pgs/*, 
+							 set<pg_t>& down_pgs,
+							 set<pg_t>& recovering_pgs*/) 
 {
-  dout(10) << "kick_requests changed " << hex << changed_pgs
-		   << ", down " << down_pgs << dec
-		   << endl;
+  dout(10) << "kick_requests in pgs " << hex << changed_pgs << dec << endl;
 
   for (set<pg_t>::iterator i = changed_pgs.begin();
 	   i != changed_pgs.end();
@@ -158,21 +167,14 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs, set<pg_t>& down_pgs)
 		op_modify.erase(tid);
 		
 		// WRITE
-		if (wr->waitfor_ack.count(tid)) {
-		  if (down_pgs.count(pgid) == 0) {
-			dout(0) << "kick_requests missing ack, resub WRNOOP " << tid << endl;
-			modifyx_submit(wr, wr->waitfor_ack[tid], true);
-		  } else {
-			dout(0) << "kick_requests missing ack, resub write " << tid << endl;
-			modifyx_submit(wr, wr->waitfor_ack[tid]);
-		  }
-		  wr->waitfor_ack.erase(tid);
-		  wr->waitfor_commit.erase(tid);
-		}
-		else if (wr->waitfor_commit.count(tid)) {
-		  dout(0) << "kick_requests missing commit, resub WRNOOP " << tid << endl;
-		  modifyx_submit(wr, wr->waitfor_commit[tid], true);
-		  wr->waitfor_commit.erase(tid);
+		if (wr->tid_version.count(tid)) {
+		  dout(0) << "kick_requests missing commit, replay write " << tid
+				  << " v " << wr->tid_version[tid] << endl;
+		  modifyx_submit(wr, wr->waitfor_commit[tid], tid);
+		} 
+		else if (wr->waitfor_ack.count(tid)) {
+		  dout(0) << "kick_requests missing ack, resub write " << tid << endl;
+		  modifyx_submit(wr, wr->waitfor_ack[tid], tid);
 		}
 	  }
 
@@ -247,7 +249,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
   return last_tid;
 }
 
-void Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex) 
+tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex) 
 {
   // find OSD
   PG &pg = get_pg( ex.pgid );
@@ -274,6 +276,8 @@ void Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
   op_read[last_tid] = rd;	
 
   pg.active_tids.insert(last_tid);
+
+  return last_tid;
 }
 
 
@@ -500,24 +504,32 @@ tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 }
 
 
-void Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, bool wrnoop)
+tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 {
   // find
   PG &pg = get_pg( ex.pgid );
   //int osd = osdmap->get_pg_acting_primary( ex.pgid );
 	
   // send
-  last_tid++;
-  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+  tid_t tid;
+  if (usetid > 0) 
+	tid = usetid;
+  else
+	tid = ++last_tid;
+
+  MOSDOp *m = new MOSDOp(tid, messenger->get_myaddr(),
 						 ex.oid, ex.pgid, osdmap->get_epoch(),
-						 wrnoop ? OSD_OP_WRNOOP:wr->op);
+						 wr->op);
   m->set_length(ex.length);
   m->set_offset(ex.start);
+
+  if (wr->tid_version.count(tid)) 
+	m->set_version(wr->tid_version[tid]);  // we're replaying this op!
 	
   // what type of op?
   switch (wr->op) {
   case OSD_OP_WRITE:
-	if (!wrnoop) {
+	{
 	  // map buffer segments into this extent
 	  // (may be fragmented bc of striping)
 	  bufferlist cur;
@@ -535,22 +547,13 @@ void Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, bool wrnoop)
   }
 
   // add to gather set
-  if (wr->onack)
-	wr->waitfor_ack[last_tid] = ex;
-  else
-	m->set_want_ack(false);
-  
-  if (wr->oncommit || !wr->onack)    // wait for commit if neither callback is provided (sloppy user)           
-	wr->waitfor_commit[last_tid] = ex;
-  else
-	m->set_want_commit(false);
-  
-  op_modify[last_tid] = wr;
-
-  pg.active_tids.insert(last_tid);
+  wr->waitfor_ack[tid] = ex;
+  wr->waitfor_commit[tid] = ex;
+  op_modify[tid] = wr;
+  pg.active_tids.insert(tid);
   
   // send
-  dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << last_tid
+  dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
 		   << "  oid " << hex << ex.oid << dec 
 		   << " " << ex.start << "~" << ex.length 
 		   << " pg " << hex << ex.pgid << dec 
@@ -558,6 +561,8 @@ void Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, bool wrnoop)
 		   << endl;
   if (pg.primary >= 0)
 	messenger->send_message(m, MSG_ADDR_OSD(pg.primary), 0);
+  
+  return tid;
 }
 
 
@@ -568,12 +573,17 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   tid_t tid = m->get_tid();
 
   if (op_modify.count(tid) == 0) {
-	dout(7) << "handle_osd_modify_reply " << tid << " commit " << m->get_commit() << " ... stray" << endl;
+	dout(7) << "handle_osd_modify_reply " << tid 
+			<< (m->get_commit() ? " commit":" ack")
+			<< " ... stray" << endl;
 	delete m;
 	return;
   }
 
-  dout(7) << "handle_osd_modify_reply " << tid << " commit " << m->get_commit() << endl;
+  dout(7) << "handle_osd_modify_reply " << tid 
+		  << (m->get_commit() ? " commit":" ack")
+		  << " v " << m->get_version()
+		  << endl;
   OSDModify *wr = op_modify[ tid ];
 
   Context *onack = 0;
@@ -588,39 +598,20 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 	return;
   }
 
-  
-  if (m->get_commit() ||            // commit closes out tid
-	  wr->oncommit == 0 ||          // .. or ack if no commit is needed
-	  m->get_result() == -EAGAIN) { // or if we got EAGAIN
+  assert(m->get_result() >= 0);
+
+  // ack or commit?
+  if (m->get_commit()) {
+	//dout(15) << " handle_osd_write_reply commit on " << tid << endl;
+	assert(wr->tid_version.count(tid) == 0 ||
+		   m->get_version() == wr->tid_version[tid]);
+
 	// remove from tid/osd maps
 	assert(pg.active_tids.count(tid));
 	pg.active_tids.erase(tid);
 	if (pg.active_tids.empty()) close_pg( m->get_pg() );
-  }
 
-  /*
-  // success?
-  if (m->get_result() == -EAGAIN) {
-	dout(7) << " got -EAGAIN, resubmitting" << endl;
-	if (wr->waitfor_ack.count(tid)) {
-	  modifyx_submit(wr, wr->waitfor_ack[tid]);
-	  wr->waitfor_ack.erase(tid);
-	} else if (wr->waitfor_commit.count(tid)) {
-	  modifyx_submit(wr, wr->waitfor_commit[tid]);
-	  wr->waitfor_commit.erase(tid);
-	}
-	else assert(0);
-	delete m;
-	return;
-  }
-  */
-  assert(m->get_result() >= 0);
-
-
-  // ack or commit?
-  if (m->get_commit()) {
 	// commit.
-	//dout(15) << " handle_osd_write_reply commit on " << tid << endl;
 	op_modify.erase( tid );
 	wr->waitfor_ack.erase(tid);
 	wr->waitfor_commit.erase(tid);
@@ -636,26 +627,16 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 	assert(wr->waitfor_ack.count(tid));
 	wr->waitfor_ack.erase(tid);
 
-	/*
-	if (wr->op == OSD_OP_WRLOCK) {
-	  OSDLock *l = (OSDLock*)wr;
-	  if (l->next != l->by_osd.end()) {
-		// submit next lock!
-		modifyx_submit(l, l->next->second);
-	  }
+	if (wr->tid_version.count(tid) &&
+		wr->tid_version[tid].version != m->get_version().version) {
+	  dout(-10) << "handle_osd_modify_reply WARNING: replay of tid " << tid 
+				<< " did not achieve previous ordering" << endl;
 	}
-	*/
-
-	if (wr->waitfor_commit.empty()) {
-	  op_modify.erase( tid );      // no commit requested  (FIXME or ooo delivery)
-	  assert(wr->oncommit == 0);
-	}
+	wr->tid_version[tid] = m->get_version();
 	
 	if (wr->waitfor_ack.empty()) {
 	  onack = wr->onack;
-	  wr->onack = 0;
-	  if (wr->waitfor_commit.empty())
-		delete wr;
+	  wr->onack = 0;  // only do callback once
 	}
   }
   

@@ -354,10 +354,13 @@ public:
   static const int STATE_ACTIVE = 1; // i am active.  (primary: replicas too)
 
   // primary
-  static const int STATE_CLEAN = 2;  // peers are complete, clean of stray replicas.
+  static const int STATE_CLEAN =  2;  // peers are complete, clean of stray replicas.
+  static const int STATE_CRASHED = 4; // all replicas went down.
+  static const int STATE_REPLAY = 8;  // crashed, waiting for replay
  
   // non-primary
-  static const int STATE_STRAY = 4; // i must notify the primary i exist.
+  static const int STATE_STRAY =  16; // i must notify the primary i exist.
+
 
  protected:
   OSD *osd;
@@ -402,6 +405,7 @@ protected:
   list<class Message*>            waiting_for_active;
   hash_map<object_t, 
 		   list<class Message*> > waiting_for_missing_object;   
+  map<eversion_t,class MOSDOp*>   replay_queue;
   
   // recovery
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
@@ -495,6 +499,8 @@ public:
   bool is_complete() const { return info.last_complete == info.last_update; }
 
   bool       is_active() const { return state_test(STATE_ACTIVE); }
+  bool       is_crashed() const { return state_test(STATE_CRASHED); }
+  bool       is_replay() const { return state_test(STATE_REPLAY); }
   //bool       is_complete()    { return state_test(STATE_COMPLETE); }
   bool       is_clean() const { return state_test(STATE_CLEAN); }
   bool       is_stray() const { return state_test(STATE_STRAY); }
@@ -517,6 +523,8 @@ public:
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
+
+  
 };
 
 
@@ -551,6 +559,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 	  << " r=" << pg.get_role();
   if (pg.get_role() == 0) out << " pct " << pg.peers_complete_thru;
   if (pg.is_active()) out << " active";
+  if (pg.is_crashed()) out << " crashed";
+  if (pg.is_replay()) out << " replay";
   if (pg.is_clean()) out << " clean";
   if (pg.is_stray()) out << " stray";
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";

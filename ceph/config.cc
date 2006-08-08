@@ -177,6 +177,7 @@ md_config_t g_conf = {
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 10,
+  osd_replay_window: 15,
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
@@ -189,7 +190,7 @@ md_config_t g_conf = {
   // --- ebofs ---
   ebofs: 1,
   ebofs_commit_ms:      10000,      // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_idle_commit_ms: 2000,//100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB

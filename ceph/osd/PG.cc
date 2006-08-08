@@ -17,6 +17,7 @@
 #include "config.h"
 #include "OSD.h"
 
+#include "common/Timer.h"
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGLog.h"
@@ -309,7 +310,6 @@ void PG::build_prior()
 	for (unsigned i=0; i<acting.size(); i++) {
 	  //dout(10) << "build prior considering epoch " << epoch << " osd" << acting[i] << endl;
 	  if (osd->osdmap->is_up(acting[i]) &&  // is up now
-		  omap.is_up(acting[i]) &&          // and was up then
 		  acting[i] != osd->whoami)         // and is not me
 		prior_set.insert(acting[i]);
 	}
@@ -370,9 +370,55 @@ void PG::peer(ObjectStore::Transaction& t,
 	peer_info_requested.insert(*it);
   }
   if (missing_info) return;
-  
+
   
   // -- ok, we have all (prior_set) info.  (and maybe others.)
+
+  // did we crash?
+  dout(10) << " last_epoch_started_any " << last_epoch_started_any << endl;
+  if (last_epoch_started_any) {
+	OSDMap omap;
+	osd->get_map(last_epoch_started_any, omap);
+	
+	// start with the last active set of replicas
+	set<int> last_started;
+	vector<int> acting;
+	omap.pg_to_acting_osds(get_pgid(), acting);
+	for (unsigned i=0; i<acting.size(); i++)
+	  last_started.insert(acting[i]);
+
+	// make sure at least one of them is still up
+	for (epoch_t e = last_epoch_started_any+1;
+		 e <= osd->osdmap->get_epoch();
+		 e++) {
+	  OSDMap omap;
+	  osd->get_map(e, omap);
+	  
+	  set<int> still_up;
+
+	  for (set<int>::iterator i = last_started.begin();
+		   i != last_started.end();
+		   i++) {
+		//dout(10) << " down in epoch " << e << " is " << omap.get_down_osds() << endl;
+		if (omap.is_up(*i))
+		  still_up.insert(*i);
+	  }
+
+	  last_started.swap(still_up);
+	  //dout(10) << " still active as of epoch " << e << ": " << last_started << endl;
+	}
+	
+	if (last_started.empty()) {
+	  dout(10) << " crashed since epoch " << last_epoch_started_any << endl;
+	  state_set(STATE_CRASHED);
+	} else {
+	  dout(10) << " still active from last started: " << last_started << endl;
+	}
+  } else if (osd->osdmap->get_epoch() > 1) {
+	dout(10) << " crashed since epoch " << last_epoch_started_any << endl;
+	state_set(STATE_CRASHED);
+  }	
+
   // who (of _everyone_ we're heard from) has the latest PG version?
   eversion_t newest_update = info.last_update;
   int        newest_update_osd = osd->whoami;
@@ -393,7 +439,7 @@ void PG::peer(ObjectStore::Transaction& t,
 		peers_complete_thru = it->second.last_complete;
 	}	
   }
-  
+
   // gather log?
   if (newest_update_osd != osd->whoami) {
 	if (peer_log_requested.count(newest_update_osd) ||
@@ -507,74 +553,16 @@ void PG::peer(ObjectStore::Transaction& t,
   }
 
 
-  // -- ok, activate!
-  activate(t);
-
-  clean_set.clear();
-  if (info.is_clean()) 
-	clean_set.insert(osd->whoami);
-
-  for (unsigned i=1; i<acting.size(); i++) {
-	int peer = acting[i];
-	assert(peer_info.count(peer));
-	
-	if (peer_info[peer].is_clean()) 
-	  clean_set.insert(peer);
-
-	
-	MOSDPGLog *m = new MOSDPGLog(osd->osdmap->get_epoch(), 
-								 info.pgid);
-	m->info = info;
-
-	if (peer_info[peer].last_update == info.last_update) {
-	  // empty log
-	} 
-	else if (peer_info[peer].last_update < log.bottom) {
-	  // summary/backlog
-	  assert(log.backlog);
-	  m->log = log;
-	} 
-	else {
-	  // incremental log
-	  assert(peer_info[peer].last_update < info.last_update);
-	  m->log.copy_after(log, peer_info[peer].last_update);
-	}
-		
-	// build missing list for them too
-	set<object_t> did;
-	for (list<Log::Entry>::reverse_iterator p = m->log.log.rbegin();
-		 p != m->log.log.rend();
-		 p++) {
-	  if (p->is_delete()) continue;
-	  if (did.count(p->oid)) continue;
-	  did.insert(p->oid);
-	  
-	  if (missing.is_missing(p->oid, p->version)) {   // we don't have it?
-		assert(missing.loc.count(p->oid));   // nothing should be lost!
-		m->missing.add(p->oid, p->version);
-		m->missing.loc[p->oid] = missing.loc[p->oid];
-	  } 
-	  // note: peer will assume we have it if we don't say otherwise.
-	  // else m->missing.loc[oid] = osd->whoami;       // we have it.
-	}
-
-	dout(10) << "sending " << m->log << " " << m->missing
-			 << " to osd" << peer << endl;
-
-	m->log.print(cout);
-
-	osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
+  // -- crash recovery?
+  if (is_crashed()) {
+	dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window << endl;
+	state_set(STATE_REPLAY);
+	g_timer.add_event_after(g_conf.osd_replay_window,
+							new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
+  } else {
+    // -- ok, activate!
+	activate(t);
   }
-
-  // all clean?
-  if (is_all_clean()) {
-	state_set(STATE_CLEAN);
-	dout(10) << "all replicas clean" << endl;
-  	clean_replicas();	
-  }
-  
-  // waiters
-  osd->take_waiters(waiting_for_active);
 }
 
 
@@ -582,7 +570,12 @@ void PG::activate(ObjectStore::Transaction& t)
 {
   // twiddle pg state
   state_set(STATE_ACTIVE);
-  state_clear(PG::STATE_STRAY);
+  state_clear(STATE_STRAY);
+  if (is_crashed()) {
+	assert(is_replay());
+	state_clear(STATE_CRASHED);
+	state_clear(STATE_REPLAY);
+  }
   info.last_epoch_started = osd->osdmap->get_epoch();
 
   if (role == 0) {	// primary state
@@ -619,6 +612,108 @@ void PG::activate(ObjectStore::Transaction& t)
 	log.requested_to = log.log.begin();
     do_recovery();
   }
+
+
+  // if primary..
+  if (role == 0 &&
+	  osd->osdmap->get_epoch() > 1) {
+	// who is clean?
+	clean_set.clear();
+	if (info.is_clean()) 
+	  clean_set.insert(osd->whoami);
+	
+	// start up replicas
+	for (unsigned i=1; i<acting.size(); i++) {
+	  int peer = acting[i];
+	  assert(peer_info.count(peer));
+	  
+	  if (peer_info[peer].is_clean()) 
+		clean_set.insert(peer);
+	  
+	  
+	  MOSDPGLog *m = new MOSDPGLog(osd->osdmap->get_epoch(), 
+								   info.pgid);
+	  m->info = info;
+	  
+	  if (peer_info[peer].last_update == info.last_update) {
+		// empty log
+	  } 
+	  else if (peer_info[peer].last_update < log.bottom) {
+		// summary/backlog
+		assert(log.backlog);
+		m->log = log;
+	  } 
+	  else {
+		// incremental log
+		assert(peer_info[peer].last_update < info.last_update);
+		m->log.copy_after(log, peer_info[peer].last_update);
+	  }
+	  
+	  // build missing list for them too
+	  set<object_t> did;
+	  for (list<Log::Entry>::reverse_iterator p = m->log.log.rbegin();
+		   p != m->log.log.rend();
+		   p++) {
+		if (p->is_delete()) continue;
+		if (did.count(p->oid)) continue;
+		did.insert(p->oid);
+		
+		if (missing.is_missing(p->oid, p->version)) {   // we don't have it?
+		  assert(missing.loc.count(p->oid));   // nothing should be lost!
+		  m->missing.add(p->oid, p->version);
+		  m->missing.loc[p->oid] = missing.loc[p->oid];
+		} 
+		// note: peer will assume we have it if we don't say otherwise.
+		// else m->missing.loc[oid] = osd->whoami;       // we have it.
+	  }
+	  
+	  dout(10) << "sending " << m->log << " " << m->missing
+			   << " to osd" << peer << endl;
+	  
+	  m->log.print(cout);
+	  
+	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
+	}
+	
+	// all clean?
+	if (is_all_clean()) {
+	  state_set(STATE_CLEAN);
+	  dout(10) << "all replicas clean" << endl;
+	  clean_replicas();	
+	}
+  }
+
+  
+  // replay (queue them _before_ other waiting ops!)
+  if (!replay_queue.empty()) {
+	eversion_t c = info.last_update;
+	list<Message*> replay;
+	list<Message*> after;
+	for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
+		 p != replay_queue.end();
+		 p++) {
+	  if (p->first <= info.last_update) {
+		dout(10) << "activate will WRNOOP " << p->first << " " << *p->second << endl;
+		after.push_back(p->second);
+		continue;
+	  }
+	  if (p->first.version != c.version+1) {
+		dout(10) << "activate replay " << p->first
+				 << " skipping " << c.version+1 - p->first.version 
+				 << " ops"
+				 << endl;	  
+	  }
+	  dout(10) << "activate replay " << p->first << " " << *p->second << endl;
+	  replay.push_back(p->second);
+	  c = p->first;
+	}
+	replay_queue.clear();
+	osd->take_waiters(replay);
+	osd->take_waiters(after);
+  }
+
+  // waiters
+  osd->take_waiters(waiting_for_active);
 }
 
 /** clean_up_local

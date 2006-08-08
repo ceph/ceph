@@ -82,31 +82,19 @@ Objecter:
 
 == todo
 
-
-
-
-
-- gzip in messenger?
-
 osd/rados
-/- add caller to log
-/- make modify ops idempotent
 - rdlocks
-- test wrnoop
 - pg_bit changes
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
-- recover period for crashed pgs
 
 osdmonitor
+- osdmonitor needs to monitor some osds...
+- osdmon needs to send map to failure reporter
 - monitor pgs
 - watch osd utilization; adjust overload in cluster map
 
 objecter
-/- order ops by object
-/- detect, cope with crashed PGs, wait for map updates, etc.
-/- filer read/write: flip offset,size args
-- replay ops (in order) after pg crash
 
 objectcacher
 - ocacher caps transitions vs locks
@@ -127,6 +115,8 @@ bugs/stability
 
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
+- gzip in messenger?
+
 
 remaining hard problems
 - how to cope with file size changes and read/write sharing
