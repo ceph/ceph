@@ -19,12 +19,12 @@ class FileCache {
 
   int num_reading;
   int num_writing;
-  int num_unsafe;
+  //int num_unsafe;
 
   // waiters
   list<Cond*> waitfor_read;
   list<Cond*> waitfor_write;
-  list<Context*> waitfor_safe;
+  //list<Context*> waitfor_safe;
   bool waitfor_release;
 
  public:
@@ -32,17 +32,17 @@ class FileCache {
 	oc(_oc), 
 	inode(_inode),
 	latest_caps(0),
-	num_reading(0), num_writing(0), num_unsafe(0),
+	num_reading(0), num_writing(0),// num_unsafe(0),
 	waitfor_release(false) {}
 
   // waiters/waiting
   bool can_read() { return latest_caps & CAP_FILE_RD; }
   bool can_write() { return latest_caps & CAP_FILE_WR; }
-  bool all_safe() { return num_unsafe == 0; }
+  bool all_safe();// { return num_unsafe == 0; }
 
   void add_read_waiter(Cond *c) { waitfor_read.push_back(c); }
   void add_write_waiter(Cond *c) { waitfor_write.push_back(c); }
-  void add_safe_waiter(Context *c) { waitfor_safe.push_back(c); }
+  void add_safe_waiter(Context *c);// { waitfor_safe.push_back(c); }
 
   // ...
   void flush_dirty(Context *onflush=0);

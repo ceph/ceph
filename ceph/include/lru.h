@@ -258,15 +258,13 @@ class LRU {
 
 
   // expire -- expire a single item
-  LRUObject *lru_expire() {
+  LRUObject *lru_get_next_expire() {
 	LRUObject *p;
-
+	
 	// look through tail of bot
 	while (lru_bot.get_length()) {
 	  p = lru_bot.get_tail();
-
-	  if (!p->lru_pinned) 
-		return lru_remove(p);   // yay.
+	  if (!p->lru_pinned) return p;
 
 	  // move to pintail
 	  lru_bot.remove(p);
@@ -276,8 +274,7 @@ class LRU {
 	// ok, try head then
 	while (lru_top.get_length()) {
 	  p = lru_top.get_tail();
-	  if (!p->lru_pinned) 
-		return lru_remove( p );
+	  if (!p->lru_pinned) return p;
 
 	  // move to pintail
 	  lru_top.remove(p);
@@ -285,6 +282,13 @@ class LRU {
 	}
 	
 	// no luck!
+	return NULL;
+  }
+  
+  LRUObject *lru_expire() {
+	LRUObject *p = lru_get_next_expire();
+	if (p) 
+	  return lru_remove(p);
 	return NULL;
   }
 

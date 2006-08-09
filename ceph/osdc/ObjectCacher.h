@@ -41,6 +41,7 @@ class ObjectCacher {
 	Object *ob;
 	bufferlist  bl;
 	tid_t last_write_tid;  // version of bh (if non-zero)
+	utime_t last_write;
 	
 	map< off_t, list<Context*> > waitfor_read;
 	
@@ -314,6 +315,7 @@ class ObjectCacher {
   void bh_write(Object *ob, BufferHead *bh);
 
   void trim(off_t max=-1);
+  void flush();
 
   bool flush(Object *o);
   off_t release(Object *o);

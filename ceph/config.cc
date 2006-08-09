@@ -71,6 +71,7 @@ md_config_t g_conf = {
   debug_mds_log: 1,
   debug_buffer: 0,
   debug_filer: 0,
+  debug_objecter: 0,
   debug_objectcacher: 0,
   debug_client: 0,
   debug_osd: 0,
@@ -384,6 +385,11 @@ void parse_config_options(vector<char*>& args)
 		g_conf.debug_filer = atoi(args[++i]);
 	  else 
 		g_debug_after_conf.debug_filer = atoi(args[++i]);
+	else if (strcmp(args[i], "--debug_objecter") == 0) 
+	  if (!g_conf.debug_after) 
+		g_conf.debug_objecter = atoi(args[++i]);
+	  else 
+		g_debug_after_conf.debug_objecter = atoi(args[++i]);
 	else if (strcmp(args[i], "--debug_objectcacher") == 0) 
 	  if (!g_conf.debug_after) 
 		g_conf.debug_objectcacher = atoi(args[++i]);

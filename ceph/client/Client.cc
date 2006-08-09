@@ -538,6 +538,7 @@ void Client::dispatch(Message *m)
 	} else {
 	  dout(10) << "unmounting: trim pass, size still " << lru.lru_get_size() 
 			   << "+" << inode_map.size() << endl;
+	  dump_cache();	  
 	}
   }
 
@@ -1541,8 +1542,10 @@ int Client::open(const char *relpath, int mode)
 	// caps included?
 	int mds = MSG_ADDR_NUM(reply->get_source());
 
-	if (f->inode->caps.empty()) // first caps?
+	if (f->inode->caps.empty()) {// first caps?
+	  dout(7) << " first caps on " << hex << f->inode->inode.ino << dec << endl;
 	  f->inode->get();
+	}
 
 	int new_caps = reply->get_file_caps();
 	new_caps &= CAP_FILE_WR|CAP_FILE_RD;    // HACK: test synchronous read/write
@@ -1865,7 +1868,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	// create a buffer that refers to *buf, but doesn't try to free it when it's done.
 	bufferlist blist;
 	blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
-	  
+	
 	// issue write
 	Cond cond;
 	bool done = false;

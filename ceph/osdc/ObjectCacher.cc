@@ -417,13 +417,13 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
 	} 
 	
 	Object *ob = objects[oid];
+
+	list<Context*> ls;
 	
 	assert(tid <= ob->last_write_tid);
 	if (ob->last_write_tid == tid) {
 	  dout(10) << "lock_ack " << *ob
 			   << " tid " << tid << endl;
-
-	  list<Context*> ls;
 
 	  switch (ob->lock_state) {
 	  case Object::LOCK_RDUNLOCKING: 
@@ -448,14 +448,21 @@ void ObjectCacher::lock_ack(list<object_t>& oids, tid_t tid)
 	  
 	  ob->last_ack_tid = tid;
 	  
-	  finish_contexts(ls);
-
 	  if (ob->can_close())
 		close_object(ob);
 	} else {
 	  dout(10) << "lock_ack " << *ob 
 			   << " tid " << tid << " obsolete" << endl;
 	}
+
+	// waiters?
+	if (ob->waitfor_ack.count(tid)) {
+	  ls.splice(ls.end(), ob->waitfor_ack[tid]);
+	  ob->waitfor_ack.erase(tid);
+	}
+
+	finish_contexts(ls);
+
   }
 }
 
@@ -552,6 +559,22 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
   //  lock.Unlock();
 }
 
+
+void ObjectCacher::flush()
+{
+  utime_t cutoff = g_clock.now();
+  //cutoff.sec_ref() -= g_conf.client_oc_max_dirty_age;
+
+  dout(10) << "flush" << endl;
+  
+  while (1) {
+	BufferHead *bh = (BufferHead*) lru_dirty.lru_get_next_expire();
+	if (!bh) break;
+	if (bh->last_write > cutoff) break;
+
+	bh_write(bh->ob, bh);
+  }	
+}
 
 void ObjectCacher::trim(off_t max)
 {
@@ -717,6 +740,8 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 
 int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 {
+  utime_t now = g_clock.now();
+  
   for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
 	   ex_it != wr->extents.end();
        ex_it++) {
@@ -748,7 +773,11 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 
 	// it's dirty.
 	mark_dirty(bh);
+	touch_bh(bh);
+	bh->last_write = now;
   }
+
+  delete wr;
 
   trim();
   return 0;
@@ -801,7 +830,10 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 	  Object *o = get_object(i->first, ino);
 	  rdlock(o);
 	}
-	
+
+	// readx will hose rd
+	list<ObjectExtent> extents = rd->extents;
+
 	// do the read, into our cache
 	Cond cond;
 	bool done = false;
@@ -811,8 +843,8 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 	while (!done) cond.Wait(lock);
 	
 	// release the locks
-	for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
-		 ex_it != rd->extents.end();
+	for (list<ObjectExtent>::iterator ex_it = extents.begin();
+		 ex_it != extents.end();
 		 ex_it++) {
 	  assert(objects.count(ex_it->oid));
 	  Object *o = objects[ex_it->oid];
@@ -873,20 +905,23 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 	wrlock(o);
   }
   
+  // writex will hose wr
+  list<ObjectExtent> extents = wr->extents;
+
   // do the write, into our cache
   writex(wr, ino);
   
   // flush 
   // ...and release the locks?
-  for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
-	   ex_it != wr->extents.end();
+  for (list<ObjectExtent>::iterator ex_it = extents.begin();
+	   ex_it != extents.end();
 	   ex_it++) {
 	assert(objects.count(ex_it->oid));
 	Object *o = objects[ex_it->oid];
 	
 	wrunlock(o);
   }
-  
+
   return 0;
 }
  
@@ -1101,12 +1136,11 @@ bool ObjectCacher::flush(Object *ob)
 }
 
 // flush.  non-blocking, takes callback.
-// returns true if already flushed, and deletes the callback.
+// returns true if already flushed
 bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
 {
   if (objects_by_ino.count(ino) == 0) {
 	dout(10) << "flush_set on " << hex << ino << dec << " dne" << endl;
-	delete onfinish;
 	return true;
   }
 
@@ -1115,6 +1149,7 @@ bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
   C_Gather *gather = 0; // we'll need to wait for all objects to flush!
 
   set<Object*>& s = objects_by_ino[ino];
+  bool safe = true;
   for (set<Object*>::iterator i = s.begin();
 	   i != s.end();
 	   i++) {
@@ -1122,20 +1157,21 @@ bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
 
 	if (!flush(ob)) {
 	  // we'll need to gather...
-	  if (!gather) 
+	  if (!gather && onfinish) 
 		gather = new C_Gather(onfinish);
+	  safe = false;
 
 	  dout(10) << "flush_set " << hex << ino << dec << " will wait for ack tid " 
 			   << ob->last_write_tid 
 			   << " on " << *ob
 			   << endl;
-	  ob->waitfor_ack[ob->last_write_tid].push_back(gather->new_sub());
+	  if (gather)
+		ob->waitfor_ack[ob->last_write_tid].push_back(gather->new_sub());
 	}
   }
   
-  if (!gather) {
+  if (safe) {
 	dout(10) << "flush_set " << hex << ino << dec << " has no dirty|tx bhs" << endl;
-	delete onfinish;
 	return true;
   }
   return false;
@@ -1150,7 +1186,6 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 
   if (objects_by_ino.count(ino) == 0) {
 	dout(10) << "commit_set on " << hex << ino << dec << " dne" << endl;
-	delete onfinish;
 	return true;
   }
 
@@ -1159,6 +1194,7 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
   C_Gather *gather = 0; // we'll need to wait for all objects to commit
 
   set<Object*>& s = objects_by_ino[ino];
+  bool safe = true;
   for (set<Object*>::iterator i = s.begin();
 	   i != s.end();
 	   i++) {
@@ -1167,18 +1203,19 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 	// make sure it's flushing.
 	flush_set(ino);
 
-	if (ob->last_write_tid < ob->last_commit_tid) {
+	if (ob->last_write_tid > ob->last_commit_tid) {
 	  dout(10) << "commit_set " << hex << ino << dec << " " << *ob 
 			   << " will finish on commit tid " << ob->last_write_tid
 			   << endl;
-	  if (!gather) gather = new C_Gather(onfinish);
-	  ob->waitfor_commit[ob->last_write_tid].push_back( gather->new_sub() );
+	  if (!gather && onfinish) gather = new C_Gather(onfinish);
+	  safe = false;
+	  if (gather)
+		ob->waitfor_commit[ob->last_write_tid].push_back( gather->new_sub() );
 	}
   }
 
-  if (!gather) {
+  if (safe) {
 	dout(10) << "commit_set " << hex << ino << dec << " all committed" << endl;
-	delete onfinish;
 	return true;
   }
   return false;

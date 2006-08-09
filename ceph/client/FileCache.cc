@@ -10,7 +10,10 @@
 
 void FileCache::flush_dirty(Context *onflush)
 {
-  oc->flush_set(inode.ino, onflush);
+  if (oc->flush_set(inode.ino, onflush)) {
+	onflush->finish(0);
+	delete onflush;
+  }
 }
 
 off_t FileCache::release_clean()
@@ -31,15 +34,12 @@ bool FileCache::is_dirty()
 void FileCache::empty(Context *onempty)
 {
   off_t unclean = release_clean();
-  bool clean = oc->flush_set(inode.ino);
+  bool clean = oc->flush_set(inode.ino, onempty);
   assert(!unclean == clean);
-  
+
   if (clean) {
 	onempty->finish(0);
 	delete onempty;
-  } else {
-	clean = oc->flush_set(inode.ino, onempty);	
-	assert(!clean);
   }
 }
 
@@ -146,4 +146,18 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
   num_writing--;
   if (num_writing == 0 && !caps_callbacks.empty())
 	check_caps();
+}
+
+bool FileCache::all_safe()
+{
+  return !oc->set_is_dirty_or_committing(inode.ino);
+}
+
+void FileCache::add_safe_waiter(Context *c) 
+{
+  bool safe = oc->commit_set(inode.ino, c);
+  if (safe) {
+	c->finish(0);
+	delete c;
+  }
 }
