@@ -31,6 +31,7 @@ class Objecter {
   class OSDOp {
   public:
 	list<ObjectExtent> extents;
+	virtual ~OSDOp() {}
   };
 
   class OSDRead : public OSDOp {

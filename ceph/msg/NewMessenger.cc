@@ -1428,11 +1428,15 @@ int Rank::EntityMessenger::shutdown()
   rank.unregister_entity(this);
 
   // stop my dispatch thread
-  lock.Lock();
-  stop = true;
-  cond.Signal();
-  lock.Unlock();
-  dispatch_thread.join();
+  if (dispatch_thread.am_self()) 
+	stop = true;
+  else {
+	lock.Lock();
+	stop = true;
+	cond.Signal();
+	lock.Unlock();
+	dispatch_thread.join();
+  }
 
   return 0;
 }

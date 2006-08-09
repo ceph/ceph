@@ -40,6 +40,10 @@ class Thread {
 	return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
   }
 
+  bool am_self() {
+	return (pthread_self() == thread_id);
+  }
+
   int join(void **prval = 0) {
 	if (thread_id == 0) return -1;   // never started.
 	int status = pthread_join(thread_id, prval);
