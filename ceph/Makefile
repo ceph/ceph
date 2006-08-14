@@ -56,7 +56,7 @@ OSDC_OBJS= \
 
 COMMON_OBJS= \
 	msg/Messenger.o\
-	msg/Dispatcher.o\
+	msg/Message.o\
 	msg/HostMonitor.o\
 	mds/MDCluster.o\
 	common/Logger.o\

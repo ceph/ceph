@@ -97,7 +97,6 @@ class Messenger {
 };
 
 
-extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);
 
 
 

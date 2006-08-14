@@ -38,7 +38,9 @@ class OSDMonitor : public Dispatcher {
 
   OSDMap::Incremental pending;
 
-  // osd monitoring
+  map<epoch_t, map<msg_addr_t, epoch_t> > awaiting_map;
+
+  // osd down -> out
   map<int,utime_t>  pending_out;
 
   
@@ -46,8 +48,9 @@ class OSDMonitor : public Dispatcher {
 
   // maps
   void accept_pending();   // accept pending, new map.
+  void send_map();         // send current map to waiters.
   void send_full_map(msg_addr_t dest);
-  void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
+  void send_incremental_map(epoch_t since, msg_addr_t dest);
   void bcast_latest_osd_map_mds();
   void bcast_latest_osd_map_osd();
 
@@ -64,9 +67,8 @@ class OSDMonitor : public Dispatcher {
   void dispatch(Message *m);
   void handle_shutdown(Message *m);
 
-  void handle_failure(class MFailure *m);
-
   void handle_osd_boot(class MOSDBoot *m);
+  void handle_osd_failure(class MOSDFailure *m);
   void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);

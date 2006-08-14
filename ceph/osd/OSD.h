@@ -172,7 +172,8 @@ public:
   list<class Message*> waiting_for_osdmap;
 
   hash_map<msg_addr_t, epoch_t>  peer_map_epoch;
-  void share_map(msg_addr_t who, epoch_t epoch);
+  bool _share_map_incoming(msg_addr_t who, epoch_t epoch);
+  void _share_map_outgoing(msg_addr_t dest);
 
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
@@ -186,6 +187,7 @@ public:
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
   void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
+
 
 
   // -- replication --
@@ -259,6 +261,8 @@ public:
 
   // messages
   virtual void dispatch(Message *m);
+  virtual Message *ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
+  virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst);
 
   //void handle_ping(class MPing *m);
   void handle_op(class MOSDOp *m);

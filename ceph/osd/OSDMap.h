@@ -131,6 +131,14 @@ private:
   bool is_up(int osd) { return !is_down(osd); }
   bool is_out(int osd) { return out_osds.count(osd); }
   bool is_in(int osd) { return !is_out(osd); }
+
+  bool get_inst(int osd, entity_inst_t& inst) { 
+	if (osd_inst.count(osd)) {
+	  inst = osd_inst[osd];
+	  return true;
+	} 
+	return false;
+  }
   
   void mark_down(int o) { down_osds.insert(o); }
   void mark_up(int o) { down_osds.erase(o); }

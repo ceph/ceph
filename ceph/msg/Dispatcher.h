@@ -20,21 +20,18 @@
 class Messenger;
 
 class Dispatcher {
- private:
-  Messenger *dis_messenger;
-  int        dis_port;
-
  public:
   virtual ~Dispatcher() { }
 
   // how i receive messages
   virtual void dispatch(Message *m) = 0;
 
-  // messenger uses this to tell me how to send messages
-  void set_messenger_port(Messenger *m, int port) {
-	dis_messenger = m;
-	dis_port = port;
-  }
+
+  // how i deal with transmission failures.
+  virtual Message *ms_handle_failure(msg_addr_t dest, entity_inst_t& inst) { return 0; }
+
+  // lookups
+  virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst) { assert(0); }
 
   // this is how i send messages
   //int send_message(Message *m, msg_addr_t dest, int dest_port);

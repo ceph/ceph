@@ -17,7 +17,7 @@
 #include "messages/MNSLookupReply.h"
 #include "messages/MNSFailure.h"
 
-#include "messages/MFailure.h"
+//#include "messages/MFailure.h"
 
 #include <netdb.h>
 
@@ -261,10 +261,12 @@ void Rank::Namer::handle_failure(MNSFailure *m)
 	rank.entity_map.erase(*i);
 	rank.entity_unstarted.erase(*i);
 	
+	/*
 	if ((*i).is_osd()) {
 	  // tell the monitor
 	  messenger->send_message(new MFailure(*i, m->get_inst()), MSG_ADDR_MON(0));
 	}
+	*/
   }
 
   delete m;
@@ -536,11 +538,16 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
 	derr(0) << "FATAL error: can't send failure to namer0, not connected yet" << endl;
 	assert(0);
   }
+
   rank.messenger->send_message(new MNSFailure(inst),
 							   MSG_ADDR_NAMER(0));
 
+
   // FIXME: possible race before i reclaim lock here?
   
+  Dispatcher *dis = 0;
+  msg_addr_t dis_dest;
+
   // requeue my messages
   rank.lock.Lock();
   lock.Lock();
@@ -550,7 +557,6 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
 	dout(10) << "sender(" << inst << ").fail " 
 			 << q.size() << " messages" << endl;
 	
-	// resubmit!
 	while (!q.empty()) {
 	  // don't keep reconnecting..
 	  if (rank.entity_map.count(q.front()->get_dest()) &&
@@ -558,6 +564,12 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
 		rank.down.insert(q.front()->get_dest());
 	  //rank.entity_map.erase(q.front()->get_dest());
 	  
+	  if (!dis &&
+		  rank.local.count(q.front()->get_source())) {
+		dis_dest = q.front()->get_dest();
+		dis = rank.local[q.front()->get_source()]->get_dispatcher();
+	  }
+
 	  if (g_conf.ms_requeue_on_sender_fail)
 		rank.submit_message( q.front() );
 	  else
@@ -574,6 +586,15 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
 	done = true;
   }
   lock.Unlock();
+
+
+  // send special failure msg?
+  if (dis) {
+	Message *m = dis->ms_handle_failure(dis_dest, inst);
+	if (m)
+	  rank.messenger->send_message(m, MSG_ADDR_MON(0));
+  }
+  
   rank.lock.Unlock();
 }
 

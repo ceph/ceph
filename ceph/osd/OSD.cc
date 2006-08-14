@@ -38,6 +38,7 @@
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MOSDPing.h"
+#include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBoot.h"
@@ -480,10 +481,11 @@ void OSD::heartbeat()
   }
   for (set<int>::iterator i = pingset.begin();
 	   i != pingset.end();
-	   i++)
+	   i++) {
+	_share_map_outgoing( MSG_ADDR_OSD(*i) );
 	messenger->send_message(new MOSDPing(osdmap->get_epoch()), 
 							MSG_ADDR_OSD(*i));
-  
+  }
 
   // schedule next!
   next_heartbeat = new C_Heartbeat(this);
@@ -497,13 +499,16 @@ void OSD::heartbeat()
 // --------------------------------------
 // dispatch
 
-void OSD::share_map(msg_addr_t who, epoch_t epoch)
+bool OSD::_share_map_incoming(msg_addr_t who, epoch_t epoch)
 {
+  bool shared = false;
+
   // does client have old map?
   if (who.is_client()) {
 	if (epoch < osdmap->get_epoch()) {
 	  dout(10) << who << " has old map " << epoch << " < " << osdmap->get_epoch() << endl;
 	  send_incremental_map(epoch, who, true);
+	  shared = true;
 	}
   }
 
@@ -518,9 +523,33 @@ void OSD::share_map(msg_addr_t who, epoch_t epoch)
 	  dout(10) << who << " has old map " << epoch << " < " << osdmap->get_epoch() << endl;
 	  send_incremental_map(epoch, who, true);
 	  peer_map_epoch[who] = osdmap->get_epoch();  // so we don't send it again.
+	  shared = true;
+	}
+  }
+
+  return shared;
+}
+
+
+void OSD::_share_map_outgoing(msg_addr_t dest) 
+{
+  assert(dest.is_osd());
+
+  // send map?
+  if (peer_map_epoch.count(dest)) {
+	// ??? send recent ???
+	// do nothing.
+  }
+  else {
+	epoch_t pe = peer_map_epoch[dest];
+	if (pe < osdmap->get_epoch()) {
+	  send_incremental_map(pe, dest, true);
+	  peer_map_epoch[dest] = osdmap->get_epoch();
 	}
   }
 }
+
+
 
 void OSD::dispatch(Message *m) 
 {
@@ -576,10 +605,6 @@ void OSD::dispatch(Message *m)
 	  // no map?  starting up?
 	  if (!osdmap) {
 		dout(7) << "no OSDMap, not booted" << endl;
-		/*if (waiting_for_osdmap.empty()) 
-		  messenger->send_message(new MOSDGetMap(sb.current_map),
-								  MSG_ADDR_MON(0));
-		*/
 		waiting_for_osdmap.push_back(m);
 		break;
 	  }
@@ -601,7 +626,7 @@ void OSD::dispatch(Message *m)
 	  case MSG_OSD_PING:
 		// take note.
 		dout(20) << "osdping from " << m->get_source() << endl;
-		share_map(m->get_source(), ((MOSDPing*)m)->map_epoch);
+		_share_map_incoming(m->get_source(), ((MOSDPing*)m)->map_epoch);
 		break;
 		
 	  case MSG_OSD_PG_NOTIFY:
@@ -653,17 +678,31 @@ void OSD::dispatch(Message *m)
 }
 
 
+Message* OSD::ms_handle_failure(msg_addr_t dest, entity_inst_t& inst)
+{
+  dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
+  messenger->send_message(new MOSDFailure(dest, inst, osdmap->get_epoch()),
+						  MSG_ADDR_MON(0));
+  return 0;
+}
+
+bool OSD::ms_lookup(msg_addr_t dest, entity_inst_t& inst)
+{
+  if (dest.is_osd()) {
+	assert(osdmap);
+	return osdmap->get_inst(dest.num(), inst);
+  } 
+
+  assert(0);
+  return false;
+}
+
+
+
 void OSD::handle_op_reply(MOSDOpReply *m)
 {
   if (m->get_map_epoch() < boot_epoch) {
 	dout(3) << "replica op reply from before boot" << endl;
-	delete m;
-	return;
-  }
-  
-  if (m->get_source().is_osd() &&
-	  osdmap->is_down(m->get_source().num())) {
-	dout(3) << "ignoring reply from down " << m->get_source() << endl;
 	delete m;
 	return;
   }
@@ -1486,6 +1525,7 @@ void OSD::do_notifies(map< int, list<PG::Info> >& notify_list)
 	}
 	dout(7) << "do_notify osd" << it->first << " on " << it->second.size() << " PGs" << endl;
 	MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(), it->second);
+	_share_map_outgoing(MSG_ADDR_OSD(it->first));
 	messenger->send_message(m, MSG_ADDR_OSD(it->first));
   }
 }
@@ -1505,8 +1545,8 @@ void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
 
 	MOSDPGQuery *m = new MOSDPGQuery(osdmap->get_epoch(),
 									 pit->second);
-	messenger->send_message(m,
-							MSG_ADDR_OSD(who));
+	_share_map_outgoing(MSG_ADDR_OSD(who));
+	messenger->send_message(m, MSG_ADDR_OSD(who));
   }
 }
 
@@ -1819,6 +1859,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  }
 	  m->missing = pg->missing;
 
+	  _share_map_outgoing(MSG_ADDR_OSD(from));
 	  messenger->send_message(m, MSG_ADDR_OSD(from));
 	}	
 
@@ -2187,7 +2228,7 @@ void OSD::handle_op(MOSDOp *op)
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
 
-  share_map(op->get_source(), op->get_map_epoch());
+  _share_map_incoming(op->get_source(), op->get_map_epoch());
 
   // what kind of op?
   if (!OSD_OP_IS_REP(op->get_op())) {
@@ -2751,6 +2792,14 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 		   << "  off " << op->get_offset() << " len " << op->get_length() 
 		   << endl;  
  
+  // share latest osd map?
+  osd_lock.Lock();
+  {
+	for (unsigned i=1; i<pg->acting.size(); i++) 
+	  _share_map_outgoing( MSG_ADDR_OSD(i) ); 
+  }
+  osd_lock.Unlock();
+  
   // issue replica writes
   OSDReplicaOp *repop = new OSDReplicaOp(op, nv, ov);
   repop->start = g_clock.now();
@@ -2759,16 +2808,11 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   
   repop->lock.Lock();
   {
-	for (unsigned i=1; i<pg->acting.size(); i++) {
+	for (unsigned i=1; i<pg->acting.size(); i++)
 	  issue_replica_op(pg, repop, pg->acting[i]);
-	}
   }
   repop->lock.Unlock();
-  
-  // pre-ack
-  //MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), false);
-  //messenger->send_message(reply, op->get_asker());
-  
+
   // prepare
   ObjectStore::Transaction t;
   if (op->get_op() != OSD_OP_WRNOOP) {
@@ -2776,7 +2820,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	prepare_op_transaction(t, op, nv, pg);
   }
   
-  // go
+  // apply
   Context *oncommit = new C_OSD_WriteCommit(this, repop, pg->info.last_complete);
   unsigned r = store->apply_transaction(t, oncommit);
   if (r != 0 &&   // no errors
@@ -2785,6 +2829,10 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	assert(r == 0);
   }
 
+  // pre-ack
+  //MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), false);
+  //messenger->send_message(reply, op->get_asker());
+ 
   // local ack
   get_repop(repop);
   {

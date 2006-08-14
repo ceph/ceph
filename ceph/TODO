@@ -16,7 +16,7 @@ failure detection
  up/down/in/out
 
 pg logging
- top, bottom, trimming, truncate_front, etc.
+ top, bottom, trimming, etc.
  caller stamps -> idempotent operations
 
 pg recovery
@@ -30,6 +30,13 @@ ebofs
  storage interface
 
  
+
+-- rados applications 
+- files
+- b-link trees
+- distributed hash table
+- fifo queues
+
 
 
 
@@ -60,18 +67,9 @@ Objecter:
 - should order acks over objects, because we want to order the updates (see below)
 
 - on map update and primary change,
- - no failure
-   - mod: wait for acks for flush to ensure ordering.
-   - mod: or, resubmit to new primary.
-     - resubmit as WRNOOP instead of original op.
-   - read: nothing special.
- - failure
-   - mod: immediately resubmit pending ops (in order) to new primary
-   - read: resubmit.
+ - resubmit to new primary.
 
- -> this orders acks, but not commits.
-
-- accept acks from current|prior primary.
+- only accept acks from current primary.
 - only accept commits from current primary.
 - need pg map
   - to detect primary changes,
@@ -82,9 +80,20 @@ Objecter:
 
 == todo
 
+- how to get usage feedback to monitor?
+
+
+messenger
+- failure reporting
+- share same tcp socket for sender and receiver?
+- close idle connections
+- osds: forget idle client addrs
+
 osd/rados
+- blocked ops pulling objects from osds that then fail.. bring to front of recovery queue!
 - rdlocks
 - pg_bit changes
+- be more careful about how incrementals are shared
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
 
@@ -107,6 +116,17 @@ reliability
 - how to choose peer sets
 - osdmonitor, filter
 
+ebofs
+- allow btree sets instead of maps
+- verify LRU behavior sensible: writes go to mid, not top!
+- fix NEAR_LAST_FWD   (?)
+- combine inodes and/or cnodes into same blocks
+- delay allocation
+  - or actually, reallocate if dirty is cancelable
+- journaling?  in NVRAM?
+- clone()
+
+
 
 bugs/stability
 - fakestore crapping out.. missing timer events?
@@ -127,6 +147,7 @@ crush
 - more efficient failure when all/too many osds are down
 
 mds
+- only share osdmap updates with clients holding capabilities
 - statlite
 - stat single writer
 - truncate()
@@ -159,14 +180,6 @@ client
 - readv+writev, readx+writex
   - serialized!
 
-ebofs
-- verify LRU behavior sensible: writes go to mid, not top!
-- fix NEAR_LAST_FWD   (?)
-- combine inodes and/or cnodes into same blocks
-- delay allocation
-  - or actually, reallocate if dirty is cancelable
-- journaling?  in NVRAM?
-- clone()
 
 
 

@@ -46,6 +46,8 @@
 #define MSG_OSD_BOOT         25
 #define MSG_OSD_MKFS_ACK     26
 
+#define MSG_OSD_FAILURE      27
+
 #define MSG_OSD_PG_NOTIFY      50
 #define MSG_OSD_PG_QUERY       51
 #define MSG_OSD_PG_SUMMARY     52
@@ -312,21 +314,18 @@ class Message {
   msg_envelope_t  env;    // envelope
   bufferlist      payload;        // payload
   
-  int tcp_sd;
   friend class Messenger;
 public:
-  int get_tcp_sd() { return tcp_sd; }
-  void set_tcp_sd(int s) { tcp_sd = s; }
 
  public:
-  Message() : tcp_sd(0) { 
+  Message() { 
 	env.source_port = env.dest_port = -1;
 	env.source = env.dest = MSG_ADDR_UNDEF;
 	env.nchunks = 0;
 	env.lamport_send_stamp = 0;	
 	env.lamport_recv_stamp = 0;
   };
-  Message(int t) : tcp_sd(0) {
+  Message(int t) {
 	env.source_port = env.dest_port = -1;
 	env.source = env.dest = MSG_ADDR_UNDEF;
 	env.nchunks = 0;
@@ -414,7 +413,7 @@ public:
   
 };
 
-
+extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);
 ostream& operator<<(ostream& out, Message& m);
 
 #endif
