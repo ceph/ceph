@@ -80,7 +80,7 @@ block_t BlockDevice::get_num_blocks()
 }
 
 
-int BlockDevice::io_thread_entry()
+void* BlockDevice::io_thread_entry()
 {
   lock.Lock();
 
@@ -353,7 +353,7 @@ void BlockDevice::finish_io(biovec *bio)
   }
 }
 
-int BlockDevice::complete_thread_entry()
+void* BlockDevice::complete_thread_entry()
 {
   complete_lock.Lock();
   dout(10) << "complete_thread start" << endl;

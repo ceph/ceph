@@ -94,7 +94,7 @@ class BlockDevice {
 
 
   // io thread
-  int io_thread_entry();
+  void *io_thread_entry();
   class IOThread : public Thread {
 	BlockDevice *dev;
   public:
@@ -116,7 +116,7 @@ class BlockDevice {
   void finish_io(biovec *bio);
 
   // complete thread
-  int complete_thread_entry();
+  void *complete_thread_entry();
   class CompleteThread : public Thread {
 	BlockDevice *dev;
   public:

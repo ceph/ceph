@@ -84,13 +84,16 @@ Objecter:
 
 
 messenger
+- lookup upcall,
+- distributed namer (eg send to MSG_ADDR_MON_ANY)
 - failure reporting
 - share same tcp socket for sender and receiver?
-- close idle connections
+- close idle connections?
 - osds: forget idle client addrs
 
 osd/rados
-- blocked ops pulling objects from osds that then fail.. bring to front of recovery queue!
+- mark residual pgs obsolete
+- deal with divergent disconnected primaries
 - rdlocks
 - pg_bit changes
 - be more careful about how incrementals are shared
