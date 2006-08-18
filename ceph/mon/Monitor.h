@@ -76,7 +76,6 @@ class Monitor : public Dispatcher {
 
   // hack
   void fake_osd_failure(int osd, bool down);
-  void fake_reorg();
 
 };
 

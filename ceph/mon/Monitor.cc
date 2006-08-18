@@ -46,16 +46,6 @@ public:
   }
 };
 
-class C_OM_Faker : public Context {
-public:
-  Monitor *om;
-  C_OM_Faker(Monitor *m) { 
-	this->om = m;
-  }
-  void finish(int r) {
-	om->fake_reorg();
-  }
-};
 
 class C_OM_FakeOSDFailure : public Context {
   Monitor *mon;
@@ -71,32 +61,6 @@ public:
 
 
 
-void Monitor::fake_reorg() 
-{
-  
-  // HACK osd map change
-  static int d = 0;
-
-  if (d > 0) {
-	dout(1) << "changing OSD map, marking osd" << d-1 << " out" << endl;
-	osdmap->mark_out(d-1);
-  }
-
-  dout(1) << "changing OSD map, marking osd" << d << " down" << endl;
-  osdmap->mark_down(d);
-
-  osdmap->inc_epoch();
-  d++;
-  
-  // bcast
-  bcast_latest_osd_map_osd();
-    
-  // do it again?
-  if (g_conf.num_osd - d > 4 &&
-	  g_conf.num_osd - d > g_conf.num_osd/2)
-	g_timer.add_event_after(g_conf.fake_osdmap_expand,
-							new C_OM_Faker(this));
-}
 
 
 void Monitor::init()
@@ -140,28 +104,18 @@ void Monitor::init()
 
 
   
-  if (whoami == 0 &&
-	  g_conf.num_osd > 4 &&
-	  g_conf.fake_osdmap_expand) {
-	dout(1) << "scheduling OSD map reorg at " << g_conf.fake_osdmap_expand << endl;
-	g_timer.add_event_after(g_conf.fake_osdmap_expand,
-							new C_OM_Faker(this));
+  // fake osd failures
+  for (map<int,float>::iterator i = g_fake_osd_down.begin();
+	   i != g_fake_osd_down.end();
+	   i++) {
+	dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
+	g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
   }
-
-  if (whoami == 0) {
-	// fake osd failures
-	for (map<int,float>::iterator i = g_fake_osd_down.begin();
-		 i != g_fake_osd_down.end();
+  for (map<int,float>::iterator i = g_fake_osd_out.begin();
+	   i != g_fake_osd_out.end();
 		 i++) {
-	  dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
-	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
-	}
-	for (map<int,float>::iterator i = g_fake_osd_out.begin();
-		 i != g_fake_osd_out.end();
-		 i++) {
-	  dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
-	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
-	}
+	dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
+	g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
   }
 
   

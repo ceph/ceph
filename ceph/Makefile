@@ -40,7 +40,7 @@ MDS_OBJS= \
 	mds/LogStream.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o\
-	mds/OSDMonitor.o
+	mds/OSDMonitor.o 
 
 OSD_OBJS= \
 	osd/PG.o\
@@ -62,6 +62,7 @@ COMMON_OBJS= \
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
+	mon/Monitor.o\
 	config.o
 
 
@@ -115,6 +116,9 @@ mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 
 
 # synthetic workload
+fakemon: fakemon.cc mds.o client.o osd.o osdc.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+
 fakesyn: fakesyn.cc mds.o client.o osd.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 

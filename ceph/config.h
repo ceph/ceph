@@ -14,6 +14,7 @@ extern map<int,float> g_fake_osd_out;
 
 
 struct md_config_t {
+  int  num_mon;
   int  num_mds;
   int  num_osd;
   int  num_client;

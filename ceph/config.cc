@@ -41,6 +41,7 @@ map<int,float> g_fake_osd_out;
 md_config_t g_debug_after_conf;
 
 md_config_t g_conf = {
+  num_mon: 5,
   num_mds: 1,
   num_osd: 4,
   num_client: 1,
@@ -316,7 +317,9 @@ void parse_config_options(vector<char*>& args)
   vector<char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
-	if (strcmp(args[i], "--nummds") == 0) 
+	if (strcmp(args[i], "--nummon") == 0) 
+	  g_conf.num_mon = atoi(args[++i]);
+	else if (strcmp(args[i], "--nummds") == 0) 
 	  g_conf.num_mds = atoi(args[++i]);
 	else if (strcmp(args[i], "--numclient") == 0) 
 	  g_conf.num_client = atoi(args[++i]);
