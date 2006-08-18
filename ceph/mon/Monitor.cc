@@ -38,8 +38,8 @@
 
 
 class C_Mon_Tick : public Context {
-public:
   Monitor *mon;
+public:
   C_Mon_Tick(Monitor *m) : mon(m) {}
   void finish(int r) {
 	mon->tick();
