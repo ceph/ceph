@@ -422,33 +422,33 @@ void Monitor::bcast_latest_osd_map_osd()
 void Monitor::tick()
 {
   lock.Lock();
-
-  dout(10) << "tick" << endl;
-
-  // mark down osds out?
-  utime_t now = g_clock.now();
-  list<int> mark_out;
-  for (map<int,utime_t>::iterator i = pending_out.begin();
-	   i != pending_out.end();
-	   i++) {
-	utime_t down = now;
-	down -= i->second;
-
-	if (down.sec() >= g_conf.mon_osd_down_out_interval) {
-	  dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << endl;
-	  mark_out.push_back(i->first);
+  {
+	dout(10) << "tick" << endl;
+	
+	// mark down osds out?
+	utime_t now = g_clock.now();
+	list<int> mark_out;
+	for (map<int,utime_t>::iterator i = pending_out.begin();
+		 i != pending_out.end();
+		 i++) {
+	  utime_t down = now;
+	  down -= i->second;
+	  
+	  if (down.sec() >= g_conf.mon_osd_down_out_interval) {
+		dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << endl;
+		mark_out.push_back(i->first);
+	  }
 	}
+	for (list<int>::iterator i = mark_out.begin();
+		 i != mark_out.end();
+		 i++) {
+	  pending_out.erase(*i);
+	  pending.new_out.push_back( *i );
+	  accept_pending();
+	}
+	
+	// next!
+	g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
   }
-  for (list<int>::iterator i = mark_out.begin();
-	   i != mark_out.end();
-	   i++) {
-	pending_out.erase(*i);
-	pending.new_out.push_back( *i );
-	accept_pending();
-  }
-  
-  // next!
-  g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
-
   lock.Unlock();
 }
