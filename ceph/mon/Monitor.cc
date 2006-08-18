@@ -48,8 +48,8 @@ public:
 
 class C_OM_Faker : public Context {
 public:
-  OSDMonitor *om;
-  C_OM_Faker(OSDMonitor *m) { 
+  Monitor *om;
+  C_OM_Faker(Monitor *m) { 
 	this->om = m;
   }
   void finish(int r) {
@@ -58,11 +58,11 @@ public:
 };
 
 class C_OM_FakeOSDFailure : public Context {
-  OSDMonitor *mon;
+  Monitor *mon;
   int osd;
   bool down;
 public:
-  C_OM_FakeOSDFailure(OSDMonitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
+  C_OM_FakeOSDFailure(Monitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
   void finish(int r) {
 	mon->fake_osd_failure(osd,down);
   }
@@ -71,7 +71,7 @@ public:
 
 
 
-void OSDMonitor::fake_reorg() 
+void Monitor::fake_reorg() 
 {
   
   // HACK osd map change
@@ -99,7 +99,7 @@ void OSDMonitor::fake_reorg()
 }
 
 
-void OSDMonitor::init()
+void Monitor::init()
 {
   dout(1) << "init" << endl;
 
@@ -173,7 +173,7 @@ void OSDMonitor::init()
 }
 
 
-void OSDMonitor::dispatch(Message *m)
+void Monitor::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case MSG_FAILURE:
@@ -208,7 +208,7 @@ void OSDMonitor::dispatch(Message *m)
 }
 
 
-void OSDMonitor::handle_shutdown(Message *m)
+void Monitor::handle_shutdown(Message *m)
 {
   dout(1) << "shutdown from " << m->get_source() << endl;
   messenger->shutdown();
@@ -216,14 +216,14 @@ void OSDMonitor::handle_shutdown(Message *m)
   delete m;
 }
 
-void OSDMonitor::handle_ping_ack(MPingAck *m)
+void Monitor::handle_ping_ack(MPingAck *m)
 {
   // ...
   
   delete m;
 }
 
-void OSDMonitor::handle_failure(MFailure *m)
+void Monitor::handle_failure(MFailure *m)
 {
   dout(1) << "osd failure: " << m->get_failed() << " from " << m->get_source() << endl;
   
@@ -256,7 +256,7 @@ void OSDMonitor::handle_failure(MFailure *m)
 
 
 
-void OSDMonitor::fake_osd_failure(int osd, bool down) 
+void Monitor::fake_osd_failure(int osd, bool down) 
 {
   if (down) {
 	dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
@@ -271,7 +271,7 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
 }
 
 
-void OSDMonitor::handle_osd_boot(MOSDBoot *m)
+void Monitor::handle_osd_boot(MOSDBoot *m)
 {
   dout(7) << "osd_boot from " << m->get_source() << endl;
   assert(m->get_source().is_osd());
@@ -320,7 +320,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   bcast_latest_osd_map_mds();
 }
 
-void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
+void Monitor::handle_osd_getmap(MOSDGetMap *m)
 {
   dout(7) << "osd_getmap from " << m->get_source() << " since " << m->get_since() << endl;
   
@@ -333,7 +333,7 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 
 
 
-void OSDMonitor::accept_pending()
+void Monitor::accept_pending()
 {
   dout(-10) << "accept_pending " << osdmap->get_epoch() << " -> " << pending.epoch << endl;
 
@@ -377,7 +377,7 @@ void OSDMonitor::accept_pending()
   pending = next;
 }
 
-void OSDMonitor::send_map()
+void Monitor::send_map()
 {
   dout(10) << "send_map " << osdmap->get_epoch() << endl;
 
@@ -392,12 +392,12 @@ void OSDMonitor::send_map()
 }
 
 
-void OSDMonitor::send_full_map(msg_addr_t who)
+void Monitor::send_full_map(msg_addr_t who)
 {
   messenger->send_message(new MOSDMap(osdmap), who);
 }
 
-void OSDMonitor::send_incremental_map(epoch_t since, msg_addr_t dest)
+void Monitor::send_incremental_map(epoch_t since, msg_addr_t dest)
 {
   dout(-10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
 		   << " to " << dest << endl;
@@ -426,7 +426,7 @@ void OSDMonitor::send_incremental_map(epoch_t since, msg_addr_t dest)
 
 
 
-void OSDMonitor::bcast_latest_osd_map_mds()
+void Monitor::bcast_latest_osd_map_mds()
 {
   epoch_t e = osdmap->get_epoch();
   dout(1) << "bcast_latest_osd_map_mds epoch " << e << endl;
@@ -438,7 +438,7 @@ void OSDMonitor::bcast_latest_osd_map_mds()
   }
 }
 
-void OSDMonitor::bcast_latest_osd_map_osd()
+void Monitor::bcast_latest_osd_map_osd()
 {
   epoch_t e = osdmap->get_epoch();
   dout(1) << "bcast_latest_osd_map_osd epoch " << e << endl;
@@ -457,7 +457,7 @@ void OSDMonitor::bcast_latest_osd_map_osd()
 
 
 
-void OSDMonitor::tick()
+void Monitor::tick()
 {
   dout(10) << "tick" << endl;
 

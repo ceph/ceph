@@ -26,7 +26,7 @@ using namespace std;
 
 #include "osd/OSDMap.h"
 
-class OSDMonitor : public Dispatcher {
+class Monitor : public Dispatcher {
   // me
   int whoami;
   Messenger *messenger;
@@ -56,7 +56,7 @@ class OSDMonitor : public Dispatcher {
 
 
  public:
-  OSDMonitor(int w, Messenger *m) : 
+  Monitor(int w, Messenger *m) : 
 	whoami(w),
 	messenger(m),
 	osdmap(0) {
