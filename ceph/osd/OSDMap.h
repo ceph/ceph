@@ -103,6 +103,7 @@ private:
   Crush     crush;       // hierarchical map
 
   friend class OSDMonitor;
+  friend class Monitor;
   friend class MDS;
 
  public:
