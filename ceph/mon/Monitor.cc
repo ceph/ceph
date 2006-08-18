@@ -37,22 +37,22 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << "mon" << whoami << " e" << (osdmap ? osdmap->get_epoch():0) << " "
 
 
-class C_OM_PingTick : public Context {
+class C_Mon_Tick : public Context {
 public:
-  Messenger *msgr;
-  C_OM_PingTick(Messenger *m) : msgr(m) {}
+  Monitor *mon;
+  C_Mon_Tick(Monitor *m) : mon(m) {}
   void finish(int r) {
-	msgr->send_message(new MPing, MSG_ADDR_MON(0));
+	mon->tick();
   }
 };
 
 
-class C_OM_FakeOSDFailure : public Context {
+class C_Mon_FakeOSDFailure : public Context {
   Monitor *mon;
   int osd;
   bool down;
 public:
-  C_OM_FakeOSDFailure(Monitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
+  C_Mon_FakeOSDFailure(Monitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
   void finish(int r) {
 	mon->fake_osd_failure(osd,down);
   }
@@ -109,13 +109,13 @@ void Monitor::init()
 	   i != g_fake_osd_down.end();
 	   i++) {
 	dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
-	g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
+	g_timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 1));
   }
   for (map<int,float>::iterator i = g_fake_osd_out.begin();
 	   i != g_fake_osd_out.end();
 		 i++) {
 	dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
-	g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
+	g_timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 0));
   }
 
   
@@ -123,42 +123,46 @@ void Monitor::init()
   messenger->set_dispatcher(this);
   
   // start ticker
-  g_timer.add_event_after(g_conf.mon_tick_interval, new C_OM_PingTick(messenger));
+  g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
 }
 
 
 void Monitor::dispatch(Message *m)
 {
-  switch (m->get_type()) {
-  case MSG_FAILURE:
-	handle_failure((MFailure*)m);
-	break;
-	
-  case MSG_PING_ACK:
-	handle_ping_ack((MPingAck*)m);
-	break;
-
-  case MSG_OSD_GETMAP:
-	handle_osd_getmap((MOSDGetMap*)m);
-	return;
-
-  case MSG_OSD_BOOT:
-	handle_osd_boot((MOSDBoot*)m);
-	return;
-
-  case MSG_SHUTDOWN:
-	handle_shutdown(m);
-	return;
-
-  case MSG_PING:
-	tick();
-	delete m;
-	return;
-
-  default:
-	dout(0) << "unknown message " << *m << endl;
-	assert(0);
+  lock.Lock();
+  {
+	switch (m->get_type()) {
+	case MSG_FAILURE:
+	  handle_failure((MFailure*)m);
+	  break;
+	  
+	case MSG_PING_ACK:
+	  handle_ping_ack((MPingAck*)m);
+	  break;
+	  
+	case MSG_OSD_GETMAP:
+	  handle_osd_getmap((MOSDGetMap*)m);
+	  return;
+	  
+	case MSG_OSD_BOOT:
+	  handle_osd_boot((MOSDBoot*)m);
+	  return;
+	  
+	case MSG_SHUTDOWN:
+	  handle_shutdown(m);
+	  return;
+	  
+	case MSG_PING:
+	  tick();
+	  delete m;
+	  return;
+	  
+	default:
+	  dout(0) << "unknown message " << *m << endl;
+	  assert(0);
+	}
   }
+  lock.Unlock();
 }
 
 
@@ -212,16 +216,20 @@ void Monitor::handle_failure(MFailure *m)
 
 void Monitor::fake_osd_failure(int osd, bool down) 
 {
-  if (down) {
-	dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
-	pending.new_down[osd] = osdmap->osd_inst[osd];
-  } else {
-	dout(1) << "fake_osd_failure OUT osd" << osd << endl;
-	pending.new_out.push_back(osd);
+  lock.Lock();
+  {
+	if (down) {
+	  dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
+	  pending.new_down[osd] = osdmap->osd_inst[osd];
+	} else {
+	  dout(1) << "fake_osd_failure OUT osd" << osd << endl;
+	  pending.new_out.push_back(osd);
+	}
+	accept_pending();
+	bcast_latest_osd_map_osd();
+	bcast_latest_osd_map_mds();
   }
-  accept_pending();
-  bcast_latest_osd_map_osd();
-  bcast_latest_osd_map_mds();
+  lock.Unlock();
 }
 
 
@@ -413,6 +421,8 @@ void Monitor::bcast_latest_osd_map_osd()
 
 void Monitor::tick()
 {
+  lock.Lock();
+
   dout(10) << "tick" << endl;
 
   // mark down osds out?
@@ -438,5 +448,7 @@ void Monitor::tick()
   }
   
   // next!
-  g_timer.add_event_after(g_conf.mon_tick_interval, new C_OM_PingTick(messenger));
+  g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
+
+  lock.Unlock();
 }

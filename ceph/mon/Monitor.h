@@ -31,6 +31,8 @@ class Monitor : public Dispatcher {
   int whoami;
   Messenger *messenger;
 
+  Mutex lock;
+
   // maps
   OSDMap *osdmap;
   map<epoch_t, bufferlist> maps;
@@ -42,9 +44,6 @@ class Monitor : public Dispatcher {
 
   // osd down -> out
   map<int,utime_t>  pending_out;
-
-  
-  void tick();  // check state, take actions
 
   // maps
   void accept_pending();   // accept pending, new map.
@@ -74,8 +73,13 @@ class Monitor : public Dispatcher {
 
   void handle_ping_ack(class MPingAck *m);
 
+  
+  void tick();  // periodic stuff. check state, take actions
+
+
   // hack
   void fake_osd_failure(int osd, bool down);
+
 
 };
 
