@@ -53,6 +53,35 @@ class Monitor : public Dispatcher {
   void bcast_latest_osd_map_mds();
   void bcast_latest_osd_map_osd();
 
+  /*******************************************
+  * Variables used by the election algorithm *
+  *******************************************/
+  // used during refresh phase
+  int ack_msg_count;
+  int refresh_num;
+  
+  // used during read phase
+  int read_num;
+  int status_msg_count;
+  
+  // the leader process id
+  int leader_id;
+  // f-accessible
+  int f;
+  
+  // the processes that compose the group
+//   vector<int> processes;
+  // parameters for the process
+  int main_delta;
+  int trip_delta;
+  
+  // state variables
+  hash_map<int, state> registry;
+  hash_map<int, view> views;
+  hash_map<int, view> old_views;
+  /************************************************
+  * END> Variables used by the election algorithm *
+  *************************************************/
 
  public:
   Monitor(int w, Messenger *m) : 
@@ -72,11 +101,21 @@ class Monitor : public Dispatcher {
   void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);
+<<<<<<< Monitor.h
+  
+  // handles for election messages
+  void handle_ack_msg(class MMonElectionAck);
+  void handle_collect_msg(class MMonElectionCollect);
+  void handle_refresh_msg(class MMonElectionRefresh);
+  void handle_status_msg(class MMoneElectionStatus);
+  
+=======
 
   
   void tick();  // periodic stuff. check state, take actions
 
 
+>>>>>>> 1.4
   // hack
   void fake_osd_failure(int osd, bool down);
 
