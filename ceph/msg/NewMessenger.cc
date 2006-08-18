@@ -1449,9 +1449,11 @@ int Rank::EntityMessenger::shutdown()
   rank.unregister_entity(this);
 
   // stop my dispatch thread
-  if (dispatch_thread.am_self()) 
+  if (dispatch_thread.am_self()) {
+	dout(0) << "shutdown i am dispatch, setting stop flag" << endl;
 	stop = true;
-  else {
+  } else {
+	dout(0) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
 	lock.Lock();
 	stop = true;
 	cond.Signal();

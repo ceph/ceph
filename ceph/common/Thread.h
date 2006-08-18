@@ -49,8 +49,10 @@ class Thread {
 	int status = pthread_join(thread_id, prval);
 	if (status == 0) 
 	  thread_id = 0;
-	else
+	else {
 	  cout << "join status = " << status << endl;
+	  assert(0);
+	}
 	return status;
   }
 };
