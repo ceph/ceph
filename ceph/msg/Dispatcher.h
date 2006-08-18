@@ -31,7 +31,7 @@ class Dispatcher {
   virtual Message *ms_handle_failure(msg_addr_t dest, entity_inst_t& inst) { return 0; }
 
   // lookups
-  virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst) { assert(0); }
+  virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst) { assert(0); return 0; }
 
   // this is how i send messages
   //int send_message(Message *m, msg_addr_t dest, int dest_port);

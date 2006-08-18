@@ -278,12 +278,14 @@ typedef __uint64_t object_t;      // object id
 
 class OSDSuperblock {
 public:
+  const static __uint64_t MAGIC = 0xeb0f505dULL;
+  __uint64_t magic;
   __uint64_t fsid;      // unique fs id (random number)
   int        whoami;    // my role in this fs.
   epoch_t    current_epoch;             // most recent epoch
   epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
   OSDSuperblock(__uint64_t f=0, int w=0) : 
-	fsid(f), whoami(w), 
+	magic(MAGIC), fsid(f), whoami(w), 
 	current_epoch(0), oldest_map(0), newest_map(0) {}
 };
 
@@ -295,6 +297,17 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 			 << " [" << sb.oldest_map << "," << sb.newest_map
 			 << "])";
 }
+
+class MonSuperblock {
+public:
+  const static __uint64_t MAGIC = 0x00eb0f5000ULL;
+  __uint64_t magic;
+  __uint64_t fsid;
+  int        whoami;  // mon #
+  epoch_t    current_epoch;
+  MonSuperblock(__uint64_t f=0, int w=0) :
+	magic(MAGIC), fsid(f), whoami(w), current_epoch(0) {}
+};
 
 
 // new types

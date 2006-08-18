@@ -36,6 +36,13 @@
 #define MSG_SHUTDOWN    99999
 
 
+#define MSG_MON_ELECTION_ACK       15
+#define MSG_MON_ELECTION_COLLECT   16
+#define MSG_MON_ELECTION_REFRESH   17
+#define MSG_MON_ELECTION_STATUS    18
+
+
+
 #define MSG_OSD_OP           20    // delete, etc.
 #define MSG_OSD_OPREPLY      21    // delete, etc.
 #define MSG_OSD_PING         22
@@ -47,6 +54,9 @@
 #define MSG_OSD_MKFS_ACK     26
 
 #define MSG_OSD_FAILURE      27
+
+
+
 
 #define MSG_OSD_PG_NOTIFY      50
 #define MSG_OSD_PG_QUERY       51
