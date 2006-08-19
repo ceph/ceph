@@ -31,8 +31,6 @@ class Monitor : public Dispatcher {
   int whoami;
   Messenger *messenger;
 
-  Mutex lock;
-
   // maps
   OSDMap *osdmap;
   map<epoch_t, bufferlist> maps;
@@ -45,6 +43,9 @@ class Monitor : public Dispatcher {
   // osd down -> out
   map<int,utime_t>  pending_out;
 
+  
+  void tick();  // check state, take actions
+
   // maps
   void accept_pending();   // accept pending, new map.
   void send_map();         // send current map to waiters.
@@ -53,6 +54,9 @@ class Monitor : public Dispatcher {
   void bcast_latest_osd_map_mds();
   void bcast_latest_osd_map_osd();
 
+  void get_min_epoch();
+  void start_read_timer();
+  
   /*******************************************
   * Variables used by the election algorithm *
   *******************************************/
@@ -79,6 +83,9 @@ class Monitor : public Dispatcher {
   hash_map<int, state> registry;
   hash_map<int, view> views;
   hash_map<int, view> old_views;
+  
+  // round trip timer
+  round_trip_task
   /************************************************
   * END> Variables used by the election algorithm *
   *************************************************/
@@ -101,7 +108,6 @@ class Monitor : public Dispatcher {
   void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);
-<<<<<<< Monitor.h
   
   // handles for election messages
   void handle_ack_msg(class MMonElectionAck);
@@ -109,16 +115,9 @@ class Monitor : public Dispatcher {
   void handle_refresh_msg(class MMonElectionRefresh);
   void handle_status_msg(class MMoneElectionStatus);
   
-=======
-
-  
-  void tick();  // periodic stuff. check state, take actions
-
-
->>>>>>> 1.4
   // hack
   void fake_osd_failure(int osd, bool down);
-
+  void fake_reorg();
 
 };
 

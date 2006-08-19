@@ -11,7 +11,7 @@
  * 
  */
 
-
+// TODO: missing run() method, which creates the two main timers, refreshTimer and readTimer
 
 #include "Monitor.h"
 
@@ -41,30 +41,108 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << "mon" << whoami << " e" << (osdmap ? osdmap->get_epoch():0) << " "
 
 
-class C_Mon_Tick : public Context {
-  Monitor *mon;
+class C_OM_PingTick : public Context {
 public:
-  C_Mon_Tick(Monitor *m) : mon(m) {}
+  Messenger *msgr;
+  C_OM_PingTick(Messenger *m) : msgr(m) {}
   void finish(int r) {
-	mon->tick();
+	msgr->send_message(new MPing, MSG_ADDR_MON(0));
   }
 };
 
+class C_OM_Faker : public Context {
+public:
+  Monitor *om;
+  C_OM_Faker(Monitor *m) { 
+	this->om = m;
+  }
+  void finish(int r) {
+	om->fake_reorg();
+  }
+};
 
-class C_Mon_FakeOSDFailure : public Context {
+class C_OM_FakeOSDFailure : public Context {
   Monitor *mon;
   int osd;
   bool down;
 public:
-  C_Mon_FakeOSDFailure(Monitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
+  C_OM_FakeOSDFailure(Monitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
   void finish(int r) {
 	mon->fake_osd_failure(osd,down);
   }
 };
 
+class C_Elect_ReadTimer : public Context {
+  Monitor *mon;
+public:
+  C_Elect_ReadTimer(Monitor *m) : mon(m){}
+  void finish(int r) {
+    m->read_num++;
+    m->status_msg_count = 0;
+    m->old_views = views;   // TODO deep copy
+    for (int i=0; i<m->processes->size(); i++)
+    {
+      m->send_message(new MMonElectionCollect(m->read_num), ###address###, ###port###);
+    }
+  }
+};
+
+class C_Elect_TripTimer : public Context {
+  Monitor *mon;
+public:
+  C_Elect_TripTimer(Monitor *m) : mon(m){}
+  void finish(int r) {
+    m->views[whoami]->expired = true;
+		m->registry[whoami]->e_num->s_num++;
+    dout(1) << "Process " << whoami <<  " timed out (" << m->ackMsgCount << "/" << (m->f + 1) << ") ... increasing epoch. Now epoch is " << m->registry[whoami]->e_num->s_num;																		
+  }
+};
+
+class C_Elect_RefreshTimer : public Context {
+  Monitor *mon;
+public:
+  C_Elect_TripTimer(Monitor *m) : mon(m){}
+  void finish(int r) {
+			m->ack_msg_count = 0;
+			m->refresh_num++;
+			MMonElectionRefresh msg = new MMonElectionRefresh(whoami, m->registry[whoami], m->refresh_num);
+			for (int i=0; i<m->processes->size(); i++)
+			{
+				m->send_message(msg, ###i-ma dest###, ###port###);
+			}
+      // Start the trip timer
+      m->round_trip_timer = new C_Elect_TripTimer(this);
+	    g_timer.add_event_after(trip_delta, m->round_trip_timer);        
+   }
+};
 
 
+void Monitor::fake_reorg() 
+{
+  
+  // HACK osd map change
+  static int d = 0;
 
+  if (d > 0) {
+	dout(1) << "changing OSD map, marking osd" << d-1 << " out" << endl;
+	osdmap->mark_out(d-1);
+  }
+
+  dout(1) << "changing OSD map, marking osd" << d << " down" << endl;
+  osdmap->mark_down(d);
+
+  osdmap->inc_epoch();
+  d++;
+  
+  // bcast
+  bcast_latest_osd_map_osd();
+    
+  // do it again?
+  if (g_conf.num_osd - d > 4 &&
+	  g_conf.num_osd - d > g_conf.num_osd/2)
+	g_timer.add_event_after(g_conf.fake_osdmap_expand,
+							new C_OM_Faker(this));
+}
 
 
 void Monitor::init()
@@ -108,18 +186,28 @@ void Monitor::init()
 
 
   
-  // fake osd failures
-  for (map<int,float>::iterator i = g_fake_osd_down.begin();
-	   i != g_fake_osd_down.end();
-	   i++) {
-	dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
-	g_timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 1));
+  if (whoami == 0 &&
+	  g_conf.num_osd > 4 &&
+	  g_conf.fake_osdmap_expand) {
+	dout(1) << "scheduling OSD map reorg at " << g_conf.fake_osdmap_expand << endl;
+	g_timer.add_event_after(g_conf.fake_osdmap_expand,
+							new C_OM_Faker(this));
   }
-  for (map<int,float>::iterator i = g_fake_osd_out.begin();
-	   i != g_fake_osd_out.end();
+
+  if (whoami == 0) {
+	// fake osd failures
+	for (map<int,float>::iterator i = g_fake_osd_down.begin();
+		 i != g_fake_osd_down.end();
 		 i++) {
-	dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
-	g_timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 0));
+	  dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
+	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
+	}
+	for (map<int,float>::iterator i = g_fake_osd_out.begin();
+		 i != g_fake_osd_out.end();
+		 i++) {
+	  dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
+	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
+	}
   }
 
   
@@ -127,13 +215,12 @@ void Monitor::init()
   messenger->set_dispatcher(this);
   
   // start ticker
-  g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
+  g_timer.add_event_after(g_conf.mon_tick_interval, new C_OM_PingTick(messenger));
 }
 
 
 void Monitor::dispatch(Message *m)
 {
-<<<<<<< Monitor.cc
   switch (m->get_type()) {
   case MSG_FAILURE:
 	handle_failure((MFailure*)m);
@@ -179,42 +266,7 @@ void Monitor::dispatch(Message *m)
   default:
 	dout(0) << "unknown message " << *m << endl;
 	assert(0);
-=======
-  lock.Lock();
-  {
-	switch (m->get_type()) {
-	case MSG_FAILURE:
-	  handle_failure((MFailure*)m);
-	  break;
-	  
-	case MSG_PING_ACK:
-	  handle_ping_ack((MPingAck*)m);
-	  break;
-	  
-	case MSG_OSD_GETMAP:
-	  handle_osd_getmap((MOSDGetMap*)m);
-	  return;
-	  
-	case MSG_OSD_BOOT:
-	  handle_osd_boot((MOSDBoot*)m);
-	  return;
-	  
-	case MSG_SHUTDOWN:
-	  handle_shutdown(m);
-	  return;
-	  
-	case MSG_PING:
-	  tick();
-	  delete m;
-	  return;
-	  
-	default:
-	  dout(0) << "unknown message " << *m << endl;
-	  assert(0);
-	}
->>>>>>> 1.6
   }
-  lock.Unlock();
 }
 
 
@@ -268,20 +320,16 @@ void Monitor::handle_failure(MFailure *m)
 
 void Monitor::fake_osd_failure(int osd, bool down) 
 {
-  lock.Lock();
-  {
-	if (down) {
-	  dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
-	  pending.new_down[osd] = osdmap->osd_inst[osd];
-	} else {
-	  dout(1) << "fake_osd_failure OUT osd" << osd << endl;
-	  pending.new_out.push_back(osd);
-	}
-	accept_pending();
-	bcast_latest_osd_map_osd();
-	bcast_latest_osd_map_mds();
+  if (down) {
+	dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
+	pending.new_down[osd] = osdmap->osd_inst[osd];
+  } else {
+	dout(1) << "fake_osd_failure OUT osd" << osd << endl;
+	pending.new_out.push_back(osd);
   }
-  lock.Unlock();
+  accept_pending();
+  bcast_latest_osd_map_osd();
+  bcast_latest_osd_map_mds();
 }
 
 
@@ -473,7 +521,6 @@ void Monitor::bcast_latest_osd_map_osd()
 
 void Monitor::tick()
 {
-<<<<<<< Monitor.cc
   dout(10) << "tick" << endl;
 
   // mark down osds out?
@@ -518,6 +565,7 @@ void Monitor::tick()
     if (this->ack_msg_count >= this->f + 1)
     {
        dout(5) << "P" << this->p_id << ": Received _f+1 acks, increase freshness" << endl;
+       g_timer.cancel_event(this->round_trip_task);
        this->round_trip_timer->cancel();
        this->registry[this->p_id]->freshness++;         
     }  
@@ -587,25 +635,29 @@ void Monitor::tick()
 			dout(1) << this->whoami << " thinks leader has ID: " << this->leader_id << endl;
 			
 			// Restarts the timer for the next iteration
-			startReadTimer();
+			g_timer.add_event_after(main_delta + trip_delta, new C_Elect_ReadTimer(this));
 		}
   }
-  
+
   // return the minimum epoch in the this->view map
   private Monitor::get_min_epoch()
   {
-  	Epoch min = null;
-		for (View v : views)
+  	Epoch min = new Epoch(-1, -1);
+		for (int i=0; i<this->views->size(); i++)
 		{
-			if (min == null || 
-					(Epoch.compare(v.getState().getEpochNum(), min) < 0 && !v.isExpired()))
+      View v = this->views[i];
+			if (v->state->e_num->isLesser(min) && !v->expired)
 			{
-				min = v.getState().getEpochNum();
+				min = v->state->e_num;
 			}
 		}
 		return min;
   }
-
+  
+  void Monitor::start_read_timer()
+  {
+         
+  }
 /*****************************************
  CLASSES NEEDED FOR THE ELECTION ALGORITHM
 ******************************************/
@@ -619,13 +671,13 @@ class Epoch {
       this->s_num = s_num;
     }
         
-    bool isGreater(Epoch *e);
-    bool isLesser(Epoch *e);
-    bool isEqual(Epoch *e);
+    bool operator>(Epoch *e);
+    bool operator<(Epoch *e);
+    bool operator==(Epoch *e);
 
 };
 
-bool Epoch::isGreater(Epoch *e)
+bool Epoch::operator>(Epoch *e)
 {
   if (this->s_num == e->s_num)
   {
@@ -637,7 +689,7 @@ bool Epoch::isGreater(Epoch *e)
   }
 }
 
-bool Epoch::isLesser(Epoch *e)
+bool Epoch::operator<(Epoch *e)
 {
   if (this->s_num == e->s_num)
   {
@@ -649,7 +701,7 @@ bool Epoch::isLesser(Epoch *e)
   }
 }
 
-bool Epoch::isEqual(Epoch *e)
+bool Epoch::operator==(Epoch *e)
 {
   return ((this->s_num == e->s_num) && (this->p_id > e->p_id));
 }
@@ -665,72 +717,38 @@ class State {
       this->freshness = freshness;
     }
         
-    bool isGreater(State *e);
-    bool isLesser(State *e);
-    bool isEqual(State *e);
+    bool operator>(State *e);
+    bool operator<(State *e);
+    bool operator==(State *e);
 };
 
-bool State::isGreater(State *e)
+bool State::operator>(State *e)
 {
-  if (this->e_num->isEqual(e->e_num))
+  if (this->e_num == e->e_num)
   {
     return (this->freshness > e->freshness);
   }
   else
   {
-    return this->e_num->isGreater(e->e_num);
+    return this->e_num > e->e_num;
   }
 }
 
-bool State::isLesser(State *e)
+bool State::operator<(State *e)
 {
-  if (this->e_num->isEqual(e->e_num))
+  if (this->e_num == e->e_num)
   {
     return (this->freshness < e->freshness);
   }
   else
   {
-    return this->e_num->isLesser(e->e_num);
-=======
-  lock.Lock();
-  {
-	dout(10) << "tick" << endl;
-	
-	// mark down osds out?
-	utime_t now = g_clock.now();
-	list<int> mark_out;
-	for (map<int,utime_t>::iterator i = pending_out.begin();
-		 i != pending_out.end();
-		 i++) {
-	  utime_t down = now;
-	  down -= i->second;
-	  
-	  if (down.sec() >= g_conf.mon_osd_down_out_interval) {
-		dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << endl;
-		mark_out.push_back(i->first);
-	  }
-	}
-	for (list<int>::iterator i = mark_out.begin();
-		 i != mark_out.end();
-		 i++) {
-	  pending_out.erase(*i);
-	  pending.new_out.push_back( *i );
-	  accept_pending();
-	}
-	
-	// next!
-	g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
->>>>>>> 1.6
+    return this->e_num < e->e_num;
   }
-<<<<<<< Monitor.cc
-=======
-  lock.Unlock();
->>>>>>> 1.6
 }
 
-bool State::isEqual(State *e)
+bool State::operator==(State *e)
 {
-  return (this->e_num->isEqual(e->e_num) && (this->freshness == e->freshness));
+  return ( (this->e_num == e->e_num) && (this->freshness == e->freshness) );
 }
 
 class View {
