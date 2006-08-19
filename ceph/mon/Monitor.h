@@ -26,10 +26,19 @@ using namespace std;
 
 #include "osd/OSDMap.h"
 
+#include "Elector.h"
+
+
 class Monitor : public Dispatcher {
+protected:
   // me
   int whoami;
   Messenger *messenger;
+  Mutex lock;
+
+  // elector
+  Elector elector;
+  friend class Elector;
 
   // maps
   OSDMap *osdmap;
@@ -57,43 +66,12 @@ class Monitor : public Dispatcher {
   void get_min_epoch();
   void start_read_timer();
   
-  /*******************************************
-  * Variables used by the election algorithm *
-  *******************************************/
-  // used during refresh phase
-  int ack_msg_count;
-  int refresh_num;
-  
-  // used during read phase
-  int read_num;
-  int status_msg_count;
-  
-  // the leader process id
-  int leader_id;
-  // f-accessible
-  int f;
-  
-  // the processes that compose the group
-//   vector<int> processes;
-  // parameters for the process
-  int main_delta;
-  int trip_delta;
-  
-  // state variables
-  hash_map<int, state> registry;
-  hash_map<int, view> views;
-  hash_map<int, view> old_views;
-  
-  // round trip timer
-  round_trip_task
-  /************************************************
-  * END> Variables used by the election algorithm *
-  *************************************************/
 
  public:
   Monitor(int w, Messenger *m) : 
 	whoami(w),
 	messenger(m),
+	elector(this, w),
 	osdmap(0) {
   }
 
@@ -108,12 +86,6 @@ class Monitor : public Dispatcher {
   void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);
-  
-  // handles for election messages
-  void handle_ack_msg(class MMonElectionAck);
-  void handle_collect_msg(class MMonElectionCollect);
-  void handle_refresh_msg(class MMonElectionRefresh);
-  void handle_status_msg(class MMoneElectionStatus);
   
   // hack
   void fake_osd_failure(int osd, bool down);
