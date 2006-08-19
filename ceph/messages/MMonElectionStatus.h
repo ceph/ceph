@@ -25,9 +25,9 @@ class MMonElectionStatus : public Message {
   map<int,int> registry;
 
   MMonElectionStatus() {}
-  MMonElectionStatus(int _q, int r) :
+  MMonElectionStatus(int _q, int r, map<int, int> reg) :
 	Message(MSG_MON_ELECTION_STATUS),
-	q(_q), read_num(r) {}
+	q(_q), read_num(r), registry(reg) {}
  
   void decode_payload() {
 	int off = 0;
