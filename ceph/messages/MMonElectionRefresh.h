@@ -17,15 +17,16 @@
 
 #include "msg/Message.h"
 
+#include "mon/Elector.h"
 
 class MMonElectionRefresh : public Message {
  public:
   int p;
-  int state;
+  Elector::State state;
   int refresh_num;
 
   MMonElectionRefresh() {}
-  MMonElectionRefresh(int _p, int s, int r) :
+  MMonElectionRefresh(int _p, Elector::State& s, int r) :
 	Message(MSG_MON_ELECTION_REFRESH),
 	p(_p), state(s), refresh_num(r) {}
  

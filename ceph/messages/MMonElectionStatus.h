@@ -17,12 +17,13 @@
 
 #include "msg/Message.h"
 
+#include "mon/Elector.h"
 
 class MMonElectionStatus : public Message {
  public:
   int q;
   int read_num;
-  map<int,int> registry;
+  map<int,Elector::State> registry;
 
   MMonElectionStatus() {}
   MMonElectionStatus(int _q, int r, map<int, int> reg) :
