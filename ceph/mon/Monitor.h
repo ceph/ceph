@@ -53,8 +53,6 @@ protected:
   map<int,utime_t>  pending_out;
 
   
-  void tick();  // check state, take actions
-
   // maps
   void accept_pending();   // accept pending, new map.
   void send_map();         // send current map to waiters.
@@ -87,6 +85,9 @@ protected:
 
   void handle_ping_ack(class MPingAck *m);
   
+  void tick();  // check state, take actions
+
+
   // hack
   void fake_osd_failure(int osd, bool down);
   void fake_reorg();

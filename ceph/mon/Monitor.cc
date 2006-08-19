@@ -79,10 +79,12 @@ void Monitor::fake_reorg()
   bcast_latest_osd_map_osd();
     
   // do it again?
+  /*
   if (g_conf.num_osd - d > 4 &&
 	  g_conf.num_osd - d > g_conf.num_osd/2)
 	g_timer.add_event_after(g_conf.fake_osdmap_expand,
-							new C_OM_Faker(this));
+							new C_Mon_Faker(this));
+  */
 }
 
 
@@ -127,14 +129,6 @@ void Monitor::init()
 
 
   
-  if (whoami == 0 &&
-	  g_conf.num_osd > 4 &&
-	  g_conf.fake_osdmap_expand) {
-	dout(1) << "scheduling OSD map reorg at " << g_conf.fake_osdmap_expand << endl;
-	g_timer.add_event_after(g_conf.fake_osdmap_expand,
-							new C_OM_Faker(this));
-  }
-
   if (whoami == 0) {
 	// fake osd failures
 	for (map<int,float>::iterator i = g_fake_osd_down.begin();

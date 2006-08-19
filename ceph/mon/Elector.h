@@ -40,23 +40,7 @@ class Elector {
       this->p_id = p_id;
       this->s_num = s_num;
     }
-	
-    bool operator>(Epoch& e) {
-	  if (s_num == e.s_num)
-		return (p_id > e.p_id);
-	  else
-		return (s_num > e.s_num);
-	}
-	bool operator<(Epoch& e) {
-	  if (s_num == e.s_num)
-		return (p_id < e.p_id);
-	  else
-		return (s_num < e.s_num);
-	}
-    bool operator==(Epoch& e) {
-	  return ((s_num == e.s_num) && (p_id > e.p_id));
-	}
-  };
+  };	
 
 
   // State
@@ -68,22 +52,6 @@ class Elector {
 	State() {};
     State (Epoch& e, int f) :
 	  epoch(e), freshness(f) {}
-
-    bool operator>(State& e) {
-	  if (epoch == e.epoch)
-		return (freshness > e.freshness);
-	  else
-		return epoch > e.epoch;
-	}
-    bool operator<(State& e) {
-	  if (epoch == e.epoch)
-		return (freshness < e.freshness);
-	  else
-		return epoch < e.epoch;
-	}
-    bool operator==(State& e) {
-	  return ( (epoch == e.epoch) && (freshness == e.freshness) );
-	}
   };
 
 
@@ -91,6 +59,7 @@ class Elector {
   public:
     State state;
     bool expired;
+	View() : expired(false) {}
     View(State& s, bool e) : state(s), expired(e) {}
   };
 
@@ -126,22 +95,13 @@ class Elector {
   map<int, View>  old_views;
 
   // get the minimum epoch in the view map
-  Epoch get_min_epoch() {
-	assert(!views.empty());
-	Epoch min = views[0].state.epoch;
-	for (unsigned i=1; i<views.size(); i++) {
-	  if (views[i].state.epoch < min && !views[i].expired) {
-		min = views[i].state.epoch;
-	  }
-	}
-	return min;
-  }
+  Epoch get_min_epoch();
   
   // handlers for election messages
   void handle_ack(class MMonElectionAck *m);
   void handle_collect(class MMonElectionCollect *m);
   void handle_refresh(class MMonElectionRefresh *m);
-  void handle_status(class MMoneElectionStatus *m);
+  void handle_status(class MMonElectionStatus *m);
 
  public:  
   Elector(Monitor *m, int w) : mon(m), whoami(w) {
@@ -157,5 +117,47 @@ class Elector {
   void dispatch(Message *m);
 
 };
+
+
+inline bool operator>(const Elector::Epoch& l, const Elector::Epoch& r) {
+  if (l.s_num == r.s_num)
+	return (l.p_id > r.p_id);
+  else
+	return (l.s_num > r.s_num);
+}
+
+inline bool operator<(const Elector::Epoch& l, const Elector::Epoch& r) {
+  if (l.s_num == r.s_num)
+	return (l.p_id < r.p_id);
+  else
+	return (l.s_num < r.s_num);
+}
+
+inline bool operator==(const Elector::Epoch& l, const Elector::Epoch& r) {
+  return ((l.s_num == r.s_num) && (l.p_id > r.p_id));
+}
+
+  
+inline bool operator>(const Elector::State& l, const Elector::State& r) 
+{
+  if (l.epoch == r.epoch)
+	return (l.freshness > r.freshness);
+  else
+	return l.epoch > r.epoch;
+}
+ 
+inline bool operator<(const Elector::State& l, const Elector::State& r) 
+{
+  if (l.epoch == r.epoch)
+	return (l.freshness < r.freshness);
+  else
+	return l.epoch < r.epoch;
+}
+ 
+inline bool operator==(const Elector::State& l, const Elector::State& r) 
+{
+  return ( (l.epoch == r.epoch) && (l.freshness == r.freshness) );
+}
+
 
 #endif

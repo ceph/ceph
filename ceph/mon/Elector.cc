@@ -82,7 +82,7 @@ void Elector::refresh_timer()
 	ack_msg_count = 0;
 	refresh_num++;
 	MMonElectionRefresh *msg = new MMonElectionRefresh(whoami, registry[whoami], refresh_num);
-	for (int i=0; i<processes.size(); i++) {
+	for (unsigned i=0; i<processes.size(); i++) {
 	  mon->messenger->send_message(msg, MSG_ADDR_MON(processes[i]));
 	}
 	
@@ -98,25 +98,38 @@ void Elector::refresh_timer()
 //////////////////////////
 
 
+Elector::Epoch Elector::get_min_epoch()
+{
+  assert(!views.empty());
+  Epoch min = views[0].state.epoch;
+  for (unsigned i=1; i<views.size(); i++) {
+	if (views[i].state.epoch < min && !views[i].expired) {
+	  min = views[i].state.epoch;
+	}
+  }
+  return min;
+}
+
+
 void Elector::dispatch(Message *m)
 {
   lock.Lock();
   {
 	switch (m->get_type()) {
 	case MSG_MON_ELECTION_ACK:
-	  handle_ack(m);
+	  handle_ack((MMonElectionAck*)m);
 	  break;
 	
 	case MSG_MON_ELECTION_STATUS:
-	  handle_status(m);
+	  handle_status((MMonElectionStatus*)m);
 	  break;
 	
 	case MSG_MON_ELECTION_COLLECT:
-	  handle_collect(m);
+	  handle_collect((MMonElectionCollect*)m);
 	  break;
 	
 	case MSG_MON_ELECTION_REFRESH:
-	  handle_refresh(m);
+	  handle_refresh((MMonElectionRefresh*)m);
 	  break;
 	  
 	default:
@@ -147,25 +160,23 @@ void Elector::handle_ack(MMonElectionAck* msg)
 
 void Elector::handle_collect(MMonElectionCollect* msg)
 {
-  messenger->send_message(new MMonElectionStatus(whoami, 
-												 msg->getSenderId(), 
-												 msg->getReadNum(), 
-												 registry),
-						  msg->get_source());
+  mon->messenger->send_message(new MMonElectionStatus(msg->get_source().num(),
+													  msg->getReadNum(), 
+													  registry),
+							   msg->get_source());
   delete msg;
 }
 
 void Elector::handle_refresh(MMonElectionRefresh* msg)
 {
-  if (this->registry[msg->p]->isLesser(msg->state)) {
+  if (registry[msg->p] < msg->state) {
 	// update local data
 	registry[msg->p] = msg->state;
 
 	// reply to msg
-	messenger->send_message(new MMonElectionAck(whoami, 
-												msg->p, 
-												msg->refresh_num), 
-							msg->get_source());
+	mon->messenger->send_message(new MMonElectionAck(msg->p, 
+													 msg->refresh_num), 
+								 msg->get_source());
   }
 
   delete msg;
@@ -175,38 +186,36 @@ void Elector::handle_refresh(MMonElectionRefresh* msg)
 void Elector::handle_status(MMonElectionStatus* msg)
 {
   if (read_num != msg->read_num) {
-	dout(1) << _processId << ":HANDLING:" << msg.getType()
+	dout(1) << ":HANDLING:" << msg->getType()
 			<< ":DISCARDED B/C OF READNUM(" << read_num << ":"
 			<< msg->read_num << ")" 
 			<< endl;
 	return;
   }
-  for (int i=0; i<this->processes->size(); i++) {
+  for (unsigned i=0; i<processes.size(); i++) {
 	int r = processes[i];
 	// Put in the view the max value between then new state and the stored one
-	if ( msg->registry[r]->isGreater(views[r]->state) ) {
-	  views[r]->state = msg->registry[r];
+	if ( msg->registry[r] > views[r].state ) {
+	  views[r].state = msg->registry[r];
 	}
   }
 		
   status_msg_count++;
-  if (status_msg_count >= processes.size() - _f) { // Responses from quorum collected
+  if (status_msg_count >= processes.size() - f) { // Responses from quorum collected
 	for (int i=0; i<processes.size(); i++) {
 	  int r = processes[i];
 	  // Check if r has refreshed its epoch number
-	  if (! this->views[r]->state->isGreater(this->old_views[r]->state) )
-		{
-		  dout(5) << this->whoami << ":Other process (" << r << ") has expired" << endl;
-		  this->views[r]->expired = true;
-		}
-	  if (this->views[r]->state->e_num->isGreater(this->old_views[r]->state->e_num))
-		{
-		  this->views[r]->expired = false;
-		}
+	  if (!( views[r].state > old_views[r].state )) {
+		dout(5) << ":Other process (" << r << ") has expired" << endl;
+		views[r].expired = true;
+	  }
+	  if (views[r].state.epoch > old_views[r].state.epoch) {
+		views[r].expired = false;
+	  }
 	}
 	Epoch leader_epoch = get_min_epoch();
-	this->leader_id = leader_epoch->p_id;
-	dout(1) << this->whoami << " thinks leader has ID: " << this->leader_id << endl;
+	leader_id = leader_epoch.p_id;
+	dout(1) << " thinks leader has ID: " << leader_id << endl;
 	
 	// Restarts the timer for the next iteration
 	g_timer.add_event_after(main_delta + trip_delta, new C_Elect_ReadTimer(this));
