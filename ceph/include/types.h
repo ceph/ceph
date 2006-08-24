@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MDS_TYPES_H
 #define __MDS_TYPES_H
 
@@ -28,6 +27,10 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
+
+#ifndef __uint64_t
+typedef uint64_t __uint64_t;
+#endif
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))

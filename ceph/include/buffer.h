@@ -316,7 +316,8 @@ class bufferptr {
 	_len = len;                      // my len too
   }
   void zero() {
-  	bzero((void*)c_str(), _len);
+  	//bzero((void*)c_str(), _len);
+	memset((void*)c_str(), 0, _len);
   }
 
 

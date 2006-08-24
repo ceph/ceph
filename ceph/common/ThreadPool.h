@@ -15,7 +15,10 @@
 #ifndef THREADPOOL
 #define THREADPOOL
 
-#include <queue>
+#include <list>
+using namespace std;
+
+
 #include <pthread.h>
 #include <common/Mutex.h>
 #include <common/Cond.h>
@@ -36,7 +39,7 @@ template <class U, class T>
 class ThreadPool {
 
  private:
-  queue<T> q;
+  list<T> q;
   Mutex q_lock;
   Semaphore q_sem;
 
@@ -78,7 +81,7 @@ class ThreadPool {
     q_lock.Lock();
 	{
 	  op = q.front();
-	  q.pop();
+	  q.pop_front();
 	  num_ops--;
 	  
 	  if (prefunc && op) {
@@ -125,7 +128,7 @@ class ThreadPool {
   void put_op(T op) {
     tpdout(DBLVL) << ".put_op " << op << endl;
     q_lock.Lock();
-    q.push(op);
+    q.push_back(op);
     num_ops++;
     q_sem.Put();
     q_lock.Unlock();
