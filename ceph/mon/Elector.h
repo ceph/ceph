@@ -49,8 +49,8 @@ class Elector {
     Epoch epoch;
     int freshness;
 
-	State() {};
-    State (Epoch& e, int f) :
+	State() : freshness(0) {};
+    State(Epoch& e, int f) :
 	  epoch(e), freshness(f) {}
   };
 
@@ -84,7 +84,7 @@ class Elector {
   int f;
   
   // the processes that compose the group
-  //   vector<int> processes;
+  vector<int> processes;
   // parameters for the process
   int main_delta;
   int trip_delta;

@@ -26,7 +26,7 @@ class MMonElectionStatus : public Message {
   map<int,Elector::State> registry;
 
   MMonElectionStatus() {}
-  MMonElectionStatus(int _q, int r, map<int, int> reg) :
+  MMonElectionStatus(int _q, int r, map<int,Elector::State> reg) :
 	Message(MSG_MON_ELECTION_STATUS),
 	q(_q), read_num(r), registry(reg) {}
  

@@ -56,9 +56,9 @@ void Elector::trip_timer()
     views[whoami].expired = true;
 	registry[whoami].epoch.s_num++;
     dout(1) << "Process " << whoami
-			<<  " timed out (" << m->ackMsgCount << "/" << (m->f + 1)
+			<<  " timed out (" << ack_msg_count << "/" << (f + 1)
 			<< ") ... increasing epoch. Now epoch is "
-			<< m->registry[whoami]->epoch->s_num
+			<< registry[whoami].epoch.s_num
 			<< endl;
   }
   lock.Unlock();
@@ -87,8 +87,8 @@ void Elector::refresh_timer()
 	}
 	
 	// Start the trip timer
-	round_trip_timer = new C_Elect_TripTimer(this);
-	g_timer.add_event_after(trip_delta, m->round_trip_timer);        
+	//round_trip_timer = new C_Elect_TripTimer(this);
+	g_timer.add_event_after(trip_delta, new C_Elect_TripTimer(this));
   }
   lock.Unlock();
 };
@@ -141,18 +141,18 @@ void Elector::dispatch(Message *m)
 
 void Elector::handle_ack(MMonElectionAck* msg)
 {
-  assert(refresh_num >= msg->get_refresh_num());
+  assert(refresh_num >= msg->refresh_num);
   
-  if (refresh_num > msg->get_refresh_num()) {
+  if (refresh_num > msg->refresh_num) {
 	// we got the message too late... discard it
 	return;
   }
   ack_msg_count++;
   if (ack_msg_count >= f + 1) {
-	dout(5) << "P" << p_id << ": Received _f+1 acks, increase freshness" << endl;
-	g_timer.cancel_event(round_trip_task);
-	round_trip_timer->cancel();
-	registry[p_id]->freshness++;         
+	dout(5) << "Received _f+1 acks, increase freshness" << endl;
+	//g_timer.cancel_event(round_trip_task);
+	//round_trip_timer->cancel();
+	registry[whoami].freshness++;         
   }
   
   delete msg;
@@ -161,7 +161,7 @@ void Elector::handle_ack(MMonElectionAck* msg)
 void Elector::handle_collect(MMonElectionCollect* msg)
 {
   mon->messenger->send_message(new MMonElectionStatus(msg->get_source().num(),
-													  msg->getReadNum(), 
+													  msg->read_num,
 													  registry),
 							   msg->get_source());
   delete msg;
@@ -186,7 +186,7 @@ void Elector::handle_refresh(MMonElectionRefresh* msg)
 void Elector::handle_status(MMonElectionStatus* msg)
 {
   if (read_num != msg->read_num) {
-	dout(1) << ":HANDLING:" << msg->getType()
+	dout(1) << "handle_status "
 			<< ":DISCARDED B/C OF READNUM(" << read_num << ":"
 			<< msg->read_num << ")" 
 			<< endl;

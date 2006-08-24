@@ -63,6 +63,7 @@ COMMON_OBJS= \
 	common/Clock.o\
 	common/Timer.o\
 	mon/Monitor.o\
+	mon/Elector.o\
 	config.o
 
 
