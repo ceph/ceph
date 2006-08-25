@@ -1,0 +1,35 @@
+#!/usr/bin/perl
+
+# hi there
+{
+	'sleep' => 3,
+
+	'nummds' => 1,
+	'numosd' => [#16,
+#				 64,
+				 256,
+				 1024,
+				 4096,
+#				 16384,
+#				 65536,
+#				 256*256
+				 ],
+	'numclient' => 0,
+	'n' => 100,
+
+	'fs' => ['ebofs'],
+
+	'start' => 30,
+	'end' => 180,
+	'kill_after' => 180,
+	
+	'osd_pg_bits' => [10, 14, 18],
+
+	'custom' => '--bdev_lock 0 --ms_stripe_osds',
+	#'custom' => '--tcp_skip_rank0',
+
+	'comb' => {
+		'x' => 'numosd',
+		'vars' => [ 'sum=osd.map', 'sum=osd.mapi', 'numpg', 'pingset' ]
+	}
+};
