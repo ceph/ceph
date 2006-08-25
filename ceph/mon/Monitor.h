@@ -61,10 +61,6 @@ protected:
   void bcast_latest_osd_map_mds();
   void bcast_latest_osd_map_osd();
 
-  void get_min_epoch();
-  void start_read_timer();
-  
-
  public:
   Monitor(int w, Messenger *m) : 
 	whoami(w),
@@ -78,9 +74,10 @@ protected:
   void dispatch(Message *m);
   void handle_shutdown(Message *m);
 
-  void handle_failure(class MFailure *m);
-
   void handle_osd_boot(class MOSDBoot *m);
+  void handle_osd_in(class MOSDIn *m);
+  void handle_osd_out(class MOSDOut *m);
+  void handle_osd_failure(class MOSDFailure *m);
   void handle_osd_getmap(class MOSDGetMap *m);
 
   void handle_ping_ack(class MPingAck *m);
@@ -90,6 +87,7 @@ protected:
 
   // hack
   void fake_osd_failure(int osd, bool down);
+  void fake_osdmap_update();
   void fake_reorg();
 
 };

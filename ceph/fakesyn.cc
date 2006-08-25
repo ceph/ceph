@@ -8,10 +8,12 @@ using namespace std;
 #include "config.h"
 
 #include "mds/MDCluster.h"
+
 #include "mds/MDS.h"
 #include "osd/OSD.h"
-#include "mds/OSDMonitor.h"
+#include "mon/Monitor.h"
 #include "client/Client.h"
+
 #include "client/SyntheticClient.h"
 
 #include "msg/FakeMessenger.h"
@@ -63,8 +65,10 @@ int main(int argc, char **argv)
   //int pid = getpid();
 
   // create mon
-  OSDMonitor *mon = new OSDMonitor(0, new FakeMessenger(MSG_ADDR_MON(0)));
-  mon->init();
+  Monitor *mon[g_conf.num_mon];
+  for (int i=0; i<g_conf.num_mon; i++) {
+	mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)));
+  }
 
   // create mds
   MDS *mds[NUMMDS];
@@ -99,6 +103,9 @@ int main(int argc, char **argv)
   fakemessenger_startthread();
   
   // init
+  for (int i=0; i<g_conf.num_mon; i++) {
+	mon[i]->init();
+  }
   for (int i=0; i<NUMMDS; i++) {
 	mds[i]->init();
 	if (g_conf.mds_local_osd)

@@ -28,6 +28,8 @@ using namespace std;
 #include "messages/MFailureAck.h"
 
 #include "messages/MOSDBoot.h"
+#include "messages/MOSDIn.h"
+#include "messages/MOSDOut.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
@@ -179,6 +181,12 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
   case MSG_OSD_BOOT:
 	m = new MOSDBoot();
+	break;
+  case MSG_OSD_IN:
+	m = new MOSDIn();
+	break;
+  case MSG_OSD_OUT:
+	m = new MOSDOut();
 	break;
   case MSG_OSD_FAILURE:
 	m = new MOSDFailure();

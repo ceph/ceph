@@ -1343,6 +1343,11 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
   alloc_write(on, bstart, blen, alloc, old_bfirst, old_blast);
   dout(20) << "apply_write  old_bfirst " << old_bfirst << ", old_blast " << old_blast << endl;
 
+  if (fake_writes) {
+	on->uncommitted.clear();   // worst case!
+	return;
+  }	
+
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
   oc->map_write(on, bstart, blen, alloc, hits);

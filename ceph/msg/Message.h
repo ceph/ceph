@@ -55,6 +55,8 @@
 
 #define MSG_OSD_FAILURE      27
 
+#define MSG_OSD_IN           28
+#define MSG_OSD_OUT          29
 
 
 

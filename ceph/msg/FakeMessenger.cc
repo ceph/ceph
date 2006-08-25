@@ -24,6 +24,11 @@
 
 #include "config.h"
 
+#undef dout
+#define dout(x) if ((x) <= g_conf.debug_ms) cout 
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
@@ -188,10 +193,11 @@ int fakemessenger_do_loop_2()
 	  
 	  if (m) {
 		//dout(18) << "got " << m << endl;
-		dout(5) << "---- '" << m->get_type_name() << 
-		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " << m 
-			 << endl;
+		dout(1) << "---- '" << m->get_type_name() 
+				<< "' from " << MSG_ADDR_NICE(m->get_source()) // << ':' << m->get_source_port() 
+				<< " to " << MSG_ADDR_NICE(m->get_dest()) //<< ':' << m->get_dest_port() 
+				<< " ---- " << m 
+				<< endl;
 		
 		if (g_conf.fakemessenger_serialize) {
 		  // encode
@@ -345,7 +351,9 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
 	}
 	dm->queue_incoming(m);
 
-	dout(5) << "--> sending " << m << " to " << MSG_ADDR_NICE(dest) << endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;
+	dout(1) << "--> " << myaddr << " sending " << m << " '" << m->get_type_name() << "'"
+			<< " to " << MSG_ADDR_NICE(dest) 
+			<< endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;
 	
   }
   catch (...) {

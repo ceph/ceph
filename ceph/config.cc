@@ -41,7 +41,7 @@ map<int,float> g_fake_osd_out;
 md_config_t g_debug_after_conf;
 
 md_config_t g_conf = {
-  num_mon: 5,
+  num_mon: 1,
   num_mds: 1,
   num_osd: 4,
   num_client: 1,
@@ -58,7 +58,9 @@ md_config_t g_conf = {
 
   fake_clock: false,
   fakemessenger_serialize: true,
+
   fake_osdmap_expand: 0,
+  fake_osdmap_updates: 0,
 
   osd_remount_at: 0,
 
@@ -84,16 +86,21 @@ md_config_t g_conf = {
   
   debug_after: 0,
 
-  tcp_skip_rank0: false,
+  /*tcp_skip_rank0: false,
   tcp_overlay_clients: false,  // over osds!
   tcp_log: false,
   tcp_serial_marshall: true,
   tcp_serial_out: false,
   tcp_multi_out: true,
   tcp_multi_dispatch: false,  // not fully implemented yet
+  */
 
   ms_single_dispatch: false,
   ms_requeue_on_sender_fail: false,
+
+  ms_stripe_osds: false,
+  ms_skip_rank0: false,
+  ms_overlay_clients: false,
 
   // --- mon ---
   mon_tick_interval: 5,
@@ -219,6 +226,7 @@ md_config_t g_conf = {
   uofs_delay_allocation:       (int)1,         //true
 
   // --- block device ---
+  bdev_lock: true,
   bdev_iothreads:    1,         // number of ios to queue with kernel
   bdev_idle_kick_after_ms: 0,//100, // ms   ** FIXME ** this seems to break things, not sure why yet **
   bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
@@ -326,23 +334,28 @@ void parse_config_options(vector<char*>& args)
 	else if (strcmp(args[i], "--numosd") == 0) 
 	  g_conf.num_osd = atoi(args[++i]);
 
-	else if (strcmp(args[i], "--tcp_skip_rank0") == 0)
-	  g_conf.tcp_skip_rank0 = true;
-	else if (strcmp(args[i], "--tcp_overlay_clients") == 0)
-	  g_conf.tcp_overlay_clients = true;
-	else if (strcmp(args[i], "--tcp_log") == 0)
+	else if (strcmp(args[i], "--ms_single_dispatch") == 0) 
+	  g_conf.ms_single_dispatch = atoi(args[++i]);
+	else if (strcmp(args[i], "--ms_stripe_osds") == 0)
+	  g_conf.ms_stripe_osds = true;
+	else if (strcmp(args[i], "--ms_skip_rank0") == 0)
+	  g_conf.ms_skip_rank0 = true;
+	else if (strcmp(args[i], "--ms_overlay_clients") == 0)
+	  g_conf.ms_overlay_clients = true;
+
+	/*else if (strcmp(args[i], "--tcp_log") == 0)
 	  g_conf.tcp_log = true;
 	else if (strcmp(args[i], "--tcp_multi_out") == 0)
 	  g_conf.tcp_multi_out = atoi(args[++i]);
-
-	else if (strcmp(args[i], "--ms_single_dispatch") == 0) 
-	  g_conf.ms_single_dispatch = atoi(args[++i]);
+	*/
 
 	else if (strcmp(args[i], "--mkfs") == 0) 
 	  g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
 
 	else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
+	else if (strcmp(args[i], "--fake_osdmap_updates") == 0) 
+	  g_conf.fake_osdmap_updates = atoi(args[++i]);
 	else if (strcmp(args[i], "--fake_osd_down") == 0) {
 	  int osd = atoi(args[++i]);
 	  float when = atof(args[++i]);
@@ -577,6 +590,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.osd_maxthreads = atoi(args[++i]);
 
 
+	else if (strcmp(args[i], "--bdev_lock") == 0) 
+	  g_conf.bdev_lock = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_el_bidir") == 0) 
 	  g_conf.bdev_el_bidir = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_iothreads") == 0) 

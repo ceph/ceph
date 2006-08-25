@@ -415,6 +415,7 @@ public:
   
   virtual void sync() {};
   
+  virtual void _fake_writes(bool b) {};
   
 };
 

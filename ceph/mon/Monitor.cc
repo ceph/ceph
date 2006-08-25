@@ -22,11 +22,12 @@
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
-#include "messages/MFailure.h"
-#include "messages/MFailureAck.h"
+#include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 #include "messages/MOSDBoot.h"
+#include "messages/MOSDIn.h"
+#include "messages/MOSDOut.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -58,26 +59,34 @@ public:
 };
 
 
+void Monitor::fake_osdmap_update()
+{
+  dout(1) << "fake_osdmap_update" << endl;
+  accept_pending();
+
+  // tell a random osd
+  send_incremental_map(osdmap->get_epoch()-1,                    // ick! FIXME
+					   MSG_ADDR_OSD(rand() % g_conf.num_osd));
+}
+
+
 void Monitor::fake_reorg() 
 {
+  int r = rand() % g_conf.num_osd;
   
-  // HACK osd map change
-  static int d = 0;
-
-  if (d > 0) {
-	dout(1) << "changing OSD map, marking osd" << d-1 << " out" << endl;
-	osdmap->mark_out(d-1);
+  if (osdmap->is_out(r)) {
+	dout(1) << "fake_reorg marking osd" << r << " in" << endl;
+	pending.new_in.push_back(r);
+  } else {
+	dout(1) << "fake_reorg marking osd" << r << " out" << endl;
+	pending.new_out.push_back(r);
   }
 
-  dout(1) << "changing OSD map, marking osd" << d << " down" << endl;
-  osdmap->mark_down(d);
-
-  osdmap->inc_epoch();
-  d++;
+  accept_pending();
   
-  // bcast
-  bcast_latest_osd_map_osd();
-    
+  // tell him!
+  send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_OSD(r));
+  
   // do it again?
   /*
   if (g_conf.num_osd - d > 4 &&
@@ -123,8 +132,8 @@ void Monitor::init()
 	  osdmap->osds.insert(i+10000);
   }
 
-  osdmap->encode(maps[osdmap->get_epoch()]); // 1
-  pending.epoch = osdmap->get_epoch()+1;     // 2
+  //osdmap->encode(maps[osdmap->get_epoch()]); // 1
+  //pending.epoch = osdmap->get_epoch()+1;     // 2
   // </HACK>
 
 
@@ -160,7 +169,7 @@ void Monitor::dispatch(Message *m)
   {
 	switch (m->get_type()) {
 	case MSG_FAILURE:
-	  handle_failure((MFailure*)m);
+	  handle_osd_failure((MOSDFailure*)m);
 	  break;
 	  
 	case MSG_PING_ACK:
@@ -174,7 +183,13 @@ void Monitor::dispatch(Message *m)
 	case MSG_OSD_BOOT:
 	  handle_osd_boot((MOSDBoot*)m);
 	  break;
-	  
+	case MSG_OSD_IN:
+	  handle_osd_in((MOSDIn*)m);
+	  break;
+	case MSG_OSD_OUT:
+	  handle_osd_out((MOSDOut*)m);
+	  break;
+
 	case MSG_SHUTDOWN:
 	  handle_shutdown(m);
 	  break;
@@ -212,14 +227,10 @@ void Monitor::handle_ping_ack(MPingAck *m)
   delete m;
 }
 
-void Monitor::handle_failure(MFailure *m)
+void Monitor::handle_osd_failure(MOSDFailure *m)
 {
   dout(1) << "osd failure: " << m->get_failed() << " from " << m->get_source() << endl;
   
-  // ack
-  messenger->send_message(new MFailureAck(m),
-						  m->get_source(), m->get_source_port());
-
   // FIXME
   // take their word for it
   int from = m->get_failed().num();
@@ -234,10 +245,10 @@ void Monitor::handle_failure(MFailure *m)
 	//awaiting_maps[pending.epoch][m->get_source()] = 
 
 	accept_pending();
-	bcast_latest_osd_map_mds();   
-	bcast_latest_osd_map_osd();   // FIXME: which osds can i tell?
 
-	//send_incremental_map(osdmap->get_epoch()-1, m->get_source());
+	bcast_latest_osd_map_mds();   
+
+	send_incremental_map(m->get_epoch(), m->get_source());
   }
 
   delete m;
@@ -277,6 +288,9 @@ void Monitor::handle_osd_boot(MOSDBoot *m)
 	if (osdmap->osd_inst.size() == osdmap->osds.size()) {
 	  dout(-7) << "osd_boot all osds booted." << endl;
 	  osdmap->inc_epoch();
+	  osdmap->encode(maps[osdmap->get_epoch()]); // 1
+	  pending.epoch = osdmap->get_epoch()+1;     // 2
+
 	  bcast_latest_osd_map_osd();
 	  bcast_latest_osd_map_mds();
 	} else {
@@ -313,14 +327,40 @@ void Monitor::handle_osd_boot(MOSDBoot *m)
   bcast_latest_osd_map_mds();
 }
 
+void Monitor::handle_osd_in(MOSDIn *m)
+{
+  dout(7) << "osd_in from " << m->get_source() << endl;
+  int from = m->get_source().num();
+
+  if (osdmap->is_out(from)) 
+	pending.new_in.push_back(from);
+  accept_pending();
+  send_incremental_map(m->map_epoch, m->get_source());
+}
+
+void Monitor::handle_osd_out(MOSDOut *m)
+{
+  dout(7) << "osd_out from " << m->get_source() << endl;
+  int from = m->get_source().num();
+  if (osdmap->is_in(from)) {
+	pending.new_out.push_back(from);
+	accept_pending();
+	send_incremental_map(m->map_epoch, m->get_source());
+  }
+}
+
 void Monitor::handle_osd_getmap(MOSDGetMap *m)
 {
   dout(7) << "osd_getmap from " << m->get_source() << " since " << m->get_since() << endl;
   
-  if (m->get_since())
-	send_incremental_map(m->get_since(), m->get_source());
-  else
-	send_full_map(m->get_source());
+  if (osdmap->get_epoch() == 0) {
+	awaiting_map[1][m->get_source()] = m->get_since();
+  } else {
+	if (m->get_since())
+	  send_incremental_map(m->get_since(), m->get_source());
+	else
+	  send_full_map(m->get_source());
+  }
   delete m;
 }
 

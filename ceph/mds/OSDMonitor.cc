@@ -26,6 +26,8 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 #include "messages/MOSDBoot.h"
+#include "messages/MOSDIn.h"
+#include "messages/MOSDOut.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -69,32 +71,33 @@ public:
 
 
 
+void OSDMonitor::fake_osdmap_update()
+{
+  dout(1) << "fake_osdmap_update" << endl;
+  accept_pending();
+
+  // tell a random osd
+  send_incremental_map(osdmap->get_epoch()-1,                    // ick! FIXME
+					   MSG_ADDR_OSD(rand() % g_conf.num_osd));
+}
+
 
 void OSDMonitor::fake_reorg() 
 {
+  int r = rand() % g_conf.num_osd;
   
-  // HACK osd map change
-  static int d = 0;
-
-  if (d > 0) {
-	dout(1) << "changing OSD map, marking osd" << d-1 << " out" << endl;
-	osdmap->mark_out(d-1);
+  if (osdmap->is_out(r)) {
+	dout(1) << "fake_reorg marking osd" << r << " in" << endl;
+	pending.new_in.push_back(r);
+  } else {
+	dout(1) << "fake_reorg marking osd" << r << " out" << endl;
+	pending.new_out.push_back(r);
   }
 
-  dout(1) << "changing OSD map, marking osd" << d << " down" << endl;
-  osdmap->mark_down(d);
-
-  osdmap->inc_epoch();
-  d++;
+  accept_pending();
   
-  // bcast
-  bcast_latest_osd_map_osd();
-    
-  // do it again?
-  if (g_conf.num_osd - d > 4 &&
-	  g_conf.num_osd - d > g_conf.num_osd/2)
-	g_timer.add_event_after(g_conf.fake_osdmap_expand,
-							new C_OM_Faker(this));
+  // tell him!
+  send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_OSD(r));
 }
 
 
@@ -188,6 +191,13 @@ void OSDMonitor::dispatch(Message *m)
   case MSG_OSD_BOOT:
 	handle_osd_boot((MOSDBoot*)m);
 	return;
+
+  case MSG_OSD_IN:
+	handle_osd_in((MOSDIn*)m);
+	break;
+  case MSG_OSD_OUT:
+	handle_osd_out((MOSDOut*)m);
+	break;
 
   case MSG_SHUTDOWN:
 	handle_shutdown(m);
@@ -317,6 +327,29 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   // tell mds
   bcast_latest_osd_map_mds();
 }
+
+void OSDMonitor::handle_osd_in(MOSDIn *m)
+{
+  dout(7) << "osd_in from " << m->get_source() << endl;
+  int from = m->get_source().num();
+  if (osdmap->is_out(from)) {
+	pending.new_in.push_back(from);
+	accept_pending();
+	send_incremental_map(m->map_epoch, m->get_source());
+  }
+}
+
+void OSDMonitor::handle_osd_out(MOSDOut *m)
+{
+  dout(7) << "osd_out from " << m->get_source() << endl;
+  int from = m->get_source().num();
+  if (osdmap->is_in(from)) {
+	pending.new_out.push_back(from);
+	accept_pending();
+	send_incremental_map(m->map_epoch, m->get_source());
+  }
+}
+
 
 void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 {

@@ -264,7 +264,7 @@ public:
   virtual Message *ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
   virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst);
 
-  //void handle_ping(class MPing *m);
+  void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);
 
   void op_read(class MOSDOp *m, PG *pg);

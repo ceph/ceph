@@ -39,20 +39,22 @@ MDS_OBJS= \
 	mds/MDStore.o\
 	mds/LogStream.o\
 	mds/IdAllocator.o\
-	mds/MDLog.o\
-	mds/OSDMonitor.o 
+	mds/MDLog.o
 
 OSD_OBJS= \
 	osd/PG.o\
 	osd/Ager.o\
 	osd/FakeStore.o\
-	ebofs.o\
 	osd/OSD.o
 
 OSDC_OBJS= \
 	osdc/Filer.o\
 	osdc/ObjectCacher.o\
 	osdc/Objecter.o
+
+MON_OBJS= \
+	mon/Monitor.o\
+	mon/Elector.o
 
 COMMON_OBJS= \
 	msg/Messenger.o\
@@ -62,8 +64,6 @@ COMMON_OBJS= \
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
-	mon/Monitor.o\
-	mon/Elector.o\
 	config.o
 
 
@@ -89,7 +89,10 @@ obfs: depend obfstest
 
 
 # real bits
-cosd: cosd.cc osd.o msg/NewMessenger.o common.o
+cmon: cmon.cc mon.o ebofs.o msg/NewMessenger.o common.o
+	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+
+cosd: cosd.cc osd.o ebofs.o msg/NewMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
 cmds: cmds.cc mds.o osdc.o msg/NewMessenger.o common.o
@@ -106,7 +109,7 @@ gprof-helper.so: test/gprof-helper.c
 
 
 # fuse
-fakefuse: fakefuse.cc mds.o client.o osd.o client/fuse.o msg/FakeMessenger.cc common.o
+fakefuse: fakefuse.cc mds.o client.o osd.o ebofs.o client/fuse.o msg/FakeMessenger.cc common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 tcpfuse: tcpfuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
@@ -117,19 +120,16 @@ mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 
 
 # synthetic workload
-fakemon: fakemon.cc mds.o client.o osd.o osdc.o msg/FakeMessenger.o common.o
+fakemon: fakemon.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-fakesyn: fakesyn.cc mds.o client.o osd.o osdc.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-mpisyn: mpisyn.cc mds.o client.o osd.o osdc.o msg/MPIMessenger.cc common.o
+tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mds.o client.o osd.o osdc.o ${TCP_OBJS} common.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
-
-newsyn: newsyn.cc mds.o client.o osd.o osdc.o msg/NewMessenger.o common.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewMessenger.o common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs
@@ -197,6 +197,9 @@ osd_obfs.o: osd/OBFSStore.o osd/OSD.ccosd/PG.o osd/ObjectStore.o osd/FakeStore.o
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
 
 mds.o: ${MDS_OBJS}
+	ld -i -o $@ $^
+
+mon.o: ${MON_OBJS}
 	ld -i -o $@ $^
 
 %.o: %.cc

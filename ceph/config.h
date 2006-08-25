@@ -33,6 +33,7 @@ struct md_config_t {
   bool fakemessenger_serialize;
 
   int fake_osdmap_expand;
+  int fake_osdmap_updates;
 
   int osd_remount_at;
 
@@ -58,16 +59,21 @@ struct md_config_t {
 
   int debug_after;
 
-  bool tcp_skip_rank0;
+  /*bool tcp_skip_rank0;
   bool tcp_overlay_clients;
   bool tcp_log;
   bool tcp_serial_marshall;
   bool tcp_serial_out;
   bool tcp_multi_out;
   bool tcp_multi_dispatch;
+  */
 
   bool ms_single_dispatch;
   bool ms_requeue_on_sender_fail;
+
+  bool ms_stripe_osds;
+  bool ms_skip_rank0;
+  bool ms_overlay_clients;
 
   // mon
   int mon_tick_interval;
@@ -191,6 +197,7 @@ struct md_config_t {
   int     uofs_delay_allocation;
 
   // block device
+  bool  bdev_lock;
   int   bdev_iothreads;
   int   bdev_idle_kick_after_ms;
   int   bdev_el_fw_max_ms;  

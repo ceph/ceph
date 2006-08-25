@@ -97,6 +97,9 @@ void Ager::age(int time,
 			   int count,         // this many times
 			   float final_water,   // and end here ( <= low_water)
 			   int fake_size_mb) { 
+
+  store->_fake_writes(true);
+
   utime_t until = g_clock.now();
   until.sec_ref() += time;
   
@@ -148,6 +151,7 @@ void Ager::age(int time,
 	  age_empty(low_water);
 	}
   }
+  store->_fake_writes(false);
   store->sync();
   store->sync();
   dout(1) << "age finished" << endl;

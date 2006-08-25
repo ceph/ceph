@@ -45,6 +45,9 @@ class Ebofs : public ObjectStore {
  protected:
   Mutex        ebofs_lock;    // a beautiful global lock
 
+  // ** debuggy **
+  bool         fake_writes;
+
   // ** super **
   BlockDevice  dev;
   bool         mounted, unmounting, dirty;
@@ -203,6 +206,7 @@ class Ebofs : public ObjectStore {
 
  public:
   Ebofs(char *devfn) : 
+	fake_writes(false),
 	dev(devfn), 
 	mounted(false), unmounting(false), dirty(false), readonly(false), 
 	super_epoch(0), commit_thread_started(false), mid_commit(false),
@@ -268,6 +272,7 @@ class Ebofs : public ObjectStore {
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
   int collection_listattr(object_t oid, vector<string>& attrs);
   
+  void _fake_writes(bool b) { fake_writes = b; }
 
 private:
   // private interface -- use if caller already holds lock

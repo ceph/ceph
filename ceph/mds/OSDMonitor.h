@@ -68,6 +68,8 @@ class OSDMonitor : public Dispatcher {
   void handle_shutdown(Message *m);
 
   void handle_osd_boot(class MOSDBoot *m);
+  void handle_osd_in(class MOSDIn *m);
+  void handle_osd_out(class MOSDOut *m);
   void handle_osd_failure(class MOSDFailure *m);
   void handle_osd_getmap(class MOSDGetMap *m);
 
@@ -75,6 +77,7 @@ class OSDMonitor : public Dispatcher {
 
   // hack
   void fake_osd_failure(int osd, bool down);
+  void fake_osdmap_update();
   void fake_reorg();
 
 };

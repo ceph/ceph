@@ -42,6 +42,8 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBoot.h"
+#include "messages/MOSDIn.h"
+#include "messages/MOSDOut.h"
 
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
@@ -126,9 +128,9 @@ OSD::OSD(int id, Messenger *m, char *dev)
 
   // init object store
   // try in this order:
-  // ebofsdev/all
   // ebofsdev/$num
   // ebofsdev/$hostname
+  // ebofsdev/all
 
   if (dev) {
 	strcpy(dev_path,dev);
@@ -136,14 +138,15 @@ OSD::OSD(int id, Messenger *m, char *dev)
 	char hostname[100];
 	hostname[0] = 0;
 	gethostname(hostname,100);
-	sprintf(dev_path, "%s/all", ebofs_base_path);
+	
+	sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
 	
 	struct stat sta;
 	if (::lstat(dev_path, &sta) != 0)
-	  sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
+	  sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);	
 	
 	if (::lstat(dev_path, &sta) != 0)
-	  sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);	
+	  sprintf(dev_path, "%s/all", ebofs_base_path);
   }
 
   if (g_conf.ebofs) {
@@ -244,13 +247,20 @@ int OSD::init()
 	
 	osd_logtype.add_inc("r_pull");
 	osd_logtype.add_inc("r_pullb");
-	osd_logtype.add_inc("r_push");
-	osd_logtype.add_inc("r_pushb");
 	osd_logtype.add_inc("r_wr");
 	osd_logtype.add_inc("r_wrb");
 	
 	osd_logtype.add_inc("rlsum");
 	osd_logtype.add_inc("rlnum");
+
+	osd_logtype.add_set("numpg");
+	osd_logtype.add_set("pingset");
+
+	osd_logtype.add_inc("map");
+	osd_logtype.add_inc("mapi");
+	osd_logtype.add_inc("mapidup");
+	osd_logtype.add_inc("mapf");
+	osd_logtype.add_inc("mapfdup");
 	
 	// request thread pool
 	{
@@ -461,7 +471,7 @@ void OSD::heartbeat()
   utime_t since = now;
   since.sec_ref() -= g_conf.osd_heartbeat_interval;
 
-  dout(15) << "heartbeat " << now << endl;
+  dout(-15) << "heartbeat " << now << endl;
 
   // send pings
   set<int> pingset;
@@ -485,6 +495,23 @@ void OSD::heartbeat()
 	_share_map_outgoing( MSG_ADDR_OSD(*i) );
 	messenger->send_message(new MOSDPing(osdmap->get_epoch()), 
 							MSG_ADDR_OSD(*i));
+  }
+
+  logger->set("pingset", pingset.size());
+
+  // hack: fake reorg?
+  if (osdmap) {
+	if ((rand() % (2*g_conf.num_osd)) == whoami) {
+	  if (osdmap->is_out(whoami)) {
+		messenger->send_message(new MOSDIn(osdmap->get_epoch()),
+								MSG_ADDR_MON(0));
+	  } 
+	  else if ((rand() % g_conf.fake_osdmap_updates) == 0) {
+		//messenger->send_message(new MOSDOut(osdmap->get_epoch()),
+		messenger->send_message(new MOSDIn(osdmap->get_epoch()),
+								MSG_ADDR_MON(0));
+	  }
+	}
   }
 
   // schedule next!
@@ -535,16 +562,18 @@ void OSD::_share_map_outgoing(msg_addr_t dest)
 {
   assert(dest.is_osd());
 
-  // send map?
-  if (peer_map_epoch.count(dest)) {
-	// ??? send recent ???
-	// do nothing.
-  }
-  else {
-	epoch_t pe = peer_map_epoch[dest];
-	if (pe < osdmap->get_epoch()) {
-	  send_incremental_map(pe, dest, true);
-	  peer_map_epoch[dest] = osdmap->get_epoch();
+  if (dest.is_osd()) {
+	// send map?
+	if (peer_map_epoch.count(dest)) {
+	  epoch_t pe = peer_map_epoch[dest];
+	  if (pe < osdmap->get_epoch()) {
+		send_incremental_map(pe, dest, true);
+		peer_map_epoch[dest] = osdmap->get_epoch();
+	  }
+	} else {
+	  // no idea about peer's epoch.
+	  // ??? send recent ???
+	  // do nothing.
 	}
   }
 }
@@ -625,8 +654,7 @@ void OSD::dispatch(Message *m)
 
 	  case MSG_OSD_PING:
 		// take note.
-		dout(20) << "osdping from " << m->get_source() << endl;
-		_share_map_incoming(m->get_source(), ((MOSDPing*)m)->map_epoch);
+		handle_osd_ping((MOSDPing*)m);
 		break;
 		
 	  case MSG_OSD_PG_NOTIFY:
@@ -809,15 +837,16 @@ void OSD::handle_rep_op_ack(PG *pg, __uint64_t tid, int result, bool commit,
 
 
 
-/*
-void OSD::handle_ping(MPing *m)
+void OSD::handle_osd_ping(MOSDPing *m)
 {
-  dout(7) << "got ping, replying" << endl;
-  messenger->send_message(new MPingAck(m),
-						  m->get_source(), m->get_source_port(), 0);
-  delete m;
+  dout(20) << "osdping from " << m->get_source() << endl;
+  _share_map_incoming(m->get_source(), ((MOSDPing*)m)->map_epoch);
+  
+  //if (!m->ack)
+  //messenger->send_message(new MOSDPing(osdmap->get_epoch(), true),
+  //m->get_source());
 }
-*/
+
 
 
 
@@ -856,6 +885,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	boot_epoch = m->get_last(); // hrm...?
   }
 
+  logger->inc("mapmsg");
+
   // store them?
   for (map<epoch_t,bufferlist>::iterator p = m->maps.begin();
 	   p != m->maps.end();
@@ -863,6 +894,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	object_t oid = get_osdmap_object_name(p->first);
 	if (store->exists(oid)) {
 	  dout(10) << "handle_osd_map already had full map epoch " << p->first << endl;
+	  logger->inc("mapfdup");
 	  bufferlist bl;
 	  get_map_bl(p->first, bl);
 	  dout(10) << " .. it is " << bl.length() << " bytes" << endl;
@@ -878,6 +910,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	if (p->first < superblock.oldest_map ||
 		superblock.oldest_map == 0)
 	  superblock.oldest_map = p->first;
+
+	logger->inc("mapf");
   }
   for (map<epoch_t,bufferlist>::iterator p = m->incremental_maps.begin();
 	   p != m->incremental_maps.end();
@@ -885,6 +919,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	object_t oid = get_inc_osdmap_object_name(p->first);
 	if (store->exists(oid)) {
 	  dout(10) << "handle_osd_map already had incremental map epoch " << p->first << endl;
+	  logger->inc("mapidup");
 	  bufferlist bl;
 	  get_inc_map_bl(p->first, bl);
 	  dout(10) << " .. it is " << bl.length() << " bytes" << endl;
@@ -900,6 +935,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	if (p->first < superblock.oldest_map ||
 		superblock.oldest_map == 0)
 	  superblock.oldest_map = p->first;
+
+	logger->inc("mapi");
   }
 
   // advance if we can
@@ -1257,6 +1294,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
   
   // do queries.
   do_queries(query_map);
+
+  logger->set("numpg", pg_map.size());
 }
 
 

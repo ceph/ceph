@@ -9,7 +9,7 @@ using namespace std;
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
-#include "mds/OSDMonitor.h"
+#include "mon/Monitor.h"
 #include "client/Client.h"
 #include "client/SyntheticClient.h"
 
@@ -129,7 +129,7 @@ int main(int argc, char **argv)
   
   // create mon
   if (myrank == 0) {
-	OSDMonitor *mon = new OSDMonitor(0, new TCPMessenger(MSG_ADDR_MON(0)));
+	Monitor *mon = new Monitor(0, new TCPMessenger(MSG_ADDR_MON(0)));
 	mon->init();
   }
 

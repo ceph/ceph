@@ -22,8 +22,9 @@
 class MOSDPing : public Message {
  public:
   epoch_t map_epoch;
+  bool ack;
 
-  MOSDPing(epoch_t e) : Message(MSG_OSD_PING), map_epoch(e) {
+  MOSDPing(epoch_t e, bool a=false) : Message(MSG_OSD_PING), map_epoch(e), ack(a) {
   }
   MOSDPing() {}
 
@@ -31,9 +32,12 @@ class MOSDPing : public Message {
 	int off = 0;
 	payload.copy(off, sizeof(map_epoch), (char*)&map_epoch);
 	off += sizeof(map_epoch);
+	payload.copy(off, sizeof(ack), (char*)&ack);
+	off += sizeof(ack);
   }
   virtual void encode_payload() {
 	payload.append((char*)&map_epoch, sizeof(map_epoch));
+	payload.append((char*)&ack, sizeof(ack));
   }
 
   virtual char *get_type_name() { return "oping"; }

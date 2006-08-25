@@ -9,7 +9,7 @@ using namespace std;
 #include "mds/MDCluster.h"
 #include "mds/MDS.h"
 #include "osd/OSD.h"
-#include "mds/OSDMonitor.h"
+#include "mon/Monitor.h"
 #include "client/Client.h"
 #include "client/SyntheticClient.h"
 
@@ -104,11 +104,14 @@ int main(int argc, char **argv)
   int world = mpiwho.second;
 
   int need = 0;
-  if (g_conf.tcp_skip_rank0) need++;
+  if (g_conf.ms_skip_rank0) need++;
   need += NUMMDS;
-  need += NUMOSD;
+  if (g_conf.ms_stripe_osds)
+	need++;
+  else
+	need += NUMOSD;
   if (NUMCLIENT) {
-	if (!g_conf.tcp_overlay_clients)
+	if (!g_conf.ms_overlay_clients)
 	  need += 1;
   }
   assert(need <= world);
@@ -129,7 +132,7 @@ int main(int argc, char **argv)
   
   // create mon
   if (myrank == 0) {
-	OSDMonitor *mon = new OSDMonitor(0, rank.register_entity(MSG_ADDR_MON(0)));
+	Monitor *mon = new Monitor(0, rank.register_entity(MSG_ADDR_MON(0)));
 	mon->init();
   }
 
@@ -137,7 +140,7 @@ int main(int argc, char **argv)
   map<int,MDS*> mds;
   map<int,OSD*> mdsosd;
   for (int i=0; i<NUMMDS; i++) {
-	if (myrank != g_conf.tcp_skip_rank0+i) continue;
+	if (myrank != g_conf.ms_skip_rank0+i) continue;
 	Messenger *m = rank.register_entity(MSG_ADDR_MDS(i));
 	cerr << "mds" << i << " on tcprank " << rank.my_rank << " " << hostname << "." << pid << endl;
 	mds[i] = new MDS(mdc, i, m);
@@ -151,9 +154,15 @@ int main(int argc, char **argv)
   }
   
   // create osd
-  map<int, OSD *> osd;
+  map<int,OSD*> osd;
+  int max_osd_nodes = world - NUMMDS - g_conf.ms_skip_rank0;  // assumes 0 clients, if we stripe.
+  int osds_per_node = (NUMOSD-1)/max_osd_nodes + 1;
   for (int i=0; i<NUMOSD; i++) {
-	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + i) continue;
+	if (g_conf.ms_stripe_osds) {
+	  if (myrank != g_conf.ms_skip_rank0+NUMMDS + i / osds_per_node) continue;
+	} else {
+	  if (myrank != g_conf.ms_skip_rank0+NUMMDS + i) continue;
+	}
 	Messenger *m = rank.register_entity(MSG_ADDR_OSD(i));
 	cerr << "osd" << i << " on tcprank " << rank.my_rank <<  " " << hostname << "." << pid << endl;
 	osd[i] = new OSD(i, m);
@@ -161,21 +170,21 @@ int main(int argc, char **argv)
 	started++;
   }
   
-  if (g_conf.tcp_overlay_clients) sleep(5);
+  if (g_conf.ms_overlay_clients) sleep(5);
 
   // create client
   int skip_osd = NUMOSD;
-  if (g_conf.tcp_overlay_clients) 
+  if (g_conf.ms_overlay_clients) 
 	skip_osd = 0;        // put clients with osds too!
-  int client_nodes = world - NUMMDS - skip_osd - g_conf.tcp_skip_rank0;
+  int client_nodes = world - NUMMDS - skip_osd - g_conf.ms_skip_rank0;
   int clients_per_node = 1;
-  if (NUMCLIENT) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
+  if (NUMCLIENT && client_nodes > 0) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
   set<int> clientlist;
   map<int,Client *> client;//[NUMCLIENT];
   map<int,SyntheticClient *> syn;//[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
 	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
-	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
+	if (myrank != g_conf.ms_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
 	clientlist.insert(i);
 	client[i] = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW));//(i)) );
 

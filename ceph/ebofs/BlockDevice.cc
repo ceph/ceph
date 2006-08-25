@@ -577,11 +577,13 @@ int BlockDevice::open(kicker *idle)
   }
 
   // lock
-  int r = ::flock(fd, LOCK_EX);
-  if (r < 0) {
-	dout(1) << "open " << dev << " failed to get LOCK_EX" << endl;
-	assert(0);
-	return -1;
+  if (g_conf.bdev_lock) {
+	int r = ::flock(fd, LOCK_EX);
+	if (r < 0) {
+	  dout(1) << "open " << dev << " failed to get LOCK_EX" << endl;
+	  assert(0);
+	  return -1;
+	}
   }
 			   
   // figure size
@@ -634,7 +636,9 @@ int BlockDevice::close()
 
   dout(2) << "close " << endl;
 
-  ::flock(fd, LOCK_UN);
+  if (g_conf.bdev_lock)
+	::flock(fd, LOCK_UN);
+
   ::close(fd);
   fd = 0;
 
