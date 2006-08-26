@@ -29,7 +29,7 @@ using namespace __gnu_cxx;
 
 class LogType {
  protected:
-  hash_map<__uint32_t, int> keymap;  
+  hash_map<__uint64_t, int> keymap;  
   vector<const char*>   keys;
   set<int>              inc_keys;
 
@@ -38,7 +38,7 @@ class LogType {
   // HACK to avoid the hash table as often as possible...
   // cache recent key name lookups in a small ring buffer
   const static int cache_keys = 10;
-  __uint32_t kc_ptr[cache_keys];
+  __uint64_t kc_ptr[cache_keys];
   int kc_val[cache_keys];
   int kc_pos;
 
@@ -59,7 +59,7 @@ class LogType {
 	i = keys.size();
 	keys.push_back(key);
 
-	__uint32_t p = (__uint32_t)key;
+	__uint64_t p = (__uint64_t)key;
 	keymap[p] = i;
 	if (is_inc) inc_keys.insert(i);
 
@@ -78,7 +78,7 @@ class LogType {
   }
 
   int lookup_key(const char* key) {
-	__uint32_t p = (__uint32_t)key;
+	__uint64_t p = (__uint64_t)key;
 
 	if (keymap.count(p)) 
 	  return keymap[p];
