@@ -168,7 +168,7 @@ void Monitor::dispatch(Message *m)
   lock.Lock();
   {
 	switch (m->get_type()) {
-	case MSG_FAILURE:
+	case MSG_OSD_FAILURE:
 	  handle_osd_failure((MOSDFailure*)m);
 	  break;
 	  
