@@ -139,7 +139,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
 		cur += left;
 		left -= left;
         assert(left == 0);
-        assert(cur == ex_it->start + ex_it->length);
+        assert(cur == ex_it->start + (off_t)ex_it->length);
         break;  // no more.
       }
       
@@ -342,7 +342,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 	map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
 	
 	while (p != ob->data.end() &&
-		   opos < start+length) {
+		   opos < start+(off_t)length) {
 	  BufferHead *bh = p->second;
 	  
 	  if (bh->start() > opos) {
@@ -360,7 +360,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 	  }
 	  
 	  assert(bh->start() == opos);   // we don't merge rx bh's... yet!
-	  assert(bh->length() < start+length-opos);
+	  assert(bh->length() < start+(off_t)length-opos);
 	  
 	  bh->bl.substr_of(bl,
 					   start+length-opos,
@@ -485,12 +485,12 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
 	off_t opos = start;
 	
 	for (map<off_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
-		 p != ob->data.end() && opos < start+length;
+		 p != ob->data.end() && opos < start+(off_t)length;
 		 p++) {
 	  BufferHead *bh = p->second;
 	  
 	  if (bh->start() < start &&
-		  bh->end() > start+length) {
+		  bh->end() > start+(off_t)length) {
 		dout(20) << "bh_write_ack skipping " << *bh << endl;
 		continue;
 	  }
@@ -677,7 +677,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	  off_t opos = ex_it->start;
 	  while (1) {
 		BufferHead *bh = bh_it->second;
-		assert(opos == bh->start() + bhoff);
+		assert(opos == (off_t)(bh->start() + bhoff));
 
 		dout(10) << "readx rmap opos " << opos
 				 << ": " << *bh << " +" << bhoff
@@ -705,7 +705,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 	  }
 	  assert(f_it == ex_it->buffer_extents.end());
 	  assert(bh_it == hits.end());
-	  assert(opos == ex_it->start + ex_it->length);
+	  assert(opos == ex_it->start + (off_t)ex_it->length);
 	}
   }
   
@@ -787,7 +787,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 // blocking wait for write.
 void ObjectCacher::wait_for_write(size_t len, Mutex& lock)
 {
-  while (get_stat_dirty() + len > g_conf.client_oc_max_dirty) {
+  while (get_stat_dirty() + (off_t)len > g_conf.client_oc_max_dirty) {
 	dout(10) << "wait_for_write waiting" << endl;
 	stat_waiter++;
 	stat_cond.Wait(lock);

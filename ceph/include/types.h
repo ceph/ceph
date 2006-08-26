@@ -27,10 +27,6 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
-// stupid crap for solaris
-#ifndef __uint64_t
-typedef uint64_t __uint64_t;
-#endif
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))

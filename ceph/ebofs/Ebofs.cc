@@ -32,7 +32,7 @@ char *nice_blocks(block_t b)
   else if (sz > (10 << 10)) 
 	sprintf(s,"%.1f MB", sz / (1024.0));
   else 
-	sprintf(s,"%llu KB", b*4);
+	sprintf(s,"%llu KB", b*4ULL);
   return s;
 }
 
@@ -475,7 +475,7 @@ void Ebofs::alloc_more_node_space()
 }
 
 
-int Ebofs::finisher_thread_entry()
+void *Ebofs::finisher_thread_entry()
 {
   finisher_lock.Lock();
   dout(10) << "finisher_thread start" << endl;
@@ -1320,7 +1320,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 	opos = on->object_size;
 	bstart = on->object_size / EBOFS_BLOCK_SIZE;
   }
-  if (off+len > on->object_size) {
+  if (off+(off_t)len > on->object_size) {
 	dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
 			 << " -> " << off+len << endl;
 	on->object_size = off+len;
@@ -1386,7 +1386,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 		dout(10) << "apply_write split off left block for partial write; rest is " << *right << endl;
 	  }
 	  if ((bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0) &&
-		  (len+off < on->object_size)) {
+		  ((off_t)len+off < on->object_size)) {
 		BufferHead *right = bc.split(bh, bh->last());
 		hits[right->start()] = right;
 		dout(10) << "apply_write split off right block for upcoming partial write; rest is " << *right << endl;
@@ -1395,11 +1395,11 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 
 	// partial at head or tail?
 	if ((bh->start() == bstart && opos % EBOFS_BLOCK_SIZE != 0) ||   // opos, not off, in case we're zeroing...
-		(bh->last() == blast && (len+off) % EBOFS_BLOCK_SIZE != 0 && (len+off) < on->object_size)) {
+		(bh->last() == blast && ((off_t)len+off) % EBOFS_BLOCK_SIZE != 0 && ((off_t)len+off) < on->object_size)) {
 	  // locate ourselves in bh
 	  unsigned off_in_bh = opos - bh->start()*EBOFS_BLOCK_SIZE;
 	  assert(off_in_bh >= 0);
-	  unsigned len_in_bh = MIN( zleft+left,
+	  unsigned len_in_bh = MIN( (off_t)(zleft+left),
 								(off_t)(bh->end()*EBOFS_BLOCK_SIZE)-opos );
 	  
 	  if (bh->is_partial() || bh->is_rx() || bh->is_missing()) {
@@ -1509,8 +1509,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 
 	// ok, we're talking full block(s) now (modulo last block of the object)
 	assert(opos % EBOFS_BLOCK_SIZE == 0);
-	assert(zleft+left >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
-		   opos+zleft+left == on->object_size);
+	assert((off_t)(zleft+left) >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
+		   opos+(off_t)(zleft+left) == on->object_size);
 
 	// alloc new buffers.
 	bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
@@ -1554,7 +1554,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 
   assert(zleft == 0);
   assert(left == 0);
-  assert(opos == off+len);
+  assert(opos == off+(off_t)len);
   //assert(blpos == bl.length());
 }
 
@@ -1603,7 +1603,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
 	off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
 	off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
 	off_t start = MAX( off, bhstart );
-	off_t end = MIN( off+len, bhend );
+	off_t end = MIN( off+(off_t)len, bhend );
 	
 	if (!i->second->have_partial_range(start-bhstart, end-bhend)) {
 	  if (partials_ok) {
@@ -1648,7 +1648,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
 	off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
 	off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
 	off_t start = MAX( pos, bhstart );
-	off_t end = MIN( off+len, bhend );
+	off_t end = MIN( off+(off_t)len, bhend );
 
 	if (bh->is_partial()) {
 	  // copy from a partial block.  yuck!
@@ -1715,7 +1715,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
 	}
 
 	size_t try_len = len ? len:on->object_size;
-	size_t will_read = MIN(off+try_len, on->object_size) - off;
+	size_t will_read = MIN(off+(off_t)try_len, on->object_size) - off;
 	
 	bool done;
 	if (attempt_read(on, off, will_read, bl, &cond, &done))
@@ -1898,7 +1898,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 	  {
 		coll_t cid = t.cids.front(); t.cids.pop_front();
 		if (_destroy_collection(cid) < 0) {
-		  dout(7) << "apply_transaction fail on _remove_collection" << endl;
+		  dout(7) << "apply_transaction fail on _destroy_collection" << endl;
 		  r &= bit;
 		}
 	  }
@@ -1992,7 +1992,8 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
   dirty_onode(on);  // dirty onode!
   
   // apply write to buffer cache
-  apply_write(on, offset, length, bl);
+  if (length > 0)
+	apply_write(on, offset, length, bl);
 
   // done.
   put_onode(on);

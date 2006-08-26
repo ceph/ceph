@@ -81,7 +81,7 @@ void Filer::file_to_extents(inode_t inode,
 	else
 	  x_len = left;
 	
-	if (ex->start + ex->length == x_offset) {
+	if (ex->start + (off_t)ex->length == x_offset) {
 	  // add to extent
 	  ex->length += x_len;
 	} else {

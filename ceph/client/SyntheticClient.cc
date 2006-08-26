@@ -174,8 +174,9 @@ SyntheticClient::SyntheticClient(Client *client)
 void *synthetic_client_thread_entry(void *ptr)
 {
   SyntheticClient *sc = (SyntheticClient*)ptr;
-  int r = sc->run();
-  return (void*)r;
+  //int r = 
+  sc->run();
+  return 0;//(void*)r;
 }
 
 string SyntheticClient::get_sarg(int seq) 

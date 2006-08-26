@@ -532,7 +532,7 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
 	iov[n].iov_base = i->c_str();
 	iov[n].iov_len = MIN(left, i->length());
 
-	assert((((unsigned)iov[n].iov_base) & 4095) == 0);
+	assert((((unsigned long long)iov[n].iov_base) & 4095ULL) == 0);
 	assert((iov[n].iov_len & 4095) == 0);
 	
 	left -= iov[n].iov_len;

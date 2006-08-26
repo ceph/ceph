@@ -189,7 +189,7 @@ class Ebofs : public ObjectStore {
   bool           finisher_stop;
   list<Context*> finisher_queue;
 
-  int finisher_thread_entry();
+  void *finisher_thread_entry();
   class FinisherThread : public Thread {
 	Ebofs *ebofs;
   public:

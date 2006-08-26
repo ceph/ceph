@@ -178,7 +178,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 	  fs->free_tab[bucket]->remove(ex.start);
 	  fs->free_blocks -= ex.length;
 	  last_pos = ex.end();
-	  dout(20) << "allocate partial " << ex << " near " << near << endl;
+	  dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << endl;
 	  dump_freelist();
 	  return ex.length;
 	}	
