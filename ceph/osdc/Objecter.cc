@@ -392,7 +392,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 		   it != by_off.end();
 		   it++) {
 		assert(it->second->length());
-		if (it->first < bytes_read) {
+		if (it->first < (off_t)bytes_read) {
 		  dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << endl;
 		  rd->bl->claim_append(*(it->second));
 		} else {
