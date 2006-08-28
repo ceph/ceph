@@ -59,7 +59,11 @@ class LogType {
 	i = keys.size();
 	keys.push_back(key);
 
+#ifdef __LP64__
 	__uint64_t p = (__uint64_t)key;
+#else
+	__uint64_t p = (__uint32_t)key;
+#endif
 	keymap[p] = i;
 	if (is_inc) inc_keys.insert(i);
 
@@ -78,7 +82,11 @@ class LogType {
   }
 
   int lookup_key(const char* key) {
+#ifdef __LP64__
 	__uint64_t p = (__uint64_t)key;
+#else
+	__uint64_t p = (__uint32_t)key;
+#endif
 
 	if (keymap.count(p)) 
 	  return keymap[p];
