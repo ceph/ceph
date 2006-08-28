@@ -122,8 +122,6 @@ OSD::OSD(int id, Messenger *m, char *dev)
   if (g_conf.osd_remount_at) 
 	g_timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
 
-  next_heartbeat = new C_Heartbeat(this);
-  g_timer.add_event_after(g_conf.osd_heartbeat_interval, next_heartbeat);
 										   
 
   // init object store
@@ -197,7 +195,7 @@ int OSD::init()
 	  if (g_conf.osd_age_time > 0) {
 		dout(2) << "age" << endl;
 		Ager ager(store);
-		ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 5, g_conf.osd_age);
+		ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 50000, g_conf.osd_age);
 	  }
 	}
 	else {
@@ -266,9 +264,9 @@ int OSD::init()
 	{
 	  char name[80];
 	  sprintf(name,"osd%d.threadpool", whoami);
-	  threadpool = new ThreadPool<OSD*, object_t>(name, g_conf.osd_maxthreads, 
-												  static_dequeueop,
-												  this);
+	  threadpool = new ThreadPool<OSD*, pg_t>(name, g_conf.osd_maxthreads, 
+											  static_dequeueop,
+											  this);
 	}
 	
 	// i'm ready!
@@ -276,7 +274,10 @@ int OSD::init()
 	
 	// announce to monitor i exist and have booted.
 	messenger->send_message(new MOSDBoot(superblock), MSG_ADDR_MON(0));
-
+	
+	// start the heart
+	next_heartbeat = new C_Heartbeat(this);
+	g_timer.add_event_after(g_conf.osd_heartbeat_interval, next_heartbeat);
   }
   osd_lock.Unlock();
 
@@ -497,10 +498,10 @@ void OSD::heartbeat()
 							MSG_ADDR_OSD(*i));
   }
 
-  logger->set("pingset", pingset.size());
+  if (logger) logger->set("pingset", pingset.size());
 
   // hack: fake reorg?
-  if (osdmap) {
+  if (osdmap && g_conf.fake_osdmap_updates) {
 	if ((rand() % (2*g_conf.num_osd)) == whoami) {
 	  if (osdmap->is_out(whoami)) {
 		messenger->send_message(new MOSDIn(osdmap->get_epoch()),

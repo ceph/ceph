@@ -24,6 +24,7 @@
 #include "include/types.h"
 #include "msg/Message.h"
 #include "common/Mutex.h"
+#include "common/Clock.h"
 
 #include "crush/crush.h"
 using namespace crush;
@@ -58,7 +59,8 @@ class OSDMap {
 public:
   class Incremental {
   public:
-	version_t epoch;   // new epoch; this is diff from epoch-1.
+	version_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
+	utime_t   ctime;
 	map<int,entity_inst_t> new_up;
 	map<int,entity_inst_t> new_down;
 	list<int> new_in;
@@ -68,6 +70,7 @@ public:
 	
 	void encode(bufferlist& bl) {
 	  bl.append((char*)&epoch, sizeof(epoch));
+	  bl.append((char*)&ctime, sizeof(ctime));
 	  ::_encode(new_up, bl);
 	  ::_encode(new_down, bl);
 	  ::_encode(new_in, bl);
@@ -77,6 +80,8 @@ public:
 	void decode(bufferlist& bl, int& off) {
 	  bl.copy(off, sizeof(epoch), (char*)&epoch);
 	  off += sizeof(epoch);
+	  bl.copy(off, sizeof(ctime), (char*)&ctime);
+	  off += sizeof(ctime);
 	  ::_decode(new_up, bl, off);
 	  ::_decode(new_down, bl, off);
 	  ::_decode(new_in, bl, off);
@@ -89,6 +94,7 @@ public:
 
 private:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
+  utime_t   ctime;       // epoch start time
   int       pg_bits;     // placement group bits 
 
   set<int>  osds;        // all osds
@@ -96,8 +102,6 @@ private:
   set<int>  out_osds;    // list of unmapped disks
   map<int,float> overload_osds; 
   map<int,entity_inst_t> osd_inst;
-
-  //bool  mkfs;
 
  public:
   Crush     crush;       // hierarchical map
@@ -107,17 +111,17 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), pg_bits(5) {} //, mkfs(false) { }
+  OSDMap() : epoch(0), pg_bits(5) {}
 
   // map info
   epoch_t get_epoch() const { return epoch; }
-  void inc_epoch() { epoch++; }//mkfs = false; }
+  void inc_epoch() { epoch++; }
 
   int get_pg_bits() const { return pg_bits; }
   void set_pg_bits(int b) { pg_bits = b; }
 
-  bool is_mkfs() const { return epoch == 1; } //mkfs; }
-  void set_mkfs() { assert(epoch == 1); /*mkfs = true;*/ }
+  bool is_mkfs() const { return epoch == 1; }
+  //void set_mkfs() { assert(epoch == 1); }
 
   /***** cluster state *****/
   int num_osds() { return osds.size(); }
@@ -150,7 +154,7 @@ private:
   void apply_incremental(Incremental &inc) {
 	assert(inc.epoch == epoch+1);
 	epoch++;
-	//mkfs = false;
+	ctime = inc.ctime;
 
 	for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
 		 i != inc.new_up.end(); 
@@ -201,8 +205,8 @@ private:
   // serialize, unserialize
   void encode(bufferlist& blist) {
 	blist.append((char*)&epoch, sizeof(epoch));
+	blist.append((char*)&ctime, sizeof(ctime));
 	blist.append((char*)&pg_bits, sizeof(pg_bits));
-	//blist.append((char*)&mkfs, sizeof(mkfs));
 	
 	_encode(osds, blist);
 	_encode(down_osds, blist);
@@ -217,10 +221,10 @@ private:
 	int off = 0;
 	blist.copy(off, sizeof(epoch), (char*)&epoch);
 	off += sizeof(epoch);
+	blist.copy(off, sizeof(ctime), (char*)&ctime);
+	off += sizeof(ctime);
 	blist.copy(off, sizeof(pg_bits), (char*)&pg_bits);
 	off += sizeof(pg_bits);
-	//blist.copy(off, sizeof(mkfs), (char*)&mkfs);
-	//off += sizeof(mkfs);
 	
 	_decode(osds, blist, off);
 	_decode(down_osds, blist, off);

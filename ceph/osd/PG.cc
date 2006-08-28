@@ -74,10 +74,12 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   dout(10) << "merge_log " << olog << " from osd" << fromosd
 		   << " into " << log << endl;
 
+  /*
   cout << "log" << endl;
   log.print(cout);
   cout << "olog" << endl;
   olog.print(cout);
+  */
 
   if (log.empty() ||
 	  (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
@@ -113,7 +115,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	log.index();
 
 	dout(10) << "merge_log  result " << log << " " << missing << endl;
-	log.print(cout);
+	//log.print(cout);
 	dout(10) << "missing " << hex << missing.missing << dec << endl;
 	return;
   }
@@ -202,7 +204,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   }
   
   dout(10) << "merge_log  result " << log << " " << missing << endl;
-  log.print(cout);
+  //log.print(cout);
   dout(10) << "missing " << hex << missing.missing << dec << endl;
 }
 
@@ -251,7 +253,7 @@ void PG::generate_backlog()
 void PG::drop_backlog()
 {
   dout(10) << "drop_backlog for " << log << endl;
-  log.print(cout);
+  //log.print(cout);
 
   assert(log.backlog);
   log.backlog = false;
@@ -670,7 +672,7 @@ void PG::activate(ObjectStore::Transaction& t)
 	  dout(10) << "sending " << m->log << " " << m->missing
 			   << " to osd" << peer << endl;
 	  
-	  m->log.print(cout);
+	  //m->log.print(cout);
 	  
 	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
 	}

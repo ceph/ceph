@@ -432,7 +432,7 @@ void Monitor::send_full_map(msg_addr_t who)
 
 void Monitor::send_incremental_map(epoch_t since, msg_addr_t dest)
 {
-  dout(-10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
+  dout(5) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
 		   << " to " << dest << endl;
   
   MOSDMap *m = new MOSDMap;
@@ -442,10 +442,10 @@ void Monitor::send_incremental_map(epoch_t since, msg_addr_t dest)
 	   e--) {
 	bufferlist bl;
 	if (inc_maps.count(e)) {
-	  dout(-10) << "send_incremental_map    inc " << e << endl;
+	  dout(10) << "send_incremental_map    inc " << e << endl;
 	  m->incremental_maps[e] = inc_maps[e];
 	} else if (maps.count(e)) {
-	  dout(-10) << "send_incremental_map   full " << e << endl;
+	  dout(10) << "send_incremental_map   full " << e << endl;
 	  m->maps[e] = maps[e];
 	  //if (!full) break;
 	}

@@ -234,6 +234,7 @@ md_config_t g_conf = {
   bdev_el_bidir: true,          // bidirectional elevator?
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
   bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
+  bdev_fake_mb: 0,
   bdev_fake_max_mb:  0,
 
   // --- fakeclient (mds regression testing) (ancient history) ---
@@ -598,6 +599,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.bdev_iothreads = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 
 	  g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
+	else if (strcmp(args[i], "--bdev_fake_mb") == 0) 
+	  g_conf.bdev_fake_mb = atoi(args[++i]);
 	else if (strcmp(args[i], "--bdev_fake_max_mb") == 0) 
 	  g_conf.bdev_fake_max_mb = atoi(args[++i]);
 

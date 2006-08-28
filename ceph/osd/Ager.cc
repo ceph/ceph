@@ -23,9 +23,10 @@ ssize_t Ager::age_pick_size() {
 }
 
 void Ager::age_fill(float pc, utime_t until) {
-  static char buf[1024*1024];
+  int max = 1024*1024;
+  char *buf = new char[max];
   bufferlist bl;
-  bl.push_back(new buffer(buf, 1024*1024));
+  bl.push_back(new buffer(buf, max));
   while (1) {
 	if (g_clock.now() > until) break;
 	
@@ -49,13 +50,16 @@ void Ager::age_fill(float pc, utime_t until) {
 	
 	off_t off = 0;
 	while (s) {
-	  ssize_t t = MIN(s, 1024*1024);
-	  store->write(oid, off, t, bl, false);
+	  ssize_t t = MIN(s, max);
+	  bufferlist sbl;
+	  sbl.substr_of(bl, 0, t);
+	  store->write(oid, off, t, sbl, false);
 	  off += t;
 	  s -= t;
 	}
 	oid++;
   }
+  delete[] buf;
 }
 
 void Ager::age_empty(float pc) {
@@ -88,6 +92,16 @@ void Ager::age_empty(float pc) {
 	store->remove(oid);
 	age_free_oids.push_back(oid);
   }
+}
+
+void pfrag(ObjectStore::FragmentationStat &st)
+{
+  cout << st.num_free_extent << " free avg " << st.avg_free_extent;
+  for (__uint64_t i=1; i<=(1ULL<<29); i = i<<1) 
+	cout //<< "\t" << i
+	  << "\t" << st.free_extent_dist[i];
+  cout << endl;
+
 }
 
 
@@ -138,11 +152,18 @@ void Ager::age(int time,
   for (int i=0; i<10; i++)
 	age_objects[i].clear();
   
+  ObjectStore::FragmentationStat st;
+
   for (int c=1; c<=count; c++) {
 	if (g_clock.now() > until) break;
 	
 	dout(1) << "age " << c << "/" << count << " filling to " << high_water << endl;
 	age_fill(high_water, until);
+	store->sync();
+	store->_get_frag_stat(st);
+	pfrag(st);
+
+
 	if (c == count) {
 	  dout(1) << "age final empty to " << final_water << endl;
 	  age_empty(final_water);	
@@ -150,10 +171,15 @@ void Ager::age(int time,
 	  dout(1) << "age " << c << "/" << count << " emptying to " << low_water << endl;
 	  age_empty(low_water);
 	}
+	store->sync();
+	store->_get_frag_stat(st);
+	pfrag(st);
+
   }
   store->_fake_writes(false);
   store->sync();
   store->sync();
   dout(1) << "age finished" << endl;
 }  
+
 

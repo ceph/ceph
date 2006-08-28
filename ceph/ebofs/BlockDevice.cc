@@ -55,7 +55,7 @@ block_t BlockDevice::get_num_blocks()
 {
   if (!num_blocks) {
 	assert(fd > 0);
-	
+
 #ifdef BLKGETSIZE64
 	// ioctl block device?
 	ioctl(fd, BLKGETSIZE64, &num_blocks);
@@ -70,11 +70,16 @@ block_t BlockDevice::get_num_blocks()
 	
 	num_blocks /= (__uint64_t)EBOFS_BLOCK_SIZE;
 
+	if (g_conf.bdev_fake_mb) {
+	  num_blocks = g_conf.bdev_fake_mb * 256;
+	  dout(0) << "faking dev size " << g_conf.bdev_fake_mb << " mb" << endl;
+	}
 	if (g_conf.bdev_fake_max_mb &&
 		num_blocks > (block_t)g_conf.bdev_fake_max_mb * 256ULL) {
 	  dout(0) << "faking dev size " << g_conf.bdev_fake_max_mb << " mb" << endl;
 	  num_blocks = g_conf.bdev_fake_max_mb * 256;
 	}
+	
   }
   return num_blocks;
 }

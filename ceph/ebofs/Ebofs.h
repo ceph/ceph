@@ -272,7 +272,9 @@ class Ebofs : public ObjectStore {
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
   int collection_listattr(object_t oid, vector<string>& attrs);
   
+  // crap
   void _fake_writes(bool b) { fake_writes = b; }
+  void _get_frag_stat(FragmentationStat& st);
 
 private:
   // private interface -- use if caller already holds lock

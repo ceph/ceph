@@ -69,8 +69,23 @@ int main(int argc, char **argv)
   vector<char*> args;
   argv_to_vec(argc, argv, args);
 
-  parse_config_options(args);
+  map<int,int> kill_osd_after;
+  if (1) {
+	vector<char*> nargs;
+	for (unsigned i=0; i<args.size(); i++) {
+	  if (strcmp(args[i],"--kill_osd_after") == 0) {
+		int o = atoi(args[++i]);
+		int w = atoi(args[++i]);
+		kill_osd_after[o] = w;
+	  }
+	  else {
+		nargs.push_back( args[i] );
+	  }
+	}
+	args.swap(nargs);
+  }
 
+  parse_config_options(args);
   parse_syn_options(args);
 
   if (g_conf.kill_after) 
@@ -163,6 +178,10 @@ int main(int argc, char **argv)
 	} else {
 	  if (myrank != g_conf.ms_skip_rank0+NUMMDS + i) continue;
 	}
+
+	if (kill_osd_after.count(i))
+	  g_timer.add_event_after(kill_osd_after[i], new C_Die);
+
 	Messenger *m = rank.register_entity(MSG_ADDR_OSD(i));
 	cerr << "osd" << i << " on tcprank " << rank.my_rank <<  " " << hostname << "." << pid << endl;
 	osd[i] = new OSD(i, m);

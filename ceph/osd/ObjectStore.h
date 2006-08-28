@@ -40,6 +40,20 @@ using namespace std;
 class ObjectStore {
 public:
 
+
+  class FragmentationStat {
+  public:
+	int num_extent;
+	int avg_extent;
+	map<int,int> extent_dist;          // powers of two
+
+	int avg_extent_per_object;
+	int avg_extent_jump;  // avg distance bweteen consecutive extents
+
+	int num_free_extent;
+	int avg_free_extent;
+	map<int,int> free_extent_dist;     // powers of two
+  };
   
   
 
@@ -416,7 +430,10 @@ public:
   virtual void sync() {};
   
   virtual void _fake_writes(bool b) {};
+
+  virtual void _get_frag_stat(FragmentationStat& st) {};
   
 };
+
 
 #endif

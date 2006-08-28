@@ -92,18 +92,16 @@ messenger
 - osds: forget idle client addrs
 
 osd/rados
-- mark residual pgs obsolete
+- mark residual pgs obsolete  ***
 - deal with divergent disconnected primaries
 - rdlocks
 - pg_bit changes
-- be more careful about how incrementals are shared
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
 
-osdmonitor
-- osdmonitor needs to monitor some osds...
-- osdmon needs to send map to failure reporter
-- monitor pgs
+monitor
+- monitor needs to monitor some osds...
+- monitor pgs, notify on out
 - watch osd utilization; adjust overload in cluster map
 
 objecter

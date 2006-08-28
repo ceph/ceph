@@ -2704,3 +2704,51 @@ int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 }
 
 
+
+void Ebofs::_get_frag_stat(FragmentationStat& st)
+{
+  ebofs_lock.Lock();
+
+  // free list is easy
+  st.free_extent_dist.clear();
+  st.num_free_extent = 0;
+
+  __uint64_t tfree = 0;
+  for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
+	Table<block_t,block_t> *tab;
+	if (b < EBOFS_NUM_FREE_BUCKETS) {
+	  tab = free_tab[b];
+	  dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
+	} else {
+	  tab = limbo_tab;
+	  dout(30) << "dump limbo  " << tab->get_num_keys() << endl;;
+	}
+	
+	if (tab->get_num_keys() > 0) {
+	  Table<block_t,block_t>::Cursor cursor(tab);
+	  assert(tab->find(0, cursor) >= 0);
+	  while (1) {
+		assert(cursor.current().value > 0);
+		
+		block_t l = cursor.current().value;
+		tfree += l;
+		int b = 0;
+		do {
+		  l = l >> 1;
+		  b++;
+		} while (l);
+		st.free_extent_dist[b]++;
+		st.num_free_extent++;
+
+		if (cursor.move_right() <= 0) break;
+	  }
+	}
+  }
+  st.avg_free_extent = tfree / st.num_free_extent;
+
+
+  // used extents is harder.  :(
+  // let's skip it for now!
+
+  ebofs_lock.Unlock();
+}
