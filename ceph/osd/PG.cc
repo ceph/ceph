@@ -74,12 +74,10 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   dout(10) << "merge_log " << olog << " from osd" << fromosd
 		   << " into " << log << endl;
 
-  /*
   cout << "log" << endl;
   log.print(cout);
   cout << "olog" << endl;
   olog.print(cout);
-  */
 
   if (log.empty() ||
 	  (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
@@ -88,20 +86,14 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	for (list<Log::Entry>::reverse_iterator p = olog.log.rbegin();
 		 p != olog.log.rend();
 		 p++) {
-	  if (p->version <= log.top) break;
+	  if (p->version <= log.top) 
+		break;
 	  if (did.count(p->oid)) continue;
 	  did.insert(p->oid);
 	  if (p->is_delete()) {
 		missing.rm(p->oid, p->version);
 	  } else {
 		missing.add(p->oid, p->version);
-		
-		// does other guy have it?  .. FIXME ..
-		if (omissing.is_missing(p->oid)) {
-		  if (omissing.loc.count(p->oid))
-			missing.loc[p->oid] = omissing.loc[p->oid];
-		} else
-		  missing.loc[p->oid] = fromosd;
 	  }
 	}
 	
@@ -113,99 +105,108 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	info.log_backlog = log.backlog = olog.backlog;
 	
 	log.index();
+  } 
 
-	dout(10) << "merge_log  result " << log << " " << missing << endl;
-	//log.print(cout);
-	dout(10) << "missing " << hex << missing.missing << dec << endl;
-	return;
-  }
+  else {
+	// i can merge the two logs!
 
-  // extend on bottom?
-  // FIXME: what if we have backlog, but they have lower bottom?
-  if (olog.bottom < log.bottom && olog.top >= log.bottom && !log.backlog) {
-	dout(10) << "merge_log  extending bottom to " << olog.bottom
-			 << (olog.backlog ? " +backlog":"")
+	// extend on bottom?
+	// FIXME: what if we have backlog, but they have lower bottom?
+	if (olog.bottom < log.bottom && olog.top >= log.bottom && !log.backlog) {
+	  dout(10) << "merge_log extending bottom to " << olog.bottom
+			   << (olog.backlog ? " +backlog":"")
 			 << endl;
-	
-	// ok
-	list<Log::Entry>::iterator from = olog.log.begin();
-	list<Log::Entry>::iterator to;
-	for (to = from;
-		 to != olog.log.end();
-		 to++) {
-	  if (to->version > log.bottom) break;
 	  
-	  // update our index while we're here
-	  log.index(*to);
-
-	  // new missing object?
-	  if (to->version > info.last_complete) {
-		if (to->is_update()) 
-		  missing.add(to->oid, to->version);
-		else 
+	// ok
+	  list<Log::Entry>::iterator from = olog.log.begin();
+	  list<Log::Entry>::iterator to;
+	  for (to = from;
+		   to != olog.log.end();
+		   to++) {
+		if (to->version > log.bottom) break;
+		
+		// update our index while we're here
+		log.index(*to);
+		
+		dout(15) << *to << endl;
+		
+		// new missing object?
+		if (to->version > info.last_complete) {
+		  if (to->is_update()) 
+			missing.add(to->oid, to->version);
+		  else 
 		  missing.rm(to->oid, to->version);
+		}
 	  }
-
-	  if (to->is_update() &&
-		  missing.is_missing(to->oid, to->version)) {
-		// does other guy have it?
-		if (omissing.is_missing(to->oid, to->version)) {
-		  if (omissing.loc.count(to->oid))
-			missing.loc[to->oid] = omissing.loc[to->oid];
-		} else
-		  missing.loc[to->oid] = fromosd;
-	  }
-	}
-	assert(to != olog.log.end());
-
-	// splice into our log.
-	log.log.splice(log.log.begin(),
-				   olog.log, from, to);
-	
-	info.log_bottom = log.bottom = olog.bottom;
-	info.log_backlog = log.backlog = olog.backlog;
-  }
-
-  // extend on top?
-  if (olog.top > log.top &&
-	  olog.bottom <= log.top) {
-	dout(10) << "merge_log  extending top to " << olog.top << endl;
-
-	list<Log::Entry>::iterator to = olog.log.end();
-	list<Log::Entry>::iterator from = olog.log.end();
-	while (1) {
-	  if (from == olog.log.begin()) break;
-	  from--;
-	  if (from->version < log.top) {
-		from++;
-		break;
-	  }
-	  log.index(*from);
-
-	  // add to missing
-	  if (from->is_update()) {
-		missing.add(from->oid, from->version);
-
-		// found?
-		if (omissing.is_missing(from->oid, from->version)) {
-		  if (omissing.loc.count(from->oid))
-			missing.loc[from->oid] = omissing.loc[from->oid];
-		} else
-		  missing.loc[from->oid] = fromosd;
-	  } else
-		missing.rm(from->oid, from->version);
+	  assert(to != olog.log.end());
+	  
+	  // splice into our log.
+	  log.log.splice(log.log.begin(),
+					 olog.log, from, to);
+	  
+	  info.log_bottom = log.bottom = olog.bottom;
+	  info.log_backlog = log.backlog = olog.backlog;
 	}
 	
-	// splice
-	log.log.splice(log.log.end(), 
-				   olog.log, from, to);
-	
-	info.last_update = log.top = olog.top;
+	// extend on top?
+	if (olog.top > log.top &&
+		olog.bottom <= log.top) {
+	  dout(10) << "merge_log extending top to " << olog.top << endl;
+	  
+	  list<Log::Entry>::iterator to = olog.log.end();
+	  list<Log::Entry>::iterator from = olog.log.end();
+	  while (1) {
+		if (from == olog.log.begin()) break;
+		from--;
+		dout(0) << "? " << *from << endl;
+		if (from->version < log.top) {
+		  from++;
+		  break;
+		}
+		
+		log.index(*from);
+		dout(10) << "merge_log " << *from << endl;
+		
+		// add to missing
+		if (from->is_update()) {
+		  missing.add(from->oid, from->version);
+		} else
+		  missing.rm(from->oid, from->version);
+	  }
+	  
+	  // splice
+	  log.log.splice(log.log.end(), 
+					 olog.log, from, to);
+	  
+	  info.last_update = log.top = olog.top;
+	}
   }
   
-  dout(10) << "merge_log  result " << log << " " << missing << endl;
-  //log.print(cout);
-  dout(10) << "missing " << hex << missing.missing << dec << endl;
+  dout(10) << "merge_log result " << log << " " << missing << endl;
+  log.print(cout);
+
+  // found items?
+  for (map<object_t,eversion_t>::iterator p = missing.missing.begin();
+	   p != missing.missing.end();
+	   p++) {
+	if (omissing.is_missing(p->first)) {
+	  assert(omissing.is_missing(p->first, p->second));
+	  if (omissing.loc.count(p->first)) {
+		dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
+				 << " on osd" << omissing.loc[p->first] << endl;
+		missing.loc[p->first] = omissing.loc[p->first];
+	  } else {
+		dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
+				 << " also LOST on source, osd" << fromosd << endl;
+	  }
+	} else {
+	  dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
+			   << " on source, osd" << fromosd << endl;
+	  missing.loc[p->first] = fromosd;
+	}
+  }
+
+  dout(10) << "merge_log missing " << hex << missing.missing << dec << endl;
 }
 
 
@@ -238,8 +239,8 @@ void PG::generate_backlog()
 	add[e.version] = e;
   }
 
-  for (map<eversion_t,Log::Entry>::iterator i = add.begin();
-	   i != add.end();
+  for (map<eversion_t,Log::Entry>::reverse_iterator i = add.rbegin();
+	   i != add.rend();
 	   i++) {
 	log.log.push_front(i->second);
 	log.index( *log.log.begin() );	// index
@@ -271,17 +272,14 @@ void PG::drop_backlog()
 
 
 
+
 ostream& PG::Log::print(ostream& out) const 
 {
   out << *this << endl;
   for (list<Entry>::const_iterator p = log.begin();
 	   p != log.end();
 	   p++) 
-	out << " " << p->version 
-		<< (p->is_update() ? "   ":" - ")
-		<< hex << p->oid << dec 
-		<< " by " << p->reqid
-		<< endl;
+	out << *p << endl;
   return out;
 }
 
@@ -611,7 +609,7 @@ void PG::activate(ObjectStore::Transaction& t)
 	}
 
 	// start recovery
-	log.requested_to = log.log.begin();
+	log.requested_to = log.complete_to;
     do_recovery();
   }
 
@@ -816,7 +814,12 @@ bool PG::do_recovery()
 	log.requested_to++;
   }
 
-  // done!
+  if (!objects_pulling.empty()) {
+	dout(7) << "do_recovery requested everything, still waiting" << endl;
+	return false;
+  }
+
+  // done?
   assert(missing.num_missing() == 0);
   assert(info.last_complete == info.last_update);
   

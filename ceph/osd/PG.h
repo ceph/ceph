@@ -538,6 +538,14 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
 			 << ")";
 }
 
+inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
+{
+  return out << " " << e.version 
+			 << (e.is_update() ? "   ":" - ")
+			 << hex << e.oid << dec 
+			 << " by " << e.reqid;
+}
+
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
 {
   out << "log(" << log.bottom << "," << log.top << "]";

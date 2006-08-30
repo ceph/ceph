@@ -870,6 +870,8 @@ void OSD::wait_for_new_map(Message *m)
  */
 void OSD::handle_osd_map(MOSDMap *m)
 {
+  wait_for_no_ops();
+  
   ObjectStore::Transaction t;
   
   if (osdmap) {
