@@ -1697,6 +1697,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 		dout(10) << *pg << " osd" << from << " now clean (" << pg->clean_set  
 				 << "): " << *it << endl;
 		if (pg->is_all_clean()) {
+		  dout(-10) << *pg << " now clean on all replicas" << endl;
 		  pg->state_set(PG::STATE_CLEAN);
 		  pg->clean_replicas();
 		}

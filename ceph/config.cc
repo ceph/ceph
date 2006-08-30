@@ -104,7 +104,7 @@ md_config_t g_conf = {
 
   // --- mon ---
   mon_tick_interval: 5,
-  mon_osd_down_out_interval: 10,  // seconds
+  mon_osd_down_out_interval: 20,  // seconds
 
   // --- client ---
   client_cache_size: 300,

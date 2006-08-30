@@ -935,15 +935,15 @@ Rank::Sender *Rank::connect_rank(entity_inst_t& inst)
 
 void Rank::show_dir()
 {
-  dout(-10) << "show_dir ---" << endl;
+  dout(10) << "show_dir ---" << endl;
   
   for (hash_map<msg_addr_t, entity_inst_t>::iterator i = entity_map.begin();
 	   i != entity_map.end();
 	   i++) {
 	if (local.count(i->first)) {
-	  dout(-10) << "show_dir entity_map " << i->first << " -> " << i->second << " local " << endl;
+	  dout(10) << "show_dir entity_map " << i->first << " -> " << i->second << " local " << endl;
 	} else {
-	  dout(-10) << "show_dir entity_map " << i->first << " -> " << i->second << endl;
+	  dout(10) << "show_dir entity_map " << i->first << " -> " << i->second << endl;
 	}
   }
 }
@@ -1498,24 +1498,24 @@ void Rank::mark_down(msg_addr_t a, entity_inst_t& inst)
   if (down.count(a) == 0) {
 	if (entity_map.count(a) &&
 		entity_map[a] > inst) {
-	  dout(-10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
-	  derr(-10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
+	  dout(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
+	  derr(10) << "mark_down " << a << " inst " << inst << " < " << entity_map[a] << endl;
 	  // do nothing!
 	} else {
 	  down.insert(a);
 
 	  if (entity_map.count(a) == 0) {
 		// don't know it
-		dout(-10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
-		derr(-10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
+		dout(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
+		derr(10) << "mark_down " << a << " inst " << inst << " ... unknown by me" << endl;
 
 		waiting_for_lookup.erase(a);
 		looking_up.erase(a);
 	  } else {
 		// know it
 		assert(entity_map[a] <= inst);
-		dout(-10) << "mark_down " << a << " inst " << inst << endl;
-		derr(-10) << "mark_down " << a << " inst " << inst << endl;
+		dout(10) << "mark_down " << a << " inst " << inst << endl;
+		derr(10) << "mark_down " << a << " inst " << inst << endl;
 		
 		entity_map.erase(a);
 		
