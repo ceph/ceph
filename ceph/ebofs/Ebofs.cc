@@ -783,6 +783,8 @@ void Ebofs::remove_onode(Onode *on)
 
   if (on->get_ref_count() > 1) cout << "remove_onode **** will survive " << *on << endl;
   put_onode(on);
+
+  dirty = true;
 }
 
 void Ebofs::put_onode(Onode *on)
@@ -810,9 +812,8 @@ void Ebofs::trim_inodes(int max)
   unsigned omax = onode_lru.lru_get_max();
   unsigned cmax = cnode_lru.lru_get_max();
   if (max >= 0) omax = cmax = max;
-  dout(10) << "trim_inodes start " 
-		   << onode_lru.lru_get_size() << " / " << omax << " onodes, " 
-		   << cnode_lru.lru_get_size() << " / " << cmax << " cnodes" << endl;
+  dout(10) << "trim_inodes start " << onode_lru.lru_get_size() << " / " << omax << " onodes, " 
+			<< cnode_lru.lru_get_size() << " / " << cmax << " cnodes" << endl;
 
   // onodes
   while (onode_lru.lru_get_size() > omax) {
@@ -825,12 +826,12 @@ void Ebofs::trim_inodes(int max)
 	onode_map.erase(on->object_id);
 	on->dangling = true;
 
-	assert(on->oc == 0);   // an open oc pins the onode!
-
 	if (on->get_ref_count() == 0) {
+	  assert(on->oc == 0);   // an open oc pins the onode!
 	  delete on;
 	} else {
-	  dout(20) << "trim_inodes   still active: " << *on << endl;
+	  dout(-20) << "trim_inodes   still active: " << *on << endl;
+	  assert(0); // huh?
 	}
   }
 
@@ -1028,6 +1029,8 @@ void Ebofs::remove_cnode(Cnode *cn)
   // hose.
   cnode_lru.lru_remove(cn);
   delete cn;
+
+  dirty = true;
 }
 
 void Ebofs::put_cnode(Cnode *cn)
@@ -1137,7 +1140,6 @@ void Ebofs::trim_bc(off_t max)
 	  Onode *on = oc->on;
 	  dout(10) << "trim_bc  closing oc on " << *on << endl;
 	  on->close_oc();
-	  put_onode(on);
 	}
   }
 
@@ -1166,17 +1168,17 @@ void Ebofs::sync()
 {
   ebofs_lock.Lock();
   if (!dirty) {
-	dout(0) << "sync in " << super_epoch << ", not dirty" << endl;
+	dout(7) << "sync in " << super_epoch << ", not dirty" << endl;
   } else {
-	dout(0) << "sync in " << super_epoch << endl;
+	dout(7) << "sync in " << super_epoch << endl;
 	
 	if (!commit_thread_started) {
-	  dout(0) << "sync waiting for commit thread to start" << endl;
+	  dout(10) << "sync waiting for commit thread to start" << endl;
 	  sync_cond.Wait(ebofs_lock);
 	}
 	
 	if (mid_commit) {
-	  dout(0) << "sync waiting for commit in progress" << endl;
+	  dout(10) << "sync waiting for commit in progress" << endl;
 	  sync_cond.Wait(ebofs_lock);
 	}
 	
@@ -1184,7 +1186,7 @@ void Ebofs::sync()
 	
 	sync_cond.Wait(ebofs_lock);  // wait
 	
-	dout(0) << "sync finish in " << super_epoch << endl;
+	dout(10) << "sync finish in " << super_epoch << endl;
   }
   ebofs_lock.Unlock();
 }
@@ -2734,8 +2736,8 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
 		tfree += l;
 		int b = 0;
 		do {
-		  l = l >> 1;
-		  b++;
+		  l = l >> 2;
+		  b++; b++;
 		} while (l);
 		st.free_extent_dist[b]++;
 		st.num_free_extent++;
@@ -2748,7 +2750,48 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
 
 
   // used extents is harder.  :(
-  // let's skip it for now!
+  st.num_extent = 0;
+  st.avg_extent = 0;
+  st.extent_dist.clear();
+  st.avg_extent_per_object = 0;
+  st.avg_extent_jump = 0;
+
+  Table<object_t,Extent>::Cursor cursor(object_tab);
+  object_tab->find(0, cursor);
+  int nobj = 0;
+  int njump = 0;
+  while (1) {
+	Onode *on = get_onode(cursor.current().key);
+	assert(on);
+
+	nobj++;	
+	st.avg_extent_per_object += on->extent_map.size();
+
+	for (map<block_t,Extent>::iterator p = on->extent_map.begin();
+		 p != on->extent_map.end();
+		 p++) {
+	  block_t l = p->second.length;
+
+	  st.num_extent++;
+	  st.avg_extent += l;
+	  if (p->first > 0) {
+		njump++;
+		st.avg_extent_jump += l;
+	  }
+
+	  int b = 0;
+	  do {
+		l = l >> 2;
+		b++; b++;
+	  } while (l);
+	  st.extent_dist[b]++;
+	}
+	put_onode(on);
+	if (cursor.move_right() <= 0) break;
+  }
+  if (njump) st.avg_extent_jump /= njump;
+  if (nobj) st.avg_extent_per_object /= (float)nobj;
+  if (st.num_extent) st.avg_extent /= st.num_extent;
 
   ebofs_lock.Unlock();
 }
