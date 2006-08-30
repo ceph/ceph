@@ -47,7 +47,7 @@ public:
 	int avg_extent;
 	map<int,int> extent_dist;          // powers of two
 
-	int avg_extent_per_object;
+	float avg_extent_per_object;
 	int avg_extent_jump;  // avg distance bweteen consecutive extents
 
 	int num_free_extent;
