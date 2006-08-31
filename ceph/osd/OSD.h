@@ -99,8 +99,6 @@ public:
 
   class Logger      *logger;
 
-  int max_recovery_ops;
-
   // local store
   char dev_path[100];
   class ObjectStore *store;
@@ -218,6 +216,7 @@ public:
 
 
   tid_t               last_tid;
+  int                 num_pulling;
 
   hash_map<pg_t, list<Message*> >        waiting_for_pg;
 

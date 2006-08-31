@@ -169,6 +169,7 @@ namespace crush {
 	  if (items.empty())
 		item_weight = w;
 	  items.push_back(item);
+	  weight += item_weight;
 	  make_primes();
 	}
 

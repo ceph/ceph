@@ -4,30 +4,25 @@
 {
 	'sleep' => 3,
 
-	'nummds' => 1,
-	'numosd' => [16,
-				 32,
-				 64,
-				 128,
-#				 256,
-#				 1024,
-#				 4096,
-#				 16384,
-#				 65536,
-#				 256*256
-				 ],
-	'numclient' => 0,
-	'n' => 6,
+	'osdbits' => [6,8,10],
+	'pgperbits' => [4,6,8],
 
-	'fs' => ['ebofs'],
+	'nummds' => 1,
+
+	'_dep' => [ 'numosd' => '1 << $osdbits',
+				'pg_bits' => '$pgperbits + $osdbits',
+				'n' => '10 + $numosd / 32'],
+	'numclient' => 0,
+
+	'fs' => 'ebofs',
 
 	'start' => 30,
 	'end' => 180,
 	'kill_after' => 180,
 	
-	'osd_pg_bits' => [10, 14, 18],
+	'osd_pg_bits' => [18],
 
-	'custom' => '--bdev_lock 0 --ms_stripe_osds',
+	'custom' => '--bdev_lock 0 --ms_stripe_osds --fake_osdmap_updates 1 --osd_maxthreads 0',
 	#'custom' => '--tcp_skip_rank0',
 
 	'comb' => {

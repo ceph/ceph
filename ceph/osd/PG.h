@@ -458,6 +458,7 @@ public:
 
   void activate(ObjectStore::Transaction& t);
 
+  void cancel_recovery();
   bool do_recovery();
 
   void clean_replicas();

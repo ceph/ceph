@@ -104,6 +104,7 @@ void Monitor::init()
 
   // <HACK set up OSDMap from g_conf>
   osdmap = new OSDMap();
+  osdmap->ctime = g_clock.now();
   osdmap->set_pg_bits(g_conf.osd_pg_bits);
 
   // start at epoch 0 until all osds boot
@@ -113,17 +114,63 @@ void Monitor::init()
 
   //if (g_conf.mkfs) osdmap->set_mkfs();
 
-  Bucket *b = new UniformBucket(1, 0);
-  int root = osdmap->crush.add_bucket(b);
-  for (int i=0; i<g_conf.num_osd; i++) {
-	osdmap->osds.insert(i);
-	b->add_item(i, 1);
-  }
-  
-  for (int i=1; i<5; i++) {
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+  if (g_conf.num_osd >= 12) {
+	int ndom = g_conf.osd_max_rep;
+	UniformBucket *domain[ndom];
+	int domid[ndom];
+	for (int i=0; i<ndom; i++) {
+	  domain[i] = new UniformBucket(1, 0);
+	  domid[i] = osdmap->crush.add_bucket(domain[i]);
+	}
+
+	// add osds
+	int nper = ((g_conf.num_osd - 1) / ndom) + 1;
+	cerr << ndom << " failure domains, " << nper << " osds each" << endl;
+	int i = 0;
+	for (int dom=0; dom<ndom; dom++) {
+	  for (int j=0; j<nper; j++) {
+		osdmap->osds.insert(i);
+		domain[dom]->add_item(i, 1.0);
+		//cerr << "osd" << i << " in domain " << dom << endl;
+		i++;
+		if (i == g_conf.num_osd) break;
+	  }
+	}
+
+	// root
+	Bucket *root = new ListBucket(2);
+	for (int i=0; i<ndom; i++) {
+	  //cerr << "dom " << i << " w " << domain[i]->get_weight() << endl;
+	  root->add_item(domid[i], domain[i]->get_weight());
+	}
+	int nroot = osdmap->crush.add_bucket(root);	
+
+	// rules
+	for (int i=1; i<=ndom; i++) {
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 1));
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));	  
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+	}
+
+	// test
+	vector<int> out;
+	osdmap->pg_to_osds(0x40200000110ULL, out);
+
+  } else {
+	// one bucket
+	Bucket *b = new UniformBucket(1, 0);
+	int root = osdmap->crush.add_bucket(b);
+	for (int i=0; i<g_conf.num_osd; i++) {
+	  osdmap->osds.insert(i);
+	  b->add_item(i, 1.0);
+	}
+	
+	for (int i=1; i<=g_conf.osd_max_rep; i++) {
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
+	  osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+	}
   }
 
   if (g_conf.mds_local_osd) {
@@ -371,6 +418,7 @@ void Monitor::accept_pending()
   dout(-10) << "accept_pending " << osdmap->get_epoch() << " -> " << pending.epoch << endl;
 
   // accept pending into a new map!
+  pending.ctime = g_clock.now();
   pending.encode( inc_maps[ pending.epoch ] );
   
   // advance!
@@ -515,7 +563,12 @@ void Monitor::tick()
 		 i++) {
 	  pending_out.erase(*i);
 	  pending.new_out.push_back( *i );
+	}
+	if (!mark_out.empty()) {
 	  accept_pending();
+
+	  // hrmpf.  bcast map for now.  FIXME FIXME.
+	  bcast_latest_osd_map_osd();
 	}
 	
 	// next!

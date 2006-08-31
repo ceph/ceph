@@ -142,6 +142,8 @@ void Logger::flush(bool force)
   }
 
   utime_t fromstart = g_clock.recent_now();
+  if (fromstart < start) 
+	start = fromstart;
   fromstart -= start;
 
   while (force ||

@@ -113,8 +113,8 @@ OSD::OSD(int id, Messenger *m, char *dev)
   boot_epoch = 0;
 
   last_tid = 0;
+  num_pulling = 0;
 
-  max_recovery_ops = 5;
 
   pending_ops = 0;
   waiting_for_no_ops = false;
@@ -248,7 +248,6 @@ int OSD::init()
 	osd_logtype.add_inc("r_wr");
 	osd_logtype.add_inc("r_wrb");
 	
-	osd_logtype.add_inc("rlsum");
 	osd_logtype.add_inc("rlnum");
 
 	osd_logtype.add_set("numpg");
@@ -1050,6 +1049,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	dout(1) << "mkfs" << endl;
 	assert(osdmap->get_epoch() == 1);
 
+	//cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << endl;
+	logger->set_start( osdmap->get_ctime() );
+
 	ps_t maxps = 1LL << osdmap->get_pg_bits();
 	
 	// create PGs
@@ -1130,10 +1132,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  // did primary change?
 	  if (oldprimary != primary) {
 		pg->info.same_primary_since = osdmap->get_epoch();
-
-		// forget about where missing items are, or anything we're pulling
-		pg->missing.loc.clear();
-		pg->objects_pulling.clear();
+		pg->cancel_recovery();
 	  }
 	  
 	  if (role != oldrole) {
@@ -1984,6 +1983,7 @@ void OSD::pull(PG *pg, object_t oid, eversion_t v)
   
   // take note
   assert(pg->objects_pulling.count(oid) == 0);
+  num_pulling++;
   pg->objects_pulling[oid] = v;
 }
 
@@ -1994,8 +1994,6 @@ void OSD::pull(PG *pg, object_t oid, eversion_t v)
  */
 void OSD::op_rep_pull(MOSDOp *op, PG *pg)
 {
-  long got = 0;
-  
   const object_t oid = op->get_oid();
 
   dout(7) << "rep_pull on " << hex << oid << dec << " v >= " << op->get_version() << endl;
@@ -2028,6 +2026,9 @@ void OSD::op_rep_pull(MOSDOp *op, PG *pg)
 		  << " in " << *pg
 		  << endl;
   assert(v >= op->get_version());
+
+  logger->inc("r_pull");
+  logger->inc("r_pullb", bl.length());
   
   // reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), true); 
@@ -2041,9 +2042,6 @@ void OSD::op_rep_pull(MOSDOp *op, PG *pg)
   messenger->send_message(reply, op->get_asker());
   
   delete op;
-
-  logger->inc("r_pull");
-  logger->inc("r_pullb", got);
 }
 
 
@@ -2086,6 +2084,7 @@ void OSD::op_rep_pull_reply(MOSDOpReply *op)
   t.collection_add(pgid, oid);
 
   // close out pull op.
+  num_pulling--;
   pg->objects_pulling.erase(oid);
   pg->missing.got(oid, v);
 
@@ -2237,6 +2236,9 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 	prepare_op_transaction(t, op, nv, pg);
 	oncommit = new C_OSD_RepModifyCommit(this, op,
 										 pg->info.last_complete);
+
+	logger->inc("r_wr");
+	logger->inc("r_wrb", op->get_length());
   }
 
   // go

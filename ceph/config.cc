@@ -104,7 +104,7 @@ md_config_t g_conf = {
 
   // --- mon ---
   mon_tick_interval: 5,
-  mon_osd_down_out_interval: 20,  // seconds
+  mon_osd_down_out_interval: 15,  // seconds
 
   // --- client ---
   client_cache_size: 300,
@@ -188,6 +188,7 @@ md_config_t g_conf = {
   osd_age_time: 0,
   osd_heartbeat_interval: 10,
   osd_replay_window: 15,
+  osd_max_pull: 2,
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
@@ -199,8 +200,8 @@ md_config_t g_conf = {
 
   // --- ebofs ---
   ebofs: 1,
-  ebofs_commit_ms:      10000,      // 0 = no forced commit timeout (for debugging/tracing)
-  ebofs_idle_commit_ms: 100,//100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
+  ebofs_commit_ms:      2000,       // 0 = no forced commit timeout (for debugging/tracing)
+  ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB
@@ -589,6 +590,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.osd_max_rep = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_maxthreads") == 0) 
 	  g_conf.osd_maxthreads = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_max_pull") == 0) 
+	  g_conf.osd_max_pull = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--bdev_lock") == 0) 

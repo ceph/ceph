@@ -58,6 +58,7 @@ class Logger {
   Logger(string fn, LogType *type);
   ~Logger();
 
+  void set_start(const utime_t& a) { start = a; }
   utime_t& get_start() { return start; }
 
   long inc(const char *s, long v = 1);
@@ -66,7 +67,7 @@ class Logger {
 
   double fset(const char *s, double v);
   double finc(const char *s, double v);
-  
+
   void flush(bool force = false);
 };
 

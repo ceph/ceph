@@ -120,6 +120,8 @@ private:
   int get_pg_bits() const { return pg_bits; }
   void set_pg_bits(int b) { pg_bits = b; }
 
+  const utime_t& get_ctime() const { return ctime; }
+
   bool is_mkfs() const { return epoch == 1; }
   //void set_mkfs() { assert(epoch == 1); }
 

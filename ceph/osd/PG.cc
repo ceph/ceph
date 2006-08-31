@@ -74,11 +74,11 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   dout(10) << "merge_log " << olog << " from osd" << fromosd
 		   << " into " << log << endl;
 
-  cout << "log" << endl;
+  /*cout << "log" << endl;
   log.print(cout);
   cout << "olog" << endl;
   olog.print(cout);
-
+  */
   if (log.empty() ||
 	  (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
 	// i'm missing everything after old log.top.
@@ -183,7 +183,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   }
   
   dout(10) << "merge_log result " << log << " " << missing << endl;
-  log.print(cout);
+  //log.print(cout);
 
   // found items?
   for (map<object_t,eversion_t>::iterator p = missing.missing.begin();
@@ -783,13 +783,30 @@ void PG::clean_up_local(ObjectStore::Transaction& t)
 }
 
 
+
+void PG::cancel_recovery()
+{
+  // forget about where missing items are, or anything we're pulling
+  missing.loc.clear();
+  osd->num_pulling -= objects_pulling.size();
+  objects_pulling.clear();
+}
+
 /**
  * do one recovery op.
  * return true if done, false if nothing left to do.
  */
 bool PG::do_recovery()
 {
-  dout(10) << "do_recovery" << endl;
+  dout(-10) << "do_recovery pulling " << objects_pulling.size() << " in pg, "
+		   << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
+		   << endl;
+
+  // can we slow down on this PG?
+  if (osd->num_pulling >= g_conf.osd_max_pull && !objects_pulling.empty()) {
+	dout(-10) << "do_recovery already pulling max, waiting" << endl;
+	return true;
+  }
 
   // look at log!
   Log::Entry *latest = 0;
