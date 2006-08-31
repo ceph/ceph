@@ -83,7 +83,7 @@ for my $f (@filt) {
 		
 		for my $v (@vars) {
 			my ($what, $field) = $v =~ /^(.+)\.([^\.]+)$/;
-			#print "$what $field .. $v\n";
+			#print "$what $field .. $v  .. $f.$field\n";
 			my $s = &load_sum("$d/sum.$what");
 			
 			#print "\t$v";
@@ -94,6 +94,7 @@ for my $f (@filt) {
 				#warn "avg field $field\n";
 				push( @{$res{$x}}, $s->{'avgval'}->{$field} );
 			}
+
 			push( @key, "$f.$field" ) unless $didkey{"$f.$field"};
 			$didkey{"$f.$field"} = 1;
 

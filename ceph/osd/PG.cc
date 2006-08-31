@@ -813,9 +813,8 @@ bool PG::do_recovery()
 
   while (log.requested_to != log.log.end()) {
 	dout(10) << "do_recovery "
-			 << log.requested_to->version
-			 << (log.requested_to->is_update() ? " update":" delete")
-			 << " " << hex << log.requested_to->oid << dec 
+			 << *log.requested_to
+			 << (objects_pulling.count(latest->oid) ? " (pulling)":"")
 			 << endl;
 
 	assert(log.objects.count(log.requested_to->oid));
@@ -842,6 +841,7 @@ bool PG::do_recovery()
   
   if (is_primary()) {
 	// i am primary
+	dout(7) << "do_recovery complete, cleaning strays" << endl;
 	clean_set.insert(osd->whoami);
 	if (is_all_clean()) {
 	  state_set(PG::STATE_CLEAN);

@@ -501,17 +501,20 @@ void OSD::heartbeat()
 
   // hack: fake reorg?
   if (osdmap && g_conf.fake_osdmap_updates) {
-	if ((rand() % (2*g_conf.num_osd)) == whoami) {
+	if ((rand() % (g_conf.num_osd / g_conf.fake_osdmap_updates)) == whoami / g_conf.fake_osdmap_updates) {
+	  messenger->send_message(new MOSDIn(osdmap->get_epoch()),
+							  MSG_ADDR_MON(0));
+	}
+	/*
 	  if (osdmap->is_out(whoami)) {
 		messenger->send_message(new MOSDIn(osdmap->get_epoch()),
 								MSG_ADDR_MON(0));
 	  } 
 	  else if ((rand() % g_conf.fake_osdmap_updates) == 0) {
 		//messenger->send_message(new MOSDOut(osdmap->get_epoch()),
-		messenger->send_message(new MOSDIn(osdmap->get_epoch()),
-								MSG_ADDR_MON(0));
 	  }
 	}
+	*/
   }
 
   // schedule next!
