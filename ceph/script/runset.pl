@@ -212,6 +212,7 @@ sub run {
 			   'mds_cache_size','mds_log_max_len',
 			   'mds_local_osd',
 			   'osd_age_time','osd_age',
+			   'osd_rep',
 			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'client_oc',
