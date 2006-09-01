@@ -52,6 +52,7 @@ protected:
 
   void dump_freelist();
 
+ public:
   int _release_loner(Extent& ex);  // release loner extent
   int _release_merge(Extent& ex);  // release any extent (searches for adjacent)
 

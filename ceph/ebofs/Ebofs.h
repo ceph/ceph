@@ -276,6 +276,10 @@ class Ebofs : public ObjectStore {
   void _fake_writes(bool b) { fake_writes = b; }
   void _get_frag_stat(FragmentationStat& st);
 
+  void _import_freelist(bufferlist& bl);
+  void _export_freelist(bufferlist& bl);
+
+
 private:
   // private interface -- use if caller already holds lock
   int _read(object_t oid, off_t off, size_t len, bufferlist& bl);

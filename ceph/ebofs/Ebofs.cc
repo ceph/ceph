@@ -2707,6 +2707,47 @@ int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 
 
 
+void Ebofs::_export_freelist(bufferlist& bl)
+{
+  for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
+	Table<block_t,block_t> *tab;
+	if (b < EBOFS_NUM_FREE_BUCKETS) {
+	  tab = free_tab[b];
+	} else {
+	  tab = limbo_tab;
+	}
+	
+	if (tab->get_num_keys() > 0) {
+	  Table<block_t,block_t>::Cursor cursor(tab);
+	  assert(tab->find(0, cursor) >= 0);
+	  while (1) {
+		assert(cursor.current().value > 0);
+		
+		Extent ex(cursor.current().key, cursor.current().value);
+		dout(0) << "_export_freelist " << ex << endl;
+		bl.append((char*)&ex, sizeof(ex));
+		if (cursor.move_right() <= 0) break;
+	  }
+	}
+  }
+}
+
+void Ebofs::_import_freelist(bufferlist& bl)
+{
+  // clear
+  for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) 
+	free_tab[b]->clear();
+  limbo_tab->clear();
+
+  // import!
+  int num = bl.length() / sizeof(Extent);
+  Extent *p = (Extent*)bl.c_str();
+  for (int i=0; i<num; i++) {
+	dout(0) << "_import_freelist " << p[i] << endl;
+	allocator._release_loner(p[i]);
+  }
+}
+
 void Ebofs::_get_frag_stat(FragmentationStat& st)
 {
   ebofs_lock.Lock();
