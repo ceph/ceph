@@ -529,6 +529,7 @@ class Table {
 		  // indices are already dirty
 		  cursor.open[cursor.level].insert_at_index_pos(cursor.pos[cursor.level], key, nodevalue);
 		}
+		verify("insert 1");
 		return 0;
 	  }
 	  
@@ -536,6 +537,7 @@ class Table {
 	  assert( cursor.open[cursor.level].size() == cursor.open[cursor.level].max_items() );
 
 	  /* can we rotate? */
+	  if (false)
 	  if (cursor.level > 0) {
 		if ((cursor.pos[cursor.level-1] > 0 
 			 && cursor.rotate_left() >= 0) ||
@@ -548,7 +550,7 @@ class Table {
 			// indices are already dirty
 			cursor.open[cursor.level].insert_at_index_pos(cursor.pos[cursor.level], key, nodevalue);
 		  }
-		  //if (sizeof(K) == 8) verify();
+		  verify("insert 2");
 		  return 0;
 		}
 	  }
@@ -604,6 +606,7 @@ class Table {
 		/* heighten tree */
 		depth++;
 		root = newroot.get_id();
+		verify("insert 3");
 		return 0;
 	  }
 
@@ -629,7 +632,8 @@ class Table {
 	if (find(key, cursor) <= 0) {
 	  cerr << "remove " << key << " 0x" << hex << key << dec << " .. dne" << endl;
 	  g_conf.debug_ebofs = 33;
-	  verify();
+	  g_conf.ebofs_verify = true;
+	  verify("remove dne"); 
 	  assert(0);
 	  return -1;  // key dne
 	}
@@ -657,11 +661,14 @@ class Table {
 		  depth = 0;
 		  pool.release(cursor.open[0].node);
 		}
+		verify("remove 1");
 		return 0;
 	  }
 	  
-	  if (cursor.open[cursor.level].size() > cursor.open[cursor.level].min_items())
+	  if (cursor.open[cursor.level].size() > cursor.open[cursor.level].min_items()) {
+		verify("remove 2");
 		return 0;
+	  }
 	  
 	  // borrow from siblings?
 	  Nodeptr left;
@@ -678,6 +685,7 @@ class Table {
 		  cursor.open[cursor.level] = left;
 		  cursor.pos[cursor.level-1]--;
 		  cursor.rotate_right();
+		  verify("remove 3");
 		  return 0;
 		}
 		
@@ -695,6 +703,7 @@ class Table {
 		  cursor.open[cursor.level] = right;
 		  cursor.pos[cursor.level-1]++;
 		  cursor.rotate_left();
+		  verify("remove 4");
 		  return 0;
 		}
 		
@@ -756,7 +765,7 @@ class Table {
 	nkeys = 0;
   }
 
-  int verify_sub(Cursor& cursor, int node_loc, int level, int& count, K& last) {
+  int verify_sub(Cursor& cursor, int node_loc, int level, int& count, K& last, const char *on) {
 	int err = 0;
 
 	Nodeptr node = pool.get_node( node_loc );
@@ -778,7 +787,7 @@ class Table {
 	  if (level < depth-1) {   
 		// index
 		cursor.pos[level] = i;
-		err += verify_sub( cursor, cursor.open[level].index_item(i).node, level+1, count, last );
+		err += verify_sub( cursor, cursor.open[level].index_item(i).node, level+1, count, last, on );
 	  } else {
 		// leaf
 		count++;
@@ -838,18 +847,39 @@ class Table {
 	return err;
   }
 
-  void verify() {
-	int count = 0;
-	Cursor cursor(this);
+  void verify(const char *on) {
+	if (!g_conf.ebofs_verify) 
+	  return;
+
 	if (root == -1 && depth == 0) {
 	  return;   // empty!
 	}
+
+	int count = 0;
+	Cursor cursor(this);
 	K last;
-	int err = verify_sub(cursor, root, 0, count, last);
-	assert(err == 0);
+	
+	int before = g_conf.debug_ebofs;
+	g_conf.debug_ebofs = 0;
+
+	int err = verify_sub(cursor, root, 0, count, last, on);
 	if (count != nkeys) {
-	  dbtout << "** count " << count << " != nkeys " << nkeys << endl;
-	  assert(nkeys == count);
+	  cerr << "** count " << count << " != nkeys " << nkeys << endl;
+	  err++;
+	}
+
+	g_conf.debug_ebofs = before;
+
+	// ok?
+	if (err) {
+	  cerr << "verify failure, called by '" << on << "'" << endl;
+	  g_conf.debug_ebofs = 30;
+	  // do it again, so we definitely get the dump.
+	  int count = 0;
+	  Cursor cursor(this);
+	  K last;
+	  verify_sub(cursor, root, 0, count, last, on);
+	  assert(err == 0);
 	}
   }
 

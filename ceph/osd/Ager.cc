@@ -14,6 +14,18 @@
 #include <fcntl.h>
 
 
+int myrand() 
+{
+  if (0) 
+	return rand();
+  else {
+	static int n = 0;
+	srand(n++);
+	return rand();
+  }
+}
+
+
 object_t Ager::age_get_oid() {
   if (!age_free_oids.empty()) {
 	object_t o = age_free_oids.front();
@@ -25,14 +37,17 @@ object_t Ager::age_get_oid() {
 
 ssize_t Ager::age_pick_size() {
   ssize_t max = file_size_distn.sample() * 1024;
-  return max/2 + (rand() % 100) * max/200 + 1;
+  return max/2 + (myrand() % 100) * max/200 + 1;
 }
 
-void Ager::age_fill(float pc, utime_t until) {
+bool start_debug = false;
+
+__uint64_t Ager::age_fill(float pc, utime_t until) {
   int max = 1024*1024;
   char *buf = new char[max];
   bufferlist bl;
   bl.push_back(new buffer(buf, max));
+  __uint64_t wrote = 0;
   while (1) {
 	if (g_clock.now() > until) break;
 	
@@ -47,13 +62,35 @@ void Ager::age_fill(float pc, utime_t until) {
 	
 	object_t oid = age_get_oid();
 	
-	int b = rand() % 10;
+	int b = myrand() % 10;
 	age_objects[b].push_back(oid);
 	
 	ssize_t s = age_pick_size();
+	wrote += (s + 4095) / 4096;
 	
 	dout(2) << "age_fill at " << a << " / " << pc << " creating " << hex << oid << dec << " sz " << s << endl;
 	
+
+	if (false && !g_conf.ebofs_verify && start_debug && wrote > 1000000ULL) { 
+	  /*
+
+
+	  1005700
+?
+1005000
+1005700
+      1005710
+      1005725ULL
+      1005750ULL
+      1005800
+	  1006000
+
+//  99  1000500 ? 1000750 1006000
+*/
+	  g_conf.debug_ebofs = 30;
+	  g_conf.ebofs_verify = true;	  
+	}
+
 	off_t off = 0;
 	while (s) {
 	  ssize_t t = MIN(s, max);
@@ -66,11 +103,16 @@ void Ager::age_fill(float pc, utime_t until) {
 	oid++;
   }
   delete[] buf;
+
+  return wrote;
 }
 
 void Ager::age_empty(float pc) {
   int nper = 20;
   int n = nper;
+
+  //g_conf.ebofs_verify = true;
+
   while (1) {
 	struct statfs st;
 	store->statfs(&st);
@@ -81,7 +123,7 @@ void Ager::age_empty(float pc) {
 	  break;
 	}
 	
-	int b = rand() % 10;
+	int b = myrand() % 10;
 	n--;
 	if (n == 0 || age_objects[b].empty()) {
 	  dout(2) << "age_empty sync" << endl;
@@ -98,14 +140,16 @@ void Ager::age_empty(float pc) {
 	store->remove(oid);
 	age_free_oids.push_back(oid);
   }
+
+  g_conf.ebofs_verify = false;
 }
 
 void pfrag(ObjectStore::FragmentationStat &st)
 {
-  cout << st.num_extent << " avg " << st.avg_extent
-	   << ", " << st.avg_extent_per_object << " per obj, " 
-	   << st.avg_extent_jump << " jump, "
-	   << st.num_free_extent << " free avg " << st.avg_free_extent;
+  cout << st.num_extent << "\tavg\t" << st.avg_extent
+	   << "\t" << st.avg_extent_per_object << "\tper obj,\t" 
+	   << st.avg_extent_jump << "\t jump,\t"
+	   << st.num_free_extent << "\tfree avg\t" << st.avg_free_extent;
   
   /*
 	for (map<int,int>::iterator p = st.free_extent_dist.begin();
@@ -124,6 +168,7 @@ void pfrag(ObjectStore::FragmentationStat &st)
 	n -= st.free_extent_dist[i];
 	if (n == 0) break;
   }
+  cout << endl;
 }
 
 
@@ -135,10 +180,17 @@ void Ager::age(int time,
 			   int fake_size_mb) { 
 
   store->_fake_writes(true);
+  srand(0);
 
-  utime_t until = g_clock.now();
+  utime_t start = g_clock.now();
+  utime_t until = start;
   until.sec_ref() += time;
   
+  int elapsed = 0;
+  int freelist_inc = 60;
+  utime_t nextfl = start;
+  nextfl.sec_ref() += freelist_inc;
+
   while (age_objects.size() < 10) age_objects.push_back( list<object_t>() );
   
   if (fake_size_mb) {
@@ -176,14 +228,21 @@ void Ager::age(int time,
   
   ObjectStore::FragmentationStat st;
 
+  __uint64_t wrote = 0;
+
   for (int c=1; c<=count; c++) {
 	if (g_clock.now() > until) break;
 	
+	if (c == 7) start_debug = true;
+	
 	dout(1) << "age " << c << "/" << count << " filling to " << high_water << endl;
-	age_fill(high_water, until);
+	__uint64_t w = age_fill(high_water, until);
+	dout(1) << "age wrote " << w << endl;
+	wrote += w;
 	store->sync();
-	store->_get_frag_stat(st);
-	pfrag(st);
+	//store->_get_frag_stat(st);
+	//pfrag(st);
+
 
 
 	if (c == count) {
@@ -197,10 +256,19 @@ void Ager::age(int time,
 	store->_get_frag_stat(st);
 	pfrag(st);
 
+	// dump freelist?
+	if (g_clock.now() > nextfl) {
+	  elapsed += freelist_inc;
+	  save_freelist(elapsed);
+	  nextfl.sec_ref() += freelist_inc;
+	}
   }
 
+  dout(1) << wrote / (1024ULL*1024ULL) << " GB written" << endl;
+
   // dump the freelist
-  save_freelist();
+  save_freelist(0);
+  exit(0);   // hack
 
   // ok!
   store->_fake_writes(false);
@@ -229,12 +297,16 @@ void Ager::load_freelist()
   store->sync();
 }
 
-void Ager::save_freelist()
+void Ager::save_freelist(int el)
 {
+  dout(1) << "save_freelist " << el << endl;
+  char s[100];
+  sprintf(s, "ebofs.freelist.%d", el);
   bufferlist bl;
   ((Ebofs*)store)->_export_freelist(bl);
-  ::unlink("ebofs.freelist");
-  int fd = ::open("ebofs.freelist", O_CREAT|O_WRONLY);
+  ::unlink(s);
+  int fd = ::open(s, O_CREAT|O_WRONLY);
+  ::fchmod(fd, 0644);
   ::write(fd, bl.c_str(), bl.length());
   ::close(fd);
 }

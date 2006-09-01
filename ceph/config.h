@@ -171,6 +171,7 @@ struct md_config_t {
 
   // ebofs
   int   ebofs;
+  bool  ebofs_verify;
   int   ebofs_commit_ms;
   int   ebofs_idle_commit_ms;
   int   ebofs_oc_size;

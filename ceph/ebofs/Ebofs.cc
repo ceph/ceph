@@ -2724,7 +2724,7 @@ void Ebofs::_export_freelist(bufferlist& bl)
 		assert(cursor.current().value > 0);
 		
 		Extent ex(cursor.current().key, cursor.current().value);
-		dout(0) << "_export_freelist " << ex << endl;
+		dout(10) << "_export_freelist " << ex << endl;
 		bl.append((char*)&ex, sizeof(ex));
 		if (cursor.move_right() <= 0) break;
 	  }
@@ -2743,7 +2743,7 @@ void Ebofs::_import_freelist(bufferlist& bl)
   int num = bl.length() / sizeof(Extent);
   Extent *p = (Extent*)bl.c_str();
   for (int i=0; i<num; i++) {
-	dout(0) << "_import_freelist " << p[i] << endl;
+	dout(10) << "_import_freelist " << p[i] << endl;
 	allocator._release_loner(p[i]);
   }
 }

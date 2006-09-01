@@ -21,7 +21,7 @@ class Ager {
   bool         did_distn;
 
   void age_empty(float pc);
-  void age_fill(float pc, utime_t until);
+  __uint64_t age_fill(float pc, utime_t until);
   ssize_t age_pick_size();
   object_t age_get_oid();
 
@@ -35,7 +35,7 @@ class Ager {
 		  float final_water,   // and end here ( <= low_water)
 		  int fake_size_mb=0);
 
-  void save_freelist();
+  void save_freelist(int);
   void load_freelist();
 };
 

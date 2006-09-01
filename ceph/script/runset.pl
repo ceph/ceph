@@ -216,6 +216,7 @@ sub run {
 			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'client_oc',
+			   'fake_osdmap_updates',
 			   'bdev_el_bidir', 'ebofs_idle_commit_ms', 'ebofs_commit_ms', 
 			   'ebofs_oc_size','ebofs_cc_size','ebofs_bc_size','ebofs_bc_max_dirty','ebofs_abp_max_alloc',
 			   'file_layout_ssize','file_layout_scount','file_layout_osize','file_layout_num_rep',
@@ -229,7 +230,7 @@ sub run {
 	$c .= " --log_name $relout/$keys";
 
 	my $post = "#!/bin/sh
-script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd* > $fn/sum.osd
+script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/osd\\* > $fn/sum.osd
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds? $fn/mds?? > $fn/sum.mds
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/mds*.log > $fn/sum.mds.log
 script/sum.pl -start $h->{'start'} -end $h->{'end'} $fn/clnode* > $fn/sum.cl

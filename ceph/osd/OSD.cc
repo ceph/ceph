@@ -198,7 +198,11 @@ int OSD::init()
 		if (g_conf.osd_age_time < 0) 
 		  ager.load_freelist();
 		else 
-		  ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 50000, g_conf.osd_age);
+		  ager.age(g_conf.osd_age_time, 
+				   g_conf.osd_age, 
+				   g_conf.osd_age - .05, 
+				   50000, 
+				   g_conf.osd_age - .05);
 	  }
 	}
 	else {
@@ -1097,6 +1101,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 		
 	  dout(7) << "created " << *pg << endl;
 	}
+
+	dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << endl;
 
   } else {
 	// scan existing pg's

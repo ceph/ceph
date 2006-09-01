@@ -23,6 +23,20 @@ while ($ARGV[0] =~ /^-/) {
 }
 my @files = @ARGV;
 
+if (scalar(@files) == 1 && $files[0] =~ /\*/) {
+	my ($dir, $pat) = $files[0] =~ /^(.*)\/([^\/]+)$/;
+	@files = ();
+
+	opendir(D,"$dir");
+	for my $f (readdir(D)) {
+		next unless $f =~ /^$pat/;
+		push(@files, $f);
+	}
+	closedir(D);
+	
+#	print "files = @files\n";
+}
+
 my @data;
 for my $f (@files) {
 	open(I,$f);
