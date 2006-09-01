@@ -192,10 +192,13 @@ int OSD::init()
 
 	if (g_conf.osd_mkfs) {
 	  // age?
-	  if (g_conf.osd_age_time > 0) {
+	  if (g_conf.osd_age_time != 0) {
 		dout(2) << "age" << endl;
 		Ager ager(store);
-		ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 50000, g_conf.osd_age);
+		if (g_conf.osd_age_time < 0) 
+		  ager.load_freelist();
+		else 
+		  ager.age(g_conf.osd_age_time, g_conf.osd_age, g_conf.osd_age / 2.0, 50000, g_conf.osd_age);
 	  }
 	}
 	else {

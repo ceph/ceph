@@ -7,6 +7,12 @@
 #include "config.h"
 #include "common/Clock.h"
 
+// ick
+#include "ebofs/Ebofs.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 object_t Ager::age_get_oid() {
   if (!age_free_oids.empty()) {
@@ -176,6 +182,11 @@ void Ager::age(int time,
 	pfrag(st);
 
   }
+
+  // dump the freelist
+  save_freelist();
+
+  // ok!
   store->_fake_writes(false);
   store->sync();
   store->sync();
@@ -183,3 +194,31 @@ void Ager::age(int time,
 }  
 
 
+void Ager::load_freelist()
+{
+  struct stat st;
+  
+  int r = ::stat("ebofs.freelist", &st);
+  assert(r == 0);
+
+  bufferptr bp = new buffer(st.st_size);
+  bufferlist bl;
+  bl.push_back(bp);
+  int fd = ::open("ebofs.freelist", O_RDONLY);
+  ::read(fd, bl.c_str(), st.st_size);
+  ::close(fd);
+
+  ((Ebofs*)store)->_import_freelist(bl);
+  store->sync();
+  store->sync();
+}
+
+void Ager::save_freelist()
+{
+  bufferlist bl;
+  ((Ebofs*)store)->_export_freelist(bl);
+  ::unlink("ebofs.freelist");
+  int fd = ::open("ebofs.freelist", O_CREAT|O_WRONLY);
+  ::write(fd, bl.c_str(), bl.length());
+  ::close(fd);
+}
