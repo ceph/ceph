@@ -102,12 +102,28 @@ void Ager::age_empty(float pc) {
 
 void pfrag(ObjectStore::FragmentationStat &st)
 {
-  cout << st.num_free_extent << " free avg " << st.avg_free_extent;
-  for (__uint64_t i=1; i<=(1ULL<<29); i = i<<1) 
-	cout //<< "\t" << i
-	  << "\t" << st.free_extent_dist[i];
-  cout << endl;
-
+  cout << st.num_extent << " avg " << st.avg_extent
+	   << ", " << st.avg_extent_per_object << " per obj, " 
+	   << st.avg_extent_jump << " jump, "
+	   << st.num_free_extent << " free avg " << st.avg_free_extent;
+  
+  /*
+	for (map<int,int>::iterator p = st.free_extent_dist.begin();
+	p != st.free_extent_dist.end();
+	p++) 
+	cout << "\t" << p->first << "=\t" << p->second;
+	cout << endl;
+  */
+  
+  int n = st.num_free_extent;
+  for (__uint64_t i=2; i <= 30; i += 2) {
+	cout << "\t" 
+	  //<< i
+	  //<< "=\t" 
+		 << st.free_extent_dist[i];
+	n -= st.free_extent_dist[i];
+	if (n == 0) break;
+  }
 }
 
 
