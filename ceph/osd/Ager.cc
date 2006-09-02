@@ -280,6 +280,8 @@ void Ager::age(int time,
 
 void Ager::load_freelist()
 {
+  dout(1) << "load_freelist" << endl;
+
   struct stat st;
   
   int r = ::stat("ebofs.freelist", &st);
