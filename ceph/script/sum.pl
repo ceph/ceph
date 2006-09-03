@@ -26,11 +26,13 @@ my @files = @ARGV;
 if (scalar(@files) == 1 && $files[0] =~ /\*/) {
 	my ($dir, $pat) = $files[0] =~ /^(.*)\/([^\/]+)$/;
 	@files = ();
-
+	$pat =~ s/\*//;
+#	print "dir $dir pat $pat\n";
 	opendir(D,"$dir");
 	for my $f (readdir(D)) {
+	#	print "$f\n";
 		next unless $f =~ /^$pat/;
-		push(@files, $f);
+		push(@files, "$dir/$f");
 	}
 	closedir(D);
 	

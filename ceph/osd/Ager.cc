@@ -104,7 +104,7 @@ __uint64_t Ager::age_fill(float pc, utime_t until) {
   }
   delete[] buf;
 
-  return wrote;
+  return wrote*4; // KB
 }
 
 void Ager::age_empty(float pc) {
@@ -233,7 +233,7 @@ void Ager::age(int time,
   for (int c=1; c<=count; c++) {
 	if (g_clock.now() > until) break;
 	
-	if (c == 7) start_debug = true;
+	//if (c == 7) start_debug = true;
 	
 	dout(1) << "age " << c << "/" << count << " filling to " << high_water << endl;
 	__uint64_t w = age_fill(high_water, until);
@@ -242,7 +242,6 @@ void Ager::age(int time,
 	store->sync();
 	//store->_get_frag_stat(st);
 	//pfrag(st);
-
 
 
 	if (c == count) {
@@ -254,6 +253,10 @@ void Ager::age(int time,
 	}
 	store->sync();
 	store->_get_frag_stat(st);
+
+	dout(1) << wrote / (1024ULL*1024ULL) << " GB written\t";// << endl;
+
+
 	pfrag(st);
 
 	// dump freelist?
@@ -263,8 +266,6 @@ void Ager::age(int time,
 	  nextfl.sec_ref() += freelist_inc;
 	}
   }
-
-  dout(1) << wrote / (1024ULL*1024ULL) << " GB written" << endl;
 
   // dump the freelist
   save_freelist(0);
