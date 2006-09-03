@@ -537,7 +537,7 @@ class Table {
 	  assert( cursor.open[cursor.level].size() == cursor.open[cursor.level].max_items() );
 
 	  /* can we rotate? */
-	  if (false)
+	  if (false)      // NO! there's a bug in here somewhere, don't to it.
 	  if (cursor.level > 0) {
 		if ((cursor.pos[cursor.level-1] > 0 
 			 && cursor.rotate_left() >= 0) ||

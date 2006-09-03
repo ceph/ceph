@@ -375,6 +375,12 @@ int Ebofs::commit_thread_entry()
 			  << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
 			  << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
 			  << nodepool.num_total() << " total." << endl;
+	  dout(2) << "commit_thread    bc: " 
+			  << "size " << bc.get_size() 
+			  << ", trimmable " << bc.get_trimmable()
+			  << ", max " << g_conf.ebofs_bc_size
+			  << endl;
+	  
 	  
 	  // (async) write onodes+condes  (do this first; it currently involves inode reallocation)
 	  commit_inodes_start();
@@ -1976,8 +1982,20 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 
 int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 {
-  dout(7) << "_write " << hex << oid << dec << " len " << length << " off " << offset << endl;
+  dout(7) << "_write " << hex << oid << dec << " " << offset << "~" << length << endl;
   assert(bl.length() == length);
+
+  // too much unflushed dirty data?  (if so, block!)
+  if (_write_will_block()) {
+	dout(10) << "_write blocking " 
+			 << hex << oid << dec << " " << offset << "~" << length << endl;
+
+	while (_write_will_block()) 
+	  bc.waitfor_stat();  // waits on ebofs_lock
+
+	dout(7) << "_write unblocked " 
+			 << hex << oid << dec << " " << offset << "~" << length << endl;
+  }
 
   // out of space?
   unsigned max = (length+offset) / EBOFS_BLOCK_SIZE + 10;  // very conservative; assumes we have to rewrite
@@ -2041,18 +2059,6 @@ int Ebofs::write(object_t oid,
 {
   ebofs_lock.Lock();
   assert(len > 0);
-
-  // too much unflushed dirty data?  (if so, block!)
-  if (_write_will_block()) {
-	dout(10) << "write blocking " 
-			 << hex << oid << dec << " len " << len << " off " << off << endl;
-
-	while (_write_will_block()) 
-	  bc.waitfor_stat();  // waits on ebofs_lock
-
-	dout(7) << "write unblocked " 
-			<< hex << oid << dec << " len " << len << " off " << off << endl;
-  }
 
   // go
   int r = _write(oid, off, len, bl);
