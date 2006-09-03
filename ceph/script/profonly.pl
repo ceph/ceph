@@ -3,10 +3,9 @@
 my $rank = shift @ARGV;
 my $args = join(' ',@ARGV);
 if ($rank == $ENV{MPD_JRANK}) {
-	$c = "LD_PRELOAD=$ENV{'HOME'}/csl/obsd/src/pmds/gprof-helper.so ./tcpsyn $args";
-
+	$c = "LD_PRELOAD=$ENV{'HOME'}/csl/obsd/src/pmds/gprof-helper.so ./newsyn $args";
 } else {
-	$c = "./tcpsyn.nopg $args";
+	$c = "./newsyn.nopg $args";
 }
 
 #print "$rank: $c\n";

@@ -1,6 +1,20 @@
 
-
 == FAST rados paper
+
+todo
+
+- latency
+  - try adding small client delay between requests
+  - try without commits?
+
+- aged ebofs fs  .. wr_age
+  - over time
+  - versus fresh (wrsizes)
+
+
+why is 4osd tput so low?  do i need more clients?
+is it the bdev_fake_mb making it unstable?
+
 
 
 cluster map
@@ -118,6 +132,9 @@ reliability
 - osdmonitor, filter
 
 ebofs
+- fix buffercache::rx_finish uninitialized pstart bug
+- fix sync() 
+- fix bug in node rotation on insert (and reenable)
 - allow btree sets instead of maps
 - verify LRU behavior sensible: writes go to mid, not top!
 - fix NEAR_LAST_FWD   (?)
