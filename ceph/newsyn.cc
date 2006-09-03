@@ -283,7 +283,7 @@ int main(int argc, char **argv)
 
   if (started) cerr << "tcpsyn finishing" << endl;
 
-  
+  return 0;
 
   // cleanup
   for (map<int,MDS*>::iterator i = mds.begin(); i != mds.end(); i++)
