@@ -17,8 +17,6 @@
 
 #include "include/types.h"
 
-#include "common/Timer.h"
-
 #include <list>
 #include <set>
 #include <ext/hash_map>
@@ -28,9 +26,12 @@ using namespace __gnu_cxx;
 class FakeStoreCollections {
  private:
   Mutex faker_lock;
+  ObjectStore *store;
   hash_map<coll_t, set<object_t> > fakecollections;
 
  public:
+  FakeStoreCollections(ObjectStore *s) : store(s) {}
+
   // faked collections
   int list_collections(list<coll_t>& ls) {
 	faker_lock.Lock();
@@ -49,7 +50,7 @@ class FakeStoreCollections {
 						Context *onsafe=0) {
 	faker_lock.Lock();
 	fakecollections[c].size();
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return 0;
   }
@@ -61,7 +62,7 @@ class FakeStoreCollections {
 	if (fakecollections.count(c)) {
 	  fakecollections.erase(c);
 	  //fakecattr.erase(c);
-	  if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	  if (onsafe) store->sync(onsafe);
 	} else 
 	  r = -1;
 	faker_lock.Unlock();
@@ -83,7 +84,7 @@ class FakeStoreCollections {
 					 Context *onsafe=0) {
 	faker_lock.Lock();
 	fakecollections[c].insert(o);
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return 0;
   }
@@ -92,7 +93,7 @@ class FakeStoreCollections {
 						Context *onsafe=0) {
 	faker_lock.Lock();
 	fakecollections[c].erase(o);
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return 0;
   }
@@ -161,16 +162,19 @@ class FakeStoreAttrs {
   };
 
   Mutex faker_lock;
+  ObjectStore *store;
   hash_map<object_t, FakeAttrSet> fakeoattrs;
   hash_map<coll_t, FakeAttrSet> fakecattrs;
 
  public:
+  FakeStoreAttrs(ObjectStore *s) : store(s) {}
+
   int setattr(object_t oid, const char *name,
 			  const void *value, size_t size,
 			  Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakeoattrs[oid].setattr(name, value, size);
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return r;
   }
@@ -197,7 +201,7 @@ class FakeStoreAttrs {
 			 Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakeoattrs[oid].rmattr(name);
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return r;
   }
@@ -214,7 +218,7 @@ class FakeStoreAttrs {
 						 Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakecattrs[c].setattr(name, value, size);
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return r;
   }
@@ -222,7 +226,7 @@ class FakeStoreAttrs {
 						Context *onsafe=0) {
 	faker_lock.Lock();
 	int r = fakecattrs[c].rmattr(name);
-	if (onsafe) g_timer.add_event_after(2.0,onsafe);
+	if (onsafe) store->sync(onsafe);
 	faker_lock.Unlock();
 	return r;
   }

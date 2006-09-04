@@ -210,9 +210,6 @@ public:
 	for (list<int>::iterator p = t.ops.begin();
 		 p != t.ops.end();
 		 p++) {
-	  Context *last = 0;
-	  if (p == t.ops.end()) last = onsafe;
-
 	  switch (*p) {
 	  case Transaction::OP_READ:
 		{
@@ -252,7 +249,7 @@ public:
 		  off_t offset = t.offsets.front(); t.offsets.pop_front();
 		  size_t len = t.lengths.front(); t.lengths.pop_front();
 		  bufferlist bl = t.bls.front(); t.bls.pop_front();
-		  write(oid, offset, len, bl, last);
+		  write(oid, offset, len, bl, 0);
 		}
 		break;
 
@@ -260,14 +257,14 @@ public:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
 		  off_t len = t.offsets.front(); t.offsets.pop_front();
-		  truncate(oid, len, last);
+		  truncate(oid, len, 0);
 		}
 		break;
 
 	  case Transaction::OP_REMOVE:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
-		  remove(oid, last);
+		  remove(oid, 0);
 		}
 		break;
 
@@ -276,14 +273,14 @@ public:
 		  object_t oid = t.oids.front(); t.oids.pop_front();
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
 		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
-		  setattr(oid, attrname, attrval.first, attrval.second, last);
+		  setattr(oid, attrname, attrval.first, attrval.second, 0);
 		}
 		break;
 	  case Transaction::OP_SETATTRS:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
 		  map<string,bufferptr> *pattrset = t.pattrsets.front(); t.pattrsets.pop_front();
-		  setattrs(oid, *pattrset, last);
+		  setattrs(oid, *pattrset, 0);
 		}
 		break;
 
@@ -291,21 +288,21 @@ public:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
-		  rmattr(oid, attrname, last);
+		  rmattr(oid, attrname, 0);
 		}
 		break;
 
 	  case Transaction::OP_MKCOLL:
 		{
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
-		  create_collection(cid, last);
+		  create_collection(cid, 0);
 		}
 		break;
 
 	  case Transaction::OP_RMCOLL:
 		{
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
-		  destroy_collection(cid, last);
+		  destroy_collection(cid, 0);
 		}
 		break;
 
@@ -313,7 +310,7 @@ public:
 		{
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
 		  object_t oid = t.oids.front(); t.oids.pop_front();
-		  collection_add(cid, oid, last);
+		  collection_add(cid, oid, 0);
 		}
 		break;
 
@@ -321,7 +318,7 @@ public:
 		{
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
 		  object_t oid = t.oids.front(); t.oids.pop_front();
-		  collection_remove(cid, oid, last);
+		  collection_remove(cid, oid, 0);
 		}
 		break;
 
@@ -330,7 +327,7 @@ public:
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
 		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
-		  collection_setattr(cid, attrname, attrval.first, attrval.second, last);
+		  collection_setattr(cid, attrname, attrval.first, attrval.second, 0);
 		}
 		break;
 
@@ -338,7 +335,7 @@ public:
 		{
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
-		  collection_rmattr(cid, attrname, last);
+		  collection_rmattr(cid, attrname, 0);
 		}
 		break;
 
@@ -348,6 +345,9 @@ public:
 		assert(0);
 	  }
 	}
+
+	if (onsafe) sync(onsafe);
+
 	return 0;  // FIXME count errors
   }
 
@@ -427,7 +427,9 @@ public:
 								 void *value, size_t size) {return 0;} //= 0;
   virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;
   
+  virtual void sync(Context *onsync) {};
   virtual void sync() {};
+  
   
   virtual void _fake_writes(bool b) {};
 

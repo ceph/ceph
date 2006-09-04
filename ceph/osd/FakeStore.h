@@ -39,6 +39,8 @@ class FakeStore : public ObjectStore,
   string basedir;
   int whoami;
   
+  int unsync;
+
   Mutex lock;
 
   // fns
@@ -47,22 +49,14 @@ class FakeStore : public ObjectStore,
   void wipe_dir(string mydir);
 
 
-  /*
-  // async fsync
-  class ThreadPool<class FakeStore, pair<int, class Context*> >  *fsync_threadpool;
-  void queue_fsync(int fd, class Context *c) {
-	fsync_threadpool->put_op(new pair<int, class Context*>(fd,c));
-  }
  public:
-  void do_fsync(int fd, class Context *c);
-  static void dofsync(class FakeStore *f, pair<int, class Context*> *af) {
-	f->do_fsync(af->first, af->second);
-	delete af;
+  FakeStore(char *base, int whoami) : FakeStoreAttrs(this), FakeStoreCollections(this)
+  {
+	this->basedir = base;
+	this->whoami = whoami;
+	unsync = 0;
   }
-  */
 
- public:
-  FakeStore(char *base, int whoami);
 
   int mount();
   int umount();
@@ -79,15 +73,12 @@ class FakeStore : public ObjectStore,
   int read(object_t oid, 
 		   off_t offset, size_t len,
 		   bufferlist& bl);
-  int write(object_t oid,
-			off_t offset, size_t len,
-			bufferlist& bl,
-			bool fsync);
   int write(object_t oid, 
 			off_t offset, size_t len,
 			bufferlist& bl, 
 			Context *onsafe);
 
+  void sync(Context *onsafe);
 };
 
 #endif
