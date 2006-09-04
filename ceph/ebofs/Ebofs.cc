@@ -1170,6 +1170,14 @@ void Ebofs::kick_idle()
   */
 }
 
+void Ebofs::sync(Context *onsafe)
+{
+  ebofs_lock.Lock();
+  if (onsafe) 
+	commit_waiters[super_epoch].push_back(onsafe);
+  ebofs_lock.Unlock();
+}
+
 void Ebofs::sync()
 {
   ebofs_lock.Lock();
@@ -1968,11 +1976,11 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
   dout(7) << "apply_transaction finish (r = " << r << ")" << endl;
   
   // set up commit waiter
-  if (r == 0) {
-	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
-  } else {
-	if (onsafe) delete onsafe;
-  }
+  //if (r == 0) {
+  if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  //} else {
+  //if (onsafe) delete onsafe;
+  //}
   
   ebofs_lock.Unlock();
   return r;

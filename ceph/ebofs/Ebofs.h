@@ -162,6 +162,7 @@ class Ebofs : public ObjectStore {
  public:
   void kick_idle();
   void sync();
+  void sync(Context *onsafe);
   void trim_buffer_cache();
 
   class IdleKicker : public BlockDevice::kicker {
