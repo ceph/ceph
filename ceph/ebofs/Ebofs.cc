@@ -2767,6 +2767,8 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   ebofs_lock.Lock();
 
   // free list is easy
+  st.total = dev.get_num_blocks();
+  st.total_free = get_free_blocks() + get_limbo_blocks();
   st.free_extent_dist.clear();
   st.num_free_extent = 0;
 
@@ -2791,10 +2793,11 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
 		tfree += l;
 		int b = 0;
 		do {
-		  l = l >> 2;
-		  b++; b++;
+		  l = l >> 1;
+		  b++; 
 		} while (l);
 		st.free_extent_dist[b]++;
+		st.free_extent_dist_sum[b] += cursor.current().value;
 		st.num_free_extent++;
 
 		if (cursor.move_right() <= 0) break;
@@ -2808,6 +2811,7 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   st.num_extent = 0;
   st.avg_extent = 0;
   st.extent_dist.clear();
+  st.extent_dist_sum.clear();
   st.avg_extent_per_object = 0;
   st.avg_extent_jump = 0;
 
@@ -2836,10 +2840,11 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
 
 	  int b = 0;
 	  do {
-		l = l >> 2;
-		b++; b++;
+		l = l >> 1;
+		b++; 
 	  } while (l);
 	  st.extent_dist[b]++;
+	  st.extent_dist_sum[b] += p->second.length;
 	}
 	put_onode(on);
 	if (cursor.move_right() <= 0) break;

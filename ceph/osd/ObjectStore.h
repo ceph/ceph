@@ -43,16 +43,20 @@ public:
 
   class FragmentationStat {
   public:
+	int total;
 	int num_extent;
 	int avg_extent;
 	map<int,int> extent_dist;          // powers of two
+	map<int,int> extent_dist_sum;          // powers of two
 
 	float avg_extent_per_object;
 	int avg_extent_jump;  // avg distance bweteen consecutive extents
 
+	int total_free;
 	int num_free_extent;
 	int avg_free_extent;
 	map<int,int> free_extent_dist;     // powers of two
+	map<int,int> free_extent_dist_sum;     // powers of two
   };
   
   

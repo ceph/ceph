@@ -144,28 +144,26 @@ void Ager::age_empty(float pc) {
   g_conf.ebofs_verify = false;
 }
 
-void pfrag(ObjectStore::FragmentationStat &st)
+void pfrag(__uint64_t written, ObjectStore::FragmentationStat &st)
 {
-  cout << st.num_extent << "\tavg\t" << st.avg_extent
-	   << "\t" << st.avg_extent_per_object << "\tper obj,\t" 
-	   << st.avg_extent_jump << "\t jump,\t"
-	   << st.num_free_extent << "\tfree avg\t" << st.avg_free_extent;
-  
-  /*
-	for (map<int,int>::iterator p = st.free_extent_dist.begin();
-	p != st.free_extent_dist.end();
-	p++) 
-	cout << "\t" << p->first << "=\t" << p->second;
-	cout << endl;
-  */
-  
-  int n = st.num_free_extent;
-  for (__uint64_t i=2; i <= 30; i += 2) {
-	cout << "\t" 
-	  //<< i
-	  //<< "=\t" 
-		 << st.free_extent_dist[i];
-	n -= st.free_extent_dist[i];
+  cout << "#gb wr\ttotal\tn x\tavg x\tavg per\tavg j\tfree\tn fr\tavg fr\tnum<2\tsum<2\tnum<4\tsum<4\t..." 
+	   << endl;
+  cout << written
+	   << "\t" << st.total
+	   << "\t" << st.num_extent
+	   << "\t" << st.avg_extent
+	   << "\t" << st.avg_extent_per_object
+	   << "\t" << st.avg_extent_jump 
+	   << "\t" << st.total_free
+	   << "\t" << st.num_free_extent
+	   << "\t" << st.avg_free_extent;
+	
+  int n = st.num_extent;
+  for (__uint64_t i=1; i <= 30; i += 1) {
+	cout << "\t" << st.extent_dist[i];
+	cout << "\t" << st.extent_dist_sum[i];
+	//cout << "\ta " << (st.extent_dist[i] ? (st.extent_dist_sum[i] / st.extent_dist[i]):0);
+	n -= st.extent_dist[i];
 	if (n == 0) break;
   }
   cout << endl;
@@ -235,29 +233,28 @@ void Ager::age(int time,
 	
 	//if (c == 7) start_debug = true;
 	
-	dout(1) << "age " << c << "/" << count << " filling to " << high_water << endl;
+	dout(1) << "#age " << c << "/" << count << " filling to " << high_water << endl;
 	__uint64_t w = age_fill(high_water, until);
-	dout(1) << "age wrote " << w << endl;
+	//dout(1) << "age wrote " << w << endl;
 	wrote += w;
-	store->sync();
+	//store->sync();
 	//store->_get_frag_stat(st);
 	//pfrag(st);
 
 
 	if (c == count) {
-	  dout(1) << "age final empty to " << final_water << endl;
+	  dout(1) << "#age final empty to " << final_water << endl;
 	  age_empty(final_water);	
 	} else {
-	  dout(1) << "age " << c << "/" << count << " emptying to " << low_water << endl;
+	  dout(1) << "#age " << c << "/" << count << " emptying to " << low_water << endl;
 	  age_empty(low_water);
 	}
-	store->sync();
+	//store->sync();
+
+	// show frag state
 	store->_get_frag_stat(st);
-
-	dout(1) << wrote / (1024ULL*1024ULL) << " GB written\t";// << endl;
-
-
-	pfrag(st);
+	pfrag(wrote / (1024ULL*1024ULL) ,  // GB
+		  st);
 
 	// dump freelist?
 	if (g_clock.now() > nextfl) {
