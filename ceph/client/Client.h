@@ -148,11 +148,11 @@ class Inode {
 
   void get() { 
 	ref++; 
-	cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
+	//cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
   }
   void put() { 
 	ref--; assert(ref >= 0); 
-	cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
+	//cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
   }
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 

@@ -53,7 +53,8 @@ __uint64_t Ager::age_fill(float pc, utime_t until) {
 	
 	struct statfs st;
 	store->statfs(&st);
-	float a = (float)(st.f_blocks-st.f_bavail) / (float)st.f_blocks;
+	float a = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);
+	//float a = (float)(st.f_bfree) / (float)st.f_blocks;
 	//dout(10) << "age_fill at " << a << " / " << pc << " .. " << st.f_blocks << " " << st.f_bavail << endl;
 	if (a >= pc) {
 	  dout(2) << "age_fill at " << a << " / " << pc << " stopping" << endl;
@@ -116,7 +117,7 @@ void Ager::age_empty(float pc) {
   while (1) {
 	struct statfs st;
 	store->statfs(&st);
-	float a = (float)(st.f_blocks-st.f_bfree) / (float)st.f_blocks;
+	float a = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);
 	dout(2) << "age_empty at " << a << " / " << pc << endl;//" stopping" << endl;
 	if (a <= pc) {
 	  dout(2) << "age_empty at " << a << " / " << pc << " stopping" << endl;
@@ -250,6 +251,7 @@ void Ager::age(int time,
 	  age_empty(low_water);
 	}
 	//store->sync();
+	//store->sync();
 
 	// show frag state
 	store->_get_frag_stat(st);
@@ -265,7 +267,7 @@ void Ager::age(int time,
   }
 
   // dump the freelist
-  save_freelist(0);
+  //save_freelist(0);
   exit(0);   // hack
 
   // ok!
