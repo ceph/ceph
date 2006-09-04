@@ -947,6 +947,10 @@ void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry,
   // write entry on disk
   bufferlist bl;
   bl.append( (char*)&logentry, sizeof(logentry) );
+  if (1) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
+	bufferptr bp = new buffer(4096 - sizeof(logentry));
+	bl.push_back(bp);
+  }
   t.write( info.pgid, ondisklog.top, bl.length(), bl );
   
   // update block map?
