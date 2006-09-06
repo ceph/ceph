@@ -53,14 +53,20 @@ __uint64_t Ager::age_fill(float pc, utime_t until) {
 	
 	struct statfs st;
 	store->statfs(&st);
-	float a = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);
+	float free = 1.0 - ((float)(st.f_bfree) / (float)st.f_blocks);
+	float avail = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);  // to write to
 	//float a = (float)(st.f_bfree) / (float)st.f_blocks;
 	//dout(10) << "age_fill at " << a << " / " << pc << " .. " << st.f_blocks << " " << st.f_bavail << endl;
-	if (a >= pc) {
-	  dout(2) << "age_fill at " << a << " / " << pc << " stopping" << endl;
+	if (free >= pc) {
+	  dout(2) << "age_fill at " << free << " / " << avail << " / " << " / " << pc << " stopping" << endl;
 	  break;
 	}
-	
+
+	// make sure we can write to it..
+	if (avail > .98 ||
+		avail - free > .02) 
+	  store->sync();
+
 	object_t oid = age_get_oid();
 	
 	int b = myrand() % 10;
@@ -68,8 +74,11 @@ __uint64_t Ager::age_fill(float pc, utime_t until) {
 	
 	ssize_t s = age_pick_size();
 	wrote += (s + 4095) / 4096;
-	
-	dout(2) << "age_fill at " << a << " / " << pc << " creating " << hex << oid << dec << " sz " << s << endl;
+
+
+
+
+	dout(2) << "age_fill at " << free << " / " << avail << " / " << pc << " creating " << hex << oid << dec << " sz " << s << endl;
 	
 
 	if (false && !g_conf.ebofs_verify && start_debug && wrote > 1000000ULL) { 
@@ -117,10 +126,11 @@ void Ager::age_empty(float pc) {
   while (1) {
 	struct statfs st;
 	store->statfs(&st);
-	float a = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);
-	dout(2) << "age_empty at " << a << " / " << pc << endl;//" stopping" << endl;
-	if (a <= pc) {
-	  dout(2) << "age_empty at " << a << " / " << pc << " stopping" << endl;
+	float free = 1.0 - ((float)(st.f_bfree) / (float)st.f_blocks);
+	float avail = 1.0 - ((float)(st.f_bavail) / (float)st.f_blocks);  // to write to
+	dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << endl;//" stopping" << endl;
+	if (free <= pc) {
+	  dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " stopping" << endl;
 	  break;
 	}
 	
@@ -129,14 +139,14 @@ void Ager::age_empty(float pc) {
 	if (n == 0 || age_objects[b].empty()) {
 	  dout(2) << "age_empty sync" << endl;
 	  //sync();
-	  sync();
+	  //sync();
 	  n = nper;
 	  continue;
 	}
 	object_t oid = age_objects[b].front();
 	age_objects[b].pop_front();
 	
-	dout(2) << "age_empty at " << a << " / " << pc << " removing " << hex << oid << dec << endl;
+	dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << oid << dec << endl;
 	
 	store->remove(oid);
 	age_free_oids.push_back(oid);

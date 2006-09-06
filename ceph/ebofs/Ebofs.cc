@@ -2771,7 +2771,8 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   st.total_free = get_free_blocks() + get_limbo_blocks();
   st.free_extent_dist.clear();
   st.num_free_extent = 0;
-
+  st.avg_free_extent = 0;
+/*
   __uint64_t tfree = 0;
   for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
 	Table<block_t,block_t> *tab;
@@ -2805,7 +2806,7 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
 	}
   }
   st.avg_free_extent = tfree / st.num_free_extent;
-
+*/
 
   // used extents is harder.  :(
   st.num_extent = 0;
@@ -2819,7 +2820,7 @@ void Ebofs::_get_frag_stat(FragmentationStat& st)
   object_tab->find(0, cursor);
   int nobj = 0;
   int njump = 0;
-  while (1) {
+  while (object_tab->get_num_keys() > 0) {
 	Onode *on = get_onode(cursor.current().key);
 	assert(on);
 
