@@ -508,7 +508,8 @@ void OSD::heartbeat()
 
   // hack: fake reorg?
   if (osdmap && g_conf.fake_osdmap_updates) {
-	if ((rand() % (g_conf.num_osd / g_conf.fake_osdmap_updates)) == whoami / g_conf.fake_osdmap_updates) {
+	if (rand() % g_conf.fake_osdmap_updates == 0) {
+	  //if ((rand() % (g_conf.num_osd / g_conf.fake_osdmap_updates)) == whoami / g_conf.fake_osdmap_updates) {
 	  messenger->send_message(new MOSDIn(osdmap->get_epoch()),
 							  MSG_ADDR_MON(0));
 	}
@@ -524,9 +525,10 @@ void OSD::heartbeat()
 	*/
   }
 
-  // schedule next!
+  // schedule next!  randomly.
   next_heartbeat = new C_Heartbeat(this);
-  g_timer.add_event_after(g_conf.osd_heartbeat_interval, next_heartbeat);
+  float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
+  g_timer.add_event_after(wait, next_heartbeat);
 
   osd_lock.Unlock();  
 }

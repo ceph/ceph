@@ -4,8 +4,8 @@
 {
 	'sleep' => 3,
 
-	'osdbits' => [6,7,8,9,10,11],
-	'pgperbits' => [3,4,5],#[4,6,8],
+	'osdbits' => [6,7,8],#,9],10,11],
+	'pgperbits' => [3],#,4,5],#[4,6,8],
 
 	'nummds' => 1,
 
@@ -14,7 +14,7 @@
 				'n' => '3 + $numosd / 32'],
 	'numclient' => 0,
 
-	'fake_osdmap_updates' => [3],
+	'fake_osdmap_updates' => [180],
 
 	'fs' => 'ebofs',
 
