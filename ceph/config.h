@@ -34,6 +34,8 @@ struct md_config_t {
 
   int fake_osdmap_expand;
   int fake_osdmap_updates;
+  int fake_osd_mttf;
+  int fake_osd_mttr;
 
   int osd_remount_at;
 

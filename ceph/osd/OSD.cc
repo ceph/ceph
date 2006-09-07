@@ -508,7 +508,7 @@ void OSD::heartbeat()
 
   // hack: fake reorg?
   if (osdmap && g_conf.fake_osdmap_updates) {
-	if (rand() % g_conf.fake_osdmap_updates == 0) {
+	if ((rand() % g_conf.fake_osdmap_updates) == 0) {
 	  //if ((rand() % (g_conf.num_osd / g_conf.fake_osdmap_updates)) == whoami / g_conf.fake_osdmap_updates) {
 	  messenger->send_message(new MOSDIn(osdmap->get_epoch()),
 							  MSG_ADDR_MON(0));

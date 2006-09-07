@@ -61,6 +61,8 @@ md_config_t g_conf = {
 
   fake_osdmap_expand: 0,
   fake_osdmap_updates: 0,
+  fake_osd_mttf: 0,
+  fake_osd_mttr: 0,
 
   osd_remount_at: 0,
 
@@ -359,6 +361,10 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.fake_osdmap_expand = atoi(args[++i]);
 	else if (strcmp(args[i], "--fake_osdmap_updates") == 0) 
 	  g_conf.fake_osdmap_updates = atoi(args[++i]);
+	else if (strcmp(args[i], "--fake_osd_mttf") == 0) 
+	  g_conf.fake_osd_mttf = atoi(args[++i]);
+	else if (strcmp(args[i], "--fake_osd_mttr") == 0) 
+	  g_conf.fake_osd_mttr = atoi(args[++i]);
 	else if (strcmp(args[i], "--fake_osd_down") == 0) {
 	  int osd = atoi(args[++i]);
 	  float when = atof(args[++i]);

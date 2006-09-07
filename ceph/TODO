@@ -3,17 +3,41 @@
 
 todo
 
-- latency
-  - try adding small client delay between requests
-  - try without commits?
-
-- aged ebofs fs  .. wr_age
-  - over time
-  - versus fresh (wrsizes)
 
 
-why is 4osd tput so low?  do i need more clients?
-is it the bdev_fake_mb making it unstable?
+1- finish ebofs fragmetnation experiment
+
+ -> do rd_age for the 200gb partition.  
+(hopefully, we can show that our allocation strategy helps reads at the expense of writes)
+
+2- age ext2 overnight to do a wishy-washy comparison
+
+3- better map_dist plot.
+
+
+
+
+1- get ebofs frag experiment running.
+
+/2- figure out rep_lat issue?
+/ 19 - perfect for 1mb writes
+
+3- ebofs time frag plot
+
+4- map dist storm.
+
+
+
+EASY
+- ebofs tput vs frag
+
+HARD
+- aged fakestore
+  - vs wrsizes
+
+- ebofs frag versus time plot
+
+
 
 
 
@@ -132,6 +156,7 @@ reliability
 - osdmonitor, filter
 
 ebofs
+- reallocate if dirty is cancelable.  specifically, so that pg log writes are efficient.
 - fix buffercache::rx_finish uninitialized pstart bug
 - fix sync() 
 - fix bug in node rotation on insert (and reenable)
@@ -139,20 +164,18 @@ ebofs
 - verify LRU behavior sensible: writes go to mid, not top!
 - fix NEAR_LAST_FWD   (?)
 - combine inodes and/or cnodes into same blocks
-- delay allocation
-  - or actually, reallocate if dirty is cancelable
 - journaling?  in NVRAM?
 - clone()
 
 
 
 bugs/stability
-- fakestore crapping out.. missing timer events?
 - figure out weird 40ms latency with double log entries
 
 
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
+  - well, just figure out general timer cancellation strategy that avoids races
 - gzip in messenger?
 
 
