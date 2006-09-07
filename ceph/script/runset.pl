@@ -205,6 +205,11 @@ sub run {
 	$c .= " --syn readfile $h->{'readfile_mb'} $h->{'readfile_size'}" if $h->{'readfile'};
 	$c .= " --syn makedirs $h->{'makedirs_dirs'} $h->{'makedirs_files'} $h->{'makedirs_depth'}" if $h->{'makedirs'};
 
+	if ($h->{'ebofs_freelist'}) {
+		system "cp freelist/ebofs.freelist.$h->{'ebofs_freelist'} ebofs.freelist";
+		$c .= " --osd_age_time -1";
+	}
+
 	for my $k ('nummds', 'numclient', 'numosd', 'kill_after',
 			   'osd_maxthreads', 'osd_object_layout', 'osd_pg_layout','osd_pg_bits',
 			   'mds_bal_rep', 'mds_bal_interval', 'mds_bal_max','mds_decay_halflife',
@@ -267,7 +272,8 @@ touch $fn/.post
 		return;
 	} else {
 		# run
-		my $cmd = "\n$launch $c > $fn/o && touch $fn/.done";
+		#my $cmd = "\n$launch $c > $fn/o && touch $fn/.done";#
+		my $cmd = "\n$launch $c > $fn/o ; touch $fn/.done";
 		print "$cmd $nobg\n";
 		my $r = undef;
 		unless ($fake) {

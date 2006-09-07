@@ -5,11 +5,11 @@
 	'sleep' => 3,
 
 	'nummds' => 1,
-	'numosd' => [10,14],#10,14,16],
-	'numclient' => [30*16],
-	'n' => 27,
+	'numosd' => [8],#10,14,16],
+	'numclient' => [10*16],
+	'n' => 13,
 
-	'fs' => ['ebofs'],
+	'fs' => 'ebofs',
 
 	'start' => 60,
 	'end' => 90,
@@ -30,11 +30,13 @@
 						 1024*1024],
 	'writefile_mb' => 10000,
 
-	'file_layout_num_rep' => [1, 2, 3],
+	'file_layout_num_rep' => 1,
 	'file_layout_ssize' => 4*1024*1024,
 	'file_layout_osize' => 4*1024*1024,
 
 	'osd_pg_bits' => 12,
+
+	'ebofs_freelist' => [0, 1080, 65400],
 
 
 		#'custom' => '--tcp_skip_rank0',
