@@ -277,7 +277,7 @@ void Ager::age(int time,
   }
 
   // dump the freelist
-  //save_freelist(0);
+  save_freelist(0);
   exit(0);   // hack
 
   // ok!

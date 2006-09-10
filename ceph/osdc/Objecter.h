@@ -4,6 +4,7 @@
 #include "include/types.h"
 #include "include/bufferlist.h"
 
+#include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"
 
 #include <list>
@@ -88,13 +89,18 @@ class Objecter {
    */
   class PG {
   public:
-	int primary;	         // current osd set
+	int updater;         // where i write
+	int reader;          // where i read, and expect acks from
 	set<tid_t>  active_tids; // active ops
 
-	PG() : primary(-1) {}
+	PG() : updater(-1), reader(-1) {}
 
-	void calc_primary(pg_t pgid, OSDMap *osdmap) {  // return true if change
-	  primary = osdmap->get_pg_acting_primary(pgid);
+	void calc(pg_t pgid, OSDMap *osdmap) {  // return true if change
+	  updater = osdmap->get_pg_acting_primary(pgid);
+	  if (g_conf.osd_rep == OSD_REP_PRIMARY)
+		reader = updater;
+	  else 
+		reader = osdmap->get_pg_acting_tail(pgid);
 	}
   };
 
@@ -103,7 +109,7 @@ class Objecter {
   
   PG &get_pg(pg_t pgid) {
 	if (!pg_map.count(pgid)) 
-	  pg_map[pgid].calc_primary(pgid, osdmap);
+	  pg_map[pgid].calc(pgid, osdmap);
 	return pg_map[pgid];
   }
   void close_pg(pg_t pgid) {

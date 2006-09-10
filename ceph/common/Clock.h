@@ -132,14 +132,18 @@ class Clock {
   // relative time (from startup)
   const utime_t& now() {
 	gettimeofday(&last.timeval(), NULL);
-	//last -= zero;
+	last -= zero;
 	//last = abs_last - start_offset;
 	return last;
   }
-  const utime_t real_now() {
-	utime_t now;
-	gettimeofday(&now.timeval(), NULL);
-	return now;
+
+  void realify(utime_t& t) {
+	t += zero;
+  }
+  utime_t real_now() {
+	utime_t realnow;
+	gettimeofday(&realnow.timeval(), NULL);
+	return realnow;
   }
 
   const utime_t& recent_now() {

@@ -1,121 +1,4 @@
 
-== FAST rados paper
-
-todo
-
-
-
-1- finish ebofs fragmetnation experiment
-
- -> do rd_age for the 200gb partition.  
-(hopefully, we can show that our allocation strategy helps reads at the expense of writes)
-
-2- age ext2 overnight to do a wishy-washy comparison
-
-3- better map_dist plot.
-
-
-
-
-1- get ebofs frag experiment running.
-
-/2- figure out rep_lat issue?
-/ 19 - perfect for 1mb writes
-
-3- ebofs time frag plot
-
-4- map dist storm.
-
-
-
-EASY
-- ebofs tput vs frag
-
-HARD
-- aged fakestore
-  - vs wrsizes
-
-- ebofs frag versus time plot
-
-
-
-
-
-cluster map
-- map distribution
-
-data distribution
- placement groups
-
-replication operation
-
-failure detection
- osd monitor
- up/down/in/out
-
-pg logging
- top, bottom, trimming, etc.
- caller stamps -> idempotent operations
-
-pg recovery
- wrt logs, objects
- wrt active ops
-
-
-ebofs
- on disk layout
- data safety
- storage interface
-
- 
-
--- rados applications 
-- files
-- b-link trees
-- distributed hash table
-- fifo queues
-
-
-
-
-== rados client nodes
-
-why do we want client op ordering?
-- simpler logic in objectcacher
-- can pipeline lock + write + unlock, etc.
-  - (at least, wrt to single objects..)
-- all complexity is in Objecter
-  - barrier: waitfor outstanding acks whenever primary osd shifts.
-
-why don't we need it?
-- can make compound write+unlock...
-- don't actually need ordering for concurrent client ops..
-
----> we want it.
-
-
-* ObjectCacher currently assumes reads+acks+commits over an _object_ are ordered.
- -> they are.
-
-- primary changes by pg
-- actual discontinuity is over disks
-- but the ordering is over objects .. not pgs (bc of missing objects, recovery, etc.)
-
-Objecter:
-- should order acks over objects, because we want to order the updates (see below)
-
-- on map update and primary change,
- - resubmit to new primary.
-
-- only accept acks from current primary.
-- only accept commits from current primary.
-- need pg map
-  - to detect primary changes,
-  - pg crashes
-
-
-
-
 == todo
 
 - how to get usage feedback to monitor?
@@ -125,11 +8,18 @@ messenger
 - lookup upcall,
 - distributed namer (eg send to MSG_ADDR_MON_ANY)
 - failure reporting
+- generalize out a transport layer?  
+  - eg reliable tcp for most things, connectionless unreliable datagrams for monitors?
+  - or, aggressive connection closing on monitors?  or just max_connections and an lru?
 - share same tcp socket for sender and receiver?
 - close idle connections?
 - osds: forget idle client addrs
 
 osd/rados
+- clean up writeahead logs
+- fix heartbeat wrt new replication
+- figure out new rep failure cases
+- same_primary_since -> same_tail_since
 - mark residual pgs obsolete  ***
 - deal with divergent disconnected primaries
 - rdlocks
@@ -143,6 +33,7 @@ monitor
 - watch osd utilization; adjust overload in cluster map
 
 objecter
+- handle new rep mode failure modes...  head, tail, middle
 
 objectcacher
 - ocacher flushing

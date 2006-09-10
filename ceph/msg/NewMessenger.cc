@@ -23,8 +23,8 @@
 
 
 #undef dout
-#define dout(l)  if (l<=g_conf.debug_ms) cout << "-- rank" << rank.my_rank << " "
-#define derr(l)  if (l<=g_conf.debug_ms) cerr << "-- rank" << rank.my_rank << " "
+#define dout(l)  if (l<=g_conf.debug_ms) cout << g_clock.now() << " -- rank" << rank.my_rank << " "
+#define derr(l)  if (l<=g_conf.debug_ms) cerr << g_clock.now() << " -- rank" << rank.my_rank << " "
 
 
 
@@ -1055,6 +1055,43 @@ void Rank::submit_messages(list<Message*>& ls)
   ls.clear();
 }
 
+
+void Rank::prepare_dest(msg_addr_t dest)
+{
+  lock.Lock();
+
+  if (entity_map.count( dest )) {
+	// remote, known rank addr.
+	entity_inst_t inst = entity_map[dest];
+	
+	if (inst == my_inst) {
+	  //dout(20) << "submit_message " << *m << " dest " << dest << " local but mid-register, waiting." << endl;
+	  //waiting_for_lookup[dest].push_back(m);
+	}
+	else if (rank_sender.count( inst.rank ) &&
+			 rank_sender[inst.rank]->inst == inst) {
+	  //dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << inst << ", connected." << endl;
+	  // connected.
+	  //sender = rank_sender[ inst.rank ];
+	} else {
+	  //dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << inst << ", connecting." << endl;
+	  // not connected.
+	  connect_rank( inst );
+	}
+  } else {
+	// unknown dest rank or rank addr.
+	if (looking_up.count(dest) == 0) {
+	  //dout(20) << "submit_message " << *m << " dest " << dest << " remote, unknown addr, looking up" << endl;
+	  lookup(dest);
+	} else {
+	  //dout(20) << "submit_message " << *m << " dest " << dest << " remote, unknown addr, already looking up" << endl;
+	}
+  }
+
+  lock.Unlock();
+}
+
+
 void Rank::submit_message(Message *m)
 {
   const msg_addr_t dest = m->get_dest();
@@ -1463,6 +1500,13 @@ int Rank::EntityMessenger::shutdown()
 
   return 0;
 }
+
+
+void Rank::EntityMessenger::prepare_send_message(msg_addr_t dest)
+{
+  rank.prepare_dest(dest);
+}
+
 
 int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {

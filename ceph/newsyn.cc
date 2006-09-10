@@ -281,9 +281,10 @@ int main(int argc, char **argv)
   // wait for everything to finish
   rank.wait();
 
-  if (started) cerr << "tcpsyn finishing" << endl;
+  if (started) cerr << "newsyn finishing" << endl;
 
-  return 0;
+  return 0;  // whatever, cleanup hangs sometimes (stopping ebofs threads?).
+
 
   // cleanup
   for (map<int,MDS*>::iterator i = mds.begin(); i != mds.end(); i++)

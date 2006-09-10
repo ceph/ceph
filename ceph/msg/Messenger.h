@@ -84,6 +84,7 @@ class Messenger {
   virtual void dispatch(Message *m);
 
   // send message
+  virtual void prepare_send_message(msg_addr_t dest) {}
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
 
   // make a procedure call

@@ -179,6 +179,7 @@ md_config_t g_conf = {
 
 
   // --- osd ---
+  osd_rep: OSD_REP_PRIMARY,
   osd_pg_bits: 8,
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
@@ -587,6 +588,15 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.osd_maxthreads = 1;   // until feng merges joel's fixes
 	}
 
+	
+	else if (strcmp(args[i], "--osd_rep") == 0) 
+	  g_conf.osd_rep = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_rep_chain") == 0) 
+	  g_conf.osd_rep = OSD_REP_CHAIN;
+	else if (strcmp(args[i], "--osd_rep_splay") == 0) 
+	  g_conf.osd_rep = OSD_REP_SPLAY;
+	else if (strcmp(args[i], "--osd_rep_primary") == 0) 
+	  g_conf.osd_rep = OSD_REP_PRIMARY;
 	else if (strcmp(args[i], "--osd_mkfs") == 0) 
 	  g_conf.osd_mkfs = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_age") == 0) 

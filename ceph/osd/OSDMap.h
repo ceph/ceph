@@ -49,6 +49,11 @@ using namespace std;
 #define PG_TYPE_RAND     1   // default: distribution randomly
 #define PG_TYPE_STARTOSD 2   // place primary on a specific OSD (named by the pg_bits)
 
+// pg roles
+#define PG_ROLE_STRAY   -1
+#define PG_ROLE_HEAD     0
+#define PG_ROLE_MIDDLE   1
+#define PG_ROLE_TAIL     2
 
 
 
@@ -437,35 +442,49 @@ private:
 	  return group[0];
 	return -1;  // we fail!
   }
+  int get_pg_acting_tail(pg_t pg) {
+	vector<int> group;
+	int nrep = pg_to_acting_osds(pg, group);
+	if (nrep > 0)
+	  return group[group.size()-1];
+	return -1;  // we fail!
+  }
 
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
+  int calc_pg_rank(int osd, vector<int>& acting, int nrep=0) {
+	if (!nrep) nrep = acting.size();
+	for (int i=0; i<nrep; i++) 
+	  if (acting[i] == osd) return i;
+	return -1;
+  }
+  int calc_pg_role(int osd, vector<int>& acting, int nrep=0) {
+	if (!nrep) nrep = acting.size();
+	int rank = calc_pg_rank(osd, acting, nrep);
+
+	if (rank < 0) return PG_ROLE_STRAY;
+	else if (rank == 0) return PG_ROLE_HEAD;
+	else if (rank == nrep-1) return PG_ROLE_TAIL;
+	else return PG_ROLE_MIDDLE;
+  }
+  
   int get_pg_role(pg_t pg, int osd) {
 	vector<int> group;
 	int nrep = pg_to_osds(pg, group);
-	for (int i=0; i<nrep; i++) {
-	  if (group[i] == osd) return i;
-	}
-	return -1;  // none
+	return calc_pg_role(osd, group, nrep);
   }
 
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) {
 	vector<int> group;
 	int nrep = pg_to_acting_osds(pg, group);
-	for (int i=0; i<nrep; i++) {
-	  if (group[i] == osd) return i;
-	}
-	return -1;  // none
+	return calc_pg_rank(osd, group, nrep);
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
   int get_pg_acting_role(pg_t pg, int osd) {
 	vector<int> group;
 	int nrep = pg_to_acting_osds(pg, group);
-	for (int i=0; i<nrep; i++) {
-	  if (group[i] == osd) return i>0 ? 1:0;
-	}
-	return -1;  // none
+	return calc_pg_role(osd, group, nrep);
   }
 
 

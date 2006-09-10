@@ -61,6 +61,9 @@ class Cond
   }
 
   int WaitUntil(Mutex &mutex, utime_t when) {
+	// make sure it's _real_ time
+	g_clock.realify(when);
+
 	// timeval -> timespec
 	struct timespec ts;
 	memset(&ts, 0, sizeof(ts));
@@ -71,7 +74,7 @@ class Cond
 	return r;
   }
   int WaitInterval(Mutex &mutex, utime_t interval) {
-	utime_t when = g_clock.real_now();
+	utime_t when = g_clock.now();
 	when += interval;
 	return WaitUntil(mutex, when);
   }

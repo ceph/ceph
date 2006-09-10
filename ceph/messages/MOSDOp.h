@@ -17,8 +17,6 @@
 
 #include "msg/Message.h"
 
-#include "osd/OSDMap.h"
-
 /*
  * OSD op
  *
@@ -46,38 +44,23 @@
 #define OSD_OP_UPLOCK     24
 #define OSD_OP_DNLOCK     25
 
+#define OSD_OP_PULL       30
+#define OSD_OP_PUSH       31
 
-#define OSD_OP_IS_REP(x)  ((x) >= 30)
-
-// replication/recovery -- these ops are relative to a specific object version #
-#define OSD_OP_REP_WRITE    (100+OSD_OP_WRITE)     // replicated (partial object) write
-#define OSD_OP_REP_WRNOOP   (100+OSD_OP_WRNOOP)     // replicated (partial object) write
-#define OSD_OP_REP_TRUNCATE (100+OSD_OP_TRUNCATE)  // replicated truncate
-#define OSD_OP_REP_DELETE   (100+OSD_OP_DELETE)
-#define OSD_OP_REP_WRLOCK   (100+OSD_OP_WRLOCK)
-#define OSD_OP_REP_WRUNLOCK (100+OSD_OP_WRUNLOCK)
-#define OSD_OP_REP_RDLOCK   (100+OSD_OP_RDLOCK)
-#define OSD_OP_REP_RDUNLOCK (100+OSD_OP_RDUNLOCK)
-#define OSD_OP_REP_UPLOCK   (100+OSD_OP_UPLOCK)
-#define OSD_OP_REP_DNLOCK   (100+OSD_OP_DNLOCK)
-
-#define OSD_OP_REP_PULL     30   // whole object read
-//#define OSD_OP_REP_PUSH     31   // whole object write
-//#define OSD_OP_REP_REMOVE   32   // delete replica
-
-//#define OSD_OP_FLAG_TRUNCATE  1   // truncate object after end of write
 
 typedef struct {
-  tid_t tid;
   long pcid;
-  msg_addr_t asker;
 
-  tid_t      orig_tid;
-  msg_addr_t orig_asker;
+  // who's asking?
+  tid_t tid;
+  msg_addr_t client;
+
+  // for replication
+  tid_t rep_tid;
 
   object_t oid;
   pg_t pg;
-  int        pg_role;//, rg_nrep;
+
   epoch_t map_epoch;
 
   eversion_t pg_trim_to;   // primary->replica: trim to here
@@ -90,8 +73,7 @@ typedef struct {
   bool   want_ack;
   bool   want_commit;
 
-  //epoch_t _included_map_epoch;
-  size_t _data_len;//, _osdmap_len;
+  size_t _data_len;
 
 } MOSDOp_st;
 
@@ -99,6 +81,10 @@ class MOSDOp : public Message {
 public:
   static const char* get_opname(int op) {
 	switch (op) {
+	case OSD_OP_READ: return "read";
+	case OSD_OP_STAT: return "stat";
+
+	case OSD_OP_WRNOOP: return "wrnoop"; 
 	case OSD_OP_WRITE: return "write"; 
 	case OSD_OP_ZERO: return "zero"; 
 	case OSD_OP_DELETE: return "delete"; 
@@ -109,7 +95,9 @@ public:
 	case OSD_OP_RDUNLOCK: return "rdunlock"; 
 	case OSD_OP_UPLOCK: return "uplock"; 
 	case OSD_OP_DNLOCK: return "dnlock"; 
-	case OSD_OP_WRNOOP: return "wrnoop"; 
+
+	case OSD_OP_PULL: return "pull";
+	case OSD_OP_PUSH: return "push";
 	default: assert(0);
 	}
 	return 0;
@@ -118,27 +106,24 @@ public:
 private:
   MOSDOp_st st;
   bufferlist data;
-  //bufferlist osdmap;
+  map<string,bufferptr> attrset;
 
   friend class MOSDOpReply;
 
  public:
-
   const tid_t       get_tid() { return st.tid; }
-  const msg_addr_t& get_asker() { return st.asker; }
+  const msg_addr_t& get_client() { return st.client; }
 
-  const tid_t       get_orig_tid() { return st.orig_tid; }
-  const msg_addr_t& get_orig_asker() { return st.orig_asker; }
-  void set_orig_tid(tid_t t) { st.orig_tid = t; }
-  void set_orig_asker(const msg_addr_t& a) { st.orig_asker = a; }
+  const tid_t       get_rep_tid() { return st.rep_tid; }
+  void set_rep_tid(tid_t t) { st.rep_tid = t; }
 
   const object_t   get_oid() { return st.oid; }
   const pg_t get_pg() { return st.pg; }
   const epoch_t  get_map_epoch() { return st.map_epoch; }
 
-  const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
+  //const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
   const eversion_t  get_version() { return st.version; }
-  const eversion_t  get_old_version() { return st.old_version; }
+  //const eversion_t  get_old_version() { return st.old_version; }
 
   const eversion_t get_pg_trim_to() { return st.pg_trim_to; }
   void set_pg_trim_to(eversion_t v) { st.pg_trim_to = v; }
@@ -148,6 +133,9 @@ private:
 
   const size_t get_length() { return st.length; }
   const size_t get_offset() { return st.offset; }
+
+  map<string,bufferptr>& get_attrset() { return attrset; }
+  void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
@@ -161,17 +149,6 @@ private:
   }
   size_t get_data_len() { return st._data_len; }
 
-  /*void attach_map(OSDMap *o) {
-	o->encode(osdmap);
-	st._included_map_epoch = o->get_epoch();
-  }
-  epoch_t get_osdmap_epoch() {
-	return st._included_map_epoch;
-  }
-  bufferlist& get_osdmap_bl() { 
-	return osdmap;
-	}*/
-
 
   // keep a pcid (procedure call id) to match up request+reply
   void set_pcid(long pcid) { this->st.pcid = pcid; }
@@ -181,12 +158,12 @@ private:
 		 object_t oid, pg_t pg, epoch_t mapepoch, int op) :
 	Message(MSG_OSD_OP) {
 	memset(&st, 0, sizeof(st));
-	this->st.orig_tid = this->st.tid = tid;
-	this->st.orig_asker = this->st.asker = asker;
+	this->st.client = asker;
+	this->st.tid = tid;
+	this->st.rep_tid = 0;
 
 	this->st.oid = oid;
 	this->st.pg = pg;
-	this->st.pg_role = 0;
 	this->st.map_epoch = mapepoch;
 	this->st.op = op;
 
@@ -195,7 +172,7 @@ private:
   }
   MOSDOp() {}
 
-  void set_pg_role(int r) { st.pg_role = r; }
+  //void set_pg_role(int r) { st.pg_role = r; }
   //void set_rg_nrep(int n) { st.rg_nrep = n; }
 
   void set_length(size_t l) { st.length = l; }
@@ -208,17 +185,18 @@ private:
 
   // marshalling
   virtual void decode_payload() {
-	payload.copy(0, sizeof(st), (char*)&st);
-	payload.splice(0, sizeof(st));
-	if (st._data_len) payload.splice(0, st._data_len, &data);
-	//if (st._osdmap_len) payload.splice(0, st._osdmap_len, &osdmap);
+	int off = 0;
+	payload.copy(off, sizeof(st), (char*)&st);
+	off += sizeof(st);
+	::_decode(attrset, payload, off);
+	if (st._data_len) 
+	  payload.splice(off, st._data_len, &data);
   }
   virtual void encode_payload() {
 	st._data_len = data.length();
-	//st._osdmap_len = osdmap.length();
 	payload.push_back( new buffer((char*)&st, sizeof(st)) );
+	::_encode(attrset, payload);
 	payload.claim_append( data );
-	//payload.claim_append( osdmap );
   }
 
   virtual char *get_type_name() { return "oop"; }
@@ -226,8 +204,8 @@ private:
 
 inline ostream& operator<<(ostream& out, MOSDOp& op)
 {
-  return out << "MOSDOp(" << MSG_ADDR_NICE(op.get_asker()) << "." << op.get_tid() 
-			 << " op " << op.get_op()
+  return out << "MOSDOp(" << MSG_ADDR_NICE(op.get_client()) << "." << op.get_tid() 
+			 << " op " << MOSDOp::get_opname(op.get_op())
 			 << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
 }
 

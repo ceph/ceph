@@ -69,6 +69,31 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
 }
 
 
+void PG::IndexedLog::trim_write_ahead(eversion_t last_update) 
+{
+  while (!log.empty() &&
+		 log.rbegin()->version > last_update) {
+	// remove from index
+	unindex(*log.rbegin());
+	
+	// remove
+	log.pop_back();
+  }
+}
+
+void PG::trim_write_ahead()
+{
+  if (info.last_update < log.top) {
+	dout(10) << "trim_write_ahead (" << info.last_update << "," << log.top << "]" << endl;
+	log.trim_write_ahead(info.last_update);
+  } else {
+	assert(info.last_update == log.top);
+	dout(10) << "trim_write_ahead last_update=top=" << info.last_update << endl;
+  }
+
+}
+
+
 void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
@@ -366,7 +391,7 @@ void PG::peer(ObjectStore::Transaction& t,
 	}
 	
 	dout(10) << " querying info from osd" << *it << endl;
-	query_map[*it][info.pgid] = Query(Query::INFO, info.same_primary_since);
+	query_map[*it][info.pgid] = Query(Query::INFO, info.same_primary_since, info.same_acker_since);
 	peer_info_requested.insert(*it);
   }
   if (missing_info) return;
@@ -454,7 +479,8 @@ void PG::peer(ObjectStore::Transaction& t,
 				 << " v " << newest_update 
 				 << ", querying since " << oldest_update_needed
 				 << endl;
-		query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update_needed, info.same_primary_since);
+		query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update_needed, 
+														info.same_primary_since, info.same_acker_since);
 		peer_log_requested[newest_update_osd] = oldest_update_needed;
 	  } else {
 		dout(10) << " newest update on osd" << newest_update_osd
@@ -464,7 +490,8 @@ void PG::peer(ObjectStore::Transaction& t,
 		assert((peer_info[newest_update_osd].last_complete >= 
 				peer_info[newest_update_osd].log_bottom) ||
 			   peer_info[newest_update_osd].log_backlog);  // or else we're in trouble.
-		query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.same_primary_since);
+		query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, 
+														info.same_primary_since, info.same_acker_since);
 		peer_summary_requested.insert(newest_update_osd);
 	  }
 	}
@@ -505,7 +532,8 @@ void PG::peer(ObjectStore::Transaction& t,
 			   << ".  fetching summary/backlog from osd" << who
 			   << endl;
 	  assert(who != osd->whoami); // can't be me, or we're in trouble.
-	  query_map[who][info.pgid] = Query(Query::BACKLOG, info.same_primary_since);
+	  query_map[who][info.pgid] = Query(Query::BACKLOG, 
+										info.same_primary_since, info.same_acker_since);
 	  peer_summary_requested.insert(who);
 	}
 	return;
@@ -529,7 +557,9 @@ void PG::peer(ObjectStore::Transaction& t,
 	  }
 
 	  dout(10) << " requesting summary/backlog from osd" << peer << endl;	  
-	  query_map[peer][info.pgid] = Query(Query::INFO, info.same_primary_since);
+	  query_map[peer][info.pgid] = Query(Query::INFO, 
+										 info.same_primary_since,
+										 info.same_acker_since);
 	  peer_summary_requested.insert(peer);
 	  waiting = true;
 	}
@@ -598,9 +628,10 @@ void PG::activate(ObjectStore::Transaction& t)
 	dout(10) << "activate - complete" << endl;
 	log.complete_to == log.log.end();
 	log.requested_to = log.log.end();
-  } else {
-	dout(10) << "activate - not complete, starting recovery" << endl;
-
+  } 
+  else if (is_primary()) {
+	dout(10) << "activate - not complete, " << missing << ", starting recovery" << endl;
+	
 	// init complete_to
 	log.complete_to = log.log.begin();
 	while (log.complete_to->version < info.last_complete) {
@@ -611,6 +642,8 @@ void PG::activate(ObjectStore::Transaction& t)
 	// start recovery
 	log.requested_to = log.complete_to;
     do_recovery();
+  } else {
+	dout(10) << "activate - not complete, " << missing << endl;
   }
 
 
@@ -647,24 +680,6 @@ void PG::activate(ObjectStore::Transaction& t)
 		// incremental log
 		assert(peer_info[peer].last_update < info.last_update);
 		m->log.copy_after(log, peer_info[peer].last_update);
-	  }
-	  
-	  // build missing list for them too
-	  set<object_t> did;
-	  for (list<Log::Entry>::reverse_iterator p = m->log.log.rbegin();
-		   p != m->log.log.rend();
-		   p++) {
-		if (p->is_delete()) continue;
-		if (did.count(p->oid)) continue;
-		did.insert(p->oid);
-		
-		if (missing.is_missing(p->oid, p->version)) {   // we don't have it?
-		  assert(missing.loc.count(p->oid));   // nothing should be lost!
-		  m->missing.add(p->oid, p->version);
-		  m->missing.loc[p->oid] = missing.loc[p->oid];
-		} 
-		// note: peer will assume we have it if we don't say otherwise.
-		// else m->missing.loc[oid] = osd->whoami;       // we have it.
 	  }
 	  
 	  dout(10) << "sending " << m->log << " " << m->missing
@@ -860,6 +875,35 @@ bool PG::do_recovery()
   return false;
 }
 
+void PG::do_peer_recovery()
+{
+  dout(10) << "do_peer_recovery" << endl;
+
+  for (unsigned i=0; i<acting.size(); i++) {
+	int peer = acting[i];
+	if (peer_missing.count(peer) == 0 ||
+		peer_missing[peer].num_missing() == 0) 
+	  continue;
+	
+	// oldest first!
+	object_t oid = peer_missing[peer].rmissing.begin()->second;
+	eversion_t v = peer_missing[peer].rmissing.begin()->first;
+
+	osd->push(this, oid, peer);
+
+	// do other peers need it too?
+	for (i++; i<acting.size(); i++) {
+	  int peer = acting[i];
+	  if (peer_missing.count(peer) &&
+		  peer_missing[peer].is_missing(oid))
+		osd->push(this, oid, peer);
+	}
+
+	return;
+  }
+  
+  // nothing to do!
+}
 
 
 

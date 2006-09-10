@@ -185,6 +185,7 @@ class Rank : public Dispatcher {
 	
 	virtual void callback_kick() {} 
 	virtual int shutdown();
+	virtual void prepare_send_message(msg_addr_t dest);
 	virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
 
 	virtual void mark_down(msg_addr_t a, entity_inst_t& i);
@@ -284,6 +285,7 @@ public:
   EntityMessenger *register_entity(msg_addr_t addr);
   void unregister_entity(EntityMessenger *ms);
 
+  void prepare_dest(msg_addr_t dest);
   void submit_message(Message *m);  
   void submit_messages(list<Message*>& ls);  
 

@@ -21,6 +21,7 @@
 #include "OSDMap.h"
 #include "ObjectStore.h"
 #include "msg/Messenger.h"
+#include "messages/MOSDOpReply.h"
 
 #include "include/types.h"
 
@@ -81,19 +82,23 @@ public:
    */
   struct Info {
 	pg_t pgid;
-	eversion_t last_update;    // (aka log.top) last object version logged/updated.
+	eversion_t last_update;    // last object version applied to store.
 	eversion_t last_complete;  // last version pg was complete through.
+
 	eversion_t log_bottom;     // oldest log entry.
-	bool      log_backlog;    // do we store a complete log?
+	bool       log_backlog;    // do we store a complete log?
+
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
 	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
+	epoch_t same_acker_since;    // upper bound: same acker at least back through this epoch.
 	epoch_t same_role_since;     // upper bound: i have held same role since
+
 	Info(pg_t p=0) : pgid(p), 
-					   //last_update(0), last_complete(0), log_bottom(0), 
-					   log_backlog(false),
-					   last_epoch_started(0), last_epoch_finished(0),
-					   same_primary_since(0), same_role_since(0) {}
+					 log_backlog(false),
+					 last_epoch_started(0), last_epoch_finished(0),
+					 same_primary_since(0), same_acker_since(0), 
+					 same_role_since(0) {}
 	bool is_clean() { return last_update == last_complete; }
   };
 
@@ -112,10 +117,15 @@ public:
 	int type;
 	eversion_t version;
 	epoch_t same_primary_since;
+	epoch_t same_acker_since;
 
-	Query() : type(-1), same_primary_since(0) {}
-	Query(int t, epoch_t s) : type(t), same_primary_since(s) {}
-	Query(int t, eversion_t v, epoch_t s) : type(t), version(v), same_primary_since(s) {}
+	Query() : type(-1), same_primary_since(0), same_acker_since(0) {}
+	Query(int t, epoch_t ps, epoch_t as) : 
+	  type(t), 
+	  same_primary_since(ps), same_acker_since(as) {}
+	Query(int t, eversion_t v, epoch_t ps, epoch_t as) : 
+	  type(t), version(v), 
+	  same_primary_since(ps), same_acker_since(as) {}
   };
   
   
@@ -158,6 +168,12 @@ public:
 	void got(object_t oid, eversion_t v) {
 	  assert(missing.count(oid));
 	  assert(missing[oid] <= v);
+	  loc.erase(oid);
+	  rmissing.erase(missing[oid]);
+	  missing.erase(oid);
+	}
+	void got(object_t oid) {
+	  assert(missing.count(oid));
 	  loc.erase(oid);
 	  rmissing.erase(missing[oid]);
 	  missing.erase(oid);
@@ -329,6 +345,7 @@ public:
 	}
 
 	void trim(ObjectStore::Transaction &t, eversion_t s);
+	void trim_write_ahead(eversion_t last_update);
   };
   
 
@@ -345,6 +362,46 @@ public:
 	OndiskLog() : bottom(0), top(0) {}
 
 	bool trim_to(eversion_t v, ObjectStore::Transaction& t);
+  };
+
+
+  /***
+   */
+
+  class RepOpGather {
+  public:
+	class MOSDOp *op;
+	tid_t rep_tid;
+
+	set<int>  waitfor_ack;
+	set<int>  waitfor_commit;
+	
+	utime_t   start;
+
+	bool sent_ack, sent_commit;
+	
+	set<int>         osds;
+	eversion_t       new_version;
+
+	eversion_t       pg_local_last_complete;
+	map<int,eversion_t> pg_complete_thru;
+	
+	RepOpGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
+	  op(o), rep_tid(rt),
+	  sent_ack(false), sent_commit(false),
+	  new_version(nv), 
+	  pg_local_last_complete(lc) { }
+	bool can_send_ack() { 
+	  return !sent_ack && !sent_commit &&
+		waitfor_ack.empty(); 
+	}
+	bool can_send_commit() { 
+	  return !sent_commit &&
+		waitfor_ack.empty() && waitfor_commit.empty(); 
+	}
+	bool can_delete() { 
+	  return waitfor_ack.empty() && waitfor_commit.empty(); 
+	}
   };
 
 
@@ -396,10 +453,17 @@ protected:
   set<int>             peer_summary_requested;
   friend class OSD;
 
+
+  // [primary|tail]
+  // old way
   map<tid_t, class OSDReplicaOp*> replica_ops;
   map<int, set<tid_t> >           replica_tids_by_osd; // osd -> (tid,...)
 
+  // new way
+  map<tid_t, RepOpGather*>          repop_gather;
+  map<tid_t, list<class Message*> > waiting_for_repop;
 
+  
   // [primary|replica]
   // pg waiters
   list<class Message*>            waiting_for_active;
@@ -411,18 +475,21 @@ protected:
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
 public:
-  void clear_primary_recovery_state() {
-	peer_info.clear();
-	peer_missing.clear();
-  }
   void clear_primary_state() {
+	// clear peering state
 	prior_set.clear();
 	stray_set.clear();
 	clean_set.clear();
 	peer_info_requested.clear();
 	peer_log_requested.clear();
-	clear_primary_recovery_state();
+	peer_info.clear();
+	peer_missing.clear();
   }
+
+  void clear_acker_state() {
+	
+  }
+
 
  public:
   bool is_acting(int osd) const { 
@@ -453,6 +520,8 @@ public:
   void merge_log(Log &olog, Missing& omissing, int from);
   void generate_backlog();
   void drop_backlog();
+  
+  void trim_write_ahead();
 
   void peer(ObjectStore::Transaction& t, map< int, map<pg_t,Query> >& query_map);
 
@@ -460,6 +529,7 @@ public:
 
   void cancel_recovery();
   bool do_recovery();
+  void do_peer_recovery();
 
   void clean_replicas();
 
@@ -479,18 +549,20 @@ public:
   { }
   
   pg_t       get_pgid() const { return info.pgid; }
-  int        get_primary() { return acting[0]; }
   int        get_nrep() const { return acting.size(); }
 
+  int        get_primary() { return acting.empty() ? -1:acting[0]; }
+  int        get_tail() { return acting.empty() ? -1:acting[ acting.size()-1 ]; }
+  int        get_acker() { return g_conf.osd_rep == OSD_REP_PRIMARY ? get_primary():get_tail(); }
+  
   int        get_role() const { return role; }
   void       set_role(int r) { role = r; }
-  void       calc_role(int whoami) {
-	role = -1;
-	for (unsigned i=0; i<acting.size(); i++)
-	  if (acting[i] == whoami) role = i>0 ? 1:0;
-  }
-  bool       is_primary() const { return role == 0; }
-  bool       is_residual() const { return role < 0; }
+
+  bool       is_primary() const { return role == PG_ROLE_HEAD; }
+  bool       is_head() const { return role == PG_ROLE_HEAD; }
+  bool       is_tail() const { return role == PG_ROLE_TAIL; }
+  bool       is_middle() const { return role == PG_ROLE_MIDDLE; }
+  bool       is_residual() const { return role == PG_ROLE_STRAY; }
   
   //int  get_state() const { return state; }
   bool state_test(int m) const { return (state & m) != 0; }
@@ -576,6 +648,19 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
   out << "]";
+  return out;
+}
+
+
+inline ostream& operator<<(ostream& out, PG::RepOpGather& repop)
+{
+  out << "repop(rep_tid=" << repop.rep_tid 
+	  << " wfack=" << repop.waitfor_ack
+	  << " wfcommit=" << repop.waitfor_commit;
+  out << " pct=" << repop.pg_complete_thru;
+  out << " op=" << *(repop.op);
+  out << " repop=" << &repop;
+  out << ")";
   return out;
 }
 

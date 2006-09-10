@@ -16,7 +16,6 @@
 #define __MOSDOPREPLY_H
 
 #include "msg/Message.h"
-#include "osd/OSDMap.h"
 
 #include "MOSDOp.h"
 #include "osd/ObjectStore.h"
@@ -32,8 +31,9 @@
 
 typedef struct {
   // req
-  long tid;
   long pcid;
+  tid_t tid;
+  tid_t rep_tid;
 
   object_t oid;
   pg_t pg;
@@ -58,11 +58,11 @@ typedef struct {
 class MOSDOpReply : public Message {
   MOSDOpReply_st st;
   bufferlist data;
-  bufferlist osdmap;
   map<string,bufferptr> attrset;
 
  public:
   long     get_tid() { return st.tid; }
+  long     get_rep_tid() { return st.rep_tid; }
   object_t get_oid() { return st.oid; }
   pg_t     get_pg() { return st.pg; }
   int      get_op()  { return st.op; }
@@ -85,6 +85,10 @@ class MOSDOpReply : public Message {
   void set_version(eversion_t v) { st.version = v; }
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
+  void set_op(int op) { st.op = op; }
+  void set_tid(tid_t t) { st.tid = t; }
+  void set_rep_tid(tid_t t) { st.rep_tid = t; }
+
   // data payload
   void set_data(bufferlist &d) {
 	data.claim(d);
@@ -101,15 +105,18 @@ class MOSDOpReply : public Message {
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid()          { return st.pcid; }
 
-  MOSDOpReply(MOSDOp *req, int result, epoch_t e, /*OSDMap *oc, */bool commit) :
+public:
+  MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
 	Message(MSG_OSD_OPREPLY) {
 	memset(&st, 0, sizeof(st));
 	this->st.pcid = req->st.pcid;
+
+	this->st.op = req->st.op;
 	this->st.tid = req->st.tid;
+	this->st.rep_tid = req->st.rep_tid;
 
 	this->st.oid = req->st.oid;
 	this->st.pg = req->st.pg;
-	this->st.op = req->st.op;
 	this->st.result = result;
 	this->st.commit = commit;
 
@@ -118,16 +125,6 @@ class MOSDOpReply : public Message {
 	this->st.version = req->st.version;
 
 	this->st.map_epoch = e;
-
-	// attach updated cluster spec?
-	/*
-	if (oc &&
-		req->get_map_epoch() < oc->get_epoch()) {
-	  oc->encode(osdmap);
-	  st._new_map_epoch = oc->get_epoch();
-	  st._oc_len = osdmap.length();
-	}
-	*/
   }
   MOSDOpReply() {}
 

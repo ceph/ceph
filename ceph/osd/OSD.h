@@ -139,7 +139,7 @@ public:
 
   // -- ops --
   class ThreadPool<class OSD*, object_t> *threadpool;
-  hash_map<pg_t, list<MOSDOp*> >         op_queue;
+  hash_map<pg_t, list<Message*> >         op_queue;
   int   pending_ops;
   bool  waiting_for_no_ops;
   Cond  no_pending_ops;
@@ -147,13 +147,13 @@ public:
   
   void wait_for_no_ops();
 
-  void enqueue_op(pg_t pgid, MOSDOp *op);
+  void enqueue_op(pg_t pgid, Message *op);
   void dequeue_op(pg_t pgid);
   static void static_dequeueop(OSD *o, pg_t pgid) {
 	o->dequeue_op(pgid);
   };
 
-  void do_op(class MOSDOp *m, PG *pg);  // actually do it
+  void do_op(Message *m, PG *pg);  // actually do it
 
   void prepare_log_transaction(ObjectStore::Transaction& t, MOSDOp* op, eversion_t& version, PG *pg, eversion_t trim_to);
   void prepare_op_transaction(ObjectStore::Transaction& t, MOSDOp* op, eversion_t& version, PG *pg);
@@ -221,11 +221,15 @@ public:
   hash_map<pg_t, list<Message*> >        waiting_for_pg;
 
   // replica ops
-  void get_repop(OSDReplicaOp*);
-  void put_repop(OSDReplicaOp*);   // will send ack/commit msgs, and delete as necessary.
-  void issue_replica_op(PG *pg, OSDReplicaOp *repop, int osd);
-  void handle_rep_op_ack(PG *pg, __uint64_t tid, int result, bool commit, int fromosd, 
-						 eversion_t pg_complete_thru=0);
+  void get_repop_gather(PG::RepOpGather*);
+  void put_repop_gather(PG *pg, PG::RepOpGather*);
+  void issue_repop(PG *pg, MOSDOp *op, int osd);
+  PG::RepOpGather *new_repop_gather(PG *pg, MOSDOp *op);
+  void repop_ack(PG *pg, PG::RepOpGather *repop,
+				 int result, bool commit,
+				 int fromosd, eversion_t pg_complete_thru=0);
+  
+  void handle_rep_op_ack(MOSDOpReply *m);
 
   // recovery
   void do_notifies(map< int, list<PG::Info> >& notify_list);
@@ -233,6 +237,7 @@ public:
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
 
   void pull(PG *pg, object_t, eversion_t);
+  void push(PG *pg, object_t oid, int dest);
 
   bool require_current_map(Message *m, epoch_t v);
   bool require_same_or_newer_map(Message *m, epoch_t e);
@@ -242,11 +247,12 @@ public:
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_remove(class MOSDPGRemove *m);
 
-  void op_rep_pull(class MOSDOp *op, PG *pg);
-  void op_rep_pull_reply(class MOSDOpReply *op);
+  void op_pull(class MOSDOp *op, PG *pg);
+  void op_push(class MOSDOp *op, PG *pg);
   
   void op_rep_modify(class MOSDOp *op, PG *pg);   // write, trucnate, delete
-  void op_rep_modify_commit(class MOSDOp *op, eversion_t last_complete);
+  void op_rep_modify_commit(class MOSDOp *op, int ackerosd, 
+							eversion_t last_complete);
   friend class C_OSD_RepModifyCommit;
 
 
@@ -269,7 +275,7 @@ public:
   void op_read(class MOSDOp *m, PG *pg);
   void op_stat(class MOSDOp *m, PG *pg);
   void op_modify(class MOSDOp *m, PG *pg);
-  void op_modify_commit(class OSDReplicaOp *repop, eversion_t last_complete);
+  void op_modify_commit(pg_t pgid, tid_t rep_tid, eversion_t pg_complete_thru);
 
   // for replication
   void handle_op_reply(class MOSDOpReply *m);

@@ -34,6 +34,9 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv)
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
+
+  //g_clock.tare();
+
   MPI_Finalize();
 
   return pair<int,int>(mpi_rank, mpi_world);

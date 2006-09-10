@@ -12,6 +12,9 @@ using namespace std;
 extern map<int,float> g_fake_osd_down;
 extern map<int,float> g_fake_osd_out;
 
+#define OSD_REP_PRIMARY 0
+#define OSD_REP_SPLAY   1
+#define OSD_REP_CHAIN   2
 
 struct md_config_t {
   int  num_mon;
@@ -151,6 +154,7 @@ struct md_config_t {
 
 
   // osd
+  int   osd_rep;
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;

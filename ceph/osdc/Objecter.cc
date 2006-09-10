@@ -108,33 +108,42 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 	pg_t pgid = i->first;
 	PG& pg = i->second;
 
-	int old = pg.primary;
-	pg.calc_primary(pgid, osdmap);
+	int oldu = pg.updater;
+	int oldr = pg.reader;
+	pg.calc(pgid, osdmap);
 
-	if (old != pg.primary) {
-	  if (old < 0) {
+	if (oldu != pg.updater ||
+		oldr != pg.reader) {
+	  /*
+	  if (oldu < 0) {
 		dout(10) << "scan_pgs pg " << hex << pgid << dec 
 				 << " (" << pg.active_tids << ")"
-				 << " primary " << old << " -> " << pg.primary
+				 << " updater " << oldu << " -> " << pg.updater
 				 << " (was crashed)"
 				 << endl;
 		//recovering_pgs.insert(pgid);
 	  }
-	  else if (osdmap->is_down(old)) {
+	  else if (osdmap->is_down(oldu)) {
 		dout(10) << "scan_pgs pg " << hex << pgid << dec 
 				 << " (" << pg.active_tids << ")"
-				 << " primary " << old << " -> " << pg.primary
-				 << " (primary went down)"
+				 << " updater " << oldu << " -> " << pg.updater
+				 << " (updater went down)"
 				 << endl;
 		//down_pgs.insert(pgid);
 	  } 
 	  else {
 		dout(10) << "scan_pgs pg " << hex << pgid << dec 
 				 << " (" << pg.active_tids << ")"
-				 << " primary " << old << " -> " << pg.primary
+				 << " updater " << oldu << " -> " << pg.updater
 				 << " (primary changed)"
 				 << endl;
 	  }
+	  */
+	  dout(10) << "scan_pgs pg " << hex << pgid << dec 
+			   << " (" << pg.active_tids << ")"
+			   << " updater " << oldu << " -> " << pg.updater
+			   << ", reader " << oldr << " -> " << pg.reader
+			   << endl;
 	  changed_pgs.insert(pgid);
 	}
   }
@@ -265,11 +274,11 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
 		   << " oid " << hex << ex.oid << dec  << " " << ex.start << "~" << ex.length
 		   << " (" << ex.buffer_extents.size() << " buffer fragments)" 
 		   << " pg " << hex << ex.pgid << dec
-		   << " osd" << pg.primary 
+		   << " osd" << pg.reader 
 		   << endl;
 
-  if (pg.primary >= 0) 
-	messenger->send_message(m, MSG_ADDR_OSD(pg.primary), 0);
+  if (pg.reader >= 0) 
+	messenger->send_message(m, MSG_ADDR_OSD(pg.reader), 0);
 	
   // add to gather set
   rd->ops[last_tid] = ex;
@@ -557,10 +566,10 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 		   << "  oid " << hex << ex.oid << dec 
 		   << " " << ex.start << "~" << ex.length 
 		   << " pg " << hex << ex.pgid << dec 
-		   << " osd" << pg.primary 
+		   << " osd" << pg.updater 
 		   << endl;
-  if (pg.primary >= 0)
-	messenger->send_message(m, MSG_ADDR_OSD(pg.primary), 0);
+  if (pg.updater >= 0)
+	messenger->send_message(m, MSG_ADDR_OSD(pg.updater), 0);
   
   return tid;
 }
@@ -592,8 +601,8 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   PG &pg = get_pg( m->get_pg() );
 
   // ignore?
-  if (pg.primary != m->get_source().num()) {
-	dout(7) << " ignoring ack|commit from non-primary" << endl;
+  if (pg.reader != m->get_source().num()) {
+	dout(7) << " ignoring ack|commit from non-acker" << endl;
 	delete m;
 	return;
   }
