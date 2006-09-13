@@ -1864,12 +1864,12 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   } else {
 	// legacy, inconsistent synchronous write.
 	dout(7) << "synchronous write" << endl;
-	  
-	// create a buffer that refers to *buf, but doesn't try to free it when it's done.
+
+	// copy into fresh buffer (since our write may be resub, async)
 	bufferlist blist;
-	blist.push_back( new buffer(buf, size, BUFFER_MODE_NOCOPY|BUFFER_MODE_NOFREE) );
-	
-	// issue write
+	blist.push_back( new buffer(buf, size) );
+
+	// prepare write
 	Cond cond;
 	bool done = false;
 	C_Cond *onfinish = new C_Cond(&cond, &done);
