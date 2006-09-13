@@ -237,6 +237,50 @@ int Allocator::release_limbo()
 
 
 
+int Allocator::_alloc_inc(Extent& ex)
+{
+  Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
+  
+  if (fs->alloc_tab->find( ex.start, cursor ) 
+	  == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
+	assert(cursor.current().value.first == ex.length);
+	pair<block_t,int>& v = cursor.dirty_current_value();
+	v.second++;
+	dout(10) << "_alloc_inc " << ex << " "
+			 << (v.second-1) << " -> " << v.second 
+			 << endl;
+  } else {
+	// insert it, @1
+	fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
+	dout(10) << "_alloc_inc " << ex << " 0 -> 1" << endl;
+  }
+  return 0;
+}
+
+int Allocator::_alloc_dec(Extent& ex)
+{
+  Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
+  
+  if (fs->alloc_tab->find( ex.start, cursor ) 
+	  == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
+	assert(cursor.current().value.first == ex.length);
+	if (cursor.current().value.second == 1) {
+	  dout(10) << "_alloc_dec " << ex << " 1 -> 0" << endl;
+	  fs->alloc_tab->remove( cursor.current().key );
+	} else {
+	  pair<block_t,int>& v = cursor.dirty_current_value();
+	  --v.second;
+	  dout(10) << "_alloc_dec " << ex << " "
+			   << (v.second+1) << " -> " << v.second 
+			   << endl;
+	}
+  } else {
+	assert(0);
+  }
+  return 0;
+}
+
+
 /*
  * release extent into freelist
  * WARNING: *ONLY* use this if you _know_ there are no adjacent free extents

@@ -104,6 +104,7 @@ class Ebofs : public ObjectStore {
   Table<object_t, Extent> *object_tab;
   Table<block_t,block_t>  *free_tab[EBOFS_NUM_FREE_BUCKETS];
   Table<block_t,block_t>  *limbo_tab;
+  Table<block_t,pair<block_t,int> > *alloc_tab;
 
   // collections
   Table<coll_t, Extent>  *collection_tab;
@@ -249,6 +250,10 @@ class Ebofs : public ObjectStore {
   int remove(object_t oid, Context *onsafe=0);
   bool write_will_block();
 
+  int rename(object_t from, object_t to);
+  int clone(object_t from, object_t to, Context *onsafe);
+  
+
   // object attr
   int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(object_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
@@ -293,6 +298,7 @@ private:
   int _truncate(object_t oid, off_t size);
   int _truncate_front(object_t oid, off_t size);
   int _remove(object_t oid);
+  int _clone(object_t from, object_t to);
   int _setattr(object_t oid, const char *name, const void *value, size_t size);
   int _setattrs(object_t oid, map<string,bufferptr>& attrset);
   int _rmattr(object_t oid, const char *name);

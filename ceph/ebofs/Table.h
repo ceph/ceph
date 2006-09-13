@@ -186,9 +186,14 @@ class Table {
 
   public:
 
-	LeafItem& current() {
+	const LeafItem& current() {
 	  assert(open[level].is_leaf());
 	  return open[level].leaf_item(pos[level]);
+	}
+	V& dirty_current_value() {
+	  assert(open[level].is_leaf());
+	  dirty();
+	  return open[level].leaf_item(pos[level]).value;
 	}
 
 	// ** read-only bits **

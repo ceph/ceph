@@ -85,6 +85,7 @@ int Ebofs::mount()
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t, block_t>( nodepool, sb->free_tab[i] );
   limbo_tab = new Table<block_t, block_t>( nodepool, sb->limbo_tab );
+  alloc_tab = new Table<block_t, pair<block_t,int> >( nodepool, sb->alloc_tab );
   
   collection_tab = new Table<coll_t, Extent>( nodepool, sb->collection_tab );
   co_tab = new Table<idpair_t, bool>( nodepool, sb->co_tab );
@@ -148,6 +149,7 @@ int Ebofs::mkfs()
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	free_tab[i] = new Table<block_t,block_t>( nodepool, empty );
   limbo_tab = new Table<block_t,block_t>( nodepool, empty );
+  alloc_tab = new Table<block_t,pair<block_t,int> >( nodepool, empty );
   
   co_tab = new Table<idpair_t, bool>( nodepool, empty );
 
@@ -193,6 +195,7 @@ void Ebofs::close_tables()
   for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
 	delete free_tab[i];
   delete limbo_tab;
+  delete alloc_tab;
   delete collection_tab;
   delete co_tab;
 
@@ -275,6 +278,10 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb.limbo_tab.num_keys = limbo_tab->get_num_keys();
   sb.limbo_tab.root = limbo_tab->get_root();
   sb.limbo_tab.depth = limbo_tab->get_depth();
+
+  sb.alloc_tab.num_keys = alloc_tab->get_num_keys();
+  sb.alloc_tab.root = alloc_tab->get_root();
+  sb.alloc_tab.depth = alloc_tab->get_depth();
 
   sb.collection_tab.num_keys = collection_tab->get_num_keys();
   sb.collection_tab.root = collection_tab->get_root();
@@ -2185,6 +2192,57 @@ int Ebofs::truncate(object_t oid, off_t size, Context *onsafe)
   ebofs_lock.Unlock();
   return r;
 }
+
+
+
+int Ebofs::clone(object_t from, object_t to, Context *onsafe)
+{
+  ebofs_lock.Lock();
+  
+  int r = _clone(from, to);
+
+  // set up commit waiter
+  if (r >= 0) {
+	if (onsafe) commit_waiters[super_epoch].push_back(onsafe);
+  } else {
+	if (onsafe) delete onsafe;
+  }
+
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_clone(object_t from, object_t to)
+{
+  Onode *fon = get_onode(from);
+  if (!fon) return -ENOENT;
+  Onode *ton = get_onode(to);
+  if (ton) {
+	put_onode(fon);
+	return -EEXIST;
+  }
+  ton = new_onode(to); 
+  assert(ton);
+  
+  // copy easy bits
+  ton->object_size = fon->object_size;
+  ton->object_blocks = fon->object_blocks;
+  ton->attr = fon->attr;
+
+  // collections
+  for (set<coll_t>::iterator p = fon->collections.begin();
+	   p != fon->collections.end();
+	   p++)
+	_collection_add(*p, to);
+  
+  // extents
+  ton->extent_map = fon->extent_map;
+  //FIXME inc ref count
+
+  return 0;
+}
+
+
 
 
 

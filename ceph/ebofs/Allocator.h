@@ -56,6 +56,9 @@ protected:
   int _release_loner(Extent& ex);  // release loner extent
   int _release_merge(Extent& ex);  // release any extent (searches for adjacent)
 
+  int _alloc_inc(Extent& ex);
+  int _alloc_dec(Extent& ex);
+
  public:
   Allocator(Ebofs *f) : fs(f), last_pos(0) {}
   

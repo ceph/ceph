@@ -24,88 +24,6 @@
 #define dout(x)  if (x <= g_conf.debug_ebofs) cout << "ebofs.bh."
 
 
-/*
-void BufferHead::finish_partials()
-{
-  dout(10) << "finish_partials on " << *this << endl;
-
-  block_t cur_block = 0;
-
-  // submit partial writes
-  for (map<block_t, PartialWrite>::iterator p = partial_write.begin();
-	   p != partial_write.end();
-	   p++) {
-	dout(10) << "finish_partials submitting queued write to " << p->second.block << endl;
-
-	// copy raw buffer; this may be a past write
-	bufferlist bl;
-	bl.push_back( oc->bc->bufferpool.alloc(EBOFS_BLOCK_SIZE) );
-	bl.copy_in(0, EBOFS_BLOCK_SIZE, data);
-	apply_partial( bl, p->second.partial );
-	
-	if (tx_ioh && tx_block == p->first) {
-	  assert(is_tx());
-	  oc->bc->bh_cancel_write(this);
-	}
-	
-	vector<Extent> exv;
-	oc->on->map_extents(object_loc.start, 1, exv);
-	assert(exv.size() == 1);
-	if (exv[0].start == p->first) {
-	  // current block!  make like a bh_write.
-	  assert(cur_block == 0);
-	  cur_block = p->first;
-	  dout(10) << "finish_partials  same block, doing a bh_write on " << p->first << " on " << *this << endl;
-	} else {
-	  // past epoch.  just write.
-	  dout(10) << "finish_partials  different block, writing to " << p->first << " on " << *this << endl;
-	  oc->bc->dev.write( p->second.block, 1, bl,
-						 new C_OC_PartialTxFinish( oc->bc, p->second.epoch ),
-						 "finish_partials");
-	  //oc->get();  // don't need OC for completion func!
-	}
-  }
-  partial_write.clear();
-
-  apply_partial();
-  if (cur_block) {
-	// same as epoch_modified, so do a normal bh_write.  
-	// assert: this should match the current onode's block
-	oc->bc->mark_dirty(this);
-	if (tx_ioh) 
-	  oc->bc->bh_cancel_write(this);
-	oc->bc->bh_write(oc->on, this, cur_block);
-	oc->bc->dec_unflushed(epoch_modified);  // undo the queued partial inc.  (bh_write just inced it)
-  } else 
-	oc->bc->mark_clean(this);
-}
-
-void BufferHead::cancel_partials()
-{
-  dout(10) << "cancel_partials on " << *this << endl;
-  for (map<block_t, PartialWrite>::iterator p = partial_write.begin();
-	   p != partial_write.end();
-	   p++) {
- 	oc->bc->dec_unflushed( p->second.epoch );
-  }
-}
-
-void BufferHead::queue_partial_write(block_t b)
-{
-  if (oc->bc->partial_write[bh->start()].count(b)) {
-	// overwrite previous partial write
-	// note that it better be same epoch if it's the same block!!
-	assert( bc.partial_write[bh->start()].[b].epoch == epoch_modified );
-  } else {
-	oc->bc->inc_unflushed( epoch_modified );
-  }
-  
-  oc->bc->partial_write[bh->start()].[ b ].partial = partial;
-  oc->bc->partial_write[bh->start()].[ b ].epoch = epoch_modified;
-}
-
-*/
-
 
 
 
@@ -826,7 +744,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	if (sp->first >= start+length) break;
 	assert(sp->first >= start);
 
-	block_t pstart;
+	block_t pstart = sp->first;
 	map<block_t, PartialWrite> writes;
 	writes.swap( sp->second );
 

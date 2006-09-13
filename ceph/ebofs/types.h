@@ -166,6 +166,7 @@ struct ebofs_super {
   // tables
   struct ebofs_table free_tab[EBOFS_NUM_FREE_BUCKETS];  
   struct ebofs_table limbo_tab;
+  struct ebofs_table alloc_tab;
   struct ebofs_table object_tab;      // object directory
   struct ebofs_table collection_tab;  // collection directory
   struct ebofs_table co_tab;
