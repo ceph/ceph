@@ -272,8 +272,8 @@ public:
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);
 
-  void op_read(class MOSDOp *m, PG *pg);
-  void op_stat(class MOSDOp *m, PG *pg);
+  void op_read(class MOSDOp *m);//, PG *pg);
+  void op_stat(class MOSDOp *m);//, PG *pg);
   void op_modify(class MOSDOp *m, PG *pg);
   void op_modify_commit(pg_t pgid, tid_t rep_tid, eversion_t pg_complete_thru);
 

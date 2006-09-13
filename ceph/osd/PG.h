@@ -654,7 +654,7 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 
 inline ostream& operator<<(ostream& out, PG::RepOpGather& repop)
 {
-  out << "repop(rep_tid=" << repop.rep_tid 
+  out << "repop(" << &repop << " rep_tid=" << repop.rep_tid 
 	  << " wfack=" << repop.waitfor_ack
 	  << " wfcommit=" << repop.waitfor_commit;
   out << " pct=" << repop.pg_complete_thru;

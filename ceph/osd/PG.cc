@@ -816,6 +816,7 @@ bool PG::do_recovery()
   dout(-10) << "do_recovery pulling " << objects_pulling.size() << " in pg, "
 		   << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
 		   << endl;
+  dout(10) << "do_recovery " << missing << endl;
 
   // can we slow down on this PG?
   if (osd->num_pulling >= g_conf.osd_max_pull && !objects_pulling.empty()) {
