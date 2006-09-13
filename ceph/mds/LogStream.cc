@@ -250,6 +250,16 @@ LogEvent *LogStream::get_next_event()
 
 
 
+class C_LS_ReadAfterSync : public Context {
+public:
+  LogStream *ls;
+  Context *waitfornext;
+  C_LS_ReadAfterSync(LogStream *l, Context *c) : ls(l), waitfornext(c) {}
+  void finish(int) {
+	ls->wait_for_next_event(waitfornext);
+  }
+};
+
 class C_LS_ReadChunk : public Context {
 public:
   bufferlist bl;
@@ -266,6 +276,12 @@ public:
 
 void LogStream::wait_for_next_event(Context *c)
 {
+  if (read_pos == sync_pos) {
+	dout(-15) << "waiting for sync before initiating read at " << read_pos << endl;
+	wait_for_sync(new C_LS_ReadAfterSync(this, c));
+	return;				 
+  }
+
   // add waiter
   if (c) waiting_for_read.push_back(c);
 
