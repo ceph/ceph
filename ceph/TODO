@@ -4,6 +4,20 @@
 - how to get usage feedback to monitor?
 
 
+osd/rados
+- clean up writeahead logs
+- fix heartbeat wrt new replication
+- figure out new rep failure cases
+- same_primary_since -> same_tail_since
+- mark residual pgs obsolete  ???
+- read vs write threads
+- deal with divergent disconnected primaries
+- rdlocks
+- pg_bit changes
+- use pg->info.same_role_since wrt replication ops.
+- report crashed pgs?
+
+
 messenger
 - lookup upcall,
 - distributed namer (eg send to MSG_ADDR_MON_ANY)
@@ -15,22 +29,12 @@ messenger
 - close idle connections?
 - osds: forget idle client addrs
 
-osd/rados
-- clean up writeahead logs
-- fix heartbeat wrt new replication
-- figure out new rep failure cases
-- same_primary_since -> same_tail_since
-- mark residual pgs obsolete  ***
-- deal with divergent disconnected primaries
-- rdlocks
-- pg_bit changes
-- use pg->info.same_role_since wrt replication ops.
-- report crashed pgs?
-
 monitor
 - monitor needs to monitor some osds...
 - monitor pgs, notify on out
 - watch osd utilization; adjust overload in cluster map
+
+
 
 objecter
 - handle new rep mode failure modes...  head, tail, middle
@@ -40,17 +44,17 @@ objectcacher
 - ocacher caps transitions vs locks
 - test read locks
 
-
 reliability
 - heartbeat vs ping
 - how to choose peer sets
 - osdmonitor, filter
 
 ebofs
+- nonblocking write on missing onodes?
 - reallocate if dirty is cancelable.  specifically, so that pg log writes are efficient.
-- fix buffercache::rx_finish uninitialized pstart bug
 - fix sync() 
 - fix bug in node rotation on insert (and reenable)
+- snapshots
 - allow btree sets instead of maps
 - verify LRU behavior sensible: writes go to mid, not top!
 - fix NEAR_LAST_FWD   (?)
