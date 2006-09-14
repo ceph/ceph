@@ -157,14 +157,66 @@ void ObjectCache::tx_finish(ioh_t ioh, block_t start, block_t length,
 }
 
 
+
+/*
+ * return any bh's that are (partially) in this range that are TX.
+ */
+int ObjectCache::find_tx(block_t start, block_t len,
+						 list<BufferHead*>& tx)
+{
+  map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
+
+  block_t cur = start;
+  block_t left = len;
+  
+  if (p != data.begin() && 
+	  (p == data.end() || p->first > cur)) {
+	p--;     // might overlap!
+	if (p->first + p->second->length() <= cur) 
+	  p++;   // doesn't overlap.
+  }
+
+  while (left > 0) {
+	assert(cur+left == start+len);
+
+	// at end?
+	if (p == data.end()) 
+	  break;
+
+	if (p->first <= cur) {
+	  // have it (or part of it)
+	  BufferHead *e = p->second;
+
+	  if (e->is_tx()) 
+		tx.push_back(e);
+	  
+	  block_t lenfromcur = MIN(e->end() - cur, left);
+	  cur += lenfromcur;
+	  left -= lenfromcur;
+	  p++;
+	  continue;  // more?
+	} else if (p->first > cur) {
+	  // gap.. miss
+	  block_t next = p->first;
+	  left -= (next-cur);
+	  cur = next;
+	  continue;
+	}
+	else 
+	  assert(0);
+  }
+
+  return 0;  
+}
+
+
+
 /*
  * map a range of blocks into buffer_heads.
  * - create missing buffer_heads as necessary.
  *  - fragment along disk extent boundaries
  */
-
-int ObjectCache::map_read(Onode *on,
-						  block_t start, block_t len, 
+int ObjectCache::map_read(block_t start, block_t len, 
 						  map<block_t, BufferHead*>& hits,
 						  map<block_t, BufferHead*>& missing,
 						  map<block_t, BufferHead*>& rx,
@@ -276,8 +328,7 @@ int ObjectCache::map_read(Onode *on,
  * - leave potentially obsoleted tx ops alone (for now)
  * - don't worry about disk extent boundaries (yet)
  */
-int ObjectCache::map_write(Onode *on, 
-						   block_t start, block_t len,
+int ObjectCache::map_write(block_t start, block_t len,
 						   interval_set<block_t>& alloc,
 						   map<block_t, BufferHead*>& hits)
 {

@@ -1258,13 +1258,86 @@ void Ebofs::alloc_write(Onode *on,
 						interval_set<block_t>& alloc,
 						block_t& old_bfirst, block_t& old_blast)
 {
-  // first decide what pages to (re)allocate
-  on->map_alloc_regions(start, len, alloc);
+  // first decide what pages to (re)allocate 
+  alloc.insert(start, len);   // start with whole range
 
-  dout(10) << "alloc_write need to (re)alloc " << alloc << " on " << *on << endl;
+  // figure out what bits are already uncommitted
+  interval_set<block_t> already_uncom;
+  already_uncom.intersection_of(alloc, on->uncommitted);
+
+  // subtract those off, so we're left with the committed bits (that must be reallocated).
+  alloc.subtract(already_uncom);
+  
+  dout(10) << "alloc_write must (re)alloc " << alloc << " on " << *on << endl;
+  
+  // release it (into limbo)
+  for (map<block_t,block_t>::iterator i = alloc.m.begin();
+	   i != alloc.m.end();
+	   i++) {
+	// get old region
+	vector<Extent> old;
+	on->map_extents(i->first, i->second, old);
+	for (unsigned o=0; o<old.size(); o++) 
+	  allocator.release(old[o]);
+
+	// take note if first/last blocks in write range are remapped.. in case we need to do a partial read/write thing
+	// these are for partial, so we don't care about TX bh's, so don't worry about bits canceling stuff below.
+	if (!old.empty()) {
+	  if (i->first == start) {
+		old_bfirst = old[0].start;
+		dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0] << endl;
+	  }
+	  if (i->first+i->second == start+len) {
+		old_blast = old[old.size()-1].last();
+		dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] << endl;
+	  }
+	}
+  }
+
+  // reallocate uncommitted but cancelable stuff too?
+  list<BufferHead*> re_tx;
+  if (1) {
+	list<BufferHead*> tx;
+
+	ObjectCache *oc = on->get_oc(&bc);
+	oc->find_tx(start, len, tx);
+	
+	for (list<BufferHead*>::reverse_iterator p = tx.rbegin();
+		 p != tx.rend();
+		 p++) {
+	  BufferHead *bh = *p;
+
+	  // let's just do single bh's for now!
+	  if (bh->length() > 1) continue;
+	  
+	  // cancelable/moveable?
+	  if (alloc.contains(bh->start(), bh->length())) {
+		dout(10) << "alloc_write  " << *bh << " already in " << alloc << endl;
+	  } else {
+		if (bc.bh_cancel_write(bh)) {
+		  re_tx.push_back(bh);
+		  alloc.insert(bh->start(), bh->length());
+		  
+		  // release (into free)
+		  vector<Extent> old;
+		  on->map_extents(bh->start(), bh->length(), old);
+		  assert(old.size() == 1);
+		  allocator.unallocate(old[0]);
+		  
+		  dout(10) << "alloc_write canceled " << *bh << ", unalloc " << old[0] << endl;
+		} else {
+		  dout(10) << "alloc_write couldn't cancel " << *bh << endl;
+		}
+	  }
+	  break; // only do tailing bh for now.
+	}
+
+	dout(10) << "alloc_write will (re)alloc " << alloc << " on " << *on << endl;
+  }
 
   if (alloc.empty()) return;  // no need to dirty the onode below!
   
+
   // merge alloc into onode uncommitted map
   //dout(10) << " union of " << on->uncommitted << " and " << alloc << endl;
   interval_set<block_t> old = on->uncommitted;
@@ -1291,25 +1364,7 @@ void Ebofs::alloc_write(Onode *on,
   for (map<block_t,block_t>::iterator i = alloc.m.begin();
 	   i != alloc.m.end();
 	   i++) {
-	dout(15) << "alloc_write need to (re)alloc " << i->first << "~" << i->second << " (of " << start << "~" << len << ")" << endl;
-	
-	// get old region
-	vector<Extent> old;
-	on->map_extents(i->first, i->second, old);
-	for (unsigned o=0; o<old.size(); o++) 
-	  allocator.release(old[o]);
-
-	// take note if first/last blocks in write range are remapped.. in case we need to do a partial read/write thing
-	if (!old.empty()) {
-	  if (i->first == start) {
-		old_bfirst = old[0].start;
-		dout(20) << "alloc_write  old_bfirst " << old_bfirst << " of " << old[0] << endl;
-	  }
-	  if (i->first+i->second == start+len) {
-		old_blast = old[old.size()-1].last();
-		dout(20) << "alloc_write  old_blast " << old_blast << " of " << old[old.size()-1] << endl;
-	  }
-	}
+	dout(15) << "alloc_write alloc " << i->first << "~" << i->second << " (of " << start << "~" << len << ")" << endl;
 
 	// allocate new space
 	block_t left = i->second;
@@ -1323,6 +1378,26 @@ void Ebofs::alloc_write(Onode *on,
 	  cur += ex.length;
 	}
   }
+
+
+  // re-tx anything we reallocated?
+  /*
+  for (list<BufferHead*>::iterator p = re_tx.begin();
+	   p != re_tx.end();
+	   p++) {
+	BufferHead *bh = *p;
+	dout(10) << "alloc_write re-tx reallocated " << *bh << endl;
+
+	// split bh if necessary!  (our new alloc may not lay on the right boundaries)
+	vector<Extent> ex;
+	on->map_extents(bh->start(), bh->length(), ex);
+	if (ex.size() > 1) {
+	  dout(10) << "alloc_write  splitting reallocated -- not implemented " << *bh << endl;
+	  assert(0);
+	}
+
+	bc.bh_write(on,bh);
+	}*/
 }
 
 
@@ -1374,7 +1449,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
-  oc->map_write(on, bstart, blen, alloc, hits);
+  oc->map_write(bstart, blen, alloc, hits);
   
   // get current versions
   //version_t lowv, highv;
@@ -1602,7 +1677,7 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   map<block_t, BufferHead*> missing;  // read these
   map<block_t, BufferHead*> rx;       // wait for these
   map<block_t, BufferHead*> partials;  // ??
-  oc->map_read(on, bstart, blen, hits, missing, rx, partials);
+  oc->map_read(bstart, blen, hits, missing, rx, partials);
 
   // missing buffers?
   if (!missing.empty()) {

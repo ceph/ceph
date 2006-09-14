@@ -754,6 +754,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 {
   wait_for_no_ops();
   
+  assert(osd_lock.is_locked());
+
   ObjectStore::Transaction t;
   
   if (osdmap) {
@@ -864,19 +866,24 @@ void OSD::handle_osd_map(MOSDMap *m)
 			 it != pg_map.end();
 			 it++) {
 		  PG *pg = it->second;
-		  list<PG::RepOpGather*> ls;  // do async; repop_ack() may modify pg->repop_gather
-		  for (map<tid_t,PG::RepOpGather*>::iterator p = pg->repop_gather.begin();
-			   p != pg->repop_gather.end();
-			   p++) {
-			dout(-1) << "chekcing repop tid " << p->first << endl;
-			if (p->second->waitfor_ack.count(osd) ||
-				p->second->waitfor_commit.count(osd)) 
-			  ls.push_back(p->second);
+
+		  _lock_pg(pg->info.pgid);
+		  {
+			list<PG::RepOpGather*> ls;  // do async; repop_ack() may modify pg->repop_gather
+			for (map<tid_t,PG::RepOpGather*>::iterator p = pg->repop_gather.begin();
+				 p != pg->repop_gather.end();
+				 p++) {
+			  dout(-1) << "checking repop tid " << p->first << endl;
+			  if (p->second->waitfor_ack.count(osd) ||
+				  p->second->waitfor_commit.count(osd)) 
+				ls.push_back(p->second);
+			}
+			for (list<PG::RepOpGather*>::iterator p = ls.begin();
+				 p != ls.end();
+				 p++)
+			  repop_ack(pg, *p, -1, true, osd);
 		  }
-		  for (list<PG::RepOpGather*>::iterator p = ls.begin();
-			   p != ls.end();
-			   p++)
-			repop_ack(pg, *p, -1, true, osd);
+		  _unlock_pg(pg->info.pgid);
 		}
 	  }
 	  for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
@@ -2703,7 +2710,7 @@ void OSD::put_repop_gather(PG *pg, PG::RepOpGather *repop)
 	//repop->lock.Unlock();  
 
 	assert(pg->repop_gather.count(repop->rep_tid));
-	//pg->repop_gather.erase(repop->rep_tid);
+	pg->repop_gather.erase(repop->rep_tid);
 
 	delete repop->op;
 	delete repop;
@@ -3033,11 +3040,15 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
   const object_t oid = op->get_oid();
   const pg_t pgid = op->get_pg();
 
-  dout(10) << "prepare_op_transaction " << op->get_op()
+  dout(10) << "prepare_op_transaction " << MOSDOp::get_opname( op->get_op() )
 		   << " " << hex << oid << dec 
 		   << " v " << version
 		   << " in " << *pg << endl;
   
+  // WRNOOP does nothing.
+  if (op->get_op() == OSD_OP_WRNOOP) 
+	return;
+
   // raise last_complete?
   if (pg->info.last_complete == pg->info.last_update)
 	pg->info.last_complete = version;
@@ -3045,10 +3056,9 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
   // raise last_update.
   assert(version > pg->info.last_update);
   pg->info.last_update = version;
-
+  
   // write pg info
   t.collection_setattr(pgid, "info", &pg->info, sizeof(pg->info));
-
 
   // apply the op
   switch (op->get_op()) {

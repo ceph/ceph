@@ -333,6 +333,7 @@ public:
    *  map range into regions that need to be (re)allocated on disk
    *  because they overlap "safe" (or unallocated) parts of the object
    */
+  /*
   void map_alloc_regions(block_t start, block_t len, 
 						 interval_set<block_t>& alloc) {
 	interval_set<block_t> already_uncom;
@@ -341,7 +342,7 @@ public:
 	already_uncom.intersection_of(alloc, uncommitted);
 	alloc.subtract(already_uncom);   // take out the bits that aren't yet committed
   }
-
+  */
 
 
 

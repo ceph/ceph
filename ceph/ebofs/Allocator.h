@@ -65,6 +65,10 @@ protected:
   int allocate(Extent& ex, block_t num, block_t near=NEAR_LAST);
   int release(Extent& ex);
 
+  int unallocate(Extent& ex) {  // skip limbo
+	return _release_merge(ex);
+  }
+
   int commit_limbo();  // limbo -> fs->limbo_tab
   int release_limbo(); // fs->limbo_tab -> free_tabs
 

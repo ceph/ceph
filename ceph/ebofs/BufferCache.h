@@ -361,15 +361,16 @@ class ObjectCache {
   }
   bool is_empty() { return data.empty(); }
 
-  int map_read(Onode *on,
-			   block_t start, block_t len, 
+  int find_tx(block_t start, block_t len,
+			  list<BufferHead*>& tx);
+
+  int map_read(block_t start, block_t len, 
 			   map<block_t, BufferHead*>& hits,     // hits
 			   map<block_t, BufferHead*>& missing,  // read these from disk
 			   map<block_t, BufferHead*>& rx,       // wait for these to finish reading from disk
 			   map<block_t, BufferHead*>& partial); // (maybe) wait for these to read from disk
   
-  int map_write(Onode *on,
-				block_t start, block_t len,
+  int map_write(block_t start, block_t len,
 				interval_set<block_t>& alloc,
 				map<block_t, BufferHead*>& hits);   // can write to these.
 

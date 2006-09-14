@@ -10,7 +10,6 @@ osd/rados
 - figure out new rep failure cases
 - same_primary_since -> same_tail_since
 - mark residual pgs obsolete  ???
-- read vs write threads
 - deal with divergent disconnected primaries
 - rdlocks
 - pg_bit changes
