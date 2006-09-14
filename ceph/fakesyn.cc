@@ -57,6 +57,8 @@ int main(int argc, char **argv)
   assert(nargs.empty());
 
 
+  g_clock.tare();
+
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
 

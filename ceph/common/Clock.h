@@ -40,6 +40,9 @@ class utime_t {
 	}
   }
 
+  struct timeval& timeval()  { return tv; }
+  friend class Clock;
+
  public:
   // cons
   utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
@@ -53,8 +56,6 @@ class utime_t {
   // ref accessors/modifiers
   time_t&         sec_ref()  { return tv.tv_sec; } 
   long&           usec_ref() { return tv.tv_usec; }
-
-  struct timeval& timeval()  { return tv; }
 
   // cast to double
   operator double() {
@@ -126,38 +127,48 @@ class Clock {
  public:
   Clock() {
 	// set offset
-	//start_offset = now();
   }
 
-  // relative time (from startup)
-  const utime_t& now() {
-	gettimeofday(&last.timeval(), NULL);
-	last -= zero;
-	//last = abs_last - start_offset;
-	return last;
-  }
-
-  void realify(utime_t& t) {
-	t += zero;
-  }
+  // real time.
   utime_t real_now() {
 	utime_t realnow;
 	gettimeofday(&realnow.timeval(), NULL);
 	return realnow;
   }
 
-  const utime_t& recent_now() {
-	return last;
-  }
-
+  // relative time (from startup)
   void tare() {
 	gettimeofday(&zero.timeval(), NULL);
   }
+  utime_t now() {
+	utime_t n;
+	gettimeofday(&n.timeval(), NULL);
+	n -= zero;
+	last = n;
+	return n;
+  }
+  utime_t recent_now() {
+	return last;
+  }
+
+  void realify(utime_t& t) {
+	t += zero;
+  }
+
+  void make_timespec(utime_t& t, struct timespec *ts) {
+	utime_t real = t;
+	realify(real);
+
+	memset(ts, 0, sizeof(*ts));
+	ts->tv_sec = real.sec();
+	ts->tv_nsec = real.nsec();
+  }
+
+
 
   // absolute time
   time_t gettime() {
-	now();
-	return last.sec();
+	return now().sec();
   }
 
 };

@@ -55,20 +55,9 @@ class Cond
 	return r;
   }
 
-  int WaitUntil(Mutex &mutex,
-		   struct timeval *tv) {
-	return WaitUntil(mutex, utime_t(tv->tv_sec, tv->tv_usec));
-  }
-
   int WaitUntil(Mutex &mutex, utime_t when) {
-	// make sure it's _real_ time
-	g_clock.realify(when);
-
-	// timeval -> timespec
 	struct timespec ts;
-	memset(&ts, 0, sizeof(ts));
-	ts.tv_sec = when.sec();
-	ts.tv_nsec = when.nsec();
+	g_clock.make_timespec(when, &ts);
 	//cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
 	int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
 	return r;

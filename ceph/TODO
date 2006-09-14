@@ -4,6 +4,9 @@
 - how to get usage feedback to monitor?
 
 
+- fix tare weirdness
+
+
 osd/rados
 - clean up writeahead logs
 - fix heartbeat wrt new replication
