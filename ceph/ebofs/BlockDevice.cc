@@ -463,6 +463,7 @@ int BlockDevice::_cancel_io(biovec *bio)
 
 int BlockDevice::count_io(block_t start, block_t len)
 {
+  lock.Lock();
   int n = 0;
   multimap<block_t,biovec*>::iterator p = io_queue.lower_bound(start);
   while (p != io_queue.end() && p->first < start+len) {
@@ -470,6 +471,7 @@ int BlockDevice::count_io(block_t start, block_t len)
 	n++;
 	p++;
   }
+  lock.Unlock();
   return n;
 }
 

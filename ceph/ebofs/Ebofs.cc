@@ -1294,11 +1294,10 @@ void Ebofs::alloc_write(Onode *on,
 	}
   }
 
-  // reallocate uncommitted but cancelable stuff too?
-  list<BufferHead*> re_tx;
+  // reallocate uncommitted too?
   if (1) {
 	list<BufferHead*> tx;
-
+	
 	ObjectCache *oc = on->get_oc(&bc);
 	oc->find_tx(start, len, tx);
 	
@@ -1307,31 +1306,27 @@ void Ebofs::alloc_write(Onode *on,
 		 p++) {
 	  BufferHead *bh = *p;
 
-	  // let's just do single bh's for now!
-	  if (bh->length() > 1) continue;
-	  
 	  // cancelable/moveable?
 	  if (alloc.contains(bh->start(), bh->length())) {
 		dout(10) << "alloc_write  " << *bh << " already in " << alloc << endl;
-	  } else {
-		if (bc.bh_cancel_write(bh)) {
-		  re_tx.push_back(bh);
-		  alloc.insert(bh->start(), bh->length());
-		  
-		  // release (into free)
-		  vector<Extent> old;
-		  on->map_extents(bh->start(), bh->length(), old);
-		  assert(old.size() == 1);
-		  allocator.unallocate(old[0]);
-		  
-		  dout(10) << "alloc_write canceled " << *bh << ", unalloc " << old[0] << endl;
-		} else {
-		  dout(10) << "alloc_write couldn't cancel " << *bh << endl;
-		}
+		continue;
 	  }
-	  break; // only do tailing bh for now.
-	}
 
+	  vector<Extent> old;
+	  on->map_extents(bh->start(), bh->length(), old);
+	  assert(old.size() == 1);
+
+	  if (bc.bh_cancel_write(bh)) {
+		dout(10) << "alloc_write unallocated " << old[0] << ", canceled " << *bh << endl;
+		allocator.unallocate(old[0]);  // release (into free)
+	  } else {
+		dout(10) << "alloc_write released " << old[0] << ", couldn't canceled " << *bh << endl;
+		allocator.release(old[0]);     // release (into limbo)
+	  }
+	  
+	  alloc.insert(bh->start(), bh->length());
+	}
+	
 	dout(10) << "alloc_write will (re)alloc " << alloc << " on " << *on << endl;
   }
 
@@ -1378,26 +1373,6 @@ void Ebofs::alloc_write(Onode *on,
 	  cur += ex.length;
 	}
   }
-
-
-  // re-tx anything we reallocated?
-  /*
-  for (list<BufferHead*>::iterator p = re_tx.begin();
-	   p != re_tx.end();
-	   p++) {
-	BufferHead *bh = *p;
-	dout(10) << "alloc_write re-tx reallocated " << *bh << endl;
-
-	// split bh if necessary!  (our new alloc may not lay on the right boundaries)
-	vector<Extent> ex;
-	on->map_extents(bh->start(), bh->length(), ex);
-	if (ex.size() > 1) {
-	  dout(10) << "alloc_write  splitting reallocated -- not implemented " << *bh << endl;
-	  assert(0);
-	}
-
-	bc.bh_write(on,bh);
-	}*/
 }
 
 
