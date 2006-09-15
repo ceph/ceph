@@ -1423,7 +1423,7 @@ void OSD::load_pgs()
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
 {
-  dout(-15) << "project_pg_history " << hex << pgid << dec
+  dout(15) << "project_pg_history " << hex << pgid << dec
 		   << " from " << from << " to " << osdmap->get_epoch()
 		   << ", start " << h
 		   << endl;
@@ -1444,7 +1444,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
 	// acting set change?
 	if (acting != last && 
 		e <= h.same_since) {
-	  dout(-15) << "project_pg_history " << hex << pgid << dec << " changed in " << e+1 
+	  dout(15) << "project_pg_history " << hex << pgid << dec << " changed in " << e+1 
 				<< " from " << acting << " -> " << last << endl;
 	  h.same_since = e+1;
 	}
@@ -1452,7 +1452,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
 	// primary change?
 	if (!(!acting.empty() && !last.empty() && acting[0] == last[0]) &&
 		e <= h.same_primary_since) {
-	  dout(-15) << "project_pg_history " << hex << pgid << dec << " primary changed in " << e+1 << endl;
+	  dout(15) << "project_pg_history " << hex << pgid << dec << " primary changed in " << e+1 << endl;
 	  h.same_primary_since = e+1;
 	
 	  if (g_conf.osd_rep == OSD_REP_PRIMARY)
@@ -1463,7 +1463,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
 	if (g_conf.osd_rep != OSD_REP_PRIMARY) {
 	  if (!(!acting.empty() && !last.empty() && acting[acting.size()-1] == last[last.size()-1]) &&
 		  e <= h.same_acker_since) {
-		dout(-15) << "project_pg_history " << hex << pgid << dec << " acker changed in " << e+1 << endl;
+		dout(15) << "project_pg_history " << hex << pgid << dec << " acker changed in " << e+1 << endl;
 		h.same_acker_since = e+1;
 	  }
 	}
@@ -1473,7 +1473,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
 		h.same_acker_since > e) break;
   }
 
-  dout(-15) << "project_pg_history end " << h << endl;
+  dout(15) << "project_pg_history end " << h << endl;
 }
 
 
@@ -2069,6 +2069,7 @@ public:
 	acked(false), waiting(false) { }
   void finish(int r) {
 	lock.Lock();
+	assert(!waiting);
 	while (!acked) {
 	  waiting = true;
 	  cond.Wait(lock);
@@ -2079,6 +2080,7 @@ public:
   }
   void ack() {
 	lock.Lock();
+	assert(!acked);
 	acked = true;
 	if (waiting) cond.Signal();
 	lock.Unlock();
@@ -2981,6 +2983,11 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 		   << " " << op->get_offset() << "~" << op->get_length()
 		   << endl;  
 
+  if (op->get_op() == OSD_OP_WRITE) {
+	logger->inc("c_wr");
+	logger->inc("c_wrb", op->get_length());
+  }
+
   // share latest osd map?
   osd_lock.Lock();
   {
@@ -3050,11 +3057,6 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	}
 
 	oncommit->ack();
-  }
-
-  if (op->get_op() == OSD_OP_WRITE) {
-	logger->inc("c_wr");
-	logger->inc("c_wrb", op->get_length());
   }
 }
 
