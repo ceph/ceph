@@ -98,6 +98,7 @@ struct md_config_t {
   int      client_oc_max_dirty;
   size_t   client_oc_max_sync_write;
 
+  
 
   /*
   bool     client_bcache;
@@ -112,6 +113,9 @@ struct md_config_t {
 
   int      client_trace;
   int      fuse_direct_io;
+
+  // objecter
+  bool  objecter_buffer_uncommitted;
 
   // mds
   int   mds_cache_size;

@@ -25,6 +25,8 @@ class Objecter {
   
  private:
   tid_t last_tid;
+  int num_unacked;
+  int num_uncommitted;
 
   /*** track pending operations ***/
   // read
@@ -121,7 +123,8 @@ class Objecter {
  public:
   Objecter(Messenger *m, OSDMap *om) : 
 	messenger(m), osdmap(om),
-	last_tid(0)
+	last_tid(0),
+	num_unacked(0), num_uncommitted(0)
 	{}
   ~Objecter() {
 	// clean up op_*

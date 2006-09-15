@@ -137,6 +137,9 @@ md_config_t g_conf = {
   client_trace: 0,
   fuse_direct_io: 0,
   
+  // --- objecter ---
+  objecter_buffer_uncommitted: true,
+
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
@@ -464,6 +467,10 @@ void parse_config_options(vector<char*>& args)
 
 	else if (strcmp(args[i], "--fakemessenger_serialize") == 0) 
 	  g_conf.fakemessenger_serialize = atoi(args[++i]);
+
+
+	else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
+	  g_conf.objecter_buffer_uncommitted = atoi(args[++i]);
 
 	else if (strcmp(args[i], "--mds_cache_size") == 0) 
 	  g_conf.mds_cache_size = atoi(args[++i]);
