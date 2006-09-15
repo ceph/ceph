@@ -247,6 +247,8 @@ touch $fn/.post
 
 	my $killmin = 1 + int ($h->{'kill_after'} / 60);
 
+	$c = "bash -c \"ulimit -c 0 ; $c\"";
+
 	my $srun = "srun --wait=600 --exclude=jobs/ltest.ignore -l -t $killmin -N $h->{'n'} -p ltest";
 	my $mpiexec = "mpiexec -l -n $h->{'n'}";
 	my $launch;
@@ -272,8 +274,8 @@ touch $fn/.post
 		return;
 	} else {
 		# run
-		#my $cmd = "\n$launch $c > $fn/o && touch $fn/.done";#
-		my $cmd = "\n$launch $c > $fn/o ; touch $fn/.done";
+		my $cmd = "\n$launch $c > $fn/o && touch $fn/.done";#
+		#my $cmd = "\n$launch $c > $fn/o ; touch $fn/.done";
 		print "$cmd $nobg\n";
 		my $r = undef;
 		unless ($fake) {
