@@ -22,6 +22,7 @@
 
 #undef dout
 #define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs."
+#define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs."
 
 char *nice_blocks(block_t b) 
 {
@@ -386,6 +387,9 @@ int Ebofs::commit_thread_entry()
 			  << "size " << bc.get_size() 
 			  << ", trimmable " << bc.get_trimmable()
 			  << ", max " << g_conf.ebofs_bc_size
+			  << "; dirty " << bc.get_stat_dirty()
+			  << ", tx " << bc.get_stat_tx()
+			  << ", max dirty " << g_conf.ebofs_bc_max_dirty
 			  << endl;
 	  
 	  
@@ -1317,14 +1321,19 @@ void Ebofs::alloc_write(Onode *on,
 	  assert(old.size() == 1);
 
 	  if (bc.bh_cancel_write(bh)) {
-		dout(10) << "alloc_write unallocated " << old[0] << ", canceled " << *bh << endl;
+		dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
 		allocator.unallocate(old[0]);  // release (into free)
+		alloc.insert(bh->start(), bh->length());
 	  } else {
-		dout(10) << "alloc_write released " << old[0] << ", couldn't canceled " << *bh << endl;
-		allocator.release(old[0]);     // release (into limbo)
+		if (bh->start() >= start && bh->end() <= start+len) {
+		  dout(10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << endl;
+		  allocator.release(old[0]);     // release (into limbo)
+		  alloc.insert(bh->start(), bh->length());
+		} else {
+		  dout(10) << "alloc_write  skipped tx " << old[0] << ", not entirely within " 
+					<< start << "~" << len << " and couldn't cancel " << *bh << endl;
+		}
 	  }
-	  
-	  alloc.insert(bh->start(), bh->length());
 	}
 	
 	dout(10) << "alloc_write will (re)alloc " << alloc << " on " << *on << endl;
@@ -2059,7 +2068,7 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 	while (_write_will_block()) 
 	  bc.waitfor_stat();  // waits on ebofs_lock
 
-	dout(7) << "_write unblocked " 
+	dout(10) << "_write unblocked " 
 			 << hex << oid << dec << " " << offset << "~" << length << endl;
   }
 
