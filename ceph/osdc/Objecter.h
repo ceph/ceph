@@ -68,15 +68,7 @@ class Objecter {
 	OSDWrite(bufferlist &b) : OSDModify(OSD_OP_WRITE), bl(b) {}
   };
 
-  /*
-  class OSDLock : public OSDModify {
-  public:
-	map<int,ObjectExtent> by_osd;
-	map<int,ObjectExtent>::iterator next;
-	OSDLock(int o) : OSDModify(o) {}
-  };
-  */
-
+  
 
  private:
   // pending ops
@@ -89,27 +81,32 @@ class Objecter {
    */
   class PG {
   public:
-	int updater;         // where i write
-	int reader;          // where i read, and expect acks from
+	vector<int> acting;
 	set<tid_t>  active_tids; // active ops
-
-	PG() : updater(-1), reader(-1) {}
-
-	void calc(pg_t pgid, OSDMap *osdmap) {  // return true if change
-	  updater = osdmap->get_pg_acting_primary(pgid);
+	
+	PG() {}
+	
+	// primary - where i write
+	int primary() {
+	  if (acting.empty()) return -1;
+	  return acting[0];
+	}
+	// acker - where i read, and receive acks from
+	int acker() {
+	  if (acting.empty()) return -1;
 	  if (g_conf.osd_rep == OSD_REP_PRIMARY)
-		reader = updater;
-	  else 
-		reader = osdmap->get_pg_acting_tail(pgid);
+		return acting[0];
+	  else
+		return acting[acting.size()-1];
 	}
   };
 
   hash_map<pg_t,PG> pg_map;
-
+  
   
   PG &get_pg(pg_t pgid) {
 	if (!pg_map.count(pgid)) 
-	  pg_map[pgid].calc(pgid, osdmap);
+	  osdmap->pg_to_acting_osds(pgid, pg_map[pgid].acting);
 	return pg_map[pgid];
   }
   void close_pg(pg_t pgid) {
@@ -117,8 +114,8 @@ class Objecter {
 	assert(pg_map[pgid].active_tids.empty());
 	pg_map.erase(pgid);
   }
-  void scan_pgs(set<pg_t>& chnaged_pgs);//, set<pg_t>& down_pgs);
-  void kick_requests(set<pg_t>& changed_pgs);//, set<pg_t>& down_pgs);
+  void scan_pgs(set<pg_t>& chnaged_pgs);
+  void kick_requests(set<pg_t>& changed_pgs);
 	
 
  public:

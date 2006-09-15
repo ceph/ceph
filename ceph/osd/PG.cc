@@ -224,11 +224,12 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 		dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
 				 << " also LOST on source, osd" << fromosd << endl;
 	  }
-	} else {
+	} 
+	else if (p->second <= olog.top) {
 	  dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
 			   << " on source, osd" << fromosd << endl;
 	  missing.loc[p->first] = fromosd;
-	}
+	} 
   }
 
   dout(10) << "merge_log missing " << hex << missing.missing << dec << endl;
@@ -391,7 +392,7 @@ void PG::peer(ObjectStore::Transaction& t,
 	}
 	
 	dout(10) << " querying info from osd" << *it << endl;
-	query_map[*it][info.pgid] = Query(Query::INFO, info.same_primary_since, info.same_acker_since);
+	query_map[*it][info.pgid] = Query(Query::INFO, info.history);
 	peer_info_requested.insert(*it);
   }
   if (missing_info) return;
@@ -465,7 +466,20 @@ void PG::peer(ObjectStore::Transaction& t,
 	}	
   }
 
-  // gather log?
+  // gather log+missing?
+  // ...from all active
+  for (unsigned i=1; i<acting.size(); i++) {
+	int peer = acting[i];
+	if (peer_log_requested.count(peer)) continue;
+	
+	dout(10) << " pulling log from osd" << peer
+			 << " from v " << oldest_update_needed
+			 << endl;
+	query_map[peer][info.pgid] = Query(Query::LOG, oldest_update_needed, info.history);
+	peer_log_requested[peer] = oldest_update_needed;
+  }
+
+  // ...and the newest too
   if (newest_update_osd != osd->whoami) {
 	if (peer_log_requested.count(newest_update_osd) ||
 		peer_summary_requested.count(newest_update_osd)) {
@@ -479,8 +493,7 @@ void PG::peer(ObjectStore::Transaction& t,
 				 << " v " << newest_update 
 				 << ", querying since " << oldest_update_needed
 				 << endl;
-		query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update_needed, 
-														info.same_primary_since, info.same_acker_since);
+		query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update_needed, info.history);
 		peer_log_requested[newest_update_osd] = oldest_update_needed;
 	  } else {
 		dout(10) << " newest update on osd" << newest_update_osd
@@ -490,8 +503,7 @@ void PG::peer(ObjectStore::Transaction& t,
 		assert((peer_info[newest_update_osd].last_complete >= 
 				peer_info[newest_update_osd].log_bottom) ||
 			   peer_info[newest_update_osd].log_backlog);  // or else we're in trouble.
-		query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, 
-														info.same_primary_since, info.same_acker_since);
+		query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.history);
 		peer_summary_requested.insert(newest_update_osd);
 	  }
 	}
@@ -499,6 +511,18 @@ void PG::peer(ObjectStore::Transaction& t,
   } else {
 	dout(10) << " i have the most up-to-date pg v " << info.last_update << endl;
   }
+
+  // did we get them all?
+  bool have_missing = true;
+  for (unsigned i=1; i<acting.size(); i++) {
+	int peer = acting[i];
+	if (peer_missing.count(peer)) continue;
+	
+	dout(10) << " waiting for log+missing from osd" << peer << endl;
+	have_missing = false;
+  }
+  if (!have_missing) return;
+
   dout(10) << " peers_complete_thru " << peers_complete_thru << endl;
   dout(10) << " oldest_update_needed " << oldest_update_needed << endl;
 
@@ -532,8 +556,7 @@ void PG::peer(ObjectStore::Transaction& t,
 			   << ".  fetching summary/backlog from osd" << who
 			   << endl;
 	  assert(who != osd->whoami); // can't be me, or we're in trouble.
-	  query_map[who][info.pgid] = Query(Query::BACKLOG, 
-										info.same_primary_since, info.same_acker_since);
+	  query_map[who][info.pgid] = Query(Query::BACKLOG, info.history);
 	  peer_summary_requested.insert(who);
 	}
 	return;
@@ -557,9 +580,7 @@ void PG::peer(ObjectStore::Transaction& t,
 	  }
 
 	  dout(10) << " requesting summary/backlog from osd" << peer << endl;	  
-	  query_map[peer][info.pgid] = Query(Query::INFO, 
-										 info.same_primary_since,
-										 info.same_acker_since);
+	  query_map[peer][info.pgid] = Query(Query::INFO, info.history);
 	  peer_summary_requested.insert(peer);
 	  waiting = true;
 	}
@@ -589,7 +610,8 @@ void PG::peer(ObjectStore::Transaction& t,
 	state_set(STATE_REPLAY);
 	g_timer.add_event_after(g_conf.osd_replay_window,
 							new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
-  } else {
+  } 
+  else if (!is_active()) {
     // -- ok, activate!
 	activate(t);
   }
@@ -598,6 +620,8 @@ void PG::peer(ObjectStore::Transaction& t,
 
 void PG::activate(ObjectStore::Transaction& t)
 {
+  assert(!is_active());
+
   // twiddle pg state
   state_set(STATE_ACTIVE);
   state_clear(STATE_STRAY);
@@ -629,7 +653,8 @@ void PG::activate(ObjectStore::Transaction& t)
 	log.complete_to == log.log.end();
 	log.requested_to = log.log.end();
   } 
-  else if (is_primary()) {
+  //else if (is_primary()) {
+  else if (true) {
 	dout(10) << "activate - not complete, " << missing << ", starting recovery" << endl;
 	
 	// init complete_to
@@ -638,7 +663,7 @@ void PG::activate(ObjectStore::Transaction& t)
 	  log.complete_to++;
 	  assert(log.complete_to != log.log.end());
 	}
-
+	
 	// start recovery
 	log.requested_to = log.complete_to;
     do_recovery();
@@ -660,10 +685,6 @@ void PG::activate(ObjectStore::Transaction& t)
 	  int peer = acting[i];
 	  assert(peer_info.count(peer));
 	  
-	  if (peer_info[peer].is_clean()) 
-		clean_set.insert(peer);
-	  
-	  
 	  MOSDPGLog *m = new MOSDPGLog(osd->osdmap->get_epoch(), 
 								   info.pgid);
 	  m->info = info;
@@ -681,19 +702,42 @@ void PG::activate(ObjectStore::Transaction& t)
 		assert(peer_info[peer].last_update < info.last_update);
 		m->log.copy_after(log, peer_info[peer].last_update);
 	  }
+
+	  // update local version of peer's missing list!
+	  {
+		eversion_t plu = peer_info[peer].last_update;
+		Missing& pm = peer_missing[peer];
+		for (list<Log::Entry>::iterator p = m->log.log.begin();
+			 p != m->log.log.end();
+			 p++) 
+		  if (p->version > plu)
+			pm.add(p->oid, p->version);
+	  }
 	  
-	  dout(10) << "sending " << m->log << " " << m->missing
+	  dout(10) << "activate sending " << m->log << " " << m->missing
 			   << " to osd" << peer << endl;
-	  
 	  //m->log.print(cout);
-	  
 	  osd->messenger->send_message(m, MSG_ADDR_OSD(peer));
+
+	  // update our missing
+	  if (peer_missing[peer].num_missing() == 0) {
+		dout(10) << "activate peer osd" << peer << " already clean, " << peer_info[peer] << endl;
+		assert(peer_info[peer].last_complete == info.last_update);
+		clean_set.insert(peer);
+	  } else {
+		dout(10) << "activate peer osd" << peer << " " << peer_info[peer]
+				 << " missing " << peer_missing[peer] << endl;
+	  }
+	  	  
 	}
+
+	// discard unneeded peering state
+	//peer_log.clear(); // actually, do this carefully, in case peer() is called again.
 	
 	// all clean?
 	if (is_all_clean()) {
 	  state_set(STATE_CLEAN);
-	  dout(10) << "all replicas clean" << endl;
+	  dout(10) << "activate all replicas clean" << endl;
 	  clean_replicas();	
 	}
   }
@@ -839,7 +883,7 @@ bool PG::do_recovery()
 	if (latest->is_update() &&
 		!objects_pulling.count(latest->oid) &&
 		missing.is_missing(latest->oid)) {
-	  osd->pull(this, latest->oid, latest->version);
+	  osd->pull(this, latest->oid);
 	  return true;
 	}
 	

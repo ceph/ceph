@@ -127,6 +127,7 @@ class Clock {
  public:
   Clock() {
 	// set offset
+	tare();
   }
 
   // real time.

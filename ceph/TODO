@@ -4,17 +4,13 @@
 - how to get usage feedback to monitor?
 
 
-- fix tare weirdness
-
-
 osd/rados
-- clean up writeahead logs
+- consider implications of nvram writeahead logs
+- deal with divergent replicas that recover
 - fix heartbeat wrt new replication
-- figure out new rep failure cases
-- same_primary_since -> same_tail_since
 - mark residual pgs obsolete  ???
-- deal with divergent disconnected primaries
 - rdlocks
+- optimize remove wrt recovery pushes
 - pg_bit changes
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
@@ -39,7 +35,6 @@ monitor
 
 
 objecter
-- handle new rep mode failure modes...  head, tail, middle
 
 objectcacher
 - ocacher flushing

@@ -90,19 +90,21 @@ public:
 
 	epoch_t last_epoch_started;  // last epoch started.
 	epoch_t last_epoch_finished; // last epoch finished.
-	epoch_t same_primary_since;  // upper bound: same primary at least back through this epoch.
-	epoch_t same_acker_since;    // upper bound: same acker at least back through this epoch.
-	epoch_t same_role_since;     // upper bound: i have held same role since
 
+	struct History {
+	  epoch_t same_since;          // same acting set since
+	  epoch_t same_primary_since;  // same primary at least back through this epoch.
+	  epoch_t same_acker_since;    // same acker at least back through this epoch.
+	  History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
+	} history;
+	
 	Info(pg_t p=0) : pgid(p), 
 					 log_backlog(false),
-					 last_epoch_started(0), last_epoch_finished(0),
-					 same_primary_since(0), same_acker_since(0), 
-					 same_role_since(0) {}
+					 last_epoch_started(0), last_epoch_finished(0) {}
 	bool is_clean() { return last_update == last_complete; }
   };
-
-
+  
+  
   /** 
    * Query - used to ask a peer for information about a pg.
    *
@@ -116,16 +118,13 @@ public:
 
 	int type;
 	eversion_t version;
-	epoch_t same_primary_since;
-	epoch_t same_acker_since;
+	Info::History history;
 
-	Query() : type(-1), same_primary_since(0), same_acker_since(0) {}
-	Query(int t, epoch_t ps, epoch_t as) : 
-	  type(t), 
-	  same_primary_since(ps), same_acker_since(as) {}
-	Query(int t, eversion_t v, epoch_t ps, epoch_t as) : 
-	  type(t), version(v), 
-	  same_primary_since(ps), same_acker_since(as) {}
+	Query() : type(-1) {}
+	Query(int t, Info::History& h) : 
+	  type(t), history(h) {}
+	Query(int t, eversion_t v, Info::History& h) : 
+	  type(t), version(v), history(h) {}
   };
   
   
@@ -409,7 +408,7 @@ public:
 public:
   // any
   static const int STATE_ACTIVE = 1; // i am active.  (primary: replicas too)
-
+  
   // primary
   static const int STATE_CLEAN =  2;  // peers are complete, clean of stray replicas.
   static const int STATE_CRASHED = 4; // all replicas went down.
@@ -601,6 +600,12 @@ public:
 };
 
 
+
+inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
+{
+  return out << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
+}
+
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
   return out << "pginfo(" << hex << pgi.pgid << dec 
@@ -608,6 +613,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
 			 << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
 			 << (pgi.log_backlog ? "+backlog":"")
 			 << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
+			 << " " << pgi.history
 			 << ")";
 }
 

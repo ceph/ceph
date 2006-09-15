@@ -192,15 +192,14 @@ public:
 
   // PG
   hash_map<pg_t, PG*>      pg_map;
-  //void  get_pg_list(list<pg_t>& ls);
   void  load_pgs();
   bool  pg_exists(pg_t pg);
   PG   *create_pg(pg_t pg, ObjectStore::Transaction& t);          // create new PG
   PG   *get_pg(pg_t pg);             // return existing PG, or null
-  //void  close_pg(pg_t pg);           // close in-memory state
   void  _remove_pg(pg_t pg);         // remove from store and memory
 
-  epoch_t calc_pg_primary_since(int primary, pg_t pgid, epoch_t start);
+  void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from);
+
   void activate_pg(pg_t pgid, epoch_t epoch);
 
   class C_Activate : public Context {
@@ -236,7 +235,7 @@ public:
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
 
-  void pull(PG *pg, object_t, eversion_t);
+  void pull(PG *pg, object_t oid);
   void push(PG *pg, object_t oid, int dest);
 
   bool require_current_map(Message *m, epoch_t v);
