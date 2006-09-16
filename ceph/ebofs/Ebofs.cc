@@ -1320,19 +1320,23 @@ void Ebofs::alloc_write(Onode *on,
 	  on->map_extents(bh->start(), bh->length(), old);
 	  assert(old.size() == 1);
 
-	  if (bc.bh_cancel_write(bh)) {
-		dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
-		allocator.unallocate(old[0]);  // release (into free)
-		alloc.insert(bh->start(), bh->length());
-	  } else {
-		if (bh->start() >= start && bh->end() <= start+len) {
-		  dout(10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << endl;
-		  allocator.release(old[0]);     // release (into limbo)
+	  if (bh->start() >= start && bh->end() <= start+len) {
+		if (bc.bh_cancel_write(bh)) {
+		  if (bh->length() == 1)
+		  dout(-10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
+		  allocator.unallocate(old[0]);  // release (into free)
 		  alloc.insert(bh->start(), bh->length());
 		} else {
-		  dout(10) << "alloc_write  skipped tx " << old[0] << ", not entirely within " 
-					<< start << "~" << len << " and couldn't cancel " << *bh << endl;
+		  if (bh->length() == 1)
+		  dout(-10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << endl;
+		  allocator.release(old[0]);     // release (into limbo)
+		  alloc.insert(bh->start(), bh->length());
 		}
+	  } else {
+		if (bh->length() == 1)
+		dout(-10) << "alloc_write  skipped tx " << old[0] << ", not entirely within " 
+				 << start << "~" << len 
+				 << " bh " << *bh << endl;
 	  }
 	}
 	
