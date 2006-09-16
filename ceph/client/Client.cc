@@ -1997,3 +1997,50 @@ int Client::statfs(const char *path, struct statfs *stbuf)
   assert(0);  // implement me
   return 0;
 }
+
+
+
+int Client;:lazyio_propogate(int fd, off_t offset, size_t count)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->lazyio_propogate(" << fd
+		  << ", " << offset << ", " << count << ")" << endl;
+  
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+  
+  if (g_conf.client_oc) {
+	Cond cond;
+	bool done = false;
+	in->fc.flush_dirty(new C_SafeCond(&client_lock, &cond, &done));
+	
+	while (!done)
+	  cond.Wait(client_lock);
+	
+  } else {
+	// mm, nothin to do.
+  }
+  
+  client_lock.Unlock();
+}
+
+int Client::lazyio_synchronize(int fs, off_t offset, size_t count)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->lazyio_synchronize(" << fd
+		  << ", " << offset << ", " << count << ")" << endl;
+  
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+  
+  if (g_conf.client_oc) {
+	in->fc.flush_dirty(0);       // flush to invalidate.
+	in->fc.release_clean();
+  } else {
+	// mm, nothin to do.
+  }
+  
+  client_lock.Unlock();
+}
