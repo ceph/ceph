@@ -918,7 +918,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   memset(buf, 7, wrsize);
   __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)wrsize;
 
-  int fd = client->open(fn.c_str(), O_WRONLY|O_CREAT);
+  int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << endl;
   if (fd < 0) return fd;
 

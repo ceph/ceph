@@ -32,17 +32,17 @@ using namespace std;
 #define LOCK_GLOCKR   2  // AR   R . / C . . .   . . / C . . .
 
 // file lock states
-#define LOCK_GLOCKW   3  // A    . . / . . . . 
+#define LOCK_GLOCKL   3  // A    . . / . . . . 
 #define LOCK_GLOCKM   4  // A    . . / . . . .
 #define LOCK_MIXED    5  // AR   . . / . R W .   . . / . R . .
 #define LOCK_GMIXEDR  6  // AR   R . / . R . .   . . / . R . . 
-#define LOCK_GMIXEDW  7  // A    . . / . . W .   
+#define LOCK_GMIXEDL  7  // A    . . / . . . .   
 
-#define LOCK_WRONLY   8  // A    . . / . . W B      (lock)
-#define LOCK_GWRONLYR 9  // A    . . / . . . .
-#define LOCK_GWRONLYM 10 // A    . . / . . W .
+#define LOCK_LONER    8  // A    . . / C R W B      (lock)      
+#define LOCK_GLONERR  9  // A    . . / . R . .
+#define LOCK_GLONERM  10 // A    . . / . R W .
 
-#define LOCK_GSYNCW   11 // A    . . / . . . .
+#define LOCK_GSYNCL   11 // A    . . / . . . .
 #define LOCK_GSYNCM   12 // A    . . / . R . .
 
 //   4 stable
@@ -97,11 +97,11 @@ class CLock {
 	switch (state) {
 	case LOCK_LOCK:
 	case LOCK_GLOCKM:
-	case LOCK_GLOCKW:
+	case LOCK_GLOCKL:
 	case LOCK_GLOCKR: 
-	case LOCK_WRONLY:
-	case LOCK_GWRONLYR:
-	case LOCK_GWRONLYM:
+	case LOCK_LONER:
+	case LOCK_GLONERR:
+	case LOCK_GLONERM:
 	  return LOCK_LOCK;
 	case LOCK_MIXED:
 	case LOCK_GMIXEDR:
@@ -112,8 +112,8 @@ class CLock {
 	  // after gather auth will bc LOCK_AC_MIXED or whatever
 	case LOCK_GSYNCM:
 	  return LOCK_MIXED;
-	case LOCK_GSYNCW:
-	case LOCK_GMIXEDW:     // ** LOCK isn't exact right state, but works.
+	case LOCK_GSYNCL:
+	case LOCK_GMIXEDL:     // ** LOCK isn't exact right state, but works.
 	  return LOCK_LOCK;
 
 	default: 
@@ -158,7 +158,7 @@ class CLock {
 	return (state == LOCK_SYNC) || 
 	  (state == LOCK_LOCK) || 
 	  (state == LOCK_MIXED) || 
-	  (state == LOCK_WRONLY);
+	  (state == LOCK_LONER);
   }
 
   // read/write access
@@ -171,7 +171,7 @@ class CLock {
   }
   bool can_read_soon(bool auth) {
 	if (auth)
-	  return (state == LOCK_GLOCKW);
+	  return (state == LOCK_GLOCKL);
 	else
 	  return false;
   }
@@ -184,7 +184,7 @@ class CLock {
   }
   bool can_write_soon(bool auth) {
 	if (auth)
-	  return (state == LOCK_GLOCKR) || (state == LOCK_GLOCKW)
+	  return (state == LOCK_GLOCKR) || (state == LOCK_GLOCKL)
 		|| (state == LOCK_GLOCKM);
 	else
 	  return false;
@@ -197,41 +197,48 @@ class CLock {
 	else
 	  return CAP_FILE_RDCACHE | CAP_FILE_RD;
   }
-  int caps_allowed(bool auth, bool singular=false) {
+  int caps_allowed(bool auth) {
 	if (auth)
 	  switch (state) {
 	  case LOCK_SYNC:
 		return CAP_FILE_RDCACHE | CAP_FILE_RD;
-	  case LOCK_GMIXEDR:
-	  case LOCK_GSYNCM:
-		return CAP_FILE_RD;
-	  case LOCK_MIXED:
-		return CAP_FILE_RD | CAP_FILE_WR;
-	  case LOCK_GMIXEDW:
-	  case LOCK_GWRONLYM:
-		return CAP_FILE_WR;
-	  case LOCK_WRONLY:
-		if (singular) return CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_RD | CAP_FILE_RDCACHE;
-		return CAP_FILE_WR | CAP_FILE_WRBUFFER;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
 		return CAP_FILE_RDCACHE;
-	  case LOCK_GLOCKW:
+
+	  case LOCK_GLOCKL:
 	  case LOCK_GLOCKM:
-	  case LOCK_GWRONLYR:
-	  case LOCK_GSYNCW:
 		return 0;
+
+	  case LOCK_MIXED:
+		return CAP_FILE_RD | CAP_FILE_WR;
+	  case LOCK_GMIXEDR:
+		return CAP_FILE_RD;
+	  case LOCK_GMIXEDL:
+		return 0;
+
+	  case LOCK_LONER:  // single client writer, of course.
+		return CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_RD | CAP_FILE_RDCACHE;
+	  case LOCK_GLONERR:
+		return CAP_FILE_WR;
+	  case LOCK_GLONERM:
+		return CAP_FILE_RD | CAP_FILE_WR;
+
+	  case LOCK_GSYNCL:
+		return 0;
+	  case LOCK_GSYNCM:
+		return CAP_FILE_RD;
 	  }
 	else
 	  switch (state) {
 	  case LOCK_SYNC:
 		return CAP_FILE_RDCACHE | CAP_FILE_RD;
-	  case LOCK_GMIXEDR:
-	  case LOCK_MIXED:
-		return CAP_FILE_RD;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
 		return CAP_FILE_RDCACHE;
+	  case LOCK_GMIXEDR:
+	  case LOCK_MIXED:
+		return CAP_FILE_RD;
 	  }
 	assert(0);
 	return 0;
@@ -240,20 +247,20 @@ class CLock {
 	if (auth)
 	  switch (state) {
 	  case LOCK_GSYNCM:
-	  case LOCK_GSYNCW:
+	  case LOCK_GSYNCL:
 	  case LOCK_SYNC:
 		return CAP_FILE_RDCACHE | CAP_FILE_RD;
 	  case LOCK_GMIXEDR:
-	  case LOCK_GMIXEDW:
+	  case LOCK_GMIXEDL:
 	  case LOCK_MIXED:
 		return CAP_FILE_RD | CAP_FILE_WR;
-	  case LOCK_GWRONLYM:
-	  case LOCK_GWRONLYR:
-	  case LOCK_WRONLY:
-		return CAP_FILE_WR | CAP_FILE_WRBUFFER;
+	  case LOCK_GLONERM:
+	  case LOCK_GLONERR:
+	  case LOCK_LONER:
+		return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WRBUFFER;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
-	  case LOCK_GLOCKW:
+	  case LOCK_GLOCKL:
 	  case LOCK_GLOCKM:
 		return 0;
 	  }
@@ -283,15 +290,15 @@ inline ostream& operator<<(ostream& out, CLock& l)
 	"sync",
 	"lock",
 	"glockr",
-	"glockw",
+	"glockl",
 	"glockm",
 	"mixed",
 	"gmixedr",
-	"gmixedw",
-	"wronly",
-	"gwronlyr",
-	"gwronlym",
-	"gsyncw",
+	"gmixedl",
+	"loner",
+	"glonerr",
+	"glonerm",
+	"gsyncl",
 	"gsyncm"
   }; 
 

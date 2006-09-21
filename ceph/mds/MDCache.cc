@@ -3573,36 +3573,10 @@ Capability* MDCache::issue_new_caps(CInode *in,
 
 bool MDCache::issue_caps(CInode *in)
 {
-  bool singular = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
-  int allowed = in->filelock.caps_allowed(in->is_auth(), singular);
+  // allowed caps are determined by the lock mode.
+  int allowed = in->filelock.caps_allowed(in->is_auth());
   dout(7) << "issue_caps filelock allows=" << cap_string(allowed) 
-		  << " singular=" << singular
 		  << " on " << *in << endl;
-
-  // look at what allowed, needed caps conflict with
-  // .. ONLY if more than one client w/ caps! ..
-  int need_conflicts = 0;
-  int issued_conflicts = 0;  
-  if (!singular) {  // ONLY if >1 client ...
-	for (map<int, Capability>::iterator it = in->client_caps.begin();
-		 it != in->client_caps.end();
-		 it++) {
-	  need_conflicts |= it->second.needed_conflicts();
-	  issued_conflicts |= it->second.issued_conflicts();
-	}
-	for (map<int, int>::iterator it = in->mds_caps_wanted.begin();
-		 it != in->mds_caps_wanted.end();
-		 it++) {
-	  need_conflicts |= Capability::conflicts( Capability::needed( it->second ) );
-	}
-  }
-  dout(10) << "  need conflicts: " << cap_string(need_conflicts) << endl;
-  dout(10) << "issued conflicts: " << cap_string(issued_conflicts) << endl;
-  
-  // what's allowed, given this mix?
-  allowed -= allowed & need_conflicts;
-  allowed -= allowed & issued_conflicts;
-  dout(10) << "         allowed: " << cap_string(allowed) << endl;
 
   // count conflicts with
   int nissued = 0;        
@@ -4442,7 +4416,7 @@ void MDCache::inode_file_eval(CInode *in)
 	  // to lock
 	case LOCK_GLOCKR:
 	case LOCK_GLOCKM:
-	case LOCK_GLOCKW:
+	case LOCK_GLOCKL:
 	  if (issued == 0) {
 		in->filelock.set_state(LOCK_LOCK);
 		
@@ -4463,7 +4437,7 @@ void MDCache::inode_file_eval(CInode *in)
 	  }
 	  break;
 
-	case LOCK_GMIXEDW:
+	case LOCK_GMIXEDL:
 	  if ((issued & ~(CAP_FILE_WR)) == 0) {
 		in->filelock.set_state(LOCK_MIXED);
 
@@ -4489,23 +4463,23 @@ void MDCache::inode_file_eval(CInode *in)
 	  }
 	  break;
 
-	  // to wronly
-	case LOCK_GWRONLYR:
+	  // to loner
+	case LOCK_GLONERR:
 	  if (issued == 0) {
-		in->filelock.set_state(LOCK_WRONLY);
+		in->filelock.set_state(LOCK_LONER);
 		in->finish_waiting(CINODE_WAIT_FILESTABLE);
 	  }
 	  break;
 
-	case LOCK_GWRONLYM:
+	case LOCK_GLONERM:
 	  if ((issued & ~CAP_FILE_WR) == 0) {
-		in->filelock.set_state(LOCK_WRONLY);
+		in->filelock.set_state(LOCK_LONER);
 		in->finish_waiting(CINODE_WAIT_FILESTABLE);
 	  }
 	  break;
 	  
 	  // to sync
-	case LOCK_GSYNCW:
+	case LOCK_GSYNCL:
 	case LOCK_GSYNCM:
 	  if ((issued & ~(CAP_FILE_RD)) == 0) {
 		in->filelock.set_state(LOCK_SYNC);
@@ -4536,6 +4510,8 @@ void MDCache::inode_file_eval(CInode *in)
 	default: 
 	  assert(0);
 	}
+
+	issue_caps(in);
   }
   
   // [replica] finished caps gather?
@@ -4583,20 +4559,20 @@ void MDCache::inode_file_eval(CInode *in)
   if (in->is_auth()) {
 	// [auth]
 	int wanted = in->get_caps_wanted();
-	bool singular = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
+	bool loner = (in->client_caps.size() == 1) && in->mds_caps_wanted.empty();
 	dout(7) << "inode_file_eval wanted=" << cap_string(wanted)
 			<< "  filelock=" << in->filelock 
-			<< "  singular=" << singular
+			<< "  loner=" << loner
 			<< endl;
 
-	// * -> wronly?
+	// * -> loner?
 	if (in->filelock.get_nread() == 0 &&
 		in->filelock.get_nwrite() == 0 &&
-		!(wanted & CAP_FILE_RD) &&
 		(wanted & CAP_FILE_WR) &&
-		in->filelock.get_state() != LOCK_WRONLY) {
-	  dout(7) << "inode_file_eval stable, bump to wronly " << *in << ", filelock=" << in->filelock << endl;
-	  inode_file_wronly(in);
+		loner &&
+		in->filelock.get_state() != LOCK_LONER) {
+	  dout(7) << "inode_file_eval stable, bump to loner " << *in << ", filelock=" << in->filelock << endl;
+	  inode_file_loner(in);
 	}
 
 	// * -> mixed?
@@ -4604,7 +4580,7 @@ void MDCache::inode_file_eval(CInode *in)
 			 in->filelock.get_nwrite() == 0 &&
 			 (wanted & CAP_FILE_RD) &&
 			 (wanted & CAP_FILE_WR) &&
-			 !(singular && in->filelock.get_state() == LOCK_WRONLY) &&
+			 !(loner && in->filelock.get_state() == LOCK_LONER) &&
 			 in->filelock.get_state() != LOCK_MIXED) {
 	  dout(7) << "inode_file_eval stable, bump to mixed " << *in << ", filelock=" << in->filelock << endl;
 	  inode_file_mixed(in);
@@ -4643,7 +4619,7 @@ bool MDCache::inode_file_sync(CInode *in)
 
   // check state
   if (in->filelock.get_state() == LOCK_SYNC ||
-	  in->filelock.get_state() == LOCK_GSYNCW ||
+	  in->filelock.get_state() == LOCK_GSYNCL ||
 	  in->filelock.get_state() == LOCK_GSYNCM)
 	return true;
 
@@ -4708,11 +4684,11 @@ bool MDCache::inode_file_sync(CInode *in)
 	return false;
   }
 
-  else if (in->filelock.get_state() == LOCK_WRONLY) {
+  else if (in->filelock.get_state() == LOCK_LONER) {
 	// writers?
 	if (issued & CAP_FILE_WR) {
 	  // gather client write caps
-	  in->filelock.set_state(LOCK_GSYNCW);
+	  in->filelock.set_state(LOCK_GSYNCL);
 	  issue_caps(in);
 	} else {
 	  // no writers, go straight to sync
@@ -4751,7 +4727,7 @@ void MDCache::inode_file_lock(CInode *in)
   if (in->filelock.get_state() == LOCK_LOCK ||
 	  in->filelock.get_state() == LOCK_GLOCKR ||
 	  in->filelock.get_state() == LOCK_GLOCKM ||
-	  in->filelock.get_state() == LOCK_GLOCKW) 
+	  in->filelock.get_state() == LOCK_GLOCKL) 
 	return;  // lock or locking
 
   assert(in->filelock.is_stable());
@@ -4822,10 +4798,10 @@ void MDCache::inode_file_lock(CInode *in)
 	}
 	  
   }
-  else if (in->filelock.get_state() == LOCK_WRONLY) {
+  else if (in->filelock.get_state() == LOCK_LONER) {
 	if (issued & CAP_FILE_WR) {
 	  // change lock
-	  in->filelock.set_state(LOCK_GLOCKW);
+	  in->filelock.set_state(LOCK_GLOCKL);
   
 	  // call back caps
 	  issue_caps(in);
@@ -4846,7 +4822,7 @@ void MDCache::inode_file_mixed(CInode *in)
   
   // check state
   if (in->filelock.get_state() == LOCK_GMIXEDR ||
-	  in->filelock.get_state() == LOCK_GMIXEDW)
+	  in->filelock.get_state() == LOCK_GMIXEDL)
 	return;     // mixed or mixing
 
   assert(in->filelock.is_stable());
@@ -4903,10 +4879,10 @@ void MDCache::inode_file_mixed(CInode *in)
 	issue_caps(in);
   }
 
-  else if (in->filelock.get_state() == LOCK_WRONLY) {
+  else if (in->filelock.get_state() == LOCK_LONER) {
 	if (issued & CAP_FILE_WRBUFFER) {
 	  // gather up WRBUFFER caps
-	  in->filelock.set_state(LOCK_GMIXEDW);
+	  in->filelock.set_state(LOCK_GMIXEDL);
 	  issue_caps(in);
 	}
 	else if (in->is_cached_by_anyone()) {
@@ -4933,23 +4909,21 @@ void MDCache::inode_file_mixed(CInode *in)
 }
 
 
-void MDCache::inode_file_wronly(CInode *in)
+void MDCache::inode_file_loner(CInode *in)
 {
-  dout(7) << "inode_file_wronly " << *in << " filelock=" << in->filelock << endl;  
+  dout(7) << "inode_file_loner " << *in << " filelock=" << in->filelock << endl;  
 
   assert(in->is_auth());
 
   // check state
-  if (in->filelock.get_state() == LOCK_WRONLY ||
-	  in->filelock.get_state() == LOCK_GWRONLYR ||
-	  in->filelock.get_state() == LOCK_GWRONLYM)
+  if (in->filelock.get_state() == LOCK_LONER ||
+	  in->filelock.get_state() == LOCK_GLONERR ||
+	  in->filelock.get_state() == LOCK_GLONERM)
 	return; 
 
   assert(in->filelock.is_stable());
-
-  int issued = in->get_caps_issued();
-  assert((in->get_caps_wanted() & CAP_FILE_RD) == 0);
-
+  assert((in->client_caps.size() == 1) && in->mds_caps_wanted.empty());
+  
   if (in->filelock.get_state() == LOCK_SYNC) {
 	if (in->is_cached_by_anyone()) {
 	  // bcast to replicas
@@ -4965,25 +4939,17 @@ void MDCache::inode_file_wronly(CInode *in)
 	  in->filelock.init_gather(in->get_cached_by());
 	  
 	  // change lock
-	  in->filelock.set_state(LOCK_GWRONLYR);
-
-	  // call back caps
-	  if (issued & CAP_FILE_RD)
-		issue_caps(in);
+	  in->filelock.set_state(LOCK_GLONERR);
 	} else {
-	  if (issued & CAP_FILE_RD) {
-		in->filelock.set_state(LOCK_GWRONLYR);
-		issue_caps(in);
-	  } else {
-		in->filelock.set_state(LOCK_WRONLY);
-		issue_caps(in);
-	  }
+	  // only one guy with file open, who gets it all, so
+	  in->filelock.set_state(LOCK_LONER);
+	  issue_caps(in);
 	}
   }
 
   else if (in->filelock.get_state() == LOCK_LOCK) {
-	// change lock.  ignore replicas; they don't know about WRONLY.
-	in->filelock.set_state(LOCK_WRONLY);
+	// change lock.  ignore replicas; they don't know about LONER.
+	in->filelock.set_state(LOCK_LONER);
 	issue_caps(in);
   }
 
@@ -5002,9 +4968,9 @@ void MDCache::inode_file_wronly(CInode *in)
 	  in->filelock.init_gather(in->get_cached_by());
 	  
 	  // change lock
-	  in->filelock.set_state(LOCK_GWRONLYM);
+	  in->filelock.set_state(LOCK_GLONERM);
 	} else {
-	  in->filelock.set_state(LOCK_WRONLY);
+	  in->filelock.set_state(LOCK_LONER);
 	  issue_caps(in);
 	}
   }
@@ -5164,8 +5130,8 @@ void MDCache::handle_lock_inode_file(MLock *m)
   case LOCK_AC_LOCKACK:
 	assert(lock->state == LOCK_GLOCKR ||
 		   lock->state == LOCK_GLOCKM ||
-		   lock->state == LOCK_GWRONLYM ||
-		   lock->state == LOCK_GWRONLYR);
+		   lock->state == LOCK_GLONERM ||
+		   lock->state == LOCK_GLONERR);
 	assert(lock->gather_set.count(from));
 	lock->gather_set.erase(from);
 
@@ -6158,19 +6124,19 @@ void MDCache::encode_export_inode(CInode *in, bufferlist& enc_state, int new_aut
   in->filelock.clear_gather();
   if (in->filelock.get_state() == LOCK_GLOCKR ||
 	  in->filelock.get_state() == LOCK_GLOCKM ||
-	  in->filelock.get_state() == LOCK_GLOCKW ||
-	  in->filelock.get_state() == LOCK_GWRONLYR ||
-	  in->filelock.get_state() == LOCK_GWRONLYM ||
-	  in->filelock.get_state() == LOCK_WRONLY)
+	  in->filelock.get_state() == LOCK_GLOCKL ||
+	  in->filelock.get_state() == LOCK_GLONERR ||
+	  in->filelock.get_state() == LOCK_GLONERM ||
+	  in->filelock.get_state() == LOCK_LONER)
 	in->filelock.set_state(LOCK_LOCK);
   if (in->filelock.get_state() == LOCK_GMIXEDR)
 	in->filelock.set_state(LOCK_MIXED);
   // this looks like a step backwards, but it's what we want!
   if (in->filelock.get_state() == LOCK_GSYNCM)
 	in->filelock.set_state(LOCK_MIXED);
-  if (in->filelock.get_state() == LOCK_GSYNCW)
+  if (in->filelock.get_state() == LOCK_GSYNCL)
 	in->filelock.set_state(LOCK_LOCK);
-  if (in->filelock.get_state() == LOCK_GMIXEDW)
+  if (in->filelock.get_state() == LOCK_GMIXEDL)
 	in->filelock.set_state(LOCK_LOCK);
 	//in->filelock.set_state(LOCK_MIXED);
   

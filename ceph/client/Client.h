@@ -140,11 +140,16 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
 
+  // for caching i/o mode
   FileCache fc;
+
+  // for sync i/o mode
+  int       sync_reads;   // sync reads in progress
+  int       sync_writes;  // sync writes in progress
 
   list<Cond*>       waitfor_write;
   list<Cond*>       waitfor_read;
-  list<Cond*>       waitfor_no_read, waitfor_no_write;
+  list<Context*>    waitfor_no_read, waitfor_no_write;
 
   void get() { 
 	ref++; 
@@ -162,7 +167,8 @@ class Inode {
 	file_wr_mtime(0), file_wr_size(0), 
 	num_open_rd(0), num_open_wr(0),
 	ref(0), dir(0), dn(0), symlink(0),
-	fc(_oc, _inode)
+	fc(_oc, _inode),
+	sync_reads(0), sync_writes(0)
   { }
   ~Inode() {
 	if (symlink) { delete symlink; symlink = 0; }
@@ -285,6 +291,11 @@ class Client : public Dispatcher {
   Messenger *messenger;  
   int whoami;
   
+  // mds fake RPC
+  map<tid_t, Cond*>                mds_rpc_cond;
+  map<tid_t, class MClientReply*>  mds_rpc_reply;
+  map<tid_t, Cond*>                mds_rpc_dispatch_cond;
+
   // cluster descriptors
   MDCluster             *mdcluster; 
   OSDMap                *osdmap;
@@ -292,7 +303,6 @@ class Client : public Dispatcher {
   bool   mounted;
   bool   unmounting;
   Cond   unmount_cond;  
-
 
   int    unsafe_sync_write;
 public:
@@ -441,6 +451,8 @@ protected:
 
   // make blocking mds request
   MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
+  void handle_client_reply(MClientReply *reply);
+
   
   // friends
   friend class SyntheticClient;

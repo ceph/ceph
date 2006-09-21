@@ -111,7 +111,7 @@ public:
   // conflicts
   static int conflicts(int from) {
 	int c = 0;
-	if (from & CAP_FILE_WRBUFFER) c |= CAP_FILE_RDCACHE|CAP_FILE_RD;//|CAP_FILE_WRBUFFER|CAP_FILE_WR;
+	if (from & CAP_FILE_WRBUFFER) c |= CAP_FILE_RDCACHE|CAP_FILE_RD;
 	if (from & CAP_FILE_WR) c |= CAP_FILE_RDCACHE;
 	if (from & CAP_FILE_RD) c |= CAP_FILE_WRBUFFER;
 	if (from & CAP_FILE_RDCACHE) c |= CAP_FILE_WRBUFFER|CAP_FILE_WR;

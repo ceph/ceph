@@ -472,7 +472,7 @@ class MDCache {
   bool inode_file_sync(CInode *in);
   void inode_file_lock(CInode *in);
   void inode_file_mixed(CInode *in);
-  void inode_file_wronly(CInode *in);
+  void inode_file_loner(CInode *in);
 
   // messengers
   void handle_lock(MLock *m);

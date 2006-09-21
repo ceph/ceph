@@ -21,9 +21,6 @@
 #include <vector>
 using namespace std;
 
-class CDir;
-class MDS;
-
 class MDCluster {
  protected:
   int          num_mds;

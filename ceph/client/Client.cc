@@ -452,10 +452,9 @@ MClientReply *Client::make_request(MClientRequest *req,
   // force use of a particular mds?
   if (use_mds >= 0) mds = use_mds;
 
-  // drop mutex for duration of call
-  client_lock.Unlock();  
-  utime_t start = g_clock.now();
 
+  // time the call
+  utime_t start = g_clock.now();
   
   bool nojournal = false;
   int op = req->get_op();
@@ -466,10 +465,38 @@ MClientReply *Client::make_request(MClientRequest *req,
 	  op == MDS_OP_RELEASE)
 	nojournal = true;
 
-  MClientReply *reply = (MClientReply*)messenger->sendrecv(req,
-														   MSG_ADDR_MDS(mds), 
-														   MDS_PORT_SERVER);
+  MClientReply *reply = 0;
+  if (1) {
+	// NEW way.
+	Cond cond;
+	tid_t tid = req->get_tid();
+	mds_rpc_cond[tid] = &cond;
+	
+	messenger->send_message(req, MSG_ADDR_MDS(mds), MDS_PORT_SERVER);
+	
+	// wait
+	while (mds_rpc_reply.count(tid) == 0)
+	  cond.Wait(client_lock);
+	
+	// got it!
+	reply = mds_rpc_reply[tid];
 
+	// kick dispatcher (we've got it!)
+	assert(mds_rpc_dispatch_cond.count(tid));
+	mds_rpc_dispatch_cond[tid]->Signal();
+
+	// clean up.
+	mds_rpc_cond.erase(tid);
+	mds_rpc_reply.erase(tid);
+  } else {
+	// OLD crap way
+	// drop mutex for duration of call
+	client_lock.Unlock();  
+	reply = (MClientReply*)messenger->sendrecv(req,
+															 MSG_ADDR_MDS(mds), 
+															 MDS_PORT_SERVER);
+	client_lock.Lock();
+  }
 
   if (client_logger) {
 	utime_t lat = g_clock.now();
@@ -497,10 +524,31 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   }
 
-  client_lock.Lock();  
   return reply;
 }
 
+
+void Client::handle_client_reply(MClientReply *reply)
+{
+  tid_t tid = reply->get_tid();
+
+  // store reply
+  mds_rpc_reply[tid] = reply;
+
+  // wake up waiter
+  assert(mds_rpc_cond.count(tid));
+  mds_rpc_cond[tid]->Signal();
+
+  // wake for kick back
+  assert(mds_rpc_dispatch_cond.count(tid) == 0);
+  Cond cond;
+  mds_rpc_dispatch_cond[tid] = &cond;
+  while (mds_rpc_cond.count(tid)) 
+	cond.Wait(client_lock);
+
+  // ok, clean up!
+  mds_rpc_dispatch_cond.erase(tid);
+}
 
 
 // ------------------------
@@ -521,6 +569,10 @@ void Client::dispatch(Message *m)
 	break;
 	
 	// client
+  case MSG_CLIENT_REPLY:
+	handle_client_reply((MClientReply*)m);
+	break;
+
   case MSG_CLIENT_FILECAPS:
 	handle_file_caps((MClientFileCaps*)m);
 	break;
@@ -739,9 +791,14 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
 	// ack?
 	if (old_caps & ~new_caps) {
-	  // send back to mds
-	  dout(5) << " we lost caps " << cap_string(old_caps & ~new_caps) << ", acking" << endl;
-	  messenger->send_message(m, m->get_source(), m->get_source_port());
+	  if (in->sync_writes) {
+		// wait for sync writes to finish
+		dout(5) << "sync writes in progress, will ack on finish" << endl;
+		in->waitfor_no_write.push_back(new C_Client_ImplementedCaps(this, m));
+	  } else {
+		// ok now
+		implemented_caps(m);
+	  }
 	} else {
 	  // discard
 	  delete m;
@@ -1566,7 +1623,6 @@ int Client::open(const char *relpath, int mode)
 	}
 
 	int new_caps = reply->get_file_caps();
-	//new_caps &= CAP_FILE_WR|CAP_FILE_RD;    // HACK: test synchronous read/write
 
 	assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
 	if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
@@ -1893,6 +1949,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	C_Cond *onfinish = new C_Cond(&cond, &done);
 	C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
 	unsafe_sync_write++;
+	in->sync_writes++;
 	
 	dout(20) << " sync write start " << onfinish << endl;
 	
@@ -1903,6 +1960,17 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 	  cond.Wait(client_lock);
 	  dout(20) << " sync write bump " << onfinish << endl;
 	}
+
+	in->sync_writes--;
+	if (in->sync_writes == 0 &&
+		!in->waitfor_no_write.empty()) {
+	  for (list<Context*>::iterator i = in->waitfor_no_write.begin();
+		   i != in->waitfor_no_write.end();
+		   i++)
+		(*i)->finish(0);
+	  in->waitfor_no_write.clear();
+	}
+
 	dout(20) << " sync write done " << onfinish << endl;
   }
 
