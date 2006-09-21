@@ -13,9 +13,6 @@
 
 
 
-// ceph stuff
-#include "Client.h"
-
 // unix-ey fs stuff
 #include <unistd.h>
 #include <sys/types.h>
@@ -23,6 +20,13 @@
 #include <utime.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
+#include "statlite.h"
+
+
+// ceph stuff
+#include "Client.h"
+
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -37,6 +41,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Logger.h"
+
 
 #include "config.h"
 #undef dout
@@ -1252,6 +1257,19 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 }
 
 
+int Client::lstatlite(const char *path, struct statlite *stl)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->lstatlite(" << path 
+		  << ", " << (void*)stl << ")" << endl;
+
+  
+  
+  client_lock.Unlock();
+  return 0;
+}
+
+
 
 int Client::chmod(const char *relpath, mode_t mode)
 {
@@ -1548,7 +1566,7 @@ int Client::open(const char *relpath, int mode)
 	}
 
 	int new_caps = reply->get_file_caps();
-	new_caps &= CAP_FILE_WR|CAP_FILE_RD;    // HACK: test synchronous read/write
+	//new_caps &= CAP_FILE_WR|CAP_FILE_RD;    // HACK: test synchronous read/write
 
 	assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
 	if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
@@ -2000,14 +2018,14 @@ int Client::statfs(const char *path, struct statfs *stbuf)
 
 
 
-int Client;:lazyio_propogate(int fd, off_t offset, size_t count)
+int Client::lazyio_propogate(int fd, off_t offset, size_t count)
 {
   client_lock.Lock();
   dout(3) << "op: client->lazyio_propogate(" << fd
 		  << ", " << offset << ", " << count << ")" << endl;
   
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
+  assert(fh_map.count(fd));
+  Fh *f = fh_map[fd];
   Inode *in = f->inode;
   
   if (g_conf.client_oc) {
@@ -2019,20 +2037,21 @@ int Client;:lazyio_propogate(int fd, off_t offset, size_t count)
 	  cond.Wait(client_lock);
 	
   } else {
-	// mm, nothin to do.
+	// mmm, nothin to do.
   }
   
   client_lock.Unlock();
+  return 0;
 }
 
-int Client::lazyio_synchronize(int fs, off_t offset, size_t count)
+int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 {
   client_lock.Lock();
   dout(3) << "op: client->lazyio_synchronize(" << fd
 		  << ", " << offset << ", " << count << ")" << endl;
   
-  assert(fh_map.count(fh));
-  Fh *f = fh_map[fh];
+  assert(fh_map.count(fd));
+  Fh *f = fh_map[fd];
   Inode *in = f->inode;
   
   if (g_conf.client_oc) {
@@ -2043,4 +2062,6 @@ int Client::lazyio_synchronize(int fs, off_t offset, size_t count)
   }
   
   client_lock.Unlock();
+  return 0;
 }
+

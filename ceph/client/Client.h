@@ -516,7 +516,7 @@ protected:
   // hpc extensions
   int lazyio_propogate(int fd, off_t offset, size_t count);
   int lazyio_synchronize(int fd, off_t offset, size_t count);
-  //int lstatlite(const char *path, struct statlite *buf);
+  int lstatlite(const char *path, struct statlite *buf);
 
 };
 
