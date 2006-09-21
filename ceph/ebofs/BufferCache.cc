@@ -169,12 +169,14 @@ int ObjectCache::find_tx(block_t start, block_t len,
   block_t cur = start;
   block_t left = len;
   
+  /* don't care about overlap, we want things _fully_ in start~len.
   if (p != data.begin() && 
 	  (p == data.end() || p->first > cur)) {
 	p--;     // might overlap!
 	if (p->first + p->second->length() <= cur) 
 	  p++;   // doesn't overlap.
   }
+  */
 
   while (left > 0) {
 	assert(cur+left == start+len);
@@ -187,7 +189,8 @@ int ObjectCache::find_tx(block_t start, block_t len,
 	  // have it (or part of it)
 	  BufferHead *e = p->second;
 
-	  if (e->is_tx()) 
+	  if (e->end() <= start+len &&
+		  e->is_tx()) 
 		tx.push_back(e);
 	  
 	  block_t lenfromcur = MIN(e->end() - cur, left);
