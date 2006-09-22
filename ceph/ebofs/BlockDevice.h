@@ -76,10 +76,11 @@ class BlockDevice {
   friend ostream& operator<<(ostream& out, biovec &bio);
 
 
-  interval_set<block_t>       io_block_lock;    // blocks currently dispatched to kernel
-  multimap<block_t, biovec*> io_queue;
+  interval_set<block_t>      io_block_lock;    // blocks currently dispatched to kernel
+  multimap<block_t, biovec*> io_queue, next_io_queue;
   map<biovec*, block_t>      io_queue_map;
   Cond                       io_wakeup;
+  bool                       use_next_queue;
   bool                       io_stop;
   int                        io_threads_started, io_threads_running;
   
@@ -131,6 +132,7 @@ class BlockDevice {
   BlockDevice(char *d) : 
 	dev(d), fd(0), num_blocks(0),
 	idle_kicker(0),
+	use_next_queue(false),
 	io_stop(false), io_threads_started(0), io_threads_running(0),
 	el_dir_forward(true), el_pos(0),
 	complete_thread(this) 
@@ -151,6 +153,8 @@ class BlockDevice {
 
   bool is_idle();
 
+  void barrier();
+  void _bump_queue();
 
   // ** blocking interface **
 

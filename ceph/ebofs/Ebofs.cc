@@ -401,6 +401,9 @@ int Ebofs::commit_thread_entry()
 	  // (async) write btree nodes
 	  nodepool.commit_start( dev, super_epoch );
 	  
+	  // blockdev barrier (prioritize our writes!)
+	  dev.barrier();
+
 	  // prepare super (before any changes get made!)
 	  bufferptr superbp;
 	  prepare_super(super_epoch, superbp);
