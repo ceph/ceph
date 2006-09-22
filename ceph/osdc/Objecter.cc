@@ -174,7 +174,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 		if (wr->tid_version.count(tid)) {
 		  if (wr->op == OSD_OP_WRITE &&
 			  !g_conf.objecter_buffer_uncommitted) {
-			derr(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << endl;
+			dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << endl;
 		  } else {
 			dout(0) << "kick_requests missing commit, replay write " << tid
 					<< " v " << wr->tid_version[tid] << endl;
