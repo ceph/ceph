@@ -342,6 +342,10 @@ int Ebofs::commit_thread_entry()
 		  }
 		  left -= next;
 		  dout(20) << "commit_thread " << left << " ms left" << endl;
+
+		  // hack hack
+		  //if (!left) g_conf.debug_ebofs = 10;
+		  // /hack hack
 		}
 	  } else {
 		// normal wait+timeout
@@ -411,18 +415,21 @@ int Ebofs::commit_thread_entry()
 	  
 	  // wait for it all to flush (drops global lock)
 	  commit_bc_wait(super_epoch-1);  
-	  dout(-30) << "commit_thread bc flushed" << endl;
+	  dout(30) << "commit_thread bc flushed" << endl;
 	  commit_inodes_wait();
-	  dout(-30) << "commit_thread inodes flushed" << endl;
+	  dout(30) << "commit_thread inodes flushed" << endl;
 	  nodepool.commit_wait();
-	  dout(-30) << "commit_thread btree nodes flushed" << endl;
+	  dout(30) << "commit_thread btree nodes flushed" << endl;
 	  
 	  // ok, now (synchronously) write the prior super!
-	  dout(-10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+	  dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+	  dev.barrier();
 	  ebofs_lock.Unlock();
 	  write_super(super_epoch, superbp);	
 	  ebofs_lock.Lock();
 	  
+	  dout(10) << "commit_thread wrote super" << endl;
+
 	  // free limbo space now 
 	  // (since we're done allocating things, 
 	  //  AND we've flushed all previous epoch data)
@@ -1306,6 +1313,7 @@ void Ebofs::alloc_write(Onode *on,
   }
 
   // reallocate uncommitted too?
+  // ( --> yes.  we can always make better allocation decisions later, with more information. )
   if (1) {
 	list<BufferHead*> tx;
 	
@@ -1330,18 +1338,18 @@ void Ebofs::alloc_write(Onode *on,
 	  if (bh->start() >= start && bh->end() <= start+len) {
 		if (bc.bh_cancel_write(bh)) {
 		  if (bh->length() == 1)
-		  dout(-10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
+		  dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
 		  allocator.unallocate(old[0]);  // release (into free)
 		  alloc.insert(bh->start(), bh->length());
 		} else {
 		  if (bh->length() == 1)
-		  dout(-10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << endl;
+		  dout(10) << "alloc_write released tx " << old[0] << ", couldn't cancel " << *bh << endl;
 		  allocator.release(old[0]);     // release (into limbo)
 		  alloc.insert(bh->start(), bh->length());
 		}
 	  } else {
 		if (bh->length() == 1)
-		dout(-10) << "alloc_write  skipped tx " << old[0] << ", not entirely within " 
+		dout(10) << "alloc_write  skipped tx " << old[0] << ", not entirely within " 
 				 << start << "~" << len 
 				 << " bh " << *bh << endl;
 	  }
@@ -2074,13 +2082,29 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
   // too much unflushed dirty data?  (if so, block!)
   if (_write_will_block()) {
 	dout(10) << "_write blocking " 
-			 << hex << oid << dec << " " << offset << "~" << length << endl;
+			  << hex << oid << dec << " " << offset << "~" << length 
+			  << "  bc: " 
+			  << "size " << bc.get_size() 
+			  << ", trimmable " << bc.get_trimmable()
+			  << ", max " << g_conf.ebofs_bc_size
+			  << "; dirty " << bc.get_stat_dirty()
+			  << ", tx " << bc.get_stat_tx()
+			  << ", max dirty " << g_conf.ebofs_bc_max_dirty
+			  << endl;
 
 	while (_write_will_block()) 
 	  bc.waitfor_stat();  // waits on ebofs_lock
 
 	dout(10) << "_write unblocked " 
-			 << hex << oid << dec << " " << offset << "~" << length << endl;
+			 << hex << oid << dec << " " << offset << "~" << length 
+			  << "  bc: " 
+			  << "size " << bc.get_size() 
+			  << ", trimmable " << bc.get_trimmable()
+			  << ", max " << g_conf.ebofs_bc_size
+			  << "; dirty " << bc.get_stat_dirty()
+			  << ", tx " << bc.get_stat_tx()
+			  << ", max dirty " << g_conf.ebofs_bc_max_dirty
+			  << endl;
   }
 
   // out of space?

@@ -32,24 +32,28 @@ Mutex logger_lock;
 
 Logger::Logger(string fn, LogType *type)
 {
-  filename = "log/";
-  if (g_conf.log_name) {
-	filename += g_conf.log_name;
-	::mkdir( filename.c_str(), 0755 );   // make sure dir exists
-	filename += "/";
+  logger_lock.Lock();
+  {
+	filename = "log/";
+	if (g_conf.log_name) {
+	  filename += g_conf.log_name;
+	  ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
+	  filename += "/";
+	}
+	filename += fn;
+	//cout << "log " << filename << endl;
+	interval = g_conf.log_interval;
+	
+	start = g_clock.now();  // time 0!
+	last_logged = 0;
+	wrote_header = -1;
+	open = false;
+	this->type = type;
+	wrote_header_last = 0;
+	
+	version = 0;
   }
-  filename += fn;
-  //cout << "log " << filename << endl;
-  interval = g_conf.log_interval;
-  start = g_clock.now();  // time 0!
-  last_logged = 0;
-  wrote_header = -1;
-  open = false;
-  this->type = type;
-  wrote_header_last = 0;
-
-  version = 0;
-
+  logger_lock.Unlock();
   flush(false);
 }
 
@@ -144,12 +148,14 @@ void Logger::flush(bool force)
   utime_t fromstart = g_clock.now();
   if (fromstart < start) {
 	cerr << "logger time jumped backwards from " << start << " to " << fromstart << endl;
+	assert(0);
 	start = fromstart;
   }
   fromstart -= start;
 
   while (force ||
-		 fromstart.sec() - last_logged >= interval) {
+		 ((fromstart.sec() > last_logged) &&
+		  (fromstart.sec() - last_logged >= interval))) {
 	last_logged += interval;
 	force = false;
 
