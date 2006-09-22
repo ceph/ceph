@@ -372,7 +372,8 @@ class ObjectCache {
   
   int map_write(block_t start, block_t len,
 				interval_set<block_t>& alloc,
-				map<block_t, BufferHead*>& hits);   // can write to these.
+				map<block_t, BufferHead*>& hits,
+				version_t super_epoch);   // can write to these.
 
   BufferHead *split(BufferHead *bh, block_t off);
 
@@ -383,7 +384,7 @@ class ObjectCache {
   void rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist& bl);
   void tx_finish(ioh_t ioh, block_t start, block_t length, version_t v, version_t epoch);
 
-  void truncate(block_t blocks);
+  void truncate(block_t blocks, version_t super_epoch);
   //  void tear_down();
 
   void dump() {
@@ -509,6 +510,11 @@ class BufferCache {
   off_t get_stat_clean() { return stat_clean; }
   off_t get_stat_partial() { return stat_partial; }
 
+  
+  map<version_t, int> &get_unflushed() {
+	return epoch_unflushed;
+  }
+
   int get_unflushed(version_t epoch) {
 	return epoch_unflushed[epoch];
   }
@@ -571,7 +577,7 @@ class BufferCache {
   void bh_write(Onode *on, BufferHead *bh, block_t shouldbe=0);
 
   bool bh_cancel_read(BufferHead *bh);
-  bool bh_cancel_write(BufferHead *bh);
+  bool bh_cancel_write(BufferHead *bh, version_t cur_epoch);
 
   void bh_queue_partial_write(Onode *on, BufferHead *bh);
   void bh_cancel_partial_write(BufferHead *bh);
@@ -579,7 +585,7 @@ class BufferCache {
   void queue_partial(block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
   void cancel_partial(block_t from, block_t to, version_t epoch);
 
-  void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, bufferlist& bl);
+  void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, block_t diskstart, bufferlist& bl);
   void tx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, version_t v, version_t e);
   void partial_tx_finish(version_t epoch);
 
@@ -594,12 +600,13 @@ class C_OC_RxFinish : public BlockDevice::callback {
   Mutex &lock;
   ObjectCache *oc;
   block_t start, length;
+  block_t diskstart;
 public:
   bufferlist bl;
-  C_OC_RxFinish(Mutex &m, ObjectCache *o, block_t s, block_t l) :
-	lock(m), oc(o), start(s), length(l) {}
+  C_OC_RxFinish(Mutex &m, ObjectCache *o, block_t s, block_t l, block_t ds) :
+	lock(m), oc(o), start(s), length(l), diskstart(ds) {}
   void finish(ioh_t ioh, int r) {
-	oc->bc->rx_finish(oc, ioh, start, length, bl);
+	oc->bc->rx_finish(oc, ioh, start, length, diskstart, bl);
   }
 };
 

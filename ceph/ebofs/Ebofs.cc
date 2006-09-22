@@ -382,12 +382,12 @@ int Ebofs::commit_thread_entry()
 			  << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
 			  << "%) limbo in " << get_limbo_extents() 
 			  << endl;
-	  dout(2) << "commit_thread  nodes: " 
+	  dout(-2) << "commit_thread  nodes: " 
 			  << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
 			  << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
 			  << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
 			  << nodepool.num_total() << " total." << endl;
-	  dout(2) << "commit_thread    bc: " 
+	  dout(-2) << "commit_thread    bc: " 
 			  << "size " << bc.get_size() 
 			  << ", trimmable " << bc.get_trimmable()
 			  << ", max " << g_conf.ebofs_bc_size
@@ -415,20 +415,20 @@ int Ebofs::commit_thread_entry()
 	  
 	  // wait for it all to flush (drops global lock)
 	  commit_bc_wait(super_epoch-1);  
-	  dout(30) << "commit_thread bc flushed" << endl;
+	  dout(-30) << "commit_thread bc flushed" << endl;
 	  commit_inodes_wait();
-	  dout(30) << "commit_thread inodes flushed" << endl;
+	  dout(-30) << "commit_thread inodes flushed" << endl;
 	  nodepool.commit_wait();
-	  dout(30) << "commit_thread btree nodes flushed" << endl;
+	  dout(-30) << "commit_thread btree nodes flushed" << endl;
 	  
 	  // ok, now (synchronously) write the prior super!
-	  dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+	  dout(-10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
 	  dev.barrier();
 	  ebofs_lock.Unlock();
 	  write_super(super_epoch, superbp);	
 	  ebofs_lock.Lock();
 	  
-	  dout(10) << "commit_thread wrote super" << endl;
+	  dout(-10) << "commit_thread wrote super" << endl;
 
 	  // free limbo space now 
 	  // (since we're done allocating things, 
@@ -452,7 +452,7 @@ int Ebofs::commit_thread_entry()
 
 	  sync_cond.Signal();
 
-	  dout(10) << "commit_thread commit finish" << endl;
+	  dout(-10) << "commit_thread commit finish" << endl;
 	}
 
 	// trim bc?
@@ -773,7 +773,7 @@ void Ebofs::remove_onode(Onode *on)
 
   // tear down buffer cache
   if (on->oc) {
-	on->oc->truncate(0);         // this will kick readers along the way.
+	on->oc->truncate(0, super_epoch);         // this will kick readers along the way.
 	on->close_oc();
   }
 
@@ -1236,11 +1236,14 @@ void Ebofs::commit_bc_wait(version_t epoch)
   dout(10) << "commit_bc_wait on epoch " << epoch << endl;  
   
   while (bc.get_unflushed(epoch) > 0) {
-	dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << endl;
+	//dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << endl;
+	dout(-10) << "commit_bc_wait epoch " << epoch << ", unflushed " << bc.get_unflushed() << endl;
 	bc.waitfor_stat();
   }
 
-  dout(10) << "commit_bc_wait all flushed for epoch " << epoch << endl;  
+  bc.get_unflushed().erase(epoch);
+
+  dout(-10) << "commit_bc_wait all flushed for epoch " << epoch << "; " << bc.get_unflushed() << endl;  
 }
 
 
@@ -1314,7 +1317,7 @@ void Ebofs::alloc_write(Onode *on,
 
   // reallocate uncommitted too?
   // ( --> yes.  we can always make better allocation decisions later, with more information. )
-  if (1) {
+  if (0) {
 	list<BufferHead*> tx;
 	
 	ObjectCache *oc = on->get_oc(&bc);
@@ -1336,7 +1339,8 @@ void Ebofs::alloc_write(Onode *on,
 	  assert(old.size() == 1);
 
 	  if (bh->start() >= start && bh->end() <= start+len) {
-		if (bc.bh_cancel_write(bh)) {
+		assert(bh->epoch_modified == super_epoch);
+		if (bc.bh_cancel_write(bh, super_epoch)) {
 		  if (bh->length() == 1)
 		  dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
 		  allocator.unallocate(old[0]);  // release (into free)
@@ -1452,7 +1456,7 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 
   // map b range onto buffer_heads
   map<block_t, BufferHead*> hits;
-  oc->map_write(bstart, blen, alloc, hits);
+  oc->map_write(bstart, blen, alloc, hits, super_epoch);
   
   // get current versions
   //version_t lowv, highv;
@@ -2248,7 +2252,7 @@ int Ebofs::_truncate(object_t oid, off_t size)
 
 	// truncate buffer cache
 	if (on->oc)
-	  on->oc->truncate(on->object_blocks);
+	  on->oc->truncate(on->object_blocks, super_epoch);
 
 	// update uncommitted
 	interval_set<block_t> uncom;

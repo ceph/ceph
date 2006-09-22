@@ -88,7 +88,7 @@ block_t BlockDevice::get_num_blocks()
 void BlockDevice::barrier()
 {
   lock.Lock();
-  dout(10) << "barrier" << endl;
+  dout(-10) << "barrier" << endl;
   if (!use_next_queue &&
 	  !io_queue.empty()) 
 	use_next_queue = true;
@@ -98,7 +98,7 @@ void BlockDevice::barrier()
 void BlockDevice::_bump_queue()
 {
   if (io_queue.empty() && use_next_queue) {
-	dout(10) << "_bump_queue next_io_queue (" << next_io_queue.size() 
+	dout(-10) << "_bump_queue next_io_queue (" << next_io_queue.size() 
 			  << ") -> io_queue (" << io_queue.size() << ")" << endl;  // empty, duh.
 	use_next_queue = false;
 	io_queue.swap(next_io_queue);

@@ -333,7 +333,8 @@ int ObjectCache::map_read(block_t start, block_t len,
  */
 int ObjectCache::map_write(block_t start, block_t len,
 						   interval_set<block_t>& alloc,
-						   map<block_t, BufferHead*>& hits)
+						   map<block_t, BufferHead*>& hits,
+						   version_t super_epoch)
 {
   map<block_t, BufferHead*>::iterator p = data.lower_bound(start);
 
@@ -409,7 +410,7 @@ int ObjectCache::map_write(block_t start, block_t len,
 			BufferHead *right = bc->split(bh, cur);
 			bc->bh_read(on, bh);          // reread left bit
 			bh = right;
-		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh)) {
+		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh, super_epoch)) {
 			BufferHead *right = bc->split(bh, cur);
 			bc->bh_write(on, bh);          // rewrite left bit
 			bh = right;
@@ -428,7 +429,7 @@ int ObjectCache::map_write(block_t start, block_t len,
 			BufferHead *right = bc->split(middle, cur+max);
 			bc->bh_read(on, right);                    // reread right
 			bh = middle;
-		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh)) {
+		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh, super_epoch)) {
 			BufferHead *middle = bc->split(bh, cur);
 			bc->bh_write(on, bh);                       // redo left
 			p++;
@@ -452,7 +453,7 @@ int ObjectCache::map_write(block_t start, block_t len,
 		  if (bh->is_rx() && bc->bh_cancel_read(bh)) {
 			BufferHead *right = bc->split(bh, cur+max);
 			bc->bh_read(on, right);			  // re-rx the right bit
-		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh)) {
+		  } else if (bh->is_tx() && !newalloc && bc->bh_cancel_write(bh, super_epoch)) {
 			BufferHead *right = bc->split(bh, cur+max);
 			bc->bh_write(on, right);			  // re-tx the right bit
 		  } else {
@@ -462,7 +463,7 @@ int ObjectCache::map_write(block_t start, block_t len,
 	  }
 	  
 	  // try to cancel tx?
-	  if (bh->is_tx() && !newalloc) bc->bh_cancel_write(bh);
+	  if (bh->is_tx() && !newalloc) bc->bh_cancel_write(bh, super_epoch);
 	  	  
 	  // put in our map
 	  hits[cur] = bh;
@@ -526,7 +527,7 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 }
 */
 
-void ObjectCache::truncate(block_t blocks)
+void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 {
   dout(7) << "truncate " << hex << object_id << dec 
 		   << " " << blocks << " blocks"
@@ -549,7 +550,7 @@ void ObjectCache::truncate(block_t blocks)
 		BufferHead *right = bc->split(bh, blocks);
 		bc->bh_read(on, bh);          // reread left bit
 		bh = right;
-	  } else if (bh->is_tx() && uncom && bc->bh_cancel_write(bh)) {
+	  } else if (bh->is_tx() && uncom && bc->bh_cancel_write(bh, super_epoch)) {
 		BufferHead *right = bc->split(bh, blocks);
 		bc->bh_write(on, bh);          // rewrite left bit
 		bh = right;
@@ -563,7 +564,7 @@ void ObjectCache::truncate(block_t blocks)
 	  if (bh->is_rx())
 		bc->bh_cancel_read(bh);
 	  if (bh->is_tx() && uncom) 
-		bc->bh_cancel_write(bh);
+		bc->bh_cancel_write(bh, super_epoch);
 	  if (bh->is_partial() && uncom)
 		bc->bh_cancel_partial_write(bh);
 	}
@@ -676,7 +677,8 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
   dout(20) << "bh_read  " << *bh << " from " << ex << endl;
   
   C_OC_RxFinish *fin = new C_OC_RxFinish(ebofs_lock, on->oc, 
-										 bh->start(), bh->length());
+										 bh->start(), bh->length(),
+										 ex.start);
 
   bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), fin->bl);  // new buffers!
 
@@ -746,13 +748,17 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 }
 
 
-bool BufferCache::bh_cancel_write(BufferHead *bh)
+bool BufferCache::bh_cancel_write(BufferHead *bh, version_t cur_epoch)
 {
   if (bh->tx_ioh && dev.cancel_io(bh->tx_ioh) >= 0) {
 	dout(10) << "bh_cancel_write on " << *bh << endl;
 	bh->tx_ioh = 0;
 	mark_dirty(bh);
+
+	assert(bh->epoch_modified == cur_epoch);
+	assert(bh->epoch_modified > 0);
 	dec_unflushed( bh->epoch_modified );   // assert.. this should be the same epoch!
+
 	int l = bh->oc->put();
 	assert(l);
 	return true;
@@ -781,10 +787,11 @@ void BufferCache::tx_finish(ObjectCache *oc,
 
 void BufferCache::rx_finish(ObjectCache *oc,
 							ioh_t ioh, block_t start, block_t length,
+							block_t diskstart, 
 							bufferlist& bl)
 {
   ebofs_lock.Lock();
-  dout(10) << "rx_finish ioh " << ioh << " on " << start << "~" << length << endl;
+  dout(-10) << "rx_finish ioh " << ioh << " on " << start << "~" << length << endl;
 
   // oc
   if (oc->put() == 0) 
@@ -793,7 +800,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	oc->rx_finish(ioh, start, length, bl);
 
   // finish any partials?
-  map<block_t, map<block_t, PartialWrite> >::iterator sp = partial_write.lower_bound(start);
+  map<block_t, map<block_t, PartialWrite> >::iterator sp = partial_write.lower_bound(diskstart);
   while (sp != partial_write.end()) {
 	if (sp->first >= start+length) break;
 	assert(sp->first >= start);
@@ -838,11 +845,7 @@ void BufferCache::partial_tx_finish(version_t epoch)
 {
   ebofs_lock.Lock();
 
-  /* don't need oc!
-  // oc?
-  if (oc->put() == 0) 
-	delete oc;
-  */
+  dout(-10) << "partial_tx_finish in epoch " << epoch << endl;
 
   // update unflushed counter
   assert(get_unflushed(epoch) > 0);
@@ -870,7 +873,7 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   bh->partial_tx_to = exv[0].start;
   bh->partial_tx_epoch = bh->epoch_modified;
 
-  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
+  dout(-10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
 
 
   // copy map state, queue for this block
@@ -890,7 +893,7 @@ void BufferCache::bh_cancel_partial_write(BufferHead *bh)
 void BufferCache::queue_partial(block_t from, block_t to, 
 								map<off_t, bufferlist>& partial, version_t epoch)
 {
-  dout(10) << "queue_partial " << from << " -> " << to
+  dout(-10) << "queue_partial " << from << " -> " << to
 		   << " in epoch " << epoch 
 		   << endl;
   
@@ -912,7 +915,7 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
   assert(partial_write[from].count(to));
   assert(partial_write[from][to].epoch == epoch);
 
-  dout(10) << "cancel_partial " << from << " -> " << to 
+  dout(-10) << "cancel_partial " << from << " -> " << to 
 		   << "  (was epoch " << partial_write[from][to].epoch << ")"
 		   << endl;
 
