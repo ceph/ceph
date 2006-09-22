@@ -238,6 +238,8 @@ int OSD::init()
 	osd_logtype.add_set("numpg");
 	osd_logtype.add_set("pingset");
 
+	osd_logtype.add_set("buf");
+
 	osd_logtype.add_inc("map");
 	osd_logtype.add_inc("mapi");
 	osd_logtype.add_inc("mapidup");
@@ -2083,6 +2085,10 @@ public:
 	assert(!acked);
 	acked = true;
 	if (waiting) cond.Signal();
+
+	// discard my reference to buffer
+	op->get_data().clear();
+
 	lock.Unlock();
   }
 };
@@ -2231,6 +2237,10 @@ void OSD::handle_op(MOSDOp *op)
 {
   const pg_t pgid = op->get_pg();
   PG *pg = get_pg(pgid);
+
+
+  logger->set("buf", buffer_total_alloc);
+
 
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
@@ -2736,6 +2746,9 @@ void OSD::put_repop_gather(PG *pg, PG::RepOpGather *repop)
 	if (r)
 	  dout(-10) << "put_repop  apply transaction return " << r << " on " << *repop << endl;
 
+	// discard my reference to buffer
+	repop->op->get_data().clear();
+
 	// send ack
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap->get_epoch(), false);
 	dout(10) << "put_repop  sending ack on " << *repop << " " << reply << endl;
@@ -3146,6 +3159,7 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
 	  bufferlist bl;
 	  bl.claim( op->get_data() );  // give buffers to store; we keep *op in memory for a long time!
 	  
+	  //if (oid < 100000000000000ULL)  // hack hack-- don't write client data
 	  t.write( oid, op->get_offset(), op->get_length(), bl );
 	}
 	break;
