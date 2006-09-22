@@ -4589,7 +4589,9 @@ void MDCache::inode_file_eval(CInode *in)
 	// * -> sync?
 	else if (in->filelock.get_nwrite() == 0 &&
 			 !(wanted & CAP_FILE_WR) &&
-			 ((wanted & CAP_FILE_RD) || in->is_cached_by_anyone()) &&
+			 ((wanted & CAP_FILE_RD) || 
+			  in->is_cached_by_anyone() || 
+			  (!loner && in->filelock.get_state() == LOCK_LONER)) &&
 			 in->filelock.get_state() != LOCK_SYNC) {
 	  dout(7) << "inode_file_eval stable, bump to sync " << *in << ", filelock=" << in->filelock << endl;
 	  inode_file_sync(in);
