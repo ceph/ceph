@@ -403,6 +403,7 @@ int Ebofs::commit_thread_entry()
 	  
 	  // blockdev barrier (prioritize our writes!)
 	  dev.barrier();
+	  dout(-30) << "commit_thread barrier" << endl;
 
 	  // prepare super (before any changes get made!)
 	  bufferptr superbp;
@@ -410,11 +411,14 @@ int Ebofs::commit_thread_entry()
 	  
 	  // wait for it all to flush (drops global lock)
 	  commit_bc_wait(super_epoch-1);  
+	  dout(-30) << "commit_thread bc flushed" << endl;
 	  commit_inodes_wait();
+	  dout(-30) << "commit_thread inodes flushed" << endl;
 	  nodepool.commit_wait();
+	  dout(-30) << "commit_thread btree nodes flushed" << endl;
 	  
 	  // ok, now (synchronously) write the prior super!
-	  dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+	  dout(-10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
 	  ebofs_lock.Unlock();
 	  write_super(super_epoch, superbp);	
 	  ebofs_lock.Lock();
