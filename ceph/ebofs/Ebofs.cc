@@ -382,12 +382,12 @@ int Ebofs::commit_thread_entry()
 			  << ", " << get_limbo_blocks() << " (" << 100*get_limbo_blocks()/dev.get_num_blocks() 
 			  << "%) limbo in " << get_limbo_extents() 
 			  << endl;
-	  dout(-2) << "commit_thread  nodes: " 
+	  dout(2) << "commit_thread  nodes: " 
 			  << 100*nodepool.num_used()/nodepool.num_total() << "% used, "
 			  << nodepool.num_free() << " (" << 100*nodepool.num_free()/nodepool.num_total() << "%) free, " 
 			  << nodepool.num_limbo() << " (" << 100*nodepool.num_limbo()/nodepool.num_total() << "%) limbo, " 
 			  << nodepool.num_total() << " total." << endl;
-	  dout(-2) << "commit_thread    bc: " 
+	  dout(2) << "commit_thread    bc: " 
 			  << "size " << bc.get_size() 
 			  << ", trimmable " << bc.get_trimmable()
 			  << ", max " << g_conf.ebofs_bc_size
@@ -407,7 +407,7 @@ int Ebofs::commit_thread_entry()
 	  
 	  // blockdev barrier (prioritize our writes!)
 	  dev.barrier();
-	  dout(-30) << "commit_thread barrier" << endl;
+	  dout(30) << "commit_thread barrier" << endl;
 
 	  // prepare super (before any changes get made!)
 	  bufferptr superbp;
@@ -415,20 +415,20 @@ int Ebofs::commit_thread_entry()
 	  
 	  // wait for it all to flush (drops global lock)
 	  commit_bc_wait(super_epoch-1);  
-	  dout(-30) << "commit_thread bc flushed" << endl;
+	  dout(30) << "commit_thread bc flushed" << endl;
 	  commit_inodes_wait();
-	  dout(-30) << "commit_thread inodes flushed" << endl;
+	  dout(30) << "commit_thread inodes flushed" << endl;
 	  nodepool.commit_wait();
-	  dout(-30) << "commit_thread btree nodes flushed" << endl;
+	  dout(30) << "commit_thread btree nodes flushed" << endl;
 	  
 	  // ok, now (synchronously) write the prior super!
-	  dout(-10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
+	  dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
 	  dev.barrier();
 	  ebofs_lock.Unlock();
 	  write_super(super_epoch, superbp);	
 	  ebofs_lock.Lock();
 	  
-	  dout(-10) << "commit_thread wrote super" << endl;
+	  dout(10) << "commit_thread wrote super" << endl;
 
 	  // free limbo space now 
 	  // (since we're done allocating things, 
@@ -452,7 +452,7 @@ int Ebofs::commit_thread_entry()
 
 	  sync_cond.Signal();
 
-	  dout(-10) << "commit_thread commit finish" << endl;
+	  dout(10) << "commit_thread commit finish" << endl;
 	}
 
 	// trim bc?
@@ -1237,13 +1237,13 @@ void Ebofs::commit_bc_wait(version_t epoch)
   
   while (bc.get_unflushed(epoch) > 0) {
 	//dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << endl;
-	dout(-10) << "commit_bc_wait epoch " << epoch << ", unflushed " << bc.get_unflushed() << endl;
+	dout(10) << "commit_bc_wait epoch " << epoch << ", unflushed " << bc.get_unflushed() << endl;
 	bc.waitfor_stat();
   }
 
   bc.get_unflushed().erase(epoch);
 
-  dout(-10) << "commit_bc_wait all flushed for epoch " << epoch << "; " << bc.get_unflushed() << endl;  
+  dout(10) << "commit_bc_wait all flushed for epoch " << epoch << "; " << bc.get_unflushed() << endl;  
 }
 
 

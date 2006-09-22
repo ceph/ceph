@@ -704,7 +704,7 @@ bool BufferCache::bh_cancel_read(BufferHead *bh)
 
 void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 {
-  dout(10) << "bh_write " << *on << " on " << *bh << endl;
+  dout(10) << "bh_write " << *on << " on " << *bh << " in epoch " << bh->epoch_modified << endl;
   assert(bh->get_version() > 0);
 
   assert(bh->is_dirty());
@@ -791,7 +791,8 @@ void BufferCache::rx_finish(ObjectCache *oc,
 							bufferlist& bl)
 {
   ebofs_lock.Lock();
-  dout(-10) << "rx_finish ioh " << ioh << " on " << start << "~" << length << endl;
+  dout(10) << "rx_finish ioh " << ioh << " on " << start << "~" << length
+			<< ", at device block " << diskstart << endl;
 
   // oc
   if (oc->put() == 0) 
@@ -800,12 +801,14 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	oc->rx_finish(ioh, start, length, bl);
 
   // finish any partials?
+  //  note: these are partials that were re-written after a commit,
+  //        or for whom the OC was destroyed (eg truncated after a commit)
   map<block_t, map<block_t, PartialWrite> >::iterator sp = partial_write.lower_bound(diskstart);
   while (sp != partial_write.end()) {
-	if (sp->first >= start+length) break;
-	assert(sp->first >= start);
+	if (sp->first >= diskstart+length) break;
+	assert(sp->first >= diskstart);
 
-	block_t pstart = sp->first;
+	block_t pblock = sp->first;
 	map<block_t, PartialWrite> writes;
 	writes.swap( sp->second );
 
@@ -816,9 +819,9 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	for (map<block_t, PartialWrite>::iterator p = writes.begin();
 		 p != writes.end();
 		 p++) {
-	  dout(-10) << "rx_finish partial from " << pstart << " to " << p->first
+	  dout(10) << "rx_finish partial from " << pblock << " -> " << p->first
 				<< " for epoch " << p->second.epoch
-		//<< " (last_modified is now " << bh->super_epoch << ")"
+		//<< " (bh.epoch_modified is now " << bh->epoch_modified << ")"
 				<< endl;
 	  // this had better be a past epoch
 	  //assert(p->epoch == epoch_modified - 1);  // ??
@@ -827,11 +830,11 @@ void BufferCache::rx_finish(ObjectCache *oc,
 	  bufferlist combined;
 	  bufferptr bp = oc->bc->bufferpool.alloc(EBOFS_BLOCK_SIZE);
 	  combined.push_back( bp );
-	  combined.copy_in((pstart-start)*EBOFS_BLOCK_SIZE, (pstart-start+1)*EBOFS_BLOCK_SIZE, bl);
+	  combined.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, bl);
 	  BufferHead::apply_partial( combined, p->second.partial );
 
 	  // write it!
-	  dev.write( pstart, 1, combined,
+	  dev.write( pblock, 1, combined,
 				 new C_OC_PartialTxFinish( this, p->second.epoch ),
 				 "finish_partials");
 	}
@@ -845,7 +848,7 @@ void BufferCache::partial_tx_finish(version_t epoch)
 {
   ebofs_lock.Lock();
 
-  dout(-10) << "partial_tx_finish in epoch " << epoch << endl;
+  dout(10) << "partial_tx_finish in epoch " << epoch << endl;
 
   // update unflushed counter
   assert(get_unflushed(epoch) > 0);
@@ -873,7 +876,7 @@ void BufferCache::bh_queue_partial_write(Onode *on, BufferHead *bh)
   bh->partial_tx_to = exv[0].start;
   bh->partial_tx_epoch = bh->epoch_modified;
 
-  dout(-10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
+  dout(10) << "bh_queue_partial_write " << *on << " on " << *bh << " block " << b << " epoch " << bh->epoch_modified << endl;
 
 
   // copy map state, queue for this block
@@ -893,7 +896,7 @@ void BufferCache::bh_cancel_partial_write(BufferHead *bh)
 void BufferCache::queue_partial(block_t from, block_t to, 
 								map<off_t, bufferlist>& partial, version_t epoch)
 {
-  dout(-10) << "queue_partial " << from << " -> " << to
+  dout(10) << "queue_partial " << from << " -> " << to
 		   << " in epoch " << epoch 
 		   << endl;
   
@@ -915,7 +918,7 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
   assert(partial_write[from].count(to));
   assert(partial_write[from][to].epoch == epoch);
 
-  dout(-10) << "cancel_partial " << from << " -> " << to 
+  dout(10) << "cancel_partial " << from << " -> " << to 
 		   << "  (was epoch " << partial_write[from][to].epoch << ")"
 		   << endl;
 
