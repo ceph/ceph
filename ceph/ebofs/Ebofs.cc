@@ -406,8 +406,8 @@ int Ebofs::commit_thread_entry()
 	  nodepool.commit_start( dev, super_epoch );
 	  
 	  // blockdev barrier (prioritize our writes!)
+	  dout(30) << "commit_thread barrier.  flushing inodes " << inodes_flushing << endl;
 	  dev.barrier();
-	  dout(30) << "commit_thread barrier" << endl;
 
 	  // prepare super (before any changes get made!)
 	  bufferptr superbp;
@@ -420,10 +420,9 @@ int Ebofs::commit_thread_entry()
 	  dout(30) << "commit_thread inodes flushed" << endl;
 	  nodepool.commit_wait();
 	  dout(30) << "commit_thread btree nodes flushed" << endl;
-	  
+
 	  // ok, now (synchronously) write the prior super!
 	  dout(10) << "commit_thread commit flushed, writing super for prior epoch" << endl;
-	  dev.barrier();
 	  ebofs_lock.Unlock();
 	  write_super(super_epoch, superbp);	
 	  ebofs_lock.Lock();
@@ -1085,9 +1084,13 @@ void Ebofs::dirty_cnode(Cnode *cn)
 void Ebofs::flush_inode_finish()
 {
   ebofs_lock.Lock();
-  inodes_flushing--;
-  if (inodes_flushing == 0) 
-	inode_commit_cond.Signal();
+  {
+	inodes_flushing--;
+	if (inodes_flushing < 1000)
+	dout(20) << "flush_inode_finish, " << inodes_flushing << " left" << endl;
+	if (inodes_flushing == 0) 
+	  inode_commit_cond.Signal();
+  }
   ebofs_lock.Unlock();
 }
 
@@ -1231,19 +1234,28 @@ void Ebofs::sync()
 }
 
 
+
 void Ebofs::commit_bc_wait(version_t epoch)
 {
   dout(10) << "commit_bc_wait on epoch " << epoch << endl;  
   
-  while (bc.get_unflushed(epoch) > 0) {
+  while (bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE,epoch) > 0 ||
+		 bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL,epoch) > 0) {
 	//dout(10) << "commit_bc_wait " << bc.get_unflushed(epoch) << " unflushed in epoch " << epoch << endl;
-	dout(10) << "commit_bc_wait epoch " << epoch << ", unflushed " << bc.get_unflushed() << endl;
-	bc.waitfor_stat();
+	dout(10) << "commit_bc_wait epoch " << epoch
+			  << ", unflushed bhwrite " << bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE) 
+			  << ", unflushed partial " << bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL) 
+			  << endl;
+	bc.waitfor_flush();
   }
 
-  bc.get_unflushed().erase(epoch);
+  bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE).erase(epoch);
+  bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL).erase(epoch);
 
-  dout(10) << "commit_bc_wait all flushed for epoch " << epoch << "; " << bc.get_unflushed() << endl;  
+  dout(10) << "commit_bc_wait all flushed for epoch " << epoch
+			<< "; " << bc.get_unflushed(EBOFS_BC_FLUSH_BHWRITE)
+			<< " " << bc.get_unflushed(EBOFS_BC_FLUSH_PARTIAL)
+			<< endl;  
 }
 
 
@@ -1317,7 +1329,7 @@ void Ebofs::alloc_write(Onode *on,
 
   // reallocate uncommitted too?
   // ( --> yes.  we can always make better allocation decisions later, with more information. )
-  if (0) {
+  if (1) {
 	list<BufferHead*> tx;
 	
 	ObjectCache *oc = on->get_oc(&bc);

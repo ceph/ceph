@@ -734,7 +734,7 @@ void BufferCache::bh_write(Onode *on, BufferHead *bh, block_t shouldbe)
 						 "bh_write");
 
   on->oc->get();
-  inc_unflushed( bh->epoch_modified );
+  inc_unflushed( EBOFS_BC_FLUSH_BHWRITE, bh->epoch_modified );
 
   /*
   // assert: no partials on the same block
@@ -757,7 +757,7 @@ bool BufferCache::bh_cancel_write(BufferHead *bh, version_t cur_epoch)
 
 	assert(bh->epoch_modified == cur_epoch);
 	assert(bh->epoch_modified > 0);
-	dec_unflushed( bh->epoch_modified );   // assert.. this should be the same epoch!
+	dec_unflushed( EBOFS_BC_FLUSH_BHWRITE, bh->epoch_modified );   // assert.. this should be the same epoch!
 
 	int l = bh->oc->put();
 	assert(l);
@@ -779,8 +779,8 @@ void BufferCache::tx_finish(ObjectCache *oc,
 	oc->tx_finish(ioh, start, length, version, epoch);
   
   // update unflushed counter
-  assert(get_unflushed(epoch) > 0);
-  dec_unflushed(epoch);
+  assert(get_unflushed(EBOFS_BC_FLUSH_BHWRITE, epoch) > 0);
+  dec_unflushed(EBOFS_BC_FLUSH_BHWRITE, epoch);
 
   ebofs_lock.Unlock();
 }
@@ -851,8 +851,8 @@ void BufferCache::partial_tx_finish(version_t epoch)
   dout(10) << "partial_tx_finish in epoch " << epoch << endl;
 
   // update unflushed counter
-  assert(get_unflushed(epoch) > 0);
-  dec_unflushed(epoch);
+  assert(get_unflushed(EBOFS_BC_FLUSH_PARTIAL, epoch) > 0);
+  dec_unflushed(EBOFS_BC_FLUSH_PARTIAL, epoch);
 
   ebofs_lock.Unlock();
 }
@@ -905,7 +905,7 @@ void BufferCache::queue_partial(block_t from, block_t to,
 	assert( partial_write[from][to].epoch == epoch);
 	assert(0); // actually.. no!
   } else {
-	inc_unflushed( epoch );
+	inc_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );
   }
   
   partial_write[from][to].partial = partial;
@@ -926,7 +926,7 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
   if (partial_write[from].empty())
 	partial_write.erase(from);
 
-  dec_unflushed( epoch );
+  dec_unflushed( EBOFS_BC_FLUSH_PARTIAL, epoch );
 }
 
 

@@ -113,6 +113,7 @@ class BlockDevice {
   Mutex          complete_lock;
   Cond           complete_wakeup;
   list<biovec*>  complete_queue;
+  int            complete_queue_len;
   
   void finish_io(biovec *bio);
 
@@ -135,6 +136,7 @@ class BlockDevice {
 	use_next_queue(false),
 	io_stop(false), io_threads_started(0), io_threads_running(0),
 	el_dir_forward(true), el_pos(0),
+	complete_queue_len(0),
 	complete_thread(this) 
 	{ };
   ~BlockDevice() {
@@ -170,6 +172,7 @@ class BlockDevice {
 	
 	lock.Lock();
 	_submit_io(&bio);
+	barrier();         // need this, to prevent starvation!
 	while (!bio.done) 
 	  c.Wait(lock);
 	lock.Unlock();
@@ -188,6 +191,7 @@ class BlockDevice {
 
 	lock.Lock();
 	_submit_io(&bio);
+	barrier();         // need this, to prevent starvation!
 	while (!bio.done) 
 	  c.Wait(lock);
 	lock.Unlock();

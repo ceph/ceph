@@ -88,7 +88,7 @@ block_t BlockDevice::get_num_blocks()
 void BlockDevice::barrier()
 {
   lock.Lock();
-  dout(-10) << "barrier" << endl;
+  dout(10) << "barrier, io_queue " << io_queue.size() << endl;
   if (!use_next_queue &&
 	  !io_queue.empty()) 
 	use_next_queue = true;
@@ -98,7 +98,7 @@ void BlockDevice::barrier()
 void BlockDevice::_bump_queue()
 {
   if (io_queue.empty() && use_next_queue) {
-	dout(-10) << "_bump_queue next_io_queue (" << next_io_queue.size() 
+	dout(10) << "_bump_queue next_io_queue (" << next_io_queue.size() 
 			  << ") -> io_queue (" << io_queue.size() << ")" << endl;  // empty, duh.
 	use_next_queue = false;
 	io_queue.swap(next_io_queue);
@@ -242,7 +242,8 @@ void* BlockDevice::io_thread_entry()
 		  io_wakeup.SignalAll();
 			
 		utime_t now = g_clock.now();
-		if (now > el_stop) break;
+		if (at_end || 
+			now > el_stop) break;
 	  }
 	  
 	  if (at_end) {
@@ -331,17 +332,17 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
   char type = biols.front()->type;
 
   list<biovec*>::iterator p = biols.begin();
-  int n = 1;
+  int numbio = 1;
   for (p++; p != biols.end(); p++) {
 	length += (*p)->length;
 	bl.claim_append((*p)->bl);
-	n++;
+	numbio++;
   }
 
   // do it
   dout(20) << "do_io start " << (type==biovec::IO_WRITE?"write":"read") 
 		   << " " << start << "~" << length 
-		   << " " << n << " bits" << endl;
+		   << " " << numbio << " bits" << endl;
   if (type == biovec::IO_WRITE) {
 	r = _write(fd, start, length, bl);
   } else if (type == biovec::IO_READ) {
@@ -358,6 +359,7 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
 	// put in completion queue
 	complete_lock.Lock();
 	complete_queue.splice( complete_queue.end(), biols );
+	complete_queue_len += numbio;
 	complete_wakeup.Signal();
 	complete_lock.Unlock();
   } else {
@@ -391,6 +393,8 @@ void* BlockDevice::complete_thread_entry()
 	while (!complete_queue.empty()) {
 	  list<biovec*> ls;
 	  ls.swap(complete_queue);
+	  dout(10) << "complete_thread grabbed " << complete_queue_len << " bios" << endl;
+	  complete_queue_len = 0;
 	  
 	  complete_lock.Unlock();
 	  

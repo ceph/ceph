@@ -410,6 +410,7 @@ class BufferCache {
 
  private:
   Cond  stat_cond;
+  Cond  flush_cond;
   int   stat_waiter;
 
   off_t stat_clean;
@@ -419,7 +420,10 @@ class BufferCache {
   off_t stat_partial;
   off_t stat_missing;
 
-  map<version_t, int> epoch_unflushed;
+#define EBOFS_BC_FLUSH_BHWRITE 0
+#define EBOFS_BC_FLUSH_PARTIAL 1
+
+  map<version_t, int> epoch_unflushed[2];
   
   /* partial writes - incomplete blocks that can't be written until
    *  their prior content is read and overlayed with the new data.
@@ -511,29 +515,31 @@ class BufferCache {
   off_t get_stat_partial() { return stat_partial; }
 
   
-  map<version_t, int> &get_unflushed() {
-	return epoch_unflushed;
+  map<version_t, int> &get_unflushed(int what) {
+	return epoch_unflushed[what];
   }
 
-  int get_unflushed(version_t epoch) {
-	return epoch_unflushed[epoch];
+  int get_unflushed(int what, version_t epoch) {
+	return epoch_unflushed[what][epoch];
   }
-  void inc_unflushed(version_t epoch) {
-	epoch_unflushed[epoch]++;
+  void inc_unflushed(int what, version_t epoch) {
+	epoch_unflushed[what][epoch]++;
 	//cout << "inc_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
   }
-  void dec_unflushed(version_t epoch) {
-	epoch_unflushed[epoch]--;
+  void dec_unflushed(int what, version_t epoch) {
+	epoch_unflushed[what][epoch]--;
 	//cout << "dec_unflushed " << epoch << " now " << epoch_unflushed[epoch] << endl;
-	if (stat_waiter && 
-		epoch_unflushed[epoch] == 0) 
-	  stat_cond.Signal();
+	if (epoch_unflushed[what][epoch] == 0) 
+	  flush_cond.Signal();
   }
 
   void waitfor_stat() {
 	stat_waiter++;
 	stat_cond.Wait(ebofs_lock);
 	stat_waiter--;
+  }
+  void waitfor_flush() {
+	flush_cond.Wait(ebofs_lock);
   }
 
 
