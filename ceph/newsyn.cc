@@ -43,6 +43,12 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv)
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_world);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
+  // first, synchronize clocks.
+  MPI_Barrier(MPI_COMM_WORLD);
+  dout(-10) << "tare" << endl;
+  g_clock.tare();
+  
+  // ok, now start up.
   tcpaddr_t nsaddr;
   memset(&nsaddr, 0, sizeof(nsaddr));
   
@@ -64,9 +70,6 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv)
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
-
-  dout(-10) << "tare" << endl;
-  g_clock.tare();
 
   MPI_Finalize();
 
