@@ -218,6 +218,7 @@ sub run {
 			   'mds_local_osd',
 			   'osd_age_time','osd_age',
 			   'osd_rep',
+			   'osd_pad_pg_log','ebofs_realloc',
 			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'client_oc',
@@ -246,8 +247,9 @@ touch $fn/.post
 	close O;
 
 	my $killmin = 1 + int ($h->{'kill_after'} / 60);
-
+	
 	$c = "bash -c \"ulimit -c 0 ; $c\"";
+	#$c = "bash -c \"$c\"";
 
 	my $srun = "srun --wait=600 --exclude=jobs/ltest.ignore -l -t $killmin -N $h->{'n'} -p ltest";
 	my $mpiexec = "mpiexec -l -n $h->{'n'}";
