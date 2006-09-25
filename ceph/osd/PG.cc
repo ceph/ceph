@@ -1036,7 +1036,7 @@ void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry,
   // write entry on disk
   bufferlist bl;
   bl.append( (char*)&logentry, sizeof(logentry) );
-  if (0) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
+  if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
 	bufferptr bp = new buffer(4096 - sizeof(logentry));
 	bl.push_back(bp);
   }

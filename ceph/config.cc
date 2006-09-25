@@ -195,6 +195,7 @@ md_config_t g_conf = {
   osd_heartbeat_interval: 10,
   osd_replay_window: 15,
   osd_max_pull: 2,
+  osd_pad_pg_log: false,
   
   // --- fakestore ---
   fakestore_fake_sync: 2,    // 2 seconds
@@ -214,6 +215,7 @@ md_config_t g_conf = {
   ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB
   ebofs_bc_max_dirty:   (200 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
+  ebofs_realloc: true,
   
   ebofs_abp_zero: false,          // zero newly allocated buffers (may shut up valgrind)
   ebofs_abp_max_alloc: 4096*16,   // max size of new buffers (larger -> more memory fragmentation)
@@ -237,8 +239,8 @@ md_config_t g_conf = {
   bdev_lock: true,
   bdev_iothreads:    1,         // number of ios to queue with kernel
   bdev_idle_kick_after_ms: 0,//100, // ms   ** FIXME ** this seems to break things, not sure why yet **
-  bdev_el_fw_max_ms: 1000,      // restart elevator at least once every 1000 ms
-  bdev_el_bw_max_ms: 300,       // restart elevator at least once every 300 ms
+  bdev_el_fw_max_ms: 10000,      // restart elevator at least once every 1000 ms
+  bdev_el_bw_max_ms: 3000,       // restart elevator at least once every 300 ms
   bdev_el_bidir: true,          // bidirectional elevator?
   bdev_iov_max: 512,            // max # iov's to collect into a single readv()/writev() call
   bdev_debug_check_io_overlap: true,   // [DEBUG] check for any pending io overlaps
@@ -576,6 +578,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.ebofs_abp_max_alloc = atoi(args[++i]);
 	else if (strcmp(args[i], "--ebofs_max_prefetch") == 0)
 	  g_conf.ebofs_max_prefetch = atoi(args[++i]);
+	else if (strcmp(args[i], "--ebofs_realloc") == 0)
+	  g_conf.ebofs_realloc = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--fakestore") == 0) {
@@ -618,6 +622,8 @@ void parse_config_options(vector<char*>& args)
 	  g_conf.osd_maxthreads = atoi(args[++i]);
 	else if (strcmp(args[i], "--osd_max_pull") == 0) 
 	  g_conf.osd_max_pull = atoi(args[++i]);
+	else if (strcmp(args[i], "--osd_pad_pg_log") == 0) 
+	  g_conf.osd_pad_pg_log = atoi(args[++i]);
 
 
 	else if (strcmp(args[i], "--bdev_lock") == 0) 

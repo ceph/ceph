@@ -171,6 +171,7 @@ struct md_config_t {
   int   osd_heartbeat_interval;
   int   osd_replay_window;
   int   osd_max_pull;
+  bool  osd_pad_pg_log;
 
   int   fakestore_fake_sync;
   bool  fakestore_fsync;
@@ -189,6 +190,7 @@ struct md_config_t {
   off_t ebofs_bc_size;
   off_t ebofs_bc_max_dirty;
   unsigned ebofs_max_prefetch;
+  bool  ebofs_realloc;
 
   bool   ebofs_abp_zero;
   size_t ebofs_abp_max_alloc;

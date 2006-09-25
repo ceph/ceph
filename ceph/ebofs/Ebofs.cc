@@ -1329,7 +1329,7 @@ void Ebofs::alloc_write(Onode *on,
 
   // reallocate uncommitted too?
   // ( --> yes.  we can always make better allocation decisions later, with more information. )
-  if (1) {
+  if (g_conf.ebofs_realloc) {
 	list<BufferHead*> tx;
 	
 	ObjectCache *oc = on->get_oc(&bc);
