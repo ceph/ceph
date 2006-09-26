@@ -9,7 +9,7 @@
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 
 CC = g++
-CFLAGS = -O4 -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
 LIBS = -lpthread  
 
 #for normal mpich2 machines
@@ -109,7 +109,7 @@ gprof-helper.so: test/gprof-helper.c
 
 
 # fuse
-fakefuse: fakefuse.cc mds.o client.o osd.o ebofs.o client/fuse.o msg/FakeMessenger.cc common.o
+fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.cc common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 tcpfuse: tcpfuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
@@ -148,7 +148,6 @@ mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-ebofs: mkfs.ebofs test.ebofs
 
 
 

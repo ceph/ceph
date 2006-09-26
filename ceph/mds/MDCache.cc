@@ -771,7 +771,7 @@ bool MDCache::shutdown_pass()
   // imports?
   if (!imports.empty()) {
 	dout(7) << "still have " << imports.size() << " imports" << endl;
-	//show_cache();
+	show_cache();
 	return false;
   }
   
@@ -781,7 +781,7 @@ bool MDCache::shutdown_pass()
 	show_cache();
 	//dump();
 	return false;
-  }
+  } 
   
   // done!
   dout(1) << "shutdown done, sending shutdown_finish" << endl;
@@ -816,7 +816,8 @@ int MDCache::open_root(Context *c)
 	// make it up (FIXME)
 	root->inode.mode = 0755 | INODE_MODE_DIR;
 	root->inode.size = 0;
-	root->inode.mtime = 0;
+	root->inode.ctime = 0;
+	root->inode.mtime = g_clock.gettime();
 
 	root->inode.nlink = 1;
 	root->inode.layout = g_OSD_MDDirLayout;
@@ -2755,36 +2756,36 @@ void MDCache::dentry_unlink_finish(CDentry *dn, CDir *dir, Context *c)
 void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 {
   CInode *diri = get_inode(m->get_dirino());
-  CDir *dir;
+  CDir *dir = 0;
   if (diri) dir = diri->dir;
+
   if (!diri || !dir) {
 	dout(7) << "handle_dentry_unlink don't have dir " << hex << m->get_dirino() << dec << endl;
-	delete m;
-	return;
   }
-  
-  CDentry *dn = dir->lookup(m->get_dn());
-  if (!dn) {
-	dout(7) << "handle_dentry_unlink don't have dentry " << *dir << " dn " << m->get_dn() << endl;
-  } else {
-	dout(7) << "handle_dentry_unlink on " << *dn << endl;
-
-	// dir?
-	if (dn->inode) {
-	  if (dn->inode->dir) {
-		dn->inode->dir->state_set(CDIR_STATE_DELETED);
-		dn->inode->dir->remove_null_dentries();
+  else {
+	CDentry *dn = dir->lookup(m->get_dn());
+	if (!dn) {
+	  dout(7) << "handle_dentry_unlink don't have dentry " << *dir << " dn " << m->get_dn() << endl;
+	} else {
+	  dout(7) << "handle_dentry_unlink on " << *dn << endl;
+	  
+	  // dir?
+	  if (dn->inode) {
+		if (dn->inode->dir) {
+		  dn->inode->dir->state_set(CDIR_STATE_DELETED);
+		  dn->inode->dir->remove_null_dentries();
+		}
 	  }
+	  
+	  string dname = dn->name;
+	  
+	  // unlink
+	  dn->dir->remove_dentry(dn);
+	  
+	  // wake up
+	  //dir->finish_waiting(CDIR_WAIT_DNREAD, dname);
+	  dir->take_waiting(CDIR_WAIT_DNREAD, dname, mds->finished_queue);
 	}
-
-	string dname = dn->name;
-	
-	// unlink
-	dn->dir->remove_dentry(dn);
-	
-	// wake up
-	//dir->finish_waiting(CDIR_WAIT_DNREAD, dname);
-	dir->take_waiting(CDIR_WAIT_DNREAD, dname, mds->finished_queue);
   }
 
   delete m;

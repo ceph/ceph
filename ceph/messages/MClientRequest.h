@@ -90,6 +90,7 @@ class MClientRequest : public Message {
   void set_tid(long t) { st.tid = t; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
+  void set_path(const filepath& fp) { path = fp; }
   void set_caller_uid(int u) { st.caller_uid = u; }
   void set_caller_gid(int g) { st.caller_gid = g; }
   void set_ino(inodeno_t ino) { st.ino = ino; }

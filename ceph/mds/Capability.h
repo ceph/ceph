@@ -24,11 +24,12 @@ using namespace std;
 
 
 // definite caps
-#define CAP_FILE_RDCACHE   1
-#define CAP_FILE_RD        2
-#define CAP_FILE_WR        4
-#define CAP_FILE_WRBUFFER  8
-//#define CAP_INODE_STAT    16
+#define CAP_FILE_RDCACHE   1    // client can safely cache reads
+#define CAP_FILE_RD        2    // client can read
+#define CAP_FILE_WR        4    // client can write
+#define CAP_FILE_WREXTEND  8    // client can extend file
+#define CAP_FILE_WRBUFFER  16   // client can safely buffer writes
+
 
 // heuristics
 //#define CAP_FILE_DELAYFLUSH  32
@@ -41,6 +42,7 @@ inline string cap_string(int cap)
   if (cap & CAP_FILE_RD) s += " rd";
   if (cap & CAP_FILE_WR) s += " wr";
   if (cap & CAP_FILE_WRBUFFER) s += " wrbuffer";
+  if (cap & CAP_FILE_WRBUFFER) s += " wrextend";
   s += " ]";
   return s;
 }

@@ -245,7 +245,9 @@ public:
 
   // readdir
   void handle_client_readdir(MClientRequest *req, CInode *ref);
-  int encode_dir_contents(CDir *dir, list<class c_inode_info*>& items);
+  int encode_dir_contents(CDir *dir, 
+						  list<class InodeStat*>& inls,
+						  list<string>& dnls);
   void handle_hash_readdir(MHashReaddir *m);
   void handle_hash_readdir_reply(MHashReaddirReply *m);
   void finish_hash_readdir(MClientRequest *req, CDir *dir); 

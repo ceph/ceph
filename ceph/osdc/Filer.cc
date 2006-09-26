@@ -31,13 +31,17 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << messenger->get_myaddr() << ".filer "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << "filer "
 
 
 void Filer::file_to_extents(inode_t inode,
 							off_t offset, size_t len,
 							list<ObjectExtent>& extents) 
 {
+  dout(10) << "file_to_extents " << offset << "~" << len 
+		   << " on " << hex << inode.ino << dec
+		   << endl;
+
   /* we want only one extent per object!
    * this means that each extent we read may map into different bits of the 
    * final read buffer.. hence OSDExtent.buffer_extents
@@ -46,7 +50,8 @@ void Filer::file_to_extents(inode_t inode,
   
   assert(inode.layout.object_size >= inode.layout.stripe_size);
   off_t stripes_per_object = inode.layout.object_size / inode.layout.stripe_size;
-  
+  dout(20) << " stripes_per_object " << stripes_per_object << endl;
+
   off_t cur = offset;
   off_t left = len;
   while (left > 0) {
@@ -93,6 +98,7 @@ void Filer::file_to_extents(inode_t inode,
 	}
 	ex->buffer_extents[cur-offset] = x_len;
 		
+	dout(15) << "file_to_extents  " << ex << endl;
 	//cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
 	
 	left -= x_len;

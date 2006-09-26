@@ -8,6 +8,8 @@ using namespace std;
 #include "config.h"
 #include "mds/MDCluster.h"
 
+#include "mon/Monitor.h"
+
 #include "mds/MDS.h"
 #include "osd/OSD.h"
 #include "client/Client.h"
@@ -63,21 +65,36 @@ int main(int argc, char **argv) {
   args = nargs;
   vec_to_argv(args, argc, argv);
 
+  Monitor *mon[g_conf.num_mon];
+  for (int i=0; i<g_conf.num_mon; i++) {
+	mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)));
+  }
+
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
 	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
-	osd[i]->init();
   }
 
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
 	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
-	mds[i]->init();
   }
  
+    // init
+  for (int i=0; i<g_conf.num_mon; i++) {
+	mon[i]->init();
+  }
+  for (int i=0; i<NUMMDS; i++) {
+	mds[i]->init();
+  }
   
+  for (int i=0; i<NUMOSD; i++) {
+	osd[i]->init();
+  }
+
+
   // create client
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {

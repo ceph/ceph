@@ -227,7 +227,7 @@ class CDir {
   set<int>   hashed_subset;  // HASHING: subset of mds's that are hashed
  public:
   // for class MDS
-  map<int, list<class c_inode_info*> > hashed_readdir;
+  map<int, pair< list<class InodeStat*>, list<string> > > hashed_readdir;
  protected:
 
   // context

@@ -1206,7 +1206,9 @@ bool MDS::try_open_dir(CInode *in, MClientRequest *req)
 
 // READDIR
 
-int MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items)
+int MDS::encode_dir_contents(CDir *dir, 
+							 list<InodeStat*>& inls,
+							 list<string>& dnls)
 {
   int numfiles = 0;
 
@@ -1223,7 +1225,8 @@ int MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items)
 	// is dentry readable?
 	if (dn->is_xlocked()) {
 	  // ***** FIXME *****
-	  dout(10) << "warning, returning xlocked dentry, we are technically WRONG" << endl;
+	  // ?
+	  dout(10) << "warning, returning xlocked dentry, we _may_ be fudging on POSIX consistency" << endl;
 	}
 	
 	CInode *in = dn->inode;
@@ -1232,8 +1235,9 @@ int MDS::encode_dir_contents(CDir *dir, list<c_inode_info*>& items)
 	dout(12) << "including inode " << *in << endl;
 
 	// add this item
-	// note: c_inode_info makes note of whether inode data is readable.
-	items.push_back( new c_inode_info(in, whoami, it->first) );
+	// note: InodeStat makes note of whether inode data is readable.
+	dnls.push_back( it->first );
+	inls.push_back( new InodeStat(in, whoami) );
 	numfiles++;
   }
   return numfiles;
@@ -1264,14 +1268,15 @@ void MDS::handle_hash_readdir(MHashReaddir *m)
 	dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << endl;
 	mdstore->fetch_dir(dir, new C_MDS_RetryMessage(this, m));
 	return;
-  }  
+}  
   
   // get content
-  list<c_inode_info*> items;
-  encode_dir_contents(dir, items);
+  list<InodeStat*> inls;
+  list<string> dnls;
+  int num = encode_dir_contents(dir, inls, dnls);
   
   // sent it back!
-  messenger->send_message(new MHashReaddirReply(dir->ino(), items),
+  messenger->send_message(new MHashReaddirReply(dir->ino(), inls, dnls, num),
 						  m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
 }
 
@@ -1295,8 +1300,10 @@ void MDS::handle_hash_readdir_reply(MHashReaddirReply *m)
   // move items to hashed_readdir gather
   int from = MSG_ADDR_NUM(m->get_source());
   assert(dir->hashed_readdir.count(from) == 0);
-  dir->hashed_readdir[from].splice(dir->hashed_readdir[from].begin(),
-								   m->get_items());
+  dir->hashed_readdir[from].first.splice(dir->hashed_readdir[from].first.begin(),
+										 m->get_in());
+  dir->hashed_readdir[from].second.splice(dir->hashed_readdir[from].second.begin(),
+										  m->get_dn());
   delete m;
 
   // gather finished?
@@ -1313,11 +1320,11 @@ void MDS::handle_hash_readdir_reply(MHashReaddirReply *m)
   finish_contexts(finished);
   
   // now discard these results
-  for (map<int, list<c_inode_info*> >::iterator it = dir->hashed_readdir.begin();
+  for (map<int, pair< list<InodeStat*>, list<string> > >::iterator it = dir->hashed_readdir.begin();
 	   it != dir->hashed_readdir.end();
 	   it++) {
-	for (list<c_inode_info*>::iterator ci = it->second.begin();
-		 ci != it->second.end();
+	for (list<InodeStat*>::iterator ci = it->second.first.begin();
+		 ci != it->second.first.end();
 		 ci++) 
 	  delete *ci;
   }
@@ -1358,7 +1365,8 @@ void MDS::finish_hash_readdir(MClientRequest *req, CDir *dir)
   reply->set_result(0);
 
   for (int i=0; i<get_cluster()->get_num_mds(); i++) {
-	reply->copy_dir_items(dir->hashed_readdir[i]);
+	reply->copy_dir_items(dir->hashed_readdir[i].first,
+						  dir->hashed_readdir[i].second);
   }
 
   // ok!
@@ -1441,7 +1449,9 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	dir->auth_pin();
 	
 	// get local bits
-	encode_dir_contents(cur->dir, dir->hashed_readdir[whoami]);
+	encode_dir_contents(cur->dir, 
+						dir->hashed_readdir[whoami].first,
+						dir->hashed_readdir[whoami].second);
 	
 	// request other bits
 	for (int i=0; i<get_cluster()->get_num_mds(); i++) {
@@ -1453,25 +1463,30 @@ void MDS::handle_client_readdir(MClientRequest *req,
 	// wait
 	dir->add_waiter(CDIR_WAIT_THISHASHEDREADDIR, 
 					new C_MDS_HashReaddir(this, req, dir));
-	return;
+  } else {
+	// NON-HASHED
+	// build dir contents
+	list<InodeStat*> inls;
+	list<string> dnls;
+	int numfiles = encode_dir_contents(cur->dir, inls, dnls);
+	
+	// . too
+	dnls.push_back(".");
+	inls.push_back(new InodeStat(cur, whoami));
+	++numfiles;
+
+	// yay, reply
+	MClientReply *reply = new MClientReply(req);
+	reply->take_dir_items(inls, dnls, numfiles);
+	
+	dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
+	reply->set_result(0);
+	
+	//balancer->hit_dir(cur->dir);
+	
+	// reply
+	reply_request(req, reply, cur);
   }
-
-  // NON-HASHED
-  // build dir contents
-  list<c_inode_info*> items;
-  int numfiles = encode_dir_contents(cur->dir, items);
-  
-  // yay, reply
-  MClientReply *reply = new MClientReply(req);
-  reply->take_dir_items(items);
-
-  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << endl;
-  reply->set_result(0);
-  
-  //balancer->hit_dir(cur->dir);
-
-  // reply
-  reply_request(req, reply, cur);
 }
 
 
@@ -2553,15 +2568,10 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
 	}
   }
 
-  // commit
+  // commit to log
   commit_request(req, new MClientReply(req, 0), diri,
-				 new EInodeUpdate(newi));
-  //,				 new EDirUpdate(newdir)); 
-  
-  // schedule a commit for good measure 
-  // NOTE: not strictly necessary.. it's in the log!
-  // but, if fakemds crashes we'll be less likely to corrupt osddata/* (in leiu of a real recovery mechanism)
-  //mdstore->commit_dir(newdir, NULL);
+				 new EInodeUpdate(newi),//);
+				 new EDirUpdate(newdir));         // FIXME: weird performance regression here w/ double log; somewhat of a mystery!
   return;
 }
 

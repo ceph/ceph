@@ -19,23 +19,29 @@
 
 class MHashReaddirReply : public Message {
   inodeno_t ino;
-  list<c_inode_info*> dir_contents;
+
+  list<InodeStat*> dir_in;
+  list<string>     dir_dn;
   
+  int num;
+
  public:
   MHashReaddirReply() { }
-  MHashReaddirReply(inodeno_t ino, list<c_inode_info*>& ls) :
-	Message(MSG_MDS_HASHREADDIRREPLY) {
-	this->ino = ino;
-	dir_contents.splice(dir_contents.begin(), ls);
+  MHashReaddirReply(inodeno_t _ino, list<InodeStat*>& inls, list<string>& dnls, int n) :
+	Message(MSG_MDS_HASHREADDIRREPLY),
+	ino(_ino),
+	num(n) {
+	dir_in.swap(inls);
+	dir_dn.swap(dnls);
   }
   ~MHashReaddirReply() {
-	list<c_inode_info*>::iterator it;
-	for (it = dir_contents.begin(); it != dir_contents.end(); it++) 
+	for (list<InodeStat*>::iterator it = dir_in.begin(); it != dir_in.end(); it++) 
 	  delete *it;
   }
 
   inodeno_t get_ino() { return ino; }
-  list<c_inode_info*>& get_items() { return dir_contents; }
+  list<InodeStat*>& get_in() { return dir_in; }
+  list<string>& get_dn() { return dir_dn; }
 
   virtual char *get_type_name() { return "Hls"; }
 
@@ -47,18 +53,26 @@ class MHashReaddirReply : public Message {
 	payload.copy(n, sizeof(n), (char*)&n);
 	off += sizeof(n);
 	for (int i=0; i<n; i++) {
-	  c_inode_info *ci = new c_inode_info;
+	  string dn;
+	  ::_decode(dn, payload, off);
+	  dir_dn.push_back(dn);
+
+	  InodeStat *ci = new InodeStat;
 	  ci->_decode(payload, off);
-	  dir_contents.push_back(ci);
+	  dir_in.push_back(ci);
 	}
   }
   virtual void encode_payload() {
 	payload.append((char*)&ino, sizeof(ino));
-	int n = dir_contents.size();
+	int n = dir_in.size();                           // FIXME?
 	payload.append((char*)&n, sizeof(n));
-	list<c_inode_info*>::iterator it;
-	for (it = dir_contents.begin(); it != dir_contents.end(); it++) 
-	  (*it)->_encode(payload);
+	list<string>::iterator pdn = dir_dn.begin();
+	for (list<InodeStat*>::iterator pin = dir_in.begin(); 
+		 pin != dir_in.end(); 
+		 ++pin, ++pdn) {
+	  ::_encode(*pdn, payload);
+	  (*pin)->_encode(payload);
+	}
   }
 
 };

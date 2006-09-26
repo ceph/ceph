@@ -1,10 +1,13 @@
 #ifndef _STATLITE_H
 #define _STATLITE_H
 
+extern "C" {
+
 #include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 
 struct statlite {
   dev_t         st_dev;      /* device */
@@ -20,6 +23,9 @@ struct statlite {
   off_t         st_size;     /* total size, in bytes         */
   blksize_t     st_blksize;  /* blocksize for filesystem I/O */
   blkcnt_t      st_blocks;   /* number of blocks allocated   */
+  struct timespec st_atim;            /* Time of last access.  */
+  struct timespec st_mtim;            /* Time of last modification.  */
+  struct timespec st_ctim;            /* Time of last status change.  */
   //time_t        st_atime;    /* time of last access          */
   //time_t        st_mtime;    /* time of last modification    */
   //time_t        st_ctime;    /* time of last change          */
@@ -39,4 +45,19 @@ struct statlite {
 #define S_ISVALIDMTIME(m)     (m & S_REQUIREMTIME)
 #define S_ISVALIDCTIME(m)     (m & S_REQUIRECTIME)
 
+
+// readdirplus etc.
+
+struct dirent_plus {
+ struct dirent     d_dirent;  /* dirent struct for this entry */
+ struct stat       d_stat;    /* attributes for this entry */
+ int               d_stat_err;/* errno for d_stat, or 0 */
+};
+struct dirent_lite {
+ struct dirent     d_dirent;  /* dirent struct for this entry */
+ struct statlite   d_stat;    /* attributes for this entry */
+ int               d_stat_err;/* errno for d_stat, or 0 */
+};
+
+}
 #endif

@@ -610,7 +610,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 	  client->mknod(a, b);
 	} else if (strcmp(op, "getdir") == 0) {
 	  const char *a = t.get_string(p);
-	  map<string,inode_t*> contents;
+	  map<string,inode_t> contents;
 	  client->getdir(a, contents);
 	} else if (strcmp(op, "open") == 0) {
 	  const char *a = t.get_string(p);
@@ -665,14 +665,14 @@ int SyntheticClient::play_trace(Trace& t, string& prefix)
 int SyntheticClient::clean_dir(string& basedir)
 {
   // read dir
-  map<string, inode_t*> contents;
+  map<string, inode_t> contents;
   int r = client->getdir(basedir.c_str(), contents);
   if (r < 0) {
 	dout(1) << "readdir on " << basedir << " returns " << r << endl;
 	return r;
   }
 
-  for (map<string, inode_t*>::iterator it = contents.begin();
+  for (map<string, inode_t>::iterator it = contents.begin();
 	   it != contents.end();
 	   it++) {
 	string file = basedir + "/" + it->first;
@@ -686,7 +686,7 @@ int SyntheticClient::clean_dir(string& basedir)
 	  continue;
 	}
 
-	if (st.st_mode & INODE_MODE_DIR) {
+	if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
 	  clean_dir(file);
 	  client->rmdir(file.c_str());
 	} else {
@@ -704,14 +704,14 @@ int SyntheticClient::full_walk(string& basedir)
   if (time_to_stop()) return -1;
 
   // read dir
-  map<string, inode_t*> contents;
+  map<string, inode_t> contents;
   int r = client->getdir(basedir.c_str(), contents);
   if (r < 0) {
 	dout(1) << "readdir on " << basedir << " returns " << r << endl;
 	return r;
   }
 
-  for (map<string, inode_t*>::iterator it = contents.begin();
+  for (map<string, inode_t>::iterator it = contents.begin();
 	   it != contents.end();
 	   it++) {
 	string file = basedir + "/" + it->first;
@@ -723,7 +723,7 @@ int SyntheticClient::full_walk(string& basedir)
 	  continue;
 	}
 
-	if (st.st_mode & INODE_MODE_DIR) full_walk(file);
+	if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) full_walk(file);
   }
 
   return 0;
@@ -797,7 +797,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   char d[500];
   dout(3) << "read_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << endl;
 
-  map<string,inode_t*> contents;
+  map<string,inode_t> contents;
   utime_t s = g_clock.now();
   int r = client->getdir(basedir, contents);
   utime_t e = g_clock.now();
@@ -1165,15 +1165,15 @@ int SyntheticClient::random_walk(int num_req)
 	if (op == MDS_OP_READDIR) {
 	  clear_dir();
 	  
-	  map<string, inode_t*> c;
+	  map<string, inode_t> c;
 	  r = client->getdir( cwd.c_str(), c );
 	  
-	  for (map<string, inode_t*>::iterator it = c.begin();
+	  for (map<string, inode_t>::iterator it = c.begin();
 		   it != c.end();
 		   it++) {
 		//dout(DBL) << " got " << it->first << endl;
-		contents[it->first] = *(it->second);
-		if (it->second->mode & INODE_MODE_DIR) 
+		contents[it->first] = it->second;
+		if (it->second.is_dir()) 
 		  subdirs.insert(it->first);
 	  }
 	  

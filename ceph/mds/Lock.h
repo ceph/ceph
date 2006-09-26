@@ -24,31 +24,49 @@ using namespace std;
 #include "Capability.h"
 
 // states and such.
-//  C = cache reads, R = read, W = write, B = buffer writes
+//  C = cache reads, R = read, W = write, A = append, B = buffer writes
 
-// basic lock                    -----auth----   ---replica---
-#define LOCK_SYNC     0  // AR   R . / C R . .   R . / C R . .   stat()
-#define LOCK_LOCK     1  // AR   R W / C . . .   . . / C . . .   truncate()
-#define LOCK_GLOCKR   2  // AR   R . / C . . .   . . / C . . .
+// basic lock                    -----auth------   ---replica-----
+#define LOCK_SYNC     0  // AR   R . / C R . . .   R . / C R . .   stat()
+#define LOCK_LOCK     1  // AR   R W / C . . . .   . . / C . . .   truncate()
+#define LOCK_GLOCKR   2  // AR   R . / C . . . .   . . / C . . .
 
 // file lock states
-#define LOCK_GLOCKL   3  // A    . . / . . . . 
-#define LOCK_GLOCKM   4  // A    . . / . . . .
-#define LOCK_MIXED    5  // AR   . . / . R W .   . . / . R . .
-#define LOCK_GMIXEDR  6  // AR   R . / . R . .   . . / . R . . 
-#define LOCK_GMIXEDL  7  // A    . . / . . . .   
+#define LOCK_GLOCKL   3  // A    . . / . . . . . 
+#define LOCK_GLOCKM   4  // A    . . / . . . . .
+#define LOCK_MIXED    5  // AR   . . / . R W A .   . . / . R . .
+#define LOCK_GMIXEDR  6  // AR   R . / . R . . .   . . / . R . . 
+#define LOCK_GMIXEDL  7  // A    . . / . . . . .   
 
-#define LOCK_LONER    8  // A    . . / C R W B      (lock)      
-#define LOCK_GLONERR  9  // A    . . / . R . .
-#define LOCK_GLONERM  10 // A    . . / . R W .
+#define LOCK_LONER    8  // A    . . / C R W A B      (lock)      
+#define LOCK_GLONERR  9  // A    . . / . R . . .
+#define LOCK_GLONERM  10 // A    . . / . R W A .
 
-#define LOCK_GSYNCL   11 // A    . . / . . . .
-#define LOCK_GSYNCM   12 // A    . . / . R . .
+#define LOCK_GSYNCL   11 // A    . . / . . . . .
+#define LOCK_GSYNCM   12 // A    . . / . R . . .
 
 //   4 stable
 //  +9 transition
 //  13 total
 
+/* no append scenarios:
+
+loner + truncate():
+  - loner needs to lose A (?unless it's the loner doing the truncate?)
+loner + statlite(size):
+  - loner needs to lose A
+
+any + statlite(size)
+  - all lose A
+
+any + statlite(mtime)
+  - all lose W
+
+
+-> we need to add lonerfixed and mixedfixed states (and associated transitions)
+ in order to efficiently support statlite(size) and truncate().
+
+ */
 
 // -- lock... hard or file
 
@@ -193,7 +211,7 @@ class CLock {
   // client caps allowed
   int caps_allowed_ever(bool auth) {
 	if (auth)
-	  return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WRBUFFER;
+	  return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER;
 	else
 	  return CAP_FILE_RDCACHE | CAP_FILE_RD;
   }
@@ -211,18 +229,18 @@ class CLock {
 		return 0;
 
 	  case LOCK_MIXED:
-		return CAP_FILE_RD | CAP_FILE_WR;
+		return CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND;
 	  case LOCK_GMIXEDR:
 		return CAP_FILE_RD;
 	  case LOCK_GMIXEDL:
 		return 0;
 
 	  case LOCK_LONER:  // single client writer, of course.
-		return CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_RD | CAP_FILE_RDCACHE;
+		return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER;
 	  case LOCK_GLONERR:
-		return CAP_FILE_WR;
+		return CAP_FILE_RD;
 	  case LOCK_GLONERM:
-		return CAP_FILE_RD | CAP_FILE_WR;
+		return CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND;
 
 	  case LOCK_GSYNCL:
 		return 0;
@@ -257,7 +275,7 @@ class CLock {
 	  case LOCK_GLONERM:
 	  case LOCK_GLONERR:
 	  case LOCK_LONER:
-		return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WRBUFFER;
+		return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER;
 	  case LOCK_LOCK:
 	  case LOCK_GLOCKR:
 	  case LOCK_GLOCKL:

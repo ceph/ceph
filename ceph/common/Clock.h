@@ -169,7 +169,7 @@ class Clock {
 
   // absolute time
   time_t gettime() {
-	return now().sec();
+	return real_now().sec();
   }
 
 };

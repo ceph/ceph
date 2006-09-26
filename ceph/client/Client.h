@@ -15,6 +15,10 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
+extern "C" {
+#include <dirent.h>
+}
+
 #include "mds/MDCluster.h"
 #include "osd/OSDMap.h"
 
@@ -27,6 +31,7 @@
 #include "messages/MClientReply.h"
 
 //#include "msgthread.h"
+#include "statlite.h"
 
 #include "include/types.h"
 #include "include/lru.h"
@@ -287,11 +292,27 @@ struct Fh {
 // client interface
 
 class Client : public Dispatcher {
+ public:
+  
+  /* getdir result */
+  struct DirResult {
+	string path;
+	map<string,inode_t> contents;
+	map<string,inode_t>::iterator p;
+	int off;
+	int size;
+	struct dirent_plus dp;
+	struct dirent_lite dl;
+	DirResult() : p(contents.end()), off(-1), size(0) {}
+  };
+
+
  protected:
   Messenger *messenger;  
   int whoami;
   
   // mds fake RPC
+  tid_t last_tid;
   map<tid_t, Cond*>                mds_rpc_cond;
   map<tid_t, class MClientReply*>  mds_rpc_reply;
   map<tid_t, Cond*>                mds_rpc_dispatch_cond;
@@ -379,7 +400,7 @@ protected:
   int get_cache_size() { return lru.lru_get_size(); }
   void set_cache_size(int m) { lru.lru_set_max(m); }
 
-  Dentry* link(Dir *dir, string& name, Inode *in) {
+  Dentry* link(Dir *dir, const string& name, Inode *in) {
 	Dentry *dn = new Dentry;
 	dn->name = name;
 	
@@ -415,7 +436,7 @@ protected:
 	delete dn;
   }
 
-  Dentry *relink(Dentry *dn, Dir *dir, string& name) {
+  Dentry *relink(Dentry *dn, Dir *dir, const string& name) {
 	// first link new dn to dir
 	/*
 	char *oldname = (char*)dn->name;
@@ -480,9 +501,9 @@ protected:
   void close_safe(Inode *in);
 
   // metadata cache
-  Inode* insert_inode_info(Dir *dir, c_inode_info *in_info);
-  void insert_trace(const vector<c_inode_info*>& trace);
-
+  Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
+  void update_inode_dist(Inode *in, InodeStat *st);
+  void insert_trace(MClientReply *reply);
 
   // ----------------------
   // fs ops.
@@ -496,7 +517,22 @@ protected:
   int chdir(const char *s);
 
   // namespace ops
-  int getdir(const char *path, map<string,inode_t*>& contents);
+  int getdir(const char *path, list<string>& contents);
+  int getdir(const char *path, map<string,inode_t>& contents);
+
+  DIR *opendir(const char *name);
+  int closedir(DIR *dir);
+  struct dirent *readdir(DIR *dir); 
+  void rewinddir(DIR *dir); 
+  off_t telldir(DIR *dir);
+  void seekdir(DIR *dir, off_t offset);
+
+  struct dirent_plus *readdirplus(DIR *dirp);
+  int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
+  struct dirent_lite *readdirlite(DIR *dirp);
+  int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
+ 
+
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);

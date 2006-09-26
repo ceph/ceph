@@ -1,10 +1,22 @@
 
+
+
 == todo
 
 - how to get usage feedback to monitor?
 
+fixit list
+- opendir, readdir, rewinddir, etc. (via getdir)
+- statlite
+- readdir
+- readdirpluslite
+- lazio_*
+- mds stat vs caps behavior.  esp wrt readdirplus, etc.
 
 osd/rados
+- don't be so pessimistic about discarding write-ahead
+- properly handle divergent pg logs and objects
+- flag missing log entries on crash recovery
 - consider implications of nvram writeahead logs
 - deal with divergent replicas that recover
 - fix heartbeat wrt new replication
@@ -14,7 +26,6 @@ osd/rados
 - pg_bit changes
 - use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
-
 
 messenger
 - lookup upcall,
@@ -32,8 +43,6 @@ monitor
 - monitor pgs, notify on out
 - watch osd utilization; adjust overload in cluster map
 
-
-
 objecter
 
 objectcacher
@@ -43,21 +52,19 @@ objectcacher
 
 reliability
 - heartbeat vs ping
-- how to choose peer sets
 - osdmonitor, filter
 
 ebofs
-- nonblocking write on missing onodes?
-- reallocate if dirty is cancelable.  specifically, so that pg log writes are efficient.
 - fix sync() 
-- fix bug in node rotation on insert (and reenable)
-- snapshots
-- allow btree sets instead of maps
-- verify LRU behavior sensible: writes go to mid, not top!
-- fix NEAR_LAST_FWD   (?)
-- combine inodes and/or cnodes into same blocks
-- journaling?  in NVRAM?
 - clone()
+- snapshots
+- combine inodes and/or cnodes into same blocks
+- allow btree sets instead of maps
+- nonblocking write on missing onodes?
+- verify LRU behavior sensible: writes go to mid, not top!
+- fix bug in node rotation on insert (and reenable)
+- fix NEAR_LAST_FWD   (?)
+- journaling?  in NVRAM?
 
 
 
@@ -68,7 +75,6 @@ bugs/stability
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
   - well, just figure out general timer cancellation strategy that avoids races
-- gzip in messenger?
 
 
 remaining hard problems
@@ -80,13 +86,12 @@ crush
 - more efficient failure when all/too many osds are down
 
 mds
-- only share osdmap updates with clients holding capabilities
-- statlite
-- stat single writer
-- truncate()
+- efficient stat for single writers
 - chdir (directory opens!)
+- lstat vs stat
+- add FILE_CAP_EXTEND capability bit
+- only share osdmap updates with clients holding capabilities
 - delayed replica caps release... we need to set a timer event? (and cancel it when appropriate?)
-- review caps logic versus singular
 - finish hard links!
  - reclaim danglers from inode file on discover...
  - fix rename wrt hard links
@@ -110,18 +115,7 @@ client
 - some heuristic behavior to consolidate caps to inode auth
 - client will re-tx anything it needed to say upon rx of new mds notification (?)
 
-- readv+writev, readx+writex
-  - serialized!
 
-
-
-
-
-cluster issues
-- communications failure model.. is it appropriate?
-  - reliable, ordered, buffered and flushed on 'down' boundaries?
-  - ordered, unreliable?
-- what about large messages?  :(
 
 
 

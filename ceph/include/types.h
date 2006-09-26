@@ -14,8 +14,11 @@
 #ifndef __MDS_TYPES_H
 #define __MDS_TYPES_H
 
+extern "C" {
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <assert.h>
+}
 
 #include <string>
 #include <set>
@@ -189,14 +192,25 @@ typedef __uint64_t version_t;
 #define FILE_MODE_W          2
 #define FILE_MODE_RW         3
 
+#define INODE_MASK_BASE       1  // ino, ctime, nlink
+#define INODE_MASK_PERM       2  // uid, gid, mode
+#define INODE_MASK_SIZE       4  // size, blksize, blocks
+#define INODE_MASK_MTIME      8  // mtime
+#define INODE_MASK_ATIME      16 // atime
+
+#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME)
+//#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME|INODE_MASK_ATIME)
+
 struct inode_t {
-  // immutable
+  // base (immutable)
   inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
   time_t    ctime;
 
+  // other
   FileLayout layout;  // ?immutable?
+  int        nlink;   // base, 
 
-  // hard (namespace permissions)
+  // hard/perm (namespace permissions)
   mode_t     mode;
   uid_t      uid;
   gid_t      gid;
@@ -205,13 +219,31 @@ struct inode_t {
   off_t      size;
   time_t     atime, mtime;      // maybe atime different?  "lazy"?
   
-  // other
-  int        nlink;
+  int        mask;
 
   // special stuff
   unsigned char hash_seed;         // only defined for dir; 0 if not hashed.
   bool          anchored;          // auth only
   version_t     file_data_version; // auth only
+
+  bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
+  bool is_dir() { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
+  bool is_file() { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
+
+  void fill_stat(struct stat *st) {
+	memset(st, 0, sizeof(struct stat));
+	st->st_ino = ino;
+	st->st_mode = mode;
+	st->st_nlink = nlink;
+	st->st_uid = uid;
+	st->st_gid = gid;
+	st->st_ctime = ctime;
+	st->st_atime = atime;
+	st->st_mtime = mtime;
+	st->st_size = size;
+	st->st_blocks = size ? ((size - 1) / 4096 + 1):0;
+	st->st_blksize = 4096;
+  }
 };
 
 
@@ -267,12 +299,22 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 
 
 #ifdef OBJECT128
-typedef lame128_t object_t;
+//typedef lame128_t object_t;
+struct object_t {
+  inodeno_t  ino;  // 64 bits
+  __uint32_t bno;  // 32 bits
+
+  snapv_t    snap_last;  // 16 bits
+  snapv_t    snap_first; // 16 bits
+};
 #else
 typedef __uint64_t object_t;      // object id
 #endif
 
 #define PG_NONE    0xffffffffffffffffLL
+
+
+typedef __uint16_t snapv_t;       // snapshot version
 
 
 class OSDSuperblock {
