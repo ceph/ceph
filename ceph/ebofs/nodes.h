@@ -409,12 +409,13 @@ class NodePool {
 	dout(20) << "ebofs.nodepool.commit_start start" << endl;
 
 	assert(flushing == 0);
-	if (0)
+	/*if (0)
 	  for (unsigned i=0; i<region_loc.size(); i++) {
 		int c = dev.count_io(region_loc[i].start, region_loc[i].length);
 		dout(20) << "ebofs.nodepool.commit_start  region " << region_loc[i] << " has " << c << " ios" << endl;
 		assert(c == 0);
 	  }
+	*/
 
 	// write map
 	flushing++;

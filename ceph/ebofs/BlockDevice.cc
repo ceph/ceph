@@ -35,9 +35,10 @@
 #include <linux/fs.h>
 #endif
 
-#undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ")."
 
+/*******************************************
+ * biovec
+ */
 
 inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
 {
@@ -50,6 +51,213 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
   out << ")";
   return out;
 }
+
+
+
+/*******************************************
+ * ElevatorQueue
+ */
+
+#undef dout
+#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ").elevatorq."
+
+
+int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols, 
+										   block_t& start, block_t& length,
+										   interval_set<block_t>& block_lock)
+{
+  // queue empty?
+  assert(!io_map.empty());
+
+  dout(20) << "dequeue_io el_pos " << el_pos << " dir " << el_dir_forward << endl;
+
+  // find our position: i >= pos
+  map<block_t,biovec*>::iterator i;
+  
+  int tries = g_conf.bdev_el_bidir + 1;
+  while (tries > 0) {
+	if (el_dir_forward) {
+	  i = io_map.lower_bound(el_pos);
+	  if (i != io_map.end()) {
+		break;  // not at end.  good.
+	  }
+	} else {
+	  i = io_map.upper_bound(el_pos);
+	  if (i != io_map.begin()) {
+		i--;   // and back down one (to get i <= pos).  good.
+		break;
+	  }
+	}
+
+	// reverse (or initial startup)?
+	if (g_conf.bdev_el_bidir || !el_dir_forward) {
+	  //	  dout(20) << "restart reversing" << endl;
+	  el_dir_forward = !el_dir_forward;
+	}
+	
+	if (el_dir_forward) {
+	  // forward
+	  el_pos = 0;
+	  
+	  if (g_conf.bdev_el_fw_max_ms) {
+		el_stop = g_clock.now();
+		utime_t max(0, 1000*g_conf.bdev_el_fw_max_ms);  // (s,us), convert ms -> us!
+		el_stop += max;
+		//	dout(20) << "restart forward sweep for " << max << endl;
+	  } else {
+		//	dout(20) << "restart fowrard sweep" << endl;
+	  }
+	} else {
+	  // reverse
+	  el_pos = bdev->get_num_blocks();
+	  
+	  if (g_conf.bdev_el_bw_max_ms) {
+		el_stop = g_clock.now();
+		utime_t max(0, 1000*g_conf.bdev_el_bw_max_ms);  // (s,us), convert ms -> us!
+		el_stop += max;
+		//	dout(20) << "restart reverse sweep for " << max << endl;
+	  } else {
+		//	dout(20) << "restart reverse sweep" << endl;
+	  }
+	}
+
+	tries--;
+  }
+  
+  assert(tries > 0);  // this shouldn't happen if the queue is non-empty.
+
+  // get some biovecs
+  int num_bio = 0;
+  
+  dout(20) << "dequeue_io  starting with " << i->first << " " << *i->second << endl;
+
+  // merge contiguous ops
+  char type = i->second->type;  // read or write
+  int num_iovs = 0;  // count eventual iov's for readv/writev
+  
+  start = i->first;
+  length = 0;
+
+  if (el_dir_forward)
+	el_pos = start;
+  else
+	el_pos = i->first + i->second->length;
+  
+  // while (contiguous)
+  while ((( el_dir_forward && el_pos == i->first) ||
+		  (!el_dir_forward && el_pos == i->first + i->second->length)) && 
+		 type == i->second->type) { 
+	biovec *bio = i->second;
+	
+	// allowed?  (not already submitted to kernel?)
+	if (block_lock.intersects(bio->start, bio->length)) {
+	  //	  dout(20) << "dequeue_io " << bio->start << "~" << bio->length 
+	  //			   << " intersects block_lock " << block_lock << endl;
+	  break;  // stop, or go with what we've got so far
+	}
+	
+	// add to biols
+	int nv = bio->bl.buffers().size();     // how many iov's in this bio's bufferlist?
+	if (num_iovs + nv >= g_conf.bdev_iov_max) break;  // too many!
+	num_iovs += nv;
+	
+	start = MIN(start, bio->start);
+	length += bio->length;
+	
+	if (el_dir_forward) {
+	  //dout(20) << "dequeue_io fw dequeue io at " << el_pos << " " << *i->second << endl;
+	  biols.push_back(bio);      // add at back
+	} else {
+	  //  dout(20) << "dequeue_io bw dequeue io at " << el_pos << " " << *i->second << endl;
+	  biols.push_front(bio);     // add at front
+	}
+	num_bio++;
+	
+	// move elevator pointer
+	bool at_end = false; 
+	map<block_t,biovec*>::iterator prev = i;
+	if (el_dir_forward) {
+	  el_pos += bio->length;                 // cont. next would start right after us
+	  i++;
+	  if (i == io_map.end()) {
+		at_end = true;
+	  }
+	} else {
+	  el_pos -= bio->length;
+	  if (i == io_map.begin()) {
+		at_end = true;
+	  } else {
+		i--;
+	  }
+	}
+	
+	// dequeue
+	io_map.erase(prev);
+	bio->in_queue = 0;
+	
+	if (at_end) break;
+  }
+  
+  return num_bio;
+}
+
+
+
+/*******************************************
+ * BarrierQueue
+ */
+#undef dout
+#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ").barrierq."
+
+void BlockDevice::BarrierQueue::barrier()
+{
+  if (!qls.empty() && qls.front()->empty()) {
+	assert(qls.size() == 1);
+	dout(10) << "barrier not adding new queue, front is empty" << endl;
+  } else {
+	qls.push_back(new ElevatorQueue(bdev, dev));
+	dout(10) << "barrier adding new elevator queue (now " << qls.size() << "), front queue has "
+			 << qls.front()->size() << " ios left" << endl;
+  }
+}
+
+bool BlockDevice::BarrierQueue::bump()
+{
+  assert(!qls.empty());
+  
+  // is the front queue empty?
+  if (qls.front()->empty() &&
+	  qls.front() != qls.back()) {
+	delete qls.front();
+	qls.pop_front();
+	dout(10) << "dequeue_io front empty, moving to next queue (" << qls.front()->size() << ")" << endl;
+	return true;
+  }
+
+  return false;
+}
+
+int BlockDevice::BarrierQueue::dequeue_io(list<biovec*>& biols, 
+										  block_t& start, block_t& length,
+										  interval_set<block_t>& locked) 
+{
+  assert(!qls.empty());
+  int n = qls.front()->dequeue_io(biols, start, length, locked);
+  bump();  // in case we emptied the front queue
+  return n;
+}
+
+
+
+
+/*******************************************
+ * BlockDevice
+ */
+
+#undef dout
+#define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ")."
+
+
 
 block_t BlockDevice::get_num_blocks() 
 {
@@ -85,26 +293,10 @@ block_t BlockDevice::get_num_blocks()
 }
 
 
-void BlockDevice::barrier()
-{
-  lock.Lock();
-  dout(10) << "barrier, io_queue " << io_queue.size() << endl;
-  if (!use_next_queue &&
-	  !io_queue.empty()) 
-	use_next_queue = true;
-  lock.Unlock();
-}
 
-void BlockDevice::_bump_queue()
-{
-  if (io_queue.empty() && use_next_queue) {
-	dout(10) << "_bump_queue next_io_queue (" << next_io_queue.size() 
-			  << ") -> io_queue (" << io_queue.size() << ")" << endl;  // empty, duh.
-	use_next_queue = false;
-	io_queue.swap(next_io_queue);
-  }
-}
-
+/** io thread
+ * each worker thread dequeues ios from the root_queue and submits them to the kernel.
+ */
 void* BlockDevice::io_thread_entry()
 {
   lock.Lock();
@@ -113,160 +305,48 @@ void* BlockDevice::io_thread_entry()
   io_threads_running++;
   assert(io_threads_running <= g_conf.bdev_iothreads);
   dout(10) << "io_thread" << whoami << " start, " << io_threads_running << " now running" << endl;
-  
-  if (whoami == 0) {  // i'm the first one starting...
-	el_dir_forward = true;
-	el_pos = 0;
-	el_stop = g_clock.now();
-	utime_t max(0, 1000*g_conf.bdev_el_fw_max_ms);  // (s,us), convert ms -> us!
-	el_stop += max;
-  }
 
+  // get my own fd (and file position pointer)
   int fd = open_fd();
   assert(fd > 0);
 
   while (!io_stop) {
-	
-	bool at_end = false;
 	bool do_sleep = false;
 	
 	// queue empty?
-	if (io_queue.empty()) {
+	if (root_queue.empty()) {
 	  // sleep
 	  do_sleep = true;
 	} else {
-	  // go until (we) reverse
 	  dout(20) << "io_thread" << whoami << " going" << endl;
 
-	  while (1) {
-		// find i >= pos
-		multimap<block_t,biovec*>::iterator i;
-		if (el_dir_forward) {
-		  i = io_queue.lower_bound(el_pos);
-		  if (i == io_queue.end()) {
-			at_end = true;
-			break;
-		  }
-		} else {
-		  i = io_queue.upper_bound(el_pos);
-		  if (i == io_queue.begin()) {
-			at_end = true;
-			break;
-		  }
-		  i--; // and back down one (to get i <= pos)
-		}
-		
-		// merge contiguous ops
-		block_t start, length;
-		list<biovec*> biols;
-		char type = i->second->type;
-		int n = 0;  // count eventual iov's for readv/writev
+	  block_t start, length;
+	  list<biovec*> biols;
+	  int n = root_queue.dequeue_io(biols, start, length, io_block_lock);
 
-		start = el_pos = i->first;
-		length = 0;
-		while (el_pos == i->first && type == i->second->type) {  // while (contiguous)
-		  biovec *bio = i->second;
-
-		  // ok?
-		  if (io_block_lock.intersects(bio->start, bio->length)) {
-			dout(20) << "io_thread" << whoami << " dequeue " << bio->start << "~" << bio->length 
-					 << " intersects block_lock " << io_block_lock << endl;
-			break;  // go to sleep, or go with what we've got so far
-		  }
-
-		  // add to biols
-		  int nv = bio->bl.buffers().size();     // how many iov's in this bio's bufferlist?
-		  if (n + nv >= g_conf.bdev_iov_max) break;
-		  n += nv;
-
-		  start = MIN(start, bio->start);
-		  length += bio->length;
-
-		  if (el_dir_forward) {
-			dout(20) << "io_thread" << whoami << " fw dequeue io at " << el_pos << " " << *i->second << endl;
-			biols.push_back(bio);      // at back
-		  } else {
-			dout(20) << "io_thread" << whoami << " bw dequeue io at " << el_pos << " " << *i->second << endl;
-			biols.push_front(bio);     // at front
-		  }
-
-		  // next bio?
-		  multimap<block_t,biovec*>::iterator prev;
-		  if (el_dir_forward) {
-			el_pos += bio->length;                 // cont. next would start right after us
-			prev = i;
-			i++;
-			if (i == io_queue.end()) {
-			  at_end = true;
-			}
-		  } else {
-			prev = i;
-			if (i == io_queue.begin()) {
-			  at_end = true;
-			} else {
-			  i--;                                 // cont. would start before us...
-			  if (i->first + i->second->length == el_pos)
-				el_pos = i->first;                 // yep, it does!
-			}
-		  }
-
-		  // dequeue
-		  io_queue_map.erase(bio);
-		  io_queue.erase(prev);
-		  _bump_queue();
+	  if (n == 0) {
+		// failed to dequeue a do-able op, sleep for now
+		dout(20) << "io_thread" << whoami << " couldn't dequeue doable op, sleeping" << endl;
+		assert(io_threads_running > 1);   // there must be someone else, if we couldn't dequeue something doable.
+		do_sleep = true;
+	  } 
+	  else {
+		// lock blocks
+		assert(start == biols.front()->start);
+		io_block_lock.insert(start, length);
 		  
-		  if (at_end) break;
-		}
-		
-		if (biols.empty()) {
-		  // failed to dequeue a do-able op, sleep for now
-		  assert(io_threads_running > 1);
-		  do_sleep = true;
-		  break;
-		}
-
-		{ // lock blocks
-		  assert(start == biols.front()->start);
-		  io_block_lock.insert(start, length);
+		// drop lock to do the io
+		lock.Unlock();
+		do_io(fd, biols);
+		lock.Lock();
 		  
-		  // drop lock to do the io
-		  lock.Unlock();
-		  do_io(fd, biols);
-		  lock.Lock();
-		  
-		  // unlock blocks
-		  io_block_lock.erase(start, length);
-		}
+		// unlock blocks
+		io_block_lock.erase(start, length);
 		
-		if ((int)io_queue.size() > io_threads_running)   // someone might have blocked on our block_lock
+		// someone might have blocked on our block_lock?
+		if (io_threads_running < g_conf.bdev_iothreads &&
+			(int)root_queue.size() > io_threads_running)   
 		  io_wakeup.SignalAll();
-			
-		utime_t now = g_clock.now();
-		if (at_end || 
-			now > el_stop) break;
-	  }
-	  
-	  if (at_end) {
-		at_end = false;
-		// reverse?
-		if (g_conf.bdev_el_bidir) {
-		  dout(20) << "io_thread" << whoami << " reversing" << endl;
-		  el_dir_forward = !el_dir_forward;
-		}
-
-		// reset disk pointers, timers
-		el_stop = g_clock.now();
-		if (el_dir_forward) {
-		  el_pos = 0;
-		  utime_t max(0, 1000*g_conf.bdev_el_fw_max_ms);  // (s,us), convert ms -> us!
-		  el_stop += max;
-		  dout(20) << "io_thread" << whoami << " forward sweep for " << max << endl;
-		} else {
-		  el_pos = num_blocks;
-		  utime_t max(0, 1000*g_conf.bdev_el_bw_max_ms);  // (s,us), convert ms -> us!
-		  el_stop += max;
-		  dout(20) << "io_thread" << whoami << " reverse sweep for " << max << endl;
-		}
 	  }
 	}
 
@@ -276,8 +356,7 @@ void* BlockDevice::io_thread_entry()
 	  // sleep
 	  io_threads_running--;
 	  dout(20) << "io_thread" << whoami << " sleeping, " << io_threads_running << " threads now running," 
-			   << " queue has " << io_queue.size() << " / " << next_io_queue.size()
-			   << endl;
+			   << " queue has " << root_queue.size()			   << endl;
 
 	  if (g_conf.bdev_idle_kick_after_ms > 0 &&
 		  io_threads_running == 0 && 
@@ -286,7 +365,7 @@ void* BlockDevice::io_thread_entry()
 		io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));   
 
 		// should we still be sleeping?  (did we get woken up, or did timer expire?
-		if (io_queue.empty() && io_threads_running == 0) {
+		if (root_queue.empty() && io_threads_running == 0) {
 		  idle_kicker->kick();		  // kick
 		  io_wakeup.Wait(lock);		  // and wait
 		}
@@ -301,24 +380,22 @@ void* BlockDevice::io_thread_entry()
 	}
   }
 
+  // clean up
   ::close(fd);
   io_threads_running--;
-
+  
   lock.Unlock();
 
   dout(10) << "io_thread" << whoami << " finish" << endl;
   return 0;
 }
 
-bool BlockDevice::is_idle()
-{
-  
-  lock.Lock();
-  bool idle = (io_threads_running == 0) && io_queue.empty();
-  lock.Unlock();
-  return idle;
-}
 
+
+/** do_io
+ * do a single io operation
+ * (lock is NOT held, but we own the *biovec)
+ */
 void BlockDevice::do_io(int fd, list<biovec*>& biols)
 {
   int r;
@@ -370,6 +447,11 @@ void BlockDevice::do_io(int fd, list<biovec*>& biols)
 }
 
 
+/** finish_io
+ *
+ * finish an io by signaling the cond or performing a callback.
+ * called by completion thread, unless that's disabled above.
+ */
 void BlockDevice::finish_io(biovec *bio)
 {
   bio->done = true;
@@ -383,6 +465,9 @@ void BlockDevice::finish_io(biovec *bio)
   }
 }
 
+/*** completion_thread
+ * handle Cond signals or callbacks for completed ios
+ */
 void* BlockDevice::complete_thread_entry()
 {
   complete_lock.Lock();
@@ -393,7 +478,7 @@ void* BlockDevice::complete_thread_entry()
 	while (!complete_queue.empty()) {
 	  list<biovec*> ls;
 	  ls.swap(complete_queue);
-	  dout(10) << "complete_thread grabbed " << complete_queue_len << " bios" << endl;
+	  dout(10) << "complete_thread grabbed " << complete_queue_len << " biovecs" << endl;
 	  complete_queue_len = 0;
 	  
 	  complete_lock.Unlock();
@@ -403,7 +488,7 @@ void* BlockDevice::complete_thread_entry()
 		   p != ls.end(); 
 		   p++) {
 		biovec *bio = *p;
-		dout(20) << "complete_thread finishing " << (void*)bio << endl;
+		dout(20) << "complete_thread finishing " << *bio << endl;
 		finish_io(bio);
 	  }
 	  
@@ -440,20 +525,19 @@ void BlockDevice::_submit_io(biovec *b)
   // NOTE: lock must be held
   dout(15) << "_submit_io " << *b << endl;
   
-  if (use_next_queue) {
-	// queue in next queue
-	assert(!io_queue.empty());
-	next_io_queue.insert(pair<block_t,biovec*>(b->start, b));
-  } else {
-	// wake up io_thread(s)?
-	if ((int)io_queue.size() == io_threads_running) 
-	  io_wakeup.SignalOne();
-	else if ((int)io_queue.size() > io_threads_running) 
-	  io_wakeup.SignalAll();
+  // wake up io_thread(s)?
+  if ((int)root_queue.size() == io_threads_running) 
+	io_wakeup.SignalOne();
+  else if ((int)root_queue.size() > io_threads_running) 
+	io_wakeup.SignalAll();
 	
-	// [DEBUG] check for overlapping ios
-	// BUG: this doesn't detect all overlaps w/ the next queue thing.
-	if (g_conf.bdev_debug_check_io_overlap) {
+  // queue 
+  root_queue.submit_io(b);
+
+  /*
+  // [DEBUG] check for overlapping ios
+  // BUG: this doesn't detect all overlaps w/ the next queue thing.
+  if (g_conf.bdev_debug_check_io_overlap) {
 	  // BUG: this doesn't catch everything!  eg 1~10000000 will be missed....
 	  multimap<block_t, biovec*>::iterator p = io_queue.lower_bound(b->start);
 	  if ((p != io_queue.end() &&
@@ -466,57 +550,26 @@ void BlockDevice::_submit_io(biovec *b)
 			 << " overlaps with existing " << *p->second << endl;
 	  }
 	}
-	
-	// queue anew
-	io_queue.insert(pair<block_t,biovec*>(b->start, b));
-  }
-  io_queue_map[b] = b->start;
+  */
+
 }
 
 int BlockDevice::_cancel_io(biovec *bio) 
 {
   // NOTE: lock must be held
-  if (io_queue_map.count(bio) == 0) {
+
+  if (bio->in_queue == 0) {
 	dout(15) << "_cancel_io " << *bio << " FAILED" << endl;
 	return -1;
-  }
-  
-  dout(15) << "_cancel_io " << *bio << endl;
-
-  block_t b = io_queue_map[bio];
-  io_queue_map.erase(bio);
-  
-  multimap<block_t,biovec*>::iterator p = io_queue.lower_bound(b);
-  while (p->first == b && p->second != bio) p++;
-  if (p->first == b && p->second == bio) {
-	io_queue.erase(p);
-	_bump_queue();
   } else {
-	p = next_io_queue.lower_bound(b);
-	while (p->first == b && p->second != bio) p++;
-	assert(p->second == bio);
-	next_io_queue.erase(p);
+    dout(15) << "_cancel_io " << *bio << endl;
+	bio->in_queue->cancel_io(bio);
+	if (root_queue.bump()) 
+	  io_wakeup.SignalAll();  // something happened!
+	return 0;
   }
- 
-  return 0;
 }
 
-
-
-int BlockDevice::count_io(block_t start, block_t len)
-{
-  assert(0);
-  lock.Lock();
-  int n = 0;
-  multimap<block_t,biovec*>::iterator p = io_queue.lower_bound(start);
-  while (p != io_queue.end() && p->first < start+len) {
-	dout(1) << "count_io in " << start << "~" << len << " : " << *p->second << endl;
-	n++;
-	p++;
-  }
-  lock.Unlock();
-  return n;
-}
 
 
 // low level io
@@ -611,7 +664,7 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
 
 int BlockDevice::open_fd()
 {
-  return ::open(dev, O_RDWR|O_SYNC|O_DIRECT, 0);
+  return ::open(dev.c_str(), O_RDWR|O_SYNC|O_DIRECT, 0);
 }
 
 int BlockDevice::open(kicker *idle) 
