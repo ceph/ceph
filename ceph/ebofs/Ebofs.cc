@@ -1040,6 +1040,8 @@ void Ebofs::write_cnode(Cnode *cn)
 
 void Ebofs::remove_cnode(Cnode *cn)
 {
+  dout(10) << "remove_cnode " << *cn << endl;
+
   // remove from table
   collection_tab->remove(cn->coll_id);
 
@@ -1051,13 +1053,16 @@ void Ebofs::remove_cnode(Cnode *cn)
   if (cn->is_dirty())
 	dirty_cnodes.erase(cn);
 
+  // remove from map and lru
+  cnode_map.erase(cn->coll_id);
+  cnode_lru.lru_remove(cn);
+
   // count down refs
   cn->mark_clean();
   cn->put();
   assert(cn->get_ref_count() == 0);
 
   // hose.
-  cnode_lru.lru_remove(cn);
   delete cn;
 
   dirty = true;
@@ -1972,8 +1977,11 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 	  {
 		object_t oid = t.oids.front(); t.oids.pop_front();
 		const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
-		pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
-		if (_setattr(oid, attrname, attrval.first, attrval.second) < 0) {
+		//pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		bufferlist bl;
+		bl.claim( t.attrbls.front() );
+		t.attrbls.pop_front();
+		if (_setattr(oid, attrname, bl.c_str(), bl.length()) < 0) {
 		  dout(7) << "apply_transaction fail on _setattr" << endl;
 		  r &= bit;
 		}
@@ -2048,8 +2056,12 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 	  {
 		coll_t cid = t.cids.front(); t.cids.pop_front();
 		const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
-		pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
-		if (_collection_setattr(cid, attrname, attrval.first, attrval.second) < 0) {
+		//pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		bufferlist bl;
+		bl.claim( t.attrbls.front() );
+		t.attrbls.pop_front();
+		if (_collection_setattr(cid, attrname, bl.c_str(), bl.length()) < 0) {
+		  //if (_collection_setattr(cid, attrname, attrval.first, attrval.second) < 0) {
 		  dout(7) << "apply_transaction fail on _collection_setattr" << endl;
 		  r &= bit;
 		}
@@ -2399,6 +2411,9 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
   on->attr[n] = new buffer((char*)value, size);
   dirty_onode(on);
   put_onode(on);
+
+  dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << " success" << endl;
+
   return 0;
 }
 
@@ -2465,9 +2480,11 @@ int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
   string n(name);
   int r = 0;
   if (on->attr.count(n) == 0) {
+	dout(10) << "_getattr " << hex << oid << dec << " '" << name << "' dne" << endl;
 	r = -1;
   } else {
 	r = MIN( on->attr[n].length(), size );
+	dout(10) << "_getattr " << hex << oid << dec << " '" << name << "' got len " << r << endl;
 	memcpy(value, on->attr[n].c_str(), r );
   }
   put_onode(on);
@@ -2763,6 +2780,7 @@ int Ebofs::collection_list(coll_t cid, list<object_t>& ls)
 	  const coll_t c = cursor.current().key.first;
 	  const object_t o = cursor.current().key.second;
 	  if (c != cid) break;   // end!
+	  dout(10) << "collection_list  " << hex << cid << " includes " << o << dec << endl;
 	  ls.push_back(o);
 	  num++;
 	  if (cursor.move_right() < 0) break;

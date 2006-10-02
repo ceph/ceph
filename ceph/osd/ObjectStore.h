@@ -92,7 +92,8 @@ public:
 	list<off_t>    offsets;
 	list<size_t>   lengths;
 	list<const char*> attrnames;
-	list< pair<const void*,int> > attrvals;
+	//list< pair<const void*,int> > attrvals;
+	list<bufferlist>  attrbls;
 
 	list<bufferlist*> pbls;
 	list<struct stat*> psts;
@@ -151,7 +152,10 @@ public:
 	  ops.push_back(op);
 	  oids.push_back(oid);
 	  attrnames.push_back(name);
-	  attrvals.push_back(pair<const void*,int>(val,len));
+	  //attrvals.push_back(pair<const void*,int>(val,len));
+	  bufferlist bl;
+	  bl.append((char*)val,len);
+	  attrbls.push_back(bl);
 	}
 	void setattrs(object_t oid, map<string,bufferptr>& attrset) {
 	  int op = OP_SETATTRS;
@@ -192,7 +196,10 @@ public:
 	  ops.push_back(op);
 	  cids.push_back(cid);
 	  attrnames.push_back(name);
-	  attrvals.push_back(pair<const void*,int>(val,len));
+	  //attrvals.push_back(pair<const void*,int>(val,len));
+	  bufferlist bl;
+	  bl.append((char*)val, len);
+	  attrbls.push_back(bl);
 	}
 	void collection_rmattr(coll_t cid, const char* name) {
 	  int op = OP_COLL_RMATTR;
@@ -276,8 +283,11 @@ public:
 		{
 		  object_t oid = t.oids.front(); t.oids.pop_front();
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
-		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
-		  setattr(oid, attrname, attrval.first, attrval.second, 0);
+		  //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		  bufferlist bl;
+		  bl.claim( t.attrbls.front() );
+		  t.attrbls.pop_front();
+		  setattr(oid, attrname, bl.c_str(), bl.length(), 0);
 		}
 		break;
 	  case Transaction::OP_SETATTRS:
@@ -330,8 +340,11 @@ public:
 		{
 		  coll_t cid = t.cids.front(); t.cids.pop_front();
 		  const char *attrname = t.attrnames.front(); t.attrnames.pop_front();
-		  pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
-		  collection_setattr(cid, attrname, attrval.first, attrval.second, 0);
+		  //pair<const void*,int> attrval = t.attrvals.front(); t.attrvals.pop_front();
+		  bufferlist bl;
+		  bl.claim( t.attrbls.front() );
+		  t.attrbls.pop_front();
+		  collection_setattr(cid, attrname, bl.c_str(), bl.length(), 0);
 		}
 		break;
 
