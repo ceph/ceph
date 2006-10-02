@@ -31,7 +31,6 @@ extern "C" {
 #include "messages/MClientReply.h"
 
 //#include "msgthread.h"
-#include "statlite.h"
 
 #include "include/types.h"
 #include "include/lru.h"
@@ -138,7 +137,7 @@ class Inode {
 
   time_t    file_wr_mtime;   // [writers] time of last write
   off_t     file_wr_size;    // [writers] largest offset we've written to
-  int       num_open_rd, num_open_wr;  // num readers, writers
+  int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   Dir       *dir;     // if i'm a dir.
@@ -154,6 +153,7 @@ class Inode {
 
   list<Cond*>       waitfor_write;
   list<Cond*>       waitfor_read;
+  list<Cond*>       waitfor_lazy;
   list<Context*>    waitfor_no_read, waitfor_no_write;
 
   void get() { 
@@ -170,7 +170,7 @@ class Inode {
 	valid_until(0),
 	dir_auth(-1), dir_hashed(false), dir_replicated(false), 
 	file_wr_mtime(0), file_wr_size(0), 
-	num_open_rd(0), num_open_wr(0),
+	num_open_rd(0), num_open_wr(0), num_open_lazy(0),
 	ref(0), dir(0), dn(0), symlink(0),
 	fc(_oc, _inode),
 	sync_reads(0), sync_writes(0)
@@ -202,6 +202,7 @@ class Inode {
 	int w = 0;
 	if (num_open_rd) w |= CAP_FILE_RD|CAP_FILE_RDCACHE;
 	if (num_open_wr) w |= CAP_FILE_WR|CAP_FILE_WRBUFFER;
+	if (num_open_lazy) w |= CAP_FILE_LAZYIO;
 	return w;
   }
 
@@ -474,7 +475,10 @@ protected:
   MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
   void handle_client_reply(MClientReply *reply);
 
-  
+  void fill_stat(inode_t& inode, struct stat *st);
+  void fill_statlite(inode_t& inode, struct statlite *st);
+
+
   // friends
   friend class SyntheticClient;
 
@@ -493,7 +497,7 @@ protected:
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);
-  void implemented_caps(class MClientFileCaps *m);
+  void implemented_caps(class MClientFileCaps *m, Inode *in);
   void release_caps(Inode *in, int retain=0);
   void update_caps_wanted(Inode *in);
 
@@ -503,7 +507,7 @@ protected:
   // metadata cache
   Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
   void update_inode_dist(Inode *in, InodeStat *st);
-  void insert_trace(MClientReply *reply);
+  Inode* insert_trace(MClientReply *reply);
 
   // ----------------------
   // fs ops.
@@ -546,7 +550,10 @@ protected:
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
+  int _lstat(const char *path, int mask, Inode **in);
   int lstat(const char *path, struct stat *stbuf);
+  int lstatlite(const char *path, struct statlite *buf);
+
   int chmod(const char *path, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);
@@ -561,11 +568,12 @@ protected:
 	//int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
 
-  // hpc extensions
+  // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
   int lazyio_synchronize(int fd, off_t offset, size_t count);
-  int lstatlite(const char *path, struct statlite *buf);
 
+
+  Message* ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
 };
 
 #endif

@@ -18,6 +18,7 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include "statlite.h"
 }
 
 #include <string>
@@ -190,7 +191,8 @@ typedef __uint64_t version_t;
 
 #define FILE_MODE_R          1
 #define FILE_MODE_W          2
-#define FILE_MODE_RW         3
+#define FILE_MODE_RW         (1|2)
+#define FILE_MODE_LAZY       4
 
 #define INODE_MASK_BASE       1  // ino, ctime, nlink
 #define INODE_MASK_PERM       2  // uid, gid, mode
@@ -229,21 +231,6 @@ struct inode_t {
   bool is_symlink() { return (mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK; }
   bool is_dir() { return (mode & INODE_TYPE_MASK) == INODE_MODE_DIR; }
   bool is_file() { return (mode & INODE_TYPE_MASK) == INODE_MODE_FILE; }
-
-  void fill_stat(struct stat *st) {
-	memset(st, 0, sizeof(struct stat));
-	st->st_ino = ino;
-	st->st_mode = mode;
-	st->st_nlink = nlink;
-	st->st_uid = uid;
-	st->st_gid = gid;
-	st->st_ctime = ctime;
-	st->st_atime = atime;
-	st->st_mtime = mtime;
-	st->st_size = size;
-	st->st_blocks = size ? ((size - 1) / 4096 + 1):0;
-	st->st_blksize = 4096;
-  }
 };
 
 

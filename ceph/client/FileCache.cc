@@ -101,7 +101,8 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
 	// read (and block)
 	Cond cond;
 	bool done = false;
-	C_Cond *onfinish = new C_Cond(&cond, &done);
+	int rvalue = 0;
+	C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 	
 	r = oc->file_read(inode, offset, size, &blist, onfinish);
 	
@@ -109,6 +110,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
 	  // block
 	  while (!done) 
 		cond.Wait(client_lock);
+	  r = rvalue;
 	} else {
 	  // it was cached.
 	  delete onfinish;

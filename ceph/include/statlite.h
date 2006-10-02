@@ -31,19 +31,26 @@ struct statlite {
   //time_t        st_ctime;    /* time of last change          */
 }; 
 
-#define S_REQUIRESIZE     1
-#define S_REQUIREBLKSIZE  2
-#define S_REQUIREBLOCKS   4
-#define S_REQUIREATIME    8
-#define S_REQUIREMTIME    16
-#define S_REQUIRECTIME    32
+#define S_STATLITE_SIZE     1
+#define S_STATLITE_BLKSIZE  2
+#define S_STATLITE_BLOCKS   4
+#define S_STATLITE_ATIME    8
+#define S_STATLITE_MTIME    16
+#define S_STATLITE_CTIME    32
 
-#define S_ISVALIDSIZE(m)      (m & S_REQUIRESIZE)
-#define S_ISVALIDBLKSIZE(m)   (m & S_REQUIREBLKSIZE)
-#define S_ISVALIDBLOCKS(m)    (m & S_REQUIREBLOCKS)
-#define S_ISVALIDATIME(m)     (m & S_REQUIREATIME)
-#define S_ISVALIDMTIME(m)     (m & S_REQUIREMTIME)
-#define S_ISVALIDCTIME(m)     (m & S_REQUIRECTIME)
+#define S_REQUIRESIZE(m)      (m | S_STATLITE_SIZE)
+#define S_REQUIREBLKSIZE(m)   (m | S_STATLITE_BLKSIZE)
+#define S_REQUIREBLOCKS(m)    (m | S_STATLITE_BLOCKS)
+#define S_REQUIREATIME(m)     (m | S_STATLITE_ATIME)
+#define S_REQUIREMTIME(m)     (m | S_STATLITE_MTIME)
+#define S_REQUIRECTIME(m)     (m | S_STATLITE_CTIME)
+
+#define S_ISVALIDSIZE(m)      (m & S_STATLITE_SIZE)
+#define S_ISVALIDBLKSIZE(m)   (m & S_STATLITE_BLKSIZE)
+#define S_ISVALIDBLOCKS(m)    (m & S_STATLITE_BLOCKS)
+#define S_ISVALIDATIME(m)     (m & S_STATLITE_ATIME)
+#define S_ISVALIDMTIME(m)     (m & S_STATLITE_MTIME)
+#define S_ISVALIDCTIME(m)     (m & S_STATLITE_CTIME)
 
 
 // readdirplus etc.

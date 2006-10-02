@@ -1072,19 +1072,23 @@ void MDS::dispatch_request(Message *m, CInode *ref)
 void MDS::handle_client_stat(MClientRequest *req,
 							 CInode *ref)
 {
-  if (!mdcache->inode_file_read_start(ref, req))
-	return;  // sync
-
+  // do I need file info?
+  int mask = req->get_iarg();
+  if (mask & (INODE_MASK_SIZE|INODE_MASK_MTIME)) {
+	// yes.  do a full stat.
+	if (!mdcache->inode_file_read_start(ref, req))
+	  return;  // syncing
+	mdcache->inode_file_read_finish(ref);
+  } else {
+	// nope!  easy peasy.
+  }
+  
+  balancer->hit_inode(ref, META_POP_IRD);   
+  
+  // reply
   dout(10) << "reply to " << *req << " stat " << ref->inode.mtime << endl;
   MClientReply *reply = new MClientReply(req);
 
-  // inode info is in the trace
-
-  mdcache->inode_file_read_finish(ref);
-
-  balancer->hit_inode(ref, META_POP_IRD);   
-
-  // reply
   reply_request(req, reply, ref);
 }
 
@@ -2647,8 +2651,10 @@ void MDS::handle_client_open(MClientRequest *req,
 							 CInode *cur)
 {
   int flags = req->get_iarg();
+  int mode = req->get_iarg2();
 
   dout(7) << "open " << flags << " on " << *cur << endl;
+  dout(10) << "open flags = " << flags << "  mode = " << mode << endl;
 
   // is it a file?
   if (!(cur->inode.mode & INODE_MODE_FILE)) {
@@ -2657,21 +2663,8 @@ void MDS::handle_client_open(MClientRequest *req,
 	return;
   }
 
-  // mode!
-  int mode = 0;
-  if (flags & O_WRONLY) 
-	mode = FILE_MODE_W;
-  else if (flags & O_RDWR) 
-	mode = FILE_MODE_RW;
-  else if (flags & O_APPEND)
-	mode = FILE_MODE_W;
-  else
-	mode = FILE_MODE_R;
-
-  dout(10) << " flags = " << flags << "  mode = " << mode << endl;
-
   // auth for write access
-  if (mode != FILE_MODE_R &&
+  if (mode != FILE_MODE_R && mode != FILE_MODE_LAZY &&
 	  !cur->is_auth()) {
 	int auth = cur->authority();
 	assert(auth != whoami);

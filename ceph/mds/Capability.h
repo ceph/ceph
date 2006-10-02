@@ -29,6 +29,7 @@ using namespace std;
 #define CAP_FILE_WR        4    // client can write
 #define CAP_FILE_WREXTEND  8    // client can extend file
 #define CAP_FILE_WRBUFFER  16   // client can safely buffer writes
+#define CAP_FILE_LAZYIO    32   // client can perform lazy io
 
 
 // heuristics
@@ -43,6 +44,7 @@ inline string cap_string(int cap)
   if (cap & CAP_FILE_WR) s += " wr";
   if (cap & CAP_FILE_WRBUFFER) s += " wrbuffer";
   if (cap & CAP_FILE_WRBUFFER) s += " wrextend";
+  if (cap & CAP_FILE_LAZYIO) s += " lazyio";
   s += " ]";
   return s;
 }

@@ -21,7 +21,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "statlite.h"
 
 
 // ceph stuff
@@ -53,6 +52,31 @@
 // static logger
 LogType client_logtype;
 Logger  *client_logger = 0;
+
+
+
+class C_Client_CloseRelease : public Context {
+  Client *cl;
+  Inode *in;
+public:
+  C_Client_CloseRelease(Client *c, Inode *i) : cl(c), in(i) {}
+  void finish(int) {
+	cl->close_release(in);
+  }
+};
+
+class C_Client_CloseSafe : public Context {
+  Client *cl;
+  Inode *in;
+public:
+  C_Client_CloseSafe(Client *c, Inode *i) : cl(c), in(i) {}
+  void finish(int) {
+	cl->close_safe(in);
+  }
+};
+
+
+
 
 
 
@@ -333,7 +357,7 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
  *
  * insert a trace from a MDS reply into the cache.
  */
-void Client::insert_trace(MClientReply *reply)
+Inode* Client::insert_trace(MClientReply *reply)
 {
   Inode *cur = root;
   time_t now = time(NULL);
@@ -373,6 +397,8 @@ void Client::insert_trace(MClientReply *reply)
 	if (g_conf.client_cache_stat_ttl)
 	  cur->valid_until = now + g_conf.client_cache_stat_ttl;
   }
+
+  return cur;
 }
 
 
@@ -653,10 +679,11 @@ void Client::dispatch(Message *m)
 class C_Client_ImplementedCaps : public Context {
   Client *client;
   MClientFileCaps *msg;
+  Inode *in;
 public:
-  C_Client_ImplementedCaps(Client *c, MClientFileCaps *m) : client(c), msg(m) {}
+  C_Client_ImplementedCaps(Client *c, MClientFileCaps *m, Inode *i) : client(c), msg(m), in(i) {}
   void finish(int r) {
-	client->implemented_caps(msg);
+	client->implemented_caps(msg,in);
   }
 };
 
@@ -789,6 +816,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	// must have been a truncate() by someone.
 	// trim the buffer cache
 	// ***** fixme write me ****
+
+	in->file_wr_size = m->get_inode().size; //??
   }
 
   // update inode
@@ -800,15 +829,14 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (in->file_wr_mtime > in->inode.mtime)
 	m->get_inode().mtime = in->inode.mtime = in->file_wr_mtime;
 
-
   if (g_conf.client_oc) {
 	// caching on, use FileCache.
 	Context *onimplement = 0;
 	if (old_caps & ~new_caps) {     // this mds is revoking caps
 	  if (in->fc.get_caps() & ~(in->file_caps()))   // net revocation
-		onimplement = new C_Client_ImplementedCaps(this, m);
+		onimplement = new C_Client_ImplementedCaps(this, m, in);
 	  else {
-		implemented_caps(m);		// ack now.
+		implemented_caps(m, in);		// ack now.
 	  }
 	}
 	in->fc.set_caps(new_caps, onimplement);
@@ -835,16 +863,25 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	  }
 	  in->waitfor_write.clear();
 	}
+	if (new_caps & CAP_FILE_LAZYIO) {
+	  for (list<Cond*>::iterator it = in->waitfor_lazy.begin();
+		   it != in->waitfor_lazy.end();
+		   it++) {
+		dout(5) << "signaling lazy waiter " << *it << endl;
+		(*it)->Signal();
+	  }
+	  in->waitfor_lazy.clear();
+	}
 
 	// ack?
 	if (old_caps & ~new_caps) {
 	  if (in->sync_writes) {
 		// wait for sync writes to finish
 		dout(5) << "sync writes in progress, will ack on finish" << endl;
-		in->waitfor_no_write.push_back(new C_Client_ImplementedCaps(this, m));
+		in->waitfor_no_write.push_back(new C_Client_ImplementedCaps(this, m, in));
 	  } else {
 		// ok now
-		implemented_caps(m);
+		implemented_caps(m, in);
 	  }
 	} else {
 	  // discard
@@ -853,10 +890,16 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 }
 
-void Client::implemented_caps(MClientFileCaps *m)
+void Client::implemented_caps(MClientFileCaps *m, Inode *in)
 {
   dout(5) << "implemented_caps " << cap_string(m->get_caps()) 
 		  << ", acking to " << m->get_source() << endl;
+
+  if (in->file_caps() == 0) {
+	in->file_wr_mtime = 0;
+	in->file_wr_size = 0;
+  }
+
   messenger->send_message(m, m->get_source(), m->get_source_port());
 }
 
@@ -885,7 +928,7 @@ void Client::release_caps(Inode *in,
 	}
   }
   
-  if ((in->file_caps() & CAP_FILE_WR) == 0) {
+  if (in->file_caps() == 0) {
 	in->file_wr_mtime = 0;
 	in->file_wr_size = 0;
   }
@@ -967,10 +1010,26 @@ int Client::unmount()
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
   assert(fh_map.empty());
-
+  
   // empty lru cache
   lru.lru_set_max(0);
   trim_cache();
+
+  if (g_conf.client_oc) {
+	// release any/all caps
+	for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
+		 p != inode_map.end();
+		 p++) {
+	  Inode *in = p->second;
+	  if (!in->caps.empty()) {
+		in->fc.release_clean();
+		if (in->fc.is_dirty())
+		  in->fc.empty(new C_Client_CloseRelease(this, in));
+		else
+		  release_caps(in);
+	  }
+	}
+  }
 
   while (lru.lru_get_size() > 0 || 
 		 !inode_map.empty()) {
@@ -1284,25 +1343,14 @@ int Client::readlink(const char *relpath, char *buf, off_t size)
 
 // inode stuff
 
-int Client::lstat(const char *relpath, struct stat *stbuf)
-{
-  client_lock.Lock();
-
-  string abspath;
-  mkabspath(relpath, abspath);
-  const char *path = abspath.c_str();
-
-  dout(3) << "op: client->lstat(\"" << path << "\", &st);" << endl;
-  tout << "lstat" << endl;
-  tout << path << endl;
-
-
-  // FIXME, PERF request allocation convenient but not necessary for cache hit
+int Client::_lstat(const char *path, int mask, Inode **in)
+{  
   MClientRequest *req = 0;
   filepath fpath(path);
   
   // check whether cache content is fresh enough
   int res = 0;
+
   Dentry *dn = lookup(fpath);
   inode_t inode;
   time_t now = time(NULL);
@@ -1315,7 +1363,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 	if (g_conf.client_cache_stat_ttl == 0)
 	  dn->inode->valid_until = 0;           // only one stat allowed after each readdir
 
-	delete req;  // don't need this
+	*in = dn->inode;
   } else {  
 	// FIXME where does FUSE maintain user information
 	//struct fuse_context *fc = fuse_get_context();
@@ -1323,6 +1371,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 	//req->set_caller_gid(fc->gid);
 	
 	req = new MClientRequest(MDS_OP_LSTAT, whoami);
+	req->set_iarg(mask);
 	req->set_path(fpath);
 
 	MClientReply *reply = make_request(req);
@@ -1333,15 +1382,80 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 	  inode = reply->get_inode();
 	  
 	  //Update metadata cache
-	  insert_trace(reply);
+	  *in = insert_trace(reply);
 	}
 
 	delete reply;
+
+	if (res != 0) 
+	  *in = 0;     // not a success.
   }
      
+  return res;
+}
+
+
+void Client::fill_stat(inode_t& inode, struct stat *st) 
+{
+  memset(st, 0, sizeof(struct stat));
+  st->st_ino = inode.ino;
+  st->st_mode = inode.mode;
+  st->st_nlink = inode.nlink;
+  st->st_uid = inode.uid;
+  st->st_gid = inode.gid;
+  st->st_ctime = inode.ctime;
+  st->st_atime = inode.atime;
+  st->st_mtime = inode.mtime;
+  st->st_size = inode.size;
+  st->st_blocks = inode.size ? ((inode.size - 1) / 4096 + 1):0;
+  st->st_blksize = 4096;
+}
+
+void Client::fill_statlite(inode_t& inode, struct statlite *st) 
+{
+  memset(st, 0, sizeof(struct stat));
+  st->st_ino = inode.ino;
+  st->st_mode = inode.mode;
+  st->st_nlink = inode.nlink;
+  st->st_uid = inode.uid;
+  st->st_gid = inode.gid;
+  st->st_ctime = inode.ctime;
+  st->st_atime = inode.atime;
+  st->st_mtime = inode.mtime;
+  st->st_size = inode.size;
+  st->st_blocks = inode.size ? ((inode.size - 1) / 4096 + 1):0;
+  st->st_blksize = 4096;
+  
+  S_REQUIREBLKSIZE(st->st_litemask);
+  if (inode.mask & INODE_MASK_BASE) S_REQUIRECTIME(st->st_litemask);
+  if (inode.mask & INODE_MASK_SIZE) {
+	S_REQUIRESIZE(st->st_litemask);
+	S_REQUIREBLOCKS(st->st_litemask);
+  }
+  if (inode.mask & INODE_MASK_MTIME) S_REQUIREMTIME(st->st_litemask);
+  if (inode.mask & INODE_MASK_ATIME) S_REQUIREATIME(st->st_litemask);
+}
+
+
+int Client::lstat(const char *relpath, struct stat *stbuf)
+{
+  client_lock.Lock();
+
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
+
+  dout(3) << "op: client->lstat(\"" << path << "\", &st);" << endl;
+  tout << "lstat" << endl;
+  tout << path << endl;
+
+  Inode *in = 0;
+
+  int res = _lstat(path, INODE_MASK_ALL_STAT, &in);
   if (res == 0) {
-	inode.fill_stat(stbuf);
-	dout(10) << "stat sez size = " << inode.size << "   uid = " << inode.uid << " ino = " << hex << stbuf->st_ino << dec << endl;
+	assert(in);
+	fill_stat(in->inode,stbuf);
+	dout(10) << "stat sez size = " << in->inode.size << " ino = " << hex << stbuf->st_ino << dec << endl;
   }
 
   trim_cache();
@@ -1350,16 +1464,36 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 }
 
 
-int Client::lstatlite(const char *path, struct statlite *stl)
+int Client::lstatlite(const char *relpath, struct statlite *stl)
 {
   client_lock.Lock();
-  dout(3) << "op: client->lstatlite(" << path 
-		  << ", " << (void*)stl << ")" << endl;
+   
+  string abspath;
+  mkabspath(relpath, abspath);
+  const char *path = abspath.c_str();
 
+  dout(3) << "op: client->lstatlite(\"" << path << "\", &st);" << endl;
+  tout << "lstatlite" << endl;
+  tout << path << endl;
+
+  // make mask
+  int mask = INODE_MASK_BASE | INODE_MASK_PERM;
+  if (S_ISVALIDSIZE(stl->st_litemask) || 
+	  S_ISVALIDBLOCKS(stl->st_litemask)) mask |= INODE_MASK_SIZE;
+  if (S_ISVALIDMTIME(stl->st_litemask)) mask |= INODE_MASK_MTIME;
+  if (S_ISVALIDATIME(stl->st_litemask)) mask |= INODE_MASK_ATIME;
   
+  Inode *in = 0;
+  int res = _lstat(path, mask, &in);
   
+  if (res == 0) {
+	fill_statlite(in->inode,stl);
+	dout(10) << "stat sez size = " << in->inode.size << " ino = " << hex << in->inode.ino << dec << endl;
+  }
+
+  trim_cache();
   client_lock.Unlock();
-  return 0;
+  return res;
 }
 
 
@@ -1708,7 +1842,7 @@ struct dirent_plus *Client::readdirplus(DIR *dirp)
   // plus
   if ((d->p->second.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT) {
 	// have it
-	d->p->second.fill_stat(&d->dp.d_stat);
+	fill_stat(d->p->second, &d->dp.d_stat);
 	d->dp.d_stat_err = 0;
   } else {
 	// don't have it, stat it
@@ -1752,7 +1886,7 @@ struct dirent_lite *Client::readdirlite(DIR *dirp)
   // plus
   if ((d->p->second.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT) {
 	// have it
-	d->p->second.fill_stat(d->dp.d_stat);
+	fill_statlite(d->p->second,d->dp.d_stat);
 	d->dp.d_stat_err = 0;
   } else {
 	// don't have it, stat it
@@ -1778,7 +1912,7 @@ struct dirent_lite *Client::readdirlite(DIR *dirp)
 
 /****** file i/o **********/
 
-int Client::open(const char *relpath, int mode) 
+int Client::open(const char *relpath, int flags) 
 {
   client_lock.Lock();
 
@@ -1786,32 +1920,38 @@ int Client::open(const char *relpath, int mode)
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
 
-  dout(3) << "op: fh = client->open(\"" << path << "\", " << mode << ");" << endl;
+  dout(3) << "op: fh = client->open(\"" << path << "\", " << flags << ");" << endl;
   tout << "open" << endl;
   tout << path << endl;
-  tout << mode << endl;
+  tout << flags << endl;
 
   int cmode = 0;
-  if (mode & O_WRONLY) 
+  bool tryauth = false;
+  if (flags & O_LAZY) 
+	cmode = FILE_MODE_LAZY;
+  else if (flags & O_WRONLY) {
 	cmode = FILE_MODE_W;
-  else if (mode & O_RDWR) 
+	tryauth = true;
+  } else if (flags & O_RDWR) {
 	cmode = FILE_MODE_RW;
-  else if (mode & O_APPEND)
+	tryauth = true;
+  } else if (flags & O_APPEND) {
 	cmode = FILE_MODE_W;
-  else
+	tryauth = true;
+  } else
 	cmode = FILE_MODE_R;
 
   // go
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
   req->set_path(path); 
-  req->set_iarg(mode);
+  req->set_iarg(flags);
+  req->set_iarg2(cmode);
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, 
-									 mode & (O_RDWR|O_WRONLY)); // try auth if writer
+  MClientReply *reply = make_request(req, tryauth); // try auth if writer
   
   assert(reply);
   dout(3) << "op: open_files[" << reply->get_result() << "] = fh;  // fh = " << reply->get_result() << endl;
@@ -1834,6 +1974,7 @@ int Client::open(const char *relpath, int mode)
 
 	if (cmode & FILE_MODE_R) f->inode->num_open_rd++;
 	if (cmode & FILE_MODE_W) f->inode->num_open_wr++;
+	if (cmode & FILE_MODE_LAZY) f->inode->num_open_lazy++;
 
 	// caps included?
 	int mds = MSG_ADDR_NUM(reply->get_source());
@@ -1890,25 +2031,7 @@ int Client::open(const char *relpath, int mode)
 
 
 
-class C_Client_CloseRelease : public Context {
-  Client *cl;
-  Inode *in;
-public:
-  C_Client_CloseRelease(Client *c, Inode *i) : cl(c), in(i) {}
-  void finish(int) {
-	cl->close_release(in);
-  }
-};
 
-class C_Client_CloseSafe : public Context {
-  Client *cl;
-  Inode *in;
-public:
-  C_Client_CloseSafe(Client *c, Inode *i) : cl(c), in(i) {}
-  void finish(int) {
-	cl->close_safe(in);
-  }
-};
 
 void Client::close_release(Inode *in)
 {
@@ -2004,7 +2127,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 {
   client_lock.Lock();
 
-  dout(3) << "op: client->read(" << fh << ", buf, " << size << ", " << offset << ");" << endl;
+  dout(3) << "op: client->read(" << fh << ", buf, " << size << ", " << offset << ");   // that's " << offset << "~" << size << endl;
   tout << "read" << endl;
   tout << fh << endl;
   tout << size << endl;
@@ -2017,19 +2140,27 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 
   if (offset < 0) 
 	offset = f->pos;
+
+  bool lazy = f->mode == FILE_MODE_LAZY;
   
   // do we have read file cap?
-  while ((in->file_caps() & CAP_FILE_RD) == 0) {
+  while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {
 	dout(7) << " don't have read cap, waiting" << endl;
 	Cond cond;
 	in->waitfor_read.push_back(&cond);
 	cond.Wait(client_lock);
+  }  
+  // lazy cap?
+  while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+ 	dout(7) << " don't have lazy cap, waiting" << endl;
+	Cond cond;
+	in->waitfor_lazy.push_back(&cond);
+	cond.Wait(client_lock);
   }
-  
  
   // determine whether read range overlaps with file
   // ...ONLY if we're doing async io
-  if (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE)) {
+  if (!lazy && (in->file_caps() & (CAP_FILE_WRBUFFER|CAP_FILE_RDCACHE))) {
 	// we're doing buffered i/o.  make sure we're inside the file.
 	// we can trust size info bc we get accurate info when buffering/caching caps are issued.
 	dout(10) << "file size: " << in->inode.size << endl;
@@ -2046,20 +2177,17 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	}
   } else {
 	// unbuffered, synchronous file i/o.  
+	// or lazy.
 	// defer to OSDs for file bounds.
   }
   
-  int rvalue = 0;
-
-  // adjust fd pos
-  f->pos = offset+size;
-
   bufferlist blist;   // data will go here
-
+  int rvalue = 0;
   int r = 0;
+
   if (g_conf.client_oc) {
 	// object cache ON
-	r = in->fc.read(offset, size, blist, client_lock);  // may block.
+	rvalue = r = in->fc.read(offset, size, blist, client_lock);  // may block.
   } else {
 	// object cache OFF -- legacy inconsistent way.
 	Cond cond;
@@ -2074,9 +2202,15 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset)
 	while (!done)
 	  cond.Wait(client_lock);
   }
-  
+
+  // adjust fd pos
+  f->pos = offset+blist.length();
+
   // copy data into caller's char* buf
   blist.copy(0, blist.length(), buf);
+
+  //dout(10) << "i read '" << blist.c_str() << "'" << endl;
+  dout(10) << "read rvalue " << rvalue << ", r " << r << endl;
 
   // done!
   client_lock.Unlock();
@@ -2130,14 +2264,21 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   if (offset < 0) 
 	offset = f->pos;
 
+  bool lazy = f->mode == FILE_MODE_LAZY;
+
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
-
   // do we have write file cap?
-  while ((in->file_caps() & CAP_FILE_WR) == 0) {
+  while (!lazy && (in->file_caps() & CAP_FILE_WR) == 0) {
 	dout(7) << " don't have write cap, waiting" << endl;
 	Cond cond;
 	in->waitfor_write.push_back(&cond);
+	cond.Wait(client_lock);
+  }
+  while (lazy && (in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+	dout(7) << " don't have lazy cap, waiting" << endl;
+	Cond cond;
+	in->waitfor_lazy.push_back(&cond);
 	cond.Wait(client_lock);
   }
 
@@ -2316,19 +2457,29 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   assert(fh_map.count(fd));
   Fh *f = fh_map[fd];
   Inode *in = f->inode;
-  
-  if (g_conf.client_oc) {
-	Cond cond;
-	bool done = false;
-	in->fc.flush_dirty(new C_SafeCond(&client_lock, &cond, &done));
-	
-	while (!done)
+
+  if (f->mode & FILE_MODE_LAZY) {
+	// wait for lazy cap
+	while ((in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+	  dout(7) << " don't have lazy cap, waiting" << endl;
+	  Cond cond;
+	  in->waitfor_lazy.push_back(&cond);
 	  cond.Wait(client_lock);
-	
-  } else {
-	// mmm, nothin to do.
+	}
+
+	if (g_conf.client_oc) {
+	  Cond cond;
+	  bool done = false;
+	  in->fc.flush_dirty(new C_SafeCond(&client_lock, &cond, &done));
+	  
+	  while (!done)
+		cond.Wait(client_lock);
+	  
+	} else {
+	  // mmm, nothin to do.
+	}
   }
-  
+
   client_lock.Unlock();
   return 0;
 }
@@ -2343,14 +2494,33 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   Fh *f = fh_map[fd];
   Inode *in = f->inode;
   
-  if (g_conf.client_oc) {
-	in->fc.flush_dirty(0);       // flush to invalidate.
-	in->fc.release_clean();
-  } else {
-	// mm, nothin to do.
+  if (f->mode & FILE_MODE_LAZY) {
+	// wait for lazy cap
+	while ((in->file_caps() & CAP_FILE_LAZYIO) == 0) {
+	  dout(7) << " don't have lazy cap, waiting" << endl;
+	  Cond cond;
+	  in->waitfor_lazy.push_back(&cond);
+	  cond.Wait(client_lock);
+	}
+	
+	if (g_conf.client_oc) {
+	  in->fc.flush_dirty(0);       // flush to invalidate.
+	  in->fc.release_clean();
+	} else {
+	  // mm, nothin to do.
+	}
   }
   
   client_lock.Unlock();
+  return 0;
+}
+
+
+Message* Client::ms_handle_failure(msg_addr_t dest, entity_inst_t& inst)
+{
+  dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
+  if (dest.is_osd())
+	objecter->ms_handle_failure(dest, inst);
   return 0;
 }
 
