@@ -1023,10 +1023,13 @@ int Client::unmount()
 	  Inode *in = p->second;
 	  if (!in->caps.empty()) {
 		in->fc.release_clean();
-		if (in->fc.is_dirty())
+		if (in->fc.is_dirty()) {
+		  dout(10) << "unmount residual caps on " << hex << in->ino() << dec << ", flushing" << endl;
 		  in->fc.empty(new C_Client_CloseRelease(this, in));
-		else
+		} else {
+		  dout(10) << "unmount residual caps on " << hex << in->ino() << dec  << ", releasing" << endl;
 		  release_caps(in);
+		}
 	  }
 	}
   }
@@ -2036,9 +2039,14 @@ int Client::open(const char *relpath, int flags)
 void Client::close_release(Inode *in)
 {
   dout(10) << "close_release on " << hex << in->ino() << dec << endl;
+
+  if (!in->num_open_rd) 
+	in->fc.release_clean();
+
   int retain = 0;
   if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
-  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_RD | CAP_FILE_RDCACHE;
+  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
+
   release_caps(in, retain);        	  // release caps now.
 }
 
