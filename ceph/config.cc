@@ -88,6 +88,14 @@ md_config_t g_conf = {
   
   debug_after: 0,
 
+  // --- messenger ---
+  ms_single_dispatch: false,
+  ms_requeue_on_sender_fail: false,
+
+  ms_stripe_osds: false,
+  ms_skip_rank0: false,
+  ms_overlay_clients: false,
+
   /*tcp_skip_rank0: false,
   tcp_overlay_clients: false,  // over osds!
   tcp_log: false,
@@ -97,16 +105,9 @@ md_config_t g_conf = {
   tcp_multi_dispatch: false,  // not fully implemented yet
   */
 
-  ms_single_dispatch: false,
-  ms_requeue_on_sender_fail: false,
-
-  ms_stripe_osds: false,
-  ms_skip_rank0: false,
-  ms_overlay_clients: false,
-
   // --- mon ---
   mon_tick_interval: 5,
-  mon_osd_down_out_interval: 15,  // seconds
+  mon_osd_down_out_interval: 5,  // seconds
 
   // --- client ---
   client_cache_size: 300,
@@ -117,22 +118,10 @@ md_config_t g_conf = {
 
   client_sync_writes: 0,
 
-  client_oc: false,
-  client_oc_size:      1024*1024* 20,
-  client_oc_max_dirty: 1024*1024* 10, 
+  client_oc: true,
+  client_oc_size:      1024*1024* 5,    // MB * n
+  client_oc_max_dirty: 1024*1024* 5,    // MB * n
   client_oc_max_sync_write: 128*1024,  // writes >= this use wrlock
-
-  /*
-  client_bcache: 0,
-  client_bcache_alloc_minsize: 1<<10, // 1KB
-  client_bcache_alloc_maxsize: 1<<18, // 256KB
-  client_bcache_ttl: 30, // seconds until dirty buffers are written to disk
-  client_bcache_size: 2<<30, // 2GB
-  //client_bcache_size: 5<<20, // 5MB
-  client_bcache_lowater: 60, // % of size
-  client_bcache_hiwater: 80, // % of size
-  client_bcache_align: 1<<10, // 1KB splice alignment
-  */
 
   client_trace: 0,
   fuse_direct_io: 0,
