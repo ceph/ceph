@@ -167,6 +167,10 @@ class Objecter {
 			 Context *onack, Context *oncommit);
 
   tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
+
+
+  Message* ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
+
 };
 
 #endif

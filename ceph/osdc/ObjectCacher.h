@@ -6,6 +6,7 @@
 #include "include/Context.h"
 
 #include "common/Cond.h"
+#include "common/Thread.h"
 
 #include "Objecter.h"
 #include "Filer.h"
@@ -173,7 +174,8 @@ class ObjectCacher {
 
 	// mid-level
 	BufferHead *split(BufferHead *bh, off_t off);
-	void merge(BufferHead *left, BufferHead *right);
+	void merge_left(BufferHead *left, BufferHead *right);
+	void merge_right(BufferHead *left, BufferHead *right);
 
 	int map_read(Objecter::OSDRead *rd,
 				 map<off_t, BufferHead*>& hits,
@@ -195,6 +197,20 @@ class ObjectCacher {
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
+
+  Cond flusher_cond;
+  bool flusher_stop;
+  void flusher_entry();
+  class FlusherThread : public Thread {
+	ObjectCacher *oc;
+  public:
+	FlusherThread(ObjectCacher *o) : oc(o) {}
+	void *entry() {
+	  oc->flusher_entry();
+	  return 0;
+	}
+  } flusher_thread;
+  
 
   // objects
   Object *get_object(object_t oid, inodeno_t ino) {
@@ -290,6 +306,7 @@ class ObjectCacher {
   void mark_tx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_TX); };
   void mark_dirty(BufferHead *bh) { 
 	bh_set_state(bh, BufferHead::STATE_DIRTY); 
+	lru_dirty.lru_touch(bh);
 	//bh->set_dirty_stamp(g_clock.now());
   };
 
@@ -311,11 +328,11 @@ class ObjectCacher {
   }
 
   // io
-  void bh_read(Object *ob, BufferHead *bh);
-  void bh_write(Object *ob, BufferHead *bh);
+  void bh_read(BufferHead *bh);
+  void bh_write(BufferHead *bh);
 
   void trim(off_t max=-1);
-  void flush();
+  void flush(off_t amount=0);
 
   bool flush(Object *o);
   off_t release(Object *o);
@@ -387,8 +404,17 @@ class ObjectCacher {
  public:
   ObjectCacher(Objecter *o, Mutex& l) : 
 	objecter(o), filer(o), lock(l),
+	flusher_stop(false), flusher_thread(this),
 	stat_waiter(0),
 	stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
+	flusher_thread.create();
+  }
+  ~ObjectCacher() {
+	//lock.Lock();  // hmm.. watch out for deadlock!
+	flusher_stop = true;
+	flusher_cond.Signal();
+	//lock.Unlock();
+	flusher_thread.join();
   }
 
 
@@ -402,7 +428,7 @@ class ObjectCacher {
 	void finish(int) {
 	  int r = oc->readx(rd, ino, onfinish);
 	  if (r > 0) {
-		onfinish->finish(0);
+		onfinish->finish(r);
 		delete onfinish;
 	  }
 	}

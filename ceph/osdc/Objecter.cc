@@ -10,6 +10,8 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 
+#include "messages/MOSDFailure.h"
+
 #include <errno.h>
 
 #include "config.h"
@@ -704,3 +706,9 @@ tid_t Objecter::lockx(OSDLock *l, Context *onack, Context *oncommit)
 
 
 
+Message* Objecter::ms_handle_failure(msg_addr_t dest, entity_inst_t& inst)
+{
+  dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
+  messenger->send_message(new MOSDFailure(dest, inst, osdmap->get_epoch()), MSG_ADDR_MON(0));
+  return 0;
+}
