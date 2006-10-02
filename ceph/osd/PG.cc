@@ -29,20 +29,78 @@
 
 /******* PGLog ********/
 
-
 void PG::Log::copy_after(const Log &other, eversion_t v) 
 {
   assert(v >= other.bottom);
   top = bottom = other.top;
-
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
 	   i != other.log.rend();
 	   i++) {
-	if (i->version <= v) break;
+	if (i->version == v) break;
+	assert(i->version > v);
 	log.push_front(*i);
   }
   bottom = v;
 }
+
+bool PG::Log::copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor) 
+{
+  assert(split >= other.bottom);
+  assert(floor >= other.bottom);
+  assert(floor <= split);
+  top = bottom = other.top;
+  
+  /* runs on replica.  split is primary's log.top.  floor is how much they want.
+     split tell us if the primary is divergent.. e.g.:
+	 -> i am A, B is primary, split is 2'6, floor is 2'2.
+A     B     C
+2'2         2'2
+2'3   2'3   2'3
+2'4   2'4   2'4
+3'5 | 2'5   2'5
+3'6 | 2'6
+3'7 |
+3'8 |
+3'9 |
+      -> i return full backlog.
+  */
+
+  for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
+	   i != other.log.rend();
+	   i++) {
+	// is primary divergent? 
+	// e.g. my 3'6 vs their 2'6 split
+	if (i->version.version == split.version && i->version.epoch > split.epoch) {
+	  clear();
+	  return false;   // divergent!
+	}
+	if (i->version == floor) break;
+	assert(i->version > floor);
+
+	// e.g. my 2'23 > '12
+	log.push_front(*i);
+  }
+  bottom = floor;
+  return true;
+}
+
+void PG::Log::copy_non_backlog(const Log &other)
+{
+  if (other.backlog) {
+	top = other.top;
+	bottom = other.bottom;
+	for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
+		 i != other.log.rend();
+		 i++) 
+	  if (i->version > bottom)
+		log.push_front(*i);
+	  else
+		break;
+  } else {
+	*this = other;
+  }
+}
+
 
 
 void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s) 
@@ -52,7 +110,9 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
 
   while (!log.empty()) {
 	Entry &e = *log.begin();
-	
+
+	if (e.version > s) break;
+
 	assert(complete_to != log.begin());
 	assert(requested_to != log.begin());
 
@@ -93,43 +153,140 @@ void PG::trim_write_ahead()
 
 }
 
+void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
+{
+  dout(10) << "proc_replica_log for osd" << from << ": " << olog << " " << omissing << endl;
+  assert(!is_active());
+
+  if (!have_master_log) {
+	// i'm building master log.
+	// note peer's missing.
+	peer_missing[from] = omissing;
+	
+	// merge log into our own log
+	merge_log(olog, omissing, from);
+	proc_missing(olog, omissing, from);
+  } else {
+	// i'm just building missing lists.
+	peer_missing[from] = omissing;
+
+	// iterate over peer log. in reverse.
+	list<Log::Entry>::reverse_iterator pp = olog.log.rbegin();
+	eversion_t lu = peer_info[from].last_update;
+	while (pp != olog.log.rend()) {
+	  if (!log.objects.count(pp->oid)) {
+		dout(10) << " divergent " << *pp << " not in our log, generating backlog" << endl;
+		generate_backlog();
+	  }
+	  
+	  if (!log.objects.count(pp->oid)) {
+		dout(10) << " divergent " << *pp << " dne, must have been new, ignoring" << endl;
+		++pp;
+		continue;
+	  } 
+
+	  if (log.objects[pp->oid]->version == pp->version) {
+		break;  // we're no longer divergent.
+		//++pp;
+		//continue;
+	  }
+
+	  if (log.objects[pp->oid]->version > pp->version) {
+		dout(10) << " divergent " << *pp
+				 << " superceded by " << log.objects[pp->oid]
+				 << ", ignoring" << endl;
+	  } else {
+		dout(10) << " divergent " << *pp << ", adding to missing" << endl;
+		peer_missing[from].add(pp->oid, pp->version);
+	  }
+
+	  ++pp;
+	  if (pp != olog.log.rend())
+		lu = pp->version;
+	  else
+		lu = olog.bottom;
+	}	
+
+	if (lu < peer_info[from].last_update) {
+	  dout(10) << " peer osd" << from << " last_update now " << lu << endl;
+	  peer_info[from].last_update = lu;
+	  if (lu < oldest_update) {
+		dout(10) << " oldest_update now " << lu << endl;
+		oldest_update = lu;
+	  }
+	}
+
+	proc_missing(olog, peer_missing[from], from);
+  }
+}
 
 void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
 		   << " into " << log << endl;
 
-  /*cout << "log" << endl;
-  log.print(cout);
-  cout << "olog" << endl;
-  olog.print(cout);
-  */
+  //cout << "log" << endl;
+  //log.print(cout);
+  //cout << "olog" << endl;
+  //olog.print(cout);
+  
   if (log.empty() ||
 	  (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
-	// i'm missing everything after old log.top.
-	set<object_t> did;
-	for (list<Log::Entry>::reverse_iterator p = olog.log.rbegin();
-		 p != olog.log.rend();
+
+	// swap and index
+	log.log.swap(olog.log);
+	log.index();
+
+	// find split point (old log.top) in new log
+	// add new items to missing along the way.
+	for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
+		 p != log.log.rend();
 		 p++) {
-	  if (p->version <= log.top) 
+	  if (p->version <= log.top) {
+		// ok, p is at split point.
+
+		// was our old log divergent?
+		if (log.top > p->version) { 
+		  dout(10) << "merge_log i was (possibly) divergent for (" << p->version << "," << log.top << "]" << endl;
+		  if (p->version < oldest_update)
+			oldest_update = p->version;
+		  
+		  while (!olog.log.empty() && 
+				 olog.log.rbegin()->version > p->version) {
+			Log::Entry &oe = *olog.log.rbegin();  // old entry (possibly divergent)
+			if (log.objects.count(oe.oid)) {
+			  if (log.objects[oe.oid]->version < oe.version) {
+				dout(10) << "merge_log  divergent entry " << oe
+						 << " not superceded by " << *log.objects[oe.oid]
+						 << ", adding to missing" << endl;
+				missing.add(oe.oid, oe.version);
+			  } else {
+				dout(10) << "merge_log  divergent entry " << oe
+						 << " superceded by " << *log.objects[oe.oid] 
+						 << ", ignoring" << endl;
+			  }
+			} else {
+			  dout(10) << "merge_log  divergent entry " << oe << ", adding to missing" << endl;
+			  missing.add(oe.oid, oe.version);
+			}
+			olog.log.pop_back();  // discard divergent entry
+		  }
+		}
 		break;
-	  if (did.count(p->oid)) continue;
-	  did.insert(p->oid);
+	  }
+
 	  if (p->is_delete()) {
+		dout(10) << "merge_log merging " << *p << ", not missing" << endl;
 		missing.rm(p->oid, p->version);
 	  } else {
+		dout(10) << "merge_log merging " << *p << ", now missing" << endl;
 		missing.add(p->oid, p->version);
 	  }
 	}
-	
-	// take the whole thing.
-	log.log.swap(olog.log);
 
 	info.last_update = log.top = olog.top;
 	info.log_bottom = log.bottom = olog.bottom;
 	info.log_backlog = log.backlog = olog.backlog;
-	
-	log.index();
   } 
 
   else {
@@ -142,7 +299,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 			   << (olog.backlog ? " +backlog":"")
 			 << endl;
 	  
-	// ok
+	  // ok
 	  list<Log::Entry>::iterator from = olog.log.begin();
 	  list<Log::Entry>::iterator to;
 	  for (to = from;
@@ -183,7 +340,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	  while (1) {
 		if (from == olog.log.begin()) break;
 		from--;
-		dout(0) << "? " << *from << endl;
+		//dout(0) << "? " << *from << endl;
 		if (from->version < log.top) {
 		  from++;
 		  break;
@@ -199,6 +356,26 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 		  missing.rm(from->oid, from->version);
 	  }
 	  
+	  // remove divergent items
+	  while (1) {
+		Log::Entry *oldtail = &(*log.log.rbegin());
+		if (oldtail->version.version+1 == from->version.version) break;
+
+		// divergent!
+		assert(oldtail->version.version >= from->version.version);
+		
+		if (log.objects[oldtail->oid]->version == oldtail->version) {
+		  // and significant.
+		  dout(10) << "merge_log had divergent " << *oldtail << ", adding to missing" << endl;
+		  //missing.add(oldtail->oid);
+		  assert(0);
+		} else {
+		  dout(10) << "merge_log had divergent " << *oldtail << ", already missing" << endl;
+		  assert(missing.is_missing(oldtail->oid));
+		}
+		log.log.pop_back();
+	  }
+
 	  // splice
 	  log.log.splice(log.log.end(), 
 					 olog.log, from, to);
@@ -210,6 +387,10 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   dout(10) << "merge_log result " << log << " " << missing << endl;
   //log.print(cout);
 
+}
+
+void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
+{
   // found items?
   for (map<object_t,eversion_t>::iterator p = missing.missing.begin();
 	   p != missing.missing.end();
@@ -217,22 +398,26 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	if (omissing.is_missing(p->first)) {
 	  assert(omissing.is_missing(p->first, p->second));
 	  if (omissing.loc.count(p->first)) {
-		dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
+		dout(10) << "proc_missing missing " << hex << p->first << dec << " " << p->second
 				 << " on osd" << omissing.loc[p->first] << endl;
 		missing.loc[p->first] = omissing.loc[p->first];
 	  } else {
-		dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
+		dout(10) << "proc_missing missing " << hex << p->first << dec << " " << p->second
 				 << " also LOST on source, osd" << fromosd << endl;
 	  }
 	} 
 	else if (p->second <= olog.top) {
-	  dout(10) << "merge_log missing " << hex << p->first << dec << " " << p->second
+	  dout(10) << "proc_missing missing " << hex << p->first << dec << " " << p->second
 			   << " on source, osd" << fromosd << endl;
 	  missing.loc[p->first] = fromosd;
-	} 
+	} else {
+	  dout(10) << "proc_missing " << hex << p->first << dec << " " << p->second
+			   << " > olog.top " << olog.top << ", not found...."
+			   << endl;
+	}
   }
 
-  dout(10) << "merge_log missing " << hex << missing.missing << dec << endl;
+  dout(10) << "proc_missing missing " << hex << missing.missing << dec << endl;
 }
 
 
@@ -257,12 +442,13 @@ void PG::generate_backlog()
 	
 	// add entry
 	Log::Entry e;
-	e.op = 0;          // FIXME when we do smarter op codes!
+	e.op = Log::Entry::UPDATE;           // FIXME when we do smarter op codes!
 	e.oid = *it;
 	osd->store->getattr(*it, 
 						"version",
 						&e.version, sizeof(e.version));
 	add[e.version] = e;
+	dout(10) << "generate_backlog found " << e << endl;
   }
 
   for (map<eversion_t,Log::Entry>::reverse_iterator i = add.rbegin();
@@ -275,6 +461,8 @@ void PG::generate_backlog()
   dout(10) << local << " local objects, "
 		   << add.size() << " objects added to backlog, " 
 		   << log.objects.size() << " in pg" << endl;
+
+  //log.print(cout);
 }
 
 void PG::drop_backlog()
@@ -289,7 +477,7 @@ void PG::drop_backlog()
 	Log::Entry &e = *log.log.begin();
 	if (e.version > log.bottom) break;
 
-	dout(10) << "drop_backlog trimming " << e.version << endl;
+	dout(15) << "drop_backlog trimming " << e.version << endl;
 	log.unindex(e);
 	log.log.pop_front();
   }
@@ -367,11 +555,31 @@ void PG::adjust_prior()
 }
 
 
+void PG::clear_primary_state()
+{
+  dout(10) << "clear_primary_state" << endl;
+
+  // clear peering state
+  have_master_log = false;
+  prior_set.clear();
+  stray_set.clear();
+  clean_set.clear();
+  peer_info_requested.clear();
+  peer_log_requested.clear();
+  peer_info.clear();
+  peer_missing.clear();
+  
+  last_epoch_started_any = info.last_epoch_started;
+}
+
 void PG::peer(ObjectStore::Transaction& t, 
 			  map< int, map<pg_t,Query> >& query_map)
 {
   dout(10) << "peer.  acting is " << acting 
 		   << ", prior_set is " << prior_set << endl;
+
+
+  /** GET ALL PG::Info *********/
 
   // -- query info from everyone in prior_set.
   bool missing_info = false;
@@ -445,10 +653,18 @@ void PG::peer(ObjectStore::Transaction& t,
 	state_set(STATE_CRASHED);
   }	
 
-  // who (of _everyone_ we're heard from) has the latest PG version?
+  dout(10) << " peers_complete_thru " << peers_complete_thru << endl;
+
+
+
+
+  /** CREATE THE MASTER PG::Log *********/
+
+  // who (of all priors and active) has the latest PG version?
   eversion_t newest_update = info.last_update;
   int        newest_update_osd = osd->whoami;
-  eversion_t oldest_update_needed = info.last_update;  // only of acting (current) osd set
+  
+  oldest_update = info.last_update;  // only of acting (current) osd set.
   peers_complete_thru = info.last_complete;
   
   for (map<int,Info>::iterator it = peer_info.begin();
@@ -459,27 +675,14 @@ void PG::peer(ObjectStore::Transaction& t,
 	  newest_update_osd = it->first;
 	}
 	if (is_acting(it->first)) {
-	  if (it->second.last_update < oldest_update_needed) 
-		oldest_update_needed = it->second.last_update;
+	  if (it->second.last_update < oldest_update) 
+		oldest_update = it->second.last_update;
 	  if (it->second.last_complete < peers_complete_thru)
 		peers_complete_thru = it->second.last_complete;
 	}	
   }
 
-  // gather log+missing?
-  // ...from all active
-  for (unsigned i=1; i<acting.size(); i++) {
-	int peer = acting[i];
-	if (peer_log_requested.count(peer)) continue;
-	
-	dout(10) << " pulling log from osd" << peer
-			 << " from v " << oldest_update_needed
-			 << endl;
-	query_map[peer][info.pgid] = Query(Query::LOG, oldest_update_needed, info.history);
-	peer_log_requested[peer] = oldest_update_needed;
-  }
-
-  // ...and the newest too
+  // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
 	if (peer_log_requested.count(newest_update_osd) ||
 		peer_summary_requested.count(newest_update_osd)) {
@@ -488,13 +691,16 @@ void PG::peer(ObjectStore::Transaction& t,
 			   << ", already queried" 
 			   << endl;
 	} else {
+	  // we'd like it back to oldest_update, but will settle for log_bottom
+	  eversion_t since = MAX(peer_info[newest_update_osd].log_bottom,
+							 oldest_update);
 	  if (peer_info[newest_update_osd].log_bottom < log.top) {
 		dout(10) << " newest update on osd" << newest_update_osd
 				 << " v " << newest_update 
-				 << ", querying since " << oldest_update_needed
+				 << ", querying since " << since
 				 << endl;
-		query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update_needed, info.history);
-		peer_log_requested[newest_update_osd] = oldest_update_needed;
+		query_map[newest_update_osd][info.pgid] = Query(Query::LOG, log.top, since, info.history);
+		peer_log_requested.insert(newest_update_osd);
 	  } else {
 		dout(10) << " newest update on osd" << newest_update_osd
 				 << " v " << newest_update 
@@ -509,13 +715,47 @@ void PG::peer(ObjectStore::Transaction& t,
 	}
 	return;
   } else {
-	dout(10) << " i have the most up-to-date pg v " << info.last_update << endl;
+	dout(10) << " newest_update " << info.last_update << " (me)" << endl;
+  }
+
+  dout(10) << " oldest_update " << oldest_update << endl;
+
+  have_master_log = true;
+
+
+  // -- do i need to generate backlog for any of my peers?
+  if (oldest_update < log.bottom && !log.backlog) {
+	dout(10) << "generating backlog for some peers, bottom " 
+			 << log.bottom << " > " << oldest_update
+			 << endl;
+	generate_backlog();
+  }
+
+
+  /** COLLECT MISSING+LOG FROM PEERS **********/
+  /*
+	we also detect divergent replicas here by pulling the full log
+	from everyone.  
+  */  
+
+  // gather missing from peers
+  for (unsigned i=1; i<acting.size(); i++) {
+	int peer = acting[i];
+	if (peer_info[peer].is_empty()) continue;
+	if (peer_log_requested.count(peer) ||
+		peer_summary_requested.count(peer)) continue;
+
+	dout(10) << " pulling log+missing from osd" << peer
+			 << endl;
+	query_map[peer][info.pgid] = Query(Query::FULLLOG, info.history);
+	peer_log_requested.insert(peer);
   }
 
   // did we get them all?
   bool have_missing = true;
   for (unsigned i=1; i<acting.size(); i++) {
 	int peer = acting[i];
+	if (peer_info[peer].is_empty()) continue;
 	if (peer_missing.count(peer)) continue;
 	
 	dout(10) << " waiting for log+missing from osd" << peer << endl;
@@ -524,47 +764,15 @@ void PG::peer(ObjectStore::Transaction& t,
   if (!have_missing) return;
 
   dout(10) << " peers_complete_thru " << peers_complete_thru << endl;
-  dout(10) << " oldest_update_needed " << oldest_update_needed << endl;
 
-  // -- is that the whole story?  (is my log sufficient?)
-  if (info.last_complete < log.bottom &&    // i don't have enough to recovery
-	  !log.backlog) {                       // and i don't have the backlog
-	// nope.  fetch backlog from someone.
-	if (peer_summary_requested.count(newest_update_osd)) {
-	  dout(10) << "i am complete thru " << info.last_complete
-			   << ", but my log starts at " << log.bottom 
-			   << ".  already waiting for summary/backlog from osd" << newest_update_osd
-			   << endl;
-	} else {
-	  // who to fetch from?
-	  int who = newest_update_osd;
-	  if (who == osd->whoami) {  // er, pick someone else!
-		// pick someone who has (back)log through my log.bottom
-		for (map<int,Info>::iterator it = peer_info.begin();
-			 it != peer_info.end();
-			 it++) {
-		  if (it->first == osd->whoami) continue;
-		  if (it->second.last_complete >= it->second.log_bottom &&  // they store backlog
-			  it->second.last_update >= log.bottom) {              // thru my log.bottom
-			who = it->first;
-			break;
-		  }
-		}
-	  }
-	  dout(10) << "i am complete thru " << info.last_complete
-			   << ", but my log starts at " << log.bottom 
-			   << ".  fetching summary/backlog from osd" << who
-			   << endl;
-	  assert(who != osd->whoami); // can't be me, or we're in trouble.
-	  query_map[who][info.pgid] = Query(Query::BACKLOG, info.history);
-	  peer_summary_requested.insert(who);
-	}
-	return;
-  }
   
   // -- ok.  and have i located all pg contents?
   if (missing.num_lost() > 0) {
 	dout(10) << "there are still " << missing.num_lost() << " lost objects" << endl;
+
+	// *****
+	// FIXME: i don't think this actually accomplishes anything!
+	// *****
 
 	// ok, let's get more summaries!
 	bool waiting = false;
@@ -580,7 +788,7 @@ void PG::peer(ObjectStore::Transaction& t,
 	  }
 
 	  dout(10) << " requesting summary/backlog from osd" << peer << endl;	  
-	  query_map[peer][info.pgid] = Query(Query::INFO, info.history);
+	  query_map[peer][info.pgid] = Query(Query::BACKLOG, info.history);
 	  peer_summary_requested.insert(peer);
 	  waiting = true;
 	}
@@ -594,14 +802,6 @@ void PG::peer(ObjectStore::Transaction& t,
   // sanity check
   assert(missing.num_lost() == 0);
   assert(info.last_complete >= log.bottom || log.backlog);
-
-  // -- do i need to generate backlog for any of my peers?
-  if (oldest_update_needed < log.bottom && !log.backlog) {
-	dout(10) << "generating backlog for some peers, bottom " 
-			 << log.bottom << " > " << oldest_update_needed
-			 << endl;
-	generate_backlog();
-  }
 
 
   // -- crash recovery?
@@ -872,13 +1072,14 @@ bool PG::do_recovery()
   Log::Entry *latest = 0;
 
   while (log.requested_to != log.log.end()) {
+	assert(log.objects.count(log.requested_to->oid));
+	latest = log.objects[log.requested_to->oid];
+	assert(latest);
+
 	dout(10) << "do_recovery "
 			 << *log.requested_to
 			 << (objects_pulling.count(latest->oid) ? " (pulling)":"")
 			 << endl;
-
-	assert(log.objects.count(log.requested_to->oid));
-	latest = log.objects[log.requested_to->oid];
 
 	if (latest->is_update() &&
 		!objects_pulling.count(latest->oid) &&

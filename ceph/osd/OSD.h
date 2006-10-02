@@ -34,45 +34,6 @@ class Messenger;
 class Message;
 
 
-
-
-/**
- *
- */
-
-  /** OSDReplicaOp
-   * state associated with an in-progress replicated update.
-   */
-  class OSDReplicaOp {
-  public:
-	class MOSDOp        *op;
-	Mutex                lock;
-	map<__uint64_t,int>  waitfor_ack;
-	map<__uint64_t,int>  waitfor_commit;
-	
-	utime_t   start;
-	
-	//bool cancel;
-	bool sent_ack, sent_commit;
-	
-	set<int>         osds;
-	eversion_t       new_version, old_version;
-
-	map<int,eversion_t> pg_complete_thru;
-	
-	OSDReplicaOp(class MOSDOp *o, eversion_t nv, eversion_t ov) :
-	  op(o), 
-	  //local_ack(false), local_commit(false), 
-	  //cancel(false),
-	  sent_ack(false), sent_commit(false),
-	  new_version(nv), old_version(ov)
-	{ }
-	bool can_send_ack() { return !sent_ack && !sent_commit &&   //!cancel && 
-							waitfor_ack.empty(); }
-	bool can_send_commit() { return !sent_commit &&    //!cancel && 
-							   waitfor_ack.empty() && waitfor_commit.empty(); }
-	bool can_delete() { return waitfor_ack.empty() && waitfor_commit.empty(); }
-  };
   
 
 class OSD : public Dispatcher {
@@ -221,6 +182,7 @@ public:
 
   // replica ops
   void get_repop_gather(PG::RepOpGather*);
+  void apply_repop(PG *pg, PG::RepOpGather *repop);
   void put_repop_gather(PG *pg, PG::RepOpGather*);
   void issue_repop(PG *pg, MOSDOp *op, int osd);
   PG::RepOpGather *new_repop_gather(PG *pg, MOSDOp *op);
@@ -281,17 +243,5 @@ public:
 
   void force_remount();
 };
-
-inline ostream& operator<<(ostream& out, OSDReplicaOp& repop)
-{
-  out << "repop(wfack=" << repop.waitfor_ack << " wfcommit=" << repop.waitfor_commit;
-  //if (repop.cancel) out << " cancel";
-  out << " op=" << *(repop.op);
-  out << " repop=" << &repop;
-  out << " lc=" << repop.pg_complete_thru;
-  out << ")";
-  return out;
-}
-
 
 #endif

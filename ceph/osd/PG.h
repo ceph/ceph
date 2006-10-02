@@ -101,7 +101,8 @@ public:
 	Info(pg_t p=0) : pgid(p), 
 					 log_backlog(false),
 					 last_epoch_started(0), last_epoch_finished(0) {}
-	bool is_clean() { return last_update == last_complete; }
+	bool is_clean() const { return last_update == last_complete; }
+	bool is_empty() const { return last_update.version == 0; }
   };
   
   
@@ -115,16 +116,17 @@ public:
 	const static int INFO = 0;
 	const static int LOG = 1;
 	const static int BACKLOG = 2;
+	const static int FULLLOG = 3;
 
 	int type;
-	eversion_t version;
+	eversion_t split, floor;
 	Info::History history;
 
 	Query() : type(-1) {}
 	Query(int t, Info::History& h) : 
-	  type(t), history(h) {}
-	Query(int t, eversion_t v, Info::History& h) : 
-	  type(t), version(v), history(h) {}
+	  type(t), history(h) { assert(t != LOG); }
+	Query(int t, eversion_t s, eversion_t f, Info::History& h) : 
+	  type(t), split(s), floor(f), history(h) { assert(t == LOG); }
   };
   
   
@@ -148,6 +150,10 @@ public:
 	}
 	bool is_missing(object_t oid, eversion_t v) {
 	  return missing.count(oid) && missing[oid] <= v;
+	}
+	void add(object_t oid) {
+	  eversion_t z;
+	  add(oid,z);
 	}
 	void add(object_t oid, eversion_t v) {
 	  if (missing.count(oid)) {
@@ -225,6 +231,7 @@ public:
 	 */
 	class Entry {
 	public:
+	  const static int LOST = 0;
 	  const static int UPDATE = 1;
 	  const static int DELETE = 2;
 
@@ -248,6 +255,12 @@ public:
 
 	Log() : backlog(false) {}
 
+	void clear() {
+	  eversion_t z;
+	  top = bottom = z;
+	  backlog = false;
+	  log.clear();
+	}
 	bool empty() const {
 	  return top.version == 0 && top.epoch == 0;
 	}
@@ -270,6 +283,8 @@ public:
 	}
 
 	void copy_after(const Log &other, eversion_t v);
+	bool copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor);
+	void copy_non_backlog(const Log &other);
 	ostream& print(ostream& out) const;
   };
 
@@ -288,6 +303,12 @@ public:
 	
 	/****/
 	IndexedLog() {}
+
+	void clear() {
+	  assert(0);
+	  unindex();
+	  Log::clear();
+	}
 
 	bool logged_object(object_t oid) {
 	  return objects.count(oid);
@@ -313,6 +334,10 @@ public:
 		objects[e.oid] = &e;
 	  caller_ops.insert(e.reqid);
 	}
+	void unindex() {
+	  objects.clear();
+	  caller_ops.clear();
+	}
 	void unindex(Entry& e) {
 	  // NOTE: this only works if we remove from the _bottom_ of the log!
 	  assert(objects.count(e.oid));
@@ -320,6 +345,7 @@ public:
 		objects.erase(e.oid);
 	  caller_ops.erase(e.reqid);
 	}
+
 
 	// accessors
 	Entry *is_updated(object_t oid) {
@@ -336,10 +362,11 @@ public:
 	  // add to log
 	  log.push_back(e);
 	  assert(e.version > top);
+	  assert(top.version == 0 || e.version.version == top.version + 1);
 	  top = e.version;
 
 	  // to our index
-	  objects[e.oid] = &(*log.rbegin());
+	  objects[e.oid] = &(log.back());
 	  caller_ops.insert(e.reqid);
 	}
 
@@ -372,6 +399,9 @@ public:
 	class MOSDOp *op;
 	tid_t rep_tid;
 
+	ObjectStore::Transaction t;
+	bool applied;
+
 	set<int>  waitfor_ack;
 	set<int>  waitfor_commit;
 	
@@ -387,9 +417,11 @@ public:
 	
 	RepOpGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
 	  op(o), rep_tid(rt),
+	  applied(false),
 	  sent_ack(false), sent_commit(false),
 	  new_version(nv), 
 	  pg_local_last_complete(lc) { }
+
 	bool can_send_ack() { 
 	  return !sent_ack && !sent_commit &&
 		waitfor_ack.empty(); 
@@ -441,14 +473,16 @@ protected:
 
   // [primary only] content recovery state
   eversion_t  peers_complete_thru;
+  bool        have_master_log;
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    clean_set;   // current OSDs that are clean
-  map<int,Info>        peer_info;  // info from peers (stray or prior)
+  eversion_t  oldest_update; // lowest (valid) last_update in active set
+  map<int,Info>        peer_info;   // info from peers (stray or prior)
   set<int>             peer_info_requested;
   map<int, Missing>    peer_missing;
-  map<int, eversion_t> peer_log_requested;  // logs i've requested (and start stamps)
+  set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_summary_requested;
   friend class OSD;
 
@@ -474,21 +508,7 @@ protected:
   map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
   
 public:
-  void clear_primary_state() {
-	// clear peering state
-	prior_set.clear();
-	stray_set.clear();
-	clean_set.clear();
-	peer_info_requested.clear();
-	peer_log_requested.clear();
-	peer_info.clear();
-	peer_missing.clear();
-  }
-
-  void clear_acker_state() {
-	
-  }
-
+  void clear_primary_state();
 
  public:
   bool is_acting(int osd) const { 
@@ -516,7 +536,10 @@ public:
 	return false;
   }
 
+  void proc_replica_log(Log &olog, Missing& omissing, int from);
   void merge_log(Log &olog, Missing& omissing, int from);
+  void proc_missing(Log &olog, Missing &omissing, int fromosd);
+  
   void generate_backlog();
   void drop_backlog();
   
@@ -544,7 +567,8 @@ public:
 	state(0),
 	last_epoch_started_any(0),
 	last_complete_commit(0),
-	peers_complete_thru(0)
+	peers_complete_thru(0),
+	have_master_log(true)
   { }
   
   pg_t       get_pgid() const { return info.pgid; }
@@ -608,13 +632,17 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
-  return out << "pginfo(" << hex << pgi.pgid << dec 
-			 << " v " << pgi.last_update << "/" << pgi.last_complete
-			 << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
-			 << (pgi.log_backlog ? "+backlog":"")
-			 << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
-			 << " " << pgi.history
-			 << ")";
+  out << "pginfo(" << hex << pgi.pgid << dec;
+  if (pgi.is_empty())
+	out << " empty";
+  else
+	out << " v " << pgi.last_update << "/" << pgi.last_complete
+		<< " (" << pgi.log_bottom << "," << pgi.last_update << "]"
+		<< (pgi.log_backlog ? "+backlog":"");
+  out << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
+	  << " " << pgi.history
+	  << ")";
+  return out;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
@@ -644,7 +672,27 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 {
   out << "pg[" << pg.info 
 	  << " r=" << pg.get_role();
+
+  if (pg.log.bottom != pg.info.log_bottom)
+	out << " (info mismatch, " << pg.log << ")";
+
+  if (pg.log.log.empty()) {
+	// shoudl it be?
+	if (pg.log.top.version - pg.log.bottom.version != 0) {
+	  out << " (log bound mismatch, empty)";
+	}
+  } else {
+	if (((pg.log.log.begin()->version.version - 1 != pg.log.bottom.version) &&
+		 !pg.log.backlog) ||
+		(pg.log.log.rbegin()->version.version != pg.log.top.version)) {
+	  out << " (log bound mismatch, actual=["
+		  << pg.log.log.begin()->version << ","
+		  << pg.log.log.rbegin()->version << "])";
+	}
+  }
+
   if (pg.get_role() == 0) out << " pct " << pg.peers_complete_thru;
+  if (!pg.have_master_log) out << " !hml";
   if (pg.is_active()) out << " active";
   if (pg.is_crashed()) out << " crashed";
   if (pg.is_replay()) out << " replay";
@@ -654,6 +702,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
   out << "]";
+
+
   return out;
 }
 

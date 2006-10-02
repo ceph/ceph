@@ -1,22 +1,100 @@
 
 
 
+------ C is primary:
+A     B     C
+2'2         2'2
+2'3   2'3   2'3
+2'4   2'4   2'4
+3'5 | 2'5   2'5
+3'6 | 2'6
+3'7 |
+3'8 |
+3'9 |
+ - needs log > 2'5 from A
+ - A detects divergence, returns summary
+A     B     C
+2'2         2'2
+2'3   2'3   2'3
+2'4   2'4   2'4
+3'5 | 2'5   3'5 *add to missing, adjusts oldest_update to 2'4
+3'6 | 2'6   3'6
+3'7 |       3'7
+3'8 |       3'8
+3'9 |       3'9
+ - adjusts peer last_update down to split point -> 2'4
+ - requsts log+missing from B
+ - B returns missing incl 2'5 and 2'6
+ - C sends appropriate sublog to everyone
+ 
+
+----- A is primary:
+A     B     C
+2'2         2'2
+2'3   2'3   2'3
+2'4   2'4   2'4
+3'5 | 2'5   2'5
+3'6 | 2'6
+3'7 |
+3'8 |
+3'9 |
+ - already has log + summary
+ - adjusts peer last_updates down to split point -> 2'4
+ - requests log > last_update on peers
+ - B returns missing for 2'5 and 2'6
+ - C returns missing for 2'5
+ - A sends appropriate sublog to everyone
+
+
+----- A is primary:
+A     B     C
+            2'2
+      2'3   2'3
+      2'4   2'4
+    | 2'5   2'5
+    | 2'6
+    |
+3'8 |
+3'9 |
+ - generates backlog
+            2'2
+      2'3   2'3
+2'4   2'4   2'4
+    | 2'5   2'5
+3'6 | 2'6
+3'7-|
+3'8 |
+3'9 |
+ - need to request full log
+  - primary will discover missing items
+ - will send backlog to peers
+  - peers will discover missing or divergent items
+
+
+
+
+
+
+backlog+(3'8,3'9] -> (2'2,2'5]
+        (2'2,3'9] -> (2'2,2'5] 
+
 == todo
+
+- document peer()
+- messenger lookup() and failure() upcalls
 
 - how to get usage feedback to monitor?
 
 fixit list
-- opendir, readdir, rewinddir, etc. (via getdir)
-- statlite
-- readdir
-- readdirpluslite
-- lazio_*
-- mds stat vs caps behavior.  esp wrt readdirplus, etc.
+/- opendir, readdir, rewinddir, etc. (via getdir)
+/- readdirplus
+/- statlite
+/- lazio_*
+
+- properly handle divergent pg logs and objects
 
 osd/rados
-- don't be so pessimistic about discarding write-ahead
-- properly handle divergent pg logs and objects
-- flag missing log entries on crash recovery
+- flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 - consider implications of nvram writeahead logs
 - deal with divergent replicas that recover
 - fix heartbeat wrt new replication
@@ -102,14 +180,7 @@ mds
 - carefully define/document frozen wrt dir_auth vs hashing
 
 client
-- lazyio_*
-- flush objectcacher
-- atomic sync writes
-- flesh out posix layer
-- statlite
-/- readdir + stat
-- readdirplus
-- lazy_*  (after object cache)
+- mixed lazy and non-lazy io will clobber each others' caps in the buffer cache
 
 - test client caps with meta exports
 - some heuristic behavior to consolidate caps to inode auth

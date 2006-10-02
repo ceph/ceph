@@ -1059,16 +1059,18 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  // deactivate.
 	  pg->state_clear(PG::STATE_ACTIVE);
 	  
-	  // discard any repops in progress.
+	  // reset primary state?
+	  if (oldrole == 0 || pg->get_role() == 0)
+		pg->clear_primary_state();
+	  
+	  // apply any repops in progress.
 	  if (oldacker == whoami) {
-		// drop our write-ahead log.  (we'll only have on if we were just the acker)
-		pg->trim_write_ahead();
-
-		// drop repops
+		// apply repops
 		for (map<tid_t,PG::RepOpGather*>::iterator p = pg->repop_gather.begin();
 			 p != pg->repop_gather.end();
 			 p++) {
-		  dout(-1) << *pg << " discarding repop " << p->second << endl;
+		  if (!p->second->applied)
+			apply_repop(pg, p->second);
 		  delete p->second->op;
 		  delete p->second;
 		}
@@ -1108,16 +1110,12 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 			   it++)
 			take_waiters(it->second);
 		  pg->waiting_for_missing_object.clear();
-
-		  // drop peers
-		  pg->clear_primary_state();
 		}
 		
 		// new primary?
 		if (role == 0) {
 		  // i am new primary
 		  pg->state_clear(PG::STATE_STRAY);
-		  pg->last_epoch_started_any = pg->info.last_epoch_started;
 		} else {
 		  // i am now replica|stray.  we need to send a notify.
 		  pg->state_set(PG::STATE_STRAY);
@@ -1152,29 +1150,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
 			dout(10) << *pg << " " << oldacting << " -> " << pg->acting
 					 << ", replicas changed" << endl;
-
-			// completely restart peering process.
-			pg->clear_primary_state();
-
-			/* this is compliated, deal with it later.
-			// clear peer_info for (re-)new replicas
-			for (unsigned i=1; i<acting.size(); i++) {
-			  bool had = false;
-			  for (unsigned j=1; j<oldacting.size(); j++)
-				if (pg->acting[i] == oldacting[j]) { 
-				  had = true; 
-				  break;
-				}
-			  if (!had) {
-				dout(10) << *pg << " hosing any peer state for new replica osd" << pg->acting[i] << endl;
-				pg->peer_info.erase(pg->acting[i]);
-				pg->peer_info_requested.erase(pg->acting[i]);
-				pg->peer_missing.erase(pg->acting[i]);
-				pg->peer_log_requested.erase(pg->acting[i]);
-				pg->peer_summary_requested.erase(pg->acting[i]);
-			  }
-			}
-			*/
 		  }
 		}
 	  }
@@ -1604,7 +1579,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->peer_info[from] = *it;
 
 	if (had) {
-	  if ((*it).is_clean() && acting) {
+	  if (pg->is_active() && 
+		  (*it).is_clean() && acting) {
 		pg->clean_set.insert(from);
 		dout(10) << *pg << " osd" << from << " now clean (" << pg->clean_set  
 				 << "): " << *it << endl;
@@ -1663,10 +1639,21 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   PG *pg = _lock_pg(pgid);
   assert(pg);
 
+  if (m->get_epoch() < pg->info.history.same_since) {
+	dout(10) << "handle_pg_log " << *pg 
+			<< " from " << m->get_source() 
+			<< " is old, discarding"
+			<< endl;
+	delete m;
+	return;
+  }
+
   dout(7) << "handle_pg_log " << *pg 
 		  << " got " << m->log << " " << m->missing
 		  << " from " << m->get_source() << endl;
 
+  //m->log.print(cout);
+  
   ObjectStore::Transaction t;
 
   if (pg->is_primary()) {
@@ -1674,12 +1661,8 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 	assert(pg->peer_log_requested.count(from) ||
 		   pg->peer_summary_requested.count(from));
 	
-	// note peer's missing.
-	pg->peer_missing[from] = m->missing;
+	pg->proc_replica_log(m->log, m->missing, from);
 
-	// merge into our own log
-	pg->merge_log(m->log, m->missing, from);
-	
 	// peer
 	map< int, map<pg_t,PG::Query> > query_map;
 	pg->peer(t, query_map);
@@ -1691,6 +1674,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 
 	// merge log
 	pg->merge_log(m->log, m->missing, from);
+	pg->proc_missing(m->log, m->missing, from);
 	assert(pg->missing.num_lost() == 0);
 
 	// ok activate!
@@ -1712,7 +1696,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
  */
 void OSD::handle_pg_query(MOSDPGQuery *m) 
 {
-  dout(7) << "handle_pg_query from " << m->get_source() << endl;
+  dout(7) << "handle_pg_query from " << m->get_source() << " epoch " << m->get_epoch() << endl;
   int from = MSG_ADDR_NUM(m->get_source());
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
@@ -1730,8 +1714,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  PG::Info::History history = it->second.history;
 	  project_pg_history(pgid, history, m->get_epoch());
 
-	  if (m->get_epoch() < history.same_primary_since) {
-		dout(10) << " pg " << hex << pgid << dec << " dne, and primary has changed in "
+	  if (m->get_epoch() < history.same_since) {
+		dout(10) << " pg " << hex << pgid << dec << " dne, and pg has changed in "
 				 << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << endl;
 		continue;
 	  }
@@ -1764,9 +1748,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  pg = _lock_pg(pgid);
 	  
 	  // same primary?
-	  if (m->get_epoch() < pg->info.history.same_primary_since) {
+	  if (m->get_epoch() < pg->info.history.same_since) {
 		dout(10) << *pg << " handle_pg_query primary changed in "
-				 << pg->info.history.same_primary_since
+				 << pg->info.history.same_since
 				 << " (msg from " << m->get_epoch() << ")" << endl;
 		_unlock_pg(pgid);
 		continue;
@@ -1784,9 +1768,20 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	} else {
 	  MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->get_pgid());
 	  m->info = pg->info;
-	  
+	  m->missing = pg->missing;
+
+	  if (it->second.type == PG::Query::LOG) {
+		dout(10) << *pg << " sending info+missing+log since split " << it->second.split
+				 << " from floor " << it->second.floor 
+				 << endl;
+		if (!m->log.copy_after_unless_divergent(pg->log, it->second.split, it->second.floor)) {
+		  dout(10) << *pg << "  divergent, sending backlog" << endl;
+		  it->second.type = PG::Query::BACKLOG;
+		}
+	  }
+
 	  if (it->second.type == PG::Query::BACKLOG) {
-		dout(10) << *pg << " sending info+summary/backlog" << endl;
+		dout(10) << *pg << " sending info+missing+backlog" << endl;
 		if (pg->log.backlog) {
 		  m->log = pg->log;
 		} else {
@@ -1795,17 +1790,13 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 		  pg->drop_backlog();
 		}
 	  } 
-	  else if (it->second.version == 0) {
-		dout(10) << *pg << " sending info+entire log" << endl;
-		m->log = pg->log;
-	  } 
-	  else {
-		eversion_t since = MAX(it->second.version, pg->log.bottom);
-		dout(10) << *pg << " sending info+log since " << since
-				 << " (asked since " << it->second.version << ")" << endl;
-		m->log.copy_after(pg->log, since);
+	  else if (it->second.type == PG::Query::FULLLOG) {
+		dout(10) << *pg << " sending info+missing+full log" << endl;
+		m->log.copy_non_backlog(pg->log);
 	  }
-	  m->missing = pg->missing;
+
+	  dout(10) << *pg << " sending " << m->log << " " << m->missing << endl;
+	  //m->log.print(cout);
 
 	  _share_map_outgoing(MSG_ADDR_OSD(from));
 	  messenger->send_message(m, MSG_ADDR_OSD(from));
@@ -1822,7 +1813,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
 void OSD::handle_pg_remove(MOSDPGRemove *m)
 {
-  dout(7) << "handle_pg_query from " << m->get_source() << endl;
+  dout(7) << "handle_pg_remove from " << m->get_source() << endl;
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
@@ -2143,13 +2134,6 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
   // prepare our transaction
   ObjectStore::Transaction t;
 
-  // update PG log
-  if (op->get_op() != OSD_OP_WRNOOP) {
-	prepare_log_transaction(t, op, nv, pg, op->get_pg_trim_to());
-	logger->inc("r_wr");
-	logger->inc("r_wrb", op->get_length());
-  }
-
   // am i acker?
   PG::RepOpGather *repop = 0;
   int ackerosd = pg->acting[0];
@@ -2188,22 +2172,32 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 
   // do op?
   C_OSD_RepModifyCommit *oncommit = 0;
+
+  logger->inc("r_wr");
+  logger->inc("r_wrb", op->get_length());
+  
   if (repop) {
 	// acker.  we'll apply later.
+	if (op->get_op() != OSD_OP_WRNOOP) {
+	  prepare_log_transaction(repop->t, op, nv, pg, op->get_pg_trim_to());
+	  prepare_op_transaction(repop->t, op, nv, pg);
+	}
   } else {
 	// middle|replica.
-	if (op->get_op() != OSD_OP_WRNOOP) 
+	if (op->get_op() != OSD_OP_WRNOOP) {
+	  prepare_log_transaction(t, op, nv, pg, op->get_pg_trim_to());
 	  prepare_op_transaction(t, op, nv, pg);
+	}
 
 	oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, pg->info.last_complete);
-  }
 
-  // apply log update. and possibly update itself.
-  unsigned tr = store->apply_transaction(t, oncommit);
-  if (tr != 0 &&   // no errors
-	  tr != 2) {   // or error on collection_add
-	cerr << "error applying transaction: r = " << tr << endl;
-	assert(tr == 0);
+	// apply log update. and possibly update itself.
+	unsigned tr = store->apply_transaction(t, oncommit);
+	if (tr != 0 &&   // no errors
+		tr != 2) {   // or error on collection_add
+	  cerr << "error applying transaction: r = " << tr << endl;
+	  assert(tr == 0);
+	}
   }
   
   // ack?
@@ -2292,11 +2286,13 @@ void OSD::handle_op(MOSDOp *op)
 	  // replay?
 	  if (op->get_version().version > 0) {
 		if (op->get_version() > pg->info.last_update) {
-		  dout(7) << *pg << " queueing replay at " << op->get_version() << " for " << *op << endl;
+		  dout(7) << *pg << " queueing replay at " << op->get_version()
+				  << " for " << *op << endl;
 		  pg->replay_queue[op->get_version()] = op;
 		  return;
 		} else {
 		  dout(7) << *pg << " replay at " << op->get_version() << " <= " << pg->info.last_update 
+				  << " for " << *op
 				  << ", will queue for WRNOOP" << endl;
 		}
 	  }
@@ -2310,14 +2306,14 @@ void OSD::handle_op(MOSDOp *op)
 	if (op->get_op() != OSD_OP_PUSH &&
 		waitfor_missing_object(op, pg)) return;
 
-	dout(7) << "handle_op " << op << " in " << *pg << endl;
+	dout(7) << "handle_op " << *op << " in " << *pg << endl;
 	
   } else {
 	// REPLICATION OP (it's from another OSD)
 
 	// have pg?
 	if (!pg) {
-	  derr(-7) << "handle_rep_op " << op 
+	  derr(-7) << "handle_rep_op " << *op 
 			   << " pgid " << hex << pgid << dec << " dne" << endl;
 	  delete op;
 	  //assert(0); // wtf, shouldn't happen.
@@ -2720,6 +2716,22 @@ void OSD::get_repop_gather(PG::RepOpGather *repop)
   dout(10) << "get_repop " << *repop << endl;
 }
 
+void OSD::apply_repop(PG *pg, PG::RepOpGather *repop)
+{
+  dout(10) << "apply_repop  applying update on " << *repop << endl;
+  assert(!repop->applied);
+
+  Context *oncommit = new C_OSD_WriteCommit(this, pg->info.pgid, repop->rep_tid, repop->pg_local_last_complete);
+  unsigned r = store->apply_transaction(repop->t, oncommit);
+  if (r)
+	dout(-10) << "apply_repop  apply transaction return " << r << " on " << *repop << endl;
+  
+  // discard my reference to buffer
+  repop->op->get_data().clear();
+
+  repop->applied = true;
+}
+
 void OSD::put_repop_gather(PG *pg, PG::RepOpGather *repop)
 {
   dout(10) << "put_repop " << *repop << endl;
@@ -2738,16 +2750,7 @@ void OSD::put_repop_gather(PG *pg, PG::RepOpGather *repop)
   else if (repop->can_send_ack() &&
 		   repop->op->wants_ack()) {
 	// apply
-	dout(10) << "put_repop  applying update on " << *repop << endl;
-	ObjectStore::Transaction t;
-	prepare_op_transaction(t, repop->op, repop->new_version, pg);
-	Context *oncommit = new C_OSD_WriteCommit(this, pg->info.pgid, repop->rep_tid, repop->pg_local_last_complete);
-	unsigned r = store->apply_transaction(t, oncommit);
-	if (r)
-	  dout(-10) << "put_repop  apply transaction return " << r << " on " << *repop << endl;
-
-	// discard my reference to buffer
-	repop->op->get_data().clear();
+	apply_repop(pg, repop);
 
 	// send ack
 	MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap->get_epoch(), false);
@@ -3037,12 +3040,9 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   if (repop) {	
 	// we are acker.
 	if (op->get_op() != OSD_OP_WRNOOP) {
-	  // log now
-	  ObjectStore::Transaction t;
-	  prepare_log_transaction(t, op, nv, pg, pg->peers_complete_thru);
-	  store->apply_transaction(t);
-
-	  // update later.
+	  // log and update later.
+	  prepare_log_transaction(repop->t, op, nv, pg, pg->peers_complete_thru);
+	  prepare_op_transaction(repop->t, op, nv, pg);
 	}
 
 	// (logical) local ack.
@@ -3083,12 +3083,13 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   
   int opcode = PG::Log::Entry::UPDATE;
   if (op->get_op() == OSD_OP_DELETE) opcode = PG::Log::Entry::DELETE;
-  PG::Log::Entry logentry(opcode, op->get_oid(), version,
+  PG::Log::Entry logentry(opcode, oid, version,
 						  op->get_client(), op->get_tid());
 
   dout(10) << "prepare_log_transaction " << op->get_op()
-		   << (logentry.is_delete() ? " - ":" + ")
-		   << hex << oid << dec 
+		   << " " << logentry
+	//		   << (logentry.is_delete() ? " - ":" + ")
+	//<< hex << oid << dec 
 		   << " v " << version
 		   << " in " << *pg << endl;
 
@@ -3096,6 +3097,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   assert(version > pg->log.top);
   pg->log.add(logentry);
   assert(pg->log.top == version);
+  dout(10) << "prepare_log_transaction appended to " << *pg << endl;
 
   // write to pg log on disk
   pg->append_log(t, logentry, trim_to);
