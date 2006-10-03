@@ -51,6 +51,10 @@ class MDSMap {
   bool is_down(int m) const { return down_mds.count(m); }
   bool is_up(int m) const { return !is_mds(m); }
 
+  const entity_inst_t& lookup(int m) {
+	assert(mds_inst.count(m));
+	return mds_inst[m];
+  }
   bool lookup(int m, entity_inst_t& inst) { 
 	if (mds_inst.count(m)) {
 	  inst = mds_inst[m];
