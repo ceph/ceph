@@ -47,20 +47,20 @@ make
 <pre>
 mkdir log
 </pre>
-			<li>Identify the EBOFS block devices. This is accomplished with symlinks (or actual files) in the <tt>ebofsdev/</tt> directory.  Devices can be identified by symlinks named after the hostname (e.g. <tt>googoo-1</tt>), logical OSD number (e.g. <tt>4</tt>), or simply <tt>all</tt> (in that order of preference).  For example,
+			<li>Identify the EBOFS block devices. This is accomplished with symlinks (or actual files) in the <tt>dev//</tt> directory.  Devices can be identified by symlinks named after the hostname (e.g. <tt>osd.googoo-1</tt>), logical OSD number (e.g. <tt>osd4</tt>), or simply <tt>osd.all</tt> (in that order of preference).  For example,
 <pre>
-mkdir ebofsdev
-ln -s /dev/sda3 ebofsdev/all   # all nodes use /dev/sda3
-ln -s /dev/sda4 ebofsdev/0     # except osd0, which should use /dev/sd4
+mkdir dev
+ln -s /dev/sda3 dev/osd.all   # all nodes use /dev/sda3
+ln -s /dev/sda4 dev/osd0      # except osd0, which should use /dev/sd4
 </pre>
 				These need not be "real" devices--they can be regular files too.  To get going with fakesyn, for example,
 <pre>
 # create small "disks" for osd0-osd3
 for f in 0 1 2 3; do                                   # fakesyn defaults is 4 OSDs
-dd if=/dev/zero of=ebofsdev/$f bs=1048576 count=1024   # 1 GB each
+dd if=/dev/zero of=dev/osd$f bs=1048576 count=1024   # 1 GB each
 done
 </pre>
-				Note that if your home/working directory is mounted via NFS, you'll want to symlink <tt>ebofsdev/</tt> to a directory on a local disk.
+				Note that if your home/working directory is mounted via NFS, you'll want to symlink <tt>dev/</tt> to a directory on a local disk.
 		</div>
 		
 
