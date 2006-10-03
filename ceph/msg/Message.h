@@ -289,14 +289,14 @@ class entity_inst_t {
   entity_inst_t(tcpaddr_t& a, int r) : addr(a), rank(r) {}
 };
 
-inline bool operator==(entity_inst_t& a, entity_inst_t& b) { return a.rank == b.rank && a.addr == b.addr; }
-inline bool operator!=(entity_inst_t& a, entity_inst_t& b) { return !(a == b); }
-inline bool operator>(entity_inst_t& a, entity_inst_t& b) { return a.rank > b.rank; }
-inline bool operator>=(entity_inst_t& a, entity_inst_t& b) { return a.rank >= b.rank; }
-inline bool operator<(entity_inst_t& a, entity_inst_t& b) { return a.rank < b.rank; }
-inline bool operator<=(entity_inst_t& a, entity_inst_t& b) { return a.rank <= b.rank; }
+inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { return a.rank == b.rank && a.addr == b.addr; }
+inline bool operator!=(const entity_inst_t& a, const entity_inst_t& b) { return !(a == b); }
+inline bool operator>(const entity_inst_t& a, const entity_inst_t& b) { return a.rank > b.rank; }
+inline bool operator>=(const entity_inst_t& a, const entity_inst_t& b) { return a.rank >= b.rank; }
+inline bool operator<(const entity_inst_t& a, const entity_inst_t& b) { return a.rank < b.rank; }
+inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) { return a.rank <= b.rank; }
 
-inline ostream& operator<<(ostream& out, entity_inst_t &i)
+inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 {
   return out << "rank" << i.rank << "_" << i.addr;
 }

@@ -904,7 +904,7 @@ int Rank::start_rank(tcpaddr_t& ns)
 /* connect_rank
  * NOTE: assumes rank.lock held.
  */
-Rank::Sender *Rank::connect_rank(entity_inst_t& inst)
+Rank::Sender *Rank::connect_rank(const entity_inst_t& inst)
 {
   assert(rank.lock.is_locked());
   assert(inst != rank.my_inst);
@@ -1089,6 +1089,63 @@ void Rank::prepare_dest(msg_addr_t dest)
   }
 
   lock.Unlock();
+}
+
+void Rank::submit_message(Message *m, const entity_inst_t& dest_inst)
+{
+  const msg_addr_t dest = m->get_dest();
+
+  // lookup
+  EntityMessenger *entity = 0;
+  Sender *sender = 0;
+
+  lock.Lock();
+  {
+	// local?
+	if (dest_inst.rank == my_inst.rank) {
+	  if (local.count(dest)) {
+		// local
+		dout(20) << "submit_message " << *m << " dest " << dest << " local" << endl;
+		if (g_conf.ms_single_dispatch) {
+		  _submit_single_dispatch(m);
+		} else {
+		  entity = local[dest];
+		}
+	  } else {
+		// mid-register
+		dout(20) << "submit_message " << *m << " dest " << dest << " local but mid-register, waiting." << endl;
+		assert(0);
+		waiting_for_lookup[dest].push_back(m);
+	  }
+	}
+	else {
+	  // remote.
+	  if (rank_sender.count( dest_inst.rank )) {
+		//&&
+		//rank_sender[dest_inst.rank]->inst == dest_inst) {
+		dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_inst << ", connected." << endl;
+		// connected.
+		sender = rank_sender[ dest_inst.rank ];
+	  } else {
+		dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_inst << ", connecting." << endl;
+		// not connected.
+		sender = connect_rank( dest_inst );
+	  }
+	}
+  }
+  lock.Unlock();
+  
+  // do it
+  if (entity) {  
+	// local!
+	dout(20) << "submit_message " << *m << " dest " << dest << " local, queueing" << endl;
+	entity->queue_message(m);
+  } 
+  else if (sender) {
+	// remote!
+	dout(20) << "submit_message " << *m << " dest " << dest << " remote, sending" << endl;
+	sender->send(m);
+  } 
 }
 
 
@@ -1507,19 +1564,37 @@ void Rank::EntityMessenger::prepare_send_message(msg_addr_t dest)
   rank.prepare_dest(dest);
 }
 
+int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst)
+{
+  // set envelope
+  m->set_source(get_myaddr(), 0);
+  m->set_dest(dest, 0);
+
+  dout(1) << "--> " 
+		  << m->get_source() //<< ':' << m->get_source_port() 
+		  << " to " << m->get_dest() //<< ':' << m->get_dest_port()
+		  << " ---- " << m->get_type_name() 
+		  << " ---- " << rank.my_inst << " --> " << inst
+		  << " ---- " << m 
+		  << endl;
+
+  rank.submit_message(m, inst);
+
+  return 0;
+}
+
 
 int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
 {
   // set envelope
   m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
-  m->set_lamport_send_stamp( get_lamport() );
-  
+
   dout(1) << "--> " 
-		  << m->get_source() << ':' << m->get_source_port() 
-		  << " to " << m->get_dest() << ':' << m->get_dest_port()
+		  << m->get_source() //<< ':' << m->get_source_port() 
+		  << " to " << m->get_dest() //<< ':' << m->get_dest_port()
 		  << " ---- " << m->get_type_name() 
-		  << " ---- " << rank.my_inst
+		  << " ---- " << rank.my_inst << " --> ?"
 		  << " ---- " << m 
 		  << endl;
 
@@ -1608,15 +1683,4 @@ void Rank::mark_up(msg_addr_t a, entity_inst_t& i)
   }
   lock.Unlock();
 }
-
-/*void Rank::EntityMessenger::reset(msg_addr_t a) 
-{
-  assert(a != get_myaddr());
-  if (rank.my_rank == 0) return;
-  rank.lock.Lock();
-  rank.down.erase(a);
-  rank.reset_peer(a);
-  rank.lock.Unlock();
-}
-*/
 

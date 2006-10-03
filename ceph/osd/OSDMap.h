@@ -143,7 +143,11 @@ private:
   bool is_up(int osd) { return !is_down(osd); }
   bool is_out(int osd) { return out_osds.count(osd); }
   bool is_in(int osd) { return !is_out(osd); }
-
+  
+  const entity_inst_t& get_inst(int osd) {
+	assert(osd_inst.count(osd));
+	return osd_inst[osd];
+  }
   bool get_inst(int osd, entity_inst_t& inst) { 
 	if (osd_inst.count(osd)) {
 	  inst = osd_inst[osd];

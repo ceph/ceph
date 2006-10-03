@@ -106,7 +106,7 @@ class Rank : public Dispatcher {
 	Mutex lock;
 	Cond cond;
 	
-	Sender(entity_inst_t& i) : inst(i), done(false), sd(0) {}
+	Sender(const entity_inst_t& i) : inst(i), done(false), sd(0) {}
 	virtual ~Sender() {}
 	
 	void *entry();
@@ -187,6 +187,7 @@ class Rank : public Dispatcher {
 	virtual int shutdown();
 	virtual void prepare_send_message(msg_addr_t dest);
 	virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+	virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst);
 
 	virtual void mark_down(msg_addr_t a, entity_inst_t& i);
 	virtual void mark_up(msg_addr_t a, entity_inst_t& i);
@@ -263,7 +264,7 @@ class Rank : public Dispatcher {
   void handle_register_ack(class MNSRegisterAck *m);
   void handle_lookup_reply(class MNSLookupReply *m);
   
-  Sender *connect_rank(entity_inst_t& inst);
+  Sender *connect_rank(const entity_inst_t& inst);
 
   void mark_down(msg_addr_t addr, entity_inst_t& i);
   void mark_up(msg_addr_t addr, entity_inst_t& i);
@@ -285,6 +286,7 @@ public:
   EntityMessenger *register_entity(msg_addr_t addr);
   void unregister_entity(EntityMessenger *ms);
 
+  void submit_message(Message *m, const entity_inst_t& inst);  
   void prepare_dest(msg_addr_t dest);
   void submit_message(Message *m);  
   void submit_messages(list<Message*>& ls);  

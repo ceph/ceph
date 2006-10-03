@@ -67,7 +67,7 @@
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cerr << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
 char *osd_base_path = "./osddata";
-char *ebofs_base_path = "./ebofsdev";
+char *ebofs_base_path = "./dev";
 
 
 
@@ -123,9 +123,9 @@ OSD::OSD(int id, Messenger *m, char *dev)
 
   // init object store
   // try in this order:
-  // ebofsdev/$num
-  // ebofsdev/$hostname
-  // ebofsdev/all
+  // dev/osd$num
+  // dev/osd.$hostname
+  // dev/osd.all
 
   if (dev) {
 	strcpy(dev_path,dev);
@@ -134,14 +134,14 @@ OSD::OSD(int id, Messenger *m, char *dev)
 	hostname[0] = 0;
 	gethostname(hostname,100);
 	
-	sprintf(dev_path, "%s/%d", ebofs_base_path, whoami);
+	sprintf(dev_path, "%s/osd%d", ebofs_base_path, whoami);
 	
 	struct stat sta;
 	if (::lstat(dev_path, &sta) != 0)
-	  sprintf(dev_path, "%s/%s", ebofs_base_path, hostname);	
+	  sprintf(dev_path, "%s/osd.%s", ebofs_base_path, hostname);	
 	
 	if (::lstat(dev_path, &sta) != 0)
-	  sprintf(dev_path, "%s/all", ebofs_base_path);
+	  sprintf(dev_path, "%s/osd.all", ebofs_base_path);
   }
 
   if (g_conf.ebofs) {
@@ -484,7 +484,7 @@ void OSD::heartbeat()
 	   i++) {
 	_share_map_outgoing( MSG_ADDR_OSD(*i) );
 	messenger->send_message(new MOSDPing(osdmap->get_epoch()), 
-							MSG_ADDR_OSD(*i));
+							MSG_ADDR_OSD(*i), osdmap->get_osd_inst(*i));
   }
 
   if (logger) logger->set("pingset", pingset.size());

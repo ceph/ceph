@@ -86,6 +86,10 @@ class Messenger {
   // send message
   virtual void prepare_send_message(msg_addr_t dest) {}
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
+  virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst) {
+	return send_message(m, dest);   // overload me!
+  }
+
 
   // make a procedure call
   virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
