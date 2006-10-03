@@ -2,20 +2,11 @@
 <div class="mainsegment">
 	<h3>Welcome</h3>
 	<div>
-		Ceph is a distributed file system designed to provide excellent
-performance, reliability, and scalability.  Ceph maximizes the
-separation between data and metadata management by replacing
-allocation tables with a pseudo-random data distribution function
-(CRUSH) designed for heterogeneous and dynamic clusters of unreliable
-object storage devices (OSDs).  We leverage device intelligence by
-distributing data replication, failure detection and recovery to
-semi-autonomous OSDs running a specialized local object file system.
-A dynamic distributed metadata cluster provides extremely efficient
-metadata management and seamlessly adapts to a wide range of general
-purpose and scientific computing file system workloads.  Performance
-measurements under a variety of workloads show that Ceph has excellent
-I/O performance and scalable metadata management, supporting more than
-250,000 metadata operations per second.
+		Ceph is a distributed file system designed to provide excellent performance, reliability, and scalability.  Unlike conventional network file systems (exemplified by NFS), Ceph maximizes the separation of metadata management from data storage by utilizing intelligent storage nodes called Object Storage Devices (OSDs).  Each OSD combines a CPU, memory, and network interface (essentially, a small, lightweight server) with a hard disk or RAID.  This basic architecture allows low-level block allocation, data replication, failure detection, and failure recovery to be distributed among potentially thousands of OSDs.  This approach allows clients (hosts or applications accessing the file system) to communicate directly with OSDs storing the data they need, while avoiding the bottleneck inherent in NFS-like systems with a single point of access.
+
+		<p>File system metadata (directory namespace) is managed by a separate, small cluster of metadata servers (MDSs), which is responsible for coordinating access to the file system.  The Ceph MDS uses a load balancing architecture that dynamically distributes responsibility for management the file system hierarchy across dozens (or even hundreds) of MDS servers, allowing Ceph to scale significantly better than other distributed file systems.
+
+		<p>Ceph is currently in the prototype stage, and is under very active development.  The file system is mountable and more or less usable, but a variety of subsystems are not yet fully functional (most notably including MDS failure recovery, reliable failure monitoring, and flexible snapshots).
 
 		<p>The Ceph project is always looking for more participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
 	</div>

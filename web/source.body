@@ -4,8 +4,6 @@
 	<div>
 		The Ceph source code is managed with Subversion.  For information on accessing the repository, please refer to the <a href="http://sourceforge.net/docs/E09">SourceForge's Subversion documentation</a>. 
 
-		<p>You can <a href="http://svn.sourceforge.net/ceph">browse the repository</a>.
-
 		<p>The Ceph project is always looking for more participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
 
 		<h4>Checking out</h4>
