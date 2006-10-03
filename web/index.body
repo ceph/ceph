@@ -1,0 +1,32 @@
+
+<div class="mainsegment">
+	<h3>Welcome</h3>
+	<div>
+		Ceph is a distributed file system designed to provide excellent
+performance, reliability, and scalability.  Ceph maximizes the
+separation between data and metadata management by replacing
+allocation tables with a pseudo-random data distribution function
+(CRUSH) designed for heterogeneous and dynamic clusters of unreliable
+object storage devices (OSDs).  We leverage device intelligence by
+distributing data replication, failure detection and recovery to
+semi-autonomous OSDs running a specialized local object file system.
+A dynamic distributed metadata cluster provides extremely efficient
+metadata management and seamlessly adapts to a wide range of general
+purpose and scientific computing file system workloads.  Performance
+measurements under a variety of workloads show that Ceph has excellent
+I/O performance and scalable metadata management, supporting more than
+250,000 metadata operations per second.
+
+		<p>The Ceph project is always looking for more participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
+	</div>
+</div>
+
+<div class="mainsegment">
+	<h3>News</h3>
+	<h4>Moved to SourceForge (10/2/2006)</h4>
+	<div>
+		After a few too many months of summer distractions, I've finally moved the Ceph CVS code base over from UCSC to Subversion on SourceForge, and created a Ceph home page.  This is largely in preparation for upcoming paper publications which will hopefully increase Ceph's exposure and attract some interest to the project.  Yay!
+	</div>
+</div>
+
+<b>Please feel free to <a href="mailto:sage@newdream.net">contact us</a> with any questions or comments.</b>
