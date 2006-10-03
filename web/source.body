@@ -1,12 +1,85 @@
 
 <div class="mainsegment">
-	<h3>Source Code</h3>
+	<h3>Getting Started</h3>
 	<div>
 		The Ceph source code is managed with Subversion.  For information on accessing the repository, please refer to the <a href="http://sourceforge.net/docs/E09">SourceForge's Subversion documentation</a>. 
 
 		<p>You can <a href="http://svn.sourceforge.net/ceph">browse the repository</a>.
 
 		<p>The Ceph project is always looking for more participants. If you are interested in using Ceph, or contributing to its development, please <a href="http://lists.sourceforge.net/mailman/listinfo/ceph-devel">join our mailing list</a> and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
+
+		<h4>Checking out</h4>
+		<div>
+			You can check out a working copy with
+			<pre>
+svn co https://svn.sourceforge.net/svnroot/ceph
+</pre>
+			The rest works essentially the same as CVS, but with <tt>svn</tt> instead of <tt>cvs</tt>.
+		</div>
+
+		<h4>Build Targets</h4>
+		<div>
+			There are a range of binary targets, mostly for ease of development and testing:
+			<ul>
+			<li><b>fakesyn</b> -- places all logical elements (MDS, client, etc.) in a single binary, with synchronous message delivery (for easy debugging!).  Includes synthetic workload generation.</li>
+			<li><b>fakefuse</b> -- same as fakesyn, but mounts a single client via FUSE.</li>
+			<li><b>newsyn</b> -- starts up all logical elements using MPI.  As with fakesyn, it includes synthetic workload generation.</li>
+			<li><b>cosd</b> -- standalone OSD</li>
+			<li><b>cmon</b> -- standalone monitor</li>
+			<li><b>cmds</b> -- standalone MDS</li>
+			<li><b>cfuse</b> -- standalone client, mountable via FUSE</li>
+			</ul>
+
+			For most development, fakesyn, fakefuse, and newsyn are sufficient.
+		</div>
+
+		<h4>Runtime Environment</h4>
+		<div>
+			Few quick steps to get things started:
+
+			<ol>
+			<li>Checkout, change into the <tt>ceph/</tt> directory, and build.  E.g.,
+<pre>
+svn co https://svn.sourceforge.net/svnroot/ceph
+cd ~/ceph/ceph
+make
+</pre>
+
+			<li>Create a <tt>log/</tt> dir for various runtime stats.
+<pre>
+mkdir log
+</pre>
+			<li>Identify the EBOFS block devices. This is accomplished with symlinks (or actual files) in the <tt>ebofsdev/</tt> directory.  Devices can be identified by symlinks named after the hostname (e.g. <tt>googoo-1</tt>), logical OSD number (e.g. <tt>4</tt>), or simply <tt>all</tt> (in that order of preference).  For example,
+<pre>
+mkdir ebofsdev
+ln -s /dev/sda3 ebofsdev/all   # all nodes use /dev/sda3
+ln -s /dev/sda4 ebofsdev/0     # except osd0, which should use /dev/sd4
+</pre>
+				These need not be "real" devices--they can be regular files too.  To get going with fakesyn, for example,
+<pre>
+# create small "disks" for osd0-osd3
+for f in 0 1 2 3; do                                   # fakesyn defaults is 4 OSDs
+dd if=/dev/zero of=ebofsdev/$f bs=1048576 count=1024   # 1 GB each
+done
+</pre>
+				Note that if your home/working directory is mounted via NFS, you'll want to symlink <tt>ebofsdev/</tt> to a directory on a local disk.
+		</div>
+		
+
+		<h4>Running fakesyn</h4>
+		<div>
+			A quick example, assuming you've set up "fake" EBOFS devices as above:
+<pre>
+make fakesyn && ./fakesyn --mkfs --osd_pg_bits 4 --debug_ms 1 --debug_client 3 --syn rw 1 100000
+# where those options mean:
+#	--mkfs               # start with a fresh file system
+#	--osd_pg_bits 4      # we only need a few PGs (we don't care about load balancing)
+#	--debug_ms 1         # show message delivery
+#	--debug_client 3     # show limited client stuff
+#	--syn rw 1 100000    # write 1GB to a file in 100,000 byte chunks, then read it back
+</pre>
+			The full set of command line arguments can be found in <tt>config.cc</tt>.
+		</div>
 	</div>
 </div>
 
