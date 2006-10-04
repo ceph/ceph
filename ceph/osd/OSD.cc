@@ -484,7 +484,7 @@ void OSD::heartbeat()
 	   i++) {
 	_share_map_outgoing( MSG_ADDR_OSD(*i) );
 	messenger->send_message(new MOSDPing(osdmap->get_epoch()), 
-							MSG_ADDR_OSD(*i), osdmap->get_osd_inst(*i));
+							MSG_ADDR_OSD(*i), osdmap->get_inst(*i));
   }
 
   if (logger) logger->set("pingset", pingset.size());
