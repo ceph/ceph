@@ -143,10 +143,13 @@ pre.report {
 }
 td.linecount { color: #999999 }
 tr.na {color: grey}
-tr.ok {background-color: #dde244}
-tr.bad {background-color: red}
-tr.good {background-color: #4ae544}
 tr.great {background-color: green; color: white}
 tr.notexec {background-color: #e84545}
 tr.low {background-color: #dde244}
+
+td.kernel {text-align: center; background-color: pink}
+td.entity {text-align: center; background-color: #4ae544}
+td.lib {text-align: center; background-color: orange}
+td.abstract {text-align: center; background-color: #dde244}
+td.net {text-align: center; background-color: lightgray}
 
