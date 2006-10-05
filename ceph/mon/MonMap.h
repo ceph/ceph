@@ -14,6 +14,9 @@
 #ifndef __MONMAP_H
 #define __MONMAP_H
 
+#include "msg/Message.h"
+#include "include/types.h"
+
 class MonMap {
  public:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this

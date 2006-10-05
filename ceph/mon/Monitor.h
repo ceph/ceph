@@ -55,7 +55,7 @@ protected:
   friend class MDSMonitor;
 
  public:
-  Monitor(int w, MonMap *mm, Messenger *m) : 
+  Monitor(int w, Messenger *m, MonMap *mm) : 
     whoami(w), 
     messenger(m),
     monmap(mm),

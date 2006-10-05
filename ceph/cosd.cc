@@ -11,6 +11,9 @@
  * 
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <sys/stat.h>
 #include <iostream>
@@ -69,7 +72,7 @@ int main(int argc, char **argv)
   ObjectStore *store = new Ebofs(dev);
   bufferlist bl;
   store->mount();
-  int r = store->read(0, 0, sizeof(sb), bl);
+  int r = store->read(object_t(0,0), 0, sizeof(sb), bl);
   if (r < 0) {
     cerr << "couldn't read superblock object on " << dev << endl;
     exit(0);
@@ -80,9 +83,9 @@ int main(int argc, char **argv)
 
   cout << "osd fs says i am osd" << sb.whoami << endl;
 
-  // start up messenger
-  bufferlist bl;
-  int fd = open(".ceph_monmap", O_RDONLY);
+  // load monmap
+  bl.clear();
+  int fd = ::open(".ceph_monmap", O_RDONLY);
   assert(fd >= 0);
   struct stat st;
   ::fstat(fd, &st);
@@ -90,10 +93,11 @@ int main(int argc, char **argv)
   bl.append(bp);
   ::read(fd, (void*)bl.c_str(), bl.length());
   ::close(fd);
-
+  
   MonMap *monmap = new MonMap;
   monmap->decode(bl);
 
+  // start up network
   rank.set_namer(monmap->get_inst(0).addr);
   rank.start_rank();
 

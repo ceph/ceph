@@ -79,7 +79,7 @@ int main(int argc, char **argv)
   // create mon
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
-    mon[i] = new Monitor(i, monmap, new FakeMessenger(MSG_ADDR_MON(i)));
+    mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
   }
 
   // create mds

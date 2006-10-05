@@ -239,7 +239,7 @@ int main(int argc, char **argv)
   
   // create mon
   if (myrank < g_conf.num_mon) {
-    Monitor *mon = new Monitor(myrank, monmap, rank.register_entity(MSG_ADDR_MON(myrank)));
+    Monitor *mon = new Monitor(myrank, rank.register_entity(MSG_ADDR_MON(myrank)), monmap);
     mon->init();
   }
 

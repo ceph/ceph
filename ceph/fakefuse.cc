@@ -19,7 +19,6 @@
 using namespace std;
 
 #include "config.h"
-#include "mds/MDCluster.h"
 
 #include "mon/Monitor.h"
 
@@ -63,8 +62,6 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
 
-  MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
-
   // start messenger thread
   fakemessenger_startthread();
 
@@ -78,21 +75,23 @@ int main(int argc, char **argv) {
   args = nargs;
   vec_to_argv(args, argc, argv);
 
+  MonMap *monmap = new MonMap;
+
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
-    mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)));
+    mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
   }
 
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
+    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)), monmap);
   }
 
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-    mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
+    mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
   }
  
     // init
@@ -111,7 +110,7 @@ int main(int argc, char **argv) {
   // create client
   Client *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-    client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(0)));
+    client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(0)), monmap);
     client[i]->init();
 
 
@@ -142,7 +141,6 @@ int main(int argc, char **argv) {
   for (int i=0; i<NUMCLIENT; i++) {
     delete client[i];
   }
-  delete mdc;
   
   return 0;
 }
