@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 
 
 #include <sys/stat.h>
@@ -6,8 +19,6 @@
 using namespace std;
 
 #include "config.h"
-
-#include "mds/MDCluster.h"
 
 #include "mds/MDS.h"
 #include "osd/OSD.h"
@@ -27,7 +38,7 @@ using namespace std;
 class C_Test : public Context {
 public:
   void finish(int r) {
-	cout << "C_Test->finish(" << r << ")" << endl;
+    cout << "C_Test->finish(" << r << ")" << endl;
   }
 };
 
@@ -50,17 +61,16 @@ int main(int argc, char **argv)
   vector<char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
-	// unknown arg, pass it on.
-	cerr << " stray arg " << args[i] << endl;
-	nargs.push_back(args[i]);
+    // unknown arg, pass it on.
+    cerr << " stray arg " << args[i] << endl;
+    nargs.push_back(args[i]);
   }
   assert(nargs.empty());
 
 
   g_clock.tare();
 
-  MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
-
+  MonMap *monmap = new MonMap(g_conf.num_mon);
 
   char hostname[100];
   gethostname(hostname,100);
@@ -69,35 +79,35 @@ int main(int argc, char **argv)
   // create mon
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
-	mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)));
+    mon[i] = new Monitor(i, monmap, new FakeMessenger(MSG_ADDR_MON(i)));
   }
 
   // create mds
   MDS *mds[NUMMDS];
   OSD *mdsosd[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-	//cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
-	if (g_conf.mds_local_osd)
-	  mdsosd[i] = new OSD(i+10000, new FakeMessenger(MSG_ADDR_OSD(i+10000)));
-	start++;
+    //cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
+    mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
+    if (g_conf.mds_local_osd)
+      mdsosd[i] = new OSD(i+10000, new FakeMessenger(MSG_ADDR_OSD(i+10000)), monmap);
+    start++;
   }
   
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-	//cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
-	start++;
+    //cerr << "osd" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
+    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)), monmap);
+    start++;
   }
   
   // create client
   Client *client[NUMCLIENT];
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	//cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-	client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(i)));
-	start++;
+    //cerr << "client" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
+    client[i] = new Client(new FakeMessenger(MSG_ADDR_CLIENT(i)), monmap);
+    start++;
   }
 
 
@@ -106,60 +116,59 @@ int main(int argc, char **argv)
   
   // init
   for (int i=0; i<g_conf.num_mon; i++) {
-	mon[i]->init();
+    mon[i]->init();
   }
   for (int i=0; i<NUMMDS; i++) {
-	mds[i]->init();
-	if (g_conf.mds_local_osd)
-	  mdsosd[i]->init();
+    mds[i]->init();
+    if (g_conf.mds_local_osd)
+      mdsosd[i]->init();
   }
   
   for (int i=0; i<NUMOSD; i++) {
-	osd[i]->init();
+    osd[i]->init();
   }
 
   
   // create client(s)
   for (int i=0; i<NUMCLIENT; i++) {
-	client[i]->init();
-	
-	// use my argc, argv (make sure you pass a mount point!)
-	//cout << "mounting" << endl;
-	client[i]->mount();
-	
-	//cout << "starting synthetic client  " << endl;
-	syn[i] = new SyntheticClient(client[i]);
+    client[i]->init();
+    
+    // use my argc, argv (make sure you pass a mount point!)
+    //cout << "mounting" << endl;
+    client[i]->mount();
+    
+    //cout << "starting synthetic client  " << endl;
+    syn[i] = new SyntheticClient(client[i]);
 
-	syn[i]->start_thread();
+    syn[i]->start_thread();
   }
 
 
   for (int i=0; i<NUMCLIENT; i++) {
-	
-	cout << "waiting for synthetic client " << i << " to finish" << endl;
-	syn[i]->join_thread();
-	delete syn[i];
-	
-	client[i]->unmount();
-	//cout << "unmounted" << endl;
-	client[i]->shutdown();
+    
+    cout << "waiting for synthetic client " << i << " to finish" << endl;
+    syn[i]->join_thread();
+    delete syn[i];
+    
+    client[i]->unmount();
+    //cout << "unmounted" << endl;
+    client[i]->shutdown();
   }
   
-		
+        
   // wait for it to finish
   fakemessenger_wait();
   
   // cleanup
   for (int i=0; i<NUMMDS; i++) {
-	delete mds[i];
+    delete mds[i];
   }
   for (int i=0; i<NUMOSD; i++) {
-	delete osd[i];
+    delete osd[i];
   }
   for (int i=0; i<NUMCLIENT; i++) {
-	delete client[i];
+    delete client[i];
   }
-  delete mdc;
 
   cout << "fakesyn done" << endl;
   return 0;

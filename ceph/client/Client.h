@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,8 +19,9 @@ extern "C" {
 #include <dirent.h>
 }
 
-#include "mds/MDCluster.h"
+#include "mds/MDSMap.h"
 #include "osd/OSDMap.h"
+#include "mon/MonMap.h"
 
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
@@ -93,12 +94,12 @@ class Dentry : public LRUObject {
 
   /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
   Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
-	name = new char[n.length()+1];
-	strcpy((char*)name, n.c_str());
+    name = new char[n.length()+1];
+    strcpy((char*)name, n.c_str());
   }
   ~Dentry() {
-	delete[] name;
-	}*/
+    delete[] name;
+    }*/
 };
 
 class Dir {
@@ -128,7 +129,7 @@ class Inode {
 
   // about the dir (if this is one!)
   int       dir_auth;
-  set<int>	dir_contacts;
+  set<int>    dir_contacts;
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
@@ -157,114 +158,117 @@ class Inode {
   list<Context*>    waitfor_no_read, waitfor_no_write;
 
   void get() { 
-	ref++; 
-	//cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
+    ref++; 
+    //cout << "inode.get on " << hex << inode.ino << dec << " now " << ref << endl;
   }
   void put() { 
-	ref--; assert(ref >= 0); 
-	//cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
+    ref--; assert(ref >= 0); 
+    //cout << "inode.put on " << hex << inode.ino << dec << " now " << ref << endl;
   }
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
-	inode(_inode),
-	valid_until(0),
-	dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-	file_wr_mtime(0), file_wr_size(0), 
-	num_open_rd(0), num_open_wr(0), num_open_lazy(0),
-	ref(0), dir(0), dn(0), symlink(0),
-	fc(_oc, _inode),
-	sync_reads(0), sync_writes(0)
+    inode(_inode),
+    valid_until(0),
+    dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    file_wr_mtime(0), file_wr_size(0), 
+    num_open_rd(0), num_open_wr(0), num_open_lazy(0),
+    ref(0), dir(0), dn(0), symlink(0),
+    fc(_oc, _inode),
+    sync_reads(0), sync_writes(0)
   { }
   ~Inode() {
-	if (symlink) { delete symlink; symlink = 0; }
+    if (symlink) { delete symlink; symlink = 0; }
   }
 
   inodeno_t ino() { return inode.ino; }
 
   bool is_dir() {
-	return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
+    return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
   }
 
   int file_caps() {
-	int c = 0;
-	for (map<int,InodeCap>::iterator it = caps.begin();
-		 it != caps.end();
-		 it++)
-	  c |= it->second.caps;
-	for (map<int,InodeCap>::iterator it = stale_caps.begin();
-		 it != stale_caps.end();
-		 it++)
-	  c |= it->second.caps;
-	return c;
+    int c = 0;
+    for (map<int,InodeCap>::iterator it = caps.begin();
+         it != caps.end();
+         it++)
+      c |= it->second.caps;
+    for (map<int,InodeCap>::iterator it = stale_caps.begin();
+         it != stale_caps.end();
+         it++)
+      c |= it->second.caps;
+    return c;
   }
 
   int file_caps_wanted() {
-	int w = 0;
-	if (num_open_rd) w |= CAP_FILE_RD|CAP_FILE_RDCACHE;
-	if (num_open_wr) w |= CAP_FILE_WR|CAP_FILE_WRBUFFER;
-	if (num_open_lazy) w |= CAP_FILE_LAZYIO;
-	return w;
+    int w = 0;
+    if (num_open_rd) w |= CAP_FILE_RD|CAP_FILE_RDCACHE;
+    if (num_open_wr) w |= CAP_FILE_WR|CAP_FILE_WRBUFFER;
+    if (num_open_lazy) w |= CAP_FILE_LAZYIO;
+    return w;
   }
 
-  int authority(MDCluster *mdcluster) {
-	//cout << "authority on " << inode.ino << " .. dir_auth is " << dir_auth<< endl;
-	// parent?
-	if (dn && dn->dir && dn->dir->parent_inode) {
-	  // parent hashed?
-	  if (dn->dir->parent_inode->dir_hashed) {
-		// hashed
-		return mdcluster->hash_dentry( dn->dir->parent_inode->ino(),
-									   dn->name );
-	  }
+  int authority(MDSMap *mdsmap) {
+    //cout << "authority on " << inode.ino << " .. dir_auth is " << dir_auth<< endl;
+    // parent?
+    if (dn && dn->dir && dn->dir->parent_inode) {
+      // parent hashed?
+      if (dn->dir->parent_inode->dir_hashed) {
+        // hashed
+	assert(0); 
+	// fixme
+        //return mdcluster->hash_dentry( dn->dir->parent_inode->ino(),
+	//dn->name );
+      }
 
-	  if (dir_auth >= 0)
-		return dir_auth;
-	  else
-		return dn->dir->parent_inode->authority(mdcluster);
-	}
+      if (dir_auth >= 0)
+        return dir_auth;
+      else
+        return dn->dir->parent_inode->authority(mdsmap);
+    }
 
-	if (dir_auth >= 0)
-	  return dir_auth;
+    if (dir_auth >= 0)
+      return dir_auth;
 
-	assert(0);	// !!!
-	return 0;
+    assert(0);    // !!!
+    return 0;
   }
   int dentry_authority(const char *dn,
-					   MDCluster *mdcluster) {
-	return mdcluster->hash_dentry( ino(),
-								   dn );
+                       MDSMap *mdsmap) {
+    assert(0);
+    //return ->hash_dentry( ino(),
+    //dn );
   }
-  int pick_replica(MDCluster *mdcluster) {
-	// replicas?
-	if (ino() > 1ULL && dir_contacts.size()) {
-	  //cout << "dir_contacts if " << dir_contacts << endl;
-	  set<int>::iterator it = dir_contacts.begin();
-	  if (dir_contacts.size() == 1)
-		return *it;
-	  else {
-		int r = rand() % dir_contacts.size();
-		while (r--) it++;
-		return *it;
-	  }
-	}
+  int pick_replica(MDSMap *mdsmap) {
+    // replicas?
+    if (ino() > 1ULL && dir_contacts.size()) {
+      //cout << "dir_contacts if " << dir_contacts << endl;
+      set<int>::iterator it = dir_contacts.begin();
+      if (dir_contacts.size() == 1)
+        return *it;
+      else {
+        int r = rand() % dir_contacts.size();
+        while (r--) it++;
+        return *it;
+      }
+    }
 
-	if (dir_replicated || ino() == 1) {
-	  //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
-	  return rand() % mdcluster->get_num_mds();  // huh.. pick a random mds!
-	}
-	else
-	  return authority(mdcluster);
+    if (dir_replicated || ino() == 1) {
+      //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
+      return rand() % mdsmap->get_num_mds();  // huh.. pick a random mds!
+    }
+    else
+      return authority(mdsmap);
   }
 
 
   // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
   Dir *open_dir() {
-	if (!dir) {
-	  if (dn) dn->get();  	// pin dentry
-	  get();
-	  dir = new Dir(this);
-	}
-	return dir;
+    if (!dir) {
+      if (dn) dn->get();      // pin dentry
+      get();
+      dir = new Dir(this);
+    }
+    return dir;
   }
 
 };
@@ -297,20 +301,21 @@ class Client : public Dispatcher {
   
   /* getdir result */
   struct DirResult {
-	string path;
-	map<string,inode_t> contents;
-	map<string,inode_t>::iterator p;
-	int off;
-	int size;
-	struct dirent_plus dp;
-	struct dirent_lite dl;
-	DirResult() : p(contents.end()), off(-1), size(0) {}
+    string path;
+    map<string,inode_t> contents;
+    map<string,inode_t>::iterator p;
+    int off;
+    int size;
+    struct dirent_plus dp;
+    struct dirent_lite dl;
+    DirResult() : p(contents.end()), off(-1), size(0) {}
   };
 
 
  protected:
   Messenger *messenger;  
   int whoami;
+  MonMap *monmap;
   
   // mds fake RPC
   tid_t last_tid;
@@ -319,12 +324,12 @@ class Client : public Dispatcher {
   map<tid_t, Cond*>                mds_rpc_dispatch_cond;
 
   // cluster descriptors
-  MDCluster             *mdcluster; 
-  OSDMap                *osdmap;
+  MDSMap *mdsmap; 
+  OSDMap *osdmap;
 
   bool   mounted;
   bool   unmounting;
-  Cond   unmount_cond;  
+  Cond   mount_cond;  
 
   int    unsafe_sync_write;
 public:
@@ -351,22 +356,22 @@ protected:
   hash_map<fh_t, Fh*>    fh_map;
   
   fh_t get_fh() {
-	fh_t fh = free_fh_set.first();
-	free_fh_set.erase(fh);
-	return fh;
+    fh_t fh = free_fh_set.first();
+    free_fh_set.erase(fh);
+    return fh;
   }
   void put_fh(fh_t fh) {
-	free_fh_set.insert(fh);
+    free_fh_set.insert(fh);
   }
 
   void mkabspath(const char *rel, string& abs) {
-	if (rel[0] == '/') {
-	  abs = rel;
-	} else {
-	  abs = cwd;
-	  abs += "/";
-	  abs += rel;
-	}
+    if (rel[0] == '/') {
+      abs = rel;
+    } else {
+      abs = cwd;
+      abs += "/";
+      abs += rel;
+    }
   }
 
 
@@ -379,85 +384,85 @@ protected:
 
   // decrease inode ref.  delete if dangling.
   void put_inode(Inode *in) {
-	in->put();
-	if (in->ref == 0) {
-	  inode_map.erase(in->inode.ino);
-	  if (in == root) root = 0;
-	  delete in;
-	}
+    in->put();
+    if (in->ref == 0) {
+      inode_map.erase(in->inode.ino);
+      if (in == root) root = 0;
+      delete in;
+    }
   }
 
   void close_dir(Dir *dir) {
-	assert(dir->is_empty());
-	
-	Inode *in = dir->parent_inode;
-	if (in->dn) in->dn->put();   // unpin dentry
-	
-	delete in->dir;
-	in->dir = 0;
-	put_inode(in);
+    assert(dir->is_empty());
+    
+    Inode *in = dir->parent_inode;
+    if (in->dn) in->dn->put();   // unpin dentry
+    
+    delete in->dir;
+    in->dir = 0;
+    put_inode(in);
   }
 
   int get_cache_size() { return lru.lru_get_size(); }
   void set_cache_size(int m) { lru.lru_set_max(m); }
 
   Dentry* link(Dir *dir, const string& name, Inode *in) {
-	Dentry *dn = new Dentry;
-	dn->name = name;
-	
-	// link to dir
-	dn->dir = dir;
-	dir->dentries[dn->name] = dn;
+    Dentry *dn = new Dentry;
+    dn->name = name;
+    
+    // link to dir
+    dn->dir = dir;
+    dir->dentries[dn->name] = dn;
 
-	// link to inode
-	dn->inode = in;
-	in->dn = dn;
-	in->get();
+    // link to inode
+    dn->inode = in;
+    in->dn = dn;
+    in->get();
 
-	lru.lru_insert_mid(dn);    // mid or top?
-	return dn;
+    lru.lru_insert_mid(dn);    // mid or top?
+    return dn;
   }
 
   void unlink(Dentry *dn) {
-	Inode *in = dn->inode;
+    Inode *in = dn->inode;
 
-	// unlink from inode
-	dn->inode = 0;
-	in->dn = 0;
-	put_inode(in);
-	
-	// unlink from dir
-	dn->dir->dentries.erase(dn->name);
-	if (dn->dir->is_empty()) 
-	  close_dir(dn->dir);
-	dn->dir = 0;
+    // unlink from inode
+    dn->inode = 0;
+    in->dn = 0;
+    put_inode(in);
+    
+    // unlink from dir
+    dn->dir->dentries.erase(dn->name);
+    if (dn->dir->is_empty()) 
+      close_dir(dn->dir);
+    dn->dir = 0;
 
-	// delete den
-	lru.lru_remove(dn);
-	delete dn;
+    // delete den
+    lru.lru_remove(dn);
+    delete dn;
   }
 
   Dentry *relink(Dentry *dn, Dir *dir, const string& name) {
-	// first link new dn to dir
-	/*
-	char *oldname = (char*)dn->name;
-	dn->name = new char[name.length()+1];
-	strcpy((char*)dn->name, name.c_str());
-	dir->dentries[dn->name] = dn;
-	*/
-	dir->dentries[name] = dn;
+    // first link new dn to dir
+    /*
+    char *oldname = (char*)dn->name;
+    dn->name = new char[name.length()+1];
+    strcpy((char*)dn->name, name.c_str());
+    dir->dentries[dn->name] = dn;
+    */
+    dir->dentries[name] = dn;
 
-	// unlink from old dir
-	dn->dir->dentries.erase(dn->name);
-	//delete[] oldname;
-	if (dn->dir->is_empty()) 
-	  close_dir(dn->dir);
+    // unlink from old dir
+    dn->dir->dentries.erase(dn->name);
+    //delete[] oldname;
+    if (dn->dir->is_empty()) 
+      close_dir(dn->dir);
 
-	// fix up dn
-	dn->name = name;
-	dn->dir = dir;
+    // fix up dn
+    dn->name = name;
+    dn->dir = dir;
 
-	return dn;
+    return dn;
   }
 
   // move dentry to top of lru
@@ -473,6 +478,7 @@ protected:
 
   // make blocking mds request
   MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
+  MClientReply* sendrecv(MClientRequest *req, int mds);
   void handle_client_reply(MClientReply *reply);
 
   void fill_stat(inode_t& inode, struct stat *st);
@@ -483,7 +489,7 @@ protected:
   friend class SyntheticClient;
 
  public:
-  Client(Messenger *m);
+  Client(Messenger *m, MonMap *mm);
   ~Client();
   void tear_down_cache();   
 
@@ -494,6 +500,10 @@ protected:
 
   // messaging
   void dispatch(Message *m);
+
+  void handle_mount_ack(class MClientMountAck*);
+  void handle_unmount_ack(Message*);
+  void handle_mds_map(class MMDSMap *m);
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);
@@ -565,7 +575,7 @@ protected:
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
   int truncate(const char *file, off_t size);
-	//int truncate(fh_t fh, long long size);
+    //int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
 
   // hpc lazyio
@@ -573,7 +583,7 @@ protected:
   int lazyio_synchronize(int fd, off_t offset, size_t count);
 
 
-  Message* ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
+  void ms_handle_failure(Message*, msg_addr_t dest, const entity_inst_t& inst);
 };
 
 #endif

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,27 +28,27 @@ class MInodeFileCaps : public Message {
   MInodeFileCaps() {}
   // from auth
   MInodeFileCaps(inodeno_t ino, int from, int caps) :
-	Message(MSG_MDS_INODEFILECAPS) {
+    Message(MSG_MDS_INODEFILECAPS) {
 
-	this->ino = ino;
-	this->from = from;
-	this->caps = caps;
+    this->ino = ino;
+    this->from = from;
+    this->caps = caps;
   }
 
   virtual char *get_type_name() { return "Icap";}
   
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(from), (char*)&from);
-	off += sizeof(from);
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	s.copy(off, sizeof(caps), (char*)&caps);
-	off += sizeof(caps);
+    s.copy(off, sizeof(from), (char*)&from);
+    off += sizeof(from);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    s.copy(off, sizeof(caps), (char*)&caps);
+    off += sizeof(caps);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&from, sizeof(from));
-	s.append((char*)&ino, sizeof(ino));
-	s.append((char*)&caps, sizeof(caps));
+    s.append((char*)&from, sizeof(from));
+    s.append((char*)&ino, sizeof(ino));
+    s.append((char*)&caps, sizeof(caps));
   }
 };
 

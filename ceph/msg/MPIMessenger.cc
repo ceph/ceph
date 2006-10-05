@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -145,27 +145,27 @@ void mpi_reap_sends(bool wait=false) {
 
   list<MPI_Request*>::iterator it = unfinished_sends.begin();
   while (it != unfinished_sends.end()) {
-	MPI_Status status;
-	int flag;
-	
-	if (wait) {
-	  MPI_Wait(*it, &status);
-	} else {
-	  MPI_Test(*it, &flag, &status);
-	  if (!flag) break;   // not finished yet
-	}
+    MPI_Status status;
+    int flag;
+    
+    if (wait) {
+      MPI_Wait(*it, &status);
+    } else {
+      MPI_Test(*it, &flag, &status);
+      if (!flag) break;   // not finished yet
+    }
 
-	dout(DBLVL) << "send " << *it << " completed" << endl;
+    dout(DBLVL) << "send " << *it << " completed" << endl;
 
-	if (unfinished_send_message.count(*it)) {
-	  dout(DBLVL) << "send message " << unfinished_send_message[*it] << " completed" << endl;
-	  delete unfinished_send_message[*it];
-	  unfinished_send_message.erase(*it);
-	}
+    if (unfinished_send_message.count(*it)) {
+      dout(DBLVL) << "send message " << unfinished_send_message[*it] << " completed" << endl;
+      delete unfinished_send_message[*it];
+      unfinished_send_message.erase(*it);
+    }
 
-	delete *it;
-	it++;
-	unfinished_sends.pop_front();
+    delete *it;
+    it++;
+    unfinished_sends.pop_front();
   }
 
   dout(DBLVL) << "reap has " << unfinished_sends.size() << " Isends outstanding, " << unfinished_send_message.size() << " messages" << endl;
@@ -191,18 +191,18 @@ Message *mpi_recv(int tag)
   msg_envelope_t env;
   
   ASSERT(MPI_Recv((void*)&env,
-				  sizeof(env),
-				  MPI_CHAR, 
-				  MPI_ANY_SOURCE,// status.MPI_SOURCE,//MPI_ANY_SOURCE,
-				  tag,
-				  MPI_COMM_WORLD,
-				  &status/*,
-						   &recv_env_req*/) == MPI_SUCCESS);
+                  sizeof(env),
+                  MPI_CHAR, 
+                  MPI_ANY_SOURCE,// status.MPI_SOURCE,//MPI_ANY_SOURCE,
+                  tag,
+                  MPI_COMM_WORLD,
+                  &status/*,
+                           &recv_env_req*/) == MPI_SUCCESS);
   assert(status.count == MSG_ENVELOPE_LEN);
 
   if (env.type == 0) {
-	dout(DBLVL) << "mpi_recv got type 0 message, kicked!" << endl;
-	return 0;
+    dout(DBLVL) << "mpi_recv got type 0 message, kicked!" << endl;
+    return 0;
   }
 
   dout(DBLVL) << "mpi_recv got envelope " << status.count << ", type=" << env.type << " src " << env.source << " dst " << env.dest << " nchunks=" << env.nchunks << " from " << status.MPI_SOURCE << endl;
@@ -210,25 +210,25 @@ Message *mpi_recv(int tag)
   // payload
   bufferlist blist;
   for (int i=0; i<env.nchunks; i++) {
-	MPI_Status fragstatus;
-	ASSERT(MPI_Probe(status.MPI_SOURCE,
-					 tag,
-					 MPI_COMM_WORLD,
-					 &fragstatus) == MPI_SUCCESS);
+    MPI_Status fragstatus;
+    ASSERT(MPI_Probe(status.MPI_SOURCE,
+                     tag,
+                     MPI_COMM_WORLD,
+                     &fragstatus) == MPI_SUCCESS);
 
-	bufferptr bp = new buffer(fragstatus.count);
-	
-	ASSERT(MPI_Recv(bp.c_str(),
-					fragstatus.count,
-					MPI_CHAR, 
-					status.MPI_SOURCE,
-					tag,
-					MPI_COMM_WORLD,
-					&fragstatus) == MPI_SUCCESS);
+    bufferptr bp = new buffer(fragstatus.count);
+    
+    ASSERT(MPI_Recv(bp.c_str(),
+                    fragstatus.count,
+                    MPI_CHAR, 
+                    status.MPI_SOURCE,
+                    tag,
+                    MPI_COMM_WORLD,
+                    &fragstatus) == MPI_SUCCESS);
 
-	blist.push_back(bp);
+    blist.push_back(bp);
 
-	dout(DBLVL) << "mpi_recv got frag " << i << " of " << env.nchunks << " len " << fragstatus.count << endl;
+    dout(DBLVL) << "mpi_recv got frag " << i << " of " << env.nchunks << " len " << fragstatus.count << endl;
   }
   
   dout(DBLVL) << "mpi_recv got " << blist.length() << " byte message tag " << status.MPI_TAG << endl;
@@ -248,14 +248,14 @@ int mpi_send(Message *m, int tag)
 
   // local?
   if (rank == mpi_rank) {      
-	dout(DBLVL) << "queuing local delivery" << endl;
-	incoming.push_back(m);
-	return 0;
+    dout(DBLVL) << "queuing local delivery" << endl;
+    incoming.push_back(m);
+    return 0;
   } 
 
   // marshall
   if (m->empty_payload())
-	m->encode_payload();
+    m->encode_payload();
   msg_envelope_t *env = &m->get_envelope();
   env->nchunks = m->get_payload().buffers().size();
 
@@ -267,28 +267,28 @@ int mpi_send(Message *m, int tag)
 
   // send envelope
   ASSERT(MPI_Isend((void*)env,
-				   sizeof(*env),
-				   MPI_CHAR,
-				   rank,
-				   tag,
-				   MPI_COMM_WORLD,
-				   mpi_prep_send_req()) == MPI_SUCCESS);
+                   sizeof(*env),
+                   MPI_CHAR,
+                   rank,
+                   tag,
+                   MPI_COMM_WORLD,
+                   mpi_prep_send_req()) == MPI_SUCCESS);
 
   // payload
   int i = 0;
   for (list<bufferptr>::iterator it = m->get_payload().buffers().begin();
-	   it != m->get_payload().buffers().end();
-	   it++) {
-	dout(DBLVL) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
-	//MPI_Request *req = new MPI_Request;
-	ASSERT(MPI_Isend((void*)(*it).c_str(),
-					 (*it).length(),
-					 MPI_CHAR,
-					 rank,
-					 tag,
-					 MPI_COMM_WORLD,
-					 mpi_prep_send_req()) == MPI_SUCCESS);
-	i++;
+       it != m->get_payload().buffers().end();
+       it++) {
+    dout(DBLVL) << "mpi_sending frag " << i << " len " << (*it).length() << endl;
+    //MPI_Request *req = new MPI_Request;
+    ASSERT(MPI_Isend((void*)(*it).c_str(),
+                     (*it).length(),
+                     MPI_CHAR,
+                     rank,
+                     tag,
+                     MPI_COMM_WORLD,
+                     mpi_prep_send_req()) == MPI_SUCCESS);
+    i++;
   }
 
   // attach message to last send, so we can free it later
@@ -313,18 +313,18 @@ static int get_thread_tag()
   int tag = (int)pthread_getspecific(tag_key);
   
   if (tag == 0) {
-	// first time this thread has performed MPI messaging
-	
-	if (pthread_mutex_lock(&mutex) < 0)
-	  SYSERROR();
-	
-	tag = ++nthreads;
-	
-	if (pthread_mutex_unlock(&mutex) < 0)
-	  SYSERROR();
-	
-	if (pthread_setspecific(tag_key, (void*)tag) < 0)
-	  SYSERROR();
+    // first time this thread has performed MPI messaging
+    
+    if (pthread_mutex_lock(&mutex) < 0)
+      SYSERROR();
+    
+    tag = ++nthreads;
+    
+    if (pthread_mutex_unlock(&mutex) < 0)
+      SYSERROR();
+    
+    if (pthread_setspecific(tag_key, (void*)tag) < 0)
+      SYSERROR();
   }
   
   return tag;
@@ -341,73 +341,73 @@ void* mpimessenger_loop(void*)
 
   while (1) {
 
-	// outgoing
-	mpi_reap_sends();
-	
+    // outgoing
+    mpi_reap_sends();
+    
 #ifdef FUNNEL_MPI
-	// check outgoing queue
-	out_queue_lock.Lock();
-	if (outgoing.size()) {
-	  dout(10) << outgoing.size() << " outgoing messages" << endl;
-	  for (list<Message*>::iterator it = outgoing.begin();
-		   it != outgoing.end();
-		   it++) {
-		mpi_send(*it, TAG_UNSOLICITED);
-	  }
-	}
-	outgoing.clear();
-	out_queue_lock.Unlock();
+    // check outgoing queue
+    out_queue_lock.Lock();
+    if (outgoing.size()) {
+      dout(10) << outgoing.size() << " outgoing messages" << endl;
+      for (list<Message*>::iterator it = outgoing.begin();
+           it != outgoing.end();
+           it++) {
+        mpi_send(*it, TAG_UNSOLICITED);
+      }
+    }
+    outgoing.clear();
+    out_queue_lock.Unlock();
 #endif
 
 
-	// timer events?
-	if (pending_timer) {
-	  dout(DBLVL) << "pending timer" << endl;
-	  g_timer.execute_pending();
-	}
+    // timer events?
+    if (pending_timer) {
+      dout(DBLVL) << "pending timer" << endl;
+      g_timer.execute_pending();
+    }
 
-	// done?
-	if (mpi_done &&
-		incoming.empty() &&
-		outgoing.empty() &&
-		!pending_timer) break;
+    // done?
+    if (mpi_done &&
+        incoming.empty() &&
+        outgoing.empty() &&
+        !pending_timer) break;
 
 
-	// incoming
-	Message *m = 0;
+    // incoming
+    Message *m = 0;
 
-	if (incoming.size()) {
-	  dout(12) << "loop pulling message off incoming" << endl;
-	  m = incoming.front();
-	  incoming.pop_front();
-	} 
-	else {
-	  // check mpi
-	  dout(12) << "loop waiting for incoming messages" << endl;
+    if (incoming.size()) {
+      dout(12) << "loop pulling message off incoming" << endl;
+      m = incoming.front();
+      incoming.pop_front();
+    } 
+    else {
+      // check mpi
+      dout(12) << "loop waiting for incoming messages" << endl;
 
-	  // get message
-	  m = mpi_recv(TAG_UNSOLICITED);
-	}
+      // get message
+      m = mpi_recv(TAG_UNSOLICITED);
+    }
 
-	// dispatch?
-	if (m) {
-	  int dest = m->get_dest();
-	  if (directory.count(dest)) {
-		Messenger *who = directory[ dest ];
-		
-		dout(4) << "---- '" << m->get_type_name() << 
-		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
-				<< m 
-				<< endl;
-		
-		who->dispatch(m);
-	  } else {
-		dout (1) << "---- i don't know who " << dest << " is." << endl;
-		assert(0);
-		break;
-	  }
-	}
+    // dispatch?
+    if (m) {
+      int dest = m->get_dest();
+      if (directory.count(dest)) {
+        Messenger *who = directory[ dest ];
+        
+        dout(4) << "---- '" << m->get_type_name() << 
+          "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+          " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+                << m 
+                << endl;
+        
+        who->dispatch(m);
+      } else {
+        dout (1) << "---- i don't know who " << dest << " is." << endl;
+        assert(0);
+        break;
+      }
+    }
 
   }
 
@@ -428,9 +428,9 @@ int mpimessenger_start()
   
   // start a thread
   pthread_create(&thread_id, 
-				 NULL, 
-				 mpimessenger_loop, 
-				 0);
+                 NULL, 
+                 mpimessenger_loop, 
+                 0);
   return 0;
 }
 
@@ -451,12 +451,12 @@ void mpimessenger_kick_loop()
 
   sender_lock.Lock();
   ASSERT(MPI_Isend(&kick_env,               // kick sync for now, but ONLY because it makes me feel safer.
-				   sizeof(kick_env),
-				   MPI_CHAR,
-				   mpi_rank,
-				   TAG_UNSOLICITED,
-				   MPI_COMM_WORLD,
-				   mpi_prep_send_req()) == MPI_SUCCESS);
+                   sizeof(kick_env),
+                   MPI_CHAR,
+                   mpi_rank,
+                   TAG_UNSOLICITED,
+                   MPI_COMM_WORLD,
+                   mpi_prep_send_req()) == MPI_SUCCESS);
   sender_lock.Unlock();
 }
 
@@ -468,8 +468,8 @@ void mpimessenger_stop()
   dout(5) << "mpimessenger_stop stopping thread" << endl;
 
   if (mpi_done) {
-	dout(1) << "mpimessenger_stop called, but already done!" << endl;
-	assert(!mpi_done);
+    dout(1) << "mpimessenger_stop called, but already done!" << endl;
+    assert(!mpi_done);
   }
 
   // set finish flag
@@ -500,8 +500,8 @@ void mpimessenger_wait()
 
 class C_MPIKicker : public Context {
   void finish(int r) {
-	dout(DBLVL) << "timer kick" << endl;
-	mpimessenger_kick_loop();
+    dout(DBLVL) << "timer kick" << endl;
+    mpimessenger_kick_loop();
   }
 };
 
@@ -548,21 +548,21 @@ int MPIMessenger::shutdown()
 
   // last one?
   if (directory.empty()) {
-	dout(10) << "shutdown last mpimessenger on rank " << mpi_rank << " shut down" << endl;
-	pthread_t whoami = pthread_self();
+    dout(10) << "shutdown last mpimessenger on rank " << mpi_rank << " shut down" << endl;
+    pthread_t whoami = pthread_self();
 
-	dout(15) << "whoami = " << whoami << ", thread = " << thread_id << endl;
-	if (whoami == thread_id) {
-	  // i am the event loop thread, just set flag!
-	  dout(15) << "  set mpi_done=true" << endl;
-	  mpi_done = true;
-	} else {
-	  // i am a different thread, tell the event loop to stop.
-	  dout(15) << "  calling mpimessenger_stop()" << endl;
-	  mpimessenger_stop();
-	}
+    dout(15) << "whoami = " << whoami << ", thread = " << thread_id << endl;
+    if (whoami == thread_id) {
+      // i am the event loop thread, just set flag!
+      dout(15) << "  set mpi_done=true" << endl;
+      mpi_done = true;
+    } else {
+      // i am a different thread, tell the event loop to stop.
+      dout(15) << "  calling mpimessenger_stop()" << endl;
+      mpimessenger_stop();
+    }
   } else {
-	dout(10) << "shutdown still " << directory.size() << " other messengers on rank " << mpi_rank << endl;
+    dout(10) << "shutdown still " << directory.size() << " other messengers on rank " << mpi_rank << endl;
   }
   return 0;
 }

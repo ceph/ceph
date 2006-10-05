@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,9 +25,9 @@ class MNSConnectAck : public Message {
  public:
   MNSConnectAck() {}
   MNSConnectAck(int r, int g=0) : 
-	Message(MSG_NS_CONNECTACK) { 
-	rank = r;
-	inst = g;
+    Message(MSG_NS_CONNECTACK) { 
+    rank = r;
+    inst = g;
   }
   
   char *get_type_name() { return "NSConA"; }
@@ -36,15 +36,15 @@ class MNSConnectAck : public Message {
   int get_inst() { return inst; }
 
   void encode_payload() {
-	payload.append((char*)&rank, sizeof(rank));
-	payload.append((char*)&inst, sizeof(inst));
+    payload.append((char*)&rank, sizeof(rank));
+    payload.append((char*)&inst, sizeof(inst));
   }
   void decode_payload() {
-	unsigned off = 0;
-	payload.copy(off, sizeof(rank), (char*)&rank);
-	off += sizeof(rank);
-	payload.copy(off, sizeof(inst), (char*)&inst);
-	off += sizeof(inst);
+    unsigned off = 0;
+    payload.copy(off, sizeof(rank), (char*)&rank);
+    off += sizeof(rank);
+    payload.copy(off, sizeof(inst), (char*)&inst);
+    off += sizeof(inst);
   }
 };
 

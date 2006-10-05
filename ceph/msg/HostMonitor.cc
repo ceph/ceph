@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -43,8 +43,8 @@ public:
      this->hm = hm;
   }
   void finish(int r) {
-	//cout << "HEARTBEAT" << endl;
-	hm->pending_events.erase(this);
+    //cout << "HEARTBEAT" << endl;
+    hm->pending_events.erase(this);
     hm->initiate_heartbeat();
   }
 };
@@ -53,11 +53,11 @@ class C_HM_CheckHeartbeat : public Context {
   HostMonitor *hm;
 public:
   C_HM_CheckHeartbeat(HostMonitor *hm) {
-	this->hm = hm;
+    this->hm = hm;
   }
   void finish(int r) {
-	//cout << "CHECK" << endl;
-	hm->pending_events.erase(this);
+    //cout << "CHECK" << endl;
+    hm->pending_events.erase(this);
     hm->check_heartbeat();
   }
 };
@@ -85,10 +85,10 @@ void HostMonitor::shutdown()
 {
   // cancel any events
   for (set<Context*>::iterator it = pending_events.begin();
-	   it != pending_events.end();
-	   it++) {
-	g_timer.cancel_event(*it);
-	delete *it;
+       it != pending_events.end();
+       it++) {
+    g_timer.cancel_event(*it);
+    delete *it;
   }
   pending_events.clear();
 }
@@ -110,7 +110,7 @@ void HostMonitor::schedule_heartbeat()
 void HostMonitor::host_is_alive(msg_addr_t host)
 {
   if (hosts.count(host))
-	status[host].last_heard_from = g_clock.gettime();
+    status[host].last_heard_from = g_clock.gettime();
 }
 
 
@@ -123,18 +123,18 @@ void HostMonitor::initiate_heartbeat()
   // send out pings
   inflight_pings.clear();
   for (set<msg_addr_t>::iterator it = hosts.begin();
-	   it != hosts.end();
-	   it++) {
-	// have i heard from them recently?
-	if (now - status[*it].last_heard_from < heartbeat_interval) {
-	  dout(DBL) << "skipping " << *it << ", i heard from them recently" << endl;
-	} else {
-	  dout(DBL) << "pinging " << *it << endl;
-	  status[*it].last_pinged = now;
-	  inflight_pings.insert(*it);
+       it != hosts.end();
+       it++) {
+    // have i heard from them recently?
+    if (now - status[*it].last_heard_from < heartbeat_interval) {
+      dout(DBL) << "skipping " << *it << ", i heard from them recently" << endl;
+    } else {
+      dout(DBL) << "pinging " << *it << endl;
+      status[*it].last_pinged = now;
+      inflight_pings.insert(*it);
 
-	  messenger->send_message(new MPing(1), *it, 0);
-	}
+      messenger->send_message(new MPing(1), *it, 0);
+    }
   }
   
   // set timer to check results
@@ -155,33 +155,33 @@ void HostMonitor::check_heartbeat()
 
   // check inflight pings
   for (set<msg_addr_t>::iterator it = inflight_pings.begin();
-	   it != inflight_pings.end();
-	   it++) {
-	status[*it].num_heartbeats_missed++;
+       it != inflight_pings.end();
+       it++) {
+    status[*it].num_heartbeats_missed++;
 
-	dout(DBL) << "no response from " << *it << " for " << status[*it].num_heartbeats_missed << " beats" << endl;
-	
-	if (status[*it].num_heartbeats_missed >= max_heartbeat_misses) {
-	  if (acked_failures.count(*it)) {
-		dout(DBL) << *it << " is already failed" << endl;
-	  } else {
-		if (unacked_failures.count(*it)) {
-		  dout(DBL) << *it << " is already failed, but unacked, sending another failure message" << endl;
-		} else {
-		  dout(DBL) << "failing " << *it << endl;
-		  unacked_failures.insert(*it);
-		}
-		
-		/*if (false)   // do this in NewMessenger for now!  FIXME
-		for (set<msg_addr_t>::iterator nit = notify.begin();
-			 nit != notify.end();
-			 nit++) {
-		  messenger->send_message(new MFailure(*it, messenger->get_inst(*it)),
-								  *nit, notify_port, 0);
-		}
-		*/
-	  }
-	}
+    dout(DBL) << "no response from " << *it << " for " << status[*it].num_heartbeats_missed << " beats" << endl;
+    
+    if (status[*it].num_heartbeats_missed >= max_heartbeat_misses) {
+      if (acked_failures.count(*it)) {
+        dout(DBL) << *it << " is already failed" << endl;
+      } else {
+        if (unacked_failures.count(*it)) {
+          dout(DBL) << *it << " is already failed, but unacked, sending another failure message" << endl;
+        } else {
+          dout(DBL) << "failing " << *it << endl;
+          unacked_failures.insert(*it);
+        }
+        
+        /*if (false)   // do this in NewMessenger for now!  FIXME
+        for (set<msg_addr_t>::iterator nit = notify.begin();
+             nit != notify.end();
+             nit++) {
+          messenger->send_message(new MFailure(*it, messenger->get_inst(*it)),
+                                  *nit, notify_port, 0);
+        }
+        */
+      }
+    }
   }
  
   // forget about the pings.
@@ -196,12 +196,12 @@ void HostMonitor::proc_message(Message *m)
   switch (m->get_type()) {
 
   case MSG_PING_ACK:
-	handle_ping_ack((MPingAck*)m);
-	break;
+    handle_ping_ack((MPingAck*)m);
+    break;
 
   case MSG_FAILURE_ACK:
-	handle_failure_ack((MFailureAck*)m);
-	break;
+    handle_failure_ack((MFailureAck*)m);
+    break;
 
   }
 }

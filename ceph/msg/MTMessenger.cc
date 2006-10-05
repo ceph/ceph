@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -51,18 +51,18 @@ static int get_tag()
     int tag = (int)pthread_getspecific(tag_key);
 
     if (tag == 0) {
-	// first time this thread has performed MPI messaging
+    // first time this thread has performed MPI messaging
 
-	if (pthread_mutex_lock(&mutex) < 0)
-	    SYSERROR();
+    if (pthread_mutex_lock(&mutex) < 0)
+        SYSERROR();
 
-	tag = ++nthreads;
+    tag = ++nthreads;
 
-	if (pthread_mutex_unlock(&mutex) < 0)
-	    SYSERROR();
+    if (pthread_mutex_unlock(&mutex) < 0)
+        SYSERROR();
 
-	if (pthread_setspecific(tag_key, (void*)tag) < 0)
-	    SYSERROR();
+    if (pthread_setspecific(tag_key, (void*)tag) < 0)
+        SYSERROR();
     }
 
     return tag;
@@ -79,11 +79,11 @@ static void send(Message *m, int rank, int tag)
 
     char *buf = (char*)r.c_str();
     ASSERT(MPI_Send(buf,
-		    size,
-		    MPI_CHAR,
-		    rank,
-		    tag,
-		    MPI_COMM_WORLD) == MPI_SUCCESS);
+            size,
+            MPI_CHAR,
+            rank,
+            tag,
+            MPI_COMM_WORLD) == MPI_SUCCESS);
 }
 
 // read a message from MPI and unmarshall it
@@ -93,21 +93,21 @@ static Message *receive(int tag)
 
     // get message size
     ASSERT(MPI_Probe(MPI_ANY_SOURCE, 
-		     tag,
-		     MPI_COMM_WORLD,
-		     &status) == MPI_SUCCESS);
+             tag,
+             MPI_COMM_WORLD,
+             &status) == MPI_SUCCESS);
 
     // get message; there may be multiple messages on the queue, we
     // need to be sure to read the one which corresponds to size
     // obtained above.
     char *buf = new char[status.count];
     ASSERT(MPI_Recv(buf,
-		    status.count,
-		    MPI_CHAR, 
-		    status.MPI_SOURCE,
-		    status.MPI_TAG,
-		    MPI_COMM_WORLD,
-		    &status) == MPI_SUCCESS);
+            status.count,
+            MPI_CHAR, 
+            status.MPI_SOURCE,
+            status.MPI_TAG,
+            MPI_COMM_WORLD,
+            &status) == MPI_SUCCESS);
 
     // unmarshall message
     crope r(buf, status.count);
@@ -126,15 +126,15 @@ MTMessenger::MTMessenger(int& argc, char**& argv)
 
     int provided;
     ASSERT(MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided)
-	   == MPI_SUCCESS);
+       == MPI_SUCCESS);
 
     ASSERT(MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank) == MPI_SUCCESS);
 
     if (pthread_mutex_init(&mutex, NULL) < 0)
-	SYSERROR();
+    SYSERROR();
 
     if (pthread_key_create(&tag_key, NULL) < 0)
-	SYSERROR();
+    SYSERROR();
 
     nthreads = 0;
 }
@@ -153,7 +153,7 @@ MTMessenger::~MTMessenger()
 // send a request and wait for the response
 Message *MTMessenger::sendrecv(Message *m, msg_addr_t dest)
 {
-    int dest_tag = 0;		// servers listen for any tag
+    int dest_tag = 0;        // servers listen for any tag
     int my_tag = get_tag();
 
     // set our envelope (not to be confused with the MPI envelope)
@@ -174,7 +174,7 @@ Message *MTMessenger::recvreq()
 // forward request, masquerading as original source
 void MTMessenger::fwdreq(Message *req, int dest)
 {
-    int dest_tag = 0;		// servers listen for any tag
+    int dest_tag = 0;        // servers listen for any tag
 
     // set our envelope (not to be confused with the MPI envelope)
     req->set_dest(dest, dest_tag);

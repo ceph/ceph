@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,9 +26,9 @@ class MHashDir : public Message {
  public:  
   MHashDir() {}
   MHashDir(inodeno_t ino) : 
-	Message(MSG_MDS_HASHDIR) {
-	this->ino = ino;
-	nden = 0;
+    Message(MSG_MDS_HASHDIR) {
+    this->ino = ino;
+    nden = 0;
   }
   virtual char *get_type_name() { return "Ha"; }
 
@@ -41,23 +41,23 @@ class MHashDir : public Message {
   void inc_nden() { nden++; }
 
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	payload.copy(off, sizeof(nden), (char*)&nden);
-	off += sizeof(nden);
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    payload.copy(off, sizeof(nden), (char*)&nden);
+    off += sizeof(nden);
 
-	size_t len;
-	payload.copy(off, sizeof(len), (char*)&len);
-	off += sizeof(len);
-	state.substr_of(payload, off, len);
+    size_t len;
+    payload.copy(off, sizeof(len), (char*)&len);
+    off += sizeof(len);
+    state.substr_of(payload, off, len);
   }
   void encode_payload() {
-	payload.append((char*)&ino, sizeof(ino));
-	payload.append((char*)&nden, sizeof(nden));
-	size_t size = state.length();
-	payload.append((char*)&size, sizeof(size));
-	payload.claim_append(state);
+    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&nden, sizeof(nden));
+    size_t size = state.length();
+    payload.append((char*)&size, sizeof(size));
+    payload.claim_append(state);
   }
 
 };

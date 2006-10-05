@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,7 +14,7 @@
 
 #include <stdarg.h>
 
-#ifdef	__cplusplus
+#ifdef    __cplusplus
 extern "C" {
 #endif
 
@@ -35,6 +35,6 @@ extern void exiterror(const char *fmt, ...);
 /* print error message */
 extern void error(const char *fmt, ...);
 
-#ifdef	__cplusplus
+#ifdef    __cplusplus
 } // extern "C"
 #endif

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,22 +25,22 @@ class MFailure : public Message {
 
   MFailure() {}
   MFailure(msg_addr_t f, entity_inst_t& i) : 
-	Message(MSG_FAILURE),
-	failed(f), inst(i) {}
+    Message(MSG_FAILURE),
+    failed(f), inst(i) {}
  
   msg_addr_t get_failed() { return failed; }
   entity_inst_t& get_inst() { return inst; }
 
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(failed), (char*)&failed);
-	off += sizeof(failed);
-	payload.copy(off, sizeof(inst), (char*)&inst);
-	off += sizeof(inst);
+    int off = 0;
+    payload.copy(off, sizeof(failed), (char*)&failed);
+    off += sizeof(failed);
+    payload.copy(off, sizeof(inst), (char*)&inst);
+    off += sizeof(inst);
   }
   void encode_payload() {
-	payload.append((char*)&failed, sizeof(failed));
-	payload.append((char*)&inst, sizeof(inst));
+    payload.append((char*)&failed, sizeof(failed));
+    payload.append((char*)&inst, sizeof(inst));
   }
 
   virtual char *get_type_name() { return "fail"; }

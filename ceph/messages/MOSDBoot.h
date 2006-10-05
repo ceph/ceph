@@ -11,19 +11,19 @@ class MOSDBoot : public Message {
 
   MOSDBoot() {}
   MOSDBoot(OSDSuperblock& s) : 
-	Message(MSG_OSD_BOOT),
-	sb(s) {
+    Message(MSG_OSD_BOOT),
+    sb(s) {
   }
 
   char *get_type_name() { return "oboot"; }
   
   void encode_payload() {
-	payload.append((char*)&sb, sizeof(sb));
+    payload.append((char*)&sb, sizeof(sb));
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(sb), (char*)&sb);
-	off += sizeof(sb);
+    int off = 0;
+    payload.copy(off, sizeof(sb), (char*)&sb);
+    off += sizeof(sb);
   }
 };
 

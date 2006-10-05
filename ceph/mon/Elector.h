@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -35,12 +35,12 @@ class Elector {
   public:
     int p_id;
     int s_num;
-	
+    
     Epoch(int p_id=0, int s_num=0) {
       this->p_id = p_id;
       this->s_num = s_num;
     }
-  };	
+  };    
 
 
   // State
@@ -49,9 +49,9 @@ class Elector {
     Epoch epoch;
     int freshness;
 
-	State() : freshness(0) {};
+    State() : freshness(0) {};
     State(Epoch& e, int f) :
-	  epoch(e), freshness(f) {}
+      epoch(e), freshness(f) {}
   };
 
 
@@ -59,7 +59,7 @@ class Elector {
   public:
     State state;
     bool expired;
-	View() : expired(false) {}
+    View() : expired(false) {}
     View(State& s, bool e) : state(s), expired(e) {}
   };
 
@@ -105,8 +105,8 @@ class Elector {
 
  public:  
   Elector(Monitor *m, int w) : mon(m), whoami(w) {
-	// initialize all those values!
-	// ...
+    // initialize all those values!
+    // ...
   }
 
   // timer methods
@@ -121,16 +121,16 @@ class Elector {
 
 inline bool operator>(const Elector::Epoch& l, const Elector::Epoch& r) {
   if (l.s_num == r.s_num)
-	return (l.p_id > r.p_id);
+    return (l.p_id > r.p_id);
   else
-	return (l.s_num > r.s_num);
+    return (l.s_num > r.s_num);
 }
 
 inline bool operator<(const Elector::Epoch& l, const Elector::Epoch& r) {
   if (l.s_num == r.s_num)
-	return (l.p_id < r.p_id);
+    return (l.p_id < r.p_id);
   else
-	return (l.s_num < r.s_num);
+    return (l.s_num < r.s_num);
 }
 
 inline bool operator==(const Elector::Epoch& l, const Elector::Epoch& r) {
@@ -141,17 +141,17 @@ inline bool operator==(const Elector::Epoch& l, const Elector::Epoch& r) {
 inline bool operator>(const Elector::State& l, const Elector::State& r) 
 {
   if (l.epoch == r.epoch)
-	return (l.freshness > r.freshness);
+    return (l.freshness > r.freshness);
   else
-	return l.epoch > r.epoch;
+    return l.epoch > r.epoch;
 }
  
 inline bool operator<(const Elector::State& l, const Elector::State& r) 
 {
   if (l.epoch == r.epoch)
-	return (l.freshness < r.freshness);
+    return (l.freshness < r.freshness);
   else
-	return l.epoch < r.epoch;
+    return l.epoch < r.epoch;
 }
  
 inline bool operator==(const Elector::State& l, const Elector::State& r) 

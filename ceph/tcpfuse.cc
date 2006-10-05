@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 
 
 #include <sys/stat.h>
@@ -42,7 +55,7 @@ int main(int argc, char **argv, char *envp[]) {
   
   Client *client = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));
   client->init();
-	
+    
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
   cout << "mounting" << endl;

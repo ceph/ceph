@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,7 +14,7 @@
 
 //
 //
-//	rush.cc
+//    rush.cc
 //
 // $Id$
 //
@@ -41,11 +41,11 @@ Rush::Rush ()
 
 //----------------------------------------------------------------------
 //
-//	Rush::AddCluster
+//    Rush::AddCluster
 //
-//	Add a cluster.  The number of servers in the cluster and
-//	the weight of each server is passed.  The current number of
-//	clusters is returned.
+//    Add a cluster.  The number of servers in the cluster and
+//    the weight of each server is passed.  The current number of
+//    clusters is returned.
 //
 //----------------------------------------------------------------------
 int
@@ -68,8 +68,8 @@ Rush::AddCluster (int nServers, double weight)
 #if 0
   for (int i = 0; i < nClusters; i++) {
     fprintf (stderr, "size=%-3d prev=%-3d weight=%-6.2f prevWeight=%-8.2f\n",
-	    clusterSize[i], serversInPrevious[i], clusterWeight[i],
-	    totalWeightBefore[i]);
+        clusterSize[i], serversInPrevious[i], clusterWeight[i],
+        totalWeightBefore[i]);
   }
 #endif
   return (nClusters);
@@ -78,23 +78,23 @@ Rush::AddCluster (int nServers, double weight)
 
 //----------------------------------------------------------------------
 //
-//	Rush::GetServersByKey
+//    Rush::GetServersByKey
 //
-//	This function returns a list of servers on which an object
-//	should be placed.  The servers array must be large enough to
-//	contain the list.
+//    This function returns a list of servers on which an object
+//    should be placed.  The servers array must be large enough to
+//    contain the list.
 //
 //----------------------------------------------------------------------
 void
 Rush::GetServersByKey (int key, int nReplicas, int servers[])
 {
-  int	replicasLeft = nReplicas;
-  int	cluster;
-  int	mustAssign, numberAssigned;
-  int	i, toDraw;
-  int	*srv = servers;
-  double	myWeight;
-  RushRNG	rng;
+  int    replicasLeft = nReplicas;
+  int    cluster;
+  int    mustAssign, numberAssigned;
+  int    i, toDraw;
+  int    *srv = servers;
+  double    myWeight;
+  RushRNG    rng;
 
   // There may not be more replicas than servers!
   assert (nReplicas <= totalServers);
@@ -113,13 +113,13 @@ Rush::GetServersByKey (int key, int nReplicas, int servers[])
     rng.Seed (myhash (key)^cluster, cluster^0xb90738);
     numberAssigned = mustAssign +
       rng.HyperGeometricWeighted (toDraw, myWeight,
-								  totalWeightBefore[cluster] + myWeight,
-								  clusterWeight[cluster]);
+                                  totalWeightBefore[cluster] + myWeight,
+                                  clusterWeight[cluster]);
     if (numberAssigned > 0) {
       rng.Seed (myhash (key)^cluster ^ 11, cluster^0xfea937);
       rng.DrawKofN (srv, numberAssigned, clusterSize[cluster]);
       for (i = 0; i < numberAssigned; i++) {
-		srv[i] += serversInPrevious[cluster];
+        srv[i] += serversInPrevious[cluster];
       }
       replicasLeft -= numberAssigned;
       srv += numberAssigned;
@@ -131,20 +131,20 @@ Rush::GetServersByKey (int key, int nReplicas, int servers[])
 
 //----------------------------------------------------------------------
 //
-//	RushRNG::HyperGeometricWeighted
+//    RushRNG::HyperGeometricWeighted
 //
-//	Use an iterative method to generate a hypergeometric random
-//	variable.  This approach guarantees that, if the number of draws
-//	is reduced, the number of successes must be as well as long as
-//	the seed for the RNG is the same.
+//    Use an iterative method to generate a hypergeometric random
+//    variable.  This approach guarantees that, if the number of draws
+//    is reduced, the number of successes must be as well as long as
+//    the seed for the RNG is the same.
 //
 //----------------------------------------------------------------------
 int
 RushRNG::HyperGeometricWeighted (int nDraws, double yesWeighted,
-				 double totalWeighted, double weightOne)
+                 double totalWeighted, double weightOne)
 {
-  int	positives = 0, i;
-  double	curRand;
+  int    positives = 0, i;
+  double    curRand;
 
   // If the weight is too small (or is negative), choose zero objects.
   if (weightOne <= 1e-9 || nDraws == 0) {
@@ -168,14 +168,14 @@ RushRNG::HyperGeometricWeighted (int nDraws, double yesWeighted,
 
 //----------------------------------------------------------------------
 //
-//	RushRNG::DrawKofN
+//    RushRNG::DrawKofN
 //
 //----------------------------------------------------------------------
 void
 RushRNG::DrawKofN (int vals[], int nToDraw, int setSize)
 {
-  int	deck[setSize];
-  int	i, pick;
+  int    deck[setSize];
+  int    i, pick;
 
   assert(nToDraw <= setSize);
 
@@ -185,16 +185,16 @@ RushRNG::DrawKofN (int vals[], int nToDraw, int setSize)
 
   for (i = 0; i < nToDraw; i++) {
     pick = (int)(RandomDouble () * (double)(setSize - i));
-	if (pick >= setSize-i) pick = setSize-i-1;  // in case
-	//	assert(i >= 0 && i < nToDraw);
-	//	assert(pick >= 0 && pick < setSize);
+    if (pick >= setSize-i) pick = setSize-i-1;  // in case
+    //    assert(i >= 0 && i < nToDraw);
+    //    assert(pick >= 0 && pick < setSize);
     vals[i] = deck[pick];
     deck[pick] = deck[setSize-i-1];
   }
 }
 
-#define	SEED_X 521288629
-#define	SEED_Y 362436069
+#define    SEED_X 521288629
+#define    SEED_Y 362436069
 RushRNG::RushRNG ()
 {
   Seed (0, 0);
@@ -212,7 +212,7 @@ RushRNG::RandomInt ()
 {
   const unsigned int a = 18000;
   const unsigned int b = 18879;
-  unsigned int	rndValue;
+  unsigned int    rndValue;
 
   state1 = a * (state1 & 0xffff) + (state1 >> 16);
   state2 = b * (state2 & 0xffff) + (state2 >> 16);
@@ -223,7 +223,7 @@ RushRNG::RandomInt ()
 double
 RushRNG::RandomDouble ()
 {
-  double	v;
+  double    v;
 
   v = (double)RandomInt() / (65536.0*65536.0);
   return (v);

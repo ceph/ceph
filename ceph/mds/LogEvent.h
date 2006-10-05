@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -45,41 +45,41 @@ class LogEvent {
   virtual void decode_payload(bufferlist& bl, int& off) = 0;
 
   void encode(bufferlist& bl) {
-	// type
-	assert(_type > 0);
-	bl.append((char*)&_type, sizeof(_type));
+    // type
+    assert(_type > 0);
+    bl.append((char*)&_type, sizeof(_type));
 
-	// len placeholder
-	int len = 0;   // we don't know just yet...
-	int off = bl.length();
-	bl.append((char*)&len, sizeof(len)); 
+    // len placeholder
+    int len = 0;   // we don't know just yet...
+    int off = bl.length();
+    bl.append((char*)&len, sizeof(len)); 
 
-	// payload
-	encode_payload(bl);
+    // payload
+    encode_payload(bl);
 
-	// HACK: pad payload to match md log layout?
-	int elen = bl.length() - off + sizeof(_type);
-	if (elen % g_conf.mds_log_pad_entry > 0) {
-	  int add = g_conf.mds_log_pad_entry - (elen % g_conf.mds_log_pad_entry);
-	  //cout << "elen " << elen << "  adding " << add << endl;
-	  buffer *b = new buffer(add);
-	  memset(b->c_str(), 0, add);
-	  bufferptr bp(b);
-	  bl.append(bp);
-	} 
+    // HACK: pad payload to match md log layout?
+    int elen = bl.length() - off + sizeof(_type);
+    if (elen % g_conf.mds_log_pad_entry > 0) {
+      int add = g_conf.mds_log_pad_entry - (elen % g_conf.mds_log_pad_entry);
+      //cout << "elen " << elen << "  adding " << add << endl;
+      buffer *b = new buffer(add);
+      memset(b->c_str(), 0, add);
+      bufferptr bp(b);
+      bl.append(bp);
+    } 
 
-	len = bl.length() - off - sizeof(len);
+    len = bl.length() - off - sizeof(len);
 
-	bl.copy_in(off, sizeof(len), (char*)&len);
+    bl.copy_in(off, sizeof(len), (char*)&len);
   }
   
   virtual bool obsolete(MDS *m) {
-	return true;
+    return true;
   }
 
   virtual void retire(MDS *m, Context *c) {
-	c->finish(0);
-	delete c;
+    c->finish(0);
+    delete c;
   }
 };
 

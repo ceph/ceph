@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -116,18 +116,18 @@ public:
   void *entry();
   
   void stop() {
-	lock.Lock();
-	done = true;
-	cond.Signal();
-	lock.Unlock();
-	join();
+    lock.Lock();
+    done = true;
+    cond.Signal();
+    lock.Unlock();
+    join();
   }
 
   void send(Message *m) {
-	lock.Lock();
-	q.push_back(m);
-	cond.Signal();
-	lock.Unlock();
+    lock.Lock();
+    q.push_back(m);
+    cond.Signal();
+    lock.Unlock();
   }
 } single_out_thread;
 
@@ -181,34 +181,34 @@ int tcpmessenger_findns(tcpaddr_t &nsa)
   // env var?
   /*int e_len = 0;
   for (int i=0; envp[i]; i++)
-	e_len += strlen(envp[i]) + 1;
+    e_len += strlen(envp[i]) + 1;
   */
-  nsaddr = getenv("CEPH_NAMESERVER");////envz_entry(*envp, e_len, "CEPH_NAMESERVER");	
+  nsaddr = getenv("CEPH_NAMESERVER");////envz_entry(*envp, e_len, "CEPH_NAMESERVER");    
   if (nsaddr) {
-	while (nsaddr[0] != '=') nsaddr++;
-	nsaddr++;
+    while (nsaddr[0] != '=') nsaddr++;
+    nsaddr++;
   }
 
   else {
-	// file?
-	int fd = ::open(".ceph_ns",O_RDONLY);
-	if (fd > 0) {
-	  ::read(fd, (void*)&nsa, sizeof(nsa));
-	  ::close(fd);
-	  have_nsa = true;
-	  nsaddr = "from .ceph_ns";
-	}
+    // file?
+    int fd = ::open(".ceph_ns",O_RDONLY);
+    if (fd > 0) {
+      ::read(fd, (void*)&nsa, sizeof(nsa));
+      ::close(fd);
+      have_nsa = true;
+      nsaddr = "from .ceph_ns";
+    }
   }
 
   if (!nsaddr && !have_nsa) {
-	cerr << "i need ceph ns addr.. either CEPH_NAMESERVER env var or --ns blah" << endl;
-	return -1;
-	//exit(-1);
+    cerr << "i need ceph ns addr.. either CEPH_NAMESERVER env var or --ns blah" << endl;
+    return -1;
+    //exit(-1);
   }
   
   // look up nsaddr?
   if (!have_nsa && tcpmessenger_lookup(nsaddr, nsa) < 0) {
-	return -1;
+    return -1;
   }
 
   dout(2) << "ceph ns is " << nsaddr << " or " << nsa << endl;
@@ -225,134 +225,134 @@ int tcpmessenger_findns(tcpaddr_t &nsa)
 class RankServer : public Dispatcher {
 public:
   void dispatch(Message *m) {
-	lookup_lock.Lock();
+    lookup_lock.Lock();
 
-	dout(DBL) << "rankserver dispatching " << *m << endl;
+    dout(DBL) << "rankserver dispatching " << *m << endl;
 
-	switch (m->get_type()) {
-	case MSG_NS_CONNECTACK:
-	  handle_connect_ack((MNSConnectAck*)m);
-	  break;
+    switch (m->get_type()) {
+    case MSG_NS_CONNECTACK:
+      handle_connect_ack((MNSConnectAck*)m);
+      break;
 
-	case MSG_NS_REGISTERACK:
-	  handle_register_ack((MNSRegisterAck*)m);
-	  break;
+    case MSG_NS_REGISTERACK:
+      handle_register_ack((MNSRegisterAck*)m);
+      break;
 
-	case MSG_NS_LOOKUPREPLY:
-	  handle_lookup_reply((MNSLookupReply*)m);
-	  break;
+    case MSG_NS_LOOKUPREPLY:
+      handle_lookup_reply((MNSLookupReply*)m);
+      break;
 
-	default:
-	  assert(0);
-	}
+    default:
+      assert(0);
+    }
 
-	lookup_lock.Unlock();
+    lookup_lock.Unlock();
   }
 
   void handle_connect_ack(MNSConnectAck *m) {
-	dout(DBL) << "my rank is " << m->get_rank();
-	my_rank = m->get_rank();
+    dout(DBL) << "my rank is " << m->get_rank();
+    my_rank = m->get_rank();
 
-	// now that i know my rank,
-	entity_rank[MSG_ADDR_RANK(my_rank)] = my_rank; 
-	rank_addr[my_rank] = listen_addr;
-	
-	waiting_for_rank.SignalAll();
+    // now that i know my rank,
+    entity_rank[MSG_ADDR_RANK(my_rank)] = my_rank; 
+    rank_addr[my_rank] = listen_addr;
+    
+    waiting_for_rank.SignalAll();
 
-	delete m;
+    delete m;
 
-	// logger!
-	dout(DBL) << "logger" << endl;
-	char names[100];
-	sprintf(names, "rank%d", my_rank);
-	string name = names;
+    // logger!
+    dout(DBL) << "logger" << endl;
+    char names[100];
+    sprintf(names, "rank%d", my_rank);
+    string name = names;
 
-	if (g_conf.tcp_log) {
-	  logger = new Logger(name, (LogType*)&rank_logtype);
-	  rank_logtype.add_set("num");
-	  rank_logtype.add_inc("in");
-	  rank_logtype.add_inc("inb");
-	  rank_logtype.add_inc("dis");
-	  rank_logtype.add_set("inq");
-	  rank_logtype.add_set("inqb");
-	  rank_logtype.add_set("outq");
-	  rank_logtype.add_set("outqb");
-	}
+    if (g_conf.tcp_log) {
+      logger = new Logger(name, (LogType*)&rank_logtype);
+      rank_logtype.add_set("num");
+      rank_logtype.add_inc("in");
+      rank_logtype.add_inc("inb");
+      rank_logtype.add_inc("dis");
+      rank_logtype.add_set("inq");
+      rank_logtype.add_set("inqb");
+      rank_logtype.add_set("outq");
+      rank_logtype.add_set("outqb");
+    }
 
   }
 
   void handle_register_ack(MNSRegisterAck *m) {
-	long tid = m->get_tid();
-	waiting_for_register_result[tid] = m->get_entity();
-	waiting_for_register_cond[tid]->Signal();
-	delete m;
+    long tid = m->get_tid();
+    waiting_for_register_result[tid] = m->get_entity();
+    waiting_for_register_cond[tid]->Signal();
+    delete m;
   }
   
   void handle_lookup_reply(MNSLookupReply *m) {
-	list<Message*> waiting;
-	dout(DBL) << "got lookup reply" << endl;
+    list<Message*> waiting;
+    dout(DBL) << "got lookup reply" << endl;
 
-	for (map<msg_addr_t, int>::iterator it = m->entity_rank.begin();
-		 it != m->entity_rank.end();
-		 it++) {
-	  dout(DBL) << "lookup got " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
-	  entity_rank[it->first] = it->second;
-	  
-	  if (it->second == my_rank) {
-		// deliver locally
-		dout(-DBL) << "delivering lookup results locally" << endl;
-		incoming_lock.Lock();
-		
-		for (list<Message*>::iterator i = waiting_for_lookup[it->first].begin();
-			 i != waiting_for_lookup[it->first].end();
-			 i++) {
-		  stat_inq++;
-		  stat_inqb += (*i)->get_payload().length();
-		  (*i)->decode_payload();
-		  incoming.push_back(*i);
-		}
-		incoming_cond.Signal();
-		incoming_lock.Unlock();
-	  } else {
-		// take waiters
-		waiting.splice(waiting.begin(), waiting_for_lookup[it->first]);
-	  }
-	  waiting_for_lookup.erase(it->first);
-	  
-	}
+    for (map<msg_addr_t, int>::iterator it = m->entity_rank.begin();
+         it != m->entity_rank.end();
+         it++) {
+      dout(DBL) << "lookup got " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
+      entity_rank[it->first] = it->second;
+      
+      if (it->second == my_rank) {
+        // deliver locally
+        dout(-DBL) << "delivering lookup results locally" << endl;
+        incoming_lock.Lock();
+        
+        for (list<Message*>::iterator i = waiting_for_lookup[it->first].begin();
+             i != waiting_for_lookup[it->first].end();
+             i++) {
+          stat_inq++;
+          stat_inqb += (*i)->get_payload().length();
+          (*i)->decode_payload();
+          incoming.push_back(*i);
+        }
+        incoming_cond.Signal();
+        incoming_lock.Unlock();
+      } else {
+        // take waiters
+        waiting.splice(waiting.begin(), waiting_for_lookup[it->first]);
+      }
+      waiting_for_lookup.erase(it->first);
+      
+    }
 
-	for (map<int,tcpaddr_t>::iterator it = m->rank_addr.begin();
-		 it != m->rank_addr.end();
-		 it++) {
-	  dout(DBL) << "lookup got rank " << it->first << " addr " << it->second << endl;
-	  rank_addr[it->first] = it->second;
+    for (map<int,tcpaddr_t>::iterator it = m->rank_addr.begin();
+         it != m->rank_addr.end();
+         it++) {
+      dout(DBL) << "lookup got rank " << it->first << " addr " << it->second << endl;
+      rank_addr[it->first] = it->second;
 
-	  // open it now
-	  if (rank_sd.count(it->first) == 0)
+      // open it now
+      if (rank_sd.count(it->first) == 0)
             tcp_open(it->first);
-	}
+    }
 
-	// send waiting messages
+    // send waiting messages
 #ifdef TCP_SERIALOUT
-	for (list<Message*>::iterator it = waiting.begin();
-		 it != waiting.end();
-		 it++) {
-	  OutThread *outt = tcp_lookup(*it);
-	  assert(outt);
-	  tcp_send(*it);
-	}
+    for (list<Message*>::iterator it = waiting.begin();
+         it != waiting.end();
+         it++) {
+      OutThread *outt = tcp_lookup(*it);
+      assert(outt);
+      tcp_send(*it);
+    }
 #else
-	for (list<Message*>::iterator it = waiting.begin();
-		 it != waiting.end();
-		 it++) {
-	  OutThread *outt = tcp_lookup(*it);
-	  assert(outt);
-	  outt->send(*it);
-//	  dout(0) << "lookup done, splicing in " << *it << endl;
-	}
+    for (list<Message*>::iterator it = waiting.begin();
+         it != waiting.end();
+         it++) {
+      OutThread *outt = tcp_lookup(*it);
+      assert(outt);
+      outt->send(*it);
+//      dout(0) << "lookup done, splicing in " << *it << endl;
+    }
 #endif
 
-	delete m;
+    delete m;
   }
   
 } rankserver;
@@ -360,8 +360,8 @@ public:
 
 class C_TCPKicker : public Context {
   void finish(int r) {
-	dout(DBL) << "timer kick" << endl;
-	tcpmessenger_kick_dispatch_loop();
+    dout(DBL) << "timer kick" << endl;
+    tcpmessenger_kick_dispatch_loop();
   }
 };
 
@@ -377,15 +377,15 @@ extern int tcpmessenger_lookup(char *str, tcpaddr_t& ta)
   char *port = 0;
   
   for (int i=0; str[i]; i++) {
-	if (str[i] == ':') {
-	  port = str+i+1;
-	  str[i] = 0;
-	  break;
-	}
+    if (str[i] == ':') {
+      port = str+i+1;
+      str[i] = 0;
+      break;
+    }
   }
   if (!port) {
-	cerr << "addr '" << str << "' doesn't look like 'host:port'" << endl;
-	return -1;
+    cerr << "addr '" << str << "' doesn't look like 'host:port'" << endl;
+    return -1;
   } 
   //cout << "host '" << host << "' port '" << port << "'" << endl;
 
@@ -393,8 +393,8 @@ extern int tcpmessenger_lookup(char *str, tcpaddr_t& ta)
   
   struct hostent *myhostname = gethostbyname( host ); 
   if (!myhostname) {
-	cerr << "host " << host << " not found" << endl;
-	return -1;
+    cerr << "host " << host << " not found" << endl;
+    return -1;
   }
 
   memset(&ta, 0, sizeof(ta));
@@ -403,10 +403,10 @@ extern int tcpmessenger_lookup(char *str, tcpaddr_t& ta)
 
   ta.sin_family = myhostname->h_addrtype;
   memcpy((char *)&ta.sin_addr,
-		 myhostname->h_addr, 
-		 myhostname->h_length);
+         myhostname->h_addr, 
+         myhostname->h_length);
   ta.sin_port = iport;
-	
+    
   cout << "lookup '" << host << ":" << port << "' -> " << ta << endl;
 
   return 0;
@@ -459,8 +459,8 @@ int tcpmessenger_init()
 
   my_addr.sin_family = myhostname->h_addrtype;
   memcpy((char *) &my_addr.sin_addr.s_addr, 
-		 myhostname->h_addr_list[0], 
-		 myhostname->h_length);
+         myhostname->h_addr_list[0], 
+         myhostname->h_length);
   my_addr.sin_port = myport;
 
   listen_addr = my_addr;
@@ -495,11 +495,11 @@ void tcpmessenger_start_nameserver(tcpaddr_t& diraddr)
 void tcpmessenger_stop_nameserver()
 {
   if (nsmessenger) {
-	dout(DBL) << "shutting down nsmessenger" << endl;
-	TCPMessenger *m = nsmessenger;
-	nsmessenger = 0;
-	m->shutdown();
-	delete m;
+    dout(DBL) << "shutting down nsmessenger" << endl;
+    TCPMessenger *m = nsmessenger;
+    nsmessenger = 0;
+    m->shutdown();
+    delete m;
   }
 }
 
@@ -512,20 +512,20 @@ void tcpmessenger_start_rankserver(tcpaddr_t& ns)
   tcp_open(0);
 
   if (my_rank >= 0) {
-	// i know my rank
-	rankmessenger = new TCPMessenger(MSG_ADDR_RANK(my_rank));
+    // i know my rank
+    rankmessenger = new TCPMessenger(MSG_ADDR_RANK(my_rank));
   } else {
-	// start rank messenger, and discover my rank.
-	rankmessenger = new TCPMessenger(MSG_ADDR_RANK_NEW);
+    // start rank messenger, and discover my rank.
+    rankmessenger = new TCPMessenger(MSG_ADDR_RANK_NEW);
   }
 }
 void tcpmessenger_stop_rankserver()
 {
   if (rankmessenger) {
-	dout(DBL) << "shutting down rankmessenger" << endl;
-	rankmessenger->shutdown();
-	delete rankmessenger;
-	rankmessenger = 0;
+    dout(DBL) << "shutting down rankmessenger" << endl;
+    rankmessenger->shutdown();
+    delete rankmessenger;
+    rankmessenger = 0;
   }
 }
 
@@ -543,9 +543,9 @@ int tcpmessenger_shutdown()
 
   // bleh
   for (hash_map<int,int>::iterator it = rank_sd.begin();
-	   it != rank_sd.end();
-	   it++) {
-	::close(it->second);
+       it != rank_sd.end();
+       it++) {
+    ::close(it->second);
   }
 
   return 0;
@@ -574,11 +574,11 @@ Message *tcp_recv(int sd)
   
   msg_envelope_t env;
   if (!tcp_read( sd, (char*)&env, sizeof(env) ))
-	return 0;
+    return 0;
 
   if (env.type == 0) {
-	dout(DBL) << "got dummy env, bailing" << endl;
-	return 0;
+    dout(DBL) << "got dummy env, bailing" << endl;
+    return 0;
   }
 
   dout(DBL) << "tcp_recv got envelope type=" << env.type << " src " << MSG_ADDR_NICE(env.source) << " dst " << MSG_ADDR_NICE(env.dest) << " nchunks=" << env.nchunks << endl;
@@ -586,16 +586,16 @@ Message *tcp_recv(int sd)
   // payload
   bufferlist blist;
   for (int i=0; i<env.nchunks; i++) {
-	int size;
-	tcp_read( sd, (char*)&size, sizeof(size) );
+    int size;
+    tcp_read( sd, (char*)&size, sizeof(size) );
 
-	bufferptr bp = new buffer(size);
-	
-	if (!tcp_read( sd, bp.c_str(), size )) return 0;
+    bufferptr bp = new buffer(size);
+    
+    if (!tcp_read( sd, bp.c_str(), size )) return 0;
 
-	blist.push_back(bp);
+    blist.push_back(bp);
 
-	dout(DBL) << "tcp_recv got frag " << i << " of " << env.nchunks << " len " << bp.length() << endl;
+    dout(DBL) << "tcp_recv got frag " << i << " of " << env.nchunks << " len " << bp.length() << endl;
   }
   
   // unmarshall message
@@ -603,8 +603,8 @@ Message *tcp_recv(int sd)
   Message *m = decode_message(env, blist);
 
   if (logger) {
-	logger->inc("in");
-	logger->inc("inb", s+sizeof(env));
+    logger->inc("in");
+    logger->inc("inb", s+sizeof(env));
   }
 
   dout(DBL) << "tcp_recv got " << s << " byte message from " << MSG_ADDR_NICE(m->get_source()) << endl;
@@ -641,12 +641,12 @@ void tcp_open(int rank)
   rank_sd[rank] = sd;
 
   if (g_conf.tcp_multi_out) {
-	rank_out[rank] = new OutThread();
-	rank_out[rank]->create();
+    rank_out[rank] = new OutThread();
+    rank_out[rank]->create();
   } else {
-	rank_out[rank] = &single_out_thread;
-	if (!single_out_thread.is_started())
-	  single_out_thread.create();
+    rank_out[rank] = &single_out_thread;
+    if (!single_out_thread.is_started())
+      single_out_thread.create();
   }
 }
 
@@ -655,7 +655,7 @@ void tcp_marshall(Message *m)
 {
   // marshall
   if (m->empty_payload())
-	m->encode_payload();
+    m->encode_payload();
 }
 
 OutThread *tcp_lookup(Message *m)
@@ -663,18 +663,18 @@ OutThread *tcp_lookup(Message *m)
   msg_addr_t addr = m->get_dest();
 
   if (!entity_rank.count(m->get_dest())) {
-	// lookup and wait.
-	if (waiting_for_lookup.count(addr)) {
-	  dout(DBL) << "already looking up " << MSG_ADDR_NICE(addr) << endl;
-	} else {
-	  dout(DBL) << "lookup on " << MSG_ADDR_NICE(addr) << " for " << m << endl;
-	  MNSLookup *r = new MNSLookup(addr);
-	  rankmessenger->send_message(r, MSG_ADDR_DIRECTORY);
-	}
-	
-	// add waiter
-	waiting_for_lookup[addr].push_back(m);
-	return 0;
+    // lookup and wait.
+    if (waiting_for_lookup.count(addr)) {
+      dout(DBL) << "already looking up " << MSG_ADDR_NICE(addr) << endl;
+    } else {
+      dout(DBL) << "lookup on " << MSG_ADDR_NICE(addr) << " for " << m << endl;
+      MNSLookup *r = new MNSLookup(addr);
+      rankmessenger->send_message(r, MSG_ADDR_DIRECTORY);
+    }
+    
+    // add waiter
+    waiting_for_lookup[addr].push_back(m);
+    return 0;
   }
 
   int rank = entity_rank[m->get_dest()];
@@ -718,8 +718,8 @@ int tcp_send(Message *m)
   //if (m->get_source() >= MSG_ADDR_OSD(0) && m->get_source() < MSG_ADDR_CLIENT(0) &&
  // m->get_dest() >= MSG_ADDR_CLIENT(0))
   dout(DBL) << g_clock.now() << " sending " << m << " " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) 
-	  //<< " rank " << rank 
-			<< " sd " << sd << endl;
+      //<< " rank " << rank 
+            << " sd " << sd << endl;
   
   // send envelope
   int r = tcp_write( sd, (char*)env, sizeof(*env) );
@@ -730,15 +730,15 @@ int tcp_send(Message *m)
   // send chunk-wise
   int i = 0;
   for (list<bufferptr>::iterator it = blist.buffers().begin();
-	   it != blist.buffers().end();
-	   it++) {
-	dout(DBL) << "tcp_sending frag " << i << " len " << (*it).length() << endl;
-	int size = (*it).length();
-	r = tcp_write( sd, (char*)&size, sizeof(size) );
-	if (r < 0) { cerr << "error sending chunk len for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
-	r = tcp_write( sd, (*it).c_str(), size );
-	if (r < 0) { cerr << "error sending data chunk for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
-	i++;
+       it != blist.buffers().end();
+       it++) {
+    dout(DBL) << "tcp_sending frag " << i << " len " << (*it).length() << endl;
+    int size = (*it).length();
+    r = tcp_write( sd, (char*)&size, sizeof(size) );
+    if (r < 0) { cerr << "error sending chunk len for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
+    r = tcp_write( sd, (*it).c_str(), size );
+    if (r < 0) { cerr << "error sending data chunk for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
+    i++;
   }
 #else
   // one big chunk
@@ -746,10 +746,10 @@ int tcp_send(Message *m)
   r = tcp_write( sd, (char*)&size, sizeof(size) );
   if (r < 0) { cerr << "error sending data len for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << endl; assert(0); }
   for (list<bufferptr>::iterator it = blist.buffers().begin();
-	   it != blist.buffers().end();
-	   it++) {
-	r = tcp_write( sd, (*it).c_str(), (*it).length() );
-	if (r < 0) { cerr << "error sending data megachunk for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << " : len " << (*it).length() << endl; assert(0); }
+       it != blist.buffers().end();
+       it++) {
+    r = tcp_write( sd, (*it).c_str(), (*it).length() );
+    if (r < 0) { cerr << "error sending data megachunk for " << *m << " to " << MSG_ADDR_NICE(m->get_dest()) << " : len " << (*it).length() << endl; assert(0); }
   }
 #endif
 
@@ -770,36 +770,36 @@ void* OutThread::entry()
 {
   lock.Lock();
   while (!q.empty() || !done) {
-	
-	if (!q.empty()) {
-	  dout(DBL) << "outthread grabbing message(s)" << endl;
-	  
-	  // grab outgoing list
-	  list<Message*> out;
-	  out.splice(out.begin(), q);
-	  
-	  // drop lock while i send these
-	  lock.Unlock();
-	  
-	  while (!out.empty()) {
-		Message *m = out.front();
-		out.pop_front();
-		
-		dout(DBL) << "outthread sending " << m << endl;
-		
-		if (!g_conf.tcp_serial_marshall) 
-		  tcp_marshall(m);
-		
-		tcp_send(m);
-	  }
-	  
-	  lock.Lock();
-	  continue;
-	}
-	
-	// wait
-	dout(DBL) << "outthread sleeping" << endl;
-	cond.Wait(lock);
+    
+    if (!q.empty()) {
+      dout(DBL) << "outthread grabbing message(s)" << endl;
+      
+      // grab outgoing list
+      list<Message*> out;
+      out.splice(out.begin(), q);
+      
+      // drop lock while i send these
+      lock.Unlock();
+      
+      while (!out.empty()) {
+        Message *m = out.front();
+        out.pop_front();
+        
+        dout(DBL) << "outthread sending " << m << endl;
+        
+        if (!g_conf.tcp_serial_marshall) 
+          tcp_marshall(m);
+        
+        tcp_send(m);
+      }
+      
+      lock.Lock();
+      continue;
+    }
+    
+    // wait
+    dout(DBL) << "outthread sleeping" << endl;
+    cond.Wait(lock);
   }
   dout(DBL) << "outthread done" << endl;
   
@@ -820,47 +820,47 @@ void *tcp_inthread(void *r)
   dout(DBL) << "tcp_inthread reading on sd " << sd << endl;
 
   while (!tcp_done) {
-	Message *m = tcp_recv(sd);
-	if (!m) break;
-	msg_addr_t who = m->get_source();
+    Message *m = tcp_recv(sd);
+    if (!m) break;
+    msg_addr_t who = m->get_source();
 
-	dout(20) << g_clock.now() <<  " inthread got " << m << " from sd " << sd << " who is " << who << endl;
+    dout(20) << g_clock.now() <<  " inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
-	// give to dispatch loop
-	size_t sz = m->get_payload().length();
+    // give to dispatch loop
+    size_t sz = m->get_payload().length();
 
-	if (g_conf.tcp_multi_dispatch) {
-	  const msg_addr_t dest = m->get_dest();
-	  directory_lock.Lock();
-	  TCPMessenger *messenger = directory[ dest ];
-	  directory_lock.Unlock();
+    if (g_conf.tcp_multi_dispatch) {
+      const msg_addr_t dest = m->get_dest();
+      directory_lock.Lock();
+      TCPMessenger *messenger = directory[ dest ];
+      directory_lock.Unlock();
 
-	  if (messenger) 
-		messenger->dispatch_queue(m);
-	  else
-		dout(0) << "dest " << dest << " dne" << endl;
+      if (messenger) 
+        messenger->dispatch_queue(m);
+      else
+        dout(0) << "dest " << dest << " dne" << endl;
 
-	} else {
-	  // single dispatch queue
-	  incoming_lock.Lock();
-	  {
-		//dout(-20) << "in1 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
-		//assert(stat_inq == incoming.size());
-		incoming.push_back(m);
-		incoming_cond.Signal();
-		
-		stat_inq++;
-		//assert(stat_inq == incoming.size());
-		//dout(-20) << "in2 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
-		stat_inqb += sz;
-	  }
-	  incoming_lock.Unlock();
-	}
+    } else {
+      // single dispatch queue
+      incoming_lock.Lock();
+      {
+        //dout(-20) << "in1 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+        //assert(stat_inq == incoming.size());
+        incoming.push_back(m);
+        incoming_cond.Signal();
+        
+        stat_inq++;
+        //assert(stat_inq == incoming.size());
+        //dout(-20) << "in2 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+        stat_inqb += sz;
+      }
+      incoming_lock.Unlock();
+    }
 
-	if (logger) {
-	  //logger->inc("in");
-	  //logger->inc("inb", sz);
-	}
+    if (logger) {
+      //logger->inc("in");
+      //logger->inc("inb", sz);
+    }
   }
 
   dout(DBL) << "tcp_inthread closing " << sd << endl;
@@ -878,24 +878,24 @@ void *tcp_acceptthread(void *)
   dout(DBL) << "tcp_acceptthread starting" << endl;
 
   while (!tcp_done) {
-	//dout(DBL) << "accepting, left = " << left << endl;
+    //dout(DBL) << "accepting, left = " << left << endl;
 
-	struct sockaddr_in addr;
-	socklen_t slen = sizeof(addr);
-	int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
-	if (sd > 0) {
-	  dout(DBL) << "accepted incoming on sd " << sd << endl;
+    struct sockaddr_in addr;
+    socklen_t slen = sizeof(addr);
+    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
+    if (sd > 0) {
+      dout(DBL) << "accepted incoming on sd " << sd << endl;
 
-	  pthread_t th;
-	  pthread_create(&th,
-					 NULL,
-					 tcp_inthread,
-					 (void*)sd);
-	  in_threads[sd] = th;
-	} else {
-	  dout(DBL) << "no incoming connection?" << endl;
-	  break;
-	}
+      pthread_t th;
+      pthread_create(&th,
+                     NULL,
+                     tcp_inthread,
+                     (void*)sd);
+      in_threads[sd] = th;
+    } else {
+      dout(DBL) << "no incoming connection?" << endl;
+      break;
+    }
   }
   return 0;
 }
@@ -910,50 +910,50 @@ void TCPMessenger::dispatch_entry()
 {
   incoming_lock.Lock();
   while (!incoming.empty() || !incoming_stop) {
-	if (!incoming.empty()) {
-	  // grab incoming messages  
-	  list<Message*> in;
-	  in.splice(in.begin(), incoming);
+    if (!incoming.empty()) {
+      // grab incoming messages  
+      list<Message*> in;
+      in.splice(in.begin(), incoming);
 
-	  assert(stat_disq == 0);
-	  stat_disq = stat_inq;
-	  stat_disqb = stat_inqb;
-	  stat_inq = 0;
-	  stat_inqb = 0;
-	
-	  // drop lock while we deliver
-	  //assert(stat_inq == incoming.size());
-	  incoming_lock.Unlock();
+      assert(stat_disq == 0);
+      stat_disq = stat_inq;
+      stat_disqb = stat_inqb;
+      stat_inq = 0;
+      stat_inqb = 0;
+    
+      // drop lock while we deliver
+      //assert(stat_inq == incoming.size());
+      incoming_lock.Unlock();
 
-	  // dispatch!
-	  while (!in.empty()) {
-		Message *m = in.front();
-		in.pop_front();
-	  
-		stat_disq--;
-		stat_disqb -= m->get_payload().length();
-		if (logger) {
-		  logger->set("inq", stat_inq+stat_disq);
-		  logger->set("inqb", stat_inqb+stat_disq);
-		  logger->inc("dis");
-		}
-	  	
-		dout(4) << g_clock.now() << " ---- '" << m->get_type_name() << 
-		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
-				<< m 
-				<< endl;
-		
-		dispatch(m);
-	  }
+      // dispatch!
+      while (!in.empty()) {
+        Message *m = in.front();
+        in.pop_front();
+      
+        stat_disq--;
+        stat_disqb -= m->get_payload().length();
+        if (logger) {
+          logger->set("inq", stat_inq+stat_disq);
+          logger->set("inqb", stat_inqb+stat_disq);
+          logger->inc("dis");
+        }
+          
+        dout(4) << g_clock.now() << " ---- '" << m->get_type_name() << 
+          "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+          " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+                << m 
+                << endl;
+        
+        dispatch(m);
+      }
 
-	  continue;
-	}
+      continue;
+    }
 
-	// sleep
-	dout(DBL) << "dispatch: waiting for incoming messages" << endl;
-	incoming_cond.Wait(incoming_lock);
-	dout(DBL) << "dispatch: woke up" << endl;
+    // sleep
+    dout(DBL) << "dispatch: waiting for incoming messages" << endl;
+    incoming_cond.Wait(incoming_lock);
+    dout(DBL) << "dispatch: woke up" << endl;
   }
   incoming_lock.Unlock();
 }
@@ -964,85 +964,85 @@ void* tcp_dispatchthread(void*)
   dout(5) << "tcp_dispatchthread start pid " << getpid() << endl;
 
   while (1) {
-	// inq?
-	incoming_lock.Lock();
+    // inq?
+    incoming_lock.Lock();
 
-	// done?
-	if (tcp_done && incoming.empty()) {
-	  incoming_lock.Unlock();
-	  break;
-	}
+    // done?
+    if (tcp_done && incoming.empty()) {
+      incoming_lock.Unlock();
+      break;
+    }
 
-	// wait?
-	if (incoming.empty()) {
-	  // wait
-	  dout(DBL) << "dispatch: incoming empty, waiting for incoming messages" << endl;
-	  incoming_cond.Wait(incoming_lock);
-	  dout(DBL) << "dispatch: woke up" << endl;
-	}
+    // wait?
+    if (incoming.empty()) {
+      // wait
+      dout(DBL) << "dispatch: incoming empty, waiting for incoming messages" << endl;
+      incoming_cond.Wait(incoming_lock);
+      dout(DBL) << "dispatch: woke up" << endl;
+    }
 
-	// grab incoming messages  
-	//dout(-20) << "dis1 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
-	//assert(stat_inq == incoming.size());
+    // grab incoming messages  
+    //dout(-20) << "dis1 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+    //assert(stat_inq == incoming.size());
 
-	list<Message*> in;
-	in.splice(in.begin(), incoming);
+    list<Message*> in;
+    in.splice(in.begin(), incoming);
 
-	assert(stat_disq == 0);
-	stat_disq = stat_inq;
-	stat_disqb = stat_inqb;
-	stat_inq = 0;
-	stat_inqb = 0;
-	//assert(stat_inq == incoming.size());
-	//dout(-20) << "dis2 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
+    assert(stat_disq == 0);
+    stat_disq = stat_inq;
+    stat_disqb = stat_inqb;
+    stat_inq = 0;
+    stat_inqb = 0;
+    //assert(stat_inq == incoming.size());
+    //dout(-20) << "dis2 stat_inq " << stat_inq << ", incoming " << incoming.size() << endl;
 
-	// drop lock while we deliver
-	incoming_lock.Unlock();
+    // drop lock while we deliver
+    incoming_lock.Unlock();
 
-	// dispatch!
-	while (!in.empty()) {
-	  Message *m = in.front();
-	  in.pop_front();
-	  
-	  stat_disq--;
-	  stat_disqb -= m->get_payload().length();
-	  if (logger) {
-		logger->set("inq", stat_inq+stat_disq);
-		logger->set("inqb", stat_inqb+stat_disq);
-		logger->inc("dis");
-	  }
-	  
-	  dout(DBL) << "dispatch doing " << *m << endl;
-	  
-	  // for rankserver?
-	  if (m->get_type() == MSG_NS_CONNECTACK ||        // i just connected
-		  m->get_dest() == MSG_ADDR_RANK(my_rank)) {
-		dout(DBL) <<  " giving to rankserver" << endl;
-		rankserver.dispatch(m);
-		continue;
-	  }
-	  
-	  // ok
-	  msg_addr_t dest = m->get_dest();
-	  directory_lock.Lock();
-	  if (directory.count(dest)) {
-		Messenger *who = directory[ dest ];
-		directory_lock.Unlock();		  
-		
-		dout(4) << g_clock.now() << " ---- '" << m->get_type_name() << 
-		  "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
-		  " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
-				<< *m 
-				<< endl;
-		
-		who->dispatch(m);
-	  } else {
-		directory_lock.Unlock();
-		dout (1) << "---- i don't know who " << MSG_ADDR_NICE(dest) << " " << dest << " is." << endl;
-		assert(0);
-	  }
-	}
-	assert(stat_disq == 0);
+    // dispatch!
+    while (!in.empty()) {
+      Message *m = in.front();
+      in.pop_front();
+      
+      stat_disq--;
+      stat_disqb -= m->get_payload().length();
+      if (logger) {
+        logger->set("inq", stat_inq+stat_disq);
+        logger->set("inqb", stat_inqb+stat_disq);
+        logger->inc("dis");
+      }
+      
+      dout(DBL) << "dispatch doing " << *m << endl;
+      
+      // for rankserver?
+      if (m->get_type() == MSG_NS_CONNECTACK ||        // i just connected
+          m->get_dest() == MSG_ADDR_RANK(my_rank)) {
+        dout(DBL) <<  " giving to rankserver" << endl;
+        rankserver.dispatch(m);
+        continue;
+      }
+      
+      // ok
+      msg_addr_t dest = m->get_dest();
+      directory_lock.Lock();
+      if (directory.count(dest)) {
+        Messenger *who = directory[ dest ];
+        directory_lock.Unlock();          
+        
+        dout(4) << g_clock.now() << " ---- '" << m->get_type_name() << 
+          "' from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() <<
+          " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() << " ---- " 
+                << *m 
+                << endl;
+        
+        who->dispatch(m);
+      } else {
+        directory_lock.Unlock();
+        dout (1) << "---- i don't know who " << MSG_ADDR_NICE(dest) << " " << dest << " is." << endl;
+        assert(0);
+      }
+    }
+    assert(stat_disq == 0);
 
   }
 
@@ -1059,28 +1059,28 @@ int tcpmessenger_start()
 {
   dout(5) << "starting accept thread" << endl;
   pthread_create(&listen_thread_id,
-				 NULL,
-				 tcp_acceptthread,
-				 0);				
+                 NULL,
+                 tcp_acceptthread,
+                 0);                
 
   dout(5) << "starting dispatch thread" << endl;
   
   // start a thread
   pthread_create(&dispatch_thread_id, 
-				 NULL, 
-				 tcp_dispatchthread,
-				 0);
+                 NULL, 
+                 tcp_dispatchthread,
+                 0);
 
 
   /*
   dout(5) << "starting outgoing thread" << endl;
   pthread_create(&out_thread_id, 
-				 NULL, 
-				 tcp_outthread,
-				 0);
+                 NULL, 
+                 tcp_outthread,
+                 0);
   */
   if (!g_conf.tcp_multi_out)
-	single_out_thread.create();
+    single_out_thread.create();
   return 0;
 }
 
@@ -1092,21 +1092,21 @@ int tcpmessenger_start()
 void tcpmessenger_kick_dispatch_loop()
 {
   if (g_conf.tcp_multi_dispatch) {
-	assert(0);
-	// all of them
-	/*for (hash_map<msg_addr_t, TCPMessenger*>::iterator i = directory.begin();
-		 i != directory.end();
-		 i++)
-	  i->second->dispatch_kick();
-	*/
+    assert(0);
+    // all of them
+    /*for (hash_map<msg_addr_t, TCPMessenger*>::iterator i = directory.begin();
+         i != directory.end();
+         i++)
+      i->second->dispatch_kick();
+    */
   } else {
-	// just one
-	dout(DBL) << "kicking" << endl;
-	incoming_lock.Lock();
-	dout(DBL) << "prekick" << endl;
-	incoming_cond.Signal();
-	incoming_lock.Unlock();
-	dout(DBL) << "kicked" << endl;
+    // just one
+    dout(DBL) << "kicking" << endl;
+    incoming_lock.Lock();
+    dout(DBL) << "prekick" << endl;
+    incoming_cond.Signal();
+    incoming_lock.Unlock();
+    dout(DBL) << "kicked" << endl;
   }
 }
 
@@ -1125,20 +1125,20 @@ void tcpmessenger_kick_outgoing_loop()
 void tcpmessenger_wait()
 {
   if (g_conf.tcp_multi_dispatch) {
-	// new way
-	incoming_lock.Lock();
-	while (!tcp_done)
-	  incoming_cond.Wait(incoming_lock);
-	incoming_lock.Unlock();
+    // new way
+    incoming_lock.Lock();
+    while (!tcp_done)
+      incoming_cond.Wait(incoming_lock);
+    incoming_lock.Unlock();
   } else {
-	// old way
-	dout(10) << "tcpmessenger_wait waking up dispatch loop" << endl;
-	tcpmessenger_kick_dispatch_loop();
-	
-	void *returnval;
-	dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
-	pthread_join(dispatch_thread_id, &returnval);
-	dout(10) << "tcpmessenger_wait thread finished." << endl;
+    // old way
+    dout(10) << "tcpmessenger_wait waking up dispatch loop" << endl;
+    tcpmessenger_kick_dispatch_loop();
+    
+    void *returnval;
+    dout(10) << "tcpmessenger_wait waiting for thread to finished." << endl;
+    pthread_join(dispatch_thread_id, &returnval);
+    dout(10) << "tcpmessenger_wait thread finished." << endl;
   }
 }
 
@@ -1155,20 +1155,20 @@ msg_addr_t register_entity(msg_addr_t addr)
   waiting_for_register_cond[id] = &cond;
 
   if (my_rank < 0) {
-	dout(DBL) << "register_entity don't know my rank, connecting" << endl;
-	
-	// connect to nameserver; discover my rank.
-	Message *m = new MNSConnect(listen_addr);
-	m->set_dest(MSG_ADDR_DIRECTORY, 0);
-	tcp_marshall(m);
-	OutThread *outt = tcp_lookup(m);
-	assert(outt);
-	tcp_send(m);
-	
-	// wait for reply
-	while (my_rank < 0) 
-	  waiting_for_rank.Wait(lookup_lock);
-	assert(my_rank > 0);
+    dout(DBL) << "register_entity don't know my rank, connecting" << endl;
+    
+    // connect to nameserver; discover my rank.
+    Message *m = new MNSConnect(listen_addr);
+    m->set_dest(MSG_ADDR_DIRECTORY, 0);
+    tcp_marshall(m);
+    OutThread *outt = tcp_lookup(m);
+    assert(outt);
+    tcp_send(m);
+    
+    // wait for reply
+    while (my_rank < 0) 
+      waiting_for_rank.Wait(lookup_lock);
+    assert(my_rank > 0);
   }
   
   // send req
@@ -1182,7 +1182,7 @@ msg_addr_t register_entity(msg_addr_t addr)
   
   // wait?
   while (!waiting_for_register_result.count(id)) 
-	cond.Wait(lookup_lock);
+    cond.Wait(lookup_lock);
 
   // get result, clean up
   msg_addr_t entity = waiting_for_register_result[id];
@@ -1209,8 +1209,8 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) :
   dispatch_thread(this)
 {
   if (myaddr != MSG_ADDR_DIRECTORY) {
-	// register!
-	myaddr = register_entity(myaddr);
+    // register!
+    myaddr = register_entity(myaddr);
   }
 
 
@@ -1220,10 +1220,10 @@ TCPMessenger::TCPMessenger(msg_addr_t myaddr) :
   // register myself in the messenger directory
   directory_lock.Lock();
   {
-	directory[myaddr] = this;
-	
-	stat_num++;
-	if (logger) logger->set("num", stat_num);
+    directory[myaddr] = this;
+    
+    stat_num++;
+    if (logger) logger->set("num", stat_num);
   }
   directory_lock.Unlock();
 
@@ -1240,18 +1240,18 @@ void TCPMessenger::ready()
   directory_lock.Unlock();
 
   if (get_myaddr() != MSG_ADDR_DIRECTORY) {
-	// started!  tell namer we are up and running.
-	lookup_lock.Lock();
-	{
-	  Message *m = new MGenericMessage(MSG_NS_STARTED);
-	  m->set_source(get_myaddr(), 0);
-	  m->set_dest(MSG_ADDR_DIRECTORY, 0);
-	  tcp_marshall(m);
-	  OutThread *outt = tcp_lookup(m);
-	  assert(outt);
-	  tcp_send(m);
-	}
-	lookup_lock.Unlock();
+    // started!  tell namer we are up and running.
+    lookup_lock.Lock();
+    {
+      Message *m = new MGenericMessage(MSG_NS_STARTED);
+      m->set_source(get_myaddr(), 0);
+      m->set_dest(MSG_ADDR_DIRECTORY, 0);
+      tcp_marshall(m);
+      OutThread *outt = tcp_lookup(m);
+      assert(outt);
+      tcp_send(m);
+    }
+    lookup_lock.Unlock();
   }
 }
 
@@ -1293,10 +1293,10 @@ int TCPMessenger::shutdown()
 
   // dont' send unregistery from nsmessenger shutdown!
   if (this != nsmessenger && 
-	  (my_rank > 0 || nsmessenger)) {
-	dout(DBL) << "sending unregister from " << MSG_ADDR_NICE(get_myaddr()) << " to ns" << endl;
-	send_message(new MGenericMessage(MSG_NS_UNREGISTER),
-				 MSG_ADDR_DIRECTORY);
+      (my_rank > 0 || nsmessenger)) {
+    dout(DBL) << "sending unregister from " << MSG_ADDR_NICE(get_myaddr()) << " to ns" << endl;
+    send_message(new MGenericMessage(MSG_NS_UNREGISTER),
+                 MSG_ADDR_DIRECTORY);
   }
 
   // remove me from the directory
@@ -1310,9 +1310,9 @@ int TCPMessenger::shutdown()
 
   // or almost last one?
   if (rankmessenger && directory.size() == 1) {
-	directory_lock.Unlock();
-	tcpmessenger_stop_rankserver();
-	directory_lock.Lock();
+    directory_lock.Unlock();
+    tcpmessenger_stop_rankserver();
+    directory_lock.Lock();
   }
 
   stat_num--;
@@ -1322,62 +1322,62 @@ int TCPMessenger::shutdown()
 
   // last one?
   if (lastone) {
-	dout(2) << "shutdown last tcpmessenger on rank " << my_rank << " shut down" << endl;
-	//pthread_t whoami = pthread_self();
-	
-	// no more timer events
-	//g_timer.unset_messenger();
-	
-	// close incoming sockets
-	//void *r;
-	for (map<int,pthread_t>::iterator it = in_threads.begin();
-		 it != in_threads.end();
-		 it++) {
-	  dout(DBL) << "closing reader on sd " << it->first << endl;	  
-	  ::close(it->first);
-	  //pthread_join(it->second, &r);
-	}
+    dout(2) << "shutdown last tcpmessenger on rank " << my_rank << " shut down" << endl;
+    //pthread_t whoami = pthread_self();
+    
+    // no more timer events
+    //g_timer.unset_messenger();
+    
+    // close incoming sockets
+    //void *r;
+    for (map<int,pthread_t>::iterator it = in_threads.begin();
+         it != in_threads.end();
+         it++) {
+      dout(DBL) << "closing reader on sd " << it->first << endl;      
+      ::close(it->first);
+      //pthread_join(it->second, &r);
+    }
 
-	if (g_conf.tcp_multi_dispatch) {
-	  // kill off dispatch threads
-	  dout(DBL) << "killing dispatch threads" << endl;
-	  for (hash_map<msg_addr_t,TCPMessenger*>::iterator it = directory.begin();
-		   it != directory.end();
-		   it++) 
-		it->second->dispatch_stop();
-	}
+    if (g_conf.tcp_multi_dispatch) {
+      // kill off dispatch threads
+      dout(DBL) << "killing dispatch threads" << endl;
+      for (hash_map<msg_addr_t,TCPMessenger*>::iterator it = directory.begin();
+           it != directory.end();
+           it++) 
+        it->second->dispatch_stop();
+    }
 
-	dout(DBL) << "setting tcp_done" << endl;
+    dout(DBL) << "setting tcp_done" << endl;
 
-	// kick/kill incoming thread
-	incoming_lock.Lock();
-	tcp_done = true;
-	incoming_cond.Signal();
-	incoming_lock.Unlock();
+    // kick/kill incoming thread
+    incoming_lock.Lock();
+    tcp_done = true;
+    incoming_cond.Signal();
+    incoming_lock.Unlock();
 
-	// finish off outgoing thread
-	dout(10) << "waiting for outgoing to finish" << endl;
-	if (g_conf.tcp_multi_out) {
-	  for (hash_map<int,OutThread*>::iterator it = rank_out.begin();
-		   it != rank_out.end();
-		   it++) {
-		it->second->stop();
-		delete it->second;
-	  }
-	} else {
-	  single_out_thread.stop();
-	}
+    // finish off outgoing thread
+    dout(10) << "waiting for outgoing to finish" << endl;
+    if (g_conf.tcp_multi_out) {
+      for (hash_map<int,OutThread*>::iterator it = rank_out.begin();
+           it != rank_out.end();
+           it++) {
+        it->second->stop();
+        delete it->second;
+      }
+    } else {
+      single_out_thread.stop();
+    }
 
-	
-	/*
+    
+    /*
 
-	dout(15) << "whoami = " << whoami << ", thread = " << dispatch_thread_id << endl;
-	if (whoami == thread_id) {
-	  // i am the event loop thread, just set flag!
-	  dout(15) << "  set tcp_done=true" << endl;
-	  tcp_done = true;
-	}
-	*/
+    dout(15) << "whoami = " << whoami << ", thread = " << dispatch_thread_id << endl;
+    if (whoami == thread_id) {
+      // i am the event loop thread, just set flag!
+      dout(15) << "  set tcp_done=true" << endl;
+      tcp_done = true;
+    }
+    */
   } 
   return 0;
 }
@@ -1399,51 +1399,51 @@ int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int frompo
   m->set_lamport_send_stamp( get_lamport() );
 
   dout(4) << "--> " << m->get_type_name() 
-		  << " from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() 
-		  << " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() 
-		  << " ---- " << m 
-		  << endl;
+          << " from " << MSG_ADDR_NICE(m->get_source()) << ':' << m->get_source_port() 
+          << " to " << MSG_ADDR_NICE(m->get_dest()) << ':' << m->get_dest_port() 
+          << " ---- " << m 
+          << endl;
 
   // local?
   TCPMessenger *entity = 0;
   directory_lock.Lock();
   if (directory.count(dest) &&
-	  directory_ready.count(dest)) entity = directory[dest];
+      directory_ready.count(dest)) entity = directory[dest];
   directory_lock.Unlock();
   
   if (entity) {  
-	// local!
-	::incoming_lock.Lock();
-	{
-	  dout(20) << " queueing locally for " << dest << " " << m << endl;  //", stat_inq " << stat_inq << ", incomign " << ::incoming.size() << endl;
-	  //assert(stat_inq == ::incoming.size());
-	  ::incoming.push_back(m);
-	  ::incoming_cond.Signal();
-	  stat_inq++;
-	  //assert(stat_inq == ::incoming.size());
-	  //dout(-20) << " stat_inq " << stat_inq << ", incoming " << ::incoming.size() << endl;
-	  stat_inqb += m->get_payload().length();
-	}
-	::incoming_lock.Unlock();
+    // local!
+    ::incoming_lock.Lock();
+    {
+      dout(20) << " queueing locally for " << dest << " " << m << endl;  //", stat_inq " << stat_inq << ", incomign " << ::incoming.size() << endl;
+      //assert(stat_inq == ::incoming.size());
+      ::incoming.push_back(m);
+      ::incoming_cond.Signal();
+      stat_inq++;
+      //assert(stat_inq == ::incoming.size());
+      //dout(-20) << " stat_inq " << stat_inq << ", incoming " << ::incoming.size() << endl;
+      stat_inqb += m->get_payload().length();
+    }
+    ::incoming_lock.Unlock();
   } else {
-	// remote!
+    // remote!
 
-	if (g_conf.tcp_serial_marshall)
-	  tcp_marshall(m);
-	
-	if (g_conf.tcp_serial_out) {
-	  lookup_lock.Lock();
-	  // send in this thread
-	  if (tcp_lookup(m))
-		tcp_send(m);
-	  lookup_lock.Unlock();
-	} else {
-	  lookup_lock.Lock();
-	  OutThread *outt = tcp_lookup(m);
-	  lookup_lock.Unlock();
-	  
-	  if (outt) outt->send(m);
-	}
+    if (g_conf.tcp_serial_marshall)
+      tcp_marshall(m);
+    
+    if (g_conf.tcp_serial_out) {
+      lookup_lock.Lock();
+      // send in this thread
+      if (tcp_lookup(m))
+        tcp_send(m);
+      lookup_lock.Unlock();
+    } else {
+      lookup_lock.Lock();
+      OutThread *outt = tcp_lookup(m);
+      lookup_lock.Unlock();
+      
+      if (outt) outt->send(m);
+    }
   }
 
   return 0;

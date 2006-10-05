@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,9 +25,9 @@ class MNSRegisterAck : public Message {
  public:
   MNSRegisterAck() {}
   MNSRegisterAck(long t, msg_addr_t e) : 
-	Message(MSG_NS_REGISTERACK) { 
-	entity = e;
-	tid = t;
+    Message(MSG_NS_REGISTERACK) { 
+    entity = e;
+    tid = t;
   }
   
   char *get_type_name() { return "NSRegA"; }
@@ -36,15 +36,15 @@ class MNSRegisterAck : public Message {
   long get_tid() { return tid; }
 
   void encode_payload() {
-	payload.append((char*)&entity, sizeof(entity));
-	payload.append((char*)&tid, sizeof(tid));
+    payload.append((char*)&entity, sizeof(entity));
+    payload.append((char*)&tid, sizeof(tid));
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(entity), (char*)&entity);
-	off += sizeof(entity);
-	payload.copy(off, sizeof(tid), (char*)&tid);
-	off += sizeof(tid);
+    int off = 0;
+    payload.copy(off, sizeof(entity), (char*)&entity);
+    off += sizeof(entity);
+    payload.copy(off, sizeof(tid), (char*)&tid);
+    off += sizeof(tid);
   }
 };
 

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -91,7 +91,7 @@ class Context;
                                     |CDIR_STATE_FROZENTREE\
                                     |CDIR_STATE_FROZENDIR\
                                     |CDIR_STATE_EXPORT\
-									 |CDIR_STATE_PROXY)
+                                     |CDIR_STATE_PROXY)
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -237,7 +237,7 @@ class CDir {
   // waiters
   multimap<int, Context*> waiting;  // tag -> context
   hash_map< string, multimap<int, Context*> >
-	                      waiting_on_dentry;
+                          waiting_on_dentry;
 
   // cache control  (defined for authority; hints for replicas)
   int              dir_rep;
@@ -268,24 +268,24 @@ class CDir {
   CDir_map_t::iterator begin() { return items.begin(); }
   CDir_map_t::iterator end() { return items.end(); }
   size_t get_size() { 
-	
-	//if ( is_auth() && !is_hashed()) assert(nauthitems == nitems);
-	//if (!is_auth() && !is_hashed()) assert(nauthitems == 0);
-	
-	return nitems; 
+    
+    //if ( is_auth() && !is_hashed()) assert(nauthitems == nitems);
+    //if (!is_auth() && !is_hashed()) assert(nauthitems == 0);
+    
+    return nitems; 
   }
   size_t get_nitems() { return nitems; }
   size_t get_nnull() { return nnull; }
   /*
   size_t get_auth_size() { 
-	assert(nauthitems <= nitems);
-	return nauthitems; 
+    assert(nauthitems <= nitems);
+    return nauthitems; 
   }
   */
 
   /*
   float get_popularity() {
-	return popularity[0].get();
+    return popularity[0].get();
   }
   */
   
@@ -293,11 +293,11 @@ class CDir {
   // -- dentries and inodes --
  public:
   CDentry* lookup(const string& n) {
-	map<string,CDentry*>::iterator iter = items.find(n);
-	if (iter == items.end()) 
-	  return 0;
-	else
-	  return iter->second;
+    map<string,CDentry*>::iterator iter = items.find(n);
+    if (iter == items.end()) 
+      return 0;
+    else
+      return iter->second;
   }
 
   CDentry* add_dentry( const string& dname, CInode *in=0 );
@@ -322,8 +322,8 @@ class CDir {
   bool is_open_by_anyone() { return !open_by.empty(); }
   bool is_open_by(int mds) { return open_by.count(mds); }
   int get_open_by_nonce(int mds) {
-	map<int,int>::iterator it = open_by_nonce.find(mds);
-	return it->second;
+    map<int,int>::iterator it = open_by_nonce.find(mds);
+    return it->second;
   }
   set<int>::iterator open_by_begin() { return open_by.begin(); }
   set<int>::iterator open_by_end() { return open_by.end(); }
@@ -332,33 +332,33 @@ class CDir {
   int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
   
   int open_by_add(int mds) {
-	int nonce = 1;
-	
-	if (is_open_by(mds)) {    // already had it?
+    int nonce = 1;
+    
+    if (is_open_by(mds)) {    // already had it?
       nonce = get_open_by_nonce(mds) + 1; // new nonce (+1)
-	  dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
-	  open_by_nonce.erase(mds);
+      dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
+      open_by_nonce.erase(mds);
     } else {
-	  if (open_by.empty()) 
-		get(CDIR_PIN_OPENED);
-	  open_by.insert(mds);
-	}
-	open_by_nonce.insert(pair<int,int>(mds,nonce));   // first! serial of 1.
+      if (open_by.empty()) 
+        get(CDIR_PIN_OPENED);
+      open_by.insert(mds);
+    }
+    open_by_nonce.insert(pair<int,int>(mds,nonce));   // first! serial of 1.
     return nonce;   // default nonce
   }
   void open_by_remove(int mds) {
-	//if (!is_open_by(mds)) return;
-	assert(is_open_by(mds));
+    //if (!is_open_by(mds)) return;
+    assert(is_open_by(mds));
 
-	open_by.erase(mds);
-	open_by_nonce.erase(mds);
-	if (open_by.empty())
-	  put(CDIR_PIN_OPENED);	  
+    open_by.erase(mds);
+    open_by_nonce.erase(mds);
+    if (open_by.empty())
+      put(CDIR_PIN_OPENED);      
   }
   void open_by_clear() {
-	if (!open_by.empty())
-	  put(CDIR_PIN_OPENED);
-	open_by.clear();
+    if (!open_by.empty())
+      put(CDIR_PIN_OPENED);
+    open_by.clear();
     open_by_nonce.clear();
   }
 
@@ -366,27 +366,27 @@ class CDir {
 
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
-	if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > g_conf.mds_bal_replicate_threshold)) {
-	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
-	  ls = open_by;
-	  if (!ls.empty()) ls.insert(auth);
-	}
+    if (( popularity[MDS_POP_CURDOM].pop[META_POP_IRD].get() > g_conf.mds_bal_replicate_threshold)) {
+      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+      ls = open_by;
+      if (!ls.empty()) ls.insert(auth);
+    }
   }
 
 
   // -- state --
   unsigned get_state() { return state; }
   void reset_state(unsigned s) { 
-	state = s; 
-	dout(10) << " cdir:" << *this << " state reset" << endl;
+    state = s; 
+    dout(10) << " cdir:" << *this << " state reset" << endl;
   }
-  void state_clear(unsigned mask) {	
-	state &= ~mask; 
-	dout(10) << " cdir:" << *this << " state -" << mask << " = " << state << endl;
+  void state_clear(unsigned mask) {    
+    state &= ~mask; 
+    dout(10) << " cdir:" << *this << " state -" << mask << " = " << state << endl;
   }
   void state_set(unsigned mask) { 
-	state |= mask; 
-	dout(10) << " cdir:" << *this << " state +" << mask << " = " << state << endl;
+    state |= mask; 
+    dout(10) << " cdir:" << *this << " state +" << mask << " = " << state << endl;
   }
   unsigned state_test(unsigned mask) { return state & mask; }
 
@@ -403,8 +403,8 @@ class CDir {
   bool is_unhashing() { return state & CDIR_STATE_UNHASHING; }
 
   bool is_rep() { 
-	if (dir_rep == CDIR_REP_NONE) return false;
-	return true;
+    if (dir_rep == CDIR_REP_NONE) return false;
+    return true;
   }
  
 
@@ -412,8 +412,8 @@ class CDir {
   // -- dirtyness --
   __uint64_t get_version() { return version; }
   void float_version(__uint64_t ge) {
-	if (version < ge)
-	  version = ge;
+    if (version < ge)
+      version = ge;
   }
   __uint64_t get_committing_version() { return committing_version; }
   __uint64_t get_last_committed_version() { return last_committed_version; }
@@ -432,18 +432,18 @@ class CDir {
   void put(int by);
   void get(int by);
   bool is_pinned_by(int by) {
-	return ref_set.count(by);
+    return ref_set.count(by);
   }
   bool is_pinned() { return ref > 0; }
   int get_ref() { return ref; }
   set<int>& get_ref_set() { return ref_set; }
   void request_pin_get() {
-	if (request_pins == 0) get(CDIR_PIN_REQUEST);
-	request_pins++;
+    if (request_pins == 0) get(CDIR_PIN_REQUEST);
+    request_pins++;
   }
   void request_pin_put() {
-	request_pins--;
-	if (request_pins == 0) put(CDIR_PIN_REQUEST);
+    request_pins--;
+    if (request_pins == 0) put(CDIR_PIN_REQUEST);
   }
 
     
@@ -452,13 +452,13 @@ class CDir {
   bool waiting_for(int tag, const string& dn);
   void add_waiter(int tag, Context *c);
   void add_waiter(int tag,
-				  const string& dentry,
-				  Context *c);
+                  const string& dentry,
+                  Context *c);
   void take_waiting(int mask, list<Context*>& ls);  // includes dentry waiters
   void take_waiting(int mask, 
-					const string& dentry, 
-					list<Context*>& ls,
-					int num=0);  
+                    const string& dentry, 
+                    list<Context*>& ls,
+                    int num=0);  
   void finish_waiting(int mask, int result = 0);    // ditto
   void finish_waiting(int mask, const string& dn, int result = 0);    // ditto
 
@@ -491,12 +491,12 @@ class CDir {
   bool is_frozen_dir() { return state & CDIR_STATE_FROZENDIR; }
   
   bool is_freezeable() {
-	if (auth_pins == 0 && nested_auth_pins == 0) return true;
-	return false;
+    if (auth_pins == 0 && nested_auth_pins == 0) return true;
+    return false;
   }
   bool is_freezeable_dir() {
-	if (auth_pins == 0) return true;
-	return false;
+    if (auth_pins == 0) return true;
+    return false;
   }
 
 
@@ -524,18 +524,18 @@ class CDirDiscover {
     ino = dir->ino();
     this->nonce = nonce;
     dir_auth = dir->dir_auth;
-	dir_rep = dir->dir_rep;
+    dir_rep = dir->dir_rep;
     rep_by = dir->dir_rep_by;
   }
 
   void update_dir(CDir *dir) {
-	assert(dir->ino() == ino);
-	assert(!dir->is_auth());
+    assert(dir->ino() == ino);
+    assert(!dir->is_auth());
 
-	dir->replica_nonce = nonce;
-	dir->dir_auth = dir_auth;
-	dir->dir_rep = dir_rep;
-	dir->dir_rep_by = rep_by;
+    dir->replica_nonce = nonce;
+    dir->dir_auth = dir_auth;
+    dir->dir_rep = dir_rep;
+    dir->dir_rep_by = rep_by;
   }
 
   inodeno_t get_ino() { return ino; }
@@ -546,7 +546,7 @@ class CDirDiscover {
     bl.append((char*)&nonce, sizeof(nonce));
     bl.append((char*)&dir_auth, sizeof(dir_auth));
     bl.append((char*)&dir_rep, sizeof(dir_rep));
-	::_encode(rep_by, bl);
+    ::_encode(rep_by, bl);
   }
 
   void _decode(bufferlist& bl, int& off) {
@@ -558,7 +558,7 @@ class CDirDiscover {
     off += sizeof(dir_auth);
     bl.copy(off, sizeof(dir_rep), (char*)&dir_rep);
     off += sizeof(dir_rep);
-	::_decode(rep_by, bl, off);
+    ::_decode(rep_by, bl, off);
   }
 
 };
@@ -590,11 +590,11 @@ class CDirExport {
  public:
   CDirExport() {}
   CDirExport(CDir *dir) {
-	memset(&st, 0, sizeof(st));
+    memset(&st, 0, sizeof(st));
 
     st.ino = dir->ino();
     st.nitems = dir->nitems;
-	st.nden = dir->items.size();
+    st.nden = dir->items.size();
     st.version = dir->version;
     st.state = dir->state;
     st.dir_auth = dir->dir_auth;
@@ -602,11 +602,11 @@ class CDirExport {
 
     st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( dir->popularity[MDS_POP_CURDOM] );
-	dir->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
-	dir->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
+    dir->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
+    dir->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
 
     rep_by = dir->dir_rep_by;
-	open_by = dir->open_by;
+    open_by = dir->open_by;
     open_by_nonce = dir->open_by_nonce;
   }
 
@@ -614,36 +614,36 @@ class CDirExport {
   __uint64_t get_nden() { return st.nden; }
 
   void update_dir(CDir *dir) {
-	assert(dir->ino() == st.ino);
+    assert(dir->ino() == st.ino);
 
-	//dir->nitems = st.nitems;
-	dir->version = st.version;
-	if (dir->state & CDIR_STATE_HASHED) 
-	  dir->state |= CDIR_STATE_AUTH;         // just inherit auth flag when hashed
-	else
-	  dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
-		(st.state & CDIR_MASK_STATE_EXPORTED);
-	dir->dir_auth = st.dir_auth;
-	dir->dir_rep = st.dir_rep;
+    //dir->nitems = st.nitems;
+    dir->version = st.version;
+    if (dir->state & CDIR_STATE_HASHED) 
+      dir->state |= CDIR_STATE_AUTH;         // just inherit auth flag when hashed
+    else
+      dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
+        (st.state & CDIR_MASK_STATE_EXPORTED);
+    dir->dir_auth = st.dir_auth;
+    dir->dir_rep = st.dir_rep;
 
-	dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;
-	dir->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
-	dir->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
-	dir->popularity[MDS_POP_NESTED] += st.popularity_curdom;
+    dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;
+    dir->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
+    dir->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
+    dir->popularity[MDS_POP_NESTED] += st.popularity_curdom;
 
-	dir->replica_nonce = 0;  // no longer defined
+    dir->replica_nonce = 0;  // no longer defined
 
-	if (!dir->open_by.empty())
-	  dout(0) << "open_by not empty non import, " << *dir << ", " << dir->open_by << endl;
+    if (!dir->open_by.empty())
+      dout(0) << "open_by not empty non import, " << *dir << ", " << dir->open_by << endl;
 
-	dir->dir_rep_by = rep_by;
-	dir->open_by = open_by;
-	dout(12) << "open_by in export is " << open_by << ", dir now " << dir->open_by << endl;
-	dir->open_by_nonce = open_by_nonce;
-	if (!open_by.empty())
-	  dir->get(CDIR_PIN_OPENED);
-	if (dir->is_dirty())
-	  dir->get(CDIR_PIN_DIRTY);
+    dir->dir_rep_by = rep_by;
+    dir->open_by = open_by;
+    dout(12) << "open_by in export is " << open_by << ", dir now " << dir->open_by << endl;
+    dir->open_by_nonce = open_by_nonce;
+    if (!open_by.empty())
+      dir->get(CDIR_PIN_OPENED);
+    if (dir->is_dirty())
+      dir->get(CDIR_PIN_DIRTY);
   }
 
 
@@ -682,7 +682,7 @@ class CDirExport {
       off += sizeof(int);
       bl.copy(off, sizeof(int), (char*)&n);
       off += sizeof(int);
-	  open_by.insert(m);
+      open_by.insert(m);
       open_by_nonce.insert(pair<int,int>(m,n));
     }
     

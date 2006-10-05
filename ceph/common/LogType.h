@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -46,72 +46,72 @@ class LogType {
 
  public:
   LogType() {
-	version = 1;
+    version = 1;
 
-	for (int i=0;i<cache_keys;i++)
-	  kc_ptr[i] = 0;
-	kc_pos = 0;
+    for (int i=0;i<cache_keys;i++)
+      kc_ptr[i] = 0;
+    kc_pos = 0;
   }
   int add_key(const char* key, bool is_inc) {
-	int i = lookup_key(key);
-	if (i >= 0) return i;
+    int i = lookup_key(key);
+    if (i >= 0) return i;
 
-	i = keys.size();
-	keys.push_back(key);
+    i = keys.size();
+    keys.push_back(key);
 
 #ifdef __LP64__
-	__uint64_t p = (__uint64_t)key;
+    __uint64_t p = (__uint64_t)key;
 #else
-	__uint64_t p = (__uint32_t)key;
+    __uint64_t p = (__uint32_t)key;
 #endif
-	keymap[p] = i;
-	if (is_inc) inc_keys.insert(i);
+    keymap[p] = i;
+    if (is_inc) inc_keys.insert(i);
 
-	version++;
-	return i;
+    version++;
+    return i;
   }
   int add_inc(const char* key) {
-	return add_key(key, true);
+    return add_key(key, true);
   }
   int add_set(const char *key) {
-	return add_key(key, false);
+    return add_key(key, false);
   }
   
   bool have_key(const char* key) {
-	return lookup_key(key) < 0;
+    return lookup_key(key) < 0;
   }
 
   int lookup_key(const char* key) {
 #ifdef __LP64__
-	__uint64_t p = (__uint64_t)key;
+    __uint64_t p = (__uint64_t)key;
 #else
-	__uint64_t p = (__uint32_t)key;
+    __uint64_t p = (__uint32_t)key;
 #endif
 
-	if (keymap.count(p)) 
-	  return keymap[p];
+    if (keymap.count(p)) 
+      return keymap[p];
 
-	// try kc ringbuffer
-	int pos = kc_pos-1;
-	for (int j=0; j<cache_keys; j++) {
-	  if (pos < 0) pos = cache_keys - 1;
-	  if (kc_ptr[pos] == p) return kc_val[pos];
-	  pos--;
-	}
+    // try kc ringbuffer
+    int pos = kc_pos-1;
+    for (int j=0; j<cache_keys; j++) {
+      if (pos < 0) pos = cache_keys - 1;
+      if (kc_ptr[pos] == p) return kc_val[pos];
+      pos--;
+    }
 
-	for (unsigned i=0; i<keys.size(); i++)
-	  if (strcmp(keys[i], key) == 0) {
-		keymap[p] = i;
+    for (unsigned i=0; i<keys.size(); i++)
+      if (strcmp(keys[i], key) == 0) {
+        keymap[p] = i;
 
-		// put in kc ringbuffer
-		kc_ptr[kc_pos] = p;
-		kc_val[kc_pos] = i;
-		kc_pos++;
-		if (kc_pos == cache_keys) kc_pos = 0;
+        // put in kc ringbuffer
+        kc_ptr[kc_pos] = p;
+        kc_val[kc_pos] = i;
+        kc_pos++;
+        if (kc_pos == cache_keys) kc_pos = 0;
 
-		return i; 
-	  }
-	return -1;
+        return i; 
+      }
+    return -1;
   }
 
 };

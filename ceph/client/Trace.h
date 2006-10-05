@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,35 +40,35 @@ class Trace {
   list<const char*>::iterator _end;
 
   void start() {
-	_cur = get_list().begin();
-	_end = get_list().end();
-	ns = 0;
+    _cur = get_list().begin();
+    _end = get_list().end();
+    ns = 0;
   }
 
   char strings[10][200];
   int ns;
   const char *get_string(const char *prefix = 0) {
-	assert(_cur != _end);
-	const char *s = *_cur;
-	_cur++;
-	if (prefix) {
-	  if (strstr(s, "/prefix") == s ||
-		  strstr(s, "/prefix") == s+1) {
-		strcpy(strings[ns], prefix);
-		strcpy(strings[ns] + strlen(prefix),
-			   s + strlen("/prefix"));
-		s = (const char*)strings[ns];
-		ns++;
-		if (ns == 10) ns = 0;
-	  }
-	} 
-	return s;
+    assert(_cur != _end);
+    const char *s = *_cur;
+    _cur++;
+    if (prefix) {
+      if (strstr(s, "/prefix") == s ||
+          strstr(s, "/prefix") == s+1) {
+        strcpy(strings[ns], prefix);
+        strcpy(strings[ns] + strlen(prefix),
+               s + strlen("/prefix"));
+        s = (const char*)strings[ns];
+        ns++;
+        if (ns == 10) ns = 0;
+      }
+    } 
+    return s;
   }
   __int64_t get_int() {
-	return atoll(get_string());
+    return atoll(get_string());
   }
   bool end() {
-	return _cur == _end;
+    return _cur == _end;
   }
 };
 

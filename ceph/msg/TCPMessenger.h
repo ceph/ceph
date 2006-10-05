@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -35,39 +35,39 @@ class TCPMessenger : public Messenger {
   Cond           incoming_cond;
 
   class DispatchThread : public Thread {
-	TCPMessenger *m;
+    TCPMessenger *m;
   public:
-	DispatchThread(TCPMessenger *_m) : m(_m) {}
-	void *entry() {
-	  m->dispatch_entry();
-	  return 0;
-	}
+    DispatchThread(TCPMessenger *_m) : m(_m) {}
+    void *entry() {
+      m->dispatch_entry();
+      return 0;
+    }
   } dispatch_thread;
 
   void dispatch_entry();
 
 public:
   void dispatch_start() {
-	incoming_stop = false;
-	dispatch_thread.create();
+    incoming_stop = false;
+    dispatch_thread.create();
   }
   /*  void dispatch_kick() {
-	incoming_lock.Lock();
-	incoming_cond.Signal();
-	incoming_lock.Unlock();
-	}*/
+    incoming_lock.Lock();
+    incoming_cond.Signal();
+    incoming_lock.Unlock();
+    }*/
   void dispatch_stop() {
-	incoming_lock.Lock();
-	incoming_stop = true;
-	incoming_cond.Signal();
-	incoming_lock.Unlock();
-	dispatch_thread.join();
+    incoming_lock.Lock();
+    incoming_stop = true;
+    incoming_cond.Signal();
+    incoming_lock.Unlock();
+    dispatch_thread.join();
   }
   void dispatch_queue(Message *m) {
-	incoming_lock.Lock();
-	incoming.push_back(m);
-	incoming_cond.Signal();
-	incoming_lock.Unlock();
+    incoming_lock.Lock();
+    incoming.push_back(m);
+    incoming_cond.Signal();
+    incoming_lock.Unlock();
   }
 
  public:

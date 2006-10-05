@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -42,7 +42,7 @@ void TCPDirectory::handle_connect(MNSConnect *m)
   messenger->map_rank_addr(rank, m->get_addr());
 
   messenger->send_message(new MNSConnectAck(rank),
-						  MSG_ADDR_RANK(rank));
+                          MSG_ADDR_RANK(rank));
   delete m;
 }
 
@@ -57,31 +57,31 @@ void TCPDirectory::handle_register(MNSRegister *m)
   msg_addr_t entity = m->get_entity();
 
   if (entity.is_new()) {
-	// make up a new address!
-	switch (entity.type()) {
-	  
-	case MSG_ADDR_RANK_BASE:         // stupid client should be able to figure this out
-	  entity = MSG_ADDR_RANK(rank);
-	  break;
-	  
-	case MSG_ADDR_MDS_BASE:
-	  entity = MSG_ADDR_MDS(nmds++);
-	  break;
-	  
-	case MSG_ADDR_OSD_BASE:
-	  entity = MSG_ADDR_OSD(nosd++);
-	  break;
-	  
-	case MSG_ADDR_CLIENT_BASE:
-	  entity = MSG_ADDR_CLIENT(nclient++);
-	  break;
-	  
-	default:
-	  assert(0);
-	}
+    // make up a new address!
+    switch (entity.type()) {
+      
+    case MSG_ADDR_RANK_BASE:         // stupid client should be able to figure this out
+      entity = MSG_ADDR_RANK(rank);
+      break;
+      
+    case MSG_ADDR_MDS_BASE:
+      entity = MSG_ADDR_MDS(nmds++);
+      break;
+      
+    case MSG_ADDR_OSD_BASE:
+      entity = MSG_ADDR_OSD(nosd++);
+      break;
+      
+    case MSG_ADDR_CLIENT_BASE:
+      entity = MSG_ADDR_CLIENT(nclient++);
+      break;
+      
+    default:
+      assert(0);
+    }
   } else {
-	// specific address!
-	assert(dir.count(entity) == 0);  // make sure it doesn't exist yet.
+    // specific address!
+    assert(dir.count(entity) == 0);  // make sure it doesn't exist yet.
   }
 
   dout(2) << "registered " << MSG_ADDR_NICE(entity) << endl;
@@ -90,7 +90,7 @@ void TCPDirectory::handle_register(MNSRegister *m)
   dir[entity] = rank;
   
   if (entity == MSG_ADDR_RANK(rank))   // map this locally now so we can reply
-	messenger->map_entity_rank(entity, rank);  // otherwise wait until they send STARTED msg
+    messenger->map_entity_rank(entity, rank);  // otherwise wait until they send STARTED msg
 
   hold.insert(entity);
 
@@ -99,7 +99,7 @@ void TCPDirectory::handle_register(MNSRegister *m)
 
   // reply w/ new id
   messenger->send_message(new MNSRegisterAck(m->get_tid(), entity), 
-						  MSG_ADDR_RANK(rank));
+                          MSG_ADDR_RANK(rank));
   delete m;
 }
 
@@ -113,16 +113,16 @@ void TCPDirectory::handle_started(Message *m)
 
   // waiters?
   if (waiting.count(entity)) {
-	list<Message*> ls;
-	ls.splice(ls.begin(), waiting[entity]);
-	waiting.erase(entity);
+    list<Message*> ls;
+    ls.splice(ls.begin(), waiting[entity]);
+    waiting.erase(entity);
 
-	dout(10) << "doing waiter on " << MSG_ADDR_NICE(entity) << endl;
-	for (list<Message*>::iterator it = ls.begin();
-		 it != ls.end();
-		 it++) {
-	  dispatch(*it);
-	}
+    dout(10) << "doing waiter on " << MSG_ADDR_NICE(entity) << endl;
+    for (list<Message*>::iterator it = ls.begin();
+         it != ls.end();
+         it++) {
+      dispatch(*it);
+    }
   }
 }
 
@@ -136,18 +136,18 @@ void TCPDirectory::handle_unregister(Message *m)
   
   // shutdown?
   if (dir.size() <= 2) {
-	dout(2) << "dir is empty except for me, shutting down" << endl;
-	tcpmessenger_stop_nameserver();
+    dout(2) << "dir is empty except for me, shutting down" << endl;
+    tcpmessenger_stop_nameserver();
   }
   else {
-	if (0) {
-	  dout(10) << "dir size now " << dir.size() << endl;
-	  for (hash_map<msg_addr_t, int>::iterator it = dir.begin();
-		   it != dir.end();
-		   it++) {
-		dout(10) << " dir: " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
-	  }
-	}
+    if (0) {
+      dout(10) << "dir size now " << dir.size() << endl;
+      for (hash_map<msg_addr_t, int>::iterator it = dir.begin();
+           it != dir.end();
+           it++) {
+        dout(10) << " dir: " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
+      }
+    }
   }
 
 }
@@ -157,10 +157,10 @@ void TCPDirectory::handle_lookup(MNSLookup *m)
 {
   // have it?
   if (dir.count(m->get_entity()) == 0 ||
-	  hold.count(m->get_entity())) {
-	dout(2) << MSG_ADDR_NICE(m->get_source()) << " lookup '" << MSG_ADDR_NICE(m->get_entity()) << "' -> dne or on hold" << endl;
-	waiting[m->get_entity()].push_back(m);
-	return;
+      hold.count(m->get_entity())) {
+    dout(2) << MSG_ADDR_NICE(m->get_source()) << " lookup '" << MSG_ADDR_NICE(m->get_entity()) << "' -> dne or on hold" << endl;
+    waiting[m->get_entity()].push_back(m);
+    return;
   }
 
   // look it up!  
@@ -173,6 +173,6 @@ void TCPDirectory::handle_lookup(MNSLookup *m)
   dout(2) << MSG_ADDR_NICE(m->get_source()) << " lookup '" << MSG_ADDR_NICE(m->get_entity()) << "' -> rank " << rank << endl;
 
   messenger->send_message(reply,
-						  m->get_source(), m->get_source_port());
+                          m->get_source(), m->get_source_port());
   delete m;
 }

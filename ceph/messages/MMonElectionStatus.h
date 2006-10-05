@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -27,21 +27,21 @@ class MMonElectionStatus : public Message {
 
   MMonElectionStatus() {}
   MMonElectionStatus(int _q, int r, map<int,Elector::State> reg) :
-	Message(MSG_MON_ELECTION_STATUS),
-	q(_q), read_num(r), registry(reg) {}
+    Message(MSG_MON_ELECTION_STATUS),
+    q(_q), read_num(r), registry(reg) {}
  
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(q), (char*)&q);
-	off += sizeof(q);
-	payload.copy(off, sizeof(read_num), (char*)&read_num);
-	off += sizeof(read_num);
-	::_decode(registry, payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(q), (char*)&q);
+    off += sizeof(q);
+    payload.copy(off, sizeof(read_num), (char*)&read_num);
+    off += sizeof(read_num);
+    ::_decode(registry, payload, off);
   }
   void encode_payload() {
-	payload.append((char*)&q, sizeof(q));
-	payload.append((char*)&read_num, sizeof(read_num));
-	::_encode(registry, payload);
+    payload.append((char*)&q, sizeof(q));
+    payload.append((char*)&read_num, sizeof(read_num));
+    ::_encode(registry, payload);
   }
 
   virtual char *get_type_name() { return "MonElStatus"; }

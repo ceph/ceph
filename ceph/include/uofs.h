@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -30,7 +30,7 @@
  void device_findsizes(int fd, long long *sz, int *bsz);
 
  int uofs_format(int bdev_id, int donode_size, int bd_ratio, int reg_size, int sb_size, int lb_size,
-	         int nr_hash_table_buckets, int delay_allocation, int flush_interval);
+             int nr_hash_table_buckets, int delay_allocation, int flush_interval);
 
  int uofs_mount(int bdev_id);
  void uofs_shutdown(void);

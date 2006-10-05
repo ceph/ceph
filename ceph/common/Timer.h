@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,10 +40,10 @@ using namespace __gnu_cxx;
 
 namespace __gnu_cxx {
   template<> struct hash<Context*> {
-	size_t operator()(const Context *p) const { 
-	  static hash<unsigned long> H;
-	  return H((unsigned long)p); 
-	}
+    size_t operator()(const Context *p) const { 
+      static hash<unsigned long> H;
+      return H((unsigned long)p); 
+    }
   };
 }
 
@@ -55,11 +55,11 @@ class Timer {
 
   // get time of the next event
   Context* get_next_scheduled(utime_t& when) {
-	if (scheduled.empty()) return 0;
-	map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
-	when = it->first;
-	multiset<Context*>::iterator sit = it->second.begin();
-	return *sit;
+    if (scheduled.empty()) return 0;
+    map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+    when = it->first;
+    multiset<Context*>::iterator sit = it->second.begin();
+    return *sit;
   }
 
   void register_timer();  // make sure i get a callback
@@ -77,13 +77,13 @@ class Timer {
   void timer_entry();    // waiter thread (that wakes us up)
 
   class TimerThread : public Thread {
-	Timer *t;
+    Timer *t;
   public:
-	void *entry() {
-	  t->timer_entry();
-	  return 0;
-	}
-	TimerThread(Timer *_t) : t(_t) {}
+    void *entry() {
+      t->timer_entry();
+      return 0;
+    }
+    TimerThread(Timer *_t) : t(_t) {}
   } timer_thread;
 
 
@@ -92,32 +92,32 @@ class Timer {
 
  public:
   Timer() :
-	//thread_id0),
-	thread_stop(false),
-	timed_sleep(false),
-	sleeping(false),
-	timer_thread(this),
-	num_event(0)
+    //thread_id0),
+    thread_stop(false),
+    timed_sleep(false),
+    sleeping(false),
+    timer_thread(this),
+    num_event(0)
   { 
   }
   ~Timer() { 
-	// scheduled
-	for (map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
-		 it != scheduled.end();
-		 it++) {
-	  for (multiset<Context*>::iterator sit = it->second.begin();
-		   sit != it->second.end();
-		   sit++)
-		delete *sit;
-	}
-	scheduled.clear();
+    // scheduled
+    for (map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+         it != scheduled.end();
+         it++) {
+      for (multiset<Context*>::iterator sit = it->second.begin();
+           sit != it->second.end();
+           sit++)
+        delete *sit;
+    }
+    scheduled.clear();
   }
   
   void init() {
-	register_timer();
+    register_timer();
   }
   void shutdown() {
-	cancel_timer();
+    cancel_timer();
   }
 
   /*
@@ -130,9 +130,9 @@ class Timer {
 
   // schedule events
   void add_event_after(float seconds,
-					   Context *callback);
+                       Context *callback);
   void add_event_at(utime_t when,
-					Context *callback);
+                    Context *callback);
   bool cancel_event(Context *callback);
 
   // execute pending events

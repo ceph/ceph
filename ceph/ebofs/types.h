@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,6 +28,9 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+#include "include/object.h"
+
+
 #ifndef MIN
 # define MIN(a,b)  ((a)<=(b) ? (a):(b))
 #endif
@@ -47,17 +50,17 @@ using namespace __gnu_cxx;
 /*
 namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
-	size_t operator()(unsigned long long __x) const { 
-	  static hash<unsigned long> H;
-	  return H((__x >> 32) ^ (__x & 0xffffffff)); 
-	}
+    size_t operator()(unsigned long long __x) const { 
+      static hash<unsigned long> H;
+      return H((__x >> 32) ^ (__x & 0xffffffff)); 
+    }
   };
   
   template<> struct hash< std::string >
   {
     size_t operator()( const std::string& x ) const
     {
-	  static hash<const char*> H;
+      static hash<const char*> H;
       return H(x.c_str());
     }
   };
@@ -105,7 +108,7 @@ struct ebofs_nodepool {
 
 
 // objects
-typedef __uint64_t object_t;
+
 typedef __uint64_t coll_t;
 
 struct ebofs_onode {
@@ -122,13 +125,9 @@ struct ebofs_onode {
 
 struct ebofs_cnode {
   Extent     cnode_loc;       /* this is actually the block we live in */
-  object_t   coll_id;
+  coll_t     coll_id;
   int        num_attr;        // num attr in cnode
 };
-
-
-//static const int EBOFS_MAX_DATA_IN_ONODE = (EBOFS_BLOCK_SIZE - sizeof(struct ebofs_onode));
-//static const int EBOFS_MAX_EXTENTS_IN_ONODE = (EBOFS_MAX_DATA_IN_ONODE / sizeof(Extent));
 
 
 // table
@@ -186,24 +185,24 @@ class AttrVal {
   int len;
   AttrVal() : data(0), len(0) {}
   AttrVal(char *from, int l) : 
-	len(l) {
-	data = new char[len];
-	memcpy(data, from, len);
+    len(l) {
+    data = new char[len];
+    memcpy(data, from, len);
   }
   AttrVal(const AttrVal &other) {
-	len = other.len;
-	data = new char[len];
-	memcpy(data, other.data, len);
+    len = other.len;
+    data = new char[len];
+    memcpy(data, other.data, len);
   }
   AttrVal& operator=(const AttrVal &other) {
-	if (data) delete[] data;
-	len = other.len;
-	data = new char[len];
-	memcpy(data, other.data, len);
-	return *this;
+    if (data) delete[] data;
+    len = other.len;
+    data = new char[len];
+    memcpy(data, other.data, len);
+    return *this;
   }
   ~AttrVal() {
-	delete[] data;
+    delete[] data;
   }
 };
 */

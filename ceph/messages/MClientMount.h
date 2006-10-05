@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -23,8 +23,8 @@ class MClientMount : public Message {
 
  public:
   MClientMount() : Message(MSG_CLIENT_MOUNT) { 
-	pcid = 0;
-	mkfs = 0;
+    pcid = 0;
+    mkfs = 0;
   }
 
   void set_mkfs(int m) { mkfs = m; }
@@ -36,14 +36,14 @@ class MClientMount : public Message {
   char *get_type_name() { return "Cmnt"; }
 
   virtual void decode_payload(crope& s, int& off) {  
-	s.copy(off, sizeof(pcid), (char*)&pcid);
-	off += sizeof(pcid);
-	s.copy(off, sizeof(mkfs), (char*)&mkfs);
-	off += sizeof(mkfs);
+    s.copy(off, sizeof(pcid), (char*)&pcid);
+    off += sizeof(pcid);
+    s.copy(off, sizeof(mkfs), (char*)&mkfs);
+    off += sizeof(mkfs);
   }
   virtual void encode_payload(crope& s) {  
-	s.append((char*)&pcid, sizeof(pcid));
-	s.append((char*)&mkfs, sizeof(mkfs));
+    s.append((char*)&pcid, sizeof(pcid));
+    s.append((char*)&mkfs, sizeof(mkfs));
   }
 };
 

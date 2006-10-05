@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -31,30 +31,30 @@ public:
 
   MOSDPGLog() {}
   MOSDPGLog(version_t mv, pg_t pgid) :
-	Message(MSG_OSD_PG_LOG) {
-	this->epoch = mv;
-	this->pgid = pgid;
+    Message(MSG_OSD_PG_LOG) {
+    this->epoch = mv;
+    this->pgid = pgid;
   }
 
   char *get_type_name() { return "PGlog"; }
 
   void encode_payload() {
-	payload.append((char*)&epoch, sizeof(epoch));
-	payload.append((char*)&pgid, sizeof(pgid));
-	payload.append((char*)&info, sizeof(info));
-	log._encode(payload);
-	missing._encode(payload);
+    payload.append((char*)&epoch, sizeof(epoch));
+    payload.append((char*)&pgid, sizeof(pgid));
+    payload.append((char*)&info, sizeof(info));
+    log._encode(payload);
+    missing._encode(payload);
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(epoch), (char*)&epoch);
-	off += sizeof(epoch);
-	payload.copy(off, sizeof(pgid), (char*)&pgid);
-	off += sizeof(pgid);
-	payload.copy(off, sizeof(info), (char*)&info);
-	off += sizeof(info);
-	log._decode(payload, off);
-	missing._decode(payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(epoch), (char*)&epoch);
+    off += sizeof(epoch);
+    payload.copy(off, sizeof(pgid), (char*)&pgid);
+    off += sizeof(pgid);
+    payload.copy(off, sizeof(info), (char*)&info);
+    off += sizeof(info);
+    log._decode(payload, off);
+    missing._decode(payload, off);
   }
 };
 

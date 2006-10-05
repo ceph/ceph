@@ -8,7 +8,7 @@ int print(string s) {
   cout << "s = " << s << "   filepath = " << fp << endl;
   cout << "  depth " << fp.depth() << endl;
   for (int i=0; i<fp.depth(); i++) {
-	cout << "\t" << i << " " << fp[i] << endl;
+    cout << "\t" << i << " " << fp[i] << endl;
   }
 }
 

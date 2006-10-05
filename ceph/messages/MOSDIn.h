@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,12 +28,12 @@ class MOSDIn : public Message {
   MOSDIn() {}
 
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(map_epoch), (char*)&map_epoch);
-	off += sizeof(map_epoch);
+    int off = 0;
+    payload.copy(off, sizeof(map_epoch), (char*)&map_epoch);
+    off += sizeof(map_epoch);
   }
   virtual void encode_payload() {
-	payload.append((char*)&map_epoch, sizeof(map_epoch));
+    payload.append((char*)&map_epoch, sizeof(map_epoch));
   }
 
   virtual char *get_type_name() { return "oin"; }

@@ -29,11 +29,11 @@ class Ager {
   Ager(ObjectStore *s) : store(s), did_distn(false) {} 
 
   void age(int time,
-		   float high_water,    // fill to this %
-		  float low_water,     // then empty to this %
-		  int count,         // this many times
-		  float final_water,   // and end here ( <= low_water)
-		  int fake_size_mb=0);
+           float high_water,    // fill to this %
+          float low_water,     // then empty to this %
+          int count,         // this many times
+          float final_water,   // and end here ( <= low_water)
+          int fake_size_mb=0);
 
   void save_freelist(int);
   void load_freelist();

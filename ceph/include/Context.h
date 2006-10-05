@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,18 +38,18 @@ class Context {
  * finish and destroy a list of Contexts
  */
 inline void finish_contexts(list<Context*>& finished, 
-							int result = 0)
+                            int result = 0)
 {
   if (finished.empty()) return;
 
   dout(10) << finished.size() << " contexts to finish with " << result << endl;
   for (list<Context*>::iterator it = finished.begin(); 
-	   it != finished.end(); 
-	   it++) {
-	Context *c = *it;
-	dout(10) << "---- " << c << endl;
-	c->finish(result);
-	delete c;
+       it != finished.end(); 
+       it++) {
+    Context *c = *it;
+    dout(10) << "---- " << c << endl;
+    c->finish(result);
+    delete c;
   }
 }
 
@@ -61,13 +61,13 @@ class C_Contexts : public Context {
   
 public:
   void add(Context* c) {
-	clist.push_back(c);
+    clist.push_back(c);
   }
   void take(list<Context*>& ls) {
-	clist.splice(clist.end(), ls);
+    clist.splice(clist.end(), ls);
   }
   void finish(int r) {
-	finish_contexts(clist, r);
+    finish_contexts(clist, r);
   }
 };
 
@@ -80,13 +80,13 @@ public:
 class C_Gather : public Context {
 public:
   class C_GatherSub : public Context {
-	C_Gather *gather;
-	int num;
+    C_Gather *gather;
+    int num;
   public:
-	C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
-	void finish(int r) {
-	  gather->finish(num);
-	}
+    C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
+    void finish(int r) {
+      gather->finish(num);
+    }
   };
 
 private:
@@ -98,18 +98,18 @@ public:
   C_Gather(Context *f) : onfinish(f), num(0) {}
 
   void finish(int r) {
-	assert(waitfor.count(r));
-	waitfor.erase(r);
-	if (waitfor.empty()) {
-	  onfinish->finish(0);
-	  delete onfinish;
-	}
+    assert(waitfor.count(r));
+    waitfor.erase(r);
+    if (waitfor.empty()) {
+      onfinish->finish(0);
+      delete onfinish;
+    }
   }
 
   Context *new_sub() {
-	num++;
-	waitfor.insert(num);
-	return new C_GatherSub(this, num);
+    num++;
+    waitfor.insert(num);
+    return new C_GatherSub(this, num);
   }
 };
 

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -35,45 +35,45 @@ class MRenameNotify : public Message {
 
   MRenameNotify() {}
   MRenameNotify(inodeno_t ino,
-				inodeno_t srcdirino,
-				const string& srcname,
-				inodeno_t destdirino,
-				const string& destdirpath,
-				const string& destname,
-				int srcauth
-				) :
-	Message(MSG_MDS_RENAMENOTIFY) {
-	this->ino = ino;
-	this->srcdirino = srcdirino;
-	this->srcname = srcname;
-	this->destdirino = destdirino;
-	this->destname = destname;
-	this->destdirpath = destdirpath;
-	this->srcauth = srcauth;
+                inodeno_t srcdirino,
+                const string& srcname,
+                inodeno_t destdirino,
+                const string& destdirpath,
+                const string& destname,
+                int srcauth
+                ) :
+    Message(MSG_MDS_RENAMENOTIFY) {
+    this->ino = ino;
+    this->srcdirino = srcdirino;
+    this->srcname = srcname;
+    this->destdirino = destdirino;
+    this->destname = destname;
+    this->destdirpath = destdirpath;
+    this->srcauth = srcauth;
   }
   virtual char *get_type_name() { return "Rnot";}
   
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
-	off += sizeof(srcdirino);
-	s.copy(off, sizeof(destdirino), (char*)&destdirino);
-	off += sizeof(destdirino);
-	_unrope(srcname, s, off);
-	_unrope(destname, s, off);
-	_unrope(destdirpath, s, off);
-	s.copy(off, sizeof(srcauth), (char*)&srcauth);
-	off += sizeof(srcauth);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    s.copy(off, sizeof(srcdirino), (char*)&srcdirino);
+    off += sizeof(srcdirino);
+    s.copy(off, sizeof(destdirino), (char*)&destdirino);
+    off += sizeof(destdirino);
+    _unrope(srcname, s, off);
+    _unrope(destname, s, off);
+    _unrope(destdirpath, s, off);
+    s.copy(off, sizeof(srcauth), (char*)&srcauth);
+    off += sizeof(srcauth);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&ino,sizeof(ino));
-	s.append((char*)&srcdirino,sizeof(srcdirino));
-	s.append((char*)&destdirino,sizeof(destdirino));
-	_rope(srcname, s);
-	_rope(destname, s);
-	_rope(destdirpath, s);
-	s.append((char*)&srcauth, sizeof(srcauth));
+    s.append((char*)&ino,sizeof(ino));
+    s.append((char*)&srcdirino,sizeof(srcdirino));
+    s.append((char*)&destdirino,sizeof(destdirino));
+    _rope(srcname, s);
+    _rope(destname, s);
+    _rope(destdirpath, s);
+    s.append((char*)&srcauth, sizeof(srcauth));
   }
 };
 

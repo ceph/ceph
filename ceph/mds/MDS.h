@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -34,7 +34,7 @@ using namespace __gnu_cxx;
 #include "common/Logger.h"
 #include "common/Mutex.h"
 
-
+#include "mon/MonMap.h"
 
 
 #define MDS_PORT_MAIN     0
@@ -72,7 +72,6 @@ class Objecter;
 class Filer;
 
 class AnchorTable;
-class MDCluster;
 class CInode;
 class CDir;
 class CDentry;
@@ -94,9 +93,10 @@ class IdAllocator;
 // types
 
 class MDS;
+class MDSMap;
 
 void split_path(string& path, 
-				vector<string>& bits);
+                vector<string>& bits);
 
 
 class MDS : public Dispatcher {
@@ -106,8 +106,9 @@ class MDS : public Dispatcher {
  protected:
   int          whoami;
 
-  MDCluster    *mdcluster;
+  MDSMap    *mdsmap;
  public:
+  MonMap       *monmap;
   OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
@@ -160,26 +161,31 @@ class MDS : public Dispatcher {
   utime_t   last_balancer_heartbeat, last_balancer_hash;
   
  public:
-  MDS(MDCluster *mdc, int whoami, Messenger *m);
+  MDS(int whoami, Messenger *m, MonMap *mm);
   ~MDS();
 
   // who am i etc
   int get_nodeid() { return whoami; }
-  MDCluster *get_cluster() { return mdcluster; }
-  MDCluster *get_mds_cluster() { return mdcluster; }
+  MDSMap *get_mds_map() { return mdsmap; }
   OSDMap *get_osd_map() { return osdmap; }
 
   // start up, shutdown
   bool is_shutting_down() { return shutting_down; }
   bool is_shut_down(int who=-1) { 
-	if (who<0)
-	  return shut_down; 
-	return did_shut_down.count(who);
+    if (who<0)
+      return shut_down; 
+    return did_shut_down.count(who);
   }
 
   int init();
   int shutdown_start();
   int shutdown_final();
+
+
+  int hash_dentry(inodeno_t ino, const string& s) {
+    return 0; // fixme
+  }
+  
 
   // osd fun
 private:
@@ -198,15 +204,17 @@ public:
   void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
   void reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei);
   void commit_request(MClientRequest *req,
-					  MClientReply *reply,
-					  CInode *tracei,
-					  LogEvent *event,
-					  LogEvent *event2 = 0);
+                      MClientReply *reply,
+                      CInode *tracei,
+                      LogEvent *event,
+                      LogEvent *event2 = 0);
   
   bool try_open_dir(CInode *in, MClientRequest *req);
 
   // special message types
   void handle_ping(class MPing *m);
+
+  void handle_mds_map(class MMDSMap *m);
 
   void handle_shutdown_start(Message *m);
   void handle_shutdown_finish(Message *m);
@@ -222,8 +230,8 @@ public:
 
   void handle_client_request(MClientRequest *m);
   void handle_client_request_2(MClientRequest *req, 
-							   vector<CDentry*>& trace,
-							   int r);
+                               vector<CDentry*>& trace,
+                               int r);
   
   // fs ops
   void handle_client_fstat(MClientRequest *req);
@@ -235,19 +243,19 @@ public:
   void handle_client_stat(MClientRequest *req, CInode *ref);
   void handle_client_utime(MClientRequest *req, CInode *ref);
   void handle_client_inode_soft_update_2(MClientRequest *req,
-										 MClientReply *reply,
-										 CInode *ref);
+                                         MClientReply *reply,
+                                         CInode *ref);
   void handle_client_chmod(MClientRequest *req, CInode *ref);
   void handle_client_chown(MClientRequest *req, CInode *ref);
   void handle_client_inode_hard_update_2(MClientRequest *req,
-										 MClientReply *reply,
-										 CInode *ref);
+                                         MClientReply *reply,
+                                         CInode *ref);
 
   // readdir
   void handle_client_readdir(MClientRequest *req, CInode *ref);
   int encode_dir_contents(CDir *dir, 
-						  list<class InodeStat*>& inls,
-						  list<string>& dnls);
+                          list<class InodeStat*>& inls,
+                          list<string>& dnls);
   void handle_hash_readdir(MHashReaddir *m);
   void handle_hash_readdir_reply(MHashReaddirReply *m);
   void finish_hash_readdir(MClientRequest *req, CDir *dir); 
@@ -257,21 +265,21 @@ public:
   void handle_client_link(MClientRequest *req, CInode *ref);
   void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
   void handle_client_link_finish(MClientRequest *req, CInode *ref,
-								 CDentry *dn, CInode *targeti);
+                                 CDentry *dn, CInode *targeti);
 
   void handle_client_unlink(MClientRequest *req, CInode *ref);
   void handle_client_rename(MClientRequest *req, CInode *ref);
   void handle_client_rename_2(MClientRequest *req,
-							  CInode *ref,
-							  CInode *srcdiri,
-							  CDir *srcdir,
-							  CDentry *srcdn,
-							  filepath& destpath,
-							  vector<CDentry*>& trace,
-							  int r);
+                              CInode *ref,
+                              CInode *srcdiri,
+                              CDir *srcdir,
+                              CDentry *srcdn,
+                              filepath& destpath,
+                              vector<CDentry*>& trace,
+                              int r);
   void handle_client_rename_local(MClientRequest *req, CInode *ref,
-								  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
-								  string& destpath, CDir *destdir, CDentry *destdn, string& name);
+                                  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
+                                  string& destpath, CDir *destdir, CDentry *destdn, string& name);
 
   void handle_client_mkdir(MClientRequest *req, CInode *ref);
   void handle_client_rmdir(MClientRequest *req, CInode *ref);
@@ -288,7 +296,7 @@ public:
 
 
   void queue_finished(list<Context*>& ls) {
-	finished_queue.splice( finished_queue.end(), ls );
+    finished_queue.splice( finished_queue.end(), ls );
   }
 };
 
@@ -299,18 +307,18 @@ class C_MDS_RetryRequest : public Context {
   CInode *ref;
  public:
   C_MDS_RetryRequest(MDS *mds, Message *req, CInode *ref) {
-	assert(ref);
-	this->mds = mds;
-	this->req = req;
-	this->ref = ref;
+    assert(ref);
+    this->mds = mds;
+    this->req = req;
+    this->ref = ref;
   }
   virtual void finish(int r) {
-	mds->dispatch_request(req, ref);
+    mds->dispatch_request(req, ref);
   }
   
   /*virtual bool can_redelegate() {
-	return true;
-	}*/
+    return true;
+    }*/
 };
 
 
@@ -319,17 +327,17 @@ class C_MDS_RetryMessage : public Context {
   MDS *mds;
 public:
   C_MDS_RetryMessage(MDS *mds, Message *m) {
-	assert(m);
-	this->m = m;
-	this->mds = mds;
+    assert(m);
+    this->m = m;
+    this->mds = mds;
   }
   virtual void finish(int r) {
-	mds->my_dispatch(m);
+    mds->my_dispatch(m);
   }
   
   /*
   virtual bool can_redelegate() {
-	return true;
+    return true;
   }
   
   virtual void redelegate(MDS *mds, int newmds);

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -23,7 +23,7 @@ class MGenericMessage : public Message {
 
  public:
   MGenericMessage(int t) : Message(t), pcid(0) { 
-	sprintf(tname, "generic%d", get_type());
+    sprintf(tname, "generic%d", get_type());
   }
 
   void set_pcid(long pcid) { this->pcid = pcid; }
@@ -32,12 +32,12 @@ class MGenericMessage : public Message {
   char *get_type_name() { return tname; }
 
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(pcid), (char*)&pcid);
-	off += sizeof(pcid);
+    int off = 0;
+    payload.copy(off, sizeof(pcid), (char*)&pcid);
+    off += sizeof(pcid);
   }
   virtual void encode_payload() {
-	payload.append((char*)&pcid, sizeof(pcid));
+    payload.append((char*)&pcid, sizeof(pcid));
   }
 };
 

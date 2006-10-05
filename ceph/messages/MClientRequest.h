@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -75,10 +75,10 @@ class MClientRequest : public Message {
  public:
   MClientRequest() {}
   MClientRequest(int op, int client) : Message(MSG_CLIENT_REQUEST) {
-	memset(&st, 0, sizeof(st));
-	this->st.op = op;
-	this->st.client = client;
-	this->st.iarg = 0;
+    memset(&st, 0, sizeof(st));
+    this->st.op = op;
+    this->st.client = client;
+    this->st.iarg = 0;
   }
   virtual char *get_type_name() { return "creq"; }
 
@@ -103,7 +103,7 @@ class MClientRequest : public Message {
   void set_sarg2(string& arg) { this->sarg2 = arg; }
   void set_sizearg(size_t s) { st.sizearg = s; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
-	st.mds_wants_replica_in_dirino = dirino; }
+    st.mds_wants_replica_in_dirino = dirino; }
 
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
@@ -121,76 +121,76 @@ class MClientRequest : public Message {
   string& get_sarg2() { return sarg2; }
   size_t get_sizearg() { return st.sizearg; }
   inodeno_t get_mds_wants_replica_in_dirino() { 
-	return st.mds_wants_replica_in_dirino; }
+    return st.mds_wants_replica_in_dirino; }
 
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
-	path._decode(payload, off);
-	_decode(sarg, payload, off);
-	_decode(sarg2, payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
+    path._decode(payload, off);
+    _decode(sarg, payload, off);
+    _decode(sarg2, payload, off);
   }
 
   virtual void encode_payload() {
-	payload.append((char*)&st, sizeof(st));
-	path._encode(payload);
-	_encode(sarg, payload);
-	_encode(sarg2, payload);
+    payload.append((char*)&st, sizeof(st));
+    path._encode(payload);
+    _encode(sarg, payload);
+    _encode(sarg2, payload);
   }
 };
 
 inline ostream& operator<<(ostream& out, MClientRequest& req) {
   out << &req << " ";
   out << "client" << req.get_client() 
-	  << "." << req.get_tid() 
-	  << ".pcid=" << req.get_pcid() 
-	  << ":";
+      << "." << req.get_tid() 
+      << ".pcid=" << req.get_pcid() 
+      << ":";
   switch(req.get_op()) {
   case MDS_OP_STAT: 
-	out << "stat"; break;
+    out << "stat"; break;
   case MDS_OP_LSTAT: 
-	out << "lstat"; break;
+    out << "lstat"; break;
   case MDS_OP_UTIME: 
-	out << "utime"; break;
+    out << "utime"; break;
   case MDS_OP_CHMOD: 
-	out << "chmod"; break;
+    out << "chmod"; break;
   case MDS_OP_CHOWN: 
-	out << "chown"; break;
+    out << "chown"; break;
 
   case MDS_OP_READDIR: 
-	out << "readdir"; break;
+    out << "readdir"; break;
   case MDS_OP_MKNOD: 
-	out << "mknod"; break;
+    out << "mknod"; break;
   case MDS_OP_LINK: 
-	out << "link"; break;
+    out << "link"; break;
   case MDS_OP_UNLINK:
-	out << "unlink"; break;
+    out << "unlink"; break;
   case MDS_OP_RENAME:
-	out << "rename"; break;
+    out << "rename"; break;
 
   case MDS_OP_MKDIR: 
-	out << "mkdir"; break;
+    out << "mkdir"; break;
   case MDS_OP_RMDIR: 
-	out << "rmdir"; break;
+    out << "rmdir"; break;
   case MDS_OP_SYMLINK: 
-	out << "symlink"; break;
+    out << "symlink"; break;
 
   case MDS_OP_OPEN: 
-	out << "open"; break;
+    out << "open"; break;
   case MDS_OP_TRUNCATE: 
-	out << "truncate"; break;
+    out << "truncate"; break;
   case MDS_OP_FSYNC: 
-	out << "fsync"; break;
+    out << "fsync"; break;
   case MDS_OP_RELEASE: 
-	out << "release"; break;
+    out << "release"; break;
   default: 
-	out << "unknown=" << req.get_op();
+    out << "unknown=" << req.get_op();
   }
   if (req.get_path().length()) 
-	out << "=" << req.get_path();
+    out << "=" << req.get_path();
   if (req.get_sarg().length())
-	out << " " << req.get_sarg();
+    out << " " << req.get_sarg();
   return out;
 }
 

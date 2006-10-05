@@ -121,7 +121,7 @@ long Logger::get(const char* key)
   int i = type->lookup_key(key);
   long r = 0;
   if (i >= 0 && (int)vals.size() > i)
-		r = vals[i];
+                r = vals[i];
   logger_lock.Unlock();
   return r;
 }
@@ -130,7 +130,7 @@ void Logger::flush(bool force)
 {
   if (!g_conf.log) return;
   logger_lock.Lock();
-	
+        
   if (version != type->version) {
     while (type->keys.size() > vals.size())
       vals.push_back(0);
@@ -152,10 +152,10 @@ void Logger::flush(bool force)
     start = fromstart;
   }
   fromstart -= start;
-	
+        
   while (force ||
-	 ((fromstart.sec() > last_logged) &&
-	  (fromstart.sec() - last_logged >= interval))) {
+         ((fromstart.sec() > last_logged) &&
+          (fromstart.sec() - last_logged >= interval))) {
     last_logged += interval;
     force = false;
     
@@ -170,10 +170,10 @@ void Logger::flush(bool force)
     // header?
     wrote_header_last++;
     if (wrote_header != type->version ||
-	wrote_header_last > 10) {
+        wrote_header_last > 10) {
       out << "#" << type->keymap.size();
       for (unsigned i=0; i<type->keys.size(); i++) 
-	out << "\t" << type->keys[i];
+        out << "\t" << type->keys[i];
       out << endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
       wrote_header = type->version;
       wrote_header_last = 0;
@@ -183,17 +183,17 @@ void Logger::flush(bool force)
     out << last_logged;
     for (unsigned i=0; i<type->keys.size(); i++) {
       if (fvals[i] > 0 && vals[i] == 0)
-	out << "\t" << fvals[i];
+        out << "\t" << fvals[i];
       else
-	out << "\t" << vals[i];
+        out << "\t" << vals[i];
     }
     out << endl;
     
     // reset the counters
     for (unsigned i=0; i<type->keys.size(); i++) {
       if (type->inc_keys.count(i)) {
-	this->vals[i] = 0;
-	this->fvals[i] = 0;
+        this->vals[i] = 0;
+        this->fvals[i] = 0;
       }
     }
   }

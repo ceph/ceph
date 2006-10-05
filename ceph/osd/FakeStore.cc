@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -42,8 +42,8 @@
 using namespace __gnu_cxx;
 
 // crap-a-crap hash
-#define HASH_DIRS       128LL
-#define HASH_FUNC(x)    (((x) ^ ((x)>>30) ^ ((x)>>18) ^ ((x)>>45) ^ 0xdead1234) * 884811 % HASH_DIRS)
+#define HASH_DIRS       0x80
+#define HASH_MASK       0x7f
 // end crap hash
 
 
@@ -55,10 +55,10 @@ using namespace __gnu_cxx;
 int FakeStore::mount() 
 {
   if (g_conf.fakestore_dev) {
-	dout(0) << "mounting" << endl;
-	char cmd[100];
-	sprintf(cmd,"mount %s", g_conf.fakestore_dev);
-	system(cmd);
+    dout(0) << "mounting" << endl;
+    char cmd[100];
+    sprintf(cmd,"mount %s", g_conf.fakestore_dev);
+    system(cmd);
   }
 
   string mydir;
@@ -70,8 +70,8 @@ int FakeStore::mount()
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-	dout(1) << "unable to stat basedir " << basedir << ", r = " << r << endl;
-	return r;
+    dout(1) << "unable to stat basedir " << basedir << ", r = " << r << endl;
+    return r;
   }
 
   // all okay.
@@ -83,10 +83,10 @@ int FakeStore::umount()
   dout(5) << "finalize" << endl;
 
   if (g_conf.fakestore_dev) {
-	char cmd[100];
-	dout(0) << "umounting" << endl;
-	sprintf(cmd,"umount %s", g_conf.fakestore_dev);
-	system(cmd);
+    char cmd[100];
+    dout(0) << "umounting" << endl;
+    sprintf(cmd,"umount %s", g_conf.fakestore_dev);
+    system(cmd);
   }
 
   // nothing
@@ -111,7 +111,8 @@ void FakeStore::get_dir(string& dir) {
 }
 void FakeStore::get_oname(object_t oid, string& fn) {
   char s[100];
-  sprintf(s, "%d/%02llx/%016llx", whoami, HASH_FUNC(oid), oid);
+  static hash<object_t> H;
+  sprintf(s, "%d/%02x/%016llx.%08x", whoami, H(oid) & HASH_MASK, oid.ino, oid.bno);
   fn = basedir + "/" + s;
   //  dout(1) << "oname is " << fn << endl;
 }
@@ -122,29 +123,29 @@ void FakeStore::wipe_dir(string mydir)
 {
   DIR *dir = ::opendir(mydir.c_str());
   if (dir) {
-	dout(10) << "wiping " << mydir << endl;
-	struct dirent *ent = 0;
-	
-	while ((ent = ::readdir(dir)) != 0) {
-	  if (ent->d_name[0] == '.') continue;
-	  dout(25) << "mkfs unlinking " << ent->d_name << endl;
-	  string fn = mydir + "/" + ent->d_name;
-	  ::unlink(fn.c_str());
-	}	
-	
-	::closedir(dir);
+    dout(10) << "wiping " << mydir << endl;
+    struct dirent *ent = 0;
+    
+    while ((ent = ::readdir(dir)) != 0) {
+      if (ent->d_name[0] == '.') continue;
+      dout(25) << "mkfs unlinking " << ent->d_name << endl;
+      string fn = mydir + "/" + ent->d_name;
+      ::unlink(fn.c_str());
+    }    
+    
+    ::closedir(dir);
   } else {
-	dout(1) << "mkfs couldn't read dir " << mydir << endl;
+    dout(1) << "mkfs couldn't read dir " << mydir << endl;
   }
 }
 
 int FakeStore::mkfs()
 {
   if (g_conf.fakestore_dev) {
-	dout(0) << "mounting" << endl;
-	char cmd[100];
-	sprintf(cmd,"mount %s", g_conf.fakestore_dev);
-	system(cmd);
+    dout(0) << "mounting" << endl;
+    char cmd[100];
+    sprintf(cmd,"mount %s", g_conf.fakestore_dev);
+    system(cmd);
   }
 
 
@@ -159,40 +160,40 @@ int FakeStore::mkfs()
   // make sure my dir exists
   r = ::stat(mydir.c_str(), &st);
   if (r != 0) {
-	dout(10) << "creating " << mydir << endl;
-	mkdir(mydir.c_str(), 0755);
-	r = ::stat(mydir.c_str(), &st);
-	if (r != 0) {
-	  dout(1) << "couldnt create dir, r = " << r << endl;
-	  return r;
-	}
+    dout(10) << "creating " << mydir << endl;
+    mkdir(mydir.c_str(), 0755);
+    r = ::stat(mydir.c_str(), &st);
+    if (r != 0) {
+      dout(1) << "couldnt create dir, r = " << r << endl;
+      return r;
+    }
   }
   else wipe_dir(mydir);
 
   // hashed bits too
   for (int i=0; i<HASH_DIRS; i++) {
-	char s[4];
-	sprintf(s, "%02x", i);
-	string subdir = mydir + "/" + s;
-	r = ::stat(subdir.c_str(), &st);
-	if (r != 0) {
-	  dout(2) << " creating " << subdir << endl;
-	  ::mkdir(subdir.c_str(), 0755);
-	  r = ::stat(subdir.c_str(), &st);
-	  if (r != 0) {
-		dout(1) << "couldnt create subdir, r = " << r << endl;
-		return r;
-	  }
-	}
-	else
-	  wipe_dir( subdir );
+    char s[4];
+    sprintf(s, "%02x", i);
+    string subdir = mydir + "/" + s;
+    r = ::stat(subdir.c_str(), &st);
+    if (r != 0) {
+      dout(2) << " creating " << subdir << endl;
+      ::mkdir(subdir.c_str(), 0755);
+      r = ::stat(subdir.c_str(), &st);
+      if (r != 0) {
+        dout(1) << "couldnt create subdir, r = " << r << endl;
+        return r;
+      }
+    }
+    else
+      wipe_dir( subdir );
   }
   
   if (g_conf.fakestore_dev) {
-	char cmd[100];
-	dout(0) << "umounting" << endl;
-	sprintf(cmd,"umount %s", g_conf.fakestore_dev);
-	system(cmd);
+    char cmd[100];
+    dout(0) << "umounting" << endl;
+    sprintf(cmd,"umount %s", g_conf.fakestore_dev);
+    system(cmd);
   }
 
   dout(1) << "mkfs done in " << mydir << endl;
@@ -206,14 +207,14 @@ bool FakeStore::exists(object_t oid)
 {
   struct stat st;
   if (stat(oid, &st) == 0)
-	return true;
+    return true;
   else 
-	return false;
+    return false;
 }
 
   
 int FakeStore::stat(object_t oid,
-					struct stat *st)
+                    struct stat *st)
 {
   dout(20) << "stat " << oid << endl;
   string fn;
@@ -246,8 +247,8 @@ int FakeStore::truncate(object_t oid, off_t size, Context *onsafe)
 }
 
 int FakeStore::read(object_t oid, 
-					off_t offset, size_t len,
-					bufferlist& bl) {
+                    off_t offset, size_t len,
+                    bufferlist& bl) {
   dout(20) << "read " << oid << " len " << len << " off " << offset << endl;
 
   string fn;
@@ -255,8 +256,8 @@ int FakeStore::read(object_t oid,
   
   int fd = ::open(fn.c_str(), O_RDONLY);
   if (fd < 0) {
-	dout(10) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
-	return fd;
+    dout(10) << "read couldn't open " << fn.c_str() << " errno " << errno << " " << strerror(errno) << endl;
+    return fd;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
   
@@ -264,16 +265,16 @@ int FakeStore::read(object_t oid,
   size_t got = 0;
 
   if (len == 0) {
-	struct stat st;
-	fstat(fd, &st);
-	len = st.st_size;
+    struct stat st;
+    fstat(fd, &st);
+    len = st.st_size;
   }
 
   if (actual == offset) {
-	bufferptr bptr = new buffer(len);  // prealloc space for entire read
-	got = ::read(fd, bptr.c_str(), len);
-	bptr.set_length(got);   // properly size the buffer
-	if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
+    bufferptr bptr = new buffer(len);  // prealloc space for entire read
+    got = ::read(fd, bptr.c_str(), len);
+    bptr.set_length(got);   // properly size the buffer
+    if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
   }
   ::flock(fd, LOCK_UN);
   ::close(fd);
@@ -282,9 +283,9 @@ int FakeStore::read(object_t oid,
 
 
 int FakeStore::write(object_t oid, 
-					 off_t offset, size_t len,
-					 bufferlist& bl, 
-					 Context *onsafe)
+                     off_t offset, size_t len,
+                     bufferlist& bl, 
+                     Context *onsafe)
 {
   dout(20) << "write " << oid << " len " << len << " off " << offset << endl;
 
@@ -296,8 +297,8 @@ int FakeStore::write(object_t oid,
   int flags = O_WRONLY;//|O_CREAT;
   int fd = ::open(fn.c_str(), flags);
   if (fd < 0) {
-	dout(1) << "write couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
-	return fd;
+    dout(1) << "write couldn't open " << fn.c_str() << " flags " << flags << " errno " << errno << " " << strerror(errno) << endl;
+    return fd;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
   //::fchmod(fd, 0664);
@@ -309,18 +310,18 @@ int FakeStore::write(object_t oid,
 
   // write buffers
   for (list<bufferptr>::iterator it = bl.buffers().begin();
-	   it != bl.buffers().end();
-	   it++) {
-	int r = ::write(fd, (*it).c_str(), (*it).length());
-	if (r > 0)
-	  did += r;
-	else {
-	  dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
-	}
+       it != bl.buffers().end();
+       it++) {
+    int r = ::write(fd, (*it).c_str(), (*it).length());
+    if (r > 0)
+      did += r;
+    else {
+      dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+    }
   }
   
   if (did < 0) {
-	dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
+    dout(1) << "couldn't write to " << fn.c_str() << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << endl;
   }
 
   ::flock(fd, LOCK_UN);
@@ -339,23 +340,23 @@ public:
   Context *c;
   int *n;
   C_FakeSync(Context *c_, int *n_) : c(c_), n(n_) {
-	++*n;
+    ++*n;
   }
   void finish(int r) {
-	c->finish(r);
-	--(*n);
-	//cout << "sync, " << *n << " still unsync" << endl;
+    c->finish(r);
+    --(*n);
+    //cout << "sync, " << *n << " still unsync" << endl;
   }
 };
 
 void FakeStore::sync(Context *onsafe)
 {
   if (g_conf.fakestore_fake_sync) {
-	g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
-							new C_FakeSync(onsafe, &unsync));
-	
+    g_timer.add_event_after((float)g_conf.fakestore_fake_sync,
+                            new C_FakeSync(onsafe, &unsync));
+    
   } else {
-	assert(0); // der..no implemented anymore
+    assert(0); // der..no implemented anymore
   }
 }
 

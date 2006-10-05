@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -29,24 +29,24 @@ class MHashDirDiscoverAck : public Message {
 
   MHashDirDiscoverAck() {}
   MHashDirDiscoverAck(inodeno_t ino, bool success=true) : 
-	Message(MSG_MDS_HASHDIRDISCOVERACK) {
-	this->ino = ino;
-	this->success = false;
+    Message(MSG_MDS_HASHDIRDISCOVERACK) {
+    this->ino = ino;
+    this->success = false;
   }
   virtual char *get_type_name() { return "HDisA"; }
 
 
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	payload.copy(off, sizeof(success), (char*)&success);
-	off += sizeof(success);
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    payload.copy(off, sizeof(success), (char*)&success);
+    off += sizeof(success);
   }
 
   void encode_payload() {
-	payload.append((char*)&ino, sizeof(ino));
-	payload.append((char*)&success, sizeof(success));
+    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&success, sizeof(success));
   }
 };
 

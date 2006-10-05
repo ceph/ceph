@@ -54,13 +54,14 @@ OSDC_OBJS= \
 
 MON_OBJS= \
 	mon/Monitor.o\
+	mon/OSDMonitor.o\
+	mon/MDSMonitor.o\
 	mon/Elector.o
 
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Message.o\
 	msg/HostMonitor.o\
-	mds/MDCluster.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\

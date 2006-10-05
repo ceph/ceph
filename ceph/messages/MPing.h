@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -23,16 +23,16 @@ class MPing : public Message {
  public:
   int seq;
   MPing(int s) : Message(MSG_PING) {
-	seq = s;
+    seq = s;
   }
   MPing() : Message(MSG_PING) {}
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(0, sizeof(seq), (char*)&seq);
-	off += sizeof(seq);
+    s.copy(0, sizeof(seq), (char*)&seq);
+    off += sizeof(seq);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&seq, sizeof(seq));
+    s.append((char*)&seq, sizeof(seq));
   }
 
   virtual char *get_type_name() { return "ping"; }

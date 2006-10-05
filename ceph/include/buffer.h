@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -85,13 +85,13 @@ class buffer {
   // ref counts
   unsigned _ref;
   int _get() { 
-	bdbout(1) << "buffer.get " << *this << " get " << _ref+1 << endl;
-	return ++_ref;
+    bdbout(1) << "buffer.get " << *this << " get " << _ref+1 << endl;
+    return ++_ref;
   }
   int _put() { 
-	bdbout(1) << "buffer.put " << *this << " put " << _ref-1 << endl;
-	assert(_ref > 0);
-	return --_ref;
+    bdbout(1) << "buffer.put " << *this << " put " << _ref-1 << endl;
+    assert(_ref > 0);
+    return --_ref;
   }
 
   // custom (de!)allocator
@@ -103,82 +103,82 @@ class buffer {
  public:
   // constructors
   buffer() : _dataptr(0), _myptr(true), _len(0), _alloc_len(0), _ref(0), free_func(0), free_func_arg(0) { 
-	bdbout(1) << "buffer.cons " << *this << endl;
+    bdbout(1) << "buffer.cons " << *this << endl;
   }
   buffer(unsigned a) : _dataptr(0), _myptr(true), _len(a), _alloc_len(a), _ref(0), free_func(0), free_func_arg(0) {
-	bdbout(1) << "buffer.cons " << *this << endl;
-	_dataptr = new char[a];
-	bufferlock.Lock();
-	buffer_total_alloc += _alloc_len;
-	bufferlock.Unlock();
-	bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
+    bdbout(1) << "buffer.cons " << *this << endl;
+    _dataptr = new char[a];
+    bufferlock.Lock();
+    buffer_total_alloc += _alloc_len;
+    bufferlock.Unlock();
+    bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
   }
   ~buffer() {
-	bdbout(1) << "buffer.des " << *this << " " << (void*)free_func << endl;
-	if (free_func) {
-	  bdbout(1) << "buffer.custom_free_func " << free_func_arg << " " << (void*)_dataptr << endl;
-	  free_func( free_func_arg, _dataptr, _alloc_len );
-	}
-	else if (_dataptr && _myptr) {
-	  bdbout(1) << "buffer.free " << (void*)_dataptr << endl;
-	  delete[] _dataptr;
-	  buffer_total_alloc -= _alloc_len;
-	}
+    bdbout(1) << "buffer.des " << *this << " " << (void*)free_func << endl;
+    if (free_func) {
+      bdbout(1) << "buffer.custom_free_func " << free_func_arg << " " << (void*)_dataptr << endl;
+      free_func( free_func_arg, _dataptr, _alloc_len );
+    }
+    else if (_dataptr && _myptr) {
+      bdbout(1) << "buffer.free " << (void*)_dataptr << endl;
+      delete[] _dataptr;
+      buffer_total_alloc -= _alloc_len;
+    }
   }
   
   buffer(const char *p, int l, int mode=BUFFER_MODE_DEFAULT, int alloc_len=0,
-		 buffer_free_func_t free_func=0, void* free_func_arg=0) : 
-	_dataptr(0), 
-	_myptr(false),
-	_len(l), 
-	_ref(0), 
-	free_func(0), free_func_arg(0) {
-	
-	if (alloc_len) 
-	  _alloc_len = alloc_len;
-	else
-	  _alloc_len = l;
+         buffer_free_func_t free_func=0, void* free_func_arg=0) : 
+    _dataptr(0), 
+    _myptr(false),
+    _len(l), 
+    _ref(0), 
+    free_func(0), free_func_arg(0) {
+    
+    if (alloc_len) 
+      _alloc_len = alloc_len;
+    else
+      _alloc_len = l;
 
-	_myptr = mode & BUFFER_MODE_FREE ? true:false;
-	bdbout(1) << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
-	if (mode & BUFFER_MODE_COPY) {
-	  _dataptr = new char[_alloc_len];
-	  bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
-	  bufferlock.Lock();
-	  buffer_total_alloc += _alloc_len;
-	  bufferlock.Unlock();
-	  memcpy(_dataptr, p, l);
-	  bdbout(1) << "buffer.copy " << *this << endl;
-	} else {
-	  _dataptr = (char*)p;                              // ugly
-	  bdbout(1) << "buffer.claim " << *this << " myptr=" << _myptr << endl;
-	}
+    _myptr = mode & BUFFER_MODE_FREE ? true:false;
+    bdbout(1) << "buffer.cons " << *this << " mode = " << mode << ", myptr=" << _myptr << endl;
+    if (mode & BUFFER_MODE_COPY) {
+      _dataptr = new char[_alloc_len];
+      bdbout(1) << "buffer.malloc " << (void*)_dataptr << endl;
+      bufferlock.Lock();
+      buffer_total_alloc += _alloc_len;
+      bufferlock.Unlock();
+      memcpy(_dataptr, p, l);
+      bdbout(1) << "buffer.copy " << *this << endl;
+    } else {
+      _dataptr = (char*)p;                              // ugly
+      bdbout(1) << "buffer.claim " << *this << " myptr=" << _myptr << endl;
+    }
 
-	if (mode & BUFFER_MODE_CUSTOMFREE && free_func) {
-	  this->free_func = free_func;
-	  this->free_func_arg = free_func_arg;
-	}
+    if (mode & BUFFER_MODE_CUSTOMFREE && free_func) {
+      this->free_func = free_func;
+      this->free_func_arg = free_func_arg;
+    }
   }
 
   // operators
   buffer& operator=(buffer& other) {
-	assert(0);  // not implemented, no reasonable assignment semantics.
-	return *this;
+    assert(0);  // not implemented, no reasonable assignment semantics.
+    return *this;
   }
 
   char *c_str() {
-	return _dataptr;
+    return _dataptr;
   }
 
   bool has_free_func() { return free_func != 0; }
   
   // accessor
   unsigned alloc_length() {
-	return _alloc_len;
+    return _alloc_len;
   }
   void set_length(unsigned l) {
-	assert(l <= _alloc_len);
-	_len = l;
+    assert(l <= _alloc_len);
+    _len = l;
   }
   unsigned length() { return _len; }
   unsigned unused_tail_length() { return _alloc_len - _len; }
@@ -210,135 +210,135 @@ class bufferptr {
  public:
   // empty cons
   bufferptr() :
-	_buffer(0),
-	_len(0),
-	_off(0) { }
+    _buffer(0),
+    _len(0),
+    _off(0) { }
   // main cons - the entire buffer
   bufferptr(buffer *b) :
-	_buffer(b),
-	_len(b->_len),
-	_off(0) {
-	assert(_buffer->_ref == 0);
-	_buffer->_get();   // this is always the first one.
+    _buffer(b),
+    _len(b->_len),
+    _off(0) {
+    assert(_buffer->_ref == 0);
+    _buffer->_get();   // this is always the first one.
   }
   // subset cons - a subset of another bufferptr (subset)
   bufferptr(const bufferptr& bp, unsigned len, unsigned off) {
-	bufferlock.Lock();
-	_buffer = bp._buffer;
-	_len = len;
-	_off = bp._off + off;
-	_buffer->_get();
-	assert(_off < _buffer->_len);          // sanity checks
-	assert(_off + _len <= _buffer->_len);
-	bufferlock.Unlock();
+    bufferlock.Lock();
+    _buffer = bp._buffer;
+    _len = len;
+    _off = bp._off + off;
+    _buffer->_get();
+    assert(_off < _buffer->_len);          // sanity checks
+    assert(_off + _len <= _buffer->_len);
+    bufferlock.Unlock();
   }
 
   // copy cons
   bufferptr(const bufferptr &other) {
-	bufferlock.Lock();
-	_buffer = other._buffer;
-	_len = other._len;
-	_off = other._off;
-	if (_buffer) _buffer->_get();	
-	bufferlock.Unlock();
+    bufferlock.Lock();
+    _buffer = other._buffer;
+    _len = other._len;
+    _off = other._off;
+    if (_buffer) _buffer->_get();    
+    bufferlock.Unlock();
   }
 
   // assignment operator
   bufferptr& operator=(const bufferptr& other) {
-	//assert(0);
-	// discard old
-	discard_buffer();
+    //assert(0);
+    // discard old
+    discard_buffer();
 
-	// point to other
-	bufferlock.Lock();
-	_buffer = other._buffer;
-	_len = other._len;
-	_off = other._off;
-	if (_buffer) _buffer->_get();
-	bufferlock.Unlock();
-	return *this;
+    // point to other
+    bufferlock.Lock();
+    _buffer = other._buffer;
+    _len = other._len;
+    _off = other._off;
+    if (_buffer) _buffer->_get();
+    bufferlock.Unlock();
+    return *this;
   }
 
   ~bufferptr() {
-	discard_buffer();
+    discard_buffer();
   }
 
   void discard_buffer() {
-	if (_buffer) {
-	  bufferlock.Lock();
-	  if (_buffer->_put() == 0) 
-		delete _buffer;
-	  _buffer = 0;
-	  bufferlock.Unlock();
-	}
+    if (_buffer) {
+      bufferlock.Lock();
+      if (_buffer->_put() == 0) 
+        delete _buffer;
+      _buffer = 0;
+      bufferlock.Unlock();
+    }
   }
 
 
   // dereference to get the actual buffer
   buffer& operator*() { 
-	return *_buffer;
+    return *_buffer;
   }
 
 
   bool at_buffer_head() const {
-	return _off == 0;
+    return _off == 0;
   }
   bool at_buffer_tail() const {
-	return _off + _len == _buffer->_len;
+    return _off + _len == _buffer->_len;
   }
 
   // accessors for my subset
   char *c_str() {
-	return _buffer->c_str() + _off;
+    return _buffer->c_str() + _off;
   }
   unsigned length() const {
-	return _len;
+    return _len;
   }
   unsigned offset() const {
-	return _off;
+    return _off;
   }
   unsigned unused_tail_length() {
-	if (!at_buffer_tail()) return 0;
-	return _buffer->unused_tail_length();
+    if (!at_buffer_tail()) return 0;
+    return _buffer->unused_tail_length();
   }
 
 
 
   // modifiers
   void set_offset(unsigned off) {
-	assert(off <= _buffer->_alloc_len);
-	_off = off;
+    assert(off <= _buffer->_alloc_len);
+    _off = off;
   }
   void set_length(unsigned len) {
-	assert(len >= 0 && _off + len <= _buffer->_alloc_len);
-	if (_buffer->_len < _off + len) 
-	  _buffer->_len = _off + len;    // set new buffer len (_IF_ i'm expanding it)
-	_len = len;                      // my len too
+    assert(len >= 0 && _off + len <= _buffer->_alloc_len);
+    if (_buffer->_len < _off + len) 
+      _buffer->_len = _off + len;    // set new buffer len (_IF_ i'm expanding it)
+    _len = len;                      // my len too
   }
   void zero() {
-  	//bzero((void*)c_str(), _len);
-	memset((void*)c_str(), 0, _len);
+      //bzero((void*)c_str(), _len);
+    memset((void*)c_str(), 0, _len);
   }
 
 
   // crope lookalikes
   void append(const char *p, unsigned len) {
-	assert(len + _len + _off <= _buffer->_alloc_len);  // FIXME later for auto-expansion?
+    assert(len + _len + _off <= _buffer->_alloc_len);  // FIXME later for auto-expansion?
 
-	// copy
-	memcpy(c_str() + _len, p, len);
-	_buffer->_len += len;
-	_len += len;
+    // copy
+    memcpy(c_str() + _len, p, len);
+    _buffer->_len += len;
+    _len += len;
   }
   void copy_out(unsigned off, unsigned len, char *dest) {
-	assert(off >= 0 && off <= _len);
-	assert(len >= 0 && off + len <= _len);
-	memcpy(dest, c_str() + off, len);
+    assert(off >= 0 && off <= _len);
+    assert(len >= 0 && off + len <= _len);
+    memcpy(dest, c_str() + off, len);
   }
   void copy_in(unsigned off, unsigned len, const char *src) {
-	assert(off >= 0 && off <= _len);
-	assert(len >= 0 && off + len <= _len);
-	memcpy(c_str() + off, src, len);
+    assert(off >= 0 && off <= _len);
+    assert(len >= 0 && off + len <= _len);
+    memcpy(c_str() + off, src, len);
   }
 
   friend ostream& operator<<(ostream& out, bufferptr& bp);
@@ -347,9 +347,9 @@ class bufferptr {
 
 inline ostream& operator<<(ostream& out, bufferptr& bp) {
   return out << "bufferptr(len=" << bp._len << " off=" << bp._off 
-			 << " cstr=" << (void*)bp.c_str()
-			 << " buf=" << *bp._buffer 
-			 << ")";
+             << " cstr=" << (void*)bp.c_str()
+             << " buf=" << *bp._buffer 
+             << ")";
 }
 
 

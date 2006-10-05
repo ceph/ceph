@@ -36,7 +36,7 @@ int main(int oargc, char **oargv) {
   int argc;
   char **argv;
   parse_config_options(oargc, oargv,
-					   argc, argv);
+                       argc, argv);
   
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
   
@@ -46,29 +46,29 @@ int main(int oargc, char **oargv) {
   // create osds
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-	osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
-	osd[i]->init();
+    osd[i] = new OSD(i, new FakeMessenger(MSG_ADDR_OSD(i)));
+    osd[i]->init();
   }
 
   // create mds
   MDS *mds[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-	mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
-	mds[i]->init();
+    mds[i] = new MDS(mdc, i, new FakeMessenger(MSG_ADDR_MDS(i)));
+    mds[i]->init();
   }
  
   
   // create clients
   FakeClient *client[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	client[i] = new FakeClient(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)), g_conf.fakeclient_requests);
-	client[i]->init();
+    client[i] = new FakeClient(mdc, i, new FakeMessenger(MSG_ADDR_CLIENT(i)), g_conf.fakeclient_requests);
+    client[i]->init();
   }
   
   // mount clients
   for (int i=0; i<NUMCLIENT; i++) 
-	//for (int i=0; i<1; i++) 
-	client[i]->mount();
+    //for (int i=0; i<1; i++) 
+    client[i]->mount();
 
   // loop
   fakemessenger_do_loop();
@@ -78,24 +78,24 @@ int main(int oargc, char **oargv) {
 
   // 
   if (argc > 1 && 
-	  strcmp(argv[1], "nocheck") == 0) {
-	cerr << "---- nocheck" << endl;
+      strcmp(argv[1], "nocheck") == 0) {
+    cerr << "---- nocheck" << endl;
   } else {
-	cout << "---- check ----" << endl;
-	for (int i=0; i<NUMMDS; i++) 
-	  mds[i]->mdcache->shutdown_pass();
+    cout << "---- check ----" << endl;
+    for (int i=0; i<NUMMDS; i++) 
+      mds[i]->mdcache->shutdown_pass();
   }
   
   // cleanup
   cout << "cleanup" << endl;
   for (int i=0; i<NUMMDS; i++) {
-	delete mds[i];
+    delete mds[i];
   }
   for (int i=0; i<NUMOSD; i++) {
-	delete osd[i];
+    delete osd[i];
   }
   for (int i=0; i<NUMCLIENT; i++) {
-	delete client[i];
+    delete client[i];
   }
   delete mdc;
   cout << "done." << endl;

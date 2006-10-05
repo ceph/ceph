@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,17 +26,17 @@ class MHashDirPrepAck : public Message {
   
   MHashDirPrepAck() {}
   MHashDirPrepAck(inodeno_t ino) :
-	Message(MSG_MDS_HASHDIRPREPACK) {
-	this->ino = ino;
+    Message(MSG_MDS_HASHDIRPREPACK) {
+    this->ino = ino;
   }
   
   virtual char *get_type_name() { return "HPAck"; }
 
   void decode_payload() {
-	payload.copy(0, sizeof(ino), (char*)&ino);
+    payload.copy(0, sizeof(ino), (char*)&ino);
   }
   void encode_payload() {
-	payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&ino, sizeof(ino));
   }
 };
 

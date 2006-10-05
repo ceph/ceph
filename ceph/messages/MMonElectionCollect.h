@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -24,16 +24,16 @@ class MMonElectionCollect : public Message {
 
   MMonElectionCollect() {}
   MMonElectionCollect(int n) :
-	Message(MSG_MON_ELECTION_COLLECT),
-	read_num(n) {}
+    Message(MSG_MON_ELECTION_COLLECT),
+    read_num(n) {}
  
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(read_num), (char*)&read_num);
-	off += sizeof(read_num);
+    int off = 0;
+    payload.copy(off, sizeof(read_num), (char*)&read_num);
+    off += sizeof(read_num);
   }
   void encode_payload() {
-	payload.append((char*)&read_num, sizeof(read_num));
+    payload.append((char*)&read_num, sizeof(read_num));
   }
 
   virtual char *get_type_name() { return "MonElCollect"; }

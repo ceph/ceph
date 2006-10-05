@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -39,94 +39,94 @@ class filepath {
   vector<string> bits;
 
   void rebuild() {
-	if (absolute()) 
-	  path = "/";
-	else 
-	  path.clear();
-	for (unsigned i=0; i<bits.size(); i++) {
-	  if (i) path += "/";
-	  path += bits[i];
-	}
+    if (absolute()) 
+      path = "/";
+    else 
+      path.clear();
+    for (unsigned i=0; i<bits.size(); i++) {
+      if (i) path += "/";
+      path += bits[i];
+    }
   }
   void parse() {
-	bits.clear();
-	int off = 0;
-	while (off < (int)path.length()) {
-	  // skip trailing/duplicate slash(es)
-	  int nextslash = path.find('/', off);
-	  if (nextslash == off) {
-		off++;
-		continue;
-	  }
-	  if (nextslash < 0) 
-		nextslash = path.length();  // no more slashes
-	  
-	  bits.push_back( path.substr(off,nextslash-off) );
-	  off = nextslash+1;
-	}
+    bits.clear();
+    int off = 0;
+    while (off < (int)path.length()) {
+      // skip trailing/duplicate slash(es)
+      int nextslash = path.find('/', off);
+      if (nextslash == off) {
+        off++;
+        continue;
+      }
+      if (nextslash < 0) 
+        nextslash = path.length();  // no more slashes
+      
+      bits.push_back( path.substr(off,nextslash-off) );
+      off = nextslash+1;
+    }
   }
 
  public:
   filepath() {}
   filepath(const string& s) {
-	set_path(s);
+    set_path(s);
   }
   filepath(const char* s) {
-	set_path(s);
+    set_path(s);
   }
 
   bool absolute() { return path[0] == '/'; }
   bool relative() { return !absolute(); }
   
   void set_path(const string& s) {
-	path = s;
-	parse();
+    path = s;
+    parse();
   }
   void set_path(const char *s) {
-	path = s;
-	parse();
+    path = s;
+    parse();
   }
 
   string& get_path() {
-	return path;
+    return path;
   }
   int length() const {
-	return path.length();
+    return path.length();
   }
 
   const char *c_str() const {
-	return path.c_str();
+    return path.c_str();
   }
 
 
   filepath prefixpath(int s) const {
-	filepath t;
-	for (int i=0; i<s; i++)
-	  t.add_dentry(bits[i]);
-	return t;
+    filepath t;
+    for (int i=0; i<s; i++)
+      t.add_dentry(bits[i]);
+    return t;
   }
   filepath postfixpath(int s) const {
-	filepath t;
-	for (unsigned i=s; i<bits.size(); i++)
-	  t.add_dentry(bits[i]);
-	return t;
+    filepath t;
+    for (unsigned i=s; i<bits.size(); i++)
+      t.add_dentry(bits[i]);
+    return t;
   }
   void add_dentry(const string& s) {
-	bits.push_back(s);
-	if (path.length())
-	  path += "/";
-	path += s;
+    bits.push_back(s);
+    if (path.length())
+      path += "/";
+    path += s;
   }
   void append(const filepath& a) {
-	for (unsigned i=0; i<a.depth(); i++) 
-	  add_dentry(a[i]);
+    for (unsigned i=0; i<a.depth(); i++) 
+      add_dentry(a[i]);
   }
 
   void pop_dentry() {
-	bits.pop_back();
-	rebuild();
-  }	
-	
+    bits.pop_back();
+    rebuild();
+  }    
+    
 
 
   void clear() {
@@ -135,15 +135,15 @@ class filepath {
   }
 
   const string& operator[](int i) const {
-	return bits[i];
+    return bits[i];
   }
 
   const string& last_bit() const {
-	return bits[ bits.size()-1 ];
+    return bits[ bits.size()-1 ];
   }
 
   unsigned depth() const {
-	return bits.size();
+    return bits.size();
   }
   bool empty() {
     return bits.size() == 0;
@@ -169,7 +169,7 @@ class filepath {
     for (int i=0; i<n; i++) {
       string s = r.c_str() + off;
       off += s.length() + 1;
-	  add_dentry(s);
+      add_dentry(s);
     }
   }
 
@@ -192,7 +192,7 @@ class filepath {
     for (int i=0; i<n; i++) {
       string s = bl.c_str() + off;
       off += s.length() + 1;
-	  add_dentry(s);
+      add_dentry(s);
     }
   }
 

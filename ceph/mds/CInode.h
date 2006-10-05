@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -158,7 +158,6 @@ class Context;
 class CDentry;
 class CDir;
 class MDS;
-class MDCluster;
 class Message;
 class CInode;
 class CInodeDiscover;
@@ -198,8 +197,8 @@ class CInode : LRUObject {
   // -- distributed caching
   set<int>         cached_by;        // [auth] mds's that cache me.  
   /* NOTE: on replicas, this doubles as replicated_by, but the
-	 cached_by_* access methods below should NOT be used in those
-	 cases, as the semantics are different! */
+     cached_by_* access methods below should NOT be used in those
+     cases, as the semantics are different! */
   map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
   int              replica_nonce;    // [replica] defined on replica
 
@@ -278,7 +277,7 @@ class CInode : LRUObject {
 
   // -- state --
   unsigned get_state() { return state; }
-  void state_clear(unsigned mask) {	state &= ~mask; }
+  void state_clear(unsigned mask) {    state &= ~mask; }
   void state_set(unsigned mask) { state |= mask; }
   unsigned state_test(unsigned mask) { return state & mask; }
 
@@ -307,8 +306,8 @@ class CInode : LRUObject {
   __uint64_t get_version() { return version; }
   __uint64_t get_parent_dir_version() { return parent_dir_version; }
   void float_parent_dir_version(__uint64_t ge) {
-	if (parent_dir_version < ge)
-	  parent_dir_version = ge;
+    if (parent_dir_version < ge)
+      parent_dir_version = ge;
   }
   
   bool is_dirty() { return state & CINODE_STATE_DIRTY; }
@@ -316,12 +315,12 @@ class CInode : LRUObject {
   
   void mark_dirty();
   void mark_clean() {
-	dout(10) << " mark_clean " << *this << endl;
-	if (state & CINODE_STATE_DIRTY) {
-	  state &= ~CINODE_STATE_DIRTY;
-	  put(CINODE_PIN_DIRTY);
-	}
-  }	
+    dout(10) << " mark_clean " << *this << endl;
+    if (state & CINODE_STATE_DIRTY) {
+      state &= ~CINODE_STATE_DIRTY;
+      put(CINODE_PIN_DIRTY);
+    }
+  }    
 
 
 
@@ -331,22 +330,22 @@ class CInode : LRUObject {
   int num_cached_by() { return cached_by.size(); }
   // cached_by_add returns a nonce
   int cached_by_add(int mds) {
-	int nonce = 1;
-	if (is_cached_by(mds)) {    // already had it?
-	  nonce = get_cached_by_nonce(mds) + 1;   // new nonce (+1)
-	  dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
-	  cached_by_nonce.erase(mds);
+    int nonce = 1;
+    if (is_cached_by(mds)) {    // already had it?
+      nonce = get_cached_by_nonce(mds) + 1;   // new nonce (+1)
+      dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
+      cached_by_nonce.erase(mds);
     } else {
-	  if (cached_by.empty()) 
-		get(CINODE_PIN_CACHED);
-	  cached_by.insert(mds);
-	}
+      if (cached_by.empty()) 
+        get(CINODE_PIN_CACHED);
+      cached_by.insert(mds);
+    }
     cached_by_nonce.insert(pair<int,int>(mds,nonce));   // first! serial of 1.
     return nonce;   // default nonce
   }
   void cached_by_add(int mds, int nonce) {
-	if (cached_by.empty()) 
-	  get(CINODE_PIN_CACHED);
+    if (cached_by.empty()) 
+      get(CINODE_PIN_CACHED);
     cached_by.insert(mds);
     cached_by_nonce.insert(pair<int,int>(mds,nonce));
   }
@@ -355,18 +354,18 @@ class CInode : LRUObject {
     return it->second;
   }
   void cached_by_remove(int mds) {
-	//if (!is_cached_by(mds)) return;
-	assert(is_cached_by(mds));
+    //if (!is_cached_by(mds)) return;
+    assert(is_cached_by(mds));
 
-	cached_by.erase(mds);
-	cached_by_nonce.erase(mds);
-	if (cached_by.empty())
-	  put(CINODE_PIN_CACHED);	  
+    cached_by.erase(mds);
+    cached_by_nonce.erase(mds);
+    if (cached_by.empty())
+      put(CINODE_PIN_CACHED);      
   }
   void cached_by_clear() {
-	if (cached_by.size())
-	  put(CINODE_PIN_CACHED);
-	cached_by.clear();
+    if (cached_by.size())
+      put(CINODE_PIN_CACHED);
+    cached_by.clear();
     cached_by_nonce.clear();
   }
   set<int>::iterator cached_by_begin() { return cached_by.begin(); }
@@ -387,111 +386,110 @@ class CInode : LRUObject {
   // client caps
   map<int,Capability>& get_client_caps() { return client_caps; }
   void add_client_cap(int client, Capability& cap) {
-	if (client_caps.empty())
-	  get(CINODE_PIN_CAPS);
-	assert(client_caps.count(client) == 0);
-	client_caps[client] = cap;
+    if (client_caps.empty())
+      get(CINODE_PIN_CAPS);
+    assert(client_caps.count(client) == 0);
+    client_caps[client] = cap;
   }
   void remove_client_cap(int client) {
-	assert(client_caps.count(client) == 1);
-	client_caps.erase(client);
-	if (client_caps.empty())
-	  put(CINODE_PIN_CAPS);
+    assert(client_caps.count(client) == 1);
+    client_caps.erase(client);
+    if (client_caps.empty())
+      put(CINODE_PIN_CAPS);
   }
   Capability* get_client_cap(int client) {
-	if (client_caps.count(client))
-	  return &client_caps[client];
-	return 0;
+    if (client_caps.count(client))
+      return &client_caps[client];
+    return 0;
   }
   /*
   void set_client_caps(map<int,Capability>& cl) {
-	if (client_caps.empty() && !cl.empty())
-	  get(CINODE_PIN_CAPS);
-	client_caps.clear();
-	client_caps = cl;
+    if (client_caps.empty() && !cl.empty())
+      get(CINODE_PIN_CAPS);
+    client_caps.clear();
+    client_caps = cl;
   }
   */
   void take_client_caps(map<int,Capability>& cl) {
-	if (!client_caps.empty())
-	  put(CINODE_PIN_CAPS);
-	cl = client_caps;
-	client_caps.clear();
+    if (!client_caps.empty())
+      put(CINODE_PIN_CAPS);
+    cl = client_caps;
+    client_caps.clear();
   }
   void merge_client_caps(map<int,Capability>& cl, set<int>& new_client_caps) {
-	if (client_caps.empty() && !cl.empty())
-	  get(CINODE_PIN_CAPS);
-	for (map<int,Capability>::iterator it = cl.begin();
-		 it != cl.end();
-		 it++) {
-	  new_client_caps.insert(it->first);
-	  if (client_caps.count(it->first)) {
-		// merge
-		client_caps[it->first].merge(it->second);
-	  } else {
-		// new
-		client_caps[it->first] = it->second;
-	  }
-	}	  
+    if (client_caps.empty() && !cl.empty())
+      get(CINODE_PIN_CAPS);
+    for (map<int,Capability>::iterator it = cl.begin();
+         it != cl.end();
+         it++) {
+      new_client_caps.insert(it->first);
+      if (client_caps.count(it->first)) {
+        // merge
+        client_caps[it->first].merge(it->second);
+      } else {
+        // new
+        client_caps[it->first] = it->second;
+      }
+    }      
   }
 
   // caps issued, wanted
   int get_caps_issued() {
-	int c = 0;
-	for (map<int,Capability>::iterator it = client_caps.begin();
-		 it != client_caps.end();
-		 it++) 
-	  c |= it->second.issued();
-	return c;
+    int c = 0;
+    for (map<int,Capability>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) 
+      c |= it->second.issued();
+    return c;
   }
   int get_caps_wanted() {
-	int w = 0;
-	for (map<int,Capability>::iterator it = client_caps.begin();
-		 it != client_caps.end();
-		 it++) {
-	  w |= it->second.wanted();
-	  //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
-	}
-	if (is_auth())
-	  for (map<int,int>::iterator it = mds_caps_wanted.begin();
-		   it != mds_caps_wanted.end();
-		   it++) {
-		w |= it->second;
-		//cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
-	  }
-	return w;
+    int w = 0;
+    for (map<int,Capability>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) {
+      w |= it->second.wanted();
+      //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
+    }
+    if (is_auth())
+      for (map<int,int>::iterator it = mds_caps_wanted.begin();
+           it != mds_caps_wanted.end();
+           it++) {
+        w |= it->second;
+        //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
+      }
+    return w;
   }
 
 
   void replicate_relax_locks() {
-	assert(is_auth());
-	assert(!is_cached_by_anyone());
-	dout(10) << " relaxing locks on " << *this << endl;
+    assert(is_auth());
+    assert(!is_cached_by_anyone());
+    dout(10) << " relaxing locks on " << *this << endl;
 
-	if (hardlock.get_state() == LOCK_LOCK &&
-		!hardlock.is_used()) {
-	  dout(10) << " hard now sync " << *this << endl;
-	  hardlock.set_state(LOCK_SYNC);
-	}
-	if (filelock.get_state() == LOCK_LOCK) {
-	  if (!filelock.is_used() &&
-		  (get_caps_issued() & CAP_FILE_WR) == 0) {
-		filelock.set_state(LOCK_SYNC);
-		dout(10) << " file now sync " << *this << endl;
-	  } else {
-		dout(10) << " can't relax filelock on " << *this << endl;
-	  }
-	}
+    if (hardlock.get_state() == LOCK_LOCK &&
+        !hardlock.is_used()) {
+      dout(10) << " hard now sync " << *this << endl;
+      hardlock.set_state(LOCK_SYNC);
+    }
+    if (filelock.get_state() == LOCK_LOCK) {
+      if (!filelock.is_used() &&
+          (get_caps_issued() & CAP_FILE_WR) == 0) {
+        filelock.set_state(LOCK_SYNC);
+        dout(10) << " file now sync " << *this << endl;
+      } else {
+        dout(10) << " can't relax filelock on " << *this << endl;
+      }
+    }
   }
 
 
   // -- authority --
   int authority();
-  //int dir_authority(MDCluster *mdc); 
 
 
   // -- auth pins --
   int is_auth_pinned() { 
-	return auth_pins;
+    return auth_pins;
   }
   int adjust_nested_auth_pins(int a);
   bool can_auth_pin();
@@ -508,77 +506,77 @@ class CInode : LRUObject {
   // -- reference counting --
   
   /* these can be pinned any # of times, and are
-	 linked to an active_request, so they're automatically cleaned
-	 up when a request is finished.  pin at will! */
+     linked to an active_request, so they're automatically cleaned
+     up when a request is finished.  pin at will! */
   void request_pin_get() {
-	if (num_request_pins == 0) get(CINODE_PIN_REQUEST);
-	num_request_pins++;
+    if (num_request_pins == 0) get(CINODE_PIN_REQUEST);
+    num_request_pins++;
   }
   void request_pin_put() {
-	num_request_pins--;
-	if (num_request_pins == 0) put(CINODE_PIN_REQUEST);
-	assert(num_request_pins >= 0);
+    num_request_pins--;
+    if (num_request_pins == 0) put(CINODE_PIN_REQUEST);
+    assert(num_request_pins >= 0);
   }
 
 
   bool is_pinned() { return ref > 0; }
   set<int>& get_ref_set() { return ref_set; }
   void put(int by) {
-	cinode_pins[by]--;
-	if (ref == 0 || ref_set.count(by) != 1) {
-	  dout(7) << " bad put " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
-	  assert(ref_set.count(by) == 1);
-	  assert(ref > 0);
-	}
-	ref--;
-	ref_set.erase(by);
-	if (ref == 0)
-	  lru_unpin();
-	dout(7) << " put " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
+    cinode_pins[by]--;
+    if (ref == 0 || ref_set.count(by) != 1) {
+      dout(7) << " bad put " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
+      assert(ref_set.count(by) == 1);
+      assert(ref > 0);
+    }
+    ref--;
+    ref_set.erase(by);
+    if (ref == 0)
+      lru_unpin();
+    dout(7) << " put " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
   }
   void get(int by) {
-	cinode_pins[by]++;
-	if (ref == 0)
-	  lru_pin();
-	if (ref_set.count(by)) {
-	  dout(7) << " bad get " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
-	  assert(ref_set.count(by) == 0);
-	}
-	ref++;
-	ref_set.insert(by);
-	dout(7) << " get " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
+    cinode_pins[by]++;
+    if (ref == 0)
+      lru_pin();
+    if (ref_set.count(by)) {
+      dout(7) << " bad get " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
+      assert(ref_set.count(by) == 0);
+    }
+    ref++;
+    ref_set.insert(by);
+    dout(7) << " get " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
   }
   bool is_pinned_by(int by) {
-	return ref_set.count(by);
+    return ref_set.count(by);
   }
 
   // -- hierarchy stuff --
   void set_primary_parent(CDentry *p) {
-	parent = p;
+    parent = p;
   }
   void remove_primary_parent(CDentry *dn) {
-	assert(dn == parent);
-	parent = 0;
+    assert(dn == parent);
+    parent = 0;
   }
   void add_remote_parent(CDentry *p) {
-	remote_parents.insert(p);
+    remote_parents.insert(p);
   }
   void remove_remote_parent(CDentry *p) {
-	remote_parents.erase(p);
+    remote_parents.erase(p);
   }
   int num_remote_parents() {
-	return remote_parents.size(); 
+    return remote_parents.size(); 
   }
 
 
   /*
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
-	if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
-		(!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
-	  //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
-	  ls = cached_by;
-	}
+    if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
+        (!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
+      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << endl;
+      ls = cached_by;
+    }
   }
   */
 
@@ -605,40 +603,40 @@ class CInodeDiscover {
  public:
   CInodeDiscover() {}
   CInodeDiscover(CInode *in, int nonce) {
-	inode = in->inode;
-	replica_nonce = nonce;
+    inode = in->inode;
+    replica_nonce = nonce;
 
-	hardlock_state = in->hardlock.get_replica_state();
-	filelock_state = in->filelock.get_replica_state();
+    hardlock_state = in->hardlock.get_replica_state();
+    filelock_state = in->filelock.get_replica_state();
   }
 
   inodeno_t get_ino() { return inode.ino; }
   int get_replica_nonce() { return replica_nonce; }
 
   void update_inode(CInode *in) {
-	in->inode = inode;
+    in->inode = inode;
 
-	in->replica_nonce = replica_nonce;
-	in->hardlock.set_state(hardlock_state);
-	in->filelock.set_state(filelock_state);
+    in->replica_nonce = replica_nonce;
+    in->hardlock.set_state(hardlock_state);
+    in->filelock.set_state(filelock_state);
   }
   
   void _encode(bufferlist& bl) {
-	bl.append((char*)&inode, sizeof(inode));
-	bl.append((char*)&replica_nonce, sizeof(replica_nonce));
-	bl.append((char*)&hardlock_state, sizeof(hardlock_state));
-	bl.append((char*)&filelock_state, sizeof(filelock_state));
+    bl.append((char*)&inode, sizeof(inode));
+    bl.append((char*)&replica_nonce, sizeof(replica_nonce));
+    bl.append((char*)&hardlock_state, sizeof(hardlock_state));
+    bl.append((char*)&filelock_state, sizeof(filelock_state));
   }
 
   void _decode(bufferlist& bl, int& off) {
-	bl.copy(off,sizeof(inode_t), (char*)&inode);
-	off += sizeof(inode_t);
-	bl.copy(off, sizeof(int), (char*)&replica_nonce);
-	off += sizeof(int);
-	bl.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
-	off += sizeof(hardlock_state);
-	bl.copy(off, sizeof(filelock_state), (char*)&filelock_state);
-	off += sizeof(filelock_state);
+    bl.copy(off,sizeof(inode_t), (char*)&inode);
+    off += sizeof(inode_t);
+    bl.copy(off, sizeof(int), (char*)&replica_nonce);
+    off += sizeof(int);
+    bl.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
+    off += sizeof(hardlock_state);
+    bl.copy(off, sizeof(filelock_state), (char*)&filelock_state);
+    off += sizeof(filelock_state);
   }  
 
 };
@@ -671,23 +669,23 @@ class CInodeExport {
 public:
   CInodeExport() {}
   CInodeExport(CInode *in) {
-	st.inode = in->inode;
-	st.version = in->get_version();
-	st.is_dirty = in->is_dirty();
-	cached_by = in->cached_by;
-	cached_by_nonce = in->cached_by_nonce; 
+    st.inode = in->inode;
+    st.version = in->get_version();
+    st.is_dirty = in->is_dirty();
+    cached_by = in->cached_by;
+    cached_by_nonce = in->cached_by_nonce; 
 
-	hardlock = in->hardlock;
-	filelock = in->filelock;
+    hardlock = in->hardlock;
+    filelock = in->filelock;
 
-	st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
-	st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
-	in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
-	in->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
-	
-	// steal WRITER caps from inode
-	in->take_client_caps(cap_map);
-	//remaining_issued = in->get_caps_issued();
+    st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
+    st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
+    in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
+    in->popularity[MDS_POP_NESTED] -= st.popularity_curdom;
+    
+    // steal WRITER caps from inode
+    in->take_client_caps(cap_map);
+    //remaining_issued = in->get_caps_issued();
   }
   ~CInodeExport() {
   }
@@ -695,35 +693,35 @@ public:
   inodeno_t get_ino() { return st.inode.ino; }
 
   void update_inode(CInode *in, set<int>& new_client_caps) {
-	in->inode = st.inode;
+    in->inode = st.inode;
 
-	in->version = st.version;
+    in->version = st.version;
 
-	in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
-	in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
-	in->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
-	in->popularity[MDS_POP_NESTED] += st.popularity_curdom;
+    in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
+    in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
+    in->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
+    in->popularity[MDS_POP_NESTED] += st.popularity_curdom;
 
-	if (st.is_dirty) {
-	  in->mark_dirty();
-	}
+    if (st.is_dirty) {
+      in->mark_dirty();
+    }
 
-	in->cached_by.clear();
-	in->cached_by = cached_by;
-	in->cached_by_nonce = cached_by_nonce;
-	if (!cached_by.empty()) 
-	  in->get(CINODE_PIN_CACHED);
+    in->cached_by.clear();
+    in->cached_by = cached_by;
+    in->cached_by_nonce = cached_by_nonce;
+    if (!cached_by.empty()) 
+      in->get(CINODE_PIN_CACHED);
 
-	in->hardlock = hardlock;
-	in->filelock = filelock;
+    in->hardlock = hardlock;
+    in->filelock = filelock;
 
-	// caps
-	in->merge_client_caps(cap_map, new_client_caps);
+    // caps
+    in->merge_client_caps(cap_map, new_client_caps);
   }
 
   void _encode(bufferlist& bl) {
     st.ncached_by = cached_by.size();
-	st.num_caps = cap_map.size();
+    st.num_caps = cap_map.size();
     bl.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
@@ -736,22 +734,22 @@ public:
       bl.append((char*)&n, sizeof(int));
     }
 
-	hardlock.encode_state(bl);
-	filelock.encode_state(bl);
+    hardlock.encode_state(bl);
+    filelock.encode_state(bl);
 
-	// caps
-	for (map<int,Capability>::iterator it = cap_map.begin();
-		 it != cap_map.end();
-		 it++) {
-	  bl.append((char*)&it->first, sizeof(it->first));
-	  it->second._encode(bl);
-	}
+    // caps
+    for (map<int,Capability>::iterator it = cap_map.begin();
+         it != cap_map.end();
+         it++) {
+      bl.append((char*)&it->first, sizeof(it->first));
+      it->second._encode(bl);
+    }
   }
 
   int _decode(bufferlist& bl, int off = 0) {
     bl.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
-	
+    
     for (int i=0; i<st.ncached_by; i++) {
       int m,n;
       bl.copy(off, sizeof(int), (char*)&m);
@@ -762,16 +760,16 @@ public:
       cached_by_nonce.insert(pair<int,int>(m,n));
     }
 
-	hardlock.decode_state(bl, off);
-	filelock.decode_state(bl, off);
+    hardlock.decode_state(bl, off);
+    filelock.decode_state(bl, off);
 
-	// caps
-	for (int i=0; i<st.num_caps; i++) {
-	  int c;
-	  bl.copy(off, sizeof(c), (char*)&c);
-	  off += sizeof(c);
-	  cap_map[c]._decode(bl, off);
-	}
+    // caps
+    for (int i=0; i<st.num_caps; i++) {
+      int c;
+      bl.copy(off, sizeof(c), (char*)&c);
+      off += sizeof(c);
+      cap_map[c]._decode(bl, off);
+    }
 
     return off;
   }

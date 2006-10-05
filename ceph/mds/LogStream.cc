@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -49,8 +49,8 @@ LogStream::LogStream(MDS *mds, Filer *filer, inodeno_t log_ino, Logger *l)
   log_inode.layout = g_OSD_MDLogLayout;
   
   if (g_conf.mds_local_osd) {
-	log_inode.layout.object_layout = OBJECT_LAYOUT_STARTOSD;
-	log_inode.layout.osd = mds->get_nodeid() + 10000;   // hack
+    log_inode.layout.object_layout = OBJECT_LAYOUT_STARTOSD;
+    log_inode.layout.osd = mds->get_nodeid() + 10000;   // hack
   }
   
   // wr
@@ -72,11 +72,11 @@ class C_LS_Append : public Context {
   off_t off;
 public:
   C_LS_Append(LogStream *ls, off_t off) {
-	this->ls = ls;
-	this->off = off;
+    this->ls = ls;
+    this->off = off;
   }
   void finish(int r) {
-	ls->_append_2(off);
+    ls->_append_2(off);
   }
 };
 
@@ -121,17 +121,17 @@ void LogStream::_append_2(off_t off)
   // wake up waiters
   map< off_t, list<Context*> >::iterator it = waiting_for_sync.begin();
   while (it != waiting_for_sync.end()) {
-	if (it->first > sync_pos) break;
-	
-	// wake them up!
-	dout(15) << it->second.size() << " waiters at offset " << it->first << " <= " << sync_pos << endl;
-	for (list<Context*>::iterator cit = it->second.begin();
-		 cit != it->second.end();
-		 cit++) 
-	  mds->finished_queue.push_back(*cit);
-	
-	// continue
-	waiting_for_sync.erase(it++);
+    if (it->first > sync_pos) break;
+    
+    // wake them up!
+    dout(15) << it->second.size() << " waiters at offset " << it->first << " <= " << sync_pos << endl;
+    for (list<Context*>::iterator cit = it->second.begin();
+         cit != it->second.end();
+         cit++) 
+      mds->finished_queue.push_back(*cit);
+    
+    // continue
+    waiting_for_sync.erase(it++);
   }
 }
 
@@ -152,27 +152,27 @@ void LogStream::flush()
 {
   // write to disk
   if (write_buf.length()) {
-	dout(15) << "flush flush_pos " << flush_pos << " < append_pos " << append_pos << ", writing " << write_buf.length() << " bytes" << endl;
-	
-	assert(write_buf.length() == append_pos - flush_pos);
-	
-	// tuck writing buffer away until write finishes
-	writing_buffers[append_pos] = new bufferlist;
-	writing_buffers[append_pos]->claim(write_buf);
+    dout(15) << "flush flush_pos " << flush_pos << " < append_pos " << append_pos << ", writing " << write_buf.length() << " bytes" << endl;
+    
+    assert(write_buf.length() == append_pos - flush_pos);
+    
+    // tuck writing buffer away until write finishes
+    writing_buffers[append_pos] = new bufferlist;
+    writing_buffers[append_pos]->claim(write_buf);
 
-	writing_latency[append_pos] = g_clock.now();
+    writing_latency[append_pos] = g_clock.now();
 
-	// write it
-	mds->filer->write(log_inode, 
-					  flush_pos, writing_buffers[append_pos]->length(), 
-					  *writing_buffers[append_pos],
-					  0,
-					  new C_LS_Append(this, append_pos), // on ack
-					  NULL);                             // on safe
+    // write it
+    mds->filer->write(log_inode, 
+                      flush_pos, writing_buffers[append_pos]->length(), 
+                      *writing_buffers[append_pos],
+                      0,
+                      new C_LS_Append(this, append_pos), // on ack
+                      NULL);                             // on safe
 
-	flush_pos = append_pos;
+    flush_pos = append_pos;
   } else {
-	dout(15) << "flush flush_pos " << flush_pos << " == append_pos " << append_pos << ", nothing to do" << endl;
+    dout(15) << "flush flush_pos " << flush_pos << " == append_pos " << append_pos << ", nothing to do" << endl;
   }
 
 }
@@ -189,7 +189,7 @@ void LogStream::flush()
 LogEvent *LogStream::get_next_event()
 {
   if (read_buf.length() < 2*sizeof(__uint32_t)) 
-	return 0;
+    return 0;
   
   // parse type, length
   int off = 0;
@@ -204,34 +204,34 @@ LogEvent *LogStream::get_next_event()
   assert(type > 0);
 
   if (read_buf.length() < off + length)
-	return 0;
+    return 0;
   
   // create event
   LogEvent *le;
   switch (type) {
   case EVENT_STRING:  // string
-	le = new EString();
-	break;
-	
+    le = new EString();
+    break;
+    
   case EVENT_INODEUPDATE:
-	le = new EInodeUpdate();
-	break;
-	
+    le = new EInodeUpdate();
+    break;
+    
   case EVENT_DIRUPDATE:
-	le = new EDirUpdate();
-	break;
-	
+    le = new EDirUpdate();
+    break;
+    
   case EVENT_UNLINK:
-	le = new EUnlink();
-	break;
-	
+    le = new EUnlink();
+    break;
+    
   case EVENT_ALLOC:
-	le = new EAlloc();
-	break;
+    le = new EAlloc();
+    break;
 
   default:
-	dout(1) << "uh oh, unknown event type " << type << endl;
-	assert(0);
+    dout(1) << "uh oh, unknown event type " << type << endl;
+    assert(0);
   }
 
   // decode
@@ -256,7 +256,7 @@ public:
   Context *waitfornext;
   C_LS_ReadAfterSync(LogStream *l, Context *c) : ls(l), waitfornext(c) {}
   void finish(int) {
-	ls->wait_for_next_event(waitfornext);
+    ls->wait_for_next_event(waitfornext);
   }
 };
 
@@ -266,10 +266,10 @@ public:
   LogStream *ls;
 
   C_LS_ReadChunk(LogStream *ls) {
-	this->ls = ls;
+    this->ls = ls;
   }
   void finish(int result) {
-	ls->_did_read(bl);
+    ls->_did_read(bl);
   }
 };
 
@@ -277,9 +277,9 @@ public:
 void LogStream::wait_for_next_event(Context *c)
 {
   if (read_pos == sync_pos) {
-	dout(-15) << "waiting for sync before initiating read at " << read_pos << endl;
-	wait_for_sync(new C_LS_ReadAfterSync(this, c));
-	return;				 
+    dout(-15) << "waiting for sync before initiating read at " << read_pos << endl;
+    wait_for_sync(new C_LS_ReadAfterSync(this, c));
+    return;                 
   }
 
   // add waiter
@@ -289,25 +289,25 @@ void LogStream::wait_for_next_event(Context *c)
   off_t tail = read_pos + read_buf.length();
   size_t size = g_conf.mds_log_read_inc;
   if (tail + (off_t)size > sync_pos) {
-	size = sync_pos - tail;
-	dout(15) << "wait_for_next_event ugh.. read_pos is " << read_pos << ", tail is " << tail << ", sync_pos only " << sync_pos << ", flush_pos " << flush_pos << ", append_pos " << append_pos << endl;
-	
-	if (size == 0) {
-	  //	assert(size > 0);   // bleh, wait for sync, etc.
-	  // just do it.  communication is ordered, right?   FIXME SOMEDAY this is totally gross blech
-	  //size = flush_pos - tail;
-	  // read tiny bit, kill some time
-	  assert(flush_pos > sync_pos);
-	  size = 1;
-	}
+    size = sync_pos - tail;
+    dout(15) << "wait_for_next_event ugh.. read_pos is " << read_pos << ", tail is " << tail << ", sync_pos only " << sync_pos << ", flush_pos " << flush_pos << ", append_pos " << append_pos << endl;
+    
+    if (size == 0) {
+      //    assert(size > 0);   // bleh, wait for sync, etc.
+      // just do it.  communication is ordered, right?   FIXME SOMEDAY this is totally gross blech
+      //size = flush_pos - tail;
+      // read tiny bit, kill some time
+      assert(flush_pos > sync_pos);
+      size = 1;
+    }
   }
 
   dout(15) << "wait_for_next_event reading from pos " << tail << " len " << size << endl;
   C_LS_ReadChunk *readc = new C_LS_ReadChunk(this);
   mds->filer->read(log_inode,  
-				   tail, g_conf.mds_log_read_inc, 
-				   &readc->bl,
-				   readc);
+                   tail, g_conf.mds_log_read_inc, 
+                   &readc->bl,
+                   readc);
 }
 
 

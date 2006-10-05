@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -91,11 +91,11 @@ class MOSDOpReply : public Message {
 
   // data payload
   void set_data(bufferlist &d) {
-	data.claim(d);
-	//st._data_len = data.length();
+    data.claim(d);
+    //st._data_len = data.length();
   }
   bufferlist& get_data() {
-	return data;
+    return data;
   }
 
   // osdmap
@@ -107,41 +107,41 @@ class MOSDOpReply : public Message {
 
 public:
   MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
-	Message(MSG_OSD_OPREPLY) {
-	memset(&st, 0, sizeof(st));
-	this->st.pcid = req->st.pcid;
+    Message(MSG_OSD_OPREPLY) {
+    memset(&st, 0, sizeof(st));
+    this->st.pcid = req->st.pcid;
 
-	this->st.op = req->st.op;
-	this->st.tid = req->st.tid;
-	this->st.rep_tid = req->st.rep_tid;
+    this->st.op = req->st.op;
+    this->st.tid = req->st.tid;
+    this->st.rep_tid = req->st.rep_tid;
 
-	this->st.oid = req->st.oid;
-	this->st.pg = req->st.pg;
-	this->st.result = result;
-	this->st.commit = commit;
+    this->st.oid = req->st.oid;
+    this->st.pg = req->st.pg;
+    this->st.result = result;
+    this->st.commit = commit;
 
-	this->st.length = req->st.length;   // speculative... OSD should ensure these are correct
-	this->st.offset = req->st.offset;
-	this->st.version = req->st.version;
+    this->st.length = req->st.length;   // speculative... OSD should ensure these are correct
+    this->st.offset = req->st.offset;
+    this->st.version = req->st.version;
 
-	this->st.map_epoch = e;
+    this->st.map_epoch = e;
   }
   MOSDOpReply() {}
 
 
   // marshalling
   virtual void decode_payload() {
-	payload.copy(0, sizeof(st), (char*)&st);
-	payload.splice(0, sizeof(st));
-	int off = 0;
-	::_decode(attrset, payload, off);
-	if (st._data_len) payload.splice(off, st._data_len, &data);
+    payload.copy(0, sizeof(st), (char*)&st);
+    payload.splice(0, sizeof(st));
+    int off = 0;
+    ::_decode(attrset, payload, off);
+    if (st._data_len) payload.splice(off, st._data_len, &data);
   }
   virtual void encode_payload() {
-	st._data_len = data.length();
-	payload.push_back( new buffer((char*)&st, sizeof(st)) );
-	::_encode(attrset, payload);
-	payload.claim_append( data );
+    st._data_len = data.length();
+    payload.push_back( new buffer((char*)&st, sizeof(st)) );
+    ::_encode(attrset, payload);
+    payload.claim_append( data );
   }
 
   virtual char *get_type_name() { return "oopr"; }

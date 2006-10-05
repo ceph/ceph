@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -35,9 +35,9 @@ class MUnhashDirPrepAck : public Message {
 
   MUnhashDirPrepAck() : assim(false) { }
   MUnhashDirPrepAck(inodeno_t ino) :
-	Message(MSG_MDS_UNHASHDIRPREPACK),
-	assim(false) {
-	this->ino = ino;
+    Message(MSG_MDS_UNHASHDIRPREPACK),
+    assim(false) {
+    this->ino = ino;
   }
   ~MUnhashDirPrepAck() {
     for (map<string,CInodeDiscover*>::iterator it = inodes.begin();
@@ -54,8 +54,8 @@ class MUnhashDirPrepAck : public Message {
   }
 
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(ino), (char*)&ino);
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
     
     // inodes
@@ -63,20 +63,20 @@ class MUnhashDirPrepAck : public Message {
     payload.copy(off, sizeof(int), (char*)&ni);
     off += sizeof(int);
     for (int i=0; i<ni; i++) {
-	  // dentry
-	  string dname;
-	  _decode(dname, payload, off);
-	  
-	  // inode
+      // dentry
+      string dname;
+      _decode(dname, payload, off);
+      
+      // inode
       CInodeDiscover *in = new CInodeDiscover;
       in->_decode(payload, off);
-	  
-	  inodes[dname] = in;
+      
+      inodes[dname] = in;
     }
   }
 
   virtual void encode_payload() {
-	payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&ino, sizeof(ino));
 
     // inodes
     int ni = inodes.size();
@@ -84,9 +84,9 @@ class MUnhashDirPrepAck : public Message {
     for (map<string,CInodeDiscover*>::iterator iit = inodes.begin();
          iit != inodes.end();
          iit++) {
-	  _encode(iit->first, payload);   // dentry
-	  iit->second->_encode(payload);  // inode
-	}
+      _encode(iit->first, payload);   // dentry
+      iit->second->_encode(payload);  // inode
+    }
   }
 };
 

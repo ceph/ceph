@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -86,14 +86,14 @@ static int ceph_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
 
   // return contents to fuse via callback
   for (map<string, inode_t>::iterator it = contents.begin();
-	   it != contents.end();
-	   it++) {
-	// (immutable) inode contents too.
-	res = filler(h,                                    // fuse's handle
-				 it->first.c_str(),                    // dentry as char*
-				 it->second.mode & INODE_TYPE_MASK,   // mask type bits from mode
-				 it->second.ino);                     // ino.. 64->32 bit issue here? FIXME
-	if (res != 0) break;   // fuse has had enough
+       it != contents.end();
+       it++) {
+    // (immutable) inode contents too.
+    res = filler(h,                                    // fuse's handle
+                 it->first.c_str(),                    // dentry as char*
+                 it->second.mode & INODE_TYPE_MASK,   // mask type bits from mode
+                 it->second.ino);                     // ino.. 64->32 bit issue here? FIXME
+    if (res != 0) break;   // fuse has had enough
   }
   return res;
 }
@@ -165,7 +165,7 @@ static int ceph_open(const char *path, struct fuse_file_info *fi)
 }
 
 static int ceph_read(const char *path, char *buf, size_t size, off_t offset,
-					 struct fuse_file_info *fi)
+                     struct fuse_file_info *fi)
 {
   fh_t fh = fi->fh;
   return client->read(fh, buf, size, offset);
@@ -256,8 +256,8 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   //newargv[newargc++] = "-o";
   //newargv[newargc++] = "large_read";
   if (g_conf.fuse_direct_io) {
-	newargv[newargc++] = "-o";
-	newargv[newargc++] = "direct_io";
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "direct_io";
   }
 
   // disable stupid fuse unlink hiding thing

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -34,10 +34,10 @@ class utime_t {
   struct timeval tv;
 
   void normalize() {
-	if (tv.tv_usec > 1000*1000) {
-	  tv.tv_sec += tv.tv_usec / (1000*1000);
-	  tv.tv_usec %= 1000*1000;
-	}
+    if (tv.tv_usec > 1000*1000) {
+      tv.tv_sec += tv.tv_usec / (1000*1000);
+      tv.tv_usec %= 1000*1000;
+    }
   }
 
   struct timeval& timeval()  { return tv; }
@@ -59,14 +59,14 @@ class utime_t {
 
   // cast to double
   operator double() {
-	return (double)sec() + ((double)usec() / 1000000.0L);
+    return (double)sec() + ((double)usec() / 1000000.0L);
   }
 };
 
 // arithmetic operators
 inline utime_t operator+(const utime_t& l, const utime_t& r) {
   return utime_t( l.sec() + r.sec() + (l.usec()+r.usec())/1000000L,
-				  (l.usec()+r.usec())%1000000L );
+                  (l.usec()+r.usec())%1000000L );
 }
 inline utime_t& operator+=(utime_t& l, const utime_t& r) {
   l.sec_ref() += r.sec() + (l.usec()+r.usec())/1000000L;
@@ -77,15 +77,15 @@ inline utime_t& operator+=(utime_t& l, const utime_t& r) {
 
 inline utime_t operator-(const utime_t& l, const utime_t& r) {
   return utime_t( l.sec() - r.sec() - (l.usec()<r.usec() ? 1:0),
-				  l.usec() - r.usec() + (l.usec()<r.usec() ? 1000000:0) );
+                  l.usec() - r.usec() + (l.usec()<r.usec() ? 1000000:0) );
 }
 inline utime_t& operator-=(utime_t& l, const utime_t& r) {
   l.sec_ref() -= r.sec();
   if (l.usec() >= r.usec())
-	l.usec_ref() -= r.usec();
+    l.usec_ref() -= r.usec();
   else {
-	l.usec_ref() += 1000000L - r.usec();
-	l.sec_ref()--;
+    l.usec_ref() += 1000000L - r.usec();
+    l.sec_ref()--;
   }
   return l;
 }
@@ -126,50 +126,54 @@ class Clock {
 
  public:
   Clock() {
-	// set offset
-	tare();
+    // set offset
+    tare();
   }
 
   // real time.
   utime_t real_now() {
-	utime_t realnow;
-	gettimeofday(&realnow.timeval(), NULL);
-	return realnow;
+    utime_t realnow;
+    gettimeofday(&realnow.timeval(), NULL);
+    return realnow;
   }
 
   // relative time (from startup)
   void tare() {
-	gettimeofday(&zero.timeval(), NULL);
+    gettimeofday(&zero.timeval(), NULL);
   }
   utime_t now() {
-	utime_t n;
-	gettimeofday(&n.timeval(), NULL);
-	n -= zero;
-	last = n;
-	return n;
+    utime_t n;
+    gettimeofday(&n.timeval(), NULL);
+    n -= zero;
+    if (n < last) {
+      cerr << "WARNING: clock jumped backwards from " << last << " to " << n << endl;
+      n = last;    // clock jumped backwards!
+    } else
+      last = n;
+    return n;
   }
   utime_t recent_now() {
-	return last;
+    return last;
   }
 
   void realify(utime_t& t) {
-	t += zero;
+    t += zero;
   }
 
   void make_timespec(utime_t& t, struct timespec *ts) {
-	utime_t real = t;
-	realify(real);
+    utime_t real = t;
+    realify(real);
 
-	memset(ts, 0, sizeof(*ts));
-	ts->tv_sec = real.sec();
-	ts->tv_nsec = real.nsec();
+    memset(ts, 0, sizeof(*ts));
+    ts->tv_sec = real.sec();
+    ts->tv_nsec = real.nsec();
   }
 
 
 
   // absolute time
   time_t gettime() {
-	return real_now().sec();
+    return real_now().sec();
   }
 
 };

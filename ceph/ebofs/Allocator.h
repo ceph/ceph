@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,14 +38,14 @@ protected:
   interval_set<block_t> limbo;
 
   static int pick_bucket(block_t num) {
-	int b = 0;
-	while (num > 1) {
-	  b++;
-	  num = num >> EBOFS_FREE_BUCKET_BITS;
-	}
-	if (b >= EBOFS_NUM_FREE_BUCKETS)
-	  b = EBOFS_NUM_FREE_BUCKETS-1;
-	return b;
+    int b = 0;
+    while (num > 1) {
+      b++;
+      num = num >> EBOFS_FREE_BUCKET_BITS;
+    }
+    if (b >= EBOFS_NUM_FREE_BUCKETS)
+      b = EBOFS_NUM_FREE_BUCKETS-1;
+    return b;
   }
 
   int find(Extent& ex, int bucket, block_t num, block_t near, int dir = DIR_ANY);
@@ -66,7 +66,7 @@ protected:
   int release(Extent& ex);
 
   int unallocate(Extent& ex) {  // skip limbo
-	return _release_merge(ex);
+    return _release_merge(ex);
   }
 
   int commit_limbo();  // limbo -> fs->limbo_tab

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -58,11 +58,11 @@ class MExportDirPrep : public Message {
   void mark_assim() { b_did_assim = true; }
 
   MExportDirPrep() {
-	b_did_assim = false;
+    b_did_assim = false;
   }
   MExportDirPrep(CInode *in) : 
-	Message(MSG_MDS_EXPORTDIRPREP) {
-	ino = in->ino();
+    Message(MSG_MDS_EXPORTDIRPREP) {
+    ino = in->ino();
     b_did_assim = false;
   }
   ~MExportDirPrep() {
@@ -96,19 +96,19 @@ class MExportDirPrep : public Message {
 
 
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(ino), (char*)&ino);
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
     
-	// exports
-	int ne;
-	payload.copy(off, sizeof(int), (char*)&ne);
-	off += sizeof(int);
+    // exports
+    int ne;
+    payload.copy(off, sizeof(int), (char*)&ne);
+    off += sizeof(int);
     for (int i=0; i<ne; i++) {
-	  inodeno_t ino;
-	  payload.copy(off, sizeof(ino), (char*)&ino);
-	  off += sizeof(ino);
-	  exports.push_back(ino);
+      inodeno_t ino;
+      payload.copy(off, sizeof(ino), (char*)&ino);
+      off += sizeof(ino);
+      exports.push_back(ino);
     }
 
     // inodes
@@ -116,21 +116,21 @@ class MExportDirPrep : public Message {
     payload.copy(off, sizeof(int), (char*)&ni);
     off += sizeof(int);
     for (int i=0; i<ni; i++) {
-	  // inode
+      // inode
       CInodeDiscover *in = new CInodeDiscover;
       in->_decode(payload, off);
       inodes.push_back(in);
-	  
-	  // dentry
-	  string d;
-	  _decode(d, payload, off);
-	  inode_dentry[in->get_ino()] = d;
-	  
-	  // dir ino
-	  inodeno_t dino;
-	  payload.copy(off, sizeof(dino), (char*)&dino);
-	  off += sizeof(dino);
-	  inode_dirino[in->get_ino()] = dino;
+      
+      // dentry
+      string d;
+      _decode(d, payload, off);
+      inode_dentry[in->get_ino()] = d;
+      
+      // dir ino
+      inodeno_t dino;
+      payload.copy(off, sizeof(dino), (char*)&dino);
+      off += sizeof(dino);
+      inode_dirino[in->get_ino()] = dino;
     }
 
     // dirs
@@ -145,17 +145,17 @@ class MExportDirPrep : public Message {
   }
 
   virtual void encode_payload() {
-	payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&ino, sizeof(ino));
 
-	// exports
+    // exports
     int ne = exports.size();
     payload.append((char*)&ne, sizeof(int));
     for (list<inodeno_t>::iterator it = exports.begin();
          it != exports.end();
          it++) {
-	  inodeno_t ino = *it;
+      inodeno_t ino = *it;
       payload.append((char*)&ino, sizeof(ino));
-	}
+    }
 
     // inodes
     int ni = inodes.size();
@@ -164,14 +164,14 @@ class MExportDirPrep : public Message {
          iit != inodes.end();
          iit++) {
       (*iit)->_encode(payload);
-	  
-	  // dentry
-	  _encode(inode_dentry[(*iit)->get_ino()], payload);
+      
+      // dentry
+      _encode(inode_dentry[(*iit)->get_ino()], payload);
 
-	  // dir ino
-	  inodeno_t ino = inode_dirino[(*iit)->get_ino()];
-	  payload.append((char*)&ino, sizeof(ino));
-	}
+      // dir ino
+      inodeno_t ino = inode_dirino[(*iit)->get_ino()];
+      payload.append((char*)&ino, sizeof(ino));
+    }
 
     // dirs
     int nd = dirs.size();
@@ -179,7 +179,7 @@ class MExportDirPrep : public Message {
     for (map<inodeno_t,CDirDiscover*>::iterator dit = dirs.begin();
          dit != dirs.end();
          dit++)
-	  dit->second->_encode(payload);
+      dit->second->_encode(payload);
   }
 };
 

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -29,23 +29,23 @@ class MExportDirDiscoverAck : public Message {
 
   MExportDirDiscoverAck() {}
   MExportDirDiscoverAck(inodeno_t ino, bool success=true) : 
-	Message(MSG_MDS_EXPORTDIRDISCOVERACK) {
-	this->ino = ino;
-	this->success = false;
+    Message(MSG_MDS_EXPORTDIRDISCOVERACK) {
+    this->ino = ino;
+    this->success = false;
   }
   virtual char *get_type_name() { return "ExDisA"; }
 
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	s.copy(off, sizeof(success), (char*)&success);
-	off += sizeof(success);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    s.copy(off, sizeof(success), (char*)&success);
+    off += sizeof(success);
   }
 
   virtual void encode_payload(crope& s) {
-	s.append((char*)&ino, sizeof(ino));
-	s.append((char*)&success, sizeof(success));
+    s.append((char*)&ino, sizeof(ino));
+    s.append((char*)&success, sizeof(success));
   }
 };
 

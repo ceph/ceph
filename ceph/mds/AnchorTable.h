@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -33,26 +33,26 @@ public:
 
   Anchor() {}
   Anchor(inodeno_t ino, inodeno_t dirino, string& ref_dn, int nref=0) {
-	this->ino = ino;
-	this->dirino = dirino;
-	this->ref_dn = ref_dn;
-	this->nref = nref;
+    this->ino = ino;
+    this->dirino = dirino;
+    this->ref_dn = ref_dn;
+    this->nref = nref;
   }  
 
   void _rope(crope& r) {
-	r.append((char*)&ino, sizeof(ino));
-	r.append((char*)&dirino, sizeof(dirino));
-	r.append((char*)&nref, sizeof(nref));
-	::_rope(ref_dn, r);
+    r.append((char*)&ino, sizeof(ino));
+    r.append((char*)&dirino, sizeof(dirino));
+    r.append((char*)&nref, sizeof(nref));
+    ::_rope(ref_dn, r);
   }
   void _unrope(crope& r, int& off) {
-	r.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	r.copy(off, sizeof(dirino), (char*)&dirino);
-	off += sizeof(dirino);
-	r.copy(off, sizeof(nref), (char*)&nref);
-	off += sizeof(nref);
-	::_unrope(ref_dn, r, off);
+    r.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    r.copy(off, sizeof(dirino), (char*)&dirino);
+    off += sizeof(dirino);
+    r.copy(off, sizeof(nref), (char*)&nref);
+    off += sizeof(nref);
+    ::_unrope(ref_dn, r, off);
   }
 } ;
 
@@ -78,11 +78,11 @@ class AnchorTable {
  protected:
   // 
   bool have_ino(inodeno_t ino) { 
-	return true;                  // always in memory for now.
+    return true;                  // always in memory for now.
   } 
   void fetch_ino(inodeno_t ino, Context *onfinish) {
-	assert(!opened);
-	load(onfinish);
+    assert(!opened);
+    load(onfinish);
   }
 
   // adjust table
@@ -115,8 +115,8 @@ class AnchorTable {
 
   // load/save entire table for now!
   void reset() {
-	opened = true;
-	anchor_map.clear();
+    opened = true;
+    anchor_map.clear();
   }
   void save(Context *onfinish);
   void load(Context *onfinish);

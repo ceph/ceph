@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,21 +25,21 @@ class MClientInodeAuthUpdate : public Message {
 
   MClientInodeAuthUpdate() {}
   MClientInodeAuthUpdate(inodeno_t ino, int newauth) :
-	Message(MSG_CLIENT_INODEAUTHUPDATE) {
-	this->ino = ino;
-	this->newauth = newauth;
+    Message(MSG_CLIENT_INODEAUTHUPDATE) {
+    this->ino = ino;
+    this->newauth = newauth;
   }
   virtual char *get_type_name() { return "Ciau";}
   
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	s.copy(off, sizeof(newauth), (char*)&newauth);
-	off += sizeof(newauth);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    s.copy(off, sizeof(newauth), (char*)&newauth);
+    off += sizeof(newauth);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&ino,sizeof(ino));
-	s.append((char*)&newauth,sizeof(newauth));
+    s.append((char*)&ino,sizeof(ino));
+    s.append((char*)&newauth,sizeof(newauth));
   }
 };
 

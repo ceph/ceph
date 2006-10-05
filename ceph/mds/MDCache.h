@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -102,10 +102,10 @@ class Message;
 
 namespace __gnu_cxx {
   template<> struct hash<Message*> {
-	size_t operator()(const Message *p) const { 
-	  static hash<unsigned long> H;
-	  return H((unsigned long)p); 
-	}
+    size_t operator()(const Message *p) const { 
+      static hash<unsigned long> H;
+      return H((unsigned long)p); 
+    }
   };
 }
 
@@ -168,13 +168,13 @@ class MDCache {
   // root inode
   CInode *get_root() { return root; }
   void set_root(CInode *r) {
-	root = r;
-	add_inode(root);
+    root = r;
+    add_inode(root);
   }
 
   // cache
   void set_cache_size(size_t max) {
-	lru.lru_set_max(max);
+    lru.lru_set_max(max);
   }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
@@ -187,14 +187,14 @@ class MDCache {
 
   // have_inode?
   bool have_inode( inodeno_t ino ) {
-	return inode_map.count(ino) ? true:false;
+    return inode_map.count(ino) ? true:false;
   }
 
   // return inode* or null
   CInode* get_inode( inodeno_t ino ) {
-	if (have_inode(ino))
-	  return inode_map[ ino ];
-	return NULL;
+    if (have_inode(ino))
+      return inode_map[ ino ];
+    return NULL;
   }
   
  protected:
@@ -212,14 +212,14 @@ class MDCache {
   void destroy_inode(CInode *in);
 
   void touch_inode(CInode *in) {
-	// touch parent(s) too
-	if (in->get_parent_dir()) touch_inode(in->get_parent_dir()->inode);
-	
-	// top or mid, depending on whether i'm auth
-	if (in->is_auth())
-	  lru.lru_touch(in);
-	else
-	  lru.lru_midtouch(in);
+    // touch parent(s) too
+    if (in->get_parent_dir()) touch_inode(in->get_parent_dir()->inode);
+    
+    // top or mid, depending on whether i'm auth
+    if (in->is_auth())
+      lru.lru_touch(in);
+    else
+      lru.lru_midtouch(in);
   }
 
  public:
@@ -228,31 +228,31 @@ class MDCache {
  protected:
   void rename_file(CDentry *srcdn, CDentry *destdn);
   void fix_renamed_dir(CDir *srcdir,
-					   CInode *in,
-					   CDir *destdir,
-					   bool authchanged,   // _inode_ auth changed
-					   int dirauth=-1);    // dirauth (for certain cases)
+                       CInode *in,
+                       CDir *destdir,
+                       bool authchanged,   // _inode_ auth changed
+                       int dirauth=-1);    // dirauth (for certain cases)
 
  public:
   int open_root(Context *c);
   int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
-					Message *req, Context *ondelay,
-					int onfail,
-					Context *onfinish=0,
-					bool is_client_req = false);
+                    Message *req, Context *ondelay,
+                    int onfail,
+                    Context *onfinish=0,
+                    bool is_client_req = false);
   void open_remote_dir(CInode *diri, Context *fin);
   void open_remote_ino(inodeno_t ino, Message *req, Context *fin);
   void open_remote_ino_2(inodeno_t ino, Message *req,
-						 vector<Anchor*>& anchortrace,
-						 Context *onfinish);
+                         vector<Anchor*>& anchortrace,
+                         Context *onfinish);
 
   bool path_pin(vector<CDentry*>& trace, Message *m, Context *c);
   void path_unpin(vector<CDentry*>& trace, Message *m);
   void make_trace(vector<CDentry*>& trace, CInode *in);
   
   bool request_start(Message *req,
-					 CInode *ref,
-					 vector<CDentry*>& trace);
+                     CInode *ref,
+                     vector<CDentry*>& trace);
   void request_cleanup(Message *req);
   void request_finish(Message *req);
   void request_forward(Message *req, int mds, int port=0);
@@ -300,8 +300,8 @@ class MDCache {
   // src
   void handle_rename_req(MRenameReq *m);              // dest -> src
   void file_rename_foreign_src(CDentry *srcdn, 
-							   inodeno_t destdirino, string& destname, string& destpath, int destauth, 
-							   int initiator);
+                               inodeno_t destdirino, string& destname, string& destpath, int destauth, 
+                               int initiator);
   void file_rename_warn(CInode *in, set<int>& notify);
   void handle_rename_notify_ack(MRenameNotifyAck *m); // bystanders -> src
   void file_rename_ack(CInode *in, int initiator);
@@ -311,8 +311,8 @@ class MDCache {
   void handle_rename_prep(MRenamePrep *m);            // init -> dest
   void handle_rename(MRename *m);                     // src -> dest
   void file_rename_notify(CInode *in, 
-						  CDir *srcdir, string& srcname, CDir *destdir, string& destname,
-						  set<int>& notify, int srcauth);
+                          CDir *srcdir, string& srcname, CDir *destdir, string& destname,
+                          set<int>& notify, int srcauth);
 
   // bystander
   void handle_rename_warning(MRenameWarning *m);      // src -> bystanders
@@ -322,8 +322,8 @@ class MDCache {
 
   // -- misc auth --
   int ino_proxy_auth(inodeno_t ino, 
-					 int frommds,
-					 map<CDir*, set<inodeno_t> >& inomap);
+                     int frommds,
+                     map<CDir*, set<inodeno_t> >& inomap);
   void do_ino_proxy(CInode *in, Message *m);
   void do_dir_proxy(CDir *dir, Message *m);
 
@@ -332,19 +332,19 @@ class MDCache {
   // exporter
  public:
   void export_dir(CDir *dir,
-				  int mds);
+                  int mds);
  protected:
   map< CDir*, set<int> > export_gather;
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
   void export_dir_frozen(CDir *dir, int dest);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir_go(CDir *dir,
-					 int dest);
+                     int dest);
   int export_dir_walk(MExportDir *req,
-					  class C_Contexts *fin,
-					  CDir *basedir,
-					  CDir *dir,
-					  int newauth);
+                      class C_Contexts *fin,
+                      CDir *basedir,
+                      CDir *dir,
+                      int newauth);
   void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
   
@@ -360,13 +360,13 @@ class MDCache {
   void import_dir_finish(CDir *dir);
   void handle_export_dir_finish(MExportDirFinish *m);
   int import_dir_block(bufferlist& bl,
-					   int& off,
-					   int oldauth,
-					   CDir *import_root,
-					   list<inodeno_t>& imported_subdirs);
+                       int& off,
+                       int oldauth,
+                       CDir *import_root,
+                       list<inodeno_t>& imported_subdirs);
   void got_hashed_replica(CDir *import,
-						  inodeno_t dir_ino,
-						  inodeno_t replica_ino);
+                          inodeno_t dir_ino,
+                          inodeno_t replica_ino);
 
   void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
 
@@ -499,11 +499,11 @@ class MDCache {
   // dentry locks
  public:
   bool dentry_xlock_start(CDentry *dn, 
-						  Message *m, CInode *ref);
+                          Message *m, CInode *ref);
   void dentry_xlock_finish(CDentry *dn, bool quiet=false);
   void handle_lock_dn(MLock *m);
   void dentry_xlock_request(CDir *dir, string& dname, bool create,
-							Message *req, Context *onfinish);
+                            Message *req, Context *onfinish);
 
   
 
@@ -513,7 +513,7 @@ class MDCache {
   vector<CInode*> hack_add_file(string& fn, CInode* in);
 
   void dump() {
-	if (root) root->dump();
+    if (root) root->dump();
   }
 
   void show_imports();

@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
@@ -256,17 +269,17 @@ struct md_config_t {
 
 };
 
-extern md_config_t g_conf;	 
-extern md_config_t g_debug_after_conf;	 
+extern md_config_t g_conf;     
+extern md_config_t g_debug_after_conf;     
 
 #define dout(x)  if ((x) <= g_conf.debug) cout
 #define dout2(x) if ((x) <= g_conf.debug) cout
 
 void env_to_vec(vector<char*>& args);
 void argv_to_vec(int argc, char **argv,
-				 vector<char*>& args);
+                 vector<char*>& args);
 void vec_to_argv(vector<char*>& args,
-				 int& argc, char **&argv);
+                 int& argc, char **&argv);
 
 void parse_config_options(vector<char*>& args);
 

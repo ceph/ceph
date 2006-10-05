@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -54,6 +54,7 @@ typedef struct {
   // who's asking?
   tid_t tid;
   msg_addr_t client;
+  entity_inst_t client_inst;
 
   // for replication
   tid_t rep_tid;
@@ -80,27 +81,27 @@ typedef struct {
 class MOSDOp : public Message {
 public:
   static const char* get_opname(int op) {
-	switch (op) {
-	case OSD_OP_READ: return "read";
-	case OSD_OP_STAT: return "stat";
+    switch (op) {
+    case OSD_OP_READ: return "read";
+    case OSD_OP_STAT: return "stat";
 
-	case OSD_OP_WRNOOP: return "wrnoop"; 
-	case OSD_OP_WRITE: return "write"; 
-	case OSD_OP_ZERO: return "zero"; 
-	case OSD_OP_DELETE: return "delete"; 
-	case OSD_OP_TRUNCATE: return "truncate"; 
-	case OSD_OP_WRLOCK: return "wrlock"; 
-	case OSD_OP_WRUNLOCK: return "wrunlock"; 
-	case OSD_OP_RDLOCK: return "rdlock"; 
-	case OSD_OP_RDUNLOCK: return "rdunlock"; 
-	case OSD_OP_UPLOCK: return "uplock"; 
-	case OSD_OP_DNLOCK: return "dnlock"; 
+    case OSD_OP_WRNOOP: return "wrnoop"; 
+    case OSD_OP_WRITE: return "write"; 
+    case OSD_OP_ZERO: return "zero"; 
+    case OSD_OP_DELETE: return "delete"; 
+    case OSD_OP_TRUNCATE: return "truncate"; 
+    case OSD_OP_WRLOCK: return "wrlock"; 
+    case OSD_OP_WRUNLOCK: return "wrunlock"; 
+    case OSD_OP_RDLOCK: return "rdlock"; 
+    case OSD_OP_RDUNLOCK: return "rdunlock"; 
+    case OSD_OP_UPLOCK: return "uplock"; 
+    case OSD_OP_DNLOCK: return "dnlock"; 
 
-	case OSD_OP_PULL: return "pull";
-	case OSD_OP_PUSH: return "push";
-	default: assert(0);
-	}
-	return 0;
+    case OSD_OP_PULL: return "pull";
+    case OSD_OP_PUSH: return "push";
+    default: assert(0);
+    }
+    return 0;
   }
 
 private:
@@ -113,6 +114,8 @@ private:
  public:
   const tid_t       get_tid() { return st.tid; }
   const msg_addr_t& get_client() { return st.client; }
+  const entity_inst_t& get_client_inst() { return st.client_inst; }
+  void set_client_inst(const entity_inst_t& i) { st.client_inst = i; }
 
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
@@ -142,10 +145,10 @@ private:
 
   
   void set_data(bufferlist &d) {
-	data.claim(d);
+    data.claim(d);
   }
   bufferlist& get_data() {
-	return data;
+    return data;
   }
   size_t get_data_len() { return st._data_len; }
 
@@ -155,20 +158,20 @@ private:
   long get_pcid() { return st.pcid; }
 
   MOSDOp(long tid, msg_addr_t asker, 
-		 object_t oid, pg_t pg, epoch_t mapepoch, int op) :
-	Message(MSG_OSD_OP) {
-	memset(&st, 0, sizeof(st));
-	this->st.client = asker;
-	this->st.tid = tid;
-	this->st.rep_tid = 0;
+         object_t oid, pg_t pg, epoch_t mapepoch, int op) :
+    Message(MSG_OSD_OP) {
+    memset(&st, 0, sizeof(st));
+    this->st.client = asker;
+    this->st.tid = tid;
+    this->st.rep_tid = 0;
 
-	this->st.oid = oid;
-	this->st.pg = pg;
-	this->st.map_epoch = mapepoch;
-	this->st.op = op;
+    this->st.oid = oid;
+    this->st.pg = pg;
+    this->st.map_epoch = mapepoch;
+    this->st.op = op;
 
-	this->st.want_ack = true;
-	this->st.want_commit = true;
+    this->st.want_ack = true;
+    this->st.want_commit = true;
   }
   MOSDOp() {}
 
@@ -185,18 +188,18 @@ private:
 
   // marshalling
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
-	::_decode(attrset, payload, off);
-	if (st._data_len) 
-	  payload.splice(off, st._data_len, &data);
+    int off = 0;
+    payload.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
+    ::_decode(attrset, payload, off);
+    if (st._data_len) 
+      payload.splice(off, st._data_len, &data);
   }
   virtual void encode_payload() {
-	st._data_len = data.length();
-	payload.push_back( new buffer((char*)&st, sizeof(st)) );
-	::_encode(attrset, payload);
-	payload.claim_append( data );
+    st._data_len = data.length();
+    payload.push_back( new buffer((char*)&st, sizeof(st)) );
+    ::_encode(attrset, payload);
+    payload.claim_append( data );
   }
 
   virtual char *get_type_name() { return "oop"; }
@@ -205,8 +208,8 @@ private:
 inline ostream& operator<<(ostream& out, MOSDOp& op)
 {
   return out << "MOSDOp(" << MSG_ADDR_NICE(op.get_client()) << "." << op.get_tid() 
-			 << " op " << MOSDOp::get_opname(op.get_op())
-			 << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
+             << " op " << MOSDOp::get_opname(op.get_op())
+             << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
 }
 
 #endif

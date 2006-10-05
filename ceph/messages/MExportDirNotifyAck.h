@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -27,18 +27,18 @@ class MExportDirNotifyAck : public Message {
   
   MExportDirNotifyAck() {}
   MExportDirNotifyAck(inodeno_t ino) :
-	Message(MSG_MDS_EXPORTDIRNOTIFYACK) {
-	this->ino = ino;
+    Message(MSG_MDS_EXPORTDIRNOTIFYACK) {
+    this->ino = ino;
   }
   virtual char *get_type_name() { return "ExNotA"; }
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
   }
   
   virtual void encode_payload(crope& s) {
-	s.append((char*)&ino, sizeof(ino));
+    s.append((char*)&ino, sizeof(ino));
   }
   
 };

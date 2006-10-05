@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -27,17 +27,17 @@ class MInodeUnlinkAck : public Message {
 
   MInodeUnlinkAck() {}
   MInodeUnlinkAck(inodeno_t ino) :
-	Message(MSG_MDS_INODEUNLINKACK) {
-	st.ino = ino;
+    Message(MSG_MDS_INODEUNLINKACK) {
+    st.ino = ino;
   }
   virtual char *get_type_name() { return "InUlA";}
   
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
+    s.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&st,sizeof(st));
+    s.append((char*)&st,sizeof(st));
   }
 };
 

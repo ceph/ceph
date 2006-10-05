@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -56,22 +56,22 @@ class ThreadPool {
   {
     ThreadPool *t = (ThreadPool *)arg;
     t->do_ops(arg);
-	return 0;
+    return 0;
   }
 
   void *do_ops(void *nothing)
   {
-	tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " starting" << endl;
+    tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " starting" << endl;
     while (1) {
       q_sem.Get();
       if (q.empty()) break;
 
-	  T op = get_op();
+      T op = get_op();
       tpdout(DBLVL) << ".func thread "<< pthread_self() << " on " << op << endl;
       func(u, op);
     }
-	tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " exiting" << endl;
-	return 0;
+    tpdout(DBLVL) << ".do_ops thread " << pthread_self() << " exiting" << endl;
+    return 0;
   }
 
 
@@ -79,16 +79,16 @@ class ThreadPool {
   {
     T op;
     q_lock.Lock();
-	{
-	  op = q.front();
-	  q.pop_front();
-	  num_ops--;
-	  
-	  if (prefunc && op) {
-		tpdout(DBLVL) << ".prefunc thread "<< pthread_self() << " on " << op << endl;
-		prefunc(u, op);
-	  }
-	}
+    {
+      op = q.front();
+      q.pop_front();
+      num_ops--;
+      
+      if (prefunc && op) {
+        tpdout(DBLVL) << ".prefunc thread "<< pthread_self() << " on " << op << endl;
+        prefunc(u, op);
+      }
+    }
     q_lock.Unlock();
 
     return op;
@@ -97,30 +97,30 @@ class ThreadPool {
  public:
 
   ThreadPool(char *myname, int howmany, void (*f)(U,T), U obj, void (*pf)(U,T) = 0) :
-	num_ops(0), num_threads(howmany), 
-	thread(num_threads),
-	u(obj),
-	func(f), prefunc(pf), 
-	myname(myname) {
-	tpdout(DBLVL) << ".cons num_threads " << num_threads << endl;
-	
-	// start threads
-	int status;
-	for(int i = 0; i < howmany; i++) {
+    num_ops(0), num_threads(howmany), 
+    thread(num_threads),
+    u(obj),
+    func(f), prefunc(pf), 
+    myname(myname) {
+    tpdout(DBLVL) << ".cons num_threads " << num_threads << endl;
+    
+    // start threads
+    int status;
+    for(int i = 0; i < howmany; i++) {
       status = pthread_create(&thread[i], NULL, (void*(*)(void *))&ThreadPool::foo, this);
-	  assert(status == 0);
+      assert(status == 0);
     }
   }
   
   ~ThreadPool() {
-	// bump sem to make threads exit cleanly
-	for(int i = 0; i < num_threads; i++) 
-	  q_sem.Put();
-	
-	// wait for them to die
+    // bump sem to make threads exit cleanly
+    for(int i = 0; i < num_threads; i++) 
+      q_sem.Put();
+    
+    // wait for them to die
     for(int i = 0; i < num_threads; i++) {
       tpdout(DBLVL) << ".des joining thread " << thread[i] << endl;
-	  void *rval = 0;  // we don't actually care
+      void *rval = 0;  // we don't actually care
       pthread_join(thread[i], &rval);
     }
   }

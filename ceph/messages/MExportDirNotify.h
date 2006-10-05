@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,73 +38,73 @@ class MExportDirNotify : public Message {
 
   MExportDirNotify() {}
   MExportDirNotify(inodeno_t ino, int old_auth, int new_auth) :
-	Message(MSG_MDS_EXPORTDIRNOTIFY) {
-	this->ino = ino;
-	this->old_auth = old_auth;
-	this->new_auth = new_auth;
+    Message(MSG_MDS_EXPORTDIRNOTIFY) {
+    this->ino = ino;
+    this->old_auth = old_auth;
+    this->new_auth = new_auth;
   }
   virtual char *get_type_name() { return "ExNot"; }
   
   void copy_subdirs(list<inodeno_t>& s) {
-	this->subdirs = s;
+    this->subdirs = s;
   }
   void copy_exports(list<inodeno_t>& ex) {
-	this->exports = ex;
+    this->exports = ex;
   }
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(int), (char*)&new_auth);
-	off += sizeof(int);
-	s.copy(off, sizeof(int), (char*)&old_auth);
-	off += sizeof(int);
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
+    s.copy(off, sizeof(int), (char*)&new_auth);
+    off += sizeof(int);
+    s.copy(off, sizeof(int), (char*)&old_auth);
+    off += sizeof(int);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
 
-	// notify
-	int n;
-	s.copy(off, sizeof(int), (char*)&n);
-	off += sizeof(int);
-	for (int i=0; i<n; i++) {
-	  inodeno_t ino;
-	  s.copy(off, sizeof(ino), (char*)&ino);
-	  exports.push_back(ino);
-	  off += sizeof(inodeno_t);
-	}
-	
-	// subdirs
-	s.copy(off, sizeof(int), (char*)&n);
-	off += sizeof(int);
-	for (int i=0; i<n; i++) {
-	  inodeno_t ino;
-	  s.copy(off, sizeof(ino), (char*)&ino);
-	  subdirs.push_back(ino);
-	  off += sizeof(inodeno_t);
-	}
+    // notify
+    int n;
+    s.copy(off, sizeof(int), (char*)&n);
+    off += sizeof(int);
+    for (int i=0; i<n; i++) {
+      inodeno_t ino;
+      s.copy(off, sizeof(ino), (char*)&ino);
+      exports.push_back(ino);
+      off += sizeof(inodeno_t);
+    }
+    
+    // subdirs
+    s.copy(off, sizeof(int), (char*)&n);
+    off += sizeof(int);
+    for (int i=0; i<n; i++) {
+      inodeno_t ino;
+      s.copy(off, sizeof(ino), (char*)&ino);
+      subdirs.push_back(ino);
+      off += sizeof(inodeno_t);
+    }
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&new_auth, sizeof(int));
-	s.append((char*)&old_auth, sizeof(int));
-	s.append((char*)&ino, sizeof(ino));
+    s.append((char*)&new_auth, sizeof(int));
+    s.append((char*)&old_auth, sizeof(int));
+    s.append((char*)&ino, sizeof(ino));
 
-	// notify
-	int n = exports.size();
-	s.append((char*)&n, sizeof(int));
-	for (list<inodeno_t>::iterator it = exports.begin();
-		 it != exports.end();
-		 it++) {
-	  inodeno_t ino = *it;
-	  s.append((char*)&ino, sizeof(ino));
-	}
+    // notify
+    int n = exports.size();
+    s.append((char*)&n, sizeof(int));
+    for (list<inodeno_t>::iterator it = exports.begin();
+         it != exports.end();
+         it++) {
+      inodeno_t ino = *it;
+      s.append((char*)&ino, sizeof(ino));
+    }
 
-	// subdirs
-	n = subdirs.size();
-	s.append((char*)&n, sizeof(int));
-	for (list<inodeno_t>::iterator it = subdirs.begin();
-		 it != subdirs.end();
-		 it++) {
-	  inodeno_t ino = *it;
-	  s.append((char*)&ino, sizeof(ino));
-	}
+    // subdirs
+    n = subdirs.size();
+    s.append((char*)&n, sizeof(int));
+    for (list<inodeno_t>::iterator it = subdirs.begin();
+         it != subdirs.end();
+         it++) {
+      inodeno_t ino = *it;
+      s.append((char*)&ino, sizeof(ino));
+    }
   }
 };
 

@@ -13,11 +13,11 @@ class Pinger : public Dispatcher {
 public:
   Messenger *messenger;
   Pinger(Messenger *m) : messenger(m) {
-	m->set_dispatcher(this);
+    m->set_dispatcher(this);
   }
   void dispatch(Message *m) {
-	//dout(1) << "got incoming " << m << endl;
-	delete m;
+    //dout(1) << "got incoming " << m << endl;
+    delete m;
 
   }
 };
@@ -34,14 +34,14 @@ int main(int argc, char **argv) {
 
   //while (1) {
   for (int i=0; i<10000; i++) {
-	
-	// ping random nodes
-	int d = rand() % world;
-	if (d != myrank) {
-	  //cout << "sending " << i << " to " << d << endl;
-	  p->messenger->send_message(new MPing(), d);
-	 }
-	
+    
+    // ping random nodes
+    int d = rand() % world;
+    if (d != myrank) {
+      //cout << "sending " << i << " to " << d << endl;
+      p->messenger->send_message(new MPing(), d);
+     }
+    
   }
 
 

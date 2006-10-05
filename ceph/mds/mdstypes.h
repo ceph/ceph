@@ -28,36 +28,36 @@ class meta_load_t {
   DecayCounter pop[META_NPOP];
 
   double meta_load() {
-	return pop[META_POP_IRD].get() + 2*pop[META_POP_IWR].get();
+    return pop[META_POP_IRD].get() + 2*pop[META_POP_IWR].get();
   }
 
   void take(meta_load_t& other) {
-	for (int i=0; i<META_NPOP; i++) {
-	  pop[i] = other.pop[i];
-	  other.pop[i].reset();
-	}
+    for (int i=0; i<META_NPOP; i++) {
+      pop[i] = other.pop[i];
+      other.pop[i].reset();
+    }
   }
 };
 
 inline ostream& operator<<( ostream& out, meta_load_t& load )
 {
   return out << "metaload<rd " << load.pop[META_POP_IRD].get()
-			 << ", wr " << load.pop[META_POP_IWR].get()
-			 << ">";
+             << ", wr " << load.pop[META_POP_IWR].get()
+             << ">";
 }
 
 
 inline meta_load_t& operator-=(meta_load_t& l, meta_load_t& r)
 {
   for (int i=0; i<META_NPOP; i++)
-	l.pop[i].adjust(- r.pop[i].get());
+    l.pop[i].adjust(- r.pop[i].get());
   return l;
 }
 
 inline meta_load_t& operator+=(meta_load_t& l, meta_load_t& r)
 {
   for (int i=0; i<META_NPOP; i++)
-	l.pop[i].adjust(r.pop[i].get());
+    l.pop[i].adjust(r.pop[i].get());
   return l;
 }
 
@@ -84,20 +84,20 @@ class mds_load_t {
   double queue_len;
 
   mds_load_t() : 
-	req_rate(0), cache_hit_rate(0), queue_len(0) { }	
+    req_rate(0), cache_hit_rate(0), queue_len(0) { }    
 
   double mds_load() {
-	switch(g_conf.mds_bal_mode) {
-	case 0: 
-	  return root.meta_load()
-		+ req_rate
-		+ 10.0*queue_len;
+    switch(g_conf.mds_bal_mode) {
+    case 0: 
+      return root.meta_load()
+        + req_rate
+        + 10.0*queue_len;
 
-	case 1:
-	  return req_rate + 10.0*queue_len;
-	}
-	assert(0);
-	return 0;
+    case 1:
+      return req_rate + 10.0*queue_len;
+    }
+    assert(0);
+    return 0;
   }
 
 };
@@ -106,10 +106,10 @@ class mds_load_t {
 inline ostream& operator<<( ostream& out, mds_load_t& load )
 {
   return out << "mdsload<" << load.root
-			 << ", req " << load.req_rate 
-			 << ", hr " << load.cache_hit_rate
-			 << ", qlen " << load.queue_len
-			 << ">";
+             << ", req " << load.req_rate 
+             << ", hr " << load.cache_hit_rate
+             << ", qlen " << load.queue_len
+             << ">";
 }
 
 /*

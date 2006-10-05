@@ -18,19 +18,19 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv)
   memset(&nsaddr, 0, sizeof(nsaddr));
   
   if (mpi_rank == 0) {
-	// i am root.
-	rank.my_rank = 0;  
-	rank.start_rank(nsaddr);
-	nsaddr = rank.get_listen_addr();
+    // i am root.
+    rank.my_rank = 0;  
+    rank.start_rank(nsaddr);
+    nsaddr = rank.get_listen_addr();
   }
 
   int r = MPI_Bcast(&nsaddr, sizeof(nsaddr), MPI_CHAR,
-					0, MPI_COMM_WORLD);
+                    0, MPI_COMM_WORLD);
 
   dout(30) << "r = " << r << " ns tcpaddr is " << nsaddr << endl;
 
   if (mpi_rank != 0) {
-	rank.start_rank(nsaddr);
+    rank.start_rank(nsaddr);
   }
 
   MPI_Barrier(MPI_COMM_WORLD);

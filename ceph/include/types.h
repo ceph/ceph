@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,10 +26,14 @@ extern "C" {
 #include <map>
 #include <vector>
 #include <iostream>
+#include <iomanip>
 using namespace std;
 
 #include <ext/rope>
 using namespace __gnu_cxx;
+
+
+#include "object.h"
 
 
 #ifndef MIN
@@ -77,18 +81,11 @@ using namespace __gnu_cxx;
 */
 
 namespace __gnu_cxx {
-  template<> struct hash<unsigned long long> {
-	size_t operator()(unsigned long long __x) const { 
-	  static hash<unsigned long> H;
-	  return H((__x >> 32) ^ (__x & 0xffffffff)); 
-	}
-  };
-  
   template<> struct hash< std::string >
   {
     size_t operator()( const std::string& x ) const
     {
-	  static hash<const char*> H;
+      static hash<const char*> H;
       return H(x.c_str());
     }
   };
@@ -160,10 +157,10 @@ struct FileLayout {
 
   FileLayout() { }
   FileLayout(int ss, int sc, int os, int nr=2, int o=-1) :
-	object_layout(o < 0 ? OBJECT_LAYOUT_DEFAULT:OBJECT_LAYOUT_STARTOSD),
-	stripe_size(ss), stripe_count(sc), object_size(os), 
-	osd(o),
-	num_rep(nr) { }
+    object_layout(o < 0 ? OBJECT_LAYOUT_DEFAULT:OBJECT_LAYOUT_STARTOSD),
+    stripe_size(ss), stripe_count(sc), object_size(os), 
+    osd(o),
+    num_rep(nr) { }
 
 };
 
@@ -248,8 +245,8 @@ inline ostream& operator<<(ostream& out, lame128_t& oid) {
 
 
 // osd types
-typedef __uint64_t ps_t;          // placement seed
-typedef __uint64_t pg_t;          // placement group
+typedef __uint32_t ps_t;          // placement seed
+typedef __uint32_t pg_t;          // placement group
 typedef __uint64_t coll_t;        // collection id
 typedef __uint64_t epoch_t;       // map epoch
 typedef __uint64_t tid_t;         // transaction id
@@ -295,10 +292,11 @@ struct object_t {
   snapv_t    snap_first; // 16 bits
 };
 #else
-typedef __uint64_t object_t;      // object id
+//typedef __uint64_t object_t;      // object id
+
 #endif
 
-#define PG_NONE    0xffffffffffffffffLL
+#define PG_NONE    0xffffffffL
 
 
 typedef __uint16_t snapv_t;       // snapshot version
@@ -313,17 +311,17 @@ public:
   epoch_t    current_epoch;             // most recent epoch
   epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
   OSDSuperblock(__uint64_t f=0, int w=0) : 
-	magic(MAGIC), fsid(f), whoami(w), 
-	current_epoch(0), oldest_map(0), newest_map(0) {}
+    magic(MAGIC), fsid(f), whoami(w), 
+    current_epoch(0), oldest_map(0), newest_map(0) {}
 };
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 {
   return out << "sb(fsid " << sb.fsid
-			 << " osd" << sb.whoami
-			 << " e" << sb.current_epoch
-			 << " [" << sb.oldest_map << "," << sb.newest_map
-			 << "])";
+             << " osd" << sb.whoami
+             << " e" << sb.current_epoch
+             << " [" << sb.oldest_map << "," << sb.newest_map
+             << "])";
 }
 
 class MonSuperblock {
@@ -334,7 +332,7 @@ public:
   int        whoami;  // mon #
   epoch_t    current_epoch;
   MonSuperblock(__uint64_t f=0, int w=0) :
-	magic(MAGIC), fsid(f), whoami(w), current_epoch(0) {}
+    magic(MAGIC), fsid(f), whoami(w), current_epoch(0) {}
 };
 
 
@@ -348,15 +346,16 @@ class ObjectExtent {
   size_t      length;    // in object
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent(object_t o=0, off_t s=0, size_t l=0) : oid(o), start(s), length(l) { }
+  ObjectExtent() : pgid(0), start(0), length(0) {}
+  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), pgid(0), start(s), length(l) { }
 };
 
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
-			 << hex << ex.oid << " in " << ex.pgid << dec
-			 << " " << ex.start << "~" << ex.length
-			 << ")";
+             << hex << ex.oid << " in " << ex.pgid << dec
+             << " " << ex.start << "~" << ex.length
+             << ")";
 }
 
 
@@ -379,8 +378,8 @@ template<class A>
 inline ostream& operator<<(ostream& out, vector<A>& v) {
   out << "[";
   for (unsigned i=0; i<v.size(); i++) {
-	if (i) out << ",";
-	out << v[i];
+    if (i) out << ",";
+    out << v[i];
   }
   out << "]";
   return out;
@@ -389,10 +388,10 @@ inline ostream& operator<<(ostream& out, vector<A>& v) {
 template<class A>
 inline ostream& operator<<(ostream& out, const set<A>& iset) {
   for (typename set<A>::const_iterator it = iset.begin();
-	   it != iset.end();
-	   it++) {
-	if (it != iset.begin()) out << ",";
-	out << *it;
+       it != iset.end();
+       it++) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
   }
   return out;
 }
@@ -400,10 +399,10 @@ inline ostream& operator<<(ostream& out, const set<A>& iset) {
 template<class A>
 inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
   for (typename multiset<A>::const_iterator it = iset.begin();
-	   it != iset.end();
-	   it++) {
-	if (it != iset.begin()) out << ",";
-	out << *it;
+       it != iset.end();
+       it++) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
   }
   return out;
 }
@@ -413,10 +412,10 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
 {
   out << "{";
   for (typename map<A,B>::const_iterator it = m.begin();
-	   it != m.end();
-	   it++) {
-	if (it != m.begin()) out << ",";
-	out << it->first << "=" << it->second;
+       it != m.end();
+       it++) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
   }
   out << "}";
   return out;
@@ -444,11 +443,11 @@ inline void _rope(set<int>& s, crope& r)
   int n = s.size();
   r.append((char*)&n, sizeof(n));
   for (set<int>::iterator it = s.begin();
-	   it != s.end();
-	   it++) {
-	int v = *it;
-	r.append((char*)&v, sizeof(v));
-	n--;
+       it != s.end();
+       it++) {
+    int v = *it;
+    r.append((char*)&v, sizeof(v));
+    n--;
   }
   assert(n==0);
 }
@@ -459,10 +458,10 @@ inline void _unrope(set<int>& s, crope& r, int& off)
   r.copy(off, sizeof(n), (char*)&n);
   off += sizeof(n);
   for (int i=0; i<n; i++) {
-	int v;
-	r.copy(off, sizeof(v), (char*)&v);
-	off += sizeof(v);
-	s.insert(v);
+    int v;
+    r.copy(off, sizeof(v), (char*)&v);
+    off += sizeof(v);
+    s.insert(v);
   }
   assert(s.size() == (unsigned)n);
 }

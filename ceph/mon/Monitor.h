@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,19 +15,14 @@
 #ifndef __MONITOR_H
 #define __MONITOR_H
 
-#include <time.h>
-
-#include <map>
-#include <set>
-using namespace std;
-
 #include "include/types.h"
 #include "msg/Messenger.h"
 
-#include "osd/OSDMap.h"
-
+#include "MonMap.h"
 #include "Elector.h"
 
+class OSDMonitor;
+class MDSMonitor;
 
 class Monitor : public Dispatcher {
 protected:
@@ -36,59 +31,44 @@ protected:
   Messenger *messenger;
   Mutex lock;
 
+  MonMap *monmap;
+
   // elector
   Elector elector;
   friend class Elector;
 
-  // maps
-  OSDMap *osdmap;
-  map<epoch_t, bufferlist> maps;
-  map<epoch_t, bufferlist> inc_maps;
+  // monitor state
+  const static int STATE_STARTING = 0;
+  const static int STATE_LEADER = 1;
+  const static int STATE_PEON =   2;
+  int state;
 
-  OSDMap::Incremental pending;
+  // my public services
+  OSDMonitor *osdmon;
+  MDSMonitor *mdsmon;
 
-  map<epoch_t, map<msg_addr_t, epoch_t> > awaiting_map;
+  // messages
+  void handle_shutdown(Message *m);
+  void handle_ping_ack(class MPingAck *m);
 
-  // osd down -> out
-  map<int,utime_t>  pending_out;
-
-  
-  // maps
-  void accept_pending();   // accept pending, new map.
-  void send_map();         // send current map to waiters.
-  void send_full_map(msg_addr_t dest);
-  void send_incremental_map(epoch_t since, msg_addr_t dest);
-  void bcast_latest_osd_map_mds();
-  void bcast_latest_osd_map_osd();
+  friend class OSDMonitor;
+  friend class MDSMonitor;
 
  public:
-  Monitor(int w, Messenger *m) : 
-	whoami(w),
-	messenger(m),
-	elector(this, w),
-	osdmap(0) {
+  Monitor(int w, MonMap *mm, Messenger *m) : 
+    whoami(w), 
+    messenger(m),
+    monmap(mm),
+    elector(this, w),
+    state(STATE_STARTING),
+    osdmon(0),
+    mdsmon(0)
+  {
   }
 
   void init();
-
   void dispatch(Message *m);
-  void handle_shutdown(Message *m);
-
-  void handle_osd_boot(class MOSDBoot *m);
-  void handle_osd_in(class MOSDIn *m);
-  void handle_osd_out(class MOSDOut *m);
-  void handle_osd_failure(class MOSDFailure *m);
-  void handle_osd_getmap(class MOSDGetMap *m);
-
-  void handle_ping_ack(class MPingAck *m);
-  
-  void tick();  // check state, take actions
-
-
-  // hack
-  void fake_osd_failure(int osd, bool down);
-  void fake_osdmap_update();
-  void fake_reorg();
+  void tick();
 
 };
 

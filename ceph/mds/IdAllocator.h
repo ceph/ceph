@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -48,14 +48,14 @@ class IdAllocator {
   bool is_opening() { return opening; }
 
   bool is_dirty(int type, idno_t id) {
-	return dirty[type].count(id) ? true:false;
+    return dirty[type].count(id) ? true:false;
   }
 
   void reset();
   void save(Context *onfinish=0);
 
   void shutdown() {
-	if (is_open()) save(0);
+    if (is_open()) save(0);
   }
 
   void load(Context *onfinish);

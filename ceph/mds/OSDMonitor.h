@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -57,9 +57,9 @@ class OSDMonitor : public Dispatcher {
 
  public:
   OSDMonitor(int w, Messenger *m) : 
-	whoami(w),
-	messenger(m),
-	osdmap(0) {
+    whoami(w),
+    messenger(m),
+    osdmap(0) {
   }
 
   void init();

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -56,11 +56,11 @@ inline bool operator!=(const reqid_t& l, const reqid_t& r) {
 
 namespace __gnu_cxx {
   template<> struct hash<reqid_t> {
-	size_t operator()(const reqid_t &r) const { 
-	  static hash<unsigned long> H;
-	  static hash<__uint64_t>    I;
-	  return H(r.addr._addr) ^ I(r.tid);
-	}
+    size_t operator()(const reqid_t &r) const { 
+      static hash<unsigned long> H;
+      static hash<__uint64_t>    I;
+      return H(r.addr._addr) ^ I(r.tid);
+    }
   };
 }
 
@@ -81,28 +81,28 @@ public:
    *    otherwise, we have no idea what the pg is supposed to contain.
    */
   struct Info {
-	pg_t pgid;
-	eversion_t last_update;    // last object version applied to store.
-	eversion_t last_complete;  // last version pg was complete through.
+    pg_t pgid;
+    eversion_t last_update;    // last object version applied to store.
+    eversion_t last_complete;  // last version pg was complete through.
 
-	eversion_t log_bottom;     // oldest log entry.
-	bool       log_backlog;    // do we store a complete log?
+    eversion_t log_bottom;     // oldest log entry.
+    bool       log_backlog;    // do we store a complete log?
 
-	epoch_t last_epoch_started;  // last epoch started.
-	epoch_t last_epoch_finished; // last epoch finished.
+    epoch_t last_epoch_started;  // last epoch started.
+    epoch_t last_epoch_finished; // last epoch finished.
 
-	struct History {
-	  epoch_t same_since;          // same acting set since
-	  epoch_t same_primary_since;  // same primary at least back through this epoch.
-	  epoch_t same_acker_since;    // same acker at least back through this epoch.
-	  History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
-	} history;
-	
-	Info(pg_t p=0) : pgid(p), 
-					 log_backlog(false),
-					 last_epoch_started(0), last_epoch_finished(0) {}
-	bool is_clean() const { return last_update == last_complete; }
-	bool is_empty() const { return last_update.version == 0; }
+    struct History {
+      epoch_t same_since;          // same acting set since
+      epoch_t same_primary_since;  // same primary at least back through this epoch.
+      epoch_t same_acker_since;    // same acker at least back through this epoch.
+      History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
+    } history;
+    
+    Info(pg_t p=0) : pgid(p), 
+                     log_backlog(false),
+                     last_epoch_started(0), last_epoch_finished(0) {}
+    bool is_clean() const { return last_update == last_complete; }
+    bool is_empty() const { return last_update.version == 0; }
   };
   
   
@@ -113,20 +113,20 @@ public:
    *   only if type=BACKLOG do we generate a backlog and provide that too.
    */
   struct Query {
-	const static int INFO = 0;
-	const static int LOG = 1;
-	const static int BACKLOG = 2;
-	const static int FULLLOG = 3;
+    const static int INFO = 0;
+    const static int LOG = 1;
+    const static int BACKLOG = 2;
+    const static int FULLLOG = 3;
 
-	int type;
-	eversion_t split, floor;
-	Info::History history;
+    int type;
+    eversion_t split, floor;
+    Info::History history;
 
-	Query() : type(-1) {}
-	Query(int t, Info::History& h) : 
-	  type(t), history(h) { assert(t != LOG); }
-	Query(int t, eversion_t s, eversion_t f, Info::History& h) : 
-	  type(t), split(s), floor(f), history(h) { assert(t == LOG); }
+    Query() : type(-1) {}
+    Query(int t, Info::History& h) : 
+      type(t), history(h) { assert(t != LOG); }
+    Query(int t, eversion_t s, eversion_t f, Info::History& h) : 
+      type(t), split(s), floor(f), history(h) { assert(t == LOG); }
   };
   
   
@@ -137,66 +137,66 @@ public:
    */
   class Missing {
   public:
-	map<object_t, eversion_t> missing;   // oid -> v
-	map<eversion_t, object_t> rmissing;  // v -> oid
+    map<object_t, eversion_t> missing;   // oid -> v
+    map<eversion_t, object_t> rmissing;  // v -> oid
 
-	map<object_t, int>       loc;       // where i think i can get them.
+    map<object_t, int>       loc;       // where i think i can get them.
 
-	int num_lost() const { return missing.size() - loc.size(); }
-	int num_missing() const { return missing.size(); }
+    int num_lost() const { return missing.size() - loc.size(); }
+    int num_missing() const { return missing.size(); }
 
-	bool is_missing(object_t oid) {
-	  return missing.count(oid);
-	}
-	bool is_missing(object_t oid, eversion_t v) {
-	  return missing.count(oid) && missing[oid] <= v;
-	}
-	void add(object_t oid) {
-	  eversion_t z;
-	  add(oid,z);
-	}
-	void add(object_t oid, eversion_t v) {
-	  if (missing.count(oid)) {
-		if (missing[oid] > v) return;   // already missing newer.
-		rmissing.erase(missing[oid]);
-	  }
-	  missing[oid] = v;
-	  rmissing[v] = oid;
-	}
-	void rm(object_t oid, eversion_t when) {
-	  if (missing.count(oid) && missing[oid] < when) {
-		rmissing.erase(missing[oid]);
-		missing.erase(oid);
-		loc.erase(oid);
-	  }		
-	}
-	void got(object_t oid, eversion_t v) {
-	  assert(missing.count(oid));
-	  assert(missing[oid] <= v);
-	  loc.erase(oid);
-	  rmissing.erase(missing[oid]);
-	  missing.erase(oid);
-	}
-	void got(object_t oid) {
-	  assert(missing.count(oid));
-	  loc.erase(oid);
-	  rmissing.erase(missing[oid]);
-	  missing.erase(oid);
-	}
+    bool is_missing(object_t oid) {
+      return missing.count(oid);
+    }
+    bool is_missing(object_t oid, eversion_t v) {
+      return missing.count(oid) && missing[oid] <= v;
+    }
+    void add(object_t oid) {
+      eversion_t z;
+      add(oid,z);
+    }
+    void add(object_t oid, eversion_t v) {
+      if (missing.count(oid)) {
+        if (missing[oid] > v) return;   // already missing newer.
+        rmissing.erase(missing[oid]);
+      }
+      missing[oid] = v;
+      rmissing[v] = oid;
+    }
+    void rm(object_t oid, eversion_t when) {
+      if (missing.count(oid) && missing[oid] < when) {
+        rmissing.erase(missing[oid]);
+        missing.erase(oid);
+        loc.erase(oid);
+      }        
+    }
+    void got(object_t oid, eversion_t v) {
+      assert(missing.count(oid));
+      assert(missing[oid] <= v);
+      loc.erase(oid);
+      rmissing.erase(missing[oid]);
+      missing.erase(oid);
+    }
+    void got(object_t oid) {
+      assert(missing.count(oid));
+      loc.erase(oid);
+      rmissing.erase(missing[oid]);
+      missing.erase(oid);
+    }
 
-	void _encode(bufferlist& blist) {
-	  ::_encode(missing, blist);
-	  ::_encode(loc, blist);
-	}
-	void _decode(bufferlist& blist, int& off) {
-	  ::_decode(missing, blist, off);
-	  ::_decode(loc, blist, off);
+    void _encode(bufferlist& blist) {
+      ::_encode(missing, blist);
+      ::_encode(loc, blist);
+    }
+    void _decode(bufferlist& blist, int& off) {
+      ::_decode(missing, blist, off);
+      ::_decode(loc, blist, off);
 
-	  for (map<object_t,eversion_t>::iterator it = missing.begin();
-		   it != missing.end();
-		   it++) 
-		rmissing[it->second] = it->first;
-	}
+      for (map<object_t,eversion_t>::iterator it = missing.begin();
+           it != missing.end();
+           it++) 
+        rmissing[it->second] = it->first;
+    }
   };
 
 
@@ -211,81 +211,81 @@ public:
    */
   class Log {
   public:
-	/** top, bottom
-	 *    top - newest entry (update|delete)
-	 * bottom - entry previous to oldest (update|delete) for which we have
-	 *          complete negative information.  
-	 * i.e. we can infer pg contents for any store whose last_update >= bottom.
-	 */
-	eversion_t top;       // newest entry (update|delete)
-	eversion_t bottom;    // version prior to oldest (update|delete) 
+    /** top, bottom
+     *    top - newest entry (update|delete)
+     * bottom - entry previous to oldest (update|delete) for which we have
+     *          complete negative information.  
+     * i.e. we can infer pg contents for any store whose last_update >= bottom.
+     */
+    eversion_t top;       // newest entry (update|delete)
+    eversion_t bottom;    // version prior to oldest (update|delete) 
 
-	/** backlog - true if log is a complete summary of pg contents.  
-	 * updated will include all items in pg, but deleted will not include
-	 * negative entries for items deleted prior to 'bottom'.
-	 */
-	bool      backlog;
-	
-	/** Entry
-	 * mapped from the eversion_t, so don't include that.
-	 */
-	class Entry {
-	public:
-	  const static int LOST = 0;
-	  const static int UPDATE = 1;
-	  const static int DELETE = 2;
+    /** backlog - true if log is a complete summary of pg contents.  
+     * updated will include all items in pg, but deleted will not include
+     * negative entries for items deleted prior to 'bottom'.
+     */
+    bool      backlog;
+    
+    /** Entry
+     * mapped from the eversion_t, so don't include that.
+     */
+    class Entry {
+    public:
+      const static int LOST = 0;
+      const static int UPDATE = 1;
+      const static int DELETE = 2;
 
-	  int        op;   // write, zero, trunc, remove
-	  object_t   oid;
-	  eversion_t version;
-	  reqid_t    reqid;  // caller+tid to uniquely identify request
-	  //msg_addr_t who;  // who did this op,
-	  //tid_t      tid;  // and their tid.
+      int        op;   // write, zero, trunc, remove
+      object_t   oid;
+      eversion_t version;
+      reqid_t    reqid;  // caller+tid to uniquely identify request
+      //msg_addr_t who;  // who did this op,
+      //tid_t      tid;  // and their tid.
 
-	  Entry() : op(0), oid(0) {}
-	  Entry(int _op, object_t _oid, const eversion_t& v, 
-			const msg_addr_t& a, tid_t t) : 
-		op(_op), oid(_oid), version(v), reqid(a,t) {}
-	  
-	  bool is_delete() const { return op == DELETE; }
-	  bool is_update() const { return !is_delete(); }
-	};
+      Entry() : op(0) {}
+      Entry(int _op, object_t _oid, const eversion_t& v, 
+            const msg_addr_t& a, tid_t t) : 
+        op(_op), oid(_oid), version(v), reqid(a,t) {}
+      
+      bool is_delete() const { return op == DELETE; }
+      bool is_update() const { return !is_delete(); }
+    };
 
-	list<Entry> log;  // the actual log.
+    list<Entry> log;  // the actual log.
 
-	Log() : backlog(false) {}
+    Log() : backlog(false) {}
 
-	void clear() {
-	  eversion_t z;
-	  top = bottom = z;
-	  backlog = false;
-	  log.clear();
-	}
-	bool empty() const {
-	  return top.version == 0 && top.epoch == 0;
-	}
+    void clear() {
+      eversion_t z;
+      top = bottom = z;
+      backlog = false;
+      log.clear();
+    }
+    bool empty() const {
+      return top.version == 0 && top.epoch == 0;
+    }
 
-	void _encode(bufferlist& blist) const {
-	  blist.append((char*)&top, sizeof(top));
-	  blist.append((char*)&bottom, sizeof(bottom));
-	  blist.append((char*)&backlog, sizeof(backlog));
-	  ::_encode(log, blist);
-	}
-	void _decode(bufferlist& blist, int& off) {
-	  blist.copy(off, sizeof(top), (char*)&top);
-	  off += sizeof(top);
-	  blist.copy(off, sizeof(bottom), (char*)&bottom);
-	  off += sizeof(bottom);
-	  blist.copy(off, sizeof(backlog), (char*)&backlog);
-	  off += sizeof(backlog);
+    void _encode(bufferlist& blist) const {
+      blist.append((char*)&top, sizeof(top));
+      blist.append((char*)&bottom, sizeof(bottom));
+      blist.append((char*)&backlog, sizeof(backlog));
+      ::_encode(log, blist);
+    }
+    void _decode(bufferlist& blist, int& off) {
+      blist.copy(off, sizeof(top), (char*)&top);
+      off += sizeof(top);
+      blist.copy(off, sizeof(bottom), (char*)&bottom);
+      off += sizeof(bottom);
+      blist.copy(off, sizeof(backlog), (char*)&backlog);
+      off += sizeof(backlog);
 
-	  ::_decode(log, blist, off);
-	}
+      ::_decode(log, blist, off);
+    }
 
-	void copy_after(const Log &other, eversion_t v);
-	bool copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor);
-	void copy_non_backlog(const Log &other);
-	ostream& print(ostream& out) const;
+    void copy_after(const Log &other, eversion_t v);
+    bool copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor);
+    void copy_non_backlog(const Log &other);
+    ostream& print(ostream& out) const;
   };
 
   /**
@@ -294,84 +294,84 @@ public:
    */
   class IndexedLog : public Log {
   public:
-	hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
-	hash_set<reqid_t>         caller_ops;
+    hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
+    hash_set<reqid_t>         caller_ops;
 
-	// recovery pointers
-	list<Entry>::iterator requested_to; // not inclusive of referenced item
-	list<Entry>::iterator complete_to;  // not inclusive of referenced item
-	
-	/****/
-	IndexedLog() {}
+    // recovery pointers
+    list<Entry>::iterator requested_to; // not inclusive of referenced item
+    list<Entry>::iterator complete_to;  // not inclusive of referenced item
+    
+    /****/
+    IndexedLog() {}
 
-	void clear() {
-	  assert(0);
-	  unindex();
-	  Log::clear();
-	}
+    void clear() {
+      assert(0);
+      unindex();
+      Log::clear();
+    }
 
-	bool logged_object(object_t oid) {
-	  return objects.count(oid);
-	}
-	bool logged_req(reqid_t &r) {
-	  return caller_ops.count(r);
-	}
+    bool logged_object(object_t oid) {
+      return objects.count(oid);
+    }
+    bool logged_req(reqid_t &r) {
+      return caller_ops.count(r);
+    }
 
-	void index() {
-	  objects.clear();
-	  caller_ops.clear();
-	  for (list<Entry>::iterator i = log.begin();
-		   i != log.end();
-		   i++) {
-		objects[i->oid] = &(*i);
-		caller_ops.insert(i->reqid);
-	  }
-	}
+    void index() {
+      objects.clear();
+      caller_ops.clear();
+      for (list<Entry>::iterator i = log.begin();
+           i != log.end();
+           i++) {
+        objects[i->oid] = &(*i);
+        caller_ops.insert(i->reqid);
+      }
+    }
 
-	void index(Entry& e) {
-	  if (objects.count(e.oid) == 0 || 
-		  objects[e.oid]->version < e.version)
-		objects[e.oid] = &e;
-	  caller_ops.insert(e.reqid);
-	}
-	void unindex() {
-	  objects.clear();
-	  caller_ops.clear();
-	}
-	void unindex(Entry& e) {
-	  // NOTE: this only works if we remove from the _bottom_ of the log!
-	  assert(objects.count(e.oid));
-	  if (objects[e.oid]->version == e.version)
-		objects.erase(e.oid);
-	  caller_ops.erase(e.reqid);
-	}
+    void index(Entry& e) {
+      if (objects.count(e.oid) == 0 || 
+          objects[e.oid]->version < e.version)
+        objects[e.oid] = &e;
+      caller_ops.insert(e.reqid);
+    }
+    void unindex() {
+      objects.clear();
+      caller_ops.clear();
+    }
+    void unindex(Entry& e) {
+      // NOTE: this only works if we remove from the _bottom_ of the log!
+      assert(objects.count(e.oid));
+      if (objects[e.oid]->version == e.version)
+        objects.erase(e.oid);
+      caller_ops.erase(e.reqid);
+    }
 
 
-	// accessors
-	Entry *is_updated(object_t oid) {
-	  if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
-	  return 0;
-	}
-	Entry *is_deleted(object_t oid) {
-	  if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
-	  return 0;
-	}
-	
-	// actors
-	void add(Entry& e) {
-	  // add to log
-	  log.push_back(e);
-	  assert(e.version > top);
-	  assert(top.version == 0 || e.version.version == top.version + 1);
-	  top = e.version;
+    // accessors
+    Entry *is_updated(object_t oid) {
+      if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
+      return 0;
+    }
+    Entry *is_deleted(object_t oid) {
+      if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
+      return 0;
+    }
+    
+    // actors
+    void add(Entry& e) {
+      // add to log
+      log.push_back(e);
+      assert(e.version > top);
+      assert(top.version == 0 || e.version.version == top.version + 1);
+      top = e.version;
 
-	  // to our index
-	  objects[e.oid] = &(log.back());
-	  caller_ops.insert(e.reqid);
-	}
+      // to our index
+      objects[e.oid] = &(log.back());
+      caller_ops.insert(e.reqid);
+    }
 
-	void trim(ObjectStore::Transaction &t, eversion_t s);
-	void trim_write_ahead(eversion_t last_update);
+    void trim(ObjectStore::Transaction &t, eversion_t s);
+    void trim_write_ahead(eversion_t last_update);
   };
   
 
@@ -380,14 +380,14 @@ public:
    */
   class OndiskLog {
   public:
-	// ok
-	off_t bottom;                     // first byte of log. 
-	off_t top;                        // byte following end of log.
-	map<off_t,eversion_t> block_map;  // block -> first stamp logged there
+    // ok
+    off_t bottom;                     // first byte of log. 
+    off_t top;                        // byte following end of log.
+    map<off_t,eversion_t> block_map;  // block -> first stamp logged there
 
-	OndiskLog() : bottom(0), top(0) {}
+    OndiskLog() : bottom(0), top(0) {}
 
-	bool trim_to(eversion_t v, ObjectStore::Transaction& t);
+    bool trim_to(eversion_t v, ObjectStore::Transaction& t);
   };
 
 
@@ -396,43 +396,43 @@ public:
 
   class RepOpGather {
   public:
-	class MOSDOp *op;
-	tid_t rep_tid;
+    class MOSDOp *op;
+    tid_t rep_tid;
 
-	ObjectStore::Transaction t;
-	bool applied;
+    ObjectStore::Transaction t;
+    bool applied;
 
-	set<int>  waitfor_ack;
-	set<int>  waitfor_commit;
-	
-	utime_t   start;
+    set<int>  waitfor_ack;
+    set<int>  waitfor_commit;
+    
+    utime_t   start;
 
-	bool sent_ack, sent_commit;
-	
-	set<int>         osds;
-	eversion_t       new_version;
+    bool sent_ack, sent_commit;
+    
+    set<int>         osds;
+    eversion_t       new_version;
 
-	eversion_t       pg_local_last_complete;
-	map<int,eversion_t> pg_complete_thru;
-	
-	RepOpGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
-	  op(o), rep_tid(rt),
-	  applied(false),
-	  sent_ack(false), sent_commit(false),
-	  new_version(nv), 
-	  pg_local_last_complete(lc) { }
+    eversion_t       pg_local_last_complete;
+    map<int,eversion_t> pg_complete_thru;
+    
+    RepOpGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
+      op(o), rep_tid(rt),
+      applied(false),
+      sent_ack(false), sent_commit(false),
+      new_version(nv), 
+      pg_local_last_complete(lc) { }
 
-	bool can_send_ack() { 
-	  return !sent_ack && !sent_commit &&
-		waitfor_ack.empty(); 
-	}
-	bool can_send_commit() { 
-	  return !sent_commit &&
-		waitfor_ack.empty() && waitfor_commit.empty(); 
-	}
-	bool can_delete() { 
-	  return waitfor_ack.empty() && waitfor_commit.empty(); 
-	}
+    bool can_send_ack() { 
+      return !sent_ack && !sent_commit &&
+        waitfor_ack.empty(); 
+    }
+    bool can_send_commit() { 
+      return !sent_commit &&
+        waitfor_ack.empty() && waitfor_commit.empty(); 
+    }
+    bool can_delete() { 
+      return waitfor_ack.empty() && waitfor_commit.empty(); 
+    }
   };
 
 
@@ -501,7 +501,7 @@ protected:
   // pg waiters
   list<class Message*>            waiting_for_active;
   hash_map<object_t, 
-		   list<class Message*> > waiting_for_missing_object;   
+           list<class Message*> > waiting_for_missing_object;   
   map<eversion_t,class MOSDOp*>   replay_queue;
   
   // recovery
@@ -512,9 +512,9 @@ public:
 
  public:
   bool is_acting(int osd) const { 
-	for (unsigned i=0; i<acting.size(); i++)
-	  if (acting[i] == osd) return true;
-	return false;
+    for (unsigned i=0; i<acting.size(); i++)
+      if (acting[i] == osd) return true;
+    return false;
   }
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
@@ -525,15 +525,15 @@ public:
   void adjust_prior();  // based on new peer_info.last_epoch_started_any
 
   bool adjust_peers_complete_thru() {
-	eversion_t t = info.last_complete;
-	for (unsigned i=1; i<acting.size(); i++) 
-	  if (peer_info[i].last_complete < t)
-		t = peer_info[i].last_complete;
-	if (t > peers_complete_thru) {
-	  peers_complete_thru = t;
-	  return true;
-	}
-	return false;
+    eversion_t t = info.last_complete;
+    for (unsigned i=1; i<acting.size(); i++) 
+      if (peer_info[i].last_complete < t)
+        t = peer_info[i].last_complete;
+    if (t > peers_complete_thru) {
+      peers_complete_thru = t;
+      return true;
+    }
+    return false;
   }
 
   void proc_replica_log(Log &olog, Missing& omissing, int from);
@@ -556,19 +556,19 @@ public:
   void clean_replicas();
 
   off_t get_log_write_pos() {
-	return 0;
+    return 0;
   }
 
  public:  
   PG(OSD *o, pg_t p) : 
-	osd(o), 
-	info(p),
-	role(0),
-	state(0),
-	last_epoch_started_any(0),
-	last_complete_commit(0),
-	peers_complete_thru(0),
-	have_master_log(true)
+    osd(o), 
+    info(p),
+    role(0),
+    state(0),
+    last_epoch_started_any(0),
+    last_complete_commit(0),
+    peers_complete_thru(0),
+    have_master_log(true)
   { }
   
   pg_t       get_pgid() const { return info.pgid; }
@@ -604,7 +604,7 @@ public:
   bool  is_empty() const { return info.last_update == 0; }
 
   int num_active_ops() const {
-	return objects_pulling.size();
+    return objects_pulling.size();
   }
 
 
@@ -614,8 +614,8 @@ public:
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction& t, 
-				  PG::Log::Entry& logentry, 
-				  eversion_t trim_to);
+                  PG::Log::Entry& logentry, 
+                  eversion_t trim_to);
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
@@ -634,23 +634,23 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
 {
   out << "pginfo(" << hex << pgi.pgid << dec;
   if (pgi.is_empty())
-	out << " empty";
+    out << " empty";
   else
-	out << " v " << pgi.last_update << "/" << pgi.last_complete
-		<< " (" << pgi.log_bottom << "," << pgi.last_update << "]"
-		<< (pgi.log_backlog ? "+backlog":"");
+    out << " v " << pgi.last_update << "/" << pgi.last_complete
+        << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
+        << (pgi.log_backlog ? "+backlog":"");
   out << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
-	  << " " << pgi.history
-	  << ")";
+      << " " << pgi.history
+      << ")";
   return out;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 {
   return out << " " << e.version 
-			 << (e.is_update() ? "   ":" - ")
-			 << hex << e.oid << dec 
-			 << " by " << e.reqid;
+             << (e.is_update() ? "   ":" - ")
+             << hex << e.oid << dec 
+             << " by " << e.reqid;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
@@ -671,24 +671,24 @@ inline ostream& operator<<(ostream& out, const PG::Missing& missing)
 inline ostream& operator<<(ostream& out, const PG& pg)
 {
   out << "pg[" << pg.info 
-	  << " r=" << pg.get_role();
+      << " r=" << pg.get_role();
 
   if (pg.log.bottom != pg.info.log_bottom)
-	out << " (info mismatch, " << pg.log << ")";
+    out << " (info mismatch, " << pg.log << ")";
 
   if (pg.log.log.empty()) {
-	// shoudl it be?
-	if (pg.log.top.version - pg.log.bottom.version != 0) {
-	  out << " (log bound mismatch, empty)";
-	}
+    // shoudl it be?
+    if (pg.log.top.version - pg.log.bottom.version != 0) {
+      out << " (log bound mismatch, empty)";
+    }
   } else {
-	if (((pg.log.log.begin()->version.version - 1 != pg.log.bottom.version) &&
-		 !pg.log.backlog) ||
-		(pg.log.log.rbegin()->version.version != pg.log.top.version)) {
-	  out << " (log bound mismatch, actual=["
-		  << pg.log.log.begin()->version << ","
-		  << pg.log.log.rbegin()->version << "])";
-	}
+    if (((pg.log.log.begin()->version.version - 1 != pg.log.bottom.version) &&
+         !pg.log.backlog) ||
+        (pg.log.log.rbegin()->version.version != pg.log.top.version)) {
+      out << " (log bound mismatch, actual=["
+          << pg.log.log.begin()->version << ","
+          << pg.log.log.rbegin()->version << "])";
+    }
   }
 
   if (pg.get_role() == 0) out << " pct " << pg.peers_complete_thru;
@@ -711,8 +711,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 inline ostream& operator<<(ostream& out, PG::RepOpGather& repop)
 {
   out << "repop(" << &repop << " rep_tid=" << repop.rep_tid 
-	  << " wfack=" << repop.waitfor_ack
-	  << " wfcommit=" << repop.waitfor_commit;
+      << " wfack=" << repop.waitfor_ack
+      << " wfcommit=" << repop.waitfor_commit;
   out << " pct=" << repop.pg_complete_thru;
   out << " op=" << *(repop.op);
   out << " repop=" << &repop;

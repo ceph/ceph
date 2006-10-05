@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -37,50 +37,50 @@ class Cond
 
   Cond() {
     int r = pthread_cond_init(&C,NULL);
-	assert(r == 0);
+    assert(r == 0);
   }
 
   virtual ~Cond() { 
-	pthread_cond_destroy(&C); 
+    pthread_cond_destroy(&C); 
   }
 
   int Wait(Mutex &mutex)  { 
-	int r = pthread_cond_wait(&C, &mutex.M);
-	return r;
+    int r = pthread_cond_wait(&C, &mutex.M);
+    return r;
   }
 
   int Wait(Mutex &mutex, char* s)  { 
-	cout << "Wait: " << s << endl;
-	int r = pthread_cond_wait(&C, &mutex.M);
-	return r;
+    cout << "Wait: " << s << endl;
+    int r = pthread_cond_wait(&C, &mutex.M);
+    return r;
   }
 
   int WaitUntil(Mutex &mutex, utime_t when) {
-	struct timespec ts;
-	g_clock.make_timespec(when, &ts);
-	//cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
-	int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
-	return r;
+    struct timespec ts;
+    g_clock.make_timespec(when, &ts);
+    //cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
+    int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
+    return r;
   }
   int WaitInterval(Mutex &mutex, utime_t interval) {
-	utime_t when = g_clock.now();
-	when += interval;
-	return WaitUntil(mutex, when);
+    utime_t when = g_clock.now();
+    when += interval;
+    return WaitUntil(mutex, when);
   }
 
   int Signal() { 
-	//int r = pthread_cond_signal(&C);
-	int r = pthread_cond_broadcast(&C);
-	return r;
+    //int r = pthread_cond_signal(&C);
+    int r = pthread_cond_broadcast(&C);
+    return r;
   }
   int SignalOne() { 
-	int r = pthread_cond_signal(&C);
-	return r;
+    int r = pthread_cond_signal(&C);
+    return r;
   }
   int SignalAll() { 
-	//int r = pthread_cond_signal(&C);
-	int r = pthread_cond_broadcast(&C);
-	return r;
+    //int r = pthread_cond_signal(&C);
+    int r = pthread_cond_broadcast(&C);
+    return r;
   }
 };
 
@@ -90,12 +90,12 @@ class C_Cond : public Context {
   int *rval;
 public:
   C_Cond(Cond *c, bool *d, int *r=0) : cond(c), done(d), rval(r) {
-	*done = false;
+    *done = false;
   }
   void finish(int r) {
-	if (rval) *rval = r;
-	*done = true;
-	cond->Signal();
+    if (rval) *rval = r;
+    *done = true;
+    cond->Signal();
   }
 };
 
@@ -106,14 +106,14 @@ class C_SafeCond : public Context {
   int *rval;
 public:
   C_SafeCond(Mutex *l, Cond *c, bool *d, int *r=0) : lock(l), cond(c), done(d), rval(r) {
-	*done = false;
+    *done = false;
   }
   void finish(int r) {
-	lock->Lock();
-	if (rval) *rval = r;
-	*done = true;
-	cond->Signal();
-	lock->Unlock();
+    lock->Lock();
+    if (rval) *rval = r;
+    *done = true;
+    cond->Signal();
+    lock->Unlock();
   }
 };
 

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,23 +25,23 @@ class RWLock
   public:
 
   RWLock() {
-	pthread_rwlock_init(&L, NULL);
+    pthread_rwlock_init(&L, NULL);
   }
 
   virtual ~RWLock() {
-	pthread_rwlock_unlock(&L);
-	pthread_rwlock_destroy(&L);
+    pthread_rwlock_unlock(&L);
+    pthread_rwlock_destroy(&L);
   }
 
   void unlock() {
-	pthread_rwlock_unlock(&L);
+    pthread_rwlock_unlock(&L);
   }
   void get_read() {
-	pthread_rwlock_rdlock(&L);	
+    pthread_rwlock_rdlock(&L);    
   }
   void put_read() { unlock(); }
   void get_write() {
-	pthread_rwlock_wrlock(&L);
+    pthread_rwlock_wrlock(&L);
   }
   void put_write() { unlock(); }
 };

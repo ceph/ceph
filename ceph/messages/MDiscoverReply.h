@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -84,9 +84,9 @@ class MDiscoverReply : public Message {
   int       get_num_dirs() { return dirs.size(); }
 
   int       get_depth() {   // return depth of deepest object (in dir/dentry/inode units)
-	return max( inodes.size(),                                 // at least this many
-		   max( no_base_dentry + path.depth() + flag_error_dn, // inode start + path + possible error
-				dirs.size() + no_base_dir ));                  // dn/inode + dirs
+    return max( inodes.size(),                                 // at least this many
+           max( no_base_dentry + path.depth() + flag_error_dn, // inode start + path + possible error
+                dirs.size() + no_base_dir ));                  // dn/inode + dirs
   }
 
   bool      has_base_dir() { return !no_base_dir && dirs.size(); }
@@ -96,7 +96,7 @@ class MDiscoverReply : public Message {
       assert(no_base_dir && no_base_dentry);
       return true;
     }
-	return false;
+    return false;
   }
   const string& get_path() { return path.get_path(); }
   bool get_path_xlock(int i) { return path_xlock[i]; }
@@ -116,40 +116,40 @@ class MDiscoverReply : public Message {
   // cons
   MDiscoverReply() {}
   MDiscoverReply(inodeno_t base_ino) :
-	Message(MSG_MDS_DISCOVERREPLY) {
-	this->base_ino = base_ino;
-	flag_error_dn = false;
-	flag_error_dir = false;
-	no_base_dir = no_base_dentry = false;
+    Message(MSG_MDS_DISCOVERREPLY) {
+    this->base_ino = base_ino;
+    flag_error_dn = false;
+    flag_error_dir = false;
+    no_base_dir = no_base_dentry = false;
   }
   ~MDiscoverReply() {
-	for (vector<CDirDiscover*>::iterator it = dirs.begin();
+    for (vector<CDirDiscover*>::iterator it = dirs.begin();
          it != dirs.end();
          it++) 
-	  delete *it;
+      delete *it;
     for (vector<CInodeDiscover*>::iterator it = inodes.begin();
          it != inodes.end();
          it++) 
-	  delete *it;
+      delete *it;
   }
   virtual char *get_type_name() { return "DisR"; }
   
   // builders
   bool is_empty() {
     return dirs.empty() && path.depth() == 0 && 
-	  inodes.empty() && 
-	  !flag_error_dn &&
-	  !flag_error_dir;
+      inodes.empty() && 
+      !flag_error_dn &&
+      !flag_error_dir;
   }
   void set_path(const filepath& dp) { path = dp; }
   void add_dentry(const string& dn, bool xlock) { 
-	if (path.depth() == 0 && dirs.empty()) no_base_dir = true;
+    if (path.depth() == 0 && dirs.empty()) no_base_dir = true;
     path.add_dentry(dn);
-	path_xlock.push_back(xlock);
+    path_xlock.push_back(xlock);
   }
 
   void add_inode(CInodeDiscover* din) {
-	if (inodes.empty() && path.depth() == 0) no_base_dir = no_base_dentry = true; 
+    if (inodes.empty() && path.depth() == 0) no_base_dir = no_base_dentry = true; 
     inodes.push_back( din );
   }
 
@@ -159,29 +159,29 @@ class MDiscoverReply : public Message {
 
   //  void set_flag_forward() { flag_forward = true; }
   void set_flag_error_dn(const string& dn) { 
-	flag_error_dn = true; 
-	error_dentry = dn; 
+    flag_error_dn = true; 
+    error_dentry = dn; 
   }
   void set_flag_error_dir() { 
-	flag_error_dir = true; 
+    flag_error_dir = true; 
   }
 
 
   // ...
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(base_ino), (char*)&base_ino);
+    int off = 0;
+    payload.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
     payload.copy(off, sizeof(bool), (char*)&no_base_dir);
     off += sizeof(bool);
     payload.copy(off, sizeof(bool), (char*)&no_base_dentry);
     off += sizeof(bool);
-	//    payload.copy(off, sizeof(bool), (char*)&flag_forward);
+    //    payload.copy(off, sizeof(bool), (char*)&flag_forward);
     //off += sizeof(bool);
     payload.copy(off, sizeof(bool), (char*)&flag_error_dn);
     off += sizeof(bool);
-	
-	_decode(error_dentry, payload, off);
+    
+    _decode(error_dentry, payload, off);
     payload.copy(off, sizeof(bool), (char*)&flag_error_dir);
     off += sizeof(bool);
     
@@ -193,7 +193,7 @@ class MDiscoverReply : public Message {
       dirs.push_back( new CDirDiscover() );
       dirs[i]->_decode(payload, off);
     }
-	//dout(12) << n << " dirs out" << endl;
+    //dout(12) << n << " dirs out" << endl;
 
     // inodes
     payload.copy(off, sizeof(int), (char*)&n);
@@ -202,63 +202,63 @@ class MDiscoverReply : public Message {
       inodes.push_back( new CInodeDiscover() );
       inodes[i]->_decode(payload, off);
     }
-	//dout(12) << n << " inodes out" << endl;
+    //dout(12) << n << " inodes out" << endl;
 
     // filepath
     path._decode(payload, off);
-	//dout(12) << path.depth() << " dentries out" << endl;
+    //dout(12) << path.depth() << " dentries out" << endl;
 
-	// path_xlock
-	payload.copy(off, sizeof(int), (char*)&n);
+    // path_xlock
+    payload.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
-	  bool b;
-	  payload.copy(off, sizeof(bool), (char*)&b);
-	  off += sizeof(bool);
-	  path_xlock.push_back(b);
+      bool b;
+      payload.copy(off, sizeof(bool), (char*)&b);
+      off += sizeof(bool);
+      path_xlock.push_back(b);
     }
   }
   void encode_payload() {
-	payload.append((char*)&base_ino, sizeof(base_ino));
-	payload.append((char*)&no_base_dir, sizeof(bool));
-	payload.append((char*)&no_base_dentry, sizeof(bool));
-	//	payload.append((char*)&flag_forward, sizeof(bool));
-	payload.append((char*)&flag_error_dn, sizeof(bool));
+    payload.append((char*)&base_ino, sizeof(base_ino));
+    payload.append((char*)&no_base_dir, sizeof(bool));
+    payload.append((char*)&no_base_dentry, sizeof(bool));
+    //    payload.append((char*)&flag_forward, sizeof(bool));
+    payload.append((char*)&flag_error_dn, sizeof(bool));
 
-	_encode(error_dentry, payload);
-	payload.append((char*)&flag_error_dir, sizeof(bool));
+    _encode(error_dentry, payload);
+    payload.append((char*)&flag_error_dir, sizeof(bool));
 
-	// dirs
+    // dirs
     int n = dirs.size();
     payload.append((char*)&n, sizeof(int));
     for (vector<CDirDiscover*>::iterator it = dirs.begin();
          it != dirs.end();
          it++) 
-	  (*it)->_encode( payload );
-	//dout(12) << n << " dirs in" << endl;
+      (*it)->_encode( payload );
+    //dout(12) << n << " dirs in" << endl;
     
-	// inodes
+    // inodes
     n = inodes.size();
     payload.append((char*)&n, sizeof(int));
     for (vector<CInodeDiscover*>::iterator it = inodes.begin();
          it != inodes.end();
          it++) 
- 	  (*it)->_encode( payload );
-	//dout(12) << n << " inodes in" << endl;
+       (*it)->_encode( payload );
+    //dout(12) << n << " inodes in" << endl;
 
-	// path
+    // path
     path._encode( payload );
-	//dout(12) << path.depth() << " dentries in" << endl;
+    //dout(12) << path.depth() << " dentries in" << endl;
 
-	// path_xlock
-	n = path_xlock.size();
-	payload.append((char*)&n, sizeof(int));
-	for (vector<bool>::iterator it = path_xlock.begin();
-		 it != path_xlock.end();
-		 it++) {
-	  bool b = *it;
-	  payload.append((char*)&b, sizeof(bool));
-	}
+    // path_xlock
+    n = path_xlock.size();
+    payload.append((char*)&n, sizeof(int));
+    for (vector<bool>::iterator it = path_xlock.begin();
+         it != path_xlock.end();
+         it++) {
+      bool b = *it;
+      payload.append((char*)&b, sizeof(bool));
+    }
   }
 
 };

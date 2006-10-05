@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -64,34 +64,34 @@ class CDentry {
  public:
   // cons
   CDentry() :
-	inode(0),
-	dir(0),
-	remote_ino(0),
-	dirty(0),
-	parent_dir_version(0),
-	lockstate(DN_LOCK_SYNC),
-	xlockedby(0),
-	npins(0) { }
+    inode(0),
+    dir(0),
+    remote_ino(0),
+    dirty(0),
+    parent_dir_version(0),
+    lockstate(DN_LOCK_SYNC),
+    xlockedby(0),
+    npins(0) { }
   CDentry(const string& n, inodeno_t ino, CInode *in=0) :
-	name(n),
-	inode(in),
-	dir(0),
-	remote_ino(ino),
-	dirty(0),
-	parent_dir_version(0),
-	lockstate(DN_LOCK_SYNC),
-	xlockedby(0),
-	npins(0) { }
+    name(n),
+    inode(in),
+    dir(0),
+    remote_ino(ino),
+    dirty(0),
+    parent_dir_version(0),
+    lockstate(DN_LOCK_SYNC),
+    xlockedby(0),
+    npins(0) { }
   CDentry(const string& n, CInode *in) :
-	name(n),
-	inode(in),
-	dir(0),
-	remote_ino(0),
-	dirty(0),
-	parent_dir_version(0),
-	lockstate(DN_LOCK_SYNC),
-	xlockedby(0),
-	npins(0) { }
+    name(n),
+    inode(in),
+    dir(0),
+    remote_ino(0),
+    dirty(0),
+    parent_dir_version(0),
+    lockstate(DN_LOCK_SYNC),
+    xlockedby(0),
+    npins(0) { }
 
   CInode *get_inode() { return inode; }
   CDir *get_dir() { return dir; }
@@ -129,8 +129,8 @@ class CDentry {
   // -- state
   __uint64_t get_parent_dir_version() { return parent_dir_version; }
   void float_parent_dir_version(__uint64_t ge) {
-	if (parent_dir_version < ge)
-	  parent_dir_version = ge;
+    if (parent_dir_version < ge)
+      parent_dir_version = ge;
   }
   
   bool is_dirty() { return dirty; }
@@ -152,25 +152,25 @@ class CDentry {
   bool is_xlockedbyother(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m != xlockedby; }
   bool is_xlockedbyme(Message *m) { return (lockstate == DN_LOCK_XLOCK) && m == xlockedby; }
   bool is_prexlockbyother(Message *m) {
-	return (lockstate == DN_LOCK_PREXLOCK) && m != xlockedby;
+    return (lockstate == DN_LOCK_PREXLOCK) && m != xlockedby;
   }
   
   // pins
   void pin(Message *m) { 
-	npins++; 
-	pinset.insert(m);
-	assert(pinset.size() == (unsigned)npins);
+    npins++; 
+    pinset.insert(m);
+    assert(pinset.size() == (unsigned)npins);
   }
   void unpin(Message *m) { 
-	npins--; 
-	assert(npins >= 0); 
-	assert(pinset.count(m) > 0);
-	pinset.erase(pinset.find(m));
-	assert(pinset.size() == (unsigned)npins);
+    npins--; 
+    assert(npins >= 0); 
+    assert(pinset.count(m) > 0);
+    pinset.erase(pinset.find(m));
+    assert(pinset.size() == (unsigned)npins);
   }
   bool is_pinnable(Message *m) { 
-	return (lockstate == DN_LOCK_SYNC) ||
-	  (lockstate == DN_LOCK_UNPINNING && pinset.count(m)); 
+    return (lockstate == DN_LOCK_SYNC) ||
+      (lockstate == DN_LOCK_UNPINNING && pinset.count(m)); 
   }
   bool is_pinned() { return npins>0; }
   int num_pins() { return npins; }

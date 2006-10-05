@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -30,7 +30,7 @@ class MDStore {
 
  public:
   MDStore(MDS *m) {
-	mds = m;
+    mds = m;
   }
 
   
@@ -41,12 +41,12 @@ class MDStore {
   void fetch_dir_2( int result, inodeno_t ino );
   
   void fetch_dir_hash( CDir *dir,
-					   Context *c,
-					   int hashcode = -1);
+                       Context *c,
+                       int hashcode = -1);
   void fetch_dir_hash_2( bufferlist &bl,
-						 inode_t& inode,
-						 Context *c,
-						 int which);
+                         inode_t& inode,
+                         Context *c,
+                         int which);
   friend class C_MDS_Fetch;
   friend class C_MDS_FetchHash;
 
@@ -59,13 +59,13 @@ class MDStore {
   
   // low level committers
   void commit_dir_slice( CDir *dir,
-						 Context *c,
-						 int hashcode = -1);
+                         Context *c,
+                         int hashcode = -1);
   void commit_dir_slice_2( int result,
-						   CDir *dir,
-						   Context *c,
-						   __uint64_t version,
-						   int hashcode );
+                           CDir *dir,
+                           Context *c,
+                           __uint64_t version,
+                           int hashcode );
   
   friend class C_MDS_CommitDirFinish;
   friend class C_MDS_CommitSlice;

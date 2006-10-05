@@ -34,61 +34,63 @@ class Rank : public Dispatcher {
   // namer
   class Namer : public Dispatcher {
   public:
-	EntityMessenger *messenger;  // namerN
+    EntityMessenger *messenger;  // namerN
 
-	int nrank;
-	int nclient, nmds, nosd, nmon;
-	
-	map<msg_addr_t, list<Message*> > waiting;
+    int nrank;
+    int nclient, nmds, nosd, nmon;
+    
+    map<msg_addr_t, list<Message*> > waiting;
 
-	Namer(EntityMessenger *msgr);
-	~Namer();
+    Namer(EntityMessenger *msgr);
+    ~Namer();
 
-	void handle_connect(class MNSConnect*);
-	void handle_register(class MNSRegister *m);
-	void handle_started(Message *m);
-	void handle_lookup(class MNSLookup *m);
-	void handle_unregister(Message *m);
-	void handle_failure(class MNSFailure *m);
+    void handle_connect(class MNSConnect*);
+    void handle_register(class MNSRegister *m);
+    void handle_started(Message *m);
+    void handle_lookup(class MNSLookup *m);
+    void handle_unregister(Message *m);
+    void handle_failure(class MNSFailure *m);
 
-	void dispatch(Message *m); 
-	
+    void dispatch(Message *m); 
+
+    void manual_insert_inst(const entity_inst_t &inst);
+
   };
 
   // incoming
   class Accepter : public Thread {
   public:
-	bool done;
+    bool done;
 
-	tcpaddr_t listen_addr;
-	int       listen_sd;
-	
-	Accepter() : done(false) {}
-	
-	void *entry();
-	void stop() {
-	  done = true;
-	  ::close(listen_sd);
-	  join();
-	}
-	int start();
+    tcpaddr_t listen_addr;
+    int       listen_sd;
+    
+    Accepter() : done(false) {}
+    
+    void *entry();
+    void stop() {
+      done = true;
+      ::close(listen_sd);
+      join();
+    }
+    int start();
   } accepter;
   
 
   class Receiver : public Thread {
   public:
-	int sd;
-	bool done;
+    int sd;
+    bool done;
 
-	Receiver(int _sd) : sd(_sd), done(false) {}
-	
-	void *entry();
-	void stop() {
-	  done = true;
-	  ::close(sd);
-	  //join();
-	}
-	Message *read_message();
+    Receiver(int _sd) : sd(_sd), done(false) {}
+    
+    void *entry();
+    void stop() {
+      done = true;
+      ::close(sd);
+      //join();
+    }
+    Message *read_message();
   };
 
 
@@ -96,113 +98,113 @@ class Rank : public Dispatcher {
   // outgoing
   class Sender : public Thread {
   public:
-	entity_inst_t inst;
-	bool done;
-	int sd;
+    entity_inst_t inst;
+    bool done;
+    int sd;
 
-	set<msg_addr_t> entities;
-	list<Message*> q;
+    set<msg_addr_t> entities;
+    list<Message*> q;
 
-	Mutex lock;
-	Cond cond;
-	
-	Sender(const entity_inst_t& i) : inst(i), done(false), sd(0) {}
-	virtual ~Sender() {}
-	
-	void *entry();
+    Mutex lock;
+    Cond cond;
+    
+    Sender(const entity_inst_t& i) : inst(i), done(false), sd(0) {}
+    virtual ~Sender() {}
+    
+    void *entry();
 
-	int connect();
-	void fail_and_requeue(list<Message*>& ls);
-	void finish();
+    int connect();
+    void fail_and_requeue(list<Message*>& ls);
+    void finish();
 
-	void stop() {
-	  lock.Lock();
-	  done = true;
-	  cond.Signal();
-	  lock.Unlock();
-	}
-	
-	void send(Message *m) {
-	  lock.Lock();
-	  q.push_back(m);
-	  cond.Signal();
-	  lock.Unlock();
-	}	
-	void send(list<Message*>& ls) {
-	  lock.Lock();
-	  q.splice(q.end(), ls);
-	  cond.Signal();
-	  lock.Unlock();
-	}
+    void stop() {
+      lock.Lock();
+      done = true;
+      cond.Signal();
+      lock.Unlock();
+    }
+    
+    void send(Message *m) {
+      lock.Lock();
+      q.push_back(m);
+      cond.Signal();
+      lock.Unlock();
+    }    
+    void send(list<Message*>& ls) {
+      lock.Lock();
+      q.splice(q.end(), ls);
+      cond.Signal();
+      lock.Unlock();
+    }
 
-	int write_message(Message *m);
+    int write_message(Message *m);
   };
 
 
 
   // messenger interface
   class EntityMessenger : public Messenger {
-	Mutex lock;
-	Cond cond;
-	list<Message*> dispatch_queue;
-	bool stop;
+    Mutex lock;
+    Cond cond;
+    list<Message*> dispatch_queue;
+    bool stop;
 
-	class DispatchThread : public Thread {
-	  EntityMessenger *m;
-	public:
-	  DispatchThread(EntityMessenger *_m) : m(_m) {}
-	  void *entry() {
-		m->dispatch_entry();
-		return 0;
-	  }
-	} dispatch_thread;
-	void dispatch_entry();
-
-  public:
-	void queue_message(Message *m) {
-	  lock.Lock();
-	  dispatch_queue.push_back(m);
-	  cond.Signal();
-	  lock.Unlock();
-	}
-	void queue_messages(list<Message*> ls) {
-	  lock.Lock();
-	  dispatch_queue.splice(dispatch_queue.end(), ls);
-	  cond.Signal();
-	  lock.Unlock();
-	}
+    class DispatchThread : public Thread {
+      EntityMessenger *m;
+    public:
+      DispatchThread(EntityMessenger *_m) : m(_m) {}
+      void *entry() {
+        m->dispatch_entry();
+        return 0;
+      }
+    } dispatch_thread;
+    void dispatch_entry();
 
   public:
-	EntityMessenger(msg_addr_t myaddr);
-	~EntityMessenger();
+    void queue_message(Message *m) {
+      lock.Lock();
+      dispatch_queue.push_back(m);
+      cond.Signal();
+      lock.Unlock();
+    }
+    void queue_messages(list<Message*> ls) {
+      lock.Lock();
+      dispatch_queue.splice(dispatch_queue.end(), ls);
+      cond.Signal();
+      lock.Unlock();
+    }
 
-	void ready();
-	bool is_stopped() { return stop; }
+  public:
+    EntityMessenger(msg_addr_t myaddr);
+    ~EntityMessenger();
 
-	void wait() {
-	  dispatch_thread.join();
-	}
-	
-	virtual void callback_kick() {} 
-	virtual int shutdown();
-	virtual void prepare_send_message(msg_addr_t dest);
-	virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
-	virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst);
+    void ready();
+    bool is_stopped() { return stop; }
 
-	virtual void mark_down(msg_addr_t a, entity_inst_t& i);
-	virtual void mark_up(msg_addr_t a, entity_inst_t& i);
-	//virtual void reset(msg_addr_t a);
+    void wait() {
+      dispatch_thread.join();
+    }
+    
+    virtual void callback_kick() {} 
+    virtual int shutdown();
+    virtual void prepare_send_message(msg_addr_t dest);
+    virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+    virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst);
+
+    virtual void mark_down(msg_addr_t a, entity_inst_t& i);
+    virtual void mark_up(msg_addr_t a, entity_inst_t& i);
+    //virtual void reset(msg_addr_t a);
   };
 
 
   class SingleDispatcher : public Thread {
-	Rank *rank;
+    Rank *rank;
   public:
-	SingleDispatcher(Rank *r) : rank(r) {}
-	void *entry() {
-	  rank->single_dispatcher_entry();
-	  return 0;
-	}
+    SingleDispatcher(Rank *r) : rank(r) {}
+    void *entry() {
+      rank->single_dispatcher_entry();
+      return 0;
+    }
   } single_dispatcher;
 
   Cond            single_dispatch_cond;
@@ -250,7 +252,7 @@ class Rank : public Dispatcher {
 
   list<Sender*>     sender_reap_queue;
   list<Receiver*>   receiver_reap_queue;
-	
+    
   EntityMessenger *messenger;   // rankN
   Namer           *namer;
 
@@ -280,7 +282,10 @@ public:
 
   int find_ns_addr(tcpaddr_t &tcpaddr);
 
-  int start_rank(tcpaddr_t& ns);
+  void set_namer(const tcpaddr_t& ns);
+  void start_namer();
+
+  int start_rank();
   void wait();
 
   EntityMessenger *register_entity(msg_addr_t addr);

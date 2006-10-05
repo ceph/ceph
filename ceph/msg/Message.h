@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -76,7 +76,14 @@
 #define MSG_CLIENT_MOUNTACK        71
 #define MSG_CLIENT_UNMOUNT         72
 
-#define MSG_MDS_HEARTBEAT          100
+
+// *** MDS ***
+
+#define MSG_MDS_BOOT               100
+#define MSG_MDS_GETMAP             101
+#define MSG_MDS_MAP                102
+#define MSG_MDS_HEARTBEAT          103
+
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111
 
@@ -183,9 +190,9 @@ typedef int  msg_addr_t;
 
 #define MSG_ADDR_ISCLIENT(x)  ((x) >= MSG_ADDR_CLIENT_BASE)
 #define MSG_ADDR_TYPE(x)    (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_RANK_BASE ? "rank": \
-							 (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_CLIENT_BASE ? "client": \
-							  (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_OSD_BASE ? "osd": \
-							   (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_MDS_BASE ? "mds": \
+                             (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_CLIENT_BASE ? "client": \
+                              (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_OSD_BASE ? "osd": \
+                               (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_MDS_BASE ? "mds": \
                                 ((x) == MSG_ADDR_DIRECTORY ? "namer":"unknown")))))
 #define MSG_ADDR_NUM(x)    ((x) & MSG_ADDR_NUM_MASK)
 #define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
@@ -202,15 +209,15 @@ public:
   int num() const { return _addr & MSG_ADDR_NUM_MASK; }
   int type() const { return _addr & MSG_ADDR_TYPE_MASK; }
   const char *type_str() const {
-	switch (type()) {
-	case MSG_ADDR_RANK_BASE: return "rank";
-	case MSG_ADDR_MDS_BASE: return "mds"; 
-	case MSG_ADDR_OSD_BASE: return "osd"; 
-	case MSG_ADDR_MON_BASE: return "mon"; 
-	case MSG_ADDR_CLIENT_BASE: return "client"; 
-	case MSG_ADDR_NAMER_BASE: return "namer";
-	}
-	return "unknown";
+    switch (type()) {
+    case MSG_ADDR_RANK_BASE: return "rank";
+    case MSG_ADDR_MDS_BASE: return "mds"; 
+    case MSG_ADDR_OSD_BASE: return "osd"; 
+    case MSG_ADDR_MON_BASE: return "mon"; 
+    case MSG_ADDR_CLIENT_BASE: return "client"; 
+    case MSG_ADDR_NAMER_BASE: return "namer";
+    }
+    return "unknown";
   }
 
   bool is_new() const { return num() == MSG_ADDR_NEW; }
@@ -238,7 +245,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const msg_addr_t m ) const
     {
-	  static hash<int> H;
+      static hash<int> H;
       return H(m._addr);
     }
   };
@@ -285,8 +292,12 @@ class entity_inst_t {
   tcpaddr_t addr;
   int       rank;
 
-  entity_inst_t() : rank(-1) {}
-  entity_inst_t(tcpaddr_t& a, int r) : addr(a), rank(r) {}
+  entity_inst_t() : rank(-1) {
+    memset(&addr, 0, sizeof(addr));
+  }
+  entity_inst_t(tcpaddr_t& a, int r) : addr(a), rank(r) {
+    memset(&addr, 0, sizeof(addr));
+  }
 };
 
 inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { return a.rank == b.rank && a.addr == b.addr; }
@@ -331,19 +342,19 @@ public:
 
  public:
   Message() { 
-	env.source_port = env.dest_port = -1;
-	env.source = env.dest = MSG_ADDR_UNDEF;
-	env.nchunks = 0;
-	env.lamport_send_stamp = 0;	
-	env.lamport_recv_stamp = 0;
+    env.source_port = env.dest_port = -1;
+    env.source = env.dest = MSG_ADDR_UNDEF;
+    env.nchunks = 0;
+    env.lamport_send_stamp = 0;    
+    env.lamport_recv_stamp = 0;
   };
   Message(int t) {
-	env.source_port = env.dest_port = -1;
-	env.source = env.dest = MSG_ADDR_UNDEF;
-	env.nchunks = 0;
-	env.type = t;
-	env.lamport_send_stamp = 0;
-	env.lamport_recv_stamp = 0;
+    env.source_port = env.dest_port = -1;
+    env.source = env.dest = MSG_ADDR_UNDEF;
+    env.nchunks = 0;
+    env.type = t;
+    env.lamport_send_stamp = 0;
+    env.lamport_recv_stamp = 0;
   }
   virtual ~Message() {
   }
@@ -361,16 +372,16 @@ public:
   void clear_payload() { payload.clear(); }
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() {
-	return payload;
+    return payload;
   }
   void set_payload(bufferlist& bl) {
-	payload.claim(bl);
+    payload.claim(bl);
   }
   msg_envelope_t& get_envelope() {
-	return env;
+    return env;
   }
   void set_envelope(msg_envelope_t& env) {
-	this->env = env;
+    this->env = env;
   }
 
 
@@ -395,7 +406,7 @@ public:
 
   // PAYLOAD ----
   void reset_payload() {
-	payload.clear();
+    payload.clear();
   }
 
   // overload either the rope version (easier!)
@@ -404,23 +415,23 @@ public:
  
   // of the bufferlist versions (faster!)
   virtual void decode_payload() {
-	// use a crope for convenience, small messages, etc.  FIXME someday.
-	crope ser;
-	payload._rope(ser);
-	
-	int off = 0;
-	decode_payload(ser, off);
-	assert((unsigned)off == payload.length());
+    // use a crope for convenience, small messages, etc.  FIXME someday.
+    crope ser;
+    payload._rope(ser);
+    
+    int off = 0;
+    decode_payload(ser, off);
+    assert((unsigned)off == payload.length());
   }
   virtual void encode_payload() {
-	assert(payload.length() == 0);  // caller should reset payload
+    assert(payload.length() == 0);  // caller should reset payload
 
-	// use crope for convenience, small messages. FIXME someday.
-	crope r;
-	encode_payload(r);
+    // use crope for convenience, small messages. FIXME someday.
+    crope r;
+    encode_payload(r);
 
-	// copy payload
-	payload.push_back( new buffer(r.c_str(), r.length()) );
+    // copy payload
+    payload.push_back( new buffer(r.c_str(), r.length()) );
   }
   
 };

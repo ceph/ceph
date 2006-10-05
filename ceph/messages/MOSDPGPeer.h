@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -31,26 +31,26 @@ class MOSDPGPeer : public Message {
 
   MOSDPGPeer() {}
   MOSDPGPeer(__uint64_t v, list<pg_t>& l, bool c=false) :
-	Message(MSG_OSD_PG_PEER) {
-	this->map_version = v;
-	this->complete = c;
-	pg_list.splice(pg_list.begin(), l);
+    Message(MSG_OSD_PG_PEER) {
+    this->map_version = v;
+    this->complete = c;
+    pg_list.splice(pg_list.begin(), l);
   }
   
   char *get_type_name() { return "PGPeer"; }
 
   void encode_payload() {
-	payload.append((char*)&map_version, sizeof(map_version));
-	payload.append((char*)&complete, sizeof(complete));
-	_encode(pg_list, payload);
+    payload.append((char*)&map_version, sizeof(map_version));
+    payload.append((char*)&complete, sizeof(complete));
+    _encode(pg_list, payload);
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(map_version), (char*)&map_version);
-	off += sizeof(map_version);
-	payload.copy(off, sizeof(complete), (char*)&complete);
-	off += sizeof(complete);
-	_decode(pg_list, payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(map_version), (char*)&map_version);
+    off += sizeof(map_version);
+    payload.copy(off, sizeof(complete), (char*)&complete);
+    off += sizeof(complete);
+    _decode(pg_list, payload, off);
   }
 };
 

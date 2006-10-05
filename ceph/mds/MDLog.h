@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -53,10 +53,10 @@ class Logger;
 
 namespace __gnu_cxx {
   template<> struct hash<LogEvent*> {
-	size_t operator()(const LogEvent *p) const { 
-	  static hash<unsigned long> H;
-	  return H((unsigned long)p); 
-	}
+    size_t operator()(const LogEvent *p) const { 
+      static hash<unsigned long> H;
+      return H((unsigned long)p); 
+    }
   };
 }
 
@@ -82,17 +82,17 @@ class MDLog {
   ~MDLog();
   
   void set_max_events(size_t max) {
-	max_events = max;
+    max_events = max;
   }
   size_t get_max_events() {
-	return max_events;
+    return max_events;
   }
   size_t get_num_events() {
-	return num_events + trimming.size();
+    return num_events + trimming.size();
   }
 
   void submit_entry( LogEvent *e,
-					 Context *c = 0 );
+                     Context *c = 0 );
   void wait_for_sync( Context *c );
   void flush();
 

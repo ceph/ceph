@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -65,19 +65,19 @@ class HostMonitor {
 
  public:
   HostMonitor(Messenger *m, string& whoami) {
-	this->messenger = m;
-	this->whoami = whoami;
-	notify_port = 0;
+    this->messenger = m;
+    this->whoami = whoami;
+    notify_port = 0;
   }
   set<msg_addr_t>& get_hosts() { return hosts; }
   set<msg_addr_t>& get_notify() { return notify; }
   void set_notify_port(int p) { notify_port = p; }
 
   void remove_host(msg_addr_t h) {
-	hosts.erase(h);
-	status.erase(h);
-	unacked_failures.erase(h);
-	acked_failures.erase(h);
+    hosts.erase(h);
+    status.erase(h);
+    unacked_failures.erase(h);
+    acked_failures.erase(h);
   }
 
   void init();

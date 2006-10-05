@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -47,16 +47,16 @@ bool AnchorTable::add(inodeno_t ino, inodeno_t dirino, string& ref_dn)
 
   // parent should be there
   assert(dirino < 1000 ||             // system dirino
-		 anchor_map.count(dirino));   // have
+         anchor_map.count(dirino));   // have
   
   if (anchor_map.count(ino) == 0) {
-	// new item
-	anchor_map[ ino ] = new Anchor(ino, dirino, ref_dn);
-	dout(10) << "  add: added " << ino << endl;
-	return true;
+    // new item
+    anchor_map[ ino ] = new Anchor(ino, dirino, ref_dn);
+    dout(10) << "  add: added " << ino << endl;
+    return true;
   } else {
-	dout(10) << "  add: had " << ino << endl;
-	return false;
+    dout(10) << "  add: had " << ino << endl;
+    return false;
   }
 }
 
@@ -69,15 +69,15 @@ void AnchorTable::inc(inodeno_t ino)
   assert(anchor);
 
   while (1) {
-	anchor->nref++;
-	  
-	dout(10) << "  inc: record " << ino << " now " << anchor->nref << endl;
-	ino = anchor->dirino;
-	
-	if (ino == 0) break;
-	if (anchor_map.count(ino) == 0) break;
-	anchor = anchor_map[ino];	  
-	assert(anchor);
+    anchor->nref++;
+      
+    dout(10) << "  inc: record " << ino << " now " << anchor->nref << endl;
+    ino = anchor->dirino;
+    
+    if (ino == 0) break;
+    if (anchor_map.count(ino) == 0) break;
+    anchor = anchor_map[ino];      
+    assert(anchor);
   }
 }
 
@@ -90,23 +90,23 @@ void AnchorTable::dec(inodeno_t ino)
   assert(anchor);
 
   while (true) {
-	anchor->nref--;
-	  
-	if (anchor->nref == 0) {
-	  dout(10) << "  dec: record " << ino << " now 0, removing" << endl;
-	  inodeno_t dirino = anchor->dirino;
-	  anchor_map.erase(ino);
-	  delete anchor;
-	  ino = dirino;
-	} else {
-	  dout(10) << "  dec: record " << ino << " now " << anchor->nref << endl;
-	  ino = anchor->dirino;
-	}
-	
-	if (ino == 0) break;
-	if (anchor_map.count(ino) == 0) break;
-	anchor = anchor_map[ino];	  
-	assert(anchor);
+    anchor->nref--;
+      
+    if (anchor->nref == 0) {
+      dout(10) << "  dec: record " << ino << " now 0, removing" << endl;
+      inodeno_t dirino = anchor->dirino;
+      anchor_map.erase(ino);
+      delete anchor;
+      ino = dirino;
+    } else {
+      dout(10) << "  dec: record " << ino << " now " << anchor->nref << endl;
+      ino = anchor->dirino;
+    }
+    
+    if (ino == 0) break;
+    if (anchor_map.count(ino) == 0) break;
+    anchor = anchor_map[ino];      
+    assert(anchor);
   }
 }
 
@@ -124,14 +124,14 @@ void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace)
   assert(anchor);
 
   while (true) {
-	dout(10) << "  record " << anchor->ino << " dirino " << anchor->dirino << " ref_dn " << anchor->ref_dn << endl;
-	trace.insert(trace.begin(), anchor);  // lame FIXME
+    dout(10) << "  record " << anchor->ino << " dirino " << anchor->dirino << " ref_dn " << anchor->ref_dn << endl;
+    trace.insert(trace.begin(), anchor);  // lame FIXME
 
-	if (anchor->dirino < MDS_INO_BASE) break;
+    if (anchor->dirino < MDS_INO_BASE) break;
 
-	assert(anchor_map.count(anchor->dirino) == 1);
-	anchor = anchor_map[anchor->dirino];
-	assert(anchor);
+    assert(anchor_map.count(anchor->dirino) == 1);
+    anchor = anchor_map[anchor->dirino];
+    assert(anchor);
   }
 }
 
@@ -141,7 +141,7 @@ void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace)
   
   // make sure trace is in table
   for (unsigned i=0; i<trace.size(); i++) 
-	add(trace[i]->ino, trace[i]->dirino, trace[i]->ref_dn);
+    add(trace[i]->ino, trace[i]->dirino, trace[i]->ref_dn);
 
   inc(ino);  // ok!
 }
@@ -161,15 +161,15 @@ void AnchorTable::proc_message(Message *m)
 {
   switch (m->get_type()) {
   case MSG_MDS_ANCHORREQUEST:
-	handle_anchor_request((MAnchorRequest*)m);
-	break;
-		
+    handle_anchor_request((MAnchorRequest*)m);
+    break;
+        
   case MSG_MDS_ANCHORREPLY:
-	handle_anchor_reply((MAnchorReply*)m);
-	break;
-	
+    handle_anchor_reply((MAnchorReply*)m);
+    break;
+    
   default:
-	assert(0);
+    assert(0);
   }
 }
 
@@ -179,15 +179,15 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
 {
   // make sure i'm open!
   if (!opened) {
-	dout(7) << "not open yet" << endl;
-	
-	waiting_for_open.push_back(new C_MDS_RetryMessage(mds,m));
-	
-	if (!opening) {
-	  opening = true;
-	  load(0);
-	}
-	return;
+    dout(7) << "not open yet" << endl;
+    
+    waiting_for_open.push_back(new C_MDS_RetryMessage(mds,m));
+    
+    if (!opening) {
+      opening = true;
+      load(0);
+    }
+    return;
   }
 
   // go
@@ -196,24 +196,24 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
   switch (m->get_op()) {
 
   case ANCHOR_OP_LOOKUP:
-	lookup( m->get_ino(), reply->get_trace() );
-	break;
+    lookup( m->get_ino(), reply->get_trace() );
+    break;
 
   case ANCHOR_OP_UPDATE:
-	destroy( m->get_ino() );
-	create( m->get_ino(), m->get_trace() );
-	break;
+    destroy( m->get_ino() );
+    create( m->get_ino(), m->get_trace() );
+    break;
 
   case ANCHOR_OP_CREATE:
-	create( m->get_ino(), m->get_trace() );
-	break;
+    create( m->get_ino(), m->get_trace() );
+    break;
 
   case ANCHOR_OP_DESTROY:
-	destroy( m->get_ino() );
-	break;
+    destroy( m->get_ino() );
+    break;
 
   default:
-	assert(0);
+    assert(0);
   }
 
   // send reply
@@ -226,40 +226,40 @@ void AnchorTable::handle_anchor_reply(class MAnchorReply *m)
   switch (m->get_op()) {
 
   case ANCHOR_OP_LOOKUP:
-	{
-	  assert(pending_lookup_trace.count(m->get_ino()) == 1);
+    {
+      assert(pending_lookup_trace.count(m->get_ino()) == 1);
 
-	  *(pending_lookup_trace[ m->get_ino() ]) = m->get_trace();
-	  Context *onfinish = pending_lookup_context[ m->get_ino() ];
+      *(pending_lookup_trace[ m->get_ino() ]) = m->get_trace();
+      Context *onfinish = pending_lookup_context[ m->get_ino() ];
 
-	  pending_lookup_trace.erase(m->get_ino());
-	  pending_lookup_context.erase(m->get_ino());
+      pending_lookup_trace.erase(m->get_ino());
+      pending_lookup_context.erase(m->get_ino());
 
-	  if (onfinish) {
-		onfinish->finish(0);
-		delete onfinish;
-	  }
-	}
-	break;
+      if (onfinish) {
+        onfinish->finish(0);
+        delete onfinish;
+      }
+    }
+    break;
 
   case ANCHOR_OP_UPDATE:
   case ANCHOR_OP_CREATE:
   case ANCHOR_OP_DESTROY:
-	{
-	  assert(pending_op.count(m->get_ino()) == 1);
+    {
+      assert(pending_op.count(m->get_ino()) == 1);
 
-	  Context *onfinish = pending_op[m->get_ino()];
-	  pending_op.erase(m->get_ino());
+      Context *onfinish = pending_op[m->get_ino()];
+      pending_op.erase(m->get_ino());
 
-	  if (onfinish) {
-		onfinish->finish(0);
-		delete onfinish;
-	  }
-	}
-	break;
+      if (onfinish) {
+        onfinish->finish(0);
+        delete onfinish;
+      }
+    }
+    break;
 
   default:
-	assert(0);
+    assert(0);
   }
 
 }
@@ -273,10 +273,10 @@ void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfinis
 {
   // me?
   if (false && mds->get_nodeid() == 0) {
-	lookup(ino, trace);
-	onfinish->finish(0);
-	delete onfinish;
-	return;
+    lookup(ino, trace);
+    onfinish->finish(0);
+    delete onfinish;
+    return;
   }
 
   // send message
@@ -292,10 +292,10 @@ void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinis
 {
   // me?
   if (false && mds->get_nodeid() == 0) {
-	create(ino, trace);
-	onfinish->finish(0);
-	delete onfinish;
-	return;
+    create(ino, trace);
+    onfinish->finish(0);
+    delete onfinish;
+    return;
   }
 
   // send message
@@ -322,10 +322,10 @@ void AnchorTable::destroy(inodeno_t ino, Context *onfinish)
 {
   // me?
   if (false && mds->get_nodeid() == 0) {
-	destroy(ino);
-	onfinish->finish(0);
-	delete onfinish;
-	return;
+    destroy(ino);
+    onfinish->finish(0);
+    delete onfinish;
+    return;
   }
 
   // send message
@@ -357,12 +357,12 @@ void AnchorTable::save(Context *onfinish)
   tab.append((char*)&num, sizeof(int));
 
   for (hash_map<inodeno_t, Anchor*>::iterator it = anchor_map.begin();
-	   it != anchor_map.end();
-	   it++) {
-	dout(14) << "adding anchor for " << it->first << endl;
-	Anchor *a = it->second;
-	assert(a);
-	a->_rope(tab);
+       it != anchor_map.end();
+       it++) {
+    dout(14) << "adding anchor for " << it->first << endl;
+    Anchor *a = it->second;
+    assert(a);
+    a->_rope(tab);
   }
 
   size_t size = tab.length();
@@ -374,9 +374,9 @@ void AnchorTable::save(Context *onfinish)
   bufferlist bl;
   bl.append(tab.c_str(), tab.length());
   mds->filer->write(table_inode,
-					0, bl.length(),
-					bl, 0, 
-					NULL, onfinish);
+                    0, bl.length(),
+                    bl, 0, 
+                    NULL, onfinish);
 }
 
 
@@ -388,14 +388,14 @@ public:
   size_t size;
   bufferlist bl;
   C_AT_Load(size_t size, AnchorTable *at, Context *onfinish) {
-	this->size = size;
-	this->at = at;
-	this->onfinish = onfinish;
+    this->size = size;
+    this->at = at;
+    this->onfinish = onfinish;
   }
   void finish(int result) {
-	assert(result > 0);
+    assert(result > 0);
 
-	at->load_2(size, bl, onfinish);
+    at->load_2(size, bl, onfinish);
   }
 };
 
@@ -406,25 +406,25 @@ class C_AT_LoadSize : public Context {
 public:
   bufferlist bl;
   C_AT_LoadSize(AnchorTable *at, MDS *mds, Context *onfinish) {
-	this->at = at;
-	this->mds = mds;
-	this->onfinish = onfinish;
+    this->at = at;
+    this->mds = mds;
+    this->onfinish = onfinish;
   }
   void finish(int r) {
-	size_t size = 0;
-	bl.copy(0, sizeof(size), (char*)&size);
-	cout << "r is " << r << " size is " << size << endl;
-	if (r > 0 && size > 0) {
-	  C_AT_Load *c = new C_AT_Load(size, at, onfinish);
-	  mds->filer->read(at->table_inode,
-					   sizeof(size), size,
-					   &c->bl,
-					   c);
-	} else {
-	  // fail
-	  bufferlist empty;
-	  at->load_2(0, empty, onfinish);
-	}
+    size_t size = 0;
+    bl.copy(0, sizeof(size), (char*)&size);
+    cout << "r is " << r << " size is " << size << endl;
+    if (r > 0 && size > 0) {
+      C_AT_Load *c = new C_AT_Load(size, at, onfinish);
+      mds->filer->read(at->table_inode,
+                       sizeof(size), size,
+                       &c->bl,
+                       c);
+    } else {
+      // fail
+      bufferlist empty;
+      at->load_2(0, empty, onfinish);
+    }
   }
 };
 
@@ -436,9 +436,9 @@ void AnchorTable::load(Context *onfinish)
   
   C_AT_LoadSize *c = new C_AT_LoadSize(this, mds, onfinish);
   mds->filer->read(table_inode,
-				   0, sizeof(size_t),
-				   &c->bl,
-				   c);
+                   0, sizeof(size_t),
+                   &c->bl,
+                   c);
 }
 
 void AnchorTable::load_2(size_t size, bufferlist& bl, Context *onfinish)
@@ -455,10 +455,10 @@ void AnchorTable::load_2(size_t size, bufferlist& bl, Context *onfinish)
   
   // parse anchors
   for (int i=0; i<num; i++) {
-	Anchor *a = new Anchor;
-	a->_unrope(r, off);
-	dout(10) << "  load_2 unroped " << a->ino << " dirino " << a->dirino << " ref_dn " << a->ref_dn << endl;
-	anchor_map[a->ino] = a;
+    Anchor *a = new Anchor;
+    a->_unrope(r, off);
+    dout(10) << "  load_2 unroped " << a->ino << " dirino " << a->dirino << " ref_dn " << a->ref_dn << endl;
+    anchor_map[a->ino] = a;
   }
 
   dout(7) << "load_2 got " << num << " anchors" << endl;
@@ -468,8 +468,8 @@ void AnchorTable::load_2(size_t size, bufferlist& bl, Context *onfinish)
 
   // finish
   if (onfinish) {
-	onfinish->finish(0);
-	delete onfinish;
+    onfinish->finish(0);
+    delete onfinish;
   }
   finish_contexts(waiting_for_open);
 }

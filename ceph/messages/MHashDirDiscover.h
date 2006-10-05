@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -29,23 +29,23 @@ class MHashDirDiscover : public Message {
 
   MHashDirDiscover() {}
   MHashDirDiscover(CInode *in) : 
-	Message(MSG_MDS_HASHDIRDISCOVER) {
-	in->make_path(path);
-	ino = in->ino();
+    Message(MSG_MDS_HASHDIRDISCOVER) {
+    in->make_path(path);
+    ino = in->ino();
   }
   virtual char *get_type_name() { return "HDis"; }
 
 
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	_decode(path, payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    _decode(path, payload, off);
   }
 
   void encode_payload() {
-	payload.append((char*)&ino, sizeof(ino));
-	_encode(path, payload);
+    payload.append((char*)&ino, sizeof(ino));
+    _encode(path, payload);
   }
 };
 

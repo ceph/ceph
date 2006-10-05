@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,36 +26,36 @@ class MInodeUpdate : public Message {
 
  public:
   inodeno_t get_ino() { 
-	inodeno_t ino;
-	inode_basic_state.copy(0, sizeof(inodeno_t), (char*)&ino);
-	return ino;
+    inodeno_t ino;
+    inode_basic_state.copy(0, sizeof(inodeno_t), (char*)&ino);
+    return ino;
   }
   int get_nonce() { return nonce; }
   
   MInodeUpdate() {}
   MInodeUpdate(CInode *in, int nonce) :
-	Message(MSG_MDS_INODEUPDATE) {
-	inode_basic_state = in->encode_basic_state();
-	this->nonce = nonce;
+    Message(MSG_MDS_INODEUPDATE) {
+    inode_basic_state = in->encode_basic_state();
+    this->nonce = nonce;
   }
   virtual char *get_type_name() { return "Iup"; }
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(int), (char*)&nonce);
-	off += sizeof(int);
-	size_t len;
-	s.copy(off, sizeof(len), (char*)&len);
-	off += sizeof(len);
-	inode_basic_state = s.substr(off, len);
-	off += len;
+    s.copy(off, sizeof(int), (char*)&nonce);
+    off += sizeof(int);
+    size_t len;
+    s.copy(off, sizeof(len), (char*)&len);
+    off += sizeof(len);
+    inode_basic_state = s.substr(off, len);
+    off += len;
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&nonce, sizeof(int));
-	size_t len = inode_basic_state.length();
-	s.append((char*)&len, sizeof(len));
-	s.append(inode_basic_state);
+    s.append((char*)&nonce, sizeof(int));
+    size_t len = inode_basic_state.length();
+    s.append((char*)&len, sizeof(len));
+    s.append(inode_basic_state);
   }
-	  
+      
 };
 
 #endif

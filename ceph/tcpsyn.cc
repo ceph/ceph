@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 
 #include <sys/stat.h>
 #include <iostream>
@@ -24,7 +37,7 @@ using namespace std;
 class C_Test : public Context {
 public:
   void finish(int r) {
-	cout << "C_Test->finish(" << r << ")" << endl;
+    cout << "C_Test->finish(" << r << ")" << endl;
   }
 };
 
@@ -37,29 +50,29 @@ int tick_count = 0;
 class C_Tick : public Context {
 public:
   void finish(int) {
-	utime_t now = g_clock.now() - tick_start;
-	dout(0) << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << endl;
-	tick_count += g_conf.tick;
-	utime_t next = tick_start;
-	next.sec_ref() += tick_count;
-	g_timer.add_event_at(next, new C_Tick);
+    utime_t now = g_clock.now() - tick_start;
+    dout(0) << "tick +" << g_conf.tick << " -> " << now << "  (" << tick_count << ")" << endl;
+    tick_count += g_conf.tick;
+    utime_t next = tick_start;
+    next.sec_ref() += tick_count;
+    g_timer.add_event_at(next, new C_Tick);
   }
 };
 
 class C_Die : public Context {
 public:
   void finish(int) {
-	cerr << "die" << endl;
-	exit(1);
+    cerr << "die" << endl;
+    exit(1);
   }
 };
 
 class C_Debug : public Context {
   public:
   void finish(int) {
-	int size = &g_conf.debug_after - &g_conf.debug;
-	memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
-	dout(0) << "debug_after flipping debug settings" << endl;
+    int size = &g_conf.debug_after - &g_conf.debug;
+    memcpy((char*)&g_conf.debug, (char*)&g_debug_after_conf.debug, size);
+    dout(0) << "debug_after flipping debug settings" << endl;
   }
 };
 
@@ -74,26 +87,26 @@ int main(int argc, char **argv)
   parse_syn_options(args);
 
   if (g_conf.kill_after) 
-	g_timer.add_event_after(g_conf.kill_after, new C_Die);
+    g_timer.add_event_after(g_conf.kill_after, new C_Die);
   if (g_conf.debug_after) 
-	g_timer.add_event_after(g_conf.debug_after, new C_Debug);
+    g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
   if (g_conf.tick) {
-	tick_start = g_clock.now();
-	g_timer.add_event_after(g_conf.tick, new C_Tick);
+    tick_start = g_clock.now();
+    g_timer.add_event_after(g_conf.tick, new C_Tick);
   }
 
   vector<char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
-	//cout << "a " << args[i] << endl;
-	// unknown arg, pass it on.
-	nargs.push_back(args[i]);
+    //cout << "a " << args[i] << endl;
+    // unknown arg, pass it on.
+    nargs.push_back(args[i]);
   }
 
   args = nargs;
   if (!args.empty()) {
-	for (unsigned i=0; i<args.size(); i++)
-	  cerr << "stray arg " << args[i] << endl;
+    for (unsigned i=0; i<args.size(); i++)
+      cerr << "stray arg " << args[i] << endl;
   }
   assert(args.empty());
 
@@ -108,13 +121,13 @@ int main(int argc, char **argv)
   need += NUMMDS;
   need += NUMOSD;
   if (NUMCLIENT) {
-	if (!g_conf.tcp_overlay_clients)
-	  need += 1;
+    if (!g_conf.tcp_overlay_clients)
+      need += 1;
   }
   assert(need <= world);
 
   if (myrank == 0)
-	cerr << "nummds " << NUMMDS << "  numosd " << NUMOSD << "  numclient " << NUMCLIENT << " .. need " << need << ", have " << world << endl;
+    cerr << "nummds " << NUMMDS << "  numosd " << NUMOSD << "  numclient " << NUMCLIENT << " .. need " << need << ", have " << world << endl;
   
   MDCluster *mdc = new MDCluster(NUMMDS, NUMOSD);
 
@@ -129,36 +142,36 @@ int main(int argc, char **argv)
   
   // create mon
   if (myrank == 0) {
-	Monitor *mon = new Monitor(0, new TCPMessenger(MSG_ADDR_MON(0)));
-	mon->init();
+    Monitor *mon = new Monitor(0, new TCPMessenger(MSG_ADDR_MON(0)));
+    mon->init();
   }
 
   // create mds
   MDS *mds[NUMMDS];
   OSD *mdsosd[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
-	if (myrank != g_conf.tcp_skip_rank0+i) continue;
-	TCPMessenger *m = new TCPMessenger(MSG_ADDR_MDS(i));
-	cerr << "mds" << i << " on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl;
-	mds[i] = new MDS(mdc, i, m);
-	mds[i]->init();
-	started++;
+    if (myrank != g_conf.tcp_skip_rank0+i) continue;
+    TCPMessenger *m = new TCPMessenger(MSG_ADDR_MDS(i));
+    cerr << "mds" << i << " on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl;
+    mds[i] = new MDS(mdc, i, m);
+    mds[i]->init();
+    started++;
 
-	if (g_conf.mds_local_osd) {
-	  mdsosd[i] = new OSD(i+10000, new TCPMessenger(MSG_ADDR_OSD(i+10000)));
-	  mdsosd[i]->init();													
-	}
+    if (g_conf.mds_local_osd) {
+      mdsosd[i] = new OSD(i+10000, new TCPMessenger(MSG_ADDR_OSD(i+10000)));
+      mdsosd[i]->init();                                                    
+    }
   }
   
   // create osd
   OSD *osd[NUMOSD];
   for (int i=0; i<NUMOSD; i++) {
-	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + i) continue;
-	TCPMessenger *m = new TCPMessenger(MSG_ADDR_OSD(i));
-	cerr << "osd" << i << " on tcprank " << tcpmessenger_get_rank() <<  " " << hostname << "." << pid << endl;
-	osd[i] = new OSD(i, m);
-	osd[i]->init();
-	started++;
+    if (myrank != g_conf.tcp_skip_rank0+NUMMDS + i) continue;
+    TCPMessenger *m = new TCPMessenger(MSG_ADDR_OSD(i));
+    cerr << "osd" << i << " on tcprank " << tcpmessenger_get_rank() <<  " " << hostname << "." << pid << endl;
+    osd[i] = new OSD(i, m);
+    osd[i]->init();
+    started++;
   }
   
   if (g_conf.tcp_overlay_clients) sleep(5);
@@ -166,7 +179,7 @@ int main(int argc, char **argv)
   // create client
   int skip_osd = NUMOSD;
   if (g_conf.tcp_overlay_clients) 
-	skip_osd = 0;        // put clients with osds too!
+    skip_osd = 0;        // put clients with osds too!
   int client_nodes = world - NUMMDS - skip_osd - g_conf.tcp_skip_rank0;
   int clients_per_node = 1;
   if (NUMCLIENT) clients_per_node = (NUMCLIENT-1) / client_nodes + 1;
@@ -174,78 +187,78 @@ int main(int argc, char **argv)
   Client *client[NUMCLIENT];
   SyntheticClient *syn[NUMCLIENT];
   for (int i=0; i<NUMCLIENT; i++) {
-	//if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
-	if (myrank != g_conf.tcp_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
-	clientlist.insert(i);
-	client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));//(i)) );
+    //if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
+    if (myrank != g_conf.tcp_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
+    clientlist.insert(i);
+    client[i] = new Client(new TCPMessenger(MSG_ADDR_CLIENT_NEW));//(i)) );
 
-	// logger?
-	if (client_logger == 0) {
-	  char s[80];
-	  sprintf(s,"clnode.%d", myrank);
-	  client_logger = new Logger(s, &client_logtype);
+    // logger?
+    if (client_logger == 0) {
+      char s[80];
+      sprintf(s,"clnode.%d", myrank);
+      client_logger = new Logger(s, &client_logtype);
 
-	  client_logtype.add_inc("lsum");
-	  client_logtype.add_inc("lnum");
-	  client_logtype.add_inc("lwsum");
-	  client_logtype.add_inc("lwnum");
-	  client_logtype.add_inc("lrsum");
-	  client_logtype.add_inc("lrnum");
-	  client_logtype.add_inc("trsum");
-	  client_logtype.add_inc("trnum");
-	  client_logtype.add_inc("wrlsum");
-	  client_logtype.add_inc("wrlnum");
-	  client_logtype.add_inc("lstatsum");
-	  client_logtype.add_inc("lstatnum");
-	  client_logtype.add_inc("ldirsum");
-	  client_logtype.add_inc("ldirnum");
-	  client_logtype.add_inc("readdir");
-	  client_logtype.add_inc("stat");
-	}
+      client_logtype.add_inc("lsum");
+      client_logtype.add_inc("lnum");
+      client_logtype.add_inc("lwsum");
+      client_logtype.add_inc("lwnum");
+      client_logtype.add_inc("lrsum");
+      client_logtype.add_inc("lrnum");
+      client_logtype.add_inc("trsum");
+      client_logtype.add_inc("trnum");
+      client_logtype.add_inc("wrlsum");
+      client_logtype.add_inc("wrlnum");
+      client_logtype.add_inc("lstatsum");
+      client_logtype.add_inc("lstatnum");
+      client_logtype.add_inc("ldirsum");
+      client_logtype.add_inc("ldirnum");
+      client_logtype.add_inc("readdir");
+      client_logtype.add_inc("stat");
+    }
 
-	client[i]->init();
-	started++;
+    client[i]->init();
+    started++;
 
-	syn[i] = new SyntheticClient(client[i]);
+    syn[i] = new SyntheticClient(client[i]);
   }
 
   if (!clientlist.empty()) dout(2) << "i have " << clientlist << endl;
 
   int nclients = 0;
   for (set<int>::iterator it = clientlist.begin();
-	   it != clientlist.end();
-	   it++) {
-	int i = *it;
+       it != clientlist.end();
+       it++) {
+    int i = *it;
 
-	//cerr << "starting synthetic client" << i << " on rank " << myrank << endl;
-	client[i]->mount();
-	syn[i]->start_thread();
-	
-	nclients++;
+    //cerr << "starting synthetic client" << i << " on rank " << myrank << endl;
+    client[i]->mount();
+    syn[i]->start_thread();
+    
+    nclients++;
   }
   if (nclients) {
-	cerr << nclients << " clients on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl;
+    cerr << nclients << " clients on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl;
   }
 
   for (set<int>::iterator it = clientlist.begin();
-	   it != clientlist.end();
-	   it++) {
-	int i = *it;
+       it != clientlist.end();
+       it++) {
+    int i = *it;
 
-	//	  cout << "waiting for synthetic client" << i << " to finish" << endl;
-	syn[i]->join_thread();
-	delete syn[i];
-	
-	client[i]->unmount();
-	//cout << "client" << i << " unmounted" << endl;
-	client[i]->shutdown();
+    //      cout << "waiting for synthetic client" << i << " to finish" << endl;
+    syn[i]->join_thread();
+    delete syn[i];
+    
+    client[i]->unmount();
+    //cout << "client" << i << " unmounted" << endl;
+    client[i]->shutdown();
   }
   
 
   if (myrank && !started) {
-	//dout(1) << "IDLE" << endl;
-	cerr << "idle on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl; 
-	tcpmessenger_stop_rankserver();
+    //dout(1) << "IDLE" << endl;
+    cerr << "idle on tcprank " << tcpmessenger_get_rank() << " " << hostname << "." << pid << endl; 
+    tcpmessenger_stop_rankserver();
   }
 
   // wait for everything to finish
@@ -259,16 +272,16 @@ int main(int argc, char **argv)
   /*
   // cleanup
   for (int i=0; i<NUMMDS; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
-	delete mds[i];
+    if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_MDS(i),world)) continue;
+    delete mds[i];
   }
   for (int i=0; i<NUMOSD; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
-	delete osd[i];
+    if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_OSD(i),world)) continue;
+    delete osd[i];
   }
   for (int i=0; i<NUMCLIENT; i++) {
-	if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
-	delete client[i];
+    if (myrank != MPI_DEST_TO_RANK(MSG_ADDR_CLIENT(i),world)) continue;
+    delete client[i];
   }
   */
   delete mdc;

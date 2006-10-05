@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,6 +19,11 @@ using namespace __gnu_cxx;
 #include "include/Context.h"
 #include "include/bufferlist.h"
 
+template<typename U,typename V>
+inline ostream& operator<<(ostream& out, const pair<U,V>& p) {
+  return out << p.first << "," << p.second;
+}
+
 #include "types.h"
 #include "Onode.h"
 #include "Cnode.h"
@@ -33,12 +38,8 @@ using namespace __gnu_cxx;
 
 #include "osd/ObjectStore.h"
 
-typedef pair<object_t,coll_t> idpair_t;
-
-inline ostream& operator<<(ostream& out, idpair_t oc) {
-  return out << hex << oc.first << "->" << oc.second << dec;
-}
-
+//typedef pair<object_t,coll_t> object_coll_t;
+typedef pair<coll_t,object_t> coll_object_t;
 
 
 class Ebofs : public ObjectStore {
@@ -64,13 +65,13 @@ class Ebofs : public ObjectStore {
   int commit_thread_entry();
 
   class CommitThread : public Thread {
-	Ebofs *ebofs;
+    Ebofs *ebofs;
   public:
-	CommitThread(Ebofs *e) : ebofs(e) {}
-	void *entry() {
-	  ebofs->commit_thread_entry();
-	  return 0;
-	}
+    CommitThread(Ebofs *e) : ebofs(e) {}
+    void *entry() {
+      ebofs->commit_thread_entry();
+      return 0;
+    }
   } commit_thread;
 
   
@@ -84,10 +85,10 @@ class Ebofs : public ObjectStore {
   block_t get_free_blocks() { return free_blocks; }
   block_t get_limbo_blocks() { return limbo_blocks; }
   block_t get_free_extents() { 
-	int n = 0;
-	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++) 
-	  n += free_tab[i]->get_num_keys();
-	return n;
+    int n = 0;
+    for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++) 
+      n += free_tab[i]->get_num_keys();
+    return n;
   }
   block_t get_limbo_extents() { return limbo_tab->get_num_keys(); }
 
@@ -108,7 +109,7 @@ class Ebofs : public ObjectStore {
 
   // collections
   Table<coll_t, Extent>  *collection_tab;
-  Table<idpair_t, bool>  *co_tab;
+  Table<coll_object_t, bool>  *co_tab;
 
   void close_tables();
 
@@ -131,7 +132,7 @@ class Ebofs : public ObjectStore {
   hash_map<coll_t, Cnode*>    cnode_map;
   LRU                         cnode_lru;
   set<Cnode*>                 dirty_cnodes;
-  map<object_t, list<Cond*> > waitfor_cnode;
+  map<coll_t, list<Cond*> >   waitfor_cnode;
 
   Cnode* new_cnode(coll_t cid);
   Cnode* get_cnode(coll_t cid);
@@ -167,22 +168,22 @@ class Ebofs : public ObjectStore {
   void trim_buffer_cache();
 
   class IdleKicker : public BlockDevice::kicker {
-	Ebofs *ebo;
+    Ebofs *ebo;
   public:
-	IdleKicker(Ebofs *t) : ebo(t) {}
-	void kick() { ebo->kick_idle(); }
+    IdleKicker(Ebofs *t) : ebo(t) {}
+    void kick() { ebo->kick_idle(); }
   } idle_kicker;
 
 
  protected:
   //void zero(Onode *on, size_t len, off_t off, off_t write_thru);
   void alloc_write(Onode *on, 
-				   block_t start, block_t len, 
-				   interval_set<block_t>& alloc,
-				   block_t& old_bfirst, block_t& old_blast);
+                   block_t start, block_t len, 
+                   interval_set<block_t>& alloc,
+                   block_t& old_bfirst, block_t& old_blast);
   void apply_write(Onode *on, off_t off, size_t len, bufferlist& bl);
   bool attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
-					Cond *will_wait_on, bool *will_wait_on_bool);
+                    Cond *will_wait_on, bool *will_wait_on_bool);
 
   // ** finisher **
   // async write notification to users
@@ -193,10 +194,10 @@ class Ebofs : public ObjectStore {
 
   void *finisher_thread_entry();
   class FinisherThread : public Thread {
-	Ebofs *ebofs;
+    Ebofs *ebofs;
   public:
-	FinisherThread(Ebofs *e) : ebofs(e) {}
-	void* entry() { return (void*)ebofs->finisher_thread_entry(); }
+    FinisherThread(Ebofs *e) : ebofs(e) {}
+    void* entry() { return (void*)ebofs->finisher_thread_entry(); }
   } finisher_thread;
 
 
@@ -208,24 +209,24 @@ class Ebofs : public ObjectStore {
 
  public:
   Ebofs(char *devfn) : 
-	fake_writes(false),
-	dev(devfn), 
-	mounted(false), unmounting(false), dirty(false), readonly(false), 
-	super_epoch(0), commit_thread_started(false), mid_commit(false),
-	commit_thread(this),
-	free_blocks(0), limbo_blocks(0),
-	allocator(this),
-	bufferpool(EBOFS_BLOCK_SIZE),
-	nodepool(ebofs_lock),
-	object_tab(0), limbo_tab(0), collection_tab(0), co_tab(0),
-	onode_lru(g_conf.ebofs_oc_size),
-	cnode_lru(g_conf.ebofs_cc_size),
-	inodes_flushing(0),
-	bc(dev, bufferpool, ebofs_lock),
-	idle_kicker(this),
-	finisher_stop(false), finisher_thread(this) {
-	for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
-	  free_tab[i] = 0;
+    fake_writes(false),
+    dev(devfn), 
+    mounted(false), unmounting(false), dirty(false), readonly(false), 
+    super_epoch(0), commit_thread_started(false), mid_commit(false),
+    commit_thread(this),
+    free_blocks(0), limbo_blocks(0),
+    allocator(this),
+    bufferpool(EBOFS_BLOCK_SIZE),
+    nodepool(ebofs_lock),
+    object_tab(0), limbo_tab(0), collection_tab(0), co_tab(0),
+    onode_lru(g_conf.ebofs_oc_size),
+    cnode_lru(g_conf.ebofs_cc_size),
+    inodes_flushing(0),
+    bc(dev, bufferpool, ebofs_lock),
+    idle_kicker(this),
+    finisher_stop(false), finisher_thread(this) {
+    for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)
+      free_tab[i] = 0;
   }
   ~Ebofs() {
   }
@@ -273,10 +274,10 @@ class Ebofs : public ObjectStore {
 
   int collection_list(coll_t c, list<object_t>& o);
   
-  int collection_setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe);
-  int collection_getattr(object_t oid, const char *name, void *value, size_t size);
+  int collection_setattr(coll_t oid, const char *name, const void *value, size_t size, Context *onsafe);
+  int collection_getattr(coll_t oid, const char *name, void *value, size_t size);
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
-  int collection_listattr(object_t oid, vector<string>& attrs);
+  int collection_listattr(coll_t oid, vector<string>& attrs);
   
   // crap
   void _fake_writes(bool b) { fake_writes = b; }
@@ -307,7 +308,7 @@ private:
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, object_t o);
   int _collection_remove(coll_t c, object_t o);
-  int _collection_setattr(object_t oid, const char *name, const void *value, size_t size);
+  int _collection_setattr(coll_t oid, const char *name, const void *value, size_t size);
   int _collection_rmattr(coll_t cid, const char *name);
   
 };

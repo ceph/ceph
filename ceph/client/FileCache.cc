@@ -11,8 +11,8 @@
 void FileCache::flush_dirty(Context *onflush)
 {
   if (oc->flush_set(inode.ino, onflush)) {
-	onflush->finish(0);
-	delete onflush;
+    onflush->finish(0);
+    delete onflush;
   }
 }
 
@@ -38,8 +38,8 @@ void FileCache::empty(Context *onempty)
   assert(!unclean == clean);
 
   if (clean) {
-	onempty->finish(0);
-	delete onempty;
+    onempty->finish(0);
+    delete onempty;
   }
 }
 
@@ -49,8 +49,8 @@ void FileCache::empty(Context *onempty)
 void FileCache::set_caps(int caps, Context *onimplement) 
 {
   if (onimplement) {
-	assert(latest_caps & ~caps);  // we should be losing caps.
-	caps_callbacks[caps].push_back(onimplement);
+    assert(latest_caps & ~caps);  // we should be losing caps.
+    caps_callbacks[caps].push_back(onimplement);
   }
   
   latest_caps = caps;
@@ -70,19 +70,19 @@ void FileCache::check_caps()
   // check callbacks
   map<int, list<Context*> >::iterator p = caps_callbacks.begin();
   while (p != caps_callbacks.end()) {
-	if (~(p->first) & used) {
-	  // implemented.
-	  dout(10) << "used is " << cap_string(used) 
-			   << ", caps " << cap_string(p->first) << " implemented, doing callback(s)" << endl;
-	  finish_contexts(p->second);
-	  map<int, list<Context*> >::iterator o = p;
-	  p++;
-	  caps_callbacks.erase(o);
-	} else {
-	  dout(10) << "used is " << cap_string(used) 
-			   << ", caps " << cap_string(p->first) << " not yet implemented" << endl;
-	  p++;
-	}
+    if (~(p->first) & used) {
+      // implemented.
+      dout(10) << "used is " << cap_string(used) 
+               << ", caps " << cap_string(p->first) << " implemented, doing callback(s)" << endl;
+      finish_contexts(p->second);
+      map<int, list<Context*> >::iterator o = p;
+      p++;
+      caps_callbacks.erase(o);
+    } else {
+      dout(10) << "used is " << cap_string(used) 
+               << ", caps " << cap_string(p->first) << " not yet implemented" << endl;
+      p++;
+    }
   }
 }
 
@@ -98,32 +98,32 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
   num_reading++;
   
   if (latest_caps & CAP_FILE_RDCACHE) {
-	// read (and block)
-	Cond cond;
-	bool done = false;
-	int rvalue = 0;
-	C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
-	
-	r = oc->file_read(inode, offset, size, &blist, onfinish);
-	
-	if (r == 0) {
-	  // block
-	  while (!done) 
-		cond.Wait(client_lock);
-	  r = rvalue;
-	} else {
-	  // it was cached.
-	  delete onfinish;
-	}
+    // read (and block)
+    Cond cond;
+    bool done = false;
+    int rvalue = 0;
+    C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
+    
+    r = oc->file_read(inode, offset, size, &blist, onfinish);
+    
+    if (r == 0) {
+      // block
+      while (!done) 
+        cond.Wait(client_lock);
+      r = rvalue;
+    } else {
+      // it was cached.
+      delete onfinish;
+    }
   } else {
-	r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock);
+    r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock);
   }
 
   // dec reading counter
   num_reading--;
 
   if (num_reading == 0 && !caps_callbacks.empty()) 
-	check_caps();
+    check_caps();
 
   return r;
 }
@@ -134,20 +134,20 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
   num_writing++;
 
   if (latest_caps & CAP_FILE_WRBUFFER) {   // caps buffered write?
-	// wait? (this may block!)
-	oc->wait_for_write(size, client_lock);
+    // wait? (this may block!)
+    oc->wait_for_write(size, client_lock);
 
-	// async, caching, non-blocking.
-	oc->file_write(inode, offset, size, blist);
+    // async, caching, non-blocking.
+    oc->file_write(inode, offset, size, blist);
   } else {
-	// atomic, synchronous, blocking.
-	oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);	  
-  }	
-	
+    // atomic, synchronous, blocking.
+    oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);      
+  }    
+    
   // dec writing counter
   num_writing--;
   if (num_writing == 0 && !caps_callbacks.empty())
-	check_caps();
+    check_caps();
 }
 
 bool FileCache::all_safe()
@@ -159,7 +159,7 @@ void FileCache::add_safe_waiter(Context *c)
 {
   bool safe = oc->commit_set(inode.ino, c);
   if (safe) {
-	c->finish(0);
-	delete c;
+    c->finish(0);
+    delete c;
   }
 }

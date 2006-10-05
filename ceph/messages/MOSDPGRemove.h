@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,22 +28,22 @@ class MOSDPGRemove : public Message {
 
   MOSDPGRemove() {}
   MOSDPGRemove(epoch_t e, set<pg_t>& l) :
-	Message(MSG_OSD_PG_REMOVE) {
-	this->epoch = e;
-	pg_list = l;
+    Message(MSG_OSD_PG_REMOVE) {
+    this->epoch = e;
+    pg_list = l;
   }
   
   char *get_type_name() { return "PGrm"; }
 
   void encode_payload() {
-	payload.append((char*)&epoch, sizeof(epoch));
-	_encode(pg_list, payload);
+    payload.append((char*)&epoch, sizeof(epoch));
+    _encode(pg_list, payload);
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(epoch), (char*)&epoch);
-	off += sizeof(epoch);
-	_decode(pg_list, payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(epoch), (char*)&epoch);
+    off += sizeof(epoch);
+    _decode(pg_list, payload, off);
   }
 
 };

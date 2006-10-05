@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -43,7 +43,7 @@ public:
   Messenger *msgr;
   C_OM_PingTick(Messenger *m) : msgr(m) {}
   void finish(int r) {
-	msgr->send_message(new MPing, MSG_ADDR_MON(0));
+    msgr->send_message(new MPing, MSG_ADDR_MON(0));
   }
 };
 
@@ -51,10 +51,10 @@ class C_OM_Faker : public Context {
 public:
   OSDMonitor *om;
   C_OM_Faker(OSDMonitor *m) { 
-	this->om = m;
+    this->om = m;
   }
   void finish(int r) {
-	om->fake_reorg();
+    om->fake_reorg();
   }
 };
 
@@ -65,7 +65,7 @@ class C_OM_FakeOSDFailure : public Context {
 public:
   C_OM_FakeOSDFailure(OSDMonitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
   void finish(int r) {
-	mon->fake_osd_failure(osd,down);
+    mon->fake_osd_failure(osd,down);
   }
 };
 
@@ -78,7 +78,7 @@ void OSDMonitor::fake_osdmap_update()
 
   // tell a random osd
   send_incremental_map(osdmap->get_epoch()-1,                    // ick! FIXME
-					   MSG_ADDR_OSD(rand() % g_conf.num_osd));
+                       MSG_ADDR_OSD(rand() % g_conf.num_osd));
 }
 
 
@@ -87,11 +87,11 @@ void OSDMonitor::fake_reorg()
   int r = rand() % g_conf.num_osd;
   
   if (osdmap->is_out(r)) {
-	dout(1) << "fake_reorg marking osd" << r << " in" << endl;
-	pending.new_in.push_back(r);
+    dout(1) << "fake_reorg marking osd" << r << " in" << endl;
+    pending.new_in.push_back(r);
   } else {
-	dout(1) << "fake_reorg marking osd" << r << " out" << endl;
-	pending.new_out.push_back(r);
+    dout(1) << "fake_reorg marking osd" << r << " out" << endl;
+    pending.new_out.push_back(r);
   }
 
   accept_pending();
@@ -120,20 +120,20 @@ void OSDMonitor::init()
   Bucket *b = new UniformBucket(1, 0);
   int root = osdmap->crush.add_bucket(b);
   for (int i=0; i<g_conf.num_osd; i++) {
-	osdmap->osds.insert(i);
-	b->add_item(i, 1);
+    osdmap->osds.insert(i);
+    b->add_item(i, 1);
   }
   
   for (int i=1; i<5; i++) {
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
-	osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+    osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
+    osdmap->crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
   }
 
   if (g_conf.mds_local_osd) {
-	// add mds osds, but don't put them in the crush mapping func
-	for (int i=0; i<g_conf.num_mds; i++) 
-	  osdmap->osds.insert(i+10000);
+    // add mds osds, but don't put them in the crush mapping func
+    for (int i=0; i<g_conf.num_mds; i++) 
+      osdmap->osds.insert(i+10000);
   }
 
   // </HACK>
@@ -141,27 +141,27 @@ void OSDMonitor::init()
 
   
   if (whoami == 0 &&
-	  g_conf.num_osd > 4 &&
-	  g_conf.fake_osdmap_expand) {
-	dout(1) << "scheduling OSD map reorg at " << g_conf.fake_osdmap_expand << endl;
-	g_timer.add_event_after(g_conf.fake_osdmap_expand,
-							new C_OM_Faker(this));
+      g_conf.num_osd > 4 &&
+      g_conf.fake_osdmap_expand) {
+    dout(1) << "scheduling OSD map reorg at " << g_conf.fake_osdmap_expand << endl;
+    g_timer.add_event_after(g_conf.fake_osdmap_expand,
+                            new C_OM_Faker(this));
   }
 
   if (whoami == 0) {
-	// fake osd failures
-	for (map<int,float>::iterator i = g_fake_osd_down.begin();
-		 i != g_fake_osd_down.end();
-		 i++) {
-	  dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
-	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
-	}
-	for (map<int,float>::iterator i = g_fake_osd_out.begin();
-		 i != g_fake_osd_out.end();
-		 i++) {
-	  dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
-	  g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
-	}
+    // fake osd failures
+    for (map<int,float>::iterator i = g_fake_osd_down.begin();
+         i != g_fake_osd_down.end();
+         i++) {
+      dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
+      g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 1));
+    }
+    for (map<int,float>::iterator i = g_fake_osd_out.begin();
+         i != g_fake_osd_out.end();
+         i++) {
+      dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
+      g_timer.add_event_after(i->second, new C_OM_FakeOSDFailure(this, i->first, 0));
+    }
   }
 
   
@@ -177,40 +177,40 @@ void OSDMonitor::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case MSG_OSD_FAILURE:
-	handle_osd_failure((MOSDFailure*)m);
-	break;
-	
+    handle_osd_failure((MOSDFailure*)m);
+    break;
+    
   case MSG_PING_ACK:
-	handle_ping_ack((MPingAck*)m);
-	break;
+    handle_ping_ack((MPingAck*)m);
+    break;
 
   case MSG_OSD_GETMAP:
-	handle_osd_getmap((MOSDGetMap*)m);
-	return;
+    handle_osd_getmap((MOSDGetMap*)m);
+    return;
 
   case MSG_OSD_BOOT:
-	handle_osd_boot((MOSDBoot*)m);
-	return;
+    handle_osd_boot((MOSDBoot*)m);
+    return;
 
   case MSG_OSD_IN:
-	handle_osd_in((MOSDIn*)m);
-	break;
+    handle_osd_in((MOSDIn*)m);
+    break;
   case MSG_OSD_OUT:
-	handle_osd_out((MOSDOut*)m);
-	break;
+    handle_osd_out((MOSDOut*)m);
+    break;
 
   case MSG_SHUTDOWN:
-	handle_shutdown(m);
-	return;
+    handle_shutdown(m);
+    return;
 
   case MSG_PING:
-	tick();
-	delete m;
-	return;
+    tick();
+    delete m;
+    return;
 
   default:
-	dout(0) << "unknown message " << *m << endl;
-	assert(0);
+    dout(0) << "unknown message " << *m << endl;
+    assert(0);
   }
 }
 
@@ -239,18 +239,18 @@ void OSDMonitor::handle_osd_failure(MOSDFailure *m)
   // take their word for it
   int from = m->get_failed().num();
   if (osdmap->is_up(from) &&
-	  (osdmap->osd_inst.count(from) == 0 ||
-	   osdmap->osd_inst[from] == m->get_inst())) {
-	pending.new_down[from] = m->get_inst();
+      (osdmap->osd_inst.count(from) == 0 ||
+       osdmap->osd_inst[from] == m->get_inst())) {
+    pending.new_down[from] = m->get_inst();
 
-	if (osdmap->is_in(from))
-	  pending_out[from] = g_clock.now();
-	
-	//awaiting_maps[pending.epoch][m->get_source()] = 
+    if (osdmap->is_in(from))
+      pending_out[from] = g_clock.now();
+    
+    //awaiting_maps[pending.epoch][m->get_source()] = 
 
-	accept_pending();
-	bcast_latest_osd_map_mds();   
-	//bcast_latest_osd_map_osd();   // FIXME: which osds can i tell?
+    accept_pending();
+    bcast_latest_osd_map_mds();   
+    //bcast_latest_osd_map_osd();   // FIXME: which osds can i tell?
   }
 
   send_incremental_map(m->get_epoch(), m->get_source());
@@ -263,11 +263,11 @@ void OSDMonitor::handle_osd_failure(MOSDFailure *m)
 void OSDMonitor::fake_osd_failure(int osd, bool down) 
 {
   if (down) {
-	dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
-	pending.new_down[osd] = osdmap->osd_inst[osd];
+    dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
+    pending.new_down[osd] = osdmap->osd_inst[osd];
   } else {
-	dout(1) << "fake_osd_failure OUT osd" << osd << endl;
-	pending.new_out.push_back(osd);
+    dout(1) << "fake_osd_failure OUT osd" << osd << endl;
+    pending.new_out.push_back(osd);
   }
   accept_pending();
   bcast_latest_osd_map_osd();
@@ -282,31 +282,31 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   int from = m->get_source().num();
 
   if (osdmap->get_epoch() == 0) {
-	// waiting for boot!
-	osdmap->osd_inst[from] = m->get_source_inst();
+    // waiting for boot!
+    osdmap->osd_inst[from] = m->get_source_inst();
 
-	if (osdmap->osd_inst.size() == osdmap->osds.size()) {
-	  dout(-7) << "osd_boot all osds booted." << endl;
-	  osdmap->inc_epoch();
-	  osdmap->encode(maps[osdmap->get_epoch()]); // 1
-	  pending.epoch = osdmap->get_epoch()+1;     // 2
+    if (osdmap->osd_inst.size() == osdmap->osds.size()) {
+      dout(-7) << "osd_boot all osds booted." << endl;
+      osdmap->inc_epoch();
+      osdmap->encode(maps[osdmap->get_epoch()]); // 1
+      pending.epoch = osdmap->get_epoch()+1;     // 2
 
-	  send_map();
-	  bcast_latest_osd_map_osd();
-	  bcast_latest_osd_map_mds();
-	} else {
-	  dout(7) << "osd_boot waiting for " 
-			  << (osdmap->osds.size() - osdmap->osd_inst.size())
-			  << " osds to boot" << endl;
-	}
-	return;
+      send_map();
+      bcast_latest_osd_map_osd();
+      bcast_latest_osd_map_mds();
+    } else {
+      dout(7) << "osd_boot waiting for " 
+              << (osdmap->osds.size() - osdmap->osd_inst.size())
+              << " osds to boot" << endl;
+    }
+    return;
   }
 
   // already up?  mark down first?
   if (osdmap->is_up(from)) {
-	assert(m->get_source_inst() > osdmap->osd_inst[from]);   // this better be newer!  
-	  pending.new_down[from] = osdmap->osd_inst[from];
-	  accept_pending();
+    assert(m->get_source_inst() > osdmap->osd_inst[from]);   // this better be newer!  
+      pending.new_down[from] = osdmap->osd_inst[from];
+      accept_pending();
   }
   
   // mark up.
@@ -316,7 +316,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   
   // mark in?
   if (osdmap->out_osds.count(from)) 
-	pending.new_in.push_back(from);
+    pending.new_in.push_back(from);
   
   accept_pending();
 
@@ -333,9 +333,9 @@ void OSDMonitor::handle_osd_in(MOSDIn *m)
   dout(7) << "osd_in from " << m->get_source() << endl;
   int from = m->get_source().num();
   if (osdmap->is_out(from)) {
-	pending.new_in.push_back(from);
-	accept_pending();
-	send_incremental_map(m->map_epoch, m->get_source());
+    pending.new_in.push_back(from);
+    accept_pending();
+    send_incremental_map(m->map_epoch, m->get_source());
   }
 }
 
@@ -344,9 +344,9 @@ void OSDMonitor::handle_osd_out(MOSDOut *m)
   dout(7) << "osd_out from " << m->get_source() << endl;
   int from = m->get_source().num();
   if (osdmap->is_in(from)) {
-	pending.new_out.push_back(from);
-	accept_pending();
-	send_incremental_map(m->map_epoch, m->get_source());
+    pending.new_out.push_back(from);
+    accept_pending();
+    send_incremental_map(m->map_epoch, m->get_source());
   }
 }
 
@@ -356,12 +356,12 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
   dout(7) << "osd_getmap from " << m->get_source() << " since " << m->get_since() << endl;
   
   if (osdmap->get_epoch() == 0) {
-	awaiting_map[1][m->get_source()] = m->get_since();
+    awaiting_map[1][m->get_source()] = m->get_since();
   } else {
-	if (m->get_since())
-	  send_incremental_map(m->get_since(), m->get_source());
-	else
-	  send_full_map(m->get_source());
+    if (m->get_since())
+      send_incremental_map(m->get_since(), m->get_source());
+    else
+      send_full_map(m->get_source());
   }
   delete m;
 }
@@ -381,30 +381,30 @@ void OSDMonitor::accept_pending()
   
   // tell me about it
   for (map<int,entity_inst_t>::iterator i = pending.new_up.begin();
-	   i != pending.new_up.end(); 
-	   i++) { 
-	dout(0) << "osd" << i->first << " UP " << i->second << endl;
-	derr(0) << "osd" << i->first << " UP " << i->second << endl;
-	messenger->mark_up(MSG_ADDR_OSD(i->first), i->second);
+       i != pending.new_up.end(); 
+       i++) { 
+    dout(0) << "osd" << i->first << " UP " << i->second << endl;
+    derr(0) << "osd" << i->first << " UP " << i->second << endl;
+    messenger->mark_up(MSG_ADDR_OSD(i->first), i->second);
   }
   for (map<int,entity_inst_t>::iterator i = pending.new_down.begin();
-	   i != pending.new_down.end();
-	   i++) {
-	dout(0) << "osd" << i->first << " DOWN " << i->second << endl;
-	derr(0) << "osd" << i->first << " DOWN " << i->second << endl;
-	messenger->mark_down(MSG_ADDR_OSD(i->first), i->second);
+       i != pending.new_down.end();
+       i++) {
+    dout(0) << "osd" << i->first << " DOWN " << i->second << endl;
+    derr(0) << "osd" << i->first << " DOWN " << i->second << endl;
+    messenger->mark_down(MSG_ADDR_OSD(i->first), i->second);
   }
   for (list<int>::iterator i = pending.new_in.begin();
-	   i != pending.new_in.end();
-	   i++) {
-	dout(0) << "osd" << *i << " IN" << endl;
-	derr(0) << "osd" << *i << " IN" << endl;
+       i != pending.new_in.end();
+       i++) {
+    dout(0) << "osd" << *i << " IN" << endl;
+    derr(0) << "osd" << *i << " IN" << endl;
   }
   for (list<int>::iterator i = pending.new_out.begin();
-	   i != pending.new_out.end();
-	   i++) {
-	dout(0) << "osd" << *i << " OUT" << endl;
-	derr(0) << "osd" << *i << " OUT" << endl;
+       i != pending.new_out.end();
+       i++) {
+    dout(0) << "osd" << *i << " OUT" << endl;
+    derr(0) << "osd" << *i << " OUT" << endl;
   }
 
   // clear new pending
@@ -421,9 +421,9 @@ void OSDMonitor::send_map()
   awaiting_map.erase(osdmap->get_epoch());
 
   for (map<msg_addr_t,epoch_t>::iterator i = s.begin();
-	   i != s.end();
-	   i++)
-	send_incremental_map(i->second, i->first);
+       i != s.end();
+       i++)
+    send_incremental_map(i->second, i->first);
 }
 
 
@@ -435,25 +435,25 @@ void OSDMonitor::send_full_map(msg_addr_t who)
 void OSDMonitor::send_incremental_map(epoch_t since, msg_addr_t dest)
 {
   dout(-10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
-		   << " to " << dest << endl;
+           << " to " << dest << endl;
   
   MOSDMap *m = new MOSDMap;
   
   for (epoch_t e = osdmap->get_epoch();
-	   e > since;
-	   e--) {
-	bufferlist bl;
-	if (inc_maps.count(e)) {
-	  dout(-10) << "send_incremental_map    inc " << e << endl;
-	  m->incremental_maps[e] = inc_maps[e];
-	} else if (maps.count(e)) {
-	  dout(-10) << "send_incremental_map   full " << e << endl;
-	  m->maps[e] = maps[e];
-	  //if (!full) break;
-	}
-	else {
-	  assert(0);  // we should have all maps.
-	}
+       e > since;
+       e--) {
+    bufferlist bl;
+    if (inc_maps.count(e)) {
+      dout(-10) << "send_incremental_map    inc " << e << endl;
+      m->incremental_maps[e] = inc_maps[e];
+    } else if (maps.count(e)) {
+      dout(-10) << "send_incremental_map   full " << e << endl;
+      m->maps[e] = maps[e];
+      //if (!full) break;
+    }
+    else {
+      assert(0);  // we should have all maps.
+    }
   }
   
   messenger->send_message(m, dest);
@@ -468,8 +468,8 @@ void OSDMonitor::bcast_latest_osd_map_mds()
   
   // tell mds
   for (int i=0; i<g_conf.num_mds; i++) {
-	//send_full_map(MSG_ADDR_MDS(i));
-	send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_MDS(i));
+    //send_full_map(MSG_ADDR_MDS(i));
+    send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_MDS(i));
   }
 }
 
@@ -482,11 +482,11 @@ void OSDMonitor::bcast_latest_osd_map_osd()
   set<int> osds;
   osdmap->get_all_osds(osds);
   for (set<int>::iterator it = osds.begin();
-	   it != osds.end();
-	   it++) {
-	if (osdmap->is_down(*it)) continue;
+       it != osds.end();
+       it++) {
+    if (osdmap->is_down(*it)) continue;
 
-	send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_OSD(*it));
+    send_incremental_map(osdmap->get_epoch()-1, MSG_ADDR_OSD(*it));
   }  
 }
 
@@ -500,22 +500,22 @@ void OSDMonitor::tick()
   utime_t now = g_clock.now();
   list<int> mark_out;
   for (map<int,utime_t>::iterator i = pending_out.begin();
-	   i != pending_out.end();
-	   i++) {
-	utime_t down = now;
-	down -= i->second;
+       i != pending_out.end();
+       i++) {
+    utime_t down = now;
+    down -= i->second;
 
-	if (down.sec() >= g_conf.mon_osd_down_out_interval) {
-	  dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << endl;
-	  mark_out.push_back(i->first);
-	}
+    if (down.sec() >= g_conf.mon_osd_down_out_interval) {
+      dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << endl;
+      mark_out.push_back(i->first);
+    }
   }
   for (list<int>::iterator i = mark_out.begin();
-	   i != mark_out.end();
-	   i++) {
-	pending_out.erase(*i);
-	pending.new_out.push_back( *i );
-	accept_pending();
+       i != mark_out.end();
+       i++) {
+    pending_out.erase(*i);
+    pending.new_out.push_back( *i );
+    accept_pending();
   }
   
   // next!

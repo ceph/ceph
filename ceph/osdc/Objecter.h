@@ -16,11 +16,13 @@ using namespace __gnu_cxx;
 class Context;
 class Messenger;
 class OSDMap;
+class MonMap;
 class Message;
 
 class Objecter {
  public:  
   Messenger *messenger;
+  MonMap    *monmap;
   OSDMap    *osdmap;
   
  private:
@@ -33,41 +35,41 @@ class Objecter {
  public:
   class OSDOp {
   public:
-	list<ObjectExtent> extents;
-	virtual ~OSDOp() {}
+    list<ObjectExtent> extents;
+    virtual ~OSDOp() {}
   };
 
   class OSDRead : public OSDOp {
   public:
-	bufferlist *bl;
-	Context *onfinish;
-	map<tid_t, ObjectExtent> ops;
-	map<object_t, bufferlist*> read_data;  // bits of data as they come back
+    bufferlist *bl;
+    Context *onfinish;
+    map<tid_t, ObjectExtent> ops;
+    map<object_t, bufferlist*> read_data;  // bits of data as they come back
 
-	OSDRead(bufferlist *b) : bl(b), onfinish(0) {
-	  bl->clear();
-	}
+    OSDRead(bufferlist *b) : bl(b), onfinish(0) {
+      bl->clear();
+    }
   };
 
   // generic modify
   class OSDModify : public OSDOp {
   public:
-	int op;
-	list<ObjectExtent> extents;
-	Context *onack;
-	Context *oncommit;
-	map<tid_t, ObjectExtent> waitfor_ack;
-	map<tid_t, eversion_t>   tid_version;
-	map<tid_t, ObjectExtent> waitfor_commit;
+    int op;
+    list<ObjectExtent> extents;
+    Context *onack;
+    Context *oncommit;
+    map<tid_t, ObjectExtent> waitfor_ack;
+    map<tid_t, eversion_t>   tid_version;
+    map<tid_t, ObjectExtent> waitfor_commit;
 
-	OSDModify(int o) : op(o), onack(0), oncommit(0) {}
+    OSDModify(int o) : op(o), onack(0), oncommit(0) {}
   };
   
   // write (includes the bufferlist)
   class OSDWrite : public OSDModify {
   public:
-	bufferlist bl;
-	OSDWrite(bufferlist &b) : OSDModify(OSD_OP_WRITE), bl(b) {}
+    bufferlist bl;
+    OSDWrite(bufferlist &b) : OSDModify(OSD_OP_WRITE), bl(b) {}
   };
 
   
@@ -83,52 +85,52 @@ class Objecter {
    */
   class PG {
   public:
-	vector<int> acting;
-	set<tid_t>  active_tids; // active ops
-	
-	PG() {}
-	
-	// primary - where i write
-	int primary() {
-	  if (acting.empty()) return -1;
-	  return acting[0];
-	}
-	// acker - where i read, and receive acks from
-	int acker() {
-	  if (acting.empty()) return -1;
-	  if (g_conf.osd_rep == OSD_REP_PRIMARY)
-		return acting[0];
-	  else
-		return acting[acting.size()-1];
-	}
+    vector<int> acting;
+    set<tid_t>  active_tids; // active ops
+    
+    PG() {}
+    
+    // primary - where i write
+    int primary() {
+      if (acting.empty()) return -1;
+      return acting[0];
+    }
+    // acker - where i read, and receive acks from
+    int acker() {
+      if (acting.empty()) return -1;
+      if (g_conf.osd_rep == OSD_REP_PRIMARY)
+        return acting[0];
+      else
+        return acting[acting.size()-1];
+    }
   };
 
   hash_map<pg_t,PG> pg_map;
   
   
   PG &get_pg(pg_t pgid) {
-	if (!pg_map.count(pgid)) 
-	  osdmap->pg_to_acting_osds(pgid, pg_map[pgid].acting);
-	return pg_map[pgid];
+    if (!pg_map.count(pgid)) 
+      osdmap->pg_to_acting_osds(pgid, pg_map[pgid].acting);
+    return pg_map[pgid];
   }
   void close_pg(pg_t pgid) {
-	assert(pg_map.count(pgid));
-	assert(pg_map[pgid].active_tids.empty());
-	pg_map.erase(pgid);
+    assert(pg_map.count(pgid));
+    assert(pg_map[pgid].active_tids.empty());
+    pg_map.erase(pgid);
   }
   void scan_pgs(set<pg_t>& chnaged_pgs);
   void kick_requests(set<pg_t>& changed_pgs);
-	
+    
 
  public:
-  Objecter(Messenger *m, OSDMap *om) : 
-	messenger(m), osdmap(om),
-	last_tid(0),
-	num_unacked(0), num_uncommitted(0)
-	{}
+  Objecter(Messenger *m, MonMap *mm, OSDMap *om) : 
+    messenger(m), monmap(mm), osdmap(om),
+    last_tid(0),
+    num_unacked(0), num_uncommitted(0)
+    {}
   ~Objecter() {
-	// clean up op_*
-	// ***
+    // clean up op_*
+    // ***
   }
 
   // messages
@@ -150,7 +152,7 @@ class Objecter {
   // public interface
  public:
   bool is_active() {
-	return !(op_read.empty() && op_modify.empty());
+    return !(op_read.empty() && op_modify.empty());
   }
 
   // med level
@@ -160,16 +162,16 @@ class Objecter {
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-			 Context *onfinish);
+             Context *onfinish);
   tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
-			  Context *onack, Context *oncommit);
+              Context *onack, Context *oncommit);
   tid_t zero(object_t oid, off_t off, size_t len,  
-			 Context *onack, Context *oncommit);
+             Context *onack, Context *oncommit);
 
   tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
 
 
-  Message* ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
+  void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst);
 
 };
 

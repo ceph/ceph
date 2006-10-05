@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,7 +28,7 @@ class Dispatcher {
 
 
   // how i deal with transmission failures.
-  virtual Message *ms_handle_failure(msg_addr_t dest, entity_inst_t& inst) { return 0; }
+  virtual void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst) { delete m; }
 
   // lookups
   virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst) { assert(0); return 0; }

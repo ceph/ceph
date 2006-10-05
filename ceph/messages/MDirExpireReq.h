@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -31,18 +31,18 @@ class MDirExpire : public Message {
 
   MDirExpire() {}
   MDirExpire(inodeno_t ino, int from, int nonce) :
-	Message(MSG_MDS_DIREXPIREREQ) {
-	st.ino = ino;
-	st.from = from;
-	st.nonce = nonce;
+    Message(MSG_MDS_DIREXPIREREQ) {
+    st.ino = ino;
+    st.from = from;
+    st.nonce = nonce;
   }
   virtual char *get_type_name() { return "DirExR";}
   
   virtual void decode_payload(crope& s) {
-	s.copy(0, sizeof(st), (char*)&st);
+    s.copy(0, sizeof(st), (char*)&st);
   }
   virtual void encode_payload(crope& s) {
-	s.append((char*)&st,sizeof(st));
+    s.append((char*)&st,sizeof(st));
   }
 };
 

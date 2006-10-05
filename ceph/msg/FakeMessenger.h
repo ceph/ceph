@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -52,22 +52,22 @@ class FakeMessenger : public Messenger {
   // -- incoming queue --
   // (that nothing uses)
   Message *get_message() {
-	if (!incoming.empty()) {
-	  Message *m = incoming.front();
-	  incoming.pop_front();
-	  qlen--;
-	  return m;
-	}
-	return NULL;
+    if (!incoming.empty()) {
+      Message *m = incoming.front();
+      incoming.pop_front();
+      qlen--;
+      return m;
+    }
+    return NULL;
   }
   bool queue_incoming(Message *m) {
-	incoming.push_back(m);
-	qlen++;
-	return true;
+    incoming.push_back(m);
+    qlen++;
+    return true;
   }
   int num_incoming() {
-	//return incoming.size();
-	return qlen;
+    //return incoming.size();
+    return qlen;
   }
 
 };

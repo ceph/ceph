@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -24,42 +24,42 @@
 void Allocator::dump_freelist()
 {
   if (0) {
-	interval_set<block_t> free;     // validate too
-	
-	block_t n = 0;
-	for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
-	  Table<block_t,block_t> *tab;
-	  if (b < EBOFS_NUM_FREE_BUCKETS) {
-		tab = fs->free_tab[b];
-		dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
-	  } else {
-		tab = fs->limbo_tab;
-		dout(30) << "dump limbo  " << tab->get_num_keys() << endl;;
-	  }
+    interval_set<block_t> free;     // validate too
+    
+    block_t n = 0;
+    for (int b=0; b<=EBOFS_NUM_FREE_BUCKETS; b++) {
+      Table<block_t,block_t> *tab;
+      if (b < EBOFS_NUM_FREE_BUCKETS) {
+        tab = fs->free_tab[b];
+        dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
+      } else {
+        tab = fs->limbo_tab;
+        dout(30) << "dump limbo  " << tab->get_num_keys() << endl;;
+      }
 
-	  if (tab->get_num_keys() > 0) {
-		Table<block_t,block_t>::Cursor cursor(tab);
-		assert(tab->find(0, cursor) >= 0);
-		while (1) {
-		  dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
-		  assert(cursor.current().value > 0);
+      if (tab->get_num_keys() > 0) {
+        Table<block_t,block_t>::Cursor cursor(tab);
+        assert(tab->find(0, cursor) >= 0);
+        while (1) {
+          dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
+          assert(cursor.current().value > 0);
 
-		  if (b < EBOFS_NUM_FREE_BUCKETS)
-			n += cursor.current().value;
+          if (b < EBOFS_NUM_FREE_BUCKETS)
+            n += cursor.current().value;
 
-		  if (free.contains( cursor.current().key, cursor.current().value )) 
-			dout(0) << "dump   bad " << cursor.current().key << "~" << cursor.current().value << endl;
-		  assert(!free.contains( cursor.current().key, cursor.current().value ));
-		  free.insert( cursor.current().key, cursor.current().value );
-		  if (cursor.move_right() <= 0) break;
-		}
-	  } else {
-		//cout << "  empty" << endl;
-	  }
-	}
-	
-	assert(n == fs->free_blocks);
-	dout(31) << "dump combined freelist is " << free << endl;
+          if (free.contains( cursor.current().key, cursor.current().value )) 
+            dout(0) << "dump   bad " << cursor.current().key << "~" << cursor.current().value << endl;
+          assert(!free.contains( cursor.current().key, cursor.current().value ));
+          free.insert( cursor.current().key, cursor.current().value );
+          if (cursor.move_right() <= 0) break;
+        }
+      } else {
+        //cout << "  empty" << endl;
+      }
+    }
+    
+    assert(n == fs->free_blocks);
+    dout(31) << "dump combined freelist is " << free << endl;
   }
 }
 
@@ -70,28 +70,28 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, int dir)
   bool found = false;
 
   if ((dir == DIR_ANY || dir == DIR_FWD) && 
-	  fs->free_tab[bucket]->find( near, cursor ) >= 0) {
-	// look to the right
-	do {
-	  if (cursor.current().value >= num)
-		found = true;
-	} while (!found && cursor.move_right() > 0);
+      fs->free_tab[bucket]->find( near, cursor ) >= 0) {
+    // look to the right
+    do {
+      if (cursor.current().value >= num)
+        found = true;
+    } while (!found && cursor.move_right() > 0);
   }
 
   if ((dir == DIR_ANY || dir == DIR_BACK) && 
-	  !found) {
-	// look to the left
-	fs->free_tab[bucket]->find( near, cursor );
+      !found) {
+    // look to the left
+    fs->free_tab[bucket]->find( near, cursor );
 
-	while (!found && cursor.move_left() >= 0) 
-	  if (cursor.current().value >= num)
-		found = true;
+    while (!found && cursor.move_left() >= 0) 
+      if (cursor.current().value >= num)
+        found = true;
   }
 
   if (found) {
-	ex.start = cursor.current().key;
-	ex.length = cursor.current().value;
-	return 0;
+    ex.start = cursor.current().key;
+    ex.length = cursor.current().value;
+    return 0;
   }
   
   return -1;
@@ -103,85 +103,85 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
   int dir = DIR_ANY; // no dir
   if (near == NEAR_LAST_FWD) {
-	near = last_pos;
-	dir = DIR_FWD;  // fwd
+    near = last_pos;
+    dir = DIR_FWD;  // fwd
   }
   else if (near == NEAR_LAST)
-	near = last_pos;
+    near = last_pos;
 
   int bucket;
 
   while (1) {  // try twice, if fwd = true
 
-	// look for contiguous extent
-	for (bucket = pick_bucket(num); bucket < EBOFS_NUM_FREE_BUCKETS; bucket++) {
-	  if (find(ex, bucket, num, near, dir) >= 0) {
-		// yay!
-		
-		// remove original
-		fs->free_tab[bucket]->remove( ex.start );
-		fs->free_blocks -= ex.length;
-		
-		if (ex.length > num) {
-		  if (ex.start < near) {
-			// to the left
-			if (ex.start + ex.length - num <= near) {
-			  // by a lot.  take right-most portion.
-			  Extent left;
-			  left.start = ex.start;
-			  left.length = ex.length - num;
-			  ex.start += left.length;
-			  ex.length -= left.length;
-			  assert(ex.length == num);
-			  _release_loner(left);
-			} else {
-			  // take middle part.
-			  Extent left,right;
-			  left.start = ex.start;
-			  left.length = near - ex.start;
-			  ex.start = near;
-			  right.start = ex.start + num;
-			  right.length = ex.length - left.length - num;
-			  ex.length = num;
-			  _release_loner(left);
-			  _release_loner(right);
-			}
-		  }
-		  else {
-			// to the right.  take left-most part.
-			Extent right;
-			right.start = ex.start + num;
-			right.length = ex.length - num;
-			ex.length = num;
-			_release_loner(right);
-		  }
-		}
-		
-		dout(20) << "allocate " << ex << " near " << near << endl;
-		last_pos = ex.end();
-		dump_freelist();
-		return num;
-	  }
-	}
+    // look for contiguous extent
+    for (bucket = pick_bucket(num); bucket < EBOFS_NUM_FREE_BUCKETS; bucket++) {
+      if (find(ex, bucket, num, near, dir) >= 0) {
+        // yay!
+        
+        // remove original
+        fs->free_tab[bucket]->remove( ex.start );
+        fs->free_blocks -= ex.length;
+        
+        if (ex.length > num) {
+          if (ex.start < near) {
+            // to the left
+            if (ex.start + ex.length - num <= near) {
+              // by a lot.  take right-most portion.
+              Extent left;
+              left.start = ex.start;
+              left.length = ex.length - num;
+              ex.start += left.length;
+              ex.length -= left.length;
+              assert(ex.length == num);
+              _release_loner(left);
+            } else {
+              // take middle part.
+              Extent left,right;
+              left.start = ex.start;
+              left.length = near - ex.start;
+              ex.start = near;
+              right.start = ex.start + num;
+              right.length = ex.length - left.length - num;
+              ex.length = num;
+              _release_loner(left);
+              _release_loner(right);
+            }
+          }
+          else {
+            // to the right.  take left-most part.
+            Extent right;
+            right.start = ex.start + num;
+            right.length = ex.length - num;
+            ex.length = num;
+            _release_loner(right);
+          }
+        }
+        
+        dout(20) << "allocate " << ex << " near " << near << endl;
+        last_pos = ex.end();
+        dump_freelist();
+        return num;
+      }
+    }
 
-	if (dir == DIR_BACK || dir == DIR_ANY) break;
-	dir = DIR_BACK;
+    if (dir == DIR_BACK || dir == DIR_ANY) break;
+    dir = DIR_BACK;
   }
 
   // ok, find partial extent instead.
   for (block_t trysize = num/2; trysize >= 1; trysize /= 2) {
-	int bucket = pick_bucket(trysize);
-	if (find(ex, bucket, trysize, near) >= 0) {
-	  // yay!
-	  assert(ex.length < num);
-	  
-	  fs->free_tab[bucket]->remove(ex.start);
-	  fs->free_blocks -= ex.length;
-	  last_pos = ex.end();
-	  dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << endl;
-	  dump_freelist();
-	  return ex.length;
-	}	
+    int bucket = pick_bucket(trysize);
+    if (find(ex, bucket, trysize, near) >= 0) {
+      // yay!
+      assert(ex.length < num);
+      
+      fs->free_tab[bucket]->remove(ex.start);
+      fs->free_blocks -= ex.length;
+      last_pos = ex.end();
+      dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << endl;
+      dump_freelist();
+      return ex.length;
+    }    
   }
 
   dout(1) << "allocate failed, fs completely full!  " << fs->free_blocks << endl;
@@ -203,10 +203,10 @@ int Allocator::commit_limbo()
 {
   dout(20) << "commit_limbo" << endl;
   for (map<block_t,block_t>::iterator i = limbo.m.begin();
-	   i != limbo.m.end();
-	   i++) {
-	fs->limbo_tab->insert(i->first, i->second);
-	//fs->free_blocks += i->second;
+       i != limbo.m.end();
+       i++) {
+    fs->limbo_tab->insert(i->first, i->second);
+    //fs->free_blocks += i->second;
   }
   limbo.clear();
   //fs->limbo_blocks = 0;
@@ -218,17 +218,17 @@ int Allocator::release_limbo()
 {
   dump_freelist();
   if (fs->limbo_tab->get_num_keys() > 0) {
-	Table<block_t,block_t>::Cursor cursor(fs->limbo_tab);
-	fs->limbo_tab->find(0, cursor);
-	while (1) {
-	  Extent ex(cursor.current().key, cursor.current().value);
-	  dout(20) << "release_limbo  ex " << ex << endl;
+    Table<block_t,block_t>::Cursor cursor(fs->limbo_tab);
+    fs->limbo_tab->find(0, cursor);
+    while (1) {
+      Extent ex(cursor.current().key, cursor.current().value);
+      dout(20) << "release_limbo  ex " << ex << endl;
 
-	  fs->limbo_blocks -= ex.length;
-	  _release_merge(ex);
+      fs->limbo_blocks -= ex.length;
+      _release_merge(ex);
 
-	  if (cursor.move_right() <= 0) break;
-	}
+      if (cursor.move_right() <= 0) break;
+    }
   }
   fs->limbo_tab->clear();
   dump_freelist();
@@ -242,17 +242,17 @@ int Allocator::_alloc_inc(Extent& ex)
   Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
   
   if (fs->alloc_tab->find( ex.start, cursor ) 
-	  == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
-	assert(cursor.current().value.first == ex.length);
-	pair<block_t,int>& v = cursor.dirty_current_value();
-	v.second++;
-	dout(10) << "_alloc_inc " << ex << " "
-			 << (v.second-1) << " -> " << v.second 
-			 << endl;
+      == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
+    assert(cursor.current().value.first == ex.length);
+    pair<block_t,int>& v = cursor.dirty_current_value();
+    v.second++;
+    dout(10) << "_alloc_inc " << ex << " "
+             << (v.second-1) << " -> " << v.second 
+             << endl;
   } else {
-	// insert it, @1
-	fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
-	dout(10) << "_alloc_inc " << ex << " 0 -> 1" << endl;
+    // insert it, @1
+    //fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
+    dout(10) << "_alloc_inc " << ex << " 0 -> 1" << endl;
   }
   return 0;
 }
@@ -262,20 +262,20 @@ int Allocator::_alloc_dec(Extent& ex)
   Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
   
   if (fs->alloc_tab->find( ex.start, cursor ) 
-	  == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
-	assert(cursor.current().value.first == ex.length);
-	if (cursor.current().value.second == 1) {
-	  dout(10) << "_alloc_dec " << ex << " 1 -> 0" << endl;
-	  fs->alloc_tab->remove( cursor.current().key );
-	} else {
-	  pair<block_t,int>& v = cursor.dirty_current_value();
-	  --v.second;
-	  dout(10) << "_alloc_dec " << ex << " "
-			   << (v.second+1) << " -> " << v.second 
-			   << endl;
-	}
+      == Table<block_t,pair<block_t,int> >::Cursor::MATCH) {
+    assert(cursor.current().value.first == ex.length);
+    if (cursor.current().value.second == 1) {
+      dout(10) << "_alloc_dec " << ex << " 1 -> 0" << endl;
+      fs->alloc_tab->remove( cursor.current().key );
+    } else {
+      pair<block_t,int>& v = cursor.dirty_current_value();
+      --v.second;
+      dout(10) << "_alloc_dec " << ex << " "
+               << (v.second+1) << " -> " << v.second 
+               << endl;
+    }
   } else {
-	assert(0);
+    assert(0);
   }
   return 0;
 }
@@ -307,35 +307,35 @@ int Allocator::_release_merge(Extent& orig)
   
   // one after us?
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
-	Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
-	
-	if (fs->free_tab[b]->find( newex.start+newex.length, cursor ) 
-		== Table<block_t,block_t>::Cursor::MATCH) {
-	  // add following extent to ours
-	  newex.length += cursor.current().value;
-	  
-	  // remove it
-	  fs->free_blocks -= cursor.current().value;
-	  fs->free_tab[b]->remove( cursor.current().key );
-	  break;
-	}
+    Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
+    
+    if (fs->free_tab[b]->find( newex.start+newex.length, cursor ) 
+        == Table<block_t,block_t>::Cursor::MATCH) {
+      // add following extent to ours
+      newex.length += cursor.current().value;
+      
+      // remove it
+      fs->free_blocks -= cursor.current().value;
+      fs->free_tab[b]->remove( cursor.current().key );
+      break;
+    }
   }
   
   // one before us?
   for (int b=0; b<EBOFS_NUM_FREE_BUCKETS; b++) {
-	Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
-	fs->free_tab[b]->find( newex.start+newex.length, cursor );
-	if (cursor.move_left() >= 0 &&
-		(cursor.current().key + cursor.current().value == newex.start)) {
-	  // merge
-	  newex.start = cursor.current().key;
-	  newex.length += cursor.current().value;
+    Table<block_t,block_t>::Cursor cursor(fs->free_tab[b]);
+    fs->free_tab[b]->find( newex.start+newex.length, cursor );
+    if (cursor.move_left() >= 0 &&
+        (cursor.current().key + cursor.current().value == newex.start)) {
+      // merge
+      newex.start = cursor.current().key;
+      newex.length += cursor.current().value;
 
-	  // remove it
-	  fs->free_blocks -= cursor.current().value;
-	  fs->free_tab[b]->remove( cursor.current().key );
-	  break;
-	}
+      // remove it
+      fs->free_blocks -= cursor.current().value;
+      fs->free_tab[b]->remove( cursor.current().key );
+      break;
+    }
   }
   
   // ok, insert newex

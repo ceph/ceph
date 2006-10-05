@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -61,7 +61,7 @@ void CDentry::mark_dirty()
 
   // pin inode?
   if (is_primary() && !dirty && inode) inode->get(CINODE_PIN_DNDIRTY);
-	
+    
   // i now live in that (potentially newly dirty) version
   parent_dir_version = dir->get_version();
 
@@ -73,19 +73,19 @@ void CDentry::mark_clean() {
   assert(parent_dir_version <= dir->get_version());
 
   if (parent_dir_version < dir->get_last_committed_version())
-	cerr << " bad mark_clean " << *this << endl;	
+    cerr << " bad mark_clean " << *this << endl;    
 
   assert(parent_dir_version >= dir->get_last_committed_version());
 
   if (is_primary() && dirty && inode) inode->put(CINODE_PIN_DNDIRTY);
   dirty = false;
-}	
+}    
 
 
 void CDentry::make_path(string& s)
 {
   if (dir->inode->get_parent_dn()) 
-	dir->inode->get_parent_dn()->make_path(s);
+    dir->inode->get_parent_dn()->make_path(s);
 
   s += "/";
   s += name;
@@ -122,20 +122,20 @@ const CDentry& CDentry::operator= (const CDentry& right) {
 
   // comparisons
   bool CDentry::operator== (const CDentry& right) const {
-	return name == right.name;
+    return name == right.name;
   }
   bool CDentry::operator!= (const CDentry& right) const {
-	return name == right.name;
+    return name == right.name;
   }
   bool CDentry::operator< (const CDentry& right) const {
-	return name < right.name;
+    return name < right.name;
   }
   bool CDentry::operator> (const CDentry& right) const {
-	return name > right.name;
+    return name > right.name;
   }
   bool CDentry::operator>= (const CDentry& right) const {
-	return name >= right.name;
+    return name >= right.name;
   }
   bool CDentry::operator<= (const CDentry& right) const {
-	return name <= right.name;
+    return name <= right.name;
   }

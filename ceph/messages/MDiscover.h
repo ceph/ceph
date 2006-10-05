@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -41,21 +41,21 @@ class MDiscover : public Message {
 
   MDiscover() { }
   MDiscover(int asker, 
-			inodeno_t base_ino,
-			filepath& want,
-			bool want_base_dir = true,
-			bool want_root_inode = false) :
-	Message(MSG_MDS_DISCOVER) {
-	this->asker = asker;
-	this->base_ino = base_ino;
-	this->want = want;
-	this->want_base_dir = want_base_dir;
-	this->want_root_inode = want_root_inode;
+            inodeno_t base_ino,
+            filepath& want,
+            bool want_base_dir = true,
+            bool want_root_inode = false) :
+    Message(MSG_MDS_DISCOVER) {
+    this->asker = asker;
+    this->base_ino = base_ino;
+    this->want = want;
+    this->want_base_dir = want_base_dir;
+    this->want_root_inode = want_root_inode;
   }
   virtual char *get_type_name() { return "Dis"; }
 
   virtual void decode_payload(crope& r, int& off) {
-	r.copy(off, sizeof(asker), (char*)&asker);
+    r.copy(off, sizeof(asker), (char*)&asker);
     off += sizeof(asker);
     r.copy(off, sizeof(base_ino), (char*)&base_ino);
     off += sizeof(base_ino);
@@ -64,7 +64,7 @@ class MDiscover : public Message {
     want._unrope(r, off);
   }
   virtual void encode_payload(crope& r) {
-	r.append((char*)&asker, sizeof(asker));
+    r.append((char*)&asker, sizeof(asker));
     r.append((char*)&base_ino, sizeof(base_ino));
     r.append((char*)&want_base_dir, sizeof(want_base_dir));
     want._rope(r);

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -33,11 +33,11 @@ class MAnchorRequest : public Message {
  public:
   MAnchorRequest() {}
   MAnchorRequest(int op, inodeno_t ino) : Message(MSG_MDS_ANCHORREQUEST) {
-	this->op = op;
-	this->ino = ino;
+    this->op = op;
+    this->ino = ino;
   }
   ~MAnchorRequest() {
-	for (unsigned i=0; i<trace.size(); i++) delete trace[i];
+    for (unsigned i=0; i<trace.size(); i++) delete trace[i];
   }
   virtual char *get_type_name() { return "areq"; }
 
@@ -48,27 +48,27 @@ class MAnchorRequest : public Message {
   vector<Anchor*>& get_trace() { return trace; }
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(op), (char*)&op);
-	off += sizeof(op);
-	s.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	int n;
-	s.copy(off, sizeof(int), (char*)&n);
-	off += sizeof(int);
-	for (int i=0; i<n; i++) {
-	  Anchor *a = new Anchor;
-	  a->_unrope(s, off);
-	  trace.push_back(a);
-	}
+    s.copy(off, sizeof(op), (char*)&op);
+    off += sizeof(op);
+    s.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    int n;
+    s.copy(off, sizeof(int), (char*)&n);
+    off += sizeof(int);
+    for (int i=0; i<n; i++) {
+      Anchor *a = new Anchor;
+      a->_unrope(s, off);
+      trace.push_back(a);
+    }
   }
 
   virtual void encode_payload(crope& r) {
-	r.append((char*)&op, sizeof(op));
-	r.append((char*)&ino, sizeof(ino));
-	int n = trace.size();
-	r.append((char*)&n, sizeof(int));
-	for (int i=0; i<n; i++) 
-	  trace[i]->_rope(r);
+    r.append((char*)&op, sizeof(op));
+    r.append((char*)&ino, sizeof(ino));
+    int n = trace.size();
+    r.append((char*)&n, sizeof(int));
+    for (int i=0; i<n; i++) 
+      trace[i]->_rope(r);
   }
 };
 

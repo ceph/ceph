@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -61,49 +61,49 @@ class TCPDirectory : public Dispatcher {
 
  public:
   TCPDirectory(TCPMessenger *m) : 
-	messenger(m),
-	version(0),
-	nrank(0), nclient(0), nmds(0), nosd(0) { 
-	messenger->set_dispatcher(this);
+    messenger(m),
+    version(0),
+    nrank(0), nclient(0), nmds(0), nosd(0) { 
+    messenger->set_dispatcher(this);
 
-	// i am rank 0!
-	dir[MSG_ADDR_DIRECTORY] = 0;
-	rank_addr[0] = m->get_tcpaddr();
-	++nrank;
+    // i am rank 0!
+    dir[MSG_ADDR_DIRECTORY] = 0;
+    rank_addr[0] = m->get_tcpaddr();
+    ++nrank;
 
-	// announce nameserver
-	cout << "export CEPH_NAMESERVER=" << m->get_tcpaddr() << endl;
+    // announce nameserver
+    cout << "export CEPH_NAMESERVER=" << m->get_tcpaddr() << endl;
 
-	int fd = ::open(".ceph_ns", O_WRONLY|O_CREAT);
-	::write(fd, (void*)&m->get_tcpaddr(), sizeof(tcpaddr_t));
-	::fchmod(fd, 0755);
-	::close(fd);
+    int fd = ::open(".ceph_ns", O_WRONLY|O_CREAT);
+    ::write(fd, (void*)&m->get_tcpaddr(), sizeof(tcpaddr_t));
+    ::fchmod(fd, 0755);
+    ::close(fd);
   }
   ~TCPDirectory() {
-	::unlink(".ceph_ns");
+    ::unlink(".ceph_ns");
   }
 
   void dispatch(Message *m) {
-	switch (m->get_type()) {
-	case MSG_NS_CONNECT:
-	  handle_connect((class MNSConnect*)m);
-	  break;
-	case MSG_NS_REGISTER:
-	  handle_register((class MNSRegister*)m);
-	  break;
-	case MSG_NS_STARTED:
-	  handle_started(m);
-	  break;
-	case MSG_NS_UNREGISTER:
-	  handle_unregister(m);
-	  break;
-	case MSG_NS_LOOKUP:
-	  handle_lookup((class MNSLookup*)m);
-	  break;
+    switch (m->get_type()) {
+    case MSG_NS_CONNECT:
+      handle_connect((class MNSConnect*)m);
+      break;
+    case MSG_NS_REGISTER:
+      handle_register((class MNSRegister*)m);
+      break;
+    case MSG_NS_STARTED:
+      handle_started(m);
+      break;
+    case MSG_NS_UNREGISTER:
+      handle_unregister(m);
+      break;
+    case MSG_NS_LOOKUP:
+      handle_lookup((class MNSLookup*)m);
+      break;
 
-	default:
-	  assert(0);
-	}
+    default:
+      assert(0);
+    }
   }
 };
 

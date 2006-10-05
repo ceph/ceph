@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -53,47 +53,47 @@ Trace::Trace(const char* f)
   trace_lock.Lock();
   
   if (traces.count(filename))
-	tl = traces[filename];
+    tl = traces[filename];
   else {
-	tl = new TokenList;
-	tl->ref = 0;
-	tl->filename = filename;
+    tl = new TokenList;
+    tl->ref = 0;
+    tl->filename = filename;
 
-	// open file
-	crope cr;
-	int fd = open(filename.c_str(), O_RDONLY);
-	assert(fd > 0);
-	char buf[100];
-	while (1) {
-	  int r = read(fd, buf, 100);
-	  if (r == 0) break;
-	  assert(r > 0);
-	  cr.append(buf, r);
-	}
-	close(fd);
-	
-	// copy
-	tl->len = cr.length()+1;
-	tl->data = new char[tl->len];
-	memcpy(tl->data, cr.c_str(), cr.length());
-	tl->data[tl->len-1] = '\n';
+    // open file
+    crope cr;
+    int fd = open(filename.c_str(), O_RDONLY);
+    assert(fd > 0);
+    char buf[100];
+    while (1) {
+      int r = read(fd, buf, 100);
+      if (r == 0) break;
+      assert(r > 0);
+      cr.append(buf, r);
+    }
+    close(fd);
+    
+    // copy
+    tl->len = cr.length()+1;
+    tl->data = new char[tl->len];
+    memcpy(tl->data, cr.c_str(), cr.length());
+    tl->data[tl->len-1] = '\n';
 
-	// index!
-	int o = 0;
-	while (o < tl->len) {
-	  char *n = tl->data + o;
-	  
-	  // find newline
-	  while (tl->data[o] != '\n') o++;
-	  assert(tl->data[o] == '\n');
-	  tl->data[o] = 0;
-	  
-	  if (tl->data + o > n) tl->tokens.push_back(n);
-	  o++;
-	}
+    // index!
+    int o = 0;
+    while (o < tl->len) {
+      char *n = tl->data + o;
+      
+      // find newline
+      while (tl->data[o] != '\n') o++;
+      assert(tl->data[o] == '\n');
+      tl->data[o] = 0;
+      
+      if (tl->data + o > n) tl->tokens.push_back(n);
+      o++;
+    }
 
-	dout(1) << "trace " << filename << " loaded with " << tl->tokens.size() << " tokens" << endl;
-	traces[filename] = tl;
+    dout(1) << "trace " << filename << " loaded with " << tl->tokens.size() << " tokens" << endl;
+    traces[filename] = tl;
   }
 
   tl->ref++;
@@ -107,8 +107,8 @@ Trace::~Trace()
   
   tl->ref--;
   if (tl->ref == 0) {
-	traces.erase(tl->filename);
-	delete tl;
+    traces.erase(tl->filename);
+    delete tl;
   }
 
   trace_lock.Unlock();

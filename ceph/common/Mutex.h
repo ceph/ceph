@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -42,18 +42,18 @@ class Mutex
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-	pthread_mutex_init(&M,&attr);
+    pthread_mutex_init(&M,&attr);
     //cout << this << " mutex init = " << r << endl;
     pthread_mutexattr_destroy(&attr);
   }
 
   Mutex(bool t) : tag(t)
   {
-	assert(0);
+    assert(0);
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-	pthread_mutex_init(&M,&attr);
+    pthread_mutex_init(&M,&attr);
     //cout << this << " mutex init = " << r << endl;
     pthread_mutexattr_destroy(&attr);
   }
@@ -63,52 +63,52 @@ class Mutex
 
   virtual ~Mutex()
   { 
-	if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").destructor locked = " << locked << " < 0" << endl;
-	//pthread_mutex_unlock(&M); 
-	pthread_mutex_destroy(&M); 
+    if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").destructor locked = " << locked << " < 0" << endl;
+    //pthread_mutex_unlock(&M); 
+    pthread_mutex_destroy(&M); 
   }
 
   int Lock()  { 
-	int t = tag;
-	if (t) cout << this << " " << pthread_self() << endl; 
-	int r = pthread_mutex_lock(&M);
-	if (t) cout << "lock = " << r << endl;
-	locked++;
-	return r;
+    int t = tag;
+    if (t) cout << this << " " << pthread_self() << endl; 
+    int r = pthread_mutex_lock(&M);
+    if (t) cout << "lock = " << r << endl;
+    locked++;
+    return r;
   }
 
   int Lock(char *s)  { 
-	cout << "Lock: " << s << endl;
-	int r = pthread_mutex_lock(&M);
-	cout << this << " " << pthread_self() << " lock = " << r << endl;
-	locked++;
-	return r;
+    cout << "Lock: " << s << endl;
+    int r = pthread_mutex_lock(&M);
+    cout << this << " " << pthread_self() << " lock = " << r << endl;
+    locked++;
+    return r;
   }
 
   int Lock_Try() const
   { 
-	return pthread_mutex_trylock(&M); 
+    return pthread_mutex_trylock(&M); 
   }
 
   int Unlock() 
   { 
-	int t = tag;
-	locked--;
-	if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
-	if (t) cout << this << " " << pthread_self() << endl;
-	int r = pthread_mutex_unlock(&M);
-	if (t) cout << "lock = " << r << endl;
-	return r;
+    int t = tag;
+    locked--;
+    if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
+    if (t) cout << this << " " << pthread_self() << endl;
+    int r = pthread_mutex_unlock(&M);
+    if (t) cout << "lock = " << r << endl;
+    return r;
   }
 
   int Unlock(char *s) 
   { 
-	cout << "Unlock: " << s << endl;
-	locked--;
-	if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
-	int r = pthread_mutex_unlock(&M);
-	cout << this << " " << pthread_self() << " unlock = " << r << endl;
-	return r;
+    cout << "Unlock: " << s << endl;
+    locked--;
+    if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
+    int r = pthread_mutex_unlock(&M);
+    cout << this << " " << pthread_self() << " unlock = " << r << endl;
+    return r;
   }
 
   friend class Cond;

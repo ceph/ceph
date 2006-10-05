@@ -8,14 +8,14 @@
 
 main (int argc, char *argv[])
 {
-  Rush	rush;
-  char	buf[200];
-  int	i, j, k, numClusters;
-  int	numKeys = 5;
-  int	numReplicas = 4;
-  int	curSize;
-  double	curWeight;
-  int	servers[1000];
+  Rush    rush;
+  char    buf[200];
+  int    i, j, k, numClusters;
+  int    numKeys = 5;
+  int    numReplicas = 4;
+  int    curSize;
+  double    curWeight;
+  int    servers[1000];
 
   if (argc > 1) {
     numKeys = atoi (argv[1]);
@@ -32,7 +32,7 @@ main (int argc, char *argv[])
     rush.AddCluster (curSize, curWeight);
     if (rush.Servers () < numReplicas) {
       fprintf (stderr, "ERROR: must have at least %d disks in the system!\n",
-	       rush.Clusters ());
+           rush.Clusters ());
       exit (-1);
     }
     for (j = 0; j < numKeys; j++) {
@@ -40,7 +40,7 @@ main (int argc, char *argv[])
 #if 0
       printf ("%-3d %-6d ", i, j);
       for (k = 0; k < numReplicas; k++) {
-	printf ("%-5d ", servers[k]);
+    printf ("%-5d ", servers[k]);
       }
       putchar ('\n');
 #endif

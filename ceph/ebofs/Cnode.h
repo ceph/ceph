@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,7 +38,7 @@ class Cnode : public LRUObject
 
  public:
   Cnode(coll_t cid) : ref(0), dirty(false), coll_id(cid) {
-	cnode_loc.length = 0;
+    cnode_loc.length = 0;
   }
   ~Cnode() {
   }
@@ -47,39 +47,39 @@ class Cnode : public LRUObject
   int get_cnode_len() { return cnode_loc.length; }
 
   void get() {
-	if (ref == 0) lru_pin();
-	ref++;
+    if (ref == 0) lru_pin();
+    ref++;
   }
   void put() {
-	ref--;
-	if (ref == 0) lru_unpin();
+    ref--;
+    if (ref == 0) lru_unpin();
   }
   int get_ref_count() { return ref; }
 
   void mark_dirty() {
-	if (!dirty) {
-	  dirty = true;
-	  get();
-	}
+    if (!dirty) {
+      dirty = true;
+      get();
+    }
   }
   void mark_clean() {
-	if (dirty) {
-	  dirty = false;
-	  put();
-	}
+    if (dirty) {
+      dirty = false;
+      put();
+    }
   }
   bool is_dirty() { return dirty; }
 
 
   int get_attr_bytes() {
-	int s = 0;
-	for (map<string, bufferptr>::iterator i = attr.begin();
-		 i != attr.end();
-		 i++) {
-	  s += i->first.length() + 1;
-	  s += i->second.length() + sizeof(int);
-	}
-	return s;
+    int s = 0;
+    for (map<string, bufferptr>::iterator i = attr.begin();
+         i != attr.end();
+         i++) {
+      s += i->first.length() + 1;
+      s += i->second.length() + sizeof(int);
+    }
+    return s;
   }
   
   //

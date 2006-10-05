@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -57,18 +57,18 @@ class MDBalancer {
   map<int,double> exported;
 
   double try_match(int ex, double& maxex,
-				   int im, double& maxim);
+                   int im, double& maxim);
   double get_maxim(int im) {
-	return target_load - mds_meta_load[im] - imported[im];
+    return target_load - mds_meta_load[im] - imported[im];
   }
   double get_maxex(int ex) {
-	return mds_meta_load[ex] - target_load - exported[ex];	
+    return mds_meta_load[ex] - target_load - exported[ex];    
   }
 
  public:
   MDBalancer(MDS *m) {
-	mds = m;
-	beat_epoch = 0;
+    mds = m;
+    beat_epoch = 0;
   }
   
   mds_load_t get_load();
@@ -83,10 +83,10 @@ class MDBalancer {
   void export_empties();
   void do_rebalance(int beat);
   void find_exports(CDir *dir, 
-					double amount, 
-					list<CDir*>& exports, 
-					double& have,
-					set<CDir*>& already_exporting);
+                    double amount, 
+                    list<CDir*>& exports, 
+                    double& have,
+                    set<CDir*>& already_exporting);
 
 
   void subtract_export(class CDir *ex);

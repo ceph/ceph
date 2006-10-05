@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -32,28 +32,28 @@ class Thread {
 
  private:
   static void *_entry_func(void *arg) {
-	return ((Thread*)arg)->entry();
+    return ((Thread*)arg)->entry();
   }
 
  public:
   int create() {
-	return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
+    return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
   }
 
   bool am_self() {
-	return (pthread_self() == thread_id);
+    return (pthread_self() == thread_id);
   }
 
   int join(void **prval = 0) {
-	if (thread_id == 0) return -1;   // never started.
-	int status = pthread_join(thread_id, prval);
-	if (status == 0) 
-	  thread_id = 0;
-	else {
-	  cout << "join status = " << status << endl;
-	  assert(0);
-	}
-	return status;
+    if (thread_id == 0) return -1;   // never started.
+    int status = pthread_join(thread_id, prval);
+    if (status == 0) 
+      thread_id = 0;
+    else {
+      cout << "join status = " << status << endl;
+      assert(0);
+    }
+    return status;
   }
 };
 

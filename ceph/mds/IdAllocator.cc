@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -78,29 +78,29 @@ void IdAllocator::save(Context *onfinish)
 
   int ntypes = free.size();
   data.append((char*)&ntypes, sizeof(ntypes));
-	
+    
   // over types
   for (map<int, rangeset<idno_t> >::iterator ty = free.begin();
-	   ty != free.end(); 
-	   ty++) {
-	int type = ty->first;
-	data.append((char*)&type, sizeof(type));
-	  
-	int mapsize = free[type].map_size();
-	data.append((char*)&mapsize, sizeof(mapsize));
-	dout(DBLEVEL) << "type " << type << " num " << mapsize << endl;
-	  
-	// over entries
-	for (map<idno_t,idno_t>::iterator it = free[type].map_begin();
-		 it != free[type].map_end();
-		 it++) {
-	  idno_t a = it->first;
-	  idno_t b = it->second;
-	  data.append((char*)&a, sizeof(a));
-	  data.append((char*)&b, sizeof(b));
-	  mapsize--;
-	}
-	assert(mapsize == 0);
+       ty != free.end(); 
+       ty++) {
+    int type = ty->first;
+    data.append((char*)&type, sizeof(type));
+      
+    int mapsize = free[type].map_size();
+    data.append((char*)&mapsize, sizeof(mapsize));
+    dout(DBLEVEL) << "type " << type << " num " << mapsize << endl;
+      
+    // over entries
+    for (map<idno_t,idno_t>::iterator it = free[type].map_begin();
+         it != free[type].map_end();
+         it++) {
+      idno_t a = it->first;
+      idno_t b = it->second;
+      data.append((char*)&a, sizeof(a));
+      data.append((char*)&b, sizeof(b));
+      mapsize--;
+    }
+    assert(mapsize == 0);
   }
 
   // reset dirty list   .. FIXME this is optimistic, i'm assuming the write succeeds.
@@ -112,10 +112,10 @@ void IdAllocator::save(Context *onfinish)
 
   // write (async)
   mds->filer->write(id_inode,
-					0, data.length(),
-					bl,
-					0,
-					onfinish, NULL);  // onack, UNSAFE, FIXME
+                    0, data.length(),
+                    bl,
+                    0,
+                    onfinish, NULL);  // onack, UNSAFE, FIXME
 }
 
 
@@ -125,7 +125,7 @@ void IdAllocator::reset()
 
   // use generic range FIXME THIS IS CRAP
   free[ID_INO].map_insert((long long)0x1000000 * (long long)(mds->get_nodeid()+1),
-						  (long long)0x1000000 * (long long)(mds->get_nodeid()+2) - 1LL);
+                          (long long)0x1000000 * (long long)(mds->get_nodeid()+2) - 1LL);
   //free[ID_INO].dump();
   
   //free[ID_FH].map_insert(10000000LL * (mds->get_nodeid()+1),
@@ -143,11 +143,11 @@ public:
   Context *onfinish;
   bufferlist bl;
   C_ID_Load(IdAllocator *ida, Context *onfinish) {
-	this->ida = ida;
-	this->onfinish = onfinish;
+    this->ida = ida;
+    this->onfinish = onfinish;
   }
   void finish(int r) {
-	ida->load_2(r, bl, onfinish);
+    ida->load_2(r, bl, onfinish);
   }
 };
 
@@ -160,9 +160,9 @@ void IdAllocator::load(Context *onfinish)
   opening = true;
 
   mds->filer->read(id_inode,
-				   0, id_inode.layout.stripe_size,
-				   &c->bl,
-				   c);
+                   0, id_inode.layout.stripe_size,
+                   &c->bl,
+                   c);
 }
 
 void IdAllocator::load_2(int r, bufferlist& blist, Context *onfinish)
@@ -170,40 +170,40 @@ void IdAllocator::load_2(int r, bufferlist& blist, Context *onfinish)
   char *dataptr = blist.c_str();
 
   if (r > 0) {
-	int off = 0;
-	int ntypes = *(int*)(dataptr + off);
-	off += sizeof(ntypes);
-	
-	dout(DBLEVEL) << "ntypes " << ntypes << endl;
-	
-	for (int ty = 0; ty < ntypes; ty++) {
-	  int type = *(int*)(dataptr + off);
-	  off += sizeof(type);
-	  
-	  int mapsize = *(int*)(dataptr + off);
-	  off += sizeof(mapsize);
-	  
-	  dout(DBLEVEL) << "type " << type << " num " << mapsize << endl;
-	  for (int i=0; i<mapsize; i++) {
-		idno_t a = *(idno_t*)(dataptr + off);
-		off += sizeof(a);
-		idno_t b = *(idno_t*)(dataptr + off);
-		off += sizeof(b);
-		free[type].map_insert(a,b);
-	  }
-	  free[type].dump();
-	}
+    int off = 0;
+    int ntypes = *(int*)(dataptr + off);
+    off += sizeof(ntypes);
+    
+    dout(DBLEVEL) << "ntypes " << ntypes << endl;
+    
+    for (int ty = 0; ty < ntypes; ty++) {
+      int type = *(int*)(dataptr + off);
+      off += sizeof(type);
+      
+      int mapsize = *(int*)(dataptr + off);
+      off += sizeof(mapsize);
+      
+      dout(DBLEVEL) << "type " << type << " num " << mapsize << endl;
+      for (int i=0; i<mapsize; i++) {
+        idno_t a = *(idno_t*)(dataptr + off);
+        off += sizeof(a);
+        idno_t b = *(idno_t*)(dataptr + off);
+        off += sizeof(b);
+        free[type].map_insert(a,b);
+      }
+      free[type].dump();
+    }
   }
   else {
-	dout(3) << "no alloc file, starting from scratch" << endl;
-	reset();
+    dout(3) << "no alloc file, starting from scratch" << endl;
+    reset();
   }
 
   opened = true;
   opening = false;
 
   if (onfinish) {
-	onfinish->finish(0);
-	delete onfinish;
+    onfinish->finish(0);
+    delete onfinish;
   }
 }

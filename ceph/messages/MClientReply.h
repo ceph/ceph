@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -63,61 +63,61 @@ class InodeStat {
  public:
   InodeStat() {}
   InodeStat(CInode *in, int whoami) :
-	inode(in->inode)
+    inode(in->inode)
   {
-	// inode.mask
-	inode.mask = INODE_MASK_BASE;
-	if (in->filelock.can_read(in->is_auth()))
-	  inode.mask |= INODE_MASK_PERM;
-	if (in->hardlock.can_read(in->is_auth()))
-	  inode.mask |= INODE_MASK_SIZE | INODE_MASK_MTIME;      // fixme when we separate this out.
-	
-	// symlink content?
-	if (in->is_symlink()) 
-	  symlink = in->symlink;
-	  
-	// replicated where?
-	if (in->dir && in->dir->is_auth()) {
-	  spec_defined = true;
-	  in->dir->get_dist_spec(this->dist, whoami);
-	} else 
-	  spec_defined = false;
+    // inode.mask
+    inode.mask = INODE_MASK_BASE;
+    if (in->filelock.can_read(in->is_auth()))
+      inode.mask |= INODE_MASK_PERM;
+    if (in->hardlock.can_read(in->is_auth()))
+      inode.mask |= INODE_MASK_SIZE | INODE_MASK_MTIME;      // fixme when we separate this out.
+    
+    // symlink content?
+    if (in->is_symlink()) 
+      symlink = in->symlink;
+      
+    // replicated where?
+    if (in->dir && in->dir->is_auth()) {
+      spec_defined = true;
+      in->dir->get_dist_spec(this->dist, whoami);
+    } else 
+      spec_defined = false;
 
-	if (in->dir)
-	  dir_auth = in->dir->get_dir_auth();
-	else
-	  dir_auth = -1;
+    if (in->dir)
+      dir_auth = in->dir->get_dir_auth();
+    else
+      dir_auth = -1;
 
-	// dir info
-	hashed = (in->dir && in->dir->is_hashed());   // FIXME not quite right.
-	replicated = (in->dir && in->dir->is_rep());
+    // dir info
+    hashed = (in->dir && in->dir->is_hashed());   // FIXME not quite right.
+    replicated = (in->dir && in->dir->is_rep());
   }
   
   void _encode(bufferlist &bl) {
-	bl.append((char*)&inode, sizeof(inode));
-	bl.append((char*)&spec_defined, sizeof(spec_defined));
-	bl.append((char*)&dir_auth, sizeof(dir_auth));
-	bl.append((char*)&hashed, sizeof(hashed));
-	bl.append((char*)&replicated, sizeof(replicated));
+    bl.append((char*)&inode, sizeof(inode));
+    bl.append((char*)&spec_defined, sizeof(spec_defined));
+    bl.append((char*)&dir_auth, sizeof(dir_auth));
+    bl.append((char*)&hashed, sizeof(hashed));
+    bl.append((char*)&replicated, sizeof(replicated));
 
-	::_encode(symlink, bl);
-	::_encode(dist, bl);	// distn
+    ::_encode(symlink, bl);
+    ::_encode(dist, bl);    // distn
   }
   
   void _decode(bufferlist &bl, int& off) {
-	bl.copy(off, sizeof(inode), (char*)&inode);
-	off += sizeof(inode);
-	bl.copy(off, sizeof(spec_defined), (char*)&spec_defined);
-	off += sizeof(spec_defined);
-	bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
-	off += sizeof(dir_auth);
-	bl.copy(off, sizeof(hashed), (char*)&hashed);
-	off += sizeof(hashed);
-	bl.copy(off, sizeof(replicated), (char*)&replicated);
-	off += sizeof(replicated);
+    bl.copy(off, sizeof(inode), (char*)&inode);
+    off += sizeof(inode);
+    bl.copy(off, sizeof(spec_defined), (char*)&spec_defined);
+    off += sizeof(spec_defined);
+    bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
+    off += sizeof(dir_auth);
+    bl.copy(off, sizeof(hashed), (char*)&hashed);
+    off += sizeof(hashed);
+    bl.copy(off, sizeof(replicated), (char*)&replicated);
+    off += sizeof(replicated);
 
-	::_decode(symlink, bl, off);
-	::_decode(dist, bl, off);
+    ::_decode(symlink, bl, off);
+    ::_decode(dist, bl, off);
   }
 };
 
@@ -176,125 +176,125 @@ class MClientReply : public Message {
 
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 
-	Message(MSG_CLIENT_REPLY) {
-	memset(&st, 0, sizeof(st));
-	this->st.pcid = req->get_pcid();    // match up procedure call id!!!
-	this->st.tid = req->get_tid();
-	this->st.op = req->get_op();
-	this->path = req->get_path();
+    Message(MSG_CLIENT_REPLY) {
+    memset(&st, 0, sizeof(st));
+    this->st.pcid = req->get_pcid();    // match up procedure call id!!!
+    this->st.tid = req->get_tid();
+    this->st.op = req->get_op();
+    this->path = req->get_path();
 
-	this->st.result = result;
+    this->st.result = result;
 
-	st._dir_size = 0;
-	st._num_trace_in = 0;
+    st._dir_size = 0;
+    st._num_trace_in = 0;
   }
   virtual ~MClientReply() {
-	list<InodeStat*>::iterator it;
-	
-	for (it = trace_in.begin(); it != trace_in.end(); ++it) 
-	  delete *it;
-	for (it = dir_in.begin(); it != dir_in.end(); ++it) 
-	  delete *it;
+    list<InodeStat*>::iterator it;
+    
+    for (it = trace_in.begin(); it != trace_in.end(); ++it) 
+      delete *it;
+    for (it = dir_in.begin(); it != dir_in.end(); ++it) 
+      delete *it;
   }
   virtual char *get_type_name() { return "creply"; }
 
 
   // serialization
   virtual void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
+    int off = 0;
+    payload.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
 
-	_decode(path, payload, off);
+    _decode(path, payload, off);
 
-	for (int i=0; i<st._num_trace_in; ++i) {
-	  if (i) {
-		string ref_dn;
-		::_decode(ref_dn, payload, off);
-		trace_dn.push_back(ref_dn);
-	  }		
-	  InodeStat *ci = new InodeStat;
-	  ci->_decode(payload, off);
-	  trace_in.push_back(ci);
-	}
+    for (int i=0; i<st._num_trace_in; ++i) {
+      if (i) {
+        string ref_dn;
+        ::_decode(ref_dn, payload, off);
+        trace_dn.push_back(ref_dn);
+      }        
+      InodeStat *ci = new InodeStat;
+      ci->_decode(payload, off);
+      trace_in.push_back(ci);
+    }
 
-	for (int i=0; i<st._dir_size; ++i) {
-	  InodeStat *ci = new InodeStat;
-	  ci->_decode(payload, off);
-	  dir_in.push_back(ci);
-	  string dn;
-	  ::_decode(dn, payload, off);
-	  dir_dn.push_back(dn);
-	}
+    for (int i=0; i<st._dir_size; ++i) {
+      InodeStat *ci = new InodeStat;
+      ci->_decode(payload, off);
+      dir_in.push_back(ci);
+      string dn;
+      ::_decode(dn, payload, off);
+      dir_dn.push_back(dn);
+    }
   }
   virtual void encode_payload() {
-	payload.append((char*)&st, sizeof(st));
-	_encode(path, payload);
+    payload.append((char*)&st, sizeof(st));
+    _encode(path, payload);
 
-	// trace
-	list<string>::iterator pdn = trace_dn.begin();
-	list<InodeStat*>::iterator pin;
-	for (pin = trace_in.begin();
-		 pin != trace_in.end();
-		 ++pin) {
-	  if (pin != trace_in.begin()) {
-		::_encode(*pdn, payload);
-		++pdn;
-	  }
-	  (*pin)->_encode(payload);
-	}
+    // trace
+    list<string>::iterator pdn = trace_dn.begin();
+    list<InodeStat*>::iterator pin;
+    for (pin = trace_in.begin();
+         pin != trace_in.end();
+         ++pin) {
+      if (pin != trace_in.begin()) {
+        ::_encode(*pdn, payload);
+        ++pdn;
+      }
+      (*pin)->_encode(payload);
+    }
 
-	// dir contents
-	pdn = dir_dn.begin();
-	for (pin = dir_in.begin();
-		 pin != dir_in.end();
-		 ++pin, ++pdn) {
-	  (*pin)->_encode(payload);
-	  ::_encode(*pdn, payload);
-	}
+    // dir contents
+    pdn = dir_dn.begin();
+    for (pin = dir_in.begin();
+         pin != dir_in.end();
+         ++pin, ++pdn) {
+      (*pin)->_encode(payload);
+      ::_encode(*pdn, payload);
+    }
   }
 
   // builders
   /*
   void add_dir_item(string& dn, InodeStat *in) {
-	dir_dn.push_back(dn);
-	dir_in.push_back(in);
-	++st._dir_size;
-	}*/
+    dir_dn.push_back(dn);
+    dir_in.push_back(in);
+    ++st._dir_size;
+    }*/
   void take_dir_items(list<InodeStat*>& inls,
-					  list<string>& dnls,
-					  int num) {
-	dir_in.swap(inls);
-	dir_dn.swap(dnls);
-	st._dir_size = num;
+                      list<string>& dnls,
+                      int num) {
+    dir_in.swap(inls);
+    dir_dn.swap(dnls);
+    st._dir_size = num;
   }
   void copy_dir_items(const list<InodeStat*>& inls,
-					  const list<string>& dnls) {
-	list<string>::const_iterator pdn = dnls.begin();
-	list<InodeStat*>::const_iterator pin = inls.begin();
-	while (pin != inls.end()) {
-	  // copy!
-	  InodeStat *i = new InodeStat;
-	  *i = **pin;
-	  dir_in.push_back(i);
-	  dir_dn.push_back(*pdn);
-	  ++pin;
-	  ++pdn;
-	  ++st._dir_size;
-	}
+                      const list<string>& dnls) {
+    list<string>::const_iterator pdn = dnls.begin();
+    list<InodeStat*>::const_iterator pin = inls.begin();
+    while (pin != inls.end()) {
+      // copy!
+      InodeStat *i = new InodeStat;
+      *i = **pin;
+      dir_in.push_back(i);
+      dir_dn.push_back(*pdn);
+      ++pin;
+      ++pdn;
+      ++st._dir_size;
+    }
   }
 
   void set_trace_dist(CInode *in, int whoami) {
-	st._num_trace_in = 0;
-	while (in) {
-	  // add this inode to trace, along with referring dentry name
-	  if (in->get_parent_dn()) 
-		trace_dn.push_front(in->get_parent_dn()->get_name());
-	  trace_in.push_front(new InodeStat(in, whoami));
-	  ++st._num_trace_in;
-	  
-	  in = in->get_parent_inode();
-	}
+    st._num_trace_in = 0;
+    while (in) {
+      // add this inode to trace, along with referring dentry name
+      if (in->get_parent_dn()) 
+        trace_dn.push_front(in->get_parent_dn()->get_name());
+      trace_in.push_front(new InodeStat(in, whoami));
+      ++st._num_trace_in;
+      
+      in = in->get_parent_inode();
+    }
   }
 
 };

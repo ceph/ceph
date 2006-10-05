@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -34,8 +34,8 @@ using namespace __gnu_cxx;
 
 
 class FakeStore : public ObjectStore, 
-				  public FakeStoreAttrs,
-				  public FakeStoreCollections {
+                  public FakeStoreAttrs,
+                  public FakeStoreCollections {
   string basedir;
   int whoami;
   
@@ -52,9 +52,9 @@ class FakeStore : public ObjectStore,
  public:
   FakeStore(char *base, int whoami) : FakeStoreAttrs(this), FakeStoreCollections(this)
   {
-	this->basedir = base;
-	this->whoami = whoami;
-	unsync = 0;
+    this->basedir = base;
+    this->whoami = whoami;
+    unsync = 0;
   }
 
 
@@ -71,12 +71,12 @@ class FakeStore : public ObjectStore,
   int remove(object_t oid, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe);
   int read(object_t oid, 
-		   off_t offset, size_t len,
-		   bufferlist& bl);
+           off_t offset, size_t len,
+           bufferlist& bl);
   int write(object_t oid, 
-			off_t offset, size_t len,
-			bufferlist& bl, 
-			Context *onsafe);
+            off_t offset, size_t len,
+            bufferlist& bl, 
+            Context *onsafe);
 
   void sync(Context *onsafe);
 };

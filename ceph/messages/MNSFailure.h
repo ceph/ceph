@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,9 +25,9 @@ class MNSFailure : public Message {
  public:
   MNSFailure() {}
   MNSFailure(entity_inst_t& i) :
-	Message(MSG_NS_FAILURE),
-	//entity(w), 
-	inst(i) {}
+    Message(MSG_NS_FAILURE),
+    //entity(w), 
+    inst(i) {}
   
   char *get_type_name() { return "NSFail"; }
 
@@ -35,15 +35,15 @@ class MNSFailure : public Message {
   entity_inst_t &get_inst() { return inst; }
 
   void encode_payload() {
-	//payload.append((char*)&entity, sizeof(entity));
-	payload.append((char*)&inst, sizeof(inst));
+    //payload.append((char*)&entity, sizeof(entity));
+    payload.append((char*)&inst, sizeof(inst));
   }
   void decode_payload() {
-	unsigned off = 0;
-	//payload.copy(off, sizeof(entity), (char*)&entity);
-	//off += sizeof(entity);
-	payload.copy(off, sizeof(inst), (char*)&inst);
-	off += sizeof(inst);
+    unsigned off = 0;
+    //payload.copy(off, sizeof(entity), (char*)&entity);
+    //off += sizeof(entity);
+    payload.copy(off, sizeof(inst), (char*)&inst);
+    off += sizeof(inst);
   }
 };
 

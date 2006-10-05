@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,7 +16,6 @@
 #include "include/types.h"
 #include "MDLog.h"
 #include "MDS.h"
-#include "MDCluster.h"
 #include "LogStream.h"
 #include "LogEvent.h"
 
@@ -48,15 +47,15 @@ MDLog::MDLog(MDS *m)
 
   static bool didit = false;
   if (!didit) {
-	mdlog_logtype.add_inc("add");
-	mdlog_logtype.add_inc("retire");	
-	mdlog_logtype.add_inc("obs");	
-	mdlog_logtype.add_inc("trim");	
-	mdlog_logtype.add_set("size");
-	mdlog_logtype.add_set("read");
-	mdlog_logtype.add_set("append");
-	mdlog_logtype.add_inc("lsum");
-	mdlog_logtype.add_inc("lnum");
+    mdlog_logtype.add_inc("add");
+    mdlog_logtype.add_inc("retire");    
+    mdlog_logtype.add_inc("obs");    
+    mdlog_logtype.add_inc("trim");    
+    mdlog_logtype.add_set("size");
+    mdlog_logtype.add_set("read");
+    mdlog_logtype.add_set("append");
+    mdlog_logtype.add_inc("lsum");
+    mdlog_logtype.add_inc("lnum");
   }
 }
 
@@ -70,39 +69,39 @@ MDLog::~MDLog()
 
 
 void MDLog::submit_entry( LogEvent *e,
-						 Context *c ) 
+                         Context *c ) 
 {
   dout(5) << "submit_entry at " << num_events << endl;
 
   if (g_conf.mds_log) {
-	off_t off = logstream->append(e);
-	delete e;
-	num_events++;
+    off_t off = logstream->append(e);
+    delete e;
+    num_events++;
 
-	logger->inc("add");
-	logger->set("size", num_events);
-	logger->set("append", logstream->get_append_pos());
+    logger->inc("add");
+    logger->set("size", num_events);
+    logger->set("append", logstream->get_append_pos());
 
-	if (c) 
-	  logstream->wait_for_sync(c, off);
+    if (c) 
+      logstream->wait_for_sync(c, off);
   } else {
-	// hack: log is disabled..
-	if (c) {
-	  c->finish(0);
-	  delete c;
-	}
+    // hack: log is disabled..
+    if (c) {
+      c->finish(0);
+      delete c;
+    }
   }
 }
 
 void MDLog::wait_for_sync( Context *c )
 {
   if (g_conf.mds_log) {
-	// wait
-	logstream->wait_for_sync(c);
+    // wait
+    logstream->wait_for_sync(c);
   } else {
-	// hack: bypass
-	c->finish(0);
-	delete c;
+    // hack: bypass
+    c->finish(0);
+    delete c;
   }
 }
 
@@ -125,11 +124,11 @@ public:
   LogEvent *le;
 
   C_MDL_Trimmed(MDLog *mdl, LogEvent *le) {
-	this->mdl = mdl; 
-	this->le = le;
+    this->mdl = mdl; 
+    this->le = le;
   }
   void finish(int res) {
-	mdl->_trimmed(le);
+    mdl->_trimmed(le);
   }
 };
 
@@ -137,10 +136,10 @@ class C_MDL_Reading : public Context {
 public:
   MDLog *mdl;
   C_MDL_Reading(MDLog *m) {
-	mdl = m; 
+    mdl = m; 
   }
   void finish(int res) {
-	mdl->_did_read();
+    mdl->_did_read();
   }
 };
 
@@ -159,49 +158,49 @@ void MDLog::trim(Context *c)
 
   // trim!
   while (num_events > max_events) {
-	
-	if ((int)trimming.size() >= g_conf.mds_log_max_trimming) {
-	  dout(7) << "  already trimming max, waiting" << endl;
-	  return;
-	}
+    
+    if ((int)trimming.size() >= g_conf.mds_log_max_trimming) {
+      dout(7) << "  already trimming max, waiting" << endl;
+      return;
+    }
 
-	off_t gap = logstream->get_append_pos() - logstream->get_read_pos();
-	dout(5) << "trim: num_events " << num_events << " - trimming " << trimming.size() << " > max " << max_events << " .. gap " << gap << endl;
-	
-	LogEvent *le = logstream->get_next_event();
+    off_t gap = logstream->get_append_pos() - logstream->get_read_pos();
+    dout(5) << "trim: num_events " << num_events << " - trimming " << trimming.size() << " > max " << max_events << " .. gap " << gap << endl;
+    
+    LogEvent *le = logstream->get_next_event();
 
-	if (le) {
-	  num_events--;
+    if (le) {
+      num_events--;
 
-	  // we just read an event.
-	  if (le->obsolete(mds) == true) {
-		// obsolete
-		dout(7) << "  obsolete " << le << endl;
-		delete le;
-		logger->inc("obs");
-	  } else {
-		assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
+      // we just read an event.
+      if (le->obsolete(mds) == true) {
+        // obsolete
+        dout(7) << "  obsolete " << le << endl;
+        delete le;
+        logger->inc("obs");
+      } else {
+        assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
-		// trim!
-		dout(7) << "  trimming " << le << endl;
-		trimming.insert(le);
-		le->retire(mds, new C_MDL_Trimmed(this, le));
-		logger->inc("retire");
-		logger->set("trim", trimming.size());
-	  }
-	  logger->set("read", logstream->get_read_pos());
-	  logger->set("size", num_events);
-	} else {
-	  // need to read!
-	  if (!waiting_for_read) {
-		waiting_for_read = true;
-		dout(7) << "  waiting for read" << endl;
-		logstream->wait_for_next_event(new C_MDL_Reading(this));
-	  } else {
-		dout(7) << "  already waiting for read" << endl;
-	  }
-	  return;
-	}
+        // trim!
+        dout(7) << "  trimming " << le << endl;
+        trimming.insert(le);
+        le->retire(mds, new C_MDL_Trimmed(this, le));
+        logger->inc("retire");
+        logger->set("trim", trimming.size());
+      }
+      logger->set("read", logstream->get_read_pos());
+      logger->set("size", num_events);
+    } else {
+      // need to read!
+      if (!waiting_for_read) {
+        waiting_for_read = true;
+        dout(7) << "  waiting for read" << endl;
+        logstream->wait_for_next_event(new C_MDL_Reading(this));
+      } else {
+        dout(7) << "  already waiting for read" << endl;
+      }
+      return;
+    }
   }
   
   // trimmed!

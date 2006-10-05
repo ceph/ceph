@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -76,54 +76,54 @@ class SyntheticClient {
   void up();
 
   void clear_dir() {
-	contents.clear();
-	subdirs.clear();
-	did_readdir = false;
+    contents.clear();
+    subdirs.clear();
+    did_readdir = false;
   }
 
   int get_random_fh() {
-	int r = rand() % open_files.size();
-	set<int>::iterator it = open_files.begin();
-	while (r--) it++;
-	return *it;
+    int r = rand() % open_files.size();
+    set<int>::iterator it = open_files.begin();
+    while (r--) it++;
+    return *it;
   }
 
 
   filepath n1;
   const char *get_random_subdir() {
-	assert(!subdirs.empty());
-	int r = ((rand() % subdirs.size()) + (rand() % subdirs.size())) / 2;  // non-uniform distn
-	set<string>::iterator it = subdirs.begin();
-	while (r--) it++;
+    assert(!subdirs.empty());
+    int r = ((rand() % subdirs.size()) + (rand() % subdirs.size())) / 2;  // non-uniform distn
+    set<string>::iterator it = subdirs.begin();
+    while (r--) it++;
 
-	n1 = cwd;
-	n1.add_dentry( *it );
-	return n1.get_path().c_str();
+    n1 = cwd;
+    n1.add_dentry( *it );
+    return n1.get_path().c_str();
   }
   filepath n2;
   const char *get_random_sub() {
-	assert(!contents.empty());
-	int r = ((rand() % contents.size()) + (rand() % contents.size())) / 2;  // non-uniform distn
-	if (cwd.depth() && cwd.last_bit().length()) 
-	  r += cwd.last_bit().c_str()[0];                                         // slightly permuted
-	r %= contents.size();
+    assert(!contents.empty());
+    int r = ((rand() % contents.size()) + (rand() % contents.size())) / 2;  // non-uniform distn
+    if (cwd.depth() && cwd.last_bit().length()) 
+      r += cwd.last_bit().c_str()[0];                                         // slightly permuted
+    r %= contents.size();
 
-	map<string,inode_t>::iterator it = contents.begin();
-	while (r--) it++;
+    map<string,inode_t>::iterator it = contents.begin();
+    while (r--) it++;
 
-	n2 = cwd;
-	n2.add_dentry( it->first );
-	return n2.get_path().c_str();
+    n2 = cwd;
+    n2.add_dentry( it->first );
+    return n2.get_path().c_str();
   }
   
   filepath sub;
   char sub_s[50];
   const char *make_sub(char *base) {
-	sprintf(sub_s, "%s.%d", base, rand() % 100);
-	string f = sub_s;
-	sub = cwd;
-	sub.add_dentry(f);
-	return sub.c_str();
+    sprintf(sub_s, "%s.%d", base, rand() % 100);
+    string f = sub_s;
+    sub = cwd;
+    sub.add_dentry(f);
+    return sub.c_str();
   }
 
  public:
@@ -135,15 +135,15 @@ class SyntheticClient {
   int run();
 
   bool run_me() {
-	if (run_only >= 0) {
-	  if (run_only == client->get_nodeid()) {
-		run_only = -1;
-		return true;
-	  }
-	  run_only = -1;
-	  return false;
-	}
-	return true;
+    if (run_only >= 0) {
+      if (run_only == client->get_nodeid()) {
+        run_only = -1;
+        return true;
+      }
+      run_only = -1;
+      return false;
+    }
+    return true;
   }
 
   // run() will do one of these things:
@@ -158,19 +158,19 @@ class SyntheticClient {
   string get_sarg(int seq);
 
   bool time_to_stop() {
-	utime_t now = g_clock.now();
-	if (0) cout << "time_to_stop .. now " << now 
-		 << " until " << run_until 
-		 << " start " << run_start 
-		 << endl;
-	if (run_until.sec() && now > run_until) 
-	  return true;
-	else
-	  return false;
+    utime_t now = g_clock.now();
+    if (0) cout << "time_to_stop .. now " << now 
+         << " until " << run_until 
+         << " start " << run_start 
+         << endl;
+    if (run_until.sec() && now > run_until) 
+      return true;
+    else
+      return false;
   }
 
   string compose_path(string& prefix, char *rest) {
-	return prefix + rest;
+    return prefix + rest;
   }
 
   int full_walk(string& fromdir);

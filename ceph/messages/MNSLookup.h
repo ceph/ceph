@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -23,8 +23,8 @@ class MNSLookup : public Message {
  public:
   MNSLookup() {}
   MNSLookup(msg_addr_t e) :
-	Message(MSG_NS_LOOKUP) {
-	entity = e;
+    Message(MSG_NS_LOOKUP) {
+    entity = e;
   }
   
   char *get_type_name() { return "NSLook"; }
@@ -32,12 +32,12 @@ class MNSLookup : public Message {
   msg_addr_t get_entity() { return entity; }
 
   void encode_payload() {
-	payload.append((char*)&entity, sizeof(entity));
+    payload.append((char*)&entity, sizeof(entity));
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(entity), (char*)&entity);
-	off += sizeof(entity);
+    int off = 0;
+    payload.copy(off, sizeof(entity), (char*)&entity);
+    off += sizeof(entity);
   }
 };
 

@@ -12,8 +12,8 @@ ostream& operator<<(ostream& out, vector<int>& v)
 {
   out << "[";
   for (int i=0; i<v.size(); i++) {
-	if (i) out << " ";
-	out << v[i];
+    if (i) out << " ";
+    out << v[i];
   }
   out << "]";
   return out;
@@ -26,7 +26,7 @@ int main()
 
   vector<int> disks;
   for (int i=0; i<20; i++)
-	disks.push_back(i);
+    disks.push_back(i);
 
 
   /*
@@ -37,7 +37,7 @@ int main()
 
   MixedBucket mb(2, 1);
   for (int i=0;i<20;i++)
-	mb.add_item(i, 10);
+    mb.add_item(i, 10);
 
   /*
   MixedBucket b(3, 1);
@@ -51,17 +51,17 @@ int main()
 
   vector<int> v(numrep);
   for (int x=1; x<1000000; x++) {
-	//cout << H(x) << "\t" << h(x) << endl;
-	for (int i=0; i<numrep; i++) {
-	  int d = b.choose_r(x, i, h);
-	  v[i] = d;
-	  ocount[d]++;
-	}
-	//cout << v << "\t" << endl;//ocount << endl;
+    //cout << H(x) << "\t" << h(x) << endl;
+    for (int i=0; i<numrep; i++) {
+      int d = b.choose_r(x, i, h);
+      v[i] = d;
+      ocount[d]++;
+    }
+    //cout << v << "\t" << endl;//ocount << endl;
   }
 
   for (int i=0; i<ocount.size(); i++) {
-	cout << "disk " << i << " has " << ocount[i] << endl;
+    cout << "disk " << i << " has " << ocount[i] << endl;
   }
 
 }

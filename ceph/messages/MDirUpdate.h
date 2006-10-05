@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -36,35 +36,35 @@ class MDirUpdate : public Message {
   string& get_path() { return path; }
 
   void tried_discover() {
-	if (st.discover) st.discover--;
+    if (st.discover) st.discover--;
   }
 
   MDirUpdate() {}
   MDirUpdate(inodeno_t ino,
-			 int dir_rep,
-			 set<int>& dir_rep_by,
-			 string& path,
-			 bool discover = false) :
-	Message(MSG_MDS_DIRUPDATE) {
-	this->st.ino = ino;
-	this->st.dir_rep = dir_rep;
-	this->dir_rep_by = dir_rep_by;
-	if (discover) this->st.discover = 5;
-	this->path = path;
+             int dir_rep,
+             set<int>& dir_rep_by,
+             string& path,
+             bool discover = false) :
+    Message(MSG_MDS_DIRUPDATE) {
+    this->st.ino = ino;
+    this->st.dir_rep = dir_rep;
+    this->dir_rep_by = dir_rep_by;
+    if (discover) this->st.discover = 5;
+    this->path = path;
   }
   virtual char *get_type_name() { return "dup"; }
 
   virtual void decode_payload(crope& s, int& off) {
-	s.copy(off, sizeof(st), (char*)&st);
-	off += sizeof(st);
-	_unrope(dir_rep_by, s, off);
-	_unrope(path, s, off);
+    s.copy(off, sizeof(st), (char*)&st);
+    off += sizeof(st);
+    _unrope(dir_rep_by, s, off);
+    _unrope(path, s, off);
   }
 
   virtual void encode_payload(crope& r) {
-	r.append((char*)&st, sizeof(st));
-	_rope(dir_rep_by, r);
-	_rope(path, r);
+    r.append((char*)&st, sizeof(st));
+    _rope(dir_rep_by, r);
+    _rope(path, r);
   }
 };
 

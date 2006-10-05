@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +18,8 @@
 
 #include "common/Mutex.h"
 #include "common/ThreadPool.h"
+
+#include "mon/MonMap.h"
 
 #include "ObjectStore.h"
 #include "PG.h"
@@ -41,13 +43,12 @@ public:
 
   /** superblock
    */
-  const static object_t SUPERBLOCK_OBJECT = 0;
   OSDSuperblock superblock;
   epoch_t  boot_epoch;      
 
-  object_t get_osdmap_object_name(epoch_t epoch) { return (object_t)(epoch << 1); }
-  object_t get_inc_osdmap_object_name(epoch_t epoch) { return (object_t)((epoch << 1) + 1); }
-
+  object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
+  object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
+  
   void write_superblock();
   void write_superblock(ObjectStore::Transaction& t);
   int read_superblock();
@@ -57,6 +58,8 @@ public:
  protected:
   Messenger *messenger;
   int whoami;
+
+  MonMap *monmap;
 
   class Logger      *logger;
 
@@ -68,12 +71,12 @@ public:
   void heartbeat();
 
   class C_Heartbeat : public Context {
-	OSD *osd;
+    OSD *osd;
   public:
-	C_Heartbeat(OSD *o) : osd(o) {}
-	void finish(int r) {
-	  osd->heartbeat();
-	}
+    C_Heartbeat(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->heartbeat();
+    }
   } *next_heartbeat;
 
   // global lock
@@ -90,7 +93,7 @@ public:
   // finished waiting messages, that will go at tail of dispatch()
   list<class Message*> finished;
   void take_waiters(list<class Message*>& ls) {
-	finished.splice(finished.end(), ls);
+    finished.splice(finished.end(), ls);
   }
   
   // object locking
@@ -99,8 +102,8 @@ public:
   bool block_if_wrlocked(MOSDOp* op);
 
   // -- ops --
-  class ThreadPool<class OSD*, object_t> *threadpool;
-  hash_map<pg_t, list<Message*> >         op_queue;
+  class ThreadPool<class OSD*, pg_t>   *threadpool;
+  hash_map<pg_t, list<Message*> >       op_queue;
   int   pending_ops;
   bool  waiting_for_no_ops;
   Cond  no_pending_ops;
@@ -111,7 +114,7 @@ public:
   void enqueue_op(pg_t pgid, Message *op);
   void dequeue_op(pg_t pgid);
   static void static_dequeueop(OSD *o, pg_t pgid) {
-	o->dequeue_op(pgid);
+    o->dequeue_op(pgid);
   };
 
   void do_op(Message *m, PG *pg);  // actually do it
@@ -131,8 +134,8 @@ public:
   list<class Message*> waiting_for_osdmap;
 
   hash_map<msg_addr_t, epoch_t>  peer_map_epoch;
-  bool _share_map_incoming(msg_addr_t who, epoch_t epoch);
-  void _share_map_outgoing(msg_addr_t dest);
+  bool _share_map_incoming(msg_addr_t who, const entity_inst_t& inst, epoch_t epoch);
+  void _share_map_outgoing(msg_addr_t dest, const entity_inst_t& inst);
 
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
@@ -145,7 +148,7 @@ public:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
-  void send_incremental_map(epoch_t since, msg_addr_t dest, bool full);
+  void send_incremental_map(epoch_t since, msg_addr_t dest, const entity_inst_t& inst, bool full);
 
 
 
@@ -164,14 +167,14 @@ public:
   void activate_pg(pg_t pgid, epoch_t epoch);
 
   class C_Activate : public Context {
-	OSD *osd;
-	pg_t pgid;
-	epoch_t epoch;
+    OSD *osd;
+    pg_t pgid;
+    epoch_t epoch;
   public:
-	C_Activate(OSD *o, pg_t p, epoch_t e) : osd(o), pgid(p), epoch(e) {}
-	void finish(int r) {
-	  osd->activate_pg(pgid, epoch);
-	}
+    C_Activate(OSD *o, pg_t p, epoch_t e) : osd(o), pgid(p), epoch(e) {}
+    void finish(int r) {
+      osd->activate_pg(pgid, epoch);
+    }
   };
 
 
@@ -187,8 +190,8 @@ public:
   void issue_repop(PG *pg, MOSDOp *op, int osd);
   PG::RepOpGather *new_repop_gather(PG *pg, MOSDOp *op);
   void repop_ack(PG *pg, PG::RepOpGather *repop,
-				 int result, bool commit,
-				 int fromosd, eversion_t pg_complete_thru=0);
+                 int result, bool commit,
+                 int fromosd, eversion_t pg_complete_thru=0);
   
   void handle_rep_op_ack(MOSDOpReply *m);
 
@@ -213,12 +216,12 @@ public:
   
   void op_rep_modify(class MOSDOp *op, PG *pg);   // write, trucnate, delete
   void op_rep_modify_commit(class MOSDOp *op, int ackerosd, 
-							eversion_t last_complete);
+                            eversion_t last_complete);
   friend class C_OSD_RepModifyCommit;
 
 
  public:
-  OSD(int id, Messenger *m, char *dev = 0);
+  OSD(int id, Messenger *m, MonMap *mm, char *dev = 0);
   ~OSD();
   
   // startup/shutdown
@@ -227,7 +230,7 @@ public:
 
   // messages
   virtual void dispatch(Message *m);
-  virtual Message *ms_handle_failure(msg_addr_t dest, entity_inst_t& inst);
+  virtual void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst);
   virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst);
 
   void handle_osd_ping(class MOSDPing *m);

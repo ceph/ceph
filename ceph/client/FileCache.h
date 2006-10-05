@@ -29,11 +29,11 @@ class FileCache {
 
  public:
   FileCache(ObjectCacher *_oc, inode_t _inode) : 
-	oc(_oc), 
-	inode(_inode),
-	latest_caps(0),
-	num_reading(0), num_writing(0),// num_unsafe(0),
-	waitfor_release(false) {}
+    oc(_oc), 
+    inode(_inode),
+    latest_caps(0),
+    num_reading(0), num_writing(0),// num_unsafe(0),
+    waitfor_release(false) {}
 
   // waiters/waiting
   bool can_read() { return latest_caps & CAP_FILE_RD; }

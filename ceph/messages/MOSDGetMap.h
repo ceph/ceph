@@ -11,8 +11,8 @@ class MOSDGetMap : public Message {
 
   //MOSDGetMap() : since(0) {}
   MOSDGetMap(epoch_t s=0) : 
-	Message(MSG_OSD_GETMAP),
-	since(s) {
+    Message(MSG_OSD_GETMAP),
+    since(s) {
   }
 
   epoch_t get_since() { return since; }
@@ -20,12 +20,12 @@ class MOSDGetMap : public Message {
   char *get_type_name() { return "getomap"; }
   
   void encode_payload() {
-	payload.append((char*)&since, sizeof(since));
+    payload.append((char*)&since, sizeof(since));
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(since), (char*)&since);
-	off += sizeof(since);
+    int off = 0;
+    payload.copy(off, sizeof(since), (char*)&since);
+    off += sizeof(since);
   }
 };
 

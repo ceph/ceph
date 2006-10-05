@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:4; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 /*
  * Ceph - scalable distributed file system
  *
@@ -39,15 +39,15 @@ pair<int,int> mpi_bootstrap_tcp(int& argc, char**& argv)
   // start up directory?
   tcpaddr_t ta;
   if (mpi_rank == 0) {
-	dout(30) << "i am rank 0, starting ns directory" << endl;
-	tcpmessenger_start_nameserver(ta);
+    dout(30) << "i am rank 0, starting ns directory" << endl;
+    tcpmessenger_start_nameserver(ta);
   } else {
-	memset(&ta, 0, sizeof(ta));
+    memset(&ta, 0, sizeof(ta));
   }
 
   // distribute tcpaddr
   int r = MPI_Bcast(&ta, sizeof(ta), MPI_CHAR,
-					0, MPI_COMM_WORLD);
+                    0, MPI_COMM_WORLD);
 
   dout(30) << "r = " << r << " ns tcpaddr is " << ta << endl;
   tcpmessenger_start_rankserver(ta);
