@@ -64,7 +64,7 @@ done
 		</div>
 		
 
-		<h4>Running fakesyn</h4>
+		<h4>Running fakesyn -- everying one process</h4>
 		<div>
 			A quick example, assuming you've set up "fake" EBOFS devices as above:
 <pre>
@@ -77,6 +77,38 @@ make fakesyn && ./fakesyn --mkfs --osd_pg_bits 4 --debug_ms 1 --debug_client 3 -
 #	--syn rw 1 100000    # write 1GB to a file in 100,000 byte chunks, then read it back
 </pre>
 			The full set of command line arguments can be found in <tt>config.cc</tt>.
+		</div>
+
+		<h4>Mounting with FUSE</h4>
+		<div>
+			The easiest route is <tt>fakefuse</tt>:
+<pre>
+modprobe fuse  # make sure fuse module is loaded
+mkdir mnt      # or whereever you want your mount point
+make fakefuse && ./fakefuse --mkfs --debug_ms 1 mnt
+</pre>
+			You should be able to ls, copy files, or whatever else (in another terminal; fakefuse will stay in the foreground).  Control-C will kill fuse and cause an orderly shutdown.  Alternatively, <tt>fusermount -u mnt</tt> will unmount.  If fakefuse crashes or hangs, you may need to <tt>kill -9 fakefuse</tt> and/or <tt>fusermount -u mnt</tt> to clean up.  Overall, FUSE is pretty well-behaved.
+		</div>
+
+		<h4>Running on multiple nodes</h4>
+		<div>
+			If you're ready to start things up on multiple nodes (or even just multiple processes on the same node), <tt>newsyn</tt> is the easiest way to get things launched.  It uses MPI to start up all the processes.  Assuming you have MPICH2 (or similar) installed,
+<pre>
+mpd &           # for a single host
+mpiboot -n 10   # for multiple hosts (see MPICH docs)
+make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 20 --syn writefile 100 16384
+</pre>
+			If you want to mount a distributed FS (instead of generating a synthetic workload), try
+<pre>
+make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 0
+# in another terminal,
+mkdir mnt
+make cfuse && ./cfuse mnt
+# and in yet another terminal,
+ls mnt 
+touch mnt/asdf   # etc
+</pre>
+			Currently, when the last client (<tt>cfuse</tt> instance, in this case) shuts down, the whole thing will shut down.  Assuming things shut down cleanly, you should be able to start things up again without the <tt>--mkfs--</tt> flag and recovery the prior file system state.
 		</div>
 
 		<h4>Structure</h4>
