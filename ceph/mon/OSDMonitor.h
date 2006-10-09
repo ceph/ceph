@@ -33,25 +33,43 @@ class OSDMonitor : public Dispatcher {
 
   // osd maps
   OSDMap *osdmap;
-  map<epoch_t, bufferlist> maps;
-  map<epoch_t, bufferlist> inc_maps;
+  OSDMap *pending_map;
 
+  map<msg_addr_t, pair<entity_inst_t, epoch_t> > awaiting_map;
+  
+  void create_initial();
+  bool get_map_bl(epoch_t epoch, bufferlist &bl);
+  bool get_inc_map_bl(epoch_t epoch, bufferlist &bl);
+
+  void save_map();
+  void save_inc_map(OSDMap::Incremental &inc);
+
+  // [leader]
   OSDMap::Incremental pending_inc;
+  map<int,utime_t>    down_pending_out;  // osd down -> out
+
+  set<int>            pending_ack; 
+
+  // we are distributed
+  const static int STATE_INIT = 0;     // startup
+  const static int STATE_SYNC = 1;     // sync map copy (readonly)
+  const static int STATE_LOCK = 2;     // [peon] map locked
+  const static int STATE_UPDATING = 3; // [leader] map locked, waiting for peon ack
+
+  int state;
+  utime_t lease_expire;     // when lease expires
   
-  map<epoch_t, map<msg_addr_t, epoch_t> > awaiting_map;
-  
-  // osd down -> out
-  map<int,utime_t>    down_pending_out;
-  
+  void init();
 
   // maps
-  void create_initial();
   void accept_pending();   // accept pending, new map.
-  void send_current();         // send current map to waiters.
-  void send_full(msg_addr_t dest);
-  void send_incremental(epoch_t since, msg_addr_t dest);
+  void send_waiting();     // send current map to waiters.
+  void send_full(msg_addr_t dest, const entity_inst_t& inst);
+  void send_incremental(epoch_t since, msg_addr_t dest, const entity_inst_t& inst);
   void bcast_latest_mds();
   void bcast_latest_osd();
+  
+  void update_map();
 
   void handle_osd_boot(class MOSDBoot *m);
   void handle_osd_in(class MOSDIn *m);
@@ -59,13 +77,28 @@ class OSDMonitor : public Dispatcher {
   void handle_osd_failure(class MOSDFailure *m);
   void handle_osd_getmap(class MOSDGetMap *m);
 
+  void handle_info(class MMonOSDMapInfo*);
+  void handle_lease(class MMonOSDMapLease*);
+  void handle_lease_ack(class MMonOSDMapLeaseAck*);
+  void handle_update_prepare(class MMonOSDMapUpdatePrepare*);
+  void handle_update_ack(class MMonOSDMapUpdateAck*);
+  void handle_update_commit(class MMonOSDMapUpdateCommit*);
+
  public:
-  OSDMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l) {
-	create_initial();
+  OSDMonitor(Monitor *mn, Messenger *m, Mutex& l) : 
+	mon(mn), messenger(m), lock(l),
+	osdmap(0),
+	state(STATE_SYNC) {
+	init();
   }
 
   void dispatch(Message *m);
   void tick();  // check state, take actions
+
+  void election_starting();  // abort whatever.
+  void election_finished();  // reinitialize whatever.
+
+  void issue_leases();
 
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();

@@ -31,8 +31,10 @@ class MDSMonitor : public Dispatcher {
   Mutex &lock;
 
   // mds maps
+ public:
   MDSMap *mdsmap;
 
+ private:
   map<epoch_t, bufferlist> maps;
 
   //map<epoch_t, bufferlist> inc_maps;

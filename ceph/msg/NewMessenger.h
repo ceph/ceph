@@ -94,7 +94,6 @@ class Rank : public Dispatcher {
   };
 
 
-
   // outgoing
   class Sender : public Thread {
   public:
@@ -108,7 +107,7 @@ class Rank : public Dispatcher {
     Mutex lock;
     Cond cond;
     
-    Sender(const entity_inst_t& i) : inst(i), done(false), sd(0) {}
+    Sender(const entity_inst_t& i, int s=0) : inst(i), done(false), sd(s) {}
     virtual ~Sender() {}
     
     void *entry();

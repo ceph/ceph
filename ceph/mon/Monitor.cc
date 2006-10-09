@@ -17,6 +17,8 @@
 
 #include "osd/OSDMap.h"
 
+#include "ebofs/Ebofs.h"
+
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
@@ -32,25 +34,25 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now()<< " mon" << whoami << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now()<< " mon" << whoami << " "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
-
-
-class C_Mon_Tick : public Context {
-  Monitor *mon;
-public:
-  C_Mon_Tick(Monitor *m) : mon(m) {}
-  void finish(int r) {
-    mon->tick();
-  }
-};
 
 
 void Monitor::init()
 {
   dout(1) << "init" << endl;
   
+  // store
+  char s[80];
+  sprintf(s, "dev/mon%d", whoami);
+  store = new Ebofs(s);
+
+  if (g_conf.mkfs)
+    store->mkfs();
+  int r = store->mount();
+  assert(r >= 0);
+
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
   mdsmon = new MDSMonitor(this, messenger, lock);
@@ -59,8 +61,41 @@ void Monitor::init()
   messenger->set_dispatcher(this);
   
   // start ticker
-  g_timer.add_event_after(g_conf.mon_tick_interval, new C_Mon_Tick(this));
+  reset_tick();
 }
+
+void Monitor::shutdown()
+{
+  dout(1) << "shutdown" << endl;
+
+  cancel_tick();
+
+  if (store) {
+    store->umount();
+    delete store;
+  }
+
+  if (monmap) delete monmap;
+  if (osdmon) delete osdmon;
+  if (mdsmon) delete mdsmon;
+
+  // die.
+  messenger->shutdown();
+  delete messenger;
+}
+
+
+void Monitor::call_election()
+{
+  dout(10) << "call_election" << endl;
+  state = STATE_STARTING;
+
+  osdmon->election_starting();
+  //mdsmon->election_starting();
+}
+
+
+
 
 
 void Monitor::dispatch(Message *m)
@@ -118,9 +153,7 @@ void Monitor::handle_shutdown(Message *m)
 {
   dout(1) << "shutdown from " << m->get_source() << endl;
 
-  // die.
-  messenger->shutdown();
-  delete messenger;
+  shutdown();
   delete m;
 }
 
@@ -134,16 +167,67 @@ void Monitor::handle_ping_ack(MPingAck *m)
 
 
 
-void Monitor::tick()
+/************ TIMER ***************/
+
+class C_Mon_Tick : public Context {
+  Monitor *mon;
+public:
+  C_Mon_Tick(Monitor *m) : mon(m) {}
+  void finish(int r) {
+    mon->tick(this);
+  }
+};
+
+
+void Monitor::cancel_tick()
+{
+  if (!tick_timer) return;
+
+  if (g_timer.cancel_event(tick_timer)) {
+    dout(10) << "cancel_tick canceled" << endl;
+  } else {
+    // already dispatched!
+    dout(10) << "cancel_tick timer dispatched, waiting to cancel" << endl;
+    tick_timer = (Context*)1;  // hackish.
+    while (tick_timer)
+      tick_timer_cond.Wait(lock);    
+  }
+}
+
+void Monitor::reset_tick()
+{
+  if (tick_timer) 
+    cancel_tick();
+  tick_timer = new C_Mon_Tick(this);
+  g_timer.add_event_after(g_conf.mon_tick_interval, tick_timer);
+}
+
+
+void Monitor::tick(Context *timer)
 {
   lock.Lock();
   {
+    if (tick_timer != timer) {
+      dout(10) << "tick - canceled" << endl;
+      tick_timer = 0;
+      tick_timer_cond.Signal();
+      lock.Unlock();
+      return;
+    }
+
+    tick_timer = 0;
+
+    // ok go.
     dout(10) << "tick" << endl;
-    
+
     osdmon->tick();
+
+    // next tick!
+    reset_tick();
   }
   lock.Unlock();
 }
+
 
 
 

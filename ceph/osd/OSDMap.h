@@ -64,8 +64,9 @@ class OSDMap {
 public:
   class Incremental {
   public:
-    version_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
-    utime_t   ctime;
+    epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
+    epoch_t mon_epoch;  // monitor epoch (election iteration)
+    utime_t ctime;
     map<int,entity_inst_t> new_up;
     map<int,entity_inst_t> new_down;
     list<int> new_in;
@@ -75,6 +76,7 @@ public:
     
     void encode(bufferlist& bl) {
       bl.append((char*)&epoch, sizeof(epoch));
+      bl.append((char*)&mon_epoch, sizeof(mon_epoch));
       bl.append((char*)&ctime, sizeof(ctime));
       ::_encode(new_up, bl);
       ::_encode(new_down, bl);
@@ -85,6 +87,8 @@ public:
     void decode(bufferlist& bl, int& off) {
       bl.copy(off, sizeof(epoch), (char*)&epoch);
       off += sizeof(epoch);
+      bl.copy(off, sizeof(mon_epoch), (char*)&mon_epoch);
+      off += sizeof(mon_epoch);
       bl.copy(off, sizeof(ctime), (char*)&ctime);
       off += sizeof(ctime);
       ::_decode(new_up, bl, off);
@@ -99,6 +103,7 @@ public:
 
 private:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
+  epoch_t   mon_epoch;  // monitor epoch (election iteration)
   utime_t   ctime;       // epoch start time
   int       pg_bits;     // placement group bits 
 
@@ -164,6 +169,7 @@ private:
   void apply_incremental(Incremental &inc) {
     assert(inc.epoch == epoch+1);
     epoch++;
+    mon_epoch = inc.mon_epoch;
     ctime = inc.ctime;
 
     for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
@@ -215,6 +221,7 @@ private:
   // serialize, unserialize
   void encode(bufferlist& blist) {
     blist.append((char*)&epoch, sizeof(epoch));
+    blist.append((char*)&mon_epoch, sizeof(mon_epoch));
     blist.append((char*)&ctime, sizeof(ctime));
     blist.append((char*)&pg_bits, sizeof(pg_bits));
     
@@ -231,6 +238,8 @@ private:
     int off = 0;
     blist.copy(off, sizeof(epoch), (char*)&epoch);
     off += sizeof(epoch);
+    blist.copy(off, sizeof(mon_epoch), (char*)&mon_epoch);
+    off += sizeof(mon_epoch);
     blist.copy(off, sizeof(ctime), (char*)&ctime);
     off += sizeof(ctime);
     blist.copy(off, sizeof(pg_bits), (char*)&pg_bits);

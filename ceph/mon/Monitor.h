@@ -21,6 +21,7 @@
 #include "MonMap.h"
 #include "Elector.h"
 
+class ObjectStore;
 class OSDMonitor;
 class MDSMonitor;
 
@@ -33,15 +34,44 @@ protected:
 
   MonMap *monmap;
 
+  // timer.
+  Context *tick_timer;
+  Cond     tick_timer_cond;
+  void cancel_tick();
+  void reset_tick();
+  friend class C_Mon_Tick;
+
+  // my local store
+  ObjectStore *store;
+
+  const static inodeno_t INO_ELECTOR = 1;
+  const static inodeno_t INO_MON_MAP = 2;
+  const static inodeno_t INO_OSD_MAP = 10;
+  const static inodeno_t INO_OSD_INC_MAP = 11;
+  const static inodeno_t INO_MDS_MAP = 20;
+  
+
   // elector
   Elector elector;
   friend class Elector;
+
+  epoch_t  mon_epoch;    // monitor epoch (election instance)
+  set<int> quorum;       // current active set of monitors (if !starting)
+
+  void call_election();
 
   // monitor state
   const static int STATE_STARTING = 0;
   const static int STATE_LEADER = 1;
   const static int STATE_PEON =   2;
   int state;
+
+  int leader;                    // current leader (to best of knowledge)
+  utime_t last_called_election;  // [starting] last time i called an election
+
+  bool is_starting() { return state == STATE_STARTING; }
+  bool is_leader() { return state == STATE_LEADER; }
+  bool is_peon() { return state == STATE_PEON; }
 
   // my public services
   OSDMonitor *osdmon;
@@ -59,16 +89,25 @@ protected:
     whoami(w), 
     messenger(m),
     monmap(mm),
+    tick_timer(0),
+    store(0),
     elector(this, w),
     state(STATE_STARTING),
+    leader(0),
     osdmon(0),
     mdsmon(0)
   {
+    // hack leader, until election works.
+    if (whoami == 0)
+      state = STATE_LEADER;
+    else
+      state = STATE_PEON;
   }
 
   void init();
+  void shutdown();
   void dispatch(Message *m);
-  void tick();
+  void tick(Context *timer);
 
 };
 

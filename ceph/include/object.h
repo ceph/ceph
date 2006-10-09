@@ -22,39 +22,40 @@ using namespace std;
 struct object_t {
   __uint64_t ino;  // "file" identifier
   __uint32_t bno;  // "block" in that "file"
+  __uint16_t rev;  // revision.
 
-  object_t() : ino(0), bno(0) {}
-  object_t(__uint64_t i, __uint32_t b) : ino(i), bno(b) {}
+  object_t() : ino(0), bno(0), rev(0) {}
+  object_t(__uint64_t i, __uint32_t b) : ino(i), bno(b), rev(0) {}
 };
 
 
 inline bool operator==(const object_t l, const object_t r) {
-  return (l.ino == r.ino) && (l.bno == r.bno);
+  return (l.ino == r.ino) && (l.bno == r.bno) && (l.rev == r.rev);
 }
 inline bool operator!=(const object_t l, const object_t r) {
-  return (l.ino != r.ino) || (l.bno != r.bno);
+  return (l.ino != r.ino) || (l.bno != r.bno) || (l.rev != r.rev);
 }
 inline bool operator>(const object_t l, const object_t r) {
-  return (l.ino > r.ino) ? true : ((l.ino == r.ino && l.bno > r.bno) ? true:false);
-}
-inline bool operator>=(const object_t l, const object_t r) {
-  return (l.ino > r.ino) ? true : ((l.ino == r.ino && l.bno >= r.bno) ? true:false);
+  return (l.ino > r.ino) ? true : ((l.ino == r.ino && l.bno > r.bno) ? true: ((l.rev > r.rev) ? true:false));
 }
 inline bool operator<(const object_t l, const object_t r) {
-  return (l.ino < r.ino) ? true : ((l.ino == r.ino && l.bno < r.bno) ? true:false);
+  return (l.ino < r.ino) ? true : ((l.ino == r.ino && l.bno < r.bno) ? true: ((l.rev < r.rev) ? true:false));
+}
+inline bool operator>=(const object_t l, const object_t r) { 
+  return !(l < r);
 }
 inline bool operator<=(const object_t l, const object_t r) {
-  return (l.ino < r.ino) ? true : ((l.ino == r.ino && l.bno <= r.bno) ? true:false);
+  return !(l > r);
 }
 inline ostream& operator<<(ostream& out, const object_t o) {
-  out << hex << o.ino;
+  out << hex << o.ino << '.';
   out.setf(ios::right);
   out.fill('0');
   out << setw(8) << o.bno << dec;
   out.unsetf(ios::right);
+  if (o.rev) 
+    out << '.' << o.rev;
   return out;
-  //return out << (long)t.sec << "." << ios::setf(ios::right) << ios::fill('0') << t.usec() << ios::usetf();
-  //return out << o.ino << '.' << o.bno;
 }
 namespace __gnu_cxx {
   template<> struct hash<__uint64_t> {

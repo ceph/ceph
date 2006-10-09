@@ -11,7 +11,7 @@
 /*** ObjectCacher::Object ***/
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << oc->objecter->messenger->get_myaddr() << ".objectcacher.object(" << hex << oid << dec << ") "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) cout << oc->objecter->messenger->get_myaddr() << ".objectcacher.object(" << oid << ") "
 
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *bh, off_t off)
@@ -156,7 +156,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
     
     if (ex_it->oid != oid) continue;
     
-    dout(10) << "map_read " << hex << ex_it->oid << dec 
+    dout(10) << "map_read " << ex_it->oid 
              << " " << ex_it->start << "~" << ex_it->length << endl;
     
     map<off_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
@@ -247,7 +247,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
     
     if (ex_it->oid != oid) continue;
     
-    dout(10) << "map_write oex " << hex << ex_it->oid << dec
+    dout(10) << "map_write oex " << ex_it->oid
              << " " << ex_it->start << "~" << ex_it->length << endl;
     
     map<off_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
@@ -394,7 +394,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 {
   //lock.Lock();
   dout(7) << "bh_read_finish " 
-          << hex << oid << dec 
+          << oid 
           << " " << start << "~" << length
           << endl;
   
@@ -542,7 +542,7 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
   //lock.Lock();
   
   dout(7) << "bh_write_ack " 
-          << hex << oid << dec 
+          << oid 
           << " tid " << tid
           << " " << start << "~" << length
           << endl;
@@ -605,7 +605,7 @@ void ObjectCacher::bh_write_commit(object_t oid, off_t start, size_t length, tid
   
   // update object last_commit
   dout(7) << "bh_write_commit " 
-          << hex << oid << dec 
+          << oid 
           << " tid " << tid
           << " " << start << "~" << length
           << endl;
@@ -739,18 +739,21 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       // make a plain list
       for (map<off_t, BufferHead*>::iterator bh_it = hits.begin();
            bh_it != hits.end();
-           bh_it++) 
+           bh_it++) {
+		dout(10) << "readx hit bh " << *bh_it->second << endl;
         hit_ls.push_back(bh_it->second);
+	  }
 
       // create reverse map of buffer offset -> object for the eventual result.
       // this is over a single ObjectExtent, so we know that
       //  - the bh's are contiguous
       //  - the buffer frags need not be (and almost certainly aren't)
+      off_t opos = ex_it->start;
       map<off_t, BufferHead*>::iterator bh_it = hits.begin();
-      size_t bhoff = 0;
+	  assert(bh_it->second->start() <= opos);
+      size_t bhoff = opos - bh_it->second->start();
       map<size_t,size_t>::iterator f_it = ex_it->buffer_extents.begin();
       size_t foff = 0;
-      off_t opos = ex_it->start;
       while (1) {
         BufferHead *bh = bh_it->second;
         assert(opos == (off_t)(bh->start() + bhoff));
@@ -780,7 +783,6 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
         if (f_it == ex_it->buffer_extents.end()) break;
       }
       assert(f_it == ex_it->buffer_extents.end());
-      assert(bh_it == hits.end());
       assert(opos == ex_it->start + (off_t)ex_it->length);
     }
   }

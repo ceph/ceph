@@ -13,6 +13,9 @@
 
 #include "OSDMonitor.h"
 #include "Monitor.h"
+#include "MDSMonitor.h"
+
+#include "osd/ObjectStore.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
@@ -21,12 +24,19 @@
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
 
+#include "messages/MMonOSDMapInfo.h"
+#include "messages/MMonOSDMapLease.h"
+#include "messages/MMonOSDMapLeaseAck.h"
+#include "messages/MMonOSDMapUpdatePrepare.h"
+#include "messages/MMonOSDMapUpdateAck.h"
+#include "messages/MMonOSDMapUpdateCommit.h"
+
 #include "common/Timer.h"
 
 #include "config.h"
 #undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now()<< " mon" << mon->whoami << ".osd e" << (osdmap ? osdmap->get_epoch():0) << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now()<< " mon" << mon->whoami << ".osd e" << (osdmap ? osdmap->get_epoch():0) << " "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".osd(" << (state == STATE_INIT ? (const char*)"init":(state == STATE_SYNC ? (const char*)"sync":(state == STATE_LOCK ? (const char*)"lock":(state == STATE_UPDATING ? (const char*)"updating":(const char*)"?\?")))) << ") e" << (osdmap ? osdmap->get_epoch():0) << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".osd(" << (state == STATE_INIT ? (const char*)"init":(state == STATE_SYNC ? (const char*)"sync":(state == STATE_LOCK ? (const char*)"lock":(state == STATE_UPDATING ? (const char*)"updating":(const char*)"?\?")))) << ") e" << (osdmap ? osdmap->get_epoch():0) << " "
 
 
 class C_Mon_FakeOSDFailure : public Context {
@@ -47,8 +57,9 @@ void OSDMonitor::fake_osdmap_update()
   accept_pending();
 
   // tell a random osd
-  send_incremental(osdmap->get_epoch()-1,                    // ick! FIXME
-				   MSG_ADDR_OSD(rand() % g_conf.num_osd));
+  int osd = rand() % g_conf.num_osd;
+  send_incremental(osdmap->get_epoch()-1,                     // ick! FIXME
+				   MSG_ADDR_OSD(osd), osdmap->get_inst(osd));
 }
 
 
@@ -67,7 +78,7 @@ void OSDMonitor::fake_reorg()
   accept_pending();
   
   // tell him!
-  send_incremental(osdmap->get_epoch()-1, MSG_ADDR_OSD(r));
+  send_incremental(osdmap->get_epoch()-1, MSG_ADDR_OSD(r), osdmap->get_inst(r));
   
   // do it again?
   /*
@@ -80,11 +91,40 @@ void OSDMonitor::fake_reorg()
 
 
 
+void OSDMonitor::init()
+{
+  // start with blank map
+  osdmap = new OSDMap;
+
+  // load my last state from the store
+  bufferlist bl;
+  if (get_map_bl(0, bl)) {
+	// yay!
+	osdmap->decode(bl);
+	dout(1) << "init got epoch " << osdmap->get_epoch() << " from store" << endl;
+  } else {
+	// FIXME. when elections work!
+	if (mon->is_leader()) {
+	  create_initial();
+	  issue_leases();
+	}
+  }
+}
+
+
+
+
+/************ MAPS ****************/
+
 
 void OSDMonitor::create_initial()
 {
+  dout(1) << "create_initial generating osdmap from g_conf" << endl;
+
   // <HACK set up OSDMap from g_conf>
+  if (osdmap) delete osdmap;
   osdmap = new OSDMap();
+  osdmap->mon_epoch = mon->mon_epoch;
   osdmap->ctime = g_clock.now();
   osdmap->set_pg_bits(g_conf.osd_pg_bits);
   
@@ -157,8 +197,6 @@ void OSDMonitor::create_initial()
 	  osdmap->osds.insert(i+10000);
   }
   
-  //osdmap->encode(maps[osdmap->get_epoch()]); // 1
-  //pending_inc.epoch = osdmap->get_epoch()+1;     // 2
   // </HACK>
   
   // fake osd failures
@@ -177,30 +215,97 @@ void OSDMonitor::create_initial()
 }
 
 
+bool OSDMonitor::get_map_bl(epoch_t epoch, bufferlist& bl)
+{
+  object_t oid(Monitor::INO_OSD_MAP, epoch);
+  if (!mon->store->exists(oid))
+	return false;
+  int r = mon->store->read(oid, 0, 0, bl);
+  assert(r > 0);
+  return true;  
+}
+
+bool OSDMonitor::get_inc_map_bl(epoch_t epoch, bufferlist& bl)
+{
+  object_t oid(Monitor::INO_OSD_INC_MAP, epoch);
+  if (!mon->store->exists(oid))
+	return false;
+  int r = mon->store->read(oid, 0, 0, bl);
+  assert(r > 0);
+  return true;  
+}
+
+
+void OSDMonitor::save_map()
+{
+  bufferlist bl;
+  osdmap->encode(bl);
+
+  ObjectStore::Transaction t;
+  t.write(object_t(Monitor::INO_OSD_MAP,0), 0, bl.length(), bl);
+  t.write(object_t(Monitor::INO_OSD_MAP,osdmap->get_epoch()), 0, bl.length(), bl); 
+  mon->store->apply_transaction(t);
+  mon->store->sync();
+}
+
+void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
+{
+  bufferlist bl;
+  osdmap->encode(bl);
+
+  bufferlist incbl;
+  inc.encode(incbl);
+
+  ObjectStore::Transaction t;
+  t.write(object_t(Monitor::INO_OSD_MAP,0), 0, bl.length(), bl);
+  t.write(object_t(Monitor::INO_OSD_MAP,osdmap->get_epoch()), 0, bl.length(), bl);         // not strictly needed??
+  t.write(object_t(Monitor::INO_OSD_INC_MAP,osdmap->get_epoch()), 0, incbl.length(), incbl); 
+  mon->store->apply_transaction(t);
+  mon->store->sync();
+}
+
+
 
 void OSDMonitor::dispatch(Message *m)
 {
   switch (m->get_type()) {
 
-    case MSG_OSD_GETMAP:
-	  handle_osd_getmap((MOSDGetMap*)m);
-	  break;
+	// services
+  case MSG_OSD_GETMAP:
+	handle_osd_getmap((MOSDGetMap*)m);
+	break;
+  case MSG_OSD_FAILURE:
+	handle_osd_failure((MOSDFailure*)m);
+	break;
+  case MSG_OSD_BOOT:
+	handle_osd_boot((MOSDBoot*)m);
+	break;
+  case MSG_OSD_IN:
+	handle_osd_in((MOSDIn*)m);
+	break;
+  case MSG_OSD_OUT:
+	handle_osd_out((MOSDOut*)m);
+	break;
 
-    case MSG_OSD_FAILURE:
-	  handle_osd_failure((MOSDFailure*)m);
-	  break;
-
-    case MSG_OSD_BOOT:
-	  handle_osd_boot((MOSDBoot*)m);
-	  break;
-
-    case MSG_OSD_IN:
-	  handle_osd_in((MOSDIn*)m);
-	  break;
-
-    case MSG_OSD_OUT:
-	  handle_osd_out((MOSDOut*)m);
-	  break;
+	// replication
+  case MSG_MON_OSDMAP_INFO:
+	handle_info((MMonOSDMapInfo*)m);
+	break;
+  case MSG_MON_OSDMAP_LEASE:
+	handle_lease((MMonOSDMapLease*)m);
+	break;
+  case MSG_MON_OSDMAP_LEASE_ACK:
+	handle_lease_ack((MMonOSDMapLeaseAck*)m);
+	break;
+  case MSG_MON_OSDMAP_UPDATE_PREPARE:
+	handle_update_prepare((MMonOSDMapUpdatePrepare*)m);
+	break;
+  case MSG_MON_OSDMAP_UPDATE_ACK:
+	handle_update_ack((MMonOSDMapUpdateAck*)m);
+	break;
+  case MSG_MON_OSDMAP_UPDATE_COMMIT:
+	handle_update_commit((MMonOSDMapUpdateCommit*)m);
+	break;
 
   default:
 	assert(0);
@@ -228,9 +333,10 @@ void OSDMonitor::handle_osd_failure(MOSDFailure *m)
 
     accept_pending();
 
-    bcast_latest_mds();   
+    send_incremental(m->get_epoch(), m->get_source(), m->get_source_inst());
 
-    send_incremental(m->get_epoch(), m->get_source());
+	send_waiting();
+    bcast_latest_mds();   
   }
 
   delete m;
@@ -269,7 +375,9 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
     if (osdmap->osd_inst.size() == osdmap->osds.size()) {
       dout(-7) << "osd_boot all osds booted." << endl;
       osdmap->inc_epoch();
-      osdmap->encode(maps[osdmap->get_epoch()]); // 1
+
+	  save_map();
+
       pending_inc.epoch = osdmap->get_epoch()+1;     // 2
 
       bcast_latest_osd();
@@ -301,7 +409,7 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   accept_pending();
 
   // the booting osd will spread word
-  send_incremental(m->sb.current_epoch, m->get_source());
+  send_incremental(m->sb.current_epoch, m->get_source(), m->get_source_inst());
   delete m;
 
   // tell mds
@@ -316,7 +424,7 @@ void OSDMonitor::handle_osd_in(MOSDIn *m)
   if (osdmap->is_out(from)) 
     pending_inc.new_in.push_back(from);
   accept_pending();
-  send_incremental(m->map_epoch, m->get_source());
+  send_incremental(m->map_epoch, m->get_source(), m->get_source_inst());
 }
 
 void OSDMonitor::handle_osd_out(MOSDOut *m)
@@ -326,7 +434,7 @@ void OSDMonitor::handle_osd_out(MOSDOut *m)
   if (osdmap->is_in(from)) {
     pending_inc.new_out.push_back(from);
     accept_pending();
-    send_incremental(m->map_epoch, m->get_source());
+    send_incremental(m->map_epoch, m->get_source(), m->get_source_inst());
   }
 }
 
@@ -335,12 +443,13 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
   dout(7) << "osd_getmap from " << m->get_source() << " since " << m->get_since() << endl;
   
   if (osdmap->get_epoch() == 0) {
-    awaiting_map[1][m->get_source()] = m->get_since();
+    awaiting_map[m->get_source()].first = m->get_source_inst();
+	awaiting_map[m->get_source()].second = m->get_since();
   } else {
     if (m->get_since())
-      send_incremental(m->get_since(), m->get_source());
+      send_incremental(m->get_since(), m->get_source(), m->get_source_inst());
     else
-      send_full(m->get_source());
+      send_full(m->get_source(), m->get_source_inst());
   }
   delete m;
 }
@@ -353,11 +462,12 @@ void OSDMonitor::accept_pending()
 
   // accept pending into a new map!
   pending_inc.ctime = g_clock.now();
-  pending_inc.encode( inc_maps[ pending_inc.epoch ] );
-  
+
   // advance!
   osdmap->apply_incremental(pending_inc);
 
+  // save it.
+  save_inc_map( pending_inc );
   
   // tell me about it
   for (map<int,entity_inst_t>::iterator i = pending_inc.new_up.begin();
@@ -392,27 +502,23 @@ void OSDMonitor::accept_pending()
   pending_inc = next;
 }
 
-void OSDMonitor::send_current()
+void OSDMonitor::send_waiting()
 {
-  dout(10) << "send_current " << osdmap->get_epoch() << endl;
+  dout(10) << "send_waiting " << osdmap->get_epoch() << endl;
 
-  map<msg_addr_t,epoch_t> s;
-  s.swap( awaiting_map[osdmap->get_epoch()] );
-  awaiting_map.erase(osdmap->get_epoch());
-
-  for (map<msg_addr_t,epoch_t>::iterator i = s.begin();
-       i != s.end();
+  for (map<msg_addr_t,pair<entity_inst_t,epoch_t> >::iterator i = awaiting_map.begin();
+       i != awaiting_map.end();
        i++)
-    send_incremental(i->second, i->first);
+    send_incremental(i->second.second, i->first, i->second.first);
 }
 
 
-void OSDMonitor::send_full(msg_addr_t who)
+void OSDMonitor::send_full(msg_addr_t who, const entity_inst_t& inst)
 {
-  messenger->send_message(new MOSDMap(osdmap), who);
+  messenger->send_message(new MOSDMap(osdmap), who, inst);
 }
 
-void OSDMonitor::send_incremental(epoch_t since, msg_addr_t dest)
+void OSDMonitor::send_incremental(epoch_t since, msg_addr_t dest, const entity_inst_t& inst)
 {
   dout(5) << "osd_send_incremental " << since << " -> " << osdmap->get_epoch()
            << " to " << dest << endl;
@@ -423,20 +529,20 @@ void OSDMonitor::send_incremental(epoch_t since, msg_addr_t dest)
        e > since;
        e--) {
     bufferlist bl;
-    if (inc_maps.count(e)) {
+    if (get_inc_map_bl(e, bl)) {
       dout(10) << "osd_send_incremental    inc " << e << endl;
-      m->incremental_maps[e] = inc_maps[e];
-    } else if (maps.count(e)) {
+      m->incremental_maps[e] = bl;
+    } 
+	else if (get_map_bl(e, bl)) {
       dout(10) << "osd_send_incremental   full " << e << endl;
-      m->maps[e] = maps[e];
-      //if (!full) break;
+      m->maps[e] = bl;
     }
     else {
       assert(0);  // we should have all maps.
     }
   }
   
-  messenger->send_message(m, dest);
+  messenger->send_message(m, dest, inst);
 }
 
 
@@ -444,19 +550,19 @@ void OSDMonitor::send_incremental(epoch_t since, msg_addr_t dest)
 void OSDMonitor::bcast_latest_mds()
 {
   epoch_t e = osdmap->get_epoch();
-  dout(1) << "osd_bcast_latest_mds epoch " << e << endl;
+  dout(1) << "bcast_latest_mds epoch " << e << endl;
   
   // tell mds
   for (int i=0; i<g_conf.num_mds; i++) {
     //send_full(MSG_ADDR_MDS(i));
-    send_incremental(osdmap->get_epoch()-1, MSG_ADDR_MDS(i));
+    send_incremental(osdmap->get_epoch()-1, MSG_ADDR_MDS(i), mon->mdsmon->mdsmap->get_inst(i));
   }
 }
 
 void OSDMonitor::bcast_latest_osd()
 {
   epoch_t e = osdmap->get_epoch();
-  dout(1) << "osd_bcast_latest_osd epoch " << e << endl;
+  dout(1) << "bcast_latest_osd epoch " << e << endl;
 
   // tell osds
   set<int> osds;
@@ -466,7 +572,7 @@ void OSDMonitor::bcast_latest_osd()
        it++) {
     if (osdmap->is_down(*it)) continue;
 
-    send_incremental(osdmap->get_epoch()-1, MSG_ADDR_OSD(*it));
+    send_incremental(osdmap->get_epoch()-1, MSG_ADDR_OSD(*it), osdmap->get_inst(*it));
   }  
 }
 
@@ -500,4 +606,249 @@ void OSDMonitor::tick()
 	// hrmpf.  bcast map for now.  FIXME FIXME.
 	bcast_latest_osd();
   }
+}
+
+void OSDMonitor::election_starting()
+{
+  dout(10) << "election_starting" << endl;
+}
+
+void OSDMonitor::election_finished()
+{
+  dout(10) << "election_starting" << endl;
+
+  state = STATE_INIT;
+
+  if (mon->is_leader()) {
+	// leader.
+	if (mon->monmap->num_mon == 1) {
+	  // hmm, it's just me!
+	  state = STATE_SYNC;
+	}
+  } 
+  else if (mon->is_peon()) {
+	// peon. send info
+	messenger->send_message(new MMonOSDMapInfo(osdmap->epoch, osdmap->mon_epoch),
+							MSG_ADDR_MON(mon->leader), mon->monmap->get_inst(mon->leader));
+  }
+
+}
+
+
+
+void OSDMonitor::handle_info(MMonOSDMapInfo *m)
+{
+  dout(10) << "handle_info from " << m->get_source()
+		   << " epoch " << m->get_epoch() << " in mon_epoch " << m->get_mon_epoch()
+		   << endl;
+
+  epoch_t epoch = m->get_epoch();
+
+  // did they have anything?
+  if (epoch > 0) {
+	// make sure it's current.
+	if (epoch == osdmap->get_epoch()) {
+	  if (osdmap->mon_epoch != m->get_mon_epoch()) {
+		dout(10) << "handle_info had divergent epoch " << m->get_epoch() 
+				 << ", mon_epoch " << m->get_mon_epoch() << " != " << osdmap->mon_epoch << endl;
+		epoch--;
+	  }
+	} else {
+	  bufferlist bl;
+	  get_map_bl(epoch, bl);
+	  
+	  OSDMap old;
+	  old.decode(bl);
+	  
+	  if (old.mon_epoch != m->get_mon_epoch()) {
+		dout(10) << "handle_info had divergent epoch " << m->get_epoch() 
+				 << ", mon_epoch " << m->get_mon_epoch() << " != " << old.mon_epoch << endl;
+		epoch--;
+	  }
+	}
+  }
+  
+  // bring up to date
+  if (epoch < osdmap->get_epoch()) 
+	send_incremental(epoch, m->get_source(), m->get_source_inst());
+
+  delete m;
+}
+
+
+void OSDMonitor::issue_leases()
+{
+  dout(10) << "issue_leases" << endl;
+  assert(mon->is_leader());
+
+  // set lease endpoint
+  lease_expire = g_clock.now();
+  lease_expire += g_conf.mon_lease;
+
+  pending_ack.clear();
+
+  for (set<int>::iterator i = mon->quorum.begin();
+	   i != mon->quorum.end();
+	   i++) {
+	if (*i == mon->whoami) continue;
+	messenger->send_message(new MMonOSDMapLease(osdmap->get_epoch(), lease_expire),
+							MSG_ADDR_MON(*i), mon->monmap->get_inst(*i));
+	pending_ack.insert(*i);
+  }
+}
+
+void OSDMonitor::handle_lease(MMonOSDMapLease *m)
+{
+  if (m->get_epoch() != osdmap->get_epoch() + 1) {
+	dout(10) << "map_lease from " << m->get_source() 
+			 << " on epoch " << m->get_epoch() << ", but i am " << osdmap->get_epoch() << endl;
+	assert(0);
+	delete m;
+	return;
+  }
+
+  dout(10) << "map_lease from " << m->get_source() << " expires " << lease_expire << endl;
+  lease_expire = m->get_lease_expire();
+  
+  delete m;
+}
+
+void OSDMonitor::handle_lease_ack(MMonOSDMapLeaseAck *m)
+{
+  // right epoch?
+  if (m->get_epoch() != osdmap->get_epoch()) {
+	dout(10) << "map_lease_ack from " << m->get_source() 
+			 << " on old epoch " << m->get_epoch() << ", dropping" << endl;
+	delete m;
+	return;
+  }
+  
+  // within time limit?
+  if (g_clock.now() >= lease_expire) {
+	dout(10) << "map_lease_ack from " << m->get_source() 
+			 << ", but lease expired, calling election" << endl;
+	mon->call_election();
+	delete m;
+	return;
+  }
+
+  assert(m->get_source().is_mon());
+  int from = m->get_source().num();
+
+  assert(pending_ack.count(from));
+  pending_ack.erase(from);
+
+  if (pending_ack.empty()) {
+	dout(10) << "map_lease_ack from " << m->get_source() 
+			 << ", last one" << endl;
+  } else {
+	dout(10) << "map_lease_ack from " << m->get_source() 
+			 << ", still waiting on " << pending_ack << endl;
+  }
+  
+  delete m;
+}
+
+
+void OSDMonitor::update_map()
+{
+  // lock map
+  state = STATE_UPDATING;
+  pending_ack.clear();
+
+  // set lease endpoint
+  lease_expire += g_conf.mon_lease;
+
+  // send prepare
+  epoch_t epoch = osdmap->get_epoch();
+  bufferlist map_bl, inc_map_bl;
+  if (!get_inc_map_bl(epoch, inc_map_bl))
+	get_map_bl(epoch, map_bl);
+
+  for (set<int>::iterator i = mon->quorum.begin();
+	   i != mon->quorum.end();
+	   i++) {
+	if (*i == mon->whoami) continue;
+	messenger->send_message(new MMonOSDMapUpdatePrepare(epoch, 
+														map_bl, inc_map_bl),
+							MSG_ADDR_MON(*i), mon->monmap->get_inst(*i));
+	pending_ack.insert(*i);
+  }
+}
+
+
+
+void OSDMonitor::handle_update_prepare(MMonOSDMapUpdatePrepare *m)
+{
+  dout(10) << "map_update_prepare from " << m->get_source() << " epoch " << m->get_epoch() << endl;
+  // accept map
+  assert(m->get_epoch() == osdmap->get_epoch() + 1);
+  
+  if (m->inc_map_bl.length()) {
+	int off = 0;
+	pending_inc.decode(m->inc_map_bl, off);
+  } else {
+	if (!pending_map)
+	  pending_map = new OSDMap;
+	pending_map->decode(m->map_bl);
+  }
+
+  // state
+  state = STATE_LOCK;
+  //lease_expire = m->lease_expire;
+  
+  // ack
+  messenger->send_message(new MMonOSDMapUpdateAck(osdmap->get_epoch()),
+						  m->get_source(), m->get_source_inst());
+  delete m;
+}
+
+void OSDMonitor::handle_update_ack(MMonOSDMapUpdateAck *m)
+{
+  /*
+  // right epoch?
+  if (m->get_epoch() != osdmap->get_epoch()) {
+	dout(10) << "map_update_ack from " << m->get_source() 
+			 << " on old epoch " << m->get_epoch() << ", dropping" << endl;
+	delete m;
+	return;
+  }
+
+  // within time limit?
+  if (g_clock.now() >= lease_expire) {
+	dout(10) << "map_update_ack from " << m->get_source() 
+			 << ", but lease expired, calling election" << endl;
+	state = STATE_SYNC;
+	mon->call_election();
+	return;
+  }
+
+  assert(m->get_source().is_mon());
+  int from = m->get_source().num();
+
+  assert(pending_lease_ack.count(from));
+  pending_lease_ack.erase(from);
+
+  if (pending_lease_ack.empty()) {
+	dout(10) << "map_update_ack from " << m->get_source() 
+			 << ", last one" << endl;
+	state = STATE_SYNC;
+	
+	// send lease commit
+	for (map<int>::iterator i = mon->quorum.begin();
+		 i != mon->quorum.end();
+		 i++) {
+	  if (i == mon->whoami) continue;
+	  messenger->send_message(new MMonOSDMapLeaseCommit(osdmap),
+							  MSG_ADDR_MON(*i), mon->monmap->get_inst(*i));
+	}
+  } else {
+	dout(10) << "map_update_ack from " << m->get_source() 
+			 << ", still waiting on " << pending_lease_ack << endl;
+  }
+*/
+}
+
+void OSDMonitor::handle_update_commit(MMonOSDMapUpdateCommit *m)
+{
 }

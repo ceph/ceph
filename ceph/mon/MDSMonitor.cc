@@ -24,8 +24,8 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now()<< " mon" << mon->whoami << ".mds e" << (mdsmap ? mdsmap->get_epoch():0) << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now()<< " mon" << mon->whoami << ".mds e" << (mdsmap ? mdsmap->get_epoch():0) << " "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".mds e" << (mdsmap ? mdsmap->get_epoch():0) << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".mds e" << (mdsmap ? mdsmap->get_epoch():0) << " "
 
 
 
@@ -105,7 +105,7 @@ void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
 
 void MDSMonitor::bcast_latest_mds()
 {
-  dout(10) << "mds_bcast_latest_mds " << mdsmap->get_epoch() << endl;
+  dout(10) << "bcast_latest_mds " << mdsmap->get_epoch() << endl;
   
   // tell mds
   for (set<int>::iterator p = mdsmap->get_mds().begin();
@@ -119,13 +119,13 @@ void MDSMonitor::bcast_latest_mds()
 
 void MDSMonitor::send_full(msg_addr_t dest, const entity_inst_t& inst)
 {
+  dout(11) << "send_full to " << dest << " inst " << inst << endl;
   messenger->send_message(new MMDSMap(mdsmap), dest, inst);
 }
 
 void MDSMonitor::send_current()
 {
-  dout(10) << "mds_send_current " << mdsmap->get_epoch() << " to " << awaiting_map.size() << endl;
-  return;
+  dout(10) << "mds_send_current " << mdsmap->get_epoch() << endl;
   for (map<msg_addr_t,entity_inst_t>::iterator i = awaiting_map.begin();
        i != awaiting_map.end();
        i++) 

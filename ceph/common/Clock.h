@@ -21,6 +21,7 @@
 
 #include <sys/time.h>
 #include <time.h>
+#include <math.h>
 
 #include <list>
 using namespace std;
@@ -33,6 +34,10 @@ class utime_t {
  private:
   struct timeval tv;
 
+  struct timeval& timeval()  { return tv; }
+  friend class Clock;
+
+ public:
   void normalize() {
     if (tv.tv_usec > 1000*1000) {
       tv.tv_sec += tv.tv_usec / (1000*1000);
@@ -40,10 +45,6 @@ class utime_t {
     }
   }
 
-  struct timeval& timeval()  { return tv; }
-  friend class Clock;
-
- public:
   // cons
   utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
   utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
@@ -72,6 +73,14 @@ inline utime_t& operator+=(utime_t& l, const utime_t& r) {
   l.sec_ref() += r.sec() + (l.usec()+r.usec())/1000000L;
   l.usec_ref() += r.usec();
   l.usec_ref() %= 1000000L;
+  return l;
+}
+inline utime_t& operator+=(utime_t& l, double f) {
+  double fs = trunc(f);
+  double us = (f - fs) / (double)1000000.0;
+  l.sec_ref() += (long)fs;
+  l.usec_ref() += (long)us;
+  l.normalize();
   return l;
 }
 

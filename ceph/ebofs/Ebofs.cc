@@ -234,7 +234,7 @@ int Ebofs::umount()
   for (hash_map<object_t,Onode*>::iterator i = onode_map.begin();
        i != onode_map.end();
        i++) {
-    dout(0) << "umount *** leftover: " << hex << i->first << dec << "   " << *(i->second) << endl;
+    dout(0) << "umount *** leftover: " << i->first << "   " << *(i->second) << endl;
   }
 
   // free memory
@@ -574,7 +574,7 @@ Onode* Ebofs::get_onode(object_t oid)
     // on disk?
     Extent onode_loc;
     if (object_tab->lookup(oid, onode_loc) < 0) {
-      dout(10) << "onode lookup failed on " << hex << oid << dec << endl;
+      dout(10) << "onode lookup failed on " << oid << endl;
       // object dne.
       return 0;
     }
@@ -589,7 +589,7 @@ Onode* Ebofs::get_onode(object_t oid)
       continue;
     }
 
-    dout(10) << "get_onode reading " << hex << oid << dec << " from " << onode_loc << endl;
+    dout(10) << "get_onode reading " << oid << " from " << onode_loc << endl;
 
     assert(waitfor_onode.count(oid) == 0);
     waitfor_onode[oid].clear();  // this should be empty initially. 
@@ -610,7 +610,7 @@ Onode* Ebofs::get_onode(object_t oid)
     // parse data block
     struct ebofs_onode *eo = (struct ebofs_onode*)bl.c_str();
     if (eo->object_id != oid) {
-      cerr << " wrong oid in onode block: " << hex << eo->object_id << " != " << oid << dec << endl;
+      cerr << " wrong oid in onode block: " << eo->object_id << " != " << oid << endl;
       cerr << " onode_loc is " << eo->onode_loc << endl;
       cerr << " object_size " << eo->object_size << endl;
       cerr << " object_blocks " << eo->object_blocks << endl;
@@ -933,7 +933,7 @@ Cnode* Ebofs::get_cnode(coll_t cid)
       continue;
     }
 
-    dout(10) << "get_cnode reading " << hex << cid << dec << " from " << cnode_loc << endl;
+    dout(10) << "get_cnode reading " << cid << " from " << cnode_loc << endl;
 
     assert(waitfor_cnode.count(cid) == 0);
     waitfor_cnode[cid].clear();  // this should be empty initially. 
@@ -1814,11 +1814,11 @@ int Ebofs::read(object_t oid,
 
 int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
 {
-  dout(7) << "_read " << hex << oid << dec << " " << off << "~" << len << endl;
+  dout(7) << "_read " << oid << " " << off << "~" << len << endl;
 
   Onode *on = get_onode(oid);
   if (!on) {
-    dout(7) << "_read " << hex << oid << dec << " " << off << "~" << len << " ... dne " << endl;
+    dout(7) << "_read " << oid << " " << off << "~" << len << " ... dne " << endl;
     return -ENOENT;  // object dne?
   }
 
@@ -1829,7 +1829,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
   while (1) {
     // check size bound
     if (off >= on->object_size) {
-      dout(7) << "_read " << hex << oid << dec << " " << off << "~" << len << " ... off past eof " << on->object_size << endl;
+      dout(7) << "_read " << oid << " " << off << "~" << len << " ... off past eof " << on->object_size << endl;
       r = -ESPIPE;   // FIXME better errno?
       break;
     }
@@ -1846,7 +1846,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
       cond.Wait(ebofs_lock);
 
     if (on->deleted) {
-      dout(7) << "_read " << hex << oid << dec << " " << off << "~" << len << " ... object deleted" << endl;
+      dout(7) << "_read " << oid << " " << off << "~" << len << " ... object deleted" << endl;
       r = -ENOENT;
       break;
     }
@@ -1857,7 +1857,7 @@ int Ebofs::_read(object_t oid, off_t off, size_t len, bufferlist& bl)
   trim_bc();
 
   if (r < 0) return r;   // return error,
-  dout(7) << "_read " << hex << oid << dec << " " << off << "~" << len << " ... got " << bl.length() << endl;
+  dout(7) << "_read " << oid << " " << off << "~" << len << " ... got " << bl.length() << endl;
   return bl.length();    // or bytes read.
 }
 
@@ -2101,13 +2101,13 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 
 int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
 {
-  dout(7) << "_write " << hex << oid << dec << " " << offset << "~" << length << endl;
+  dout(7) << "_write " << oid << " " << offset << "~" << length << endl;
   assert(bl.length() == length);
 
   // too much unflushed dirty data?  (if so, block!)
   if (_write_will_block()) {
     dout(10) << "_write blocking " 
-              << hex << oid << dec << " " << offset << "~" << length 
+              << oid << " " << offset << "~" << length 
               << "  bc: " 
               << "size " << bc.get_size() 
               << ", trimmable " << bc.get_trimmable()
@@ -2121,7 +2121,7 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
       bc.waitfor_stat();  // waits on ebofs_lock
 
     dout(10) << "_write unblocked " 
-             << hex << oid << dec << " " << offset << "~" << length 
+             << oid << " " << offset << "~" << length 
               << "  bc: " 
               << "size " << bc.get_size() 
               << ", trimmable " << bc.get_trimmable()
@@ -2213,7 +2213,7 @@ int Ebofs::write(object_t oid,
 
 int Ebofs::_remove(object_t oid)
 {
-  dout(7) << "_remove " << hex << oid << dec << endl;
+  dout(7) << "_remove " << oid << endl;
 
   // get inode
   Onode *on = get_onode(oid);
@@ -2246,7 +2246,7 @@ int Ebofs::remove(object_t oid, Context *onsafe)
 
 int Ebofs::_truncate(object_t oid, off_t size)
 {
-  dout(7) << "_truncate " << hex << oid << dec << " size " << size << endl;
+  dout(7) << "_truncate " << oid << " size " << size << endl;
 
   Onode *on = get_onode(oid);
   if (!on) 
@@ -2368,7 +2368,7 @@ int Ebofs::_clone(object_t from, object_t to)
 bool Ebofs::exists(object_t oid)
 {
   ebofs_lock.Lock();
-  dout(8) << "exists " << hex << oid << dec << endl;
+  dout(8) << "exists " << oid << endl;
   bool e = (object_tab->lookup(oid) == 0);
   ebofs_lock.Unlock();
   return e;
@@ -2384,7 +2384,7 @@ int Ebofs::stat(object_t oid, struct stat *st)
 
 int Ebofs::_stat(object_t oid, struct stat *st)
 {
-  dout(7) << "_stat " << hex << oid << dec << endl;
+  dout(7) << "_stat " << oid << endl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2399,7 +2399,7 @@ int Ebofs::_stat(object_t oid, struct stat *st)
 
 int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t size) 
 {
-  dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << endl;
+  dout(8) << "setattr " << oid << " '" << name << "' len " << size << endl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2409,7 +2409,7 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
   dirty_onode(on);
   put_onode(on);
 
-  dout(8) << "setattr " << hex << oid << dec << " '" << name << "' len " << size << " success" << endl;
+  dout(8) << "setattr " << oid << " '" << name << "' len " << size << " success" << endl;
 
   return 0;
 }
@@ -2432,7 +2432,7 @@ int Ebofs::setattr(object_t oid, const char *name, const void *value, size_t siz
 
 int Ebofs::_setattrs(object_t oid, map<string,bufferptr>& attrset)
 {
-  dout(8) << "setattrs " << hex << oid << dec << endl;
+  dout(8) << "setattrs " << oid << endl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2469,7 +2469,7 @@ int Ebofs::getattr(object_t oid, const char *name, void *value, size_t size)
 
 int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
 {
-  dout(8) << "_getattr " << hex << oid << dec << " '" << name << "' maxlen " << size << endl;
+  dout(8) << "_getattr " << oid << " '" << name << "' maxlen " << size << endl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2477,11 +2477,11 @@ int Ebofs::_getattr(object_t oid, const char *name, void *value, size_t size)
   string n(name);
   int r = 0;
   if (on->attr.count(n) == 0) {
-    dout(10) << "_getattr " << hex << oid << dec << " '" << name << "' dne" << endl;
+    dout(10) << "_getattr " << oid << " '" << name << "' dne" << endl;
     r = -1;
   } else {
     r = MIN( on->attr[n].length(), size );
-    dout(10) << "_getattr " << hex << oid << dec << " '" << name << "' got len " << r << endl;
+    dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << endl;
     memcpy(value, on->attr[n].c_str(), r );
   }
   put_onode(on);
@@ -2498,7 +2498,7 @@ int Ebofs::getattrs(object_t oid, map<string,bufferptr> &aset)
 
 int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
 {
-  dout(8) << "_getattrs " << hex << oid << dec << endl;
+  dout(8) << "_getattrs " << oid << endl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2511,7 +2511,7 @@ int Ebofs::_getattrs(object_t oid, map<string,bufferptr> &aset)
 
 int Ebofs::_rmattr(object_t oid, const char *name) 
 {
-  dout(8) << "_rmattr " << hex << oid << dec << " '" << name << "'" << endl;
+  dout(8) << "_rmattr " << oid << " '" << name << "'" << endl;
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
@@ -2543,7 +2543,7 @@ int Ebofs::rmattr(object_t oid, const char *name, Context *onsafe)
 int Ebofs::listattr(object_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
-  dout(8) << "listattr " << hex << oid << dec << endl;
+  dout(8) << "listattr " << oid << endl;
 
   Onode *on = get_onode(oid);
   if (!on) {

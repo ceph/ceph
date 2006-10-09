@@ -276,7 +276,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
   m->set_length(ex.length);
   m->set_offset(ex.start);
   dout(10) << "readx_submit " << rd << " tid " << last_tid
-           << " oid " << hex << ex.oid << dec  << " " << ex.start << "~" << ex.length
+           << " oid " << ex.oid << " " << ex.start << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
            << " pg " << hex << ex.pgid << dec
            << " osd" << pg.acker() 
@@ -329,7 +329,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   //assert(m->get_result() >= 0);
 
   // what buffer offset are we?
-  dout(7) << " got frag from " << hex << m->get_oid() << dec << " "
+  dout(7) << " got frag from " << m->get_oid() << " "
           << m->get_offset() << "~" << m->get_length()
           << ", still have " << rd->ops.size() << " more ops" << endl;
   
@@ -368,7 +368,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
         for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
              bit != eit->buffer_extents.end();
              bit++) {
-          dout(21) << " object " << hex << eit->oid << dec << " extent " << eit->start << "~" << eit->length << " : ox offset " << ox_off << " -> buffer extent " << bit->first << "~" << bit->second << endl;
+          dout(21) << " object " << eit->oid << " extent " << eit->start << "~" << eit->length << " : ox offset " << ox_off << " -> buffer extent " << bit->first << "~" << bit->second << endl;
           by_off[bit->first] = new bufferlist;
 
           if (ox_off + bit->second <= ox_len) {
@@ -570,7 +570,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 
   // send
   dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
-           << "  oid " << hex << ex.oid << dec 
+           << "  oid " << ex.oid
            << " " << ex.start << "~" << ex.length 
            << " pg " << hex << ex.pgid << dec 
            << " osd" << pg.primary()

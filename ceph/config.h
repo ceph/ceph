@@ -96,6 +96,7 @@ struct md_config_t {
   // mon
   int mon_tick_interval;
   int mon_osd_down_out_interval;
+  float mon_lease;
 
   // client
   int      client_cache_size;

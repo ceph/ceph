@@ -529,7 +529,7 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 
 void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 {
-  dout(7) << "truncate " << hex << object_id << dec 
+  dout(7) << "truncate " << object_id 
            << " " << blocks << " blocks"
            <<  endl;
 

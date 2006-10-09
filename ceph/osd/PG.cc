@@ -398,26 +398,26 @@ void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
     if (omissing.is_missing(p->first)) {
       assert(omissing.is_missing(p->first, p->second));
       if (omissing.loc.count(p->first)) {
-        dout(10) << "proc_missing missing " << hex << p->first << dec << " " << p->second
+        dout(10) << "proc_missing missing " << p->first << " " << p->second
                  << " on osd" << omissing.loc[p->first] << endl;
         missing.loc[p->first] = omissing.loc[p->first];
       } else {
-        dout(10) << "proc_missing missing " << hex << p->first << dec << " " << p->second
+        dout(10) << "proc_missing missing " << p->first << " " << p->second
                  << " also LOST on source, osd" << fromosd << endl;
       }
     } 
     else if (p->second <= olog.top) {
-      dout(10) << "proc_missing missing " << hex << p->first << dec << " " << p->second
+      dout(10) << "proc_missing missing " << p->first << " " << p->second
                << " on source, osd" << fromosd << endl;
       missing.loc[p->first] = fromosd;
     } else {
-      dout(10) << "proc_missing " << hex << p->first << dec << " " << p->second
+      dout(10) << "proc_missing " << p->first << " " << p->second
                << " > olog.top " << olog.top << ", not found...."
                << endl;
     }
   }
 
-  dout(10) << "proc_missing missing " << hex << missing.missing << dec << endl;
+  dout(10) << "proc_missing missing " << missing.missing << endl;
 }
 
 
@@ -1003,7 +1003,7 @@ void PG::clean_up_local(ObjectStore::Transaction& t)
       
       if (p->is_delete()) {
         if (s.count(p->oid)) {
-          dout(10) << " deleting " << hex << p->oid << dec
+          dout(10) << " deleting " << p->oid
                    << " when " << p->version << endl;
           t.remove(p->oid);
         }
@@ -1017,7 +1017,7 @@ void PG::clean_up_local(ObjectStore::Transaction& t)
     for (set<object_t>::iterator i = s.begin(); 
          i != s.end();
          i++) {
-      dout(10) << " deleting stray " << hex << *i << dec << endl;
+      dout(10) << " deleting stray " << *i << endl;
       t.remove(*i);
     }
 
@@ -1031,7 +1031,7 @@ void PG::clean_up_local(ObjectStore::Transaction& t)
       did.insert(p->oid);
 
       if (p->is_delete()) {
-        dout(10) << " deleting " << hex << p->oid << dec
+        dout(10) << " deleting " << p->oid
                  << " when " << p->version << endl;
         t.remove(p->oid);
       } else {

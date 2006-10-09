@@ -41,22 +41,27 @@
 #define MSG_MON_ELECTION_REFRESH   17
 #define MSG_MON_ELECTION_STATUS    18
 
+#define MSG_MON_OSDMAP_INFO            20
+#define MSG_MON_OSDMAP_LEASE           21
+#define MSG_MON_OSDMAP_LEASE_ACK       22
+#define MSG_MON_OSDMAP_UPDATE_PREPARE  23
+#define MSG_MON_OSDMAP_UPDATE_ACK      24
+#define MSG_MON_OSDMAP_UPDATE_COMMIT   25
 
+#define MSG_OSD_OP           40    // delete, etc.
+#define MSG_OSD_OPREPLY      41    // delete, etc.
+#define MSG_OSD_PING         42
 
-#define MSG_OSD_OP           20    // delete, etc.
-#define MSG_OSD_OPREPLY      21    // delete, etc.
-#define MSG_OSD_PING         22
+#define MSG_OSD_GETMAP       43
+#define MSG_OSD_MAP          44
 
-#define MSG_OSD_GETMAP       23
-#define MSG_OSD_MAP          24
+#define MSG_OSD_BOOT         45
+#define MSG_OSD_MKFS_ACK     46
 
-#define MSG_OSD_BOOT         25
-#define MSG_OSD_MKFS_ACK     26
+#define MSG_OSD_FAILURE      47
 
-#define MSG_OSD_FAILURE      27
-
-#define MSG_OSD_IN           28
-#define MSG_OSD_OUT          29
+#define MSG_OSD_IN           48
+#define MSG_OSD_OUT          49
 
 
 

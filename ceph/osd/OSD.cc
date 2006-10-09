@@ -1884,7 +1884,7 @@ void OSD::pull(PG *pg, object_t oid)
   eversion_t v = pg->missing.missing[oid];
   int osd = pg->missing.loc[oid];
   
-  dout(7) << *pg << " pull " << hex << oid << dec 
+  dout(7) << *pg << " pull " << oid
           << " v " << v 
           << " from osd" << osd
           << endl;
@@ -1924,7 +1924,7 @@ void OSD::push(PG *pg, object_t oid, int dest)
   assert(tr == 0);  // !!!
 
   // ok
-  dout(7) << *pg << " push " << hex << oid << dec << " v " << v 
+  dout(7) << *pg << " push " << oid << " v " << v 
           << " size " << bl.length()
           << " to osd" << dest
           << endl;
@@ -1956,7 +1956,7 @@ void OSD::op_pull(MOSDOp *op, PG *pg)
   const eversion_t v = op->get_version();
   int from = op->get_source().num();
 
-  dout(7) << *pg << " op_pull " << hex << oid << dec << " v " << op->get_version()
+  dout(7) << *pg << " op_pull " << oid << " v " << op->get_version()
           << " from " << op->get_source()
           << endl;
 
@@ -1977,7 +1977,7 @@ void OSD::op_pull(MOSDOp *op, PG *pg)
   } else {
     // non-primary
     if (pg->missing.is_missing(oid)) {
-      dout(7) << *pg << " op_pull not primary, and missing " << hex << oid << dec << ", ignoring" << endl;
+      dout(7) << *pg << " op_pull not primary, and missing " << oid << ", ignoring" << endl;
       delete op;
       return;
     }
@@ -1997,12 +1997,12 @@ void OSD::op_push(MOSDOp *op, PG *pg)
   eversion_t v = op->get_version();
 
   if (!pg->missing.is_missing(oid)) {
-    dout(7) << *pg << " op_push not missing " << hex << oid << dec << endl;
+    dout(7) << *pg << " op_push not missing " << oid << endl;
     return;
   }
   
   dout(7) << *pg << " op_push " 
-          << hex << oid << dec 
+          << oid 
           << " v " << v 
           << " size " << op->get_length() << " " << op->get_data().length()
           << endl;
@@ -2148,7 +2148,7 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
 
   const char *opname = MOSDOp::get_opname(op->get_op());
   dout(10) << "op_rep_modify " << opname 
-           << " " << hex << oid << dec 
+           << " " << oid 
            << " v " << nv 
            << " " << op->get_offset() << "~" << op->get_length()
            << " in " << *pg
@@ -2603,7 +2603,7 @@ bool OSD::block_if_wrlocked(MOSDOp* op)
 
   msg_addr_t source;
   int len = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
-  //cout << "getattr returns " << len << " on " << hex << oid << dec << endl;
+  //cout << "getattr returns " << len << " on " << oid << endl;
 
   if (len == sizeof(source) &&
       source != op->get_client()) {
@@ -2630,14 +2630,14 @@ bool OSD::waitfor_missing_object(MOSDOp *op, PG *pg)
     eversion_t v = pg->missing.missing[oid];
     if (pg->objects_pulling.count(oid)) {
       dout(7) << "missing "
-              << hex << oid << dec 
+              << oid 
               << " v " << v
               << " in " << *pg
               << ", already pulling"
               << endl;
     } else {
       dout(7) << "missing " 
-              << hex << oid << dec 
+              << oid 
               << " v " << v
               << " in " << *pg
               << ", pulling"
@@ -2666,7 +2666,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
   // for _any_ op type -- eg only the locker can unlock!
   if (block_if_wrlocked(op)) return; // op will be handled later, after the object unlocks
  
-  dout(10) << "op_read " << hex << oid << dec 
+  dout(10) << "op_read " << oid 
            << " " << op->get_offset() << "~" << op->get_length() 
     //<< " in " << *pg 
            << endl;
@@ -2691,7 +2691,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     reply->set_length(0);
   }
   
-  dout(10) << " read got " << got << " / " << op->get_length() << " bytes from obj " << hex << oid << dec << endl;
+  dout(10) << " read got " << got << " / " << op->get_length() << " bytes from obj " << oid << endl;
   
   logger->inc("rd");
   if (got >= 0) logger->inc("rdb", got);
@@ -2718,7 +2718,7 @@ void OSD::op_stat(MOSDOp *op)//, PG *pg)
   memset(&st, sizeof(st), 0);
   int r = store->stat(oid, &st);
   
-  dout(3) << "op_stat on " << hex << oid << dec 
+  dout(3) << "op_stat on " << oid 
           << " r = " << r
           << " size = " << st.st_size
     //<< " in " << *pg
@@ -2830,7 +2830,7 @@ void OSD::issue_repop(PG *pg, MOSDOp *op, int osd)
 
   dout(7) << " issue_repop rep_tid " << op->get_rep_tid()
           << " in " << *pg 
-          << " o " << hex << oid << dec
+          << " o " << oid
           << " to osd" << osd
           << endl;
   
@@ -3023,7 +3023,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   op->set_version(nv);
   
   dout(10) << "op_modify " << opname 
-           << " " << hex << oid << dec 
+           << " " << oid 
            << " v " << nv 
            << " " << op->get_offset() << "~" << op->get_length()
            << endl;  
@@ -3120,7 +3120,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   dout(10) << "prepare_log_transaction " << op->get_op()
            << " " << logentry
     //           << (logentry.is_delete() ? " - ":" + ")
-    //<< hex << oid << dec 
+    //<< oid 
            << " v " << version
            << " in " << *pg << endl;
 
@@ -3145,7 +3145,7 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
   const pg_t pgid = op->get_pg();
 
   dout(10) << "prepare_op_transaction " << MOSDOp::get_opname( op->get_op() )
-           << " " << hex << oid << dec 
+           << " " << oid 
            << " v " << version
            << " in " << *pg << endl;
   

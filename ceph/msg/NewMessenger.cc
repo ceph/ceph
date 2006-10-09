@@ -618,15 +618,17 @@ void Rank::Sender::fail_and_requeue(list<Message*>& out)
 void *Rank::Sender::entry()
 {
   // connect
-  int rc = connect();
-  if (rc < 0) {
-    list<Message*> out;
-    derr(0) << "error connecting to " << inst << endl;
-    fail_and_requeue(out);
-    finish();
-    return 0;
+  if (sd == 0) {
+	int rc = connect();
+	if (rc < 0) {
+	  list<Message*> out;
+	  derr(0) << "error connecting to " << inst << endl;
+	  fail_and_requeue(out);
+	  finish();
+	  return 0;
+	}
   }
-  
+
   lock.Lock();
   while (!q.empty() || !done) {
     

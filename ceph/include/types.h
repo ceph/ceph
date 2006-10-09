@@ -248,8 +248,10 @@ inline ostream& operator<<(ostream& out, lame128_t& oid) {
 typedef __uint32_t ps_t;          // placement seed
 typedef __uint32_t pg_t;          // placement group
 typedef __uint64_t coll_t;        // collection id
-typedef __uint64_t epoch_t;       // map epoch
 typedef __uint64_t tid_t;         // transaction id
+
+typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
+
 
 // compound rados version type
 class eversion_t {
@@ -353,7 +355,7 @@ class ObjectExtent {
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
-             << hex << ex.oid << " in " << ex.pgid << dec
+             << ex.oid << " in " << hex << ex.pgid << dec
              << " " << ex.start << "~" << ex.length
              << ")";
 }
