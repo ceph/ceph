@@ -27,22 +27,22 @@ class MMonOSDMapLease : public Message {
   const utime_t& get_lease_expire() { return lease_expire; }
 
   MMonOSDMapLease(epoch_t e, utime_t le) :
-	Message(MSG_MON_OSDMAP_LEASE),
-	epoch(e), lease_expire(le) {
+    Message(MSG_MON_OSDMAP_LEASE),
+    epoch(e), lease_expire(le) {
   }
-
-  char *get_type_name() { return "omaplease"; }
+  
+  char *get_type_name() { return "omap_lease"; }
   
   void encode_payload() {
-	payload.append((char*)&epoch, sizeof(epoch));
-	payload.append((char*)&lease_expire, sizeof(lease_expire));
+    payload.append((char*)&epoch, sizeof(epoch));
+    payload.append((char*)&lease_expire, sizeof(lease_expire));
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(epoch), (char*)&epoch);
-	off += sizeof(epoch);
-	payload.copy(off, sizeof(lease_expire), (char*)&lease_expire);
-	off += sizeof(lease_expire);
+    int off = 0;
+    payload.copy(off, sizeof(epoch), (char*)&epoch);
+    off += sizeof(epoch);
+    payload.copy(off, sizeof(lease_expire), (char*)&lease_expire);
+    off += sizeof(lease_expire);
   }
 };
 

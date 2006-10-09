@@ -27,25 +27,25 @@ class MMonOSDMapUpdatePrepare : public Message {
   epoch_t get_epoch() { return epoch; }
 
   MMonOSDMapUpdatePrepare(epoch_t e, 
-						  bufferlist& mbl, bufferlist& incmbl) : 
-	Message(MSG_MON_OSDMAP_UPDATE_PREPARE),
-	epoch(e), 
-	map_bl(mbl), inc_map_bl(incmbl) {
+			  bufferlist& mbl, bufferlist& incmbl) : 
+    Message(MSG_MON_OSDMAP_UPDATE_PREPARE),
+    epoch(e), 
+    map_bl(mbl), inc_map_bl(incmbl) {
   }
-
+  
   char *get_type_name() { return "omap_update_prepare"; }
   
   void encode_payload() {
-	payload.append((char*)&epoch, sizeof(epoch));
+    payload.append((char*)&epoch, sizeof(epoch));
     ::_encode(map_bl, payload);
     ::_encode(inc_map_bl, payload);
   }
   void decode_payload() {
-	int off = 0;
-	payload.copy(off, sizeof(epoch), (char*)&epoch);
-	off += sizeof(epoch);
-	::_decode(map_bl, payload, off);
-	::_decode(inc_map_bl, payload, off);
+    int off = 0;
+    payload.copy(off, sizeof(epoch), (char*)&epoch);
+    off += sizeof(epoch);
+    ::_decode(map_bl, payload, off);
+    ::_decode(inc_map_bl, payload, off);
   }
 };
 
