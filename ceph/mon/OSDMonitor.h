@@ -32,8 +32,7 @@ class OSDMonitor : public Dispatcher {
   Mutex &lock;
 
   // osd maps
-  OSDMap *osdmap;
-  OSDMap *pending_map;
+  OSDMap osdmap;
 
   map<msg_addr_t, pair<entity_inst_t, epoch_t> > awaiting_map;
   
@@ -86,10 +85,9 @@ class OSDMonitor : public Dispatcher {
 
  public:
   OSDMonitor(Monitor *mn, Messenger *m, Mutex& l) : 
-	mon(mn), messenger(m), lock(l),
-	osdmap(0),
-	state(STATE_SYNC) {
-	init();
+    mon(mn), messenger(m), lock(l),
+    state(STATE_SYNC) {
+    init();
   }
 
   void dispatch(Message *m);

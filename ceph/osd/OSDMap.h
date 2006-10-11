@@ -120,7 +120,7 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), pg_bits(5) {}
+  OSDMap() : epoch(0), mon_epoch(0), pg_bits(5) {}
 
   // map info
   epoch_t get_epoch() const { return epoch; }

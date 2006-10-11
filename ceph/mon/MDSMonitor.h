@@ -32,7 +32,7 @@ class MDSMonitor : public Dispatcher {
 
   // mds maps
  public:
-  MDSMap *mdsmap;
+  MDSMap mdsmap;
 
  private:
   map<epoch_t, bufferlist> maps;
@@ -57,8 +57,8 @@ class MDSMonitor : public Dispatcher {
   void handle_mds_getmap(class MMDSGetMap *m);
 
  public:
-  MDSMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l), mdsmap(0) {
-	create_initial();
+  MDSMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l) {
+    create_initial();
   }
 
   void dispatch(Message *m);
