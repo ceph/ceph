@@ -569,7 +569,7 @@ MClientReply* Client::sendrecv(MClientRequest *req, int mds)
   tid_t tid = req->get_tid();
   mds_rpc_cond[tid] = &cond;
   
-  messenger->send_message(req, MSG_ADDR_MDS(mds), MDS_PORT_SERVER);
+  messenger->send_message(req, MSG_ADDR_MDS(mds), mdsmap->get_inst(mds), MDS_PORT_SERVER);
   
   // wait
   while (mds_rpc_reply.count(tid) == 0) {
@@ -844,7 +844,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << ", which we don't want caps for, releasing." << endl;
     m->set_caps(0);
     m->set_wanted(0);
-    messenger->send_message(m, m->get_source(), m->get_source_port());
+    entity_inst_t srcinst = m->get_source_inst();
+    messenger->send_message(m, m->get_source(), srcinst, m->get_source_port());
     return;
   }
 
@@ -975,7 +976,7 @@ void Client::release_caps(Inode *in,
                                                it->second.seq,
                                                it->second.caps,
                                                in->file_caps_wanted()); 
-      messenger->send_message(m, MSG_ADDR_MDS(it->first), MDS_PORT_CACHE);
+      messenger->send_message(m, MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_CACHE);
     }
   }
   
@@ -1000,7 +1001,7 @@ void Client::update_caps_wanted(Inode *in)
                                              it->second.caps,
                                              in->file_caps_wanted());
     messenger->send_message(m,
-                            MSG_ADDR_MDS(it->first), MDS_PORT_CACHE);
+                            MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_CACHE);
   }
 }
 
@@ -1031,7 +1032,7 @@ int Client::mount(int mkfs)
   MClientMount *m = new MClientMount();
   if (mkfs) m->set_mkfs(mkfs);
 
-  messenger->send_message(m, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  messenger->send_message(m, MSG_ADDR_MDS(0), mdsmap->get_inst(0), MDS_PORT_SERVER);
 
   while (!mounted)
     mount_cond.Wait(client_lock);
@@ -1109,7 +1110,7 @@ int Client::unmount()
   
   // send unmount!
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
-  messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_SERVER);
+  messenger->send_message(req, MSG_ADDR_MDS(0), mdsmap->get_inst(0), MDS_PORT_SERVER);
 
   while (mounted)
     mount_cond.Wait(client_lock);

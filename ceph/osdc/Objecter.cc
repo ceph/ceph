@@ -17,8 +17,8 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << messenger->get_myaddr() << ".objecter "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << messenger->get_myaddr() << ".objecter "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << messenger->get_myaddr() << ".objecter "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << messenger->get_myaddr() << ".objecter "
 
 
 // messages ------------------------------
@@ -283,7 +283,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
            << endl;
 
   if (pg.acker() >= 0) 
-    messenger->send_message(m, MSG_ADDR_OSD(pg.acker()), 0);
+    messenger->send_message(m, MSG_ADDR_OSD(pg.acker()), osdmap->get_inst(pg.acker()));
     
   // add to gather set
   rd->ops[last_tid] = ex;
@@ -576,7 +576,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " osd" << pg.primary()
            << endl;
   if (pg.primary() >= 0)
-    messenger->send_message(m, MSG_ADDR_OSD(pg.primary()), 0);
+    messenger->send_message(m, MSG_ADDR_OSD(pg.primary()), osdmap->get_inst(pg.primary()));
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << endl;
   

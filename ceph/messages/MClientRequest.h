@@ -48,10 +48,11 @@
 
 
 typedef struct {
-  long pcid;   // procedure call id, to match request+response
   long tid;
   int client;
   int op;
+  
+  entity_inst_t client_inst;
 
   int caller_uid, caller_gid;
   inodeno_t ino;
@@ -83,8 +84,8 @@ class MClientRequest : public Message {
   virtual char *get_type_name() { return "creq"; }
 
   // keep a pcid (procedure call id) to match up request+reply
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid() { return st.pcid; }
+  //void set_pcid(long pcid) { this->st.pcid = pcid; }
+  //long get_pcid() { return st.pcid; }
 
   // normal fields
   void set_tid(long t) { st.tid = t; }
@@ -104,6 +105,9 @@ class MClientRequest : public Message {
   void set_sizearg(size_t s) { st.sizearg = s; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     st.mds_wants_replica_in_dirino = dirino; }
+  
+  void set_client_inst(const entity_inst_t& i) { st.client_inst = i; }
+  const entity_inst_t& get_client_inst() { return st.client_inst; }
 
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
@@ -138,60 +142,60 @@ class MClientRequest : public Message {
     _encode(sarg, payload);
     _encode(sarg2, payload);
   }
-};
 
-inline ostream& operator<<(ostream& out, MClientRequest& req) {
-  out << &req << " ";
-  out << "client" << req.get_client() 
-      << "." << req.get_tid() 
-      << ".pcid=" << req.get_pcid() 
-      << ":";
-  switch(req.get_op()) {
-  case MDS_OP_STAT: 
-    out << "stat"; break;
-  case MDS_OP_LSTAT: 
-    out << "lstat"; break;
-  case MDS_OP_UTIME: 
-    out << "utime"; break;
-  case MDS_OP_CHMOD: 
-    out << "chmod"; break;
-  case MDS_OP_CHOWN: 
-    out << "chown"; break;
-
-  case MDS_OP_READDIR: 
-    out << "readdir"; break;
-  case MDS_OP_MKNOD: 
-    out << "mknod"; break;
-  case MDS_OP_LINK: 
-    out << "link"; break;
-  case MDS_OP_UNLINK:
-    out << "unlink"; break;
-  case MDS_OP_RENAME:
-    out << "rename"; break;
-
-  case MDS_OP_MKDIR: 
-    out << "mkdir"; break;
-  case MDS_OP_RMDIR: 
-    out << "rmdir"; break;
-  case MDS_OP_SYMLINK: 
-    out << "symlink"; break;
-
-  case MDS_OP_OPEN: 
-    out << "open"; break;
-  case MDS_OP_TRUNCATE: 
-    out << "truncate"; break;
-  case MDS_OP_FSYNC: 
-    out << "fsync"; break;
-  case MDS_OP_RELEASE: 
-    out << "release"; break;
-  default: 
-    out << "unknown=" << req.get_op();
+  void print(ostream& out) {
+    out << "clientreq(client" << get_client() 
+	<< "." << get_tid() 
+      //<< ".pcid=" << get_pcid() 
+	<< ":";
+    switch(get_op()) {
+    case MDS_OP_STAT: 
+      out << "stat"; break;
+    case MDS_OP_LSTAT: 
+      out << "lstat"; break;
+    case MDS_OP_UTIME: 
+      out << "utime"; break;
+    case MDS_OP_CHMOD: 
+      out << "chmod"; break;
+    case MDS_OP_CHOWN: 
+      out << "chown"; break;
+      
+    case MDS_OP_READDIR: 
+      out << "readdir"; break;
+    case MDS_OP_MKNOD: 
+      out << "mknod"; break;
+    case MDS_OP_LINK: 
+      out << "link"; break;
+    case MDS_OP_UNLINK:
+      out << "unlink"; break;
+    case MDS_OP_RENAME:
+      out << "rename"; break;
+      
+    case MDS_OP_MKDIR: 
+      out << "mkdir"; break;
+    case MDS_OP_RMDIR: 
+      out << "rmdir"; break;
+    case MDS_OP_SYMLINK: 
+      out << "symlink"; break;
+      
+    case MDS_OP_OPEN: 
+      out << "open"; break;
+    case MDS_OP_TRUNCATE: 
+      out << "truncate"; break;
+    case MDS_OP_FSYNC: 
+      out << "fsync"; break;
+    case MDS_OP_RELEASE: 
+      out << "release"; break;
+    default: 
+      out << "unknown=" << get_op();
+    }
+    if (get_path().length()) 
+      out << "=" << get_path();
+    if (get_sarg().length())
+      out << " " << get_sarg();
+    out << ")";
   }
-  if (req.get_path().length()) 
-    out << "=" << req.get_path();
-  if (req.get_sarg().length())
-    out << " " << req.get_sarg();
-  return out;
-}
+
+};
 
 #endif

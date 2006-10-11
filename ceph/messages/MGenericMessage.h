@@ -18,26 +18,26 @@
 #include "msg/Message.h"
 
 class MGenericMessage : public Message {
-  char tname[100];
-  long pcid;
+  char tname[20];
+  //long pcid;
 
  public:
-  MGenericMessage(int t) : Message(t), pcid(0) { 
+  MGenericMessage(int t) : Message(t) { 
     sprintf(tname, "generic%d", get_type());
   }
 
-  void set_pcid(long pcid) { this->pcid = pcid; }
-  long get_pcid() { return pcid; }
+  //void set_pcid(long pcid) { this->pcid = pcid; }
+  //long get_pcid() { return pcid; }
 
   char *get_type_name() { return tname; }
 
   virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(pcid), (char*)&pcid);
-    off += sizeof(pcid);
+    //int off = 0;
+    //payload.copy(off, sizeof(pcid), (char*)&pcid);
+    //off += sizeof(pcid);
   }
   virtual void encode_payload() {
-    payload.append((char*)&pcid, sizeof(pcid));
+    //payload.append((char*)&pcid, sizeof(pcid));
   }
 };
 

@@ -9,7 +9,7 @@
 monitor
 ?- monitor user lib that handles resending, redirection of mon requests.
 - elector
-- organize monitor store
+/- organize monitor store
 
 osdmon
 - distribute
@@ -18,6 +18,7 @@ osdmon
 - monitor pgs, notify on out
 - watch osd utilization; adjust overload in cluster map
 
+mdsmon
 
 osd/rados
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
@@ -27,12 +28,11 @@ osd/rados
 - rdlocks
 - optimize remove wrt recovery pushes
 - pg_bit changes
-- use pg->info.same_role_since wrt replication ops.
 - report crashed pgs?
 
 messenger
-- share same tcp socket for sender and receiver
-- graceful connection teardown
+/- share same tcp socket for sender and receiver
+/- graceful connection teardown
 - close idle connections
 - generalize out a transport layer?  
   - eg reliable tcp for most things, connectionless unreliable datagrams for monitors?
@@ -81,8 +81,21 @@ crush
 - more efficient failure when all/too many osds are down
 
 mds
-- efficient stat for single writers
+- distributed client management
+- anchormgr
+  - 2pc
+  - independent journal
+  - distributed?
+- link count management
+  - also 2pc
 - chdir (directory opens!)
+- rewrite logstream
+  - clean up
+  - be smart about rados ack vs reread
+  - log locking?  root log object
+  - trimming, rotation
+
+- efficient stat for single writers
 - lstat vs stat
 - add FILE_CAP_EXTEND capability bit
 - only share osdmap updates with clients holding capabilities
@@ -96,6 +109,8 @@ mds
 
 - carefully define/document frozen wrt dir_auth vs hashing
 
+
+
 client
 - mixed lazy and non-lazy io will clobber each others' caps in the buffer cache
 
@@ -105,14 +120,6 @@ client
 
 
 
-
-
-
-REPLICATION
-
-requirements
-- We should support a fast succession of map updates, even when intermediate reorganizations are not allowed to complete before the next starts.
-- Reorganizations can be arbitrary, potentially involving a completely disparate set of OSDs in a RG between epochs.  (We will of course seek to minimize movement in practice.)
 
 
 
@@ -152,13 +159,6 @@ why qsync could be wrong (for very strict POSIX) : varying mds -> client message
 
 SAGE:
 
-- global sync (to be used by shutdown)
-  - flush all dirty data to disk
-  - flush logs/journals
-
-- readdir
- - set up waiters for pending xlocks
-
 - string table?
 
 - hard links
@@ -172,7 +172,6 @@ SAGE:
 CLIENT TODO
 
 - statfs
-- readdir content only optionally includes valid inode info
 
 
 
@@ -188,13 +187,6 @@ ISSUES
  - error flag   (if file not found, etc.)
  - [what was i talking about?] make sure waiters are properly triggered, either upon dir_rep update, or (empty!) discover reply
 
-
-
-CLEANUP
-- waiters after export... fix will_fail, will_delegate nonsense
- - should a subset of these waiters be triggered immediately after
-   export, since discover-based contexts will just be forwarded to the
-   new auth?
 
 
 DOCUMENT
@@ -216,7 +208,6 @@ IMPLEMENT
   - popularity calculation and management is inconsistent/wrong.
   - does it work?
 
-- instrumentation!
 - dump active config in run output somewhere
 
 
