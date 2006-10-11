@@ -67,10 +67,11 @@ class Messenger {
   virtual void dispatch(Message *m);
 
   // send message
-  virtual void prepare_send_message(msg_addr_t dest) {}
+  virtual void prepare_dest(const entity_inst_t& inst) {}
   virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
-  virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst) {
-    return send_message(m, dest);   // overload me!
+  virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst,
+			   int port=0, int fromport=0) {
+    return send_message(m, dest, port, fromport);   // overload me!
   }
 
 

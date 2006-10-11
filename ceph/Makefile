@@ -80,7 +80,7 @@ TCP_OBJS = \
 
 TARGETS = cosd cfuse newsyn fakesyn
 
-SRCS=*.cc */*.cc
+SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
 all: depend ${TARGETS}
 
@@ -90,16 +90,16 @@ obfs: depend obfstest
 
 
 # real bits
-cmon: cmon.cc mon.o ebofs.o msg/NewMessenger.o common.o
+cmon: cmon.cc mon.o ebofs.o msg/NewerMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o msg/NewMessenger.o common.o
+cosd: cosd.cc osd.o ebofs.o msg/NewerMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cmds: cmds.cc mds.o osdc.o msg/NewMessenger.o common.o
+cmds: cmds.cc mds.o osdc.o msg/NewerMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/NewMessenger.o common.o
+cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/NewerMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -127,10 +127,10 @@ fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o
 tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewMessenger.o common.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o
 	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewMessenger.o common.o
+newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs

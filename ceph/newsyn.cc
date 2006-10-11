@@ -27,7 +27,7 @@ using namespace std;
 #include "client/Client.h"
 #include "client/SyntheticClient.h"
 
-#include "msg/NewMessenger.h"
+#include "msg/NewerMessenger.h"
 
 #include "common/Timer.h"
 

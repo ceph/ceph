@@ -113,14 +113,6 @@ using namespace std;
 #define DEBUGLVL  10    // debug level of output
 
 
-ostream& operator<<(ostream& out, Message& m)
-{
-  // some messages define << themselves
-  if (m.get_type() == MSG_CLIENT_REQUEST) return out << *((MClientRequest*)&m);
-
-  // generic
-  return out << "message(type=" << m.get_type() << ")";
-}
 
 
 
@@ -419,6 +411,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
     // -- simple messages without payload --
 
+  case MSG_CLOSE:
   case MSG_NS_STARTED:
   case MSG_NS_UNREGISTER:
   case MSG_SHUTDOWN:

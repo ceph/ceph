@@ -16,6 +16,8 @@
 #ifndef __MESSAGE_H
 #define __MESSAGE_H
  
+#define MSG_CLOSE 0
+
 #define MSG_NS_CONNECT     1
 #define MSG_NS_CONNECTACK  2
 #define MSG_NS_REGISTER    3
@@ -438,10 +440,17 @@ public:
     // copy payload
     payload.push_back( new buffer(r.c_str(), r.length()) );
   }
+
+  virtual void print(ostream& out) {
+    out << "message(type=" << get_type() << ")";
+  }
   
 };
 
 extern Message *decode_message(msg_envelope_t &env, bufferlist& bl);
-ostream& operator<<(ostream& out, Message& m);
+inline ostream& operator<<(ostream& out, Message& m) {
+  m.print(out);
+  return out;
+}
 
 #endif
