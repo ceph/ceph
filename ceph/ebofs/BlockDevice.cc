@@ -60,6 +60,7 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
 
 #undef dout
 #define dout(x) if (x <= g_conf.debug_bdev) cout << "bdev(" << dev << ").elevatorq."
+#define derr(x) if (x <= g_conf.debug_bdev) cerr << "bdev(" << dev << ").elevatorq."
 
 
 int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols, 
@@ -681,9 +682,9 @@ int BlockDevice::open(kicker *idle)
 
   // lock
   if (g_conf.bdev_lock) {
-    int r = ::flock(fd, LOCK_EX);
+    int r = ::flock(fd, LOCK_EX|LOCK_NB);
     if (r < 0) {
-      dout(1) << "open " << dev << " failed to get LOCK_EX" << endl;
+      derr(1) << "open " << dev << " failed to get LOCK_EX" << endl;
       assert(0);
       return -1;
     }
