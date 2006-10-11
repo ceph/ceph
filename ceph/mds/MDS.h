@@ -36,6 +36,8 @@ using namespace __gnu_cxx;
 
 #include "mon/MonMap.h"
 
+#include "ClientMap.h"
+
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
@@ -114,8 +116,10 @@ class MDS : public Dispatcher {
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
   //  PGManager    *pgmanager;
- protected:
 
+  ClientMap    clientmap;
+
+ protected:
 
   // shutdown crap
   bool         shutting_down;
@@ -138,10 +142,6 @@ class MDS : public Dispatcher {
 
   friend class MDStore;
 
-  // stats
-  set<int>     mounted_clients;
-
-  
   
  public:
   list<Context*> finished_queue;
@@ -168,6 +168,8 @@ class MDS : public Dispatcher {
   int get_nodeid() { return whoami; }
   MDSMap *get_mds_map() { return mdsmap; }
   OSDMap *get_osd_map() { return osdmap; }
+
+  void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
 
   // start up, shutdown
   bool is_shutting_down() { return shutting_down; }

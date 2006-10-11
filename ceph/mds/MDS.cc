@@ -76,8 +76,8 @@ LogType mds_logtype, mds_cache_logtype;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << "mds" << whoami << " "
-#define  dout3(l,mds)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << "mds" << mds->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << " "
+#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << " "
 
 
 
@@ -192,11 +192,19 @@ MDS::~MDS() {
 }
 
 
+void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
+{
+  if (port && !fromport) 
+    fromport = port;
+  messenger->send_message(m, MSG_ADDR_MDS(mds), mdsmap->get_inst(mds), port, fromport);
+}
+
+
 int MDS::init()
 {
   // request osd map
-  dout(5) << "requesting osdmap, mdsmap from mon0" << endl;
-  messenger->send_message(new MMDSBoot, MSG_ADDR_MON(0));
+  dout(5) << "requesting mdsmap from mon0" << endl;
+  messenger->send_message(new MMDSBoot, MSG_ADDR_MON(0), monmap->get_inst(0));
   return 0;
 }
 
@@ -204,14 +212,14 @@ int MDS::init()
 int MDS::shutdown_start()
 {
   dout(1) << "shutdown_start" << endl;
-  cerr << "mds shutdown start" << endl;
+  derr(0) << "mds shutdown start" << endl;
 
   for (set<int>::iterator p = mdsmap->get_mds().begin();
        p != mdsmap->get_mds().end();
        p++) {
     dout(1) << "sending MShutdownStart to mds" << *p << endl;
-    messenger->send_message(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
-                            MSG_ADDR_MDS(*p), MDS_PORT_MAIN, MDS_PORT_MAIN);
+    send_message_mds(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
+		     *p, MDS_PORT_MAIN);
   }
 
   if (idalloc) idalloc->shutdown();
@@ -259,16 +267,15 @@ void MDS::handle_shutdown_finish(Message *m)
 
   if (did_shut_down.size() == (unsigned)mdsmap->get_num_mds()) {
     // MDS's all ready to shut down!
-    cerr << "mds shutdown final" << endl;
+    derr(0) << "mds shutdown final" << endl;
 
     dout(1) << "sending shutdown to remaining MDSs, OSDs" << endl;
     for (int i=1; i<g_conf.num_mds; i++) {
       dout(10) << "sending shutdown to mds" << i << endl;
-      messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-                              MSG_ADDR_MDS(i), 0, 0);
+      send_message_mds(new MGenericMessage(MSG_SHUTDOWN), i);
       if (g_conf.mds_local_osd) 
         messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-                                MSG_ADDR_OSD(i+10000), 0, 0);
+                                MSG_ADDR_OSD(i+10000), osdmap->get_inst(i+10000));
     }
 
     // shut down osd's
@@ -280,7 +287,7 @@ void MDS::handle_shutdown_finish(Message *m)
       if (osdmap->is_down(*it)) continue;
       dout(10) << "sending shutdown to osd" << *it << endl;
       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-                              MSG_ADDR_OSD(*it), 0, 0);
+                              MSG_ADDR_OSD(*it), osdmap->get_inst(*it));
     }
 
     // shut myself down.
@@ -650,6 +657,13 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->decode(p->second);
 
   delete m;
+
+  // do we need an osdmap too?
+  if (!osdmap) {
+    int mon = monmap->pick_mon();
+    messenger->send_message(new MOSDGetMap(0),
+			    MSG_ADDR_MON(mon), monmap->get_inst(mon));
+  }
 }
 
 
@@ -664,13 +678,13 @@ void MDS::handle_osd_map(MOSDMap *m)
   }
   
   // pass on to clients
-  for (set<int>::iterator it = mounted_clients.begin();
-       it != mounted_clients.end();
+  for (set<int>::iterator it = clientmap.get_mount_set().begin();
+       it != clientmap.get_mount_set().end();
        it++) {
     MOSDMap *n = new MOSDMap;
     n->maps = m->maps;
     n->incremental_maps = m->incremental_maps;
-    messenger->send_message(n, MSG_ADDR_CLIENT(*it));
+    messenger->send_message(n, MSG_ADDR_CLIENT(*it), clientmap.get_inst(*it));
   }
 
   // process locally
@@ -709,13 +723,13 @@ void MDS::handle_client_mount(MClientMount *m)
 
   int n = MSG_ADDR_NUM(m->get_source());
   dout(3) << "mount by client" << n << endl;
-  mounted_clients.insert(n);
+  clientmap.add_mount(n, m->get_source_inst());
 
   assert(whoami == 0);  // mds0 mounts/unmounts
 
   // ack
   messenger->send_message(new MClientMountAck(m, mdsmap, osdmap), 
-                          m->get_source(), m->get_source_port());
+                          m->get_source(), m->get_source_inst());
   delete m;
 }
 
@@ -726,16 +740,16 @@ void MDS::handle_client_unmount(Message *m)
 
   assert(whoami == 0);  // mds0 mounts/unmounts
 
-  assert(mounted_clients.count(n));
-  mounted_clients.erase(n);
+  clientmap.rem_mount(n);
 
-  if (mounted_clients.empty()) {
+  if (clientmap.get_mount_set().empty()) {
     dout(3) << "all clients done, initiating shutdown" << endl;
     shutdown_start();
   }
 
   // ack by sending back to client
-  messenger->send_message(m, m->get_source(), m->get_source_port());
+  entity_inst_t srcinst = m->get_source_inst();  // make a copy!
+  messenger->send_message(m, m->get_source(), srcinst);
 }
 
 
@@ -744,8 +758,7 @@ void MDS::handle_ping(MPing *m)
   dout(10) << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with seq " << m->seq << endl;
 
   messenger->send_message(new MPingAck(m),
-                          m->get_source(), m->get_source_port(),
-                          MDS_PORT_MAIN);
+                          m->get_source(), m->get_source_inst());
   
   delete m;
 }
@@ -813,8 +826,7 @@ void MDS::reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei
   
   // send reply
   messenger->send_message(reply,
-                          MSG_ADDR_CLIENT(req->get_client()), 0,
-                          MDS_PORT_SERVER);
+                          MSG_ADDR_CLIENT(req->get_client()), req->get_client_inst());
 
   // discard request
   mdcache->request_finish(req);
@@ -864,6 +876,10 @@ void MDS::handle_client_request(MClientRequest *req)
 {
   dout(4) << "req " << *req << endl;
 
+  // note original client addr
+  if (req->get_source().is_client())
+    req->set_client_inst( req->get_source_inst() );
+
   if (is_shutting_down()) {
     dout(5) << " shutting down, discarding client request." << endl;
     delete req;
@@ -901,8 +917,7 @@ void MDS::handle_client_request(MClientRequest *req)
       int next = whoami + 1;
       if (next >= mdsmap->get_num_mds()) next = 0;
       dout(10) << "got request on ino we don't have, passing buck to " << next << endl;
-      messenger->send_message(req, 
-                              MSG_ADDR_MDS(next), MDS_PORT_SERVER, MDS_PORT_SERVER);
+      send_message_mds(req, next, MDS_PORT_SERVER);
       return;
     }
   }
@@ -951,8 +966,7 @@ void MDS::handle_client_request(MClientRequest *req)
       
       // send error
       messenger->send_message(new MClientReply(req, r),
-                              MSG_ADDR_CLIENT(req->get_client()), 0,
-                              MDS_PORT_SERVER);
+                              MSG_ADDR_CLIENT(req->get_client()), req->get_client_inst());
 
       // <HACK>
       if (refpath.last_bit() == ".hash" &&
@@ -1307,7 +1321,7 @@ void MDS::handle_hash_readdir(MHashReaddir *m)
   
   // sent it back!
   messenger->send_message(new MHashReaddirReply(dir->ino(), inls, dnls, num),
-                          m->get_source(), MDS_PORT_CACHE, MDS_PORT_CACHE);
+                          m->get_source(), m->get_source_inst(), MDS_PORT_CACHE);
 }
 
 
@@ -1486,8 +1500,7 @@ void MDS::handle_client_readdir(MClientRequest *req,
     // request other bits
     for (int i=0; i<mdsmap->get_num_mds(); i++) {
       if (i == get_nodeid()) continue;
-      messenger->send_message(new MHashReaddir(dir->ino()),
-                              MSG_ADDR_MDS(i), MDS_PORT_SERVER, MDS_PORT_SERVER);
+      send_message_mds(new MHashReaddir(dir->ino()), i, MDS_PORT_SERVER);
     }
 
     // wait
@@ -1836,8 +1849,7 @@ void MDS::handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<C
   } else {
     // remote: send nlink++ request, wait
     dout(7) << "target is remote, sending InodeLink" << endl;
-    messenger->send_message(new MInodeLink(targeti->ino(), whoami),
-                            MSG_ADDR_MDS(targeti->authority()), MDS_PORT_CACHE, MDS_PORT_CACHE);
+    send_message_mds(new MInodeLink(targeti->ino(), whoami), targeti->authority(), MDS_PORT_CACHE);
     
     // wait
     targeti->add_waiter(CINODE_WAIT_LINK,
