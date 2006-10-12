@@ -5,6 +5,12 @@
 #include "FileCache.h"
 #include "osdc/ObjectCacher.h"
 
+#include "msg/Messenger.h"
+
+#undef dout
+#define dout(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myaddr() << ".filecache "
+#define derr(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myaddr() << ".filecache "
+
 
 // flush/release/clean
 
@@ -70,7 +76,7 @@ void FileCache::check_caps()
   // check callbacks
   map<int, list<Context*> >::iterator p = caps_callbacks.begin();
   while (p != caps_callbacks.end()) {
-    if (~(p->first) & used) {
+    if (used == 0 || (~(p->first) & used)) {
       // implemented.
       dout(10) << "used is " << cap_string(used) 
                << ", caps " << cap_string(p->first) << " implemented, doing callback(s)" << endl;

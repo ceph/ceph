@@ -187,9 +187,11 @@ class ObjectCacher {
   
   // ******* ObjectCacher *********
   // ObjectCacher fields
- private:
+ public:
   Objecter *objecter;
   Filer filer;
+
+ private:
   Mutex& lock;
   
   hash_map<object_t, Object*> objects;
