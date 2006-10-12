@@ -39,14 +39,6 @@ using namespace __gnu_cxx;
 #endif
 
 
-
-
-/*
-- this is to make some of the STL types work with 64 bit values, string hash keys, etc.
-- added when i was using an old STL.. maybe try taking these out and see if things 
-  compile now?
-*/
-
 /*
 namespace __gnu_cxx {
   template<> struct hash<unsigned long long> {
@@ -170,43 +162,6 @@ struct ebofs_super {
   struct ebofs_table collection_tab;  // collection directory
   struct ebofs_table co_tab;
 };
-
-
-
-/*
- * really simple container for (collection|object) attribute values,
- * which are a (void*,int) pair.  hide associated memory management
- * ugliness.
- */
-/* nevermind, i'm going to use bufferptr instead! der.
-class AttrVal {
- public:
-  char *data;
-  int len;
-  AttrVal() : data(0), len(0) {}
-  AttrVal(char *from, int l) : 
-    len(l) {
-    data = new char[len];
-    memcpy(data, from, len);
-  }
-  AttrVal(const AttrVal &other) {
-    len = other.len;
-    data = new char[len];
-    memcpy(data, other.data, len);
-  }
-  AttrVal& operator=(const AttrVal &other) {
-    if (data) delete[] data;
-    len = other.len;
-    data = new char[len];
-    memcpy(data, other.data, len);
-    return *this;
-  }
-  ~AttrVal() {
-    delete[] data;
-  }
-};
-*/
-
 
 
 #endif
