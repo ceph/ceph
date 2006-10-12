@@ -23,8 +23,6 @@
 #include <time.h>
 #include <math.h>
 
-#include <list>
-using namespace std;
 
 
 // --------
@@ -109,14 +107,14 @@ inline bool operator<(const utime_t& a, const utime_t& b)
 }
 
 // ostream
-inline ostream& operator<<(ostream& out, const utime_t& t)
+inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
 {
   //return out << t.sec() << "." << t.usec();
   out << (long)t.sec() << ".";
-  out.setf(ios::right);
+  out.setf(std::ios::right);
   out.fill('0');
-  out << setw(6) << t.usec();
-  out.unsetf(ios::right);
+  out << std::setw(6) << t.usec();
+  out.unsetf(std::ios::right);
   return out;
   
   //return out << (long)t.sec << "." << ios::setf(ios::right) << ios::fill('0') << t.usec() << ios::usetf();
@@ -155,7 +153,7 @@ class Clock {
     gettimeofday(&n.timeval(), NULL);
     n -= zero;
     if (n < last) {
-      cerr << "WARNING: clock jumped backwards from " << last << " to " << n << endl;
+      std::cerr << "WARNING: clock jumped backwards from " << last << " to " << n << std::endl;
       n = last;    // clock jumped backwards!
     } else
       last = n;
