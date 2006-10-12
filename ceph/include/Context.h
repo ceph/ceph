@@ -20,8 +20,8 @@
 #include <assert.h>
 #include <list>
 #include <set>
+
 #include <iostream>
-using namespace std;
 
 
 /*
@@ -37,13 +37,16 @@ class Context {
 /*
  * finish and destroy a list of Contexts
  */
-inline void finish_contexts(list<Context*>& finished, 
+inline void finish_contexts(std::list<Context*>& finished, 
                             int result = 0)
 {
+  using std::cout;
+  using std::endl;
+  
   if (finished.empty()) return;
 
   dout(10) << finished.size() << " contexts to finish with " << result << endl;
-  for (list<Context*>::iterator it = finished.begin(); 
+  for (std::list<Context*>::iterator it = finished.begin(); 
        it != finished.end(); 
        it++) {
     Context *c = *it;
@@ -57,13 +60,13 @@ inline void finish_contexts(list<Context*>& finished,
  * C_Contexts - set of Contexts
  */
 class C_Contexts : public Context {
-  list<Context*> clist;
+  std::list<Context*> clist;
   
 public:
   void add(Context* c) {
     clist.push_back(c);
   }
-  void take(list<Context*>& ls) {
+  void take(std::list<Context*>& ls) {
     clist.splice(clist.end(), ls);
   }
   void finish(int r) {
@@ -91,7 +94,7 @@ public:
 
 private:
   Context *onfinish;
-  set<int> waitfor;
+  std::set<int> waitfor;
   int num;
 
 public:
