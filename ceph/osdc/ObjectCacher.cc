@@ -1364,16 +1364,24 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 
 off_t ObjectCacher::release(Object *ob)
 {
+  list<BufferHead*> clean;
   off_t o_unclean = 0;
+
   for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
        p != ob->data.end();
        p++) {
     BufferHead *bh = p->second;
     if (bh->is_clean()) 
-      bh_remove(ob, bh);
+	  clean.push_back(bh);
     else 
       o_unclean += bh->length();
   }
+
+  for (list<BufferHead*>::iterator p = clean.begin();
+	   p != clean.end();
+	   p++)
+	bh_remove(ob, *p);
+
   return o_unclean;
 }
 
