@@ -40,6 +40,11 @@ public:
   list<const char *> tokens;
  
   int ref;
+
+  TokenList() : data(0), ref(0) {}
+  ~TokenList() {
+    delete[] data;
+  }
 };
 
 map<string, TokenList*> traces;
@@ -56,7 +61,6 @@ Trace::Trace(const char* f)
     tl = traces[filename];
   else {
     tl = new TokenList;
-    tl->ref = 0;
     tl->filename = filename;
 
     // open file
