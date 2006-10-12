@@ -30,6 +30,8 @@ class MDSMap {
   epoch_t epoch;
   utime_t ctime;
 
+  int anchortable;
+
   set<int> all_mds;
   set<int> down_mds;
   map<int,entity_inst_t> mds_inst;
@@ -37,12 +39,14 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0) {}
+  MDSMap() : epoch(0), anchortable(0) {}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
   const utime_t& get_ctime() const { return ctime; }
+
+  int get_anchortable() const { return anchortable; }
 
   int get_num_mds() const { return all_mds.size(); }
   int get_num_up_mds() const { return all_mds.size() - down_mds.size(); }
@@ -69,6 +73,7 @@ class MDSMap {
   void encode(bufferlist& blist) {
     blist.append((char*)&epoch, sizeof(epoch));
     blist.append((char*)&ctime, sizeof(ctime));
+    blist.append((char*)&anchortable, sizeof(anchortable));
     
     _encode(all_mds, blist);
     _encode(down_mds, blist);
@@ -81,6 +86,8 @@ class MDSMap {
     off += sizeof(epoch);
     blist.copy(off, sizeof(ctime), (char*)&ctime);
     off += sizeof(ctime);
+    blist.copy(off, sizeof(anchortable), (char*)&anchortable);
+    off += sizeof(anchortable);
     
     _decode(all_mds, blist, off);
     _decode(down_mds, blist, off);

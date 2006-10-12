@@ -30,7 +30,9 @@
 #include "MDLog.h"
 #include "MDBalancer.h"
 #include "IdAllocator.h"
+
 #include "AnchorTable.h"
+#include "AnchorClient.h"
 
 #include "include/filepath.h"
 
@@ -90,23 +92,30 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   monmap = mm;
   messenger = m;
 
-  mdsmap = 0;
+  mdsmap = new MDSMap;
+
+  objecter = new Objecter(messenger, monmap, osdmap);
+  filer = new Filer(objecter);
 
   mdcache = new MDCache(this);
   mdstore = new MDStore(this);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
-  anchormgr = new AnchorTable(this);
+
+  anchorclient = new AnchorClient(messenger, mdsmap);
+
+  // hack
+  if (whoami == 0) 
+    anchormgr = new AnchorTable(this);
+  else
+    anchormgr = 0;
 
   req_rate = 0;
 
 
   osdmap = 0;
 
-  objecter = new Objecter(messenger, monmap, osdmap);
-  filer = new Filer(objecter);
 
-  mdlog->set_max_events(g_conf.mds_log_max_len);
 
   shutting_down = false;
   shut_down = false;
@@ -180,6 +189,7 @@ MDS::~MDS() {
   if (balancer) { delete balancer; balancer = NULL; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
   if (anchormgr) { delete anchormgr; anchormgr = NULL; }
+  if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
 
   if (filer) { delete filer; filer = 0; }
@@ -472,6 +482,9 @@ void MDS::my_dispatch(Message *m)
   case MDS_PORT_ANCHORMGR:
     anchormgr->proc_message(m);
     break;
+  case MDS_PORT_ANCHORCLIENT:
+    anchorclient->dispatch(m);
+    break;
     
   case MDS_PORT_CACHE:
     mdcache->proc_message(m);
@@ -648,9 +661,6 @@ void MDS::my_dispatch(Message *m)
 
 void MDS::handle_mds_map(MMDSMap *m)
 {
-  if (!mdsmap) 
-    mdsmap = new MDSMap;
-    
   map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();
 
   dout(1) << "handle_mds_map epoch " << p->first << endl;
@@ -714,6 +724,10 @@ void MDS::handle_client_mount(MClientMount *m)
 
       // fake out idalloc (reset, pretend loaded)
       idalloc->reset();
+
+      // fake out anchortable
+      if (mdsmap->get_anchortable() == whoami)
+	anchormgr->reset();
 
       // init osds too
       //mkfs(new C_MDS_Unpause(this));
@@ -850,7 +864,7 @@ void MDS::commit_request(MClientRequest *req,
   if (event) mdlog->submit_entry(event);
   if (event2) mdlog->submit_entry(event2);
   
-  if (g_conf.mds_log_before_reply && g_conf.mds_log) {
+  if (g_conf.mds_log_before_reply && g_conf.mds_log && event) {
     // SAFE mode!
 
     // pin inode so it doesn't go away!

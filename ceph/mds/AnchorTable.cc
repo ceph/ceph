@@ -11,8 +11,6 @@
  * 
  */
 
-
-
 #include "AnchorTable.h"
 #include "MDS.h"
 
@@ -22,9 +20,12 @@
 #include "messages/MAnchorRequest.h"
 #include "messages/MAnchorReply.h"
 
+#include "common/Clock.h"
+
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "anchortable: "
+#define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchortable "
+#define derr(x)  if (x <= g_conf.debug_mds) cerr << g_clock.now() << " " << mds->messenger->get_myaddr() << ".anchortable "
 
 AnchorTable::AnchorTable(MDS *mds)
 {
@@ -43,8 +44,8 @@ AnchorTable::AnchorTable(MDS *mds)
 
 bool AnchorTable::add(inodeno_t ino, inodeno_t dirino, string& ref_dn) 
 {
-  dout(7) << "add " << ino << " dirino " << dirino << " ref_dn " << ref_dn << endl;
-
+  dout(7) << "add " << std::hex << ino << " dirino " << dirino << std::dec << " ref_dn " << ref_dn << endl;
+  
   // parent should be there
   assert(dirino < 1000 ||             // system dirino
          anchor_map.count(dirino));   // have
@@ -52,17 +53,17 @@ bool AnchorTable::add(inodeno_t ino, inodeno_t dirino, string& ref_dn)
   if (anchor_map.count(ino) == 0) {
     // new item
     anchor_map[ ino ] = new Anchor(ino, dirino, ref_dn);
-    dout(10) << "  add: added " << ino << endl;
+    dout(10) << "  add: added " << std::hex << ino << std::dec << endl;
     return true;
   } else {
-    dout(10) << "  add: had " << ino << endl;
+    dout(10) << "  add: had " << std::hex << ino << std::dec << endl;
     return false;
   }
 }
 
 void AnchorTable::inc(inodeno_t ino)
 {
-  dout(7) << "inc " << ino << endl;
+  dout(7) << "inc " << std::hex << ino << std::dec << endl;
 
   assert(anchor_map.count(ino) != 0);
   Anchor *anchor = anchor_map[ino];
@@ -71,7 +72,7 @@ void AnchorTable::inc(inodeno_t ino)
   while (1) {
     anchor->nref++;
       
-    dout(10) << "  inc: record " << ino << " now " << anchor->nref << endl;
+    dout(10) << "  inc: record " << std::hex << ino << std::dec << " now " << anchor->nref << endl;
     ino = anchor->dirino;
     
     if (ino == 0) break;
@@ -83,7 +84,7 @@ void AnchorTable::inc(inodeno_t ino)
 
 void AnchorTable::dec(inodeno_t ino) 
 {
-  dout(7) << "dec " << ino << endl;
+  dout(7) << "dec " << std::hex << ino << std::dec << endl;
 
   assert(anchor_map.count(ino) != 0);
   Anchor *anchor = anchor_map[ino];
@@ -93,13 +94,13 @@ void AnchorTable::dec(inodeno_t ino)
     anchor->nref--;
       
     if (anchor->nref == 0) {
-      dout(10) << "  dec: record " << ino << " now 0, removing" << endl;
+      dout(10) << "  dec: record " << std::hex << ino << std::dec << " now 0, removing" << endl;
       inodeno_t dirino = anchor->dirino;
       anchor_map.erase(ino);
       delete anchor;
       ino = dirino;
     } else {
-      dout(10) << "  dec: record " << ino << " now " << anchor->nref << endl;
+      dout(10) << "  dec: record " << std::hex << ino << std::dec << " now " << anchor->nref << endl;
       ino = anchor->dirino;
     }
     
@@ -117,14 +118,14 @@ void AnchorTable::dec(inodeno_t ino)
 
 void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace)
 {
-  dout(7) << "lookup " << ino << endl;
+  dout(7) << "lookup " << std::hex << ino << std::dec << endl;
 
   assert(anchor_map.count(ino) == 1);
   Anchor *anchor = anchor_map[ino];
   assert(anchor);
 
   while (true) {
-    dout(10) << "  record " << anchor->ino << " dirino " << anchor->dirino << " ref_dn " << anchor->ref_dn << endl;
+    dout(10) << "  record " << std::hex << anchor->ino << " dirino " << anchor->dirino << std::dec << " ref_dn " << anchor->ref_dn << endl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
 
     if (anchor->dirino < MDS_INO_BASE) break;
@@ -137,7 +138,7 @@ void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace)
 
 void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace)
 {
-  dout(7) << "create " << ino << endl;
+  dout(7) << "create " << std::hex << ino << std::dec << endl;
   
   // make sure trace is in table
   for (unsigned i=0; i<trace.size(); i++) 
@@ -162,10 +163,6 @@ void AnchorTable::proc_message(Message *m)
   switch (m->get_type()) {
   case MSG_MDS_ANCHORREQUEST:
     handle_anchor_request((MAnchorRequest*)m);
-    break;
-        
-  case MSG_MDS_ANCHORREPLY:
-    handle_anchor_reply((MAnchorReply*)m);
     break;
     
   default:
@@ -221,123 +218,6 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
   delete m;
 }
 
-void AnchorTable::handle_anchor_reply(class MAnchorReply *m)
-{
-  switch (m->get_op()) {
-
-  case ANCHOR_OP_LOOKUP:
-    {
-      assert(pending_lookup_trace.count(m->get_ino()) == 1);
-
-      *(pending_lookup_trace[ m->get_ino() ]) = m->get_trace();
-      Context *onfinish = pending_lookup_context[ m->get_ino() ];
-
-      pending_lookup_trace.erase(m->get_ino());
-      pending_lookup_context.erase(m->get_ino());
-
-      if (onfinish) {
-        onfinish->finish(0);
-        delete onfinish;
-      }
-    }
-    break;
-
-  case ANCHOR_OP_UPDATE:
-  case ANCHOR_OP_CREATE:
-  case ANCHOR_OP_DESTROY:
-    {
-      assert(pending_op.count(m->get_ino()) == 1);
-
-      Context *onfinish = pending_op[m->get_ino()];
-      pending_op.erase(m->get_ino());
-
-      if (onfinish) {
-        onfinish->finish(0);
-        delete onfinish;
-      }
-    }
-    break;
-
-  default:
-    assert(0);
-  }
-
-}
-
-
-/*
- * public async interface
- */
-
-void AnchorTable::lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish)
-{
-  // me?
-  if (false && mds->get_nodeid() == 0) {
-    lookup(ino, trace);
-    onfinish->finish(0);
-    delete onfinish;
-    return;
-  }
-
-  // send message
-  MAnchorRequest *req = new MAnchorRequest(ANCHOR_OP_LOOKUP, ino);
-
-  pending_lookup_trace[ino] = &trace;
-  pending_lookup_context[ino] = onfinish;
-
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
-}
-
-void AnchorTable::create(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish)
-{
-  // me?
-  if (false && mds->get_nodeid() == 0) {
-    create(ino, trace);
-    onfinish->finish(0);
-    delete onfinish;
-    return;
-  }
-
-  // send message
-  MAnchorRequest *req = new MAnchorRequest(ANCHOR_OP_CREATE, ino);
-  req->set_trace(trace);
-
-  pending_op[ino] = onfinish;
-
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
-}
-
-void AnchorTable::update(inodeno_t ino, vector<Anchor*>& trace, Context *onfinish)
-{
-  // send message
-  MAnchorRequest *req = new MAnchorRequest(ANCHOR_OP_UPDATE, ino);
-  req->set_trace(trace);
-
-  pending_op[ino] = onfinish;
-
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
-}
-
-void AnchorTable::destroy(inodeno_t ino, Context *onfinish)
-{
-  // me?
-  if (false && mds->get_nodeid() == 0) {
-    destroy(ino);
-    onfinish->finish(0);
-    delete onfinish;
-    return;
-  }
-
-  // send message
-  MAnchorRequest *req = new MAnchorRequest(ANCHOR_OP_DESTROY, ino);
-
-  pending_op[ino] = onfinish;
-
-  mds->messenger->send_message(req, MSG_ADDR_MDS(0), MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORMGR);
-}
-
-
-
 
 
 
@@ -351,28 +231,28 @@ void AnchorTable::save(Context *onfinish)
   if (!opened) return;
   
   // build up write
-  crope tab;
+  bufferlist tabbl;
 
   int num = anchor_map.size();
-  tab.append((char*)&num, sizeof(int));
+  tabbl.append((char*)&num, sizeof(int));
 
   for (hash_map<inodeno_t, Anchor*>::iterator it = anchor_map.begin();
        it != anchor_map.end();
        it++) {
-    dout(14) << "adding anchor for " << it->first << endl;
+    dout(14) << " saving anchor for " << std::hex << it->first << std::dec << endl;
     Anchor *a = it->second;
     assert(a);
-    a->_rope(tab);
+    a->_encode(tabbl);
   }
 
-  size_t size = tab.length();
-  tab.insert(0, (char*)&size, sizeof(size));
+  bufferlist bl;
+  size_t size = tabbl.length();
+  bl.append((char*)&size, sizeof(size));
+  bl.claim_append(tabbl);
 
   dout(7) << " " << num << " anchors, " << size << " bytes" << endl;
   
   // write!
-  bufferlist bl;
-  bl.append(tab.c_str(), tab.length());
   mds->filer->write(table_inode,
                     0, bl.length(),
                     bl, 0, 
@@ -383,39 +263,35 @@ void AnchorTable::save(Context *onfinish)
 
 class C_AT_Load : public Context {
   AnchorTable *at;
-  Context *onfinish;
 public:
   size_t size;
   bufferlist bl;
-  C_AT_Load(size_t size, AnchorTable *at, Context *onfinish) {
+  C_AT_Load(size_t size, AnchorTable *at) {
     this->size = size;
     this->at = at;
-    this->onfinish = onfinish;
   }
   void finish(int result) {
     assert(result > 0);
 
-    at->load_2(size, bl, onfinish);
+    at->load_2(size, bl);
   }
 };
 
 class C_AT_LoadSize : public Context {
   AnchorTable *at;
   MDS *mds;
-  Context *onfinish;
 public:
   bufferlist bl;
-  C_AT_LoadSize(AnchorTable *at, MDS *mds, Context *onfinish) {
+  C_AT_LoadSize(AnchorTable *at, MDS *mds) {
     this->at = at;
     this->mds = mds;
-    this->onfinish = onfinish;
   }
   void finish(int r) {
     size_t size = 0;
     bl.copy(0, sizeof(size), (char*)&size);
     cout << "r is " << r << " size is " << size << endl;
     if (r > 0 && size > 0) {
-      C_AT_Load *c = new C_AT_Load(size, at, onfinish);
+      C_AT_Load *c = new C_AT_Load(size, at);
       mds->filer->read(at->table_inode,
                        sizeof(size), size,
                        &c->bl,
@@ -423,7 +299,7 @@ public:
     } else {
       // fail
       bufferlist empty;
-      at->load_2(0, empty, onfinish);
+      at->load_2(0, empty);
     }
   }
 };
@@ -433,31 +309,29 @@ void AnchorTable::load(Context *onfinish)
   dout(7) << "load" << endl;
 
   assert(!opened);
+
+  waiting_for_open.push_back(onfinish);
   
-  C_AT_LoadSize *c = new C_AT_LoadSize(this, mds, onfinish);
+  C_AT_LoadSize *c = new C_AT_LoadSize(this, mds);
   mds->filer->read(table_inode,
                    0, sizeof(size_t),
                    &c->bl,
                    c);
 }
 
-void AnchorTable::load_2(size_t size, bufferlist& bl, Context *onfinish)
+void AnchorTable::load_2(size_t size, bufferlist& bl)
 {
-  // make a rope to be easy.. FIXME someday
-  crope r;
-  bl._rope(r);
-
   // num
   int off = 0;
   int num;
-  r.copy(0, sizeof(num), (char*)&num);
+  bl.copy(0, sizeof(num), (char*)&num);
   off += sizeof(num);
   
   // parse anchors
   for (int i=0; i<num; i++) {
     Anchor *a = new Anchor;
-    a->_unrope(r, off);
-    dout(10) << "  load_2 unroped " << a->ino << " dirino " << a->dirino << " ref_dn " << a->ref_dn << endl;
+    a->_decode(bl, off);
+    dout(10) << "load_2 decoded " << std::hex << a->ino << " dirino " << a->dirino << std::dec << " ref_dn " << a->ref_dn << endl;
     anchor_map[a->ino] = a;
   }
 
@@ -467,10 +341,6 @@ void AnchorTable::load_2(size_t size, bufferlist& bl, Context *onfinish)
   opening = false;
 
   // finish
-  if (onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
-  }
   finish_contexts(waiting_for_open);
 }
 

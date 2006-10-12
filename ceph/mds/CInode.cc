@@ -20,11 +20,13 @@
 #include "MDS.h"
 #include "AnchorTable.h"
 
+#include "common/Clock.h"
+
 #include <string>
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << "cinode: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << "     cinode: "
 
 
 int cinode_pins[CINODE_NUM_PINS];  // counts

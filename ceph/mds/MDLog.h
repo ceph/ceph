@@ -15,36 +15,15 @@
 #ifndef __MDLOG_H
 #define __MDLOG_H
 
-/*
-
-hmm, some things that go in the MDS log:
-
-
-prepare + commit versions of many of these?
-
-- inode update
- ???  entry will include mdloc_t of dir it resides in... 
-
-- directory operation
-  unlink,
-  rename= atomic link+unlink (across multiple dirs, possibly...)
-
-- import
-- export
-
-
-*/
-
-#include "../include/Context.h"
+#include "include/types.h"
+#include "include/Context.h"
 
 #include <list>
-
-using namespace std;
 
 #include <ext/hash_set>
 using namespace __gnu_cxx;
 
-class LogStream;
+class LogStreamer;
 class LogEvent;
 class MDS;
 
@@ -66,10 +45,11 @@ class MDLog {
   size_t num_events; // in events
   size_t max_events;
 
-  LogStream *logstream;
+  inode_t log_inode;
+  LogStreamer *logstreamer;
   
   hash_set<LogEvent*>  trimming;     // events currently being trimmed
-  list<Context*>  trim_waiters;   // contexts waiting for trim
+  std::list<Context*>  trim_waiters;   // contexts waiting for trim
   bool            trim_reading;
 
   bool waiting_for_read;

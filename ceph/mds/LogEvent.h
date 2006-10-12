@@ -16,19 +16,20 @@
 #ifndef __LOGEVENT_H
 #define __LOGEVENT_H
 
-#include <stdlib.h>
-#include <string>
-#include <ext/rope>
-using namespace std;
-
 #define EVENT_STRING       1
 #define EVENT_INODEUPDATE  2
 #define EVENT_DIRUPDATE    3
 #define EVENT_UNLINK       4
 #define EVENT_ALLOC        5
 
-#include "config.h"
 
+#include <string>
+using namespace std;
+
+#include "include/bufferlist.h"
+#include "include/Context.h"
+
+class MDS;
 
 // generic log event
 class LogEvent {
@@ -49,15 +50,10 @@ class LogEvent {
     assert(_type > 0);
     bl.append((char*)&_type, sizeof(_type));
 
-    // len placeholder
-    int len = 0;   // we don't know just yet...
-    int off = bl.length();
-    bl.append((char*)&len, sizeof(len)); 
-
     // payload
     encode_payload(bl);
 
-    // HACK: pad payload to match md log layout?
+    /*// HACK: pad payload to match md log layout?
     int elen = bl.length() - off + sizeof(_type);
     if (elen % g_conf.mds_log_pad_entry > 0) {
       int add = g_conf.mds_log_pad_entry - (elen % g_conf.mds_log_pad_entry);
@@ -69,10 +65,13 @@ class LogEvent {
     } 
 
     len = bl.length() - off - sizeof(len);
-
     bl.copy_in(off, sizeof(len), (char*)&len);
+    */
   }
+
+  static LogEvent *decode(bufferlist &bl);
   
+  // ...
   virtual bool obsolete(MDS *m) {
     return true;
   }
@@ -81,6 +80,7 @@ class LogEvent {
     c->finish(0);
     delete c;
   }
+
 };
 
 #endif

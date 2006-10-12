@@ -45,28 +45,29 @@ class MAnchorReply : public Message {
   inodeno_t get_ino() { return ino; }
   vector<Anchor*>& get_trace() { return trace; }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(op), (char*)&op);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(op), (char*)&op);
     off += sizeof(op);
-    s.copy(off, sizeof(ino), (char*)&ino);
+    payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
     int n;
-    s.copy(off, sizeof(int), (char*)&n);
+    payload.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
       Anchor *a = new Anchor;
-      a->_unrope(s, off);
+      a->_decode(payload, off);
       trace.push_back(a);
     }
   }
 
-  virtual void encode_payload(crope& r) {
-    r.append((char*)&op, sizeof(op));
-    r.append((char*)&ino, sizeof(ino));
+  virtual void encode_payload() {
+    payload.append((char*)&op, sizeof(op));
+    payload.append((char*)&ino, sizeof(ino));
     int n = trace.size();
-    r.append((char*)&n, sizeof(int));
+    payload.append((char*)&n, sizeof(int));
     for (int i=0; i<n; i++) 
-      trace[i]->_rope(r);
+      trace[i]->_encode(payload);
   }
 };
 

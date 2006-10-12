@@ -94,6 +94,11 @@ void LogStreamer::flush(Context *onsync)
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at " << write_pos << "/" << flush_pos << "/" << ack_pos << endl;
+
+    if (onsync) {
+      onsync->finish(0);
+      delete onsync;
+    }
     return;
   }
 

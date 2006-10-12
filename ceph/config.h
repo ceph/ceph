@@ -20,10 +20,9 @@ extern class FileLayout g_OSD_MDLogLayout;
 
 #include <vector>
 #include <map>
-using namespace std;
 
-extern map<int,float> g_fake_osd_down;
-extern map<int,float> g_fake_osd_out;
+extern std::map<int,float> g_fake_osd_down;
+extern std::map<int,float> g_fake_osd_out;
 
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
@@ -273,15 +272,15 @@ struct md_config_t {
 extern md_config_t g_conf;     
 extern md_config_t g_debug_after_conf;     
 
-#define dout(x)  if ((x) <= g_conf.debug) cout
-#define dout2(x) if ((x) <= g_conf.debug) cout
+#define dout(x)  if ((x) <= g_conf.debug) std::cout
+#define dout2(x) if ((x) <= g_conf.debug) std::cout
 
-void env_to_vec(vector<char*>& args);
+void env_to_vec(std::vector<char*>& args);
 void argv_to_vec(int argc, char **argv,
-                 vector<char*>& args);
-void vec_to_argv(vector<char*>& args,
+                 std::vector<char*>& args);
+void vec_to_argv(std::vector<char*>& args,
                  int& argc, char **&argv);
 
-void parse_config_options(vector<char*>& args);
+void parse_config_options(std::vector<char*>& args);
 
 #endif

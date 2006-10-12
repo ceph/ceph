@@ -48,8 +48,8 @@ FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects
 //FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20 );  // old way
 
 // fake osd failures: osd -> time
-map<int,float> g_fake_osd_down;
-map<int,float> g_fake_osd_out;
+std::map<int,float> g_fake_osd_down;
+std::map<int,float> g_fake_osd_out;
 
 md_config_t g_debug_after_conf;
 
@@ -287,11 +287,9 @@ md_config_t g_conf = {
 
 #include <stdlib.h>
 #include <string.h>
-#include <iostream>
-using namespace std;
 
 
-void env_to_vec(vector<char*>& args) 
+void env_to_vec(std::vector<char*>& args) 
 {
   const char *p = getenv("CEPH_ARGS");
   if (!p) return;
@@ -317,13 +315,13 @@ void env_to_vec(vector<char*>& args)
 
 
 void argv_to_vec(int argc, char **argv,
-                 vector<char*>& args)
+                 std::vector<char*>& args)
 {
   for (int i=1; i<argc; i++)
     args.push_back(argv[i]);
 }
 
-void vec_to_argv(vector<char*>& args,
+void vec_to_argv(std::vector<char*>& args,
                  int& argc, char **&argv)
 {
   argv = (char**)malloc(sizeof(char*) * argc);
@@ -334,9 +332,9 @@ void vec_to_argv(vector<char*>& args,
     argv[argc++] = args[i];
 }
 
-void parse_config_options(vector<char*>& args)
+void parse_config_options(std::vector<char*>& args)
 {
-  vector<char*> nargs;
+  std::vector<char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--nummon") == 0) 

@@ -36,8 +36,9 @@ MDS_OBJS= \
 	mds/CDir.o\
 	mds/CInode.o\
 	mds/AnchorTable.o\
+	mds/AnchorClient.o\
 	mds/MDStore.o\
-	mds/LogStream.o\
+	mds/LogEvent.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o
 
@@ -50,7 +51,8 @@ OSD_OBJS= \
 OSDC_OBJS= \
 	osdc/Filer.o\
 	osdc/ObjectCacher.o\
-	osdc/Objecter.o
+	osdc/Objecter.o\
+	osdc/LogStreamer.o
 
 MON_OBJS= \
 	mon/Monitor.o\
@@ -209,8 +211,8 @@ mon.o: ${MON_OBJS}
 	${CC} -fPIC ${CFLAGS} -c $< -o $@
 
 count:
-	cat *.cc */*.cc */*.h */*/*.h | wc -l
-	cat *.cc */*.cc */*.h */*/*.h | grep -c \;
+	cat ${SRCS} | wc -l
+	cat ${SRCS} | grep -c \;
 
 .depend:
 	touch .depend

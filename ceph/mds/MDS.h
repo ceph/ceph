@@ -45,7 +45,8 @@ using namespace __gnu_cxx;
 #define MDS_PORT_STORE    102
 #define MDS_PORT_BALANCER 103
 
-#define MDS_PORT_ANCHORMGR 200
+#define MDS_PORT_ANCHORCLIENT 200
+#define MDS_PORT_ANCHORMGR    201
 
 #define MDS_PORT_OSDMON    300
 #define MDS_PORT_PGMGR     301
@@ -74,6 +75,7 @@ class Objecter;
 class Filer;
 
 class AnchorTable;
+class AnchorClient;
 class CInode;
 class CDir;
 class CDentry;
@@ -115,6 +117,7 @@ class MDS : public Dispatcher {
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
   AnchorTable  *anchormgr;
+  AnchorClient *anchorclient;
   //  PGManager    *pgmanager;
 
   ClientMap    clientmap;

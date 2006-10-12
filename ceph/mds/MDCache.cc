@@ -21,7 +21,7 @@
 #include "MDSMap.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
-#include "AnchorTable.h"
+#include "AnchorClient.h"
 
 #include "include/filepath.h"
 
@@ -101,7 +101,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << "mds" << mds->get_nodeid() << ".cache "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".cache "
 
 
 
@@ -1530,7 +1530,7 @@ void MDCache::open_remote_ino(inodeno_t ino,
   dout(7) << "open_remote_ino on " << ino << endl;
   
   C_MDC_OpenRemoteInoLookup *c = new C_MDC_OpenRemoteInoLookup(this, ino, req, onfinish);
-  mds->anchormgr->lookup(ino, c->anchortrace, c);
+  mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
 void MDCache::open_remote_ino_2(inodeno_t ino,
@@ -1856,7 +1856,7 @@ void MDCache::anchor_inode(CInode *in, Context *onfinish)
     in->make_anchor_trace(trace);
     
     // do it
-    mds->anchormgr->create(in->ino(), trace, 
+    mds->anchorclient->create(in->ino(), trace, 
                            new C_MDC_AnchorInode( in ));
   }
 }
@@ -2658,7 +2658,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
       vector<Anchor*> atrace;
       in->make_anchor_trace(atrace);
       assert(atrace.size() == 1);   // it's dangling
-      mds->anchormgr->update(in->ino(), atrace, 
+      mds->anchorclient->update(in->ino(), atrace, 
                              new C_MDC_DentryUnlink(this, dn, dir, c));
       return;
     }
@@ -2676,7 +2676,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
         dout(7) << "nlink=1+primary or 0+dangling, removing anchor" << endl;
 
         // remove anchor (async)
-        mds->anchormgr->destroy(dn->inode->ino(), NULL);
+        mds->anchorclient->destroy(dn->inode->ino(), NULL);
       }
     } else {
       int auth = dn->inode->authority();
@@ -2795,7 +2795,7 @@ void MDCache::handle_inode_unlink(MInodeUnlink *m)
       in->mark_clean();       // mark it clean.
       
       // remove anchor (async)
-      mds->anchormgr->destroy(in->ino(), NULL);
+      mds->anchorclient->destroy(in->ino(), NULL);
     }
     else {
       in->mark_dirty();
@@ -2809,7 +2809,7 @@ void MDCache::handle_inode_unlink(MInodeUnlink *m)
       dout(7) << "nlink=1, removing anchor" << endl;
       
       // remove anchor (async)
-      mds->anchormgr->destroy(in->ino(), NULL);
+      mds->anchorclient->destroy(in->ino(), NULL);
     }
   }
 

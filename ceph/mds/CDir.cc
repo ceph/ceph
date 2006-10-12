@@ -21,12 +21,13 @@
 #include "MDSMap.h"
 
 #include "include/Context.h"
+#include "common/Clock.h"
 
 #include <cassert>
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << "mds" << mds->get_nodeid() << "        cdir: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << "        cdir: "
 
 
 // PINS
