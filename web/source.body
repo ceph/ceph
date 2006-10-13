@@ -59,6 +59,11 @@ ln -s /dev/sda4 dev/osd0      # except osd0, which should use /dev/sd4
 for f in 0 1 2 3; do                                 # fakesyn defaults is 4 OSDs
 dd if=/dev/zero of=dev/osd$f bs=1048576 count=1024   # 1 GB each
 done
+
+# smaller devices for monitors too
+for f in 0 1 2 3 4 ; do
+dd if=/dev/zero of=dev/mon$f bs=1048576 count=10   # 10 MB each
+done
 </pre>
 				Note that if your home/working directory is mounted via NFS, you'll want to symlink <tt>dev/</tt> to a directory on a local disk.
 		</div>
