@@ -47,27 +47,5 @@ Ceph fills this gap by providing a scalable, reliable file system that can seaml
 
  	</div>
 
-	<h3>Overview</h3>
-	<div>
-
-
-
-
-		Write me.
-		<p>
-
-		<h4>Dynamic Distributed Metadata</h4>
-		<div>
-		</div>
-
-		<h4>CRUSH</h4>
-		<div>
-		</div>
-
-		<h4>RADOS</h4>
-		<div>
-		</div>
-
-	</div>
 </div>
 
