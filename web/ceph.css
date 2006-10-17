@@ -35,7 +35,7 @@ small { font-size: 10px; }
 .navsegment {
     padding: 0;
     border: 1px solid #C9D2DC;
-    background-color: #EEEEEE;
+    background-color: #EEEEFF;
     margin-bottom: 10px;
 }
 .navsegment h4 {
@@ -43,7 +43,7 @@ small { font-size: 10px; }
     font-family: sans-serif, Arial;
     font-weight: bold;
     color: #000066;
-    background-color: #C9D2DC;
+    background-color: #C9D2EC;
     border-top: 1px solid white;
     border-left: 1px solid white;
     border-bottom: 1px solid #93A4B7;
@@ -74,7 +74,7 @@ small { font-size: 10px; }
 }
 .mainsegment h3 {
     margin: 0;
-    background-color: #6D859E;
+    background-color: #7982BC;
     color: white;
     padding: 2px 1px 2px 6px;
     font-family: sans-serif, "Trebuchet MS", Tahoma, Arial;
@@ -91,7 +91,7 @@ small { font-size: 10px; }
     margin: 0;
     padding: 2px 1px 2px 6px;
     font-family: sans-serif, Arial, Tahoma;
-    background-color: #EEEEEE;
+    background-color: #DDDDEE;
     border-top: 1px solid white;
     border-left: 1px solid white;
     border-bottom: 1px solid #999999;
@@ -99,7 +99,7 @@ small { font-size: 10px; }
 }
 pre, .programlisting {
     background-color: #EFEFEF;
-    border: 1px solid #CCCCCC;
+    border: 1px solid #CCCCEE;
     padding: 10px;
 }
 
@@ -123,30 +123,8 @@ DD { padding-bottom: 0 }
     padding: 10px;
 }
 
-/* Test reporting */
-h4.file {
-  background-color: #EEEEEE;
-  border: 1px solid #999999;
-  margin-top: 20px;
-}
-h4.function {
-  background-color: transparent;
-  border: 0px;
-  margin-top: 15px;
-  font-style: italic;
-}
-table.report {width: 100%; border-width: thin; border-style: solid}
-pre.report { 
-  background-color: transparent;
-  border: 0;
-  padding: 0;
-}
-td.linecount { color: #999999 }
-tr.na {color: grey}
-tr.great {background-color: green; color: white}
-tr.notexec {background-color: #e84545}
-tr.low {background-color: #dde244}
 
+/* Diagram thinger */
 td.kernel {text-align: center; background-color: pink}
 td.entity {text-align: center; background-color: #4ae544}
 td.lib {text-align: center; background-color: orange}
