@@ -102,7 +102,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
 
   } else {
     int l = g_conf.num_mon * 1000;   // nice'n big.
-    bufferptr bp = new buffer(l); 
+    bufferptr bp(l); 
     bl.append(bp);
   }
   

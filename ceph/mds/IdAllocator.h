@@ -17,7 +17,7 @@
 
 #include "include/types.h"
 #include "include/rangeset.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 #include "include/Context.h"
 
 class MDS;

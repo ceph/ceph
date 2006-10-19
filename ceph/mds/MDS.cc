@@ -30,6 +30,7 @@
 #include "MDLog.h"
 #include "MDBalancer.h"
 #include "IdAllocator.h"
+#include "Migrator.h"
 
 #include "AnchorTable.h"
 #include "AnchorClient.h"
@@ -490,6 +491,10 @@ void MDS::my_dispatch(Message *m)
     mdcache->proc_message(m);
     break;
 
+  case MDS_PORT_MIGRATOR:
+    mdcache->migrator->dispatch(m);
+    break;
+
     /*
   case MSG_PORT_MDLOG:
     mymds->logger->proc_message(m);
@@ -550,7 +555,7 @@ void MDS::my_dispatch(Message *m)
       !(mdcache->get_root()->dir->is_hashed() || 
         mdcache->get_root()->dir->is_hashing())) {
     dout(0) << "hashing root" << endl;
-    mdcache->hash_dir(mdcache->get_root()->dir);
+    mdcache->migrator->hash_dir(mdcache->get_root()->dir);
   }
 
 
@@ -610,7 +615,7 @@ void MDS::my_dispatch(Message *m)
         CInode *in = mdcache->get_inode(100000010);
         if (in && in->dir) {
           if (in->dir->is_auth()) 
-            mdcache->hash_dir(in->dir);
+            mdcache->migrator->hash_dir(in->dir);
           didhash[whoami] = 1;
         }
       }
@@ -618,7 +623,7 @@ void MDS::my_dispatch(Message *m)
         CInode *in = mdcache->get_inode(100000010);
         if (in && in->dir) {
           if (in->dir->is_auth() && in->dir->is_hashed())
-            mdcache->unhash_dir(in->dir);
+            mdcache->migrator->unhash_dir(in->dir);
           didhash[whoami] = 2;
         }
       }
@@ -638,7 +643,7 @@ void MDS::my_dispatch(Message *m)
       CDir *dir = in->get_or_open_dir(this);
       if (dir->is_auth()) {
         dout(1) << "FORCING EXPORT" << endl;
-        mdcache->export_dir(dir,1);
+        mdcache->migrator->export_dir(dir,1);
         didit = true;
       }
     }
@@ -990,7 +995,7 @@ void MDS::handle_client_request(MClientRequest *req)
         if (!dir->is_hashed() &&
             !dir->is_hashing() &&
             dir->is_auth())
-          mdcache->hash_dir(dir);
+          mdcache->migrator->hash_dir(dir);
       }
       // </HACK>
 
@@ -2014,7 +2019,7 @@ void MDS::handle_client_unlink(MClientRequest *req,
         dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
         if (!in->dir->is_freezing() && in->dir->is_frozen()) {
           assert(in->dir->is_import());
-          mdcache->export_empty_import(in->dir);          
+          mdcache->migrator->export_empty_import(in->dir);          
         } else {
           dout(7) << "apparently already exporting" << endl;
         }
@@ -2620,7 +2625,7 @@ void MDS::handle_client_mkdir(MClientRequest *req, CInode *diri)
     int dest = rand() % mdsmap->get_num_mds();
     if (dest != whoami) {
       dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << endl;
-      mdcache->export_dir(newdir, dest);
+      mdcache->migrator->export_dir(newdir, dest);
     }
   }
 

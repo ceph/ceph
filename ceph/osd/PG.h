@@ -16,7 +16,7 @@
 
 
 #include "include/types.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 #include "OSDMap.h"
 #include "ObjectStore.h"

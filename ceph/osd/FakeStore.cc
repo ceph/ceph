@@ -35,7 +35,7 @@
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "
 
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 #include <map>
 #include <ext/hash_map>
@@ -271,7 +271,7 @@ int FakeStore::read(object_t oid,
   }
 
   if (actual == offset) {
-    bufferptr bptr = new buffer(len);  // prealloc space for entire read
+    bufferptr bptr(len);  // prealloc space for entire read
     got = ::read(fd, bptr.c_str(), len);
     bptr.set_length(got);   // properly size the buffer
     if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
@@ -309,10 +309,10 @@ int FakeStore::write(object_t oid,
   assert(actual == offset);
 
   // write buffers
-  for (list<bufferptr>::iterator it = bl.buffers().begin();
+  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
        it != bl.buffers().end();
        it++) {
-    int r = ::write(fd, (*it).c_str(), (*it).length());
+    int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
     if (r > 0)
       did += r;
     else {

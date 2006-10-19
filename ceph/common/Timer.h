@@ -92,7 +92,6 @@ class Timer {
 
  public:
   Timer() :
-    //thread_id0),
     thread_stop(false),
     timed_sleep(false),
     sleeping(false),
@@ -101,6 +100,9 @@ class Timer {
   { 
   }
   ~Timer() { 
+    // stop.
+    cancel_timer();
+
     // scheduled
     for (map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
          it != scheduled.end();
@@ -119,14 +121,6 @@ class Timer {
   void shutdown() {
     cancel_timer();
   }
-
-  /*
-  void set_messenger_kicker(Context *c);
-  void unset_messenger_kicker();
-
-  void set_messenger(Messenger *m);
-  void unset_messenger();
-  */
 
   // schedule events
   void add_event_after(float seconds,

@@ -44,6 +44,7 @@ using namespace __gnu_cxx;
 #define MDS_PORT_CACHE    101
 #define MDS_PORT_STORE    102
 #define MDS_PORT_BALANCER 103
+#define MDS_PORT_MIGRATOR 104
 
 #define MDS_PORT_ANCHORCLIENT 200
 #define MDS_PORT_ANCHORMGR    201

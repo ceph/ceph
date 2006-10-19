@@ -12,9 +12,8 @@
  */
 
 
-
-#ifndef _Cond_Posix_
-#define _Cond_Posix_
+#ifndef __COND_H
+#define __COND_H
 
 #include <time.h>
 
@@ -26,32 +25,31 @@
 #include <pthread.h>
 #include <cassert>
 
-class Cond
-{
-  mutable pthread_cond_t C;
+class Cond {
+  // my bits
+  pthread_cond_t _c;
 
+  // don't allow copying.
   void operator=(Cond &C) {}
   Cond( const Cond &C ) {}
 
  public:
-
   Cond() {
-    int r = pthread_cond_init(&C,NULL);
+    int r = pthread_cond_init(&_c,NULL);
     assert(r == 0);
   }
-
   virtual ~Cond() { 
-    pthread_cond_destroy(&C); 
+    pthread_cond_destroy(&_c); 
   }
 
   int Wait(Mutex &mutex)  { 
-    int r = pthread_cond_wait(&C, &mutex.M);
+    int r = pthread_cond_wait(&_c, &mutex._m);
     return r;
   }
 
   int Wait(Mutex &mutex, char* s)  { 
-    cout << "Wait: " << s << endl;
-    int r = pthread_cond_wait(&C, &mutex.M);
+    //cout << "Wait: " << s << endl;
+    int r = pthread_cond_wait(&_c, &mutex._m);
     return r;
   }
 
@@ -59,7 +57,7 @@ class Cond
     struct timespec ts;
     g_clock.make_timespec(when, &ts);
     //cout << "timedwait for " << ts.tv_sec << " sec " << ts.tv_nsec << " nsec" << endl;
-    int r = pthread_cond_timedwait(&C, &mutex.M, &ts);
+    int r = pthread_cond_timedwait(&_c, &mutex._m, &ts);
     return r;
   }
   int WaitInterval(Mutex &mutex, utime_t interval) {
@@ -69,17 +67,17 @@ class Cond
   }
 
   int Signal() { 
-    //int r = pthread_cond_signal(&C);
-    int r = pthread_cond_broadcast(&C);
+    //int r = pthread_cond_signal(&_c);
+    int r = pthread_cond_broadcast(&_c);
     return r;
   }
   int SignalOne() { 
-    int r = pthread_cond_signal(&C);
+    int r = pthread_cond_signal(&_c);
     return r;
   }
   int SignalAll() { 
-    //int r = pthread_cond_signal(&C);
-    int r = pthread_cond_broadcast(&C);
+    //int r = pthread_cond_signal(&_c);
+    int r = pthread_cond_broadcast(&_c);
     return r;
   }
 };
@@ -117,4 +115,4 @@ public:
   }
 };
 
-#endif // !_Cond_Posix_
+#endif

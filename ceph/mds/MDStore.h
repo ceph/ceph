@@ -17,7 +17,7 @@
 #define __MDSTORE_H
 
 #include "include/types.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 class MDS;
 class CDir;

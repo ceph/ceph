@@ -56,6 +56,7 @@ class CDentry {
   int            npins;
   multiset<Message*> pinset;
 
+  friend class Migrator;
   friend class MDCache;
   friend class MDS;
   friend class CInode;

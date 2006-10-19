@@ -21,7 +21,6 @@
 #include "common/Clock.h"
 
 #include "types.h"
-#include "AlignedBufferPool.h"
 #include "BlockDevice.h"
 
 #include "include/interval_set.h"
@@ -402,7 +401,6 @@ class BufferCache {
  public:
   Mutex             &ebofs_lock;          // hack: this is a ref to global ebofs_lock
   BlockDevice       &dev;
-  AlignedBufferPool &bufferpool;
 
   set<BufferHead*> dirty_bh;
 
@@ -445,8 +443,8 @@ class BufferCache {
   map<block_t, map<block_t, PartialWrite> > partial_write;  // queued writes w/ partial content
 
  public:
-  BufferCache(BlockDevice& d, AlignedBufferPool& bp, Mutex& el) : 
-    ebofs_lock(el), dev(d), bufferpool(bp),
+  BufferCache(BlockDevice& d, Mutex& el) : 
+    ebofs_lock(el), dev(d), 
     stat_waiter(0),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_partial(0), stat_missing(0)
     {}

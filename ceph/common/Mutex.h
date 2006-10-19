@@ -11,107 +11,58 @@
  * 
  */
 
-
-/////////////////////////////////////////////////////////////////////
-//  Written by Phillip Sitbon
-//  Copyright 2003
-//
-//  Posix/Mutex.h
-//    - Resource locking mechanism using Posix mutexes
-//
-/////////////////////////////////////////////////////////////////////
-
-#ifndef _Mutex_Posix_
-#define _Mutex_Posix_
+#ifndef __MUTEX_H
+#define __MUTEX_H
 
 #include <pthread.h>
 #include <cassert>
 
-class Mutex
-{
-  mutable pthread_mutex_t M;
+class Mutex {
+private:
+  pthread_mutex_t _m;
+  int nlock;
+  bool recursive;
+
+  // don't allow copying.
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
-  bool tag;
-  int locked;
 
-  public:
-
-  Mutex() : tag(false), locked(0)
-  {
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&M,&attr);
-    //cout << this << " mutex init = " << r << endl;
-    pthread_mutexattr_destroy(&attr);
+public:
+  Mutex(bool r = true) : nlock(0), recursive(r) {
+    if (recursive) {
+      pthread_mutexattr_t attr;
+      pthread_mutexattr_init(&attr);
+      pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutex_init(&_m,&attr);
+      pthread_mutexattr_destroy(&attr);
+    } else {
+      pthread_mutex_init(&_m,NULL);
+    }
+  }
+  virtual ~Mutex() {
+    assert(nlock == 0);
+    pthread_mutex_destroy(&_m); 
   }
 
-  Mutex(bool t) : tag(t)
-  {
-    assert(0);
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&M,&attr);
-    //cout << this << " mutex init = " << r << endl;
-    pthread_mutexattr_destroy(&attr);
+  bool is_locked() {
+    return (nlock > 0);
   }
 
-  bool is_locked() { return locked > 0; }
-  int get_lock_count() { return locked; }
-
-  virtual ~Mutex()
-  { 
-    if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").destructor locked = " << locked << " < 0" << endl;
-    //pthread_mutex_unlock(&M); 
-    pthread_mutex_destroy(&M); 
+  void Lock() {
+    int r = pthread_mutex_lock(&_m);
+    assert(r == 0);
+    nlock++;
+    assert(nlock == 1 || recursive);
   }
 
-  int Lock()  { 
-    int t = tag;
-    if (t) cout << this << " " << pthread_self() << endl; 
-    int r = pthread_mutex_lock(&M);
-    if (t) cout << "lock = " << r << endl;
-    locked++;
-    return r;
-  }
-
-  int Lock(char *s)  { 
-    cout << "Lock: " << s << endl;
-    int r = pthread_mutex_lock(&M);
-    cout << this << " " << pthread_self() << " lock = " << r << endl;
-    locked++;
-    return r;
-  }
-
-  int Lock_Try() const
-  { 
-    return pthread_mutex_trylock(&M); 
-  }
-
-  int Unlock() 
-  { 
-    int t = tag;
-    locked--;
-    if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
-    if (t) cout << this << " " << pthread_self() << endl;
-    int r = pthread_mutex_unlock(&M);
-    if (t) cout << "lock = " << r << endl;
-    return r;
-  }
-
-  int Unlock(char *s) 
-  { 
-    cout << "Unlock: " << s << endl;
-    locked--;
-    if (locked < 0) cerr << "Mutex(" << this << "," << pthread_self() << ").Unlock locked = " << locked << " < 0" << endl;
-    int r = pthread_mutex_unlock(&M);
-    cout << this << " " << pthread_self() << " unlock = " << r << endl;
-    return r;
+  void Unlock() {
+    assert(nlock > 0);
+    --nlock;
+    int r = pthread_mutex_unlock(&_m);
+    assert(r == 0);
   }
 
   friend class Cond;
 };
 
-#endif // !_Mutex_Posix_
+#endif

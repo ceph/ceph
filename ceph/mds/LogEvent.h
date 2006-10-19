@@ -26,7 +26,7 @@
 #include <string>
 using namespace std;
 
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 #include "include/Context.h"
 
 class MDS;

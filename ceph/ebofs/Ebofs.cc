@@ -51,8 +51,8 @@ int Ebofs::mount()
   dout(2) << "mounting " << dev.get_device_name() << " " << dev.get_num_blocks() << " blocks, " << nice_blocks(dev.get_num_blocks()) << endl;
 
   // read super
-  bufferptr bp1 = bufferpool.alloc(EBOFS_BLOCK_SIZE);
-  bufferptr bp2 = bufferpool.alloc(EBOFS_BLOCK_SIZE);
+  bufferptr bp1 = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
+  bufferptr bp2 = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
   dev.read(0, 1, bp1);
   dev.read(1, 1, bp2);
 
@@ -301,7 +301,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb.nodepool.node_usemap_odd = nodepool.usemap_odd;
   
   // put in a buffer
-  bp = bufferpool.alloc(EBOFS_BLOCK_SIZE);
+  bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
   memcpy(bp.c_str(), (const char*)&sb, sizeof(sb));
 }
 
@@ -596,7 +596,7 @@ Onode* Ebofs::get_onode(object_t oid)
 
     // read it!
     bufferlist bl;
-    bufferpool.alloc( EBOFS_BLOCK_SIZE*onode_loc.length, bl );
+    bl.push_back( buffer::create_page_aligned( EBOFS_BLOCK_SIZE*onode_loc.length ) );
 
     ebofs_lock.Unlock();
     dev.read( onode_loc.start, onode_loc.length, bl );
@@ -639,7 +639,7 @@ Onode* Ebofs::get_onode(object_t oid)
       p += key.length() + 1;
       int len = *(int*)(p);
       p += sizeof(len);
-      on->attr[key] = new buffer(p, len);
+      on->attr[key] = buffer::copy(p, len);
       p += len;
       dout(15) << "get_onode " << *on  << " attr " << key << " len " << len << endl;
     }
@@ -733,7 +733,7 @@ void Ebofs::write_onode(Onode *on)
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
 
   bufferlist bl;
-  bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
+  bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks) );
 
   // (always) relocate onode
   if (1) {
@@ -940,7 +940,8 @@ Cnode* Ebofs::get_cnode(coll_t cid)
 
     // read it!
     bufferlist bl;
-    bufferpool.alloc( EBOFS_BLOCK_SIZE*cnode_loc.length, bl );
+    //bufferpool.alloc( EBOFS_BLOCK_SIZE*cnode_loc.length, bl );
+    bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*cnode_loc.length) );
 
     ebofs_lock.Unlock();
     dev.read( cnode_loc.start, cnode_loc.length, bl );
@@ -962,7 +963,7 @@ Cnode* Ebofs::get_cnode(coll_t cid)
       p += key.length() + 1;
       int len = *(int*)(p);
       p += sizeof(len);
-      cn->attr[key] = new buffer(p, len);
+      cn->attr[key] = buffer::copy(p, len);
       p += len;
       dout(15) << "get_cnode " << *cn  << " attr " << key << " len " << len << endl;
     }
@@ -1012,7 +1013,8 @@ void Ebofs::write_cnode(Cnode *cn)
   unsigned blocks = (bytes-1)/EBOFS_BLOCK_SIZE + 1;
   
   bufferlist bl;
-  bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
+  //bufferpool.alloc( EBOFS_BLOCK_SIZE*blocks, bl );
+  bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*blocks) );
 
   // (always) relocate cnode!
   if (1) {
@@ -1494,7 +1496,8 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
       dout(10) << "apply_write tx pending, copying buffer on " << *bh << endl;
       bufferlist temp;
       temp.claim(bh->data);
-      bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+      //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+      bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
       bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
     }
 
@@ -1533,9 +1536,10 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
                  << endl;
         unsigned z = MIN( zleft, len_in_bh );
         if (z) {
+	  bufferptr zp(z);
+	  zp.zero();
           bufferlist zb;
-          zb.push_back(new buffer(z));
-          zb.zero();
+          zb.push_back(zp);
           bh->add_partial(off_in_bh, zb);
            zleft -= z;
           opos += z;
@@ -1552,7 +1556,9 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
 
         if (bh->partial_is_complete(on->object_size - bh->start()*EBOFS_BLOCK_SIZE)) {
           dout(10) << "apply_write  completed partial " << *bh << endl;
-          bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
+          //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);  // new buffers!
+	  bh->data.clear();
+	  bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
           bh->data.zero();
           bh->apply_partial();
           bc.mark_dirty(bh);
@@ -1599,14 +1605,16 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
         //  FIXME: only do the modified pages?  this might be a big bh!
         bufferlist temp;
         temp.claim(bh->data);
-        bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+        //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data); 
+	bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
         bh->data.copy_in(0, bh->length()*EBOFS_BLOCK_SIZE, temp);
 
         unsigned z = MIN( zleft, len_in_bh );
         if (z) {
+	  bufferptr zp(z);
+	  zp.zero();
           bufferlist zb;
-          zb.push_back(new buffer(z));
-          zb.zero();
+          zb.push_back(zp);
           bh->data.copy_in(off_in_bh, z, zb);
           zleft -= z;
           opos += z;
@@ -1633,7 +1641,9 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
            opos+(off_t)(zleft+left) == on->object_size);
 
     // alloc new buffers.
-    bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
+    //bc.bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), bh->data);
+    bh->data.clear();
+    bh->data.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
     
     // copy!
     unsigned len_in_bh = MIN(bh->length()*EBOFS_BLOCK_SIZE, zleft+left);
@@ -1645,9 +1655,10 @@ void Ebofs::apply_write(Onode *on, off_t off, size_t len, bufferlist& bl)
     
     unsigned z = MIN(len_in_bh, zleft);
     if (z) {
+      bufferptr zp(z);
+      zp.zero();
       bufferlist zb;
-      zb.push_back(new buffer(z));
-      zb.zero();
+      zb.push_back(zp);
       bh->data.copy_in(0, z, zb);
       zleft -= z;
     }
@@ -2405,7 +2416,7 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
   if (!on) return -ENOENT;
 
   string n(name);
-  on->attr[n] = new buffer((char*)value, size);
+  on->attr[n] = buffer::copy((char*)value, size);
   dirty_onode(on);
   put_onode(on);
 
@@ -2797,7 +2808,7 @@ int Ebofs::_collection_setattr(coll_t cid, const char *name, const void *value, 
   if (!cn) return -ENOENT;
 
   string n(name);
-  cn->attr[n] = new buffer((char*)value, size);
+  cn->attr[n] = buffer::copy((char*)value, size);
   dirty_cnode(cn);
   put_cnode(cn);
 

@@ -50,8 +50,6 @@ typedef struct {
   eversion_t pg_complete_thru;
 
   epoch_t map_epoch;
-
-  size_t _data_len;//, _oc_len;
 } MOSDOpReply_st;
 
 
@@ -92,7 +90,6 @@ class MOSDOpReply : public Message {
   // data payload
   void set_data(bufferlist &d) {
     data.claim(d);
-    //st._data_len = data.length();
   }
   bufferlist& get_data() {
     return data;
@@ -135,13 +132,12 @@ public:
     payload.splice(0, sizeof(st));
     int off = 0;
     ::_decode(attrset, payload, off);
-    if (st._data_len) payload.splice(off, st._data_len, &data);
+    ::_decode(data, payload, off);
   }
   virtual void encode_payload() {
-    st._data_len = data.length();
-    payload.push_back( new buffer((char*)&st, sizeof(st)) );
+    payload.append((char*)&st, sizeof(st));
     ::_encode(attrset, payload);
-    payload.claim_append( data );
+    ::_encode(data, payload);
   }
 
   virtual char *get_type_name() { return "oopr"; }

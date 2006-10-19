@@ -73,9 +73,6 @@ typedef struct {
 
   bool   want_ack;
   bool   want_commit;
-
-  size_t _data_len;
-
 } MOSDOp_st;
 
 class MOSDOp : public Message {
@@ -150,7 +147,7 @@ private:
   bufferlist& get_data() {
     return data;
   }
-  size_t get_data_len() { return st._data_len; }
+  size_t get_data_len() { return data.length(); }
 
 
   // keep a pcid (procedure call id) to match up request+reply
@@ -192,14 +189,12 @@ private:
     payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
     ::_decode(attrset, payload, off);
-    if (st._data_len) 
-      payload.splice(off, st._data_len, &data);
+    ::_decode(data, payload, off);
   }
   virtual void encode_payload() {
-    st._data_len = data.length();
-    payload.push_back( new buffer((char*)&st, sizeof(st)) );
+    payload.append((char*)&st, sizeof(st));
     ::_encode(attrset, payload);
-    payload.claim_append( data );
+    ::_encode(data, payload);
   }
 
   virtual char *get_type_name() { return "oop"; }

@@ -142,7 +142,7 @@ class FakeStoreAttrs {
     
     int setattr(const char *name, const void *value, size_t size) {
       string n = name;
-      bufferptr bp(new buffer((char*)value,size));
+      bufferptr bp = buffer::copy((char*)value, size);
       attrs[n] = bp;
       return 0;
     }

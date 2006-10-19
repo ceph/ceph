@@ -16,7 +16,6 @@
 #define __MUNHASHDIRACK_H
 
 #include "msg/Message.h"
-#include "include/bufferlist.h"
 
 class MUnhashDirAck : public Message {
   inodeno_t ino;

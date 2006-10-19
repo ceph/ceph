@@ -12,12 +12,14 @@
  */
 
 
+#include <map>
+using namespace std;
 
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
 #include "include/Context.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 template<typename U,typename V>
 inline ostream& operator<<(ostream& out, const pair<U,V>& p) {
@@ -31,7 +33,6 @@ inline ostream& operator<<(ostream& out, const pair<U,V>& p) {
 #include "nodes.h"
 #include "Allocator.h"
 #include "Table.h"
-#include "AlignedBufferPool.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -92,10 +93,6 @@ class Ebofs : public ObjectStore {
   }
   block_t get_limbo_extents() { return limbo_tab->get_num_keys(); }
 
-
-  // ** buffers **
-  AlignedBufferPool bufferpool;
-  
 
   // ** tables and sets **
   // nodes
@@ -216,13 +213,12 @@ class Ebofs : public ObjectStore {
     commit_thread(this),
     free_blocks(0), limbo_blocks(0),
     allocator(this),
-    bufferpool(EBOFS_BLOCK_SIZE),
     nodepool(ebofs_lock),
     object_tab(0), limbo_tab(0), collection_tab(0), co_tab(0),
     onode_lru(g_conf.ebofs_oc_size),
     cnode_lru(g_conf.ebofs_cc_size),
     inodes_flushing(0),
-    bc(dev, bufferpool, ebofs_lock),
+    bc(dev, ebofs_lock),
     idle_kicker(this),
     finisher_stop(false), finisher_thread(this) {
     for (int i=0; i<EBOFS_NUM_FREE_BUCKETS; i++)

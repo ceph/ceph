@@ -15,9 +15,6 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
-extern "C" {
-#include <dirent.h>
-}
 
 #include "mds/MDSMap.h"
 #include "osd/OSDMap.h"

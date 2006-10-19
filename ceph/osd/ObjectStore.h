@@ -17,7 +17,7 @@
 
 #include "include/types.h"
 #include "include/Context.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 #include "include/Distribution.h"
 

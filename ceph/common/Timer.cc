@@ -75,7 +75,7 @@ void Timer::timer_entry()
       if (!pending.empty()) {
         sleeping = false;
         lock.Unlock();
-        { // make sure we're not holding any locks while we do callbacks (or talk to the messenger)
+        { // make sure we're not holding any locks while we do callbacks
           // make the callbacks myself.
           for (list<Context*>::iterator cit = pending.begin();
                cit != pending.end();
@@ -136,7 +136,6 @@ void Timer::register_timer()
   } else {
     dout(DBL) << "register_timer starting thread" << endl;
     timer_thread.create();
-    //pthread_create(&thread_id, NULL, timer_thread_entrypoint, (void*)this);
   }
 }
 
@@ -155,7 +154,7 @@ void Timer::cancel_timer()
     
     dout(10) << "waiting for thread to finish" << endl;
     void *ptr;
-    timer_thread.join(&ptr);//pthread_join(thread_id, &ptr);
+    timer_thread.join(&ptr);
     
     dout(10) << "thread finished, exit code " << ptr << endl;
   }

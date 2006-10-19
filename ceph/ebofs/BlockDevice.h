@@ -15,7 +15,7 @@
 #ifndef __EBOFS_BLOCKDEVICE_H
 #define __EBOFS_BLOCKDEVICE_H
 
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
 #include "common/Mutex.h"

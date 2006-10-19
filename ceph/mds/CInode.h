@@ -171,7 +171,7 @@ extern int cinode_pins[CINODE_NUM_PINS];  // counts
 
 
 // cached inode wrapper
-class CInode : LRUObject {
+class CInode : public LRUObject {
  public:
   inode_t          inode;     // the inode itself
 
@@ -229,6 +229,7 @@ class CInode : LRUObject {
   meta_load_t popularity[MDS_NPOP];
 
   // friends
+  friend class Migrator;
   friend class MDCache;
   friend class CDir;
   friend class CInodeExport;

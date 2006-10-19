@@ -384,16 +384,15 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
             // zero end of bx
             dout(21) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << endl;
-            bufferptr z = new buffer(ox_off + bit->second - ox_len);
-            memset(z.c_str(), 0, z.length());
+            bufferptr z(ox_off + bit->second - ox_len);
+			z.zero();
             by_off[bit->first]->append( z );
           } else {
             // we got none of this bx.  zero whole thing.
             assert(ox_off >= ox_len);
             dout(21) << "  adding all zeros for this bit " << bit->second << endl;
-            bufferptr z = new buffer(bit->second);
-            assert(z.length() == bit->second);
-            memset(z.c_str(), 0, z.length());
+            bufferptr z(bit->second);
+			z.zero();
             by_off[bit->first]->append( z );
           }
           ox_off += bit->second;

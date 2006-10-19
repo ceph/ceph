@@ -733,7 +733,7 @@ Message *Rank::Pipe::read_message()
     
     if (size == 0) continue;
 
-    bufferptr bp = new buffer(size);
+    bufferptr bp(size);
     
     if (!tcp_read( sd, bp.c_str(), size )) return 0;
     
@@ -785,7 +785,7 @@ int Rank::Pipe::write_message(Message *m)
 #ifdef TCP_KEEP_CHUNKS
   // send chunk-wise
   int i = 0;
-  for (list<bufferptr>::iterator it = blist.buffers().begin();
+  for (list<bufferptr>::const_iterator it = blist.buffers().begin();
        it != blist.buffers().end();
        it++) {
     dout(10) << "pipe(" << peer_inst << ' ' << this << ").writer tcp_sending frag " << i << " len " << (*it).length() << endl;
@@ -812,11 +812,11 @@ int Rank::Pipe::write_message(Message *m)
   }
   dout(20) << "pipe(" << peer_inst << ' ' << this << ").writer data len is " << size << " in " << blist.buffers().size() << " buffers" << endl;
 
-  for (list<bufferptr>::iterator it = blist.buffers().begin();
+  for (list<bufferptr>::const_iterator it = blist.buffers().begin();
        it != blist.buffers().end();
        it++) {
     if ((*it).length() == 0) continue;  // blank buffer.
-    r = tcp_write( sd, (*it).c_str(), (*it).length() );
+    r = tcp_write( sd, (char*)(*it).c_str(), (*it).length() );
     if (r < 0) { 
       derr(10) << "pipe(" << peer_inst << ' ' << this << ").writer error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; 
       return -1;

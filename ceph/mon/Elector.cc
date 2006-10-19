@@ -32,7 +32,7 @@ void Elector::read_timer()
     read_num++;
     status_msg_count = 0;
     old_views = views;   // TODO deep copy
-    for (int i=0; i<processes.size(); i++) {
+    for (unsigned i=0; i<processes.size(); i++) {
       mon->messenger->send_message(new MMonElectionCollect(read_num), 
                                    MSG_ADDR_MON(processes[i]));
     }
@@ -201,8 +201,8 @@ void Elector::handle_status(MMonElectionStatus* msg)
   }
         
   status_msg_count++;
-  if (status_msg_count >= processes.size() - f) { // Responses from quorum collected
-    for (int i=0; i<processes.size(); i++) {
+  if (status_msg_count >= (int)processes.size() - f) { // Responses from quorum collected
+    for (unsigned i=0; i<processes.size(); i++) {
       int r = processes[i];
       // Check if r has refreshed its epoch number
       if (!( views[r].state > old_views[r].state )) {

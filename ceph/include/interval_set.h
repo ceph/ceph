@@ -160,7 +160,7 @@ class interval_set {
       if (p->first < start) {
         
         if (p->first + p->second != start) {
-          cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
+          //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
           assert(0);
         }
         

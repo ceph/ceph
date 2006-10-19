@@ -18,7 +18,7 @@
 using std::string;
 
 #include "include/types.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 class Anchor {
 public:

@@ -591,12 +591,12 @@ int BlockDevice::_read(int fd, block_t bno, unsigned num, bufferlist& bl)
   struct iovec iov[ bl.buffers().size() ];
   int n = 0;
   size_t left = len;
-  for (list<bufferptr>::iterator i = bl.buffers().begin();
+  for (list<bufferptr>::const_iterator i = bl.buffers().begin();
        i != bl.buffers().end();
        i++) {
     assert(i->length() % EBOFS_BLOCK_SIZE == 0);
     
-    iov[n].iov_base = i->c_str();
+    iov[n].iov_base = (void*)i->c_str();
     iov[n].iov_len = MIN(left, i->length());
 
     left -= iov[n].iov_len;
@@ -628,12 +628,12 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
 
   int n = 0;
   size_t left = len;
-  for (list<bufferptr>::iterator i = bl.buffers().begin();
+  for (list<bufferptr>::const_iterator i = bl.buffers().begin();
        i != bl.buffers().end();
        i++) {
     assert(i->length() % EBOFS_BLOCK_SIZE == 0);
 
-    iov[n].iov_base = i->c_str();
+    iov[n].iov_base = (void*)i->c_str();
     iov[n].iov_len = MIN(left, i->length());
 
     assert((((unsigned long long)iov[n].iov_base) & 4095ULL) == 0);

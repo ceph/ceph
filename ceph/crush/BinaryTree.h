@@ -8,7 +8,7 @@
 //#include <set>
 using namespace std;
 
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 namespace crush {
 

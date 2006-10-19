@@ -16,7 +16,6 @@
 #define __MHASHDIR_H
 
 #include "msg/Message.h"
-#include "include/bufferlist.h"
 
 class MHashDir : public Message {
   inodeno_t ino;

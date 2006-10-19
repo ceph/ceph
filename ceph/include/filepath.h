@@ -31,7 +31,7 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
-#include "bufferlist.h"
+#include "buffer.h"
 
 
 class filepath {

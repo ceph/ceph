@@ -19,7 +19,6 @@
 
 #include "types.h"
 #include "BlockDevice.h"
-#include "AlignedBufferPool.h"
 
 
 /*
@@ -104,13 +103,13 @@ class Node {
 
   void set_state(int s) { state = s; }
 
-  void make_shadow(AlignedBufferPool& bufferpool) {
+  void make_shadow() {
     assert(is_tx());
     
     shadow_bptr = bptr;
     
     // new buffer
-    bptr = bufferpool.alloc(EBOFS_NODE_BYTES);
+    bptr = buffer::create_page_aligned(EBOFS_NODE_BYTES);
     nrecs = (int*)(bptr.c_str());
     type = (int*)(bptr.c_str() + sizeof(*nrecs));
     
@@ -126,8 +125,6 @@ class Node {
 
 class NodePool {
  protected:
-  AlignedBufferPool     bufferpool;    // our own memory allocator for node buffers
-
   map<nodeid_t, Node*>  node_map;      // open node map
   
  public:
@@ -161,7 +158,6 @@ class NodePool {
 
  public:
   NodePool(Mutex &el) : 
-    bufferpool(EBOFS_NODE_BYTES), 
     num_nodes(0),
     ebofs_lock(el),
     flushing(0) {}
@@ -239,7 +235,7 @@ class NodePool {
     else 
       loc = usemap_even;
 
-    bufferptr bp = bufferpool.alloc(EBOFS_BLOCK_SIZE*loc.length);
+    bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*loc.length);
     dev.read(loc.start, loc.length, bp);
     
     // parse
@@ -285,7 +281,7 @@ class NodePool {
         if (!clean.count(nid)) continue;  
         debofs(20) << "ebofs.nodepool.read  node " << nid << endl;
 
-        bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
+        bufferptr bp = buffer::create_page_aligned(EBOFS_NODE_BYTES);
         dev.read(region_loc[r].start + (block_t)boff, EBOFS_NODE_BLOCKS, 
                  bp);
         
@@ -329,7 +325,7 @@ class NodePool {
     else 
       loc = usemap_even;
     
-    bufferptr bp = bufferpool.alloc(EBOFS_BLOCK_SIZE*loc.length);
+    bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*loc.length);
 
     // fill in
     unsigned region = 0;  // current region
@@ -511,7 +507,7 @@ class NodePool {
     debofs(15) << "ebofs.nodepool.new_node " << nid << endl;
     
     // alloc node
-    bufferptr bp = bufferpool.alloc(EBOFS_NODE_BYTES);
+    bufferptr bp = buffer::create_page_aligned(EBOFS_NODE_BYTES);
     Node *n = new Node(nid, bp, Node::STATE_DIRTY);
     n->set_type(type);
     n->set_size(0);
@@ -568,7 +564,7 @@ class NodePool {
       tx.erase(oldid);
       
       // move/copy current -> shadow buffer as necessary
-      n->make_shadow(bufferpool);   
+      n->make_shadow();   
     }
     limbo.insert(oldid);
     node_map.erase(oldid);

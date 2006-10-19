@@ -8,6 +8,8 @@
 
 typedef struct sockaddr_in tcpaddr_t;
 
+using std::ostream;
+
 inline ostream& operator<<(ostream& out, const tcpaddr_t &a)
 {
   unsigned char addr[4];

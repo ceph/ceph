@@ -2,7 +2,7 @@
 #define __OBJECTER_H
 
 #include "include/types.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 #include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"

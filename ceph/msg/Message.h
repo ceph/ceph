@@ -162,8 +162,23 @@
 #define MSG_MDS_SHUTDOWNFINISH 901
 
 
+#include <stdlib.h>
+#include <cassert>
 
-#include "include/bufferlist.h"
+#include <iostream>
+#include <list>
+using std::list;
+
+#include <ext/hash_map>
+#include <ext/rope>
+
+using __gnu_cxx::crope;
+
+#include "include/buffer.h"
+
+#include "tcp.h"
+
+
 
 
 // use fixed offsets and static entity -> logical addr mapping!
@@ -242,10 +257,11 @@ inline bool operator< (const msg_addr_t& l, const msg_addr_t& r) { return l._add
 
 //typedef struct msg_addr msg_addr_t;
 
-inline ostream& operator<<(ostream& out, const msg_addr_t& addr) {
+inline std::ostream& operator<<(std::ostream& out, const msg_addr_t& addr) {
   //if (addr.is_namer()) return out << "namer";
   return out << addr.type_str() << addr.num();
 }
+
 
 namespace __gnu_cxx {
   template<> struct hash< msg_addr_t >
@@ -280,18 +296,6 @@ namespace __gnu_cxx {
 #define MSG_ADDR_NICE(x)      x.type_str() << x.num()
 
 
-
-#include <stdlib.h>
-#include <cassert>
-
-#include <iostream>
-using namespace std;
-
-#include <ext/rope>
-using namespace __gnu_cxx;
-
-
-#include "tcp.h"
 
 
 class entity_inst_t {
@@ -424,7 +428,10 @@ public:
   virtual void decode_payload() {
     // use a crope for convenience, small messages, etc.  FIXME someday.
     crope ser;
-    payload._rope(ser);
+    for (list<bufferptr>::const_iterator it = payload.buffers().begin();
+         it != payload.buffers().end();
+         it++)
+      ser.append((*it).c_str(), (*it).length());
     
     int off = 0;
     decode_payload(ser, off);
@@ -438,7 +445,7 @@ public:
     encode_payload(r);
 
     // copy payload
-    payload.push_back( new buffer(r.c_str(), r.length()) );
+    payload.push_back( buffer::copy(r.c_str(), r.length()) );
   }
 
   virtual void print(ostream& out) {

@@ -32,16 +32,10 @@
 
 
 class MDS;
+class Migrator;
+
 class Message;
-class MExportDirDiscover;
-class MExportDirDiscoverAck;
-class MExportDirPrep;
-class MExportDirPrepAck;
-class MExportDirWarning;
-class MExportDir;
-class MExportDirNotify;
-class MExportDirNotifyAck;
-class MExportDirFinish;
+
 class MDiscover;
 class MDiscoverReply;
 //class MInodeUpdate;
@@ -59,21 +53,6 @@ class MRenameReq;
 class MRenameAck;
 
 class MClientRequest;
-
-class MHashDirDiscover;
-class MHashDirDiscoverAck;
-class MHashDirPrep;
-class MHashDirPrepAck;
-class MHashDir;
-class MHashDirAck;
-class MHashDirNotify;
-
-class MUnhashDirPrep;
-class MUnhashDirPrepAck;
-class MUnhashDir;
-class MUnhashDirAck;
-class MUnhashDirNotify;
-class MUnhashDirNotifyAck;
 
 
 // MDCache
@@ -129,28 +108,15 @@ class MDCache {
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
-  // export fun
-  map<CDir*, set<int> >  export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
-  map<CDir*, list<inodeno_t> > export_proxy_inos;
-  map<CDir*, list<inodeno_t> > export_proxy_dirinos;
-
-  set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
-  map<inodeno_t, MExportDirNotify*> stray_export_notifies;
-
   // rename fun
   set<inodeno_t>                    stray_rename_warnings; // notifies i haven't seen
   map<inodeno_t, MRenameNotify*>    stray_rename_notifies;
 
-  // hashing madness
-  multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
-  multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
-        // maps frozen_dir_ino's to waiting-for-discover ino's.
-  multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
-  // maps import_root_ino's to frozen dir ino's (with pending discovers)
-
 
 
  public:
+  Migrator *migrator;
+
   // active MDS requests
   //map<Message*, active_request_t>   active_requests;
   hash_map<Message*, active_request_t>   active_requests;
@@ -158,7 +124,7 @@ class MDCache {
   int shutdown_commits;
   bool did_shutdown_exports;
   
-
+  friend class Migrator;
   friend class MDBalancer;
 
  public:
@@ -197,11 +163,6 @@ class MDCache {
     return NULL;
   }
   
- protected:
-  CDir *get_auth_container(CDir *in);
-  void find_nested_exports(CDir *dir, set<CDir*>& s);
-  void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
-
 
   // adding/removing
  public:
@@ -223,9 +184,14 @@ class MDCache {
   }
 
  public:
-  void export_empty_import(CDir *dir);
 
  protected:
+  // private methods
+  CDir *get_auth_container(CDir *in);
+  void find_nested_exports(CDir *dir, set<CDir*>& s);
+  void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
+
+
   void rename_file(CDentry *srcdn, CDentry *destdn);
   void fix_renamed_dir(CDir *srcdir,
                        CInode *in,
@@ -328,114 +294,7 @@ class MDCache {
   void do_dir_proxy(CDir *dir, Message *m);
 
 
-  // -- import/export --
-  // exporter
- public:
-  void export_dir(CDir *dir,
-                  int mds);
- protected:
-  map< CDir*, set<int> > export_gather;
-  void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
-  void export_dir_frozen(CDir *dir, int dest);
-  void handle_export_dir_prep_ack(MExportDirPrepAck *m);
-  void export_dir_go(CDir *dir,
-                     int dest);
-  int export_dir_walk(MExportDir *req,
-                      class C_Contexts *fin,
-                      CDir *basedir,
-                      CDir *dir,
-                      int newauth);
-  void export_dir_finish(CDir *dir);
-  void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
-  
-  void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
-  
-  friend class C_MDC_ExportFreeze;
 
-  // importer
-  void handle_export_dir_discover(MExportDirDiscover *m);
-  void handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r);
-  void handle_export_dir_prep(MExportDirPrep *m);
-  void handle_export_dir(MExportDir *m);
-  void import_dir_finish(CDir *dir);
-  void handle_export_dir_finish(MExportDirFinish *m);
-  int import_dir_block(bufferlist& bl,
-                       int& off,
-                       int oldauth,
-                       CDir *import_root,
-                       list<inodeno_t>& imported_subdirs);
-  void got_hashed_replica(CDir *import,
-                          inodeno_t dir_ino,
-                          inodeno_t replica_ino);
-
-  void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
-
-  friend class C_MDC_ExportDirDiscover;
-
-  // bystander
-  void handle_export_dir_warning(MExportDirWarning *m);
-  void handle_export_dir_notify(MExportDirNotify *m);
-
-
-  // -- hashed directories --
-
-  // HASH
- public:
-  void hash_dir(CDir *dir);  // on auth
- protected:
-  map< CDir*, set<int> >             hash_gather;
-  map< CDir*, map< int, set<int> > > hash_notify_gather;
-  map< CDir*, list<CInode*> >        hash_proxy_inos;
-
-  // hash on auth
-  void handle_hash_dir_discover_ack(MHashDirDiscoverAck *m);
-  void hash_dir_complete(CDir *dir);
-  void hash_dir_frozen(CDir *dir);
-  void handle_hash_dir_prep_ack(MHashDirPrepAck *m);
-  void hash_dir_go(CDir *dir);
-  void handle_hash_dir_ack(MHashDirAck *m);
-  void hash_dir_finish(CDir *dir);
-  friend class C_MDC_HashFreeze;
-  friend class C_MDC_HashComplete;
-
-  // auth and non-auth
-  void handle_hash_dir_notify(MHashDirNotify *m);
-
-  // hash on non-auth
-  void handle_hash_dir_discover(MHashDirDiscover *m);
-  void handle_hash_dir_discover_2(MHashDirDiscover *m, CInode *in, int r);
-  void handle_hash_dir_prep(MHashDirPrep *m);
-  void handle_hash_dir(MHashDir *m);
-  friend class C_MDC_HashDirDiscover;
-
-  // UNHASH
- public:
-  void unhash_dir(CDir *dir);   // on auth
- protected:
-  map< CDir*, list<MUnhashDirAck*> > unhash_content;
-  void import_hashed_content(CDir *dir, bufferlist& bl, int nden, int oldauth);
-
-  // unhash on auth
-  void unhash_dir_frozen(CDir *dir);
-  void unhash_dir_prep(CDir *dir);
-  void handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m);
-  void unhash_dir_go(CDir *dir);
-  void handle_unhash_dir_ack(MUnhashDirAck *m);
-  void handle_unhash_dir_notify_ack(MUnhashDirNotifyAck *m);
-  void unhash_dir_finish(CDir *dir);
-  friend class C_MDC_UnhashFreeze;
-  friend class C_MDC_UnhashComplete;
-
-  // unhash on all
-  void unhash_dir_complete(CDir *dir);
-
-  // unhash on non-auth
-  void handle_unhash_dir_prep(MUnhashDirPrep *m);
-  void unhash_dir_prep_frozen(CDir *dir);
-  void unhash_dir_prep_finish(CDir *dir);
-  void handle_unhash_dir(MUnhashDir *m);
-  void handle_unhash_dir_notify(MUnhashDirNotify *m);
-  friend class C_MDC_UnhashPrepFreeze;
 
   // -- updates --
   //int send_inode_updates(CInode *in);

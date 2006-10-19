@@ -85,7 +85,7 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       
       // apply partial to myself
       assert(bh->data.length() == 0);
-      bufferptr bp = bc->bufferpool.alloc(EBOFS_BLOCK_SIZE);
+      bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
       bh->data.push_back( bp );
       bh->data.copy_in(0, EBOFS_BLOCK_SIZE, bl);
       bh->apply_partial();
@@ -680,7 +680,8 @@ void BufferCache::bh_read(Onode *on, BufferHead *bh, block_t from)
                                          bh->start(), bh->length(),
                                          ex.start);
 
-  bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), fin->bl);  // new buffers!
+  //bufferpool.alloc(EBOFS_BLOCK_SIZE*bh->length(), fin->bl);  // new buffers!
+  fin->bl.push_back( buffer::create_page_aligned(EBOFS_BLOCK_SIZE*bh->length()) );
 
   bh->rx_ioh = dev.read(ex.start, ex.length, fin->bl,
                         fin);
@@ -828,7 +829,7 @@ void BufferCache::rx_finish(ObjectCache *oc,
       
       // make the combined block
       bufferlist combined;
-      bufferptr bp = oc->bc->bufferpool.alloc(EBOFS_BLOCK_SIZE);
+      bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
       combined.push_back( bp );
       combined.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, bl);
       BufferHead::apply_partial( combined, p->second.partial );

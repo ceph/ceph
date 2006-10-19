@@ -19,7 +19,7 @@
 #include <set>
 using namespace std;
 
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 #include "Capability.h"
 
@@ -300,6 +300,7 @@ class CLock {
   */
 
   friend class MDCache;
+  friend class Migrator;
 };
 
 //ostream& operator<<(ostream& out, CLock& l);

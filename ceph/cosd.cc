@@ -89,7 +89,7 @@ int main(int argc, char **argv)
   assert(fd >= 0);
   struct stat st;
   ::fstat(fd, &st);
-  bufferptr bp = new buffer(st.st_size);
+  bufferptr bp(st.st_size);
   bl.append(bp);
   ::read(fd, (void*)bl.c_str(), bl.length());
   ::close(fd);

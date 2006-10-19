@@ -46,9 +46,10 @@ bool start_debug = false;
 
 __uint64_t Ager::age_fill(float pc, utime_t until) {
   int max = 1024*1024;
-  char *buf = new char[max];
+  bufferptr bp(max);
+  bp.zero();
   bufferlist bl;
-  bl.push_back(new buffer(buf, max));
+  bl.push_back(bp);
   __uint64_t wrote = 0;
   while (1) {
     if (g_clock.now() > until) break;
@@ -114,7 +115,6 @@ __uint64_t Ager::age_fill(float pc, utime_t until) {
     }
     oid.bno++;
   }
-  delete[] buf;
 
   return wrote*4; // KB
 }
@@ -299,7 +299,7 @@ void Ager::load_freelist()
   int r = ::stat("ebofs.freelist", &st);
   assert(r == 0);
 
-  bufferptr bp = new buffer(st.st_size);
+  bufferptr bp(st.st_size);
   bufferlist bl;
   bl.push_back(bp);
   int fd = ::open("ebofs.freelist", O_RDONLY);

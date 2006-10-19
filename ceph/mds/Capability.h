@@ -15,7 +15,7 @@
 #ifndef __CAPABILITY_H
 #define __CAPABILITY_H
 
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 
 #include <map>
 using namespace std;

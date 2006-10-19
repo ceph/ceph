@@ -19,6 +19,7 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "MDCache.h"
+#include "Migrator.h"
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
@@ -176,7 +177,7 @@ void MDBalancer::export_empties()
     CDir *dir = *it;
     
     if (!dir->inode->is_root() && dir->get_size() == 0) 
-      mds->mdcache->export_empty_import(dir);
+      mds->mdcache->migrator->export_empty_import(dir);
   }
 }
 
@@ -226,7 +227,7 @@ void MDBalancer::do_hashing()
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_hashing hashing " << *dir << endl;
-    mds->mdcache->hash_dir(dir);
+    mds->mdcache->migrator->hash_dir(dir);
   }
   hash_queue.clear();
 }
@@ -389,7 +390,7 @@ void MDBalancer::do_rebalance(int beat)
       dout(-5) << " exporting idle import " << **it 
                << " back to mds" << (*it)->inode->authority()
                << endl;
-      mds->mdcache->export_dir(*it, (*it)->inode->authority());
+      mds->mdcache->migrator->export_dir(*it, (*it)->inode->authority());
       continue;
     }
     import_pop_map[ pop ] = *it;
@@ -453,7 +454,7 @@ void MDBalancer::do_rebalance(int beat)
           dout(-5) << "reexporting " << *dir 
                    << " pop " << pop 
                    << " back to mds" << target << endl;
-          mds->mdcache->export_dir(dir, target);
+          mds->mdcache->migrator->export_dir(dir, target);
           have += pop;
           import_from_map.erase(plast);
           import_pop_map.erase(pop);
@@ -483,7 +484,7 @@ void MDBalancer::do_rebalance(int beat)
                  << " back to mds" << imp->inode->authority()
                  << endl;
         have += pop;
-        mds->mdcache->export_dir(imp, imp->inode->authority());
+        mds->mdcache->migrator->export_dir(imp, imp->inode->authority());
       }
       if (amount-have < MIN_OFFLOAD) break;
     }
@@ -514,7 +515,7 @@ void MDBalancer::do_rebalance(int beat)
                << " fragment " << **it 
                << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() 
                << endl;
-      mds->mdcache->export_dir(*it, target);
+      mds->mdcache->migrator->export_dir(*it, target);
     }
   }
 

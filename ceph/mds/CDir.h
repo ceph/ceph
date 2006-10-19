@@ -17,7 +17,7 @@
 #define __CDIR_H
 
 #include "include/types.h"
-#include "include/bufferlist.h"
+#include "include/buffer.h"
 #include "config.h"
 #include "common/DecayCounter.h"
 
@@ -247,6 +247,7 @@ class CDir {
   meta_load_t popularity[MDS_NPOP];
 
   // friends
+  friend class Migrator;
   friend class CInode;
   friend class MDCache;
   friend class MDiscover;

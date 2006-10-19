@@ -31,6 +31,7 @@ EBOFS_OBJS= \
 MDS_OBJS= \
 	mds/MDS.o\
 	mds/MDCache.o\
+	mds/Migrator.o\
 	mds/MDBalancer.o\
 	mds/CDentry.o\
 	mds/CDir.o\

@@ -23,6 +23,8 @@
 
 
 
+
+
 // ceph stuff
 #include "Client.h"
 
@@ -2347,11 +2349,13 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   // time it.
   utime_t start = g_clock.now();
     
+  // copy into fresh buffer (since our write may be resub, async)
+  bufferptr bp = buffer::copy(buf, size);
+  bufferlist blist;
+  blist.push_back( bp );
+
   if (g_conf.client_oc) { // buffer cache ON?
     assert(objectcacher);
-
-    bufferlist blist;
-    blist.push_back( new buffer(buf, size) );
 
     // write (this may block!)
     in->fc.write(offset, size, blist, client_lock);
@@ -2359,10 +2363,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
   } else {
     // legacy, inconsistent synchronous write.
     dout(7) << "synchronous write" << endl;
-
-    // copy into fresh buffer (since our write may be resub, async)
-    bufferlist blist;
-    blist.push_back( new buffer(buf, size) );
 
     // prepare write
     Cond cond;

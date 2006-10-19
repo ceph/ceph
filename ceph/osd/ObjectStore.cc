@@ -20,9 +20,10 @@ object_t ObjectStore::age_get_oid() {
   }
 
   void ObjectStore::age_fill(float pc, utime_t until) {
-    static char buf[1024*1024];
+	bufferptr bp(1024*1024);
+	bp.zero();
     bufferlist bl;
-    bl.push_back(new buffer(buf, 1024*1024));
+    bl.push_back(bp);
     while (1) {
       if (g_clock.now() > until) break;
 
