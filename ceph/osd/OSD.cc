@@ -3197,6 +3197,33 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
     }
     break;
     
+  case OSD_OP_ZERO:
+    {
+      assert(0);  // are you sure this is what you want?
+      // zero, remove, or truncate?
+      struct stat st;
+      int r = store->stat(oid, &st);
+      if (r >= 0) {
+	if (op->get_offset() + op->get_length() >= st.st_size) {
+	  if (op->get_offset()) 
+	    t.truncate(oid, op->get_length() + op->get_offset());
+	  else
+	    t.remove(oid);
+	} else {
+	  // zero.  the dumb way.  FIXME.
+	  bufferptr bp(op->get_length());
+	  bp.zero();
+	  bufferlist bl;
+	  bl.push_back(bp);
+	  t.write(oid, op->get_offset(), op->get_length(), bl);
+	}
+      } else {
+	// noop?
+	dout(10) << "apply_transaction zero on " << oid << ", but dne?  stat returns " << r << endl;
+      }
+    }
+    break;
+
   case OSD_OP_TRUNCATE:
     { // truncate
       //r = store->truncate(oid, op->get_offset());
