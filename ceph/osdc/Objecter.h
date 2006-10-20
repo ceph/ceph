@@ -51,6 +51,14 @@ class Objecter {
     }
   };
 
+  class OSDStat : public OSDOp {
+  public:
+	tid_t tid;
+	off_t *size;  // where the size goes.
+    Context *onfinish;
+	OSDStat(off_t *s) : tid(0), size(s), onfinish(0) { }
+  };
+
   // generic modify
   class OSDModify : public OSDOp {
   public:
@@ -76,6 +84,7 @@ class Objecter {
 
  private:
   // pending ops
+  hash_map<tid_t,OSDStat*>   op_stat;
   hash_map<tid_t,OSDRead*>   op_read;
   hash_map<tid_t,OSDModify*> op_modify;
 
@@ -137,17 +146,16 @@ class Objecter {
  public:
   void dispatch(Message *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
+  void handle_osd_stat_reply(class MOSDOpReply *m);
   void handle_osd_read_reply(class MOSDOpReply *m);
   void handle_osd_modify_reply(class MOSDOpReply *m);
   void handle_osd_lock_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
 
  private:
-
   tid_t readx_submit(OSDRead *rd, ObjectExtent& ex);
   tid_t modifyx_submit(OSDModify *wr, ObjectExtent& ex, tid_t tid=0);
-
-
+  tid_t stat_submit(OSDStat *st);
 
   // public interface
  public:
@@ -167,6 +175,7 @@ class Objecter {
               Context *onack, Context *oncommit);
   tid_t zero(object_t oid, off_t off, size_t len,  
              Context *onack, Context *oncommit);
+  tid_t stat(object_t oid, off_t *size, Context *onfinish);  
 
   tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
 

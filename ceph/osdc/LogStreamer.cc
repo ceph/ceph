@@ -23,6 +23,148 @@
 #define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".logstreamer "
 
 
+
+/***************** HEADER *******************/
+
+ostream& operator<<(ostream& out, LogStreamer::Header &h) 
+{
+  return out << "loghead(trim " << h.trimmed_pos
+	     << ", expire " << h.expire_pos
+	     << ", read " << h.read_pos
+	     << ", write " << h.write_pos
+	     << ")";
+}
+
+class LogStreamer::C_ReadHead : public Context {
+  LogStreamer *ls;
+public:
+  bufferlist bl;
+  C_ReadHead(LogStreamer *l) : ls(l) {}
+  void finish(int r) {
+    ls->_finish_read_head(r, bl);
+  }
+};
+
+class LogStreamer::C_ProbeEnd : public Context {
+  LogStreamer *ls;
+public:
+  off_t end;
+  C_ProbeEnd(LogStreamer *l) : ls(l), end(-1) {}
+  void finish(int r) {
+    ls->_finish_probe_end(r, end);
+  }
+};
+
+void LogStreamer::recover(Context *onread) 
+{
+  assert(state != STATE_ACTIVE);
+
+  if (onread)
+    waitfor_recover.push_back(onread);
+  
+  if (state != STATE_UNDEF) {
+    dout(1) << "recover - already recoverying" << endl;
+    return;
+  }
+
+  dout(1) << "read_head" << endl;
+  state = STATE_READHEAD;
+  C_ReadHead *fin = new C_ReadHead(this);
+  filer.read(inode, 0, sizeof(Header), &fin->bl, fin);
+}
+
+void LogStreamer::_finish_read_head(int r, bufferlist& bl)
+{
+  assert(state == STATE_READHEAD);
+
+  if (bl.length() == 0) {
+    dout(1) << "_finish_read_head r=" << r << " read 0 bytes, assuming empty log" << endl;    
+    state = STATE_ACTIVE;
+    list<Context*> ls;
+    ls.swap(waitfor_recover);
+    finish_contexts(ls, 0);
+    return;
+  } 
+
+  // unpack header
+  Header h;
+  assert(bl.length() == sizeof(h));
+  bl.copy(0, sizeof(h), (char*)&h);
+  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << endl;
+
+  write_pos = flush_pos = ack_pos = h.write_pos;
+  read_pos = requested_pos = received_pos = h.read_pos;
+  expire_pos = h.expire_pos;
+  trimmed_pos = trimmed_pos = h.trimmed_pos;
+
+  // probe the log
+  state = STATE_PROBING;
+  C_ProbeEnd *fin = new C_ProbeEnd(this);
+  filer.probe_fwd(inode, h.write_pos, &fin->end, fin);
+}
+
+void LogStreamer::_finish_probe_end(int r, off_t end)
+{
+  assert(r >= 0);
+  assert(end >= write_pos);
+  assert(state == STATE_PROBING);
+
+  dout(1) << "_finish_probe_end write_pos = " << end 
+	  << " (header had " << write_pos << "). recovered."
+	  << endl;
+  
+  write_pos = flush_pos = ack_pos = end;
+  
+  // done.
+  list<Context*> ls;
+  ls.swap(waitfor_recover);
+  finish_contexts(ls, 0);
+}
+
+
+// WRITING
+
+class LogStreamer::C_WriteHead : public Context {
+public:
+  LogStreamer *ls;
+  Header h;
+  Context *oncommit;
+  C_WriteHead(LogStreamer *l, Header& h_, Context *c) : ls(l), h(h_), oncommit(c) {}
+  void finish(int r) {
+    ls->_finish_write_head(h, oncommit);
+  }
+};
+
+void LogStreamer::write_head(Context *oncommit)
+{
+  assert(state == STATE_ACTIVE);
+  last_written.trimmed_pos = trimmed_pos;
+  last_written.expire_pos = expire_pos;
+  last_written.read_pos = read_pos;
+  last_written.write_pos = ack_pos; //write_pos;
+  dout(10) << "write_head " << last_written << endl;
+  
+  last_wrote_head = g_clock.now();
+
+  bufferlist bl;
+  bl.append((char*)&last_written, sizeof(last_written));
+  filer.write(inode, 0, bl.length(), bl, 0, 
+	      0, new C_WriteHead(this, last_written, oncommit));
+}
+
+void LogStreamer::_finish_write_head(Header &wrote, Context *oncommit)
+{
+  dout(10) << "_finish_write_head " << wrote << endl;
+  last_committed = wrote;
+  if (oncommit) {
+    oncommit->finish(0);
+    delete oncommit;
+  }
+
+  trim();  // trim?
+}
+
+
 /***************** WRITING *******************/
 
 class LogStreamer::C_Flush : public Context {
@@ -120,6 +262,11 @@ void LogStreamer::flush(Context *onsync)
   // queue waiter (at _new_ write_pos; will go when reached by ack_pos)
   if (onsync) 
     waitfor_flush[write_pos].push_back(onsync);
+
+  // write head?
+  if (last_wrote_head.sec() + 30 < g_clock.now().sec()) {
+    write_head();
+  }
 }
 
 
@@ -276,7 +423,7 @@ void LogStreamer::read_entry(bufferlist *bl, Context *onfinish)
  *  return true if next entry is ready.
  *  kickstart read as necessary.
  */
-bool LogStreamer::is_readable()
+bool LogStreamer::is_readable() 
 {
   // anything to read?
   if (read_pos == write_pos) return false;
@@ -339,5 +486,68 @@ void LogStreamer::wait_for_readable(Context *onreadable)
   assert(on_readable == 0);
   on_readable = onreadable;
 }
+
+
+
+
+/***************** TRIMMING *******************/
+
+
+class LogStreamer::C_Trim : public Context {
+  LogStreamer *ls;
+  off_t to;
+public:
+  C_Trim(LogStreamer *l, off_t t) : ls(l), to(t) {}
+  void finish(int r) {
+    ls->_trim_finish(r, to);
+  }
+};
+
+void LogStreamer::trim()
+{
+  off_t trim_to = last_committed.expire_pos;
+  trim_to -= trim_to % inode.layout.period();
+  dout(10) << "trim last_commited head was " << last_committed
+	   << ", can trim to " << trim_to
+	   << endl;
+  if (trim_to == 0 || trim_to == trimming_pos) {
+    dout(10) << "trim already trimmed/trimming to " 
+	     << trimmed_pos << "/" << trimming_pos << endl;
+    return;
+  }
+  
+  // trim
+  assert(trim_to <= write_pos);
+  assert(trim_to > trimming_pos);
+  dout(10) << "trim trimming to " << trim_to 
+	   << ", trimmed/trimming/expire are " 
+	   << trimmed_pos << "/" << trimming_pos << "/" << expire_pos
+	   << endl;
+  
+  filer.remove(inode, trimming_pos, trim_to-trimming_pos, 
+	       0, new C_Trim(this, trim_to));
+  trimming_pos = trim_to;  
+}
+
+void LogStreamer::_trim_finish(int r, off_t to)
+{
+  dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
+	   << ", trimmed/trimming/expire now "
+	   << to << "/" << trimming_pos << "/" << expire_pos
+	   << endl;
+  assert(r >= 0);
+  
+  assert(to <= trimming_pos);
+  assert(to > trimmed_pos);
+  trimmed_pos = to;
+
+  // finishers?
+  while (!waitfor_trim.empty() &&
+	 waitfor_trim.begin()->first <= trimmed_pos) {
+    finish_contexts(waitfor_trim.begin()->second, 0);
+    waitfor_trim.erase(waitfor_trim.begin());
+  }
+}
+
 
 // eof.

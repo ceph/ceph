@@ -203,6 +203,16 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
         rd->ops.erase(tid);
       }
 
+	  else if (op_stat.count(tid)) {
+		OSDStat *st = op_stat[tid];
+		op_stat.erase(tid);
+		
+		dout(0) << "kick_requests resub stat " << tid << endl;
+		
+        // resubmit
+        stat_submit(st);
+	  }
+	  
       else 
         assert(0);
     }         
@@ -222,6 +232,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   case OSD_OP_WRNOOP:
   case OSD_OP_WRITE:
   case OSD_OP_ZERO:
+  case OSD_OP_DELETE:
   case OSD_OP_WRUNLOCK:
   case OSD_OP_WRLOCK:
   case OSD_OP_RDLOCK:
@@ -237,6 +248,102 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
+
+// stat -----------------------------------
+
+tid_t Objecter::stat(object_t oid, off_t *size, Context *onfinish)
+{
+  OSDStat *st = new OSDStat(size);
+  st->extents.push_back(ObjectExtent(oid, 0, 0));
+  st->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
+  st->onfinish = onfinish;
+
+  return stat_submit(st);
+}
+
+tid_t Objecter::stat_submit(OSDStat *st) 
+{
+  // find OSD
+  ObjectExtent &ex = st->extents.front();
+  PG &pg = get_pg( ex.pgid );
+
+  // send
+  last_tid++;
+  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+                         ex.oid, ex.pgid, osdmap->get_epoch(), 
+                         OSD_OP_STAT);
+  dout(10) << "stat_submit " << st << " tid " << last_tid
+           << " oid " << ex.oid
+           << " pg " << hex << ex.pgid << dec
+           << " osd" << pg.acker() 
+           << endl;
+
+  if (pg.acker() >= 0) 
+    messenger->send_message(m, MSG_ADDR_OSD(pg.acker()), osdmap->get_inst(pg.acker()));
+  
+  // add to gather set
+  st->tid = last_tid;
+  op_stat[last_tid] = st;    
+
+  pg.active_tids.insert(last_tid);
+
+  return last_tid;
+}
+
+void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
+{
+  // get pio
+  tid_t tid = m->get_tid();
+
+  if (op_stat.count(tid) == 0) {
+    dout(7) << "handle_osd_stat_reply " << tid << " ... stray" << endl;
+    delete m;
+    return;
+  }
+
+  dout(7) << "handle_osd_stat_reply " << tid 
+		  << " r=" << m->get_result()
+		  << " size=" << m->get_object_size()
+		  << endl;
+  OSDStat *st = op_stat[ tid ];
+  op_stat.erase( tid );
+
+  // remove from osd/tid maps
+  PG& pg = get_pg( m->get_pg() );
+  assert(pg.active_tids.count(tid));
+  pg.active_tids.erase(tid);
+  if (pg.active_tids.empty()) close_pg( m->get_pg() );
+  
+  // success?
+  if (m->get_result() == -EAGAIN) {
+    dout(7) << " got -EAGAIN, resubmitting" << endl;
+    stat_submit(st);
+    delete m;
+    return;
+  }
+  //assert(m->get_result() >= 0);
+
+  // ok!
+  if (m->get_result() < 0) {
+	*st->size = -1;
+  } else {
+	*st->size = m->get_object_size();
+  }
+
+  // finish, clean up
+  Context *onfinish = st->onfinish;
+
+  // done
+  delete st;
+  if (onfinish) {
+	onfinish->finish(m->get_result());
+	delete onfinish;
+  }
+
+  delete m;
+}
+
+
 // read -----------------------------------
 
 
@@ -249,6 +356,7 @@ tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl,
   readx(rd, onfinish);
   return last_tid;
 }
+
 
 tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 {
@@ -485,6 +593,7 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len,
   modifyx(z, onack, oncommit);
   return last_tid;
 }
+
 
 // lock ops
 

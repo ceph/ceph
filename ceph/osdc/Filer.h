@@ -20,7 +20,7 @@
  * stripe file ranges onto objects.
  * build list<ObjectExtent> for the objecter or objectcacher.
  *
- * also, provide convenience methods that call objecter for your.
+ * also, provide convenience methods that call objecter for you.
  *
  * "files" are identified by ino. 
  */
@@ -48,6 +48,29 @@ class OSDMap;
 class Filer {
   Objecter   *objecter;
   
+  // probes
+  struct Probe {
+    inode_t inode;
+    off_t from;
+    off_t *end;
+    Context *onfinish;
+    
+    list<ObjectExtent> probing;
+    off_t probing_len;
+    
+    map<object_t, off_t> known;
+    map<object_t, tid_t> ops;
+
+    Probe(inode_t &i, off_t f, off_t *e, Context *c) : 
+      inode(i), from(f), end(e), onfinish(c), probing_len(0) {}
+  };
+  
+  class C_Probe;
+  //friend class C_Probe;  
+
+  void _probe(Probe *p);
+  void _probed(Probe *p, object_t oid, off_t size);
+
  public:
   Filer(Objecter *o) : objecter(o) {}
   ~Filer() {}
@@ -64,7 +87,6 @@ class Filer {
            Context *onfinish) {
     Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
     file_to_extents(inode, offset, len, rd->extents);
-
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 
@@ -77,7 +99,6 @@ class Filer {
             Context *oncommit) {
     Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
     file_to_extents(inode, offset, len, wr->extents);
-
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -88,10 +109,23 @@ class Filer {
            Context *oncommit) {
     Objecter::OSDModify *z = new Objecter::OSDModify(OSD_OP_ZERO);
     file_to_extents(inode, offset, len, z->extents);
-
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
+  int remove(inode_t& inode,
+	     off_t offset,
+	     size_t len,
+	     Context *onack,
+	     Context *oncommit) {
+    Objecter::OSDModify *z = new Objecter::OSDModify(OSD_OP_DELETE);
+    file_to_extents(inode, offset, len, z->extents);
+    return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
+  }
+
+  int probe_fwd(inode_t& inode,
+		off_t start_from,
+		off_t *end,
+		Context *onfinish);
 
 
   /***** mapping *****/

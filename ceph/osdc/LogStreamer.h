@@ -11,6 +11,39 @@
  * 
  */
 
+/* LogStreamer
+ *
+ * This class stripes a serial log over objects on the store.  Three logical pointers:
+ *
+ *  write_pos - where we're writing new entries
+ *   read_pos - where we're reading old entires
+ * expire_pos - what is deemed "old" by user
+ *   trimmed_pos - where we're expiring old items
+ *
+ *  trimmed_pos <= expire_pos <= read_pos <= write_pos.
+ *
+ * Often, read_pos <= write_pos (as with MDS log).  During recovery, write_pos is undefined
+ * until the end of the log is discovered.
+ *
+ * A "head" struct at the beginning of the log is used to store metadata at
+ * regular intervals.  The basic invariants include:
+ *
+ *   head.read_pos   <= read_pos   -- the head may "lag", since it's updated lazily.
+ *   head.write_pos  <= write_pos
+ *   head.expire_pos <= expire_pos
+ *   head.trimmed_pos   <= trimmed_pos
+ *
+ * More significantly,
+ *
+ *   head.expire_pos >= trimmed_pos -- this ensures we can find the "beginning" of the log
+ *                                  as last recorded, before it is trimmed.  trimming will
+ *                                  block until a sufficiently current expire_pos is committed.
+ *
+ * To recover log state, we simply start at the last write_pos in the head, and probe the
+ * object sequence sizes until we read the end.  
+ *
+ */
+
 #ifndef __LOGSTREAMER_H
 #define __LOGSTREAMER_H
 
@@ -24,12 +57,49 @@ class Context;
 class Logger;
 
 class LogStreamer {
+
+  // this goes at the head of the log "file".
+  struct Header {
+    off_t trimmed_pos;
+    off_t expire_pos;
+    off_t read_pos;
+    off_t write_pos;
+    Header() : trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0) {}
+  } last_written, last_committed;
+
+  friend ostream& operator<<(ostream& out, Header &h);
+
+
   // me
   inode_t inode;
   Objecter *objecter;
   Filer filer;
 
   Logger *logger;
+
+  // my state
+  static const int STATE_UNDEF = 0;
+  static const int STATE_READHEAD = 1;
+  static const int STATE_PROBING = 2;
+  static const int STATE_ACTIVE = 2;
+
+  int state;
+
+  // header
+  utime_t last_wrote_head;
+  void _finish_write_head(Header &wrote, Context *oncommit);
+  class C_WriteHead;
+  friend class C_WriteHead;
+
+  list<Context*> waitfor_recover;
+  void _finish_read_head(int r, bufferlist& bl);
+  void _finish_probe_end(int r, off_t end);
+  class C_ReadHead;
+  friend class C_ReadHead;
+  class C_ProbeEnd;
+  friend class C_ProbeEnd;
+
+
 
   // writer
   off_t write_pos;       // logical write position, where next entry will go
@@ -66,19 +136,31 @@ class LogStreamer {
   void _finish_read(int r);     // we just read some (read completion callback)
   void _issue_read(off_t len);  // read some more
   void _prefetch();             // maybe read ahead
-
   class C_Read;
   friend class C_Read;
   class C_RetryRead;
   friend class C_RetryRead;
 
+  // trimmer
+  off_t expire_pos;    // what we're allowed to trim to
+  off_t trimming_pos;      // what we've requested to trim through
+  off_t trimmed_pos;   // what has been trimmed
+  map<off_t, list<Context*> > waitfor_trim;
+
+  void _trim_finish(int r, off_t to);
+  class C_Trim;
+  friend class C_Trim;
+
 public:
   LogStreamer(inode_t& inode_, Objecter *obj, Logger *l, off_t fl=0, off_t pff=0) : 
     inode(inode_), objecter(obj), filer(objecter), logger(l),
+    state(STATE_UNDEF),
     write_pos(0), flush_pos(0), ack_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(fl), prefetch_from(pff),
-    read_bl(0), on_read_finish(0), on_readable(0) {
+    read_bl(0), on_read_finish(0), on_readable(0),
+    expire_pos(0), trimming_pos(0), trimmed_pos(0) 
+  {
     // prefetch intelligently.
     // (watch out, this is big if you use big objects or weird striping)
     if (!fetch_len)
@@ -88,23 +170,49 @@ public:
   }
 
   // me
-  void open(Context *onopen);
-  void claim(Context *onclaim, msg_addr_t from);
-  void save(Context *onsave);
+  //void open(Context *onopen);
+  //void claim(Context *onclaim, msg_addr_t from);
 
-  off_t get_write_pos() { return write_pos; }
-  off_t get_read_pos() { return read_pos; }
+  /* reset 
+   *  NOTE: we assume the caller knows/has ensured that any objects 
+   * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
+   * an "erase" method.
+   */
+  void reset() {
+    state = STATE_ACTIVE;
+    write_pos = flush_pos = ack_pos =
+      read_pos = requested_pos = received_pos =
+      expire_pos = trimming_pos = trimmed_pos = inode.layout.period();
+  }
+  void recover(Context *onfinish);
+  void write_head(Context *onsave=0);
+
+  off_t get_write_pos() const { return write_pos; }
+  off_t get_read_pos() const { return read_pos; }
+  off_t get_expire_pos() const { return expire_pos; }
+  off_t get_trimmed_pos() const { return trimmed_pos; }
 
   // write
   off_t append_entry(bufferlist& bl, Context *onsync = 0);
   void flush(Context *onsync = 0);
 
   // read
+  void set_read_pos(off_t p) { 
+    assert(requested_pos == received_pos);  // we can't cope w/ in-progress read right now.
+    assert(read_bl == 0); // etc.
+    read_pos = requested_pos = received_pos = p;
+    read_buf.clear();
+  }
   bool is_readable();
   bool try_read_entry(bufferlist& bl);
   void wait_for_readable(Context *onfinish);
   void read_entry(bufferlist* bl, Context *onfinish);
   
+  // trim
+  void set_expire_pos(off_t ep) { expire_pos = ep; }
+  void trim();
+  //bool is_trimmable() { return trimming_pos < expire_pos; }
+  //void trim(off_t trim_to=0, Context *c=0);
 };
 
 

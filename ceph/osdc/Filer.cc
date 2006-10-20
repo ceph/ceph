@@ -34,6 +34,123 @@
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << "filer "
 
 
+class Filer::C_Probe : public Context {
+public:
+  Filer *filer;
+  Probe *probe;
+  object_t oid;
+  off_t size;
+  C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o), size(0) {}
+  void finish(int r) {
+    filer->_probed(probe, oid, size);    
+  }  
+};
+
+int Filer::probe_fwd(inode_t& inode,
+		     off_t start_from,
+		     off_t *end,
+		     Context *onfinish) 
+{
+  dout(10) << "probe_fwd " << inode.ino << " starting from " << start_from << endl;
+
+  Probe *probe = new Probe(inode, start_from, end, onfinish);
+
+  // period (bytes before we jump unto a new set of object(s))
+  off_t period = inode.layout.object_size * inode.layout.stripe_count;
+
+  // start with 1+ periods.
+  probe->probing_len = period + (period - (start_from % period));
+
+  _probe(probe);
+  return 0;
+}
+
+void Filer::_probe(Probe *probe)
+{
+  dout(10) << "_probe " << probe->inode.ino << " " << probe->from << "~" << probe->probing_len << endl;
+  
+  // map range onto objects
+  file_to_extents(probe->inode, probe->from, probe->probing_len, probe->probing);
+  
+  for (list<ObjectExtent>::iterator p = probe->probing.begin();
+       p != probe->probing.end();
+       p++) {
+    dout(10) << "_probe  probing " << hex << p->oid << dec << endl;
+    C_Probe *c = new C_Probe(this, probe, p->oid);
+    objecter->stat(p->oid, &c->size, c);
+  }
+}
+
+void Filer::_probed(Probe *probe, object_t oid, off_t size)
+{
+  dout(10) << "_probed " << probe->inode.ino << " object " << hex << oid << dec << " has size " << size << endl;
+
+  probe->known[oid] = size;
+  probe->ops.erase(oid);
+
+  if (!probe->ops.empty()) 
+    return;  // waiting for more!
+
+  // analyze!
+  off_t end = 0;
+  for (list<ObjectExtent>::iterator p = probe->probing.begin();
+       p != probe->probing.end();
+       p++) {
+    off_t shouldbe = p->length+p->start;
+    dout(10) << "_probed  " << probe->inode.ino << " object " << hex << p->oid << dec
+	     << " should be " << shouldbe
+	     << ",  actual is " << probe->known[p->oid]
+	     << endl;
+
+    if (probe->known[p->oid] < 0) { end = -1; break; } // error!
+
+    assert(probe->known[p->oid] <= shouldbe);
+    if (shouldbe == probe->known[p->oid]) continue;  // keep going
+   
+    // aha, we found the end!
+    // calc offset into buffer_extent to get distance from probe->from.
+    off_t oleft = probe->known[p->oid] - p->start;
+    for (map<size_t,size_t>::iterator i = p->buffer_extents.begin();
+	 i != p->buffer_extents.end();
+	 i++) {
+      if (oleft <= (off_t)i->second) {
+	end = probe->from + i->first + oleft;
+	dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
+		 << ", from was " << probe->from << ", end is " << end 
+		 << endl;
+	break;
+      }
+      oleft -= i->second;
+    }
+    break;
+  }
+
+  if (end == 0) {
+    // keep probing!
+    dout(10) << "_probed didn't find end, probing further" << endl;
+    off_t period = probe->inode.layout.object_size * probe->inode.layout.stripe_count;
+    probe->from += probe->probing_len;
+    probe->probing_len = period;
+    _probe(probe);
+    return;
+  }
+
+  if (end < 0) {
+    dout(10) << "_probed encountered an error while probing" << endl;
+    *probe->end = -1;
+  } else {
+    // hooray!
+    dout(10) << "_probed found end at " << end << endl;
+    *probe->end = end;
+  }
+
+  // done!  finish and clean up.
+  probe->onfinish->finish(end > 0 ? 0:-1);
+  delete probe->onfinish;
+  delete probe;
+}
+
+
 void Filer::file_to_extents(inode_t inode,
                             off_t offset, size_t len,
                             list<ObjectExtent>& extents) 
