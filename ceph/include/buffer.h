@@ -269,9 +269,9 @@ public:
     void set_offset(unsigned o) { _off = o; }
     void set_length(unsigned l) { _len = l; }
 
-    void append(char *p, unsigned l) {
+    void append(const char *p, unsigned l) {
       assert(_raw);
-      assert(unused_tail_length() <= l);
+      assert(l <= unused_tail_length());
       memcpy(c_str() + _len, p, l);
       _len += l;
     }
@@ -292,6 +292,7 @@ public:
     }
   };
 
+  friend std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
   /*
    * list - the useful bit!
@@ -485,13 +486,10 @@ public:
       if (!_buffers.empty()) {
 	unsigned avail = _buffers.back().unused_tail_length();
 	if (avail > 0) {
-	  //cout << "copying up to " << len << " into tail " << avail << " bytes of tail buf" << endl;
+	  //std::cout << "copying up to " << len << " into tail " << avail << " bytes of tail buf " << _buffers.back() << std::endl;
 	  if (avail > len) 
 	    avail = len;
-	  unsigned blen = _buffers.back().length();
-	  memcpy(_buffers.back().c_str() + blen, data, avail);
-	  blen += avail;
-	  _buffers.back().set_length(blen);
+	  _buffers.back().append(data, avail);
 	  _len += avail;
 	  data += avail;
 	  len -= avail;
@@ -502,7 +500,7 @@ public:
       
       // just add another buffer.
       // alloc a bit extra, in case we do a bunch of appends.   FIXME be smarter!
-      if (alen < 1024) alen = 1024;
+      if (alen < 4096) alen = 4096;
       ptr bp = create(alen);
       bp.set_length(len);
       bp.copy_in(0, len, data);
