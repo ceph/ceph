@@ -100,8 +100,8 @@ void MDLog::write_head(Context *c)
 void MDLog::submit_entry( LogEvent *e,
 			  Context *c ) 
 {
-  dout(5) << "submit_entry at " << num_events << endl;
-
+  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *e << endl;
+  
   if (g_conf.mds_log) {
     // encode it, with event type
     bufferlist bl;
@@ -196,7 +196,7 @@ void MDLog::_did_read()
 
 void MDLog::_trimmed(LogEvent *le) 
 {
-  dout(7) << "  trimmed " << le << endl;
+  dout(7) << "  trimmed " << *le << endl;
   
   assert(le->can_expire(mds));
 
@@ -246,14 +246,14 @@ void MDLog::trim(Context *c)
       // we just read an event.
       if (le->can_expire(mds) == true) {
         // obsolete
-        dout(7) << "trim  obsolete " << le << endl;
+        dout(7) << "trim  obsolete " << *le << endl;
         delete le;
         logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
         // trim!
-        dout(7) << "trim  trimming " << le << endl;
+        dout(7) << "trim  trimming " << *le << endl;
         trimming[le->_end_off] = le;
         le->retire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("retire");
@@ -283,6 +283,89 @@ void MDLog::trim(Context *c)
   std::list<Context*> finished;
   finished.swap(trim_waiters);
   finish_contexts(finished, 0);
+}
+
+
+void MDLog::replay(Context *c)
+{
+  assert(journaler->is_active());
+
+  // start reading at the last known expire point.
+  journaler->set_read_pos( journaler->get_expire_pos() );
+
+  // empty?
+  if (journaler->get_read_pos() == journaler->get_write_pos()) {
+    dout(10) << "replay - journal empty, done." << endl;
+    if (c) {
+      c->finish(0);
+      delete c;
+    }
+    return;
+  }
+
+  // add waiter
+  if (c)
+    waitfor_replay.push_back(c);
+
+  // go!
+  dout(10) << "replay start, from " << journaler->get_read_pos()
+	   << " to " << journaler->get_write_pos() << endl;
+
+  assert(num_events == 0);
+
+  _replay(); 
+}
+
+class C_MDL_Replay : public Context {
+  MDLog *mdlog;
+public:
+  C_MDL_Replay(MDLog *l) : mdlog(l) {}
+  void finish(int r) { mdlog->_replay(); }
+};
+
+void MDLog::_replay()
+{
+  // read what's buffered
+  while (journaler->is_readable() &&
+	 journaler->get_read_pos() < journaler->get_write_pos()) {
+    // read it
+    off_t pos = journaler->get_read_pos();
+    bufferlist bl;
+    bool r = journaler->try_read_entry(bl);
+    assert(r);
+    
+    // unpack event
+    LogEvent *le = LogEvent::decode(bl);
+    num_events++;
+
+    if (le->has_happened(mds)) {
+      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
+	       << " : " << *le << " : already happened" << endl;
+    } else {
+      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
+	       << " : " << *le << " : applying" << endl;
+      le->replay(mds);
+    }
+    delete le;
+  }
+
+  // wait for read?
+  if (journaler->get_read_pos() < journaler->get_write_pos()) {
+    journaler->wait_for_readable(new C_MDL_Replay(this));
+    return;    
+  }
+
+  // done!
+  assert(journaler->get_read_pos() == journaler->get_write_pos());
+  dout(10) << "_replay - complete" << endl;
+
+  // move read pointer _back_ to expire pos, for eventual trimming
+  journaler->set_read_pos(journaler->get_expire_pos());
+
+  // kick waiter(s)
+  list<Context*> ls;
+  ls.swap(waitfor_replay);
+  finish_contexts(ls,0);  
 }
 
 

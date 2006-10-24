@@ -339,8 +339,8 @@ void MDS::boot_recover(int step)
     
   case 4:
     dout(2) << "boot_recover " << step << ": replaying mds log" << endl;
-
-    //break;
+    mdlog->replay(new C_MDS_BootRecover(this, 5));
+    break;
 
   case 5:
     dout(2) << "boot_recover " << step << ": done." << endl;
@@ -493,11 +493,13 @@ void MDS::my_dispatch(Message *m)
   */
 
 
-  // flush log to disk after every op.  for now.
-  mdlog->flush();
+  if (is_active()) {
+    // flush log to disk after every op.  for now.
+    mdlog->flush();
 
-  // trim cache
-  mdcache->trim();
+    // trim cache
+    mdcache->trim();
+  }
   
   // finish any triggered contexts
   if (finished_queue.size()) {
@@ -507,7 +509,6 @@ void MDS::my_dispatch(Message *m)
     assert(finished_queue.empty());
     finish_contexts(ls);
   }
-
 
   
 
@@ -525,7 +526,8 @@ void MDS::my_dispatch(Message *m)
   // periodic crap (1-second resolution)
   static utime_t last_log = g_clock.recent_now();
   utime_t now = g_clock.recent_now();
-  if (last_log.sec() != now.sec()) {
+  if (is_active() && 
+      last_log.sec() != now.sec()) {
 
     // log
     last_log = now;

@@ -29,7 +29,7 @@
 #define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".idalloc: "
 
 
-idno_t IdAllocator::alloc_id() 
+idno_t IdAllocator::alloc_id(bool replay) 
 {
   assert(is_active());
   
@@ -41,12 +41,13 @@ idno_t IdAllocator::alloc_id()
   version++;
   
   // log it
-  mds->mdlog->submit_entry(new EAlloc(IDTYPE_INO, id, EALLOC_EV_ALLOC, version));
+  if (!replay)
+    mds->mdlog->submit_entry(new EAlloc(IDTYPE_INO, id, EALLOC_EV_ALLOC, version));
   
   return id;
 }
 
-void IdAllocator::reclaim_id(idno_t id) 
+void IdAllocator::reclaim_id(idno_t id, bool replay) 
 {
   assert(is_active());
   
@@ -55,7 +56,8 @@ void IdAllocator::reclaim_id(idno_t id)
 
   version++;
   
-  mds->mdlog->submit_entry(new EAlloc(IDTYPE_INO, id, EALLOC_EV_FREE, version));
+  if (!replay)
+    mds->mdlog->submit_entry(new EAlloc(IDTYPE_INO, id, EALLOC_EV_FREE, version));
 }
 
 
@@ -63,41 +65,54 @@ void IdAllocator::reclaim_id(idno_t id)
 class C_ID_Save : public Context {
   IdAllocator *ida;
   version_t version;
-  Context *onfinish;
 public:
-  C_ID_Save(IdAllocator *i, version_t v, Context *c) : ida(i), version(v), onfinish(c) {}
+  C_ID_Save(IdAllocator *i, version_t v) : ida(i), version(v) {}
   void finish(int r) {
-    ida->save_2(version, onfinish);
+    ida->save_2(version);
   }
 };
 
-void IdAllocator::save(Context *onfinish)
+void IdAllocator::save(Context *onfinish, version_t v)
 {
+  if (v > 0 && v <= committing_version) {
+    dout(10) << "save v " << version << " - already saving "
+	     << committing_version << " >= needed " << v << endl;
+    waitfor_save[v].push_back(onfinish);
+    return;
+  }
+  
   dout(10) << "save v " << version << endl;
   assert(is_active());
-
+  
   bufferlist bl;
 
   bl.append((char*)&version, sizeof(version));
   ::_encode(free.m, bl);
 
+  committing_version = version;
+
+  waitfor_save[version].push_back(onfinish);
+
   // write (async)
   mds->filer->write(inode,
                     0, bl.length(), bl,
                     0,
-		    0, new C_ID_Save(this, version, onfinish));
+		    0, new C_ID_Save(this, version));
 }
 
-void IdAllocator::save_2(version_t v, Context *onfinish)
+void IdAllocator::save_2(version_t v)
 {
   dout(10) << "save_2 v " << v << endl;
-    
+  
   committed_version = v;
-
-  if (onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
+  
+  list<Context*> ls;
+  while (!waitfor_save.empty()) {
+    if (waitfor_save.begin()->first > v) break;
+    ls.splice(ls.end(), waitfor_save.begin()->second);
+    waitfor_save.erase(waitfor_save.begin());
   }
+  finish_contexts(ls,0);
 }
 
 

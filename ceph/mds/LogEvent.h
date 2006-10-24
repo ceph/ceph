@@ -48,6 +48,11 @@ class LogEvent {
   static LogEvent *decode(bufferlist &bl);
 
 
+  virtual void print(ostream& out) { 
+    out << "event(" << _type << ")";
+  }
+
+
   /*** live journal ***/
 
   /* obsolete() - is this entry committed to primary store, such that
@@ -74,8 +79,13 @@ class LogEvent {
 
   /* replay() - replay given event
    */
-  virtual void replay(MDS *m, Context *c) { assert(0); }
+  virtual void replay(MDS *m) { assert(0); }
 
 };
+
+inline ostream& operator<<(ostream& out, LogEvent& le) {
+  le.print(out);
+  return out;
+}
 
 #endif

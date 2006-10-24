@@ -35,22 +35,24 @@ class IdAllocator {
   //static const int STATE_COMMITTING = 3;
   int state;
 
-  version_t version, committed_version;
+  version_t version, committing_version, committed_version;
 
   interval_set<idno_t> free;   // unused ids
   
+  map<version_t, list<Context*> > waitfor_save;
+
  public:
   IdAllocator(MDS *m, inode_t i) :
     mds(m),
     inode(i),
     state(STATE_UNDEF),
-    version(0), committed_version(0)
+    version(0), committing_version(0), committed_version(0)
   {
   }
 
   // alloc or reclaim ids
-  idno_t alloc_id();
-  void reclaim_id(idno_t id);
+  idno_t alloc_id(bool replay=false);
+  void reclaim_id(idno_t id, bool replay=false);
 
   version_t get_version() { return version; }
   version_t get_committed_version() { return committed_version; }
@@ -61,8 +63,8 @@ class IdAllocator {
   bool is_opening() { return state == STATE_OPENING; }
 
   void reset();
-  void save(Context *onfinish=0);
-  void save_2(version_t v, Context *onfinish);
+  void save(Context *onfinish=0, version_t need=0);
+  void save_2(version_t v);
 
   void shutdown() {
     if (is_active()) save(0);

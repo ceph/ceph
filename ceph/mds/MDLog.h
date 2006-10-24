@@ -50,6 +50,7 @@ class MDLog {
 
   inode_t log_inode;
   Journaler *journaler;
+
   
   //hash_map<LogEvent*>  trimming;       // events currently being trimmed
   map<off_t, LogEvent*> trimming;
@@ -61,6 +62,8 @@ class MDLog {
 
   Logger *logger;
   
+  list<Context*> waitfor_replay;
+
  public:
   MDLog(MDS *m);
   ~MDLog();
@@ -80,6 +83,9 @@ class MDLog {
   void reset();  // fresh, empty log! 
   void open(Context *onopen);
   void write_head(Context *onfinish);
+
+  void replay(Context *onfinish);
+  void _replay();
 };
 
 #endif
