@@ -5,6 +5,10 @@
 
 - how to get usage feedback to monitor?
 
+- change messenger entity_inst_t
+ - no more rank!  make it a uniquish nonce?
+
+
 
 monitor
 ?- monitor user lib that handles resending, redirection of mon requests.

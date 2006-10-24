@@ -261,43 +261,6 @@ class CLock {
     assert(0);
     return 0;
   }
-  /*
-  int caps_allowed_soon(bool auth) {
-    if (auth)
-      switch (state) {
-      case LOCK_GSYNCM:
-      case LOCK_GSYNCL:
-      case LOCK_SYNC:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
-      case LOCK_GMIXEDR:
-      case LOCK_GMIXEDL:
-      case LOCK_MIXED:
-        return CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_LAZYIO;
-      case LOCK_GLONERM:
-      case LOCK_GLONERR:
-      case LOCK_LONER:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_WR | CAP_FILE_WREXTEND | CAP_FILE_WRBUFFER | CAP_FILE_LAZYIO;
-      case LOCK_LOCK:
-      case LOCK_GLOCKR:
-      case LOCK_GLOCKL:
-      case LOCK_GLOCKM:
-        return 0;
-      }
-    else
-      switch (state) {
-      case LOCK_SYNC:
-        return CAP_FILE_RDCACHE | CAP_FILE_RD | CAP_FILE_LAZYIO;
-      case LOCK_GMIXEDR:
-      case LOCK_MIXED:
-        return CAP_FILE_RD | CAP_FILE_LAZYIO;
-      case LOCK_LOCK:
-      case LOCK_GLOCKR:
-        return 0;
-      }
-    assert(0);
-    return 0;
-  }
-  */
 
   friend class MDCache;
   friend class Migrator;

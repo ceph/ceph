@@ -35,51 +35,46 @@ class MDS;
 class LogEvent {
  private:
   int _type;
+  off_t _end_off;
+  friend class MDLog;
 
  public:
-  LogEvent(int t) : _type(t) { }
+  LogEvent(int t) : _type(t), _end_off(0) { }
   virtual ~LogEvent() { }
-  
-  int get_type() { return _type; }
 
+  // encoding
   virtual void encode_payload(bufferlist& bl) = 0;
   virtual void decode_payload(bufferlist& bl, int& off) = 0;
-
-  void encode(bufferlist& bl) {
-    // type
-    assert(_type > 0);
-    bl.append((char*)&_type, sizeof(_type));
-
-    // payload
-    encode_payload(bl);
-
-    /*// HACK: pad payload to match md log layout?
-    int elen = bl.length() - off + sizeof(_type);
-    if (elen % g_conf.mds_log_pad_entry > 0) {
-      int add = g_conf.mds_log_pad_entry - (elen % g_conf.mds_log_pad_entry);
-      //cout << "elen " << elen << "  adding " << add << endl;
-      buffer *b = new buffer(add);
-      memset(b->c_str(), 0, add);
-      bufferptr bp(b);
-      bl.append(bp);
-    } 
-
-    len = bl.length() - off - sizeof(len);
-    bl.copy_in(off, sizeof(len), (char*)&len);
-    */
-  }
-
   static LogEvent *decode(bufferlist &bl);
-  
-  // ...
-  virtual bool obsolete(MDS *m) {
+
+
+  /*** live journal ***/
+
+  /* obsolete() - is this entry committed to primary store, such that
+   *   we can expire it from the journal?
+   */
+  virtual bool can_expire(MDS *m) {
     return true;
   }
-
+  
+  /* retire() - prod MDS into committing hte relevant state so that this
+   *   entry can be expired from the jorunal.
+   */
   virtual void retire(MDS *m, Context *c) {
     c->finish(0);
     delete c;
   }
+
+  
+  /*** recovery ***/
+
+  /* has_happened() - true if this event has already been applied.
+   */
+  virtual bool has_happened(MDS *m) { return true; }
+
+  /* replay() - replay given event
+   */
+  virtual void replay(MDS *m, Context *c) { assert(0); }
 
 };
 

@@ -11,7 +11,7 @@
  * 
  */
 
-#include "LogStreamer.h"
+#include "Journaler.h"
 
 #include "include/Context.h"
 #include "common/Logger.h"
@@ -19,14 +19,24 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".logstreamer "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".logstreamer "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cout << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".journaler "
+#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) cerr << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".journaler "
 
+
+
+void Journaler::reset()
+{
+  dout(1) << "reset to blank journal" << endl;
+  state = STATE_ACTIVE;
+  write_pos = flush_pos = ack_pos =
+    read_pos = requested_pos = received_pos =
+    expire_pos = trimming_pos = trimmed_pos = inode.layout.period();
+}
 
 
 /***************** HEADER *******************/
 
-ostream& operator<<(ostream& out, LogStreamer::Header &h) 
+ostream& operator<<(ostream& out, Journaler::Header &h) 
 {
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos
@@ -35,27 +45,27 @@ ostream& operator<<(ostream& out, LogStreamer::Header &h)
 	     << ")";
 }
 
-class LogStreamer::C_ReadHead : public Context {
-  LogStreamer *ls;
+class Journaler::C_ReadHead : public Context {
+  Journaler *ls;
 public:
   bufferlist bl;
-  C_ReadHead(LogStreamer *l) : ls(l) {}
+  C_ReadHead(Journaler *l) : ls(l) {}
   void finish(int r) {
     ls->_finish_read_head(r, bl);
   }
 };
 
-class LogStreamer::C_ProbeEnd : public Context {
-  LogStreamer *ls;
+class Journaler::C_ProbeEnd : public Context {
+  Journaler *ls;
 public:
   off_t end;
-  C_ProbeEnd(LogStreamer *l) : ls(l), end(-1) {}
+  C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
   void finish(int r) {
     ls->_finish_probe_end(r, end);
   }
 };
 
-void LogStreamer::recover(Context *onread) 
+void Journaler::recover(Context *onread) 
 {
   assert(state != STATE_ACTIVE);
 
@@ -73,7 +83,7 @@ void LogStreamer::recover(Context *onread)
   filer.read(inode, 0, sizeof(Header), &fin->bl, fin);
 }
 
-void LogStreamer::_finish_read_head(int r, bufferlist& bl)
+void Journaler::_finish_read_head(int r, bufferlist& bl)
 {
   assert(state == STATE_READHEAD);
 
@@ -103,7 +113,7 @@ void LogStreamer::_finish_read_head(int r, bufferlist& bl)
   filer.probe_fwd(inode, h.write_pos, &fin->end, fin);
 }
 
-void LogStreamer::_finish_probe_end(int r, off_t end)
+void Journaler::_finish_probe_end(int r, off_t end)
 {
   assert(r >= 0);
   assert(end >= write_pos);
@@ -124,18 +134,18 @@ void LogStreamer::_finish_probe_end(int r, off_t end)
 
 // WRITING
 
-class LogStreamer::C_WriteHead : public Context {
+class Journaler::C_WriteHead : public Context {
 public:
-  LogStreamer *ls;
+  Journaler *ls;
   Header h;
   Context *oncommit;
-  C_WriteHead(LogStreamer *l, Header& h_, Context *c) : ls(l), h(h_), oncommit(c) {}
+  C_WriteHead(Journaler *l, Header& h_, Context *c) : ls(l), h(h_), oncommit(c) {}
   void finish(int r) {
     ls->_finish_write_head(h, oncommit);
   }
 };
 
-void LogStreamer::write_head(Context *oncommit)
+void Journaler::write_head(Context *oncommit)
 {
   assert(state == STATE_ACTIVE);
   last_written.trimmed_pos = trimmed_pos;
@@ -152,7 +162,7 @@ void LogStreamer::write_head(Context *oncommit)
 	      0, new C_WriteHead(this, last_written, oncommit));
 }
 
-void LogStreamer::_finish_write_head(Header &wrote, Context *oncommit)
+void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 {
   dout(10) << "_finish_write_head " << wrote << endl;
   last_committed = wrote;
@@ -167,15 +177,15 @@ void LogStreamer::_finish_write_head(Header &wrote, Context *oncommit)
 
 /***************** WRITING *******************/
 
-class LogStreamer::C_Flush : public Context {
-  LogStreamer *ls;
+class Journaler::C_Flush : public Context {
+  Journaler *ls;
   off_t start;
 public:
-  C_Flush(LogStreamer *l, off_t s) : ls(l), start(s) {}
+  C_Flush(Journaler *l, off_t s) : ls(l), start(s) {}
   void finish(int r) { ls->_finish_flush(r, start); }
 };
 
-void LogStreamer::_finish_flush(int r, off_t start)
+void Journaler::_finish_flush(int r, off_t start)
 {
   assert(r>=0);
 
@@ -213,7 +223,7 @@ void LogStreamer::_finish_flush(int r, off_t start)
 }
 
 
-off_t LogStreamer::append_entry(bufferlist& bl, Context *onsync)
+off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
 {
   dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(size_t)) << endl;
   
@@ -231,7 +241,7 @@ off_t LogStreamer::append_entry(bufferlist& bl, Context *onsync)
 }
 
 
-void LogStreamer::flush(Context *onsync)
+void Journaler::flush(Context *onsync)
 {
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
@@ -274,21 +284,21 @@ void LogStreamer::flush(Context *onsync)
 /***************** READING *******************/
 
 
-class LogStreamer::C_Read : public Context {
-  LogStreamer *ls;
+class Journaler::C_Read : public Context {
+  Journaler *ls;
 public:
-  C_Read(LogStreamer *l) : ls(l) {}
+  C_Read(Journaler *l) : ls(l) {}
   void finish(int r) { ls->_finish_read(r); }
 };
 
-class LogStreamer::C_RetryRead : public Context {
-  LogStreamer *ls;
+class Journaler::C_RetryRead : public Context {
+  Journaler *ls;
 public:
-  C_RetryRead(LogStreamer *l) : ls(l) {}
+  C_RetryRead(Journaler *l) : ls(l) {}
   void finish(int r) { ls->is_readable(); }  // this'll kickstart.
 };
 
-void LogStreamer::_finish_read(int r)
+void Journaler::_finish_read(int r)
 {
   assert(r>=0);
 
@@ -334,7 +344,7 @@ void LogStreamer::_finish_read(int r)
  * then discover we need even more for an especially large entry.
  * i don't think that circumstance will arise particularly often.
  */
-void LogStreamer::_issue_read(off_t len)
+void Journaler::_issue_read(off_t len)
 {
   if (_is_reading()) {
     dout(10) << "_issue_read " << len << " waiting, already reading " 
@@ -371,7 +381,7 @@ void LogStreamer::_issue_read(off_t len)
   requested_pos += len;
 }
 
-void LogStreamer::_prefetch()
+void Journaler::_prefetch()
 {
   // prefetch?
   off_t left = requested_pos - read_pos;
@@ -385,7 +395,7 @@ void LogStreamer::_prefetch()
 }
 
 
-void LogStreamer::read_entry(bufferlist *bl, Context *onfinish)
+void Journaler::read_entry(bufferlist *bl, Context *onfinish)
 {
   // only one read at a time!
   assert(read_bl == 0);
@@ -423,7 +433,7 @@ void LogStreamer::read_entry(bufferlist *bl, Context *onfinish)
  *  return true if next entry is ready.
  *  kickstart read as necessary.
  */
-bool LogStreamer::is_readable() 
+bool Journaler::is_readable() 
 {
   // anything to read?
   if (read_pos == write_pos) return false;
@@ -453,7 +463,7 @@ bool LogStreamer::is_readable()
  *  read entry into bl if it's ready.
  *  otherwise, do nothing.  (well, we'll start fetching it for good measure.)
  */
-bool LogStreamer::try_read_entry(bufferlist& bl)
+bool Journaler::try_read_entry(bufferlist& bl)
 {
   if (!is_readable()) {  // this may start a read. 
     dout(10) << "try_read_entry at " << read_pos << " not readable" << endl;
@@ -479,7 +489,7 @@ bool LogStreamer::try_read_entry(bufferlist& bl)
   return true;
 }
 
-void LogStreamer::wait_for_readable(Context *onreadable)
+void Journaler::wait_for_readable(Context *onreadable)
 {
   dout(10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << endl;
   assert(!is_readable());
@@ -493,17 +503,17 @@ void LogStreamer::wait_for_readable(Context *onreadable)
 /***************** TRIMMING *******************/
 
 
-class LogStreamer::C_Trim : public Context {
-  LogStreamer *ls;
+class Journaler::C_Trim : public Context {
+  Journaler *ls;
   off_t to;
 public:
-  C_Trim(LogStreamer *l, off_t t) : ls(l), to(t) {}
+  C_Trim(Journaler *l, off_t t) : ls(l), to(t) {}
   void finish(int r) {
     ls->_trim_finish(r, to);
   }
 };
 
-void LogStreamer::trim()
+void Journaler::trim()
 {
   off_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % inode.layout.period();
@@ -529,7 +539,7 @@ void LogStreamer::trim()
   trimming_pos = trim_to;  
 }
 
-void LogStreamer::_trim_finish(int r, off_t to)
+void Journaler::_trim_finish(int r, off_t to)
 {
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
 	   << ", trimmed/trimming/expire now "

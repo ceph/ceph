@@ -74,7 +74,24 @@ void Monitor::shutdown()
     store->umount();
     delete store;
   }
+  
+  // stop osds.
+  for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
+       it != osdmon->osdmap.get_osds().end();
+       it++) {
+    if (osdmon->osdmap.is_down(*it)) continue;
+    dout(10) << "sending shutdown to osd" << *it << endl;
+    messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
+			    MSG_ADDR_OSD(*it), osdmon->osdmap.get_inst(*it));
+  }
+  
+  // monitors too.
+  for (int i=0; i<monmap->num_mon; i++)
+    if (i != whoami)
+      messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
+			      MSG_ADDR_MON(i), monmap->get_inst(i));
 
+  // clean up
   if (monmap) delete monmap;
   if (osdmon) delete osdmon;
   if (mdsmon) delete mdsmon;
@@ -110,7 +127,14 @@ void Monitor::dispatch(Message *m)
       break;
 
     case MSG_SHUTDOWN:
-      handle_shutdown(m);
+      if (m->get_source().is_mds()) {
+	mdsmon->dispatch(m);
+	if (mdsmon->mdsmap.get_num_mds() == 0) 
+	  shutdown();
+      }
+      else if (m->get_source().is_osd()) {
+	osdmon->dispatch(m);
+      }
       break;
 
 

@@ -98,7 +98,7 @@ public:
       ::_decode(new_overload, bl, off);
     }
 
-    Incremental(epoch_t e=0) : epoch(e) {}
+    Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
   };
 
 private:

@@ -23,6 +23,7 @@
 #include <time.h>
 #include <math.h>
 
+#include "Mutex.h"
 
 
 // --------
@@ -35,6 +36,7 @@ class utime_t {
   struct timeval& timeval()  { return tv; }
   friend class Clock;
 
+ 
  public:
   void normalize() {
     if (tv.tv_usec > 1000*1000) {
@@ -131,6 +133,8 @@ class Clock {
   utime_t last;
   utime_t zero;
 
+  Mutex lock;
+
  public:
   Clock() {
     // set offset
@@ -139,8 +143,9 @@ class Clock {
 
   // real time.
   utime_t real_now() {
-    utime_t realnow;
-    gettimeofday(&realnow.timeval(), NULL);
+    utime_t realnow = now();
+    realnow += zero;
+    //gettimeofday(&realnow.timeval(), NULL);
     return realnow;
   }
 
@@ -149,6 +154,7 @@ class Clock {
     gettimeofday(&zero.timeval(), NULL);
   }
   utime_t now() {
+    //lock.Lock();  
     utime_t n;
     gettimeofday(&n.timeval(), NULL);
     n -= zero;
@@ -157,6 +163,7 @@ class Clock {
       n = last;    // clock jumped backwards!
     } else
       last = n;
+    //lock.Unlock();
     return n;
   }
   utime_t recent_now() {

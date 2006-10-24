@@ -252,14 +252,14 @@ void CInode::mark_dirty() {
 
 // new state encoders
 
-void CInode::encode_file_state(crope& r) 
+void CInode::encode_file_state(bufferlist& bl) 
 {
-  r.append((char*)&inode.size, sizeof(inode.size));
-  r.append((char*)&inode.mtime, sizeof(inode.mtime));
-  r.append((char*)&inode.atime, sizeof(inode.atime));  // ??
+  bl.append((char*)&inode.size, sizeof(inode.size));
+  bl.append((char*)&inode.mtime, sizeof(inode.mtime));
+  bl.append((char*)&inode.atime, sizeof(inode.atime));  // ??
 }
 
-void CInode::decode_file_state(crope& r, int& off)
+void CInode::decode_file_state(bufferlist& r, int& off)
 {
   r.copy(off, sizeof(inode.size), (char*)&inode.size);
   off += sizeof(inode.size);
@@ -288,7 +288,7 @@ void CInode::decode_merge_file_state(crope& r, int& off)
 }
 */
 
-void CInode::encode_hard_state(crope& r)
+void CInode::encode_hard_state(bufferlist& r)
 {
   r.append((char*)&inode.mode, sizeof(inode.mode));
   r.append((char*)&inode.uid, sizeof(inode.uid));
@@ -296,7 +296,7 @@ void CInode::encode_hard_state(crope& r)
   r.append((char*)&inode.ctime, sizeof(inode.ctime));
 }
 
-void CInode::decode_hard_state(crope& r, int& off)
+void CInode::decode_hard_state(bufferlist& r, int& off)
 {
   r.copy(off, sizeof(inode.mode), (char*)&inode.mode);
   off += sizeof(inode.mode);
@@ -311,54 +311,28 @@ void CInode::decode_hard_state(crope& r, int& off)
 
 // old state encoders
 
-crope CInode::encode_basic_state()
+/*
+void CInode::encode_basic_state(bufferlist& r)
 {
-  crope r;
-
   // inode
   r.append((char*)&inode, sizeof(inode));
-  
-  // cached_by
-  int n = cached_by.size();
-  r.append((char*)&n, sizeof(int));
-  for (set<int>::iterator it = cached_by.begin(); 
-       it != cached_by.end();
-       it++) {
-    int mds = *it;
-    r.append((char*)&mds, sizeof(mds));
-    int nonce = get_cached_by_nonce(mds);
-    r.append((char*)&nonce, sizeof(nonce));
-  }
-
-  return r;
+  ::_encode(cached_by, r);
+  ::_encode(cached_by_nonce, r);
 }
  
-int CInode::decode_basic_state(crope r, int off)
+void CInode::decode_basic_state(bufferlist& r, int& off)
 {
   // inode
   r.copy(0,sizeof(inode_t), (char*)&inode);
   off += sizeof(inode_t);
-    
-  // cached_by --- although really this is rep_by,
-  //               since we're non-authoritative  (?????)
-  int n;
-  r.copy(off, sizeof(int), (char*)&n);
-  off += sizeof(int);
-  cached_by.clear();
-  for (int i=0; i<n; i++) {
-    // mds
-    int mds;
-    r.copy(off, sizeof(int), (char*)&mds);
-    off += sizeof(int);
-    int nonce;
-    r.copy(off, sizeof(int), (char*)&nonce);
-    off += sizeof(int);
-    cached_by_add(mds, nonce);
-  }
 
-  return off;
+  bool empty = cached_by.empty();
+  ::_decode(cached_by, r, off);
+  ::_decode(cached_by_nonce, r, off);
+  if (!empty)
+    get(CINODE_PIN_CACHED);
 }
-
+*/
 
 
 // waiting

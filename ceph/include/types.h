@@ -150,8 +150,10 @@ struct FileLayout {
   int stripe_count;    // over this many objects
   int object_size;     // until objects are this big, then use a new set of objects.
 
-  // osdlocal
-  int osd;
+  // period = bytes before i start on a new set of objects.
+  int period() { return object_size * stripe_count; }
+
+  int osd;    // osdlocal
 
   int num_rep;  // replication
 

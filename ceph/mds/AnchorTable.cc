@@ -158,7 +158,7 @@ void AnchorTable::destroy(inodeno_t ino)
  * messages 
  */
 
-void AnchorTable::proc_message(Message *m)
+void AnchorTable::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case MSG_MDS_ANCHORREQUEST:
@@ -288,6 +288,7 @@ public:
   }
   void finish(int r) {
     size_t size = 0;
+    assert(bl.length() >= sizeof(size));
     bl.copy(0, sizeof(size), (char*)&size);
     cout << "r is " << r << " size is " << size << endl;
     if (r > 0 && size > 0) {

@@ -21,8 +21,8 @@
 // *******************
 
 #undef dout
-#define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs."
-#define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs."
+#define dout(x) if (x <= g_conf.debug_ebofs) cout << "ebofs(" << dev.get_device_name() << ")."
+#define derr(x) if (x <= g_conf.debug_ebofs) cerr << "ebofs(" << dev.get_device_name() << ")."
 
 char *nice_blocks(block_t b) 
 {

@@ -38,7 +38,7 @@ class EDirUpdate : public LogEvent {
   }
 
   
-  virtual bool obsolete(MDS *mds) {
+  virtual bool can_expire(MDS *mds) {
 	// am i obsolete?
 	CInode *in = mds->mdcache->get_inode(dirino);
 	if (!in) return true;

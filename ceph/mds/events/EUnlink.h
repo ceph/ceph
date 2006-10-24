@@ -42,7 +42,7 @@ class EUnlink : public LogEvent {
 	off += dname.length() + 1;
   }
   
-  virtual bool obsolete(MDS *mds) {
+  virtual bool can_expire(MDS *mds) {
 	// am i obsolete?
 	CInode *idir = mds->mdcache->get_inode(dir_ino);
 	if (!idir) return true;

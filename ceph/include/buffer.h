@@ -247,7 +247,7 @@ public:
     char *c_str() { assert(_raw); return _raw->data + _off; }
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
-    unsigned unused_tail_length() const { return (_off+_len) - _raw->len; }
+    unsigned unused_tail_length() const { return _raw->len - (_off+_len); }
 
     const char *raw_c_str() const { assert(_raw); return _raw->data; }
     unsigned raw_length() const { assert(_raw); return _raw->len; }

@@ -11,9 +11,9 @@
  * 
  */
 
-/* LogStreamer
+/* Journaler
  *
- * This class stripes a serial log over objects on the store.  Three logical pointers:
+ * This class stripes a serial log over objects on the store.  Four logical pointers:
  *
  *  write_pos - where we're writing new entries
  *   read_pos - where we're reading old entires
@@ -42,10 +42,12 @@
  * To recover log state, we simply start at the last write_pos in the head, and probe the
  * object sequence sizes until we read the end.  
  *
+ * Head struct is stored in the first object.  Actual journal starts after layout.period() bytes.
+ *
  */
 
-#ifndef __LOGSTREAMER_H
-#define __LOGSTREAMER_H
+#ifndef __JOURNALER_H
+#define __JOURNALER_H
 
 #include "Objecter.h"
 #include "Filer.h"
@@ -56,7 +58,7 @@
 class Context;
 class Logger;
 
-class LogStreamer {
+class Journaler {
 
   // this goes at the head of the log "file".
   struct Header {
@@ -152,7 +154,7 @@ class LogStreamer {
   friend class C_Trim;
 
 public:
-  LogStreamer(inode_t& inode_, Objecter *obj, Logger *l, off_t fl=0, off_t pff=0) : 
+  Journaler(inode_t& inode_, Objecter *obj, Logger *l, off_t fl=0, off_t pff=0) : 
     inode(inode_), objecter(obj), filer(objecter), logger(l),
     state(STATE_UNDEF),
     write_pos(0), flush_pos(0), ack_pos(0),
@@ -178,12 +180,7 @@ public:
    * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
    * an "erase" method.
    */
-  void reset() {
-    state = STATE_ACTIVE;
-    write_pos = flush_pos = ack_pos =
-      read_pos = requested_pos = received_pos =
-      expire_pos = trimming_pos = trimmed_pos = inode.layout.period();
-  }
+  void reset();
   void recover(Context *onfinish);
   void write_head(Context *onsave=0);
 

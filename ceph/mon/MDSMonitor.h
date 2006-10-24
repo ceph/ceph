@@ -55,6 +55,7 @@ class MDSMonitor : public Dispatcher {
   void handle_mds_boot(class MMDSBoot *m);
   void handle_mds_failure(class MMDSFailure *m);
   void handle_mds_getmap(class MMDSGetMap *m);
+  void handle_mds_shutdown(Message *m);
 
  public:
   MDSMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l) {

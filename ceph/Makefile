@@ -30,8 +30,10 @@ EBOFS_OBJS= \
 
 MDS_OBJS= \
 	mds/MDS.o\
+	mds/Server.o\
 	mds/MDCache.o\
 	mds/Migrator.o\
+	mds/Renamer.o\
 	mds/MDBalancer.o\
 	mds/CDentry.o\
 	mds/CDir.o\
@@ -50,10 +52,10 @@ OSD_OBJS= \
 	osd/OSD.o
 
 OSDC_OBJS= \
-	osdc/Filer.o\
-	osdc/ObjectCacher.o\
 	osdc/Objecter.o\
-	osdc/LogStreamer.o
+	osdc/ObjectCacher.o\
+	osdc/Filer.o\
+	osdc/Journaler.o
 
 MON_OBJS= \
 	mon/Monitor.o\

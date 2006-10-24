@@ -38,7 +38,7 @@ class EInodeUpdate : public LogEvent {
   }
 
   
-  virtual bool obsolete(MDS *mds) {
+  bool can_expire(MDS *mds) {
 	// am i obsolete?
 	CInode *in = mds->mdcache->get_inode(inode.ino);
 

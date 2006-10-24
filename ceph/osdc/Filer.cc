@@ -31,7 +31,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << "filer "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) cout << g_clock.now() << " " << objecter->messenger->get_myaddr() << ".filer "
 
 
 class Filer::C_Probe : public Context {
@@ -51,23 +51,25 @@ int Filer::probe_fwd(inode_t& inode,
 		     off_t *end,
 		     Context *onfinish) 
 {
-  dout(10) << "probe_fwd " << inode.ino << " starting from " << start_from << endl;
+  dout(10) << "probe_fwd " << hex << inode.ino << dec << " starting from " << start_from << endl;
 
   Probe *probe = new Probe(inode, start_from, end, onfinish);
 
   // period (bytes before we jump unto a new set of object(s))
-  off_t period = inode.layout.object_size * inode.layout.stripe_count;
+  off_t period = inode.layout.period();
 
   // start with 1+ periods.
-  probe->probing_len = period + (period - (start_from % period));
-
+  probe->probing_len = period;
+  if (start_from % period) 
+    probe->probing_len += period - (start_from % period);
+  
   _probe(probe);
   return 0;
 }
 
 void Filer::_probe(Probe *probe)
 {
-  dout(10) << "_probe " << probe->inode.ino << " " << probe->from << "~" << probe->probing_len << endl;
+  dout(10) << "_probe " << hex << probe->inode.ino << dec << " " << probe->from << "~" << probe->probing_len << endl;
   
   // map range onto objects
   file_to_extents(probe->inode, probe->from, probe->probing_len, probe->probing);
@@ -75,9 +77,9 @@ void Filer::_probe(Probe *probe)
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
-    dout(10) << "_probe  probing " << hex << p->oid << dec << endl;
+    dout(10) << "_probe  probing " << p->oid << endl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    objecter->stat(p->oid, &c->size, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, c);
   }
 }
 
@@ -86,6 +88,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
   dout(10) << "_probed " << probe->inode.ino << " object " << hex << oid << dec << " has size " << size << endl;
 
   probe->known[oid] = size;
+  assert(probe->ops.count(oid));
   probe->ops.erase(oid);
 
   if (!probe->ops.empty()) 
@@ -99,7 +102,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
     off_t shouldbe = p->length+p->start;
     dout(10) << "_probed  " << probe->inode.ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
-	     << ",  actual is " << probe->known[p->oid]
+	     << ", actual is " << probe->known[p->oid]
 	     << endl;
 
     if (probe->known[p->oid] < 0) { end = -1; break; } // error!

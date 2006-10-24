@@ -41,16 +41,15 @@ using namespace __gnu_cxx;
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
-#define MDS_PORT_CACHE    101
-#define MDS_PORT_STORE    102
-#define MDS_PORT_BALANCER 103
-#define MDS_PORT_MIGRATOR 104
+#define MDS_PORT_CACHE    2
+#define MDS_PORT_STORE    3
+#define MDS_PORT_BALANCER 4
+#define MDS_PORT_MIGRATOR 5
+#define MDS_PORT_RENAMER  6
 
-#define MDS_PORT_ANCHORCLIENT 200
-#define MDS_PORT_ANCHORMGR    201
+#define MDS_PORT_ANCHORCLIENT 10
+#define MDS_PORT_ANCHORMGR    11
 
-#define MDS_PORT_OSDMON    300
-#define MDS_PORT_PGMGR     301
 
 #define MDS_INO_ROOT              1
 #define MDS_INO_PGTABLE           2
@@ -60,9 +59,6 @@ using namespace __gnu_cxx;
 #define MDS_INO_ANCHORTABLE       0x400
 #define MDS_INO_BASE              0x1000
 
-#define MDS_MKFS_FAST      1   // fake new root inode+dir
-#define MDS_MKFS_FULL      2   // wipe osd's too
-
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
@@ -71,37 +67,33 @@ using namespace __gnu_cxx;
 
 class filepath;
 
+class MDSMap;
 class OSDMap;
 class Objecter;
 class Filer;
 
+class Server;
 class AnchorTable;
 class AnchorClient;
-class CInode;
-class CDir;
-class CDentry;
 class MDCache;
 class MDStore;
 class MDLog;
+class MDBalancer;
+class IdAllocator;
+
+class CInode;
+class CDir;
+class CDentry;
+
 class Messenger;
 class Message;
+
 class MClientRequest;
 class MClientReply;
 class MHashReaddir;
 class MHashReaddirReply;
-class MDBalancer;
-class LogEvent;
-class IdAllocator;
-//class PGManager;
 
 
-// types
-
-class MDS;
-class MDSMap;
-
-void split_path(string& path, 
-                vector<string>& bits);
 
 
 class MDS : public Dispatcher {
@@ -111,34 +103,73 @@ class MDS : public Dispatcher {
  protected:
   int          whoami;
 
-  MDSMap    *mdsmap;
  public:
+  Messenger    *messenger;
+  MDSMap       *mdsmap;
   MonMap       *monmap;
   OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
-  AnchorTable  *anchormgr;
-  AnchorClient *anchorclient;
-  //  PGManager    *pgmanager;
 
   ClientMap    clientmap;
 
+  // sub systems
+  Server       *server;
+  MDCache      *mdcache;
+  MDStore      *mdstore;
+  MDLog        *mdlog;
+  MDBalancer   *balancer;
+
+  IdAllocator  *idalloc;
+
+  AnchorTable  *anchormgr;
+  AnchorClient *anchorclient;
+
+  Logger       *logger, *logger2;
+
+
+
  protected:
+  // -- MDS state --
+  static const int STATE_BOOTING       = 1;  // fetching mds and osd maps
+  static const int STATE_MKFS          = 2;  // creating a file system
+  static const int STATE_RECOVERING    = 3;  // recovering mds log
+  static const int STATE_ACTIVE        = 4;  // up and active!
+  static const int STATE_STOPPING      = 5;
+  static const int STATE_STOPPED       = 6;
+
+  int state;
+  list<Context*> waitfor_active;
+
+public:
+  void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
+
+  bool is_booting() { return state == STATE_BOOTING; }
+  bool is_recovering() { return state == STATE_RECOVERING; }
+  bool is_active() { return state == STATE_ACTIVE; }
+  bool is_stopping() { return state == STATE_STOPPING; }
+  bool is_stopped() { return state == STATE_STOPPED; }
+
+  void mark_active();
+
+
+  // -- waiters --
+  list<Context*> finished_queue;
+
+  void queue_finished(Context *c) {
+    finished_queue.push_back(c);
+  }
+  void queue_finished(list<Context*>& ls) {
+    finished_queue.splice( finished_queue.end(), ls );
+  }
+  
+
 
   // shutdown crap
-  bool         shutting_down;
-  set<int>     did_shut_down;
-  bool         shut_down;
-
-  bool         mds_paused;
-  list<Context*> waiting_for_unpause;
-  friend class C_MDS_Unpause;
-
   int req_rate;
 
   // ino's and fh's
  public:
-  class IdAllocator  *idalloc;
 
   int get_req_rate() { return req_rate; }
 
@@ -148,20 +179,8 @@ class MDS : public Dispatcher {
 
   
  public:
-  list<Context*> finished_queue;
-
- public:
-  // sub systems
-  MDCache      *mdcache;    // cache
-  MDStore      *mdstore;    // storage interface
-  Messenger    *messenger;    // message processing
-  MDLog        *mdlog;
-  MDBalancer   *balancer;
-
-  Logger       *logger, *logger2;
 
  protected:
-  __uint64_t   stat_ops;
   utime_t   last_balancer_heartbeat, last_balancer_hash;
   
  public:
@@ -176,46 +195,24 @@ class MDS : public Dispatcher {
   void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
 
   // start up, shutdown
-  bool is_shutting_down() { return shutting_down; }
-  bool is_shut_down(int who=-1) { 
-    if (who<0)
-      return shut_down; 
-    return did_shut_down.count(who);
-  }
-
   int init();
+
+  void boot_mkfs();      
+  void boot_mkfs_finish();
+  void boot_recover(int step=0);   
+
   int shutdown_start();
   int shutdown_final();
-
 
   int hash_dentry(inodeno_t ino, const string& s) {
     return 0; // fixme
   }
   
 
-  // osd fun
-private:
-  set<int>   pending_mkfs;
-  Context    *waiting_for_mkfs;
-public:
-  void mkfs(Context *onfinish);
-  void handle_osd_mkfs_ack(Message *m);
-
   // messages
   void proc_message(Message *m);
   virtual void dispatch(Message *m);
   void my_dispatch(Message *m);
-
-  // generic request helpers
-  void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
-  void reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei);
-  void commit_request(MClientRequest *req,
-                      MClientReply *reply,
-                      CInode *tracei,
-                      LogEvent *event,
-                      LogEvent *event2 = 0);
-  
-  bool try_open_dir(CInode *in, MClientRequest *req);
 
   // special message types
   void handle_ping(class MPing *m);
@@ -223,109 +220,13 @@ public:
   void handle_mds_map(class MMDSMap *m);
 
   void handle_shutdown_start(Message *m);
-  void handle_shutdown_finish(Message *m);
-  void handle_shutdown(Message *m);
 
   // osds
   void handle_osd_getmap(Message *m);
   void handle_osd_map(class MOSDMap *m);
 
-  // clients
-  void handle_client_mount(class MClientMount *m);
-  void handle_client_unmount(Message *m);
-
-  void handle_client_request(MClientRequest *m);
-  void handle_client_request_2(MClientRequest *req, 
-                               vector<CDentry*>& trace,
-                               int r);
-  
-  // fs ops
-  void handle_client_fstat(MClientRequest *req);
-
-  // requests
-  void dispatch_request(Message *m, CInode *ref);
-
-  // inode request *req, CInode *ref;
-  void handle_client_stat(MClientRequest *req, CInode *ref);
-  void handle_client_utime(MClientRequest *req, CInode *ref);
-  void handle_client_inode_soft_update_2(MClientRequest *req,
-                                         MClientReply *reply,
-                                         CInode *ref);
-  void handle_client_chmod(MClientRequest *req, CInode *ref);
-  void handle_client_chown(MClientRequest *req, CInode *ref);
-  void handle_client_inode_hard_update_2(MClientRequest *req,
-                                         MClientReply *reply,
-                                         CInode *ref);
-
-  // readdir
-  void handle_client_readdir(MClientRequest *req, CInode *ref);
-  int encode_dir_contents(CDir *dir, 
-                          list<class InodeStat*>& inls,
-                          list<string>& dnls);
-  void handle_hash_readdir(MHashReaddir *m);
-  void handle_hash_readdir_reply(MHashReaddirReply *m);
-  void finish_hash_readdir(MClientRequest *req, CDir *dir); 
-
-  // namespace changes
-  void handle_client_mknod(MClientRequest *req, CInode *ref);
-  void handle_client_link(MClientRequest *req, CInode *ref);
-  void handle_client_link_2(int r, MClientRequest *req, CInode *ref, vector<CDentry*>& trace);
-  void handle_client_link_finish(MClientRequest *req, CInode *ref,
-                                 CDentry *dn, CInode *targeti);
-
-  void handle_client_unlink(MClientRequest *req, CInode *ref);
-  void handle_client_rename(MClientRequest *req, CInode *ref);
-  void handle_client_rename_2(MClientRequest *req,
-                              CInode *ref,
-                              CInode *srcdiri,
-                              CDir *srcdir,
-                              CDentry *srcdn,
-                              filepath& destpath,
-                              vector<CDentry*>& trace,
-                              int r);
-  void handle_client_rename_local(MClientRequest *req, CInode *ref,
-                                  string& srcpath, CInode *srcdiri, CDentry *srcdn, 
-                                  string& destpath, CDir *destdir, CDentry *destdn, string& name);
-
-  void handle_client_mkdir(MClientRequest *req, CInode *ref);
-  void handle_client_rmdir(MClientRequest *req, CInode *ref);
-  void handle_client_symlink(MClientRequest *req, CInode *ref);
-
-  // file
-  void handle_client_open(MClientRequest *req, CInode *ref);
-  void handle_client_openc(MClientRequest *req, CInode *ref);
-  void handle_client_release(MClientRequest *req, CInode *in);  
-  void handle_client_truncate(MClientRequest *req, CInode *in);
-  void handle_client_fsync(MClientRequest *req, CInode *in);
-
-  CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
-
-
-  void queue_finished(list<Context*>& ls) {
-    finished_queue.splice( finished_queue.end(), ls );
-  }
 };
 
-
-class C_MDS_RetryRequest : public Context {
-  MDS *mds;
-  Message *req;   // MClientRequest or MLock
-  CInode *ref;
- public:
-  C_MDS_RetryRequest(MDS *mds, Message *req, CInode *ref) {
-    assert(ref);
-    this->mds = mds;
-    this->req = req;
-    this->ref = ref;
-  }
-  virtual void finish(int r) {
-    mds->dispatch_request(req, ref);
-  }
-  
-  /*virtual bool can_redelegate() {
-    return true;
-    }*/
-};
 
 
 class C_MDS_RetryMessage : public Context {
@@ -340,14 +241,6 @@ public:
   virtual void finish(int r) {
     mds->my_dispatch(m);
   }
-  
-  /*
-  virtual bool can_redelegate() {
-    return true;
-  }
-  
-  virtual void redelegate(MDS *mds, int newmds);
-  */
 };
 
 

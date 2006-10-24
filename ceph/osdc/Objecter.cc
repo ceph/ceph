@@ -228,6 +228,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   case OSD_OP_READ:
     handle_osd_read_reply(m);
     break;
+
+  case OSD_OP_STAT:
+	handle_osd_stat_reply(m);
+	break;
     
   case OSD_OP_WRNOOP:
   case OSD_OP_WRITE:

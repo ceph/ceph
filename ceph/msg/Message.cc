@@ -99,7 +99,7 @@ using namespace std;
 #include "messages/MInodeLink.h"
 #include "messages/MInodeLinkAck.h"
 
-#include "messages/MInodeUpdate.h"
+//#include "messages/MInodeUpdate.h"
 #include "messages/MInodeExpire.h"
 #include "messages/MDirExpire.h"
 #include "messages/MCacheExpire.h"
@@ -388,9 +388,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     m = new MInodeLinkAck();
     break;
 
-  case MSG_MDS_INODEUPDATE:
+	/*  case MSG_MDS_INODEUPDATE:
     m = new MInodeUpdate();
     break;
+	*/
 
   case MSG_MDS_INODEEXPIRE:
     m = new MInodeExpire();

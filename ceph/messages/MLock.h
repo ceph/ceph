@@ -59,13 +59,13 @@ class MLock : public Message {
   char      otype;  // lock object type
   inodeno_t ino;    // ino ref, or possibly
   string    dn;     // dentry name
-  crope     data;   // and possibly some data
+  bufferlist data;   // and possibly some data
   string    path;   // possibly a path too (for dentry lock discovers)
 
  public:
   inodeno_t get_ino() { return ino; }
   string& get_dn() { return dn; }
-  crope& get_data() { return data; }
+  bufferlist& get_data() { return data; }
   int get_asker() { return asker; }
   int get_action() { return action; }
   int get_otype() { return otype; }
@@ -92,52 +92,35 @@ class MLock : public Message {
     this->ino = dirino;
     this->dn = dn;
   }
-  void set_data(crope& data) {
-    this->data = data;
+  void set_data(bufferlist& data) {
+    this->data.claim( data );
   }
   void set_path(const string& p) {
     path = p;
   }
   
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off,sizeof(action), (char*)&action);
+  void decode_payload() {
+    int off = 0;
+    payload.copy(off,sizeof(action), (char*)&action);
     off += sizeof(action);
-
-    s.copy(off,sizeof(asker), (char*)&asker);
+    payload.copy(off,sizeof(asker), (char*)&asker);
     off += sizeof(asker);
-    
-    s.copy(off,sizeof(otype), (char*)&otype);
+    payload.copy(off,sizeof(otype), (char*)&otype);
     off += sizeof(otype);
-
-    s.copy(off,sizeof(ino), (char*)&ino);
+    payload.copy(off,sizeof(ino), (char*)&ino);
     off += sizeof(ino);
-    
-    dn = s.c_str() + off;
-    off += dn.length() + 1;
-
-    path = s.c_str() + off;
-    off += path.length() + 1;
-
-    int len;
-    s.copy(off, sizeof(len), (char*)&len);
-    off += sizeof(len);
-    data = s.substr(off, len);
-    off += len;
+    ::_decode(dn, payload, off);
+    ::_decode(path, payload, off);
+    ::_decode(data, payload, off);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&action, sizeof(action));
-    s.append((char*)&asker, sizeof(asker));
-
-    s.append((char*)&otype, sizeof(otype));
-
-    s.append((char*)&ino, sizeof(inodeno_t));
-
-    s.append((char*)dn.c_str(), dn.length()+1);
-    s.append((char*)path.c_str(), path.length()+1);
-
-    int len = data.length();
-    s.append((char*)&len, sizeof(len));
-    s.append(data);
+  virtual void encode_payload() {
+    payload.append((char*)&action, sizeof(action));
+    payload.append((char*)&asker, sizeof(asker));
+    payload.append((char*)&otype, sizeof(otype));
+    payload.append((char*)&ino, sizeof(inodeno_t));
+    ::_encode(dn, payload);
+    ::_encode(path, payload);
+    ::_encode(data, payload);
   }
 
 };

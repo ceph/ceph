@@ -92,6 +92,7 @@ protected:
     tick_timer(0),
     store(0),
     elector(this, w),
+    mon_epoch(0), 
     state(STATE_STARTING),
     leader(0),
     osdmon(0),

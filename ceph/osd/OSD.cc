@@ -113,6 +113,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev)
   last_tid = 0;
   num_pulling = 0;
 
+  state = STATE_BOOTING;
+
 
   pending_ops = 0;
   waiting_for_no_ops = false;
@@ -279,6 +281,8 @@ int OSD::shutdown()
   dout(1) << "shutdown, timer has " << g_timer.num_event << endl;
 
   if (next_heartbeat) g_timer.cancel_event(next_heartbeat);
+
+  state = STATE_STOPPING;
 
   // finish ops
   wait_for_no_ops();
@@ -856,6 +860,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // advance if we can
   bool advanced = false;
+  
+  if (m->get_source().is_mon() && is_booting()) 
+    advanced = true;
+
   epoch_t cur = superblock.current_epoch;
   while (cur < superblock.newest_map) {
     bufferlist bl;

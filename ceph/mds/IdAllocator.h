@@ -16,46 +16,56 @@
 #define __IDALLOCATOR_H
 
 #include "include/types.h"
-#include "include/rangeset.h"
+#include "include/interval_set.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 
 class MDS;
 
-#define ID_INO    1  // inode
-//#define ID_FH     2  // file handle
-
-typedef __uint64_t idno_t;
+#define IDTYPE_INO 1
+typedef inodeno_t idno_t;
 
 class IdAllocator {
   MDS *mds;
+  inode_t inode;
 
-  map< int, rangeset<idno_t> > free;   // type -> rangeset
-  map< int, set<idno_t> >      dirty;  // dirty ids
-  
-  bool opened, opening;
-  
-  inode_t id_inode;
+  static const int STATE_UNDEF   = 0;
+  static const int STATE_OPENING = 1;
+  static const int STATE_ACTIVE  = 2;
+  //static const int STATE_COMMITTING = 3;
+  int state;
 
+  version_t version, committed_version;
+
+  interval_set<idno_t> free;   // unused ids
+  
  public:
-  IdAllocator(MDS *mds);
+  IdAllocator(MDS *m, inode_t i) :
+    mds(m),
+    inode(i),
+    state(STATE_UNDEF),
+    version(0), committed_version(0)
+  {
+  }
 
-  idno_t get_id(int type);
-  void reclaim_id(int type, idno_t id);
+  // alloc or reclaim ids
+  idno_t alloc_id();
+  void reclaim_id(idno_t id);
+
+  version_t get_version() { return version; }
+  version_t get_committed_version() { return committed_version; }
 
   // load/save from disk (hack)
-  bool is_open() { return opened; }
-  bool is_opening() { return opening; }
-
-  bool is_dirty(int type, idno_t id) {
-    return dirty[type].count(id) ? true:false;
-  }
+  bool is_undef() { return state == STATE_UNDEF; }
+  bool is_active() { return state == STATE_ACTIVE; }
+  bool is_opening() { return state == STATE_OPENING; }
 
   void reset();
   void save(Context *onfinish=0);
+  void save_2(version_t v, Context *onfinish);
 
   void shutdown() {
-    if (is_open()) save(0);
+    if (is_active()) save(0);
   }
 
   void load(Context *onfinish);

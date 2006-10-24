@@ -100,7 +100,10 @@ md_config_t g_conf = {
   debug_mon: 0,
   
   debug_after: 0,
-
+  
+  // --- clock ---
+  clock_lock: false,
+  
   // --- messenger ---
   ms_single_dispatch: false,
   ms_requeue_on_sender_fail: false,
@@ -186,7 +189,7 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
-  osd_pg_bits: 8,
+  osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
   osd_max_rep: 4,
@@ -196,7 +199,7 @@ md_config_t g_conf = {
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 10,
-  osd_replay_window: 15,
+  osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
   
@@ -471,6 +474,9 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--fakemessenger_serialize") == 0) 
       g_conf.fakemessenger_serialize = atoi(args[++i]);
 
+
+    else if (strcmp(args[i], "--clock_lock") == 0) 
+      g_conf.clock_lock = atoi(args[++i]);
 
     else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
       g_conf.objecter_buffer_uncommitted = atoi(args[++i]);

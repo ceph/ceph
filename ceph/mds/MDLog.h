@@ -20,16 +20,16 @@
 
 #include <list>
 
-#include <ext/hash_set>
-using namespace __gnu_cxx;
+//#include <ext/hash_map>
+//using __gnu_cxx::hash_mapset;
 
-class LogStreamer;
+class Journaler;
 class LogEvent;
 class MDS;
 
 class Logger;
 
-
+/*
 namespace __gnu_cxx {
   template<> struct hash<LogEvent*> {
     size_t operator()(const LogEvent *p) const { 
@@ -38,6 +38,7 @@ namespace __gnu_cxx {
     }
   };
 }
+*/
 
 class MDLog {
  protected:
@@ -45,12 +46,15 @@ class MDLog {
   size_t num_events; // in events
   size_t max_events;
 
+  int unflushed;
+
   inode_t log_inode;
-  LogStreamer *logstreamer;
+  Journaler *journaler;
   
-  hash_set<LogEvent*>  trimming;     // events currently being trimmed
+  //hash_map<LogEvent*>  trimming;       // events currently being trimmed
+  map<off_t, LogEvent*> trimming;
   std::list<Context*>  trim_waiters;   // contexts waiting for trim
-  bool            trim_reading;
+  bool                 trim_reading;
 
   bool waiting_for_read;
   friend class C_MDL_Reading;
@@ -61,24 +65,21 @@ class MDLog {
   MDLog(MDS *m);
   ~MDLog();
   
-  void set_max_events(size_t max) {
-    max_events = max;
-  }
-  size_t get_max_events() {
-    return max_events;
-  }
-  size_t get_num_events() {
-    return num_events + trimming.size();
-  }
+  void set_max_events(size_t max) { max_events = max; }
+  size_t get_max_events() { return max_events; }
+  size_t get_num_events() { return num_events + trimming.size(); }
 
-  void submit_entry( LogEvent *e,
-                     Context *c = 0 );
+  void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );
   void flush();
 
   void trim(Context *c);
   void _did_read();
   void _trimmed(LogEvent *le);
+
+  void reset();  // fresh, empty log! 
+  void open(Context *onopen);
+  void write_head(Context *onfinish);
 };
 
 #endif

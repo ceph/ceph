@@ -578,7 +578,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   
   // *** other state too?
 
-  // move to end of LRU so we drop it out of cache quickly!
+  // move to end of LRU so we drop out of cache quickly!
   cache->lru.lru_bottouch(in);
 }
 

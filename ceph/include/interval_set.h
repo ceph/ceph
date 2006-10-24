@@ -150,6 +150,10 @@ class interval_set {
     return p->first+p->second;
   }
   
+  void insert(T val) {
+    insert(val, 1);
+  }
+
   void insert(T start, T len) {
     //cout << "insert " << start << "~" << len << endl;
     assert(len > 0);
@@ -186,6 +190,10 @@ class interval_set {
     }
   }
   
+  void erase(T val) {
+    erase(val, 1);
+  }
+
   void erase(T start, T len) {
     typename map<T,T>::iterator p = find_inc_m(start);
 

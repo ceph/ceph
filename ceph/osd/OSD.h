@@ -59,6 +59,17 @@ public:
   Messenger *messenger;
   int whoami;
 
+  static const int STATE_BOOTING = 1;
+  static const int STATE_ACTIVE = 2;
+  static const int STATE_STOPPING = 3;
+
+  int state;
+
+  bool is_booting() { return state == STATE_BOOTING; }
+  bool is_active() { return state == STATE_ACTIVE; }
+  bool is_stopping() { return state == STATE_STOPPING; }
+
+
   MonMap *monmap;
 
   class Logger      *logger;

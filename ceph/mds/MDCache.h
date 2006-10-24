@@ -33,34 +33,28 @@
 
 class MDS;
 class Migrator;
+class Renamer;
+
+class Logger;
 
 class Message;
 
 class MDiscover;
 class MDiscoverReply;
-//class MInodeUpdate;
 class MCacheExpire;
 class MDirUpdate;
 class MDentryUnlink;
 class MLock;
 
-class MRenameWarning;
-class MRenameNotify;
-class MRenameNotifyAck;
-class MRename;
-class MRenamePrep;
-class MRenameReq;
-class MRenameAck;
 
 class MClientRequest;
 
 
 // MDCache
 
-typedef hash_map<inodeno_t, CInode*> inode_map_t;
+//typedef const char* pchar;
 
 
-typedef const char* pchar;
 
 /** active_request_t
  * state we track for requests we are currently processing.
@@ -76,9 +70,6 @@ typedef struct {
   set< CDentry* >           foreign_xlocks;   // xlocks on foreign hosts
 } active_request_t;
 
-
-class Message;
-
 namespace __gnu_cxx {
   template<> struct hash<Message*> {
     size_t operator()(const Message *p) const { 
@@ -90,15 +81,14 @@ namespace __gnu_cxx {
 
 class MDCache {
  protected:
-  // the cache
-  CInode                       *root;        // root inode
- public:
-  LRU                           lru;         // lru for expiring items
- protected:
-  inode_map_t                   inode_map;   // map of inodes by ino            
- 
+  // my master
   MDS *mds;
 
+  // the cache
+  CInode                       *root;        // root inode
+  LRU                           lru;         // lru for expiring items
+  hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino            
+ 
   // root
   list<Context*>     waiting_for_root;
 
@@ -108,29 +98,30 @@ class MDCache {
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
-  // rename fun
-  set<inodeno_t>                    stray_rename_warnings; // notifies i haven't seen
-  map<inodeno_t, MRenameNotify*>    stray_rename_notifies;
-
-
-
- public:
-  Migrator *migrator;
-
   // active MDS requests
-  //map<Message*, active_request_t>   active_requests;
   hash_map<Message*, active_request_t>   active_requests;
 
+  // shutdown crap
   int shutdown_commits;
   bool did_shutdown_exports;
-  
+  friend class C_MDC_ShutdownCommit;
+
   friend class Migrator;
+  friend class Renamer;
   friend class MDBalancer;
+
+ public:
+  // subsystems
+  Migrator *migrator;
+  Renamer *renamer;
 
  public:
   MDCache(MDS *m);
   ~MDCache();
   
+  // debug
+  void log_stat(Logger *logger);
+
   // root inode
   CInode *get_root() { return root; }
   void set_root(CInode *r) {
@@ -139,9 +130,7 @@ class MDCache {
   }
 
   // cache
-  void set_cache_size(size_t max) {
-    lru.lru_set_max(max);
-  }
+  void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
 
@@ -151,27 +140,21 @@ class MDCache {
   bool shutdown_pass();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
-  // have_inode?
-  bool have_inode( inodeno_t ino ) {
-    return inode_map.count(ino) ? true:false;
-  }
-
-  // return inode* or null
+  // inode_map
+  bool have_inode( inodeno_t ino ) { return inode_map.count(ino) ? true:false; }
   CInode* get_inode( inodeno_t ino ) {
     if (have_inode(ino))
       return inode_map[ ino ];
     return NULL;
   }
   
-
-  // adding/removing
  public:
   CInode *create_inode();
   void add_inode(CInode *in);
+
  protected:
   void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
-
   void touch_inode(CInode *in) {
     // touch parent(s) too
     if (in->get_parent_dir()) touch_inode(in->get_parent_dir()->inode);
@@ -182,8 +165,7 @@ class MDCache {
     else
       lru.lru_midtouch(in);
   }
-
- public:
+  void rename_file(CDentry *srcdn, CDentry *destdn);
 
  protected:
   // private methods
@@ -191,13 +173,6 @@ class MDCache {
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 
-
-  void rename_file(CDentry *srcdn, CDentry *destdn);
-  void fix_renamed_dir(CDir *srcdir,
-                       CInode *in,
-                       CDir *destdir,
-                       bool authchanged,   // _inode_ auth changed
-                       int dirauth=-1);    // dirauth (for certain cases)
 
  public:
   int open_root(Context *c);
@@ -234,7 +209,7 @@ class MDCache {
 
   // == messages ==
  public:
-  int proc_message(Message *m);
+  void dispatch(Message *m);
 
  protected:
   // -- replicas --
@@ -253,36 +228,6 @@ class MDCache {
   void handle_inode_unlink(class MInodeUnlink *m);
   void handle_inode_unlink_ack(class MInodeUnlinkAck *m);
   friend class C_MDC_DentryUnlink;
-
-  // RENAME
-  // initiator
- public:
-  void file_rename(CDentry *srcdn, CDentry *destdn, Context *c);
- protected:
-  void handle_rename_ack(MRenameAck *m);              // dest -> init (almost always)
-  void file_rename_finish(CDir *srcdir, CInode *in, Context *c);
-  friend class C_MDC_RenameAck;
-
-  // src
-  void handle_rename_req(MRenameReq *m);              // dest -> src
-  void file_rename_foreign_src(CDentry *srcdn, 
-                               inodeno_t destdirino, string& destname, string& destpath, int destauth, 
-                               int initiator);
-  void file_rename_warn(CInode *in, set<int>& notify);
-  void handle_rename_notify_ack(MRenameNotifyAck *m); // bystanders -> src
-  void file_rename_ack(CInode *in, int initiator);
-  friend class C_MDC_RenameNotifyAck;
-
-  // dest
-  void handle_rename_prep(MRenamePrep *m);            // init -> dest
-  void handle_rename(MRename *m);                     // src -> dest
-  void file_rename_notify(CInode *in, 
-                          CDir *srcdir, string& srcname, CDir *destdir, string& destname,
-                          set<int>& notify, int srcauth);
-
-  // bystander
-  void handle_rename_warning(MRenameWarning *m);      // src -> bystanders
-  void handle_rename_notify(MRenameNotify *m);        // dest -> bystanders
 
 
 
@@ -363,14 +308,15 @@ class MDCache {
   void handle_lock_dn(MLock *m);
   void dentry_xlock_request(CDir *dir, string& dname, bool create,
                             Message *req, Context *onfinish);
+  void dentry_xlock_request_finish(int r,
+				   CDir *dir, string& dname, 
+				   Message *req,
+				   Context *finisher);
 
   
 
   // == crap fns ==
  public:
-  CInode* hack_get_file(string& fn);
-  vector<CInode*> hack_add_file(string& fn, CInode* in);
-
   void dump() {
     if (root) root->dump();
   }

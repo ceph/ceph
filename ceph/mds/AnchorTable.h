@@ -60,7 +60,7 @@ class AnchorTable {
 
   // messages
  public:
-  void proc_message(class Message *m);
+  void dispatch(class Message *m);
  protected:
   void handle_anchor_request(class MAnchorRequest *m);  
 

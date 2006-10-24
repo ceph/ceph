@@ -15,7 +15,7 @@
 #include "MDS.h"
 #include "LogEvent.h"
 
-#include "osdc/LogStreamer.h"
+#include "osdc/Journaler.h"
 
 #include "common/LogType.h"
 #include "common/Logger.h"
@@ -36,6 +36,8 @@ MDLog::MDLog(MDS *m)
   waiting_for_read = false;
 
   max_events = g_conf.mds_log_max_len;
+
+  unflushed = 0;
 
   // logger
   char name[80];
@@ -66,17 +68,33 @@ MDLog::MDLog(MDS *m)
   }
 
   // log streamer
-  logstreamer = new LogStreamer(log_inode, mds->objecter, logger);
+  journaler = new Journaler(log_inode, mds->objecter, logger);
 
 }
 
 
 MDLog::~MDLog()
 {
-  if (logstreamer) { delete logstreamer; logstreamer = 0; }
+  if (journaler) { delete journaler; journaler = 0; }
   if (logger) { delete logger; logger = 0; }
 }
 
+
+void MDLog::reset()
+{
+  journaler->reset();
+}
+
+void MDLog::open(Context *c)
+{
+  dout(5) << "open discovering log bounds" << endl;
+  journaler->recover(c);
+}
+
+void MDLog::write_head(Context *c) 
+{
+  journaler->write_head(c);
+}
 
 
 void MDLog::submit_entry( LogEvent *e,
@@ -85,20 +103,28 @@ void MDLog::submit_entry( LogEvent *e,
   dout(5) << "submit_entry at " << num_events << endl;
 
   if (g_conf.mds_log) {
-    // encode and append
+    // encode it, with event type
     bufferlist bl;
-    e->encode(bl);
-    logstreamer->append_entry(bl);
+    bl.append((char*)&e->_type, sizeof(e->_type));
+    e->encode_payload(bl);
+
+    // journal it.
+    journaler->append_entry(bl);
 
     delete e;
     num_events++;
 
     logger->inc("add");
     logger->set("size", num_events);
-    logger->set("append", logstreamer->get_write_pos());
+    logger->set("append", journaler->get_write_pos());
 
-    if (c) 
-      logstreamer->flush(c);
+    if (c) {
+      unflushed = 0;
+      journaler->flush(c);
+    }
+    else
+      unflushed++;
+
   } else {
     // hack: log is disabled.
     if (c) {
@@ -112,7 +138,7 @@ void MDLog::wait_for_sync( Context *c )
 {
   if (g_conf.mds_log) {
     // wait
-    logstreamer->flush(c);
+    journaler->flush(c);
   } else {
     // hack: bypass.
     c->finish(0);
@@ -122,7 +148,9 @@ void MDLog::wait_for_sync( Context *c )
 
 void MDLog::flush()
 {
-  logstreamer->flush();
+  if (unflushed)
+    journaler->flush();
+  unflushed = 0;
 
   // trim
   trim(NULL);
@@ -169,11 +197,19 @@ void MDLog::_did_read()
 void MDLog::_trimmed(LogEvent *le) 
 {
   dout(7) << "  trimmed " << le << endl;
-  trimming.erase(le);
+  
+  assert(le->can_expire(mds));
+
+  if (trimming.begin()->first == le->_end_off) {
+    // front!  we can expire log a bit
+    journaler->set_expire_pos(le->_end_off);
+  }
+
+  trimming.erase(le->_end_off);
   delete le;
  
   logger->set("trim", trimming.size());
-  logger->set("read", logstreamer->get_read_pos());
+  logger->set("read", journaler->get_read_pos());
  
   trim(0);
 }
@@ -189,7 +225,7 @@ void MDLog::trim(Context *c)
   // trim!
   while (num_events > max_events) {
     
-    off_t gap = logstreamer->get_write_pos() - logstreamer->get_read_pos();
+    off_t gap = journaler->get_write_pos() - journaler->get_read_pos();
     dout(5) << "trim num_events " << num_events << " > max " << max_events
 	    << ", trimming " << trimming.size()
 	    << ", byte gap " << gap
@@ -201,13 +237,14 @@ void MDLog::trim(Context *c)
     }
     
     bufferlist bl;
-    if (logstreamer->try_read_entry(bl)) {
+    if (journaler->try_read_entry(bl)) {
       // decode logevent
       LogEvent *le = LogEvent::decode(bl);
+      le->_end_off = journaler->get_read_pos();
       num_events--;
 
       // we just read an event.
-      if (le->obsolete(mds) == true) {
+      if (le->can_expire(mds) == true) {
         // obsolete
         dout(7) << "trim  obsolete " << le << endl;
         delete le;
@@ -217,19 +254,19 @@ void MDLog::trim(Context *c)
 
         // trim!
         dout(7) << "trim  trimming " << le << endl;
-        trimming.insert(le);
+        trimming[le->_end_off] = le;
         le->retire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("retire");
         logger->set("trim", trimming.size());
       }
-      logger->set("read", logstreamer->get_read_pos());
+      logger->set("read", journaler->get_read_pos());
       logger->set("size", num_events);
     } else {
       // need to read!
       if (!waiting_for_read) {
         waiting_for_read = true;
         dout(7) << "trim  waiting for read" << endl;
-        logstreamer->wait_for_readable(new C_MDL_Reading(this));
+        journaler->wait_for_readable(new C_MDL_Reading(this));
       } else {
         dout(7) << "trim  already waiting for read" << endl;
       }

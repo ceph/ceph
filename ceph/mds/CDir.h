@@ -30,9 +30,8 @@
 #include <string>
 using namespace std;
 
-#include <ext/rope>
 #include <ext/hash_map>
-using namespace __gnu_cxx;
+using __gnu_cxx::hash_map;
 
 
 #include "CInode.h"

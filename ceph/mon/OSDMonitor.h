@@ -32,8 +32,10 @@ class OSDMonitor : public Dispatcher {
   Mutex &lock;
 
   // osd maps
+public:
   OSDMap osdmap;
 
+private:
   map<msg_addr_t, pair<entity_inst_t, epoch_t> > awaiting_map;
   
   void create_initial();

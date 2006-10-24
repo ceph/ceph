@@ -15,23 +15,24 @@ class EAlloc : public LogEvent {
  protected:
   int  idtype;
   idno_t id;
-  int  what;  
+  int  what;  // alloc or dealloc
+  version_t table_version;
 
  public:
-  EAlloc(int idtype, idno_t id, int what) :
+  EAlloc() : LogEvent(EVENT_ALLOC) { }
+  EAlloc(int idtype, idno_t id, int what, version_t v) :
 	LogEvent(EVENT_ALLOC) {
 	this->idtype = idtype;
 	this->id = id;
 	this->what = what;
-  }
-  EAlloc() :
-	LogEvent(EVENT_ALLOC) {
+	this->table_version = v;
   }
   
   void encode_payload(bufferlist& bl) {
 	bl.append((char*)&idtype, sizeof(idtype));
 	bl.append((char*)&id, sizeof(id));
 	bl.append((char*)&what, sizeof(what));
+	bl.append((char*)&table_version, sizeof(table_version));
   }
   void decode_payload(bufferlist& bl, int& off) {
 	bl.copy(off, sizeof(idtype), (char*)&idtype);
@@ -40,18 +41,43 @@ class EAlloc : public LogEvent {
 	off += sizeof(id);
 	bl.copy(off, sizeof(what), (char*)&what);
 	off += sizeof(what);
+	bl.copy(off, sizeof(table_version), (char*)&table_version);
+	off += sizeof(table_version);
   }
 
-  
-  virtual bool obsolete(MDS *mds) {
-	if (mds->idalloc->is_dirty(idtype, id))
+
+  // live journal
+  bool can_expire(MDS *mds) {
+	if (mds->idalloc->get_committed_version() <= table_version)
 	  return false;   // still dirty
 	else
 	  return true;    // already flushed
   }
 
-  virtual void retire(MDS *mds, Context *c) {
+  void retire(MDS *mds, Context *c) {
 	mds->idalloc->save(c);
+  }
+
+
+  // recovery
+  bool has_happened(MDS *mds) {
+	return (mds->idalloc->get_version() >= table_version);
+  }
+
+  void replay(MDS *mds, Context *c) {
+	assert(table_version-1 == mds->idalloc->get_version());
+	
+	if (what == EALLOC_EV_ALLOC) {
+	  idno_t nid = mds->idalloc->alloc_id();
+	  assert(nid == id);       // this should match.
+	} 
+	else if (what == EALLOC_EV_FREE) {
+	  mds->idalloc->reclaim_id(id);
+	} 
+	else
+	  assert(0);
+	
+	assert(table_version == mds->idalloc->get_version());
   }
   
 };

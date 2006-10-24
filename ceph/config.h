@@ -76,6 +76,11 @@ struct md_config_t {
 
   int debug_after;
 
+  // clock
+  bool clock_lock;
+
+  // messenger
+
   /*bool tcp_skip_rank0;
   bool tcp_overlay_clients;
   bool tcp_log;

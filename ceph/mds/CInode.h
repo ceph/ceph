@@ -36,9 +36,6 @@
 #include <iostream>
 using namespace std;
 
-#include <ext/rope>
-using namespace __gnu_cxx;
-
 
 
 
@@ -185,8 +182,8 @@ class CInode : public LRUObject {
  protected:
   int              ref;       // reference count
   set<int>         ref_set;
-  __uint64_t       version;
-  __uint64_t       parent_dir_version;  // dir version when last touched.
+  version_t       version;
+  version_t       parent_dir_version;  // dir version when last touched.
 
   unsigned         state;
 
@@ -201,9 +198,6 @@ class CInode : public LRUObject {
      cases, as the semantics are different! */
   map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
   int              replica_nonce;    // [replica] defined on replica
-
-  // this is sort of a mess.
-  set<int>         rename_waiting_for_ack;
 
   int              dangling_auth;    // explicit auth, when dangling.
 
@@ -229,6 +223,7 @@ class CInode : public LRUObject {
   meta_load_t popularity[MDS_NPOP];
 
   // friends
+  friend class Server;
   friend class Migrator;
   friend class MDCache;
   friend class CDir;
@@ -290,23 +285,21 @@ class CInode : public LRUObject {
   void mark_safe() { state &= ~CINODE_STATE_UNSAFE; }
 
   // -- state encoding --
-  crope encode_basic_state();
-  int decode_basic_state(crope r, int off=0);
+  //void encode_basic_state(bufferlist& r);
+  //void decode_basic_state(bufferlist& r, int& off);
 
-  crope encode_export_state();
 
-  void encode_file_state(crope& r);
-  void decode_file_state(crope& r, int& off);
-  void decode_merge_file_state(crope& r, int& off);
+  void encode_file_state(bufferlist& r);
+  void decode_file_state(bufferlist& r, int& off);
 
-  void encode_hard_state(crope& r);
-  void decode_hard_state(crope& r, int& off);
+  void encode_hard_state(bufferlist& r);
+  void decode_hard_state(bufferlist& r, int& off);
 
   
   // -- dirtyness --
-  __uint64_t get_version() { return version; }
-  __uint64_t get_parent_dir_version() { return parent_dir_version; }
-  void float_parent_dir_version(__uint64_t ge) {
+  version_t get_version() { return version; }
+  version_t get_parent_dir_version() { return parent_dir_version; }
+  void float_parent_dir_version(version_t ge) {
     if (parent_dir_version < ge)
       parent_dir_version = ge;
   }
@@ -588,7 +581,6 @@ class CInode : public LRUObject {
 
 
 
-
 // -- encoded state
 
 // discover
@@ -645,21 +637,18 @@ class CInodeDiscover {
 
 // export
 
-typedef struct {
-  inode_t        inode;
-  __uint64_t     version;
-  meta_load_t    popularity_justme;
-  meta_load_t    popularity_curdom;
-  bool           is_dirty;       // dirty inode?
-
-  int            ncached_by;  // int pairs follow
-  int            num_caps;
-} CInodeExport_st;
-
-
 class CInodeExport {
 
-  CInodeExport_st st;
+  struct {
+    inode_t        inode;
+    version_t     version;
+    meta_load_t    popularity_justme;
+    meta_load_t    popularity_curdom;
+    bool           is_dirty;       // dirty inode?
+    
+    int            num_caps;
+  } st;
+
   set<int>      cached_by;
   map<int,int>  cached_by_nonce;
   map<int,Capability>  cap_map;
@@ -721,19 +710,12 @@ public:
   }
 
   void _encode(bufferlist& bl) {
-    st.ncached_by = cached_by.size();
     st.num_caps = cap_map.size();
     bl.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
-    for (map<int,int>::iterator it = cached_by_nonce.begin();
-         it != cached_by_nonce.end();
-         it++) {
-      int m = it->first;
-      bl.append((char*)&m, sizeof(int));
-      int n = it->second;
-      bl.append((char*)&n, sizeof(int));
-    }
+    ::_encode(cached_by, bl);
+    ::_encode(cached_by_nonce, bl);
 
     hardlock.encode_state(bl);
     filelock.encode_state(bl);
@@ -751,15 +733,8 @@ public:
     bl.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
     
-    for (int i=0; i<st.ncached_by; i++) {
-      int m,n;
-      bl.copy(off, sizeof(int), (char*)&m);
-      off += sizeof(int);
-      bl.copy(off, sizeof(int), (char*)&n);
-      off += sizeof(int);
-      cached_by.insert(m);
-      cached_by_nonce.insert(pair<int,int>(m,n));
-    }
+    ::_decode(cached_by, bl, off);
+    ::_decode(cached_by_nonce, bl, off);
 
     hardlock.decode_state(bl, off);
     filelock.decode_state(bl, off);
