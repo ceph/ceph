@@ -11,8 +11,6 @@
  * 
  */
 
-
-
 #ifndef __LOGEVENT_H
 #define __LOGEVENT_H
 

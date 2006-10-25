@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __EUNLINK_H
 #define __EUNLINK_H
 
@@ -19,53 +32,53 @@ class EUnlink : public LogEvent {
 
  public:
   EUnlink(CDir *dir, CDentry* dn) :
-	LogEvent(EVENT_UNLINK) {
-	this->dir_ino = dir->ino();
-	this->dname = dn->get_name();
-	this->version = dir->get_version();
+    LogEvent(EVENT_UNLINK) {
+    this->dir_ino = dir->ino();
+    this->dname = dn->get_name();
+    this->version = dir->get_version();
   }
   EUnlink() :
-	LogEvent(EVENT_UNLINK) {
+    LogEvent(EVENT_UNLINK) {
   }
   
   virtual void encode_payload(bufferlist& bl) {
-	bl.append((char*)&dir_ino, sizeof(dir_ino));
-	bl.append((char*)&version, sizeof(version));
-	bl.append((char*)dname.c_str(), dname.length() + 1);
+    bl.append((char*)&dir_ino, sizeof(dir_ino));
+    bl.append((char*)&version, sizeof(version));
+    bl.append((char*)dname.c_str(), dname.length() + 1);
   }
   void decode_payload(bufferlist& bl, int& off) {
-	bl.copy(off, sizeof(dir_ino), (char*)&dir_ino);
-	off += sizeof(dir_ino);
-	bl.copy(off, sizeof(version), (char*)&version);
-	off += sizeof(version);
-	dname = bl.c_str() + off;
-	off += dname.length() + 1;
+    bl.copy(off, sizeof(dir_ino), (char*)&dir_ino);
+    off += sizeof(dir_ino);
+    bl.copy(off, sizeof(version), (char*)&version);
+    off += sizeof(version);
+    dname = bl.c_str() + off;
+    off += dname.length() + 1;
   }
   
   virtual bool can_expire(MDS *mds) {
-	// am i obsolete?
-	CInode *idir = mds->mdcache->get_inode(dir_ino);
-	if (!idir) return true;
+    // am i obsolete?
+    CInode *idir = mds->mdcache->get_inode(dir_ino);
+    if (!idir) return true;
 
-	CDir *dir = idir->dir;
+    CDir *dir = idir->dir;
 
-	if (!dir) return true;
+    if (!dir) return true;
 
-	if (!idir->dir->is_auth()) return true;
-	if (idir->dir->is_clean()) return true;
+    if (!idir->dir->is_auth()) return true;
+    if (idir->dir->is_clean()) return true;
 
-	if (idir->dir->get_last_committed_version() >= version) return true;
-	return false;
+    if (idir->dir->get_last_committed_version() >= version) return true;
+    return false;
   }
 
   virtual void retire(MDS *mds, Context *c) {
-	// commit my containing directory
-	CDir *dir = mds->mdcache->get_inode(dir_ino)->dir;
-	assert(dir);
-	
-	// okay!
-	dout(7) << "commiting dirty (from unlink) dir " << *dir << endl;
-	mds->mdstore->commit_dir(dir, version, c);
+    // commit my containing directory
+    CDir *dir = mds->mdcache->get_inode(dir_ino)->dir;
+    assert(dir);
+    
+    // okay!
+    dout(7) << "commiting dirty (from unlink) dir " << *dir << endl;
+    mds->mdstore->commit_dir(dir, version, c);
   }
 };
 
