@@ -57,6 +57,7 @@ class CDentry {
   multiset<Message*> pinset;
 
   friend class Migrator;
+  friend class Locker;
   friend class Renamer;
   friend class Server;
   friend class MDCache;

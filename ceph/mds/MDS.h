@@ -42,10 +42,11 @@ using namespace __gnu_cxx;
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
 #define MDS_PORT_CACHE    2
-#define MDS_PORT_STORE    3
-#define MDS_PORT_BALANCER 4
-#define MDS_PORT_MIGRATOR 5
-#define MDS_PORT_RENAMER  6
+#define MDS_PORT_LOCKER   3
+#define MDS_PORT_STORE    4
+#define MDS_PORT_BALANCER 5
+#define MDS_PORT_MIGRATOR 6
+#define MDS_PORT_RENAMER  7
 
 #define MDS_PORT_ANCHORCLIENT 10
 #define MDS_PORT_ANCHORMGR    11
@@ -73,6 +74,7 @@ class Objecter;
 class Filer;
 
 class Server;
+class Locker;
 class AnchorTable;
 class AnchorClient;
 class MDCache;
@@ -116,6 +118,7 @@ class MDS : public Dispatcher {
   // sub systems
   Server       *server;
   MDCache      *mdcache;
+  Locker       *locker;
   MDStore      *mdstore;
   MDLog        *mdlog;
   MDBalancer   *balancer;

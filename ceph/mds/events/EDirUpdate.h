@@ -17,6 +17,7 @@
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
+#include "ETraced.h"
 #include "../LogEvent.h"
 #include "../CDir.h"
 #include "../MDCache.h"
@@ -24,26 +25,32 @@
 
 
 
-class EDirUpdate : public LogEvent {
+class EDirUpdate : public ETraced {
  protected:
   inodeno_t dirino;
   version_t version;
 
  public:
-  EDirUpdate(CDir *dir) :
-    LogEvent(EVENT_DIRUPDATE) {
+  EDirUpdate(CDir *dir) : ETraced(EVENT_DIRUPDATE, dir->inode) {
     this->dirino = dir->ino();
     version = dir->get_version();
   }
-  EDirUpdate() :
-    LogEvent(EVENT_DIRUPDATE) {
+  EDirUpdate() : ETraced(EVENT_DIRUPDATE) {
   }
   
+  void print(ostream& out) {
+    out << "up dir " << dirino << " ";
+    ETraced::print(out);
+    out << "/ v " << version;
+  }
+
   virtual void encode_payload(bufferlist& bl) {
+    encode_trace(bl);
     bl.append((char*)&version, sizeof(version));
     bl.append((char*)&dirino, sizeof(dirino));
   }
   void decode_payload(bufferlist& bl, int& off) {
+    decode_trace(bl, off);
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
     bl.copy(off, sizeof(dirino), (char*)&dirino);

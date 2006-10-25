@@ -106,6 +106,7 @@ class MDCache {
   bool did_shutdown_exports;
   friend class C_MDC_ShutdownCommit;
 
+  friend class Locker;
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
@@ -250,70 +251,7 @@ class MDCache {
 
   void handle_cache_expire(MCacheExpire *m);
 
-  // -- locks --
-  // high level interface
- public:
-  bool inode_hard_read_try(CInode *in, Context *con);
-  bool inode_hard_read_start(CInode *in, MClientRequest *m);
-  void inode_hard_read_finish(CInode *in);
-  bool inode_hard_write_start(CInode *in, MClientRequest *m);
-  void inode_hard_write_finish(CInode *in);
-  bool inode_file_read_start(CInode *in, MClientRequest *m);
-  void inode_file_read_finish(CInode *in);
-  bool inode_file_write_start(CInode *in, MClientRequest *m);
-  void inode_file_write_finish(CInode *in);
 
-  void inode_hard_eval(CInode *in);
-  void inode_file_eval(CInode *in);
-
- protected:
-  void inode_hard_mode(CInode *in, int mode);
-  void inode_file_mode(CInode *in, int mode);
-
-  // low level triggers
-  void inode_hard_sync(CInode *in);
-  void inode_hard_lock(CInode *in);
-  bool inode_file_sync(CInode *in);
-  void inode_file_lock(CInode *in);
-  void inode_file_mixed(CInode *in);
-  void inode_file_loner(CInode *in);
-
-  // messengers
-  void handle_lock(MLock *m);
-  void handle_lock_inode_hard(MLock *m);
-  void handle_lock_inode_file(MLock *m);
-
-  // -- file i/o --
- public:
-  version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, MClientRequest *req);
-  bool issue_caps(CInode *in);
-
- protected:
-  void handle_client_file_caps(class MClientFileCaps *m);
-
-  void request_inode_file_caps(CInode *in);
-  void handle_inode_file_caps(class MInodeFileCaps *m);
-
-
-
-  // dirs
-  void handle_lock_dir(MLock *m);
-
-  // dentry locks
- public:
-  bool dentry_xlock_start(CDentry *dn, 
-                          Message *m, CInode *ref);
-  void dentry_xlock_finish(CDentry *dn, bool quiet=false);
-  void handle_lock_dn(MLock *m);
-  void dentry_xlock_request(CDir *dir, string& dname, bool create,
-                            Message *req, Context *onfinish);
-  void dentry_xlock_request_finish(int r,
-				   CDir *dir, string& dname, 
-				   Message *req,
-				   Context *finisher);
-
-  
 
   // == crap fns ==
  public:

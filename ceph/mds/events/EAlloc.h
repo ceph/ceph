@@ -69,7 +69,7 @@ class EAlloc : public LogEvent {
 
   // live journal
   bool can_expire(MDS *mds) {
-    if (mds->idalloc->get_committed_version() <= table_version)
+    if (mds->idalloc->get_committed_version() < table_version)
       return false;   // still dirty
     else
       return true;    // already flushed

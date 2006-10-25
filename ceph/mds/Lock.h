@@ -263,6 +263,7 @@ class CLock {
   }
 
   friend class MDCache;
+  friend class Locker;
   friend class Migrator;
 };
 

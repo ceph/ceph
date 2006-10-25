@@ -91,7 +91,8 @@ void IdAllocator::save(Context *onfinish, version_t v)
 
   committing_version = version;
 
-  waitfor_save[version].push_back(onfinish);
+  if (onfinish)
+    waitfor_save[version].push_back(onfinish);
 
   // write (async)
   mds->filer->write(inode,

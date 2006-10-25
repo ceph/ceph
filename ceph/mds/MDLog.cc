@@ -246,14 +246,14 @@ void MDLog::trim(Context *c)
       // we just read an event.
       if (le->can_expire(mds) == true) {
         // obsolete
-        dout(7) << "trim  obsolete " << *le << endl;
+        dout(7) << "trim  obsolete: " << *le << endl;
         delete le;
         logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
         // trim!
-        dout(7) << "trim  trimming " << *le << endl;
+        dout(7) << "trim  trimming: " << *le << endl;
         trimming[le->_end_off] = le;
         le->retire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("retire");

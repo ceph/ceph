@@ -26,6 +26,7 @@
 
 #include "MDS.h"
 #include "Server.h"
+#include "Locker.h"
 #include "MDCache.h"
 #include "MDStore.h"
 #include "MDLog.h"
@@ -101,6 +102,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
 
 
   server = new Server(this);
+  locker = new Locker(this, mdcache);
 
 
   req_rate = 0;
@@ -454,6 +456,9 @@ void MDS::my_dispatch(Message *m)
     
   case MDS_PORT_CACHE:
     mdcache->dispatch(m);
+    break;
+  case MDS_PORT_LOCKER:
+    locker->dispatch(m);
     break;
 
   case MDS_PORT_MIGRATOR:

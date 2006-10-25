@@ -224,6 +224,7 @@ class CInode : public LRUObject {
 
   // friends
   friend class Server;
+  friend class Locker;
   friend class Migrator;
   friend class MDCache;
   friend class CDir;

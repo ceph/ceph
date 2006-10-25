@@ -18,6 +18,7 @@
 #include "CDir.h"
 #include "CDentry.h"
 #include "Migrator.h"
+#include "Locker.h"
 
 #include "MDBalancer.h"
 #include "MDLog.h"
@@ -1337,7 +1338,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     in->hardlock.gather_set.erase(mds->get_nodeid());
     in->hardlock.gather_set.erase(oldauth);
     if (in->hardlock.gather_set.empty())
-      cache->inode_hard_eval(in);
+      mds->locker->inode_hard_eval(in);
   }
 
   // caps
@@ -1361,7 +1362,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     in->filelock.gather_set.erase(mds->get_nodeid());
     in->filelock.gather_set.erase(oldauth);
     if (in->filelock.gather_set.empty())  // necessary but not suffient...
-      cache->inode_file_eval(in);    
+      mds->locker->inode_file_eval(in);    
   }
 
   // other

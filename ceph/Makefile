@@ -32,6 +32,7 @@ MDS_OBJS= \
 	mds/MDS.o\
 	mds/Server.o\
 	mds/MDCache.o\
+	mds/Locker.o\
 	mds/Migrator.o\
 	mds/Renamer.o\
 	mds/MDBalancer.o\

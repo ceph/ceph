@@ -198,7 +198,7 @@ public:
   // read
   void set_read_pos(off_t p) { 
     assert(requested_pos == received_pos);  // we can't cope w/ in-progress read right now.
-    assert(read_bl == 0); // etc.
+    assert(read_bl == 0); // ...
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }

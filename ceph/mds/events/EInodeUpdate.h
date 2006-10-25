@@ -17,35 +17,34 @@
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
-#include "../LogEvent.h"
-#include "../CInode.h"
-#include "../MDCache.h"
+
+#include "ETraced.h"
 #include "../MDStore.h"
 
 
 
-class EInodeUpdate : public LogEvent {
+class EInodeUpdate : public ETraced {
  protected:
   inode_t inode;
-  __uint32_t version;
 
  public:
-  EInodeUpdate(CInode *in) :
-    LogEvent(EVENT_INODEUPDATE) {
-    this->inode = in->inode;
-    version = in->get_version();
+  EInodeUpdate(CInode *in) : ETraced(EVENT_INODEUPDATE, in) {
+    this->inode = in->get_inode();
   }
-  EInodeUpdate() :
-    LogEvent(EVENT_INODEUPDATE) {
-  }
+  EInodeUpdate() : ETraced(EVENT_INODEUPDATE) { }
   
+  void print(ostream& out) {
+    out << "up inode " << inode.ino << " ";
+    ETraced::print(out);
+    out << " v " << inode.version;    
+  }
+
   virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&version, sizeof(version));
+    encode_trace(bl);
     bl.append((char*)&inode, sizeof(inode));
   }
   void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(version), (char*)&version);
-    off += sizeof(version);
+    decode_trace(bl, off);
     bl.copy(off, sizeof(inode), (char*)&inode);
     off += sizeof(inode);
   }
@@ -63,7 +62,7 @@ class EInodeUpdate : public LogEvent {
     dout(7) << "EInodeUpdate obsolete? on " << *in << endl;
     if (!in->is_auth())
       return true;  // not my inode anymore!
-    if (in->get_version() != version)
+    if (in->get_version() != inode.version)
       return true;  // i'm obsolete!  (another log entry follows)
 
     CDir *parent = in->get_parent_dir();

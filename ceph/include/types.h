@@ -223,6 +223,7 @@ struct inode_t {
   int        mask;
 
   // special stuff
+  version_t     version;           // auth only
   unsigned char hash_seed;         // only defined for dir; 0 if not hashed.
   bool          anchored;          // auth only
   version_t     file_data_version; // auth only
