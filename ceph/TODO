@@ -54,16 +54,17 @@ reliability
 - osdmonitor, filter
 
 ebofs
-- fix sync() 
+- test(fix) sync() 
 - clone()
 - snapshots
 - combine inodes and/or cnodes into same blocks
 - allow btree sets instead of maps
+- eliminate nodepools
 - nonblocking write on missing onodes?
-- verify LRU behavior sensible: writes go to mid, not top!
 - fix bug in node rotation on insert (and reenable)
-- fix NEAR_LAST_FWD   (?)
-- journaling?  in NVRAM?
+- fix NEAR_LAST_FWD (?)
+- journaling? in NVRAM?
+- metadata in nvram?  flash?
 
 
 
