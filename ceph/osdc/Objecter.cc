@@ -143,7 +143,7 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
     }
     
     // changed significantly.
-    dout(10) << "scan_pgs pg " << hex << pgid << dec 
+    dout(10) << "scan_pgs pg " << pgid 
              << " (" << pg.active_tids << ")"
              << " " << other << " -> " << pg.acting
              << endl;
@@ -153,7 +153,7 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 
 void Objecter::kick_requests(set<pg_t>& changed_pgs) 
 {
-  dout(10) << "kick_requests in pgs " << hex << changed_pgs << dec << endl;
+  dout(10) << "kick_requests in pgs " << changed_pgs << endl;
 
   for (set<pg_t>::iterator i = changed_pgs.begin();
        i != changed_pgs.end();
@@ -278,7 +278,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
                          OSD_OP_STAT);
   dout(10) << "stat_submit " << st << " tid " << last_tid
            << " oid " << ex.oid
-           << " pg " << hex << ex.pgid << dec
+           << " pg " << ex.pgid
            << " osd" << pg.acker() 
            << endl;
 
@@ -390,7 +390,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
   dout(10) << "readx_submit " << rd << " tid " << last_tid
            << " oid " << ex.oid << " " << ex.start << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
-           << " pg " << hex << ex.pgid << dec
+           << " pg " << ex.pgid
            << " osd" << pg.acker() 
            << endl;
 
@@ -684,7 +684,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
            << "  oid " << ex.oid
            << " " << ex.start << "~" << ex.length 
-           << " pg " << hex << ex.pgid << dec 
+           << " pg " << ex.pgid 
            << " osd" << pg.primary()
            << endl;
   if (pg.primary() >= 0)

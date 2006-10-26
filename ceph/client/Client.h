@@ -33,7 +33,7 @@
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/filepath.h"
-#include "include/rangeset.h"
+#include "include/interval_set.h"
 
 #include "common/Mutex.h"
 
@@ -349,16 +349,16 @@ protected:
 
   // file handles, etc.
   string                 cwd;
-  rangeset<fh_t>         free_fh_set;  // unused fh's
+  interval_set<fh_t>     free_fh_set;  // unused fh's
   hash_map<fh_t, Fh*>    fh_map;
   
   fh_t get_fh() {
-    fh_t fh = free_fh_set.first();
-    free_fh_set.erase(fh);
+    fh_t fh = free_fh_set.start();
+    free_fh_set.erase(fh, 1);
     return fh;
   }
   void put_fh(fh_t fh) {
-    free_fh_set.insert(fh);
+    free_fh_set.insert(fh, 1);
   }
 
   void mkabspath(const char *rel, string& abs) {

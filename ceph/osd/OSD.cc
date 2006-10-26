@@ -361,8 +361,8 @@ PG *OSD::_lock_pg(pg_t pgid)
 
   if (pg_lock.count(pgid)) {
     Cond c;
-    dout(15) << "lock_pg " << hex << pgid << dec << " waiting as " << &c << endl;
-    //cerr << "lock_pg " << hex << pgid << dec << " waiting as " << &c << endl;
+    dout(15) << "lock_pg " << pgid << " waiting as " << &c << endl;
+    //cerr << "lock_pg " << pgid << " waiting as " << &c << endl;
 
     list<Cond*>& ls = pg_lock_waiters[pgid];   // this is commit, right?
     ls.push_back(&c);
@@ -377,7 +377,7 @@ PG *OSD::_lock_pg(pg_t pgid)
       pg_lock_waiters.erase(pgid);
   }
 
-  dout(15) << "lock_pg " << hex << pgid << dec << endl;
+  dout(15) << "lock_pg " << pgid << endl;
   pg_lock.insert(pgid);
 
   return pg_map[pgid];  
@@ -400,17 +400,17 @@ void OSD::_unlock_pg(pg_t pgid)
     // someone is in line
     Cond *c = pg_lock_waiters[pgid].front();
     assert(c);
-    dout(15) << "unlock_pg " << hex << pgid << dec << " waking up next guy " << c << endl;
+    dout(15) << "unlock_pg " << pgid << " waking up next guy " << c << endl;
     c->Signal();
   } else {
     // nobody waiting
-    dout(15) << "unlock_pg " << hex << pgid << dec << endl;
+    dout(15) << "unlock_pg " << pgid << endl;
   }
 }
 
 void OSD::_remove_pg(pg_t pgid) 
 {
-  dout(10) << "_remove_pg " << hex << pgid << dec << endl;
+  dout(10) << "_remove_pg " << pgid << endl;
 
   // remove from store
   list<object_t> olist;
@@ -1005,7 +1005,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     for (int nrep = 1; 
          nrep <= MIN(g_conf.num_osd, g_conf.osd_max_rep);    // for low osd counts..  hackish bleh
          nrep++) {
-      for (pg_t ps = 0; ps < maxps; ps++) {
+      for (pg_t ps = 0; ps < maxps; ++ps) {
         pg_t pgid = osdmap->ps_nrep_to_pg(ps, nrep);
         vector<int> acting;
         int nrep = osdmap->pg_to_acting_osds(pgid, acting);
@@ -1434,7 +1434,7 @@ void OSD::load_pgs()
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
 {
-  dout(15) << "project_pg_history " << hex << pgid << dec
+  dout(15) << "project_pg_history " << pgid
            << " from " << from << " to " << osdmap->get_epoch()
            << ", start " << h
            << endl;
@@ -1455,7 +1455,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
     // acting set change?
     if (acting != last && 
         e <= h.same_since) {
-      dout(15) << "project_pg_history " << hex << pgid << dec << " changed in " << e+1 
+      dout(15) << "project_pg_history " << pgid << " changed in " << e+1 
                 << " from " << acting << " -> " << last << endl;
       h.same_since = e+1;
     }
@@ -1463,7 +1463,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
     // primary change?
     if (!(!acting.empty() && !last.empty() && acting[0] == last[0]) &&
         e <= h.same_primary_since) {
-      dout(15) << "project_pg_history " << hex << pgid << dec << " primary changed in " << e+1 << endl;
+      dout(15) << "project_pg_history " << pgid << " primary changed in " << e+1 << endl;
       h.same_primary_since = e+1;
     
       if (g_conf.osd_rep == OSD_REP_PRIMARY)
@@ -1474,7 +1474,7 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
     if (g_conf.osd_rep != OSD_REP_PRIMARY) {
       if (!(!acting.empty() && !last.empty() && acting[acting.size()-1] == last[last.size()-1]) &&
           e <= h.same_acker_since) {
-        dout(15) << "project_pg_history " << hex << pgid << dec << " acker changed in " << e+1 << endl;
+        dout(15) << "project_pg_history " << pgid << " acker changed in " << e+1 << endl;
         h.same_acker_since = e+1;
       }
     }
@@ -1561,7 +1561,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       project_pg_history(pgid, history, m->get_epoch());
 
       if (m->get_epoch() < history.same_primary_since) {
-        dout(10) << "handle_pg_notify pg " << hex << pgid << dec << " dne, and primary changed in "
+        dout(10) << "handle_pg_notify pg " << pgid << " dne, and primary changed in "
                  << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << endl;
         continue;
       }
@@ -1664,7 +1664,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
   if (pg_map.count(pgid) == 0) {
-    dout(10) << "handle_pg_log don't have pg " << hex << pgid << dec << ", dropping" << endl;
+    dout(10) << "handle_pg_log don't have pg " << pgid << ", dropping" << endl;
     assert(m->get_epoch() < osdmap->get_epoch());
     delete m;
     return;
@@ -1749,7 +1749,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       project_pg_history(pgid, history, m->get_epoch());
 
       if (m->get_epoch() < history.same_since) {
-        dout(10) << " pg " << hex << pgid << dec << " dne, and pg has changed in "
+        dout(10) << " pg " << pgid << " dne, and pg has changed in "
                  << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << endl;
         continue;
       }
@@ -1760,7 +1760,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       int role = osdmap->calc_pg_role(whoami, acting, nrep);
 
       if (role < 0) {
-        dout(10) << " pg " << hex << pgid << dec << " dne, and i am not an active replica" << endl;
+        dout(10) << " pg " << pgid << " dne, and i am not an active replica" << endl;
         PG::Info empty(pgid);
         notify_list[from].push_back(empty);
         continue;
@@ -1858,7 +1858,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     PG *pg;
 
     if (pg_map.count(pgid) == 0) {
-      dout(10) << " don't have pg " << hex << pgid << dec << endl;
+      dout(10) << " don't have pg " << pgid << endl;
       continue;
     }
 
@@ -2288,7 +2288,7 @@ void OSD::handle_op(MOSDOp *op)
     // have pg?
     if (!pg) {
       dout(7) << "hit non-existent pg " 
-              << hex << pgid << dec 
+              << pgid 
               << ", waiting" << endl;
       waiting_for_pg[pgid].push_back(op);
       return;
@@ -2351,7 +2351,7 @@ void OSD::handle_op(MOSDOp *op)
     // have pg?
     if (!pg) {
       derr(-7) << "handle_rep_op " << *op 
-               << " pgid " << hex << pgid << dec << " dne" << endl;
+               << " pgid " << pgid << " dne" << endl;
       delete op;
       //assert(0); // wtf, shouldn't happen.
       return;
@@ -2468,7 +2468,7 @@ void OSD::dequeue_op(pg_t pgid)
     ls.pop_front();
     
     if (pgid) {
-      dout(10) << "dequeue_op " << op << " write pg " << hex << pgid << dec 
+      dout(10) << "dequeue_op " << op << " write pg " << pgid 
                << ls.size() << " / " << (pending_ops-1) << " more pending" << endl;
     } else {
       dout(10) << "dequeue_op " << op << " read "
@@ -2965,12 +2965,12 @@ void OSD::op_modify_commit(pg_t pgid, tid_t rep_tid, eversion_t pg_complete_thru
       put_repop_gather(pg, repop);
       dout(10) << "op_modify_commit done on " << repop << endl;
     } else {
-      dout(10) << "op_modify_commit pg " << hex << pgid << dec << " rep_tid " << rep_tid << " dne" << endl;
+      dout(10) << "op_modify_commit pg " << pgid << " rep_tid " << rep_tid << " dne" << endl;
     }
 
     unlock_pg(pgid);
   } else {
-    dout(10) << "op_modify_commit pg " << hex << pgid << dec << " dne" << endl;
+    dout(10) << "op_modify_commit pg " << pgid << " dne" << endl;
   }
 }
 

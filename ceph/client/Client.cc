@@ -107,7 +107,7 @@ Client::Client(Messenger *m, MonMap *mm)
   set_cache_size(g_conf.client_cache_size);
 
   // file handles
-  free_fh_set.map_insert(10, 1<<30);
+  free_fh_set.insert(10, 1<<30);
 
   // set up messengers
   messenger = m;
@@ -140,7 +140,7 @@ void Client::tear_down_cache()
        it != fh_map.end();
        it++) {
     Fh *fh = it->second;
-    dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << hex << fh->inode->inode.ino << dec << endl;
+    dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << endl;
     put_inode(fh->inode);
     delete fh;
   }
@@ -171,7 +171,7 @@ void Client::tear_down_cache()
 
 void Client::dump_inode(Inode *in, set<Inode*>& did)
 {
-  dout(1) << "dump_inode: inode " << hex << in->ino() << dec << " ref " << in->ref << " dir " << in->dir << endl;
+  dout(1) << "dump_inode: inode " << in->ino() << " ref " << in->ref << " dir " << in->dir << endl;
 
   if (in->dir) {
     dout(1) << "  dir size " << in->dir->dentries.size() << endl;
@@ -196,7 +196,7 @@ void Client::dump_cache()
        it++) {
     if (did.count(it->second)) continue;
     
-    dout(1) << "dump_cache: inode " << hex << it->first << dec
+    dout(1) << "dump_cache: inode " << it->first
             << " ref " << it->second->ref 
             << " dir " << it->second->dir << endl;
     if (it->second->dir) {
@@ -234,7 +234,7 @@ void Client::trim_cache()
     Dentry *dn = (Dentry*)lru.lru_expire();
     if (!dn) break;  // done
     
-    //dout(10) << "trim_cache unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << dec << endl;
+    //dout(10) << "trim_cache unlinking dn " << dn->name << " in dir " << hex << dn->dir->inode->inode.ino << endl;
     unlink(dn);
   }
 
@@ -256,7 +256,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_inode " << dname << " ino " << hex << st->inode.ino << dec 
+  dout(12) << "insert_inode " << dname << " ino " << st->inode.ino 
            << "  size " << st->inode.size
            << "  mtime " << st->inode.mtime
            << "  hashed " << st->hashed
@@ -266,11 +266,11 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
     if (dn->inode->inode.ino == st->inode.ino) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
-               << " with correct ino " << hex << dn->inode->inode.ino << dec
+               << " with correct ino " << dn->inode->inode.ino
                << endl;
     } else {
       dout(12) << " had dentry " << dname
-               << " with WRONG ino " << hex << dn->inode->inode.ino << dec
+               << " with WRONG ino " << dn->inode->inode.ino
                << endl;
       unlink(dn);
       dn = NULL;
@@ -284,13 +284,13 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
       assert(in);
 
       if (in->dn) {
-        dout(12) << " had ino " << hex << in->inode.ino << dec
+        dout(12) << " had ino " << in->inode.ino
                  << " linked at wrong position, unlinking"
                  << endl;
         dn = relink(in->dn, dir, dname);
       } else {
         // link
-        dout(12) << " had ino " << hex << in->inode.ino << dec
+        dout(12) << " had ino " << in->inode.ino
                  << " unlinked, linking" << endl;
         dn = link(dir, dname, in);
       }
@@ -301,7 +301,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
     Inode *in = new Inode(st->inode, objectcacher);
     inode_map[st->inode.ino] = in;
     dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with ino " << hex << st->inode.ino << dec << endl;
+    dout(12) << " new dentry+node with ino " << st->inode.ino << endl;
   } else {
     // actually update info
     dout(12) << " stat inode mask is " << st->inode.mask << endl;
@@ -351,10 +351,10 @@ void Client::update_inode_dist(Inode *in, InodeStat *st)
   // dir replication
   if (st->spec_defined) {
     if (st->dist.empty() && !in->dir_contacts.empty())
-      dout(9) << "lost dist spec for " << hex << in->inode.ino << dec 
+      dout(9) << "lost dist spec for " << in->inode.ino 
               << " " << st->dist << endl;
     if (!st->dist.empty() && in->dir_contacts.empty()) 
-      dout(9) << "got dist spec for " << hex << in->inode.ino << dec 
+      dout(9) << "got dist spec for " << in->inode.ino 
               << " " << st->dist << endl;
     in->dir_contacts = st->dist;
   }
@@ -388,7 +388,7 @@ Inode* Client::insert_trace(MClientReply *reply)
       }
     } else {
       // not root.
-      dout(10) << "insert_trace dn " << *pdn << " ino " << hex << (*pin)->inode.ino << dec << endl;
+      dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << endl;
       Dir *dir = cur->open_dir();
       cur = this->insert_inode(dir, *pin, *pdn);
       ++pdn;      
@@ -441,7 +441,7 @@ Dentry *Client::lookup(filepath& path)
   }
   
   if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << hex << dn->inode->inode.ino << dec << " valid_until " << dn->inode->valid_until<< endl;
+    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " valid_until " << dn->inode->valid_until<< endl;
   }
 
   return dn;
@@ -473,7 +473,7 @@ MClientReply *Client::make_request(MClientRequest *req,
         break;
       }
       
-      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << hex << diri->inode.ino << dec << " " << req->get_filepath()[i] << endl;
+      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << endl;
 
       if (i == depth-1) {  // last one!
         item = dir->dentries[ req->get_filepath()[i] ]->inode;
@@ -757,7 +757,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     int other = m->get_mds();
 
     if (in && in->stale_caps.count(other)) {
-      dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " reap on mds" << other << endl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " reap on mds" << other << endl;
 
       // fresh from new mds?
       if (!in->caps.count(mds)) {
@@ -772,7 +772,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       
       // fall-thru!
     } else {
-      dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " premature (!!) reap on mds" << other << endl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) reap on mds" << other << endl;
       // delay!
       cap_reap_queue[in->ino()][other] = m;
       return;
@@ -783,7 +783,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   // stale?
   if (m->get_special() == MClientFileCaps::FILECAP_STALE) {
-    dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
+    dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now stale" << endl;
     
     // move to stale list
     assert(in->caps.count(mds));
@@ -797,7 +797,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     // delayed reap?
     if (cap_reap_queue.count(in->ino()) &&
         cap_reap_queue[in->ino()].count(mds)) {
-      dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " delayed reap on mds" << m->get_mds() << endl;
+      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " delayed reap on mds" << m->get_mds() << endl;
       
       // process delayed reap
       handle_file_caps( cap_reap_queue[in->ino()][mds] );
@@ -811,7 +811,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   // release?
   if (m->get_special() == MClientFileCaps::FILECAP_RELEASE) {
-    dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec << " from mds" << mds << " release" << endl;
+    dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " release" << endl;
     assert(in->caps.count(mds));
     in->caps.erase(mds);
     for (map<int,InodeCap>::iterator p = in->caps.begin();
@@ -840,7 +840,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
   // don't want?
   if (in->file_caps_wanted() == 0) {
-    dout(5) << "handle_file_caps on ino " << hex << m->get_ino() << dec 
+    dout(5) << "handle_file_caps on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
             << ", which we don't want caps for, releasing." << endl;
@@ -858,7 +858,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   const int new_caps = m->get_caps();
   in->caps[mds].caps = new_caps;
   in->caps[mds].seq = m->get_seq();
-  dout(5) << "handle_file_caps on in " << hex << m->get_ino() << dec 
+  dout(5) << "handle_file_caps on in " << m->get_ino() 
           << " mds" << mds << " seq " << m->get_seq() 
           << " caps now " << cap_string(new_caps) 
           << " was " << cap_string(old_caps) << endl;
@@ -961,7 +961,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
 void Client::release_caps(Inode *in,
                           int retain)
 {
-  dout(5) << "releasing caps on ino " << hex << in->inode.ino << dec
+  dout(5) << "releasing caps on ino " << in->inode.ino << dec
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
           << endl;
@@ -1079,10 +1079,10 @@ int Client::unmount()
       if (!in->caps.empty()) {
         in->fc.release_clean();
         if (in->fc.is_dirty()) {
-          dout(10) << "unmount residual caps on " << hex << in->ino() << dec << ", flushing" << endl;
+          dout(10) << "unmount residual caps on " << in->ino() << ", flushing" << endl;
           in->fc.empty(new C_Client_CloseRelease(this, in));
         } else {
-          dout(10) << "unmount residual caps on " << hex << in->ino() << dec  << ", releasing" << endl;
+          dout(10) << "unmount residual caps on " << in->ino()  << ", releasing" << endl;
           release_caps(in);
         }
       }
@@ -1511,7 +1511,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
   if (res == 0) {
     assert(in);
     fill_stat(in->inode,stbuf);
-    dout(10) << "stat sez size = " << in->inode.size << " ino = " << hex << stbuf->st_ino << dec << endl;
+    dout(10) << "stat sez size = " << in->inode.size << " ino = " << stbuf->st_ino << endl;
   }
 
   trim_cache();
@@ -1544,7 +1544,7 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
   
   if (res == 0) {
     fill_statlite(in->inode,stl);
-    dout(10) << "stat sez size = " << in->inode.size << " ino = " << hex << in->inode.ino << dec << endl;
+    dout(10) << "stat sez size = " << in->inode.size << " ino = " << in->inode.ino << endl;
   }
 
   trim_cache();
@@ -2036,7 +2036,7 @@ int Client::open(const char *relpath, int flags)
     int mds = MSG_ADDR_NUM(reply->get_source());
 
     if (f->inode->caps.empty()) {// first caps?
-      dout(7) << " first caps on " << hex << f->inode->inode.ino << dec << endl;
+      dout(7) << " first caps on " << f->inode->inode.ino << endl;
       f->inode->get();
     }
 
@@ -2045,7 +2045,7 @@ int Client::open(const char *relpath, int flags)
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
       dout(7) << "open got caps " << cap_string(new_caps)
-              << " for " << hex << f->inode->ino() << dec 
+              << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds << endl;
 
@@ -2062,7 +2062,7 @@ int Client::open(const char *relpath, int flags)
 
     } else {
       dout(7) << "open got SAME caps " << cap_string(new_caps) 
-              << " for " << hex << f->inode->ino() << dec 
+              << " for " << f->inode->ino() 
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds << endl;
     }
@@ -2091,7 +2091,7 @@ int Client::open(const char *relpath, int flags)
 
 void Client::close_release(Inode *in)
 {
-  dout(10) << "close_release on " << hex << in->ino() << dec << endl;
+  dout(10) << "close_release on " << in->ino() << endl;
 
   if (!in->num_open_rd) 
     in->fc.release_clean();
@@ -2105,7 +2105,7 @@ void Client::close_release(Inode *in)
 
 void Client::close_safe(Inode *in)
 {
-  dout(10) << "close_safe on " << hex << in->ino() << dec << endl;
+  dout(10) << "close_safe on " << in->ino() << endl;
   put_inode(in);
   if (unmounting) 
     mount_cond.Signal();
@@ -2158,14 +2158,14 @@ int Client::close(fh_t fh)
 
     // pin until safe?
     if (in->num_open_wr == 0 && !in->fc.all_safe()) {
-      dout(10) << "pinning ino " << hex << in->ino() << dec << " until safe" << endl;
+      dout(10) << "pinning ino " << in->ino() << " until safe" << endl;
       in->get();
       in->fc.add_safe_waiter(new C_Client_CloseSafe(this, in));
     }
   } else {
     // caching off.
     if (in->num_open_rd == 0 && in->num_open_wr == 0) {
-      dout(10) << "  releasing caps on " << hex << in->ino() << dec << endl;
+      dout(10) << "  releasing caps on " << in->ino() << endl;
       release_caps(in);              // release caps now.
     }
   }
@@ -2466,7 +2466,7 @@ int Client::fsync(fh_t fh, bool syncdataonly)
   Fh *f = fh_map[fh];
   Inode *in = f->inode;
 
-  dout(3) << "fsync fh " << fh << " ino " << hex << in->inode.ino << dec << " syncdataonly " << syncdataonly << endl;
+  dout(3) << "fsync fh " << fh << " ino " << in->inode.ino << " syncdataonly " << syncdataonly << endl;
 
   // metadata?
   if (!syncdataonly) {

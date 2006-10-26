@@ -19,6 +19,7 @@
 #define EVENT_DIRUPDATE    3
 #define EVENT_UNLINK       4
 #define EVENT_ALLOC        5
+#define EVENT_MKNOD        6
 
 
 #include <string>

@@ -941,7 +941,7 @@ void ObjectCacher::flusher_entry()
 int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock)
 {
   dout(10) << "atomic_sync_readx " << rd
-           << " in " << hex << ino << dec
+           << " in " << ino
            << endl;
 
   if (rd->extents.size() == 1) {
@@ -998,7 +998,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock)
 {
   dout(10) << "atomic_sync_writex " << wr
-           << " in " << hex << ino << dec
+           << " in " << ino
            << endl;
 
   if (wr->extents.size() == 1 &&
@@ -1015,7 +1015,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
          o->lock_state != Object::LOCK_UPGRADING)) {
       // just write synchronously.
       dout(10) << "atomic_sync_writex " << wr
-               << " in " << hex << ino << dec
+               << " in " << ino
                << " doing sync write"
                << endl;
 
@@ -1280,11 +1280,11 @@ bool ObjectCacher::flush(Object *ob)
 bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "flush_set on " << hex << ino << dec << " dne" << endl;
+    dout(10) << "flush_set on " << ino << " dne" << endl;
     return true;
   }
 
-  dout(10) << "flush_set " << hex << ino << dec << endl;
+  dout(10) << "flush_set " << ino << endl;
 
   C_Gather *gather = 0; // we'll need to wait for all objects to flush!
 
@@ -1301,7 +1301,7 @@ bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
         gather = new C_Gather(onfinish);
       safe = false;
 
-      dout(10) << "flush_set " << hex << ino << dec << " will wait for ack tid " 
+      dout(10) << "flush_set " << ino << " will wait for ack tid " 
                << ob->last_write_tid 
                << " on " << *ob
                << endl;
@@ -1311,7 +1311,7 @@ bool ObjectCacher::flush_set(inodeno_t ino, Context *onfinish)
   }
   
   if (safe) {
-    dout(10) << "flush_set " << hex << ino << dec << " has no dirty|tx bhs" << endl;
+    dout(10) << "flush_set " << ino << " has no dirty|tx bhs" << endl;
     return true;
   }
   return false;
@@ -1325,11 +1325,11 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
   assert(onfinish);  // doesn't make any sense otherwise.
 
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "commit_set on " << hex << ino << dec << " dne" << endl;
+    dout(10) << "commit_set on " << ino << " dne" << endl;
     return true;
   }
 
-  dout(10) << "commit_set " << hex << ino << dec << endl;
+  dout(10) << "commit_set " << ino << endl;
 
   C_Gather *gather = 0; // we'll need to wait for all objects to commit
 
@@ -1344,7 +1344,7 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
     flush_set(ino);
 
     if (ob->last_write_tid > ob->last_commit_tid) {
-      dout(10) << "commit_set " << hex << ino << dec << " " << *ob 
+      dout(10) << "commit_set " << ino << " " << *ob 
                << " will finish on commit tid " << ob->last_write_tid
                << endl;
       if (!gather && onfinish) gather = new C_Gather(onfinish);
@@ -1355,7 +1355,7 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
   }
 
   if (safe) {
-    dout(10) << "commit_set " << hex << ino << dec << " all committed" << endl;
+    dout(10) << "commit_set " << ino << " all committed" << endl;
     return true;
   }
   return false;
@@ -1391,11 +1391,11 @@ off_t ObjectCacher::release_set(inodeno_t ino)
   off_t unclean = 0;
 
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "release_set on " << hex << ino << dec << " dne" << endl;
+    dout(10) << "release_set on " << ino << " dne" << endl;
     return 0;
   }
 
-  dout(10) << "release_set " << hex << ino << dec << endl;
+  dout(10) << "release_set " << ino << endl;
 
   set<Object*>& s = objects_by_ino[ino];
   for (set<Object*>::iterator i = s.begin();
@@ -1407,14 +1407,14 @@ off_t ObjectCacher::release_set(inodeno_t ino)
     unclean += o_unclean;
 
     if (o_unclean) 
-      dout(10) << "release_set " << hex << ino << dec << " " << *ob 
+      dout(10) << "release_set " << ino << " " << *ob 
                << " has " << o_unclean << " bytes left"
                << endl;
     
   }
 
   if (unclean) {
-    dout(10) << "release_set " << hex << ino << dec
+    dout(10) << "release_set " << ino
              << ", " << unclean << " bytes left" << endl;
   }
 
@@ -1425,11 +1425,11 @@ off_t ObjectCacher::release_set(inodeno_t ino)
 void ObjectCacher::kick_sync_writers(inodeno_t ino)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "kick_sync_writers on " << hex << ino << dec << " dne" << endl;
+    dout(10) << "kick_sync_writers on " << ino << " dne" << endl;
     return;
   }
 
-  dout(10) << "kick_sync_writers on " << hex << ino << dec << endl;
+  dout(10) << "kick_sync_writers on " << ino << endl;
 
   list<Context*> ls;
 
@@ -1448,11 +1448,11 @@ void ObjectCacher::kick_sync_writers(inodeno_t ino)
 void ObjectCacher::kick_sync_readers(inodeno_t ino)
 {
   if (objects_by_ino.count(ino) == 0) {
-    dout(10) << "kick_sync_readers on " << hex << ino << dec << " dne" << endl;
+    dout(10) << "kick_sync_readers on " << ino << " dne" << endl;
     return;
   }
 
-  dout(10) << "kick_sync_readers on " << hex << ino << dec << endl;
+  dout(10) << "kick_sync_readers on " << ino << endl;
 
   list<Context*> ls;
 

@@ -21,12 +21,13 @@
 #include "events/EDirUpdate.h"
 #include "events/EUnlink.h"
 #include "events/EAlloc.h"
+#include "events/EMknod.h"
 
 LogEvent *LogEvent::decode(bufferlist& bl)
 {
   // parse type, length
   int off = 0;
-  __uint32_t type;
+  int type;
   bl.copy(off, sizeof(type), (char*)&type);
   off += sizeof(type);
 
@@ -56,6 +57,10 @@ LogEvent *LogEvent::decode(bufferlist& bl)
     
   case EVENT_ALLOC:
     le = new EAlloc();
+    break;
+
+  case EVENT_MKNOD:
+    le = new EMknod();
     break;
 
   default:

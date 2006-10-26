@@ -35,6 +35,7 @@
 
 #include "events/EInodeUpdate.h"
 #include "events/EDirUpdate.h"
+#include "events/EMknod.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -1015,7 +1016,7 @@ CInode *Server::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->mark_dirty();
   
   // journal it
-  mdlog->submit_entry(new EDirUpdate(dir));  // FIXME WRONG EVENT
+  mdlog->submit_entry(new EMknod(newi));
 
   // ok!
   return newi;

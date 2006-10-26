@@ -818,7 +818,7 @@ int MDCache::path_traverse(filepath& origpath,
           dout(7) << "linking in remote in " << *in << endl;
           dn->link_remote(in);
         } else {
-          dout(7) << "remote link to " << hex << dn->get_remote_ino() << dec << ", which i don't have" << endl;
+          dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << endl;
           open_remote_ino(dn->get_remote_ino(), req,
                           ondelay);
           return 1;
@@ -865,7 +865,7 @@ int MDCache::path_traverse(filepath& origpath,
 
         // forwarder wants replicas?
         if (is_client_req && ((MClientRequest*)req)->get_mds_wants_replica_in_dirino()) {
-          dout(30) << "traverse: REP is here, " << hex << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << cur->dir->ino() << dec << endl;
+          dout(30) << "traverse: REP is here, " << ((MClientRequest*)req)->get_mds_wants_replica_in_dirino() << " vs " << cur->dir->ino() << endl;
           
           if (((MClientRequest*)req)->get_mds_wants_replica_in_dirino() == cur->dir->ino() &&
               cur->dir->is_auth() && 
@@ -1698,7 +1698,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     cur = get_inode(m->get_base_ino());
     
     if (!cur) {
-      dout(7) << "discover_reply don't have base ino " << hex << m->get_base_ino() << dec << ", dropping" << endl;
+      dout(7) << "discover_reply don't have base ino " << m->get_base_ino() << ", dropping" << endl;
       delete m;
       return;
     }
@@ -1874,7 +1874,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
   CInode *in = get_inode(m->get_ino());
   if (!in) {
     //dout(7) << "inode_update on " << m->get_ino() << ", don't have it, ignoring" << endl;
-    dout(7) << "inode_update on " << hex << m->get_ino() << dec << ", don't have it, sending expire" << endl;
+    dout(7) << "inode_update on " << m->get_ino() << ", don't have it, sending expire" << endl;
     MCacheExpire *expire = new MCacheExpire(mds->get_nodeid());
     expire->add_inode(m->get_ino(), m->get_nonce());
     mds->send_message_mds(expire, m->get_source().num(), MDS_PORT_CACHE);
@@ -1919,7 +1919,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     int nonce = it->second;
     
     if (!in) {
-      dout(0) << "inode_expire on " << hex << it->first << dec << " from " << from << ", don't have it" << endl;
+      dout(0) << "inode_expire on " << it->first << " from " << from << ", don't have it" << endl;
       assert(in);  // i should be authority, or proxy .. and pinned
     }  
     if (!in->is_auth()) {
@@ -2063,7 +2063,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 {
   CInode *in = get_inode(m->get_ino());
   if (!in || !in->dir) {
-    dout(5) << "dir_update on " << hex << m->get_ino() << dec << ", don't have it" << endl;
+    dout(5) << "dir_update on " << m->get_ino() << ", don't have it" << endl;
 
     // discover it?
     if (m->should_discover()) {
@@ -2271,7 +2271,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
   if (diri) dir = diri->dir;
 
   if (!diri || !dir) {
-    dout(7) << "handle_dentry_unlink don't have dir " << hex << m->get_dirino() << dec << endl;
+    dout(7) << "handle_dentry_unlink don't have dir " << m->get_dirino() << endl;
   }
   else {
     CDentry *dn = dir->lookup(m->get_dn());

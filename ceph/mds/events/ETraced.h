@@ -100,8 +100,10 @@ public:
     for (list<bit>::iterator p = trace.begin();
 	 p != trace.end();
 	 p++) {
-      if (p != trace.begin()) out << "/";
-      out << p->dn;
+      if (p == trace.begin()) 
+	out << "[" << p->dirino << "]/" << p->dn;
+      else 
+	out << "/" << p->dn;
     }
   }
 

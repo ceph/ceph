@@ -170,17 +170,33 @@ struct FileLayout {
 
 // -- inode --
 
-/** object id
- * msb[ ino bits | ono bits ]lsb
- * from LSB to MSB 
- */
+//typedef __uint64_t inodeno_t;   
 
-#define OID_ONO_BITS       32        // 1mb * 10^9 = 1 petabyte files
-#define OID_INO_BITS       (64-32)   // 2^34 =~ 16 billion files
+struct inodeno_t {
+  __uint64_t val;
+  inodeno_t() : val() {}
+  inodeno_t(__uint64_t v) : val(v) {}
+  inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
+  operator __uint64_t() const { return val; }
+};
 
-typedef __uint64_t inodeno_t;   // 34-bit ino (for now!)
+inline ostream& operator<<(ostream& out, inodeno_t ino) {
+  return out << hex << ino.val << dec;
+}
+
+namespace __gnu_cxx {
+  template<> struct hash< inodeno_t >
+  {
+    size_t operator()( const inodeno_t& x ) const
+    {
+      static hash<__uint64_t> H;
+      return H(x.val);
+    }
+  };
+}
 
 typedef __uint64_t version_t;
+
 
 
 #define INODE_MODE_FILE     0100000 // S_IFREG
@@ -248,12 +264,43 @@ inline ostream& operator<<(ostream& out, lame128_t& oid) {
 
 
 // osd types
-typedef __uint32_t ps_t;          // placement seed
-typedef __uint32_t pg_t;          // placement group
+//typedef __uint32_t ps_t;          // placement seed
+//typedef __uint32_t pg_t;          // placement group
 typedef __uint64_t coll_t;        // collection id
 typedef __uint64_t tid_t;         // transaction id
 
 typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
+
+// placement group id
+struct pg_t {
+  __uint32_t val;
+  pg_t() : val() {}
+  pg_t(__uint32_t v) : val(v) {}
+  pg_t operator=(__uint32_t v) { val = v; return *this; }
+  pg_t operator&=(__uint32_t v) { val &= v; return *this; }
+  pg_t operator+=(pg_t o) { val += o.val; return *this; }
+  pg_t operator-=(pg_t o) { val -= o.val; return *this; }
+  pg_t operator++() { ++val; return *this; }
+  operator __uint32_t() const { return val; }
+};
+
+inline ostream& operator<<(ostream& out, pg_t pg) {
+  return out << hex << pg.val << dec;
+}
+
+namespace __gnu_cxx {
+  template<> struct hash< pg_t >
+  {
+    size_t operator()( const pg_t& x ) const
+    {
+      static hash<__uint32_t> H;
+      return H(x.val);
+    }
+  };
+}
+
+typedef pg_t ps_t;  // placement seed
+
 
 
 // compound rados version type

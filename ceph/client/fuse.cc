@@ -41,7 +41,6 @@
 
 // ceph stuff
 #include "include/types.h"
-#include "include/rangeset.h"
 
 #include "Client.h"
 
@@ -98,7 +97,7 @@ static int ceph_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
   return res;
 }
 
-static int ceph_mknod(const char *path, mode_t mode, dev_t rdev)
+static int ceph_mknod(const char *path, mode_t mode, dev_t rdev) 
 {
   return client->mknod(path, mode);
 }

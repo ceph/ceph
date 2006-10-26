@@ -44,12 +44,11 @@ protected:
   // my local store
   ObjectStore *store;
 
-  const static inodeno_t INO_ELECTOR = 1;
-  const static inodeno_t INO_MON_MAP = 2;
-  const static inodeno_t INO_OSD_MAP = 10;
-  const static inodeno_t INO_OSD_INC_MAP = 11;
-  const static inodeno_t INO_MDS_MAP = 20;
-  
+  const static int INO_ELECTOR = 1;
+  const static int INO_MON_MAP = 2;
+  const static int INO_OSD_MAP = 10;
+  const static int INO_OSD_INC_MAP = 11;
+  const static int INO_MDS_MAP = 20;
 
   // elector
   Elector elector;
