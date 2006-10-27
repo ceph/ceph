@@ -23,7 +23,7 @@
 		The following papers represent earlier research upon which Ceph's design is partially based.
 		<ul>
 			<li>Qin Xin, Thomas Schwarz, Ethan L. Miller, <a href="http://www.ssrc.ucsc.edu/Papers/xin-mascots05.pdf">Disk Infant Mortality in Large Storage Systems</a>, Proceedings of the 13th International Symposium on Modeling, Analysis, and Simulation of Computer and Telecommunication Systems (MASCOTS '05), September 2005.
-			<li>Joel C. Wu, Scott A. Brandt, <a href="http://www.ssrc.ucsc.edu/Papers/xin-mascots05.pdf">Hierarchical Disk Sharing for Multimedia Systems and Servers</a>, Proceedings of the 15th ACM International Workshop on Network and Operating Systems Support for Digital Audio and Video (NOSSDAV 2005), June 2005, pages 189-194.
+			<li>Joel C. Wu, Scott A. Brandt, <a href="http://www.soe.ucsc.edu/~jwu/papers/wu-nossdav05.pdf">Hierarchical Disk Sharing for Multimedia Systems and Servers</a>, Proceedings of the 15th ACM International Workshop on Network and Operating Systems Support for Digital Audio and Video (NOSSDAV 2005), June 2005, pages 189-194.
 			<li>Qin Xin, Ethan L. Miller, Thomas Schwarz, Darrell D. E. Long, <a href="http://www.ssrc.ucsc.edu/Papers/xin-mss05.pdf">Impact of Failure on Interconnection Networks in Large Storage Systems</a>, Proceedings of the 22nd IEEE / 13th NASA Goddard Conference on Mass Storage Systems and Technologies, April 2005.
 
 			<li>Feng Wang, Scott A. Brandt, Ethan L. Miller, Darrell D. E. Long, <a href="http://ssrc.cse.ucsc.edu/Papers/wang-mss04b.pdf">OBFS: A File System for Object-Based Storage Devices</a>, Proceedings of the 21st IEEE / 12th NASA Goddard Conference on Mass Storage Systems and Technologies, April 2004, pages 283-300.
