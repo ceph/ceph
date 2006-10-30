@@ -978,7 +978,7 @@ void Client::release_caps(Inode *in,
                                                it->second.seq,
                                                it->second.caps,
                                                in->file_caps_wanted()); 
-      messenger->send_message(m, MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_CACHE);
+      messenger->send_message(m, MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
     }
   }
   
@@ -1003,7 +1003,7 @@ void Client::update_caps_wanted(Inode *in)
                                              it->second.caps,
                                              in->file_caps_wanted());
     messenger->send_message(m,
-                            MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_CACHE);
+                            MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
   }
 }
 
