@@ -248,6 +248,16 @@ public:
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
     unsigned unused_tail_length() const { return _raw->len - (_off+_len); }
+    const char& operator[](unsigned n) const { 
+      assert(_raw); 
+      assert(n < _len);
+      return _raw->data[_off + n];
+    }
+    char& operator[](unsigned n) { 
+      assert(_raw); 
+      assert(n < _len);
+      return _raw->data[_off + n];
+    }
 
     const char *raw_c_str() const { assert(_raw); return _raw->data; }
     unsigned raw_length() const { assert(_raw); return _raw->len; }
@@ -520,6 +530,23 @@ public:
     }
     
     
+    /*
+     * get a char
+     */
+    const char& operator[](unsigned n) {
+      assert(n < _len);
+      for (std::list<ptr>::iterator p = _buffers.begin();
+	   p != _buffers.end();
+	   p++) {
+	if (n >= p->length()) {
+	  n -= p->length();
+	  continue;
+	}
+	return (*p)[n];
+      }
+      assert(0);
+    }
+
     /*
      * return a contiguous ptr to whole bufferlist contents.
      */
