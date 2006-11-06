@@ -1,10 +1,27 @@
 
 <div class="mainsegment">
+	<h3>Roadmap</h3>
+	<div>
+		Here is a brief summary of what we're currently working on, and what state we expect Ceph to take in the foreseeable future.  This is a rough estimate, and highly dependent on what kind of interest Ceph generates in the larger community.
+
+		<ul>
+		<li><b>Q4 2006</b> -- MDS recovery for single MDS configurations.
+		<li><b>Q1/Q2 2007</b> -- MDS recovery for multi-MDS configurations.
+		<li><b>Q2 2007</b> -- Snapshots.
+		</ul>
+
+	</div>
+
 	<h3>Tasks</h3>
 	<div>
 		Although Ceph is currently a working prototype that demonstrates the key features of the architecture, a variety of key features need to be implemented in order to make Ceph a stable file system that can be used in production environments.  Some of the key tasks are outlined below.  If you are a kernel or file system developer and are interested in contributing to Ceph, please join the email list and <a href="mailto:ceph-devel@lists.sourceforge.net">drop us a line</a>.
 
 		<p>
+
+		<h4>Snapshots</h4>
+		<div>
+		
+		</div>
 
 		<h4>Ebofs</h4>
 		<div>
