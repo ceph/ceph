@@ -135,6 +135,9 @@ struct md_config_t {
   // objecter
   bool  objecter_buffer_uncommitted;
 
+  // journaler
+  bool  journaler_allow_split_entries;
+
   // mds
   int   mds_cache_size;
   float mds_cache_mid;

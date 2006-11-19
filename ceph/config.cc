@@ -146,6 +146,9 @@ md_config_t g_conf = {
   // --- objecter ---
   objecter_buffer_uncommitted: true,
 
+  // --- journaler ---
+  journaler_allow_split_entries: false,
+
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
