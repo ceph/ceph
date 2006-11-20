@@ -1,12 +1,39 @@
 
 == todo
 
+papers to read
+- gribble et al 2000, scalable distributed hash table
+- sagiv blink trees
+- johnson and colbrook's DE and DB-trees (maybe fewer locks?)
+
+
+
 - messenger lookup() and failure() upcalls
 
 - how to get usage feedback to monitor?
 
 - change messenger entity_inst_t
  - no more rank!  make it a uniquish nonce?
+
+
+osd
+- pull out "object" service
+- btree service
+- interject snapshot abstraction.  inbetween?  
+ - how to generalize pg log entries?  
+ - or put snapshotting in apply_operation?
+
+osdc
+- distributed btree thing: Blinker!
+
+mds
+- rewrite mdstore to use osd btree service
+
+journaler
+- should we pad with zeros to avoid splitting individual entries?
+  - make it a g_conf flag?
+  - have to fix reader to skip over zeros (either <4 bytes for size, or zeroed sizes)
+- need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
 
 
 
@@ -25,13 +52,14 @@ osdmon
 mdsmon
 
 osd/rados
+- pg_num instead of pg_bits
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 - consider implications of nvram writeahead logs
 - fix heartbeat wrt new replication
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-- pg_bit changes
+- pg_bit/pg_num changes
 - report crashed pgs?
 
 messenger
@@ -74,7 +102,8 @@ bugs/stability
 
 general
 - timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
-  - well, just figure out general timer cancellation strategy that avoids races
+- well, just figure out general timer cancellation strategy that avoids races
+ - use updated Timer as a model?
 
 
 remaining hard problems
