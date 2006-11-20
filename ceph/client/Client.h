@@ -579,6 +579,7 @@ protected:
   int lazyio_propogate(int fd, off_t offset, size_t count);
   int lazyio_synchronize(int fd, off_t offset, size_t count);
 
+  int describe_layout(char *fn, list<ObjectExtent>& result);
 
   void ms_handle_failure(Message*, msg_addr_t dest, const entity_inst_t& inst);
 };
