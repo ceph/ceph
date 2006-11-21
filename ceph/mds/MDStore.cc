@@ -33,7 +33,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "mds" << mds->get_nodeid() << ".store "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".store "
 
 
 /*
@@ -235,42 +235,49 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
   
   // parse buffer contents into cache
   dout(15) << "bl is " << bl << endl;
+
+  int off = 0;
   size_t size;
-  bl.copy(0, sizeof(size), (char*)&size);
+  __uint32_t num;
+  version_t got_version;
+  int got_hashcode;
+  bl.copy(off, sizeof(size), (char*)&size);
+  off += sizeof(size);
   assert(bl.length() >= size + sizeof(size));  
+  bl.copy(off, sizeof(num), (char*)&num);
+  off += sizeof(num);
+  bl.copy(off, sizeof(got_version), (char*)&got_version);
+  off += sizeof(got_version);
+  bl.copy(off, sizeof(got_hashcode), (char*)&got_hashcode);
+  off += sizeof(got_hashcode);
+
+  assert(got_hashcode == hashcode);  
   
-  int n;
-  bl.copy(sizeof(size), sizeof(n), (char*)&n);
-  
-  char *buffer = bl.c_str();      // contiguous ptr to whole buffer(list)  
-  size_t buflen = bl.length();
-  size_t p = sizeof(size_t);
-  
-  __uint32_t num = *(__uint32_t*)(buffer + p);
-  p += sizeof(num);
+  int buflen = bl.length();
   
   dout(10) << "  " << num << " items in " << size << " bytes" << endl;
 
   unsigned parsed = 0;
   while (parsed < num) {
-    assert(p < buflen && num > 0);
+    assert(off < buflen && num > 0);
     parsed++;
     
-    dout(24) << " " << parsed << "/" << num << " pos " << p-8 << endl;
+    dout(24) << " " << parsed << "/" << num << " pos " << off << endl;
 
     // dentry
-    string dname = buffer+p;
-    p += dname.length() + 1;
+    string dname;
+    ::_decode(dname, bl, off);
     dout(24) << "parse filename '" << dname << "'" << endl;
     
     CDentry *dn = dir->lookup(dname);  // existing dentry?
     
-    if (*(buffer+p) == 'L') {
-      // hard link, we don't do that yet.
-      p++;
-
-      inodeno_t ino = *(inodeno_t*)(buffer+p);
-      p += sizeof(ino);
+    char type = bl[off];
+    ++off;
+    if (type == 'L') {
+      // hard link
+      inodeno_t ino;
+      bl.copy(off, sizeof(ino), (char*)&ino);
+      off += sizeof(ino);
 
       // what to do?
       if (hashcode >= 0) {
@@ -301,20 +308,18 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
         dout(12) << "readdir got remote link " << ino << " (dont' have it)" << endl;
       }
     } 
-    else if (*(buffer+p) == 'I') {
+    else if (type == 'I') {
       // inode
-      p++;
       
       // parse out inode
-      inode_t *inode = (inode_t*)(buffer+p);
-      p += sizeof(inode_t);
+      inode_t inode;
+      bl.copy(off, sizeof(inode), (char*)&inode);
+      off += sizeof(inode);
 
       string symlink;
-      if ((inode->mode & INODE_TYPE_MASK) == INODE_MODE_SYMLINK) {
-        symlink = (char*)(buffer+p);
-        p += symlink.length() + 1;
-      }
-
+      if (inode.is_symlink())
+        ::_decode(symlink, bl, off);
+      
       // what to do?
       if (hashcode >= 0) {
         int dentryhashcode = mds->hash_dentry( dir->ino(), dname );
@@ -328,19 +333,28 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
         } else {
           // had dentry
           dout(12) << "readdir had dentry " << dname << endl;
+
+	  // under water?
+	  if (dn->get_inode()->get_parent_dir_version() <= got_version) {
+	    dout(10) << "readdir had underwater dentry " << dname << " and inode, marking clean" << endl;
+	    dn->get_inode()->mark_clean();
+	    dn->mark_clean();
+	  }
         }
         continue;
       }
       
       // add inode
       CInode *in = 0;
-      if (mds->mdcache->have_inode(inode->ino)) {
-        in = mds->mdcache->get_inode(inode->ino);
-        dout(12) << "readdir got (but i already had) " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
+      if (mds->mdcache->have_inode(inode.ino)) {
+        in = mds->mdcache->get_inode(inode.ino);
+        dout(12) << "readdir got (but i already had) " << *in 
+		 << " mode " << in->inode.mode 
+		 << " mtime " << in->inode.mtime << endl;
       } else {
         // inode
-        in = new CInode();
-        memcpy(&in->inode, inode, sizeof(inode_t));
+        in = new CInode(mds->mdcache);
+	in->inode = inode;
         
         // symlink?
         if (in->is_symlink()) {
@@ -356,7 +370,8 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
       dout(12) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
     }
     else {
-      dout(1) << "corrupt directory, i got tag char '" << *(buffer+p) << "' val " << (int)(*(buffer+p)) << " at pos " << p << endl;
+      dout(1) << "corrupt directory, i got tag char '" << type << "' val " << (int)(type) 
+	      << " at pos " << off << endl;
       assert(0);
     }
   }
@@ -378,12 +393,12 @@ class C_MDS_CommitDirVerify : public Context {
 public:
   MDS *mds;
   inodeno_t ino;
-  __uint64_t version;
+  version_t version;
   Context *c;
   
   C_MDS_CommitDirVerify( MDS *mds, 
                         inodeno_t ino, 
-                        __uint64_t version,
+                        version_t version,
                         Context *c) {
     this->mds = mds;
     this->c = c;
@@ -428,7 +443,7 @@ class C_MDS_CommitDirFinish : public Context {
  protected:
   MDStore *ms;
   CDir *dir;
-  __uint64_t version;
+  version_t version;
 
  public:
 
@@ -454,7 +469,7 @@ void MDStore::commit_dir( CDir *dir,
 }
 
 void MDStore::commit_dir( CDir *dir,
-                          __uint64_t version,
+                          version_t version,
                           Context *c )
 {
   assert(dir->is_auth() ||
@@ -520,7 +535,7 @@ void MDStore::commit_dir( CDir *dir,
 
 void MDStore::commit_dir_2( int result,
                             CDir *dir,
-                            __uint64_t committed_version)
+                            version_t committed_version)
 {
   dout(5) << "commit_dir_2 " << *dir << " committed " << committed_version << ", current version " << dir->get_version() << endl;
   assert(committed_version == dir->get_committing_version());
@@ -549,7 +564,7 @@ class C_MDS_CommitSlice : public Context {
   CDir *dir;
   Context *c;
   int hashcode;
-  __uint64_t version;
+  version_t version;
 
 public:
   bufferlist bl;
@@ -587,6 +602,10 @@ void MDStore::commit_dir_slice( CDir *dir,
   __uint32_t num = 0;
   
   bufferlist dirdata;
+
+  version_t v = dir->get_version();
+  dirdata.append((char*)&v, sizeof(v));
+  dirdata.append((char*)&hashcode, sizeof(hashcode));
   
   for (CDir_map_t::iterator it = dir->begin();
        it != dir->end();
@@ -639,7 +658,13 @@ void MDStore::commit_dir_slice( CDir *dir,
       if (in->is_dirty()) {
         in->float_parent_dir_version( dir->get_version() );
         dout(12) << " dirty inode " << *in << " now " << in->get_parent_dir_version() << endl;
+
+	in->set_committing_version( in->get_version() );
+	assert(in->get_last_committed_version() < in->get_committing_version());
+      } else {
+	assert(in->get_committing_version() == in->get_version());
       }
+
     }
 
     num++;
@@ -669,7 +694,7 @@ void MDStore::commit_dir_slice( CDir *dir,
 void MDStore::commit_dir_slice_2( int result,
                                  CDir *dir,
                                  Context *c,
-                                 __uint64_t committed_version,
+                                 version_t committed_version,
                                  int hashcode )
 {
   dout(11) << "commit_dir_slice_2 hashcode " << hashcode << " " << *dir << " v " << committed_version << endl;
@@ -715,6 +740,9 @@ void MDStore::commit_dir_slice_2( int result,
     assert(in);
     assert(in->is_auth());
     
+    if (in->get_committing_version())
+      in->set_committed_version();
+
     if (committed_version > in->get_parent_dir_version()) {
       dout(15) << " dir " << committed_version << " > inode " << in->get_parent_dir_version() << " still clean " << *(in) << endl;
       assert(!in->is_dirty());

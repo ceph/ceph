@@ -45,8 +45,8 @@ class CDentry {
   inodeno_t       remote_ino;      // if remote dentry
 
   // state
-  bool             dirty;
-  __uint64_t       parent_dir_version;  // dir version when last touched.
+  bool            dirty;
+  version_t       parent_dir_version;  // dir version when last touched.
 
   // locking
   int            lockstate;

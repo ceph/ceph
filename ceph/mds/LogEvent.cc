@@ -22,6 +22,8 @@
 #include "events/EUnlink.h"
 #include "events/EAlloc.h"
 #include "events/EMknod.h"
+#include "events/EMkdir.h"
+#include "events/EPurgeFinish.h"
 
 LogEvent *LogEvent::decode(bufferlist& bl)
 {
@@ -54,6 +56,10 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_UNLINK:
     le = new EUnlink();
     break;
+
+  case EVENT_PURGEFINISH:
+    le = new EPurgeFinish();
+    break;
     
   case EVENT_ALLOC:
     le = new EAlloc();
@@ -61,6 +67,10 @@ LogEvent *LogEvent::decode(bufferlist& bl)
 
   case EVENT_MKNOD:
     le = new EMknod();
+    break;
+
+  case EVENT_MKDIR:
+    le = new EMkdir();
     break;
 
   default:

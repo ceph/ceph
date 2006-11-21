@@ -17,40 +17,43 @@
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
-#include "ETraced.h"
+
 #include "../LogEvent.h"
+#include "ETrace.h"
 #include "../CDir.h"
 #include "../MDCache.h"
 #include "../MDStore.h"
 
 
 
-class EDirUpdate : public ETraced {
+class EDirUpdate : public LogEvent {
  protected:
+  ETrace trace;
   inodeno_t dirino;
   version_t version;
 
  public:
-  EDirUpdate(CDir *dir) : ETraced(EVENT_DIRUPDATE, dir->inode) {
+  EDirUpdate(CDir *dir) : LogEvent(EVENT_DIRUPDATE),
+			  trace(dir->inode) {
     this->dirino = dir->ino();
     version = dir->get_version();
   }
-  EDirUpdate() : ETraced(EVENT_DIRUPDATE) {
+  EDirUpdate() : LogEvent(EVENT_DIRUPDATE) {
   }
   
   void print(ostream& out) {
-    out << "up dir " << dirino << " ";
-    ETraced::print(out);
-    out << "/ v " << version;
+    out << "up dir " << dirino << " "
+	<< trace
+	<< "/ v " << version;
   }
 
   virtual void encode_payload(bufferlist& bl) {
-    encode_trace(bl);
+    trace.encode(bl);
     bl.append((char*)&version, sizeof(version));
     bl.append((char*)&dirino, sizeof(dirino));
   }
   void decode_payload(bufferlist& bl, int& off) {
-    decode_trace(bl, off);
+    trace.decode(bl, off);
     bl.copy(off, sizeof(version), (char*)&version);
     off += sizeof(version);
     bl.copy(off, sizeof(dirino), (char*)&dirino);

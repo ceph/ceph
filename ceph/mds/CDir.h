@@ -203,9 +203,9 @@ class CDir {
 
   // state
   unsigned         state;
-  __uint64_t       version;
-  __uint64_t       committing_version;
-  __uint64_t       last_committed_version;
+  version_t       version;
+  version_t       committing_version;
+  version_t       last_committed_version;
 
   // authority, replicas
   set<int>         open_by;        // nodes that have me open
@@ -410,16 +410,18 @@ class CDir {
 
 
   // -- dirtyness --
-  __uint64_t get_version() { return version; }
-  void float_version(__uint64_t ge) {
+  version_t get_version() { return version; }
+  void float_version(version_t ge) {
     if (version < ge)
       version = ge;
   }
-  __uint64_t get_committing_version() { return committing_version; }
-  __uint64_t get_last_committed_version() { return last_committed_version; }
+  void set_version(version_t v) { version = v; }
+
+  version_t get_committing_version() { return committing_version; }
+  version_t get_last_committed_version() { return last_committed_version; }
   // as in, we're committing the current version.
   void set_committing_version() { committing_version = version; }
-  void set_last_committed_version(__uint64_t v) { last_committed_version = v; }
+  void set_last_committed_version(version_t v) { last_committed_version = v; }
   void mark_dirty();
   void mark_clean();
   void mark_complete() { state_set(CDIR_STATE_COMPLETE); }
@@ -570,7 +572,7 @@ typedef struct {
   inodeno_t      ino;
   __uint64_t     nitems; // actual real entries
   __uint64_t     nden;   // num dentries (including null ones)
-  __uint64_t     version;
+  version_t     version;
   unsigned       state;
   meta_load_t   popularity_justme;
   meta_load_t   popularity_curdom;

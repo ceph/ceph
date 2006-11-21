@@ -513,7 +513,7 @@ void Migrator::export_dir_go(CDir *dir,
  */
 void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_auth)
 {
-  in->version++;  // so local log entries are ignored, etc.  (FIXME ??)
+  in->inode.version++;  // so local log entries are ignored, etc.  (FIXME ??)
   
   // tell (all) clients about migrating caps.. mark STALE
   for (map<int, Capability>::iterator it = in->client_caps.begin();
@@ -960,7 +960,7 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
         (*it)->update_inode(in);
         dout(7) << " updated " << *in << endl;
       } else {
-        in = new CInode(false);
+        in = new CInode(mds->mdcache, false);
         (*it)->update_inode(in);
         
         // link to the containing dir
@@ -1300,7 +1300,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   bool added = false;
   CInode *in = cache->get_inode(istate.get_ino());
   if (!in) {
-    in = new CInode;
+    in = new CInode(mds->mdcache);
     added = true;
   } else {
     in->set_auth(true);
@@ -2406,7 +2406,7 @@ void Migrator::handle_hash_dir_prep(MHashDirPrep *m)
         it->second->update_inode(in);
         dout(5) << " updated " << *in << endl;
       } else {
-        in = new CInode(false);
+        in = new CInode(mds->mdcache, false);
         it->second->update_inode(in);
         cache->add_inode(in);
         
@@ -2637,7 +2637,7 @@ void Migrator::handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m)
         it->second->update_inode(in);
         dout(5) << " updated " << *in << endl;
       } else {
-        in = new CInode(false);
+        in = new CInode(mds->mdcache, false);
         it->second->update_inode(in);
         cache->add_inode(in);
         

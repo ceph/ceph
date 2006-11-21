@@ -11,33 +11,33 @@
  * 
  */
 
-#ifndef __EMKNOD_H
-#define __EMKNOD_H
+#ifndef __EMKDIR_H
+#define __EMKDIR_H
 
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
-#include "../LogEvent.h"
 #include "ETrace.h"
 #include "../MDS.h"
 #include "../MDStore.h"
 
 
-class EMknod : public LogEvent {
+class EMkdir : public LogEvent {
  protected:
   ETrace trace;
   //version_t pdirv;
 
  public:
-  EMknod(CInode *in) : LogEvent(EVENT_MKNOD), 
-		       trace(in) {
-    //pdirv = in->get_parent_dir()->get_version();
+  EMkdir(CDir *dir) : LogEvent(EVENT_MKDIR),
+		      trace(dir->inode) {
+    //pdirv = dir->inode->get_parent_dir()->get_version();
   }
-  EMknod() : LogEvent(EVENT_MKNOD) { }
+  EMkdir() : LogEvent(EVENT_MKDIR) { }
   
   void print(ostream& out) {
-    out << "mknod " << trace;
+    out << "mkdir ";
+    trace.print(out);
   }
 
   virtual void encode_payload(bufferlist& bl) {
@@ -48,10 +48,12 @@ class EMknod : public LogEvent {
     trace.decode(bl, off);
     //bl.copy(off, sizeof(pdirv), (char*)&pdirv);
     //off += sizeof(pdirv);
-  }  
-
+  }
+  
   bool can_expire(MDS *mds);
   void retire(MDS *mds, Context *c);
+
+  // recovery
   bool has_happened(MDS *mds);  
   void replay(MDS *mds);
 

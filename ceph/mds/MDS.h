@@ -24,7 +24,6 @@
 using namespace std;
 
 #include <ext/hash_map>
-#include <ext/rope>
 using namespace __gnu_cxx;
 
 #include "msg/Dispatcher.h"
@@ -248,9 +247,6 @@ public:
 
 
 ostream& operator<<(ostream& out, MDS& mds);
-
-
-//extern MDS *g_mds;
 
 
 #endif

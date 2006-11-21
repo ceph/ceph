@@ -11,45 +11,34 @@
  * 
  */
 
-#ifndef __EMKNOD_H
-#define __EMKNOD_H
+#ifndef __EPURGE_H
+#define __EPURGE_H
 
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
-#include "../LogEvent.h"
-#include "ETrace.h"
-#include "../MDS.h"
-#include "../MDStore.h"
-
-
-class EMknod : public LogEvent {
+class EPurgeFinish : public LogEvent {
  protected:
-  ETrace trace;
-  //version_t pdirv;
+  inodeno_t ino;
 
  public:
-  EMknod(CInode *in) : LogEvent(EVENT_MKNOD), 
-		       trace(in) {
-    //pdirv = in->get_parent_dir()->get_version();
-  }
-  EMknod() : LogEvent(EVENT_MKNOD) { }
+  EPurgeFinish(inodeno_t i) : 
+	LogEvent(EVENT_PURGEFINISH),
+	ino(i) { }
+  EPurgeFinish() : LogEvent(EVENT_PURGEFINISH) { }
   
   void print(ostream& out) {
-    out << "mknod " << trace;
+    out << "purgefinish " << ino;
   }
 
   virtual void encode_payload(bufferlist& bl) {
-    trace.encode(bl);
-    //bl.append((char*)&pdirv, sizeof(pdirv));
+    bl.append((char*)&ino, sizeof(ino));
   }
   void decode_payload(bufferlist& bl, int& off) {
-    trace.decode(bl, off);
-    //bl.copy(off, sizeof(pdirv), (char*)&pdirv);
-    //off += sizeof(pdirv);
-  }  
-
+    bl.copy(off, sizeof(ino), (char*)&ino);
+  }
+  
   bool can_expire(MDS *mds);
   void retire(MDS *mds, Context *c);
   bool has_happened(MDS *mds);  

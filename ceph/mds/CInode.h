@@ -19,8 +19,6 @@
 #include "config.h"
 #include "include/types.h"
 #include "include/lru.h"
-#include "common/DecayCounter.h"
-//#include <sys/stat.h>
 
 #include "CDentry.h"
 #include "Lock.h"
@@ -158,6 +156,7 @@ class MDS;
 class Message;
 class CInode;
 class CInodeDiscover;
+class MDCache;
 
 //class MInodeSyncStart;
 
@@ -170,6 +169,8 @@ extern int cinode_pins[CINODE_NUM_PINS];  // counts
 // cached inode wrapper
 class CInode : public LRUObject {
  public:
+  MDCache *mdcache;
+
   inode_t          inode;     // the inode itself
 
   CDir            *dir;       // directory, if we have it opened.
@@ -182,8 +183,9 @@ class CInode : public LRUObject {
  protected:
   int              ref;       // reference count
   set<int>         ref_set;
-  version_t       version;
-  version_t       parent_dir_version;  // dir version when last touched.
+  version_t        parent_dir_version;  // parent dir version when i was last touched.
+  version_t        committing_version;
+  version_t        committed_version;
 
   unsigned         state;
 
@@ -233,7 +235,7 @@ class CInode : public LRUObject {
 
  public:
   // ---------------------------
-  CInode(bool auth=true);
+  CInode(MDCache *c, bool auth=true);
   ~CInode();
   
 
@@ -298,24 +300,25 @@ class CInode : public LRUObject {
 
   
   // -- dirtyness --
-  version_t get_version() { return version; }
+  version_t get_version() { return inode.version; }
   version_t get_parent_dir_version() { return parent_dir_version; }
   void float_parent_dir_version(version_t ge) {
     if (parent_dir_version < ge)
       parent_dir_version = ge;
   }
-  
+  version_t get_committing_version() { return committing_version; }
+  version_t get_last_committed_version() { return committed_version; }
+  void set_committing_version(version_t v) { committing_version = v; }
+  void set_committed_version() { 
+    committed_version = committing_version;
+    committing_version = 0;
+  }
+
   bool is_dirty() { return state & CINODE_STATE_DIRTY; }
   bool is_clean() { return !is_dirty(); }
   
   void mark_dirty();
-  void mark_clean() {
-    dout(10) << " mark_clean " << *this << endl;
-    if (state & CINODE_STATE_DIRTY) {
-      state &= ~CINODE_STATE_DIRTY;
-      put(CINODE_PIN_DIRTY);
-    }
-  }    
+  void mark_clean();
 
 
 
@@ -642,7 +645,6 @@ class CInodeExport {
 
   struct {
     inode_t        inode;
-    version_t     version;
     meta_load_t    popularity_justme;
     meta_load_t    popularity_curdom;
     bool           is_dirty;       // dirty inode?
@@ -661,7 +663,6 @@ public:
   CInodeExport() {}
   CInodeExport(CInode *in) {
     st.inode = in->inode;
-    st.version = in->get_version();
     st.is_dirty = in->is_dirty();
     cached_by = in->cached_by;
     cached_by_nonce = in->cached_by_nonce; 
@@ -685,8 +686,6 @@ public:
 
   void update_inode(CInode *in, set<int>& new_client_caps) {
     in->inode = st.inode;
-
-    in->version = st.version;
 
     in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
     in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;

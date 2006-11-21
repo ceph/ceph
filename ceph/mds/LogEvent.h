@@ -15,11 +15,18 @@
 #define __LOGEVENT_H
 
 #define EVENT_STRING       1
+
 #define EVENT_INODEUPDATE  2
 #define EVENT_DIRUPDATE    3
-#define EVENT_UNLINK       4
-#define EVENT_ALLOC        5
-#define EVENT_MKNOD        6
+
+#define EVENT_ALLOC        10
+#define EVENT_MKNOD        11
+#define EVENT_MKDIR        12
+#define EVENT_LINK         13
+
+#define EVENT_UNLINK       20
+#define EVENT_RMDIR        21
+#define EVENT_PURGEFINISH  22
 
 
 #include <string>

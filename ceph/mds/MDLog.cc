@@ -97,21 +97,21 @@ void MDLog::write_head(Context *c)
 }
 
 
-void MDLog::submit_entry( LogEvent *e,
+void MDLog::submit_entry( LogEvent *le,
 			  Context *c ) 
 {
-  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *e << endl;
+  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
   
   if (g_conf.mds_log) {
     // encode it, with event type
     bufferlist bl;
-    bl.append((char*)&e->_type, sizeof(e->_type));
-    e->encode_payload(bl);
+    bl.append((char*)&le->_type, sizeof(le->_type));
+    le->encode_payload(bl);
 
     // journal it.
     journaler->append_entry(bl);
 
-    delete e;
+    delete le;
     num_events++;
 
     logger->inc("add");
@@ -201,7 +201,7 @@ void MDLog::_trimmed(LogEvent *le)
   assert(le->can_expire(mds));
 
   if (trimming.begin()->first == le->_end_off) {
-    // front!  we can expire log a bit
+    // front!  we can expire the log a bit
     journaler->set_expire_pos(le->_end_off);
   }
 

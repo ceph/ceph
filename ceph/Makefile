@@ -30,6 +30,7 @@ EBOFS_OBJS= \
 
 MDS_OBJS= \
 	mds/MDS.o\
+	mds/journal.o\
 	mds/Server.o\
 	mds/MDCache.o\
 	mds/Locker.o\

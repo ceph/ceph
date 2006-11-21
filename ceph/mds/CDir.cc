@@ -27,7 +27,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << "        cdir: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".cache.dir(" << inode->inode.ino << ") "
 
 
 // PINS

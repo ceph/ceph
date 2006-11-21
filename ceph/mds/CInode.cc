@@ -18,6 +18,7 @@
 #include "CDentry.h"
 
 #include "MDS.h"
+#include "MDCache.h"
 #include "AnchorTable.h"
 
 #include "common/Clock.h"
@@ -26,7 +27,7 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << "     cinode: "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.inode(" << inode.ino << ") "
 
 
 int cinode_pins[CINODE_NUM_PINS];  // counts
@@ -55,6 +56,8 @@ ostream& operator<<(ostream& out, CInode& in)
   }
 
   if (in.is_symlink()) out << " symlink";
+
+  out << " v" << in.get_version();
 
   out << " hard=" << in.hardlock;
   out << " file=" << in.filelock;
@@ -88,7 +91,9 @@ ostream& operator<<(ostream& out, CInode& in)
 
 
 // ====== CInode =======
-CInode::CInode(bool auth) : LRUObject() {
+CInode::CInode(MDCache *c, bool auth) : LRUObject() {
+  mdcache = c;
+
   ref = 0;
   
   parent = NULL;
@@ -100,7 +105,8 @@ CInode::CInode(bool auth) : LRUObject() {
   num_request_pins = 0;
 
   state = 0;  
-  version = 0;
+
+  committing_version = committed_version = 0;
 
   if (auth) state_set(CINODE_STATE_AUTH);
 }
@@ -227,7 +233,7 @@ void CInode::mark_dirty() {
   assert(is_auth());
 
   // touch my private version
-  version++;
+  inode.version++;
   if (!(state & CINODE_STATE_DIRTY)) {
     state |= CINODE_STATE_DIRTY;
     get(CINODE_PIN_DIRTY);
@@ -243,6 +249,14 @@ void CInode::mark_dirty() {
   }
 }
 
+void CInode::mark_clean()
+{
+  dout(10) << " mark_clean " << *this << endl;
+  if (state & CINODE_STATE_DIRTY) {
+    state &= ~CINODE_STATE_DIRTY;
+    put(CINODE_PIN_DIRTY);
+  }
+}    
 
 // state 
 

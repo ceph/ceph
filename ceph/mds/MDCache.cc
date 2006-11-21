@@ -38,9 +38,8 @@
 
 #include "osdc/Filer.h"
 
-#include "events/EInodeUpdate.h"
-#include "events/EDirUpdate.h"
 #include "events/EUnlink.h"
+#include "events/EPurgeFinish.h"
 
 #include "messages/MGenericMessage.h"
 #include "messages/MDiscover.h"
@@ -96,8 +95,9 @@ MDCache::MDCache(MDS *m)
 
 MDCache::~MDCache() 
 {
+  delete migrator;
+  delete renamer;
 }
-
 
 
 void MDCache::log_stat(Logger *logger)
@@ -132,7 +132,7 @@ bool MDCache::shutdown()
 
 CInode *MDCache::create_inode()
 {
-  CInode *in = new CInode;
+  CInode *in = new CInode(this);
 
   // zero
   memset(&in->inode, 0, sizeof(inode_t));
@@ -200,6 +200,100 @@ void MDCache::rename_file(CDentry *srcdn,
 }
 
 
+
+void MDCache::set_root(CInode *in)
+{
+  assert(root == 0);
+  root = in;
+  root->state_set(CINODE_STATE_ROOT);
+}
+
+void MDCache::add_import(CDir *dir)
+{
+  imports.insert(dir);
+  dir->state_set(CDIR_STATE_IMPORT);
+  dir->get(CDIR_PIN_IMPORT);
+}
+
+
+
+
+
+// **************
+// Inode purging -- reliably removing deleted file's objects
+
+class C_MDC_PurgeFinish : public Context {
+  MDCache *mdc;
+  inodeno_t ino;
+public:
+  C_MDC_PurgeFinish(MDCache *c, inodeno_t i) : mdc(c), ino(i) {}
+  void finish(int r) {
+    mdc->purge_inode_finish(ino);
+  }
+};
+class C_MDC_PurgeFinish2 : public Context {
+  MDCache *mdc;
+  inodeno_t ino;
+public:
+  C_MDC_PurgeFinish2(MDCache *c, inodeno_t i) : mdc(c), ino(i) {}
+  void finish(int r) {
+    mdc->purge_inode_finish_2(ino);
+  }
+};
+
+/* purge_inode in
+ * will be called by on unlink or rmdir
+ * caller responsible for journaling an appropriate EUnlink or ERmdir
+ */
+void MDCache::purge_inode(inode_t &inode)
+{
+  dout(10) << "purge_inode " << inode.ino << " size " << inode.size << endl;
+
+  // take note
+  assert(purging.count(inode.ino) == 0);
+  purging[inode.ino] = inode;
+
+  // remove
+  mds->filer->remove(inode, 0, inode.size,
+		     0, new C_MDC_PurgeFinish(this, inode.ino));
+}
+
+void MDCache::purge_inode_finish(inodeno_t ino)
+{
+  dout(10) << "purge_inode_finish " << ino << " - logging our completion" << endl;
+
+  // log completion
+  mds->mdlog->submit_entry(new EPurgeFinish(ino),
+			   new C_MDC_PurgeFinish2(this, ino));
+}
+
+void MDCache::purge_inode_finish_2(inodeno_t ino)
+{
+  dout(10) << "purge_inode_finish_2 " << ino << endl;
+
+  // remove from purging list
+  purging.erase(ino);
+
+  // tell anyone who cares (log flusher?)
+  list<Context*> ls;
+  ls.swap(waiting_for_purge[ino]);
+  waiting_for_purge.erase(ino);
+  finish_contexts(ls, 0);
+
+  // reclaim ino?
+  
+}
+
+void MDCache::start_recovered_purges()
+{
+  for (map<inodeno_t,inode_t>::iterator p = purging.begin();
+       p != purging.end();
+       ++p) {
+    dout(10) << "start_recovered_purges " << p->first << " size " << p->second.size << endl;
+    mds->filer->remove(p->second, 0, p->second.size,
+		       0, new C_MDC_PurgeFinish(this, p->first));
+  }
+}
 
 
 
@@ -529,7 +623,7 @@ int MDCache::open_root(Context *c)
   // open root inode
   if (whoami == 0) { 
     // i am root inode
-    CInode *root = new CInode();
+    CInode *root = new CInode(this);
     memset(&root->inode, 0, sizeof(inode_t));
     root->inode.ino = 1;
     root->inode.hash_seed = 0;   // not hashed!
@@ -543,9 +637,8 @@ int MDCache::open_root(Context *c)
     root->inode.nlink = 1;
     root->inode.layout = g_OSD_MDDirLayout;
 
-    root->state_set(CINODE_STATE_ROOT);
-
     set_root( root );
+    add_inode( root );
 
     // root directory too
     assert(root->dir == NULL);
@@ -1682,13 +1775,13 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     assert(!m->has_base_dir());
     
     // add in root
-    cur = new CInode(false);
+    cur = new CInode(this, false);
       
     m->get_inode(0).update_inode(cur);
     
     // root
-    cur->state_set(CINODE_STATE_ROOT);
     set_root( cur );
+    add_inode( cur );
     dout(7) << " got root: " << *cur << endl;
 
     // take waiters
@@ -1814,7 +1907,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       assert(dn->inode == 0);  // better not be something else linked to this dentry...
 
       // didn't have it.
-      in = new CInode(false);
+      in = new CInode(this, false);
       
       m->get_inode(i).update_inode(in);
         
@@ -2136,7 +2229,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 
   // log it
   if (dn->inode) dn->inode->mark_unsafe();   // XXX ??? FIXME
-  mds->mdlog->submit_entry(new EUnlink(dir, dn),
+  mds->mdlog->submit_entry(new EUnlink(dir, dn, dn->inode),
                            NULL);    // FIXME FIXME FIXME
 
   // tell replicas

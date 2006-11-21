@@ -17,69 +17,48 @@
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
+
 #include "../LogEvent.h"
+#include "ETrace.h"
+
 #include "../CInode.h"
-#include "../MDCache.h"
-#include "../MDStore.h"
-
-
+#include "../CDentry.h"
+#include "../CDir.h"
 
 class EUnlink : public LogEvent {
  protected:
-  inodeno_t dir_ino;
-  __uint64_t version;
+  ETrace diritrace;
+  version_t dirv;
   string dname;
+  ETrace inodetrace;
 
  public:
-  EUnlink(CDir *dir, CDentry* dn) :
-    LogEvent(EVENT_UNLINK) {
-    this->dir_ino = dir->ino();
-    this->dname = dn->get_name();
-    this->version = dir->get_version();
-  }
-  EUnlink() :
-    LogEvent(EVENT_UNLINK) {
-  }
+  EUnlink(CDir *dir, CDentry* dn, CInode *in) :
+    LogEvent(EVENT_UNLINK),
+    diritrace(dir->inode), 
+    dirv(dir->get_version()),
+    dname(dn->get_name()),
+    inodetrace(in) {}
+  EUnlink() : LogEvent(EVENT_UNLINK) { }
   
   virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&dir_ino, sizeof(dir_ino));
-    bl.append((char*)&version, sizeof(version));
-    bl.append((char*)dname.c_str(), dname.length() + 1);
+    diritrace.encode(bl);
+    bl.append((char*)&dirv, sizeof(dirv));
+    ::_encode(dname, bl);
+    inodetrace.encode(bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(dir_ino), (char*)&dir_ino);
-    off += sizeof(dir_ino);
-    bl.copy(off, sizeof(version), (char*)&version);
-    off += sizeof(version);
-    dname = bl.c_str() + off;
-    off += dname.length() + 1;
+    diritrace.decode(bl,off);
+    bl.copy(off, sizeof(dirv), (char*)&dirv);
+    off += sizeof(dirv);
+    ::_decode(dname, bl, off);
+    inodetrace.decode(bl, off);
   }
   
-  virtual bool can_expire(MDS *mds) {
-    // am i obsolete?
-    CInode *idir = mds->mdcache->get_inode(dir_ino);
-    if (!idir) return true;
-
-    CDir *dir = idir->dir;
-
-    if (!dir) return true;
-
-    if (!idir->dir->is_auth()) return true;
-    if (idir->dir->is_clean()) return true;
-
-    if (idir->dir->get_last_committed_version() >= version) return true;
-    return false;
-  }
-
-  virtual void retire(MDS *mds, Context *c) {
-    // commit my containing directory
-    CDir *dir = mds->mdcache->get_inode(dir_ino)->dir;
-    assert(dir);
-    
-    // okay!
-    dout(7) << "commiting dirty (from unlink) dir " << *dir << endl;
-    mds->mdstore->commit_dir(dir, version, c);
-  }
+  bool can_expire(MDS *mds);
+  void retire(MDS *mds, Context *c);
+  bool has_happened(MDS *mds);  
+  void replay(MDS *mds);
 };
 
 #endif

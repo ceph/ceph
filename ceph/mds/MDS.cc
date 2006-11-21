@@ -316,7 +316,15 @@ void MDS::boot_recover(int step)
 
   switch (step) {
   case 0:
-    step = 1;
+    if (whoami == 0) {
+      dout(2) << "boot_recover " << step << ": creating root inode" << endl;
+      mdcache->open_root(0);
+      step = 1;
+      // fall-thru
+    } else {
+      // FIXME
+      assert(0);
+    }
 
   case 1:
     dout(2) << "boot_recover " << step << ": opening idalloc" << endl;
@@ -345,6 +353,12 @@ void MDS::boot_recover(int step)
     break;
 
   case 5:
+    dout(2) << "boot_recover " << step << ": restarting any recovered purges" << endl;
+    mdcache->start_recovered_purges();
+    step++;
+    // fall-thru
+
+  case 6:
     dout(2) << "boot_recover " << step << ": done." << endl;
     mark_active();
   }

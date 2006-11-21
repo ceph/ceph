@@ -100,12 +100,17 @@ class MDCache {
   
   // active MDS requests
   hash_map<Message*, active_request_t>   active_requests;
+  
+  // inode purging
+  map<inodeno_t, inode_t>         purging;
+  map<inodeno_t, list<Context*> > waiting_for_purge;
 
   // shutdown crap
   int shutdown_commits;
   bool did_shutdown_exports;
   friend class C_MDC_ShutdownCommit;
 
+  friend class CInode;
   friend class Locker;
   friend class Migrator;
   friend class Renamer;
@@ -125,10 +130,10 @@ class MDCache {
 
   // root inode
   CInode *get_root() { return root; }
-  void set_root(CInode *r) {
-    root = r;
-    add_inode(root);
-  }
+  void set_root(CInode *r);
+
+  void add_import(CDir *dir);
+  void remove_import(CDir *dir);
 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
@@ -167,6 +172,15 @@ class MDCache {
       lru.lru_midtouch(in);
   }
   void rename_file(CDentry *srcdn, CDentry *destdn);
+
+ public:
+  // inode purging
+  void purge_inode(inode_t& inode);
+  void purge_inode_finish(inodeno_t ino);
+  void purge_inode_finish_2(inodeno_t ino);
+  void waitfor_purge(inodeno_t ino, Context *c);
+  void start_recovered_purges();
+
 
  protected:
   // private methods

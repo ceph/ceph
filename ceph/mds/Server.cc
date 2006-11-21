@@ -36,6 +36,7 @@
 #include "events/EInodeUpdate.h"
 #include "events/EDirUpdate.h"
 #include "events/EMknod.h"
+#include "events/EMkdir.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -49,6 +50,10 @@
 #include <iostream>
 using namespace std;
 
+#include "config.h"
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << ".server "
+#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << ".server "
 
 
 void Server::dispatch(Message *m) 
@@ -332,14 +337,30 @@ void Server::handle_client_request(MClientRequest *req)
                               MSG_ADDR_CLIENT(req->get_client()), req->get_client_inst());
 
       // <HACK>
-      if (refpath.last_bit() == ".hash" &&
-          refpath.depth() > 1) {
-        dout(1) << "got explicit hash command " << refpath << endl;
-        CDir *dir = trace[trace.size()-1]->get_inode()->dir;
-        if (!dir->is_hashed() &&
-            !dir->is_hashing() &&
-            dir->is_auth())
-          mdcache->migrator->hash_dir(dir);
+      // is this a special debug command?
+      if (refpath.depth() - 1 == trace.size() &&
+	  refpath.last_bit().find(".ceph.") == 0) {
+	CDir *dir = 0;
+	if (trace.empty())
+	  dir = mdcache->get_root()->dir;
+	else
+	  dir = trace[trace.size()-1]->get_inode()->dir;
+
+	dout(1) << "** POSSIBLE CEPH DEBUG COMMAND '" << refpath.last_bit() << "' in " << *dir << endl;
+
+	if (refpath.last_bit() == ".ceph.hash" &&
+	    refpath.depth() > 1) {
+	  dout(1) << "got explicit hash command " << refpath << endl;
+	  CDir *dir = trace[trace.size()-1]->get_inode()->dir;
+	  if (!dir->is_hashed() &&
+	      !dir->is_hashing() &&
+	      dir->is_auth())
+	    mdcache->migrator->hash_dir(dir);
+	}
+	else if (refpath.last_bit() == ".ceph.commit") {
+	  dout(1) << "got explicit commit command on  " << *dir << endl;
+	  mds->mdstore->commit_dir(dir, 0);
+	}
       }
       // </HACK>
 
@@ -473,7 +494,7 @@ void Server::dispatch_request(Message *m, CInode *ref)
 // STAT
 
 void Server::handle_client_stat(MClientRequest *req,
-                             CInode *ref)
+				CInode *ref)
 {
   // do I need file info?
   int mask = req->get_iarg();
@@ -913,7 +934,7 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *ref)
 
   // commit
   commit_request(req, new MClientReply(req, 0), ref,
-                 new EInodeUpdate(newi));  // FIXME this is the wrong message
+		 new EMknod(newi));
 }
 
 // mknod(): used by handle_client_mkdir, handle_client_mknod, which are mostly identical.
@@ -1016,7 +1037,7 @@ CInode *Server::mknod(MClientRequest *req, CInode *diri, bool okexist)
   newi->mark_dirty();
   
   // journal it
-  mdlog->submit_entry(new EMknod(newi));
+  //mdlog->submit_entry(new EMknod(newi));
 
   // ok!
   return newi;
@@ -1066,6 +1087,8 @@ void Server::handle_client_link(MClientRequest *req, CInode *ref)
   CDir *dir = ref->dir;
   dout(7) << "handle_client_link dir is " << *dir << endl;
   
+
+
   // make sure it's my dentry
   int dauth = dir->dentry_authority(dname);  
   if (dauth != whoami) {
@@ -1974,8 +1997,9 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
 
   // commit to log
   commit_request(req, new MClientReply(req, 0), diri,
-                 new EInodeUpdate(newi),//);
-                 new EDirUpdate(newdir));         // FIXME: weird performance regression here w/ double log; somewhat of a mystery!
+                 new EMkdir(newdir));
+  //new EInodeUpdate(newi),//);
+  //new EDirUpdate(newdir));         // FIXME: weird performance regression here w/ double log; somewhat of a mystery!
   return;
 }
 
