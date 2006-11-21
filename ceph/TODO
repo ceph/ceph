@@ -15,6 +15,23 @@ papers to read
 - change messenger entity_inst_t
  - no more rank!  make it a uniquish nonce?
 
+- clean up mds caps release in exporter
+- figure out client failure modes
+- clean up messenger failure modes.  
+- add connection retry.
+
+mds recovery
+- multiple passes?
+ 1- establish import/export map
+ ?- 
+ 2- replay inode, dir, dentry updates
+- single pass
+ - each event needs to embed inode for trace up to the import
+ - second stage will reconcile cached items with other active mds nodes
+ - cached items will be shared with the primary to repopulate it's non-dirty cache
+ - query clients for their state too?
+   - mds must journal list of clients with whom we share state?
+
 
 osd
 - pull out "object" service
