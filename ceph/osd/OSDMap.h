@@ -41,7 +41,7 @@ using namespace std;
  */
 
 // from LSB to MSB,
-#define PG_PS_BITS         24  // max bits for placement seed/group portion of PG
+#define PG_PS_BITS         16  // max bits for placement seed/group portion of PG
 #define PG_REP_BITS        6   // up to 64 replicas   
 #define PG_TYPE_BITS       2
 #define PG_PS_MASK         ((1LL<<PG_PS_BITS)-1)
@@ -106,6 +106,7 @@ private:
   epoch_t   mon_epoch;  // monitor epoch (election iteration)
   utime_t   ctime;       // epoch start time
   int       pg_bits;     // placement group bits 
+  int       localized_pg_bits;  // bits for localized pgs
 
   set<int>  osds;        // all osds
   set<int>  down_osds;   // list of down disks
@@ -120,7 +121,7 @@ private:
   friend class MDS;
 
  public:
-  OSDMap() : epoch(0), mon_epoch(0), pg_bits(5) {}
+  OSDMap() : epoch(0), mon_epoch(0), pg_bits(5), localized_pg_bits(3) {}
 
   // map info
   epoch_t get_epoch() const { return epoch; }
@@ -128,6 +129,7 @@ private:
 
   int get_pg_bits() const { return pg_bits; }
   void set_pg_bits(int b) { pg_bits = b; }
+  int get_localized_pg_bits() const { return localized_pg_bits; }
 
   const utime_t& get_ctime() const { return ctime; }
 
@@ -259,8 +261,8 @@ private:
 
   /****   mapping facilities   ****/
 
-  // oid -> ps
-  ps_t object_to_pg(object_t oid, FileLayout& layout) {
+  // oid -> pg
+  pg_t object_to_pg(object_t oid, FileLayout& layout) {
     static crush::Hash H(777);
         
     int policy = layout.object_layout;
@@ -268,7 +270,7 @@ private:
       policy = g_conf.osd_object_layout;
 
     int type = PG_TYPE_RAND;
-    pg_t ps;
+    ps_t ps;
 
     switch (policy) {
     case OBJECT_LAYOUT_LINEAR:
@@ -305,41 +307,41 @@ private:
     }
 
     // construct final PG
-    pg_t pg = type;
+    /*pg_t pg = type;
     pg = (pg << PG_REP_BITS) | (pg_t)layout.num_rep;
     pg = (pg << PG_PS_BITS) | ps;
+    */
     //cout << "pg " << hex << pg << dec << endl;
-    return pg;
+    return pg_t(ps, 0, layout.num_rep);
   }
 
   // (ps, nrep) -> pg
   pg_t ps_nrep_to_pg(ps_t ps, int nrep) {
-    return ((pg_t)ps & ((1ULL<<pg_bits)-1ULL)) 
+    /*return ((pg_t)ps & ((1ULL<<pg_bits)-1ULL)) 
       | ((pg_t)nrep << PG_PS_BITS)
       | ((pg_t)PG_TYPE_RAND << (PG_PS_BITS+PG_REP_BITS));
+    */
+    return pg_t(ps, 0, nrep, 0);
   }
-  pg_t osd_nrep_to_pg(int osd, int nrep) {
-    return ((pg_t)osd)
+  pg_t ps_osd_nrep_to_pg(ps_t ps, int osd, int nrep) {
+    /*return ((pg_t)osd)
       | ((pg_t)nrep << PG_PS_BITS)
       | ((pg_t)PG_TYPE_STARTOSD << (PG_PS_BITS+PG_REP_BITS));
-
+    */
+    return pg_t(ps, osd+1, nrep, 0);
   }
 
   // pg -> nrep
   int pg_to_nrep(pg_t pg) {
-    return (pg >> PG_PS_BITS) & ((1ULL << PG_REP_BITS)-1);
+    return pg.u.fields.nrep;
+    //return (pg >> PG_PS_BITS) & ((1ULL << PG_REP_BITS)-1);
   }
 
   // pg -> ps
   int pg_to_ps(pg_t pg) {
-    return pg & PG_PS_MASK;
+    //return pg & PG_PS_MASK;
+    return pg.u.fields.ps;
   }
-
-  // pg -> pg_type
-  int pg_to_type(pg_t pg) {
-    return pg >> (PG_PS_BITS + PG_REP_BITS);
-  }
-  
 
   // pg -> (osd list)
   int pg_to_osds(pg_t pg,
@@ -347,71 +349,69 @@ private:
     pg_t ps = pg_to_ps(pg);
     int num_rep = pg_to_nrep(pg);
     assert(num_rep > 0);
-    int type = pg_to_type(pg);
-
-    // spread "on" ps bits around a bit (usually only low bits are set bc of pg_bits)
     
-    if (num_rep > 0) {
-      switch(g_conf.osd_pg_layout) {
-      case PG_LAYOUT_CRUSH:
-        crush.do_rule(crush.rules[num_rep],
-                      ps,
-                      osds,
-                      out_osds, overload_osds);
-        break;
-        
-      case PG_LAYOUT_LINEAR:
-        for (int i=0; i<num_rep; i++) 
-          osds.push_back( (i + ps*num_rep) % g_conf.num_osd );
-        break;
-        
-      case PG_LAYOUT_HYBRID:
-        {
-          static crush::Hash H(777);
-          int h = H(ps);
-          for (int i=0; i<num_rep; i++) 
-            osds.push_back( (h+i) % g_conf.num_osd );
-        }
-        break;
-        
-      case PG_LAYOUT_HASH:
-        {
-          static crush::Hash H(777);
-          for (int i=0; i<num_rep; i++) {
-            int t = 1;
-            int osd = 0;
-            while (t++) {
-              osd = H(i, ps, t) % g_conf.num_osd;
-              int j = 0;
-              for (; j<i; j++) 
-                if (osds[j] == osd) break;
-              if (j == i) break;
-            }
-            osds.push_back(osd);
-          }      
-        }
-        break;
-        
-      default:
-        assert(0);
+    // map to osds[]
+    switch(g_conf.osd_pg_layout) {
+    case PG_LAYOUT_CRUSH:
+      crush.do_rule(crush.rules[num_rep],     // FIXME.
+		    ps,
+		    osds,
+		    out_osds, overload_osds);
+      break;
+      
+    case PG_LAYOUT_LINEAR:
+      for (int i=0; i<num_rep; i++) 
+	osds.push_back( (i + ps*num_rep) % g_conf.num_osd );
+      break;
+      
+    case PG_LAYOUT_HYBRID:
+      {
+	static crush::Hash H(777);
+	int h = H(ps);
+	for (int i=0; i<num_rep; i++) 
+	  osds.push_back( (h+i) % g_conf.num_osd );
       }
+      break;
+      
+    case PG_LAYOUT_HASH:
+      {
+	static crush::Hash H(777);
+	for (int i=0; i<num_rep; i++) {
+	  int t = 1;
+	  int osd = 0;
+	  while (t++) {
+	    osd = H(i, ps, t) % g_conf.num_osd;
+	    int j = 0;
+	    for (; j<i; j++) 
+	      if (osds[j] == osd) break;
+	    if (j == i) break;
+	  }
+	  osds.push_back(osd);
+	}      
+      }
+      break;
+      
+    default:
+      assert(0);
     }
+  
+    if (pg.u.fields.preferred > 0) {
+      int osd = pg.u.fields.preferred-1;
 
-    if (type == PG_TYPE_STARTOSD) {
       // already in there?
       if (osds.empty()) {
-        osds.push_back((int)ps);
+        osds.push_back(osd);
       } else {
         assert(num_rep > 0);
         for (int i=1; i<num_rep; i++)
-          if (osds[i] == (int)ps) {
+          if (osds[i] == osd) {
             // swap with position 0
             osds[i] = osds[0];
           }
-        osds[0] = (int)ps;
+        osds[0] = osd;
       }
 
-      if (is_out((int)ps)) 
+      if (is_out(osd))
         osds.erase(osds.begin());  // oops, but it's down!
     }
     

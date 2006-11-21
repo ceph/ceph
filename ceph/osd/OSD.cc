@@ -450,10 +450,25 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
       _unlock_pg(pgid);
     }
   }
-  osd_lock.Unlock();
+
+  // finishers?
+  if (finished.empty()) {
+    osd_lock.Unlock();
+  } else {
+    list<Message*> waiting;
+    waiting.splice(waiting.begin(), finished);
+
+    osd_lock.Unlock();
+    
+    for (list<Message*>::iterator it = waiting.begin();
+         it != waiting.end();
+         it++) {
+      dispatch(*it);
+    }
+  }
 
   // kick myself w/ a ping .. HACK
-  messenger->send_message(new MPing, MSG_ADDR_OSD(whoami));
+  //messenger->send_message(new MPing, MSG_ADDR_OSD(whoami));
 }
 
 
@@ -995,6 +1010,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
   
   if (osdmap->is_mkfs()) {
     ps_t maxps = 1ULL << osdmap->get_pg_bits();
+    ps_t maxlps = 1ULL << osdmap->get_localized_pg_bits();
     dout(1) << "mkfs on " << osdmap->get_pg_bits() << " bits, " << maxps << " pgs" << endl;
     assert(osdmap->get_epoch() == 1);
 
@@ -1005,43 +1021,45 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     for (int nrep = 1; 
          nrep <= MIN(g_conf.num_osd, g_conf.osd_max_rep);    // for low osd counts..  hackish bleh
          nrep++) {
-      for (pg_t ps = 0; ps < maxps; ++ps) {
-        pg_t pgid = osdmap->ps_nrep_to_pg(ps, nrep);
-        vector<int> acting;
-        int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-        int role = osdmap->calc_pg_role(whoami, acting, nrep);
-        if (role < 0) continue;
-        
-        PG *pg = create_pg(pgid, t);
-        pg->set_role(role);
-        pg->acting.swap(acting);
-        pg->last_epoch_started_any = 
-          pg->info.last_epoch_started = 
-          pg->info.history.same_since = 
-          pg->info.history.same_primary_since = 
-          pg->info.history.same_acker_since = osdmap->get_epoch();
-        pg->activate(t);
-        
-        dout(7) << "created " << *pg << endl;
+      for (ps_t ps = 0; ps < maxps; ++ps) {
+	vector<int> acting;
+	pg_t pgid = osdmap->ps_nrep_to_pg(ps, nrep);
+	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+	int role = osdmap->calc_pg_role(whoami, acting, nrep);
+	if (role < 0) continue;
+	
+	PG *pg = create_pg(pgid, t);
+	pg->set_role(role);
+	pg->acting.swap(acting);
+	pg->last_epoch_started_any = 
+	  pg->info.last_epoch_started = 
+	  pg->info.history.same_since = 
+	  pg->info.history.same_primary_since = 
+	    pg->info.history.same_acker_since = osdmap->get_epoch();
+	pg->activate(t);
+	
+	dout(7) << "created " << *pg << endl;
       }
 
-      // local PG too
-      pg_t pgid = osdmap->osd_nrep_to_pg(whoami, nrep);
-      vector<int> acting;
-      int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-      int role = osdmap->calc_pg_role(whoami, acting, nrep);
-
-      PG *pg = create_pg(pgid, t);
-      pg->acting.swap(acting);
-      pg->set_role(role);
-      pg->last_epoch_started_any = 
-        pg->info.last_epoch_started = 
-        pg->info.history.same_primary_since = 
-        pg->info.history.same_acker_since = 
-        pg->info.history.same_since = osdmap->get_epoch();
-      pg->activate(t);
-        
-      dout(7) << "created " << *pg << endl;
+      for (ps_t ps = 0; ps < maxlps; ++ps) {
+	// local PG too
+	vector<int> acting;
+	pg_t pgid = osdmap->ps_osd_nrep_to_pg(ps, whoami, nrep);
+	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
+	int role = osdmap->calc_pg_role(whoami, acting, nrep);
+	
+	PG *pg = create_pg(pgid, t);
+	pg->acting.swap(acting);
+	pg->set_role(role);
+	pg->last_epoch_started_any = 
+	  pg->info.last_epoch_started = 
+	  pg->info.history.same_primary_since = 
+	  pg->info.history.same_acker_since = 
+	  pg->info.history.same_since = osdmap->get_epoch();
+	pg->activate(t);
+	
+	dout(7) << "created " << *pg << endl;
+      }
     }
 
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << endl;
@@ -1376,6 +1394,9 @@ bool OSD::pg_exists(pg_t pgid)
 
 PG *OSD::create_pg(pg_t pgid, ObjectStore::Transaction& t)
 {
+  if (pg_map.count(pgid)) {
+    dout(0) << "create_pg on " << pgid << ", already have " << *pg_map[pgid] << endl;
+  }
   assert(pg_map.count(pgid) == 0);
   assert(!pg_exists(pgid));
 
