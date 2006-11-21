@@ -191,7 +191,6 @@ void Filer::file_to_extents(inode_t inode,
       ex = &object_extents[oid];
       ex->oid = oid;
       ex->pgid = objecter->osdmap->object_to_pg( oid, inode.layout );
-      //ex->osd = objecter->osdmap->get_pg_acting_primary( ex->pg );
     }
     
     // map range into object
@@ -218,7 +217,7 @@ void Filer::file_to_extents(inode_t inode,
     }
     ex->buffer_extents[cur-offset] = x_len;
         
-    dout(15) << "file_to_extents  " << ex << endl;
+    dout(15) << "file_to_extents  " << *ex << " in " << ex->pgid << endl;
     //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
     
     left -= x_len;
