@@ -271,21 +271,49 @@ typedef __uint64_t tid_t;         // transaction id
 
 typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
+// pg stuff
+typedef __uint16_t ps_t;
+typedef __uint8_t pruleset_t;
+
 // placement group id
 struct pg_t {
-  __uint32_t val;
-  pg_t() : val() {}
-  pg_t(__uint32_t v) : val(v) {}
-  pg_t operator=(__uint32_t v) { val = v; return *this; }
-  pg_t operator&=(__uint32_t v) { val &= v; return *this; }
-  pg_t operator+=(pg_t o) { val += o.val; return *this; }
-  pg_t operator-=(pg_t o) { val -= o.val; return *this; }
-  pg_t operator++() { ++val; return *this; }
-  operator __uint32_t() const { return val; }
+  union {
+    struct {
+      int         preferred;
+      ps_t        ps;
+      __uint8_t   nrep;
+      pruleset_t  ruleset;
+    } fields;
+    __uint64_t val;
+  } u;
+  pg_t() { u.val = 0; }
+  pg_t(const pg_t& o) { u.val = o.u.val; }
+  pg_t(ps_t s, int p, unsigned char n, pruleset_t r=0) {
+    u.fields.ps = s;
+    u.fields.preferred = p;
+    u.fields.nrep = n;
+    u.fields.ruleset = r;
+  }
+  pg_t(__uint64_t v) { u.val = v; }
+  /*
+  pg_t operator=(__uint64_t v) { u.val = v; return *this; }
+  pg_t operator&=(__uint64_t v) { u.val &= v; return *this; }
+  pg_t operator+=(pg_t o) { u.val += o.val; return *this; }
+  pg_t operator-=(pg_t o) { u.val -= o.val; return *this; }
+  pg_t operator++() { ++u.val; return *this; }
+  */
+  operator __uint64_t() const { return u.val; }
 };
 
 inline ostream& operator<<(ostream& out, pg_t pg) {
-  return out << hex << pg.val << dec;
+  //return out << hex << pg.val << dec;
+  if (pg.u.fields.ruleset)
+    out << (int)pg.u.fields.ruleset << '.';
+  out << (int)pg.u.fields.nrep << '.';
+  if (pg.u.fields.preferred)
+    out << pg.u.fields.preferred << '.';
+  out << hex << pg.u.fields.ps << dec;
+  return out;
 }
 
 namespace __gnu_cxx {
@@ -293,13 +321,11 @@ namespace __gnu_cxx {
   {
     size_t operator()( const pg_t& x ) const
     {
-      static hash<__uint32_t> H;
-      return H(x.val);
+      static hash<__uint64_t> H;
+      return H(x);
     }
   };
 }
-
-typedef pg_t ps_t;  // placement seed
 
 
 
