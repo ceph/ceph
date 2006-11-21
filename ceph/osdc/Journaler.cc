@@ -105,7 +105,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   write_pos = flush_pos = ack_pos = h.write_pos;
   read_pos = requested_pos = received_pos = h.read_pos;
   expire_pos = h.expire_pos;
-  trimmed_pos = trimmed_pos = h.trimmed_pos;
+  trimmed_pos = trimming_pos = h.trimmed_pos;
 
   // probe the log
   state = STATE_PROBING;
