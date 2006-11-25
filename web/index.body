@@ -6,7 +6,7 @@
 
 		<ol>
 		<li><b>Petabyte-scale storage</b> -- Ceph is built from the ground up to seamlessly and gracefully scale from gigabytes to petabytes and beyond.  Scalability is considered in terms of workload as well as total storage.  Ceph gracefully handles workloads in which tens thousands of clients or more simultaneously access the same file, or write to the same directory--usage scenarios that bring existing enterprise storage systems to their knees.
-		<li><b>Robust, open-source distributed storage</b> -- Ceph is released under the terms of the LGPL, which means it is free software (as in speech).  Ceph provides a variety of key features that are sorely lacking from existing open-source file systems, including snapshots, seamless scalability (the ability to simply add disks to expand volumes), and intelligent load balancing.
+		<li><b>Robust, open-source distributed storage</b> -- Ceph is released under the terms of the LGPL, which means it is free software (as in speech).  Ceph will provide a variety of key features that are sorely lacking from existing open-source file systems, including snapshots, seamless scalability (the ability to simply add disks to expand volumes), and intelligent load balancing.
 		</ol>
 
 		Here are some of the key features that make Ceph different from existing file systems that you may have worked with:
