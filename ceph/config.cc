@@ -201,7 +201,7 @@ md_config_t g_conf = {
   osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
-  osd_heartbeat_interval: 10,
+  osd_heartbeat_interval: 1000,   // shut up while i'm debugging
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,

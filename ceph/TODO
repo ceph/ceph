@@ -7,6 +7,22 @@ papers to read
 - johnson and colbrook's DE and DB-trees (maybe fewer locks?)
 
 
+rados todo
+- better experiments
+- flush log only in response to subsequent read or write?
+- better behaving recovery
+- justify use of splay.
+  - dynamic replication
+- snapshots
+
+rados snapshots
+- write is tagged with current_rev.
+  - if latest object.rev != current_rev, we clone it before applying write.
+- reads are tagged with readv.  
+  - we read from newest object whose snapv >= readv.
+
+
+
 
 - messenger lookup() and failure() upcalls
 

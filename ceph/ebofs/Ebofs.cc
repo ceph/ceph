@@ -159,7 +159,7 @@ int Ebofs::mkfs()
   left.start = nodepool.usemap_odd.end();
   left.length = num_blocks - left.start;
   dout(10) << "mkfs: free data blocks at " << left << endl;
-  allocator.release( left );
+  allocator._release_into_limbo( left );
   allocator.commit_limbo();   // -> limbo_tab
   allocator.release_limbo();  // -> free_tab
 
@@ -1359,7 +1359,9 @@ void Ebofs::alloc_write(Onode *on,
         if (bc.bh_cancel_write(bh, super_epoch)) {
           if (bh->length() == 1)
           dout(10) << "alloc_write unallocated tx " << old[0] << ", canceled " << *bh << endl;
-          allocator.unallocate(old[0]);  // release (into free)
+	  // no, this isn't compatible with clone() and extent reference counting.
+          //allocator.unallocate(old[0]);  // release (into free)
+	  allocator.release(old[0]);  
           alloc.insert(bh->start(), bh->length());
         } else {
           if (bh->length() == 1)
@@ -2367,11 +2369,60 @@ int Ebofs::_clone(object_t from, object_t to)
   
   // extents
   ton->extent_map = fon->extent_map;
-  //FIXME inc ref count
+  for (map<block_t, Extent>::iterator p = ton->extent_map.begin();
+       p != ton->extent_map.end();
+       ++p) {
+    allocator.alloc_inc(p->second);
+  }
 
   return 0;
 }
 
+
+
+
+/*
+ * pick object revision with rev <= specified rev.  
+ *  (rev is essential a ctime.)
+ *
+ */
+int Ebofs::pick_object_revision(object_t& oid)
+{
+  int r = 0;
+
+  ebofs_lock.Lock();
+  object_t orig = oid;
+
+  if (object_tab->get_num_keys() == 0)
+    r = -EEXIST;
+  else {
+    if (oid.rev == 0) oid.rev = object_t::MAXREV;
+    
+    Table<object_t, Extent>::Cursor cursor(object_tab);
+    
+    object_tab->find(oid, cursor);
+    while (1) {
+      object_t t = cursor.current().key;
+      if (t.ino != oid.ino ||
+	  t.bno != oid.bno) {
+	r = -EEXIST;
+	break;
+      }
+      
+      if (t.rev <= oid.rev) {
+	oid = t;
+	break;
+      }
+
+      if (cursor.move_left() <= 0) break;
+    }
+  }
+
+  dout(8) << "find_object_revision " << orig << " -> " << oid << endl;
+  
+  ebofs_lock.Unlock();
+  return r;
+}
 
 
 

@@ -233,7 +233,7 @@ class Table {
         return -1;  
       }
       
-      /* move left one */
+      /* move right one */
       assert( pos[l] < open[l].size() );  
       pos[l]++;
       
@@ -510,12 +510,15 @@ class Table {
     
     // empty?
     if (nkeys == 0) {
-      // create a root node (leaf!)
-      assert(root == -1);
-      assert(depth == 0);
-      Nodeptr newroot( pool.new_node(Node::TYPE_LEAF) );
-      root = newroot.get_id();
-      depth++;
+      if (root == -1) {
+	// create a root node (leaf!)
+	assert(depth == 0);
+	Nodeptr newroot( pool.new_node(Node::TYPE_LEAF) );
+	root = newroot.get_id();
+	depth++;
+      }
+      assert(depth == 1);
+      assert(root >= 0);
     }
 
     // start at/near key

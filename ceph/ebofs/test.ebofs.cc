@@ -31,7 +31,8 @@ public:
   void *entry() {
 
     while (!stop) {
-      object_t oid = (rand() % 2) + 0x10000000;
+      object_t oid;
+      oid.ino = (rand() % 2) + 0x10000000;
       coll_t cid = rand() % 50;
       off_t off = rand() % 10000;//0;//rand() % 1000000;
       off_t len = 1+rand() % 100000;
@@ -52,7 +53,7 @@ public:
             char *p = b;
             while (l--) {
               assert(*p == 0 ||
-                     *p == (char)(off ^ oid));
+                     *p == (char)(off ^ oid.ino));
               off++;
               p++;
             }
@@ -64,9 +65,10 @@ public:
         {
           cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << endl;
           for (int j=0;j<len;j++) 
-            b[j] = (char)(oid^(off+j));
+            b[j] = (char)(oid.ino^(off+j));
+	  bufferptr wp(b, len);
           bufferlist w;
-          w.append(b,len);
+          w.append(wp);
           fs.write(oid, off, len, w, 0);
         }
         break;

@@ -19,10 +19,14 @@
 using namespace std;
 
 
+typedef __uint32_t objectrev_t;
+
 struct object_t {
+  static const __uint32_t MAXREV = 0xffffffffU;
+
   __uint64_t ino;  // "file" identifier
   __uint32_t bno;  // "block" in that "file"
-  __uint16_t rev;  // revision.
+  objectrev_t rev; // revision.  normally ctime (as epoch).
 
   object_t() : ino(0), bno(0), rev(0) {}
   object_t(__uint64_t i, __uint32_t b) : ino(i), bno(b), rev(0) {}

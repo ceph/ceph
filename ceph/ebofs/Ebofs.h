@@ -236,6 +236,8 @@ class Ebofs : public ObjectStore {
   // atomic transaction
   unsigned apply_transaction(Transaction& t, Context *onsafe=0);
 
+  int pick_object_revision(object_t& oid);
+
   // object interface
   bool exists(object_t);
   int stat(object_t, struct stat*);
@@ -275,6 +277,16 @@ class Ebofs : public ObjectStore {
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
   int collection_listattr(coll_t oid, vector<string>& attrs);
   
+  // maps
+  int map_lookup(object_t o, bufferlist& key, bufferlist& val);
+  int map_insert(object_t o, bufferlist& key, bufferlist& val);
+  int map_remove(object_t o, bufferlist& key);
+  int map_list(object_t o, list<bufferlist>& keys);
+  int map_list(object_t o, map<bufferlist,bufferlist>& vals);
+  int map_list(object_t o, 
+	       bufferlist& start, bufferlist& end,
+	       map<bufferlist,bufferlist>& vals);
+
   // crap
   void _fake_writes(bool b) { fake_writes = b; }
   void _get_frag_stat(FragmentationStat& st);
@@ -306,5 +318,6 @@ private:
   int _collection_remove(coll_t c, object_t o);
   int _collection_setattr(coll_t oid, const char *name, const void *value, size_t size);
   int _collection_rmattr(coll_t cid, const char *name);
+
   
 };

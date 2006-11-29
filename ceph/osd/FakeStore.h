@@ -66,6 +66,9 @@ class FakeStore : public ObjectStore,
 
   // ------------------
   // objects
+  int pick_object_revision(object_t& oid) {
+    return 0;
+  }
   bool exists(object_t oid);
   int stat(object_t oid, struct stat *st);
   int remove(object_t oid, Context *onsafe);

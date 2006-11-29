@@ -112,7 +112,7 @@ void FakeStore::get_dir(string& dir) {
 void FakeStore::get_oname(object_t oid, string& fn) {
   char s[100];
   static hash<object_t> H;
-  sprintf(s, "%d/%02x/%016llx.%08x", whoami, H(oid) & HASH_MASK, oid.ino, oid.bno);
+  sprintf(s, "%d/%02x/%016llx.%08x.%d", whoami, H(oid) & HASH_MASK, oid.ino, oid.bno, oid.rev);
   fn = basedir + "/" + s;
   //  dout(1) << "oname is " << fn << endl;
 }

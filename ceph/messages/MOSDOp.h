@@ -60,6 +60,7 @@ typedef struct {
   tid_t rep_tid;
 
   object_t oid;
+  objectrev_t rev;
   pg_t pg;
 
   epoch_t map_epoch;

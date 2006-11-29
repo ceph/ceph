@@ -40,7 +40,7 @@ int main(int argc, char **argv)
     Ebofs fs(filename);
     fs.mount();
     
-
+    /*
     if (1) {
       // partial write tests
       char crap[1024*1024];
@@ -285,6 +285,7 @@ int main(int argc, char **argv)
       }
       
     }
+    */
     
     fs.sync();
     fs.trim_buffer_cache();

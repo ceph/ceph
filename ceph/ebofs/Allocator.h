@@ -53,21 +53,29 @@ protected:
   void dump_freelist();
 
  public:
+  int _release_into_limbo(Extent& ex);
+
   int _release_loner(Extent& ex);  // release loner extent
   int _release_merge(Extent& ex);  // release any extent (searches for adjacent)
 
-  int _alloc_inc(Extent& ex);
-  int _alloc_dec(Extent& ex);
+  //int _alloc_loner_inc(Extent& ex);
+  //int _alloc_loner_dec(Extent& ex);
+
 
  public:
   Allocator(Ebofs *f) : fs(f), last_pos(0) {}
   
   int allocate(Extent& ex, block_t num, block_t near=NEAR_LAST);
-  int release(Extent& ex);
+  int release(Extent& ex);  // alias for alloc_dec
 
-  int unallocate(Extent& ex) {  // skip limbo
+  int alloc_inc(Extent ex);
+  int alloc_dec(Extent ex);
+
+
+  /*int unallocate(Extent& ex) {  // skip limbo
     return _release_merge(ex);
   }
+  */
 
   int commit_limbo();  // limbo -> fs->limbo_tab
   int release_limbo(); // fs->limbo_tab -> free_tabs

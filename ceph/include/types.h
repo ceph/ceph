@@ -360,19 +360,6 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 }
 
 
-#ifdef OBJECT128
-//typedef lame128_t object_t;
-struct object_t {
-  inodeno_t  ino;  // 64 bits
-  __uint32_t bno;  // 32 bits
-
-  snapv_t    snap_last;  // 16 bits
-  snapv_t    snap_first; // 16 bits
-};
-#else
-//typedef __uint64_t object_t;      // object id
-
-#endif
 
 #define PG_NONE    0xffffffffL
 

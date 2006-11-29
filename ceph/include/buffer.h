@@ -16,8 +16,10 @@
 
 #include "common/Mutex.h"
 
-#include <ostream>
+#include <iostream>
 #include <list>
+
+using std::cout;
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
@@ -229,7 +231,7 @@ public:
       if (_raw) {
 	_raw->lock.Lock();
 	if (--_raw->nref == 0) {
-	  //std::cout << "hosing raw " << (void*)_raw << std::endl;
+	  //cout << "hosing raw " << (void*)_raw << std::endl;
 	  _raw->lock.Unlock();	  
 	  delete _raw;  // dealloc old (if any)
 	} else
@@ -671,6 +673,33 @@ public:
 
 typedef buffer::ptr bufferptr;
 typedef buffer::list bufferlist;
+
+
+inline bool operator>(bufferlist& l, bufferlist& r) {
+  for (unsigned p = 0; ; p++) {
+    if (l.length() > p && r.length() == p) return true;
+    if (l.length() == p) return false;
+    if (l[p] > r[p]) return true;
+    if (l[p] < r[p]) return false;
+    p++;
+  }
+}
+inline bool operator>=(bufferlist& l, bufferlist& r) {
+  for (unsigned p = 0; ; p++) {
+    if (l.length() > p && r.length() == p) return true;
+    if (r.length() == p && l.length() == p) return true;
+    if (l[p] > r[p]) return true;
+    if (l[p] < r[p]) return false;
+    p++;
+  }
+}
+inline bool operator<(bufferlist& l, bufferlist& r) {
+  return r > l;
+}
+inline bool operator<=(bufferlist& l, bufferlist& r) {
+  return r >= l;
+}
+
 
 inline std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
   return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref << ")";

@@ -384,6 +384,8 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   // objects
+  virtual int pick_object_revision(object_t& oid) = 0;
+
   virtual bool exists(object_t oid) = 0;                   // useful?
   virtual int stat(object_t oid, struct stat *st) = 0;     // struct stat?
 
