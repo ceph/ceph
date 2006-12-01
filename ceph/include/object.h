@@ -40,10 +40,20 @@ inline bool operator!=(const object_t l, const object_t r) {
   return (l.ino != r.ino) || (l.bno != r.bno) || (l.rev != r.rev);
 }
 inline bool operator>(const object_t l, const object_t r) {
-  return (l.ino > r.ino) ? true : ((l.ino == r.ino && l.bno > r.bno) ? true: ((l.rev > r.rev) ? true:false));
+  if (l.ino > r.ino) return true;
+  if (l.ino < r.ino) return false;
+  if (l.bno > r.bno) return true;
+  if (l.bno < r.bno) return false;
+  if (l.rev > r.rev) return true;
+  return false;
 }
 inline bool operator<(const object_t l, const object_t r) {
-  return (l.ino < r.ino) ? true : ((l.ino == r.ino && l.bno < r.bno) ? true: ((l.rev < r.rev) ? true:false));
+  if (l.ino < r.ino) return true;
+  if (l.ino > r.ino) return false;
+  if (l.bno < r.bno) return true;
+  if (l.bno > r.bno) return false;
+  if (l.rev < r.rev) return true;
+  return false;
 }
 inline bool operator>=(const object_t l, const object_t r) { 
   return !(l < r);
