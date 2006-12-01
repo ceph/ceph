@@ -109,6 +109,7 @@ struct ebofs_onode {
   object_t   object_id;       /* for kicks */
   off_t      object_size;     /* file size in bytes.  should this be 64-bit? */
   unsigned   object_blocks;
+  bool       readonly;
   
   int        num_collections;
   int        num_attr;        // num attr in onode

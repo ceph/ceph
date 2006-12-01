@@ -1,13 +1,10 @@
 
 == todo
 
-papers to read
-- gribble et al 2000, scalable distributed hash table
-- sagiv blink trees
-- johnson and colbrook's DE and DB-trees (maybe fewer locks?)
+ebofs
+- verify proper behavior of conflicting/overlapping reads of clones
 
-
-rados todo
+rados paper todo
 - better experiments
 - flush log only in response to subsequent read or write?
 - better behaving recovery
@@ -16,11 +13,20 @@ rados todo
 - snapshots
 
 rados snapshots
-- write is tagged with current_rev.
-  - if latest object.rev != current_rev, we clone it before applying write.
-- reads are tagged with readv.  
-  - we read from newest object whose snapv >= readv.
+- attr.crev is rev we were created in.
+- oid.rev=0 is "live".  defined for attr.crev <= rev.
+- otherwise, defined for attr.crev <= rev < oid.rev  (i.e. oid.rev is upper bound, non-inclusive.)
 
+- write is tagged with op.rev
+  - if latest op.rev != attr.crev,
+    - we clone to oid.rev=rev
+    - clone keeps old crev.
+    - change live attr.crev=rev.
+- delete is tagged with op.rev
+  - rename live to oid.rev = op.rev
+- read is tagged with op.rev
+  - if 0, we read from 0 (if it exists).
+  - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
 
 
 

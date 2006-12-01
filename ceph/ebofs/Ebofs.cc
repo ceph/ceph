@@ -619,6 +619,7 @@ Onode* Ebofs::get_onode(object_t oid)
            << eo->num_extents << " extents" << endl;
       assert(eo->object_id == oid);
     }
+    on->readonly = eo->readonly;
     on->onode_loc = eo->onode_loc;
     on->object_size = eo->object_size;
     on->object_blocks = eo->object_blocks;
@@ -684,6 +685,7 @@ void Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
 {
   // onode
   struct ebofs_onode eo;
+  eo.readonly = on->readonly;
   eo.onode_loc = on->onode_loc;
   eo.object_id = on->object_id;
   eo.object_size = on->object_size;
@@ -2156,6 +2158,10 @@ int Ebofs::_write(object_t oid, off_t offset, size_t length, bufferlist& bl)
   // get|create inode
   Onode *on = get_onode(oid);
   if (!on) on = new_onode(oid);    // new inode!
+  if (on->readonly) {
+    put_onode(on);
+    return -EACCES;
+  }
 
   dirty_onode(on);  // dirty onode!
   
@@ -2264,7 +2270,11 @@ int Ebofs::_truncate(object_t oid, off_t size)
   Onode *on = get_onode(oid);
   if (!on) 
     return -ENOENT;
-  
+  if (on->readonly) {
+    put_onode(on);
+    return -EACCES;
+  }
+
   int r = 0;
   if (size > on->object_size) {
     r = -EINVAL;  // whatever
@@ -2285,8 +2295,11 @@ int Ebofs::_truncate(object_t oid, off_t size)
     }
 
     // truncate buffer cache
-    if (on->oc)
+    if (on->oc) {
       on->oc->truncate(on->object_blocks, super_epoch);
+      if (on->oc->is_empty())
+	on->close_oc();
+    }
 
     // update uncommitted
     interval_set<block_t> uncom;
@@ -2346,17 +2359,21 @@ int Ebofs::clone(object_t from, object_t to, Context *onsafe)
 
 int Ebofs::_clone(object_t from, object_t to)
 {
+  dout(7) << "_clone " << from << " -> " << to << endl;
+
   Onode *fon = get_onode(from);
   if (!fon) return -ENOENT;
   Onode *ton = get_onode(to);
   if (ton) {
     put_onode(fon);
+    put_onode(ton);
     return -EEXIST;
   }
   ton = new_onode(to); 
   assert(ton);
   
   // copy easy bits
+  ton->readonly = true;
   ton->object_size = fon->object_size;
   ton->object_blocks = fon->object_blocks;
   ton->attr = fon->attr;
@@ -2375,6 +2392,16 @@ int Ebofs::_clone(object_t from, object_t to)
     allocator.alloc_inc(p->second);
   }
 
+  // clear uncommitted
+  fon->uncommitted.clear();
+
+  // muck with ObjectCache
+  if (fon->oc) 
+    fon->oc->clone_to( ton );
+  
+  // ok!
+  put_onode(ton);
+  put_onode(fon);
   return 0;
 }
 
@@ -2465,6 +2492,10 @@ int Ebofs::_setattr(object_t oid, const char *name, const void *value, size_t si
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
+  if (on->readonly) {
+    put_onode(on);
+    return -EACCES;
+  }
 
   string n(name);
   on->attr[n] = buffer::copy((char*)value, size);
@@ -2498,6 +2529,10 @@ int Ebofs::_setattrs(object_t oid, map<string,bufferptr>& attrset)
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
+  if (on->readonly) {
+    put_onode(on);
+    return -EACCES;
+  }
 
   on->attr = attrset;
   dirty_onode(on);
@@ -2577,6 +2612,10 @@ int Ebofs::_rmattr(object_t oid, const char *name)
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
+  if (on->readonly) {
+    put_onode(on);
+    return -EACCES;
+  }
 
   string n(name);
   on->attr.erase(n);

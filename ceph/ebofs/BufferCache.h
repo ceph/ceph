@@ -57,6 +57,9 @@ class BufferHead : public LRUObject {
   map<off_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
 
   map< block_t, list<Context*> > waitfor_read;
+  
+  set<BufferHead*>  shadows;     // shadow bh's that clone()ed me.
+  BufferHead*       shadow_of;
 
  private:
   int        ref;
@@ -76,8 +79,12 @@ class BufferHead : public LRUObject {
   BufferHead(ObjectCache *o) :
     oc(o), //cancellable_ioh(0), tx_epoch(0),
     rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
+    shadow_of(0),
     ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0)
     {}
+  ~BufferHead() {
+    unpin_shadows();
+  }
   
   ObjectCache *get_oc() { return oc; }
 
@@ -115,6 +122,11 @@ class BufferHead : public LRUObject {
   void set_state(int s) {
     if (s == STATE_PARTIAL || s == STATE_RX || s == STATE_TX) get();
     if (state == STATE_PARTIAL || state == STATE_RX || state == STATE_TX) put();
+
+    if ((state == STATE_TX && s != STATE_TX) ||
+	(state == STATE_PARTIAL && s != STATE_PARTIAL)) 
+      unpin_shadows();
+
     state = s;
   }
   int get_state() { return state; }
@@ -131,6 +143,26 @@ class BufferHead : public LRUObject {
   //void cancel_partials();
   //void queue_partial_write(block_t b);
 
+  void add_shadow(BufferHead *dup) {
+    shadows.insert(dup);
+    dup->shadow_of = this;
+    dup->get();
+  }
+  void remove_shadow(BufferHead *dup) {
+    shadows.erase(dup);
+    dup->shadow_of = 0;
+    dup->put();
+  }
+  void unpin_shadows() {
+    for (set<BufferHead*>::iterator p = shadows.begin();
+	 p != shadows.end();
+	 ++p) {
+      //cout << "unpin shadow " << *p << endl;
+      (*p)->shadow_of = 0;
+      (*p)->put();
+    }
+    shadows.clear();
+  }
 
   void copy_partial_substr(off_t start, off_t end, bufferlist& bl) {
     map<off_t, bufferlist>::iterator i = partial.begin();
@@ -386,6 +418,8 @@ class ObjectCache {
   void truncate(block_t blocks, version_t super_epoch);
   //  void tear_down();
 
+  void clone_to(Onode *other);
+
   void dump() {
     for (map<block_t,BufferHead*>::iterator i = data.begin();
          i != data.end();
@@ -441,6 +475,7 @@ class BufferCache {
   };
 
   map<block_t, map<block_t, PartialWrite> > partial_write;  // queued writes w/ partial content
+  map<block_t, set<BufferHead*> >           shadow_partials;
 
  public:
   BufferCache(BlockDevice& d, Mutex& el) : 
@@ -588,6 +623,9 @@ class BufferCache {
 
   void queue_partial(block_t from, block_t to, map<off_t, bufferlist>& partial, version_t epoch);
   void cancel_partial(block_t from, block_t to, version_t epoch);
+
+  void add_shadow_partial(block_t from, BufferHead *bh);
+  void cancel_shadow_partial(block_t from, BufferHead *bh);
 
   void rx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, block_t diskstart, bufferlist& bl);
   void tx_finish(ObjectCache *oc, ioh_t ioh, block_t start, block_t len, version_t v, version_t e);

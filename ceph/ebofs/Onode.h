@@ -42,6 +42,7 @@ public:
   version_t version;      // incremented on each modify.
 
   // data
+  bool     readonly;
   Extent   onode_loc;
   off_t    object_size;
   unsigned object_blocks;
@@ -64,8 +65,9 @@ public:
 
  public:
   Onode(object_t oid) : ref(0), object_id(oid), version(0),
-    object_size(0), object_blocks(0), oc(0),
-    dirty(false), dangling(false), deleted(false) { 
+			readonly(false),
+			object_size(0), object_blocks(0), oc(0),
+			dirty(false), dangling(false), deleted(false) { 
     onode_loc.length = 0;
   }
   ~Onode() {
@@ -79,12 +81,12 @@ public:
   void get() {
     if (ref == 0) lru_pin();
     ref++;
-    //cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << endl;
+    cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << endl;
   }
   void put() {
     ref--;
     if (ref == 0) lru_unpin();
-    //cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << endl;
+    cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << endl;
   }
 
   void mark_dirty() {

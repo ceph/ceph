@@ -282,7 +282,10 @@ int ObjectCache::map_read(block_t start, block_t len,
         partial[cur] = e;
         dout(20) << "map_read partial " << *e << endl;
       }
-      else assert(0);
+      else {
+	dout(0) << "map_read ??? " << *e << endl;
+	assert(0);
+      }
       
       block_t lenfromcur = MIN(e->end() - cur, left);
       cur += lenfromcur;
@@ -565,8 +568,17 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
         bc->bh_cancel_read(bh);
       if (bh->is_tx() && uncom) 
         bc->bh_cancel_write(bh, super_epoch);
-      if (bh->is_partial() && uncom)
-        bc->bh_cancel_partial_write(bh);
+      if (bh->shadow_of) {
+	dout(10) << "truncate " << *bh << " unshadowing " << *bh->shadow_of << endl;
+	// shadow
+	bh->shadow_of->remove_shadow(bh);
+	if (bh->is_partial()) 
+	  bc->cancel_shadow_partial(bh->rx_from.start, bh);
+      } else {
+	// normal
+	if (bh->is_partial() && uncom)
+	  bc->bh_cancel_partial_write(bh);
+      }
     }
     
     for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
@@ -577,6 +589,43 @@ void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 
     bc->remove_bh(bh);
     delete bh;
+  }
+}
+
+
+void ObjectCache::clone_to(Onode *other)
+{
+  ObjectCache *ton = 0;
+
+  for (map<block_t, BufferHead*>::iterator p = data.begin();
+       p != data.end();
+       p++) {
+    BufferHead *bh = p->second;
+    dout(10) << "clone_to ? " << *bh << endl;
+    if (bh->is_dirty() || bh->is_tx() || bh->is_partial()) {
+      // dup dirty or tx bh's
+      if (!ton)
+	ton = other->get_oc(bc);
+      BufferHead *nbh = new BufferHead(ton);
+      nbh->set_start( bh->start() );
+      nbh->set_length( bh->length() );
+      nbh->data = bh->data;      // just copy refs to underlying buffers. 
+      bc->add_bh(nbh);
+
+      if (bh->is_partial()) {
+	dout(0) << "clone_to PARTIAL FIXME NOT FULLY IMPLEMENTED ******" << endl;
+	nbh->partial = bh->partial;
+	bc->mark_partial(nbh);
+	// register as shadow_partial
+	bc->add_shadow_partial(bh->rx_from.start, nbh);
+      } else {
+	// clean buffer will shadow
+	bh->add_shadow(nbh);
+	bc->mark_clean(nbh);
+      }
+
+      dout(10) << "clone_to dup " << *bh << " -> " << *nbh << endl;
+    } 
   }
 }
 
@@ -603,7 +652,7 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
   block_t newleftlen = after - orig->start();
   right->set_start( after );
   right->set_length( orig->length() - newleftlen );
-
+  
   // shorten left
   stat_sub(orig);
   orig->set_length( newleftlen );
@@ -619,6 +668,12 @@ BufferHead *BufferCache::split(BufferHead *orig, block_t after)
     right->rx_from.length -= newleftlen;
     right->rx_from.start += newleftlen;
   }
+
+  // dup shadows
+  for (set<BufferHead*>::iterator p = orig->shadows.begin();
+       p != orig->shadows.end();
+       ++p)
+    right->add_shadow(*p);
 
   // split buffers too
   bufferlist bl;
@@ -841,7 +896,53 @@ void BufferCache::rx_finish(ObjectCache *oc,
     }
   }
 
-  // 
+  // shadow partials?
+  {
+    list<Context*> waiters;
+    map<block_t, set<BufferHead*> >::iterator sp = shadow_partials.lower_bound(diskstart);
+    while (sp != shadow_partials.end()) {
+      if (sp->first >= diskstart+length) break;
+      assert(sp->first >= diskstart);
+      
+      block_t pblock = sp->first;
+      set<BufferHead*> ls;
+      ls.swap( sp->second );
+      
+      map<block_t, set<BufferHead*> >::iterator t = sp;
+      sp++;
+      shadow_partials.erase(t);
+      
+      for (set<BufferHead*>::iterator p = ls.begin();
+	   p != ls.end();
+	   ++p) {
+	BufferHead *bh = *p;
+	dout(10) << "rx_finish applying shadow_partial for " << pblock
+		 << " to " << *bh << endl;
+	bufferptr bp = buffer::create_page_aligned(EBOFS_BLOCK_SIZE);
+	bh->data.clear();
+	bh->data.push_back( bp );
+	bh->data.copy_in((pblock-diskstart)*EBOFS_BLOCK_SIZE, 
+			 (pblock-diskstart+1)*EBOFS_BLOCK_SIZE, 
+			 bl);
+	bh->apply_partial();
+	bh->set_state(BufferHead::STATE_CLEAN);
+	
+	// trigger waiters
+	for (map<block_t,list<Context*> >::iterator p = bh->waitfor_read.begin();
+	     p != bh->waitfor_read.end();
+	     p++) {
+	  assert(p->first >= bh->start() && p->first < bh->end());
+	  waiters.splice(waiters.begin(), p->second);
+	}
+	bh->waitfor_read.clear();
+      }  
+    }
+
+    // kick waiters
+    finish_contexts(waiters);
+  }
+
+  // done.
   ebofs_lock.Unlock();
 }
 
@@ -931,4 +1032,14 @@ void BufferCache::cancel_partial(block_t from, block_t to, version_t epoch)
 }
 
 
+void BufferCache::add_shadow_partial(block_t from, BufferHead *bh)
+{
+  dout(10) << "add_shadow_partial from " << from << " " << *bh << endl;
+  shadow_partials[from].insert(bh);
+}
 
+void BufferCache::cancel_shadow_partial(block_t from, BufferHead *bh)
+{
+  dout(10) << "cancel_shadow_partial from " << from << " " << *bh << endl;
+  shadow_partials[from].erase(bh);
+}

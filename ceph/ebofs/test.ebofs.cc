@@ -32,7 +32,7 @@ public:
 
     while (!stop) {
       object_t oid;
-      oid.ino = (rand() % 2) + 0x10000000;
+      oid.ino = (rand() % 10) + 0x10000000;
       coll_t cid = rand() % 50;
       off_t off = rand() % 10000;//0;//rand() % 1000000;
       off_t len = 1+rand() % 100000;
@@ -40,9 +40,10 @@ public:
       if (rand() % 2) a = "two";
       int l = 3;//rand() % 10;
 
-      switch (rand() % 9) {
+      switch (rand() % 10) {
       case 0:
         {
+	  oid.rev = rand() % 10;
           cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << endl;
           bufferlist bl;
           fs.read(oid, off, len, bl);
@@ -115,6 +116,14 @@ public:
           fs.truncate(oid, 0);
         }
         break;
+
+      case 9:
+	{
+	  object_t newoid = oid;
+	  newoid.rev = rand() % 10;
+	  cout << t << " clone " << oid << " to " << newoid << endl;
+	  fs.clone(oid, newoid, 0);
+	}
       }
 
 
@@ -140,6 +149,47 @@ int main(int argc, char **argv)
 
   Ebofs fs(filename);
   if (fs.mount() < 0) return -1;
+
+
+  // explicit tests
+  if (1) {
+    // verify that clone() plays nice with partial writes
+    object_t oid(1,1);
+    bufferptr bp(10000);
+    bp.zero();
+    bufferlist bl;
+    bl.push_back(bp);
+    fs.write(oid, 0, 10000, bl, 0);
+
+    fs.sync();
+    fs.trim_buffer_cache();
+
+    // induce a partial write
+    bufferlist bl2;
+    bl2.substr_of(bl, 0, 100);
+    fs.write(oid, 100, 100, bl2, 0);
+
+    // clone it
+    object_t oid2;
+    oid2 = oid;
+    oid2.rev = 1;
+    fs.clone(oid, oid2, 0);
+
+    // ... 
+    if (0) {
+      // make sure partial still behaves after orig is removed...
+      fs.remove(oid, 0);
+
+      // or i read for oid2...
+      bufferlist rbl;
+      fs.read(oid2, 0, 200, rbl);
+    }
+    if (1) {
+      // make sure things behave if we remove the clone
+      fs.remove(oid2,0);
+    }
+  }
+  // /explicit tests
 
   list<Tester*> ls;
   for (int i=0; i<threads; i++) {
