@@ -110,8 +110,11 @@ double go(int dep, int per)
 
   utime_t start = g_clock.now();
 
+  set<int> out;
+  map<int,float> overload;
+
   for (int x=1; x <= place; x++)
-	c.do_rule(rule, x, v);
+	c.do_rule(rule, x, v, out, overload);
 
   utime_t end = g_clock.now();
 
