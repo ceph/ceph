@@ -103,9 +103,11 @@ mpd &           # for a single host
 mpiboot -n 10   # for multiple hosts (see MPICH docs)
 make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 20 --syn writefile 100 16384
 </pre>
+			You will probably want to make <tt>dev/osdall</tt> a symlink to some block device that exists on every node you're starting an OSD on.  Otherwise, you'll need a symlink (for "block device" file) for each osd.
+
 			If you want to mount a distributed FS (instead of generating a synthetic workload), try
 <pre>
-make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 0
+make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 0     # 0 clients, just mds and osds
 # in another terminal,
 mkdir mnt
 make cfuse && ./cfuse mnt
@@ -113,7 +115,7 @@ make cfuse && ./cfuse mnt
 ls mnt 
 touch mnt/asdf   # etc
 </pre>
-			Currently, when the last client (<tt>cfuse</tt> instance, in this case) shuts down, the whole thing will shut down.  Assuming things shut down cleanly, you should be able to start things up again without the <tt>--mkfs--</tt> flag and recovery the prior file system state.
+			Currently, when the last client (<tt>cfuse</tt> instance, in this case) shuts down, the whole thing will shut down.  Assuming things shut down cleanly, you should be able to start things up again without the <tt>--mkfs</tt> flag and recover the prior file system state.
 		</div>
 
 		<h4>Structure</h4>
