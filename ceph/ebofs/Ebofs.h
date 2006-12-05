@@ -236,7 +236,7 @@ class Ebofs : public ObjectStore {
   // atomic transaction
   unsigned apply_transaction(Transaction& t, Context *onsafe=0);
 
-  int pick_object_revision(object_t& oid);
+  int pick_object_revision_lt(object_t& oid);
 
   // object interface
   bool exists(object_t);

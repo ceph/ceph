@@ -137,7 +137,7 @@ int Ebofs::mkfs()
   nodepool.usemap_odd.length = usemap_len;
   dout(10) << "mkfs: even usemap at " << nodepool.usemap_even << endl;
   dout(10) << "mkfs:  odd usemap at " << nodepool.usemap_odd << endl;
-  
+
   // init tables
   struct ebofs_table empty;
   empty.num_keys = 0;
@@ -160,6 +160,9 @@ int Ebofs::mkfs()
   left.length = num_blocks - left.start;
   dout(10) << "mkfs: free data blocks at " << left << endl;
   allocator._release_into_limbo( left );
+  allocator.alloc_inc(nr);
+  allocator.alloc_inc(nodepool.usemap_even);
+  allocator.alloc_inc(nodepool.usemap_odd);
   allocator.commit_limbo();   // -> limbo_tab
   allocator.release_limbo();  // -> free_tab
 
@@ -2022,6 +2025,17 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
       }
       break;
 
+    case Transaction::OP_CLONE:
+      {
+        object_t oid = t.oids.front(); t.oids.pop_front();
+        object_t noid = t.oids.front(); t.oids.pop_front();
+	if (_clone(oid, noid) < 0) {
+	  dout(7) << "apply_transaction fail on _clone" << endl;
+	  r &= bit;
+	}
+      }
+      break;
+
     case Transaction::OP_MKCOLL:
       {
         coll_t cid = t.cids.front(); t.cids.pop_front();
@@ -2409,43 +2423,46 @@ int Ebofs::_clone(object_t from, object_t to)
 
 
 /*
- * pick object revision with rev <= specified rev.  
- *  (rev is essential a ctime.)
+ * pick object revision with rev < specified rev.  
+ *  (oid.rev is a noninclusive upper bound.)
  *
  */
-int Ebofs::pick_object_revision(object_t& oid)
+int Ebofs::pick_object_revision_lt(object_t& oid)
 {
   int r = 0;
+  assert(oid.rev > 0);   // this is only useful for non-zero oid.rev
 
   ebofs_lock.Lock();
   object_t orig = oid;
 
+  object_t live = oid;
+  live.rev = 0;
+
   if (object_tab->get_num_keys() == 0)
     r = -EEXIST;
   else {
-    if (oid.rev == 0) oid.rev = object_t::MAXREV;
-    
     Table<object_t, Extent>::Cursor cursor(object_tab);
     
-    object_tab->find(oid, cursor);
-    while (1) {
-      object_t t = cursor.current().key;
-      if (t.ino != oid.ino ||
-	  t.bno != oid.bno) {
-	r = -EEXIST;
-	break;
+    object_tab->find(oid, cursor);  // this will be just _past_ highest eligible rev
+    if (cursor.move_left() <= 0) {
+      r = -EEXIST;
+    } else {
+      while (1) {
+	object_t t = cursor.current().key;
+	if (t < live) return -EEXIST;
+	if (t.ino == oid.ino &&
+	    t.bno == oid.bno &&
+	    t.rev < oid.rev) {
+	  oid = t;
+	  break;
+	}
+	if (cursor.move_left() <= 0) break;
       }
-      
-      if (t.rev <= oid.rev) {
-	oid = t;
-	break;
-      }
-
-      if (cursor.move_left() <= 0) break;
     }
   }
 
-  dout(8) << "find_object_revision " << orig << " -> " << oid << endl;
+  dout(8) << "find_object_revision " << orig << " -> " << oid
+	  << "  r=" << r << endl;
   
   ebofs_lock.Unlock();
   return r;

@@ -81,12 +81,12 @@ public:
   void get() {
     if (ref == 0) lru_pin();
     ref++;
-    cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << endl;
+    //cout << "ebofs.onode.get " << hex << object_id << dec << " " << ref << endl;
   }
   void put() {
     ref--;
     if (ref == 0) lru_unpin();
-    cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << endl;
+    //cout << "ebofs.onode.put " << hex << object_id << dec << " " << ref << endl;
   }
 
   void mark_dirty() {
