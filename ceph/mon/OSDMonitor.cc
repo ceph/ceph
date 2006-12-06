@@ -163,7 +163,7 @@ void OSDMonitor::create_initial()
       for (int j=0; j<nper; j++) {
 	osdmap.osds.insert(i);
 	domain[dom]->add_item(i, 1.0);
-	//cerr << "osd" << i << " in domain " << dom << endl;
+	cerr << "osd" << i << " in domain " << dom << endl;
 	i++;
 	if (i == g_conf.num_osd) break;
       }
@@ -186,8 +186,8 @@ void OSDMonitor::create_initial()
     }
     
     // test
-    vector<int> out;
-    osdmap.pg_to_osds(0x40200000110ULL, out);
+    //vector<int> out;
+    //osdmap.pg_to_osds(0x40200000110ULL, out);
     
   } else {
     // one bucket
