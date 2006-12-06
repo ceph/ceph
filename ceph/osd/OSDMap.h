@@ -52,8 +52,9 @@ using namespace std;
 // pg roles
 #define PG_ROLE_STRAY   -1
 #define PG_ROLE_HEAD     0
-#define PG_ROLE_MIDDLE   1
-#define PG_ROLE_TAIL     2
+#define PG_ROLE_ACKER    1
+#define PG_ROLE_MIDDLE   2  // der.. misnomer
+//#define PG_ROLE_TAIL     2
 
 
 
@@ -351,12 +352,23 @@ private:
     assert(num_rep > 0);
     
     // map to osds[]
-    switch(g_conf.osd_pg_layout) {
+    switch (g_conf.osd_pg_layout) {
     case PG_LAYOUT_CRUSH:
-      crush.do_rule(crush.rules[num_rep],     // FIXME.
-		    ps,
-		    osds,
-		    out_osds, overload_osds);
+      {
+	int forcefeed = -1;
+	if (pg.u.fields.preferred > 0) {
+	  forcefeed = pg.u.fields.preferred-1;
+	  if (out_osds.count(forcefeed)) 
+	    forcefeed = -1;  // or not!
+	}
+	crush.do_rule(crush.rules[num_rep],     // FIXME rule thing.
+		      ps, 
+		      osds,
+		      out_osds, overload_osds,
+		      forcefeed);
+	//if (forcefeed >= 0)
+	//cout << "forcefeed " << forcefeed << " result " << osds << endl;
+      }
       break;
       
     case PG_LAYOUT_LINEAR:
@@ -395,7 +407,8 @@ private:
       assert(0);
     }
   
-    if (pg.u.fields.preferred > 0) {
+    if (pg.u.fields.preferred > 0 &&
+	g_conf.osd_pg_layout != PG_LAYOUT_CRUSH) {
       int osd = pg.u.fields.preferred-1;
 
       // already in there?
@@ -474,7 +487,7 @@ private:
 
     if (rank < 0) return PG_ROLE_STRAY;
     else if (rank == 0) return PG_ROLE_HEAD;
-    else if (rank == nrep-1) return PG_ROLE_TAIL;
+    else if (rank == 1) return PG_ROLE_ACKER;
     else return PG_ROLE_MIDDLE;
   }
   
