@@ -356,18 +356,14 @@ private:
     case PG_LAYOUT_CRUSH:
       {
 	int forcefeed = -1;
-	if (pg.u.fields.preferred > 0) {
+	if (pg.u.fields.preferred > 0 &&
+	    out_osds.count(pg.u.fields.preferred-1) == 0) 
 	  forcefeed = pg.u.fields.preferred-1;
-	  if (out_osds.count(forcefeed)) 
-	    forcefeed = -1;  // or not!
-	}
 	crush.do_rule(crush.rules[num_rep],     // FIXME rule thing.
 		      ps, 
 		      osds,
 		      out_osds, overload_osds,
 		      forcefeed);
-	//if (forcefeed >= 0)
-	//cout << "forcefeed " << forcefeed << " result " << osds << endl;
       }
       break;
       
