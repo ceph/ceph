@@ -2375,7 +2375,9 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
     dout(20) << " sync write start " << onfinish << endl;
     
     filer->write(in->inode, offset, size, blist, 0, 
-                 onfinish, onsafe);
+                 onfinish, onsafe
+		 //, 1+((int)g_clock.now()) / 10 //f->pos // hack hack test osd revision snapshots
+		 ); 
     
     while (!done) {
       cond.Wait(client_lock);

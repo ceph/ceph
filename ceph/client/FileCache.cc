@@ -147,7 +147,7 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
     oc->file_write(inode, offset, size, blist);
   } else {
     // atomic, synchronous, blocking.
-    oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);      
+    oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);
   }    
     
   // dec writing counter
