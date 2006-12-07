@@ -156,7 +156,8 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
 
 void Filer::file_to_extents(inode_t inode,
                             off_t offset, size_t len,
-                            list<ObjectExtent>& extents) 
+                            list<ObjectExtent>& extents,
+			    objectrev_t rev) 
 {
   dout(10) << "file_to_extents " << offset << "~" << len 
            << " on " << hex << inode.ino << dec
@@ -190,6 +191,7 @@ void Filer::file_to_extents(inode_t inode,
     else {
       ex = &object_extents[oid];
       ex->oid = oid;
+      ex->rev = rev;
       ex->pgid = objecter->osdmap->object_to_pg( oid, inode.layout );
     }
     

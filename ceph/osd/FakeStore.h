@@ -66,7 +66,7 @@ class FakeStore : public ObjectStore,
 
   // ------------------
   // objects
-  int pick_object_revision(object_t& oid) {
+  int pick_object_revision_lt(object_t& oid) {
     return 0;
   }
   bool exists(object_t oid);

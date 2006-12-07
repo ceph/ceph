@@ -77,6 +77,7 @@ public:
     static const int OP_SETATTR =      14;  // oid, attrname, attrval
     static const int OP_SETATTRS =     15;  // oid, attrset
     static const int OP_RMATTR =       16;  // oid, attrname
+    static const int OP_CLONE =        17;  // oid, newoid
 
     static const int OP_MKCOLL =       20;  // cid
     static const int OP_RMCOLL =       21;  // cid
@@ -168,6 +169,12 @@ public:
       ops.push_back(op);
       oids.push_back(oid);
       attrnames.push_back(name);
+    }
+    void clone(object_t oid, object_t noid) {
+      int op = OP_CLONE;
+      ops.push_back(op);
+      oids.push_back(oid);
+      oids.push_back(noid);
     }
     void create_collection(coll_t cid) {
       int op = OP_MKCOLL;
@@ -306,6 +313,14 @@ public:
         }
         break;
 
+      case Transaction::OP_CLONE:
+	{
+          object_t oid = t.oids.front(); t.oids.pop_front();
+          object_t noid = t.oids.front(); t.oids.pop_front();
+	  clone(oid, noid);
+	}
+	break;
+
       case Transaction::OP_MKCOLL:
         {
           coll_t cid = t.cids.front(); t.cids.pop_front();
@@ -384,7 +399,7 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   // objects
-  virtual int pick_object_revision(object_t& oid) = 0;
+  virtual int pick_object_revision_lt(object_t& oid) = 0;
 
   virtual bool exists(object_t oid) = 0;                   // useful?
   virtual int stat(object_t oid, struct stat *st) = 0;     // struct stat?
@@ -420,6 +435,10 @@ public:
 
   virtual int rmattr(object_t oid, const char *name,
                      Context *onsafe=0) {return 0;}
+
+  virtual int clone(object_t oid, object_t noid) {
+    return -1; 
+  }
 
   virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
   

@@ -96,8 +96,9 @@ class ObjectCacher {
   private:
     // ObjectCacher::Object fields
     ObjectCacher *oc;
-    object_t  oid;
+    object_t  oid;   // this _always_ is oid.rev=0
     inodeno_t ino;
+	objectrev_t rev; // last rev we're written
     
   public:
     map<off_t, BufferHead*>     data;
@@ -476,7 +477,8 @@ class ObjectCacher {
 
   int file_write(inode_t& inode,
                  off_t offset, size_t len, 
-                 bufferlist& bl) {
+                 bufferlist& bl,
+				 objectrev_t rev=0) {
     Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return writex(wr, inode.ino);
@@ -498,7 +500,8 @@ class ObjectCacher {
   int file_atomic_sync_write(inode_t& inode,
                              off_t offset, size_t len, 
                              bufferlist& bl,
-                             Mutex &lock) {
+                             Mutex &lock,
+							 objectrev_t rev=0) {
     Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return atomic_sync_writex(wr, inode.ino, lock);

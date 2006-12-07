@@ -91,8 +91,14 @@ public:
   } *next_heartbeat;
 
   // global lock
-  Mutex osd_lock;                          
+  Mutex osd_lock;
 
+  // -- stats --
+  int hb_stat_ops;  // ops since last heartbeat
+  int hb_stat_qlen; // cumulative queue length since last hb
+
+  hash_map<int, float> peer_qlen;
+  
   // per-pg locking (serializing)
   hash_set<pg_t>               pg_lock;
   hash_map<pg_t, list<Cond*> > pg_lock_waiters;  
@@ -130,10 +136,15 @@ public:
 
   void do_op(Message *m, PG *pg);  // actually do it
 
-  void prepare_log_transaction(ObjectStore::Transaction& t, MOSDOp* op, eversion_t& version, PG *pg, eversion_t trim_to);
-  void prepare_op_transaction(ObjectStore::Transaction& t, MOSDOp* op, eversion_t& version, PG *pg);
+  void prepare_log_transaction(ObjectStore::Transaction& t, MOSDOp* op, eversion_t& version, 
+			       objectrev_t crev, objectrev_t rev, PG *pg, eversion_t trim_to);
+  void prepare_op_transaction(ObjectStore::Transaction& t, MOSDOp* op, eversion_t& version, 
+			      objectrev_t crev, objectrev_t rev, PG *pg);
   
   bool waitfor_missing_object(MOSDOp *op, PG *pg);
+  bool pick_missing_object_rev(object_t& oid, PG *pg);
+  bool pick_object_rev(object_t& oid);
+
 
   
  friend class PG;

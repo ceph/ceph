@@ -442,7 +442,7 @@ void PG::generate_backlog()
     
     // add entry
     Log::Entry e;
-    e.op = Log::Entry::UPDATE;           // FIXME when we do smarter op codes!
+    e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
     e.oid = *it;
     osd->store->getattr(*it, 
                         "version",

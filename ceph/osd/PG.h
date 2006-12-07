@@ -232,23 +232,26 @@ public:
     class Entry {
     public:
       const static int LOST = 0;
-      const static int UPDATE = 1;
-      const static int DELETE = 2;
+      const static int MODIFY = 1;
+      const static int CLONE = 2;  
+      const static int DELETE = 3;
 
       int        op;   // write, zero, trunc, remove
       object_t   oid;
       eversion_t version;
+      objectrev_t rev;
+      
       reqid_t    reqid;  // caller+tid to uniquely identify request
-      //msg_addr_t who;  // who did this op,
-      //tid_t      tid;  // and their tid.
-
+      
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v, 
             const msg_addr_t& a, tid_t t) : 
         op(_op), oid(_oid), version(v), reqid(a,t) {}
       
       bool is_delete() const { return op == DELETE; }
-      bool is_update() const { return !is_delete(); }
+      bool is_clone() const { return op == CLONE; }
+      bool is_modify() const { return op == MODIFY; }
+      bool is_update() const { return is_clone() || is_modify(); }
     };
 
     list<Entry> log;  // the actual log.
@@ -362,7 +365,7 @@ public:
       // add to log
       log.push_back(e);
       assert(e.version > top);
-      assert(top.version == 0 || e.version.version == top.version + 1);
+      assert(top.version == 0 || e.version.version > top.version);
       top = e.version;
 
       // to our index
@@ -575,15 +578,21 @@ public:
   int        get_nrep() const { return acting.size(); }
 
   int        get_primary() { return acting.empty() ? -1:acting[0]; }
-  int        get_tail() { return acting.empty() ? -1:acting[ acting.size()-1 ]; }
-  int        get_acker() { return g_conf.osd_rep == OSD_REP_PRIMARY ? get_primary():get_tail(); }
+  //int        get_tail() { return acting.empty() ? -1:acting[ acting.size()-1 ]; }
+  //int        get_acker() { return g_conf.osd_rep == OSD_REP_PRIMARY ? get_primary():get_tail(); }
+  int        get_acker() { 
+    if (g_conf.osd_rep == OSD_REP_PRIMARY ||
+	acting.size() <= 1) 
+      return get_primary();
+    return acting[1];
+  }
   
   int        get_role() const { return role; }
   void       set_role(int r) { role = r; }
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
+  bool       is_acker() const { return role == PG_ROLE_ACKER; }
   bool       is_head() const { return role == PG_ROLE_HEAD; }
-  bool       is_tail() const { return role == PG_ROLE_TAIL; }
   bool       is_middle() const { return role == PG_ROLE_MIDDLE; }
   bool       is_residual() const { return role == PG_ROLE_STRAY; }
   
@@ -648,9 +657,11 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 {
   return out << " " << e.version 
-             << (e.is_update() ? "   ":" - ")
-             << hex << e.oid << dec 
-             << " by " << e.reqid;
+             << (e.is_delete() ? " - ":
+		 (e.is_clone() ? " c ":
+		  (e.is_modify() ? " m ":
+		   " ? ")))
+             << e.oid << " by " << e.reqid;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 

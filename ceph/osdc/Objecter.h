@@ -110,7 +110,7 @@ class Objecter {
       if (g_conf.osd_rep == OSD_REP_PRIMARY)
         return acting[0];
       else
-        return acting[acting.size()-1];
+        return acting[acting.size() > 1 ? 1:0];
     }
   };
 
@@ -170,12 +170,16 @@ class Objecter {
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-             Context *onfinish);
+             Context *onfinish, 
+			 objectrev_t rev=0);
   tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
-              Context *onack, Context *oncommit);
+              Context *onack, Context *oncommit, 
+			  objectrev_t rev=0);
   tid_t zero(object_t oid, off_t off, size_t len,  
-             Context *onack, Context *oncommit);
-  tid_t stat(object_t oid, off_t *size, Context *onfinish);  
+             Context *onack, Context *oncommit, 
+			 objectrev_t rev=0);
+  tid_t stat(object_t oid, off_t *size, Context *onfinish, 
+			 objectrev_t rev=0);  
 
   tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
 

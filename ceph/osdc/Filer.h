@@ -96,9 +96,10 @@ class Filer {
             bufferlist& bl,
             int flags, 
             Context *onack,
-            Context *oncommit) {
+            Context *oncommit,
+	    objectrev_t rev=0) {
     Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-    file_to_extents(inode, offset, len, wr->extents);
+    file_to_extents(inode, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -147,7 +148,8 @@ class Filer {
   void file_to_extents(inode_t inode,
                        off_t offset,
                        size_t len,
-                       list<ObjectExtent>& extents);
+                       list<ObjectExtent>& extents,
+		       objectrev_t rev=0);
   
 };
 
