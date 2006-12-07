@@ -409,12 +409,13 @@ class ObjectExtent {
   off_t       start;     // in object
   size_t      length;    // in object
 
+  objectrev_t rev;       // which revision?
   pg_t        pgid;      // where to find the object
 
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent() : start(0), length(0), pgid(0) {}
-  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), pgid(0) { }
+  ObjectExtent() : start(0), length(0), rev(0), pgid(0) {}
+  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), rev(0), pgid(0) { }
 };
 
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
