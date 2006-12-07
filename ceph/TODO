@@ -1,8 +1,14 @@
 
+- paxos for monitor
+- lnet?
+- crush
+ - xml import/export?
+ - crush tools
+
 == todo
 
-ebofs
-- verify proper behavior of conflicting/overlapping reads of clones
+- integrate revisions into ObjectCacher
+- clean up oid.rev vs op.rev in osd+osdc
 
 rados paper todo
 - better experiments
@@ -17,20 +23,24 @@ rados snapshots
 - oid.rev=0 is "live".  defined for attr.crev <= rev.
 - otherwise, defined for attr.crev <= rev < oid.rev  (i.e. oid.rev is upper bound, non-inclusive.)
 
-- write is tagged with op.rev
-  - if latest op.rev != attr.crev,
-    - we clone to oid.rev=rev
-    - clone keeps old crev.
+- write|delete is tagged with op.rev
+  - if attr.crev < op.rev
+    - we clone to oid.rev=rev (clone keeps old crev)
     - change live attr.crev=rev.
-- delete is tagged with op.rev
-  - rename live to oid.rev = op.rev
+  - apply update
 - read is tagged with op.rev
   - if 0, we read from 0 (if it exists).
   - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
 
+/- how to log entries
+/- actually do the clone on write
+/- how do deal with missing 
+/- consistent read for past revs
+- how to efficiently manage recovery
+  - include alloc diff from next and/or previous
+  - i.e. try to clone() if we can.
+  - and adjust allocation if we can't?
 
-
-- messenger lookup() and failure() upcalls
 
 - how to get usage feedback to monitor?
 
@@ -58,12 +68,6 @@ mds recovery
 osd
 - pull out "object" service
 - btree service
-- interject snapshot abstraction.  inbetween?  
- - how to generalize pg log entries?  
- - or put snapshotting in apply_operation?
-
-osdc
-- distributed btree thing: Blinker!
 
 mds
 - rewrite mdstore to use osd btree service
@@ -73,7 +77,6 @@ journaler
   - make it a g_conf flag?
   - have to fix reader to skip over zeros (either <4 bytes for size, or zeroed sizes)
 - need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
-
 
 
 monitor
@@ -121,9 +124,8 @@ reliability
 - osdmonitor, filter
 
 ebofs
+- verify proper behavior of conflicting/overlapping reads of clones
 - test(fix) sync() 
-- clone()
-- snapshots
 - combine inodes and/or cnodes into same blocks
 - allow btree sets instead of maps
 - eliminate nodepools
@@ -152,6 +154,8 @@ remaining hard problems
 
 crush
 - more efficient failure when all/too many osds are down
+- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
+
 
 mds
 - distributed client management
