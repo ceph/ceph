@@ -125,6 +125,9 @@ private:
   //const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
   const eversion_t  get_version() { return st.version; }
   //const eversion_t  get_old_version() { return st.old_version; }
+  
+  void set_rev(objectrev_t r) { st.rev = r; }
+  objectrev_t get_rev() { return st.rev; }
 
   const eversion_t get_pg_trim_to() { return st.pg_trim_to; }
   void set_pg_trim_to(eversion_t v) { st.pg_trim_to = v; }
