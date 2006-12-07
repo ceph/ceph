@@ -192,6 +192,7 @@ md_config_t g_conf = {
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
+  osd_balance_reads: false,
   osd_pg_bits: 0,  // 0 == let osdmonitor decide
   osd_object_layout: OBJECT_LAYOUT_HASHINO,
   osd_pg_layout: PG_LAYOUT_CRUSH,
@@ -201,7 +202,7 @@ md_config_t g_conf = {
   osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
-  osd_heartbeat_interval: 1000,   // shut up while i'm debugging
+  osd_heartbeat_interval: 5,   // shut up while i'm debugging
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
@@ -609,7 +610,9 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.osd_maxthreads = 1;   // until feng merges joel's fixes
     }
 
-    
+
+    else if (strcmp(args[i], "--osd_balance_reads") == 0) 
+      g_conf.osd_balance_reads = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_rep") == 0) 
       g_conf.osd_rep = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_rep_chain") == 0) 

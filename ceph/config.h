@@ -180,6 +180,7 @@ struct md_config_t {
 
   // osd
   int   osd_rep;
+  bool  osd_balance_reads;
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;
