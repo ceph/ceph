@@ -124,7 +124,7 @@ int Ebofs::mkfs()
   // create first noderegion
   Extent nr;
   nr.start = 2;
-  nr.length = 10+ (num_blocks / 1000);
+  nr.length = 20+ (num_blocks / 1000);
   if (nr.length < 10) nr.length = 10;
   nodepool.add_region(nr);
   dout(10) << "mkfs: first node region at " << nr << endl;
@@ -2429,41 +2429,45 @@ int Ebofs::_clone(object_t from, object_t to)
  */
 int Ebofs::pick_object_revision_lt(object_t& oid)
 {
-  int r = 0;
   assert(oid.rev > 0);   // this is only useful for non-zero oid.rev
 
+  int r = -EEXIST;             // return code
   ebofs_lock.Lock();
-  object_t orig = oid;
-
-  object_t live = oid;
-  live.rev = 0;
-
-  if (object_tab->get_num_keys() == 0)
-    r = -EEXIST;
-  else {
-    Table<object_t, Extent>::Cursor cursor(object_tab);
+  {
+    object_t orig = oid;
+    object_t live = oid;
+    live.rev = 0;
     
-    object_tab->find(oid, cursor);  // this will be just _past_ highest eligible rev
-    if (cursor.move_left() <= 0) {
-      r = -EEXIST;
-    } else {
-      while (1) {
-	object_t t = cursor.current().key;
-	if (t < live) return -EEXIST;
-	if (t.ino == oid.ino &&
-	    t.bno == oid.bno &&
-	    t.rev < oid.rev) {
-	  oid = t;
-	  break;
+    if (object_tab->get_num_keys() > 0) {
+      Table<object_t, Extent>::Cursor cursor(object_tab);
+      
+      object_tab->find(oid, cursor);  // this will be just _past_ highest eligible rev
+      if (cursor.move_left() > 0) {
+	bool firstpass = true;
+	while (1) {
+	  object_t t = cursor.current().key;
+	  if (t.ino != oid.ino || 
+	      t.bno != oid.bno)                 // passed to previous object
+	    break;
+	  if (oid.rev < t.rev) {                // rev < desired.  possible match.
+	    r = 0;
+	    oid = t;
+	    break;
+	  }
+	  if (firstpass && oid.rev >= t.rev) {  // there is no old rev < desired.  try live.
+	    r = 0;
+	    oid = live;
+	    break;
+	  }
+	  if (cursor.move_left() <= 0) break;
+	  firstpass = false;
 	}
-	if (cursor.move_left() <= 0) break;
       }
     }
+    
+    dout(8) << "find_object_revision " << orig << " -> " << oid
+	    << "  r=" << r << endl;
   }
-
-  dout(8) << "find_object_revision " << orig << " -> " << oid
-	  << "  r=" << r << endl;
-  
   ebofs_lock.Unlock();
   return r;
 }
