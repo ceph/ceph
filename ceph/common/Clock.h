@@ -159,7 +159,7 @@ class Clock {
     gettimeofday(&n.timeval(), NULL);
     n -= zero;
     if (n < last) {
-      std::cerr << "WARNING: clock jumped backwards from " << last << " to " << n << std::endl;
+      //std::cerr << "WARNING: clock jumped backwards from " << last << " to " << n << std::endl;
       n = last;    // clock jumped backwards!
     } else
       last = n;
