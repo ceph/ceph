@@ -219,6 +219,7 @@ sub run {
 			   'osd_age_time','osd_age',
 			   'osd_rep',
 			   'osd_pad_pg_log','ebofs_realloc',
+			   'osd_balance_reads',
 			   'tcp_multi_out',
 			   'client_cache_stat_ttl','client_cache_readdir_ttl',
 			   'client_oc',
