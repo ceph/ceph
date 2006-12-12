@@ -163,12 +163,12 @@ void Rank::Namer::handle_register(MNSRegister *m)
 
   // register
   if (rank.entity_map.count(entity)) {
-    dout(0) << "namer.handle_register re-registering " << entity
+    dout(1) << "namer.handle_register re-registering " << entity
             << " inst " << m->get_source_inst()
             << " (was " << rank.entity_map[entity] << ")"
             << endl;
   } else {
-    dout(0) << "namer.handle_register registering " << entity
+    dout(1) << "namer.handle_register registering " << entity
             << " inst " << m->get_source_inst()
             << endl;
   }
@@ -208,7 +208,7 @@ void Rank::Namer::handle_started(Message *m)
 void Rank::Namer::handle_unregister(Message *m)
 {
   msg_addr_t who = m->get_source();
-  dout(0) << "namer.handle_unregister entity " << who << endl;
+  dout(1) << "namer.handle_unregister entity " << who << endl;
 
   rank.show_dir();
   
@@ -626,7 +626,7 @@ void Rank::Pipe::writer()
   if (!server) {
     int rc = connect();
     if (rc < 0) {
-      derr(0) << "pipe(" << peer_inst << ' ' << this << ").writer error connecting" << endl;
+      derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error connecting" << endl;
       done = true;
       list<Message*> out;
       fail(out);
@@ -662,7 +662,7 @@ void Rank::Pipe::writer()
         
         if (write_message(m) < 0) {
           // failed!
-          derr(0) << "pipe(" << peer_inst << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest() << endl;
+          derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest() << endl;
           out.push_front(m);
           fail(out);
           done = true;
@@ -776,7 +776,7 @@ int Rank::Pipe::write_message(Message *m)
   // send envelope
   int r = tcp_write( sd, (char*)env, sizeof(*env) );
   if (r < 0) { 
-    derr(0) << "pipe(" << peer_inst << ' ' << this << ").writer error sending envelope for " << *m
+    derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error sending envelope for " << *m
              << " to " << m->get_dest() << endl; 
     return -1;
   }
@@ -887,7 +887,7 @@ void Rank::Pipe::fail(list<Message*>& out)
       for (list<Message*>::iterator k = j->second.begin();
            k != j->second.end();
            ++k) {
-	derr(0) << "pipe(" << peer_inst << ' ' << this << ").fail on " << **k << " to " << j->first << " inst " << peer_inst << endl;
+	derr(1) << "pipe(" << peer_inst << ' ' << this << ").fail on " << **k << " to " << j->first << " inst " << peer_inst << endl;
         i->first->ms_handle_failure(*k, j->first, peer_inst);
       }
 }
@@ -1038,7 +1038,7 @@ int Rank::start_rank()
     local[raddr] = messenger = new EntityMessenger(raddr);
     messenger->set_dispatcher(this);
     
-    dout(0) << "start_rank " << my_rank << " at " << my_inst << endl;
+    dout(1) << "start_rank " << my_rank << " at " << my_inst << endl;
   } 
 
   lock.Unlock();
@@ -1640,10 +1640,10 @@ int Rank::EntityMessenger::shutdown()
 
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
-    dout(0) << "shutdown i am dispatch, setting stop flag" << endl;
+    dout(1) << "shutdown i am dispatch, setting stop flag" << endl;
     stop = true;
   } else {
-    dout(0) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
+    dout(1) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
     lock.Lock();
     stop = true;
     cond.Signal();
