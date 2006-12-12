@@ -59,7 +59,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
 
   // first, synchronize clocks.
   MPI_Barrier(MPI_COMM_WORLD);
-  dout(-10) << "tare" << endl;
+  //dout(-10) << "tare" << endl;
   g_clock.tare();
   
   // start up all monitors at known addresses.
