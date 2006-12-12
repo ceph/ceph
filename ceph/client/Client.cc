@@ -1091,7 +1091,7 @@ int Client::unmount()
 
   while (lru.lru_get_size() > 0 || 
          !inode_map.empty()) {
-    dout(0) << "cache still has " << lru.lru_get_size() 
+    dout(2) << "cache still has " << lru.lru_get_size() 
             << "+" << inode_map.size() << " items" 
             << ", waiting (presumably for safe or for caps to be released?)"
             << endl;
