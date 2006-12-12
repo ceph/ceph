@@ -62,6 +62,10 @@ private:
     raw(char *c, unsigned l) : data(c), len(l), nref(0), lock(false) {}
     virtual ~raw() {};
 
+    // no copying.
+    raw(const raw &other);
+    const raw& operator=(const raw &other);
+
     virtual raw* clone_empty() = 0;
     raw *clone() {
       raw *c = clone_empty();
