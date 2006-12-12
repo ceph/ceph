@@ -231,7 +231,7 @@ public:
       if (_raw) {
 	_raw->lock.Lock();
 	if (--_raw->nref == 0) {
-	  //cout << "hosing raw " << (void*)_raw << std::endl;
+	  //cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
 	  _raw->lock.Unlock();	  
 	  delete _raw;  // dealloc old (if any)
 	} else
