@@ -160,7 +160,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
         dout(20) << "allocate " << ex << " near " << near << endl;
         last_pos = ex.end();
         dump_freelist();
-	alloc_inc(ex);
+	if (g_conf.ebofs_cloneable)
+	  alloc_inc(ex);
         return num;
       }
     }
@@ -181,7 +182,8 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
       last_pos = ex.end();
       dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << endl;
       dump_freelist();
-      alloc_inc(ex);
+      if (g_conf.ebofs_cloneable)
+	alloc_inc(ex);
       return ex.length;
     }    
   }
@@ -204,7 +206,10 @@ int Allocator::_release_into_limbo(Extent& ex)
 
 int Allocator::release(Extent& ex)
 {
-  return alloc_dec(ex);
+  if (g_conf.ebofs_cloneable)
+    return alloc_dec(ex);
+
+  _release_into_limbo(ex);
 }
 
 int Allocator::commit_limbo()

@@ -160,9 +160,11 @@ int Ebofs::mkfs()
   left.length = num_blocks - left.start;
   dout(10) << "mkfs: free data blocks at " << left << endl;
   allocator._release_into_limbo( left );
-  allocator.alloc_inc(nr);
-  allocator.alloc_inc(nodepool.usemap_even);
-  allocator.alloc_inc(nodepool.usemap_odd);
+  if (g_conf.ebofs_cloneable) {
+    allocator.alloc_inc(nr);
+    allocator.alloc_inc(nodepool.usemap_even);
+    allocator.alloc_inc(nodepool.usemap_odd);
+  }
   allocator.commit_limbo();   // -> limbo_tab
   allocator.release_limbo();  // -> free_tab
 
@@ -2374,6 +2376,9 @@ int Ebofs::clone(object_t from, object_t to, Context *onsafe)
 int Ebofs::_clone(object_t from, object_t to)
 {
   dout(7) << "_clone " << from << " -> " << to << endl;
+
+  if (!g_conf.ebofs_cloneable) 
+    return -1;  // no!
 
   Onode *fon = get_onode(from);
   if (!fon) return -ENOENT;

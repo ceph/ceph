@@ -219,6 +219,7 @@ md_config_t g_conf = {
 
   // --- ebofs ---
   ebofs: 1,
+  ebofs_cloneable: false,
   ebofs_verify: false,
   ebofs_commit_ms:      2000,       // 0 = no forced commit timeout (for debugging/tracing)
   ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
@@ -575,6 +576,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--ebofs") == 0) 
       g_conf.ebofs = 1;
+    else if (strcmp(args[i], "--ebofs_cloneable") == 0)
+      g_conf.ebofs_cloneable = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_verify") == 0)
       g_conf.ebofs_verify = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_commit_ms") == 0)
