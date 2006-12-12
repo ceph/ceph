@@ -96,6 +96,7 @@ struct md_config_t {
   bool ms_stripe_osds;
   bool ms_skip_rank0;
   bool ms_overlay_clients;
+  bool ms_die_on_failure;
 
   // mon
   int mon_tick_interval;

@@ -83,7 +83,7 @@ md_config_t g_conf = {
 
   tick: 0,
 
-  debug: 1,
+  debug: 0,
   debug_mds: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
@@ -112,6 +112,8 @@ md_config_t g_conf = {
   ms_skip_rank0: false,
   ms_overlay_clients: false,
 
+  ms_die_on_failure: false,
+
   /*tcp_skip_rank0: false,
   tcp_overlay_clients: false,  // over osds!
   tcp_log: false,
@@ -138,7 +140,7 @@ md_config_t g_conf = {
   client_oc: true,
   client_oc_size:      1024*1024* 5,    // MB * n
   client_oc_max_dirty: 1024*1024* 5,    // MB * n
-  client_oc_max_sync_write: 128*1024,  // writes >= this use wrlock
+  client_oc_max_sync_write: 128*1024,   // writes >= this use wrlock
 
   client_trace: 0,
   fuse_direct_io: 0,
@@ -222,8 +224,8 @@ md_config_t g_conf = {
   ebofs_idle_commit_ms: 100,        // 0 = no idle detection.  use this -or- bdev_idle_kick_after_ms
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
-  ebofs_bc_size:        (350 *256), // 4k blocks, *256 for MB
-  ebofs_bc_max_dirty:   (200 *256), // before write() will block
+  ebofs_bc_size:        (80 *256), // 4k blocks, *256 for MB
+  ebofs_bc_max_dirty:   (60 *256), // before write() will block
   ebofs_max_prefetch: 1000, // 4k blocks
   ebofs_realloc: true,
   
@@ -361,6 +363,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.ms_skip_rank0 = true;
     else if (strcmp(args[i], "--ms_overlay_clients") == 0)
       g_conf.ms_overlay_clients = true;
+    else if (strcmp(args[i], "--ms_die_on_failure") == 0)
+      g_conf.ms_die_on_failure = true;
 
     /*else if (strcmp(args[i], "--tcp_log") == 0)
       g_conf.tcp_log = true;
