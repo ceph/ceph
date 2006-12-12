@@ -273,7 +273,7 @@ int OSD::init()
   }
   osd_lock.Unlock();
 
-  dout(0) << "osd_rep " << g_conf.osd_rep << endl;
+  //dout(0) << "osd_rep " << g_conf.osd_rep << endl;
 
   return 0;
 }
@@ -724,6 +724,10 @@ void OSD::dispatch(Message *m)
 
 void OSD::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst)
 {
+  if (g_conf.ms_die_on_failure) {
+    exit(0);
+  }
+
   if (dest.is_osd()) {
     // failed osd.  drop message, report to mon.
     int mon = monmap->pick_mon();
@@ -927,7 +931,7 @@ void OSD::handle_osd_map(MOSDMap *m)
             for (map<tid_t,PG::RepOpGather*>::iterator p = pg->repop_gather.begin();
                  p != pg->repop_gather.end();
                  p++) {
-              dout(-1) << "checking repop tid " << p->first << endl;
+              //dout(-1) << "checking repop tid " << p->first << endl;
               if (p->second->waitfor_ack.count(osd) ||
                   p->second->waitfor_commit.count(osd)) 
                 ls.push_back(p->second);
@@ -2320,6 +2324,7 @@ void OSD::handle_op(MOSDOp *op)
 
     // note original source
     op->set_client_inst( op->get_source_inst() );
+    op->clear_payload();    // and hose encoded payload (in case we forward)
 
     // have pg?
     if (!pg) {
@@ -2411,7 +2416,18 @@ void OSD::handle_op(MOSDOp *op)
     
     // balance reads?
     if (read &&
-	g_conf.osd_balance_reads) {
+	g_conf.osd_balance_reads &&
+	pg->get_acker() == whoami) {
+      // test
+      if (false) {
+	if (pg->acting.size() > 1) {
+	  int peer = pg->acting[1];
+	  dout(-10) << "fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << endl;
+	  messenger->send_message(op, MSG_ADDR_OSD(peer), osdmap->get_inst(peer));
+	  return;
+	}
+      }
+      
       // am i above my average?
       float my_avg = hb_stat_qlen / hb_stat_ops;
       if (pending_ops > my_avg) {
@@ -2420,13 +2436,19 @@ void OSD::handle_op(MOSDOp *op)
 	  int peer = pg->acting[i];
 	  if (peer_qlen.count(peer) &&
 	      peer_qlen[peer] < my_avg) {
-	    // take the first one
-	    dout(-10) << "my qlen " << pending_ops << " > my_avg " << my_avg
-		      << ", fwd to peer w/ qlen " << peer_qlen[peer]
-		      << " osd" << peer
-		      << endl;
-	    messenger->send_message(op, MSG_ADDR_OSD(peer));
-	    return;
+	    // calculate a probability that we should redirect
+	    float p = (my_avg - peer_qlen[peer]) / my_avg;             // this is dumb.
+	    
+	    if (drand48() <= p) {
+	      // take the first one
+	      dout(-10) << "my qlen " << pending_ops << " > my_avg " << my_avg
+			<< ", p=" << p 
+			<< ", fwd to peer w/ qlen " << peer_qlen[peer]
+			<< " osd" << peer
+			<< endl;
+	      messenger->send_message(op, MSG_ADDR_OSD(peer), osdmap->get_inst(peer));
+	      return;
+	    }
 	  }
 	}
       }
