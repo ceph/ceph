@@ -151,12 +151,12 @@ void Rank::Namer::handle_register(MNSRegister *m)
 
   // register
   if (rank.entity_map.count(entity)) {
-    dout(0) << "namer.handle_register re-registering " << entity
+    dout(1) << "namer.handle_register re-registering " << entity
             << " inst " << m->get_source_inst()
             << " (was " << rank.entity_map[entity] << ")"
             << endl;
   } else {
-    dout(0) << "namer.handle_register registering " << entity
+    dout(1) << "namer.handle_register registering " << entity
             << " inst " << m->get_source_inst()
             << endl;
   }
@@ -196,7 +196,7 @@ void Rank::Namer::handle_started(Message *m)
 void Rank::Namer::handle_unregister(Message *m)
 {
   msg_addr_t who = m->get_source();
-  dout(0) << "namer.handle_unregister entity " << who << endl;
+  dout(1) << "namer.handle_unregister entity " << who << endl;
 
   rank.show_dir();
   
@@ -903,7 +903,7 @@ int Rank::start_rank()
     local[raddr] = messenger = new EntityMessenger(raddr);
     messenger->set_dispatcher(this);
     
-    dout(0) << "start_rank " << my_rank << " at " << my_inst << endl;
+    dout(1) << "start_rank " << my_rank << " at " << my_inst << endl;
   } 
 
   lock.Unlock();
@@ -1568,10 +1568,10 @@ int Rank::EntityMessenger::shutdown()
 
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
-    dout(0) << "shutdown i am dispatch, setting stop flag" << endl;
+    dout(1) << "shutdown i am dispatch, setting stop flag" << endl;
     stop = true;
   } else {
-    dout(0) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
+    dout(1) << "shutdown i am not dispatch, setting stop flag and joining thread." << endl;
     lock.Lock();
     stop = true;
     cond.Signal();
