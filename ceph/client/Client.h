@@ -232,6 +232,7 @@ class Inode {
   int dentry_authority(const char *dn,
                        MDSMap *mdsmap) {
     assert(0);
+    return 0;
     //return ->hash_dentry( ino(),
     //dn );
   }
