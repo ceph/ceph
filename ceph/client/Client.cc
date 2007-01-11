@@ -22,7 +22,8 @@
 #include <fcntl.h>
 
 
-
+#include <iostream>
+using namespace std;
 
 
 // ceph stuff
@@ -1482,6 +1483,7 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
   st->st_blocks = inode.size ? ((inode.size - 1) / 4096 + 1):0;
   st->st_blksize = 4096;
   
+  /*
   S_REQUIREBLKSIZE(st->st_litemask);
   if (inode.mask & INODE_MASK_BASE) S_REQUIRECTIME(st->st_litemask);
   if (inode.mask & INODE_MASK_SIZE) {
@@ -1490,6 +1492,7 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
   }
   if (inode.mask & INODE_MASK_MTIME) S_REQUIREMTIME(st->st_litemask);
   if (inode.mask & INODE_MASK_ATIME) S_REQUIREATIME(st->st_litemask);
+  */
 }
 
 
@@ -1824,6 +1827,7 @@ struct dirent *Client::readdir(DIR *dirp)
 
   // fill the dirent
   d->dp.d_dirent.d_ino = d->p->second.ino;
+#ifndef __CYGWIN__
   if (d->p->second.is_symlink())
     d->dp.d_dirent.d_type = DT_LNK;
   else if (d->p->second.is_dir())
@@ -1832,10 +1836,12 @@ struct dirent *Client::readdir(DIR *dirp)
     d->dp.d_dirent.d_type = DT_REG;
   else
     d->dp.d_dirent.d_type = DT_UNKNOWN;
-  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
 
   d->dp.d_dirent.d_off = d->off;
   d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
+#endif
+
+  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
 
   // move up
   ++d->off;
@@ -1882,6 +1888,7 @@ struct dirent_plus *Client::readdirplus(DIR *dirp)
 
   // fill the dirent
   d->dp.d_dirent.d_ino = d->p->second.ino;
+#ifndef __CYGWIN__
   if (d->p->second.is_symlink())
     d->dp.d_dirent.d_type = DT_LNK;
   else if (d->p->second.is_dir())
@@ -1890,10 +1897,12 @@ struct dirent_plus *Client::readdirplus(DIR *dirp)
     d->dp.d_dirent.d_type = DT_REG;
   else
     d->dp.d_dirent.d_type = DT_UNKNOWN;
-  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
 
   d->dp.d_dirent.d_off = d->off;
   d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
+#endif
+
+  strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
 
   // plus
   if ((d->p->second.mask & INODE_MASK_ALL_STAT) == INODE_MASK_ALL_STAT) {
