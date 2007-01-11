@@ -11,13 +11,15 @@
  * 
  */
 
+#include <iostream>
+using namespace std;
+
 
 
 #include "SyntheticClient.h"
 
 #include "include/filepath.h"
 #include "mds/MDS.h"
-
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -135,7 +137,9 @@ void parse_syn_options(vector<char*>& args)
       } else if (strcmp(args[i],"opentest") == 0) { 
         syn_modes.push_back( SYNCLIENT_MODE_OPENTEST );
         syn_iargs.push_back( atoi(args[++i]) );
-
+      } else if (strcmp(args[i],"optest") == 0) {
+	syn_modes.push_back( SYNCLIENT_MODE_OPTEST );
+        syn_iargs.push_back( atoi(args[++i]) );
       } else {
         cerr << "unknown syn arg " << args[i] << endl;
         assert(0);
@@ -469,6 +473,20 @@ int SyntheticClient::run()
       }
       break;
 
+    case SYNCLIENT_MODE_OPTEST:
+      {
+        int count = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+	  client->mknod("test",0777);
+	  struct stat st;
+	  for (int i=0; i<count; i++) {
+	    client->lstat("test", &st);
+	    client->chmod("test", 0777);
+          }
+        }
+      }
+      break;
+      
     default:
       assert(0);
     }

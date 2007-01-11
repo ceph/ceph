@@ -43,6 +43,7 @@
 #define SYNCLIENT_MODE_TRACE       30
 
 #define SYNCLIENT_MODE_OPENTEST     40
+#define SYNCLIENT_MODE_OPTEST       41
 
 #define SYNCLIENT_MODE_ONLY        50
 #define SYNCLIENT_MODE_UNTIL       51
