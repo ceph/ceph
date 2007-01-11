@@ -920,6 +920,7 @@ inline void _encode(const std::map<T, bufferlist>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
+  //std::cout << "n = " << n << std::endl;
   for (typename std::map<T, bufferlist>::const_iterator it = s.begin();
        it != s.end();
        it++) {
@@ -927,6 +928,7 @@ inline void _encode(const std::map<T, bufferlist>& s, bufferlist& bl)
     bl.append((char*)&k, sizeof(k));
     _encode(it->second, bl);
     n--;
+    //std::cout << "--n = " << n << " after k " << k << std::endl;
   }
   assert(n==0);
 }
