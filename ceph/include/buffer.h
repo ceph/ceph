@@ -20,6 +20,7 @@
 #include <list>
 
 using std::cout;
+using std::endl;
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
@@ -140,12 +141,16 @@ private:
   public:
     raw_hack_aligned(unsigned l) : raw(l) {
       realdata = new char[len+4095];
-      unsigned off = (unsigned)data % 4096;
+      unsigned off = ((unsigned)realdata) % 4096;
       if (off) 
 	data = realdata + 4096 - off;
       else
 	data = realdata;
       inc_total_alloc(len+4095);
+      //cout << "hack aligned " << (unsigned)data 
+      //<< " in raw " << (unsigned)realdata
+      //<< " off " << off << endl;
+      assert(((unsigned)data & 4095) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
