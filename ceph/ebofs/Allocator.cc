@@ -23,7 +23,7 @@
 
 void Allocator::dump_freelist()
 {
-  if (0) {
+  if (1) {
     interval_set<block_t> free;     // validate too
     
     block_t n = 0;
@@ -31,17 +31,17 @@ void Allocator::dump_freelist()
       Table<block_t,block_t> *tab;
       if (b < EBOFS_NUM_FREE_BUCKETS) {
         tab = fs->free_tab[b];
-        dout(30) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
+        dout(0) << "dump bucket " << b << "  " << tab->get_num_keys() << endl;
       } else {
         tab = fs->limbo_tab;
-        dout(30) << "dump limbo  " << tab->get_num_keys() << endl;;
+        dout(0) << "dump limbo  " << tab->get_num_keys() << endl;;
       }
 
       if (tab->get_num_keys() > 0) {
         Table<block_t,block_t>::Cursor cursor(tab);
         assert(tab->find(0, cursor) >= 0);
         while (1) {
-          dout(30) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
+          dout(0) << "dump  ex " << cursor.current().key << "~" << cursor.current().value << endl;
           assert(cursor.current().value > 0);
 
           if (b < EBOFS_NUM_FREE_BUCKETS)
@@ -59,7 +59,22 @@ void Allocator::dump_freelist()
     }
     
     assert(n == fs->free_blocks);
-    dout(31) << "dump combined freelist is " << free << endl;
+    dout(0) << "dump combined freelist is " << free << endl;
+
+    
+    // alloc_tab
+    if (fs->alloc_tab->get_num_keys() > 0) {
+      Table<block_t,pair<block_t,int> >::Cursor cursor(fs->alloc_tab);
+      assert(fs->alloc_tab->find(0, cursor) >= 0);
+      while (1) {
+	dout(0) << "alloc  ex " << cursor.current().key << "~" << cursor.current().value.first << " ref "
+		<< cursor.current().value.second
+		<< endl;
+	assert(cursor.current().value.first > 0);
+	
+	if (cursor.move_right() <= 0) break;
+      }
+    }
   }
 }
 
@@ -99,7 +114,7 @@ int Allocator::find(Extent& ex, int bucket, block_t num, block_t near, int dir)
 
 int Allocator::allocate(Extent& ex, block_t num, block_t near)
 {
-  dump_freelist();
+  //dump_freelist();
 
   int dir = DIR_ANY; // no dir
   if (near == NEAR_LAST_FWD) {
@@ -159,7 +174,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
         
         dout(20) << "allocate " << ex << " near " << near << endl;
         last_pos = ex.end();
-        dump_freelist();
+        //dump_freelist();
 	if (g_conf.ebofs_cloneable)
 	  alloc_inc(ex);
         return num;
@@ -181,7 +196,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
       fs->free_blocks -= ex.length;
       last_pos = ex.end();
       dout(20) << "allocate partial " << ex << " (wanted " << num << ") near " << near << endl;
-      dump_freelist();
+      //dump_freelist();
       if (g_conf.ebofs_cloneable)
 	alloc_inc(ex);
       return ex.length;
@@ -190,7 +205,7 @@ int Allocator::allocate(Extent& ex, block_t num, block_t near)
 
   dout(1) << "allocate failed, fs completely full!  " << fs->free_blocks << endl;
   assert(0);
-  dump_freelist();
+  //dump_freelist();
   return -1;
 }
 
@@ -223,13 +238,13 @@ int Allocator::commit_limbo()
   }
   limbo.clear();
   //fs->limbo_blocks = 0;
-  dump_freelist();
+  //dump_freelist();
   return 0;
 }
 
 int Allocator::release_limbo()
 {
-  dump_freelist();
+  //dump_freelist();
   if (fs->limbo_tab->get_num_keys() > 0) {
     Table<block_t,block_t>::Cursor cursor(fs->limbo_tab);
     fs->limbo_tab->find(0, cursor);
@@ -244,7 +259,7 @@ int Allocator::release_limbo()
     }
   }
   fs->limbo_tab->clear();
-  dump_freelist();
+  //dump_freelist();
   return 0;
 }
 
@@ -327,15 +342,31 @@ int Allocator::alloc_inc(Extent ex)
     // too far left?
     if (cursor.current().key < ex.start &&
 	cursor.current().key + cursor.current().value.first <= ex.start) {
+      // adjacent?
+      bool adjacent = false;
+      if (cursor.current().key + cursor.current().value.first == ex.start &&
+	  cursor.current().value.second == 1) 
+	adjacent = true;
+
       // no overlap.
       r = cursor.move_right();
       dout(10) << "alloc_inc move_right r = " << r << endl;
       
       // at end?
       if (r <= 0) {
-	// insert at end, finish.
-	fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
-	dout(10) << "alloc_inc + " << ex << " 0 -> 1 (at end)" << endl;
+	// hmm!
+	if (adjacent) {
+	  // adjust previous entry
+	  cursor.move_left();
+	  pair<block_t,int> &v = cursor.dirty_current_value();
+	  v.first += ex.length; // yay!
+	  dout(10) << "alloc_inc + " << ex << " 0 -> 1 (adjust at end)" << endl;
+	} else {
+	  // insert at end, finish.
+	  int r = fs->alloc_tab->insert(ex.start, pair<block_t,int>(ex.length,1));
+	  dout(10) << "alloc_inc + " << ex << " 0 -> 1 (at end) .. r = " << r << endl;
+	  //dump_freelist();
+	}
 	return 0;
       }
     }
@@ -451,6 +482,8 @@ int Allocator::alloc_dec(Extent ex)
 
   // try to move to left (to check for overlap)
   int r = fs->alloc_tab->find( ex.start, cursor );
+  dout(10) << "alloc_dec find r = " << r << endl;
+
   if (r == Table<block_t,pair<block_t,int> >::Cursor::OOB ||
       cursor.current().key > ex.start) {
     r = cursor.move_left();
@@ -460,6 +493,7 @@ int Allocator::alloc_dec(Extent ex)
     if (cursor.current().key < ex.start &&
 	cursor.current().key + cursor.current().value.first <= ex.start) {
       // no overlap.
+      dump_freelist();
       assert(0);
     }
   }
