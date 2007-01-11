@@ -7,6 +7,39 @@
 
 == todo
 
+1- pipelining writes?
+2- intervening reads?
+
+inode ops
+ utime       -- no concurrency issues
+ chown/chmod -- should lock
+ truncate    -- should lock
+ 1-> no.  multiple process concurrency on a single inode is not important.
+ 2-> maybe... intervening stats?  probably not important.
+
+directory ops.  parent inode mtime, + dirent xlocks?
+ mknod
+ open+create
+ symlink
+ unlink
+ rmdir
+ rename
+ 1-> yes.  but mtime updates are independent (mtime monotonically increasing), so it's easy.
+ 2-> yes.  
+
+--> so, make let's make file/hard wrlock exclusive.
+
+locks
+ namespace
+  path pins -- read lock
+  dentry xlock -- write lock
+ inode
+  hard/file rd start/stop -- read lock
+  hard/file wr start/stop -- write lock
+ 
+
+
+
 - integrate revisions into ObjectCacher
 - clean up oid.rev vs op.rev in osd+osdc
 
@@ -32,16 +65,6 @@ rados snapshots
   - if 0, we read from 0 (if it exists).
   - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
 
-/- how to log entries
-/- actually do the clone on write
-/- how do deal with missing 
-/- consistent read for past revs
-- how to efficiently manage recovery
-  - include alloc diff from next and/or previous
-  - i.e. try to clone() if we can.
-  - and adjust allocation if we can't?
-
-
 - how to get usage feedback to monitor?
 
 - change messenger entity_inst_t
@@ -65,13 +88,6 @@ mds recovery
    - mds must journal list of clients with whom we share state?
 
 
-osd
-- pull out "object" service
-- btree service
-
-mds
-- rewrite mdstore to use osd btree service
-
 journaler
 - should we pad with zeros to avoid splitting individual entries?
   - make it a g_conf flag?
@@ -94,6 +110,7 @@ osdmon
 mdsmon
 
 osd/rados
+- efficiently replicate clone() objects
 - pg_num instead of pg_bits
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 - consider implications of nvram writeahead logs
