@@ -245,8 +245,10 @@ void Server::handle_client_request(MClientRequest *req)
   dout(4) << "req " << *req << endl;
 
   // note original client addr
-  if (req->get_source().is_client())
+  if (req->get_source().is_client()) {
     req->set_client_inst( req->get_source_inst() );
+    req->clear_payload();
+  }
 
   if (!mds->is_active()) {
     dout(5) << " not active, discarding client request." << endl;
