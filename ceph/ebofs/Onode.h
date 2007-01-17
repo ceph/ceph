@@ -106,6 +106,9 @@ public:
   bool is_dangling() { return dangling; }
 
   
+  bool have_oc() {
+    return oc != 0;
+  }
   ObjectCache *get_oc(BufferCache *bc) {
     if (!oc) {
       oc = new ObjectCache(object_id, this, bc);
