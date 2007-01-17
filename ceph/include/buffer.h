@@ -136,6 +136,7 @@ private:
   };
 #endif
 
+#ifdef __CYGWIN__
   class raw_hack_aligned : public raw {
     char *realdata;
   public:
@@ -160,6 +161,7 @@ private:
       return new raw_hack_aligned(len);
     }
   };
+#endif
 
 public:
 
