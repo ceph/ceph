@@ -225,6 +225,7 @@ int Allocator::release(Extent& ex)
     return alloc_dec(ex);
 
   _release_into_limbo(ex);
+  return 0;
 }
 
 int Allocator::commit_limbo()
