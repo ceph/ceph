@@ -10,7 +10,7 @@
 		<div>
 			You can check out a working copy with
 			<pre>
-svn co https://svn.sourceforge.net/svnroot/ceph
+svn co https://ceph.svn.sourceforge.net/svnroot/ceph
 </pre>
 			The rest works essentially the same as CVS, but with <tt>svn</tt> instead of <tt>cvs</tt>.
 		</div>
@@ -38,8 +38,8 @@ svn co https://svn.sourceforge.net/svnroot/ceph
 			<ol>
 			<li>Checkout, change into the <tt>ceph/</tt> directory, and build.  E.g.,
 <pre>
-svn co https://svn.sourceforge.net/svnroot/ceph
-cd ~/ceph/ceph
+svn co https://ceph.svn.sourceforge.net/svnroot/ceph
+cd ~/ceph/trunk/ceph
 make
 </pre>
 
@@ -125,15 +125,15 @@ touch mnt/asdf   # etc
 <table border=0>
 <tr> <td></td> <td>Application</td> </tr>
 <tr> <td></td> <td class=kernel>kernel</td> </tr>
-<tr> <td>Application</td> <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/client/fuse.cc?view=markup">FUSE glue</a></td> </tr>
-<tr> <td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/client/Client.h?view=markup">Client</a></td> <td class=net width=50></td><td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/mds/MDS.h?view=markup">MDS</a></td> </tr>
-<tr>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/osdc/Filer.h?view=markup">Filer</a></td> <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/osdc/ObjectCacher.h?view=markup">ObjectCacher</a></td> <td></td><td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/mds/MDLog.h?view=markup">MDLog</td><td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/mds/MDStore.h?view=markup">MDStore</a></td> </tr>
-<tr> <td></td> <td class=lib colspan=4><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/osdc/Objecter.h?view=markup">Objecter</a></td> </tr>
+<tr> <td>Application</td> <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/client/fuse.cc?view=markup">FUSE glue</a></td> </tr>
+<tr> <td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/client/Client.h?view=markup">Client</a></td> <td class=net width=50></td><td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/mds/MDS.h?view=markup">MDS</a></td> </tr>
+<tr>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osdc/Filer.h?view=markup">Filer</a></td> <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osdc/ObjectCacher.h?view=markup">ObjectCacher</a></td> <td></td><td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/mds/MDLog.h?view=markup">MDLog</td><td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/mds/MDStore.h?view=markup">MDStore</a></td> </tr>
+<tr> <td></td> <td class=lib colspan=4><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osdc/Objecter.h?view=markup">Objecter</a></td> </tr>
 <tr> <td colspan=2></td> <td class=net colspan=2>(message layer)</td> </tr>
-<tr> <td colspan=2></td> <td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/osd/OSD.h?view=markup">OSD</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=abstract colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/osd/ObjectStore.h?view=markup">ObjectStore</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/ebofs/Ebofs.h?view=markup">EBOFS</a></td> <td rowspan=2 class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/osd/FakeStore.h?view=markup">FakeStore</a></td> </tr>
-<tr> <td colspan=2></td>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/ceph/ebofs/BlockDevice.h?view=markup">BlockDevice</a></td> </tr>
+<tr> <td colspan=2></td> <td class=entity colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osd/OSD.h?view=markup">OSD</a></td> </tr>
+<tr> <td colspan=2></td>  <td class=abstract colspan=2><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osd/ObjectStore.h?view=markup">ObjectStore</a></td> </tr>
+<tr> <td colspan=2></td>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/ebofs/Ebofs.h?view=markup">EBOFS</a></td> <td rowspan=2 class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/osd/FakeStore.h?view=markup">FakeStore</a></td> </tr>
+<tr> <td colspan=2></td>  <td class=lib><a href="http://svn.sourceforge.net/viewvc/ceph/trunk/ceph/ebofs/BlockDevice.h?view=markup">BlockDevice</a></td> </tr>
 <tr> <td colspan=2></td>  <td class=kernel colspan=2>Kernel POSIX interface</td> </tr>
 <tr> <td height=30></td> </tr>
 <tr> <td>Key:</td> <td class=net>Network</td> <td class=entity>Entity</td> <td class=lib>Lib/module</td> <td class=abstract>Abstract interface</td> <td class=kernel>Kernel</td>  </tr>
