@@ -101,9 +101,9 @@ make fakefuse && ./fakefuse --mkfs --debug_ms 1 mnt
 <pre>
 mpd &           # for a single host
 mpiboot -n 10   # for multiple hosts (see MPICH docs)
-make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 20 --syn writefile 100 16384
+make newsyn && mpiexec -l -n 10 ./newsyn --mkfs --nummds 1 --numosd 6 --numclient 20 --syn writefile 100 16384
 </pre>
-			You will probably want to make <tt>dev/osdall</tt> a symlink to some block device that exists on every node you're starting an OSD on.  Otherwise, you'll need a symlink (for "block device" file) for each osd.
+			You will probably want to make <tt>dev/osd.all</tt> a symlink to some block device that exists on every node you're starting an OSD on.  Otherwise, you'll need a symlink (for "block device" file) for each osd.
 
 			If you want to mount a distributed FS (instead of generating a synthetic workload), try
 <pre>
