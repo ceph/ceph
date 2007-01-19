@@ -107,7 +107,7 @@ make newsyn && mpiexec -l -n 10 ./newsyn --mkfs --nummds 1 --numosd 6 --numclien
 
 			If you want to mount a distributed FS (instead of generating a synthetic workload), try
 <pre>
-make newsyn && ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 0     # 0 clients, just mds and osds
+make newsyn && mpiexec -l -n 10 ./newsyn --mkfs --nummds 2 --numosd 6 --numclient 0     # 0 clients, just mds and osds
 # in another terminal,
 mkdir mnt
 make cfuse && ./cfuse mnt
