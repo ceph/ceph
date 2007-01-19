@@ -80,15 +80,20 @@ namespace __gnu_cxx {
 }
 
 class MDCache {
- protected:
+ public:
   // my master
   MDS *mds;
 
+  LRU                           lru;         // dentry lru for expiring items from cache
+
+ protected:
   // the cache
   CInode                       *root;        // root inode
-  LRU                           lru;         // lru for expiring items
   hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino            
- 
+  
+  list<CInode*>                 inode_expire_queue;  // inodes to delete
+
+
   // root
   list<Context*>     waiting_for_root;
 
@@ -115,8 +120,10 @@ class MDCache {
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
+  friend class EImportMap;
 
  public:
+
   // subsystems
   Migrator *migrator;
   Renamer *renamer;
@@ -132,8 +139,11 @@ class MDCache {
   CInode *get_root() { return root; }
   void set_root(CInode *r);
 
+  int get_num_imports() { return imports.size(); }
   void add_import(CDir *dir);
   void remove_import(CDir *dir);
+
+  void log_import_map(Context *onsync=0);
 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
@@ -154,6 +164,12 @@ class MDCache {
     return NULL;
   }
   
+
+  int hash_dentry(inodeno_t ino, const string& s) {
+    return 0; // fixme
+  }
+  
+
  public:
   CInode *create_inode();
   void add_inode(CInode *in);
@@ -162,14 +178,19 @@ class MDCache {
   void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
   void touch_inode(CInode *in) {
-    // touch parent(s) too
-    if (in->get_parent_dir()) touch_inode(in->get_parent_dir()->inode);
+    if (in->get_parent_dn())
+      touch_dentry(in->get_parent_dn());
+  }
+  void touch_dentry(CDentry *dn) {
+    // touch ancestors
+    if (dn->get_dir()->get_inode()->get_parent_dn())
+      touch_dentry(dn->get_dir()->get_inode()->get_parent_dn());
     
-    // top or mid, depending on whether i'm auth
-    if (in->is_auth())
-      lru.lru_touch(in);
+    // touch me
+    if (dn->is_auth())
+      lru.lru_touch(dn);
     else
-      lru.lru_midtouch(in);
+      lru.lru_midtouch(dn);
   }
   void rename_file(CDentry *srcdn, CDentry *destdn);
 

@@ -41,6 +41,11 @@ public:
   // generic request helpers
   void reply_request(MClientRequest *req, int r = 0, CInode *tracei = 0);
   void reply_request(MClientRequest *req, MClientReply *reply, CInode *tracei);
+  
+  void submit_update(MClientRequest *req, CInode *wrlockedi,
+		     LogEvent *event,
+		     Context *oncommit);
+
   void commit_request(MClientRequest *req,
                       MClientReply *reply,
                       CInode *tracei,
@@ -118,7 +123,15 @@ public:
   void handle_client_truncate(MClientRequest *req, CInode *in);
   void handle_client_fsync(MClientRequest *req, CInode *in);
 
+
+  // some helpers
   CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
+
+  CDir *validate_new_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
+  bool prepare_mknod(MClientRequest *req, CInode *diri, 
+		     CInode **pin, CDentry **pdn, 
+		     bool okexist=false);
+
 
 
 };

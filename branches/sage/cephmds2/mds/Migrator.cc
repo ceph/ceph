@@ -19,6 +19,7 @@
 #include "CDentry.h"
 #include "Migrator.h"
 #include "Locker.h"
+#include "MDStore.h"
 
 #include "MDBalancer.h"
 #include "MDLog.h"
@@ -26,8 +27,11 @@
 
 #include "include/filepath.h"
 
-#include "events/EInodeUpdate.h"
-#include "events/EDirUpdate.h"
+#include "events/EString.h"
+#include "events/EExportStart.h"
+#include "events/EExportFinish.h"
+#include "events/EImportStart.h"
+#include "events/EImportFinish.h"
 
 #include "msg/Messenger.h"
 
@@ -199,6 +203,7 @@ void Migrator::export_empty_import(CDir *dir)
 }
 
 
+
 // ==========================================================
 // IMPORT/EXPORT
 
@@ -257,16 +262,21 @@ void Migrator::export_dir(CDir *dir,
   // ok, let's go.
 
   // send ExportDirDiscover (ask target)
-  export_gather[dir].insert(dest);
   mds->send_message_mds(new MExportDirDiscover(dir->inode), dest, MDS_PORT_MIGRATOR);
   dir->auth_pin();   // pin dir, to hang up our freeze  (unpin on prep ack)
 
   // take away the popularity we're sending.   FIXME: do this later?
   mds->balancer->subtract_export(dir);
   
+  // we need to do a few things here..
+  C_Gather *gather = new C_Gather(new C_MDC_ExportFreeze(this, dir, dest));
   
-  // freeze the subtree
-  dir->freeze_tree(new C_MDC_ExportFreeze(this, dir, dest));
+  // 1- freeze the subtree
+  dir->freeze_tree(gather->new_sub());
+
+  // 2- log out intentions
+  mds->mdlog->submit_entry(new EExportStart(dir, dest),
+			   gather->new_sub());
 }
 
 
@@ -281,16 +291,9 @@ void Migrator::handle_export_dir_discover_ack(MExportDirDiscoverAck *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  int from = MSG_ADDR_NUM(m->get_source());
-  assert(export_gather[dir].count(from));
-  export_gather[dir].erase(from);
-
-  if (export_gather[dir].empty()) {
-    dout(7) << "export_dir_discover_ack " << *dir << ", releasing auth_pin" << endl;
-    dir->auth_unpin();   // unpin to allow freeze to complete
-  } else {
-    dout(7) << "export_dir_discover_ack " << *dir << ", still waiting for " << export_gather[dir] << endl;
-  }
+  dout(7) << "export_dir_discover_ack from " << m->get_source()
+	  << " on " << *dir << ", releasing auth_pin" << endl;
+  dir->auth_unpin();   // unpin to allow freeze to complete
   
   delete m;  // done
 }
@@ -313,7 +316,7 @@ void Migrator::export_dir_frozen(CDir *dir,
   set<inodeno_t> inodes_added;
   
   // include base dir
-  prep->add_dir( new CDirDiscover(dir, dir->open_by_add(dest)) );
+  prep->add_dir( new CDirDiscover(dir, dir->add_replica(dest)) );
   
   // also include traces to all nested exports.
   set<CDir*> my_nested;
@@ -347,7 +350,7 @@ void Migrator::export_dir_frozen(CDir *dir,
       // include dir? note: this'll include everything except the nested exports themselves, 
       // since someone else is obviously auth.
       if (cur->is_auth()) {
-        prep->add_dir( new CDirDiscover(cur, cur->open_by_add(dest)) );  // yay!
+        prep->add_dir( new CDirDiscover(cur, cur->add_replica(dest)) );  // yay!
         dout(7) << "  added " << *cur << endl;
       }
       
@@ -407,7 +410,7 @@ void Migrator::export_dir_go(CDir *dir,
     assert(dir->is_import());
     cache->imports.erase(dir);
     dir->state_clear(CDIR_STATE_IMPORT);
-    dir->put(CDIR_PIN_IMPORT);                  // unpin, no longer an import
+    dir->put(CDir::PIN_IMPORT);                  // unpin, no longer an import
     
     // discard nested exports (that we're handing off
     for (set<CDir*>::iterator p = cache->nested_exports[dir].begin();
@@ -430,7 +433,7 @@ void Migrator::export_dir_go(CDir *dir,
     cache->nested_exports[containing_import].insert(dir);
     
     dir->state_set(CDIR_STATE_EXPORT);
-    dir->get(CDIR_PIN_EXPORT);                  // i must keep it pinned
+    dir->get(CDir::PIN_EXPORT);                  // i must keep it pinned
     
     // discard nested exports (that we're handing off)
     for (set<CDir*>::iterator p = cache->nested_exports[containing_import].begin();
@@ -469,16 +472,16 @@ void Migrator::export_dir_go(CDir *dir,
   // make list of nodes i expect an export_dir_notify_ack from
   //  (everyone w/ this dir open, but me!)
   assert(export_notify_ack_waiting[dir].empty());
-  for (set<int>::iterator it = dir->open_by.begin();
-       it != dir->open_by.end();
+  for (map<int,int>::iterator it = dir->replicas_begin();
+       it != dir->replicas_end();
        it++) {
-    if (*it == mds->get_nodeid()) continue;
-    export_notify_ack_waiting[dir].insert( *it );
+    if (it->first == mds->get_nodeid()) continue;
+    export_notify_ack_waiting[dir].insert( it->first );
 
     // send warning to all but dest
-    if (*it != dest) {
-      dout(10) << " sending export_dir_warning to mds" << *it << endl;
-      mds->send_message_mds(new MExportDirWarning( dir->ino() ), *it, MDS_PORT_MIGRATOR);
+    if (it->first != dest) {
+      dout(10) << " sending export_dir_warning to mds" << it->first << endl;
+      mds->send_message_mds(new MExportDirWarning( dir->ino() ), it->first, MDS_PORT_MIGRATOR);
     }
   }
   assert(export_notify_ack_waiting[dir].count( dest ));
@@ -530,11 +533,11 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   }
 
   // relax locks?
-  if (!in->is_cached_by_anyone())
+  if (!in->is_replicated())
     in->replicate_relax_locks();
 
   // add inode
-  assert(in->cached_by.count(mds->get_nodeid()) == 0);
+  assert(!in->is_replica(mds->get_nodeid()));
   CInodeExport istate( in );
   istate._encode( enc_state );
 
@@ -544,7 +547,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   if (in->is_dirty()) in->mark_clean();
   
   // clear/unpin cached_by (we're no longer the authority)
-  in->cached_by_clear();
+  in->clear_replicas();
   
   // twiddle lock states for auth -> replica transition
   // hard
@@ -580,7 +583,8 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   // *** other state too?
 
   // move to end of LRU so we drop out of cache quickly!
-  cache->lru.lru_bottouch(in);
+  if (in->get_parent_dn()) 
+    cache->lru.lru_bottouch(in->get_parent_dn());
 }
 
 
@@ -594,6 +598,8 @@ int Migrator::export_dir_walk(MExportDir *req,
 
   dout(7) << "export_dir_walk " << *dir << " " << dir->nitems << " items" << endl;
   
+  assert(dir->get_projected_version() == dir->get_version());
+
   // dir 
   bufferlist enc_dir;
   
@@ -601,7 +607,7 @@ int Migrator::export_dir_walk(MExportDir *req,
   dstate._encode( enc_dir );
   
   // release open_by 
-  dir->open_by_clear();
+  dir->clear_replicas();
 
   // mark
   assert(dir->is_auth());
@@ -610,7 +616,7 @@ int Migrator::export_dir_walk(MExportDir *req,
 
   // proxy
   dir->state_set(CDIR_STATE_PROXY);
-  dir->get(CDIR_PIN_PROXY);
+  dir->get(CDir::PIN_PROXY);
   export_proxy_dirinos[basedir].push_back(dir->ino());
 
   list<CDir*> subdirs;
@@ -649,7 +655,10 @@ int Migrator::export_dir_walk(MExportDir *req,
         enc_dir.append("D", 1);  // dirty
       else 
         enc_dir.append("C", 1);  // clean
-      
+
+      version_t dnv = dn->get_version();
+      enc_dir.append((char*)&dnv, sizeof(dnv));
+
       // null dentry?
       if (dn->is_null()) {
         enc_dir.append("N", 1);  // null dentry
@@ -687,7 +696,7 @@ int Migrator::export_dir_walk(MExportDir *req,
           cache->exports.erase(in->dir);                    // discard nested export   (nested_exports updated above)
           
           in->dir->state_clear(CDIR_STATE_EXPORT);
-          in->dir->put(CDIR_PIN_EXPORT);
+          in->dir->put(CDir::PIN_EXPORT);
           
           // simplify dir_auth?
           if (in->dir->get_dir_auth() == newauth)
@@ -697,8 +706,8 @@ int Migrator::export_dir_walk(MExportDir *req,
       
       // add to proxy
       export_proxy_inos[basedir].push_back(in->ino());
-      in->state_set(CINODE_STATE_PROXY);
-      in->get(CINODE_PIN_PROXY);
+      in->state_set(CInode::STATE_PROXY);
+      in->get(CInode::PIN_PROXY);
       
       // waiters
       list<Context*> waiters;
@@ -717,6 +726,17 @@ int Migrator::export_dir_walk(MExportDir *req,
 }
 
 
+class C_MDS_ExportFinishLogged : public Context {
+  Migrator *migrator;
+  CDir *dir;
+public:
+  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : migrator(m), dir(d) {}
+  void finish(int r) {
+    migrator->export_dir_finish(dir);
+  }
+};
+
+
 /*
  * i should get an export_dir_notify_ack from every mds that had me open, including the new auth (an ack)
  */
@@ -733,58 +753,19 @@ void Migrator::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
   export_notify_ack_waiting[dir].erase(from);
 
   // done?
-  if (!export_notify_ack_waiting[dir].empty()) {
-    dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
-            << ", still waiting for " << export_notify_ack_waiting[dir] << endl;
-    
-  } else {
+  if (export_notify_ack_waiting[dir].empty()) {
+    export_notify_ack_waiting.erase(dir);
+
     dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
             << ", last one!" << endl;
 
-    // ok, we're finished!
-    export_notify_ack_waiting.erase(dir);
+    // log export completion, then finish (unfreeze, trigger finish context, etc.)
+    mds->mdlog->submit_entry(new EExportFinish(dir),
+			     new C_MDS_ExportFinishLogged(this, dir));
 
-    // finish export  (unfreeze, trigger finish context, etc.)
-    export_dir_finish(dir);
-
-    // unpin proxies
-    // inodes
-    for (list<inodeno_t>::iterator it = export_proxy_inos[dir].begin();
-         it != export_proxy_inos[dir].end();
-         it++) {
-      CInode *in = cache->get_inode(*it);
-      in->put(CINODE_PIN_PROXY);
-      assert(in->state_test(CINODE_STATE_PROXY));
-      in->state_clear(CINODE_STATE_PROXY);
-    }
-    export_proxy_inos.erase(dir);
-
-    // dirs
-    for (list<inodeno_t>::iterator it = export_proxy_dirinos[dir].begin();
-         it != export_proxy_dirinos[dir].end();
-         it++) {
-      CDir *dir = cache->get_inode(*it)->dir;
-      dir->put(CDIR_PIN_PROXY);
-      assert(dir->state_test(CDIR_STATE_PROXY));
-      dir->state_clear(CDIR_STATE_PROXY);
-
-      // hose neg dentries, too, since we're no longer auth
-      CDir_map_t::iterator it;
-      for (it = dir->begin(); it != dir->end(); ) {
-        CDentry *dn = it->second;
-        it++;
-        if (dn->is_null()) {
-          assert(dn->is_sync());
-          dir->remove_dentry(dn);
-        } else {
-          //dout(10) << "export_dir_notify_ack leaving xlocked neg " << *dn << endl;
-          if (dn->is_dirty())
-            dn->mark_clean();
-        }
-      }
-    }
-    export_proxy_dirinos.erase(dir);
-
+  } else {
+    dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
+            << ", still waiting for " << export_notify_ack_waiting[dir] << endl;
   }
 
   delete m;
@@ -796,12 +777,7 @@ void Migrator::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
  */
 void Migrator::export_dir_finish(CDir *dir)
 {
-  // exported!
-
-  
-  // FIXME log it
-  
-  // send finish to new auth
+  // send finish/commit to new auth
   mds->send_message_mds(new MExportDirFinish(dir->ino()), dir->authority(), MDS_PORT_MIGRATOR);
   
   // unfreeze
@@ -814,6 +790,44 @@ void Migrator::export_dir_finish(CDir *dir)
   cache->make_trace(trace, dir->inode);
   cache->path_unpin(trace, 0);
 
+  // unpin proxies
+  // inodes
+  for (list<inodeno_t>::iterator it = export_proxy_inos[dir].begin();
+       it != export_proxy_inos[dir].end();
+       it++) {
+    CInode *in = cache->get_inode(*it);
+    in->put(CInode::PIN_PROXY);
+    assert(in->state_test(CInode::STATE_PROXY));
+    in->state_clear(CInode::STATE_PROXY);
+  }
+  export_proxy_inos.erase(dir);
+  
+  // dirs
+  for (list<inodeno_t>::iterator it = export_proxy_dirinos[dir].begin();
+       it != export_proxy_dirinos[dir].end();
+       it++) {
+    CDir *dir = cache->get_inode(*it)->dir;
+    dir->put(CDir::PIN_PROXY);
+    assert(dir->state_test(CDIR_STATE_PROXY));
+    dir->state_clear(CDIR_STATE_PROXY);
+    
+    // hose neg dentries, too, since we're no longer auth
+    CDir_map_t::iterator it;
+    for (it = dir->begin(); it != dir->end(); ) {
+      CDentry *dn = it->second;
+      it++;
+      if (dn->is_null()) {
+	assert(dn->is_sync());
+	dir->remove_dentry(dn);
+      } else {
+	//dout(10) << "export_dir_notify_ack leaving xlocked neg " << *dn << endl;
+	if (dn->is_dirty())
+	  dn->mark_clean();
+      }
+    }
+  }
+  export_proxy_dirinos.erase(dir);
+    
 
   // stats
   mds->logger->set("nex", cache->exports.size());
@@ -891,7 +905,7 @@ void Migrator::handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, i
   }
   
   // pin inode in the cache (for now)
-  in->get(CINODE_PIN_IMPORTING);
+  in->get(CInode::PIN_IMPORTING);
   
   // pin auth too, until the import completes.
   in->auth_pin();
@@ -925,7 +939,7 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
     assert(!m->did_assim());
 
     // open dir i'm importing.
-    diri->set_dir( new CDir(diri, mds, false) );
+    diri->set_dir( new CDir(diri, mds->mdcache, false) );
     dir = diri->dir;
     m->get_dir(diri->ino())->update_dir(dir);
     
@@ -943,8 +957,8 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
     m->mark_assim();  // only do this the first time!
 
     // move pin to dir
-    diri->put(CINODE_PIN_IMPORTING);
-    dir->get(CDIR_PIN_IMPORTING);  
+    diri->put(CInode::PIN_IMPORTING);
+    dir->get(CDir::PIN_IMPORTING);  
 
     // auth pin too
     dir->auth_pin();
@@ -980,7 +994,7 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
           m->get_dir(in->ino())->update_dir(in->dir);
           dout(7) << " updated " << *in->dir << endl;
         } else {
-          in->set_dir( new CDir(in, mds, false) );
+          in->set_dir( new CDir(in, mds->mdcache, false) );
           m->get_dir(in->ino())->update_dir(in->dir);
           dout(7) << "   added " << *in->dir << endl;
           in->take_waiting(CINODE_WAIT_DIR, finished);
@@ -1002,8 +1016,8 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
 			       new C_MDS_RetryMessage(mds, m));
 
         // pin it!
-        in->get(CINODE_PIN_OPENINGDIR);
-        in->state_set(CINODE_STATE_OPENINGDIR);
+        in->get(CInode::PIN_OPENINGDIR);
+        in->state_set(CInode::STATE_OPENINGDIR);
       }
     }
   } else {
@@ -1023,12 +1037,12 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
     if (in->dir) {
       if (!in->dir->state_test(CDIR_STATE_IMPORTINGEXPORT)) {
         dout(7) << "  pinning nested export " << *in->dir << endl;
-        in->dir->get(CDIR_PIN_IMPORTINGEXPORT);
+        in->dir->get(CDir::PIN_IMPORTINGEXPORT);
         in->dir->state_set(CDIR_STATE_IMPORTINGEXPORT);
 
-        if (in->state_test(CINODE_STATE_OPENINGDIR)) {
-          in->put(CINODE_PIN_OPENINGDIR);
-          in->state_clear(CINODE_STATE_OPENINGDIR);
+        if (in->state_test(CInode::STATE_OPENINGDIR)) {
+          in->put(CInode::PIN_OPENINGDIR);
+          in->state_clear(CInode::STATE_OPENINGDIR);
         }
       } else {
         dout(7) << "  already pinned nested export " << *in << endl;
@@ -1084,7 +1098,23 @@ public:
 };
 */
 
-
+class C_MDS_ImportDirLoggedStart : public Context {
+  Migrator *migrator;
+  CDir *dir;
+  int from;
+  list<inodeno_t> imported_subdirs;
+  list<inodeno_t> exports;
+public:
+  C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f, 
+			     list<inodeno_t>& is, list<inodeno_t>& e) :
+    migrator(m), dir(d), from(f) {
+    imported_subdirs.swap(is);
+    exports.swap(e);
+  }
+  void finish(int r) {
+    migrator->import_dir_logged_start(dir, from, imported_subdirs, exports);
+  }
+};
 
 void Migrator::handle_export_dir(MExportDir *m)
 {
@@ -1097,9 +1127,11 @@ void Migrator::handle_export_dir(MExportDir *m)
   dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
-
-
   show_imports();
+  
+  // start the journal entry
+  EImportStart *le = new EImportStart(m->get_exports());
+  le->metablob.add_dir_context(dir);
   
   // note new authority (locally)
   if (dir->inode->is_auth())
@@ -1116,7 +1148,7 @@ void Migrator::handle_export_dir(MExportDir *m)
     cache->exports.erase(dir);
 
     dir->state_clear(CDIR_STATE_EXPORT);
-    dir->put(CDIR_PIN_EXPORT);                // unpin, no longer an export
+    dir->put(CDir::PIN_EXPORT);                // unpin, no longer an export
     
     containing_import = cache->get_auth_container(dir);  
     dout(7) << "  it is nested under import " << *containing_import << endl;
@@ -1125,7 +1157,7 @@ void Migrator::handle_export_dir(MExportDir *m)
     // new import
     cache->imports.insert(dir);
     dir->state_set(CDIR_STATE_IMPORT);
-    dir->get(CDIR_PIN_IMPORT);                // must keep it pinned
+    dir->get(CDir::PIN_IMPORT);                // must keep it pinned
     
     containing_import = dir;  // imported exports nested under *in
 
@@ -1134,7 +1166,13 @@ void Migrator::handle_export_dir(MExportDir *m)
 
 
   // take out my temp pin
-  dir->put(CDIR_PIN_IMPORTING);
+  dir->put(CDir::PIN_IMPORTING);
+
+  // mark import point frozen
+  // (note: this is a manual freeze.. hack hack hack!)
+  dir->get_inode()->auth_pin();
+  dir->get(CDir::PIN_FREEZE);
+  dir->state_set(CDIR_STATE_FROZENTREE);
 
   // add any inherited exports
   for (list<inodeno_t>::iterator it = m->get_exports().begin();
@@ -1146,8 +1184,13 @@ void Migrator::handle_export_dir(MExportDir *m)
 
     dout(15) << " nested export " << *ex << endl;
 
+    // mark export point frozenleaf
+    ex->get(CDir::PIN_FREEZELEAF);
+    ex->state_set(CDIR_STATE_FROZENTREELEAF);
+    import_freeze_leaves[dir->ino()].insert(ex);  // and take note!
+
     // remove our pin
-    ex->put(CDIR_PIN_IMPORTINGEXPORT);
+    ex->put(CDir::PIN_IMPORTINGEXPORT);
     ex->state_clear(CDIR_STATE_IMPORTINGEXPORT);
 
 
@@ -1163,20 +1206,21 @@ void Migrator::handle_export_dir(MExportDir *m)
       for (set<CDir*>::iterator it = cache->nested_exports[ex].begin();
            it != cache->nested_exports[ex].end();
            it++) {
-        dout(7) << "     moving nested export " << **it << " under " << *containing_import << endl;
+        dout(7) << "     moving nested export " << **it 
+		<< " under " << *containing_import << endl;
         cache->nested_exports[containing_import].insert(*it);
       }
       cache->nested_exports.erase(ex);          // de-list under old import
       
       ex->set_dir_auth( CDIR_AUTH_PARENT );
-      ex->put(CDIR_PIN_IMPORT);       // imports are pinned, no longer import
+      ex->put(CDir::PIN_IMPORT);       // imports are pinned, no longer import
 
     } else {
       dout(7) << " importing export " << *ex << endl;
 
       // add it
       ex->state_set(CDIR_STATE_EXPORT);
-      ex->get(CDIR_PIN_EXPORT);           // all exports are pinned
+      ex->get(CDir::PIN_EXPORT);           // all exports are pinned
       cache->exports.insert(ex);
       cache->nested_exports[containing_import].insert(ex);
       mds->logger->inc("imex");
@@ -1198,7 +1242,8 @@ void Migrator::handle_export_dir(MExportDir *m)
                        off,
                        oldauth, 
                        dir,                 // import root
-                       imported_subdirs);
+                       imported_subdirs,
+		       le);
   }
   dout(10) << " " << imported_subdirs.size() << " imported subdirs" << endl;
   dout(10) << " " << m->get_exports().size() << " imported nested exports" << endl;
@@ -1207,64 +1252,60 @@ void Migrator::handle_export_dir(MExportDir *m)
   // adjust popularity
   mds->balancer->add_import(dir);
 
-  // send notify's etc.
-  dout(7) << "sending notifyack for " << *dir << " to old auth " << MSG_ADDR_NUM(m->get_source()) << endl;
-  mds->send_message_mds(new MExportDirNotifyAck(dir->inode->ino()),
-			m->get_source().num(), MDS_PORT_MIGRATOR);
-
-  dout(7) << "sending notify to others" << endl;
-  for (set<int>::iterator it = dir->open_by.begin();
-       it != dir->open_by.end();
-       it++) {
-    assert( *it != mds->get_nodeid() );
-    if ( *it == MSG_ADDR_NUM(m->get_source()) ) continue;  // not to old auth.
-
-    MExportDirNotify *notify = new MExportDirNotify(dir->ino(), MSG_ADDR_NUM(m->get_source()), mds->get_nodeid());
-    notify->copy_exports(m->get_exports());
-
-    if (g_conf.mds_verify_export_dirauth)
-      notify->copy_subdirs(imported_subdirs);   // copy subdir list (DEBUG)
-
-    mds->send_message_mds(notify, *it, MDS_PORT_MIGRATOR);
-  }
-  
-  // done
-  delete m;
-
-  show_imports();
-
-
-  // is it empty?
-  if (dir->get_size() == 0 &&
-      !dir->inode->is_auth()) {
-    // reexport!
-    export_empty_import(dir);
-  }
-
+  // log it
+  mds->mdlog->submit_entry(le,
+			   new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num(), 
+							  imported_subdirs, m->get_exports()));
 
   // some stats
   mds->logger->inc("im");
   mds->logger->inc("iim", num_imported_inodes);
   mds->logger->set("nim", cache->imports.size());
 
-
-  // FIXME LOG IT
-
-  /*
-    stupid hashing crap, FIXME
-
-  // wait for replicas in hashed dirs?
-  if (import_hashed_replicate_waiting.count(m->get_ino())) {
-    // it'll happen later!, when i get my inodegetreplicaack's back
-  } else {
-    // finish now
-    //not anymoreimport_dir_finish(dir);
-  }
-  */
-
+  delete m;
 }
 
 
+void Migrator::import_dir_logged_start(CDir *dir, int from,
+				       list<inodeno_t> &imported_subdirs,
+				       list<inodeno_t> &exports)
+{
+  dout(7) << "import_dir_logged " << *dir << endl;
+
+  // send notify's etc.
+  dout(7) << "sending notifyack for " << *dir << " to old auth mds" << from << endl;
+  mds->send_message_mds(new MExportDirNotifyAck(dir->inode->ino()),
+			from, MDS_PORT_MIGRATOR);
+  
+  dout(7) << "sending notify to others" << endl;
+  for (map<int,int>::iterator it = dir->replicas_begin();
+       it != dir->replicas_end();
+       it++) {
+    assert( it->first != mds->get_nodeid() );
+    if ( it->first == from ) continue;  // not to old auth.
+    
+    MExportDirNotify *notify = new MExportDirNotify(dir->ino(), from, mds->get_nodeid());
+    notify->copy_exports(exports);
+
+    if (g_conf.mds_verify_export_dirauth)
+      notify->copy_subdirs(imported_subdirs);   // copy subdir list (DEBUG)
+    
+    mds->send_message_mds(notify, it->first, MDS_PORT_MIGRATOR);
+  }
+  
+  show_imports();
+}
+
+
+class C_MDS_ImportDirLoggedFinish : public Context {
+  Migrator *migrator;
+  CDir *dir;
+public:
+  C_MDS_ImportDirLoggedFinish(Migrator *m, CDir *d) : migrator(m), dir(d) { }
+  void finish(int r) {
+    migrator->import_dir_logged_finish(dir);
+  }
+};
 
 void Migrator::handle_export_dir_finish(MExportDirFinish *m)
 {
@@ -1272,8 +1313,18 @@ void Migrator::handle_export_dir_finish(MExportDirFinish *m)
   CDir *dir = diri->dir;
   assert(dir);
 
-  dout(7) << "handle_export_dir_finish on " << *dir << endl;
+  dout(7) << "handle_export_dir_finish logging import_finish on " << *dir << endl;
   assert(dir->is_auth());
+
+  // log
+  mds->mdlog->submit_entry(new EImportFinish(dir),
+			   new C_MDS_ImportDirLoggedFinish(this,dir));
+  delete m;
+}
+
+void Migrator::import_dir_logged_finish(CDir *dir)
+{
+  dout(7) << "import_dir_finish" << endl;
 
   dout(5) << "done with import of " << *dir << endl;
   show_imports();
@@ -1283,11 +1334,29 @@ void Migrator::handle_export_dir_finish(MExportDirFinish *m)
   // un auth pin (other exports can now proceed)
   dir->auth_unpin();  
   
+  // unfreeze!
+  for (set<CDir*>::iterator p = import_freeze_leaves[dir->ino()].begin();
+       p != import_freeze_leaves[dir->ino()].end();
+       ++p) {
+    (*p)->put(CDir::PIN_FREEZELEAF);
+    (*p)->state_clear(CDIR_STATE_FROZENTREELEAF);
+  }
+  import_freeze_leaves.erase(dir->ino());
+
+  dir->unfreeze_tree();
+      
+
   // ok now finish contexts
   dout(5) << "finishing any waiters on imported data" << endl;
   dir->finish_waiting(CDIR_WAIT_IMPORTED);
 
-  delete m;
+
+  // is it empty?
+  if (dir->get_size() == 0 &&
+      !dir->inode->is_auth()) {
+    // reexport!
+    export_empty_import(dir);
+  }
 }
 
 
@@ -1327,10 +1396,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   
   
   // cached_by
-  assert(!in->is_cached_by(oldauth));
-  in->cached_by_add( oldauth, CINODE_EXPORT_NONCE );
-  if (in->is_cached_by(mds->get_nodeid()))
-    in->cached_by_remove(mds->get_nodeid());
+  assert(!in->is_replica(oldauth));
+  in->add_replica( oldauth, CINODE_EXPORT_NONCE );
+  if (in->is_replica(mds->get_nodeid()))
+    in->remove_replica(mds->get_nodeid());
   
   // twiddle locks
   // hard
@@ -1364,20 +1433,15 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     if (in->filelock.gather_set.empty())  // necessary but not suffient...
       mds->locker->inode_file_eval(in);    
   }
-
-  // other
-  if (in->is_dirty()) {
-    dout(10) << "logging dirty import " << *in << endl;
-    mds->mdlog->submit_entry(new EInodeUpdate(in));
-  }
 }
 
 
 int Migrator::import_dir_block(bufferlist& bl,
-                              int& off,
-                              int oldauth,
-                              CDir *import_root,
-                              list<inodeno_t>& imported_subdirs)
+			       int& off,
+			       int oldauth,
+			       CDir *import_root,
+			       list<inodeno_t>& imported_subdirs,
+			       EImportStart *le)
 {
   // set up dir
   CDirExport dstate;
@@ -1385,7 +1449,7 @@ int Migrator::import_dir_block(bufferlist& bl,
 
   CInode *diri = cache->get_inode(dstate.get_ino());
   assert(diri);
-  CDir *dir = diri->get_or_open_dir(mds);
+  CDir *dir = diri->get_or_open_dir(mds->mdcache);
   assert(dir);
  
   dout(7) << " import_dir_block " << *dir << " have " << dir->nitems << " items, importing " << dstate.get_nden() << " dentries" << endl;
@@ -1404,10 +1468,13 @@ int Migrator::import_dir_block(bufferlist& bl,
     dir->state_set(CDIR_STATE_AUTH);
 
   // open_by
-  assert(!dir->is_open_by(oldauth));
-  dir->open_by_add(oldauth);
-  if (dir->is_open_by(mds->get_nodeid()))
-    dir->open_by_remove(mds->get_nodeid());
+  assert(!dir->is_replica(oldauth));
+  dir->add_replica(oldauth);
+  if (dir->is_replica(mds->get_nodeid()))
+    dir->remove_replica(mds->get_nodeid());
+
+  // add to journal entry
+  le->metablob.add_dir(dir);
 
   if (dir->is_hashed()) {
 
@@ -1443,6 +1510,10 @@ int Migrator::import_dir_block(bufferlist& bl,
       char dirty;
       bl.copy(off, 1, &dirty);
       off++;
+
+      version_t dnv;
+      bl.copy(off, sizeof(dnv), (char*)&dnv);
+      off += sizeof(dnv);
       
       char icode;
       bl.copy(off, 1, &icode);
@@ -1471,14 +1542,15 @@ int Migrator::import_dir_block(bufferlist& bl,
         // inode
         decode_import_inode(dn, bl, off, oldauth);
       }
-      
-      // mark dentry dirty?  (only _after_ we link the inode!)
-      if (dirty == 'D') dn->mark_dirty();
-      
-    }
 
-    if (dir->is_dirty()) 
-      mds->mdlog->submit_entry(new EDirUpdate(dir));
+      // mark dentry dirty?  (only _after_ we link the inode!)
+      if (dirty == 'D') 
+	dn->_mark_dirty();
+      dn->set_version(dnv);
+
+      // add dentry to journal entry
+      le->metablob.add_dentry(dn);
+    }
 
     return num_imported;
   }
@@ -1649,7 +1721,7 @@ void Migrator::import_hashed_content(CDir *dir, bufferlist& bl, int nden, int ol
       // fix up subdir export?
       if (dn->inode->dir) {
         assert(dn->inode->dir->state_test(CDIR_STATE_IMPORTINGEXPORT));
-        dn->inode->dir->put(CDIR_PIN_IMPORTINGEXPORT);
+        dn->inode->dir->put(CDir::PIN_IMPORTINGEXPORT);
         dn->inode->dir->state_clear(CDIR_STATE_IMPORTINGEXPORT);
 
         if (dn->inode->dir->is_auth()) {
@@ -1658,7 +1730,7 @@ void Migrator::import_hashed_content(CDir *dir, bufferlist& bl, int nden, int ol
           dout(7) << "unimporting subdir now that inode is mine " << *dn->inode->dir << endl;
           dn->inode->dir->set_dir_auth( CDIR_AUTH_PARENT );
           cache->imports.erase(dn->inode->dir);
-          dn->inode->dir->put(CDIR_PIN_IMPORT);
+          dn->inode->dir->put(CDir::PIN_IMPORT);
           dn->inode->dir->state_clear(CDIR_STATE_IMPORT);
           
           // move nested under hashdir
@@ -1674,7 +1746,7 @@ void Migrator::import_hashed_content(CDir *dir, bufferlist& bl, int nden, int ol
         else {
           // not mine.  make it an export.
           dout(7) << "making subdir into export " << *dn->inode->dir << endl;
-          dn->inode->dir->get(CDIR_PIN_EXPORT);
+          dn->inode->dir->get(CDir::PIN_EXPORT);
           dn->inode->dir->state_set(CDIR_STATE_EXPORT);
           cache->exports.insert(dn->inode->dir);
           cache->nested_exports[dir].insert(dn->inode->dir);
@@ -1687,7 +1759,7 @@ void Migrator::import_hashed_content(CDir *dir, bufferlist& bl, int nden, int ol
     }
     
     // mark dentry dirty?  (only _after_ we link the inode!)
-    dn->mark_dirty();
+    dn->_mark_dirty(); // fixme
   }
 }
 
@@ -1777,7 +1849,7 @@ void Migrator::hash_dir(CDir *dir)
 
   // ok, go
   dir->state_set(CDIR_STATE_HASHING);
-  dir->get(CDIR_PIN_HASHING);
+  dir->get(CDir::PIN_HASHING);
   assert(dir->hashed_subset.empty());
 
   // discover on all mds
@@ -1846,7 +1918,7 @@ void Migrator::hash_dir_complete(CDir *dir)
        it != dir->end(); 
        it++) {
     CInode *in = it->second->inode;
-    in->mark_dirty();
+    in->_mark_dirty(); // fixme
   }
   
   if (dir->is_frozen_dir())
@@ -1885,7 +1957,7 @@ void Migrator::hash_dir_frozen(CDir *dir)
     if (!in->is_dir()) continue;
     if (!in->dir) continue;
     
-    int dentryhashcode = mds->hash_dentry( dir->ino(), it->first );
+    int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), it->first );
     if (dentryhashcode == mds->get_nodeid()) continue;
 
     // msg?
@@ -1980,7 +2052,7 @@ void Migrator::hash_dir_go(CDir *dir)
     CDentry *dn = it->second;
     CInode *in = dn->inode;
 
-    int dentryhashcode = mds->hash_dentry( dir->ino(), it->first );
+    int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), it->first );
     if (dentryhashcode == mds->get_nodeid()) {
       continue;      // still mine!
     }
@@ -2020,8 +2092,8 @@ void Migrator::hash_dir_go(CDir *dir)
 
     // add to proxy
     hash_proxy_inos[dir].push_back(in);
-    in->state_set(CINODE_STATE_PROXY);
-    in->get(CINODE_PIN_PROXY);
+    in->state_set(CInode::STATE_PROXY);
+    in->get(CInode::PIN_PROXY);
 
     // fix up subdirs
     if (in->dir) {
@@ -2030,7 +2102,7 @@ void Migrator::hash_dir_go(CDir *dir)
         dout(7) << "making subdir into import " << *in->dir << endl;
         in->dir->set_dir_auth( mds->get_nodeid() );
         cache->imports.insert(in->dir);
-        in->dir->get(CDIR_PIN_IMPORT);
+        in->dir->get(CDir::PIN_IMPORT);
         in->dir->state_set(CDIR_STATE_IMPORT);
 
         // fix nested bits
@@ -2049,7 +2121,7 @@ void Migrator::hash_dir_go(CDir *dir)
         // not mine.
         dout(7) << "un-exporting subdir that's being hashed away " << *in->dir << endl;
         assert(in->dir->is_export());
-        in->dir->put(CDIR_PIN_EXPORT);
+        in->dir->put(CDir::PIN_EXPORT);
         in->dir->state_clear(CDIR_STATE_EXPORT);
         cache->exports.erase(in->dir);
         cache->nested_exports[containing_import].erase(in->dir);
@@ -2068,15 +2140,15 @@ void Migrator::hash_dir_go(CDir *dir)
 
   // dir state
   dir->state_set(CDIR_STATE_HASHED);
-  dir->get(CDIR_PIN_HASHED);
+  dir->get(CDir::PIN_HASHED);
   cache->hashdirs.insert(dir);
-  dir->mark_dirty();
-  mds->mdlog->submit_entry(new EDirUpdate(dir));
+  dir->mark_dirty(dir->pre_dirty()); // fixme
+  mds->mdlog->submit_entry(new EString("dirty dir fixme"));
 
   // inode state
   if (dir->inode->is_auth()) {
-    dir->inode->mark_dirty();
-    mds->mdlog->submit_entry(new EInodeUpdate(dir->inode));
+    dir->inode->_mark_dirty(); // fixme
+    mds->mdlog->submit_entry(new EString("hash dirty fixme"));
   }
 
   // fix up nested_exports?
@@ -2164,7 +2236,7 @@ void Migrator::hash_dir_finish(CDir *dir)
   // dir state
   hash_gather.erase(dir);
   dir->state_clear(CDIR_STATE_HASHING);
-  dir->put(CDIR_PIN_HASHING);
+  dir->put(CDir::PIN_HASHING);
   dir->hashed_subset.clear();
 
   // unproxy inodes
@@ -2173,9 +2245,9 @@ void Migrator::hash_dir_finish(CDir *dir)
        it != hash_proxy_inos[dir].end();
        it++) {
     CInode *in = *it;
-    assert(in->state_test(CINODE_STATE_PROXY));
-    in->state_clear(CINODE_STATE_PROXY);
-    in->put(CINODE_PIN_PROXY);
+    assert(in->state_test(CInode::STATE_PROXY));
+    in->state_clear(CInode::STATE_PROXY);
+    in->put(CInode::PIN_PROXY);
   }
   hash_proxy_inos.erase(dir);
 
@@ -2256,7 +2328,7 @@ void Migrator::handle_hash_dir_notify(MHashDirNotify *m)
       if (!in) continue;
       if (!in->dir) continue;
       
-      int dentryhashcode = mds->hash_dentry( dir->ino(), it->first );
+      int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), it->first );
       if (dentryhashcode != from) continue;   // we'll import these in a minute
       
       if (in->dir->authority() != dentryhashcode)
@@ -2275,7 +2347,7 @@ void Migrator::handle_hash_dir_notify(MHashDirNotify *m)
       hash_gather.erase(dir);
       
       dir->state_clear(CDIR_STATE_HASHING);
-      dir->put(CDIR_PIN_HASHING);
+      dir->put(CDir::PIN_HASHING);
       dir->hashed_subset.clear();
     } else {
       dout(7) << "still waiting for notify from " << hash_gather[dir] << endl;
@@ -2355,14 +2427,14 @@ void Migrator::handle_hash_dir_discover_2(MHashDirDiscover *m, CInode *in, int r
 
   // pin dir, set hashing flag
   dir->state_set(CDIR_STATE_HASHING);
-  dir->get(CDIR_PIN_HASHING);
+  dir->get(CDir::PIN_HASHING);
   assert(dir->hashed_subset.empty());
   
   // inode state
   dir->inode->inode.hash_seed = 1;// dir->ino();
   if (dir->inode->is_auth()) {
-    dir->inode->mark_dirty();
-    mds->mdlog->submit_entry(new EInodeUpdate(dir->inode));
+    dir->inode->_mark_dirty(); // fixme
+    mds->mdlog->submit_entry(new EString("hash dirty fixme"));
   }
 
   // get gather set ready for notifies
@@ -2435,7 +2507,7 @@ void Migrator::handle_hash_dir_prep(MHashDirPrep *m)
     if (in->dir) {
       if (!in->dir->state_test(CDIR_STATE_IMPORTINGEXPORT)) {
         dout(5) << "  pinning nested export " << *in->dir << endl;
-        in->dir->get(CDIR_PIN_IMPORTINGEXPORT);
+        in->dir->get(CDir::PIN_IMPORTINGEXPORT);
         in->dir->state_set(CDIR_STATE_IMPORTINGEXPORT);
       } else {
         dout(5) << "  already pinned nested export " << *in << endl;
@@ -2482,14 +2554,14 @@ void Migrator::handle_hash_dir(MHashDir *m)
 
   // dir state
   dir->state_set(CDIR_STATE_HASHED);
-  dir->get(CDIR_PIN_HASHED);
+  dir->get(CDir::PIN_HASHED);
   cache->hashdirs.insert(dir);
   dir->hashed_subset.insert(mds->get_nodeid());
 
   // dir is complete
   dir->mark_complete();
-  dir->mark_dirty();
-  mds->mdlog->submit_entry(new EDirUpdate(dir));
+  dir->mark_dirty(dir->pre_dirty()); // fixme
+  mds->mdlog->submit_entry(new EString("dirty dir fixme"));
 
   // commit
   mds->mdstore->commit_dir(dir, 0);
@@ -2666,7 +2738,7 @@ void Migrator::handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m)
     if (in->dir) {
       if (!in->dir->state_test(CDIR_STATE_IMPORTINGEXPORT)) {
         dout(5) << "  pinning nested export " << *in->dir << endl;
-        in->dir->get(CDIR_PIN_IMPORTINGEXPORT);
+        in->dir->get(CDir::PIN_IMPORTINGEXPORT);
         in->dir->state_set(CDIR_STATE_IMPORTINGEXPORT);
       } else {
         dout(5) << "  already pinned nested export " << *in << endl;
@@ -2765,20 +2837,20 @@ void Migrator::handle_unhash_dir_ack(MUnhashDirAck *m)
   // dir state
   //dir->state_clear(CDIR_STATE_UNHASHING); //later
   dir->state_clear(CDIR_STATE_HASHED);
-  dir->put(CDIR_PIN_HASHED);
+  dir->put(CDir::PIN_HASHED);
   cache->hashdirs.erase(dir);
   
   // commit!
   assert(dir->is_complete());
   //dir->mark_complete();
-  dir->mark_dirty();
+  dir->mark_dirty(dir->pre_dirty()); // fixme
   mds->mdstore->commit_dir(dir, 0);
 
   // inode state
   dir->inode->inode.hash_seed = 0;
   if (dir->inode->is_auth()) {
-    dir->inode->mark_dirty();
-    mds->mdlog->submit_entry(new EInodeUpdate(dir->inode));
+    dir->inode->_mark_dirty(); // fixme
+    mds->mdlog->submit_entry(new EString("hash inode dirty fixme"));
   }
   
   // notify
@@ -2866,8 +2938,8 @@ void Migrator::unhash_dir_complete(CDir *dir)
        it++) {
     CInode *in = it->second->inode;
     if (in->is_auth()) {
-      in->mark_dirty();
-      mds->mdlog->submit_entry(new EInodeUpdate(in));
+      in->_mark_dirty(); // fixme
+      mds->mdlog->submit_entry(new EString("unhash dirty fixme"));
     }
   }
   
@@ -2970,7 +3042,7 @@ void Migrator::unhash_dir_prep_finish(CDir *dir)
     if (!in->is_dir()) continue;
     if (!in->dir) continue;
     
-    int dentryhashcode = mds->hash_dentry( dir->ino(), it->first );
+    int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), it->first );
     if (dentryhashcode != mds->get_nodeid()) continue;
     
     // msg?
@@ -3016,7 +3088,7 @@ void Migrator::handle_unhash_dir(MUnhashDir *m)
     CDentry *dn = it->second;
     CInode *in = dn->inode;
 
-    int dentryhashcode = mds->hash_dentry( dir->ino(), it->first );
+    int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), it->first );
     if (dentryhashcode != mds->get_nodeid()) {
       // not mine!
       // twiddle dir_auth?
@@ -3060,8 +3132,8 @@ void Migrator::handle_unhash_dir(MUnhashDir *m)
       dn->mark_clean();
 
     // proxy
-    in->state_set(CINODE_STATE_PROXY);
-    in->get(CINODE_PIN_PROXY);
+    in->state_set(CInode::STATE_PROXY);
+    in->get(CInode::PIN_PROXY);
     hash_proxy_inos[dir].push_back(in);
 
     if (in->dir) {
@@ -3070,14 +3142,14 @@ void Migrator::handle_unhash_dir(MUnhashDir *m)
         dout(7) << "making subdir into import " << *in->dir << endl;
         in->dir->set_dir_auth( mds->get_nodeid() );
         cache->imports.insert(in->dir);
-        in->dir->get(CDIR_PIN_IMPORT);
+        in->dir->get(CDir::PIN_IMPORT);
         in->dir->state_set(CDIR_STATE_IMPORT);
       }
       else {
         // not mine.
         dout(7) << "un-exporting subdir that's being unhashed away " << *in->dir << endl;
         assert(in->dir->is_export());
-        in->dir->put(CDIR_PIN_EXPORT);
+        in->dir->put(CDir::PIN_EXPORT);
         in->dir->state_clear(CDIR_STATE_EXPORT);
         cache->exports.erase(in->dir);
         cache->nested_exports[dir].erase(in->dir);
@@ -3097,15 +3169,15 @@ void Migrator::handle_unhash_dir(MUnhashDir *m)
   // dir state
   //dir->state_clear(CDIR_STATE_UNHASHING);  // later
   dir->state_clear(CDIR_STATE_HASHED);
-  dir->put(CDIR_PIN_HASHED);
+  dir->put(CDir::PIN_HASHED);
   cache->hashdirs.erase(dir);
   dir->mark_clean();
 
   // inode state
   dir->inode->inode.hash_seed = 0;
   if (dir->inode->is_auth()) {
-    dir->inode->mark_dirty();
-    mds->mdlog->submit_entry(new EInodeUpdate(dir->inode));
+    dir->inode->_mark_dirty(); // fixme
+    mds->mdlog->submit_entry(new EString("unhash inode dirty fixme"));
   }
 
   // init gather set
@@ -3169,9 +3241,9 @@ void Migrator::handle_unhash_dir_notify(MUnhashDirNotify *m)
        it != hash_proxy_inos[dir].end();
        it++) {
     CInode *in = *it;
-    assert(in->state_test(CINODE_STATE_PROXY));
-    in->state_clear(CINODE_STATE_PROXY);
-    in->put(CINODE_PIN_PROXY);
+    assert(in->state_test(CInode::STATE_PROXY));
+    in->state_clear(CInode::STATE_PROXY);
+    in->put(CInode::PIN_PROXY);
   }
 
   // unfreeze

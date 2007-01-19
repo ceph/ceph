@@ -11,48 +11,34 @@
  * 
  */
 
-#ifndef __EMKDIR_H
-#define __EMKDIR_H
+#ifndef __EIMPORTFINISH_H
+#define __EIMPORTFINISH_H
 
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
-#include "ETrace.h"
 #include "../MDS.h"
-#include "../MDStore.h"
 
-
-class EMkdir : public LogEvent {
+class EImportFinish : public LogEvent {
  protected:
-  ETrace trace;
-  //version_t pdirv;
+  inodeno_t dirino; // imported dir
 
  public:
-  EMkdir(CInode *diri, CDentry *dn, CInode *newi) : LogEvent(EVENT_MKDIR), 
-						    trace(diri) {
-    // include new guy to the trace too
-    trace.push_back(diri->ino(),
-		    diri->dir->get_version(),
-		    dn->get_name(),
-		    newi->inode);
-    ++trace.back().inode.version;  // project inode version.
-  }
-  EMkdir() : LogEvent(EVENT_MKDIR) { }
+  EImportFinish(CDir *dir) : LogEvent(EVENT_IMPORTFINISH), 
+			     dirino(dir->ino()) { }
+  EImportFinish() : LogEvent(EVENT_IMPORTFINISH) { }
   
   void print(ostream& out) {
-    out << "mkdir ";
-    trace.print(out);
+    out << "import_finish " << dirino;
   }
 
   virtual void encode_payload(bufferlist& bl) {
-    trace.encode(bl);
-    //bl.append((char*)&pdirv, sizeof(pdirv));
+    bl.append((char*)&dirino, sizeof(dirino));
   }
   void decode_payload(bufferlist& bl, int& off) {
-    trace.decode(bl, off);
-    //bl.copy(off, sizeof(pdirv), (char*)&pdirv);
-    //off += sizeof(pdirv);
+    bl.copy(off, sizeof(dirino), (char*)&dirino);
+    off += sizeof(dirino);
   }
   
   bool has_expired(MDS *mds);

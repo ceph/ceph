@@ -452,7 +452,7 @@ Dentry *Client::lookup(filepath& path)
 
 MClientReply *Client::make_request(MClientRequest *req, 
                                    bool auth_best, 
-                                   int use_mds)  // this param is icky, debug weirdness!
+                                   int use_mds)  // this param is purely for debug hacking
 {
   // assign a unique tid
   req->set_tid(++last_tid);
@@ -492,7 +492,10 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   // choose an mds
   int mds = 0;
-  if (diri) {
+  if (!diri || g_conf.client_use_random_mds) {
+    // no root info, pick a random MDS
+    mds = rand() % mdsmap->get_num_mds();
+  } else {
     if (auth_best) {
       // pick the actual auth (as best we can)
       if (item) {
@@ -511,9 +514,6 @@ MClientReply *Client::make_request(MClientRequest *req,
       else 
         mds = diri->pick_replica(mdsmap);
     }
-  } else {
-    // no root info, pick a random MDS
-    mds = rand() % mdsmap->get_num_mds();
   }
   dout(20) << "mds is " << mds << endl;
 

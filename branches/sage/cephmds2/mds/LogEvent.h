@@ -19,6 +19,9 @@
 #define EVENT_INODEUPDATE  2
 #define EVENT_DIRUPDATE    3
 
+#define EVENT_IMPORTMAP    4
+#define EVENT_UPDATE       5
+
 #define EVENT_ALLOC        10
 #define EVENT_MKNOD        11
 #define EVENT_MKDIR        12
@@ -27,6 +30,12 @@
 #define EVENT_UNLINK       20
 #define EVENT_RMDIR        21
 #define EVENT_PURGEFINISH  22
+
+#define EVENT_EXPORTSTART  30
+#define EVENT_EXPORTFINISH 31
+#define EVENT_IMPORTSTART  32
+#define EVENT_IMPORTFINISH 33
+
 
 
 #include <string>
@@ -48,6 +57,9 @@ class LogEvent {
   LogEvent(int t) : _type(t), _end_off(0) { }
   virtual ~LogEvent() { }
 
+  int get_type() { return _type; }
+  off_t get_end_off() { return _end_off; }
+
   // encoding
   virtual void encode_payload(bufferlist& bl) = 0;
   virtual void decode_payload(bufferlist& bl, int& off) = 0;
@@ -64,26 +76,22 @@ class LogEvent {
   /* obsolete() - is this entry committed to primary store, such that
    *   we can expire it from the journal?
    */
-  virtual bool can_expire(MDS *m) {
+  virtual bool has_expired(MDS *m) {
     return true;
   }
   
-  /* retire() - prod MDS into committing hte relevant state so that this
+  /* expire() - prod MDS into committing the relevant state so that this
    *   entry can be expired from the jorunal.
    */
-  virtual void retire(MDS *m, Context *c) {
+  virtual void expire(MDS *m, Context *c) {
+    assert(0);
     c->finish(0);
     delete c;
   }
 
   
   /*** recovery ***/
-
-  /* has_happened() - true if this event has already been applied.
-   */
-  virtual bool has_happened(MDS *m) { return true; }
-
-  /* replay() - replay given event
+  /* replay() - replay given event.  this is idempotent.
    */
   virtual void replay(MDS *m) { assert(0); }
 

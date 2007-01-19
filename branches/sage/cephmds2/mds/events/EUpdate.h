@@ -11,38 +11,39 @@
  * 
  */
 
-#ifndef __EPURGE_H
-#define __EPURGE_H
+#ifndef __MDS_EUPDATE_H
+#define __MDS_EUPDATE_H
 
-#include <assert.h>
-#include "config.h"
-#include "include/types.h"
+#include "../LogEvent.h"
+#include "EMetaBlob.h"
 
-class EPurgeFinish : public LogEvent {
- protected:
-  inodeno_t ino;
+class EUpdate : public LogEvent {
+public:
+  EMetaBlob metablob;
+  string type;
 
- public:
-  EPurgeFinish(inodeno_t i) : 
-	LogEvent(EVENT_PURGEFINISH),
-	ino(i) { }
-  EPurgeFinish() : LogEvent(EVENT_PURGEFINISH) { }
+  EUpdate() : LogEvent(EVENT_UPDATE) { }
+  EUpdate(const char *s) : LogEvent(EVENT_UPDATE),
+			   type(s) { }
   
   void print(ostream& out) {
-    out << "purgefinish " << ino;
+    if (type.length())
+      out << type << " ";
+    out << metablob;
   }
 
-  virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&ino, sizeof(ino));
-  }
+  void encode_payload(bufferlist& bl) {
+    ::_encode(type, bl);
+    metablob._encode(bl);
+  } 
   void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(ino), (char*)&ino);
+    ::_decode(type, bl, off);
+    metablob._decode(bl, off);
   }
-  
+
   bool has_expired(MDS *mds);
   void expire(MDS *mds, Context *c);
   void replay(MDS *mds);
-
 };
 
 #endif

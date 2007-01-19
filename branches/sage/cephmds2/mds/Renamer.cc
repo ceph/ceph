@@ -27,8 +27,7 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "events/EInodeUpdate.h"
-#include "events/EDirUpdate.h"
+#include "events/EString.h"
 #include "events/EUnlink.h"
 
 #include "messages/MRenameWarning.h"
@@ -112,7 +111,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         // not import anymore!
         cache->imports.erase(in->dir);
         in->dir->state_clear(CDIR_STATE_IMPORT);
-        in->dir->put(CDIR_PIN_IMPORT);
+        in->dir->put(CDir::PIN_IMPORT);
 
         in->dir->set_dir_auth( CDIR_AUTH_PARENT );
         dout(7) << " fixing dir_auth to be " << in->dir->get_dir_auth() << endl;
@@ -163,7 +162,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         // i am now an import
         cache->imports.insert(in->dir);
         in->dir->state_set(CDIR_STATE_IMPORT);
-        in->dir->get(CDIR_PIN_IMPORT);
+        in->dir->get(CDir::PIN_IMPORT);
 
         in->dir->set_dir_auth( mds->get_nodeid() );
         dout(7) << " fixing dir_auth to be " << in->dir->get_dir_auth() << endl;
@@ -212,7 +211,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         // now export
         cache->exports.insert(in->dir);
         in->dir->state_set(CDIR_STATE_EXPORT);
-        in->dir->get(CDIR_PIN_EXPORT);
+        in->dir->get(CDir::PIN_EXPORT);
         
         assert(dir_auth >= 0);  // better be defined
         in->dir->set_dir_auth( dir_auth );
@@ -253,7 +252,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         // remove from export list
         cache->exports.erase(in->dir);
         in->dir->state_clear(CDIR_STATE_EXPORT);
-        in->dir->put(CDIR_PIN_EXPORT);
+        in->dir->put(CDir::PIN_EXPORT);
         
         CDir *oldcon = cache->get_auth_container(srcdir);
         assert(oldcon);
@@ -416,17 +415,21 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
     fix_renamed_dir(srcdir, in, destdir, false);  // auth didnt change
 
   // mark dentries dirty
-  srcdn->mark_dirty();
-  destdn->mark_dirty();
-  in->mark_dirty();
+  srcdn->_mark_dirty(); // fixme
+  destdn->_mark_dirty(); // fixme
+  in->_mark_dirty();    // fixme
  
  
   // local, restrict notify to ppl with open dirs
-  set<int> notify = srcdir->get_open_by();
-  for (set<int>::iterator it = destdir->open_by_begin();
-       it != destdir->open_by_end();
+  set<int> notify;
+  for (map<int,int>::iterator it = srcdir->replicas_begin();
+       it != srcdir->replicas_end();
+       ++it)
+    notify.insert(it->first);
+  for (map<int,int>::iterator it = destdir->replicas_begin();
+       it != destdir->replicas_end();
        it++)
-    if (notify.count(*it) == 0) notify.insert(*it);
+    if (notify.count(it->first) == 0) notify.insert(it->first);
   
   if (notify.size()) {
     // warn + notify
@@ -554,11 +557,11 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
   if (in->is_dir() && in->dir) 
     fix_renamed_dir(srcdir, in, destdir, true);  // auth changed
 
-  srcdn->mark_dirty();
+  srcdn->_mark_dirty(); // fixme
 
   // proxy!
-  in->state_set(CINODE_STATE_PROXY);
-  in->get(CINODE_PIN_PROXY);
+  in->state_set(CInode::STATE_PROXY);
+  in->get(CInode::PIN_PROXY);
   
   // generate notify list (everybody but src|dst) and send warnings
   set<int> notify;
@@ -614,10 +617,10 @@ void Renamer::file_rename_ack(CInode *in, int initiator)
   // we got all our MNotifyAck's.
 
   // was i proxy (if not, it's cuz this was a local rename)
-  if (in->state_test(CINODE_STATE_PROXY)) {
+  if (in->state_test(CInode::STATE_PROXY)) {
     dout(10) << "file_rename_ack clearing proxy bit on " << *in << endl;
-    in->state_clear(CINODE_STATE_PROXY);
-    in->put(CINODE_PIN_PROXY);
+    in->state_clear(CInode::STATE_PROXY);
+    in->put(CInode::PIN_PROXY);
   }
 
   // done!
@@ -671,7 +674,7 @@ void Renamer::handle_rename_prep(MRenamePrep *m)
   }
 
   // pin
-  srcin->get(CINODE_PIN_RENAMESRC);
+  srcin->get(CInode::PIN_RENAMESRC);
 
   // send rename request
   MRenameReq *req = new MRenameReq(m->get_initiator(),  // i'm the initiator
@@ -737,11 +740,11 @@ void Renamer::handle_rename(MRename *m)
   }
   
   // mark dirty
-  destdn->mark_dirty();
-  in->mark_dirty();
+  destdn->_mark_dirty(); // fixme
+  in->_mark_dirty(); // fixme
 
   // unpin
-  in->put(CINODE_PIN_RENAMESRC);
+  in->put(CInode::PIN_RENAMESRC);
 
   // ok, send notifies.
   set<int> notify;

@@ -4,6 +4,8 @@
 
 #include <math.h>
 #include <ostream>
+#include <set>
+#include <map>
 using namespace std;
 
 #include "config.h"
@@ -11,6 +13,8 @@ using namespace std;
 
 #include <cassert>
 
+
+// ================================================================
 
 /* meta_load_t
  * hierarchical load for an inode/dir and it's children
@@ -130,6 +134,128 @@ inline mds_load_t operator/( mds_load_t& a, double d )
   return r;
 }
 */
+
+
+// ================================================================
+// dir slices
+
+struct dirslice_t {
+  short hash_mask;
+  short hash_val;
+};
+
+
+
+// ================================================================
+
+#define MDS_PIN_REPLICATED 1
+
+class MDSCacheObject {
+ protected:
+  unsigned state;     // state bits
+  
+  int      ref;       // reference count
+  set<int> ref_set;
+
+  map<int,int> replicas;      // [auth] mds -> nonce
+  int          replica_nonce; // [replica] defined on replica
+
+ public:
+  MDSCacheObject() :
+	state(0),
+	ref(0),
+	replica_nonce(0) {}
+  virtual ~MDSCacheObject() {}
+  
+  // --------------------------------------------
+  // state
+  unsigned get_state() { return state; }
+  void state_clear(unsigned mask) { state &= ~mask; }
+  void state_set(unsigned mask) { state |= mask; }
+  unsigned state_test(unsigned mask) { return state & mask; }
+  void state_reset(unsigned s) { state = s; }
+
+  // --------------------------------------------
+  // pins
+  int get_num_ref() { return ref; }
+  bool is_pinned_by(int by) { return ref_set.count(by); }
+  set<int>& get_ref_set() { return ref_set; }
+
+  virtual void last_put() {}
+  virtual void bad_put(int by) {
+	assert(ref_set.count(by) == 1);
+	assert(ref > 0);
+  }
+  void put(int by) {
+    if (ref == 0 || ref_set.count(by) != 1) {
+	  bad_put(by);
+    } else {
+	  ref--;
+	  ref_set.erase(by);
+	  assert(ref == (int)ref_set.size());
+	  if (ref == 0)
+		last_put();
+	}
+  }
+
+  virtual void first_get() {}
+  virtual void bad_get(int by) {
+	assert(ref_set.count(by) == 0);
+	assert(0);
+  }
+  void get(int by) {
+    if (ref_set.count(by)) {
+	  bad_get(by);
+    } else {
+	  if (ref == 0) 
+		first_get();
+	  ref++;
+	  ref_set.insert(by);
+	  assert(ref == (int)ref_set.size());
+	}
+  }
+
+
+
+  // --------------------------------------------
+  // replication
+  bool is_replicated() { return !replicas.empty(); }
+  bool is_replica(int mds) { return replicas.count(mds); }
+  int num_replicas() { return replicas.size(); }
+  int add_replica(int mds) {
+	if (replicas.count(mds)) 
+	  return ++replicas[mds];  // inc nonce
+	if (replicas.empty()) 
+	  get(MDS_PIN_REPLICATED);
+	return replicas[mds] = 1;
+  }
+  void add_replica(int mds, int nonce) {
+	if (replicas.empty()) 
+	  get(MDS_PIN_REPLICATED);
+	replicas[mds] = nonce;
+  }
+  int get_replica_nonce(int mds) {
+	assert(replicas.count(mds));
+	return replicas[mds];
+  }
+  void remove_replica(int mds) {
+	assert(replicas.count(mds));
+	replicas.erase(mds);
+	if (replicas.empty())
+	  put(MDS_PIN_REPLICATED);
+  }
+  void clear_replicas() {
+	if (!replicas.empty())
+	  put(MDS_PIN_REPLICATED);
+	replicas.clear();
+  }
+  map<int,int>::iterator replicas_begin() { return replicas.begin(); }
+  map<int,int>::iterator replicas_end() { return replicas.end(); }
+  const map<int,int>& get_replicas() { return replicas; }
+
+  int get_replica_nonce() { return replica_nonce;}
+  void set_replica_nonce(int n) { replica_nonce = n; }
+};
 
 
 #endif

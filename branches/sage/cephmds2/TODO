@@ -1,3 +1,25 @@
+mds
+- journal+recovery
+  - EImportMap
+  - EMetaBlob replay
+  - import/export
+    - how to keep other MDS nodes from goofing up the import/export notify stuff
+  - recovery vs import/export
+  - idempotent ops
+  - unlink
+  - open+create
+  - file capabilities i/o
+  - link
+  - rename
+- mds failure
+  - mdsmon map updates, mds states
+    - active, down, recovering, stopping
+  - 
+- should auth_pins really go to the root?
+  - FIXME: auth_pins on importer versus import beneath an authpinned region?
+
+journaler
+- fix up for large events (e.g. imports)
 
 - paxos for monitor
 - lnet?
@@ -43,8 +65,12 @@ locks
 - integrate revisions into ObjectCacher
 - clean up oid.rev vs op.rev in osd+osdc
 
+rados+ebofs
+- purge replicated writes from cache.  (with exception of partial tail blocks.)
+
 rados paper todo
 - better experiments
+  - berkeleydb objectstore?
 - flush log only in response to subsequent read or write?
 - better behaving recovery
 - justify use of splay.

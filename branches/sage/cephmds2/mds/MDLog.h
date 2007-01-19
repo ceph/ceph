@@ -51,9 +51,7 @@ class MDLog {
   inode_t log_inode;
   Journaler *journaler;
 
-  
-  //hash_map<LogEvent*>  trimming;       // events currently being trimmed
-  map<off_t, LogEvent*> trimming;
+  map<off_t,LogEvent*> trimming;
   std::list<Context*>  trim_waiters;   // contexts waiting for trim
   bool                 trim_reading;
 
@@ -64,6 +62,15 @@ class MDLog {
   
   list<Context*> waitfor_replay;
 
+  // importmaps
+  off_t  last_import_map;   // offsets of last committed importmap.  constrains trimming.
+  list<Context*> import_map_expire_waiters;
+  bool writing_import_map;  // one is being written now
+  bool seen_import_map;  // for recovery
+
+  friend class EImportMap;
+  friend class C_MDS_WroteImportMap;
+
  public:
   MDLog(MDS *m);
   ~MDLog();
@@ -71,6 +78,9 @@ class MDLog {
   void set_max_events(size_t max) { max_events = max; }
   size_t get_max_events() { return max_events; }
   size_t get_num_events() { return num_events + trimming.size(); }
+
+  off_t get_read_pos();
+  off_t get_write_pos();
 
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );

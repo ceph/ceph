@@ -228,7 +228,7 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
   } 
 
   // make sure we have a CDir
-  CDir *dir = idir->get_or_open_dir(mds);
+  CDir *dir = idir->get_or_open_dir(mds->mdcache);
   
   // do it
   dout(7) << "fetch_dir_hash_2 hashcode " << hashcode << " dir " << *dir << endl;
@@ -281,7 +281,7 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
 
       // what to do?
       if (hashcode >= 0) {
-        int dentryhashcode = mds->hash_dentry( dir->ino(), dname );
+        int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), dname );
         assert(dentryhashcode == hashcode);
       }
 
@@ -322,7 +322,7 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
       
       // what to do?
       if (hashcode >= 0) {
-        int dentryhashcode = mds->hash_dentry( dir->ino(), dname );
+        int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), dname );
         assert(dentryhashcode == hashcode);
       }
       
@@ -335,10 +335,11 @@ void MDStore::fetch_dir_hash_2( bufferlist& bl,
           dout(12) << "readdir had dentry " << dname << endl;
 
 	  // under water?
-	  if (dn->get_inode()->get_parent_dir_version() <= got_version) {
+	  if (dn->get_version() <= got_version) {
+	    assert(dn->get_inode()->get_version() <= got_version);
 	    dout(10) << "readdir had underwater dentry " << dname << " and inode, marking clean" << endl;
-	    dn->get_inode()->mark_clean();
 	    dn->mark_clean();
+	    dn->get_inode()->mark_clean();
 	  }
         }
         continue;
@@ -412,12 +413,16 @@ public:
       CInode *in = mds->mdcache->get_inode(ino);
       assert(in && in->dir);
       if (in && in->dir && in->dir->is_auth()) {
-        dout(7) << "CommitDirVerify: current version = " << in->dir->get_version() << endl;
-        dout(7) << "CommitDirVerify:  last committed = " << in->dir->get_last_committed_version() << endl;
-           dout(7) << "CommitDirVerify:        required = " << version << endl;
+        dout(7) << "CommitDirVerify: current = " << in->dir->get_version() 
+		<< ", last committed = " << in->dir->get_last_committed_version() 
+		<< ", required = " << version << endl;
         
         if (in->dir->get_last_committed_version() >= version) {
           dout(7) << "my required version is safe, done." << endl;
+	  if (c) {
+	    c->finish(0);
+	    delete c;
+	  }
         } else { 
           dout(7) << "my required version is still not safe, committing again." << endl;
 
@@ -425,13 +430,15 @@ public:
           mds->mdstore->commit_dir(in->dir, 
                                    version,
                                    c);
-          return;
         }
+	return;
       }
-    }
-    
+    } 
+      
     // must have exported ors omethign!
     dout(7) << "can't retry commit dir on " << ino << ", must have exported?" << endl;
+    
+    // finish.
     if (c) {
       c->finish(-1);
       delete c;
@@ -613,16 +620,10 @@ void MDStore::commit_dir_slice( CDir *dir,
     CDentry *dn = it->second;
 
     if (hashcode >= 0) {
-      int dentryhashcode = mds->hash_dentry( dir->ino(), it->first );
+      int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), it->first );
       if (dentryhashcode != hashcode) continue;
     }
 
-    // put dentry in this version
-    if (dn->is_dirty()) {
-      dn->float_parent_dir_version( dir->get_version() );
-      dout(12) << " dirty dn " << *dn << " now " << dn->get_parent_dir_version() << endl;
-    }
-    
     if (dn->is_null()) continue;  // skipping negative entry
 
     // primary or remote?
@@ -653,18 +654,6 @@ void MDStore::commit_dir_slice( CDir *dir,
         dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
         dirdata.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
       }
-      
-      // put inode in this dir version
-      if (in->is_dirty()) {
-        in->float_parent_dir_version( dir->get_version() );
-        dout(12) << " dirty inode " << *in << " now " << in->get_parent_dir_version() << endl;
-
-	in->set_committing_version( in->get_version() );
-	assert(in->get_last_committed_version() < in->get_committing_version());
-      } else {
-	assert(in->get_committing_version() == in->get_version());
-      }
-
     }
 
     num++;
@@ -707,62 +696,39 @@ void MDStore::commit_dir_slice_2( int result,
     it++;
     
     if (hashcode >= 0) {
-      int dentryhashcode = mds->hash_dentry( dir->ino(), dn->get_name() );
+      int dentryhashcode = mds->mdcache->hash_dentry( dir->ino(), dn->get_name() );
       if (dentryhashcode != hashcode) continue;
     }
 
     // dentry
-    if (committed_version > dn->get_parent_dir_version()) {
-      dout(15) << " dir " << committed_version << " > dn " << dn->get_parent_dir_version() << " still clean " << *dn << endl;
-      assert(!dn->is_dirty());
-    }
-    else if (dn->get_parent_dir_version() == committed_version) {
-      dout(15) << " dir " << committed_version << " == dn " << dn->get_parent_dir_version() << " now clean " << *dn << endl;
-      if (dn->is_dirty())
-        dn->mark_clean();     // might not but could be dirty
-      
-      // remove, if it's null and unlocked
-      if (dn->is_null() && dn->is_sync()) {
-        dout(15) << "   removing clean and null " << *dn << endl;
-        null_clean.push_back(dn);
-        continue;
-      }
+    if (committed_version >= dn->get_version()) {
+      if (dn->is_dirty()) {
+	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << endl;
+	dn->mark_clean();
+      } 
     } else {
-      dout(15) << " dir " << committed_version << " < dn " << dn->get_parent_dir_version() << " still dirty " << *dn << endl;
-      assert(committed_version < dn->get_parent_dir_version());
-      //assert(dn->is_dirty() || !dn->is_sync());  // -OR- we did a fetch_dir in order to do a newer commit...
+      dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << endl;
     }
 
     // only do primary...
-    if (!dn->is_primary()) continue;
+    if (!dn->is_primary()) 
+      continue;
     
     CInode *in = dn->get_inode();
     assert(in);
     assert(in->is_auth());
     
-    if (in->get_committing_version())
-      in->set_committed_version();
-
-    if (committed_version > in->get_parent_dir_version()) {
-      dout(15) << " dir " << committed_version << " > inode " << in->get_parent_dir_version() << " still clean " << *(in) << endl;
-      assert(!in->is_dirty());
-    }
-    else if (in->get_parent_dir_version() == committed_version) {
-      dout(15) << " dir " << committed_version << " == inode " << in->get_parent_dir_version() << " now clean " << *(in) << endl;
-      in->mark_clean();     // might not but could be dirty
+    if (committed_version >= in->get_version()) {
+      if (in->is_dirty()) {
+	dout(15) << " dir " << committed_version << " >= inode " << in->get_version() << " now clean " << *in << endl;
+	in->mark_clean();
+      }
     } else {
-      dout(15) << " dir " << committed_version << " < inode " << in->get_parent_dir_version() << " still dirty " << *(in) << endl;
-      assert(committed_version < in->get_parent_dir_version());
-      //assert(in->is_dirty());  // -OR- we did a fetch_dir in order to do a newer commit...
+      dout(15) << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << endl;
+      assert(in->is_dirty());
     }
   }
 
-  // remove null clean dentries
-  for (list<CDentry*>::iterator it = null_clean.begin();
-       it != null_clean.end();
-       it++) 
-    dir->remove_dentry(*it);
-  
   // unpin
   dir->auth_unpin();
 

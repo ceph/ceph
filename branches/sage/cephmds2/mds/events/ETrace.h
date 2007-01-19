@@ -55,6 +55,10 @@ class ETrace {
  public:
   list<bit> trace;
 
+  void push_back(inodeno_t di, version_t dv, const string& d, inode_t i) {
+    trace.push_back(bit(di, dv, d, i));
+  }
+
   ETrace(CInode *in = 0) { 
     if (in) {
       CDir *dir;
@@ -66,7 +70,7 @@ class ETrace {
 	if (!dir) break;      
 	
 	trace.push_front(bit(dir->ino(),
-			     dir->get_version(),
+			     dir->get_projected_version(),
 			     dn->get_name(),
 			     in->inode));
 	

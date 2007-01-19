@@ -31,11 +31,12 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << "mds" << mds->get_nodeid() << ".bal " << (g_clock.recent_now() - mds->logger->get_start()) << " "
+#define  dout(l)    if (l<=g_conf.debug_mds || l<=g_conf.debug_mds_balancer) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
+
 
 
 int MDBalancer::proc_message(Message *m)
@@ -54,6 +55,41 @@ int MDBalancer::proc_message(Message *m)
 
   return 0;
 }
+
+
+
+
+void MDBalancer::tick()
+{
+  static int num_bal_times = g_conf.mds_bal_max;
+  static utime_t first = g_clock.now();
+  utime_t now = g_clock.now();
+  utime_t elapsed = now;
+  elapsed -= first;
+
+  // balance?
+  if (true && 
+      mds->get_nodeid() == 0 &&
+      (num_bal_times || 
+       (g_conf.mds_bal_max_until >= 0 && 
+	elapsed.sec() > g_conf.mds_bal_max_until)) && 
+      !mds->is_stopping() && !mds->is_stopped() &&
+      now.sec() - last_heartbeat.sec() >= g_conf.mds_bal_interval) {
+    last_heartbeat = now;
+    send_heartbeat();
+    num_bal_times--;
+  }
+  
+  // hash?
+  if (true &&
+      g_conf.num_mds > 1 &&
+      now.sec() - last_hash.sec() > g_conf.mds_bal_hash_interval) {
+    last_hash = now;
+    do_hashing();
+  }
+}
+
+
 
 
 class C_Bal_SendHeartbeat : public Context {

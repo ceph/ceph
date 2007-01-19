@@ -27,10 +27,10 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.inode(" << inode.ino << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
-int cinode_pins[CINODE_NUM_PINS];  // counts
+//int cinode_pins[CINODE_NUM_PINS];  // counts
 
 
 ostream& operator<<(ostream& out, CInode& in)
@@ -40,18 +40,11 @@ ostream& operator<<(ostream& out, CInode& in)
   out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/ ":" ");
   if (in.is_auth()) {
     out << "auth";
-    if (in.is_cached_by_anyone()) {
-      //out << "+" << in.get_cached_by();
-      for (set<int>::iterator it = in.cached_by_begin();
-           it != in.cached_by_end();
-           it++) {
-        out << "+" << *it << "." << in.get_cached_by_nonce(*it);
-      }
-    }
+    if (in.is_replicated()) 
+      out << in.get_replicas();
   } else {
     out << "rep@" << in.authority();
-    //if (in.get_replica_nonce() > 1)
-      out << "." << in.get_replica_nonce();
+    out << "." << in.get_replica_nonce();
     assert(in.get_replica_nonce() >= 0);
   }
 
@@ -62,15 +55,12 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " hard=" << in.hardlock;
   out << " file=" << in.filelock;
 
-  if (in.is_pinned()) {
+  if (in.get_num_ref()) {
     out << " |";
     for(set<int>::iterator it = in.get_ref_set().begin();
         it != in.get_ref_set().end();
         it++)
-      if (*it < CINODE_NUM_PINS)
-        out << " " << cinode_pin_names[*it];
-      else
-        out << " " << *it;
+      out << " " << CInode::pin_name(*it);
   }
 
   // hack: spit out crap on which clients have caps
@@ -91,11 +81,12 @@ ostream& operator<<(ostream& out, CInode& in)
 
 
 // ====== CInode =======
-CInode::CInode(MDCache *c, bool auth) : LRUObject() {
+CInode::CInode(MDCache *c, bool auth) {
   mdcache = c;
 
   ref = 0;
   
+  num_parents = 0;
   parent = NULL;
   
   dir = NULL;     // CDir opened separately
@@ -106,14 +97,45 @@ CInode::CInode(MDCache *c, bool auth) : LRUObject() {
 
   state = 0;  
 
-  committing_version = committed_version = 0;
-
-  if (auth) state_set(CINODE_STATE_AUTH);
+  if (auth) state_set(STATE_AUTH);
 }
 
 CInode::~CInode() {
   if (dir) { delete dir; dir = 0; }
 }
+
+
+// pins
+
+void CInode::first_get()
+{
+  // pin my dentry?
+  if (parent) 
+    parent->get(CDentry::PIN_INODEPIN);
+}
+
+void CInode::last_put() 
+{
+  // unpin my dentry?
+  if (parent) {
+    parent->put(CDentry::PIN_INODEPIN);
+  } 
+  if (num_parents == 0 && get_num_ref() == 0)
+    mdcache->inode_expire_queue.push_back(this);  // queue myself for garbage collection
+}
+
+void CInode::get_parent()
+{
+  num_parents++;
+}
+void CInode::put_parent()
+{
+  num_parents--;
+  if (num_parents == 0 && get_num_ref() == 0)
+    mdcache->inode_expire_queue.push_back(this);    // queue myself for garbage collection
+}
+
+
 
 CDir *CInode::get_parent_dir()
 {
@@ -135,7 +157,7 @@ bool CInode::dir_is_auth() {
     return is_auth();
 }
 
-CDir *CInode::get_or_open_dir(MDS *mds)
+CDir *CInode::get_or_open_dir(MDCache *mdcache)
 {
   assert(is_dir());
 
@@ -146,7 +168,7 @@ CDir *CInode::get_or_open_dir(MDS *mds)
 
   // only auth can open dir alone.
   assert(is_auth());
-  set_dir( new CDir(this, mds, true) );
+  set_dir( new CDir(this, mdcache, true) );
   dir->dir_auth = -1;
   return dir;
 }
@@ -158,21 +180,23 @@ CDir *CInode::set_dir(CDir *newdir)
   return dir;
 }
 
+void CInode::close_dir()
+{
+  assert(dir);
+  assert(dir->get_num_ref() == 0);
+  delete dir;
+  dir = 0;
+}
+
+
 void CInode::set_auth(bool a) 
 {
   if (!is_dangling() && !is_root() && 
       is_auth() != a) {
-    /*
-    CDir *dir = get_parent_dir();
-    if (is_auth() && !a) 
-      dir->nauthitems--;
-    else
-      dir->nauthitems++;
-    */
   }
   
-  if (a) state_set(CINODE_STATE_AUTH);
-  else state_clear(CINODE_STATE_AUTH);
+  if (a) state_set(STATE_AUTH);
+  else state_clear(STATE_AUTH);
 }
 
 
@@ -200,7 +224,7 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
                                 parent->dir->inode->ino(),
                                 parent->name) );
   }
-  else if (state_test(CINODE_STATE_DANGLING)) {
+  else if (state_test(STATE_DANGLING)) {
     dout(7) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
     string ref_dn;
     trace.push_back( new Anchor(ino(),
@@ -214,14 +238,25 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
 
 
 
-void CInode::mark_dirty() {
+version_t CInode::pre_dirty()
+{    
+  assert(parent);
+  return parent->pre_dirty();
+}
+
+void CInode::_mark_dirty()
+{
+  if (!state_test(STATE_DIRTY)) {
+    state_set(STATE_DIRTY);
+    get(PIN_DIRTY);
+  }
+}
+
+void CInode::mark_dirty(version_t pv) {
   
   dout(10) << "mark_dirty " << *this << endl;
 
-  if (!parent) {
-    dout(10) << " dangling, not marking dirty!" << endl;
-    return;
-  }
+  assert(parent);
 
   /*
     NOTE: I may already be dirty, but this fn _still_ needs to be called so that
@@ -229,32 +264,25 @@ void CInode::mark_dirty() {
     updated below.
   */
   
-  // only auth can get dirty.  "dirty" async data in replicas is relative to (say) filelock state, not dirty flag.
+  // only auth can get dirty.  "dirty" async data in replicas is relative to
+  // filelock state, not the dirty flag.
   assert(is_auth());
-
-  // touch my private version
-  inode.version++;
-  if (!(state & CINODE_STATE_DIRTY)) {
-    state |= CINODE_STATE_DIRTY;
-    get(CINODE_PIN_DIRTY);
-  }
   
-  // relative to parent dir:
-  if (parent) {
-    // dir is now dirty (if it wasn't already)
-    parent->dir->mark_dirty();
-    
-    // i now live in that (potentially newly dirty) version
-    parent_dir_version = parent->dir->get_version();
-  }
+  // touch my private version
+  assert(inode.version < pv);
+  inode.version = pv;
+  _mark_dirty();
+
+  // mark dentry too
+  parent->mark_dirty(pv);
 }
 
 void CInode::mark_clean()
 {
   dout(10) << " mark_clean " << *this << endl;
-  if (state & CINODE_STATE_DIRTY) {
-    state &= ~CINODE_STATE_DIRTY;
-    put(CINODE_PIN_DIRTY);
+  if (state_test(STATE_DIRTY)) {
+    state_clear(STATE_DIRTY);
+    put(PIN_DIRTY);
   }
 }    
 
@@ -323,31 +351,6 @@ void CInode::decode_hard_state(bufferlist& r, int& off)
 }
 
 
-// old state encoders
-
-/*
-void CInode::encode_basic_state(bufferlist& r)
-{
-  // inode
-  r.append((char*)&inode, sizeof(inode));
-  ::_encode(cached_by, r);
-  ::_encode(cached_by_nonce, r);
-}
- 
-void CInode::decode_basic_state(bufferlist& r, int& off)
-{
-  // inode
-  r.copy(0,sizeof(inode_t), (char*)&inode);
-  off += sizeof(inode_t);
-
-  bool empty = cached_by.empty();
-  ::_decode(cached_by, r, off);
-  ::_decode(cached_by_nonce, r, off);
-  if (!empty)
-    get(CINODE_PIN_CACHED);
-}
-*/
-
 
 // waiting
 
@@ -386,7 +389,7 @@ void CInode::add_waiter(int tag, Context *c) {
   
   // this inode.
   if (waiting.size() == 0)
-    get(CINODE_PIN_WAITER);
+    get(PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
   
@@ -410,7 +413,7 @@ void CInode::take_waiting(int mask, list<Context*>& ls)
   }
 
   if (waiting.empty())
-    put(CINODE_PIN_WAITER);
+    put(PIN_WAITER);
 }
 
 void CInode::finish_waiting(int mask, int result) 
@@ -432,7 +435,7 @@ bool CInode::can_auth_pin() {
 
 void CInode::auth_pin() {
   if (auth_pins == 0)
-    get(CINODE_PIN_AUTHPIN);
+    get(PIN_AUTHPIN);
   auth_pins++;
 
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
@@ -444,7 +447,7 @@ void CInode::auth_pin() {
 void CInode::auth_unpin() {
   auth_pins--;
   if (auth_pins == 0)
-    put(CINODE_PIN_AUTHPIN);
+    put(PIN_AUTHPIN);
 
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
 
@@ -463,8 +466,9 @@ int CInode::authority() {
     return dangling_auth;   // explicit
   if (is_root())
     return 0;  // i am root
-  assert(parent);
-  return parent->dir->dentry_authority( parent->name );
+  if (parent)
+    return parent->dir->dentry_authority( parent->name );
+  return -1;  // undefined (inode must not be linked yet!)
 }
 
 
@@ -473,11 +477,11 @@ CInodeDiscover* CInode::replicate_to( int rep )
   assert(is_auth());
 
   // relax locks?
-  if (!is_cached_by_anyone())
+  if (!is_replicated())
     replicate_relax_locks();
   
   // return the thinger
-  int nonce = cached_by_add( rep );
+  int nonce = add_replica( rep );
   return new CInodeDiscover( this, nonce );
 }
 

@@ -149,7 +149,7 @@ md_config_t g_conf = {
   objecter_buffer_uncommitted: true,
 
   // --- journaler ---
-  journaler_allow_split_entries: false,
+  journaler_allow_split_entries: true,
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
@@ -164,7 +164,7 @@ md_config_t g_conf = {
   mds_log_pad_entry: 128,//256,//64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
-
+  mds_log_import_map_interval: 1024*1024,  // frequency (in bytes) of EImportMap in log
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
   mds_bal_hash_rd: 10000,
@@ -549,7 +549,9 @@ void parse_config_options(std::vector<char*>& args)
     
     else if (strcmp(args[i], "--mds_local_osd") == 0) 
       g_conf.mds_local_osd = atoi(args[++i]);
-
+    
+    else if (strcmp(args[i], "--client_use_random_mds") == 0)
+      g_conf.client_use_random_mds = true;
     else if (strcmp(args[i], "--client_cache_size") == 0)
       g_conf.client_cache_size = atoi(args[++i]);
     else if (strcmp(args[i], "--client_cache_stat_ttl") == 0)

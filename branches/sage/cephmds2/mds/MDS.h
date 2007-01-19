@@ -181,11 +181,6 @@ public:
 
   
  public:
-
- protected:
-  utime_t   last_balancer_heartbeat, last_balancer_hash;
-  
- public:
   MDS(int whoami, Messenger *m, MonMap *mm);
   ~MDS();
 
@@ -206,10 +201,7 @@ public:
   int shutdown_start();
   int shutdown_final();
 
-  int hash_dentry(inodeno_t ino, const string& s) {
-    return 0; // fixme
-  }
-  
+  void tick();
 
   // messages
   void proc_message(Message *m);

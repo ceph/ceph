@@ -109,8 +109,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
 
   state = STATE_BOOTING;
 
-  last_balancer_hash = last_balancer_heartbeat = g_clock.recent_now();
-
   // log
   string name;
   name = "mds";
@@ -194,15 +192,83 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
 }
 
 
+class C_MDS_Tick : public Context {
+  MDS *mds;
+public:
+  C_MDS_Tick(MDS *m) : mds(m) {}
+  void finish(int r) {
+    mds->tick();
+  }
+};
+
+
+
 int MDS::init()
 {
   // request osd map
   dout(5) << "requesting mds and osd maps from mon" << endl;
   int mon = monmap->pick_mon();
   messenger->send_message(new MMDSBoot, MSG_ADDR_MON(mon), monmap->get_inst(mon));
+
+  // schedule tick
+  g_timer.add_event_after(1.0, new C_MDS_Tick(this));
   return 0;
 }
 
+
+
+void MDS::tick()
+{
+  mds_lock.Lock();
+
+  // reschedule
+  g_timer.add_event_after(1.0, new C_MDS_Tick(this));
+
+  // log
+  mds_load_t load = balancer->get_load();
+  
+  req_rate = logger->get("req");
+  
+  logger->set("l", (int)load.mds_load());
+  logger->set("q", messenger->get_dispatch_queue_len());
+  logger->set("buf", buffer_total_alloc);
+  
+  mdcache->log_stat(logger);
+
+  
+  // booted?
+  if (!is_booting()) {
+    
+    // balancer
+    balancer->tick();
+    
+    // HACK to test hashing stuff
+    if (false) {
+      /*
+      static map<int,int> didhash;
+      if (elapsed.sec() > 15 && !didhash[whoami]) {
+	CInode *in = mdcache->get_inode(100000010);
+	if (in && in->dir) {
+	  if (in->dir->is_auth()) 
+	    mdcache->migrator->hash_dir(in->dir);
+	  didhash[whoami] = 1;
+	}
+      }
+      if (0 && elapsed.sec() > 25 && didhash[whoami] == 1) {
+	CInode *in = mdcache->get_inode(100000010);
+	if (in && in->dir) {
+	  if (in->dir->is_auth() && in->dir->is_hashed())
+	    mdcache->migrator->unhash_dir(in->dir);
+	  didhash[whoami] = 2;
+	}
+      }
+      */
+    }
+  }
+
+
+  mds_lock.Unlock();
+}
 
 void MDS::handle_mds_map(MMDSMap *m)
 {
@@ -260,7 +326,7 @@ void MDS::boot_mkfs()
   C_Gather *fin = new C_Gather(new C_MDS_MkfsFinish(this));
   
   if (whoami == 0) {
-    dout(3) << "boot_mkfs - creating root inode and dir" << endl;
+    dout(3) << "boot_mkfs creating root inode and dir" << endl;
 
     // create root inode.
     mdcache->open_root(0);
@@ -270,7 +336,7 @@ void MDS::boot_mkfs()
     // force empty root dir
     CDir *dir = root->dir;
     dir->mark_complete();
-    dir->mark_dirty();
+    dir->mark_dirty(dir->pre_dirty());
 
     // save it
     mdstore->commit_dir(dir, fin->new_sub());
@@ -280,6 +346,9 @@ void MDS::boot_mkfs()
   dout(10) << "boot_mkfs creating fresh journal" << endl;
   mdlog->reset();
   mdlog->write_head(fin->new_sub());
+
+  // write our empty importmap
+  mdcache->log_import_map(fin->new_sub());
 
   // fixme: fake out idalloc (reset, pretend loaded)
   dout(10) << "boot_mkfs creating fresh idalloc table" << endl;
@@ -443,6 +512,7 @@ int MDS::shutdown_final()
 
 
 
+
 void MDS::dispatch(Message *m)
 {
   // make sure we advacne the clock
@@ -531,7 +601,7 @@ void MDS::my_dispatch(Message *m)
 
   
 
-  // hash root?
+  // hack: force hash root?
   if (false &&
       mdcache->get_root() &&
       mdcache->get_root()->dir &&
@@ -542,74 +612,7 @@ void MDS::my_dispatch(Message *m)
   }
 
 
-  // periodic crap (1-second resolution)
-  static utime_t last_log = g_clock.recent_now();
-  utime_t now = g_clock.recent_now();
-  if (is_active() && 
-      last_log.sec() != now.sec()) {
 
-    // log
-    last_log = now;
-    mds_load_t load = balancer->get_load();
-
-    req_rate = logger->get("req");
-
-    logger->set("l", (int)load.mds_load());
-    logger->set("q", messenger->get_dispatch_queue_len());
-    logger->set("buf", buffer_total_alloc);
-
-    mdcache->log_stat(logger);
-
-
-    // balance?
-    static int num_bal_times = g_conf.mds_bal_max;
-    static utime_t first = g_clock.recent_now();
-    utime_t elapsed = now;
-    elapsed -= first;
-    if (true && 
-        whoami == 0 &&
-        (num_bal_times || (g_conf.mds_bal_max_until >= 0 && elapsed.sec() > g_conf.mds_bal_max_until)) && 
-        !is_stopping() && !is_stopped() &&
-        now.sec() - last_balancer_heartbeat.sec() >= g_conf.mds_bal_interval) {
-      last_balancer_heartbeat = now;
-      balancer->send_heartbeat();
-      num_bal_times--;
-    }
-
-    // hash?
-    if (true &&
-        g_conf.num_mds > 1 &&
-        now.sec() - last_balancer_hash.sec() > g_conf.mds_bal_hash_interval) {
-      last_balancer_hash = now;
-      balancer->do_hashing();
-    }
-    
-    
-
-    // HACK to test hashing stuff
-    if (false) {
-      static map<int,int> didhash;
-      if (elapsed.sec() > 15 && !didhash[whoami]) {
-        CInode *in = mdcache->get_inode(100000010);
-        if (in && in->dir) {
-          if (in->dir->is_auth()) 
-            mdcache->migrator->hash_dir(in->dir);
-          didhash[whoami] = 1;
-        }
-      }
-      if (0 && elapsed.sec() > 25 && didhash[whoami] == 1) {
-        CInode *in = mdcache->get_inode(100000010);
-        if (in && in->dir) {
-          if (in->dir->is_auth() && in->dir->is_hashed())
-            mdcache->migrator->unhash_dir(in->dir);
-          didhash[whoami] = 2;
-        }
-      }
-    }
-
-
-
-  }
 
   // HACK to force export to test foreign renames
   if (false && whoami == 0) {
@@ -618,7 +621,7 @@ void MDS::my_dispatch(Message *m)
     // 7 to 1
     CInode *in = mdcache->get_inode(1001);
     if (in && in->is_dir() && !didit) {
-      CDir *dir = in->get_or_open_dir(this);
+      CDir *dir = in->get_or_open_dir(mdcache);
       if (dir->is_auth()) {
         dout(1) << "FORCING EXPORT" << endl;
         mdcache->migrator->export_dir(dir,1);

@@ -152,6 +152,7 @@ struct md_config_t {
   int mds_log_pad_entry;
   bool  mds_log_before_reply;
   bool  mds_log_flush_on_shutdown;
+  off_t mds_log_import_map_interval;
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;

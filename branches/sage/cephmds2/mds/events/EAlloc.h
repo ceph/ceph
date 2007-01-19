@@ -68,41 +68,38 @@ class EAlloc : public LogEvent {
   
 
   // live journal
-  bool can_expire(MDS *mds) {
+  bool has_expired(MDS *mds) {
     if (mds->idalloc->get_committed_version() < table_version)
       return false;   // still dirty
     else
       return true;    // already flushed
   }
   
-  void retire(MDS *mds, Context *c) {
+  void expire(MDS *mds, Context *c) {
     mds->idalloc->save(c, table_version);
   }
   
   
   // recovery
-  bool has_happened(MDS *mds) {
+  void replay(MDS *mds) {
     if (mds->idalloc->get_version() >= table_version) {
       cout << " event " << table_version << " <= table " << mds->idalloc->get_version() << endl;
-      return true;
-    } else 
-      return false;
-  }
-
-  void replay(MDS *mds) {
-    assert(table_version-1 == mds->idalloc->get_version());
-    
-    if (what == EALLOC_EV_ALLOC) {
-      idno_t nid = mds->idalloc->alloc_id(true);
-      assert(nid == id);       // this should match.
-    } 
-    else if (what == EALLOC_EV_FREE) {
-      mds->idalloc->reclaim_id(id, true);
-    } 
-    else
-      assert(0);
-    
-    assert(table_version == mds->idalloc->get_version());
+    } else {
+      cout << " event " << table_version << " - 1 == table " << mds->idalloc->get_version() << endl;
+      assert(table_version-1 == mds->idalloc->get_version());
+      
+      if (what == EALLOC_EV_ALLOC) {
+	idno_t nid = mds->idalloc->alloc_id(true);
+	assert(nid == id);       // this should match.
+      } 
+      else if (what == EALLOC_EV_FREE) {
+	mds->idalloc->reclaim_id(id, true);
+      } 
+      else
+	assert(0);
+      
+      assert(table_version == mds->idalloc->get_version());
+    }
   }
   
 };

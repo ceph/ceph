@@ -11,48 +11,42 @@
  * 
  */
 
-#ifndef __EMKDIR_H
-#define __EMKDIR_H
+#ifndef __EEXPORTSTART_H
+#define __EEXPORTSTART_H
 
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
-#include "ETrace.h"
 #include "../MDS.h"
-#include "../MDStore.h"
 
+#include "EMetaBlob.h"
 
-class EMkdir : public LogEvent {
+class EExportStart : public LogEvent {
  protected:
-  ETrace trace;
-  //version_t pdirv;
+  EMetaBlob metablob; // exported dir
+  int dest;     // dest mds
 
  public:
-  EMkdir(CInode *diri, CDentry *dn, CInode *newi) : LogEvent(EVENT_MKDIR), 
-						    trace(diri) {
-    // include new guy to the trace too
-    trace.push_back(diri->ino(),
-		    diri->dir->get_version(),
-		    dn->get_name(),
-		    newi->inode);
-    ++trace.back().inode.version;  // project inode version.
+  EExportStart(CDir *dir, int d) : LogEvent(EVENT_EXPORTSTART),
+				   dest(d) { 
+    metablob.add_dir_context(dir);
   }
-  EMkdir() : LogEvent(EVENT_MKDIR) { }
+  EExportStart() : LogEvent(EVENT_EXPORTSTART) { }
   
   void print(ostream& out) {
-    out << "mkdir ";
-    trace.print(out);
+    out << "export_start ";
+    out << " -> " << dest;
   }
 
   virtual void encode_payload(bufferlist& bl) {
-    trace.encode(bl);
-    //bl.append((char*)&pdirv, sizeof(pdirv));
+    metablob._encode(bl);
+    bl.append((char*)&dest, sizeof(dest));
   }
   void decode_payload(bufferlist& bl, int& off) {
-    trace.decode(bl, off);
-    //bl.copy(off, sizeof(pdirv), (char*)&pdirv);
-    //off += sizeof(pdirv);
+    metablob._decode(bl, off);
+    bl.copy(off, sizeof(dest), (char*)&dest);
+    off += sizeof(dest);
   }
   
   bool has_expired(MDS *mds);

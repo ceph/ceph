@@ -54,6 +54,8 @@ class MUnhashDirAck;
 class MUnhashDirNotify;
 class MUnhashDirNotifyAck;
 
+class EImportStart;
+
 class Migrator {
 private:
   MDS *mds;
@@ -67,6 +69,9 @@ private:
   set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
   
+  // import muck
+  map<inodeno_t, set<CDir*> > import_freeze_leaves;
+
   // hashing madness
   multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
@@ -90,7 +95,6 @@ public:
   void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
 
  protected:
-  map< CDir*, set<int> > export_gather;
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
   void export_dir_frozen(CDir *dir, int dest);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
@@ -103,28 +107,33 @@ public:
                       int newauth);
   void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
-  
-  
+    
   friend class C_MDC_ExportFreeze;
+  friend class C_MDS_ExportFinishLogged;
 
   // importer
   void handle_export_dir_discover(MExportDirDiscover *m);
   void handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r);
   void handle_export_dir_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
-  void import_dir_finish(CDir *dir);
+  void import_dir_logged_start(CDir *dir, int from,
+			       list<inodeno_t> &imported_subdirs,
+			       list<inodeno_t> &exports);
+  void import_dir_logged_finish(CDir *dir);
   void handle_export_dir_finish(MExportDirFinish *m);
   int import_dir_block(bufferlist& bl,
                        int& off,
                        int oldauth,
                        CDir *import_root,
-                       list<inodeno_t>& imported_subdirs);
+                       list<inodeno_t>& imported_subdirs,
+		       EImportStart *le);
   void got_hashed_replica(CDir *import,
                           inodeno_t dir_ino,
                           inodeno_t replica_ino);
 
-
   friend class C_MDC_ExportDirDiscover;
+  friend class C_MDS_ImportDirLoggedStart;
+  friend class C_MDS_ImportDirLoggedFinish;
 
   // bystander
   void handle_export_dir_warning(MExportDirWarning *m);

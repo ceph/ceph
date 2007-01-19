@@ -11,264 +11,308 @@
  * 
  */
 
-#include "events/ETrace.h"
-#include "events/EMknod.h"
-#include "events/EMkdir.h"
-#include "events/EInodeUpdate.h"
+#include "events/EMetaBlob.h"
+#include "events/EUpdate.h"
+#include "events/EImportMap.h"
+
 #include "events/EPurgeFinish.h"
 #include "events/EUnlink.h"
+#include "events/EExportStart.h"
+#include "events/EExportFinish.h"
+#include "events/EImportStart.h"
+#include "events/EImportFinish.h"
 
 #include "MDS.h"
+#include "MDLog.h"
 #include "MDCache.h"
+#include "MDStore.h"
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
 
 
 // -----------------------
-// ETrace
+// EMetaBlob
 
-CInode *ETrace::restore_trace(MDS *mds) 
+bool EMetaBlob::has_expired(MDS *mds)
 {
-  CInode *in = 0;
-  for (list<bit>::iterator p = trace.begin();
-       p != trace.end();
-       ++p) {
+  // examine dirv's for my lumps
+  for (map<inodeno_t,dirlump>::iterator lp = lump_map.begin();
+       lp != lump_map.end();
+       ++lp) {
+    CInode *diri = mds->mdcache->get_inode(lp->first);
+    if (!diri) 
+      continue;       // we expired it
+    CDir *dir = diri->dir;
+    if (!dir) 
+      continue;       // we expired it
+
+    // FIXME: check the slice only
+    if (dir->get_last_committed_version() < lp->second.dirv) {
+      dout(10) << "EMetaBlob.has_expired need dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+      return false;  // not committed.
+    } else {
+      dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+    }
+  }
+
+  return true;  // all dirlumps expired.
+}
+
+void EMetaBlob::expire(MDS *mds, Context *c)
+{
+  list<CDir*> commit;
+  int ncommit = 0;
+
+  // examine dirv's for my lumps
+  // make list of dir slices i need to commit
+  for (map<inodeno_t,dirlump>::iterator lp = lump_map.begin();
+       lp != lump_map.end();
+       ++lp) {
+    CInode *diri = mds->mdcache->get_inode(lp->first);
+    if (!diri) 
+      continue;       // we expired it
+    CDir *dir = diri->dir;
+    if (!dir) 
+      continue;       // we expired it
+    
+    // FIXME: check the slice only
+    if (dir->get_last_committed_version() < lp->second.dirv) {
+      dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
+	       << ", committing " << *dir << endl;
+      commit.push_back(dir);
+      ncommit++;
+    } else {
+      dout(10) << "EMetaBlob.expire have dirv " << lp->second.dirv
+	       << " on " << *dir << endl;
+    }
+  }
+
+  // commit
+  assert(!commit.empty());
+
+  if (ncommit == 1) {
+    mds->mdstore->commit_dir(commit.front(), c);
+  } else {
+    assert(ncommit > 1);
+    C_Gather *gather = new C_Gather(c);
+    for (list<CDir*>::iterator p = commit.begin();
+	 p != commit.end();
+	 ++p)
+      mds->mdstore->commit_dir(*p, gather->new_sub());
+  }
+}
+
+void EMetaBlob::replay(MDS *mds)
+{
+  // walk through my dirs (in order!)
+  for (list<inodeno_t>::iterator lp = lump_order.begin();
+       lp != lump_order.end();
+       ++lp) {
+    dout(10) << "EMetaBlob.replay dir " << *lp << endl;
+    dirlump &lump = lump_map[*lp];
+
     // the dir 
-    CInode *diri = mds->mdcache->get_inode(p->dirino);
+    CInode *diri = mds->mdcache->get_inode(*lp);
+    CDir *dir;
     if (!diri) {
-      dout(10) << "ETrace.restore_trace adding dir " << p->dirino << endl;
       diri = new CInode(mds->mdcache);
-      diri->inode.ino = p->dirino;
+      diri->inode.ino = *lp;
       diri->inode.mode = INODE_MODE_DIR;
       mds->mdcache->add_inode(diri);
 
-      CDir *dir = diri->get_or_open_dir(mds);
+      dir = diri->get_or_open_dir(mds->mdcache);
 
-      // root?  import?
-      if (p == trace.begin()) {
-	mds->mdcache->add_import(dir);
-	if (dir->ino() == 1) 
-	  mds->mdcache->set_root(diri);
-      }
+      if (dir->ino() == 1)
+	mds->mdcache->set_root(diri);
+
+      dout(10) << "EMetaBlob.replay added dir " << *dir << endl;
     } else {
-      dout(20) << "ETrace.restore_trace had dir " << p->dirino << endl;
-      diri->get_or_open_dir(mds);
+      dir = diri->get_or_open_dir(mds->mdcache);
+      dout(20) << "EMetaBlob.replay had dir " << *dir << endl;
     }
-    assert(diri->dir);
-    dout(20) << "ETrace.restore_trace dir is " << *diri->dir << endl;
+    dir->set_version( lump.dirv-1 );
+    dir->mark_dirty( lump.dirv );
+    if (lump.is_complete())
+      dir->mark_complete();
     
-    // the inode
-    in = mds->mdcache->get_inode(p->inode.ino);
-    if (!in) {
-      dout(10) << "ETrace.restore_trace adding dn '" << p->dn << "' inode " << p->inode.ino << endl;
-      in = new CInode(mds->mdcache);
-      in->inode = p->inode;
-      mds->mdcache->add_inode(in);
-      
-      // the dentry
-      CDentry *dn = diri->dir->add_dentry( p->dn, in );
-      dn->mark_dirty();
-      assert(dn);
-    } else {
-      dout(20) << "ETrace.restore_trace had dn '" << p->dn << "' inode " << p->inode.ino << endl;
-      in->inode = p->inode;
+    // decode bits
+    lump._decode_bits();
+
+    // full dentry+inode pairs
+    for (list<fullbit>::iterator p = lump.dfull.begin();
+	 p != lump.dfull.end();
+	 p++) {
+      CInode *in = mds->mdcache->get_inode(p->inode.ino);
+      if (!in) {
+	// inode
+	in = new CInode(mds->mdcache);
+	in->inode = p->inode;
+	if (in->inode.is_symlink()) in->symlink = p->symlink;
+	mds->mdcache->add_inode(in);
+	// dentry
+	CDentry *dn = dir->add_dentry( p->dn, in );
+	dn->set_version(p->dnv);
+	dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay added " << *dn << " " << *in << endl;
+      } else {
+	// inode
+	in->inode = p->inode;
+	if (in->inode.is_symlink()) in->symlink = p->symlink;
+	// dentry
+	CDentry *dn = in->get_parent_dn();
+	dn->set_version(p->dnv);
+	dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay had " << *in->get_parent_dn() << " " << *in << endl;
+      }
     }
-    dout(20) << "ETrace.restore_trace in is " << *in << endl;
+
+    // remote dentries
+    for (list<remotebit>::iterator p = lump.dremote.begin();
+	 p != lump.dremote.end();
+	 p++) {
+      CDentry *dn = dir->lookup(p->dn);
+      if (!dn) {
+	dn = dir->add_dentry(p->dn, p->ino);
+	dn->set_remote_ino(p->ino);
+	dn->set_version(p->dnv);
+	dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay added " << *dn << endl;
+      } else {
+	dn->set_remote_ino(p->ino);
+	dn->set_version(p->dnv);
+	dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay had " << *dn << endl;
+      }
+    }
+
+    // null dentries
+    for (list<nullbit>::iterator p = lump.dnull.begin();
+	 p != lump.dnull.end();
+	 p++) {
+      CDentry *dn = dir->lookup(p->dn);
+      if (!dn) {
+	dn = dir->add_dentry(p->dn);
+	dn->set_version(p->dnv);
+	dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay added " << *dn << endl;
+      } else {
+	dn->set_version(p->dnv);
+	dn->_mark_dirty();
+	dout(10) << "EMetaBlob.replay had " << *dn << endl;
+      }
+    }
   }
-  return in;
+}
+
+
+
+
+// -----------------------
+// EUpdate
+
+bool EUpdate::has_expired(MDS *mds)
+{
+  return metablob.has_expired(mds);
+}
+
+void EUpdate::expire(MDS *mds, Context *c)
+{
+  metablob.expire(mds, c);
+}
+
+void EUpdate::replay(MDS *mds)
+{
+  metablob.replay(mds);
 }
 
 
 // -----------------------
-// EMkdir
-// - trace goes to new dir's inode.
+// EImportMap
 
-bool EMkdir::can_expire(MDS *mds) 
+bool EImportMap::has_expired(MDS *mds)
 {
-  // am i obsolete?
-  CInode *in = mds->mdcache->get_inode( trace.back().inode.ino );
-  if (!in) return true;
-  CDir *dir = in->dir;
-  if (!dir) return true;
-  CDir *pdir = in->get_parent_dir();
-  assert(pdir);
-  
-  dout(10) << "EMkdir.can_expire  in is " << *in << endl;
-  dout(10) << "EMkdir.can_expire inv is " << trace.back().inode.version << endl;
-  dout(10) << "EMkdir.can_expire dir is " << *dir << endl;
-  bool commitparent = in->get_last_committed_version() < trace.back().inode.version;
-  bool commitnew = dir->get_last_committed_version() == 0;
-
-  if (commitparent || commitnew) return false;
-  return true;
-}
-
-void EMkdir::retire(MDS *mds, Context *c) 
-{
-  // commit parent dir AND my dir
-  CInode *in = mds->mdcache->get_inode( trace.back().inode.ino );
-  assert(in);
-  CDir *dir = in->dir;
-  assert(dir);
-  CDir *pdir = in->get_parent_dir();
-  assert(pdir);
-  
-  dout(10) << "EMkdir.retire  in is " << *in << endl;
-  dout(10) << "EMkdir.retire inv is " << trace.back().inode.version << endl;
-  dout(10) << "EMkdir.retire dir is " << *dir << endl;
-  bool commitparent = in->get_last_committed_version() < trace.back().inode.version;
-  bool commitnew = dir->get_last_committed_version() == 0;
-  
-  if (commitparent && commitnew) {
-    // both
-    dout(10) << "EMkdir.retire committing parent+new dir " << *dir << endl;
-    C_Gather *gather = new C_Gather(c);
-    mds->mdstore->commit_dir(pdir, gather->new_sub());
-    mds->mdstore->commit_dir(dir, gather->new_sub());
-  } else if (commitparent) {
-    // just parent
-    dout(10) << "EMkdir.retire committing parent dir " << *dir << endl;
-    mds->mdstore->commit_dir(pdir, c);
+  if (mds->mdlog->last_import_map > get_end_off()) {
+    dout(10) << "EImportMap.has_expired -- there's a newer map" << endl;
+    return true;
+  } 
+  else if (mds->mdlog->get_read_pos() == mds->mdlog->get_write_pos()) {
+    dout(10) << "EImportMap.has_expired -- log is empty, allowing map to expire" << endl;
+    return true;
   } else {
-    // just new dir
-    dout(10) << "EMkdir.retire committing new dir " << *dir << endl;
-    mds->mdstore->commit_dir(dir, c);
+    dout(10) << "EImportMap.has_expired -- not until there's a newer map written" << endl;
+    return false;
   }
 }
 
-bool EMkdir::has_happened(MDS *mds) 
+void EImportMap::expire(MDS *mds, Context *c)
 {
-  return false;     
-}
-  
-void EMkdir::replay(MDS *mds) 
-{
-  dout(10) << "EMkdir.replay " << *this << endl;
-  CInode *in = trace.restore_trace(mds);
-
-  // mark dir inode dirty
-  in->mark_dirty();
-
-  // mark parent dir dirty, and set version.  
-  // this may end up being below water when dir is fetched from disk.
-  CDir *pdir = in->get_parent_dir();
-  if (!pdir->is_dirty()) pdir->mark_dirty();
-  pdir->set_version(trace.back().dirv);
- 
-  // mark new dir dirty + complete
-  CDir *dir = in->get_or_open_dir(mds);
-  dir->mark_dirty();
-  dir->mark_complete();
+  dout(10) << "EImportMap.has_expire -- waiting for a newer map to be written (or for shutdown)" << endl;
+  mds->mdlog->import_map_expire_waiters.push_back(c);
 }
 
-
-
-// -----------------------
-// EMknod
-  
-bool EMknod::can_expire(MDS *mds) 
+void EImportMap::replay(MDS *mds) 
 {
-  // am i obsolete?
-  CInode *in = mds->mdcache->get_inode( trace.back().inode.ino );
-  if (!in) return true;
+  dout(10) << "EImportMap.replay -- reconstructing import/export spanning tree" << endl;
+  assert(imports.empty());
 
-  if (!in->is_auth()) return true;  // not my inode anymore!
-  if (in->get_version() != trace.back().inode.version)
-    return true;  // i'm obsolete!  (another log entry follows)
+  // first, stick the spanning tree in my cache
+  metablob.replay(mds);
 
-  if (in->get_last_committed_version() >= trace.back().inode.version)
-    return true;
+  // restore import/export maps
+  for (set<inodeno_t>::iterator p = imports.begin();
+       p != imports.end();
+       ++p) {
+    CInode *imi = mds->mdcache->get_inode(*p);
+    assert(imi);
+    CDir *im = imi->get_or_open_dir(mds->mdcache);
+    assert(im);
 
-  return false;
-}
+    im->set_dir_auth(mds->get_nodeid());
+    mds->mdcache->add_import(im);
 
-void EMknod::retire(MDS *mds, Context *c) 
-{
-  // commit parent directory
-  CInode *diri = mds->mdcache->get_inode( trace.back().dirino );
-  assert(diri);
-  CDir *dir = diri->dir;
-  assert(dir);
+    // nested exports
+    for (set<inodeno_t>::iterator q = nested_exports[*p].begin();
+	 q != nested_exports[*p].end();
+	 ++q) {
+      CInode *exi = mds->mdcache->get_inode(*q);
+      assert(exi);
+      CDir *ex = exi->get_or_open_dir(mds->mdcache);
+      assert(ex);
 
-  dout(10) << "EMknod.retire committing parent dir " << *dir << endl;
-  mds->mdstore->commit_dir(dir, c);
-}
+      ex->set_dir_auth(mds->get_nodeid() + 1);  // anything that's not me, for now!
+      ex->state_set(CDIR_STATE_EXPORT);
+      ex->get(CDir::PIN_EXPORT);
+      mds->mdcache->exports.insert(ex);
+      mds->mdcache->nested_exports[im].insert(ex);
+    }
+  }
 
-bool EMknod::has_happened(MDS *mds) 
-{
-  return false;
-}
-  
-void EMknod::replay(MDS *mds) 
-{
-  dout(10) << "EMknod.replay " << *this << endl;
-  CInode *in = trace.restore_trace(mds);
-  in->mark_dirty();
+  // twiddle all dir and inode auth bits
+  for (hash_map<inodeno_t,CInode*>::iterator p = mds->mdcache->inode_map.begin();
+       p != mds->mdcache->inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->authority() == mds->get_nodeid())
+      in->state_set(CInode::STATE_AUTH);
+    else
+      in->state_clear(CInode::STATE_AUTH);
 
-  // mark parent dir dirty, and set version.  
-  // this may end up being below water when dir is fetched from disk.
-  CDir *pdir = in->get_parent_dir();
-  if (!pdir->is_dirty()) pdir->mark_dirty();
-  pdir->set_version(trace.back().dirv);
-}
+    if (in->dir) {
+      if (in->dir->authority() == mds->get_nodeid())
+	in->dir->state_set(CDIR_STATE_AUTH);
+      else
+	in->dir->state_clear(CDIR_STATE_AUTH);
+    }
+  }
 
+  mds->mdcache->show_imports();
+  mds->mdcache->show_cache();
 
-
-// -----------------------
-// EInodeUpdate
-
-bool EInodeUpdate::can_expire(MDS *mds) 
-{
-  CInode *in = mds->mdcache->get_inode( trace.back().inode.ino );
-  if (!in) return true;
-
-  if (!in->is_auth()) return true;  // not my inode anymore!
-  if (in->get_version() != trace.back().inode.version)
-    return true;  // i'm obsolete!  (another log entry follows)
-
-  /*
-  // frozen -> exporting -> obsolete    (FOR NOW?)
-  if (in->is_frozen())
-  return true; 
-  */
-
-  if (in->get_last_committed_version() >= trace.back().inode.version)
-    return true;
-
-  return false;
-}
-
-void EInodeUpdate::retire(MDS *mds, Context *c) 
-{
-   // commit parent directory
-  CInode *diri = mds->mdcache->get_inode( trace.back().dirino );
-  assert(diri);
-  CDir *dir = diri->dir;
-  assert(dir);
-
-  dout(10) << "EMknod.retire committing parent dir " << *dir << endl;
-  mds->mdstore->commit_dir(dir, c);
-}
-  
-bool EInodeUpdate::has_happened(MDS *mds)
-{
-  return false;
-}
-
-void EInodeUpdate::replay(MDS *mds) 
-{
-  dout(10) << "EInodeUpdate.replay " << *this << endl;
-  CInode *in = trace.restore_trace(mds);
-  in->mark_dirty();
-
-  // mark parent dir dirty, and set version.  
-  // this may end up being below water when dir is fetched from disk.
-  CDir *pdir = in->get_parent_dir();
-  if (!pdir->is_dirty()) pdir->mark_dirty();
-  pdir->set_version(trace.back().dirv);
 }
 
 
@@ -276,8 +320,9 @@ void EInodeUpdate::replay(MDS *mds)
 // -----------------------
 // EUnlink
 
-bool EUnlink::can_expire(MDS *mds)
+bool EUnlink::has_expired(MDS *mds)
 {
+  /*
   // dir
   CInode *diri = mds->mdcache->get_inode( diritrace.back().inode.ino );
   CDir *dir = 0;
@@ -291,12 +336,13 @@ bool EUnlink::can_expire(MDS *mds)
     if (in && in->get_last_committed_version() < inodetrace.back().inode.version)
       return false;
   }
-
+  */
   return true;
 }
 
-void EUnlink::retire(MDS *mds, Context *c)
+void EUnlink::expire(MDS *mds, Context *c)
 {
+  /*
   CInode *diri = mds->mdcache->get_inode( diritrace.back().inode.ino );
   CDir *dir = diri->dir;
   assert(dir);
@@ -304,11 +350,7 @@ void EUnlink::retire(MDS *mds, Context *c)
   // okay!
   dout(7) << "commiting dirty (from unlink) dir " << *dir << endl;
   mds->mdstore->commit_dir(dir, dirv, c);
-}
-
-bool EUnlink::has_happened(MDS *mds)
-{
-  return true;
+  */
 }
 
 void EUnlink::replay(MDS *mds)
@@ -322,23 +364,71 @@ void EUnlink::replay(MDS *mds)
 // EPurgeFinish
 
 
-bool EPurgeFinish::can_expire(MDS *mds)
+bool EPurgeFinish::has_expired(MDS *mds)
 {
   return true;
 }
 
-void EPurgeFinish::retire(MDS *mds, Context *c)
+void EPurgeFinish::expire(MDS *mds, Context *c)
 {
-}
-
-bool EPurgeFinish::has_happened(MDS *mds)
-{
-  return true;
 }
 
 void EPurgeFinish::replay(MDS *mds)
 {
 }
+
+
+
+
+
+
+bool EExportStart::has_expired(MDS *mds)
+{
+  return true;
+}
+void EExportStart::expire(MDS *mds, Context *c)
+{
+}
+void EExportStart::replay(MDS *mds)
+{
+}
+
+
+bool EExportFinish::has_expired(MDS *mds)
+{
+  return true;
+}
+void EExportFinish::expire(MDS *mds, Context *c)
+{
+}
+void EExportFinish::replay(MDS *mds)
+{
+}
+
+
+bool EImportStart::has_expired(MDS *mds)
+{
+  return true;
+}
+void EImportStart::expire(MDS *mds, Context *c)
+{
+}
+void EImportStart::replay(MDS *mds)
+{
+}
+
+
+bool EImportFinish::has_expired(MDS *mds)
+{
+  return true;
+}
+void EImportFinish::expire(MDS *mds, Context *c)
+{
+}
+void EImportFinish::replay(MDS *mds)
+{
+}
+
 
 
 

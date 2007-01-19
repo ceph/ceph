@@ -28,10 +28,15 @@ class EInodeUpdate : public LogEvent {
 
  public:
   EInodeUpdate(CInode *in) : LogEvent(EVENT_INODEUPDATE),
-			     trace(in) {
+			     trace(in) { 
+    trace.back().inode.version++;  // this is a write-ahead log.  bump the version.
   }
   EInodeUpdate() : LogEvent(EVENT_INODEUPDATE) { }
   
+  inode_t& get_inode() {
+    return trace.back().inode;
+  }
+
   void print(ostream& out) {
     out << "up inode " << trace.back().inode.ino 
 	<< " " << trace 
@@ -45,9 +50,8 @@ class EInodeUpdate : public LogEvent {
     trace.decode(bl, off);
   }
 
-  bool can_expire(MDS *mds);
-  void retire(MDS *mds, Context *c);
-  bool has_happened(MDS *mds);  
+  bool has_expired(MDS *mds);
+  void expire(MDS *mds, Context *c);
   void replay(MDS *mds);
 
 };
