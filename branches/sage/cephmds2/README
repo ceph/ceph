@@ -1,0 +1,53 @@
+pmds = parallel metadata server/system
+
+'test' is a standalone proccess that runs all clients, OSDs, and MDSs
+in a single process with a basic message passer (FakeMessenger).
+Useful for debugging.
+
+'pmds' uses MPI for communication.
+
+'import' builds a metadata store on ./osddata/ by taking find output
+from stdin.  Make sure find is run from the current directory so that
+import can stat the files it's fed.  The find root becomes the file
+system root; feel free to use relative paths.
+
+This is all GPL, etc.
+
+
+Getting started:
+
+ 1- Comment out the LEAKTRACER= line in the Makefile if you don't have
+    LeakTracer installed (you probably don't).
+ 
+ 2- make (test and import targets are testing ones; pmds uses MPI)
+
+ 3- Build an OSD metadata store:
+      # mkdir osddata
+      # find /some/big/dir | ./import root
+
+ 4- Single proc sim:
+      # ./test
+    or more likely,
+      # ./test > out
+
+ 5- Change parameters in config.cc.
+
+ 6- If you want stats logged, mkdir log (make sure you have enough
+    file handles; there's one open file per client).
+
+
+Notes on pmds (MPI version):
+
+ - On mcr/alc I have to 
+     # setenv LD_LIBRARY_PATH /usr/lib/mpi/mpi_gnu/lib
+   for the GNU runtime MPI libs (otherwise you get the Intel ones,
+   which segfault).
+
+ - Each MDS and OSD gets its own node.  Clients are divided over
+   whatever is left over.  So make sure you tell MPI to give you at
+   least num_mds+num_osd+1 processes (num_mds etc defined in
+   config.cc).
+
+
+
+2004.08.25 sage@newdream.net
