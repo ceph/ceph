@@ -42,6 +42,8 @@ MDLog::MDLog(MDS *m)
 
   max_events = g_conf.mds_log_max_len;
 
+  capped = false;
+
   unflushed = 0;
 
   // logger
@@ -117,8 +119,6 @@ off_t MDLog::get_write_pos()
 void MDLog::submit_entry( LogEvent *le,
 			  Context *c ) 
 {
-  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
-  
   if (g_conf.mds_log) {
     // encode it, with event type
     bufferlist bl;
@@ -127,6 +127,10 @@ void MDLog::submit_entry( LogEvent *le,
 
     // journal it.
     journaler->append_entry(bl);
+
+    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
+
+    assert(!capped);
 
     delete le;
     num_events++;
@@ -220,8 +224,7 @@ void MDLog::_did_read()
 
 void MDLog::_trimmed(LogEvent *le) 
 {
-  dout(7) << "  trimmed " << *le << endl;
-  
+  dout(7) << "trimmed : " << le->get_end_off() << " : " << *le << endl;
   assert(le->has_expired(mds));
 
   if (trimming.begin()->first == le->_end_off) {
@@ -248,6 +251,8 @@ void MDLog::trim(Context *c)
     trim_waiters.push_back(c);
 
   // trim!
+  dout(10) << "trim " <<  num_events << " events / " << max_events << " max" << endl;
+
   while (num_events > max_events) {
     
     off_t gap = journaler->get_write_pos() - journaler->get_read_pos();
@@ -271,14 +276,14 @@ void MDLog::trim(Context *c)
       // we just read an event.
       if (le->has_expired(mds)) {
         // obsolete
-        dout(7) << "trim  obsolete: " << *le << endl;
+ 	dout(7) << "trim  obsolete : " << le->get_end_off() << " : " << *le << endl;
         delete le;
         logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
         // trim!
-        dout(7) << "trim  expiring: " << *le << endl;
+	dout(7) << "trim  expiring : " << le->get_end_off() << " : " << *le << endl;
         trimming[le->_end_off] = le;
         le->expire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("expire");
@@ -310,6 +315,7 @@ void MDLog::trim(Context *c)
   finish_contexts(finished, 0);
 
   // hmm, are we at the end?
+  /*
   if (journaler->get_read_pos() == journaler->get_write_pos() &&
       trimming.size() == import_map_expire_waiters.size()) {
     dout(5) << "trim log is empty, allowing import_map to expire" << endl;
@@ -317,6 +323,7 @@ void MDLog::trim(Context *c)
     ls.swap(import_map_expire_waiters);
     finish_contexts(ls);
   }
+  */
 }
 
 

@@ -20,6 +20,7 @@
 #include "Migrator.h"
 #include "Locker.h"
 #include "MDStore.h"
+#include "Migrator.h"
 
 #include "MDBalancer.h"
 #include "MDLog.h"
@@ -61,6 +62,11 @@
 #include "messages/MUnhashDirAck.h"
 #include "messages/MUnhashDirNotify.h"
 #include "messages/MUnhashDirNotifyAck.h"
+
+
+#include "config.h"
+#undef dout
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
 
 
 
@@ -362,8 +368,8 @@ void Migrator::export_dir_frozen(CDir *dir,
          it++) {
       CInode *in = *it;
       dout(7) << "  added " << *in << endl;
-      prep->add_inode( in->parent->dir->ino(),
-                       in->parent->name,
+      prep->add_inode( in->parent->get_dir()->ino(),
+                       in->parent->get_name(),
                        in->replicate_to(dest) );
     }
 
@@ -516,8 +522,6 @@ void Migrator::export_dir_go(CDir *dir,
  */
 void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_auth)
 {
-  in->inode.version++;  // so local log entries are ignored, etc.  (FIXME ??)
-  
   // tell (all) clients about migrating caps.. mark STALE
   for (map<int, Capability>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
@@ -643,7 +647,7 @@ int Migrator::export_dir_walk(MExportDir *req,
     CDir_map_t::iterator it;
     for (it = dir->begin(); it != dir->end(); it++) {
       CDentry *dn = it->second;
-      CInode *in = dn->inode;
+      CInode *in = dn->get_inode();
       
       num_exported++;
       
@@ -828,6 +832,9 @@ void Migrator::export_dir_finish(CDir *dir)
   }
   export_proxy_dirinos.erase(dir);
     
+  // queue finishers
+  mds->queue_finished(export_finish_waiters[dir]);
+  export_finish_waiters.erase(dir);
 
   // stats
   mds->logger->set("nex", cache->exports.size());
@@ -1124,7 +1131,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   assert(dir);
 
   int oldauth = MSG_ADDR_NUM(m->get_source());
-  dout(7) << "handle_export_dir, import " << *dir << " from " << oldauth << endl;
+  dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
   show_imports();
@@ -1171,7 +1178,6 @@ void Migrator::handle_export_dir(MExportDir *m)
   // mark import point frozen
   // (note: this is a manual freeze.. hack hack hack!)
   dir->get_inode()->auth_pin();
-  dir->get(CDir::PIN_FREEZE);
   dir->state_set(CDIR_STATE_FROZENTREE);
 
   // add any inherited exports
@@ -1375,16 +1381,15 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
     in->set_auth(true);
   }
 
-  // link before state
+  // state after link  -- or not!  -sage
+  set<int> merged_client_caps;
+  istate.update_inode(in, merged_client_caps);
+ 
+  // link before state  -- or not!  -sage
   if (dn->inode != in) {
     assert(!dn->inode);
     dn->dir->link_inode(dn, in);
   }
-
-  // state after link
-  set<int> merged_client_caps;
-  istate.update_inode(in, merged_client_caps);
- 
  
   // add inode?
   if (added) {
@@ -1522,9 +1527,14 @@ int Migrator::import_dir_block(bufferlist& bl,
       CDentry *dn = dir->lookup(dname);
       if (!dn)
         dn = dir->add_dentry(dname);  // null
+
+      // mark dentry dirty?
+      if (dirty == 'D') 
+	dn->_mark_dirty();
       
-      // mark dn dirty _after_ we link the inode (scroll down)
-      
+      dn->set_version( dnv );
+      dn->set_projected_version( dnv );
+
       if (icode == 'N') {
         // null dentry
         assert(dn->is_null());  
@@ -1542,11 +1552,6 @@ int Migrator::import_dir_block(bufferlist& bl,
         // inode
         decode_import_inode(dn, bl, off, oldauth);
       }
-
-      // mark dentry dirty?  (only _after_ we link the inode!)
-      if (dirty == 'D') 
-	dn->_mark_dirty();
-      dn->set_version(dnv);
 
       // add dentry to journal entry
       le->metablob.add_dentry(dn);

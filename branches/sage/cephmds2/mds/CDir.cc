@@ -45,6 +45,11 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " auth";
     if (dir.is_replicated())
       out << dir.get_replicas();
+
+    out << " v=" << dir.get_version();
+    out << " pv=" << dir.get_projected_version();
+    out << " cv=" << dir.get_committing_version();
+    out << " lastcv=" << dir.get_last_committed_version();
   } else {
     out << " rep@" << dir.authority();
     if (dir.get_replica_nonce() > 1)
@@ -53,15 +58,10 @@ ostream& operator<<(ostream& out, CDir& dir)
 
   if (dir.get_dir_auth() != CDIR_AUTH_PARENT)
     out << " dir_auth=" << dir.get_dir_auth();
-
+  
   out << " state=" << dir.get_state();
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
-
-  out << " v=" << dir.get_version();
-  out << " pv=" << dir.get_projected_version();
-  out << " cv=" << dir.get_committing_version();
-  out << " lastcv=" << dir.get_last_committed_version();
-
+  
   if (dir.get_num_ref()) {
     out << " |";
     for(set<int>::iterator it = dir.get_ref_set().begin();

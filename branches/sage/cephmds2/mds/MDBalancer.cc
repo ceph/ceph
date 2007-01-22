@@ -552,6 +552,9 @@ void MDBalancer::do_rebalance(int beat)
                << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() 
                << endl;
       mds->mdcache->migrator->export_dir(*it, target);
+      
+      // hack! only do one dir.
+      break;
     }
   }
 

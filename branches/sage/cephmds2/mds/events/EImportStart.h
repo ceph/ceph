@@ -34,7 +34,7 @@ class EImportStart : public LogEvent {
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
   void print(ostream& out) {
-    out << "import_start " << metablob;
+    out << "EImportStart " << metablob;
   }
   
   virtual void encode_payload(bufferlist& bl) {

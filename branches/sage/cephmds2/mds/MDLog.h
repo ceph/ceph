@@ -48,6 +48,8 @@ class MDLog {
 
   int unflushed;
 
+  bool capped;
+
   inode_t log_inode;
   Journaler *journaler;
 
@@ -70,6 +72,7 @@ class MDLog {
 
   friend class EImportMap;
   friend class C_MDS_WroteImportMap;
+  friend class MDCache;
 
  public:
   MDLog(MDS *m);
@@ -78,9 +81,15 @@ class MDLog {
   void set_max_events(size_t max) { max_events = max; }
   size_t get_max_events() { return max_events; }
   size_t get_num_events() { return num_events + trimming.size(); }
+  size_t get_non_importmap_events() { return num_events + trimming.size() - import_map_expire_waiters.size(); }
 
   off_t get_read_pos();
   off_t get_write_pos();
+
+  bool is_capped() { return capped; }
+  void cap() { 
+    capped = true;
+  }
 
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );

@@ -66,6 +66,8 @@ private:
   map<CDir*, list<inodeno_t> > export_proxy_inos;
   map<CDir*, list<inodeno_t> > export_proxy_dirinos;
   
+  map<CDir*, list<Context*> > export_finish_waiters;
+
   set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
   
@@ -84,6 +86,11 @@ public:
 
   void dispatch(Message*);
 
+  //bool is_importing();
+  bool is_exporting() {
+    return !export_notify_ack_waiting.empty() || !export_finish_waiters.empty();      
+  }
+
   // -- import/export --
   // exporter
  public:
@@ -93,6 +100,10 @@ public:
 
   void encode_export_inode(CInode *in, bufferlist& enc_state, int newauth);
   void decode_import_inode(CDentry *dn, bufferlist& bl, int &off, int oldauth);
+
+  void add_export_finish_waiter(CDir *dir, Context *c) {
+    export_finish_waiters[dir].push_back(c);
+  }
 
  protected:
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);

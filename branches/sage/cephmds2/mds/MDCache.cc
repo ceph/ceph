@@ -39,6 +39,7 @@
 #include "osdc/Filer.h"
 
 #include "events/EImportMap.h"
+#include "events/EString.h"
 #include "events/EUnlink.h"
 #include "events/EPurgeFinish.h"
 
@@ -91,6 +92,7 @@ MDCache::MDCache(MDS *m)
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
   did_shutdown_exports = false;
+  did_shutdown_log_cap = false;
   shutdown_commits = 0;
 }
 
@@ -190,7 +192,8 @@ public:
   C_MDS_WroteImportMap(MDLog *ml, off_t eo) : mdlog(ml), end_off(eo) { }
   void finish(int r) {
     //    cout << "WroteImportMap at " << end_off << endl;
-    mdlog->last_import_map = end_off;
+    if (r >= 0)
+      mdlog->last_import_map = end_off;
     mdlog->writing_import_map = false;
   }
 };
@@ -553,14 +556,18 @@ bool MDCache::shutdown_pass()
   trim(0);
   dout(5) << "lru size now " << lru.lru_get_size() << endl;
 
+  mds->mdlog->trim(0);
 
   // (wait for) flush log?
-  if (g_conf.mds_log_flush_on_shutdown &&
-      mds->mdlog->get_num_events()) {
-    dout(7) << "waiting for log to flush .. " << mds->mdlog->get_num_events() << endl;
-    return false;
-  } 
-  
+  if (g_conf.mds_log_flush_on_shutdown) {
+    if (mds->mdlog->get_non_importmap_events()) {
+      dout(7) << "waiting for log to flush .. " << mds->mdlog->get_num_events() 
+	      << " (" << mds->mdlog->get_non_importmap_events() << ")" << endl;
+      return false;
+    } 
+  }
+
+
   // send all imports back to 0.
   if (mds->get_nodeid() != 0 && !did_shutdown_exports) {
     // flush what i can from the cache first..
@@ -589,11 +596,6 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
-  // filer active?
-  if (mds->filer->is_active()) {
-    dout(7) << "filer still active" << endl;
-    return false;
-  }
   
   // close root?
   if (mds->get_nodeid() == 0 &&
@@ -609,7 +611,7 @@ bool MDCache::shutdown_pass()
     root->dir->put(CDir::PIN_IMPORT);
 
     if (root->is_pinned_by(CInode::PIN_DIRTY)) {
-      dout(7) << "clearing root dirty flag" << endl;
+      dout(7) << "clearing root inode dirty flag" << endl;
       root->put(CInode::PIN_DIRTY);
     }
 
@@ -617,12 +619,39 @@ bool MDCache::shutdown_pass()
   }
   
   // imports?
-  if (!imports.empty()) {
-    dout(7) << "still have " << imports.size() << " imports" << endl;
+  if (!imports.empty() || migrator->is_exporting()) {
+    dout(7) << "still have " << imports.size() << " imports, or still exporting" << endl;
     show_cache();
     return false;
   }
   
+  // cap log?
+  if (g_conf.mds_log_flush_on_shutdown) {
+
+    if (imports.empty() && exports.empty()) {
+      // (only do this once!)
+      if (!mds->mdlog->is_capped()) {
+	dout(7) << "logging final import_map and capping the log" << endl;
+	did_shutdown_log_cap = true;
+	log_import_map();
+	mds->mdlog->cap();
+	// note that this won't flush right away, so we'll make at least one more pass
+      }
+    }
+
+    if (mds->mdlog->get_num_events()) {
+      dout(7) << "waiting for log to flush (including import_map, now) .. " << mds->mdlog->get_num_events() 
+	      << " (" << mds->mdlog->get_non_importmap_events() << ")" << endl;
+    }
+  }
+
+  // filer active?
+  if (mds->filer->is_active()) {
+    dout(7) << "filer still active" << endl;
+    return false;
+  }
+
+
   // done?
   if (lru.lru_get_size() > 0) {
     dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << endl;
@@ -2317,7 +2346,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
 
   // log it
   if (dn->inode) dn->inode->mark_unsafe();   // XXX ??? FIXME
-  mds->mdlog->submit_entry(new EUnlink(dir, dn, dn->inode),
+  mds->mdlog->submit_entry(new EString("unlink fixme fixme"),//EUnlink(dir, dn, dn->inode),
                            NULL);    // FIXME FIXME FIXME
 
   // tell replicas
@@ -2575,6 +2604,22 @@ CDir *MDCache::get_auth_container(CDir *dir)
   }
 
   return imp;
+}
+
+CDir *MDCache::get_export_container(CDir *dir)
+{
+  CDir *ex = dir;  // might be *dir
+  assert(!ex->is_auth());
+  
+  // find the underlying import or hash that delegates dir away
+  while (true) {
+    if (ex->is_export()) break; // import
+    ex = ex->get_parent_dir();
+    assert(ex);
+    if (ex->is_hashed()) break; // hash
+  }
+
+  return ex;
 }
 
 

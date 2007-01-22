@@ -170,6 +170,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t get_version() { return version; }
   void set_version(version_t v) { projected_version = version = v; }
   version_t get_projected_version() { return projected_version; }
+  void set_projected_version(version_t v) { projected_version = v; }
   
   int authority();
 

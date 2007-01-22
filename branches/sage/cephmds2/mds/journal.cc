@@ -26,6 +26,7 @@
 #include "MDLog.h"
 #include "MDCache.h"
 #include "MDStore.h"
+#include "Migrator.h"
 
 #include "config.h"
 #undef dout
@@ -36,6 +37,16 @@
 // -----------------------
 // EMetaBlob
 
+/*
+ * we need to ensure that a journaled item has either
+ * 
+ * - been safely committed to its dirslice.
+ *
+ * - has been safely exported. note that !is_auth() && !is_proxy()
+ * implies safely exported.  if !is_auth() && is_proxy(), we need to
+ * add a waiter for the export to complete.
+ *
+ */
 bool EMetaBlob::has_expired(MDS *mds)
 {
   // examine dirv's for my lumps
@@ -50,6 +61,18 @@ bool EMetaBlob::has_expired(MDS *mds)
       continue;       // we expired it
 
     // FIXME: check the slice only
+
+    if (dir->is_proxy()) {
+      dout(10) << "EMetaBlob.has_expired am proxy, needed dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+      return false;      // we need to wait until the export flushes!
+    }
+    if (!dir->is_auth()) {
+      dout(10) << "EMetaBlob.has_expired not auth, needed dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+      continue;       // not our problem
+    }
+
     if (dir->get_last_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.has_expired need dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
@@ -66,6 +89,7 @@ bool EMetaBlob::has_expired(MDS *mds)
 void EMetaBlob::expire(MDS *mds, Context *c)
 {
   list<CDir*> commit;
+  list<CDir*> waitfor_export;
   int ncommit = 0;
 
   // examine dirv's for my lumps
@@ -81,6 +105,20 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       continue;       // we expired it
     
     // FIXME: check the slice only
+
+    if (dir->is_proxy()) {
+      // wait until export is acked (logged on remote) and committed (logged locally)
+      CDir *ex = mds->mdcache->get_export_container(dir);
+      dout(10) << "EMetaBlob.expire proxy for " << *dir
+	       << ", waiting for export finish on " << *ex << endl;
+      waitfor_export.push_back(ex);
+      continue;
+    }
+    if (!dir->is_auth()) {
+      dout(10) << "EMetaBlob.expire not auth, needed dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+      continue;     // not our problem
+    }
     if (dir->get_last_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
 	       << ", committing " << *dir << endl;
@@ -98,12 +136,15 @@ void EMetaBlob::expire(MDS *mds, Context *c)
   if (ncommit == 1) {
     mds->mdstore->commit_dir(commit.front(), c);
   } else {
-    assert(ncommit > 1);
     C_Gather *gather = new C_Gather(c);
     for (list<CDir*>::iterator p = commit.begin();
 	 p != commit.end();
 	 ++p)
       mds->mdstore->commit_dir(*p, gather->new_sub());
+    for (list<CDir*>::iterator p = waitfor_export.begin();
+	 p != waitfor_export.end();
+	 ++p) 
+      mds->mdcache->migrator->add_export_finish_waiter(*p, gather->new_sub());
   }
 }
 
@@ -240,14 +281,31 @@ bool EImportMap::has_expired(MDS *mds)
     dout(10) << "EImportMap.has_expired -- there's a newer map" << endl;
     return true;
   } 
-  else if (mds->mdlog->get_read_pos() == mds->mdlog->get_write_pos()) {
-    dout(10) << "EImportMap.has_expired -- log is empty, allowing map to expire" << endl;
+  else if (mds->mdlog->is_capped()) {
+    dout(10) << "EImportMap.has_expired -- log is capped, allowing map to expire" << endl;
     return true;
   } else {
     dout(10) << "EImportMap.has_expired -- not until there's a newer map written" << endl;
     return false;
   }
 }
+
+/*
+class C_MDS_ImportMapFlush : public Context {
+  MDS *mds;
+  off_t end_off;
+public:
+  C_MDS_ImportMapFlush(MDS *m, off_t eo) : mds(m), end_off(eo) { }
+  void finish(int r) {
+    // am i the last thing in the log?
+    if (mds->mdlog->get_write_pos() == end_off) {
+      // yes.  we're good.
+    } else {
+      // no.  submit another import_map so that we can go away.
+    }
+  }
+};
+*/
 
 void EImportMap::expire(MDS *mds, Context *c)
 {
@@ -408,11 +466,14 @@ void EExportFinish::replay(MDS *mds)
 
 bool EImportStart::has_expired(MDS *mds)
 {
-  return true;
+  return metablob.has_expired(mds);
 }
+
 void EImportStart::expire(MDS *mds, Context *c)
 {
+  metablob.expire(mds, c);
 }
+
 void EImportStart::replay(MDS *mds)
 {
 }

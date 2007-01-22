@@ -19,40 +19,48 @@
 #include "include/types.h"
 
 #include "../LogEvent.h"
-#include "ETrace.h"
+#include "EMetaBlob.h"
 
 #include "../CInode.h"
 #include "../CDentry.h"
 #include "../CDir.h"
 
+/// help rewrite me
+
 class EUnlink : public LogEvent {
  protected:
-  ETrace diritrace;
   version_t dirv;
   string dname;
-  ETrace inodetrace;
 
  public:
+  EMetaBlob metaglob;
+  
+  /*
   EUnlink(CDir *dir, CDentry* dn, CInode *in) :
     LogEvent(EVENT_UNLINK),
     diritrace(dir->inode), 
     dirv(dir->get_version()),
     dname(dn->get_name()),
     inodetrace(in) {}
+  */
   EUnlink() : LogEvent(EVENT_UNLINK) { }
   
   virtual void encode_payload(bufferlist& bl) {
+  /*
     diritrace.encode(bl);
     bl.append((char*)&dirv, sizeof(dirv));
     ::_encode(dname, bl);
     inodetrace.encode(bl);
+  */
   }
   void decode_payload(bufferlist& bl, int& off) {
+    /*
     diritrace.decode(bl,off);
     bl.copy(off, sizeof(dirv), (char*)&dirv);
     off += sizeof(dirv);
     ::_decode(dname, bl, off);
     inodetrace.decode(bl, off);
+  */
   }
   
   bool has_expired(MDS *mds);

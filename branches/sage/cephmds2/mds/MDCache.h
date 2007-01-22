@@ -113,6 +113,7 @@ class MDCache {
   // shutdown crap
   int shutdown_commits;
   bool did_shutdown_exports;
+  bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
 
   friend class CInode;
@@ -203,9 +204,9 @@ class MDCache {
   void start_recovered_purges();
 
 
- protected:
-  // private methods
+ public:
   CDir *get_auth_container(CDir *in);
+  CDir *get_export_container(CDir *dir);
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 

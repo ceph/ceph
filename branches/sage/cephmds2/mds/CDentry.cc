@@ -126,10 +126,8 @@ void CDentry::mark_clean() {
   assert(is_dirty());
   assert(version <= dir->get_version());
 
-  if (version < dir->get_last_committed_version()) {
-    cerr << " bad mark_clean " << *this << endl;    
-    assert(version >= dir->get_last_committed_version());
-  }
+  // this happens on export.
+  //assert(version <= dir->get_last_committed_version());  
 
   // state+pin
   state_clear(STATE_DIRTY);

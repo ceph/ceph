@@ -1,3 +1,8 @@
+blech:
+- importmap cleanup on log flush/shutdown
+- metablob shoudl mark explicitly dirtied items, and return 'expired' if they have
+  higher versions (and are thus described by a newer journal entry)
+
 mds
 - journal+recovery
   - EImportMap

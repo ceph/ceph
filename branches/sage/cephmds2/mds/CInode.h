@@ -570,7 +570,7 @@ public:
 
     hardlock = in->hardlock;
     filelock = in->filelock;
-
+    
     st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
     in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;

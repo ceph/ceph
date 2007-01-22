@@ -175,7 +175,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_WAITER =   2;  // waiter(s)
   static const int PIN_IMPORT =   3;
   static const int PIN_EXPORT =   4;
-  static const int PIN_FREEZE =   5;
+  //static const int PIN_FREEZE =   5;
   static const int PIN_FREEZELEAF = 6;
   static const int PIN_PROXY =    7;  // auth just changed.
   static const int PIN_AUTHPIN =  8;
@@ -192,7 +192,7 @@ class CDir : public MDSCacheObject {
     case PIN_WAITER: return "waiter";
     case PIN_IMPORT: return "import";
     case PIN_EXPORT: return "export";
-    case PIN_FREEZE: return "freeze";
+      //case PIN_FREEZE: return "freeze";
     case PIN_FREEZELEAF: return "freezeleaf";
     case PIN_PROXY: return "proxy";
     case PIN_AUTHPIN: return "authpin";
@@ -224,7 +224,7 @@ class CDir : public MDSCacheObject {
   // state
   version_t       version;
   version_t       committing_version;
-  version_t       last_committed_version;
+  version_t       last_committed_version;   // slight lie; we bump this on import.
   version_t       projected_version; 
 
   // authority, replicas
@@ -533,6 +533,8 @@ class CDirExport {
   CDirExport(CDir *dir) {
     memset(&st, 0, sizeof(st));
 
+    assert(dir->get_version() == dir->get_projected_version());
+
     st.ino = dir->ino();
     st.nitems = dir->nitems;
     st.nden = dir->items.size();
@@ -557,9 +559,14 @@ class CDirExport {
     assert(dir->ino() == st.ino);
 
     //dir->nitems = st.nitems;
-    dir->version = st.version;
+
+    // set last_committed_version at old version
+    dir->committing_version = dir->last_committed_version = st.version;
+    dir->projected_version = dir->version = st.version;    // this is bumped, below, if dirty
+
+    // twiddle state
     if (dir->state & CDIR_STATE_HASHED) 
-      dir->state |= CDIR_STATE_AUTH;         // just inherit auth flag when hashed
+      dir->state_set( CDIR_STATE_AUTH );         // just inherit auth flag when hashed
     else
       dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
         (st.state & CDIR_MASK_STATE_EXPORTED);
@@ -581,8 +588,12 @@ class CDirExport {
     dout(12) << "replicas in export is " << replicas << ", dir now " << dir->replicas << endl;
     if (!replicas.empty())
       dir->get(CDir::PIN_OPENED);
-    if (dir->is_dirty())
-      dir->get(CDir::PIN_DIRTY);
+    if (dir->is_dirty()) {
+      dir->get(CDir::PIN_DIRTY);  
+
+      // bump dir version + 1 if dirty
+      dir->projected_version = dir->version = st.version + 1;
+    }
   }
 
 
