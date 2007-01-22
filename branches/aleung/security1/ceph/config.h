@@ -278,6 +278,12 @@ struct md_config_t {
   int fakeclient_op_fsync;
   int fakeclient_op_close;
 
+  // security (all princiapls)
+  int secure_io;
+  int sign_scheme;
+  int hash_scheme;
+  int crypt_scheme;
+
 };
 
 extern md_config_t g_conf;     

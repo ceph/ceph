@@ -291,7 +291,14 @@ md_config_t g_conf = {
   fakeclient_op_write:      false,  // osd!
   fakeclient_op_truncate:   false,
   fakeclient_op_fsync:      false,
-  fakeclient_op_close:    200
+  fakeclient_op_close:    200,
+
+  //security (all principals)
+  secure_io:              1,
+  sign_scheme:            0, /* 0=esign, 1=RSA */
+  hash_scheme:            0, /* 0=sha-1, 1=sha-256,
+				2=sha-512, 3 = md5 */
+  crypt_scheme:           0  /* 0=rijndael, 1=RC5 */
 };
 
 
@@ -680,6 +687,12 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.kill_after = atoi(args[++i]);
     else if (strcmp(args[i], "--tick") == 0) 
       g_conf.tick = atoi(args[++i]);
+
+    // security flag to turn off security
+    else if (strcmp(args[i], "--no_sec") == 0) {
+      g_conf.secure_io = 0;
+      i++;
+    }
 
     else if (strcmp(args[i], "--file_layout_ssize") == 0) 
       g_OSD_FileLayout.stripe_size = atoi(args[++i]);
