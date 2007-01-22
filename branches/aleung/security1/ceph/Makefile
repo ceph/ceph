@@ -10,7 +10,8 @@
 
 CC = g++
 CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread  
+LIBS = -lpthread 
+CRYPTOLIBS = /usr/lib/libcrypto++5.2.so
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -85,6 +86,9 @@ TCP_OBJS = \
 	msg/TCPMessenger.o\
 	msg/TCPDirectory.o
 
+CRYPTO_OBJS = \
+	crypto/CryptoLib.o
+
 TARGETS = cosd cfuse newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
@@ -128,7 +132,7 @@ mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 
 
 # synthetic workload
-fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crypto.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
@@ -142,7 +146,7 @@ newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessen
 
 # + obfs
 fakesynobfs: fakesyn.cc mds.o client.o osd_obfs.o msg/FakeMessenger.o common.o
-	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@
+	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} ${CRYPTOLIBS} $^ -o $@
 
 tcpsynobfs: tcpsyn.cc mds.o client.o osd_obfs.o ${TCP_OBJS} common.o
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ 
@@ -198,6 +202,9 @@ osd.o: ${OSD_OBJS}
 	ld -i -o $@ $^
 
 osdc.o: ${OSDC_OBJS}
+	ld -i -o $@ $^
+
+crypto.o: ${CRYPTO_OBJS}
 	ld -i -o $@ $^
 
 osd_obfs.o: osd/OBFSStore.o osd/OSD.ccosd/PG.o osd/ObjectStore.o osd/FakeStore.o
