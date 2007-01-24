@@ -340,7 +340,7 @@ void FakeMessenger::reset_myaddr(msg_addr_t m)
 }
 
 
-int FakeMessenger::send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst, int port, int fromport)
+int FakeMessenger::send_message(Message *m, msg_addr_t dest, entity_inst_t inst, int port, int fromport)
 {
   m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
