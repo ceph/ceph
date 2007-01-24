@@ -73,7 +73,7 @@ void MDBalancer::tick()
       (num_bal_times || 
        (g_conf.mds_bal_max_until >= 0 && 
 	elapsed.sec() > g_conf.mds_bal_max_until)) && 
-      !mds->is_stopping() && !mds->is_stopped() &&
+      mds->is_active() &&
       now.sec() - last_heartbeat.sec() >= g_conf.mds_bal_interval) {
     last_heartbeat = now;
     send_heartbeat();

@@ -36,8 +36,8 @@ void MDSMonitor::create_initial()
   mdsmap.epoch = 0;  // until everyone boots
   mdsmap.ctime = g_clock.now();
   for (int i=0; i<g_conf.num_mds; i++) {
-    mdsmap.all_mds.insert(i);
-    mdsmap.down_mds.insert(i);
+    mdsmap.mds_set.insert(i);
+    mdsmap.mds_state[i] = MDSMap::STATE_OUT;
   }
 }
 
@@ -77,7 +77,7 @@ void MDSMonitor::handle_mds_boot(MMDSBoot *m)
   if (mdsmap.get_epoch() == 0) {
     // waiting for boot!
     mdsmap.mds_inst[from] = m->get_source_inst();
-    mdsmap.down_mds.erase(from);
+    mdsmap.mds_state[from] = MDSMap::STATE_STARTING;
     
     if ((int)mdsmap.mds_inst.size() == mdsmap.get_num_mds()) {
       mdsmap.inc_epoch();
@@ -103,11 +103,10 @@ void MDSMonitor::handle_mds_shutdown(Message *m)
   assert(m->get_source().is_mds());
   int from = m->get_source().num();
 
-  mdsmap.mds_inst.erase(from);
-  mdsmap.all_mds.erase(from);
+  mdsmap.remove_mds(from);
 
   dout(7) << "mds_shutdown from " << m->get_source() 
-	  << ", still have " << mdsmap.all_mds
+	  << ", still have " << mdsmap.mds_set
 	  << endl;
   
   // tell someone?
@@ -132,8 +131,8 @@ void MDSMonitor::bcast_latest_mds()
   dout(10) << "bcast_latest_mds " << mdsmap.get_epoch() << endl;
   
   // tell mds
-  for (set<int>::iterator p = mdsmap.get_mds().begin();
-       p != mdsmap.get_mds().end();
+  for (set<int>::iterator p = mdsmap.get_mds_set().begin();
+       p != mdsmap.get_mds_set().end();
        p++) {
     if (mdsmap.is_down(*p)) continue;
     send_full(MSG_ADDR_MDS(*p), mdsmap.get_inst(*p));

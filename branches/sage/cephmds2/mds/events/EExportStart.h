@@ -25,26 +25,30 @@
 class EExportStart : public LogEvent {
  protected:
   EMetaBlob metablob; // exported dir
+  inodeno_t dirino;
   int dest;     // dest mds
 
  public:
   EExportStart(CDir *dir, int d) : LogEvent(EVENT_EXPORTSTART),
+				   dirino(dir->ino()),
 				   dest(d) { 
     metablob.add_dir_context(dir);
   }
   EExportStart() : LogEvent(EVENT_EXPORTSTART) { }
   
   void print(ostream& out) {
-    out << "export_start ";
-    out << " -> " << dest;
+    out << "export_start " << dirino << " -> " << dest;
   }
 
   virtual void encode_payload(bufferlist& bl) {
     metablob._encode(bl);
+    bl.append((char*)&dirino, sizeof(dirino));
     bl.append((char*)&dest, sizeof(dest));
   }
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
+    bl.copy(off, sizeof(dirino), (char*)&dirino);
+    off += sizeof(dirino);
     bl.copy(off, sizeof(dest), (char*)&dest);
     off += sizeof(dest);
   }

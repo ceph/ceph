@@ -267,6 +267,8 @@ void Migrator::export_dir(CDir *dir,
 
   // ok, let's go.
 
+  exporting.insert(dir);
+
   // send ExportDirDiscover (ask target)
   mds->send_message_mds(new MExportDirDiscover(dir->inode), dest, MDS_PORT_MIGRATOR);
   dir->auth_pin();   // pin dir, to hang up our freeze  (unpin on prep ack)
@@ -764,7 +766,7 @@ void Migrator::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
             << ", last one!" << endl;
 
     // log export completion, then finish (unfreeze, trigger finish context, etc.)
-    mds->mdlog->submit_entry(new EExportFinish(dir),
+    mds->mdlog->submit_entry(new EExportFinish(dir, true),
 			     new C_MDS_ExportFinishLogged(this, dir));
 
   } else {
@@ -783,6 +785,9 @@ void Migrator::export_dir_finish(CDir *dir)
 {
   // send finish/commit to new auth
   mds->send_message_mds(new MExportDirFinish(dir->ino()), dir->authority(), MDS_PORT_MIGRATOR);
+  
+  // remove from exporting list
+  exporting.erase(dir);
   
   // unfreeze
   dout(7) << "export_dir_finish " << *dir << ", unfreezing" << endl;
@@ -1323,7 +1328,7 @@ void Migrator::handle_export_dir_finish(MExportDirFinish *m)
   assert(dir->is_auth());
 
   // log
-  mds->mdlog->submit_entry(new EImportFinish(dir),
+  mds->mdlog->submit_entry(new EImportFinish(dir, true),
 			   new C_MDS_ImportDirLoggedFinish(this,dir));
   delete m;
 }
@@ -1479,7 +1484,7 @@ int Migrator::import_dir_block(bufferlist& bl,
     dir->remove_replica(mds->get_nodeid());
 
   // add to journal entry
-  le->metablob.add_dir(dir);
+  le->metablob.add_dir(dir, true);  // Hmm: false would be okay in some cases
 
   if (dir->is_hashed()) {
 
@@ -1554,7 +1559,7 @@ int Migrator::import_dir_block(bufferlist& bl,
       }
 
       // add dentry to journal entry
-      le->metablob.add_dentry(dn);
+      le->metablob.add_dentry(dn, true);  // Hmm: might we do dn->is_dirty() here instead?  
     }
 
     return num_imported;
@@ -3186,7 +3191,7 @@ void Migrator::handle_unhash_dir(MUnhashDir *m)
   }
 
   // init gather set
-  hash_gather[dir] = mds->get_mds_map()->get_mds();
+  hash_gather[dir] = mds->get_mds_map()->get_mds_set();   // fixme
   hash_gather[dir].erase(mds->get_nodeid());
 
   // send unhash message

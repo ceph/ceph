@@ -567,8 +567,8 @@ void OSDMonitor::bcast_latest_mds()
   dout(1) << "bcast_latest_mds epoch " << e << endl;
   
   // tell mds
-  for (set<int>::iterator i = mon->mdsmon->mdsmap.get_mds().begin();
-       i != mon->mdsmon->mdsmap.get_mds().end();
+  for (set<int>::iterator i = mon->mdsmon->mdsmap.get_mds_set().begin();
+       i != mon->mdsmon->mdsmap.get_mds_set().end();
        i++) {
     if (mon->mdsmon->mdsmap.is_down(*i)) continue;
     send_incremental(osdmap.get_epoch()-1, MSG_ADDR_MDS(*i), mon->mdsmon->mdsmap.get_inst(*i));

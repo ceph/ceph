@@ -49,21 +49,29 @@ class EMetaBlob {
     version_t dnv;
     inode_t inode;      // if it's not
     string  symlink;
-    fullbit(const string& d, inode_t& i) : dn(d), inode(i) { }
-    fullbit(const string& d, inode_t& i, string& sym) : dn(d), inode(i), symlink(sym) { }
+    bool dirty;
+
+    fullbit(const string& d, version_t v, inode_t& i, bool dr) : dn(d), dnv(v), inode(i), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, string& sym, bool dr) : dn(d), dnv(v), inode(i), symlink(sym), dirty(dr) { }
     fullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
+      bl.append((char*)&dnv, sizeof(dnv));
       bl.append((char*)&inode, sizeof(inode));
       if (inode.is_symlink())
 	::_encode(symlink, bl);
+      bl.append((char*)&dirty, sizeof(dirty));
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
+      bl.copy(off, sizeof(dnv), (char*)&dnv);
+      off += sizeof(dnv);
       bl.copy(off, sizeof(inode), (char*)&inode);  
       off += sizeof(inode);
       if (inode.is_symlink())
 	::_decode(symlink, bl, off);
+      bl.copy(off, sizeof(dirty), (char*)&dirty);
+      off += sizeof(dirty);
     }
   };
   
@@ -73,13 +81,15 @@ class EMetaBlob {
     string dn;
     version_t dnv;
     inodeno_t ino;
+    bool dirty;
 
-    remotebit(const string& d, version_t v, inodeno_t i) : dn(d), dnv(v), ino(i) { }
+    remotebit(const string& d, version_t v, inodeno_t i, bool dr) : dn(d), dnv(v), ino(i), dirty(dr) { }
     remotebit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
       bl.append((char*)&dnv, sizeof(dnv));
       bl.append((char*)&ino, sizeof(ino));
+      bl.append((char*)&dirty, sizeof(dirty));
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
@@ -87,6 +97,8 @@ class EMetaBlob {
       off += sizeof(dnv);
       bl.copy(off, sizeof(ino), (char*)&ino);
       off += sizeof(ino);
+      bl.copy(off, sizeof(dirty), (char*)&dirty);
+      off += sizeof(dirty);
     }
   };
 
@@ -96,16 +108,20 @@ class EMetaBlob {
   struct nullbit {
     string dn;
     version_t dnv;
-    nullbit(const string& d, version_t v) : dn(d), dnv(v) { }
+    bool dirty;
+    nullbit(const string& d, version_t v, bool dr) : dn(d), dnv(v), dirty(dr) { }
     nullbit(bufferlist& bl, int& off) { _decode(bl, off); }
     void _encode(bufferlist& bl) {
       ::_encode(dn, bl);
       bl.append((char*)&dnv, sizeof(dnv));
+      bl.append((char*)&dirty, sizeof(dirty));
     }
     void _decode(bufferlist& bl, int& off) {
       ::_decode(dn, bl, off);
       bl.copy(off, sizeof(dnv), (char*)&dnv);
       off += sizeof(dnv);
+      bl.copy(off, sizeof(dirty), (char*)&dirty);
+      off += sizeof(dirty);
     }
   };
 
@@ -115,6 +131,7 @@ class EMetaBlob {
   struct dirlump {
     static const int STATE_IMPORT =   (1<<0);
     static const int STATE_COMPLETE = (1<<1);
+    static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
     dirslice_t dirslice;
     version_t  dirv;
@@ -131,6 +148,8 @@ class EMetaBlob {
     void mark_import() { state |= STATE_IMPORT; }
     bool is_complete() { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
+    bool is_dirty() { return state & STATE_DIRTY; }
+    void mark_dirty() { state |= STATE_DIRTY; }
 
     void _encode_bits() {
       for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
@@ -185,30 +204,69 @@ class EMetaBlob {
  public:
   
   // remote pointer to to-be-journaled inode iff it's a normal (non-remote) dentry
-  inode_t *add_dentry(CDentry *dn, CInode *in=0) {
+  inode_t *add_dentry(CDentry *dn, bool dirty, CInode *in=0) {
     CDir *dir = dn->get_dir();
     if (!in) in = dn->get_inode();
 
     // add the dir
-    dirlump& lump = add_dir(dir);
+    dirlump& lump = add_dir(dir, false);
 
     // add the dirbit
     if (dn->is_remote()) {
-      lump.dremote.push_back(remotebit(dn->get_name(), dn->get_projected_version(), dn->get_remote_ino()));
       lump.nremote++;
+      if (dirty)
+	lump.dremote.push_front(remotebit(dn->get_name(), 
+					  dn->get_projected_version(), 
+					  dn->get_remote_ino(), 
+					  dirty));
+      else
+	lump.dremote.push_back(remotebit(dn->get_name(), 
+					 dn->get_projected_version(), 
+					 dn->get_remote_ino(), 
+					 dirty));
     } 
     else if (!in) {
-      lump.dnull.push_back(nullbit(dn->get_name(), dn->get_projected_version()));
       lump.nnull++;
+      if (dirty)
+	lump.dnull.push_front(nullbit(dn->get_name(), 
+				      dn->get_projected_version(), 
+				      dirty));
+      else
+	lump.dnull.push_back(nullbit(dn->get_name(), 
+				     dn->get_projected_version(), 
+				     dirty));
     }
     else {
-      lump.dfull.push_back(fullbit(dn->get_name(), in->inode, in->symlink));
       lump.nfull++;
-      return &lump.dfull.back().inode;
+      if (dirty) {
+	lump.dfull.push_front(fullbit(dn->get_name(), 
+				      dn->get_projected_version(), 
+				      in->inode, in->symlink, 
+				      dirty));
+	return &lump.dfull.front().inode;
+      } else {
+	lump.dfull.push_back(fullbit(dn->get_name(), 
+				     dn->get_projected_version(),
+				     in->inode, in->symlink, 
+				     dirty));
+	return &lump.dfull.back().inode;
+      }
     }
     return 0;
   }
   
+  dirlump& add_dir(CDir *dir, bool dirty) {
+    if (lump_map.count(dir->ino()) == 0) {
+      lump_order.push_back(dir->ino());
+      lump_map[dir->ino()].dirv = dir->get_projected_version();
+    }
+    dirlump& l = lump_map[dir->ino()];
+    if (dir->is_complete()) l.mark_complete();
+    if (dir->is_import()) l.mark_import();
+    if (dirty) l.mark_dirty();
+    return l;
+  }
+
   void add_dir_context(CDir *dir, bool toroot=false) {
     // already have this dir?  (we must always add in order)
     if (lump_map.count(dir->ino())) 
@@ -223,20 +281,12 @@ class EMetaBlob {
 
     CDentry *parent = diri->get_parent_dn();
     add_dir_context(parent->get_dir(), toroot);
-    add_dentry(parent);
+    add_dentry(parent, false);
   }
 
-  dirlump& add_dir(CDir *dir) {
-    if (lump_map.count(dir->ino()) == 0) {
-      lump_order.push_back(dir->ino());
-      lump_map[dir->ino()].dirv = dir->get_projected_version();
-    }
-    dirlump& l = lump_map[dir->ino()];
-    if (dir->is_complete()) l.mark_complete();
-    if (dir->is_import()) l.mark_import();
-    return l;
-  }
-    
+
+  // encoding
+
   void _encode(bufferlist& bl) {
     int n = lump_map.size();
     bl.append((char*)&n, sizeof(n));

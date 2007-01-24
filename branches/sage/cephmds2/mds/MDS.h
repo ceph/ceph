@@ -34,6 +34,7 @@ using namespace __gnu_cxx;
 #include "common/Mutex.h"
 
 #include "mon/MonMap.h"
+#include "MDSMap.h"
 
 #include "ClientMap.h"
 
@@ -67,7 +68,6 @@ using namespace __gnu_cxx;
 
 class filepath;
 
-class MDSMap;
 class OSDMap;
 class Objecter;
 class Filer;
@@ -133,24 +133,19 @@ class MDS : public Dispatcher {
 
  protected:
   // -- MDS state --
-  static const int STATE_BOOTING       = 1;  // fetching mds and osd maps
-  static const int STATE_MKFS          = 2;  // creating a file system
-  static const int STATE_RECOVERING    = 3;  // recovering mds log
-  static const int STATE_ACTIVE        = 4;  // up and active!
-  static const int STATE_STOPPING      = 5;
-  static const int STATE_STOPPED       = 6;
-
   int state;
   list<Context*> waitfor_active;
 
 public:
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
-  bool is_booting() { return state == STATE_BOOTING; }
-  bool is_recovering() { return state == STATE_RECOVERING; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_stopping() { return state == STATE_STOPPING; }
-  bool is_stopped() { return state == STATE_STOPPED; }
+  bool is_down()     { return state == MDSMap::STATE_DOWN; }
+  bool is_booting()  { return state == MDSMap::STATE_DOWN; }
+  bool is_creating() { return state == MDSMap::STATE_CREATING; }
+  bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
+  bool is_starting() { return state == MDSMap::STATE_STARTING; }
+  bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
+  bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
 
   void mark_active();
 

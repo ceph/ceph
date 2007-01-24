@@ -617,7 +617,7 @@ void Server::handle_client_utime(MClientRequest *req,
   // log + wait
   EUpdate *le = new EUpdate("utime");
   le->metablob.add_dir_context(cur->get_parent_dir());
-  inode_t *pi = le->metablob.add_dentry(cur->parent);
+  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = mtime;
   pi->atime = mtime;
   pi->version = pdv;
@@ -680,7 +680,7 @@ void Server::handle_client_chmod(MClientRequest *req,
   // log + wait
   EUpdate *le = new EUpdate("chmod");
   le->metablob.add_dir_context(cur->get_parent_dir());
-  inode_t *pi = le->metablob.add_dentry(cur->parent);
+  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mode = mode;
   pi->version = pdv;
   
@@ -738,7 +738,7 @@ void Server::handle_client_chown(MClientRequest *req,
   // log + wait
   EUpdate *le = new EUpdate("chown");
   le->metablob.add_dir_context(cur->get_parent_dir());
-  inode_t *pi = le->metablob.add_dentry(cur->parent);
+  inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   if (uid >= 0) pi->uid = uid;
   if (gid >= 0) pi->gid = gid;
   pi->version = pdv;
@@ -1094,7 +1094,7 @@ void Server::handle_client_mknod(MClientRequest *req, CInode *diri)
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("mknod");
   le->metablob.add_dir_context(diri->dir);
-  inode_t *pi = le->metablob.add_dentry(dn, newi);
+  inode_t *pi = le->metablob.add_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   
   // log + wait
@@ -1256,9 +1256,9 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("mkdir");
   le->metablob.add_dir_context(diri->dir);
-  inode_t *pi = le->metablob.add_dentry(dn, newi);
+  inode_t *pi = le->metablob.add_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
-  le->metablob.add_dir(newi->dir);
+  le->metablob.add_dir(newi->dir, true);
   
   // log + wait
   mdlog->submit_entry(le);
@@ -1304,7 +1304,7 @@ void Server::handle_client_symlink(MClientRequest *req, CInode *diri)
   C_MDS_mknod_finish *fin = new C_MDS_mknod_finish(mds, req, dn, newi);
   EUpdate *le = new EUpdate("symlink");
   le->metablob.add_dir_context(diri->dir);
-  inode_t *pi = le->metablob.add_dentry(dn, newi);
+  inode_t *pi = le->metablob.add_dentry(dn, true, newi);
   pi->version = dn->get_projected_version();
   
   // log + wait

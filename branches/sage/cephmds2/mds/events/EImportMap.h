@@ -22,7 +22,7 @@ public:
   EMetaBlob metablob;
   set<inodeno_t> imports;
   set<inodeno_t> exports;
-  set<inodeno_t> hashdirs;
+  //set<inodeno_t> hashdirs;
   map<inodeno_t, set<inodeno_t> > nested_exports;
 
   EImportMap() : LogEvent(EVENT_IMPORTMAP) { }
@@ -34,9 +34,27 @@ public:
 
   void encode_payload(bufferlist& bl) {
     metablob._encode(bl);
+    ::_encode(imports, bl);
+    ::_encode(exports, bl);
+    for (set<inodeno_t>::iterator p = imports.begin();
+	 p != imports.end();
+	 ++p) {
+      ::_encode(nested_exports[*p], bl);
+      if (nested_exports[*p].empty())
+	nested_exports.erase(*p);
+    }
   } 
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
+    ::_decode(imports, bl, off);
+    ::_decode(exports, bl, off);
+    for (set<inodeno_t>::iterator p = imports.begin();
+	 p != imports.end();
+	 ++p) {
+      ::_decode(nested_exports[*p], bl, off);
+      if (nested_exports[*p].empty())
+	nested_exports.erase(*p);
+    }
   }
 
   bool has_expired(MDS *mds);

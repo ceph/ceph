@@ -212,6 +212,7 @@ class MDCache {
 
 
  public:
+  CInode *create_root_inode();
   int open_root(Context *c);
   int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,

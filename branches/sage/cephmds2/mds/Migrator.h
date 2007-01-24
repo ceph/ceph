@@ -62,6 +62,7 @@ private:
   MDCache *cache;
 
   // export fun
+  set<CDir*>             exporting;
   map<CDir*, set<int> >  export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
   map<CDir*, list<inodeno_t> > export_proxy_inos;
   map<CDir*, list<inodeno_t> > export_proxy_dirinos;
@@ -87,8 +88,11 @@ public:
   void dispatch(Message*);
 
   //bool is_importing();
-  bool is_exporting() {
-    return !export_notify_ack_waiting.empty() || !export_finish_waiters.empty();      
+  bool is_exporting(CDir *dir = 0) {
+    if (dir)
+      return exporting.count(dir);
+    else 
+      return !exporting.empty();
   }
 
   // -- import/export --

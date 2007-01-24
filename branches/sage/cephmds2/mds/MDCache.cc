@@ -213,6 +213,7 @@ void MDCache::log_import_map(Context *onsync)
     CDir *im = *p;
     le->imports.insert(im->ino());
     le->metablob.add_dir_context(im, true);
+    le->metablob.add_dir(im, false);
 
     if (nested_exports.count(im)) {
       for (set<CDir*>::iterator q = nested_exports[im].begin();
@@ -222,6 +223,7 @@ void MDCache::log_import_map(Context *onsync)
 	le->nested_exports[im->ino()].insert(ex->ino());
 	le->exports.insert(ex->ino());
 	le->metablob.add_dir_context(ex);
+	le->metablob.add_dir(ex, false);
       }
     }
   }
@@ -502,7 +504,7 @@ bool MDCache::shutdown_pass()
 {
   dout(7) << "shutdown_pass" << endl;
   //assert(mds->is_shutting_down());
-  if (mds->is_stopped()) {
+  if (mds->is_down()) {
     dout(7) << " already shut down" << endl;
     show_cache();
     show_imports();
@@ -669,6 +671,27 @@ bool MDCache::shutdown_pass()
 
 
 
+CInode *MDCache::create_root_inode()
+{
+  CInode *root = new CInode(this);
+  memset(&root->inode, 0, sizeof(inode_t));
+  root->inode.ino = 1;
+  root->inode.hash_seed = 0;   // not hashed!
+  
+  // make it up (FIXME)
+  root->inode.mode = 0755 | INODE_MODE_DIR;
+  root->inode.size = 0;
+  root->inode.ctime = 0;
+  root->inode.mtime = g_clock.gettime();
+  
+  root->inode.nlink = 1;
+  root->inode.layout = g_OSD_MDDirLayout;
+  
+  set_root( root );
+  add_inode( root );
+
+  return root;
+}
 
 
 int MDCache::open_root(Context *c)
@@ -678,22 +701,7 @@ int MDCache::open_root(Context *c)
   // open root inode
   if (whoami == 0) { 
     // i am root inode
-    CInode *root = new CInode(this);
-    memset(&root->inode, 0, sizeof(inode_t));
-    root->inode.ino = 1;
-    root->inode.hash_seed = 0;   // not hashed!
-
-    // make it up (FIXME)
-    root->inode.mode = 0755 | INODE_MODE_DIR;
-    root->inode.size = 0;
-    root->inode.ctime = 0;
-    root->inode.mtime = g_clock.gettime();
-
-    root->inode.nlink = 1;
-    root->inode.layout = g_OSD_MDDirLayout;
-
-    set_root( root );
-    add_inode( root );
+    CInode *root = create_root_inode();
 
     // root directory too
     assert(root->dir == NULL);
@@ -2236,7 +2244,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 
   set<int> who;
   if (bcast) {
-    who = mds->get_mds_map()->get_mds();
+    who = mds->get_mds_map()->get_mds_set();
   } else {
     for (map<int,int>::iterator p = dir->replicas_begin();
 	 p != dir->replicas_end();

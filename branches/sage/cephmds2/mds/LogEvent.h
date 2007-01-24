@@ -50,14 +50,15 @@ class MDS;
 class LogEvent {
  private:
   int _type;
-  off_t _end_off;
+  off_t _start_off,_end_off;
   friend class MDLog;
 
  public:
-  LogEvent(int t) : _type(t), _end_off(0) { }
+  LogEvent(int t) : _type(t), _start_off(0), _end_off(0) { }
   virtual ~LogEvent() { }
 
   int get_type() { return _type; }
+  off_t get_start_off() { return _start_off; }
   off_t get_end_off() { return _end_off; }
 
   // encoding

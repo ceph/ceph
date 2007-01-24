@@ -107,7 +107,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
 
   req_rate = 0;
 
-  state = STATE_BOOTING;
+  state = MDSMap::STATE_DOWN;  // booting
 
   // log
   string name;
@@ -381,10 +381,11 @@ public:
 void MDS::boot_recover(int step)
 {
   if (is_booting()) 
-    state = STATE_RECOVERING;
+    state = MDSMap::STATE_STARTING;
 
   switch (step) {
   case 0:
+    /* no, EImportMap takes care of all this.
     if (whoami == 0) {
       dout(2) << "boot_recover " << step << ": creating root inode" << endl;
       mdcache->open_root(0);
@@ -393,7 +394,8 @@ void MDS::boot_recover(int step)
     } else {
       // FIXME
       assert(0);
-    }
+      }*/
+    step = 1;
 
   case 1:
     dout(2) << "boot_recover " << step << ": opening idalloc" << endl;
@@ -438,7 +440,7 @@ void MDS::boot_recover(int step)
 void MDS::mark_active()
 {
   dout(3) << "mark_active" << endl;
-  state = STATE_ACTIVE;
+  state = MDSMap::STATE_ACTIVE;
   finish_contexts(waitfor_active);  // kick waiters
 }
 
@@ -451,12 +453,14 @@ int MDS::shutdown_start()
   dout(1) << "shutdown_start" << endl;
   derr(0) << "mds shutdown start" << endl;
 
-  for (set<int>::iterator p = mdsmap->get_mds().begin();
-       p != mdsmap->get_mds().end();
+  for (set<int>::iterator p = mdsmap->get_mds_set().begin();
+       p != mdsmap->get_mds_set().end();
        p++) {
-    dout(1) << "sending MShutdownStart to mds" << *p << endl;
-    send_message_mds(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
-		     *p, MDS_PORT_MAIN);
+    if (mdsmap->is_starting(*p) || mdsmap->is_active(*p)) {
+      dout(1) << "sending MShutdownStart to mds" << *p << endl;
+      send_message_mds(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
+		       *p, MDS_PORT_MAIN);
+    }
   }
 
   if (idalloc) idalloc->shutdown();
@@ -471,7 +475,7 @@ void MDS::handle_shutdown_start(Message *m)
   dout(1) << " handle_shutdown_start" << endl;
 
   // set flag
-  state = STATE_STOPPING;
+  state = MDSMap::STATE_STOPPING;
 
   mdcache->shutdown_start();
   
@@ -494,7 +498,7 @@ int MDS::shutdown_final()
 {
   dout(1) << "shutdown" << endl;
   
-  state = STATE_STOPPED;
+  state = MDSMap::STATE_DOWN;
   
   // shut down cache
   mdcache->shutdown();

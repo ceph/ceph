@@ -23,22 +23,31 @@
 class EImportFinish : public LogEvent {
  protected:
   inodeno_t dirino; // imported dir
+  bool success;
 
  public:
-  EImportFinish(CDir *dir) : LogEvent(EVENT_IMPORTFINISH), 
-			     dirino(dir->ino()) { }
+  EImportFinish(CDir *dir, bool s) : LogEvent(EVENT_IMPORTFINISH), 
+				     dirino(dir->ino()),
+				     success(s) { }
   EImportFinish() : LogEvent(EVENT_IMPORTFINISH) { }
   
   void print(ostream& out) {
     out << "import_finish " << dirino;
+    if (success)
+      out << " success";
+    else
+      out << " failed";
   }
 
   virtual void encode_payload(bufferlist& bl) {
     bl.append((char*)&dirino, sizeof(dirino));
+    bl.append((char*)&success, sizeof(success));
   }
   void decode_payload(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(dirino), (char*)&dirino);
     off += sizeof(dirino);
+    bl.copy(off, sizeof(success), (char*)&success);
+    off += sizeof(success);
   }
   
   bool has_expired(MDS *mds);

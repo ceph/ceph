@@ -358,7 +358,7 @@ class CDir : public MDSCacheObject {
 
   // -- dirtyness --
   version_t get_version() { return version; }
-  void set_version(version_t v) { version = v; }
+  void set_version(version_t v) { projected_version = version = v; }
   version_t get_projected_version() { return projected_version; }
   
   version_t get_committing_version() { return committing_version; }
@@ -368,6 +368,7 @@ class CDir : public MDSCacheObject {
   void set_last_committed_version(version_t v) { last_committed_version = v; }
 
   version_t pre_dirty();
+  void _mark_dirty();
   void mark_dirty(version_t pv);
   void mark_clean();
   void mark_complete() { state_set(CDIR_STATE_COMPLETE); }

@@ -487,18 +487,22 @@ version_t CDir::pre_dirty()
   return projected_version;
 }
 
+void CDir::_mark_dirty()
+{
+  if (!state_test(CDIR_STATE_DIRTY)) {
+    state_set(CDIR_STATE_DIRTY);
+    dout(10) << "mark_dirty (was clean) " << *this << " version " << version << endl;
+    get(PIN_DIRTY);
+  } else {
+    dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << endl;
+  }
+}
+
 void CDir::mark_dirty(version_t pv)
 {
   ++version;
   assert(pv == version);
-
-  if (!state_test(CDIR_STATE_DIRTY)) {
-    state_set(CDIR_STATE_DIRTY);
-    dout(10) << "mark_dirty (was clean) " << *this << " new version " << version << endl;
-    get(PIN_DIRTY);
-  } else {
-    dout(10) << "mark_dirty (already dirty) " << *this << " new version " << version << endl;
-  }
+  _mark_dirty();
 }
 
 void CDir::mark_clean()

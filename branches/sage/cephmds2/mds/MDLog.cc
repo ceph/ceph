@@ -120,6 +120,8 @@ void MDLog::submit_entry( LogEvent *le,
 			  Context *c ) 
 {
   if (g_conf.mds_log) {
+    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
+
     // encode it, with event type
     bufferlist bl;
     bl.append((char*)&le->_type, sizeof(le->_type));
@@ -127,8 +129,6 @@ void MDLog::submit_entry( LogEvent *le,
 
     // journal it.
     journaler->append_entry(bl);
-
-    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
 
     assert(!capped);
 
@@ -224,7 +224,7 @@ void MDLog::_did_read()
 
 void MDLog::_trimmed(LogEvent *le) 
 {
-  dout(7) << "trimmed : " << le->get_end_off() << " : " << *le << endl;
+  dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << endl;
   assert(le->has_expired(mds));
 
   if (trimming.begin()->first == le->_end_off) {
@@ -267,23 +267,25 @@ void MDLog::trim(Context *c)
     }
     
     bufferlist bl;
+    off_t so = journaler->get_read_pos();
     if (journaler->try_read_entry(bl)) {
       // decode logevent
       LogEvent *le = LogEvent::decode(bl);
+      le->_start_off = so;
       le->_end_off = journaler->get_read_pos();
       num_events--;
 
       // we just read an event.
       if (le->has_expired(mds)) {
         // obsolete
- 	dout(7) << "trim  obsolete : " << le->get_end_off() << " : " << *le << endl;
+ 	dout(7) << "trim  obsolete : " << le->get_start_off() << " : " << *le << endl;
         delete le;
         logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
         // trim!
-	dout(7) << "trim  expiring : " << le->get_end_off() << " : " << *le << endl;
+	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << endl;
         trimming[le->_end_off] = le;
         le->expire(mds, new C_MDL_Trimmed(this, le));
         logger->inc("expire");

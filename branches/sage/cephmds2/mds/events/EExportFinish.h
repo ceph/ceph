@@ -23,22 +23,31 @@
 class EExportFinish : public LogEvent {
  protected:
   inodeno_t dirino; // exported dir
+  bool success;
 
  public:
-  EExportFinish(CDir *dir) : LogEvent(EVENT_EXPORTFINISH), 
-			     dirino(dir->ino()) { }
+  EExportFinish(CDir *dir, bool s) : LogEvent(EVENT_EXPORTFINISH), 
+				     dirino(dir->ino()),
+				     success(s) { }
   EExportFinish() : LogEvent(EVENT_EXPORTFINISH) { }
   
   void print(ostream& out) {
     out << "export_finish " << dirino;
+    if (success)
+      out << " success";
+    else 
+      out << " failure";
   }
 
   virtual void encode_payload(bufferlist& bl) {
     bl.append((char*)&dirino, sizeof(dirino));
+    bl.append((char*)&success, sizeof(success));
   }
   void decode_payload(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(dirino), (char*)&dirino);
     off += sizeof(dirino);
+    bl.copy(off, sizeof(success), (char*)&success);
+    off += sizeof(success);
   }
   
   bool has_expired(MDS *mds);

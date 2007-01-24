@@ -42,6 +42,14 @@ public:
   }
 };
 
+class C_Die : public Context {
+public:
+  void finish(int) {
+    cerr << "die" << endl;
+    exit(1);
+  }
+};
+
 
 int main(int argc, char **argv) 
 {
@@ -66,6 +74,10 @@ int main(int argc, char **argv)
     nargs.push_back(args[i]);
   }
   assert(nargs.empty());
+
+
+  if (g_conf.kill_after) 
+    g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
 
   g_clock.tare();

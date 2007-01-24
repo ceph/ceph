@@ -12,6 +12,7 @@
  */
 
 #include "events/EMetaBlob.h"
+#include "events/EAlloc.h"
 #include "events/EUpdate.h"
 #include "events/EImportMap.h"
 
@@ -150,6 +151,8 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 
 void EMetaBlob::replay(MDS *mds)
 {
+  dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << endl;
+
   // walk through my dirs (in order!)
   for (list<inodeno_t>::iterator lp = lump_order.begin();
        lp != lump_order.end();
@@ -161,23 +164,20 @@ void EMetaBlob::replay(MDS *mds)
     CInode *diri = mds->mdcache->get_inode(*lp);
     CDir *dir;
     if (!diri) {
-      diri = new CInode(mds->mdcache);
-      diri->inode.ino = *lp;
-      diri->inode.mode = INODE_MODE_DIR;
-      mds->mdcache->add_inode(diri);
-
-      dir = diri->get_or_open_dir(mds->mdcache);
-
-      if (dir->ino() == 1)
-	mds->mdcache->set_root(diri);
-
-      dout(10) << "EMetaBlob.replay added dir " << *dir << endl;
+      assert(*lp == 1);
+      diri = mds->mdcache->create_root_inode();
+      dout(10) << "EMetaBlob.replay created root " << *diri << endl;
+    }
+    if (diri->dir) {
+      dir = diri->dir;
+      dout(20) << "EMetaBlob.replay had dir " << *dir << endl;
     } else {
       dir = diri->get_or_open_dir(mds->mdcache);
-      dout(20) << "EMetaBlob.replay had dir " << *dir << endl;
+      dout(10) << "EMetaBlob.replay added dir " << *dir << endl;  
     }
-    dir->set_version( lump.dirv-1 );
-    dir->mark_dirty( lump.dirv );
+    dir->set_version( lump.dirv );
+    if (lump.is_dirty())
+      dir->_mark_dirty();
     if (lump.is_complete())
       dir->mark_complete();
     
@@ -252,6 +252,53 @@ void EMetaBlob::replay(MDS *mds)
 
 
 
+// -----------------------
+// EAlloc
+
+bool EAlloc::has_expired(MDS *mds) 
+{
+  version_t cv = mds->idalloc->get_committed_version();
+  if (cv < table_version) {
+    dout(10) << "EAlloc.has_expired v " << table_version << " > " << cv
+	     << ", still dirty" << endl;
+    return false;   // still dirty
+  } else {
+    dout(10) << "EAlloc.has_expired v " << table_version << " <= " << cv
+	     << ", already flushed" << endl;
+    return true;    // already flushed
+  }
+}
+
+void EAlloc::expire(MDS *mds, Context *c)
+{
+  dout(10) << "EAlloc.expire saving idalloc table" << endl;
+  mds->idalloc->save(c, table_version);
+}
+
+void EAlloc::replay(MDS *mds)
+{
+  if (mds->idalloc->get_version() >= table_version) {
+    dout(10) << "EAlloc.replay event " << table_version
+	     << " <= table " << mds->idalloc->get_version() << endl;
+  } else {
+    dout(10) << " EAlloc.replay event " << table_version
+	     << " - 1 == table " << mds->idalloc->get_version() << endl;
+    assert(table_version-1 == mds->idalloc->get_version());
+    
+    if (what == EALLOC_EV_ALLOC) {
+      idno_t nid = mds->idalloc->alloc_id(true);
+      assert(nid == id);       // this should match.
+    } 
+    else if (what == EALLOC_EV_FREE) {
+      mds->idalloc->reclaim_id(id, true);
+    } 
+    else
+      assert(0);
+    
+    assert(table_version == mds->idalloc->get_version());
+  }
+}
+
 
 // -----------------------
 // EUpdate
@@ -316,7 +363,7 @@ void EImportMap::expire(MDS *mds, Context *c)
 void EImportMap::replay(MDS *mds) 
 {
   dout(10) << "EImportMap.replay -- reconstructing import/export spanning tree" << endl;
-  assert(imports.empty());
+  assert(mds->mdcache->imports.empty());
 
   // first, stick the spanning tree in my cache
   metablob.replay(mds);
@@ -438,19 +485,44 @@ void EPurgeFinish::replay(MDS *mds)
 
 
 
-
+// -----------------------
+// EExportStart
 
 bool EExportStart::has_expired(MDS *mds)
 {
-  return true;
-}
-void EExportStart::expire(MDS *mds, Context *c)
-{
-}
-void EExportStart::replay(MDS *mds)
-{
+  CInode *diri = mds->mdcache->get_inode(dirino);
+  if (!diri) return true;
+  CDir *dir = diri->dir;
+  if (!dir) return true;
+  if (!mds->mdcache->migrator->is_exporting(dir))
+    return true;
+  dout(10) << "EExportStart.has_expired still exporting " << *dir << endl;
+  return false;
 }
 
+void EExportStart::expire(MDS *mds, Context *c)
+{
+  CInode *diri = mds->mdcache->get_inode(dirino);
+  assert(diri);
+  CDir *dir = diri->dir;
+  assert(dir);
+  assert(mds->mdcache->migrator->is_exporting(dir));
+
+  dout(10) << "EExportStart.expire waiting for export of " << *dir << endl;
+  mds->mdcache->migrator->add_export_finish_waiter(dir, c);
+}
+
+void EExportStart::replay(MDS *mds)
+{
+  dout(10) << "EExportStart.replay " << dirino << " -> " << dest << endl;
+
+  metablob.replay(mds);
+
+  
+}
+
+// -----------------------
+// EExportFinish
 
 bool EExportFinish::has_expired(MDS *mds)
 {
@@ -463,6 +535,9 @@ void EExportFinish::replay(MDS *mds)
 {
 }
 
+
+// -----------------------
+// EImportStart
 
 bool EImportStart::has_expired(MDS *mds)
 {
