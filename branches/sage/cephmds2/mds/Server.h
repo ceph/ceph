@@ -23,7 +23,6 @@ class Server {
   MDCache *mdcache;
   MDLog *mdlog;
   Messenger *messenger;
-  int whoami;
 
   __uint64_t stat_ops;
 
@@ -32,7 +31,7 @@ public:
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
-    messenger(mds->messenger), whoami(mds->get_nodeid()),
+    messenger(mds->messenger),
     stat_ops(0) {
   }
 

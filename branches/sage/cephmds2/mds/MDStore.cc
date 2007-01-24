@@ -92,7 +92,7 @@ void MDStore::fetch_dir( CDir *dir,
   dir->state_set(CDIR_STATE_FETCHING);
   
   // stats
-  mds->logger->inc("fdir");
+  if (mds->logger) mds->logger->inc("fdir");
   
   // create return context
   Context *fin = new C_MDS_Fetch( this, dir->ino() );
@@ -529,7 +529,7 @@ void MDStore::commit_dir( CDir *dir,
   dir->set_committing_version(); 
 
   // stats
-  mds->logger->inc("cdir");
+  if (mds->logger) mds->logger->inc("cdir");
 
   if (dir->is_hashed()) {
     // hashed

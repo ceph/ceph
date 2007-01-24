@@ -73,6 +73,13 @@ void MDSMonitor::handle_mds_boot(MMDSBoot *m)
   dout(7) << "mds_boot from " << m->get_source() << " at " << m->get_source_inst() << endl;
   assert(m->get_source().is_mds());
   int from = m->get_source().num();
+
+  // choose an MDS id
+  if (from < 0 || !mdsmap.is_down(from)) {
+    for (from=0; ; ++from) 
+      if (mdsmap.is_down(from)) break;
+    dout(10) << "mds_boot assigned mds" << from << endl;
+  }
   
   if (mdsmap.get_epoch() == 0) {
     // waiting for boot!
@@ -155,3 +162,11 @@ void MDSMonitor::send_current()
   awaiting_map.clear();
 }
 
+void MDSMonitor::send_latest(msg_addr_t dest, const entity_inst_t& inst)
+{
+  // FIXME: check if we're locked, etc.
+  if (mdsmap.get_epoch() > 0)
+    send_full(dest, inst);
+  else
+    awaiting_map[dest] = inst;
+}

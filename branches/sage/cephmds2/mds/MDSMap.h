@@ -83,6 +83,15 @@ class MDSMap {
     } 
     return false;
   }
+  
+  int get_inst_rank(const entity_inst_t& inst) {
+    for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
+	 p != mds_inst.end();
+	 ++p) {
+      if (p->second == inst) return p->first;
+    }
+    return -1;
+  }
 
   void remove_mds(int m) {
     mds_set.erase(m);

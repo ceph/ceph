@@ -519,7 +519,7 @@ protected:
 
   // ----------------------
   // fs ops.
-  int mount(int mkfs=0);
+  int mount();
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.

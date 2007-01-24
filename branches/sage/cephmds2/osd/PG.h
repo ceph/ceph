@@ -59,7 +59,7 @@ namespace __gnu_cxx {
     size_t operator()(const reqid_t &r) const { 
       static hash<unsigned long> H;
       static hash<__uint64_t>    I;
-      return H(r.addr._addr) ^ I(r.tid);
+      return H(r.addr.type() ^ r.addr.num()) ^ I(r.tid);
     }
   };
 }

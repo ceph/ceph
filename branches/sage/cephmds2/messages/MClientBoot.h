@@ -12,18 +12,18 @@
  */
 
 
-#ifndef __MCLIENTMOUNT_H
-#define __MCLIENTMOUNT_H
+#ifndef __MCLIENTBOOT_H
+#define __MCLIENTBOOT_H
 
 #include "msg/Message.h"
 
-class MClientMount : public Message {
+class MClientBoot : public Message {
 
  public:
-  MClientMount() : Message(MSG_CLIENT_MOUNT) { 
+  MClientBoot() : Message(MSG_CLIENT_BOOT) { 
   }
 
-  char *get_type_name() { return "Cmnt"; }
+  char *get_type_name() { return "Cboot"; }
 
   virtual void decode_payload(crope& s, int& off) {  
   }

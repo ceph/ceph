@@ -42,13 +42,14 @@ class IdAllocator {
   map<version_t, list<Context*> > waitfor_save;
 
  public:
-  IdAllocator(MDS *m, inode_t i) :
+  IdAllocator(MDS *m) :
     mds(m),
-    inode(i),
     state(STATE_UNDEF),
     version(0), committing_version(0), committed_version(0)
   {
   }
+  
+  void init_inode();
 
   // alloc or reclaim ids
   idno_t alloc_id(bool replay=false);

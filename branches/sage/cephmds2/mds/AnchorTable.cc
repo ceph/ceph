@@ -32,10 +32,20 @@ AnchorTable::AnchorTable(MDS *mds)
   this->mds = mds;
   opening = false;
   opened = false;
-  
+}
+
+void AnchorTable::init_inode()
+{
   memset(&table_inode, 0, sizeof(table_inode));
   table_inode.ino = MDS_INO_ANCHORTABLE+mds->get_nodeid();
   table_inode.layout = g_OSD_FileLayout;
+}
+
+void AnchorTable::reset()
+{  
+  init_inode();
+  opened = true;
+  anchor_map.clear();
 }
 
 /*
@@ -214,7 +224,7 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
   }
 
   // send reply
-  mds->messenger->send_message(reply, m->get_source(), m->get_source_port());
+  mds->messenger->send_message(reply, m->get_source(), m->get_source_inst(), m->get_source_port());
   delete m;
 }
 
@@ -308,6 +318,7 @@ public:
 void AnchorTable::load(Context *onfinish)
 {
   dout(7) << "load" << endl;
+  init_inode();
 
   assert(!opened);
 

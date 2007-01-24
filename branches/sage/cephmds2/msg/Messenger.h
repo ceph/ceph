@@ -36,14 +36,20 @@ class Messenger {
  private:
   Dispatcher          *dispatcher;
   msg_addr_t           _myaddr;
+  entity_inst_t        _myinst;
 
 
  public:
   Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w) { }
   virtual ~Messenger() { }
   
-  void       set_myaddr(msg_addr_t m) { _myaddr = m; }
+  const entity_inst_t &get_myinst() { return _myinst; }
+  void set_myinst(entity_inst_t& v) { _myinst = v; }
+
   msg_addr_t get_myaddr() { return _myaddr; }
+  void _set_myaddr(msg_addr_t m) { _myaddr = m; }
+
+  virtual void reset_myaddr(msg_addr_t m) = 0;
 
 
   virtual int shutdown() = 0;
@@ -68,11 +74,9 @@ class Messenger {
 
   // send message
   virtual void prepare_dest(const entity_inst_t& inst) {}
-  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
-  virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst,
-			   int port=0, int fromport=0) {
-    return send_message(m, dest, port, fromport);   // overload me!
-  }
+  //virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;
+  virtual int send_message(Message *m, msg_addr_t dest, entity_inst_t inst,
+			   int port=0, int fromport=0) = 0;
 
 
   // make a procedure call

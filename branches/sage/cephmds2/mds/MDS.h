@@ -188,6 +188,7 @@ public:
 
   // start up, shutdown
   int init();
+  void reopen_log();
 
   void boot_mkfs();      
   void boot_mkfs_finish();
@@ -232,8 +233,6 @@ public:
   }
 };
 
-
-ostream& operator<<(ostream& out, MDS& mds);
 
 
 #endif

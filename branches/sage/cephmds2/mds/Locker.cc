@@ -331,7 +331,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
  */
 void Locker::handle_client_file_caps(MClientFileCaps *m)
 {
-  int client = MSG_ADDR_NUM(m->get_source());
+  int client = m->get_source().num();
   CInode *in = mdcache->get_inode(m->get_ino());
   Capability *cap = 0;
   if (in) 
@@ -745,7 +745,7 @@ void Locker::handle_lock_inode_hard(MLock *m)
 {
   assert(m->get_otype() == LOCK_OTYPE_IHARD);
   
-  mds->logger->inc("lih");
+  if (mds->logger) mds->logger->inc("lih");
 
   int from = m->get_asker();
   CInode *in = mdcache->get_inode(m->get_ino());
@@ -1492,7 +1492,7 @@ void Locker::handle_lock_inode_file(MLock *m)
 {
   assert(m->get_otype() == LOCK_OTYPE_IFILE);
   
-  mds->logger->inc("lif");
+  if (mds->logger) mds->logger->inc("lif");
 
   CInode *in = mdcache->get_inode(m->get_ino());
   int from = m->get_asker();

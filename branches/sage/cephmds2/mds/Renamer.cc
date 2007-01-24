@@ -600,7 +600,7 @@ void Renamer::handle_rename_notify_ack(MRenameNotifyAck *m)
   assert(in);
   dout(7) << "handle_rename_notify_ack on " << *in << endl;
 
-  int source = MSG_ADDR_NUM(m->get_source());
+  int source = m->get_source().num();
   rename_waiting_for_ack[in->ino()].erase(source);
   if (rename_waiting_for_ack[in->ino()].empty()) {
     // last one!
@@ -727,7 +727,7 @@ void Renamer::handle_rename(MRename *m)
   // HACK
   bufferlist bufstate;
   bufstate.claim_append(m->get_inode_state());
-  cache->migrator->decode_import_inode(destdn, bufstate, off, MSG_ADDR_NUM(m->get_source()));
+  cache->migrator->decode_import_inode(destdn, bufstate, off, m->get_source().num());
 
   CInode *in = destdn->inode;
   assert(in);
@@ -749,11 +749,11 @@ void Renamer::handle_rename(MRename *m)
   // ok, send notifies.
   set<int> notify;
   for (int i=0; i<mds->get_mds_map()->get_num_mds(); i++) {
-    if (i != MSG_ADDR_NUM(m->get_source()) &&  // except the source
+    if (i != m->get_source().num() &&  // except the source
         i != mds->get_nodeid())  // and the dest
       notify.insert(i);
   }
-  file_rename_notify(in, srcdir, srcname, destdir, destname, notify, MSG_ADDR_NUM(m->get_source()));
+  file_rename_notify(in, srcdir, srcname, destdir, destname, notify, m->get_source().num());
 
   delete m;
 }

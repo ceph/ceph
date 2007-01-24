@@ -392,7 +392,7 @@ bool MDCache::trim(int max)
 	!diri->is_root())                   // not root
       migrator->export_empty_import(diri->dir);
     
-    mds->logger->inc("cex");
+    if (mds->logger) mds->logger->inc("cex");
   }
 
   // inode expire_queue
@@ -1034,9 +1034,9 @@ int MDCache::path_traverse(filepath& origpath,
             
             if (dn->get_inode()->is_replica(from)) {
               dout(15) << "traverse: REP would replicate to mds" << from << ", but already cached_by " 
-                       << MSG_ADDR_NICE(req->get_source()) << " dn " << *dn << endl; 
+                       << req->get_source() << " dn " << *dn << endl; 
             } else {
-              dout(10) << "traverse: REP replicating to " << MSG_ADDR_NICE(req->get_source()) << " dn " << *dn << endl;
+              dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << endl;
               MDiscoverReply *reply = new MDiscoverReply(cur->dir->ino());
               reply->add_dentry( dn->replicate_to( from ) );
               reply->add_inode( dn->inode->replicate_to( from ) );
@@ -1080,7 +1080,7 @@ int MDCache::path_traverse(filepath& origpath,
         touch_inode(cur);
         mds->mdstore->fetch_dir(cur->dir, ondelay);
         
-        mds->logger->inc("cmiss");
+        if (mds->logger) mds->logger->inc("cmiss");
 
         if (onfinish) delete onfinish;
         return 1;
@@ -1114,7 +1114,7 @@ int MDCache::path_traverse(filepath& origpath,
 					      want,
 					      false),
 				dauth, MDS_PORT_CACHE);
-          mds->logger->inc("dis");
+          if (mds->logger) mds->logger->inc("dis");
         }
         
         // delay processing of current request.
@@ -1124,7 +1124,7 @@ int MDCache::path_traverse(filepath& origpath,
                              path[depth], 
                              new C_MDC_TraverseDiscover(onfinish, ondelay));
         
-        mds->logger->inc("cmiss");
+        if (mds->logger) mds->logger->inc("cmiss");
         return 1;
       } 
       if (onfail == MDS_TRAVERSE_FORWARD) {
@@ -1140,7 +1140,7 @@ int MDCache::path_traverse(filepath& origpath,
         mds->send_message_mds(req, dauth, req->get_dest_port());
         //show_imports();
         
-        mds->logger->inc("cfw");
+        if (mds->logger) mds->logger->inc("cfw");
         if (onfinish) delete onfinish;
         delete ondelay;
         return 2;
@@ -1346,7 +1346,7 @@ bool MDCache::request_start(Message *req,
   // request pins
   request_pin_inode(req, ref);
   
-  mds->logger->inc("req");
+  if (mds->logger) mds->logger->inc("req");
 
   return true;
 }
@@ -1441,19 +1441,21 @@ void MDCache::request_cleanup(Message *req)
 
 
   // log some stats *****
-  mds->logger->set("c", lru.lru_get_size());
-  mds->logger->set("cpin", lru.lru_get_num_pinned());
-  mds->logger->set("ctop", lru.lru_get_top());
-  mds->logger->set("cbot", lru.lru_get_bot());
-  mds->logger->set("cptail", lru.lru_get_pintail());
-  //mds->logger->set("buf",buffer_total_alloc);
+  if (mds->logger) {
+    mds->logger->set("c", lru.lru_get_size());
+    mds->logger->set("cpin", lru.lru_get_num_pinned());
+    mds->logger->set("ctop", lru.lru_get_top());
+    mds->logger->set("cbot", lru.lru_get_bot());
+    mds->logger->set("cptail", lru.lru_get_pintail());
+    //mds->logger->set("buf",buffer_total_alloc);
+  }
 
   if (g_conf.log_pins) {
     // pin
     /*
 for (int i=0; i<CINODE_NUM_PINS; i++) {
-      mds->logger2->set(cinode_pin_names[i],
-                        cinode_pins[i]);
+      if (mds->logger2) mds->logger2->set(cinode_pin_names[i],
+					  cinode_pins[i]);
     }
     */
     /*
@@ -1462,7 +1464,7 @@ for (int i=0; i<CINODE_NUM_PINS; i++) {
       it++) {
       //string s = "D";
       //s += cdir_pin_names[it->first];
-      mds->logger2->set(//s, 
+      if (mds->logger2) mds->logger2->set(//s, 
       cdir_pin_names[it->first],
       it->second);
       }
@@ -1477,7 +1479,7 @@ void MDCache::request_finish(Message *req)
   request_cleanup(req);
   delete req;  // delete req
   
-  mds->logger->inc("reply");
+  if (mds->logger) mds->logger->inc("reply");
 
 
   //dump();
@@ -1492,7 +1494,7 @@ void MDCache::request_forward(Message *req, int who, int port)
   request_cleanup(req);
   mds->send_message_mds(req, who, port);
 
-  mds->logger->inc("fw");
+  if (mds->logger) mds->logger->inc("fw");
 }
 
 
@@ -2057,7 +2059,7 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 void MDCache::handle_cache_expire(MCacheExpire *m)
 {
   int from = m->get_from();
-  int source = MSG_ADDR_NUM(m->get_source());
+  int source = m->get_source().num();
   map<int, MCacheExpire*> proxymap;
   
   if (m->get_from() == source) {

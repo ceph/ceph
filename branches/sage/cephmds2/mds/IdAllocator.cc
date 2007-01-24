@@ -29,6 +29,14 @@
 #define dout(x)  if (x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".idalloc: "
 
 
+void IdAllocator::init_inode()
+{
+  memset(&inode, 0, sizeof(inode));
+  inode.ino = MDS_INO_IDS_OFFSET + mds->get_nodeid();
+  inode.layout = g_OSD_FileLayout;
+}
+
+
 idno_t IdAllocator::alloc_id(bool replay) 
 {
   assert(is_active());
@@ -119,6 +127,8 @@ void IdAllocator::save_2(version_t v)
 
 void IdAllocator::reset()
 {
+  init_inode();
+
   free.clear();
 
   // use generic range FIXME THIS IS CRAP
@@ -151,6 +161,8 @@ public:
 void IdAllocator::load(Context *onfinish)
 { 
   dout(10) << "load" << endl;
+
+  init_inode();
 
   assert(is_undef());
   state = STATE_OPENING;

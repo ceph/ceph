@@ -391,7 +391,7 @@ void Migrator::handle_export_dir_prep_ack(MExportDirPrepAck *m)
   dout(7) << "export_dir_prep_ack " << *dir << ", starting export" << endl;
   
   // start export.
-  export_dir_go(dir, MSG_ADDR_NUM(m->get_source()));
+  export_dir_go(dir, m->get_source().num());
 
   // done
   delete m;
@@ -510,8 +510,8 @@ void Migrator::export_dir_go(CDir *dir,
 
 
   // stats
-  mds->logger->inc("ex");
-  mds->logger->inc("iex", num_exported_inodes);
+  if (mds->logger) mds->logger->inc("ex");
+  if (mds->logger) mds->logger->inc("iex", num_exported_inodes);
 
   show_imports();
 }
@@ -754,7 +754,7 @@ void Migrator::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
   assert(dir->is_frozen_tree_root());  // i'm exporting!
 
   // remove from waiting list
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   assert(export_notify_ack_waiting[dir].count(from));
   export_notify_ack_waiting[dir].erase(from);
 
@@ -842,7 +842,7 @@ void Migrator::export_dir_finish(CDir *dir)
   export_finish_waiters.erase(dir);
 
   // stats
-  mds->logger->set("nex", cache->exports.size());
+  if (mds->logger) mds->logger->set("nex", cache->exports.size());
 
   show_imports();
 }
@@ -876,7 +876,7 @@ public:
 
 void Migrator::handle_export_dir_discover(MExportDirDiscover *m)
 {
-  assert(MSG_ADDR_NUM(m->get_source()) != mds->get_nodeid());
+  assert(m->get_source().num() != mds->get_nodeid());
 
   dout(7) << "handle_export_dir_discover on " << m->get_path() << endl;
 
@@ -933,7 +933,7 @@ void Migrator::handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, i
 
 void Migrator::handle_export_dir_prep(MExportDirPrep *m)
 {
-  assert(MSG_ADDR_NUM(m->get_source()) != mds->get_nodeid());
+  assert(m->get_source().num() != mds->get_nodeid());
 
   CInode *diri = cache->get_inode(m->get_ino());
   assert(diri);
@@ -1135,7 +1135,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   CDir *dir = diri->dir;
   assert(dir);
 
-  int oldauth = MSG_ADDR_NUM(m->get_source());
+  int oldauth = m->get_source().num();
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
@@ -1211,7 +1211,7 @@ void Migrator::handle_export_dir(MExportDir *m)
       cache->imports.erase(ex);
       ex->state_clear(CDIR_STATE_IMPORT);
 
-      mds->logger->inc("imex");
+      if (mds->logger) mds->logger->inc("imex");
 
       // move nested exports under containing_import
       for (set<CDir*>::iterator it = cache->nested_exports[ex].begin();
@@ -1234,7 +1234,7 @@ void Migrator::handle_export_dir(MExportDir *m)
       ex->get(CDir::PIN_EXPORT);           // all exports are pinned
       cache->exports.insert(ex);
       cache->nested_exports[containing_import].insert(ex);
-      mds->logger->inc("imex");
+      if (mds->logger) mds->logger->inc("imex");
     }
     
   }
@@ -1269,9 +1269,11 @@ void Migrator::handle_export_dir(MExportDir *m)
 							  imported_subdirs, m->get_exports()));
 
   // some stats
-  mds->logger->inc("im");
-  mds->logger->inc("iim", num_imported_inodes);
-  mds->logger->set("nim", cache->imports.size());
+  if (mds->logger) {
+    mds->logger->inc("im");
+    mds->logger->inc("iim", num_imported_inodes);
+    mds->logger->set("nim", cache->imports.size());
+  }
 
   delete m;
 }
@@ -1339,8 +1341,10 @@ void Migrator::import_dir_logged_finish(CDir *dir)
 
   dout(5) << "done with import of " << *dir << endl;
   show_imports();
-  mds->logger->set("nex", cache->exports.size());
-  mds->logger->set("nim", cache->imports.size());
+  if (mds->logger) {
+    mds->logger->set("nex", cache->exports.size());
+    mds->logger->set("nim", cache->imports.size());
+  }
 
   // un auth pin (other exports can now proceed)
   dir->auth_unpin();  
@@ -1895,7 +1899,7 @@ void Migrator::handle_hash_dir_discover_ack(MHashDirDiscoverAck *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   assert(hash_gather[dir].count(from));
   hash_gather[dir].erase(from);
   
@@ -2005,7 +2009,7 @@ void Migrator::handle_hash_dir_prep_ack(MHashDirPrepAck *m)
   CDir *dir = in->dir;
   assert(dir);
 
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
 
   assert(hash_gather[dir].count(from) == 1);
   hash_gather[dir].erase(from);
@@ -2215,7 +2219,7 @@ void Migrator::handle_hash_dir_ack(MHashDirAck *m)
   assert(dir->is_hashed());
   assert(dir->is_hashing());
 
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   assert(hash_gather[dir].count(from) == 1);
   hash_gather[dir].erase(from);
   
@@ -2273,7 +2277,7 @@ void Migrator::hash_dir_finish(CDir *dir)
   assert(hash_gather.count(dir) == 0);
 
   // stats
-  //mds->logger->inc("nh", 1);
+  //if (mds->logger) mds->logger->inc("nh", 1);
 
 }
 
@@ -2293,7 +2297,7 @@ void Migrator::handle_hash_dir_notify(MHashDirNotify *m)
   dout(5) << "handle_hash_dir_notify " << *dir << endl;
   int from = m->get_from();
 
-  int source = MSG_ADDR_NUM(m->get_source());
+  int source = m->get_source().num();
   if (dir->is_auth()) {
     // gather notifies
     assert(dir->is_hashed());
@@ -2400,7 +2404,7 @@ public:
 
 void Migrator::handle_hash_dir_discover(MHashDirDiscover *m)
 {
-  assert(MSG_ADDR_NUM(m->get_source()) != mds->get_nodeid());
+  assert(m->get_source().num() != mds->get_nodeid());
 
   dout(7) << "handle_hash_dir_discover on " << m->get_path() << endl;
 
@@ -2557,7 +2561,7 @@ void Migrator::handle_hash_dir(MHashDir *m)
   assert(dir->is_hashing());
 
   dout(5) << "handle_hash_dir " << *dir << endl;
-  int oldauth = MSG_ADDR_NUM(m->get_source());
+  int oldauth = m->get_source().num();
 
   // content
   import_hashed_content(dir, m->get_state(), m->get_nden(), oldauth);
@@ -2580,7 +2584,7 @@ void Migrator::handle_hash_dir(MHashDir *m)
   dout(7) << "sending notifies" << endl;
   for (int i=0; i<mds->get_mds_map()->get_num_mds(); i++) {
     if (i == mds->get_nodeid()) continue;
-    if (i == MSG_ADDR_NUM(m->get_source())) continue;
+    if (i == m->get_source().num()) continue;
     mds->send_message_mds(new MHashDirNotify(dir->ino(), mds->get_nodeid()),
 			  i, MDS_PORT_MIGRATOR);
   }
@@ -2704,7 +2708,7 @@ void Migrator::handle_unhash_dir_prep_ack(MUnhashDirPrepAck *m)
   CDir *dir = in->dir;
   assert(dir);
   
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   dout(7) << "handle_unhash_dir_prep_ack from " << from << " " << *dir << endl;
 
   if (!m->did_assim()) {
@@ -2817,7 +2821,7 @@ void Migrator::handle_unhash_dir_ack(MUnhashDirAck *m)
   assert(dir->is_hashed());
 
   // assimilate content
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   import_hashed_content(dir, m->get_state(), m->get_nden(), from);
   delete m;
 
@@ -2892,7 +2896,7 @@ void Migrator::handle_unhash_dir_notify_ack(MUnhashDirNotifyAck *m)
   assert(dir->is_frozen_dir());
 
   // done?
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   assert(hash_gather[dir].count(from));
   hash_gather[dir].erase(from);
   delete m;
@@ -3221,7 +3225,7 @@ void Migrator::handle_unhash_dir_notify(MUnhashDirNotify *m)
   assert(dir->is_unhashing());
   assert(!dir->is_auth());
   
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   assert(hash_gather[dir].count(from) == 1);
   hash_gather[dir].erase(from);
   delete m;
