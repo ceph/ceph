@@ -30,6 +30,7 @@ using namespace std;
 #include "Client.h"
 
 
+#include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientFileCaps.h"
@@ -91,7 +92,7 @@ public:
 Client::Client(Messenger *m, MonMap *mm)
 {
   // which client am i?
-  whoami = MSG_ADDR_NUM(m->get_myaddr());
+  whoami = m->get_myaddr().num();
   monmap = mm;
 
   mounted = false;
@@ -683,36 +684,17 @@ void Client::dispatch(Message *m)
   client_lock.Unlock();
 }
 
-void Client::handle_mount_ack(MClientMountAck *m)
-{
-  // mdsmap!
-  if (!mdsmap) mdsmap = new MDSMap;
-  mdsmap->decode(m->get_mds_map_state());
-
-  // we got osdmap!
-  osdmap->decode(m->get_osd_map_state());
-
-  dout(2) << "mounted" << endl;
-  mounted = true;
-  mount_cond.Signal();
-
-  delete m;
-}
-
-
-void Client::handle_unmount_ack(Message* m)
-{
-  dout(1) << "got unmount ack" << endl;
-  mounted = false;
-  mount_cond.Signal();
-  delete m;
-}
-
 
 void Client::handle_mds_map(MMDSMap* m)
 {
   if (mdsmap == 0)
     mdsmap = new MDSMap;
+
+  if (whoami < 0) {
+    whoami = m->get_dest().num();
+    dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
+    messenger->reset_myaddr(m->get_dest());
+  }    
 
   map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();
   
@@ -747,7 +729,7 @@ public:
  */
 void Client::handle_file_caps(MClientFileCaps *m)
 {
-  int mds = MSG_ADDR_NUM(m->get_source());
+  int mds = m->get_source().num();
   Inode *in = 0;
   if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
 
@@ -847,8 +829,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << ", which we don't want caps for, releasing." << endl;
     m->set_caps(0);
     m->set_wanted(0);
-    entity_inst_t srcinst = m->get_source_inst();
-    messenger->send_message(m, m->get_source(), srcinst, m->get_source_port());
+    messenger->send_message(m, m->get_source(), m->get_source_inst(), m->get_source_port());
     return;
   }
 
@@ -955,7 +936,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
     in->file_wr_size = 0;
   }
 
-  messenger->send_message(m, m->get_source(), m->get_source_port());
+  messenger->send_message(m, m->get_source(), m->get_source_inst(), m->get_source_port());
 }
 
 
@@ -1013,7 +994,7 @@ void Client::update_caps_wanted(Inode *in)
 // -------------------
 // fs ops
 
-int Client::mount(int mkfs)
+int Client::mount()
 {
   client_lock.Lock();
 
@@ -1021,22 +1002,24 @@ int Client::mount(int mkfs)
 
   // FIXME mds map update race with mount.
 
-  dout(2) << "fetching latest mds map" << endl;
+  dout(2) << "sending boot msg to monitor" << endl;
   if (mdsmap) 
     delete mdsmap;
   int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSGetMap(),
+  messenger->send_message(new MClientBoot(),
 			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
-
+  
   while (!mdsmap)
     mount_cond.Wait(client_lock);
   
   dout(2) << "mounting" << endl;
   MClientMount *m = new MClientMount();
-  if (mkfs) m->set_mkfs(mkfs);
 
-  messenger->send_message(m, MSG_ADDR_MDS(0), mdsmap->get_inst(0), MDS_PORT_SERVER);
-
+  int who = 0; // mdsmap->get_root();  // mount at root, for now
+  messenger->send_message(m, 
+			  MSG_ADDR_MDS(who), mdsmap->get_inst(who), 
+			  MDS_PORT_SERVER);
+  
   while (!mounted)
     mount_cond.Wait(client_lock);
 
@@ -1054,6 +1037,23 @@ int Client::mount(int mkfs)
   */
   return 0;
 }
+
+void Client::handle_mount_ack(MClientMountAck *m)
+{
+  // mdsmap!
+  if (!mdsmap) mdsmap = new MDSMap;
+  mdsmap->decode(m->get_mds_map_state());
+
+  // we got osdmap!
+  osdmap->decode(m->get_osd_map_state());
+
+  dout(2) << "mounted" << endl;
+  mounted = true;
+  mount_cond.Signal();
+
+  delete m;
+}
+
 
 int Client::unmount()
 {
@@ -1122,6 +1122,14 @@ int Client::unmount()
 
   client_lock.Unlock();
   return 0;
+}
+
+void Client::handle_unmount_ack(Message* m)
+{
+  dout(1) << "got unmount ack" << endl;
+  mounted = false;
+  mount_cond.Signal();
+  delete m;
 }
 
 
@@ -2042,7 +2050,7 @@ int Client::open(const char *relpath, int flags)
     if (cmode & FILE_MODE_LAZY) f->inode->num_open_lazy++;
 
     // caps included?
-    int mds = MSG_ADDR_NUM(reply->get_source());
+    int mds = reply->get_source().num();
 
     if (f->inode->caps.empty()) {// first caps?
       dout(7) << " first caps on " << f->inode->inode.ino << endl;

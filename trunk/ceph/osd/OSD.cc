@@ -1568,7 +1568,7 @@ void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
 void OSD::handle_pg_notify(MOSDPGNotify *m)
 {
   dout(7) << "handle_pg_notify from " << m->get_source() << endl;
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
 
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
@@ -1687,7 +1687,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
 void OSD::handle_pg_log(MOSDPGLog *m) 
 {
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   const pg_t pgid = m->get_pgid();
 
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
@@ -1759,7 +1759,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 void OSD::handle_pg_query(MOSDPGQuery *m) 
 {
   dout(7) << "handle_pg_query from " << m->get_source() << " epoch " << m->get_epoch() << endl;
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 

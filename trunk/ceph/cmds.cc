@@ -23,11 +23,9 @@ using namespace std;
 #include "config.h"
 
 #include "mon/MonMap.h"
+#include "mds/MDS.h"
 
-#include "osd/OSD.h"
-#include "ebofs/Ebofs.h"
-
-#include "msg/NewMessenger.h"
+#include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
 
@@ -63,42 +61,6 @@ int main(int argc, char **argv)
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
 
-  char *dev;
-  int whoami = -1;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--dev") == 0) 
-      dev = args[++i];
-    else if (strcmp(args[i],"--osd") == 0)
-      whoami = atoi(args[++i]);
-    else {
-      cerr << "unrecognized arg " << args[i] << endl;
-      return -1;
-    }
-  }
-  cout << "dev " << dev << endl;
-  
-
-  if (whoami < 0) {
-    // who am i?   peek at superblock!
-    OSDSuperblock sb;
-    ObjectStore *store = new Ebofs(dev);
-    bufferlist bl;
-    store->mount();
-    int r = store->read(object_t(0,0), 0, sizeof(sb), bl);
-    if (r < 0) {
-      cerr << "couldn't read superblock object on " << dev << endl;
-      exit(0);
-    }
-    bl.copy(0, sizeof(sb), (char*)&sb);
-    store->umount();
-    delete store;
-    whoami = sb.whoami;
-    
-    cout << "osd fs says i am osd" << whoami << endl;
-  } else {
-    cout << "command line arg says i am osd" << whoami << endl;
-  }
-
   // load monmap
   bufferlist bl;
   int fd = ::open(".ceph_monmap", O_RDONLY);
@@ -116,17 +78,18 @@ int main(int argc, char **argv)
   // start up network
   rank.start_rank();
 
-  // start osd
-  Messenger *m = rank.register_entity(MSG_ADDR_OSD(whoami));
+  // start mds
+  Messenger *m = rank.register_entity(MSG_ADDR_MDS_NEW);
   assert(m);
-  OSD *osd = new OSD(whoami, m, monmap, dev);
-  osd->init();
-
+  
+  MDS *mds = new MDS(m->get_myaddr().num(), m, monmap);
+  mds->init();
+  
   // wait
   rank.wait();
 
   // done
-  delete osd;
+  delete mds;
 
   return 0;
 }

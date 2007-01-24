@@ -38,6 +38,8 @@ class AnchorTable {
   AnchorTable(MDS *mds); 
 
  protected:
+  void init_inode();  // call this before doing anything.
+
   // 
   bool have_ino(inodeno_t ino) { 
     return true;                  // always in memory for now.
@@ -68,10 +70,7 @@ class AnchorTable {
  public:
 
   // load/save entire table for now!
-  void reset() {
-    opened = true;
-    anchor_map.clear();
-  }
+  void reset();
   void save(Context *onfinish);
   void load(Context *onfinish);
   void load_2(size_t size, bufferlist& bl);

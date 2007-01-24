@@ -79,9 +79,10 @@
 #define MSG_CLIENT_FILECAPS        63
 #define MSG_CLIENT_INODEAUTHUPDATE 64
 
-#define MSG_CLIENT_MOUNT           70
-#define MSG_CLIENT_MOUNTACK        71
-#define MSG_CLIENT_UNMOUNT         72
+#define MSG_CLIENT_BOOT            70
+#define MSG_CLIENT_MOUNT           71
+#define MSG_CLIENT_MOUNTACK        72
+#define MSG_CLIENT_UNMOUNT         73
 
 
 // *** MDS ***
@@ -183,53 +184,26 @@ using __gnu_cxx::crope;
 
 // use fixed offsets and static entity -> logical addr mapping!
 #define MSG_ADDR_NAMER_BASE   0
-#define MSG_ADDR_RANK_BASE    0x10000000    // per-rank messenger services
-#define MSG_ADDR_MDS_BASE     0x20000000
-#define MSG_ADDR_OSD_BASE     0x30000000
-#define MSG_ADDR_MON_BASE     0x40000000
-#define MSG_ADDR_CLIENT_BASE  0x50000000
+#define MSG_ADDR_RANK_BASE    1
+#define MSG_ADDR_MDS_BASE     2
+#define MSG_ADDR_OSD_BASE     3
+#define MSG_ADDR_MON_BASE     4
+#define MSG_ADDR_CLIENT_BASE  5
 
-#define MSG_ADDR_TYPE_MASK    0xf0000000
-#define MSG_ADDR_NUM_MASK     0x0fffffff
+#define MSG_ADDR_NEW          -1
 
-#define MSG_ADDR_NEW          0x0fffffff
-#define MSG_ADDR_UNDEF_BASE   0xffffffff
-
-
-/* old int way, which lacked type safety...
-typedef int  msg_addr_t;
-
-#define MSG_ADDR_RANK(x)    (MSG_ADDR_RANK_BASE + (x))
-#define MSG_ADDR_MDS(x)     (MSG_ADDR_MDS_BASE + (x))
-#define MSG_ADDR_OSD(x)     (MSG_ADDR_OSD_BASE + (x))
-#define MSG_ADDR_CLIENT(x)  (MSG_ADDR_CLIENT_BASE + (x))
-
-#define MSG_ADDR_DIRECTORY   0
-#define MSG_ADDR_RANK_NEW    MSG_ADDR_RANK(MSG_ADDR_NEW)
-#define MSG_ADDR_MDS_NEW     MSG_ADDR_MDS(MSG_ADDR_NEW)
-#define MSG_ADDR_OSD_NEW     MSG_ADDR_OSD(MSG_ADDR_NEW)
-#define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(MSG_ADDR_NEW)
-
-#define MSG_ADDR_ISCLIENT(x)  ((x) >= MSG_ADDR_CLIENT_BASE)
-#define MSG_ADDR_TYPE(x)    (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_RANK_BASE ? "rank": \
-                             (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_CLIENT_BASE ? "client": \
-                              (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_OSD_BASE ? "osd": \
-                               (((x) & MSG_ADDR_TYPE_MASK) == MSG_ADDR_MDS_BASE ? "mds": \
-                                ((x) == MSG_ADDR_DIRECTORY ? "namer":"unknown")))))
-#define MSG_ADDR_NUM(x)    ((x) & MSG_ADDR_NUM_MASK)
-#define MSG_ADDR_NICE(x)   MSG_ADDR_TYPE(x) << MSG_ADDR_NUM(x)
-*/
 
 // new typed msg_addr_t way!
 class msg_addr_t {
 public:
-  int _addr;
+  int _type;
+  int _num;
 
-  msg_addr_t() : _addr(MSG_ADDR_UNDEF_BASE) {}
-  msg_addr_t(int t, int n) : _addr(t | n) {}
+  msg_addr_t() : _type(0), _num(0) {}
+  msg_addr_t(int t, int n) : _type(t), _num(n) {}
   
-  int num() const { return _addr & MSG_ADDR_NUM_MASK; }
-  int type() const { return _addr & MSG_ADDR_TYPE_MASK; }
+  int num() const { return _num; }
+  int type() const { return _type; }
   const char *type_str() const {
     switch (type()) {
     case MSG_ADDR_RANK_BASE: return "rank";
@@ -251,17 +225,17 @@ public:
   bool is_namer() const { return type() == MSG_ADDR_NAMER_BASE; }
 };
 
-inline bool operator== (const msg_addr_t& l, const msg_addr_t& r) { return l._addr == r._addr; }
-inline bool operator!= (const msg_addr_t& l, const msg_addr_t& r) { return l._addr != r._addr; }
-inline bool operator< (const msg_addr_t& l, const msg_addr_t& r) { return l._addr < r._addr; }
-
-//typedef struct msg_addr msg_addr_t;
+inline bool operator== (const msg_addr_t& l, const msg_addr_t& r) { return (l._type == r._type) && (l._num == r._num); }
+inline bool operator!= (const msg_addr_t& l, const msg_addr_t& r) { return (l._type != r._type) || (l._num != r._num); }
+inline bool operator< (const msg_addr_t& l, const msg_addr_t& r) { return (l._type < r._type) || (l._type == r._type && l._num < r._num); }
 
 inline std::ostream& operator<<(std::ostream& out, const msg_addr_t& addr) {
   //if (addr.is_namer()) return out << "namer";
-  return out << addr.type_str() << addr.num();
+  if (addr.is_new() || addr.num() < 0)
+    return out << addr.type_str() << "?";
+  else
+    return out << addr.type_str() << addr.num();
 }
-
 
 namespace __gnu_cxx {
   template<> struct hash< msg_addr_t >
@@ -269,7 +243,7 @@ namespace __gnu_cxx {
     size_t operator()( const msg_addr_t m ) const
     {
       static hash<int> H;
-      return H(m._addr);
+      return H(m.type() ^ m.num());
     }
   };
 }
@@ -290,24 +264,25 @@ namespace __gnu_cxx {
 #define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(MSG_ADDR_NEW)
 #define MSG_ADDR_NAMER_NEW   MSG_ADDR_NAMER(MSG_ADDR_NEW)
 
-#define MSG_ADDR_ISCLIENT(x)  x.is_client()
-#define MSG_ADDR_TYPE(x)      x.type_str()
-#define MSG_ADDR_NUM(x)       x.num()
-#define MSG_ADDR_NICE(x)      x.type_str() << x.num()
-
-
-
 
 class entity_inst_t {
  public:
   tcpaddr_t addr;
-  int       rank;
+  __int64_t rank;
 
   entity_inst_t() : rank(-1) {
     memset(&addr, 0, sizeof(addr));
   }
   entity_inst_t(tcpaddr_t& a, int r) : addr(a), rank(r) {
     memset(&addr, 0, sizeof(addr));
+  }
+
+  void set_addr(tcpaddr_t a) {
+    addr = a;
+    
+    // figure out rank
+    rank = *((unsigned*)&a.sin_addr.s_addr);
+    rank |= (__uint64_t)a.sin_port << 32;
   }
 };
 
@@ -320,7 +295,8 @@ inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) { return 
 
 inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 {
-  return out << "rank" << i.rank << "_" << i.addr;
+  //return out << "rank" << i.rank << "_" << i.addr;
+  return out << i.addr;
 }
 
 
@@ -413,7 +389,7 @@ public:
   int get_source_port() { return env.source_port; }
 
   entity_inst_t& get_source_inst() { return env.source_inst; }
-  void set_source_inst(entity_inst_t &i) { env.source_inst = i; }
+  void set_source_inst(const entity_inst_t &i) { env.source_inst = i; }
 
   // PAYLOAD ----
   void reset_payload() {
@@ -449,7 +425,7 @@ public:
   }
 
   virtual void print(ostream& out) {
-    out << "message(type=" << get_type() << ")";
+    out << get_type_name();
   }
   
 };

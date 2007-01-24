@@ -71,6 +71,7 @@ int main(int argc, char **argv)
   g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
+  monmap->mon_inst[0].rank = 0;  // hack ; see FakeMessenger.cc
 
   char hostname[100];
   gethostname(hostname,100);
@@ -87,7 +88,7 @@ int main(int argc, char **argv)
   OSD *mdsosd[NUMMDS];
   for (int i=0; i<NUMMDS; i++) {
     //cerr << "mds" << i << " on rank " << myrank << " " << hostname << "." << pid << endl;
-    mds[i] = new MDS(i, new FakeMessenger(MSG_ADDR_MDS(i)), monmap);
+    mds[i] = new MDS(-1, new FakeMessenger(MSG_ADDR_MDS_NEW), monmap);
     if (g_conf.mds_local_osd)
       mdsosd[i] = new OSD(i+10000, new FakeMessenger(MSG_ADDR_OSD(i+10000)), monmap);
     start++;

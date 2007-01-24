@@ -63,12 +63,12 @@ MON_OBJS= \
 	mon/Monitor.o\
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
+	mon/ClientMonitor.o\
 	mon/Elector.o
 
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Message.o\
-	msg/HostMonitor.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
@@ -85,7 +85,7 @@ TCP_OBJS = \
 	msg/TCPMessenger.o\
 	msg/TCPDirectory.o
 
-TARGETS = cosd cfuse newsyn fakesyn
+TARGETS = cmon cosd cmds cfuse newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
@@ -97,16 +97,16 @@ obfs: depend obfstest
 
 
 # real bits
-cmon: cmon.cc mon.o ebofs.o msg/NewerMessenger.o common.o
+cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o msg/NewerMessenger.o common.o
+cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cmds: cmds.cc mds.o osdc.o msg/NewerMessenger.o common.o
+cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/NewerMessenger.o common.o
+cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -134,7 +134,7 @@ fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o
 tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
 	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o

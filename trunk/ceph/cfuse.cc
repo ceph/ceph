@@ -11,8 +11,6 @@
  * 
  */
 
-
-
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
@@ -20,12 +18,10 @@ using namespace std;
 
 #include "config.h"
 
-#include "mds/MDS.h"
-#include "osd/OSD.h"
 #include "client/Client.h"
 #include "client/fuse.h"
 
-#include "msg/NewMessenger.h"
+#include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
        
@@ -60,7 +56,6 @@ int main(int argc, char **argv, char *envp[]) {
   monmap->decode(bl);
 
   // start up network
-  rank.set_namer(monmap->get_inst(0).addr);
   rank.start_rank();
 
   // start client
@@ -85,7 +80,6 @@ int main(int argc, char **argv, char *envp[]) {
   // wait for messenger to finish
   rank.wait();
   
-
   return 0;
 }
 

@@ -31,6 +31,7 @@
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
+#include "ClientMonitor.h"
 
 #include "config.h"
 #undef dout
@@ -56,6 +57,7 @@ void Monitor::init()
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
   mdsmon = new MDSMonitor(this, messenger, lock);
+  clientmon = new ClientMonitor(this, messenger, lock);
 
   // i'm ready!
   messenger->set_dispatcher(this);
@@ -95,6 +97,7 @@ void Monitor::shutdown()
   if (monmap) delete monmap;
   if (osdmon) delete osdmon;
   if (mdsmon) delete mdsmon;
+  if (clientmon) delete clientmon;
 
   // die.
   messenger->shutdown();
@@ -152,6 +155,11 @@ void Monitor::dispatch(Message *m)
     case MSG_MDS_BOOT:
     case MSG_MDS_GETMAP:
       mdsmon->dispatch(m);
+      break;
+
+      // clients
+    case MSG_CLIENT_BOOT:
+      clientmon->dispatch(m);
       break;
 
 

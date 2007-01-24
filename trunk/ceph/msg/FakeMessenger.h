@@ -26,8 +26,6 @@ class Timer;
 
 class FakeMessenger : public Messenger {
  protected:
-  msg_addr_t myaddr;
-
   class Logger *logger;
 
   int    qlen;
@@ -39,8 +37,10 @@ class FakeMessenger : public Messenger {
 
   virtual int shutdown();
 
+  void reset_myaddr(msg_addr_t m);
+
   // msg interface
-  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+  virtual int send_message(Message *m, msg_addr_t dest, entity_inst_t inst, int port=0, int fromport=0);
   
   // events
   //virtual void trigger_timer(Timer *t);

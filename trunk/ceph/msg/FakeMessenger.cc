@@ -48,11 +48,13 @@ using namespace __gnu_cxx;
 
 // global queue.
 
-map<msg_addr_t, FakeMessenger*>      directory;
+int nranks = 0;  // this identify each entity_inst_t
+
+map<int, FakeMessenger*>      directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
-set<msg_addr_t>           shutdown_set;
+set<int>           shutdown_set;
 
 Mutex lock;
 Cond  cond;
@@ -62,6 +64,7 @@ bool pending_timer = false;
 bool      awake = false;
 bool      fm_shutdown = false;
 pthread_t thread_id;
+
 
 
 class C_FakeKicker : public Context {
@@ -175,15 +178,15 @@ int fakemessenger_do_loop_2()
     lock.Lock();
 
     // messages
-    map<msg_addr_t, FakeMessenger*>::iterator it = directory.begin();
+    map<int, FakeMessenger*>::iterator it = directory.begin();
     while (it != directory.end()) {
-
-      dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has " << it->second->num_incoming() << " queued" << endl;
-
       FakeMessenger *mgr = it->second;
 
+      dout(18) << "messenger " << mgr << " at " << mgr->get_myaddr() << " has " << mgr->num_incoming() << " queued" << endl;
+
+
       if (!mgr->is_ready()) {
-        dout(18) << "messenger " << it->second << " at " << MSG_ADDR_NICE(it->first) << " has no dispatcher, skipping" << endl;
+        dout(18) << "messenger " << mgr << " at " << mgr->get_myaddr() << " has no dispatcher, skipping" << endl;
         it++;
         continue;
       }
@@ -194,8 +197,8 @@ int fakemessenger_do_loop_2()
       if (m) {
         //dout(18) << "got " << m << endl;
         dout(1) << "---- '" << m->get_type_name() 
-                << "' from " << MSG_ADDR_NICE(m->get_source()) // << ':' << m->get_source_port() 
-                << " to " << MSG_ADDR_NICE(m->get_dest()) //<< ':' << m->get_dest_port() 
+                << "' from " << m->get_source() // << ':' << m->get_source_port() 
+                << " to " << m->get_dest() //<< ':' << m->get_dest_port() 
                 << " ---- " << m 
                 << endl;
         
@@ -225,7 +228,7 @@ int fakemessenger_do_loop_2()
     
     // deal with shutdowns.. dleayed to avoid concurrent directory modification
     if (!shutdown_set.empty()) {
-      for (set<msg_addr_t>::iterator it = shutdown_set.begin();
+      for (set<int>::iterator it = shutdown_set.begin();
            it != shutdown_set.end();
            it++) {
         dout(7) << "fakemessenger: removing " << *it << " from directory" << endl;
@@ -252,12 +255,21 @@ int fakemessenger_do_loop_2()
 
 FakeMessenger::FakeMessenger(msg_addr_t me)  : Messenger(me)
 {
-  myaddr = me;
+  entity_inst_t fakeinst;
   lock.Lock();
-  directory[ myaddr ] = this;
+  {
+    // assign rank
+    fakeinst.addr.sin_port = 
+      fakeinst.rank = nranks++;
+    set_myinst(fakeinst);
+
+    // add to directory
+    directory[ fakeinst.rank ] = this;
+  }
   lock.Unlock();
 
-  cout << "fakemessenger " << myaddr << " messenger is " << this << endl;
+
+  cout << "fakemessenger " << get_myaddr() << " messenger is " << this << " at " << fakeinst << endl;
 
   //g_timer.set_messenger(this);
 
@@ -287,8 +299,8 @@ int FakeMessenger::shutdown()
 {
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   lock.Lock();
-  assert(directory.count(myaddr) == 1);
-  shutdown_set.insert(myaddr);
+  assert(directory.count(get_myinst().rank) == 1);
+  shutdown_set.insert(get_myinst().rank);
   
   /*
   directory.erase(myaddr);
@@ -321,14 +333,20 @@ void FakeMessenger::trigger_timer(Timer *t)
 }
 */
 
-int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
+void FakeMessenger::reset_myaddr(msg_addr_t m)
 {
-  m->set_source(myaddr, fromport);
+  dout(1) << "reset_myaddr from " << get_myaddr() << " to " << m << endl;
+  _set_myaddr(m);
+}
+
+
+int FakeMessenger::send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst, int port, int fromport)
+{
+  m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
   //m->set_lamport_send_stamp( get_lamport() );
 
-  entity_inst_t blank;
-  m->set_source_inst(blank);
+  m->set_source_inst(get_myinst());
 
   lock.Lock();
 
@@ -336,26 +354,26 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromp
   try {
 #ifdef LOG_MESSAGES
     // stats
-    loggers[myaddr]->inc("+send",1);
+    loggers[get_myaddr()]->inc("+send",1);
     loggers[dest]->inc("-recv",1);
 
     char s[20];
     sprintf(s,"+%s", m->get_type_name());
-    loggers[myaddr]->inc(s);
+    loggers[get_myaddr()]->inc(s);
     sprintf(s,"-%s", m->get_type_name());
     loggers[dest]->inc(s);
 #endif
 
     // queue
-    FakeMessenger *dm = directory[dest];
+    FakeMessenger *dm = directory[inst.rank];
     if (!dm) {
-      dout(1) << "** destination " << MSG_ADDR_NICE(dest) << " (" << dest << ") dne" << endl;
+      dout(1) << "** destination " << dest << " (" << inst << ") dne" << endl;
       assert(dm);
     }
     dm->queue_incoming(m);
 
-    dout(1) << "--> " << myaddr << " sending " << m << " '" << m->get_type_name() << "'"
-            << " to " << MSG_ADDR_NICE(dest) 
+    dout(1) << "--> " << get_myaddr() << " sending " << m << " '" << m->get_type_name() << "'"
+            << " to " << dest 
             << endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;
     
   }

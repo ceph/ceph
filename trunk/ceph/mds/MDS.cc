@@ -84,22 +84,9 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   balancer = new MDBalancer(this);
 
   anchorclient = new AnchorClient(messenger, mdsmap);
+  idalloc = new IdAllocator(this);
 
-  // alloc
-  {
-    inode_t id_inode;
-    memset(&id_inode, 0, sizeof(id_inode));
-    id_inode.ino = MDS_INO_IDS_OFFSET + whoami;
-    id_inode.layout = g_OSD_FileLayout;
-    idalloc = new IdAllocator(this, id_inode);
-  }
-
-  // hack: anchortable on mds0.
-  if (whoami == 0) 
-    anchormgr = new AnchorTable(this);
-  else
-    anchormgr = 0;
-
+  anchormgr = new AnchorTable(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -110,6 +97,46 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   state = STATE_BOOTING;
 
   last_balancer_hash = last_balancer_heartbeat = g_clock.recent_now();
+
+
+  logger = logger2 = 0;
+
+  // i'm ready!
+  messenger->set_dispatcher(this);
+}
+
+MDS::~MDS() {
+  if (mdcache) { delete mdcache; mdcache = NULL; }
+  if (mdstore) { delete mdstore; mdstore = NULL; }
+  if (mdlog) { delete mdlog; mdlog = NULL; }
+  if (balancer) { delete balancer; balancer = NULL; }
+  if (idalloc) { delete idalloc; idalloc = NULL; }
+  if (anchormgr) { delete anchormgr; anchormgr = NULL; }
+  if (anchorclient) { delete anchorclient; anchorclient = NULL; }
+  if (osdmap) { delete osdmap; osdmap = 0; }
+
+  if (filer) { delete filer; filer = 0; }
+  if (objecter) { delete objecter; objecter = 0; }
+  if (messenger) { delete messenger; messenger = NULL; }
+
+  if (logger) { delete logger; logger = 0; }
+  if (logger2) { delete logger2; logger2 = 0; }
+
+}
+
+
+void MDS::reopen_log()
+{
+  // flush+close old log
+  if (logger) {
+    logger->flush(true);
+    delete logger;
+  }
+  if (logger2) {
+    logger2->flush(true);
+    delete logger2;
+  }
+
 
   // log
   string name;
@@ -160,31 +187,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   char n[80];
   sprintf(n, "mds%d.cache", whoami);
   logger2 = new Logger(n, (LogType*)&mds_cache_logtype);
-  
-
-  // i'm ready!
-  messenger->set_dispatcher(this);
 }
-
-MDS::~MDS() {
-  if (mdcache) { delete mdcache; mdcache = NULL; }
-  if (mdstore) { delete mdstore; mdstore = NULL; }
-  if (mdlog) { delete mdlog; mdlog = NULL; }
-  if (balancer) { delete balancer; balancer = NULL; }
-  if (idalloc) { delete idalloc; idalloc = NULL; }
-  if (anchormgr) { delete anchormgr; anchormgr = NULL; }
-  if (anchorclient) { delete anchorclient; anchorclient = NULL; }
-  if (osdmap) { delete osdmap; osdmap = 0; }
-
-  if (filer) { delete filer; filer = 0; }
-  if (objecter) { delete objecter; objecter = 0; }
-  if (messenger) { delete messenger; messenger = NULL; }
-
-  if (logger) { delete logger; logger = 0; }
-  if (logger2) { delete logger2; logger2 = 0; }
-
-}
-
 
 void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
 {
@@ -213,6 +216,15 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   delete m;
   
+  // see who i am
+  int w = mdsmap->get_inst_rank(messenger->get_myinst());
+  if (w != whoami) {
+    whoami = w;
+    messenger->reset_myaddr(MSG_ADDR_MDS(w));
+    reopen_log();
+  }
+  dout(1) << "map says i am " << w << endl;
+
   if (is_booting()) {
     // we need an osdmap too.
     int mon = monmap->pick_mon();
@@ -407,7 +419,7 @@ void MDS::handle_shutdown_start(Message *m)
   mdcache->shutdown_start();
   
   // save anchor table
-  if (whoami == 0)
+  if (mdsmap->get_anchortable() == whoami) 
     anchormgr->save(0);  // FIXME FIXME
 
   // flush log
@@ -552,13 +564,15 @@ void MDS::my_dispatch(Message *m)
     last_log = now;
     mds_load_t load = balancer->get_load();
 
-    req_rate = logger->get("req");
-
-    logger->set("l", (int)load.mds_load());
-    logger->set("q", messenger->get_dispatch_queue_len());
-    logger->set("buf", buffer_total_alloc);
-
-    mdcache->log_stat(logger);
+    if (logger) {
+      req_rate = logger->get("req");
+      
+      logger->set("l", (int)load.mds_load());
+      logger->set("q", messenger->get_dispatch_queue_len());
+      logger->set("buf", buffer_total_alloc);
+      
+      mdcache->log_stat(logger);
+    }
 
 
     // balance?
@@ -682,7 +696,7 @@ void MDS::proc_message(Message *m)
 
 void MDS::handle_ping(MPing *m)
 {
-  dout(10) << " received ping from " << MSG_ADDR_NICE(m->get_source()) << " with seq " << m->seq << endl;
+  dout(10) << " received ping from " << m->get_source() << " with seq " << m->seq << endl;
 
   messenger->send_message(new MPingAck(m),
                           m->get_source(), m->get_source_inst());

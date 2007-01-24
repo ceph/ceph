@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __MDSMONITOR_H
-#define __MDSMONITOR_H
+#ifndef __CLIENTMONITOR_H
+#define __CLIENTMONITOR_H
 
 #include <map>
 #include <set>
@@ -25,50 +25,28 @@ using namespace std;
 
 class Monitor;
 
-class MDSMonitor : public Dispatcher {
+class ClientMonitor : public Dispatcher {
   Monitor *mon;
   Messenger *messenger;
   Mutex &lock;
 
-  // mds maps
- public:
-  MDSMap mdsmap;
-
  private:
-  map<epoch_t, bufferlist> maps;
+  int num_clients;
+  map<msg_addr_t,entity_inst_t> client_map;
 
-  //map<epoch_t, bufferlist> inc_maps;
-  //MDSMap::Incremental pending_inc;
-  
-  map<msg_addr_t,entity_inst_t> awaiting_map;
-  
-
-  // maps
-  void create_initial();
-  void send_current();         // send current map to waiters.
-  void send_full(msg_addr_t dest, const entity_inst_t& inst);
   void bcast_latest_mds();
 
   //void accept_pending();   // accept pending, new map.
   //void send_incremental(epoch_t since, msg_addr_t dest);
 
-  void handle_mds_boot(class MMDSBoot *m);
-  void handle_mds_failure(class MMDSFailure *m);
-  void handle_mds_getmap(class MMDSGetMap *m);
-  void handle_mds_shutdown(Message *m);
-
-
+  void handle_client_boot(class MClientBoot *m);
 
  public:
-  MDSMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l) {
-    create_initial();
-  }
-
+  ClientMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l),
+						       num_clients(0) { }
+  
   void dispatch(Message *m);
   void tick();  // check state, take actions
-
-  void send_latest(msg_addr_t dest, const entity_inst_t& inst);
-
 };
 
 #endif

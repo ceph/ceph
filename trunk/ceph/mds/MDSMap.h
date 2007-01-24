@@ -68,6 +68,16 @@ class MDSMap {
     } 
     return false;
   }
+  
+  int get_inst_rank(const entity_inst_t& inst) {
+    for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
+	 p != mds_inst.end();
+	 ++p) {
+      if (p->second == inst) return p->first;
+    }
+    return -1;
+  }
+
 
   // serialize, unserialize
   void encode(bufferlist& blist) {
