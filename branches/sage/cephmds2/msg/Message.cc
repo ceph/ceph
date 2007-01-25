@@ -50,7 +50,7 @@ using namespace std;
 
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
-#include "messages/MMDSBoot.h"
+#include "messages/MMDSBeacon.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -245,8 +245,8 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_MAP:
 	m = new MMDSMap();
 	break;
-  case MSG_MDS_BOOT:
-	m = new MMDSBoot();
+  case MSG_MDS_BEACON:
+	m = new MMDSBeacon;
 	break;
 
   case MSG_MDS_DIRUPDATE:

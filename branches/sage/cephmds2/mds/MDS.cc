@@ -44,7 +44,7 @@
 #include "common/Timer.h"
 
 #include "messages/MMDSMap.h"
-#include "messages/MMDSBoot.h"
+#include "messages/MMDSBeacon.h"
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
@@ -91,10 +91,17 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
+  
+  // beacon
+  beacon_last_seq = 0;
+  beacon_sender = 0;
+  beacon_killer = 0;
+
 
   req_rate = 0;
 
-  state = MDSMap::STATE_DOWN;  // booting
+  state = MDSMap::STATE_OUT;
+  want_state = MDSMap::STATE_STARTING;
 
 
   logger = logger2 = 0;
@@ -208,10 +215,9 @@ public:
 
 int MDS::init()
 {
-  // request osd map
-  dout(5) << "requesting mds and osd maps from mon" << endl;
-  int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSBoot, MSG_ADDR_MON(mon), monmap->get_inst(mon));
+  // starting beacon.  this will induce an MDSMap from the monitor
+  state = MDSMap::STATE_STARTING;
+  beacon_start();
 
   // schedule tick
   g_timer.add_event_after(1.0, new C_MDS_Tick(this));
@@ -241,7 +247,7 @@ void MDS::tick()
   }
   
   // booted?
-  if (!is_booting()) {
+  if (is_active()) {
     
     // balancer
     balancer->tick();
@@ -274,44 +280,169 @@ void MDS::tick()
   mds_lock.Unlock();
 }
 
+
+
+
+// -----------------------
+// beacons
+
+void MDS::beacon_start()
+{
+  beacon_send(0);        // send first beacon
+  reset_beacon_killer(); // schedule killer
+}
+  
+
+class C_MDS_BeaconSender : public Context {
+  MDS *mds;
+public:
+  C_MDS_BeaconSender(MDS *m) : mds(m) {}
+  void finish(int r) {
+    mds->mds_lock.Lock();
+    mds->beacon_send(this);
+    mds->mds_lock.Unlock();
+  }
+};
+
+void MDS::beacon_send(Context *c)
+{
+  if (c && c != beacon_sender) {
+    derr(0) << "beacon_send beacon_sender doesn't match, noop" << endl;
+    return;
+  }
+
+  ++beacon_last_seq;
+  dout(10) << "beacon_send " << MDSMap::get_state_name(want_state)
+	   << " seq " << beacon_last_seq << endl;
+
+  beacon_seq_stamp[beacon_last_seq] = g_clock.now();
+  
+  int mon = monmap->pick_mon();
+  messenger->send_message(new MMDSBeacon(want_state, beacon_last_seq),
+			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
+
+  // schedule next sender
+  beacon_sender = new C_MDS_BeaconSender(this);
+  g_timer.add_event_after(g_conf.mds_beacon_interval, beacon_sender);
+}
+
+void MDS::handle_mds_beacon(MMDSBeacon *m)
+{
+  dout(10) << "handle_mds_beacon " << MDSMap::get_state_name(m->get_state())
+	   << " seq " << m->get_seq() << endl;
+  version_t seq = m->get_seq();
+  
+  // update lab
+  if (beacon_seq_stamp.count(seq)) {
+    assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);
+    beacon_last_acked_stamp = beacon_seq_stamp[seq];
+    
+    // clean up seq_stamp map
+    while (!beacon_seq_stamp.empty() &&
+	   beacon_seq_stamp.begin()->first <= seq)
+      beacon_seq_stamp.erase(beacon_seq_stamp.begin());
+    
+    reset_beacon_killer();
+  }
+
+  delete m;
+}
+
+class C_MDS_BeaconKiller : public Context {
+  MDS *mds;
+  utime_t lab;
+public:
+  C_MDS_BeaconKiller(MDS *m, utime_t l) : mds(m), lab(l) {}
+  void finish(int r) {
+    mds->beacon_kill(lab);
+  }
+};
+
+void MDS::reset_beacon_killer()
+{
+  utime_t when = beacon_last_acked_stamp;
+  when += g_conf.mds_beacon_grace;
+  
+  dout(15) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
+	   << ", will die at " << when << endl;
+  
+  if (beacon_killer) 
+    g_timer.cancel_event(beacon_killer);
+
+  beacon_killer = new C_MDS_BeaconKiller(this, beacon_last_acked_stamp);
+  g_timer.add_event_at(when, beacon_killer);
+}
+
+void MDS::beacon_kill(utime_t lab)
+{
+  if (lab == beacon_last_acked_stamp) {
+    dout(0) << "beacon_kill last_acked_stamp " << lab 
+	    << ", killing myself."
+	    << endl;
+    exit(0);
+  } else {
+    dout(20) << "beacon_kill last_acked_stamp " << beacon_last_acked_stamp 
+	     << " != my " << lab 
+	     << ", doing nothing."
+	     << endl;
+  }
+}
+
+
+
 void MDS::handle_mds_map(MMDSMap *m)
 {
-  map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();
+  map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();   // fixme multiple maps?
 
   dout(1) << "handle_mds_map epoch " << p->first << endl;
   mdsmap->decode(p->second);
 
-  delete m;
-  
   // see who i am
-  int w = mdsmap->get_inst_rank(messenger->get_myinst());
-  if (w != whoami) {
-    whoami = w;
-    messenger->reset_myaddr(MSG_ADDR_MDS(w));
+  int oldwhoami = whoami;
+  whoami = mdsmap->get_inst_rank(messenger->get_myinst());
+  if (oldwhoami != whoami) {
+    messenger->reset_myaddr(MSG_ADDR_MDS(whoami));
     reopen_log();
   }
-  dout(1) << "map says i am " << w << endl;
 
-  if (is_booting()) {
+  // update my state
+  int oldstate = state;
+  state = mdsmap->get_state(whoami);
+  
+  if (oldstate == MDSMap::STATE_OUT && state == MDSMap::STATE_CREATING) {
+    // special case at startup (monitor decides whether i am creating or starting)
+    assert(want_state == MDSMap::STATE_STARTING);
+    want_state = MDSMap::STATE_CREATING;
+  }
+
+  dout(1) << "handle_mds_map i am mds" << whoami << " with state " << mdsmap->get_state_name(state) << endl;
+
+  // do i need an osdmap?
+  if (oldwhoami < 0) {
     // we need an osdmap too.
     int mon = monmap->pick_mon();
     messenger->send_message(new MOSDGetMap(0),
 			    MSG_ADDR_MON(mon), monmap->get_inst(mon));
   }
+
+  delete m;
 }
 
 void MDS::handle_osd_map(MOSDMap *m)
 {
+  version_t had = osdmap->get_epoch();
+  
   // process locally
   objecter->handle_osd_map(m);
-  
-  if (is_booting()) {
-    // we got our maps.  mkfs for recovery?
-    if (g_conf.mkfs)
-      boot_mkfs();
-    else 
+
+  if (had == 0) {
+    if (is_starting()) 
       boot_recover();
-  }
+    else if (is_creating()) 
+      boot_mkfs();
+    else
+      assert(0);
+  }  
   
   // pass on to clients
   for (set<int>::iterator it = clientmap.get_mount_set().begin();
@@ -350,7 +481,7 @@ void MDS::boot_mkfs()
     CDir *dir = root->dir;
     dir->mark_complete();
     dir->mark_dirty(dir->pre_dirty());
-
+    
     // save it
     mdstore->commit_dir(dir, fin->new_sub());
   }
@@ -393,9 +524,6 @@ public:
 
 void MDS::boot_recover(int step)
 {
-  if (is_booting()) 
-    state = MDSMap::STATE_STARTING;
-
   switch (step) {
   case 0:
     /* no, EImportMap takes care of all this.
@@ -455,6 +583,14 @@ void MDS::mark_active()
   dout(3) << "mark_active" << endl;
   state = MDSMap::STATE_ACTIVE;
   finish_contexts(waitfor_active);  // kick waiters
+
+  beacon_send();
+  
+  /*
+  int who = monmap->pick_mon();
+  messenger->send_message(new MMDSState(state),
+			  MSG_ADDR_MON(who), monmap->get_inst(who));
+  */
 }
 
 
@@ -511,7 +647,7 @@ int MDS::shutdown_final()
 {
   dout(1) << "shutdown" << endl;
   
-  state = MDSMap::STATE_DOWN;
+  state = MDSMap::STATE_OUT;
   
   // shut down cache
   mdcache->shutdown();
@@ -682,11 +818,13 @@ void MDS::proc_message(Message *m)
     handle_mds_map((MMDSMap*)m);
     return;
 
+  case MSG_MDS_BEACON:
+    handle_mds_beacon((MMDSBeacon*)m);
+    return;
+
   case MSG_MDS_SHUTDOWNSTART:    // mds0 -> mds1+
     handle_shutdown_start(m);
     return;
-
-
 
   case MSG_PING:
     handle_ping((MPing*)m);

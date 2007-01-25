@@ -152,7 +152,7 @@ void Monitor::dispatch(Message *m)
 
       
       // MDSs
-    case MSG_MDS_BOOT:
+    case MSG_MDS_BEACON:
     case MSG_MDS_GETMAP:
       mdsmon->dispatch(m);
       break;

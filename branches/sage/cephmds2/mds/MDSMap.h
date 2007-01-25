@@ -27,15 +27,30 @@ using namespace std;
 
 class MDSMap {
  public:
-  static const int STATE_OUT =      0;    // offline, no metadata.  need not exist in map at all.
-  static const int STATE_DOWN =     1;    // offline, holds (er, held) metadata; needs to be recovered.
+  static const int STATE_OUT =      0;    // down, no active metadata.
+  static const int STATE_FAILED =   1;    // down, holds (er, held) metadata; needs to be recovered.
 
-  static const int STATE_STANDBY =  2;    // online, but inactive; waiting for someone to fail.
-  static const int STATE_CREATING = 3;    // online, creating MDS instance (initializing journal, etc.)
-  static const int STATE_STARTING = 4;    // online, scanning journal, recoverying any shared state
-  static const int STATE_ACTIVE =   5;    // online, active
-  static const int STATE_STOPPING = 6;    // online, exporting metadata (-> standby or out)
+  static const int STATE_STANDBY =  2;    // up, but inactive; waiting for someone to fail.
+  static const int STATE_CREATING = 3;    // up, creating MDS instance (initializing journal, etc.)
+  static const int STATE_STARTING = 4;    // up, scanning journal, recoverying any shared state
+  static const int STATE_ACTIVE =   5;    // up, active
+  static const int STATE_STOPPING = 6;    // up, exporting metadata (-> standby or out)
   
+  static const char *get_state_name(int s) {
+    switch (s) {
+      // down
+    case STATE_OUT:      return "down:out";
+    case STATE_FAILED:   return "down:failed";
+      // up
+    case STATE_STANDBY:  return "up:standby";
+    case STATE_CREATING: return "up:creating";
+    case STATE_STARTING: return "up:starting";
+    case STATE_ACTIVE:   return "up:active";
+    case STATE_STOPPING: return "up:stopping";
+    default: assert(0);
+    }
+  }
+
  protected:
   epoch_t epoch;
   utime_t ctime;
@@ -45,7 +60,8 @@ class MDSMap {
 
   set<int>               mds_set;    // set of MDSs
   map<int,int>           mds_state;  // MDS state
-  map<int,entity_inst_t> mds_inst;   // online (non-out, non-down) instances
+  map<int,version_t>     mds_state_seq;
+  map<int,entity_inst_t> mds_inst;   // up instances
 
   friend class MDSMonitor;
 
@@ -64,14 +80,22 @@ class MDSMap {
 
   const set<int>& get_mds_set() const { return mds_set; }
 
-  bool is_out(int m)      { return mds_state.count(m) == 0 && mds_state[m] == STATE_OUT; }
-  bool is_down(int m)     { return mds_state.count(m) && mds_state[m] == STATE_DOWN; }
+  bool is_down(int m) { return is_out(m) || is_failed(m); }
+  bool is_up(int m) { return !is_down(m); }
+
+  bool is_out(int m)      { return mds_state.count(m) == 0 || mds_state[m] == STATE_OUT; }
+  bool is_failed(int m)   { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
   bool is_standby(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STANDBY; }
   bool is_creating(int m) { return mds_state.count(m) && mds_state[m] == STATE_CREATING; }
   bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
   bool is_active(int m)   { return mds_state.count(m) && mds_state[m] == STATE_ACTIVE; }
   bool is_stopping(int m) { return mds_state.count(m) && mds_state[m] == STATE_STOPPING; }
   
+  int get_state(int m) {
+    if (mds_state.count(m)) return mds_state[m];
+    return STATE_OUT;
+  }
+
   const entity_inst_t& get_inst(int m) {
     assert(mds_inst.count(m));
     return mds_inst[m];

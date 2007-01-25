@@ -87,10 +87,10 @@
 
 // *** MDS ***
 
-#define MSG_MDS_BOOT               100
-#define MSG_MDS_GETMAP             101
-#define MSG_MDS_MAP                102
-#define MSG_MDS_HEARTBEAT          103
+#define MSG_MDS_GETMAP             102
+#define MSG_MDS_MAP                103
+#define MSG_MDS_HEARTBEAT          104  // for mds load balancer
+#define MSG_MDS_BEACON             105  // to monitor
 
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111

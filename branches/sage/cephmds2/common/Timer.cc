@@ -21,7 +21,7 @@
 #include "include/Context.h"
 
 #undef dout
-#define dout(x)  if (x <= g_conf.debug) cout << "Timer: "
+#define dout(x)  if (x <= g_conf.debug) cout << g_clock.now() << " TIMER "
 
 #define DBL 10
 

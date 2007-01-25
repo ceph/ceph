@@ -504,7 +504,7 @@ bool MDCache::shutdown_pass()
 {
   dout(7) << "shutdown_pass" << endl;
   //assert(mds->is_shutting_down());
-  if (mds->is_down()) {
+  if (mds->is_out()) {
     dout(7) << " already shut down" << endl;
     show_cache();
     show_imports();

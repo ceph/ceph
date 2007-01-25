@@ -94,7 +94,7 @@ class MClientReply;
 class MHashReaddir;
 class MHashReaddirReply;
 
-
+class MMDSBeacon;
 
 
 class MDS : public Dispatcher {
@@ -133,14 +133,15 @@ class MDS : public Dispatcher {
 
  protected:
   // -- MDS state --
-  int state;
+  int state;         // my confirmed state
+  int want_state;    // the state i want
   list<Context*> waitfor_active;
 
 public:
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
-  bool is_down()     { return state == MDSMap::STATE_DOWN; }
-  bool is_booting()  { return state == MDSMap::STATE_DOWN; }
+  bool is_out()      { return state == MDSMap::STATE_OUT; }
+  bool is_failed()   { return state == MDSMap::STATE_FAILED; }
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
@@ -160,6 +161,12 @@ public:
     finished_queue.splice( finished_queue.end(), ls );
   }
   
+  // -- keepalive beacon --
+  version_t               beacon_last_seq;          // last seq sent to monitor
+  map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
+  utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
+  Context *beacon_sender;
+  Context *beacon_killer;                           // next scheduled time of death
 
 
   // shutdown crap
@@ -174,7 +181,7 @@ public:
 
   friend class MDStore;
 
-  
+ 
  public:
   MDS(int whoami, Messenger *m, MonMap *mm);
   ~MDS();
@@ -198,6 +205,12 @@ public:
   int shutdown_final();
 
   void tick();
+  
+  void beacon_start();
+  void beacon_send(Context *c=0);
+  void beacon_kill(utime_t lab);
+  void handle_mds_beacon(MMDSBeacon *m);
+  void reset_beacon_killer();
 
   // messages
   void proc_message(Message *m);

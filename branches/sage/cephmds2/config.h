@@ -145,6 +145,9 @@ struct md_config_t {
   
   float mds_decay_halflife;
 
+  float mds_beacon_interval;
+  float mds_beacon_grace;
+
   bool mds_log;
   int mds_log_max_len;
   int mds_log_max_trimming;

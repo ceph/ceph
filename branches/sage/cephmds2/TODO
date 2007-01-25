@@ -1,8 +1,11 @@
 blech:
-- metablob shoudl mark explicitly dirtied items, and return 'expired' if they have
+- EMetablob should return 'expired' if they have
   higher versions (and are thus described by a newer journal entry)
+
 - mds failure detection, failure decision by monitor.  
   - keepalive beacons!
+
+- mds state changes for shutdown
 
 
 mds

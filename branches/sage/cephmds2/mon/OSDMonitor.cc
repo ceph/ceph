@@ -570,7 +570,7 @@ void OSDMonitor::bcast_latest_mds()
   for (set<int>::iterator i = mon->mdsmon->mdsmap.get_mds_set().begin();
        i != mon->mdsmon->mdsmap.get_mds_set().end();
        i++) {
-    if (mon->mdsmon->mdsmap.is_down(*i)) continue;
+    if (mon->mdsmon->mdsmap.is_out(*i) || mon->mdsmon->mdsmap.is_down(*i)) continue;
     send_incremental(osdmap.get_epoch()-1, MSG_ADDR_MDS(*i), mon->mdsmon->mdsmap.get_inst(*i));
   }
 }
