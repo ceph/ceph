@@ -97,10 +97,12 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   beacon_sender = 0;
   beacon_killer = 0;
 
+  tick_event = 0;
+  lost_timers = 0;
 
   req_rate = 0;
 
-  state = MDSMap::STATE_OUT;
+  state = MDSMap::STATE_DNE;
   want_state = MDSMap::STATE_STARTING;
 
 
@@ -207,7 +209,7 @@ class C_MDS_Tick : public Context {
 public:
   C_MDS_Tick(MDS *m) : mds(m) {}
   void finish(int r) {
-    mds->tick();
+    mds->tick(this);
   }
 };
 
@@ -220,18 +222,36 @@ int MDS::init()
   beacon_start();
 
   // schedule tick
-  g_timer.add_event_after(1.0, new C_MDS_Tick(this));
+  reset_tick();
   return 0;
 }
 
+void MDS::reset_tick()
+{
+  // cancel old
+  if (tick_event &&
+      !g_timer.cancel_event(tick_event)) 
+    lost_timers++;
 
+  // schedule
+  tick_event = new C_MDS_Tick(this);
+  g_timer.add_event_after(g_conf.mon_tick_interval, tick_event);
+}
 
-void MDS::tick()
+void MDS::tick(Context *c)
 {
   mds_lock.Lock();
 
+  // am i canceled?
+  if (c != tick_event) {
+    lost_timers--;
+    timer_cond.Signal();
+    mds_lock.Unlock();
+    return;
+  }
+
   // reschedule
-  g_timer.add_event_after(1.0, new C_MDS_Tick(this));
+  reset_tick();
 
   // log
   mds_load_t load = balancer->get_load();
@@ -307,7 +327,9 @@ public:
 void MDS::beacon_send(Context *c)
 {
   if (c && c != beacon_sender) {
-    derr(0) << "beacon_send beacon_sender doesn't match, noop" << endl;
+    dout(15) << "beacon_send beacon_sender doesn't match, noop" << endl;
+    lost_timers--;
+    timer_cond.Signal();
     return;
   }
 
@@ -322,6 +344,9 @@ void MDS::beacon_send(Context *c)
 			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
 
   // schedule next sender
+  if (beacon_sender &&
+      !g_timer.cancel_event(beacon_sender))
+    lost_timers++;
   beacon_sender = new C_MDS_BeaconSender(this);
   g_timer.add_event_after(g_conf.mds_beacon_interval, beacon_sender);
 }
@@ -366,8 +391,9 @@ void MDS::reset_beacon_killer()
   dout(15) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
 	   << ", will die at " << when << endl;
   
-  if (beacon_killer) 
-    g_timer.cancel_event(beacon_killer);
+  if (beacon_killer &&
+      !g_timer.cancel_event(beacon_killer))
+    lost_timers++;
 
   beacon_killer = new C_MDS_BeaconKiller(this, beacon_last_acked_stamp);
   g_timer.add_event_at(when, beacon_killer);
@@ -409,7 +435,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   int oldstate = state;
   state = mdsmap->get_state(whoami);
   
-  if (oldstate == MDSMap::STATE_OUT && state == MDSMap::STATE_CREATING) {
+  if (oldstate == MDSMap::STATE_DNE && state == MDSMap::STATE_CREATING) {
     // special case at startup (monitor decides whether i am creating or starting)
     assert(want_state == MDSMap::STATE_STARTING);
     want_state = MDSMap::STATE_CREATING;
@@ -423,6 +449,40 @@ void MDS::handle_mds_map(MMDSMap *m)
     int mon = monmap->pick_mon();
     messenger->send_message(new MOSDGetMap(0),
 			    MSG_ADDR_MON(mon), monmap->get_inst(mon));
+  }
+
+  // now active?
+  if (is_active() &&
+      (oldstate == MDSMap::STATE_STARTING ||
+       oldstate == MDSMap::STATE_CREATING)) {
+    dout(1) << "now active" << endl;
+    finish_contexts(waitfor_active);  // kick waiters
+  }
+
+  // now stopping?
+  if (is_stopping() && oldstate == MDSMap::STATE_ACTIVE) {
+    dout(1) << "now stopping" << endl;
+
+    mdcache->shutdown_start();
+    
+    // save anchor table
+    if (mdsmap->get_anchortable() == whoami) 
+      anchormgr->save(0);  // FIXME?  or detect completion via filer?
+    
+    if (idalloc) 
+      idalloc->save(0);    // FIXME?  or detect completion via filer?
+  
+    // flush log
+    mdlog->set_max_events(0);
+    mdlog->trim(NULL);
+  }
+
+  // now standby?
+  if (is_stopped() && oldstate == MDSMap::STATE_STOPPING) {
+    // ok, now really stop
+    dout(1) << "now stopped, sending down:out and exiting" << endl;
+
+    shutdown_final();
   }
 
   delete m;
@@ -439,7 +499,7 @@ void MDS::handle_osd_map(MOSDMap *m)
     if (is_starting()) 
       boot_recover();
     else if (is_creating()) 
-      boot_mkfs();
+      boot_create();
     else
       assert(0);
   }  
@@ -456,21 +516,21 @@ void MDS::handle_osd_map(MOSDMap *m)
 }
 
 
-class C_MDS_MkfsFinish : public Context {
+class C_MDS_CreateFinish : public Context {
   MDS *mds;
 public:
-  C_MDS_MkfsFinish(MDS *m) : mds(m) {}
-  void finish(int r) { mds->boot_mkfs_finish(); }
+  C_MDS_CreateFinish(MDS *m) : mds(m) {}
+  void finish(int r) { mds->boot_create_finish(); }
 };
 
-void MDS::boot_mkfs()
+void MDS::boot_create()
 {
-  dout(3) << "boot_mkfs" << endl;
+  dout(3) << "boot_create" << endl;
 
-  C_Gather *fin = new C_Gather(new C_MDS_MkfsFinish(this));
+  C_Gather *fin = new C_Gather(new C_MDS_CreateFinish(this));
   
   if (whoami == 0) {
-    dout(3) << "boot_mkfs creating root inode and dir" << endl;
+    dout(3) << "boot_create since i am also mds0, creating root inode and dir" << endl;
 
     // create root inode.
     mdcache->open_root(0);
@@ -487,7 +547,7 @@ void MDS::boot_mkfs()
   }
   
   // start with a fresh journal
-  dout(10) << "boot_mkfs creating fresh journal" << endl;
+  dout(10) << "boot_create creating fresh journal" << endl;
   mdlog->reset();
   mdlog->write_head(fin->new_sub());
 
@@ -495,21 +555,21 @@ void MDS::boot_mkfs()
   mdcache->log_import_map(fin->new_sub());
 
   // fixme: fake out idalloc (reset, pretend loaded)
-  dout(10) << "boot_mkfs creating fresh idalloc table" << endl;
+  dout(10) << "boot_create creating fresh idalloc table" << endl;
   idalloc->reset();
   idalloc->save(fin->new_sub());
   
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
-    dout(10) << "boot_mkfs creating fresh anchortable" << endl;
+    dout(10) << "boot_create creating fresh anchortable" << endl;
     anchormgr->reset();
     anchormgr->save(fin->new_sub());
   }
 }
 
-void MDS::boot_mkfs_finish()
+void MDS::boot_create_finish()
 {
-  dout(3) << "boot_mkfs_finish" << endl;
+  dout(3) << "boot_create_finish" << endl;
   mark_active();
 }
 
@@ -581,16 +641,8 @@ void MDS::boot_recover(int step)
 void MDS::mark_active()
 {
   dout(3) << "mark_active" << endl;
-  state = MDSMap::STATE_ACTIVE;
-  finish_contexts(waitfor_active);  // kick waiters
-
+  want_state = MDSMap::STATE_ACTIVE;
   beacon_send();
-  
-  /*
-  int who = monmap->pick_mon();
-  messenger->send_message(new MMDSState(state),
-			  MSG_ADDR_MON(who), monmap->get_inst(who));
-  */
 }
 
 
@@ -602,6 +654,7 @@ int MDS::shutdown_start()
   dout(1) << "shutdown_start" << endl;
   derr(0) << "mds shutdown start" << endl;
 
+  // tell everyone to stop.
   for (set<int>::iterator p = mdsmap->get_mds_set().begin();
        p != mdsmap->get_mds_set().end();
        p++) {
@@ -612,9 +665,9 @@ int MDS::shutdown_start()
     }
   }
 
-  if (idalloc) idalloc->shutdown();
-  
-  handle_shutdown_start(NULL);
+  // go
+  want_state = MDSMap::STATE_STOPPING;
+  beacon_send();
   return 0;
 }
 
@@ -624,41 +677,48 @@ void MDS::handle_shutdown_start(Message *m)
   dout(1) << " handle_shutdown_start" << endl;
 
   // set flag
-  state = MDSMap::STATE_STOPPING;
+  want_state = MDSMap::STATE_STOPPING;
+  beacon_send();
 
-  mdcache->shutdown_start();
-  
-  // save anchor table
-  if (mdsmap->get_anchortable() == whoami) 
-    anchormgr->save(0);  // FIXME FIXME
-
-  // flush log
-  mdlog->set_max_events(0);
-  mdlog->trim(NULL);
-
-  if (m) delete m;
-
-  //g_conf.debug_mds = 10;
+  delete m;
 }
 
 
 
 int MDS::shutdown_final()
 {
-  dout(1) << "shutdown" << endl;
-  
-  state = MDSMap::STATE_OUT;
+  dout(1) << "shutdown_final" << endl;
+
+  // send final down:out beacon (it doesn't matter if this arrives)
+  want_state = MDSMap::STATE_OUT;
+  beacon_send();
+
+  // stop timers
+  if (beacon_killer) {
+    g_timer.cancel_event(beacon_killer);
+    beacon_killer = 0;
+  }
+  if (beacon_sender) {
+    if (!g_timer.cancel_event(beacon_sender)) 
+      lost_timers++;
+    beacon_sender = 0;
+  }
+  if (tick_event) {
+    if (!g_timer.cancel_event(tick_event))
+      lost_timers++;
+    tick_event = 0;
+  }
+  while (lost_timers++) {
+    dout(1) << "waiting to cancel " << lost_timers << " timer events" << endl;
+    timer_cond.Wait(mds_lock);
+  }
   
   // shut down cache
   mdcache->shutdown();
-
-  // tell monitor
-  messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-			  MSG_ADDR_MON(0), monmap->get_inst(0));
-
+  
   // shut down messenger
   messenger->shutdown();
-
+  
   return 0;
 }
 
@@ -788,8 +848,11 @@ void MDS::my_dispatch(Message *m)
   // shut down?
   if (is_stopping()) {
     if (mdcache->shutdown_pass()) {
-      dout(7) << "shutdown_pass=true, finished w/ shutdown" << endl;
-      shutdown_final();      
+      dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to up:stopped" << endl;
+
+      // tell monitor we shut down cleanly.
+      want_state = MDSMap::STATE_STOPPED;
+      beacon_send();
     }
   }
 

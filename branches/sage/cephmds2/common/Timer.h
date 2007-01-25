@@ -51,16 +51,12 @@ namespace __gnu_cxx {
 class Timer {
  private:
   map< utime_t, multiset<Context*> >  scheduled;    // time -> (context ...)
-  hash_map< Context*, utime_t >  event_times;  // event -> time
+  hash_map< Context*, utime_t >       event_times;  // event -> time
 
   // get time of the next event
-  Context* get_next_scheduled(utime_t& when) {
-    if (scheduled.empty()) return 0;
-    map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
-    when = it->first;
-    multiset<Context*>::iterator sit = it->second.begin();
-    return *sit;
-  }
+  //Context* get_next_scheduled(utime_t& when);
+
+  bool get_next_due(utime_t &when);
 
   void register_timer();  // make sure i get a callback
   void cancel_timer();    // make sure i get a callback

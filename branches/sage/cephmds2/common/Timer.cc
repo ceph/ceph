@@ -33,6 +33,34 @@
 Timer      g_timer;
 
 
+/*
+Context* Timer::get_next_scheduled(utime_t& when)
+{
+  if (scheduled.empty()) {
+    dout(10) << "get_next_scheduled - nothing scheduled" << endl;
+    return 0;
+  }
+  map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+  when = it->first;
+  multiset<Context*>::iterator sit = it->second.begin();
+  dout(10) << "get_next_scheduled " << *sit << " at " << when << endl;
+  return *sit;
+}*/
+
+
+bool Timer::get_next_due(utime_t& when)
+{
+  if (scheduled.empty()) {
+    dout(10) << "get_next_due - nothing scheduled" << endl;
+    return false;
+  } else {
+    map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+    when = it->first;
+    dout(10) << "get_next_due - " << when << endl;
+    return true;
+  }
+}
+
 /**** thread solution *****/
 
 void Timer::timer_entry()
@@ -46,12 +74,12 @@ void Timer::timer_entry()
 
     // any events due?
     utime_t next;
-    Context *event = get_next_scheduled(next);
+    bool next_due = get_next_due(next);
     
-    list<Context*> pending;
-    
-    if (event && now >= next) {
+    if (next_due && now >= next) {
       // move to pending list
+      list<Context*> pending;
+
       map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
       while (it != scheduled.end()) {
         if (it->first > now) break;
@@ -75,7 +103,8 @@ void Timer::timer_entry()
       if (!pending.empty()) {
         sleeping = false;
         lock.Unlock();
-        { // make sure we're not holding any locks while we do callbacks
+        { 
+	  // make sure we're not holding any locks while we do callbacks
           // make the callbacks myself.
           for (list<Context*>::iterator cit = pending.begin();
                cit != pending.end();
@@ -90,10 +119,9 @@ void Timer::timer_entry()
       }
 
     }
-
     else {
       // sleep
-      if (event) {
+      if (next_due) {
         dout(DBL) << "sleeping until " << next << endl;
         timed_sleep = true;
         sleeping = true;
@@ -130,7 +158,7 @@ void Timer::register_timer()
       else
         sleep_cond.SignalAll();
     } else {
-      dout(DBL) << "register_timer doing nothing; thread is alive but not sleeping" << endl;
+      dout(DBL) << "register_timer doing nothing; thread is awake" << endl;
       // it's probably doing callbacks.
     }
   } else {

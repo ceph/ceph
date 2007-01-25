@@ -76,88 +76,7 @@ void MDSMonitor::print_map()
   }
 }
 
-/*
-void MDSMonitor::handle_mds_state(MMDSState *m)
-{
-  dout(7) << "mds_state " << MDSMap::get_state_name(m->get_state())
-	  << " from " << m->get_source() << " at " << m->get_source_inst() << endl;
-  assert(m->get_source().is_mds());
-  int from = m->get_source().num();
-  int state = m->get_state();
-  
-  if (state == MDSMap::STATE_STARTING) {
-    // MDS BOOT
 
-    // choose an MDS id
-    if (from >= 0) {
-      // wants to be a specific MDS. 
-      if (mdsmap.is_down(from) ||
-	  mdsmap.get_inst(from) == m->get_source_inst()) {
-	// fine, whatever.
-	dout(10) << "mds_state assigning requested mds" << from << endl;
-      } else {
-	dout(10) << "mds_state not assigning requested mds" << from 
-		 << ", that mds is up and someone else" << endl;
-	from = -1;
-      }
-    }
-    if (from < 0) {
-      // pick a failed mds?
-      for (set<int>::iterator p = mdsmap.mds_set.begin();
-	   p != mdsmap.mds_set.end();
-	   ++p) {
-	if (mdsmap.is_failed(*p)) {
-	  dout(10) << "mds_state assigned failed mds" << from << endl;
-	  from = *p;
-	  break;
-	}
-      }
-    }
-    if (from < 0) {
-      // ok, just pick any unused mds id.
-      for (from=0; ; ++from) {
-	if (mdsmap.is_out(from)) {
-	  dout(10) << "mds_state assigned unused mds" << from << endl;
-	  break;
-	}
-      }
-    }
-    
-    // add to map
-    mdsmap.mds_set.insert(from);
-    mdsmap.mds_inst[from] = m->get_source_inst();
-    if (!mdsmap.mds_state.count(from)) {
-      // this is a new MDS!
-      state = MDSMap::STATE_CREATING;
-    }
-  }
-  else if (state == MDSMap::STATE_ACTIVE) {
-    // MDS now active
-    assert(mdsmap.is_starting(from) ||
-	   mdsmap.is_creating(from));
-  }
-
-  // update mds state
-  if (mdsmap.mds_state.count(from)) {
-    dout(10) << "mds_state mds" << from << " " << MDSMap::get_state_name(mdsmap.mds_state[from])
-	     << " -> " << MDSMap::get_state_name(state)
-	     << endl;
-  } else {
-    dout(10) << "mds_state mds" << from << " is new"
-	     << " -> " << MDSMap::get_state_name(state)
-	     << endl;
-  }
-  mdsmap.mds_state[from] = state;
-
-  // inc map version
-  mdsmap.inc_epoch();
-  mdsmap.encode(maps[mdsmap.get_epoch()]);
-
-  // bcast map
-  bcast_latest_mds();
-  send_current();
-}
-*/
 
 void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
 {
@@ -193,8 +112,8 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
 	   p != mdsmap.mds_set.end();
 	   ++p) {
 	if (mdsmap.is_failed(*p)) {
-	  dout(10) << "mds_beacon assigned failed mds" << from << endl;
 	  from = *p;
+	  dout(10) << "mds_beacon assigned failed mds" << from << endl;
 	  booted = true;
 	  break;
 	}
@@ -203,8 +122,9 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     if (from < 0) {
       // ok, just pick any unused mds id.
       for (from=0; ; ++from) {
-	if (mdsmap.is_out(from)) {
-	  dout(10) << "mds_beacon assigned unused mds" << from << endl;
+	if (mdsmap.is_dne(from) ||
+	    mdsmap.is_out(from)) {
+	  dout(10) << "mds_beacon assigned out|dne mds" << from << endl;
 	  booted = true;
 	  break;
 	}
@@ -237,10 +157,11 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
   }
 
 
-  // reply to beacon.
-  last_beacon[from] = g_clock.now();  // note time
-  messenger->send_message(m, MSG_ADDR_MDS(from), m->get_source_inst());
-
+  // reply to beacon?
+  if (state != MDSMap::STATE_OUT) {
+    last_beacon[from] = g_clock.now();  // note time
+    messenger->send_message(m, MSG_ADDR_MDS(from), m->get_source_inst());
+  }
 
   // did we update the map?
   if (mdsmap.mds_state[from] != state) {
@@ -310,4 +231,55 @@ void MDSMonitor::send_latest(msg_addr_t dest, const entity_inst_t& inst)
     send_full(dest, inst);
   else
     awaiting_map[dest] = inst;
+}
+
+
+void MDSMonitor::tick()
+{
+  // make sure mds's are still alive
+  utime_t now = g_clock.now();
+  if (now > g_conf.mds_beacon_grace) {
+    utime_t cutoff = now;
+    cutoff -= g_conf.mds_beacon_grace;
+    
+    bool changed = false;
+    
+    for (set<int>::iterator p = mdsmap.get_mds_set().begin();
+	 p != mdsmap.get_mds_set().end();
+	 ++p) {
+      if (!mdsmap.is_up(*p)) 
+	continue;  
+      
+      if (last_beacon.count(*p)) {
+	if (last_beacon[*p] < cutoff) {
+	  int newstate = MDSMap::STATE_FAILED;
+	  if (mdsmap.mds_state[*p] == MDSMap::STATE_CREATING) 
+	    newstate = MDSMap::STATE_DNE;
+	  
+	  dout(10) << "no beacon from mds" << *p << " since " << last_beacon[*p]
+		   << ", marking " << mdsmap.get_state_name(newstate)
+		   << endl;
+	  
+	  // update map
+	  mdsmap.mds_state[*p] = newstate;
+	  mdsmap.mds_state_seq.erase(*p);
+	  changed = true;
+	}
+      } else {
+	dout(10) << "no beacons from mds" << *p << ", assuming one " << now << endl;
+	last_beacon[*p] = now;
+      }
+    }
+
+    if (changed) {
+      mdsmap.inc_epoch();
+      mdsmap.encode(maps[mdsmap.get_epoch()]);
+      
+      print_map();
+      
+      // bcast map
+      bcast_latest_mds();
+      send_current();
+    }
+  }
 }

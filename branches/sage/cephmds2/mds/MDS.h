@@ -32,6 +32,7 @@ using namespace __gnu_cxx;
 #include "common/DecayCounter.h"
 #include "common/Logger.h"
 #include "common/Mutex.h"
+#include "common/Cond.h"
 
 #include "mon/MonMap.h"
 #include "MDSMap.h"
@@ -140,6 +141,7 @@ class MDS : public Dispatcher {
 public:
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
+  bool is_dne()      { return state == MDSMap::STATE_DNE; }
   bool is_out()      { return state == MDSMap::STATE_OUT; }
   bool is_failed()   { return state == MDSMap::STATE_FAILED; }
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
@@ -147,6 +149,7 @@ public:
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
+  bool is_stopped()  { return state == MDSMap::STATE_STOPPED; }
 
   void mark_active();
 
@@ -167,6 +170,13 @@ public:
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
   Context *beacon_sender;
   Context *beacon_killer;                           // next scheduled time of death
+
+  // tick and other timer fun
+  Context *tick_event;
+  void     reset_tick();
+
+  int      lost_timers;
+  Cond     timer_cond;
 
 
   // shutdown crap
@@ -197,14 +207,14 @@ public:
   int init();
   void reopen_log();
 
-  void boot_mkfs();      
-  void boot_mkfs_finish();
-  void boot_recover(int step=0);   
+  void boot_create();              // i am new mds.
+  void boot_create_finish();
+  void boot_recover(int step=0);   // i am starting/recovering existing mds.
 
   int shutdown_start();
   int shutdown_final();
 
-  void tick();
+  void tick(Context *c);
   
   void beacon_start();
   void beacon_send(Context *c=0);

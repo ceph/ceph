@@ -130,14 +130,8 @@ void Monitor::dispatch(Message *m)
       break;
 
     case MSG_SHUTDOWN:
-      if (m->get_source().is_mds()) {
-	mdsmon->dispatch(m);
-	if (mdsmon->mdsmap.get_num_mds() == 0) 
-	  shutdown();
-      }
-      else if (m->get_source().is_osd()) {
-	osdmon->dispatch(m);
-      }
+      assert(m->get_source().is_osd());
+      osdmon->dispatch(m);
       break;
 
 
@@ -155,6 +149,12 @@ void Monitor::dispatch(Message *m)
     case MSG_MDS_BEACON:
     case MSG_MDS_GETMAP:
       mdsmon->dispatch(m);
+
+      // hackish: did all mds's shut down?
+      if (g_conf.mon_stop_with_last_mds &&
+	  mdsmon->mdsmap.get_num_up_mds() == 0) 
+	shutdown();
+
       break;
 
       // clients
@@ -240,7 +240,7 @@ void Monitor::tick(Context *timer)
   lock.Lock();
   {
     if (tick_timer != timer) {
-      dout(10) << "tick - canceled" << endl;
+      dout(15) << "tick - canceled" << endl;
       tick_timer = 0;
       tick_timer_cond.Signal();
       lock.Unlock();
@@ -250,9 +250,10 @@ void Monitor::tick(Context *timer)
     tick_timer = 0;
 
     // ok go.
-    dout(10) << "tick" << endl;
+    dout(11) << "tick" << endl;
 
     osdmon->tick();
+    mdsmon->tick();
 
     // next tick!
     reset_tick();

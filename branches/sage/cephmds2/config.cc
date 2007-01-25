@@ -127,6 +127,7 @@ md_config_t g_conf = {
   mon_tick_interval: 5,
   mon_osd_down_out_interval: 5,  // seconds
   mon_lease: 2.000,  // seconds
+  mon_stop_with_last_mds: true,
 
   // --- client ---
   client_cache_size: 300,
@@ -568,6 +569,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
       g_conf.mon_osd_down_out_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mon_stop_with_last_mds") == 0)
+      g_conf.mon_stop_with_last_mds = atoi(args[++i]);
 
     else if (strcmp(args[i], "--client_sync_writes") == 0)
       g_conf.client_sync_writes = atoi(args[++i]);
