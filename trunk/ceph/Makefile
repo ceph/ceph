@@ -98,13 +98,16 @@ obfs: depend obfstest
 
 # real bits
 cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+csyn: csyn.cc client.o osdc.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
