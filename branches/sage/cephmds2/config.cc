@@ -190,6 +190,7 @@ md_config_t g_conf = {
 
   mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
+  mds_shutdown_on_last_unmount: true,
 
   mds_verify_export_dirauth: true,
 
@@ -512,6 +513,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_commit_on_shutdown = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_shutdown_check") == 0) 
       g_conf.mds_shutdown_check = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_shutdown_on_last_unmount") == 0) 
+      g_conf.mds_shutdown_on_last_unmount = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
       g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
 

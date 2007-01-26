@@ -808,8 +808,8 @@ void PG::peer(ObjectStore::Transaction& t,
   if (is_crashed()) {
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window << endl;
     state_set(STATE_REPLAY);
-    g_timer.add_event_after(g_conf.osd_replay_window,
-                            new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
+    osd->timer.add_event_after(g_conf.osd_replay_window,
+			       new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
   } 
   else if (!is_active()) {
     // -- ok, activate!

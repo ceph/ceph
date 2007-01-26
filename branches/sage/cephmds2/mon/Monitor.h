@@ -18,6 +18,8 @@
 #include "include/types.h"
 #include "msg/Messenger.h"
 
+#include "common/Timer.h"
+
 #include "MonMap.h"
 #include "Elector.h"
 
@@ -36,8 +38,8 @@ protected:
   MonMap *monmap;
 
   // timer.
+  SafeTimer timer;
   Context *tick_timer;
-  Cond     tick_timer_cond;
   void cancel_tick();
   void reset_tick();
   friend class C_Mon_Tick;
@@ -91,7 +93,7 @@ protected:
     whoami(w), 
     messenger(m),
     monmap(mm),
-    tick_timer(0),
+    timer(lock), tick_timer(0),
     store(0),
     elector(this, w),
     mon_epoch(0), 
@@ -109,7 +111,7 @@ protected:
   void init();
   void shutdown();
   void dispatch(Message *m);
-  void tick(Context *timer);
+  void tick();
 
 };
 

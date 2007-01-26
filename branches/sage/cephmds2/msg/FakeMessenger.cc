@@ -59,38 +59,15 @@ set<int>           shutdown_set;
 Mutex lock;
 Cond  cond;
 
-bool pending_timer = false;
-
 bool      awake = false;
 bool      fm_shutdown = false;
 pthread_t thread_id;
 
 
 
-class C_FakeKicker : public Context {
-  void finish(int r) {
-    dout(18) << "timer kick" << endl;
-    pending_timer = true;
-    lock.Lock();
-    cond.Signal();  // why not
-    lock.Unlock();
-  }
-};
-
-void FakeMessenger::callback_kick() 
-{
-  pending_timer = true;
-  lock.Lock();
-  cond.Signal();  // why not
-  lock.Unlock();
-}
 
 void *fakemessenger_thread(void *ptr) 
 {
-  //dout(1) << "thread start, setting timer kicker" << endl;
-  //g_timer.set_messenger_kicker(new C_FakeKicker());
-  //msgr_callback_kicker = new C_FakeKicker();
-
   lock.Lock();
   while (1) {
     dout(20) << "thread waiting" << endl;
@@ -106,11 +83,6 @@ void *fakemessenger_thread(void *ptr)
     if (directory.empty()) break;
   }
   lock.Unlock();
-
-  //cout << "unsetting messenger" << endl;
-  //g_timer.unset_messenger_kicker();
-  //g_timer.unset_messenger();
-  //msgr_callback_kicker = 0;
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
   return 0;
@@ -163,19 +135,6 @@ int fakemessenger_do_loop_2()
     bool didone = false;
     
     dout(18) << "do_loop top" << endl;
-
-    /*// timer?
-    if (pending_timer) {
-      pending_timer = false;
-      dout(5) << "pending timer" << endl;
-      g_timer.execute_pending();
-    }
-    */
-
-    // callbacks
-    lock.Unlock();
-    Messenger::do_callbacks();
-    lock.Lock();
 
     // messages
     map<int, FakeMessenger*>::iterator it = directory.begin();
@@ -271,8 +230,6 @@ FakeMessenger::FakeMessenger(msg_addr_t me)  : Messenger(me)
 
   cout << "fakemessenger " << get_myaddr() << " messenger is " << this << " at " << fakeinst << endl;
 
-  //g_timer.set_messenger(this);
-
   qlen = 0;
 
   /*
@@ -322,16 +279,6 @@ int FakeMessenger::shutdown()
   return 0;
 }
 
-/*
-void FakeMessenger::trigger_timer(Timer *t) 
-{
-  // note timer to call
-  pending_timer = t;
-
-  // wake up thread?
-  cond.Signal();  // why not
-}
-*/
 
 void FakeMessenger::reset_myaddr(msg_addr_t m)
 {
@@ -344,7 +291,6 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, entity_inst_t inst,
 {
   m->set_source(get_myaddr(), fromport);
   m->set_dest(dest, port);
-  //m->set_lamport_send_stamp( get_lamport() );
 
   m->set_source_inst(get_myinst());
 

@@ -2,11 +2,6 @@ blech:
 - EMetablob should return 'expired' if they have
   higher versions (and are thus described by a newer journal entry)
 
-- mds failure detection, failure decision by monitor.  
-  - keepalive beacons!
-
-- mds state changes for shutdown
-
 
 mds
 - journal+recovery
@@ -194,15 +189,10 @@ bugs/stability
 - figure out weird 40ms latency with double log entries
 
 
-general
-- timer needs cancel sets, schedulers need to cancel outstanding events on shutdown
-- well, just figure out general timer cancellation strategy that avoids races
- - use updated Timer as a model?
-
 
 remaining hard problems
 - how to cope with file size changes and read/write sharing
-- mds failure recovery (of course)
+- mds STOGITH...
 
 
 crush
@@ -214,7 +204,7 @@ mds
 - distributed client management
 - anchormgr
   - 2pc
-  - independent journal
+  - independent journal?
   - distributed?
 - link count management
   - also 2pc

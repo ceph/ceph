@@ -119,7 +119,8 @@ void Server::handle_client_unmount(Message *m)
 
   mds->clientmap.rem_mount(n);
 
-  if (mds->clientmap.get_mount_set().empty()) {
+  if (g_conf.mds_shutdown_on_last_unmount &&
+      mds->clientmap.get_mount_set().empty()) {
     dout(3) << "all clients done, initiating shutdown" << endl;
     mds->shutdown_start();
   }

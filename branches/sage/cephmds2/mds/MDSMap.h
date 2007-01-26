@@ -89,6 +89,14 @@ class MDSMap {
       if (is_up(*p)) ++n;
     return n;
   }
+  int get_num_up_or_failed_mds() {
+    int n = 0;
+    for (set<int>::const_iterator p = mds_set.begin();
+	 p != mds_set.end();
+	 p++)
+      if (is_up(*p) || is_failed(*p)) ++n;
+    return n;
+  }
 
   const set<int>& get_mds_set() const { return mds_set; }
 

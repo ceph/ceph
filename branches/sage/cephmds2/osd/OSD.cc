@@ -101,7 +101,7 @@ void OSD::force_remount()
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) 
+OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
 {
   whoami = id;
   messenger = m;
@@ -122,9 +122,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev)
   waiting_for_no_ops = false;
 
   if (g_conf.osd_remount_at) 
-    g_timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
+    timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
 
-                                           
 
   // init object store
   // try in this order:
@@ -268,8 +267,7 @@ int OSD::init()
     messenger->send_message(new MOSDBoot(superblock), MSG_ADDR_MON(mon), monmap->get_inst(mon));
     
     // start the heart
-    next_heartbeat = new C_Heartbeat(this);
-    g_timer.add_event_after(g_conf.osd_heartbeat_interval, next_heartbeat);
+    timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
   }
   osd_lock.Unlock();
 
@@ -280,11 +278,13 @@ int OSD::init()
 
 int OSD::shutdown()
 {
-  dout(1) << "shutdown, timer has " << g_timer.num_event << endl;
-
-  if (next_heartbeat) g_timer.cancel_event(next_heartbeat);
+  dout(1) << "shutdown" << endl;
 
   state = STATE_STOPPING;
+
+  // cancel timers
+  timer.cancel_all();
+  timer.join();
 
   // finish ops
   wait_for_no_ops();
@@ -475,8 +475,6 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 
 void OSD::heartbeat()
 {
-  osd_lock.Lock();
-
   utime_t now = g_clock.now();
   utime_t since = now;
   since.sec_ref() -= g_conf.osd_heartbeat_interval;
@@ -542,11 +540,8 @@ void OSD::heartbeat()
   }
 
   // schedule next!  randomly.
-  next_heartbeat = new C_Heartbeat(this);
   float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
-  g_timer.add_event_after(wait, next_heartbeat);
-
-  osd_lock.Unlock();  
+  timer.add_event_after(wait, new C_Heartbeat(this));
 }
 
 

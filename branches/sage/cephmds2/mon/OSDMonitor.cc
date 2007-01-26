@@ -84,7 +84,7 @@ void OSDMonitor::fake_reorg()
   /*
   if (g_conf.num_osd - d > 4 &&
       g_conf.num_osd - d > g_conf.num_osd/2)
-    g_timer.add_event_after(g_conf.fake_osdmap_expand,
+    mon->timer.add_event_after(g_conf.fake_osdmap_expand,
                             new C_Mon_Faker(this));
   */
 }
@@ -218,13 +218,13 @@ void OSDMonitor::create_initial()
 	   i != g_fake_osd_down.end();
 	   i++) {
 	dout(0) << "will fake osd" << i->first << " DOWN after " << i->second << endl;
-	g_timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 1));
+	mon->timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 1));
   }
   for (map<int,float>::iterator i = g_fake_osd_out.begin();
 	   i != g_fake_osd_out.end();
 	   i++) {
 	dout(0) << "will fake osd" << i->first << " OUT after " << i->second << endl;
-	g_timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 0));
+	mon->timer.add_event_after(i->second, new C_Mon_FakeOSDFailure(this, i->first, 0));
   }
 }
 
@@ -359,20 +359,16 @@ void OSDMonitor::handle_osd_failure(MOSDFailure *m)
 
 void OSDMonitor::fake_osd_failure(int osd, bool down) 
 {
-  lock.Lock();
-  {
-    if (down) {
-      dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
-      pending_inc.new_down[osd] = osdmap.osd_inst[osd];
-    } else {
-      dout(1) << "fake_osd_failure OUT osd" << osd << endl;
-      pending_inc.new_out.push_back(osd);
-    }
-    accept_pending();
-    bcast_latest_osd();
-    bcast_latest_mds();
+  if (down) {
+    dout(1) << "fake_osd_failure DOWN osd" << osd << endl;
+    pending_inc.new_down[osd] = osdmap.osd_inst[osd];
+  } else {
+    dout(1) << "fake_osd_failure OUT osd" << osd << endl;
+    pending_inc.new_out.push_back(osd);
   }
-  lock.Unlock();
+  accept_pending();
+  bcast_latest_osd();
+  bcast_latest_mds();
 }
 
 

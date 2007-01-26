@@ -42,6 +42,8 @@
 
 void Monitor::init()
 {
+  lock.Lock();
+  
   dout(1) << "init" << endl;
   
   // store
@@ -64,14 +66,20 @@ void Monitor::init()
   
   // start ticker
   reset_tick();
+  
+  lock.Unlock();
 }
 
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << endl;
 
+  // cancel all events
   cancel_tick();
-
+  timer.cancel_all();
+  timer.join();
+  
+  // unmount my local storage
   if (store) {
     store->umount();
     delete store;
@@ -152,7 +160,7 @@ void Monitor::dispatch(Message *m)
 
       // hackish: did all mds's shut down?
       if (g_conf.mon_stop_with_last_mds &&
-	  mdsmon->mdsmap.get_num_up_mds() == 0) 
+	  mdsmon->mdsmap.get_num_up_or_failed_mds() == 0) 
 	shutdown();
 
       break;
@@ -199,66 +207,42 @@ void Monitor::handle_ping_ack(MPingAck *m)
 
 
 
-/************ TIMER ***************/
+/************ TICK ***************/
 
 class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
   C_Mon_Tick(Monitor *m) : mon(m) {}
   void finish(int r) {
-    mon->tick(this);
+    mon->tick();
   }
 };
 
-
 void Monitor::cancel_tick()
 {
-  if (!tick_timer) return;
-
-  if (g_timer.cancel_event(tick_timer)) {
-    dout(10) << "cancel_tick canceled" << endl;
-  } else {
-    // already dispatched!
-    dout(10) << "cancel_tick timer dispatched, waiting to cancel" << endl;
-    tick_timer = (Context*)1;  // hackish.
-    while (tick_timer)
-      tick_timer_cond.Wait(lock);    
-  }
+  if (tick_timer) timer.cancel_event(tick_timer);
 }
 
 void Monitor::reset_tick()
 {
-  if (tick_timer) 
-    cancel_tick();
+  cancel_tick();
   tick_timer = new C_Mon_Tick(this);
-  g_timer.add_event_after(g_conf.mon_tick_interval, tick_timer);
+  timer.add_event_after(g_conf.mon_tick_interval, tick_timer);
 }
 
 
-void Monitor::tick(Context *timer)
+void Monitor::tick()
 {
-  lock.Lock();
-  {
-    if (tick_timer != timer) {
-      dout(15) << "tick - canceled" << endl;
-      tick_timer = 0;
-      tick_timer_cond.Signal();
-      lock.Unlock();
-      return;
-    }
+  tick_timer = 0;
 
-    tick_timer = 0;
-
-    // ok go.
-    dout(11) << "tick" << endl;
-
-    osdmon->tick();
-    mdsmon->tick();
-
-    // next tick!
-    reset_tick();
-  }
-  lock.Unlock();
+  // ok go.
+  dout(11) << "tick" << endl;
+  
+  osdmon->tick();
+  mdsmon->tick();
+  
+  // next tick!
+  reset_tick();
 }
 
 

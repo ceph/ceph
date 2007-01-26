@@ -228,6 +228,7 @@ void MDCache::log_import_map(Context *onsync)
     }
   }
 
+  mds->mdlog->writing_import_map = true;
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_MDS_WroteImportMap(mds->mdlog, mds->mdlog->get_write_pos()));
   if (onsync)
@@ -457,13 +458,10 @@ public:
 
 class C_MDC_ShutdownCheck : public Context {
   MDCache *mdc;
-  Mutex *lock;
 public:
-  C_MDC_ShutdownCheck(MDCache *m, Mutex *l) : mdc(m), lock(l) {}
+  C_MDC_ShutdownCheck(MDCache *m) : mdc(m) {}
   void finish(int) {
-    lock->Lock();
     mdc->shutdown_check();
-    lock->Unlock();
   }
 };
 
@@ -476,7 +474,7 @@ void MDCache::shutdown_check()
   g_conf.debug_mds = 10;
   show_cache();
   g_conf.debug_mds = o;
-  g_timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this, &mds->mds_lock));
+  mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
   // this
   dout(0) << "lru size now " << lru.lru_get_size() << endl;
@@ -495,7 +493,7 @@ void MDCache::shutdown_start()
   dout(1) << "shutdown_start" << endl;
 
   if (g_conf.mds_shutdown_check)
-    g_timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this, &mds->mds_lock));
+    mds->timer.add_event_after(g_conf.mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 }
 
 

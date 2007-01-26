@@ -47,8 +47,6 @@ class FakeMessenger : public Messenger {
 
   int get_dispatch_queue_len() { return qlen; }
 
-  void callback_kick();
-
   // -- incoming queue --
   // (that nothing uses)
   Message *get_message() {

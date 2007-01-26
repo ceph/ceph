@@ -33,6 +33,7 @@ using namespace __gnu_cxx;
 #include "common/Logger.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/Timer.h"
 
 #include "mon/MonMap.h"
 #include "MDSMap.h"
@@ -102,6 +103,8 @@ class MDS : public Dispatcher {
  public:
   Mutex        mds_lock;
 
+  SafeTimer    timer;
+
  protected:
   int          whoami;
 
@@ -129,7 +132,6 @@ class MDS : public Dispatcher {
   AnchorClient *anchorclient;
 
   Logger       *logger, *logger2;
-
 
 
  protected:
@@ -175,9 +177,7 @@ public:
   Context *tick_event;
   void     reset_tick();
 
-  int      lost_timers;
-  Cond     timer_cond;
-
+  
 
   // shutdown crap
   int req_rate;
@@ -214,10 +214,10 @@ public:
   int shutdown_start();
   int shutdown_final();
 
-  void tick(Context *c);
+  void tick();
   
   void beacon_start();
-  void beacon_send(Context *c=0);
+  void beacon_send();
   void beacon_kill(utime_t lab);
   void handle_mds_beacon(MMDSBeacon *m);
   void reset_beacon_killer();

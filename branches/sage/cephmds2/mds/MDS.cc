@@ -66,7 +66,7 @@ LogType mds_logtype, mds_cache_logtype;
 
 
 // cons/des
-MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
+MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   this->whoami = whoami;
 
   monmap = mm;
@@ -97,8 +97,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   beacon_sender = 0;
   beacon_killer = 0;
 
+  // tick
   tick_event = 0;
-  lost_timers = 0;
 
   req_rate = 0;
 
@@ -209,7 +209,7 @@ class C_MDS_Tick : public Context {
 public:
   C_MDS_Tick(MDS *m) : mds(m) {}
   void finish(int r) {
-    mds->tick(this);
+    mds->tick();
   }
 };
 
@@ -217,39 +217,31 @@ public:
 
 int MDS::init()
 {
+  mds_lock.Lock();
+
   // starting beacon.  this will induce an MDSMap from the monitor
   state = MDSMap::STATE_STARTING;
   beacon_start();
 
   // schedule tick
   reset_tick();
+
+  mds_lock.Unlock();
   return 0;
 }
 
 void MDS::reset_tick()
 {
   // cancel old
-  if (tick_event &&
-      !g_timer.cancel_event(tick_event)) 
-    lost_timers++;
+  if (tick_event) timer.cancel_event(tick_event);
 
   // schedule
   tick_event = new C_MDS_Tick(this);
-  g_timer.add_event_after(g_conf.mon_tick_interval, tick_event);
+  timer.add_event_after(g_conf.mon_tick_interval, tick_event);
 }
 
-void MDS::tick(Context *c)
+void MDS::tick()
 {
-  mds_lock.Lock();
-
-  // am i canceled?
-  if (c != tick_event) {
-    lost_timers--;
-    timer_cond.Signal();
-    mds_lock.Unlock();
-    return;
-  }
-
   // reschedule
   reset_tick();
 
@@ -295,9 +287,6 @@ void MDS::tick(Context *c)
       */
     }
   }
-
-
-  mds_lock.Unlock();
 }
 
 
@@ -308,7 +297,7 @@ void MDS::tick(Context *c)
 
 void MDS::beacon_start()
 {
-  beacon_send(0);        // send first beacon
+  beacon_send();        // send first beacon
   reset_beacon_killer(); // schedule killer
 }
   
@@ -318,21 +307,12 @@ class C_MDS_BeaconSender : public Context {
 public:
   C_MDS_BeaconSender(MDS *m) : mds(m) {}
   void finish(int r) {
-    mds->mds_lock.Lock();
-    mds->beacon_send(this);
-    mds->mds_lock.Unlock();
+    mds->beacon_send();
   }
 };
 
-void MDS::beacon_send(Context *c)
+void MDS::beacon_send()
 {
-  if (c && c != beacon_sender) {
-    dout(15) << "beacon_send beacon_sender doesn't match, noop" << endl;
-    lost_timers--;
-    timer_cond.Signal();
-    return;
-  }
-
   ++beacon_last_seq;
   dout(10) << "beacon_send " << MDSMap::get_state_name(want_state)
 	   << " seq " << beacon_last_seq << endl;
@@ -344,11 +324,9 @@ void MDS::beacon_send(Context *c)
 			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
 
   // schedule next sender
-  if (beacon_sender &&
-      !g_timer.cancel_event(beacon_sender))
-    lost_timers++;
+  if (beacon_sender) timer.cancel_event(beacon_sender);
   beacon_sender = new C_MDS_BeaconSender(this);
-  g_timer.add_event_after(g_conf.mds_beacon_interval, beacon_sender);
+  timer.add_event_after(g_conf.mds_beacon_interval, beacon_sender);
 }
 
 void MDS::handle_mds_beacon(MMDSBeacon *m)
@@ -391,12 +369,10 @@ void MDS::reset_beacon_killer()
   dout(15) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
 	   << ", will die at " << when << endl;
   
-  if (beacon_killer &&
-      !g_timer.cancel_event(beacon_killer))
-    lost_timers++;
+  if (beacon_killer) timer.cancel_event(beacon_killer);
 
   beacon_killer = new C_MDS_BeaconKiller(this, beacon_last_acked_stamp);
-  g_timer.add_event_at(when, beacon_killer);
+  timer.add_event_at(when, beacon_killer);
 }
 
 void MDS::beacon_kill(utime_t lab)
@@ -695,23 +671,19 @@ int MDS::shutdown_final()
 
   // stop timers
   if (beacon_killer) {
-    g_timer.cancel_event(beacon_killer);
+    timer.cancel_event(beacon_killer);
     beacon_killer = 0;
   }
   if (beacon_sender) {
-    if (!g_timer.cancel_event(beacon_sender)) 
-      lost_timers++;
+    timer.cancel_event(beacon_sender);
     beacon_sender = 0;
   }
   if (tick_event) {
-    if (!g_timer.cancel_event(tick_event))
-      lost_timers++;
+    timer.cancel_event(tick_event);
     tick_event = 0;
   }
-  while (lost_timers++) {
-    dout(1) << "waiting to cancel " << lost_timers << " timer events" << endl;
-    timer_cond.Wait(mds_lock);
-  }
+  timer.cancel_all();
+  timer.join();
   
   // shut down cache
   mdcache->shutdown();
@@ -728,10 +700,6 @@ int MDS::shutdown_final()
 
 void MDS::dispatch(Message *m)
 {
-  // make sure we advacne the clock
-  g_clock.now();
-
-  // process
   mds_lock.Lock();
   my_dispatch(m);
   mds_lock.Unlock();

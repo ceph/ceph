@@ -22,6 +22,7 @@
 
 #undef dout
 #define dout(x)  if (x <= g_conf.debug) cout << g_clock.now() << " TIMER "
+#define derr(x)  if (x <= g_conf.debug) cerr << g_clock.now() << " TIMER "
 
 #define DBL 10
 
@@ -33,20 +34,8 @@
 Timer      g_timer;
 
 
-/*
-Context* Timer::get_next_scheduled(utime_t& when)
-{
-  if (scheduled.empty()) {
-    dout(10) << "get_next_scheduled - nothing scheduled" << endl;
-    return 0;
-  }
-  map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
-  when = it->first;
-  multiset<Context*>::iterator sit = it->second.begin();
-  dout(10) << "get_next_scheduled " << *sit << " at " << when << endl;
-  return *sit;
-}*/
 
+/**** thread solution *****/
 
 bool Timer::get_next_due(utime_t& when)
 {
@@ -54,14 +43,13 @@ bool Timer::get_next_due(utime_t& when)
     dout(10) << "get_next_due - nothing scheduled" << endl;
     return false;
   } else {
-    map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+    map< utime_t, set<Context*> >::iterator it = scheduled.begin();
     when = it->first;
     dout(10) << "get_next_due - " << when << endl;
     return true;
   }
 }
 
-/**** thread solution *****/
 
 void Timer::timer_entry()
 {
@@ -80,14 +68,14 @@ void Timer::timer_entry()
       // move to pending list
       list<Context*> pending;
 
-      map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+      map< utime_t, set<Context*> >::iterator it = scheduled.begin();
       while (it != scheduled.end()) {
         if (it->first > now) break;
 
         utime_t t = it->first;
         dout(DBL) << "queueing event(s) scheduled at " << t << endl;
 
-        for (multiset<Context*>::iterator cit = it->second.begin();
+        for (set<Context*>::iterator cit = it->second.begin();
              cit != it->second.end();
              cit++) {
           pending.push_back(*cit);
@@ -95,7 +83,7 @@ void Timer::timer_entry()
           num_event--;
         }
 
-        map< utime_t, multiset<Context*> >::iterator previt = it;
+        map< utime_t, set<Context*> >::iterator previt = it;
         it++;
         scheduled.erase(previt);
       }
@@ -111,6 +99,7 @@ void Timer::timer_entry()
                cit++) {
             dout(DBL) << "doing callback " << *cit << endl;
             (*cit)->finish(0);
+	    delete *cit;
           }
           pending.clear();
           assert(pending.empty());
@@ -205,19 +194,20 @@ void Timer::add_event_after(float seconds,
 void Timer::add_event_at(utime_t when,
                          Context *callback) 
 {
-  // insert
+  lock.Lock();
+
   dout(DBL) << "add_event " << callback << " at " << when << endl;
 
-  lock.Lock();
-  scheduled[ when ].insert(callback);
-  assert(event_times.count(callback) == 0);     // err.. there can be only one (for now!)
+  // insert
+  scheduled[when].insert(callback);
+  assert(event_times.count(callback) == 0);
   event_times[callback] = when;
   
   num_event++;
-
-  // make sure i wake up
+  
+  // make sure i wake up on time
   register_timer();
-
+  
   lock.Unlock();
 }
 
@@ -228,21 +218,94 @@ bool Timer::cancel_event(Context *callback)
   dout(DBL) << "cancel_event " << callback << endl;
 
   if (!event_times.count(callback)) {
-    dout(DBL) << "cancel_event " << callback << " wasn't scheduled?" << endl;
+    dout(DBL) << "cancel_event " << callback << " isn't scheduled (probably executing in another thread?)" << endl;
     lock.Unlock();
-    assert(0);
     return false;     // wasn't scheduled.
   }
 
   utime_t tp = event_times[callback];
-  assert(scheduled.count(tp));
-
-  multiset<Context*>::iterator p = scheduled[tp].find(callback);  // there may be more than one?
-  assert(p != scheduled[tp].end());
-  scheduled[tp].erase(p);
-
   event_times.erase(callback);
+
+  assert(scheduled.count(tp));
+  assert(scheduled[tp].count(callback));
+  scheduled[tp].erase(callback);
+  if (scheduled[tp].empty())
+    scheduled.erase(tp);
   
   lock.Unlock();
   return true;
+}
+
+
+// -------------------------------
+
+void SafeTimer::add_event_after(float seconds, Context *c)
+{
+  assert(lock.is_locked());
+  g_timer.add_event_after(seconds, new EventWrapper(this, c));
+  scheduled.insert(c);
+}
+
+void SafeTimer::add_event_at(utime_t when, Context *c)
+{
+  assert(lock.is_locked());
+  g_timer.add_event_at(when, new EventWrapper(this, c));
+  scheduled.insert(c);
+}
+
+void SafeTimer::EventWrapper::finish(int r)
+{
+  timer->lock.Lock();
+  if (timer->scheduled.count(actual)) {
+    // still scheduled.  execute.
+    actual->finish(r);
+    timer->scheduled.erase(actual);
+  } else {
+    // canceled.
+    assert(timer->canceled.count(actual));
+    timer->canceled.erase(actual);
+    delete actual;
+    timer->cond.Signal();
+  }
+  timer->lock.Unlock();
+}
+
+void SafeTimer::cancel_event(Context *c) 
+{
+  assert(lock.is_locked());
+  assert(scheduled.count(c));
+  scheduled.erase(c);
+  if (!g_timer.cancel_event(c)) 
+    canceled.insert(c);
+}
+
+void SafeTimer::cancel_all()
+{
+  assert(lock.is_locked());
+  for (set<Context*>::iterator p = scheduled.begin();
+       p != scheduled.end();
+       ++p) 
+    if (!g_timer.cancel_event(*p)) 
+      canceled.insert(*p);
+  scheduled.clear();
+}
+
+void SafeTimer::join()
+{
+  assert(lock.is_locked());
+  assert(scheduled.empty());
+  while (!canceled.empty()) {
+    // wait
+    dout(-10) << "SafeTimer.join waiting for " << canceled.size() << " to join" << endl;
+    cond.Wait(lock);
+  }
+}
+
+SafeTimer::~SafeTimer()
+{
+  if (!scheduled.empty() && !canceled.empty()) {
+    derr(0) << "SafeTimer.~SafeTimer " << scheduled.size() << " events scheduled, " 
+	    << canceled.size() << " canceled but unflushed" 
+	    << endl;
+  }
 }

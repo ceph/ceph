@@ -179,6 +179,7 @@ struct md_config_t {
 
   bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;
+  bool  mds_shutdown_on_last_unmount;
   bool  mds_verify_export_dirauth;     // debug flag
 
   bool  mds_local_osd;

@@ -27,18 +27,14 @@ public:
 
 void Elector::read_timer()
 {
-  lock.Lock();
-  {
-    read_num++;
-    status_msg_count = 0;
-    old_views = views;   // TODO deep copy
-    for (unsigned i=0; i<processes.size(); i++) {
-      mon->messenger->send_message(new MMonElectionCollect(read_num), 
-                                   MSG_ADDR_MON(processes[i]),
-								   mon->monmap->get_inst(processes[i]));
-    }
+  read_num++;
+  status_msg_count = 0;
+  old_views = views;   // TODO deep copy
+  for (unsigned i=0; i<processes.size(); i++) {
+	mon->messenger->send_message(new MMonElectionCollect(read_num), 
+								 MSG_ADDR_MON(processes[i]),
+								 mon->monmap->get_inst(processes[i]));
   }
-  lock.Unlock();
 };
 
 class C_Elect_TripTimer : public Context {
@@ -52,17 +48,13 @@ public:
 
 void Elector::trip_timer()
 {
-  lock.Lock();
-  {
-    views[whoami].expired = true;
-    registry[whoami].epoch.s_num++;
-    dout(1) << "Process " << whoami
-            <<  " timed out (" << ack_msg_count << "/" << (f + 1)
-            << ") ... increasing epoch. Now epoch is "
-            << registry[whoami].epoch.s_num
-            << endl;
-  }
-  lock.Unlock();
+  views[whoami].expired = true;
+  registry[whoami].epoch.s_num++;
+  dout(1) << "Process " << whoami
+		  <<  " timed out (" << ack_msg_count << "/" << (f + 1)
+		  << ") ... increasing epoch. Now epoch is "
+		  << registry[whoami].epoch.s_num
+		  << endl;
 };
 
 
@@ -78,20 +70,16 @@ public:
 
 void Elector::refresh_timer()
 {
-  lock.Lock();
-  {
-    ack_msg_count = 0;
-    refresh_num++;
-    MMonElectionRefresh *msg = new MMonElectionRefresh(whoami, registry[whoami], refresh_num);
-    for (unsigned i=0; i<processes.size(); i++) {
-      mon->messenger->send_message(msg, MSG_ADDR_MON(processes[i]), mon->monmap->get_inst(processes[i]));
-    }
-    
-    // Start the trip timer
-    //round_trip_timer = new C_Elect_TripTimer(this);
-    g_timer.add_event_after(trip_delta, new C_Elect_TripTimer(this));
+  ack_msg_count = 0;
+  refresh_num++;
+  MMonElectionRefresh *msg = new MMonElectionRefresh(whoami, registry[whoami], refresh_num);
+  for (unsigned i=0; i<processes.size(); i++) {
+	mon->messenger->send_message(msg, MSG_ADDR_MON(processes[i]), mon->monmap->get_inst(processes[i]));
   }
-  lock.Unlock();
+  
+  // Start the trip timer
+  //round_trip_timer = new C_Elect_TripTimer(this);
+  mon->timer.add_event_after(trip_delta, new C_Elect_TripTimer(this));
 };
 
 
@@ -114,30 +102,26 @@ Elector::Epoch Elector::get_min_epoch()
 
 void Elector::dispatch(Message *m)
 {
-  lock.Lock();
-  {
-    switch (m->get_type()) {
-    case MSG_MON_ELECTION_ACK:
-      handle_ack((MMonElectionAck*)m);
-      break;
+  switch (m->get_type()) {
+  case MSG_MON_ELECTION_ACK:
+	handle_ack((MMonElectionAck*)m);
+	break;
+	
+  case MSG_MON_ELECTION_STATUS:
+	handle_status((MMonElectionStatus*)m);
+	break;
     
-    case MSG_MON_ELECTION_STATUS:
-      handle_status((MMonElectionStatus*)m);
-      break;
+  case MSG_MON_ELECTION_COLLECT:
+	handle_collect((MMonElectionCollect*)m);
+	break;
     
-    case MSG_MON_ELECTION_COLLECT:
-      handle_collect((MMonElectionCollect*)m);
-      break;
-    
-    case MSG_MON_ELECTION_REFRESH:
-      handle_refresh((MMonElectionRefresh*)m);
-      break;
-      
-    default:
-      assert(0);
-    }
+  case MSG_MON_ELECTION_REFRESH:
+	handle_refresh((MMonElectionRefresh*)m);
+	break;
+	
+  default:
+	assert(0);
   }
-  lock.Unlock();
 }
 
 void Elector::handle_ack(MMonElectionAck* msg)
@@ -151,7 +135,7 @@ void Elector::handle_ack(MMonElectionAck* msg)
   ack_msg_count++;
   if (ack_msg_count >= f + 1) {
     dout(5) << "Received _f+1 acks, increase freshness" << endl;
-    //g_timer.cancel_event(round_trip_task);
+    //mon->timer.cancel_event(round_trip_task);
     //round_trip_timer->cancel();
     registry[whoami].freshness++;         
   }
@@ -221,7 +205,7 @@ void Elector::handle_status(MMonElectionStatus* msg)
     dout(1) << " thinks leader has ID: " << leader_id << endl;
     
     // Restarts the timer for the next iteration
-    g_timer.add_event_after(main_delta + trip_delta, new C_Elect_ReadTimer(this));
+    mon->timer.add_event_after(main_delta + trip_delta, new C_Elect_ReadTimer(this));
   }
 }
 

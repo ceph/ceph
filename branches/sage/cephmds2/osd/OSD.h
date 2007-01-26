@@ -18,6 +18,7 @@
 
 #include "common/Mutex.h"
 #include "common/ThreadPool.h"
+#include "common/Timer.h"
 
 #include "mon/MonMap.h"
 
@@ -88,10 +89,11 @@ public:
     void finish(int r) {
       osd->heartbeat();
     }
-  } *next_heartbeat;
+  };
 
   // global lock
   Mutex osd_lock;
+  SafeTimer timer;
 
   // -- stats --
   int hb_stat_ops;  // ops since last heartbeat

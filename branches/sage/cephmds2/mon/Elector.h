@@ -68,7 +68,6 @@ class Elector {
  private:
   Monitor *mon;
   int whoami;
-  Mutex lock;
 
   // used during refresh phase
   int ack_msg_count;

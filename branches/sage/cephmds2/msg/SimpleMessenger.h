@@ -199,7 +199,6 @@ class Rank {
     
     void reset_myaddr(msg_addr_t m);
 
-    void callback_kick() {} 
     int shutdown();
     void prepare_dest(const entity_inst_t& inst);
     int send_message(Message *m, msg_addr_t dest, entity_inst_t inst,
