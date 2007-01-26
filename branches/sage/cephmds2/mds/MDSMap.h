@@ -31,7 +31,7 @@ class MDSMap {
   static const int STATE_OUT =      1;    // down, once existed, but no imports.
   static const int STATE_FAILED =   2;    // down, holds (er, held) metadata; needs to be recovered.
 
-  static const int STATE_STANDBY =  3;    // up, but inactive; waiting for someone to fail.
+  static const int STATE_STANDBY =  3;    // up, but inactive.  waiting for assignment by monitor.
   static const int STATE_CREATING = 4;    // up, creating MDS instance (initializing journal, etc.)
   static const int STATE_STARTING = 5;    // up, scanning journal, recoverying any shared state
   static const int STATE_ACTIVE =   6;    // up, active
@@ -62,10 +62,10 @@ class MDSMap {
   int anchortable;   // which MDS has anchortable (fixme someday)
   int root;          // which MDS has root directory
 
-  set<int>               mds_set;    // set of MDSs
-  map<int,int>           mds_state;  // MDS state
+  set<int>               mds_created;   // which mds ids have initialized journals and id tables.
+  map<int,int>           mds_state;     // MDS state
   map<int,version_t>     mds_state_seq;
-  map<int,entity_inst_t> mds_inst;   // up instances
+  map<int,entity_inst_t> mds_inst;      // up instances
 
   friend class MDSMonitor;
 
@@ -80,26 +80,59 @@ class MDSMap {
   int get_anchortable() const { return anchortable; }
   int get_root() const { return root; }
 
-  int get_num_mds() const { return mds_set.size(); }
+  // counts
+  int get_num_mds() const { return mds_state.size(); }
   int get_num_up_mds() {
     int n = 0;
-    for (set<int>::const_iterator p = mds_set.begin();
-	 p != mds_set.end();
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
 	 p++)
-      if (is_up(*p)) ++n;
+      if (is_up(p->first)) ++n;
     return n;
   }
   int get_num_up_or_failed_mds() {
     int n = 0;
-    for (set<int>::const_iterator p = mds_set.begin();
-	 p != mds_set.end();
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
 	 p++)
-      if (is_up(*p) || is_failed(*p)) ++n;
+      if (is_up(p->first) || is_failed(p->first)) 
+	++n;
     return n;
   }
 
-  const set<int>& get_mds_set() const { return mds_set; }
+  // sets
+  void get_mds_set(set<int>& s) {
+    s.clear();
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      s.insert(p->first);
+  }
+  void get_up_mds_set(set<int>& s) {
+    s.clear();
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (is_up(p->first)) 
+	s.insert(p->first);
+  }
+  void get_mds_set(set<int>& s, int state) {
+    s.clear();
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (p->second == state)
+	s.insert(p->first);
+  }
+  void get_active_mds_set(set<int>& s) {
+    get_mds_set(s, MDSMap::STATE_ACTIVE);
+  }
+  void get_failed_mds_set(set<int>& s) {
+    get_mds_set(s, MDSMap::STATE_FAILED);
+  }
 
+
+  // state
   bool is_down(int m) { return is_dne(m) || is_out(m) || is_failed(m); }
   bool is_up(int m) { return !is_down(m); }
 
@@ -119,6 +152,10 @@ class MDSMap {
     return STATE_OUT;
   }
 
+  // inst
+  bool have_inst(int m) {
+    return mds_inst.count(m);
+  }
   const entity_inst_t& get_inst(int m) {
     assert(mds_inst.count(m));
     return mds_inst[m];
@@ -141,9 +178,9 @@ class MDSMap {
   }
 
   void remove_mds(int m) {
-    mds_set.erase(m);
     mds_inst.erase(m);
     mds_state.erase(m);
+    mds_state_seq.erase(m);
   }
 
 
@@ -154,8 +191,8 @@ class MDSMap {
     blist.append((char*)&anchortable, sizeof(anchortable));
     blist.append((char*)&root, sizeof(root));
     
-    _encode(mds_set, blist);
     _encode(mds_state, blist);
+    _encode(mds_state_seq, blist);
     _encode(mds_inst, blist);
   }
   
@@ -170,8 +207,8 @@ class MDSMap {
     blist.copy(off, sizeof(root), (char*)&root);
     off += sizeof(root);
     
-    _decode(mds_set, blist, off);
     _decode(mds_state, blist, off);
+    _decode(mds_state_seq, blist, off);
     _decode(mds_inst, blist, off);
   }
 

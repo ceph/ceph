@@ -138,11 +138,15 @@ class EMetaBlob {
     int state;
     int nfull, nremote, nnull;
     bufferlist bfull, bremote, bnull;
+
+  private:
+    bool dn_decoded;
     list<fullbit>   dfull;
     list<remotebit> dremote;
     list<nullbit>   dnull;
-    
-    dirlump() : state(0), nfull(0), nremote(0), nnull(0) { }
+
+  public:
+    dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
     bool is_import() { return state & STATE_IMPORT; }
     void mark_import() { state |= STATE_IMPORT; }
@@ -150,6 +154,10 @@ class EMetaBlob {
     void mark_complete() { state |= STATE_COMPLETE; }
     bool is_dirty() { return state & STATE_DIRTY; }
     void mark_dirty() { state |= STATE_DIRTY; }
+
+    list<fullbit>   &get_dfull()   { return dfull; }
+    list<remotebit> &get_dremote() { return dremote; }
+    list<nullbit>   &get_dnull()   { return dnull; }
 
     void _encode_bits() {
       for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
@@ -160,6 +168,7 @@ class EMetaBlob {
 	p->_encode(bnull);
     }
     void _decode_bits() { 
+      if (dn_decoded) return;
       int off = 0;
       for (int i=0; i<nfull; i++) 
 	dfull.push_back(fullbit(bfull, off));
@@ -169,6 +178,7 @@ class EMetaBlob {
       off = 0;
       for (int i=0; i<nnull; i++) 
 	dnull.push_back(nullbit(bnull, off));
+      dn_decoded = true;
     }
 
     void _encode(bufferlist& bl) {
@@ -194,6 +204,7 @@ class EMetaBlob {
       ::_decode(bremote, bl, off);
       ::_decode(bnull, bl, off);
       // don't decode bits unless we need them.
+      dn_decoded = false;
     }
   };
   
@@ -215,41 +226,41 @@ class EMetaBlob {
     if (dn->is_remote()) {
       lump.nremote++;
       if (dirty)
-	lump.dremote.push_front(remotebit(dn->get_name(), 
-					  dn->get_projected_version(), 
-					  dn->get_remote_ino(), 
-					  dirty));
+	lump.get_dremote().push_front(remotebit(dn->get_name(), 
+						dn->get_projected_version(), 
+						dn->get_remote_ino(), 
+						dirty));
       else
-	lump.dremote.push_back(remotebit(dn->get_name(), 
-					 dn->get_projected_version(), 
-					 dn->get_remote_ino(), 
-					 dirty));
+	lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					       dn->get_projected_version(), 
+					       dn->get_remote_ino(), 
+					       dirty));
     } 
     else if (!in) {
       lump.nnull++;
       if (dirty)
-	lump.dnull.push_front(nullbit(dn->get_name(), 
-				      dn->get_projected_version(), 
-				      dirty));
+	lump.get_dnull().push_front(nullbit(dn->get_name(), 
+					    dn->get_projected_version(), 
+					    dirty));
       else
-	lump.dnull.push_back(nullbit(dn->get_name(), 
-				     dn->get_projected_version(), 
-				     dirty));
+	lump.get_dnull().push_back(nullbit(dn->get_name(), 
+					   dn->get_projected_version(), 
+					   dirty));
     }
     else {
       lump.nfull++;
       if (dirty) {
-	lump.dfull.push_front(fullbit(dn->get_name(), 
-				      dn->get_projected_version(), 
-				      in->inode, in->symlink, 
-				      dirty));
-	return &lump.dfull.front().inode;
+	lump.get_dfull().push_front(fullbit(dn->get_name(), 
+					    dn->get_projected_version(), 
+					    in->inode, in->symlink, 
+					    dirty));
+	return &lump.get_dfull().front().inode;
       } else {
-	lump.dfull.push_back(fullbit(dn->get_name(), 
-				     dn->get_projected_version(),
-				     in->inode, in->symlink, 
-				     dirty));
-	return &lump.dfull.back().inode;
+	lump.get_dfull().push_back(fullbit(dn->get_name(), 
+					   dn->get_projected_version(),
+					   in->inode, in->symlink, 
+					   dirty));
+	return &lump.get_dfull().back().inode;
       }
     }
     return 0;

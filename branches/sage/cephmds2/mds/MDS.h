@@ -204,7 +204,7 @@ public:
   void send_message_mds(Message *m, int mds, int port=0, int fromport=0);
 
   // start up, shutdown
-  int init();
+  int init(bool standby=false);
   void reopen_log();
 
   void boot_create();              // i am new mds.

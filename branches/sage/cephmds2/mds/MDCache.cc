@@ -2244,7 +2244,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 
   set<int> who;
   if (bcast) {
-    who = mds->get_mds_map()->get_mds_set();
+    mds->get_mds_map()->get_active_mds_set(who);
   } else {
     for (map<int,int>::iterator p = dir->replicas_begin();
 	 p != dir->replicas_end();

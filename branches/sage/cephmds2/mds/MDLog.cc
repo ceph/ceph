@@ -46,6 +46,20 @@ MDLog::MDLog(MDS *m)
 
   unflushed = 0;
 
+  journaler = 0;
+  logger = 0;
+}
+
+
+MDLog::~MDLog()
+{
+  if (journaler) { delete journaler; journaler = 0; }
+  if (logger) { delete logger; logger = 0; }
+}
+
+
+void MDLog::init_journaler()
+{
   // logger
   char name[80];
   sprintf(name, "mds%d.log", mds->get_nodeid());
@@ -73,28 +87,24 @@ MDLog::MDLog(MDS *m)
     log_inode.layout.object_layout = OBJECT_LAYOUT_STARTOSD;
     log_inode.layout.osd = mds->get_nodeid() + 10000;   // hack
   }
-
+  
   // log streamer
+  if (journaler) delete journaler;
   journaler = new Journaler(log_inode, mds->objecter, logger);
-
 }
 
-
-MDLog::~MDLog()
-{
-  if (journaler) { delete journaler; journaler = 0; }
-  if (logger) { delete logger; logger = 0; }
-}
 
 
 void MDLog::reset()
 {
+  init_journaler();
   journaler->reset();
 }
 
 void MDLog::open(Context *c)
 {
   dout(5) << "open discovering log bounds" << endl;
+  init_journaler();
   journaler->recover(c);
 }
 
@@ -368,6 +378,10 @@ public:
 
 void MDLog::_replay()
 {
+  dout(10) << "_replay read_pos " << journaler->get_read_pos() 
+	   << " / " << journaler->get_write_pos()
+	   << endl;
+
   // read what's buffered
   while (journaler->is_readable() &&
 	 journaler->get_read_pos() < journaler->get_write_pos()) {
@@ -397,11 +411,19 @@ void MDLog::_replay()
     delete le;
   }
 
+  dout(10) << "_replay read_pos " << journaler->get_read_pos() 
+	   << " / " << journaler->get_write_pos()
+	   << endl;
+
   // wait for read?
   if (journaler->get_read_pos() < journaler->get_write_pos()) {
     journaler->wait_for_readable(new C_MDL_Replay(this));
     return;    
   }
+
+  dout(10) << "_replay read_pos " << journaler->get_read_pos() 
+	   << " / " << journaler->get_write_pos()
+	   << endl;
 
   // done!
   assert(journaler->get_read_pos() == journaler->get_write_pos());

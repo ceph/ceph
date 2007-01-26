@@ -26,15 +26,8 @@ class Dispatcher {
   // how i receive messages
   virtual void dispatch(Message *m) = 0;
 
-
   // how i deal with transmission failures.
   virtual void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst) { delete m; }
-
-  // lookups
-  virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst) { assert(0); return 0; }
-
-  // this is how i send messages
-  //int send_message(Message *m, msg_addr_t dest, int dest_port);
 };
 
 #endif

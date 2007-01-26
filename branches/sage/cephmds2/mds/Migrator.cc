@@ -3195,7 +3195,7 @@ void Migrator::handle_unhash_dir(MUnhashDir *m)
   }
 
   // init gather set
-  hash_gather[dir] = mds->get_mds_map()->get_mds_set();   // fixme
+  mds->get_mds_map()->get_active_mds_set( hash_gather[dir] );
   hash_gather[dir].erase(mds->get_nodeid());
 
   // send unhash message

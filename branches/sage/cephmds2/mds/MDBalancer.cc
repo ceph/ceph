@@ -155,15 +155,15 @@ void MDBalancer::send_heartbeat()
   }
 
   
-  int size = mds->get_mds_map()->get_num_mds();
-  for (int i = 0; i<size; i++) {
-    if (i == mds->get_nodeid()) continue;
+  set<int> up;
+  mds->get_mds_map()->get_up_mds_set(up);
+  for (set<int>::iterator p = up.begin(); p != up.end(); ++p) {
+    if (*p == mds->get_nodeid()) continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->messenger->send_message(hb,
-                                 MSG_ADDR_MDS(i), mds->mdsmap->get_inst(i),
-				 MDS_PORT_BALANCER,
-                                 MDS_PORT_BALANCER);
+                                 MSG_ADDR_MDS(*p), mds->mdsmap->get_inst(*p),
+				 MDS_PORT_BALANCER, MDS_PORT_BALANCER);
   }
 }
 

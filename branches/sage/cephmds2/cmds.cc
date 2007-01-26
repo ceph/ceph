@@ -60,6 +60,17 @@ int main(int argc, char **argv)
   if (g_conf.debug_after) 
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
+  // mds specific args
+  bool standby = false;  // by default, i'll start active.
+  for (unsigned i=0; i<args.size(); i++) {
+    if (strcmp(args[i], "--standby") == 0) 
+      standby = true;
+    else {
+      cerr << "unrecognized arg " << args[i] << endl;
+      return -1;
+    }
+  }
+
 
   // load monmap
   bufferlist bl;
@@ -83,7 +94,7 @@ int main(int argc, char **argv)
   assert(m);
   
   MDS *mds = new MDS(m->get_myaddr().num(), m, monmap);
-  mds->init();
+  mds->init(standby);
   
   // wait
   rank.wait();

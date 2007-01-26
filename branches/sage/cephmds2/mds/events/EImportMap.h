@@ -29,7 +29,8 @@ public:
   
   void print(ostream& out) {
     out << "import_map " << imports.size() << " imports, " 
-	<< exports.size() << " exports";
+	<< exports.size() << " exports"
+	<< " " << metablob;
   }
 
   void encode_payload(bufferlist& bl) {

@@ -102,8 +102,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 
   req_rate = 0;
 
-  state = MDSMap::STATE_DNE;
-  want_state = MDSMap::STATE_STARTING;
+  want_state = state = MDSMap::STATE_DNE;
 
 
   logger = logger2 = 0;
@@ -215,14 +214,18 @@ public:
 
 
 
-int MDS::init()
+int MDS::init(bool standby)
 {
   mds_lock.Lock();
 
+  if (standby)
+    want_state = MDSMap::STATE_STANDBY;
+  else
+    want_state = MDSMap::STATE_STARTING;
+  
   // starting beacon.  this will induce an MDSMap from the monitor
-  state = MDSMap::STATE_STARTING;
   beacon_start();
-
+  
   // schedule tick
   reset_tick();
 
@@ -297,8 +300,9 @@ void MDS::tick()
 
 void MDS::beacon_start()
 {
-  beacon_send();        // send first beacon
-  reset_beacon_killer(); // schedule killer
+  beacon_send();         // send first beacon
+  
+  //reset_beacon_killer(); // schedule killer
 }
   
 
@@ -315,7 +319,9 @@ void MDS::beacon_send()
 {
   ++beacon_last_seq;
   dout(10) << "beacon_send " << MDSMap::get_state_name(want_state)
-	   << " seq " << beacon_last_seq << endl;
+	   << " seq " << beacon_last_seq
+	   << " (currently " << MDSMap::get_state_name(state) << ")"
+	   << endl;
 
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
@@ -405,16 +411,18 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (oldwhoami != whoami) {
     messenger->reset_myaddr(MSG_ADDR_MDS(whoami));
     reopen_log();
+
+    mdlog->reset();
   }
 
   // update my state
   int oldstate = state;
   state = mdsmap->get_state(whoami);
   
-  if (oldstate == MDSMap::STATE_DNE && state == MDSMap::STATE_CREATING) {
-    // special case at startup (monitor decides whether i am creating or starting)
-    assert(want_state == MDSMap::STATE_STARTING);
-    want_state = MDSMap::STATE_CREATING;
+  // did the monitor order me active?
+  if ((oldstate == MDSMap::STATE_DNE || oldstate == MDSMap::STATE_STANDBY) && 
+      (state == MDSMap::STATE_CREATING || state == MDSMap::STATE_STARTING)) {
+    want_state = state;
   }
 
   dout(1) << "handle_mds_map i am mds" << whoami << " with state " << mdsmap->get_state_name(state) << endl;
@@ -476,8 +484,8 @@ void MDS::handle_osd_map(MOSDMap *m)
       boot_recover();
     else if (is_creating()) 
       boot_create();
-    else
-      assert(0);
+    else 
+      assert(is_standby());
   }  
   
   // pass on to clients
@@ -631,8 +639,10 @@ int MDS::shutdown_start()
   derr(0) << "mds shutdown start" << endl;
 
   // tell everyone to stop.
-  for (set<int>::iterator p = mdsmap->get_mds_set().begin();
-       p != mdsmap->get_mds_set().end();
+  set<int> active;
+  mdsmap->get_active_mds_set(active);
+  for (set<int>::iterator p = active.begin();
+       p != active.end();
        p++) {
     if (mdsmap->is_starting(*p) || mdsmap->is_active(*p)) {
       dout(1) << "sending MShutdownStart to mds" << *p << endl;
@@ -752,17 +762,6 @@ void MDS::my_dispatch(Message *m)
 
 
   // HACK FOR NOW
-  /*
-  static bool did_heartbeat_hack = false;
-  if (!shutting_down && !shut_down &&
-      false && 
-      !did_heartbeat_hack) {
-    osdmonitor->initiate_heartbeat();
-    did_heartbeat_hack = true;
-  }
-  */
-
-
   if (is_active()) {
     // flush log to disk after every op.  for now.
     mdlog->flush();

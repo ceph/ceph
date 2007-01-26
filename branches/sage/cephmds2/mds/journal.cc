@@ -185,8 +185,8 @@ void EMetaBlob::replay(MDS *mds)
     lump._decode_bits();
 
     // full dentry+inode pairs
-    for (list<fullbit>::iterator p = lump.dfull.begin();
-	 p != lump.dfull.end();
+    for (list<fullbit>::iterator p = lump.get_dfull().begin();
+	 p != lump.get_dfull().end();
 	 p++) {
       CInode *in = mds->mdcache->get_inode(p->inode.ino);
       if (!in) {
@@ -213,8 +213,8 @@ void EMetaBlob::replay(MDS *mds)
     }
 
     // remote dentries
-    for (list<remotebit>::iterator p = lump.dremote.begin();
-	 p != lump.dremote.end();
+    for (list<remotebit>::iterator p = lump.get_dremote().begin();
+	 p != lump.get_dremote().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
@@ -232,8 +232,8 @@ void EMetaBlob::replay(MDS *mds)
     }
 
     // null dentries
-    for (list<nullbit>::iterator p = lump.dnull.begin();
-	 p != lump.dnull.end();
+    for (list<nullbit>::iterator p = lump.get_dnull().begin();
+	 p != lump.get_dnull().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn);
       if (!dn) {
