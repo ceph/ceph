@@ -89,8 +89,8 @@ public:
       ::_encode(new_in, bl);
       ::_encode(new_out, bl);
       ::_encode(new_overload, bl);
-      //::_encode(added_osd_keys, bl);
-      //::_encode(removed_osd_keys, bl);
+      ::_encode(added_osd_keys, bl);
+      ::_encode(removed_osd_keys, bl);
     }
     void decode(bufferlist& bl, int& off) {
       bl.copy(off, sizeof(epoch), (char*)&epoch);
@@ -104,8 +104,8 @@ public:
       ::_decode(new_in, bl, off);
       ::_decode(new_out, bl, off);
       ::_decode(new_overload, bl, off);
-      //::_decode(added_osd_keys, bl, off);
-      //::_decode(removed_osd_keys, bl, off);
+      ::_decode(added_osd_keys, bl, off);
+      ::_decode(removed_osd_keys, bl, off);
     }
 
     Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
@@ -244,7 +244,7 @@ private:
     _encode(out_osds, blist);
     _encode(overload_osds, blist);
     _encode(osd_inst, blist);
-    //_encode(osd_keys, blist);
+    _encode(osd_keys, blist);
     
     crush._encode(blist);
   }
@@ -265,7 +265,7 @@ private:
     _decode(out_osds, blist, off);
     _decode(overload_osds, blist, off);
     _decode(osd_inst, blist, off);
-    //_decode(osd_keys, blist, off);
+    _decode(osd_keys, blist, off);
     
     crush._decode(blist, off);
   }
