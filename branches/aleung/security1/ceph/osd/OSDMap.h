@@ -35,6 +35,9 @@ using namespace crush;
 #include <map>
 using namespace std;
 
+#include"crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 
 /*
  * some system constants
@@ -74,6 +77,8 @@ public:
     list<int> new_out;
     map<int,float> new_overload;  // updated overload value
     list<int>      old_overload;  // no longer overload
+    map<int,string> added_osd_keys; // new public keys
+    list<int> removed_osd_keys; // public keys to remove
     
     void encode(bufferlist& bl) {
       bl.append((char*)&epoch, sizeof(epoch));
@@ -84,6 +89,8 @@ public:
       ::_encode(new_in, bl);
       ::_encode(new_out, bl);
       ::_encode(new_overload, bl);
+      //::_encode(added_osd_keys, bl);
+      //::_encode(removed_osd_keys, bl);
     }
     void decode(bufferlist& bl, int& off) {
       bl.copy(off, sizeof(epoch), (char*)&epoch);
@@ -97,6 +104,8 @@ public:
       ::_decode(new_in, bl, off);
       ::_decode(new_out, bl, off);
       ::_decode(new_overload, bl, off);
+      //::_decode(added_osd_keys, bl, off);
+      //::_decode(removed_osd_keys, bl, off);
     }
 
     Incremental(epoch_t e=0) : epoch(e), mon_epoch(0) {}
@@ -114,6 +123,7 @@ private:
   set<int>  out_osds;    // list of unmapped disks
   map<int,float> overload_osds; 
   map<int,entity_inst_t> osd_inst;
+  map<int,string> osd_keys; //all public keys
 
  public:
   Crush     crush;       // hierarchical map
@@ -145,6 +155,7 @@ private:
   const set<int>& get_down_osds() { return down_osds; }
   const set<int>& get_out_osds() { return out_osds; }
   const map<int,float>& get_overload_osds() { return overload_osds; }
+  const map<int,string>& get_keys() { return osd_keys; }
   
   bool is_down(int osd) { return down_osds.count(osd); }
   bool is_up(int osd) { return !is_down(osd); }
@@ -233,6 +244,7 @@ private:
     _encode(out_osds, blist);
     _encode(overload_osds, blist);
     _encode(osd_inst, blist);
+    //_encode(osd_keys, blist);
     
     crush._encode(blist);
   }
@@ -253,6 +265,7 @@ private:
     _decode(out_osds, blist, off);
     _decode(overload_osds, blist, off);
     _decode(osd_inst, blist, off);
+    //_decode(osd_keys, blist, off);
     
     crush._decode(blist, off);
   }

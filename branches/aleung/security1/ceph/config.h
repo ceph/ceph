@@ -279,7 +279,7 @@ struct md_config_t {
   int fakeclient_op_close;
 
   // security (all princiapls)
-  int secure_io;
+  bool secure_io;
   int sign_scheme;
   int hash_scheme;
   int crypt_scheme;

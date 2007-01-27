@@ -32,10 +32,11 @@ using namespace __gnu_cxx;
 
 #include "messages/MOSDOp.h"
 
+#include"crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 class Messenger;
 class Message;
-
-
   
 
 class OSD : public Dispatcher {
@@ -58,6 +59,10 @@ public:
  protected:
   Messenger *messenger;
   int whoami;
+
+  // public/private key
+  esignPriv myPrivKey;
+  esignPub myPubKey;
 
   static const int STATE_BOOTING = 1;
   static const int STATE_ACTIVE = 2;

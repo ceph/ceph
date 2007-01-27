@@ -31,6 +31,10 @@ using namespace std;
 
 #include "common/Timer.h"
 
+// crypto library
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 #define NUMMDS g_conf.num_mds
 #define NUMOSD g_conf.num_osd
 #define NUMCLIENT g_conf.num_client
@@ -69,6 +73,21 @@ int main(int argc, char **argv)
 
 
   g_clock.tare();
+  
+  if (g_conf.secure_io) {
+    cout << "Testing crypto library" << endl;
+    
+    const byte* myMsg = (const byte*)"hash me";
+    byte digestBuf[SHA1DIGESTSIZE];
+    byte hexBuf[2*SHA1DIGESTSIZE];
+    
+    sha1(myMsg,digestBuf,strlen((const char*)myMsg));
+    toHex(digestBuf, hexBuf, SHA1DIGESTSIZE,
+		   2*SHA1DIGESTSIZE);
+    
+    cerr << "SHA1 of " << myMsg << " is " <<
+      string((const char*)hexBuf,2*SHA1DIGESTSIZE) << endl;
+  }
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
 
