@@ -159,7 +159,7 @@ bool CryptoLib::rsaVer(byte* dataBuf, const unsigned int dataLen,
 
 /**********
  * Generate an ESIGN private(Signer) key
- * from a seed input string
+ * from a seed input file
  **********/
 ESIGN<SHA>::Signer CryptoLib::esignPrivKey(char* seedPath) {
   //StringSource ss(seedData, true,
@@ -176,6 +176,30 @@ ESIGN<SHA>::Signer CryptoLib::esignPrivKey(char* seedPath) {
 ESIGN<SHA>::Verifier CryptoLib::esignPubKey(ESIGN<SHA>::Signer seedKey) {
   ESIGN<SHA>::Verifier pub(seedKey);
   return pub;
+}
+
+/**********
+ * Generate an ESIGN private (Signer) key
+ * from a input string
+ * This is intended be used to recover keys
+ * from DEREncoded strings
+ **********/
+ESIGN<SHA>::Signer CryptoLib::_fromStr_esignPrivKey(string seedString) {
+  StringSource s(seedString, true, new HexDecoder());
+  ESIGN<SHA>::Signer pubRecover(s);
+  return pubRecover;
+}
+
+/**********
+ * Generate an ESIGN public (Verifier) key
+ * from a input string
+ * This is intended be used to recover keys
+ * from DEREncoded strings
+ **********/
+ESIGN<SHA>::Verifier CryptoLib::_fromStr_esignPubKey(string seedString) {
+  StringSource s(seedString, true, new HexDecoder());
+  ESIGN<SHA>::Verifier pubRecover(s);
+  return pubRecover;
 }
 
 /**********
@@ -283,6 +307,32 @@ void CryptoLib::toHex(const byte* dataBuf, byte* hexBuf, unsigned int dataLen, u
   hexEnc.Put(dataBuf, dataLen);
   hexEnc.MessageEnd();
   hexEnc.Get(hexBuf, hexLen);
+}
+
+/**********
+ * Turns keys (private)
+ * into string for buffer encoding
+ * User DER encoding
+ **********/
+string CryptoLib::privToString(CryptoLib::esignPriv privKey) {
+  string priv_string;
+  HexEncoder privString(new StringSink(priv_string));
+  privKey.DEREncode(privString);
+  privString.MessageEnd();
+  return priv_string;
+}
+
+/**********
+ * Turns keys (public)
+ * into string for buffer encoding
+ * User DER encoding
+ **********/
+string CryptoLib::pubToString(CryptoLib::esignPub pubKey) {
+  string pub_string;
+  HexEncoder pubString(new StringSink(pub_string));
+  pubKey.DEREncode(pubString);
+  pubString.MessageEnd();
+  return pub_string;
 }
 
 //BenchMarkSignature<ESIGN<SHA> >("esig1023.dat", "ESIGN 1023", t);

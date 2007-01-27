@@ -34,15 +34,16 @@
 #include<crypto++/aes.h>
 #include<crypto++/rijndael.h>
 
+#include"crypto_config.h"
+
 #include<iostream>
 
 using namespace std;
 
-class CryptoLib {
+namespace CryptoLib {
 
-  typedef CryptoLib ThisClass;
+  //typedef CryptoLib ThisClass;
 
- public:
   enum {MD5DIGESTSIZE=16, SHA1DIGESTSIZE=20, SHA256DIGESTSIZE=32,
 	SHA384DIGESTSIZE=48, SHA512DIGESTSIZE=64};
   enum {RJ128KEYSIZE=16, RJBLOCKSIZE=16, RC5KEYSIZE=16, RC5BLOCKSIZE=8};
@@ -70,6 +71,8 @@ class CryptoLib {
   // asymmetric key generation
   esignPriv esignPrivKey(char*);
   esignPub esignPubKey(CryptoPP::ESIGN<CryptoPP::SHA>::Signer);
+  esignPriv _fromStr_esignPrivKey(string); /* ! */
+  esignPub _fromStr_esignPubKey(string); /* ! */
   rsaPriv rsaPrivKey(char*);
   rsaPub rsaPubKey(rsaPriv);
   
@@ -90,9 +93,9 @@ class CryptoLib {
 
   // string encoding
   void toHex(const byte*, byte*, unsigned int, unsigned int);
+  string privToString(CryptoLib::esignPriv); /* ! */
+  string pubToString(CryptoLib::esignPub); /* ! */
   
- protected:
- private:
   /* Templated one-way hash function*/
   void hashFunc(const byte*, byte*, unsigned int,
 		char*, CryptoPP::HashTransformation &);
@@ -103,4 +106,5 @@ class CryptoLib {
   /* Templated asymmetric key generation */
   /* Templated symmetric key generation */
 };
+
 #endif
