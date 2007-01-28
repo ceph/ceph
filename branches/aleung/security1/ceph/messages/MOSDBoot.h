@@ -21,11 +21,15 @@
 class MOSDBoot : public Message {
  public:
   OSDSuperblock sb;
+  string public_key_str;
 
   MOSDBoot() {}
   MOSDBoot(OSDSuperblock& s) : 
     Message(MSG_OSD_BOOT),
     sb(s) {
+  }
+  MOSDBoot(OSDSuperblock& s, string pks) :
+    Message(MSG_OSD_BOOT), sb(s), public_key_str(pks) {
   }
 
   char *get_type_name() { return "oboot"; }
