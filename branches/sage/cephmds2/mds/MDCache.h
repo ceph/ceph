@@ -122,6 +122,8 @@ class MDCache {
   friend class Renamer;
   friend class MDBalancer;
   friend class EImportMap;
+  friend class MDLog;
+
 
  public:
 
@@ -143,6 +145,7 @@ class MDCache {
   int get_num_imports() { return imports.size(); }
   void add_import(CDir *dir);
   void remove_import(CDir *dir);
+  void recalc_auth_bits();
 
   void log_import_map(Context *onsync=0);
 

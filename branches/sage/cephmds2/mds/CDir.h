@@ -46,6 +46,7 @@ class Context;
 // directory authority types
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
+#define CDIR_AUTH_UNKNOWN  -2
 
 
 #define CDIR_NONCE_EXPORT   1

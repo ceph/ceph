@@ -112,6 +112,7 @@ public:
  protected:
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
   void export_dir_frozen(CDir *dir, int dest);
+  void export_dir_frozen_logged(CDir *dir, MExportDirPrep *prep, int dest);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir_go(CDir *dir,
                      int dest);
@@ -124,8 +125,8 @@ public:
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
     
   friend class C_MDC_ExportFreeze;
+  friend class C_MDC_ExportStartLogged;
   friend class C_MDS_ExportFinishLogged;
-
   // importer
   void handle_export_dir_discover(MExportDirDiscover *m);
   void handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r);

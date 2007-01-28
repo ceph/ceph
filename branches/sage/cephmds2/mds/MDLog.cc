@@ -378,10 +378,6 @@ public:
 
 void MDLog::_replay()
 {
-  dout(10) << "_replay read_pos " << journaler->get_read_pos() 
-	   << " / " << journaler->get_write_pos()
-	   << endl;
-
   // read what's buffered
   while (journaler->is_readable() &&
 	 journaler->get_read_pos() < journaler->get_write_pos()) {
@@ -411,19 +407,11 @@ void MDLog::_replay()
     delete le;
   }
 
-  dout(10) << "_replay read_pos " << journaler->get_read_pos() 
-	   << " / " << journaler->get_write_pos()
-	   << endl;
-
   // wait for read?
   if (journaler->get_read_pos() < journaler->get_write_pos()) {
     journaler->wait_for_readable(new C_MDL_Replay(this));
     return;    
   }
-
-  dout(10) << "_replay read_pos " << journaler->get_read_pos() 
-	   << " / " << journaler->get_write_pos()
-	   << endl;
 
   // done!
   assert(journaler->get_read_pos() == journaler->get_write_pos());
@@ -431,6 +419,10 @@ void MDLog::_replay()
 
   // move read pointer _back_ to expire pos, for eventual trimming
   journaler->set_read_pos(journaler->get_expire_pos());
+
+
+  // twiddle all dir and inode auth bits
+  mds->mdcache->recalc_auth_bits();
 
   // kick waiter(s)
   list<Context*> ls;

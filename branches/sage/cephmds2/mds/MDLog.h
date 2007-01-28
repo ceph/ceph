@@ -76,9 +76,17 @@ class MDLog {
 
   void init_journaler();
 
+
+ public:
+  // replay state
+  map<inodeno_t, set<inodeno_t> >   pending_exports;
+
+
+
  public:
   MDLog(MDS *m);
   ~MDLog();
+
  
 
   void set_max_events(size_t max) { max_events = max; }

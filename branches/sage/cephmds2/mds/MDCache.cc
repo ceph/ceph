@@ -103,6 +103,7 @@ MDCache::~MDCache()
 }
 
 
+
 void MDCache::log_stat(Logger *logger)
 {
   if (get_root()) {
@@ -266,6 +267,31 @@ void MDCache::add_import(CDir *dir)
   imports.insert(dir);
   dir->state_set(CDIR_STATE_IMPORT);
   dir->get(CDir::PIN_IMPORT);
+}
+
+
+void MDCache::recalc_auth_bits()
+{
+  dout(7) << "recalc_auth_bits" << endl;
+
+  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->authority() == mds->get_nodeid())
+      in->state_set(CInode::STATE_AUTH);
+    else
+      in->state_clear(CInode::STATE_AUTH);
+
+    if (in->dir) {
+      if (in->dir->authority() == mds->get_nodeid())
+	in->dir->state_set(CDIR_STATE_AUTH);
+      else
+	in->dir->state_clear(CDIR_STATE_AUTH);
+    }
+  }
+  show_imports();
+  show_cache();
 }
 
 

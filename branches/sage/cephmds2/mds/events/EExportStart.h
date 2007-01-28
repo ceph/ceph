@@ -23,10 +23,12 @@
 #include "EMetaBlob.h"
 
 class EExportStart : public LogEvent {
- protected:
+ public:
   EMetaBlob metablob; // exported dir
-  inodeno_t dirino;
+ protected:
+  inodeno_t      dirino;
   int dest;     // dest mds
+  set<inodeno_t> bounds;
 
  public:
   EExportStart(CDir *dir, int d) : LogEvent(EVENT_EXPORTSTART),
@@ -36,6 +38,8 @@ class EExportStart : public LogEvent {
   }
   EExportStart() : LogEvent(EVENT_EXPORTSTART) { }
   
+  set<inodeno_t> &get_bounds() { return bounds; }
+
   void print(ostream& out) {
     out << "export_start " << dirino << " -> " << dest;
   }
@@ -44,6 +48,7 @@ class EExportStart : public LogEvent {
     metablob._encode(bl);
     bl.append((char*)&dirino, sizeof(dirino));
     bl.append((char*)&dest, sizeof(dest));
+    ::_encode(bounds, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
@@ -51,6 +56,7 @@ class EExportStart : public LogEvent {
     off += sizeof(dirino);
     bl.copy(off, sizeof(dest), (char*)&dest);
     off += sizeof(dest);
+    ::_decode(bounds, bl, off);
   }
   
   bool has_expired(MDS *mds);

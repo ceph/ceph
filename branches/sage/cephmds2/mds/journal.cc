@@ -389,7 +389,7 @@ void EImportMap::replay(MDS *mds)
       CDir *ex = exi->get_or_open_dir(mds->mdcache);
       assert(ex);
 
-      ex->set_dir_auth(mds->get_nodeid() + 1);  // anything that's not me, for now!
+      ex->set_dir_auth(CDIR_AUTH_UNKNOWN);
       ex->state_set(CDIR_STATE_EXPORT);
       ex->get(CDir::PIN_EXPORT);
       mds->mdcache->exports.insert(ex);
@@ -397,26 +397,7 @@ void EImportMap::replay(MDS *mds)
     }
   }
 
-  // twiddle all dir and inode auth bits
-  for (hash_map<inodeno_t,CInode*>::iterator p = mds->mdcache->inode_map.begin();
-       p != mds->mdcache->inode_map.end();
-       ++p) {
-    CInode *in = p->second;
-    if (in->authority() == mds->get_nodeid())
-      in->state_set(CInode::STATE_AUTH);
-    else
-      in->state_clear(CInode::STATE_AUTH);
-
-    if (in->dir) {
-      if (in->dir->authority() == mds->get_nodeid())
-	in->dir->state_set(CDIR_STATE_AUTH);
-      else
-	in->dir->state_clear(CDIR_STATE_AUTH);
-    }
-  }
-
   mds->mdcache->show_imports();
-  mds->mdcache->show_cache();
 
 }
 
@@ -515,10 +496,15 @@ void EExportStart::expire(MDS *mds, Context *c)
 void EExportStart::replay(MDS *mds)
 {
   dout(10) << "EExportStart.replay " << dirino << " -> " << dest << endl;
-
   metablob.replay(mds);
-
   
+  // put in pending_exports lists
+  CInode *diri = mds->mdcache->get_inode(dirino);
+  assert(diri);
+  CDir *dir = diri->dir;
+  assert(dir);
+
+  mds->mdlog->pending_exports[dirino] = bounds;
 }
 
 // -----------------------
@@ -526,13 +512,42 @@ void EExportStart::replay(MDS *mds)
 
 bool EExportFinish::has_expired(MDS *mds)
 {
+  // we can always expire.
   return true;
 }
+
 void EExportFinish::expire(MDS *mds, Context *c)
 {
+  assert(0);  // should never happen.
 }
+
 void EExportFinish::replay(MDS *mds)
 {
+  dout(10) << "EExportFinish.replay " << dirino << endl;
+
+  CInode *diri = mds->mdcache->get_inode(dirino);
+  assert(diri);
+  CDir *dir = diri->dir;
+  assert(dir);
+
+  set<inodeno_t> bounds = mds->mdlog->pending_exports[dirino];
+  mds->mdlog->pending_exports.erase(dirino);
+
+  // adjust dir_auth
+  dir->set_dir_auth( CDIR_AUTH_UNKNOWN );  // not me
+
+  // bounds (exports, before)
+  for (set<inodeno_t>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CInode *bi = mds->mdcache->get_inode(*p);
+    assert(bi);
+    CDir *bd = bi->dir;
+    assert(bd);
+    
+    assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
+    bd->set_dir_auth( CDIR_AUTH_UNKNOWN );  // not me
+  }
 }
 
 

@@ -538,20 +538,9 @@ void CDir::last_put()
  */
 int CDir::authority() 
 {
-  if (get_dir_auth() >= 0)
-    return get_dir_auth();
-
-  /*
-  CDir *parent = inode->get_parent_dir();
-  if (parent)
-    return parent->authority();
-  
-  // root, or dangling
-  assert(inode->is_root());  // no dirs under danglers!?
-  //assert(inode->is_root() || inode->is_dangling());  
-  */
-
-  return inode->authority();
+  if (dir_auth == CDIR_AUTH_PARENT)
+    return inode->authority();
+  return dir_auth;
 }
 
 int CDir::dentry_authority(const string& dn )

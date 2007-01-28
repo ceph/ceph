@@ -276,15 +276,8 @@ void Migrator::export_dir(CDir *dir,
   // take away the popularity we're sending.   FIXME: do this later?
   mds->balancer->subtract_export(dir);
   
-  // we need to do a few things here..
-  C_Gather *gather = new C_Gather(new C_MDC_ExportFreeze(this, dir, dest));
-  
-  // 1- freeze the subtree
-  dir->freeze_tree(gather->new_sub());
-
-  // 2- log out intentions
-  mds->mdlog->submit_entry(new EExportStart(dir, dest),
-			   gather->new_sub());
+  // freeze the subtree
+  dir->freeze_tree(new C_MDC_ExportFreeze(this, dir, dest));
 }
 
 
@@ -306,6 +299,19 @@ void Migrator::handle_export_dir_discover_ack(MExportDirDiscoverAck *m)
   delete m;  // done
 }
 
+class C_MDC_ExportStartLogged : public Context {
+  Migrator *mig;
+  CDir *ex;   // dir i'm exporting
+  int dest;
+  MExportDirPrep *prep;
+
+public:
+  C_MDC_ExportStartLogged(Migrator *m, CDir *e, int d, MExportDirPrep *p) :
+	mig(m), ex(e), dest(d), prep(p) {}
+  virtual void finish(int r) {
+    mig->export_dir_frozen_logged(ex, prep, dest);
+  }
+};
 
 void Migrator::export_dir_frozen(CDir *dir,
                                 int dest)
@@ -315,6 +321,7 @@ void Migrator::export_dir_frozen(CDir *dir,
 
   show_imports();
 
+  EExportStart *le = new EExportStart(dir, dest);
   MExportDirPrep *prep = new MExportDirPrep(dir->inode);
 
   // include spanning tree for all nested exports.
@@ -322,9 +329,10 @@ void Migrator::export_dir_frozen(CDir *dir,
   // dir_auth updates on any nested exports are properly absorbed.
   
   set<inodeno_t> inodes_added;
-  
+
   // include base dir
   prep->add_dir( new CDirDiscover(dir, dir->add_replica(dest)) );
+  le->metablob.add_dir( dir, false );
   
   // also include traces to all nested exports.
   set<CDir*> my_nested;
@@ -337,6 +345,9 @@ void Migrator::export_dir_frozen(CDir *dir,
     dout(7) << " including nested export " << *exp << " in prep" << endl;
 
     prep->add_export( exp->ino() );
+    le->get_bounds().insert(exp->ino());
+    le->metablob.add_dir_context( exp );
+    le->metablob.add_dir( exp, false );
 
     /* first assemble each trace, in trace order, and put in message */
     list<CInode*> inode_trace;  
@@ -377,7 +388,14 @@ void Migrator::export_dir_frozen(CDir *dir,
 
   }
   
-  // send it!
+  // log our intentions
+  dout(7) << " logging EExportStart" << endl;
+  mds->mdlog->submit_entry(le, new C_MDC_ExportStartLogged(this, dir, dest, prep));
+}
+
+void Migrator::export_dir_frozen_logged(CDir *dir, MExportDirPrep *prep, int dest)
+{
+  dout(7) << "export_dir_frozen_logged " << *dir << endl;
   mds->send_message_mds(prep, dest, MDS_PORT_MIGRATOR);
 }
 
