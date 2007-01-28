@@ -61,18 +61,15 @@ int Rank::Accepter::start()
   assert(listen_sd > 0);
   
   /* bind to port */
-  memset((char*)&listen_addr, 0, sizeof(listen_addr));
-  listen_addr.sin_family = AF_INET;
-  listen_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  listen_addr.sin_port = 0;
-  
-  int rc = bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+  int rc = bind(listen_sd, (struct sockaddr *) &rank.listen_addr, sizeof(rank.listen_addr));
+  if (rc < 0) 
+    derr(0) << "accepter.start unable to bind to " << rank.listen_addr << endl;
   assert(rc >= 0);
 
-  socklen_t llen = sizeof(listen_addr);
-  getsockname(listen_sd, (sockaddr*)&listen_addr, &llen);
+  socklen_t llen = sizeof(rank.listen_addr);
+  getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
   
-  int myport = listen_addr.sin_port;
+  int myport = rank.listen_addr.sin_port;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
@@ -97,9 +94,9 @@ int Rank::Accepter::start()
          myhostname->h_length);
   my_addr.sin_port = myport;
   
-  listen_addr = my_addr;
+  rank.listen_addr = my_addr;
   
-  dout(10) << "accepter.start listen addr is " << listen_addr << endl;
+  dout(10) << "accepter.start listen addr is " << rank.listen_addr << endl;
 
   // start thread
   create();
@@ -671,9 +668,21 @@ void Rank::Pipe::fail(list<Message*>& out)
 
 Rank::Rank() : 
   single_dispatcher(this) {
+  // default to any listen_addr
+  memset((char*)&listen_addr, 0, sizeof(listen_addr));
+  listen_addr.sin_family = AF_INET;
+  listen_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  listen_addr.sin_port = 0;
 }
 Rank::~Rank()
 {
+}
+
+void Rank::set_listen_addr(tcpaddr_t& a)
+{
+  dout(10) << "set_listen_addr " << a << endl;
+  memcpy((char*)&listen_addr.sin_addr.s_addr, (char*)&a.sin_addr.s_addr, 4);
+  listen_addr.sin_port = a.sin_port;
 }
 
 
@@ -762,7 +771,7 @@ int Rank::start_rank()
   lock.Lock();
 
   // my_inst
-  my_inst.set_addr( accepter.listen_addr );
+  my_inst.set_addr( listen_addr );
 
   dout(1) << "start_rank at " << my_inst << endl;
 
@@ -972,35 +981,6 @@ void Rank::wait()
 
 
 
-int Rank::find_ns_addr(tcpaddr_t &nsa)
-{
-  // file?
-  int fd = ::open(".ceph_ns",O_RDONLY);
-  if (fd > 0) {
-    ::read(fd, (void*)&nsa, sizeof(nsa));
-    ::close(fd);
-    cout << "ceph ns is " << nsa << endl;
-    return 0;
-  }
-
-  // env var?
-  char *nsaddr = getenv("CEPH_NAMESERVER");////envz_entry(*envp, e_len, "CEPH_NAMESERVER");    
-  if (nsaddr) {
-    while (nsaddr[0] != '=') nsaddr++;
-    nsaddr++;
-    
-    if (tcp_hostlookup(nsaddr, nsa) < 0) {
-      cout << "can't resolve " << nsaddr << endl;
-      return -1;
-    }
-
-    cout << "ceph ns is " << nsa << endl;
-    return 0;
-  }
-
-  cerr << "i can't find ceph ns addr in .ceph_ns or CEPH_NAMESERVER" << endl;
-  return -1;
-}
 
 
 

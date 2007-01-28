@@ -48,7 +48,6 @@ class Rank {
   public:
     bool done;
 
-    tcpaddr_t listen_addr;
     int       listen_sd;
     
     Accepter() : done(false) {}
@@ -234,6 +233,9 @@ class Rank {
   Mutex lock;
   Cond  wait_cond;  // for wait()
   
+  // where i listen
+  tcpaddr_t listen_addr;
+
   // my instance
   entity_inst_t my_inst;
   
@@ -257,7 +259,7 @@ class Rank {
   void mark_down(msg_addr_t addr, entity_inst_t& i);
   void mark_up(msg_addr_t addr, entity_inst_t& i);
 
-  tcpaddr_t get_listen_addr() { return accepter.listen_addr; }
+  tcpaddr_t get_listen_addr() { return listen_addr; }
 
   void reaper();
 
@@ -267,7 +269,7 @@ public:
   Rank();
   ~Rank();
 
-  int find_ns_addr(tcpaddr_t &tcpaddr);
+  void set_listen_addr(tcpaddr_t& a);
 
   int start_rank();
   void wait();

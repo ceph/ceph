@@ -1,3 +1,9 @@
+- make CDIR_AUTH_UNKNOWN values _PARENT when possible
+- starting -> (replay + rejoin) states
+- bcast import map on rejoin
+- ...
+- merge in cmon stuff from branch
+
 blech:
 - EMetablob should return 'expired' if they have
   higher versions (and are thus described by a newer journal entry)

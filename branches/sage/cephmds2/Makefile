@@ -93,6 +93,9 @@ obfs: depend obfstest
 
 
 # real bits
+mkmonmap: mkmonmap.cc common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
 cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 

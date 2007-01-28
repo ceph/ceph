@@ -60,33 +60,57 @@ int main(int argc, char **argv)
   if (g_conf.debug_after) 
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
-  // let's assume a standalone monitor
-  // FIXME: we want to start a cluster, eventually.
-  cout << "starting standalone mon0" << endl;
-
-  // start messenger
-  rank.start_rank();
-
-  // create monmap
-  MonMap *monmap = new MonMap(1);
-  monmap->mon_inst[0] = rank.my_inst;
-
-  cout << "bound to " << rank.get_listen_addr() << endl;
+  // args
+  int whoami = -1;
+  char *monmap_fn = ".ceph_monmap";
+  for (unsigned i=0; i<args.size(); i++) {
+    if (strcmp(args[i], "--mon") == 0) 
+      whoami = atoi(args[++i]);
+    else if (strcmp(args[i], "--monmap") == 0) 
+      monmap_fn = args[++i];
+    else {
+      cerr << "unrecognized arg " << args[i] << endl;
+      return -1;
+    }
+  }
   
-  // start monitor
-  Messenger *m = rank.register_entity(MSG_ADDR_MON(0));
-  Monitor *mon = new Monitor(0, m, monmap);
-  mon->init();
+  MonMap monmap;
 
-  // write monmap
-  cout << "writing monmap to .ceph_monmap" << endl;
-  bufferlist bl;
-  monmap->encode(bl);
-  int fd = ::open(".ceph_monmap", O_RDWR|O_CREAT);
-  assert(fd >= 0);
-  ::fchmod(fd, 0644);
-  ::write(fd, (void*)bl.c_str(), bl.length());
-  ::close(fd);
+  if (whoami < 0) {
+    // let's assume a standalone monitor
+    cout << "starting standalone mon0" << endl;
+    whoami = 0;
+
+    // start messenger
+    rank.start_rank();
+    cout << "bound to " << rank.get_listen_addr() << endl;
+
+    // add single mon0
+    monmap.add_mon(rank.my_inst);
+    
+    // write monmap
+    cout << "writing monmap to " << monmap_fn << endl;;
+    int r = monmap.write(monmap_fn);
+    assert(r >= 0);
+  } else {
+    // i am specific monitor.
+
+    // read monmap
+    cout << "reading monmap from .ceph_monmap" << endl;
+    int r = monmap.read(monmap_fn);
+    assert(r >= 0);
+
+    // bind to a specific port
+    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << endl;
+    tcpaddr_t addr = monmap.get_inst(whoami).addr;
+    rank.set_listen_addr(addr);
+    rank.start_rank();
+  }
+
+  // start monitor
+  Messenger *m = rank.register_entity(MSG_ADDR_MON(whoami));
+  Monitor *mon = new Monitor(whoami, m, &monmap);
+  mon->init();
 
   // wait
   cout << "waiting for shutdown ..." << endl;

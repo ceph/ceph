@@ -89,12 +89,7 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   bufferlist bl;
   if (mpi_rank == 0) {
     monmap->encode(bl);
-    
-    int fd = ::open(".ceph_monmap", O_WRONLY|O_CREAT);
-    ::write(fd, (void*)bl.c_str(), bl.length());
-    ::fchmod(fd, 0644);
-    ::close(fd);
-
+    monmap->write(".ceph_monmap");
   } else {
     int l = g_conf.num_mon * 1000;   // nice'n big.
     bufferptr bp(l); 

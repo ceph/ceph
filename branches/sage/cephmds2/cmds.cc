@@ -73,18 +73,9 @@ int main(int argc, char **argv)
 
 
   // load monmap
-  bufferlist bl;
-  int fd = ::open(".ceph_monmap", O_RDONLY);
-  assert(fd >= 0);
-  struct stat st;
-  ::fstat(fd, &st);
-  bufferptr bp(st.st_size);
-  bl.append(bp);
-  ::read(fd, (void*)bl.c_str(), bl.length());
-  ::close(fd);
-  
-  MonMap *monmap = new MonMap;
-  monmap->decode(bl);
+  MonMap monmap;
+  int r = monmap.read(".ceph_monmap");
+  assert(r >= 0);
 
   // start up network
   rank.start_rank();
@@ -93,7 +84,7 @@ int main(int argc, char **argv)
   Messenger *m = rank.register_entity(MSG_ADDR_MDS_NEW);
   assert(m);
   
-  MDS *mds = new MDS(m->get_myaddr().num(), m, monmap);
+  MDS *mds = new MDS(m->get_myaddr().num(), m, &monmap);
   mds->init(standby);
   
   // wait
