@@ -42,24 +42,15 @@ int main(int argc, char **argv, char *envp[]) {
   vec_to_argv(args, argc, argv);
 
   // load monmap
-  bufferlist bl;
-  int fd = ::open(".ceph_monmap", O_RDONLY);
-  assert(fd >= 0);
-  struct stat st;
-  ::fstat(fd, &st);
-  bufferptr bp(st.st_size);
-  bl.append(bp);
-  ::read(fd, (void*)bl.c_str(), bl.length());
-  ::close(fd);
-  
-  MonMap *monmap = new MonMap;
-  monmap->decode(bl);
+  MonMap monmap;
+  int r = monmap.read(".ceph_monmap");
+  assert(r >= 0);
 
   // start up network
   rank.start_rank();
 
   // start client
-  Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), monmap);
+  Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
   client->init();
     
   // start up fuse
