@@ -140,15 +140,19 @@ class MDS : public Dispatcher {
   int want_state;    // the state i want
   list<Context*> waitfor_active;
 
-public:
+  map<int,version_t> peer_mdsmap_epoch;
+
+ public:
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
   bool is_dne()      { return state == MDSMap::STATE_DNE; }
   bool is_out()      { return state == MDSMap::STATE_OUT; }
   bool is_failed()   { return state == MDSMap::STATE_FAILED; }
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
-  bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
+  bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
+  bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
+  bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
   bool is_stopped()  { return state == MDSMap::STATE_STOPPED; }
@@ -205,11 +209,12 @@ public:
 
   // start up, shutdown
   int init(bool standby=false);
-  void reopen_log();
+  void reopen_logger();
 
-  void boot_create();              // i am new mds.
-  void boot_create_finish();
-  void boot_recover(int step=0);   // i am starting/recovering existing mds.
+  void boot_create();             // i am new mds.
+  void boot_start();              // i am old but empty (was down:out) mds.
+  void boot_replay(int step=0);   // i am recovering existing (down:failed) mds.
+  void boot_finish();
 
   int shutdown_start();
   int shutdown_final();

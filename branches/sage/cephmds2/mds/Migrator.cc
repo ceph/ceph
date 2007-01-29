@@ -1160,7 +1160,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   show_imports();
   
   // start the journal entry
-  EImportStart *le = new EImportStart(m->get_exports());
+  EImportStart *le = new EImportStart(dir->ino(), m->get_exports());
   le->metablob.add_dir_context(dir);
   
   // note new authority (locally)

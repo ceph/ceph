@@ -96,10 +96,16 @@ class MDLog {
 
   off_t get_read_pos();
   off_t get_write_pos();
+  bool empty() {
+    return get_read_pos() == get_write_pos();
+  }
 
   bool is_capped() { return capped; }
   void cap() { 
     capped = true;
+    list<Context*> ls;
+    ls.swap(import_map_expire_waiters);
+    finish_contexts(ls);
   }
 
   void submit_entry( LogEvent *e, Context *c = 0 );

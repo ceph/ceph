@@ -156,10 +156,6 @@ class CInode : public MDSCacheObject {
   CDir            *dir;       // directory, if we have it opened.
   string           symlink;   // symlink dest, if symlink
 
-  // inode metadata locks
-  CLock        hardlock;
-  CLock        filelock;
-
  protected:
   // parent dentries in cache
   int              num_parents;
@@ -174,9 +170,15 @@ class CInode : public MDSCacheObject {
   // waiters
   multimap<int, Context*>  waiting;
 
+
+  // -- distributed state --
+public:
+  // inode metadata locks
+  CLock        hardlock;
+  CLock        filelock;
+protected:
   // file capabilities
   map<int, Capability>  client_caps;         // client -> caps
-
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;

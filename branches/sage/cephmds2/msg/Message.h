@@ -92,6 +92,9 @@
 #define MSG_MDS_HEARTBEAT          104  // for mds load balancer
 #define MSG_MDS_BEACON             105  // to monitor
 
+#define MSG_MDS_IMPORTMAP          106
+#define MSG_MDS_CACHEREJOIN        107
+
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111
 

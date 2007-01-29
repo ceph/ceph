@@ -39,6 +39,9 @@ class Logger;
 
 class Message;
 
+class MMDSImportMap;
+class MMDSCacheRejoin;
+class MMDSCacheRejoinAck;
 class MDiscover;
 class MDiscoverReply;
 class MCacheExpire;
@@ -103,6 +106,11 @@ class MDCache {
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
+  // [replay]
+  map<inodeno_t, set<inodeno_t> > my_ambiguous_imports;  // from EImportStart w/o EImportFinish during journal replay
+  map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  // from MMDSImportMaps
+  
+
   // active MDS requests
   hash_map<Message*, active_request_t>   active_requests;
   
@@ -116,12 +124,34 @@ class MDCache {
   bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
 
+  // recovery
+protected:
+  set<int> want_import_map;    // nodes i need to send my import map to
+  set<int> import_map_gather;  // nodes i need an import_map from
+  
+  void handle_import_map(MMDSImportMap *m);
+  void handle_cache_rejoin(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
+  void send_cache_rejoins();
+  void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
+  void send_cache_rejoin_acks();
+public:
+  void send_import_map(int who);
+  void send_import_maps();
+
+
+  
+
+  
   friend class CInode;
   friend class Locker;
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
   friend class EImportMap;
+  friend class EExportFinish;
+  friend class EImportStart;
+  friend class EImportFinish;
   friend class MDLog;
 
 
@@ -149,6 +179,8 @@ class MDCache {
 
   void log_import_map(Context *onsync=0);
 
+
+  
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }

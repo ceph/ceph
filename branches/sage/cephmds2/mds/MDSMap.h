@@ -28,15 +28,17 @@ using namespace std;
 class MDSMap {
  public:
   static const int STATE_DNE =      0;    // down, never existed.
-  static const int STATE_OUT =      1;    // down, once existed, but no imports.
+  static const int STATE_OUT =      1;    // down, once existed, but no imports, empty log.
   static const int STATE_FAILED =   2;    // down, holds (er, held) metadata; needs to be recovered.
 
   static const int STATE_STANDBY =  3;    // up, but inactive.  waiting for assignment by monitor.
-  static const int STATE_CREATING = 4;    // up, creating MDS instance (initializing journal, etc.)
-  static const int STATE_STARTING = 5;    // up, scanning journal, recoverying any shared state
-  static const int STATE_ACTIVE =   6;    // up, active
-  static const int STATE_STOPPING = 7;    // up, exporting metadata (-> standby or out)
-  static const int STATE_STOPPED  = 8;    // up, finished stopping.  like standby, but not avail to takeover.
+  static const int STATE_CREATING = 4;    // up, creating MDS instance (new journal, idalloc..)
+  static const int STATE_STARTING = 5;    // up, starting prior out MDS instance.
+  static const int STATE_REPLAY   = 6;    // up, scanning journal, recoverying any shared state
+  static const int STATE_REJOIN   = 7;    // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =   8;    // up, active
+  static const int STATE_STOPPING = 9;    // up, exporting metadata (-> standby or out)
+  static const int STATE_STOPPED  = 10;   // up, finished stopping.  like standby, but not avail to takeover.
   
   static const char *get_state_name(int s) {
     switch (s) {
@@ -48,6 +50,8 @@ class MDSMap {
     case STATE_STANDBY:  return "up:standby";
     case STATE_CREATING: return "up:creating";
     case STATE_STARTING: return "up:starting";
+    case STATE_REPLAY:   return "up:replay";
+    case STATE_REJOIN:   return "up:rejoin";
     case STATE_ACTIVE:   return "up:active";
     case STATE_STOPPING: return "up:stopping";
     case STATE_STOPPED:  return "up:stopped";
@@ -82,6 +86,14 @@ class MDSMap {
 
   // counts
   int get_num_mds() const { return mds_state.size(); }
+  int get_num_mds(int state) {
+    int n = 0;
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (p->second == state) ++n;
+    return n;
+  }
   int get_num_up_mds() {
     int n = 0;
     for (map<int,int>::const_iterator p = mds_state.begin();
@@ -138,14 +150,23 @@ class MDSMap {
 
   bool is_dne(int m)      { return mds_state.count(m) == 0 || mds_state[m] == STATE_DNE; }
   bool is_out(int m)      { return mds_state.count(m) && mds_state[m] == STATE_OUT; }
-  bool is_failed(int m)   { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
+  bool is_failed(int m)    { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
 
   bool is_standby(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STANDBY; }
   bool is_creating(int m) { return mds_state.count(m) && mds_state[m] == STATE_CREATING; }
   bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
+  bool is_replay(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REPLAY; }
+  bool is_rejoin(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REJOIN; }
   bool is_active(int m)   { return mds_state.count(m) && mds_state[m] == STATE_ACTIVE; }
   bool is_stopping(int m) { return mds_state.count(m) && mds_state[m] == STATE_STOPPING; }
   bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
+
+  bool is_degraded() {
+    return get_num_mds(STATE_REPLAY) + get_num_mds(STATE_REJOIN) + get_num_mds(STATE_FAILED);
+  }
+  bool is_created(int m) {
+    return mds_created.count(m);
+  }
 
   int get_state(int m) {
     if (mds_state.count(m)) return mds_state[m];

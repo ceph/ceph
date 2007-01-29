@@ -51,6 +51,8 @@ using namespace std;
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
+#include "messages/MMDSImportMap.h"
+#include "messages/MMDSCacheRejoin.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -247,6 +249,12 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 	break;
   case MSG_MDS_BEACON:
 	m = new MMDSBeacon;
+	break;
+  case MSG_MDS_IMPORTMAP:
+	m = new MMDSImportMap;
+	break;
+  case MSG_MDS_CACHEREJOIN:
+	m = new MMDSCacheRejoin;
 	break;
 
   case MSG_MDS_DIRUPDATE:

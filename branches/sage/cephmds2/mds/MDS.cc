@@ -131,7 +131,7 @@ MDS::~MDS() {
 }
 
 
-void MDS::reopen_log()
+void MDS::reopen_logger()
 {
   // flush+close old log
   if (logger) {
@@ -197,6 +197,14 @@ void MDS::reopen_log()
 
 void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
 {
+  // send mdsmap first?
+  if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
+    messenger->send_message(new MMDSMap(mdsmap), 
+			    MSG_ADDR_MDS(mds), mdsmap->get_inst(mds));
+    peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
+  }
+
+  // send message
   if (port && !fromport) 
     fromport = port;
   messenger->send_message(m, MSG_ADDR_MDS(mds), mdsmap->get_inst(mds), port, fromport);
@@ -400,73 +408,122 @@ void MDS::beacon_kill(utime_t lab)
 
 void MDS::handle_mds_map(MMDSMap *m)
 {
-  map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();   // fixme multiple maps?
+  version_t epoch = m->get_epoch();
+  dout(1) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << endl;
 
-  dout(1) << "handle_mds_map epoch " << p->first << endl;
-  mdsmap->decode(p->second);
+  // note source's map version
+  if (m->get_source().is_mds() && 
+      peer_mdsmap_epoch[m->get_source().num()] < epoch) {
+    dout(15) << " peer " << m->get_source()
+	     << " has mdsmap epoch >= " << epoch
+	     << endl;
+    peer_mdsmap_epoch[m->get_source().num()] = epoch;
+  }
+
+  // is it new?
+  if (epoch <= mdsmap->get_epoch()) {
+    dout(1) << " old map epoch " << epoch << " < " << mdsmap->get_epoch() 
+	    << ", discarding" << endl;
+    delete m;
+    return;
+  }
+
+  // decode and process
+  mdsmap->decode(m->get_encoded());
+
+  // note some old state
+  int oldwhoami = whoami;
+  int oldstate = state;
+  set<int> oldrejoin;
+  mdsmap->get_mds_set(oldrejoin, MDSMap::STATE_REJOIN);
+  set<int> oldfailed;
+  mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
 
   // see who i am
-  int oldwhoami = whoami;
   whoami = mdsmap->get_inst_rank(messenger->get_myinst());
   if (oldwhoami != whoami) {
     messenger->reset_myaddr(MSG_ADDR_MDS(whoami));
-    reopen_log();
+    reopen_logger();
+    dout(1) << "handle_mds_map i am now mds" << whoami << endl;
 
-    mdlog->reset();
+    // do i need an osdmap?
+    if (oldwhoami < 0) {
+      // we need an osdmap too.
+      int mon = monmap->pick_mon();
+      messenger->send_message(new MOSDGetMap(0),
+			      MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    }
   }
 
   // update my state
-  int oldstate = state;
   state = mdsmap->get_state(whoami);
   
-  // did the monitor order me active?
-  if ((oldstate == MDSMap::STATE_DNE || oldstate == MDSMap::STATE_STANDBY) && 
-      (state == MDSMap::STATE_CREATING || state == MDSMap::STATE_STARTING)) {
-    want_state = state;
+  // did it change?
+  if (oldstate != state) {
+    if (state == want_state) {
+      dout(1) << "handle_mds_map new state " << mdsmap->get_state_name(state) << endl;
+    } else {
+      dout(1) << "handle_mds_map new state " << mdsmap->get_state_name(state)
+	      << ", although i wanted " << mdsmap->get_state_name(want_state)
+	      << endl;
+      want_state = state;
+    }
+
+    // now active?
+    if (is_active()) {
+      dout(1) << "now active" << endl;
+      finish_contexts(waitfor_active);  // kick waiters
+    }
+
+    // now stopping?
+    else if (is_stopping()) {
+      assert(oldstate == MDSMap::STATE_ACTIVE);
+      dout(1) << "now stopping" << endl;
+      
+      mdcache->shutdown_start();
+      
+      // save anchor table
+      if (mdsmap->get_anchortable() == whoami) 
+	anchormgr->save(0);  // FIXME?  or detect completion via filer?
+      
+      if (idalloc) 
+	idalloc->save(0);    // FIXME?  or detect completion via filer?
+      
+      // flush log
+      mdlog->set_max_events(0);
+      mdlog->trim(NULL);
+    }
+
+    // now standby?
+    else if (is_stopped()) {
+      assert(oldstate == MDSMap::STATE_STOPPING);
+      dout(1) << "now stopped, sending down:out and exiting" << endl;
+      shutdown_final();
+    }
   }
-
-  dout(1) << "handle_mds_map i am mds" << whoami << " with state " << mdsmap->get_state_name(state) << endl;
-
-  // do i need an osdmap?
-  if (oldwhoami < 0) {
-    // we need an osdmap too.
-    int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDGetMap(0),
-			    MSG_ADDR_MON(mon), monmap->get_inst(mon));
-  }
-
-  // now active?
-  if (is_active() &&
-      (oldstate == MDSMap::STATE_STARTING ||
-       oldstate == MDSMap::STATE_CREATING)) {
-    dout(1) << "now active" << endl;
-    finish_contexts(waitfor_active);  // kick waiters
-  }
-
-  // now stopping?
-  if (is_stopping() && oldstate == MDSMap::STATE_ACTIVE) {
-    dout(1) << "now stopping" << endl;
-
-    mdcache->shutdown_start();
-    
-    // save anchor table
-    if (mdsmap->get_anchortable() == whoami) 
-      anchormgr->save(0);  // FIXME?  or detect completion via filer?
-    
-    if (idalloc) 
-      idalloc->save(0);    // FIXME?  or detect completion via filer?
   
-    // flush log
-    mdlog->set_max_events(0);
-    mdlog->trim(NULL);
+  
+
+  // is anybody rejoining?
+  if (is_rejoin() || is_active() || is_stopping()) {
+    set<int> rejoin;
+    mdsmap->get_mds_set(rejoin, MDSMap::STATE_REJOIN);
+    for (set<int>::iterator p = rejoin.begin(); p != rejoin.end(); ++p) {
+      if (oldrejoin.count(*p) == 0 ||          // if other guy newly rejoin, or
+	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly rejoin,
+	mdcache->send_import_map(*p);          // share my import map
+    }
   }
 
-  // now standby?
-  if (is_stopped() && oldstate == MDSMap::STATE_STOPPING) {
-    // ok, now really stop
-    dout(1) << "now stopped, sending down:out and exiting" << endl;
-
-    shutdown_final();
+  // did anyone go down?
+  if (is_active() || is_stopping()) {
+    set<int> failed;
+    mdsmap->get_mds_set(failed, MDSMap::STATE_FAILED);
+    for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
+      // newly so?
+      if (oldfailed.count(*p)) continue;      
+      // FIXME.
+    }
   }
 
   delete m;
@@ -480,10 +537,12 @@ void MDS::handle_osd_map(MOSDMap *m)
   objecter->handle_osd_map(m);
 
   if (had == 0) {
-    if (is_starting()) 
-      boot_recover();
-    else if (is_creating()) 
-      boot_create();
+    if (is_creating()) 
+      boot_create();    // new tables, journal
+    else if (is_starting())
+      boot_start();     // old tables, empty journal
+    else if (is_replay()) 
+      boot_replay();    // replay, join
     else 
       assert(is_standby());
   }  
@@ -500,18 +559,23 @@ void MDS::handle_osd_map(MOSDMap *m)
 }
 
 
-class C_MDS_CreateFinish : public Context {
+class C_MDS_BootFinish : public Context {
   MDS *mds;
 public:
-  C_MDS_CreateFinish(MDS *m) : mds(m) {}
-  void finish(int r) { mds->boot_create_finish(); }
+  C_MDS_BootFinish(MDS *m) : mds(m) {}
+  void finish(int r) { mds->boot_finish(); }
 };
 
 void MDS::boot_create()
 {
   dout(3) << "boot_create" << endl;
 
-  C_Gather *fin = new C_Gather(new C_MDS_CreateFinish(this));
+  C_Gather *fin = new C_Gather(new C_MDS_BootFinish(this));
+
+  // start with a fresh journal
+  dout(10) << "boot_create creating fresh journal" << endl;
+  mdlog->reset();
+  mdlog->write_head(fin->new_sub());
   
   if (whoami == 0) {
     dout(3) << "boot_create since i am also mds0, creating root inode and dir" << endl;
@@ -528,15 +592,10 @@ void MDS::boot_create()
     
     // save it
     mdstore->commit_dir(dir, fin->new_sub());
+    
+    // write our empty importmap (that reflects the root import)
+    mdcache->log_import_map(fin->new_sub());
   }
-  
-  // start with a fresh journal
-  dout(10) << "boot_create creating fresh journal" << endl;
-  mdlog->reset();
-  mdlog->write_head(fin->new_sub());
-
-  // write our empty importmap
-  mdcache->log_import_map(fin->new_sub());
 
   // fixme: fake out idalloc (reset, pretend loaded)
   dout(10) << "boot_create creating fresh idalloc table" << endl;
@@ -551,9 +610,40 @@ void MDS::boot_create()
   }
 }
 
-void MDS::boot_create_finish()
+void MDS::boot_start()
 {
-  dout(3) << "boot_create_finish" << endl;
+  dout(2) << "boot_start" << endl;
+  
+  C_Gather *fin = new C_Gather(new C_MDS_BootFinish(this));
+  
+  dout(2) << "boot_start opening idalloc" << endl;
+  idalloc->load(fin->new_sub());
+  
+  if (mdsmap->get_anchortable() == whoami) {
+    dout(2) << "boot_start opening anchor table" << endl;
+    anchormgr->load(fin->new_sub());
+  } else {
+    dout(2) << "boot_start i have no anchor table" << endl;
+  }
+
+  dout(2) << "boot_start opening mds log" << endl;
+  mdlog->open(fin->new_sub());
+
+  if (mdsmap->get_root() == whoami) {
+    dout(2) << "boot_start opening root directory" << endl;
+    mdcache->open_root(fin->new_sub());
+  }
+}
+
+void MDS::boot_finish()
+{
+  dout(3) << "boot_finish" << endl;
+
+  if (is_starting()) {
+    // make sure mdslog is empty
+    assert(mdlog->get_read_pos() == mdlog->get_write_pos());
+  }
+
   mark_active();
 }
 
@@ -563,63 +653,64 @@ class C_MDS_BootRecover : public Context {
   int nextstep;
 public:
   C_MDS_BootRecover(MDS *m, int n) : mds(m), nextstep(n) {}
-  void finish(int r) { mds->boot_recover(nextstep); }
+  void finish(int r) { mds->boot_replay(nextstep); }
 };
 
-void MDS::boot_recover(int step)
+void MDS::boot_replay(int step)
 {
   switch (step) {
   case 0:
-    /* no, EImportMap takes care of all this.
-    if (whoami == 0) {
-      dout(2) << "boot_recover " << step << ": creating root inode" << endl;
-      mdcache->open_root(0);
-      step = 1;
-      // fall-thru
-    } else {
-      // FIXME
-      assert(0);
-      }*/
-    step = 1;
+    step = 1;  // fall-thru.
 
   case 1:
-    dout(2) << "boot_recover " << step << ": opening idalloc" << endl;
+    dout(2) << "boot_replay " << step << ": opening idalloc" << endl;
     idalloc->load(new C_MDS_BootRecover(this, 2));
     break;
 
   case 2:
     if (mdsmap->get_anchortable() == whoami) {
-      dout(2) << "boot_recover " << step << ": opening anchor table" << endl;
+      dout(2) << "boot_replay " << step << ": opening anchor table" << endl;
       anchormgr->load(new C_MDS_BootRecover(this, 3));
       break;
-    } else {
-      dout(2) << "boot_recover " << step << ": i have no anchor table" << endl;
-      step++;
     }
-    // fall-thru
+    dout(2) << "boot_replay " << step << ": i have no anchor table" << endl;
+    step++; // fall-thru
 
   case 3:
-    dout(2) << "boot_recover " << step << ": opening mds log" << endl;
+    dout(2) << "boot_replay " << step << ": opening mds log" << endl;
     mdlog->open(new C_MDS_BootRecover(this, 4));
     break;
     
   case 4:
-    dout(2) << "boot_recover " << step << ": replaying mds log" << endl;
+    dout(2) << "boot_replay " << step << ": replaying mds log" << endl;
     mdlog->replay(new C_MDS_BootRecover(this, 5));
     break;
 
   case 5:
-    dout(2) << "boot_recover " << step << ": restarting any recovered purges" << endl;
+    dout(2) << "boot_replay " << step << ": twiddling my auth bits" << endl;
+    mdcache->recalc_auth_bits();
+    
+    dout(2) << "boot_replay " << step << ": restarting any recovered purges" << endl;
     mdcache->start_recovered_purges();
-    step++;
-    // fall-thru
-
+    
+    step++;    // fall-thru
+    
   case 6:
-    dout(2) << "boot_recover " << step << ": done." << endl;
-    mark_active();
+    // done with replay!
+    if (mdsmap->get_num_mds(MDSMap::STATE_REJOIN) == 0 &&
+	mdsmap->get_num_mds(MDSMap::STATE_REPLAY) == 1 && // me
+	mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) {
+      dout(2) << "boot_replay " << step << ": i am alone, moving to state active" << endl;      
+      want_state = MDSMap::STATE_ACTIVE;
+    } else {
+      dout(2) << "boot_replay " << step << ": i am not alone, moving to state rejoin" << endl;
+      want_state = MDSMap::STATE_REJOIN;
+    }
+    beacon_send();
+    break;
+
   }
 }
-
 
 
 void MDS::mark_active()
@@ -628,7 +719,6 @@ void MDS::mark_active()
   want_state = MDSMap::STATE_ACTIVE;
   beacon_send();
 }
-
 
 
 
@@ -644,7 +734,7 @@ int MDS::shutdown_start()
   for (set<int>::iterator p = active.begin();
        p != active.end();
        p++) {
-    if (mdsmap->is_starting(*p) || mdsmap->is_active(*p)) {
+    if (mdsmap->is_up(*p)) {
       dout(1) << "sending MShutdownStart to mds" << *p << endl;
       send_message_mds(new MGenericMessage(MSG_MDS_SHUTDOWNSTART),
 		       *p, MDS_PORT_MAIN);

@@ -44,6 +44,10 @@
 #include "events/EPurgeFinish.h"
 
 #include "messages/MGenericMessage.h"
+
+#include "messages/MMDSImportMap.h"
+#include "messages/MMDSCacheRejoin.h"
+
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
 
@@ -199,6 +203,8 @@ public:
   }
 };
 
+
+
 void MDCache::log_import_map(Context *onsync)
 {
   dout(10) << "log_import_map " << imports.size() << " imports, "
@@ -235,6 +241,171 @@ void MDCache::log_import_map(Context *onsync)
   if (onsync)
     mds->mdlog->wait_for_sync(onsync);
 }
+
+
+
+
+
+// =====================
+// recovery stuff
+
+void MDCache::send_import_maps()
+{
+  dout(10) << "send_import_maps" << endl;
+  
+  for (set<int>::iterator p = want_import_map.begin();
+       p != want_import_map.end();
+       ++p)
+    send_import_map(*p);
+
+  want_import_map.clear();
+}
+
+void MDCache::send_import_map(int who)
+{
+  dout(10) << "send_import_map to mds" << who << endl;
+
+  MMDSImportMap *m = new MMDSImportMap;
+
+  // known
+  for (set<CDir*>::iterator p = imports.begin();
+       p != imports.end();
+       p++) {
+    CDir *im = *p;
+    m->add_import(im->ino());
+    
+    if (nested_exports.count(im)) {
+      for (set<CDir*>::iterator q = nested_exports[im].begin();
+	   q != nested_exports[im].end();
+	   ++q) {
+	CDir *ex = *q;
+	m->add_import_export(im->ino(), ex->ino());
+      }
+    }
+  }
+
+  // ambiguous
+  for (map<inodeno_t, set<inodeno_t> >::iterator p = my_ambiguous_imports.begin();
+       p != my_ambiguous_imports.end();
+       ++p) 
+    m->add_ambiguous_import(p->first, p->second);
+  
+  // second
+  mds->send_message_mds(m, who, MDS_PORT_CACHE);
+}
+
+
+void MDCache::handle_import_map(MMDSImportMap *m)
+{
+  dout(7) << "handle_import_map from " << m->get_source() << endl;
+  int from = m->get_source().num();
+
+  MMDSCacheRejoin *rejoin;
+  if (mds->is_active())
+    rejoin = new MMDSCacheRejoin;
+
+  // update my dir_auth values
+  for (map<inodeno_t, set<inodeno_t> >::iterator pi = m->imap.begin();
+       pi != m->imap.end();
+       ++pi) {
+    CInode *imi = get_inode(pi->first);
+    if (!imi) continue;
+    CDir *im = imi->dir;
+    if (!im) continue;
+    
+    im->set_dir_auth(from);
+    
+    for (set<inodeno_t>::iterator pe = pi->second.begin();
+	 pe != pi->second.end();
+	 ++pe) {
+      CInode *exi = get_inode(*pe);
+      if (!exi) continue;
+      CDir *ex = exi->dir;
+      if (!ex) continue;
+      
+      if (ex->get_dir_auth() == CDIR_AUTH_PARENT)
+	ex->set_dir_auth(CDIR_AUTH_UNKNOWN);
+    }
+
+    if (mds->is_active()) {
+      // walk my cache to fill out CacheRejoin
+      cache_rejoin_walk(im, rejoin);
+    }
+  }
+
+  // note ambiguous imports too
+  for (map<inodeno_t, set<inodeno_t> >::iterator pi = m->ambiguous_imap.begin();
+       pi != m->ambiguous_imap.end();
+       ++pi)
+    mds->mdcache->other_ambiguous_imports[from][pi->first].swap( pi->second );
+  
+  if (mds->is_active())
+    mds->send_message_mds(rejoin, from, MDS_PORT_CACHE);
+  
+  delete m;
+}
+
+
+void MDCache::send_cache_rejoins()
+{
+
+}
+
+void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
+{
+  dout(10) << "cache_rejoin_walk " << *dir << endl;
+  rejoin->add_dir(dir->ino());
+
+  list<CDir*> nested;  // finish this dir, then do nested items
+  
+  // walk dentries
+  for (map<string,CDentry*>::iterator p = dir->items.begin();
+       p != dir->items.end();
+       ++p) {
+    // dentry
+    if (mds->is_rejoin())
+      rejoin->add_dentry(dir->ino(), p->first, -1);
+    else
+      rejoin->add_dentry(dir->ino(), p->first, p->second->lockstate);
+
+    // inode?
+    if (p->second->is_primary() && p->second->get_inode()) {
+      CInode *in = p->second->get_inode();
+      if (mds->is_rejoin())
+	rejoin->add_inode(in->ino(), 
+			  -1, -1,
+			  in->get_caps_wanted());
+      else
+	rejoin->add_inode(in->ino(), 
+			  in->hardlock.get_state(), in->filelock.get_state(),
+			  in->get_caps_wanted());
+      
+      // dir?
+      if (in->dir &&
+	  in->dir->get_dir_auth() == CDIR_AUTH_PARENT)
+	nested.push_back(in->dir);
+    }
+  }
+
+  // recurse into nested dirs
+  for (list<CDir*>::iterator p = nested.begin(); 
+       p != nested.end();
+       ++p)
+    cache_rejoin_walk(*p, rejoin);
+}
+
+
+void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
+{
+  dout(7) << "handle_cache_rejoin from " << m->get_source() << endl;
+  //int from = m->get_source().num();
+
+  
+
+
+  delete m;
+}
+
 
 
 
@@ -280,14 +451,20 @@ void MDCache::recalc_auth_bits()
     CInode *in = p->second;
     if (in->authority() == mds->get_nodeid())
       in->state_set(CInode::STATE_AUTH);
-    else
+    else {
       in->state_clear(CInode::STATE_AUTH);
+      if (in->is_dirty())
+	in->mark_clean();
+    }
 
     if (in->dir) {
       if (in->dir->authority() == mds->get_nodeid())
 	in->dir->state_set(CDIR_STATE_AUTH);
-      else
+      else {
 	in->dir->state_clear(CDIR_STATE_AUTH);
+	if (in->dir->is_dirty()) 
+	  in->dir->mark_clean();
+      }
     }
   }
   show_imports();
@@ -657,9 +834,7 @@ bool MDCache::shutdown_pass()
     if (imports.empty() && exports.empty()) {
       // (only do this once!)
       if (!mds->mdlog->is_capped()) {
-	dout(7) << "logging final import_map and capping the log" << endl;
-	did_shutdown_log_cap = true;
-	log_import_map();
+	dout(7) << "capping the log" << endl;
 	mds->mdlog->cap();
 	// note that this won't flush right away, so we'll make at least one more pass
       }
@@ -668,6 +843,17 @@ bool MDCache::shutdown_pass()
     if (mds->mdlog->get_num_events()) {
       dout(7) << "waiting for log to flush (including import_map, now) .. " << mds->mdlog->get_num_events() 
 	      << " (" << mds->mdlog->get_non_importmap_events() << ")" << endl;
+      return false;
+    }
+
+    if (!did_shutdown_log_cap) {
+      // flush journal header
+      dout(7) << "writing header for (now-empty) journal" << endl;
+      assert(mds->mdlog->empty());
+      mds->mdlog->write_head(0);  
+      // NOTE: filer active checker below will block us until this completes.
+      did_shutdown_log_cap = true;
+      return false;
     }
   }
 
@@ -778,6 +964,11 @@ int MDCache::open_root(Context *c)
 void MDCache::dispatch(Message *m)
 {
   switch (m->get_type()) {
+
+  case MSG_MDS_IMPORTMAP:
+    handle_import_map((MMDSImportMap*)m);
+    break;
+
   case MSG_MDS_DISCOVER:
     handle_discover((MDiscover*)m);
     break;

@@ -23,14 +23,16 @@
 #include "EMetaBlob.h"
 
 class EImportStart : public LogEvent {
- protected:
-  list<inodeno_t> exports;
+protected:
+  inodeno_t dirino;
+  list<inodeno_t> bounds;
 
  public:
   EMetaBlob metablob;
 
-  EImportStart(list<inodeno_t>& ex) : LogEvent(EVENT_IMPORTSTART), 
-				      exports(ex) { }
+  EImportStart(inodeno_t di,
+	       list<inodeno_t>& b) : LogEvent(EVENT_IMPORTSTART), 
+				     dirino(di), bounds(b) { }
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
   void print(ostream& out) {
@@ -39,11 +41,11 @@ class EImportStart : public LogEvent {
   
   virtual void encode_payload(bufferlist& bl) {
     metablob._encode(bl);
-    ::_encode(exports, bl);
+    ::_encode(bounds, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
-    ::_decode(exports, bl, off);
+    ::_decode(bounds, bl, off);
   }
   
   bool has_expired(MDS *mds);

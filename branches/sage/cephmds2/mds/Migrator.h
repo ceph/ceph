@@ -67,7 +67,7 @@ private:
   map<CDir*, list<inodeno_t> > export_proxy_inos;
   map<CDir*, list<inodeno_t> > export_proxy_dirinos;
   
-  map<CDir*, list<Context*> > export_finish_waiters;
+  map<CDir*, list<Context*> >  export_finish_waiters;
 
   set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
@@ -80,7 +80,7 @@ private:
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
   // maps frozen_dir_ino's to waiting-for-discover ino's.
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
-    
+
 public:
   // -- cons --
   Migrator(MDS *m, MDCache *c) : mds(m), cache(c) {}

@@ -1,8 +1,42 @@
-- make CDIR_AUTH_UNKNOWN values _PARENT when possible
-- starting -> (replay + rejoin) states
-- bcast import map on rejoin
-- ...
-- merge in cmon stuff from branch
+- preemptive mdsmap sharing
+
+- how to disambiguate importstart w/o an importfinish?
+- der chicken/egg headache on immediately sending import_map, since imports are ambiguous.
+ 
+- ambiguous imports on active node should include in-progress imports!
+
+
+importmap only sent after exports have completed.
+failures update export ack waitlists, so exports will compelte if unrelated nodes fail.
+importmap can be sent regardless of import status -- pending import is just flagged ambiguous.
+failure of exporter induces some cleanup on importer.  will disambiguate when it gets an importmap on exporter recovery.
+failure of importer induces cleanup on exporter.  no ambiguity.
+
+
+- no new mds may join if cluster is in a recovery state.  creating|replay -> standby (unless failed)
+
+recoverer:
+- enter rejoin state
+- wait for import_map from all replay|rejoin|active nodes
+- disambiguate any imports
+- send cacherejoin for all my non-auth metadata
+- wait for all rejoinacks to establish lock/caps state
+- go active
+
+
+
+
+
+
+- will a replay node get the proper dir_auth updates regardless of import_map message timing? (i.e. send before/during/after import/export?)  verify all cases.
+- push out recovered lockstate after all CacheRejoins have been received.
+
+
+mdsmap notes 
+- mds don't care about intervening states, except rejoin > active, and
+  that transition requires active involvement.  thus, no need worry
+  about delivering/processing the full sequence of maps.
+
 
 blech:
 - EMetablob should return 'expired' if they have

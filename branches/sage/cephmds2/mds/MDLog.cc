@@ -97,6 +97,7 @@ void MDLog::init_journaler()
 
 void MDLog::reset()
 {
+  dout(5) << "reset to empty log" << endl;
   init_journaler();
   journaler->reset();
 }
@@ -157,6 +158,7 @@ void MDLog::submit_entry( LogEvent *le,
       unflushed++;
 
     // should we log a new import_map?
+    // FIXME: should this go elsewhere?
     if (last_import_map && !writing_import_map &&
 	journaler->get_write_pos() - last_import_map >= g_conf.mds_log_import_map_interval) {
       // log import map
@@ -419,10 +421,6 @@ void MDLog::_replay()
 
   // move read pointer _back_ to expire pos, for eventual trimming
   journaler->set_read_pos(journaler->get_expire_pos());
-
-
-  // twiddle all dir and inode auth bits
-  mds->mdcache->recalc_auth_bits();
 
   // kick waiter(s)
   list<Context*> ls;

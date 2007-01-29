@@ -88,13 +88,11 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
   
   // choose an MDS id
   if (from >= 0) {
-    // wants to be a specific MDS. 
-    if (mdsmap.is_down(from) ||
-	mdsmap.get_inst(from) == m->get_source_inst()) {
-      // fine, whatever.
-      //dout(10) << "mds_beacon assigning requested mds" << from << endl;
+    // wants to be (or already is) a specific MDS. 
+    if (mdsmap.is_down(from)) {
+      dout(10) << "mds_beacon assigning requested mds" << from << endl;
       booted = true;
-    } else {
+    } else if (mdsmap.get_inst(from) != m->get_source_inst()) {
       dout(10) << "mds_beacon not assigning requested mds" << from 
 	       << ", that mds is up and someone else" << endl;
       from = -1;
@@ -125,36 +123,35 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
   // make sure it's in the map
   if (booted) {
     mdsmap.mds_inst[from] = m->get_source_inst();
-  }
-  
 
-  // bad beacon?
-  if (mdsmap.is_up(from) &&
-      mdsmap.get_inst(from) != m->get_source_inst()) {
-    dout(7) << "mds_beacon has mismatched inst, dropping" << endl;
-    delete m;
-    return;
+    // starting -> creating|starting|replay
+    if (mdsmap.is_degraded() &&
+	!mdsmap.is_failed(from)) {
+      dout(10) << "mds_beacon currently degraded, new mds will be standby" << endl;
+      state = MDSMap::STATE_STANDBY;
+    }
+    else if (state == MDSMap::STATE_STARTING) {
+      if (mdsmap.is_failed(from)) {
+	dout(10) << "mds_beacon will recover mds" << from << endl;
+	state = MDSMap::STATE_REPLAY;
+      } 
+      else if (mdsmap.is_out(from)) {
+	dout(10) << "mds_beacon will start mds" << from << endl;
+	state = MDSMap::STATE_STARTING;
+      } 
+      else {
+	dout(10) << "mds_beacon will create mds" << from << endl;
+	state = MDSMap::STATE_CREATING;
+      } 
+    }
   }
 
+  // old beacon?
   if (mdsmap.mds_state_seq[from] > seq) {
     dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << endl;
     delete m;
     return;
   }
-
-
-  // starting -> creating weirdness.
-  if (mdsmap.mds_created.count(from) == 0) {
-    // mds may not know it needs to create  
-    if (state == MDSMap::STATE_STARTING)
-      state = MDSMap::STATE_CREATING;  
-
-    // mds may have finished creating.
-    if (state == MDSMap::STATE_ACTIVE &&
-	mdsmap.mds_state[from] == MDSMap::STATE_CREATING)
-      mdsmap.mds_created.insert(from);
-  }
-
   
   // reply to beacon?
   if (state != MDSMap::STATE_OUT) {
@@ -252,9 +249,37 @@ void MDSMonitor::tick()
 	 ++p) {
       if (last_beacon.count(*p)) {
 	if (last_beacon[*p] < cutoff) {
-	  int newstate = MDSMap::STATE_FAILED;
-	  if (mdsmap.mds_state[*p] == MDSMap::STATE_CREATING) 
+
+	  // failure!
+	  int newstate;
+	  switch (mdsmap.get_state(*p)) {
+	  case MDSMap::STATE_CREATING:
+	    // didn't finish creating
 	    newstate = MDSMap::STATE_DNE;
+	    break;
+
+	  case MDSMap::STATE_STANDBY:
+	    if (mdsmap.is_created(*p))
+	      newstate = MDSMap::STATE_OUT;
+	    else
+	      newstate = MDSMap::STATE_DNE;
+	    break;
+
+	  case MDSMap::STATE_REPLAY:
+	  case MDSMap::STATE_REJOIN:
+	  case MDSMap::STATE_ACTIVE:
+	  case MDSMap::STATE_STOPPING:
+	    newstate = MDSMap::STATE_FAILED;
+	    break;
+
+	  case MDSMap::STATE_STARTING:
+	  case MDSMap::STATE_STOPPED:
+	    newstate = MDSMap::STATE_OUT;
+	    break;
+
+	  default:
+	    assert(0);
+	  }
 	  
 	  dout(10) << "no beacon from mds" << *p << " since " << last_beacon[*p]
 		   << ", marking " << mdsmap.get_state_name(newstate)

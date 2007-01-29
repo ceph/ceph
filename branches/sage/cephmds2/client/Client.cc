@@ -696,10 +696,8 @@ void Client::handle_mds_map(MMDSMap* m)
     messenger->reset_myaddr(m->get_dest());
   }    
 
-  map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();
-  
-  dout(1) << "handle_mds_map epoch " << p->first << endl;
-  mdsmap->decode(p->second);
+  dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
+  mdsmap->decode(m->get_encoded());
   
   delete m;
 

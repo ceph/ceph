@@ -81,7 +81,7 @@ CLIENT_OBJS= \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TARGETS = cmon cosd cmds cfuse newsyn fakesyn
+TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
