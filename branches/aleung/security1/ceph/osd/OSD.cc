@@ -263,6 +263,8 @@ int OSD::init()
                                               static_dequeueop,
                                               this);
     }
+
+    // convert public key to string
     
     // i'm ready!
     messenger->set_dispatcher(this);

@@ -33,6 +33,8 @@ class MOSDBoot : public Message {
   }
 
   char *get_type_name() { return "oboot"; }
+
+  string get_public_key() { return public_key_str; }
   
   void encode_payload() {
     payload.append((char*)&sb, sizeof(sb));

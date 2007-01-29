@@ -118,8 +118,9 @@ void OSDMonitor::init()
 
 
 /************ MAPS ****************/
-
-
+/**********
+ * Creates an initital OSD map
+ **********/
 void OSDMonitor::create_initial()
 {
   dout(1) << "create_initial generating osdmap from g_conf" << endl;
@@ -128,6 +129,7 @@ void OSDMonitor::create_initial()
   osdmap.mon_epoch = mon->mon_epoch;
   osdmap.ctime = g_clock.now();
 
+  // set up osd placement groups
   if (g_conf.osd_pg_bits) {
     osdmap.set_pg_bits(g_conf.osd_pg_bits);
   } else {
@@ -205,6 +207,8 @@ void OSDMonitor::create_initial()
     }
   }
   
+  /* Adds MDS OSDs to the map, they need keys...
+   This just adds them to the set in the map */
   if (g_conf.mds_local_osd) {
     // add mds osds, but don't put them in the crush mapping func
     for (int i=0; i<g_conf.num_mds; i++) 
@@ -384,10 +388,13 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
   
   if (osdmap.get_epoch() == 0) {
     // waiting for boot!
+    // add the OSD instance to the map?
     osdmap.osd_inst[from] = m->get_source_inst();
+    // adds the key to the map
+    osdmap.osd_keys[from] = m->get_public_key();
 
     if (osdmap.osd_inst.size() == osdmap.osds.size()) {
-      dout(-7) << "osd_boot all osds booted." << endl;
+      dout(7) << "osd_boot all osds booted." << endl;
       osdmap.inc_epoch();
       
       save_map();
@@ -403,7 +410,8 @@ void OSDMonitor::handle_osd_boot(MOSDBoot *m)
     }
     return;
   }
-  
+  // if epoch != 0 then its incremental
+
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
     pending_inc.new_down[from] = osdmap.osd_inst[from];
