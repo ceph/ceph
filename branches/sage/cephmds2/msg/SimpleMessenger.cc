@@ -335,8 +335,12 @@ void Rank::Pipe::reader()
 	} else {
 	  entity = rank.find_unnamed(m->get_dest());
 	  if (!entity) {
-	    derr(0) << "pipe(" << peer_inst << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
-	    assert(0);  // FIXME do this differently
+	    if (rank.stopped.count(m->get_dest())) {
+	      // ignore it
+	    } else {
+	      derr(0) << "pipe(" << peer_inst << ' ' << this << ").reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << endl;
+	      assert(0);  // FIXME do this differently
+	    }
 	  }
 	}
       }
@@ -858,10 +862,13 @@ void Rank::unregister_entity(EntityMessenger *msgr)
   dout(10) << "unregister_entity " << msgr->get_myaddr() << endl;
   
   // remove from local directory.
-  assert(local.count(msgr->get_myaddr()));
-  local.erase(msgr->get_myaddr());
-  assert(entity_map.count(msgr->get_myaddr()));
-  entity_map.erase(msgr->get_myaddr());
+  msg_addr_t addr = msgr->get_myaddr();
+  assert(local.count(addr));
+  local.erase(addr);
+  assert(entity_map.count(addr));
+  entity_map.erase(addr);
+  
+  stopped.insert(addr);
 
   wait_cond.Signal();
 

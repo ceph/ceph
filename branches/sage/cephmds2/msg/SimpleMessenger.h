@@ -245,6 +245,7 @@ class Rank {
 
   // local
   map<msg_addr_t, EntityMessenger*> local;
+  set<msg_addr_t>                   stopped;
   
   // remote
   hash_map<__int64_t, Pipe*> rank_pipe;
