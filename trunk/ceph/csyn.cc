@@ -25,8 +25,10 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-       
+
+#ifndef DARWIN
 #include <envz.h>
+#endif // DARWIN
 
 #include <sys/types.h>
 #include <sys/stat.h>

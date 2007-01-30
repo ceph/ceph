@@ -25,7 +25,9 @@ using namespace std;
 
 #include "common/Timer.h"
        
+#ifndef DARWIN
 #include <envz.h>
+#endif // DARWIN
 
 #include <sys/types.h>
 #include <sys/stat.h>

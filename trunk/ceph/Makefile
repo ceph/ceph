@@ -8,9 +8,17 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 
+#CC = g++
+#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+#LIBS = -lpthread  
+
+# For linux
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+# For Darwin
+#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=5
+
 CC = g++
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread  
+LIBS = -lpthread
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -81,10 +89,6 @@ CLIENT_OBJS= \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TCP_OBJS = \
-	msg/TCPMessenger.o\
-	msg/TCPDirectory.o
-
 TARGETS = cmon cosd cmds cfuse newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
@@ -134,7 +138,7 @@ mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 
 
 # synthetic workload
-fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
@@ -166,8 +170,8 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 
 
 # libceph
-libceph.o: client/ldceph.o client/Client.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
-	ld -i $^ -o $@
+libceph.o: client/ldceph.o client/Client.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
+	ar -rc $@ $^
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
@@ -183,37 +187,32 @@ mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 %.so: %.cc
 	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
-
-testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/clock.o msg/Messenger.o msg/Dispatcher.o msg/error.o
-	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
-
-
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 common.o: ${COMMON_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 ebofs.o: ${EBOFS_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 client.o: ${CLIENT_OBJS} 
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 osd.o: ${OSD_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 osdc.o: ${OSDC_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
-osd_obfs.o: osd/OBFSStore.o osd/OSD.ccosd/PG.o osd/ObjectStore.o osd/FakeStore.o
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
+osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.o
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.o
 
 mds.o: ${MDS_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 mon.o: ${MON_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@
