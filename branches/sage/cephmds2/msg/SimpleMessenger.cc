@@ -117,8 +117,10 @@ void *Rank::Accepter::entry()
       dout(10) << "accepted incoming on sd " << sd << endl;
       
       rank.lock.Lock();
-      Pipe *p = new Pipe(sd);
-      rank.pipes.insert(p);
+      if (!rank.local.empty()) {
+	Pipe *p = new Pipe(sd);
+	rank.pipes.insert(p);
+      }
       rank.lock.Unlock();
     } else {
       dout(10) << "no incoming connection?" << endl;
@@ -271,6 +273,9 @@ void Rank::Pipe::close()
   // queue close message.
   if (socket_error) {
     dout(10) << "pipe(" << peer_inst << ' ' << this << ").close not queueing MSG_CLOSE, socket error" << endl;
+  } 
+  else if (!writer_running) {
+    dout(10) << "pipe(" << peer_inst << ' ' << this << ").close not queueing MSG_CLOSE, no writer running" << endl;  
   } else {
     dout(10) << "pipe(" << peer_inst << ' ' << this << ").close queueing MSG_CLOSE" << endl;
     lock.Lock();
@@ -943,6 +948,8 @@ void Rank::wait()
     if (local.empty()) {
       dout(10) << "wait: everything stopped" << endl;
       break;   // everything stopped.
+    } else {
+      dout(10) << "wait: local still has " << local.size() << " items, waiting" << endl;
     }
     
     wait_cond.Wait(lock);
@@ -950,6 +957,9 @@ void Rank::wait()
   lock.Unlock();
   
   // done!  clean up.
+
+  //dout(10) << "wait: stopping accepter thread" << endl;
+  //accepter.stop();
 
   // stop dispatch thread
   if (g_conf.ms_single_dispatch) {
@@ -1018,6 +1028,11 @@ void Rank::EntityMessenger::dispatch_entry()
       {
         // deliver
         while (!ls.empty()) {
+	  if (stop) {
+	    dout(1) << "dispatch: stop=true, discarding " << ls.size() 
+		    << " messages in dispatch queue" << endl;
+	    break;
+	  }
           Message *m = ls.front();
           ls.pop_front();
           dout(1) << m->get_dest() 
@@ -1034,6 +1049,9 @@ void Rank::EntityMessenger::dispatch_entry()
     cond.Wait(lock);
   }
   lock.Unlock();
+
+  // deregister
+  rank.unregister_entity(this);
 }
 
 void Rank::EntityMessenger::ready()
@@ -1059,9 +1077,6 @@ void Rank::EntityMessenger::ready()
 int Rank::EntityMessenger::shutdown()
 {
   dout(10) << "shutdown " << get_myaddr() << endl;
-  
-  // deregister
-  rank.unregister_entity(this);
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
