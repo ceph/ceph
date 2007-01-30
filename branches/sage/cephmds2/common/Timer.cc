@@ -219,7 +219,7 @@ bool Timer::cancel_event(Context *callback)
   dout(DBL) << "cancel_event " << callback << endl;
 
   if (!event_times.count(callback)) {
-    dout(DBL) << "cancel_event " << callback << " isn't scheduled (probably executing in another thread?)" << endl;
+    dout(DBL) << "cancel_event " << callback << " isn't scheduled (probably executing)" << endl;
     lock.Unlock();
     return false;     // wasn't scheduled.
   }
@@ -265,13 +265,14 @@ void SafeTimer::EventWrapper::finish(int r)
     // still scheduled.  execute.
     actual->finish(r);
     timer->scheduled.erase(actual);
+    timer->canceled.erase(actual);  // in case, say, i canceled myself
   } else {
     // canceled.
     assert(timer->canceled.count(actual));
     timer->canceled.erase(actual);
-    delete actual;
     timer->cond.Signal();
   }
+  delete actual;
   timer->lock.Unlock();
 }
 
@@ -302,6 +303,7 @@ void SafeTimer::join()
   while (!canceled.empty()) {
     // wait
     dout(-10) << "SafeTimer.join waiting for " << canceled.size() << " to join" << endl;
+    dout(-10) << canceled << endl;
     cond.Wait(lock);
   }
 }
