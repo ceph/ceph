@@ -97,8 +97,9 @@ void Timer::timer_entry()
           for (list<Context*>::iterator cit = pending.begin();
                cit != pending.end();
                cit++) {
-            dout(DBL) << "doing callback " << *cit << endl;
+            dout(DBL) << "start callback " << *cit << endl;
             (*cit)->finish(0);
+            dout(DBL) << "finish callback " << *cit << endl;
 	    delete *cit;
           }
           pending.clear();
@@ -242,15 +243,19 @@ bool Timer::cancel_event(Context *callback)
 void SafeTimer::add_event_after(float seconds, Context *c)
 {
   assert(lock.is_locked());
-  g_timer.add_event_after(seconds, new EventWrapper(this, c));
-  scheduled.insert(c);
+  Context *w = new EventWrapper(this, c);
+  dout(DBL) << "SafeTimer.add_event_after wrapping " << c << " with " << w << endl;
+  scheduled[c] = w;
+  g_timer.add_event_after(seconds, w);
 }
 
 void SafeTimer::add_event_at(utime_t when, Context *c)
 {
   assert(lock.is_locked());
-  g_timer.add_event_at(when, new EventWrapper(this, c));
-  scheduled.insert(c);
+  Context *w = new EventWrapper(this, c);
+  dout(DBL) << "SafeTimer.add_event_at wrapping " << c << " with " << w << endl;
+  scheduled[c] = w;
+  g_timer.add_event_at(when, w);
 }
 
 void SafeTimer::EventWrapper::finish(int r)
@@ -274,19 +279,19 @@ void SafeTimer::cancel_event(Context *c)
 {
   assert(lock.is_locked());
   assert(scheduled.count(c));
+  if (!g_timer.cancel_event(scheduled[c])) 
+    canceled[c] = scheduled[c];
   scheduled.erase(c);
-  if (!g_timer.cancel_event(c)) 
-    canceled.insert(c);
 }
 
 void SafeTimer::cancel_all()
 {
   assert(lock.is_locked());
-  for (set<Context*>::iterator p = scheduled.begin();
+  for (map<Context*,Context*>::iterator p = scheduled.begin();
        p != scheduled.end();
        ++p) 
-    if (!g_timer.cancel_event(*p)) 
-      canceled.insert(*p);
+    if (!g_timer.cancel_event(p->second))
+      canceled[p->first] = p->second;
   scheduled.clear();
 }
 

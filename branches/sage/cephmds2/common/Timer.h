@@ -142,8 +142,8 @@ class Timer {
 class SafeTimer {
   Mutex&        lock;
   Cond          cond;
-  set<Context*> scheduled;
-  set<Context*> canceled;
+  map<Context*,Context*> scheduled;  // actual -> wrapper
+  map<Context*,Context*> canceled;
   
   class EventWrapper : public Context {
     SafeTimer *timer;
