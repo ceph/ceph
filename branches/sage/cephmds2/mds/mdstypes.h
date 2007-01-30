@@ -45,7 +45,7 @@ class meta_load_t {
 
 inline ostream& operator<<( ostream& out, meta_load_t& load )
 {
-  return out << "metaload<rd " << load.pop[META_POP_IRD].get()
+  return out << "<rd " << load.pop[META_POP_IRD].get()
              << ", wr " << load.pop[META_POP_IWR].get()
              << ">";
 }

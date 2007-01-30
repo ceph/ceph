@@ -61,10 +61,13 @@ int main(int argc, char **argv)
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
   // mds specific args
+  int whoami = -1;
   bool standby = false;  // by default, i'll start active.
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--standby") == 0) 
       standby = true;
+    else if (strcmp(args[i], "--mds") == 0) 
+      whoami = atoi(args[++i]);
     else {
       cerr << "unrecognized arg " << args[i] << endl;
       return -1;
@@ -81,10 +84,10 @@ int main(int argc, char **argv)
   rank.start_rank();
 
   // start mds
-  Messenger *m = rank.register_entity(MSG_ADDR_MDS_NEW);
+  Messenger *m = rank.register_entity(MSG_ADDR_MDS(whoami));
   assert(m);
   
-  MDS *mds = new MDS(m->get_myaddr().num(), m, &monmap);
+  MDS *mds = new MDS(whoami, m, &monmap);
   mds->init(standby);
   
   // wait

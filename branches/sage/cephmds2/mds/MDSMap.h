@@ -142,6 +142,16 @@ class MDSMap {
   void get_failed_mds_set(set<int>& s) {
     get_mds_set(s, MDSMap::STATE_FAILED);
   }
+  void get_recovery_mds_set(set<int>& s) {
+    s.clear();
+    for (map<int,int>::const_iterator p = mds_state.begin();
+	 p != mds_state.end();
+	 p++)
+      if (is_failed(p->first) || 
+	  is_replay(p->first) || is_rejoin(p->first) ||
+	  is_active(p->first) || is_stopping(p->first))
+	s.insert(p->first);
+  }
 
 
   // state

@@ -159,7 +159,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 30,
 
   mds_beacon_interval: 5.0,
-  mds_beacon_grace: 15.0,
+  mds_beacon_grace: 10.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,

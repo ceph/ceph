@@ -1303,6 +1303,8 @@ void Migrator::import_dir_logged_start(CDir *dir, int from,
 {
   dout(7) << "import_dir_logged " << *dir << endl;
 
+  assert(0); // test die
+
   // send notify's etc.
   dout(7) << "sending notifyack for " << *dir << " to old auth mds" << from << endl;
   mds->send_message_mds(new MExportDirNotifyAck(dir->inode->ino()),

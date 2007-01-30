@@ -301,8 +301,10 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   int from = m->get_source().num();
 
   MMDSCacheRejoin *rejoin;
-  if (mds->is_active())
+  if (mds->is_active() || mds->is_stopping())
     rejoin = new MMDSCacheRejoin;
+
+  // FIXME: check if we are a surviving ambiguous importer
 
   // update my dir_auth values
   for (map<inodeno_t, set<inodeno_t> >::iterator pi = m->imap.begin();
@@ -339,16 +341,238 @@ void MDCache::handle_import_map(MMDSImportMap *m)
        ++pi)
     mds->mdcache->other_ambiguous_imports[from][pi->first].swap( pi->second );
   
-  if (mds->is_active())
+  if (mds->is_rejoin()) {
+    assert(want_import_map.count(from));
+    want_import_map.erase(from);
+    if (want_import_map.empty()) {
+      dout(10) << "got all import maps" << endl;
+      disambiguate_imports();
+      recalc_auth_bits();
+      send_cache_rejoins();
+    } else {
+      dout(10) << "still waiting for importmaps from " << want_import_map << endl;
+    }
+  } else if (mds->is_active() || mds->is_stopping()) {
     mds->send_message_mds(rejoin, from, MDS_PORT_CACHE);
-  
+  } 
+
   delete m;
 }
 
 
+void MDCache::disambiguate_imports()
+{
+  dout(10) << "disambiguate_imports" << endl;
+
+  // other nodes' ambiguous imports
+  for (map<int, map<inodeno_t, set<inodeno_t> > >::iterator p = other_ambiguous_imports.begin();
+       p != other_ambiguous_imports.begin();
+       ++p) {
+    int who = p->first;
+
+    for (map<inodeno_t, set<inodeno_t> >::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      CInode *diri = get_inode(q->first);
+      if (!diri) continue;
+      CDir *dir = diri->dir;
+      if (!dir) continue;
+      
+      if (dir->authority() >= CDIR_AUTH_UNKNOWN) {
+	dout(10) << "mds" << who << " did not import " << *dir << endl;
+      } else {
+	dout(10) << "mds" << who << " did import " << *dir << endl;
+	int was = dir->authority();
+	dir->set_dir_auth(who);
+	
+	for (set<inodeno_t>::iterator r = q->second.begin();
+	     r != q->second.end();
+	     ++r) {
+	  CInode *exi = get_inode(q->first);
+	  if (!exi) continue;
+	  CDir *ex = exi->dir;
+	  if (!ex) continue;
+	  if (ex->get_dir_auth() == CDIR_AUTH_PARENT)
+	    ex->set_dir_auth(was);
+	  dout(10) << "   bound " << *ex << endl;
+	}
+      }
+    }
+  }
+  other_ambiguous_imports.clear();
+
+  // my ambiguous imports
+  while (!my_ambiguous_imports.empty()) {
+    map<inodeno_t, set<inodeno_t> >::iterator q = my_ambiguous_imports.begin();
+
+    CInode *diri = get_inode(q->first);
+    if (!diri) continue;
+    CDir *dir = diri->dir;
+    if (!dir) continue;
+    
+    if (dir->authority() != CDIR_AUTH_UNKNOWN) {
+      dout(10) << "ambiguous import auth known, must not be me " << *dir << endl;
+      cancel_ambiguous_import(q->first);
+    } else {
+      dout(10) << "ambiguous import auth unknown, must be me " << *dir << endl;
+      finish_ambiguous_import(q->first);
+    }
+  }
+  assert(my_ambiguous_imports.empty());
+
+  show_imports();
+}
+
+void MDCache::cancel_ambiguous_import(inodeno_t dirino)
+{
+  assert(my_ambiguous_imports.count(dirino));
+  dout(10) << "cancel_ambiguous_import " << dirino
+	   << " bounds " << my_ambiguous_imports[dirino]
+	   << endl;
+  my_ambiguous_imports.erase(dirino);
+}
+
+void MDCache::finish_ambiguous_import(inodeno_t dirino)
+{
+  assert(my_ambiguous_imports.count(dirino));
+  set<inodeno_t> bounds;
+  bounds.swap(my_ambiguous_imports[dirino]);
+  my_ambiguous_imports.erase(dirino);
+
+  dout(10) << "finish_ambiguous_import " << dirino
+	   << " bounds " << bounds
+	   << endl;
+
+  CInode *diri = get_inode(dirino);
+  assert(diri);
+  CDir *dir = diri->dir;
+  assert(dir);
+    
+  // adjust dir_auth
+  CDir *im = dir;
+  if (dir->get_inode()->authority() == mds->get_nodeid()) {
+    // parent is already me.  adding to existing import.
+    im = get_auth_container(dir);
+    if (!im) im = dir;
+    nested_exports[im].erase(dir);
+    dir->set_dir_auth( CDIR_AUTH_PARENT );     
+    dir->state_set(CDIR_STATE_EXPORT);
+    dir->get(CDir::PIN_EXPORT);
+  } else {
+    // parent isn't me.  new import.
+    imports.insert(dir);
+    dir->set_dir_auth( mds->get_nodeid() );               
+    dir->state_set(CDIR_STATE_IMPORT);
+    dir->get(CDir::PIN_IMPORT);
+  }
+
+  dout(10) << "  base " << *dir << endl;
+  if (dir != im)
+    dout(10) << "  under " << *im << endl;
+
+  // bounds (exports, before)
+  for (set<inodeno_t>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CInode *bi = get_inode(*p);
+    assert(bi);
+    CDir *bd = bi->dir;
+    assert(bd);
+    
+    if (bd->get_dir_auth() == mds->get_nodeid()) {
+      // still me.  was an import. 
+      imports.erase(bd);
+      bd->set_dir_auth( CDIR_AUTH_PARENT );   
+      bd->state_clear(CDIR_STATE_IMPORT);
+      bd->put(CDir::PIN_IMPORT);
+      // move nested exports.
+      for (set<CDir*>::iterator q = nested_exports[bd].begin();
+	   q != nested_exports[bd].end();
+	   ++q) 
+	nested_exports[im].insert(*q);
+      nested_exports.erase(bd);	
+
+    } else {
+      // not me anymore.  now an export.
+      exports.insert(bd);
+      nested_exports[im].insert(bd);
+      assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
+      bd->set_dir_auth( CDIR_AUTH_UNKNOWN );
+      bd->state_set(CDIR_STATE_EXPORT);
+      bd->get(CDir::PIN_EXPORT);
+    }
+    
+    dout(10) << "  bound " << *bd << endl;
+  }
+}
+
+void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
+{
+  CInode *diri = get_inode(dirino);
+  assert(diri);
+  CDir *dir = diri->dir;
+  assert(dir);
+  
+  dout(10) << "finish_ambiguous_export " << dirino 
+	   << " bounds " << bounds
+	   << endl;
+  
+  // adjust dir_auth
+  CDir *im = get_auth_container(dir);
+  if (dir->get_inode()->authority() == CDIR_AUTH_UNKNOWN) { 
+    // was an import, hose it
+    assert(im == dir);
+    assert(imports.count(dir));
+    imports.erase(dir);
+    dir->set_dir_auth( CDIR_AUTH_PARENT );
+    dir->state_clear(CDIR_STATE_IMPORT);
+    dir->put(CDir::PIN_IMPORT);
+  } else {
+    // i'm now an export
+    exports.insert(dir);
+    nested_exports[im].insert(dir);
+    dir->set_dir_auth( CDIR_AUTH_UNKNOWN );  // not me
+    dir->state_set(CDIR_STATE_EXPORT);
+    dir->get(CDir::PIN_EXPORT);
+  }
+  dout(10) << "  base " << *dir << endl;
+  if (dir != im)
+    dout(10) << "  under " << *im << endl;
+    
+  // bounds (there were exports, before)
+  for (set<inodeno_t>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CInode *bi = get_inode(*p);
+    assert(bi);
+    CDir *bd = bi->dir;
+    assert(bd);
+    
+    // hose export
+    assert(exports.count(bd));
+    exports.erase(bd);
+    nested_exports[im].erase(bd);
+    
+    // fix dir_auth
+    assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
+    bd->set_dir_auth( CDIR_AUTH_PARENT );  // not me
+
+    bd->state_clear(CDIR_STATE_EXPORT);
+    bd->put(CDir::PIN_EXPORT);
+
+    dout(10) << "  bound " << *bd << endl;
+  }
+  
+  show_imports();
+}
+
+
+
+
 void MDCache::send_cache_rejoins()
 {
-
+  dout(10) << "send_cache_rejoins " << endl;
+  
 }
 
 void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
@@ -455,6 +679,16 @@ void MDCache::recalc_auth_bits()
       in->state_clear(CInode::STATE_AUTH);
       if (in->is_dirty())
 	in->mark_clean();
+    }
+
+    if (in->parent) {
+      if (in->parent->authority() == mds->get_nodeid())
+	in->parent->state_set(CDentry::STATE_AUTH);
+      else {
+	in->parent->state_clear(CDentry::STATE_AUTH);
+	if (in->parent->is_dirty()) 
+	  in->parent->mark_clean();
+      }
     }
 
     if (in->dir) {
@@ -606,14 +840,15 @@ bool MDCache::trim(int max)
 
     assert(in->get_num_ref() == 0);
     
+    int dirauth = -2;
     if (in->dir) {
       // notify dir authority?
-      int auth = in->dir->authority();
-      if (auth != mds->get_nodeid()) {
-	dout(17) << "sending expire to mds" << auth << " on   " << *in->dir << endl;
-	if (expiremap.count(auth) == 0) 
-	  expiremap[auth] = new MCacheExpire(mds->get_nodeid());
-	expiremap[auth]->add_dir(in->ino(), in->dir->replica_nonce);
+      dirauth = in->dir->authority();
+      if (dirauth != mds->get_nodeid()) {
+	dout(17) << "sending expire to mds" << dirauth << " on   " << *in->dir << endl;
+	if (expiremap.count(dirauth) == 0) 
+	  expiremap[dirauth] = new MCacheExpire(mds->get_nodeid());
+	expiremap[dirauth]->add_dir(in->ino(), in->dir->replica_nonce);
       }
 
       in->close_dir();
@@ -621,6 +856,11 @@ bool MDCache::trim(int max)
   
     // notify inode authority
     int auth = in->authority();
+    if (auth == CDIR_AUTH_UNKNOWN) {
+      assert(in->ino() == 1);
+      assert(dirauth >= 0);
+      auth = dirauth;
+    }
     if (auth != mds->get_nodeid()) {
       assert(!in->is_auth());
       dout(17) << "sending expire to mds" << auth << " on " << *in << endl;
@@ -2814,7 +3054,7 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
  * Returns the directory in which authority is delegated for *dir.  
  * This may be because a directory is an import, or because it is hashed
  * and we are nested underneath an inode in that dir (that hashes to us).
- * Thus do not assume con->is_auth()!  It is_auth() || is_hashed().
+ * Thus do not assume result->is_auth()!  It is_auth() || is_hashed().
  */
 CDir *MDCache::get_auth_container(CDir *dir)
 {
@@ -2824,7 +3064,7 @@ CDir *MDCache::get_auth_container(CDir *dir)
   while (true) {
     if (imp->is_import()) break; // import
     imp = imp->get_parent_dir();
-    assert(imp);
+    if (!imp) break;             // none
     if (imp->is_hashed()) break; // hash
   }
 
@@ -2916,7 +3156,69 @@ void MDCache::find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s)
 
 void MDCache::show_imports()
 {
-  mds->balancer->show_imports();
+  int db = 10;
+
+  if (imports.empty() &&
+      hashdirs.empty()) {
+    dout(db) << "show_imports: no imports/exports/hashdirs" << endl;
+    return;
+  }
+  dout(db) << "show_imports:" << endl;
+
+  set<CDir*> ecopy = exports;
+
+  set<CDir*>::iterator it = hashdirs.begin();
+  while (1) {
+    if (it == hashdirs.end()) it = imports.begin();
+    if (it == imports.end() ) break;
+    
+    CDir *im = *it;
+    
+    if (im->is_import()) {
+      dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
+      //assert( im->is_auth() );
+    } 
+    else if (im->is_hashed()) {
+      if (im->is_import()) continue;  // if import AND hash, list as import.
+      dout(db) << "  + hash (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
+    }
+    
+    for (set<CDir*>::iterator p = nested_exports[im].begin();
+         p != nested_exports[im].end();
+         p++) {
+      CDir *exp = *p;
+      if (exp->is_hashed()) {
+        //assert(0);  // we don't do it this way actually
+        dout(db) << "      - hash (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
+        //assert( !exp->is_auth() );
+      } else {
+        dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
+        assert( exp->is_export() );
+        //assert( !exp->is_auth() );
+      }
+
+      if ( get_auth_container(exp) != im ) {
+        dout(1) << "uh oh, auth container is " << *get_auth_container(exp) << endl;
+        assert( get_auth_container(exp) == im );
+      }
+      
+      if (ecopy.count(exp) != 1) {
+        dout(1) << "***** nested_export " << *exp << " not in exports" << endl;
+        assert(0);
+      }
+      ecopy.erase(exp);
+    }
+
+    it++;
+  }
+  
+  if (ecopy.size()) {
+    for (set<CDir*>::iterator it = ecopy.begin();
+         it != ecopy.end();
+         it++) 
+      dout(1) << "***** stray item in exports: " << **it << endl;
+    assert(ecopy.size() == 0);
+  }
 }
 
 

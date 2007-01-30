@@ -68,7 +68,7 @@ class MDLog {
   off_t  last_import_map;   // offsets of last committed importmap.  constrains trimming.
   list<Context*> import_map_expire_waiters;
   bool writing_import_map;  // one is being written now
-  bool seen_import_map;  // for recovery
+  bool seen_import_map;     // for recovery
 
   friend class EImportMap;
   friend class C_MDS_WroteImportMap;

@@ -40,10 +40,13 @@ protected:
   }
   
   virtual void encode_payload(bufferlist& bl) {
+    bl.append((char*)&dirino, sizeof(dirino));
     metablob._encode(bl);
     ::_encode(bounds, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
+    bl.copy(off, sizeof(dirino), (char*)&dirino);
+    off += sizeof(dirino);
     metablob._decode(bl, off);
     ::_decode(bounds, bl, off);
   }

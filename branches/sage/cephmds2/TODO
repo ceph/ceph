@@ -24,7 +24,7 @@ recoverer:
 - go active
 
 
-
+* fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 
 
 

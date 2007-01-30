@@ -173,6 +173,8 @@ void EMetaBlob::replay(MDS *mds)
       dout(20) << "EMetaBlob.replay had dir " << *dir << endl;
     } else {
       dir = diri->get_or_open_dir(mds->mdcache);
+      if (*lp == 1) 
+	dir->set_dir_auth(CDIR_AUTH_UNKNOWN);
       dout(10) << "EMetaBlob.replay added dir " << *dir << endl;  
     }
     dir->set_version( lump.dirv );
@@ -372,33 +374,11 @@ void EImportMap::replay(MDS *mds)
   for (set<inodeno_t>::iterator p = imports.begin();
        p != imports.end();
        ++p) {
-    CInode *imi = mds->mdcache->get_inode(*p);
-    assert(imi);
-    CDir *im = imi->get_or_open_dir(mds->mdcache);
-    assert(im);
-
-    im->set_dir_auth(mds->get_nodeid());
-    mds->mdcache->add_import(im);
-
-    // nested exports
-    for (set<inodeno_t>::iterator q = nested_exports[*p].begin();
-	 q != nested_exports[*p].end();
-	 ++q) {
-      CInode *exi = mds->mdcache->get_inode(*q);
-      assert(exi);
-      CDir *ex = exi->get_or_open_dir(mds->mdcache);
-      assert(ex);
-
-      ex->set_dir_auth(CDIR_AUTH_UNKNOWN);
-      ex->state_set(CDIR_STATE_EXPORT);
-      ex->get(CDir::PIN_EXPORT);
-      mds->mdcache->exports.insert(ex);
-      mds->mdcache->nested_exports[im].insert(ex);
-    }
+    mds->mdcache->add_ambiguous_import(*p, nested_exports[*p]);
+    mds->mdcache->finish_ambiguous_import(*p);
   }
-
+  
   mds->mdcache->show_imports();
-
 }
 
 
@@ -466,6 +446,9 @@ void EPurgeFinish::replay(MDS *mds)
 
 
 
+
+// =========================================================================
+
 // -----------------------
 // EExportStart
 
@@ -499,11 +482,6 @@ void EExportStart::replay(MDS *mds)
   metablob.replay(mds);
   
   // put in pending_exports lists
-  CInode *diri = mds->mdcache->get_inode(dirino);
-  assert(diri);
-  CDir *dir = diri->dir;
-  assert(dir);
-
   mds->mdlog->pending_exports[dirino] = bounds;
 }
 
@@ -525,50 +503,14 @@ void EExportFinish::replay(MDS *mds)
 {
   dout(10) << "EExportFinish.replay " << dirino << " success=" << success << endl;
 
-  CInode *diri = mds->mdcache->get_inode(dirino);
-  assert(diri);
-  CDir *dir = diri->dir;
-  assert(dir);
+  assert(mds->mdlog->pending_exports.count(dirino));
 
-  set<inodeno_t> bounds;
-  bounds.swap( mds->mdlog->pending_exports[dirino] );
+  // finish?
+  if (success) 
+    mds->mdcache->finish_ambiguous_export(dirino, mds->mdlog->pending_exports[dirino]);
+
+  // remove from pending_exports list
   mds->mdlog->pending_exports.erase(dirino);
-
-  if (success) {
-    // adjust dir_auth
-    CDir *im = mds->mdcache->get_auth_container(dir);
-    if (dir->get_inode()->authority() == CDIR_AUTH_UNKNOWN) { 
-      // was an import, hose it
-      assert(im == dir);
-      assert(mds->mdcache->imports.count(dir));
-      mds->mdcache->imports.erase(dir);
-      dir->set_dir_auth( CDIR_AUTH_PARENT );
-    } else {
-      // i'm now an export
-      mds->mdcache->exports.insert(dir);
-      mds->mdcache->nested_exports[im].insert(dir);
-      dir->set_dir_auth( CDIR_AUTH_UNKNOWN );  // not me
-    }
-    
-    // bounds (there were exports, before)
-    for (set<inodeno_t>::iterator p = bounds.begin();
-	 p != bounds.end();
-	 ++p) {
-      CInode *bi = mds->mdcache->get_inode(*p);
-      assert(bi);
-      CDir *bd = bi->dir;
-      assert(bd);
-
-      // hose export
-      assert(mds->mdcache->exports.count(bd));
-      mds->mdcache->exports.erase(bd);
-      mds->mdcache->nested_exports[im].erase(bd);
-      
-      // fix dir_auth
-      assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
-      bd->set_dir_auth( CDIR_AUTH_PARENT );  // not me
-    }
-  }
 }
 
 
@@ -591,9 +533,13 @@ void EImportStart::replay(MDS *mds)
   dout(10) << "EImportStart.replay " << dirino << endl;
   metablob.replay(mds);
 
-  // put in ambiguous import list
+  // convert list -> set
+  set<inodeno_t> b;
   for (list<inodeno_t>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-    mds->mdcache->my_ambiguous_imports[dirino].insert(*p);
+    b.insert(*p);
+
+  // put in ambiguous import list
+  mds->mdcache->add_ambiguous_import(dirino, b);
 }
 
 // -----------------------
@@ -611,57 +557,10 @@ void EImportFinish::expire(MDS *mds, Context *c)
 void EImportFinish::replay(MDS *mds)
 {
   dout(10) << "EImportFinish.replay " << dirino << " success=" << success << endl;
-  mds->mdcache->my_ambiguous_imports.erase(dirino);
-
-  CInode *diri = mds->mdcache->get_inode(dirino);
-  assert(diri);
-  CDir *dir = diri->dir;
-  assert(dir);
-
-  set<inodeno_t> bounds;
-  bounds.swap( mds->mdcache->my_ambiguous_imports[dirino] );
-  mds->mdcache->my_ambiguous_imports.erase(dirino);
-  
-  if (success) {
-    // adjust dir_auth
-    CDir *im = dir;
-    if (dir->get_inode()->authority() == mds->get_nodeid()) {
-      // parent is already me.  adding to existing import.
-      im = mds->mdcache->get_auth_container(dir);
-      mds->mdcache->nested_exports[im].erase(dir);
-      dir->set_dir_auth( CDIR_AUTH_PARENT );     
-    } else {
-      // parent isn't me.  new import.
-      mds->mdcache->imports.insert(dir);
-      dir->set_dir_auth( mds->get_nodeid() );               
-    }
-
-    // bounds (exports, before)
-    for (set<inodeno_t>::iterator p = bounds.begin();
-	 p != bounds.end();
-	 ++p) {
-      CInode *bi = mds->mdcache->get_inode(*p);
-      assert(bi);
-      CDir *bd = bi->dir;
-      assert(bd);
-
-      if (bd->get_dir_auth() == mds->get_nodeid()) {
-	// still me.  was an import.  move nested exports.
-	mds->mdcache->imports.erase(bd);
-	for (set<CDir*>::iterator q = mds->mdcache->nested_exports[bd].begin();
-	     q != mds->mdcache->nested_exports[bd].end();
-	     ++q) 
-	  mds->mdcache->nested_exports[im].insert(*q);
-	mds->mdcache->nested_exports.erase(bd);	
-	bd->set_dir_auth( CDIR_AUTH_PARENT );   
-      } else {
-	// not me anymore.  now an export.
-	mds->mdcache->exports.insert(bd);
-	mds->mdcache->nested_exports[im].insert(bd);
-	bd->set_dir_auth( CDIR_AUTH_UNKNOWN );
-      }
-    }
-  }
+  if (success) 
+    mds->mdcache->finish_ambiguous_import(dirino);
+  else
+    mds->mdcache->cancel_ambiguous_import(dirino);
 }
 
 

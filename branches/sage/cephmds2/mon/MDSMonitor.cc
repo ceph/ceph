@@ -167,7 +167,10 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
 	     << " -> " << MDSMap::get_state_name(state)
 	     << endl;
     mdsmap.mds_state[from] = state;
-    mdsmap.mds_state_seq[from] = seq;
+    if (mdsmap.is_up(from))
+      mdsmap.mds_state_seq[from] = seq;
+    else
+      mdsmap.mds_state_seq.erase(from);
     
     // inc map version
     mdsmap.inc_epoch();

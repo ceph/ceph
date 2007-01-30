@@ -846,71 +846,7 @@ void MDBalancer::add_import(CDir *dir)
 
 void MDBalancer::show_imports(bool external)
 {
-  int db = 20; //debug level
-  return;
-  
-  if (mds->mdcache->imports.empty() &&
-      mds->mdcache->hashdirs.empty()) {
-    dout(db) << "no imports/exports/hashdirs" << endl;
-    return;
-  }
-  dout(db) << "imports/exports/hashdirs:" << endl;
-
-  set<CDir*> ecopy = mds->mdcache->exports;
-
-  set<CDir*>::iterator it = mds->mdcache->hashdirs.begin();
-  while (1) {
-    if (it == mds->mdcache->hashdirs.end()) it = mds->mdcache->imports.begin();
-    if (it == mds->mdcache->imports.end() ) break;
-    
-    CDir *im = *it;
-    
-    if (im->is_import()) {
-      dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
-      assert( im->is_auth() );
-    } 
-    else if (im->is_hashed()) {
-      if (im->is_import()) continue;  // if import AND hash, list as import.
-      dout(db) << "  + hash (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
-    }
-    
-    for (set<CDir*>::iterator p = mds->mdcache->nested_exports[im].begin();
-         p != mds->mdcache->nested_exports[im].end();
-         p++) {
-      CDir *exp = *p;
-      if (exp->is_hashed()) {
-        //assert(0);  // we don't do it this way actually
-        dout(db) << "      - hash (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-        assert( !exp->is_auth() );
-      } else {
-        dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-        assert( exp->is_export() );
-        assert( !exp->is_auth() );
-      }
-
-      if ( mds->mdcache->get_auth_container(exp) != im ) {
-        dout(1) << "uh oh, auth container is " << mds->mdcache->get_auth_container(exp) << endl;
-        dout(1) << "uh oh, auth container is " << *mds->mdcache->get_auth_container(exp) << endl;
-        assert( mds->mdcache->get_auth_container(exp) == im );
-      }
-      
-      if (ecopy.count(exp) != 1) {
-        dout(1) << "***** nested_export " << *exp << " not in exports" << endl;
-        assert(0);
-      }
-      ecopy.erase(exp);
-    }
-
-    it++;
-  }
-  
-  if (ecopy.size()) {
-    for (set<CDir*>::iterator it = ecopy.begin();
-         it != ecopy.end();
-         it++) 
-      dout(1) << "***** stray item in exports: " << **it << endl;
-    assert(ecopy.size() == 0);
-  }
+  mds->mdcache->show_imports();
 }
 
 

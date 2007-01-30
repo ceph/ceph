@@ -428,9 +428,6 @@ void MDS::handle_mds_map(MMDSMap *m)
     return;
   }
 
-  // decode and process
-  mdsmap->decode(m->get_encoded());
-
   // note some old state
   int oldwhoami = whoami;
   int oldstate = state;
@@ -438,6 +435,9 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->get_mds_set(oldrejoin, MDSMap::STATE_REJOIN);
   set<int> oldfailed;
   mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
+
+  // decode and process
+  mdsmap->decode(m->get_encoded());
 
   // see who i am
   whoami = mdsmap->get_inst_rank(messenger->get_myinst());
@@ -475,6 +475,15 @@ void MDS::handle_mds_map(MMDSMap *m)
       finish_contexts(waitfor_active);  // kick waiters
     }
 
+    else if (is_replay()) {
+      // initialize gather sets
+      set<int> rs;
+      mdsmap->get_recovery_mds_set(rs);
+      rs.erase(whoami);
+      dout(1) << "now replay.  my recovery peers are " << rs << endl;
+      mdcache->set_recovery_set(rs);
+    }
+    
     // now stopping?
     else if (is_stopping()) {
       assert(oldstate == MDSMap::STATE_ACTIVE);
@@ -508,7 +517,9 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (is_rejoin() || is_active() || is_stopping()) {
     set<int> rejoin;
     mdsmap->get_mds_set(rejoin, MDSMap::STATE_REJOIN);
+    dout(10) << "rejoin set is " << rejoin << ", was " << oldrejoin << endl;
     for (set<int>::iterator p = rejoin.begin(); p != rejoin.end(); ++p) {
+      if (*p == whoami) continue;
       if (oldrejoin.count(*p) == 0 ||          // if other guy newly rejoin, or
 	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly rejoin,
 	mdcache->send_import_map(*p);          // share my import map
@@ -572,11 +583,6 @@ void MDS::boot_create()
 
   C_Gather *fin = new C_Gather(new C_MDS_BootFinish(this));
 
-  // start with a fresh journal
-  dout(10) << "boot_create creating fresh journal" << endl;
-  mdlog->reset();
-  mdlog->write_head(fin->new_sub());
-  
   if (whoami == 0) {
     dout(3) << "boot_create since i am also mds0, creating root inode and dir" << endl;
 
@@ -592,10 +598,15 @@ void MDS::boot_create()
     
     // save it
     mdstore->commit_dir(dir, fin->new_sub());
-    
-    // write our empty importmap (that reflects the root import)
-    mdcache->log_import_map(fin->new_sub());
   }
+
+  // start with a fresh journal
+  dout(10) << "boot_create creating fresh journal" << endl;
+  mdlog->reset();
+  mdlog->write_head(fin->new_sub());
+  
+  // write our first importmap
+  mdcache->log_import_map(fin->new_sub());
 
   // fixme: fake out idalloc (reset, pretend loaded)
   dout(10) << "boot_create creating fresh idalloc table" << endl;
@@ -687,9 +698,6 @@ void MDS::boot_replay(int step)
     break;
 
   case 5:
-    dout(2) << "boot_replay " << step << ": twiddling my auth bits" << endl;
-    mdcache->recalc_auth_bits();
-    
     dout(2) << "boot_replay " << step << ": restarting any recovered purges" << endl;
     mdcache->start_recovered_purges();
     

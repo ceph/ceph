@@ -106,9 +106,9 @@ class MDCache {
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
-  // [replay]
-  map<inodeno_t, set<inodeno_t> > my_ambiguous_imports;  // from EImportStart w/o EImportFinish during journal replay
-  map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  // from MMDSImportMaps
+  void adjust_export(int to,   CDir *root, set<CDir*>& bounds);
+  void adjust_import(int from, CDir *root, set<CDir*>& bounds);
+  
   
 
   // active MDS requests
@@ -126,12 +126,18 @@ class MDCache {
 
   // recovery
 protected:
-  set<int> want_import_map;    // nodes i need to send my import map to
+  // from EImportStart w/o EImportFinish during journal replay
+  map<inodeno_t, set<inodeno_t> >            my_ambiguous_imports;  
+  // from MMDSImportMaps
+  map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  
+
+  set<int> want_import_map;    // nodes i need to send my import map to (when exports finish)
   set<int> import_map_gather;  // nodes i need an import_map from
   
   void handle_import_map(MMDSImportMap *m);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
+  void disambiguate_imports();
   void send_cache_rejoins();
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void send_cache_rejoin_acks();
@@ -139,20 +145,29 @@ public:
   void send_import_map(int who);
   void send_import_maps();
 
+  void set_recovery_set(set<int>& s) {
+    want_import_map.swap(s);
+  }
+
+  // ambiguous imports
+  void add_ambiguous_import(inodeno_t base, set<inodeno_t>& bounds) {
+    my_ambiguous_imports[base].swap(bounds);
+  }
+  void cancel_ambiguous_import(inodeno_t dirino);
+  void finish_ambiguous_import(inodeno_t dirino);
+  
+  void finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds);
+
+
 
   
 
-  
   friend class CInode;
   friend class Locker;
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
   friend class EImportMap;
-  friend class EExportFinish;
-  friend class EImportStart;
-  friend class EImportFinish;
-  friend class MDLog;
 
 
  public:

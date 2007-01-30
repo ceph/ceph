@@ -463,11 +463,18 @@ void CInode::auth_unpin() {
 
 int CInode::authority() {
   if (is_dangling()) 
-    return dangling_auth;   // explicit
-  if (is_root())
-    return 0;  // i am root
+    return dangling_auth;      // explicit
+
+  if (is_root()) {             // i am root
+    if (dir)
+      return dir->get_dir_auth();  // bit of a chicken/egg issue here!
+    else
+      return CDIR_AUTH_UNKNOWN;
+  }
+
   if (parent)
     return parent->dir->dentry_authority( parent->name );
+
   return -1;  // undefined (inode must not be linked yet!)
 }
 

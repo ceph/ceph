@@ -265,14 +265,21 @@ void SafeTimer::EventWrapper::finish(int r)
     // still scheduled.  execute.
     actual->finish(r);
     timer->scheduled.erase(actual);
-    timer->canceled.erase(actual);  // in case, say, i canceled myself
   } else {
-    // canceled.
+    // i was canceled.
     assert(timer->canceled.count(actual));
-    timer->canceled.erase(actual);
+  }
+
+  // did i get canceled?
+  // (this can happen even if i just executed above. e.g., i may have canceled myself.)
+  if (timer->canceled.count(actual)) {
+    timer->canceled.erase(actual); 
     timer->cond.Signal();
   }
+
+  // delete the original event
   delete actual;
+
   timer->lock.Unlock();
 }
 
@@ -280,26 +287,30 @@ void SafeTimer::cancel_event(Context *c)
 {
   assert(lock.is_locked());
   assert(scheduled.count(c));
-  if (!g_timer.cancel_event(scheduled[c])) 
+
+  if (g_timer.cancel_event(scheduled[c])) {
+    // hosed wrapper.  hose original event too.
+    delete scheduled[c];
+  } else {
+    // clean up later.
     canceled[c] = scheduled[c];
+  }
   scheduled.erase(c);
 }
 
 void SafeTimer::cancel_all()
 {
   assert(lock.is_locked());
-  for (map<Context*,Context*>::iterator p = scheduled.begin();
-       p != scheduled.end();
-       ++p) 
-    if (!g_timer.cancel_event(p->second))
-      canceled[p->first] = p->second;
-  scheduled.clear();
+  
+  while (!scheduled.empty()) 
+    cancel_event(scheduled.begin()->first);
 }
 
 void SafeTimer::join()
 {
   assert(lock.is_locked());
   assert(scheduled.empty());
+
   while (!canceled.empty()) {
     // wait
     dout(-10) << "SafeTimer.join waiting for " << canceled.size() << " to join" << endl;
