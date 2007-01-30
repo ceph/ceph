@@ -256,8 +256,11 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // allow other (all!) users to see my file system
   // NOTE: echo user_allow_other >> /etc/fuse.conf
+  // NB: seems broken on Darwin
+#ifndef DARWIN
   newargv[newargc++] = "-o";
   newargv[newargc++] = "allow_other";
+#endif // DARWIN
   
   // use inos
   newargv[newargc++] = "-o";

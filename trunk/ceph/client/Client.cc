@@ -21,6 +21,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#ifdef DARWIN
+#include <sys/statvfs.h>
+#endif // DARWIN
+
 
 #include <iostream>
 using namespace std;
@@ -2526,15 +2530,29 @@ int Client::chdir(const char *path)
 }
 
 #ifdef DARWIN
-int Client::statfs(const char *path, struct statvfs *stbuf) 
+int Client::statfs(const char *path, struct statvfs *stbuf)
+{
+  bzero (stbuf, sizeof (struct statvfs));
+  // FIXME
+  stbuf->f_bsize   = 1024;
+  stbuf->f_frsize  = 1024;
+  stbuf->f_blocks  = 1024 * 1024;
+  stbuf->f_bfree   = 1024 * 1024;
+  stbuf->f_bavail  = 1024 * 1024;
+  stbuf->f_files   = 1024 * 1024;
+  stbuf->f_ffree   = 1024 * 1024;
+  stbuf->f_favail  = 1024 * 1024;
+  stbuf->f_namemax = 1024;
+
+  return 0;
+}
 #else
 int Client::statfs(const char *path, struct statfs *stbuf) 
-#endif
 {
   assert(0);  // implement me
   return 0;
 }
-
+#endif
 
 
 int Client::lazyio_propogate(int fd, off_t offset, size_t count)
