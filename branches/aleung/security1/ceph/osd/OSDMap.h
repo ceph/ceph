@@ -123,7 +123,8 @@ private:
   set<int>  out_osds;    // list of unmapped disks
   map<int,float> overload_osds; 
   map<int,entity_inst_t> osd_inst;
-  map<int,string> osd_keys; //all public keys
+  map<int,string> osd_str_keys; //all public keys in str form
+  map<int,esignPub> osd_keys; // all public key objects (cache)
 
  public:
   Crush     crush;       // hierarchical map
@@ -155,7 +156,20 @@ private:
   const set<int>& get_down_osds() { return down_osds; }
   const set<int>& get_out_osds() { return out_osds; }
   const map<int,float>& get_overload_osds() { return overload_osds; }
-  const map<int,string>& get_keys() { return osd_keys; }
+  const map<int,string>& get_key_str_map() { return osd_str_keys; }
+  const map<int,esignPub>& get_key_map() { return osd_keys; }
+  const esignPub get_key(int client) { 
+    // I have a cached key object
+    if (osd_keys.count(client)) {
+      return osd_keys[client];
+    }
+    // there must be a str key atleast for the client
+    assert(osd_str_keys.count(client));
+    esignPub tempPub = _fromStr_esignPubKey(osd_str_keys[client]);
+    osd_keys[client] = tempPub;
+    return tempPub;
+  }
+  const string& get_str_keys(int client) { return osd_str_keys[client]; }
   
   bool is_down(int osd) { return down_osds.count(osd); }
   bool is_up(int osd) { return !is_down(osd); }
@@ -229,6 +243,18 @@ private:
          i++) {
       assert(overload_osds.count(*i));
       overload_osds.erase(*i);
+    }
+    // add the incremental keys to osd_keys
+    for (map<int,string>::iterator i = inc.added_osd_keys.begin();
+         i != inc.added_osd_keys.end();
+         i++) {
+      osd_str_keys[i->first] = i->second;
+    }
+    for (list<int>::iterator i = inc.removed_osd_keys.begin();
+         i != inc.removed_osd_keys.end();
+         i++) {
+      assert(osd_str_keys.count(*i)); // sanity check
+      osd_str_keys.erase(*i);
     }
   }
 

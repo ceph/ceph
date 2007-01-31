@@ -113,6 +113,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev)
   // create public/private keys
   myPrivKey = esignPrivKey("crypto/esig1536.dat");
   myPubKey = esignPubKey(myPrivKey);
+  // write these out to disk
 
   last_tid = 0;
   num_pulling = 0;
@@ -265,13 +266,16 @@ int OSD::init()
     }
 
     // convert public key to string
+    string key_str = pubToString(myPubKey);
     
     // i'm ready!
     messenger->set_dispatcher(this);
     
     // announce to monitor i exist and have booted.
     int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDBoot(superblock), MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    //messenger->send_message(new MOSDBoot(superblock), MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    // new boot message w/ public key
+    messenger->send_message(new MOSDBoot(superblock, key_str), MSG_ADDR_MON(mon), monmap->get_inst(mon));
     
     // start the heart
     next_heartbeat = new C_Heartbeat(this);
@@ -809,6 +813,7 @@ void OSD::wait_for_new_map(Message *m)
 
 /** update_map
  * assimilate new OSDMap(s).  scan pgs, etc.
+ * Takes an OSDMap message
  */
 void OSD::handle_osd_map(MOSDMap *m)
 {
@@ -818,6 +823,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   ObjectStore::Transaction t;
   
+  // checks if I ALREADY had an OSD map
   if (osdmap) {
     dout(3) << "handle_osd_map epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -834,10 +840,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   logger->inc("mapmsg");
 
+  // parses all of the available maps to see if
+  // ive seen it, if not store it?
   // store them?
   for (map<epoch_t,bufferlist>::iterator p = m->maps.begin();
        p != m->maps.end();
        p++) {
+    // checks to see if I have seen this map?
     object_t oid = get_osdmap_object_name(p->first);
     if (store->exists(oid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << endl;
@@ -848,6 +857,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       continue;
     }
 
+    // if I have not already seen the map then store it?
     dout(10) << "handle_osd_map got full map epoch " << p->first << endl;
     //t.write(oid, 0, p->second.length(), p->second);
     store->write(oid, 0, p->second.length(), p->second, 0);
@@ -893,8 +903,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     advanced = true;
 
   epoch_t cur = superblock.current_epoch;
+  // applies all of the new maps until were up to date?
   while (cur < superblock.newest_map) {
     bufferlist bl;
+    // if there is a newer (by 1) inc map OR I have a newer map
     if (m->incremental_maps.count(cur+1) ||
         store->exists(get_inc_osdmap_object_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << endl;

@@ -21,6 +21,9 @@
 #include "MonMap.h"
 #include "Elector.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 class ObjectStore;
 class OSDMonitor;
 class MDSMonitor;
@@ -44,6 +47,10 @@ protected:
 
   // my local store
   ObjectStore *store;
+
+  // mon pub/priv keys
+  esignPriv myPrivKey;
+  esignPub myPubKey;
 
   const static int INO_ELECTOR = 1;
   const static int INO_MON_MAP = 2;
@@ -104,6 +111,33 @@ protected:
       state = STATE_LEADER;
     else
       state = STATE_PEON;
+
+    // init keys
+    myPrivKey = esignPrivKey("crypto/esig1536.dat");
+    myPubKey = esignPubKey(myPrivKey);
+  }
+  Monitor(int w, Messenger *m, MonMap *mm, esignPriv key) : 
+    whoami(w), 
+    messenger(m),
+    monmap(mm),
+    tick_timer(0),
+    store(0),
+    elector(this, w),
+    mon_epoch(0), 
+    state(STATE_STARTING),
+    leader(0),
+    osdmon(0),
+    mdsmon(0),
+    myPrivKey(key)
+  {
+    // hack leader, until election works.
+    if (whoami == 0)
+      state = STATE_LEADER;
+    else
+      state = STATE_PEON;
+
+    // init keys
+    myPubKey = esignPubKey(myPrivKey);
   }
 
   void init();

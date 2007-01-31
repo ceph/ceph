@@ -20,6 +20,9 @@
 
 #include "include/types.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 #include <set>
 #include <map>
 #include <string>

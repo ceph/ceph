@@ -20,16 +20,26 @@
 
 #include "msg/Message.h"
 #include "include/types.h"
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
 
 class MonMap {
  public:
   epoch_t   epoch;       // what epoch of the osd cluster descriptor is this
   int       num_mon;
   vector<entity_inst_t> mon_inst;
+  string pub_str_key;
+  esignPub pub_key;
+  bool keyConvert;
 
   int       last_mon;    // last mon i talked to
 
-  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {}
+  //  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s),
+  //	    last_mon(-1), keyConvert(false) {}
+  // the map constructor when I have a key
+  MonMap(int s=0,string key=NULL) : epoch(0), num_mon(s), mon_inst(s),
+			       last_mon(-1),
+			       pub_str_key(key), keyConvert(false){}
 
   void add_mon(entity_inst_t inst) {
     mon_inst.push_back(inst);
@@ -50,11 +60,27 @@ class MonMap {
     return mon_inst[m];
   }
 
+  // key mutator
+  void set_str_key(string key) {
+    pub_str_key = key;
+  }
+  
+  // key access
+  const string get_str_key() {
+    return pub_str_key;
+  }
+  const esignPub get_key() {
+    if (!keyConvert)
+      pub_key = _fromStr_esignPubKey(pub_str_key);
+    return pub_key;
+  }
+
   void encode(bufferlist& blist) {
     blist.append((char*)&epoch, sizeof(epoch));
     blist.append((char*)&num_mon, sizeof(num_mon));
     
     _encode(mon_inst, blist);
+    _encode(pub_str_key, blist);
   }
   
   void decode(bufferlist& blist) {
@@ -65,6 +91,7 @@ class MonMap {
     off += sizeof(num_mon);
 
     _decode(mon_inst, blist, off);
+    _decode(pub_str_key, blist, off);
   }
 
   int write(char *fn) {
