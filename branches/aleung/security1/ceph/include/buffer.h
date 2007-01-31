@@ -864,6 +864,33 @@ inline void _decode(std::vector<T>& s, bufferlist& bl, int& off)
   assert(s.size() == (unsigned)n);
 }
 
+// list<string>
+inline void _encode(const std::list<std::string>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (std::list<std::string>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(*it, bl);
+    n--;
+  }
+  assert(n==0);
+}
+inline void _decode(std::list<std::string>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    std::string st;
+    ::_decode(st, bl, off);
+    s.push_back(st);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
 // list<T>
 template<class T>
 inline void _encode(const std::list<T>& s, bufferlist& bl)
@@ -954,9 +981,39 @@ inline void _decode(std::map<T,bufferlist>& s, bufferlist& bl, int& off)
     T k;
     bl.copy(off, sizeof(k), (char*)&k);
     off += sizeof(k);
-    bufferlist b;
-    _decode(b, bl, off);
-    s[k] = b;
+    _decode(s[k], bl, off);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// map<T,string>
+template<class T>
+inline void _encode(const std::map<T, std::string>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::map<T, std::string>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    T k = it->first;
+    bl.append((char*)&k, sizeof(k));
+    _encode(it->second, bl);
+    n--;
+  }
+  assert(n==0);
+}
+template<class T>
+inline void _decode(std::map<T,std::string>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    T k;
+    bl.copy(off, sizeof(k), (char*)&k);
+    off += sizeof(k);
+    _decode(s[k], bl, off);
   }
   assert(s.size() == (unsigned)n);
 }
