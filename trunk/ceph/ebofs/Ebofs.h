@@ -242,7 +242,8 @@ class Ebofs : public ObjectStore {
   bool exists(object_t);
   int stat(object_t, struct stat*);
   int read(object_t, off_t off, size_t len, bufferlist& bl);
-  //int write(object_t oid, off_t off, size_t len, bufferlist& bl, bool fsync=true);
+  int is_cached(object_t oid, off_t off, size_t len);
+
   int write(object_t oid, off_t off, size_t len, bufferlist& bl, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
   int truncate_front(object_t oid, off_t size, Context *onsafe=0);
@@ -298,6 +299,7 @@ class Ebofs : public ObjectStore {
 private:
   // private interface -- use if caller already holds lock
   int _read(object_t oid, off_t off, size_t len, bufferlist& bl);
+  int _is_cached(object_t oid, off_t off, size_t len);
   int _stat(object_t oid, struct stat *st);
   int _getattr(object_t oid, const char *name, void *value, size_t size);
   int _getattrs(object_t oid, map<string,bufferptr> &aset);
