@@ -8,10 +8,24 @@
 # This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
 # behave just fine...  change ${CC} back to mpicxx if you get paranoid.
 
+#CC = g++
+#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+#LIBS = -lpthread  
+
+# Hook for extra -I options, etc.
+EXTRA_CFLAGS = 
+
+ifeq ($(target),darwin)
+# For Darwin
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
+else
+# For linux
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+endif
+
 CC = g++
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread 
-CRYPTOLIBS = /usr/lib/libcrypto++5.2.so
+LIBS = -lpthread -lcrypto++5.2
+#CRYPTOLIBS = /usr/lib/libcrypto++5.2.so
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -64,12 +78,12 @@ MON_OBJS= \
 	mon/Monitor.o\
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
+	mon/ClientMonitor.o\
 	mon/Elector.o
 
 COMMON_OBJS= \
 	msg/Messenger.o\
 	msg/Message.o\
-	msg/HostMonitor.o\
 	common/Logger.o\
 	common/Clock.o\
 	common/Timer.o\
@@ -82,14 +96,10 @@ CLIENT_OBJS= \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TCP_OBJS = \
-	msg/TCPMessenger.o\
-	msg/TCPDirectory.o
-
 CRYPTO_OBJS = \
 	crypto/CryptoLib.o
 
-TARGETS = cosd cfuse newsyn fakesyn
+TARGETS = cmon cosd cmds cfuse newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
@@ -101,16 +111,22 @@ obfs: depend obfstest
 
 
 # real bits
-cmon: cmon.cc mon.o ebofs.o msg/NewerMessenger.o common.o
-	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+mkmonmap: mkmonmap.cc common.o crypto.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o msg/NewerMessenger.o common.o
-	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o crypto.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmds: cmds.cc mds.o osdc.o msg/NewerMessenger.o common.o
-	${CC} ${CFLAGS} ${MPILIBS} $^ -o $@
+cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o crypto.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/NewerMessenger.o common.o
+cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o crypto.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+csyn: csyn.cc client.o osdc.o msg/SimpleMessenger.o common.o crypto.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+cfuse: cfuse.cc client.o osdc.o client/fuse.o msg/SimpleMessenger.o common.o crypto.o
 	${CC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
 
@@ -133,20 +149,20 @@ mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
 
 # synthetic workload
 fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o crypto.o
-	${CC} -pg ${CFLAGS} ${LIBS} ${CRYPTOLIBS} $^ -o $@
+	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o crypto.o
 	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o
+newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o crypto.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
 # + obfs
 fakesynobfs: fakesyn.cc mds.o client.o osd_obfs.o msg/FakeMessenger.o common.o
-	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} ${CRYPTOLIBS} $^ -o $@
+	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@
 
 tcpsynobfs: tcpsyn.cc mds.o client.o osd_obfs.o ${TCP_OBJS} common.o
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ 
@@ -164,8 +180,8 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 
 
 # libceph
-libceph.o: client/ldceph.o client/Client.o ${TCP_OBJS} ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
-	ld -i $^ -o $@
+libceph.o: client/ldceph.o client/Client.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
+	ar -rc $@ $^
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
@@ -181,40 +197,35 @@ mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 %.so: %.cc
 	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
-
-testmpi: test/testmpi.cc msg/MPIMessenger.cc config.o common/Timer.o common/clock.o msg/Messenger.o msg/Dispatcher.o msg/error.o
-	${MPICC} ${CFLAGS} ${LIBS} $^ -o $@
-
-
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 common.o: ${COMMON_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 ebofs.o: ${EBOFS_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 client.o: ${CLIENT_OBJS} 
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 osd.o: ${OSD_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 osdc.o: ${OSDC_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 crypto.o: ${CRYPTO_OBJS}
 	ld -i -o $@ $^
 
-osd_obfs.o: osd/OBFSStore.o osd/OSD.ccosd/PG.o osd/ObjectStore.o osd/FakeStore.o
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
+osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.o
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.o
 
 mds.o: ${MDS_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 mon.o: ${MON_OBJS}
-	ld -i -o $@ $^
+	ar -rc $@ $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@

@@ -44,7 +44,7 @@ Logger::Logger(string fn, LogType *type)
     //cout << "log " << filename << endl;
     interval = g_conf.log_interval;
     
-    start = g_clock.now();  // time 0!
+    //start = g_clock.now();  // time 0!
     last_logged = 0;
     wrote_header = -1;
     open = false;
@@ -152,7 +152,7 @@ void Logger::flush(bool force)
     start = fromstart;
   }
   fromstart -= start;
-        
+      
   while (force ||
          ((fromstart.sec() > last_logged) &&
           (fromstart.sec() - last_logged >= interval))) {

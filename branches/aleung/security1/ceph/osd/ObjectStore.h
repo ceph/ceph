@@ -22,7 +22,12 @@
 #include "include/Distribution.h"
 
 #include <sys/stat.h>
+
+#ifdef DARWIN
+#include <sys/statvfs.h>
+#else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
+#endif /* DARWIN */
 
 #include <list>
 using namespace std;

@@ -31,7 +31,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << "mds" << mds->get_nodeid() << ".bal " << (g_clock.recent_now() - mds->logger->get_start()) << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
@@ -125,14 +125,15 @@ void MDBalancer::send_heartbeat()
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->messenger->send_message(hb,
-                                 MSG_ADDR_MDS(i), MDS_PORT_BALANCER,
+                                 MSG_ADDR_MDS(i), mds->mdsmap->get_inst(i),
+				 MDS_PORT_BALANCER,
                                  MDS_PORT_BALANCER);
   }
 }
 
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  dout(25) << "=== got heartbeat " << m->get_beat() << " from " << MSG_ADDR_NICE(m->get_source()) << " " << m->get_load() << endl;
+  dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << endl;
   
   if (!mds->mdcache->get_root()) {
     dout(10) << "no root on handle" << endl;
@@ -140,7 +141,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     return;
   }
 
-  int who = MSG_ADDR_NUM(m->get_source());
+  int who = m->get_source().num();
   
   if (who == 0) {
     dout(20) << " from mds0, new epoch" << endl;

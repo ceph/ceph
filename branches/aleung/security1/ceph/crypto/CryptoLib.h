@@ -34,7 +34,7 @@
 #include<crypto++/aes.h>
 #include<crypto++/rijndael.h>
 
-#include"crypto_config.h"
+//#include"crypto_config.h"
 
 #include<iostream>
 

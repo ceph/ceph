@@ -41,6 +41,7 @@ using namespace std;
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 
+#include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientRequest.h"
@@ -218,6 +219,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
     // clients
+  case MSG_CLIENT_BOOT:
+    m = new MClientBoot();
+    break;
   case MSG_CLIENT_MOUNT:
     m = new MClientMount();
     break;

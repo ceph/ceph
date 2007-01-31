@@ -55,8 +55,10 @@ class utime_t {
   int           nsec() const { return tv.tv_usec*1000; }
 
   // ref accessors/modifiers
-  time_t&         sec_ref()  { return tv.tv_sec; } 
-  long&           usec_ref() { return tv.tv_usec; }
+  time_t&         sec_ref()  { return tv.tv_sec; }
+  // FIXME: tv.tv_usec is a __darwin_suseconds_t on Darwin.
+  // is just casting it to long& OK? 
+  long&           usec_ref() { return (long&) tv.tv_usec; }
 
   // cast to double
   operator double() {

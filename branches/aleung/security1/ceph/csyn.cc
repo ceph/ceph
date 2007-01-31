@@ -18,13 +18,14 @@ using namespace std;
 
 #include "config.h"
 
+#include "client/SyntheticClient.h"
 #include "client/Client.h"
 #include "client/fuse.h"
 
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
-       
+
 #ifndef DARWIN
 #include <envz.h>
 #endif // DARWIN
@@ -39,6 +40,7 @@ int main(int argc, char **argv, char *envp[]) {
   vector<char*> args;
   argv_to_vec(argc, argv, args);
   parse_config_options(args);
+  parse_syn_options(args);   // for SyntheticClient
 
   // args for fuse
   vec_to_argv(args, argc, argv);
@@ -55,15 +57,21 @@ int main(int argc, char **argv, char *envp[]) {
   Client *client = new Client(rank.register_entity(MSG_ADDR_CLIENT_NEW), &monmap);
   client->init();
     
+  // start syntheticclient
+  SyntheticClient *syn = new SyntheticClient(client);
+
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
   cout << "mounting" << endl;
   client->mount();
   
-  cerr << "starting fuse on pid " << getpid() << endl;
-  ceph_fuse_main(client, argc, argv);
-  cerr << "fuse finished on pid " << getpid() << endl;
-  
+  cout << "starting syn client" << endl;
+  syn->start_thread();
+
+  // wait
+  syn->join_thread();
+
+  // unmount
   client->unmount();
   cout << "unmounted" << endl;
   client->shutdown();

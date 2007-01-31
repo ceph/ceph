@@ -27,7 +27,7 @@
 #define _XOPEN_SOURCE 500
 #endif
 
-#define FUSE_USE_VERSION 22
+#define FUSE_USE_VERSION 25
 
 #include <fuse.h>
 #include <stdio.h>
@@ -36,7 +36,11 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
+#ifdef DARWIN
+#include <sys/statvfs.h>
+#else
 #include <sys/statfs.h>
+#endif // DARWIN
 
 
 // ceph stuff
@@ -185,10 +189,18 @@ static int ceph_flush(const char *path, struct fuse_file_info *fi)
 }
 */
 
+
+#ifdef DARWIN
+static int ceph_statfs(const char *path, struct statvfs *stbuf)
+{
+  return client->statfs(path, stbuf);
+}
+#else
 static int ceph_statfs(const char *path, struct statfs *stbuf)
 {
   return client->statfs(path, stbuf);
 }
+#endif
 
 
 
@@ -244,8 +256,11 @@ int ceph_fuse_main(Client *c, int argc, char *argv[])
   
   // allow other (all!) users to see my file system
   // NOTE: echo user_allow_other >> /etc/fuse.conf
+  // NB: seems broken on Darwin
+#ifndef DARWIN
   newargv[newargc++] = "-o";
   newargv[newargc++] = "allow_other";
+#endif // DARWIN
   
   // use inos
   newargv[newargc++] = "-o";

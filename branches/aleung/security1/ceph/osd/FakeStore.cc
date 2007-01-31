@@ -31,6 +31,11 @@
 //#include <sys/xattr.h>
 //#include <sys/vfs.h>
 
+#ifdef DARWIN
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif // DARWIN
+
 #include "config.h"
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug) cout << "osd" << whoami << ".fakestore "

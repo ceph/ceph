@@ -23,11 +23,9 @@ using namespace std;
 #include "config.h"
 
 #include "mon/MonMap.h"
+#include "mon/Monitor.h"
 
-#include "osd/OSD.h"
-#include "ebofs/Ebofs.h"
-
-#include "msg/NewMessenger.h"
+#include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
 
@@ -62,62 +60,64 @@ int main(int argc, char **argv)
   if (g_conf.debug_after) 
     g_timer.add_event_after(g_conf.debug_after, new C_Debug);
 
-
-  char *dev;
+  // args
   int whoami = -1;
+  char *monmap_fn = ".ceph_monmap";
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--dev") == 0) 
-      dev = args[++i];
-    else if (strcmp(args[i],"--osd") == 0)
+    if (strcmp(args[i], "--mon") == 0) 
       whoami = atoi(args[++i]);
+    else if (strcmp(args[i], "--monmap") == 0) 
+      monmap_fn = args[++i];
     else {
       cerr << "unrecognized arg " << args[i] << endl;
       return -1;
     }
   }
-  cout << "dev " << dev << endl;
   
+  MonMap monmap;
 
   if (whoami < 0) {
-    // who am i?   peek at superblock!
-    OSDSuperblock sb;
-    ObjectStore *store = new Ebofs(dev);
-    bufferlist bl;
-    store->mount();
-    int r = store->read(object_t(0,0), 0, sizeof(sb), bl);
-    if (r < 0) {
-      cerr << "couldn't read superblock object on " << dev << endl;
-      exit(0);
-    }
-    bl.copy(0, sizeof(sb), (char*)&sb);
-    store->umount();
-    delete store;
-    whoami = sb.whoami;
+    // let's assume a standalone monitor
+    cout << "starting standalone mon0" << endl;
+    whoami = 0;
+
+    // start messenger
+    rank.start_rank();
+    cout << "bound to " << rank.get_listen_addr() << endl;
+
+    // add single mon0
+    monmap.add_mon(rank.my_inst);
     
-    cout << "osd fs says i am osd" << whoami << endl;
+    // write monmap
+    cout << "writing monmap to " << monmap_fn << endl;;
+    int r = monmap.write(monmap_fn);
+    assert(r >= 0);
   } else {
-    cout << "command line arg says i am osd" << whoami << endl;
+    // i am specific monitor.
+
+    // read monmap
+    cout << "reading monmap from .ceph_monmap" << endl;
+    int r = monmap.read(monmap_fn);
+    assert(r >= 0);
+
+    // bind to a specific port
+    cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << endl;
+    tcpaddr_t addr = monmap.get_inst(whoami).addr;
+    rank.set_listen_addr(addr);
+    rank.start_rank();
   }
 
-  // load monmap
-  MonMap monmap;
-  int r = monmap.read(".ceph_monmap");
-  assert(r >= 0);
-
-  // start up network
-  rank.start_rank();
-
-  // start osd
-  Messenger *m = rank.register_entity(MSG_ADDR_OSD(whoami));
-  assert(m);
-  OSD *osd = new OSD(whoami, m, &monmap, dev);
-  osd->init();
+  // start monitor
+  Messenger *m = rank.register_entity(MSG_ADDR_MON(whoami));
+  Monitor *mon = new Monitor(whoami, m, &monmap);
+  mon->init();
 
   // wait
+  cout << "waiting for shutdown ..." << endl;
   rank.wait();
 
   // done
-  delete osd;
+  delete mon;
 
   return 0;
 }

@@ -52,8 +52,8 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << ".server "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << whoami << ".server "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
+#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
 
 
 void Server::dispatch(Message *m) 
@@ -99,11 +99,11 @@ void Server::dispatch(Message *m)
 
 void Server::handle_client_mount(MClientMount *m)
 {
-  int n = MSG_ADDR_NUM(m->get_source());
+  int n = m->get_source().num();
   dout(3) << "mount by client" << n << endl;
   mds->clientmap.add_mount(n, m->get_source_inst());
 
-  assert(whoami == 0);  // mds0 mounts/unmounts
+  assert(mds->get_nodeid() == 0);  // mds0 mounts/unmounts
 
   // ack
   messenger->send_message(new MClientMountAck(m, mds->mdsmap, mds->osdmap), 
@@ -113,10 +113,10 @@ void Server::handle_client_mount(MClientMount *m)
 
 void Server::handle_client_unmount(Message *m)
 {
-  int n = MSG_ADDR_NUM(m->get_source());
+  int n = m->get_source().num();
   dout(3) << "unmount by client" << n << endl;
 
-  assert(whoami == 0);  // mds0 mounts/unmounts
+  assert(mds->get_nodeid() == 0);  // mds0 mounts/unmounts
 
   mds->clientmap.rem_mount(n);
 
@@ -189,7 +189,7 @@ void Server::reply_request(MClientRequest *req, MClientReply *reply, CInode *tra
 
   // include trace
   if (tracei) {
-    reply->set_trace_dist( tracei, whoami );
+    reply->set_trace_dist( tracei, mds->get_nodeid() );
   }
   
   // send reply
@@ -284,7 +284,7 @@ void Server::handle_client_request(MClientRequest *req)
     ref = mdcache->get_inode(req->get_ino());   // fixme someday no ino needed?
 
     if (!ref) {
-      int next = whoami + 1;
+      int next = mds->get_nodeid() + 1;
       if (next >= mds->mdsmap->get_num_mds()) next = 0;
       dout(10) << "got request on ino we don't have, passing buck to " << next << endl;
       mds->send_message_mds(req, next, MDS_PORT_SERVER);
@@ -649,7 +649,7 @@ int Server::encode_dir_contents(CDir *dir,
     
     // hashed?
     if (dir->is_hashed() &&
-        whoami != mds->hash_dentry( dir->ino(), it->first ))
+        mds->get_nodeid() != mds->hash_dentry( dir->ino(), it->first ))
       continue;
     
     // is dentry readable?
@@ -667,7 +667,7 @@ int Server::encode_dir_contents(CDir *dir,
     // add this item
     // note: InodeStat makes note of whether inode data is readable.
     dnls.push_back( it->first );
-    inls.push_back( new InodeStat(in, whoami) );
+    inls.push_back( new InodeStat(in, mds->get_nodeid()) );
     numfiles++;
   }
   return numfiles;
@@ -728,7 +728,7 @@ void Server::handle_hash_readdir_reply(MHashReaddirReply *m)
   assert(dir->is_hashed());
   
   // move items to hashed_readdir gather
-  int from = MSG_ADDR_NUM(m->get_source());
+  int from = m->get_source().num();
   assert(dir->hashed_readdir.count(from) == 0);
   dir->hashed_readdir[from].first.splice(dir->hashed_readdir[from].first.begin(),
                                          m->get_in());
@@ -821,7 +821,7 @@ void Server::handle_client_readdir(MClientRequest *req,
     if (cur->dir)
       dirauth = cur->dir->authority();
     assert(dirauth >= 0);
-    assert(dirauth != whoami);
+    assert(dirauth != mds->get_nodeid());
     
     // forward to authority
     dout(10) << " forwarding readdir to authority " << dirauth << endl;
@@ -880,12 +880,12 @@ void Server::handle_client_readdir(MClientRequest *req,
     
     // get local bits
     encode_dir_contents(cur->dir, 
-                        dir->hashed_readdir[whoami].first,
-                        dir->hashed_readdir[whoami].second);
+                        dir->hashed_readdir[mds->get_nodeid()].first,
+                        dir->hashed_readdir[mds->get_nodeid()].second);
     
     // request other bits
     for (int i=0; i<mds->mdsmap->get_num_mds(); i++) {
-      if (i == whoami) continue;
+      if (i == mds->get_nodeid()) continue;
       mds->send_message_mds(new MHashReaddir(dir->ino()), i, MDS_PORT_SERVER);
     }
 
@@ -901,7 +901,7 @@ void Server::handle_client_readdir(MClientRequest *req,
     
     // . too
     dnls.push_back(".");
-    inls.push_back(new InodeStat(cur, whoami));
+    inls.push_back(new InodeStat(cur, mds->get_nodeid()));
     ++numfiles;
 
     // yay, reply
@@ -972,7 +972,7 @@ CInode *Server::mknod(MClientRequest *req, CInode *diri, bool okexist)
   
   // make sure it's my dentry
   int dnauth = dir->dentry_authority(name);  
-  if (dnauth != whoami) {
+  if (dnauth != mds->get_nodeid()) {
     // fw
     
     dout(7) << "mknod on " << req->get_path() << ", dentry " << *dir << " dn " << name << " not mine, fw to " << dnauth << endl;
@@ -1093,7 +1093,7 @@ void Server::handle_client_link(MClientRequest *req, CInode *ref)
 
   // make sure it's my dentry
   int dauth = dir->dentry_authority(dname);  
-  if (dauth != whoami) {
+  if (dauth != mds->get_nodeid()) {
     // fw
     dout(7) << "link on " << req->get_path() << ", dn " << dname << " in " << *dir << " not mine, fw to " << dauth << endl;
     mdcache->request_forward(req, dauth);
@@ -1191,7 +1191,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *ref, vecto
   
   string dname = req->get_filepath().last_bit();
   int dauth = dir->dentry_authority(dname);
-  if (whoami != dauth) {
+  if (mds->get_nodeid() != dauth) {
     // ugh, exported out from under us
     dout(7) << "ugh, forwarded out from under us, dentry auth is " << dauth << endl;
     mdcache->request_forward(req, dauth);
@@ -1237,7 +1237,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *ref, vecto
   } else {
     // remote: send nlink++ request, wait
     dout(7) << "target is remote, sending InodeLink" << endl;
-    mds->send_message_mds(new MInodeLink(targeti->ino(), whoami), targeti->authority(), MDS_PORT_CACHE);
+    mds->send_message_mds(new MInodeLink(targeti->ino(), mds->get_nodeid()), targeti->authority(), MDS_PORT_CACHE);
     
     // wait
     targeti->add_waiter(CINODE_WAIT_LINK,
@@ -1303,7 +1303,7 @@ void Server::handle_client_unlink(MClientRequest *req,
   // does it exist?
   CDentry *dn = dir->lookup(name);
   if (!dn) {
-    if (dnauth == whoami) {
+    if (dnauth == mds->get_nodeid()) {
       dout(7) << "handle_client_rmdir/unlink dne " << name << " in " << *dir << endl;
       reply_request(req, -ENOENT);
     } else {
@@ -1413,7 +1413,7 @@ void Server::handle_client_unlink(MClientRequest *req,
   }
 
   // am i dentry auth?
-  if (dnauth != whoami) {
+  if (dnauth != mds->get_nodeid()) {
     // not auth; forward!
     dout(7) << "handle_client_unlink not auth for " << *dir << " dn " << dn->name << ", fwd to " << dnauth << endl;
     mdcache->request_forward(req, dnauth);
@@ -1586,7 +1586,7 @@ void Server::handle_client_rename(MClientRequest *req,
   
   // make sure it's my dentry
   int srcauth = srcdir->dentry_authority(srcname);  
-  if (srcauth != whoami) {
+  if (srcauth != mds->get_nodeid()) {
     // fw
     dout(7) << "rename on " << req->get_path() << ", dentry " << *srcdir << " dn " << srcname << " not mine, fw to " << srcauth << endl;
     mdcache->request_forward(req, srcauth);
@@ -1780,8 +1780,8 @@ void Server::handle_client_rename_2(MClientRequest *req,
   dout(7) << "handle_client_rename_2 destname " << destname << " destdir " << *destdir << " auth " << destauth << endl;
   
   // 
-  if (srcauth != whoami || 
-      destauth != whoami) {
+  if (srcauth != mds->get_nodeid() || 
+      destauth != mds->get_nodeid()) {
     dout(7) << "rename has remote dest " << destauth << endl;
     dout(7) << "FOREIGN RENAME" << endl;
     
@@ -1857,8 +1857,8 @@ void Server::handle_client_rename_local(MClientRequest *req,
   //everybody = true;
   //}
 
-  bool srclocal = srcdn->dir->dentry_authority(srcdn->name) == whoami;
-  bool destlocal = destdir->dentry_authority(destname) == whoami;
+  bool srclocal = srcdn->dir->dentry_authority(srcdn->name) == mds->get_nodeid();
+  bool destlocal = destdir->dentry_authority(destname) == mds->get_nodeid();
 
   dout(7) << "handle_client_rename_local: src local=" << srclocal << " " << *srcdn << endl;
   if (destdn) {
@@ -1991,7 +1991,7 @@ void Server::handle_client_mkdir(MClientRequest *req, CInode *diri)
       newdir->is_auth() &&
       !newdir->is_hashing()) {
     int dest = rand() % mds->mdsmap->get_num_mds();
-    if (dest != whoami) {
+    if (dest != mds->get_nodeid()) {
       dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << endl;
       mdcache->migrator->export_dir(newdir, dest);
     }
@@ -2093,7 +2093,7 @@ void Server::handle_client_open(MClientRequest *req,
   if (mode != FILE_MODE_R && mode != FILE_MODE_LAZY &&
       !cur->is_auth()) {
     int auth = cur->authority();
-    assert(auth != whoami);
+    assert(auth != mds->get_nodeid());
     dout(9) << "open writeable on replica for " << *cur << " fw to auth " << auth << endl;
     
     mdcache->request_forward(req, auth);

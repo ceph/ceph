@@ -24,6 +24,7 @@
 class ObjectStore;
 class OSDMonitor;
 class MDSMonitor;
+class ClientMonitor;
 
 class Monitor : public Dispatcher {
 protected:
@@ -75,6 +76,7 @@ protected:
   // my public services
   OSDMonitor *osdmon;
   MDSMonitor *mdsmon;
+  ClientMonitor *clientmon;
 
   // messages
   void handle_shutdown(Message *m);
@@ -82,6 +84,7 @@ protected:
 
   friend class OSDMonitor;
   friend class MDSMonitor;
+  friend class ClientMonitor;
 
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
@@ -94,8 +97,7 @@ protected:
     mon_epoch(0), 
     state(STATE_STARTING),
     leader(0),
-    osdmon(0),
-    mdsmon(0)
+    osdmon(0), mdsmon(0), clientmon(0)
   {
     // hack leader, until election works.
     if (whoami == 0)
