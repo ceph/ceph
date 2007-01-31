@@ -33,6 +33,7 @@ class MonMap {
   esignPub pub_key;
   bool keyConvert;
 
+  // no key supplied, so create one
   MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {
     esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
     pub_key = esignPubKey(tempKey);
@@ -40,7 +41,7 @@ class MonMap {
     // now throw away the private key
     keyConvert = false;
   }
-  // the map constructor when I have a key
+  // the map constructor when I have a public key
   MonMap(int s,string key) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1),
 			     pub_str_key(key), keyConvert(false) {
   }
