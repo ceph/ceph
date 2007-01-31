@@ -1,0 +1,26 @@
+/**********
+ * This class constructs a user instance.
+ * Clients will act a proxies for user behavior.
+ * We should assume the client has authenticated alreadt
+ * perhaps to the kernel.
+ **********/
+#ifndef __USER_H
+#define __USER_H
+
+#include<iostream>
+using namespace std;
+
+#include"crypto/CryptoLib.h"
+using namespace CryptoLib;
+
+class User {
+  // identification
+  uid_t uid;
+  gid_t gid;
+  char *username;
+  esignPub myPubKey;
+  // a kerberos like certification ticket
+  certTicket *ticket;
+}
+
+#endif
