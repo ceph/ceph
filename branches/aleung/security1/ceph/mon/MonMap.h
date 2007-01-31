@@ -34,6 +34,10 @@ class MonMap {
   bool keyConvert;
 
   MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {
+    esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
+    pub_key = esignPubKey(tempKey);
+    pub_str_key = pubToString(pub_key);
+    // now throw away the private key
     keyConvert = false;
   }
   // the map constructor when I have a key
@@ -80,7 +84,7 @@ class MonMap {
     blist.append((char*)&num_mon, sizeof(num_mon));
     
     _encode(mon_inst, blist);
-    //_encode(pub_str_key, blist);
+    _encode(pub_str_key, blist);
   }
   
   void decode(bufferlist& blist) {
@@ -91,7 +95,7 @@ class MonMap {
     off += sizeof(num_mon);
 
     _decode(mon_inst, blist, off);
-    //_decode(pub_str_key, blist, off);
+    _decode(pub_str_key, blist, off);
   }
 
   int write(char *fn) {
