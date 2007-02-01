@@ -83,6 +83,8 @@
 #define MSG_CLIENT_MOUNT           71
 #define MSG_CLIENT_MOUNTACK        72
 #define MSG_CLIENT_UNMOUNT         73
+#define MSG_CLIENT_AUTH_USER       74
+#define MSG_CLIENT_AUTH_USER_ACK   75
 
 
 // *** MDS ***

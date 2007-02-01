@@ -44,6 +44,8 @@ using namespace std;
 #include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
+#include "messages/MClientAuthUser.h"
+#include "messages/MClientAuthUserAck.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
@@ -227,6 +229,12 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_CLIENT_MOUNTACK:
     m = new MClientMountAck();
+    break;
+  case MSG_CLIENT_AUTH_USER:
+    m = new MClientAuthUser();
+    break;
+  case MSG_CLIENT_AUTH_USER_ACK:
+    m = new MClientAuthUserAck();
     break;
   case MSG_CLIENT_REQUEST:
     m = new MClientRequest();

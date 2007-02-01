@@ -455,6 +455,12 @@ Dentry *Client::lookup(filepath& path)
 
 // -------
 
+UserCert *Client::get_user_cert(int uid)
+{
+  
+
+}
+
 MClientReply *Client::make_request(MClientRequest *req, 
                                    bool auth_best, 
                                    int use_mds)  // this param is icky, debug weirdness!
@@ -1682,6 +1688,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
 
 
+
 int Client::mknod(const char *relpath, mode_t mode) 
 { 
   client_lock.Lock();
@@ -1689,6 +1696,10 @@ int Client::mknod(const char *relpath, mode_t mode)
   string abspath;
   mkabspath(relpath, abspath);
   const char *path = abspath.c_str();
+
+  UserCert *uc = get_user_cert(getuid(), getgid());
+  // do work
+  put_user_cert(uc);
 
   dout(3) << "op: client->mknod(\"" << path << "\", " << mode << ");" << endl;
   tout << "mknod" << endl;

@@ -40,6 +40,7 @@ class ClientMonitor : public Dispatcher {
   //void send_incremental(epoch_t since, msg_addr_t dest);
 
   void handle_client_boot(class MClientBoot *m);
+  void handle_client_auth_user(class MClientAuthUser *m);
 
  public:
   ClientMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l),

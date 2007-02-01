@@ -146,7 +146,6 @@ private:
   const utime_t& get_ctime() const { return ctime; }
 
   bool is_mkfs() const { return epoch == 1; }
-  //void set_mkfs() { assert(epoch == 1); }
 
   /***** cluster state *****/
   int num_osds() { return osds.size(); }

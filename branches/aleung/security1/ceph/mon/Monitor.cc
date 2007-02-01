@@ -159,6 +159,7 @@ void Monitor::dispatch(Message *m)
 
       // clients
     case MSG_CLIENT_BOOT:
+    case MSG_CLIENT_AUTH_USER:
       clientmon->dispatch(m);
       break;
 
