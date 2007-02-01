@@ -10,8 +10,8 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << "mon" << whoami << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << "mon" << whoami << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".elector "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".elector "
 
 
 void Elector::start()
@@ -38,7 +38,7 @@ void Elector::start()
 
 void Elector::defer(int who)
 {
-  dout(5) << "defer -- i'm deferring to " << who << endl;
+  dout(5) << "defer to " << who << endl;
 
   if (electing_me) {
 	acked_me.clear();
@@ -98,6 +98,9 @@ void Elector::expire()
 
 void Elector::victory()
 {
+  leader_acked = -1;
+  electing_me = false;
+
   // tell everyone
   for (unsigned i=0; i<mon->monmap->num_mon; ++i) {
 	if (i == whoami) continue;
@@ -112,7 +115,7 @@ void Elector::victory()
 
 void Elector::handle_propose(MMonElectionPropose *m)
 {
-  dout(5) << "propose from " << m->get_source() << endl;
+  dout(5) << "handle_propose from " << m->get_source() << endl;
   int from = m->get_source().num();
 
   if (from > whoami) {
@@ -135,7 +138,7 @@ void Elector::handle_propose(MMonElectionPropose *m)
  
 void Elector::handle_ack(MMonElectionAck *m)
 {
-  dout(5) << "ack from " << m->get_source() << endl;
+  dout(5) << "handle_ack from " << m->get_source() << endl;
   int from = m->get_source().num();
   
   if (electing_me) {
@@ -157,7 +160,7 @@ void Elector::handle_ack(MMonElectionAck *m)
 
 void Elector::handle_victory(MMonElectionVictory *m)
 {
-  dout(5) << "victory from " << m->get_source() << endl;
+  dout(5) << "handle_victory from " << m->get_source() << endl;
   int from = m->get_source().num();
   
   if (from < whoami) {

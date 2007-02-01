@@ -23,6 +23,9 @@ class MMonElectionAck : public Message {
   MMonElectionAck() : Message(MSG_MON_ELECTION_ACK) {}
   
   virtual char *get_type_name() { return "election_ack"; }
+
+  void encode_payload() {}
+  void decode_payload() {}
 };
 
 #endif
