@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /**********
  * This class constructs a user instance.
  * Clients will act a proxies for user behavior.

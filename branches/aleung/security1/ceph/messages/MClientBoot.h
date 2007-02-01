@@ -18,16 +18,16 @@
 #include "msg/Message.h"
 
 class MClientBoot : public Message {
-
+  
  public:
   MClientBoot() : Message(MSG_CLIENT_BOOT) { 
   }
 
   char *get_type_name() { return "Cboot"; }
 
-  virtual void decode_payload(crope& s, int& off) {  
+  virtual void decode_payload(crope& s, int& off) {
   }
-  virtual void encode_payload(crope& s) {  
+  virtual void encode_payload(crope& s) {
   }
 };
 

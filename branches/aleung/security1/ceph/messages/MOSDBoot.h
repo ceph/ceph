@@ -38,11 +38,15 @@ class MOSDBoot : public Message {
   
   void encode_payload() {
     payload.append((char*)&sb, sizeof(sb));
+    // pass the key
+    _encode(public_key_str, payload);
   }
   void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(sb), (char*)&sb);
     off += sizeof(sb);
+
+    _decode(public_key_str, payload, off);
   }
 };
 
