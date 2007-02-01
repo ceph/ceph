@@ -64,6 +64,11 @@ void Monitor::init()
   
   // start ticker
   reset_tick();
+
+  // call election?
+  assert(monmap->num_mon != 2);
+  if (monmap->num_mon >= 3) 
+    call_election();
 }
 
 void Monitor::shutdown()
@@ -107,8 +112,12 @@ void Monitor::shutdown()
 
 void Monitor::call_election()
 {
+  if (monmap->num_mon == 1) return;
+
   dout(10) << "call_election" << endl;
   state = STATE_STARTING;
+
+  elector.start();
 
   osdmon->election_starting();
   //mdsmon->election_starting();
@@ -164,10 +173,9 @@ void Monitor::dispatch(Message *m)
 
 
       // elector messages
+    case MSG_MON_ELECTION_PROPOSE:
     case MSG_MON_ELECTION_ACK:
-    case MSG_MON_ELECTION_STATUS:
-    case MSG_MON_ELECTION_COLLECT:
-    case MSG_MON_ELECTION_REFRESH:
+    case MSG_MON_ELECTION_VICTORY:
       elector.dispatch(m);
       break;
 

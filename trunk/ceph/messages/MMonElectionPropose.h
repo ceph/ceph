@@ -12,17 +12,17 @@
  */
 
 
-#ifndef __MMONELECTIONACK_H
-#define __MMONELECTIONACK_H
+#ifndef __MMONELECTIONPROPOSE_H
+#define __MMONELECTIONPROPOSE_H
 
 #include "msg/Message.h"
 
 
-class MMonElectionAck : public Message {
+class MMonElectionPropose : public Message {
  public:
-  MMonElectionAck() : Message(MSG_MON_ELECTION_ACK) {}
+  MMonElectionPropose() : Message(MSG_MON_ELECTION_PROPOSE) {}
   
-  virtual char *get_type_name() { return "election_ack"; }
+  virtual char *get_type_name() { return "election_propose"; }
 };
 
 #endif

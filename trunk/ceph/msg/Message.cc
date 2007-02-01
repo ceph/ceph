@@ -18,9 +18,8 @@ using namespace std;
 #include "messages/MNSFailure.h"
 
 #include "messages/MMonElectionAck.h"
-#include "messages/MMonElectionCollect.h"
-#include "messages/MMonElectionRefresh.h"
-#include "messages/MMonElectionStatus.h"
+#include "messages/MMonElectionPropose.h"
+#include "messages/MMonElectionVictory.h"
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
@@ -150,17 +149,14 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     m = new MNSFailure();
     break;
 
+  case MSG_MON_ELECTION_PROPOSE:
+    m = new MMonElectionPropose;
+    break;
   case MSG_MON_ELECTION_ACK:
-    m = new MMonElectionAck();
+    m = new MMonElectionAck;
     break;
-  case MSG_MON_ELECTION_COLLECT:
-    m = new MMonElectionCollect();
-    break;
-  case MSG_MON_ELECTION_REFRESH:
-    m = new MMonElectionRefresh();
-    break;
-  case MSG_MON_ELECTION_STATUS:
-    m = new MMonElectionStatus();
+  case MSG_MON_ELECTION_VICTORY:
+    m = new MMonElectionVictory;
     break;
 
   case MSG_PING:

@@ -21,143 +21,52 @@ using namespace std;
 #include "include/types.h"
 #include "msg/Message.h"
 
+#include "include/Context.h"
+
+#include "common/Timer.h"
 
 class Monitor;
 
 
 class Elector {
- public:
-
-  //// sub-classes
-
-  // Epoch
-  class Epoch {
-  public:
-    int p_id;
-    int s_num;
-    
-    Epoch(int p_id=0, int s_num=0) {
-      this->p_id = p_id;
-      this->s_num = s_num;
-    }
-  };    
-
-
-  // State
-  class State {
-  public:
-    Epoch epoch;
-    int freshness;
-
-    State() : freshness(0) {};
-    State(Epoch& e, int f) :
-      epoch(e), freshness(f) {}
-  };
-
-
-  class View {
-  public:
-    State state;
-    bool expired;
-    View() : expired(false) {}
-    View(State& s, bool e) : state(s), expired(e) {}
-  };
-
-
-  ///////////////
  private:
   Monitor *mon;
   int whoami;
-  Mutex lock;
 
-  // used during refresh phase
-  int ack_msg_count;
-  int refresh_num;
-  
-  // used during read phase
-  int read_num;
-  int status_msg_count;
-  
-  // the leader process id
-  int leader_id;
-  // f-accessible
-  int f;
-  
-  // the processes that compose the group
-  vector<int> processes;
-  // parameters for the process
-  int main_delta;
-  int trip_delta;
-  
-  // state variables
-  map<int, State> registry;
-  map<int, View>  views;
-  map<int, View>  old_views;
+  Context *expire_event;
 
-  // get the minimum epoch in the view map
-  Epoch get_min_epoch();
+  void reset_timer();
+  void cancel_timer();
+
+  // electing me
+  bool     electing_me;
+  utime_t  start_stamp;
+  set<int> acked_me;
+
+  // electing them
+  int     leader_acked;  // who i've acked
+  utime_t ack_stamp;     // and when
   
-  // handlers for election messages
+ public:
+ 
+  void start();   // start an electing me
+  void defer(int who);
+  void expire();  // timer goes off
+  void victory();
+   
+  void handle_propose(class MMonElectionPropose *m);
   void handle_ack(class MMonElectionAck *m);
-  void handle_collect(class MMonElectionCollect *m);
-  void handle_refresh(class MMonElectionRefresh *m);
-  void handle_status(class MMonElectionStatus *m);
+  void handle_victory(class MMonElectionVictory *m);
 
+  
  public:  
   Elector(Monitor *m, int w) : mon(m), whoami(w) {
     // initialize all those values!
     // ...
   }
 
-  // timer methods
-  void read_timer();
-  void trip_timer();
-  void refresh_timer();
-  
   void dispatch(Message *m);
-
 };
-
-
-inline bool operator>(const Elector::Epoch& l, const Elector::Epoch& r) {
-  if (l.s_num == r.s_num)
-    return (l.p_id > r.p_id);
-  else
-    return (l.s_num > r.s_num);
-}
-
-inline bool operator<(const Elector::Epoch& l, const Elector::Epoch& r) {
-  if (l.s_num == r.s_num)
-    return (l.p_id < r.p_id);
-  else
-    return (l.s_num < r.s_num);
-}
-
-inline bool operator==(const Elector::Epoch& l, const Elector::Epoch& r) {
-  return ((l.s_num == r.s_num) && (l.p_id > r.p_id));
-}
-
-  
-inline bool operator>(const Elector::State& l, const Elector::State& r) 
-{
-  if (l.epoch == r.epoch)
-    return (l.freshness > r.freshness);
-  else
-    return l.epoch > r.epoch;
-}
- 
-inline bool operator<(const Elector::State& l, const Elector::State& r) 
-{
-  if (l.epoch == r.epoch)
-    return (l.freshness < r.freshness);
-  else
-    return l.epoch < r.epoch;
-}
- 
-inline bool operator==(const Elector::State& l, const Elector::State& r) 
-{
-  return ( (l.epoch == r.epoch) && (l.freshness == r.freshness) );
-}
 
 
 #endif
