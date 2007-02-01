@@ -1,0 +1,200 @@
+
+#include "Elector.h"
+#include "Monitor.h"
+
+#include "common/Timer.h"
+
+#include "messages/MMonElectionPropose.h"
+#include "messages/MMonElectionAck.h"
+#include "messages/MMonElectionVictory.h"
+
+#include "config.h"
+#undef dout
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << "mon" << whoami << " "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << "mon" << whoami << " "
+
+
+void Elector::start()
+{
+  dout(5) << "start -- can i be leader?" << endl;
+
+  leader_acked = -1;
+
+  // start by trying to elect me
+  start_stamp = g_clock.now();
+  acked_me.clear();
+  acked_me.insert(whoami);
+  electing_me = true;
+  
+  // bcast to everyone else
+  for (unsigned i=0; i<mon->monmap->num_mon; ++i) {
+	if (i == whoami) continue;
+	mon->messenger->send_message(new MMonElectionPropose,
+								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
+  }
+  
+  reset_timer();
+}
+
+void Elector::defer(int who)
+{
+  dout(5) << "defer -- i'm deferring to " << who << endl;
+
+  if (electing_me) {
+	acked_me.clear();
+	electing_me = false;
+  }
+
+  // ack them
+  leader_acked = who;
+  ack_stamp = g_clock.now();
+  mon->messenger->send_message(new MMonElectionAck,
+							   MSG_ADDR_MON(who), mon->monmap->get_inst(who));
+  
+  // set a timer
+  reset_timer();
+}
+
+
+class C_Mon_ElectionExpire : public Context {
+  Elector *elector;
+public:
+  C_Mon_ElectionExpire(Elector *e) : elector(e) { }
+  void finish(int r) {
+	elector->expire();
+  }
+};
+
+void Elector::reset_timer()
+{
+  // set the timer
+  cancel_timer();
+  expire_event = new C_Mon_ElectionExpire(this);
+  g_timer.add_event_after(g_conf.mon_lease,
+							 expire_event);
+}
+
+void Elector::cancel_timer()
+{
+  if (expire_event)
+	g_timer.cancel_event(expire_event);
+}
+
+void Elector::expire()
+{
+  dout(5) << "election timer expired" << endl;
+  
+  // did i win?
+  if (electing_me &&
+	  acked_me.size() > mon->monmap->num_mon / 2) {
+	// i win
+	victory();
+  } else {
+	// whoever i deferred to didn't declare victory quickly enough.
+	start();
+  }
+}
+
+
+void Elector::victory()
+{
+  // tell everyone
+  for (unsigned i=0; i<mon->monmap->num_mon; ++i) {
+	if (i == whoami) continue;
+	mon->messenger->send_message(new MMonElectionVictory,
+								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
+  }
+    
+  // tell monitor
+  mon->win_election(acked_me);
+}
+
+
+void Elector::handle_propose(MMonElectionPropose *m)
+{
+  dout(5) << "propose from " << m->get_source() << endl;
+  int from = m->get_source().num();
+
+  if (from > whoami) {
+	// wait, i should win!
+	if (!electing_me)
+	  start();
+  } else {
+	// they would win over me
+	if (leader_acked < 0 ||      // haven't acked anyone yet, or
+		leader_acked > from) {   // they would win over who you did ack
+	  defer(from);
+  	} else {
+	  // ignore them!
+	  dout(5) << "no, we already acked " << leader_acked << endl;
+	}
+  }
+  
+  delete m;
+}
+ 
+void Elector::handle_ack(MMonElectionAck *m)
+{
+  dout(5) << "ack from " << m->get_source() << endl;
+  int from = m->get_source().num();
+  
+  if (electing_me) {
+	// thanks
+	acked_me.insert(from);
+	dout(5) << " so far i have " << acked_me << endl;
+	
+	// is that _everyone_?
+	if (acked_me.size() == mon->monmap->num_mon) {
+	  // if yes, shortcut to election finish
+	  victory();
+	}
+  } else {
+	// ignore, i'm deferring already.
+  }
+  
+  delete m;
+}
+
+void Elector::handle_victory(MMonElectionVictory *m)
+{
+  dout(5) << "victory from " << m->get_source() << endl;
+  int from = m->get_source().num();
+  
+  if (from < whoami) {
+	// ok, fine, they win
+	mon->lose_election(from);
+
+	// cancel my timer
+	cancel_timer();	
+  } else {
+	// no, that makes no sense, i should win.  start over!
+	start();
+  }
+}
+
+
+
+
+void Elector::dispatch(Message *m)
+{
+  switch (m->get_type()) {
+  case MSG_MON_ELECTION_ACK:
+	handle_ack((MMonElectionAck*)m);
+	break;
+    
+  case MSG_MON_ELECTION_PROPOSE:
+	handle_propose((MMonElectionPropose*)m);
+	break;
+    
+  case MSG_MON_ELECTION_VICTORY:
+	handle_victory((MMonElectionVictory*)m);
+	break;
+	
+  default:
+	assert(0);
+  }
+}
+
+
+
+
