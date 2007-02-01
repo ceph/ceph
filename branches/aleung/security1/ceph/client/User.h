@@ -21,6 +21,18 @@ class User {
   esignPub myPubKey;
   // a kerberos like certification ticket
   certTicket *ticket;
+
+ public:
+  // the pub/prv key pair must exist before hand. The user
+  // presumably logs in with a passwd which relates
+  // to the key gen
+  User(uid_t u, gid g, char *uname, esignPub key) :
+    uid(u),
+    gid(g),
+    username(uname),
+    myPubKey(key)
+    { }
+    
 }
 
 #endif
