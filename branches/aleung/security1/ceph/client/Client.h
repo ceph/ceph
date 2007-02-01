@@ -53,6 +53,7 @@ using namespace __gnu_cxx;
 class Filer;
 class Objecter;
 class ObjectCacher;
+class Ticket;
 
 extern class LogType client_logtype;
 extern class Logger  *client_logger;
@@ -482,6 +483,14 @@ protected:
   void fill_stat(inode_t& inode, struct stat *st);
   void fill_statlite(inode_t& inode, struct statlite *st);
 
+  // security
+  map<uid_t,Ticket*> user_ticket;
+  map<uid_t,int>     user_ticket_ref;
+  map<uid_t,list<Cond*> >   ticket_waiter_cond;
+
+  Ticket *get_user_ticket(uid_t uid, gid_t gid);
+  void put_user_ticket(Ticket *tk);
+
 
   // friends
   friend class SyntheticClient;
@@ -502,6 +511,9 @@ protected:
   void handle_mount_ack(class MClientMountAck*);
   void handle_unmount_ack(Message*);
   void handle_mds_map(class MMDSMap *m);
+
+  // user tickets
+  void handle_auth_user_ack(class MClientAuthUserAck *m);
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);

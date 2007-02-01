@@ -18,12 +18,13 @@
 #include "msg/Message.h"
 
 class MClientAuthUserAck : public Message {
-
  public:
   MClientAuthUserAck() : Message(MSG_CLIENT_AUTH_USER_ACK) { 
   }
 
   char *get_type_name() { return "client_auth_user_ack"; }
+
+  uid_t get_uid() { return 0; }  // fixme
 
   void decode_payload() {  
   }

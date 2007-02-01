@@ -93,6 +93,6 @@ public:
   //bl.append((char*)&uid,sizeof(uid));
   //bl.copy(off,sizeof(uid),(char*)&uid);
   //off += sizeof(uid);
-}
+};
 
 #endif

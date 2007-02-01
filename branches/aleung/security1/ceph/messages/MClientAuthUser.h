@@ -18,17 +18,39 @@
 #include "msg/Message.h"
 
 class MClientAuthUser : public Message {
-
+  string username;
+  uid_t uid;
+  gid_t gid;
+  string pubKey;
+  
  public:
-  MClientAuthUser() : Message(MSG_CLIENT_AUTH_USER) { 
-  }
+  MClientAuthUser() : Message(MSG_CLIENT_AUTH_USER) {}
+  MClientAuthUser(string un, uid_t u, gid_t g, string k) : 
+    Message(MSG_CLIENT_AUTH_USER), username(un), uid(u), gid(g), pubKey(k) { }
 
   char *get_type_name() { return "client_auth_user"; }
+  const string& get_str_key() { return pubKey; }
+  //esignPub get_key() { return _fromString_esignPubKey(pubKey); }
+  string get_username() { return username; }
+  uid_t get_uid() { return uid; }
+  gid_t get_gid() { return gid; }
 
-  void decode_payload() {  
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(uid), (char*)&uid);
+    off += sizeof(uid);
+    payload.copy(off, sizeof(gid), (char*)&gid);
+    off += sizeof(gid);
+    _decode(username, payload, off);
+    _decode(pubKey, payload, off);
   }
-  void encode_payload() {  
+  virtual void encode_payload() {
+    payload.append((char*)&uid, sizeof(uid));
+    payload.append((char*)&gid, sizeof(gid));
+    _encode(username, payload);
+    _encode(pubKey, payload);
   }
+
 };
 
 #endif
