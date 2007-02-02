@@ -47,8 +47,10 @@ namespace CryptoLib {
   enum {MD5DIGESTSIZE=16, SHA1DIGESTSIZE=20, SHA256DIGESTSIZE=32,
 	SHA384DIGESTSIZE=48, SHA512DIGESTSIZE=64};
   enum {RJ128KEYSIZE=16, RJBLOCKSIZE=16, RC5KEYSIZE=16, RC5BLOCKSIZE=8};
+  enum {ESIGNSIGSIZE=192};
 
   typedef CryptoPP::SecByteBlock SigBuf;
+  typedef CryptoPP::FixedSizeSecBlock<byte,ESIGNSIGSIZE> FixedSigBuf;
   typedef CryptoPP::ESIGN<CryptoPP::SHA>::Signer esignPriv;
   typedef CryptoPP::ESIGN<CryptoPP::SHA>::Verifier esignPub;
   typedef CryptoPP::RSASSA_PKCS1v15_SHA_Signer rsaPriv;

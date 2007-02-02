@@ -30,7 +30,7 @@ class MClientAuthUser : public Message {
 
   char *get_type_name() { return "client_auth_user"; }
   const string& get_str_key() { return pubKey; }
-  //esignPub get_key() { return _fromString_esignPubKey(pubKey); }
+  esignPub get_key() { return _fromString_esignPubKey(pubKey); }
   string get_username() { return username; }
   uid_t get_uid() { return uid; }
   gid_t get_gid() { return gid; }

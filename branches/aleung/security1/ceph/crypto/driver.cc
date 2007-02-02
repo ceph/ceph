@@ -63,6 +63,25 @@ int main(int argc, char* argv[]) {
   esignPriv privKey = esignPrivKey(keyInput);
   esignPub pubKey = esignPubKey(privKey);
   SigBuf mySignature = esignSig(signMsg, strlen((const char*)signMsg), privKey);
+  // testing --> remove me!
+  byte testBuf[mySignature.size()];
+  memcpy((void*)testBuf,(void*)mySignature, mySignature.size());
+  //SigBuf testSecBuf = new SigBuf(testBuf, mySignature.size());
+  SigBuf testSecBuf(testBuf, mySignature.size());
+  FixedSigBuf testFixedBuf;
+  testFixedBuf.Assign(testSecBuf, testSecBuf.size());
+  //memcpy((void*)testSecBuf, (void*)testBuf, mySignature.size());
+  cout << "sizeof(testBuf)=" << sizeof(testBuf) << endl;
+  cout << "sizeof(testSecBuf)=" << sizeof(testSecBuf) << " and .size()=" << testSecBuf.size() << endl;
+  cout << "sizeof(testFixedBuf)=" << sizeof(testFixedBuf) << " and .size()=" << testFixedBuf.size() << endl;
+  SigBuf finalSig;
+  finalSig.Assign(testFixedBuf, testFixedBuf.size());
+  
+  if (esignVer(signMsg, strlen((const char*)signMsg), finalSig, pubKey))
+    cout << "TESTCOPY signature verification SUCCEDED" << endl;
+  else
+    cout << "TESTCOPY signature verification FAILED" << endl;
+  
   if (esignVer(signMsg, strlen((const char*)signMsg), mySignature, pubKey))
     cout << "ESIGN signature verification SUCCEDED" << endl;
   else
