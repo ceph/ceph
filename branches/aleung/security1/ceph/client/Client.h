@@ -39,6 +39,12 @@
 
 #include "FileCache.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
+#include "crypto/Ticket.h"
+//#include "User.h"
+
 // stl
 #include <set>
 #include <map>

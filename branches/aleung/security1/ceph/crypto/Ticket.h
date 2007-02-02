@@ -30,7 +30,7 @@ class Ticket {
   string pubKey;
   esignPub realKey;
   FixedSigBuf allocSig;
-  SigBug signature;
+  SigBuf signature;
   bool keyConverted;
   bool sigConverted;
 
