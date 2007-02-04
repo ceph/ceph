@@ -88,7 +88,8 @@ class Context;
                                     |CDIR_STATE_DIRTY)  
 #define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT\
                                     |CDIR_STATE_EXPORT\
-                                    |CDIR_STATE_IMPORTINGEXPORT)
+                                    |CDIR_STATE_IMPORTINGEXPORT\
+                                    |CDIR_STATE_FROZENTREE)
 #define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
                                     |CDIR_STATE_FROZENTREE\
                                     |CDIR_STATE_FROZENDIR\

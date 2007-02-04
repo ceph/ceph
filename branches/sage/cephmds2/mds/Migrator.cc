@@ -210,8 +210,90 @@ void Migrator::export_empty_import(CDir *dir)
 
 
 
+
 // ==========================================================
-// IMPORT/EXPORT
+// mds failure handling
+
+void Migrator::handle_mds_failure(int who)
+{
+  dout(5) << "handle_mds_failure mds" << who << endl;
+
+  // check my exports
+  map<CDir*,int>::iterator p = export_state.begin();
+  while (p != export_state.end()) {
+    map<CDir*,int>::iterator next = p;
+    next++;
+    CDir *dir = p->first;
+    
+    if (export_peer[dir] == who) {
+      // the guy i'm exporting to failed.  
+      // clean up.
+      dout(10) << "cleaning up export state " << p->second << " of " << *dir << endl;
+      
+      switch (p->second) {
+      case EXPORT_DISCOVERING:
+	dout(10) << "state discovering : canceling freeze and removing auth_pin" << endl;
+	dir->unfreeze_tree();  // cancel the freeze
+	dir->auth_unpin();     // remove the auth_pin (that was holding up the freeze)
+	break;
+
+      case EXPORT_FREEZING:
+	dout(10) << "state freezing : canceling freeze" << endl;
+	dir->unfreeze_tree();  // cancel the freeze
+	break;
+
+      case EXPORT_LOGGINGSTART:
+      case EXPORT_PREPPING:
+	dout(10) << "state loggingstart|prepping : logging EExportFinish(false)" << endl;
+	mds->mdlog->submit_entry(new EExportFinish(dir,false));
+	// logger will unfreeze.
+	break;
+
+      case EXPORT_EXPORTING:
+	dout(10) << "state exporting : logging EExportFinish(false), reversing, and unfreezing" << endl;
+	mds->mdlog->submit_entry(new EExportFinish(dir,false));
+	reverse_export(dir);
+	dir->unfreeze_tree();
+	break;
+
+      case EXPORT_LOGGINGFINISH:
+	dout(10) << "state loggingfinish : doing nothing, we were successful." << endl;
+	break;
+
+      default:
+	assert(0);
+      }
+
+      export_state.erase(dir);
+      export_peer.erase(dir);
+      
+    } else {
+      // third party failed.  potential peripheral damage?
+      if (p->second == EXPORT_EXPORTING) {
+	// yeah, i'm waiting for acks, let's fake theirs.
+	if (export_notify_ack_waiting[dir].count(who)) {
+	  dout(10) << "faking export_dir_notify_ack from mds" << who
+		   << " on " << *dir << " to mds" << export_peer[dir] 
+		   << endl;
+	  export_notify_ack_waiting[dir].erase(who);
+	  if (export_notify_ack_waiting[dir].empty())
+	    export_dir_acked(dir);
+	}
+      }
+    }
+    
+    // next!
+    p = next;
+  }
+}
+
+
+
+
+
+
+// ==========================================================
+// EXPORT
 
 
 class C_MDC_ExportFreeze : public Context {
@@ -223,7 +305,8 @@ public:
   C_MDC_ExportFreeze(Migrator *m, CDir *e, int d) :
 	mig(m), ex(e), dest(d) {}
   virtual void finish(int r) {
-    mig->export_dir_frozen(ex, dest);
+    if (r >= 0)
+      mig->export_dir_frozen(ex, dest);
   }
 };
 
@@ -266,8 +349,9 @@ void Migrator::export_dir(CDir *dir,
   }
 
   // ok, let's go.
-
-  exporting.insert(dir);
+  assert(export_state.count(dir) == 0);
+  export_state[dir] = EXPORT_DISCOVERING;
+  export_peer[dir] = dest;
 
   // send ExportDirDiscover (ask target)
   mds->send_message_mds(new MExportDirDiscover(dir->inode), dest, MDS_PORT_MIGRATOR);
@@ -294,6 +378,9 @@ void Migrator::handle_export_dir_discover_ack(MExportDirDiscoverAck *m)
   
   dout(7) << "export_dir_discover_ack from " << m->get_source()
 	  << " on " << *dir << ", releasing auth_pin" << endl;
+
+  export_state[dir] = EXPORT_FREEZING;
+
   dir->auth_unpin();   // unpin to allow freeze to complete
   
   delete m;  // done
@@ -318,6 +405,7 @@ void Migrator::export_dir_frozen(CDir *dir,
 {
   // subtree is now frozen!
   dout(7) << "export_dir_frozen on " << *dir << " to " << dest << endl;
+  export_state[dir] = EXPORT_LOGGINGSTART;
 
   show_imports();
 
@@ -396,6 +484,17 @@ void Migrator::export_dir_frozen(CDir *dir,
 void Migrator::export_dir_frozen_logged(CDir *dir, MExportDirPrep *prep, int dest)
 {
   dout(7) << "export_dir_frozen_logged " << *dir << endl;
+
+  if (export_state.count(dir) == 0 ||
+      export_state[dir] != EXPORT_LOGGINGSTART) {
+    // export must have aborted.  
+    dout(7) << "export must have aborted, unfreezing and deleting me old prep message" << endl;
+    delete prep;
+    dir->unfreeze_tree();  // cancel the freeze
+    return;
+  }
+
+  export_state[dir] = EXPORT_PREPPING;
   mds->send_message_mds(prep, dest, MDS_PORT_MIGRATOR);
 }
 
@@ -408,7 +507,16 @@ void Migrator::handle_export_dir_prep_ack(MExportDirPrepAck *m)
 
   dout(7) << "export_dir_prep_ack " << *dir << ", starting export" << endl;
   
+  if (export_state.count(dir) == 0 ||
+      export_state[dir] != EXPORT_PREPPING) {
+    // export must have aborted.  
+    dout(7) << "export must have aborted, unfreezing" << endl;
+    dir->unfreeze_tree();
+    return;
+  }
+
   // start export.
+  export_state[dir] = EXPORT_EXPORTING;
   export_dir_go(dir, m->get_source().num());
 
   // done
@@ -431,6 +539,8 @@ void Migrator::export_dir_go(CDir *dir,
   // update imports/exports
   CDir *containing_import = cache->get_auth_container(dir);
 
+  set<CDir*> bounds;
+
   if (containing_import == dir) {
     dout(7) << " i'm rexporting a previous import" << endl;
     assert(dir->is_import());
@@ -446,6 +556,7 @@ void Migrator::export_dir_go(CDir *dir,
 
       // add to export message
       req->add_export(nested);
+      bounds.insert(nested);
       
       // nested beneath our new export *in; remove!
       dout(7) << " export " << *nested << " was nested beneath us; removing from export list(s)" << endl;
@@ -482,6 +593,7 @@ void Migrator::export_dir_go(CDir *dir,
 
         // add to msg
         req->add_export(nested);
+	bounds.insert(nested);
       } else {
         dout(12) << " export " << *nested << " is under other export " << *containing_export << ", which is unrelated" << endl;
         assert(cache->get_auth_container(containing_export) != containing_import);
@@ -489,11 +601,16 @@ void Migrator::export_dir_go(CDir *dir,
     }
   }
 
+
   // note new authority (locally)
   if (dir->inode->authority() == dest)
     dir->set_dir_auth( CDIR_AUTH_PARENT );
   else
     dir->set_dir_auth( dest );
+
+  // note bounds
+  export_bounds[dir].swap(bounds);
+
 
   // make list of nodes i expect an export_dir_notify_ack from
   //  (everyone w/ this dir open, but me!)
@@ -513,7 +630,7 @@ void Migrator::export_dir_go(CDir *dir,
   assert(export_notify_ack_waiting[dir].count( dest ));
 
   // fill export message with cache data
-  C_Contexts *fin = new C_Contexts;
+  C_Contexts *fin = new C_Contexts;       // collect all the waiters
   int num_exported_inodes = export_dir_walk( req, 
                                              fin, 
                                              dir,   // base
@@ -776,24 +893,112 @@ void Migrator::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
   assert(export_notify_ack_waiting[dir].count(from));
   export_notify_ack_waiting[dir].erase(from);
 
+  dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
+	  << ", still need (" << export_notify_ack_waiting[dir] << ")" << endl;
+  
   // done?
   if (export_notify_ack_waiting[dir].empty()) {
-    export_notify_ack_waiting.erase(dir);
-
-    dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
-            << ", last one!" << endl;
-
-    // log export completion, then finish (unfreeze, trigger finish context, etc.)
-    mds->mdlog->submit_entry(new EExportFinish(dir, true),
-			     new C_MDS_ExportFinishLogged(this, dir));
-
+    export_dir_acked(dir);
   } else {
     dout(7) << "handle_export_dir_notify_ack on " << *dir << " from " << from 
             << ", still waiting for " << export_notify_ack_waiting[dir] << endl;
   }
-
+  
   delete m;
 }
+
+
+
+/*
+ * this happens if hte dest failes after i send teh export data but before it is acked
+ * that is, we don't know they safely received and logged it, so we reverse our changes
+ * and go on.
+ */
+void Migrator::reverse_export(CDir *dir)
+{
+  dout(7) << "reverse_export " << *dir << endl;
+  
+  assert(export_state[dir] == EXPORT_EXPORTING);
+  assert(export_bounds.count(dir));
+  
+  set<CDir*> bounds;
+  bounds.swap(export_bounds[dir]);
+  export_bounds.erase(dir);
+
+  // -- adjust dir_auth --
+  // base
+  CDir *im = dir;
+  if (dir->get_inode()->authority() == mds->get_nodeid()) {
+    // parent is already me.  adding to existing import.
+    im = mds->mdcache->get_auth_container(dir);
+    assert(im);
+    mds->mdcache->nested_exports[im].erase(dir);
+    dir->set_dir_auth( CDIR_AUTH_PARENT );     
+    dir->state_set(CDIR_STATE_EXPORT);
+    dir->get(CDir::PIN_EXPORT);
+  } else {
+    // parent isn't me.  new import.
+    mds->mdcache->imports.insert(dir);
+    dir->set_dir_auth( mds->get_nodeid() );               
+    dir->state_set(CDIR_STATE_IMPORT);
+    dir->get(CDir::PIN_IMPORT);
+  }
+
+  dout(10) << "  base " << *dir << endl;
+  if (dir != im)
+    dout(10) << "  under " << *im << endl;
+  
+  // bounds
+  for (set<CDir*>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CDir *bd = *p;
+    
+    if (bd->get_dir_auth() == mds->get_nodeid()) {
+      // still me.  was an import. 
+      mds->mdcache->imports.erase(bd);
+      bd->set_dir_auth( CDIR_AUTH_PARENT );   
+      bd->state_clear(CDIR_STATE_IMPORT);
+      bd->put(CDir::PIN_IMPORT);
+      // move nested exports.
+      for (set<CDir*>::iterator q = mds->mdcache->nested_exports[bd].begin();
+	   q != mds->mdcache->nested_exports[bd].end();
+	   ++q) 
+	mds->mdcache->nested_exports[im].insert(*q);
+      mds->mdcache->nested_exports.erase(bd);	
+    } else {
+      // not me anymore.  now an export.
+      mds->mdcache->exports.insert(bd);
+      mds->mdcache->nested_exports[im].insert(bd);
+      assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
+      bd->set_dir_auth( CDIR_AUTH_UNKNOWN );
+      bd->state_set(CDIR_STATE_EXPORT);
+      bd->get(CDir::PIN_EXPORT);
+    }
+    
+    dout(10) << "  bound " << *bd << endl;
+  }
+
+
+  // -- adjust auth bits --
+  
+  
+
+
+}
+
+void Migrator::export_dir_acked(CDir *dir)
+{
+  dout(7) << "export_dir_acked " << *dir << endl;
+  export_notify_ack_waiting.erase(dir);
+  
+  export_state[dir] = EXPORT_LOGGINGFINISH;
+  export_bounds.erase(dir);
+  
+  // log export completion, then finish (unfreeze, trigger finish context, etc.)
+  mds->mdlog->submit_entry(new EExportFinish(dir, true),
+			   new C_MDS_ExportFinishLogged(this, dir));
+}  
 
 
 /*
@@ -801,16 +1006,23 @@ void Migrator::handle_export_dir_notify_ack(MExportDirNotifyAck *m)
  */
 void Migrator::export_dir_finish(CDir *dir)
 {
-  // send finish/commit to new auth
-  mds->send_message_mds(new MExportDirFinish(dir->ino()), dir->authority(), MDS_PORT_MIGRATOR);
-  
-  // remove from exporting list
-  exporting.erase(dir);
-  
-  // unfreeze
-  dout(7) << "export_dir_finish " << *dir << ", unfreezing" << endl;
-  dir->unfreeze_tree();
+  dout(7) << "export_dir_finish " << *dir << endl;
 
+  if (export_state.count(dir)) {
+    // send finish/commit to new auth
+    mds->send_message_mds(new MExportDirFinish(dir->ino()), dir->authority(), MDS_PORT_MIGRATOR);
+
+    // remove from exporting list
+    export_state.erase(dir);
+    export_peer.erase(dir);
+  } else {
+    dout(7) << "target must have failed, not sending final commit message.  export succeeded anyway." << endl;
+  }
+    
+  // unfreeze
+  dout(7) << "export_dir_finish unfreezing" << endl;
+  dir->unfreeze_tree();
+  
   // unpin path
   dout(7) << "export_dir_finish unpinning path" << endl;
   vector<CDentry*> trace;
@@ -874,9 +1086,9 @@ void Migrator::export_dir_finish(CDir *dir)
 
 
 
+// ==========================================================
+// IMPORT
 
-
-//  IMPORTS
 
 class C_MDC_ExportDirDiscover : public Context {
   Migrator *mig;
@@ -939,6 +1151,9 @@ void Migrator::handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, i
   
   // pin auth too, until the import completes.
   in->auth_pin();
+
+  import_state[in->ino()] = IMPORT_DISCOVERED;
+
   
   // reply
   dout(7) << " sending export_dir_discover_ack on " << *in << endl;
@@ -993,6 +1208,9 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
     // auth pin too
     dir->auth_pin();
     diri->auth_unpin();
+
+    // change import state
+    import_state[diri->ino()] = IMPORT_PREPPING;
     
     // assimilate traces to exports
     for (list<CInodeDiscover*>::iterator it = m->get_inodes().begin();
@@ -1040,6 +1258,9 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
       CInode *in = cache->get_inode(*it);
       assert(in);
       
+      // note bound.
+      import_bounds[dir->ino()].insert(*it);
+
       if (!in->dir) {
         dout(7) << "  opening nested export on " << *in << endl;
         cache->open_remote_dir(in,
@@ -1089,7 +1310,10 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
     dout(7) << " all ready, sending export_dir_prep_ack on " << *dir << endl;
     mds->send_message_mds(new MExportDirPrepAck(dir->ino()),
 			  m->get_source().num(), MDS_PORT_MIGRATOR);
-    
+
+    // note new state
+    import_state[diri->ino()] = IMPORT_PREPPED;
+
     // done 
     delete m;
   }
@@ -1216,8 +1440,8 @@ void Migrator::handle_export_dir(MExportDir *m)
     // mark export point frozenleaf
     ex->get(CDir::PIN_FREEZELEAF);
     ex->state_set(CDIR_STATE_FROZENTREELEAF);
-    import_freeze_leaves[dir->ino()].insert(ex);  // and take note!
-
+    assert(import_bounds[dir->ino()].count(*it));    // we took note during prep stage
+    
     // remove our pin
     ex->put(CDir::PIN_IMPORTINGEXPORT);
     ex->state_clear(CDIR_STATE_IMPORTINGEXPORT);
@@ -1281,10 +1505,15 @@ void Migrator::handle_export_dir(MExportDir *m)
   // adjust popularity
   mds->balancer->add_import(dir);
 
+  dout(7) << "handle_export_dir did " << *dir << endl;
+
   // log it
   mds->mdlog->submit_entry(le,
 			   new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num(), 
 							  imported_subdirs, m->get_exports()));
+
+  // note state
+  import_state[dir->ino()] = IMPORT_LOGGINGSTART;
 
   // some stats
   if (mds->logger) {
@@ -1303,7 +1532,8 @@ void Migrator::import_dir_logged_start(CDir *dir, int from,
 {
   dout(7) << "import_dir_logged " << *dir << endl;
 
-  assert(0); // test die
+  // note state
+  import_state[dir->ino()] = IMPORT_ACKING;
 
   // send notify's etc.
   dout(7) << "sending notifyack for " << *dir << " to old auth mds" << from << endl;
@@ -1349,6 +1579,9 @@ void Migrator::handle_export_dir_finish(MExportDirFinish *m)
   dout(7) << "handle_export_dir_finish logging import_finish on " << *dir << endl;
   assert(dir->is_auth());
 
+  // note state
+  import_state[dir->ino()] = IMPORT_LOGGINGFINISH;
+
   // log
   mds->mdlog->submit_entry(new EImportFinish(dir, true),
 			   new C_MDS_ImportDirLoggedFinish(this,dir));
@@ -1357,34 +1590,38 @@ void Migrator::handle_export_dir_finish(MExportDirFinish *m)
 
 void Migrator::import_dir_logged_finish(CDir *dir)
 {
-  dout(7) << "import_dir_finish" << endl;
-
-  dout(5) << "done with import of " << *dir << endl;
-  show_imports();
-  if (mds->logger) {
-    mds->logger->set("nex", cache->exports.size());
-    mds->logger->set("nim", cache->imports.size());
-  }
+  dout(7) << "import_dir_logged_finish " << *dir << endl;
 
   // un auth pin (other exports can now proceed)
   dir->auth_unpin();  
   
   // unfreeze!
-  for (set<CDir*>::iterator p = import_freeze_leaves[dir->ino()].begin();
-       p != import_freeze_leaves[dir->ino()].end();
+  for (set<inodeno_t>::iterator p = import_bounds[dir->ino()].begin();
+       p != import_bounds[dir->ino()].end();
        ++p) {
-    (*p)->put(CDir::PIN_FREEZELEAF);
-    (*p)->state_clear(CDIR_STATE_FROZENTREELEAF);
+    CInode *diri = mds->mdcache->get_inode(*p);
+    CDir *dir = diri->dir;
+    assert(dir->state_test(CDIR_STATE_FROZENTREELEAF));
+    dir->put(CDir::PIN_FREEZELEAF);
+    dir->state_clear(CDIR_STATE_FROZENTREELEAF);
   }
-  import_freeze_leaves.erase(dir->ino());
 
   dir->unfreeze_tree();
       
+  // clear import state (we're done!)
+  import_state.erase(dir->ino());
+  import_bounds.erase(dir->ino());
 
   // ok now finish contexts
   dout(5) << "finishing any waiters on imported data" << endl;
   dir->finish_waiting(CDIR_WAIT_IMPORTED);
 
+  // log it
+  if (mds->logger) {
+    mds->logger->set("nex", cache->exports.size());
+    mds->logger->set("nim", cache->imports.size());
+  }
+  show_imports();
 
   // is it empty?
   if (dir->get_size() == 0 &&
@@ -1510,10 +1747,11 @@ int Migrator::import_dir_block(bufferlist& bl,
   // add to journal entry
   le->metablob.add_dir(dir, true);  // Hmm: false would be okay in some cases
 
+  int num_imported = 0;
+
   if (dir->is_hashed()) {
 
     // do nothing; dir is hashed
-    return 0;
   } else {
     // take all waiters on this dir
     // NOTE: a pass of imported data is guaranteed to get all of my waiters because
@@ -1529,7 +1767,6 @@ int Migrator::import_dir_block(bufferlist& bl,
     dout(15) << "doing contents" << endl;
     
     // contents
-    int num_imported = 0;
     long nden = dstate.get_nden();
 
     for (; nden>0; nden--) {
@@ -1586,8 +1823,10 @@ int Migrator::import_dir_block(bufferlist& bl,
       le->metablob.add_dentry(dn, true);  // Hmm: might we do dn->is_dirty() here instead?  
     }
 
-    return num_imported;
   }
+
+  dout(7) << " import_dir_block done " << *dir << endl;
+  return num_imported;
 }
 
 

@@ -61,9 +61,20 @@ private:
   MDS *mds;
   MDCache *cache;
 
+  // -- exports --
+  // export stages.  used to clean up intelligently if there's a failure.
+  const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
+  const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
+  const static int EXPORT_LOGGINGSTART  = 3;  // we're logging EExportStart
+  const static int EXPORT_PREPPING      = 4;  // sending dest spanning tree to export bounds
+  const static int EXPORT_EXPORTING     = 5;  // sent actual export, waiting for acks
+  const static int EXPORT_LOGGINGFINISH = 6; // logging EExportFinish
+  
   // export fun
-  set<CDir*>             exporting;
-  map<CDir*, set<int> >  export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
+  map<CDir*, int>              export_state;
+  map<CDir*, int>              export_peer;
+  map<CDir*, set<CDir*> >      export_bounds;
+  map<CDir*, set<int> >        export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
   map<CDir*, list<inodeno_t> > export_proxy_inos;
   map<CDir*, list<inodeno_t> > export_proxy_dirinos;
   
@@ -72,14 +83,26 @@ private:
   set<inodeno_t>                    stray_export_warnings; // notifies i haven't seen
   map<inodeno_t, MExportDirNotify*> stray_export_notifies;
   
-  // import muck
-  map<inodeno_t, set<CDir*> > import_freeze_leaves;
 
-  // hashing madness
+  // -- imports --
+  const static int IMPORT_DISCOVERED    = 1; // waiting for prep
+  const static int IMPORT_PREPPING      = 2; // opening dirs on bounds
+  const static int IMPORT_PREPPED       = 3; // opened bounds, waiting for import
+  const static int IMPORT_LOGGINGSTART  = 3; // got import, logging EImportStart
+  const static int IMPORT_ACKING        = 4; // logged, sent acks
+  const static int IMPORT_LOGGINGFINISH = 5;
+
+  map<inodeno_t,int>             import_state;
+  map<inodeno_t,set<inodeno_t> > import_bounds;
+
+
+  // -- hashing madness --
   multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
   // maps frozen_dir_ino's to waiting-for-discover ino's.
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
+
+
 
 public:
   // -- cons --
@@ -87,13 +110,28 @@ public:
 
   void dispatch(Message*);
 
-  //bool is_importing();
-  bool is_exporting(CDir *dir = 0) {
-    if (dir)
-      return exporting.count(dir);
-    else 
-      return !exporting.empty();
+  
+  // -- status --
+  int is_exporting(CDir *dir) {
+    if (export_state.count(dir)) return export_state[dir];
+    return 0;
   }
+  bool is_exporting() { return !export_state.empty(); }
+  int is_importing(inodeno_t dirino) {
+    if (import_state.count(dirino)) return import_state[dirino];
+    return 0;
+  }
+  bool is_importing() { return !import_state.empty(); }
+  const set<inodeno_t>& get_import_bounds(inodeno_t base) { 
+    assert(import_bounds.count(base));
+    return import_bounds[base];
+  }
+
+
+  // -- misc --
+  void handle_mds_failure(int who);
+  void show_imports();
+
 
   // -- import/export --
   // exporter
@@ -121,9 +159,11 @@ public:
                       CDir *basedir,
                       CDir *dir,
                       int newauth);
-  void export_dir_finish(CDir *dir);
   void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
-    
+  void reverse_export(CDir *dir);
+  void export_dir_acked(CDir *dir);
+  void export_dir_finish(CDir *dir);
+
   friend class C_MDC_ExportFreeze;
   friend class C_MDC_ExportStartLogged;
   friend class C_MDS_ExportFinishLogged;
@@ -155,7 +195,6 @@ public:
   void handle_export_dir_warning(MExportDirWarning *m);
   void handle_export_dir_notify(MExportDirNotify *m);
 
-  void show_imports();
 
   // -- hashed directories --
 

@@ -27,6 +27,7 @@ using namespace std;
 
 class MDSMap {
  public:
+  // mds states
   static const int STATE_DNE =      0;    // down, never existed.
   static const int STATE_OUT =      1;    // down, once existed, but no imports, empty log.
   static const int STATE_FAILED =   2;    // down, holds (er, held) metadata; needs to be recovered.
@@ -35,10 +36,11 @@ class MDSMap {
   static const int STATE_CREATING = 4;    // up, creating MDS instance (new journal, idalloc..)
   static const int STATE_STARTING = 5;    // up, starting prior out MDS instance.
   static const int STATE_REPLAY   = 6;    // up, scanning journal, recoverying any shared state
-  static const int STATE_REJOIN   = 7;    // up, replayed journal, rejoining distributed cache
-  static const int STATE_ACTIVE =   8;    // up, active
-  static const int STATE_STOPPING = 9;    // up, exporting metadata (-> standby or out)
-  static const int STATE_STOPPED  = 10;   // up, finished stopping.  like standby, but not avail to takeover.
+  static const int STATE_RESOLVE  = 7;    // up, disambiguating partial distributed operations (import/export, ...rename?)
+  static const int STATE_REJOIN   = 8;    // up, replayed journal, rejoining distributed cache
+  static const int STATE_ACTIVE =   9;    // up, active
+  static const int STATE_STOPPING = 10;    // up, exporting metadata (-> standby or out)
+  static const int STATE_STOPPED  = 11;   // up, finished stopping.  like standby, but not avail to takeover.
   
   static const char *get_state_name(int s) {
     switch (s) {
@@ -51,6 +53,7 @@ class MDSMap {
     case STATE_CREATING: return "up:creating";
     case STATE_STARTING: return "up:starting";
     case STATE_REPLAY:   return "up:replay";
+    case STATE_RESOLVE:  return "up:resolve";
     case STATE_REJOIN:   return "up:rejoin";
     case STATE_ACTIVE:   return "up:active";
     case STATE_STOPPING: return "up:stopping";
@@ -148,13 +151,13 @@ class MDSMap {
 	 p != mds_state.end();
 	 p++)
       if (is_failed(p->first) || 
-	  is_replay(p->first) || is_rejoin(p->first) ||
+	  is_replay(p->first) || is_resolve(p->first) || is_rejoin(p->first) ||
 	  is_active(p->first) || is_stopping(p->first))
 	s.insert(p->first);
   }
 
 
-  // state
+  // mds states
   bool is_down(int m) { return is_dne(m) || is_out(m) || is_failed(m); }
   bool is_up(int m) { return !is_down(m); }
 
@@ -166,17 +169,32 @@ class MDSMap {
   bool is_creating(int m) { return mds_state.count(m) && mds_state[m] == STATE_CREATING; }
   bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
   bool is_replay(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REPLAY; }
+  bool is_resolve(int m)   { return mds_state.count(m) && mds_state[m] == STATE_RESOLVE; }
   bool is_rejoin(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REJOIN; }
   bool is_active(int m)   { return mds_state.count(m) && mds_state[m] == STATE_ACTIVE; }
   bool is_stopping(int m) { return mds_state.count(m) && mds_state[m] == STATE_STOPPING; }
   bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
 
+  bool has_created(int m) { return mds_created.count(m); }
+
+  // cluster states
   bool is_degraded() {
-    return get_num_mds(STATE_REPLAY) + get_num_mds(STATE_REJOIN) + get_num_mds(STATE_FAILED);
+    return get_num_mds(STATE_REPLAY) + 
+      get_num_mds(STATE_RESOLVE) + 
+      get_num_mds(STATE_REJOIN) + 
+      get_num_mds(STATE_FAILED);
   }
-  bool is_created(int m) {
-    return mds_created.count(m);
+  /*bool is_resolving() {  // nodes are resolving distributed ops
+    return get_num_mds(STATE_RESOLVE);
+    }*/
+  bool is_rejoining() {  
+    // nodes are rejoining cache state
+    return get_num_mds(STATE_REJOIN) > 0 &&
+      get_num_mds(STATE_RESOLVE) == 0 &&
+      get_num_mds(STATE_REPLAY) == 0 &&
+      get_num_mds(STATE_FAILED) == 0;
   }
+
 
   int get_state(int m) {
     if (mds_state.count(m)) return mds_state[m];

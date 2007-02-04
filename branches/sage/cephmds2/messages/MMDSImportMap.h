@@ -41,7 +41,7 @@ class MMDSImportMap : public Message {
     imap[im].insert(ex);
   }
 
-  void add_ambiguous_import(inodeno_t im, set<inodeno_t>& m) {
+  void add_ambiguous_import(inodeno_t im, const set<inodeno_t>& m) {
     ambiguous_imap[im] = m;
   }
 

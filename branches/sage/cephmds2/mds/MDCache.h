@@ -131,22 +131,23 @@ protected:
   // from MMDSImportMaps
   map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  
 
-  set<int> want_import_map;    // nodes i need to send my import map to (when exports finish)
-  set<int> import_map_gather;  // nodes i need an import_map from
+  set<int> recovery_set;
+  set<int> got_import_map;    // nodes i need to send my import map to (when exports finish)
+  set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
   
   void handle_import_map(MMDSImportMap *m);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
   void disambiguate_imports();
-  void send_cache_rejoins();
   void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void send_cache_rejoin_acks();
 public:
   void send_import_map(int who);
   void send_import_maps();
+  void send_cache_rejoins();
 
   void set_recovery_set(set<int>& s) {
-    want_import_map.swap(s);
+    recovery_set = s;
   }
 
   // ambiguous imports
@@ -194,8 +195,7 @@ public:
 
   void log_import_map(Context *onsync=0);
 
-
-  
+ 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
@@ -243,6 +243,9 @@ public:
     else
       lru.lru_midtouch(dn);
   }
+
+  void inode_remove_replica(CInode *in, int rep);
+
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
  public:

@@ -152,12 +152,13 @@ class MDS : public Dispatcher {
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
   bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
+  bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
   bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
   bool is_stopped()  { return state == MDSMap::STATE_STOPPED; }
 
-  void mark_active();
+  void set_want_state(int s);
 
 
   // -- waiters --

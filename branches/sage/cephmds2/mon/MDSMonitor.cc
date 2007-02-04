@@ -262,7 +262,7 @@ void MDSMonitor::tick()
 	    break;
 
 	  case MDSMap::STATE_STANDBY:
-	    if (mdsmap.is_created(*p))
+	    if (mdsmap.has_created(*p))
 	      newstate = MDSMap::STATE_OUT;
 	    else
 	      newstate = MDSMap::STATE_DNE;

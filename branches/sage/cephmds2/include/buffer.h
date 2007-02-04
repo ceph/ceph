@@ -799,6 +799,34 @@ inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 #include <vector>
 #include <string>
 
+// set<string>
+inline void _encode(const std::set<std::string>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (std::set<std::string>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(*it, bl);
+    n--;
+  }
+  assert(n==0);
+}
+inline void _decode(std::set<std::string>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    std::string v;
+    ::_decode(v, bl, off);
+    s.insert(v);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+
 // set<T>
 template<class T>
 inline void _encode(const std::set<T>& s, bufferlist& bl)

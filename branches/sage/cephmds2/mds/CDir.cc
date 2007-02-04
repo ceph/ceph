@@ -60,6 +60,13 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " dir_auth=" << dir.get_dir_auth();
   
   out << " state=" << dir.get_state();
+  if (dir.state_test(CDIR_STATE_COMPLETE)) out << "|complete";
+  if (dir.state_test(CDIR_STATE_FREEZINGTREE)) out << "|freezingtree";
+  if (dir.state_test(CDIR_STATE_FROZENTREE)) out << "|frozentree";
+  if (dir.state_test(CDIR_STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
+  if (dir.state_test(CDIR_STATE_FROZENDIR)) out << "|frozendir";
+  if (dir.state_test(CDIR_STATE_FREEZINGDIR)) out << "|freezingdir";
+
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
   
   if (dir.get_num_ref()) {
@@ -716,13 +723,24 @@ void CDir::freeze_tree_finish(Context *c)
 void CDir::unfreeze_tree()
 {
   dout(10) << "unfreeze_tree " << *this << endl;
-  state_clear(CDIR_STATE_FROZENTREE);
-  
-  // unpin  (may => FREEZEABLE)   FIXME: is this order good?
-  inode->auth_unpin();
 
-  // waiters?
-  finish_waiting(CDIR_WAIT_UNFREEZE);
+  if (state_test(CDIR_STATE_FROZENTREE)) {
+    // frozen.  unfreeze.
+    state_clear(CDIR_STATE_FROZENTREE);
+
+    // unpin  (may => FREEZEABLE)   FIXME: is this order good?
+    inode->auth_unpin();
+
+    // waiters?
+    finish_waiting(CDIR_WAIT_UNFREEZE);
+  } else {
+    // freezing.  stop it.
+    assert(state_test(CDIR_STATE_FREEZINGTREE));
+    state_clear(CDIR_STATE_FREEZINGTREE);
+    
+    // cancel freeze waiters
+    finish_waiting(CDIR_WAIT_FREEZEABLE, -1);
+  }
 }
 
 bool CDir::is_freezing_tree()

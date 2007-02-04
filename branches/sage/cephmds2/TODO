@@ -1,9 +1,22 @@
-- preemptive mdsmap sharing
 
-- how to disambiguate importstart w/o an importfinish?
-- der chicken/egg headache on immediately sending import_map, since imports are ambiguous.
- 
+huh:
+- how to keep mds osd op ids unique after a failover?
+  - (and, how to flush out failed mds)
+
+
+- handle exporter recovery if importer fails during EXPORT_EXPORTING stage
+
+- delay response to sending import_map if export in progress?
+- finish export before sending import_map?  (if is_recoverying or whatever...)
+
 - ambiguous imports on active node should include in-progress imports!
+
+- how to effectively trim cache after resolve but before rejoin
+  - we need to eliminate unneed non-auth metadata, without hosing potentially useful auth metadata
+
+
+- falures during recovery stages... rejoin
+
 
 
 importmap only sent after exports have completed.
@@ -13,7 +26,7 @@ failure of exporter induces some cleanup on importer.  will disambiguate when it
 failure of importer induces cleanup on exporter.  no ambiguity.
 
 
-- no new mds may join if cluster is in a recovery state.  creating|replay -> standby (unless failed)
+- no new mds may join if cluster is in a recovery state.  starting -> standby (unless failed)
 
 recoverer:
 - enter rejoin state

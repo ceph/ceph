@@ -422,7 +422,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // is it new?
   if (epoch <= mdsmap->get_epoch()) {
-    dout(1) << " old map epoch " << epoch << " < " << mdsmap->get_epoch() 
+    dout(1) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
 	    << ", discarding" << endl;
     delete m;
     return;
@@ -431,8 +431,9 @@ void MDS::handle_mds_map(MMDSMap *m)
   // note some old state
   int oldwhoami = whoami;
   int oldstate = state;
-  set<int> oldrejoin;
-  mdsmap->get_mds_set(oldrejoin, MDSMap::STATE_REJOIN);
+  set<int> oldresolve;
+  mdsmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
+  bool wasrejoining = mdsmap->is_rejoining();
   set<int> oldfailed;
   mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
 
@@ -512,17 +513,24 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   
   
-
-  // is anybody rejoining?
-  if (is_rejoin() || is_active() || is_stopping()) {
-    set<int> rejoin;
-    mdsmap->get_mds_set(rejoin, MDSMap::STATE_REJOIN);
-    dout(10) << "rejoin set is " << rejoin << ", was " << oldrejoin << endl;
-    for (set<int>::iterator p = rejoin.begin(); p != rejoin.end(); ++p) {
+  // is anyone resolving?
+  if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
+    set<int> resolve;
+    mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
+    if (oldresolve != resolve) 
+      dout(10) << "resolve set is " << resolve << ", was " << oldresolve << endl;
+    for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
       if (*p == whoami) continue;
-      if (oldrejoin.count(*p) == 0 ||          // if other guy newly rejoin, or
-	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly rejoin,
+      if (oldresolve.count(*p) == 0 ||         // if other guy newly resolve, or
+	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly resolve,
 	mdcache->send_import_map(*p);          // share my import map
+    }
+  }
+  
+  // is everybody finally rejoining?
+  if (is_rejoin() || is_active() || is_stopping()) {
+    if (!wasrejoining && mdsmap->is_rejoining()) {
+      mdcache->send_cache_rejoins();
     }
   }
 
@@ -655,7 +663,7 @@ void MDS::boot_finish()
     assert(mdlog->get_read_pos() == mdlog->get_write_pos());
   }
 
-  mark_active();
+  set_want_state(MDSMap::STATE_ACTIVE);
 }
 
 
@@ -705,26 +713,28 @@ void MDS::boot_replay(int step)
     
   case 6:
     // done with replay!
-    if (mdsmap->get_num_mds(MDSMap::STATE_REJOIN) == 0 &&
+    if (mdsmap->get_num_mds(MDSMap::STATE_ACTIVE) == 0 &&
+	mdsmap->get_num_mds(MDSMap::STATE_STOPPING) == 0 &&
+	mdsmap->get_num_mds(MDSMap::STATE_RESOLVE) == 0 &&
+	mdsmap->get_num_mds(MDSMap::STATE_REJOIN) == 0 &&
 	mdsmap->get_num_mds(MDSMap::STATE_REPLAY) == 1 && // me
 	mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) {
       dout(2) << "boot_replay " << step << ": i am alone, moving to state active" << endl;      
-      want_state = MDSMap::STATE_ACTIVE;
+      set_want_state(MDSMap::STATE_ACTIVE);
     } else {
-      dout(2) << "boot_replay " << step << ": i am not alone, moving to state rejoin" << endl;
-      want_state = MDSMap::STATE_REJOIN;
+      dout(2) << "boot_replay " << step << ": i am not alone, moving to state resolve" << endl;
+      set_want_state(MDSMap::STATE_RESOLVE);
     }
-    beacon_send();
     break;
 
   }
 }
 
 
-void MDS::mark_active()
+void MDS::set_want_state(int s)
 {
-  dout(3) << "mark_active" << endl;
-  want_state = MDSMap::STATE_ACTIVE;
+  dout(3) << "set_want_state " << MDSMap::get_state_name(s) << endl;
+  want_state = s;
   beacon_send();
 }
 
@@ -750,8 +760,7 @@ int MDS::shutdown_start()
   }
 
   // go
-  want_state = MDSMap::STATE_STOPPING;
-  beacon_send();
+  set_want_state(MDSMap::STATE_STOPPING);
   return 0;
 }
 
@@ -761,8 +770,7 @@ void MDS::handle_shutdown_start(Message *m)
   dout(1) << " handle_shutdown_start" << endl;
 
   // set flag
-  want_state = MDSMap::STATE_STOPPING;
-  beacon_send();
+  set_want_state(MDSMap::STATE_STOPPING);
 
   delete m;
 }
@@ -774,8 +782,7 @@ int MDS::shutdown_final()
   dout(1) << "shutdown_final" << endl;
 
   // send final down:out beacon (it doesn't matter if this arrives)
-  want_state = MDSMap::STATE_OUT;
-  beacon_send();
+  set_want_state(MDSMap::STATE_OUT);
 
   // stop timers
   if (beacon_killer) {
@@ -817,6 +824,24 @@ void MDS::dispatch(Message *m)
 
 void MDS::my_dispatch(Message *m)
 {
+  // from bad mds?
+  if (m->get_source().is_mds()) {
+    int from = m->get_source().num();
+    if (!mdsmap->have_inst(from) ||
+	mdsmap->get_inst(from) != m->get_source_inst()) {
+      // bogus mds?
+      if (m->get_type() != MSG_MDS_MAP) {
+	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
+		<< ", dropping" << endl;
+	delete m;
+	return;
+      } else {
+	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
+		<< ", but it's an mdsmap, looking at it" << endl;
+      }
+    }
+  }
+
 
   switch (m->get_dest_port()) {
     
@@ -916,8 +941,7 @@ void MDS::my_dispatch(Message *m)
       dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to up:stopped" << endl;
 
       // tell monitor we shut down cleanly.
-      want_state = MDSMap::STATE_STOPPED;
-      beacon_send();
+      set_want_state(MDSMap::STATE_STOPPED);
     }
   }
 
@@ -957,6 +981,9 @@ void MDS::proc_message(Message *m)
   case MSG_PING:
     handle_ping((MPing*)m);
     return;
+
+  default:
+    assert(0);
   }
 
 }

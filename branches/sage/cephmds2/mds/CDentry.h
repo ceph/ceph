@@ -32,7 +32,7 @@ class CDir;
 #define DN_LOCK_SYNC      0
 #define DN_LOCK_PREXLOCK  1
 #define DN_LOCK_XLOCK     2
-#define DN_LOCK_UNPINNING 3  // waiting for pins to go away
+#define DN_LOCK_UNPINNING 3  // waiting for pins to go away .. FIXME REVIEW THIS CODE ..
 
 #define DN_XLOCK_FOREIGN  ((Message*)0x1)  // not 0, not a valid pointer.
 

@@ -18,21 +18,14 @@
 
 #include "include/types.h"
 
+// sent from replica to auth
 
 class MMDSCacheRejoin : public Message {
-  
-  struct InodeState {
-	int hardlock;     // hardlock state
-	int filelock;     // filelock state
-	int caps_wanted;  // what caps bits i want
-	InodeState(int cw=0, int hl=-1, int fl=-1) : hardlock(hl), filelock(fl), caps_wanted(cw) {}
-  };
-
-  map<inodeno_t, InodeState> inodes;
-  map<inodeno_t, map<string, int> > dentries;
-  set<inodeno_t> dirs;
-
  public:
+  map<inodeno_t,int> inodes; // ino -> caps_wanted
+  set<inodeno_t> dirs;
+  map<inodeno_t, set<string> > dentries;   // dir -> (dentries...)
+
   MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
 
   char *get_type_name() { return "cache_rejoin"; }
@@ -42,23 +35,27 @@ class MMDSCacheRejoin : public Message {
   }
 
   void add_dir(inodeno_t dirino) {
-	dirs.insert(dirino);
+    dirs.insert(dirino);
   }
-  void add_dentry(inodeno_t dirino, const string& dn, int ls) {
-	dentries[dirino][dn] = ls;
+  void add_dentry(inodeno_t dirino, const string& dn) {
+    dentries[dirino].insert(dn);
   }
-  void add_inode(inodeno_t ino, int hl, int fl, int cw) {
-	inodes[ino] = InodeState(cw,hl,fl);
+  void add_inode(inodeno_t ino, int cw) {
+    inodes[ino] = cw;
   }
   
   void encode_payload() {
-	::_encode(inodes, payload);
-	::_encode(dirs, payload);
+    ::_encode(inodes, payload);
+    ::_encode(dirs, payload);
+    for (set<inodeno_t>::iterator p = dirs.begin(); p != dirs.end(); ++p)
+      ::_encode(dentries[*p], payload);
   }
   void decode_payload() {
-	int off = 0;
-	::_decode(inodes, payload, off);
-	::_decode(dirs, payload, off);
+    int off = 0;
+    ::_decode(inodes, payload, off);
+    ::_decode(dirs, payload, off);
+    for (set<inodeno_t>::iterator p = dirs.begin(); p != dirs.end(); ++p)
+      ::_decode(dentries[*p], payload, off);
   }
 };
 

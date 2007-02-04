@@ -85,7 +85,7 @@ class CLock {
   
  public:
   CLock() : 
-    state(LOCK_LOCK), 
+    state(LOCK_SYNC), 
     nread(0), 
     wrlock_by(0) {
   }

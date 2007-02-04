@@ -47,6 +47,7 @@
 
 #include "messages/MMDSImportMap.h"
 #include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSCacheRejoinAck.h"
 
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
@@ -249,18 +250,6 @@ void MDCache::log_import_map(Context *onsync)
 // =====================
 // recovery stuff
 
-void MDCache::send_import_maps()
-{
-  dout(10) << "send_import_maps" << endl;
-  
-  for (set<int>::iterator p = want_import_map.begin();
-       p != want_import_map.end();
-       ++p)
-    send_import_map(*p);
-
-  want_import_map.clear();
-}
-
 void MDCache::send_import_map(int who)
 {
   dout(10) << "send_import_map to mds" << who << endl;
@@ -272,14 +261,22 @@ void MDCache::send_import_map(int who)
        p != imports.end();
        p++) {
     CDir *im = *p;
-    m->add_import(im->ino());
-    
-    if (nested_exports.count(im)) {
-      for (set<CDir*>::iterator q = nested_exports[im].begin();
-	   q != nested_exports[im].end();
-	   ++q) {
-	CDir *ex = *q;
-	m->add_import_export(im->ino(), ex->ino());
+
+    if (migrator->is_importing(im->ino())) {
+      // ambiguous (mid-import)
+      m->add_ambiguous_import(im->ino(), 
+			      migrator->get_import_bounds(im->ino()));
+    } else {
+      // not ambiguous.
+      m->add_import(im->ino());
+      
+      if (nested_exports.count(im)) {
+	for (set<CDir*>::iterator q = nested_exports[im].begin();
+	     q != nested_exports[im].end();
+	     ++q) {
+	  CDir *ex = *q;
+	  m->add_import_export(im->ino(), ex->ino());
+	}
       }
     }
   }
@@ -295,14 +292,17 @@ void MDCache::send_import_map(int who)
 }
 
 
+
+/*
+ * during resolve state, we share import_maps to determine who
+ * is authoritative for which trees.  we expect to get an import_map
+ * from _everyone_ in the recovery_set (the mds cluster at the time of
+ * the first failure).
+ */
 void MDCache::handle_import_map(MMDSImportMap *m)
 {
   dout(7) << "handle_import_map from " << m->get_source() << endl;
   int from = m->get_source().num();
-
-  MMDSCacheRejoin *rejoin;
-  if (mds->is_active() || mds->is_stopping())
-    rejoin = new MMDSCacheRejoin;
 
   // FIXME: check if we are a surviving ambiguous importer
 
@@ -328,11 +328,6 @@ void MDCache::handle_import_map(MMDSImportMap *m)
       if (ex->get_dir_auth() == CDIR_AUTH_PARENT)
 	ex->set_dir_auth(CDIR_AUTH_UNKNOWN);
     }
-
-    if (mds->is_active()) {
-      // walk my cache to fill out CacheRejoin
-      cache_rejoin_walk(im, rejoin);
-    }
   }
 
   // note ambiguous imports too
@@ -340,22 +335,23 @@ void MDCache::handle_import_map(MMDSImportMap *m)
        pi != m->ambiguous_imap.end();
        ++pi)
     mds->mdcache->other_ambiguous_imports[from][pi->first].swap( pi->second );
-  
-  if (mds->is_rejoin()) {
-    assert(want_import_map.count(from));
-    want_import_map.erase(from);
-    if (want_import_map.empty()) {
-      dout(10) << "got all import maps" << endl;
-      disambiguate_imports();
-      recalc_auth_bits();
-      send_cache_rejoins();
-    } else {
-      dout(10) << "still waiting for importmaps from " << want_import_map << endl;
-    }
-  } else if (mds->is_active() || mds->is_stopping()) {
-    mds->send_message_mds(rejoin, from, MDS_PORT_CACHE);
-  } 
 
+  // did i get them all?
+  got_import_map.insert(from);
+  
+  if (got_import_map == recovery_set) {
+    dout(10) << "got all import maps, ready to rejoin" << endl;
+    disambiguate_imports();
+    recalc_auth_bits();
+    
+    // move to rejoin state
+    mds->set_want_state(MDSMap::STATE_REJOIN);
+  
+  } else {
+    dout(10) << "still waiting for more importmaps, got " << got_import_map 
+	     << ", need " << recovery_set << endl;
+  }
+  
   delete m;
 }
 
@@ -569,11 +565,65 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
 
 
 
+/*
+ * rejoin phase!
+ * we start out by sending rejoins to everyone in the recovery set.
+ *
+ * if _were_ are rejoining, send for all regions in our cache.
+ * if we are active|stopping, send only to nodes that are are rejoining.
+ */
 void MDCache::send_cache_rejoins()
 {
   dout(10) << "send_cache_rejoins " << endl;
+
+  map<int, MMDSCacheRejoin*> rejoins;
   
+  // build list of dir_auth regions
+  list<CDir*> dir_auth_regions;
+  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    if (!p->second->is_dir()) continue;
+    if (!p->second->dir) continue;
+    if (p->second->dir->get_dir_auth() == CDIR_AUTH_PARENT) continue;
+
+    int auth = p->second->dir->get_dir_auth();
+    assert(auth >= 0);
+
+    if (auth == mds->get_nodeid()) continue; // skip my own regions!
+
+    if (rejoins.count(auth) == 0) {
+      if (mds->is_rejoin() ||                // if i am rejoining,
+	  mds->mdsmap->is_rejoin(auth))      // or if they are rejoining,
+	rejoins[auth] = new MMDSCacheRejoin; // send a rejoin
+      else
+	continue;   // otherwise, skip this region
+    }
+    
+    // add to list
+    dout(10) << " on mds" << auth << " region " << *p->second << endl;
+    dir_auth_regions.push_back(p->second->dir);
+  }
+
+  // walk the regions
+  for (list<CDir*>::iterator p = dir_auth_regions.begin();
+       p != dir_auth_regions.end();
+       ++p) {
+    CDir *dir = *p;
+    int to = dir->authority();
+    cache_rejoin_walk(dir, rejoins[to]);
+  }
+
+  // send the messages
+  assert(rejoin_ack_gather.empty());
+  for (map<int,MMDSCacheRejoin*>::iterator p = rejoins.begin();
+       p != rejoins.end();
+       ++p) {
+    mds->send_message_mds(p->second, p->first, MDS_PORT_CACHE);
+    rejoin_ack_gather.insert(p->first);
+  }
 }
+
 
 void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 {
@@ -587,22 +637,13 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
        p != dir->items.end();
        ++p) {
     // dentry
-    if (mds->is_rejoin())
-      rejoin->add_dentry(dir->ino(), p->first, -1);
-    else
-      rejoin->add_dentry(dir->ino(), p->first, p->second->lockstate);
-
+    rejoin->add_dentry(dir->ino(), p->first);
+    
     // inode?
     if (p->second->is_primary() && p->second->get_inode()) {
       CInode *in = p->second->get_inode();
-      if (mds->is_rejoin())
-	rejoin->add_inode(in->ino(), 
-			  -1, -1,
-			  in->get_caps_wanted());
-      else
-	rejoin->add_inode(in->ino(), 
-			  in->hardlock.get_state(), in->filelock.get_state(),
-			  in->get_caps_wanted());
+      rejoin->add_inode(in->ino(), 
+			in->get_caps_wanted());
       
       // dir?
       if (in->dir &&
@@ -619,19 +660,168 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 }
 
 
+/*
+ * i got a rejoin.
+ * 
+ *  - reply with the lockstate
+ *
+ * if i am active|stopping, 
+ *  - remove source from replica list for everything not referenced here.
+ */
 void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 {
   dout(7) << "handle_cache_rejoin from " << m->get_source() << endl;
-  //int from = m->get_source().num();
+  int from = m->get_source().num();
 
+  MMDSCacheRejoinAck *ack = new MMDSCacheRejoinAck;
+
+  if (mds->is_active() || mds->is_stopping()) {
+    dout(10) << "removing stale cache replicas" << endl;
+    // first, scour cache of replica references
+    for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+	 p != inode_map.end();
+	 ++p) {
+      // inode
+      CInode *in = p->second;
+      if (in->is_replica(from) && m->inodes.count(p->first) == 0) {
+	inode_remove_replica(in, from);
+	dout(10) << " rem " << *in << endl;
+      }
+
+      // dentry
+      if (in->parent) {
+	CDentry *dn = in->parent;
+	if (dn->is_replica(from) &&
+	    (m->dentries.count(dn->get_dir()->ino()) == 0 ||
+	     m->dentries[dn->get_dir()->ino()].count(dn->get_name()) == 0)) {
+	  dn->remove_replica(from);
+	  dout(10) << " rem " << *dn << endl;
+	}
+      }
+
+      // dir
+      if (in->dir) {
+	CDir *dir = in->dir;
+	if (dir->is_replica(from) && m->dirs.count(p->first) == 0) {
+	  dir->remove_replica(from);
+	  dout(10) << " rem " << *dir << endl;
+	}
+      }
+    }
+  } else {
+    assert(mds->is_rejoin());
+  }
+
+  // dirs
+  for (set<inodeno_t>::iterator p = m->dirs.begin();
+       p != m->dirs.end();
+       ++p) {
+    CInode *diri = get_inode(*p);
+    assert(diri);
+    CDir *dir = diri->dir;
+    assert(dir);
+    int nonce = dir->add_replica(from);
+    dout(10) << " has " << *dir << endl;
+    ack->add_dir(*p, nonce);
+    
+    // dentries
+    for (set<string>::iterator q = m->dentries[*p].begin();
+	 q != m->dentries[*p].end();
+	 ++q) {
+      CDentry *dn = dir->lookup(*q);
+      assert(dn);
+      int nonce = dn->add_replica(from);
+      dout(10) << " has " << *dn << endl;
+      ack->add_dentry(*p, *q, dn->get_lockstate(), nonce);
+    }
+  }
+
+  // inodes
+  for (map<inodeno_t,int>::iterator p = m->inodes.begin();
+       p != m->inodes.end();
+       ++p) {
+    CInode *in = get_inode(p->first);
+    assert(in);
+    int nonce = in->add_replica(from);
+    if (p->second)
+      in->mds_caps_wanted[from] = p->second;
+    else
+      in->mds_caps_wanted.erase(from);
+    in->hardlock.gather_set.erase(from);  // just in case
+    in->filelock.gather_set.erase(from);  // just in case
+    dout(10) << " has " << *in << endl;
+    ack->add_inode(p->first, 
+		   in->hardlock.get_replica_state(), in->filelock.get_replica_state(), 
+		   nonce);
+  }
+
+  // send ack
+  mds->send_message_mds(ack, from, MDS_PORT_CACHE);
   
-
-
   delete m;
 }
 
 
+void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
+{
+  dout(7) << "handle_cache_rejoin from " << m->get_source() << endl;
+  int from = m->get_source().num();
+  
+  // dirs
+  for (list<MMDSCacheRejoinAck::dirinfo>::iterator p = m->dirs.begin();
+       p != m->dirs.end();
+       ++p) {
+    CInode *diri = get_inode(p->dirino);
+    CDir *dir = diri->dir;
+    assert(dir);
 
+    dir->set_replica_nonce(p->nonce);
+    dout(10) << " got " << *dir << endl;
+
+    // dentries
+    for (map<string,MMDSCacheRejoinAck::dninfo>::iterator q = m->dentries[p->dirino].begin();
+	 q != m->dentries[p->dirino].end();
+	 ++q) {
+      CDentry *dn = dir->lookup(q->first);
+      assert(dn);
+      dn->set_replica_nonce(q->second.nonce);
+      dn->set_lockstate(q->second.lock);
+      dout(10) << " got " << *dn << endl;
+    }
+  }
+
+  // inodes
+  for (list<MMDSCacheRejoinAck::inodeinfo>::iterator p = m->inodes.begin();
+       p != m->inodes.end();
+       ++p) {
+    CInode *in = get_inode(p->ino);
+    assert(in);
+    in->set_replica_nonce(p->nonce);
+    in->hardlock.set_state(p->hardlock);
+    in->filelock.set_state(p->filelock);
+    dout(10) << " got " << *in << endl;
+  }
+
+  delete m;
+
+  // done?
+  rejoin_ack_gather.erase(from);
+  if (rejoin_ack_gather.empty()) {
+    dout(7) << "all done, going active!" << endl;
+    show_imports();
+    show_cache();
+    mds->set_want_state(MDSMap::STATE_ACTIVE);
+  } else {
+    dout(7) << "still need rejoin_ack from " << rejoin_ack_gather << endl;
+  }
+
+}
+
+
+
+
+
+// ===============================================================================
 
 void MDCache::rename_file(CDentry *srcdn, 
                           CDentry *destdn)
@@ -1208,6 +1398,14 @@ void MDCache::dispatch(Message *m)
   case MSG_MDS_IMPORTMAP:
     handle_import_map((MMDSImportMap*)m);
     break;
+
+  case MSG_MDS_CACHEREJOIN:
+    handle_cache_rejoin((MMDSCacheRejoin*)m);
+    break;
+  case MSG_MDS_CACHEREJOINACK:
+    handle_cache_rejoin_ack((MMDSCacheRejoinAck*)m);
+    break;
+
 
   case MSG_MDS_DISCOVER:
     handle_discover((MDiscover*)m);
@@ -2554,27 +2752,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     else if (nonce == in->get_replica_nonce(from)) {
       // remove from our cached_by
       dout(7) << "inode expire on " << *in << " from mds" << from << " cached_by was " << in->get_replicas() << endl;
-      in->remove_replica(from);
-      in->mds_caps_wanted.erase(from);
-      
-      // note: this code calls _eval more often than it needs to!
-      // fix lock
-      if (in->hardlock.is_gathering(from)) {
-        in->hardlock.gather_set.erase(from);
-        if (in->hardlock.gather_set.size() == 0)
-          mds->locker->inode_hard_eval(in);
-      }
-      if (in->filelock.is_gathering(from)) {
-        in->filelock.gather_set.erase(from);
-        if (in->filelock.gather_set.size() == 0)
-          mds->locker->inode_file_eval(in);
-      }
-      
-      // alone now?
-      if (!in->is_replicated()) {
-        mds->locker->inode_hard_eval(in);
-        mds->locker->inode_file_eval(in);
-      }
+      inode_remove_replica(in, from);
 
     } 
     else {
@@ -2693,6 +2871,30 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
   delete m;
 }
 
+void MDCache::inode_remove_replica(CInode *in, int from)
+{
+  in->remove_replica(from);
+  in->mds_caps_wanted.erase(from);
+  
+  // note: this code calls _eval more often than it needs to!
+  // fix lock
+  if (in->hardlock.is_gathering(from)) {
+    in->hardlock.gather_set.erase(from);
+    if (in->hardlock.gather_set.size() == 0)
+      mds->locker->inode_hard_eval(in);
+  }
+  if (in->filelock.is_gathering(from)) {
+    in->filelock.gather_set.erase(from);
+    if (in->filelock.gather_set.size() == 0)
+      mds->locker->inode_file_eval(in);
+  }
+  
+  // alone now?
+  if (!in->is_replicated()) {
+    mds->locker->inode_hard_eval(in);
+    mds->locker->inode_file_eval(in);
+  }
+}
 
 
 int MDCache::send_dir_updates(CDir *dir, bool bcast)
