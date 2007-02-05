@@ -18,9 +18,11 @@ EXTRA_CFLAGS =
 ifeq ($(target),darwin)
 # For Darwin
 CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
+LDINC = ar -rc
 else
 # For linux
 CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+LDINC = ld -i -o
 endif
 
 CC = g++
@@ -177,7 +179,7 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 
 # libceph
 libceph.o: client/ldceph.o client/Client.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
@@ -197,28 +199,28 @@ clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 common.o: ${COMMON_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 ebofs.o: ${EBOFS_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 client.o: ${CLIENT_OBJS} 
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 osd.o: ${OSD_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 osdc.o: ${OSDC_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.o
 	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.o
 
 mds.o: ${MDS_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 mon.o: ${MON_OBJS}
-	ar -rc $@ $^
+	${LDINC} $@ $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@
