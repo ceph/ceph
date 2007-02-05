@@ -405,6 +405,7 @@ class ObjectCache {
                 interval_set<block_t>& alloc,
                 map<block_t, BufferHead*>& hits,
                 version_t super_epoch);   // can write to these.
+  void touch_bottom(block_t bstart, block_t blast);
 
   BufferHead *split(BufferHead *bh, block_t off);
 
@@ -508,6 +509,12 @@ class BufferCache {
       lru_dirty.lru_touch(bh);
     } else
       lru_rest.lru_touch(bh);
+  }
+  void touch_bottom(BufferHead *bh) {
+    if (bh->is_dirty()) {
+      lru_dirty.lru_bottouch(bh);
+    } else
+      lru_rest.lru_bottouch(bh);
   }
   void remove_bh(BufferHead *bh) {
     bh->get_oc()->remove_bh(bh);
