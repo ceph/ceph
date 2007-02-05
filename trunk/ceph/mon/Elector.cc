@@ -27,7 +27,7 @@ void Elector::start()
   electing_me = true;
   
   // bcast to everyone else
-  for (unsigned i=0; i<mon->monmap->num_mon; ++i) {
+  for (int i=0; i<mon->monmap->num_mon; ++i) {
 	if (i == whoami) continue;
 	mon->messenger->send_message(new MMonElectionPropose,
 								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
@@ -86,7 +86,7 @@ void Elector::expire()
   
   // did i win?
   if (electing_me &&
-	  acked_me.size() > mon->monmap->num_mon / 2) {
+	  acked_me.size() > (unsigned)(mon->monmap->num_mon / 2)) {
 	// i win
 	victory();
   } else {
@@ -102,7 +102,7 @@ void Elector::victory()
   electing_me = false;
 
   // tell everyone
-  for (unsigned i=0; i<mon->monmap->num_mon; ++i) {
+  for (int i=0; i<mon->monmap->num_mon; ++i) {
 	if (i == whoami) continue;
 	mon->messenger->send_message(new MMonElectionVictory,
 								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
@@ -147,7 +147,7 @@ void Elector::handle_ack(MMonElectionAck *m)
 	dout(5) << " so far i have " << acked_me << endl;
 	
 	// is that _everyone_?
-	if (acked_me.size() == mon->monmap->num_mon) {
+	if (acked_me.size() == (unsigned)mon->monmap->num_mon) {
 	  // if yes, shortcut to election finish
 	  victory();
 	}
