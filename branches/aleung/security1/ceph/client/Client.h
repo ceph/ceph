@@ -50,6 +50,9 @@ using namespace CryptoLib;
 #include <map>
 using namespace std;
 
+#include<unistd.h>
+#include<sys/types.h>
+
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
@@ -494,6 +497,9 @@ protected:
   map<uid_t,int>     user_ticket_ref;
   map<uid_t,list<Cond*> >   ticket_waiter_cond;
 
+  // user map?
+  //map<uid_t>
+
   Ticket *get_user_ticket(uid_t uid, gid_t gid);
   void put_user_ticket(Ticket *tk);
 
@@ -542,69 +548,95 @@ protected:
 
   // these shoud (more or less) mirror the actual system calls.
 #ifdef DARWIN
-  int statfs(const char *path, struct statvfs *stbuf);
+  int statfs(const char *path, struct statvfs *stbuf,
+	     __int64_t uid, __int64_t gid);
 #else
-  int statfs(const char *path, struct statfs *stbuf);
+  int statfs(const char *path, struct statfs *stbuf,
+	     __int64_t uid, __int64_t gid);
 #endif
 
   // crap
-  int chdir(const char *s);
+  int chdir(const char *s, __int64_t uid, __int64_t gid);
 
   // namespace ops
   int getdir(const char *path, list<string>& contents);
   int getdir(const char *path, map<string,inode_t>& contents);
 
-  DIR *opendir(const char *name);
-  int closedir(DIR *dir);
-  struct dirent *readdir(DIR *dir); 
-  void rewinddir(DIR *dir); 
-  off_t telldir(DIR *dir);
-  void seekdir(DIR *dir, off_t offset);
+  DIR *opendir(const char *name, __int64_t uid = -1, __int64_t gid = -1);
+  int closedir(DIR *dir, __int64_t uid = -1, __int64_t gid = -1);
+  struct dirent *readdir(DIR *dir, __int64_t uid = -1, __int64_t gid = -1); 
+  void rewinddir(DIR *dir, __int64_t uid = -1, __int64_t gid = -1); 
+  off_t telldir(DIR *dir, __int64_t uid = -1, __int64_t gid = -1);
+  void seekdir(DIR *dir, off_t offset,
+	       __int64_t uid = -1, __int64_t gid = -1);
 
-  struct dirent_plus *readdirplus(DIR *dirp);
+  struct dirent_plus *readdirplus(DIR *dirp,
+				  __int64_t uid = -1, __int64_t gid = -1);
   int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
-  struct dirent_lite *readdirlite(DIR *dirp);
+  struct dirent_lite *readdirlite(DIR *dirp, __int64_t uid, __int64_t gid);
   int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
  
 
-  int link(const char *existing, const char *newname);
-  int unlink(const char *path);
-  int rename(const char *from, const char *to);
+  int link(const char *existing, const char *newname,
+	   __int64_t uid = -1, __int64_t gid = -1);
+  int unlink(const char *path, __int64_t uid = -1, __int64_t gid = -1);
+  int rename(const char *from, const char *to,
+	     __int64_t uid = -1, __int64_t gid = -1);
 
   // dirs
-  int mkdir(const char *path, mode_t mode);
-  int rmdir(const char *path);
+  int mkdir(const char *path, mode_t mode,
+	    __int64_t uid = -1, __int64_t gid = -1);
+  int rmdir(const char *path, __int64_t uid = -1, __int64_t gid = -1);
 
   // symlinks
-  int readlink(const char *path, char *buf, off_t size);
-  int symlink(const char *existing, const char *newname);
+  int readlink(const char *path, char *buf, off_t size,
+	       __int64_t uid = -1, __int64_t gid = -1);
+  int symlink(const char *existing, const char *newname,
+	      __int64_t uid = -1, __int64_t gid = -1);
 
   // inode stuff
-  int _lstat(const char *path, int mask, Inode **in);
-  int lstat(const char *path, struct stat *stbuf);
-  int lstatlite(const char *path, struct statlite *buf);
+  int _lstat(const char *path, int mask, Inode **in,
+	     __int64_t uid = -1, __int64_t gid = -1);
+  int lstat(const char *path, struct stat *stbuf,
+	    __int64_t uid = -1, __int64_t gid = -1);
+  int lstatlite(const char *path, struct statlite *buf,
+		__int64_t uid = -1, __int64_t gid = -1);
 
-  int chmod(const char *path, mode_t mode);
-  int chown(const char *path, uid_t uid, gid_t gid);
-  int utime(const char *path, struct utimbuf *buf);
+  int chmod(const char *path, mode_t mode,
+	    __int64_t uid = -1, __int64_t gid = -1);
+  //int chown(const char *path, uid_t uid, gid_t gid,
+  //    __int64_t uid = -1, __int64_t gid = -1);
+  int chown(const char *path, __int64_t uid, __int64_t gid);
+  int utime(const char *path, struct utimbuf *buf,
+	    __int64_t uid = -1, __int64_t gid = -1);
   
   // file ops
-  int mknod(const char *path, mode_t mode);
-  int open(const char *path, int mode);
-  int close(fh_t fh);
-  int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
-  int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
-  int truncate(const char *file, off_t size);
+  int mknod(const char *path, mode_t mode,
+	    __int64_t uid = -1, __int64_t gid = -1);
+  int open(const char *path, int mode,
+	   __int64_t uid = -1, __int64_t gid = -1);
+  int close(fh_t fh,
+	    __int64_t uid = -1, __int64_t gid = -1);
+  int read(fh_t fh, char *buf, off_t size, off_t offset=-1,
+	   __int64_t uid = -1, __int64_t gid = -1);
+  int write(fh_t fh, const char *buf, off_t size, off_t offset=-1,
+	    __int64_t uid = -1, __int64_t gid = -1);
+  int truncate(const char *file, off_t size,
+	       __int64_t uid = -1, __int64_t gid = -1);
     //int truncate(fh_t fh, long long size);
-  int fsync(fh_t fh, bool syncdataonly);
+  int fsync(fh_t fh, bool syncdataonly,
+	    __int64_t uid = -1, __int64_t gid = -1);
 
   // hpc lazyio
-  int lazyio_propogate(int fd, off_t offset, size_t count);
-  int lazyio_synchronize(int fd, off_t offset, size_t count);
+  int lazyio_propogate(int fd, off_t offset, size_t count,
+		       __int64_t uid = -1, __int64_t gid = -1);
+  int lazyio_synchronize(int fd, off_t offset, size_t count,
+			 __int64_t uid = -1, __int64_t gid = -1);
 
   int describe_layout(char *fn, list<ObjectExtent>& result);
 
   void ms_handle_failure(Message*, msg_addr_t dest, const entity_inst_t& inst);
+
 };
 
 #endif

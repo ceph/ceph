@@ -38,6 +38,10 @@ protected:
 
   MonMap *monmap;
 
+  // mon pub/priv keys
+  esignPriv myPrivKey;
+  esignPub myPubKey;
+
   // timer.
   Context *tick_timer;
   Cond     tick_timer_cond;
@@ -47,10 +51,6 @@ protected:
 
   // my local store
   ObjectStore *store;
-
-  // mon pub/priv keys
-  esignPriv myPrivKey;
-  esignPub myPubKey;
 
   const static int INO_ELECTOR = 1;
   const static int INO_MON_MAP = 2;
@@ -118,8 +118,9 @@ protected:
   }
   Monitor(int w, Messenger *m, MonMap *mm, esignPriv key) : 
     whoami(w), 
-    messenger(m),
+    messenger(m), 
     monmap(mm),
+    myPrivKey(key),
     tick_timer(0),
     store(0),
     elector(this, w),
@@ -127,8 +128,7 @@ protected:
     state(STATE_STARTING),
     leader(0),
     osdmon(0),
-    mdsmon(0),
-    myPrivKey(key)
+    mdsmon(0)
   {
     // hack leader, until election works.
     if (whoami == 0)

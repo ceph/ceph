@@ -17,10 +17,14 @@
 #include "MDSMonitor.h"
 
 #include "messages/MClientBoot.h"
+#include "messages/MClientAuthUser.h"
+#include "messages/MClientAuthUserAck.h"
 #include "messages/MMDSMap.h"
 //#include "messages/MMDSFailure.h"
 
 #include "common/Timer.h"
+
+#include "crypto/Ticket.h"
 
 #include "config.h"
 #undef dout
@@ -36,6 +40,9 @@ void ClientMonitor::dispatch(Message *m)
 
   case MSG_CLIENT_BOOT:
     handle_client_boot((MClientBoot*)m);
+    break;
+  case MSG_CLIENT_AUTH_USER:
+    handle_client_auth_user((MClientAuthUser*)m);
     break;
     
     /*
@@ -67,6 +74,57 @@ void ClientMonitor::handle_client_boot(MClientBoot *m)
   // reply with latest mds map
   mon->mdsmon->send_latest(MSG_ADDR_CLIENT(from), m->get_source_inst());
   delete m;
+}
+
+void ClientMonitor::handle_client_auth_user(MClientAuthUser *m)
+{
+  dout(7) << "client_auth_user from " << m->get_source() << " at " << m->get_source_inst() << endl;
+  assert(m->get_source().is_client());
+  //int from = m->get_source().num();
+  
+  // grab information
+  uid_t uid = m->get_uid();
+  gid_t gid = m->get_gid();
+  // ticket time = 60 minutes (too long, only for debug)
+  utime_t t_s = g_clock.now();
+  utime_t t_e = t_s;
+  t_e += 3600;
+  string name = "unknown";
+  string key = m->get_str_key();
+
+  
+  // create iv
+  char iv[RJBLOCKSIZE];
+  memset(iv, 0x01, RJBLOCKSIZE); // worthless right now
+  string k_0 = iv;
+
+  // create a ticket
+  Ticket userTicket(uid, gid, t_s, t_e, k_0, name, key);
+
+  // sign the ticket
+  userTicket.sign_ticket(mon->myPrivKey);
+  cout << "SIGNED THE TICKET SUCCESFULY?" << endl << endl;
+
+  // test the verification
+  if (userTicket.verif_ticket(mon->myPubKey))
+    cout << "Verification succeeded" << endl;
+  else
+    cout << "Verification failed" << endl;
+
+  // cache the ticket?
+
+  // reply to auth_user
+  cout << "send_ticket to " << m->get_source() <<
+    " inst " << m->get_source_inst() << endl;
+  messenger->send_message(new MClientAuthUserAck(&userTicket),
+			  m->get_source(), m->get_source_inst());
+  cout << "ACK Ticket sent to " << m->get_source() << endl;
+  
+}
+
+void ClientMonitor::send_ticket(msg_addr_t dest, const entity_inst_t& inst) {
+  cout << "send_ticket to " << dest << " inst " << inst << endl;
+  //messenger->send_message(new MClientAuthUserAck(&userTicket), dest, inst);
 }
 
 /*

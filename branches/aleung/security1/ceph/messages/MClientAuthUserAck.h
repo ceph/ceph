@@ -16,19 +16,39 @@
 #define __MCLIENTAUTHUSERACK_H
 
 #include "msg/Message.h"
+#include "crypto/Ticket.h"
 
 class MClientAuthUserAck : public Message {
+  //bufferlist ticketBL;
+  Ticket myTicket;
  public:
   MClientAuthUserAck() : Message(MSG_CLIENT_AUTH_USER_ACK) { 
+  }
+  MClientAuthUserAck(Ticket *ticket) : Message(MSG_CLIENT_AUTH_USER_ACK) { 
+    //ticket->encode(ticketBL);
+    myTicket = (*ticket);
   }
 
   char *get_type_name() { return "client_auth_user_ack"; }
 
   uid_t get_uid() { return 0; }  // fixme
 
-  void decode_payload() {  
+  Ticket *getTicket() {
+    return &myTicket;
   }
-  void encode_payload() {  
+
+  void decode_payload() {
+    cout << "Trying decode payload ACK" << endl;
+    int off = 0;
+    //::_decode(myTicket, payload, off);
+    myTicket.decode(payload, off);
+    cout << "ACK Decoded OK" << endl;
+  }
+  void encode_payload() {
+    cout << "Trying encode payload ACK" << endl;
+    //::_encode(myTicket, payload);
+    myTicket.encode(payload);
+    cout << "ACK Encoded OK" << endl;
   }
 };
 

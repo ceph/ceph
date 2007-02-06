@@ -23,6 +23,9 @@ using namespace std;
 
 #include "mds/MDSMap.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 class Monitor;
 
 class ClientMonitor : public Dispatcher {
@@ -41,6 +44,7 @@ class ClientMonitor : public Dispatcher {
 
   void handle_client_boot(class MClientBoot *m);
   void handle_client_auth_user(class MClientAuthUser *m);
+  void send_ticket(msg_addr_t dest, const entity_inst_t& inst);
 
  public:
   ClientMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l),

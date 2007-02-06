@@ -63,6 +63,10 @@ Client *client;     // the ceph client
 // ------
 // fuse hooks
 
+// checks fuse context or else returns the real getuid
+//static int ceph_getuid() {
+//}
+
 static int ceph_getattr(const char *path, struct stat *stbuf)
 {
   return client->lstat(path, stbuf);

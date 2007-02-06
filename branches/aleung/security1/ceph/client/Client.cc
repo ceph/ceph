@@ -217,7 +217,7 @@ void Client::dump_cache()
  
 }
 
-
+// should send boot message?
 void Client::init() {
   
 }
@@ -635,18 +635,26 @@ void Client::handle_client_reply(MClientReply *reply)
 
 void Client::handle_auth_user_ack(MClientAuthUserAck *m)
 {
+  cout << "Handling auth user ack" << endl;
   uid_t uid = m->get_uid();
   dout(10) << "handle_auth_user_ack for " << uid << endl;
 
   // put the ticket in the ticket map
   // **
+  user_ticket[uid] = m->get_ticket();
 
   // wait up the waiter(s)
+  cout << "Entering for loop" << endl;
   for (list<Cond*>::iterator p = ticket_waiter_cond[uid].begin();
        p != ticket_waiter_cond[uid].end();
-       ++p)
+       ++p) {
+    cout << "In the for loop" << endl;
     (*p)->Signal();
+    cout << "Signal waiter" << endl;
+  }
+  cout << "Out of the for loop" << endl;
   ticket_waiter_cond.erase(uid);
+  cout << "Leaving the auth user ack handler" << endl;
 }
 
 Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
@@ -669,14 +677,18 @@ Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
       dout(10) << "get_user_ticket waiting for ticket for uid " << uid << endl;
     }
     
+    cout << "Ready to wait for reply" << endl;
     // wait for reply
     ticket_waiter_cond[uid].push_back( &cond );
     
+    cout << "Waiting for a Wait" << endl;
     // naively assume we'll get a ticket FIXME
     while (user_ticket.count(uid) == 0) 
       cond.Wait(client_lock);
+
+    cout << "Did I break the loop?" << endl;
   }
-  
+  cout << "About to leave sending request function" << endl;
   // inc ref count
   user_ticket_ref[uid]++;
   return user_ticket[uid];
@@ -1210,15 +1222,22 @@ void Client::handle_unmount_ack(Message* m)
 
 // namespace ops
 
-int Client::link(const char *existing, const char *newname) 
+int Client::link(const char *existing, const char *newname,
+		 __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
   dout(3) << "op: client->link(\"" << existing << "\", \"" << newname << "\");" << endl;
   tout << "link" << endl;
   tout << existing << endl;
   tout << newname << endl;
-
+  
   Ticket *tk = get_user_ticket(getuid(), getgid());
+  //Ticket *tk;
+  //if (uid == -1 || gid == -1)
+  //  tk = get_user_ticket(getuid(), getgid());
+  //else
+  //  tk = get_user_ticket(uid, gid);
+
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1251,11 +1270,12 @@ int Client::link(const char *existing, const char *newname)
 }
 
 
-int Client::unlink(const char *relpath)
+int Client::unlink(const char *relpath, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
   Ticket *tk = get_user_ticket(getuid(), getgid());
+
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1300,7 +1320,8 @@ int Client::unlink(const char *relpath)
   return res;
 }
 
-int Client::rename(const char *relfrom, const char *relto)
+int Client::rename(const char *relfrom, const char *relto,
+		   __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1347,7 +1368,7 @@ int Client::rename(const char *relfrom, const char *relto)
 
 // dirs
 
-int Client::mkdir(const char *relpath, mode_t mode)
+int Client::mkdir(const char *relpath, mode_t mode, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1389,7 +1410,7 @@ int Client::mkdir(const char *relpath, mode_t mode)
   return res;
 }
 
-int Client::rmdir(const char *relpath)
+int Client::rmdir(const char *relpath, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
   
@@ -1441,7 +1462,8 @@ int Client::rmdir(const char *relpath)
 
 // symlinks
   
-int Client::symlink(const char *reltarget, const char *rellink)
+int Client::symlink(const char *reltarget, const char *rellink,
+		    __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1486,7 +1508,8 @@ int Client::symlink(const char *reltarget, const char *rellink)
   return res;
 }
 
-int Client::readlink(const char *relpath, char *buf, off_t size) 
+int Client::readlink(const char *relpath, char *buf, off_t size,
+		     __int64_t uid, __int64_t gid) 
 { 
   client_lock.Lock();
 
@@ -1531,7 +1554,8 @@ int Client::readlink(const char *relpath, char *buf, off_t size)
 
 // inode stuff
 
-int Client::_lstat(const char *path, int mask, Inode **in)
+int Client::_lstat(const char *path, int mask, Inode **in,
+		   __int64_t uid, __int64_t gid)
 {  
   MClientRequest *req = 0;
   filepath fpath(path);
@@ -1630,7 +1654,8 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
 }
 
 
-int Client::lstat(const char *relpath, struct stat *stbuf)
+int Client::lstat(const char *relpath, struct stat *stbuf,
+		  __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1664,7 +1689,8 @@ int Client::lstat(const char *relpath, struct stat *stbuf)
 }
 
 
-int Client::lstatlite(const char *relpath, struct statlite *stl)
+int Client::lstatlite(const char *relpath, struct statlite *stl,
+		      __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
    
@@ -1705,7 +1731,8 @@ int Client::lstatlite(const char *relpath, struct statlite *stl)
 
 
 
-int Client::chmod(const char *relpath, mode_t mode)
+int Client::chmod(const char *relpath, mode_t mode,
+		  __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1745,7 +1772,9 @@ int Client::chmod(const char *relpath, mode_t mode)
   return res;
 }
 
-int Client::chown(const char *relpath, uid_t uid, gid_t gid)
+//int Client::chown(const char *relpath, uid_t uid, gid_t gid,
+//		  __int64_t uid, __int64_t gid)
+int Client::chown(const char *relpath, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1789,7 +1818,8 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   return res;
 }
 
-int Client::utime(const char *relpath, struct utimbuf *buf)
+int Client::utime(const char *relpath, struct utimbuf *buf,
+		  __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -1837,7 +1867,8 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 
 
 
-int Client::mknod(const char *relpath, mode_t mode) 
+int Client::mknod(const char *relpath, mode_t mode,
+		  __int64_t uid, __int64_t gid) 
 { 
   client_lock.Lock();
 
@@ -1977,7 +2008,7 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
 
 /** POSIX stubs **/
 
-DIR *Client::opendir(const char *name) 
+DIR *Client::opendir(const char *name, __int64_t uid, __int64_t gid) 
 {
   DirResult *d = new DirResult;
   d->size = getdir(name, d->contents);
@@ -1986,7 +2017,7 @@ DIR *Client::opendir(const char *name)
   return (DIR*)d;
 }
 
-int Client::closedir(DIR *dir) 
+int Client::closedir(DIR *dir, __int64_t uid, __int64_t gid) 
 {
   DirResult *d = (DirResult*)dir;
   delete d;
@@ -2001,7 +2032,7 @@ int Client::closedir(DIR *dir)
 //  char           d_name[256]; /* filename */
 //};
 
-struct dirent *Client::readdir(DIR *dirp)
+struct dirent *Client::readdir(DIR *dirp, __int64_t uid, __int64_t gid)
 {
   DirResult *d = (DirResult*)dirp;
 
@@ -2036,20 +2067,20 @@ struct dirent *Client::readdir(DIR *dirp)
   return &d->dp.d_dirent;
 }
  
-void Client::rewinddir(DIR *dirp)
+void Client::rewinddir(DIR *dirp, __int64_t uid, __int64_t gid)
 {
   DirResult *d = (DirResult*)dirp;
   d->p = d->contents.begin();
   d->off = 0;
 }
  
-off_t Client::telldir(DIR *dirp)
+off_t Client::telldir(DIR *dirp, __int64_t uid, __int64_t gid)
 {
   DirResult *d = (DirResult*)dirp;
   return d->off;
 }
 
-void Client::seekdir(DIR *dirp, off_t offset)
+void Client::seekdir(DIR *dirp, off_t offset, __int64_t uid, __int64_t gid)
 {
   DirResult *d = (DirResult*)dirp;
 
@@ -2064,7 +2095,8 @@ void Client::seekdir(DIR *dirp, off_t offset)
   }
 }
 
-struct dirent_plus *Client::readdirplus(DIR *dirp)
+struct dirent_plus *Client::readdirplus(DIR *dirp,
+					__int64_t uid, __int64_t gid)
 {
   DirResult *d = (DirResult*)dirp;
 
@@ -2165,11 +2197,12 @@ struct dirent_lite *Client::readdirlite(DIR *dirp)
 
 /****** file i/o **********/
 
-int Client::open(const char *relpath, int flags) 
+int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
 
   Ticket *tk = get_user_ticket(getuid(), getgid());
+  cout << "Returned from ticket call" << endl;
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2315,7 +2348,7 @@ void Client::close_safe(Inode *in)
     mount_cond.Signal();
 }
 
-int Client::close(fh_t fh)
+int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -2396,7 +2429,8 @@ int Client::close(fh_t fh)
 
 // blocking osd interface
 
-int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 
+int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
+		 __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
 
@@ -2525,7 +2559,8 @@ void Client::hack_sync_write_safe()
   client_lock.Unlock();
 }
 
-int Client::write(fh_t fh, const char *buf, off_t size, off_t offset) 
+int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
+		  __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
 
@@ -2651,7 +2686,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset)
 }
 
 
-int Client::truncate(const char *file, off_t size) 
+int Client::truncate(const char *file, off_t size, __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
 
@@ -2688,7 +2723,7 @@ int Client::truncate(const char *file, off_t size)
 }
 
 
-int Client::fsync(fh_t fh, bool syncdataonly) 
+int Client::fsync(fh_t fh, bool syncdataonly, __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
 
@@ -2733,7 +2768,7 @@ int Client::fsync(fh_t fh, bool syncdataonly)
 
 // not written yet, but i want to link!
 
-int Client::chdir(const char *path)
+int Client::chdir(const char *path, __int64_t uid, __int64_t gid)
 {
   // fake it for now!
   string abs;
@@ -2744,7 +2779,8 @@ int Client::chdir(const char *path)
 }
 
 #ifdef DARWIN
-int Client::statfs(const char *path, struct statvfs *stbuf)
+int Client::statfs(const char *path, struct statvfs *stbuf,
+		   __int64_t uid, __int64_t gid)
 {
   bzero (stbuf, sizeof (struct statvfs));
   // FIXME
@@ -2761,7 +2797,8 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   return 0;
 }
 #else
-int Client::statfs(const char *path, struct statfs *stbuf) 
+int Client::statfs(const char *path, struct statfs *stbuf,
+		   __int64_t uid, __int64_t gid) 
 {
   assert(0);  // implement me
   return 0;
@@ -2769,7 +2806,8 @@ int Client::statfs(const char *path, struct statfs *stbuf)
 #endif
 
 
-int Client::lazyio_propogate(int fd, off_t offset, size_t count)
+int Client::lazyio_propogate(int fd, off_t offset, size_t count,
+			     __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
@@ -2813,7 +2851,8 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   return 0;
 }
 
-int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
+int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
+			       __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
