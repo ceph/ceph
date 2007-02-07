@@ -496,9 +496,11 @@ protected:
   map<uid_t,Ticket*> user_ticket;
   map<uid_t,int>     user_ticket_ref;
   map<uid_t,list<Cond*> >   ticket_waiter_cond;
+  map<uid_t,esignPub*> user_pub_key;
+  map<uid_t,esignPriv*> user_priv_key;
 
-  // user map?
-  //map<uid_t>
+  // user map
+  //map<uid_t, User*> user_identity;
 
   Ticket *get_user_ticket(uid_t uid, gid_t gid);
   void put_user_ticket(Ticket *tk);
@@ -519,7 +521,6 @@ protected:
 
   // messaging
   void dispatch(Message *m);
-
   void handle_mount_ack(class MClientMountAck*);
   void handle_unmount_ack(Message*);
   void handle_mds_map(class MMDSMap *m);

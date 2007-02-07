@@ -641,9 +641,11 @@ void Client::handle_auth_user_ack(MClientAuthUserAck *m)
 
   // put the ticket in the ticket map
   // **
-  user_ticket[uid] = m->get_ticket();
+  cout << "Got ticket for uid: " << uid << endl;
+  user_ticket[uid] = m->getTicket();
 
   // wait up the waiter(s)
+  // this signals all ticket waiters
   cout << "Entering for loop" << endl;
   for (list<Cond*>::iterator p = ticket_waiter_cond[uid].begin();
        p != ticket_waiter_cond[uid].end();
@@ -659,12 +661,25 @@ void Client::handle_auth_user_ack(MClientAuthUserAck *m)
 
 Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
 {
+  cout << "Requesting ticket for uid: " << uid << ", gid: " << gid << endl;
   // do we already have it?
   if (user_ticket.count(uid) == 0) {
     Cond cond;
     string username;  // i don't know!
-    string key;       // ...
+    string key;       // get from cache or make it now
 
+    // no key, make one now
+    // this should be a function with some
+    // security stuff (password) to gen key
+    if (user_pub_key.count(uid) == 0) {
+      esignPriv privKey = esignPrivKey("crypto/esig1536.dat");
+      esignPub pubKey = esignPubKey(privKey);
+      user_priv_key[uid] = &privKey;
+      user_pub_key[uid] = &pubKey;
+    }
+    key = pubToString(*(user_pub_key[uid]));
+
+    // if no one has already requested the ticket
     if (ticket_waiter_cond.count(uid) == 0) {
       // request from monitor
       int mon = monmap->pick_mon();
@@ -683,8 +698,10 @@ Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
     
     cout << "Waiting for a Wait" << endl;
     // naively assume we'll get a ticket FIXME
-    while (user_ticket.count(uid) == 0) 
+    while (user_ticket.count(uid) == 0) { 
+      cout << "user_ticket.count(uid) = " << user_ticket.count(uid) << endl;
       cond.Wait(client_lock);
+    }
 
     cout << "Did I break the loop?" << endl;
   }
@@ -2202,7 +2219,7 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
   client_lock.Lock();
 
   Ticket *tk = get_user_ticket(getuid(), getgid());
-  cout << "Returned from ticket call" << endl;
+
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;

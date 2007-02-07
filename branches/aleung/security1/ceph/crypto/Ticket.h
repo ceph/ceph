@@ -84,7 +84,6 @@ public:
   }
 
   void sign_ticket(esignPriv privKey) {
-    cout << "Trying to SIGN ticket" << endl << endl;
     byte ticketArray[sizeof(identity)];
     memcpy(ticketArray, &identity, sizeof(identity));
     signature = esignSig(ticketArray, sizeof(identity), privKey);
@@ -92,7 +91,6 @@ public:
   }
 
   bool verif_ticket (esignPub pubKey) {
-    cout << "Verifying ticket" << endl << endl;
     byte ticketArray[sizeof(identity)];
     memcpy(ticketArray, &identity, sizeof(identity));
     signature.Assign(allocSig, allocSig.size());
@@ -101,11 +99,10 @@ public:
   
 
   void decode(bufferlist& blist, int& off) {
-    cout << "About to decode BL ticket" << endl;
     
-    //int off = 0;
     blist.copy(off, sizeof(identity.uid), (char*)&(identity.uid));
     off += sizeof(identity.uid);
+    cout << "Decoded uid: " << identity.uid << endl;
     blist.copy(off, sizeof(identity.gid), (char*)&(identity.gid));
     off += sizeof(identity.gid);
     blist.copy(off, sizeof(identity.t_s), (char*)&(identity.t_s));
@@ -121,18 +118,15 @@ public:
     _decode(identity.username, blist, off);
     _decode(identity.pubKey, blist, off);
 
-    cout << "Decoded BL ticket OK" << endl;
-
   }
   void encode(bufferlist& blist) {
-    cout << "About to encode ticket" << endl;
+
     blist.append((char*)&(identity.uid), sizeof(identity.uid));
     blist.append((char*)&(identity.gid), sizeof(identity.gid));
     blist.append((char*)&(identity.t_s), sizeof(identity.t_s));
     blist.append((char*)&(identity.t_e), sizeof(identity.t_e));
     blist.append((char*)&allocSig, sizeof(allocSig));
     //blist.append((char*)&identity, sizeof(identity));
-    cout << "Encoded ticket OK" << endl;
 
     _encode(identity.iv, blist);
     _encode(identity.username, blist);

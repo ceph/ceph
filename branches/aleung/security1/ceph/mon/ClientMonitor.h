@@ -26,6 +26,8 @@ using namespace std;
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 
+#include "crypto/Ticket.h"
+
 class Monitor;
 
 class ClientMonitor : public Dispatcher {
@@ -36,6 +38,7 @@ class ClientMonitor : public Dispatcher {
  private:
   int num_clients;
   map<msg_addr_t,entity_inst_t> client_map;
+  map<uid_t, Ticket*> user_tickets;
 
   void bcast_latest_mds();
 
