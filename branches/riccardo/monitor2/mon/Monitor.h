@@ -23,7 +23,7 @@
 #include "Paxos.h"
 
 
-class ObjectStore;
+class MonitorStore;
 class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
@@ -45,7 +45,8 @@ protected:
   friend class C_Mon_Tick;
 
   // my local store
-  ObjectStore *store;
+  //ObjectStore *store;
+  MonitorStore *store;
 
   const static int INO_ELECTOR = 1;
   const static int INO_MON_MAP = 2;
@@ -112,7 +113,7 @@ protected:
     elector(this, w),
     mon_epoch(0), 
     
-    test_paxos(this, w, 0),  // machine 0 == test paxos
+    test_paxos(this, w, 0, "tester"),  // machine 0 == tester paxos
 
     state(STATE_STARTING),
     leader(0),

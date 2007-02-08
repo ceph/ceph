@@ -20,17 +20,32 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " store(" << dir <<") "
 
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 
 void MonitorStore::init()
 {
+  dout(1) << "init" << endl;
   // verify dir exists
-  DIR *d = ::opendir(dir);
+  DIR *d = ::opendir(dir.c_str());
   if (!d) {
-	derr(1) << "basedir " << dir << " dne" << endl;
-	assert(0);
+    derr(1) << "basedir " << dir << " dne" << endl;
+    assert(0);
   }
   ::closedir(d);
+}
+
+
+void MonitorStore::mkfs()
+{
+  dout(1) << "mkfs" << endl;
+
+  char cmd[200];
+  sprintf(cmd, "/bin/rm -rf %s/*", dir.c_str());
+  dout(1) << cmd << endl;
+  //system(cmd);
 }
 
 
@@ -38,42 +53,140 @@ version_t MonitorStore::get_int(const char *a, const char *b)
 {
   char fn[200];
   if (b)
-	sprintf(fn, "%s/%s/%s", dir, a, b);
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   else
-	sprintf(fn, "%s/%s", dir, a);
-
+    sprintf(fn, "%s/%s", dir.c_str(), a);
+  
   FILE *f = ::fopen(fn, "r");
   if (!f) 
-	return 0;
-
+    return 0;
+  
   char buf[20];
   ::fgets(buf, 20, f);
   ::fclose(f);
-
+  
   version_t val = atoi(buf);
-
+  
   if (b) {
-	dout(10) << "get_int " << a << "/" << b << " = " << val << endl;
+    dout(10) << "get_int " << a << "/" << b << " = " << val << endl;
   } else {
-	dout(10) << "get_int " << a << " = " << val << endl;
+    dout(10) << "get_int " << a << " = " << val << endl;
   }
   return val;
 }
 
 
-void MonitorStore::set_int(version_t val, const char *a, const char *b)
+void MonitorStore::put_int(version_t val, const char *a, const char *b)
 {
   char fn[200];
+  sprintf(fn, "%s/%s", dir.c_str(), a);
   if (b) {
-	dout(10) << "set_int " << a << "/" << b << " = " << val << endl;
-	sprintf(fn, "%s/%s/%s", dir, a, b);
+    ::mkdir(fn, 0755);
+    dout(10) << "set_int " << a << "/" << b << " = " << val << endl;
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-	dout(10) << "set_int " << a << " = " << val << endl;
-	sprintf(fn, "%s/%s", dir, a);
+    dout(10) << "set_int " << a << " = " << val << endl;
   }
   
-  FILE *f = ::fopen(fn, "w");
+  char tfn[200];
+  sprintf(tfn, "%s.new", fn);
+  FILE *f = ::fopen(tfn, "w");
   assert(f);
   ::fprintf(f, "%lld\n", val);
   ::fclose(f);
+  ::rename(tfn, fn);
+}
+
+
+// ----------------------------------------
+// buffers
+
+bool MonitorStore::exists_bl(const char *a, const char *b)
+{
+  char fn[200];
+  if (b) {
+    dout(10) << "exists_bl " << a << "/" << b << endl;
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+  } else {
+    dout(10) << "exists_bl " << a << endl;
+    sprintf(fn, "%s/%s", dir.c_str(), a);
+  }
+  
+  struct stat st;
+  int r = ::stat(fn, &st);
+  return r == 0;
+}
+
+
+int MonitorStore::get_bl(bufferlist& bl, const char *a, const char *b)
+{
+  char fn[200];
+  if (b) {
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+  } else {
+    sprintf(fn, "%s/%s", dir.c_str(), a);
+  }
+  
+  int fd = ::open(fn, O_RDONLY);
+  if (!fd) {
+    if (b) {
+      dout(10) << "get_bl " << a << "/" << b << " DNE" << endl;
+    } else {
+      dout(10) << "get_bl " << a << " DNE" << endl;
+    }
+    return 0;
+  }
+
+  // read size
+  __int32_t len = 0;
+  ::read(fd, &len, sizeof(len));
+  
+  // read buffer
+  bl.clear();
+  bufferptr bp(len);
+  ::read(fd, bp.c_str(), len);
+  bl.append(bp);
+  ::close(fd);
+
+  if (b) {
+    dout(10) << "get_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+  } else {
+    dout(10) << "get_bl " << a << " = " << bl.length() << " bytes" << endl;
+  }
+
+  return len;
+}
+
+int MonitorStore::put_bl(bufferlist& bl, const char *a, const char *b)
+{
+  char fn[200];
+  sprintf(fn, "%s/%s", dir.c_str(), a);
+  if (b) {
+    ::mkdir(fn, 0755);
+    dout(10) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+  } else {
+    dout(10) << "put_bl " << a << " = " << bl.length() << " bytes" << endl;
+  }
+  
+  char tfn[200];
+  sprintf(tfn, "%s.new", fn);
+  int fd = ::open(tfn, O_WRONLY|O_CREAT);
+  assert(fd);
+  
+  // write size
+  __int32_t len = bl.length();
+  ::write(fd, &len, sizeof(len));
+
+  // write data
+  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
+       it != bl.buffers().end();
+       it++) 
+    ::write(fd, it->c_str(), it->length());
+  
+  ::fsync(fd);
+  ::close(fd);
+  ::rename(tfn, fn);
+
+  return 0;
 }

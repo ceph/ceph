@@ -114,7 +114,7 @@ obfs: depend obfstest
 mkmonmap: mkmonmap.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
+cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o

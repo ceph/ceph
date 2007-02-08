@@ -33,15 +33,16 @@ class Paxos {
 
   // my state machine info
   int machine_id;
+  const char *machine_name;
   map<version_t, bufferlist> accepted_values;
   map<version_t, int>        accepted_proposal_number;
-
-  version_t last_proposal_number;
 
   // proposer
   void propose(version_t v, bufferlist& value);
   void handle_last(MMonPaxos*);
   void handle_accept(MMonPaxos*);
+
+  version_t get_new_proposal_number();
   
   // accepter
   void handle_prepare(MMonPaxos*);  
@@ -53,7 +54,8 @@ class Paxos {
 
 public:
   Paxos(Monitor *m, int w,
-	int mid) : mon(m), whoami(w), machine_id(mid) {
+	int mid,const char *mnm) : mon(m), whoami(w), 
+				   machine_id(mid), machine_name(mnm) {
   }
 
   void dispatch(Message *m);

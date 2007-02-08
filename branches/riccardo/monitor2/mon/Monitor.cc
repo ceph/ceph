@@ -17,7 +17,7 @@
 
 #include "osd/OSDMap.h"
 
-#include "ebofs/Ebofs.h"
+#include "MonitorStore.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
@@ -46,13 +46,11 @@ void Monitor::init()
   
   // store
   char s[80];
-  sprintf(s, "dev/mon%d", whoami);
-  store = new Ebofs(s);
+  sprintf(s, "mondata/mon%d", whoami);
+  store = new MonitorStore(s);
 
   if (g_conf.mkfs)
     store->mkfs();
-  int r = store->mount();
-  assert(r >= 0);
 
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
@@ -83,10 +81,8 @@ void Monitor::shutdown()
 
   cancel_tick();
 
-  if (store) {
-    store->umount();
+  if (store) 
     delete store;
-  }
   
   // stop osds.
   for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();

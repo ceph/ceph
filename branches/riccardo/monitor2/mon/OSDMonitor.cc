@@ -15,7 +15,7 @@
 #include "Monitor.h"
 #include "MDSMonitor.h"
 
-#include "osd/ObjectStore.h"
+#include "MonitorStore.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
@@ -224,20 +224,18 @@ void OSDMonitor::create_initial()
 
 bool OSDMonitor::get_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  object_t oid(Monitor::INO_OSD_MAP, epoch);
-  if (!mon->store->exists(oid))
+  if (!mon->store->exists_bl("osdmap", epoch))
     return false;
-  int r = mon->store->read(oid, 0, 0, bl);
+  int r = mon->store->get_bl(bl, "osdmap", epoch);
   assert(r > 0);
   return true;  
 }
 
 bool OSDMonitor::get_inc_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  object_t oid(Monitor::INO_OSD_INC_MAP, epoch);
-  if (!mon->store->exists(oid))
+  if (!mon->store->exists_bl("osdincmap", epoch))
     return false;
-  int r = mon->store->read(oid, 0, 0, bl);
+  int r = mon->store->get_bl(bl, "osdincmap", epoch);
   assert(r > 0);
   return true;  
 }
@@ -248,11 +246,8 @@ void OSDMonitor::save_map()
   bufferlist bl;
   osdmap.encode(bl);
 
-  ObjectStore::Transaction t;
-  t.write(object_t(Monitor::INO_OSD_MAP,0), 0, bl.length(), bl);
-  t.write(object_t(Monitor::INO_OSD_MAP,osdmap.get_epoch()), 0, bl.length(), bl); 
-  mon->store->apply_transaction(t);
-  mon->store->sync();
+  mon->store->put_bl(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
 void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
@@ -263,12 +258,9 @@ void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
   bufferlist incbl;
   inc.encode(incbl);
 
-  ObjectStore::Transaction t;
-  t.write(object_t(Monitor::INO_OSD_MAP,0), 0, bl.length(), bl);
-  t.write(object_t(Monitor::INO_OSD_MAP,osdmap.get_epoch()), 0, bl.length(), bl);         // not strictly needed??
-  t.write(object_t(Monitor::INO_OSD_INC_MAP,osdmap.get_epoch()), 0, incbl.length(), incbl); 
-  mon->store->apply_transaction(t);
-  mon->store->sync();
+  mon->store->put_bl(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_bl(incbl, "osdincmap", osdmap.get_epoch());
+  mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
 

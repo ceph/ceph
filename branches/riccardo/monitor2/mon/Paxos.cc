@@ -13,13 +13,14 @@
 
 #include "Paxos.h"
 #include "Monitor.h"
+#include "MonitorStore.h"
 
 #include "messages/MMonPaxos.h"
 
 #include "config.h"
 #undef dout
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_id << ") "
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_id << ") "
+#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << ") "
+#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cout << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << ") "
 
 
 // ---------------------------------
@@ -35,6 +36,23 @@ void Paxos::handle_last(MMonPaxos *m)
   delete m;
 }
 
+
+/*
+ * return a globally unique, monotonically increasing proposal number
+ */
+version_t Paxos::get_new_proposal_number()
+{
+  // read, update, write
+  version_t last = mon->store->get_int("last_paxos_proposal");
+  last++;
+  mon->store->put_int(last, "last_paxos_proposal");
+
+  // make it unique among all monitors.
+  version_t pn = (100000000ULL * (version_t)whoami) + last;
+  
+  dout(10) << "get_new_proposal_number = " << pn << endl;
+  return pn;
+}
 
 
 // ---------------------------------
@@ -68,9 +86,9 @@ void Paxos::leader_start()
   // .. do something else too 
 
 
-  int who = 2;
-  mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COMMIT, machine_id, 12, 122),
-							   MSG_ADDR_MON(who), mon->monmap->get_inst(who));
+  //int who = 2;
+  //mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COMMIT, machine_id, 12, 122),
+  //MSG_ADDR_MON(who), mon->monmap->get_inst(who));
 }
 
 
