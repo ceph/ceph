@@ -75,12 +75,15 @@ class BufferHead : public LRUObject {
 
   utime_t    dirty_stamp;
 
+  bool       want_to_expire;  // wants to be at bottom of lru
+
  public:
   BufferHead(ObjectCache *o) :
     oc(o), //cancellable_ioh(0), tx_epoch(0),
     rx_ioh(0), tx_ioh(0), tx_block(0), partial_tx_to(0), partial_tx_epoch(0),
     shadow_of(0),
-    ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0)
+    ref(0), state(STATE_MISSING), epoch_modified(0), version(0), last_flushed(0),
+    want_to_expire(false)
     {}
   ~BufferHead() {
     unpin_shadows();
@@ -512,6 +515,7 @@ class BufferCache {
   }
   void touch_bottom(BufferHead *bh) {
     if (bh->is_dirty()) {
+      bh->want_to_expire = true;
       lru_dirty.lru_bottouch(bh);
     } else
       lru_rest.lru_bottouch(bh);
@@ -593,7 +597,10 @@ class BufferCache {
     }
     if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
       lru_dirty.lru_remove(bh);
-      lru_rest.lru_insert_mid(bh);
+      if (bh->want_to_expire)
+	lru_rest.lru_insert_bot(bh);
+      else
+	lru_rest.lru_insert_mid(bh);
       dirty_bh.erase(bh);
     }
 
