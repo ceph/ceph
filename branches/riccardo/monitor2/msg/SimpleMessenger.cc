@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "config.h"
 
@@ -51,6 +52,23 @@ Rank rank;
  * Accepter
  */
 
+void simplemessenger_sigint(int r)
+{
+  rank.sigint();
+}
+
+void Rank::sigint()
+{
+  lock.Lock();
+  derr(0) << "got control-c, exiting" << endl;
+  ::close(accepter.listen_sd);
+  exit(-1);
+  lock.Unlock();
+}
+
+
+
+
 int Rank::Accepter::start()
 {
   // bind to a socket
@@ -66,16 +84,16 @@ int Rank::Accepter::start()
     derr(0) << "accepter.start unable to bind to " << rank.listen_addr << endl;
   assert(rc >= 0);
 
+  // what port did we get?
   socklen_t llen = sizeof(rank.listen_addr);
   getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
   
-  int myport = rank.listen_addr.sin_port;
+  int myport = ntohs(rank.listen_addr.sin_port);
+  dout(10) << "accepter.start bound to port " << myport << endl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
   assert(rc >= 0);
-
-  //dout(10) << "accepter.start listening on " << myport << endl;
   
   // my address is...
   char host[100];
@@ -92,11 +110,14 @@ int Rank::Accepter::start()
   memcpy((char *) &my_addr.sin_addr.s_addr, 
          myhostname->h_addr_list[0], 
          myhostname->h_length);
-  my_addr.sin_port = myport;
+  my_addr.sin_port = htons(myport);
   
   rank.listen_addr = my_addr;
   
   dout(10) << "accepter.start listen addr is " << rank.listen_addr << endl;
+
+  // set up signal handler
+  signal(SIGINT, simplemessenger_sigint);
 
   // start thread
   create();
@@ -209,10 +230,14 @@ int Rank::Pipe::connect()
   assert(rc>=0);
 
   // connect!
-  rc = ::connect(sd, (sockaddr*)&peer_inst.addr, sizeof(myAddr));
-  if (rc < 0) return rc;
+  rc = ::connect(sd, (struct sockaddr*)&peer_inst.addr, sizeof(myAddr));
+  if (rc < 0) {
+    dout(10) << "connect error " << peer_inst
+	     << ", " << errno << ": " << strerror(errno) << endl;
+    return rc;
+  }
 
-  // identify peer
+  // identify peer ..... FIXME
   entity_inst_t inst;
   rc = tcp_read(sd, (char*)&inst, sizeof(inst));
   if (inst.rank < 0) 
@@ -378,7 +403,9 @@ void Rank::Pipe::writer()
   if (!server) {
     int rc = connect();
     if (rc < 0) {
-      derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error connecting" << endl;
+      derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error connecting, " 
+	      << errno << ": " << strerror(errno)
+	      << endl;
       done = true;
       list<Message*> out;
       fail(out);
@@ -414,7 +441,9 @@ void Rank::Pipe::writer()
         
         if (write_message(m) < 0) {
           // failed!
-          derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest() << endl;
+          derr(1) << "pipe(" << peer_inst << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest()
+		  << ", " << errno << ": " << strerror(errno)
+		  << endl;
           out.push_front(m);
           fail(out);
           done = true;

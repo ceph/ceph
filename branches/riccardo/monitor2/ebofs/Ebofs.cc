@@ -1870,6 +1870,35 @@ int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
   */
 }
 
+void Ebofs::trim_from_cache(object_t oid, off_t off, size_t len)
+{
+  ebofs_lock.Lock();
+  _trim_from_cache(oid, off, len);
+  ebofs_lock.Unlock();
+}
+
+void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
+{
+  Onode *on = 0;
+  if (onode_map.count(oid) == 0) {
+    dout(7) << "_trim_from_cache " << oid << " " << off << "~" << len << " ... onode not in cache  " << endl;
+    return; 
+  } 
+  
+  if (!on->have_oc()) 
+    return; // nothing is cached. 
+
+  // map to blocks
+  block_t bstart = off / EBOFS_BLOCK_SIZE;
+  block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
+
+  ObjectCache *oc = on->get_oc(&bc);
+  oc->touch_bottom(bstart, blast);
+  
+  return;
+}
+
+
 int Ebofs::read(object_t oid, 
                 off_t off, size_t len,
                 bufferlist& bl)
@@ -2014,6 +2043,15 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
           dout(7) << "apply_transaction fail on _write" << endl;
           r &= bit;
         }
+      }
+      break;
+
+    case Transaction::OP_TRIMCACHE:
+      {
+        object_t oid = t.oids.front(); t.oids.pop_front();
+        off_t offset = t.offsets.front(); t.offsets.pop_front();
+        size_t len = t.lengths.front(); t.lengths.pop_front();
+        _trim_from_cache(oid, offset, len);
       }
       break;
 

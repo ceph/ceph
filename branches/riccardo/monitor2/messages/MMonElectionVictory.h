@@ -28,15 +28,13 @@ class MMonElectionVictory : public Message {
   
   virtual char *get_type_name() { return "election_victory"; }
   
-  /*
   void encode_payload() {
-    ::_encode(active_set, payload);
+    //::_encode(active_set, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(active_set, payload, off);
+    //int off = 0;
+    //::_decode(active_set, payload, off);
   }
-  */
 };
 
 #endif

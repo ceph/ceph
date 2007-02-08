@@ -86,20 +86,13 @@ protected:
   friend class MDSMonitor;
   friend class ClientMonitor;
 
-
   // initiate election
   void call_election();
 
-  // called by Elector when it's finished
-  void win_election(set<int>& active) {
-    leader = whoami;
-    quorum = active;
-    state = STATE_LEADER;
-  } 
-  void lose_election(int l) {
-    state = STATE_PEON;
-    leader = l;
-  }
+  // end election (called by Elector)
+  void win_election(set<int>& q);
+  void lose_election(int l);
+
 
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
@@ -114,11 +107,6 @@ protected:
     leader(0),
     osdmon(0), mdsmon(0), clientmon(0)
   {
-    // hack leader, until election works.
-    if (whoami == 0)
-      state = STATE_LEADER;
-    else
-      state = STATE_PEON;
   }
 
 

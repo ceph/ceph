@@ -62,8 +62,10 @@ bool parse_ip_port(const char *s, tcpaddr_t& tcpaddr)
   }
   
   // copy into inst
+  memset(&tcpaddr, 0, sizeof(addr));
+  tcpaddr.sin_family = AF_INET;
   memcpy((char*)&tcpaddr.sin_addr.s_addr, (char*)addr, 4);
-  tcpaddr.sin_port = port;
+  tcpaddr.sin_port = htons(port);
 
   return true;
 }
@@ -88,6 +90,7 @@ int main(int argc, char **argv)
 	cerr << "mkmonmap: invalid ip:port '" << args[i] << "'" << endl;
 	return -1;
       }
+      
       entity_inst_t inst;
       inst.set_addr(addr);
       cout << "mkmonmap: mon" << monmap.num_mon << " " << inst << endl;

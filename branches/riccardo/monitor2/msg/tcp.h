@@ -18,7 +18,7 @@ inline ostream& operator<<(ostream& out, const tcpaddr_t &a)
       << (unsigned)addr[1] << "."
       << (unsigned)addr[2] << "."
       << (unsigned)addr[3] << ":"
-      << (int)a.sin_port;
+      << ntohs(a.sin_port);
   return out;
 }
 

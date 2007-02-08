@@ -23,6 +23,10 @@ class MMonElectionPropose : public Message {
   MMonElectionPropose() : Message(MSG_MON_ELECTION_PROPOSE) {}
   
   virtual char *get_type_name() { return "election_propose"; }
+
+  void encode_payload() {}
+  void decode_payload() {}
+
 };
 
 #endif

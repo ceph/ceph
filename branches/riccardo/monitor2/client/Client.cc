@@ -21,9 +21,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#ifdef DARWIN
 #include <sys/statvfs.h>
-#endif // DARWIN
 
 
 #include <iostream>
@@ -2529,7 +2527,6 @@ int Client::chdir(const char *path)
   return 0;
 }
 
-#ifdef DARWIN
 int Client::statfs(const char *path, struct statvfs *stbuf)
 {
   bzero (stbuf, sizeof (struct statvfs));
@@ -2546,13 +2543,6 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 
   return 0;
 }
-#else
-int Client::statfs(const char *path, struct statfs *stbuf) 
-{
-  assert(0);  // implement me
-  return 0;
-}
-#endif
 
 
 int Client::lazyio_propogate(int fd, off_t offset, size_t count)

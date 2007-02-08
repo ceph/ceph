@@ -39,7 +39,10 @@ using namespace __gnu_cxx;
 /* Rank - per-process
  */
 class Rank {
- 
+public:
+  void sigint();
+
+private:
   class EntityMessenger;
   class Pipe;
 
@@ -60,6 +63,8 @@ class Rank {
     }
     int start();
   } accepter;
+
+  void sigint(int r);
   
 
   // pipe

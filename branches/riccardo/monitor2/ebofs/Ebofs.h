@@ -245,6 +245,7 @@ class Ebofs : public ObjectStore {
   int is_cached(object_t oid, off_t off, size_t len);
 
   int write(object_t oid, off_t off, size_t len, bufferlist& bl, Context *onsafe);
+  void trim_from_cache(object_t oid, off_t off, size_t len);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
   int truncate_front(object_t oid, off_t size, Context *onsafe=0);
   int remove(object_t oid, Context *onsafe=0);
@@ -306,6 +307,7 @@ private:
 
   bool _write_will_block();
   int _write(object_t oid, off_t off, size_t len, bufferlist& bl);
+  void _trim_from_cache(object_t oid, off_t off, size_t len);
   int _truncate(object_t oid, off_t size);
   int _truncate_front(object_t oid, off_t size);
   int _remove(object_t oid);

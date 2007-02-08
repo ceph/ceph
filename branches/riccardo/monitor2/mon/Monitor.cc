@@ -66,9 +66,15 @@ void Monitor::init()
   reset_tick();
 
   // call election?
-  assert(monmap->num_mon != 2);
-  if (monmap->num_mon >= 3) 
+  if (monmap->num_mon > 1) {
+    assert(monmap->num_mon != 2); 
     call_election();
+  } else {
+    // we're standalone.
+    set<int> q;
+    q.insert(whoami);
+    win_election(q);
+  }
 }
 
 void Monitor::shutdown()
@@ -123,7 +129,24 @@ void Monitor::call_election()
   //mdsmon->election_starting();
 }
 
+void Monitor::win_election(set<int>& active) 
+{
+  state = STATE_LEADER;
+  leader = whoami;
+  quorum = active;
+  dout(10) << "win_election, quorum is " << quorum << endl;
 
+  // init
+  osdmon->election_finished();
+  //mdsmon->election_finished();
+} 
+
+void Monitor::lose_election(int l) 
+{
+  state = STATE_PEON;
+  leader = l;
+  dout(10) << "lose_election, leader is mon" << leader << endl;
+}
 
 
 
