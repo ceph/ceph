@@ -20,6 +20,8 @@
 
 #include "MonMap.h"
 #include "Elector.h"
+#include "Paxos.h"
+
 
 class ObjectStore;
 class OSDMonitor;
@@ -60,6 +62,11 @@ protected:
 
   //void call_election();
 
+  // paxos
+  Paxos test_paxos;
+  friend class Paxos;
+
+
   // monitor state
   const static int STATE_STARTING = 0; // electing
   const static int STATE_LEADER =   1;
@@ -94,6 +101,7 @@ protected:
   void lose_election(int l);
 
 
+
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
     whoami(w), 
@@ -103,6 +111,9 @@ protected:
     store(0),
     elector(this, w),
     mon_epoch(0), 
+    
+    test_paxos(this, w, 0),  // machine 0 == test paxos
+
     state(STATE_STARTING),
     leader(0),
     osdmon(0), mdsmon(0), clientmon(0)

@@ -17,6 +17,8 @@ using namespace std;
 #include "messages/MNSLookupReply.h"
 #include "messages/MNSFailure.h"
 
+#include "messages/MMonPaxos.h"
+
 #include "messages/MMonElectionAck.h"
 #include "messages/MMonElectionPropose.h"
 #include "messages/MMonElectionVictory.h"
@@ -147,6 +149,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_NS_FAILURE:
     m = new MNSFailure();
+    break;
+
+  case MSG_MON_PAXOS:
+    m = new MMonPaxos;
     break;
 
   case MSG_MON_ELECTION_PROPOSE:

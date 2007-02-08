@@ -77,6 +77,7 @@ OSDC_OBJS= \
 
 MON_OBJS= \
 	mon/Monitor.o\
+	mon/Paxos.o\
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
 	mon/ClientMonitor.o\

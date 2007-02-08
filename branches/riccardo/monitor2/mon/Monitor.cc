@@ -139,6 +139,9 @@ void Monitor::win_election(set<int>& active)
   // init
   osdmon->election_finished();
   //mdsmon->election_finished();
+
+  // init paxos
+  test_paxos.leader_start();
 } 
 
 void Monitor::lose_election(int l) 

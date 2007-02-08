@@ -38,6 +38,7 @@
 #define MSG_SHUTDOWN    99999
 
 
+
 #define MSG_MON_ELECTION_ACK       15
 #define MSG_MON_ELECTION_PROPOSE   16
 #define MSG_MON_ELECTION_VICTORY   17
@@ -48,6 +49,8 @@
 #define MSG_MON_OSDMAP_UPDATE_PREPARE  23
 #define MSG_MON_OSDMAP_UPDATE_ACK      24
 #define MSG_MON_OSDMAP_UPDATE_COMMIT   25
+
+#define MSG_MON_PAXOS              30
 
 #define MSG_OSD_OP           40    // delete, etc.
 #define MSG_OSD_OPREPLY      41    // delete, etc.
