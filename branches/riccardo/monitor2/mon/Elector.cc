@@ -125,7 +125,8 @@ void Elector::handle_propose(MMonElectionPropose *m)
   } else {
 	// they would win over me
 	if (leader_acked < 0 ||      // haven't acked anyone yet, or
-		leader_acked > from) {   // they would win over who you did ack
+		leader_acked > from ||   // they would win over who you did ack, or
+		leader_acked == from) {  // this is the guy we're already deferring to
 	  defer(from);
   	} else {
 	  // ignore them!
