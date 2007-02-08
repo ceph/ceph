@@ -101,6 +101,8 @@ void Elector::victory()
   leader_acked = -1;
   electing_me = false;
 
+  cancel_timer();
+
   // tell everyone
   for (int i=0; i<mon->monmap->num_mon; ++i) {
 	if (i == whoami) continue;
