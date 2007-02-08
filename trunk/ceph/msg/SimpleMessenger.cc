@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "config.h"
 
@@ -50,6 +51,23 @@ Rank rank;
 /********************************************
  * Accepter
  */
+
+void simplemessenger_sigint(int r)
+{
+  rank.sigint();
+}
+
+void Rank::sigint()
+{
+  lock.Lock();
+  derr(0) << "got control-c, exiting" << endl;
+  ::close(accepter.listen_sd);
+  exit(-1);
+  lock.Unlock();
+}
+
+
+
 
 int Rank::Accepter::start()
 {
@@ -97,6 +115,9 @@ int Rank::Accepter::start()
   rank.listen_addr = my_addr;
   
   dout(10) << "accepter.start listen addr is " << rank.listen_addr << endl;
+
+  // set up signal handler
+  signal(SIGINT, simplemessenger_sigint);
 
   // start thread
   create();
