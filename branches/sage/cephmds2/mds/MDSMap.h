@@ -72,7 +72,8 @@ class MDSMap {
   set<int>               mds_created;   // which mds ids have initialized journals and id tables.
   map<int,int>           mds_state;     // MDS state
   map<int,version_t>     mds_state_seq;
-  map<int,entity_inst_t>      mds_inst;      // up instances
+  map<int,entity_inst_t> mds_inst;      // up instances
+  map<int,int>           mds_inc;       // incarnation count (monotonically increases)
 
   friend class MDSMonitor;
 
@@ -234,6 +235,12 @@ class MDSMap {
     return -1;
   }
 
+  int get_inc(int m) {
+    assert(mds_inc.count(m));
+    return mds_inc[m];
+  }
+
+
   void remove_mds(int m) {
     mds_inst.erase(m);
     mds_state.erase(m);
@@ -251,6 +258,7 @@ class MDSMap {
     ::_encode(mds_state, blist);
     ::_encode(mds_state_seq, blist);
     ::_encode(mds_inst, blist);
+    ::_encode(mds_inc, blist);
   }
   
   void decode(bufferlist& blist) {
@@ -267,6 +275,7 @@ class MDSMap {
     ::_decode(mds_state, blist, off);
     ::_decode(mds_state_seq, blist, off);
     ::_decode(mds_inst, blist, off);
+    ::_decode(mds_inc, blist, off);
   }
 
 

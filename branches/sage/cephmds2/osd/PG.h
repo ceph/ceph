@@ -34,35 +34,7 @@ using namespace __gnu_cxx;
 
 class OSD;
 
-/* reqid_t - caller + tid to unique identify this request
- */
-class reqid_t {
-public:
-  entity_name_t addr;
-  tid_t      tid;
-  reqid_t() : tid(0) {}
-  reqid_t(const entity_name_t& a, tid_t t) : addr(a), tid(t) {}
-};
 
-inline ostream& operator<<(ostream& out, const reqid_t& r) {
-  return out << r.addr << "." << r.tid;
-}
-inline bool operator==(const reqid_t& l, const reqid_t& r) {
-  return (l.addr == r.addr) && (l.tid == r.tid);
-}
-inline bool operator!=(const reqid_t& l, const reqid_t& r) {
-  return (l.addr != r.addr) || (l.tid != r.tid);
-}
-
-namespace __gnu_cxx {
-  template<> struct hash<reqid_t> {
-    size_t operator()(const reqid_t &r) const { 
-      static hash<unsigned long> H;
-      static hash<__uint64_t>    I;
-      return H(r.addr.type() ^ r.addr.num()) ^ I(r.tid);
-    }
-  };
-}
 
 /** PG - Replica Placement Group
  *
@@ -241,12 +213,12 @@ public:
       eversion_t version;
       objectrev_t rev;
       
-      reqid_t    reqid;  // caller+tid to uniquely identify request
+      reqid_t reqid;  // caller+tid to uniquely identify request
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v, 
-            const entity_name_t& a, tid_t t) : 
-        op(_op), oid(_oid), version(v), reqid(a,t) {}
+	    const reqid_t& rid) :
+        op(_op), oid(_oid), version(v), reqid(rid) {}
       
       bool is_delete() const { return op == DELETE; }
       bool is_clone() const { return op == CLONE; }
@@ -298,7 +270,7 @@ public:
   class IndexedLog : public Log {
   public:
     hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<reqid_t>         caller_ops;
+    hash_set<reqid_t>      caller_ops;
 
     // recovery pointers
     list<Entry>::iterator requested_to; // not inclusive of referenced item
@@ -316,7 +288,7 @@ public:
     bool logged_object(object_t oid) {
       return objects.count(oid);
     }
-    bool logged_req(reqid_t &r) {
+    bool logged_req(const reqid_t &r) {
       return caller_ops.count(r);
     }
 

@@ -1912,7 +1912,7 @@ void OSD::pull(PG *pg, object_t oid)
 
   // send op
   tid_t tid = ++last_tid;
-  MOSDOp *op = new MOSDOp(tid, messenger->get_myinst(),
+  MOSDOp *op = new MOSDOp(messenger->get_myinst(), 0, tid,
                           oid, pg->get_pgid(),
                           osdmap->get_epoch(),
                           OSD_OP_PULL);
@@ -1954,7 +1954,7 @@ void OSD::push(PG *pg, object_t oid, int dest)
   logger->inc("r_pushb", bl.length());
   
   // send
-  MOSDOp *op = new MOSDOp(++last_tid, messenger->get_myinst(),
+  MOSDOp *op = new MOSDOp(messenger->get_myinst(), 0, ++last_tid,
                           oid, pg->info.pgid, osdmap->get_epoch(), 
                           OSD_OP_PUSH); 
   op->set_offset(0);
@@ -3004,8 +3004,7 @@ void OSD::issue_repop(PG *pg, MOSDOp *op, int osd)
           << endl;
   
   // forward the write/update/whatever
-  MOSDOp *wr = new MOSDOp(op->get_tid(),
-                          op->get_client_inst(),
+  MOSDOp *wr = new MOSDOp(op->get_client_inst(), op->get_client_inc(), op->get_reqid().tid,
                           oid,
                           pg->get_pgid(),
                           osdmap->get_epoch(),
@@ -3159,9 +3158,8 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   }
 
   // dup op?
-  reqid_t reqid(op->get_client(), op->get_tid());
-  if (pg->log.logged_req(reqid)) {
-    dout(-3) << "op_modify " << opname << " dup op " << reqid
+  if (pg->log.logged_req(op->get_reqid())) {
+    dout(-3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << endl;
     op->set_op(OSD_OP_WRNOOP);
     opname = MOSDOp::get_opname(op->get_op());
@@ -3312,8 +3310,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   if (crev && rev && rev > crev) {
     eversion_t cv = version;
     cv.version--;
-    PG::Log::Entry cloneentry(PG::Log::Entry::CLONE, oid, cv,
-			    op->get_client(), op->get_tid());
+    PG::Log::Entry cloneentry(PG::Log::Entry::CLONE, oid, cv, op->get_reqid());
     pg->log.add(cloneentry);
 
     dout(10) << "prepare_log_transaction " << op->get_op()
@@ -3324,8 +3321,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   // actual op
   int opcode = PG::Log::Entry::MODIFY;
   if (op->get_op() == OSD_OP_DELETE) opcode = PG::Log::Entry::DELETE;
-  PG::Log::Entry logentry(opcode, oid, version,
-                          op->get_client(), op->get_tid());
+  PG::Log::Entry logentry(opcode, oid, version, op->get_reqid());
 
   dout(10) << "prepare_log_transaction " << op->get_op()
            << " " << logentry

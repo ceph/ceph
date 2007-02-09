@@ -16,6 +16,7 @@
 #define __OBJECTSTORE_H
 
 #include "include/types.h"
+#include "osd_types.h"
 #include "include/Context.h"
 #include "include/buffer.h"
 

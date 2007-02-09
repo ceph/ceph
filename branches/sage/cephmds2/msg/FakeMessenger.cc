@@ -155,10 +155,9 @@ int fakemessenger_do_loop_2()
       
       if (m) {
         //dout(18) << "got " << m << endl;
-        dout(1) << "---- '" << m->get_type_name() 
-                << "' from " << m->get_source() // << ':' << m->get_source_port() 
-                << " to " << m->get_dest() //<< ':' << m->get_dest_port() 
-                << " ---- " << m 
+        dout(1) << "---- " << m->get_dest() 
+		<< " <- " << m->get_source()
+                << " ---- " << *m 
                 << endl;
         
         if (g_conf.fakemessenger_serialize) {
@@ -328,9 +327,7 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
     }
     dm->queue_incoming(m);
 
-    dout(1) << "--> " << get_myname() << " sending " << m << " '" << m->get_type_name() << "'"
-            << " to " << inst
-            << endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;
+    dout(1) << "--> " << get_myname() << " -> " << inst.name << " " << *m << endl;
     
   }
   catch (...) {

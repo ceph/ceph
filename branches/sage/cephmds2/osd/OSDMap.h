@@ -22,6 +22,7 @@
  */
 #include "config.h"
 #include "include/types.h"
+#include "osd_types.h"
 #include "msg/Message.h"
 #include "common/Mutex.h"
 #include "common/Clock.h"

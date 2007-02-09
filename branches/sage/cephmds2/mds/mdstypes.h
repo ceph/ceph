@@ -14,6 +14,35 @@ using namespace std;
 #include <cassert>
 
 
+
+// md ops
+#define MDS_OP_STATFS   1
+
+#define MDS_OP_STAT     100
+#define MDS_OP_LSTAT    101
+#define MDS_OP_UTIME    102
+#define MDS_OP_CHMOD    103
+#define MDS_OP_CHOWN    104  
+
+
+#define MDS_OP_READDIR  200
+#define MDS_OP_MKNOD    201
+#define MDS_OP_LINK     202
+#define MDS_OP_UNLINK   203
+#define MDS_OP_RENAME   204
+
+#define MDS_OP_MKDIR    220
+#define MDS_OP_RMDIR    221
+#define MDS_OP_SYMLINK  222
+
+#define MDS_OP_OPEN     301
+#define MDS_OP_TRUNCATE 306
+#define MDS_OP_FSYNC    307
+//#define MDS_OP_CLOSE    310
+#define MDS_OP_RELEASE  308
+
+
+
 // ================================================================
 
 /* meta_load_t

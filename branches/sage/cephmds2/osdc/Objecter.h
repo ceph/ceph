@@ -27,6 +27,7 @@ class Objecter {
   
  private:
   tid_t last_tid;
+  int client_inc;
   int num_unacked;
   int num_uncommitted;
 
@@ -134,7 +135,7 @@ class Objecter {
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om) : 
     messenger(m), monmap(mm), osdmap(om),
-    last_tid(0),
+    last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0)
     {}
   ~Objecter() {
@@ -161,6 +162,10 @@ class Objecter {
  public:
   bool is_active() {
     return !(op_read.empty() && op_modify.empty());
+  }
+
+  void set_client_incarnation(int inc) {
+	client_inc = inc;
   }
 
   // med level

@@ -64,7 +64,7 @@ void MDSMonitor::print_map()
   for (set<int>::iterator p = all.begin();
        p != all.end();
        ++p) {
-    dout(7) << " mds" << *p 
+    dout(7) << " mds" << *p << "." << mdsmap.mds_inc[*p]
 	    << " : " << MDSMap::get_state_name(mdsmap.get_state(*p))
 	    << " : " << (mdsmap.have_inst(*p) ? mdsmap.get_inst(*p) : blank)
 	    << endl;
@@ -140,6 +140,7 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
   if (booted) {
     mdsmap.mds_inst[from].addr = m->get_source_addr();
     mdsmap.mds_inst[from].name = MSG_ADDR_MDS(from);
+    mdsmap.mds_inc[from]++;
 
     // starting -> creating|starting|replay
     if (mdsmap.is_degraded() &&

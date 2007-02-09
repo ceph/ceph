@@ -446,6 +446,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     // update messenger.
     messenger->reset_myname(MSG_ADDR_MDS(whoami));
 
+    // tell objecter my incarnation
+    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
+
     reopen_logger();
     dout(1) << "handle_mds_map i am now mds" << whoami << endl;
 

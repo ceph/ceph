@@ -26,6 +26,8 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+#include "mdstypes.h"
+
 #include "msg/Dispatcher.h"
 #include "include/types.h"
 #include "include/Context.h"

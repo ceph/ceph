@@ -28,38 +28,36 @@
  *
  */
 
-
-typedef struct {
-  // req
-  long pcid;
-  tid_t tid;
-  tid_t rep_tid;
-
-  object_t oid;
-  pg_t pg;
-
-  int op;
-  
-  // reply
-  int    result;
-  bool   commit;
-  size_t length, offset;
-  size_t object_size;
-  eversion_t version;
-
-  eversion_t pg_complete_thru;
-
-  epoch_t map_epoch;
-} MOSDOpReply_st;
-
-
 class MOSDOpReply : public Message {
-  MOSDOpReply_st st;
+  struct {
+    // req
+    reqid_t reqid;
+
+    tid_t rep_tid;
+    
+    object_t oid;
+    pg_t pg;
+    
+    int op;
+    
+    // reply
+    int    result;
+    bool   commit;
+    size_t length, offset;
+    size_t object_size;
+    eversion_t version;
+    
+    eversion_t pg_complete_thru;
+    
+    epoch_t map_epoch;
+  } st;
+
   bufferlist data;
   map<string,bufferptr> attrset;
 
  public:
-  long     get_tid() { return st.tid; }
+  const reqid_t& get_reqid() { return st.reqid; }
+  long     get_tid() { return st.reqid.tid; }
   long     get_rep_tid() { return st.rep_tid; }
   object_t get_oid() { return st.oid; }
   pg_t     get_pg() { return st.pg; }
@@ -84,7 +82,6 @@ class MOSDOpReply : public Message {
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
 
   void set_op(int op) { st.op = op; }
-  void set_tid(tid_t t) { st.tid = t; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
 
   // data payload
@@ -98,18 +95,13 @@ class MOSDOpReply : public Message {
   // osdmap
   epoch_t get_map_epoch() { return st.map_epoch; }
 
-  // keep a pcid (procedure call id) to match up request+reply
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid()          { return st.pcid; }
 
 public:
   MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
     Message(MSG_OSD_OPREPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.pcid = req->st.pcid;
-
+    this->st.reqid = req->st.reqid;
     this->st.op = req->st.op;
-    this->st.tid = req->st.tid;
     this->st.rep_tid = req->st.rep_tid;
 
     this->st.oid = req->st.oid;
@@ -141,6 +133,16 @@ public:
   }
 
   virtual char *get_type_name() { return "oopr"; }
+  
+  void print(ostream& out) {
+    out << "osd_op_reply(" << st.reqid
+	<< " " << MOSDOp::get_opname(st.op)
+	<< " " << st.oid << " = " << st.result 
+      //<< " " << this
+	<< ")";
+  }
+
 };
+
 
 #endif

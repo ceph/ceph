@@ -16,6 +16,7 @@
 #define __MOSDOP_H
 
 #include "msg/Message.h"
+#include "osd/osd_types.h"
 
 /*
  * OSD op
@@ -25,9 +26,7 @@
  *
  */
 
-//#define OSD_OP_MKFS       20
-
-// client ops
+// osd client ops
 #define OSD_OP_READ       1
 #define OSD_OP_STAT       2
 
@@ -47,33 +46,6 @@
 #define OSD_OP_PULL       30
 #define OSD_OP_PUSH       31
 
-
-typedef struct {
-  long pcid;
-
-  // who's asking?
-  tid_t tid;
-  entity_inst_t client;
-
-  // for replication
-  tid_t rep_tid;
-
-  object_t oid;
-  objectrev_t rev;
-  pg_t pg;
-
-  epoch_t map_epoch;
-
-  eversion_t pg_trim_to;   // primary->replica: trim to here
-
-  int op;
-  size_t length, offset;
-  eversion_t version;
-  eversion_t old_version;
-
-  bool   want_ack;
-  bool   want_commit;
-} MOSDOp_st;
 
 class MOSDOp : public Message {
 public:
@@ -102,14 +74,43 @@ public:
   }
 
 private:
-  MOSDOp_st st;
+  struct {
+    long pcid;
+    
+    // who's asking?
+    entity_inst_t client;
+    reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
+    
+    // for replication
+    tid_t rep_tid;
+    
+    object_t oid;
+    objectrev_t rev;
+    pg_t pg;
+    
+    epoch_t map_epoch;
+    
+    eversion_t pg_trim_to;   // primary->replica: trim to here
+    
+    int op;
+    size_t length, offset;
+    eversion_t version;
+    eversion_t old_version;
+    
+    bool   want_ack;
+    bool   want_commit;
+  } st;
+
   bufferlist data;
   map<string,bufferptr> attrset;
 
   friend class MOSDOpReply;
 
  public:
-  const tid_t       get_tid() { return st.tid; }
+  const reqid_t&    get_reqid() { return st.reqid; }
+  const tid_t          get_client_tid() { return st.reqid.tid; }
+  int                  get_client_inc() { return st.reqid.inc; }
+
   const entity_name_t& get_client() { return st.client.name; }
   const entity_inst_t& get_client_inst() { return st.client; }
   void set_client_inst(const entity_inst_t& i) { st.client = i; }
@@ -117,8 +118,8 @@ private:
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
 
-  const object_t   get_oid() { return st.oid; }
-  const pg_t get_pg() { return st.pg; }
+  const object_t get_oid() { return st.oid; }
+  const pg_t     get_pg() { return st.pg; }
   const epoch_t  get_map_epoch() { return st.map_epoch; }
 
   //const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
@@ -157,18 +158,21 @@ private:
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid() { return st.pcid; }
 
-  MOSDOp(long tid, entity_inst_t asker, 
+  MOSDOp(entity_inst_t asker, int inc, long tid,
          object_t oid, pg_t pg, epoch_t mapepoch, int op) :
     Message(MSG_OSD_OP) {
     memset(&st, 0, sizeof(st));
     this->st.client = asker;
-    this->st.tid = tid;
-    this->st.rep_tid = 0;
+    this->st.reqid.name = asker.name;
+    this->st.reqid.inc = inc;
+    this->st.reqid.tid = tid;
 
     this->st.oid = oid;
     this->st.pg = pg;
     this->st.map_epoch = mapepoch;
     this->st.op = op;
+
+    this->st.rep_tid = 0;
 
     this->st.want_ack = true;
     this->st.want_commit = true;
@@ -201,13 +205,15 @@ private:
   }
 
   virtual char *get_type_name() { return "oop"; }
+
+  void print(ostream& out) {
+    out << "osd_op(" << st.reqid
+	<< " " << get_opname(st.op)
+	<< " " << st.oid
+      //<< " " << this 
+	<< ")";
+  }
 };
 
-inline ostream& operator<<(ostream& out, MOSDOp& op)
-{
-  return out << "MOSDOp(" << op.get_client() << "." << op.get_tid() 
-             << " op " << MOSDOp::get_opname(op.get_op())
-             << " oid " << hex << op.get_oid() << dec << " " << &op << ")";
-}
 
 #endif

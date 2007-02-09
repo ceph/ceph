@@ -271,7 +271,8 @@ tid_t Objecter::stat_submit(OSDStat *st)
 
   // send
   last_tid++;
-  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myinst(),
+  assert(client_inc >= 0);
+  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
                          ex.oid, ex.pgid, osdmap->get_epoch(), 
                          OSD_OP_STAT);
   dout(10) << "stat_submit " << st << " tid " << last_tid
@@ -382,7 +383,8 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
 
   // send
   last_tid++;
-  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myinst(),
+  assert(client_inc >= 0);
+  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
                          ex.oid, ex.pgid, osdmap->get_epoch(), 
                          OSD_OP_READ);
   m->set_length(ex.length);
@@ -646,7 +648,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   else
     tid = ++last_tid;
 
-  MOSDOp *m = new MOSDOp(tid, messenger->get_myinst(),
+  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
                          ex.oid, ex.pgid, osdmap->get_epoch(),
                          wr->op);
   m->set_length(ex.length);

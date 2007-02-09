@@ -701,6 +701,9 @@ void Client::handle_mds_map(MMDSMap* m)
   
   delete m;
 
+  // note our inc #
+  objecter->set_client_incarnation(0);  // fixme
+
   mount_cond.Signal();  // mount might be waiting for this.
 }
 
