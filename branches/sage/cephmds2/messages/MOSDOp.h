@@ -53,8 +53,7 @@ typedef struct {
 
   // who's asking?
   tid_t tid;
-  msg_addr_t client;
-  entity_inst_t client_inst;
+  entity_inst_t client;
 
   // for replication
   tid_t rep_tid;
@@ -111,9 +110,9 @@ private:
 
  public:
   const tid_t       get_tid() { return st.tid; }
-  const msg_addr_t& get_client() { return st.client; }
-  const entity_inst_t& get_client_inst() { return st.client_inst; }
-  void set_client_inst(const entity_inst_t& i) { st.client_inst = i; }
+  const entity_name_t& get_client() { return st.client.name; }
+  const entity_inst_t& get_client_inst() { return st.client; }
+  void set_client_inst(const entity_inst_t& i) { st.client = i; }
 
   const tid_t       get_rep_tid() { return st.rep_tid; }
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
@@ -158,7 +157,7 @@ private:
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid() { return st.pcid; }
 
-  MOSDOp(long tid, msg_addr_t asker, 
+  MOSDOp(long tid, entity_inst_t asker, 
          object_t oid, pg_t pg, epoch_t mapepoch, int op) :
     Message(MSG_OSD_OP) {
     memset(&st, 0, sizeof(st));

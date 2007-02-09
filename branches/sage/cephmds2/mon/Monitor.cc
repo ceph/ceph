@@ -92,14 +92,14 @@ void Monitor::shutdown()
     if (osdmon->osdmap.is_down(*it)) continue;
     dout(10) << "sending shutdown to osd" << *it << endl;
     messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-			    MSG_ADDR_OSD(*it), osdmon->osdmap.get_inst(*it));
+			    osdmon->osdmap.get_inst(*it));
   }
   
   // monitors too.
   for (int i=0; i<monmap->num_mon; i++)
     if (i != whoami)
       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
-			      MSG_ADDR_MON(i), monmap->get_inst(i));
+			      monmap->get_inst(i));
 
   // clean up
   if (monmap) delete monmap;

@@ -28,18 +28,18 @@ class Timer;
 
 class MPIMessenger : public Messenger {
  protected:
-  msg_addr_t myaddr;     // my address
+  entity_name_t myaddr;     // my address
   //class Logger *logger;  // for logging
   
  public:
-  MPIMessenger(msg_addr_t myaddr);
+  MPIMessenger(entity_name_t myaddr);
   ~MPIMessenger();
 
   // init, shutdown MPI and associated event loop thread.
   virtual int shutdown();
 
   // message interface
-  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+  virtual int send_message(Message *m, entity_name_t dest, int port=0, int fromport=0);
 };
 
 /**

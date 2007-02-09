@@ -27,7 +27,7 @@ class Dispatcher {
   virtual void dispatch(Message *m) = 0;
 
   // how i deal with transmission failures.
-  virtual void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst) { delete m; }
+  virtual void ms_handle_failure(Message *m, entity_name_t dest, const entity_addr_t& addr) { delete m; }
 };
 
 #endif

@@ -917,7 +917,7 @@ void PG::activate(ObjectStore::Transaction& t)
       dout(10) << "activate sending " << m->log << " " << m->missing
                << " to osd" << peer << endl;
       //m->log.print(cout);
-      osd->messenger->send_message(m, MSG_ADDR_OSD(peer), osd->osdmap->get_inst(peer));
+      osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
 
       // update our missing
       if (peer_missing[peer].num_missing() == 0) {
@@ -1115,7 +1115,7 @@ bool PG::do_recovery()
     ls.push_back(info);
     osd->messenger->send_message(new MOSDPGNotify(osd->osdmap->get_epoch(),
                                                   ls),
-                                 MSG_ADDR_OSD(get_primary()), osd->osdmap->get_inst(get_primary()));
+                                 osd->osdmap->get_inst(get_primary()));
   }
 
   return false;
@@ -1164,7 +1164,7 @@ void PG::clean_replicas()
     set<pg_t> ls;
     ls.insert(info.pgid);
     MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
-    osd->messenger->send_message(m, MSG_ADDR_OSD(*p), osd->osdmap->get_inst(*p));
+    osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
   }
 
   stray_set.clear();

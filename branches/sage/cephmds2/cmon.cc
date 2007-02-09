@@ -86,7 +86,10 @@ int main(int argc, char **argv)
     cout << "bound to " << rank.get_listen_addr() << endl;
 
     // add single mon0
-    monmap.add_mon(rank.my_inst);
+    entity_inst_t inst;
+    inst.name = MSG_ADDR_MON(0);
+    inst.addr = rank.my_addr;
+    monmap.add_mon(inst);
     
     // write monmap
     cout << "writing monmap to " << monmap_fn << endl;;
@@ -102,7 +105,8 @@ int main(int argc, char **argv)
 
     // bind to a specific port
     cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << endl;
-    tcpaddr_t addr = monmap.get_inst(whoami).addr;
+    tcpaddr_t addr;
+    monmap.get_inst(whoami).addr.make_addr(addr);
     rank.set_listen_addr(addr);
     rank.start_rank();
   }

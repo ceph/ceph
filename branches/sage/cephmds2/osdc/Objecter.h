@@ -184,7 +184,7 @@ class Objecter {
   tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
 
 
-  void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst);
+  void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);
 
 };
 

@@ -224,7 +224,7 @@ void AnchorTable::handle_anchor_request(class MAnchorRequest *m)
   }
 
   // send reply
-  mds->messenger->send_message(reply, m->get_source(), m->get_source_inst(), m->get_source_port());
+  mds->messenger->send_message(reply, m->get_source_inst(), m->get_source_port());
   delete m;
 }
 

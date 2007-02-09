@@ -250,7 +250,34 @@ void MDCache::log_import_map(Context *onsync)
 // =====================
 // recovery stuff
 
+void MDCache::send_pending_import_maps()
+{
+  if (wants_import_map.empty())
+    return;  // nothing to send.
+
+  // only if it's appropriate!
+  if (migrator->is_exporting()) {
+    dout(7) << "send_pending_import_maps waiting, exports still in progress" << endl;
+    return;  // not now
+  }
+
+  // ok, send them.
+  for (set<int>::iterator p = wants_import_map.begin();
+       p != wants_import_map.end();
+       p++) 
+    send_import_map_now(*p);
+  wants_import_map.clear();
+}
+
 void MDCache::send_import_map(int who)
+{
+  if (migrator->is_exporting())
+    send_import_map_later(who);
+  else
+    send_import_map_now(who);
+}
+
+void MDCache::send_import_map_now(int who)
 {
   dout(10) << "send_import_map to mds" << who << endl;
 
@@ -343,7 +370,8 @@ void MDCache::handle_import_map(MMDSImportMap *m)
     dout(10) << "got all import maps, ready to rejoin" << endl;
     disambiguate_imports();
     recalc_auth_bits();
-    
+    trim_non_auth(); 
+
     // move to rejoin state
     mds->set_want_state(MDSMap::STATE_REJOIN);
   
@@ -451,9 +479,10 @@ void MDCache::finish_ambiguous_import(inodeno_t dirino)
     im = get_auth_container(dir);
     if (!im) im = dir;
     nested_exports[im].erase(dir);
+    exports.erase(dir);
     dir->set_dir_auth( CDIR_AUTH_PARENT );     
-    dir->state_set(CDIR_STATE_EXPORT);
-    dir->get(CDir::PIN_EXPORT);
+    dir->state_clear(CDIR_STATE_EXPORT);
+    dir->put(CDir::PIN_EXPORT);
   } else {
     // parent isn't me.  new import.
     imports.insert(dir);
@@ -577,7 +606,7 @@ void MDCache::send_cache_rejoins()
   dout(10) << "send_cache_rejoins " << endl;
 
   map<int, MMDSCacheRejoin*> rejoins;
-  
+
   // build list of dir_auth regions
   list<CDir*> dir_auth_regions;
   for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
@@ -1077,6 +1106,57 @@ bool MDCache::trim(int max)
 
   return true;
 }
+
+
+void MDCache::trim_non_auth()
+{
+  dout(7) << "trim_non_auth" << endl;
+  
+  CDentry *first_auth = 0;
+  
+  // trim non-auth items from the lru
+  while (lru.lru_get_size() > 0) {
+    CDentry *dn = (CDentry*)lru.lru_expire();
+    if (!dn) break;
+
+    if (dn->is_auth()) {
+      // add back into lru (at the top)
+      lru.lru_insert_top(dn);
+
+      if (!first_auth) {
+	first_auth = dn;
+      } else {
+	if (first_auth == dn) 
+	  break;
+      }
+    } else {
+      // non-auth.  expire.
+      CDir *dir = dn->get_dir();
+      assert(dir);
+
+      // unlink the dentry
+      dout(15) << "trim_non_auth removing " << *dn << endl;
+      if (!dn->is_null()) 
+	dir->unlink_inode(dn);
+      dir->remove_dentry(dn);
+      
+      // adjust the dir state
+      CInode *diri = dir->get_inode();
+      diri->dir->state_clear(CDIR_STATE_COMPLETE);  // dir incomplete!
+    }
+  }
+
+  // inode expire queue
+  while (!inode_expire_queue.empty()) {
+    CInode *in = inode_expire_queue.front();
+    inode_expire_queue.pop_front();
+    dout(15) << "trim_non_auth removing " << *in << endl;
+    if (in == root) root = 0;
+    remove_inode(in);
+  }
+}
+
+
 
 class C_MDC_ShutdownCommit : public Context {
   MDCache *mdc;

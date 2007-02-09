@@ -32,7 +32,6 @@ void Elector::read_timer()
   old_views = views;   // TODO deep copy
   for (unsigned i=0; i<processes.size(); i++) {
 	mon->messenger->send_message(new MMonElectionCollect(read_num), 
-								 MSG_ADDR_MON(processes[i]),
 								 mon->monmap->get_inst(processes[i]));
   }
 };
@@ -74,7 +73,7 @@ void Elector::refresh_timer()
   refresh_num++;
   MMonElectionRefresh *msg = new MMonElectionRefresh(whoami, registry[whoami], refresh_num);
   for (unsigned i=0; i<processes.size(); i++) {
-	mon->messenger->send_message(msg, MSG_ADDR_MON(processes[i]), mon->monmap->get_inst(processes[i]));
+	mon->messenger->send_message(msg, mon->monmap->get_inst(processes[i]));
   }
   
   // Start the trip timer
@@ -148,7 +147,6 @@ void Elector::handle_collect(MMonElectionCollect* msg)
   mon->messenger->send_message(new MMonElectionStatus(msg->get_source().num(),
                                                       msg->read_num,
                                                       registry),
-                               msg->get_source(),
 							   mon->monmap->get_inst(msg->get_source().num()));
   delete msg;
 }
@@ -162,7 +160,6 @@ void Elector::handle_refresh(MMonElectionRefresh* msg)
     // reply to msg
     mon->messenger->send_message(new MMonElectionAck(msg->p, 
                                                      msg->refresh_num),
-								 msg->get_source(),
 								 mon->monmap->get_inst(msg->get_source().num()));
   }
 

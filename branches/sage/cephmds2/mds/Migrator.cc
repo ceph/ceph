@@ -266,7 +266,9 @@ void Migrator::handle_mds_failure(int who)
 
       export_state.erase(dir);
       export_peer.erase(dir);
-      
+
+      // send pending import_maps?
+      mds->mdcache->send_pending_import_maps();
     } else {
       // third party failed.  potential peripheral damage?
       if (p->second == EXPORT_EXPORTING) {
@@ -317,12 +319,17 @@ public:
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
  */
 void Migrator::export_dir(CDir *dir,
-                         int dest)
+			  int dest)
 {
   dout(7) << "export_dir " << *dir << " to " << dest << endl;
   assert(dest != mds->get_nodeid());
   assert(!dir->is_hashed());
    
+  if (mds->mdsmap->is_degraded()) {
+    dout(7) << "cluster degraded, no exports for now" << endl;
+    return;
+  }
+
   if (dir->inode->is_root()) {
     dout(7) << "i won't export root" << endl;
     assert(0);
@@ -669,7 +676,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
                                              it->second.pending(),
                                              it->second.wanted(),
                                              MClientFileCaps::FILECAP_STALE);
-    mds->messenger->send_message(m, MSG_ADDR_CLIENT(it->first), mds->clientmap.get_inst(it->first),
+    mds->messenger->send_message(m, mds->clientmap.get_inst(it->first),
 				 0, MDS_PORT_CACHE);
   }
 
@@ -1075,6 +1082,9 @@ void Migrator::export_dir_finish(CDir *dir)
   if (mds->logger) mds->logger->set("nex", cache->exports.size());
 
   show_imports();
+
+  // send pending import_maps?
+  mds->mdcache->send_pending_import_maps();
 }
 
 
@@ -1692,7 +1702,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
                                                 MClientFileCaps::FILECAP_REAP);
     caps->set_mds( oldauth ); // reap from whom?
     mds->messenger->send_message(caps, 
-				 MSG_ADDR_CLIENT(*it), mds->clientmap.get_inst(*it),
+				 mds->clientmap.get_inst(*it),
 				 0, MDS_PORT_CACHE);
   }
 

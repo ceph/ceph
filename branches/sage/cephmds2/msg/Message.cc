@@ -9,6 +9,7 @@ using namespace std;
 
 #include "messages/MGenericMessage.h"
 
+/*
 #include "messages/MNSConnect.h"
 #include "messages/MNSConnectAck.h"
 #include "messages/MNSRegister.h"
@@ -16,6 +17,7 @@ using namespace std;
 #include "messages/MNSLookup.h"
 #include "messages/MNSLookupReply.h"
 #include "messages/MNSFailure.h"
+*/
 
 #include "messages/MMonElectionAck.h"
 #include "messages/MMonElectionCollect.h"
@@ -24,8 +26,8 @@ using namespace std;
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
-#include "messages/MFailure.h"
-#include "messages/MFailureAck.h"
+//#include "messages/MFailure.h"
+//#include "messages/MFailureAck.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
@@ -131,6 +133,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
     // -- with payload --
 
+	/*
   case MSG_NS_CONNECT:
     m = new MNSConnect();
     break;
@@ -152,6 +155,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_NS_FAILURE:
     m = new MNSFailure();
     break;
+	*/
 
   case MSG_MON_ELECTION_ACK:
     m = new MMonElectionAck();
@@ -172,12 +176,14 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_PING_ACK:
     m = new MPingAck();
     break;
+	/*
   case MSG_FAILURE:
     m = new MFailure();
     break;
   case MSG_FAILURE_ACK:
     m = new MFailureAck();
     break;
+	*/
 
   case MSG_OSD_BOOT:
     m = new MOSDBoot();

@@ -3,46 +3,29 @@ huh:
 - how to keep mds osd op ids unique after a failover?
   - (and, how to flush out failed mds)
 
+- exporter recovery if importer fails during EXPORT_EXPORTING stage
+- importer recovery if exporter fails
 
-- handle exporter recovery if importer fails during EXPORT_EXPORTING stage
-
-- delay response to sending import_map if export in progress?
-- finish export before sending import_map?  (if is_recoverying or whatever...)
-
-- ambiguous imports on active node should include in-progress imports!
-
-- how to effectively trim cache after resolve but before rejoin
-  - we need to eliminate unneed non-auth metadata, without hosing potentially useful auth metadata
-
+/?- delay response to sending import_map if export in progress?
+/?- finish export before sending import_map?
+/- ambiguous imports on active node should include in-progress imports!
+/- how to effectively trim cache after resolve but before rejoin
+/  - we need to eliminate unneed non-auth metadata, without hosing potentially useful auth metadata
 
 - falures during recovery stages... rejoin
 
+- fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 
 
 importmap only sent after exports have completed.
 failures update export ack waitlists, so exports will compelte if unrelated nodes fail.
 importmap can be sent regardless of import status -- pending import is just flagged ambiguous.
-failure of exporter induces some cleanup on importer.  will disambiguate when it gets an importmap on exporter recovery.
+failure of exporter induces some cleanup on importer.  importer will disambiguate when it gets an importmap on exporter recovery.
 failure of importer induces cleanup on exporter.  no ambiguity.
 
 
-- no new mds may join if cluster is in a recovery state.  starting -> standby (unless failed)
-
-recoverer:
-- enter rejoin state
-- wait for import_map from all replay|rejoin|active nodes
-- disambiguate any imports
-- send cacherejoin for all my non-auth metadata
-- wait for all rejoinacks to establish lock/caps state
-- go active
-
-
-* fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
-
-
-
-- will a replay node get the proper dir_auth updates regardless of import_map message timing? (i.e. send before/during/after import/export?)  verify all cases.
-- push out recovered lockstate after all CacheRejoins have been received.
+/- no new mds may join if cluster is in a recovery state.  starting -> standby (unless failed)
+/  - make sure creating -> standby, and are not included in recovery set?
 
 
 mdsmap notes 
@@ -50,11 +33,9 @@ mdsmap notes
   that transition requires active involvement.  thus, no need worry
   about delivering/processing the full sequence of maps.
 
-
 blech:
 - EMetablob should return 'expired' if they have
   higher versions (and are thus described by a newer journal entry)
-
 
 mds
 - journal+recovery

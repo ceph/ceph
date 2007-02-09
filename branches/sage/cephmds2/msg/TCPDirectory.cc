@@ -54,7 +54,7 @@ void TCPDirectory::handle_register(MNSRegister *m)
   
   // pick id
   int rank = m->get_rank();
-  msg_addr_t entity = m->get_entity();
+  entity_name_t entity = m->get_entity();
 
   if (entity.is_new()) {
     // make up a new address!
@@ -105,7 +105,7 @@ void TCPDirectory::handle_register(MNSRegister *m)
 
 void TCPDirectory::handle_started(Message *m)
 {
-  msg_addr_t entity = m->get_source();
+  entity_name_t entity = m->get_source();
 
   dout(3) << "start signal from " << MSG_ADDR_NICE(entity) << endl;
   hold.erase(entity);
@@ -128,7 +128,7 @@ void TCPDirectory::handle_started(Message *m)
 
 void TCPDirectory::handle_unregister(Message *m)
 {
-  msg_addr_t who = m->get_source();
+  entity_name_t who = m->get_source();
   dout(2) << "unregister from entity " << MSG_ADDR_NICE(who) << endl;
   
   assert(dir.count(who));
@@ -142,7 +142,7 @@ void TCPDirectory::handle_unregister(Message *m)
   else {
     if (0) {
       dout(10) << "dir size now " << dir.size() << endl;
-      for (hash_map<msg_addr_t, int>::iterator it = dir.begin();
+      for (hash_map<entity_name_t, int>::iterator it = dir.begin();
            it != dir.end();
            it++) {
         dout(10) << " dir: " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;

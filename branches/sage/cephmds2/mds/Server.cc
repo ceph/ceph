@@ -106,7 +106,7 @@ void Server::handle_client_mount(MClientMount *m)
 
   // ack
   messenger->send_message(new MClientMountAck(m, mds->mdsmap, mds->osdmap), 
-                          m->get_source(), m->get_source_inst());
+                          m->get_source_inst());
   delete m;
 }
 
@@ -126,8 +126,7 @@ void Server::handle_client_unmount(Message *m)
   }
 
   // ack by sending back to client
-  entity_inst_t srcinst = m->get_source_inst();  // make a copy!
-  messenger->send_message(m, m->get_source(), srcinst);
+  messenger->send_message(m, m->get_source_inst());
 }
 
 
@@ -194,7 +193,7 @@ void Server::reply_request(MClientRequest *req, MClientReply *reply, CInode *tra
   
   // send reply
   messenger->send_message(reply,
-                          MSG_ADDR_CLIENT(req->get_client()), req->get_client_inst());
+                          req->get_client_inst());
 
   // discard request
   mdcache->request_finish(req);
@@ -354,7 +353,7 @@ void Server::handle_client_request(MClientRequest *req)
       
       // send error
       messenger->send_message(new MClientReply(req, r),
-                              MSG_ADDR_CLIENT(req->get_client()), req->get_client_inst());
+                              req->get_client_inst());
 
       // <HACK>
       // is this a special debug command?
@@ -826,7 +825,7 @@ void Server::handle_hash_readdir(MHashReaddir *m)
   
   // sent it back!
   messenger->send_message(new MHashReaddirReply(dir->ino(), inls, dnls, num),
-                          m->get_source(), m->get_source_inst(), MDS_PORT_CACHE);
+                          m->get_source_inst(), MDS_PORT_CACHE);
 }
 
 
@@ -1140,7 +1139,14 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
     mdcache->request_forward(req, dnauth);
     return false;
   }
-  // ok, done passing buck.
+
+  // dir auth pinnable?
+  if (!dir->can_auth_pin()) {
+    dout(7) << "validate_new_dentry_dir: dir " << *dir << " not pinnable, waiting" << endl;
+    dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+		    new C_MDS_RetryRequest(mds, req, diri));
+    return false;
+  }
 
   // frozen?
   if (dir->is_frozen()) {
@@ -1202,6 +1208,9 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
     return false;
   }
 
+  // make sure dir is pinnable
+  
+
   // create inode
   *pin = mdcache->create_inode();
   (*pin)->inode.uid = req->get_caller_uid();
@@ -1217,7 +1226,7 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
 
   // xlock dentry
   bool res = mds->locker->dentry_xlock_start(*pdn, req, diri);
-  assert(res == true);    // FIXME: dn needs independent provenance
+  assert(res == true);
   
   // bump modify pop
   mds->balancer->hit_dir(dir, META_POP_DWR);

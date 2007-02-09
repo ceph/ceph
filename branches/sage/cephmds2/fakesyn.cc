@@ -83,8 +83,9 @@ int main(int argc, char **argv)
   g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
-  monmap->mon_inst[0].rank = 0;  // hack ; see FakeMessenger.cc
-
+  entity_addr_t a;
+  monmap->mon_inst[0] = entity_inst_t(MSG_ADDR_MON(0), a);  // hack ; see FakeMessenger.cc
+  
   char hostname[100];
   gethostname(hostname,100);
   //int pid = getpid();

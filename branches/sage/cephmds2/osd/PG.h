@@ -38,10 +38,10 @@ class OSD;
  */
 class reqid_t {
 public:
-  msg_addr_t addr;
+  entity_name_t addr;
   tid_t      tid;
   reqid_t() : tid(0) {}
-  reqid_t(const msg_addr_t& a, tid_t t) : addr(a), tid(t) {}
+  reqid_t(const entity_name_t& a, tid_t t) : addr(a), tid(t) {}
 };
 
 inline ostream& operator<<(ostream& out, const reqid_t& r) {
@@ -245,7 +245,7 @@ public:
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v, 
-            const msg_addr_t& a, tid_t t) : 
+            const entity_name_t& a, tid_t t) : 
         op(_op), oid(_oid), version(v), reqid(a,t) {}
       
       bool is_delete() const { return op == DELETE; }

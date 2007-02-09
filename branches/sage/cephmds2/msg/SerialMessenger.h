@@ -21,8 +21,8 @@
 class SerialMessenger : public Dispatcher {
  public:
   virtual void dispatch(Message *m) = 0;      // i receive my messages here
-  virtual void send(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;          // doesn't block
-  virtual Message *sendrecv(Message *m, msg_addr_t dest, int port=0, int fromport=0) = 0;  // blocks for matching reply
+  virtual void send(Message *m, entity_name_t dest, int port=0, int fromport=0) = 0;          // doesn't block
+  virtual Message *sendrecv(Message *m, entity_name_t dest, int port=0, int fromport=0) = 0;  // blocks for matching reply
 };
 
 #endif

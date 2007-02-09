@@ -132,7 +132,8 @@ protected:
   map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  
 
   set<int> recovery_set;
-  set<int> got_import_map;    // nodes i need to send my import map to (when exports finish)
+  set<int> wants_import_map;   // nodes i need to send my import map to
+  set<int> got_import_map;     // nodes i need to send my import map to (when exports finish)
   set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
   
   void handle_import_map(MMDSImportMap *m);
@@ -143,7 +144,11 @@ protected:
   void send_cache_rejoin_acks();
 public:
   void send_import_map(int who);
-  void send_import_maps();
+  void send_import_map_now(int who);
+  void send_import_map_later(int who) {
+    wants_import_map.insert(who);
+  }
+  void send_pending_import_maps();  // maybe.
   void send_cache_rejoins();
 
   void set_recovery_set(set<int>& s) {
@@ -200,6 +205,7 @@ public:
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
+  void trim_non_auth();      // trim out trimmable non-auth items
 
   // shutdown
   void shutdown_start();

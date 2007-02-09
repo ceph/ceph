@@ -20,13 +20,13 @@
 
 class MFailureAck : public Message {
  public:
-  msg_addr_t failed;
+  entity_name_t failed;
   MFailureAck(MFailure *m) : Message(MSG_FAILURE_ACK) {
     this->failed = m->get_failed();
   }
   MFailureAck() {}
  
-  msg_addr_t get_failed() { return failed; }
+  entity_name_t get_failed() { return failed; }
 
   virtual void decode_payload(crope& s, int& off) {
     s.copy(0, sizeof(failed), (char*)&failed);

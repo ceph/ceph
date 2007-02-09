@@ -120,14 +120,31 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     }
   }
   
+
+  // old beacon?
+  if (mdsmap.mds_state_seq[from] > seq) {
+    dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << endl;
+    delete m;
+    return;
+  }
+  
+  // reply to beacon?
+  if (state != MDSMap::STATE_OUT) {
+    last_beacon[from] = g_clock.now();  // note time
+    messenger->send_message(new MMDSBeacon(state, seq), 
+			    m->get_source_inst());
+  }
+
+
   // make sure it's in the map
   if (booted) {
-    mdsmap.mds_inst[from] = m->get_source_inst();
+    mdsmap.mds_inst[from].addr = m->get_source_addr();
+    mdsmap.mds_inst[from].name = MSG_ADDR_MDS(from);
 
     // starting -> creating|starting|replay
     if (mdsmap.is_degraded() &&
 	!mdsmap.is_failed(from)) {
-      dout(10) << "mds_beacon currently degraded, new mds will be standby" << endl;
+      dout(10) << "mds_beacon currently degraded, mds" << from << " will be standby" << endl;
       state = MDSMap::STATE_STANDBY;
     }
     else if (state == MDSMap::STATE_STARTING) {
@@ -146,18 +163,17 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     }
   }
 
-  // old beacon?
-  if (mdsmap.mds_state_seq[from] > seq) {
-    dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << endl;
-    delete m;
-    return;
+  // if creating -> active, go to standby instead
+  if (state == MDSMap::STATE_ACTIVE && mdsmap.is_creating(from)) {
+    mdsmap.mds_created.insert(from);
+    dout(10) << "mds_beacon created mds" << from << endl;
+    
+    if (mdsmap.is_degraded()) {
+      dout(10) << "mds_beacon current degraded, marking mds" << from << " as standby" << endl;
+      state = MDSMap::STATE_STANDBY;
+    }
   }
-  
-  // reply to beacon?
-  if (state != MDSMap::STATE_OUT) {
-    last_beacon[from] = g_clock.now();  // note time
-    messenger->send_message(m, MSG_ADDR_MDS(from), m->get_source_inst());
-  }
+
 
   // did we update the map?
   if (mdsmap.mds_state.count(from) == 0 ||
@@ -182,6 +198,8 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     bcast_latest_mds();
     send_current();
   }
+
+  delete m;
 }
 
 
@@ -189,9 +207,9 @@ void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
 {
   dout(7) << "mds_getmap from " << m->get_source() << " " << m->get_source_inst() << endl;
   if (mdsmap.get_epoch() > 0)
-    send_full(m->get_source(), m->get_source_inst());
+    send_full(m->get_source_inst());
   else
-    awaiting_map[m->get_source()] = m->get_source_inst();
+    awaiting_map.push_back( m->get_source_inst() );
 }
 
 
@@ -205,32 +223,32 @@ void MDSMonitor::bcast_latest_mds()
   for (set<int>::iterator p = up.begin();
        p != up.end();
        p++) 
-    send_full(MSG_ADDR_MDS(*p), mdsmap.get_inst(*p));
+    send_full(mdsmap.get_inst(*p));
 }
 
-void MDSMonitor::send_full(msg_addr_t dest, const entity_inst_t& inst)
+void MDSMonitor::send_full(entity_inst_t dest)
 {
-  dout(11) << "send_full to " << dest << " inst " << inst << endl;
-  messenger->send_message(new MMDSMap(&mdsmap), dest, inst);
+  dout(11) << "send_full to " << dest << endl;
+  messenger->send_message(new MMDSMap(&mdsmap), dest);
 }
 
 void MDSMonitor::send_current()
 {
   dout(10) << "mds_send_current " << mdsmap.get_epoch() << endl;
-  for (map<msg_addr_t,entity_inst_t>::iterator i = awaiting_map.begin();
+  for (list<entity_inst_t>::iterator i = awaiting_map.begin();
        i != awaiting_map.end();
        i++) 
-    send_full(i->first, i->second);
+    send_full(*i);
   awaiting_map.clear();
 }
 
-void MDSMonitor::send_latest(msg_addr_t dest, const entity_inst_t& inst)
+void MDSMonitor::send_latest(entity_inst_t dest)
 {
   // FIXME: check if we're locked, etc.
   if (mdsmap.get_epoch() > 0)
-    send_full(dest, inst);
+    send_full(dest);
   else
-    awaiting_map[dest] = inst;
+    awaiting_map.push_back(dest);
 }
 
 

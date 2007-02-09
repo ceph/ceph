@@ -80,6 +80,28 @@ using namespace __gnu_cxx;
   compile now?
 */
 
+class blobhash {
+public:
+  size_t operator()(const char *p, unsigned len) {
+    static hash<long> H;
+    long acc = 0;
+    while (len >= sizeof(long)) {
+      acc ^= *(long*)p;
+      p += sizeof(long);
+      len -= sizeof(long);
+    }   
+    int sh = 0;
+    while (len) {
+      acc ^= (long)*p << sh;
+      sh += 8;
+      len--;
+      p++;
+    }
+    return H(acc);
+  }
+};
+
+
 namespace __gnu_cxx {
   template<> struct hash< std::string >
   {

@@ -89,8 +89,9 @@ int main(int argc, char **argv)
 	return -1;
       }
       entity_inst_t inst;
-      inst.set_addr(addr);
-      cout << "mkmonmap: mon" << monmap.num_mon << " " << inst << endl;
+      inst.addr.set_addr(addr);
+      inst.name = MSG_ADDR_MON(monmap.num_mon);
+      cout << "mkmonmap: adding " << inst << endl;
       monmap.add_mon(inst);
     }
   }

@@ -200,14 +200,14 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
     messenger->send_message(new MMDSMap(mdsmap), 
-			    MSG_ADDR_MDS(mds), mdsmap->get_inst(mds));
+			    mdsmap->get_inst(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
   // send message
   if (port && !fromport) 
     fromport = port;
-  messenger->send_message(m, MSG_ADDR_MDS(mds), mdsmap->get_inst(mds), port, fromport);
+  messenger->send_message(m, mdsmap->get_inst(mds), port, fromport);
 }
 
 
@@ -335,7 +335,7 @@ void MDS::beacon_send()
   
   int mon = monmap->pick_mon();
   messenger->send_message(new MMDSBeacon(want_state, beacon_last_seq),
-			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
+			  monmap->get_inst(mon));
 
   // schedule next sender
   if (beacon_sender) timer.cancel_event(beacon_sender);
@@ -441,9 +441,11 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->decode(m->get_encoded());
 
   // see who i am
-  whoami = mdsmap->get_inst_rank(messenger->get_myinst());
+  whoami = mdsmap->get_inst_rank(messenger->get_myaddr());
   if (oldwhoami != whoami) {
-    messenger->reset_myaddr(MSG_ADDR_MDS(whoami));
+    // update messenger.
+    messenger->reset_myname(MSG_ADDR_MDS(whoami));
+
     reopen_logger();
     dout(1) << "handle_mds_map i am now mds" << whoami << endl;
 
@@ -452,7 +454,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       // we need an osdmap too.
       int mon = monmap->pick_mon();
       messenger->send_message(new MOSDGetMap(0),
-			      MSG_ADDR_MON(mon), monmap->get_inst(mon));
+			      monmap->get_inst(mon));
     }
   }
 
@@ -523,7 +525,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (*p == whoami) continue;
       if (oldresolve.count(*p) == 0 ||         // if other guy newly resolve, or
 	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly resolve,
-	mdcache->send_import_map(*p);          // share my import map
+	mdcache->send_import_map(*p);          // share my import map (now or later)
     }
   }
   
@@ -573,7 +575,7 @@ void MDS::handle_osd_map(MOSDMap *m)
     MOSDMap *n = new MOSDMap;
     n->maps = m->maps;
     n->incremental_maps = m->incremental_maps;
-    messenger->send_message(n, MSG_ADDR_CLIENT(*it), clientmap.get_inst(*it));
+    messenger->send_message(n, clientmap.get_inst(*it));
   }
 }
 
@@ -998,7 +1000,7 @@ void MDS::handle_ping(MPing *m)
   dout(10) << " received ping from " << m->get_source() << " with seq " << m->seq << endl;
 
   messenger->send_message(new MPingAck(m),
-                          m->get_source(), m->get_source_inst());
+                          m->get_source_inst());
   
   delete m;
 }

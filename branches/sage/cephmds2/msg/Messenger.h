@@ -33,20 +33,23 @@ class Timer;
 class Messenger {
  private:
   Dispatcher          *dispatcher;
-  msg_addr_t           _myaddr;
-  entity_inst_t        _myinst;
+  entity_name_t           _myname;
 
  public:
-  Messenger(msg_addr_t w) : dispatcher(0), _myaddr(w) { }
+  Messenger(entity_name_t w) : dispatcher(0), _myname(w) { }
   virtual ~Messenger() { }
   
   // accessors
-  const entity_inst_t &get_myinst() { return _myinst; }
-  void set_myinst(entity_inst_t& v) { _myinst = v; }
+  entity_name_t get_myname() { return _myname; }
+  void _set_myname(entity_name_t m) { _myname = m; }
 
-  msg_addr_t get_myaddr() { return _myaddr; }
-  void _set_myaddr(msg_addr_t m) { _myaddr = m; }
-  virtual void reset_myaddr(msg_addr_t m) = 0;
+  virtual void reset_myname(entity_name_t m) = 0;
+
+  virtual const entity_addr_t &get_myaddr() = 0;
+
+  entity_inst_t get_myinst() { return entity_inst_t(_myname, get_myaddr()); }
+  
+  // hrmpf.
   virtual int get_dispatch_queue_len() { return 0; };
 
   // setup
@@ -65,16 +68,14 @@ class Messenger {
   virtual int shutdown() = 0;
 
   // send message
-  virtual void prepare_dest(const entity_inst_t& inst) {}
-  virtual int send_message(Message *m, msg_addr_t dest, entity_inst_t inst,
+  virtual void prepare_dest(const entity_addr_t& addr) {}
+  virtual int send_message(Message *m, entity_inst_t dest,
 			   int port=0, int fromport=0) = 0;
 
   // make a procedure call
-  //virtual Message* sendrecv(Message *m, msg_addr_t dest, int port=0);
+  //virtual Message* sendrecv(Message *m, msg_name_t dest, int port=0);
 
-  virtual void mark_down(msg_addr_t a, entity_inst_t& i) {}
-  virtual void mark_up(msg_addr_t a, entity_inst_t& i) {}
-  //virtual void reset(msg_addr_t a) { mark_down(a); mark_up(a); }
+  virtual void mark_down(entity_addr_t a) {}
 
 };
 

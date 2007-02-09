@@ -240,7 +240,7 @@ bool Locker::issue_caps(CInode *in)
                                                          it->second.get_last_seq(),
                                                          it->second.pending(),
                                                          it->second.wanted()),
-                                     MSG_ADDR_CLIENT(it->first), mds->clientmap.get_inst(it->first), 
+                                     mds->clientmap.get_inst(it->first), 
 				     0, MDS_PORT_LOCKER);
       }
     }
@@ -379,7 +379,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     MClientFileCaps *r = new MClientFileCaps(in->inode, 
                                              0, 0, 0,
                                              MClientFileCaps::FILECAP_RELEASE);
-    mds->messenger->send_message(r, m->get_source(), m->get_source_inst(), 0, MDS_PORT_LOCKER);
+    mds->messenger->send_message(r, m->get_source_inst(), 0, MDS_PORT_LOCKER);
   }
 
   // merge in atime?

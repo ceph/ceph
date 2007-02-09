@@ -76,8 +76,8 @@ off_t stat_outq = 0, stat_outqb = 0;
 
 
 // local directory
-hash_map<msg_addr_t, TCPMessenger*>  directory;  // local
-hash_set<msg_addr_t>                 directory_ready;
+hash_map<entity_name_t, TCPMessenger*>  directory;  // local
+hash_set<entity_name_t>                 directory_ready;
 Mutex                         directory_lock;
 
 // connecting
@@ -89,7 +89,7 @@ Cond               waiting_for_rank;
 // register
 long regid = 0;
 map<int, Cond* >        waiting_for_register_cond;
-map<int, msg_addr_t >   waiting_for_register_result;
+map<int, entity_name_t >   waiting_for_register_result;
 
 // incoming messages
 list<Message*>                incoming;
@@ -132,11 +132,11 @@ public:
 } single_out_thread;
 
 Mutex lookup_lock;  // 
-hash_map<msg_addr_t, int> entity_rank;      // entity -> rank
+hash_map<entity_name_t, int> entity_rank;      // entity -> rank
 hash_map<int, int>        rank_sd;   // outgoing sockets, rank -> sd
 hash_map<int, OutThread*> rank_out;
 hash_map<int, tcpaddr_t>  rank_addr; // rank -> tcpaddr
-map<msg_addr_t, list<Message*> > waiting_for_lookup;
+map<entity_name_t, list<Message*> > waiting_for_lookup;
 
 
 /* this process */
@@ -292,7 +292,7 @@ public:
     list<Message*> waiting;
     dout(DBL) << "got lookup reply" << endl;
 
-    for (map<msg_addr_t, int>::iterator it = m->entity_rank.begin();
+    for (map<entity_name_t, int>::iterator it = m->entity_rank.begin();
          it != m->entity_rank.end();
          it++) {
       dout(DBL) << "lookup got " << MSG_ADDR_NICE(it->first) << " on rank " << it->second << endl;
@@ -660,7 +660,7 @@ void tcp_marshall(Message *m)
 
 OutThread *tcp_lookup(Message *m)
 {
-  msg_addr_t addr = m->get_dest();
+  entity_name_t addr = m->get_dest();
 
   if (!entity_rank.count(m->get_dest())) {
     // lookup and wait.
@@ -822,7 +822,7 @@ void *tcp_inthread(void *r)
   while (!tcp_done) {
     Message *m = tcp_recv(sd);
     if (!m) break;
-    msg_addr_t who = m->get_source();
+    entity_name_t who = m->get_source();
 
     dout(20) << g_clock.now() <<  " inthread got " << m << " from sd " << sd << " who is " << who << endl;
 
@@ -830,7 +830,7 @@ void *tcp_inthread(void *r)
     size_t sz = m->get_payload().length();
 
     if (g_conf.tcp_multi_dispatch) {
-      const msg_addr_t dest = m->get_dest();
+      const entity_name_t dest = m->get_dest();
       directory_lock.Lock();
       TCPMessenger *messenger = directory[ dest ];
       directory_lock.Unlock();
@@ -1023,7 +1023,7 @@ void* tcp_dispatchthread(void*)
       }
       
       // ok
-      msg_addr_t dest = m->get_dest();
+      entity_name_t dest = m->get_dest();
       directory_lock.Lock();
       if (directory.count(dest)) {
         Messenger *who = directory[ dest ];
@@ -1145,7 +1145,7 @@ void tcpmessenger_wait()
 
 
 
-msg_addr_t register_entity(msg_addr_t addr) 
+entity_name_t register_entity(entity_name_t addr) 
 {
   lookup_lock.Lock();
   
@@ -1185,7 +1185,7 @@ msg_addr_t register_entity(msg_addr_t addr)
     cond.Wait(lookup_lock);
 
   // get result, clean up
-  msg_addr_t entity = waiting_for_register_result[id];
+  entity_name_t entity = waiting_for_register_result[id];
   waiting_for_register_result.erase(id);
   waiting_for_register_cond.erase(id);
   
@@ -1204,7 +1204,7 @@ msg_addr_t register_entity(msg_addr_t addr)
  */
 
 
-TCPMessenger::TCPMessenger(msg_addr_t myaddr) : 
+TCPMessenger::TCPMessenger(entity_name_t myaddr) : 
   Messenger(myaddr), 
   dispatch_thread(this)
 {
@@ -1266,7 +1266,7 @@ tcpaddr_t& TCPMessenger::get_tcpaddr()
   return listen_addr;
 }
 
-void TCPMessenger::map_entity_rank(msg_addr_t e, int r)
+void TCPMessenger::map_entity_rank(entity_name_t e, int r)
 {
   lookup_lock.Lock();
   entity_rank[e] = r;
@@ -1341,7 +1341,7 @@ int TCPMessenger::shutdown()
     if (g_conf.tcp_multi_dispatch) {
       // kill off dispatch threads
       dout(DBL) << "killing dispatch threads" << endl;
-      for (hash_map<msg_addr_t,TCPMessenger*>::iterator it = directory.begin();
+      for (hash_map<entity_name_t,TCPMessenger*>::iterator it = directory.begin();
            it != directory.end();
            it++) 
         it->second->dispatch_stop();
@@ -1391,7 +1391,7 @@ int TCPMessenger::shutdown()
 
 
 /* note: send_message _MUST_ be non-blocking */
-int TCPMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
+int TCPMessenger::send_message(Message *m, entity_name_t dest, int port, int fromport)
 {
   // set envelope
   m->set_source(get_myaddr(), fromport);

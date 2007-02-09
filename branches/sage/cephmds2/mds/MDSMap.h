@@ -72,7 +72,7 @@ class MDSMap {
   set<int>               mds_created;   // which mds ids have initialized journals and id tables.
   map<int,int>           mds_state;     // MDS state
   map<int,version_t>     mds_state_seq;
-  map<int,entity_inst_t> mds_inst;      // up instances
+  map<int,entity_inst_t>      mds_inst;      // up instances
 
   friend class MDSMonitor;
 
@@ -178,7 +178,7 @@ class MDSMap {
   bool has_created(int m) { return mds_created.count(m); }
 
   // cluster states
-  bool is_degraded() {
+  bool is_degraded() {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     return get_num_mds(STATE_REPLAY) + 
       get_num_mds(STATE_RESOLVE) + 
       get_num_mds(STATE_REJOIN) + 
@@ -217,12 +217,20 @@ class MDSMap {
     return false;
   }
   
-  int get_inst_rank(const entity_inst_t& inst) {
+  int get_inst_rank(const entity_addr_t& addr) {
     for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
 	 p != mds_inst.end();
 	 ++p) {
-      if (p->second == inst) return p->first;
+      if (p->second.addr == addr) return p->first;
     }
+    /*else
+      for (map<int,entity_inst_t>::iterator p = mds_inst.begin();
+	   p != mds_inst.end();
+	   ++p) {
+	if (memcmp(&p->second.addr,&inst.addr, sizeof(inst.addr)) == 0) return p->first;
+      }
+    */
+
     return -1;
   }
 
@@ -240,9 +248,9 @@ class MDSMap {
     blist.append((char*)&anchortable, sizeof(anchortable));
     blist.append((char*)&root, sizeof(root));
     
-    _encode(mds_state, blist);
-    _encode(mds_state_seq, blist);
-    _encode(mds_inst, blist);
+    ::_encode(mds_state, blist);
+    ::_encode(mds_state_seq, blist);
+    ::_encode(mds_inst, blist);
   }
   
   void decode(bufferlist& blist) {
@@ -256,9 +264,9 @@ class MDSMap {
     blist.copy(off, sizeof(root), (char*)&root);
     off += sizeof(root);
     
-    _decode(mds_state, blist, off);
-    _decode(mds_state_seq, blist, off);
-    _decode(mds_inst, blist, off);
+    ::_decode(mds_state, blist, off);
+    ::_decode(mds_state_seq, blist, off);
+    ::_decode(mds_inst, blist, off);
   }
 
 
