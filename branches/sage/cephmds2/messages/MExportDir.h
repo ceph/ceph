@@ -21,50 +21,42 @@
 class MExportDir : public Message {
   inodeno_t ino;
   
-  int         ndirs;
-  bufferlist  state;
-  
-  list<inodeno_t> exports;
-
-  // hashed pre-discovers
-  //map<inodeno_t, set<string> > hashed_prediscover;
+  list<bufferlist> dirstate; // a bl for reach dir
+  list<inodeno_t>  exports;
 
  public:  
   MExportDir() {}
-  MExportDir(CInode *in) : 
-    Message(MSG_MDS_EXPORTDIR) {
-    this->ino = in->inode.ino;
-    ndirs = 0;
+  MExportDir(inodeno_t dirino) : 
+    Message(MSG_MDS_EXPORTDIR),
+    ino(dirino) {
   }
   virtual char *get_type_name() { return "Ex"; }
 
   inodeno_t get_ino() { return ino; }
-  int get_ndirs() { return ndirs; }
-  bufferlist& get_state() { return state; }
+  list<bufferlist>& get_dirstate() { return dirstate; }
   list<inodeno_t>& get_exports() { return exports; }
-  
+
   void add_dir(bufferlist& dir) {
-    state.claim_append( dir );
-    ndirs++;
+    dirstate.push_back(dir);
   }
-  void add_export(CDir *dir) { 
-    exports.push_back(dir->ino()); 
+  void set_dirstate(const list<bufferlist>& ls) {
+    dirstate = ls;
+  }
+  void add_export(inodeno_t dirino) { 
+    exports.push_back(dirino); 
   }
 
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
-    payload.copy(off, sizeof(ndirs), (char*)&ndirs);
-    off += sizeof(ndirs);
     ::_decode(exports, payload, off);
-    ::_decode(state, payload, off);
+    ::_decode(dirstate, payload, off);
   }
   virtual void encode_payload() {
     payload.append((char*)&ino, sizeof(ino));
-    payload.append((char*)&ndirs, sizeof(ndirs));
     ::_encode(exports, payload);
-    ::_encode(state, payload);
+    ::_encode(dirstate, payload);
   }
 
 };

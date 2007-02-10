@@ -1,5 +1,14 @@
 
-- exporter recovery if importer fails during EXPORT_EXPORTING stage
+- how to reliably deliver cache expire messages?
+  - how should proxy behave?
+  - exporter failure
+    - all cacheexpire info has been passed on up until point where export is permanent.  no impact.
+  - importer failure
+    - exporter collects expire info, so that it can reverse.
+    - ???  
+  - maybe hosts should double-up expires until after export is known to have committed?
+
+/- exporter recovery if importer fails during EXPORT_EXPORTING stage
 - importer recovery if exporter fails
 
 /?- delay response to sending import_map if export in progress?
@@ -10,7 +19,7 @@
 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
-- falures during recovery stages... rejoin
+- failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
 
 - fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 

@@ -206,6 +206,9 @@ count:
 	cat ${SRCS} | wc -l
 	cat ${SRCS} | grep -c \;
 
+TAGS:
+	etags `find . -name "*.[h|cc]"`
+
 .depend:
 	touch .depend
 

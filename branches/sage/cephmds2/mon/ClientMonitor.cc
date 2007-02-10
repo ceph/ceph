@@ -65,7 +65,9 @@ void ClientMonitor::handle_client_boot(MClientBoot *m)
   client_map[MSG_ADDR_CLIENT(from)] = m->get_source_addr();
 
   // reply with latest mds map
-  mon->mdsmon->send_latest(m->get_source_inst());
+  entity_inst_t to = m->get_source_inst();
+  to.name = MSG_ADDR_CLIENT(from);
+  mon->mdsmon->send_latest(to);
   delete m;
 }
 

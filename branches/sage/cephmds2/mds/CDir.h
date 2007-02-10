@@ -89,12 +89,14 @@ class Context;
 #define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT\
                                     |CDIR_STATE_EXPORT\
                                     |CDIR_STATE_IMPORTINGEXPORT\
-                                    |CDIR_STATE_FROZENTREE)
+                                    |CDIR_STATE_FROZENTREE\
+                                    |CDIR_STATE_PROXY)
+
 #define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
                                     |CDIR_STATE_FROZENTREE\
                                     |CDIR_STATE_FROZENDIR\
                                     |CDIR_STATE_EXPORT\
-                                     |CDIR_STATE_PROXY)
+                                    |CDIR_STATE_PROXY)
 
 // common states
 #define CDIR_STATE_CLEAN   0
@@ -513,21 +515,17 @@ class CDirDiscover {
 
 // export
 
-typedef struct {
-  inodeno_t      ino;
-  __uint64_t     nitems; // actual real entries
-  __uint64_t     nden;   // num dentries (including null ones)
-  version_t     version;
-  unsigned       state;
-  meta_load_t   popularity_justme;
-  meta_load_t   popularity_curdom;
-  int            dir_auth;
-  int            dir_rep;
-  // ints follow
-} CDirExport_st;
-
 class CDirExport {
-  CDirExport_st st;
+  struct {
+    inodeno_t   ino;
+    long        nitems; // actual real entries
+    long        nden;   // num dentries (including null ones)
+    version_t   version;
+    unsigned    state;
+    meta_load_t popularity_justme;
+    meta_load_t popularity_curdom;
+    int         dir_rep;
+  } st;
   map<int,int> replicas;
   set<int>     rep_by;
 
@@ -543,7 +541,6 @@ class CDirExport {
     st.nden = dir->items.size();
     st.version = dir->version;
     st.state = dir->state;
-    st.dir_auth = dir->dir_auth;
     st.dir_rep = dir->dir_rep;
 
     st.popularity_justme.take( dir->popularity[MDS_POP_JUSTME] );
@@ -573,7 +570,6 @@ class CDirExport {
     else
       dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
         (st.state & CDIR_MASK_STATE_EXPORTED);
-    dir->dir_auth = st.dir_auth;
     dir->dir_rep = st.dir_rep;
 
     dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;

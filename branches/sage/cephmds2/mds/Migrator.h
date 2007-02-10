@@ -29,12 +29,12 @@ class CDir;
 class CInode;
 class CDentry;
 
+class MExportDir;
 class MExportDirDiscover;
 class MExportDirDiscoverAck;
 class MExportDirPrep;
 class MExportDirPrepAck;
 class MExportDirWarning;
-class MExportDir;
 class MExportDirNotify;
 class MExportDirNotifyAck;
 class MExportDirFinish;
@@ -74,6 +74,7 @@ private:
   map<CDir*, int>              export_state;
   map<CDir*, int>              export_peer;
   map<CDir*, set<CDir*> >      export_bounds;
+  map<CDir*, list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*, set<int> >        export_notify_ack_waiting; // nodes i am waiting to get export_notify_ack's from
   map<CDir*, list<inodeno_t> > export_proxy_inos;
   map<CDir*, list<inodeno_t> > export_proxy_dirinos;
@@ -88,11 +89,12 @@ private:
   const static int IMPORT_DISCOVERED    = 1; // waiting for prep
   const static int IMPORT_PREPPING      = 2; // opening dirs on bounds
   const static int IMPORT_PREPPED       = 3; // opened bounds, waiting for import
-  const static int IMPORT_LOGGINGSTART  = 3; // got import, logging EImportStart
-  const static int IMPORT_ACKING        = 4; // logged, sent acks
-  const static int IMPORT_LOGGINGFINISH = 5;
+  const static int IMPORT_LOGGINGSTART  = 4; // got import, logging EImportStart
+  const static int IMPORT_ACKING        = 5; // logged, sent acks
+  const static int IMPORT_LOGGINGFINISH = 6;
 
   map<inodeno_t,int>             import_state;
+  map<inodeno_t,int>             import_peer;
   map<inodeno_t,set<inodeno_t> > import_bounds;
 
 
@@ -146,6 +148,7 @@ public:
   void add_export_finish_waiter(CDir *dir, Context *c) {
     export_finish_waiters[dir].push_back(c);
   }
+  void clear_export_proxy_pins(CDir *dir);
 
  protected:
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
@@ -154,7 +157,7 @@ public:
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void export_dir_go(CDir *dir,
                      int dest);
-  int export_dir_walk(MExportDir *req,
+  int encode_export_dir(list<bufferlist>& dirstatelist,
                       class C_Contexts *fin,
                       CDir *basedir,
                       CDir *dir,
@@ -177,12 +180,11 @@ public:
 			       list<inodeno_t> &exports);
   void import_dir_logged_finish(CDir *dir);
   void handle_export_dir_finish(MExportDirFinish *m);
-  int import_dir_block(bufferlist& bl,
-                       int& off,
-                       int oldauth,
-                       CDir *import_root,
-                       list<inodeno_t>& imported_subdirs,
-		       EImportStart *le);
+  int decode_import_dir(bufferlist& bl,
+			int oldauth,
+			CDir *import_root,
+			list<inodeno_t>& imported_subdirs,
+			EImportStart *le);
   void got_hashed_replica(CDir *import,
                           inodeno_t dir_ino,
                           inodeno_t replica_ino);

@@ -826,6 +826,33 @@ inline void _decode(std::set<std::string>& s, bufferlist& bl, int& off)
   assert(s.size() == (unsigned)n);
 }
 
+// list<bufferlist>
+inline void _encode(const std::list<bufferlist>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (std::list<bufferlist>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(*it, bl);
+    n--;
+  }
+  assert(n==0);
+}
+inline void _decode(std::list<bufferlist>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    bufferlist v;
+    s.push_back(v);
+    ::_decode(s.back(), bl, off);
+  }
+  //assert(s.size() == (unsigned)n);
+}
+
 
 // set<T>
 template<class T>

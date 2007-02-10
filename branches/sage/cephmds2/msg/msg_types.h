@@ -19,8 +19,8 @@
 
 // new typed msg_addr_t way!
 class entity_name_t {
-  int _type:3;
-  int _num:29;
+  int _type;
+  int _num;
 
 public:
   static const int TYPE_MON = 1;
@@ -42,8 +42,8 @@ public:
     case TYPE_OSD: return "osd"; 
     case TYPE_MON: return "mon"; 
     case TYPE_CLIENT: return "client"; 
-    }
-    return "unknown";
+    default: return "unknown";
+    }    
   }
 
   bool is_new() const { return num() == NEW; }

@@ -60,6 +60,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " dir_auth=" << dir.get_dir_auth();
   
   out << " state=" << dir.get_state();
+  if (dir.state_test(CDIR_STATE_PROXY)) out << "|proxy";
   if (dir.state_test(CDIR_STATE_COMPLETE)) out << "|complete";
   if (dir.state_test(CDIR_STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDIR_STATE_FROZENTREE)) out << "|frozentree";

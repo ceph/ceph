@@ -546,7 +546,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
       // newly so?
       if (oldfailed.count(*p)) continue;      
-      // FIXME.
+
+      mdcache->migrator->handle_mds_failure(*p);
     }
   }
 

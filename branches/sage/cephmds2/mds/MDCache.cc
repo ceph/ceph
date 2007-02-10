@@ -607,6 +607,17 @@ void MDCache::send_cache_rejoins()
 
   map<int, MMDSCacheRejoin*> rejoins;
 
+  // if i am rejoining, send a rejoin to everyone.
+  // otherwise, just send to others who are rejoining.
+  for (set<int>::iterator p = recovery_set.begin();
+       p != recovery_set.end();
+       ++p) {
+    if (*p == mds->get_nodeid())  continue;  // nothing to myself!
+    if (mds->is_rejoin() ||
+	mds->mdsmap->is_rejoin(*p))
+      rejoins[*p] = new MMDSCacheRejoin;
+  }	
+
   // build list of dir_auth regions
   list<CDir*> dir_auth_regions;
   for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
@@ -620,14 +631,9 @@ void MDCache::send_cache_rejoins()
     assert(auth >= 0);
 
     if (auth == mds->get_nodeid()) continue; // skip my own regions!
-
-    if (rejoins.count(auth) == 0) {
-      if (mds->is_rejoin() ||                // if i am rejoining,
-	  mds->mdsmap->is_rejoin(auth))      // or if they are rejoining,
-	rejoins[auth] = new MMDSCacheRejoin; // send a rejoin
-      else
-	continue;   // otherwise, skip this region
-    }
+    
+    if (rejoins.count(auth) == 0) 
+      continue;   // don't care about this node's regions
     
     // add to list
     dout(10) << " on mds" << auth << " region " << *p->second << endl;
@@ -651,7 +657,14 @@ void MDCache::send_cache_rejoins()
     mds->send_message_mds(p->second, p->first, MDS_PORT_CACHE);
     rejoin_ack_gather.insert(p->first);
   }
+
+  // nothing?
+  if (rejoins.empty()) {
+    dout(10) << "nothing to rejoin, going active" << endl;
+    mds->set_want_state(MDSMap::STATE_ACTIVE);
+  }
 }
+
 
 
 void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
