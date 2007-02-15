@@ -63,16 +63,23 @@ void Paxos::handle_old_round(MMonPaxos *m)
 /*
  * return a globally unique, monotonically increasing proposal number
  */
-version_t Paxos::get_new_proposal_number()
+version_t Paxos::get_new_proposal_number(version_t gt)
 {
-  // read, update, write
+  // read last
   version_t last = mon->store->get_int("last_paxos_proposal");
+  if (last < gt) 
+    last = gt;
+  
+  // update
+  last = last >> 8;
   last++;
-  mon->store->put_int(last, "last_paxos_proposal");
 
   // make it unique among all monitors.
-  version_t pn = (100000000ULL * (version_t)whoami) + last;
+  version_t pn = (last << 8) + (version_t)whoami;
   
+  // write
+  mon->store->put_int(pn, "last_paxos_proposal");
+
   dout(10) << "get_new_proposal_number = " << pn << endl;
   return pn;
 }

@@ -45,7 +45,7 @@ class Paxos {
   void handle_ack(MMonPaxos*);
   void handle_old_round(MMonPaxos*);
   
-  version_t get_new_proposal_number();
+  version_t get_new_proposal_number(version_t gt=0);
   
   // accepter
   void handle_collect(MMonPaxos*);
