@@ -39,17 +39,20 @@ class Paxos {
 
   // proposer
   void propose(version_t v, bufferlist& value);
+  
   void handle_last(MMonPaxos*);
   void handle_accept(MMonPaxos*);
-
+  void handle_ack(MMonPaxos*);
+  void handle_old_round(MMonPaxos*);
+  
   version_t get_new_proposal_number();
   
   // accepter
-  void handle_prepare(MMonPaxos*);  
-  void handle_commit(MMonPaxos*);
+  void handle_collect(MMonPaxos*);
 
   // learner
-  
+  void handle_success(MMonPaxos*);
+  void handle_begin(MMonPaxos*);
   
 
 public:

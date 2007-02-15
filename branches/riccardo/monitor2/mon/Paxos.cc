@@ -25,17 +25,40 @@
 
 // ---------------------------------
 // proposer
-
-
+void Paxos::propose(version_t v, bufferlist& value)
+{
+//todo high rf
+}
+  
 void Paxos::handle_last(MMonPaxos *m)
 {
+//todo high rf
   dout(10) << "handle_last " << *m << endl;
-  
-  // ...
-
   delete m;
 }
 
+void Paxos::handle_accept(MMonPaxos *m)
+{
+//todo high rf
+  dout(10) << "handle_accept " << *m << endl;
+  delete m;
+  
+}
+
+void Paxos::handle_ack(MMonPaxos *m)
+{
+//todo high rf
+  dout(10) << "handle_ack " << *m << endl;
+  delete m;
+}
+
+void Paxos::handle_old_round(MMonPaxos *m)
+{
+//todo high rf
+  dout(10) << "handle_old_round " << *m << endl;
+  delete m;
+}
+  
 
 /*
  * return a globally unique, monotonically increasing proposal number
@@ -57,11 +80,9 @@ version_t Paxos::get_new_proposal_number()
 
 // ---------------------------------
 // accepter
-
-
-void Paxos::handle_commit(MMonPaxos *m)
+void Paxos::handle_collect(MMonPaxos *m)
 {
-
+//todo high rf
   // ...
 
   delete m;
@@ -72,10 +93,17 @@ void Paxos::handle_commit(MMonPaxos *m)
 
 // ---------------------------------
 // learner
+void Paxos::handle_success(MMonPaxos *m)
+{
+  //todo high rf
+  delete m;
+}
 
-
-
-
+void Paxos::handle_begin(MMonPaxos *m)
+{
+  //todo high rf
+  delete m;
+}
 
 // ---------------------------------
 
@@ -84,11 +112,13 @@ void Paxos::leader_start()
   dout(10) << "i am the leader" << endl;
 
   // .. do something else too 
-
-
-  //int who = 2;
-  //mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COMMIT, machine_id, 12, 122),
-  //MSG_ADDR_MON(who), mon->monmap->get_inst(who));
+  version_t pn = get_new_proposal_number();
+  for (int i=0; i<mon->monmap->num_mon; ++i) {
+  	if (i == whoami) continue;
+  	// todo high rf I pass the pn twice... what is the last parameter for?
+	mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COLLECT, whoami, pn, pn),
+								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
+  }
 }
 
 
@@ -102,15 +132,34 @@ void Paxos::dispatch(Message *m)
 	  MMonPaxos *pm = (MMonPaxos*)m;
 
 	  // NOTE: these ops are defined in messages/MMonPaxos.h
-	  // todo rf
 	  switch (pm->op) {
 		// learner
-	  case MMonPaxos::OP_PROPOSE:
+	  case MMonPaxos::OP_COLLECT:
+		handle_collect(pm);
+		break;
+		
+	  case MMonPaxos::OP_LAST:
 		handle_last(pm);
 		break;
 
-	  case MMonPaxos::OP_COMMIT:
-		handle_commit(pm);
+	  case MMonPaxos::OP_OLDROUND:
+		handle_old_round(pm);
+		break;
+
+	  case MMonPaxos::OP_BEGIN:
+		handle_begin(pm);
+		break;
+
+	  case MMonPaxos::OP_ACCEPT:
+		handle_accept(pm);
+		break;		
+
+	  case MMonPaxos::OP_SUCCESS:
+		handle_success(pm);
+		break;
+
+	  case MMonPaxos::OP_ACK:
+		handle_ack(pm);
 		break;
 
 	  default:
