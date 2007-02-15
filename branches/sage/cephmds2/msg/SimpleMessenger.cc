@@ -49,6 +49,9 @@ int Rank::Accepter::start()
   // bind to a socket
   dout(10) << "accepter.start binding to listen " << endl;
   
+  // use whatever user specified..
+  g_my_addr.make_addr(rank.listen_addr);
+
   /* socket creation */
   listen_sd = socket(AF_INET,SOCK_STREAM,0);
   assert(listen_sd > 0);
@@ -77,20 +80,27 @@ int Rank::Accepter::start()
 
   struct hostent *myhostname = gethostbyname( host ); 
 
-  // fill in rank.listen_addr
-  memset(&rank.listen_addr, 0, sizeof(rank.listen_addr));
+  // figure out my_addr
+  if (g_my_addr.port > 0) {
+    // user specified it, easy.
+    rank.my_addr = g_my_addr;
+  } else {
+    // try to figure out what ip i can be reached out
+    memset(&rank.listen_addr, 0, sizeof(rank.listen_addr));
 
-  rank.listen_addr.sin_family = myhostname->h_addrtype;
-  memcpy((char *) &rank.listen_addr.sin_addr.s_addr, 
-         myhostname->h_addr_list[0], 
-         myhostname->h_length);
-  rank.listen_addr.sin_port = myport;
+    // look up my hostname.  blech!  this sucks.
+    rank.listen_addr.sin_family = myhostname->h_addrtype;
+    memcpy((char *) &rank.listen_addr.sin_addr.s_addr, 
+	   myhostname->h_addr_list[0], 
+	   myhostname->h_length);
+    rank.listen_addr.sin_port = myport;
+    rank.my_addr.set_addr(rank.listen_addr);
+  }
   
-  // fill in rank.my_addr
-  rank.my_addr.set_addr(rank.listen_addr);
-  rank.my_addr.nonce = getpid();
+  // set a nonce
+  rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   
-  dout(10) << "accepter.start listening at " << rank.my_addr << endl;
+  dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
 
   // start thread
   create();
@@ -667,13 +677,14 @@ Rank::~Rank()
 {
 }
 
+/*
 void Rank::set_listen_addr(tcpaddr_t& a)
 {
   dout(10) << "set_listen_addr " << a << endl;
   memcpy((char*)&listen_addr.sin_addr.s_addr, (char*)&a.sin_addr.s_addr, 4);
   listen_addr.sin_port = a.sin_port;
 }
-
+*/
 
 void Rank::_submit_single_dispatch(Message *m)
 {

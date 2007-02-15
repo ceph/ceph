@@ -105,9 +105,7 @@ int main(int argc, char **argv)
 
     // bind to a specific port
     cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << endl;
-    tcpaddr_t addr;
-    monmap.get_inst(whoami).addr.make_addr(addr);
-    rank.set_listen_addr(addr);
+    g_my_addr = monmap.get_inst(whoami).addr;
     rank.start_rank();
   }
 

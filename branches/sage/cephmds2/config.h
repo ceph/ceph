@@ -28,6 +28,11 @@ extern std::map<int,float> g_fake_osd_out;
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
 
+
+#include "msg/msg_types.h"
+
+extern entity_addr_t g_my_addr;
+
 struct md_config_t {
   int  num_mon;
   int  num_mds;
@@ -299,5 +304,9 @@ void vec_to_argv(std::vector<char*>& args,
                  int& argc, char **&argv);
 
 void parse_config_options(std::vector<char*>& args);
+
+extern bool parse_ip_port(const char *s, entity_addr_t& addr);
+
+
 
 #endif

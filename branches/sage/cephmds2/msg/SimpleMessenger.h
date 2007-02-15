@@ -265,7 +265,7 @@ public:
   Rank();
   ~Rank();
 
-  void set_listen_addr(tcpaddr_t& a);
+  //void set_listen_addr(tcpaddr_t& a);
 
   int start_rank();
   void wait();

@@ -51,6 +51,8 @@ FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects
 std::map<int,float> g_fake_osd_down;
 std::map<int,float> g_fake_osd_out;
 
+entity_addr_t g_my_addr;
+
 md_config_t g_debug_after_conf;
 
 md_config_t g_conf = {
@@ -347,12 +349,62 @@ void vec_to_argv(std::vector<char*>& args,
     argv[argc++] = args[i];
 }
 
+bool parse_ip_port(const char *s, entity_addr_t& a)
+{
+  int count = 0; // digit count
+  int off = 0;
+
+  while (1) {
+    // parse the #.
+    int val = 0;
+    int numdigits = 0;
+    
+    while (*s >= '0' && *s <= '9') {
+      int digit = *s - '0';
+      //cout << "digit " << digit << endl;
+      val *= 10;
+      val += digit;
+      numdigits++;
+      s++; off++;
+    }
+    //cout << "val " << val << endl;
+    
+    if (numdigits == 0) {
+      cerr << "no digits at off " << off << endl;
+      return false;           // no digits
+    }
+    if (count < 3 && *s != '.') {
+      cerr << "should period at " << off << endl;
+      return false;   // should have 3 periods
+    }
+    if (count == 3 && *s != ':') {
+      cerr << "expected : at " << off << endl;
+      return false;  // then a colon
+    }
+    s++; off++;
+
+    if (count <= 3)
+      a.ipq[count] = val;
+    else
+      a.port = val;
+    
+    count++;
+    if (count == 5) break;  
+  }
+  
+  return true;
+}
+
+
+
 void parse_config_options(std::vector<char*>& args)
 {
   std::vector<char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--nummon") == 0) 
+    if (strcmp(args[i],"--bind") == 0) 
+      assert(parse_ip_port(args[++i], g_my_addr));
+    else if (strcmp(args[i], "--nummon") == 0) 
       g_conf.num_mon = atoi(args[++i]);
     else if (strcmp(args[i], "--nummds") == 0) 
       g_conf.num_mds = atoi(args[++i]);
