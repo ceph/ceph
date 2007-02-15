@@ -20,12 +20,13 @@
 class MMonPaxos : public Message {
  public:
   // op types
-  const static int OP_PROPOSE = 1;
-  const static int OP_LAST = 2;
-  const static int OP_ACCEPT = 3;
-  const static int OP_COMMIT = 4;
-  // ..
-  // todo rf .. fill these in!
+  const static int OP_COLLECT = 1;   // proposer: propose round
+  const static int OP_LAST = 2;		 // voter:    accept proposed round
+  const static int OP_OLDROUND = 3;	 // voter:    notify proposer he proposed an old round
+  const static int OP_BEGIN = 4;	 // proposer: value proposed for this round
+  const static int OP_ACCEPT = 5;	 // voter:    accept propsed value
+  const static int OP_SUCCESS = 7;   // proposer: notify learners of agreed value
+  const static int OP_ACK = 8;		 // learner:  notify proposer that new value has been saved
 
   int op;   
   int machine_id;
