@@ -21,6 +21,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <sys/statvfs.h>
+
 
 #include <iostream>
 using namespace std;
@@ -1485,9 +1487,12 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
   st->st_nlink = inode.nlink;
   st->st_uid = inode.uid;
   st->st_gid = inode.gid;
+#ifndef DARWIN
+  // FIXME what's going on here with darwin?
   st->st_ctime = inode.ctime;
   st->st_atime = inode.atime;
   st->st_mtime = inode.mtime;
+#endif
   st->st_size = inode.size;
   st->st_blocks = inode.size ? ((inode.size - 1) / 4096 + 1):0;
   st->st_blksize = 4096;
@@ -1837,6 +1842,7 @@ struct dirent *Client::readdir(DIR *dirp)
   // fill the dirent
   d->dp.d_dirent.d_ino = d->p->second.ino;
 #ifndef __CYGWIN__
+#ifndef DARWIN
   if (d->p->second.is_symlink())
     d->dp.d_dirent.d_type = DT_LNK;
   else if (d->p->second.is_dir())
@@ -1848,6 +1854,7 @@ struct dirent *Client::readdir(DIR *dirp)
 
   d->dp.d_dirent.d_off = d->off;
   d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
+#endif // DARWIN
 #endif
 
   strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
@@ -1898,6 +1905,7 @@ struct dirent_plus *Client::readdirplus(DIR *dirp)
   // fill the dirent
   d->dp.d_dirent.d_ino = d->p->second.ino;
 #ifndef __CYGWIN__
+#ifndef DARWIN
   if (d->p->second.is_symlink())
     d->dp.d_dirent.d_type = DT_LNK;
   else if (d->p->second.is_dir())
@@ -1909,6 +1917,7 @@ struct dirent_plus *Client::readdirplus(DIR *dirp)
 
   d->dp.d_dirent.d_off = d->off;
   d->dp.d_dirent.d_reclen = 1; // all records are length 1 (wrt offset, seekdir, telldir, etc.)
+#endif // DARWIN
 #endif
 
   strncpy(d->dp.d_dirent.d_name, d->p->first.c_str(), 256);
@@ -2519,12 +2528,22 @@ int Client::chdir(const char *path)
   return 0;
 }
 
-int Client::statfs(const char *path, struct statfs *stbuf) 
+int Client::statfs(const char *path, struct statvfs *stbuf)
 {
-  assert(0);  // implement me
+  bzero (stbuf, sizeof (struct statvfs));
+  // FIXME
+  stbuf->f_bsize   = 1024;
+  stbuf->f_frsize  = 1024;
+  stbuf->f_blocks  = 1024 * 1024;
+  stbuf->f_bfree   = 1024 * 1024;
+  stbuf->f_bavail  = 1024 * 1024;
+  stbuf->f_files   = 1024 * 1024;
+  stbuf->f_ffree   = 1024 * 1024;
+  stbuf->f_favail  = 1024 * 1024;
+  stbuf->f_namemax = 1024;
+
   return 0;
 }
-
 
 
 int Client::lazyio_propogate(int fd, off_t offset, size_t count)

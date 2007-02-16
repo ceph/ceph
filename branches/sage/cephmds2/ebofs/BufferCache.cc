@@ -530,6 +530,23 @@ int ObjectCache::scan_versions(block_t start, block_t len,
 }
 */
 
+void ObjectCache::touch_bottom(block_t bstart, block_t blast)
+{
+  for (map<block_t, BufferHead*>::iterator p = data.lower_bound(bstart);
+       p != data.end();
+       ++p) {
+    BufferHead *bh = p->second;
+    
+    // don't trim unless it's entirely in our range
+    if (bh->start() < bstart) continue;
+    if (bh->end() > blast) break;     
+    
+    dout(12) << "moving " << *bh << " to bottom of lru" << endl;
+    bc->touch_bottom(bh);  // move to bottom of lru list
+  }
+}  
+
+
 void ObjectCache::truncate(block_t blocks, version_t super_epoch)
 {
   dout(7) << "truncate " << object_id 

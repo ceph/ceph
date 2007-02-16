@@ -66,7 +66,18 @@ void Monitor::init()
   
   // start ticker
   reset_tick();
-  
+
+  // call election?
+  if (monmap->num_mon > 1) {
+    assert(monmap->num_mon != 2); 
+    call_election();
+  } else {
+    // we're standalone.
+    set<int> q;
+    q.insert(whoami);
+    win_election(q);
+  }
+
   lock.Unlock();
 }
 
@@ -115,14 +126,35 @@ void Monitor::shutdown()
 
 void Monitor::call_election()
 {
+  if (monmap->num_mon == 1) return;
+
   dout(10) << "call_election" << endl;
   state = STATE_STARTING;
+
+  elector.start();
 
   osdmon->election_starting();
   //mdsmon->election_starting();
 }
 
+void Monitor::win_election(set<int>& active) 
+{
+  state = STATE_LEADER;
+  leader = whoami;
+  quorum = active;
+  dout(10) << "win_election, quorum is " << quorum << endl;
 
+  // init
+  osdmon->election_finished();
+  //mdsmon->election_finished();
+} 
+
+void Monitor::lose_election(int l) 
+{
+  state = STATE_PEON;
+  leader = l;
+  dout(10) << "lose_election, leader is mon" << leader << endl;
+}
 
 
 
@@ -172,10 +204,9 @@ void Monitor::dispatch(Message *m)
 
 
       // elector messages
+    case MSG_MON_ELECTION_PROPOSE:
     case MSG_MON_ELECTION_ACK:
-    case MSG_MON_ELECTION_STATUS:
-    case MSG_MON_ELECTION_COLLECT:
-    case MSG_MON_ELECTION_REFRESH:
+    case MSG_MON_ELECTION_VICTORY:
       elector.dispatch(m);
       break;
 

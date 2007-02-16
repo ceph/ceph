@@ -523,7 +523,7 @@ protected:
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.
-  int statfs(const char *path, struct statfs *stbuf);
+  int statfs(const char *path, struct statvfs *stbuf);
 
   // crap
   int chdir(const char *s);

@@ -9,9 +9,25 @@
 # dev work, and seems to behave just fine...  change ${CC} back to
 # mpicxx if you get paranoid.
 
+#CC = g++
+#CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
+#LIBS = -lpthread  
+
+# Hook for extra -I options, etc.
+EXTRA_CFLAGS = 
+
+ifeq ($(target),darwin)
+# For Darwin
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE -DDARWIN -D__FreeBSD__=10 ${EXTRA_CFLAGS}
+LDINC = ar -rc
+else
+# For linux
+CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE 
+LDINC = ld -i -o
+endif
+
 CC = g++
-CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
-LIBS = -lpthread  
+LIBS = -lpthread
 
 #for normal mpich2 machines
 MPICC = mpicxx
@@ -121,7 +137,7 @@ gprof-helper.so: test/gprof-helper.c
 fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.o mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
+fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
@@ -155,7 +171,7 @@ osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.
 
 # libceph
 libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
-	ld -i $^ -o $@
+	${LDINC} $^ -o $@
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
@@ -171,30 +187,29 @@ mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 %.so: %.cc
 	${CC} -shared -fPIC ${CFLAGS} $< -o $@
 
-
 clean:
 	rm -f *.o */*.o ${TARGETS} ${TEST_TARGETS}
 
 common.o: ${COMMON_OBJS}
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 ebofs.o: ${EBOFS_OBJS}
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 client.o: ${CLIENT_OBJS} 
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 osd.o: ${OSD_OBJS}
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 osdc.o: ${OSDC_OBJS}
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 mds.o: ${MDS_OBJS}
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 mon.o: ${MON_OBJS}
-	ld -i -o $@ $^
+	${LDINC} $@ $^
 
 %.o: %.cc
 	${CC} ${CFLAGS} -c $< -o $@

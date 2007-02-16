@@ -32,7 +32,9 @@
 #include <sys/ioctl.h>
 
 #ifndef __CYGWIN__
+#ifndef DARWIN
 #include <linux/fs.h>
+#endif
 #endif
 
 
@@ -665,7 +667,13 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
 
 int BlockDevice::open_fd()
 {
+#ifdef DARWIN
+  int fd = ::open(dev.c_str(), O_RDWR|O_SYNC, 0);
+  ::fcntl(fd, F_NOCACHE);
+  return fd;
+#else
   return ::open(dev.c_str(), O_RDWR|O_SYNC|O_DIRECT, 0);
+#endif
 }
 
 int BlockDevice::open(kicker *idle) 

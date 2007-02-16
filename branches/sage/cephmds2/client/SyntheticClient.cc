@@ -12,6 +12,7 @@
  */
 
 #include <iostream>
+#include <sstream>
 using namespace std;
 
 
@@ -80,6 +81,9 @@ void parse_syn_options(vector<char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+        syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"makedirmess") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRMESS );
         syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"statdirs") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_STATDIRS );
@@ -282,6 +286,16 @@ int SyntheticClient::run()
       }
       break;
 
+    case SYNCLIENT_MODE_MAKEDIRMESS:
+      {
+        string sarg1 = get_sarg(0);
+        int iarg1 = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "makedirmess " << sarg1 << " " << iarg1 << endl;
+          make_dir_mess(sarg1.c_str(), iarg1);
+        }
+      }
+      break;
     case SYNCLIENT_MODE_MAKEDIRS:
       {
         string sarg1 = get_sarg(0);
@@ -1235,4 +1249,43 @@ int SyntheticClient::random_walk(int num_req)
   return 0;
 }
 
+
+
+
+void SyntheticClient::make_dir_mess(const char *basedir, int n)
+{
+  vector<string> dirs;
+  
+  dirs.push_back(basedir);
+  dirs.push_back(basedir);
+  
+  client->mkdir(basedir, 0755);
+
+  // motivation:
+  //  P(dir) ~ subdirs_of(dir) + 2
+  // from 5-year metadata workload paper in fast'07
+
+  // create dirs
+  for (int i=0; i<n; i++) {
+    // pick a dir
+    int k = rand() % dirs.size();
+    string parent = dirs[k];
+    
+    // pick a name
+    std::stringstream ss;
+    ss << parent << "/" << i;
+    string dir;
+    ss >> dir;
+
+    // update dirs
+    dirs.push_back(parent);
+    dirs.push_back(dir);
+    dirs.push_back(dir);
+
+    // do it
+    client->mkdir(dir.c_str(), 0755);
+  }
+    
+  
+}
 

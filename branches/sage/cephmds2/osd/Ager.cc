@@ -13,6 +13,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#ifdef DARWIN
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif // DARWIN
+
 
 int myrand() 
 {

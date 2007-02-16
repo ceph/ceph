@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "config.h"
 
@@ -44,6 +45,23 @@ Rank rank;
  * Accepter
  */
 
+void simplemessenger_sigint(int r)
+{
+  rank.sigint();
+}
+
+void Rank::sigint()
+{
+  lock.Lock();
+  derr(0) << "got control-c, exiting" << endl;
+  ::close(accepter.listen_sd);
+  exit(-1);
+  lock.Unlock();
+}
+
+
+
+
 int Rank::Accepter::start()
 {
   // bind to a socket
@@ -62,10 +80,12 @@ int Rank::Accepter::start()
     derr(0) << "accepter.start unable to bind to " << rank.listen_addr << endl;
   assert(rc >= 0);
 
+  // what port did we get?
   socklen_t llen = sizeof(rank.listen_addr);
   getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
   
-  int myport = rank.listen_addr.sin_port;
+  int myport = ntohs(rank.listen_addr.sin_port);
+  dout(10) << "accepter.start bound to port " << myport << endl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
@@ -93,7 +113,7 @@ int Rank::Accepter::start()
     memcpy((char *) &rank.listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-    rank.listen_addr.sin_port = myport;
+    rank.listen_addr.sin_port = htons(myport);
     rank.my_addr.set_addr(rank.listen_addr);
   }
   
@@ -101,6 +121,9 @@ int Rank::Accepter::start()
   rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   
   dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
+
+  // set up signal handler
+  signal(SIGINT, simplemessenger_sigint);
 
   // start thread
   create();
@@ -213,9 +236,13 @@ int Rank::Pipe::connect()
   tcpaddr_t tcpaddr;
   peer_addr.make_addr(tcpaddr);
   rc = ::connect(sd, (sockaddr*)&tcpaddr, sizeof(myAddr));
-  if (rc < 0) return rc;
+  if (rc < 0) {
+    dout(10) << "connect error " << peer_addr
+	     << ", " << errno << ": " << strerror(errno) << endl;
+    return rc;
+  }
 
-  // identify peer
+  // identify peer ..... FIXME
   entity_addr_t paddr;
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
   if (peer_addr != paddr) {
@@ -377,7 +404,9 @@ void Rank::Pipe::writer()
   if (!server) {
     int rc = connect();
     if (rc < 0) {
-      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error connecting" << endl;
+      derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error connecting, " 
+	      << errno << ": " << strerror(errno)
+	      << endl;
       done = true;
       list<Message*> out;
       fail(out);
@@ -413,7 +442,9 @@ void Rank::Pipe::writer()
         
         if (write_message(m) < 0) {
           // failed!
-          derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest() << endl;
+          derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending " << *m << " to " << m->get_dest()
+		  << ", " << errno << ": " << strerror(errno)
+		  << endl;
           out.push_front(m);
           fail(out);
           done = true;

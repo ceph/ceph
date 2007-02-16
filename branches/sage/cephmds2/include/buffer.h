@@ -108,7 +108,7 @@ private:
   class raw_mmap_pages : public raw {
   public:
     raw_mmap_pages(unsigned l) : raw(l) {
-      data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+      data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
       inc_total_alloc(len);
     }
     ~raw_mmap_pages() {
@@ -123,7 +123,11 @@ private:
   class raw_posix_aligned : public raw {
   public:
     raw_posix_aligned(unsigned l) : raw(l) {
+#ifdef DARWIN
+      data = (char *) valloc (len);
+#else
       ::posix_memalign((void**)&data, BUFFER_PAGE_SIZE, len);
+#endif /* DARWIN */
       inc_total_alloc(len);
     }
     ~raw_posix_aligned() {

@@ -104,13 +104,6 @@ void OSDMonitor::init()
 
     // set up pending_inc
     pending_inc.epoch = osdmap.get_epoch()+1;
-
-  } else {
-    // FIXME. when elections work!
-    if (mon->is_leader()) {
-      create_initial();
-      issue_leases();
-    }
   }
 }
 
@@ -627,9 +620,17 @@ void OSDMonitor::election_starting()
 
 void OSDMonitor::election_finished()
 {
-  dout(10) << "election_starting" << endl;
+  dout(10) << "election_finished" << endl;
 
   state = STATE_INIT;
+
+  // map?
+  if (osdmap.get_epoch() == 0 &&
+      mon->is_leader()) {
+    create_initial();
+  }
+
+
 
   if (mon->is_leader()) {
     // leader.
@@ -640,8 +641,8 @@ void OSDMonitor::election_finished()
   } 
   else if (mon->is_peon()) {
     // peon. send info
-    messenger->send_message(new MMonOSDMapInfo(osdmap.epoch, osdmap.mon_epoch),
-			    mon->monmap->get_inst(mon->leader));
+    //messenger->send_message(new MMonOSDMapInfo(osdmap.epoch, osdmap.mon_epoch),
+    //			    mon->monmap->get_inst(mon->leader));
   }
   
 }

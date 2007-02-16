@@ -60,6 +60,7 @@ class MDSMap {
     case STATE_STOPPED:  return "up:stopped";
     default: assert(0);
     }
+    return 0;
   }
 
  protected:

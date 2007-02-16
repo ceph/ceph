@@ -60,12 +60,12 @@ protected:
   epoch_t  mon_epoch;    // monitor epoch (election instance)
   set<int> quorum;       // current active set of monitors (if !starting)
 
-  void call_election();
+  //void call_election();
 
   // monitor state
-  const static int STATE_STARTING = 0;
-  const static int STATE_LEADER = 1;
-  const static int STATE_PEON =   2;
+  const static int STATE_STARTING = 0; // electing
+  const static int STATE_LEADER =   1;
+  const static int STATE_PEON =     2;
   int state;
 
   int leader;                    // current leader (to best of knowledge)
@@ -88,6 +88,14 @@ protected:
   friend class MDSMonitor;
   friend class ClientMonitor;
 
+  // initiate election
+  void call_election();
+
+  // end election (called by Elector)
+  void win_election(set<int>& q);
+  void lose_election(int l);
+
+
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
     whoami(w), 
@@ -101,12 +109,8 @@ protected:
     leader(0),
     osdmon(0), mdsmon(0), clientmon(0)
   {
-    // hack leader, until election works.
-    if (whoami == 0)
-      state = STATE_LEADER;
-    else
-      state = STATE_PEON;
   }
+
 
   void init();
   void shutdown();

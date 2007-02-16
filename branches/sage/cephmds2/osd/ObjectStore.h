@@ -23,7 +23,12 @@
 #include "include/Distribution.h"
 
 #include <sys/stat.h>
+
+#ifdef DARWIN
+#include <sys/statvfs.h>
+#else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
+#endif /* DARWIN */
 
 #include <list>
 using namespace std;
@@ -79,6 +84,8 @@ public:
     static const int OP_SETATTRS =     15;  // oid, attrset
     static const int OP_RMATTR =       16;  // oid, attrname
     static const int OP_CLONE =        17;  // oid, newoid
+
+    static const int OP_TRIMCACHE =    18;  // oid, offset, len
 
     static const int OP_MKCOLL =       20;  // cid
     static const int OP_RMCOLL =       21;  // cid
@@ -137,6 +144,13 @@ public:
       offsets.push_back(off);
       lengths.push_back(len);
       bls.push_back(bl);
+    }
+    void trim_from_cache(object_t oid, off_t off, size_t len) {
+      int op = OP_TRIMCACHE;
+      ops.push_back(op);
+      oids.push_back(oid);
+      offsets.push_back(off);
+      lengths.push_back(len);
     }
     void truncate(object_t oid, off_t off) {
       int op = OP_TRUNCATE;
@@ -269,6 +283,15 @@ public:
           size_t len = t.lengths.front(); t.lengths.pop_front();
           bufferlist bl = t.bls.front(); t.bls.pop_front();
           write(oid, offset, len, bl, 0);
+        }
+        break;
+
+      case Transaction::OP_TRIMCACHE:
+        {
+          object_t oid = t.oids.front(); t.oids.pop_front();
+          off_t offset = t.offsets.front(); t.offsets.pop_front();
+          size_t len = t.lengths.front(); t.lengths.pop_front();
+          trim_from_cache(oid, offset, len);
         }
         break;
 
@@ -424,6 +447,8 @@ public:
                     off_t offset, size_t len,
                     bufferlist& bl, 
                     Context *onsafe) = 0;//{ return -1; }
+  virtual void trim_from_cache(object_t oid, 
+			       off_t offset, size_t len) { }
 
   virtual int setattr(object_t oid, const char *name,
                       const void *value, size_t size,
