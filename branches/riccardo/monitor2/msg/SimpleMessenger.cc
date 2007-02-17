@@ -55,7 +55,7 @@ void Rank::sigint()
   lock.Lock();
   derr(0) << "got control-c, exiting" << endl;
   ::close(accepter.listen_sd);
-  exit(-1);
+  _exit(-1);
   lock.Unlock();
 }
 
@@ -84,13 +84,11 @@ int Rank::Accepter::start()
   socklen_t llen = sizeof(rank.listen_addr);
   getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
   
-  int myport = ntohs(rank.listen_addr.sin_port);
-  dout(10) << "accepter.start bound to port " << myport << endl;
+  dout(10) << "accepter.start bound to " << rank.listen_addr << endl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
   assert(rc >= 0);
-  //dout(10) << "accepter.start listening on " << myport << endl;
   
   // my address is...  HELP HELP HELP!
   char host[100];
@@ -102,24 +100,20 @@ int Rank::Accepter::start()
 
   // figure out my_addr
   if (g_my_addr.port > 0) {
-    // user specified it, easy.
+    // user specified it, easy peasy.
     rank.my_addr = g_my_addr;
   } else {
-    // try to figure out what ip i can be reached out
-    memset(&rank.listen_addr, 0, sizeof(rank.listen_addr));
-
     // look up my hostname.  blech!  this sucks.
     rank.listen_addr.sin_family = myhostname->h_addrtype;
     memcpy((char *) &rank.listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-    rank.listen_addr.sin_port = htons(myport);
+
+    // set up my_addr with a nonce
     rank.my_addr.set_addr(rank.listen_addr);
+    rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
-  
-  // set a nonce
-  rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
-  
+
   dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
 
   // set up signal handler
