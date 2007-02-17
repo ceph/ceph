@@ -74,8 +74,7 @@ private:
     bool done;
     entity_addr_t peer_addr;
     bool server;
-    bool sent_close;
-    bool socket_error;
+    bool need_to_send_close;
 
     bool reader_running;
     bool writer_running;
@@ -109,11 +108,11 @@ private:
       void *entry() { pipe->writer(); return 0; }
     } writer_thread;
     friend class Writer;
-
+    
   public:
     Pipe(int s) : sd(s),
 		  done(false), server(true), 
-		  sent_close(false), socket_error(false),
+		  need_to_send_close(true),
 		  reader_running(false), writer_running(false),
 		  reader_thread(this), writer_thread(this) {
       // server
@@ -121,10 +120,10 @@ private:
       reader_thread.create();
     }
     Pipe(const entity_addr_t &pi) : sd(0),
-      done(false), peer_addr(pi), server(false), 
-      sent_close(false),
-      reader_running(false), writer_running(false),
-      reader_thread(this), writer_thread(this) {
+				    done(false), peer_addr(pi), server(false), 
+				    need_to_send_close(true),
+				    reader_running(false), writer_running(false),
+				    reader_thread(this), writer_thread(this) {
       // client
       writer_running = true;
       writer_thread.create();

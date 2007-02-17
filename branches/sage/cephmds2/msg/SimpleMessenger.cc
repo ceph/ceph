@@ -279,10 +279,6 @@ int Rank::Pipe::connect()
 
 void Rank::Pipe::close()
 {
-  if (sent_close) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").close already closing" << endl;
-    return;
-  }
   dout(10) << "pipe(" << peer_addr << ' ' << this << ").close" << endl;
 
   // unreg ourselves
@@ -290,24 +286,30 @@ void Rank::Pipe::close()
   {
     if (rank.rank_pipe.count(peer_addr) &&
         rank.rank_pipe[peer_addr] == this) {
-      dout(10) << "pipe(" << peer_addr << ' ' << this << ").close unregistering pipe" << endl;
+      dout(10) << "pipe(" << peer_addr << ' ' << this
+	       << ").close unregistering pipe" << endl;
       rank.rank_pipe.erase(peer_addr);
     }
   }
   rank.lock.Unlock();
 
-  // queue close message.
-  if (socket_error) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").close not queueing MSG_CLOSE, socket error" << endl;
-  } 
-  else if (!writer_running) {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").close not queueing MSG_CLOSE, no writer running" << endl;  
+  // queue close message?
+  if (!need_to_send_close) {
+    dout(10) << "pipe(" << peer_addr << ' ' << this
+	     << ").close already closing/closed" << endl;
+    return;
+  }
+  
+  if (!writer_running) {
+    dout(10) << "pipe(" << peer_addr << ' ' << this
+	     << ").close not queueing MSG_CLOSE, no writer running" << endl;  
   } else {
-    dout(10) << "pipe(" << peer_addr << ' ' << this << ").close queueing MSG_CLOSE" << endl;
+    dout(10) << "pipe(" << peer_addr << ' ' << this
+	     << ").close queueing MSG_CLOSE" << endl;
     lock.Lock();
     q.push_back(new MGenericMessage(MSG_CLOSE));
     cond.Signal();
-    sent_close = true;
+    need_to_send_close = false;
     lock.Unlock();  
   }
 }
@@ -329,12 +331,12 @@ void Rank::Pipe::reader()
       if (m) {
 	delete m;
 	dout(10) << "pipe(" << peer_addr << ' ' << this << ").reader read MSG_CLOSE message" << endl;
+	need_to_send_close = false;
       } else {
 	derr(10) << "pipe(" << peer_addr << ' ' << this << ").reader read null message" << endl;
       }
 
-      if (!sent_close)
-	close();
+      close();
 
       done = true;
       cond.Signal();  // wake up writer too.
@@ -500,7 +502,7 @@ Message *Rank::Pipe::read_message()
   
   msg_envelope_t env; 
   if (!tcp_read( sd, (char*)&env, sizeof(env) )) {
-    socket_error = true;
+    need_to_send_close = false;
     return 0;
   }
   
@@ -514,7 +516,7 @@ Message *Rank::Pipe::read_message()
   for (int i=0; i<env.nchunks; i++) {
     int size;
     if (!tcp_read( sd, (char*)&size, sizeof(size) )) {
-      socket_error = true;
+      need_to_send_close = false;
       return 0;
     }
     
@@ -523,7 +525,7 @@ Message *Rank::Pipe::read_message()
     bufferptr bp(size);
     
     if (!tcp_read( sd, bp.c_str(), size )) {
-      socket_error = true;
+      need_to_send_close = false;
       return 0;
     }
     
@@ -567,7 +569,7 @@ int Rank::Pipe::write_message(Message *m)
   if (r < 0) { 
     derr(1) << "pipe(" << peer_addr << ' ' << this << ").writer error sending envelope for " << *m
              << " to " << m->get_dest() << endl; 
-    socket_error = true;
+    need_to_send_close = false;
     return -1;
   }
 
@@ -583,13 +585,13 @@ int Rank::Pipe::write_message(Message *m)
     r = tcp_write( sd, (char*)&size, sizeof(size) );
     if (r < 0) { 
       derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending chunk len for " << *m << " to " << m->get_dest() << endl; 
-      socket_error = true;
+      need_to_send_close = false;
       return -1;
     }
     r = tcp_write( sd, (*it).c_str(), size );
     if (r < 0) { 
       derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data chunk for " << *m << " to " << m->get_dest() << endl; 
-      socket_error = true;
+      need_to_send_close = false;
       return -1;
     }
     i++;
@@ -600,7 +602,7 @@ int Rank::Pipe::write_message(Message *m)
   r = tcp_write( sd, (char*)&size, sizeof(size) );
   if (r < 0) { 
     derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data len for " << *m << " to " << m->get_dest() << endl; 
-    socket_error = true;
+    need_to_send_close = false;
     return -1;
   }
   dout(20) << "pipe(" << peer_addr << ' ' << this << ").writer data len is " << size << " in " << blist.buffers().size() << " buffers" << endl;
@@ -612,7 +614,7 @@ int Rank::Pipe::write_message(Message *m)
     r = tcp_write( sd, (char*)(*it).c_str(), (*it).length() );
     if (r < 0) { 
       derr(10) << "pipe(" << peer_addr << ' ' << this << ").writer error sending data megachunk for " << *m << " to " << m->get_dest() << " : len " << (*it).length() << endl; 
-      socket_error = true;
+      need_to_send_close = false;
       return -1;
     }
   }
