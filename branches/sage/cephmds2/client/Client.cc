@@ -53,7 +53,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "client" << whoami << "." << pthread_self() << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami << "." << pthread_self() << " "
 
 #define  tout       if (g_conf.client_trace) cout << "trace: " 
 

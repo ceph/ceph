@@ -31,7 +31,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "synthetic" << client->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << g_clock.now() << " synthetic" << client->get_nodeid() << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
