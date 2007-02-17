@@ -11,6 +11,8 @@
  * 
  */
 
+#include "events/EString.h"
+
 #include "events/EMetaBlob.h"
 #include "events/EAlloc.h"
 #include "events/EUpdate.h"
@@ -33,6 +35,24 @@
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
 #define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+
+
+// -----------------------
+// EString
+
+bool EString::has_expired(MDS *mds) {
+  dout(10) << "EString.has_expired " << event << endl; 
+  return true;
+}
+void EString::expire(MDS *mds, Context *c)
+{
+  dout(10) << "EString.expire " << event << endl; 
+}
+void EString::replay(MDS *mds)
+{
+  dout(10) << "EString.replay " << event << endl; 
+}
+
 
 
 // -----------------------

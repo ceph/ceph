@@ -127,9 +127,9 @@ public:
   CInode *mknod(MClientRequest *req, CInode *ref, bool okexist=false);  // used by mknod, symlink, mkdir, openc
 
   CDir *validate_new_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
-  bool prepare_mknod(MClientRequest *req, CInode *diri, 
-		     CInode **pin, CDentry **pdn, 
-		     bool okexist=false);
+  int prepare_mknod(MClientRequest *req, CInode *diri, 
+		    CInode **pin, CDentry **pdn, 
+		    bool okexist=false);
 
 
 

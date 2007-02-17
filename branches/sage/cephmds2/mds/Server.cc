@@ -1164,10 +1164,15 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
  * create the inode and dentry, but do not link them.
  * pre_dirty the dentry+dir.
  * xlock the dentry.
+ *
+ * return val
+ *  0 - wait for something
+ *  1 - created
+ *  2 - already exists (only if okexist=true)
  */
-bool Server::prepare_mknod(MClientRequest *req, CInode *diri, 
-			   CInode **pin, CDentry **pdn, 
-			   bool okexist) 
+int Server::prepare_mknod(MClientRequest *req, CInode *diri, 
+			  CInode **pin, CDentry **pdn, 
+			  bool okexist) 
 {
   dout(10) << "prepare_mknod " << req->get_filepath() << " in " << *diri << endl;
   
@@ -1176,7 +1181,7 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
   string name = req->get_filepath().last_bit();
   
   CDir *dir = validate_new_dentry_dir(req, diri, name);
-  if (!dir) return false;
+  if (!dir) return 0;
 
   // make sure name doesn't already exist
   *pdn = dir->lookup(name);
@@ -1184,7 +1189,7 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
     if (!(*pdn)->can_read(req)) {
       dout(10) << "waiting on (existing!) dentry " << **pdn << endl;
       dir->add_waiter(CDIR_WAIT_DNREAD, name, new C_MDS_RetryRequest(mds, req, diri));
-      return false;
+      return 0;
     }
 
     if (!(*pdn)->is_null()) {
@@ -1192,11 +1197,11 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
       if (okexist) {
         dout(10) << "dentry " << name << " exists in " << *dir << endl;
 	*pin = (*pdn)->inode;
-        return true;
+        return 2;
       } else {
         dout(10) << "dentry " << name << " exists in " << *dir << endl;
         reply_request(req, -EEXIST);
-        return false;
+        return 0;
       }
     }
   }
@@ -1205,7 +1210,7 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
   if (!dir->is_complete()) {
     dout(7) << " incomplete dir contents for " << *dir << ", fetching" << endl;
     mds->mdstore->fetch_dir(dir, new C_MDS_RetryRequest(mds, req, diri));
-    return false;
+    return 0;
   }
 
   // make sure dir is pinnable
@@ -1231,7 +1236,7 @@ bool Server::prepare_mknod(MClientRequest *req, CInode *diri,
   // bump modify pop
   mds->balancer->hit_dir(dir, META_POP_DWR);
 
-  return true;
+  return 1;
 }
 
 
@@ -2234,7 +2239,7 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 // open, openc, close
 
 void Server::handle_client_open(MClientRequest *req,
-                             CInode *cur)
+				CInode *cur)
 {
   int flags = req->get_iarg();
   int mode = req->get_iarg2();
@@ -2282,19 +2287,77 @@ void Server::handle_client_open(MClientRequest *req,
 }
 
 
+class C_MDS_openc_finish : public Context {
+  MDS *mds;
+  MClientRequest *req;
+  CDentry *dn;
+  CInode *newi;
+  version_t pv;
+public:
+  C_MDS_openc_finish(MDS *m, MClientRequest *r, CDentry *d, CInode *ni) :
+    mds(m), req(r), dn(d), newi(ni),
+    pv(d->get_projected_version()) {}
+  void finish(int r) {
+    assert(r == 0);
 
-void Server::handle_client_openc(MClientRequest *req, CInode *ref)
+    // link the inode
+    dn->get_dir()->link_inode(dn, newi);
+
+    // dirty inode, dn, dir
+    newi->mark_dirty(pv);
+
+    // unlock
+    mds->locker->dentry_xlock_finish(dn);
+
+    // hit pop
+    mds->balancer->hit_inode(newi, META_POP_IWR);
+
+    // ok, do the open.
+    mds->server->handle_client_open(req, newi);
+  }
+};
+
+
+void Server::handle_client_openc(MClientRequest *req, CInode *diri)
 {
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << endl;
 
-  assert(0);
-  CInode *in = 0;//mknod(req, ref, true);   // FIXME FIXME
-  if (!in) return;
+  CInode *in = 0;
+  CDentry *dn = 0;
+  
+  // make dentry and inode, xlock dentry.
+  int r = prepare_mknod(req, diri, &in, &dn);
+  if (!r) 
+    return; // wait on something
+  assert(in);
+  assert(dn);
 
-  in->inode.mode = 0644;              // wtf FIXME
-  in->inode.mode |= INODE_MODE_FILE;
+  if (r == 1) {
+    // created.
+    // it's a file.
+    in->inode.mode = 0644;              // FIXME req should have a umask
+    in->inode.mode |= INODE_MODE_FILE;
 
-  handle_client_open(req, in);
+    // prepare finisher
+    C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, req, dn, in);
+    EUpdate *le = new EUpdate("openc");
+    le->metablob.add_dir_context(diri->dir);
+    inode_t *pi = le->metablob.add_dentry(dn, true, in);
+    pi->version = dn->get_projected_version();
+    
+    // log + wait
+    mdlog->submit_entry(le);
+    mdlog->wait_for_sync(fin);
+
+    /*
+      FIXME. this needs to be rewritten when the write capability stuff starts
+      getting journaled.  
+    */
+  } else {
+    // exists!
+    // FIXME: do i need to repin path based existant inode? hmm.
+    handle_client_open(req, in);
+  }
 }
 
 
