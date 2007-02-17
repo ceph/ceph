@@ -30,6 +30,11 @@ class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
 
+#define PAXOS_TEST       0
+#define PAXOS_OSDMAP     1
+#define PAXOS_MDSMAP     2
+#define PAXOS_CLIENTMAP  3
+
 class Monitor : public Dispatcher {
 protected:
   // me
@@ -115,7 +120,7 @@ protected:
     elector(this, w),
     mon_epoch(0), 
     
-    test_paxos(this, w, 0, "tester"),  // machine 0 == tester paxos
+    test_paxos(this, w, PAXOS_TEST, "tester"),  // tester state machine
 
     state(STATE_STARTING),
     leader(0),

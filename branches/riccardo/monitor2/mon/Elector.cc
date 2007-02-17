@@ -40,9 +40,9 @@ void Elector::start()
   
   // bcast to everyone else
   for (int i=0; i<mon->monmap->num_mon; ++i) {
-	if (i == whoami) continue;
-	mon->messenger->send_message(new MMonElectionPropose,
-								 mon->monmap->get_inst(i));
+    if (i == whoami) continue;
+    mon->messenger->send_message(new MMonElectionPropose,
+				 mon->monmap->get_inst(i));
   }
   
   reset_timer();
@@ -53,18 +53,18 @@ void Elector::defer(int who)
   dout(5) << "defer to " << who << endl;
 
   if (electing_me) {
-	acked_me.clear();
-	electing_me = false;
+    acked_me.clear();
+    electing_me = false;
   }
 
   // ack them
   leader_acked = who;
   ack_stamp = g_clock.now();
   mon->messenger->send_message(new MMonElectionAck,
-							   mon->monmap->get_inst(who));
+			       mon->monmap->get_inst(who));
   
   // set a timer
-  reset_timer();
+  reset_timer(1.0);  // give the leader some extra time to declare victory
 }
 
 
@@ -73,24 +73,24 @@ class C_Mon_ElectionExpire : public Context {
 public:
   C_Mon_ElectionExpire(Elector *e) : elector(e) { }
   void finish(int r) {
-	elector->expire();
+    elector->expire();
   }
 };
 
-void Elector::reset_timer()
+void Elector::reset_timer(double plus)
 {
   // set the timer
   cancel_timer();
   expire_event = new C_Mon_ElectionExpire(this);
-  g_timer.add_event_after(g_conf.mon_lease,
-							 expire_event);
+  g_timer.add_event_after(g_conf.mon_lease + plus,
+			  expire_event);
 }
 
 
 void Elector::cancel_timer()
 {
   if (expire_event)
-	g_timer.cancel_event(expire_event);
+    g_timer.cancel_event(expire_event);
 }
 
 void Elector::expire()
@@ -99,12 +99,12 @@ void Elector::expire()
   
   // did i win?
   if (electing_me &&
-	  acked_me.size() > (unsigned)(mon->monmap->num_mon / 2)) {
-	// i win
-	victory();
+      acked_me.size() > (unsigned)(mon->monmap->num_mon / 2)) {
+    // i win
+    victory();
   } else {
-	// whoever i deferred to didn't declare victory quickly enough.
-	start();
+    // whoever i deferred to didn't declare victory quickly enough.
+    start();
   }
 }
 
@@ -118,9 +118,9 @@ void Elector::victory()
 
   // tell everyone
   for (int i=0; i<mon->monmap->num_mon; ++i) {
-	if (i == whoami) continue;
-	mon->messenger->send_message(new MMonElectionVictory,
-								 mon->monmap->get_inst(i));
+    if (i == whoami) continue;
+    mon->messenger->send_message(new MMonElectionVictory,
+				 mon->monmap->get_inst(i));
   }
     
   // tell monitor
@@ -134,19 +134,19 @@ void Elector::handle_propose(MMonElectionPropose *m)
   int from = m->get_source().num();
 
   if (from > whoami) {
-	// wait, i should win!
-	if (!electing_me)
-	  start();
+    // wait, i should win!
+    if (!electing_me)
+      start();
   } else {
-	// they would win over me
-	if (leader_acked < 0 ||      // haven't acked anyone yet, or
-		leader_acked > from ||   // they would win over who you did ack, or
-		leader_acked == from) {  // this is the guy we're already deferring to
-	  defer(from);
-  	} else {
-	  // ignore them!
-	  dout(5) << "no, we already acked " << leader_acked << endl;
-	}
+    // they would win over me
+    if (leader_acked < 0 ||      // haven't acked anyone yet, or
+	leader_acked > from ||   // they would win over who you did ack, or
+	leader_acked == from) {  // this is the guy we're already deferring to
+      defer(from);
+    } else {
+      // ignore them!
+      dout(5) << "no, we already acked " << leader_acked << endl;
+    }
   }
   
   delete m;
@@ -158,17 +158,17 @@ void Elector::handle_ack(MMonElectionAck *m)
   int from = m->get_source().num();
   
   if (electing_me) {
-	// thanks
-	acked_me.insert(from);
-	dout(5) << " so far i have " << acked_me << endl;
-	
-	// is that _everyone_?
-	if (acked_me.size() == (unsigned)mon->monmap->num_mon) {
-	  // if yes, shortcut to election finish
-	  victory();
-	}
+    // thanks
+    acked_me.insert(from);
+    dout(5) << " so far i have " << acked_me << endl;
+    
+    // is that _everyone_?
+    if (acked_me.size() == (unsigned)mon->monmap->num_mon) {
+      // if yes, shortcut to election finish
+      victory();
+    }
   } else {
-	// ignore, i'm deferring already.
+    // ignore, i'm deferring already.
   }
   
   delete m;
@@ -180,14 +180,14 @@ void Elector::handle_victory(MMonElectionVictory *m)
   int from = m->get_source().num();
   
   if (from < whoami) {
-	// ok, fine, they win
-	mon->lose_election(from);
-
-	// cancel my timer
-	cancel_timer();	
+    // ok, fine, they win
+    mon->lose_election(from);
+    
+    // cancel my timer
+    cancel_timer();	
   } else {
-	// no, that makes no sense, i should win.  start over!
-	start();
+    // no, that makes no sense, i should win.  start over!
+    start();
   }
 }
 
@@ -198,19 +198,19 @@ void Elector::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case MSG_MON_ELECTION_ACK:
-	handle_ack((MMonElectionAck*)m);
-	break;
+    handle_ack((MMonElectionAck*)m);
+    break;
     
   case MSG_MON_ELECTION_PROPOSE:
-	handle_propose((MMonElectionPropose*)m);
-	break;
+    handle_propose((MMonElectionPropose*)m);
+    break;
     
   case MSG_MON_ELECTION_VICTORY:
-	handle_victory((MMonElectionVictory*)m);
-	break;
-	
+    handle_victory((MMonElectionVictory*)m);
+    break;
+    
   default:
-	assert(0);
+    assert(0);
   }
 }
 

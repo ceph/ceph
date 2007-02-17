@@ -26,6 +26,8 @@
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
 
+#include "messages/MMonPaxos.h"
+
 #include "common/Timer.h"
 #include "common/Clock.h"
 
@@ -201,6 +203,21 @@ void Monitor::dispatch(Message *m)
       clientmon->dispatch(m);
       break;
 
+
+      // paxos
+    case MSG_MON_PAXOS:
+      // send it to the right paxos instance
+      switch (((MMonPaxos*)m)->machine_id) {
+      case PAXOS_TEST:
+	test_paxos.dispatch(m);
+	break;
+      case PAXOS_OSDMAP:
+	//...
+	
+      default:
+	assert(0);
+      }
+      break;
 
       // elector messages
     case MSG_MON_ELECTION_PROPOSE:

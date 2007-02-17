@@ -71,11 +71,11 @@ version_t Paxos::get_new_proposal_number(version_t gt)
     last = gt;
   
   // update
-  last = last >> 8;
+  last /= 100;
   last++;
 
   // make it unique among all monitors.
-  version_t pn = (last << 8) + (version_t)whoami;
+  version_t pn = last*100 + (version_t)whoami;
   
   // write
   mon->store->put_int(pn, "last_paxos_proposal");
