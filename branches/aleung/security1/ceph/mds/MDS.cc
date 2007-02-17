@@ -91,6 +91,10 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) {
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
+  // init keys
+  myPrivKey = esignPrivKey("crypto/esig1536.dat");
+  myPubKey = esignPubKey(myPrivKey);
+
 
   req_rate = 0;
 
@@ -199,6 +203,8 @@ void MDS::send_message_mds(Message *m, int mds, int port, int fromport)
 
 int MDS::init()
 {
+  // generate my key pair
+  
   // request osd map
   dout(5) << "requesting mds and osd maps from mon" << endl;
   int mon = monmap->pick_mon();

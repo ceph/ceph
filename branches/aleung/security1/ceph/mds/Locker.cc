@@ -111,28 +111,40 @@ Capability* Locker::issue_new_caps(CInode *in,
   if (mode & FILE_MODE_W) my_want |= CAP_FILE_WRBUFFER | CAP_FILE_WR;
 
   // register a capability
+  // checks capabilities for the file indexed by client id
+  // returns 0 if there is no cached capability
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
+    // makes a cap which only contains the desired mode (my_want)
     Capability c(my_want);
+    // caches this capability in the inode
     in->add_client_cap(my_client, c);
+    // pull the cap back out, why? you have a pointer to it already
+    // ah, because this is the variable used later
     cap = in->get_client_cap(my_client);
     
     // note client addr
+    // increase reference count on this clientid
     mds->clientmap.add_open(my_client, req->get_client_inst());
     
   } else {
     // make sure it has sufficient caps
+    // if the mode cached is not the mode were looking for
     if (cap->wanted() & ~my_want) {
       // augment wanted caps for this client
+      // just changed  the cached capability to the mode we want
       cap->set_wanted( cap->wanted() | my_want );
     }
   }
 
   // suppress file cap messages for this guy for a few moments (we'll bundle with the open() reply)
+  // is this so that issue_caps() does actually send caps to the client?
   cap->set_suppress(true);
+  // checks the mode the client asked for previously
   int before = cap->pending();
 
+  // if this MDS is the authority for the inode
   if (in->is_auth()) {
     // [auth] twiddle mode?
     inode_file_eval(in);
@@ -145,11 +157,13 @@ Capability* Locker::issue_new_caps(CInode *in,
   issue_caps(in);  // note: _eval above may have done this already...
 
   // re-issue whatever we can
+  // this doesn't actually seem to do anything
   cap->issue(cap->pending());
   
   // ok, stop suppressing.
   cap->set_suppress(false);
 
+  // the mode of the most recently sent, should be the desired mode?
   int now = cap->pending();
   if (before != now &&
       (before & CAP_FILE_WR) == 0 &&
@@ -167,7 +181,46 @@ Capability* Locker::issue_new_caps(CInode *in,
   return cap;
 }
 
+/**********
+ * This function returns a new extended capability
+ * for the user for file
+ * This function does nothing for synchronization
+ **********/
+ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
+  dout(3) << "issue_new_EXTcaps for mode " << mode << " on " << *in << endl;
 
+  // get the uid
+  int my_client = req->get_client();
+  uid_t my_user = req->get_caller_uid();
+  int my_want = 0;
+  // only care about reading a writing, no sync
+  if (mode & FILE_MODE_R) my_want |= CAP_FILE_RD;
+  if (mode & FILE_MODE_W) my_want |= CAP_FILE_WR;
+
+  // checks capabilities for the file indexed by client id
+  // returns 0 if there is no cached capability
+  ExtCap *ext_cap = in->get_user_extcap(my_user);
+  if (!ext_cap) {
+    // need to create new cap
+    ExtCap my_cap(my_want, my_user, in->ino());
+    
+    // caches this capability in the inode
+    in->add_user_extcap(my_user, my_cap);
+
+    //ext_cap = (&my_cap);
+    ext_cap = in->get_user_extcap(my_user);
+    
+  }
+  // we want to index based on mode, so we can cache more caps
+  // does the cached cap have the write mode?
+  else {
+    // augment the capability if not right mode
+    if (ext_cap->mode() != mode)
+      ext_cap->set_mode(mode);
+      
+  }
+  return ext_cap;  
+}
 
 bool Locker::issue_caps(CInode *in)
 {

@@ -146,6 +146,9 @@ class MClientReply : public Message {
   list<InodeStat*> dir_in;
   list<string>     dir_dn;
 
+  // security capability
+  ExtCap ext_cap;
+
  public:
   void set_pcid(long pcid) { this->st.pcid = pcid; }
   long get_pcid() { return st.pcid; }
@@ -168,11 +171,15 @@ class MClientReply : public Message {
   unsigned char get_file_caps() { return st.file_caps; }
   long get_file_caps_seq() { return st.file_caps_seq; }
   __uint64_t get_file_data_version() { return st.file_data_version; }
+
+  ExtCap* get_ext_cap() { return &ext_cap; }
   
   void set_result(int r) { st.result = r; }
   void set_file_caps(unsigned char c) { st.file_caps = c; }
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   void set_file_data_version(__uint64_t v) { st.file_data_version = v; }
+
+  void set_ext_cap(ExtCap ecap) { ext_cap = ecap; }
 
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 
@@ -226,6 +233,9 @@ class MClientReply : public Message {
       ::_decode(dn, payload, off);
       dir_dn.push_back(dn);
     }
+
+    //_decode(ext_cap, payload, off);
+    ext_cap._decode(payload, off);
   }
   virtual void encode_payload() {
     payload.append((char*)&st, sizeof(st));
@@ -252,6 +262,8 @@ class MClientReply : public Message {
       (*pin)->_encode(payload);
       ::_encode(*pdn, payload);
     }
+    //_encode(ext_cap, payload);
+    ext_cap._encode(payload);
   }
 
   // builders

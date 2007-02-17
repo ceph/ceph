@@ -292,6 +292,7 @@ void Server::handle_client_request(MClientRequest *req)
     }
   }
 
+  // file specific operations
   if (!ref) {
     // we need to traverse a path
     filepath refpath = req->get_filepath();
@@ -370,7 +371,8 @@ void Server::handle_client_request(MClientRequest *req)
       delete req;
       return;
     }
-    
+
+    // if not an error return from path_traverse
     if (trace.size()) 
       ref = trace[trace.size()-1]->inode;
     else
@@ -2078,6 +2080,8 @@ void Server::handle_client_open(MClientRequest *req,
 {
   int flags = req->get_iarg();
   int mode = req->get_iarg2();
+  //uid_t uid = req->get_caller_uid();
+  //gid_t gid = req->get_caller_gid();
 
   dout(7) << "open " << flags << " on " << *cur << endl;
   dout(10) << "open flags = " << flags << "  mode = " << mode << endl;
@@ -2090,6 +2094,7 @@ void Server::handle_client_open(MClientRequest *req,
   }
 
   // auth for write access
+  // redirect the write open to the auth?
   if (mode != FILE_MODE_R && mode != FILE_MODE_LAZY &&
       !cur->is_auth()) {
     int auth = cur->authority();
@@ -2102,11 +2107,17 @@ void Server::handle_client_open(MClientRequest *req,
 
 
   // hmm, check permissions or something.
+  // permissions must be checked at the user/group/world level
 
 
   // can we issue the caps they want?
   version_t fdv = mds->locker->issue_file_data_version(cur);
   Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
+
+  // create security capability
+  ExtCap *ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
+  ext_cap->sign_extcap(mds->getPrvKey());
+
   if (!cap) return; // can't issue (yet), so wait!
 
   dout(12) << "open gets caps " << cap_string(cap->pending()) << " for " << req->get_source() << " on " << *cur << endl;
@@ -2118,6 +2129,8 @@ void Server::handle_client_open(MClientRequest *req,
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_data_version(fdv);
+  // set security cap
+  reply->set_ext_cap((*ext_cap));
   reply_request(req, reply, cur);
 }
 

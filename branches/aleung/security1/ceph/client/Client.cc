@@ -1247,8 +1247,17 @@ int Client::link(const char *existing, const char *newname,
   tout << "link" << endl;
   tout << existing << endl;
   tout << newname << endl;
+
+  // fix uid/gid if not supplied
+  // get it from the system
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
   
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
+  // This is for FUSE support of passing the userid
   //Ticket *tk;
   //if (uid == -1 || gid == -1)
   //  tk = get_user_ticket(getuid(), getgid());
@@ -1270,8 +1279,8 @@ int Client::link(const char *existing, const char *newname,
   req->set_sarg(existing);
   
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
   
   MClientReply *reply = make_request(req, true);
   int res = reply->get_result();
@@ -1291,7 +1300,15 @@ int Client::unlink(const char *relpath, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                                
+  // get it from the system                                                     
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
 
   if (!tk) {
     client_lock.Unlock();
@@ -1311,8 +1328,8 @@ int Client::unlink(const char *relpath, __int64_t uid, __int64_t gid)
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1342,7 +1359,16 @@ int Client::rename(const char *relfrom, const char *relto,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                              
+  // get it from the system                                               
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1366,8 +1392,8 @@ int Client::rename(const char *relfrom, const char *relto,
   req->set_sarg(to);
  
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1389,7 +1415,15 @@ int Client::mkdir(const char *relpath, mode_t mode, __int64_t uid, __int64_t gid
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied
+  // get it from the system
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1410,8 +1444,8 @@ int Client::mkdir(const char *relpath, mode_t mode, __int64_t uid, __int64_t gid
   req->set_iarg( (int)mode );
  
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1431,7 +1465,16 @@ int Client::rmdir(const char *relpath, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
   
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1450,8 +1493,8 @@ int Client::rmdir(const char *relpath, __int64_t uid, __int64_t gid)
   req->set_path(path);
  
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1484,7 +1527,15 @@ int Client::symlink(const char *reltarget, const char *rellink,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1508,8 +1559,8 @@ int Client::symlink(const char *reltarget, const char *rellink,
   req->set_sarg(target);
  
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1530,7 +1581,15 @@ int Client::readlink(const char *relpath, char *buf, off_t size,
 { 
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1579,6 +1638,16 @@ int Client::_lstat(const char *path, int mask, Inode **in,
   
   // check whether cache content is fresh enough
   int res = 0;
+
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+  // the ticket should be used since it must look at
+  // execute permissions in path
+  //Ticket *tk = get_user_ticket(uid, gid);
 
   Dentry *dn = lookup(fpath);
   inode_t inode;
@@ -1676,7 +1745,15 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1711,7 +1788,15 @@ int Client::lstatlite(const char *relpath, struct statlite *stl,
 {
   client_lock.Lock();
    
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1753,7 +1838,15 @@ int Client::chmod(const char *relpath, mode_t mode,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied
+  // get it from the system
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1774,8 +1867,8 @@ int Client::chmod(const char *relpath, mode_t mode,
   req->set_iarg( (int)mode );
 
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
   
   MClientReply *reply = make_request(req, true);
   int res = reply->get_result();
@@ -1795,7 +1888,15 @@ int Client::chown(const char *relpath, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1818,8 +1919,8 @@ int Client::chown(const char *relpath, __int64_t uid, __int64_t gid)
   req->set_iarg2( (int)gid );
 
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
 
@@ -1840,7 +1941,15 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1864,8 +1973,8 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
   req->set_targ2( buf->actime );
 
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1889,7 +1998,15 @@ int Client::mknod(const char *relpath, mode_t mode,
 { 
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1910,8 +2027,8 @@ int Client::mknod(const char *relpath, mode_t mode,
   req->set_iarg( mode );
 
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -1939,11 +2056,20 @@ int Client::mknod(const char *relpath, mode_t mode,
 
 // fyi: typedef int (*dirfillerfunc_t) (void *handle, const char *name, int type, inodeno_t ino);
 
-int Client::getdir(const char *relpath, map<string,inode_t>& contents) 
+int Client::getdir(const char *relpath, map<string,inode_t>& contents,
+		   __int64_t uid, __int64_t gid) 
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -1962,8 +2088,8 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
   req->set_path(path); 
 
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
 
   //FIXME enforce caller uid rights?
    
@@ -2051,6 +2177,7 @@ int Client::closedir(DIR *dir, __int64_t uid, __int64_t gid)
 
 struct dirent *Client::readdir(DIR *dirp, __int64_t uid, __int64_t gid)
 {
+  
   DirResult *d = (DirResult*)dirp;
 
   // end of dir?
@@ -2218,7 +2345,14 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                   
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
 
   if (!tk) {
     client_lock.Unlock();
@@ -2256,9 +2390,18 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
   req->set_iarg(flags);
   req->set_iarg2(cmode);
 
+  // don't need a cap if I have one cached
+  ExtCap *ext_cap;
+  //ExtCap *ext_cap = fc->get_ext_caps(uid);
+  // !!FIX ME!! Set flag to not ask for cap if I have one already
+  if (!ext_cap)
+    cout << "No capability cached at client for file " << path << endl;
+  else
+    cout << "Cached capability found! for file " << path << endl;
+
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
   
   MClientReply *reply = make_request(req, tryauth); // try auth if writer
   
@@ -2295,6 +2438,12 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 
     int new_caps = reply->get_file_caps();
 
+    // need security caps? check if I even asked for one
+    ext_cap = reply->get_ext_cap();
+
+    // cache it
+    f->inode->set_ext_cap(uid, ext_cap);
+    
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
       dout(7) << "open got caps " << cap_string(new_caps)
@@ -2369,7 +2518,15 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                            
+  // get it from the system                                                
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2451,7 +2608,15 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2581,7 +2746,15 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                             
+  // get it from the system                                               
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2707,7 +2880,15 @@ int Client::truncate(const char *file, off_t size, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2724,8 +2905,8 @@ int Client::truncate(const char *file, off_t size, __int64_t uid, __int64_t gid)
   req->set_sizearg( size );
 
   // FIXME where does FUSE maintain user information
-  req->set_caller_uid(getuid());
-  req->set_caller_gid(getgid());
+  req->set_caller_uid(uid);
+  req->set_caller_gid(gid);
   
   MClientReply *reply = make_request(req, true);
   int res = reply->get_result();
@@ -2744,7 +2925,15 @@ int Client::fsync(fh_t fh, bool syncdataonly, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2828,7 +3017,15 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;
@@ -2873,7 +3070,15 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
 {
   client_lock.Lock();
 
-  Ticket *tk = get_user_ticket(getuid(), getgid());
+  // fix uid/gid if not supplied                                               
+  // get it from the system                                                    
+  if (uid == -1 || gid == -1) {
+    uid = getuid();
+    gid = getgid();
+  }
+
+  Ticket *tk = get_user_ticket(uid, gid);
+  //Ticket *tk = get_user_ticket(getuid(), getgid());
   if (!tk) {
     client_lock.Unlock();
     return -EPERM;

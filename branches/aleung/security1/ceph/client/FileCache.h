@@ -7,6 +7,8 @@ using namespace std;
 #include "common/Cond.h"
 #include "mds/Capability.h"
 
+#include "crypto/ExtCap.h"
+
 class ObjectCacher;
 
 class FileCache {
@@ -55,7 +57,7 @@ class FileCache {
   int get_caps() { return latest_caps; }
   void set_caps(int caps, Context *onimplement=0);
   void check_caps();
-  
+
   int read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock);  // may block.
   void write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock);  // may block.
 

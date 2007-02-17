@@ -51,6 +51,8 @@ typedef struct {
   long tid;
   int client;
   int op;
+  uid_t uid;
+  gid_t gid;
   
   entity_inst_t client_inst;
 
@@ -79,6 +81,15 @@ class MClientRequest : public Message {
     memset(&st, 0, sizeof(st));
     this->st.op = op;
     this->st.client = client;
+    this->st.iarg = 0;
+  }
+  MClientRequest(int op, int client, uid_t u, gid_t g)
+    : Message(MSG_CLIENT_REQUEST) {
+    memset(&st, 0, sizeof(st));
+    this->st.op = op;
+    this->st.client = client;
+    this->st.uid = u;
+    this->st.gid = g;
     this->st.iarg = 0;
   }
   virtual char *get_type_name() { return "creq"; }
@@ -112,8 +123,8 @@ class MClientRequest : public Message {
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
-  int get_caller_uid() { return st.caller_uid; }
-  int get_caller_gid() { return st.caller_gid; }
+  uid_t get_caller_uid() { return st.caller_uid; }
+  gid_t get_caller_gid() { return st.caller_gid; }
   inodeno_t get_ino() { return st.ino; }
   string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }

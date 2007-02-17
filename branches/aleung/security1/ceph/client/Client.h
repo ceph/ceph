@@ -152,6 +152,9 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
 
+  // secure caps
+  map<uid_t, ExtCap*> ext_cap_cache;
+
   // for caching i/o mode
   FileCache fc;
 
@@ -191,6 +194,13 @@ class Inode {
 
   bool is_dir() {
     return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
+  }
+
+  void set_ext_cap(uid_t user, ExtCap *ecap) { ext_cap_cache[user] = ecap; }
+  ExtCap* get_ext_cap(uid_t user) {
+    if (ext_cap_cache.count(user))
+      return ext_cap_cache[user]; 
+    return 0;
   }
 
   int file_caps() {
@@ -560,8 +570,10 @@ protected:
   int chdir(const char *s, __int64_t uid, __int64_t gid);
 
   // namespace ops
-  int getdir(const char *path, list<string>& contents);
-  int getdir(const char *path, map<string,inode_t>& contents);
+  int getdir(const char *path, list<string>& contents,
+	     __int64_t uid = -1, __int64_t gid = -1);
+  int getdir(const char *path, map<string,inode_t>& contents,
+	     __int64_t uid = -1, __int64_t gid = -1);
 
   DIR *opendir(const char *name, __int64_t uid = -1, __int64_t gid = -1);
   int closedir(DIR *dir, __int64_t uid = -1, __int64_t gid = -1);

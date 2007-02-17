@@ -34,7 +34,9 @@
 #include <iostream>
 using namespace std;
 
-
+#include "crypto/CryptoLib.h"
+using namespace std;
+#include "crypto/ExtCap.h"
 
 
 
@@ -211,6 +213,14 @@ class CInode : public LRUObject {
   // file capabilities
   map<int, Capability>  client_caps;         // client -> caps
 
+  
+  // secure capabilities
+  // will be dependant based on MDS collection policy!
+  map<uid_t, ExtCap>  ext_caps;
+  //ExtCap *user_cap;
+  //ExtCap *group_cap;
+  //ExtCap *world_cap;
+
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
@@ -255,6 +265,8 @@ class CInode : public LRUObject {
   int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
 
   inodeno_t ino() { return inode.ino; }
+  uid_t get_uid() { return inode.uid; }
+  gid_t get_gid() { return inode.gid; }
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   CDir *get_parent_dir();
@@ -456,6 +468,27 @@ class CInode : public LRUObject {
         //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
       }
     return w;
+  }
+
+  // secure extended caps
+  //map<int,ExtCap*>& get_client_extcaps() { return ext_caps; }
+
+  void add_user_extcap(uid_t user, ExtCap extcap) {
+    //if (ext_caps.empty())
+    //  get(CINODE_PIN_CAPS);
+    assert(ext_caps.count(user) == 0);
+    ext_caps[user] = extcap;
+  }
+  void remove_user_extcap(uid_t user) {
+    assert(ext_caps.count(user) == 1);
+    ext_caps.erase(user);
+    //if (client_caps.empty())
+    //  put(CINODE_PIN_CAPS);
+  }
+  ExtCap* get_user_extcap(uid_t user) {
+    if (ext_caps.count(user))
+      return &(ext_caps[user]);
+    return 0;
   }
 
 

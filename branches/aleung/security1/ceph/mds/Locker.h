@@ -91,6 +91,9 @@ private:
  public:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, MClientRequest *req);
+  // returns a secured extended capability for the user
+  ExtCap* issue_new_extcaps(CInode *in, int mode, MClientRequest *req);
+  // sign the extcap
   bool issue_caps(CInode *in);
 
  protected:

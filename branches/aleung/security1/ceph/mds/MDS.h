@@ -37,6 +37,10 @@ using namespace __gnu_cxx;
 
 #include "ClientMap.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
+#include "crypto/ExtCap.h"
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
@@ -143,6 +147,10 @@ class MDS : public Dispatcher {
   int state;
   list<Context*> waitfor_active;
 
+  // mds pub/priv keys
+  esignPriv myPrivKey;
+  esignPub myPubKey;
+
 public:
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 
@@ -206,6 +214,9 @@ public:
 
   int shutdown_start();
   int shutdown_final();
+
+  esignPub getPubKey() { return myPubKey; }
+  esignPriv getPrvKey() { return myPrivKey; }
 
   int hash_dentry(inodeno_t ino, const string& s) {
     return 0; // fixme
