@@ -33,7 +33,7 @@ public:
     ~MTMessenger();
 
     // send a request to a server and wait (block) for the response;
-    virtual Message *sendrecv(Message *m, msg_addr_t dest);
+    virtual Message *sendrecv(Message *m, entity_name_t dest);
 
     // wait (block) for a request from anyone
     Message *recvreq();

@@ -31,7 +31,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "synthetic" << client->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << g_clock.now() << " synthetic" << client->get_nodeid() << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
@@ -109,7 +109,7 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
 
-      } else if (strcmp(args[i],"fullwalk") == 0) {
+      } else if (strcmp(args[i],"walk") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
         //syn_sargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"randomwalk") == 0) {
@@ -380,7 +380,7 @@ int SyntheticClient::run()
 
     case SYNCLIENT_MODE_FULLWALK:
       {
-        string sarg1 = get_sarg(0);
+        string sarg1;// = get_sarg(0);
         if (run_me()) {
           dout(2) << "fullwalk" << sarg1 << endl;
           full_walk(sarg1);
@@ -735,27 +735,39 @@ int SyntheticClient::full_walk(string& basedir)
 {
   if (time_to_stop()) return -1;
 
-  // read dir
-  map<string, inode_t> contents;
-  int r = client->getdir(basedir.c_str(), contents);
-  if (r < 0) {
-    dout(1) << "readdir on " << basedir << " returns " << r << endl;
-    return r;
-  }
+  list<string> dirq;
+  dirq.push_back(basedir);
 
-  for (map<string, inode_t>::iterator it = contents.begin();
-       it != contents.end();
-       it++) {
-    string file = basedir + "/" + it->first;
+  while (!dirq.empty()) {
+    string dir = dirq.front();
+    dirq.pop_front();
 
-    struct stat st;
-    int r = client->lstat(file.c_str(), &st);
+    // read dir
+    map<string, inode_t> contents;
+    int r = client->getdir(dir.c_str(), contents);
     if (r < 0) {
-      dout(1) << "stat error on " << file << " r=" << r << endl;
+      dout(1) << "readdir on " << dir << " returns " << r << endl;
       continue;
     }
-
-    if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) full_walk(file);
+    
+    for (map<string, inode_t>::iterator it = contents.begin();
+	 it != contents.end();
+	 it++) {
+      if (it->first == ".") continue;
+      if (it->first == "..") continue;
+      string file = dir + "/" + it->first;
+      
+      struct stat st;
+      int r = client->lstat(file.c_str(), &st);
+      if (r < 0) {
+	dout(1) << "stat error on " << file << " r=" << r << endl;
+	continue;
+      }
+      
+      if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
+	dirq.push_back(file);
+      }
+    }
   }
 
   return 0;

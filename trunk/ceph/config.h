@@ -28,6 +28,11 @@ extern std::map<int,float> g_fake_osd_out;
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
 
+
+#include "msg/msg_types.h"
+
+extern entity_addr_t g_my_addr;
+
 struct md_config_t {
   int  num_mon;
   int  num_mds;
@@ -102,6 +107,7 @@ struct md_config_t {
   int mon_tick_interval;
   int mon_osd_down_out_interval;
   float mon_lease;
+  bool mon_stop_with_last_mds;
 
   // client
   int      client_cache_size;
@@ -145,6 +151,9 @@ struct md_config_t {
   
   float mds_decay_halflife;
 
+  float mds_beacon_interval;
+  float mds_beacon_grace;
+
   bool mds_log;
   int mds_log_max_len;
   int mds_log_max_trimming;
@@ -152,6 +161,7 @@ struct md_config_t {
   int mds_log_pad_entry;
   bool  mds_log_before_reply;
   bool  mds_log_flush_on_shutdown;
+  off_t mds_log_import_map_interval;
   
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
@@ -174,6 +184,7 @@ struct md_config_t {
 
   bool  mds_commit_on_shutdown;
   int   mds_shutdown_check;
+  bool  mds_shutdown_on_last_unmount;
   bool  mds_verify_export_dirauth;     // debug flag
 
   bool  mds_local_osd;
@@ -293,5 +304,9 @@ void vec_to_argv(std::vector<char*>& args,
                  int& argc, char **&argv);
 
 void parse_config_options(std::vector<char*>& args);
+
+extern bool parse_ip_port(const char *s, entity_addr_t& addr);
+
+
 
 #endif

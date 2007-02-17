@@ -25,52 +25,6 @@
 using namespace std;
 
 
-#include "config.h"
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug) cout << "messenger: "
-#define DEBUGLVL  10    // debug level of output
-
-
-
-// -------- 
-// callbacks
-
-Mutex                msgr_callback_lock;
-list<Context*>       msgr_callback_queue;
-//Context*             msgr_callback_kicker = 0;
-
-void Messenger::queue_callback(Context *c) {
-  msgr_callback_lock.Lock();
-  msgr_callback_queue.push_back(c);
-  msgr_callback_lock.Unlock();
-
-  callback_kick();
-}
-void Messenger::queue_callbacks(list<Context*>& ls) {
-  msgr_callback_lock.Lock();
-  msgr_callback_queue.splice(msgr_callback_queue.end(), ls);
-  msgr_callback_lock.Unlock();
-
-  callback_kick();
-}
-
-void Messenger::do_callbacks() {
-  // take list
-  msgr_callback_lock.Lock();
-  list<Context*> ls;
-  ls.splice(ls.begin(), msgr_callback_queue);
-  msgr_callback_lock.Unlock();
-
-  // do them
-  for (list<Context*>::iterator it = ls.begin();
-       it != ls.end();
-       it++) {
-    dout(10) << "--- doing callback " << *it << endl;
-    (*it)->finish(0);
-    delete *it;
-  }
-}
-
 // ---------
 // incoming messages
 

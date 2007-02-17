@@ -39,9 +39,8 @@ class EPurgeFinish : public LogEvent {
     bl.copy(off, sizeof(ino), (char*)&ino);
   }
   
-  bool can_expire(MDS *mds);
-  void retire(MDS *mds, Context *c);
-  bool has_happened(MDS *mds);  
+  bool has_expired(MDS *mds);
+  void expire(MDS *mds, Context *c);
   void replay(MDS *mds);
 
 };

@@ -53,7 +53,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "client" << whoami << "." << pthread_self() << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami << "." << pthread_self() << " "
 
 #define  tout       if (g_conf.client_trace) cout << "trace: " 
 
@@ -94,7 +94,7 @@ public:
 Client::Client(Messenger *m, MonMap *mm)
 {
   // which client am i?
-  whoami = m->get_myaddr().num();
+  whoami = m->get_myname().num();
   monmap = mm;
 
   mounted = false;
@@ -455,7 +455,7 @@ Dentry *Client::lookup(filepath& path)
 
 MClientReply *Client::make_request(MClientRequest *req, 
                                    bool auth_best, 
-                                   int use_mds)  // this param is icky, debug weirdness!
+                                   int use_mds)  // this param is purely for debug hacking
 {
   // assign a unique tid
   req->set_tid(++last_tid);
@@ -495,7 +495,10 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   // choose an mds
   int mds = 0;
-  if (diri) {
+  if (!diri || g_conf.client_use_random_mds) {
+    // no root info, pick a random MDS
+    mds = rand() % mdsmap->get_num_mds();
+  } else {
     if (auth_best) {
       // pick the actual auth (as best we can)
       if (item) {
@@ -514,9 +517,6 @@ MClientReply *Client::make_request(MClientRequest *req,
       else 
         mds = diri->pick_replica(mdsmap);
     }
-  } else {
-    // no root info, pick a random MDS
-    mds = rand() % mdsmap->get_num_mds();
   }
   dout(20) << "mds is " << mds << endl;
 
@@ -575,7 +575,7 @@ MClientReply* Client::sendrecv(MClientRequest *req, int mds)
   tid_t tid = req->get_tid();
   mds_rpc_cond[tid] = &cond;
   
-  messenger->send_message(req, MSG_ADDR_MDS(mds), mdsmap->get_inst(mds), MDS_PORT_SERVER);
+  messenger->send_message(req, mdsmap->get_inst(mds), MDS_PORT_SERVER);
   
   // wait
   while (mds_rpc_reply.count(tid) == 0) {
@@ -695,15 +695,16 @@ void Client::handle_mds_map(MMDSMap* m)
   if (whoami < 0) {
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
-    messenger->reset_myaddr(m->get_dest());
+    messenger->reset_myname(m->get_dest());
   }    
 
-  map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();
-  
-  dout(1) << "handle_mds_map epoch " << p->first << endl;
-  mdsmap->decode(p->second);
+  dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
+  mdsmap->decode(m->get_encoded());
   
   delete m;
+
+  // note our inc #
+  objecter->set_client_incarnation(0);  // fixme
 
   mount_cond.Signal();  // mount might be waiting for this.
 }
@@ -831,7 +832,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << ", which we don't want caps for, releasing." << endl;
     m->set_caps(0);
     m->set_wanted(0);
-    messenger->send_message(m, m->get_source(), m->get_source_inst(), m->get_source_port());
+    messenger->send_message(m, m->get_source_inst(), m->get_source_port());
     return;
   }
 
@@ -938,7 +939,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
     in->file_wr_size = 0;
   }
 
-  messenger->send_message(m, m->get_source(), m->get_source_inst(), m->get_source_port());
+  messenger->send_message(m, m->get_source_inst(), m->get_source_port());
 }
 
 
@@ -962,7 +963,7 @@ void Client::release_caps(Inode *in,
                                                it->second.seq,
                                                it->second.caps,
                                                in->file_caps_wanted()); 
-      messenger->send_message(m, MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
+      messenger->send_message(m, mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
     }
   }
   
@@ -987,7 +988,7 @@ void Client::update_caps_wanted(Inode *in)
                                              it->second.caps,
                                              in->file_caps_wanted());
     messenger->send_message(m,
-                            MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
+                            mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
   }
 }
 
@@ -1009,7 +1010,7 @@ int Client::mount()
     delete mdsmap;
   int mon = monmap->pick_mon();
   messenger->send_message(new MClientBoot(),
-			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
+			  monmap->get_inst(mon));
   
   while (!mdsmap)
     mount_cond.Wait(client_lock);
@@ -1019,7 +1020,7 @@ int Client::mount()
 
   int who = 0; // mdsmap->get_root();  // mount at root, for now
   messenger->send_message(m, 
-			  MSG_ADDR_MDS(who), mdsmap->get_inst(who), 
+			  mdsmap->get_inst(who), 
 			  MDS_PORT_SERVER);
   
   while (!mounted)
@@ -1115,7 +1116,7 @@ int Client::unmount()
   
   // send unmount!
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
-  messenger->send_message(req, MSG_ADDR_MDS(0), mdsmap->get_inst(0), MDS_PORT_SERVER);
+  messenger->send_message(req, mdsmap->get_inst(0), MDS_PORT_SERVER);
 
   while (mounted)
     mount_cond.Wait(client_lock);
@@ -2613,7 +2614,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 }
 
 
-void Client::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst)
+void Client::ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst)
 {
   if (dest.is_mon()) {
     // resend to a different monitor.
@@ -2621,7 +2622,7 @@ void Client::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t&
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", resending to mon" << mon 
             << endl;
-    messenger->send_message(m, MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(m, monmap->get_inst(mon));
   }
   else if (dest.is_osd()) {
     objecter->ms_handle_failure(m, dest, inst);

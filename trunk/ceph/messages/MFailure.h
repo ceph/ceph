@@ -20,15 +20,15 @@
 
 class MFailure : public Message {
  public:
-  msg_addr_t failed;
+  entity_name_t failed;
   entity_inst_t inst;
 
   MFailure() {}
-  MFailure(msg_addr_t f, entity_inst_t& i) : 
+  MFailure(entity_name_t f, entity_inst_t& i) : 
     Message(MSG_FAILURE),
     failed(f), inst(i) {}
  
-  msg_addr_t get_failed() { return failed; }
+  entity_name_t get_failed() { return failed; }
   entity_inst_t& get_inst() { return inst; }
 
   void decode_payload() {

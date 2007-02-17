@@ -18,6 +18,7 @@
 #include "CInode.h"
 
 #include "MDS.h"
+#include "MDCache.h"
 #include "MDSMap.h"
 
 #include "include/Context.h"
@@ -27,28 +28,12 @@
 
 #include "config.h"
 #undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".cache.dir(" << inode->inode.ino << ") "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << inode->inode.ino << ") "
 
 
 // PINS
-int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+//int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
-static char* cdir_pin_names[CDIR_NUM_PINS] = {
-  "child",
-  "opened",
-  "waiter",
-  "import",
-  "export",
-  "freeze",
-  "proxy",
-  "authpin",
-  "imping",
-  "impex",
-  "hashed",
-  "hashing",
-  "dirty",
-  "reqpins"
-};
 
 
 ostream& operator<<(ostream& out, CDir& dir)
@@ -56,41 +41,42 @@ ostream& operator<<(ostream& out, CDir& dir)
   string path;
   dir.get_inode()->make_path(path);
   out << "[dir " << dir.ino() << " " << path << "/";
-  if (dir.is_dirty()) out << " dirty";
-  if (dir.is_import()) out << " import";
-  if (dir.is_export()) out << " export";
-  if (dir.is_rep()) out << " repl";
-  if (dir.is_hashed()) out << " hashed"; //=" << (int)dir.get_inode()->inode.hash_seed;
   if (dir.is_auth()) {
     out << " auth";
-    if (dir.is_open_by_anyone())
-      out << "+" << dir.get_open_by();
+    if (dir.is_replicated())
+      out << dir.get_replicas();
+
+    out << " v=" << dir.get_version();
+    out << " pv=" << dir.get_projected_version();
+    out << " cv=" << dir.get_committing_version();
+    out << " lastcv=" << dir.get_last_committed_version();
   } else {
     out << " rep@" << dir.authority();
     if (dir.get_replica_nonce() > 1)
       out << "." << dir.get_replica_nonce();
   }
 
-  if (dir.is_pinned()) {
+  if (dir.get_dir_auth() != CDIR_AUTH_PARENT)
+    out << " dir_auth=" << dir.get_dir_auth();
+  
+  out << " state=" << dir.get_state();
+  if (dir.state_test(CDIR_STATE_PROXY)) out << "|proxy";
+  if (dir.state_test(CDIR_STATE_COMPLETE)) out << "|complete";
+  if (dir.state_test(CDIR_STATE_FREEZINGTREE)) out << "|freezingtree";
+  if (dir.state_test(CDIR_STATE_FROZENTREE)) out << "|frozentree";
+  if (dir.state_test(CDIR_STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
+  if (dir.state_test(CDIR_STATE_FROZENDIR)) out << "|frozendir";
+  if (dir.state_test(CDIR_STATE_FREEZINGDIR)) out << "|freezingdir";
+
+  out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
+  
+  if (dir.get_num_ref()) {
     out << " |";
     for(set<int>::iterator it = dir.get_ref_set().begin();
         it != dir.get_ref_set().end();
         it++)
-      if (*it < CDIR_NUM_PINS)
-        out << " " << cdir_pin_names[*it];
-      else
-        out << " " << *it;
+      out << " " << CDir::pin_name(*it);
   }
-
-  if (dir.get_dir_auth() != CDIR_AUTH_PARENT)
-    out << " dir_auth=" << dir.get_dir_auth();
-
-  out << " state=" << dir.get_state();
-  out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
-
-  out << " v=" << dir.get_version();
-  out << " cv=" << dir.get_committing_version();
-  out << " lastcv=" << dir.get_last_committed_version();
 
   out << " " << &dir;
   return out << "]";
@@ -100,16 +86,16 @@ ostream& operator<<(ostream& out, CDir& dir)
 // -------------------------------------------------------------------
 // CDir
 
-CDir::CDir(CInode *in, MDS *mds, bool auth)
+CDir::CDir(CInode *in, MDCache *mdcache, bool auth)
 {
   inode = in;
-  this->mds = mds;
+  this->cache = mdcache;
   
   nitems = 0;
   nnull = 0;
   state = CDIR_STATE_INITIAL;
 
-  version = 0;
+  projected_version = version = 0;
   committing_version = 0;
   last_committed_version = 0;
 
@@ -141,15 +127,19 @@ CDir::CDir(CInode *in, MDS *mds, bool auth)
  * linking fun
  */
 
-CDentry* CDir::add_dentry( const string& dname, inodeno_t ino) 
+CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth) 
 {
   // foreign
   assert(lookup(dname) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, ino);
+  if (auth) 
+    dn->state_set(CDentry::STATE_AUTH);
+  cache->lru.lru_insert_mid(dn);
+
   dn->dir = this;
-  dn->parent_dir_version = version;
+  dn->version = projected_version;
   
   // add to dir
   assert(items.count(dn->name) == 0);
@@ -161,7 +151,7 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino)
   dout(12) << "add_dentry " << *dn << endl;
 
   // pin?
-  if (nnull + nitems == 1) get(CDIR_PIN_CHILD);
+  if (nnull + nitems == 1) get(PIN_CHILD);
   
   assert(nnull + nitems == items.size());
   assert(nnull == null_items.size());         
@@ -169,15 +159,19 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino)
 }
 
 
-CDentry* CDir::add_dentry( const string& dname, CInode *in ) 
+CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth ) 
 {
   // primary
   assert(lookup(dname) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, in);
+  if (auth) 
+    dn->state_set(CDentry::STATE_AUTH);
+  cache->lru.lru_insert_mid(dn);
+
   dn->dir = this;
-  dn->parent_dir_version = version;
+  dn->version = projected_version;
   
   // add to dir
   assert(items.count(dn->name) == 0);
@@ -196,7 +190,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in )
   dout(12) << "add_dentry " << *dn << endl;
 
   // pin?
-  if (nnull + nitems == 1) get(CDIR_PIN_CHILD);
+  if (nnull + nitems == 1) get(PIN_CHILD);
   
   assert(nnull + nitems == items.size());
   assert(nnull == null_items.size());         
@@ -214,7 +208,7 @@ void CDir::remove_dentry(CDentry *dn)
     unlink_inode_work(dn);
   } else {
     // remove from null list
-     assert(null_items.count(dn->name) == 1);
+    assert(null_items.count(dn->name) == 1);
     null_items.erase(dn->name);
     nnull--;
   }
@@ -223,10 +217,11 @@ void CDir::remove_dentry(CDentry *dn)
   assert(items.count(dn->name) == 1);
   items.erase(dn->name);
 
+  cache->lru.lru_remove(dn);
   delete dn;
 
   // unpin?
-  if (nnull + nitems == 0) put(CDIR_PIN_CHILD);
+  if (nnull + nitems == 0) put(PIN_CHILD);
 
   assert(nnull + nitems == items.size());
   assert(nnull == null_items.size());         
@@ -234,7 +229,7 @@ void CDir::remove_dentry(CDentry *dn)
 
 void CDir::link_inode( CDentry *dn, inodeno_t ino)
 {
-  //dout(12) << "link_inode " << *dn << " remote " << ino << endl;
+  dout(12) << "link_inode " << *dn << " remote " << ino << endl;
 
   assert(dn->is_null());
   dn->set_remote_ino(ino);
@@ -247,10 +242,10 @@ void CDir::link_inode( CDentry *dn, inodeno_t ino)
 
 void CDir::link_inode( CDentry *dn, CInode *in )
 {
+  dout(12) << "link_inode " << *dn << " " << *in << endl;
   assert(!dn->is_remote());
 
   link_inode_work(dn,in);
-  //dout(12) << "link_inode " << *dn << " " << *in << endl;
   
   // remove from null list
   assert(null_items.count(dn->name) == 1);
@@ -269,14 +264,15 @@ void CDir::link_inode_work( CDentry *dn, CInode *in )
   nitems++;  // adjust dir size
   
   // set dir version
-  in->parent_dir_version = get_version();
+  in->inode.version = dn->get_version();
   
   // clear dangling
-  in->state_clear(CINODE_STATE_DANGLING);
+  in->state_clear(CInode::STATE_DANGLING);
 
-  // dn dirty?
-  if (dn->is_dirty()) in->get(CINODE_PIN_DNDIRTY);
-
+  // pin dentry?
+  if (in->get_num_ref())
+    dn->get(CDentry::PIN_INODEPIN);
+  
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
     adjust_nested_auth_pins( in->auth_pins + in->nested_auth_pins );
@@ -314,17 +310,18 @@ void CDir::unlink_inode_work( CDentry *dn )
     // explicitly define auth
     in->dangling_auth = in->authority();
     //dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
+
+    // unpin dentry?
+    if (in->get_num_ref())
+      dn->put(CDentry::PIN_INODEPIN);
     
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)
       adjust_nested_auth_pins( 0 - (in->auth_pins + in->nested_auth_pins) );
     
     // set dangling flag
-    in->state_set(CINODE_STATE_DANGLING);
+    in->state_set(CInode::STATE_DANGLING);
 
-    // dn dirty?
-    if (dn->is_dirty()) in->put(CINODE_PIN_DNDIRTY);
-    
     // detach inode
     in->remove_primary_parent(dn);
     dn->inode = 0;
@@ -377,7 +374,7 @@ void CDir::add_waiter(int tag,
                       const string& dentry,
                       Context *c) {
   if (waiting.empty() && waiting_on_dentry.size() == 0)
-    get(CDIR_PIN_WAITER);
+    get(PIN_WAITER);
   waiting_on_dentry[ dentry ].insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter dentry " << dentry << " tag " << tag << " " << c << " on " << *this << endl;
 }
@@ -398,7 +395,7 @@ void CDir::add_waiter(int tag, Context *c) {
 
   // this dir.
   if (waiting.empty() && waiting_on_dentry.size() == 0)
-    get(CDIR_PIN_WAITER);
+    get(PIN_WAITER);
   waiting.insert(pair<int,Context*>(tag,c));
   dout(10) << "add_waiter " << tag << " " << c << " on " << *this << endl;
 }
@@ -434,7 +431,7 @@ void CDir::take_waiting(int mask,
   
   // ...whole map?
   if (waiting_on_dentry.size() == 0 && waiting.empty())
-    put(CDIR_PIN_WAITER);
+    put(PIN_WAITER);
 }
 
 /* NOTE: this checks dentry waiters too */
@@ -465,7 +462,7 @@ void CDir::take_waiting(int mask,
     }
     
     if (waiting_on_dentry.size() == 0 && waiting.empty())
-      put(CDIR_PIN_WAITER);
+      put(PIN_WAITER);
   }
 }
 
@@ -491,21 +488,29 @@ void CDir::finish_waiting(int mask, const string& dn, int result)
 
 // dirty/clean
 
-void CDir::mark_dirty()
+version_t CDir::pre_dirty()
+{
+  ++projected_version;
+  dout(10) << "pre_dirty " << projected_version << endl;
+  return projected_version;
+}
+
+void CDir::_mark_dirty()
 {
   if (!state_test(CDIR_STATE_DIRTY)) {
-    version++;
     state_set(CDIR_STATE_DIRTY);
-    dout(10) << "mark_dirty (was clean) " << *this << " new version " << version << endl;
-    get(CDIR_PIN_DIRTY);
-  } 
-  else if (state_test(CDIR_STATE_COMMITTING) &&
-           committing_version == version) {
-    version++;  // now dirtier than committing version!
-    dout(10) << "mark_dirty (committing) " << *this << " new version " << version << "/" << committing_version <<  endl;
+    dout(10) << "mark_dirty (was clean) " << *this << " version " << version << endl;
+    get(PIN_DIRTY);
   } else {
     dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << endl;
   }
+}
+
+void CDir::mark_dirty(version_t pv)
+{
+  ++version;
+  assert(pv == version);
+  _mark_dirty();
 }
 
 void CDir::mark_clean()
@@ -513,51 +518,21 @@ void CDir::mark_clean()
   dout(10) << "mark_clean " << *this << " version " << version << endl;
   if (state_test(CDIR_STATE_DIRTY)) {
     state_clear(CDIR_STATE_DIRTY);
-    put(CDIR_PIN_DIRTY);
+    put(PIN_DIRTY);
   }
 }
 
 
 
-// ref counts
 
-void CDir::put(int by) {
-  cdir_pins[by]--;
-
-  // bad?
-  if (ref == 0 || ref_set.count(by) != 1) {
-    dout(7) << *this << " bad put by " << by << " " << cdir_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
-    assert(ref_set.count(by) == 1);
-    assert(ref > 0);
-  }
-
-  ref--;
-  ref_set.erase(by);
-
-  // inode
-  if (ref == 0)
-    inode->put(CINODE_PIN_DIR);
-
-  dout(7) << *this << " put by " << by << " " << cdir_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
+void CDir::first_get()
+{
+  inode->get(CInode::PIN_DIR);
 }
 
-void CDir::get(int by) {
-  cdir_pins[by]++;
-
-  // inode
-  if (ref == 0)
-    inode->get(CINODE_PIN_DIR);
-
-  // bad?
-  if (ref_set.count(by)) {
-    dout(7) << *this << " bad get by " << by << " " << cdir_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
-    assert(ref_set.count(by) == 0);
-  }
-  
-  ref++;
-  ref_set.insert(by);
-  
-  dout(7) << *this << " get by " << by << " " << cdir_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
+void CDir::last_put()
+{
+  inode->put(CInode::PIN_DIR);
 }
 
 
@@ -571,34 +546,23 @@ void CDir::get(int by) {
  */
 int CDir::authority() 
 {
-  if (get_dir_auth() >= 0)
-    return get_dir_auth();
-
-  /*
-  CDir *parent = inode->get_parent_dir();
-  if (parent)
-    return parent->authority();
-  
-  // root, or dangling
-  assert(inode->is_root());  // no dirs under danglers!?
-  //assert(inode->is_root() || inode->is_dangling());  
-  */
-
-  return inode->authority();
+  if (dir_auth == CDIR_AUTH_PARENT)
+    return inode->authority();
+  return dir_auth;
 }
 
 int CDir::dentry_authority(const string& dn )
 {
   // hashing -- subset of nodes have hashed the contents
   if (is_hashing() && !hashed_subset.empty()) {
-    int hashauth = mds->hash_dentry( inode->ino(), dn );  // hashed
+    int hashauth = cache->hash_dentry( inode->ino(), dn );  // hashed
     if (hashed_subset.count(hashauth))
       return hashauth;
   }
 
   // hashed
   if (is_hashed()) {
-    return mds->hash_dentry( inode->ino(), dn );  // hashed
+    return cache->hash_dentry( inode->ino(), dn );  // hashed
   }
   
   if (get_dir_auth() == CDIR_AUTH_PARENT) {
@@ -624,7 +588,7 @@ void CDir::set_dir_auth(int d)
 
 void CDir::auth_pin() {
   if (auth_pins == 0)
-    get(CDIR_PIN_AUTHPIN);
+    get(PIN_AUTHPIN);
   auth_pins++;
 
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
@@ -637,7 +601,7 @@ void CDir::auth_pin() {
 void CDir::auth_unpin() {
   auth_pins--;
   if (auth_pins == 0)
-    put(CDIR_PIN_AUTHPIN);
+    put(PIN_AUTHPIN);
 
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
   assert(auth_pins >= 0);
@@ -760,13 +724,24 @@ void CDir::freeze_tree_finish(Context *c)
 void CDir::unfreeze_tree()
 {
   dout(10) << "unfreeze_tree " << *this << endl;
-  state_clear(CDIR_STATE_FROZENTREE);
-  
-  // unpin  (may => FREEZEABLE)   FIXME: is this order good?
-  inode->auth_unpin();
 
-  // waiters?
-  finish_waiting(CDIR_WAIT_UNFREEZE);
+  if (state_test(CDIR_STATE_FROZENTREE)) {
+    // frozen.  unfreeze.
+    state_clear(CDIR_STATE_FROZENTREE);
+
+    // unpin  (may => FREEZEABLE)   FIXME: is this order good?
+    inode->auth_unpin();
+
+    // waiters?
+    finish_waiting(CDIR_WAIT_UNFREEZE);
+  } else {
+    // freezing.  stop it.
+    assert(state_test(CDIR_STATE_FREEZINGTREE));
+    state_clear(CDIR_STATE_FREEZINGTREE);
+    
+    // cancel freeze waiters
+    finish_waiting(CDIR_WAIT_FREEZEABLE, -1);
+  }
 }
 
 bool CDir::is_freezing_tree()
@@ -790,6 +765,7 @@ bool CDir::is_frozen_tree()
     if (dir->is_frozen_tree_root()) return true;
     if (dir->is_import()) return false;
     if (dir->is_hashed()) return false;
+    if (dir->is_frozen_tree_leaf()) return false;
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else

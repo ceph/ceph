@@ -68,7 +68,8 @@ pair<int,int> mpi_bootstrap_new(int& argc, char**& argv, MonMap *monmap)
   rank.start_rank();   // bind and listen
 
   if (mpi_rank < g_conf.num_mon) {
-    moninst[mpi_rank].set_addr( rank.get_listen_addr() );
+    moninst[mpi_rank].addr = rank.my_addr;
+    moninst[mpi_rank].name = MSG_ADDR_MON(mpi_rank);
 
     //cerr << mpi_rank << " at " << rank.get_listen_addr() << endl;
   } 
@@ -242,7 +243,7 @@ int main(int argc, char **argv)
   for (int i=0; i<NUMMDS; i++) {
     if (myrank != g_conf.ms_skip_rank0+i) continue;
     Messenger *m = rank.register_entity(MSG_ADDR_MDS(i));
-    cerr << "mds" << i << " at " << rank.my_inst << " " << hostname << "." << pid << endl;
+    cerr << "mds" << i << " at " << rank.my_addr << " " << hostname << "." << pid << endl;
     mds[i] = new MDS(i, m, monmap);
     mds[i]->init();
     started++;
@@ -268,7 +269,7 @@ int main(int argc, char **argv)
       g_timer.add_event_after(kill_osd_after[i], new C_Die);
 
     Messenger *m = rank.register_entity(MSG_ADDR_OSD(i));
-    cerr << "osd" << i << " at " << rank.my_inst <<  " " << hostname << "." << pid << endl;
+    cerr << "osd" << i << " at " << rank.my_addr <<  " " << hostname << "." << pid << endl;
     osd[i] = new OSD(i, m, monmap);
     osd[i]->init();
     started++;
@@ -337,7 +338,7 @@ int main(int argc, char **argv)
     nclients++;
   }
   if (nclients) {
-    cerr << nclients << " clients  at " << rank.my_inst << " " << hostname << "." << pid << endl;
+    cerr << nclients << " clients  at " << rank.my_addr << " " << hostname << "." << pid << endl;
   }
 
   for (set<int>::iterator it = clientlist.begin();
@@ -359,7 +360,7 @@ int main(int argc, char **argv)
 
   if (myrank && !started) {
     //dout(1) << "IDLE" << endl;
-    cerr << "idle at " << rank.my_inst << " " << hostname << "." << pid << endl; 
+    cerr << "idle at " << rank.my_addr << " " << hostname << "." << pid << endl; 
     //rank.stop_rank();
   } 
 

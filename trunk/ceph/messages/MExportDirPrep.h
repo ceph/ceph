@@ -85,7 +85,7 @@ class MExportDirPrep : public Message {
   void add_export(inodeno_t dirino) {
     exports.push_back( dirino );
   }
-  void add_inode(inodeno_t dirino, string& dentry, CInodeDiscover *in) {
+  void add_inode(inodeno_t dirino, const string& dentry, CInodeDiscover *in) {
     inodes.push_back(in);
     inode_dirino.insert(pair<inodeno_t, inodeno_t>(in->get_ino(), dirino));
     inode_dentry.insert(pair<inodeno_t, string>(in->get_ino(), dentry));

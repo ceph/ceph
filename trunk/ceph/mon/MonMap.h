@@ -45,7 +45,7 @@ class MonMap {
     return last_mon;    
   }
 
-  const entity_inst_t get_inst(int m) {
+  const entity_inst_t &get_inst(int m) {
     assert(m < num_mon);
     return mon_inst[m];
   }

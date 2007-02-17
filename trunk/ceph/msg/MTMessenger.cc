@@ -151,7 +151,7 @@ MTMessenger::~MTMessenger()
 }
 
 // send a request and wait for the response
-Message *MTMessenger::sendrecv(Message *m, msg_addr_t dest)
+Message *MTMessenger::sendrecv(Message *m, entity_name_t dest)
 {
     int dest_tag = 0;        // servers listen for any tag
     int my_tag = get_tag();

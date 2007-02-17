@@ -48,12 +48,12 @@ class MDLog {
 
   int unflushed;
 
+  bool capped;
+
   inode_t log_inode;
   Journaler *journaler;
 
-  
-  //hash_map<LogEvent*>  trimming;       // events currently being trimmed
-  map<off_t, LogEvent*> trimming;
+  map<off_t,LogEvent*> trimming;
   std::list<Context*>  trim_waiters;   // contexts waiting for trim
   bool                 trim_reading;
 
@@ -64,13 +64,49 @@ class MDLog {
   
   list<Context*> waitfor_replay;
 
+  // importmaps
+  off_t  last_import_map;   // offsets of last committed importmap.  constrains trimming.
+  list<Context*> import_map_expire_waiters;
+  bool writing_import_map;  // one is being written now
+  bool seen_import_map;     // for recovery
+
+  friend class EImportMap;
+  friend class C_MDS_WroteImportMap;
+  friend class MDCache;
+
+  void init_journaler();
+
+
+ public:
+  // replay state
+  map<inodeno_t, set<inodeno_t> >   pending_exports;
+
+
+
  public:
   MDLog(MDS *m);
   ~MDLog();
-  
+
+ 
+
   void set_max_events(size_t max) { max_events = max; }
   size_t get_max_events() { return max_events; }
   size_t get_num_events() { return num_events + trimming.size(); }
+  size_t get_non_importmap_events() { return num_events + trimming.size() - import_map_expire_waiters.size(); }
+
+  off_t get_read_pos();
+  off_t get_write_pos();
+  bool empty() {
+    return get_read_pos() == get_write_pos();
+  }
+
+  bool is_capped() { return capped; }
+  void cap() { 
+    capped = true;
+    list<Context*> ls;
+    ls.swap(import_map_expire_waiters);
+    finish_contexts(ls);
+  }
 
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );

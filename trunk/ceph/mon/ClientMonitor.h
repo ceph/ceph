@@ -32,7 +32,7 @@ class ClientMonitor : public Dispatcher {
 
  private:
   int num_clients;
-  map<msg_addr_t,entity_inst_t> client_map;
+  map<entity_name_t,entity_addr_t> client_map;
 
   void bcast_latest_mds();
 

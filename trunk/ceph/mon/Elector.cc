@@ -30,7 +30,7 @@ void Elector::start()
   for (int i=0; i<mon->monmap->num_mon; ++i) {
 	if (i == whoami) continue;
 	mon->messenger->send_message(new MMonElectionPropose,
-								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
+								 mon->monmap->get_inst(i));
   }
   
   reset_timer();
@@ -49,7 +49,7 @@ void Elector::defer(int who)
   leader_acked = who;
   ack_stamp = g_clock.now();
   mon->messenger->send_message(new MMonElectionAck,
-							   MSG_ADDR_MON(who), mon->monmap->get_inst(who));
+							   mon->monmap->get_inst(who));
   
   // set a timer
   reset_timer();
@@ -73,6 +73,7 @@ void Elector::reset_timer()
   g_timer.add_event_after(g_conf.mon_lease,
 							 expire_event);
 }
+
 
 void Elector::cancel_timer()
 {
@@ -105,7 +106,7 @@ void Elector::victory()
   for (int i=0; i<mon->monmap->num_mon; ++i) {
 	if (i == whoami) continue;
 	mon->messenger->send_message(new MMonElectionVictory,
-								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
+								 mon->monmap->get_inst(i));
   }
     
   // tell monitor

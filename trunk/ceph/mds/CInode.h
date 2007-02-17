@@ -20,11 +20,12 @@
 #include "include/types.h"
 #include "include/lru.h"
 
+#include "mdstypes.h"
+
 #include "CDentry.h"
 #include "Lock.h"
 #include "Capability.h"
 
-#include "mdstypes.h"
 
 #include <cassert>
 #include <list>
@@ -33,55 +34,6 @@
 #include <map>
 #include <iostream>
 using namespace std;
-
-
-
-
-
-// pins for keeping an item in cache (and debugging)
-#define CINODE_PIN_DIR       0
-#define CINODE_PIN_CACHED    1
-#define CINODE_PIN_DIRTY     2   // must flush
-#define CINODE_PIN_PROXY     3   // can't expire yet
-#define CINODE_PIN_WAITER    4   // waiter
-
-#define CINODE_PIN_CAPS      5  // local fh's
-
-#define CINODE_PIN_DNDIRTY   7  // dentry is dirty
-
-#define CINODE_PIN_AUTHPIN   8
-#define CINODE_PIN_IMPORTING  9   // multipurpose, for importing
-#define CINODE_PIN_REQUEST   10  // request is logging, finishing
-#define CINODE_PIN_RENAMESRC 11  // pinned on dest for foreign rename
-#define CINODE_PIN_ANCHORING 12
-
-#define CINODE_PIN_OPENINGDIR 13
-
-#define CINODE_PIN_DENTRYLOCK   14
-
-#define CINODE_NUM_PINS       15
-
-static char *cinode_pin_names[CINODE_NUM_PINS] = {
-  "dir",
-  "cached",
-  "dirty",
-  "proxy",
-  "waiter",
-  "caps",
-  "--",
-  "dndirty",
-  "authpin",
-  "imping",
-  "request",
-  "rensrc",
-  "anching",
-  "opdir",
-  "dnlock"
-};
-
-
-
-
 
 
 // wait reasons
@@ -120,29 +72,8 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 
 #define CINODE_WAIT_CAPS            (1<<30)
 
-
-
-
 #define CINODE_WAIT_ANY           0xffffffff
 
-
-// state
-#define CINODE_STATE_AUTH        (1<<0)
-#define CINODE_STATE_ROOT        (1<<1)
-
-#define CINODE_STATE_DIRTY       (1<<2)
-#define CINODE_STATE_UNSAFE      (1<<3)   // not logged yet
-#define CINODE_STATE_DANGLING    (1<<4)   // delete me when i expire; i have no dentry
-#define CINODE_STATE_UNLINKING   (1<<5)
-#define CINODE_STATE_PROXY       (1<<6)   // can't expire yet
-#define CINODE_STATE_EXPORTING   (1<<7)   // on nonauth bystander.
-
-#define CINODE_STATE_ANCHORING   (1<<8)
-
-#define CINODE_STATE_OPENINGDIR  (1<<9)
-
-//#define CINODE_STATE_RENAMING    (1<<8)  // moving me
-//#define CINODE_STATE_RENAMINGTO  (1<<9)  // rename target (will be unlinked)
 
 
 // misc
@@ -152,22 +83,71 @@ static char *cinode_pin_names[CINODE_NUM_PINS] = {
 class Context;
 class CDentry;
 class CDir;
-class MDS;
 class Message;
 class CInode;
 class CInodeDiscover;
 class MDCache;
 
-//class MInodeSyncStart;
 
 ostream& operator<<(ostream& out, CInode& in);
 
 
-extern int cinode_pins[CINODE_NUM_PINS];  // counts
-
-
 // cached inode wrapper
-class CInode : public LRUObject {
+class CInode : public MDSCacheObject {
+ public:
+  // -- pins --
+  static const int PIN_CACHED =     1;
+  static const int PIN_DIR =        2;
+  static const int PIN_DIRTY =      4;  // must flush
+  static const int PIN_PROXY =      5;  // can't expire yet
+  static const int PIN_WAITER =     6;  // waiter
+  static const int PIN_CAPS =       7;  // local fh's
+  static const int PIN_AUTHPIN =    8;
+  static const int PIN_IMPORTING =  9;  // multipurpose, for importing
+  static const int PIN_REQUEST =   10;  // request is logging, finishing
+  static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
+  static const int PIN_ANCHORING = 12;
+  
+  static const int PIN_OPENINGDIR = 13;
+
+  static const int PIN_DENTRYLOCK = 14;
+
+  static const char *pin_name(int p) {
+    switch (p) {
+    case PIN_CACHED: return "cached";
+    case PIN_DIR: return "dir";
+    case PIN_DIRTY: return "dirty";
+    case PIN_PROXY: return "proxy";
+    case PIN_WAITER: return "waiter";
+    case PIN_CAPS: return "caps";
+    case PIN_AUTHPIN: return "authpin";
+    case PIN_IMPORTING: return "importing";
+    case PIN_REQUEST: return "request";
+    case PIN_RENAMESRC: return "renamesrc";
+    case PIN_ANCHORING: return "anchoring";
+    case PIN_OPENINGDIR: return "openingdir";
+    case PIN_DENTRYLOCK: return "dentrylock";
+    default: assert(0);
+    }
+  }
+
+  // state
+  static const int STATE_AUTH =       (1<<0);
+  static const int STATE_ROOT =       (1<<1);
+  static const int STATE_DIRTY =      (1<<2);
+  static const int STATE_UNSAFE =     (1<<3);   // not logged yet
+  static const int STATE_DANGLING =   (1<<4);   // delete me when i expire; i have no dentry
+  static const int STATE_UNLINKING =  (1<<5);
+  static const int STATE_PROXY =      (1<<6);   // can't expire yet
+  static const int STATE_EXPORTING =  (1<<7);   // on nonauth bystander.
+  static const int STATE_ANCHORING =  (1<<8);
+  static const int STATE_OPENINGDIR = (1<<9);
+  //static const int STATE_RENAMING =   (1<<8);  // moving me
+  //static const int STATE_RENAMINGTO = (1<<9);  // rename target (will be unlinked)
+
+
+
+
  public:
   MDCache *mdcache;
 
@@ -176,31 +156,13 @@ class CInode : public LRUObject {
   CDir            *dir;       // directory, if we have it opened.
   string           symlink;   // symlink dest, if symlink
 
-  // inode metadata locks
-  CLock        hardlock;
-  CLock        filelock;
-
  protected:
-  int              ref;       // reference count
-  set<int>         ref_set;
-  version_t        parent_dir_version;  // parent dir version when i was last touched.
-  version_t        committing_version;
-  version_t        committed_version;
-
-  unsigned         state;
-
   // parent dentries in cache
+  int              num_parents;
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
   // -- distributed caching
-  set<int>         cached_by;        // [auth] mds's that cache me.  
-  /* NOTE: on replicas, this doubles as replicated_by, but the
-     cached_by_* access methods below should NOT be used in those
-     cases, as the semantics are different! */
-  map<int,int>     cached_by_nonce;  // [auth] nonce issued to each replica
-  int              replica_nonce;    // [replica] defined on replica
-
   int              dangling_auth;    // explicit auth, when dangling.
 
   int              num_request_pins;
@@ -208,9 +170,15 @@ class CInode : public LRUObject {
   // waiters
   multimap<int, Context*>  waiting;
 
+
+  // -- distributed state --
+public:
+  // inode metadata locks
+  CLock        hardlock;
+  CLock        filelock;
+protected:
   // file capabilities
   map<int, Capability>  client_caps;         // client -> caps
-
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
@@ -246,13 +214,11 @@ class CInode : public LRUObject {
 
   bool is_anchored() { return inode.anchored; }
 
-  bool is_root() { return state & CINODE_STATE_ROOT; }
-  bool is_proxy() { return state & CINODE_STATE_PROXY; }
+  bool is_root() { return state & STATE_ROOT; }
+  bool is_proxy() { return state & STATE_PROXY; }
 
-  bool is_auth() { return state & CINODE_STATE_AUTH; }
+  bool is_auth() { return state & STATE_AUTH; }
   void set_auth(bool auth);
-  bool is_replica() { return !is_auth(); }
-  int get_replica_nonce() { assert(!is_auth()); return replica_nonce; }
 
   inodeno_t ino() { return inode.ino; }
   inode_t& get_inode() { return inode; }
@@ -261,8 +227,9 @@ class CInode : public LRUObject {
   CInode *get_parent_inode();
   CInode *get_realm_root();   // import, hash, or root
   
-  CDir *get_or_open_dir(MDS *mds);
+  CDir *get_or_open_dir(MDCache *mdcache);
   CDir *set_dir(CDir *newdir);
+  void close_dir();
   
   bool dir_is_auth();
 
@@ -275,17 +242,12 @@ class CInode : public LRUObject {
 
 
   // -- state --
-  unsigned get_state() { return state; }
-  void state_clear(unsigned mask) {    state &= ~mask; }
-  void state_set(unsigned mask) { state |= mask; }
-  unsigned state_test(unsigned mask) { return state & mask; }
+  bool is_unsafe() { return state & STATE_UNSAFE; }
+  bool is_dangling() { return state & STATE_DANGLING; }
+  bool is_unlinking() { return state & STATE_UNLINKING; }
 
-  bool is_unsafe() { return state & CINODE_STATE_UNSAFE; }
-  bool is_dangling() { return state & CINODE_STATE_DANGLING; }
-  bool is_unlinking() { return state & CINODE_STATE_UNLINKING; }
-
-  void mark_unsafe() { state |= CINODE_STATE_UNSAFE; }
-  void mark_safe() { state &= ~CINODE_STATE_UNSAFE; }
+  void mark_unsafe() { state |= STATE_UNSAFE; }
+  void mark_safe() { state &= ~STATE_UNSAFE; }
 
   // -- state encoding --
   //void encode_basic_state(bufferlist& r);
@@ -301,74 +263,17 @@ class CInode : public LRUObject {
   
   // -- dirtyness --
   version_t get_version() { return inode.version; }
-  version_t get_parent_dir_version() { return parent_dir_version; }
-  void float_parent_dir_version(version_t ge) {
-    if (parent_dir_version < ge)
-      parent_dir_version = ge;
-  }
-  version_t get_committing_version() { return committing_version; }
-  version_t get_last_committed_version() { return committed_version; }
-  void set_committing_version(version_t v) { committing_version = v; }
-  void set_committed_version() { 
-    committed_version = committing_version;
-    committing_version = 0;
-  }
 
-  bool is_dirty() { return state & CINODE_STATE_DIRTY; }
+  bool is_dirty() { return state & STATE_DIRTY; }
   bool is_clean() { return !is_dirty(); }
   
-  void mark_dirty();
+  version_t pre_dirty();
+  void _mark_dirty();
+  void mark_dirty(version_t projected_dirv);
   void mark_clean();
 
 
 
-  // -- cached_by -- to be used ONLY when we're authoritative or cacheproxy
-  bool is_cached_by_anyone() { return !cached_by.empty(); }
-  bool is_cached_by(int mds) { return cached_by.count(mds); }
-  int num_cached_by() { return cached_by.size(); }
-  // cached_by_add returns a nonce
-  int cached_by_add(int mds) {
-    int nonce = 1;
-    if (is_cached_by(mds)) {    // already had it?
-      nonce = get_cached_by_nonce(mds) + 1;   // new nonce (+1)
-      dout(10) << *this << " issuing new nonce " << nonce << " to mds" << mds << endl;
-      cached_by_nonce.erase(mds);
-    } else {
-      if (cached_by.empty()) 
-        get(CINODE_PIN_CACHED);
-      cached_by.insert(mds);
-    }
-    cached_by_nonce.insert(pair<int,int>(mds,nonce));   // first! serial of 1.
-    return nonce;   // default nonce
-  }
-  void cached_by_add(int mds, int nonce) {
-    if (cached_by.empty()) 
-      get(CINODE_PIN_CACHED);
-    cached_by.insert(mds);
-    cached_by_nonce.insert(pair<int,int>(mds,nonce));
-  }
-  int get_cached_by_nonce(int mds) {
-    map<int,int>::iterator it = cached_by_nonce.find(mds);
-    return it->second;
-  }
-  void cached_by_remove(int mds) {
-    //if (!is_cached_by(mds)) return;
-    assert(is_cached_by(mds));
-
-    cached_by.erase(mds);
-    cached_by_nonce.erase(mds);
-    if (cached_by.empty())
-      put(CINODE_PIN_CACHED);      
-  }
-  void cached_by_clear() {
-    if (cached_by.size())
-      put(CINODE_PIN_CACHED);
-    cached_by.clear();
-    cached_by_nonce.clear();
-  }
-  set<int>::iterator cached_by_begin() { return cached_by.begin(); }
-  set<int>::iterator cached_by_end() { return cached_by.end(); }
-  set<int>& get_cached_by() { return cached_by; }
 
   CInodeDiscover* replicate_to(int rep);
 
@@ -380,12 +285,19 @@ class CInode : public LRUObject {
   void finish_waiting(int mask, int result = 0);
 
 
+  bool is_hardlock_write_wanted() {
+    return waiting_for(CINODE_WAIT_HARDW);
+  }
+  bool is_filelock_write_wanted() {
+    return waiting_for(CINODE_WAIT_FILEW);
+  }
+
   // -- caps -- (new)
   // client caps
   map<int,Capability>& get_client_caps() { return client_caps; }
   void add_client_cap(int client, Capability& cap) {
     if (client_caps.empty())
-      get(CINODE_PIN_CAPS);
+      get(PIN_CAPS);
     assert(client_caps.count(client) == 0);
     client_caps[client] = cap;
   }
@@ -393,7 +305,7 @@ class CInode : public LRUObject {
     assert(client_caps.count(client) == 1);
     client_caps.erase(client);
     if (client_caps.empty())
-      put(CINODE_PIN_CAPS);
+      put(PIN_CAPS);
   }
   Capability* get_client_cap(int client) {
     if (client_caps.count(client))
@@ -403,20 +315,20 @@ class CInode : public LRUObject {
   /*
   void set_client_caps(map<int,Capability>& cl) {
     if (client_caps.empty() && !cl.empty())
-      get(CINODE_PIN_CAPS);
+      get(PIN_CAPS);
     client_caps.clear();
     client_caps = cl;
   }
   */
   void take_client_caps(map<int,Capability>& cl) {
     if (!client_caps.empty())
-      put(CINODE_PIN_CAPS);
+      put(PIN_CAPS);
     cl = client_caps;
     client_caps.clear();
   }
   void merge_client_caps(map<int,Capability>& cl, set<int>& new_client_caps) {
     if (client_caps.empty() && !cl.empty())
-      get(CINODE_PIN_CAPS);
+      get(PIN_CAPS);
     for (map<int,Capability>::iterator it = cl.begin();
          it != cl.end();
          it++) {
@@ -461,7 +373,7 @@ class CInode : public LRUObject {
 
   void replicate_relax_locks() {
     assert(is_auth());
-    assert(!is_cached_by_anyone());
+    assert(!is_replicated());
     dout(10) << " relaxing locks on " << *this << endl;
 
     if (hardlock.get_state() == LOCK_LOCK &&
@@ -507,60 +419,53 @@ class CInode : public LRUObject {
      linked to an active_request, so they're automatically cleaned
      up when a request is finished.  pin at will! */
   void request_pin_get() {
-    if (num_request_pins == 0) get(CINODE_PIN_REQUEST);
+    if (num_request_pins == 0) get(PIN_REQUEST);
     num_request_pins++;
   }
   void request_pin_put() {
     num_request_pins--;
-    if (num_request_pins == 0) put(CINODE_PIN_REQUEST);
+    if (num_request_pins == 0) put(PIN_REQUEST);
     assert(num_request_pins >= 0);
   }
 
+  void bad_put(int by) {
+    dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
+    assert(ref_set.count(by) == 1);
+    assert(ref > 0);
+  }
+  void bad_get(int by) {
+    dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << endl;
+    assert(ref_set.count(by) == 0);
+  }
+  void first_get();
+  void last_put();
 
-  bool is_pinned() { return ref > 0; }
-  set<int>& get_ref_set() { return ref_set; }
-  void put(int by) {
-    cinode_pins[by]--;
-    if (ref == 0 || ref_set.count(by) != 1) {
-      dout(7) << " bad put " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
-      assert(ref_set.count(by) == 1);
-      assert(ref > 0);
-    }
-    ref--;
-    ref_set.erase(by);
-    if (ref == 0)
-      lru_unpin();
-    dout(7) << " put " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
-  }
-  void get(int by) {
-    cinode_pins[by]++;
-    if (ref == 0)
-      lru_pin();
-    if (ref_set.count(by)) {
-      dout(7) << " bad get " << *this << " by " << by << " " << cinode_pin_names[by] << " was " << ref << " (" << ref_set << ")" << endl;
-      assert(ref_set.count(by) == 0);
-    }
-    ref++;
-    ref_set.insert(by);
-    dout(7) << " get " << *this << " by " << by << " " << cinode_pin_names[by] << " now " << ref << " (" << ref_set << ")" << endl;
-  }
-  bool is_pinned_by(int by) {
-    return ref_set.count(by);
-  }
 
   // -- hierarchy stuff --
+private:
+  void get_parent();
+  void put_parent();
+
+public:
   void set_primary_parent(CDentry *p) {
+    assert(parent == 0);
     parent = p;
+    get_parent();
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
     parent = 0;
+    put_parent();
   }
   void add_remote_parent(CDentry *p) {
+    if (remote_parents.empty())
+      get_parent();
     remote_parents.insert(p);
   }
   void remove_remote_parent(CDentry *p) {
     remote_parents.erase(p);
+    if (remote_parents.empty())
+      put_parent();
   }
   int num_remote_parents() {
     return remote_parents.size(); 
@@ -652,8 +557,7 @@ class CInodeExport {
     int            num_caps;
   } st;
 
-  set<int>      cached_by;
-  map<int,int>  cached_by_nonce;
+  map<int,int>     replicas;
   map<int,Capability>  cap_map;
 
   CLock         hardlock,filelock;
@@ -664,12 +568,11 @@ public:
   CInodeExport(CInode *in) {
     st.inode = in->inode;
     st.is_dirty = in->is_dirty();
-    cached_by = in->cached_by;
-    cached_by_nonce = in->cached_by_nonce; 
+    replicas = in->replicas;
 
     hardlock = in->hardlock;
     filelock = in->filelock;
-
+    
     st.popularity_justme.take( in->popularity[MDS_POP_JUSTME] );
     st.popularity_curdom.take( in->popularity[MDS_POP_CURDOM] );
     in->popularity[MDS_POP_ANYDOM] -= st.popularity_curdom;
@@ -692,15 +595,12 @@ public:
     in->popularity[MDS_POP_ANYDOM] += st.popularity_curdom;
     in->popularity[MDS_POP_NESTED] += st.popularity_curdom;
 
-    if (st.is_dirty) {
-      in->mark_dirty();
-    }
+    if (st.is_dirty) 
+      in->_mark_dirty();
 
-    in->cached_by.clear();
-    in->cached_by = cached_by;
-    in->cached_by_nonce = cached_by_nonce;
-    if (!cached_by.empty()) 
-      in->get(CINODE_PIN_CACHED);
+    in->replicas = replicas;
+    if (!replicas.empty()) 
+      in->get(CInode::PIN_CACHED);
 
     in->hardlock = hardlock;
     in->filelock = filelock;
@@ -714,8 +614,7 @@ public:
     bl.append((char*)&st, sizeof(st));
     
     // cached_by + nonce
-    ::_encode(cached_by, bl);
-    ::_encode(cached_by_nonce, bl);
+    ::_encode(replicas, bl);
 
     hardlock.encode_state(bl);
     filelock.encode_state(bl);
@@ -733,8 +632,7 @@ public:
     bl.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
     
-    ::_decode(cached_by, bl, off);
-    ::_decode(cached_by_nonce, bl, off);
+    ::_decode(replicas, bl, off);
 
     hardlock.decode_state(bl, off);
     filelock.decode_state(bl, off);

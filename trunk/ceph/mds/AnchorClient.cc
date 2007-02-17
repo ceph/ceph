@@ -104,7 +104,7 @@ void AnchorClient::lookup(inodeno_t ino, vector<Anchor*>& trace, Context *onfini
   pending_lookup_context[ino] = onfinish;
 
   messenger->send_message(req, 
-			  MSG_ADDR_MDS(mdsmap->get_anchortable()), mdsmap->get_inst(mdsmap->get_anchortable()),
+			  mdsmap->get_inst(mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORCLIENT);
 }
 
@@ -117,7 +117,7 @@ void AnchorClient::create(inodeno_t ino, vector<Anchor*>& trace, Context *onfini
   pending_op[ino] = onfinish;
 
   messenger->send_message(req, 
-			  MSG_ADDR_MDS(mdsmap->get_anchortable()), mdsmap->get_inst(mdsmap->get_anchortable()),
+			  mdsmap->get_inst(mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORCLIENT);
 }
 
@@ -130,7 +130,7 @@ void AnchorClient::update(inodeno_t ino, vector<Anchor*>& trace, Context *onfini
   pending_op[ino] = onfinish;
   
   messenger->send_message(req, 
-			  MSG_ADDR_MDS(mdsmap->get_anchortable()), mdsmap->get_inst(mdsmap->get_anchortable()),
+			  mdsmap->get_inst(mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORCLIENT);
 }
 
@@ -142,7 +142,7 @@ void AnchorClient::destroy(inodeno_t ino, Context *onfinish)
   pending_op[ino] = onfinish;
 
   messenger->send_message(req, 
-			  MSG_ADDR_MDS(mdsmap->get_anchortable()), mdsmap->get_inst(mdsmap->get_anchortable()),
+			  mdsmap->get_inst(mdsmap->get_anchortable()),
 			  MDS_PORT_ANCHORMGR, MDS_PORT_ANCHORCLIENT);
 }
 

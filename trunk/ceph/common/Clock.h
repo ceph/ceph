@@ -100,6 +100,10 @@ inline utime_t& operator-=(utime_t& l, const utime_t& r) {
   }
   return l;
 }
+inline utime_t& operator-=(utime_t& l, double f) {
+  l += -f;
+  return l;
+}
 
 inline bool operator>(const utime_t& a, const utime_t& b)
 {

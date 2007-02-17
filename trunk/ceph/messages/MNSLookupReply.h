@@ -20,7 +20,7 @@
 
 class MNSLookupReply : public Message {
  public:
-  map<msg_addr_t, entity_inst_t> entity_map;  
+  map<entity_name_t, entity_inst_t> entity_map;  
 
  public:
   MNSLookupReply() {}
