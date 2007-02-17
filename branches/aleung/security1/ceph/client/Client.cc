@@ -2451,6 +2451,7 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds << endl;
 
+
       int old_caps = f->inode->caps[mds].caps;
       f->inode->caps[mds].caps = new_caps;
       f->inode->caps[mds].seq = reply->get_file_caps_seq();
