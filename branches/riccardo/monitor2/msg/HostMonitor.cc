@@ -107,7 +107,7 @@ void HostMonitor::schedule_heartbeat()
 
 // take note of a live host
 
-void HostMonitor::host_is_alive(msg_addr_t host)
+void HostMonitor::host_is_alive(entity_name_t host)
 {
   if (hosts.count(host))
     status[host].last_heard_from = g_clock.gettime();
@@ -122,7 +122,7 @@ void HostMonitor::initiate_heartbeat()
   
   // send out pings
   inflight_pings.clear();
-  for (set<msg_addr_t>::iterator it = hosts.begin();
+  for (set<entity_name_t>::iterator it = hosts.begin();
        it != hosts.end();
        it++) {
     // have i heard from them recently?
@@ -154,7 +154,7 @@ void HostMonitor::check_heartbeat()
   dout(DBL) << "check_heartbeat()" << endl;
 
   // check inflight pings
-  for (set<msg_addr_t>::iterator it = inflight_pings.begin();
+  for (set<entity_name_t>::iterator it = inflight_pings.begin();
        it != inflight_pings.end();
        it++) {
     status[*it].num_heartbeats_missed++;
@@ -208,7 +208,7 @@ void HostMonitor::proc_message(Message *m)
 
 void HostMonitor::handle_ping_ack(MPingAck *m)
 {
-  msg_addr_t from = m->get_source();
+  entity_name_t from = m->get_source();
 
   dout(DBL) << "ping ack from " << from << endl;
   status[from].last_pinged = g_clock.gettime();
@@ -224,7 +224,7 @@ void HostMonitor::handle_failure_ack(MFailureAck *m)
   // FIXME: this doesn't handle failed -> alive transitions gracefully at all..
 
   // the higher-up's acknowledged our failure notification, we can stop resending it.
-  msg_addr_t failed = m->get_failed();
+  entity_name_t failed = m->get_failed();
   dout(DBL) << "handle_failure_ack " << failed << endl;
   unacked_failures.erase(failed);
   acked_failures.insert(failed);

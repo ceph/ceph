@@ -54,6 +54,10 @@ private:
 
   void dispatch(Message *m);
 
+  void send_lock_message(CInode *in, int msg, int type);
+  void send_lock_message(CInode *in, int msg, int type, bufferlist& data);
+  void send_lock_message(CDentry *dn, int msg);
+
   // -- locks --
   // high level interface
  public:

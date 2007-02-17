@@ -1,12 +1,13 @@
 
-# mpicxx must be on your path; on googoo, this means that
-# /usr/local/mpich2-1.0.2/bin must be on your path.
+# mpicxx must be on your path to build newsyn.  on googoo, this means
+# that /usr/local/mpich2-1.0.2/bin must be on your path.
 
 # For now, use g++ most of the time.
-# When compiling MPI stuff, specify myfile.cc instead of myfile.o so that ${MPICC} is 
-# invoked instead of the generic .o rule (or it'll use g++).
-# This makes it less annoying to build on non-mpi hosts for dev work, and seems to 
-# behave just fine...  change ${CC} back to mpicxx if you get paranoid.
+# When compiling MPI stuff, specify myfile.cc instead of myfile.o so
+# that ${MPICC} is invoked instead of the generic .o rule (or it'll
+# use g++).  This makes it less annoying to build on non-mpi hosts for
+# dev work, and seems to behave just fine...  change ${CC} back to
+# mpicxx if you get paranoid.
 
 #CC = g++
 #CFLAGS = -g -Wall -I. -D_FILE_OFFSET_BITS=64 -DMPICH_IGNORE_CXX_SEEK -D_REENTRANT -D_THREAD_SAFE
@@ -85,7 +86,6 @@ MON_OBJS= \
 	mon/MonitorStore.o
 
 COMMON_OBJS= \
-	msg/Messenger.o\
 	msg/Message.o\
 	common/Logger.o\
 	common/Clock.o\
@@ -99,7 +99,7 @@ CLIENT_OBJS= \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TARGETS = cmon cosd cmds cfuse newsyn fakesyn
+TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
@@ -135,41 +135,23 @@ gprof-helper.so: test/gprof-helper.c
 	gcc -shared -fPIC test/gprof-helper.c -o gprof-helper.so -lpthread -ldl 
 
 
-
-# fuse
-fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.cc common.o
+# fake*
+fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
 
-tcpfuse: tcpfuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
-	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
-
-mpifuse: mpifuse.cc mds.o client.o client/fuse.o ${TCP_OBJS} common.o
-	${MPICC} ${CFLAGS} ${LIBS} -lfuse $^ -o $@
-
-
-# synthetic workload
 fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
-tcpsyn: tcpsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o ${TCP_OBJS} common.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
+# mpi startup
 newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
 	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/NewerMessenger.o common.o
+newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
-
-# + obfs
-fakesynobfs: fakesyn.cc mds.o client.o osd_obfs.o msg/FakeMessenger.o common.o
-	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@
-
-tcpsynobfs: tcpsyn.cc mds.o client.o osd_obfs.o ${TCP_OBJS} common.o
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ 
 
 
 # ebofs
-
 mkfs.ebofs: ebofs/mkfs.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
@@ -177,11 +159,21 @@ test.ebofs: ebofs/test.ebofs.cc config.cc common/Clock.o ebofs.o
 	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
 
 
+# + obfs (old)
+fakesynobfs: fakesyn.cc mds.o client.o osd_obfs.o msg/FakeMessenger.o common.o
+	${CC} -DUSE_OBFS ${CFLAGS} ${LIBS} $^ -o $@
+
+tcpsynobfs: tcpsyn.cc mds.o client.o osd_obfs.o ${TCP_OBJS} common.o
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ 
+
+osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.o
+	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.a
+
 
 
 # libceph
-libceph.o: client/ldceph.o client/Client.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
-	${LDINC} $@ $^
+libceph.o: client/ldceph.o client/Client.o msg/SimpleMessenger.o ${COMMON_OBJS} ${SYN_OBJS} ${OSDC_OBJS}
+	${LDINC} $^ -o $@
 
 bench/mdtest/mdtest.o: bench/mdtest/mdtest.c
 	mpicc -c $^ -o $@
@@ -215,9 +207,6 @@ osd.o: ${OSD_OBJS}
 osdc.o: ${OSDC_OBJS}
 	${LDINC} $@ $^
 
-osd_obfs.o: osd/OBFSStore.o osd/OSD.cc osd/PG.o osd/ObjectStore.o osd/FakeStore.o
-	${MPICC} -DUSE_OBFS ${MPICFLAGS} ${MPILIBS} $^ -o $@ ../uofs/uofs.o
-
 mds.o: ${MDS_OBJS}
 	${LDINC} $@ $^
 
@@ -233,6 +222,9 @@ mon.o: ${MON_OBJS}
 count:
 	cat ${SRCS} | wc -l
 	cat ${SRCS} | grep -c \;
+
+TAGS:
+	etags `find . -name "*.[h|cc]"`
 
 .depend:
 	touch .depend

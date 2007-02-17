@@ -12,6 +12,7 @@
  */
 
 #include <iostream>
+#include <sstream>
 using namespace std;
 
 
@@ -30,7 +31,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "synthetic" << client->get_nodeid() << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << g_clock.now() << " synthetic" << client->get_nodeid() << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
@@ -81,6 +82,9 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
+      } else if (strcmp(args[i],"makedirmess") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRMESS );
+        syn_iargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"statdirs") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_STATDIRS );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -105,7 +109,7 @@ void parse_syn_options(vector<char*>& args)
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
 
-      } else if (strcmp(args[i],"fullwalk") == 0) {
+      } else if (strcmp(args[i],"walk") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_FULLWALK );
         //syn_sargs.push_back( atoi(args[++i]) );
       } else if (strcmp(args[i],"randomwalk") == 0) {
@@ -282,6 +286,16 @@ int SyntheticClient::run()
       }
       break;
 
+    case SYNCLIENT_MODE_MAKEDIRMESS:
+      {
+        string sarg1 = get_sarg(0);
+        int iarg1 = iargs.front();  iargs.pop_front();
+        if (run_me()) {
+          dout(2) << "makedirmess " << sarg1 << " " << iarg1 << endl;
+          make_dir_mess(sarg1.c_str(), iarg1);
+        }
+      }
+      break;
     case SYNCLIENT_MODE_MAKEDIRS:
       {
         string sarg1 = get_sarg(0);
@@ -366,7 +380,7 @@ int SyntheticClient::run()
 
     case SYNCLIENT_MODE_FULLWALK:
       {
-        string sarg1 = get_sarg(0);
+        string sarg1;// = get_sarg(0);
         if (run_me()) {
           dout(2) << "fullwalk" << sarg1 << endl;
           full_walk(sarg1);
@@ -721,27 +735,39 @@ int SyntheticClient::full_walk(string& basedir)
 {
   if (time_to_stop()) return -1;
 
-  // read dir
-  map<string, inode_t> contents;
-  int r = client->getdir(basedir.c_str(), contents);
-  if (r < 0) {
-    dout(1) << "readdir on " << basedir << " returns " << r << endl;
-    return r;
-  }
+  list<string> dirq;
+  dirq.push_back(basedir);
 
-  for (map<string, inode_t>::iterator it = contents.begin();
-       it != contents.end();
-       it++) {
-    string file = basedir + "/" + it->first;
+  while (!dirq.empty()) {
+    string dir = dirq.front();
+    dirq.pop_front();
 
-    struct stat st;
-    int r = client->lstat(file.c_str(), &st);
+    // read dir
+    map<string, inode_t> contents;
+    int r = client->getdir(dir.c_str(), contents);
     if (r < 0) {
-      dout(1) << "stat error on " << file << " r=" << r << endl;
+      dout(1) << "readdir on " << dir << " returns " << r << endl;
       continue;
     }
-
-    if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) full_walk(file);
+    
+    for (map<string, inode_t>::iterator it = contents.begin();
+	 it != contents.end();
+	 it++) {
+      if (it->first == ".") continue;
+      if (it->first == "..") continue;
+      string file = dir + "/" + it->first;
+      
+      struct stat st;
+      int r = client->lstat(file.c_str(), &st);
+      if (r < 0) {
+	dout(1) << "stat error on " << file << " r=" << r << endl;
+	continue;
+      }
+      
+      if ((st.st_mode & INODE_TYPE_MASK) == INODE_MODE_DIR) {
+	dirq.push_back(file);
+      }
+    }
   }
 
   return 0;
@@ -1223,4 +1249,43 @@ int SyntheticClient::random_walk(int num_req)
   return 0;
 }
 
+
+
+
+void SyntheticClient::make_dir_mess(const char *basedir, int n)
+{
+  vector<string> dirs;
+  
+  dirs.push_back(basedir);
+  dirs.push_back(basedir);
+  
+  client->mkdir(basedir, 0755);
+
+  // motivation:
+  //  P(dir) ~ subdirs_of(dir) + 2
+  // from 5-year metadata workload paper in fast'07
+
+  // create dirs
+  for (int i=0; i<n; i++) {
+    // pick a dir
+    int k = rand() % dirs.size();
+    string parent = dirs[k];
+    
+    // pick a name
+    std::stringstream ss;
+    ss << parent << "/" << i;
+    string dir;
+    ss >> dir;
+
+    // update dirs
+    dirs.push_back(parent);
+    dirs.push_back(dir);
+    dirs.push_back(dir);
+
+    // do it
+    client->mkdir(dir.c_str(), 0755);
+  }
+    
+  
+}
 

@@ -39,8 +39,10 @@ class CDir;
 class MDBalancer {
  protected:
   MDS *mds;
-  
   int beat_epoch;
+
+  utime_t last_heartbeat;
+  utime_t last_hash;
 
   // todo
   set<inodeno_t>   hash_queue;
@@ -66,10 +68,9 @@ class MDBalancer {
   }
 
  public:
-  MDBalancer(MDS *m) {
-    mds = m;
-    beat_epoch = 0;
-  }
+  MDBalancer(MDS *m) : 
+    mds(m),
+    beat_epoch(0) { }
   
   mds_load_t get_load();
 
@@ -77,6 +78,8 @@ class MDBalancer {
   
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
+
+  void tick();
 
   void do_hashing();
 

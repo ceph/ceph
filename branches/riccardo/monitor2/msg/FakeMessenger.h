@@ -31,23 +31,30 @@ class FakeMessenger : public Messenger {
   int    qlen;
   list<Message*>       incoming;        // incoming queue
 
+  entity_inst_t _myinst;
+
  public:
-  FakeMessenger(msg_addr_t me);
+  FakeMessenger(entity_name_t me);
   ~FakeMessenger();
 
   virtual int shutdown();
 
-  void reset_myaddr(msg_addr_t m);
+  const entity_inst_t& get_myinst() {
+    return _myinst;
+  };
+  const entity_addr_t& get_myaddr() {
+    return _myinst.addr;
+  }
+
+  void reset_myname(entity_name_t m);
 
   // msg interface
-  virtual int send_message(Message *m, msg_addr_t dest, entity_inst_t inst, int port=0, int fromport=0);
+  virtual int send_message(Message *m, entity_inst_t dest, int port=0, int fromport=0);
   
   // events
   //virtual void trigger_timer(Timer *t);
 
   int get_dispatch_queue_len() { return qlen; }
-
-  void callback_kick();
 
   // -- incoming queue --
   // (that nothing uses)

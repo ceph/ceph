@@ -71,11 +71,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
         for (map<int,entity_inst_t>::iterator i = inc.new_down.begin();
              i != inc.new_down.end();
              i++) 
-          messenger->mark_down(MSG_ADDR_OSD(i->first), i->second);
-        for (map<int,entity_inst_t>::iterator i = inc.new_up.begin();
-             i != inc.new_up.end();
-             i++) 
-          messenger->mark_up(MSG_ADDR_OSD(i->first), i->second);
+          messenger->mark_down(i->second.addr);
         
       }
       else if (m->maps.count(e)) {
@@ -86,7 +82,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
         dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << endl;
         int mon = monmap->pick_mon();
         messenger->send_message(new MOSDGetMap(osdmap->get_epoch()), 
-                                MSG_ADDR_MON(mon), monmap->get_inst(mon));
+                                monmap->get_inst(mon));
         break;
       }
       
@@ -275,7 +271,8 @@ tid_t Objecter::stat_submit(OSDStat *st)
 
   // send
   last_tid++;
-  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+  assert(client_inc >= 0);
+  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
                          ex.oid, ex.pgid, osdmap->get_epoch(), 
                          OSD_OP_STAT);
   dout(10) << "stat_submit " << st << " tid " << last_tid
@@ -285,7 +282,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
            << endl;
 
   if (pg.acker() >= 0) 
-    messenger->send_message(m, MSG_ADDR_OSD(pg.acker()), osdmap->get_inst(pg.acker()));
+    messenger->send_message(m, osdmap->get_inst(pg.acker()));
   
   // add to gather set
   st->tid = last_tid;
@@ -386,7 +383,8 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
 
   // send
   last_tid++;
-  MOSDOp *m = new MOSDOp(last_tid, messenger->get_myaddr(),
+  assert(client_inc >= 0);
+  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
                          ex.oid, ex.pgid, osdmap->get_epoch(), 
                          OSD_OP_READ);
   m->set_length(ex.length);
@@ -399,7 +397,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
            << endl;
 
   if (pg.acker() >= 0) 
-    messenger->send_message(m, MSG_ADDR_OSD(pg.acker()), osdmap->get_inst(pg.acker()));
+    messenger->send_message(m, osdmap->get_inst(pg.acker()));
     
   // add to gather set
   rd->ops[last_tid] = ex;
@@ -650,7 +648,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   else
     tid = ++last_tid;
 
-  MOSDOp *m = new MOSDOp(tid, messenger->get_myaddr(),
+  MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
                          ex.oid, ex.pgid, osdmap->get_epoch(),
                          wr->op);
   m->set_length(ex.length);
@@ -697,7 +695,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " osd" << pg.primary()
            << endl;
   if (pg.primary() >= 0)
-    messenger->send_message(m, MSG_ADDR_OSD(pg.primary()), osdmap->get_inst(pg.primary()));
+    messenger->send_message(m, osdmap->get_inst(pg.primary()));
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << endl;
   
@@ -805,7 +803,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
 
 
-void Objecter::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst)
+void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst)
 {
   if (dest.is_mon()) {
     // try a new mon
@@ -813,15 +811,15 @@ void Objecter::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", resending to mon" << mon 
             << endl;
-    messenger->send_message(m, MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(m, monmap->get_inst(mon));
   } 
   else if (dest.is_osd()) {
     int mon = monmap->pick_mon();
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", dropping and reporting to mon" << mon 
             << endl;
-    messenger->send_message(new MOSDFailure(dest, inst, osdmap->get_epoch()), 
-                            MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(new MOSDFailure(inst, osdmap->get_epoch()), 
+                            monmap->get_inst(mon));
     delete m;
   } else {
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 

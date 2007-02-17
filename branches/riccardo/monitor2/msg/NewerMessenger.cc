@@ -136,7 +136,7 @@ void Rank::Namer::handle_register(MNSRegister *m)
           << " addr " << m->get_entity() << endl;
   
   // pick id
-  msg_addr_t entity = m->get_entity();
+  entity_name_t entity = m->get_entity();
 
   if (entity.is_new()) {
     // make up a new address!
@@ -184,7 +184,7 @@ void Rank::Namer::handle_register(MNSRegister *m)
 
 void Rank::Namer::handle_started(Message *m)
 {
-  msg_addr_t who = m->get_source();
+  entity_name_t who = m->get_source();
   dout(10) << "namer.handle_started from entity " << who << endl;
 
   assert(rank.entity_unstarted.count(who));
@@ -207,7 +207,7 @@ void Rank::Namer::handle_started(Message *m)
 
 void Rank::Namer::handle_unregister(Message *m)
 {
-  msg_addr_t who = m->get_source();
+  entity_name_t who = m->get_source();
   dout(1) << "namer.handle_unregister entity " << who << endl;
 
   rank.show_dir();
@@ -264,14 +264,14 @@ void Rank::Namer::handle_failure(MNSFailure *m)
            << endl;
 
   // search for entities on this instance
-  list<msg_addr_t> rm;
-  for (hash_map<msg_addr_t,entity_inst_t>::iterator i = rank.entity_map.begin();
+  list<entity_name_t> rm;
+  for (hash_map<entity_name_t,entity_inst_t>::iterator i = rank.entity_map.begin();
        i != rank.entity_map.end();
        i++) {
     if (i->second != m->get_inst()) continue;
     rm.push_back(i->first);
   }
-  for (list<msg_addr_t>::iterator i = rm.begin();
+  for (list<entity_name_t>::iterator i = rm.begin();
        i != rm.end();
        i++) {
     dout(10) << "namer.handle_failure inst " << m->get_inst()
@@ -852,7 +852,7 @@ void Rank::Pipe::fail(list<Message*>& out)
   // what do i do about reader()?   FIXME
 
   // sort my messages by (source) dispatcher, dest.
-  map<Dispatcher*, map<msg_addr_t, list<Message*> > > by_dis;
+  map<Dispatcher*, map<entity_name_t, list<Message*> > > by_dis;
   lock.Lock();
   {
     // include out at front of queue
@@ -878,10 +878,10 @@ void Rank::Pipe::fail(list<Message*>& out)
   lock.Unlock();
 
   // report failure(s) to dispatcher(s)
-  for (map<Dispatcher*, map<msg_addr_t, list<Message*> > >::iterator i = by_dis.begin();
+  for (map<Dispatcher*, map<entity_name_t, list<Message*> > >::iterator i = by_dis.begin();
        i != by_dis.end();
        ++i) 
-    for (map<msg_addr_t, list<Message*> >::iterator j = i->second.begin();
+    for (map<entity_name_t, list<Message*> >::iterator j = i->second.begin();
          j != i->second.end();
          ++j) 
       for (list<Message*>::iterator k = j->second.begin();
@@ -1032,7 +1032,7 @@ int Rank::start_rank()
     messenger->set_dispatcher(this);
   } else {
     // create my rank
-    msg_addr_t raddr = MSG_ADDR_RANK(my_rank);
+    entity_name_t raddr = MSG_ADDR_RANK(my_rank);
     entity_map[raddr] = my_inst;
     entity_unstarted.insert(raddr);
     local[raddr] = messenger = new EntityMessenger(raddr);
@@ -1048,7 +1048,7 @@ int Rank::start_rank()
 void Rank::start_namer()
 {
   // create namer0
-  msg_addr_t naddr = MSG_ADDR_NAMER(0);
+  entity_name_t naddr = MSG_ADDR_NAMER(0);
   entity_map[naddr] = my_inst;
   local[naddr] = new EntityMessenger(naddr);
   namer = new Namer(local[naddr]);
@@ -1087,7 +1087,7 @@ void Rank::show_dir()
 {
   dout(10) << "show_dir ---" << endl;
   
-  for (hash_map<msg_addr_t, entity_inst_t>::iterator i = entity_map.begin();
+  for (hash_map<entity_name_t, entity_inst_t>::iterator i = entity_map.begin();
        i != entity_map.end();
        i++) {
     if (local.count(i->first)) {
@@ -1102,7 +1102,7 @@ void Rank::show_dir()
 /* lookup
  * NOTE: assumes directory.lock held
  */
-void Rank::lookup(msg_addr_t addr)
+void Rank::lookup(entity_name_t addr)
 {
   dout(10) << "lookup " << addr << endl;
   assert(lock.is_locked());
@@ -1118,7 +1118,7 @@ void Rank::lookup(msg_addr_t addr)
 
 /* register_entity 
  */
-Rank::EntityMessenger *Rank::register_entity(msg_addr_t addr)
+Rank::EntityMessenger *Rank::register_entity(entity_name_t addr)
 {
   dout(10) << "register_entity " << addr << endl;
   lock.Lock();
@@ -1209,7 +1209,7 @@ void Rank::submit_messages(list<Message*>& ls)
 
 void Rank::submit_message(Message *m, const entity_inst_t& dest_inst)
 {
-  const msg_addr_t dest = m->get_dest();
+  const entity_name_t dest = m->get_dest();
 
   // lookup
   EntityMessenger *entity = 0;
@@ -1267,7 +1267,7 @@ void Rank::submit_message(Message *m, const entity_inst_t& dest_inst)
 
 void Rank::submit_message(Message *m)
 {
-  const msg_addr_t dest = m->get_dest();
+  const entity_name_t dest = m->get_dest();
 
   // lookup
   EntityMessenger *entity = 0;
@@ -1404,11 +1404,11 @@ void Rank::handle_lookup_reply(MNSLookupReply *m)
   list<Message*> waiting;
   dout(10) << "got lookup reply" << endl;
   
-  for (map<msg_addr_t,entity_inst_t>::iterator it = m->entity_map.begin();
+  for (map<entity_name_t,entity_inst_t>::iterator it = m->entity_map.begin();
        it != m->entity_map.end();
        it++) {
     dout(10) << "lookup got " << it->first << " at " << it->second << endl;
-    msg_addr_t addr = it->first;
+    entity_name_t addr = it->first;
     entity_inst_t inst = it->second;
 
     if (entity_map.count(addr) &&
@@ -1563,7 +1563,7 @@ int Rank::find_ns_addr(tcpaddr_t &nsa)
  * EntityMessenger
  */
 
-Rank::EntityMessenger::EntityMessenger(msg_addr_t myaddr) :
+Rank::EntityMessenger::EntityMessenger(entity_name_t myaddr) :
   Messenger(myaddr),
   stop(false),
   dispatch_thread(this)
@@ -1665,7 +1665,7 @@ void Rank::EntityMessenger::prepare_dest(const entity_inst_t& inst)
   rank.lock.Unlock();
 }
 
-int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst,
+int Rank::EntityMessenger::send_message(Message *m, entity_name_t dest, const entity_inst_t& inst,
 					int port, int fromport)
 {
   // set envelope
@@ -1688,7 +1688,7 @@ int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, const entit
 }
 
 
-int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
+int Rank::EntityMessenger::send_message(Message *m, entity_name_t dest, int port, int fromport)
 {
   // set envelope
   m->set_source(get_myaddr(), fromport);
@@ -1710,13 +1710,13 @@ int Rank::EntityMessenger::send_message(Message *m, msg_addr_t dest, int port, i
 }
 
 
-void Rank::EntityMessenger::mark_down(msg_addr_t a, entity_inst_t& i)
+void Rank::EntityMessenger::mark_down(entity_name_t a, entity_inst_t& i)
 {
   assert(a != get_myaddr());
   rank.mark_down(a,i);
 }
 
-void Rank::mark_down(msg_addr_t a, entity_inst_t& inst)
+void Rank::mark_down(entity_name_t a, entity_inst_t& inst)
 {
   //if (my_rank == 0) return;   // ugh.. rank0 already handles this stuff in the namer
   lock.Lock();
@@ -1755,13 +1755,13 @@ void Rank::mark_down(msg_addr_t a, entity_inst_t& inst)
   lock.Unlock();
 }
 
-void Rank::EntityMessenger::mark_up(msg_addr_t a, entity_inst_t& i)
+void Rank::EntityMessenger::mark_up(entity_name_t a, entity_inst_t& i)
 {
   assert(a != get_myaddr());
   rank.mark_up(a, i);
 }
 
-void Rank::mark_up(msg_addr_t a, entity_inst_t& i)
+void Rank::mark_up(entity_name_t a, entity_inst_t& i)
 {
   if (my_rank == 0) return;
   lock.Lock();

@@ -331,7 +331,7 @@ class Client : public Dispatcher {
 
   int    unsafe_sync_write;
 public:
-  msg_addr_t get_myaddr() { return messenger->get_myaddr(); } 
+  entity_name_t get_myname() { return messenger->get_myname(); } 
   void hack_sync_write_safe();
 
 protected:
@@ -582,7 +582,7 @@ protected:
 
   int describe_layout(char *fn, list<ObjectExtent>& result);
 
-  void ms_handle_failure(Message*, msg_addr_t dest, const entity_inst_t& inst);
+  void ms_handle_failure(Message*, entity_name_t dest, const entity_inst_t& inst);
 };
 
 #endif

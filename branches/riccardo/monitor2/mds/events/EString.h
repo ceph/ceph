@@ -39,7 +39,6 @@ class EString : public LogEvent {
     event = bl.c_str() + off;
     off += event.length() + 1;
   }
-  
   void encode_payload(bufferlist& bl) {
     bl.append(event.c_str(), event.length()+1);
   }
@@ -47,6 +46,10 @@ class EString : public LogEvent {
   void print(ostream& out) {
     out << '"' << event << '"';
   }
+
+  bool has_expired(MDS *mds);
+  void expire(MDS *mds, Context *c);
+  void replay(MDS *mds);
 
 };
 

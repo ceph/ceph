@@ -20,31 +20,26 @@
 
 class MOSDFailure : public Message {
  public:
-  msg_addr_t    failed;
-  entity_inst_t inst;
+  entity_inst_t failed;
   epoch_t       epoch;
 
   MOSDFailure() {}
-  MOSDFailure(msg_addr_t f, const entity_inst_t& i, epoch_t e) : 
+  MOSDFailure(entity_inst_t f, epoch_t e) : 
     Message(MSG_OSD_FAILURE),
-    failed(f), inst(i), epoch(e) {}
+    failed(f), epoch(e) {}
  
-  msg_addr_t get_failed() { return failed; }
-  entity_inst_t& get_inst() { return inst; }
+  entity_inst_t get_failed() { return failed; }
   epoch_t get_epoch() { return epoch; }
 
   void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(failed), (char*)&failed);
     off += sizeof(failed);
-    payload.copy(off, sizeof(inst), (char*)&inst);
-    off += sizeof(inst);
     payload.copy(off, sizeof(epoch), (char*)&epoch);
     off += sizeof(epoch);
   }
   void encode_payload() {
     payload.append((char*)&failed, sizeof(failed));
-    payload.append((char*)&inst, sizeof(inst));
     payload.append((char*)&epoch, sizeof(epoch));
   }
 

@@ -11,8 +11,6 @@
  * 
  */
 
-
-
 #ifndef __MESSAGE_H
 #define __MESSAGE_H
  
@@ -89,10 +87,14 @@
 
 // *** MDS ***
 
-#define MSG_MDS_BOOT               100
-#define MSG_MDS_GETMAP             101
-#define MSG_MDS_MAP                102
-#define MSG_MDS_HEARTBEAT          103
+#define MSG_MDS_GETMAP             102
+#define MSG_MDS_MAP                103
+#define MSG_MDS_HEARTBEAT          104  // for mds load balancer
+#define MSG_MDS_BEACON             105  // to monitor
+
+#define MSG_MDS_IMPORTMAP          106
+#define MSG_MDS_CACHEREJOIN        107
+#define MSG_MDS_CACHEREJOINACK     108
 
 #define MSG_MDS_DISCOVER           110
 #define MSG_MDS_DISCOVERREPLY      111
@@ -177,130 +179,14 @@ using std::list;
 
 using __gnu_cxx::crope;
 
+#include "include/types.h"
 #include "include/buffer.h"
-
-#include "tcp.h"
-
+#include "msg_types.h"
 
 
 
-// use fixed offsets and static entity -> logical addr mapping!
-#define MSG_ADDR_NAMER_BASE   0
-#define MSG_ADDR_RANK_BASE    1
-#define MSG_ADDR_MDS_BASE     2
-#define MSG_ADDR_OSD_BASE     3
-#define MSG_ADDR_MON_BASE     4
-#define MSG_ADDR_CLIENT_BASE  5
 
-#define MSG_ADDR_NEW          -1
-
-
-// new typed msg_addr_t way!
-class msg_addr_t {
-public:
-  int _type;
-  int _num;
-
-  msg_addr_t() : _type(0), _num(0) {}
-  msg_addr_t(int t, int n) : _type(t), _num(n) {}
-  
-  int num() const { return _num; }
-  int type() const { return _type; }
-  const char *type_str() const {
-    switch (type()) {
-    case MSG_ADDR_RANK_BASE: return "rank";
-    case MSG_ADDR_MDS_BASE: return "mds"; 
-    case MSG_ADDR_OSD_BASE: return "osd"; 
-    case MSG_ADDR_MON_BASE: return "mon"; 
-    case MSG_ADDR_CLIENT_BASE: return "client"; 
-    case MSG_ADDR_NAMER_BASE: return "namer";
-    }
-    return "unknown";
-  }
-
-  bool is_new() const { return num() == MSG_ADDR_NEW; }
-
-  bool is_client() const { return type() == MSG_ADDR_CLIENT_BASE; }
-  bool is_mds() const { return type() == MSG_ADDR_MDS_BASE; }
-  bool is_osd() const { return type() == MSG_ADDR_OSD_BASE; }
-  bool is_mon() const { return type() == MSG_ADDR_MON_BASE; }
-  bool is_namer() const { return type() == MSG_ADDR_NAMER_BASE; }
-};
-
-inline bool operator== (const msg_addr_t& l, const msg_addr_t& r) { return (l._type == r._type) && (l._num == r._num); }
-inline bool operator!= (const msg_addr_t& l, const msg_addr_t& r) { return (l._type != r._type) || (l._num != r._num); }
-inline bool operator< (const msg_addr_t& l, const msg_addr_t& r) { return (l._type < r._type) || (l._type == r._type && l._num < r._num); }
-
-inline std::ostream& operator<<(std::ostream& out, const msg_addr_t& addr) {
-  //if (addr.is_namer()) return out << "namer";
-  if (addr.is_new() || addr.num() < 0)
-    return out << addr.type_str() << "?";
-  else
-    return out << addr.type_str() << addr.num();
-}
-
-namespace __gnu_cxx {
-  template<> struct hash< msg_addr_t >
-  {
-    size_t operator()( const msg_addr_t m ) const
-    {
-      static hash<int> H;
-      return H(m.type() ^ m.num());
-    }
-  };
-}
-
-#define MSG_ADDR_RANK(x)    msg_addr_t(MSG_ADDR_RANK_BASE,x)
-#define MSG_ADDR_MDS(x)     msg_addr_t(MSG_ADDR_MDS_BASE,x)
-#define MSG_ADDR_OSD(x)     msg_addr_t(MSG_ADDR_OSD_BASE,x)
-#define MSG_ADDR_MON(x)     msg_addr_t(MSG_ADDR_MON_BASE,x)
-#define MSG_ADDR_CLIENT(x)  msg_addr_t(MSG_ADDR_CLIENT_BASE,x)
-#define MSG_ADDR_NAMER(x)   msg_addr_t(MSG_ADDR_NAMER_BASE,x)
-
-#define MSG_ADDR_UNDEF       msg_addr_t()
-#define MSG_ADDR_DIRECTORY   MSG_ADDR_NAMER(0)
-
-#define MSG_ADDR_RANK_NEW    MSG_ADDR_RANK(MSG_ADDR_NEW)
-#define MSG_ADDR_MDS_NEW     MSG_ADDR_MDS(MSG_ADDR_NEW)
-#define MSG_ADDR_OSD_NEW     MSG_ADDR_OSD(MSG_ADDR_NEW)
-#define MSG_ADDR_CLIENT_NEW  MSG_ADDR_CLIENT(MSG_ADDR_NEW)
-#define MSG_ADDR_NAMER_NEW   MSG_ADDR_NAMER(MSG_ADDR_NEW)
-
-
-class entity_inst_t {
- public:
-  tcpaddr_t addr;
-  __int64_t rank;
-
-  entity_inst_t() : rank(-1) {
-    memset(&addr, 0, sizeof(addr));
-  }
-  entity_inst_t(tcpaddr_t& a, int r) : addr(a), rank(r) {
-    memset(&addr, 0, sizeof(addr));
-  }
-
-  void set_addr(tcpaddr_t a) {
-    addr = a;
-    
-    // figure out rank
-    rank = *((unsigned*)&a.sin_addr.s_addr);
-    rank |= (__uint64_t)a.sin_port << 32;
-  }
-};
-
-inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { return a.rank == b.rank && a.addr == b.addr; }
-inline bool operator!=(const entity_inst_t& a, const entity_inst_t& b) { return !(a == b); }
-inline bool operator>(const entity_inst_t& a, const entity_inst_t& b) { return a.rank > b.rank; }
-inline bool operator>=(const entity_inst_t& a, const entity_inst_t& b) { return a.rank >= b.rank; }
-inline bool operator<(const entity_inst_t& a, const entity_inst_t& b) { return a.rank < b.rank; }
-inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) { return a.rank <= b.rank; }
-
-inline ostream& operator<<(ostream& out, const entity_inst_t &i)
-{
-  //return out << "rank" << i.rank << "_" << i.addr;
-  return out << i.addr;
-}
-
+// ======================================================
 
 // abstract Message class
 
@@ -308,12 +194,9 @@ inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 
 typedef struct {
   int type;
-  msg_addr_t source, dest;
-  entity_inst_t source_inst;
+  entity_inst_t src, dst;
   int source_port, dest_port;
   int nchunks;
-  __uint64_t lamport_send_stamp;
-  __uint64_t lamport_recv_stamp;
 } msg_envelope_t;
 
 #define MSG_ENVELOPE_LEN  sizeof(msg_envelope_t)
@@ -332,26 +215,15 @@ public:
  public:
   Message() { 
     env.source_port = env.dest_port = -1;
-    env.source = env.dest = MSG_ADDR_UNDEF;
     env.nchunks = 0;
-    env.lamport_send_stamp = 0;    
-    env.lamport_recv_stamp = 0;
   };
   Message(int t) {
     env.source_port = env.dest_port = -1;
-    env.source = env.dest = MSG_ADDR_UNDEF;
     env.nchunks = 0;
     env.type = t;
-    env.lamport_send_stamp = 0;
-    env.lamport_recv_stamp = 0;
   }
   virtual ~Message() {
   }
-
-  void set_lamport_send_stamp(__uint64_t t) { env.lamport_send_stamp = t; }
-  void set_lamport_recv_stamp(__uint64_t t) { env.lamport_recv_stamp = t; }
-  __uint64_t get_lamport_send_stamp() { return env.lamport_send_stamp; }
-  __uint64_t get_lamport_recv_stamp() { return env.lamport_recv_stamp; }
 
 
   // for rpc-type procedural messages (pcid = procedure call id)
@@ -382,16 +254,19 @@ public:
   virtual char *get_type_name() = 0;
 
   // source/dest
-  msg_addr_t& get_dest() { return env.dest; }
-  void set_dest(msg_addr_t a, int p) { env.dest = a; env.dest_port = p; }
+  entity_inst_t& get_dest_inst() { return env.dst; }
+  entity_inst_t& get_source_inst() { return env.src; }
+
+  entity_name_t& get_dest() { return env.dst.name; }
+  void set_dest(entity_name_t a, int p) { env.dst.name = a; env.dest_port = p; }
   int get_dest_port() { return env.dest_port; }
   
-  msg_addr_t& get_source() { return env.source; }
-  void set_source(msg_addr_t a, int p) { env.source = a; env.source_port = p; }
+  entity_name_t& get_source() { return env.src.name; }
+  void set_source(entity_name_t a, int p) { env.src.name = a; env.source_port = p; }
   int get_source_port() { return env.source_port; }
 
-  entity_inst_t& get_source_inst() { return env.source_inst; }
-  void set_source_inst(const entity_inst_t &i) { env.source_inst = i; }
+  entity_addr_t& get_source_addr() { return env.src.addr; }
+  void set_source_addr(const entity_addr_t &i) { env.src.addr = i; }
 
   // PAYLOAD ----
   void reset_payload() {

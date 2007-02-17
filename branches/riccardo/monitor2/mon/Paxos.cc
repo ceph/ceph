@@ -121,10 +121,10 @@ void Paxos::leader_start()
   // .. do something else too 
   version_t pn = get_new_proposal_number();
   for (int i=0; i<mon->monmap->num_mon; ++i) {
-  	if (i == whoami) continue;
-  	// todo high rf I pass the pn twice... what is the last parameter for?
-	mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COLLECT, whoami, pn, pn),
-								 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
+    if (i == whoami) continue;
+    // todo high rf I pass the pn twice... what is the last parameter for?
+    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COLLECT, whoami, pn, pn),
+				 mon->monmap->get_inst(i));
   }
 }
 
@@ -135,48 +135,48 @@ void Paxos::dispatch(Message *m)
   switch (m->get_type()) {
 	
   case MSG_MON_PAXOS:
-	{
-	  MMonPaxos *pm = (MMonPaxos*)m;
-
-	  // NOTE: these ops are defined in messages/MMonPaxos.h
-	  switch (pm->op) {
-		// learner
-	  case MMonPaxos::OP_COLLECT:
-		handle_collect(pm);
-		break;
-		
-	  case MMonPaxos::OP_LAST:
-		handle_last(pm);
-		break;
-
-	  case MMonPaxos::OP_OLDROUND:
-		handle_old_round(pm);
-		break;
-
-	  case MMonPaxos::OP_BEGIN:
-		handle_begin(pm);
-		break;
-
-	  case MMonPaxos::OP_ACCEPT:
-		handle_accept(pm);
-		break;		
-
-	  case MMonPaxos::OP_SUCCESS:
-		handle_success(pm);
-		break;
-
-	  case MMonPaxos::OP_ACK:
-		handle_ack(pm);
-		break;
-
-	  default:
-		assert(0);
-	  }
-	}
+    {
+      MMonPaxos *pm = (MMonPaxos*)m;
+      
+      // NOTE: these ops are defined in messages/MMonPaxos.h
+      switch (pm->op) {
+	// learner
+      case MMonPaxos::OP_COLLECT:
+	handle_collect(pm);
 	break;
 	
+      case MMonPaxos::OP_LAST:
+	handle_last(pm);
+	break;
+	
+      case MMonPaxos::OP_OLDROUND:
+	handle_old_round(pm);
+	break;
+	
+      case MMonPaxos::OP_BEGIN:
+	handle_begin(pm);
+	break;
+	
+      case MMonPaxos::OP_ACCEPT:
+	handle_accept(pm);
+	break;		
+	
+      case MMonPaxos::OP_SUCCESS:
+	handle_success(pm);
+	break;
+	
+      case MMonPaxos::OP_ACK:
+	handle_ack(pm);
+	break;
+	
+	  default:
+	    assert(0);
+      }
+    }
+    break;
+    
   default:
-	assert(0);
+    assert(0);
   }
 }
 

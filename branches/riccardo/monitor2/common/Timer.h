@@ -50,17 +50,13 @@ namespace __gnu_cxx {
 
 class Timer {
  private:
-  map< utime_t, multiset<Context*> >  scheduled;    // time -> (context ...)
+  map< utime_t, set<Context*> >  scheduled;    // time -> (context ...)
   hash_map< Context*, utime_t >  event_times;  // event -> time
 
   // get time of the next event
-  Context* get_next_scheduled(utime_t& when) {
-    if (scheduled.empty()) return 0;
-    map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
-    when = it->first;
-    multiset<Context*>::iterator sit = it->second.begin();
-    return *sit;
-  }
+  //Context* get_next_scheduled(utime_t& when);
+
+  bool get_next_due(utime_t &when);
 
   void register_timer();  // make sure i get a callback
   void cancel_timer();    // make sure i get a callback
@@ -104,10 +100,10 @@ class Timer {
     cancel_timer();
 
     // scheduled
-    for (map< utime_t, multiset<Context*> >::iterator it = scheduled.begin();
+    for (map< utime_t, set<Context*> >::iterator it = scheduled.begin();
          it != scheduled.end();
          it++) {
-      for (multiset<Context*>::iterator sit = it->second.begin();
+      for (set<Context*>::iterator sit = it->second.begin();
            sit != it->second.end();
            sit++)
         delete *sit;
@@ -132,6 +128,44 @@ class Timer {
   // execute pending events
   void execute_pending();
 
+};
+
+
+/*
+ * SafeTimer is a wrapper around the raw Timer (or rather, g_timer, it's global
+ * instantiation) that protects event execution with an existing mutex.  It 
+ * provides for, among other things, reliable event cancellation on class
+ * destruction.  The caller just needs to cancel each event (or cancel_all()),
+ * and then call join() to ensure any concurrently exectuting events (in other
+ * threads) get flushed.
+ */
+class SafeTimer {
+  Mutex&        lock;
+  Cond          cond;
+  map<Context*,Context*> scheduled;  // actual -> wrapper
+  map<Context*,Context*> canceled;
+  
+  class EventWrapper : public Context {
+    SafeTimer *timer;
+    Context *actual;
+  public:
+    EventWrapper(SafeTimer *st, Context *c) : timer(st), 
+					      actual(c) {}
+    void finish(int r);
+  };
+
+public:
+  SafeTimer(Mutex& l) : lock(l) { }
+  ~SafeTimer();
+
+  void add_event_after(float seconds, Context *c);
+  void add_event_at(utime_t when, Context *c);
+  void cancel_event(Context *c);
+  void cancel_all();
+  void join();
+
+  int get_num_scheduled() { return scheduled.size(); }
+  int get_num_canceled() { return canceled.size(); }
 };
 
 

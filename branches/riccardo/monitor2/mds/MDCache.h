@@ -39,6 +39,9 @@ class Logger;
 
 class Message;
 
+class MMDSImportMap;
+class MMDSCacheRejoin;
+class MMDSCacheRejoinAck;
 class MDiscover;
 class MDiscoverReply;
 class MCacheExpire;
@@ -80,15 +83,20 @@ namespace __gnu_cxx {
 }
 
 class MDCache {
- protected:
+ public:
   // my master
   MDS *mds;
 
+  LRU                           lru;         // dentry lru for expiring items from cache
+
+ protected:
   // the cache
   CInode                       *root;        // root inode
-  LRU                           lru;         // lru for expiring items
   hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino            
- 
+  
+  list<CInode*>                 inode_expire_queue;  // inodes to delete
+
+
   // root
   list<Context*>     waiting_for_root;
 
@@ -98,6 +106,11 @@ class MDCache {
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
+  void adjust_export(int to,   CDir *root, set<CDir*>& bounds);
+  void adjust_import(int from, CDir *root, set<CDir*>& bounds);
+  
+  
+
   // active MDS requests
   hash_map<Message*, active_request_t>   active_requests;
   
@@ -108,15 +121,63 @@ class MDCache {
   // shutdown crap
   int shutdown_commits;
   bool did_shutdown_exports;
+  bool did_shutdown_log_cap;
   friend class C_MDC_ShutdownCommit;
+
+  // recovery
+protected:
+  // from EImportStart w/o EImportFinish during journal replay
+  map<inodeno_t, set<inodeno_t> >            my_ambiguous_imports;  
+  // from MMDSImportMaps
+  map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  
+
+  set<int> recovery_set;
+  set<int> wants_import_map;   // nodes i need to send my import map to
+  set<int> got_import_map;     // nodes i need to send my import map to (when exports finish)
+  set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
+  
+  void handle_import_map(MMDSImportMap *m);
+  void handle_cache_rejoin(MMDSCacheRejoin *m);
+  void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
+  void disambiguate_imports();
+  void cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
+  void send_cache_rejoin_acks();
+public:
+  void send_import_map(int who);
+  void send_import_map_now(int who);
+  void send_import_map_later(int who) {
+    wants_import_map.insert(who);
+  }
+  void send_pending_import_maps();  // maybe.
+  void send_cache_rejoins();
+
+  void set_recovery_set(set<int>& s) {
+    recovery_set = s;
+  }
+
+  // ambiguous imports
+  void add_ambiguous_import(inodeno_t base, set<inodeno_t>& bounds) {
+    my_ambiguous_imports[base].swap(bounds);
+  }
+  void cancel_ambiguous_import(inodeno_t dirino);
+  void finish_ambiguous_import(inodeno_t dirino);
+  
+  void finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds);
+
+
+
+  
 
   friend class CInode;
   friend class Locker;
   friend class Migrator;
   friend class Renamer;
   friend class MDBalancer;
+  friend class EImportMap;
+
 
  public:
+
   // subsystems
   Migrator *migrator;
   Renamer *renamer;
@@ -132,13 +193,19 @@ class MDCache {
   CInode *get_root() { return root; }
   void set_root(CInode *r);
 
+  int get_num_imports() { return imports.size(); }
   void add_import(CDir *dir);
   void remove_import(CDir *dir);
+  void recalc_auth_bits();
 
+  void log_import_map(Context *onsync=0);
+
+ 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
+  void trim_non_auth();      // trim out trimmable non-auth items
 
   // shutdown
   void shutdown_start();
@@ -154,6 +221,12 @@ class MDCache {
     return NULL;
   }
   
+
+  int hash_dentry(inodeno_t ino, const string& s) {
+    return 0; // fixme
+  }
+  
+
  public:
   CInode *create_inode();
   void add_inode(CInode *in);
@@ -162,15 +235,23 @@ class MDCache {
   void remove_inode(CInode *in);
   void destroy_inode(CInode *in);
   void touch_inode(CInode *in) {
-    // touch parent(s) too
-    if (in->get_parent_dir()) touch_inode(in->get_parent_dir()->inode);
-    
-    // top or mid, depending on whether i'm auth
-    if (in->is_auth())
-      lru.lru_touch(in);
-    else
-      lru.lru_midtouch(in);
+    if (in->get_parent_dn())
+      touch_dentry(in->get_parent_dn());
   }
+  void touch_dentry(CDentry *dn) {
+    // touch ancestors
+    if (dn->get_dir()->get_inode()->get_parent_dn())
+      touch_dentry(dn->get_dir()->get_inode()->get_parent_dn());
+    
+    // touch me
+    if (dn->is_auth())
+      lru.lru_touch(dn);
+    else
+      lru.lru_midtouch(dn);
+  }
+
+  void inode_remove_replica(CInode *in, int rep);
+
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
  public:
@@ -182,14 +263,15 @@ class MDCache {
   void start_recovered_purges();
 
 
- protected:
-  // private methods
+ public:
   CDir *get_auth_container(CDir *in);
+  CDir *get_export_container(CDir *dir);
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 
 
  public:
+  CInode *create_root_inode();
   int open_root(Context *c);
   int path_traverse(filepath& path, vector<CDentry*>& trace, bool follow_trailing_sym,
                     Message *req, Context *ondelay,

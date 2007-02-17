@@ -51,7 +51,7 @@ class Rank : public Dispatcher {
     int nrank;
     int nclient, nmds, nosd, nmon;
     
-    map<msg_addr_t, list<Message*> > waiting;
+    map<entity_name_t, list<Message*> > waiting;
 
     Namer(EntityMessenger *msgr);
     ~Namer();
@@ -212,7 +212,7 @@ class Rank : public Dispatcher {
     }
 
   public:
-    EntityMessenger(msg_addr_t myaddr);
+    EntityMessenger(entity_name_t myaddr);
     ~EntityMessenger();
 
     void ready();
@@ -225,12 +225,12 @@ class Rank : public Dispatcher {
     virtual void callback_kick() {} 
     virtual int shutdown();
     virtual void prepare_dest(const entity_inst_t& inst);
-    virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
-    virtual int send_message(Message *m, msg_addr_t dest, const entity_inst_t& inst,
+    virtual int send_message(Message *m, entity_name_t dest, int port=0, int fromport=0);
+    virtual int send_message(Message *m, entity_name_t dest, const entity_inst_t& inst,
 							 int port=0, int fromport=0);
 
-    virtual void mark_down(msg_addr_t a, entity_inst_t& i);
-    virtual void mark_up(msg_addr_t a, entity_inst_t& i);
+    virtual void mark_down(entity_name_t a, entity_inst_t& i);
+    virtual void mark_up(entity_name_t a, entity_inst_t& i);
     //virtual void reset(msg_addr_t a);
   };
 
@@ -249,7 +249,7 @@ class Rank : public Dispatcher {
   bool            single_dispatch_stop;
   list<Message*>  single_dispatch_queue;
 
-  map<msg_addr_t, list<Message*> > waiting_for_ready;
+  map<entity_name_t, list<Message*> > waiting_for_ready;
 
   void single_dispatcher_entry();
   void _submit_single_dispatch(Message *m);
@@ -268,18 +268,18 @@ class Rank : public Dispatcher {
   entity_inst_t my_inst;
   
   // lookup
-  hash_map<msg_addr_t, entity_inst_t> entity_map;
-  hash_set<msg_addr_t>                entity_unstarted;
+  hash_map<entity_name_t, entity_inst_t> entity_map;
+  hash_set<entity_name_t>                entity_unstarted;
   
-  map<msg_addr_t, list<Message*> > waiting_for_lookup;
-  set<msg_addr_t>                  looking_up;
+  map<entity_name_t, list<Message*> > waiting_for_lookup;
+  set<entity_name_t>                  looking_up;
 
   // register
   map<int, Cond* >        waiting_for_register_cond;
-  map<int, msg_addr_t >   waiting_for_register_result;
+  map<int, entity_name_t >   waiting_for_register_result;
   
   // local
-  map<msg_addr_t, EntityMessenger*> local;
+  map<entity_name_t, EntityMessenger*> local;
   
   // remote
   hash_map<int, Pipe*> rank_pipe;
@@ -294,7 +294,7 @@ class Rank : public Dispatcher {
 
   void show_dir();
 
-  void lookup(msg_addr_t addr);
+  void lookup(entity_name_t addr);
   
   void dispatch(Message *m);
   void handle_connect_ack(class MNSConnectAck *m);
@@ -303,8 +303,8 @@ class Rank : public Dispatcher {
   
   Pipe *connect_rank(const entity_inst_t& inst);
 
-  void mark_down(msg_addr_t addr, entity_inst_t& i);
-  void mark_up(msg_addr_t addr, entity_inst_t& i);
+  void mark_down(entity_name_t addr, entity_inst_t& i);
+  void mark_up(entity_name_t addr, entity_inst_t& i);
 
   tcpaddr_t get_listen_addr() { return accepter.listen_addr; }
 
@@ -323,7 +323,7 @@ public:
   int start_rank();
   void wait();
 
-  EntityMessenger *register_entity(msg_addr_t addr);
+  EntityMessenger *register_entity(entity_name_t addr);
   void unregister_entity(EntityMessenger *ms);
 
   void submit_message(Message *m, const entity_inst_t& inst);  
@@ -332,7 +332,7 @@ public:
   void submit_messages(list<Message*>& ls);  
 
   // create a new messenger
-  EntityMessenger *new_entity(msg_addr_t addr);
+  EntityMessenger *new_entity(entity_name_t addr);
 
 } ;
 

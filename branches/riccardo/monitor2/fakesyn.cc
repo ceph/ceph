@@ -42,6 +42,14 @@ public:
   }
 };
 
+class C_Die : public Context {
+public:
+  void finish(int) {
+    cerr << "die" << endl;
+    exit(1);
+  }
+};
+
 
 int main(int argc, char **argv) 
 {
@@ -68,11 +76,16 @@ int main(int argc, char **argv)
   assert(nargs.empty());
 
 
+  if (g_conf.kill_after) 
+    g_timer.add_event_after(g_conf.kill_after, new C_Die);
+
+
   g_clock.tare();
 
   MonMap *monmap = new MonMap(g_conf.num_mon);
-  monmap->mon_inst[0].rank = 0;  // hack ; see FakeMessenger.cc
-
+  entity_addr_t a;
+  monmap->mon_inst[0] = entity_inst_t(MSG_ADDR_MON(0), a);  // hack ; see FakeMessenger.cc
+  
   char hostname[100];
   gethostname(hostname,100);
   //int pid = getpid();

@@ -24,8 +24,9 @@
 
 #define SYNCLIENT_MODE_RANDOMWALK  1
 #define SYNCLIENT_MODE_FULLWALK    2
-#define SYNCLIENT_MODE_REPEATWALK  7
+#define SYNCLIENT_MODE_REPEATWALK  3
 
+#define SYNCLIENT_MODE_MAKEDIRMESS  7
 #define SYNCLIENT_MODE_MAKEDIRS     8      // dirs files depth
 #define SYNCLIENT_MODE_STATDIRS     9     // dirs files depth
 #define SYNCLIENT_MODE_READDIRS     10     // dirs files depth
@@ -192,6 +193,8 @@ class SyntheticClient {
   int clean_dir(string& basedir);
 
   int play_trace(Trace& t, string& prefix);
+
+  void make_dir_mess(const char *basedir, int n);
 
 };
 

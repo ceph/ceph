@@ -505,7 +505,7 @@ class C_MPIKicker : public Context {
   }
 };
 
-MPIMessenger::MPIMessenger(msg_addr_t myaddr) : Messenger(myaddr)
+MPIMessenger::MPIMessenger(entity_name_t myaddr) : Messenger(myaddr)
 {
   // my address
   this->myaddr = myaddr;
@@ -576,7 +576,7 @@ int MPIMessenger::shutdown()
 
 
 /* note: send_message _MUST_ be non-blocking */
-int MPIMessenger::send_message(Message *m, msg_addr_t dest, int port, int fromport)
+int MPIMessenger::send_message(Message *m, entity_name_t dest, int port, int fromport)
 {
   // set envelope
   m->set_source(myaddr, fromport);

@@ -40,22 +40,29 @@ class MDSMonitor : public Dispatcher {
   //map<epoch_t, bufferlist> inc_maps;
   //MDSMap::Incremental pending_inc;
   
-  map<msg_addr_t,entity_inst_t> awaiting_map;
-  
+  list<entity_inst_t> awaiting_map;
+
+  // beacons
+  map<int, utime_t> last_beacon;
+
+  bool is_alive(int mds);
+
 
   // maps
   void create_initial();
   void send_current();         // send current map to waiters.
-  void send_full(msg_addr_t dest, const entity_inst_t& inst);
+  void send_full(entity_inst_t dest);
   void bcast_latest_mds();
+
+  void print_map();
 
   //void accept_pending();   // accept pending, new map.
   //void send_incremental(epoch_t since, msg_addr_t dest);
 
-  void handle_mds_boot(class MMDSBoot *m);
-  void handle_mds_failure(class MMDSFailure *m);
+  void handle_mds_state(class MMDSState *m);
+  void handle_mds_beacon(class MMDSBeacon *m);
+  //void handle_mds_failure(class MMDSFailure *m);
   void handle_mds_getmap(class MMDSGetMap *m);
-  void handle_mds_shutdown(Message *m);
 
 
 
@@ -67,7 +74,7 @@ class MDSMonitor : public Dispatcher {
   void dispatch(Message *m);
   void tick();  // check state, take actions
 
-  void send_latest(msg_addr_t dest, const entity_inst_t& inst);
+  void send_latest(entity_inst_t dest);
 
 };
 

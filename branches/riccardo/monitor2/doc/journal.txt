@@ -1,5 +1,21 @@
 
 
+- LogEvent.replay() is idempotent.  we won't know whether the update is old or not.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 journal is distributed among different nodes.  because authority changes over time, it's not immedicatley clear to a recoverying node relaying the journal whether the data is "real" or not (it might be exported later in the journal).
 
 

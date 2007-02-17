@@ -22,6 +22,17 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
+
+/*
+ * this structure is used by the MDS purely so that
+ * it can remember client addresses (entity_inst_t)
+ * while processing request(s) on behalf of clients.
+ * as such it's only really a sort of short-term cache.
+ * 
+ * it also remembers which clients mounted via this MDS,
+ * for the same reason (so that mounted clients can be 
+ * contacted if necessary).
+ */
 class ClientMap {
   hash_map<int,entity_inst_t> client_inst;
   set<int>           client_mount;

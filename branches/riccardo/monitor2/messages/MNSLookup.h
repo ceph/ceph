@@ -18,18 +18,18 @@
 #include "msg/Message.h"
 
 class MNSLookup : public Message {
-  msg_addr_t entity;
+  entity_name_t entity;
 
  public:
   MNSLookup() {}
-  MNSLookup(msg_addr_t e) :
+  MNSLookup(entity_name_t e) :
     Message(MSG_NS_LOOKUP) {
     entity = e;
   }
   
   char *get_type_name() { return "NSLook"; }
 
-  msg_addr_t get_entity() { return entity; }
+  entity_name_t get_entity() { return entity; }
 
   void encode_payload() {
     payload.append((char*)&entity, sizeof(entity));

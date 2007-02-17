@@ -32,9 +32,7 @@ using namespace std;
 #include <ext/rope>
 using namespace __gnu_cxx;
 
-
 #include "object.h"
-
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -44,34 +42,6 @@ using namespace __gnu_cxx;
 #endif
 
 
-// md ops
-#define MDS_OP_STATFS   1
-
-#define MDS_OP_STAT     100
-#define MDS_OP_LSTAT    101
-#define MDS_OP_UTIME    102
-#define MDS_OP_CHMOD    103
-#define MDS_OP_CHOWN    104  
-
-
-#define MDS_OP_READDIR  200
-#define MDS_OP_MKNOD    201
-#define MDS_OP_LINK     202
-#define MDS_OP_UNLINK   203
-#define MDS_OP_RENAME   204
-
-#define MDS_OP_MKDIR    220
-#define MDS_OP_RMDIR    221
-#define MDS_OP_SYMLINK  222
-
-#define MDS_OP_OPEN     301
-#define MDS_OP_TRUNCATE 306
-#define MDS_OP_FSYNC    307
-//#define MDS_OP_CLOSE    310
-#define MDS_OP_RELEASE  308
-
-
-
 // -- stl crap --
 
 /*
@@ -79,6 +49,28 @@ using namespace __gnu_cxx;
 - added when i was using an old STL.. maybe try taking these out and see if things 
   compile now?
 */
+
+class blobhash {
+public:
+  size_t operator()(const char *p, unsigned len) {
+    static hash<long> H;
+    long acc = 0;
+    while (len >= sizeof(long)) {
+      acc ^= *(long*)p;
+      p += sizeof(long);
+      len -= sizeof(long);
+    }   
+    int sh = 0;
+    while (len) {
+      acc ^= (long)*p << sh;
+      sh += 8;
+      len--;
+      p++;
+    }
+    return H(acc);
+  }
+};
+
 
 namespace __gnu_cxx {
   template<> struct hash< std::string >
@@ -121,6 +113,17 @@ struct ltstr
     return strcmp(s1, s2) < 0;
   }
 };
+
+
+
+// ----------------------
+// some basic types
+
+typedef __uint64_t tid_t;         // transaction id
+typedef __uint64_t version_t;
+typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
+
+
 
 
 
@@ -178,8 +181,6 @@ struct FileLayout {
 
 // -- inode --
 
-//typedef __uint64_t inodeno_t;   
-
 struct inodeno_t {
   __uint64_t val;
   inodeno_t() : val() {}
@@ -202,9 +203,6 @@ namespace __gnu_cxx {
     }
   };
 }
-
-typedef __uint64_t version_t;
-
 
 
 #define INODE_MODE_FILE     0100000 // S_IFREG
@@ -259,182 +257,6 @@ struct inode_t {
 
 
 
-// lame 128-bit value class.
-class lame128_t {
-public:
-  __uint64_t hi, lo;
-  lame128_t(__uint64_t h=0, __uint64_t l=0) : hi(h), lo(l) {}
-};
-
-inline ostream& operator<<(ostream& out, lame128_t& oid) {
-  return out << oid.hi << "." << oid.lo;
-}
-
-
-// osd types
-//typedef __uint32_t ps_t;          // placement seed
-//typedef __uint32_t pg_t;          // placement group
-typedef __uint64_t coll_t;        // collection id
-typedef __uint64_t tid_t;         // transaction id
-
-typedef __uint32_t epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
-
-// pg stuff
-typedef __uint16_t ps_t;
-typedef __uint8_t pruleset_t;
-
-// placement group id
-struct pg_t {
-  union {
-    struct {
-      int         preferred;
-      ps_t        ps;
-      __uint8_t   nrep;
-      pruleset_t  ruleset;
-    } fields;
-    __uint64_t val;
-  } u;
-  pg_t() { u.val = 0; }
-  pg_t(const pg_t& o) { u.val = o.u.val; }
-  pg_t(ps_t s, int p, unsigned char n, pruleset_t r=0) {
-    u.fields.ps = s;
-    u.fields.preferred = p;
-    u.fields.nrep = n;
-    u.fields.ruleset = r;
-  }
-  pg_t(__uint64_t v) { u.val = v; }
-  /*
-  pg_t operator=(__uint64_t v) { u.val = v; return *this; }
-  pg_t operator&=(__uint64_t v) { u.val &= v; return *this; }
-  pg_t operator+=(pg_t o) { u.val += o.val; return *this; }
-  pg_t operator-=(pg_t o) { u.val -= o.val; return *this; }
-  pg_t operator++() { ++u.val; return *this; }
-  */
-  operator __uint64_t() const { return u.val; }
-};
-
-inline ostream& operator<<(ostream& out, pg_t pg) {
-  //return out << hex << pg.val << dec;
-  if (pg.u.fields.ruleset)
-    out << (int)pg.u.fields.ruleset << '.';
-  out << (int)pg.u.fields.nrep << '.';
-  if (pg.u.fields.preferred)
-    out << pg.u.fields.preferred << '.';
-  out << hex << pg.u.fields.ps << dec;
-  return out;
-}
-
-namespace __gnu_cxx {
-  template<> struct hash< pg_t >
-  {
-    size_t operator()( const pg_t& x ) const
-    {
-      static hash<__uint64_t> H;
-      return H(x);
-    }
-  };
-}
-
-
-
-// compound rados version type
-class eversion_t {
-public:
-  epoch_t epoch;
-  version_t version;
-  eversion_t(epoch_t e=0, version_t v=0) : epoch(e), version(v) {}
-};
-
-inline bool operator==(const eversion_t& l, const eversion_t& r) {
-  return (l.epoch == r.epoch) && (l.version == r.version);
-}
-inline bool operator!=(const eversion_t& l, const eversion_t& r) {
-  return (l.epoch != r.epoch) || (l.version != r.version);
-}
-inline bool operator<(const eversion_t& l, const eversion_t& r) {
-  return (l.epoch == r.epoch) ? (l.version < r.version):(l.epoch < r.epoch);
-}
-inline bool operator<=(const eversion_t& l, const eversion_t& r) {
-  return (l.epoch == r.epoch) ? (l.version <= r.version):(l.epoch <= r.epoch);
-}
-inline bool operator>(const eversion_t& l, const eversion_t& r) {
-  return (l.epoch == r.epoch) ? (l.version > r.version):(l.epoch > r.epoch);
-}
-inline bool operator>=(const eversion_t& l, const eversion_t& r) {
-  return (l.epoch == r.epoch) ? (l.version >= r.version):(l.epoch >= r.epoch);
-}
-inline ostream& operator<<(ostream& out, const eversion_t e) {
-  return out << e.epoch << "'" << e.version;
-}
-
-
-
-#define PG_NONE    0xffffffffL
-
-
-typedef __uint16_t snapv_t;       // snapshot version
-
-
-class OSDSuperblock {
-public:
-  const static __uint64_t MAGIC = 0xeb0f505dULL;
-  __uint64_t magic;
-  __uint64_t fsid;      // unique fs id (random number)
-  int        whoami;    // my role in this fs.
-  epoch_t    current_epoch;             // most recent epoch
-  epoch_t    oldest_map, newest_map;    // oldest/newest maps we have.
-  OSDSuperblock(__uint64_t f=0, int w=0) : 
-    magic(MAGIC), fsid(f), whoami(w), 
-    current_epoch(0), oldest_map(0), newest_map(0) {}
-};
-
-inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
-{
-  return out << "sb(fsid " << sb.fsid
-             << " osd" << sb.whoami
-             << " e" << sb.current_epoch
-             << " [" << sb.oldest_map << "," << sb.newest_map
-             << "])";
-}
-
-class MonSuperblock {
-public:
-  const static __uint64_t MAGIC = 0x00eb0f5000ULL;
-  __uint64_t magic;
-  __uint64_t fsid;
-  int        whoami;  // mon #
-  epoch_t    current_epoch;
-  MonSuperblock(__uint64_t f=0, int w=0) :
-    magic(MAGIC), fsid(f), whoami(w), current_epoch(0) {}
-};
-
-
-// new types
-
-class ObjectExtent {
- public:
-  object_t    oid;       // object id
-  off_t       start;     // in object
-  size_t      length;    // in object
-
-  objectrev_t rev;       // which revision?
-  pg_t        pgid;      // where to find the object
-
-  map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
-  
-  ObjectExtent() : start(0), length(0), rev(0), pgid(0) {}
-  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), rev(0), pgid(0) { }
-};
-
-inline ostream& operator<<(ostream& out, ObjectExtent &ex)
-{
-  return out << "extent(" 
-             << ex.oid << " in " << hex << ex.pgid << dec
-             << " " << ex.start << "~" << ex.length
-             << ")";
-}
-
-
 
 // client types
 typedef int        fh_t;          // file handle 
@@ -442,8 +264,6 @@ typedef int        fh_t;          // file handle
 
 // dentries
 #define MAX_DENTRY_LEN 255
-
-
 
 
 

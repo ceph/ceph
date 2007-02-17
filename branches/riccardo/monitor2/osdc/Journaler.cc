@@ -100,12 +100,13 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   Header h;
   assert(bl.length() == sizeof(h));
   bl.copy(0, sizeof(h), (char*)&h);
-  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << endl;
 
   write_pos = flush_pos = ack_pos = h.write_pos;
   read_pos = requested_pos = received_pos = h.read_pos;
   expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
+
+  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << endl;
 
   // probe the log
   state = STATE_PROBING;
@@ -115,14 +116,22 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 
 void Journaler::_finish_probe_end(int r, off_t end)
 {
-  assert(r >= 0);
-  assert(end >= write_pos);
   assert(state == STATE_PROBING);
-
-  dout(1) << "_finish_probe_end write_pos = " << end 
-	  << " (header had " << write_pos << "). recovered."
-	  << endl;
   
+  if (end == -1) {
+    end = write_pos;
+    dout(1) << "_finish_probe_end write_pos = " << end 
+	    << " (header had " << write_pos << "). log was empty. recovered."
+	    << endl;
+    assert(0); // hrm.
+  } else {
+    assert(end >= write_pos);
+    assert(r >= 0);
+    dout(1) << "_finish_probe_end write_pos = " << end 
+	    << " (header had " << write_pos << "). recovered."
+	    << endl;
+  }
+
   write_pos = flush_pos = ack_pos = end;
   
   // done.

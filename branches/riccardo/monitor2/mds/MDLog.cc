@@ -13,6 +13,7 @@
 
 #include "MDLog.h"
 #include "MDS.h"
+#include "MDCache.h"
 #include "LogEvent.h"
 
 #include "osdc/Journaler.h"
@@ -22,8 +23,8 @@
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 
@@ -35,10 +36,30 @@ MDLog::MDLog(MDS *m)
   num_events = 0;
   waiting_for_read = false;
 
+  last_import_map = 0;
+  writing_import_map = false;
+  seen_import_map = false;
+
   max_events = g_conf.mds_log_max_len;
+
+  capped = false;
 
   unflushed = 0;
 
+  journaler = 0;
+  logger = 0;
+}
+
+
+MDLog::~MDLog()
+{
+  if (journaler) { delete journaler; journaler = 0; }
+  if (logger) { delete logger; logger = 0; }
+}
+
+
+void MDLog::init_journaler()
+{
   // logger
   char name[80];
   sprintf(name, "mds%d.log", mds->get_nodeid());
@@ -47,7 +68,7 @@ MDLog::MDLog(MDS *m)
   static bool didit = false;
   if (!didit) {
     mdlog_logtype.add_inc("add");
-    mdlog_logtype.add_inc("retire");    
+    mdlog_logtype.add_inc("expire");    
     mdlog_logtype.add_inc("obs");    
     mdlog_logtype.add_inc("trim");    
     mdlog_logtype.add_set("size");
@@ -66,28 +87,25 @@ MDLog::MDLog(MDS *m)
     log_inode.layout.object_layout = OBJECT_LAYOUT_STARTOSD;
     log_inode.layout.osd = mds->get_nodeid() + 10000;   // hack
   }
-
+  
   // log streamer
+  if (journaler) delete journaler;
   journaler = new Journaler(log_inode, mds->objecter, logger);
-
 }
 
-
-MDLog::~MDLog()
-{
-  if (journaler) { delete journaler; journaler = 0; }
-  if (logger) { delete logger; logger = 0; }
-}
 
 
 void MDLog::reset()
 {
+  dout(5) << "reset to empty log" << endl;
+  init_journaler();
   journaler->reset();
 }
 
 void MDLog::open(Context *c)
 {
   dout(5) << "open discovering log bounds" << endl;
+  init_journaler();
   journaler->recover(c);
 }
 
@@ -97,12 +115,24 @@ void MDLog::write_head(Context *c)
 }
 
 
+off_t MDLog::get_read_pos() 
+{
+  return journaler->get_read_pos(); 
+}
+
+off_t MDLog::get_write_pos() 
+{
+  return journaler->get_write_pos(); 
+}
+
+
+
 void MDLog::submit_entry( LogEvent *le,
 			  Context *c ) 
 {
-  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
-  
   if (g_conf.mds_log) {
+    dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << endl;
+
     // encode it, with event type
     bufferlist bl;
     bl.append((char*)&le->_type, sizeof(le->_type));
@@ -110,6 +140,8 @@ void MDLog::submit_entry( LogEvent *le,
 
     // journal it.
     journaler->append_entry(bl);
+
+    assert(!capped);
 
     delete le;
     num_events++;
@@ -124,6 +156,14 @@ void MDLog::submit_entry( LogEvent *le,
     }
     else
       unflushed++;
+
+    // should we log a new import_map?
+    // FIXME: should this go elsewhere?
+    if (last_import_map && !writing_import_map &&
+	journaler->get_write_pos() - last_import_map >= g_conf.mds_log_import_map_interval) {
+      // log import map
+      mds->mdcache->log_import_map();
+    }
 
   } else {
     // hack: log is disabled.
@@ -196,12 +236,12 @@ void MDLog::_did_read()
 
 void MDLog::_trimmed(LogEvent *le) 
 {
-  dout(7) << "  trimmed " << *le << endl;
-  
-  assert(le->can_expire(mds));
+  dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << endl;
+  assert(le->has_expired(mds));
 
   if (trimming.begin()->first == le->_end_off) {
-    // front!  we can expire the log a bit
+    // we trimmed off the front!  
+    // we can expire the log a bit.
     journaler->set_expire_pos(le->_end_off);
   }
 
@@ -223,6 +263,8 @@ void MDLog::trim(Context *c)
     trim_waiters.push_back(c);
 
   // trim!
+  dout(10) << "trim " <<  num_events << " events / " << max_events << " max" << endl;
+
   while (num_events > max_events) {
     
     off_t gap = journaler->get_write_pos() - journaler->get_read_pos();
@@ -237,26 +279,28 @@ void MDLog::trim(Context *c)
     }
     
     bufferlist bl;
+    off_t so = journaler->get_read_pos();
     if (journaler->try_read_entry(bl)) {
       // decode logevent
       LogEvent *le = LogEvent::decode(bl);
+      le->_start_off = so;
       le->_end_off = journaler->get_read_pos();
       num_events--;
 
       // we just read an event.
-      if (le->can_expire(mds) == true) {
+      if (le->has_expired(mds)) {
         // obsolete
-        dout(7) << "trim  obsolete: " << *le << endl;
+ 	dout(7) << "trim  obsolete : " << le->get_start_off() << " : " << *le << endl;
         delete le;
         logger->inc("obs");
       } else {
         assert ((int)trimming.size() < g_conf.mds_log_max_trimming);
 
         // trim!
-        dout(7) << "trim  trimming: " << *le << endl;
+	dout(7) << "trim  expiring : " << le->get_start_off() << " : " << *le << endl;
         trimming[le->_end_off] = le;
-        le->retire(mds, new C_MDL_Trimmed(this, le));
-        logger->inc("retire");
+        le->expire(mds, new C_MDL_Trimmed(this, le));
+        logger->inc("expire");
         logger->set("trim", trimming.size());
       }
       logger->set("read", journaler->get_read_pos());
@@ -283,6 +327,17 @@ void MDLog::trim(Context *c)
   std::list<Context*> finished;
   finished.swap(trim_waiters);
   finish_contexts(finished, 0);
+
+  // hmm, are we at the end?
+  /*
+  if (journaler->get_read_pos() == journaler->get_write_pos() &&
+      trimming.size() == import_map_expire_waiters.size()) {
+    dout(5) << "trim log is empty, allowing import_map to expire" << endl;
+    list<Context*> ls;
+    ls.swap(import_map_expire_waiters);
+    finish_contexts(ls);
+  }
+  */
 }
 
 
@@ -338,13 +393,18 @@ void MDLog::_replay()
     LogEvent *le = LogEvent::decode(bl);
     num_events++;
 
-    if (le->has_happened(mds)) {
+    // have we seen an import map yet?
+    if (!seen_import_map &&
+	le->get_type() != EVENT_IMPORTMAP) {
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " : " << *le << " : already happened" << endl;
+	       << " -- waiting for import_map.  (skipping " << *le << ")" << endl;
     } else {
       dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
-	       << " : " << *le << " : applying" << endl;
+	       << " : " << *le << endl;
       le->replay(mds);
+
+      if (le->get_type() == EVENT_IMPORTMAP)
+	seen_import_map = true;
     }
     delete le;
   }

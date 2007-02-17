@@ -21,6 +21,7 @@
 
 class MMDSMap : public Message {
  public:
+  /*
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
 
@@ -42,25 +43,33 @@ class MMDSMap : public Message {
         (e == 0 || i->first > e)) e = i->first;
     return e;
   }
+  */
 
+  version_t epoch;
+  bufferlist encoded;
+
+  version_t get_epoch() const { return epoch; }
+  bufferlist& get_encoded() { return encoded; }
 
   MMDSMap() : 
     Message(MSG_MDS_MAP) {}
   MMDSMap(MDSMap *mm) :
     Message(MSG_MDS_MAP) {
-    mm->encode(maps[mm->get_epoch()]);
+    epoch = mm->get_epoch();
+    mm->encode(encoded);
   }
 
 
   // marshalling
   virtual void decode_payload() {
     int off = 0;
-    ::_decode(maps, payload, off);
-    ::_decode(incremental_maps, payload, off);
+    payload.copy(off, sizeof(epoch), (char*)&epoch);
+    off += sizeof(epoch);
+    ::_decode(encoded, payload, off);
   }
   virtual void encode_payload() {
-    ::_encode(maps, payload);
-    ::_encode(incremental_maps, payload);
+    payload.append((char*)&epoch, sizeof(epoch));
+    ::_encode(encoded, payload);
   }
 
   virtual char *get_type_name() { return "mdsmap"; }
