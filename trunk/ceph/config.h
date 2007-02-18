@@ -289,6 +289,14 @@ struct md_config_t {
   int fakeclient_op_fsync;
   int fakeclient_op_close;
 
+#ifdef USE_OSBDB
+  bool bdbstore;
+  int debug_bdbstore;
+  bool bdbstore_btree;
+  int bdbstore_ffactor;
+  int bdbstore_nelem;
+  int bdbstore_pagesize;
+#endif // USE_OSBDB
 };
 
 extern md_config_t g_conf;     

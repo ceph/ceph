@@ -299,6 +299,16 @@ md_config_t g_conf = {
   fakeclient_op_truncate:   false,
   fakeclient_op_fsync:      false,
   fakeclient_op_close:    200
+
+#ifdef USE_OSBDB
+  ,
+  bdbstore: false,
+  debug_bdbstore: 1,
+  bdbstore_btree: false,
+  bdbstore_ffactor: 0,
+  bdbstore_nelem: 0,
+  bdbstore_pagesize: 0
+#endif // USE_OSBDB
 };
 
 
@@ -771,6 +781,25 @@ void parse_config_options(std::vector<char*>& args)
       if (!g_OSD_MDLogLayout.num_rep)
         g_conf.mds_log = false;
     }
+
+#ifdef USE_OSBDB
+    else if (strcmp(args[i], "--bdbstore") == 0) {
+      g_conf.bdbstore = true;
+      g_conf.ebofs = 0;
+    }
+    else if (strcmp(args[i], "--bdbstore-btree") == 0) {
+      g_conf.bdbstore_btree = true;
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-ffactor") == 0) {
+      g_conf.bdbstore_ffactor = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-nelem") == 0) {
+      g_conf.bdbstore_nelem = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-pagesize") == 0) {
+      g_conf.bdbstore_pagesize = atoi(args[++i]);
+    }
+#endif // USE_OSBDB
 
     else {
       nargs.push_back(args[i]);

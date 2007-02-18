@@ -26,6 +26,10 @@
 
 #include "ebofs/Ebofs.h"
 
+#ifdef USE_OSBDB
+#include "osbdb/OSBDB.h"
+#endif // USE_OSBDB
+
 #include "Ager.h"
 
 
@@ -157,6 +161,11 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
     store = new OBFSStore(whoami, NULL, dev_path);
   }
 #endif
+#ifdef USE_OSBDB
+  else if (g_conf.bdbstore) {
+    store = new OSBDB(dev_path);
+  }
+#endif // USE_OSBDB
   else {
     store = new FakeStore(osd_base_path, whoami); 
   }
