@@ -296,6 +296,7 @@ struct md_config_t {
   int bdbstore_ffactor;
   int bdbstore_nelem;
   int bdbstore_pagesize;
+  int bdbstore_cachesize;
 #endif // USE_OSBDB
 };
 

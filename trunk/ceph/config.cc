@@ -307,7 +307,8 @@ md_config_t g_conf = {
   bdbstore_btree: false,
   bdbstore_ffactor: 0,
   bdbstore_nelem: 0,
-  bdbstore_pagesize: 0
+  bdbstore_pagesize: 0,
+  bdbstore_cachesize: 0
 #endif // USE_OSBDB
 };
 
@@ -798,6 +799,9 @@ void parse_config_options(std::vector<char*>& args)
     }
     else if (strcmp(args[i], "--bdbstore-hash-pagesize") == 0) {
       g_conf.bdbstore_pagesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
+      g_conf.bdbstore_cachesize = atoi(args[++i]);
     }
 #endif // USE_OSBDB
 

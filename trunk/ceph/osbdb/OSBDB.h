@@ -41,35 +41,149 @@ struct stored_superblock
   uint32_t version;
 };
 
+inline ostream& operator<<(ostream& out, const stored_superblock sb)
+{
+  out << "osbdb.super(" << sb.version << ")" << endl;
+  return out;
+}
+
 /**
- * A stored object. These are mapped by the raw 128-bit object ID, and
- * include the length of the object.
+ * An object identifier; we define this so we can have a POD object to
+ * work with.
+ */
+struct oid_t // POD
+{
+  char id[16];
+};
+
+inline void mkoid (oid_t& id, object_t& oid)
+{
+  // XXX byte order?
+  memcpy (id.id, &oid, sizeof (oid_t));
+}
+
+inline ostream& operator<<(ostream& out, const oid_t id)
+{
+  for (int i = 0; i < 16; i++)
+    {
+      out.fill('0');
+      out << setw(2) << hex << (id.id[i] & 0xFF);
+      if ((i & 3) == 3)
+        out << ':';
+    }
+  out.unsetf(ios::right);
+  out << dec;
+  return out;
+}
+
+/**
+ * An "inode" key. We map a 'stored_object' struct to this key for
+ * every object.
+ */
+struct object_inode_key // POD
+{
+  oid_t oid;
+  char tag;
+};
+
+/**
+ * "Constructor" for an object_inode_key.
+ */
+inline object_inode_key new_object_inode_key (object_t& oid)
+{
+  object_inode_key key;
+  memset(&key, 0, sizeof (object_inode_key));
+  mkoid (key.oid, oid);
+  key.tag = 'i';
+  return key;
+}
+
+/*
+ * We use this, instead of sizeof(), to try and guarantee that we
+ * don't include the structure padding, if any.
+ *
+ * This *should* return 17: sizeof (oid_t) == 16; sizeof (char) == 1.
+ */
+inline size_t sizeof_object_inode_key()
+{
+  return offsetof(object_inode_key, tag) + sizeof (char);
+}
+
+             // Frank Poole: Unfortunately, that sounds a little
+             //              like famous last words.
+             //   -- 2001: A Space Odyssey
+
+inline ostream& operator<<(ostream& out, const object_inode_key o)
+{
+  out << o.tag << "/" << o.oid;
+  return out;
+}
+
+/**
+ * A stored object. This is essentially the "inode" of the object,
+ * containing things like the object's length. The object itself is
+ * stored as-is, mapped by the 128-bit object ID.
  */
 struct stored_object
 {
   uint32_t length;
-  char data[0];    // Actually variable-length
 };
+
+inline ostream& operator<<(ostream& out, const stored_object s)
+{
+  out << "inode(l:" << s.length << ")";
+  return out;
+}
 
 /*
  * Key referencing the list of attribute names for an object. This is
  * simply the object's ID, with an additional character 'a' appended.
  */
-struct attrs_id
+struct attrs_id // POD
 {
-  attrs_id() : pad('a') { }
-
-  object_t oid;
-  const char pad;
+  oid_t oid;
+  char tag;
 };
+
+/*
+ * "Construtor" for attrs_id.
+ */
+inline struct attrs_id new_attrs_id (object_t& oid)
+{
+  attrs_id aid;
+  memset (&aid, 0, sizeof (attrs_id));
+  mkoid(aid.oid, oid);
+  aid.tag = 'a';
+  return aid;
+}
+
+/*
+ * See explanation for sizeof_object_inode_id.
+ */
+inline size_t sizeof_attrs_id()
+{
+  return offsetof(struct attrs_id, tag) + sizeof (char);
+}
+
+inline ostream& operator<<(ostream& out, const attrs_id id)
+{
+  out << id.tag << "/" << id.oid;
+  return out;
+}
 
 /*
  * Encapsulation of a single attribute name.
  */
-struct attr_name
+struct attr_name // POD
 {
   char name[OSBDB_MAX_ATTR_LEN];
 };
+
+inline ostream& operator<<(ostream& out, const attr_name n)
+{
+  out << n.name;
+  return out;
+}
 
 inline bool operator<(const attr_name n1, const attr_name n2)
 {
@@ -83,6 +197,7 @@ inline bool operator>(const attr_name n1, const attr_name n2)
 
 inline bool operator==(const attr_name n1, const attr_name n2)
 {
+  std::cerr << n1.name << " == " << n2.name << "?" << endl;
   return (strncmp (n1.name, n2.name, OSBDB_MAX_ATTR_LEN) == 0);
 }
 
@@ -110,26 +225,94 @@ struct stored_attrs
   attr_name names[0];   // actually variable-length
 };
 
+inline ostream& operator<<(ostream& out, const stored_attrs *sa)
+{
+  out << sa->count << " [ ";
+  for (unsigned i = 0; i < sa->count; i++)
+    out << sa->names[i] << (i == sa->count - 1 ? " " : ", ");
+  out << "]";
+  return out;
+}
+
 /*
  * An object attribute key. An object attribute is mapped simply by
  * the object ID appended with the attribute name. Attribute names
  * may not be empty, and must be less than 256 characters, in this
  * implementation.
  */
-struct attr_id
+struct attr_id // POD
 {
-  object_t oid;
+  oid_t oid;
   attr_name name;
 };
+
+inline attr_id new_attr_id (object_t& oid, const char *name)
+{
+  attr_id aid;
+  memset(&aid, 0, sizeof (attr_id));
+  mkoid (aid.oid, oid);
+  strncpy (aid.name.name, name, OSBDB_MAX_ATTR_LEN);
+  return aid;
+}
+
+inline ostream& operator<<(ostream &out, const attr_id id)
+{
+  out << id.oid << ":" << id.name;
+  return out;
+}
+
+/*
+ * A key for a collection attributes list.
+ */
+struct coll_attrs_id // POD
+{
+  coll_t cid;
+  char tag;
+};
+
+inline coll_attrs_id new_coll_attrs_id (coll_t cid)
+{
+  coll_attrs_id catts;
+  memset(&catts, 0, sizeof (coll_attrs_id));
+  catts.cid = cid;
+  catts.tag = 'C';
+  return catts;
+}
+
+inline size_t sizeof_coll_attrs_id()
+{
+  return offsetof(coll_attrs_id, tag) + sizeof (char);
+}
+
+inline ostream& operator<<(ostream& out, coll_attrs_id id)
+{
+  out << id.tag << "/" << id.cid;
+  return out;
+}
 
 /*
  * A collection attribute key. Similar to 
  */
-struct coll_attr_id
+struct coll_attr_id // POD
 {
   coll_t cid;
   attr_name name;
 };
+
+inline coll_attr_id new_coll_attr_id (coll_t cid, const char *name)
+{
+  coll_attr_id catt;
+  memset(&catt, 0, sizeof (coll_attr_id));
+  catt.cid = cid;
+  strncpy (catt.name.name, name, OSBDB_MAX_ATTR_LEN);
+  return catt;
+}
+
+inline ostream& operator<<(ostream& out, coll_attr_id id)
+{
+  out << id.cid << ":" << id.name;
+  return out;
+}
 
 /*
  * This is the key we store the master collections list under.
@@ -151,6 +334,19 @@ struct stored_colls
   coll_t colls[0]; // actually variable-length
 };
 
+inline ostream& operator<<(ostream& out, stored_colls *c)
+{
+  out << c->count << " [ ";
+  for (unsigned i = 0; i < c->count; i++)
+    {
+      out << hex << c->colls[i];
+      if (i < c->count - 1)
+        out << ", ";
+    }
+  out << " ]" << dec;
+  return out;
+}
+
 /*
  * A stored collection (a bag of object IDs). These are referenced by
  * the bare collection identifier type, a coll_t (thus, a 32-bit
@@ -169,41 +365,81 @@ struct stored_coll
   object_t objects[0]; // actually variable-length
 };
 
+inline ostream& operator<<(ostream& out, stored_coll *c)
+{
+  out << c->count << " [ ";
+  for (unsigned i = 0; i < c->count; i++)
+    {
+      out << c->objects[i];
+      if (i < c->count - 1)
+        out << ", ";
+    }
+  out << " ]";
+  return out;
+}
+
 /*
  * The object store interface for Berkeley DB.
  */
 class OSBDB : public ObjectStore
 {
  private:
-  //  DbEnv env;
-  Db db;
+  DbEnv *env;
+  Db *db;
   string device;
+  bool mounted;
+  bool opened;
 
  public:
 
-  OSBDB(const char *dev) : db (NULL, 0), device (dev)
+  OSBDB(const char *dev)
+    : env(0), db (0), device (dev), mounted(false), opened(false)
   {
-    if (!g_conf.bdbstore_btree)
+    /*env = new DbEnv (DB_CXX_NO_EXCEPTIONS);
+    env->set_error_stream (&std::cerr);
+    // WTF? You can't open an env if you set this flag here, but BDB
+    // says you also can't set it after you open the env.
+    //env->set_flags (DB_LOG_INMEMORY, 1);
+    char *p = strrchr (dev, '/');
+    int env_flags = (DB_CREATE | DB_THREAD | DB_INIT_LOCK
+                     | DB_INIT_MPOOL | DB_INIT_TXN | DB_INIT_LOG);
+    if (p != NULL)
       {
-        if (g_conf.bdbstore_pagesize > 0)
-          db.set_pagesize (g_conf.bdbstore_pagesize);
-        if (g_conf.bdbstore_ffactor > 0 && g_conf.bdbstore_nelem > 0)
+        *p = '\0';
+        if (env->open (dev, env_flags, 0) != 0)
           {
-            db.set_h_ffactor (g_conf.bdbstore_ffactor);
-            db.set_h_nelem (g_conf.bdbstore_nelem);
+            std::cerr << "failed to open environment: "
+                      << dev << std::endl;
+            ::abort();
+          }
+        *p = '/';
+        dev = p+1;
+      }
+    else
+      {
+        if (env->open (NULL, env_flags, 0) != 0)
+          {
+            std::cerr << "failed to open environment: ." << std::endl;
+            ::abort();
           }
       }
-    if (db.open (NULL, dev, "OSD", (g_conf.bdbstore_btree ? DB_BTREE : DB_HASH),
-                 DB_CREATE, 0) != 0)
-      {
-        std::cerr << "failed to open database" << std::endl;
-        ::abort();
-      }
+
+    // Double WTF: if you remove the DB_LOG_INMEMORY bit, db->open
+    // fails, inexplicably, with EINVAL!*/
+    //    env->set_flags (DB_DIRECT_DB | /*DB_AUTO_COMMIT |*/ DB_LOG_INMEMORY, 1);
   }
 
   ~OSBDB()
   {
-    db.close (0);
+    if (mounted)
+      {
+        umount();
+      }
+    if (env != NULL)
+      {
+        env->close (0);
+        delete env;
+      }
   }
 
   int mount();
@@ -230,9 +466,14 @@ class OSBDB : public ObjectStore
               const void *value, size_t size, Context *onsafe=0);
   int setattrs(object_t oid, map<string,bufferptr>& aset,
                Context *onsafe=0);
-  int clone(object_t oid, object_t noid);
-
+  int getattr(object_t oid, const char *name,
+              void *value, size_t size);
+  int getattrs(object_t oid, map<string,bufferptr>& aset);
+  int rmattr(object_t oid, const char *name,
+             Context *onsafe=0);
   int listattr(object_t oid, char *attrs, size_t size);
+
+  int clone(object_t oid, object_t noid);
   
   // Collections.
   
@@ -258,6 +499,9 @@ class OSBDB : public ObjectStore
   void sync();
 
 private:
+  int opendb (DBTYPE type=DB_UNKNOWN, int flags=0);
+
   int _setattr(object_t oid, const char *name, const void *value,
                size_t size, Context *onsync);
+  int _getattr(object_t oid, const char *name, void *value, size_t size);
 };
