@@ -76,7 +76,7 @@ void FileCache::check_caps()
   // check callbacks
   map<int, list<Context*> >::iterator p = caps_callbacks.begin();
   while (p != caps_callbacks.end()) {
-    if (used == 0 || (~(p->first) & used)) {
+    if (used == 0 || (~(p->first) & used) == 0) {
       // implemented.
       dout(10) << "used is " << cap_string(used) 
                << ", caps " << cap_string(p->first) << " implemented, doing callback(s)" << endl;

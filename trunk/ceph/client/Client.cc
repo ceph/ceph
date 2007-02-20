@@ -949,6 +949,7 @@ void Client::release_caps(Inode *in,
   dout(5) << "releasing caps on ino " << in->inode.ino << dec
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
+	  << " want " << cap_string(in->file_caps_wanted())
           << endl;
   
   for (map<int,InodeCap>::iterator it = in->caps.begin();
@@ -2119,13 +2120,15 @@ int Client::open(const char *relpath, int flags)
 void Client::close_release(Inode *in)
 {
   dout(10) << "close_release on " << in->ino() << endl;
+  dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << endl;
 
   if (!in->num_open_rd) 
     in->fc.release_clean();
 
   int retain = 0;
-  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
-  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
+  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_WREXTEND;
+  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_RD | CAP_FILE_RDCACHE;
 
   release_caps(in, retain);              // release caps now.
 }
