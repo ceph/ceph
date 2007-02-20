@@ -252,6 +252,20 @@ IMPLEMENT
 
 ==== MDS RECOVERY ====
 
+doc todo
+- mdsmonitor beacon semantics
+- cache expiration, cache invariants
+- recovery states, implicit barrier are rejoin
+- journal content
+ - importmaps and up:resolve
+- metablob version semantics
+ 
+
+
+
+- bystander dir_auth(_pending) recovery from exporter failure
+
+
 - how to reliably deliver cache expire messages?
   - how should proxy behave?
   - exporter failure
@@ -306,6 +320,8 @@ blech:
   higher versions (and are thus described by a newer journal entry)
 
 mds
+- fix ctime locking semantics.  i am dumb.
+
 - mds falure vs clients
   - clean up client op redirection
   - idempotent ops

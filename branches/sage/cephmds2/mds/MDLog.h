@@ -18,6 +18,9 @@
 #include "include/types.h"
 #include "include/Context.h"
 
+#include "common/Thread.h"
+#include "common/Cond.h"
+
 #include <list>
 
 //#include <ext/hash_map>
@@ -53,6 +56,9 @@ class MDLog {
   inode_t log_inode;
   Journaler *journaler;
 
+  Logger *logger;
+
+  // -- trimming --
   map<off_t,LogEvent*> trimming;
   std::list<Context*>  trim_waiters;   // contexts waiting for trim
   bool                 trim_reading;
@@ -60,11 +66,32 @@ class MDLog {
   bool waiting_for_read;
   friend class C_MDL_Reading;
 
-  Logger *logger;
-  
+
+
+  // -- replay --
+  Cond replay_cond;
+
+  class ReplayThread : public Thread {
+    MDLog *log;
+  public:
+    ReplayThread(MDLog *l) : log(l) {}
+    void* entry() {
+      log->_replay_thread();
+      return 0;
+    }
+  } replay_thread;
+
+  friend class ReplayThread;
+  friend class C_MDL_Replay;
+
   list<Context*> waitfor_replay;
 
-  // importmaps
+  void _replay();         // old way
+  void _replay_thread();  // new way
+
+
+
+  // -- importmaps --
   off_t  last_import_map;   // offsets of last committed importmap.  constrains trimming.
   list<Context*> import_map_expire_waiters;
   bool writing_import_map;  // one is being written now
@@ -84,7 +111,17 @@ class MDLog {
 
 
  public:
-  MDLog(MDS *m);
+  MDLog(MDS *m) : mds(m),
+		  num_events(0), max_events(g_conf.mds_log_max_len),
+		  unflushed(0),
+		  capped(false),
+		  journaler(0),
+		  logger(0),
+		  trim_reading(false), waiting_for_read(false),
+		  replay_thread(this),
+		  last_import_map(0),
+		  writing_import_map(false), seen_import_map(false) {
+  }		  
   ~MDLog();
 
  
@@ -121,7 +158,6 @@ class MDLog {
   void write_head(Context *onfinish);
 
   void replay(Context *onfinish);
-  void _replay();
 };
 
 #endif

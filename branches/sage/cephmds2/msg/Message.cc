@@ -65,7 +65,9 @@ using namespace std;
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
 #include "messages/MExportDirWarning.h"
+#include "messages/MExportDirWarningAck.h"
 #include "messages/MExportDir.h"
+#include "messages/MExportDirAck.h"
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
@@ -282,11 +284,13 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
   case MSG_MDS_EXPORTDIR:
-    m = new MExportDir();
+    m = new MExportDir;
     break;
-
+  case MSG_MDS_EXPORTDIRACK:
+    m = new MExportDirAck;
+    break;
   case MSG_MDS_EXPORTDIRFINISH:
-    m = new MExportDirFinish();
+    m = new MExportDirFinish;
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFY:
@@ -306,7 +310,10 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 
   case MSG_MDS_EXPORTDIRWARNING:
-    m = new MExportDirWarning();
+    m = new MExportDirWarning;
+    break;
+  case MSG_MDS_EXPORTDIRWARNINGACK:
+    m = new MExportDirWarningAck;
     break;
 
 

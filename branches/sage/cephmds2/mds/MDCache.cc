@@ -521,7 +521,7 @@ void MDCache::finish_ambiguous_import(inodeno_t dirino)
       // not me anymore.  now an export.
       exports.insert(bd);
       nested_exports[im].insert(bd);
-      assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
+      //hrm. assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
       bd->set_dir_auth( CDIR_AUTH_UNKNOWN );
       bd->state_set(CDIR_STATE_EXPORT);
       bd->get(CDir::PIN_EXPORT);
@@ -1030,26 +1030,114 @@ bool MDCache::trim(int max)
 
   map<int, MCacheExpire*> expiremap;
 
+
+  // DENTRIES from the LRU
+
   while (lru.lru_get_size() > (unsigned)max) {
     CDentry *dn = (CDentry*)lru.lru_expire();
     if (!dn) break;
     
     CDir *dir = dn->get_dir();
     assert(dir);
+
+    CDir *con = get_realm_root(dir);
+    assert(con);
+
+    dout(12) << "trim removing " << *dn << endl;
+    dout(12) << " in container " << *con << endl;
     
     // notify dentry authority?
+    int auth2 = CDIR_AUTH_UNKNOWN;
+    int auth = CDIR_AUTH_UNKNOWN;
     if (!dn->is_auth()) {
-      int auth = dn->authority();
-      dout(17) << "sending expire to mds" << auth << " on " << *dn << endl;
+      auth = dn->authority(&auth2);
+
+      dout(12) << "  sending expire to mds" << auth << " on " << *dn << endl;
+      assert(auth != mds->get_nodeid());
       if (expiremap.count(auth) == 0) 
 	expiremap[auth] = new MCacheExpire(mds->get_nodeid());
-      expiremap[auth]->add_dentry(dir->ino(), dn->get_name(), dn->get_replica_nonce());
+      expiremap[auth]->add_dentry(con->ino(), dir->ino(), dn->get_name(), dn->get_replica_nonce());
+
+      if (auth2 >= 0 && auth2 != mds->get_nodeid()) {
+	dout(12) << "  sending expire2 to mds" << auth2 << " on " << *dn << endl;
+	if (expiremap.count(auth2) == 0) 
+	  expiremap[auth2] = new MCacheExpire(mds->get_nodeid());
+	expiremap[auth2]->add_dentry(con->ino(), dir->ino(), dn->get_name(), dn->get_replica_nonce());
+      }
     }
     
     // unlink the dentry
-    dout(15) << "trim removing " << *dn << endl;
-    if (!dn->is_null()) 
+    if (dn->is_remote()) {
+      // just unlink.
       dir->unlink_inode(dn);
+    } 
+    else if (dn->is_primary()) {
+      // expire the inode, too.
+      CInode *in = dn->get_inode();
+      assert(in);
+      assert(in->get_num_ref() == 0);
+      
+      // DIR
+      if (in->dir) {
+	if (!in->dir->is_auth()) {
+	  int dirauth2;
+	  int dirauth = in->dir->authority(&dirauth2);
+
+	  assert(dirauth2 < 100);   // hack die bug die
+
+	  // was this an auth delegation?  (if so, slightly modified container)
+	  CDir *dcon = con;
+	  if (in->dir->dir_auth >= 0 ||
+	      in->dir->dir_auth_pending >= 0) {
+	    dout(12) << "  for just this dir, the container is " << *dcon << endl;
+	    dcon = in->dir;
+	  }
+	  
+	  dout(12) << "  sending expire to mds" << dirauth << " on   " << *in->dir << endl;
+	  assert(dirauth != mds->get_nodeid());
+	  if (expiremap.count(dirauth) == 0) 
+	    expiremap[dirauth] = new MCacheExpire(mds->get_nodeid());
+	  expiremap[dirauth]->add_dir(dcon->ino(), in->ino(), in->dir->replica_nonce);
+	  
+	  if (dirauth2 >= 0 && dirauth2 != mds->get_nodeid()) {
+	    dout(12) << "  sending expire2 to mds" << dirauth2 << " on   " << *in->dir << endl;
+	    if (expiremap.count(dirauth2) == 0) 
+	      expiremap[dirauth2] = new MCacheExpire(mds->get_nodeid());
+	    expiremap[dirauth2]->add_dir(dcon->ino(), in->ino(), in->dir->replica_nonce);
+	  }
+	}
+	
+	in->close_dir();
+      }
+      
+      // INODE
+      if (!in->is_auth()) {
+	assert(auth >= 0);
+
+	dout(12) << "  sending expire to mds" << auth << " on " << *in << endl;
+	assert(auth != mds->get_nodeid());
+	if (expiremap.count(auth) == 0) 
+	  expiremap[auth] = new MCacheExpire(mds->get_nodeid());
+	expiremap[auth]->add_inode(con->ino(), in->ino(), in->get_replica_nonce());
+	
+	if (auth2 >= 0 && auth2 != mds->get_nodeid()) {
+	  dout(12) << "  sending expire2 to mds" << auth2 << " on " << *in << endl;
+	  if (expiremap.count(auth2) == 0) 
+	    expiremap[auth2] = new MCacheExpire(mds->get_nodeid());
+	  expiremap[auth2]->add_inode(con->ino(), in->ino(), in->get_replica_nonce());
+	}
+      }
+
+      dout(15) << "  trim removing " << *in << endl;
+      if (in == root) root = 0;
+      
+      // unlink
+      dir->unlink_inode(dn);
+      remove_inode(in);
+    } 
+    else {
+      assert(dn->is_null());
+    }
     dir->remove_dentry(dn);
 
     // adjust the dir state
@@ -1063,49 +1151,6 @@ bool MDCache::trim(int max)
       migrator->export_empty_import(diri->dir);
     
     if (mds->logger) mds->logger->inc("cex");
-  }
-
-  // inode expire_queue
-  while (!inode_expire_queue.empty()) {
-    CInode *in = inode_expire_queue.front();
-    inode_expire_queue.pop_front();
-
-    assert(in->get_num_ref() == 0);
-    
-    int dirauth = -2;
-    if (in->dir) {
-      // notify dir authority?
-      dirauth = in->dir->authority();
-      if (dirauth != mds->get_nodeid()) {
-	dout(17) << "sending expire to mds" << dirauth << " on   " << *in->dir << endl;
-	if (expiremap.count(dirauth) == 0) 
-	  expiremap[dirauth] = new MCacheExpire(mds->get_nodeid());
-	expiremap[dirauth]->add_dir(in->ino(), in->dir->replica_nonce);
-      }
-
-      in->close_dir();
-    }
-  
-    // notify inode authority
-    int auth = in->authority();
-    if (auth == CDIR_AUTH_UNKNOWN) {
-      assert(in->ino() == 1);
-      assert(dirauth >= 0);
-      auth = dirauth;
-    }
-    if (auth != mds->get_nodeid()) {
-      assert(!in->is_auth());
-      dout(17) << "sending expire to mds" << auth << " on " << *in << endl;
-      if (expiremap.count(auth) == 0) 
-	expiremap[auth] = new MCacheExpire(mds->get_nodeid());
-      expiremap[auth]->add_inode(in->ino(), in->get_replica_nonce());
-    } else {
-      assert(in->is_auth());
-    }
-
-    dout(15) << "trim removing " << *in << endl;
-    if (in == root) root = 0;
-    remove_inode(in);
   }
 
   // send expires
@@ -1125,6 +1170,8 @@ void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << endl;
   
+  // note first auth item we see.  
+  // when we see it the second time, stop.
   CDentry *first_auth = 0;
   
   // trim non-auth items from the lru
@@ -2310,7 +2357,6 @@ void MDCache::handle_inode_link(MInodeLink *m)
   assert(in);
 
   if (!in->is_auth()) {
-    assert(in->is_proxy());
     dout(7) << "handle_inode_link not auth for " << *in << ", fw to auth" << endl;
     mds->send_message_mds(m, in->authority(), MDS_PORT_CACHE);
     return;
@@ -2805,163 +2851,154 @@ void MDCache::handle_inode_update(MInodeUpdate *m)
 void MDCache::handle_cache_expire(MCacheExpire *m)
 {
   int from = m->get_from();
-  int source = m->get_source().num();
-  map<int, MCacheExpire*> proxymap;
   
-  if (m->get_from() == source) {
-    dout(7) << "cache_expire from mds" << from << endl;
-  } else {
-    dout(7) << "cache_expire from mds" << from << " via " << source << endl;
-  }
+  dout(7) << "cache_expire from mds" << from << endl;
 
-  // inodes
-  for (map<inodeno_t,int>::iterator it = m->get_inodes().begin();
-       it != m->get_inodes().end();
-       it++) {
-    CInode *in = get_inode(it->first);
-    int nonce = it->second;
-    
-    if (!in) {
-      dout(0) << "inode expire on " << it->first << " from " << from << ", don't have it" << endl;
-      assert(in);  // i should be authority, or proxy .. and pinned
-    }  
-    if (!in->is_auth()) {
-      int newauth = in->authority();
-      dout(7) << "proxy inode expire on " << *in << " to " << newauth << endl;
-      assert(newauth >= 0);
-      if (!in->state_test(CInode::STATE_PROXY)) dout(0) << "missing proxy bit on " << *in << endl;
-      assert(in->state_test(CInode::STATE_PROXY));
-      if (proxymap.count(newauth) == 0) proxymap[newauth] = new MCacheExpire(from);
-      proxymap[newauth]->add_inode(it->first, it->second);
+  // loop over realms
+  for (map<inodeno_t,MCacheExpire::realm>::iterator p = m->realms.begin();
+       p != m->realms.end();
+       ++p) {
+    // get container
+    CInode *coni = get_inode(p->first);
+    CDir *con = coni ? coni->dir : 0;
+
+    assert(con);  // we had better have this.
+
+    if (!con->is_auth()) {
+      // not auth.
+      dout(7) << "delaying nonauth expires for " << *con << endl;
+      assert(con->is_frozen_tree_root());
+
+      // make a message container
+      if (delayed_expire[con].count(from) == 0) 
+	delayed_expire[con][from] = new MCacheExpire(from);
+
+      // merge these expires into it
+      delayed_expire[con][from]->add_realm(p->first, p->second);
       continue;
     }
-    
-    // check nonce
-    if (from == mds->get_nodeid()) {
-      // my cache_expire, and the export_dir giving auth back to me crossed paths!  
-      // we can ignore this.  no danger of confusion since the two parties are both me.
-      dout(7) << "inode expire on " << *in << " from mds" << from << " .. ME!  ignoring." << endl;
-    } 
-    else if (nonce == in->get_replica_nonce(from)) {
-      // remove from our cached_by
-      dout(7) << "inode expire on " << *in << " from mds" << from << " cached_by was " << in->get_replicas() << endl;
-      inode_remove_replica(in, from);
+    dout(7) << "expires for " << *con << endl;
 
-    } 
-    else {
-      // this is an old nonce, ignore expire.
-      dout(7) << "inode expire on " << *in << " from mds" << from
-	      << " with old nonce " << nonce << " (current " << in->get_replica_nonce(from) << "), dropping" 
-	      << endl;
-      assert(in->get_replica_nonce(from) > nonce);
-    }
-  }
-
-  // dirs
-  for (map<inodeno_t,int>::iterator it = m->get_dirs().begin();
-       it != m->get_dirs().end();
-       it++) {
-    CInode *diri = get_inode(it->first);
-    assert(diri);
-    CDir *dir = diri->dir;
-    int nonce = it->second;
-    
-    if (!dir) {
-      dout(0) << "dir expire on " << it->first << " from " << from << ", don't have it" << endl;
-      assert(dir);  // i should be authority, or proxy ... and pinned
-    }  
-    if (!dir->is_auth()) {
-      int newauth = dir->authority();
-      dout(7) << "proxy dir expire on " << *dir << " to " << newauth << endl;
-      if (!dir->is_proxy()) dout(0) << "nonproxy dir expire? " << *dir << " .. auth is " << newauth << " .. expire is from " << from << endl;
-      assert(dir->is_proxy());
-      assert(newauth >= 0);
-      assert(dir->state_test(CDIR_STATE_PROXY));
-      if (proxymap.count(newauth) == 0) proxymap[newauth] = new MCacheExpire(from);
-      proxymap[newauth]->add_dir(it->first, it->second);
-      continue;
-    }
-    
-    // check nonce
-    if (from == mds->get_nodeid()) {
-      dout(7) << "dir expire on " << *dir << " from mds" << from
-	      << " .. ME!  ignoring" << endl;
-    } 
-    else if (nonce == dir->get_replica_nonce(from)) {
-      // remove from our cached_by
-      dout(7) << "dir expire on " << *dir << " from mds" << from
-	      << " replicas was " << dir->replicas << endl;
-      dir->remove_replica(from);
-    } 
-    else {
-      // this is an old nonce, ignore expire.
-      dout(7) << "dir expire on " << *dir << " from mds" << from 
-	      << " with old nonce " << nonce << " (current " << dir->get_replica_nonce(from)
-	      << "), dropping" << endl;
-      assert(dir->get_replica_nonce(from) > nonce);
-    }
-  }
-
-  // dentries
-  for (map<inodeno_t, map<string,int> >::iterator pd = m->get_dentries().begin();
-       pd != m->get_dentries().end();
-       ++pd) {
-    dout(0) << "dn expires in dir " << pd->first << endl;
-    CInode *diri = get_inode(pd->first);
-    CDir *dir = diri->dir;
-    assert(dir);
-
-    if (!dir->is_auth()) {
-      int newauth = dir->authority();
-      dout(7) << "proxy dentry expires on " << *dir << " to " << newauth << endl;
-      if (!dir->is_proxy()) 
-	dout(0) << "nonproxy dentry expires? " << *dir << " .. auth is " << newauth
-		<< " .. expire is from " << from << endl;
-      assert(dir->is_proxy());
-      assert(newauth >= 0);
-      assert(dir->state_test(CDIR_STATE_PROXY));
-      if (proxymap.count(newauth) == 0) proxymap[newauth] = new MCacheExpire(from);
-      proxymap[newauth]->add_dentries(pd->first, pd->second);
-      continue;
-    }
-
-    for (map<string,int>::iterator p = pd->second.begin();
-	 p != pd->second.end();
-	 ++p) {
-      int nonce = p->second;
-
-      CDentry *dn = dir->lookup(p->first);
-      if (!dn) 
-	dout(0) << "missing dentry for " << p->first << " in " << *dir << endl;
-      assert(dn);
+    // INODES
+    for (map<inodeno_t,int>::iterator it = p->second.inodes.begin();
+	 it != p->second.inodes.end();
+	 it++) {
+      CInode *in = get_inode(it->first);
+      int nonce = it->second;
       
-      if (from == mds->get_nodeid()) {
-	dout(7) << "dentry_expire on " << *dn << " from mds" << from 
-		<< " .. ME! ignoring" << endl;
-      } 
-      else if (nonce == dn->get_replica_nonce(from)) {
-	dout(7) << "dentry_expire on " << *dn << " from mds" << from << endl;
-	dn->remove_replica(from);
+      if (!in) {
+	dout(0) << " inode expire on " << it->first << " from " << from << ", don't have it" << endl;
+	assert(in);
+      }        
+      assert(in->is_auth());
+      
+      // check nonce
+      if (nonce == in->get_replica_nonce(from)) {
+	// remove from our cached_by
+	dout(7) << " inode expire on " << *in << " from mds" << from << " cached_by was " << in->get_replicas() << endl;
+	inode_remove_replica(in, from);
       } 
       else {
-	dout(7) << "dentry_expire on " << *dn << " from mds" << from
-		<< " with old nonce " << nonce << " (current " << dn->get_replica_nonce(from)
+	// this is an old nonce, ignore expire.
+	dout(7) << " inode expire on " << *in << " from mds" << from
+		<< " with old nonce " << nonce << " (current " << in->get_replica_nonce(from) << "), dropping" 
+		<< endl;
+	assert(in->get_replica_nonce(from) > nonce);
+      }
+    }
+    
+    // DIRS
+    for (map<inodeno_t,int>::iterator it = p->second.dirs.begin();
+	 it != p->second.dirs.end();
+	 it++) {
+      CInode *diri = get_inode(it->first);
+      assert(diri);
+      CDir *dir = diri->dir;
+      int nonce = it->second;
+      
+      if (!dir) {
+	dout(0) << " dir expire on " << it->first << " from " << from << ", don't have it" << endl;
+	assert(dir);
+      }  
+      assert(dir->is_auth());
+      
+      // check nonce
+      if (nonce == dir->get_replica_nonce(from)) {
+	// remove from our cached_by
+	dout(7) << " dir expire on " << *dir << " from mds" << from
+		<< " replicas was " << dir->replicas << endl;
+	dir->remove_replica(from);
+      } 
+      else {
+	// this is an old nonce, ignore expire.
+	dout(7) << " dir expire on " << *dir << " from mds" << from 
+		<< " with old nonce " << nonce << " (current " << dir->get_replica_nonce(from)
 		<< "), dropping" << endl;
-	assert(dn->get_replica_nonce(from) > nonce);
+	assert(dir->get_replica_nonce(from) > nonce);
+      }
+    }
+    
+    // DENTRIES
+    for (map<inodeno_t, map<string,int> >::iterator pd = p->second.dentries.begin();
+	 pd != p->second.dentries.end();
+	 ++pd) {
+      dout(0) << " dn expires in dir " << pd->first << endl;
+      CInode *diri = get_inode(pd->first);
+      CDir *dir = diri ? diri->dir : 0;
+      
+      if (!dir) {
+	dout(0) << " dn expires on " << pd->first << " from " << from << ", don't have it" << endl;
+	assert(dir);
+      } 
+      assert(dir->is_auth());
+      
+      for (map<string,int>::iterator p = pd->second.begin();
+	   p != pd->second.end();
+	   ++p) {
+	int nonce = p->second;
+	
+	CDentry *dn = dir->lookup(p->first);
+	if (!dn) 
+	  dout(0) << "  missing dentry for " << p->first << " in " << *dir << endl;
+	assert(dn);
+	
+	if (nonce == dn->get_replica_nonce(from)) {
+	  dout(7) << "  dentry_expire on " << *dn << " from mds" << from << endl;
+	  dn->remove_replica(from);
+	} 
+	else {
+	  dout(7) << "  dentry_expire on " << *dn << " from mds" << from
+		  << " with old nonce " << nonce << " (current " << dn->get_replica_nonce(from)
+		  << "), dropping" << endl;
+	  assert(dn->get_replica_nonce(from) > nonce);
+	}
       }
     }
   }
 
-  // send proxy forwards
-  for (map<int, MCacheExpire*>::iterator it = proxymap.begin();
-       it != proxymap.end();
-       it++) {
-    dout(7) << "sending proxy forward to " << it->first << endl;
-    mds->send_message_mds(it->second, it->first, MDS_PORT_CACHE);
-  }
 
   // done
   delete m;
+}
+
+void MDCache::process_delayed_expire(CDir *dir)
+{
+  dout(7) << "process_delayed_expire on " << *dir << endl;
+  for (map<int,MCacheExpire*>::iterator p = delayed_expire[dir].begin();
+       p != delayed_expire[dir].end();
+       ++p) 
+    handle_cache_expire(p->second);
+  delayed_expire.erase(dir);  
+}
+
+void MDCache::discard_delayed_expire(CDir *dir)
+{
+  dout(7) << "discard_delayed_expire on " << *dir << endl;
+  for (map<int,MCacheExpire*>::iterator p = delayed_expire[dir].begin();
+       p != delayed_expire[dir].end();
+       ++p) 
+    delete p->second;
+  delayed_expire.erase(dir);  
 }
 
 void MDCache::inode_remove_replica(CInode *in, int from)
@@ -3364,6 +3401,19 @@ CDir *MDCache::get_auth_container(CDir *dir)
   }
 
   return imp;
+}
+
+CDir *MDCache::get_realm_root(CDir *dir)
+{
+  // find the underlying dir that delegates (or is about to delegate) auth
+  while (true) {
+    if (dir->get_dir_auth() >= 0 ||
+	dir->get_dir_auth_pending() >= 0)
+      return dir;
+    dir = dir->get_parent_dir();
+    if (!dir) 
+      return 0;             // none
+  }
 }
 
 CDir *MDCache::get_export_container(CDir *dir)

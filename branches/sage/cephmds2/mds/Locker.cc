@@ -1782,6 +1782,9 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
   
   // mine!
   dn->xlockedby = m;
+  
+  // pin me!
+  dn->get(CDentry::PIN_XLOCK);
 
   if (dn->is_replicated()) {
     dn->lockstate = DN_LOCK_PREXLOCK;
@@ -1835,6 +1838,9 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
 
   dn->xlockedby = 0;
   dn->lockstate = DN_LOCK_SYNC;
+
+  // unpin
+  dn->put(CDentry::PIN_XLOCK);
 
   // unpin parent dir?
   // -> no?  because we might have xlocked 2 things in this dir.
@@ -2213,7 +2219,6 @@ void Locker::handle_lock_dn(MLock *m)
   case LOCK_AC_UNXLOCK:
     dout(7) << "handle_lock_dn unxlock on " << *dn << endl;
     {
-      string dname = dn->name;
       Message *m = dn->xlockedby;
 
       // finish request

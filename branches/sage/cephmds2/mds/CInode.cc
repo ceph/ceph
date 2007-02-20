@@ -86,7 +86,7 @@ CInode::CInode(MDCache *c, bool auth) {
 
   ref = 0;
   
-  num_parents = 0;
+  //num_parents = 0;
   parent = NULL;
   
   dir = NULL;     // CDir opened separately
@@ -120,10 +120,11 @@ void CInode::last_put()
   if (parent) {
     parent->put(CDentry::PIN_INODEPIN);
   } 
-  if (num_parents == 0 && get_num_ref() == 0)
-    mdcache->inode_expire_queue.push_back(this);  // queue myself for garbage collection
+  //if (num_parents == 0 && get_num_ref() == 0)
+  //mdcache->inode_expire_queue.push_back(this);  // queue myself for garbage collection
 }
 
+/*
 void CInode::get_parent()
 {
   num_parents++;
@@ -134,6 +135,21 @@ void CInode::put_parent()
   if (num_parents == 0 && get_num_ref() == 0)
     mdcache->inode_expire_queue.push_back(this);    // queue myself for garbage collection
 }
+*/
+
+void CInode::add_remote_parent(CDentry *p) 
+{
+  if (remote_parents.empty())
+    get(PIN_REMOTEPARENT);
+  remote_parents.insert(p);
+}
+void CInode::remove_remote_parent(CDentry *p) 
+{
+  remote_parents.erase(p);
+  if (remote_parents.empty())
+    put(PIN_REMOTEPARENT);
+}
+
 
 
 
@@ -461,23 +477,27 @@ void CInode::auth_unpin() {
 
 // authority
 
-int CInode::authority() {
-  if (is_dangling()) 
+int CInode::authority(int *a2) {
+  if (is_dangling()) {
+    if (a2) *a2 = dangling_auth2;
     return dangling_auth;      // explicit
+  }
 
   if (is_root()) {             // i am root
     if (dir)
-      return dir->get_dir_auth();  // bit of a chicken/egg issue here!
-    else
+      return dir->get_dir_auth(a2);  // bit of a chicken/egg issue here!
+    else {
+      if (a2) *a2 = CDIR_AUTH_UNKNOWN;
       return CDIR_AUTH_UNKNOWN;
+    }
   }
 
   if (parent)
-    return parent->dir->dentry_authority( parent->name );
+    return parent->dir->dentry_authority( parent->name, a2 );
 
+  if (a2) *a2 = CDIR_AUTH_UNKNOWN;
   return -1;  // undefined (inode must not be linked yet!)
 }
-
 
 CInodeDiscover* CInode::replicate_to( int rep )
 {

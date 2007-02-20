@@ -40,6 +40,8 @@
 Rank rank;
 
 
+sighandler_t old_sigint_handler;
+
 
 /********************************************
  * Accepter
@@ -48,14 +50,23 @@ Rank rank;
 void simplemessenger_sigint(int r)
 {
   rank.sigint();
+  old_sigint_handler(r);
 }
 
 void Rank::sigint()
 {
   lock.Lock();
   derr(0) << "got control-c, exiting" << endl;
+  
+  // force close listener socket
   ::close(accepter.listen_sd);
-  exit(-1);
+
+  // force close all pipe sockets, too
+  for (hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.begin();
+       p != rank_pipe.end();
+       ++p) 
+    p->second->force_close();
+
   lock.Unlock();
 }
 
@@ -123,7 +134,7 @@ int Rank::Accepter::start()
   dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
 
   // set up signal handler
-  signal(SIGINT, simplemessenger_sigint);
+  old_sigint_handler = signal(SIGINT, simplemessenger_sigint);
 
   // start thread
   create();
@@ -245,6 +256,10 @@ int Rank::Pipe::connect()
   // identify peer ..... FIXME
   entity_addr_t paddr;
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
+  if (!rc) { // bool
+    dout(10) << "pipe(" << peer_addr << ' ' << this << ").connect couldn't read peer addr" << endl;
+    return -1;
+  }
   if (peer_addr != paddr) {
     derr(0) << "pipe(" << peer_addr << ' ' << this << ").connect peer is " << paddr << ", wtf" << endl;
     assert(0);

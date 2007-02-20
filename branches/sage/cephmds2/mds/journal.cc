@@ -384,18 +384,21 @@ void EImportMap::expire(MDS *mds, Context *c)
 
 void EImportMap::replay(MDS *mds) 
 {
-  dout(10) << "EImportMap.replay -- reconstructing import/export spanning tree" << endl;
-  assert(mds->mdcache->imports.empty());
+  if (!mds->mdcache->imports.empty()) {
+    dout(10) << "EImportMap.replay -- ignoring, already have import map" << endl;
+  } else {
+    dout(10) << "EImportMap.replay -- reconstructing import/export spanning tree" << endl;
 
-  // first, stick the spanning tree in my cache
-  metablob.replay(mds);
-
-  // restore import/export maps
-  for (set<inodeno_t>::iterator p = imports.begin();
-       p != imports.end();
-       ++p) {
-    mds->mdcache->add_ambiguous_import(*p, nested_exports[*p]);
-    mds->mdcache->finish_ambiguous_import(*p);
+    // first, stick the spanning tree in my cache
+    metablob.replay(mds);
+    
+    // restore import/export maps
+    for (set<inodeno_t>::iterator p = imports.begin();
+	 p != imports.end();
+	 ++p) {
+      mds->mdcache->add_ambiguous_import(*p, nested_exports[*p]);
+      mds->mdcache->finish_ambiguous_import(*p);
+    }
   }
   
   mds->mdcache->show_imports();

@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRDISCOVERACK_H
 #define __MEXPORTDIRDISCOVERACK_H
 
@@ -36,16 +35,17 @@ class MExportDirDiscoverAck : public Message {
   virtual char *get_type_name() { return "ExDisA"; }
 
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(ino), (char*)&ino);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
-    s.copy(off, sizeof(success), (char*)&success);
+    payload.copy(off, sizeof(success), (char*)&success);
     off += sizeof(success);
   }
 
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
-    s.append((char*)&success, sizeof(success));
+  virtual void encode_payload() {
+    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&success, sizeof(success));
   }
 };
 

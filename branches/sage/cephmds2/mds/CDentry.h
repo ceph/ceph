@@ -51,15 +51,19 @@ class CDentry : public MDSCacheObject, public LRUObject {
   static const int PIN_REPLICATED = 1; // replicated by another MDS
   static const int PIN_DIRTY = 2;      //
   static const int PIN_PROXY = 3;      //
+  static const int PIN_XLOCK = 4;
   static const char *pin_name(int p) {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_REPLICATED: return "replicated";
     case PIN_DIRTY: return "dirty";
     case PIN_PROXY: return "proxy";
+    case PIN_XLOCK: return "xlock";
     default: assert(0);
     }
   };
+
+  static const int EXPORT_NONCE = 1;
 
 
  protected:
@@ -172,7 +176,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t get_projected_version() { return projected_version; }
   void set_projected_version(version_t v) { projected_version = v; }
   
-  int authority();
+  int authority(int *a2=0);
 
   bool is_auth() { return state & STATE_AUTH; }
   bool is_dirty() { return state & STATE_DIRTY; }
@@ -187,6 +191,43 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // -- replication
   CDentryDiscover *replicate_to(int rep);
 
+
+  // -- exporting
+  // note: this assumes the dentry already exists.  
+  // i.e., the name is already extracted... so we just need the other state.
+  void encode_export_state(bufferlist& bl) {
+    bl.append((char*)&version, sizeof(version));
+    bl.append((char*)&projected_version, sizeof(projected_version));
+    bl.append((char*)&lockstate, sizeof(lockstate));
+    ::_encode(gather_set, bl);
+    ::_encode(replicas, bl);
+
+    // twiddle
+    clear_replicas();
+    replica_nonce = EXPORT_NONCE;
+    state_clear(CDentry::STATE_AUTH);
+    if (is_dirty())
+      mark_clean();
+  }
+  void decode_import_state(bufferlist& bl, int& off, int from, int to) {
+    bl.copy(off, sizeof(version), (char*)&version);
+    off += sizeof(version);
+    bl.copy(off, sizeof(projected_version), (char*)&projected_version);
+    off += sizeof(projected_version);
+    bl.copy(off, sizeof(lockstate), (char*)&lockstate);
+    off += sizeof(lockstate);
+    ::_decode(gather_set, bl, off);
+    ::_decode(replicas, bl, off);
+
+    // twiddle
+    if (state_test(STATE_DIRTY))
+      _mark_dirty();
+    if (!replicas.empty())
+      get(PIN_REPLICATED);
+    add_replica(from, EXPORT_NONCE);
+    if (is_replica(to))
+      remove_replica(to);
+  }
 
   // -- locking
   int get_lockstate() { return lockstate; }
@@ -283,6 +324,7 @@ public:
   }
 
 };
+
 
 
 #endif

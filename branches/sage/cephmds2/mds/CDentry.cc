@@ -84,9 +84,9 @@ inodeno_t CDentry::get_ino()
 }
 
 
-int CDentry::authority()
+int CDentry::authority(int *a2)
 {
-  return dir->dentry_authority( name );
+  return dir->dentry_authority(name, a2);
 }
 
 

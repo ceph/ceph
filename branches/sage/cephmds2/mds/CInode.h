@@ -107,10 +107,9 @@ class CInode : public MDSCacheObject {
   static const int PIN_REQUEST =   10;  // request is logging, finishing
   static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
   static const int PIN_ANCHORING = 12;
-  
   static const int PIN_OPENINGDIR = 13;
-
-  static const int PIN_DENTRYLOCK = 14;
+  static const int PIN_REMOTEPARENT = 14;
+  static const int PIN_DENTRYLOCK = 15;
 
   static const char *pin_name(int p) {
     switch (p) {
@@ -126,6 +125,7 @@ class CInode : public MDSCacheObject {
     case PIN_RENAMESRC: return "renamesrc";
     case PIN_ANCHORING: return "anchoring";
     case PIN_OPENINGDIR: return "openingdir";
+    case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_DENTRYLOCK: return "dentrylock";
     default: assert(0);
     }
@@ -158,12 +158,13 @@ class CInode : public MDSCacheObject {
 
  protected:
   // parent dentries in cache
-  int              num_parents;
+  //int              num_parents;
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
   // -- distributed caching
   int              dangling_auth;    // explicit auth, when dangling.
+  int              dangling_auth2;    // explicit auth, when dangling.
 
   int              num_request_pins;
 
@@ -394,7 +395,7 @@ protected:
 
 
   // -- authority --
-  int authority();
+  int authority(int *a2=0);
 
 
   // -- auth pins --
@@ -443,30 +444,20 @@ protected:
 
   // -- hierarchy stuff --
 private:
-  void get_parent();
-  void put_parent();
+  //void get_parent();
+  //void put_parent();
 
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
     parent = p;
-    get_parent();
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
     parent = 0;
-    put_parent();
   }
-  void add_remote_parent(CDentry *p) {
-    if (remote_parents.empty())
-      get_parent();
-    remote_parents.insert(p);
-  }
-  void remove_remote_parent(CDentry *p) {
-    remote_parents.erase(p);
-    if (remote_parents.empty())
-      put_parent();
-  }
+  void add_remote_parent(CDentry *p);
+  void remove_remote_parent(CDentry *p);
   int num_remote_parents() {
     return remote_parents.size(); 
   }

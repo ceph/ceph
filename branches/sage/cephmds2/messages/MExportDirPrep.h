@@ -100,16 +100,7 @@ class MExportDirPrep : public Message {
     payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
     
-    // exports
-    int ne;
-    payload.copy(off, sizeof(int), (char*)&ne);
-    off += sizeof(int);
-    for (int i=0; i<ne; i++) {
-      inodeno_t ino;
-      payload.copy(off, sizeof(ino), (char*)&ino);
-      off += sizeof(ino);
-      exports.push_back(ino);
-    }
+    ::_decode(exports, payload, off);
 
     // inodes
     int ni;
@@ -147,15 +138,7 @@ class MExportDirPrep : public Message {
   virtual void encode_payload() {
     payload.append((char*)&ino, sizeof(ino));
 
-    // exports
-    int ne = exports.size();
-    payload.append((char*)&ne, sizeof(int));
-    for (list<inodeno_t>::iterator it = exports.begin();
-         it != exports.end();
-         it++) {
-      inodeno_t ino = *it;
-      payload.append((char*)&ino, sizeof(ino));
-    }
+    ::_encode(exports, payload);
 
     // inodes
     int ni = inodes.size();

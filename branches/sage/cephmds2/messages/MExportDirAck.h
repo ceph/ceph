@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRACK_H
 #define __MEXPORTDIRACK_H
 
@@ -24,17 +23,18 @@ class MExportDirAck : public Message {
   inodeno_t get_ino() { return ino; }
   
   MExportDirAck() {}
-  MExportDirAck(MExportDir *req) :
-    Message(MSG_MDS_EXPORTDIRACK) {
-    ino = req->get_ino();
-  }  
+  MExportDirAck(inodeno_t i) :
+    Message(MSG_MDS_EXPORTDIRACK), ino(i) { }
+
   virtual char *get_type_name() { return "ExAck"; }
   
-  virtual void decode_payload(crope& s) {
-    s.copy(0, sizeof(ino), (char*)&ino);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&ino, sizeof(ino));
+  virtual void encode_payload() {
+    payload.append((char*)&ino, sizeof(ino));
   }
 
 };

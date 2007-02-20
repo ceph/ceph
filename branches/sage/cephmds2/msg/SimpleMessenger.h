@@ -153,6 +153,10 @@ private:
       cond.Signal();
       lock.Unlock();
     }
+
+    void force_close() {
+      ::close(sd);
+    }
   };
 
 

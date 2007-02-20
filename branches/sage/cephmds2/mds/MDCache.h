@@ -106,10 +106,11 @@ class MDCache {
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
   
-  void adjust_export(int to,   CDir *root, set<CDir*>& bounds);
-  void adjust_import(int from, CDir *root, set<CDir*>& bounds);
+  //void adjust_export(int to,   CDir *root, set<CDir*>& bounds);
+  //void adjust_import(int from, CDir *root, set<CDir*>& bounds);
   
-  
+  // delayed cache expire
+  map<CDir*, map<int, MCacheExpire*> > delayed_expire; // import|export dir -> expire msg
 
   // active MDS requests
   hash_map<Message*, active_request_t>   active_requests;
@@ -265,10 +266,10 @@ public:
 
  public:
   CDir *get_auth_container(CDir *in);
+  CDir *get_realm_root(CDir *dr);
   CDir *get_export_container(CDir *dir);
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
-
 
  public:
   CInode *create_root_inode();
@@ -328,15 +329,6 @@ public:
 
 
 
-  // -- misc auth --
-  int ino_proxy_auth(inodeno_t ino, 
-                     int frommds,
-                     map<CDir*, set<inodeno_t> >& inomap);
-  void do_ino_proxy(CInode *in, Message *m);
-  void do_dir_proxy(CDir *dir, Message *m);
-
-
-
 
   // -- updates --
   //int send_inode_updates(CInode *in);
@@ -346,7 +338,8 @@ public:
   void handle_dir_update(MDirUpdate *m);
 
   void handle_cache_expire(MCacheExpire *m);
-
+  void process_delayed_expire(CDir *dir);
+  void discard_delayed_expire(CDir *dir);
 
 
   // == crap fns ==

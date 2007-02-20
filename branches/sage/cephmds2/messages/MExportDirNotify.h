@@ -11,7 +11,6 @@
  * 
  */
 
-
 #ifndef __MEXPORTDIRNOTIFY_H
 #define __MEXPORTDIRNOTIFY_H
 
@@ -51,60 +50,34 @@ class MExportDirNotify : public Message {
   void copy_exports(list<inodeno_t>& ex) {
     this->exports = ex;
   }
-
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(int), (char*)&new_auth);
-    off += sizeof(int);
-    s.copy(off, sizeof(int), (char*)&old_auth);
-    off += sizeof(int);
-    s.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-
-    // notify
-    int n;
-    s.copy(off, sizeof(int), (char*)&n);
-    off += sizeof(int);
-    for (int i=0; i<n; i++) {
-      inodeno_t ino;
-      s.copy(off, sizeof(ino), (char*)&ino);
-      exports.push_back(ino);
-      off += sizeof(inodeno_t);
-    }
-    
-    // subdirs
-    s.copy(off, sizeof(int), (char*)&n);
-    off += sizeof(int);
-    for (int i=0; i<n; i++) {
-      inodeno_t ino;
-      s.copy(off, sizeof(ino), (char*)&ino);
-      subdirs.push_back(ino);
-      off += sizeof(inodeno_t);
-    }
+  void copy_exports(set<inodeno_t>& ex) {
+    for (set<inodeno_t>::iterator i = ex.begin();
+	 i != ex.end(); ++i)
+      exports.push_back(*i);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&new_auth, sizeof(int));
-    s.append((char*)&old_auth, sizeof(int));
-    s.append((char*)&ino, sizeof(ino));
+  void copy_exports(set<CDir*>& ex) {
+    for (set<CDir*>::iterator i = ex.begin();
+	 i != ex.end(); ++i)
+      exports.push_back((*i)->ino());
+  }
 
-    // notify
-    int n = exports.size();
-    s.append((char*)&n, sizeof(int));
-    for (list<inodeno_t>::iterator it = exports.begin();
-         it != exports.end();
-         it++) {
-      inodeno_t ino = *it;
-      s.append((char*)&ino, sizeof(ino));
-    }
-
-    // subdirs
-    n = subdirs.size();
-    s.append((char*)&n, sizeof(int));
-    for (list<inodeno_t>::iterator it = subdirs.begin();
-         it != subdirs.end();
-         it++) {
-      inodeno_t ino = *it;
-      s.append((char*)&ino, sizeof(ino));
-    }
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(int), (char*)&new_auth);
+    off += sizeof(int);
+    payload.copy(off, sizeof(int), (char*)&old_auth);
+    off += sizeof(int);
+    payload.copy(off, sizeof(ino), (char*)&ino);
+    off += sizeof(ino);
+    ::_decode(exports, payload, off);
+    ::_decode(subdirs, payload, off);
+  }
+  virtual void encode_payload() {
+    payload.append((char*)&new_auth, sizeof(int));
+    payload.append((char*)&old_auth, sizeof(int));
+    payload.append((char*)&ino, sizeof(ino));
+    ::_encode(exports, payload);
+    ::_encode(subdirs, payload);
   }
 };
 

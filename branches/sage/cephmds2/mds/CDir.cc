@@ -56,8 +56,10 @@ ostream& operator<<(ostream& out, CDir& dir)
       out << "." << dir.get_replica_nonce();
   }
 
-  if (dir.get_dir_auth() != CDIR_AUTH_PARENT)
+  if (dir.get_dir_auth() != CDIR_AUTH_PARENT) 
     out << " dir_auth=" << dir.get_dir_auth();
+  if (dir.get_dir_auth_pending() != CDIR_AUTH_UNKNOWN)
+    out << " dir_auth_pending=" << dir.get_dir_auth_pending();
   
   out << " state=" << dir.get_state();
   if (dir.state_test(CDIR_STATE_PROXY)) out << "|proxy";
@@ -101,8 +103,11 @@ CDir::CDir(CInode *in, MDCache *mdcache, bool auth)
 
   ref = 0;
 
+  // dir_auth
+  dir_auth = CDIR_AUTH_PARENT;
+  dir_auth_pending = CDIR_AUTH_UNKNOWN;
+
   // auth
-  dir_auth = -1;
   assert(in->is_dir());
   if (auth) 
     state |= CDIR_STATE_AUTH;
@@ -117,7 +122,8 @@ CDir::CDir(CInode *in, MDCache *mdcache, bool auth)
   nested_auth_pins = 0;
   request_pins = 0;
   
-  dir_rep = CDIR_REP_NONE;
+  //dir_rep = CDIR_REP_NONE;
+  dir_rep = CDIR_REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
 }
 
 
@@ -308,7 +314,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     assert(dn->is_primary());
  
     // explicitly define auth
-    in->dangling_auth = in->authority();
+    in->dangling_auth = in->authority(&in->dangling_auth2);
     //dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
 
     // unpin dentry?
@@ -544,14 +550,24 @@ void CDir::last_put()
 /*
  * simple rule: if dir_auth isn't explicit, auth is the same as the inode.
  */
-int CDir::authority() 
+int CDir::authority(int *a2) 
 {
+  // does dir_auth_pending terminate here?
+  if (a2 && dir_auth_pending != CDIR_AUTH_UNKNOWN) {
+    *a2 = dir_auth_pending;
+    a2 = 0;
+  }
+
+  // pass to parent?
   if (dir_auth == CDIR_AUTH_PARENT)
-    return inode->authority();
+    return inode->authority(a2);
+
+  // at current node.
+  if (a2) *a2 = dir_auth_pending;
   return dir_auth;
 }
 
-int CDir::dentry_authority(const string& dn )
+int CDir::dentry_authority(const string& dn, int *a2 )
 {
   // hashing -- subset of nodes have hashed the contents
   if (is_hashing() && !hashed_subset.empty()) {
@@ -565,20 +581,30 @@ int CDir::dentry_authority(const string& dn )
     return cache->hash_dentry( inode->ino(), dn );  // hashed
   }
   
-  if (get_dir_auth() == CDIR_AUTH_PARENT) {
+  if (dir_auth == CDIR_AUTH_PARENT) {
     //dout(15) << "dir_auth = parent at " << *this << endl;
-    return inode->authority();       // same as my inode
+    return inode->authority(a2);       // same as my inode
   }
 
   // it's explicit for this whole dir
   //dout(15) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
-  return get_dir_auth();
+  return get_dir_auth(a2);
 }
 
-void CDir::set_dir_auth(int d) 
+void CDir::set_dir_auth(int d, int d2) 
 { 
-  dout(10) << "setting dir_auth=" << d << " from " << dir_auth << " on " << *this << endl;
+  dout(10) << "setting dir_auth=" << d << "," << d2
+	   << " from " << dir_auth << "," << dir_auth_pending
+	   << " on " << *this << endl;
   dir_auth = d; 
+  dir_auth_pending = d2;
+}
+void CDir::set_dir_auth_pending(int d2) 
+{
+  dout(10) << "setting dir_auth_pending=" << d2
+	   << " from " << dir_auth << "," << dir_auth_pending
+	   << " on " << *this << endl;
+  dir_auth_pending = d2;
 }
 
 
@@ -770,6 +796,20 @@ bool CDir::is_frozen_tree()
       dir = dir->inode->parent->dir;
     else
       return false;  // root on replica
+  }
+}
+
+CDir *CDir::get_frozen_tree_root() 
+{
+  assert(is_frozen());
+  CDir *dir = this;
+  while (1) {
+    if (dir->is_frozen_tree_root()) 
+      return dir;
+    if (dir->inode->parent)
+      dir = dir->inode->parent->dir;
+    else
+      assert(0);
   }
 }
 

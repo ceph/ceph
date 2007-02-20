@@ -232,7 +232,7 @@ class CDir : public MDSCacheObject {
   version_t       projected_version; 
 
   // authority, replicas
-  int              dir_auth;       
+  int              dir_auth, dir_auth_pending;
 
   // lock nesting, freeze
   int        auth_pins;
@@ -319,10 +319,18 @@ class CDir : public MDSCacheObject {
 
   // -- authority --
  public:
-  int authority();
-  int dentry_authority(const string& d);
-  int get_dir_auth() { return dir_auth; }
-  void set_dir_auth(int d);
+  int authority(int *a2=0);
+  int dentry_authority(const string& d, int *a2=0);
+  int get_dir_auth(int *a2=0) { 
+    if (a2) 
+      *a2 = dir_auth_pending;
+    return dir_auth; 
+  }
+  int get_dir_auth_pending() {
+    return dir_auth_pending;
+  }
+  void set_dir_auth(int d, int d2=CDIR_AUTH_UNKNOWN);
+  void set_dir_auth_pending(int d2);
 
  
 
@@ -448,6 +456,7 @@ class CDir : public MDSCacheObject {
     return false;
   }
 
+  CDir *get_frozen_tree_root();
 
 
   // debuggin bs

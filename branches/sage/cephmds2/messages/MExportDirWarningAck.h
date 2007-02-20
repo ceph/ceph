@@ -11,24 +11,26 @@
  * 
  */
 
-#ifndef __MEXPORTDIRFINISH_H
-#define __MEXPORTDIRFINISH_H
+#ifndef __MEXPORTDIRWARNINGACK_H
+#define __MEXPORTDIRWARNINGACK_H
 
 #include "msg/Message.h"
+#include "mds/CInode.h"
+#include "include/types.h"
 
-class MExportDirFinish : public Message {
+class MExportDirWarningAck : public Message {
   inodeno_t ino;
 
  public:
   inodeno_t get_ino() { return ino; }
-  
-  MExportDirFinish() {}
-  MExportDirFinish(inodeno_t ino) :
-    Message(MSG_MDS_EXPORTDIRFINISH) {
-    this->ino = ino;
-  }  
-  virtual char *get_type_name() { return "ExFin"; }
-  
+
+  MExportDirWarningAck() {}
+  MExportDirWarningAck(inodeno_t i) : 
+    Message(MSG_MDS_EXPORTDIRWARNINGACK),
+    ino(i) {}
+
+  virtual char *get_type_name() { return "ExWAck"; }
+
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(ino), (char*)&ino);
@@ -37,7 +39,6 @@ class MExportDirFinish : public Message {
   virtual void encode_payload() {
     payload.append((char*)&ino, sizeof(ino));
   }
-
 };
 
 #endif
