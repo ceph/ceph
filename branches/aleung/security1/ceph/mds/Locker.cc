@@ -197,29 +197,38 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   if (mode & FILE_MODE_R) my_want |= CAP_FILE_RD;
   if (mode & FILE_MODE_W) my_want |= CAP_FILE_WR;
 
-  // checks capabilities for the file indexed by client id
-  // returns 0 if there is no cached capability
-  ExtCap *ext_cap = in->get_user_extcap(my_user);
-  if (!ext_cap) {
-    // need to create new cap
-    ExtCap my_cap(my_want, my_user, in->ino());
+  //ExtCap *ext_cap = in->get_user_extcap(my_user);
+  ExtCap *ext_cap = new ExtCap(my_want, my_user, in->ino());
+  //ExtCap ext_cap(my_want, my_user, in->ino());
+  //if (!ext_cap) {
+  cout << "Made new " << my_want << " capability for uid: "
+       << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
+
+    //ExtCap my_cap(my_want, my_user, in->ino());
     
     // caches this capability in the inode
-    in->add_user_extcap(my_user, my_cap);
+    //in->add_user_extcap(my_user, my_cap);
 
     //ext_cap = (&my_cap);
-    ext_cap = in->get_user_extcap(my_user);
+    //ext_cap = in->get_user_extcap(my_user);
     
-  }
+  ext_cap->sign_extcap(mds->getPrvKey());
+
+  if(ext_cap->verif_extcap(mds->getPubKey()))
+    cout << "Locker.cc::Verification succeeded" << endl;
+  else
+    cout << "Locker.cc::Verification failed" << endl;
+    //}
   // we want to index based on mode, so we can cache more caps
   // does the cached cap have the write mode?
-  else {
-    // augment the capability if not right mode
-    if (ext_cap->mode() != mode)
+  /*else {
+    cout << "Got capability from cache!!!" << endl;
+    if (ext_cap->mode() != mode) {
       ext_cap->set_mode(mode);
-      
-  }
-  return ext_cap;  
+      ext_cap->clear_signature();
+      ext_cap->sign_extcap(mds->getPrvKey());
+      }*/
+  return ext_cap;
 }
 
 bool Locker::issue_caps(CInode *in)

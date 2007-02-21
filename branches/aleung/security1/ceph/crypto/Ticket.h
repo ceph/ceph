@@ -102,7 +102,6 @@ public:
     
     blist.copy(off, sizeof(identity.uid), (char*)&(identity.uid));
     off += sizeof(identity.uid);
-    cout << "Decoded uid: " << identity.uid << endl;
     blist.copy(off, sizeof(identity.gid), (char*)&(identity.gid));
     off += sizeof(identity.gid);
     blist.copy(off, sizeof(identity.t_s), (char*)&(identity.t_s));

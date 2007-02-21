@@ -172,14 +172,19 @@ class MClientReply : public Message {
   long get_file_caps_seq() { return st.file_caps_seq; }
   __uint64_t get_file_data_version() { return st.file_data_version; }
 
-  ExtCap* get_ext_cap() { return &ext_cap; }
+  ExtCap get_ext_cap() { return ext_cap; }
+  ExtCap *get_ptr_cap() { return &ext_cap; }
   
   void set_result(int r) { st.result = r; }
   void set_file_caps(unsigned char c) { st.file_caps = c; }
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   void set_file_data_version(__uint64_t v) { st.file_data_version = v; }
 
-  void set_ext_cap(ExtCap ecap) { ext_cap = ecap; }
+  void set_ext_cap(ExtCap *ecap) { ext_cap = (*ecap); }
+  //void set_ext_cap(ExtCap *ecap) {
+  //  ext_cap = (*ecap);
+  //  memcpy(&(ext_cap.allocSig), &(ecap->allocSig), ecap->allocSig.size());
+  //}
 
   MClientReply() {};
   MClientReply(MClientRequest *req, int result = 0) : 

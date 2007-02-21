@@ -635,33 +635,28 @@ void Client::handle_client_reply(MClientReply *reply)
 
 void Client::handle_auth_user_ack(MClientAuthUserAck *m)
 {
-  cout << "Handling auth user ack" << endl;
   uid_t uid = m->get_uid();
   dout(10) << "handle_auth_user_ack for " << uid << endl;
 
   // put the ticket in the ticket map
   // **
-  cout << "Got ticket for uid: " << uid << endl;
   user_ticket[uid] = m->getTicket();
 
   // wait up the waiter(s)
   // this signals all ticket waiters
-  cout << "Entering for loop" << endl;
   for (list<Cond*>::iterator p = ticket_waiter_cond[uid].begin();
        p != ticket_waiter_cond[uid].end();
        ++p) {
-    cout << "In the for loop" << endl;
     (*p)->Signal();
-    cout << "Signal waiter" << endl;
   }
-  cout << "Out of the for loop" << endl;
+
   ticket_waiter_cond.erase(uid);
-  cout << "Leaving the auth user ack handler" << endl;
+
 }
 
 Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
 {
-  cout << "Requesting ticket for uid: " << uid << ", gid: " << gid << endl;
+  dout(10) << "get_user_ticket for uid: " << uid << ", gid: " << gid << endl;
   // do we already have it?
   if (user_ticket.count(uid) == 0) {
     Cond cond;
@@ -2391,13 +2386,13 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
   req->set_iarg2(cmode);
 
   // don't need a cap if I have one cached
-  ExtCap *ext_cap;
+  //ExtCap ext_cap;
   //ExtCap *ext_cap = fc->get_ext_caps(uid);
   // !!FIX ME!! Set flag to not ask for cap if I have one already
-  if (!ext_cap)
-    cout << "No capability cached at client for file " << path << endl;
-  else
-    cout << "Cached capability found! for file " << path << endl;
+  //if (!ext_cap)
+  //  cout << "No capability cached at client for file " << path << endl;
+  //else
+  //  cout << "Cached capability found! for file " << path << endl;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(uid);
@@ -2439,11 +2434,19 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     int new_caps = reply->get_file_caps();
 
     // need security caps? check if I even asked for one
-    ext_cap = reply->get_ext_cap();
+    ExtCap ext_cap = reply->get_ext_cap();
+    
+    cout << "Received a " << ext_cap.mode() << " capability for uid: "
+	 << ext_cap.get_uid() << " for inode: " << ext_cap.get_ino() << endl;
+    
+    if (reply->get_ext_cap().verif_extcap(monmap->get_key()))
+      cout << "Verified the signature correctly" << endl;
+    else
+      cout << "Failed to verify the signature" << endl;
 
     // cache it
-    f->inode->set_ext_cap(uid, ext_cap);
-    
+    //f->inode->set_ext_cap(uid, ext_cap);
+
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
       dout(7) << "open got caps " << cap_string(new_caps)
@@ -2480,7 +2483,9 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     dout(0) << "open failure result " << result << endl;
   }
 
+  cout << "Before delete!!" << endl << endl;
   delete reply;
+  cout << "After delete!!" << endl << endl;
 
   put_user_ticket(tk);
   trim_cache();
@@ -2638,6 +2643,10 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
     offset = f->pos;
 
   bool lazy = f->mode == FILE_MODE_LAZY;
+
+  // grab security cap for file (mode should always be correct)
+  // add that assertion
+  ExtCap *read_ext_cap = in->get_ext_cap(uid);
   
   // do we have read file cap?
   while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {

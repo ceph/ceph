@@ -2105,18 +2105,20 @@ void Server::handle_client_open(MClientRequest *req,
     return;
   }
 
-
   // hmm, check permissions or something.
   // permissions must be checked at the user/group/world level
-
 
   // can we issue the caps they want?
   version_t fdv = mds->locker->issue_file_data_version(cur);
   Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
 
-  // create security capability
+  // create signed security capability
   ExtCap *ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
-  ext_cap->sign_extcap(mds->getPrvKey());
+
+  if(ext_cap->verif_extcap(mds->getPubKey()))
+    cout << "Server.cc::first::Verification succeeded" << endl;
+  else
+    cout << "Server.cc::first::Verification failed" << endl;
 
   if (!cap) return; // can't issue (yet), so wait!
 
@@ -2130,7 +2132,17 @@ void Server::handle_client_open(MClientRequest *req,
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_data_version(fdv);
   // set security cap
-  reply->set_ext_cap((*ext_cap));
+  reply->set_ext_cap(ext_cap);
+
+  if(reply->get_ptr_cap()->verif_extcap(mds->getPubKey()))
+    cout << "Server.cc::ptr::Verification succeeded" << endl;
+  else
+    cout << "Server.cc::prr::Verification failed" << endl;
+
+  if(reply->get_ext_cap().verif_extcap(mds->getPubKey()))
+    cout << "Server.cc::Verification succeeded" << endl;
+  else
+    cout << "Server.cc::Verification failed" << endl;
   reply_request(req, reply, cur);
 }
 

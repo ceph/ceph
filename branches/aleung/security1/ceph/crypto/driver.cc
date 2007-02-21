@@ -70,6 +70,15 @@ int main(int argc, char* argv[]) {
   SigBuf testSecBuf(testBuf, mySignature.size());
   FixedSigBuf testFixedBuf;
   testFixedBuf.Assign(testSecBuf, testSecBuf.size());
+  FixedSigBuf ftBuf;
+  memcpy((void*)ftBuf, (void*)testFixedBuf, testFixedBuf.size());
+  SigBuf copyTest;
+  copyTest.Assign(ftBuf, ftBuf.size());
+  if (esignVer(signMsg, strlen((const char*)signMsg), copyTest, pubKey))
+    cout << "COPYTEST! signature verification SUCCEDED" << endl;
+  else
+    cout << "COPYTEST! signature verification FAILED" << endl;
+  
   //memcpy((void*)testSecBuf, (void*)testBuf, mySignature.size());
   cout << "sizeof(testBuf)=" << sizeof(testBuf) << endl;
   cout << "sizeof(testSecBuf)=" << sizeof(testSecBuf) << " and .size()=" << testSecBuf.size() << endl;
@@ -86,6 +95,11 @@ int main(int argc, char* argv[]) {
     cout << "ESIGN signature verification SUCCEDED" << endl;
   else
     cout << "ESIGN signature verification FAILED" << endl;
+
+  if (esignVer(signMsg, strlen((const char*)signMsg), mySignature, pubKey))
+    cout << "RE-ESIGN signature verification SUCCEDED" << endl;
+  else
+    cout << "RE-ESIGN signature verification FAILED" << endl;
 
   // RSA signature
   byte* rsaMsg = (byte *)"Message to sign";
