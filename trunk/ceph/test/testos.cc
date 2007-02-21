@@ -17,6 +17,9 @@ Foundation.  See file COPYING. */
 #include <iostream>
 #include <cerrno>
 
+#include <fcntl.h>
+#include <sys/mount.h>
+
 using namespace std;
 
 static inline unsigned long long
@@ -38,8 +41,13 @@ int main (int argc, char **argv)
   char *osd_name = "ebofs";
   unsigned object_size = 1024;
   unsigned object_count = 1024;
-  unsigned write_iter = 5;
+  unsigned write_iter = 64;
   unsigned random_seed = ::time(NULL);
+  char *device = "/tmp/testos";
+  char *mountcmd = "mount /tmp/testos";
+  char *umountcmd = "umount /tmp/testos";
+
+  bool inhibit_remount = (getenv("TESTOS_INHIBIT_REMOUNT") != NULL);
 
   if (argc > 1
       && (strcmp (argv[1], "-h") == 0
@@ -75,9 +83,18 @@ int main (int argc, char **argv)
   object_size = ((object_size + (sizeof (long) - 1)) / sizeof (long)) * sizeof (long);
 
   char *osd_file = new char[32];
-  strcpy (osd_file, "/tmp/testos.XXXXXX");
+  strcpy (osd_file, "/tmp/testos/testos.XXXXXX");
   mktemp (osd_file);
 
+  if (!inhibit_remount)
+    {
+      if (system (mountcmd) != 0)
+        {
+          cerr << "mount failed" << endl;
+          exit (1);
+        }
+    }
+      
   ObjectStore *os = NULL;
   if (strcasecmp (osd_name, "ebofs") == 0)
     {
@@ -92,6 +109,8 @@ int main (int argc, char **argv)
       fseek (f, 1024 * 1024 * 1024, SEEK_SET);
       fputc ('\0', f);
       fclose (f);
+      // 20K cache
+      g_conf.ebofs_bc_size = 5; // times 4K
       os = new Ebofs (osd_file);
     }
   else if (strcasecmp (osd_name, "osbdb") == 0)
@@ -105,11 +124,16 @@ int main (int argc, char **argv)
       e = getenv ("OSBDB_PAGESIZE");
       if (e != NULL)
         g_conf.bdbstore_pagesize = atol(e);
+      g_conf.debug_bdbstore = 1;
+      // 20K cache
+      g_conf.bdbstore_cachesize = 20 * 1024;
       os = new OSBDB (osd_file);
     }
   else if (strcasecmp (osd_name, "osbdb-btree") == 0)
     {
       g_conf.bdbstore_btree = true;
+      // 20K cache
+      g_conf.bdbstore_cachesize = 20 * 1024;
       os = new OSBDB (osd_file);
     }
   else
@@ -122,12 +146,27 @@ int main (int argc, char **argv)
   cout << "Writing " << object_count << " objects of size "
        << object_size << " to " << osd_name << endl;
 
-  unsigned long long totalw = 0;
-  unsigned long long totalw_max = 0;
-  unsigned long long totalw_min = 0;
-  unsigned long long totalr = 0;
-  unsigned long long totalr_max = 0;
-  unsigned long long totalr_min = 0;
+  char *val = (char *) malloc (object_size);
+  char *val2 = (char *) malloc (object_size);
+  auto_ptr<char> valptr (val);
+  auto_ptr<char> valptr2(val2);
+  if (getenv ("TESTOS_UNALIGNED") != NULL)
+    {
+      val = val + 1;
+      val2 = val2 + 1;
+    }
+
+  for (unsigned i = 0; i < object_size; i++)
+    {
+      val[i] = (char) i;
+      val2[i] = (char) i;
+    }
+  object_t *oids = new object_t[object_count];
+
+  utime_t writes[write_iter];
+  utime_t total_write;
+  utime_t reads[write_iter];
+  utime_t total_read;
   for (unsigned i = 0; i < write_iter; i++)
     {
       cerr << "Iteration " << i << endl;
@@ -145,109 +184,125 @@ int main (int argc, char **argv)
           exit (1);
         }
 
-      struct timeval tm1, tm2;
-      struct timezone tz;
-      memset (&tz, 0, sizeof (tz));
-      srandom (random_seed);
+      srandom (random_seed + i);
 
-      unsigned long long write_us = 0;
-      unsigned long long max_write_us = 0;
-      unsigned long long min_write_us = 0xFFFFFFFF;
-      char *val = (char *) valloc (object_size);
-      auto_ptr<char> valptr (val);
+      for (unsigned j = 0; j < object_count; j++)
+        {
+          oids[j].ino = (uint64_t) random() << 32 | random();
+          oids[j].bno = random();
+        }
+
+      utime_t begin = g_clock.now();
       for (unsigned o = 0; o < object_count; o++)
         {
-          object_t oid ((uint64_t) random() << 32 | random(), random());
-
-          {
-            long *v = (long *) val;
-            int n = object_size / sizeof (long);
-            for (int j = 0; j < n; j++)
-              v[j] = random();
-          }
-
           bufferptr bp (val, object_size);
           bufferlist bl;
           bl.push_back (bp);
           int ret;
-          gettimeofday (&tm1, &tz);
-          if ((ret = os->write (oid, 0L, object_size, bl, NULL)) < 0)
-            cerr << "write " << oid << " failed: " << strerror (-ret) << endl;
-          gettimeofday (&tm2, &tz);
-
-          unsigned long long us = to_usec (tm2) - to_usec (tm1);
-          write_us += us;
-          max_write_us = MAX(max_write_us, us);
-          min_write_us = MIN(min_write_us, us);
+          if ((ret = os->write (oids[o], 0L, object_size, bl, NULL)) < 0)
+            cerr << "write " << oids[o] << " failed: "
+                 << strerror (-ret) << endl;
         }
+      utime_t end = g_clock.now() - begin;
 
-      cerr << "Wrote in " << write_us << " us" << endl;
-      cerr << "Average: " << (write_us / object_count)
-           << "us; min: " << min_write_us
-           << "us; max: " << max_write_us << " us" << endl;
-      totalw = totalw + (write_us / object_count);
-      totalw_max += max_write_us;
-      totalw_min += min_write_us;
+      cerr << "Write finished in " << end << endl;
+      total_write += end;
+      writes[i] = end;
 
-      srandom (random_seed);
+      os->sync();
+      os->umount();
+      sync();
 
-      unsigned long long read_us = 0;
-      unsigned long long max_read_us = 0;
-      unsigned long long min_read_us = 0xFFFFFFFF;
-      char *val2 = (char *) valloc(object_size);
-      auto_ptr<char> valptr2(val2);
+      if (!inhibit_remount)
+        {
+          if (system (umountcmd) != 0)
+            {
+              cerr << "umount failed" << endl;
+              exit (1);
+            }
+      
+          if (system (mountcmd) != 0)
+            {
+              cerr << "mount(2) failed" << endl;
+              exit (1);
+            }
+        }
+      
+      os->mount();
+
+      begin = g_clock.now();
       for (unsigned o = 0; o < object_count; o++)
         {
-          object_t oid ((uint64_t) random() << 32 | random(), random());
-          
-          {
-            long *v = (long *) val;
-            int n = object_size / sizeof (long);
-            for (int j = 0; j < n; j++)
-              v[j] = random();
-          }
-
           bufferptr bp (val2, object_size);
           bufferlist bl;
           bl.push_back (bp);
           
-          gettimeofday (&tm1, &tz);
-          if (os->read (oid, 0L, object_size, bl) < 0)
+          if (os->read (oids[o], 0L, object_size, bl) < 0)
             {
-              cerr << "object " << oid << " not found!" << endl;
-              continue;
+              cerr << "object " << oids[o] << " not found!" << endl;
             }
-          gettimeofday (&tm2, &tz);
-
-          unsigned long long us = to_usec (tm2) - to_usec (tm1);
-          read_us += us;
-          max_read_us = MAX(max_read_us, us);
-          min_read_us = MIN(min_read_us, us);
-          if (!memcmp (val, val2, object_size) != 0)
-            cerr << "read doesn't match written!" << endl;
         }
+      end = g_clock.now() - begin;
 
-      cerr << "Read in " << read_us << " ms" << endl;
-      cerr << "Average: " << (read_us / object_count)
-           << "us; min: " << min_read_us
-           << "us; max: " << max_read_us << " us" << endl;
-      totalr = totalr + (read_us / object_count);
-      totalr_max += max_read_us;
-      totalr_min += min_read_us;
+      cerr << "Read finished in " << end << endl;
+      total_read += end;
+      reads[i] = end;
+
       os->umount();
-      random_seed++;
+      sync();
+
+      if (!inhibit_remount)
+        {
+          if (system (umountcmd) != 0)
+            {
+              cerr << "umount(2) failed" << endl;
+              exit (1);
+            }
+      
+          if (system (mountcmd) != 0)
+            {
+              cerr << "mount(3) failed" << endl;
+              exit (1);
+            }
+        }      
     }
 
-  cerr << "Finished in " << ((totalr + totalw) / 1000) << " ms" << endl;
+  cerr << "Finished in " << (total_write + total_read) << endl;
+
+  double write_mean = (double) total_write / write_iter;
+  double write_sd = 0.0;
+  for (unsigned i = 0; i < write_iter; i++)
+    {
+      double x = (double) writes[i] - write_mean;
+      write_sd += x * x;
+    }
+  write_sd = sqrt (write_sd / write_iter);
+
+  double read_mean = (double) total_read / write_iter;
+  double read_sd = 0.0;
+  for (unsigned i = 0; i < write_iter; i++)
+    {
+      double x = (double) reads[i] - read_mean;
+      write_sd += x * x;
+    }
+  read_sd = sqrt (read_sd / write_iter);
+
   cout << "TESTOS: write " << osd_name << ":" << object_size << ":"
-       << object_count << ":" << write_iter << ":" << (random_seed - write_iter)
-       << " -- " << (totalw / write_iter) << " " << (totalw_max / write_iter)
-       << " " << (totalw_min / write_iter) << endl;
+       << object_count << ":" << write_iter << ":" << random_seed
+       << " -- " << write_mean << " " << write_sd << endl;
+
   cout << "TESTOS: read " << osd_name << ":" << object_size << ":"
-       << object_count << ":" << write_iter << ":" << (random_seed - write_iter)
-       << " -- " << (totalr / write_iter) << " " << (totalr_max / write_iter)
-       << " " << (totalr_min / write_iter) << endl;
+       << object_count << ":" << write_iter << ":" << random_seed
+       << " -- " << read_mean << " " << read_sd << endl;
 
   unlink (osd_file);
+  if (!inhibit_remount)
+    {
+      if (system (umountcmd) != 0)
+        {
+          cerr << "umount(3) failed" << endl;
+          exit (1);
+        }
+    }
   exit (0);
 }
