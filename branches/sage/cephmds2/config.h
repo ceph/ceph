@@ -189,6 +189,7 @@ struct md_config_t {
 
   bool  mds_local_osd;
 
+  int mds_thrash_exports;
 
   // osd
   int   osd_rep;

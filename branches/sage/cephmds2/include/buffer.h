@@ -829,6 +829,31 @@ inline void _decode(std::set<std::string>& s, bufferlist& bl, int& off)
   }
   assert(s.size() == (unsigned)n);
 }
+// vector<string>
+inline void _encode(std::vector<std::string>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (std::vector<std::string>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(*it, bl);
+    n--;
+  }
+  assert(n==0);
+}
+inline void _decode(std::vector<std::string>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  s = std::vector<std::string>(n);
+  for (int i=0; i<n; i++) {
+    ::_decode(s[i], bl, off);
+  }
+  assert(s.size() == (unsigned)n);
+}
 
 // list<bufferlist>
 inline void _encode(const std::list<bufferlist>& s, bufferlist& bl)

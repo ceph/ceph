@@ -19,6 +19,8 @@ using namespace std;
 #include "messages/MNSFailure.h"
 */
 
+#include "messages/MMonCommand.h"
+#include "messages/MMonCommandAck.h"
 #include "messages/MMonElectionAck.h"
 #include "messages/MMonElectionPropose.h"
 #include "messages/MMonElectionVictory.h"
@@ -158,6 +160,12 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 	*/
 
+  case MSG_MON_COMMAND:
+    m = new MMonCommand;
+    break;
+  case MSG_MON_COMMAND_ACK:
+    m = new MMonCommandAck;
+    break;
   case MSG_MON_ELECTION_PROPOSE:
     m = new MMonElectionPropose;
     break;

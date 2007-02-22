@@ -19,7 +19,11 @@
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSBeacon.h"
 
+#include "messages/MMonCommand.h"
+
 #include "common/Timer.h"
+
+#include <sstream>
 
 #include "config.h"
 #undef dout
@@ -68,6 +72,39 @@ void MDSMonitor::print_map()
 	    << " : " << MDSMap::get_state_name(mdsmap.get_state(*p))
 	    << " : " << (mdsmap.have_inst(*p) ? mdsmap.get_inst(*p) : blank)
 	    << endl;
+  }
+}
+
+
+void MDSMonitor::handle_command(MMonCommand *m, int& r, string& rs)
+{
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stop" && m->cmd.size() > 2) {
+      int who = atoi(m->cmd[2].c_str());
+      if (mdsmap.is_active(who)) {
+	r = 0;
+	ss << "telling mds" << who << " to stop";
+	getline(ss,rs);
+
+	// hack
+	mdsmap.mds_state[who] = MDSMap::STATE_STOPPING;
+    
+	// inc map version
+	mdsmap.inc_epoch();
+	mdsmap.encode(maps[mdsmap.get_epoch()]);
+	
+	print_map();
+	
+	// bcast map
+	bcast_latest_mds();
+	send_current();
+      } else {
+	ss << "mds" << who << " not active (" << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
+	getline(ss,rs);
+      }
+    }
   }
 }
 

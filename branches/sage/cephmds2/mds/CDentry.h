@@ -176,7 +176,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t get_projected_version() { return projected_version; }
   void set_projected_version(version_t v) { projected_version = v; }
   
-  int authority(int *a2=0);
+  pair<int,int> authority();
 
   bool is_auth() { return state & STATE_AUTH; }
   bool is_dirty() { return state & STATE_DIRTY; }

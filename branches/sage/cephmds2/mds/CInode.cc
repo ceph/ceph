@@ -185,7 +185,6 @@ CDir *CInode::get_or_open_dir(MDCache *mdcache)
   // only auth can open dir alone.
   assert(is_auth());
   set_dir( new CDir(this, mdcache, true) );
-  dir->dir_auth = -1;
   return dir;
 }
 
@@ -244,7 +243,7 @@ void CInode::make_anchor_trace(vector<Anchor*>& trace)
     dout(7) << "make_anchor_trace dangling " << ino() << " on mds " << dangling_auth << endl;
     string ref_dn;
     trace.push_back( new Anchor(ino(),
-                                MDS_INO_INODEFILE_OFFSET+dangling_auth,
+                                MDS_INO_INODEFILE_OFFSET+dangling_auth.first,
                                 ref_dn) );
   }
   else 
@@ -475,30 +474,35 @@ void CInode::auth_unpin()
     parent->dir->adjust_nested_auth_pins( -1 );
 }
 
+void CInode::adjust_nested_auth_pins(int a)
+{
+  if (!parent) return;
+  nested_auth_pins += a;
+  parent->get_dir()->adjust_nested_auth_pins(a);
+}
+
 
 
 // authority
 
-int CInode::authority(int *a2) {
-  if (is_dangling()) {
-    if (a2) *a2 = dangling_auth2;
+pair<int,int> CInode::authority() 
+{
+  if (is_dangling()) 
     return dangling_auth;      // explicit
-  }
 
   if (is_root()) {             // i am root
     if (dir)
-      return dir->get_dir_auth(a2);  // bit of a chicken/egg issue here!
+      return dir->get_dir_auth();  // bit of a chicken/egg issue here!
     else {
-      if (a2) *a2 = CDIR_AUTH_UNKNOWN;
-      return CDIR_AUTH_UNKNOWN;
+      return CDIR_AUTH_UNDEF;
     }
   }
 
+  // this is useless if we hose the hashing crap.
   if (parent)
-    return parent->dir->dentry_authority( parent->name, a2 );
+    return parent->dir->dentry_authority( parent->name );
 
-  if (a2) *a2 = CDIR_AUTH_UNKNOWN;
-  return -1;  // undefined (inode must not be linked yet!)
+  return CDIR_AUTH_UNDEF;
 }
 
 CInodeDiscover* CInode::replicate_to( int rep )

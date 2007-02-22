@@ -262,24 +262,16 @@ doc todo
  
 
 
+FIRST
+
+
+
+- openingdir pins should be handled by open_remote_dir, not explicitly by handle_export_dir_prep
+
 
 - bystander dir_auth(_pending) recovery from exporter failure
 
-
-- how to reliably deliver cache expire messages?
-  - how should proxy behave?
-  - exporter failure
-    - all cacheexpire info has been passed on up until point where export is permanent.  no impact.
-  - importer failure
-    - exporter collects expire info, so that it can reverse.
-    - ???  
-  - maybe hosts should double-up expires until after export is known to have committed?
---> just send expires to both nodes.  dir_auth+dir_auth2.  clean up export ack/notify process.  :)
-
-*** dar... no, separate bystander dir_auth updates from the prepare/ack/commit cycle!
-- expire should go to both old and new auth
-- set_dir_auth should take optional second auth, and authority() should optionally set/return a second possible auth
-- does inode need it's own replica list?  no!
+- does inode need it's own replica list?  no?
 - dirslices.
 
 

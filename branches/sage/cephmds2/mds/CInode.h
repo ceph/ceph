@@ -163,10 +163,9 @@ class CInode : public MDSCacheObject {
   set<CDentry*>    remote_parents;     // if hard linked
 
   // -- distributed caching
-  int              dangling_auth;    // explicit auth, when dangling.
-  int              dangling_auth2;    // explicit auth, when dangling.
+  pair<int,int> dangling_auth;    // explicit auth, when dangling.
 
-  int              num_request_pins;
+  int           num_request_pins;
 
   // waiters
   multimap<int, Context*>  waiting;
@@ -395,14 +394,14 @@ protected:
 
 
   // -- authority --
-  int authority(int *a2=0);
+  pair<int,int> authority();
 
 
   // -- auth pins --
   int is_auth_pinned() { 
     return auth_pins;
   }
-  int adjust_nested_auth_pins(int a);
+  void adjust_nested_auth_pins(int a);
   bool can_auth_pin();
   void auth_pin();
   void auth_unpin();

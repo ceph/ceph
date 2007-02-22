@@ -272,6 +272,11 @@ typedef int        fh_t;          // file handle
 
 // -- io helpers --
 
+template<class A, class B>
+inline ostream& operator<<(ostream& out, pair<A,B> v) {
+  return out << v.first << "," << v.second;
+}
+
 template<class A>
 inline ostream& operator<<(ostream& out, vector<A>& v) {
   out << "[";

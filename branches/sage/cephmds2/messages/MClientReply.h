@@ -84,7 +84,7 @@ class InodeStat {
       spec_defined = false;
 
     if (in->dir)
-      dir_auth = in->dir->get_dir_auth();
+      dir_auth = in->dir->get_dir_auth().first;
     else
       dir_auth = -1;
 

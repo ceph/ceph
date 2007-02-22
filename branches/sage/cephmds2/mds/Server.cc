@@ -370,11 +370,13 @@ void Server::handle_client_request(MClientRequest *req)
 	if (refpath.last_bit() == ".ceph.hash" &&
 	    refpath.depth() > 1) {
 	  dout(1) << "got explicit hash command " << refpath << endl;
+	  /*
 	  CDir *dir = trace[trace.size()-1]->get_inode()->dir;
 	  if (!dir->is_hashed() &&
 	      !dir->is_hashing() &&
 	      dir->is_auth())
 	    mdcache->migrator->hash_dir(dir);
+	  */
 	}
 	else if (refpath.last_bit() == ".ceph.commit") {
 	  dout(1) << "got explicit commit command on  " << *dir << endl;
@@ -938,9 +940,9 @@ void Server::handle_client_readdir(MClientRequest *req,
 
   // auth?
   if (!cur->dir_is_auth()) {
-    int dirauth = cur->authority();
+    int dirauth = cur->authority().first;
     if (cur->dir)
-      dirauth = cur->dir->authority();
+      dirauth = cur->dir->authority().first;
     assert(dirauth >= 0);
     assert(dirauth != mds->get_nodeid());
     
@@ -1122,7 +1124,7 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
 
   // am i not open, not auth?
   if (!diri->dir && !diri->is_auth()) {
-    int dirauth = diri->authority();
+    int dirauth = diri->authority().first;
     dout(7) << "validate_new_dentry_dir: don't know dir auth, not open, auth is i think mds" << dirauth << endl;
     mdcache->request_forward(req, dirauth);
     return false;
@@ -1133,7 +1135,7 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
   CDir *dir = diri->dir;
   
   // make sure it's my dentry
-  int dnauth = dir->dentry_authority(name);  
+  int dnauth = dir->dentry_authority(name).first;  
   if (dnauth != mds->get_nodeid()) {
     // fw
     dout(7) << "mknod on " << req->get_path() << ", dentry " << *dir
@@ -1477,7 +1479,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
   } else {
     // remote: send nlink++ request, wait
     dout(7) << "target is remote, sending InodeLink" << endl;
-    mds->send_message_mds(new MInodeLink(targeti->ino(), mds->get_nodeid()), targeti->authority(), MDS_PORT_CACHE);
+    mds->send_message_mds(new MInodeLink(targeti->ino(), mds->get_nodeid()), targeti->authority().first, MDS_PORT_CACHE);
     
     // wait
     targeti->add_waiter(CINODE_WAIT_LINK,
@@ -1530,7 +1532,7 @@ void Server::handle_client_unlink(MClientRequest *req,
 
   // am i not open, not auth?
   if (!diri->dir && !diri->is_auth()) {
-    int dirauth = diri->authority();
+    int dirauth = diri->authority().first;
     dout(7) << "don't know dir auth, not open, auth is i think " << dirauth << endl;
     mdcache->request_forward(req, dirauth);
     return;
@@ -1538,7 +1540,7 @@ void Server::handle_client_unlink(MClientRequest *req,
   
   if (!try_open_dir(diri, req)) return;
   CDir *dir = diri->dir;
-  int dnauth = dir->dentry_authority(name);  
+  int dnauth = dir->dentry_authority(name).first;  
 
   // does it exist?
   CDentry *dn = dir->lookup(name);
@@ -1596,7 +1598,7 @@ void Server::handle_client_unlink(MClientRequest *req,
         return;
       }
       if (!in->dir->is_auth()) {
-        int dirauth = in->dir->authority();
+        int dirauth = in->dir->authority().first;
         dout(7) << "handle_client_rmdir not auth for dir " << *in->dir << ", sending to dir auth " << dnauth << endl;
         mdcache->request_forward(req, dirauth);
         return;
@@ -1814,7 +1816,7 @@ void Server::handle_client_rename(MClientRequest *req,
 
   // am i not open, not auth?
   if (!srcdiri->dir && !srcdiri->is_auth()) {
-    int dirauth = srcdiri->authority();
+    int dirauth = srcdiri->authority().first;
     dout(7) << "don't know dir auth, not open, srcdir auth is probably " << dirauth << endl;
     mdcache->request_forward(req, dirauth);
     return;
@@ -1825,7 +1827,7 @@ void Server::handle_client_rename(MClientRequest *req,
   dout(7) << "handle_client_rename srcdir is " << *srcdir << endl;
   
   // make sure it's my dentry
-  int srcauth = srcdir->dentry_authority(srcname);  
+  int srcauth = srcdir->dentry_authority(srcname).first;  
   if (srcauth != mds->get_nodeid()) {
     // fw
     dout(7) << "rename on " << req->get_path() << ", dentry " << *srcdir << " dn " << srcname << " not mine, fw to " << srcauth << endl;
@@ -2015,8 +2017,8 @@ void Server::handle_client_rename_2(MClientRequest *req,
   
 
   // local or remote?
-  int srcauth = srcdir->dentry_authority(srcdn->name);
-  int destauth = destdir->dentry_authority(destname);
+  int srcauth = srcdir->dentry_authority(srcdn->name).first;
+  int destauth = destdir->dentry_authority(destname).first;
   dout(7) << "handle_client_rename_2 destname " << destname << " destdir " << *destdir << " auth " << destauth << endl;
   
   // 
@@ -2097,8 +2099,8 @@ void Server::handle_client_rename_local(MClientRequest *req,
   //everybody = true;
   //}
 
-  bool srclocal = srcdn->dir->dentry_authority(srcdn->name) == mds->get_nodeid();
-  bool destlocal = destdir->dentry_authority(destname) == mds->get_nodeid();
+  bool srclocal = srcdn->dir->dentry_authority(srcdn->name).first == mds->get_nodeid();
+  bool destlocal = destdir->dentry_authority(destname).first == mds->get_nodeid();
 
   dout(7) << "handle_client_rename_local: src local=" << srclocal << " " << *srcdn << endl;
   if (destdn) {
@@ -2260,7 +2262,7 @@ void Server::handle_client_open(MClientRequest *req,
   // auth for write access
   if (mode != FILE_MODE_R && mode != FILE_MODE_LAZY &&
       !cur->is_auth()) {
-    int auth = cur->authority();
+    int auth = cur->authority().first;
     assert(auth != mds->get_nodeid());
     dout(9) << "open writeable on replica for " << *cur << " fw to auth " << auth << endl;
     

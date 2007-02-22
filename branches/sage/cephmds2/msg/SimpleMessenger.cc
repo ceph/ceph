@@ -700,7 +700,8 @@ void Rank::Pipe::fail(list<Message*>& out)
            k != j->second.end();
            ++k) {
 	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << j->first << " inst " << peer_addr << endl;
-        i->first->ms_handle_failure(*k, j->first, peer_addr);
+	if (i->first)
+	  i->first->ms_handle_failure(*k, j->first, peer_addr);
       }
 }
 

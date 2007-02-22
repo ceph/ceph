@@ -439,7 +439,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // decode and process
   mdsmap->decode(m->get_encoded());
-
+  
   // see who i am
   whoami = mdsmap->get_inst_rank(messenger->get_myaddr());
   if (oldwhoami != whoami) {
@@ -473,6 +473,16 @@ void MDS::handle_mds_map(MMDSMap *m)
 	      << ", although i wanted " << mdsmap->get_state_name(want_state)
 	      << endl;
       want_state = state;
+    }    
+
+    // contemplate suicide
+    if (mdsmap->get_inst(whoami) != messenger->get_myinst()) {
+      dout(1) << "apparently i've been replaced by " << mdsmap->get_inst(whoami) << ", committing suicide." << endl;
+      exit(-1);
+    }
+    if (mdsmap->is_down(whoami)) {
+      dout(1) << "apparently i'm down. committing suicide." << endl;
+      exit(-1);
     }
 
     // now active?
@@ -834,10 +844,11 @@ void MDS::my_dispatch(Message *m)
   if (m->get_source().is_mds()) {
     int from = m->get_source().num();
     if (!mdsmap->have_inst(from) ||
-	mdsmap->get_inst(from) != m->get_source_inst()) {
+	mdsmap->get_inst(from) != m->get_source_inst() ||
+	mdsmap->is_down(from)) {
       // bogus mds?
       if (m->get_type() != MSG_MDS_MAP) {
-	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
+	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << endl;
 	delete m;
 	return;
@@ -909,6 +920,33 @@ void MDS::my_dispatch(Message *m)
   }
 
   
+  // hack: thrash exports
+  for (int i=0; i<g_conf.mds_thrash_exports; i++) {
+    set<int> s;
+    mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
+    if (s.size() == 1) 
+      break;  // need peers for this to work.
+
+    dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf.mds_thrash_exports << endl;
+    
+    // pick a random dir inode
+    int n = rand() % mdcache->inode_map.size();
+    hash_map<inodeno_t,CInode*>::iterator p = mdcache->inode_map.begin();
+    while (n--) p++;
+    
+    CDir *dir = p->second->dir;
+    if (dir && dir->is_auth()) {
+      int dest;
+      do {
+	int k = rand() % s.size();
+	set<int>::iterator p = s.begin();
+	while (k--) p++;
+	dest = *p;
+      } while (dest != whoami);
+      mdcache->migrator->export_dir(dir,dest);
+    }
+  }
+
 
   // hack: force hash root?
   if (false &&

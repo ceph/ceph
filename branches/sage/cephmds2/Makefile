@@ -97,7 +97,7 @@ CLIENT_OBJS= \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn
+TARGETS = cmon cosd cmds cfuse csyn cmonctl newsyn fakesyn
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
@@ -113,6 +113,9 @@ mkmonmap: mkmonmap.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+
+cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o

@@ -292,7 +292,7 @@ void MDCache::send_import_map_now(int who)
     if (migrator->is_importing(im->ino())) {
       // ambiguous (mid-import)
       m->add_ambiguous_import(im->ino(), 
-			      migrator->get_import_bounds(im->ino()));
+			      migrator->get_import_bound_inos(im->ino()));
     } else {
       // not ambiguous.
       m->add_import(im->ino());
@@ -352,7 +352,7 @@ void MDCache::handle_import_map(MMDSImportMap *m)
       CDir *ex = exi->dir;
       if (!ex) continue;
       
-      if (ex->get_dir_auth() == CDIR_AUTH_PARENT)
+      if (ex->get_dir_auth().first == CDIR_AUTH_PARENT)
 	ex->set_dir_auth(CDIR_AUTH_UNKNOWN);
     }
   }
@@ -402,11 +402,11 @@ void MDCache::disambiguate_imports()
       CDir *dir = diri->dir;
       if (!dir) continue;
       
-      if (dir->authority() >= CDIR_AUTH_UNKNOWN) {
+      if (dir->authority().first >= CDIR_AUTH_UNKNOWN) {
 	dout(10) << "mds" << who << " did not import " << *dir << endl;
       } else {
 	dout(10) << "mds" << who << " did import " << *dir << endl;
-	int was = dir->authority();
+	int was = dir->authority().first;
 	dir->set_dir_auth(who);
 	
 	for (set<inodeno_t>::iterator r = q->second.begin();
@@ -416,7 +416,7 @@ void MDCache::disambiguate_imports()
 	  if (!exi) continue;
 	  CDir *ex = exi->dir;
 	  if (!ex) continue;
-	  if (ex->get_dir_auth() == CDIR_AUTH_PARENT)
+	  if (ex->get_dir_auth().first == CDIR_AUTH_PARENT)
 	    ex->set_dir_auth(was);
 	  dout(10) << "   bound " << *ex << endl;
 	}
@@ -434,7 +434,7 @@ void MDCache::disambiguate_imports()
     CDir *dir = diri->dir;
     if (!dir) continue;
     
-    if (dir->authority() != CDIR_AUTH_UNKNOWN) {
+    if (dir->authority().first != CDIR_AUTH_UNKNOWN) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << endl;
       cancel_ambiguous_import(q->first);
     } else {
@@ -459,12 +459,12 @@ void MDCache::cancel_ambiguous_import(inodeno_t dirino)
 void MDCache::finish_ambiguous_import(inodeno_t dirino)
 {
   assert(my_ambiguous_imports.count(dirino));
-  set<inodeno_t> bounds;
-  bounds.swap(my_ambiguous_imports[dirino]);
+  set<inodeno_t> bound_inos;
+  bound_inos.swap(my_ambiguous_imports[dirino]);
   my_ambiguous_imports.erase(dirino);
 
   dout(10) << "finish_ambiguous_import " << dirino
-	   << " bounds " << bounds
+	   << " bounds " << bound_inos
 	   << endl;
 
   CInode *diri = get_inode(dirino);
@@ -472,63 +472,20 @@ void MDCache::finish_ambiguous_import(inodeno_t dirino)
   CDir *dir = diri->dir;
   assert(dir);
     
-  // adjust dir_auth
-  CDir *im = dir;
-  if (dir->get_inode()->authority() == mds->get_nodeid()) {
-    // parent is already me.  adding to existing import.
-    im = get_auth_container(dir);
-    if (!im) im = dir;
-    nested_exports[im].erase(dir);
-    exports.erase(dir);
-    dir->set_dir_auth( CDIR_AUTH_PARENT );     
-    dir->state_clear(CDIR_STATE_EXPORT);
-    dir->put(CDir::PIN_EXPORT);
-  } else {
-    // parent isn't me.  new import.
-    imports.insert(dir);
-    dir->set_dir_auth( mds->get_nodeid() );               
-    dir->state_set(CDIR_STATE_IMPORT);
-    dir->get(CDir::PIN_IMPORT);
-  }
-
-  dout(10) << "  base " << *dir << endl;
-  if (dir != im)
-    dout(10) << "  under " << *im << endl;
-
-  // bounds (exports, before)
-  for (set<inodeno_t>::iterator p = bounds.begin();
-       p != bounds.end();
+  // make bounds list
+  set<CDir*> bounds;
+  for (set<inodeno_t>::iterator p = bound_inos.begin();
+       p != bound_inos.end();
        ++p) {
     CInode *bi = get_inode(*p);
     assert(bi);
     CDir *bd = bi->dir;
     assert(bd);
-    
-    if (bd->get_dir_auth() == mds->get_nodeid()) {
-      // still me.  was an import. 
-      imports.erase(bd);
-      bd->set_dir_auth( CDIR_AUTH_PARENT );   
-      bd->state_clear(CDIR_STATE_IMPORT);
-      bd->put(CDir::PIN_IMPORT);
-      // move nested exports.
-      for (set<CDir*>::iterator q = nested_exports[bd].begin();
-	   q != nested_exports[bd].end();
-	   ++q) 
-	nested_exports[im].insert(*q);
-      nested_exports.erase(bd);	
-
-    } else {
-      // not me anymore.  now an export.
-      exports.insert(bd);
-      nested_exports[im].insert(bd);
-      //hrm. assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
-      bd->set_dir_auth( CDIR_AUTH_UNKNOWN );
-      bd->state_set(CDIR_STATE_EXPORT);
-      bd->get(CDir::PIN_EXPORT);
-    }
-    
-    dout(10) << "  bound " << *bd << endl;
+    bounds.insert(bd);
   }
+
+  // adjust dir_auth, import maps
+  import_subtree(dir, bounds);
 }
 
 void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
@@ -544,7 +501,7 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
   
   // adjust dir_auth
   CDir *im = get_auth_container(dir);
-  if (dir->get_inode()->authority() == CDIR_AUTH_UNKNOWN) { 
+  if (dir->get_inode()->authority().first == CDIR_AUTH_UNKNOWN) { 
     // was an import, hose it
     assert(im == dir);
     assert(imports.count(dir));
@@ -560,7 +517,7 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
     dir->state_set(CDIR_STATE_EXPORT);
     dir->get(CDir::PIN_EXPORT);
   }
-  dout(10) << "  base " << *dir << endl;
+  dout(10) << "  root " << *dir << endl;
   if (dir != im)
     dout(10) << "  under " << *im << endl;
     
@@ -579,7 +536,7 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
     nested_exports[im].erase(bd);
     
     // fix dir_auth
-    assert(bd->get_dir_auth() != CDIR_AUTH_PARENT);
+    assert(bd->get_dir_auth().first != CDIR_AUTH_PARENT);
     bd->set_dir_auth( CDIR_AUTH_PARENT );  // not me
 
     bd->state_clear(CDIR_STATE_EXPORT);
@@ -591,6 +548,200 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
   show_imports();
 }
 
+
+
+/** import_subtree
+ * adjust dir_auth.first.
+ * adjust import/export/nested_export maps and pins.
+ */
+void MDCache::import_subtree(CDir *root, set<CDir*>& bounds)
+{
+  dout(7) << "import_subtree_start " << *root << endl;
+
+  CDir *im = root;   // the new subtree root (an import)
+
+  // root
+  if (root->inode->is_auth()) {
+    // parent is already me.  was export, adding back to existing import.
+    im = get_auth_container(root);
+    assert(im);
+    nested_exports[im].erase(root);
+    exports.erase(root);
+    root->set_dir_auth(CDIR_AUTH_PARENT, true);
+    root->state_clear(CDIR_STATE_EXPORT);
+    root->put(CDir::PIN_EXPORT);
+  } else {
+    // parent isn't me.  new import.
+    imports.insert(root);
+    root->set_dir_auth(mds->get_nodeid(), true);
+    root->state_set(CDIR_STATE_IMPORT);
+    root->get(CDir::PIN_IMPORT);
+  }
+
+  dout(10) << "  root " << *root << endl;
+  if (root != im)
+    dout(10) << "  under " << *im << endl;
+
+  // i should have no pins in this region.
+  assert(root->get_cum_auth_pins() == 0);
+
+  // bounds
+  for (set<CDir*>::iterator it = bounds.begin();
+       it != bounds.end();
+       it++) {
+    CDir *bd = *it;
+    
+    if (bd->is_import()) {
+      // bound is still me.  was an import. 
+      imports.erase(bd);
+      bd->set_dir_auth(CDIR_AUTH_PARENT, true);   
+      bd->state_clear(CDIR_STATE_IMPORT);
+      bd->put(CDir::PIN_IMPORT);
+      // move nested exports under this bound to my subtree root.
+      for (set<CDir*>::iterator q = nested_exports[bd].begin();
+	   q != nested_exports[bd].end();
+	   ++q) 
+	nested_exports[im].insert(*q);
+      nested_exports.erase(bd);	
+    } else {
+      // not me anymore.  now an export.
+      exports.insert(bd);
+      nested_exports[im].insert(bd);
+      assert(bd->get_dir_auth().first != CDIR_AUTH_PARENT);
+      bd->state_set(CDIR_STATE_EXPORT);
+      bd->get(CDir::PIN_EXPORT);
+    }
+    
+    dout(10) << "  bound " << *bd << endl;
+  }
+}
+
+void MDCache::import_subtree_finish(CDir *root, set<CDir*>& bounds)
+{
+  
+}
+
+void MDCache::export_subtree(CDir *root, set<CDir*>& bounds, int dest)
+{
+  dout(7) << "export_subtree " << *root << endl;
+  
+  CDir *im = get_auth_container(root);
+
+  // root
+  if (root->is_import()) {
+    // was an import, hose it
+    assert(im == root);
+    assert(imports.count(root));
+    imports.erase(root);
+    root->set_dir_auth(CDIR_AUTH_PARENT);
+    root->state_clear(CDIR_STATE_IMPORT);
+    root->put(CDir::PIN_IMPORT);
+  } else {
+    // i'm now an export
+    exports.insert(root);
+    nested_exports[im].insert(root);
+    root->set_dir_auth( dest );  // not me
+    root->state_set(CDIR_STATE_EXPORT);
+    root->get(CDir::PIN_EXPORT);
+  }
+
+  // fix dir_auth
+  if (root->inode->authority().first == dest)
+    root->set_dir_auth( CDIR_AUTH_PARENT );
+  else
+    root->set_dir_auth( dest );
+  
+  dout(10) << "  root " << *root << endl;
+  if (root != im)
+    dout(10) << "  under " << *im << endl;
+    
+  // bounds (there were exports, before)
+  for (set<CDir*>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CDir *bd = *p;
+    
+    // hose export
+    assert(exports.count(bd));
+    exports.erase(bd);
+    nested_exports[im].erase(bd);
+
+    bd->state_clear(CDIR_STATE_EXPORT);
+    bd->put(CDir::PIN_EXPORT);
+    
+    // fix dir_auth
+    assert(bd->get_dir_auth().first != CDIR_AUTH_PARENT);
+    if (bd->get_dir_auth().first == dest)
+      bd->set_dir_auth(CDIR_AUTH_PARENT);
+    else
+      bd->set_dir_auth(dest);
+    
+    dout(10) << "  bound " << *bd << endl;
+  }
+}
+
+
+/*
+ * adjust the dir_auth of a subtree.
+ * merge with parent and/or child subtrees, if is it appropriate.
+ */
+void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
+{
+  dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
+	  << " under " << *dir << endl;
+
+  // note my current bounds.
+  set<CDir*> bounds = subtree_bounds[dir];
+
+  // join with parent?
+  CDir *root = dir;
+  if (dir->ino() != 1) // i'm the root, screw you
+    root = get_subtree_root(dir->get_parent_dir());
+  
+  if (root != dir && root->get_dir_auth() == auth) {
+    // join the subtrees.
+    dir->set_dir_auth(CDIR_AUTH_DEFAULT);
+    dout(10) << "  merge with parent " << *root << endl;
+
+    // move our bounds under new root
+    subtree_bounds.erase(dir);
+    for (set<CDir*>::iterator p = bounds.begin();
+	 p != bounds.end();
+	 ++p) 
+      subtree_bounds[root].insert(*p);
+
+    // dir is no longer a subtree
+    subtree_bounds.erase(dir);
+  } else {
+    // don't merge with parent, just update our auth.
+    dir->set_dir_auth(auth);
+  }
+
+  // bounds
+  for (set<CDir*>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CDir *bound = *p;
+    
+    if (bound->dir_auth == auth) {
+      // merge with child.
+      dout(10) << "  merging bound " << *bound << endl;
+      bound->set_dir_auth(CDIR_AUTH_DEFAULT);
+      
+      // move child's children under root.
+      for (set<CDir*>::iterator q = subtree_bounds[bound].begin();
+	   q != subtree_bounds[bound].end();
+	   ++q) 
+	subtree_bounds[root].insert(*q);
+
+      // bound is no longer a subtree.
+      subtree_bounds[root].erase(bound);
+    } else {
+      // don't merge.
+      dout(10) << "  bound " << *bound << endl;
+    }
+  }
+}
 
 
 
@@ -625,9 +776,9 @@ void MDCache::send_cache_rejoins()
        ++p) {
     if (!p->second->is_dir()) continue;
     if (!p->second->dir) continue;
-    if (p->second->dir->get_dir_auth() == CDIR_AUTH_PARENT) continue;
+    if (p->second->dir->get_dir_auth().first == CDIR_AUTH_PARENT) continue;
 
-    int auth = p->second->dir->get_dir_auth();
+    int auth = p->second->dir->get_dir_auth().first;
     assert(auth >= 0);
 
     if (auth == mds->get_nodeid()) continue; // skip my own regions!
@@ -645,7 +796,7 @@ void MDCache::send_cache_rejoins()
        p != dir_auth_regions.end();
        ++p) {
     CDir *dir = *p;
-    int to = dir->authority();
+    int to = dir->authority().first;
     cache_rejoin_walk(dir, rejoins[to]);
   }
 
@@ -689,7 +840,7 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       
       // dir?
       if (in->dir &&
-	  in->dir->get_dir_auth() == CDIR_AUTH_PARENT)
+	  in->dir->get_dir_auth().first == CDIR_AUTH_PARENT)
 	nested.push_back(in->dir);
     }
   }
@@ -905,7 +1056,7 @@ void MDCache::recalc_auth_bits()
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
-    if (in->authority() == mds->get_nodeid())
+    if (in->authority().first == mds->get_nodeid())
       in->state_set(CInode::STATE_AUTH);
     else {
       in->state_clear(CInode::STATE_AUTH);
@@ -914,7 +1065,7 @@ void MDCache::recalc_auth_bits()
     }
 
     if (in->parent) {
-      if (in->parent->authority() == mds->get_nodeid())
+      if (in->parent->authority().first == mds->get_nodeid())
 	in->parent->state_set(CDentry::STATE_AUTH);
       else {
 	in->parent->state_clear(CDentry::STATE_AUTH);
@@ -924,7 +1075,7 @@ void MDCache::recalc_auth_bits()
     }
 
     if (in->dir) {
-      if (in->dir->authority() == mds->get_nodeid())
+      if (in->dir->authority().first == mds->get_nodeid())
 	in->dir->state_set(CDIR_STATE_AUTH);
       else {
 	in->dir->state_clear(CDIR_STATE_AUTH);
@@ -1030,7 +1181,6 @@ bool MDCache::trim(int max)
 
   map<int, MCacheExpire*> expiremap;
 
-
   // DENTRIES from the LRU
 
   while (lru.lru_get_size() > (unsigned)max) {
@@ -1040,29 +1190,24 @@ bool MDCache::trim(int max)
     CDir *dir = dn->get_dir();
     assert(dir);
 
-    CDir *con = get_realm_root(dir);
+    CDir *con = get_subtree_root(dir);
     assert(con);
 
     dout(12) << "trim removing " << *dn << endl;
     dout(12) << " in container " << *con << endl;
     
     // notify dentry authority?
-    int auth2 = CDIR_AUTH_UNKNOWN;
-    int auth = CDIR_AUTH_UNKNOWN;
     if (!dn->is_auth()) {
-      auth = dn->authority(&auth2);
+      pair<int,int> auth = dn->authority();
 
-      dout(12) << "  sending expire to mds" << auth << " on " << *dn << endl;
-      assert(auth != mds->get_nodeid());
-      if (expiremap.count(auth) == 0) 
-	expiremap[auth] = new MCacheExpire(mds->get_nodeid());
-      expiremap[auth]->add_dentry(con->ino(), dir->ino(), dn->get_name(), dn->get_replica_nonce());
-
-      if (auth2 >= 0 && auth2 != mds->get_nodeid()) {
-	dout(12) << "  sending expire2 to mds" << auth2 << " on " << *dn << endl;
-	if (expiremap.count(auth2) == 0) 
-	  expiremap[auth2] = new MCacheExpire(mds->get_nodeid());
-	expiremap[auth2]->add_dentry(con->ino(), dir->ino(), dn->get_name(), dn->get_replica_nonce());
+      for (int a=auth.first; 
+	   a != auth.second && auth.second >= 0 && auth.second != mds->get_nodeid(); 
+	   a=auth.second) {
+	dout(12) << "  sending expire to mds" << a << " on " << *dn << endl;
+	assert(a != mds->get_nodeid());
+	if (expiremap.count(a) == 0) 
+	  expiremap[a] = new MCacheExpire(mds->get_nodeid());
+	expiremap[a]->add_dentry(con->ino(), dir->ino(), dn->get_name(), dn->get_replica_nonce());
       }
     }
     
@@ -1075,65 +1220,7 @@ bool MDCache::trim(int max)
       // expire the inode, too.
       CInode *in = dn->get_inode();
       assert(in);
-      assert(in->get_num_ref() == 0);
-      
-      // DIR
-      if (in->dir) {
-	if (!in->dir->is_auth()) {
-	  int dirauth2;
-	  int dirauth = in->dir->authority(&dirauth2);
-
-	  assert(dirauth2 < 100);   // hack die bug die
-
-	  // was this an auth delegation?  (if so, slightly modified container)
-	  CDir *dcon = con;
-	  if (in->dir->dir_auth >= 0 ||
-	      in->dir->dir_auth_pending >= 0) {
-	    dout(12) << "  for just this dir, the container is " << *dcon << endl;
-	    dcon = in->dir;
-	  }
-	  
-	  dout(12) << "  sending expire to mds" << dirauth << " on   " << *in->dir << endl;
-	  assert(dirauth != mds->get_nodeid());
-	  if (expiremap.count(dirauth) == 0) 
-	    expiremap[dirauth] = new MCacheExpire(mds->get_nodeid());
-	  expiremap[dirauth]->add_dir(dcon->ino(), in->ino(), in->dir->replica_nonce);
-	  
-	  if (dirauth2 >= 0 && dirauth2 != mds->get_nodeid()) {
-	    dout(12) << "  sending expire2 to mds" << dirauth2 << " on   " << *in->dir << endl;
-	    if (expiremap.count(dirauth2) == 0) 
-	      expiremap[dirauth2] = new MCacheExpire(mds->get_nodeid());
-	    expiremap[dirauth2]->add_dir(dcon->ino(), in->ino(), in->dir->replica_nonce);
-	  }
-	}
-	
-	in->close_dir();
-      }
-      
-      // INODE
-      if (!in->is_auth()) {
-	assert(auth >= 0);
-
-	dout(12) << "  sending expire to mds" << auth << " on " << *in << endl;
-	assert(auth != mds->get_nodeid());
-	if (expiremap.count(auth) == 0) 
-	  expiremap[auth] = new MCacheExpire(mds->get_nodeid());
-	expiremap[auth]->add_inode(con->ino(), in->ino(), in->get_replica_nonce());
-	
-	if (auth2 >= 0 && auth2 != mds->get_nodeid()) {
-	  dout(12) << "  sending expire2 to mds" << auth2 << " on " << *in << endl;
-	  if (expiremap.count(auth2) == 0) 
-	    expiremap[auth2] = new MCacheExpire(mds->get_nodeid());
-	  expiremap[auth2]->add_inode(con->ino(), in->ino(), in->get_replica_nonce());
-	}
-      }
-
-      dout(15) << "  trim removing " << *in << endl;
-      if (in == root) root = 0;
-      
-      // unlink
-      dir->unlink_inode(dn);
-      remove_inode(in);
+      trim_inode(dn, in, con->ino(), expiremap);
     } 
     else {
       assert(dn->is_null());
@@ -1153,6 +1240,15 @@ bool MDCache::trim(int max)
     if (mds->logger) mds->logger->inc("cex");
   }
 
+  // troot inode+dir?
+  while (max == 0 &&  // only if we're trimming everything!
+	 lru.lru_get_size() == 0 && 
+	 root && 
+	 root->get_num_ref() == 0 &&
+	 root->dir &&
+	 root->dir->get_num_ref() == 0)
+    trim_inode(0, root, 1, expiremap);
+
   // send expires
   for (map<int, MCacheExpire*>::iterator it = expiremap.begin();
        it != expiremap.end();
@@ -1161,8 +1257,67 @@ bool MDCache::trim(int max)
     mds->send_message_mds(it->second, it->first, MDS_PORT_CACHE);
   }
 
-
   return true;
+}
+
+void MDCache::trim_inode(CDentry *dn, CInode *in, inodeno_t conino, map<int, MCacheExpire*>& expiremap)
+{
+  assert(in->get_num_ref() == 0);
+    
+  // DIR
+  pair<int,int> dirauth = CDIR_AUTH_UNDEF;
+  if (in->dir) {
+    if (!in->dir->is_auth()) {
+      dirauth = in->dir->authority();
+      assert(dirauth.second < 100);   // hack die bug die
+      
+      // was this an auth delegation?  (if so, slightly modified container)
+      inodeno_t dconino = conino;
+      if (in->dir->is_subtree_root()) {
+	dout(12) << "  for just this dir, the container is " << *in->dir << endl;
+	dconino = in->ino();
+      }
+      
+      for (int a=dirauth.first; 
+	   a != dirauth.second && dirauth.second >= 0 && dirauth.second != mds->get_nodeid(); 
+	   a=dirauth.second) {
+	dout(12) << "  sending expire to mds" << a << " on   " << *in->dir << endl;
+	assert(a != mds->get_nodeid());
+	if (expiremap.count(a) == 0) 
+	  expiremap[a] = new MCacheExpire(mds->get_nodeid());
+	expiremap[a]->add_dir(dconino, in->ino(), in->dir->replica_nonce);
+      }
+    }
+    
+    in->close_dir();
+  }
+  
+  // INODE
+  if (!in->is_auth()) {
+    pair<int,int> auth = in->authority();
+    if (auth.first < 0) {  // e.g., root
+      assert(in->ino() == 1);
+      auth = dirauth; 
+    }
+    
+    for (int a=auth.first; 
+	 a != auth.second && auth.second >= 0 && auth.second != mds->get_nodeid(); 
+	 a=auth.second) {
+      dout(12) << "  sending expire to mds" << a << " on " << *in << endl;
+      assert(a != mds->get_nodeid());
+      if (expiremap.count(a) == 0) 
+	expiremap[a] = new MCacheExpire(mds->get_nodeid());
+      expiremap[a]->add_inode(conino, in->ino(), in->get_replica_nonce());
+    }
+  }
+  
+  dout(15) << "  trim removing " << *in << endl;
+  
+  // unlink
+  if (dn)
+    dn->get_dir()->unlink_inode(dn);
+  remove_inode(in);
+  if (in == root) root = 0;
 }
 
 
@@ -1291,7 +1446,7 @@ bool MDCache::shutdown_pass()
       CDir *dir = *it;
       if (!dir->is_auth()) continue;
       if (dir->is_unhashing()) continue;
-      migrator->unhash_dir(dir);
+      //migrator->unhash_dir(dir);
     }
 
     dout(7) << "waiting for dirs to unhash" << endl;
@@ -1371,24 +1526,24 @@ bool MDCache::shutdown_pass()
 
   
   // close root?
-  if (mds->get_nodeid() == 0 &&
-      lru.lru_get_size() == 0 &&
-      root && 
-      root->dir && 
-      root->dir->is_import() &&
-      root->dir->get_num_ref() == 1) {  // 1 is the import!
-    // un-import
-    dout(7) << "removing root import" << endl;
-    imports.erase(root->dir);
-    root->dir->state_clear(CDIR_STATE_IMPORT);
-    root->dir->put(CDir::PIN_IMPORT);
-
-    if (root->is_pinned_by(CInode::PIN_DIRTY)) {
-      dout(7) << "clearing root inode dirty flag" << endl;
-      root->put(CInode::PIN_DIRTY);
+  if (lru.lru_get_size() == 0 &&
+      root &&
+      root->dir) {
+    
+    if (root->dir->is_import()) {
+      // un-import
+      dout(7) << "removing root import" << endl;
+      imports.erase(root->dir);
+      root->dir->state_clear(CDIR_STATE_IMPORT);
+      root->dir->put(CDir::PIN_IMPORT);
+      
+      if (root->is_pinned_by(CInode::PIN_DIRTY)) {
+	dout(7) << "clearing root inode dirty flag" << endl;
+	root->put(CInode::PIN_DIRTY);
+      }
     }
 
-    trim(0);
+    // ignore root inode/dir on other nodes, since it's empty anyway. 
   }
   
   // imports?
@@ -1696,7 +1851,7 @@ int MDCache::path_traverse(filepath& origpath,
 					      cur->ino(),
 					      want,
 					      true),  // need this dir too
-				cur->authority(), MDS_PORT_CACHE);
+				cur->authority().first, MDS_PORT_CACHE);
         }
         cur->add_waiter(CINODE_WAIT_DIR, ondelay);
         if (onfinish) delete onfinish;
@@ -1848,7 +2003,7 @@ int MDCache::path_traverse(filepath& origpath,
     
     // MISS.  don't have it.
 
-    int dauth = cur->dir->dentry_authority( path[depth] );
+    int dauth = cur->dir->dentry_authority( path[depth] ).first;
     dout(12) << "traverse: miss on dentry " << path[depth] << " dauth " << dauth << " in " << *cur->dir << endl;
     
 
@@ -1977,8 +2132,8 @@ void MDCache::open_remote_dir(CInode *diri,
 				      diri->ino(),
 				      want,
 				      true),  // need the dir open
-			diri->authority(), MDS_PORT_CACHE);
-
+			diri->authority().first, MDS_PORT_CACHE);
+  
   diri->add_waiter(CINODE_WAIT_DIR, fin);
 }
 
@@ -2203,7 +2358,7 @@ void MDCache::request_cleanup(Message *req)
       
       dout(7) << "request_cleanup sending unxlock for foreign xlock on " << *dn << endl;
       assert(dn->is_xlocked());
-      int dauth = dn->dir->dentry_authority(dn->name);
+      int dauth = dn->dir->dentry_authority(dn->name).first;
       MLock *m = new MLock(LOCK_AC_UNXLOCK, mds->get_nodeid());
       m->set_dn(dn->dir->ino(), dn->name);
       mds->send_message_mds(m, dauth, MDS_PORT_CACHE);
@@ -2358,7 +2513,7 @@ void MDCache::handle_inode_link(MInodeLink *m)
 
   if (!in->is_auth()) {
     dout(7) << "handle_inode_link not auth for " << *in << ", fw to auth" << endl;
-    mds->send_message_mds(m, in->authority(), MDS_PORT_CACHE);
+    mds->send_message_mds(m, in->authority().first, MDS_PORT_CACHE);
     return;
   }
 
@@ -2447,7 +2602,7 @@ void MDCache::handle_discover(MDiscover *dis)
     
     // crazyness?
     if (!cur->dir && !cur->is_auth()) {
-      int iauth = cur->authority();
+      int iauth = cur->authority().first;
       dout(7) << "no dir and not inode auth; fwd to auth " << iauth << endl;
       mds->send_message_mds( dis, iauth, MDS_PORT_CACHE);
       return;
@@ -2521,7 +2676,7 @@ void MDCache::handle_discover(MDiscover *dis)
     if (dis->get_want().depth() == 0) break;
     
     // lookup dentry
-    int dentry_auth = cur->dir->dentry_authority( dis->get_dentry(i) );
+    int dentry_auth = cur->dir->dentry_authority( dis->get_dentry(i) ).first;
     if (dentry_auth != mds->get_nodeid()) {
       dout(7) << *cur->dir << "dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
       break;      // that's it for us!
@@ -2593,7 +2748,7 @@ void MDCache::handle_discover(MDiscover *dis)
     if ((cur->is_auth() || cur->is_proxy() || cur->dir->is_proxy()) &&
         !cur->dir->is_auth()) {
       // fwd to dir auth
-      int dirauth = cur->dir->authority();
+      int dirauth = cur->dir->authority().first;
       if (dirauth == dis->get_asker()) {
         dout(7) << "from (new?) dir auth, dropping (obsolete) discover on floor." << endl;  // XXX FIXME is this right?
         //assert(dis->get_asker() == dis->get_source());  //might be a weird other loop.  either way, asker has it.
@@ -3222,7 +3377,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
         mds->anchorclient->destroy(dn->inode->ino(), NULL);
       }
     } else {
-      int auth = dn->inode->authority();
+      int auth = dn->inode->authority().first;
       dout(7) << "remote target is remote, sending unlink request to " << auth << endl;
 
       mds->send_message_mds(new MInodeUnlink(dn->inode->ino(), mds->get_nodeid()),
@@ -3319,7 +3474,7 @@ void MDCache::handle_inode_unlink(MInodeUnlink *m)
   // proxy?
   if (in->is_proxy()) {
     dout(7) << "handle_inode_unlink proxy on " << *in << endl;
-    mds->send_message_mds(m, in->authority(), MDS_PORT_CACHE);
+    mds->send_message_mds(m, in->authority().first, MDS_PORT_CACHE);
     return;
   }
   assert(in->is_auth());
@@ -3403,12 +3558,11 @@ CDir *MDCache::get_auth_container(CDir *dir)
   return imp;
 }
 
-CDir *MDCache::get_realm_root(CDir *dir)
+CDir *MDCache::get_subtree_root(CDir *dir)
 {
   // find the underlying dir that delegates (or is about to delegate) auth
   while (true) {
-    if (dir->get_dir_auth() >= 0 ||
-	dir->get_dir_auth_pending() >= 0)
+    if (dir->is_subtree_root()) 
       return dir;
     dir = dir->get_parent_dir();
     if (!dir) 

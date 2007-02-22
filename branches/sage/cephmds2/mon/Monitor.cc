@@ -25,6 +25,8 @@
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
+#include "messages/MMonCommand.h"
+#include "messages/MMonCommandAck.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -157,6 +159,32 @@ void Monitor::lose_election(int l)
 }
 
 
+void Monitor::handle_command(MMonCommand *m)
+{
+  dout(0) << "handle_command " << *m << endl;
+  
+  int r = -1;
+  string rs = "unrecognized command";
+
+  if (!m->cmd.empty()) {
+    if (m->cmd[0] == "stop") {
+      r = 0;
+      rs = "stopping";
+    }
+    else if (m->cmd[0] == "mds") {
+      mdsmon->handle_command(m, r, rs);
+    }
+    else if (m->cmd[0] == "osd") {
+
+    }
+  }
+
+  // reply
+  messenger->send_message(new MMonCommandAck(r, rs), m->get_source_inst());
+  delete m;
+}
+
+
 
 void Monitor::dispatch(Message *m)
 {
@@ -172,6 +200,10 @@ void Monitor::dispatch(Message *m)
     case MSG_SHUTDOWN:
       assert(m->get_source().is_osd());
       osdmon->dispatch(m);
+      break;
+
+    case MSG_MON_COMMAND:
+      handle_command((MMonCommand*)m);
       break;
 
 

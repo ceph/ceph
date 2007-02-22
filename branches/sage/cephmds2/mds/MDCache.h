@@ -96,6 +96,7 @@ class MDCache {
   
   list<CInode*>                 inode_expire_queue;  // inodes to delete
 
+  friend class MDS; // for inode_map, FIXME
 
   // root
   list<Context*>     waiting_for_root;
@@ -105,9 +106,20 @@ class MDCache {
   set<CDir*>             exports;
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
+
+  // subtrees
+  map<CDir*,set<CDir*> > subtree_bounds;   // nested bounds on subtrees.
   
-  //void adjust_export(int to,   CDir *root, set<CDir*>& bounds);
-  //void adjust_import(int from, CDir *root, set<CDir*>& bounds);
+  // adjust subtree auth specification
+  //  dir->dir_auth
+  //  imports/exports/nested_exports
+  //  join/split subtrees as appropriate
+  void import_subtree(CDir *root, set<CDir*>& bounds);
+  void import_subtree_finish(CDir *root, set<CDir*>& bounds);
+  void export_subtree(CDir *root, set<CDir*>& bounds, int dest);
+  void export_subtree_finish(CDir *root, set<CDir*>& bounds, int dest);
+
+  void adjust_subtree_auth(CDir *root, pair<int,int> auth);
   
   // delayed cache expire
   map<CDir*, map<int, MCacheExpire*> > delayed_expire; // import|export dir -> expire msg
@@ -206,6 +218,8 @@ public:
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
+  void trim_inode(CDentry *dn, CInode *in, inodeno_t conino, 
+		  map<int,class MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 
   // shutdown
@@ -266,7 +280,7 @@ public:
 
  public:
   CDir *get_auth_container(CDir *in);
-  CDir *get_realm_root(CDir *dr);
+  CDir *get_subtree_root(CDir *dir);
   CDir *get_export_container(CDir *dir);
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);

@@ -285,7 +285,7 @@ void Locker::request_inode_file_caps(CInode *in)
     }
     assert(!in->is_auth());
 
-    int auth = in->authority();
+    int auth = in->authority().first;
     dout(7) << "request_inode_file_caps " << cap_string(wanted)
             << " was " << cap_string(in->replica_caps_wanted) 
             << " on " << *in << " to mds" << auth << endl;
@@ -310,7 +310,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
   if (in->is_proxy()) {
     dout(7) << "proxy, fw" << endl;
-    mds->send_message_mds(m, in->authority(), MDS_PORT_LOCKER);
+    mds->send_message_mds(m, in->authority().first, MDS_PORT_LOCKER);
     return;
   }
 
@@ -616,7 +616,7 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
   } else {
     // replica
     // fw to auth
-    int auth = in->authority();
+    int auth = in->authority().first;
     dout(7) << "inode_hard_write_start " << *in << " on replica, fw to auth " << auth << endl;
     assert(auth != mds->get_nodeid());
     mdcache->request_forward(m, auth);
@@ -758,7 +758,7 @@ void Locker::handle_lock_inode_hard(MLock *m)
 
     if (in->is_proxy()) {
       // fw
-      int newauth = in->authority();
+      int newauth = in->authority().first;
       assert(newauth >= 0);
       if (from == newauth) {
         dout(7) << "handle_lock " << m->get_ino() << " from " << from << ": proxy, but from new auth, dropping" << endl;
@@ -897,7 +897,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
       if (in->filelock.is_stable()) {
 
         // fw to auth
-        int auth = in->authority();
+        int auth = in->authority().first;
         dout(7) << "inode_file_read_start " << *in << " on replica and async, fw to auth " << auth << endl;
         assert(auth != mds->get_nodeid());
         mdcache->request_forward(m, auth);
@@ -958,7 +958,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
     } else {
       // replica
       // fw to auth
-      int auth = in->authority();
+      int auth = in->authority().first;
       dout(7) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
       assert(auth != mds->get_nodeid());
       mdcache->request_forward(m, auth);
@@ -1115,7 +1115,7 @@ void Locker::inode_file_eval(CInode *in)
         // ack
         MLock *reply = new MLock(LOCK_AC_MIXEDACK, mds->get_nodeid());
         reply->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(reply, in->authority(), MDS_PORT_LOCKER);
+        mds->send_message_mds(reply, in->authority().first, MDS_PORT_LOCKER);
       }
       break;
 
@@ -1126,7 +1126,7 @@ void Locker::inode_file_eval(CInode *in)
         // ack
         MLock *reply = new MLock(LOCK_AC_LOCKACK, mds->get_nodeid());
         reply->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(reply, in->authority(), MDS_PORT_LOCKER);
+        mds->send_message_mds(reply, in->authority().first, MDS_PORT_LOCKER);
       }
       break;
 
@@ -1505,7 +1505,7 @@ void Locker::handle_lock_inode_file(MLock *m)
         
     if (in->is_proxy()) {
       // fw
-      int newauth = in->authority();
+      int newauth = in->authority().first;
       assert(newauth >= 0);
       if (from == newauth) {
         dout(7) << "handle_lock " << m->get_ino() << " from " << from << ": proxy, but from new auth, dropping" << endl;
@@ -1915,7 +1915,7 @@ void Locker::dentry_xlock_request(CDir *dir, string& dname, bool create,
 {
   dout(10) << "dentry_xlock_request on dn " << dname << " create=" << create << " in " << *dir << endl; 
   // send request
-  int dauth = dir->dentry_authority(dname);
+  int dauth = dir->dentry_authority(dname).first;
   MLock *m = new MLock(create ? LOCK_AC_REQXLOCKC:LOCK_AC_REQXLOCK, mds->get_nodeid());
   m->set_dn(dir->ino(), dname);
   mds->send_message_mds(m, dauth, MDS_PORT_LOCKER);
@@ -1946,7 +1946,7 @@ void Locker::handle_lock_dn(MLock *m)
 
     // normally we have it always
     if (diri && dir) {
-      int dauth = dir->dentry_authority(dname);
+      int dauth = dir->dentry_authority(dname).first;
       assert(dauth == mds->get_nodeid() || dir->is_proxy() ||  // mine or proxy,
              m->get_action() == LOCK_AC_REQXLOCKACK ||         // or we did a REQXLOCK and this is our ack/nak
              m->get_action() == LOCK_AC_REQXLOCKNAK);

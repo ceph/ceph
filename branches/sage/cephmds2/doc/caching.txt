@@ -198,3 +198,37 @@ celery
 
 
 
+dir is a subtree root iff dir_auth.first != parent.
+if dir_auth.first = parent then inode auth == dir auth, but the converse may not be true.  
+that is, you may have inode auth = dir auth, but dir_auth.first = whoami.  e.g.,
+  /usr is import.
+  /usr/bin is export.
+  /usr frozen for export, with bound /usr/bin.
+  /usr/bin imports completely.  /usr/bin.dir_auth = whoami, not parent, because inode is not authpinnable.
+this is safe because the /usr bound is known, and an abort can adjust the bound's dir_auth.
+
+
+- if i am auth, any subtree bound will be a subtree root, and an export, frozen, or both.
+- if i am auth and unfrozen/freezing, any subtree bound will be an export.  and subtree root.
+- if i am auth and frozen, any subtree bound will be an export, or subtree root noted in export_bounds/import_bounds.
+
+- if a dir is a subtree root, it is
+  - auth, import
+  - auth, export
+  - nonauth, frozen, importing
+  - auth, frozen, imported
+  - auth, parent is auth+frozen for import|export, i am known bound.
+  - auth, parent is auth+frozen for import
+  - frozen and exporting
+  
+
+- a frozen tree root dir will auth_pin it's inode IFF it is auth AND not a subtree root.
+
+
+--------------------------
+
+dir is a subtree root iff dir_auth.first != parent.
+
+if subtree root and not root, will appear in subtree_bounds[parent subtree root].
+
+

@@ -141,7 +141,7 @@ void MDBalancer::send_heartbeat()
        it++) {
     CDir *im = *it;
     if (im->inode->is_root()) continue;
-    int from = im->inode->authority();
+    int from = im->inode->authority().first;
     import_map[from] += im->popularity[MDS_POP_CURDOM].meta_load();
   }
   mds_import_map[ mds->get_nodeid() ] = import_map;
@@ -264,7 +264,7 @@ void MDBalancer::do_hashing()
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_hashing hashing " << *dir << endl;
-    mds->mdcache->migrator->hash_dir(dir);
+    //mds->mdcache->migrator->hash_dir(dir);
   }
   hash_queue.clear();
 }
@@ -427,11 +427,11 @@ void MDBalancer::do_rebalance(int beat)
       dout(-5) << " exporting idle import " << **it 
                << " back to mds" << (*it)->inode->authority()
                << endl;
-      mds->mdcache->migrator->export_dir(*it, (*it)->inode->authority());
+      mds->mdcache->migrator->export_dir(*it, (*it)->inode->authority().first);
       continue;
     }
     import_pop_map[ pop ] = *it;
-    int from = (*it)->inode->authority();
+    int from = (*it)->inode->authority().first;
     dout(15) << "  map: i imported " << **it << " from " << from << endl;
     import_from_map.insert(pair<int,CDir*>(from, *it));
   }
@@ -485,7 +485,7 @@ void MDBalancer::do_rebalance(int beat)
         if (dir->is_hashed()) continue;
         if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
         double pop = dir->popularity[MDS_POP_CURDOM].meta_load();
-        assert(dir->inode->authority() == target);  // cuz that's how i put it in the map, dummy
+        assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
         
         if (pop <= amount-have) {
           dout(-5) << "reexporting " << *dir 
@@ -521,7 +521,7 @@ void MDBalancer::do_rebalance(int beat)
                  << " back to mds" << imp->inode->authority()
                  << endl;
         have += pop;
-        mds->mdcache->migrator->export_dir(imp, imp->inode->authority());
+        mds->mdcache->migrator->export_dir(imp, imp->inode->authority().first);
       }
       if (amount-have < MIN_OFFLOAD) break;
     }

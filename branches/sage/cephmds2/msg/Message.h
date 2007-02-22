@@ -30,11 +30,10 @@
 #define MSG_PING        10
 #define MSG_PING_ACK    11
 
-#define MSG_FAILURE     12
-#define MSG_FAILURE_ACK 13
-
 #define MSG_SHUTDOWN    99999
 
+#define MSG_MON_COMMAND            13
+#define MSG_MON_COMMAND_ACK        14
 
 #define MSG_MON_ELECTION_ACK       15
 #define MSG_MON_ELECTION_PROPOSE   16

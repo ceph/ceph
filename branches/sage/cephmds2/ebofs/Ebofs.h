@@ -21,11 +21,6 @@ using namespace __gnu_cxx;
 #include "include/Context.h"
 #include "include/buffer.h"
 
-template<typename U,typename V>
-inline ostream& operator<<(ostream& out, const pair<U,V>& p) {
-  return out << p.first << "," << p.second;
-}
-
 #include "types.h"
 #include "Onode.h"
 #include "Cnode.h"

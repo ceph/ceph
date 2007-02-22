@@ -75,17 +75,14 @@ private:
   const static int EXPORT_NOTIFYING     = 8;  // waiting for notifyacks
   
   // export fun
-  map<CDir*, int>               export_state;
-  map<CDir*, int>               export_peer;
-  map<CDir*, set<CDir*> >       export_bounds;
-  map<CDir*, list<bufferlist> > export_data;   // only during EXPORTING state
-  map<CDir*, set<int> >         export_warning_ack_waiting;
-  map<CDir*, set<int> >         export_notify_ack_waiting;
+  map<CDir*,int>               export_state;
+  map<CDir*,int>               export_peer;
+  map<CDir*,set<CDir*> >       export_bounds;
+  map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
+  map<CDir*,set<int> >         export_warning_ack_waiting;
+  map<CDir*,set<int> >         export_notify_ack_waiting;
 
-  //map<CDir*, list<inodeno_t> >  export_proxy_inos;
-  //map<CDir*, list<inodeno_t> >  export_proxy_dirinos;
-  
-  map<CDir*, list<Context*> >   export_finish_waiters;
+  map<CDir*,list<Context*> >   export_finish_waiters;
   
 
   // -- imports --
@@ -98,7 +95,8 @@ private:
 
   map<inodeno_t,int>             import_state;
   map<inodeno_t,int>             import_peer;
-  map<inodeno_t,set<inodeno_t> > import_bounds;
+  map<inodeno_t,set<inodeno_t> > import_bound_inos;
+  map<CDir*,set<CDir*> >         import_bounds;
 
 
   // -- hashing madness --
@@ -127,7 +125,11 @@ public:
     return 0;
   }
   bool is_importing() { return !import_state.empty(); }
-  const set<inodeno_t>& get_import_bounds(inodeno_t base) { 
+  const set<inodeno_t>& get_import_bound_inos(inodeno_t base) { 
+    assert(import_bound_inos.count(base));
+    return import_bound_inos[base];
+  }
+  const set<CDir*>& get_import_bounds(CDir *base) { 
     assert(import_bounds.count(base));
     return import_bounds[base];
   }
@@ -187,6 +189,7 @@ public:
   void got_hashed_replica(CDir *import,
                           inodeno_t dir_ino,
                           inodeno_t replica_ino);
+  void reverse_import(CDir *dir);
   void import_dir_logged_start(CDir *dir, int from,
 			       list<inodeno_t> &imported_subdirs,
 			       list<inodeno_t> &exports);

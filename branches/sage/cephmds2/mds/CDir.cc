@@ -56,17 +56,15 @@ ostream& operator<<(ostream& out, CDir& dir)
       out << "." << dir.get_replica_nonce();
   }
 
-  if (dir.get_dir_auth() != CDIR_AUTH_PARENT) 
+  if (dir.get_dir_auth() != CDIR_AUTH_DEFAULT) 
     out << " dir_auth=" << dir.get_dir_auth();
-  if (dir.get_dir_auth_pending() != CDIR_AUTH_UNKNOWN)
-    out << " dir_auth_pending=" << dir.get_dir_auth_pending();
   
   out << " state=" << dir.get_state();
   if (dir.state_test(CDIR_STATE_PROXY)) out << "|proxy";
   if (dir.state_test(CDIR_STATE_COMPLETE)) out << "|complete";
   if (dir.state_test(CDIR_STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDIR_STATE_FROZENTREE)) out << "|frozentree";
-  if (dir.state_test(CDIR_STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
+  //if (dir.state_test(CDIR_STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
   if (dir.state_test(CDIR_STATE_FROZENDIR)) out << "|frozendir";
   if (dir.state_test(CDIR_STATE_FREEZINGDIR)) out << "|freezingdir";
 
@@ -104,8 +102,7 @@ CDir::CDir(CInode *in, MDCache *mdcache, bool auth)
   ref = 0;
 
   // dir_auth
-  dir_auth = CDIR_AUTH_PARENT;
-  dir_auth_pending = CDIR_AUTH_UNKNOWN;
+  dir_auth = CDIR_AUTH_DEFAULT;
 
   // auth
   assert(in->is_dir());
@@ -314,7 +311,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     assert(dn->is_primary());
  
     // explicitly define auth
-    in->dangling_auth = in->authority(&in->dangling_auth2);
+    in->dangling_auth = in->authority();
     //dout(10) << "unlink_inode " << *in << " dangling_auth now " << in->dangling_auth << endl;
 
     // unpin dentry?
@@ -548,27 +545,49 @@ void CDir::last_put()
  */
 
 /*
- * simple rule: if dir_auth isn't explicit, auth is the same as the inode.
+ * if dir_auth.first == parent, auth is same as inode.
+ * unless .second != unknown, in which case that sticks.
  */
-int CDir::authority(int *a2) 
+pair<int,int> CDir::authority() 
 {
-  // does dir_auth_pending terminate here?
-  if (a2 && dir_auth_pending != CDIR_AUTH_UNKNOWN) {
-    *a2 = dir_auth_pending;
-    a2 = 0;
-  }
-
-  // pass to parent?
-  if (dir_auth == CDIR_AUTH_PARENT)
-    return inode->authority(a2);
-
-  // at current node.
-  if (a2) *a2 = dir_auth_pending;
-  return dir_auth;
+  pair<int,int> a = dir_auth;
+  
+  // look at parent?
+  if (dir_auth.first == CDIR_AUTH_PARENT) 
+    a = inode->authority();
+  
+  if (dir_auth.second == CDIR_AUTH_UNKNOWN)
+    return a;
+  else 
+    return pair<int,int>(a.first, dir_auth.second);
 }
 
-int CDir::dentry_authority(const string& dn, int *a2 )
+/** is_subtree_root()
+ * true if this is an auth delegation point.  
+ * that is, dir_auth != default (parent,unknown)
+ *
+ * some key observations:
+ *  if i am auth:
+ *    - any region bound will be an export, or frozen.
+ *
+ * note that this DOES heed dir_auth.pending
+ */
+bool CDir::is_subtree_root()
 {
+  if (dir_auth == CDIR_AUTH_DEFAULT)
+    return false;
+  else
+    return true;
+}
+
+
+
+pair<int,int> CDir::dentry_authority(const string& dn)
+{
+  // forget hashing for now.
+  return authority();
+
+  /*
   // hashing -- subset of nodes have hashed the contents
   if (is_hashing() && !hashed_subset.empty()) {
     int hashauth = cache->hash_dentry( inode->ino(), dn );  // hashed
@@ -589,27 +608,61 @@ int CDir::dentry_authority(const string& dn, int *a2 )
   // it's explicit for this whole dir
   //dout(15) << "dir_auth explicit " << dir_auth << " at " << *this << endl;
   return get_dir_auth(a2);
+  */
 }
 
-void CDir::set_dir_auth(int d, int d2) 
+
+/** set_dir_auth
+ *
+ * accept 'iamauth' param so that i can intelligently adjust freeze auth_pins
+ * even when the auth bit isn't correct.  
+ * as when calling MDCache::import_subtree(...).
+ */
+void CDir::set_dir_auth(pair<int,int> a, bool iamauth) 
 { 
-  dout(10) << "setting dir_auth=" << d << "," << d2
-	   << " from " << dir_auth << "," << dir_auth_pending
+  dout(10) << "setting dir_auth=" << a
+	   << " from " << dir_auth
 	   << " on " << *this << endl;
-  dir_auth = d; 
-  dir_auth_pending = d2;
-}
-void CDir::set_dir_auth_pending(int d2) 
-{
-  dout(10) << "setting dir_auth_pending=" << d2
-	   << " from " << dir_auth << "," << dir_auth_pending
-	   << " on " << *this << endl;
-  dir_auth_pending = d2;
+  
+  bool was_subtree = is_subtree_root();
+
+  // set it.
+  dir_auth = a;
+
+  // new subtree root?
+  if (!was_subtree && is_subtree_root()) {
+    dout(10) << "new subtree root, adjusting auth_pins" << endl;
+    
+    // adjust nested auth pins
+    inode->adjust_nested_auth_pins(get_cum_auth_pins());
+    
+    // pin parent of frozen dir/tree?
+    if (iamauth && (is_frozen_tree_root() || is_frozen_dir()))
+      inode->auth_pin();
+  } 
+  if (was_subtree && !is_subtree_root()) {
+    dout(10) << "old subtree root, adjusting auth_pins" << endl;
+    
+    // adjust nested auth pins
+    inode->adjust_nested_auth_pins(get_cum_auth_pins());
+  }
 }
 
 
 /*****************************************
- * AUTH PINS
+ * AUTH PINS and FREEZING
+ *
+ * the basic plan is that auth_pins only exist in auth regions, and they
+ * prevent a freeze (and subsequent auth change).  
+ *
+ * however, we also need to prevent a parent from freezing if a child is frozen.
+ * for that reason, the parent inode of a frozen directory is auth_pinned.
+ *
+ * the oddity is when the frozen directory is a subtree root.  if that's the case,
+ * the parent inode isn't frozen.  which means that when subtree authority is adjusted
+ * at the bounds, inodes for any frozen bound directories need to get auth_pins at that
+ * time.
+ *
  */
 
 void CDir::auth_pin() 
@@ -621,12 +674,12 @@ void CDir::auth_pin()
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
 
   // nest pins?
-  if (!is_subtree_root()) {
-    assert(!is_import());
-    inode->nested_auth_pins++;
-    if (inode->parent)
-      inode->parent->dir->adjust_nested_auth_pins( 1 );
-  }
+  if (is_subtree_root()) return;  // no.
+  assert(!is_import());
+
+  inode->nested_auth_pins++;
+  if (inode->parent)
+    inode->parent->dir->adjust_nested_auth_pins( 1 );
 }
 
 void CDir::auth_unpin() 
@@ -643,36 +696,35 @@ void CDir::auth_unpin()
     on_freezeable();
   
   // nest?
-  if (!is_subtree_root()) {
-    inode->nested_auth_pins--;
-    if (inode->parent)
-      inode->parent->dir->adjust_nested_auth_pins( -1 );
-  }
+  if (is_subtree_root()) return;  // no.
+  assert(!is_import());
+
+  inode->nested_auth_pins--;
+  if (inode->parent)
+    inode->parent->dir->adjust_nested_auth_pins( -1 );
 }
 
 void CDir::adjust_nested_auth_pins(int inc) 
 {
   CDir *dir = this;
   
-  while (1) {
-    // dir
-    dir->nested_auth_pins += inc;
-    
-    dout(10) << "adjust_nested_auth_pins on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
-    assert(dir->nested_auth_pins >= 0);
-    
-    // pending freeze?
-    if (dir->auth_pins + dir->nested_auth_pins == 0) 
-      dir->on_freezeable();
-    
-    // it's inode
-    dir->inode->nested_auth_pins += inc;
-    
-    if (dir->inode->parent)
-      dir = dir->inode->parent->dir;
-    else
-      break;
-  }
+  // dir
+  dir->nested_auth_pins += inc;
+  
+  dout(10) << "adjust_nested_auth_pins on " << *dir << " count now " << dir->auth_pins << " + " << dir->nested_auth_pins << endl;
+  assert(dir->nested_auth_pins >= 0);
+  
+  // pending freeze?
+  if (is_freezeable())
+    dir->on_freezeable();
+  // on freezeable_dir too?  FIXME
+  
+  // adjust my inode?
+  if (dir->is_subtree_root()) 
+    return; // no, stop.
+
+  // yes.
+  dir->inode->adjust_nested_auth_pins(inc);
 }
 
 
@@ -685,6 +737,9 @@ void CDir::on_freezeable()
 {
   // check for anything pending freezeable
 
+  /* NOTE: this will be called on deeper dirs first, walking up toward
+     the root, meaning that deeper freeze attempts will succeed first.
+  */
   /* NOTE: the first of these will likely freeze the dir, and unmark
      FREEZING.  additional ones will re-flag FREEZING.  this isn't
      particularly graceful, and might cause problems if the first one
@@ -715,14 +770,7 @@ void CDir::freeze_tree(Context *c)
   
   if (is_freezeable()) {
     dout(10) << "freeze_tree " << *this << endl;
-    
-    state_set(CDIR_STATE_FROZENTREE);
-    inode->auth_pin();  // auth_pin for duration of freeze
-    
-    // easy, we're frozen
-    c->finish(0);
-    delete c;
-    
+    _freeze_tree(c);
   } else {
     state_set(CDIR_STATE_FREEZINGTREE);
     dout(10) << "freeze_tree + wait " << *this << endl;
@@ -744,10 +792,23 @@ void CDir::freeze_tree_finish(Context *c)
   }
 
   dout(10) << "freeze_tree_finish " << *this << endl;
-  state_set(CDIR_STATE_FROZENTREE);
-  state_clear(CDIR_STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+  _freeze_tree(c);
+}
 
-  inode->auth_pin();  // auth_pin for duration of freeze
+void CDir::_freeze_tree(Context *c)
+{
+  dout(10) << "_freeze_tree " << *this << endl;
+
+  // there shouldn't be any conflicting auth_pins.
+  assert(is_freezeable_dir());
+
+  // twiddle state
+  state_clear(CDIR_STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+  state_set(CDIR_STATE_FROZENTREE);
+
+  // auth_pin inode for duration of freeze, if we are not a subtree root.
+  if (is_auth() && !is_subtree_root())
+    inode->auth_pin();  
   
   // continue to frozen land
   if (c) {
@@ -765,7 +826,8 @@ void CDir::unfreeze_tree()
     state_clear(CDIR_STATE_FROZENTREE);
 
     // unpin  (may => FREEZEABLE)   FIXME: is this order good?
-    inode->auth_unpin();
+    if (is_auth() && !is_subtree_root())
+      inode->auth_unpin();
 
     // waiters?
     finish_waiting(CDIR_WAIT_UNFREEZE);
@@ -798,9 +860,7 @@ bool CDir::is_frozen_tree()
   CDir *dir = this;
   while (1) {
     if (dir->is_frozen_tree_root()) return true;
-    if (dir->is_import()) return false;
-    if (dir->is_hashed()) return false;
-    if (dir->is_frozen_tree_leaf()) return false;
+    if (dir->is_subtree_root()) return false;
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else
@@ -846,14 +906,7 @@ void CDir::freeze_dir(Context *c)
   
   if (is_freezeable_dir()) {
     dout(10) << "freeze_dir " << *this << endl;
-    
-    state_set(CDIR_STATE_FROZENDIR);
-    inode->auth_pin();  // auth_pin for duration of freeze
-    
-    // easy, we're frozen
-    c->finish(0);
-    delete c;
-    
+    _freeze_dir(c);
   } else {
     state_set(CDIR_STATE_FREEZINGDIR);
     dout(10) << "freeze_dir + wait " << *this << endl;
@@ -863,27 +916,32 @@ void CDir::freeze_dir(Context *c)
   } 
 }
 
+void CDir::_freeze_dir(Context *c)
+{  
+  dout(10) << "_freeze_dir " << *this << endl;
+
+  state_set(CDIR_STATE_FROZENDIR);
+
+  if (is_auth() && !is_subtree_root())
+    inode->auth_pin();  // auth_pin for duration of freeze
+  
+  if (c) {
+    c->finish(0);
+    delete c;
+  }
+}
+
 void CDir::freeze_dir_finish(Context *c)
 {
   // freezeable now?
-  if (!is_freezeable_dir()) {
+  if (is_freezeable_dir()) {
+    // freeze now
+    _freeze_dir(c);
+  } else {
     // wait again!
     dout(10) << "freeze_dir_finish still waiting " << *this << endl;
     state_set(CDIR_STATE_FREEZINGDIR);
     add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
-    return;
-  }
-
-  dout(10) << "freeze_dir_finish " << *this << endl;
-  state_set(CDIR_STATE_FROZENDIR);
-  state_clear(CDIR_STATE_FREEZINGDIR);   // actually, this may get set again by next context?
-  
-  inode->auth_pin();  // auth_pin for duration of freeze
-  
-  // continue to frozen land
-  if (c) {
-    c->finish(0);
-    delete c;
   }
 }
 
@@ -893,7 +951,8 @@ void CDir::unfreeze_dir()
   state_clear(CDIR_STATE_FROZENDIR);
   
   // unpin  (may => FREEZEABLE)   FIXME: is this order good?
-  inode->auth_unpin();
+  if (is_auth() && !is_subtree_root())
+    inode->auth_unpin();
 
   // waiters?
   finish_waiting(CDIR_WAIT_UNFREEZE);

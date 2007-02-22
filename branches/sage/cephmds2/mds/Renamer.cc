@@ -131,7 +131,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         // inode was ours, still ours.
         dout(7) << "inode was ours, still ours." << endl;
         assert(!in->dir->is_import());
-        assert(in->dir->get_dir_auth() == CDIR_AUTH_PARENT);
+        assert(in->dir->get_dir_auth().first == CDIR_AUTH_PARENT);
         
         // move any exports nested beneath me?
         CDir *newcon = cache->get_auth_container(in->dir);
@@ -189,7 +189,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         assert(in->dir->is_import());
 
         // verify dir_auth
-        assert(in->dir->get_dir_auth() == mds->get_nodeid()); // me, because i'm auth for dir.
+        assert(in->dir->get_dir_auth().first == mds->get_nodeid()); // me, because i'm auth for dir.
         assert(in->authority() != in->dir->get_dir_auth());   // inode not me.
       }
 
@@ -227,7 +227,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
         // sanity
         assert(in->dir->is_export());
-        assert(in->dir->get_dir_auth() >= 0);              
+        assert(in->dir->get_dir_auth().first >= 0);              
         assert(in->dir->get_dir_auth() != in->authority());
 
         // moved under new import?
@@ -264,7 +264,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
           in->dir->set_dir_auth( CDIR_AUTH_PARENT );
           dout(7) << "simplified dir_auth to -1, inode auth is (also) " << in->authority() << endl;
         } else {
-          assert(in->dir->get_dir_auth() >= 0);    // someone else's export,
+          assert(in->dir->get_dir_auth().first >= 0);    // someone else's export,
         }
 
       } else {
@@ -272,7 +272,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         dout(7) << "inode was replica, still replica.  do nothing." << endl;
         
         // fix dir_auth?
-        if (in->authority() == dir_auth)
+        if (in->authority().first == dir_auth)
           in->dir->set_dir_auth( CDIR_AUTH_PARENT );
         else
           in->dir->set_dir_auth( dir_auth );
@@ -346,8 +346,8 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
 
 
   // determine the players
-  int srcauth = srcdir->dentry_authority(srcdn->name);
-  int destauth = destdir->dentry_authority(destname);
+  int srcauth = srcdir->dentry_authority(srcdn->name).first;
+  int destauth = destdir->dentry_authority(destname).first;
 
 
   // FOREIGN rename?
@@ -714,7 +714,7 @@ void Renamer::handle_rename(MRename *m)
 
   // note old dir auth
   int old_dir_auth = -1;
-  if (srcdn->inode->dir) old_dir_auth = srcdn->inode->dir->authority();
+  if (srcdn->inode->dir) old_dir_auth = srcdn->inode->dir->authority().first;
     
   // rename replica into position
   if (destdn->inode && destdn->inode->is_dirty())
@@ -845,7 +845,7 @@ void Renamer::handle_rename_notify(MRenameNotify *m)
     CInode *in = srcdn->inode;
 
     int old_dir_auth = -1;
-    if (in && in->dir) old_dir_auth = in->dir->authority();
+    if (in && in->dir) old_dir_auth = in->dir->authority().first;
 
     if (!destdn) {
       destdn = destdir->add_dentry(m->get_destname());  // create null dentry

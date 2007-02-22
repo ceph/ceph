@@ -27,12 +27,13 @@ public:
   static const int TYPE_MDS = 2;
   static const int TYPE_OSD = 3;
   static const int TYPE_CLIENT = 4;
+  static const int TYPE_ADMIN = 5;
 
   static const int NEW = -1;
 
   // cons
   entity_name_t() : _type(0), _num(0) {}
-  entity_name_t(int t, int n) : _type(t), _num(n) {}
+  entity_name_t(int t, int n=NEW) : _type(t), _num(n) {}
   
   int num() const { return _num; }
   int type() const { return _type; }
@@ -42,6 +43,7 @@ public:
     case TYPE_OSD: return "osd"; 
     case TYPE_MON: return "mon"; 
     case TYPE_CLIENT: return "client"; 
+    case TYPE_ADMIN: return "admin";
     default: return "unknown";
     }    
   }
@@ -52,6 +54,7 @@ public:
   bool is_mds() const { return type() == TYPE_MDS; }
   bool is_osd() const { return type() == TYPE_OSD; }
   bool is_mon() const { return type() == TYPE_MON; }
+  bool is_admin() const { return type() == TYPE_ADMIN; }
 };
 
 inline bool operator== (const entity_name_t& l, const entity_name_t& r) { 

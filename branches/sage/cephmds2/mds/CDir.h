@@ -47,7 +47,8 @@ class Context;
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_UNKNOWN  -2
-
+#define CDIR_AUTH_DEFAULT  pair<int,int>(CDIR_AUTH_PARENT,CDIR_AUTH_UNKNOWN)
+#define CDIR_AUTH_UNDEF    pair<int,int>(CDIR_AUTH_UNKNOWN,CDIR_AUTH_UNKNOWN)
 
 #define CDIR_NONCE_EXPORT   1
 
@@ -61,7 +62,7 @@ class Context;
 
 #define CDIR_STATE_FROZENTREE     (1<<4)   // root of tree (bounded by exports)
 #define CDIR_STATE_FREEZINGTREE   (1<<5)   // in process of freezing 
-#define CDIR_STATE_FROZENTREELEAF (1<<6)   // outer bound of frozen region (on import)
+//#define CDIR_STATE_FROZENTREELEAF (1<<6)   // outer bound of frozen region (on import)
 #define CDIR_STATE_FROZENDIR      (1<<7)
 #define CDIR_STATE_FREEZINGDIR    (1<<8)
 
@@ -70,13 +71,14 @@ class Context;
 
 #define CDIR_STATE_DELETED        (1<<11)
 
-#define CDIR_STATE_IMPORT           (1<<12)   // flag set if this is an import.
-#define CDIR_STATE_EXPORT           (1<<13)
-#define CDIR_STATE_IMPORTINGEXPORT  (1<<14)
+#define CDIR_STATE_IMPORT       (1<<12)   // flag set if this is an import.
+#define CDIR_STATE_EXPORT       (1<<13)
+#define CDIR_STATE_IMPORTBOUND  (1<<14)
+#define CDIR_STATE_EXPORTBOUND  (1<<15)
 
-#define CDIR_STATE_HASHED           (1<<15)   // if hashed
-#define CDIR_STATE_HASHING          (1<<16)
-#define CDIR_STATE_UNHASHING        (1<<17)
+#define CDIR_STATE_HASHED           (1<<16)   // if hashed
+#define CDIR_STATE_HASHING          (1<<17)
+#define CDIR_STATE_UNHASHING        (1<<18)
 
 
 
@@ -88,7 +90,7 @@ class Context;
                                     |CDIR_STATE_DIRTY)  
 #define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT\
                                     |CDIR_STATE_EXPORT\
-                                    |CDIR_STATE_IMPORTINGEXPORT\
+                                    |CDIR_STATE_IMPORTBOUND\
                                     |CDIR_STATE_FROZENTREE\
                                     |CDIR_STATE_PROXY)
 
@@ -180,15 +182,18 @@ class CDir : public MDSCacheObject {
   static const int PIN_IMPORT =   3;
   static const int PIN_EXPORT =   4;
   //static const int PIN_FREEZE =   5;
-  static const int PIN_FREEZELEAF = 6;
+  //  static const int PIN_FREEZELEAF = 6;
   static const int PIN_PROXY =    7;  // auth just changed.
   static const int PIN_AUTHPIN =  8;
   static const int PIN_IMPORTING = 9;
-  static const int PIN_IMPORTINGEXPORT = 10;
-  static const int PIN_HASHED =   11;
-  static const int PIN_HASHING =  12;
-  static const int PIN_DIRTY =    13;
-  static const int PIN_REQUEST =  14;
+  static const int PIN_EXPORTING = 10;
+  static const int PIN_IMPORTBOUND = 11;
+  static const int PIN_EXPORTBOUND = 12;
+  static const int PIN_HASHED =   13;
+  static const int PIN_HASHING =  14;
+  static const int PIN_DIRTY =    15;
+  static const int PIN_REQUEST =  16;
+  static const int PIN_LOGGINGEXPORTFINISH = 17;
   static const char *pin_name(int p) {
     switch (p) {
     case PIN_CHILD: return "child";
@@ -196,16 +201,19 @@ class CDir : public MDSCacheObject {
     case PIN_WAITER: return "waiter";
     case PIN_IMPORT: return "import";
     case PIN_EXPORT: return "export";
+    case PIN_EXPORTING: return "exporting";
+    case PIN_IMPORTING: return "importing";
+    case PIN_IMPORTBOUND: return "importbound";
+    case PIN_EXPORTBOUND: return "exportbound";
       //case PIN_FREEZE: return "freeze";
-    case PIN_FREEZELEAF: return "freezeleaf";
+      //    case PIN_FREEZELEAF: return "freezeleaf";
     case PIN_PROXY: return "proxy";
     case PIN_AUTHPIN: return "authpin";
-    case PIN_IMPORTING: return "importing";
-    case PIN_IMPORTINGEXPORT: return "importingexport";
     case PIN_HASHED: return "hashed";
     case PIN_HASHING: return "hashing";
     case PIN_DIRTY: return "dirty";
     case PIN_REQUEST: return "request";
+    case PIN_LOGGINGEXPORTFINISH: return "loggingexportfinish";
     default: assert(0);
     }
   }
@@ -230,9 +238,6 @@ class CDir : public MDSCacheObject {
   version_t       committing_version;
   version_t       last_committed_version;   // slight lie; we bump this on import.
   version_t       projected_version; 
-
-  // authority, replicas
-  int              dir_auth, dir_auth_pending;
 
   // lock nesting, freeze
   int        auth_pins;
@@ -318,27 +323,29 @@ class CDir : public MDSCacheObject {
   void remove_null_dentries();  // on empty, clean dir
 
   // -- authority --
- public:
-  int authority(int *a2=0);
-  int dentry_authority(const string& d, int *a2=0);
-  int get_dir_auth(int *a2=0) { 
-    if (a2) 
-      *a2 = dir_auth_pending;
-    return dir_auth; 
-  }
-  int get_dir_auth_pending() {
-    return dir_auth_pending;
-  }
-  void set_dir_auth(int d, int d2=CDIR_AUTH_UNKNOWN);
-  void set_dir_auth_pending(int d2);
+  /*
+   *     normal: <parent,unknown>   !subtree_root
+   * delegation: <mds,unknown>       subtree_root
+   *  ambiguous: <mds1,mds2>         subtree_root
+   *             <parent,mds2>       subtree_root     
+   */
+  pair<int,int> dir_auth;
 
-  bool is_subtree_root() {
-    if (dir_auth != CDIR_AUTH_PARENT ||
-	dir_auth_pending != CDIR_AUTH_PARENT)
-      return true;
-    else 
-      return false;
+ public:
+  pair<int,int> authority();
+  pair<int,int> dentry_authority(const string& d);
+  pair<int,int> get_dir_auth() { return dir_auth; }
+  //int get_dir_auth_pending() { return dir_auth->second; }
+  void set_dir_auth(pair<int,int> a, bool iamauth=false);
+  void set_dir_auth(int a, bool iamauth=false) { 
+    set_dir_auth(pair<int,int>(a, dir_auth.second), iamauth); 
   }
+  void set_dir_auth_pending(int b) { 
+    set_dir_auth(pair<int,int>(dir_auth.first, b)); 
+  }
+
+  bool is_subtree_root();
+
 
  
 
@@ -440,9 +447,11 @@ class CDir : public MDSCacheObject {
   void freeze_tree(Context *c);
   void freeze_tree_finish(Context *c);
   void unfreeze_tree();
+  void _freeze_tree(Context *c=0);
 
   void freeze_dir(Context *c);
   void freeze_dir_finish(Context *c);
+  void _freeze_dir(Context *c=0);
   void unfreeze_dir();
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
@@ -453,16 +462,28 @@ class CDir : public MDSCacheObject {
   bool is_frozen() { return is_frozen_dir() || is_frozen_tree(); }
   bool is_frozen_tree();
   bool is_frozen_tree_root() { return state & CDIR_STATE_FROZENTREE; }
-  bool is_frozen_tree_leaf() { return state & CDIR_STATE_FROZENTREELEAF; }
   bool is_frozen_dir() { return state & CDIR_STATE_FROZENDIR; }
   
   bool is_freezeable() {
-    if (auth_pins == 0 && nested_auth_pins == 0) return true;
-    return false;
+    // no nested auth pins.
+    if (auth_pins > 0 || nested_auth_pins > 0) 
+      return false;
+
+    // inode must not be frozen.
+    if (inode->is_frozen())
+      return false;
+
+    return true;
   }
   bool is_freezeable_dir() {
-    if (auth_pins == 0) return true;
-    return false;
+    if (auth_pins > 0) 
+      return false;
+
+    // inode must not be frozen.
+    if (inode->is_frozen())
+      return false;
+
+    return true;
   }
 
   CDir *get_frozen_tree_root();
@@ -481,7 +502,7 @@ class CDir : public MDSCacheObject {
 class CDirDiscover {
   inodeno_t ino;
   int       nonce;
-  int       dir_auth;
+  int  dir_auth;
   int       dir_rep;
   set<int>  rep_by;
 
@@ -490,7 +511,7 @@ class CDirDiscover {
   CDirDiscover(CDir *dir, int nonce) {
     ino = dir->ino();
     this->nonce = nonce;
-    dir_auth = dir->dir_auth;
+    dir_auth = dir->dir_auth.first;
     dir_rep = dir->dir_rep;
     rep_by = dir->dir_rep_by;
   }
@@ -500,7 +521,7 @@ class CDirDiscover {
     assert(!dir->is_auth());
 
     dir->replica_nonce = nonce;
-    dir->dir_auth = dir_auth;
+    dir->set_dir_auth( dir_auth );
     dir->dir_rep = dir_rep;
     dir->dir_rep_by = rep_by;
   }
