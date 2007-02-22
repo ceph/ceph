@@ -332,6 +332,14 @@ class CDir : public MDSCacheObject {
   void set_dir_auth(int d, int d2=CDIR_AUTH_UNKNOWN);
   void set_dir_auth_pending(int d2);
 
+  bool is_subtree_root() {
+    if (dir_auth != CDIR_AUTH_PARENT ||
+	dir_auth_pending != CDIR_AUTH_PARENT)
+      return true;
+    else 
+      return false;
+  }
+
  
 
   // for giving to clients
@@ -422,6 +430,7 @@ class CDir : public MDSCacheObject {
   // -- auth pins --
   bool can_auth_pin() { return !(is_frozen() || is_freezing()); }
   int is_auth_pinned() { return auth_pins; }
+  int get_cum_auth_pins() { return auth_pins + nested_auth_pins; }
   void auth_pin();
   void auth_unpin();
   void adjust_nested_auth_pins(int inc);

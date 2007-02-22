@@ -1461,8 +1461,8 @@ CInode *MDCache::create_root_inode()
   // make it up (FIXME)
   root->inode.mode = 0755 | INODE_MODE_DIR;
   root->inode.size = 0;
-  root->inode.ctime = 0;
-  root->inode.mtime = g_clock.gettime();
+  root->inode.ctime = 
+    root->inode.mtime = g_clock.gettime();
   
   root->inode.nlink = 1;
   root->inode.layout = g_OSD_MDDirLayout;

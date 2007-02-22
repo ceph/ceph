@@ -612,19 +612,25 @@ void CDir::set_dir_auth_pending(int d2)
  * AUTH PINS
  */
 
-void CDir::auth_pin() {
+void CDir::auth_pin() 
+{
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
 
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
-  
-  inode->nested_auth_pins++;
-  if (inode->parent)
-    inode->parent->dir->adjust_nested_auth_pins( 1 );
+
+  // nest pins?
+  if (!is_subtree_root()) {
+    assert(!is_import());
+    inode->nested_auth_pins++;
+    if (inode->parent)
+      inode->parent->dir->adjust_nested_auth_pins( 1 );
+  }
 }
 
-void CDir::auth_unpin() {
+void CDir::auth_unpin() 
+{
   auth_pins--;
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
@@ -636,9 +642,12 @@ void CDir::auth_unpin() {
   if (auth_pins + nested_auth_pins == 0)
     on_freezeable();
   
-  inode->nested_auth_pins--;
-  if (inode->parent)
-    inode->parent->dir->adjust_nested_auth_pins( -1 );
+  // nest?
+  if (!is_subtree_root()) {
+    inode->nested_auth_pins--;
+    if (inode->parent)
+      inode->parent->dir->adjust_nested_auth_pins( -1 );
+  }
 }
 
 void CDir::adjust_nested_auth_pins(int inc) 

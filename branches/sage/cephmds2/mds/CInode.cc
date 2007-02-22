@@ -449,26 +449,28 @@ bool CInode::can_auth_pin() {
   return true;
 }
 
-void CInode::auth_pin() {
+void CInode::auth_pin() 
+{
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
 
   dout(7) << "auth_pin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
-
+  
   if (parent)
     parent->dir->adjust_nested_auth_pins( 1 );
 }
 
-void CInode::auth_unpin() {
+void CInode::auth_unpin() 
+{
   auth_pins--;
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
-
+  
   dout(7) << "auth_unpin on " << *this << " count now " << auth_pins << " + " << nested_auth_pins << endl;
-
+  
   assert(auth_pins >= 0);
-
+  
   if (parent)
     parent->dir->adjust_nested_auth_pins( -1 );
 }

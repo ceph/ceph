@@ -663,6 +663,8 @@ void Migrator::export_dir_go(CDir *dir)
   assert(export_bounds.count(dir) == 1);
   assert(export_data.count(dir) == 0);
 
+  assert(dir->get_cum_auth_pins() == 0);
+
   // update imports/exports
   CDir *containing_import = cache->get_auth_container(dir);
 
@@ -1058,6 +1060,8 @@ void Migrator::reverse_export(CDir *dir)
   if (dir != im)
     dout(10) << "  under " << *im << endl;
   
+  assert(dir->get_cum_auth_pins() == 0);
+
   // bounds
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
@@ -1613,6 +1617,8 @@ void Migrator::handle_export_dir(MExportDir *m)
   if (dir != im)
     dout(10) << "  under " << *im << endl;
 
+  assert(dir->get_cum_auth_pins() == 0);
+
   // bounds
   for (list<inodeno_t>::iterator it = m->get_exports().begin();
        it != m->get_exports().end();
@@ -1633,6 +1639,9 @@ void Migrator::handle_export_dir(MExportDir *m)
 	   ++q) 
 	mds->mdcache->nested_exports[im].insert(*q);
       mds->mdcache->nested_exports.erase(bd);	
+
+      // adjust nested auth pins
+      bdi->adjust_nested_auth_pins(bd->get_cum_auth_pins());
     } else {
       // not me anymore.  now an export.
       mds->mdcache->exports.insert(bd);

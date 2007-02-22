@@ -620,6 +620,7 @@ void Server::handle_client_utime(MClientRequest *req,
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mtime = mtime;
   pi->atime = mtime;
+  pi->ctime = g_clock.gettime();
   pi->version = pdv;
   
   mdlog->submit_entry(le);
@@ -683,6 +684,7 @@ void Server::handle_client_chmod(MClientRequest *req,
   inode_t *pi = le->metablob.add_dentry(cur->parent, true);
   pi->mode = mode;
   pi->version = pdv;
+  pi->ctime = g_clock.gettime();
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);
@@ -742,6 +744,7 @@ void Server::handle_client_chown(MClientRequest *req,
   if (uid >= 0) pi->uid = uid;
   if (gid >= 0) pi->gid = gid;
   pi->version = pdv;
+  pi->ctime = g_clock.gettime();
   
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(fin);

@@ -186,7 +186,7 @@ protected:
 
 
  private:
-  // lock nesting
+  // auth pin
   int auth_pins;
   int nested_auth_pins;
 

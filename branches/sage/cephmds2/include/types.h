@@ -215,11 +215,12 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-#define INODE_MASK_BASE       1  // ino, ctime, nlink
+#define INODE_MASK_BASE       1  // ino, nlink
 #define INODE_MASK_PERM       2  // uid, gid, mode
 #define INODE_MASK_SIZE       4  // size, blksize, blocks
-#define INODE_MASK_MTIME      8  // mtime
-#define INODE_MASK_ATIME      16 // atime
+#define INODE_MASK_CTIME      8  // ctime
+#define INODE_MASK_MTIME      16  // mtime
+#define INODE_MASK_ATIME      32 // atime
 
 #define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME)
 //#define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME|INODE_MASK_ATIME)
@@ -227,11 +228,11 @@ namespace __gnu_cxx {
 struct inode_t {
   // base (immutable)
   inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
-  time_t    ctime;
 
-  // other
+  // other.
   FileLayout layout;  // ?immutable?
   int        nlink;   // base, 
+  time_t     ctime;   // inode change time
 
   // hard/perm (namespace permissions)
   mode_t     mode;
@@ -240,8 +241,9 @@ struct inode_t {
 
   // file (data access)
   off_t      size;
-  time_t     atime, mtime;      // maybe atime different?  "lazy"?
-  
+  time_t     mtime;   // file data modify time.
+  time_t     atime;   // file data access time.
+ 
   int        mask;
 
   // special stuff

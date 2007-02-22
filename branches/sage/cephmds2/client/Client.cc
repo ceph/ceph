@@ -1471,7 +1471,7 @@ void Client::fill_stat(inode_t& inode, struct stat *st)
   st->st_nlink = inode.nlink;
   st->st_uid = inode.uid;
   st->st_gid = inode.gid;
-  st->st_ctime = inode.ctime;
+  st->st_ctime = MAX(inode.ctime, inode.mtime);
   st->st_atime = inode.atime;
   st->st_mtime = inode.mtime;
   st->st_size = inode.size;
@@ -1489,7 +1489,7 @@ void Client::fill_statlite(inode_t& inode, struct statlite *st)
   st->st_gid = inode.gid;
 #ifndef DARWIN
   // FIXME what's going on here with darwin?
-  st->st_ctime = inode.ctime;
+  st->st_ctime = MAX(inode.ctime, inode.mtime);
   st->st_atime = inode.atime;
   st->st_mtime = inode.mtime;
 #endif
