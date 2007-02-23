@@ -35,7 +35,7 @@ class MDSMonitor : public Dispatcher {
   MDSMap mdsmap;
 
  private:
-  map<epoch_t, bufferlist> maps;
+  bufferlist encoded_map;
 
   //map<epoch_t, bufferlist> inc_maps;
   //MDSMap::Incremental pending_inc;
@@ -54,6 +54,10 @@ class MDSMonitor : public Dispatcher {
   void send_full(entity_inst_t dest);
   void bcast_latest_mds();
 
+  void issue_map();
+
+  void save_map();
+  void load_map();
   void print_map();
 
   //void accept_pending();   // accept pending, new map.
@@ -68,11 +72,13 @@ class MDSMonitor : public Dispatcher {
 
  public:
   MDSMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l) {
-    create_initial();
   }
 
   void dispatch(Message *m);
   void tick();  // check state, take actions
+
+  void election_starting();
+  void election_finished();
 
   void send_latest(entity_inst_t dest);
 

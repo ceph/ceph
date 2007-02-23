@@ -22,39 +22,38 @@
 class MonitorStore {
   string dir;
 
-  void init();
-
 public:
   MonitorStore(char *d) : dir(d) {
-    init();
   }
   ~MonitorStore() {
   }
 
   void mkfs();  // wipe
+  void mount();
 
   // ints (stored as ascii)
   version_t get_int(const char *a, const char *b=0);
   void put_int(version_t v, const char *a, const char *b=0);
 
   // buffers
-  bool exists_bl(const char *a, const char *b=0);
-  int get_bl(bufferlist& bl, const char *a, const char *b);
-  int put_bl(bufferlist& bl, const char *a, const char *b);
-  bool exists_bl(const char *a, unsigned b) {
-    char bs[16];
-    sprintf(bs, "%0u", b);
-    return exists_bl(a, bs);
+  // ss and sn varieties.
+  bool exists_bl_ss(const char *a, const char *b=0);
+  int get_bl_ss(bufferlist& bl, const char *a, const char *b);
+  int put_bl_ss(bufferlist& bl, const char *a, const char *b);
+  bool exists_bl_sn(const char *a, version_t b) {
+    char bs[20];
+    sprintf(bs, "%llu", b);
+    return exists_bl_ss(a, bs);
   }
-  int get_bl(bufferlist& bl, const char *a, version_t b) {
-    char bs[16];
-    sprintf(bs, "%0llu", b);
-    return get_bl(bl, a, bs);
+  int get_bl_sn(bufferlist& bl, const char *a, version_t b) {
+    char bs[20];
+    sprintf(bs, "%llu", b);
+    return get_bl_ss(bl, a, bs);
   }
-  int put_bl(bufferlist& bl, const char *a, version_t b) {
-    char bs[16];
-    sprintf(bs, "%0llu", b);
-    return put_bl(bl, a, bs);
+  int put_bl_sn(bufferlist& bl, const char *a, version_t b) {
+    char bs[20];
+    sprintf(bs, "%llu", b);
+    return put_bl_ss(bl, a, bs);
   }
 
   /*

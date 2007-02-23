@@ -91,6 +91,7 @@ void OSDMonitor::fake_reorg()
 
 
 
+/*
 void OSDMonitor::init()
 {
   // start with blank map
@@ -106,6 +107,7 @@ void OSDMonitor::init()
     pending_inc.epoch = osdmap.get_epoch()+1;
   }
 }
+*/
 
 
 
@@ -224,18 +226,18 @@ void OSDMonitor::create_initial()
 
 bool OSDMonitor::get_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  if (!mon->store->exists_bl("osdmap", epoch))
+  if (!mon->store->exists_bl_sn("osdmap", epoch))
     return false;
-  int r = mon->store->get_bl(bl, "osdmap", epoch);
+  int r = mon->store->get_bl_sn(bl, "osdmap", epoch);
   assert(r > 0);
   return true;  
 }
 
 bool OSDMonitor::get_inc_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  if (!mon->store->exists_bl("osdincmap", epoch))
+  if (!mon->store->exists_bl_sn("osdincmap", epoch))
     return false;
-  int r = mon->store->get_bl(bl, "osdincmap", epoch);
+  int r = mon->store->get_bl_sn(bl, "osdincmap", epoch);
   assert(r > 0);
   return true;  
 }
@@ -246,7 +248,7 @@ void OSDMonitor::save_map()
   bufferlist bl;
   osdmap.encode(bl);
 
-  mon->store->put_bl(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_bl_sn(bl, "osdmap", osdmap.get_epoch());
   mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
@@ -258,8 +260,8 @@ void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
   bufferlist incbl;
   inc.encode(incbl);
 
-  mon->store->put_bl(bl, "osdmap", osdmap.get_epoch());
-  mon->store->put_bl(incbl, "osdincmap", osdmap.get_epoch());
+  mon->store->put_bl_sn(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_bl_sn(incbl, "osdincmap", osdmap.get_epoch());
   mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
@@ -614,6 +616,26 @@ void OSDMonitor::election_finished()
 {
   dout(10) << "election_finished" << endl;
 
+  if (mon->is_leader()) {
+    if (g_conf.mkfs) {
+      create_initial();
+      save_map();
+    } else {
+      //
+      epoch_t epoch = mon->store->get_int("osd_epoch");
+      dout(10) << " last epoch was " << epoch << endl;
+      bufferlist bl, blinc;
+      int r = mon->store->get_bl_sn(bl, "osdmap", epoch);
+      assert(r>0);
+      osdmap.decode(bl);
+
+      // pending_inc
+      pending_inc.epoch = epoch+1;
+    }
+
+  }
+
+  /*
   state = STATE_INIT;
 
   // map?
@@ -636,7 +658,7 @@ void OSDMonitor::election_finished()
     //messenger->send_message(new MMonOSDMapInfo(osdmap.epoch, osdmap.mon_epoch),
     //			    mon->monmap->get_inst(mon->leader));
   }
-  
+  */
 }
 
 

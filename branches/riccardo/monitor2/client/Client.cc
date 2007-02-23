@@ -2619,7 +2619,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 
 void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
-  msg_addr_t dest = inst.name;
+  entity_name_t dest = inst.name;
 
   if (dest.is_mon()) {
     // resend to a different monitor.

@@ -25,9 +25,9 @@
 #include <fcntl.h>
 
 
-void MonitorStore::init()
+void MonitorStore::mount()
 {
-  dout(1) << "init" << endl;
+  dout(1) << "mount" << endl;
   // verify dir exists
   DIR *d = ::opendir(dir.c_str());
   if (!d) {
@@ -43,7 +43,7 @@ void MonitorStore::mkfs()
   dout(1) << "mkfs" << endl;
 
   char cmd[200];
-  sprintf(cmd, "/bin/rm -r %s ; mkdir %s", dir.c_str(), dir.c_str());
+  sprintf(cmd, "test -d %s && /bin/rm -r %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
   dout(1) << cmd << endl;
   system(cmd);
 }
@@ -106,7 +106,7 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
 // ----------------------------------------
 // buffers
 
-bool MonitorStore::exists_bl(const char *a, const char *b)
+bool MonitorStore::exists_bl_ss(const char *a, const char *b)
 {
   char fn[200];
   if (b) {
@@ -123,7 +123,7 @@ bool MonitorStore::exists_bl(const char *a, const char *b)
 }
 
 
-int MonitorStore::get_bl(bufferlist& bl, const char *a, const char *b)
+int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
 {
   char fn[200];
   if (b) {
@@ -162,7 +162,7 @@ int MonitorStore::get_bl(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-int MonitorStore::put_bl(bufferlist& bl, const char *a, const char *b)
+int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
 {
   char fn[200];
   sprintf(fn, "%s/%s", dir.c_str(), a);

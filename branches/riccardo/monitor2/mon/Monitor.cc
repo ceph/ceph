@@ -55,6 +55,8 @@ void Monitor::init()
 
   if (g_conf.mkfs)
     store->mkfs();
+  else
+    store->mount();
 
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
@@ -144,7 +146,7 @@ void Monitor::win_election(set<int>& active)
 
   // init
   osdmon->election_finished();
-  //mdsmon->election_finished();
+  mdsmon->election_finished();
 
   // init paxos
   test_paxos.leader_start();
