@@ -153,7 +153,7 @@ class Inode {
   string    *symlink; // symlink content, if it's a symlink
 
   // secure caps
-  map<uid_t, ExtCap*> ext_cap_cache;
+  map<uid_t, ExtCap> ext_cap_cache;
 
   // for caching i/o mode
   FileCache fc;
@@ -196,10 +196,10 @@ class Inode {
     return (inode.mode & INODE_TYPE_MASK) == INODE_MODE_DIR;
   }
 
-  void set_ext_cap(uid_t user, ExtCap *ecap) { ext_cap_cache[user] = ecap; }
+  void set_ext_cap(uid_t user, ExtCap *ecap) { ext_cap_cache[user] = (*ecap); }
   ExtCap* get_ext_cap(uid_t user) {
     if (ext_cap_cache.count(user))
-      return ext_cap_cache[user]; 
+      return &(ext_cap_cache[user]); 
     return 0;
   }
 

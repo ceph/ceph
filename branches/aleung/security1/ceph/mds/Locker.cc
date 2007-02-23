@@ -203,7 +203,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     // make new cap
     ext_cap = new ExtCap(my_want, my_user, in->ino());
 
-    cout << "Made new " << my_want << " capability for uid: "
+    dout(3) << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
     
     ext_cap->sign_extcap(mds->getPrvKey());
@@ -215,7 +215,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   // we want to index based on mode, so we can cache more caps
   // does the cached cap have the write mode?
   else {
-    cout << "Got cached " << my_want << " capability for uid: "
+    dout(3) << "Got cached " << my_want << " capability for uid: "
 	 << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino() << endl;
     if (ext_cap->mode() < mode) {
       ext_cap->set_mode(mode);

@@ -2435,13 +2435,13 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     // need security caps? check if I even asked for one
     ExtCap ext_cap = reply->get_ext_cap();
     
-    cout << "Received a " << ext_cap.mode() << " capability for uid: "
+    dout(3) << "Received a " << ext_cap.mode() << " capability for uid: "
 	 << ext_cap.get_uid() << " for inode: " << ext_cap.get_ino() << endl;
 
     assert(ext_cap.verif_extcap(monmap->get_key()));
 
     // cache it
-    f->inode->set_ext_cap(uid, ext_cap);
+    f->inode->set_ext_cap(uid, &ext_cap);
 
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   
@@ -2479,9 +2479,7 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     dout(0) << "open failure result " << result << endl;
   }
 
-  cout << "Before delete!!" << endl << endl;
   delete reply;
-  cout << "After delete!!" << endl << endl;
 
   put_user_ticket(tk);
   trim_cache();
