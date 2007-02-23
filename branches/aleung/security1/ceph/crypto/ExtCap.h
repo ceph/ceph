@@ -38,7 +38,7 @@ private:
   
   cap_data_t data;
   byte sigArray[ESIGNSIGSIZE];
-  SigBuf signature;
+  //SigBuf signature;
 
 public:
   friend class Client;
@@ -106,6 +106,7 @@ public:
   void sign_extcap(esignPriv privKey) {
     byte capArray[sizeof(data)];
     memcpy(capArray, &data, sizeof(data));
+    SigBuf signature;
     signature = esignSig(capArray, sizeof(data), privKey);
     // store the signature into permanent buffer
     memcpy(sigArray, signature.data(), signature.size());
@@ -129,7 +130,7 @@ public:
     //memset(hexArray, 0x00, sizeof(hexArray));
     //toHex(sigArray, hexArray, sizeof(sigArray), sizeof(sigArray));
     //cout << "Verified signature hex: " << endl << string((const char*)hexArray,sizeof(hexArray)) << endl;
-
+    SigBuf signature;
     signature.Assign(sigArray, sizeof(sigArray));
     
     return esignVer(capArray, sizeof(data), signature, pubKey);

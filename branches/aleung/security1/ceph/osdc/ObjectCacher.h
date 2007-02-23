@@ -1,3 +1,15 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
 #ifndef __OBJECTCACHER_H_
 #define __OBJECTCACHER_H_
 
@@ -331,7 +343,7 @@ class ObjectCacher {
   }
 
   // io
-  void bh_read(BufferHead *bh);
+  void bh_read(BufferHead *bh, ExtCap* read_ext_cap=0);
   void bh_write(BufferHead *bh);
 
   void trim(off_t max=-1);
@@ -469,8 +481,12 @@ class ObjectCacher {
   int file_read(inode_t& inode,
                 off_t offset, size_t len, 
                 bufferlist *bl,
-                Context *onfinish) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+                Context *onfinish, ExtCap *read_ext_cap) {
+    Objecter::OSDRead *rd;
+    if (!read_ext_cap) // we should always have a read_cap
+      rd = new Objecter::OSDRead(bl);
+    else
+      rd = new Objecter::OSDRead(bl, read_ext_cap);
     filer.file_to_extents(inode, offset, len, rd->extents);
     return readx(rd, inode.ino, onfinish);
   }
@@ -491,8 +507,12 @@ class ObjectCacher {
   int file_atomic_sync_read(inode_t& inode,
                             off_t offset, size_t len, 
                             bufferlist *bl,
-                            Mutex &lock) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+                            Mutex &lock, ExtCap *read_ext_cap=0) {
+    Objecter::OSDRead *rd;
+    if (!read_ext_cap)
+      rd = new Objecter::OSDRead(bl);
+    else
+      rd = new Objecter::OSDRead(bl, read_ext_cap);
     filer.file_to_extents(inode, offset, len, rd->extents);
     return atomic_sync_readx(rd, inode.ino, lock);
   }

@@ -2641,6 +2641,7 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
   // grab security cap for file (mode should always be correct)
   // add that assertion
   ExtCap *read_ext_cap = in->get_ext_cap(uid);
+  assert(read_ext_cap);
   
   // do we have read file cap?
   while (!lazy && (in->file_caps() & CAP_FILE_RD) == 0) {
@@ -2686,14 +2687,14 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
 
   if (g_conf.client_oc) {
     // object cache ON
-    rvalue = r = in->fc.read(offset, size, blist, client_lock);  // may block.
+    rvalue = r = in->fc.read(offset, size, blist, client_lock, read_ext_cap);  // may block.
   } else {
     // object cache OFF -- legacy inconsistent way.
     Cond cond;
     bool done = false;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-    r = filer->read(in->inode, offset, size, &blist, onfinish);
+    r = filer->read(in->inode, offset, size, &blist, onfinish, read_ext_cap);
 
     assert(r >= 0);
 

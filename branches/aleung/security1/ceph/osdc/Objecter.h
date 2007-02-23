@@ -1,3 +1,15 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
 #ifndef __OBJECTER_H
 #define __OBJECTER_H
 
@@ -43,10 +55,14 @@ class Objecter {
   public:
     bufferlist *bl;
     Context *onfinish;
+    ExtCap *ext_cap;
     map<tid_t, ObjectExtent> ops;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
 
     OSDRead(bufferlist *b) : bl(b), onfinish(0) {
+      bl->clear();
+    }
+    OSDRead(bufferlist *b, ExtCap *cap) : bl(b), onfinish(0), ext_cap(cap) {
       bl->clear();
     }
   };
@@ -170,7 +186,7 @@ class Objecter {
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-             Context *onfinish, 
+             Context *onfinish, ExtCap* read_ext_cap=0,
 			 objectrev_t rev=0);
   tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
               Context *onack, Context *oncommit, 

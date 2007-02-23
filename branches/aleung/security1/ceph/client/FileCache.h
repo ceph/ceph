@@ -58,7 +58,8 @@ class FileCache {
   void set_caps(int caps, Context *onimplement=0);
   void check_caps();
 
-  int read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock);  // may block.
+  int read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock,
+	   ExtCap *read_ext_cap=0);  // may block.
   void write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock);  // may block.
 
 };

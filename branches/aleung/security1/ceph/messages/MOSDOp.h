@@ -17,6 +17,10 @@
 
 #include "msg/Message.h"
 
+#include "crypto/CryptoLib.h"
+#include "crypto/ExtCap.h"
+using namespace CryptoLib;
+
 /*
  * OSD op
  *
@@ -107,6 +111,9 @@ private:
   bufferlist data;
   map<string,bufferptr> attrset;
 
+  // security capability
+  ExtCap ext_cap;
+
   friend class MOSDOpReply;
 
  public:
@@ -144,6 +151,9 @@ private:
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
 
+  ExtCap* get_capability() { return &ext_cap; }
+
+  void set_capability(ExtCap *cap) { ext_cap = (*cap); }
   
   void set_data(bufferlist &d) {
     data.claim(d);
@@ -194,11 +204,13 @@ private:
     off += sizeof(st);
     ::_decode(attrset, payload, off);
     ::_decode(data, payload, off);
+    ext_cap._decode(payload, off);
   }
   virtual void encode_payload() {
     payload.append((char*)&st, sizeof(st));
     ::_encode(attrset, payload);
     ::_encode(data, payload);
+    ext_cap._encode(payload);
   }
 
   virtual char *get_type_name() { return "oop"; }

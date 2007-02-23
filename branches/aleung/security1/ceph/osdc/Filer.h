@@ -84,8 +84,14 @@ class Filer {
            off_t offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
-           Context *onfinish) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
+           Context *onfinish, ExtCap* read_cap=0) {
+    // we should always pass a read_cap...this is just
+    // to support legacy stuff
+    Objecter::OSDRead *rd;
+    if (!read_cap)
+      rd = new Objecter::OSDRead(bl);
+    else
+      rd = new Objecter::OSDRead(bl, read_cap);
     file_to_extents(inode, offset, len, rd->extents);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }

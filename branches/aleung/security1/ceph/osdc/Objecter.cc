@@ -354,10 +354,14 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 
 
 tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-                     Context *onfinish, 
+                     Context *onfinish, ExtCap* read_ext_cap,
 					 objectrev_t rev)
 {
-  OSDRead *rd = new OSDRead(bl);
+  OSDRead *rd;
+  if (read_ext_cap) // there should always be a cap
+    rd = new OSDRead(bl, read_ext_cap);
+  else
+    rd = new OSDRead(bl); 
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
   rd->extents.front().rev = rev;
@@ -391,6 +395,8 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
                          OSD_OP_READ);
   m->set_length(ex.length);
   m->set_offset(ex.start);
+  if (rd->ext_cap)
+    m->set_capability(rd->ext_cap);
   dout(10) << "readx_submit " << rd << " tid " << last_tid
            << " oid " << ex.oid << " " << ex.start << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 

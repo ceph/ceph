@@ -376,7 +376,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
 
 /* private */
 
-void ObjectCacher::bh_read(BufferHead *bh)
+void ObjectCacher::bh_read(BufferHead *bh, ExtCap *read_ext_cap)
 {
   dout(7) << "bh_read on " << *bh << endl;
 
@@ -387,7 +387,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
 
   // go
   objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), &onfinish->bl,
-                 onfinish);
+                 onfinish, read_ext_cap);
 }
 
 void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, bufferlist &bl)
@@ -695,6 +695,8 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
   list<BufferHead*> hit_ls;
   map<size_t, bufferlist> stripe_map;  // final buffer offset -> substring
 
+  // should assert we have a cap
+
   for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ex_it++) {
@@ -712,7 +714,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       for (map<off_t, BufferHead*>::iterator bh_it = missing.begin();
            bh_it != missing.end();
            bh_it++) {
-        bh_read(bh_it->second);
+        bh_read(bh_it->second, rd->ext_cap);
         if (success) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
                    << " off " << bh_it->first << endl;

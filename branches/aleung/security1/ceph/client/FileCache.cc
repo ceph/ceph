@@ -7,6 +7,8 @@
 
 #include "msg/Messenger.h"
 
+#include "crypto/ExtCap.h"
+
 #undef dout
 #define dout(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myaddr() << ".filecache "
 #define derr(x)  if (x <= g_conf.debug_client) cout << g_clock.now() << " " << oc->objecter->messenger->get_myaddr() << ".filecache "
@@ -96,7 +98,7 @@ void FileCache::check_caps()
 
 // read/write
 
-int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
+int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock, ExtCap* read_ext_cap)
 {
   int r = 0;
 
@@ -110,7 +112,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
     int rvalue = 0;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
     
-    r = oc->file_read(inode, offset, size, &blist, onfinish);
+    r = oc->file_read(inode, offset, size, &blist, onfinish, read_ext_cap);
     
     if (r == 0) {
       // block
@@ -121,8 +123,8 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
       // it was cached.
       delete onfinish;
     }
-  } else {
-    r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock);
+  } else { // cache is on but I can't rdcache
+    r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock, read_ext_cap);
   }
 
   // dec reading counter
