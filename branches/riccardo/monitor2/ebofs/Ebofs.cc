@@ -16,7 +16,13 @@
 #include "Ebofs.h"
 
 #include <errno.h>
+
+#ifndef DARWIN
 #include <sys/vfs.h>
+#else
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif // DARWIN
 
 // *******************
 
@@ -1278,7 +1284,9 @@ int Ebofs::statfs(struct statfs *buf)
   buf->f_files = nodepool.num_total();   /* total file nodes in file system */
   buf->f_ffree = nodepool.num_free();    /* free file nodes in fs */
   //buf->f_fsid = 0;                       /* file system id */
+#ifndef DARWIN
   buf->f_namelen = 8;                    /* maximum length of filenames */
+#endif // DARWIN
 
   return 0;
 }
