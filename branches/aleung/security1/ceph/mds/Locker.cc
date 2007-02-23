@@ -190,7 +190,6 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   dout(3) << "issue_new_EXTcaps for mode " << mode << " on " << *in << endl;
 
   // get the uid
-  int my_client = req->get_client();
   uid_t my_user = req->get_caller_uid();
   int my_want = 0;
   // issue most generic cap (RW)

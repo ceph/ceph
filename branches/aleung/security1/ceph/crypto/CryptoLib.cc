@@ -24,12 +24,14 @@ using namespace std;
  * block ciphers. This returns a encryptor mode
  * for encrypting using AC5.
  **********/
+/*
 CryptoLib::cfbRC5Enc CryptoLib::getRC5Enc(byte* key,
 					  const unsigned int keyLen,
 					  byte* iv) {
   cfbRC5Enc cfbEncryption(key, keyLen, iv);
   return cfbEncryption;
 }
+*/
 
 /**********
  * Generates a Cipher Feedback Mode
@@ -37,32 +39,38 @@ CryptoLib::cfbRC5Enc CryptoLib::getRC5Enc(byte* key,
  * block ciphers. This returns a decryptor mode
  * for decrypting using RC5.
  **********/
+/*
 CryptoLib::cfbRC5Dec CryptoLib::getRC5Dec(byte* key,
 					       const unsigned int keyLen,
 					       byte* iv) {
   cfbRC5Dec cfbDecryption(key, keyLen, iv);
   return cfbDecryption;
 }
+*/
 
 /**********
  * Encrypts a block of data using Rijndael.
  * This assumes the out buffer is already
  * allocated to the right size.
  **********/
+/*
 void CryptoLib::encryptRC5(byte* plain, const unsigned int plainLen,
 			   byte* cipher, CryptoLib::cfbRC5Enc cfbEncryption) {
   cfbEncryption.ProcessData(cipher, plain, plainLen);
 }
+*/
 
 /**********
  * Decrypts a block of data using Rijndael.
  * This assumes the out buffer is already
  * allocated to the right size.
  **********/
+/*
 void CryptoLib::decryptRC5(byte* cipher, const unsigned int cipherLen,
 			   byte* plain, CryptoLib::cfbRC5Dec cfbDecryption) {
   cfbDecryption.ProcessData(plain, cipher, cipherLen);
 }
+*/
 
 /**********
  * Generates a Cipher Feedback Mode
