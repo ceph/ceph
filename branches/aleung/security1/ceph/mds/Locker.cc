@@ -193,41 +193,35 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   int my_client = req->get_client();
   uid_t my_user = req->get_caller_uid();
   int my_want = 0;
-  // only care about reading a writing, no sync
-  if (mode & FILE_MODE_R) my_want |= CAP_FILE_RD;
-  if (mode & FILE_MODE_W) my_want |= CAP_FILE_WR;
+  // issue most generic cap (RW)
+  my_want |= FILE_MODE_RW;
 
-  //ExtCap *ext_cap = in->get_user_extcap(my_user);
-  ExtCap *ext_cap = new ExtCap(my_want, my_user, in->ino());
-  //ExtCap ext_cap(my_want, my_user, in->ino());
-  //if (!ext_cap) {
-  cout << "Made new " << my_want << " capability for uid: "
+  // check cache
+  ExtCap *ext_cap = in->get_user_extcap(my_user);
+
+  if (!ext_cap) {
+    // make new cap
+    ext_cap = new ExtCap(my_want, my_user, in->ino());
+
+    cout << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;
-
-    //ExtCap my_cap(my_want, my_user, in->ino());
     
+    ext_cap->sign_extcap(mds->getPrvKey());
+
     // caches this capability in the inode
-    //in->add_user_extcap(my_user, my_cap);
+    in->add_user_extcap(my_user,ext_cap);
 
-    //ext_cap = (&my_cap);
-    //ext_cap = in->get_user_extcap(my_user);
-    
-  ext_cap->sign_extcap(mds->getPrvKey());
-
-  if(ext_cap->verif_extcap(mds->getPubKey()))
-    cout << "Locker.cc::Verification succeeded" << endl;
-  else
-    cout << "Locker.cc::Verification failed" << endl;
-    //}
+  }
   // we want to index based on mode, so we can cache more caps
   // does the cached cap have the write mode?
-  /*else {
-    cout << "Got capability from cache!!!" << endl;
-    if (ext_cap->mode() != mode) {
+  else {
+    cout << "Got cached " << my_want << " capability for uid: "
+	 << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino() << endl;
+    if (ext_cap->mode() < mode) {
       ext_cap->set_mode(mode);
-      ext_cap->clear_signature();
       ext_cap->sign_extcap(mds->getPrvKey());
-      }*/
+    }
+  }
   return ext_cap;
 }
 

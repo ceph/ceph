@@ -2115,11 +2115,6 @@ void Server::handle_client_open(MClientRequest *req,
   // create signed security capability
   ExtCap *ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
 
-  if(ext_cap->verif_extcap(mds->getPubKey()))
-    cout << "Server.cc::first::Verification succeeded" << endl;
-  else
-    cout << "Server.cc::first::Verification failed" << endl;
-
   if (!cap) return; // can't issue (yet), so wait!
 
   dout(12) << "open gets caps " << cap_string(cap->pending()) << " for " << req->get_source() << " on " << *cur << endl;
@@ -2134,15 +2129,6 @@ void Server::handle_client_open(MClientRequest *req,
   // set security cap
   reply->set_ext_cap(ext_cap);
 
-  if(reply->get_ptr_cap()->verif_extcap(mds->getPubKey()))
-    cout << "Server.cc::ptr::Verification succeeded" << endl;
-  else
-    cout << "Server.cc::prr::Verification failed" << endl;
-
-  if(reply->get_ext_cap().verif_extcap(mds->getPubKey()))
-    cout << "Server.cc::Verification succeeded" << endl;
-  else
-    cout << "Server.cc::Verification failed" << endl;
   reply_request(req, reply, cur);
 }
 

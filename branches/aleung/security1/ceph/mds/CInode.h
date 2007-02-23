@@ -473,11 +473,11 @@ class CInode : public LRUObject {
   // secure extended caps
   //map<int,ExtCap*>& get_client_extcaps() { return ext_caps; }
 
-  void add_user_extcap(uid_t user, ExtCap extcap) {
+  void add_user_extcap(uid_t user, ExtCap* extcap) {
     //if (ext_caps.empty())
     //  get(CINODE_PIN_CAPS);
     assert(ext_caps.count(user) == 0);
-    ext_caps[user] = extcap;
+    ext_caps[user] = (*extcap);
   }
   void remove_user_extcap(uid_t user) {
     assert(ext_caps.count(user) == 1);

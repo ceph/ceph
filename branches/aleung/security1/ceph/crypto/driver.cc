@@ -101,6 +101,22 @@ int main(int argc, char* argv[]) {
   else
     cout << "RE-ESIGN signature verification FAILED" << endl;
 
+  cout << "Trying to convert ESIGN pub key to byte array" << endl;
+  string tempString = pubToString(pubKey);
+  char charKey[tempString.size()];
+  memcpy(charKey, tempString.c_str(), sizeof(charKey));
+  byte hexKey[sizeof(charKey)];
+  memset(hexKey, 0x00, sizeof(hexKey));
+  toHex((byte*)charKey, hexKey, sizeof(charKey), sizeof(hexKey));
+  cout << "ESIGN public key size is: " << tempString.size() << " " << sizeof(hexKey) << endl;
+  cout << "Hex array  of ESIGN public key: " << string((const char*)hexKey, sizeof(hexKey)) << endl;
+  string convString(charKey, sizeof(charKey));
+  esignPub testKey = _fromStr_esignPubKey(convString);
+  if (esignVer(signMsg, strlen((const char*)signMsg), mySignature, testKey))
+    cout << "ARRAY copy KEY verified" << endl;
+  else
+    cout << "Array copy Key failed" << endl;
+
   // RSA signature
   byte* rsaMsg = (byte *)"Message to sign";
   char* rsaInput = "rsa1024.dat";

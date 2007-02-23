@@ -642,6 +642,9 @@ void Client::handle_auth_user_ack(MClientAuthUserAck *m)
   // **
   user_ticket[uid] = m->getTicket();
 
+  // verify the ticket
+  assert(user_ticket[uid]->verif_ticket(monmap->get_key()));
+
   // wait up the waiter(s)
   // this signals all ticket waiters
   for (list<Cond*>::iterator p = ticket_waiter_cond[uid].begin();
@@ -687,20 +690,16 @@ Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
       dout(10) << "get_user_ticket waiting for ticket for uid " << uid << endl;
     }
     
-    cout << "Ready to wait for reply" << endl;
     // wait for reply
     ticket_waiter_cond[uid].push_back( &cond );
     
-    cout << "Waiting for a Wait" << endl;
     // naively assume we'll get a ticket FIXME
     while (user_ticket.count(uid) == 0) { 
-      cout << "user_ticket.count(uid) = " << user_ticket.count(uid) << endl;
       cond.Wait(client_lock);
     }
 
-    cout << "Did I break the loop?" << endl;
   }
-  cout << "About to leave sending request function" << endl;
+
   // inc ref count
   user_ticket_ref[uid]++;
   return user_ticket[uid];
@@ -2438,14 +2437,11 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     
     cout << "Received a " << ext_cap.mode() << " capability for uid: "
 	 << ext_cap.get_uid() << " for inode: " << ext_cap.get_ino() << endl;
-    
-    if (reply->get_ext_cap().verif_extcap(monmap->get_key()))
-      cout << "Verified the signature correctly" << endl;
-    else
-      cout << "Failed to verify the signature" << endl;
+
+    assert(ext_cap.verif_extcap(monmap->get_key()));
 
     // cache it
-    //f->inode->set_ext_cap(uid, ext_cap);
+    f->inode->set_ext_cap(uid, ext_cap);
 
     assert(reply->get_file_caps_seq() >= f->inode->caps[mds].seq);
     if (reply->get_file_caps_seq() > f->inode->caps[mds].seq) {   

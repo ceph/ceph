@@ -26,6 +26,7 @@ class MClientAuthUserAck : public Message {
   }
   MClientAuthUserAck(Ticket *ticket) : Message(MSG_CLIENT_AUTH_USER_ACK) { 
     myTicket = (*ticket);
+
   }
 
   char *get_type_name() { return "client_auth_user_ack"; }

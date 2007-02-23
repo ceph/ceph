@@ -88,29 +88,17 @@ void ClientMonitor::handle_client_auth_user(MClientAuthUser *m)
   // user should be able to make new ticket eventually
   if (user_tickets.count(uid) == 0) {
     gid_t gid = m->get_gid();
-    // ticket time = 60 minutes (too long? too short?)
-    utime_t t_s = g_clock.now();
-    utime_t t_e = t_s;
-    t_e += 3600;
-    string name = "unknown";
-    string key = m->get_str_key();
     
     // create iv
-    char iv[RJBLOCKSIZE];
-    memset(iv, 0x01, RJBLOCKSIZE); // worthless right now
-    string k_0 = iv;
+    byte iv[RJBLOCKSIZE];
+    // set generic IV
+    memset(iv, 0x01, RJBLOCKSIZE);
     
     // create a ticket
-    userTicket = new Ticket(uid, gid, t_s, t_e, k_0, name, key);
+    userTicket = new Ticket(uid, gid, iv, m->get_key());
     
     // sign the ticket
     userTicket->sign_ticket(mon->myPrivKey);
-    
-    // test the verification
-    //if (userTicket.verif_ticket(mon->myPubKey))
-    //  cout << "Verification succeeded" << endl;
-    //else
-    //  cout << "Verification failed" << endl;
     
     // cache the ticket
     user_tickets[uid] = userTicket;

@@ -41,6 +41,8 @@ private:
   SigBuf signature;
 
 public:
+  friend class Client;
+  friend class OSD;
   // default constructor, should really not be used
   ExtCap() {}
 
@@ -93,24 +95,6 @@ public:
   // FYI, you should resign the cap after this
   void set_mode(int new_mode) { data.mode = new_mode; }
 
-  /*
-  SigBuf get_sig() {
-    if (sigConverted)
-      return signature;
-    signature.Assign(allocSig.data(), allocSig.size());
-    sigConverted = true;
-    return signature;
-  }
-
-  FixedSigBuf get_fixed_sig() {
-    return allocSig;
-  }
-
-  FixedSigBuf *get_fixed_sig_ptr( ){
-    return &allocSig;
-  }
-  */
-
   const cap_data_t* get_data() const {
     return (&data);
   }
@@ -131,9 +115,6 @@ public:
     //toHex(capArray, hexArray, sizeof(capArray), sizeof(capArray));
     //cout << "Signed content capArray hex: " << endl << string((const char*)hexArray,sizeof(hexArray)) << endl;
 
-    //cout << "SIGNATURE SIZE: " << signature.size() << endl;
-    //allocSig.Assign(signature,signature.size());
-    
     //byte hexTest[sizeof(sigArray)];
     //memset(hexTest, 0x00, sizeof(sigArray));
     //toHex(sigArray, hexTest, sizeof(sigArray), sizeof(sigArray));
@@ -144,10 +125,10 @@ public:
     byte capArray[sizeof(data)];
     memcpy(capArray, &data, sizeof(data));
 
-    //byte hexArray[sizeof(capArray)];
+    //byte hexArray[sizeof(sigArray)];
     //memset(hexArray, 0x00, sizeof(hexArray));
-    //toHex(capArray, hexArray, sizeof(capArray), sizeof(capArray));
-    //cout << "Verified content capArray hex: " << endl << string((const char*)hexArray,sizeof(hexArray)) << endl;
+    //toHex(sigArray, hexArray, sizeof(sigArray), sizeof(sigArray));
+    //cout << "Verified signature hex: " << endl << string((const char*)hexArray,sizeof(hexArray)) << endl;
 
     signature.Assign(sigArray, sizeof(sigArray));
     
@@ -155,52 +136,15 @@ public:
   }
 
   void _encode(bufferlist& bl) {
-    /*
-    bl.append((char*)&(data.id), sizeof(data.id));
-    bl.append((char*)&(data.t_s), sizeof(data.t_s));
-    bl.append((char*)&(data.t_e), sizeof(data.t_e));
-    bl.append((char*)&(data.mode), sizeof(data.mode));
-    bl.append((char*)&(data.comp), sizeof(data.comp));
-    bl.append((char*)&(data.uid), sizeof(data.uid));
-    bl.append((char*)&(data.gid), sizeof(data.gid));
-    bl.append((char*)&(data.ino), sizeof(data.ino));
-    */
     bl.append((char*)&(data), sizeof(data));
-    //bl.append((char*)((void*)allocSig), sizeof(allocSig));
     bl.append((char*)sigArray, sizeof(sigArray));
-
-    //::_encode(user_rhash, bl);
-    //::_encode(file_rhash, bl);
     
   }
   void _decode(bufferlist& bl, int& off) {
-    /*
-    bl.copy(off, sizeof(data.id), (char*)&(data.id));
-    off += sizeof(data.id);
-    bl.copy(off, sizeof(data.t_s), (char*)&(data.t_s));
-    off += sizeof(data.t_s);
-    bl.copy(off, sizeof(data.t_e), (char*)&(data.t_e));
-    off += sizeof(data.t_e);
-    bl.copy(off, sizeof(data.mode), (char*)&(data.mode));
-    off += sizeof(data.mode);
-    bl.copy(off, sizeof(data.comp), (char*)&(data.comp));
-    off += sizeof(data.comp);
-    bl.copy(off, sizeof(data.uid), (char*)&(data.uid));
-    off += sizeof(data.uid);
-    bl.copy(off, sizeof(data.gid), (char*)&(data.gid));
-    off += sizeof(data.gid);
-    bl.copy(off, sizeof(data.ino ), (char*)&(data.ino ));
-    off += sizeof(data.ino);
-    */
     bl.copy(off, sizeof(data), (char*)&(data));
     off += sizeof(data);
-    //bl.copy(off, sizeof(allocSig), (char*)((void*)allocSig));
-    //off += sizeof(allocSig);
     bl.copy(off, sizeof(sigArray), (char*)sigArray);
     off += sizeof(sigArray);
-
-    //::_decode(user_rhash, bl, off);
-    //::_decode(file_rhash, bl, off);
   }
 };
 
