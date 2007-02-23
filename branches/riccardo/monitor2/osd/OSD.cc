@@ -731,6 +731,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   entity_name_t dest = inst.name;
 
   if (g_conf.ms_die_on_failure) {
+    dout(0) << "ms_handle_failure " << inst << " on " << *m << endl;
     exit(0);
   }
 
@@ -1017,6 +1018,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << endl;
     logger->set_start( osdmap->get_ctime() );
+
+    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
 
     // create PGs
     for (int nrep = 1; 

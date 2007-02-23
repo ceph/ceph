@@ -43,9 +43,9 @@ void MonitorStore::mkfs()
   dout(1) << "mkfs" << endl;
 
   char cmd[200];
-  sprintf(cmd, "/bin/rm -rf %s/*", dir.c_str());
+  sprintf(cmd, "/bin/rm -r %s ; mkdir %s", dir.c_str(), dir.c_str());
   dout(1) << cmd << endl;
-  //system(cmd);
+  system(cmd);
 }
 
 
@@ -68,9 +68,9 @@ version_t MonitorStore::get_int(const char *a, const char *b)
   version_t val = atoi(buf);
   
   if (b) {
-    dout(10) << "get_int " << a << "/" << b << " = " << val << endl;
+    dout(15) << "get_int " << a << "/" << b << " = " << val << endl;
   } else {
-    dout(10) << "get_int " << a << " = " << val << endl;
+    dout(15) << "get_int " << a << " = " << val << endl;
   }
   return val;
 }
@@ -82,18 +82,23 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   sprintf(fn, "%s/%s", dir.c_str(), a);
   if (b) {
     ::mkdir(fn, 0755);
-    dout(10) << "set_int " << a << "/" << b << " = " << val << endl;
+    dout(15) << "set_int " << a << "/" << b << " = " << val << endl;
     sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    dout(10) << "set_int " << a << " = " << val << endl;
+    dout(15) << "set_int " << a << " = " << val << endl;
   }
   
+  char vs[30];
+  sprintf(vs, "%lld\n", val);
+
   char tfn[200];
   sprintf(tfn, "%s.new", fn);
-  FILE *f = ::fopen(tfn, "w");
-  assert(f);
-  ::fprintf(f, "%lld\n", val);
-  ::fclose(f);
+
+  int fd = ::open(tfn, O_WRONLY|O_CREAT);
+  assert(fd > 0);
+  ::fchmod(fd, 0644);
+  ::write(fd, vs, strlen(vs));
+  ::close(fd);
   ::rename(tfn, fn);
 }
 
@@ -105,10 +110,10 @@ bool MonitorStore::exists_bl(const char *a, const char *b)
 {
   char fn[200];
   if (b) {
-    dout(10) << "exists_bl " << a << "/" << b << endl;
+    dout(15) << "exists_bl " << a << "/" << b << endl;
     sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    dout(10) << "exists_bl " << a << endl;
+    dout(15) << "exists_bl " << a << endl;
     sprintf(fn, "%s/%s", dir.c_str(), a);
   }
   
@@ -130,9 +135,9 @@ int MonitorStore::get_bl(bufferlist& bl, const char *a, const char *b)
   int fd = ::open(fn, O_RDONLY);
   if (!fd) {
     if (b) {
-      dout(10) << "get_bl " << a << "/" << b << " DNE" << endl;
+      dout(15) << "get_bl " << a << "/" << b << " DNE" << endl;
     } else {
-      dout(10) << "get_bl " << a << " DNE" << endl;
+      dout(15) << "get_bl " << a << " DNE" << endl;
     }
     return 0;
   }
@@ -149,9 +154,9 @@ int MonitorStore::get_bl(bufferlist& bl, const char *a, const char *b)
   ::close(fd);
 
   if (b) {
-    dout(10) << "get_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "get_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
   } else {
-    dout(10) << "get_bl " << a << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "get_bl " << a << " = " << bl.length() << " bytes" << endl;
   }
 
   return len;
@@ -163,10 +168,10 @@ int MonitorStore::put_bl(bufferlist& bl, const char *a, const char *b)
   sprintf(fn, "%s/%s", dir.c_str(), a);
   if (b) {
     ::mkdir(fn, 0755);
-    dout(10) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << endl;
     sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    dout(10) << "put_bl " << a << " = " << bl.length() << " bytes" << endl;
+    dout(15) << "put_bl " << a << " = " << bl.length() << " bytes" << endl;
   }
   
   char tfn[200];
@@ -183,7 +188,7 @@ int MonitorStore::put_bl(bufferlist& bl, const char *a, const char *b)
        it != bl.buffers().end();
        it++) 
     ::write(fd, it->c_str(), it->length());
-  
+  ::fchmod(fd, 0644);
   ::fsync(fd);
   ::close(fd);
   ::rename(tfn, fn);
