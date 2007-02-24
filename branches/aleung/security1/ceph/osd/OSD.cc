@@ -3200,6 +3200,16 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     opname = MOSDOp::get_opname(op->get_op());
   }
 
+  // check for capability
+  ExtCap *op_capability = op->get_capability();
+  if (op_capability) {
+    cout << "OSD recieved a capability" << endl;
+    if (op_capability->verif_extcap(monmap->get_key()))
+      cout << "OSD successfully verified capability" << endl;
+    else
+      cout << "OSD failed to verify capability" << endl;
+  }
+
   // locked by someone else?
   // for _any_ op type -- eg only the locker can unlock!
   if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
