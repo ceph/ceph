@@ -358,6 +358,21 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
   bcast_latest_mds();
 }
 
+void OSDMonitor::mark_all_down()
+{
+  dout(7) << "mark_all_down" << endl;
+
+  for (set<int>::iterator it = osdmap.get_osds().begin();
+       it != osdmap.get_osds().end();
+       it++) {
+    if (osdmap.is_down(*it)) continue;
+    pending_inc.new_down[*it] = osdmap.get_inst(*it);
+  }
+  accept_pending();
+}
+
+
+
 
 void OSDMonitor::handle_osd_boot(MOSDBoot *m)
 {

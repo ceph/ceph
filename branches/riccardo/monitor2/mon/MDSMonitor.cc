@@ -112,6 +112,7 @@ void MDSMonitor::print_map()
 void MDSMonitor::issue_map()
 {
   mdsmap.inc_epoch();
+  encoded_map.clear();
   mdsmap.encode(encoded_map);
 
   dout(7) << "issue_map epoch " << mdsmap.get_epoch() << endl;

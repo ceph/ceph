@@ -92,10 +92,6 @@ void Monitor::shutdown()
   timer.cancel_all();
   timer.join();
   
-  // unmount my local storage
-  if (store) 
-    delete store;
-  
   // stop osds.
   for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
        it != osdmon->osdmap.get_osds().end();
@@ -105,6 +101,7 @@ void Monitor::shutdown()
     messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
 			    osdmon->osdmap.get_inst(*it));
   }
+  osdmon->mark_all_down();
   
   // monitors too.
   for (int i=0; i<monmap->num_mon; i++)
@@ -112,6 +109,10 @@ void Monitor::shutdown()
       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
 			      monmap->get_inst(i));
 
+  // unmount my local storage
+  if (store) 
+    delete store;
+  
   // clean up
   if (monmap) delete monmap;
   if (osdmon) delete osdmon;

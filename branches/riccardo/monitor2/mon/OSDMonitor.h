@@ -100,6 +100,8 @@ private:
 
   void issue_leases();
 
+  void mark_all_down();
+
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();
   void fake_reorg();

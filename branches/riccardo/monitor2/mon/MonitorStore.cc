@@ -188,6 +188,7 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
        it != bl.buffers().end();
        it++) 
     ::write(fd, it->c_str(), it->length());
+
   ::fchmod(fd, 0644);
   ::fsync(fd);
   ::close(fd);
