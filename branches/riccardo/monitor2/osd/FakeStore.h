@@ -32,31 +32,34 @@ using namespace __gnu_cxx;
 
 // fake attributes in memory, if we need to.
 
-
-class FakeStore : public ObjectStore, 
-                  public FakeStoreAttrs,
-                  public FakeStoreCollections {
+class FakeStore : public ObjectStore {
   string basedir;
   int whoami;
-  
+
+  Mutex synclock;
+  Cond synccond;
   int unsync;
 
-  Mutex lock;
+  // fake attrs?
+  FakeStoreAttrs attrs;
+  bool fake_attrs;
 
-  // fns
-  void get_dir(string& dir);
-  void get_oname(object_t oid, string& fn);
-  void wipe_dir(string mydir);
-
+  // fake collections?
+  FakeStoreCollections collections;
+  bool fake_collections;
+  
+  // helper fns
+  void get_oname(object_t oid, char *s);
+  void get_cdir(coll_t cid, char *s);
+  void get_coname(coll_t cid, object_t oid, char *s);
 
  public:
-  FakeStore(char *base, int whoami) : FakeStoreAttrs(this), FakeStoreCollections(this)
-  {
-    this->basedir = base;
-    this->whoami = whoami;
-    unsync = 0;
-  }
-
+  FakeStore(char *base, int w) : 
+    basedir(base),
+    whoami(w),
+    unsync(0),
+    attrs(this), fake_attrs(false), 
+    collections(this), fake_collections(false) { }
 
   int mount();
   int umount();
@@ -81,7 +84,44 @@ class FakeStore : public ObjectStore,
             bufferlist& bl, 
             Context *onsafe);
 
+  void sync();
   void sync(Context *onsafe);
+
+  // attrs
+  int setattr(object_t oid, const char *name,
+              const void *value, size_t size,
+              Context *onsafe=0);
+  int setattrs(object_t oid, map<string,bufferptr>& aset);
+  int getattr(object_t oid, const char *name,
+              void *value, size_t size);
+  int getattrs(object_t oid, map<string,bufferptr>& aset);
+  int rmattr(object_t oid, const char *name,
+             Context *onsafe=0);
+  int listattr(object_t oid, char *attrs, size_t size);
+  int collection_setattr(coll_t c, const char *name,
+                         void *value, size_t size,
+                         Context *onsafe=0);
+  int collection_rmattr(coll_t c, const char *name,
+                        Context *onsafe=0);
+  int collection_getattr(coll_t c, const char *name,
+                         void *value, size_t size);
+  int collection_listattr(coll_t c, char *attrs, size_t size);
+
+
+  // collections
+  int list_collections(list<coll_t>& ls);
+  int create_collection(coll_t c,
+                        Context *onsafe=0);
+  int destroy_collection(coll_t c,
+                         Context *onsafe=0);
+  int collection_stat(coll_t c, struct stat *st);
+  bool collection_exists(coll_t c);
+  int collection_add(coll_t c, object_t o,
+                     Context *onsafe=0);
+  int collection_remove(coll_t c, object_t o,
+                        Context *onsafe=0);
+  int collection_list(coll_t c, list<object_t>& o);
+
 };
 
 #endif

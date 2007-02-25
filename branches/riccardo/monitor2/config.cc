@@ -221,7 +221,8 @@ md_config_t g_conf = {
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
-  fakestore_fakeattr: true,   
+  fakestore_fake_attrs: false,
+  fakestore_fake_collections: false,   
   fakestore_dev: 0,
 
   // --- ebofs ---
@@ -685,6 +686,10 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.fakestore_writesync = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 
       g_conf.fakestore_dev = args[++i];
+    else if (strcmp(args[i], "--fakestore_fake_attrs") == 0) 
+      g_conf.fakestore_fake_attrs = true;//atoi(args[++i]);
+    else if (strcmp(args[i], "--fakestore_fake_collections") == 0) 
+      g_conf.fakestore_fake_collections = true;//atoi(args[++i]);
 
     else if (strcmp(args[i], "--obfs") == 0) {
       g_conf.uofs = 1;

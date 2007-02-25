@@ -167,7 +167,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
   }
 #endif // USE_OSBDB
   else {
-    store = new FakeStore(osd_base_path, whoami); 
+    sprintf(dev_path, "osddata/osd%d", whoami);
+    store = new FakeStore(dev_path, whoami);
   }
 
 }
@@ -1737,7 +1738,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     assert(pg->missing.num_lost() == 0);
 
     // ok activate!
-     pg->activate(t);
+    pg->activate(t);
   }
 
   unsigned tr = store->apply_transaction(t);
