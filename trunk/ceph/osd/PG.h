@@ -613,7 +613,7 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
 {
-  out << "pginfo(" << hex << pgi.pgid << dec;
+  out << "pginfo(" << pgi.pgid;
   if (pgi.is_empty())
     out << " empty";
   else
@@ -669,8 +669,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
          !pg.log.backlog) ||
         (pg.log.log.rbegin()->version.version != pg.log.top.version)) {
       out << " (log bound mismatch, actual=["
-          << pg.log.log.begin()->version << ","
-          << pg.log.log.rbegin()->version << "])";
+	  << pg.log.log.begin()->version << ","
+	  << pg.log.log.rbegin()->version << "] len=" << pg.log.log.size() << ")";
     }
   }
 

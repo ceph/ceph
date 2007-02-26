@@ -211,7 +211,8 @@ struct md_config_t {
   bool  fakestore_fsync;
   bool  fakestore_writesync;
   int   fakestore_syncthreads;   // such crap
-  bool  fakestore_fakeattr;
+  bool  fakestore_fake_attrs;
+  bool  fakestore_fake_collections;
   char  *fakestore_dev;
 
   // ebofs

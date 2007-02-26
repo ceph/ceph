@@ -30,6 +30,7 @@ struct object_t {
 
   object_t() : ino(0), bno(0), rev(0) {}
   object_t(__uint64_t i, __uint32_t b) : ino(i), bno(b), rev(0) {}
+  object_t(__uint64_t i, __uint32_t b, __uint32_t r) : ino(i), bno(b), rev(r) {}
 };
 
 

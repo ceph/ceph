@@ -582,7 +582,7 @@ protected:
 
   int describe_layout(char *fn, list<ObjectExtent>& result);
 
-  void ms_handle_failure(Message*, entity_name_t dest, const entity_inst_t& inst);
+  void ms_handle_failure(Message*, const entity_inst_t& inst);
 };
 
 #endif

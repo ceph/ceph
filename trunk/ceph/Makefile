@@ -83,10 +83,12 @@ OSDC_OBJS= \
 
 MON_OBJS= \
 	mon/Monitor.o\
+	mon/Paxos.o\
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
 	mon/ClientMonitor.o\
-	mon/Elector.o
+	mon/Elector.o\
+	mon/MonitorStore.o
 
 COMMON_OBJS= \
 	msg/Message.o\
@@ -109,7 +111,7 @@ OSBDB_OBJS = \
 OSBDB_OBJ = osbdb.o
 endif
 
-TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn
+TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn mkmonmap
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
@@ -124,7 +126,7 @@ obfs: depend obfstest
 mkmonmap: mkmonmap.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
+cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cosd: cosd.cc osd.o ebofs.o ${OSBDB_OBJ} msg/SimpleMessenger.o common.o

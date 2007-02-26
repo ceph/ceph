@@ -826,7 +826,7 @@ void PG::activate(ObjectStore::Transaction& t)
   state_set(STATE_ACTIVE);
   state_clear(STATE_STRAY);
   if (is_crashed()) {
-    assert(is_replay());
+    //assert(is_replay());      // HELP.. not on replica?
     state_clear(STATE_CRASHED);
     state_clear(STATE_REPLAY);
   }
@@ -1174,6 +1174,8 @@ void PG::clean_replicas()
 
 void PG::write_log(ObjectStore::Transaction& t)
 {
+  dout(10) << "write_log" << endl;
+
   // assemble buffer
   bufferlist bl;
   
@@ -1186,12 +1188,16 @@ void PG::write_log(ObjectStore::Transaction& t)
     if (bl.length() % 4096 == 0)
       ondisklog.block_map[bl.length()] = p->version;
     bl.append((char*)&(*p), sizeof(*p));
+    if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
+      bufferptr bp(4096 - sizeof(*p));
+      bl.push_back(bp);
+    }
   }
   ondisklog.top = bl.length();
   
   // write it
-  t.remove( object_t(1,info.pgid) );
-  t.write( object_t(1,info.pgid) , 0, bl.length(), bl);
+  t.remove( info.pgid.to_object() );
+  t.write( info.pgid.to_object() , 0, bl.length(), bl);
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
@@ -1234,6 +1240,8 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry, 
                     eversion_t trim_to)
 {
+  dout(10) << "append_log " << ondisklog.top << " " << logentry << endl;
+
   // write entry on disk
   bufferlist bl;
   bl.append( (char*)&logentry, sizeof(logentry) );
@@ -1241,7 +1249,7 @@ void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry,
     bufferptr bp(4096 - sizeof(logentry));
     bl.push_back(bp);
   }
-  t.write( object_t(1,info.pgid), ondisklog.top, bl.length(), bl );
+  t.write( info.pgid.to_object(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
@@ -1263,30 +1271,43 @@ void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry,
 
 void PG::read_log(ObjectStore *store)
 {
+  int r;
   // load bounds
   ondisklog.bottom = ondisklog.top = 0;
-  store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  
+  r = store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  assert(r == sizeof(ondisklog.bottom));
+  r = store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  assert(r == sizeof(ondisklog.top));
+
+  dout(10) << "read_log [" << ondisklog.bottom << "," << ondisklog.top << ")" << endl;
+
   log.backlog = info.log_backlog;
   log.bottom = info.log_bottom;
   
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(object_t(1,info.pgid), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(info.pgid.to_object(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     
     PG::Log::Entry e;
     off_t pos = ondisklog.bottom;
+    assert(log.log.empty());
     while (pos < ondisklog.top) {
       bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
+      dout(10) << "read_log " << pos << " " << e << endl;
+
       if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
         if (pos % 4096 == 0)
-          ondisklog.block_map[pos] = e.version;
+	  ondisklog.block_map[pos] = e.version;
         log.log.push_back(e);
+      } else {
+	dout(10) << "read_log ignoring entry at " << pos << endl;
       }
       
-      pos += sizeof(e);
+      if (g_conf.osd_pad_pg_log)   // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
+	pos += 4096;
+      else
+	pos += sizeof(e);
     }
   }
   log.top = info.last_update;

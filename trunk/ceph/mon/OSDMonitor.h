@@ -60,7 +60,7 @@ private:
   int state;
   utime_t lease_expire;     // when lease expires
   
-  void init();
+  //void init();
 
   // maps
   void accept_pending();   // accept pending, new map.
@@ -89,7 +89,7 @@ private:
   OSDMonitor(Monitor *mn, Messenger *m, Mutex& l) : 
     mon(mn), messenger(m), lock(l),
     state(STATE_SYNC) {
-    init();
+    //init();
   }
 
   void dispatch(Message *m);
@@ -99,6 +99,8 @@ private:
   void election_finished();  // reinitialize whatever.
 
   void issue_leases();
+
+  void mark_all_down();
 
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();

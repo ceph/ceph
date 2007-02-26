@@ -217,7 +217,9 @@ FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
   {
     // assign rank
     _myinst.name = me;
-    _myinst.addr.nonce = nranks++;
+    _myinst.addr.port = nranks++;
+    //if (!me.is_mon())
+    //_myinst.addr.nonce = getpid();
 
     // add to directory
     directory[ _myinst.addr ] = this;
@@ -323,7 +325,7 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
 	   ++p) {
 	dout(1) << "** have " << p->first << " to " << p->second << endl;
       }
-      assert(dm);
+      //assert(dm);
     }
     dm->queue_incoming(m);
 

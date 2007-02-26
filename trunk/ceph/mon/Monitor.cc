@@ -17,7 +17,7 @@
 
 #include "osd/OSDMap.h"
 
-#include "ebofs/Ebofs.h"
+#include "MonitorStore.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
@@ -25,6 +25,8 @@
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
+
+#include "messages/MMonPaxos.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -48,13 +50,13 @@ void Monitor::init()
   
   // store
   char s[80];
-  sprintf(s, "dev/mon%d", whoami);
-  store = new Ebofs(s);
+  sprintf(s, "mondata/mon%d", whoami);
+  store = new MonitorStore(s);
 
   if (g_conf.mkfs)
     store->mkfs();
-  int r = store->mount();
-  assert(r >= 0);
+  else
+    store->mount();
 
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
@@ -90,12 +92,6 @@ void Monitor::shutdown()
   timer.cancel_all();
   timer.join();
   
-  // unmount my local storage
-  if (store) {
-    store->umount();
-    delete store;
-  }
-  
   // stop osds.
   for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
        it != osdmon->osdmap.get_osds().end();
@@ -105,6 +101,7 @@ void Monitor::shutdown()
     messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
 			    osdmon->osdmap.get_inst(*it));
   }
+  osdmon->mark_all_down();
   
   // monitors too.
   for (int i=0; i<monmap->num_mon; i++)
@@ -112,6 +109,10 @@ void Monitor::shutdown()
       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
 			      monmap->get_inst(i));
 
+  // unmount my local storage
+  if (store) 
+    delete store;
+  
   // clean up
   if (monmap) delete monmap;
   if (osdmon) delete osdmon;
@@ -146,7 +147,10 @@ void Monitor::win_election(set<int>& active)
 
   // init
   osdmon->election_finished();
-  //mdsmon->election_finished();
+  mdsmon->election_finished();
+
+  // init paxos
+  test_paxos.leader_start();
 } 
 
 void Monitor::lose_election(int l) 
@@ -202,6 +206,21 @@ void Monitor::dispatch(Message *m)
       clientmon->dispatch(m);
       break;
 
+
+      // paxos
+    case MSG_MON_PAXOS:
+      // send it to the right paxos instance
+      switch (((MMonPaxos*)m)->machine_id) {
+      case PAXOS_TEST:
+	test_paxos.dispatch(m);
+	break;
+      case PAXOS_OSDMAP:
+	//...
+	
+      default:
+	assert(0);
+      }
+      break;
 
       // elector messages
     case MSG_MON_ELECTION_PROPOSE:

@@ -167,7 +167,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
   }
 #endif // USE_OSBDB
   else {
-    store = new FakeStore(osd_base_path, whoami); 
+    sprintf(dev_path, "osddata/osd%d", whoami);
+    store = new FakeStore(dev_path, whoami);
   }
 
 }
@@ -434,7 +435,7 @@ void OSD::_remove_pg(pg_t pgid)
          p++)
       t.remove(*p);
     t.remove_collection(pgid);
-    t.remove(object_t(1,pgid));  // log too
+    t.remove(pgid.to_object());  // log too
   }
   store->apply_transaction(t);
   
@@ -731,6 +732,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   entity_name_t dest = inst.name;
 
   if (g_conf.ms_die_on_failure) {
+    dout(0) << "ms_handle_failure " << inst << " on " << *m << endl;
     exit(0);
   }
 
@@ -1017,6 +1019,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << endl;
     logger->set_start( osdmap->get_ctime() );
+
+    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
 
     // create PGs
     for (int nrep = 1; 
@@ -1734,7 +1738,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     assert(pg->missing.num_lost() == 0);
 
     // ok activate!
-     pg->activate(t);
+    pg->activate(t);
   }
 
   unsigned tr = store->apply_transaction(t);
