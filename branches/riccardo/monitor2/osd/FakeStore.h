@@ -76,50 +76,33 @@ class FakeStore : public ObjectStore {
   int stat(object_t oid, struct stat *st);
   int remove(object_t oid, Context *onsafe);
   int truncate(object_t oid, off_t size, Context *onsafe);
-  int read(object_t oid, 
-           off_t offset, size_t len,
-           bufferlist& bl);
-  int write(object_t oid, 
-            off_t offset, size_t len,
-            bufferlist& bl, 
-            Context *onsafe);
+  int read(object_t oid, off_t offset, size_t len, bufferlist& bl);
+  int write(object_t oid, off_t offset, size_t len, bufferlist& bl, Context *onsafe);
 
   void sync();
   void sync(Context *onsafe);
 
   // attrs
-  int setattr(object_t oid, const char *name,
-              const void *value, size_t size,
-              Context *onsafe=0);
+  int setattr(object_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(object_t oid, map<string,bufferptr>& aset);
-  int getattr(object_t oid, const char *name,
-              void *value, size_t size);
+  int getattr(object_t oid, const char *name, void *value, size_t size);
   int getattrs(object_t oid, map<string,bufferptr>& aset);
-  int rmattr(object_t oid, const char *name,
-             Context *onsafe=0);
-  int listattr(object_t oid, char *attrs, size_t size);
-  int collection_setattr(coll_t c, const char *name,
-                         void *value, size_t size,
-                         Context *onsafe=0);
-  int collection_rmattr(coll_t c, const char *name,
-                        Context *onsafe=0);
-  int collection_getattr(coll_t c, const char *name,
-                         void *value, size_t size);
-  int collection_listattr(coll_t c, char *attrs, size_t size);
+  int rmattr(object_t oid, const char *name, Context *onsafe=0);
+  //int listattr(object_t oid, char *attrs, size_t size);
+  int collection_setattr(coll_t c, const char *name, void *value, size_t size, Context *onsafe=0);
+  int collection_rmattr(coll_t c, const char *name, Context *onsafe=0);
+  int collection_getattr(coll_t c, const char *name, void *value, size_t size);
+  //int collection_listattr(coll_t c, char *attrs, size_t size);
 
 
   // collections
   int list_collections(list<coll_t>& ls);
-  int create_collection(coll_t c,
-                        Context *onsafe=0);
-  int destroy_collection(coll_t c,
-                         Context *onsafe=0);
+  int create_collection(coll_t c, Context *onsafe=0);
+  int destroy_collection(coll_t c, Context *onsafe=0);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
-  int collection_add(coll_t c, object_t o,
-                     Context *onsafe=0);
-  int collection_remove(coll_t c, object_t o,
-                        Context *onsafe=0);
+  int collection_add(coll_t c, object_t o, Context *onsafe=0);
+  int collection_remove(coll_t c, object_t o, Context *onsafe=0);
   int collection_list(coll_t c, list<object_t>& o);
 
 };

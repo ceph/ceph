@@ -452,6 +452,7 @@ int FakeStore::rmattr(object_t oid, const char *name, Context *onsafe)
   return r;
 }
 
+/*
 int FakeStore::listattr(object_t oid, char *attrls, size_t size) 
 {
   if (fake_attrs) return attrs.listattr(oid, attrls, size);
@@ -459,6 +460,7 @@ int FakeStore::listattr(object_t oid, char *attrls, size_t size)
   get_oname(oid, fn);
   return ::listxattr(fn, attrls, size);
 }
+*/
 
 
 // collections
@@ -485,12 +487,13 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
   return 0;
 }
 
+/*
 int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size) 
 {
   if (fake_attrs) return collection_listattr(c, attrs, size);
   return 0;
 }
-
+*/
 
 // --------------------------
 // collections

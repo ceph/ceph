@@ -466,7 +466,7 @@ public:
     return -1; 
   }
 
-  virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
+  //virtual int listattr(object_t oid, char *attrs, size_t size) {return 0;} //= 0;
   
   // collections
   virtual int list_collections(list<coll_t>& ls) {return 0;}//= 0;
@@ -489,10 +489,10 @@ public:
                                 Context *onsafe=0) {return 0;} //= 0;
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) {return 0;} //= 0;
-  virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;
+  //virtual int collection_listattr(coll_t cid, char *attrs, size_t size) {return 0;} //= 0;
   
-  virtual void sync(Context *onsync) {};
-  virtual void sync() {};
+  virtual void sync(Context *onsync) {}
+  virtual void sync() {}
   
   
   virtual void _fake_writes(bool b) {};

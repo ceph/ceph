@@ -435,7 +435,7 @@ void OSD::_remove_pg(pg_t pgid)
          p++)
       t.remove(*p);
     t.remove_collection(pgid);
-    t.remove(object_t(1,pgid));  // log too
+    t.remove(pgid.to_object());  // log too
   }
   store->apply_transaction(t);
   
