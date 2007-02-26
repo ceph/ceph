@@ -1998,7 +1998,7 @@ void Locker::handle_lock_dn(MLock *m)
 
       case LOCK_AC_REQXLOCK:
         // send nak
-        if (dir->state_test(CDIR_STATE_DELETED)) {
+        if (dir->state_test(CDir::STATE_DELETED)) {
           dout(7) << "handle_lock_dn reqxlock on deleted dir " << *dir << ", nak" << endl;
         } else {
           dout(7) << "handle_lock_dn reqxlock on " << dname << " in " << *dir << " dne, nak" << endl;

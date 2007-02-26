@@ -83,13 +83,13 @@ void MDStore::fetch_dir( CDir *dir,
   if (c) dir->add_waiter(CDIR_WAIT_COMPLETE, c);
   
   // already fetching?
-  if (dir->state_test(CDIR_STATE_FETCHING)) {
+  if (dir->state_test(CDir::STATE_FETCHING)) {
     dout(7) << "already fetching " << *dir << "; waiting" << endl;
     return;
   }
   
   // state
-  dir->state_set(CDIR_STATE_FETCHING);
+  dir->state_set(CDir::STATE_FETCHING);
   
   // stats
   if (mds->logger) mds->logger->inc("fdir");
@@ -118,8 +118,8 @@ void MDStore::fetch_dir_2( int result,
   assert(dir);
   
   // dir is now complete
-  dir->state_set(CDIR_STATE_COMPLETE);
-  dir->state_clear(CDIR_STATE_FETCHING);
+  dir->state_set(CDir::STATE_COMPLETE);
+  dir->state_clear(CDir::STATE_FETCHING);
 
   // finish
   list<Context*> finished;
@@ -483,7 +483,7 @@ void MDStore::commit_dir( CDir *dir,
          dir->is_hashed());
   
   // already committing?
-  if (dir->state_test(CDIR_STATE_COMMITTING)) {
+  if (dir->state_test(CDir::STATE_COMMITTING)) {
     // already mid-commit!
     dout(7) << "commit_dir " << *dir << " mid-commit of " << dir->get_committing_version() << endl;
     dout(7) << "  current version = " << dir->get_version() << endl;
@@ -525,7 +525,7 @@ void MDStore::commit_dir( CDir *dir,
   Context *fin = new C_MDS_CommitDirFinish(this, dir);
   
   // state
-  dir->state_set(CDIR_STATE_COMMITTING);
+  dir->state_set(CDir::STATE_COMMITTING);
   dir->set_committing_version(); 
 
   // stats
@@ -554,7 +554,7 @@ void MDStore::commit_dir_2( int result,
   if (committed_version == dir->get_version())
     dir->mark_clean();
  
-  dir->state_clear(CDIR_STATE_COMMITTING);
+  dir->state_clear(CDir::STATE_COMMITTING);
 
   // finish
   dir->finish_waiting(CDIR_WAIT_COMMITTED);

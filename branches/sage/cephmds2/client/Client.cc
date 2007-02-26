@@ -1787,12 +1787,10 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
         contents[*pdn] = in->inode;
       }
     }
-    
+
     // add .. too?
-    if (diri != root && diri->dn && diri->dn->dir) {
-      Inode *parent = diri->dn->dir->parent_inode;
-      contents[".."] = parent->inode;
-    }    
+    if (diri != root) 
+      contents[".."] = diri->inode;
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***

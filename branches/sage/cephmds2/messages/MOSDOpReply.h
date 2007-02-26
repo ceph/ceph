@@ -137,9 +137,13 @@ public:
   void print(ostream& out) {
     out << "osd_op_reply(" << st.reqid
 	<< " " << MOSDOp::get_opname(st.op)
-	<< " " << st.oid << " = " << st.result 
-      //<< " " << this
-	<< ")";
+	<< " " << st.oid;
+    if (st.commit)
+      out << " commit";
+    else
+      out << " ack";
+    out << " = " << st.result;
+    out << ")";
   }
 
 };

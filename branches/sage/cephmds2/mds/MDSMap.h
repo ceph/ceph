@@ -175,6 +175,7 @@ class MDSMap {
   bool is_rejoin(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REJOIN; }
   bool is_active(int m)   { return mds_state.count(m) && mds_state[m] == STATE_ACTIVE; }
   bool is_stopping(int m) { return mds_state.count(m) && mds_state[m] == STATE_STOPPING; }
+  bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }
   bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
 
   bool has_created(int m) { return mds_created.count(m); }

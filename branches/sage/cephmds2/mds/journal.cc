@@ -127,10 +127,10 @@ void EMetaBlob::expire(MDS *mds, Context *c)
     
     // FIXME: check the slice only
 
-    if (dir->is_proxy()) {
+    if (dir->auth_is_ambiguous()) {
       // wait until export is acked (logged on remote) and committed (logged locally)
-      CDir *ex = mds->mdcache->get_export_container(dir);
-      dout(10) << "EMetaBlob.expire proxy for " << *dir
+      CDir *ex = mds->mdcache->get_subtree_root(dir);
+      dout(10) << "EMetaBlob.expire ambiguous auth for " << *dir
 	       << ", waiting for export finish on " << *ex << endl;
       waitfor_export.push_back(ex);
       continue;
@@ -384,6 +384,7 @@ void EImportMap::expire(MDS *mds, Context *c)
 
 void EImportMap::replay(MDS *mds) 
 {
+  /*
   if (!mds->mdcache->imports.empty()) {
     dout(10) << "EImportMap.replay -- ignoring, already have import map" << endl;
   } else {
@@ -400,7 +401,7 @@ void EImportMap::replay(MDS *mds)
       mds->mdcache->finish_ambiguous_import(*p);
     }
   }
-  
+  */
   mds->mdcache->show_imports();
 }
 

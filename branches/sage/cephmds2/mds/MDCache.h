@@ -101,26 +101,47 @@ class MDCache {
   // root
   list<Context*>     waiting_for_root;
 
+  /*
   // imports, exports, and hashes.
   set<CDir*>             imports;                // includes root (on mds0)
   set<CDir*>             exports;
   set<CDir*>             hashdirs;
   map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
 
-  // subtrees
-  map<CDir*,set<CDir*> > subtree_bounds;   // nested bounds on subtrees.
+  void import_subtree(CDir *root, set<CDir*>& bounds);
+  void export_subtree(CDir *root, set<CDir*>& bounds, int dest);
+  */
+
+  // -- subtrees --
+protected:
+  map<CDir*,set<CDir*> > subtrees;   // nested bounds on subtrees.
   
   // adjust subtree auth specification
   //  dir->dir_auth
   //  imports/exports/nested_exports
   //  join/split subtrees as appropriate
-  void import_subtree(CDir *root, set<CDir*>& bounds);
-  void import_subtree_finish(CDir *root, set<CDir*>& bounds);
-  void export_subtree(CDir *root, set<CDir*>& bounds, int dest);
-  void export_subtree_finish(CDir *root, set<CDir*>& bounds, int dest);
-
+public:
   void adjust_subtree_auth(CDir *root, pair<int,int> auth);
+  void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN) {
+    adjust_subtree_auth(root, pair<int,int>(a,b)); }
+  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth);
+  void adjust_export_state(CDir *dir);
+  void try_subtree_merge(CDir *root);
+  CDir *get_subtree_root(CDir *dir);
+  void get_subtree_bounds(CDir *root, set<CDir*>& bounds);
+  void get_wouldbe_subtree_bounds(CDir *root, set<CDir*>& bounds);
+  void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
+  void verify_subtree_bounds(CDir *root, const list<inodeno_t>& boundinos);
+
+  void get_auth_subtrees(set<CDir*>& s);
+  void get_fullauth_subtrees(set<CDir*>& s);
+
+  int num_subtrees();
+  int num_subtrees_fullauth();
+  int num_subtrees_fullnonauth();
+
   
+protected:
   // delayed cache expire
   map<CDir*, map<int, MCacheExpire*> > delayed_expire; // import|export dir -> expire msg
 
@@ -206,9 +227,9 @@ public:
   CInode *get_root() { return root; }
   void set_root(CInode *r);
 
-  int get_num_imports() { return imports.size(); }
-  void add_import(CDir *dir);
-  void remove_import(CDir *dir);
+  //int get_num_imports() { return imports.size(); }
+  //void add_import(CDir *dir);
+  //void remove_import(CDir *dir);
   void recalc_auth_bits();
 
   void log_import_map(Context *onsync=0);
@@ -280,7 +301,6 @@ public:
 
  public:
   CDir *get_auth_container(CDir *in);
-  CDir *get_subtree_root(CDir *dir);
   CDir *get_export_container(CDir *dir);
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
@@ -364,6 +384,7 @@ public:
 
   void show_imports();
   void show_cache();
+  void show_subtrees();
 
 };
 

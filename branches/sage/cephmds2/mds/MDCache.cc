@@ -208,13 +208,15 @@ public:
 
 void MDCache::log_import_map(Context *onsync)
 {
-  dout(10) << "log_import_map " << imports.size() << " imports, "
-	   << exports.size() << " exports" << endl;
+  dout(10) << "log_import_map " << num_subtrees() << " subtrees" 
+	   << num_subtrees_fullauth() << " fullauth"
+	   << endl;
   
   EImportMap *le = new EImportMap;
-
+  
   // include import/export inodes,
   // and a spanning tree to tie it to the root of the fs
+  /*
   for (set<CDir*>::iterator p = imports.begin();
        p != imports.end();
        p++) {
@@ -235,6 +237,7 @@ void MDCache::log_import_map(Context *onsync)
       }
     }
   }
+  */
 
   mds->mdlog->writing_import_map = true;
   mds->mdlog->submit_entry(le);
@@ -281,28 +284,34 @@ void MDCache::send_import_map_now(int who)
 {
   dout(10) << "send_import_map to mds" << who << endl;
 
+  /*
   MMDSImportMap *m = new MMDSImportMap;
 
   // known
-  for (set<CDir*>::iterator p = imports.begin();
-       p != imports.end();
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
        p++) {
-    CDir *im = *p;
+    CDir *dir = p->first;
 
-    if (migrator->is_importing(im->ino())) {
+    // only our subtrees
+    if (dir->authority().first != mds->get_nodeid()) 
+      continue;
+
+    if (migrator->is_importing(dir->ino())) {
       // ambiguous (mid-import)
-      m->add_ambiguous_import(im->ino(), 
-			      migrator->get_import_bound_inos(im->ino()));
+      m->add_ambiguous_import(dir->ino(), 
+			      migrator->get_import_bound_inos(dir->ino()));
     } else {
       // not ambiguous.
-      m->add_import(im->ino());
+      m->add_import(dir->ino());
       
-      if (nested_exports.count(im)) {
-	for (set<CDir*>::iterator q = nested_exports[im].begin();
-	     q != nested_exports[im].end();
+      // bounds too
+      if (nested_exports.count(dir)) {
+	for (set<CDir*>::iterator q = p->second.begin();
+	     q != p->second.end();
 	     ++q) {
-	  CDir *ex = *q;
-	  m->add_import_export(im->ino(), ex->ino());
+	  CDir *bound = *q;
+	  m->add_import_export(dir->ino(), bound->ino());
 	}
       }
     }
@@ -316,6 +325,8 @@ void MDCache::send_import_map_now(int who)
   
   // second
   mds->send_message_mds(m, who, MDS_PORT_CACHE);
+
+  */
 }
 
 
@@ -485,7 +496,7 @@ void MDCache::finish_ambiguous_import(inodeno_t dirino)
   }
 
   // adjust dir_auth, import maps
-  import_subtree(dir, bounds);
+  adjust_subtree_auth(dir, mds->get_nodeid());
 }
 
 void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
@@ -499,6 +510,7 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
 	   << " bounds " << bounds
 	   << endl;
   
+  /*
   // adjust dir_auth
   CDir *im = get_auth_container(dir);
   if (dir->get_inode()->authority().first == CDIR_AUTH_UNKNOWN) { 
@@ -507,14 +519,14 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
     assert(imports.count(dir));
     imports.erase(dir);
     dir->set_dir_auth( CDIR_AUTH_PARENT );
-    dir->state_clear(CDIR_STATE_IMPORT);
+    dir->state_clear(CDir::STATE_IMPORT);
     dir->put(CDir::PIN_IMPORT);
   } else {
     // i'm now an export
     exports.insert(dir);
     nested_exports[im].insert(dir);
     dir->set_dir_auth( CDIR_AUTH_UNKNOWN );  // not me
-    dir->state_set(CDIR_STATE_EXPORT);
+    dir->state_set(CDir::STATE_EXPORT);
     dir->get(CDir::PIN_EXPORT);
   }
   dout(10) << "  root " << *dir << endl;
@@ -539,209 +551,392 @@ void MDCache::finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds)
     assert(bd->get_dir_auth().first != CDIR_AUTH_PARENT);
     bd->set_dir_auth( CDIR_AUTH_PARENT );  // not me
 
-    bd->state_clear(CDIR_STATE_EXPORT);
+    bd->state_clear(CDir::STATE_EXPORT);
     bd->put(CDir::PIN_EXPORT);
 
     dout(10) << "  bound " << *bd << endl;
   }
-  
+  */
   show_imports();
 }
 
 
 
-/** import_subtree
- * adjust dir_auth.first.
- * adjust import/export/nested_export maps and pins.
- */
-void MDCache::import_subtree(CDir *root, set<CDir*>& bounds)
-{
-  dout(7) << "import_subtree_start " << *root << endl;
-
-  CDir *im = root;   // the new subtree root (an import)
-
-  // root
-  if (root->inode->is_auth()) {
-    // parent is already me.  was export, adding back to existing import.
-    im = get_auth_container(root);
-    assert(im);
-    nested_exports[im].erase(root);
-    exports.erase(root);
-    root->set_dir_auth(CDIR_AUTH_PARENT, true);
-    root->state_clear(CDIR_STATE_EXPORT);
-    root->put(CDir::PIN_EXPORT);
-  } else {
-    // parent isn't me.  new import.
-    imports.insert(root);
-    root->set_dir_auth(mds->get_nodeid(), true);
-    root->state_set(CDIR_STATE_IMPORT);
-    root->get(CDir::PIN_IMPORT);
-  }
-
-  dout(10) << "  root " << *root << endl;
-  if (root != im)
-    dout(10) << "  under " << *im << endl;
-
-  // i should have no pins in this region.
-  assert(root->get_cum_auth_pins() == 0);
-
-  // bounds
-  for (set<CDir*>::iterator it = bounds.begin();
-       it != bounds.end();
-       it++) {
-    CDir *bd = *it;
-    
-    if (bd->is_import()) {
-      // bound is still me.  was an import. 
-      imports.erase(bd);
-      bd->set_dir_auth(CDIR_AUTH_PARENT, true);   
-      bd->state_clear(CDIR_STATE_IMPORT);
-      bd->put(CDir::PIN_IMPORT);
-      // move nested exports under this bound to my subtree root.
-      for (set<CDir*>::iterator q = nested_exports[bd].begin();
-	   q != nested_exports[bd].end();
-	   ++q) 
-	nested_exports[im].insert(*q);
-      nested_exports.erase(bd);	
-    } else {
-      // not me anymore.  now an export.
-      exports.insert(bd);
-      nested_exports[im].insert(bd);
-      assert(bd->get_dir_auth().first != CDIR_AUTH_PARENT);
-      bd->state_set(CDIR_STATE_EXPORT);
-      bd->get(CDir::PIN_EXPORT);
-    }
-    
-    dout(10) << "  bound " << *bd << endl;
-  }
-}
-
-void MDCache::import_subtree_finish(CDir *root, set<CDir*>& bounds)
-{
-  
-}
-
-void MDCache::export_subtree(CDir *root, set<CDir*>& bounds, int dest)
-{
-  dout(7) << "export_subtree " << *root << endl;
-  
-  CDir *im = get_auth_container(root);
-
-  // root
-  if (root->is_import()) {
-    // was an import, hose it
-    assert(im == root);
-    assert(imports.count(root));
-    imports.erase(root);
-    root->set_dir_auth(CDIR_AUTH_PARENT);
-    root->state_clear(CDIR_STATE_IMPORT);
-    root->put(CDir::PIN_IMPORT);
-  } else {
-    // i'm now an export
-    exports.insert(root);
-    nested_exports[im].insert(root);
-    root->set_dir_auth( dest );  // not me
-    root->state_set(CDIR_STATE_EXPORT);
-    root->get(CDir::PIN_EXPORT);
-  }
-
-  // fix dir_auth
-  if (root->inode->authority().first == dest)
-    root->set_dir_auth( CDIR_AUTH_PARENT );
-  else
-    root->set_dir_auth( dest );
-  
-  dout(10) << "  root " << *root << endl;
-  if (root != im)
-    dout(10) << "  under " << *im << endl;
-    
-  // bounds (there were exports, before)
-  for (set<CDir*>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = *p;
-    
-    // hose export
-    assert(exports.count(bd));
-    exports.erase(bd);
-    nested_exports[im].erase(bd);
-
-    bd->state_clear(CDIR_STATE_EXPORT);
-    bd->put(CDir::PIN_EXPORT);
-    
-    // fix dir_auth
-    assert(bd->get_dir_auth().first != CDIR_AUTH_PARENT);
-    if (bd->get_dir_auth().first == dest)
-      bd->set_dir_auth(CDIR_AUTH_PARENT);
-    else
-      bd->set_dir_auth(dest);
-    
-    dout(10) << "  bound " << *bd << endl;
-  }
-}
-
 
 /*
  * adjust the dir_auth of a subtree.
  * merge with parent and/or child subtrees, if is it appropriate.
+ * merge can ONLY happen if both parent and child have unambiguous auth.
  */
 void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
 {
   dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
-	  << " under " << *dir << endl;
+	  << " on " << *dir << endl;
 
-  // note my current bounds.
-  set<CDir*> bounds = subtree_bounds[dir];
+  show_subtrees();
 
-  // join with parent?
-  CDir *root = dir;
-  if (dir->ino() != 1) // i'm the root, screw you
-    root = get_subtree_root(dir->get_parent_dir());
-  
-  if (root != dir && root->get_dir_auth() == auth) {
-    // join the subtrees.
-    dir->set_dir_auth(CDIR_AUTH_DEFAULT);
-    dout(10) << "  merge with parent " << *root << endl;
-
-    // move our bounds under new root
-    subtree_bounds.erase(dir);
-    for (set<CDir*>::iterator p = bounds.begin();
-	 p != bounds.end();
-	 ++p) 
-      subtree_bounds[root].insert(*p);
-
-    // dir is no longer a subtree
-    subtree_bounds.erase(dir);
+  CDir *root;
+  if (dir->ino() == 1) {
+    root = dir;  // bootstrap hack.
+    subtrees[root].clear();
   } else {
-    // don't merge with parent, just update our auth.
+    root = get_subtree_root(dir);  // subtree root
+  }
+  assert(root);
+  assert(subtrees.count(root));
+  dout(7) << " current root is " << *root << endl;
+
+  if (root == dir) {
+    // i am already a subtree.
     dir->set_dir_auth(auth);
+  } else {
+    // i am a new subtree.
+    dout(10) << "  new subtree at " << *dir << endl;
+    assert(subtrees.count(dir) == 0);
+    subtrees[dir].clear();      // create empty subtree bounds list for me.
+
+    // set dir_auth
+    dir->set_dir_auth(auth);
+    
+    // move items nested beneath me, under me.
+    set<CDir*>::iterator p = subtrees[root].begin();
+    while (p != subtrees[root].end()) {
+      set<CDir*>::iterator next = p;
+      next++;
+      if (get_subtree_root((*p)->get_parent_dir()) == dir) {
+	// move under me
+	dout(10) << "  claiming child bound " << **p << endl;
+	subtrees[dir].insert(*p); 
+	subtrees[root].erase(p);
+      }
+      p = next;
+    }
+    
+    // i am a bound of the parent subtree.
+    subtrees[root].insert(dir); 
+
+    // i am now the subtree root.
+    root = dir;
   }
 
-  // bounds
+  // adjust export pins
+  adjust_export_state(dir);
+  for (set<CDir*>::iterator p = subtrees[dir].begin();
+       p != subtrees[dir].end();
+       ++p) 
+    adjust_export_state(*p);
+  
+  show_subtrees();
+}
+
+
+/*
+ * any "export" point must be pinned in cache to ensure a proper
+ * chain of delegation.  we do this by pinning when a dir is nonauth
+ * but the inode is auth.
+ *
+ * import points don't need to be pinned the same way simply because the
+ * exporter is pinned and thus always open.
+ */
+void MDCache::adjust_export_state(CDir *dir)
+{
+  if (!dir->is_auth() && dir->inode->is_auth()) {
+    // export.
+    if (!dir->state_test(CDir::STATE_EXPORT)) {
+      dout(10) << "adjust_export_state pinning new export " << *dir << endl;
+      dir->state_set(CDir::STATE_EXPORT);
+      dir->get(CDir::PIN_EXPORT);
+    }
+  } 
+  else {
+    // not export.
+    if (dir->state_test(CDir::STATE_EXPORT)) {
+      dout(10) << "adjust_export_state unpinning old export " << *dir << endl;
+      dir->state_clear(CDir::STATE_EXPORT);
+      dir->put(CDir::PIN_EXPORT);
+    }
+  }
+}
+
+void MDCache::try_subtree_merge(CDir *dir)
+{
+  dout(7) << "try_subtree_merge " << *dir << endl;
+
+  // try to merge bounds?
+  set<CDir*>::iterator p = subtrees[dir].begin();
+  while (p != subtrees[dir].end()) {
+    set<CDir*>::iterator next = p;
+    next++;
+    CDir *bound = *p;
+    
+    if (bound->dir_auth == dir->dir_auth &&            // if auth matches,
+	dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&   // auth is unambiguous,
+	!bound->state_test(CDir::STATE_EXPORTBOUND)) { // and not an exportbound,
+      // merge with child.
+      dout(10) << "  merging with child bound " << *bound << endl;
+      bound->set_dir_auth(CDIR_AUTH_DEFAULT);
+      
+      // move child's children under dir.
+      for (set<CDir*>::iterator q = subtrees[bound].begin();
+	   q != subtrees[bound].end();
+	   ++q) 
+	subtrees[dir].insert(*q);
+      
+      // bound is no longer a separate subtree.
+      subtrees[dir].erase(bound);
+      subtrees.erase(bound);
+    }
+
+    // next!
+    p = next;
+  }
+
+  // merge with parent?
+  CDir *parent = dir;  
+  if (dir->ino() != 1)
+    parent = get_subtree_root(dir->get_parent_dir());
+  
+  if (parent != dir &&                              // we have a parent,
+      parent->dir_auth == dir->dir_auth &&          // auth matches,
+      dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&  // auth is unambiguous,
+      !dir->state_test(CDir::STATE_EXPORTBOUND)) {  // not an exportbound,
+    // merge with parent.
+    dout(10) << "  merge with parent " << *parent << endl;
+    dir->set_dir_auth(CDIR_AUTH_DEFAULT);
+    
+    // move our bounds under the parent
+    for (set<CDir*>::iterator p = subtrees[dir].begin();
+	 p != subtrees[dir].end();
+	 ++p) 
+      subtrees[parent].insert(*p);
+    
+    // we are no longer a subtree or bound
+    subtrees.erase(dir);
+    subtrees[parent].erase(dir);
+  } 
+
+  show_subtrees();
+}
+
+
+void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth)
+{
+  dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
+	  << " on " << *dir << endl;
+
+  show_subtrees();
+
+  CDir *root;
+  if (dir->ino() == 1) {
+    root = dir;  // bootstrap hack.
+    subtrees[root].clear();
+  } else {
+    root = get_subtree_root(dir);  // subtree root
+  }
+  assert(root);
+  assert(subtrees.count(root));
+  dout(7) << " current root is " << *root << endl;
+
+  pair<int,int> oldauth = dir->authority();
+
+  if (root == dir) {
+    // i am already a subtree.
+    dir->set_dir_auth(auth);
+  } else {
+    // i am a new subtree.
+    dout(10) << "  new subtree at " << *dir << endl;
+    assert(subtrees.count(dir) == 0);
+    subtrees[dir].clear();      // create empty subtree bounds list for me.
+    
+    // set dir_auth
+    dir->set_dir_auth(auth);
+    
+    // move items nested beneath me, under me.
+    set<CDir*>::iterator p = subtrees[root].begin();
+    while (p != subtrees[root].end()) {
+      set<CDir*>::iterator next = p;
+      next++;
+      if (get_subtree_root((*p)->get_parent_dir()) == dir) {
+	// move under me
+	dout(10) << "  claiming child bound " << **p << endl;
+	subtrees[dir].insert(*p); 
+	subtrees[root].erase(p);
+      }
+      p = next;
+    }
+    
+    // i am a bound of the parent subtree.
+    subtrees[root].insert(dir); 
+
+    // i am now the subtree root.
+    root = dir;
+  }
+  
+  // verify/adjust bounds.
+  // these may be new, but no deeper than any existing bounds.
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) {
     CDir *bound = *p;
-    
-    if (bound->dir_auth == auth) {
-      // merge with child.
-      dout(10) << "  merging bound " << *bound << endl;
-      bound->set_dir_auth(CDIR_AUTH_DEFAULT);
-      
-      // move child's children under root.
-      for (set<CDir*>::iterator q = subtree_bounds[bound].begin();
-	   q != subtree_bounds[bound].end();
-	   ++q) 
-	subtree_bounds[root].insert(*q);
+    if (subtrees[dir].count(bound)) continue;  // have it.
+    adjust_subtree_auth(bound, oldauth);       // otherwise, adjust at bound.
+  }
 
-      // bound is no longer a subtree.
-      subtree_bounds[root].erase(bound);
-    } else {
-      // don't merge.
-      dout(10) << "  bound " << *bound << endl;
+  verify_subtree_bounds(dir, bounds);
+
+  show_subtrees();
+}
+
+
+CDir *MDCache::get_subtree_root(CDir *dir)
+{
+  // find the underlying dir that delegates (or is about to delegate) auth
+  while (true) {
+    if (dir->is_subtree_root()) 
+      return dir;
+    dir = dir->get_parent_dir();
+    if (!dir) 
+      return 0;             // none
+  }
+}
+
+void MDCache::get_subtree_bounds(CDir *dir, set<CDir*>& bounds)
+{
+  assert(subtrees.count(dir));
+  bounds = subtrees[dir];
+}
+
+void MDCache::get_wouldbe_subtree_bounds(CDir *dir, set<CDir*>& bounds)
+{
+  if (subtrees.count(dir)) {
+    // just copy them, dir is a subtree.
+    get_subtree_bounds(dir, bounds);
+  } else {
+    // find them
+    CDir *root = get_subtree_root(dir);
+    for (set<CDir*>::iterator p = subtrees[root].begin();
+	 p != subtrees[root].end();
+	 ++p) {
+      CDir *t = *p;
+      while (t != root) {
+	t = t->get_parent_dir();
+	assert(t);
+	if (t == dir) {
+	  bounds.insert(*p);
+	  continue;
+	}
+      }
     }
   }
 }
+
+void MDCache::verify_subtree_bounds(CDir *dir, const set<CDir*>& bounds)
+{
+  // for debugging only.
+  assert(subtrees.count(dir));
+  if (bounds != subtrees[dir]) {
+    dout(0) << "verify_subtree_bounds failed" << endl;
+    set<CDir*> b = bounds;
+    for (set<CDir*>::iterator p = subtrees[dir].begin();
+	 p != subtrees[dir].end();
+	 ++p) {
+      if (bounds.count(*p)) {
+	b.erase(*p);
+	continue;
+      }
+      dout(0) << "  missing bound " << **p << endl;
+    }
+    for (set<CDir*>::iterator p = b.begin();
+	 p != b.end();
+	 ++p) 
+      dout(0) << "    extra bound " << **p << endl;
+  }
+  assert(bounds == subtrees[dir]);
+}
+
+void MDCache::verify_subtree_bounds(CDir *dir, const list<inodeno_t>& bounds)
+{
+  // for debugging only.
+  assert(subtrees.count(dir));
+
+  // make sure that any bounds i do have are properly noted as such.
+  int failed = 0;
+  for (list<inodeno_t>::const_iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CInode *bdi = get_inode(*p);
+    if (!bdi) continue;
+    CDir *bd = bdi->dir;
+    if (!bd) continue;
+    if (subtrees[dir].count(bd) == 0) {
+      dout(0) << "verify_subtree_bounds failed: extra bound " << *bd << endl;
+      failed++;
+    }
+  }
+  assert(failed == 0);
+}
+
+
+void MDCache::get_fullauth_subtrees(set<CDir*>& s)
+{
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *root = p->first;
+    if (root->is_fullauth())
+      s.insert(root);
+  }
+}
+void MDCache::get_auth_subtrees(set<CDir*>& s)
+{
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *root = p->first;
+    if (root->is_auth())
+      s.insert(root);
+  }
+}
+
+
+// count.
+
+int MDCache::num_subtrees()
+{
+  return subtrees.size();
+}
+
+int MDCache::num_subtrees_fullauth()
+{
+  int n = 0;
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *root = p->first;
+    if (root->is_fullauth())
+      n++;
+  }
+  return n;
+}
+
+int MDCache::num_subtrees_fullnonauth()
+{
+  int n = 0;
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *root = p->first;
+    if (root->is_fullnonauth())
+      n++;
+  }
+  return n;
+}
+
+
+
+
+
+
 
 
 
@@ -1040,12 +1235,14 @@ void MDCache::set_root(CInode *in)
   root->state_set(CInode::STATE_ROOT);
 }
 
+/*
 void MDCache::add_import(CDir *dir)
 {
   imports.insert(dir);
-  dir->state_set(CDIR_STATE_IMPORT);
+  dir->state_set(CDir::STATE_IMPORT);
   dir->get(CDir::PIN_IMPORT);
 }
+*/
 
 
 void MDCache::recalc_auth_bits()
@@ -1076,9 +1273,9 @@ void MDCache::recalc_auth_bits()
 
     if (in->dir) {
       if (in->dir->authority().first == mds->get_nodeid())
-	in->dir->state_set(CDIR_STATE_AUTH);
+	in->dir->state_set(CDir::STATE_AUTH);
       else {
-	in->dir->state_clear(CDIR_STATE_AUTH);
+	in->dir->state_clear(CDir::STATE_AUTH);
 	if (in->dir->is_dirty()) 
 	  in->dir->mark_clean();
       }
@@ -1229,7 +1426,7 @@ bool MDCache::trim(int max)
 
     // adjust the dir state
     CInode *diri = dir->get_inode();
-    diri->dir->state_clear(CDIR_STATE_COMPLETE);  // dir incomplete!
+    diri->dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
 
     // reexport?
     if (diri->dir->is_import() &&             // import
@@ -1274,8 +1471,13 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, inodeno_t conino, map<int, MCa
       // was this an auth delegation?  (if so, slightly modified container)
       inodeno_t dconino = conino;
       if (in->dir->is_subtree_root()) {
-	dout(12) << "  for just this dir, the container is " << *in->dir << endl;
+	dout(12) << "  this is a subtree, removing from map, container is " << *in->dir << endl;
 	dconino = in->ino();
+
+	// remove from subtree map
+	assert(subtrees.count(in->dir));
+	assert(subtrees[in->dir].empty());
+	subtrees.erase(in->dir);
       }
       
       for (int a=dirauth.first; 
@@ -1357,7 +1559,7 @@ void MDCache::trim_non_auth()
       
       // adjust the dir state
       CInode *diri = dir->get_inode();
-      diri->dir->state_clear(CDIR_STATE_COMPLETE);  // dir incomplete!
+      diri->dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
     }
   }
 
@@ -1409,9 +1611,6 @@ void MDCache::shutdown_check()
   dout(0) << "log len " << mds->mdlog->get_num_events() << endl;
 
 
-  if (exports.size()) 
-    dout(0) << "still have " << exports.size() << " exports" << endl;
-
   if (mds->filer->is_active()) 
     dout(0) << "filer still active" << endl;
 }
@@ -1438,6 +1637,7 @@ bool MDCache::shutdown_pass()
   }
 
   // unhash dirs?
+  /*
   if (!hashdirs.empty()) {
     // unhash any of my dirs?
     for (set<CDir*>::iterator it = hashdirs.begin();
@@ -1452,6 +1652,7 @@ bool MDCache::shutdown_pass()
     dout(7) << "waiting for dirs to unhash" << endl;
     return false;
   }
+  */
 
   // commit dirs?
   if (g_conf.mds_commit_on_shutdown) {
@@ -1497,80 +1698,61 @@ bool MDCache::shutdown_pass()
 
 
   // send all imports back to 0.
-  if (mds->get_nodeid() != 0 && !did_shutdown_exports) {
+  if (mds->get_nodeid() != 0 && 
+      !migrator->is_exporting() &&
+      !migrator->is_importing()) {
     // flush what i can from the cache first..
     trim(0);
-
+    
     // export to root
-    for (set<CDir*>::iterator it = imports.begin();
-         it != imports.end();
-         ) {
-      CDir *im = *it;
-      it++;
-      if (im->inode->is_root()) continue;
-      if (im->is_frozen() || im->is_freezing()) continue;
+    for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
+         it != subtrees.end();
+         it++) {
+      CDir *dir = it->first;
+      if (dir->inode->is_root()) continue;
+      if (dir->is_frozen() || dir->is_freezing()) continue;
+      if (!dir->is_fullauth()) continue;
       
-      dout(7) << "sending " << *im << " back to mds0" << endl;
-      migrator->export_dir(im,0);
+      dout(7) << "sending " << *dir << " back to mds0" << endl;
+      migrator->export_dir(dir, 0);
     }
     did_shutdown_exports = true;
   } 
-
-
-  // waiting for imports?  (e.g. root?)
-  if (exports.size()) {
-    dout(7) << "still have " << exports.size() << " exports" << endl;
-    //show_cache();
-    return false;
-  }
-
   
   // close root?
   if (lru.lru_get_size() == 0 &&
       root &&
-      root->dir) {
-    
-    if (root->dir->is_import()) {
-      // un-import
-      dout(7) << "removing root import" << endl;
-      imports.erase(root->dir);
-      root->dir->state_clear(CDIR_STATE_IMPORT);
-      root->dir->put(CDir::PIN_IMPORT);
-      
-      if (root->is_pinned_by(CInode::PIN_DIRTY)) {
-	dout(7) << "clearing root inode dirty flag" << endl;
-	root->put(CInode::PIN_DIRTY);
-      }
-    }
-
-    // ignore root inode/dir on other nodes, since it's empty anyway. 
+      root->is_pinned_by(CInode::PIN_DIRTY)) {
+    dout(7) << "clearing root inode dirty flag" << endl;
+    root->put(CInode::PIN_DIRTY);
   }
   
-  // imports?
-  if (!imports.empty() || migrator->is_exporting()) {
-    dout(7) << "still have " << imports.size() << " imports, or still exporting" << endl;
+  // subtrees map not empty yet?
+  if (!subtrees.empty()) {
+    dout(7) << "still have " << num_subtrees() << " subtrees" << endl;
     show_cache();
     return false;
   }
+  assert(subtrees.empty());
+  assert(!migrator->is_exporting());
+  assert(!migrator->is_importing());
   
   // cap log?
   if (g_conf.mds_log_flush_on_shutdown) {
 
-    if (imports.empty() && exports.empty()) {
-      // (only do this once!)
-      if (!mds->mdlog->is_capped()) {
-	dout(7) << "capping the log" << endl;
-	mds->mdlog->cap();
-	// note that this won't flush right away, so we'll make at least one more pass
-      }
+    // (only do this once!)
+    if (!mds->mdlog->is_capped()) {
+      dout(7) << "capping the log" << endl;
+      mds->mdlog->cap();
+      // note that this won't flush right away, so we'll make at least one more pass
     }
-
+    
     if (mds->mdlog->get_num_events()) {
       dout(7) << "waiting for log to flush (including import_map, now) .. " << mds->mdlog->get_num_events() 
 	      << " (" << mds->mdlog->get_non_importmap_events() << ")" << endl;
       return false;
     }
-
+    
     if (!did_shutdown_log_cap) {
       // flush journal header
       dout(7) << "writing header for (now-empty) journal" << endl;
@@ -1640,14 +1822,11 @@ int MDCache::open_root(Context *c)
 
     // root directory too
     assert(root->dir == NULL);
-    root->set_dir( new CDir(root, this, true) );
-    root->dir->set_dir_auth( 0 );  // me!
-    root->dir->dir_rep = CDIR_REP_ALL;   //NONE;
+    root->set_dir(new CDir(root, this, true));
+    adjust_subtree_auth(root->dir, 0);   
+    root->dir->dir_rep = CDir::REP_ALL;   //NONE;
 
-    // root is sort of technically an import (from a vacuum)
-    imports.insert( root->dir );
-    root->dir->state_set(CDIR_STATE_IMPORT);
-    root->dir->get(CDir::PIN_IMPORT);
+    show_imports();
 
     if (c) {
       c->finish(0);
@@ -2842,6 +3021,11 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         // add it (_replica_)
         cur->set_dir( new CDir(cur, this, false) );
         m->get_dir(i).update_dir(cur->dir);
+
+	// is this a dir_auth delegation boundary?
+	if (m->get_source().num() != cur->authority().first)
+	  adjust_subtree_auth(cur->dir, m->get_source().num());
+	
         dout(7) << "added " << *cur->dir << " nonce " << cur->dir->replica_nonce << endl;
 
         // get waiters
@@ -3328,7 +3512,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
       if (dn->inode->dir) {
         // mark dir clean too, since it now dne!
         assert(dn->inode->dir->is_auth());
-        dn->inode->dir->state_set(CDIR_STATE_DELETED);
+        dn->inode->dir->state_set(CDir::STATE_DELETED);
         dn->inode->dir->remove_null_dentries();
         dn->inode->dir->mark_clean();
       }
@@ -3445,7 +3629,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       // dir?
       if (dn->inode) {
         if (dn->inode->dir) {
-          dn->inode->dir->state_set(CDIR_STATE_DELETED);
+          dn->inode->dir->state_set(CDir::STATE_DELETED);
           dn->inode->dir->remove_null_dentries();
         }
       }
@@ -3543,6 +3727,8 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
  * and we are nested underneath an inode in that dir (that hashes to us).
  * Thus do not assume result->is_auth()!  It is_auth() || is_hashed().
  */
+
+/*
 CDir *MDCache::get_auth_container(CDir *dir)
 {
   CDir *imp = dir;  // might be *dir
@@ -3556,18 +3742,6 @@ CDir *MDCache::get_auth_container(CDir *dir)
   }
 
   return imp;
-}
-
-CDir *MDCache::get_subtree_root(CDir *dir)
-{
-  // find the underlying dir that delegates (or is about to delegate) auth
-  while (true) {
-    if (dir->is_subtree_root()) 
-      return dir;
-    dir = dir->get_parent_dir();
-    if (!dir) 
-      return 0;             // none
-  }
 }
 
 CDir *MDCache::get_export_container(CDir *dir)
@@ -3633,7 +3807,7 @@ void MDCache::find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s)
 }
 
 
-
+*/
 
 
 
@@ -3652,11 +3826,98 @@ void MDCache::find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s)
 // ==============================================================
 // debug crap
 
+void MDCache::show_subtrees()
+{
+  dout(10) << "show_subtrees:" << endl;
+  
+  list<pair<CDir*,int> > q;
+  string indent;
+
+  if (root && root->dir) 
+    q.push_back(pair<CDir*,int>(root->dir, 0));
+
+  set<CDir*> seen;
+
+  while (!q.empty()) {
+    CDir *dir = q.front().first;
+    int d = q.front().second;
+    q.pop_front();
+
+    // sanity check
+    if (seen.count(dir)) dout(0) << "aah, already seen " << *dir << endl;
+    assert(seen.count(dir) == 0);
+    seen.insert(dir);
+
+    // adjust indenter
+    while ((unsigned)d < indent.size()) 
+      indent.resize(d);
+    
+    // pad
+    string pad = "__________________________________";
+    pad.resize(12-indent.size());
+
+    string auth;
+    if (dir->is_auth())
+      auth = "auth ";
+    else
+      auth = "rep  ";
+
+    char s[10];
+    if (dir->get_dir_auth().second == CDIR_AUTH_UNKNOWN)
+      sprintf(s, "%2d   ", dir->get_dir_auth().first);
+    else
+      sprintf(s, "%2d,%2d", dir->get_dir_auth().first, dir->get_dir_auth().second);
+    
+    // print
+    dout(10) << indent << "|_" << pad << s << " " << auth << *dir << endl;
+
+    // nested items?
+    if (!subtrees[dir].empty()) {
+      // more at my level?
+      if (!q.empty() && q.front().second == d)
+	indent += "| ";
+      else
+	indent += "  ";
+
+      for (set<CDir*>::iterator p = subtrees[dir].begin();
+	   p != subtrees[dir].end();
+	   ++p) 
+	q.push_front(pair<CDir*,int>(*p, d+2));
+    }
+  }
+}
+
 
 void MDCache::show_imports()
 {
   int db = 10;
 
+  dout(db) << "show_imports:" << endl;
+
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *root = p->first;
+
+    if (!root->is_auth()) continue;
+
+    dout(db) << " ___ " << *root << endl;
+    
+    for (set<CDir*>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      CDir *bound = *q;
+      dout(db) << "  |__" << *bound << endl;
+    }    
+  }
+
+  show_subtrees();
+  return;
+
+
+
+  /// old
+  /*
   if (imports.empty() &&
       hashdirs.empty()) {
     dout(db) << "show_imports: no imports/exports/hashdirs" << endl;
@@ -3718,6 +3979,7 @@ void MDCache::show_imports()
       dout(1) << "***** stray item in exports: " << **it << endl;
     assert(ecopy.size() == 0);
   }
+  */
 }
 
 

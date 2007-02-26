@@ -95,6 +95,13 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
   dout(7) << "fix_renamed_dir on " << *in << endl;
   dout(7) << "fix_renamed_dir on " << *in->dir << endl;
 
+
+  assert(0); // rewrite .
+
+  // 1- fix subtree tree.
+  // 2- adjust subtree auth.
+
+  /*
   if (in->dir->is_auth()) {
     // dir ours
     dout(7) << "dir is auth" << endl;
@@ -102,34 +109,14 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
     if (in->is_auth()) {
       // inode now ours
-
       if (authchanged) {
         // inode _was_ replica, now ours
-        dout(7) << "inode was replica, now ours.  removing from import list." << endl;
-        assert(in->dir->is_import());
-        
-        // not import anymore!
-        cache->imports.erase(in->dir);
-        in->dir->state_clear(CDIR_STATE_IMPORT);
-        in->dir->put(CDir::PIN_IMPORT);
-
-        in->dir->set_dir_auth( CDIR_AUTH_PARENT );
-        dout(7) << " fixing dir_auth to be " << in->dir->get_dir_auth() << endl;
-
-        // move my nested imports to in's containing import
-        CDir *con = cache->get_auth_container(in->dir);
-        assert(con);
-        for (set<CDir*>::iterator p = cache->nested_exports[in->dir].begin();
-             p != cache->nested_exports[in->dir].end();
-             p++) {
-          dout(7) << "moving nested export under new container " << *con << endl;
-          cache->nested_exports[con].insert(*p);
-        }
-        cache->nested_exports.erase(in->dir);
-        
+        dout(7) << "inode was replica, now ours." << endl;
+	cache->adjust_subtree_auth(dir, mds->get_nodeid());
       } else {
         // inode was ours, still ours.
         dout(7) << "inode was ours, still ours." << endl;
+	
         assert(!in->dir->is_import());
         assert(in->dir->get_dir_auth().first == CDIR_AUTH_PARENT);
         
@@ -161,7 +148,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
         // i am now an import
         cache->imports.insert(in->dir);
-        in->dir->state_set(CDIR_STATE_IMPORT);
+        in->dir->state_set(CDir::STATE_IMPORT);
         in->dir->get(CDir::PIN_IMPORT);
 
         in->dir->set_dir_auth( mds->get_nodeid() );
@@ -210,7 +197,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
         
         // now export
         cache->exports.insert(in->dir);
-        in->dir->state_set(CDIR_STATE_EXPORT);
+        in->dir->state_set(CDir::STATE_EXPORT);
         in->dir->get(CDir::PIN_EXPORT);
         
         assert(dir_auth >= 0);  // better be defined
@@ -251,7 +238,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
 
         // remove from export list
         cache->exports.erase(in->dir);
-        in->dir->state_clear(CDIR_STATE_EXPORT);
+        in->dir->state_clear(CDir::STATE_EXPORT);
         in->dir->put(CDir::PIN_EXPORT);
         
         CDir *oldcon = cache->get_auth_container(srcdir);
@@ -284,7 +271,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
       assert(!in->dir->is_export());
     }  
   }
-
+  */
   cache->show_imports();
 }
 

@@ -899,16 +899,6 @@ void MDS::my_dispatch(Message *m)
     dout(1) << "MDS dispatch unknown message port" << m->get_dest_port() << endl;
     assert(0);
   }
-
-
-  // HACK FOR NOW
-  if (is_active()) {
-    // flush log to disk after every op.  for now.
-    mdlog->flush();
-
-    // trim cache
-    mdcache->trim();
-  }
   
   // finish any triggered contexts
   if (finished_queue.size()) {
@@ -919,12 +909,22 @@ void MDS::my_dispatch(Message *m)
     finish_contexts(ls);
   }
 
+
+  // HACK FOR NOW
+  if (is_active()) {
+    // flush log to disk after every op.  for now.
+    mdlog->flush();
+
+    // trim cache
+    mdcache->trim();
+  }
+
   
   // hack: thrash exports
   for (int i=0; i<g_conf.mds_thrash_exports; i++) {
     set<int> s;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
-    if (s.size() == 1) 
+    if (s.size() == 1 || mdcache->inode_map.size() < 10) 
       break;  // need peers for this to work.
 
     dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf.mds_thrash_exports << endl;
@@ -935,16 +935,18 @@ void MDS::my_dispatch(Message *m)
     while (n--) p++;
     
     CDir *dir = p->second->dir;
-    if (dir && dir->is_auth()) {
-      int dest;
-      do {
-	int k = rand() % s.size();
-	set<int>::iterator p = s.begin();
-	while (k--) p++;
-	dest = *p;
-      } while (dest != whoami);
-      mdcache->migrator->export_dir(dir,dest);
-    }
+    if (!dir) continue;                      // must be a dir.
+    if (!dir->get_parent_dir()) continue;    // must be linked.
+    if (!dir->is_auth()) continue;           // must be auth.
+
+    int dest;
+    do {
+      int k = rand() % s.size();
+      set<int>::iterator p = s.begin();
+      while (k--) p++;
+      dest = *p;
+    } while (dest == whoami);
+    mdcache->migrator->export_dir(dir,dest);
   }
 
 

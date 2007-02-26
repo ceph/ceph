@@ -137,7 +137,6 @@ public:
 
   // -- misc --
   void handle_mds_failure(int who);
-  void show_imports();
 
 
   // -- import/export --
@@ -158,7 +157,7 @@ public:
  protected:
   void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
   void export_dir_frozen(CDir *dir, int dest);
-  void export_dir_frozen_logged(CDir *dir, MExportDirPrep *prep, int dest);
+  //void export_dir_start_logged(CDir *dir, MExportDirPrep *prep, int dest);
   void handle_export_dir_prep_ack(MExportDirPrepAck *m);
   void handle_export_dir_warning_ack(MExportDirWarningAck *m);
   void export_dir_go(CDir *dir);

@@ -53,61 +53,8 @@ class Context;
 #define CDIR_NONCE_EXPORT   1
 
 
-// state bits
-#define CDIR_STATE_AUTH          (1<<0)   // auth for this dir (hashing doesn't count)
-#define CDIR_STATE_PROXY         (1<<1)   // proxy auth
-
-#define CDIR_STATE_COMPLETE      (1<<2)   // the complete contents are in cache
-#define CDIR_STATE_DIRTY         (1<<3)   // has been modified since last commit
-
-#define CDIR_STATE_FROZENTREE     (1<<4)   // root of tree (bounded by exports)
-#define CDIR_STATE_FREEZINGTREE   (1<<5)   // in process of freezing 
-//#define CDIR_STATE_FROZENTREELEAF (1<<6)   // outer bound of frozen region (on import)
-#define CDIR_STATE_FROZENDIR      (1<<7)
-#define CDIR_STATE_FREEZINGDIR    (1<<8)
-
-#define CDIR_STATE_COMMITTING     (1<<9)   // mid-commit
-#define CDIR_STATE_FETCHING       (1<<10)   // currenting fetching
-
-#define CDIR_STATE_DELETED        (1<<11)
-
-#define CDIR_STATE_IMPORT       (1<<12)   // flag set if this is an import.
-#define CDIR_STATE_EXPORT       (1<<13)
-#define CDIR_STATE_IMPORTBOUND  (1<<14)
-#define CDIR_STATE_EXPORTBOUND  (1<<15)
-
-#define CDIR_STATE_HASHED           (1<<16)   // if hashed
-#define CDIR_STATE_HASHING          (1<<17)
-#define CDIR_STATE_UNHASHING        (1<<18)
 
 
-
-
-
-// these state bits are preserved by an import/export
-// ...except if the directory is hashed, in which case none of them are!
-#define CDIR_MASK_STATE_EXPORTED    (CDIR_STATE_COMPLETE\
-                                    |CDIR_STATE_DIRTY)  
-#define CDIR_MASK_STATE_IMPORT_KEPT (CDIR_STATE_IMPORT\
-                                    |CDIR_STATE_EXPORT\
-                                    |CDIR_STATE_IMPORTBOUND\
-                                    |CDIR_STATE_FROZENTREE\
-                                    |CDIR_STATE_PROXY)
-
-#define CDIR_MASK_STATE_EXPORT_KEPT (CDIR_STATE_HASHED\
-                                    |CDIR_STATE_FROZENTREE\
-                                    |CDIR_STATE_FROZENDIR\
-                                    |CDIR_STATE_EXPORT\
-                                    |CDIR_STATE_PROXY)
-
-// common states
-#define CDIR_STATE_CLEAN   0
-#define CDIR_STATE_INITIAL 0  
-
-// directory replication
-#define CDIR_REP_ALL       1
-#define CDIR_REP_NONE      0
-#define CDIR_REP_LIST      2
 
 
 
@@ -218,6 +165,52 @@ class CDir : public MDSCacheObject {
     }
   }
 
+  // -- state --
+  static const unsigned STATE_AUTH =          (1<< 0);   // auth for this dir (hashing doesn't count)
+  static const unsigned STATE_PROXY =         (1<< 1);   // proxy auth
+  static const unsigned STATE_COMPLETE =      (1<< 2);   // the complete contents are in cache
+  static const unsigned STATE_DIRTY =         (1<< 3);   // has been modified since last commit
+  static const unsigned STATE_FROZENTREE =    (1<< 4);   // root of tree (bounded by exports)
+  static const unsigned STATE_FREEZINGTREE =  (1<< 5);   // in process of freezing 
+  static const unsigned STATE_FROZENDIR =     (1<< 6);
+  static const unsigned STATE_FREEZINGDIR =   (1<< 7);
+  static const unsigned STATE_COMMITTING =    (1<< 8);   // mid-commit
+  static const unsigned STATE_FETCHING =      (1<< 9);   // currenting fetching
+  static const unsigned STATE_DELETED =       (1<<10);
+  static const unsigned STATE_IMPORT =        (1<<11);   // flag set if this is an import.
+  static const unsigned STATE_EXPORT =        (1<<12);
+  static const unsigned STATE_IMPORTBOUND =   (1<<13);
+  static const unsigned STATE_EXPORTBOUND =   (1<<14);
+  static const unsigned STATE_HASHED =        (1<<15);   // if hashed
+  static const unsigned STATE_HASHING =       (1<<16);
+  static const unsigned STATE_UNHASHING =     (1<<17);
+
+  // common states
+  static const unsigned STATE_CLEAN =  0;
+  static const unsigned STATE_INITIAL = 0;
+
+  // these state bits are preserved by an import/export
+  // ...except if the directory is hashed, in which case none of them are!
+  static const unsigned MASK_STATE_EXPORTED = 
+  STATE_COMPLETE|STATE_DIRTY;
+  static const unsigned MASK_STATE_IMPORT_KEPT = 
+  STATE_IMPORT|STATE_EXPORT
+  |STATE_IMPORTBOUND|STATE_EXPORTBOUND
+  |STATE_FROZENTREE|STATE_PROXY;
+  static const unsigned MASK_STATE_EXPORT_KEPT = 
+  STATE_HASHED 
+  |STATE_IMPORTBOUND|STATE_EXPORTBOUND
+  |STATE_FROZENTREE
+  |STATE_FROZENDIR
+  |STATE_EXPORT
+  |STATE_PROXY;
+
+  // -- rep spec --
+  static const int REP_NONE =     0;
+  static const int REP_ALL =      1;
+  static const int REP_LIST =     2;
+
+
 
  public:
   // context
@@ -260,7 +253,7 @@ class CDir : public MDSCacheObject {
 
   // cache control  (defined for authority; hints for replicas)
   int              dir_rep;
-  set<int>         dir_rep_by;      // if dir_rep == CDIR_REP_LIST
+  set<int>         dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   meta_load_t popularity[MDS_NPOP];
@@ -335,17 +328,21 @@ class CDir : public MDSCacheObject {
   pair<int,int> authority();
   pair<int,int> dentry_authority(const string& d);
   pair<int,int> get_dir_auth() { return dir_auth; }
-  //int get_dir_auth_pending() { return dir_auth->second; }
   void set_dir_auth(pair<int,int> a, bool iamauth=false);
-  void set_dir_auth(int a, bool iamauth=false) { 
-    set_dir_auth(pair<int,int>(a, dir_auth.second), iamauth); 
+  void set_dir_auth(int a) { 
+    set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN), false); 
   }
-  void set_dir_auth_pending(int b) { 
-    set_dir_auth(pair<int,int>(dir_auth.first, b)); 
+  bool auth_is_ambiguous() {
+    return dir_auth.second != CDIR_AUTH_UNKNOWN;
   }
-
+  bool is_fullauth() {
+    return is_auth() && !auth_is_ambiguous();
+  }
+  bool is_fullnonauth() {
+    return !is_auth() && !auth_is_ambiguous();
+  }
+  
   bool is_subtree_root();
-
 
  
 
@@ -364,20 +361,20 @@ class CDir : public MDSCacheObject {
 
 
   // -- state --
-  bool is_complete() { return state & CDIR_STATE_COMPLETE; }
-  bool is_dirty() { return state_test(CDIR_STATE_DIRTY); }
+  bool is_complete() { return state & STATE_COMPLETE; }
+  bool is_dirty() { return state_test(STATE_DIRTY); }
 
-  bool is_auth() { return state & CDIR_STATE_AUTH; }
-  bool is_proxy() { return state & CDIR_STATE_PROXY; }
-  bool is_import() { return state & CDIR_STATE_IMPORT; }
-  bool is_export() { return state & CDIR_STATE_EXPORT; }
+  bool is_auth() { return state & STATE_AUTH; }
+  bool is_proxy() { return state & STATE_PROXY; }
+  bool is_import() { return state & STATE_IMPORT; }
+  bool is_export() { return state & STATE_EXPORT; }
 
-  bool is_hashed() { return state & CDIR_STATE_HASHED; }
-  bool is_hashing() { return state & CDIR_STATE_HASHING; }
-  bool is_unhashing() { return state & CDIR_STATE_UNHASHING; }
+  bool is_hashed() { return state & STATE_HASHED; }
+  bool is_hashing() { return state & STATE_HASHING; }
+  bool is_unhashing() { return state & STATE_UNHASHING; }
 
   bool is_rep() { 
-    if (dir_rep == CDIR_REP_NONE) return false;
+    if (dir_rep == REP_NONE) return false;
     return true;
   }
  
@@ -398,8 +395,8 @@ class CDir : public MDSCacheObject {
   void _mark_dirty();
   void mark_dirty(version_t pv);
   void mark_clean();
-  void mark_complete() { state_set(CDIR_STATE_COMPLETE); }
-  bool is_clean() { return !state_test(CDIR_STATE_DIRTY); }
+  void mark_complete() { state_set(STATE_COMPLETE); }
+  bool is_clean() { return !state_test(STATE_DIRTY); }
 
 
 
@@ -438,6 +435,8 @@ class CDir : public MDSCacheObject {
   bool can_auth_pin() { return !(is_frozen() || is_freezing()); }
   int is_auth_pinned() { return auth_pins; }
   int get_cum_auth_pins() { return auth_pins + nested_auth_pins; }
+  int get_auth_pins() { return auth_pins; }
+  int get_nested_auth_pins() { return nested_auth_pins; }
   void auth_pin();
   void auth_unpin();
   void adjust_nested_auth_pins(int inc);
@@ -456,13 +455,13 @@ class CDir : public MDSCacheObject {
 
   bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
   bool is_freezing_tree();
-  bool is_freezing_tree_root() { return state & CDIR_STATE_FREEZINGTREE; }
-  bool is_freezing_dir() { return state & CDIR_STATE_FREEZINGDIR; }
+  bool is_freezing_tree_root() { return state & STATE_FREEZINGTREE; }
+  bool is_freezing_dir() { return state & STATE_FREEZINGDIR; }
 
   bool is_frozen() { return is_frozen_dir() || is_frozen_tree(); }
   bool is_frozen_tree();
-  bool is_frozen_tree_root() { return state & CDIR_STATE_FROZENTREE; }
-  bool is_frozen_dir() { return state & CDIR_STATE_FROZENDIR; }
+  bool is_frozen_tree_root() { return state & STATE_FROZENTREE; }
+  bool is_frozen_dir() { return state & STATE_FROZENDIR; }
   
   bool is_freezeable() {
     // no nested auth pins.
@@ -470,7 +469,7 @@ class CDir : public MDSCacheObject {
       return false;
 
     // inode must not be frozen.
-    if (inode->is_frozen())
+    if (!is_subtree_root() && inode->is_frozen())
       return false;
 
     return true;
@@ -479,8 +478,8 @@ class CDir : public MDSCacheObject {
     if (auth_pins > 0) 
       return false;
 
-    // inode must not be frozen.
-    if (inode->is_frozen())
+    // if not subtree root, inode must not be frozen.
+    if (!is_subtree_root() && inode->is_frozen())
       return false;
 
     return true;
@@ -511,7 +510,7 @@ class CDirDiscover {
   CDirDiscover(CDir *dir, int nonce) {
     ino = dir->ino();
     this->nonce = nonce;
-    dir_auth = dir->dir_auth.first;
+    //dir_auth = dir->dir_auth.first;
     dir_rep = dir->dir_rep;
     rep_by = dir->dir_rep_by;
   }
@@ -521,7 +520,7 @@ class CDirDiscover {
     assert(!dir->is_auth());
 
     dir->replica_nonce = nonce;
-    dir->set_dir_auth( dir_auth );
+    //dir->set_dir_auth( dir_auth );
     dir->dir_rep = dir_rep;
     dir->dir_rep_by = rep_by;
   }
@@ -604,11 +603,11 @@ class CDirExport {
     dir->projected_version = dir->version = st.version;    // this is bumped, below, if dirty
 
     // twiddle state
-    if (dir->state & CDIR_STATE_HASHED) 
-      dir->state_set( CDIR_STATE_AUTH );         // just inherit auth flag when hashed
+    if (dir->state & CDir::STATE_HASHED) 
+      dir->state_set( CDir::STATE_AUTH );         // just inherit auth flag when hashed
     else
-      dir->state = (dir->state & CDIR_MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
-        (st.state & CDIR_MASK_STATE_EXPORTED);
+      dir->state = (dir->state & CDir::MASK_STATE_IMPORT_KEPT) |   // remember import flag, etc.
+        (st.state & CDir::MASK_STATE_EXPORTED);
     dir->dir_rep = st.dir_rep;
 
     dir->popularity[MDS_POP_JUSTME] += st.popularity_justme;

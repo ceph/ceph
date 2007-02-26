@@ -19,34 +19,32 @@
 using namespace std;
 
 class MExportDirNotify : public Message {
-  int       new_auth;
-  int       old_auth;
   inodeno_t ino;
-  
+  pair<int,int> auth;
   list<inodeno_t> exports;  // bounds; these dirs are _not_ included (tho the inodes are)
-  list<inodeno_t> subdirs;
+
+  //list<inodeno_t> subdirs;
 
  public:
   inodeno_t get_ino() { return ino; }
-  int get_new_auth() { return new_auth; }
-  int get_old_auth() { return old_auth; }
+  pair<int,int> get_auth() { return auth; }
   list<inodeno_t>& get_exports() { return exports; }
-  list<inodeno_t>::iterator subdirs_begin() { return subdirs.begin(); }
-  list<inodeno_t>::iterator subdirs_end() { return subdirs.end(); }
-  int num_subdirs() { return subdirs.size(); }
+  //list<inodeno_t>::iterator subdirs_begin() { return subdirs.begin(); }
+  //list<inodeno_t>::iterator subdirs_end() { return subdirs.end(); }
+  //int num_subdirs() { return subdirs.size(); }
 
   MExportDirNotify() {}
-  MExportDirNotify(inodeno_t ino, int old_auth, int new_auth) :
-    Message(MSG_MDS_EXPORTDIRNOTIFY) {
-    this->ino = ino;
-    this->old_auth = old_auth;
-    this->new_auth = new_auth;
-  }
+  MExportDirNotify(inodeno_t i, int a, int b) :
+    Message(MSG_MDS_EXPORTDIRNOTIFY),
+    ino(i), auth(a,b) { }
+
   virtual char *get_type_name() { return "ExNot"; }
   
+  /*
   void copy_subdirs(list<inodeno_t>& s) {
     this->subdirs = s;
   }
+  */
   void copy_exports(list<inodeno_t>& ex) {
     this->exports = ex;
   }
@@ -63,21 +61,18 @@ class MExportDirNotify : public Message {
 
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(int), (char*)&new_auth);
-    off += sizeof(int);
-    payload.copy(off, sizeof(int), (char*)&old_auth);
-    off += sizeof(int);
+    payload.copy(off, sizeof(auth), (char*)&auth);
+    off += sizeof(auth);
     payload.copy(off, sizeof(ino), (char*)&ino);
     off += sizeof(ino);
     ::_decode(exports, payload, off);
-    ::_decode(subdirs, payload, off);
+    //::_decode(subdirs, payload, off);
   }
   virtual void encode_payload() {
-    payload.append((char*)&new_auth, sizeof(int));
-    payload.append((char*)&old_auth, sizeof(int));
+    payload.append((char*)&auth, sizeof(auth));
     payload.append((char*)&ino, sizeof(ino));
     ::_encode(exports, payload);
-    ::_encode(subdirs, payload);
+    //::_encode(subdirs, payload);
   }
 };
 
