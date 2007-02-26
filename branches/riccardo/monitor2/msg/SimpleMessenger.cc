@@ -682,7 +682,7 @@ void Rank::Pipe::fail(list<Message*>& out)
       for (list<Message*>::iterator k = j->second.begin();
            k != j->second.end();
            ++k) {
-	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << j->first << " inst " << peer_addr << endl;
+	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << (*k)->get_dest_inst() << endl;
         i->first->ms_handle_failure(*k, (*k)->get_dest_inst());
       }
 }
@@ -1111,7 +1111,8 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest,
   // set envelope
   m->set_source(get_myname(), fromport);
   m->set_source_addr(rank.my_addr);
-  m->set_dest(dest.name, port);
+  m->set_dest_inst(dest);
+  m->set_dest_port(port);
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr

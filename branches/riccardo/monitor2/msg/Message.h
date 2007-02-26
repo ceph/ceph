@@ -255,11 +255,15 @@ public:
 
   // source/dest
   entity_inst_t& get_dest_inst() { return env.dst; }
+  void set_dest_inst(entity_inst_t& inst) { env.dst = inst; }
+
   entity_inst_t& get_source_inst() { return env.src; }
+  void set_source_inst(entity_inst_t& inst) { env.src = inst; }
 
   entity_name_t& get_dest() { return env.dst.name; }
   void set_dest(entity_name_t a, int p) { env.dst.name = a; env.dest_port = p; }
   int get_dest_port() { return env.dest_port; }
+  void set_dest_port(int p) { env.dest_port = p; }
   
   entity_name_t& get_source() { return env.src.name; }
   void set_source(entity_name_t a, int p) { env.src.name = a; env.source_port = p; }
