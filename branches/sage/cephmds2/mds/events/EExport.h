@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __EEXPORTFINISH_H
-#define __EEXPORTFINISH_H
+#ifndef __EEXPORT_H
+#define __EEXPORT_H
 
 #include <assert.h>
 #include "config.h"
@@ -20,34 +20,38 @@
 
 #include "../MDS.h"
 
-class EExportFinish : public LogEvent {
- protected:
-  inodeno_t dirino; // exported dir
-  bool success;
+#include "EMetaBlob.h"
 
- public:
-  EExportFinish(CDir *dir, bool s) : LogEvent(EVENT_EXPORTFINISH), 
-				     dirino(dir->ino()),
-				     success(s) { }
-  EExportFinish() : LogEvent(EVENT_EXPORTFINISH) { }
+class EExport : public LogEvent {
+public:
+  EMetaBlob metablob; // exported dir
+protected:
+  inodeno_t      dirino;
+  set<inodeno_t> bounds;
+  
+public:
+  EExport(CDir *dir) : LogEvent(EVENT_EXPORT),
+		       dirino(dir->ino()) { 
+    metablob.add_dir_context(dir);
+  }
+  EExport() : LogEvent(EVENT_EXPORT) { }
+  
+  set<inodeno_t> &get_bounds() { return bounds; }
   
   void print(ostream& out) {
-    out << "export_finish " << dirino;
-    if (success)
-      out << " success";
-    else 
-      out << " failure";
+    out << "export " << dirino << " " << metablob;
   }
 
   virtual void encode_payload(bufferlist& bl) {
+    metablob._encode(bl);
     bl.append((char*)&dirino, sizeof(dirino));
-    bl.append((char*)&success, sizeof(success));
+    ::_encode(bounds, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
+    metablob._decode(bl, off);
     bl.copy(off, sizeof(dirino), (char*)&dirino);
     off += sizeof(dirino);
-    bl.copy(off, sizeof(success), (char*)&success);
-    off += sizeof(success);
+    ::_decode(bounds, bl, off);
   }
   
   bool has_expired(MDS *mds);

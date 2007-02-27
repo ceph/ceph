@@ -326,24 +326,6 @@ void CInode::decode_file_state(bufferlist& r, int& off)
   off += sizeof(inode.atime);
 }
 
-/* not used currently
-void CInode::decode_merge_file_state(crope& r, int& off)
-{
-  __uint64_t size;
-  r.copy(off, sizeof(size), (char*)&size);
-  off += sizeof(size);
-  if (size > inode.size) inode.size = size;
-
-  time_t t;
-  r.copy(off, sizeof(t), (char*)&t);
-  off += sizeof(t);
-  if (t > inode.mtime) inode.mtime = t;
-
-  r.copy(off, sizeof(t), (char*)&t);
-  off += sizeof(t);
-  if (t > inode.atime) inode.atime = t;
-}
-*/
 
 void CInode::encode_hard_state(bufferlist& r)
 {

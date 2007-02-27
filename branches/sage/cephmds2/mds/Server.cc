@@ -1628,12 +1628,7 @@ void Server::handle_client_unlink(MClientRequest *req,
       if (!in->is_auth()) {
         // i should be exporting this now/soon, since the dir is empty.
         dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
-        if (!in->dir->is_freezing() && in->dir->is_frozen()) {
-          assert(in->dir->is_import());
-          mdcache->migrator->export_empty_import(in->dir);          
-        } else {
-          dout(7) << "apparently already exporting" << endl;
-        }
+	mdcache->migrator->export_empty_import(in->dir);          
         in->dir->add_waiter(CDIR_WAIT_UNFREEZE,
                             new C_MDS_RetryRequest(mds, req, diri));
         return;

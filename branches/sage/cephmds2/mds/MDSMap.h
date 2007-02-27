@@ -119,14 +119,12 @@ class MDSMap {
 
   // sets
   void get_mds_set(set<int>& s) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
       s.insert(p->first);
   }
   void get_up_mds_set(set<int>& s) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
@@ -134,7 +132,6 @@ class MDSMap {
 	s.insert(p->first);
   }
   void get_mds_set(set<int>& s, int state) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)
@@ -148,7 +145,6 @@ class MDSMap {
     get_mds_set(s, MDSMap::STATE_FAILED);
   }
   void get_recovery_mds_set(set<int>& s) {
-    s.clear();
     for (map<int,int>::const_iterator p = mds_state.begin();
 	 p != mds_state.end();
 	 p++)

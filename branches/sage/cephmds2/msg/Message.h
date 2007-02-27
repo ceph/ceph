@@ -173,9 +173,7 @@
 using std::list;
 
 #include <ext/hash_map>
-#include <ext/rope>
 
-using __gnu_cxx::crope;
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -271,33 +269,8 @@ public:
     payload.clear();
   }
 
-  // overload either the rope version (easier!)
-  virtual void encode_payload(crope& s)           { assert(0); }
-  virtual void decode_payload(crope& s, int& off) { assert(0); }
- 
-  // of the bufferlist versions (faster!)
-  virtual void decode_payload() {
-    // use a crope for convenience, small messages, etc.  FIXME someday.
-    crope ser;
-    for (list<bufferptr>::const_iterator it = payload.buffers().begin();
-         it != payload.buffers().end();
-         it++)
-      ser.append((*it).c_str(), (*it).length());
-    
-    int off = 0;
-    decode_payload(ser, off);
-    assert((unsigned)off == payload.length());
-  }
-  virtual void encode_payload() {
-    assert(payload.length() == 0);  // caller should reset payload
-
-    // use crope for convenience, small messages. FIXME someday.
-    crope r;
-    encode_payload(r);
-
-    // copy payload
-    payload.push_back( buffer::copy(r.c_str(), r.length()) );
-  }
+  virtual void decode_payload() = 0;
+  virtual void encode_payload() = 0;
 
   virtual void print(ostream& out) {
     out << get_type_name();

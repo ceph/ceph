@@ -28,9 +28,6 @@
 #include <vector>
 using namespace std;
 
-#include <ext/rope>
-using namespace __gnu_cxx;
-
 #include "buffer.h"
 
 
@@ -149,29 +146,6 @@ class filepath {
     return bits.size() == 0;
   }
 
-  
-  void _rope(crope& r) {
-    char n = bits.size();
-    r.append((char*)&n, sizeof(char));
-    for (vector<string>::iterator it = bits.begin();
-         it != bits.end();
-         it++) { 
-      r.append((*it).c_str(), (*it).length()+1);
-    }
-  }
-
-  void _unrope(crope& r, int& off) {
-    clear();
-
-    char n;
-    r.copy(off, sizeof(char), (char*)&n);
-    off += sizeof(char);
-    for (int i=0; i<n; i++) {
-      string s = r.c_str() + off;
-      off += s.length() + 1;
-      add_dentry(s);
-    }
-  }
 
   void _encode(bufferlist& bl) {
     char n = bits.size();

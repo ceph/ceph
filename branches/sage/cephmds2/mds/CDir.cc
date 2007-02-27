@@ -696,7 +696,7 @@ void CDir::auth_pin()
 
   // nest pins?
   if (is_subtree_root()) return;  // no.
-  assert(!is_import());
+  //assert(!is_import());
 
   inode->nested_auth_pins++;
   if (inode->parent)
@@ -718,7 +718,7 @@ void CDir::auth_unpin()
   
   // nest?
   if (is_subtree_root()) return;  // no.
-  assert(!is_import());
+  //assert(!is_import());
 
   inode->nested_auth_pins--;
   if (inode->parent)
@@ -867,8 +867,7 @@ bool CDir::is_freezing_tree()
   CDir *dir = this;
   while (1) {
     if (dir->is_freezing_tree_root()) return true;
-    if (dir->is_import()) return false;
-    if (dir->is_hashed()) return false;
+    if (dir->is_subtree_root()) return false;
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else

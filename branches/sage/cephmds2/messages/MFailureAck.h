@@ -28,15 +28,16 @@ class MFailureAck : public Message {
  
   entity_name_t get_failed() { return failed; }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(0, sizeof(failed), (char*)&failed);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(0, sizeof(failed), (char*)&failed);
     off += sizeof(failed);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&failed, sizeof(failed));
+  virtual void encode_payload() {
+    payload.append((char*)&failed, sizeof(failed));
   }
 
-  virtual char *get_type_name() { return "faila"; }
+  virtual char *get_type_name() { return "failack"; }
 };
 
 #endif

@@ -109,8 +109,6 @@ using namespace std;
 #include "messages/MInodeLinkAck.h"
 
 //#include "messages/MInodeUpdate.h"
-#include "messages/MInodeExpire.h"
-#include "messages/MDirExpire.h"
 #include "messages/MCacheExpire.h"
 #include "messages/MInodeFileCaps.h"
 
@@ -426,16 +424,8 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
 	*/
 
-  case MSG_MDS_INODEEXPIRE:
-    m = new MInodeExpire();
-    break;
-
   case MSG_MDS_INODEFILECAPS:
     m = new MInodeFileCaps();
-    break;
-
-  case MSG_MDS_DIREXPIRE:
-    m = new MDirExpire();
     break;
 
   case MSG_MDS_LOCK:

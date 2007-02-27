@@ -40,40 +40,18 @@ class MHeartbeat : public Message {
 
   virtual char *get_type_name() { return "HB"; }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off,sizeof(load), (char*)&load);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off,sizeof(load), (char*)&load);
     off += sizeof(load);
-    s.copy(off, sizeof(beat), (char*)&beat);
+    payload.copy(off, sizeof(beat), (char*)&beat);
     off += sizeof(beat);
-
-    int n;
-    s.copy(off, sizeof(n), (char*)&n);
-    off += sizeof(n);
-    while (n--) {
-      int f;
-      s.copy(off, sizeof(f), (char*)&f);
-      off += sizeof(f);
-      float v;
-      s.copy(off, sizeof(v), (char*)&v);
-      off += sizeof(v);      
-      import_map[f] = v;
-    }
+    ::_decode(import_map, payload, off);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&load, sizeof(load));
-    s.append((char*)&beat, sizeof(beat));
-
-    int n = import_map.size();
-    s.append((char*)&n, sizeof(n));
-    for (map<int, float>::iterator it = import_map.begin();
-         it != import_map.end();
-         it++) {
-      int f = it->first;
-      s.append((char*)&f, sizeof(f));
-      float v = it->second;
-      s.append((char*)&v, sizeof(v));
-    }
-
+  virtual void encode_payload() {
+    payload.append((char*)&load, sizeof(load));
+    payload.append((char*)&beat, sizeof(beat));
+    ::_encode(import_map, payload);
   }
 
 };

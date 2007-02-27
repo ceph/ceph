@@ -72,30 +72,31 @@ class MClientFileCaps : public Message {
   }
   virtual char *get_type_name() { return "Cfcap";}
   
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(seq), (char*)&seq);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(seq), (char*)&seq);
     off += sizeof(seq);
-    s.copy(off, sizeof(inode), (char*)&inode);
+    payload.copy(off, sizeof(inode), (char*)&inode);
     off += sizeof(inode);
-    s.copy(off, sizeof(caps), (char*)&caps);
+    payload.copy(off, sizeof(caps), (char*)&caps);
     off += sizeof(caps);
-    s.copy(off, sizeof(wanted), (char*)&wanted);
+    payload.copy(off, sizeof(wanted), (char*)&wanted);
     off += sizeof(wanted);
-    //s.copy(off, sizeof(client), (char*)&client);
+    //payload.copy(off, sizeof(client), (char*)&client);
     //off += sizeof(client);
-    s.copy(off, sizeof(mds), (char*)&mds);
+    payload.copy(off, sizeof(mds), (char*)&mds);
     off += sizeof(mds);
-    s.copy(off, sizeof(special), (char*)&special);
+    payload.copy(off, sizeof(special), (char*)&special);
     off += sizeof(special);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&seq, sizeof(seq));
-    s.append((char*)&inode, sizeof(inode));
-    s.append((char*)&caps, sizeof(caps));
-    s.append((char*)&wanted, sizeof(wanted));
-    //s.append((char*)&client, sizeof(client));
-    s.append((char*)&mds,sizeof(mds));
-    s.append((char*)&special,sizeof(special));
+  virtual void encode_payload() {
+    payload.append((char*)&seq, sizeof(seq));
+    payload.append((char*)&inode, sizeof(inode));
+    payload.append((char*)&caps, sizeof(caps));
+    payload.append((char*)&wanted, sizeof(wanted));
+    //payload.append((char*)&client, sizeof(client));
+    payload.append((char*)&mds,sizeof(mds));
+    payload.append((char*)&special,sizeof(special));
   }
 };
 

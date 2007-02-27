@@ -54,17 +54,18 @@ class MDirUpdate : public Message {
   }
   virtual char *get_type_name() { return "dup"; }
 
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(st), (char*)&st);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
-    _unrope(dir_rep_by, s, off);
-    _unrope(path, s, off);
+    ::_decode(dir_rep_by, payload, off);
+    ::_decode(path, payload, off);
   }
 
-  virtual void encode_payload(crope& r) {
-    r.append((char*)&st, sizeof(st));
-    _rope(dir_rep_by, r);
-    _rope(path, r);
+  virtual void encode_payload() {
+    payload.append((char*)&st, sizeof(st));
+    ::_encode(dir_rep_by, payload);
+    ::_encode(path, payload);
   }
 };
 

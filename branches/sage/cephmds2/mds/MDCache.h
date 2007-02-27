@@ -93,13 +93,15 @@ class MDCache {
   // the cache
   CInode                       *root;        // root inode
   hash_map<inodeno_t,CInode*>   inode_map;   // map of inodes by ino            
-  
-  list<CInode*>                 inode_expire_queue;  // inodes to delete
 
-  friend class MDS; // for inode_map, FIXME
+  friend class MDS;  // for thrash_exports hack.
 
   // root
   list<Context*>     waiting_for_root;
+
+public:
+  int get_num_inodes() { return inode_map.size(); }
+  int get_num_dentries() { return lru.lru_get_size(); }
 
   /*
   // imports, exports, and hashes.
@@ -123,11 +125,20 @@ protected:
 public:
   void adjust_subtree_auth(CDir *root, pair<int,int> auth);
   void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN) {
-    adjust_subtree_auth(root, pair<int,int>(a,b)); }
+    adjust_subtree_auth(root, pair<int,int>(a,b)); 
+  }
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth);
+  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, int a) {
+    adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
+  }
+  void adjust_bounded_subtree_auth(CDir *dir, list<inodeno_t>& bounds, pair<int,int> auth);
+  void adjust_bounded_subtree_auth(CDir *dir, list<inodeno_t>& bounds, int a) {
+    adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
+  }
   void adjust_export_state(CDir *dir);
   void try_subtree_merge(CDir *root);
   CDir *get_subtree_root(CDir *dir);
+  void remove_subtree(CDir *dir);
   void get_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void get_wouldbe_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
@@ -161,9 +172,9 @@ protected:
   // recovery
 protected:
   // from EImportStart w/o EImportFinish during journal replay
-  map<inodeno_t, set<inodeno_t> >            my_ambiguous_imports;  
+  map<inodeno_t, list<inodeno_t> >            my_ambiguous_imports;  
   // from MMDSImportMaps
-  map<int, map<inodeno_t, set<inodeno_t> > > other_ambiguous_imports;  
+  map<int, map<inodeno_t, list<inodeno_t> > > other_ambiguous_imports;  
 
   set<int> recovery_set;
   set<int> wants_import_map;   // nodes i need to send my import map to
@@ -179,9 +190,7 @@ protected:
 public:
   void send_import_map(int who);
   void send_import_map_now(int who);
-  void send_import_map_later(int who) {
-    wants_import_map.insert(who);
-  }
+  void send_import_map_later(int who);
   void send_pending_import_maps();  // maybe.
   void send_cache_rejoins();
 
@@ -190,13 +199,11 @@ public:
   }
 
   // ambiguous imports
-  void add_ambiguous_import(inodeno_t base, set<inodeno_t>& bounds) {
-    my_ambiguous_imports[base].swap(bounds);
-  }
+  void add_ambiguous_import(inodeno_t base, list<inodeno_t>& bounds);
+  void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
   void cancel_ambiguous_import(inodeno_t dirino);
   void finish_ambiguous_import(inodeno_t dirino);
-  
-  void finish_ambiguous_export(inodeno_t dirino, set<inodeno_t>& bounds);
+
 
 
 
@@ -253,10 +260,15 @@ public:
   bool have_inode( inodeno_t ino ) { return inode_map.count(ino) ? true:false; }
   CInode* get_inode( inodeno_t ino ) {
     if (have_inode(ino))
-      return inode_map[ ino ];
+      return inode_map[ino];
     return NULL;
   }
-  
+  CDir* get_dir(inodeno_t dirino) {
+    if (have_inode(dirino))
+      return inode_map[dirino]->dir;
+    return NULL;
+  }
+
 
   int hash_dentry(inodeno_t ino, const string& s) {
     return 0; // fixme

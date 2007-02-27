@@ -454,7 +454,7 @@ void Renamer::file_rename_finish(CDir *srcdir, CInode *in, Context *c)
   dout(10) << "file_rename_finish on " << *in << endl;
 
   // did i empty out an imported dir?  FIXME this check should go somewhere else???
-  if (srcdir->is_import() && !srcdir->inode->is_root() && srcdir->get_size() == 0) 
+  if (srcdir->is_auth() && !srcdir->inode->is_auth() && srcdir->get_size() == 0) 
     cache->migrator->export_empty_import(srcdir);
 
   // finish our caller

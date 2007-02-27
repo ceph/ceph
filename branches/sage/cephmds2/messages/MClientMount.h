@@ -25,9 +25,9 @@ class MClientMount : public Message {
 
   char *get_type_name() { return "Cmnt"; }
 
-  virtual void decode_payload(crope& s, int& off) {  
+  virtual void decode_payload() {  
   }
-  virtual void encode_payload(crope& s) {  
+  virtual void encode_payload() {  
   }
 };
 

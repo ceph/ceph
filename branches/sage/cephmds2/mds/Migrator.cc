@@ -28,8 +28,7 @@
 #include "include/filepath.h"
 
 #include "events/EString.h"
-#include "events/EExportStart.h"
-#include "events/EExportFinish.h"
+#include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
 
@@ -180,22 +179,22 @@ void Migrator::export_empty_import(CDir *dir)
 {
   dout(7) << "export_empty_import " << *dir << endl;
   
-  return;  // hack fixme
-
-  if (!dir->is_import()) {
-    dout(7) << "not import (anymore?)" << endl;
-    return;
-  }
-  if (dir->inode->is_root()) {
-    dout(7) << "root" << endl;
-    return;
-  }
-
+  if (dir->inode->is_auth()) return;
+  if (!dir->is_auth()) return;
+  
+  if (dir->inode->is_freezing() || dir->inode->is_frozen()) return;
+  if (dir->is_freezing() || dir->is_frozen()) return;
+  
   if (dir->get_size() > 0) {
     dout(7) << "not actually empty" << endl;
     return;
   }
 
+  if (dir->inode->is_root()) {
+    dout(7) << "root" << endl;
+    return;
+  }
+  
   // is it really empty?
   if (!dir->is_complete()) {
     dout(7) << "not complete, fetching." << endl;
@@ -203,9 +202,9 @@ void Migrator::export_empty_import(CDir *dir)
                             new C_MDC_EmptyImport(this,dir));
     return;
   }
-
+  
   int dest = dir->inode->authority().first;
-
+  
   // comment this out ot wreak havoc?
   //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
   
@@ -254,14 +253,12 @@ void Migrator::handle_mds_failure(int who)
       case EXPORT_LOGGINGSTART:
       case EXPORT_PREPPING:
       case EXPORT_WARNING:
-	dout(10) << "state loggingstart|prepping|warning : unfreezing, logging EExportFinish(false)" << endl;
+	dout(10) << "state loggingstart|prepping|warning : unfreezing" << endl;
 	dir->unfreeze_tree();
-	mds->mdlog->submit_entry(new EExportFinish(dir,false));
 	break;
 	
       case EXPORT_EXPORTING:
-	dout(10) << "state exporting : logging EExportFinish(false), reversing, and unfreezing" << endl;
-	mds->mdlog->submit_entry(new EExportFinish(dir,false));
+	dout(10) << "state exporting : reversing, and unfreezing" << endl;
 	reverse_export(dir);
 	dir->unfreeze_tree();
 	break;
@@ -336,9 +333,7 @@ void Migrator::handle_mds_failure(int who)
     next++;
     inodeno_t dirino = q->first;
     CInode *diri = mds->mdcache->get_inode(dirino);
-    CDir *dir = 0;
-    if (diri) 
-      dir = diri->dir;
+    CDir *dir = mds->mdcache->get_dir(dirino);
 
     if (import_peer[dirino] == who) {
       switch (import_state[dirino]) {
@@ -347,6 +342,8 @@ void Migrator::handle_mds_failure(int who)
 	assert(diri);
 	// unpin base
 	diri->put(CInode::PIN_IMPORTING);
+	import_state.erase(dirino);
+	import_peer.erase(dirino);
 	break;
 
 	// NOTE: state order reversal + fall-thru, pay attention.
@@ -358,7 +355,7 @@ void Migrator::handle_mds_failure(int who)
 	// unfreeze
 	dir->unfreeze_tree();
 
-	// adjust auth
+	// adjust auth back to me
 	cache->adjust_subtree_auth(dir, mds->get_nodeid());
 	cache->try_subtree_merge(dir);
 	
@@ -369,8 +366,10 @@ void Migrator::handle_mds_failure(int who)
 	  dout(10) << "state prepping : unpinning base+bounds " << *dir << endl;
 	}
 	assert(dir);
+
 	// unpin base
 	dir->put(CDir::PIN_IMPORTING);
+
 	// unpin bounds
 	for (set<CDir*>::iterator it = import_bounds[dir].begin();
 	     it != import_bounds[dir].end();
@@ -380,33 +379,31 @@ void Migrator::handle_mds_failure(int who)
 	  bd->state_clear(CDir::STATE_IMPORTBOUND);
 	  bd->put(CDir::PIN_IMPORTBOUND);
 	}
+
+	import_state.erase(dirino);
+	import_peer.erase(dirino);
+	import_bound_inos.erase(dirino);
+	import_bounds.erase(dir);
 	break;
 
 
       case IMPORT_LOGGINGSTART:
 	dout(10) << "state loggingstart : reversing import on " << *dir << endl;
 	assert(dir);
-	mds->mdlog->submit_entry(new EImportFinish(dir,false));	// log failure
 	reverse_import(dir);
 	break;
 
       case IMPORT_ACKING:
 	// hrm.  make this an ambiguous import, and wait for exporter recovery to disambiguate
-	// ...
+	dout(10) << "state acking : noting ambiguous import " << *dir << endl;
+	cache->add_ambiguous_import(dir, import_bounds[dir]);
 	break;
 
       case IMPORT_LOGGINGFINISH:
-	// do nothing, exporter is no longer involved.
+	// do nothing special, exporter is no longer involved.
+	// i will finish/clean up myself.
 	break;
       }
-
-      import_state.erase(dirino);
-      import_peer.erase(dirino);
-      import_bound_inos.erase(dirino);
-      import_bounds.erase(dir);
-
-      cache->show_imports();
-      cache->show_cache();
     }
 
     // next!
@@ -551,7 +548,6 @@ void Migrator::export_dir_frozen(CDir *dir,
   set<CDir*> &bounds = export_bounds[dir];
 
   // generate prep message, log entry.
-  EExportStart *le = new EExportStart(dir, dest);
   MExportDirPrep *prep = new MExportDirPrep(dir->inode);
 
   // include spanning tree for all nested exports.
@@ -562,7 +558,6 @@ void Migrator::export_dir_frozen(CDir *dir,
 
   // include base dir
   prep->add_dir( new CDirDiscover(dir, dir->add_replica(dest)) );
-  le->metablob.add_dir( dir, false );
   
   // check bounds
   for (set<CDir*>::iterator it = bounds.begin();
@@ -577,9 +572,6 @@ void Migrator::export_dir_frozen(CDir *dir,
     dout(7) << "  export bound " << *bound << endl;
 
     prep->add_export( bound->ino() );
-    le->get_bounds().insert(bound->ino());
-    le->metablob.add_dir_context( bound );
-    le->metablob.add_dir( bound, false );
 
     /* first assemble each trace, in trace order, and put in message */
     list<CInode*> inode_trace;  
@@ -619,32 +611,8 @@ void Migrator::export_dir_frozen(CDir *dir,
     }
 
   }
-  
-  // log our intentions
-  dout(7) << " logging EExportStart" << endl;
-  mds->mdlog->submit_entry(le);
-  // don't wait for it to flush, it doesn't matter.
-  // FIXME: just combine Start into Finish, we only need 1 log entry.
-  //, new C_MDC_ExportStartLogged(this, dir, dest, prep));
 
-  /*
-
-}
-
-void Migrator::export_dir_start_logged(CDir *dir, MExportDirPrep *prep, int dest)
-{
-  dout(7) << "export_dir_start_logged " << *dir << endl;
-
-  if (export_state.count(dir) == 0 ||
-      export_state[dir] != EXPORT_LOGGINGSTART) {
-    // export must have aborted.  
-    dout(7) << "export must have aborted, unfreezing and deleting me old prep message" << endl;
-    delete prep;
-    dir->unfreeze_tree();  // cancel the freeze
-    return;
-  }
-  */
-
+  // send.
   export_state[dir] = EXPORT_PREPPING;
   mds->send_message_mds(prep, dest, MDS_PORT_MIGRATOR);
 }
@@ -1002,8 +970,7 @@ public:
  */
 void Migrator::handle_export_dir_ack(MExportDirAck *m)
 {
-  CInode *diri = cache->get_inode(m->get_ino());
-  CDir *dir = diri->dir;
+  CDir *dir = cache->get_dir(m->get_ino());
   assert(dir);
   assert(dir->is_frozen_tree_root());  // i'm exporting!
 
@@ -1015,9 +982,21 @@ void Migrator::handle_export_dir_ack(MExportDirAck *m)
   export_state[dir] = EXPORT_LOGGINGFINISH;
   export_data.erase(dir);
   
+  // log completion
+  EExport *le = new EExport(dir);
+  le->metablob.add_dir( dir, false );
+  for (set<CDir*>::iterator p = export_bounds[dir].begin();
+       p != export_bounds[dir].end();
+       ++p) {
+    CDir *bound = *p;
+    le->get_bounds().insert(bound->ino());
+    le->metablob.add_dir_context(bound);
+    le->metablob.add_dir(bound, false);
+  }
+
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   dir->get(CDir::PIN_LOGGINGEXPORTFINISH);
-  mds->mdlog->submit_entry(new EExportFinish(dir, true),
+  mds->mdlog->submit_entry(le,
 			   new C_MDS_ExportFinishLogged(this, dir));
   
   delete m;
@@ -1425,7 +1404,7 @@ void Migrator::handle_export_dir_prep(MExportDirPrep *m)
       assert(in);
       
       // note bound.
-      import_bound_inos[dir->ino()].insert(*it);
+      import_bound_inos[dir->ino()].push_back(*it);
 
       if (!in->dir) {
         dout(7) << "  opening nested export on " << *in << endl;
@@ -1514,10 +1493,7 @@ public:
 
 void Migrator::handle_export_dir(MExportDir *m)
 {
-  CInode *diri = cache->get_inode(m->get_ino());
-  assert(diri);
-  CDir *dir = diri->dir;
-  assert(dir);
+  CDir *dir = cache->get_dir(m->get_ino());
 
   int oldauth = m->get_source().num();
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << endl;
@@ -1532,9 +1508,6 @@ void Migrator::handle_export_dir(MExportDir *m)
   // adjust auth (list us _first_)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), oldauth);
   cache->verify_subtree_bounds(dir, import_bounds[dir]);
-
-  // take out my importing pin
-  dir->put(CDir::PIN_IMPORTING);
 
   // add this crap to my cache
   list<inodeno_t> imported_subdirs;
@@ -1553,17 +1526,12 @@ void Migrator::handle_export_dir(MExportDir *m)
   dout(10) << " " << imported_subdirs.size() << " imported subdirs" << endl;
   dout(10) << " " << m->get_exports().size() << " imported nested exports" << endl;
   
-  // remove bound pins
   // include bounds in EImportStart
   for (set<CDir*>::iterator it = import_bounds[dir].begin();
        it != import_bounds[dir].end();
        it++) {
     CDir *bd = *it;
 
-    // remove bound pin
-    bd->put(CDir::PIN_IMPORTBOUND);
-    bd->state_clear(CDir::STATE_IMPORTBOUND);
-    
     // include bounding dirs in EImportStart
     // (now that the interior metadata is already in the event)
     le->metablob.add_dir(bd, false);
@@ -1593,16 +1561,19 @@ void Migrator::handle_export_dir(MExportDir *m)
 }
 
 
+/*
+ * note: this does teh full work of reversing and import and cleaning up
+ *  state.  
+ * called by both handle_mds_failure and by handle_import_map (if we are
+ *  a survivor coping with an exporter failure+recovery).
+ */
 void Migrator::reverse_import(CDir *dir)
 {
   dout(7) << "reverse_import " << *dir << endl;
 
-  assert(0); // implement me.
+  // remove importing pin
+  dir->put(CDir::PIN_IMPORTING);
 
-  // update auth, with possible subtree merge.
-  cache->adjust_subtree_auth(dir, import_peer[dir->ino()]);
-  cache->try_subtree_merge(dir);
-  
   // remove bound pins
   for (set<CDir*>::iterator it = import_bounds[dir].begin();
        it != import_bounds[dir].end();
@@ -1612,7 +1583,31 @@ void Migrator::reverse_import(CDir *dir)
     bd->state_clear(CDir::STATE_IMPORTBOUND);
   }
 
+  // update auth, with possible subtree merge.
+  cache->adjust_subtree_auth(dir, import_peer[dir->ino()]);
+  cache->try_subtree_merge(dir);
+  
+
+      
+  assert(0); // implement me.
+  cache->show_cache();
+
+
+
   // ...
+  // adjust auth/dirty bits
+
+  // discard expire crap
+  cache->discard_delayed_expire(dir);
+
+  // log our failure
+  mds->mdlog->submit_entry(new EImportFinish(dir,false));	// log failure
+
+  // clean up
+  import_state.erase(dir->ino());
+  import_peer.erase(dir->ino());
+  import_bound_inos.erase(dir->ino());
+  import_bounds.erase(dir);
 }
 
 
@@ -1646,26 +1641,42 @@ public:
 
 void Migrator::handle_export_dir_finish(MExportDirFinish *m)
 {
-  CInode *diri = cache->get_inode(m->get_ino());
-  CDir *dir = diri->dir;
+  CDir *dir = cache->get_dir(m->get_ino());
   assert(dir);
+  dout(7) << "handle_export_dir_finish on " << *dir << endl;
+  import_dir_finish(dir);
+  delete m;
+}
 
-  dout(7) << "handle_export_dir_finish logging import_finish on " << *dir << endl;
-
+void Migrator::import_dir_finish(CDir *dir) 
+{
+  dout(7) << "import_dir_finish logging import_finish on " << *dir << endl;
+  
   // note state
   import_state[dir->ino()] = IMPORT_LOGGINGFINISH;
-
+  
   // log finish
   mds->mdlog->submit_entry(new EImportFinish(dir, true),
 			   new C_MDS_ImportDirLoggedFinish(this,dir));
-
-  delete m;
 }
 
 
 void Migrator::import_dir_logged_finish(CDir *dir)
 {
   dout(7) << "import_dir_logged_finish " << *dir << endl;
+
+  // remove pins
+  dir->put(CDir::PIN_IMPORTING);
+
+  for (set<CDir*>::iterator it = import_bounds[dir].begin();
+       it != import_bounds[dir].end();
+       it++) {
+    CDir *bd = *it;
+
+    // remove bound pin
+    bd->put(CDir::PIN_IMPORTBOUND);
+    bd->state_clear(CDir::STATE_IMPORTBOUND);
+  }
 
   // unfreeze
   dir->unfreeze_tree();
@@ -1899,9 +1910,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
 
 void Migrator::handle_export_dir_warning(MExportDirWarning *m)
 {
-  CInode *diri = cache->get_inode(m->get_ino());
-  CDir *dir = 0;
-  if (diri) dir = diri->dir;
+  CDir *dir = cache->get_dir(m->get_ino());
 
   int oldauth = m->get_source().num();
   int newauth = m->get_new_dir_auth();
@@ -1928,9 +1937,7 @@ void Migrator::handle_export_dir_warning(MExportDirWarning *m)
 
 void Migrator::handle_export_dir_notify(MExportDirNotify *m)
 {
-  CInode *diri = cache->get_inode(m->get_ino());
-  CDir *dir = 0;
-  if (diri) dir = diri->dir;
+  CDir *dir = cache->get_dir(m->get_ino());
 
   int from = m->get_source().num();
   pair<int,int> auth = m->get_auth();
@@ -1941,19 +1948,8 @@ void Migrator::handle_export_dir_notify(MExportDirNotify *m)
   } else {
     dout(7) << "handle_export_dir_notify " << auth
 	    << " on " << *dir << endl;
-    // see which bounds we have in our cache
-    set<CDir*> bounds;
-    for (list<inodeno_t>::iterator p = m->get_exports().begin();
-	 p != m->get_exports().end();
-	 ++p) {
-      CInode *in = cache->get_inode(*p);
-      if (in && in->dir) 
-	bounds.insert(in->dir);
-    }
-
     // adjust auth
-    cache->adjust_bounded_subtree_auth(dir, bounds, auth);
-    cache->verify_subtree_bounds(dir, bounds);
+    cache->adjust_bounded_subtree_auth(dir, m->get_exports(), auth);
     
     // induce a merge?
     cache->try_subtree_merge(dir);

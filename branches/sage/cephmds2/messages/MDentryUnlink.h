@@ -31,14 +31,15 @@ class MDentryUnlink : public Message {
   }
   virtual char *get_type_name() { return "Dun";}
   
-  virtual void decode_payload(crope& s, int& off) {
-    s.copy(off, sizeof(dirino), (char*)&dirino);
+  virtual void decode_payload() {
+    int off = 0;
+    payload.copy(off, sizeof(dirino), (char*)&dirino);
     off += sizeof(dirino);
-    _unrope(dn, s, off);
+    ::_decode(dn, payload, off);
   }
-  virtual void encode_payload(crope& s) {
-    s.append((char*)&dirino,sizeof(dirino));
-    _rope(dn, s);
+  virtual void encode_payload() {
+    payload.append((char*)&dirino,sizeof(dirino));
+    ::_encode(dn, payload);
   }
 };
 

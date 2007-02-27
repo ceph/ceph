@@ -64,6 +64,7 @@ private:
   MDCache *cache;
 
   // -- exports --
+public:
   // export stages.  used to clean up intelligently if there's a failure.
   const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
   const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
@@ -73,7 +74,8 @@ private:
   const static int EXPORT_EXPORTING     = 6;  // sent actual export, waiting for ack
   const static int EXPORT_LOGGINGFINISH = 7;  // logging EExportFinish
   const static int EXPORT_NOTIFYING     = 8;  // waiting for notifyacks
-  
+
+protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
@@ -86,6 +88,7 @@ private:
   
 
   // -- imports --
+public:
   const static int IMPORT_DISCOVERED    = 1; // waiting for prep
   const static int IMPORT_PREPPING      = 2; // opening dirs on bounds
   const static int IMPORT_PREPPED       = 3; // opened bounds, waiting for import
@@ -93,10 +96,11 @@ private:
   const static int IMPORT_ACKING        = 5; // logged EImportStart, sent ack, waiting for finish
   const static int IMPORT_LOGGINGFINISH = 6; // logging EImportFinish
 
-  map<inodeno_t,int>             import_state;
-  map<inodeno_t,int>             import_peer;
-  map<inodeno_t,set<inodeno_t> > import_bound_inos;
-  map<CDir*,set<CDir*> >         import_bounds;
+protected:
+  map<inodeno_t,int>              import_state;
+  map<inodeno_t,int>              import_peer;
+  map<inodeno_t,list<inodeno_t> > import_bound_inos;
+  map<CDir*,set<CDir*> >          import_bounds;
 
 
   // -- hashing madness --
@@ -125,13 +129,22 @@ public:
     return 0;
   }
   bool is_importing() { return !import_state.empty(); }
-  const set<inodeno_t>& get_import_bound_inos(inodeno_t base) { 
+  const list<inodeno_t>& get_import_bound_inos(inodeno_t base) { 
     assert(import_bound_inos.count(base));
     return import_bound_inos[base];
   }
   const set<CDir*>& get_import_bounds(CDir *base) { 
     assert(import_bounds.count(base));
     return import_bounds[base];
+  }
+
+  int get_import_state(inodeno_t dirino) {
+    assert(import_state.count(dirino));
+    return import_state[dirino];
+  }
+  int get_import_peer(inodeno_t dirino) {
+    assert(import_peer.count(dirino));
+    return import_peer[dirino];
   }
 
 
@@ -188,11 +201,16 @@ public:
   void got_hashed_replica(CDir *import,
                           inodeno_t dir_ino,
                           inodeno_t replica_ino);
+public:
   void reverse_import(CDir *dir);
+protected:
   void import_dir_logged_start(CDir *dir, int from,
 			       list<inodeno_t> &imported_subdirs,
 			       list<inodeno_t> &exports);
   void handle_export_dir_finish(MExportDirFinish *m);
+public:
+  void import_dir_finish(CDir *dir);
+protected:
   void import_dir_logged_finish(CDir *dir);
 
   friend class C_MDC_ExportDirDiscover;

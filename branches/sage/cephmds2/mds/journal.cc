@@ -20,8 +20,7 @@
 
 #include "events/EPurgeFinish.h"
 #include "events/EUnlink.h"
-#include "events/EExportStart.h"
-#include "events/EExportFinish.h"
+#include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
 
@@ -384,12 +383,11 @@ void EImportMap::expire(MDS *mds, Context *c)
 
 void EImportMap::replay(MDS *mds) 
 {
-  /*
-  if (!mds->mdcache->imports.empty()) {
+  if (!mds->mdcache->subtrees.empty()) {
     dout(10) << "EImportMap.replay -- ignoring, already have import map" << endl;
   } else {
-    dout(10) << "EImportMap.replay -- reconstructing import/export spanning tree" << endl;
-
+    dout(10) << "EImportMap.replay -- reconstructing (auth) subtree spanning tree" << endl;
+    
     // first, stick the spanning tree in my cache
     metablob.replay(mds);
     
@@ -397,11 +395,11 @@ void EImportMap::replay(MDS *mds)
     for (set<inodeno_t>::iterator p = imports.begin();
 	 p != imports.end();
 	 ++p) {
-      mds->mdcache->add_ambiguous_import(*p, nested_exports[*p]);
-      mds->mdcache->finish_ambiguous_import(*p);
+      CInode *diri = mds->mdcache->get_inode(*p);
+      CDir *dir = diri->dir;
+      mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
     }
   }
-  */
   mds->mdcache->show_imports();
 }
 
@@ -474,9 +472,9 @@ void EPurgeFinish::replay(MDS *mds)
 // =========================================================================
 
 // -----------------------
-// EExportStart
+// EExport
 
-bool EExportStart::has_expired(MDS *mds)
+bool EExport::has_expired(MDS *mds)
 {
   CInode *diri = mds->mdcache->get_inode(dirino);
   if (!diri) return true;
@@ -484,11 +482,11 @@ bool EExportStart::has_expired(MDS *mds)
   if (!dir) return true;
   if (!mds->mdcache->migrator->is_exporting(dir))
     return true;
-  dout(10) << "EExportStart.has_expired still exporting " << *dir << endl;
+  dout(10) << "EExport.has_expired still exporting " << *dir << endl;
   return false;
 }
 
-void EExportStart::expire(MDS *mds, Context *c)
+void EExport::expire(MDS *mds, Context *c)
 {
   CInode *diri = mds->mdcache->get_inode(dirino);
   assert(diri);
@@ -496,45 +494,33 @@ void EExportStart::expire(MDS *mds, Context *c)
   assert(dir);
   assert(mds->mdcache->migrator->is_exporting(dir));
 
-  dout(10) << "EExportStart.expire waiting for export of " << *dir << endl;
+  dout(10) << "EExport.expire waiting for export of " << *dir << endl;
   mds->mdcache->migrator->add_export_finish_waiter(dir, c);
 }
 
-void EExportStart::replay(MDS *mds)
+void EExport::replay(MDS *mds)
 {
-  dout(10) << "EExportStart.replay " << dirino << " -> " << dest << endl;
+  dout(10) << "EExport.replay " << dirino << endl;
   metablob.replay(mds);
   
-  // put in pending_exports lists
-  mds->mdlog->pending_exports[dirino] = bounds;
-}
+  CInode *diri = mds->mdcache->get_inode(dirino);
+  assert(diri);
+  CDir *dir = diri->dir;
+  assert(dir);
+  
+  set<CDir*> realbounds;
+  for (set<inodeno_t>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CInode *bdi = mds->mdcache->get_inode(*p);
+    CDir *bd = bdi->dir;
+    assert(bd);
+    realbounds.insert(bd);
+  }
 
-// -----------------------
-// EExportFinish
-
-bool EExportFinish::has_expired(MDS *mds)
-{
-  // we can always expire.
-  return true;
-}
-
-void EExportFinish::expire(MDS *mds, Context *c)
-{
-  assert(0);  // should never happen.
-}
-
-void EExportFinish::replay(MDS *mds)
-{
-  dout(10) << "EExportFinish.replay " << dirino << " success=" << success << endl;
-
-  assert(mds->mdlog->pending_exports.count(dirino));
-
-  // finish?
-  if (success) 
-    mds->mdcache->finish_ambiguous_export(dirino, mds->mdlog->pending_exports[dirino]);
-
-  // remove from pending_exports list
-  mds->mdlog->pending_exports.erase(dirino);
+  // adjust auth away
+  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
+  mds->mdcache->try_subtree_merge(dir);
 }
 
 
@@ -557,13 +543,8 @@ void EImportStart::replay(MDS *mds)
   dout(10) << "EImportStart.replay " << dirino << endl;
   metablob.replay(mds);
 
-  // convert list -> set
-  set<inodeno_t> b;
-  for (list<inodeno_t>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-    b.insert(*p);
-
   // put in ambiguous import list
-  mds->mdcache->add_ambiguous_import(dirino, b);
+  mds->mdcache->add_ambiguous_import(dirino, bounds);
 }
 
 // -----------------------

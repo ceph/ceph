@@ -1108,6 +1108,37 @@ inline void _decode(std::map<T, std::set<U> >& s, bufferlist& bl, int& off)
   }
   assert(s.size() == (unsigned)n);
 }
+// map<T,list<U>>
+template<class T, class U>
+inline void _encode(const std::map<T, std::list<U> >& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::map<T, std::list<U> >::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    T k = it->first;
+    bl.append((char*)&k, sizeof(k));
+    ::_encode(it->second, bl);
+    n--;
+  }
+  assert(n==0);
+}
+template<class T, class U>
+inline void _decode(std::map<T, std::list<U> >& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    T k;
+    bl.copy(off, sizeof(k), (char*)&k);
+    off += sizeof(k);
+    ::_decode(s[k], bl, off);
+  }
+  assert(s.size() == (unsigned)n);
+}
 
 
 // map<T,U>

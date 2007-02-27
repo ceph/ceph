@@ -528,20 +528,36 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   
   
-  // is anyone resolving?
-  if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
+  // RESOLVE
+  // am i newly resolving?
+  if (is_resolve() && oldstate == MDSMap::STATE_REPLAY) {
+    // send to all resolve, active, stopping
+    dout(10) << "i am newly resolving, sharing import map" << endl;
+    set<int> who;
+    mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
+    mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
+    mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);     // hrm. FIXME.
+    for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
+      if (*p == whoami) continue;
+      mdcache->send_import_map(*p);  // now.
+    }
+  }
+  // is someone else newly resolving?
+  else if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
     set<int> resolve;
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
-    if (oldresolve != resolve) 
+    if (oldresolve != resolve) {
       dout(10) << "resolve set is " << resolve << ", was " << oldresolve << endl;
-    for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
-      if (*p == whoami) continue;
-      if (oldresolve.count(*p) == 0 ||         // if other guy newly resolve, or
-	  oldstate == MDSMap::STATE_REPLAY)    // if i'm newly resolve,
-	mdcache->send_import_map(*p);          // share my import map (now or later)
+      for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) {
+	if (*p == whoami) continue;
+	if (oldresolve.count(*p)) continue;
+	mdcache->send_import_map(*p);  // now or later.
+      }
     }
   }
   
+  // REJOIN
   // is everybody finally rejoining?
   if (is_rejoin() || is_active() || is_stopping()) {
     if (!wasrejoining && mdsmap->is_rejoining()) {
@@ -924,7 +940,7 @@ void MDS::my_dispatch(Message *m)
   for (int i=0; i<g_conf.mds_thrash_exports; i++) {
     set<int> s;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
-    if (s.size() == 1 || mdcache->inode_map.size() < 10) 
+    if (s.size() < 2 || mdcache->get_num_inodes() < 10) 
       break;  // need peers for this to work.
 
     dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf.mds_thrash_exports << endl;

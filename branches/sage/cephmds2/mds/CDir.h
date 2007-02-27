@@ -126,7 +126,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_CHILD =    0;
   static const int PIN_OPENED =   1;  // open by another node
   static const int PIN_WAITER =   2;  // waiter(s)
-  static const int PIN_IMPORT =   3;
+  //static const int PIN_IMPORT =   3;
   static const int PIN_EXPORT =   4;
   //static const int PIN_FREEZE =   5;
   //  static const int PIN_FREEZELEAF = 6;
@@ -146,7 +146,7 @@ class CDir : public MDSCacheObject {
     case PIN_CHILD: return "child";
     case PIN_OPENED: return "opened";
     case PIN_WAITER: return "waiter";
-    case PIN_IMPORT: return "import";
+      //case PIN_IMPORT: return "import";
     case PIN_EXPORT: return "export";
     case PIN_EXPORTING: return "exporting";
     case PIN_IMPORTING: return "importing";
@@ -177,7 +177,7 @@ class CDir : public MDSCacheObject {
   static const unsigned STATE_COMMITTING =    (1<< 8);   // mid-commit
   static const unsigned STATE_FETCHING =      (1<< 9);   // currenting fetching
   static const unsigned STATE_DELETED =       (1<<10);
-  static const unsigned STATE_IMPORT =        (1<<11);   // flag set if this is an import.
+  //static const unsigned STATE_IMPORT =        (1<<11);   // flag set if this is an import.
   static const unsigned STATE_EXPORT =        (1<<12);
   static const unsigned STATE_IMPORTBOUND =   (1<<13);
   static const unsigned STATE_EXPORTBOUND =   (1<<14);
@@ -194,7 +194,8 @@ class CDir : public MDSCacheObject {
   static const unsigned MASK_STATE_EXPORTED = 
   STATE_COMPLETE|STATE_DIRTY;
   static const unsigned MASK_STATE_IMPORT_KEPT = 
-  STATE_IMPORT|STATE_EXPORT
+  //STATE_IMPORT|
+  STATE_EXPORT
   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
   |STATE_FROZENTREE|STATE_PROXY;
   static const unsigned MASK_STATE_EXPORT_KEPT = 
@@ -366,8 +367,8 @@ class CDir : public MDSCacheObject {
 
   bool is_auth() { return state & STATE_AUTH; }
   bool is_proxy() { return state & STATE_PROXY; }
-  bool is_import() { return state & STATE_IMPORT; }
-  bool is_export() { return state & STATE_EXPORT; }
+  //bool is_import() { return state & STATE_IMPORT; }
+  //bool is_export() { return state & STATE_EXPORT; }
 
   bool is_hashed() { return state & STATE_HASHED; }
   bool is_hashing() { return state & STATE_HASHING; }

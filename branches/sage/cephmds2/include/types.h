@@ -22,6 +22,7 @@ extern "C" {
 }
 
 #include <string>
+#include <list>
 #include <set>
 #include <map>
 #include <vector>
@@ -29,8 +30,9 @@ extern "C" {
 #include <iomanip>
 using namespace std;
 
-#include <ext/rope>
+#include <ext/hash_map>
 using namespace __gnu_cxx;
+
 
 #include "object.h"
 
@@ -289,6 +291,17 @@ inline ostream& operator<<(ostream& out, vector<A>& v) {
 }
 
 template<class A>
+inline ostream& operator<<(ostream& out, const list<A>& ilist) {
+  for (typename list<A>::const_iterator it = ilist.begin();
+       it != ilist.end();
+       it++) {
+    if (it != ilist.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A>
 inline ostream& operator<<(ostream& out, const set<A>& iset) {
   for (typename set<A>::const_iterator it = iset.begin();
        it != iset.end();
@@ -325,48 +338,5 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
 }
 
 
-
-
-// -- rope helpers --
-
-// string
-inline void _rope(string& s, crope& r) 
-{
-  r.append(s.c_str(), s.length()+1);
-}
-inline void _unrope(string& s, crope& r, int& off)
-{
-  s = r.c_str() + off;
-  off += s.length() + 1;
-}
-
-// set<int>
-inline void _rope(set<int>& s, crope& r)
-{
-  int n = s.size();
-  r.append((char*)&n, sizeof(n));
-  for (set<int>::iterator it = s.begin();
-       it != s.end();
-       it++) {
-    int v = *it;
-    r.append((char*)&v, sizeof(v));
-    n--;
-  }
-  assert(n==0);
-}
-inline void _unrope(set<int>& s, crope& r, int& off) 
-{
-  s.clear();
-  int n;
-  r.copy(off, sizeof(n), (char*)&n);
-  off += sizeof(n);
-  for (int i=0; i<n; i++) {
-    int v;
-    r.copy(off, sizeof(v), (char*)&v);
-    off += sizeof(v);
-    s.insert(v);
-  }
-  assert(s.size() == (unsigned)n);
-}
 
 #endif
