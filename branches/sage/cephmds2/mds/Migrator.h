@@ -168,30 +168,31 @@ public:
   void clear_export_proxy_pins(CDir *dir);
 
  protected:
-  void handle_export_dir_discover_ack(MExportDirDiscoverAck *m);
-  void export_dir_frozen(CDir *dir, int dest);
-  //void export_dir_start_logged(CDir *dir, MExportDirPrep *prep, int dest);
-  void handle_export_dir_prep_ack(MExportDirPrepAck *m);
-  void handle_export_dir_warning_ack(MExportDirWarningAck *m);
-  void export_dir_go(CDir *dir);
+  void handle_export_discover_ack(MExportDirDiscoverAck *m);
+  void export_frozen(CDir *dir, int dest);
+  //void export_start_logged(CDir *dir, MExportDirPrep *prep, int dest);
+  void handle_export_prep_ack(MExportDirPrepAck *m);
+  void handle_export_warning_ack(MExportDirWarningAck *m);
+  void export_go(CDir *dir);
   int encode_export_dir(list<bufferlist>& dirstatelist,
                       class C_Contexts *fin,
                       CDir *basedir,
                       CDir *dir,
                       int newauth);
   void reverse_export(CDir *dir);
-  void handle_export_dir_ack(MExportDirAck *m);
-  void export_dir_logged_finish(CDir *dir);
-  void handle_export_dir_notify_ack(MExportDirNotifyAck *m);
-  void export_dir_finish(CDir *dir);
+  void export_notify_abort(CDir* dir);
+  void handle_export_ack(MExportDirAck *m);
+  void export_logged_finish(CDir *dir);
+  void handle_export_notify_ack(MExportDirNotifyAck *m);
+  void export_finish(CDir *dir);
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDC_ExportStartLogged;
   friend class C_MDS_ExportFinishLogged;
   // importer
-  void handle_export_dir_discover(MExportDirDiscover *m);
-  void handle_export_dir_discover_2(MExportDirDiscover *m, CInode *in, int r);
-  void handle_export_dir_prep(MExportDirPrep *m);
+  void handle_export_discover(MExportDirDiscover *m);
+  void handle_export_discover_2(MExportDirDiscover *m, CInode *in, int r);
+  void handle_export_prep(MExportDirPrep *m);
   void handle_export_dir(MExportDir *m);
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
@@ -204,22 +205,22 @@ public:
 public:
   void reverse_import(CDir *dir);
 protected:
-  void import_dir_logged_start(CDir *dir, int from,
+  void import_logged_start(CDir *dir, int from,
 			       list<inodeno_t> &imported_subdirs,
 			       list<inodeno_t> &exports);
-  void handle_export_dir_finish(MExportDirFinish *m);
+  void handle_export_finish(MExportDirFinish *m);
 public:
-  void import_dir_finish(CDir *dir);
+  void import_finish(CDir *dir);
 protected:
-  void import_dir_logged_finish(CDir *dir);
+  void import_logged_finish(CDir *dir);
 
   friend class C_MDC_ExportDirDiscover;
   friend class C_MDS_ImportDirLoggedStart;
   friend class C_MDS_ImportDirLoggedFinish;
 
   // bystander
-  void handle_export_dir_warning(MExportDirWarning *m);
-  void handle_export_dir_notify(MExportDirNotify *m);
+  void handle_export_warning(MExportDirWarning *m);
+  void handle_export_notify(MExportDirNotify *m);
 
 
   // -- hashed directories --

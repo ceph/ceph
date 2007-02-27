@@ -112,7 +112,7 @@ void MDSMonitor::handle_command(MMonCommand *m, int& r, string& rs)
 
 void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
 {
-  dout(7) << "mds_beacon " << *m
+  dout(12) << "mds_beacon " << *m
 	  << " from " << m->get_source()
 	  << " " << m->get_source_inst()
 	  << endl;

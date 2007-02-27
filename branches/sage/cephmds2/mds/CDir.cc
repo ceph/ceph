@@ -666,6 +666,10 @@ void CDir::set_dir_auth(pair<int,int> a, bool iamauth)
     
     // adjust nested auth pins
     inode->adjust_nested_auth_pins(get_cum_auth_pins());
+
+    // pin parent of frozen dir/tree?
+    if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
+      inode->auth_pin();
   }
 }
 

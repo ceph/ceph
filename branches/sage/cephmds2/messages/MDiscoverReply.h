@@ -42,6 +42,9 @@ using namespace std;
  *   error_flag_dn(string) - the specified dentry dne
  *   error_flag_dir        - the last item wasn't a dir, so we couldn't continue.
  *
+ * and sometimes,
+ *   dir_auth_hint         - where we think the dir auth is
+ *
  * depth() gives us the number of depth units/indices for which we have 
  * information.  this INCLUDES those for which we have errors but no data.
  *
@@ -69,7 +72,7 @@ class MDiscoverReply : public Message {
   bool        flag_error_dn;
   bool        flag_error_dir;
   string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
-
+  int         dir_auth_hint;
   
   vector<CDirDiscover*>    dirs;      // not inode-aligned if no_base_dir = true.
   vector<CDentryDiscover*> dentries;  // not inode-aligned if no_base_dentry = true
@@ -106,6 +109,7 @@ class MDiscoverReply : public Message {
   bool is_flag_error_dn() { return flag_error_dn; }
   bool is_flag_error_dir() { return flag_error_dir; }
   string& get_error_dentry() { return error_dentry; }
+  int get_dir_auth_hint() { return dir_auth_hint; }
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
   CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
@@ -121,6 +125,7 @@ class MDiscoverReply : public Message {
     flag_error_dn = false;
     flag_error_dir = false;
     no_base_dir = no_base_dentry = false;
+    dir_auth_hint = CDIR_AUTH_UNKNOWN;
   }
   ~MDiscoverReply() {
     for (vector<CDirDiscover*>::iterator it = dirs.begin();
@@ -138,7 +143,8 @@ class MDiscoverReply : public Message {
   bool is_empty() {
     return dirs.empty() && dentries.empty() && inodes.empty() && 
       !flag_error_dn &&
-      !flag_error_dir;
+      !flag_error_dir &&
+      dir_auth_hint == CDIR_AUTH_UNKNOWN;
   }
   void add_dentry(CDentryDiscover* ddis) {
     if (dentries.empty() && dirs.empty()) no_base_dir = true;
@@ -164,6 +170,9 @@ class MDiscoverReply : public Message {
   void set_flag_error_dir() { 
     flag_error_dir = true; 
   }
+  void set_dir_auth_hint(int a) {
+    dir_auth_hint = a;
+  }
 
 
   // ...
@@ -180,9 +189,12 @@ class MDiscoverReply : public Message {
     payload.copy(off, sizeof(bool), (char*)&flag_error_dn);
     off += sizeof(bool);
     
-    _decode(error_dentry, payload, off);
+    ::_decode(error_dentry, payload, off);
     payload.copy(off, sizeof(bool), (char*)&flag_error_dir);
     off += sizeof(bool);
+
+    payload.copy(off, sizeof(dir_auth_hint), (char*)&dir_auth_hint);
+    off += sizeof(dir_auth_hint);
     
     // dirs
     int n;
@@ -218,8 +230,10 @@ class MDiscoverReply : public Message {
     //    payload.append((char*)&flag_forward, sizeof(bool));
     payload.append((char*)&flag_error_dn, sizeof(bool));
 
-    _encode(error_dentry, payload);
+    ::_encode(error_dentry, payload);
     payload.append((char*)&flag_error_dir, sizeof(bool));
+
+    payload.append((char*)&dir_auth_hint, sizeof(dir_auth_hint));
 
     // dirs
     int n = dirs.size();

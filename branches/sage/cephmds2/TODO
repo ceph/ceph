@@ -1,3 +1,36 @@
+doc
+- mdsmonitor beacon semantics
+- cache expiration, cache invariants
+ - including dual expire states, transition, vs subtree grouping of expire messages
+- recovery states, implicit barrier are rejoin
+- journal content
+ - importmaps and up:resolve
+- metablob version semantics
+ 
+
+mds
+- openingdir pins should be handled by open_remote_dir, not explicitly by handle_export_dir_prep
+- bystander recovery from exporter failure
+- does inode need it's own replica list?  no?
+- dirslices.
+- importer recovery if exporter fails
+- osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
+- failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
+- fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
+- incremental mdsmaps
+- client mount logging
+- client failure
+- EMetablob should return 'expired' if they have
+  higher versions (and are thus described by a newer journal entry)
+- mds failure vs clients
+  - clean up client op redirection
+  - idempotent ops
+- journal+recovery
+  - unlink
+  - open(wr cap), open+create
+  - file capabilities i/o
+  - link
+  - rename
 
 
 monitor
@@ -245,86 +278,4 @@ IMPLEMENT
 
 
 
-
-
-
-
-
-==== MDS RECOVERY ====
-
-doc todo
-- mdsmonitor beacon semantics
-- cache expiration, cache invariants
-- recovery states, implicit barrier are rejoin
-- journal content
- - importmaps and up:resolve
-- metablob version semantics
- 
-
-
-FIRST
-
-
-
-- openingdir pins should be handled by open_remote_dir, not explicitly by handle_export_dir_prep
-
-
-- bystander dir_auth(_pending) recovery from exporter failure
-
-- does inode need it's own replica list?  no?
-- dirslices.
-
-
-/- exporter recovery if importer fails during EXPORT_EXPORTING stage
-- importer recovery if exporter fails
-
-/?- delay response to sending import_map if export in progress?
-/?- finish export before sending import_map?
-/- ambiguous imports on active node should include in-progress imports!
-/- how to effectively trim cache after resolve but before rejoin
-/  - we need to eliminate unneed non-auth metadata, without hosing potentially useful auth metadata
-
-- osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
-
-- failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
-
-- fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
-
-
-importmap only sent after exports have completed.
-failures update export ack waitlists, so exports will compelte if unrelated nodes fail.
-importmap can be sent regardless of import status -- pending import is just flagged ambiguous.
-failure of exporter induces some cleanup on importer.  importer will disambiguate when it gets an importmap on exporter recovery.
-failure of importer induces cleanup on exporter.  no ambiguity.
-
-
-/- no new mds may join if cluster is in a recovery state.  starting -> standby (unless failed)
-/  - make sure creating -> standby, and are not included in recovery set?
-
-
-mdsmap notes 
-- mds don't care about intervening states, except rejoin > active, and
-  that transition requires active involvement.  thus, no need worry
-  about delivering/processing the full sequence of maps.
-
-blech:
-- EMetablob should return 'expired' if they have
-  higher versions (and are thus described by a newer journal entry)
-
-mds
-- fix ctime locking semantics.  i am dumb.
-
-- mds falure vs clients
-  - clean up client op redirection
-  - idempotent ops
-
-- journal+recovery
-  - unlink
-  - open(wr cap), open+create
-  - file capabilities i/o
-  - link
-  - rename
-
-- should auth_pins really go to the root?
-  - FIXME: auth_pins on importer versus import beneath an authpinned region?
 

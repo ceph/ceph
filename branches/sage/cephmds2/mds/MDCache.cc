@@ -864,7 +864,7 @@ void MDCache::handle_import_map(MMDSImportMap *m)
       assert(migrator->get_import_state(dir->ino()) == Migrator::IMPORT_ACKING);
       if (migrator->get_import_peer(dir->ino()) == from) {
 	dout(7) << "ambiguous import succeeded on " << *dir << endl;
-	migrator->import_dir_finish(dir);	// success, yay!
+	migrator->import_finish(dir);	// success, yay!
 	my_ambiguous_imports.erase(p);
       }
       p = n;
@@ -3083,6 +3083,13 @@ void MDCache::handle_discover(MDiscover *dis)
       }
     }
   }
+
+  // set dir_auth hint?
+  if (cur->is_dir() && cur->dir && 
+      cur->is_auth() && !cur->dir->is_auth()) {
+    dout(7) << "setting dir_auth_hint for " << *cur->dir << endl;
+    reply->set_dir_auth_hint(cur->dir->authority().first);
+  }
        
   // how did we do.
   if (reply->is_empty()) {
@@ -3090,8 +3097,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // discard empty reply
     delete reply;
 
-    if ((cur->is_auth() || cur->is_proxy() || cur->dir->is_proxy()) &&
-        !cur->dir->is_auth()) {
+    /*
+    if (cur->is_auth() && !cur->dir->is_auth()) {
+      // set hint
       // fwd to dir auth
       int dirauth = cur->dir->authority().first;
       if (dirauth == dis->get_asker()) {
@@ -3103,9 +3111,16 @@ void MDCache::handle_discover(MDiscover *dis)
         mds->send_message_mds( dis, dirauth, MDS_PORT_CACHE );
       }
       return;
-    }
+      }*/
     
-    dout(7) << "i'm not auth or proxy, dropping (this empty reply).  i bet i just exported." << endl;
+    // wait for frozen dir?
+    if (cur->dir->is_frozen()) {
+      dout(7) << "waiting for frozen " << *cur->dir << endl;
+      cur->dir->add_waiter(CDIR_WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+      return;
+    } else {
+      dout(7) << "i'm not auth, dropping request (+this empty reply)." << endl;
+    }
     //assert(0);
     
   } else {
@@ -3283,12 +3298,24 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     cur = in;
   }
 
-  // dir error at the end there?
-  if (m->is_flag_error_dir()) {
+  // dir_auth hint?
+  if (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN) {
+    dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << endl;
+    // let's just open it.
+    filepath want;  // no dentries, i just want the dir open
+    mds->send_message_mds(new MDiscover(mds->get_nodeid(),
+					cur->ino(),
+					want,
+					true),  // need the dir open
+			  m->get_dir_auth_hint(), MDS_PORT_CACHE);
+  }
+  else if (m->is_flag_error_dir()) {
+    // dir error at the end there?
     dout(7) << " flag_error on dir " << *cur << endl;
     assert(!cur->is_dir());
     cur->take_waiting(CINODE_WAIT_DIR, error);
   }
+
 
   // finish errors directly
   finish_contexts(error, -ENOENT);
