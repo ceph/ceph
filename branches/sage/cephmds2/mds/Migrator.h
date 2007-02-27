@@ -94,7 +94,7 @@ public:
   const static int IMPORT_PREPPED       = 3; // opened bounds, waiting for import
   const static int IMPORT_LOGGINGSTART  = 4; // got import, logging EImportStart
   const static int IMPORT_ACKING        = 5; // logged EImportStart, sent ack, waiting for finish
-  const static int IMPORT_LOGGINGFINISH = 6; // logging EImportFinish
+  //const static int IMPORT_LOGGINGFINISH = 6; // logging EImportFinish
 
 protected:
   map<inodeno_t,int>              import_state;
@@ -179,7 +179,7 @@ public:
                       CDir *basedir,
                       CDir *dir,
                       int newauth);
-  void reverse_export(CDir *dir);
+  void export_reverse(CDir *dir);
   void export_notify_abort(CDir* dir);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
@@ -203,16 +203,15 @@ public:
                           inodeno_t dir_ino,
                           inodeno_t replica_ino);
 public:
-  void reverse_import(CDir *dir);
+  void import_reverse(CDir *dir, bool fix_dir_auth=true);
 protected:
   void import_logged_start(CDir *dir, int from,
 			       list<inodeno_t> &imported_subdirs,
 			       list<inodeno_t> &exports);
   void handle_export_finish(MExportDirFinish *m);
 public:
-  void import_finish(CDir *dir);
+  void import_finish(CDir *dir, bool now=false);
 protected:
-  void import_logged_finish(CDir *dir);
 
   friend class C_MDC_ExportDirDiscover;
   friend class C_MDS_ImportDirLoggedStart;

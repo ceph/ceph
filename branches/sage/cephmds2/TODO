@@ -1,3 +1,10 @@
+monday
+ retest with 3+
+   no failures
+   full failure
+ document cache
+ pg rewrite
+
 doc
 - mdsmonitor beacon semantics
 - cache expiration, cache invariants

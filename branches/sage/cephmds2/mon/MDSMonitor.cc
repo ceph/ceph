@@ -61,7 +61,7 @@ void MDSMonitor::dispatch(Message *m)
 
 void MDSMonitor::print_map()
 {
-  dout(7) << "print_map epoch " << mdsmap.get_epoch() << endl;
+  dout(7) << "print_map epoch " << mdsmap.get_epoch() << " num_mds " << g_conf.num_mds << endl;
   entity_inst_t blank;
   set<int> all;
   mdsmap.get_mds_set(all);
@@ -104,6 +104,12 @@ void MDSMonitor::handle_command(MMonCommand *m, int& r, string& rs)
 	ss << "mds" << who << " not active (" << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
 	getline(ss,rs);
       }
+    }
+    else if (m->cmd[1] == "setnum" && m->cmd.size() > 2) {
+      g_conf.num_mds = atoi(m->cmd[2].c_str());
+      ss << "g_conf.num_mds = " << g_conf.num_mds << endl;
+      getline(ss,rs);
+      print_map();
     }
   }
 }
@@ -184,7 +190,13 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
 	!mdsmap.is_failed(from)) {
       dout(10) << "mds_beacon currently degraded, mds" << from << " will be standby" << endl;
       state = MDSMap::STATE_STANDBY;
+    } 
+    /*
+    else if (from >= g_conf.num_mds) {
+      dout(10) << "mds_beacon already have " << g_conf.num_mds << " mds's, standby (increase with 'mds setnum xxx')" << endl;
+      state = MDSMap::STATE_STANDBY;
     }
+    */
     else if (state == MDSMap::STATE_STARTING) {
       if (mdsmap.is_failed(from)) {
 	dout(10) << "mds_beacon will recover mds" << from << endl;

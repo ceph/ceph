@@ -367,35 +367,24 @@ void MDCache::adjust_export_state(CDir *dir)
 void MDCache::try_subtree_merge(CDir *dir)
 {
   dout(7) << "try_subtree_merge " << *dir << endl;
+  assert(subtrees.count(dir));
+  set<CDir*> oldbounds = subtrees[dir];
 
-  // try to merge bounds?
-  set<CDir*>::iterator p = subtrees[dir].begin();
-  while (p != subtrees[dir].end()) {
-    set<CDir*>::iterator next = p;
-    next++;
-    CDir *bound = *p;
-    
-    if (bound->dir_auth == dir->dir_auth &&            // if auth matches,
-	dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&   // auth is unambiguous,
-	!bound->state_test(CDir::STATE_EXPORTBOUND)) { // and not an exportbound,
-      // merge with child.
-      dout(10) << "  merging with child bound " << *bound << endl;
-      bound->set_dir_auth(CDIR_AUTH_DEFAULT);
-      
-      // move child's children under dir.
-      for (set<CDir*>::iterator q = subtrees[bound].begin();
-	   q != subtrees[bound].end();
-	   ++q) 
-	subtrees[dir].insert(*q);
-      
-      // bound is no longer a separate subtree.
-      subtrees[dir].erase(bound);
-      subtrees.erase(bound);
-    }
+  // try merge at my root
+  try_subtree_merge_at(dir);
 
-    // next!
-    p = next;
-  }
+  // try merge at my old bounds
+  for (set<CDir*>::iterator p = oldbounds.begin();
+       p != oldbounds.end();
+       ++p) 
+    try_subtree_merge_at(*p);
+  
+}
+
+void MDCache::try_subtree_merge_at(CDir *dir)
+{
+  dout(10) << "try_subtree_merge_at " << *dir << endl;
+  assert(subtrees.count(dir));
 
   // merge with parent?
   CDir *parent = dir;  
@@ -407,7 +396,7 @@ void MDCache::try_subtree_merge(CDir *dir)
       dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&  // auth is unambiguous,
       !dir->state_test(CDir::STATE_EXPORTBOUND)) {  // not an exportbound,
     // merge with parent.
-    dout(10) << "  merge with parent " << *parent << endl;
+    dout(10) << "  subtree merge at " << *parent << endl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
     
     // move our bounds under the parent
@@ -480,19 +469,54 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
   }
 
   // verify/adjust bounds.
-  // these may be new, but no deeper than any existing bounds.
+  // - these may be new, or
+  // - beneath existing ambiguous bounds (which will be collapsed),
+  // - but NOT beneath unambiguous bounds.
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) {
     CDir *bound = *p;
-    if (subtrees[dir].count(bound)) {
+    
+    // new bound?
+    if (subtrees[dir].count(bound) == 0) {
+      if (get_subtree_root(bound) == dir) {
+	dout(10) << "  new bound " << *bound << ", adjusting auth back to old " << oldauth << endl;
+	adjust_subtree_auth(bound, oldauth);       // otherwise, adjust at bound.
+      }
+      else {
+	dout(10) << "  want bound " << *bound << endl;
+	// make sure it's nested beneath ambiguous subtree(s)
+	while (1) {
+	  CDir *t = get_subtree_root(bound->get_parent_dir());
+	  if (t == dir) break;
+	  while (subtrees[dir].count(t) == 0)
+	    t = get_subtree_root(t->get_parent_dir());
+	  dout(10) << "  swallowing intervening subtree at " << *t << endl;
+	  adjust_subtree_auth(t, auth);
+	  try_subtree_merge_at(t);
+	}
+      }
+    }
+    else {
       dout(10) << "  already have bound " << *bound << endl;
-    } else {
-      dout(10) << "  missing bound " << *bound << ", adjusting auth back to old " << oldauth << endl;
-      adjust_subtree_auth(bound, oldauth);       // otherwise, adjust at bound.
     }
   }
+  // merge stray bounds?
+  set<CDir*>::iterator p = subtrees[dir].begin();
+  while (p != subtrees[dir].end()) {
+    set<CDir*>::iterator n = p;
+    n++;
+    if (bounds.count(*p) == 0) {
+      CDir *stray = *p;
+      dout(10) << "  swallowing extra subtree at " << *stray << endl;
+      assert(stray->auth_is_ambiguous());
+      adjust_subtree_auth(stray, auth);
+      try_subtree_merge_at(stray);
+    }
+    p = n;
+  }
 
+  // bound should now match.
   verify_subtree_bounds(dir, bounds);
 
   show_subtrees();
@@ -780,8 +804,9 @@ void MDCache::send_pending_import_maps()
 void MDCache::send_import_map_now(int who)
 {
   dout(10) << "send_import_map_now to mds" << who << endl;
-
   MMDSImportMap *m = new MMDSImportMap;
+
+  show_subtrees();
 
   // known
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
@@ -833,38 +858,37 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   dout(7) << "handle_import_map from " << m->get_source() << endl;
   int from = m->get_source().num();
 
-  // FIXME: check if we are a surviving ambiguous importer
-
   // update my dir_auth values
   for (map<inodeno_t, list<inodeno_t> >::iterator pi = m->imap.begin();
        pi != m->imap.end();
        ++pi) {
     CDir *im = get_dir(pi->first);
-    if (im) 
+    if (im) {
       adjust_bounded_subtree_auth(im, pi->second, from);
-
-    // ambiguous import failure?
-    if ((mds->is_active() || mds->is_stopping()) &&
-	my_ambiguous_imports.count(pi->first)) {
-      assert(im);
-      dout(7) << "ambiguous import failed on " << *im << endl;
-      migrator->reverse_import(im);
+      try_subtree_merge(im);
     }
   }
 
-  // ambiguous import success?
+  // am i a surviving ambiguous importer?
   if (mds->is_active() || mds->is_stopping()) {
+    // check for any import success/failure (from this node)
     map<inodeno_t, list<inodeno_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
       map<inodeno_t, list<inodeno_t> >::iterator n = p;
       n++;
       CDir *dir = get_dir(p->first);
       assert(dir);
+      dout(10) << "checking ambiguous import " << *dir << endl;
       assert(migrator->is_importing(dir->ino()));
       assert(migrator->get_import_state(dir->ino()) == Migrator::IMPORT_ACKING);
       if (migrator->get_import_peer(dir->ino()) == from) {
-	dout(7) << "ambiguous import succeeded on " << *dir << endl;
-	migrator->import_finish(dir);	// success, yay!
+	if (dir->auth_is_ambiguous()) {
+	  dout(7) << "ambiguous import succeeded on " << *dir << endl;
+	  migrator->import_finish(dir, true);	// don't wait for log flush
+	} else {
+	  dout(7) << "ambiguous import failed on " << *dir << endl;
+	  migrator->import_reverse(dir, false);  // don't adjust dir_auth.
+	}
 	my_ambiguous_imports.erase(p);
       }
       p = n;
@@ -874,8 +898,12 @@ void MDCache::handle_import_map(MMDSImportMap *m)
   // note ambiguous imports too
   for (map<inodeno_t, list<inodeno_t> >::iterator pi = m->ambiguous_imap.begin();
        pi != m->ambiguous_imap.end();
-       ++pi)
-    mds->mdcache->other_ambiguous_imports[from][pi->first].swap( pi->second );
+       ++pi) {
+    dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << endl;
+    other_ambiguous_imports[from][pi->first].swap( pi->second );
+  }
+
+  show_subtrees();
 
   // did i get them all?
   got_import_map.insert(from);
@@ -893,7 +921,7 @@ void MDCache::handle_import_map(MMDSImportMap *m)
     dout(10) << "still waiting for more importmaps, got " << got_import_map 
 	     << ", need " << recovery_set << endl;
   }
-  
+
   delete m;
 }
 
@@ -902,15 +930,19 @@ void MDCache::disambiguate_imports()
 {
   dout(10) << "disambiguate_imports" << endl;
 
+  // FIXME what about surviving bystanders
+
   // other nodes' ambiguous imports
   for (map<int, map<inodeno_t, list<inodeno_t> > >::iterator p = other_ambiguous_imports.begin();
-       p != other_ambiguous_imports.begin();
+       p != other_ambiguous_imports.end();
        ++p) {
     int who = p->first;
+    dout(10) << "ambiguous imports for mds" << who << endl;
 
     for (map<inodeno_t, list<inodeno_t> >::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
+      dout(10) << " ambiguous import " << q->first << " bounds " << q->second << endl;
       CDir *dir = get_dir(q->first);
       if (!dir) continue;
       
