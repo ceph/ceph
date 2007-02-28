@@ -1772,6 +1772,10 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
       for (list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
            pin != reply->get_dir_in().end(); 
            ++pin, ++pdn) {
+	// ignore .
+	if (*pdn == ".") 
+	  continue;
+
         // count entries
         res++;
 
@@ -1786,11 +1790,14 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents)
         // contents to caller too!
         contents[*pdn] = in->inode;
       }
+      if (dir->is_empty())
+	close_dir(dir);
     }
 
     // add .. too?
+    contents["."] = diri->inode;
     if (diri != root) 
-      contents[".."] = diri->inode;
+      contents[".."] = diri->dn->dir->parent_inode->inode;
 
     // FIXME: remove items in cache that weren't in my readdir?
     // ***

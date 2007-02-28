@@ -410,6 +410,7 @@ protected:
     
     // link to dir
     dn->dir = dir;
+    //cout << "link dir " << dir->parent_inode->inode.ino << " '" << name << "' -> inode " << in->inode.ino << endl;
     dir->dentries[dn->name] = dn;
 
     // link to inode
@@ -428,6 +429,7 @@ protected:
     dn->inode = 0;
     in->dn = 0;
     put_inode(in);
+    assert(!in->is_dir() || in->dir == 0);
     
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
@@ -448,6 +450,8 @@ protected:
     strcpy((char*)dn->name, name.c_str());
     dir->dentries[dn->name] = dn;
     */
+    //cout << "relink dir " << dir->parent_inode->inode.ino << " '" << name << "' -> inode " << dn->inode->inode.ino << endl;
+
     dir->dentries[name] = dn;
 
     // unlink from old dir
