@@ -440,12 +440,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   // decode and process
   mdsmap->decode(m->get_encoded());
 
-  // tell objecter my incarnation
-  if (objecter->get_client_incarnation() < 0) {
-    assert(mdsmap->get_inc(whoami) > 0);
-    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
-  }
-
   // see who i am
   whoami = mdsmap->get_inst_rank(messenger->get_myaddr());
   if (oldwhoami != whoami) {
@@ -464,6 +458,13 @@ void MDS::handle_mds_map(MMDSMap *m)
       messenger->send_message(new MOSDGetMap(0),
 			      monmap->get_inst(mon));
     }
+  }
+
+  // tell objecter my incarnation
+  if (objecter->get_client_incarnation() < 0 &&
+      mdsmap->have_inst(whoami)) {
+    assert(mdsmap->get_inc(whoami) > 0);
+    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
   }
 
   // update my state
