@@ -30,20 +30,20 @@ class MMonPaxos : public Message {
 
   int op;   
   int machine_id;
-  version_t proposal;
-  version_t n;
+  version_t pn;
+  version_t v;
   bufferlist value;
 
   MMonPaxos() : Message(MSG_MON_PAXOS) {}
   MMonPaxos(int o, int mid, 
-	    version_t pn, version_t v) : Message(MSG_MON_PAXOS),
-					     op(o), machine_id(mid), 
-					     proposal(pn), n(v) {}
+	    version_t _pn, version_t _v) : Message(MSG_MON_PAXOS),
+					   op(o), machine_id(mid), 
+					   pn(_pn), v(_v) {}
   MMonPaxos(int o, int mid, 
-	    version_t pn, version_t v, 
+	    version_t _pn, version_t _v, 
 	    bufferlist& b) : Message(MSG_MON_PAXOS),
 			     op(o), machine_id(mid),
-			     proposal(pn), n(v), 
+			     pn(_pn), v(_v),
 			     value(b) {}
   
   virtual char *get_type_name() { return "paxos"; }

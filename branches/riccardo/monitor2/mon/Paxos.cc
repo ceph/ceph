@@ -24,47 +24,149 @@
 
 
 // ---------------------------------
+
+// PHASE 1
+
 // proposer
-void Paxos::propose(version_t v, bufferlist& value)
+void Paxos::leader_start()
 {
-//todo high rf: what si this?!?
-}
+  dout(10) << "i am the leader, start paxos" << endl;
   
+  // reset the number of lasts received
+  last_num = 0;
+  my_pn = get_new_proposal_number();
+  last_pn = 0;
+
+  // send collect
+  for (int i=0; i<mon->monmap->num_mon; ++i) {
+    if (i == whoami) continue;
+    // todo high rf I pass the pn twice... what is the last parameter for?
+    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COLLECT, whoami, pn, 0),
+				 mon->monmap->get_inst(i));
+  }
+}
+
+void Paxos::handle_collect(MMonPaxos *m)
+{
+  if (m->pn > accepted_pn[m->v]) {
+    dout(10) << "handle_collect - replied LAST" << *m << endl;
+    // send ack/last
+    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_LAST, machine_id,
+					       accepted_pn[m->v], m->v,
+					       accepted_value[m->v]));
+    accepted_pn[m->v] = m->pn;
+  }
+  else {
+    dout(10) << "handle_collect - replied OLDROUND" << *m << endl;
+    // send nak/oldround
+    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_LAST, machine_id,
+					       accepted_pn[m->v], m->v, 
+					       accepted_value[m->v]));
+  }
+  
+  delete m;
+}
+
 void Paxos::handle_last(MMonPaxos *m)
 {
-  dout(10) << "handle_last - one more last collected " << *m << endl;
+  dout(10) << "handle_last " << *m << endl;
+
+  if (m->pn > last_pn) {
+    dout(10) << " accepter accepted pn " << m->pn << ", taking that value" << endl;
+    last_value = m->value;
+  }
+
+  // majority?
+  bool had = have_majority();
   num_last++;
+
+  if (!had && have_majority()) {
+    dout(5) << "handle_last - we just got a majority" << endl;
+
+    if (last_pn) {
+      // propose previous value
+      propose();
+    } else {
+      // it's unconstrained.
+    }
+  }
+
+
+
+
   // use == instead of > so that if we receive additional LAST messages, we will not do this again
-  if (num_last ==  (unsigned)(mon->monmap->num_mon / 2)+1){
-	  dout(5) << "handle_last - got majority" << endl;
-	  // bcast to everyone else - begin
-	  num_accepts=0;
-	  for (int i=0; i<mon->monmap->num_mon; ++i) {
-		// we only set up our value if we get the majority, so for now we don't save it
-		if (i == whoami) continue;
-		// todo high rf: where is the data we want to send?
-		mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_BEGIN, whoami, pn, DATA_TO_SEND),
-									 MSG_ADDR_MON(i), mon->monmap->get_inst(i));
-	  }
+  if (num_last == (unsigned)(mon->monmap->num_mon / 2)+1) {
+    dout(5) << "handle_last - got majority" << endl;
+
+    // propose
+    propose
+    
+    // bcast to everyone else - begin
+    num_accept = 0;
+    for (int i=0; i<mon->monmap->num_mon; ++i) {
+      if (i == whoami) continue;
+      // we only set up our value if we get the majority, so for now we don't save it
+      // todo high rf: where is the data we want to send?
+      mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_BEGIN, machine_id, 
+						 pn, DATA_TO_SEND),
+				   mon->monmap->get_inst(i));
+    }
   }
   delete m;
 }
+
+void Paxos::handle_oldround(MMonPaxos *m)
+{
+  dout(10) << "handle_oldround " << *m << endl;
+
+  // the state is already constrained because an acceptor has
+  // accepted with a higher pn than ours.
+  
+  // in any case, we can propose for this state.
+
+  last_value = m->value;
+  last_pn = m->pn;
+  
+  // ?
+  if (have_majority())
+    propose(); 
+
+  delete m;
+}
+
+
 
 void Paxos::handle_accept(MMonPaxos *m)
 {
   dout(10) << "handle_accept " << *m << endl;
   num_accepts++;
-  if (num_accepts ==  (unsigned)(mon->monmap->num_mon / 2)+1){
-	  dout(5) << "handle_accept - bcast commit messages" << *m << endl;
-	  for (int i=0; i<mon->monmap->num_mon; ++i) {
-	    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COMMIT, whoami, pn, DATA_TO_COMMIT),
-												MSG_ADDR_MON(i), mon->monmap->get_inst(i));
-	  }
+  if (num_accepts == (unsigned)(mon->monmap->num_mon / 2)+1){
+    dout(5) << "handle_accept - bcast commit messages" << *m << endl;
+    for (int i=0; i<mon->monmap->num_mon; ++i) {
+      mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COMMIT, 
+						 whoami, 
+						 pn, 
+						 DATA_TO_COMMIT),
+				   mon->monmap->get_inst(i));
+    }
   }
   
   delete m;
   
 }
+
+
+void Paxos::propose(version_t v, bufferlist& value)
+{
+  last_value = value;
+  last_version = v;
+
+  // kick start whatever
+  // send some message
+}
+  
+
+
 
 void Paxos::handle_ack(MMonPaxos *m)
 {
@@ -110,16 +212,19 @@ version_t Paxos::get_new_proposal_number(version_t gt)
 // accepter
 void Paxos::handle_collect(MMonPaxos *m)
 {
-   if (m->pn > last) {
-	   dout(10) << "handle_collect - replied LAST" << *m << endl;
-	   mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_LAST, whoami, last));
-	   last = m->pn;
-   }
-   else {
-	   dout(10) << "handle_collect - replied OLDROUND" << *m << endl;
-	   mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_OLDROUND, whoami, last));
-   }
-	   
+  if (m->pn > accepted_pn[m->v]) {
+     dout(10) << "handle_collect - replied LAST" << *m << endl;
+     mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_LAST, machine_id,
+						m->pn, m->v));
+     accepted_pn[m->v] = m->pn;
+  }
+  else {
+    dout(10) << "handle_collect - replied OLDROUND" << *m << endl;
+    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_OLDROUND, machine_id,
+					       accepted_pn[m->v], m->v, 
+					       accepted_value[m->v]));
+  }
+  
   delete m;
 }
 
@@ -152,21 +257,6 @@ void Paxos::handle_begin(MMonPaxos *m)
 }
 
 // ---------------------------------
-
-void Paxos::leader_start()
-{
-  dout(10) << "i am the leader, start paxos" << endl;
-
-  // reset the number of lasts received
-  num_lasts = 0;
-  version_t pn = get_new_proposal_number();
-  for (int i=0; i<mon->monmap->num_mon; ++i) {
-    if (i == whoami) continue;
-    // todo high rf I pass the pn twice... what is the last parameter for?
-    mon->messenger->send_message(new MMonPaxos(MMonPaxos::OP_COLLECT, whoami, pn, pn),
-				 mon->monmap->get_inst(i));
-  }
-}
 
 
 
