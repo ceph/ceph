@@ -638,6 +638,11 @@ void ObjectCacher::flush(off_t amount)
 
   dout(10) << "flush " << amount << endl;
   
+  /*
+   * NOTE: we aren't actually pulling things off the LRU here, just looking at the
+   * tail item.  Then we call bh_write, which moves it to the other LRU, so that we
+   * can call lru_dirty.lru_get_next_expire() again.
+   */
   off_t did = 0;
   while (amount == 0 || did < amount) {
     BufferHead *bh = (BufferHead*) lru_dirty.lru_get_next_expire();
