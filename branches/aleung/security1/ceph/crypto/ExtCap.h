@@ -17,6 +17,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "mds/Capability.h"
+#include "common/Clock.h"
 
 using namespace std;
 

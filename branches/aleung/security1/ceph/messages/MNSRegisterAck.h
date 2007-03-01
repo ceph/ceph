@@ -19,12 +19,12 @@
 #include "msg/TCPMessenger.h"
 
 class MNSRegisterAck : public Message {
-  msg_addr_t entity;
+  entity_name_t entity;
   long tid;
 
  public:
   MNSRegisterAck() {}
-  MNSRegisterAck(long t, msg_addr_t e) : 
+  MNSRegisterAck(long t, entity_name_t e) : 
     Message(MSG_NS_REGISTERACK) { 
     entity = e;
     tid = t;
@@ -32,7 +32,7 @@ class MNSRegisterAck : public Message {
   
   char *get_type_name() { return "NSRegA"; }
 
-  msg_addr_t get_entity() { return entity; }
+  entity_name_t get_entity() { return entity; }
   long get_tid() { return tid; }
 
   void encode_payload() {

@@ -20,15 +20,12 @@
 class MClientBoot : public Message {
   
  public:
-  MClientBoot() : Message(MSG_CLIENT_BOOT) { 
-  }
+  MClientBoot() : Message(MSG_CLIENT_BOOT) { }
 
-  char *get_type_name() { return "Cboot"; }
+  char *get_type_name() { return "client_boot"; }
 
-  virtual void decode_payload(crope& s, int& off) {
-  }
-  virtual void encode_payload(crope& s) {
-  }
+  void encode_payload() { }
+  void decode_payload() { }
 };
 
 #endif

@@ -9,6 +9,7 @@ using namespace std;
 
 #include "messages/MGenericMessage.h"
 
+/*
 #include "messages/MNSConnect.h"
 #include "messages/MNSConnectAck.h"
 #include "messages/MNSRegister.h"
@@ -16,16 +17,18 @@ using namespace std;
 #include "messages/MNSLookup.h"
 #include "messages/MNSLookupReply.h"
 #include "messages/MNSFailure.h"
+*/
+
+#include "messages/MMonPaxos.h"
 
 #include "messages/MMonElectionAck.h"
-#include "messages/MMonElectionCollect.h"
-#include "messages/MMonElectionRefresh.h"
-#include "messages/MMonElectionStatus.h"
+#include "messages/MMonElectionPropose.h"
+#include "messages/MMonElectionVictory.h"
 
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
-#include "messages/MFailure.h"
-#include "messages/MFailureAck.h"
+//#include "messages/MFailure.h"
+//#include "messages/MFailureAck.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
@@ -52,7 +55,10 @@ using namespace std;
 
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
-#include "messages/MMDSBoot.h"
+#include "messages/MMDSBeacon.h"
+#include "messages/MMDSImportMap.h"
+#include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSCacheRejoinAck.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -130,6 +136,7 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
 
     // -- with payload --
 
+	/*
   case MSG_NS_CONNECT:
     m = new MNSConnect();
     break;
@@ -151,18 +158,20 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_NS_FAILURE:
     m = new MNSFailure();
     break;
+	*/
 
+  case MSG_MON_PAXOS:
+    m = new MMonPaxos;
+    break;
+
+  case MSG_MON_ELECTION_PROPOSE:
+    m = new MMonElectionPropose;
+    break;
   case MSG_MON_ELECTION_ACK:
-    m = new MMonElectionAck();
+    m = new MMonElectionAck;
     break;
-  case MSG_MON_ELECTION_COLLECT:
-    m = new MMonElectionCollect();
-    break;
-  case MSG_MON_ELECTION_REFRESH:
-    m = new MMonElectionRefresh();
-    break;
-  case MSG_MON_ELECTION_STATUS:
-    m = new MMonElectionStatus();
+  case MSG_MON_ELECTION_VICTORY:
+    m = new MMonElectionVictory;
     break;
 
   case MSG_PING:
@@ -171,12 +180,14 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_PING_ACK:
     m = new MPingAck();
     break;
+	/*
   case MSG_FAILURE:
     m = new MFailure();
     break;
   case MSG_FAILURE_ACK:
     m = new MFailureAck();
     break;
+	*/
 
   case MSG_OSD_BOOT:
     m = new MOSDBoot();
@@ -253,8 +264,17 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
   case MSG_MDS_MAP:
 	m = new MMDSMap();
 	break;
-  case MSG_MDS_BOOT:
-	m = new MMDSBoot();
+  case MSG_MDS_BEACON:
+	m = new MMDSBeacon;
+	break;
+  case MSG_MDS_IMPORTMAP:
+	m = new MMDSImportMap;
+	break;
+  case MSG_MDS_CACHEREJOIN:
+	m = new MMDSCacheRejoin;
+	break;
+  case MSG_MDS_CACHEREJOINACK:
+	m = new MMDSCacheRejoinAck;
 	break;
 
   case MSG_MDS_DIRUPDATE:

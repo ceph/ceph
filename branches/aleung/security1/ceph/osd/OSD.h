@@ -18,6 +18,7 @@
 
 #include "common/Mutex.h"
 #include "common/ThreadPool.h"
+#include "common/Timer.h"
 
 #include "mon/MonMap.h"
 
@@ -93,10 +94,11 @@ public:
     void finish(int r) {
       osd->heartbeat();
     }
-  } *next_heartbeat;
+  };
 
   // global lock
   Mutex osd_lock;
+  SafeTimer timer;
 
   // -- stats --
   int hb_stat_ops;  // ops since last heartbeat
@@ -160,9 +162,9 @@ public:
   class OSDMap  *osdmap;
   list<class Message*> waiting_for_osdmap;
 
-  hash_map<msg_addr_t, epoch_t>  peer_map_epoch;
-  bool _share_map_incoming(msg_addr_t who, const entity_inst_t& inst, epoch_t epoch);
-  void _share_map_outgoing(msg_addr_t dest, const entity_inst_t& inst);
+  hash_map<entity_name_t, epoch_t>  peer_map_epoch;  // FIXME types
+  bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch);
+  void _share_map_outgoing(const entity_inst_t& inst);
 
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
@@ -175,7 +177,7 @@ public:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
-  void send_incremental_map(epoch_t since, msg_addr_t dest, const entity_inst_t& inst, bool full);
+  void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full);
 
 
 
@@ -257,8 +259,7 @@ public:
 
   // messages
   virtual void dispatch(Message *m);
-  virtual void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst);
-  virtual bool ms_lookup(msg_addr_t dest, entity_inst_t& inst);
+  virtual void ms_handle_failure(Message *m, const entity_inst_t& inst);
 
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);

@@ -71,13 +71,13 @@ public:
   }
 
  public:
-  TCPMessenger(msg_addr_t myaddr);
+  TCPMessenger(entity_name_t myaddr);
   ~TCPMessenger();
 
   void ready();
 
   tcpaddr_t& get_tcpaddr();
-  void map_entity_rank(msg_addr_t e, int r);
+  void map_entity_rank(entity_name_t e, int r);
   void map_rank_addr(int r, tcpaddr_t a);
 
   int get_dispatch_queue_len();
@@ -88,7 +88,7 @@ public:
   virtual int shutdown();
 
   // message interface
-  virtual int send_message(Message *m, msg_addr_t dest, int port=0, int fromport=0);
+  virtual int send_message(Message *m, entity_name_t dest, int port=0, int fromport=0);
 };
 
 /**

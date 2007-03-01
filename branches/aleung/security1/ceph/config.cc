@@ -51,6 +51,8 @@ FileLayout g_OSD_MDLogLayout( 1<<20, 1, 1<<20, 2 );  // 1M objects
 std::map<int,float> g_fake_osd_down;
 std::map<int,float> g_fake_osd_out;
 
+entity_addr_t g_my_addr;
+
 md_config_t g_debug_after_conf;
 
 md_config_t g_conf = {
@@ -127,6 +129,7 @@ md_config_t g_conf = {
   mon_tick_interval: 5,
   mon_osd_down_out_interval: 5,  // seconds
   mon_lease: 2.000,  // seconds
+  mon_stop_with_last_mds: true,
 
   // --- client ---
   client_cache_size: 300,
@@ -149,13 +152,16 @@ md_config_t g_conf = {
   objecter_buffer_uncommitted: true,
 
   // --- journaler ---
-  journaler_allow_split_entries: false,
+  journaler_allow_split_entries: true,
 
   // --- mds ---
   mds_cache_size: MDS_CACHE_SIZE,
   mds_cache_mid: .7,
 
   mds_decay_halflife: 30,
+
+  mds_beacon_interval: 5.0,
+  mds_beacon_grace: 10.0,
 
   mds_log: true,
   mds_log_max_len:  MDS_CACHE_SIZE / 3,
@@ -164,7 +170,7 @@ md_config_t g_conf = {
   mds_log_pad_entry: 128,//256,//64,
   mds_log_before_reply: true,
   mds_log_flush_on_shutdown: true,
-
+  mds_log_import_map_interval: 1024*1024,  // frequency (in bytes) of EImportMap in log
   mds_bal_replicate_threshold: 2000,
   mds_bal_unreplicate_threshold: 0,//500,
   mds_bal_hash_rd: 10000,
@@ -186,6 +192,7 @@ md_config_t g_conf = {
 
   mds_commit_on_shutdown: true,
   mds_shutdown_check: 0, //30,
+  mds_shutdown_on_last_unmount: true,
 
   mds_verify_export_dirauth: true,
 
@@ -214,7 +221,8 @@ md_config_t g_conf = {
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
-  fakestore_fakeattr: true,   
+  fakestore_fake_attrs: false,
+  fakestore_fake_collections: false,   
   fakestore_dev: 0,
 
   // --- ebofs ---
@@ -299,6 +307,17 @@ md_config_t g_conf = {
   hash_scheme:            0, /* 0=sha-1, 1=sha-256,
 				2=sha-512, 3 = md5 */
   crypt_scheme:           0  /* 0=rijndael, 1=RC5 */
+
+#ifdef USE_OSBDB
+  ,
+  bdbstore: false,
+  debug_bdbstore: 1,
+  bdbstore_btree: false,
+  bdbstore_ffactor: 0,
+  bdbstore_nelem: 0,
+  bdbstore_pagesize: 0,
+  bdbstore_cachesize: 0
+#endif // USE_OSBDB
 };
 
 
@@ -349,12 +368,62 @@ void vec_to_argv(std::vector<char*>& args,
     argv[argc++] = args[i];
 }
 
+bool parse_ip_port(const char *s, entity_addr_t& a)
+{
+  int count = 0; // digit count
+  int off = 0;
+
+  while (1) {
+    // parse the #.
+    int val = 0;
+    int numdigits = 0;
+    
+    while (*s >= '0' && *s <= '9') {
+      int digit = *s - '0';
+      //cout << "digit " << digit << endl;
+      val *= 10;
+      val += digit;
+      numdigits++;
+      s++; off++;
+    }
+    //cout << "val " << val << endl;
+    
+    if (numdigits == 0) {
+      cerr << "no digits at off " << off << endl;
+      return false;           // no digits
+    }
+    if (count < 3 && *s != '.') {
+      cerr << "should period at " << off << endl;
+      return false;   // should have 3 periods
+    }
+    if (count == 3 && *s != ':') {
+      cerr << "expected : at " << off << endl;
+      return false;  // then a colon
+    }
+    s++; off++;
+
+    if (count <= 3)
+      a.ipq[count] = val;
+    else
+      a.port = val;
+    
+    count++;
+    if (count == 5) break;  
+  }
+  
+  return true;
+}
+
+
+
 void parse_config_options(std::vector<char*>& args)
 {
   std::vector<char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--nummon") == 0) 
+    if (strcmp(args[i],"--bind") == 0) 
+      assert(parse_ip_port(args[++i], g_my_addr));
+    else if (strcmp(args[i], "--nummon") == 0) 
       g_conf.num_mon = atoi(args[++i]);
     else if (strcmp(args[i], "--nummds") == 0) 
       g_conf.num_mds = atoi(args[++i]);
@@ -500,6 +569,11 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--mds_beacon_interval") == 0) 
+      g_conf.mds_beacon_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_beacon_grace") == 0) 
+      g_conf.mds_beacon_grace = atoi(args[++i]);
+
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_before_reply") == 0) 
@@ -515,6 +589,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_commit_on_shutdown = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_shutdown_check") == 0) 
       g_conf.mds_shutdown_check = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_shutdown_on_last_unmount") == 0) 
+      g_conf.mds_shutdown_on_last_unmount = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_flush_on_shutdown") == 0) 
       g_conf.mds_log_flush_on_shutdown = atoi(args[++i]);
 
@@ -556,7 +632,9 @@ void parse_config_options(std::vector<char*>& args)
     
     else if (strcmp(args[i], "--mds_local_osd") == 0) 
       g_conf.mds_local_osd = atoi(args[++i]);
-
+    
+    else if (strcmp(args[i], "--client_use_random_mds") == 0)
+      g_conf.client_use_random_mds = true;
     else if (strcmp(args[i], "--client_cache_size") == 0)
       g_conf.client_cache_size = atoi(args[++i]);
     else if (strcmp(args[i], "--client_cache_stat_ttl") == 0)
@@ -570,6 +648,8 @@ void parse_config_options(std::vector<char*>& args)
 
     else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
       g_conf.mon_osd_down_out_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mon_stop_with_last_mds") == 0)
+      g_conf.mon_stop_with_last_mds = atoi(args[++i]);
 
     else if (strcmp(args[i], "--client_sync_writes") == 0)
       g_conf.client_sync_writes = atoi(args[++i]);
@@ -618,6 +698,10 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.fakestore_writesync = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 
       g_conf.fakestore_dev = args[++i];
+    else if (strcmp(args[i], "--fakestore_fake_attrs") == 0) 
+      g_conf.fakestore_fake_attrs = true;//atoi(args[++i]);
+    else if (strcmp(args[i], "--fakestore_fake_collections") == 0) 
+      g_conf.fakestore_fake_collections = true;//atoi(args[++i]);
 
     else if (strcmp(args[i], "--obfs") == 0) {
       g_conf.uofs = 1;
@@ -719,6 +803,28 @@ void parse_config_options(std::vector<char*>& args)
       if (!g_OSD_MDLogLayout.num_rep)
         g_conf.mds_log = false;
     }
+
+#ifdef USE_OSBDB
+    else if (strcmp(args[i], "--bdbstore") == 0) {
+      g_conf.bdbstore = true;
+      g_conf.ebofs = 0;
+    }
+    else if (strcmp(args[i], "--bdbstore-btree") == 0) {
+      g_conf.bdbstore_btree = true;
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-ffactor") == 0) {
+      g_conf.bdbstore_ffactor = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-nelem") == 0) {
+      g_conf.bdbstore_nelem = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-pagesize") == 0) {
+      g_conf.bdbstore_pagesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
+      g_conf.bdbstore_cachesize = atoi(args[++i]);
+    }
+#endif // USE_OSBDB
 
     else {
       nargs.push_back(args[i]);

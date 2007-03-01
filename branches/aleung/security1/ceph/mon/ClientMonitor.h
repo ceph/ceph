@@ -37,7 +37,7 @@ class ClientMonitor : public Dispatcher {
 
  private:
   int num_clients;
-  map<msg_addr_t,entity_inst_t> client_map;
+  map<entity_name_t,entity_addr_t> client_map;
   map<uid_t, Ticket*> user_tickets;
 
   void bcast_latest_mds();
@@ -47,7 +47,7 @@ class ClientMonitor : public Dispatcher {
 
   void handle_client_boot(class MClientBoot *m);
   void handle_client_auth_user(class MClientAuthUser *m);
-  void send_ticket(msg_addr_t dest, const entity_inst_t& inst);
+  void send_ticket(const entity_inst_t& inst);
 
  public:
   ClientMonitor(Monitor *mn, Messenger *m, Mutex& l) : mon(mn), messenger(m), lock(l),

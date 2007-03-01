@@ -19,6 +19,7 @@
 
 #include "msg/Message.h"
 #include "include/filepath.h"
+#include "mds/mdstypes.h"
 #include "mds/MDS.h"
 
 /**

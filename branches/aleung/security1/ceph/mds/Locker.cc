@@ -27,8 +27,8 @@
 
 #include "include/filepath.h"
 
-#include "events/EInodeUpdate.h"
-#include "events/EDirUpdate.h"
+#include "events/EString.h"
+#include "events/EUpdate.h"
 #include "events/EUnlink.h"
 
 #include "msg/Messenger.h"
@@ -86,6 +86,41 @@ void Locker::dispatch(Message *m)
   }
 }
 
+
+void Locker::send_lock_message(CInode *in, int msg, int type)
+{
+  for (map<int,int>::iterator it = in->replicas_begin(); 
+       it != in->replicas_end(); 
+       it++) {
+    MLock *m = new MLock(msg, mds->get_nodeid());
+    m->set_ino(in->ino(), type);
+    mds->send_message_mds(m, it->first, MDS_PORT_LOCKER);
+  }
+}
+
+
+void Locker::send_lock_message(CInode *in, int msg, int type, bufferlist& data)
+{
+  for (map<int,int>::iterator it = in->replicas_begin(); 
+       it != in->replicas_end(); 
+       it++) {
+    MLock *m = new MLock(msg, mds->get_nodeid());
+    m->set_ino(in->ino(), type);
+    m->set_data(data);
+    mds->send_message_mds(m, it->first, MDS_PORT_LOCKER);
+  }
+}
+
+void Locker::send_lock_message(CDentry *dn, int msg)
+{
+  for (map<int,int>::iterator it = dn->replicas_begin();
+       it != dn->replicas_end();
+       it++) {
+    MLock *m = new MLock(msg, mds->get_nodeid());
+    m->set_dn(dn->dir->ino(), dn->name);
+    mds->send_message_mds(m, it->first, MDS_PORT_LOCKER);
+  }
+}
 
 
 
@@ -260,7 +295,7 @@ bool Locker::issue_caps(CInode *in)
                                                          it->second.get_last_seq(),
                                                          it->second.pending(),
                                                          it->second.wanted()),
-                                     MSG_ADDR_CLIENT(it->first), mds->clientmap.get_inst(it->first), 
+                                     mds->clientmap.get_inst(it->first), 
 				     0, MDS_PORT_LOCKER);
       }
     }
@@ -399,7 +434,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     MClientFileCaps *r = new MClientFileCaps(in->inode, 
                                              0, 0, 0,
                                              MClientFileCaps::FILECAP_RELEASE);
-    mds->messenger->send_message(r, m->get_source(), m->get_source_inst(), 0, MDS_PORT_LOCKER);
+    mds->messenger->send_message(r, m->get_source_inst(), 0, MDS_PORT_LOCKER);
   }
 
   // merge in atime?
@@ -428,7 +463,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     }
 
     if (dirty) 
-      mds->mdlog->submit_entry(new EInodeUpdate(in));
+      mds->mdlog->submit_entry(new EString("cap inode update dirty fixme"));
   }  
 
   // reevaluate, waiters
@@ -601,7 +636,7 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
 
   // if not replicated, i can twiddle lock at will
   if (in->is_auth() &&
-      !in->is_cached_by_anyone() &&
+      !in->is_replicated() &&
       in->hardlock.get_state() != LOCK_LOCK) 
     in->hardlock.set_state(LOCK_LOCK);
   
@@ -615,7 +650,7 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
     }
 
     in->auth_pin();  // ugh, can't condition this on nwrite==0 bc we twiddle that in handle_lock_*
-    in->hardlock.get_write();
+    in->hardlock.get_write(m);
     return true;
   }
   
@@ -648,17 +683,19 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
 void Locker::inode_hard_write_finish(CInode *in)
 {
   // drop ref
-  assert(in->hardlock.can_write(in->is_auth()));
+  //assert(in->hardlock.can_write(in->is_auth()));
   in->hardlock.put_write();
   in->auth_unpin();
   dout(7) << "inode_hard_write_finish on " << *in << endl;
-  
-  // drop lock?
-  if (in->hardlock.get_nwrite() == 0) {
 
+  // others waiting?
+  if (in->is_hardlock_write_wanted()) {
+    // wake 'em up
+    in->take_waiting(CINODE_WAIT_HARDW, mds->finished_queue);
+  } else {
     // auto-sync if alone.
     if (in->is_auth() &&
-        !in->is_cached_by_anyone() &&
+        !in->is_replicated() &&
         in->hardlock.get_state() != LOCK_SYNC) 
       in->hardlock.set_state(LOCK_SYNC);
     
@@ -679,9 +716,9 @@ void Locker::inode_hard_eval(CInode *in)
       in->hardlock.set_state(LOCK_LOCK);
       
       // waiters
-      in->hardlock.get_write();
+      //in->hardlock.get_write();
       in->finish_waiting(CINODE_WAIT_HARDRWB|CINODE_WAIT_HARDSTABLE);
-      in->hardlock.put_write();
+      //in->hardlock.put_write();
       break;
       
     default:
@@ -693,8 +730,8 @@ void Locker::inode_hard_eval(CInode *in)
   if (in->is_auth()) {
 
     // sync?
-    if (in->is_cached_by_anyone() &&
-        in->hardlock.get_nwrite() == 0 &&
+    if (in->is_replicated() &&
+        in->is_hardlock_write_wanted() &&
         in->hardlock.get_state() != LOCK_SYNC) {
       dout(7) << "inode_hard_eval stable, syncing " << *in << endl;
       inode_hard_sync(in);
@@ -725,14 +762,7 @@ void Locker::inode_hard_sync(CInode *in)
   in->encode_hard_state(harddata);
   
   // bcast to replicas
-  for (set<int>::iterator it = in->cached_by_begin(); 
-       it != in->cached_by_end(); 
-       it++) {
-    MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-    m->set_ino(in->ino(), LOCK_OTYPE_IHARD);
-    m->set_data(harddata);
-    mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-  }
+  send_lock_message(in, LOCK_AC_SYNC, LOCK_OTYPE_IHARD, harddata);
   
   // change lock
   in->hardlock.set_state(LOCK_SYNC);
@@ -753,17 +783,11 @@ void Locker::inode_hard_lock(CInode *in)
   assert(in->hardlock.get_state() == LOCK_SYNC);
   
   // bcast to replicas
-  for (set<int>::iterator it = in->cached_by_begin(); 
-       it != in->cached_by_end(); 
-       it++) {
-    MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
-    m->set_ino(in->ino(), LOCK_OTYPE_IHARD);
-    mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-  }
+  send_lock_message(in, LOCK_AC_LOCK, LOCK_OTYPE_IHARD);
   
   // change lock
   in->hardlock.set_state(LOCK_GLOCKR);
-  in->hardlock.init_gather(in->get_cached_by());
+  in->hardlock.init_gather(in->get_replicas());
 }
 
 
@@ -913,9 +937,9 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
         if (in->filelock.can_read(in->is_auth())) {
           in->filelock.get_read();
           
-          in->filelock.get_write();
+          //in->filelock.get_write();
           in->finish_waiting(CINODE_WAIT_FILERWB|CINODE_WAIT_FILESTABLE);
-          in->filelock.put_write();
+          //in->filelock.put_write();
           return true;
         }
       } else {
@@ -968,47 +992,51 @@ void Locker::inode_file_read_finish(CInode *in)
 
 bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
 {
-  // can write?  grab ref.
-  if (in->filelock.can_write(in->is_auth())) {
-    in->filelock.get_write();
-    return true;
-  }
+  // can't write?
+  if (!in->filelock.can_write(in->is_auth())) {
   
-  // can't write, replicated.
-  if (in->is_auth()) {
-    // auth
-    if (in->filelock.can_write_soon(in->is_auth())) {
-      // just wait
-    } else {
-      if (!in->filelock.is_stable()) {
-        dout(7) << "inode_file_write_start on auth, waiting for stable on " << *in << endl;
-        in->add_waiter(CINODE_WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
-        return false;
-      }
-      
-      // initiate lock 
-      inode_file_lock(in);
+    // can't write.
+    if (in->is_auth()) {
+      // auth
+      if (!in->filelock.can_write_soon(in->is_auth())) {
+	if (!in->filelock.is_stable()) {
+	  dout(7) << "inode_file_write_start on auth, waiting for stable on " << *in << endl;
+	  in->add_waiter(CINODE_WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+	  return false;
+	}
+	
+	// initiate lock 
+	inode_file_lock(in);
 
-      if (in->filelock.can_write(in->is_auth())) {
-        in->filelock.get_write();
-        
-        in->filelock.get_read();
-        in->finish_waiting(CINODE_WAIT_FILERWB|CINODE_WAIT_FILESTABLE);
-        in->filelock.put_read();
-        return true;
+	// fall-thru to below.
       }
+    } else {
+      // replica
+      // fw to auth
+      int auth = in->authority();
+      dout(7) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
+      assert(auth != mds->get_nodeid());
+      mdcache->request_forward(m, auth);
+      return false;
+    }
+  } 
+  
+  // check again
+  if (in->filelock.can_write(in->is_auth())) {
+    // can i auth pin?
+    assert(in->is_auth());
+    if (!in->can_auth_pin()) {
+      dout(7) << "inode_file_write_start waiting for authpinnable on " << *in << endl;
+      in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
+      return false;
     }
     
+    in->auth_pin();
+    in->filelock.get_write(m);
+    return true;
+  } else {
     dout(7) << "inode_file_write_start on auth, waiting for write on " << *in << endl;
     in->add_waiter(CINODE_WAIT_FILEW, new C_MDS_RetryRequest(mds, m, in));
-    return false;
-  } else {
-    // replica
-    // fw to auth
-    int auth = in->authority();
-    dout(7) << "inode_file_write_start " << *in << " on replica, fw to auth " << auth << endl;
-    assert(auth != mds->get_nodeid());
-    mdcache->request_forward(m, auth);
     return false;
   }
 }
@@ -1022,7 +1050,7 @@ void Locker::inode_file_write_finish(CInode *in)
   dout(7) << "inode_file_write_finish on " << *in << ", filelock=" << in->filelock << endl;
   
   // drop lock?
-  if (in->filelock.get_nwrite() == 0) {
+  if (!in->is_filelock_write_wanted()) {
     in->finish_waiting(CINODE_WAIT_FILENOWR);
     inode_file_eval(in);
   }
@@ -1057,10 +1085,10 @@ void Locker::inode_file_eval(CInode *in)
         
         // waiters
         in->filelock.get_read();
-        in->filelock.get_write();
+        //in->filelock.get_write();
         in->finish_waiting(CINODE_WAIT_FILERWB|CINODE_WAIT_FILESTABLE);
         in->filelock.put_read();
-        in->filelock.put_write();
+        //in->filelock.put_write();
       }
       break;
       
@@ -1076,20 +1104,13 @@ void Locker::inode_file_eval(CInode *in)
       if ((issued & ~(CAP_FILE_WR)) == 0) {
         in->filelock.set_state(LOCK_MIXED);
 
-        if (in->is_cached_by_anyone()) {
+        if (in->is_replicated()) {
           // data
           bufferlist softdata;
           in->encode_file_state(softdata);
           
           // bcast to replicas
-          for (set<int>::iterator it = in->cached_by_begin(); 
-               it != in->cached_by_end(); 
-               it++) {
-            MLock *m = new MLock(LOCK_AC_MIXED, mds->get_nodeid());
-            m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-            m->set_data(softdata);
-            mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-          }
+	  send_lock_message(in, LOCK_AC_MIXED, LOCK_OTYPE_IFILE, softdata);
         }
 
         in->finish_waiting(CINODE_WAIT_FILESTABLE);
@@ -1121,14 +1142,7 @@ void Locker::inode_file_eval(CInode *in)
           bufferlist softdata;
           in->encode_file_state(softdata);
           
-          for (set<int>::iterator it = in->cached_by_begin(); 
-               it != in->cached_by_end(); 
-               it++) {
-            MLock *reply = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-            reply->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-            reply->set_data(softdata);
-            mds->send_message_mds(reply, *it, MDS_PORT_LOCKER);
-          }
+	  send_lock_message(in, LOCK_AC_SYNC, LOCK_OTYPE_IFILE, softdata);
         }
         
         // waiters
@@ -1194,7 +1208,7 @@ void Locker::inode_file_eval(CInode *in)
 
     // * -> loner?
     if (in->filelock.get_nread() == 0 &&
-        in->filelock.get_nwrite() == 0 &&
+        !in->is_filelock_write_wanted() &&
         (wanted & CAP_FILE_WR) &&
         loner &&
         in->filelock.get_state() != LOCK_LONER) {
@@ -1204,7 +1218,7 @@ void Locker::inode_file_eval(CInode *in)
 
     // * -> mixed?
     else if (in->filelock.get_nread() == 0 &&
-             in->filelock.get_nwrite() == 0 &&
+             !in->is_filelock_write_wanted() &&
              (wanted & CAP_FILE_RD) &&
              (wanted & CAP_FILE_WR) &&
              !(loner && in->filelock.get_state() == LOCK_LONER) &&
@@ -1214,10 +1228,10 @@ void Locker::inode_file_eval(CInode *in)
     }
 
     // * -> sync?
-    else if (in->filelock.get_nwrite() == 0 &&
+    else if (!in->is_filelock_write_wanted() &&
              !(wanted & CAP_FILE_WR) &&
              ((wanted & CAP_FILE_RD) || 
-              in->is_cached_by_anyone() || 
+              in->is_replicated() || 
               (!loner && in->filelock.get_state() == LOCK_LONER)) &&
              in->filelock.get_state() != LOCK_SYNC) {
       dout(7) << "inode_file_eval stable, bump to sync " << *in << ", filelock=" << in->filelock << endl;
@@ -1225,7 +1239,7 @@ void Locker::inode_file_eval(CInode *in)
     }
 
     // * -> lock?  (if not replicated or open)
-    else if (!in->is_cached_by_anyone() &&
+    else if (!in->is_replicated() &&
              wanted == 0 &&
              in->filelock.get_state() != LOCK_LOCK) {
       inode_file_lock(in);
@@ -1259,20 +1273,13 @@ bool Locker::inode_file_sync(CInode *in)
   assert((in->get_caps_wanted() & CAP_FILE_WR) == 0);
 
   if (in->filelock.get_state() == LOCK_LOCK) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // soft data
       bufferlist softdata;
       in->encode_file_state(softdata);
       
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-	   it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-	m->set_data(softdata);
-	mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
+      send_lock_message(in, LOCK_AC_SYNC, LOCK_OTYPE_IFILE, softdata);
     }
 
     // change lock
@@ -1292,15 +1299,9 @@ bool Locker::inode_file_sync(CInode *in)
     } else {
       // no writers, go straight to sync
 
-      if (in->is_cached_by_anyone()) {
+      if (in->is_replicated()) {
         // bcast to replicas
-        for (set<int>::iterator it = in->cached_by_begin(); 
-             it != in->cached_by_end(); 
-             it++) {
-          MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-          m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-          mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-        }
+	send_lock_message(in, LOCK_AC_SYNC, LOCK_OTYPE_IFILE);
       }
     
       // change lock
@@ -1317,15 +1318,9 @@ bool Locker::inode_file_sync(CInode *in)
       issue_caps(in);
     } else {
       // no writers, go straight to sync
-      if (in->is_cached_by_anyone()) {
+      if (in->is_replicated()) {
         // bcast to replicas
-        for (set<int>::iterator it = in->cached_by_begin(); 
-             it != in->cached_by_end(); 
-             it++) {
-          MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-          m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-          mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-        }
+	send_lock_message(in, LOCK_AC_SYNC, LOCK_OTYPE_IFILE);
       }
 
       // change lock
@@ -1338,6 +1333,7 @@ bool Locker::inode_file_sync(CInode *in)
 
   return false;
 }
+
 
 
 void Locker::inode_file_lock(CInode *in)
@@ -1358,16 +1354,10 @@ void Locker::inode_file_lock(CInode *in)
   int issued = in->get_caps_issued();
 
   if (in->filelock.get_state() == LOCK_SYNC) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
-      in->filelock.init_gather(in->get_cached_by());
+      send_lock_message(in, LOCK_AC_LOCK, LOCK_OTYPE_IFILE);
+      in->filelock.init_gather(in->get_replicas());
       
       // change lock
       in->filelock.set_state(LOCK_GLOCKR);
@@ -1387,16 +1377,10 @@ void Locker::inode_file_lock(CInode *in)
   }
 
   else if (in->filelock.get_state() == LOCK_MIXED) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
-      in->filelock.init_gather(in->get_cached_by());
+      send_lock_message(in, LOCK_AC_LOCK, LOCK_OTYPE_IFILE);
+      in->filelock.init_gather(in->get_replicas());
 
       // change lock
       in->filelock.set_state(LOCK_GLOCKM);
@@ -1449,16 +1433,10 @@ void Locker::inode_file_mixed(CInode *in)
   int issued = in->get_caps_issued();
 
   if (in->filelock.get_state() == LOCK_SYNC) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_MIXED, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
-      in->filelock.init_gather(in->get_cached_by());
+      send_lock_message(in, LOCK_AC_MIXED, LOCK_OTYPE_IFILE);
+      in->filelock.init_gather(in->get_replicas());
     
       in->filelock.set_state(LOCK_GMIXEDR);
       issue_caps(in);
@@ -1473,20 +1451,13 @@ void Locker::inode_file_mixed(CInode *in)
   }
 
   else if (in->filelock.get_state() == LOCK_LOCK) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // data
       bufferlist softdata;
       in->encode_file_state(softdata);
       
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_MIXED, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        m->set_data(softdata);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
+      send_lock_message(in, LOCK_AC_MIXED, LOCK_OTYPE_IFILE, softdata);
     }
 
     // change lock
@@ -1500,15 +1471,9 @@ void Locker::inode_file_mixed(CInode *in)
       in->filelock.set_state(LOCK_GMIXEDL);
       issue_caps(in);
     }
-    else if (in->is_cached_by_anyone()) {
+    else if (in->is_replicated()) {
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_MIXED, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
+      send_lock_message(in, LOCK_AC_MIXED, LOCK_OTYPE_IFILE);
       in->filelock.set_state(LOCK_MIXED);
       issue_caps(in);
     } else {
@@ -1538,16 +1503,10 @@ void Locker::inode_file_loner(CInode *in)
   assert((in->client_caps.size() == 1) && in->mds_caps_wanted.empty());
   
   if (in->filelock.get_state() == LOCK_SYNC) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
-      in->filelock.init_gather(in->get_cached_by());
+      send_lock_message(in, LOCK_AC_LOCK, LOCK_OTYPE_IFILE);
+      in->filelock.init_gather(in->get_replicas());
       
       // change lock
       in->filelock.set_state(LOCK_GLONERR);
@@ -1565,16 +1524,10 @@ void Locker::inode_file_loner(CInode *in)
   }
 
   else if (in->filelock.get_state() == LOCK_MIXED) {
-    if (in->is_cached_by_anyone()) {
+    if (in->is_replicated()) {
       // bcast to replicas
-      for (set<int>::iterator it = in->cached_by_begin(); 
-           it != in->cached_by_end(); 
-           it++) {
-        MLock *m = new MLock(LOCK_AC_LOCK, mds->get_nodeid());
-        m->set_ino(in->ino(), LOCK_OTYPE_IFILE);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
-      in->filelock.init_gather(in->get_cached_by());
+      send_lock_message(in, LOCK_AC_LOCK, LOCK_OTYPE_IFILE);
+      in->filelock.init_gather(in->get_replicas());
       
       // change lock
       in->filelock.set_state(LOCK_GLONERM);
@@ -1720,9 +1673,9 @@ void Locker::handle_lock_inode_file(MLock *m)
     issue_caps(in);
     
     // waiters
-    in->filelock.get_write();
+    //in->filelock.get_write();
     in->finish_waiting(CINODE_WAIT_FILEW|CINODE_WAIT_FILESTABLE);
-    in->filelock.put_write();
+    //in->filelock.put_write();
     inode_file_eval(in);
     break;
 
@@ -1885,11 +1838,15 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
   // mine!
   dn->xlockedby = m;
 
-  if (dn->dir->is_open_by_anyone()) {
+  if (dn->is_replicated()) {
     dn->lockstate = DN_LOCK_PREXLOCK;
     
     // xlock with whom?
-    set<int> who = dn->dir->get_open_by();
+    set<int> who;
+    for (map<int,int>::iterator p = dn->replicas_begin();
+	 p != dn->replicas_end();
+	 ++p)
+      who.insert(p->first);
     dn->gather_set = who;
 
     // make path
@@ -1941,14 +1898,8 @@ void Locker::dentry_xlock_finish(CDentry *dn, bool quiet)
   // tell replicas?
   if (!quiet) {
     // tell even if dn is null.
-    if (dn->dir->is_open_by_anyone()) {
-      for (set<int>::iterator it = dn->dir->open_by_begin();
-           it != dn->dir->open_by_end();
-           it++) {
-        MLock *m = new MLock(LOCK_AC_SYNC, mds->get_nodeid());
-        m->set_dn(dn->dir->ino(), dn->name);
-        mds->send_message_mds(m, *it, MDS_PORT_LOCKER);
-      }
+    if (dn->is_replicated()) {
+      send_lock_message(dn, LOCK_AC_SYNC);
     }
   }
   

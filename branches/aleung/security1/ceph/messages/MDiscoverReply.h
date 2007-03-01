@@ -71,26 +71,27 @@ class MDiscoverReply : public Message {
   string      error_dentry;   // dentry that was not found (to trigger waiters on asker)
 
   
-  vector<CDirDiscover*>   dirs;      // not inode-aligned if no_base_dir = true.
-  filepath                path;      // not inode-aligned if no_base_dentry = true
-  vector<bool>            path_xlock;  
-  vector<CInodeDiscover*> inodes;
+  vector<CDirDiscover*>    dirs;      // not inode-aligned if no_base_dir = true.
+  vector<CDentryDiscover*> dentries;  // not inode-aligned if no_base_dentry = true
+  vector<CInodeDiscover*>  inodes;
+
+  string path;
 
  public:
   // accessors
   inodeno_t get_base_ino() { return base_ino; }
   int       get_num_inodes() { return inodes.size(); }
-  int       get_num_dentries() { return path.depth(); }
+  int       get_num_dentries() { return dentries.size(); }
   int       get_num_dirs() { return dirs.size(); }
 
   int       get_depth() {   // return depth of deepest object (in dir/dentry/inode units)
     return max( inodes.size(),                                 // at least this many
-           max( no_base_dentry + path.depth() + flag_error_dn, // inode start + path + possible error
+           max( no_base_dentry + dentries.size() + flag_error_dn, // inode start + path + possible error
                 dirs.size() + no_base_dir ));                  // dn/inode + dirs
   }
 
   bool      has_base_dir() { return !no_base_dir && dirs.size(); }
-  bool      has_base_dentry() { return !no_base_dentry && path.depth(); }
+  bool      has_base_dentry() { return !no_base_dentry && dentries.size(); }
   bool has_root() {
     if (base_ino == 0) {
       assert(no_base_dir && no_base_dentry);
@@ -98,8 +99,8 @@ class MDiscoverReply : public Message {
     }
     return false;
   }
-  const string& get_path() { return path.get_path(); }
-  bool get_path_xlock(int i) { return path_xlock[i]; }
+
+  const string& get_path() { return path; }
 
   //  bool is_flag_forward() { return flag_forward; }
   bool is_flag_error_dn() { return flag_error_dn; }
@@ -108,8 +109,7 @@ class MDiscoverReply : public Message {
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
   CDirDiscover& get_dir(int n) { return *(dirs[n - no_base_dir]); }
-  const string& get_dentry(int n) { return path[n - no_base_dentry]; }
-  bool get_dentry_xlock(int n) { return path_xlock[n - no_base_dentry]; }
+  CDentryDiscover& get_dentry(int n) { return *(dentries[n - no_base_dentry]); }
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
   inodeno_t get_ino(int n) { return inodes[n]->get_ino(); }
 
@@ -136,20 +136,19 @@ class MDiscoverReply : public Message {
   
   // builders
   bool is_empty() {
-    return dirs.empty() && path.depth() == 0 && 
-      inodes.empty() && 
+    return dirs.empty() && dentries.empty() && inodes.empty() && 
       !flag_error_dn &&
       !flag_error_dir;
   }
-  void set_path(const filepath& dp) { path = dp; }
-  void add_dentry(const string& dn, bool xlock) { 
-    if (path.depth() == 0 && dirs.empty()) no_base_dir = true;
-    path.add_dentry(dn);
-    path_xlock.push_back(xlock);
+  void add_dentry(CDentryDiscover* ddis) {
+    if (dentries.empty() && dirs.empty()) no_base_dir = true;
+    dentries.push_back(ddis);
+    if (path.length()) path += "/";
+    path += ddis->get_dname();
   }
-
+  
   void add_inode(CInodeDiscover* din) {
-    if (inodes.empty() && path.depth() == 0) no_base_dir = no_base_dentry = true; 
+    if (inodes.empty() && dentries.empty()) no_base_dir = no_base_dentry = true; 
     inodes.push_back( din );
   }
 
@@ -204,18 +203,12 @@ class MDiscoverReply : public Message {
     }
     //dout(12) << n << " inodes out" << endl;
 
-    // filepath
-    path._decode(payload, off);
-    //dout(12) << path.depth() << " dentries out" << endl;
-
-    // path_xlock
+    // dentries
     payload.copy(off, sizeof(int), (char*)&n);
     off += sizeof(int);
     for (int i=0; i<n; i++) {
-      bool b;
-      payload.copy(off, sizeof(bool), (char*)&b);
-      off += sizeof(bool);
-      path_xlock.push_back(b);
+      dentries.push_back( new CDentryDiscover() );
+      dentries[i]->_decode(payload, off);
     }
   }
   void encode_payload() {
@@ -246,19 +239,14 @@ class MDiscoverReply : public Message {
        (*it)->_encode( payload );
     //dout(12) << n << " inodes in" << endl;
 
-    // path
-    path._encode( payload );
-    //dout(12) << path.depth() << " dentries in" << endl;
-
-    // path_xlock
-    n = path_xlock.size();
+    // dentries
+    n = dentries.size();
     payload.append((char*)&n, sizeof(int));
-    for (vector<bool>::iterator it = path_xlock.begin();
-         it != path_xlock.end();
-         it++) {
-      bool b = *it;
-      payload.append((char*)&b, sizeof(bool));
-    }
+    for (vector<CDentryDiscover*>::iterator it = dentries.begin();
+         it != dentries.end();
+         it++) 
+       (*it)->_encode( payload );
+    //dout(12) << n << " dentries in" << endl;
   }
 
 };

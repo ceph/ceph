@@ -17,7 +17,7 @@
 
 #include "osd/OSDMap.h"
 
-#include "ebofs/Ebofs.h"
+#include "MonitorStore.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
@@ -25,6 +25,8 @@
 #include "messages/MPing.h"
 #include "messages/MPingAck.h"
 #include "messages/MGenericMessage.h"
+
+#include "messages/MMonPaxos.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -39,20 +41,51 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) cerr << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
 
+void Monitor::set_new_private_key(string& pk)
+{
+  dout(10) << "set_new_private_key" << endl;
+
+  // FIXME.
+  assert(0);
+}
 
 void Monitor::init()
 {
+  lock.Lock();
+  
   dout(1) << "init" << endl;
   
   // store
   char s[80];
-  sprintf(s, "dev/mon%d", whoami);
-  store = new Ebofs(s);
+  sprintf(s, "mondata/mon%d", whoami);
+  store = new MonitorStore(s);
 
-  if (g_conf.mkfs)
+  if (g_conf.mkfs) {
     store->mkfs();
-  int r = store->mount();
-  assert(r >= 0);
+
+    // i should have already been provided a key via set_new_private_key().
+    // save it.
+    // FIXME.
+    bufferlist bl;
+    //bl.append(myPrivKey.c_str(), myPrivKey.length());
+    store->put_bl_ss(bl, "private_key", 0);
+    assert(0);
+  }
+  else {
+    store->mount();
+
+    // load private key
+    // FIXME.
+    bufferlist bl;
+    store->get_bl_ss(bl, "private_key", 0);
+    //myPrivKey = bl.c_str();
+
+    // der?
+    myPrivKey = esignPrivKey("crypto/esig1536.dat");
+    myPubKey = esignPubKey(myPrivKey);
+
+    assert(0);
+  }
 
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
@@ -64,18 +97,29 @@ void Monitor::init()
   
   // start ticker
   reset_tick();
+
+  // call election?
+  if (monmap->num_mon > 1) {
+    assert(monmap->num_mon != 2); 
+    call_election();
+  } else {
+    // we're standalone.
+    set<int> q;
+    q.insert(whoami);
+    win_election(q);
+  }
+
+  lock.Unlock();
 }
 
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << endl;
 
+  // cancel all events
   cancel_tick();
-
-  if (store) {
-    store->umount();
-    delete store;
-  }
+  timer.cancel_all();
+  timer.join();
   
   // stop osds.
   for (set<int>::iterator it = osdmon->osdmap.get_osds().begin();
@@ -84,15 +128,20 @@ void Monitor::shutdown()
     if (osdmon->osdmap.is_down(*it)) continue;
     dout(10) << "sending shutdown to osd" << *it << endl;
     messenger->send_message(new MGenericMessage(MSG_SHUTDOWN),
-			    MSG_ADDR_OSD(*it), osdmon->osdmap.get_inst(*it));
+			    osdmon->osdmap.get_inst(*it));
   }
+  osdmon->mark_all_down();
   
   // monitors too.
   for (int i=0; i<monmap->num_mon; i++)
     if (i != whoami)
       messenger->send_message(new MGenericMessage(MSG_SHUTDOWN), 
-			      MSG_ADDR_MON(i), monmap->get_inst(i));
+			      monmap->get_inst(i));
 
+  // unmount my local storage
+  if (store) 
+    delete store;
+  
   // clean up
   if (monmap) delete monmap;
   if (osdmon) delete osdmon;
@@ -107,14 +156,38 @@ void Monitor::shutdown()
 
 void Monitor::call_election()
 {
+  if (monmap->num_mon == 1) return;
+
   dout(10) << "call_election" << endl;
   state = STATE_STARTING;
+
+  elector.start();
 
   osdmon->election_starting();
   //mdsmon->election_starting();
 }
 
+void Monitor::win_election(set<int>& active) 
+{
+  state = STATE_LEADER;
+  leader = whoami;
+  quorum = active;
+  dout(10) << "win_election, quorum is " << quorum << endl;
 
+  // init
+  osdmon->election_finished();
+  mdsmon->election_finished();
+
+  // init paxos
+  test_paxos.leader_start();
+} 
+
+void Monitor::lose_election(int l) 
+{
+  state = STATE_PEON;
+  leader = l;
+  dout(10) << "lose_election, leader is mon" << leader << endl;
+}
 
 
 
@@ -130,14 +203,8 @@ void Monitor::dispatch(Message *m)
       break;
 
     case MSG_SHUTDOWN:
-      if (m->get_source().is_mds()) {
-	mdsmon->dispatch(m);
-	if (mdsmon->mdsmap.get_num_mds() == 0) 
-	  shutdown();
-      }
-      else if (m->get_source().is_osd()) {
-	osdmon->dispatch(m);
-      }
+      assert(m->get_source().is_osd());
+      osdmon->dispatch(m);
       break;
 
 
@@ -152,9 +219,15 @@ void Monitor::dispatch(Message *m)
 
       
       // MDSs
-    case MSG_MDS_BOOT:
+    case MSG_MDS_BEACON:
     case MSG_MDS_GETMAP:
       mdsmon->dispatch(m);
+
+      // hackish: did all mds's shut down?
+      if (g_conf.mon_stop_with_last_mds &&
+	  mdsmon->mdsmap.get_num_up_or_failed_mds() == 0) 
+	shutdown();
+
       break;
 
       // clients
@@ -164,11 +237,25 @@ void Monitor::dispatch(Message *m)
       break;
 
 
+      // paxos
+    case MSG_MON_PAXOS:
+      // send it to the right paxos instance
+      switch (((MMonPaxos*)m)->machine_id) {
+      case PAXOS_TEST:
+	test_paxos.dispatch(m);
+	break;
+      case PAXOS_OSDMAP:
+	//...
+	
+      default:
+	assert(0);
+      }
+      break;
+
       // elector messages
+    case MSG_MON_ELECTION_PROPOSE:
     case MSG_MON_ELECTION_ACK:
-    case MSG_MON_ELECTION_STATUS:
-    case MSG_MON_ELECTION_COLLECT:
-    case MSG_MON_ELECTION_REFRESH:
+    case MSG_MON_ELECTION_VICTORY:
       elector.dispatch(m);
       break;
 
@@ -200,65 +287,42 @@ void Monitor::handle_ping_ack(MPingAck *m)
 
 
 
-/************ TIMER ***************/
+/************ TICK ***************/
 
 class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
   C_Mon_Tick(Monitor *m) : mon(m) {}
   void finish(int r) {
-    mon->tick(this);
+    mon->tick();
   }
 };
 
-
 void Monitor::cancel_tick()
 {
-  if (!tick_timer) return;
-
-  if (g_timer.cancel_event(tick_timer)) {
-    dout(10) << "cancel_tick canceled" << endl;
-  } else {
-    // already dispatched!
-    dout(10) << "cancel_tick timer dispatched, waiting to cancel" << endl;
-    tick_timer = (Context*)1;  // hackish.
-    while (tick_timer)
-      tick_timer_cond.Wait(lock);    
-  }
+  if (tick_timer) timer.cancel_event(tick_timer);
 }
 
 void Monitor::reset_tick()
 {
-  if (tick_timer) 
-    cancel_tick();
+  cancel_tick();
   tick_timer = new C_Mon_Tick(this);
-  g_timer.add_event_after(g_conf.mon_tick_interval, tick_timer);
+  timer.add_event_after(g_conf.mon_tick_interval, tick_timer);
 }
 
 
-void Monitor::tick(Context *timer)
+void Monitor::tick()
 {
-  lock.Lock();
-  {
-    if (tick_timer != timer) {
-      dout(10) << "tick - canceled" << endl;
-      tick_timer = 0;
-      tick_timer_cond.Signal();
-      lock.Unlock();
-      return;
-    }
+  tick_timer = 0;
 
-    tick_timer = 0;
-
-    // ok go.
-    dout(10) << "tick" << endl;
-
-    osdmon->tick();
-
-    // next tick!
-    reset_tick();
-  }
-  lock.Unlock();
+  // ok go.
+  dout(11) << "tick" << endl;
+  
+  osdmon->tick();
+  mdsmon->tick();
+  
+  // next tick!
+  reset_tick();
 }
 
 

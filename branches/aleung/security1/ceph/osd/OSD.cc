@@ -26,6 +26,10 @@
 
 #include "ebofs/Ebofs.h"
 
+#ifdef USE_OSBDB
+#include "osbdb/OSBDB.h"
+#endif // USE_OSBDB
+
 #include "Ager.h"
 
 
@@ -101,7 +105,7 @@ void OSD::force_remount()
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) 
+OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
 {
   whoami = id;
   messenger = m;
@@ -127,9 +131,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev)
   waiting_for_no_ops = false;
 
   if (g_conf.osd_remount_at) 
-    g_timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
+    timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
 
-                                           
 
   // init object store
   // try in this order:
@@ -163,8 +166,14 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev)
     store = new OBFSStore(whoami, NULL, dev_path);
   }
 #endif
+#ifdef USE_OSBDB
+  else if (g_conf.bdbstore) {
+    store = new OSBDB(dev_path);
+  }
+#endif // USE_OSBDB
   else {
-    store = new FakeStore(osd_base_path, whoami); 
+    sprintf(dev_path, "osddata/osd%d", whoami);
+    store = new FakeStore(dev_path, whoami);
   }
 
 }
@@ -273,13 +282,11 @@ int OSD::init()
     
     // announce to monitor i exist and have booted.
     int mon = monmap->pick_mon();
-    //messenger->send_message(new MOSDBoot(superblock), MSG_ADDR_MON(mon), monmap->get_inst(mon));
     // new boot message w/ public key
-    messenger->send_message(new MOSDBoot(superblock, key_str), MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(new MOSDBoot(superblock, key_str), monmap->get_inst(mon));
     
     // start the heart
-    next_heartbeat = new C_Heartbeat(this);
-    g_timer.add_event_after(g_conf.osd_heartbeat_interval, next_heartbeat);
+    timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
   }
   osd_lock.Unlock();
 
@@ -290,11 +297,13 @@ int OSD::init()
 
 int OSD::shutdown()
 {
-  dout(1) << "shutdown, timer has " << g_timer.num_event << endl;
-
-  if (next_heartbeat) g_timer.cancel_event(next_heartbeat);
+  dout(1) << "shutdown" << endl;
 
   state = STATE_STOPPING;
+
+  // cancel timers
+  timer.cancel_all();
+  timer.join();
 
   // finish ops
   wait_for_no_ops();
@@ -435,7 +444,7 @@ void OSD::_remove_pg(pg_t pgid)
          p++)
       t.remove(*p);
     t.remove_collection(pgid);
-    t.remove(object_t(1,pgid));  // log too
+    t.remove(pgid.to_object());  // log too
   }
   store->apply_transaction(t);
   
@@ -485,8 +494,6 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 
 void OSD::heartbeat()
 {
-  osd_lock.Lock();
-
   utime_t now = g_clock.now();
   utime_t since = now;
   since.sec_ref() -= g_conf.osd_heartbeat_interval;
@@ -523,9 +530,9 @@ void OSD::heartbeat()
   for (set<int>::iterator i = pingset.begin();
        i != pingset.end();
        i++) {
-    _share_map_outgoing( MSG_ADDR_OSD(*i), osdmap->get_inst(*i) );
+    _share_map_outgoing( osdmap->get_inst(*i) );
     messenger->send_message(new MOSDPing(osdmap->get_epoch(), avg_qlen), 
-                            MSG_ADDR_OSD(*i), osdmap->get_inst(*i));
+                            osdmap->get_inst(*i));
   }
 
   if (logger) logger->set("pingset", pingset.size());
@@ -536,7 +543,7 @@ void OSD::heartbeat()
     if ((rand() % g_conf.fake_osdmap_updates) == 0) {
       //if ((rand() % (g_conf.num_osd / g_conf.fake_osdmap_updates)) == whoami / g_conf.fake_osdmap_updates) {
       messenger->send_message(new MOSDIn(osdmap->get_epoch()),
-                              MSG_ADDR_MON(mon), monmap->get_inst(mon));
+                              monmap->get_inst(mon));
     }
     /*
       if (osdmap->is_out(whoami)) {
@@ -552,11 +559,8 @@ void OSD::heartbeat()
   }
 
   // schedule next!  randomly.
-  next_heartbeat = new C_Heartbeat(this);
   float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
-  g_timer.add_event_after(wait, next_heartbeat);
-
-  osd_lock.Unlock();  
+  timer.add_event_after(wait, new C_Heartbeat(this));
 }
 
 
@@ -564,30 +568,30 @@ void OSD::heartbeat()
 // --------------------------------------
 // dispatch
 
-bool OSD::_share_map_incoming(msg_addr_t who, const entity_inst_t& inst, epoch_t epoch)
+bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
 {
   bool shared = false;
 
   // does client have old map?
-  if (who.is_client()) {
+  if (inst.name.is_client()) {
     if (epoch < osdmap->get_epoch()) {
-      dout(10) << who << " has old map " << epoch << " < " << osdmap->get_epoch() << endl;
-      send_incremental_map(epoch, who, inst, true);
+      dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << endl;
+      send_incremental_map(epoch, inst, true);
       shared = true;
     }
   }
 
   // does peer have old map?
-  if (who.is_osd()) {
+  if (inst.name.is_osd()) {
     // remember
-    if (peer_map_epoch[who] < epoch)
-      peer_map_epoch[who] = epoch;
+    if (peer_map_epoch[inst.name] < epoch)
+      peer_map_epoch[inst.name] = epoch;
     
     // older?
-    if (peer_map_epoch[who] < osdmap->get_epoch()) {
-      dout(10) << who << " has old map " << epoch << " < " << osdmap->get_epoch() << endl;
-      send_incremental_map(epoch, who, inst, true);
-      peer_map_epoch[who] = osdmap->get_epoch();  // so we don't send it again.
+    if (peer_map_epoch[inst.name] < osdmap->get_epoch()) {
+      dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << endl;
+      send_incremental_map(epoch, inst, true);
+      peer_map_epoch[inst.name] = osdmap->get_epoch();  // so we don't send it again.
       shared = true;
     }
   }
@@ -596,17 +600,17 @@ bool OSD::_share_map_incoming(msg_addr_t who, const entity_inst_t& inst, epoch_t
 }
 
 
-void OSD::_share_map_outgoing(msg_addr_t dest, const entity_inst_t& inst) 
+void OSD::_share_map_outgoing(const entity_inst_t& inst) 
 {
-  assert(dest.is_osd());
+  assert(inst.name.is_osd());
 
-  if (dest.is_osd()) {
+  if (inst.name.is_osd()) {
     // send map?
-    if (peer_map_epoch.count(dest)) {
-      epoch_t pe = peer_map_epoch[dest];
+    if (peer_map_epoch.count(inst.name)) {
+      epoch_t pe = peer_map_epoch[inst.name];
       if (pe < osdmap->get_epoch()) {
-        send_incremental_map(pe, dest, inst, true);
-        peer_map_epoch[dest] = osdmap->get_epoch();
+        send_incremental_map(pe, inst, true);
+        peer_map_epoch[inst.name] = osdmap->get_epoch();
       }
     } else {
       // no idea about peer's epoch.
@@ -732,9 +736,12 @@ void OSD::dispatch(Message *m)
 }
 
 
-void OSD::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst)
+void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
+  entity_name_t dest = inst.name;
+
   if (g_conf.ms_die_on_failure) {
+    dout(0) << "ms_handle_failure " << inst << " on " << *m << endl;
     exit(0);
   }
 
@@ -744,8 +751,8 @@ void OSD::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& in
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", dropping and reporting to mon" << mon 
             << endl;
-    messenger->send_message(new MOSDFailure(dest, inst, osdmap->get_epoch()),
-                            MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(new MOSDFailure(inst, osdmap->get_epoch()),
+                            monmap->get_inst(mon));
     delete m;
   } else if (dest.is_mon()) {
     // resend to a different monitor.
@@ -753,7 +760,7 @@ void OSD::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& in
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", resending to mon" << mon 
             << endl;
-    messenger->send_message(m, MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(m, monmap->get_inst(mon));
   }
   else {
     // client?
@@ -763,24 +770,13 @@ void OSD::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& in
   }
 }
 
-bool OSD::ms_lookup(msg_addr_t dest, entity_inst_t& inst)
-{
-  if (dest.is_osd()) {
-    assert(osdmap);
-    return osdmap->get_inst(dest.num(), inst);
-  } 
-
-  assert(0);
-  return false;
-}
-
 
 
 
 void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "osdping from " << m->get_source() << endl;
-  _share_map_incoming(m->get_source(), m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
+  _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
   
   int from = m->get_source().num();
   peer_qlen[from] = m->avg_qlen;
@@ -804,7 +800,7 @@ void OSD::wait_for_new_map(Message *m)
   if (waiting_for_osdmap.empty()) {
     int mon = monmap->pick_mon();
     messenger->send_message(new MOSDGetMap(osdmap->get_epoch()),
-                            MSG_ADDR_MON(mon), monmap->get_inst(mon));
+                            monmap->get_inst(mon));
   }
   
   waiting_for_osdmap.push_back(m);
@@ -934,7 +930,7 @@ void OSD::handle_osd_map(MOSDMap *m)
            i++) {
         int osd = i->first;
         if (osd == whoami) continue;
-        messenger->mark_down(MSG_ADDR_OSD(osd), i->second);
+        messenger->mark_down(i->second.addr);
         peer_map_epoch.erase(MSG_ADDR_OSD(osd));
       
         // kick any replica ops
@@ -966,7 +962,6 @@ void OSD::handle_osd_map(MOSDMap *m)
            i != inc.new_up.end();
            i++) {
         if (i->first == whoami) continue;
-        messenger->mark_up(MSG_ADDR_OSD(i->first), i->second);
         peer_map_epoch.erase(MSG_ADDR_OSD(i->first));
       }
     }
@@ -985,7 +980,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << endl;
       int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(cur), MSG_ADDR_MON(mon), monmap->get_inst(mon));
+      messenger->send_message(new MOSDGetMap(cur), monmap->get_inst(mon));
       break;
     }
 
@@ -1041,6 +1036,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << endl;
     logger->set_start( osdmap->get_ctime() );
+
+    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
 
     // create PGs
     for (int nrep = 1; 
@@ -1281,10 +1278,10 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 }
 
 
-void OSD::send_incremental_map(epoch_t since, msg_addr_t dest, const entity_inst_t& inst, bool full)
+void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full)
 {
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
-           << " to " << dest << endl;
+           << " to " << inst << endl;
   
   MOSDMap *m = new MOSDMap;
   
@@ -1303,7 +1300,7 @@ void OSD::send_incremental_map(epoch_t since, msg_addr_t dest, const entity_inst
     }
   }
 
-  messenger->send_message(m, dest, inst);
+  messenger->send_message(m, inst);
 }
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
@@ -1550,8 +1547,8 @@ void OSD::do_notifies(map< int, list<PG::Info> >& notify_list)
     }
     dout(7) << "do_notify osd" << it->first << " on " << it->second.size() << " PGs" << endl;
     MOSDPGNotify *m = new MOSDPGNotify(osdmap->get_epoch(), it->second);
-    _share_map_outgoing(MSG_ADDR_OSD(it->first), osdmap->get_inst(it->first));
-    messenger->send_message(m, MSG_ADDR_OSD(it->first), osdmap->get_inst(it->first));
+    _share_map_outgoing(osdmap->get_inst(it->first));
+    messenger->send_message(m, osdmap->get_inst(it->first));
   }
 }
 
@@ -1570,8 +1567,8 @@ void OSD::do_queries(map< int, map<pg_t,PG::Query> >& query_map)
 
     MOSDPGQuery *m = new MOSDPGQuery(osdmap->get_epoch(),
                                      pit->second);
-    _share_map_outgoing(MSG_ADDR_OSD(who), osdmap->get_inst(who));
-    messenger->send_message(m, MSG_ADDR_OSD(who), osdmap->get_inst(who));
+    _share_map_outgoing(osdmap->get_inst(who));
+    messenger->send_message(m, osdmap->get_inst(who));
   }
 }
 
@@ -1758,7 +1755,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     assert(pg->missing.num_lost() == 0);
 
     // ok activate!
-     pg->activate(t);
+    pg->activate(t);
   }
 
   unsigned tr = store->apply_transaction(t);
@@ -1878,8 +1875,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << *pg << " sending " << m->log << " " << m->missing << endl;
       //m->log.print(cout);
 
-      _share_map_outgoing(MSG_ADDR_OSD(from), osdmap->get_inst(from));
-      messenger->send_message(m, MSG_ADDR_OSD(from), osdmap->get_inst(from));
+      _share_map_outgoing(osdmap->get_inst(from));
+      messenger->send_message(m, osdmap->get_inst(from));
     }    
 
     _unlock_pg(pgid);
@@ -1945,12 +1942,12 @@ void OSD::pull(PG *pg, object_t oid)
 
   // send op
   tid_t tid = ++last_tid;
-  MOSDOp *op = new MOSDOp(tid, messenger->get_myaddr(),
+  MOSDOp *op = new MOSDOp(messenger->get_myinst(), 0, tid,
                           oid, pg->get_pgid(),
                           osdmap->get_epoch(),
                           OSD_OP_PULL);
   op->set_version(v);
-  messenger->send_message(op, MSG_ADDR_OSD(osd), osdmap->get_inst(osd));
+  messenger->send_message(op, osdmap->get_inst(osd));
   
   // take note
   assert(pg->objects_pulling.count(oid) == 0);
@@ -1987,7 +1984,7 @@ void OSD::push(PG *pg, object_t oid, int dest)
   logger->inc("r_pushb", bl.length());
   
   // send
-  MOSDOp *op = new MOSDOp(++last_tid, MSG_ADDR_OSD(whoami),
+  MOSDOp *op = new MOSDOp(messenger->get_myinst(), 0, ++last_tid,
                           oid, pg->info.pgid, osdmap->get_epoch(), 
                           OSD_OP_PUSH); 
   op->set_offset(0);
@@ -1996,7 +1993,7 @@ void OSD::push(PG *pg, object_t oid, int dest)
   op->set_version(v);
   op->set_attrset(attrset);
   
-  messenger->send_message(op, MSG_ADDR_OSD(dest), osdmap->get_inst(dest));
+  messenger->send_message(op, osdmap->get_inst(dest));
 }
 
 
@@ -2172,7 +2169,7 @@ void OSD::op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t last_complet
            << endl;
   MOSDOpReply *commit = new MOSDOpReply(op, 0, osdmap->get_epoch(), true);
   commit->set_pg_complete_thru(last_complete);
-  messenger->send_message(commit, MSG_ADDR_OSD(ackerosd), osdmap->get_inst(ackerosd));
+  messenger->send_message(commit, osdmap->get_inst(ackerosd));
   delete op;
 }
 
@@ -2302,7 +2299,7 @@ void OSD::op_rep_modify(MOSDOp *op, PG *pg)
     // send ack to acker?
     if (g_conf.osd_rep != OSD_REP_CHAIN) {
       MOSDOpReply *ack = new MOSDOpReply(op, 0, osdmap->get_epoch(), false);
-      messenger->send_message(ack, MSG_ADDR_OSD(ackerosd), osdmap->get_inst(ackerosd));
+      messenger->send_message(ack, osdmap->get_inst(ackerosd));
     }
 
     // ack myself.
@@ -2332,7 +2329,7 @@ void OSD::handle_op(MOSDOp *op)
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source(), op->get_source_inst(), op->get_map_epoch());
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
 
   // what kind of op?
   bool read = op->get_op() < 10;   // read, stat.  but not pull.
@@ -2441,7 +2438,7 @@ void OSD::handle_op(MOSDOp *op)
 	if (pg->acting.size() > 1) {
 	  int peer = pg->acting[1];
 	  dout(-10) << "fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << endl;
-	  messenger->send_message(op, MSG_ADDR_OSD(peer), osdmap->get_inst(peer));
+	  messenger->send_message(op, osdmap->get_inst(peer));
 	  return;
 	}
       }
@@ -2464,7 +2461,7 @@ void OSD::handle_op(MOSDOp *op)
 			<< ", fwd to peer w/ qlen " << peer_qlen[peer]
 			<< " osd" << peer
 			<< endl;
-	      messenger->send_message(op, MSG_ADDR_OSD(peer), osdmap->get_inst(peer));
+	      messenger->send_message(op, osdmap->get_inst(peer));
 	      return;
 	    }
 	  }
@@ -2539,7 +2536,7 @@ void OSD::handle_op_reply(MOSDOpReply *op)
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source(), op->get_source_inst(), op->get_map_epoch());
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
 
   if (!pg) {
     // hmm.
@@ -2736,8 +2733,8 @@ bool OSD::block_if_wrlocked(MOSDOp* op)
 {
   object_t oid = op->get_oid();
 
-  msg_addr_t source;
-  int len = store->getattr(oid, "wrlock", &source, sizeof(msg_addr_t));
+  entity_name_t source;
+  int len = store->getattr(oid, "wrlock", &source, sizeof(entity_name_t));
   //cout << "getattr returns " << len << " on " << oid << endl;
 
   if (len == sizeof(source) &&
@@ -2904,7 +2901,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
   if (r >= 0) logger->inc("rdb", r);
   
   // send it
-  messenger->send_message(reply, op->get_client(), op->get_client_inst());
+  messenger->send_message(reply, op->get_client_inst());
   
   delete op;
 }
@@ -2940,7 +2937,7 @@ void OSD::op_stat(MOSDOp *op)//, PG *pg)
   
   MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap->get_epoch(), true);
   reply->set_object_size(st.st_size);
-  messenger->send_message(reply, op->get_client(), op->get_client_inst());
+  messenger->send_message(reply, op->get_client_inst());
   
   logger->inc("stat");
 
@@ -2985,7 +2982,7 @@ void OSD::put_repop_gather(PG *pg, PG::RepOpGather *repop)
     // send commit.
     MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap->get_epoch(), true);
     dout(10) << "put_repop  sending commit on " << *repop << " " << reply << endl;
-    messenger->send_message(reply, repop->op->get_client(), repop->op->get_client_inst());
+    messenger->send_message(reply, repop->op->get_client_inst());
     repop->sent_commit = true;
   }
 
@@ -2998,7 +2995,7 @@ void OSD::put_repop_gather(PG *pg, PG::RepOpGather *repop)
     // send ack
     MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osdmap->get_epoch(), false);
     dout(10) << "put_repop  sending ack on " << *repop << " " << reply << endl;
-    messenger->send_message(reply, repop->op->get_client(), repop->op->get_client_inst());
+    messenger->send_message(reply, repop->op->get_client_inst());
     repop->sent_ack = true;
 
     utime_t now = g_clock.now();
@@ -3049,8 +3046,7 @@ void OSD::issue_repop(PG *pg, MOSDOp *op, int osd)
           << endl;
   
   // forward the write/update/whatever
-  MOSDOp *wr = new MOSDOp(op->get_tid(),
-                          op->get_client(),
+  MOSDOp *wr = new MOSDOp(op->get_client_inst(), op->get_client_inc(), op->get_reqid().tid,
                           oid,
                           pg->get_pgid(),
                           osdmap->get_epoch(),
@@ -3063,7 +3059,7 @@ void OSD::issue_repop(PG *pg, MOSDOp *op, int osd)
   wr->set_rep_tid(op->get_rep_tid());
   wr->set_pg_trim_to(pg->peers_complete_thru);
 
-  messenger->send_message(wr, MSG_ADDR_OSD(osd), osdmap->get_inst(osd));
+  messenger->send_message(wr, osdmap->get_inst(osd));
 }
 
 PG::RepOpGather *OSD::new_repop_gather(PG *pg, 
@@ -3204,9 +3200,8 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   }
 
   // dup op?
-  reqid_t reqid(op->get_client(), op->get_tid());
-  if (pg->log.logged_req(reqid)) {
-    dout(-3) << "op_modify " << opname << " dup op " << reqid
+  if (pg->log.logged_req(op->get_reqid())) {
+    dout(-3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << endl;
     op->set_op(OSD_OP_WRNOOP);
     opname = MOSDOp::get_opname(op->get_op());
@@ -3305,7 +3300,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   {
     for (unsigned i=1; i<pg->acting.size(); i++) {
       int osd = pg->acting[i];
-      _share_map_outgoing( MSG_ADDR_OSD(osd), osdmap->get_inst(osd) ); 
+      _share_map_outgoing( osdmap->get_inst(osd) ); 
     }
   }
   osd_lock.Unlock();
@@ -3388,8 +3383,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   if (crev && rev && rev > crev) {
     eversion_t cv = version;
     cv.version--;
-    PG::Log::Entry cloneentry(PG::Log::Entry::CLONE, oid, cv,
-			    op->get_client(), op->get_tid());
+    PG::Log::Entry cloneentry(PG::Log::Entry::CLONE, oid, cv, op->get_reqid());
     pg->log.add(cloneentry);
 
     dout(10) << "prepare_log_transaction " << op->get_op()
@@ -3400,8 +3394,7 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   // actual op
   int opcode = PG::Log::Entry::MODIFY;
   if (op->get_op() == OSD_OP_DELETE) opcode = PG::Log::Entry::DELETE;
-  PG::Log::Entry logentry(opcode, oid, version,
-                          op->get_client(), op->get_tid());
+  PG::Log::Entry logentry(opcode, oid, version, op->get_reqid());
 
   dout(10) << "prepare_log_transaction " << op->get_op()
            << " " << logentry
@@ -3467,7 +3460,7 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
   case OSD_OP_WRLOCK:
     { // lock object
       //r = store->setattr(oid, "wrlock", &op->get_asker(), sizeof(msg_addr_t), oncommit);
-      t.setattr(oid, "wrlock", &op->get_client(), sizeof(msg_addr_t));
+      t.setattr(oid, "wrlock", &op->get_client(), sizeof(entity_name_t));
     }
     break;  
     

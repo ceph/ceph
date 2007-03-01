@@ -747,6 +747,7 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
 
 // encoder/decode helpers
 
+// -- basic types --
 // string
 inline void _encode(const std::string& s, bufferlist& bl) 
 {
@@ -796,18 +797,74 @@ inline void _decode(bufferlist& s, bufferlist& bl, int& off)
   off += len;
 }
 
+
 #include <set>
 #include <map>
 #include <vector>
 #include <string>
 
-// set<T>
-template<class T>
-inline void _encode(std::set<T>& s, bufferlist& bl)
+// set<string>
+inline void _encode(const std::set<std::string>& s, bufferlist& bl)
 {
   int n = s.size();
   bl.append((char*)&n, sizeof(n));
-  for (typename std::set<T>::iterator it = s.begin();
+  for (std::set<std::string>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(*it, bl);
+    n--;
+  }
+  assert(n==0);
+}
+inline void _decode(std::set<std::string>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    std::string v;
+    ::_decode(v, bl, off);
+    s.insert(v);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// list<bufferlist>
+inline void _encode(const std::list<bufferlist>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (std::list<bufferlist>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(*it, bl);
+    n--;
+  }
+  assert(n==0);
+}
+inline void _decode(std::list<bufferlist>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    bufferlist v;
+    s.push_back(v);
+    ::_decode(s.back(), bl, off);
+  }
+  //assert(s.size() == (unsigned)n);
+}
+
+
+// set<T>
+template<class T>
+inline void _encode(const std::set<T>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::set<T>::const_iterator it = s.begin();
        it != s.end();
        it++) {
     T v = *it;
@@ -1017,6 +1074,73 @@ inline void _decode(std::map<T,std::string>& s, bufferlist& bl, int& off)
   }
   assert(s.size() == (unsigned)n);
 }
+
+// map<string,U>
+template<class U>
+inline void _encode(const std::map<std::string, U>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::map<std::string, U>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    ::_encode(it->first, bl);
+    U v = it->second;
+    bl.append((char*)&v, sizeof(v));
+    n--;
+  }
+  assert(n==0);
+}
+template<class U>
+inline void _decode(std::map<std::string,U>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    std::string k;
+    U v;
+    ::_decode(k, bl, off);
+    bl.copy(off, sizeof(v), (char*)&v);
+    off += sizeof(v);
+    s[k] = v;
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// map<T,set<U>>
+template<class T, class U>
+inline void _encode(const std::map<T, std::set<U> >& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename std::map<T, std::set<U> >::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    T k = it->first;
+    bl.append((char*)&k, sizeof(k));
+    ::_encode(it->second, bl);
+    n--;
+  }
+  assert(n==0);
+}
+template<class T, class U>
+inline void _decode(std::map<T, std::set<U> >& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    T k;
+    bl.copy(off, sizeof(k), (char*)&k);
+    off += sizeof(k);
+    ::_decode(s[k], bl, off);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
 
 // map<T,U>
 template<class T, class U>

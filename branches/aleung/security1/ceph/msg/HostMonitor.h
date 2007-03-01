@@ -38,19 +38,19 @@ class HostMonitor {
   string whoami;
 
   // hosts i monitor
-  set<msg_addr_t>  hosts;
+  set<entity_name_t>  hosts;
 
   // who i tell when they fail
-  set<msg_addr_t>  notify;
+  set<entity_name_t>  notify;
   int              notify_port;
 
   // their status
-  map<msg_addr_t,monitor_rec_t>  status;
+  map<entity_name_t,monitor_rec_t>  status;
 
-  set<msg_addr_t>  inflight_pings;    // pings we sent that haven't replied yet
+  set<entity_name_t>  inflight_pings;    // pings we sent that haven't replied yet
 
-  set<msg_addr_t>  unacked_failures;  // failed hosts that haven't been acked yet.
-  set<msg_addr_t>  acked_failures;    // these failures have been acked.
+  set<entity_name_t>  unacked_failures;  // failed hosts that haven't been acked yet.
+  set<entity_name_t>  acked_failures;    // these failures have been acked.
 
   float heartbeat_interval;    // how often to do a heartbeat
   float max_ping_time;         // how long before it's a miss
@@ -69,11 +69,11 @@ class HostMonitor {
     this->whoami = whoami;
     notify_port = 0;
   }
-  set<msg_addr_t>& get_hosts() { return hosts; }
-  set<msg_addr_t>& get_notify() { return notify; }
+  set<entity_name_t>& get_hosts() { return hosts; }
+  set<entity_name_t>& get_notify() { return notify; }
   void set_notify_port(int p) { notify_port = p; }
 
-  void remove_host(msg_addr_t h) {
+  void remove_host(entity_name_t h) {
     hosts.erase(h);
     status.erase(h);
     unacked_failures.erase(h);
@@ -83,7 +83,7 @@ class HostMonitor {
   void init();
   void shutdown();
   
-  void host_is_alive(msg_addr_t who);
+  void host_is_alive(entity_name_t who);
 
   void proc_message(Message *m);
   void handle_ping_ack(class MPingAck *m);

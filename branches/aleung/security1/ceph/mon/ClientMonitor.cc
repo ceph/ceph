@@ -60,17 +60,19 @@ void ClientMonitor::handle_client_boot(MClientBoot *m)
   assert(m->get_source().is_client());
   int from = m->get_source().num();
   
-  // choose an MDS id
+  // choose a client id
   if (from < 0 || 
-      (client_map.count(m->get_source()) && client_map[m->get_source()] != m->get_source_inst())) {
+      (client_map.count(m->get_source()) && client_map[m->get_source()] != m->get_source_addr())) {
     from = ++num_clients;
     dout(10) << "client_boot assigned client" << from << endl;
   }
 
-  client_map[MSG_ADDR_CLIENT(from)] = m->get_source_inst();
+  client_map[MSG_ADDR_CLIENT(from)] = m->get_source_addr();
 
   // reply with latest mds map
-  mon->mdsmon->send_latest(MSG_ADDR_CLIENT(from), m->get_source_inst());
+  entity_inst_t to = m->get_source_inst();
+  to.name = MSG_ADDR_CLIENT(from);
+  mon->mdsmon->send_latest(to);
   delete m;
 }
 
@@ -107,7 +109,7 @@ void ClientMonitor::handle_client_auth_user(MClientAuthUser *m)
     userTicket = user_tickets[uid];
   // reply to auth_user
   messenger->send_message(new MClientAuthUserAck(userTicket),
-			  m->get_source(), m->get_source_inst());
+			  m->get_source_inst());
   
 }
 

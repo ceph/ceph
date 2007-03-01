@@ -76,6 +76,8 @@ int main(int argc, char **argv)
   
   MonMap monmap;
 
+  string new_private_key;
+
   if (whoami < 0) {
     // let's assume a standalone monitor
     cout << "starting standalone mon0" << endl;
@@ -86,8 +88,15 @@ int main(int argc, char **argv)
     cout << "bound to " << rank.get_listen_addr() << endl;
 
     // add single mon0
-    monmap.add_mon(rank.my_inst);
+    entity_inst_t inst;
+    inst.name = MSG_ADDR_MON(0);
+    inst.addr = rank.my_addr;
+    monmap.add_mon(inst);
     
+    // generate a key pair
+    cout << "generating a key pair" << endl;
+    monmap.generate_key_pair(new_private_key);
+
     // write monmap
     cout << "writing monmap to " << monmap_fn << endl;;
     int r = monmap.write(monmap_fn);
@@ -102,14 +111,17 @@ int main(int argc, char **argv)
 
     // bind to a specific port
     cout << "starting mon" << whoami << " at " << monmap.get_inst(whoami) << endl;
-    tcpaddr_t addr = monmap.get_inst(whoami).addr;
-    rank.set_listen_addr(addr);
+    g_my_addr = monmap.get_inst(whoami).addr;
     rank.start_rank();
   }
 
   // start monitor
   Messenger *m = rank.register_entity(MSG_ADDR_MON(whoami));
   Monitor *mon = new Monitor(whoami, m, &monmap);
+
+  if (new_private_key.length())
+    mon->set_new_private_key(new_private_key);
+
   mon->init();
 
   // wait

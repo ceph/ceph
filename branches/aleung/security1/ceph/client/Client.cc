@@ -22,9 +22,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#ifdef DARWIN
 #include <sys/statvfs.h>
-#endif // DARWIN
 
 
 #include <iostream>
@@ -60,7 +58,7 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_client) cout << "client" << whoami << "." << pthread_self() << " "
+#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) cout << g_clock.now() << " client" << whoami << "." << pthread_self() << " "
 
 #define  tout       if (g_conf.client_trace) cout << "trace: " 
 
@@ -101,7 +99,7 @@ public:
 Client::Client(Messenger *m, MonMap *mm)
 {
   // which client am i?
-  whoami = m->get_myaddr().num();
+  whoami = m->get_myname().num();
   monmap = mm;
 
   mounted = false;
@@ -464,7 +462,7 @@ Dentry *Client::lookup(filepath& path)
 
 MClientReply *Client::make_request(MClientRequest *req, 
                                    bool auth_best, 
-                                   int use_mds)  // this param is icky, debug weirdness!
+                                   int use_mds)  // this param is purely for debug hacking
 {
   // assign a unique tid
   req->set_tid(++last_tid);
@@ -504,7 +502,10 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   // choose an mds
   int mds = 0;
-  if (diri) {
+  if (!diri || g_conf.client_use_random_mds) {
+    // no root info, pick a random MDS
+    mds = rand() % mdsmap->get_num_mds();
+  } else {
     if (auth_best) {
       // pick the actual auth (as best we can)
       if (item) {
@@ -523,9 +524,6 @@ MClientReply *Client::make_request(MClientRequest *req,
       else 
         mds = diri->pick_replica(mdsmap);
     }
-  } else {
-    // no root info, pick a random MDS
-    mds = rand() % mdsmap->get_num_mds();
   }
   dout(20) << "mds is " << mds << endl;
 
@@ -584,7 +582,7 @@ MClientReply* Client::sendrecv(MClientRequest *req, int mds)
   tid_t tid = req->get_tid();
   mds_rpc_cond[tid] = &cond;
   
-  messenger->send_message(req, MSG_ADDR_MDS(mds), mdsmap->get_inst(mds), MDS_PORT_SERVER);
+  messenger->send_message(req, mdsmap->get_inst(mds), MDS_PORT_SERVER);
   
   // wait
   while (mds_rpc_reply.count(tid) == 0) {
@@ -684,7 +682,7 @@ Ticket *Client::get_user_ticket(uid_t uid, gid_t gid)
       dout(10) << "get_user_ticket requesting ticket for uid " << uid 
 	       << " from mon" << mon << endl;
       messenger->send_message(new MClientAuthUser(username, uid, gid, key),
-			      MSG_ADDR_MON(mon), monmap->get_inst(mon));
+			      monmap->get_inst(mon));
     } else {
       // don't request, someone else already did.  just wait!
       dout(10) << "get_user_ticket waiting for ticket for uid " << uid << endl;
@@ -790,15 +788,16 @@ void Client::handle_mds_map(MMDSMap* m)
   if (whoami < 0) {
     whoami = m->get_dest().num();
     dout(1) << "handle_mds_map i am now " << m->get_dest() << endl;
-    messenger->reset_myaddr(m->get_dest());
+    messenger->reset_myname(m->get_dest());
   }    
 
-  map<epoch_t, bufferlist>::reverse_iterator p = m->maps.rbegin();
-  
-  dout(1) << "handle_mds_map epoch " << p->first << endl;
-  mdsmap->decode(p->second);
+  dout(1) << "handle_mds_map epoch " << m->get_epoch() << endl;
+  mdsmap->decode(m->get_encoded());
   
   delete m;
+
+  // note our inc #
+  objecter->set_client_incarnation(0);  // fixme
 
   mount_cond.Signal();  // mount might be waiting for this.
 }
@@ -926,7 +925,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << ", which we don't want caps for, releasing." << endl;
     m->set_caps(0);
     m->set_wanted(0);
-    messenger->send_message(m, m->get_source(), m->get_source_inst(), m->get_source_port());
+    messenger->send_message(m, m->get_source_inst(), m->get_source_port());
     return;
   }
 
@@ -1033,7 +1032,7 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
     in->file_wr_size = 0;
   }
 
-  messenger->send_message(m, m->get_source(), m->get_source_inst(), m->get_source_port());
+  messenger->send_message(m, m->get_source_inst(), m->get_source_port());
 }
 
 
@@ -1043,6 +1042,7 @@ void Client::release_caps(Inode *in,
   dout(5) << "releasing caps on ino " << in->inode.ino << dec
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
+	  << " want " << cap_string(in->file_caps_wanted())
           << endl;
   
   for (map<int,InodeCap>::iterator it = in->caps.begin();
@@ -1057,7 +1057,7 @@ void Client::release_caps(Inode *in,
                                                it->second.seq,
                                                it->second.caps,
                                                in->file_caps_wanted()); 
-      messenger->send_message(m, MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
+      messenger->send_message(m, mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
     }
   }
   
@@ -1082,7 +1082,7 @@ void Client::update_caps_wanted(Inode *in)
                                              it->second.caps,
                                              in->file_caps_wanted());
     messenger->send_message(m,
-                            MSG_ADDR_MDS(it->first), mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
+                            mdsmap->get_inst(it->first), MDS_PORT_LOCKER);
   }
 }
 
@@ -1104,7 +1104,7 @@ int Client::mount()
     delete mdsmap;
   int mon = monmap->pick_mon();
   messenger->send_message(new MClientBoot(),
-			  MSG_ADDR_MON(mon), monmap->get_inst(mon));
+			  monmap->get_inst(mon));
   
   while (!mdsmap)
     mount_cond.Wait(client_lock);
@@ -1114,7 +1114,7 @@ int Client::mount()
 
   int who = 0; // mdsmap->get_root();  // mount at root, for now
   messenger->send_message(m, 
-			  MSG_ADDR_MDS(who), mdsmap->get_inst(who), 
+			  mdsmap->get_inst(who), 
 			  MDS_PORT_SERVER);
   
   while (!mounted)
@@ -1210,7 +1210,7 @@ int Client::unmount()
   
   // send unmount!
   Message *req = new MGenericMessage(MSG_CLIENT_UNMOUNT);
-  messenger->send_message(req, MSG_ADDR_MDS(0), mdsmap->get_inst(0), MDS_PORT_SERVER);
+  messenger->send_message(req, mdsmap->get_inst(0), MDS_PORT_SERVER);
 
   while (mounted)
     mount_cond.Wait(client_lock);
@@ -2495,13 +2495,15 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 void Client::close_release(Inode *in)
 {
   dout(10) << "close_release on " << in->ino() << endl;
+  dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << endl;
 
   if (!in->num_open_rd) 
     in->fc.release_clean();
 
   int retain = 0;
-  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
-  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
+  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_WREXTEND;
+  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_RD | CAP_FILE_RDCACHE;
 
   release_caps(in, retain);              // release caps now.
 }
@@ -2992,7 +2994,6 @@ int Client::chdir(const char *path, __int64_t uid, __int64_t gid)
   return 0;
 }
 
-#ifdef DARWIN
 int Client::statfs(const char *path, struct statvfs *stbuf,
 		   __int64_t uid, __int64_t gid)
 {
@@ -3010,14 +3011,6 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 
   return 0;
 }
-#else
-int Client::statfs(const char *path, struct statfs *stbuf,
-		   __int64_t uid, __int64_t gid) 
-{
-  assert(0);  // implement me
-  return 0;
-}
-#endif
 
 
 int Client::lazyio_propogate(int fd, off_t offset, size_t count,
@@ -3122,15 +3115,17 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
 }
 
 
-void Client::ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst)
+void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
+  entity_name_t dest = inst.name;
+
   if (dest.is_mon()) {
     // resend to a different monitor.
     int mon = monmap->pick_mon(true);
     dout(0) << "ms_handle_failure " << dest << " inst " << inst 
             << ", resending to mon" << mon 
             << endl;
-    messenger->send_message(m, MSG_ADDR_MON(mon), monmap->get_inst(mon));
+    messenger->send_message(m, monmap->get_inst(mon));
   }
   else if (dest.is_osd()) {
     objecter->ms_handle_failure(m, dest, inst);

@@ -19,13 +19,13 @@
 #include "msg/TCPMessenger.h"
 
 class MNSRegister : public Message {
-  msg_addr_t addr;
+  entity_name_t addr;
   int rank;
   long tid;
 
  public:
   MNSRegister() {}
-  MNSRegister(msg_addr_t a, int r, int ti) : 
+  MNSRegister(entity_name_t a, int r, int ti) : 
     Message(MSG_NS_REGISTER) { 
     addr = a;
     rank = r;
@@ -34,7 +34,7 @@ class MNSRegister : public Message {
   
   char *get_type_name() { return "NSReg"; }
 
-  msg_addr_t get_entity() { return addr; }
+  entity_name_t get_entity() { return addr; }
   int get_rank() { return rank; }
   long get_tid() { return tid; }
 

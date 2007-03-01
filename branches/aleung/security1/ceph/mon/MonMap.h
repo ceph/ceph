@@ -33,18 +33,17 @@ class MonMap {
   esignPub pub_key;
   bool keyConvert;
 
-  // no key supplied, so create one
-  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {
+  MonMap(int s=0) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1) {}
+  
+  void generate_key_pair(string& private_key) {
     esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
     pub_key = esignPubKey(tempKey);
     pub_str_key = pubToString(pub_key);
     // now throw away the private key
     keyConvert = false;
+    assert(0); // FIXME
   }
-  // the map constructor when I have a public key
-  MonMap(int s,string key) : epoch(0), num_mon(s), mon_inst(s), last_mon(-1),
-			     pub_str_key(key), keyConvert(false) {
-  }
+
 
   void add_mon(entity_inst_t inst) {
     mon_inst.push_back(inst);
@@ -60,7 +59,7 @@ class MonMap {
     return last_mon;    
   }
 
-  const entity_inst_t get_inst(int m) {
+  const entity_inst_t &get_inst(int m) {
     assert(m < num_mon);
     return mon_inst[m];
   }

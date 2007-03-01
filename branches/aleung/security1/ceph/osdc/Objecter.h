@@ -39,6 +39,7 @@ class Objecter {
   
  private:
   tid_t last_tid;
+  int client_inc;
   int num_unacked;
   int num_uncommitted;
 
@@ -154,7 +155,7 @@ class Objecter {
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om) : 
     messenger(m), monmap(mm), osdmap(om),
-    last_tid(0),
+    last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0)
     {}
   ~Objecter() {
@@ -183,6 +184,11 @@ class Objecter {
     return !(op_read.empty() && op_modify.empty());
   }
 
+  int get_client_incarnation() { return client_inc; }
+  void set_client_incarnation(int inc) {
+	client_inc = inc;
+  }
+
   // med level
   tid_t readx(OSDRead *read, Context *onfinish);
   tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
@@ -204,7 +210,7 @@ class Objecter {
   tid_t lock(int op, object_t oid, Context *onack, Context *oncommit);
 
 
-  void ms_handle_failure(Message *m, msg_addr_t dest, const entity_inst_t& inst);
+  void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);
 
 };
 

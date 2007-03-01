@@ -351,7 +351,7 @@ class Client : public Dispatcher {
 
   int    unsafe_sync_write;
 public:
-  msg_addr_t get_myaddr() { return messenger->get_myaddr(); } 
+  entity_name_t get_myname() { return messenger->get_myname(); } 
   void hack_sync_write_safe();
 
 protected:
@@ -558,13 +558,8 @@ protected:
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.
-#ifdef DARWIN
   int statfs(const char *path, struct statvfs *stbuf,
-	     __int64_t uid, __int64_t gid);
-#else
-  int statfs(const char *path, struct statfs *stbuf,
-	     __int64_t uid, __int64_t gid);
-#endif
+	     __int64_t uid=-1, __int64_t gid=-1);
 
   // crap
   int chdir(const char *s, __int64_t uid, __int64_t gid);
@@ -648,7 +643,7 @@ protected:
 
   int describe_layout(char *fn, list<ObjectExtent>& result);
 
-  void ms_handle_failure(Message*, msg_addr_t dest, const entity_inst_t& inst);
+  void ms_handle_failure(Message*, const entity_inst_t& inst);
 
 };
 

@@ -16,12 +16,12 @@
 #include "Ebofs.h"
 
 #include <errno.h>
-#ifdef DARWIN
+
+#ifndef DARWIN
+#include <sys/vfs.h>
+#else
 #include <sys/param.h>
 #include <sys/mount.h>
-#include <sys/statvfs.h>
-#else
-#include <sys/vfs.h>
 #endif // DARWIN
 
 // *******************
@@ -574,7 +574,7 @@ Onode* Ebofs::get_onode(object_t oid)
 {
   while (1) {
     // in cache?
-    if (onode_map.count(oid)) {
+    if (have_onode(oid)) {
       // yay
       Onode *on = onode_map[oid];
       on->get();
@@ -1218,8 +1218,10 @@ void Ebofs::kick_idle()
 void Ebofs::sync(Context *onsafe)
 {
   ebofs_lock.Lock();
-  if (onsafe) 
+  if (onsafe) {
+    dirty = true;
     commit_waiters[super_epoch].push_back(onsafe);
+  }
   ebofs_lock.Unlock();
 }
 
@@ -1229,22 +1231,14 @@ void Ebofs::sync()
   if (!dirty) {
     dout(7) << "sync in " << super_epoch << ", not dirty" << endl;
   } else {
-    dout(7) << "sync in " << super_epoch << endl;
-    
-    if (!commit_thread_started) {
-      dout(10) << "sync waiting for commit thread to start" << endl;
+    epoch_t start = super_epoch;
+    dout(7) << "sync start in " << start << endl;
+    while (super_epoch == start) {
+      dout(7) << "sync kicking commit in " << super_epoch << endl;
+      dirty = true;
+      commit_cond.Signal();
       sync_cond.Wait(ebofs_lock);
     }
-    
-    if (mid_commit) {
-      dout(10) << "sync waiting for commit in progress" << endl;
-      sync_cond.Wait(ebofs_lock);
-    }
-    
-    commit_cond.Signal();  // trigger a commit
-    
-    sync_cond.Wait(ebofs_lock);  // wait
-    
     dout(10) << "sync finish in " << super_epoch << endl;
   }
   ebofs_lock.Unlock();
@@ -1830,6 +1824,92 @@ bool Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   return true;
 }
 
+
+/*
+ * is_cached -- query whether a object extent is in our cache
+ * return value of -1 if onode isn't loaded.  otherwise, the number
+ * of extents that need to be read (i.e. # of seeks)  
+ */
+int Ebofs::is_cached(object_t oid, off_t off, size_t len)
+{
+  ebofs_lock.Lock();
+  int r = _is_cached(oid, off, len);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
+{
+  if (!have_onode(oid)) {
+    dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << endl;
+    return -1;  // object dne?
+  } 
+  Onode *on = get_onode(oid);
+  
+  if (!on->have_oc()) {  
+    // nothing is cached.  return # of extents in file.
+    return on->extent_map.size();
+  }
+  
+  // map
+  block_t bstart = off / EBOFS_BLOCK_SIZE;
+  block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
+  block_t blen = blast-bstart+1;
+
+  map<block_t, BufferHead*> hits;
+  map<block_t, BufferHead*> missing;  // read these
+  map<block_t, BufferHead*> rx;       // wait for these
+  map<block_t, BufferHead*> partials;  // ??
+  on->get_oc(&bc)->map_read(bstart, blen, hits, missing, rx, partials);
+  return missing.size() + rx.size() + partials.size();
+
+  // FIXME: actually, we should calculate if these extents are contiguous.
+  // and not using map_read, probably...
+  /* hrmpf
+  block_t dpos = 0;
+  block_t opos = bstart;
+  while (opos < blen) {
+    if (hits.begin()->first == opos) {
+    } else {
+      block_t d;
+      if (missing.begin()->first == opos) d = missing.begin()->second.
+    
+  }
+  */
+}
+
+void Ebofs::trim_from_cache(object_t oid, off_t off, size_t len)
+{
+  ebofs_lock.Lock();
+  _trim_from_cache(oid, off, len);
+  ebofs_lock.Unlock();
+}
+
+void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
+{
+  // be careful not to load it if we don't have it
+  if (!have_onode(oid)) {
+    dout(7) << "_trim_from_cache " << oid << " " << off << "~" << len << " ... onode not in cache  " << endl;
+    return; 
+  } 
+  
+  // ok, we have it, get a pointer.
+  Onode *on = get_onode(oid);
+  
+  if (!on->have_oc()) 
+    return; // nothing is cached. 
+
+  // map to blocks
+  block_t bstart = off / EBOFS_BLOCK_SIZE;
+  block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
+
+  ObjectCache *oc = on->get_oc(&bc);
+  oc->touch_bottom(bstart, blast);
+  
+  return;
+}
+
+
 int Ebofs::read(object_t oid, 
                 off_t off, size_t len,
                 bufferlist& bl)
@@ -1974,6 +2054,15 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
           dout(7) << "apply_transaction fail on _write" << endl;
           r &= bit;
         }
+      }
+      break;
+
+    case Transaction::OP_TRIMCACHE:
+      {
+        object_t oid = t.oids.front(); t.oids.pop_front();
+        off_t offset = t.offsets.front(); t.offsets.pop_front();
+        size_t len = t.lengths.front(); t.lengths.pop_front();
+        _trim_from_cache(oid, offset, len);
       }
       break;
 

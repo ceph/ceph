@@ -31,11 +31,12 @@ using namespace std;
 
 #include "config.h"
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_mds_balancer) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".bal "
+#define  dout(l)    if (l<=g_conf.debug_mds || l<=g_conf.debug_mds_balancer) cout << g_clock.now() << " mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
+
 
 
 int MDBalancer::proc_message(Message *m)
@@ -54,6 +55,41 @@ int MDBalancer::proc_message(Message *m)
 
   return 0;
 }
+
+
+
+
+void MDBalancer::tick()
+{
+  static int num_bal_times = g_conf.mds_bal_max;
+  static utime_t first = g_clock.now();
+  utime_t now = g_clock.now();
+  utime_t elapsed = now;
+  elapsed -= first;
+
+  // balance?
+  if (true && 
+      mds->get_nodeid() == 0 &&
+      (num_bal_times || 
+       (g_conf.mds_bal_max_until >= 0 && 
+	elapsed.sec() > g_conf.mds_bal_max_until)) && 
+      mds->is_active() &&
+      now.sec() - last_heartbeat.sec() >= g_conf.mds_bal_interval) {
+    last_heartbeat = now;
+    send_heartbeat();
+    num_bal_times--;
+  }
+  
+  // hash?
+  if (true &&
+      g_conf.num_mds > 1 &&
+      now.sec() - last_hash.sec() > g_conf.mds_bal_hash_interval) {
+    last_hash = now;
+    do_hashing();
+  }
+}
+
+
 
 
 class C_Bal_SendHeartbeat : public Context {
@@ -119,15 +155,15 @@ void MDBalancer::send_heartbeat()
   }
 
   
-  int size = mds->get_mds_map()->get_num_mds();
-  for (int i = 0; i<size; i++) {
-    if (i == mds->get_nodeid()) continue;
+  set<int> up;
+  mds->get_mds_map()->get_up_mds_set(up);
+  for (set<int>::iterator p = up.begin(); p != up.end(); ++p) {
+    if (*p == mds->get_nodeid()) continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->messenger->send_message(hb,
-                                 MSG_ADDR_MDS(i), mds->mdsmap->get_inst(i),
-				 MDS_PORT_BALANCER,
-                                 MDS_PORT_BALANCER);
+                                 mds->mdsmap->get_inst(*p),
+				 MDS_PORT_BALANCER, MDS_PORT_BALANCER);
   }
 }
 
@@ -517,6 +553,9 @@ void MDBalancer::do_rebalance(int beat)
                << " pop " << (*it)->popularity[MDS_POP_CURDOM].meta_load() 
                << endl;
       mds->mdcache->migrator->export_dir(*it, target);
+      
+      // hack! only do one dir.
+      break;
     }
   }
 
@@ -807,71 +846,7 @@ void MDBalancer::add_import(CDir *dir)
 
 void MDBalancer::show_imports(bool external)
 {
-  int db = 20; //debug level
-  return;
-  
-  if (mds->mdcache->imports.empty() &&
-      mds->mdcache->hashdirs.empty()) {
-    dout(db) << "no imports/exports/hashdirs" << endl;
-    return;
-  }
-  dout(db) << "imports/exports/hashdirs:" << endl;
-
-  set<CDir*> ecopy = mds->mdcache->exports;
-
-  set<CDir*>::iterator it = mds->mdcache->hashdirs.begin();
-  while (1) {
-    if (it == mds->mdcache->hashdirs.end()) it = mds->mdcache->imports.begin();
-    if (it == mds->mdcache->imports.end() ) break;
-    
-    CDir *im = *it;
-    
-    if (im->is_import()) {
-      dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
-      assert( im->is_auth() );
-    } 
-    else if (im->is_hashed()) {
-      if (im->is_import()) continue;  // if import AND hash, list as import.
-      dout(db) << "  + hash (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
-    }
-    
-    for (set<CDir*>::iterator p = mds->mdcache->nested_exports[im].begin();
-         p != mds->mdcache->nested_exports[im].end();
-         p++) {
-      CDir *exp = *p;
-      if (exp->is_hashed()) {
-        //assert(0);  // we don't do it this way actually
-        dout(db) << "      - hash (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-        assert( !exp->is_auth() );
-      } else {
-        dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-        assert( exp->is_export() );
-        assert( !exp->is_auth() );
-      }
-
-      if ( mds->mdcache->get_auth_container(exp) != im ) {
-        dout(1) << "uh oh, auth container is " << mds->mdcache->get_auth_container(exp) << endl;
-        dout(1) << "uh oh, auth container is " << *mds->mdcache->get_auth_container(exp) << endl;
-        assert( mds->mdcache->get_auth_container(exp) == im );
-      }
-      
-      if (ecopy.count(exp) != 1) {
-        dout(1) << "***** nested_export " << *exp << " not in exports" << endl;
-        assert(0);
-      }
-      ecopy.erase(exp);
-    }
-
-    it++;
-  }
-  
-  if (ecopy.size()) {
-    for (set<CDir*>::iterator it = ecopy.begin();
-         it != ecopy.end();
-         it++) 
-      dout(1) << "***** stray item in exports: " << **it << endl;
-    assert(ecopy.size() == 0);
-  }
+  mds->mdcache->show_imports();
 }
 
 

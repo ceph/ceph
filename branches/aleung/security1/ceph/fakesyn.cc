@@ -46,6 +46,14 @@ public:
   }
 };
 
+class C_Die : public Context {
+public:
+  void finish(int) {
+    cerr << "die" << endl;
+    exit(1);
+  }
+};
+
 
 int main(int argc, char **argv) 
 {
@@ -72,11 +80,15 @@ int main(int argc, char **argv)
   assert(nargs.empty());
 
 
+  if (g_conf.kill_after) 
+    g_timer.add_event_after(g_conf.kill_after, new C_Die);
+
+
   g_clock.tare();
   
   if (g_conf.secure_io) {
     cout << "Testing crypto library" << endl;
-    
+
     const byte* myMsg = (const byte*)"hash me";
     byte digestBuf[SHA1DIGESTSIZE];
     byte hexBuf[2*SHA1DIGESTSIZE];
@@ -89,8 +101,15 @@ int main(int argc, char **argv)
       string((const char*)hexBuf,2*SHA1DIGESTSIZE) << endl;
   }
 
+  // need to reload old monmap on !mkfs to make mon private key match monmap.  FIXME.
+  assert(g_conf.mkfs); 
+
   MonMap *monmap = new MonMap(g_conf.num_mon);
-  monmap->mon_inst[0].rank = 0;  // hack ; see FakeMessenger.cc
+  entity_addr_t a;
+  monmap->mon_inst[0] = entity_inst_t(MSG_ADDR_MON(0), a);  // hack ; see FakeMessenger.cc
+
+  string mon_private_key;
+  monmap->generate_key_pair(mon_private_key);
 
   char hostname[100];
   gethostname(hostname,100);
@@ -100,6 +119,7 @@ int main(int argc, char **argv)
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
     mon[i] = new Monitor(i, new FakeMessenger(MSG_ADDR_MON(i)), monmap);
+    mon[i]->set_new_private_key(mon_private_key);
   }
 
   // create mds

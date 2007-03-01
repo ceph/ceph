@@ -118,6 +118,9 @@ class Ebofs : public ObjectStore {
   map<object_t, list<Cond*> > waitfor_onode;
 
   Onode* new_onode(object_t oid);     // make new onode.  ref++.
+  bool have_onode(object_t oid) {
+    return onode_map.count(oid);
+  }
   Onode* get_onode(object_t oid);     // get cached onode, or read from disk.  ref++.
   void remove_onode(Onode *on);
   void put_onode(Onode* o);         // put it back down.  ref--.
@@ -242,8 +245,10 @@ class Ebofs : public ObjectStore {
   bool exists(object_t);
   int stat(object_t, struct stat*);
   int read(object_t, off_t off, size_t len, bufferlist& bl);
-  //int write(object_t oid, off_t off, size_t len, bufferlist& bl, bool fsync=true);
+  int is_cached(object_t oid, off_t off, size_t len);
+
   int write(object_t oid, off_t off, size_t len, bufferlist& bl, Context *onsafe);
+  void trim_from_cache(object_t oid, off_t off, size_t len);
   int truncate(object_t oid, off_t size, Context *onsafe=0);
   int truncate_front(object_t oid, off_t size, Context *onsafe=0);
   int remove(object_t oid, Context *onsafe=0);
@@ -298,12 +303,14 @@ class Ebofs : public ObjectStore {
 private:
   // private interface -- use if caller already holds lock
   int _read(object_t oid, off_t off, size_t len, bufferlist& bl);
+  int _is_cached(object_t oid, off_t off, size_t len);
   int _stat(object_t oid, struct stat *st);
   int _getattr(object_t oid, const char *name, void *value, size_t size);
   int _getattrs(object_t oid, map<string,bufferptr> &aset);
 
   bool _write_will_block();
   int _write(object_t oid, off_t off, size_t len, bufferlist& bl);
+  void _trim_from_cache(object_t oid, off_t off, size_t len);
   int _truncate(object_t oid, off_t size);
   int _truncate_front(object_t oid, off_t size);
   int _remove(object_t oid);

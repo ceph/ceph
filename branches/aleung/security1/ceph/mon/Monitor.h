@@ -18,16 +18,24 @@
 #include "include/types.h"
 #include "msg/Messenger.h"
 
+#include "common/Timer.h"
+
 #include "MonMap.h"
 #include "Elector.h"
+#include "Paxos.h"
 
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 
-class ObjectStore;
+class MonitorStore;
 class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
+
+#define PAXOS_TEST       0
+#define PAXOS_OSDMAP     1
+#define PAXOS_MDSMAP     2
+#define PAXOS_CLIENTMAP  3
 
 class Monitor : public Dispatcher {
 protected:
@@ -43,14 +51,15 @@ protected:
   esignPub myPubKey;
 
   // timer.
+  SafeTimer timer;
   Context *tick_timer;
-  Cond     tick_timer_cond;
   void cancel_tick();
   void reset_tick();
   friend class C_Mon_Tick;
 
   // my local store
-  ObjectStore *store;
+  //ObjectStore *store;
+  MonitorStore *store;
 
   const static int INO_ELECTOR = 1;
   const static int INO_MON_MAP = 2;
@@ -65,12 +74,17 @@ protected:
   epoch_t  mon_epoch;    // monitor epoch (election instance)
   set<int> quorum;       // current active set of monitors (if !starting)
 
-  void call_election();
+  //void call_election();
+
+  // paxos
+  Paxos test_paxos;
+  friend class Paxos;
+
 
   // monitor state
-  const static int STATE_STARTING = 0;
-  const static int STATE_LEADER = 1;
-  const static int STATE_PEON =   2;
+  const static int STATE_STARTING = 0; // electing
+  const static int STATE_LEADER =   1;
+  const static int STATE_PEON =     2;
   int state;
 
   int leader;                    // current leader (to best of knowledge)
@@ -93,57 +107,39 @@ protected:
   friend class MDSMonitor;
   friend class ClientMonitor;
 
+  // initiate election
+  void call_election();
+
+  // end election (called by Elector)
+  void win_election(set<int>& q);
+  void lose_election(int l);
+
+
+
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
     whoami(w), 
     messenger(m),
     monmap(mm),
-    tick_timer(0),
+    timer(lock), tick_timer(0),
     store(0),
     elector(this, w),
     mon_epoch(0), 
+    
+    test_paxos(this, w, PAXOS_TEST, "tester"),  // tester state machine
+
     state(STATE_STARTING),
     leader(0),
     osdmon(0), mdsmon(0), clientmon(0)
   {
-    // hack leader, until election works.
-    if (whoami == 0)
-      state = STATE_LEADER;
-    else
-      state = STATE_PEON;
-
-    // init keys
-    myPrivKey = esignPrivKey("crypto/esig1536.dat");
-    myPubKey = esignPubKey(myPrivKey);
   }
-  Monitor(int w, Messenger *m, MonMap *mm, esignPriv key) : 
-    whoami(w), 
-    messenger(m), 
-    monmap(mm),
-    myPrivKey(key),
-    tick_timer(0),
-    store(0),
-    elector(this, w),
-    mon_epoch(0), 
-    state(STATE_STARTING),
-    leader(0),
-    osdmon(0),
-    mdsmon(0)
-  {
-    // hack leader, until election works.
-    if (whoami == 0)
-      state = STATE_LEADER;
-    else
-      state = STATE_PEON;
 
-    // init keys
-    myPubKey = esignPubKey(myPrivKey);
-  }
+  void set_new_private_key(string& pk);
 
   void init();
   void shutdown();
   void dispatch(Message *m);
-  void tick(Context *timer);
+  void tick();
 
 };
 

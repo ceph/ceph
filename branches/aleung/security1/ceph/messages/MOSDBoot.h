@@ -17,6 +17,7 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
+#include "osd/osd_types.h"
 
 class MOSDBoot : public Message {
  public:

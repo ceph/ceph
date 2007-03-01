@@ -36,7 +36,7 @@ public:
   OSDMap osdmap;
 
 private:
-  map<msg_addr_t, pair<entity_inst_t, epoch_t> > awaiting_map;
+  map<entity_name_t, pair<entity_inst_t, epoch_t> > awaiting_map;
   
   void create_initial();
   bool get_map_bl(epoch_t epoch, bufferlist &bl);
@@ -60,13 +60,13 @@ private:
   int state;
   utime_t lease_expire;     // when lease expires
   
-  void init();
+  //void init();
 
   // maps
   void accept_pending();   // accept pending, new map.
   void send_waiting();     // send current map to waiters.
-  void send_full(msg_addr_t dest, const entity_inst_t& inst);
-  void send_incremental(epoch_t since, msg_addr_t dest, const entity_inst_t& inst);
+  void send_full(entity_inst_t dest);
+  void send_incremental(epoch_t since, entity_inst_t dest);
   void bcast_latest_mds();
   void bcast_latest_osd();
   
@@ -89,7 +89,7 @@ private:
   OSDMonitor(Monitor *mn, Messenger *m, Mutex& l) : 
     mon(mn), messenger(m), lock(l),
     state(STATE_SYNC) {
-    init();
+    //init();
   }
 
   void dispatch(Message *m);
@@ -99,6 +99,8 @@ private:
   void election_finished();  // reinitialize whatever.
 
   void issue_leases();
+
+  void mark_all_down();
 
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();

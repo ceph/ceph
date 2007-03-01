@@ -40,17 +40,17 @@ class TCPDirectory : public Dispatcher {
   TCPMessenger *messenger;
 
   // directory
-  hash_map<msg_addr_t, int> dir;        // entity -> rank
+  hash_map<entity_name_t, int> dir;        // entity -> rank
   hash_map<int, tcpaddr_t>  rank_addr;  // rank -> ADDR (e.g. host:port)
   
   __uint64_t                version;
-  map<__uint64_t, msg_addr_t>  update_log;
+  map<__uint64_t, entity_name_t>  update_log;
   
   int                       nrank;
   int                       nclient, nmds, nosd;
 
-  set<msg_addr_t>           hold;
-  map<msg_addr_t, list<Message*> > waiting;
+  set<entity_name_t>           hold;
+  map<entity_name_t, list<Message*> > waiting;
 
   // messages
   void handle_connect(class MNSConnect*);

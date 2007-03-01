@@ -17,32 +17,56 @@
 #include "CInode.h"
 #include "CDir.h"
 
+#include "MDS.h"
+#include "MDCache.h"
+
 #include <cassert>
 
 #undef dout
-#define dout(x) if ((x) <= g_conf.debug) cout << "mds.dentry "
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") "
 
 
 // CDentry
 
 ostream& operator<<(ostream& out, CDentry& dn)
 {
-  out << "[dentry " << dn.get_name();
-  if (dn.is_pinned()) out << " " << dn.num_pins() << " pins";
+  string path;
+  dn.make_path(path);
   
+  out << "[dentry " << path;
+  if (dn.is_auth()) {
+    out << " auth";
+    if (dn.is_replicated()) 
+      out << dn.get_replicas();
+  } else {
+    out << " rep@" << dn.authority();
+    out << "." << dn.get_replica_nonce();
+    assert(dn.get_replica_nonce() >= 0);
+  }
+
   if (dn.is_null()) out << " NULL";
   if (dn.is_remote()) out << " REMOTE";
 
+  if (dn.is_pinned()) out << " " << dn.num_pins() << " pathpins";
+
   if (dn.get_lockstate() == DN_LOCK_UNPINNING) out << " unpinning";
-  if (dn.is_dirty()) out << " dirty";
   if (dn.get_lockstate() == DN_LOCK_PREXLOCK) out << " prexlock=" << dn.get_xlockedby() << " g=" << dn.get_gather_set();
   if (dn.get_lockstate() == DN_LOCK_XLOCK) out << " xlock=" << dn.get_xlockedby();
 
-  out << " dirv=" << dn.get_parent_dir_version();
+  out << " v=" << dn.get_version();
+  out << " pv=" << dn.get_projected_version();
 
   out << " inode=" << dn.get_inode();
+
+  if (dn.get_num_ref()) {
+    out << " |";
+    for(set<int>::iterator it = dn.get_ref_set().begin();
+        it != dn.get_ref_set().end();
+        it++)
+      out << " " << CDentry::pin_name(*it);
+  }
+
   out << " " << &dn;
-  out << " in " << *dn.get_dir();
   out << "]";
   return out;
 }
@@ -52,41 +76,73 @@ CDentry::CDentry(const CDentry& m) {
 }
 
 
-void CDentry::mark_dirty() 
+inodeno_t CDentry::get_ino()
+{
+  if (inode) 
+    return inode->ino();
+  return inodeno_t();
+}
+
+
+int CDentry::authority()
+{
+  return dir->dentry_authority( name );
+}
+
+
+version_t CDentry::pre_dirty()
+{
+  // NOTE: in the future, this will dirty a particular slice/subset of the dir.
+  projected_version = dir->pre_dirty();
+  dout(10) << " pre_dirty " << *this << endl;
+  return projected_version;
+}
+
+
+void CDentry::_mark_dirty()
+{
+  // state+pin
+  if (!state_test(STATE_DIRTY)) {
+    state_set(STATE_DIRTY);
+    get(PIN_DIRTY);
+  }
+}
+
+void CDentry::mark_dirty(version_t pv) 
 {
   dout(10) << " mark_dirty " << *this << endl;
 
-  // dir is now dirty (if it wasn't already)
-  dir->mark_dirty();
+  // i now live in this new dir version
+  assert(pv == projected_version);
+  version = pv;
+  _mark_dirty();
 
-  // pin inode?
-  if (is_primary() && !dirty && inode) inode->get(CINODE_PIN_DNDIRTY);
-    
-  // i now live in that (potentially newly dirty) version
-  parent_dir_version = dir->get_version();
-
-  dirty = true;
+  // mark dir too
+  dir->mark_dirty(pv);
 }
+
 void CDentry::mark_clean() {
   dout(10) << " mark_clean " << *this << endl;
-  assert(dirty);
-  assert(parent_dir_version <= dir->get_version());
+  assert(is_dirty());
+  assert(version <= dir->get_version());
 
-  if (parent_dir_version < dir->get_last_committed_version())
-    cerr << " bad mark_clean " << *this << endl;    
+  // this happens on export.
+  //assert(version <= dir->get_last_committed_version());  
 
-  assert(parent_dir_version >= dir->get_last_committed_version());
-
-  if (is_primary() && dirty && inode) inode->put(CINODE_PIN_DNDIRTY);
-  dirty = false;
+  // state+pin
+  state_clear(STATE_DIRTY);
+  put(PIN_DIRTY);
 }    
 
 
 void CDentry::make_path(string& s)
 {
-  if (dir->inode->get_parent_dn()) 
-    dir->inode->get_parent_dn()->make_path(s);
-
+  if (dir) {
+    if (dir->inode->get_parent_dn()) 
+      dir->inode->get_parent_dn()->make_path(s);
+  } else {
+    s = "???";
+  }
   s += "/";
   s += name;
 }
@@ -110,6 +166,12 @@ void CDentry::unlink_remote()
   inode = 0;
 }
 
+
+CDentryDiscover *CDentry::replicate_to(int who)
+{
+  int nonce = add_replica(who);
+  return new CDentryDiscover(this, nonce);
+}
 
 
 

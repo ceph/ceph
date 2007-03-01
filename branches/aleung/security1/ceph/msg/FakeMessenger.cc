@@ -50,16 +50,14 @@ using namespace __gnu_cxx;
 
 int nranks = 0;  // this identify each entity_inst_t
 
-map<int, FakeMessenger*>      directory;
+map<entity_addr_t, FakeMessenger*>      directory;
 hash_map<int, Logger*>        loggers;
 LogType fakemsg_logtype;
 
-set<int>           shutdown_set;
+set<entity_addr_t>           shutdown_set;
 
 Mutex lock;
 Cond  cond;
-
-bool pending_timer = false;
 
 bool      awake = false;
 bool      fm_shutdown = false;
@@ -67,30 +65,9 @@ pthread_t thread_id;
 
 
 
-class C_FakeKicker : public Context {
-  void finish(int r) {
-    dout(18) << "timer kick" << endl;
-    pending_timer = true;
-    lock.Lock();
-    cond.Signal();  // why not
-    lock.Unlock();
-  }
-};
-
-void FakeMessenger::callback_kick() 
-{
-  pending_timer = true;
-  lock.Lock();
-  cond.Signal();  // why not
-  lock.Unlock();
-}
 
 void *fakemessenger_thread(void *ptr) 
 {
-  //dout(1) << "thread start, setting timer kicker" << endl;
-  //g_timer.set_messenger_kicker(new C_FakeKicker());
-  //msgr_callback_kicker = new C_FakeKicker();
-
   lock.Lock();
   while (1) {
     dout(20) << "thread waiting" << endl;
@@ -106,11 +83,6 @@ void *fakemessenger_thread(void *ptr)
     if (directory.empty()) break;
   }
   lock.Unlock();
-
-  //cout << "unsetting messenger" << endl;
-  //g_timer.unset_messenger_kicker();
-  //g_timer.unset_messenger();
-  //msgr_callback_kicker = 0;
 
   dout(1) << "thread finish (i woke up but no messages, bye)" << endl;
   return 0;
@@ -164,29 +136,16 @@ int fakemessenger_do_loop_2()
     
     dout(18) << "do_loop top" << endl;
 
-    /*// timer?
-    if (pending_timer) {
-      pending_timer = false;
-      dout(5) << "pending timer" << endl;
-      g_timer.execute_pending();
-    }
-    */
-
-    // callbacks
-    lock.Unlock();
-    Messenger::do_callbacks();
-    lock.Lock();
-
     // messages
-    map<int, FakeMessenger*>::iterator it = directory.begin();
+    map<entity_addr_t, FakeMessenger*>::iterator it = directory.begin();
     while (it != directory.end()) {
       FakeMessenger *mgr = it->second;
 
-      dout(18) << "messenger " << mgr << " at " << mgr->get_myaddr() << " has " << mgr->num_incoming() << " queued" << endl;
+      dout(18) << "messenger " << mgr << " at " << mgr->get_myname() << " has " << mgr->num_incoming() << " queued" << endl;
 
 
       if (!mgr->is_ready()) {
-        dout(18) << "messenger " << mgr << " at " << mgr->get_myaddr() << " has no dispatcher, skipping" << endl;
+        dout(18) << "messenger " << mgr << " at " << mgr->get_myname() << " has no dispatcher, skipping" << endl;
         it++;
         continue;
       }
@@ -196,10 +155,9 @@ int fakemessenger_do_loop_2()
       
       if (m) {
         //dout(18) << "got " << m << endl;
-        dout(1) << "---- '" << m->get_type_name() 
-                << "' from " << m->get_source() // << ':' << m->get_source_port() 
-                << " to " << m->get_dest() //<< ':' << m->get_dest_port() 
-                << " ---- " << m 
+        dout(1) << "---- " << m->get_dest() 
+		<< " <- " << m->get_source()
+                << " ---- " << *m 
                 << endl;
         
         if (g_conf.fakemessenger_serialize) {
@@ -228,7 +186,7 @@ int fakemessenger_do_loop_2()
     
     // deal with shutdowns.. dleayed to avoid concurrent directory modification
     if (!shutdown_set.empty()) {
-      for (set<int>::iterator it = shutdown_set.begin();
+      for (set<entity_addr_t>::iterator it = shutdown_set.begin();
            it != shutdown_set.end();
            it++) {
         dout(7) << "fakemessenger: removing " << *it << " from directory" << endl;
@@ -253,25 +211,23 @@ int fakemessenger_do_loop_2()
 }
 
 
-FakeMessenger::FakeMessenger(msg_addr_t me)  : Messenger(me)
+FakeMessenger::FakeMessenger(entity_name_t me)  : Messenger(me)
 {
-  entity_inst_t fakeinst;
   lock.Lock();
   {
     // assign rank
-    fakeinst.addr.sin_port = 
-      fakeinst.rank = nranks++;
-    set_myinst(fakeinst);
+    _myinst.name = me;
+    _myinst.addr.port = nranks++;
+    //if (!me.is_mon())
+    //_myinst.addr.nonce = getpid();
 
     // add to directory
-    directory[ fakeinst.rank ] = this;
+    directory[ _myinst.addr ] = this;
   }
   lock.Unlock();
 
 
-  cout << "fakemessenger " << get_myaddr() << " messenger is " << this << " at " << fakeinst << endl;
-
-  //g_timer.set_messenger(this);
+  cout << "fakemessenger " << get_myname() << " messenger is " << this << " at " << _myinst << endl;
 
   qlen = 0;
 
@@ -299,8 +255,8 @@ int FakeMessenger::shutdown()
 {
   //cout << "shutdown on messenger " << this << " has " << num_incoming() << " queued" << endl;
   lock.Lock();
-  assert(directory.count(get_myinst().rank) == 1);
-  shutdown_set.insert(get_myinst().rank);
+  assert(directory.count(_myinst.addr) == 1);
+  shutdown_set.insert(_myinst.addr);
   
   /*
   directory.erase(myaddr);
@@ -322,31 +278,27 @@ int FakeMessenger::shutdown()
   return 0;
 }
 
-/*
-void FakeMessenger::trigger_timer(Timer *t) 
-{
-  // note timer to call
-  pending_timer = t;
 
-  // wake up thread?
-  cond.Signal();  // why not
-}
-*/
-
-void FakeMessenger::reset_myaddr(msg_addr_t m)
+void FakeMessenger::reset_myname(entity_name_t m)
 {
-  dout(1) << "reset_myaddr from " << get_myaddr() << " to " << m << endl;
-  _set_myaddr(m);
+  dout(1) << "reset_myname from " << get_myname() << " to " << m << endl;
+  _set_myname(m);
+
+  directory.erase(_myinst.addr);
+  _myinst.name = m;
+  directory[_myinst.addr] = this;
+  
 }
 
 
-int FakeMessenger::send_message(Message *m, msg_addr_t dest, entity_inst_t inst, int port, int fromport)
+int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fromport)
 {
-  m->set_source(get_myaddr(), fromport);
-  m->set_dest(dest, port);
-  //m->set_lamport_send_stamp( get_lamport() );
+  entity_name_t dest = inst.name;
+  
+  m->set_source(get_myname(), fromport);
+  m->set_source_addr(get_myaddr());
 
-  m->set_source_inst(get_myinst());
+  m->set_dest(inst.name, port);
 
   lock.Lock();
 
@@ -365,16 +317,19 @@ int FakeMessenger::send_message(Message *m, msg_addr_t dest, entity_inst_t inst,
 #endif
 
     // queue
-    FakeMessenger *dm = directory[inst.rank];
+    FakeMessenger *dm = directory[inst.addr];
     if (!dm) {
-      dout(1) << "** destination " << dest << " (" << inst << ") dne" << endl;
-      assert(dm);
+      dout(1) << "** destination " << inst << " dne" << endl;
+      for (map<entity_addr_t, FakeMessenger*>::iterator p = directory.begin();
+	   p != directory.end();
+	   ++p) {
+	dout(1) << "** have " << p->first << " to " << p->second << endl;
+      }
+      //assert(dm);
     }
     dm->queue_incoming(m);
 
-    dout(1) << "--> " << get_myaddr() << " sending " << m << " '" << m->get_type_name() << "'"
-            << " to " << dest 
-            << endl;//" m " << dm << " has " << dm->num_incoming() << " queued" << endl;
+    dout(1) << "--> " << get_myname() << " -> " << inst.name << " " << *m << endl;
     
   }
   catch (...) {

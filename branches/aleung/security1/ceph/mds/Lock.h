@@ -70,38 +70,43 @@ any + statlite(mtime)
 
 // -- lock... hard or file
 
+class Message;
+
 class CLock {
  protected:
   // lock state
   char     state;
   set<int> gather_set;  // auth
-  int      nread, nwrite;
+
+  // local state
+  int      nread;
+  Message *wrlock_by;
 
   
  public:
   CLock() : 
-    state(LOCK_LOCK), 
+    state(LOCK_SYNC), 
     nread(0), 
-    nwrite(0) {
+    wrlock_by(0) {
   }
   
   // encode/decode
   void encode_state(bufferlist& bl) {
     bl.append((char*)&state, sizeof(state));
-    bl.append((char*)&nread, sizeof(nread));
-    bl.append((char*)&nwrite, sizeof(nwrite));
-
     _encode(gather_set, bl);
+
+    //bl.append((char*)&nread, sizeof(nread));
+    //bl.append((char*)&nwrite, sizeof(nwrite));
   }
   void decode_state(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(state), (char*)&state);
     off += sizeof(state);
-    bl.copy(off, sizeof(nread), (char*)&nread);
-    off += sizeof(nread);
-    bl.copy(off, sizeof(nwrite), (char*)&nwrite);
-    off += sizeof(nwrite);
-
     _decode(gather_set, bl, off);
+
+    //bl.copy(off, sizeof(nread), (char*)&nread);
+    //off += sizeof(nread);
+    //bl.copy(off, sizeof(nwrite), (char*)&nwrite);
+    //off += sizeof(nwrite);
   }
 
   char get_state() { return state; }
@@ -142,8 +147,9 @@ class CLock {
 
   // gather set
   set<int>& get_gather_set() { return gather_set; }
-  void init_gather(set<int>& i) {
-    gather_set = i;
+  void init_gather(const map<int,int>& i) {
+    for (map<int,int>::const_iterator p = i.begin(); p != i.end(); ++p)
+      gather_set.insert(p->first);
   }
   bool is_gathering(int i) {
     return gather_set.count(i);
@@ -160,16 +166,20 @@ class CLock {
   }
   int get_nread() { return nread; }
 
-  int get_write() { return ++nwrite; }
-  int put_write() {
-    assert(nwrite>0);
-    return --nwrite;
+  void get_write(Message *who) { 
+    assert(wrlock_by == 0);
+    wrlock_by = who; 
   }
-  int get_nwrite() { return nwrite; }
+  void put_write() {
+    assert(wrlock_by);
+    wrlock_by = 0;
+  }
+  bool is_wrlocked() { return wrlock_by ? true:false; }
+  Message *get_wrlocked_by() { return wrlock_by; }
   bool is_used() {
-    return (nwrite+nread)>0 ? true:false;
+    return (is_wrlocked() || (nread>0)) ? true:false;
   }
-
+  
   
   // stable
   bool is_stable() {
@@ -196,7 +206,7 @@ class CLock {
 
   bool can_write(bool auth) {
     if (auth) 
-      return (state == LOCK_LOCK);
+      return (state == LOCK_LOCK) && !is_wrlocked();
     else
       return false;
   }
@@ -291,9 +301,9 @@ inline ostream& operator<<(ostream& out, CLock& l)
   if (!l.get_gather_set().empty()) out << " g=" << l.get_gather_set();
 
   if (l.get_nread()) 
-    out << " " << l.get_nread() << "r";
-  if (l.get_nwrite())
-    out << " " << l.get_nwrite() << "w";
+    out << " r=" << l.get_nread();
+  if (l.is_wrlocked())
+    out << " w=" << l.get_wrlocked_by();
 
   // rw?
   /*
