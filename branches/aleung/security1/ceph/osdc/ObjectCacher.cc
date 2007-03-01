@@ -356,7 +356,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
         left -= glen;
         continue;    // more?
       }
-    }
+s    }
   }
   
   // set versoin
@@ -454,7 +454,7 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 }
 
 
-void ObjectCacher::bh_write(BufferHead *bh)
+void ObjectCacher::bh_write(BufferHead *bh, ExtCap *write_cap)
 {
   dout(7) << "bh_write " << *bh << endl;
   
@@ -464,7 +464,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
 
   // go
   tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->bl,
-                              onack, oncommit);
+                              onack, oncommit, write_cap);
 
   // set bh last_write_tid
   onack->tid = tid;
@@ -824,6 +824,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 {
   utime_t now = g_clock.now();
   
+  // grab all objects in the extent
   for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ex_it++) {
@@ -832,7 +833,9 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 
     // map it all into a single bufferhead.
     BufferHead *bh = o->map_write(wr);
-    
+    // set security cap in bh
+    bh->bh_cap = wr->modify_cap;
+
     // adjust buffer pointers (ie "copy" data into my cache)
     // this is over a single ObjectExtent, so we know that
     //  - there is one contiguous bh
@@ -863,7 +866,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     map<off_t,BufferHead*>::iterator p = o->data.find(bh->start());
     if (p != o->data.begin()) {
       p--;
-      if (p->second->is_dirty()) {
+      if (p->second->is_dirty() && p->second->bh_cap == bh->bh_cap) {
         o->merge_left(p->second,bh);
         bh = p->second;
       }
@@ -872,7 +875,8 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     p = o->data.find(bh->start());
     p++;
     if (p != o->data.end() &&
-        p->second->is_dirty()) 
+        p->second->is_dirty() && 
+	p->second->bh_cap == bh->bh_cap) 
       o->merge_left(p->second,bh);
   }
 
@@ -1270,8 +1274,9 @@ bool ObjectCacher::flush(Object *ob)
       continue;
     }
     if (!bh->is_dirty()) continue;
-    
-    bh_write(bh);
+    // get capability for write back
+    ExtCap *write_cap = ob->ocap;
+    bh_write(bh, write_cap);
     clean = false;
   }
   return clean;

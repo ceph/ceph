@@ -14,6 +14,7 @@
 #ifndef __EXTCAP_H
 #define __EXTCAP_H
 
+#include "include/types.h"
 #include "include/buffer.h"
 #include "mds/Capability.h"
 
@@ -21,6 +22,8 @@ using namespace std;
 
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
+
+#include "common/Clock.h"
 
 class ExtCap {
 private:

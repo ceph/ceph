@@ -85,8 +85,10 @@ class Objecter {
     map<tid_t, ObjectExtent> waitfor_ack;
     map<tid_t, eversion_t>   tid_version;
     map<tid_t, ObjectExtent> waitfor_commit;
+    ExtCap *modify_cap;
 
     OSDModify(int o) : op(o), onack(0), oncommit(0) {}
+    OSDModify(int o, ExtCap* cap) : op(o), onack(0), oncommit(0), modify_cap(cap) {}
   };
   
   // write (includes the bufferlist)
@@ -94,6 +96,7 @@ class Objecter {
   public:
     bufferlist bl;
     OSDWrite(bufferlist &b) : OSDModify(OSD_OP_WRITE), bl(b) {}
+    OSDWrite(bufferlist &b, ExtCap *write_cap) : OSDModify(OSD_OP_WRITE, write_cap), bl(b) {}
   };
 
   
@@ -186,10 +189,10 @@ class Objecter {
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-             Context *onfinish, ExtCap* read_ext_cap=0,
+             Context *onfinish, ExtCap *read_ext_cap=0,
 			 objectrev_t rev=0);
   tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
-              Context *onack, Context *oncommit, 
+              Context *onack, Context *oncommit, ExtCap *write_ext_cap=0,
 			  objectrev_t rev=0);
   tid_t zero(object_t oid, off_t off, size_t len,  
              Context *onack, Context *oncommit, 

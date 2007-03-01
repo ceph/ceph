@@ -2784,6 +2784,9 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
   dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << endl;
 
+  ExtCap *write_ext_cap = in->get_ext_cap(uid);
+  assert(write_ext_cap);
+
   // do we have write file cap?
   while (!lazy && (in->file_caps() & CAP_FILE_WR) == 0) {
     dout(7) << " don't have write cap, waiting" << endl;
@@ -2813,7 +2816,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
     assert(objectcacher);
 
     // write (this may block!)
-    in->fc.write(offset, size, blist, client_lock);
+    in->fc.write(offset, size, blist, client_lock, write_ext_cap);
 
   } else {
     // legacy, inconsistent synchronous write.
@@ -2830,7 +2833,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
     dout(20) << " sync write start " << onfinish << endl;
     
     filer->write(in->inode, offset, size, blist, 0, 
-                 onfinish, onsafe
+                 onfinish, onsafe, write_ext_cap
 		 //, 1+((int)g_clock.now()) / 10 //f->pos // hack hack test osd revision snapshots
 		 ); 
     

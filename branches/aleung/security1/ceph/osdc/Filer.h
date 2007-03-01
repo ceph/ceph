@@ -102,9 +102,13 @@ class Filer {
             bufferlist& bl,
             int flags, 
             Context *onack,
-            Context *oncommit,
+            Context *oncommit, ExtCap* write_cap=0,
 	    objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+    Objecter::OSDWrite *wr;
+    if (!write_cap) // we should always pass a cap
+      wr = new Objecter::OSDWrite(bl);
+    else
+      wr = new Objecter::OSDWrite(bl, write_cap);
     file_to_extents(inode, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }

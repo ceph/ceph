@@ -586,9 +586,13 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 tid_t Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl, 
                       Context *onack, Context *oncommit,
-					  objectrev_t rev)
+		      ExtCap *write_ext_cap, objectrev_t rev)
 {
-  OSDWrite *wr = new OSDWrite(bl);
+  OSDWrite *wr;
+  if (write_ext_cap)
+    wr = new OSDWrite(bl, write_ext_cap);
+  else
+    wr = new OSDWrite(bl);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
   wr->extents.front().buffer_extents[0] = len;
@@ -662,6 +666,9 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   m->set_length(ex.length);
   m->set_offset(ex.start);
   m->set_rev(ex.rev);
+  // only cap for a write, fix later
+  if (wr->modify_cap && wr->op == OSD_OP_WRITE)
+    m->set_capability(wr->modify_cap);    
 
   if (wr->tid_version.count(tid)) 
     m->set_version(wr->tid_version[tid]);  // we're replaying this op!

@@ -136,7 +136,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
   return r;
 }
 
-void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
+void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock, ExtCap *write_ext_cap)
 {
   // inc writing counter
   num_writing++;
@@ -146,10 +146,10 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
     oc->wait_for_write(size, client_lock);
 
     // async, caching, non-blocking.
-    oc->file_write(inode, offset, size, blist);
+    oc->file_write(inode, offset, size, blist, write_ext_cap);
   } else {
     // atomic, synchronous, blocking.
-    oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);
+    oc->file_atomic_sync_write(inode, offset, size, blist, client_lock, write_ext_cap);
   }    
     
   // dec writing counter

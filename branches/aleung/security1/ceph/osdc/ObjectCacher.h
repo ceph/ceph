@@ -23,6 +23,10 @@
 #include "Objecter.h"
 #include "Filer.h"
 
+//#include "crypto/CryptoLib.h"
+//using namespace CryptoLib;
+//#include "crypto/ExtCap.h"
+
 class Objecter;
 class Objecter::OSDRead;
 class Objecter::OSDWrite;
@@ -55,6 +59,9 @@ class ObjectCacher {
     bufferlist  bl;
     tid_t last_write_tid;  // version of bh (if non-zero)
     utime_t last_write;
+
+    // security cap
+    ExtCap *bh_cap;
     
     map< off_t, list<Context*> > waitfor_read;
     
@@ -110,7 +117,7 @@ class ObjectCacher {
     ObjectCacher *oc;
     object_t  oid;   // this _always_ is oid.rev=0
     inodeno_t ino;
-	objectrev_t rev; // last rev we're written
+    objectrev_t rev; // last rev we're written
     
   public:
     map<off_t, BufferHead*>     data;
@@ -344,7 +351,7 @@ class ObjectCacher {
 
   // io
   void bh_read(BufferHead *bh, ExtCap* read_ext_cap=0);
-  void bh_write(BufferHead *bh);
+  void bh_write(BufferHead *bh, ExtCap *write_cap=0);
 
   void trim(off_t max=-1);
   void flush(off_t amount=0);
@@ -493,9 +500,13 @@ class ObjectCacher {
 
   int file_write(inode_t& inode,
                  off_t offset, size_t len, 
-                 bufferlist& bl,
+                 bufferlist& bl, ExtCap *write_ext_cap,
 				 objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+    Objecter::OSDWrite *wr;
+    if (!write_ext_cap)
+      wr = new Objecter::OSDWrite(bl);
+    else
+      wr = new Objecter::OSDWrite(bl, write_ext_cap);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return writex(wr, inode.ino);
   }
@@ -520,7 +531,7 @@ class ObjectCacher {
   int file_atomic_sync_write(inode_t& inode,
                              off_t offset, size_t len, 
                              bufferlist& bl,
-                             Mutex &lock,
+                             Mutex &lock, ExtCap *write_ext_cap=0,
 							 objectrev_t rev=0) {
     Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
     filer.file_to_extents(inode, offset, len, wr->extents);

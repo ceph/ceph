@@ -7,6 +7,8 @@ using namespace std;
 #include "common/Cond.h"
 #include "mds/Capability.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
 #include "crypto/ExtCap.h"
 
 class ObjectCacher;
@@ -60,7 +62,8 @@ class FileCache {
 
   int read(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock,
 	   ExtCap *read_ext_cap=0);  // may block.
-  void write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock);  // may block.
+  void write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock,
+	     ExtCap *write_ext_cap=0);  // may block.
 
 };
 

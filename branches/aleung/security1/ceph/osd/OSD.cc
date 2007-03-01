@@ -2858,6 +2858,16 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
+  // verify the capability
+  ExtCap *op_capability = op->get_capability();
+  if (op_capability) {
+    cout << "OSD recieved a capability" << endl;
+    if (op_capability->verif_extcap(monmap->get_key()))
+      cout << "OSD successfully verified capability" << endl;
+    else
+      cout << "OSD failed to verify capability" << endl;
+  }
+
   long r = 0;
   bufferlist bl;
   
@@ -3202,13 +3212,18 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 
   // check for capability
   ExtCap *op_capability = op->get_capability();
-  if (op_capability) {
-    cout << "OSD recieved a capability" << endl;
+  if (op_capability && op->get_op() == OSD_OP_WRITE) {
+    cout << "OSD recieved a write with a capability" << endl;
     if (op_capability->verif_extcap(monmap->get_key()))
       cout << "OSD successfully verified capability" << endl;
     else
       cout << "OSD failed to verify capability" << endl;
   }
+  else if (op->get_op() == OSD_OP_WRITE) {
+    cout << "Received write with no capability" << endl;
+  }
+  else
+    cout << "Received " << opname << " with no capability" << endl;
 
   // locked by someone else?
   // for _any_ op type -- eg only the locker can unlock!
