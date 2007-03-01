@@ -68,12 +68,13 @@ public:
   // export stages.  used to clean up intelligently if there's a failure.
   const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
   const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
-  const static int EXPORT_LOGGINGSTART  = 3;  // we're logging EExportStart
+  //const static int EXPORT_LOGGINGSTART  = 3;  // we're logging EExportStart
   const static int EXPORT_PREPPING      = 4;  // sending dest spanning tree to export bounds
   const static int EXPORT_WARNING       = 5;  // warning bystanders of dir_auth_pending
   const static int EXPORT_EXPORTING     = 6;  // sent actual export, waiting for ack
   const static int EXPORT_LOGGINGFINISH = 7;  // logging EExportFinish
   const static int EXPORT_NOTIFYING     = 8;  // waiting for notifyacks
+  const static int EXPORT_ABORTING      = 9;  // notifying bystanders of abort
 
 protected:
   // export fun
@@ -95,12 +96,14 @@ public:
   const static int IMPORT_LOGGINGSTART  = 4; // got import, logging EImportStart
   const static int IMPORT_ACKING        = 5; // logged EImportStart, sent ack, waiting for finish
   //const static int IMPORT_LOGGINGFINISH = 6; // logging EImportFinish
+  const static int IMPORT_ABORTING      = 7; // notifying bystanders of an abort before unfreezing
 
 protected:
   map<inodeno_t,int>              import_state;
   map<inodeno_t,int>              import_peer;
   map<inodeno_t,list<inodeno_t> > import_bound_inos;
   map<CDir*,set<CDir*> >          import_bounds;
+  map<CDir*,set<int> >            import_bystanders;
 
 
   // -- hashing madness --
@@ -205,6 +208,9 @@ public:
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);
 protected:
+  void import_reverse_unfreeze(CDir *dir);
+  void import_reverse_unpin(CDir *dir);
+  void import_notify_abort(CDir *dir);
   void import_logged_start(CDir *dir, int from,
 			       list<inodeno_t> &imported_subdirs,
 			       list<inodeno_t> &exports);

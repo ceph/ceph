@@ -30,6 +30,9 @@ class MExportDirNotifyAck : public Message {
     this->ino = ino;
   }
   virtual char *get_type_name() { return "ExNotA"; }
+  void print(ostream& o) {
+    o << "export_notify_ack(" << ino << ")";
+  }
 
   virtual void decode_payload() {
     int off = 0;

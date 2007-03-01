@@ -182,6 +182,7 @@ protected:
   set<int> got_import_map;     // nodes i need to send my import map to (when exports finish)
   set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
   
+  void handle_mds_failure(int who);
   void handle_import_map(MMDSImportMap *m);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);

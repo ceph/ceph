@@ -279,7 +279,8 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
   CDir *root;
   if (dir->ino() == 1) {
     root = dir;  // bootstrap hack.
-    subtrees[root].clear();
+    if (subtrees.count(root) == 0)
+      subtrees[root].clear();
   } else {
     root = get_subtree_root(dir);  // subtree root
   }
@@ -509,7 +510,6 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
     if (bounds.count(*p) == 0) {
       CDir *stray = *p;
       dout(10) << "  swallowing extra subtree at " << *stray << endl;
-      assert(stray->auth_is_ambiguous());
       adjust_subtree_auth(stray, auth);
       try_subtree_merge_at(stray);
     }
@@ -847,6 +847,39 @@ void MDCache::send_import_map_now(int who)
 }
 
 
+void MDCache::handle_mds_failure(int who)
+{
+  dout(7) << "handle_mds_failure mds" << who << endl;
+  
+  // adjust subtree auth
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *dir = p->first;
+    // only if we are a _bystander_.
+    if (dir->dir_auth.first == who &&
+	dir->dir_auth.second >= 0 &&
+	dir->dir_auth.second != mds->get_nodeid()) {
+      dout(7) << "disambiguating auth for " << *dir << endl;
+      adjust_subtree_auth(dir, dir->dir_auth.second);
+      try_subtree_merge(dir);
+    }
+    else if (dir->dir_auth.second == who &&
+	     dir->dir_auth.first != mds->get_nodeid()) {
+      dout(7) << "disambiguating auth for " << *dir << endl;
+      adjust_subtree_auth(dir, dir->dir_auth.first);
+      try_subtree_merge(dir);
+    }      
+  }
+
+  // tell the migrator too.
+  migrator->handle_mds_failure(who);
+
+  show_subtrees();  
+}
+
+
+
 /*
  * during resolve state, we share import_maps to determine who
  * is authoritative for which trees.  we expect to get an import_map
@@ -895,12 +928,14 @@ void MDCache::handle_import_map(MMDSImportMap *m)
     }
   }
 
-  // note ambiguous imports too
-  for (map<inodeno_t, list<inodeno_t> >::iterator pi = m->ambiguous_imap.begin();
-       pi != m->ambiguous_imap.end();
-       ++pi) {
-    dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << endl;
-    other_ambiguous_imports[from][pi->first].swap( pi->second );
+  // note ambiguous imports too.. unless i'm already active
+  if (!mds->is_active() && !mds->is_stopping()) {
+    for (map<inodeno_t, list<inodeno_t> >::iterator pi = m->ambiguous_imap.begin();
+	 pi != m->ambiguous_imap.end();
+	 ++pi) {
+      dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << endl;
+      other_ambiguous_imports[from][pi->first].swap( pi->second );
+    }
   }
 
   show_subtrees();
@@ -2229,6 +2264,12 @@ int MDCache::path_traverse(filepath& origpath,
 					      want,
 					      true),  // need this dir too
 				cur->authority().first, MDS_PORT_CACHE);
+	  if (cur->authority().second >= 0) 
+	    mds->send_message_mds(new MDiscover(mds->get_nodeid(),
+						cur->ino(),
+						want,
+						true),  // need this dir too
+				  cur->authority().second, MDS_PORT_CACHE);
         }
         cur->add_waiter(CINODE_WAIT_DIR, ondelay);
         if (onfinish) delete onfinish;
@@ -2380,11 +2421,11 @@ int MDCache::path_traverse(filepath& origpath,
     
     // MISS.  don't have it.
 
-    int dauth = cur->dir->dentry_authority( path[depth] ).first;
+    pair<int,int> dauth = cur->dir->dentry_authority( path[depth] );
     dout(12) << "traverse: miss on dentry " << path[depth] << " dauth " << dauth << " in " << *cur->dir << endl;
     
 
-    if (dauth == whoami) {
+    if (dauth.first == whoami) {
       // dentry is mine.
       if (cur->dir->is_complete()) {
         // file not found
@@ -2438,7 +2479,14 @@ int MDCache::path_traverse(filepath& origpath,
 					      cur->ino(),
 					      want,
 					      false),
-				dauth, MDS_PORT_CACHE);
+				dauth.first, MDS_PORT_CACHE);
+	  if (dauth.second >= 0) 
+	    mds->send_message_mds(new MDiscover(mds->get_nodeid(),
+						cur->ino(),
+						want,
+						false),
+				  dauth.second, MDS_PORT_CACHE);
+
           if (mds->logger) mds->logger->inc("dis");
         }
         
@@ -2462,7 +2510,7 @@ int MDCache::path_traverse(filepath& origpath,
           req->clear_payload();  // reencode!
         }
 
-        mds->send_message_mds(req, dauth, req->get_dest_port());
+        mds->send_message_mds(req, dauth.first, req->get_dest_port());
         //show_imports();
         
         if (mds->logger) mds->logger->inc("cfw");

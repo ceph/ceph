@@ -16,6 +16,8 @@ doc
  
 
 mds
+- bystanders should avoid contacting auth when it is ambiguous.
+  - CDIR_WAIT_UNAMBIGUOUS?
 - openingdir pins should be handled by open_remote_dir, not explicitly by handle_export_dir_prep
 - bystander recovery from exporter failure
 - does inode need it's own replica list?  no?

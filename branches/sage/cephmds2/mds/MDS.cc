@@ -573,7 +573,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       // newly so?
       if (oldfailed.count(*p)) continue;      
 
-      mdcache->migrator->handle_mds_failure(*p);
+      mdcache->handle_mds_failure(*p);
     }
   }
 

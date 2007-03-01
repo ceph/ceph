@@ -35,6 +35,8 @@ class MExportDirPrep : public Message {
 
   map<inodeno_t,CDirDiscover*>   dirs;
 
+  set<int>                       bystanders;
+
   bool b_did_assim;
 
  public:
@@ -53,6 +55,7 @@ class MExportDirPrep : public Message {
   CDirDiscover* get_dir(inodeno_t ino) {
     return dirs[ino];
   }
+  set<int> &get_bystanders() { return bystanders; }
 
   bool did_assim() { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
@@ -80,8 +83,6 @@ class MExportDirPrep : public Message {
   virtual char *get_type_name() { return "ExP"; }
 
 
-
-
   void add_export(inodeno_t dirino) {
     exports.push_back( dirino );
   }
@@ -93,7 +94,9 @@ class MExportDirPrep : public Message {
   void add_dir(CDirDiscover *dir) {
     dirs.insert(pair<inodeno_t, CDirDiscover*>(dir->get_ino(), dir));
   }
-
+  void add_bystander(int who) {
+    bystanders.insert(who);
+  }
 
   virtual void decode_payload() {
     int off = 0;
@@ -133,6 +136,8 @@ class MExportDirPrep : public Message {
       dir->_decode(payload, off);
       dirs[dir->get_ino()] = dir;
     }
+    
+    ::_decode(bystanders, payload, off);
   }
 
   virtual void encode_payload() {
@@ -163,6 +168,8 @@ class MExportDirPrep : public Message {
          dit != dirs.end();
          dit++)
       dit->second->_encode(payload);
+
+    ::_encode(bystanders, payload);
   }
 };
 
