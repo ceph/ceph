@@ -44,9 +44,11 @@
 void Monitor::set_new_private_key(string& pk)
 {
   dout(10) << "set_new_private_key" << endl;
-
+  myPrivKey = _fromStr_esignPrivKey(pk);
+  myPubKey = esignPubKey(myPrivKey);
+  
   // FIXME.
-  assert(0);
+  //assert(0);
 }
 
 void Monitor::init()

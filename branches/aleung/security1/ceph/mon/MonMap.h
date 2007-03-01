@@ -37,11 +37,12 @@ class MonMap {
   
   void generate_key_pair(string& private_key) {
     esignPriv tempKey = esignPrivKey("crypto/esig1536.dat");
+    private_key = privToString(tempKey);
     pub_key = esignPubKey(tempKey);
     pub_str_key = pubToString(pub_key);
     // now throw away the private key
     keyConvert = false;
-    assert(0); // FIXME
+    //assert(0); // FIXME
   }
 
 
