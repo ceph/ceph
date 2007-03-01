@@ -502,6 +502,8 @@ class ObjectCacher {
                  off_t offset, size_t len, 
                  bufferlist& bl, ExtCap *write_ext_cap,
 				 objectrev_t rev=0) {
+    // insert write_cap into write object
+    // will be inserted into bufferhead later
     Objecter::OSDWrite *wr;
     if (!write_ext_cap)
       wr = new Objecter::OSDWrite(bl);
@@ -533,7 +535,11 @@ class ObjectCacher {
                              bufferlist& bl,
                              Mutex &lock, ExtCap *write_ext_cap=0,
 							 objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+    // we really should always have a cap
+    if (write_ext_cap != 0)
+      Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, write_exp_cap);
+    else
+      Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return atomic_sync_writex(wr, inode.ino, lock);
   }
