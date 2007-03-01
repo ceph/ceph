@@ -1334,7 +1334,60 @@ void PG::read_log(ObjectStore *store)
 
 
 
-bool PG::is_dup(reqid_t rid)
+
+
+
+// =======================
+// revisions
+
+
+/*
+int OSD::list_missing_revs(object_t oid, set<object_t>& revs, PG *pg)
 {
-  return pg->log.logged_req(rid);
+  int c = 0;
+  oid.rev = 0;
+  
+  map<object_t,eversion_t>::iterator p = pg->missing.missing.lower_bound(oid);
+  if (p == pg->missing.missing.end()) 
+    return 0;  // clearly not
+
+  while (p->first.ino == oid.ino &&
+	 p->first.bno == oid.bno) {
+    revs.insert(p->first);
+    c++;
+  }
+  return c;
+}*/
+
+bool PG::pick_missing_object_rev(object_t& oid)
+{
+  map<object_t,eversion_t>::iterator p = missing.missing.upper_bound(oid);
+  if (p == missing.missing.end()) 
+    return false;  // clearly no candidate
+
+  if (p->first.ino == oid.ino && p->first.bno == oid.bno) {
+    oid = p->first;  // yes!  it's an upper bound revision for me.
+    return true;
+  }
+  return false;
 }
+
+bool PG::pick_object_rev(object_t& oid)
+{
+  object_t t = oid;
+
+  if (!osd->store->pick_object_revision_lt(t))
+    return false; // we have no revisions of this object!
+  
+  objectrev_t crev;
+  int r = osd->store->getattr(t, "crev", &crev, sizeof(crev));
+  assert(r >= 0);
+  if (crev <= oid.rev) {
+    dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << endl;
+    oid = t;
+    return true;
+  }
+
+  return false;  
+}
+

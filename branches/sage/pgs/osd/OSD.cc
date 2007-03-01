@@ -1957,196 +1957,6 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
 /*** RECOVERY ***/
 
-/** pull - request object from a peer
- */
-void OSD::pull(PG *pg, object_t oid)
-{
-  assert(pg->missing.loc.count(oid));
-  eversion_t v = pg->missing.missing[oid];
-  int osd = pg->missing.loc[oid];
-  
-  dout(7) << *pg << " pull " << oid
-          << " v " << v 
-          << " from osd" << osd
-          << endl;
-
-  // send op
-  tid_t tid = ++last_tid;
-  MOSDOp *op = new MOSDOp(messenger->get_myinst(), 0, tid,
-                          oid, pg->get_pgid(),
-                          osdmap->get_epoch(),
-                          OSD_OP_PULL);
-  op->set_version(v);
-  messenger->send_message(op, osdmap->get_inst(osd));
-  
-  // take note
-  assert(pg->objects_pulling.count(oid) == 0);
-  num_pulling++;
-  pg->objects_pulling[oid] = v;
-}
-
-
-/** push - send object to a peer
- */
-void OSD::push(PG *pg, object_t oid, int dest)
-{
-  // read data+attrs
-  bufferlist bl;
-  eversion_t v;
-  int vlen = sizeof(v);
-  map<string,bufferptr> attrset;
-  
-  ObjectStore::Transaction t;
-  t.read(oid, 0, 0, &bl);
-  t.getattr(oid, "version", &v, &vlen);
-  t.getattrs(oid, attrset);
-  unsigned tr = store->apply_transaction(t);
-  
-  assert(tr == 0);  // !!!
-
-  // ok
-  dout(7) << *pg << " push " << oid << " v " << v 
-          << " size " << bl.length()
-          << " to osd" << dest
-          << endl;
-
-  logger->inc("r_push");
-  logger->inc("r_pushb", bl.length());
-  
-  // send
-  MOSDOp *op = new MOSDOp(messenger->get_myinst(), 0, ++last_tid,
-                          oid, pg->info.pgid, osdmap->get_epoch(), 
-                          OSD_OP_PUSH); 
-  op->set_offset(0);
-  op->set_length(bl.length());
-  op->set_data(bl);   // note: claims bl, set length above here!
-  op->set_version(v);
-  op->set_attrset(attrset);
-  
-  messenger->send_message(op, osdmap->get_inst(dest));
-}
-
-
-/** op_pull
- * process request to pull an entire object.
- * NOTE: called from opqueue.
- */
-void OSD::op_pull(MOSDOp *op, PG *pg)
-{
-  const object_t oid = op->get_oid();
-  const eversion_t v = op->get_version();
-  int from = op->get_source().num();
-
-  dout(7) << *pg << " op_pull " << oid << " v " << op->get_version()
-          << " from " << op->get_source()
-          << endl;
-
-  // is a replica asking?  are they missing it?
-  if (pg->is_primary()) {
-    // primary
-    assert(pg->peer_missing.count(from));  // we had better know this, from the peering process.
-
-    if (!pg->peer_missing[from].is_missing(oid)) {
-      dout(7) << *pg << " op_pull replica isn't actually missing it, we must have already pushed to them" << endl;
-      delete op;
-      return;
-    }
-
-    // do we have it yet?
-    if (waitfor_missing_object(op, pg))
-      return;
-  } else {
-    // non-primary
-    if (pg->missing.is_missing(oid)) {
-      dout(7) << *pg << " op_pull not primary, and missing " << oid << ", ignoring" << endl;
-      delete op;
-      return;
-    }
-  }
-    
-  // push it back!
-  push(pg, oid, op->get_source().num());
-}
-
-
-/** op_push
- * NOTE: called from opqueue.
- */
-void OSD::op_push(MOSDOp *op, PG *pg)
-{
-  object_t oid = op->get_oid();
-  eversion_t v = op->get_version();
-
-  if (!pg->missing.is_missing(oid)) {
-    dout(7) << *pg << " op_push not missing " << oid << endl;
-    return;
-  }
-  
-  dout(7) << *pg << " op_push " 
-          << oid 
-          << " v " << v 
-          << " size " << op->get_length() << " " << op->get_data().length()
-          << endl;
-
-  assert(op->get_data().length() == op->get_length());
-  
-  // write object and add it to the PG
-  ObjectStore::Transaction t;
-  t.remove(oid);  // in case old version exists
-  t.write(oid, 0, op->get_length(), op->get_data());
-  t.setattrs(oid, op->get_attrset());
-  t.collection_add(pg->info.pgid, oid);
-
-  // close out pull op?
-  num_pulling--;
-  if (pg->objects_pulling.count(oid))
-    pg->objects_pulling.erase(oid);
-  pg->missing.got(oid, v);
-
-
-  // raise last_complete?
-  assert(pg->log.complete_to != pg->log.log.end());
-  while (pg->log.complete_to != pg->log.log.end()) {
-    if (pg->missing.missing.count(pg->log.complete_to->oid)) break;
-    if (pg->info.last_complete < pg->log.complete_to->version)
-      pg->info.last_complete = pg->log.complete_to->version;
-    pg->log.complete_to++;
-  }
-  dout(10) << *pg << " last_complete now " << pg->info.last_complete << endl;
-  
-  
-  // apply to disk!
-  t.collection_setattr(pg->info.pgid, "info", &pg->info, sizeof(pg->info));
-  unsigned r = store->apply_transaction(t);
-  assert(r == 0);
-
-
-
-  // am i primary?  are others missing this too?
-  if (pg->is_primary()) {
-    for (unsigned i=1; i<pg->acting.size(); i++) {
-      int peer = pg->acting[i];
-      assert(pg->peer_missing.count(peer));
-      if (pg->peer_missing[peer].is_missing(oid)) {
-        // ok, push it, and they (will) have it now.
-        pg->peer_missing[peer].got(oid, v);
-        push(pg, oid, peer);
-      }
-    }
-  }
-
-  // continue recovery
-  pg->do_recovery();
-  
-  // kick waiters
-  if (pg->waiting_for_missing_object.count(oid)) 
-    take_waiters(pg->waiting_for_missing_object[oid]);
-
-  delete op;
-}
-
-
-
 
 // op_rep_modify
 
@@ -2213,7 +2023,8 @@ void OSD::handle_op(MOSDOp *op)
       delete op;
       return;
     }
-    if (!read && !pg->same_for_modify_since(op->get_map_epoch())) {
+    if (!read && (pg->get_primary() != whoami ||
+		  !pg->same_for_modify_since(op->get_map_epoch()))) {
       dout(7) << "handle_rep_op pg changed " << pg->info.history
 	      << " after " << op->get_map_epoch() 
 	      << ", dropping" << endl;
@@ -2244,6 +2055,11 @@ void OSD::handle_op(MOSDOp *op)
     }
     
     // missing object?
+    if (pg->is_missing_object(op->get_oid())) {
+      pg->wait_for_missing_object(op->get_oid(), op);
+      return;
+    }
+    /*
     if (read && op->get_oid().rev > 0) {
       // versioned read.  hrm.
       // are we missing a revision that we might need?
@@ -2273,6 +2089,7 @@ void OSD::handle_op(MOSDOp *op)
       if (op->get_op() != OSD_OP_PUSH &&
 	  waitfor_missing_object(op, pg)) return;
     }
+    */
 
     dout(7) << "handle_op " << *op << " in " << *pg << endl;
     
@@ -2486,18 +2303,22 @@ void OSD::do_op(Message *m, PG *pg)
       
       // reads
     case OSD_OP_READ:
-      op_read(op, pg);
+      if (block_if_wrlocked(op)) 
+	return;
+      pg->op_read(op);
       break;
     case OSD_OP_STAT:
-      op_stat(op, pg);
+      if (block_if_wrlocked(op)) 
+	return;
+      pg->op_stat(op);
       break;
       
       // rep stuff
     case OSD_OP_PULL:
-      op_pull(op, pg);
+      pg->op_pull(op);
       break;
     case OSD_OP_PUSH:
-      op_push(op, pg);
+      pg->op_push(op);
       break;
       
       // writes
@@ -2512,10 +2333,33 @@ void OSD::do_op(Message *m, PG *pg)
     case OSD_OP_RDUNLOCK:
     case OSD_OP_UPLOCK:
     case OSD_OP_DNLOCK:
-      if (op->get_source().is_osd()) 
-        op_rep_modify(op, pg);
-      else
-        op_modify(op, pg);
+      if (op->get_source().is_osd()) {
+        pg->op_rep_modify(op, pg);
+      } else {
+	// locked by someone else?
+	// for _any_ op type -- eg only the locker can unlock!
+	if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
+	    block_if_wrlocked(op)) 
+	  return; // op will be handled later, after the object unlocks
+	
+	// share latest osd map with rest of pg?
+	osd_lock.Lock();
+	{
+	  for (unsigned i=1; i<pg->acting.size(); i++) {
+	    int osd = pg->acting[i];
+	    _share_map_outgoing( osdmap->get_inst(osd) ); 
+	  }
+	}
+	osd_lock.Unlock();
+	
+	// go go gadget pg
+        pg->op_modify(op);
+
+	if (op->get_op() == OSD_OP_WRITE) {
+	  logger->inc("c_wr");
+	  logger->inc("c_wrb", op->get_length());
+	}
+      }
       break;
       
     default:
@@ -2523,23 +2367,7 @@ void OSD::do_op(Message *m, PG *pg)
     }
   } 
   else if (m->get_type() == MSG_OSD_OPREPLY) {
-    // must be replication.
-    MOSDOpReply *r = (MOSDOpReply*)m;
-    tid_t rep_tid = r->get_rep_tid();
-  
-    if (pg->repop_gather.count(rep_tid)) {
-      // oh, good.
-      int fromosd = r->get_source().num();
-      repop_ack(pg, pg->repop_gather[rep_tid], 
-                r->get_result(), r->get_commit(), 
-                fromosd, 
-                r->get_pg_complete_thru());
-      delete m;
-    } else {
-      // early ack.
-      pg->waiting_for_repop[rep_tid].push_back(r);
-    }
-
+    pg->op_reply((MOSDOpReply*)m);
   } else
     assert(0);
 }
@@ -2558,6 +2386,8 @@ void OSD::wait_for_no_ops()
   } 
   dout(7) << "wait_for_no_ops - none" << endl;
 }
+
+
 
 
 // ==============================
@@ -2589,180 +2419,3 @@ bool OSD::block_if_wrlocked(MOSDOp* op)
 
 // ===============================
 // OPS
-
-/*
-int OSD::list_missing_revs(object_t oid, set<object_t>& revs, PG *pg)
-{
-  int c = 0;
-  oid.rev = 0;
-  
-  map<object_t,eversion_t>::iterator p = pg->missing.missing.lower_bound(oid);
-  if (p == pg->missing.missing.end()) 
-    return 0;  // clearly not
-
-  while (p->first.ino == oid.ino &&
-	 p->first.bno == oid.bno) {
-    revs.insert(p->first);
-    c++;
-  }
-  return c;
-}*/
-
-bool OSD::pick_missing_object_rev(object_t& oid, PG *pg)
-{
-  map<object_t,eversion_t>::iterator p = pg->missing.missing.upper_bound(oid);
-  if (p == pg->missing.missing.end()) 
-    return false;  // clearly no candidate
-
-  if (p->first.ino == oid.ino && p->first.bno == oid.bno) {
-    oid = p->first;  // yes!  it's an upper bound revision for me.
-    return true;
-  }
-  return false;
-}
-
-bool OSD::pick_object_rev(object_t& oid)
-{
-  object_t t = oid;
-
-  if (!store->pick_object_revision_lt(t))
-    return false; // we have no revisions of this object!
-  
-  objectrev_t crev;
-  int r = store->getattr(t, "crev", &crev, sizeof(crev));
-  assert(r >= 0);
-  if (crev <= oid.rev) {
-    dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << endl;
-    oid = t;
-    return true;
-  }
-
-  return false;  
-}
-
-bool OSD::waitfor_missing_object(MOSDOp *op, PG *pg)
-{
-  const object_t oid = op->get_oid();
-
-  // are we missing the object?
-  if (pg->missing.missing.count(oid)) {
-    // we don't have it (yet).
-    eversion_t v = pg->missing.missing[oid];
-    if (pg->objects_pulling.count(oid)) {
-      dout(7) << "missing "
-              << oid 
-              << " v " << v
-              << " in " << *pg
-              << ", already pulling"
-              << endl;
-    } else {
-      dout(7) << "missing " 
-              << oid 
-              << " v " << v
-              << " in " << *pg
-              << ", pulling"
-              << endl;
-      pull(pg, oid);
-    }
-    pg->waiting_for_missing_object[oid].push_back(op);
-    return true;
-  }
-
-  return false;
-}
-
-
-
-
-// READ OPS
-
-/** op_read
- * client read op
- * NOTE: called from opqueue.
- */
-void OSD::op_read(MOSDOp *op, PG *pg)
-{
-  object_t oid = op->get_oid();
-  
-  // if the target object is locked for writing by another client, put 'op' to the waiting queue
-  // for _any_ op type -- eg only the locker can unlock!
-  if (block_if_wrlocked(op)) return; // op will be handled later, after the object unlocks
- 
-  int r = pg->op_read(op);
-
-  logger->inc("rd");
-  if (r >= 0) {
-    logger->inc("c_rd");
-    logger->inc("c_rdb", r);
-    logger->inc("rdb", r);
-  }
-  
-}
-
-
-/** op_stat
- * client stat
- * NOTE: called from opqueue
- */
-void OSD::op_stat(MOSDOp *op)//, PG *pg)
-{
-  object_t oid = op->get_oid();
-
-  // if the target object is locked for writing by another client, put 'op' to the waiting queue
-  if (block_if_wrlocked(op)) return; //read will be handled later, after the object unlocks
-
-  pg->op_stat(op);
-
-  logger->inc("stat");
-}
-
-
-
-
-
-
-/** op_modify
- * process client modify op
- * NOTE: called from opqueue.
- */
-void OSD::op_modify(MOSDOp *op, PG *pg)
-{
-  object_t oid = op->get_oid();
-  const char *opname = MOSDOp::get_opname(op->get_op());
-
-  // locked by someone else?
-  // for _any_ op type -- eg only the locker can unlock!
-  if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
-      block_if_wrlocked(op)) 
-    return; // op will be handled later, after the object unlocks
-
-
-  // dup op?
-  if (pg->is_dup(op->get_reqid())) {
-    dout(-3) << "op_modify " << opname << " dup op " << op->get_reqid()
-             << ", doing WRNOOP" << endl;
-    op->set_op(OSD_OP_WRNOOP);
-    opname = MOSDOp::get_opname(op->get_op());
-  }
-
-  // share latest osd map with rest of pg?
-  osd_lock.Lock();
-  {
-    for (unsigned i=1; i<pg->acting.size(); i++) {
-      int osd = pg->acting[i];
-      _share_map_outgoing( osdmap->get_inst(osd) ); 
-    }
-  }
-  osd_lock.Unlock();
-
-  if (op->get_op() == OSD_OP_WRITE) {
-    logger->inc("c_wr");
-    logger->inc("c_wrb", op->get_length());
-  }
-
-  // go
-  pg->assign_version(op);
-  pg->op_modify(op);
-}
-
-

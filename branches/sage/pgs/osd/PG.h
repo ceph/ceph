@@ -16,7 +16,7 @@
 
 
 #include "include/types.h"
-#include "include/osd_types.h"
+#include "osd_types.h"
 #include "include/buffer.h"
 
 #include "OSDMap.h"
@@ -31,6 +31,8 @@ using namespace __gnu_cxx;
 
 
 class OSD;
+class MOSDOp;
+class MOSDOpReply;
 
 
 /** PG - Replica Placement Group
@@ -490,6 +492,7 @@ public:
     peers_complete_thru(0),
     have_master_log(true)
   { }
+  virtual ~PG() {}
   
   pg_t       get_pgid() const { return info.pgid; }
   int        get_nrep() const { return acting.size(); }
@@ -546,19 +549,30 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
 
-  bool is_dup(reqid_t rid);
+  bool is_dup(reqid_t rid) {
+    return log.logged_req(rid);
+  }
+
+
+  bool pick_missing_object_rev(object_t& oid);
+  bool pick_object_rev(object_t& oid);
+
+
 
   // abstract bits
-  void op_stat(MOSDOp *op) = 0;
-  int op_read(MOSDOp *op) = 0;
-  void op_modify(MOSDOp *op) = 0;
+  virtual void op_stat(MOSDOp *op) = 0;
+  virtual int op_read(MOSDOp *op) = 0;
+  virtual void op_modify(MOSDOp *op) = 0;
+  virtual void op_push(MOSDOp *op) = 0;
+  virtual void op_pull(MOSDOp *op) = 0;
+  virtual void op_reply(MOSDOpReply *op) = 0;
 
-  bool same_for_read_since(epoch_t e);
-  bool same_for_modify_since(epoch_t e);
-  bool same_for_rep_modify_since(epoch_t e);
+  virtual bool same_for_read_since(epoch_t e);
+  virtual bool same_for_modify_since(epoch_t e);
+  virtual bool same_for_rep_modify_since(epoch_t e);
 
-  bool is_missing_object(object_t oid);
-  void wait_for_missing_object(object_t oid, op);
+  virtual bool is_missing_object(object_t oid);
+  virtual void wait_for_missing_object(object_t oid, MOSDOp *op);
 
 };
 

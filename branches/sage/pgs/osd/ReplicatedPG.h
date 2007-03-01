@@ -17,13 +17,15 @@
 
 #include "PG.h"
 
+#include "messages/MOSDOp.h"
+
 
 class ReplicatedPG : public PG {
-  
+public:  
   /*
    * gather state on the primary/head while replicating an osd op.
    */
-  class Gather {
+  class RepGather {
   public:
     class MOSDOp *op;
     tid_t rep_tid;
@@ -44,7 +46,7 @@ class ReplicatedPG : public PG {
     eversion_t       pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    Gather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
+    RepGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
       op(o), rep_tid(rt),
       applied(false),
       sent_ack(false), sent_commit(false),
@@ -64,38 +66,65 @@ class ReplicatedPG : public PG {
     }
   };
 
+protected:
   // replica ops
   // [primary|tail]
-  map<tid_t, Gather*>          repop_gather;
+  map<tid_t, RepGather*>               rep_gather;
   map<tid_t, list<class Message*> > waiting_for_repop;
 
-  void get_repop_gather(Gather*);
-  void apply_repop(Gather *repop);
-  void put_repop_gather(Gather*);
+  void get_rep_gather(RepGather*);
+  void apply_repop(RepGather *repop);
+  void put_rep_gather(RepGather*);
   void issue_repop(MOSDOp *op, int osd);
-  Gather *new_repop_gather(MOSDOp *op);
-  void repop_ack(Gather *repop,
+  RepGather *new_rep_gather(MOSDOp *op);
+  void repop_ack(RepGather *repop,
                  int result, bool commit,
                  int fromosd, eversion_t pg_complete_thru=0);
+  
+  // push/pull
+  void push(object_t oid, int dest);
+  void pull(object_t oid);
+
+  // modify
+  void assign_version(MOSDOp *op);
+  void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
+  void op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t last_complete);
+
+  friend class C_OSD_WriteCommit;
 
 public:
+  ReplicatedPG(OSD *o, pg_t p) : PG(o,p) {}
+
   void op_stat(MOSDOp *op);
   int op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
-  
+  void op_rep_modify(MOSDOp *op);
+  void op_push(MOSDOp *op);
+  void op_pull(MOSDOp *op);
+
+  void op_reply(MOSDOpReply *r);
+
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
   bool is_missing_object(object_t oid);
-  void wait_for_missing_object(object_t oid, op);
+  void wait_for_missing_object(object_t oid, MOSDOp *op);
+
+  void prepare_log_transaction(ObjectStore::Transaction& t, 
+			       MOSDOp *op, eversion_t& version, 
+			       objectrev_t crev, objectrev_t rev,
+			       eversion_t trim_to);
+  void prepare_op_transaction(ObjectStore::Transaction& t, 
+			      MOSDOp *op, eversion_t& version, 
+			      objectrev_t crev, objectrev_t rev);
 
 };
 
 
-inline ostream& operator<<(ostream& out, PG::Gather& repop)
+inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
-  out << "repop(" << &repop << " rep_tid=" << repop.rep_tid 
+  out << "repgather(" << &repop << " rep_tid=" << repop.rep_tid 
       << " wfack=" << repop.waitfor_ack
       << " wfcommit=" << repop.waitfor_commit;
   out << " pct=" << repop.pg_complete_thru;

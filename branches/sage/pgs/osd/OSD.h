@@ -144,12 +144,12 @@ public:
 			      objectrev_t crev, objectrev_t rev, PG *pg);
   
   bool waitfor_missing_object(MOSDOp *op, PG *pg);
-  bool pick_missing_object_rev(object_t& oid, PG *pg);
-  bool pick_object_rev(object_t& oid);
 
 
   
- friend class PG;
+  friend class PG;
+  friend class ReplicatedPG;
+  friend class C_OSD_WriteCommit;
 
  protected:
 
@@ -238,6 +238,8 @@ public:
  public:
   OSD(int id, Messenger *m, MonMap *mm, char *dev = 0);
   ~OSD();
+
+  int get_nodeid() { return whoami; }
   
   // startup/shutdown
   int init();

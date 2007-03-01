@@ -13,14 +13,25 @@
 
 
 #include "ReplicatedPG.h"
+#include "OSD.h"
 
+#include "common/Logger.h"
+
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 
 #include "config.h"
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+
+#include <errno.h>
+#include <sys/stat.h>
 
 
+
+// =======================
+// pg changes
 
 bool ReplicatedPG::same_for_read_since(epoch_t e)
 {
@@ -29,8 +40,7 @@ bool ReplicatedPG::same_for_read_since(epoch_t e)
 
 bool ReplicatedPG::same_for_modify_since(epoch_t e)
 {
-  return (get_primary() == whoami &&
-          e >= info.history.same_primary_since);
+  return (e >= info.history.same_primary_since);
 }
 
 bool ReplicatedPG::same_for_rep_modify_since(epoch_t e)
@@ -41,11 +51,13 @@ bool ReplicatedPG::same_for_rep_modify_since(epoch_t e)
     return e >= info.history.same_since;   // whole pg set same
   } else {
     // primary, splay
-    return (e >= info.history.same_primary_since &&|
+    return (e >= info.history.same_primary_since &&
 	    e >= info.history.same_acker_since);    
   }
 }
 
+// ====================
+// missing objects
 
 bool ReplicatedPG::is_missing_object(object_t oid)
 {
@@ -53,10 +65,27 @@ bool ReplicatedPG::is_missing_object(object_t oid)
 }
  
 
-
-void ReplicatedPG::wait_for_missing_object(object_t oid, op)
+void ReplicatedPG::wait_for_missing_object(object_t oid, MOSDOp *op)
 {
-  
+  assert(is_missing_object(oid));
+
+  // we don't have it (yet).
+  eversion_t v = missing.missing[oid];
+  if (objects_pulling.count(oid)) {
+    dout(7) << "missing "
+	    << oid 
+	    << " v " << v
+	    << ", already pulling"
+	    << endl;
+  } else {
+    dout(7) << "missing " 
+	    << oid 
+	    << " v " << v
+	    << ", pulling"
+	    << endl;
+    pull(oid);
+  }
+  waiting_for_missing_object[oid].push_back(op);
 }
 
 
@@ -67,6 +96,8 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, op)
 
 int ReplicatedPG::op_read(MOSDOp *op)
 {
+  object_t oid = op->get_oid();
+
   dout(10) << "op_read " << oid 
            << " " << op->get_offset() << "~" << op->get_length() 
     //<< " in " << *pg 
@@ -74,19 +105,19 @@ int ReplicatedPG::op_read(MOSDOp *op)
 
   long r = 0;
   bufferlist bl;
-  
+
   if (oid.rev && !pick_object_rev(oid)) {
     // we have no revision for this request.
     r = -EEXIST;
   } else {
     // read into a buffer
-    r = store->read(oid, 
-		    op->get_offset(), op->get_length(),
-		    bl);
+    r = osd->store->read(oid, 
+			 op->get_offset(), op->get_length(),
+			 bl);
   }
   
   // set up reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osdmap->get_epoch(), true); 
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), true); 
   if (r >= 0) {
     reply->set_result(0);
     reply->set_data(bl);
@@ -109,6 +140,8 @@ int ReplicatedPG::op_read(MOSDOp *op)
 
 void ReplicatedPG::op_stat(MOSDOp *op)
 {
+  object_t oid = op->get_oid();
+
   struct stat st;
   memset(&st, sizeof(st), 0);
   int r = 0;
@@ -117,7 +150,7 @@ void ReplicatedPG::op_stat(MOSDOp *op)
     // we have no revision for this request.
     r = -EEXIST;
   } else {
-    r = store->stat(oid, &st);
+    r = osd->store->stat(oid, &st);
   }
   
   dout(3) << "op_stat on " << oid 
@@ -126,7 +159,7 @@ void ReplicatedPG::op_stat(MOSDOp *op)
     //<< " in " << *pg
           << endl;
   
-  MOSDOpReply *reply = new MOSDOpReply(op, r, osdmap->get_epoch(), true);
+  MOSDOpReply *reply = new MOSDOpReply(op, r, osd->osdmap->get_epoch(), true);
   reply->set_object_size(st.st_size);
   osd->messenger->send_message(reply, op->get_client_inst());
   
@@ -139,11 +172,10 @@ void ReplicatedPG::op_stat(MOSDOp *op)
 // ========================================================================
 // MODIFY
 
-void OSD::prepare_log_transaction(ObjectStore::Transaction& t, 
-                                  MOSDOp *op, eversion_t& version, 
-				  objectrev_t crev, objectrev_t rev,
-				  PG *pg,
-                                  eversion_t trim_to)
+void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t, 
+					   MOSDOp *op, eversion_t& version, 
+					   objectrev_t crev, objectrev_t rev,
+					   eversion_t trim_to)
 {
   const object_t oid = op->get_oid();
 
@@ -151,12 +183,12 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
   if (crev && rev && rev > crev) {
     eversion_t cv = version;
     cv.version--;
-    PG::Log::Entry cloneentry(PG::Log::Entry::CLONE, oid, cv, op->get_reqid());
-    pg->log.add(cloneentry);
+    Log::Entry cloneentry(PG::Log::Entry::CLONE, oid, cv, op->get_reqid());
+    log.add(cloneentry);
 
     dout(10) << "prepare_log_transaction " << op->get_op()
 	     << " " << cloneentry
-	     << " in " << *pg << endl;
+	     << endl;
   }
 
   // actual op
@@ -166,26 +198,25 @@ void OSD::prepare_log_transaction(ObjectStore::Transaction& t,
 
   dout(10) << "prepare_log_transaction " << op->get_op()
            << " " << logentry
-           << " in " << *pg << endl;
+           << endl;
 
   // append to log
-  assert(version > pg->log.top);
-  pg->log.add(logentry);
-  assert(pg->log.top == version);
-  dout(10) << "prepare_log_transaction appended to " << *pg << endl;
+  assert(version > log.top);
+  log.add(logentry);
+  assert(log.top == version);
+  dout(10) << "prepare_log_transaction appended" << endl;
 
   // write to pg log on disk
-  pg->append_log(t, logentry, trim_to);
+  append_log(t, logentry, trim_to);
 }
 
 
 /** prepare_op_transaction
  * apply an op to the store wrapped in a transaction.
  */
-void OSD::prepare_op_transaction(ObjectStore::Transaction& t, 
-                                 MOSDOp *op, eversion_t& version, 
-				 objectrev_t crev, objectrev_t rev,
-				 PG *pg)
+void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, 
+					  MOSDOp *op, eversion_t& version, 
+					  objectrev_t crev, objectrev_t rev)
 {
   const object_t oid = op->get_oid();
   const pg_t pgid = op->get_pg();
@@ -197,22 +228,22 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
            << " v " << version
 	   << " crev " << crev
 	   << " rev " << rev
-           << " in " << *pg << endl;
+           << endl;
   
   // WRNOOP does nothing.
   if (op->get_op() == OSD_OP_WRNOOP) 
     return;
 
   // raise last_complete?
-  if (pg->info.last_complete == pg->info.last_update)
-    pg->info.last_complete = version;
+  if (info.last_complete == info.last_update)
+    info.last_complete = version;
   
   // raise last_update.
-  assert(version > pg->info.last_update);
-  pg->info.last_update = version;
+  assert(version > info.last_update);
+  info.last_update = version;
   
   // write pg info
-  t.collection_setattr(pgid, "info", &pg->info, sizeof(pg->info));
+  t.collection_setattr(pgid, "info", &info, sizeof(info));
 
   // clone?
   if (crev && rev && rev > crev) {
@@ -238,9 +269,9 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
       t.rmattr(oid, "wrlock");
       
       // unblock all operations that were waiting for this object to become unlocked
-      if (waiting_for_wr_unlock.count(oid)) {
-        take_waiters(waiting_for_wr_unlock[oid]);
-        waiting_for_wr_unlock.erase(oid);
+      if (osd->waiting_for_wr_unlock.count(oid)) {
+        osd->take_waiters(osd->waiting_for_wr_unlock[oid]);
+        osd->waiting_for_wr_unlock.erase(oid);
       }
     }
     break;
@@ -261,7 +292,7 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
       assert(0);  // are you sure this is what you want?
       // zero, remove, or truncate?
       struct stat st;
-      int r = store->stat(oid, &st);
+      int r = osd->store->stat(oid, &st);
       if (r >= 0) {
 	if (op->get_offset() + op->get_length() >= st.st_size) {
 	  if (op->get_offset()) 
@@ -324,13 +355,30 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
 // ========================================================================
 // rep op gather
 
-void ReplicatedPG::get_repop_gather(Gather *repop)
+class C_OSD_WriteCommit : public Context {
+public:
+  OSD *osd;
+  pg_t pgid;
+  tid_t rep_tid;
+  eversion_t pg_last_complete;
+  C_OSD_WriteCommit(OSD *o, pg_t p, tid_t rt, eversion_t lc) : osd(o), pgid(p), rep_tid(rt), pg_last_complete(lc) {}
+  void finish(int r) {
+    ReplicatedPG *pg = (ReplicatedPG*)(osd->_lock_pg(pgid));
+    if (pg) {
+      pg->op_modify_commit(rep_tid, pg_last_complete);
+      osd->_unlock_pg(pg->info.pgid);
+    }
+  }
+};
+
+
+void ReplicatedPG::get_rep_gather(RepGather *repop)
 {
   //repop->lock.Lock();
   dout(10) << "get_repop " << *repop << endl;
 }
 
-void ReplicatedPG::apply_repop(Gather *repop)
+void ReplicatedPG::apply_repop(RepGather *repop)
 {
   dout(10) << "apply_repop  applying update on " << *repop << endl;
   assert(!repop->applied);
@@ -346,7 +394,7 @@ void ReplicatedPG::apply_repop(Gather *repop)
   repop->applied = true;
 }
 
-void ReplicatedPG::put_repop_gather(Gather *repop)
+void ReplicatedPG::put_rep_gather(RepGather *repop)
 {
   dout(10) << "put_repop " << *repop << endl;
   
@@ -399,8 +447,8 @@ void ReplicatedPG::put_repop_gather(Gather *repop)
     dout(10) << "put_repop  deleting " << *repop << endl;
     //repop->lock.Unlock();  
 	
-    assert(repop_gather.count(repop->rep_tid));
-    repop_gather.erase(repop->rep_tid);
+    assert(rep_gather.count(repop->rep_tid));
+    rep_gather.erase(repop->rep_tid);
 	
     delete repop->op;
     delete repop;
@@ -411,13 +459,13 @@ void ReplicatedPG::put_repop_gather(Gather *repop)
 }
 
 
-void ReplicatedPG::issue_repop(MOSDOp *op, int osd)
+void ReplicatedPG::issue_repop(MOSDOp *op, int dest)
 {
   object_t oid = op->get_oid();
   
   dout(7) << " issue_repop rep_tid " << op->get_rep_tid()
           << " o " << oid
-          << " to osd" << osd
+          << " to osd" << dest
           << endl;
   
   // forward the write/update/whatever
@@ -432,16 +480,16 @@ void ReplicatedPG::issue_repop(MOSDOp *op, int osd)
   wr->set_version(op->get_version());
   
   wr->set_rep_tid(op->get_rep_tid());
-  wr->set_pg_trim_to(pg->peers_complete_thru);
+  wr->set_pg_trim_to(peers_complete_thru);
   
-  osd->messenger->send_message(wr, osdmap->get_inst(osd));
+  osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-Gather *ReplicatedPG::new_repop_gather(MOSDOp *op)
+ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op)
 {
-  dout(10) << "new_repop_gather rep_tid " << op->get_rep_tid() << " on " << *op << endl;
+  dout(10) << "new_rep_gather rep_tid " << op->get_rep_tid() << " on " << *op << endl;
 
-  Gather *repop = new Gather(op, op->get_rep_tid(), 
+  RepGather *repop = new RepGather(op, op->get_rep_tid(), 
                                                op->get_version(), 
                                                info.last_complete);
   
@@ -478,11 +526,11 @@ Gather *ReplicatedPG::new_repop_gather(MOSDOp *op)
 
   repop->start = g_clock.now();
 
-  repop_gather[ repop->rep_tid ] = repop;
+  rep_gather[ repop->rep_tid ] = repop;
 
   // anyone waiting?  (acks that got here before the op did)
   if (waiting_for_repop.count(repop->rep_tid)) {
-    take_waiters(waiting_for_repop[repop->rep_tid]);
+    osd->take_waiters(waiting_for_repop[repop->rep_tid]);
     waiting_for_repop.erase(repop->rep_tid);
   }
 
@@ -490,7 +538,7 @@ Gather *ReplicatedPG::new_repop_gather(MOSDOp *op)
 }
  
 
-void ReplicatedPG::repop_ack(Gather *repop,
+void ReplicatedPG::repop_ack(RepGather *repop,
                     int result, bool commit,
                     int fromosd, eversion_t pg_complete_thru)
 {
@@ -500,7 +548,7 @@ void ReplicatedPG::repop_ack(Gather *repop,
           << " result " << result << " commit " << commit << " from osd" << fromosd
           << endl;
 
-  get_repop_gather(repop);
+  get_rep_gather(repop);
   {
     if (commit) {
       // commit
@@ -513,7 +561,7 @@ void ReplicatedPG::repop_ack(Gather *repop,
       repop->waitfor_ack.erase(fromosd);
     }
   }
-  put_repop_gather(repop);
+  put_rep_gather(repop);
 }
 
 
@@ -529,20 +577,53 @@ void ReplicatedPG::repop_ack(Gather *repop,
 
 
 
+
+
+
+
+
+
+
+
+
+/** op_modify_commit
+ * transaction commit on the acker.
+ */
+void ReplicatedPG::op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru)
+{
+  if (rep_gather.count(rep_tid)) {
+    RepGather *repop = rep_gather[rep_tid];
+    
+    dout(10) << "op_modify_commit " << *repop->op << endl;
+    get_rep_gather(repop);
+    {
+      assert(repop->waitfor_commit.count(osd->get_nodeid()));
+      repop->waitfor_commit.erase(osd->get_nodeid());
+      repop->pg_complete_thru[osd->get_nodeid()] = pg_complete_thru;
+    }
+    put_rep_gather(repop);
+    dout(10) << "op_modify_commit done on " << repop << endl;
+  } else {
+    dout(10) << "op_modify_commit rep_tid " << rep_tid << " dne" << endl;
+  }
+}
+
+
+
 void ReplicatedPG::assign_version(MOSDOp *op)
 {
   // check crev
   objectrev_t crev = 0;
-  store->getattr(oid, "crev", (char*)&crev, sizeof(crev));
+  osd->store->getattr(oid, "crev", (char*)&crev, sizeof(crev));
 
   // assign version
   eversion_t clone_version;
-  eversion_t nv = pg->log.top;
+  eversion_t nv = log.top;
   if (op->get_op() != OSD_OP_WRNOOP) {
-    nv.epoch = osdmap->get_epoch();
+    nv.epoch = osd->osdmap->get_epoch();
     nv.version++;
-    assert(nv > pg->info.last_update);
-    assert(nv > pg->log.top);
+    assert(nv > info.last_update);
+    assert(nv > log.top);
 
     // will clone?
     if (crev && op->get_rev() && op->get_rev() > crev) {
@@ -567,58 +648,7 @@ void ReplicatedPG::assign_version(MOSDOp *op)
 
   // set version in op, for benefit of client and our eventual reply
   op->set_version(nv);
-
 }
-
-
-
-
-
-
-
-
-class C_OSD_WriteCommit : public Context {
-public:
-  OSD *osd;
-  pg_t pgid;
-  tid_t rep_tid;
-  eversion_t pg_last_complete;
-  C_OSD_WriteCommit(OSD *o, pg_t p, tid_t rt, eversion_t lc) : osd(o), pgid(p), rep_tid(rt), pg_last_complete(lc) {}
-  void finish(int r) {
-	ReplicatedPG *pg = (ReplicatedPG*)osd->_lock_pg(pgid);
-	if (pg) {
-	  pg->op_modify_commit(rep_tid, pg_last_complete);
-	  osd->_unlock_pg(pg);
-	}
-  }
-};
-
-
-/** op_modify_commit
- * transaction commit on the acker.
- */
-void ReplicatedPG::op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru)
-{
-  lock();
-  
-  if (repop_gather.count(rep_tid)) {
-	Gather *repop = repop_gather[rep_tid];
-	
-	dout(10) << "op_modify_commit " << *repop->op << endl;
-	get_repop_gather(repop);
-	{
-	  assert(repop->waitfor_commit.count(whoami));
-	  repop->waitfor_commit.erase(whoami);
-	  repop->pg_complete_thru[whoami] = pg_complete_thru;
-	}
-	put_repop_gather(repop);
-	dout(10) << "op_modify_commit done on " << repop << endl;
-  } else {
-	dout(10) << "op_modify_commit pg " << pgid << " rep_tid " << rep_tid << " dne" << endl;
-  }
-}
-
-
 
 
 
@@ -626,6 +656,17 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 {
   object_t oid = op->get_oid();
   const char *opname = MOSDOp::get_opname(op->get_op());
+
+  // dup op?
+  if (is_dup(op->get_reqid())) {
+    dout(-3) << "op_modify " << opname << " dup op " << op->get_reqid()
+             << ", doing WRNOOP" << endl;
+    op->set_op(OSD_OP_WRNOOP);
+    opname = MOSDOp::get_opname(op->get_op());
+  }
+
+  // assign the op a version
+  assign_version(op);
 
   // are any peers missing this?
   for (unsigned i=1; i<pg->acting.size(); i++) {
@@ -648,7 +689,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << endl;  
 
   // issue replica writes
-  Gather *repop = 0;
+  RepGather *repop = 0;
   bool alone = (pg->acting.size() == 1);
   tid_t rep_tid = ++last_tid;
   op->set_rep_tid(rep_tid);
@@ -667,7 +708,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       issue_repop(pg, op, pg->acting[i]);
   } else {
     // primary rep, or alone.
-    repop = new_repop_gather(pg, op);
+    repop = new_rep_gather(pg, op);
 
     // send to rest.
     if (!alone)
@@ -685,12 +726,12 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
     // (logical) local ack.
     // (if alone, this will apply the update.)
-    get_repop_gather(repop);
+    get_rep_gather(repop);
     {
       assert(repop->waitfor_ack.count(whoami));
       repop->waitfor_ack.erase(whoami);
     }
-    put_repop_gather(pg, repop);
+    put_rep_gather(pg, repop);
 
   } else {
     // chain or splay.  apply.
@@ -787,7 +828,7 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
   ObjectStore::Transaction t;
 
   // am i acker?
-  Gather *repop = 0;
+  RepGather *repop = 0;
   int ackerosd = pg->acting[0];
 
   if ((g_conf.osd_rep == OSD_REP_CHAIN || g_conf.osd_rep == OSD_REP_SPLAY)) {
@@ -795,20 +836,20 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
   
     if (pg->is_acker()) {
       // i am tail acker.
-      if (pg->repop_gather.count(op->get_rep_tid())) {
-        repop = pg->repop_gather[ op->get_rep_tid() ];
+      if (pg->rep_gather.count(op->get_rep_tid())) {
+        repop = pg->rep_gather[ op->get_rep_tid() ];
       } else {
-        repop = new_repop_gather(pg, op);
+        repop = new_rep_gather(pg, op);
       }
       
       // infer ack from source
       int fromosd = op->get_source().num();
-      get_repop_gather(repop);
+      get_rep_gather(repop);
       {
         //assert(repop->waitfor_ack.count(fromosd));   // no, we may come thru here twice.
         repop->waitfor_ack.erase(fromosd);
       }
-      put_repop_gather(pg, repop);
+      put_rep_gather(pg, repop);
 
       // prepare dest socket
       //messenger->prepare_send_message(op->get_client());
@@ -858,12 +899,12 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
   // ack?
   if (repop) {
     // (logical) local ack.  this may induce the actual update.
-    get_repop_gather(repop);
+    get_rep_gather(repop);
     {
       assert(repop->waitfor_ack.count(whoami));
       repop->waitfor_ack.erase(whoami);
     }
-    put_repop_gather(pg, repop);
+    put_rep_gather(pg, repop);
   } 
   else {
     // send ack to acker?
@@ -892,3 +933,228 @@ void ReplicatedPG::op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t las
   delete op;
 }
 
+
+
+
+
+
+
+
+
+
+// ===========================================================
+
+/** pull - request object from a peer
+ */
+void ReplicatedPG::pull(object_t oid)
+{
+  assert(missing.loc.count(oid));
+  eversion_t v = missing.missing[oid];
+  int osd = missing.loc[oid];
+  
+  dout(7) << "pull " << oid
+          << " v " << v 
+          << " from osd" << osd
+          << endl;
+
+  // send op
+  tid_t tid = ++last_tid;
+  MOSDOp *op = new MOSDOp(osd->messenger->get_myinst(), 0, tid,
+                          oid, info.pgid,
+                          osd->osdmap->get_epoch(),
+                          OSD_OP_PULL);
+  op->set_version(v);
+  osd->messenger->send_message(op, osdmap->get_inst(osd));
+  
+  // take note
+  assert(objects_pulling.count(oid) == 0);
+  num_pulling++;
+  objects_pulling[oid] = v;
+}
+
+
+/** push - send object to a peer
+ */
+void ReplicatedPG::push(object_t oid, int dest)
+{
+  // read data+attrs
+  bufferlist bl;
+  eversion_t v;
+  int vlen = sizeof(v);
+  map<string,bufferptr> attrset;
+  
+  ObjectStore::Transaction t;
+  t.read(oid, 0, 0, &bl);
+  t.getattr(oid, "version", &v, &vlen);
+  t.getattrs(oid, attrset);
+  unsigned tr = osd->store->apply_transaction(t);
+  
+  assert(tr == 0);  // !!!
+
+  // ok
+  dout(7) << "push " << oid << " v " << v 
+          << " size " << bl.length()
+          << " to osd" << dest
+          << endl;
+
+  osd->logger->inc("r_push");
+  osd->logger->inc("r_pushb", bl.length());
+  
+  // send
+  MOSDOp *op = new MOSDOp(osd->messenger->get_myinst(), 0, ++last_tid,
+                          oid, info.pgid, osdmap->get_epoch(), 
+                          OSD_OP_PUSH); 
+  op->set_offset(0);
+  op->set_length(bl.length());
+  op->set_data(bl);   // note: claims bl, set length above here!
+  op->set_version(v);
+  op->set_attrset(attrset);
+  
+  osd->messenger->send_message(op, osd->osdmap->get_inst(dest));
+}
+
+
+
+/** op_pull
+ * process request to pull an entire object.
+ * NOTE: called from opqueue.
+ */
+void ReplicatedPG::op_pull(MOSDOp *op)
+{
+  const object_t oid = op->get_oid();
+  const eversion_t v = op->get_version();
+  int from = op->get_source().num();
+
+  dout(7) << "op_pull " << oid << " v " << op->get_version()
+          << " from " << op->get_source()
+          << endl;
+
+  // is a replica asking?  are they missing it?
+  if (is_primary()) {
+    // primary
+    assert(peer_missing.count(from));  // we had better know this, from the peering process.
+
+    if (!peer_missing[from].is_missing(oid)) {
+      dout(7) << "op_pull replica isn't actually missing it, we must have already pushed to them" << endl;
+      delete op;
+      return;
+    }
+
+    // do we have it yet?
+    if (is_missing_object(oid)) {
+      wait_for_missing_object(oid, op);
+      return;
+    }
+  } else {
+    // non-primary
+    if (missing.is_missing(oid)) {
+      dout(7) << "op_pull not primary, and missing " << oid << ", ignoring" << endl;
+      delete op;
+      return;
+    }
+  }
+    
+  // push it back!
+  push(oid, op->get_source().num());
+}
+
+
+/** op_push
+ * NOTE: called from opqueue.
+ */
+void ReplicatedPG::op_push(MOSDOp *op)
+{
+  object_t oid = op->get_oid();
+  eversion_t v = op->get_version();
+
+  if (!is_missing_object(oid)) {
+    dout(7) << "op_push not missing " << oid << endl;
+    return;
+  }
+  
+  dout(7) << "op_push " 
+          << oid 
+          << " v " << v 
+          << " size " << op->get_length() << " " << op->get_data().length()
+          << endl;
+
+  assert(op->get_data().length() == op->get_length());
+  
+  // write object and add it to the PG
+  ObjectStore::Transaction t;
+  t.remove(oid);  // in case old version exists
+  t.write(oid, 0, op->get_length(), op->get_data());
+  t.setattrs(oid, op->get_attrset());
+  t.collection_add(info.pgid, oid);
+
+  // close out pull op?
+  num_pulling--;
+  if (objects_pulling.count(oid))
+    objects_pulling.erase(oid);
+  missing.got(oid, v);
+
+
+  // raise last_complete?
+  assert(log.complete_to != log.log.end());
+  while (log.complete_to != log.log.end()) {
+    if (missing.missing.count(log.complete_to->oid)) break;
+    if (info.last_complete < log.complete_to->version)
+      info.last_complete = log.complete_to->version;
+    log.complete_to++;
+  }
+  dout(10) << "last_complete now " << info.last_complete << endl;
+  
+  
+  // apply to disk!
+  t.collection_setattr(info.pgid, "info", &info, sizeof(info));
+  unsigned r = osd->store->apply_transaction(t);
+  assert(r == 0);
+
+
+
+  // am i primary?  are others missing this too?
+  if (is_primary()) {
+    for (unsigned i=1; i<acting.size(); i++) {
+      int peer = acting[i];
+      assert(peer_missing.count(peer));
+      if (peer_missing[peer].is_missing(oid)) {
+        // ok, push it, and they (will) have it now.
+        peer_missing[peer].got(oid, v);
+        push(oid, peer);
+      }
+    }
+  }
+
+  // continue recovery
+  do_recovery();
+  
+  // kick waiters
+  if (waiting_for_missing_object.count(oid)) {
+    osd->take_waiters(waiting_for_missing_object[oid]);
+    waiting_for_missing_object.erase(oid);
+  }
+
+  delete op;
+}
+
+
+
+
+void ReplicatedPG::op_reply(MOSDOpReply *r)
+{
+  // must be replication.
+  tid_t rep_tid = r->get_rep_tid();
+  
+  if (rep_gather.count(rep_tid)) {
+    // oh, good.
+    int fromosd = r->get_source().num();
+    repop_ack(rep_gather[rep_tid], 
+	      r->get_result(), r->get_commit(), 
+	      fromosd, 
+	      r->get_pg_complete_thru());
+    delete m;
+  } else {
+    // early ack.
+    waiting_for_repop[rep_tid].push_back(r);
+  }
+}
