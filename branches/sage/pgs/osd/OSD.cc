@@ -30,6 +30,10 @@
 #include "osbdb/OSBDB.h"
 #endif // USE_OSBDB
 
+
+#include "ReplicatedPG.h"
+#include "RAID4PG.h"
+
 #include "Ager.h"
 
 
@@ -627,14 +631,6 @@ void OSD::dispatch(Message *m)
     break;
 
     // -- don't need OSDMap --
-
-    /*
-    // host monitor
-  case MSG_PING_ACK:
-  case MSG_FAILURE_ACK:
-    monitor->proc_message(m);
-    break;
-    */
 
     // map and replication
   case MSG_OSD_MAP:
@@ -1479,7 +1475,13 @@ void OSD::load_pgs()
        it++) {
     pg_t pgid = *it;
 
-    PG *pg = new PG(this, pgid);
+    PG *pg = 0;
+    if (pgid->is_rep())
+      new ReplicatedPG(this, pgid);
+    else if (pgid->is_raid())
+      new RAID4PG(this, pgid);
+    else 
+      assert(0);
     pg_map[pgid] = pg;
 
     // read pg info
@@ -2201,32 +2203,26 @@ void OSD::handle_op(MOSDOp *op)
       waiting_for_pg[pgid].push_back(op);
       return;
     }
-    
-    if (read) {
-      // read. am i the (same) acker?
-      if (//pg->get_acker() != whoami ||
-          op->get_map_epoch() < pg->info.history.same_acker_since) {
-        dout(7) << "acting acker is osd" << pg->get_acker()
-                << " since " << pg->info.history.same_acker_since 
-                << ", dropping" << endl;
-        assert(op->get_map_epoch() < osdmap->get_epoch());
-        delete op;
-        return;
-      }
-    } else {
-      // write. am i the (same) primary?
-      if (pg->get_primary() != whoami ||
-          op->get_map_epoch() < pg->info.history.same_primary_since) {
-        dout(7) << "acting primary is osd" << pg->get_primary()
-                << " since " << pg->info.history.same_primary_since 
-                << ", dropping" << endl;
-        assert(op->get_map_epoch() < osdmap->get_epoch());
-        delete op;
-        return;
-      }
+
+    // pg must be same-ish...
+    if (read && !pg->same_for_read_since(op->get_map_epoch())) {
+      dout(7) << "handle_rep_op pg changed " << pg->info.history
+	      << " after " << op->get_map_epoch() 
+	      << ", dropping" << endl;
+      assert(op->get_map_epoch() < osdmap->get_epoch());
+      delete op;
+      return;
+    }
+    if (!read && !pg->same_for_modify_since(op->get_map_epoch())) {
+      dout(7) << "handle_rep_op pg changed " << pg->info.history
+	      << " after " << op->get_map_epoch() 
+	      << ", dropping" << endl;
+      assert(op->get_map_epoch() < osdmap->get_epoch());
+      delete op;
+      return;
     }
     
-    // must be active.
+    // pg must be active.
     if (!pg->is_active()) {
       // replay?
       if (op->get_version().version > 0) {
@@ -2334,18 +2330,8 @@ void OSD::handle_op(MOSDOp *op)
     }
     
     // check osd map: same set, or primary+acker?
-    if (g_conf.osd_rep == OSD_REP_CHAIN &&
-        op->get_map_epoch() < pg->info.history.same_since) {
+    if (!pg->same_for_rep_modify_since(op->get_map_epoch())) {
       dout(10) << "handle_rep_op pg changed " << pg->info.history
-               << " after " << op->get_map_epoch() 
-               << ", dropping" << endl;
-      delete op;
-      return;
-    }
-    if (g_conf.osd_rep != OSD_REP_CHAIN &&
-        (op->get_map_epoch() < pg->info.history.same_primary_since ||
-         op->get_map_epoch() < pg->info.history.same_acker_since)) {
-      dout(10) << "handle_rep_op pg primary|acker changed " << pg->info.history
                << " after " << op->get_map_epoch() 
                << ", dropping" << endl;
       delete op;

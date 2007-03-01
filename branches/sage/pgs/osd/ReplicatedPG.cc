@@ -21,6 +21,47 @@
 #define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) cout << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 
+
+bool ReplicatedPG::same_for_read_since(epoch_t e)
+{
+  return (e >= info.history.same_acker_since);
+}
+
+bool ReplicatedPG::same_for_modify_since(epoch_t e)
+{
+  return (get_primary() == whoami &&
+          e >= info.history.same_primary_since);
+}
+
+bool ReplicatedPG::same_for_rep_modify_since(epoch_t e)
+{
+  // check osd map: same set, or primary+acker?
+
+  if (g_conf.osd_rep == OSD_REP_CHAIN) {
+    return e >= info.history.same_since;   // whole pg set same
+  } else {
+    // primary, splay
+    return (e >= info.history.same_primary_since &&|
+	    e >= info.history.same_acker_since);    
+  }
+}
+
+
+bool ReplicatedPG::is_missing_object(object_t oid)
+{
+  return missing.missing.count(oid);
+}
+ 
+
+
+void ReplicatedPG::wait_for_missing_object(object_t oid, op)
+{
+  
+}
+
+
+
+
 // ========================================================================
 // READS
 

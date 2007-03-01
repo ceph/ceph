@@ -173,11 +173,27 @@ void OSDMonitor::create_initial()
     int nroot = osdmap.crush.add_bucket(root);    
     
     // rules
+    // replication
     for (int i=1; i<=ndom; i++) {
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 1));
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));      
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      int r = CRUSH_REP_RULE(i);
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 1));
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));      
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    }
+    // raid
+    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
+      int r = CRUSH_RAID_RULE(i);      
+      if (ndom >= i) {
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 1));
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, 1, 0));      
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      } else {
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, nroot));
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
+	osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      }
     }
     
     // test
@@ -193,10 +209,20 @@ void OSDMonitor::create_initial()
       b->add_item(i, 1.0);
     }
     
+    // rules
+    // replication
     for (int i=1; i<=g_conf.osd_max_rep; i++) {
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
-      osdmap.crush.rules[i].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+      int r = CRUSH_REP_RULE(i);
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, i, 0));
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    }
+    // raid
+    for (int i=g_conf.osd_min_raid_width; i <= g_conf.osd_max_raid_width; i++) {
+      int r = CRUSH_RAID_RULE(i);      
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_CHOOSE_INDEP, i, 0));
+      osdmap.crush.rules[r].steps.push_back(RuleStep(CRUSH_RULE_EMIT));
     }
   }
   

@@ -553,6 +553,13 @@ public:
   int op_read(MOSDOp *op) = 0;
   void op_modify(MOSDOp *op) = 0;
 
+  bool same_for_read_since(epoch_t e);
+  bool same_for_modify_since(epoch_t e);
+  bool same_for_rep_modify_since(epoch_t e);
+
+  bool is_missing_object(object_t oid);
+  void wait_for_missing_object(object_t oid, op);
+
 };
 
 
