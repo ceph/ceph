@@ -2861,7 +2861,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
   // verify the capability
   ExtCap *op_capability = op->get_capability();
   if (op_capability) {
-    cout << "OSD recieved a capability" << endl;
+    cout << "OSD recieved a read capability" << endl;
     if (op_capability->verif_extcap(monmap->get_key()))
       cout << "OSD successfully verified capability" << endl;
     else

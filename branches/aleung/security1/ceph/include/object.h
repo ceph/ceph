@@ -18,8 +18,6 @@
 #include <iomanip>
 using namespace std;
 
-#include "crypto/ExtCap.h"
-
 
 typedef __uint32_t objectrev_t;
 

@@ -23,7 +23,6 @@ using namespace std;
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 
-#include "common/Clock.h"
 
 class ExtCap {
 private:

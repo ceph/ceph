@@ -351,7 +351,8 @@ class ObjectCacher {
 
   // io
   void bh_read(BufferHead *bh, ExtCap* read_ext_cap=0);
-  void bh_write(BufferHead *bh, ExtCap *write_cap=0);
+  // doesn't need a cap (cap is in bh)
+  void bh_write(BufferHead *bh);
 
   void trim(off_t max=-1);
   void flush(off_t amount=0);
@@ -536,10 +537,11 @@ class ObjectCacher {
                              Mutex &lock, ExtCap *write_ext_cap=0,
 							 objectrev_t rev=0) {
     // we really should always have a cap
+    Objecter::OSDWrite *wr;
     if (write_ext_cap != 0)
-      Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, write_exp_cap);
+      wr = new Objecter::OSDWrite(bl, write_ext_cap);
     else
-      Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
+      wr = new Objecter::OSDWrite(bl);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return atomic_sync_writex(wr, inode.ino, lock);
   }

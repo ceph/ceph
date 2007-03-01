@@ -356,7 +356,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr
         left -= glen;
         continue;    // more?
       }
-s    }
+    }
   }
   
   // set versoin
@@ -454,14 +454,16 @@ void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, buff
 }
 
 
-void ObjectCacher::bh_write(BufferHead *bh, ExtCap *write_cap)
+void ObjectCacher::bh_write(BufferHead *bh)
 {
   dout(7) << "bh_write " << *bh << endl;
   
   // finishers
   C_WriteAck *onack = new C_WriteAck(this, bh->ob->get_oid(), bh->start(), bh->length());
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->get_oid(), bh->start(), bh->length());
-
+  
+  // get security cap
+  ExtCap *write_cap = bh->bh_cap;
   // go
   tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->bl,
                               onack, oncommit, write_cap);
@@ -1274,9 +1276,7 @@ bool ObjectCacher::flush(Object *ob)
       continue;
     }
     if (!bh->is_dirty()) continue;
-    // get capability for write back
-    ExtCap *write_cap = ob->ocap;
-    bh_write(bh, write_cap);
+    bh_write(bh);
     clean = false;
   }
   return clean;
