@@ -287,6 +287,7 @@ int main(int argc, char **argv)
   set<int> clientlist;
   map<int,Client *> client;//[NUMCLIENT];
   map<int,SyntheticClient *> syn;//[NUMCLIENT];
+  int nclients = 0;
   for (int i=0; i<NUMCLIENT; i++) {
     //if (myrank != NUMMDS + NUMOSD + i % client_nodes) continue;
     if (myrank != g_conf.ms_skip_rank0+NUMMDS + skip_osd + i / clients_per_node) continue;
@@ -321,21 +322,21 @@ int main(int argc, char **argv)
     started++;
 
     syn[i] = new SyntheticClient(client[i]);
+
+    client[i]->mount();
+    nclients++;
   }
 
   if (!clientlist.empty()) dout(2) << "i have " << clientlist << endl;
 
-  int nclients = 0;
   for (set<int>::iterator it = clientlist.begin();
        it != clientlist.end();
        it++) {
     int i = *it;
 
     //cerr << "starting synthetic client" << i << " on rank " << myrank << endl;
-    client[i]->mount();
     syn[i]->start_thread();
     
-    nclients++;
   }
   if (nclients) {
     cerr << nclients << " clients  at " << rank.my_addr << " " << hostname << "." << pid << endl;

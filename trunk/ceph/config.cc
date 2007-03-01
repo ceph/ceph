@@ -562,6 +562,11 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--mds_beacon_interval") == 0) 
+      g_conf.mds_beacon_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_beacon_grace") == 0) 
+      g_conf.mds_beacon_grace = atoi(args[++i]);
+
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_before_reply") == 0) 
