@@ -2811,7 +2811,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
   bufferptr bp = buffer::copy(buf, size);
   bufferlist blist;
   blist.push_back( bp );
-
+  
   if (g_conf.client_oc) { // buffer cache ON?
     assert(objectcacher);
 

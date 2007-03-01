@@ -2858,9 +2858,11 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
-  // verify the capability
-  ExtCap *op_capability = op->get_capability();
-  if (op_capability) {
+  // FIXME only verfiy reads from a client
+  // i know, i know...not secure but they should all have caps
+  if (op->get_dest().is_client()) {
+    ExtCap *op_capability = op->get_capability();
+    assert(op_capability);
     cout << "OSD recieved a read capability" << endl;
     if (op_capability->verif_extcap(monmap->get_key()))
       cout << "OSD successfully verified capability" << endl;
@@ -3210,6 +3212,21 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     opname = MOSDOp::get_opname(op->get_op());
   }
 
+  // FIXME only verfiy writes from a client
+  // i know, i know...not secure but they should all have caps
+  if (op->get_op() == OSD_OP_WRITE
+      && op->get_dest().is_client()) {
+    ExtCap *op_capability = op->get_capability();
+    assert(op_capability);
+    if (op_capability->verif_extcap(monmap->get_key()))
+      cout << "OSD successfully verified a write capability" << endl;
+    else
+      cout << "OSD failed to verify a write capability" << endl;
+  }
+  else
+    cout << "Received some write with no cap" << endl;
+    
+  /*
   // check for capability
   ExtCap *op_capability = op->get_capability();
   if (op_capability && op->get_op() == OSD_OP_WRITE) {
@@ -3224,6 +3241,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   }
   else
     cout << "Received " << opname << " with no capability" << endl;
+  */
 
   // locked by someone else?
   // for _any_ op type -- eg only the locker can unlock!

@@ -59,9 +59,9 @@ class Objecter {
     map<tid_t, ObjectExtent> ops;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
 
-    OSDRead(bufferlist *b) : bl(b), onfinish(0) {
-      bl->clear();
-    }
+    //OSDRead(bufferlist *b) : bl(b), onfinish(0) {
+    //  bl->clear();
+    //}
     OSDRead(bufferlist *b, ExtCap *cap) : bl(b), onfinish(0), ext_cap(cap) {
       bl->clear();
     }
@@ -88,7 +88,8 @@ class Objecter {
     ExtCap *modify_cap;
 
     OSDModify(int o) : op(o), onack(0), oncommit(0) {}
-    OSDModify(int o, ExtCap* cap) : op(o), onack(0), oncommit(0), modify_cap(cap) {}
+    OSDModify(int o, ExtCap *cap) : op(o), onack(0), oncommit(0), modify_cap(cap) {}
+   
   };
   
   // write (includes the bufferlist)
@@ -189,10 +190,10 @@ class Objecter {
 
   // even lazier
   tid_t read(object_t oid, off_t off, size_t len, bufferlist *bl, 
-             Context *onfinish, ExtCap *read_ext_cap=0,
+             Context *onfinish, ExtCap *read_ext_cap,
 			 objectrev_t rev=0);
   tid_t write(object_t oid, off_t off, size_t len, bufferlist &bl, 
-              Context *onack, Context *oncommit, ExtCap *write_ext_cap=0,
+              Context *onack, Context *oncommit, ExtCap *write_ext_cap,
 			  objectrev_t rev=0);
   tid_t zero(object_t oid, off_t off, size_t len,  
              Context *onack, Context *oncommit, 

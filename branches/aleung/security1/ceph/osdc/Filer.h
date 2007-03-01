@@ -87,11 +87,7 @@ class Filer {
            Context *onfinish, ExtCap* read_cap=0) {
     // we should always pass a read_cap...this is just
     // to support legacy stuff
-    Objecter::OSDRead *rd;
-    if (!read_cap)
-      rd = new Objecter::OSDRead(bl);
-    else
-      rd = new Objecter::OSDRead(bl, read_cap);
+    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, read_cap);
     file_to_extents(inode, offset, len, rd->extents);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
@@ -104,11 +100,7 @@ class Filer {
             Context *onack,
             Context *oncommit, ExtCap* write_cap=0,
 	    objectrev_t rev=0) {
-    Objecter::OSDWrite *wr;
-    if (!write_cap) // we should always pass a cap
-      wr = new Objecter::OSDWrite(bl);
-    else
-      wr = new Objecter::OSDWrite(bl, write_cap);
+    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, write_cap);
     file_to_extents(inode, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }

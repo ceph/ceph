@@ -23,10 +23,6 @@
 #include "Objecter.h"
 #include "Filer.h"
 
-//#include "crypto/CryptoLib.h"
-//using namespace CryptoLib;
-//#include "crypto/ExtCap.h"
-
 class Objecter;
 class Objecter::OSDRead;
 class Objecter::OSDWrite;
@@ -60,7 +56,9 @@ class ObjectCacher {
     tid_t last_write_tid;  // version of bh (if non-zero)
     utime_t last_write;
 
-    // security cap
+    // security cap per bufferhead
+    // this allows any bufferhead written back
+    // to have a cap
     ExtCap *bh_cap;
     
     map< off_t, list<Context*> > waitfor_read;
@@ -350,7 +348,7 @@ class ObjectCacher {
   }
 
   // io
-  void bh_read(BufferHead *bh, ExtCap* read_ext_cap=0);
+  void bh_read(BufferHead *bh, ExtCap* read_ext_cap);
   // doesn't need a cap (cap is in bh)
   void bh_write(BufferHead *bh);
 
@@ -490,11 +488,7 @@ class ObjectCacher {
                 off_t offset, size_t len, 
                 bufferlist *bl,
                 Context *onfinish, ExtCap *read_ext_cap) {
-    Objecter::OSDRead *rd;
-    if (!read_ext_cap) // we should always have a read_cap
-      rd = new Objecter::OSDRead(bl);
-    else
-      rd = new Objecter::OSDRead(bl, read_ext_cap);
+    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, read_ext_cap);
     filer.file_to_extents(inode, offset, len, rd->extents);
     return readx(rd, inode.ino, onfinish);
   }
@@ -505,11 +499,7 @@ class ObjectCacher {
 				 objectrev_t rev=0) {
     // insert write_cap into write object
     // will be inserted into bufferhead later
-    Objecter::OSDWrite *wr;
-    if (!write_ext_cap)
-      wr = new Objecter::OSDWrite(bl);
-    else
-      wr = new Objecter::OSDWrite(bl, write_ext_cap);
+    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, write_ext_cap);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return writex(wr, inode.ino);
   }
@@ -522,11 +512,7 @@ class ObjectCacher {
                             off_t offset, size_t len, 
                             bufferlist *bl,
                             Mutex &lock, ExtCap *read_ext_cap=0) {
-    Objecter::OSDRead *rd;
-    if (!read_ext_cap)
-      rd = new Objecter::OSDRead(bl);
-    else
-      rd = new Objecter::OSDRead(bl, read_ext_cap);
+    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, read_ext_cap);
     filer.file_to_extents(inode, offset, len, rd->extents);
     return atomic_sync_readx(rd, inode.ino, lock);
   }
@@ -537,11 +523,7 @@ class ObjectCacher {
                              Mutex &lock, ExtCap *write_ext_cap=0,
 							 objectrev_t rev=0) {
     // we really should always have a cap
-    Objecter::OSDWrite *wr;
-    if (write_ext_cap != 0)
-      wr = new Objecter::OSDWrite(bl, write_ext_cap);
-    else
-      wr = new Objecter::OSDWrite(bl);
+    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, write_ext_cap);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return atomic_sync_writex(wr, inode.ino, lock);
   }

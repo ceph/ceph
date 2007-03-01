@@ -357,11 +357,8 @@ tid_t Objecter::read(object_t oid, off_t off, size_t len, bufferlist *bl,
                      Context *onfinish, ExtCap* read_ext_cap,
 					 objectrev_t rev)
 {
-  OSDRead *rd;
-  if (read_ext_cap) // there should always be a cap
-    rd = new OSDRead(bl, read_ext_cap);
-  else
-    rd = new OSDRead(bl); 
+  OSDRead *rd = new OSDRead(bl, read_ext_cap);
+
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
   rd->extents.front().rev = rev;
@@ -395,7 +392,10 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
                          OSD_OP_READ);
   m->set_length(ex.length);
   m->set_offset(ex.start);
-  if (rd->ext_cap)
+  // set ext cap
+  // FIXME mds currently is writing without caps...so we let it
+  // all other (client) writes should have cap
+  if (messenger->get_myaddr().is_client())
     m->set_capability(rd->ext_cap);
   dout(10) << "readx_submit " << rd << " tid " << last_tid
            << " oid " << ex.oid << " " << ex.start << "~" << ex.length
@@ -588,11 +588,8 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, bufferlist &bl,
                       Context *onack, Context *oncommit,
 		      ExtCap *write_ext_cap, objectrev_t rev)
 {
-  OSDWrite *wr;
-  if (write_ext_cap)
-    wr = new OSDWrite(bl, write_ext_cap);
-  else
-    wr = new OSDWrite(bl);
+  OSDWrite *wr = new OSDWrite(bl, write_ext_cap);
+
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().pgid = osdmap->object_to_pg( oid, g_OSD_FileLayout );
   wr->extents.front().buffer_extents[0] = len;
@@ -667,8 +664,10 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   m->set_offset(ex.start);
   m->set_rev(ex.rev);
   // only cap for a write, fix later
-  if (wr->modify_cap && wr->op == OSD_OP_WRITE)
-    m->set_capability(wr->modify_cap);    
+  // FIXME mds does writes through this interface without a cap
+  // we let it for now
+  if (wr->op == OSD_OP_WRITE && messenger->get_myaddr().is_client())
+      m->set_capability(wr->modify_cap);   
 
   if (wr->tid_version.count(tid)) 
     m->set_version(wr->tid_version[tid]);  // we're replaying this op!
