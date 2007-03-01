@@ -574,7 +574,7 @@ Onode* Ebofs::get_onode(object_t oid)
 {
   while (1) {
     // in cache?
-    if (onode_map.count(oid)) {
+    if (have_onode(oid)) {
       // yay
       Onode *on = onode_map[oid];
       on->get();
@@ -1840,11 +1840,11 @@ int Ebofs::is_cached(object_t oid, off_t off, size_t len)
 
 int Ebofs::_is_cached(object_t oid, off_t off, size_t len)
 {
-  Onode *on = 0;
-  if (onode_map.count(oid) == 0) {
+  if (!have_onode(oid)) {
     dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << endl;
     return -1;  // object dne?
   } 
+  Onode *on = get_onode(oid);
   
   if (!on->have_oc()) {  
     // nothing is cached.  return # of extents in file.
@@ -1887,11 +1887,14 @@ void Ebofs::trim_from_cache(object_t oid, off_t off, size_t len)
 
 void Ebofs::_trim_from_cache(object_t oid, off_t off, size_t len)
 {
-  Onode *on = 0;
-  if (onode_map.count(oid) == 0) {
+  // be careful not to load it if we don't have it
+  if (!have_onode(oid)) {
     dout(7) << "_trim_from_cache " << oid << " " << off << "~" << len << " ... onode not in cache  " << endl;
     return; 
   } 
+  
+  // ok, we have it, get a pointer.
+  Onode *on = get_onode(oid);
   
   if (!on->have_oc()) 
     return; // nothing is cached. 
