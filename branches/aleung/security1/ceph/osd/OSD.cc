@@ -2877,19 +2877,22 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     //<< " in " << *pg 
            << endl;
 
-  // FIXME only verfiy reads from a client
-  // i know, i know...not secure but they should all have caps
-  if (op->get_source().is_client()) {
-    ExtCap *op_capability = op->get_capability();
-    assert(op_capability);
-    if (verify_cap(op_capability))
-      cout << "OSD successfully verified capability" << endl;
+  // check cap if security is on, otherwise ignore it
+  if (g_conf.secure_io) {
+    // FIXME only verfiy reads from a client
+    // i know, i know...not secure but they should all have caps
+    if (op->get_source().is_client()) {
+      ExtCap *op_capability = op->get_capability();
+      assert(op_capability);
+      if (verify_cap(op_capability))
+	cout << "OSD successfully verified capability" << endl;
+      else
+	cout << "OSD failed to verify capability" << endl;
+    }
     else
-      cout << "OSD failed to verify capability" << endl;
+      cout << "Received some read with no cap from " <<
+	op->get_source().type() << endl;
   }
-  else
-    cout << "Received some read with no cap from " << op->get_source().type() << endl;
-
 
   long r = 0;
   bufferlist bl;
@@ -3231,39 +3234,24 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     opname = MOSDOp::get_opname(op->get_op());
   }
 
-  // FIXME only verfiy writes from a client
-  // i know, i know...not secure but they should all have caps
-  if (op->get_op() == OSD_OP_WRITE
-      && op->get_source().is_client()) {
-    ExtCap *op_capability = op->get_capability();
-    assert(op_capability);
-
-    // have i already verified this cap?
-    if (verify_cap(op_capability))
-      cout << "OSD successfully verified a write capability" << endl;
+  if (g_conf.secure_io) {
+    // FIXME only verfiy writes from a client
+    // i know, i know...not secure but they should all have caps
+    if (op->get_op() == OSD_OP_WRITE
+	&& op->get_source().is_client()) {
+      ExtCap *op_capability = op->get_capability();
+      assert(op_capability);
+      
+      // have i already verified this cap?
+      if (verify_cap(op_capability))
+	cout << "OSD successfully verified a write capability" << endl;
+      else
+	cout << "OSD failed to verify a write capability" << endl;
+    }
     else
-      cout << "OSD failed to verify a write capability" << endl;
+      cout << "Received some write with no cap from " << op->get_source().type() << endl;
   }
-  else
-    cout << "Received some write with no cap from " << op->get_source().type() << endl;
-    
-  /*
-  // check for capability
-  ExtCap *op_capability = op->get_capability();
-  if (op_capability && op->get_op() == OSD_OP_WRITE) {
-    cout << "OSD recieved a write with a capability" << endl;
-    if (op_capability->verif_extcap(monmap->get_key()))
-      cout << "OSD successfully verified capability" << endl;
-    else
-      cout << "OSD failed to verify capability" << endl;
-  }
-  else if (op->get_op() == OSD_OP_WRITE) {
-    cout << "Received write with no capability" << endl;
-  }
-  else
-    cout << "Received " << opname << " with no capability" << endl;
-  */
-
+  
   // locked by someone else?
   // for _any_ op type -- eg only the locker can unlock!
   if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush

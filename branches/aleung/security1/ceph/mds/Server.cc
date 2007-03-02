@@ -2278,7 +2278,10 @@ void Server::handle_client_open(MClientRequest *req,
   Capability *cap = mds->locker->issue_new_caps(cur, mode, req);
 
   // create signed security capability
-  ExtCap *ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
+  // no security, just include a blank cap
+  ExtCap *ext_cap;
+  if (g_conf.secure_io)
+    ext_cap = mds->locker->issue_new_extcaps(cur, mode, req);
 
   if (!cap) return; // can't issue (yet), so wait!
 
@@ -2291,9 +2294,10 @@ void Server::handle_client_open(MClientRequest *req,
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_data_version(fdv);
-  // set security cap
-  reply->set_ext_cap(ext_cap);
-
+  // set security cap if security is on
+  if (g_conf.secure_io)
+    reply->set_ext_cap(ext_cap);
+  
   reply_request(req, reply, cur);
 }
 

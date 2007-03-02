@@ -2380,18 +2380,9 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 
   // go
   MClientRequest *req = new MClientRequest(MDS_OP_OPEN, whoami);
-  req->set_path(path); 
+  req->set_path(path);
   req->set_iarg(flags);
   req->set_iarg2(cmode);
-
-  // don't need a cap if I have one cached
-  //ExtCap ext_cap;
-  //ExtCap *ext_cap = fc->get_ext_caps(uid);
-  // !!FIX ME!! Set flag to not ask for cap if I have one already
-  //if (!ext_cap)
-  //  cout << "No capability cached at client for file " << path << endl;
-  //else
-  //  cout << "Cached capability found! for file " << path << endl;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(uid);
@@ -2438,7 +2429,8 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
     dout(3) << "Received a " << ext_cap.mode() << " capability for uid: "
 	 << ext_cap.get_uid() << " for inode: " << ext_cap.get_ino() << endl;
 
-    assert(ext_cap.verif_extcap(monmap->get_key()));
+    // FIXME the client should not actually verif the cap
+    //assert(ext_cap.verif_extcap(monmap->get_key()));
 
     // cache it
     f->inode->set_ext_cap(uid, &ext_cap);
