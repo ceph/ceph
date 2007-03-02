@@ -2212,6 +2212,40 @@ int Client::close(fh_t fh)
 // ------------
 // read, write
 
+
+off_t Client::lseek(fh_t fh, off_t offset, int whence)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->lseek(" << fh << ", " << offset << ", " << whence << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  switch (whence) {
+  case SEEK_SET: 
+    f->pos = offset;
+    break;
+
+  case SEEK_CUR:
+    f->pos += offset;
+    break;
+
+  case SEEK_END:
+    f->pos = in->inode.size + offset;
+    break;
+
+  default:
+    assert(0);
+  }
+  
+  off_t pos = f->pos;
+  client_lock.Unlock();
+
+  return pos;
+}
+
+
 // blocking osd interface
 
 int Client::read(fh_t fh, char *buf, off_t size, off_t offset) 

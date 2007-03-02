@@ -570,11 +570,13 @@ protected:
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
   int close(fh_t fh);
+  off_t lseek(fh_t fh, off_t offset, int whence);
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
   int truncate(const char *file, off_t size);
     //int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
+
 
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
