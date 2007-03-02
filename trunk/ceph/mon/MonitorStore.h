@@ -42,17 +42,29 @@ public:
   int put_bl_ss(bufferlist& bl, const char *a, const char *b);
   bool exists_bl_sn(const char *a, version_t b) {
     char bs[20];
+#ifdef __LP64__
+    sprintf(bs, "%lu", b);
+#else
     sprintf(bs, "%llu", b);
+#endif
     return exists_bl_ss(a, bs);
   }
   int get_bl_sn(bufferlist& bl, const char *a, version_t b) {
     char bs[20];
+#ifdef __LP64__
+    sprintf(bs, "%lu", b);
+#else
     sprintf(bs, "%llu", b);
+#endif
     return get_bl_ss(bl, a, bs);
   }
   int put_bl_sn(bufferlist& bl, const char *a, version_t b) {
     char bs[20];
+#ifdef __LP64__
+    sprintf(bs, "%lu", b);
+#else
     sprintf(bs, "%llu", b);
+#endif
     return put_bl_ss(bl, a, bs);
   }
 

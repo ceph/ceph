@@ -89,7 +89,11 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   }
   
   char vs[30];
+#ifdef __LP64__
+  sprintf(vs, "%ld\n", val);
+#else
   sprintf(vs, "%lld\n", val);
+#endif
 
   char tfn[200];
   sprintf(tfn, "%s.new", fn);

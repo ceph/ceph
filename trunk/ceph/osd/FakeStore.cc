@@ -68,24 +68,41 @@ void FakeStore::get_oname(object_t oid, char *s)
 {
   static hash<object_t> H;
   assert(sizeof(oid) == 16);
+#ifdef __LP64__
+  sprintf(s, "%s/objects/%02lx/%016lx.%016lx", basedir.c_str(), H(oid) & HASH_MASK, 
+	  *((__uint64_t*)&oid),
+	  *(((__uint64_t*)&oid) + 1));
+#else
   sprintf(s, "%s/objects/%02x/%016llx.%016llx", basedir.c_str(), H(oid) & HASH_MASK, 
 	  *((__uint64_t*)&oid),
 	  *(((__uint64_t*)&oid) + 1));
+#endif
 }
 
 void FakeStore::get_cdir(coll_t cid, char *s) 
 {
   assert(sizeof(cid) == 8);
+#ifdef __LP64__
+  sprintf(s, "%s/collections/%016lx", basedir.c_str(), 
+	  cid);
+#else
   sprintf(s, "%s/collections/%016llx", basedir.c_str(), 
 	  cid);
+#endif
 }
 
 void FakeStore::get_coname(coll_t cid, object_t oid, char *s) 
 {
   assert(sizeof(oid) == 16);
+#ifdef __LP64__
+  sprintf(s, "%s/collections/%016lx/%016lx.%016lx", basedir.c_str(), cid, 
+	  *((__uint64_t*)&oid),
+	  *(((__uint64_t*)&oid) + 1));
+#else
   sprintf(s, "%s/collections/%016llx/%016llx.%016llx", basedir.c_str(), cid, 
 	  *((__uint64_t*)&oid),
 	  *(((__uint64_t*)&oid) + 1));
+#endif
 }
 
 
