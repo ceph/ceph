@@ -298,6 +298,7 @@ struct md_config_t {
   int bdbstore_nelem;
   int bdbstore_pagesize;
   int bdbstore_cachesize;
+  bool bdbstore_transactional;
 #endif // USE_OSBDB
 };
 
