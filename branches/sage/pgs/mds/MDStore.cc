@@ -199,9 +199,9 @@ void MDStore::fetch_dir_hash( CDir *dir,
   C_MDS_FetchHash *fin = new C_MDS_FetchHash( mds, dir->get_inode()->inode, c, hashcode );
   
   // grab first stripe bit (which had better be more than 16 bytes!)
-  assert(dir->get_inode()->inode.layout.stripe_size >= 16);
+  assert(dir->get_inode()->inode.layout.stripe_unit >= 16);
   mds->filer->read(dir->get_inode()->inode,
-                   get_hash_offset(hashcode), dir->get_inode()->inode.layout.stripe_size, 
+                   get_hash_offset(hashcode), dir->get_inode()->inode.layout.stripe_unit, 
                    &fin->bl,
                    fin );
 }

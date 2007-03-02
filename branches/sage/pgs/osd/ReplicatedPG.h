@@ -82,18 +82,46 @@ protected:
                  int fromosd, eversion_t pg_complete_thru=0);
   
   // push/pull
+  int num_pulling;
+  
   void push(object_t oid, int dest);
   void pull(object_t oid);
 
   // modify
-  void assign_version(MOSDOp *op);
+  objectrev_t assign_version(MOSDOp *op);
   void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
   void op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t last_complete);
 
+  void prepare_log_transaction(ObjectStore::Transaction& t, 
+			       MOSDOp *op, eversion_t& version, 
+			       objectrev_t crev, objectrev_t rev,
+			       eversion_t trim_to);
+  void prepare_op_transaction(ObjectStore::Transaction& t, 
+			      MOSDOp *op, eversion_t& version, 
+			      objectrev_t crev, objectrev_t rev);
+
   friend class C_OSD_WriteCommit;
 
+
+  // pg on-disk content
+  void clean_up_local(ObjectStore::Transaction& t);
+
+  void cancel_recovery();
+  bool do_recovery();
+  void do_peer_recovery();
+
+  void clean_replicas();
+
+
+
+
+
 public:
-  ReplicatedPG(OSD *o, pg_t p) : PG(o,p) {}
+  ReplicatedPG(OSD *o, pg_t p) : 
+    PG(o,p),
+    num_pulling(0)
+  { }
+  ~ReplicatedPG() {}
 
   void op_stat(MOSDOp *op);
   int op_read(MOSDOp *op);
@@ -111,13 +139,9 @@ public:
   bool is_missing_object(object_t oid);
   void wait_for_missing_object(object_t oid, MOSDOp *op);
 
-  void prepare_log_transaction(ObjectStore::Transaction& t, 
-			       MOSDOp *op, eversion_t& version, 
-			       objectrev_t crev, objectrev_t rev,
-			       eversion_t trim_to);
-  void prepare_op_transaction(ObjectStore::Transaction& t, 
-			      MOSDOp *op, eversion_t& version, 
-			      objectrev_t crev, objectrev_t rev);
+  void note_failed_osd(int o);
+  void on_acker_change();
+  void on_role_change();
 
 };
 

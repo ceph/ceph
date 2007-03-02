@@ -169,7 +169,7 @@ void IdAllocator::load(Context *onfinish)
 
   C_ID_Load *c = new C_ID_Load(this, onfinish);
   mds->filer->read(inode,
-                   0, inode.layout.stripe_size,
+                   0, inode.layout.stripe_unit,
                    &c->bl,
                    c);
 }

@@ -919,21 +919,7 @@ void OSD::handle_osd_map(MOSDMap *m)
           PG *pg = it->second;
 
           _lock_pg(pg->info.pgid);
-          {
-            list<PG::RepOpGather*> ls;  // do async; repop_ack() may modify pg->repop_gather
-            for (map<tid_t,PG::RepOpGather*>::iterator p = pg->repop_gather.begin();
-                 p != pg->repop_gather.end();
-                 p++) {
-              //dout(-1) << "checking repop tid " << p->first << endl;
-              if (p->second->waitfor_ack.count(osd) ||
-                  p->second->waitfor_commit.count(osd)) 
-                ls.push_back(p->second);
-            }
-            for (list<PG::RepOpGather*>::iterator p = ls.begin();
-                 p != ls.end();
-                 p++)
-              repop_ack(pg, *p, -1, true, osd);
-          }
+	  pg->note_failed_osd(osd);
           _unlock_pg(pg->info.pgid);
         }
       }
@@ -1065,6 +1051,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
 
     // raided
+    /*
     for (int size = g_conf.osd_min_raid_width;
 	 size <= g_conf.osd_max_raid_width;
 	 size++) {
@@ -1107,9 +1094,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	
 	dout(7) << "created " << *pg << endl;
       }
-
     }
-
+    */
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << endl;
 
   } else {
@@ -1165,26 +1151,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       
       // apply any repops in progress.
       if (oldacker == whoami) {
-        // apply repops
-        for (map<tid_t,PG::RepOpGather*>::iterator p = pg->repop_gather.begin();
-             p != pg->repop_gather.end();
-             p++) {
-          if (!p->second->applied)
-            apply_repop(pg, p->second);
-          delete p->second->op;
-          delete p->second;
-        }
-        pg->repop_gather.clear();
-        
-        // and repop waiters
-        for (map<tid_t, list<Message*> >::iterator p = pg->waiting_for_repop.begin();
-             p != pg->waiting_for_repop.end();
-             p++)
-          for (list<Message*>::iterator pm = p->second.begin();
-               pm != p->second.end();
-               pm++)
-            delete *pm;
-        pg->waiting_for_repop.clear();
+	pg->on_acker_change();
       }
 
       if (role != oldrole) {
@@ -1192,24 +1159,19 @@ void OSD::advance_map(ObjectStore::Transaction& t)
         if (oldrole == 0) {
           pg->state_clear(PG::STATE_CLEAN);
 
-          // take replay queue waiters
-          list<Message*> ls;
-          for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
-               it != pg->replay_queue.end();
-               it++)
-            ls.push_back(it->second);
-          pg->replay_queue.clear();
-          take_waiters(ls);
+	  // take replay queue waiters
+	  list<Message*> ls;
+	  for (map<eversion_t,MOSDOp*>::iterator it = pg->replay_queue.begin();
+	       it != pg->replay_queue.end();
+	       it++)
+	    ls.push_back(it->second);
+	  pg->replay_queue.clear();
+	  take_waiters(ls);
 
-          // take active waiters
-          take_waiters(pg->waiting_for_active);
-          
-          // take object waiters
-          for (hash_map<object_t, list<Message*> >::iterator it = pg->waiting_for_missing_object.begin();
-               it != pg->waiting_for_missing_object.end();
-               it++)
-            take_waiters(it->second);
-          pg->waiting_for_missing_object.clear();
+	  // take active waiters
+	  take_waiters(pg->waiting_for_active);
+  
+	  pg->on_role_change();
         }
         
         // new primary?
@@ -1446,7 +1408,13 @@ PG *OSD::create_pg(pg_t pgid, ObjectStore::Transaction& t)
   assert(pg_map.count(pgid) == 0);
   assert(!pg_exists(pgid));
 
-  PG *pg = new PG(this, pgid);
+  PG *pg;
+  if (pgid.is_rep())
+    pg = new ReplicatedPG(this, pgid);
+  else if (pgid.is_raid4())
+    assert(0); //pg = new RAID4PG(this, pgid);
+  else 
+    assert(0);
   pg_map[pgid] = pg;
 
   t.create_collection(pgid);
@@ -1476,10 +1444,10 @@ void OSD::load_pgs()
     pg_t pgid = *it;
 
     PG *pg = 0;
-    if (pgid->is_rep())
+    if (pgid.is_rep())
       new ReplicatedPG(this, pgid);
-    else if (pgid->is_raid())
-      new RAID4PG(this, pgid);
+    else if (pgid.is_raid4())
+      assert(0); //new RAID4PG(this, pgid);
     else 
       assert(0);
     pg_map[pgid] = pg;
@@ -1955,24 +1923,6 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
 
 
-/*** RECOVERY ***/
-
-
-// op_rep_modify
-
-
-// process a modification operation
-
-
-/** op_rep_modify
- * process a replicated modify.
- * NOTE: called from opqueue.
- */
-void OSD::op_rep_modify(MOSDOp *op, PG *pg)
-{ 
-}
-
-
 // =========================================================
 // OPS
 
@@ -2165,9 +2115,10 @@ void OSD::handle_op(MOSDOp *op)
     _unlock_pg(pgid);
   } else {
     // queue for worker threads
-    if (read) 
+    /*if (read) 
       enqueue_op(0, op);     // no locking needed for reads
     else 
+    */
       enqueue_op(pgid, op);     
   }
 }
@@ -2334,7 +2285,7 @@ void OSD::do_op(Message *m, PG *pg)
     case OSD_OP_UPLOCK:
     case OSD_OP_DNLOCK:
       if (op->get_source().is_osd()) {
-        pg->op_rep_modify(op, pg);
+        pg->op_rep_modify(op);
       } else {
 	// locked by someone else?
 	// for _any_ op type -- eg only the locker can unlock!

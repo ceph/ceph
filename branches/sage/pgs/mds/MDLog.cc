@@ -84,8 +84,7 @@ void MDLog::init_journaler()
   log_inode.layout = g_OSD_MDLogLayout;
   
   if (g_conf.mds_local_osd) {
-    log_inode.layout.object_layout = OBJECT_LAYOUT_STARTOSD;
-    log_inode.layout.osd = mds->get_nodeid() + 10000;   // hack
+    log_inode.layout.preferred = mds->get_nodeid() + 10000;   // hack
   }
   
   // log streamer

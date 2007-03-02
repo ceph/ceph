@@ -43,11 +43,17 @@ public:
 private:
   union {
     struct {
-      __uint8_t   type:3;       //  2 
-      __uint8_t   size:5;       //  5
-      ps_t        ps:16;        // 16
-      pruleset_t  ruleset:8;    //  8
-      __uint32_t  preferred:32; // 32
+      /*
+      int      preferred:32; // 32
+      unsigned type:3;       //  3
+      unsigned size:5;       //  5
+      unsigned ps:16;        // 16
+      unsigned ruleset:8;    //  8
+      */
+      __int32_t preferred;
+      __uint8_t type;
+      __uint8_t size;
+      __uint16_t ps;
     } fields;
     __uint64_t val;          // 64
   } u;
@@ -55,12 +61,13 @@ private:
 public:
   pg_t() { u.val = 0; }
   pg_t(const pg_t& o) { u.val = o.u.val; }
-  pg_t(int type, int size, ps_t seed, int pref, pruleset_t r=0) {
+  pg_t(int type, int size, ps_t seed, int pref) {//, pruleset_t r=0) {
     u.fields.type = type;
     u.fields.size = size;
     u.fields.ps = seed;
-    u.fields.preferred = pref+1;   // hack: avoid negative.
-    u.fields.ruleset = r;
+    u.fields.preferred = pref;   // hack: avoid negative.
+    //u.fields.ruleset = r;
+    assert(sizeof(u.fields) == sizeof(u.val));
   }
   pg_t(__uint64_t v) { u.val = v; }
 
@@ -70,8 +77,8 @@ public:
 
   int size() { return u.fields.size; }
   ps_t ps() { return u.fields.ps; }
-  pruleset_t ruleset() { return u.fields.ruleset; }
-  __uint32_t preferred() { return u.fields.preferred-1; }   // hack: avoid negative.
+  //pruleset_t ruleset() { return u.fields.ruleset; }
+  int preferred() { return u.fields.preferred; }   // hack: avoid negative.
   
   /*
   pg_t operator=(__uint64_t v) { u.val = v; return *this; }
@@ -96,10 +103,10 @@ inline ostream& operator<<(ostream& out, pg_t pg)
   else 
     out << pg.size() << '?';
   
-  if (pg.ruleset())
-    out << (int)pg.ruleset() << 's';
+  //if (pg.ruleset())
+  //out << (int)pg.ruleset() << 's';
   
-  if (pg.preferred())
+  if (pg.preferred() >= 0)
     out << pg.preferred() << 'p';
   out << hex << pg.ps() << dec;
 

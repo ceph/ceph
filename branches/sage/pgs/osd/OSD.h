@@ -207,17 +207,27 @@ public:
 
   hash_map<pg_t, list<Message*> >        waiting_for_pg;
 
+  Mutex tid_lock;
+  tid_t get_tid() {
+    tid_t t;
+    tid_lock.Lock();
+    t = ++last_tid;
+    tid_lock.Unlock();
+    return t;
+  }
+
  
-  void handle_rep_op_ack(MOSDOpReply *m);
+  //void handle_rep_op_ack(MOSDOpReply *m);
 
   // recovery
   void do_notifies(map< int, list<PG::Info> >& notify_list);
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
 
+  /*
   void pull(PG *pg, object_t oid);
   void push(PG *pg, object_t oid, int dest);
-
+  */
   bool require_current_map(Message *m, epoch_t v);
   bool require_same_or_newer_map(Message *m, epoch_t e);
 
@@ -226,12 +236,14 @@ public:
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_remove(class MOSDPGRemove *m);
 
+  /*
   void op_pull(class MOSDOp *op, PG *pg);
   void op_push(class MOSDOp *op, PG *pg);
-  
   void op_rep_modify(class MOSDOp *op, PG *pg);   // write, trucnate, delete
   void op_rep_modify_commit(class MOSDOp *op, int ackerosd, 
                             eversion_t last_complete);
+  */
+
   friend class C_OSD_RepModifyCommit;
 
 

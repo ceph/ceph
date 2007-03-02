@@ -31,7 +31,7 @@
 long buffer_total_alloc = 0;
 Mutex bufferlock;
 
-
+#include "osd/osd_types.h"
 
 FileLayout g_OSD_FileLayout( 1<<20, 1, 1<<20, pg_t::TYPE_REP, 2 );  // stripe over 1M objects, 2x replication
 //FileLayout g_OSD_FileLayout( 1<<17, 4, 1<<20 );   // 128k stripes over sets of 4

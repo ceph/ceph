@@ -471,15 +471,18 @@ public:
 
   void activate(ObjectStore::Transaction& t);
 
-  void cancel_recovery();
-  bool do_recovery();
-  void do_peer_recovery();
+  virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
-  void clean_replicas();
+  virtual void cancel_recovery() = 0;
+  virtual bool do_recovery() = 0;
+  virtual void clean_replicas() = 0;
 
   off_t get_log_write_pos() {
     return 0;
   }
+
+  virtual void op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t last_complete) = 0;
+  friend class C_OSD_RepModify_Commit;
 
  public:  
   PG(OSD *o, pg_t p) : 
@@ -492,7 +495,7 @@ public:
     peers_complete_thru(0),
     have_master_log(true)
   { }
-  virtual ~PG() {}
+  virtual ~PG() { }
   
   pg_t       get_pgid() const { return info.pgid; }
   int        get_nrep() const { return acting.size(); }
@@ -536,10 +539,6 @@ public:
     return objects_pulling.size();
   }
 
-
-  // pg on-disk content
-  void clean_up_local(ObjectStore::Transaction& t);
-
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction& t, 
@@ -559,21 +558,28 @@ public:
 
 
 
+
+
   // abstract bits
   virtual void op_stat(MOSDOp *op) = 0;
   virtual int op_read(MOSDOp *op) = 0;
   virtual void op_modify(MOSDOp *op) = 0;
+  virtual void op_rep_modify(MOSDOp *op) = 0;
   virtual void op_push(MOSDOp *op) = 0;
   virtual void op_pull(MOSDOp *op) = 0;
   virtual void op_reply(MOSDOpReply *op) = 0;
 
-  virtual bool same_for_read_since(epoch_t e);
-  virtual bool same_for_modify_since(epoch_t e);
-  virtual bool same_for_rep_modify_since(epoch_t e);
+  virtual bool same_for_read_since(epoch_t e) = 0;
+  virtual bool same_for_modify_since(epoch_t e) = 0;
+  virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
-  virtual bool is_missing_object(object_t oid);
-  virtual void wait_for_missing_object(object_t oid, MOSDOp *op);
+  virtual bool is_missing_object(object_t oid) = 0;
+  virtual void wait_for_missing_object(object_t oid, MOSDOp *op) = 0;
 
+  virtual void note_failed_osd(int osd) = 0;
+
+  virtual void on_acker_change() = 0;
+  virtual void on_role_change() = 0;
 };
 
 
