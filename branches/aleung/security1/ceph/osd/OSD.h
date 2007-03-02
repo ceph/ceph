@@ -35,6 +35,7 @@ using namespace __gnu_cxx;
 
 #include"crypto/CryptoLib.h"
 using namespace CryptoLib;
+#include "crypto/CapCache.h"
 
 class Messenger;
 class Message;
@@ -46,7 +47,7 @@ public:
   /** superblock
    */
   OSDSuperblock superblock;
-  epoch_t  boot_epoch;      
+  epoch_t  boot_epoch;
 
   object_t get_osdmap_object_name(epoch_t epoch) { return object_t(0,epoch << 1); }
   object_t get_inc_osdmap_object_name(epoch_t epoch) { return object_t(0, (epoch << 1) + 1); }
@@ -64,6 +65,9 @@ public:
   // public/private key
   esignPriv myPrivKey;
   esignPub myPubKey;
+
+  // capability cache
+  CapCache *cap_cache;  
 
   static const int STATE_BOOTING = 1;
   static const int STATE_ACTIVE = 2;

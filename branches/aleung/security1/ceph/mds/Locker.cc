@@ -236,6 +236,9 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   if (!ext_cap) {
     // make new cap
     ext_cap = new ExtCap(my_want, my_user, in->ino());
+    ext_cap->set_id(cap_id_count, mds->get_nodeid());
+    // increment capability count
+    cap_id_count++;
 
     dout(3) << "Made new " << my_want << " capability for uid: "
        << ext_cap->get_uid() << " for inode: " << ext_cap->get_ino()<< endl;

@@ -276,6 +276,9 @@ int OSD::init()
 
     // convert public key to string
     string key_str = pubToString(myPubKey);
+
+    // ready cache
+    cap_cache = new CapCache();
     
     // i'm ready!
     messenger->set_dispatcher(this);
@@ -2866,6 +2869,9 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     else
       cout << "OSD failed to verify capability" << endl;
   }
+  else
+    cout << "Received some read with no cap from " << op->get_source().type() << endl;
+
 
   long r = 0;
   bufferlist bl;
@@ -3219,7 +3225,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       cout << "OSD failed to verify a write capability" << endl;
   }
   else
-    cout << "Received some write with no cap" << endl;
+    cout << "Received some write with no cap from " << op->get_source().type() << endl;
     
   /*
   // check for capability

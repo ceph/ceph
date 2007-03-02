@@ -24,11 +24,52 @@ using namespace std;
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 
+struct cap_id_t {
+  int cid;
+  int mds_id;
+};
+// comparison operators
+inline bool operator>(const cap_id_t& a, const cap_id_t& b)
+{
+  if (a.mds_id > b.mds_id)
+    return true;
+  else if (a.mds_id == b.mds_id ) {
+    if (a.cid > b.cid)
+      return true;
+    else
+      return false;
+  }
+  else
+    return false;
+}
+inline bool operator<(const cap_id_t& a, const cap_id_t& b)
+{
+  if (a.mds_id < b.mds_id)
+    return true;
+  else if (a.mds_id == b.mds_id ) {
+    if (a.cid < b.cid)
+      return true;
+    else
+      return false;
+  }
+  else
+    return false;
+}
+
+// ostream
+inline std::ostream& operator<<(std::ostream& out, const cap_id_t& c)
+{
+  out << c.mds_id << ".";
+  out.setf(std::ios::right);
+  out << c.cid;
+  out.unsetf(std::ios::right);
+  return out;
+}
 
 class ExtCap {
 private:
   struct cap_data_t {
-    int id; // capability id
+    cap_id_t id; // capability id
     utime_t t_s; // creation time
     utime_t t_e; // expiration time
     int mode; // I/O mode
@@ -46,6 +87,7 @@ private:
 public:
   friend class Client;
   friend class OSD;
+  friend class CapCache;
   // default constructor, should really not be used
   ExtCap() {}
 
@@ -58,7 +100,8 @@ public:
    **********/
   ExtCap(int m, uid_t u, inodeno_t n)
   {
-    data.id = 0;
+    data.id.cid = 0;
+    data.id.mds_id = 0;
     data.t_s = g_clock.now();
     data.t_e = data.t_s;
     data.t_e += 3600;
@@ -85,7 +128,7 @@ public:
 
   ~ExtCap() { }
   
-  int get_id() const { return data.id; }
+  cap_id_t get_id() const { return data.id; }
   utime_t get_ts() const { return data.t_s; }
   utime_t get_te() const { return data.t_e; }
   uid_t get_uid() const { return data.uid; }
@@ -97,6 +140,10 @@ public:
   // in case the mode needs to be changed
   // FYI, you should resign the cap after this
   void set_mode(int new_mode) { data.mode = new_mode; }
+  void set_id(int new_id, int new_mds_id) {
+    data.id.cid = new_id;
+    data.id.mds_id = new_mds_id;
+  }
 
   const cap_data_t* get_data() const {
     return (&data);
