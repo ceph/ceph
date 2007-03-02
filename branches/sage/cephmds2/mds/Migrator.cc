@@ -536,7 +536,7 @@ void Migrator::export_frozen(CDir *dir,
   // ok!
   //export_state[dir] = EXPORT_LOGGINGSTART;
 
-  cache->show_imports();
+  cache->show_subtrees();
 
   // note the bounds.
   //  force it into a subtree by listing auth as <me,me>.
@@ -710,7 +710,7 @@ void Migrator::export_go(CDir *dir)
   int dest = export_peer[dir];
   dout(7) << "export_go " << *dir << " to " << dest << endl;
 
-  cache->show_imports();
+  cache->show_subtrees();
   
   export_warning_ack_waiting.erase(dir);
   export_state[dir] = EXPORT_EXPORTING;
@@ -754,7 +754,7 @@ void Migrator::export_go(CDir *dir)
   if (mds->logger) mds->logger->inc("ex");
   if (mds->logger) mds->logger->inc("iex", num_exported_inodes);
 
-  cache->show_imports();
+  cache->show_subtrees();
 }
 
 
@@ -1238,7 +1238,7 @@ void Migrator::export_finish(CDir *dir)
   // stats
   //if (mds->logger) mds->logger->set("nex", cache->exports.size());
 
-  cache->show_imports();
+  cache->show_subtrees();
 
   // send pending import_maps?
   mds->mdcache->send_pending_import_maps();
@@ -1363,7 +1363,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   }
   assert(dir->is_auth() == false);
   
-  cache->show_imports();
+  cache->show_subtrees();
 
   // assimilate contents?
   if (!m->did_assim()) {
@@ -1525,7 +1525,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << endl;
   assert(dir->is_auth() == false);
 
-  cache->show_imports();
+  cache->show_subtrees();
 
   // start the journal entry
   EImportStart *le = new EImportStart(dir->ino(), m->get_exports());
@@ -1734,7 +1734,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   mds->send_message_mds(new MExportDirAck(dir->inode->ino()),
 			from, MDS_PORT_MIGRATOR);
 
-  cache->show_imports();
+  cache->show_subtrees();
 }
 
 
@@ -1794,7 +1794,7 @@ void Migrator::import_finish(CDir *dir, bool now)
     //mds->logger->set("nex", cache->exports.size());
     //mds->logger->set("nim", cache->imports.size());
   }
-  cache->show_imports();
+  cache->show_subtrees();
 
   // is it empty?
   if (dir->get_size() == 0 &&

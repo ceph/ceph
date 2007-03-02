@@ -461,6 +461,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     }
   }
 
+  // for debug
+  if (g_conf.mds_dump_cache_on_map)
+    mdcache->dump_cache();
+
   // update my state
   state = mdsmap->get_state(whoami);
   
@@ -560,8 +564,13 @@ void MDS::handle_mds_map(MMDSMap *m)
   // REJOIN
   // is everybody finally rejoining?
   if (is_rejoin() || is_active() || is_stopping()) {
+    // did we start?
     if (!wasrejoining && mdsmap->is_rejoining()) {
       mdcache->send_cache_rejoins();
+    }
+    // did we finish?
+    if (wasrejoining && !mdsmap->is_rejoining()) {
+      mdcache->dump_cache();
     }
   }
 

@@ -400,7 +400,7 @@ void EImportMap::replay(MDS *mds)
       mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
     }
   }
-  mds->mdcache->show_imports();
+  mds->mdcache->show_subtrees();
 }
 
 

@@ -199,6 +199,7 @@ md_config_t g_conf = {
   mds_local_osd: false,
 
   mds_thrash_exports: 0,
+  mds_dump_cache_on_map: false,
 
   // --- osd ---
   osd_rep: OSD_REP_PRIMARY,
@@ -611,6 +612,8 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.mds_local_osd = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
       g_conf.mds_thrash_exports = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
+      g_conf.mds_dump_cache_on_map = 1;
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;

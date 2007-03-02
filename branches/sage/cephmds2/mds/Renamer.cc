@@ -272,7 +272,7 @@ void Renamer::fix_renamed_dir(CDir *srcdir,
     }  
   }
   */
-  cache->show_imports();
+  cache->show_subtrees();
 }
 
 /*
@@ -359,7 +359,7 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
                                        srcauth);  // tell dest who src is (maybe even me)
       mds->send_message_mds(m, destauth, MDS_PORT_CACHE);
       
-      cache->show_imports();
+      cache->show_subtrees();
       
     }
     
@@ -503,7 +503,7 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
   assert(in);
   assert(in->is_auth());
 
-  if (in->is_dir()) cache->show_imports();
+  if (in->is_dir()) cache->show_subtrees();
 
   // encode and export inode state
   bufferlist inode_state;

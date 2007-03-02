@@ -30,10 +30,6 @@ class MMDSCacheRejoin : public Message {
 
   char *get_type_name() { return "cache_rejoin"; }
 
-  void print(ostream& out) {
-    out << "cache_rejoin" << endl;
-  }
-
   void add_dir(inodeno_t dirino) {
     dirs.insert(dirino);
   }

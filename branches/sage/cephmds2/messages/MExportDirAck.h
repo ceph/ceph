@@ -27,7 +27,10 @@ class MExportDirAck : public Message {
     Message(MSG_MDS_EXPORTDIRACK), ino(i) { }
 
   virtual char *get_type_name() { return "ExAck"; }
-  
+    void print(ostream& o) {
+    o << "export_ack(" << ino << ")";
+  }
+
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(ino), (char*)&ino);

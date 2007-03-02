@@ -190,6 +190,7 @@ struct md_config_t {
   bool  mds_local_osd;
 
   int mds_thrash_exports;
+  bool mds_dump_cache_on_map;
 
   // osd
   int   osd_rep;

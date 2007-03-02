@@ -179,9 +179,10 @@ protected:
 
   set<int> recovery_set;
   set<int> wants_import_map;   // nodes i need to send my import map to
-  set<int> got_import_map;     // nodes i need to send my import map to (when exports finish)
+  set<int> got_import_map;     // nodes i got import_maps from
   set<int> rejoin_ack_gather;  // nodes i need a rejoin ack from
   
+  void set_recovery_set(set<int>& s);
   void handle_mds_failure(int who);
   void handle_import_map(MMDSImportMap *m);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -196,9 +197,6 @@ public:
   void send_pending_import_maps();  // maybe.
   void send_cache_rejoins();
 
-  void set_recovery_set(set<int>& s) {
-    recovery_set = s;
-  }
 
   // ambiguous imports
   void add_ambiguous_import(inodeno_t base, list<inodeno_t>& bounds);
@@ -396,9 +394,9 @@ public:
     if (root) root->dump();
   }
 
-  void show_imports();
   void show_cache();
-  void show_subtrees();
+  void dump_cache();
+  void show_subtrees(int dbl=10);
 
 };
 

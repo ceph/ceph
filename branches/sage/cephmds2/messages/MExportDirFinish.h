@@ -28,7 +28,9 @@ class MExportDirFinish : public Message {
     this->ino = ino;
   }  
   virtual char *get_type_name() { return "ExFin"; }
-  
+  void print(ostream& o) {
+    o << "export_finish(" << ino << ")";
+  }
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(ino), (char*)&ino);

@@ -31,6 +31,9 @@ class MExportDir : public Message {
     ino(dirino) {
   }
   virtual char *get_type_name() { return "Ex"; }
+  void print(ostream& o) {
+    o << "export(" << ino << ")";
+  }
 
   inodeno_t get_ino() { return ino; }
   list<bufferlist>& get_dirstate() { return dirstate; }

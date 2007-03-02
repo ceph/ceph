@@ -856,7 +856,7 @@ void MDBalancer::add_import(CDir *dir)
 
 void MDBalancer::show_imports(bool external)
 {
-  mds->mdcache->show_imports();
+  mds->mdcache->show_subtrees();
 }
 
 

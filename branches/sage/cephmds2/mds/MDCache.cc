@@ -130,7 +130,7 @@ bool MDCache::shutdown()
   if (lru.lru_get_size() > 0) {
     dout(7) << "WARNING: mdcache shutodwn with non-empty cache" << endl;
     //show_cache();
-    show_imports();
+    show_subtrees();
     //dump();
   }
   return true;
@@ -227,7 +227,7 @@ int MDCache::open_root(Context *c)
     adjust_subtree_auth(root->dir, 0);   
     root->dir->dir_rep = CDir::REP_ALL;   //NONE;
 
-    show_imports();
+    show_subtrees();
 
     if (c) {
       c->finish(0);
@@ -411,7 +411,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     subtrees[parent].erase(dir);
   } 
 
-  show_subtrees();
+  show_subtrees(15);
 }
 
 
@@ -851,6 +851,16 @@ void MDCache::handle_mds_failure(int who)
 {
   dout(7) << "handle_mds_failure mds" << who << endl;
   
+  // make note of recovery set
+  mds->mdsmap->get_recovery_mds_set(recovery_set);
+  recovery_set.erase(mds->get_nodeid());
+  dout(1) << "my recovery peers will be " << recovery_set << endl;
+
+  // adjust my recovery lists
+  wants_import_map.erase(who);   // MDS will ask again
+  got_import_map.erase(who);     // i'll get another.
+  rejoin_ack_gather.erase(who);  // i'll need/get another.
+ 
   // adjust subtree auth
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -878,6 +888,11 @@ void MDCache::handle_mds_failure(int who)
   show_subtrees();  
 }
 
+void MDCache::set_recovery_set(set<int>& s) 
+{
+  dout(7) << "set_recovery_set " << s << endl;
+  recovery_set = s;
+}
 
 
 /*
@@ -1009,24 +1024,30 @@ void MDCache::disambiguate_imports()
   }
   assert(my_ambiguous_imports.empty());
 
-  show_imports();
+  show_subtrees();
 }
 
 
 void MDCache::add_ambiguous_import(inodeno_t base, list<inodeno_t>& bounds) 
 {
   assert(my_ambiguous_imports.count(base) == 0);
-  my_ambiguous_imports[base].swap(bounds);
+  my_ambiguous_imports[base].swap( bounds );
 }
 
 
 void MDCache::add_ambiguous_import(CDir *base, const set<CDir*>& bounds)
 {
+  // make a list
   list<inodeno_t> binos;
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) 
     binos.push_back((*p)->ino());
+  
+  // note: this can get called twice if the exporter fails during recovery
+  if (my_ambiguous_imports.count(base->ino()))
+    my_ambiguous_imports.erase(base->ino());
+
   add_ambiguous_import(base->ino(), binos);
 }
 
@@ -1098,7 +1119,7 @@ void MDCache::recalc_auth_bits()
       }
     }
   }
-  show_imports();
+  show_subtrees();
   show_cache();
 }
 
@@ -1111,7 +1132,7 @@ void MDCache::recalc_auth_bits()
  */
 void MDCache::send_cache_rejoins()
 {
-  dout(10) << "send_cache_rejoins " << endl;
+  dout(10) << "send_cache_rejoins with recovery_set " << recovery_set << endl;
 
   map<int, MMDSCacheRejoin*> rejoins;
 
@@ -1126,35 +1147,24 @@ void MDCache::send_cache_rejoins()
       rejoins[*p] = new MMDSCacheRejoin;
   }	
 
-  // build list of dir_auth regions
-  list<CDir*> dir_auth_regions;
-  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
-    if (!p->second->is_dir()) continue;
-    if (!p->second->dir) continue;
-    if (p->second->dir->get_dir_auth().first == CDIR_AUTH_PARENT) continue;
+  assert(!migrator->is_importing());
+  assert(!migrator->is_exporting());
 
-    int auth = p->second->dir->get_dir_auth().first;
+  // check all subtrees
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *dir = p->first;
+    assert(dir->is_subtree_root());
+    assert(!dir->auth_is_ambiguous());
+
+    int auth = dir->get_dir_auth().first;
     assert(auth >= 0);
-
-    if (auth == mds->get_nodeid()) continue; // skip my own regions!
     
-    if (rejoins.count(auth) == 0) 
-      continue;   // don't care about this node's regions
-    
-    // add to list
-    dout(10) << " on mds" << auth << " region " << *p->second << endl;
-    dir_auth_regions.push_back(p->second->dir);
-  }
+    if (auth == mds->get_nodeid()) continue;  // skip my own regions!
+    if (rejoins.count(auth) == 0) continue;   // don't care about this node's regions
 
-  // walk the regions
-  for (list<CDir*>::iterator p = dir_auth_regions.begin();
-       p != dir_auth_regions.end();
-       ++p) {
-    CDir *dir = *p;
-    int to = dir->authority().first;
-    cache_rejoin_walk(dir, rejoins[to]);
+    cache_rejoin_walk(dir, rejoins[auth]);
   }
 
   // send the messages
@@ -1194,9 +1204,8 @@ void MDCache::cache_rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       rejoin->add_inode(in->ino(), 
 			in->get_caps_wanted());
       
-      // dir?
-      if (in->dir &&
-	  in->dir->get_dir_auth().first == CDIR_AUTH_PARENT)
+      // dir (in this subtree)?
+      if (in->dir && !in->dir->is_subtree_root()) 
 	nested.push_back(in->dir);
     }
   }
@@ -1311,7 +1320,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 
 void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
 {
-  dout(7) << "handle_cache_rejoin from " << m->get_source() << endl;
+  dout(7) << "handle_cache_rejoin_ack from " << m->get_source() << endl;
   int from = m->get_source().num();
   
   // dirs
@@ -1354,7 +1363,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoinAck *m)
   rejoin_ack_gather.erase(from);
   if (rejoin_ack_gather.empty()) {
     dout(7) << "all done, going active!" << endl;
-    show_imports();
+    show_subtrees();
     show_cache();
     mds->set_want_state(MDSMap::STATE_ACTIVE);
   } else {
@@ -1935,7 +1944,7 @@ bool MDCache::shutdown_pass()
   if (mds->is_out()) {
     dout(7) << " already shut down" << endl;
     show_cache();
-    show_imports();
+    show_subtrees();
     return true;
   }
 
@@ -2511,7 +2520,7 @@ int MDCache::path_traverse(filepath& origpath,
         }
 
         mds->send_message_mds(req, dauth.first, req->get_dest_port());
-        //show_imports();
+        //show_subtrees();
         
         if (mds->logger) mds->logger->inc("cfw");
         if (onfinish) delete onfinish;
@@ -3921,9 +3930,9 @@ void MDCache::find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s)
 // ==============================================================
 // debug crap
 
-void MDCache::show_subtrees()
+void MDCache::show_subtrees(int dbl)
 {
-  dout(10) << "show_subtrees:" << endl;
+  //dout(10) << "show_subtrees" << endl;
   
   list<pair<CDir*,int> > q;
   string indent;
@@ -3964,7 +3973,7 @@ void MDCache::show_subtrees()
       sprintf(s, "%2d,%2d", dir->get_dir_auth().first, dir->get_dir_auth().second);
     
     // print
-    dout(10) << indent << "|_" << pad << s << " " << auth << *dir << endl;
+    dout(dbl) << indent << "|_" << pad << s << " " << auth << *dir << endl;
 
     // nested items?
     if (!subtrees[dir].empty()) {
@@ -3983,6 +3992,7 @@ void MDCache::show_subtrees()
 }
 
 
+/*
 void MDCache::show_imports()
 {
   int db = 10;
@@ -4008,7 +4018,8 @@ void MDCache::show_imports()
 
   show_subtrees();
   return;
-
+}
+*/
 
 
   /// old
@@ -4074,14 +4085,14 @@ void MDCache::show_imports()
       dout(1) << "***** stray item in exports: " << **it << endl;
     assert(ecopy.size() == 0);
   }
-  */
 }
+  */
 
 
 void MDCache::show_cache()
 {
   dout(7) << "show_cache" << endl;
-
+  
   for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
@@ -4095,3 +4106,40 @@ void MDCache::show_cache()
   }
 }
 
+
+void MDCache::dump_cache()
+{
+  char fn[20];
+  sprintf(fn, "cachedump.%d.mds%d", mds->mdsmap->get_epoch(), mds->get_nodeid());
+
+  dout(1) << "dump_cache to " << fn << endl;
+
+  ofstream myfile;
+  myfile.open(fn);
+  
+  for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
+       it != inode_map.end();
+       it++) {
+    /*
+    myfile << *((*it).second) << endl;
+    CDentry *dn = (*it).second->get_parent_dn();
+    if (dn) 
+      myfile << *dn << endl;
+    */
+    
+    if ((*it).second->dir) {
+      CDir *dir = (*it).second->dir;
+      myfile << *dir->inode << endl;
+      myfile << *dir << endl;
+      
+      for (CDir_map_t::iterator p = dir->items.begin();
+	   p != dir->items.end();
+	   ++p) {
+	CDentry *dn = p->second;
+	myfile << *dn << endl;
+      }
+    }
+  }
+
+  myfile.close();
+}

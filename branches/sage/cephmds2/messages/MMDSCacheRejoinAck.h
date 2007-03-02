@@ -50,10 +50,6 @@ class MMDSCacheRejoinAck : public Message {
 
   char *get_type_name() { return "cache_rejoin_ack"; }
 
-  void print(ostream& out) {
-    out << "cache_rejoin" << endl;
-  }
-
   void add_dir(inodeno_t dirino, int nonce) {
     dirs.push_back(dirinfo(dirino,nonce));
   }
