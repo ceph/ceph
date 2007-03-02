@@ -22,11 +22,9 @@ class MMonPaxos : public Message {
   // op types
   const static int OP_COLLECT = 1;   // proposer: propose round
   const static int OP_LAST = 2;		 // voter:    accept proposed round
-  const static int OP_OLDROUND = 3;	 // voter:    notify proposer he proposed an old round
   const static int OP_BEGIN = 4;	 // proposer: value proposed for this round
   const static int OP_ACCEPT = 5;	 // voter:    accept propsed value
-  const static int OP_SUCCESS = 7;   // proposer: notify learners of agreed value
-  const static int OP_ACK = 8;		 // learner:  notify proposer that new value has been saved
+  const static int OP_COMMIT = 7;   // proposer: notify learners of agreed value
 
   // which state machine?
   int op;   
@@ -53,8 +51,8 @@ class MMonPaxos : public Message {
     payload.append((char*)&op, sizeof(op));
     payload.append((char*)&machine_id, sizeof(machine_id));
     payload.append((char*)&last_committed, sizeof(last_committed));
+    payload.append((char*)&old_accepted_pn, sizeof(old_accepted_pn));
     ::_encode(values, payload);
-    ::_encode(pns, payload);
   }
   void decode_payload() {
     int off = 0;
@@ -64,8 +62,9 @@ class MMonPaxos : public Message {
     off += sizeof(machine_id);
     payload.copy(off, sizeof(last_committed), (char*)&last_committed);
     off += sizeof(last_committed);
+    payload.copy(off, sizeof(old_accepted_pn), (char*)&old_accepted_pn);
+    off += sizeof(old_accepted_pn);
     ::_decode(values, payload, off);
-    ::_decode(pns, payload, off);
   }
 };
 

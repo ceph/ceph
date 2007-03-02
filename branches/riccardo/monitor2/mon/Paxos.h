@@ -71,7 +71,7 @@ class Paxos {
   bufferlist new_value;
   int        num_accepted;
  
-  void collect(versiont_t oldpn);
+  void collect(version_t oldpn);
   void handle_collect(MMonPaxos*);
   void handle_last(MMonPaxos*);
   void begin(bufferlist& value);
