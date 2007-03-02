@@ -70,8 +70,12 @@ void Monitor::init()
     // FIXME.
     bufferlist bl;
     //bl.append(myPrivKey.c_str(), myPrivKey.length());
+    string prvString = privToString(myPrivKey);
+    string pubString = pubToString(myPubKey);
+    ::_encode(prvString, bl);
+    ::_encode(pubString, bl);
     store->put_bl_ss(bl, "private_key", 0);
-    assert(0);
+    //assert(0);
   }
   else {
     store->mount();
@@ -81,12 +85,18 @@ void Monitor::init()
     bufferlist bl;
     store->get_bl_ss(bl, "private_key", 0);
     //myPrivKey = bl.c_str();
-
+    int off = 0;
+    string prvString, pubString;
+    ::_decode(prvString, bl, off);
+    ::_decode(pubString, bl, off);
+    // get keys from strings
+    myPrivKey = _fromStr_esignPrivKey(prvString);
+    myPubKey = _fromStr_esignPubKey(pubString);
     // der?
-    myPrivKey = esignPrivKey("crypto/esig1536.dat");
-    myPubKey = esignPubKey(myPrivKey);
+    //myPrivKey = esignPrivKey("crypto/esig1536.dat");
+    //myPubKey = esignPubKey(myPrivKey);
 
-    assert(0);
+    // assert(0);
   }
 
   // create 

@@ -2857,7 +2857,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
 
   // FIXME only verfiy reads from a client
   // i know, i know...not secure but they should all have caps
-  if (op->get_dest().is_client()) {
+  if (op->get_source().is_client()) {
     ExtCap *op_capability = op->get_capability();
     assert(op_capability);
     cout << "OSD recieved a read capability" << endl;
@@ -3210,7 +3210,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
   // FIXME only verfiy writes from a client
   // i know, i know...not secure but they should all have caps
   if (op->get_op() == OSD_OP_WRITE
-      && op->get_dest().is_client()) {
+      && op->get_source().is_client()) {
     ExtCap *op_capability = op->get_capability();
     assert(op_capability);
     if (op_capability->verif_extcap(monmap->get_key()))
