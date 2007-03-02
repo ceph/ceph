@@ -369,6 +369,25 @@ int OSD::read_superblock()
 }
 
 
+// security operations
+
+// assumes the request and cap contents has already been checked
+bool OSD::verify_cap(ExtCap *cap) {
+
+  // have i already verified this cap?
+  if (!cap_cache->prev_verified(cap->get_id())) {
+    cout << "Verifying an unseen capability" << endl;
+    // actually verify
+    if (cap->verif_extcap(monmap->get_key())) {
+      // cache the verification
+      cap_cache->insert(cap);
+    }
+    else
+      return false;
+  }
+  return true;
+}
+
 // object locks
 
 PG *OSD::lock_pg(pg_t pgid) 
@@ -2863,8 +2882,7 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
   if (op->get_source().is_client()) {
     ExtCap *op_capability = op->get_capability();
     assert(op_capability);
-    cout << "OSD recieved a read capability" << endl;
-    if (op_capability->verif_extcap(monmap->get_key()))
+    if (verify_cap(op_capability))
       cout << "OSD successfully verified capability" << endl;
     else
       cout << "OSD failed to verify capability" << endl;
@@ -3219,7 +3237,9 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       && op->get_source().is_client()) {
     ExtCap *op_capability = op->get_capability();
     assert(op_capability);
-    if (op_capability->verif_extcap(monmap->get_key()))
+
+    // have i already verified this cap?
+    if (verify_cap(op_capability))
       cout << "OSD successfully verified a write capability" << endl;
     else
       cout << "OSD failed to verify a write capability" << endl;

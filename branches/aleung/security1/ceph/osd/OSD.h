@@ -261,6 +261,9 @@ public:
   int init();
   int shutdown();
 
+  // security ops
+  bool verify_cap(ExtCap *cap);
+
   // messages
   virtual void dispatch(Message *m);
   virtual void ms_handle_failure(Message *m, const entity_inst_t& inst);
