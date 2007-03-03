@@ -376,7 +376,7 @@ bool OSD::verify_cap(ExtCap *cap) {
 
   // have i already verified this cap?
   if (!cap_cache->prev_verified(cap->get_id())) {
-    cout << "Verifying an unseen capability" << endl;
+    //cout << "Verifying an unseen capability" << endl;
     // actually verify
     if (cap->verif_extcap(monmap->get_key())) {
       // cache the verification
@@ -2884,14 +2884,15 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     if (op->get_source().is_client()) {
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
-      if (verify_cap(op_capability))
-	cout << "OSD successfully verified a read capability" << endl;
-      else
-	cout << "OSD failed to verify a read capability" << endl;
+      assert(verify_cap(op_capability));
+      //if (verify_cap(op_capability))
+      //cout << "OSD successfully verified a read capability" << endl;
+      //else
+      //cout << "OSD failed to verify a read capability" << endl;
     }
-    else
-      cout << "Received some read with no cap from " <<
-	op->get_source().type() << endl;
+    //else
+    //cout << "Received some read with no cap from " <<
+    //op->get_source().type() << endl;
   }
 
   long r = 0;
@@ -3241,15 +3242,16 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
 	&& op->get_source().is_client()) {
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
-      
+      assert(verify_cap(op_capability));
       // have i already verified this cap?
-      if (verify_cap(op_capability))
-	cout << "OSD successfully verified a write capability" << endl;
-      else
-	cout << "OSD failed to verify a write capability" << endl;
+      //if (verify_cap(op_capability))
+      //cout << "OSD successfully verified a write capability" << endl;
+      //else
+      //cout << "OSD failed to verify a write capability" << endl;
     }
-    else
-      cout << "Received some write with no cap from " << op->get_source().type() << endl;
+    //else
+    //cout << "Received some write with no cap from " <<
+    //op->get_source().type() << endl;
   }
   
   // locked by someone else?
