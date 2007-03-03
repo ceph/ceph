@@ -27,7 +27,8 @@ LDINC = ld -i -o
 endif
 
 CC = g++
-LIBS = -lpthread -lcrypto++5.2
+LIBS = -lpthread -lcryptopp
+#LIBS = -lpthread -lcrypto++5.2
 #CRYPTOLIBS = /usr/lib/libcrypto++5.2.so
 
 ifeq ($(want_bdb),yes)
@@ -156,12 +157,12 @@ fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o ${OSBDB_OBJ} cli
 	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -lfuse $^ -o $@
 
 fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/FakeMessenger.o common.o crypto.o
-	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
+	${CC} -pg ${CFLAGS} $^ -o $@ ${LIBS} ${OSBDB_LIBS}
 
 
 # mpi startup
 newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o crypto.o
-	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
+	${MPICC} -pg ${MPICFLAGS} $^ -o $@ ${MPILIBS} ${OSBDB_LIBS}
 
 newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o crypto.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@

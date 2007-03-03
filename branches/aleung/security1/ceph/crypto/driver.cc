@@ -165,7 +165,6 @@ int main(int argc, char* argv[]) {
   decryptCFB(cipherMsg, plainLen, origMsg, myDec);
   cout << "My recovered message is " << origMsg << endl;
 
-  /*
   // RC5 encryption/decryption
   byte plainRC5[] = "My RC5 message to encrypt is even longer now";
   unsigned int plainRC5len = strlen((const char*)plainRC5)+1;
@@ -198,6 +197,6 @@ int main(int argc, char* argv[]) {
   //decrypt
   decryptRC5(cipherRC5, plainRC5len, recoverRC5, decRC5);
   cout << "My recovered message is " << recoverRC5 << endl;
-  */
+
   return 0;
 }

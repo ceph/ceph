@@ -30,11 +30,9 @@
 #include<crypto++/esign.h>
 //encryption/decryption
 #include<crypto++/modes.h>
-//#include<crypto++/rc5.h>
+#include<crypto++/rc5.h>
 #include<crypto++/aes.h>
 #include<crypto++/rijndael.h>
-
-//#include"crypto_config.h"
 
 #include<iostream>
 
@@ -57,20 +55,19 @@ namespace CryptoLib {
   typedef CryptoPP::RSASSA_PKCS1v15_SHA_Verifier rsaPub;
   typedef CryptoPP::CFB_Mode<CryptoPP::Rijndael>::Encryption cfbModeEnc;
   typedef CryptoPP::CFB_Mode<CryptoPP::Rijndael>::Decryption cfbModeDec;
-  //typedef CryptoPP::CFB_Mode<CryptoPP::RC5>::Encryption cfbRC5Enc;
-  //typedef CryptoPP::CFB_Mode<CryptoPP::RC5>::Decryption cfbRC5Dec;
+  typedef CryptoPP::CFB_Mode<CryptoPP::RC5>::Encryption cfbRC5Enc;
+  typedef CryptoPP::CFB_Mode<CryptoPP::RC5>::Decryption cfbRC5Dec;
 
   // symmetric block modes
   cfbModeEnc getCFBModeEnc(byte*, const unsigned int, byte*);
   cfbModeDec getCFBModeDec(byte*, const unsigned int, byte*);
   void encryptCFB(byte*, const unsigned int, byte*, cfbModeEnc);
   void decryptCFB(byte*, const unsigned int, byte*, cfbModeDec);
-  /*
   cfbRC5Enc getRC5Enc(byte*, const unsigned int, byte*);
   cfbRC5Dec getRC5Dec(byte*, const unsigned int, byte*);
   void encryptRC5(byte*, const unsigned int, byte*, cfbRC5Enc);
   void decryptRC5(byte*, const unsigned int, byte*, cfbRC5Dec);
-  */
+  
 
   // asymmetric key generation
   esignPriv esignPrivKey(char*);
