@@ -31,6 +31,9 @@ using namespace std;
 
 #include "common/Timer.h"
 
+#include "crypto/CryptoLib.h"
+using namespace CryptoLib;
+
 #define NUMMDS g_conf.num_mds
 #define NUMOSD g_conf.num_osd
 #define NUMCLIENT g_conf.num_client

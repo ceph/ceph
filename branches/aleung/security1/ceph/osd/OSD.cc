@@ -2885,9 +2885,9 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
       if (verify_cap(op_capability))
-	cout << "OSD successfully verified capability" << endl;
+	cout << "OSD successfully verified a read capability" << endl;
       else
-	cout << "OSD failed to verify capability" << endl;
+	cout << "OSD failed to verify a read capability" << endl;
     }
     else
       cout << "Received some read with no cap from " <<

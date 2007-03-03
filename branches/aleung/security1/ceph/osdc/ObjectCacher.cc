@@ -750,8 +750,8 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
            bh_it != hits.end();
            bh_it++) {
 		dout(10) << "readx hit bh " << *bh_it->second << endl;
-        hit_ls.push_back(bh_it->second);
-	  }
+		hit_ls.push_back(bh_it->second);
+      }
 
       // create reverse map of buffer offset -> object for the eventual result.
       // this is over a single ObjectExtent, so we know that
