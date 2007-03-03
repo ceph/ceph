@@ -2651,6 +2651,65 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 }
 
 
+// =========================================
+// layout
+
+
+int Client::describe_layout(int fh, FileLayout *lp)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->describe_layout(" << fh << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  *lp = in->inode.layout;
+
+  client_lock.Unlock();
+  return 0;
+}
+
+int Client::get_stripe_unit(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.stripe_size;
+}
+
+int Client::get_stripe_width(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.stripe_size*layout.stripe_count;
+}
+
+int Client::get_stripe_period(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.period();
+}
+
+int Client::enumerate_layout(int fh, list<ObjectExtent>& result,
+			     off_t length, off_t offset)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->enumerate_layout(" << fh << ", " << length << ", " << offset << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  // map to a list of extents
+  filer->file_to_extents(in->inode, offset, length, result);
+
+  client_lock.Unlock();
+  return 0;
+}
+
+
+
 void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
   entity_name_t dest = inst.name;

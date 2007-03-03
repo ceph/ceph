@@ -143,7 +143,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
     gethostname(hostname,100);
     
     sprintf(dev_path, "%s/osd%d", ebofs_base_path, whoami);
-    
+
     struct stat sta;
     if (::lstat(dev_path, &sta) != 0)
       sprintf(dev_path, "%s/osd.%s", ebofs_base_path, hostname);    

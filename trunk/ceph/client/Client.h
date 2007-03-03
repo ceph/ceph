@@ -582,8 +582,15 @@ protected:
   int lazyio_propogate(int fd, off_t offset, size_t count);
   int lazyio_synchronize(int fd, off_t offset, size_t count);
 
-  int describe_layout(char *fn, list<ObjectExtent>& result);
+  // expose file layout
+  int describe_layout(int fd, FileLayout* layout);
+  int get_stripe_unit(int fd);
+  int get_stripe_width(int fd);
+  int get_stripe_period(int fd);
+  int enumerate_layout(int fd, list<ObjectExtent>& result,
+		       off_t length, off_t offset);
 
+  // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);
 };
 

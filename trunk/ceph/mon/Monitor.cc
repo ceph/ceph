@@ -53,10 +53,10 @@ void Monitor::init()
   sprintf(s, "mondata/mon%d", whoami);
   store = new MonitorStore(s);
 
-  if (g_conf.mkfs)
+  if (g_conf.mkfs) 
     store->mkfs();
-  else
-    store->mount();
+
+  store->mount();
 
   // create 
   osdmon = new OSDMonitor(this, messenger, lock);
