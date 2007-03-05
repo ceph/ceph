@@ -27,6 +27,7 @@
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
+#include "messages/MOSDUpdate.h"
 
 //#include "msgthread.h"
 
@@ -43,7 +44,7 @@
 using namespace CryptoLib;
 
 #include "crypto/Ticket.h"
-//#include "User.h"
+#include "crypto/CapGroup.h"
 
 // stl
 #include <set>
@@ -509,12 +510,15 @@ protected:
   map<uid_t,esignPub*> user_pub_key;
   map<uid_t,esignPriv*> user_priv_key;
 
+  map<gid_t, CapGroup> groups;
+
   // user map
   //map<uid_t, User*> user_identity;
 
   Ticket *get_user_ticket(uid_t uid, gid_t gid);
   void put_user_ticket(Ticket *tk);
 
+  void handle_osd_update(MOSDUpdate *m);
 
   // friends
   friend class SyntheticClient;

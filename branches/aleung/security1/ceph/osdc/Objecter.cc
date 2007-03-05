@@ -393,8 +393,10 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex)
   // set ext cap
   // FIXME mds currently is writing without caps...so we let it
   // all other (client) writes should have cap
-  if (m->get_client().is_client())
+  if (m->get_client().is_client()) {
+    m->set_user(rd->ext_cap->get_uid());
     m->set_capability(rd->ext_cap);
+  }
   dout(10) << "readx_submit " << rd << " tid " << last_tid
            << " oid " << ex.oid << " " << ex.start << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
@@ -664,8 +666,10 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   // only cap for a write, fix later
   // FIXME mds does writes through this interface without a cap
   // we let it for now
-  if (wr->op == OSD_OP_WRITE && m->get_client().is_client())
-      m->set_capability(wr->modify_cap);   
+  if (wr->op == OSD_OP_WRITE && m->get_client().is_client()) {
+    m->set_user(wr->modify_cap->get_uid());
+    m->set_capability(wr->modify_cap);   
+  }
 
   if (wr->tid_version.count(tid)) 
     m->set_version(wr->tid_version[tid]);  // we're replaying this op!

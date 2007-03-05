@@ -84,6 +84,8 @@ private:
     // who's asking?
     entity_inst_t client;
     reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
+
+    uid_t user;
     
     // for replication
     tid_t rep_tid;
@@ -150,6 +152,9 @@ private:
 
   const bool wants_ack() { return st.want_ack; }
   const bool wants_commit() { return st.want_commit; }
+
+  uid_t get_user() { return st.user; }
+  void set_user(uid_t uid) { st.user = uid; }   
 
   ExtCap* get_capability() { return &ext_cap; }
 

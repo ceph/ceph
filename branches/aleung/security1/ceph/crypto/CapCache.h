@@ -13,10 +13,10 @@
 #ifndef __CAPCACHE_H
 #define __CAPCACHE_H
 
-#include <iostream>
-using namespace std;
+//#include <iostream>
+//using namespace std;
 
-#include "crypto/ExtCap.h"
+//#include "crypto/ExtCap.h"
 
 class CapCache {
 private:

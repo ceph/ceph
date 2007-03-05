@@ -371,6 +371,53 @@ int OSD::read_superblock()
 
 // security operations
 
+// checks that the access rights in the cap are correct
+bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
+  
+  if (op_capability->get_type() == UNIX_GROUP) {
+    // check if user is in group
+    gid_t my_group = op_capability->get_gid();
+    if (!(unix_groups[my_group].contains(op_capability->get_uid()))) {
+      // do update to get new unix groups
+      cout << "User " << op_capability->get_uid() << " not in group "
+	   << my_group << endl;
+      update_group(op->get_client_inst(), my_group);
+      return false;
+    }
+  }
+  // check users match
+  else if (op->get_user() != op_capability->get_uid()) {
+    cout << "User did in cap did not match request" << endl;
+    return false;
+  }
+  // check mode matches
+  if (op->get_op() == OSD_OP_WRITE &&
+      op_capability->mode() & FILE_MODE_W == 0) {
+    cout << "Write mode in cap did not match request" << endl;
+    return false;
+  }
+  if (op->get_op() == OSD_OP_READ &&
+      op_capability->mode() & FILE_MODE_R == 0) {
+    cout << "Read mode in cap did not match request" << endl;
+    return false;
+  }
+  // check object matches
+  if (op->get_oid().ino != op_capability->get_ino()) {
+    cout << "File in cap did not match request" << endl;
+    return false;
+  }
+  return true;
+}
+
+// gets group information from client (will block!)
+void OSD::update_group(entity_inst_t client, gid_t group) {
+    // set up reply
+  MOSDUpdate *update = new MOSDUpdate(group);
+
+  // send it
+  messenger->send_message(update, client);
+}
+
 // assumes the request and cap contents has already been checked
 bool OSD::verify_cap(ExtCap *cap) {
 
@@ -2884,15 +2931,14 @@ void OSD::op_read(MOSDOp *op)//, PG *pg)
     if (op->get_source().is_client()) {
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
+      // check accesses are right
+      if (check_request(op, op_capability)) {
+	cout << "Access permissions are correct" << endl;
+      }
+      else
+	cout << "Access permissions are incorrect" << endl;
       assert(verify_cap(op_capability));
-      //if (verify_cap(op_capability))
-      //cout << "OSD successfully verified a read capability" << endl;
-      //else
-      //cout << "OSD failed to verify a read capability" << endl;
     }
-    //else
-    //cout << "Received some read with no cap from " <<
-    //op->get_source().type() << endl;
   }
 
   long r = 0;
@@ -3240,14 +3286,17 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     // i know, i know...not secure but they should all have caps
     if (op->get_op() == OSD_OP_WRITE
 	&& op->get_source().is_client()) {
+
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
+      // check accesses are right
+      if (check_request(op, op_capability)) {
+	cout << "Access permissions are correct" << endl;
+      }
+      else
+	cout << "Access permissions are incorrect" << endl;
+      
       assert(verify_cap(op_capability));
-      // have i already verified this cap?
-      //if (verify_cap(op_capability))
-      //cout << "OSD successfully verified a write capability" << endl;
-      //else
-      //cout << "OSD failed to verify a write capability" << endl;
     }
     //else
     //cout << "Received some write with no cap from " <<

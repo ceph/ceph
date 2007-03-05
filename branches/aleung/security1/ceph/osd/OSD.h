@@ -32,10 +32,12 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "messages/MOSDOp.h"
+#include "messages/MOSDUpdate.h"
 
-#include"crypto/CryptoLib.h"
+#include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 #include "crypto/CapCache.h"
+#include "crypto/CapGroup.h"
 
 class Messenger;
 class Message;
@@ -109,6 +111,9 @@ public:
   int hb_stat_qlen; // cumulative queue length since last hb
 
   hash_map<int, float> peer_qlen;
+
+  // unix group cache
+  map<gid_t, CapGroup> unix_groups;
   
   // per-pg locking (serializing)
   hash_set<pg_t>               pg_lock;
@@ -262,6 +267,8 @@ public:
   int shutdown();
 
   // security ops
+  bool check_request(class MOSDOp *op, ExtCap *op_capability);
+  void update_group(entity_inst_t client, gid_t group);
   bool verify_cap(ExtCap *cap);
 
   // messages

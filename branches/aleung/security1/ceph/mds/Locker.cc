@@ -226,6 +226,7 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 
   // get the uid
   uid_t my_user = req->get_caller_uid();
+  gid_t my_group = req->get_caller_gid();
   int my_want = 0;
   // issue most generic cap (RW)
   my_want |= FILE_MODE_RW;
@@ -235,7 +236,24 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 
   if (!ext_cap) {
     // make new cap
-    ext_cap = new ExtCap(my_want, my_user, in->ino());
+    // unix grouping
+    if (g_conf.mds_group == 1) {
+      ext_cap = new ExtCap(my_want, my_user, my_group, in->ino());
+
+      // configure group
+      if (mds->unix_groups.count(my_group) == 0)
+	mds->unix_groups[my_group].set_gid(my_group);
+
+      // add user to group if not know already
+      if (!(mds->unix_groups[my_group].contains(my_user)))
+	mds->unix_groups[my_group].add_user(my_user);
+
+      ext_cap->set_type(1);
+    }
+    // default no grouping
+    else
+      ext_cap = new ExtCap(my_want, my_user, in->ino());
+
     ext_cap->set_id(cap_id_count, mds->get_nodeid());
     // increment capability count
     cap_id_count++;

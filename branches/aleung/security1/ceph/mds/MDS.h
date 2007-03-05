@@ -46,6 +46,7 @@ using namespace __gnu_cxx;
 using namespace CryptoLib;
 
 #include "crypto/ExtCap.h"
+#include "crypto/CapGroup.h"
 
 #define MDS_PORT_MAIN     0
 #define MDS_PORT_SERVER   1
@@ -152,6 +153,9 @@ class MDS : public Dispatcher {
 
 public:
   map<int,version_t> peer_mdsmap_epoch;
+
+  // user groups
+  map<gid_t, CapGroup> unix_groups;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 

@@ -712,6 +712,15 @@ void Client::put_user_ticket(Ticket *tk)
     user_ticket_ref.erase(uid);
 }
 
+void Client::handle_osd_update(MOSDUpdate *m) {
+  cout << "Received a request to resolve group " << m->get_group() << endl;
+  // check local cache
+  if (groups.count(m->get_group())) {
+    
+  }
+  // else, ask mds, pass it, cache it
+  assert(0);
+}
 
 // ------------------------
 // incoming messages
@@ -728,6 +737,9 @@ void Client::dispatch(Message *m)
 
   case MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
+    break;
+  case MSG_OSD_UPDATE:
+    handle_osd_update((MOSDUpdate*)m);
     break;
     
     // client
@@ -752,6 +764,9 @@ void Client::dispatch(Message *m)
     break;
   case MSG_CLIENT_UNMOUNT:
     handle_unmount_ack(m);
+    break;
+    //  case MSG_OSD_UPDATE:
+    //
     break;
 
 

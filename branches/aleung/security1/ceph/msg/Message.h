@@ -73,6 +73,9 @@
 #define MSG_OSD_PG_LOG         53
 #define MSG_OSD_PG_REMOVE      54
 
+// osd group update
+#define MSG_OSD_UPDATE         55
+
 #define MSG_CLIENT_REQUEST         60
 #define MSG_CLIENT_REPLY           61
 //#define MSG_CLIENT_DONE            62

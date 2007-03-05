@@ -43,6 +43,7 @@ using namespace std;
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
+#include "messages/MOSDUpdate.h"
 
 #include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
@@ -229,6 +230,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_OSD_PG_REMOVE:
     m = new MOSDPGRemove();
+    break;
+  case MSG_OSD_UPDATE:
+    m = new MOSDUpdate();
     break;
 
     // clients

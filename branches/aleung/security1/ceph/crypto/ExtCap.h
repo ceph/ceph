@@ -24,6 +24,9 @@ using namespace std;
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 
+#define NO_GROUP 0
+#define UNIX_GROUP 1
+
 struct cap_id_t {
   int cid;
   int mds_id;
@@ -73,16 +76,19 @@ private:
     utime_t t_s; // creation time
     utime_t t_e; // expiration time
     int mode; // I/O mode
-    __uint8_t comp; // specify users/pubkey (for delegation)
-    
+    __uint8_t type; // specify mds policy
+
+    // single user ident
     uid_t uid; // user id
+    //unix group idents
     gid_t gid; // group id
+    bool world;
+
     inodeno_t ino; // inode number
   };
   
   cap_data_t data;
   byte sigArray[ESIGNSIGSIZE];
-  //SigBuf signature;
 
 public:
   friend class Client;
@@ -107,6 +113,7 @@ public:
     data.t_e += 3600;
     data.mode = m;
     data.uid = u;
+    data.gid = 0;
     data.ino = n;
   }
 
@@ -121,6 +128,19 @@ public:
   // capability for many named users, too many files
 
   // capability for too many users, single file
+  // --> unix grouping, issue cap to must general mode
+  ExtCap(int m, uid_t u, gid_t g, inodeno_t n)
+  {
+    data.id.cid = 0;
+    data.id.mds_id = 0;
+    data.t_s = g_clock.now();
+    data.t_e = data.t_s;
+    data.t_e += 3600;
+    data.mode = m;
+    data.uid = u;
+    data.gid = g;
+    data.ino = n;
+  }
 
   // capability for too many user, many named files
 
@@ -135,7 +155,7 @@ public:
   gid_t get_gid() const { return data.gid; }
   inodeno_t get_ino() const { return data.ino; }
   int mode() const { return data.mode; }
-  __int8_t comp() const { return data.comp; }
+  __int8_t get_type() const { return data.type; }
 
   // in case the mode needs to be changed
   // FYI, you should resign the cap after this
@@ -144,6 +164,7 @@ public:
     data.id.cid = new_id;
     data.id.mds_id = new_mds_id;
   }
+  void set_type(__int8_t new_type) { data.type = new_type;}
 
   const cap_data_t* get_data() const {
     return (&data);

@@ -303,6 +303,9 @@ md_config_t g_conf = {
 
   //security (all principals)
   secure_io:              true,
+  mds_group:              0, /* 0=none, 1=unix, 2=batch, 3=def, 4=predict */
+  mds_collection:         0, /* 0=none, 1=unix, 3=def */
+  client_aux:             0, /* 0=off, 1=on */
   sign_scheme:            0, /* 0=esign, 1=RSA */
   hash_scheme:            0, /* 0=sha-1, 1=sha-256,
 				2=sha-512, 3 = md5 */
@@ -775,6 +778,12 @@ void parse_config_options(std::vector<char*>& args)
     // security flag to turn off security
     else if (strcmp(args[i], "--no_sec") == 0)
       g_conf.secure_io = false;
+    else if (strcmp(args[i], "--mds_group") == 0)
+      g_conf.mds_group = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_collection") == 0)
+      g_conf.mds_collection = atoi(args[++i]);
+    else if (strcmp(args[i], "--client_aux") == 0)
+      g_conf.client_aux = atoi(args[++i]);
 
     else if (strcmp(args[i], "--file_layout_ssize") == 0) 
       g_OSD_FileLayout.stripe_size = atoi(args[++i]);

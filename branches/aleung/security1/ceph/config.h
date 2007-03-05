@@ -292,6 +292,9 @@ struct md_config_t {
 
   // security (all princiapls)
   bool secure_io;
+  int mds_group;
+  int mds_collection;
+  int client_aux;
   int sign_scheme;
   int hash_scheme;
   int crypt_scheme;
