@@ -70,8 +70,8 @@
 #define MSG_OSD_PG_REMOVE      54
 
 #define MSG_CLIENT_REQUEST         60
-#define MSG_CLIENT_REPLY           61
-//#define MSG_CLIENT_DONE            62
+#define MSG_CLIENT_REQUEST_FORWARD 61
+#define MSG_CLIENT_REPLY           62
 #define MSG_CLIENT_FILECAPS        63
 #define MSG_CLIENT_INODEAUTHUPDATE 64
 
@@ -233,6 +233,9 @@ public:
   }
   void set_payload(bufferlist& bl) {
     payload.claim(bl);
+  }
+  void copy_payload(bufferlist& bl) {
+    payload = bl;
   }
   msg_envelope_t& get_envelope() {
     return env;

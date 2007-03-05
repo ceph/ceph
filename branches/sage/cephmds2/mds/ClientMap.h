@@ -34,6 +34,13 @@ using namespace __gnu_cxx;
  * contacted if necessary).
  */
 class ClientMap {
+  version_t version;
+
+  version_t projected;
+  version_t committing;
+  version_t committed;
+  map<version_t, list<Context*> > commit_waiters;
+
   hash_map<int,entity_inst_t> client_inst;
   set<int>           client_mount;
   hash_map<int, int> client_ref;
@@ -58,27 +65,69 @@ class ClientMap {
   }
   
 public:
+  ClientMap() : version(0), projected(0), committing(0), committed(0) {}
+
+  version_t get_version() { return version; }
+  version_t get_projected() { return projected; }
+  version_t get_committing() { return committing; }
+  version_t get_committed() { return committed; }
+
+  version_t inc_projected() { return ++projected; }
+  void set_committing(version_t v) { committing = v; }
+  void set_committed(version_t v) { committed = v; }
+
+  void add_commit_waiter(Context *c) { 
+    commit_waiters[committing].push_back(c); 
+  }
+  void take_commit_waiters(version_t v, list<Context*>& ls) { 
+    ls.swap(commit_waiters[v]);
+    commit_waiters.erase(v);
+  }
+
+  bool empty() {
+    return client_inst.empty() && client_mount.empty() && client_ref.empty();
+  }
+
   const entity_inst_t& get_inst(int client) {
     assert(client_inst.count(client));
     return client_inst[client];
   }
   const set<int>& get_mount_set() { return client_mount; }
   
-  void add_mount(int client, const entity_inst_t& inst) {
-    inc_ref(client, inst);
-    client_mount.insert(client);
+  void add_mount(const entity_inst_t& inst) {
+    inc_ref(inst.name.num(), inst);
+    client_mount.insert(inst.name.num());
+    version++;
   }
   void rem_mount(int client) {
     dec_ref(client);
     client_mount.erase(client);
+    version++;
   }
   
   
   void add_open(int client, const entity_inst_t& inst) {
     inc_ref(client, inst);
+    version++;
   }
   void dec_open(int client) {
     dec_ref(client);
+    version++;
+  }
+
+  void encode(bufferlist& bl) {
+    bl.append((char*)&version, sizeof(version));
+    ::_encode(client_inst, bl);
+    ::_encode(client_mount, bl);
+    ::_encode(client_ref, bl);
+  }
+  void decode(bufferlist& bl, int& off) {
+    bl.copy(off, sizeof(version), (char*)&version);
+    ::_decode(client_inst, bl, off);
+    ::_decode(client_mount, bl, off);
+    ::_decode(client_ref, bl, off);
+
+    projected = committing = committed = version;
   }
 };
 

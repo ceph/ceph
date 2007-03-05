@@ -22,6 +22,9 @@
 #define EVENT_IMPORTMAP    4
 #define EVENT_UPDATE       5
 
+#define EVENT_MOUNT        6
+#define EVENT_CLIENTMAP    7
+
 #define EVENT_ALLOC        10
 #define EVENT_MKNOD        11
 #define EVENT_MKDIR        12

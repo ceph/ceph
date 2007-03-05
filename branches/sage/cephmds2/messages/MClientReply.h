@@ -17,6 +17,8 @@
 
 #include "include/types.h"
 
+#include "MClientRequest.h"
+
 #include "msg/Message.h"
 #include "mds/CInode.h"
 #include "mds/CDir.h"
@@ -36,12 +38,12 @@ class CInode;
  *  int result - error code, or fh if it was open
  *
  * for most requests:
- *  trace is a vector of c_inoe_info's tracing from root to the file/dir/whatever
+ *  trace is a vector of InodeStat's tracing from root to the file/dir/whatever
  *  the operation referred to, so that the client can update it's info about what
  *  metadata lives on what MDS.
  *
  * for readdir replies:
- *  dir_contents is a vector c_inode_info*'s.  
+ *  dir_contents is a vector of InodeStat*'s.  
  * 
  * that's mostly it, i think!
  *
@@ -122,22 +124,19 @@ class InodeStat {
 };
 
 
-typedef struct {
-  long pcid;
-  long tid;
-  int op;
-  int result;  // error code
-  unsigned char file_caps;  // for open
-  long          file_caps_seq;
-  __uint64_t file_data_version;  // for client buffercache consistency
-
-  int _num_trace_in;
-  int _dir_size;
-} MClientReply_st;
-
 class MClientReply : public Message {
   // reply data
-  MClientReply_st st;
+  struct {
+    long tid;
+    int op;
+    int result;  // error code
+    unsigned char file_caps;  // for open
+    long          file_caps_seq;
+    __uint64_t file_data_version;  // for client buffercache consistency
+    
+    int _num_trace_in;
+    int _dir_size;
+  } st;
  
   string path;
   list<InodeStat*> trace_in;
@@ -147,9 +146,6 @@ class MClientReply : public Message {
   list<string>     dir_dn;
 
  public:
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid() { return st.pcid; }
-
   long get_tid() { return st.tid; }
   int get_op() { return st.op; }
 
@@ -178,7 +174,6 @@ class MClientReply : public Message {
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.pcid = req->get_pcid();    // match up procedure call id!!!
     this->st.tid = req->get_tid();
     this->st.op = req->get_op();
     this->path = req->get_path();
@@ -197,7 +192,11 @@ class MClientReply : public Message {
       delete *it;
   }
   virtual char *get_type_name() { return "creply"; }
-
+  void print(ostream& o) {
+    o << "creply(" << env.dst.name << "." << st.tid;
+    if (st.result) o << " = " << st.result;
+    o << ")";
+  }
 
   // serialization
   virtual void decode_payload() {

@@ -802,6 +802,7 @@ inline void _decode(bufferlist& s, bufferlist& bl, int& off)
 #include <map>
 #include <vector>
 #include <string>
+#include <ext/hash_map>
 
 // set<string>
 inline void _encode(const std::set<std::string>& s, bufferlist& bl)
@@ -1167,12 +1168,44 @@ inline void _decode(std::map<T,U>& s, bufferlist& bl, int& off)
   off += sizeof(n);
   for (int i=0; i<n; i++) {
     T k;
-    U v;
     bl.copy(off, sizeof(k), (char*)&k);
     off += sizeof(k);
-    bl.copy(off, sizeof(v), (char*)&v);
-    off += sizeof(v);
-    s[k] = v;
+    bl.copy(off, sizeof(U), (char*)&s[k]);
+    off += sizeof(U);
+  }
+  assert(s.size() == (unsigned)n);
+}
+
+// hash_map<T,U>
+template<class T, class U>
+inline void _encode(const __gnu_cxx::hash_map<T, U>& s, bufferlist& bl)
+{
+  int n = s.size();
+  bl.append((char*)&n, sizeof(n));
+  for (typename __gnu_cxx::hash_map<T, U>::const_iterator it = s.begin();
+       it != s.end();
+       it++) {
+    T k = it->first;
+    U v = it->second;
+    bl.append((char*)&k, sizeof(k));
+    bl.append((char*)&v, sizeof(v));
+    n--;
+  }
+  assert(n==0);
+}
+template<class T, class U>
+inline void _decode(__gnu_cxx::hash_map<T,U>& s, bufferlist& bl, int& off) 
+{
+  s.clear();
+  int n;
+  bl.copy(off, sizeof(n), (char*)&n);
+  off += sizeof(n);
+  for (int i=0; i<n; i++) {
+    T k;
+    bl.copy(off, sizeof(k), (char*)&k);
+    off += sizeof(k);
+    bl.copy(off, sizeof(U), (char*)&s[k]);
+    off += sizeof(U);
   }
   assert(s.size() == (unsigned)n);
 }

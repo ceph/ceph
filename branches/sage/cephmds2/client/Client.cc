@@ -31,6 +31,8 @@ using namespace std;
 // ceph stuff
 #include "Client.h"
 
+#include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
 
 #include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
@@ -457,9 +459,6 @@ MClientReply *Client::make_request(MClientRequest *req,
                                    bool auth_best, 
                                    int use_mds)  // this param is purely for debug hacking
 {
-  // assign a unique tid
-  req->set_tid(++last_tid);
-
   // find deepest known prefix
   Inode *diri = root;   // the deepest known containing dir
   Inode *item = 0;      // the actual item... if we know it
@@ -570,57 +569,120 @@ MClientReply *Client::make_request(MClientRequest *req,
 
 MClientReply* Client::sendrecv(MClientRequest *req, int mds)
 {
-  // NEW way.
+  MetaRequest request;
+
+  // assign a unique tid
+  tid_t tid = ++last_tid;
+  req->set_tid(tid);
+
+  mds_requests[tid] = &request;
+
+  // encode payload
+  req->encode_payload();
+  request.request_payload = req->get_payload();
+  
+  // make initial request
+  send_request(&request, mds);
+
+  // wait for reply
   Cond cond;
-  tid_t tid = req->get_tid();
-  mds_rpc_cond[tid] = &cond;
-  
-  messenger->send_message(req, mdsmap->get_inst(mds), MDS_PORT_SERVER);
-  
-  // wait
-  while (mds_rpc_reply.count(tid) == 0) {
+  request.caller_cond = &cond;
+  while (request.reply == 0) {
     dout(20) << "sendrecv awaiting reply kick on " << &cond << endl;
     cond.Wait(client_lock);
   }
-  
+
   // got it!
-  MClientReply *reply = mds_rpc_reply[tid];
+  MClientReply *reply = request.reply;
   
   // kick dispatcher (we've got it!)
-  assert(mds_rpc_dispatch_cond.count(tid));
-  mds_rpc_dispatch_cond[tid]->Signal();
-  dout(20) << "sendrecv kickback on tid " << tid << " " << mds_rpc_dispatch_cond[tid] << endl;
+  assert(request.dispatch_cond);
+  request.dispatch_cond->Signal();
+  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << endl;
   
   // clean up.
-  mds_rpc_cond.erase(tid);
-  mds_rpc_reply.erase(tid);
-
+  mds_requests.erase(tid);
   return reply;
+}
+
+void Client::send_request(MetaRequest *request, int mds)
+{
+  MClientRequest *r = request->request;
+  if (!r) {
+    // make a new one
+    r = new MClientRequest;
+    r->copy_payload(request->request_payload);
+    r->decode_payload();
+  }
+  request->request = 0;
+
+  dout(10) << "send_request " << *r << " to mds" << mds << endl;
+  messenger->send_message(r, mdsmap->get_inst(mds), MDS_PORT_SERVER);
+  
+  request->mds.insert(mds);
+}
+
+void Client::handle_client_request_forward(MClientRequestForward *fwd)
+{
+  tid_t tid = fwd->get_tid();
+
+  if (mds_requests.count(tid) == 0) {
+    dout(10) << "handle_client_request_forward no pending request on tid " << tid << endl;
+    delete fwd;
+    return;
+  }
+
+  MetaRequest *request = mds_requests[tid];
+  assert(request);
+
+  // note new mds set.
+  // there are now exactly two mds's whose failure should trigger a resend
+  // of this request.
+  if (request->num_fwd < fwd->get_num_fwd()) {
+    request->mds.clear();
+    request->mds.insert(fwd->get_source().num());
+    request->mds.insert(fwd->get_dest_mds());
+    request->num_fwd = fwd->get_num_fwd();
+    dout(-10) << "handle_client_request tid " << tid
+	     << " fwd " << fwd->get_num_fwd() 
+	     << " to mds" << fwd->get_dest_mds() 
+	     << ", mds set now " << request->mds
+	     << endl;
+  } else {
+    dout(-10) << "handle_client_request tid " << tid
+	     << " previously forwarded to mds" << fwd->get_dest_mds() 
+	     << ", mds still " << request->mds
+	     << endl;
+  }
+
+  delete fwd;
 }
 
 void Client::handle_client_reply(MClientReply *reply)
 {
   tid_t tid = reply->get_tid();
 
+  if (mds_requests.count(tid) == 0) {
+    dout(10) << "handle_client_reply no pending request on tid " << tid << endl;
+    delete reply;
+    return;
+  }
+  MetaRequest *request = mds_requests[tid];
+  assert(request);
+
   // store reply
-  mds_rpc_reply[tid] = reply;
+  request->reply = reply;
 
   // wake up waiter
-  assert(mds_rpc_cond.count(tid));
-  dout(20) << "handle_client_reply kicking caller on " << mds_rpc_cond[tid] << endl;
-  mds_rpc_cond[tid]->Signal();
+  request->caller_cond->Signal();
 
   // wake for kick back
-  assert(mds_rpc_dispatch_cond.count(tid) == 0);
   Cond cond;
-  mds_rpc_dispatch_cond[tid] = &cond;
-  while (mds_rpc_cond.count(tid)) {
+  request->dispatch_cond = &cond;
+  while (mds_requests.count(tid)) {
     dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << endl;
     cond.Wait(client_lock);
   }
-
-  // ok, clean up!
-  mds_rpc_dispatch_cond.erase(tid);
 }
 
 
@@ -646,6 +708,9 @@ void Client::dispatch(Message *m)
     handle_mds_map((MMDSMap*)m);
     break;
     
+  case MSG_CLIENT_REQUEST_FORWARD:
+    handle_client_request_forward((MClientRequestForward*)m);
+    break;
   case MSG_CLIENT_REPLY:
     handle_client_reply((MClientReply*)m);
     break;
@@ -707,6 +772,29 @@ void Client::handle_mds_map(MMDSMap* m)
   objecter->set_client_incarnation(0);  // fixme
 
   mount_cond.Signal();  // mount might be waiting for this.
+
+  // resubmit any requests to recovering mds's
+  set<int> resolving;
+  mdsmap->get_mds_set(resolving, MDSMap::STATE_REJOIN);
+  for (set<int>::iterator p = resolving.begin();
+       p != resolving.end();
+       ++p) {
+    kick_requests(*p);
+    failed_mds.erase(*p);
+  }
+
+}
+
+
+void Client::kick_requests(int mds)
+{
+  dout(10) << "kick_requests for mds" << mds << endl;
+
+  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) 
+    if (p->second->mds.count(mds))
+      send_request(p->second, mds);
 }
 
 
@@ -2634,8 +2722,7 @@ void Client::ms_handle_failure(Message *m, entity_name_t dest, const entity_inst
   } 
   else if (dest.is_mds()) {
     dout(0) << "ms_handle_failure " << dest << " inst " << inst << endl;
-    // help!
-    assert(0);
+    failed_mds.insert(dest.num());
   }
   else {
     // client?

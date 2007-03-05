@@ -28,7 +28,6 @@
  *    can be forwarded around between MDS's.
  *
  *   int client - the originating client
- *   long pcid  - procedure call id, used to match request+response.
  *   long tid   - transaction id, unique among requests for that client.  probably just a counter!
  *                -> the MDS passes the Request to the Reply constructor, so this always matches.
  *  
@@ -48,48 +47,43 @@
  */
 
 
-typedef struct {
-  long tid;
-  int client;
-  int op;
-  
-  entity_inst_t client_inst;
-
-  int caller_uid, caller_gid;
-  inodeno_t ino;
-
-  int    iarg, iarg2;
-  time_t targ, targ2;
-
-  inodeno_t  mds_wants_replica_in_dirino;
-
-  size_t sizearg;
-} MClientRequest_st;
-
 
 class MClientRequest : public Message {
-  MClientRequest_st st;
+  struct {
+    long tid;
+    int num_fwd;
+    int client;
+    int op;
+    
+    entity_inst_t client_inst;
+    
+    int caller_uid, caller_gid;
+    inodeno_t ino;
+    
+    int    iarg, iarg2;
+    time_t targ, targ2;
+    
+    inodeno_t  mds_wants_replica_in_dirino;
+    
+    size_t sizearg;
+  } st;
   filepath path;
   string sarg;
   string sarg2;
 
 
  public:
-  MClientRequest() {}
+  MClientRequest() : Message(MSG_CLIENT_REQUEST) {}
   MClientRequest(int op, int client) : Message(MSG_CLIENT_REQUEST) {
     memset(&st, 0, sizeof(st));
     this->st.op = op;
     this->st.client = client;
     this->st.iarg = 0;
   }
-  virtual char *get_type_name() { return "creq"; }
-
-  // keep a pcid (procedure call id) to match up request+reply
-  //void set_pcid(long pcid) { this->st.pcid = pcid; }
-  //long get_pcid() { return st.pcid; }
 
   // normal fields
   void set_tid(long t) { st.tid = t; }
+  void inc_num_fwd() { st.num_fwd++; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
   void set_path(const filepath& fp) { path = fp; }
@@ -112,6 +106,7 @@ class MClientRequest : public Message {
 
   int get_client() { return st.client; }
   long get_tid() { return st.tid; }
+  int get_num_fwd() { return st.num_fwd; }
   int get_op() { return st.op; }
   int get_caller_uid() { return st.caller_uid; }
   int get_caller_gid() { return st.caller_gid; }
@@ -128,26 +123,26 @@ class MClientRequest : public Message {
   inodeno_t get_mds_wants_replica_in_dirino() { 
     return st.mds_wants_replica_in_dirino; }
 
-  virtual void decode_payload() {
+  void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
     path._decode(payload, off);
-    _decode(sarg, payload, off);
-    _decode(sarg2, payload, off);
+    ::_decode(sarg, payload, off);
+    ::_decode(sarg2, payload, off);
   }
 
-  virtual void encode_payload() {
+  void encode_payload() {
     payload.append((char*)&st, sizeof(st));
     path._encode(payload);
-    _encode(sarg, payload);
-    _encode(sarg2, payload);
+    ::_encode(sarg, payload);
+    ::_encode(sarg2, payload);
   }
 
+  char *get_type_name() { return "creq"; }
   void print(ostream& out) {
     out << "clientreq(client" << get_client() 
 	<< "." << get_tid() 
-      //<< ".pcid=" << get_pcid() 
 	<< ":";
     switch(get_op()) {
     case MDS_OP_STAT: 

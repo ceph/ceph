@@ -173,6 +173,74 @@ struct dirslice_t {
   short hash_val;
 };
 
+/*
+ * hashbit
+ */
+class hashbit {
+  unsigned _value:24;
+  unsigned _bits:8;
+
+ public:
+  hashbit() :
+	_value(0), _bits(0) { }
+  hashbit(unsigned v, unsigned b) :
+	_value(v), _bits(b) { }
+
+  // accessors
+  unsigned value() const { return _value; }
+  unsigned bits() const { return _bits; }
+  unsigned mask() const { return 0xffffffff >> (32-_bits); }
+  operator unsigned() const { 
+	return (_bits << 24) + _value;
+  }
+  
+  // tests
+  bool contains(hashbit sub) {
+	return (sub.bits() >= bits() &&             // they are more specific than us,
+			(sub.value() & mask()) == value()); // and they are contained by us.
+  }
+
+  // splitting
+  hashbit left_half() {
+	return hashbit(_value, _bits+1);
+  }
+  hashbit right_half() {
+	return hashbit(_value | (1<<_bits), _bits+1);
+  }
+  void split(int nb, vector<hashbit>& fragments) {
+	assert(nb > 0);
+	unsigned nway = 1 << (nb-1);
+	fragments.clear();
+	fragments.reserve(nway);
+	for (unsigned i=0; i<nway; i++) 
+	  fragments.push_back( hashbit(_value | (i << (_bits+nb-1)), _bits+nb) );
+  }
+};
+
+//bool operator<(const hashbit& l, const hashbit& r) { return (unsigned)l < (unsigned)r; }
+inline ostream& operator<<(ostream& out, hashbit& hb)
+{
+  return out << "hb(" << hex << hb.value() << dec << "/" << hb.bits() << ")";
+}
+
+class hashtree {
+  // pairs <hb, n>:
+  //  hashbit hb is split n ways.
+  //  if child hashbit does not appear, it is not split.
+  map<hashbit,int> _splits;  
+
+ public:
+  void split(hashbit hb, int n) {
+	assert(_splits.count(hb) == 0);
+	_splits[hb] = n;
+  }
+  void merge(hashbit hb, int n) {
+	assert(_splits[hb] == n);
+	_splits.erase(hb);
+  }
+
+};
+
 
 
 // ================================================================

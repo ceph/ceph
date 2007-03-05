@@ -36,6 +36,7 @@
 
 #include "events/EString.h"
 #include "events/EUpdate.h"
+#include "events/EMount.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -71,10 +72,6 @@ void Server::dispatch(Message *m)
   case MSG_CLIENT_UNMOUNT:
     handle_client_unmount(m);
     return;
-  }
- 
-
-  switch (m->get_type()) {
   case MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
     return;
@@ -94,39 +91,68 @@ void Server::dispatch(Message *m)
 
 
 
+// ----------------------------------------------------------
+// MOUNT and UNMOUNT
+
+
+class C_MDS_mount_finish : public Context {
+  MDS *mds;
+  Message *m;
+  bool mount;
+  version_t cmapv;
+public:
+  C_MDS_mount_finish(MDS *m, Message *msg, bool mnt, version_t mv) :
+    mds(m), m(msg), mount(mnt), cmapv(mv) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // apply
+    if (mount)
+      mds->clientmap.add_mount(m->get_source_inst());
+    else
+      mds->clientmap.rem_mount(m->get_source().num());
+    
+    assert(cmapv == mds->clientmap.get_version());
+    
+    // reply
+    if (mount) {
+      // mounted
+      mds->messenger->send_message(new MClientMountAck((MClientMount*)m, mds->mdsmap, mds->osdmap), 
+				   m->get_source_inst());
+      delete m;
+    } else {
+      // ack by sending back to client
+      mds->messenger->send_message(m, m->get_source_inst());
+
+      // unmounted
+      if (g_conf.mds_shutdown_on_last_unmount &&
+	  mds->clientmap.get_mount_set().empty()) {
+	dout(3) << "all clients done, initiating shutdown" << endl;
+	mds->shutdown_start();
+      }
+    }
+  }
+};
 
 
 void Server::handle_client_mount(MClientMount *m)
 {
-  int n = m->get_source().num();
-  dout(3) << "mount by client" << n << endl;
-  mds->clientmap.add_mount(n, m->get_source_inst());
+  dout(3) << "mount by " << m->get_source() << endl;
 
-  assert(mds->get_nodeid() == 0);  // mds0 mounts/unmounts
-
-  // ack
-  messenger->send_message(new MClientMountAck(m, mds->mdsmap, mds->osdmap), 
-                          m->get_source_inst());
-  delete m;
+  // journal it
+  version_t cmapv = mds->clientmap.inc_projected();
+  mdlog->submit_entry(new EMount(m->get_source_inst(), true, cmapv),
+		      new C_MDS_mount_finish(mds, m, true, cmapv));
 }
 
 void Server::handle_client_unmount(Message *m)
 {
-  int n = m->get_source().num();
-  dout(3) << "unmount by client" << n << endl;
+  dout(3) << "unmount by " << m->get_source() << endl;
 
-  assert(mds->get_nodeid() == 0);  // mds0 mounts/unmounts
-
-  mds->clientmap.rem_mount(n);
-
-  if (g_conf.mds_shutdown_on_last_unmount &&
-      mds->clientmap.get_mount_set().empty()) {
-    dout(3) << "all clients done, initiating shutdown" << endl;
-    mds->shutdown_start();
-  }
-
-  // ack by sending back to client
-  messenger->send_message(m, m->get_source_inst());
+  // journal it
+  version_t cmapv = mds->clientmap.inc_projected();
+  mdlog->submit_entry(new EMount(m->get_source_inst(), false, cmapv),
+		      new C_MDS_mount_finish(mds, m, false, cmapv));
 }
 
 

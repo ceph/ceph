@@ -25,10 +25,7 @@
 #include "msg/Messenger.h"
 #include "msg/SerialMessenger.h"
 
-#include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
-
-//#include "msgthread.h"
 
 #include "include/types.h"
 #include "include/lru.h"
@@ -49,6 +46,9 @@ using namespace __gnu_cxx;
 
 #define O_LAZY 01000000
 
+
+class MClientRequest;
+class MClientRequestForward;
 
 class Filer;
 class Objecter;
@@ -316,10 +316,33 @@ class Client : public Dispatcher {
   MonMap *monmap;
   
   // mds fake RPC
+  struct MetaRequest {
+    tid_t tid;
+    MClientRequest *request;    
+    bufferlist request_payload;  // in case i have to retry
+
+    set<int> mds;                // who i am asking
+    int      num_fwd;            // # of times i've been forwarded
+
+    MClientReply *reply;         // the reply
+
+    Cond  *caller_cond;          // who to take up
+    Cond  *dispatch_cond;        // who to kick back
+
+    MetaRequest() : request(0), num_fwd(0), reply(0), caller_cond(0), dispatch_cond(0) {}
+  };
   tid_t last_tid;
-  map<tid_t, Cond*>                mds_rpc_cond;
-  map<tid_t, class MClientReply*>  mds_rpc_reply;
-  map<tid_t, Cond*>                mds_rpc_dispatch_cond;
+  map<tid_t, MetaRequest*> mds_requests;
+  set<int>                 failed_mds;
+  
+  MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
+  MClientReply* sendrecv(MClientRequest *req, int mds);
+  void send_request(MetaRequest *request, int mds);
+  void handle_client_request_forward(MClientRequestForward *reply);
+  void handle_client_reply(MClientReply *reply);
+  void kick_requests(int mds);
+
+
 
   // cluster descriptors
   MDSMap *mdsmap; 
@@ -477,11 +500,6 @@ protected:
   
   // find dentry based on filepath
   Dentry *lookup(filepath& path);
-
-  // make blocking mds request
-  MClientReply *make_request(MClientRequest *req, bool auth_best=false, int use_auth=-1);
-  MClientReply* sendrecv(MClientRequest *req, int mds);
-  void handle_client_reply(MClientReply *reply);
 
   void fill_stat(inode_t& inode, struct stat *st);
   void fill_statlite(inode_t& inode, struct statlite *st);

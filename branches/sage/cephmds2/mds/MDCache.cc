@@ -67,6 +67,7 @@
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
 #include "messages/MClientFileCaps.h"
 
 #include "IdAllocator.h"
@@ -886,6 +887,55 @@ void MDCache::handle_mds_failure(int who)
   migrator->handle_mds_failure(who);
 
   show_subtrees();  
+}
+
+/*
+ * handle_mds_recovery - called on another node's transition 
+ * from resolve -> active.
+ */
+void MDCache::handle_mds_recovery(int who)
+{
+  dout(7) << "handle_mds_recovery mds" << who << endl;
+
+  list<Context*> waiters;
+
+  // wake up any waiters in their subtrees
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *dir = p->first;
+
+    if (dir->authority().first != who) continue;
+    assert(!dir->is_auth());
+   
+    // wake any waiters
+    list<CDir*> q;
+    q.push_back(dir);
+
+    while (!q.empty()) {
+      CDir *d = q.front();
+      q.pop_front();
+      d->take_waiting(CDIR_WAIT_ANY, waiters);
+
+      // inode waiters too
+      for (CDir_map_t::iterator p = d->items.begin();
+	   p != d->items.end();
+	   ++p) {
+	CDentry *dn = p->second;
+	if (dn->is_primary()) {
+	  dn->get_inode()->take_waiting(CINODE_WAIT_ANY, waiters);
+	  
+	  // recurse?
+	  if (dn->get_inode()->dir &&
+	      !dn->get_inode()->dir->is_subtree_root())
+	    q.push_back(dn->get_inode()->dir);
+	}
+      }
+    }
+  }
+
+  // queue them up.
+  mds->queue_finished(waiters);
 }
 
 void MDCache::set_recovery_set(set<int>& s) 
@@ -2873,7 +2923,23 @@ void MDCache::request_forward(Message *req, int who, int port)
   if (!port) port = MDS_PORT_SERVER;
 
   dout(7) << "request_forward to " << who << " req " << *req << endl;
+
+  // clean up my state
   request_cleanup(req);
+
+  // client request?
+  if (req->get_type() == MSG_CLIENT_REQUEST) {
+    MClientRequest *creq = (MClientRequest*)req;
+
+    // inc forward counter
+    creq->inc_num_fwd();
+    
+    // tell the client
+    mds->messenger->send_message(new MClientRequestForward(creq->get_tid(), who, creq->get_num_fwd()),
+				 creq->get_client_inst());
+  }
+
+  // forward
   mds->send_message_mds(req, who, port);
 
   if (mds->logger) mds->logger->inc("fw");
@@ -3990,103 +4056,6 @@ void MDCache::show_subtrees(int dbl)
     }
   }
 }
-
-
-/*
-void MDCache::show_imports()
-{
-  int db = 10;
-
-  dout(db) << "show_imports:" << endl;
-
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *root = p->first;
-
-    if (!root->is_auth()) continue;
-
-    dout(db) << " ___ " << *root << endl;
-    
-    for (set<CDir*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      CDir *bound = *q;
-      dout(db) << "  |__" << *bound << endl;
-    }    
-  }
-
-  show_subtrees();
-  return;
-}
-*/
-
-
-  /// old
-  /*
-  if (imports.empty() &&
-      hashdirs.empty()) {
-    dout(db) << "show_imports: no imports/exports/hashdirs" << endl;
-    return;
-  }
-  dout(db) << "show_imports:" << endl;
-
-  set<CDir*> ecopy = exports;
-
-  set<CDir*>::iterator it = hashdirs.begin();
-  while (1) {
-    if (it == hashdirs.end()) it = imports.begin();
-    if (it == imports.end() ) break;
-    
-    CDir *im = *it;
-    
-    if (im->is_import()) {
-      dout(db) << "  + import (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
-      //assert( im->is_auth() );
-    } 
-    else if (im->is_hashed()) {
-      if (im->is_import()) continue;  // if import AND hash, list as import.
-      dout(db) << "  + hash (" << im->popularity[MDS_POP_CURDOM] << "/" << im->popularity[MDS_POP_ANYDOM] << ")  " << *im << endl;
-    }
-    
-    for (set<CDir*>::iterator p = nested_exports[im].begin();
-         p != nested_exports[im].end();
-         p++) {
-      CDir *exp = *p;
-      if (exp->is_hashed()) {
-        //assert(0);  // we don't do it this way actually
-        dout(db) << "      - hash (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-        //assert( !exp->is_auth() );
-      } else {
-        dout(db) << "      - ex (" << exp->popularity[MDS_POP_NESTED] << ", " << exp->popularity[MDS_POP_ANYDOM] << ")  " << *exp << " to " << exp->dir_auth << endl;
-        assert( exp->is_export() );
-        //assert( !exp->is_auth() );
-      }
-
-      if ( get_auth_container(exp) != im ) {
-        dout(1) << "uh oh, auth container is " << *get_auth_container(exp) << endl;
-        assert( get_auth_container(exp) == im );
-      }
-      
-      if (ecopy.count(exp) != 1) {
-        dout(1) << "***** nested_export " << *exp << " not in exports" << endl;
-        assert(0);
-      }
-      ecopy.erase(exp);
-    }
-
-    it++;
-  }
-  
-  if (ecopy.size()) {
-    for (set<CDir*>::iterator it = ecopy.begin();
-         it != ecopy.end();
-         it++) 
-      dout(1) << "***** stray item in exports: " << **it << endl;
-    assert(ecopy.size() == 0);
-  }
-}
-  */
 
 
 void MDCache::show_cache()

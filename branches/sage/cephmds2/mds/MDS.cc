@@ -43,6 +43,8 @@
 
 #include "common/Timer.h"
 
+#include "events/EClientMap.h"
+
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 
@@ -436,6 +438,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   bool wasrejoining = mdsmap->is_rejoining();
   set<int> oldfailed;
   mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
+  set<int> oldactive;
+  mdsmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
 
   // decode and process
   mdsmap->decode(m->get_encoded());
@@ -567,10 +571,30 @@ void MDS::handle_mds_map(MMDSMap *m)
     // did we start?
     if (!wasrejoining && mdsmap->is_rejoining()) {
       mdcache->send_cache_rejoins();
+
+      // share the map with mounted clients
+      dout(10) << "sharing mdsmap with mounted clients" << endl;
+      for (set<int>::const_iterator p = clientmap.get_mount_set().begin();
+	   p != clientmap.get_mount_set().end();
+	   ++p) {
+	messenger->send_message(new MMDSMap(mdsmap),
+				clientmap.get_inst(*p));
+      }
     }
     // did we finish?
     if (wasrejoining && !mdsmap->is_rejoining()) {
       mdcache->dump_cache();
+    }
+  }
+
+  // did someone go active?
+  if (is_active() || is_stopping()) {
+    set<int> active;
+    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
+    for (set<int>::iterator p = active.begin(); p != active.end(); ++p) {
+      if (*p == whoami) continue;         // not me
+      if (oldactive.count(*p)) continue;  // newly so?
+      mdcache->handle_mds_recovery(*p);
     }
   }
 
@@ -1074,3 +1098,33 @@ void MDS::handle_ping(MPing *m)
   delete m;
 }
 
+
+
+
+class C_LogClientmap : public Context {
+  ClientMap *clientmap;
+  version_t cmapv;
+public:
+  C_LogClientmap(ClientMap *cm, version_t v) : 
+    clientmap(cm), cmapv(v) {}
+  void finish(int r) {
+    clientmap->set_committed(cmapv);
+    list<Context*> ls;
+    clientmap->take_commit_waiters(cmapv, ls);
+    finish_contexts(ls);
+  }
+};
+
+void MDS::log_clientmap(Context *c)
+{
+  dout(10) << "log_clientmap " << clientmap.get_version() << endl;
+
+  bufferlist bl;
+  clientmap.encode(bl);
+
+  clientmap.set_committing(clientmap.get_version());
+  clientmap.add_commit_waiter(c);
+
+  mdlog->submit_entry(new EClientMap(bl, clientmap.get_version()),
+		      new C_LogClientmap(&clientmap, clientmap.get_version()));
+}

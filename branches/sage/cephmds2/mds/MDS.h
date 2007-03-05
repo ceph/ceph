@@ -118,8 +118,6 @@ class MDS : public Dispatcher {
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
 
-  ClientMap    clientmap;
-
   // sub systems
   Server       *server;
   MDCache      *mdcache;
@@ -184,7 +182,10 @@ class MDS : public Dispatcher {
   Context *tick_event;
   void     reset_tick();
 
-  
+  // -- client map --
+  ClientMap    clientmap;
+  void log_clientmap(Context *c);
+
 
   // shutdown crap
   int req_rate;

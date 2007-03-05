@@ -184,6 +184,7 @@ protected:
   
   void set_recovery_set(set<int>& s);
   void handle_mds_failure(int who);
+  void handle_mds_recovery(int who);
   void handle_import_map(MMDSImportMap *m);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_ack(MMDSCacheRejoinAck *m);
