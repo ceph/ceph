@@ -1037,6 +1037,7 @@ void Client::release_caps(Inode *in,
   dout(5) << "releasing caps on ino " << in->inode.ino << dec
           << " had " << cap_string(in->file_caps())
           << " retaining " << cap_string(retain) 
+	  << " want " << cap_string(in->file_caps_wanted())
           << endl;
   
   for (map<int,InodeCap>::iterator it = in->caps.begin();
@@ -2212,13 +2213,15 @@ int Client::open(const char *relpath, int flags)
 void Client::close_release(Inode *in)
 {
   dout(10) << "close_release on " << in->ino() << endl;
+  dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << endl;
 
   if (!in->num_open_rd) 
     in->fc.release_clean();
 
   int retain = 0;
-  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
-  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER;
+  if (in->num_open_wr || in->fc.is_dirty()) retain |= CAP_FILE_WR | CAP_FILE_WRBUFFER | CAP_FILE_WREXTEND;
+  if (in->num_open_rd || in->fc.is_cached()) retain |= CAP_FILE_RD | CAP_FILE_RDCACHE;
 
   release_caps(in, retain);              // release caps now.
 }
@@ -2301,6 +2304,40 @@ int Client::close(fh_t fh)
 
 // ------------
 // read, write
+
+
+off_t Client::lseek(fh_t fh, off_t offset, int whence)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->lseek(" << fh << ", " << offset << ", " << whence << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  switch (whence) {
+  case SEEK_SET: 
+    f->pos = offset;
+    break;
+
+  case SEEK_CUR:
+    f->pos += offset;
+    break;
+
+  case SEEK_END:
+    f->pos = in->inode.size + offset;
+    break;
+
+  default:
+    assert(0);
+  }
+  
+  off_t pos = f->pos;
+  client_lock.Unlock();
+
+  return pos;
+}
+
 
 // blocking osd interface
 
@@ -2707,8 +2744,69 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
 }
 
 
-void Client::ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst)
+// =========================================
+// layout
+
+
+int Client::describe_layout(int fh, FileLayout *lp)
 {
+  client_lock.Lock();
+  dout(3) << "op: client->describe_layout(" << fh << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  *lp = in->inode.layout;
+
+  client_lock.Unlock();
+  return 0;
+}
+
+int Client::get_stripe_unit(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.stripe_size;
+}
+
+int Client::get_stripe_width(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.stripe_size*layout.stripe_count;
+}
+
+int Client::get_stripe_period(int fd)
+{
+  FileLayout layout;
+  describe_layout(fd, &layout);
+  return layout.period();
+}
+
+int Client::enumerate_layout(int fh, list<ObjectExtent>& result,
+			     off_t length, off_t offset)
+{
+  client_lock.Lock();
+  dout(3) << "op: client->enumerate_layout(" << fh << ", " << length << ", " << offset << ");" << endl;
+
+  assert(fh_map.count(fh));
+  Fh *f = fh_map[fh];
+  Inode *in = f->inode;
+
+  // map to a list of extents
+  filer->file_to_extents(in->inode, offset, length, result);
+
+  client_lock.Unlock();
+  return 0;
+}
+
+
+
+void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
+{
+  entity_name_t dest = inst.name;
+
   if (dest.is_mon()) {
     // resend to a different monitor.
     int mon = monmap->pick_mon(true);

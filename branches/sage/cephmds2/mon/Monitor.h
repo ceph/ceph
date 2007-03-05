@@ -22,11 +22,18 @@
 
 #include "MonMap.h"
 #include "Elector.h"
+#include "Paxos.h"
 
-class ObjectStore;
+
+class MonitorStore;
 class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
+
+#define PAXOS_TEST       0
+#define PAXOS_OSDMAP     1
+#define PAXOS_MDSMAP     2
+#define PAXOS_CLIENTMAP  3
 
 class Monitor : public Dispatcher {
 protected:
@@ -45,7 +52,8 @@ protected:
   friend class C_Mon_Tick;
 
   // my local store
-  ObjectStore *store;
+  //ObjectStore *store;
+  MonitorStore *store;
 
   const static int INO_ELECTOR = 1;
   const static int INO_MON_MAP = 2;
@@ -61,6 +69,11 @@ protected:
   set<int> quorum;       // current active set of monitors (if !starting)
 
   //void call_election();
+
+  // paxos
+  Paxos test_paxos;
+  friend class Paxos;
+
 
   // monitor state
   const static int STATE_STARTING = 0; // electing
@@ -97,6 +110,7 @@ protected:
   void lose_election(int l);
 
 
+
  public:
   Monitor(int w, Messenger *m, MonMap *mm) : 
     whoami(w), 
@@ -106,6 +120,9 @@ protected:
     store(0),
     elector(this, w),
     mon_epoch(0), 
+    
+    test_paxos(this, w, PAXOS_TEST, "tester"),  // tester state machine
+
     state(STATE_STARTING),
     leader(0),
     osdmon(0), mdsmon(0), clientmon(0)

@@ -95,13 +95,11 @@ int Rank::Accepter::start()
   socklen_t llen = sizeof(rank.listen_addr);
   getsockname(listen_sd, (sockaddr*)&rank.listen_addr, &llen);
   
-  int myport = ntohs(rank.listen_addr.sin_port);
-  dout(10) << "accepter.start bound to port " << myport << endl;
+  dout(10) << "accepter.start bound to " << rank.listen_addr << endl;
 
   // listen!
   rc = ::listen(listen_sd, 1000);
   assert(rc >= 0);
-  //dout(10) << "accepter.start listening on " << myport << endl;
   
   // my address is...  HELP HELP HELP!
   char host[100];
@@ -113,24 +111,20 @@ int Rank::Accepter::start()
 
   // figure out my_addr
   if (g_my_addr.port > 0) {
-    // user specified it, easy.
+    // user specified it, easy peasy.
     rank.my_addr = g_my_addr;
   } else {
-    // try to figure out what ip i can be reached out
-    memset(&rank.listen_addr, 0, sizeof(rank.listen_addr));
-
     // look up my hostname.  blech!  this sucks.
     rank.listen_addr.sin_family = myhostname->h_addrtype;
     memcpy((char *) &rank.listen_addr.sin_addr.s_addr, 
 	   myhostname->h_addr_list[0], 
 	   myhostname->h_length);
-    rank.listen_addr.sin_port = htons(myport);
+
+    // set up my_addr with a nonce
     rank.my_addr.set_addr(rank.listen_addr);
+    rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
-  
-  // set a nonce
-  rank.my_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
-  
+
   dout(10) << "accepter.start my addr is " << rank.my_addr << endl;
 
   // set up signal handler
@@ -699,9 +693,9 @@ void Rank::Pipe::fail(list<Message*>& out)
       for (list<Message*>::iterator k = j->second.begin();
            k != j->second.end();
            ++k) {
-	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << j->first << " inst " << peer_addr << endl;
+	derr(1) << "pipe(" << peer_addr << ' ' << this << ").fail on " << **k << " to " << (*k)->get_dest_inst() << endl;
 	if (i->first)
-	  i->first->ms_handle_failure(*k, j->first, peer_addr);
+	  i->first->ms_handle_failure(*k, (*k)->get_dest_inst());
       }
 }
 
@@ -876,6 +870,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   EntityMessenger *msgr = new EntityMessenger(name);
 
   // add to directory
+  assert(local.count(name) == 0);
   local[name] = msgr;
   
   lock.Unlock();
@@ -922,7 +917,7 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
         }
       } else {
         derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?" << endl;
-        assert(0);  // hmpf
+        //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
       }
     }
     else {
@@ -1129,7 +1124,8 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest,
   // set envelope
   m->set_source(get_myname(), fromport);
   m->set_source_addr(rank.my_addr);
-  m->set_dest(dest.name, port);
+  m->set_dest_inst(dest);
+  m->set_dest_port(port);
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr

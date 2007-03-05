@@ -130,6 +130,7 @@ md_config_t g_conf = {
   mon_osd_down_out_interval: 5,  // seconds
   mon_lease: 2.000,  // seconds
   mon_stop_with_last_mds: true,
+  mon_store_abspath: false,      // make monitorstore use absolute path (to workaround fakefuse idiocy)
 
   // --- client ---
   client_cache_size: 300,
@@ -223,7 +224,8 @@ md_config_t g_conf = {
   fakestore_fsync: false,//true,
   fakestore_writesync: false,
   fakestore_syncthreads: 4,
-  fakestore_fakeattr: true,   
+  fakestore_fake_attrs: false,
+  fakestore_fake_collections: false,   
   fakestore_dev: 0,
 
   // --- ebofs ---
@@ -301,6 +303,18 @@ md_config_t g_conf = {
   fakeclient_op_truncate:   false,
   fakeclient_op_fsync:      false,
   fakeclient_op_close:    200
+
+#ifdef USE_OSBDB
+  ,
+  bdbstore: false,
+  debug_bdbstore: 1,
+  bdbstore_btree: false,
+  bdbstore_ffactor: 0,
+  bdbstore_nelem: 0,
+  bdbstore_pagesize: 0,
+  bdbstore_cachesize: 0,
+  bdbstore_transactional: false
+#endif // USE_OSBDB
 };
 
 
@@ -552,6 +566,11 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--mds_cache_size") == 0) 
       g_conf.mds_cache_size = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--mds_beacon_interval") == 0) 
+      g_conf.mds_beacon_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_beacon_grace") == 0) 
+      g_conf.mds_beacon_grace = atoi(args[++i]);
+
     else if (strcmp(args[i], "--mds_log") == 0) 
       g_conf.mds_log = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_log_before_reply") == 0) 
@@ -680,6 +699,10 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.fakestore_writesync = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 
       g_conf.fakestore_dev = args[++i];
+    else if (strcmp(args[i], "--fakestore_fake_attrs") == 0) 
+      g_conf.fakestore_fake_attrs = true;//atoi(args[++i]);
+    else if (strcmp(args[i], "--fakestore_fake_collections") == 0) 
+      g_conf.fakestore_fake_collections = true;//atoi(args[++i]);
 
     else if (strcmp(args[i], "--obfs") == 0) {
       g_conf.uofs = 1;
@@ -777,6 +800,34 @@ void parse_config_options(std::vector<char*>& args)
       if (!g_OSD_MDLogLayout.num_rep)
         g_conf.mds_log = false;
     }
+
+#ifdef USE_OSBDB
+    else if (strcmp(args[i], "--bdbstore") == 0) {
+      g_conf.bdbstore = true;
+      g_conf.ebofs = 0;
+    }
+    else if (strcmp(args[i], "--bdbstore-btree") == 0) {
+      g_conf.bdbstore_btree = true;
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-ffactor") == 0) {
+      g_conf.bdbstore_ffactor = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-nelem") == 0) {
+      g_conf.bdbstore_nelem = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-hash-pagesize") == 0) {
+      g_conf.bdbstore_pagesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
+      g_conf.bdbstore_cachesize = atoi(args[++i]);
+    }
+    else if (strcmp(args[i], "--bdbstore-transactional") == 0) {
+      g_conf.bdbstore_transactional = true;
+    }
+    else if (strcmp(args[i], "--debug-bdbstore") == 0) {
+      g_conf.debug_bdbstore = atoi(args[++i]);
+    }
+#endif // USE_OSBDB
 
     else {
       nargs.push_back(args[i]);

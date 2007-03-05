@@ -592,19 +592,28 @@ protected:
   int mknod(const char *path, mode_t mode);
   int open(const char *path, int mode);
   int close(fh_t fh);
+  off_t lseek(fh_t fh, off_t offset, int whence);
   int read(fh_t fh, char *buf, off_t size, off_t offset=-1);
   int write(fh_t fh, const char *buf, off_t size, off_t offset=-1);
   int truncate(const char *file, off_t size);
     //int truncate(fh_t fh, long long size);
   int fsync(fh_t fh, bool syncdataonly);
 
+
   // hpc lazyio
   int lazyio_propogate(int fd, off_t offset, size_t count);
   int lazyio_synchronize(int fd, off_t offset, size_t count);
 
-  int describe_layout(char *fn, list<ObjectExtent>& result);
+  // expose file layout
+  int describe_layout(int fd, FileLayout* layout);
+  int get_stripe_unit(int fd);
+  int get_stripe_width(int fd);
+  int get_stripe_period(int fd);
+  int enumerate_layout(int fd, list<ObjectExtent>& result,
+		       off_t length, off_t offset);
 
-  void ms_handle_failure(Message*, entity_name_t dest, const entity_inst_t& inst);
+  // failure
+  void ms_handle_failure(Message*, const entity_inst_t& inst);
 };
 
 #endif

@@ -112,12 +112,13 @@ struct entity_addr_t {
 
   void set_addr(tcpaddr_t a) {
     memcpy((char*)ipq, (char*)&a.sin_addr.s_addr, 4);
-    port = a.sin_port;
+    port = ntohs(a.sin_port);
   }
   void make_addr(tcpaddr_t& a) const {
+    memset(&a, 0, sizeof(a));
     a.sin_family = AF_INET;
     memcpy((char*)&a.sin_addr.s_addr, (char*)ipq, 4);
-    a.sin_port = port;
+    a.sin_port = htons(port);
   }
 };
 

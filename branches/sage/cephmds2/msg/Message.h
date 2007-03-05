@@ -35,6 +35,7 @@
 #define MSG_MON_COMMAND            13
 #define MSG_MON_COMMAND_ACK        14
 
+
 #define MSG_MON_ELECTION_ACK       15
 #define MSG_MON_ELECTION_PROPOSE   16
 #define MSG_MON_ELECTION_VICTORY   17
@@ -45,6 +46,8 @@
 #define MSG_MON_OSDMAP_UPDATE_PREPARE  23
 #define MSG_MON_OSDMAP_UPDATE_ACK      24
 #define MSG_MON_OSDMAP_UPDATE_COMMIT   25
+
+#define MSG_MON_PAXOS              30
 
 #define MSG_OSD_OP           40    // delete, etc.
 #define MSG_OSD_OPREPLY      41    // delete, etc.
@@ -254,11 +257,15 @@ public:
 
   // source/dest
   entity_inst_t& get_dest_inst() { return env.dst; }
+  void set_dest_inst(entity_inst_t& inst) { env.dst = inst; }
+
   entity_inst_t& get_source_inst() { return env.src; }
+  void set_source_inst(entity_inst_t& inst) { env.src = inst; }
 
   entity_name_t& get_dest() { return env.dst.name; }
   void set_dest(entity_name_t a, int p) { env.dst.name = a; env.dest_port = p; }
   int get_dest_port() { return env.dest_port; }
+  void set_dest_port(int p) { env.dest_port = p; }
   
   entity_name_t& get_source() { return env.src.name; }
   void set_source(entity_name_t a, int p) { env.src.name = a; env.source_port = p; }

@@ -26,6 +26,10 @@
 
 #include "ebofs/Ebofs.h"
 
+#ifdef USE_OSBDB
+#include "osbdb/OSBDB.h"
+#endif // USE_OSBDB
+
 #include "Ager.h"
 
 
@@ -139,7 +143,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
     gethostname(hostname,100);
     
     sprintf(dev_path, "%s/osd%d", ebofs_base_path, whoami);
-    
+
     struct stat sta;
     if (::lstat(dev_path, &sta) != 0)
       sprintf(dev_path, "%s/osd.%s", ebofs_base_path, hostname);    
@@ -157,8 +161,14 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, char *dev) : timer(osd_lock)
     store = new OBFSStore(whoami, NULL, dev_path);
   }
 #endif
+#ifdef USE_OSBDB
+  else if (g_conf.bdbstore) {
+    store = new OSBDB(dev_path);
+  }
+#endif // USE_OSBDB
   else {
-    store = new FakeStore(osd_base_path, whoami); 
+    sprintf(dev_path, "osddata/osd%d", whoami);
+    store = new FakeStore(dev_path, whoami);
   }
 
 }
@@ -425,7 +435,7 @@ void OSD::_remove_pg(pg_t pgid)
          p++)
       t.remove(*p);
     t.remove_collection(pgid);
-    t.remove(object_t(1,pgid));  // log too
+    t.remove(pgid.to_object());  // log too
   }
   store->apply_transaction(t);
   
@@ -722,6 +732,7 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
   entity_name_t dest = inst.name;
 
   if (g_conf.ms_die_on_failure) {
+    dout(0) << "ms_handle_failure " << inst << " on " << *m << endl;
     exit(0);
   }
 
@@ -1008,6 +1019,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     //cerr << "osdmap " << osdmap->get_ctime() << " logger start " << logger->get_start() << endl;
     logger->set_start( osdmap->get_ctime() );
+
+    assert(g_conf.osd_mkfs);  // make sure we did a mkfs!
 
     // create PGs
     for (int nrep = 1; 
@@ -1725,7 +1738,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
     assert(pg->missing.num_lost() == 0);
 
     // ok activate!
-     pg->activate(t);
+    pg->activate(t);
   }
 
   unsigned tr = store->apply_transaction(t);

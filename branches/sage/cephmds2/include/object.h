@@ -33,6 +33,7 @@ struct object_t {
 
   object_t() : ino(0), bno(0), rev(0) {}
   object_t(__uint64_t i, __uint32_t b) : ino(i), bno(b), rev(0) {}
+  object_t(__uint64_t i, __uint32_t b, __uint32_t r) : ino(i), bno(b), rev(r) {}
 };
 
 
@@ -74,13 +75,17 @@ inline ostream& operator<<(ostream& out, const object_t o) {
     out << '.' << o.rev;
   return out;
 }
+
+
 namespace __gnu_cxx {
+#ifndef __LP64__
   template<> struct hash<__uint64_t> {
     size_t operator()(__uint64_t __x) const { 
       static hash<__uint32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
+#endif
 
   template<> struct hash<object_t> {
     size_t operator()(const object_t &r) const { 
@@ -90,5 +95,6 @@ namespace __gnu_cxx {
     }
   };
 }
+
 
 #endif

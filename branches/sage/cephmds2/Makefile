@@ -29,6 +29,11 @@ endif
 CC = g++
 LIBS = -lpthread
 
+ifeq ($(want_bdb),yes)
+CFLAGS += -DUSE_OSBDB
+OSBDB_LIBS = -ldb_cxx
+endif
+
 #for normal mpich2 machines
 MPICC = mpicxx
 MPICFLAGS = ${CFLAGS}
@@ -78,10 +83,12 @@ OSDC_OBJS= \
 
 MON_OBJS= \
 	mon/Monitor.o\
+	mon/Paxos.o\
 	mon/OSDMonitor.o\
 	mon/MDSMonitor.o\
 	mon/ClientMonitor.o\
-	mon/Elector.o
+	mon/Elector.o\
+	mon/MonitorStore.o
 
 COMMON_OBJS= \
 	msg/Message.o\
@@ -97,7 +104,14 @@ CLIENT_OBJS= \
 	client/SyntheticClient.o\
 	client/Trace.o
 
-TARGETS = cmon cosd cmds cfuse csyn cmonctl newsyn fakesyn
+ifeq ($(want_bdb),yes)
+OSBDB_OBJS = \
+	osbdb/OSBDB.o
+
+OSBDB_OBJ = osbdb.o
+endif
+
+TARGETS = cmon cosd cmds cfuse csyn newsyn fakesyn mkmonmap cmonctl
 
 SRCS=*.cc */*.cc *.h */*.h */*/*.h
 
@@ -112,14 +126,14 @@ obfs: depend obfstest
 mkmonmap: mkmonmap.cc common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cmon: cmon.cc mon.o ebofs.o msg/SimpleMessenger.o common.o
+cmon: cmon.cc mon.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
 cmonctl: cmonctl.cc msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-cosd: cosd.cc osd.o ebofs.o msg/SimpleMessenger.o common.o
-	${CC} ${CFLAGS} ${LIBS} $^ -o $@
+cosd: cosd.cc osd.o ebofs.o ${OSBDB_OBJ} msg/SimpleMessenger.o common.o
+	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
 
 cmds: cmds.cc mds.o osdc.o msg/SimpleMessenger.o common.o
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
@@ -137,19 +151,19 @@ gprof-helper.so: test/gprof-helper.c
 
 
 # fake*
-fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o client/fuse.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} -lfuse $^ -o $@
+fakefuse: fakefuse.cc mon.o mds.o client.o osd.o osdc.o ebofs.o ${OSBDB_OBJ} client/fuse.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -lfuse $^ -o $@
 
-fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/FakeMessenger.o common.o
-	${CC} -pg ${CFLAGS} ${LIBS} $^ -o $@
+fakesyn: fakesyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/FakeMessenger.o common.o
+	${CC} -pg ${CFLAGS} ${LIBS} ${OSBDB_LIBS} $^ -o $@
 
 
 # mpi startup
-newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} $^ -o $@
+newsyn: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o
+	${MPICC} -pg ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
 
-newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o osdc.o msg/SimpleMessenger.o common.o
-	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
+newsyn.nopg: newsyn.cc mon.o mds.o client.o osd.o ebofs.o ${OSBDB_OBJ} osdc.o msg/SimpleMessenger.o common.o
+	${MPICC} ${MPICFLAGS} ${MPILIBS} ${OSBDB_LIBS} $^ -o $@
 
 
 # ebofs
@@ -185,6 +199,11 @@ mdtest: bench/mdtest/mdtest.o
 mdtest.ceph: bench/mdtest/mdtest.o libceph.o
 	${MPICC} ${MPICFLAGS} ${MPILIBS} $^ -o $@
 
+# OSD test
+
+testos: test/testos.o ebofs.o osbdb.o common.o
+	${CC} ${CFLAGS} ${LIBS} ${OSBDB_LIBS} -o $@ $^
+
 #
 
 %.so: %.cc
@@ -212,6 +231,9 @@ mds.o: ${MDS_OBJS}
 	${LDINC} $@ $^
 
 mon.o: ${MON_OBJS}
+	${LDINC} $@ $^
+
+osbdb.o: ${OSBDB_OBJS}
 	${LDINC} $@ $^
 
 %.o: %.cc

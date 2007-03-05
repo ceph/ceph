@@ -15,7 +15,7 @@
 #include "Monitor.h"
 #include "MDSMonitor.h"
 
-#include "osd/ObjectStore.h"
+#include "MonitorStore.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
@@ -91,6 +91,7 @@ void OSDMonitor::fake_reorg()
 
 
 
+/*
 void OSDMonitor::init()
 {
   // start with blank map
@@ -106,6 +107,7 @@ void OSDMonitor::init()
     pending_inc.epoch = osdmap.get_epoch()+1;
   }
 }
+*/
 
 
 
@@ -224,20 +226,18 @@ void OSDMonitor::create_initial()
 
 bool OSDMonitor::get_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  object_t oid(Monitor::INO_OSD_MAP, epoch);
-  if (!mon->store->exists(oid))
+  if (!mon->store->exists_bl_sn("osdmap", epoch))
     return false;
-  int r = mon->store->read(oid, 0, 0, bl);
+  int r = mon->store->get_bl_sn(bl, "osdmap", epoch);
   assert(r > 0);
   return true;  
 }
 
 bool OSDMonitor::get_inc_map_bl(epoch_t epoch, bufferlist& bl)
 {
-  object_t oid(Monitor::INO_OSD_INC_MAP, epoch);
-  if (!mon->store->exists(oid))
+  if (!mon->store->exists_bl_sn("osdincmap", epoch))
     return false;
-  int r = mon->store->read(oid, 0, 0, bl);
+  int r = mon->store->get_bl_sn(bl, "osdincmap", epoch);
   assert(r > 0);
   return true;  
 }
@@ -248,11 +248,8 @@ void OSDMonitor::save_map()
   bufferlist bl;
   osdmap.encode(bl);
 
-  ObjectStore::Transaction t;
-  t.write(object_t(Monitor::INO_OSD_MAP,0), 0, bl.length(), bl);
-  t.write(object_t(Monitor::INO_OSD_MAP,osdmap.get_epoch()), 0, bl.length(), bl); 
-  mon->store->apply_transaction(t);
-  mon->store->sync();
+  mon->store->put_bl_sn(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
 void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
@@ -263,12 +260,9 @@ void OSDMonitor::save_inc_map(OSDMap::Incremental &inc)
   bufferlist incbl;
   inc.encode(incbl);
 
-  ObjectStore::Transaction t;
-  t.write(object_t(Monitor::INO_OSD_MAP,0), 0, bl.length(), bl);
-  t.write(object_t(Monitor::INO_OSD_MAP,osdmap.get_epoch()), 0, bl.length(), bl);         // not strictly needed??
-  t.write(object_t(Monitor::INO_OSD_INC_MAP,osdmap.get_epoch()), 0, incbl.length(), incbl); 
-  mon->store->apply_transaction(t);
-  mon->store->sync();
+  mon->store->put_bl_sn(bl, "osdmap", osdmap.get_epoch());
+  mon->store->put_bl_sn(incbl, "osdincmap", osdmap.get_epoch());
+  mon->store->put_int(osdmap.get_epoch(), "osd_epoch");
 }
 
 
@@ -363,6 +357,21 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
   bcast_latest_osd();
   bcast_latest_mds();
 }
+
+void OSDMonitor::mark_all_down()
+{
+  dout(7) << "mark_all_down" << endl;
+
+  for (set<int>::iterator it = osdmap.get_osds().begin();
+       it != osdmap.get_osds().end();
+       it++) {
+    if (osdmap.is_down(*it)) continue;
+    pending_inc.new_down[*it] = osdmap.get_inst(*it);
+  }
+  accept_pending();
+}
+
+
 
 
 void OSDMonitor::handle_osd_boot(MOSDBoot *m)
@@ -622,6 +631,26 @@ void OSDMonitor::election_finished()
 {
   dout(10) << "election_finished" << endl;
 
+  if (mon->is_leader()) {
+    if (g_conf.mkfs) {
+      create_initial();
+      save_map();
+    } else {
+      //
+      epoch_t epoch = mon->store->get_int("osd_epoch");
+      dout(10) << " last epoch was " << epoch << endl;
+      bufferlist bl, blinc;
+      int r = mon->store->get_bl_sn(bl, "osdmap", epoch);
+      assert(r>0);
+      osdmap.decode(bl);
+
+      // pending_inc
+      pending_inc.epoch = epoch+1;
+    }
+
+  }
+
+  /*
   state = STATE_INIT;
 
   // map?
@@ -644,7 +673,7 @@ void OSDMonitor::election_finished()
     //messenger->send_message(new MMonOSDMapInfo(osdmap.epoch, osdmap.mon_epoch),
     //			    mon->monmap->get_inst(mon->leader));
   }
-  
+  */
 }
 
 

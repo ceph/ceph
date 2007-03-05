@@ -35,7 +35,7 @@ class Elector {
 
   Context *expire_event;
 
-  void reset_timer();
+  void reset_timer(double plus=0.0);
   void cancel_timer();
 
   // electing me

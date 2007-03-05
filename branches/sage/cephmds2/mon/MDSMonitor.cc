@@ -14,6 +14,7 @@
 
 #include "MDSMonitor.h"
 #include "Monitor.h"
+#include "MonitorStore.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MMDSGetMap.h"
@@ -34,14 +35,6 @@
 
 /********* MDS map **************/
 
-void MDSMonitor::create_initial()
-{
-  mdsmap.epoch = 0;  // until everyone boots
-  mdsmap.ctime = g_clock.now();
-  
-  print_map();
-}
-
 void MDSMonitor::dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -57,6 +50,50 @@ void MDSMonitor::dispatch(Message *m)
   default:
     assert(0);
   }  
+}
+
+
+
+void MDSMonitor::election_finished()
+{
+  if (mon->is_leader()) {
+
+    // FIXME be smarter later.
+
+    if (g_conf.mkfs) {
+      create_initial();
+      save_map();
+    } else {
+      load_map();
+    }
+  }
+}
+
+
+void MDSMonitor::create_initial()
+{
+  mdsmap.epoch = 0;  // until everyone boots
+  mdsmap.ctime = g_clock.now();
+
+  mdsmap.encode(encoded_map);
+
+  print_map();
+}
+
+void MDSMonitor::load_map()
+{
+  int r = mon->store->get_bl_ss(encoded_map, "mdsmap", "current");
+  assert(r > 0);
+  mdsmap.decode(encoded_map);
+  dout(7) << "load_map epoch " << mdsmap.get_epoch() << endl;
+}
+
+void MDSMonitor::save_map()
+{
+  dout(7) << "save_map epoch " << mdsmap.get_epoch() << endl;
+  
+  int r = mon->store->put_bl_ss(encoded_map, "mdsmap", "current");
+  assert(r>=0);
 }
 
 void MDSMonitor::print_map()
@@ -75,11 +112,26 @@ void MDSMonitor::print_map()
   }
 }
 
+void MDSMonitor::issue_map()
+{
+  mdsmap.inc_epoch();
+  encoded_map.clear();
+  mdsmap.encode(encoded_map);
+
+  dout(7) << "issue_map epoch " << mdsmap.get_epoch() << endl;
+  
+  save_map();
+  print_map();
+  
+  // bcast map
+  bcast_latest_mds();
+  send_current();
+}
+
 
 void MDSMonitor::handle_command(MMonCommand *m, int& r, string& rs)
 {
   stringstream ss;
-
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stop" && m->cmd.size() > 2) {
       int who = atoi(m->cmd[2].c_str());
@@ -90,16 +142,8 @@ void MDSMonitor::handle_command(MMonCommand *m, int& r, string& rs)
 
 	// hack
 	mdsmap.mds_state[who] = MDSMap::STATE_STOPPING;
-    
-	// inc map version
-	mdsmap.inc_epoch();
-	mdsmap.encode(maps[mdsmap.get_epoch()]);
-	
-	print_map();
-	
-	// bcast map
-	bcast_latest_mds();
-	send_current();
+    	issue_map();
+
       } else {
 	ss << "mds" << who << " not active (" << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
 	getline(ss,rs);
@@ -238,15 +282,7 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     else
       mdsmap.mds_state_seq.erase(from);
     
-    // inc map version
-    mdsmap.inc_epoch();
-    mdsmap.encode(maps[mdsmap.get_epoch()]);
-    
-    print_map();
-
-    // bcast map
-    bcast_latest_mds();
-    send_current();
+    issue_map();
   }
 
   delete m;
@@ -369,14 +405,7 @@ void MDSMonitor::tick()
     }
 
     if (changed) {
-      mdsmap.inc_epoch();
-      mdsmap.encode(maps[mdsmap.get_epoch()]);
-      
-      print_map();
-      
-      // bcast map
-      bcast_latest_mds();
-      send_current();
+      issue_map();
     }
   }
 }

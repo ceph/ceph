@@ -16,9 +16,11 @@
 
 #include "include/reqid.h"
 
+#define PG_INO 1
+
+
 // osd types
 typedef __uint64_t coll_t;        // collection id
-
 
 // pg stuff
 typedef __uint16_t ps_t;
@@ -28,13 +30,14 @@ typedef __uint8_t pruleset_t;
 struct pg_t {
   union {
     struct {
-      int         preferred;
-      ps_t        ps;
-      __uint8_t   nrep;
-      pruleset_t  ruleset;
+      __uint32_t  preferred:32; // 32
+      ps_t        ps:16;        // 16
+      __uint8_t   nrep:8;       //  8
+      pruleset_t  ruleset:8;    //  8
     } fields;
-    __uint64_t val;
+    __uint64_t val;          // 64
   } u;
+
   pg_t() { u.val = 0; }
   pg_t(const pg_t& o) { u.val = o.u.val; }
   pg_t(ps_t s, int p, unsigned char n, pruleset_t r=0) {
@@ -52,6 +55,8 @@ struct pg_t {
   pg_t operator++() { ++u.val; return *this; }
   */
   operator __uint64_t() const { return u.val; }
+
+  object_t to_object() const { return object_t(PG_INO, u.val >> 32, u.val & 0xffffffff); }
 };
 
 inline ostream& operator<<(ostream& out, pg_t pg) {
@@ -62,6 +67,8 @@ inline ostream& operator<<(ostream& out, pg_t pg) {
   if (pg.u.fields.preferred)
     out << pg.u.fields.preferred << '.';
   out << hex << pg.u.fields.ps << dec;
+  out << "=" << hex << pg.u.val << dec;
+  out << "=" << hex << (__uint64_t)pg << dec;
   return out;
 }
 

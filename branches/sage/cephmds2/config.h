@@ -108,6 +108,7 @@ struct md_config_t {
   int mon_osd_down_out_interval;
   float mon_lease;
   bool mon_stop_with_last_mds;
+  bool mon_store_abspath;
 
   // client
   int      client_cache_size;
@@ -213,7 +214,8 @@ struct md_config_t {
   bool  fakestore_fsync;
   bool  fakestore_writesync;
   int   fakestore_syncthreads;   // such crap
-  bool  fakestore_fakeattr;
+  bool  fakestore_fake_attrs;
+  bool  fakestore_fake_collections;
   char  *fakestore_dev;
 
   // ebofs
@@ -291,6 +293,16 @@ struct md_config_t {
   int fakeclient_op_fsync;
   int fakeclient_op_close;
 
+#ifdef USE_OSBDB
+  bool bdbstore;
+  int debug_bdbstore;
+  bool bdbstore_btree;
+  int bdbstore_ffactor;
+  int bdbstore_nelem;
+  int bdbstore_pagesize;
+  int bdbstore_cachesize;
+  bool bdbstore_transactional;
+#endif // USE_OSBDB
 };
 
 extern md_config_t g_conf;     
