@@ -28,6 +28,8 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MOSDUpdate.h"
+#include "messages/MOSDUpdateReply.h"
+#include "messages/MClientUpdate.h"
 
 //#include "msgthread.h"
 

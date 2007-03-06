@@ -713,13 +713,18 @@ void Client::put_user_ticket(Ticket *tk)
 }
 
 void Client::handle_osd_update(MOSDUpdate *m) {
-  cout << "Received a request to resolve group " << m->get_group() << endl;
   // check local cache
-  if (groups.count(m->get_group())) {
-    
-  }
-  // else, ask mds, pass it, cache it
-  assert(0);
+  MOSDUpdateReply *reply;
+  gid_t my_group = m->get_group();
+  cout << "Received a request to resolve group " << my_group << endl;
+  // if we dont have it cached, ask mds, cache it
+  //if (groups.count(my_group) == 0) {
+  //  MClientUpdate *update = new MClientUpdate(my_group);
+  //}
+  //reply = new MOSDUpdateReply(groups[my_group].get_list());
+  reply = new MOSDUpdateReply(my_group);
+
+  messenger->send_message(reply, m->get_source_inst());
 }
 
 // ------------------------

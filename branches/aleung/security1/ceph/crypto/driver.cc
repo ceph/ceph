@@ -13,6 +13,7 @@
  * Author: Andrew Leung Nov., 2006
  ******************************/
 #include"CryptoLib.h"
+#include "MerkleTree.h"
 #include<iostream>
 
 using namespace std;
@@ -21,6 +22,20 @@ using namespace CryptoLib;
 int main(int argc, char* argv[]) {
   // message to hash
   const byte* msg = (const byte*)"hash me";
+
+  // test merkle trees
+  MerkleTree mtree;
+  uid_t user1 = 1000;
+  mtree.add_user(user1);
+  cout << "My root hash: " << mtree << endl;
+  MerkleTree mtree2 = mtree;
+  uid_t user2 = 2000;
+  mtree2.add_user(user2);
+  cout << "My update root hash " << mtree2 << endl;
+  if (mtree2.get_root_hash() > mtree.get_root_hash())
+    cout << "mtree2 is bigger" << endl;
+  else
+    cout << "mtree is bigger" << endl;
 
   // sha-1
   byte digest[SHA1DIGESTSIZE];

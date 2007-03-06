@@ -75,12 +75,14 @@
 
 // osd group update
 #define MSG_OSD_UPDATE         55
+#define MSG_OSD_UPDATE_REPLY   56
 
 #define MSG_CLIENT_REQUEST         60
 #define MSG_CLIENT_REPLY           61
 //#define MSG_CLIENT_DONE            62
 #define MSG_CLIENT_FILECAPS        63
 #define MSG_CLIENT_INODEAUTHUPDATE 64
+#define MSG_CLIENT_UPDATE          65
 
 #define MSG_CLIENT_BOOT            70
 #define MSG_CLIENT_MOUNT           71

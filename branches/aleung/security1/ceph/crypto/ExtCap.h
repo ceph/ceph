@@ -23,6 +23,7 @@ using namespace std;
 
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
+#include "crypto/MerkleTree.h"
 
 #define NO_GROUP 0
 #define UNIX_GROUP 1
@@ -83,6 +84,10 @@ private:
     //unix group idents
     gid_t gid; // group id
     bool world;
+
+    // hash based users and files
+    hash_t user_group;
+    hash_t file_group;
 
     inodeno_t ino; // inode number
   };
@@ -165,6 +170,12 @@ public:
     data.id.mds_id = new_mds_id;
   }
   void set_type(__int8_t new_type) { data.type = new_type;}
+
+  void set_user_hash(hash_t nhash) { user_group = nhash; }
+  void set_file_hash(hash_t nhash) { file_group = nhash; }
+
+  hash_t get_user_hash() { return user_group; }
+  hash_t get_file_hash() { return file_group; }
 
   const cap_data_t* get_data() const {
     return (&data);

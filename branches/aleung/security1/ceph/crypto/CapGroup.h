@@ -16,21 +16,28 @@
 #include<iostream>
 using namespace std;
 
-#include "include/types.h"
+//#include "include/types.h"
+#include "crypto/MerkleTree.h"
 
 class CapGroup {
  private:
-  gid_t group_id;
+  //gid_t group_id;
+  hash_t root_hash;
   list<uid_t> users;
 
  public:
   friend class OSD;
   friend class Locker;
   CapGroup () { }
-  CapGroup (gid_t id) { group_id = id; }
+  //CapGroup (gid_t id) { group_id = id; }
+  CapGroup (hash_t rhash, list<uid_t>& ulist) :
+    root_hash(rhash), users(ulist) { }
   
-  gid_t get_gid() { return group_id; }
-  void set_gid(gid_t id) { group_id = id; }
+  //gid_t get_gid() { return group_id; }
+  //void set_gid(gid_t id) { group_id = id; }
+
+  hash_t get_root_hash() { return root_hash; }
+  void set_root_hash(hash_t nhash) { root_hash = nhash; }
 
   void add_user(uid_t user) {
     users.push_back(user);
@@ -49,6 +56,9 @@ class CapGroup {
     }
     return false;
   }
+
+  void set_list(list<uid_t>& nlist) { users = nlist; }
+  list<uid_t>& get_list() { return users; }
 };
 
 #endif

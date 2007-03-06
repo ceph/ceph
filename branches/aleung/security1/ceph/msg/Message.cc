@@ -44,6 +44,7 @@ using namespace std;
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDUpdate.h"
+#include "messages/MOSDUpdateReply.h"
 
 #include "messages/MClientBoot.h"
 #include "messages/MClientMount.h"
@@ -53,6 +54,7 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
+#include "messages/MClientUpdate.h"
 
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
@@ -233,6 +235,9 @@ decode_message(msg_envelope_t& env, bufferlist& payload)
     break;
   case MSG_OSD_UPDATE:
     m = new MOSDUpdate();
+    break;
+  case MSG_OSD_UPDATE_REPLY:
+    m = new MOSDUpdateReply();
     break;
 
     // clients

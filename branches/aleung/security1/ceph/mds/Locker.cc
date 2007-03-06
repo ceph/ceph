@@ -222,11 +222,12 @@ Capability* Locker::issue_new_caps(CInode *in,
  * This function does nothing for synchronization
  **********/
 ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
-  dout(3) << "issue_new_EXTcaps for mode " << mode << " on " << *in << endl;
+  dout(3) << "issue_new_extcaps for mode " << mode << " on " << *in << endl;
 
   // get the uid
   uid_t my_user = req->get_caller_uid();
   gid_t my_group = req->get_caller_gid();
+  gid_t file_group = req->get_gid();
   int my_want = 0;
   // issue most generic cap (RW)
   my_want |= FILE_MODE_RW;
@@ -238,15 +239,15 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     // make new cap
     // unix grouping
     if (g_conf.mds_group == 1) {
-      ext_cap = new ExtCap(my_want, my_user, my_group, in->ino());
-
       // configure group
       if (mds->unix_groups.count(my_group) == 0)
 	mds->unix_groups[my_group].set_gid(my_group);
-
+      
       // add user to group if not know already
       if (!(mds->unix_groups[my_group].contains(my_user)))
 	mds->unix_groups[my_group].add_user(my_user);
+
+      ext_cap = new ExtCap(my_want, my_user, my_group, in->ino());
 
       ext_cap->set_type(1);
     }

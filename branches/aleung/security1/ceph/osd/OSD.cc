@@ -377,11 +377,18 @@ bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
   if (op_capability->get_type() == UNIX_GROUP) {
     // check if user is in group
     gid_t my_group = op_capability->get_gid();
+
+    // do we have group cached? if not, update group
+    // this will block till we have the group!!
+    if (unix_groups.count(my_group) == 0) {
+      update_group(op->get_client_inst(), my_group);
+    }
+    
+    // now we should have the group, is the client in it?
     if (!(unix_groups[my_group].contains(op_capability->get_uid()))) {
       // do update to get new unix groups
       cout << "User " << op_capability->get_uid() << " not in group "
 	   << my_group << endl;
-      update_group(op->get_client_inst(), my_group);
       return false;
     }
   }
@@ -413,9 +420,51 @@ bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
 void OSD::update_group(entity_inst_t client, gid_t group) {
     // set up reply
   MOSDUpdate *update = new MOSDUpdate(group);
+  Cond cond;
+  
+  // if no one has already requested the ticket
+  if (update_waiter_cond.count(group) == 0) {
+    dout(10) << "update_group requesting update for gid " << group << endl;
+      // send it
+    messenger->send_message(update, client);
+  } else {
+    // don't request, someone else already did.  just wait!
+    dout(10) << "update_group waiting for update for gid " << group << endl;
+  }
+  
+  // wait for reply
+  update_waiter_cond[group].push_back( &cond );
+  
+  // naively assume we'll get an update FIXME
+  while (unix_groups.count(group) == 0) { 
+    cond.Wait(osd_lock);
+    //cout << "Received a singal, going to check group " << group << endl;
+  }
+  cout << "Received updated group, returning" << endl;
+  
+}
 
-  // send it
-  messenger->send_message(update, client);
+// gets reply for group and wakes up waiters
+void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
+
+  // store the new list into group
+  gid_t my_group = m->get_group();
+
+  cout << "hande_osd_update_reply for " << my_group << endl;
+  dout(10) << "hande_osd_update_reply for " << my_group << endl;
+
+  // add the new list to our cache
+  unix_groups[my_group].set_list(m->get_list());
+
+  // wait up the waiter(s)
+  // this signals all update waiters
+  for (list<Cond*>::iterator p = update_waiter_cond[my_group].begin();
+       p != update_waiter_cond[my_group].end();
+       ++p) {
+    (*p)->Signal();
+  }
+
+  update_waiter_cond.erase(my_group);
 }
 
 // assumes the request and cap contents has already been checked
@@ -777,6 +826,10 @@ void OSD::dispatch(Message *m)
       case MSG_OSD_OPREPLY:
         handle_op_reply((MOSDOpReply*)m);
         break;
+	// for updating security groups
+      case MSG_OSD_UPDATE_REPLY:
+	handle_osd_update_reply((MOSDUpdateReply*)m);
+	break;
         
         
       default:

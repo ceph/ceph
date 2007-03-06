@@ -33,11 +33,13 @@ using namespace __gnu_cxx;
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDUpdate.h"
+#include "messages/MOSDUpdateReply.h"
 
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 #include "crypto/CapCache.h"
 #include "crypto/CapGroup.h"
+#include "crypto/MerkleTree.h"
 
 class Messenger;
 class Message;
@@ -113,7 +115,11 @@ public:
   hash_map<int, float> peer_qlen;
 
   // unix group cache
-  map<gid_t, CapGroup> unix_groups;
+  //map<gid_t, CapGroup> unix_groups;
+  map<hash_t, CapGroup> user_groups;
+  //map<gid_t, list<Cond*> > update_waiter_cond;
+  map<hash_t, list<Cond*> > update_waiter_cond;
+  void handle_osd_update_reply(MOSDUpdateReply *m);
   
   // per-pg locking (serializing)
   hash_set<pg_t>               pg_lock;
