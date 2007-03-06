@@ -73,7 +73,7 @@ void MDSMonitor::election_finished()
 void MDSMonitor::create_initial()
 {
   mdsmap.epoch = 0;  // until everyone boots
-  mdsmap.ctime = g_clock.now();
+  mdsmap.created = g_clock.now();
 
   mdsmap.encode(encoded_map);
 
@@ -229,6 +229,9 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     mdsmap.mds_inst[from].name = MSG_ADDR_MDS(from);
     mdsmap.mds_inc[from]++;
 
+    // someone (new) joined the cluster
+    mdsmap.same_inst_since = mdsmap.epoch+1;
+
     // starting -> creating|starting|replay
     if (mdsmap.is_degraded() &&
 	!mdsmap.is_failed(from)) {
@@ -276,6 +279,11 @@ void MDSMonitor::handle_mds_beacon(MMDSBeacon *m)
     dout(10) << "mds_beacon mds" << from << " " << MDSMap::get_state_name(mdsmap.mds_state[from])
 	     << " -> " << MDSMap::get_state_name(state)
 	     << endl;
+    // did someone leave the cluster?
+    if (state == MDSMap::STATE_OUT && mdsmap.mds_state[from] != MDSMap::STATE_OUT) 
+      mdsmap.same_inst_since = mdsmap.epoch+1;
+
+    // change the state
     mdsmap.mds_state[from] = state;
     if (mdsmap.is_up(from))
       mdsmap.mds_state_seq[from] = seq;

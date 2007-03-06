@@ -993,33 +993,35 @@ void MDCache::handle_import_map(MMDSImportMap *m)
     }
   }
 
-  // note ambiguous imports too.. unless i'm already active
-  if (!mds->is_active() && !mds->is_stopping()) {
+  show_subtrees();
+
+
+  // recovering?
+  if (!mds->is_rejoin() && !mds->is_active() && !mds->is_stopping()) {
+    // note ambiguous imports too.. unless i'm already active
     for (map<inodeno_t, list<inodeno_t> >::iterator pi = m->ambiguous_imap.begin();
 	 pi != m->ambiguous_imap.end();
 	 ++pi) {
       dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << endl;
       other_ambiguous_imports[from][pi->first].swap( pi->second );
     }
-  }
 
-  show_subtrees();
-
-  // did i get them all?
-  got_import_map.insert(from);
-  
-  if (got_import_map == recovery_set) {
-    dout(10) << "got all import maps, ready to rejoin" << endl;
-    disambiguate_imports();
-    recalc_auth_bits();
-    trim_non_auth(); 
+    // did i get them all?
+    got_import_map.insert(from);
     
-    // move to rejoin state
-    mds->set_want_state(MDSMap::STATE_REJOIN);
-    
-  } else {
-    dout(10) << "still waiting for more importmaps, got " << got_import_map 
-	     << ", need " << recovery_set << endl;
+    if (got_import_map == recovery_set) {
+      dout(10) << "got all import maps, ready to rejoin" << endl;
+      disambiguate_imports();
+      recalc_auth_bits();
+      trim_non_auth(); 
+      
+      // move to rejoin state
+      mds->set_want_state(MDSMap::STATE_REJOIN);
+      
+    } else {
+      dout(10) << "still waiting for more importmaps, got " << got_import_map 
+	       << ", need " << recovery_set << endl;
+    }
   }
 
   delete m;

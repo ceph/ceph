@@ -93,6 +93,9 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
+
+  // clients
+  last_client_mdsmap_bcast = 0;
   
   // beacon
   beacon_last_seq = 0;
@@ -105,7 +108,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   req_rate = 0;
 
   want_state = state = MDSMap::STATE_DNE;
-
 
   logger = logger2 = 0;
 
@@ -440,6 +442,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
   set<int> oldactive;
   mdsmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
+  set<int> oldcreating;
+  mdsmap->get_mds_set(oldcreating, MDSMap::STATE_CREATING);
+  set<int> oldout;
+  mdsmap->get_mds_set(oldout, MDSMap::STATE_OUT);
 
   // decode and process
   mdsmap->decode(m->get_encoded());
@@ -571,21 +577,17 @@ void MDS::handle_mds_map(MMDSMap *m)
     }
   }
   
+  // we need to make sure clients find out about (new) mds addresses.
+  // clients don't care about mds state.
+  bool share_with_clients = false;
+
   // REJOIN
   // is everybody finally rejoining?
   if (is_rejoin() || is_active() || is_stopping()) {
     // did we start?
     if (!wasrejoining && mdsmap->is_rejoining()) {
       mdcache->send_cache_rejoins();
-
-      // share the map with mounted clients
-      dout(10) << "sharing mdsmap with mounted clients" << endl;
-      for (set<int>::const_iterator p = clientmap.get_mount_set().begin();
-	   p != clientmap.get_mount_set().end();
-	   ++p) {
-	messenger->send_message(new MMDSMap(mdsmap),
-				clientmap.get_inst(*p));
-      }
+      share_with_clients = true;
     }
     // did we finish?
     if (wasrejoining && !mdsmap->is_rejoining()) {
@@ -614,6 +616,23 @@ void MDS::handle_mds_map(MMDSMap *m)
 
       mdcache->handle_mds_failure(*p);
     }
+  }
+
+  // inst set changed?
+  if (mdsmap->get_same_inst_since() > last_client_mdsmap_bcast) 
+    share_with_clients = true;
+ 
+  // share map with clients?
+  if (share_with_clients) {
+    // share the map with mounted clients
+    dout(10) << "sharing mdsmap with mounted clients" << endl;
+    for (set<int>::const_iterator p = clientmap.get_mount_set().begin();
+	 p != clientmap.get_mount_set().end();
+	 ++p) {
+      messenger->send_message(new MMDSMap(mdsmap),
+			      clientmap.get_inst(*p));
+    }
+    last_client_mdsmap_bcast = mdsmap->get_epoch();
   }
 
   delete m;

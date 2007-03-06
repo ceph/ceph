@@ -643,13 +643,13 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
     request->mds.insert(fwd->get_source().num());
     request->mds.insert(fwd->get_dest_mds());
     request->num_fwd = fwd->get_num_fwd();
-    dout(-10) << "handle_client_request tid " << tid
+    dout(10) << "handle_client_request tid " << tid
 	     << " fwd " << fwd->get_num_fwd() 
 	     << " to mds" << fwd->get_dest_mds() 
 	     << ", mds set now " << request->mds
 	     << endl;
   } else {
-    dout(-10) << "handle_client_request tid " << tid
+    dout(10) << "handle_client_request tid " << tid
 	     << " previously forwarded to mds" << fwd->get_dest_mds() 
 	     << ", mds still " << request->mds
 	     << endl;

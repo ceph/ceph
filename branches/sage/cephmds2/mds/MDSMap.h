@@ -65,7 +65,8 @@ class MDSMap {
 
  protected:
   epoch_t epoch;
-  utime_t ctime;
+  utime_t created;
+  epoch_t same_inst_since;
 
   int anchortable;   // which MDS has anchortable (fixme someday)
   int root;          // which MDS has root directory
@@ -79,12 +80,13 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), anchortable(0), root(0) {}
+  MDSMap() : epoch(0), same_inst_since(0), anchortable(0), root(0) {}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  const utime_t& get_ctime() const { return ctime; }
+  const utime_t& get_create() const { return created; }
+  epoch_t get_same_inst_since() const { return same_inst_since; }
 
   int get_anchortable() const { return anchortable; }
   int get_root() const { return root; }
@@ -249,7 +251,8 @@ class MDSMap {
   // serialize, unserialize
   void encode(bufferlist& blist) {
     blist.append((char*)&epoch, sizeof(epoch));
-    blist.append((char*)&ctime, sizeof(ctime));
+    blist.append((char*)&created, sizeof(created));
+    blist.append((char*)&same_inst_since, sizeof(same_inst_since));
     blist.append((char*)&anchortable, sizeof(anchortable));
     blist.append((char*)&root, sizeof(root));
     
@@ -263,8 +266,10 @@ class MDSMap {
     int off = 0;
     blist.copy(off, sizeof(epoch), (char*)&epoch);
     off += sizeof(epoch);
-    blist.copy(off, sizeof(ctime), (char*)&ctime);
-    off += sizeof(ctime);
+    blist.copy(off, sizeof(created), (char*)&created);
+    off += sizeof(created);
+    blist.copy(off, sizeof(same_inst_since), (char*)&same_inst_since);
+    off += sizeof(same_inst_since);
     blist.copy(off, sizeof(anchortable), (char*)&anchortable);
     off += sizeof(anchortable);
     blist.copy(off, sizeof(root), (char*)&root);

@@ -1,9 +1,7 @@
 monday
- retest with 3+
-   no failures
-   full failure
  document cache
- pg rewrite
+ tag osd ops, objects with filelayout
+ mds diropen
 
 doc
 - mdsmonitor beacon semantics
@@ -13,7 +11,7 @@ doc
 - journal content
  - importmaps and up:resolve
 - metablob version semantics
- 
+
 
 mds
 - bystanders should avoid contacting auth when it is ambiguous.
@@ -30,7 +28,6 @@ mds
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
 - fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 - incremental mdsmaps
-- client mount logging
 - client failure
 - EMetablob should return 'expired' if they have
   higher versions (and are thus described by a newer journal entry)
@@ -44,6 +41,19 @@ mds
   - link
   - rename
 - dirslices.
+- dirslice vs readdir
+- redo hard links
+- anchortable
+- sync clients on stat
+  - will need to ditch 10s client metadata caching before this is useful
+  - implement truncate
+- statfs?
+- btree directories (for efficient large directories)
+- consistency points/snapshots
+
+- fix MExportAck and others to use dir+dentry, not inode
+  (otherwise this all breaks with hard links.. altho it probably needs reworking already?)
+
 
 
 monitor
@@ -198,30 +208,11 @@ mds
 
 client
 - fstat
-- make_request: cope with mds failure
 - mixed lazy and non-lazy io will clobber each others' caps in the buffer cache.. how to isolate..
 - test client caps migration w/ mds exports
 - some heuristic behavior to consolidate caps to inode auth?
 
 
-
-MDS TODO
-- fix hashed readdir: should (optionally) do a lock on dir namespace?
-- fix hard links
-  - they mostly work, but they're fragile
-- sync clients on stat
-  - will need to ditch 10s client metadata caching before this is useful
-  - implement truncate
-- implement hashed directories
-- statfs?
-- rewrite journal + recovery
-- figure out online failure recovery
-- more distributed fh management?
-- btree directories (for efficient large directories)
-- consistency points/snapshots
-
-- fix MExportAck and others to use dir+dentry, not inode
-  (otherwise this all breaks with hard links.. altho it probably needs reworking already?)
 
 
 
