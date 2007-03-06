@@ -75,8 +75,6 @@ public:
 
 private:
   struct {
-    long pcid;
-    
     // who's asking?
     entity_inst_t client;
     reqid_t    reqid;  // minor weirdness: entity_name_t is in reqid_t too.
@@ -86,7 +84,7 @@ private:
     
     object_t oid;
     objectrev_t rev;
-    pg_t pg;
+    ObjectLayout layout;
     
     epoch_t map_epoch;
     
@@ -119,7 +117,8 @@ private:
   void set_rep_tid(tid_t t) { st.rep_tid = t; }
 
   const object_t get_oid() { return st.oid; }
-  const pg_t     get_pg() { return st.pg; }
+  const pg_t     get_pg() { return st.layout.pgid; }
+  const ObjectLayout& get_layout() { return st.layout; }
   const epoch_t  get_map_epoch() { return st.map_epoch; }
 
   //const int        get_pg_role() { return st.pg_role; }  // who am i asking for?
@@ -154,12 +153,9 @@ private:
   size_t get_data_len() { return data.length(); }
 
 
-  // keep a pcid (procedure call id) to match up request+reply
-  void set_pcid(long pcid) { this->st.pcid = pcid; }
-  long get_pcid() { return st.pcid; }
 
   MOSDOp(entity_inst_t asker, int inc, long tid,
-         object_t oid, pg_t pg, epoch_t mapepoch, int op) :
+         object_t oid, ObjectLayout ol, epoch_t mapepoch, int op) :
     Message(MSG_OSD_OP) {
     memset(&st, 0, sizeof(st));
     this->st.client = asker;
@@ -168,7 +164,7 @@ private:
     this->st.reqid.tid = tid;
 
     this->st.oid = oid;
-    this->st.pg = pg;
+    this->st.layout = ol;
     this->st.map_epoch = mapepoch;
     this->st.op = op;
 
@@ -181,6 +177,8 @@ private:
 
   //void set_pg_role(int r) { st.pg_role = r; }
   //void set_rg_nrep(int n) { st.rg_nrep = n; }
+
+  void set_layout(const ObjectLayout& l) { st.layout = l; }
 
   void set_length(size_t l) { st.length = l; }
   void set_offset(size_t o) { st.offset = o; }
@@ -204,8 +202,7 @@ private:
     ::_encode(data, payload);
   }
 
-  virtual char *get_type_name() { return "oop"; }
-
+  virtual char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << st.reqid
 	<< " " << get_opname(st.op)

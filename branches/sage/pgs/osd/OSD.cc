@@ -361,20 +361,55 @@ int OSD::read_superblock()
 }
 
 
-// object locks
 
-PG *OSD::lock_pg(pg_t pgid) 
+
+
+// ======================================================
+// PG's
+
+PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 {
-  osd_lock.Lock();
-  PG *pg = _lock_pg(pgid);
-  osd_lock.Unlock();
+  dout(10) << "_create_lock_pg " << pgid << endl;
+
+  if (pg_map.count(pgid)) 
+    dout(0) << "_create_lock_pg on " << pgid << ", already have " << *pg_map[pgid] << endl;
+  
+  // create
+  PG *pg;
+  if (pgid.is_rep())
+    pg = new ReplicatedPG(this, pgid);
+  else if (pgid.is_raid4())
+    pg = new RAID4PG(this, pgid);
+  else 
+    assert(0);
+
+  assert(pg_map.count(pgid) == 0);
+  pg_map[pgid] = pg;
+
+  // lock
+  pg->lock();
+  pg_lock.insert(pgid);
+
+  pg->get(); // because it's in pg_map
+  pg->get(); // because we're locking it
+
+  // create collection
+  assert(!store->collection_exists(pgid));
+  t.create_collection(pgid);
+
   return pg;
+}
+
+bool OSD::_have_pg(pg_t pgid)
+{
+  return pg_map.count(pgid);
 }
 
 PG *OSD::_lock_pg(pg_t pgid)
 {
   assert(pg_map.count(pgid));
 
+  // wait?
   if (pg_lock.count(pgid)) {
     Cond c;
     dout(15) << "lock_pg " << pgid << " waiting as " << &c << endl;
@@ -396,14 +431,10 @@ PG *OSD::_lock_pg(pg_t pgid)
   dout(15) << "lock_pg " << pgid << endl;
   pg_lock.insert(pgid);
 
-  return pg_map[pgid];  
-}
-
-void OSD::unlock_pg(pg_t pgid) 
-{
-  osd_lock.Lock();
-  _unlock_pg(pgid);
-  osd_lock.Unlock();
+  PG *pg = pg_map[pgid];
+  pg->lock();
+  pg->get();    // because we're "locking" it and returning a pointer copy.
+  return pg;
 }
 
 void OSD::_unlock_pg(pg_t pgid) 
@@ -411,6 +442,8 @@ void OSD::_unlock_pg(pg_t pgid)
   // unlock
   assert(pg_lock.count(pgid));
   pg_lock.erase(pgid);
+
+  pg_map[pgid]->put_unlock();
 
   if (pg_lock_waiters.count(pgid)) {
     // someone is in line
@@ -424,9 +457,14 @@ void OSD::_unlock_pg(pg_t pgid)
   }
 }
 
-void OSD::_remove_pg(pg_t pgid) 
+void OSD::_remove_unlock_pg(PG *pg) 
 {
-  dout(10) << "_remove_pg " << pgid << endl;
+  pg_t pgid = pg->info.pgid;
+
+  dout(10) << "_remove_unlock_pg " << pgid << endl;
+
+  // there shouldn't be any waiters, since we're a stray, and pg is presumably clean0.
+  assert(pg_lock_waiters.count(pgid) == 0);
 
   // remove from store
   list<object_t> olist;
@@ -435,19 +473,126 @@ void OSD::_remove_pg(pg_t pgid)
   ObjectStore::Transaction t;
   {
     for (list<object_t>::iterator p = olist.begin();
-         p != olist.end();
-         p++)
+	 p != olist.end();
+	 p++)
       t.remove(*p);
     t.remove_collection(pgid);
     t.remove(pgid.to_object());  // log too
   }
   store->apply_transaction(t);
-  
-  // hose from memory
-  delete pg_map[pgid];
+
+  // mark deleted
+  pg->mark_deleted();
+
+  // unlock
+  pg_lock.erase(pgid);
+  pg->put();   
+
+  // remove from map
   pg_map.erase(pgid);
+  pg->put_unlock();     // will delete, if last reference
 }
 
+
+
+void OSD::load_pgs()
+{
+  dout(10) << "load_pgs" << endl;
+  assert(pg_map.empty());
+
+  list<coll_t> ls;
+  store->list_collections(ls);
+
+  for (list<coll_t>::iterator it = ls.begin();
+       it != ls.end();
+       it++) {
+    pg_t pgid = *it;
+
+    PG *pg = 0;
+    if (pgid.is_rep())
+      new ReplicatedPG(this, pgid);
+    else if (pgid.is_raid4())
+      new RAID4PG(this, pgid);
+    else 
+      assert(0);
+    pg_map[pgid] = pg;
+    pg->get();
+
+    // read pg info
+    store->collection_getattr(pgid, "info", &pg->info, sizeof(pg->info));
+    
+    // read pg log
+    pg->read_log(store);
+
+    // generate state for current mapping
+    int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);
+    int role = osdmap->calc_pg_role(whoami, pg->acting, nrep);
+    pg->set_role(role);
+
+    dout(10) << "load_pgs loaded " << *pg << " " << pg->log << endl;
+  }
+}
+ 
+
+
+/**
+ * check epochs starting from start to verify the pg acting set hasn't changed
+ * up until now
+ */
+void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
+{
+  dout(15) << "project_pg_history " << pgid
+           << " from " << from << " to " << osdmap->get_epoch()
+           << ", start " << h
+           << endl;
+
+  vector<int> last;
+  osdmap->pg_to_acting_osds(pgid, last);
+
+  for (epoch_t e = osdmap->get_epoch()-1;
+       e >= from;
+       e--) {
+    // verify during intermediate epoch
+    OSDMap oldmap;
+    get_map(e, oldmap);
+
+    vector<int> acting;
+    oldmap.pg_to_acting_osds(pgid, acting);
+
+    // acting set change?
+    if (acting != last && 
+        e <= h.same_since) {
+      dout(15) << "project_pg_history " << pgid << " changed in " << e+1 
+                << " from " << acting << " -> " << last << endl;
+      h.same_since = e+1;
+    }
+
+    // primary change?
+    if (!(!acting.empty() && !last.empty() && acting[0] == last[0]) &&
+        e <= h.same_primary_since) {
+      dout(15) << "project_pg_history " << pgid << " primary changed in " << e+1 << endl;
+      h.same_primary_since = e+1;
+    
+      if (g_conf.osd_rep == OSD_REP_PRIMARY)
+        h.same_acker_since = h.same_primary_since;
+    }
+
+    // acker change?
+    if (g_conf.osd_rep != OSD_REP_PRIMARY) {
+      if (!(!acting.empty() && !last.empty() && acting[acting.size()-1] == last[last.size()-1]) &&
+          e <= h.same_acker_since) {
+        dout(15) << "project_pg_history " << pgid << " acker changed in " << e+1 << endl;
+        h.same_acker_since = e+1;
+      }
+    }
+
+    if (h.same_since > e &&
+        h.same_primary_since > e &&
+        h.same_acker_since > e) break;
+  }
+
+  dout(15) << "project_pg_history end " << h << endl;
+}
 
 void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 {
@@ -1016,7 +1161,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	int role = osdmap->calc_pg_role(whoami, acting, nrep);
 	if (role < 0) continue;
 	
-	PG *pg = create_pg(pgid, t);
+	PG *pg = _create_lock_pg(pgid, t);
 	pg->set_role(role);
 	pg->acting.swap(acting);
 	pg->last_epoch_started_any = 
@@ -1025,8 +1170,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  pg->info.history.same_primary_since = 
 	    pg->info.history.same_acker_since = osdmap->get_epoch();
 	pg->activate(t);
-	
+
 	dout(7) << "created " << *pg << endl;
+	_unlock_pg(pgid);
       }
 
       for (ps_t ps = 0; ps < maxlps; ++ps) {
@@ -1036,7 +1182,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
 	int role = osdmap->calc_pg_role(whoami, acting, nrep);
 	
-	PG *pg = create_pg(pgid, t);
+	PG *pg = _create_lock_pg(pgid, t);
 	pg->acting.swap(acting);
 	pg->set_role(role);
 	pg->last_epoch_started_any = 
@@ -1047,11 +1193,11 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	pg->activate(t);
 	
 	dout(7) << "created " << *pg << endl;
+	_unlock_pg(pgid);
       }
     }
 
     // raided
-    /*
     for (int size = g_conf.osd_min_raid_width;
 	 size <= g_conf.osd_max_raid_width;
 	 size++) {
@@ -1062,7 +1208,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	int role = osdmap->calc_pg_role(whoami, acting, nrep);
 	if (role < 0) continue;
 	
-	PG *pg = create_pg(pgid, t);
+	PG *pg = _create_lock_pg(pgid, t);
 	pg->set_role(role);
 	pg->acting.swap(acting);
 	pg->last_epoch_started_any = 
@@ -1071,8 +1217,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  pg->info.history.same_primary_since = 
 	    pg->info.history.same_acker_since = osdmap->get_epoch();
 	pg->activate(t);
-	
+
 	dout(7) << "created " << *pg << endl;
+	_unlock_pg(pgid);
       }
 
       for (ps_t ps = 0; ps < maxlps; ++ps) {
@@ -1082,7 +1229,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	int nrep = osdmap->pg_to_acting_osds(pgid, acting);
 	int role = osdmap->calc_pg_role(whoami, acting, nrep);
 	
-	PG *pg = create_pg(pgid, t);
+	PG *pg = _create_lock_pg(pgid, t);
 	pg->acting.swap(acting);
 	pg->set_role(role);
 	pg->last_epoch_started_any = 
@@ -1093,9 +1240,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	pg->activate(t);
 	
 	dout(7) << "created " << *pg << endl;
+	_unlock_pg(pgid);
       }
     }
-    */
     dout(1) << "mkfs done, created " << pg_map.size() << " pgs" << endl;
 
   } else {
@@ -1392,142 +1539,6 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 
 
 
-// ======================================================
-// PG's
-
-bool OSD::pg_exists(pg_t pgid) 
-{
-  return store->collection_exists(pgid);
-}
-
-PG *OSD::create_pg(pg_t pgid, ObjectStore::Transaction& t)
-{
-  if (pg_map.count(pgid)) {
-    dout(0) << "create_pg on " << pgid << ", already have " << *pg_map[pgid] << endl;
-  }
-  assert(pg_map.count(pgid) == 0);
-  assert(!pg_exists(pgid));
-
-  PG *pg;
-  if (pgid.is_rep())
-    pg = new ReplicatedPG(this, pgid);
-  else if (pgid.is_raid4())
-    assert(0); //pg = new RAID4PG(this, pgid);
-  else 
-    assert(0);
-  pg_map[pgid] = pg;
-
-  t.create_collection(pgid);
-
-  return pg;
-}
-
-
-PG *OSD::get_pg(pg_t pgid)
-{
-  if (pg_map.count(pgid))
-    return pg_map[pgid];
-  return 0;
-}
-
-void OSD::load_pgs()
-{
-  dout(10) << "load_pgs" << endl;
-  assert(pg_map.empty());
-
-  list<coll_t> ls;
-  store->list_collections(ls);
-
-  for (list<coll_t>::iterator it = ls.begin();
-       it != ls.end();
-       it++) {
-    pg_t pgid = *it;
-
-    PG *pg = 0;
-    if (pgid.is_rep())
-      new ReplicatedPG(this, pgid);
-    else if (pgid.is_raid4())
-      assert(0); //new RAID4PG(this, pgid);
-    else 
-      assert(0);
-    pg_map[pgid] = pg;
-
-    // read pg info
-    store->collection_getattr(pgid, "info", &pg->info, sizeof(pg->info));
-    
-    // read pg log
-    pg->read_log(store);
-
-    // generate state for current mapping
-    int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);
-    int role = osdmap->calc_pg_role(whoami, pg->acting, nrep);
-    pg->set_role(role);
-
-    dout(10) << "load_pgs loaded " << *pg << " " << pg->log << endl;
-  }
-}
- 
-
-
-/**
- * check epochs starting from start to verify the pg acting set hasn't changed
- * up until now
- */
-void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from)
-{
-  dout(15) << "project_pg_history " << pgid
-           << " from " << from << " to " << osdmap->get_epoch()
-           << ", start " << h
-           << endl;
-
-  vector<int> last;
-  osdmap->pg_to_acting_osds(pgid, last);
-
-  for (epoch_t e = osdmap->get_epoch()-1;
-       e >= from;
-       e--) {
-    // verify during intermediate epoch
-    OSDMap oldmap;
-    get_map(e, oldmap);
-
-    vector<int> acting;
-    oldmap.pg_to_acting_osds(pgid, acting);
-
-    // acting set change?
-    if (acting != last && 
-        e <= h.same_since) {
-      dout(15) << "project_pg_history " << pgid << " changed in " << e+1 
-                << " from " << acting << " -> " << last << endl;
-      h.same_since = e+1;
-    }
-
-    // primary change?
-    if (!(!acting.empty() && !last.empty() && acting[0] == last[0]) &&
-        e <= h.same_primary_since) {
-      dout(15) << "project_pg_history " << pgid << " primary changed in " << e+1 << endl;
-      h.same_primary_since = e+1;
-    
-      if (g_conf.osd_rep == OSD_REP_PRIMARY)
-        h.same_acker_since = h.same_primary_since;
-    }
-
-    // acker change?
-    if (g_conf.osd_rep != OSD_REP_PRIMARY) {
-      if (!(!acting.empty() && !last.empty() && acting[acting.size()-1] == last[last.size()-1]) &&
-          e <= h.same_acker_since) {
-        dout(15) << "project_pg_history " << pgid << " acker changed in " << e+1 << endl;
-        h.same_acker_since = e+1;
-      }
-    }
-
-    if (h.same_since > e &&
-        h.same_primary_since > e &&
-        h.same_acker_since > e) break;
-  }
-
-  dout(15) << "project_pg_history end " << h << endl;
-}
-
 
 /** do_notifies
  * Send an MOSDPGNotify to a primary, with a list of PGs that I have
@@ -1608,7 +1619,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       }
       
       // ok, create PG!
-      pg = create_pg(pgid, t);
+      pg = _create_lock_pg(pgid, t);
       osdmap->pg_to_acting_osds(pgid, pg->acting);
       pg->set_role(0);
       pg->info.history = history;
@@ -1625,8 +1636,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
         take_waiters(waiting_for_pg[pgid]);
         waiting_for_pg.erase(pgid);
       }
-
-      _lock_pg(pgid);
     } else {
       // already had it.  am i (still) the primary?
       pg = _lock_pg(pgid);
@@ -1809,7 +1818,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       assert(role > 0);
 
       ObjectStore::Transaction t;
-      pg = create_pg(pgid, t);
+      pg = _create_lock_pg(pgid, t);
       pg->acting.swap( acting );
       pg->set_role(role);
       pg->info.history = history;
@@ -1818,7 +1827,6 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       store->apply_transaction(t);
 
       dout(10) << *pg << " dne (before), but i am role " << role << endl;
-      _lock_pg(pgid);
     } else {
       pg = _lock_pg(pgid);
       
@@ -1908,11 +1916,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     dout(10) << *pg << " removing." << endl;
     assert(pg->get_role() == -1);
     
-    _remove_pg(pgid);
-
-    // unlock.  there shouldn't be any waiters, since we're a stray, and pg is presumably clean0.
-    assert(pg_lock_waiters.count(pgid) == 0);
-    _unlock_pg(pgid);
+    _remove_unlock_pg(pg);
   }
 
   delete m;
@@ -1929,7 +1933,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 void OSD::handle_op(MOSDOp *op)
 {
   const pg_t pgid = op->get_pg();
-  PG *pg = get_pg(pgid);
+  PG *pg = _have_pg(pgid) ? _lock_pg(pgid):0;
 
 
   logger->set("buf", buffer_total_alloc);
@@ -1940,7 +1944,10 @@ void OSD::handle_op(MOSDOp *op)
 
 
   // require same or newer map
-  if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+  if (!require_same_or_newer_map(op, op->get_map_epoch())) {
+    _unlock_pg(pgid);
+    return;
+  }
 
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
@@ -1961,6 +1968,7 @@ void OSD::handle_op(MOSDOp *op)
               << pgid 
               << ", waiting" << endl;
       waiting_for_pg[pgid].push_back(op);
+      _unlock_pg(pgid);
       return;
     }
 
@@ -1970,6 +1978,7 @@ void OSD::handle_op(MOSDOp *op)
 	      << " after " << op->get_map_epoch() 
 	      << ", dropping" << endl;
       assert(op->get_map_epoch() < osdmap->get_epoch());
+      _unlock_pg(pgid);
       delete op;
       return;
     }
@@ -1979,6 +1988,7 @@ void OSD::handle_op(MOSDOp *op)
 	      << " after " << op->get_map_epoch() 
 	      << ", dropping" << endl;
       assert(op->get_map_epoch() < osdmap->get_epoch());
+      _unlock_pg(pgid);
       delete op;
       return;
     }
@@ -1991,6 +2001,7 @@ void OSD::handle_op(MOSDOp *op)
           dout(7) << *pg << " queueing replay at " << op->get_version()
                   << " for " << *op << endl;
           pg->replay_queue[op->get_version()] = op;
+	  _unlock_pg(pgid);
           return;
         } else {
           dout(7) << *pg << " replay at " << op->get_version() << " <= " << pg->info.last_update 
@@ -2001,12 +2012,14 @@ void OSD::handle_op(MOSDOp *op)
       
       dout(7) << *pg << " not active (yet)" << endl;
       pg->waiting_for_active.push_back(op);
+      _unlock_pg(pgid);
       return;
     }
     
     // missing object?
     if (pg->is_missing_object(op->get_oid())) {
       pg->wait_for_missing_object(op->get_oid(), op);
+      _unlock_pg(pgid);
       return;
     }
     /*
@@ -2054,6 +2067,7 @@ void OSD::handle_op(MOSDOp *op)
 	  int peer = pg->acting[1];
 	  dout(-10) << "fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << endl;
 	  messenger->send_message(op, osdmap->get_inst(peer));
+	  _unlock_pg(pgid);
 	  return;
 	}
       }
@@ -2077,6 +2091,7 @@ void OSD::handle_op(MOSDOp *op)
 			<< " osd" << peer
 			<< endl;
 	      messenger->send_message(op, osdmap->get_inst(peer));
+	      _unlock_pg(pgid);
 	      return;
 	    }
 	  }
@@ -2101,6 +2116,7 @@ void OSD::handle_op(MOSDOp *op)
       dout(10) << "handle_rep_op pg changed " << pg->info.history
                << " after " << op->get_map_epoch() 
                << ", dropping" << endl;
+      _unlock_pg(pgid);
       delete op;
       return;
     }
@@ -2110,10 +2126,17 @@ void OSD::handle_op(MOSDOp *op)
   }
   
   if (g_conf.osd_maxthreads < 1) {
-    _lock_pg(pgid);
-    do_op(op, pg); // do it now
+
+    if (op->get_type() == MSG_OSD_OP)
+      pg->do_op((MOSDOp*)op); // do it now
+    else if (op->get_type() == MSG_OSD_OPREPLY)
+      pg->do_op_reply((MOSDOpReply*)op);
+    else 
+      assert(0);
+
     _unlock_pg(pgid);
   } else {
+    _unlock_pg(pgid);
     // queue for worker threads
     /*if (read) 
       enqueue_op(0, op);     // no locking needed for reads
@@ -2136,7 +2159,6 @@ void OSD::handle_op_reply(MOSDOpReply *op)
   
   // make sure we have the pg
   const pg_t pgid = op->get_pg();
-  PG *pg = get_pg(pgid);
 
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
@@ -2144,14 +2166,15 @@ void OSD::handle_op_reply(MOSDOpReply *op)
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
 
-  if (!pg) {
+  if (!_have_pg(pgid)) {
     // hmm.
     delete op;
-  }
+    return;
+  } 
 
   if (g_conf.osd_maxthreads < 1) {
-    _lock_pg(pgid);
-    do_op(op, pg); // do it now
+    PG *pg = _lock_pg(pgid);
+    pg->do_op_reply(op); // do it now
     _unlock_pg(pgid);
   } else {
     enqueue_op(pgid, op);     // queue for worker threads
@@ -2211,7 +2234,12 @@ void OSD::dequeue_op(pg_t pgid)
   osd_lock.Unlock();
 
   // do it
-  do_op(op, pg);
+  if (op->get_type() == MSG_OSD_OP)
+    pg->do_op((MOSDOp*)op); // do it now
+  else if (op->get_type() == MSG_OSD_OPREPLY)
+    pg->do_op_reply((MOSDOpReply*)op);
+  else 
+    assert(0);
 
   // finish
   osd_lock.Lock();
@@ -2235,93 +2263,6 @@ void OSD::dequeue_op(pg_t pgid)
   osd_lock.Unlock();
 }
 
-
-
-/** do_op - do an op
- * object lock will be held (if multithreaded)
- * osd_lock NOT held.
- */
-void OSD::do_op(Message *m, PG *pg) 
-{
-  //dout(15) << "do_op " << *m << endl;
-
-  if (m->get_type() == MSG_OSD_OP) {
-    MOSDOp *op = (MOSDOp*)m;
-
-    logger->inc("op");
-
-    switch (op->get_op()) {
-      
-      // reads
-    case OSD_OP_READ:
-      if (block_if_wrlocked(op)) 
-	return;
-      pg->op_read(op);
-      break;
-    case OSD_OP_STAT:
-      if (block_if_wrlocked(op)) 
-	return;
-      pg->op_stat(op);
-      break;
-      
-      // rep stuff
-    case OSD_OP_PULL:
-      pg->op_pull(op);
-      break;
-    case OSD_OP_PUSH:
-      pg->op_push(op);
-      break;
-      
-      // writes
-    case OSD_OP_WRNOOP:
-    case OSD_OP_WRITE:
-    case OSD_OP_ZERO:
-    case OSD_OP_DELETE:
-    case OSD_OP_TRUNCATE:
-    case OSD_OP_WRLOCK:
-    case OSD_OP_WRUNLOCK:
-    case OSD_OP_RDLOCK:
-    case OSD_OP_RDUNLOCK:
-    case OSD_OP_UPLOCK:
-    case OSD_OP_DNLOCK:
-      if (op->get_source().is_osd()) {
-        pg->op_rep_modify(op);
-      } else {
-	// locked by someone else?
-	// for _any_ op type -- eg only the locker can unlock!
-	if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
-	    block_if_wrlocked(op)) 
-	  return; // op will be handled later, after the object unlocks
-	
-	// share latest osd map with rest of pg?
-	osd_lock.Lock();
-	{
-	  for (unsigned i=1; i<pg->acting.size(); i++) {
-	    int osd = pg->acting[i];
-	    _share_map_outgoing( osdmap->get_inst(osd) ); 
-	  }
-	}
-	osd_lock.Unlock();
-	
-	// go go gadget pg
-        pg->op_modify(op);
-
-	if (op->get_op() == OSD_OP_WRITE) {
-	  logger->inc("c_wr");
-	  logger->inc("c_wrb", op->get_length());
-	}
-      }
-      break;
-      
-    default:
-      assert(0);
-    }
-  } 
-  else if (m->get_type() == MSG_OSD_OPREPLY) {
-    pg->op_reply((MOSDOpReply*)m);
-  } else
-    assert(0);
-}
 
 
 

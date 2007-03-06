@@ -33,5 +33,92 @@
 
 
 
+void RAID4PG::do_op(MOSDOp *op)
+{
+
+
+}
+
+
+
+void RAID4PG::do_op_reply(MOSDOpReply *reply)
+{
+
+}
+
+
+
+// -----------------
+// pg changes
+
+bool RAID4PG::same_for_read_since(epoch_t e)
+{
+  return e >= info.history.same_since;   // whole pg set same
+}
+
+bool RAID4PG::same_for_modify_since(epoch_t e)
+{
+  return e >= info.history.same_since;   // whole pg set same
+}
+
+bool RAID4PG::same_for_rep_modify_since(epoch_t e)
+{
+  return e >= info.history.same_since;   // whole pg set same
+}
+
+
+// -----------------
+// RECOVERY
+
+bool RAID4PG::is_missing_object(object_t oid)
+{
+  return false;
+}
+
+void RAID4PG::wait_for_missing_object(object_t oid, MOSDOp *op)
+{
+  assert(0);
+}
+
+void RAID4PG::note_failed_osd(int o)
+{
+  dout(10) << "note_failed_osd osd" << o << endl;
+  assert(0);
+}
+
+void RAID4PG::on_acker_change()
+{
+  dout(10) << "on_acker_change" << endl;
+  assert(0);
+}
+
+
+void RAID4PG::on_role_change()
+{
+  dout(10) << "on_role_change" << endl;
+  assert(0);
+}
+
+
+void RAID4PG::clean_up_local(ObjectStore::Transaction&)
+{
+}
+
+void RAID4PG::cancel_recovery() 
+{
+  assert(0);
+}
+
+bool RAID4PG::do_recovery() 
+{
+  assert(0);
+  return false;
+}
+
+void RAID4PG::clean_replicas() 
+{
+  assert(0);
+}
+
 
 

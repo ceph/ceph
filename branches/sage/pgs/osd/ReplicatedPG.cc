@@ -94,6 +94,91 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, MOSDOp *op)
 
 
 
+
+/** do_op - do an op
+ * pg lock will be held (if multithreaded)
+ * osd_lock NOT held.
+ */
+void ReplicatedPG::do_op(MOSDOp *op) 
+{
+  //dout(15) << "do_op " << *op << endl;
+
+  osd->logger->inc("op");
+
+  switch (op->get_op()) {
+    
+    // reads
+  case OSD_OP_READ:
+    if (osd->block_if_wrlocked(op)) 
+      return;
+    op_read(op);
+    break;
+  case OSD_OP_STAT:
+    if (osd->block_if_wrlocked(op)) 
+      return;
+    op_stat(op);
+    break;
+    
+    // rep stuff
+  case OSD_OP_PULL:
+    op_pull(op);
+    break;
+  case OSD_OP_PUSH:
+    op_push(op);
+    break;
+    
+    // writes
+  case OSD_OP_WRNOOP:
+  case OSD_OP_WRITE:
+  case OSD_OP_ZERO:
+  case OSD_OP_DELETE:
+  case OSD_OP_TRUNCATE:
+  case OSD_OP_WRLOCK:
+  case OSD_OP_WRUNLOCK:
+  case OSD_OP_RDLOCK:
+  case OSD_OP_RDUNLOCK:
+  case OSD_OP_UPLOCK:
+  case OSD_OP_DNLOCK:
+    if (op->get_source().is_osd()) {
+      op_rep_modify(op);
+    } else {
+      // go go gadget pg
+      op_modify(op);
+      
+      if (op->get_op() == OSD_OP_WRITE) {
+	osd->logger->inc("c_wr");
+	osd->logger->inc("c_wrb", op->get_length());
+      }
+    }
+    break;
+    
+  default:
+    assert(0);
+  }
+}
+
+void ReplicatedPG::do_op_reply(MOSDOpReply *r)
+{
+  // must be replication.
+  tid_t rep_tid = r->get_rep_tid();
+  
+  if (rep_gather.count(rep_tid)) {
+    // oh, good.
+    int fromosd = r->get_source().num();
+    repop_ack(rep_gather[rep_tid], 
+	      r->get_result(), r->get_commit(), 
+	      fromosd, 
+	      r->get_pg_complete_thru());
+    delete r;
+  } else {
+    // early ack.
+    waiting_for_repop[rep_tid].push_back(r);
+  }
+}
+
+
+
+
 // ========================================================================
 // READS
 
@@ -358,19 +443,19 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t,
 // ========================================================================
 // rep op gather
 
-class C_OSD_WriteCommit : public Context {
+class C_OSD_ModifyCommit : public Context {
 public:
-  OSD *osd;
-  pg_t pgid;
+  ReplicatedPG *pg;
   tid_t rep_tid;
   eversion_t pg_last_complete;
-  C_OSD_WriteCommit(OSD *o, pg_t p, tid_t rt, eversion_t lc) : osd(o), pgid(p), rep_tid(rt), pg_last_complete(lc) {}
+  C_OSD_ModifyCommit(ReplicatedPG *p, tid_t rt, eversion_t lc) : pg(p), rep_tid(rt), pg_last_complete(lc) {
+    pg->get();  // we're copying the pointer
+  }
   void finish(int r) {
-    ReplicatedPG *pg = (ReplicatedPG*)(osd->_lock_pg(pgid));
-    if (pg) {
+    pg->lock();
+    if (!pg->is_deleted()) 
       pg->op_modify_commit(rep_tid, pg_last_complete);
-      osd->_unlock_pg(pg->info.pgid);
-    }
+    pg->put_unlock();
   }
 };
 
@@ -386,7 +471,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   dout(10) << "apply_repop  applying update on " << *repop << endl;
   assert(!repop->applied);
 
-  Context *oncommit = new C_OSD_WriteCommit(osd, info.pgid, repop->rep_tid, repop->pg_local_last_complete);
+  Context *oncommit = new C_OSD_ModifyCommit(this, repop->rep_tid, repop->pg_local_last_complete);
   unsigned r = osd->store->apply_transaction(repop->t, oncommit);
   if (r)
     dout(-10) << "apply_repop  apply transaction return " << r << " on " << *repop << endl;
@@ -474,7 +559,7 @@ void ReplicatedPG::issue_repop(MOSDOp *op, int dest)
   // forward the write/update/whatever
   MOSDOp *wr = new MOSDOp(op->get_client_inst(), op->get_client_inc(), op->get_reqid().tid,
                           oid,
-                          info.pgid,
+                          ObjectLayout(info.pgid),
                           osd->osdmap->get_epoch(),
                           op->get_op());
   wr->get_data() = op->get_data();   // _copy_ bufferlist
@@ -662,7 +747,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
 // commit (to disk) callback
 class C_OSD_RepModifyCommit : public Context {
 public:
-  OSD *osd;
+  ReplicatedPG *pg;
   MOSDOp *op;
   int destosd;
 
@@ -673,9 +758,11 @@ public:
   bool acked;
   bool waiting;
 
-  C_OSD_RepModifyCommit(OSD *o, MOSDOp *oo, int dosd, eversion_t lc) : 
-    osd(o), op(oo), destosd(dosd), pg_last_complete(lc),
-    acked(false), waiting(false) { }
+  C_OSD_RepModifyCommit(ReplicatedPG *p, MOSDOp *oo, int dosd, eversion_t lc) : 
+    pg(p), op(oo), destosd(dosd), pg_last_complete(lc),
+    acked(false), waiting(false) { 
+    pg->get();  // we're copying the pointer.
+  }
   void finish(int r) {
     lock.Lock();
     assert(!waiting);
@@ -686,9 +773,9 @@ public:
     assert(acked);
     lock.Unlock();
 
-    PG *pg = osd->lock_pg(op->get_pg());
+    pg->lock();
     pg->op_rep_modify_commit(op, destosd, pg_last_complete);
-    osd->unlock_pg(op->get_pg());
+    pg->put_unlock();
   }
   void ack() {
     lock.Lock();
@@ -709,6 +796,22 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   int whoami = osd->get_nodeid();
   object_t oid = op->get_oid();
   const char *opname = MOSDOp::get_opname(op->get_op());
+
+  // locked by someone else?
+  // for _any_ op type -- eg only the locker can unlock!
+  if (op->get_op() != OSD_OP_WRNOOP &&  // except WRNOOP; we just want to flush
+      osd->block_if_wrlocked(op)) 
+    return; // op will be handled later, after the object unlocks
+  
+  // share latest osd map with rest of pg?
+  osd->osd_lock.Lock();
+  {
+    for (unsigned i=1; i<acting.size(); i++) {
+      osd->_share_map_outgoing( osd->osdmap->get_inst(acting[i]) ); 
+    }
+  }
+  osd->osd_lock.Unlock();
+  
 
   // dup op?
   if (is_dup(op->get_reqid())) {
@@ -793,7 +896,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     prepare_log_transaction(t, op, nv, crev, op->get_rev(), peers_complete_thru);
     prepare_op_transaction(t, op, nv, crev, op->get_rev());
 
-    C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(osd, op, get_acker(), 
+    C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, get_acker(), 
                                                                 info.last_complete);
     unsigned r = osd->store->apply_transaction(t, oncommit);
     if (r != 0 &&   // no errors
@@ -897,7 +1000,7 @@ void ReplicatedPG::op_rep_modify(MOSDOp *op)
       prepare_op_transaction(t, op, nv, crev, op->get_rev());
     }
 
-    oncommit = new C_OSD_RepModifyCommit(osd, op, ackerosd, info.last_complete);
+    oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
 
     // apply log update. and possibly update itself.
     unsigned tr = osd->store->apply_transaction(t, oncommit);
@@ -1151,25 +1254,6 @@ void ReplicatedPG::op_push(MOSDOp *op)
 
 
 
-
-void ReplicatedPG::op_reply(MOSDOpReply *r)
-{
-  // must be replication.
-  tid_t rep_tid = r->get_rep_tid();
-  
-  if (rep_gather.count(rep_tid)) {
-    // oh, good.
-    int fromosd = r->get_source().num();
-    repop_ack(rep_gather[rep_tid], 
-	      r->get_result(), r->get_commit(), 
-	      fromosd, 
-	      r->get_pg_complete_thru());
-    delete r;
-  } else {
-    // early ack.
-    waiting_for_repop[rep_tid].push_back(r);
-  }
-}
 
 
 

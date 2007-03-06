@@ -264,7 +264,7 @@ private:
   /****   mapping facilities   ****/
 
   // oid -> pg
-  pg_t object_to_pg(object_t oid, FileLayout& layout) {
+  ObjectLayout file_to_object_layout(object_t oid, FileLayout& layout) {
     static crush::Hash H(777);
     
     // calculate ps (placement seed)
@@ -299,8 +299,9 @@ private:
       assert(0);
     }
 
-    // construct pg
-    return pg_t(layout.pg_type, layout.pg_size, ps, layout.preferred);
+    // construct object layout
+    return ObjectLayout(pg_t(layout.pg_type, layout.pg_size, ps, layout.preferred), 
+			layout.object_stripe_unit);
   }
 
 

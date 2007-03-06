@@ -379,8 +379,46 @@ public:
   static const int STATE_STRAY =  16; // i must notify the primary i exist.
 
 
- protected:
+protected:
   OSD *osd;
+
+  /** locking and reference counting.
+   * I destroy myself when the reference count hits zero.
+   * lock() should be called before doing anything.
+   * get() should be called on pointer copy (to another thread, etc.).
+   * put() should be called on destruction of some previously copied pointer.
+   * put_unlock() when done with the current pointer (_most common_).
+   */  
+  Mutex _lock;
+  int  ref;
+  bool deleted;
+
+public:
+  void lock() {
+    //cout << info.pgid << " lock" << endl;
+    _lock.Lock();
+  }
+  void get() {
+    //cout << info.pgid << " get " << ref << endl;
+    assert(_lock.is_locked());
+    ++ref; 
+  }
+  void put() { 
+    //cout << info.pgid << " put " << ref << endl;
+    assert(_lock.is_locked());
+    --ref; 
+    assert(ref > 0);  // last put must be a put_unlock.
+  }
+  void put_unlock() { 
+    //cout << info.pgid << " put_unlock " << ref << endl;
+    assert(_lock.is_locked());
+    --ref; 
+    _lock.Unlock();
+    if (ref == 0) delete this;
+  }
+
+  void mark_deleted() { deleted = true; }
+  bool is_deleted() { return deleted; }
 
 public:
   // pg state
@@ -481,12 +519,12 @@ public:
     return 0;
   }
 
-  virtual void op_rep_modify_commit(MOSDOp *op, int ackerosd, eversion_t last_complete) = 0;
   friend class C_OSD_RepModify_Commit;
 
  public:  
   PG(OSD *o, pg_t p) : 
     osd(o), 
+    ref(0), deleted(false),
     info(p),
     role(0),
     state(0),
@@ -558,16 +596,9 @@ public:
 
 
 
-
-
   // abstract bits
-  virtual void op_stat(MOSDOp *op) = 0;
-  virtual int op_read(MOSDOp *op) = 0;
-  virtual void op_modify(MOSDOp *op) = 0;
-  virtual void op_rep_modify(MOSDOp *op) = 0;
-  virtual void op_push(MOSDOp *op) = 0;
-  virtual void op_pull(MOSDOp *op) = 0;
-  virtual void op_reply(MOSDOpReply *op) = 0;
+  virtual void do_op(MOSDOp *op) = 0;
+  virtual void do_op_reply(MOSDOpReply *op) = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;

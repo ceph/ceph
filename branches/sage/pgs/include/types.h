@@ -141,11 +141,15 @@ struct FileLayout {
   char pg_size;        // pg size (num replicas, or raid4 stripe width)
   int  preferred;      // preferred primary osd?
 
+  // -- pg -> disk layout --
+  int  object_stripe_unit;  // for per-object raid
+
   FileLayout() { }
   FileLayout(int su, int sc, int os, int pgt, int pgs, int o=-1) :
     stripe_unit(su), stripe_count(sc), object_size(os), 
-    pg_type(pgt), pg_size(pgs),
-    preferred(o) {
+    pg_type(pgt), pg_size(pgs), preferred(o),
+    object_stripe_unit(su)   // note: bad default, we pbly want su/(pgs-1)
+  {
     assert(object_size % stripe_unit == 0);
   }
 

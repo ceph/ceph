@@ -100,7 +100,8 @@ protected:
 			      MOSDOp *op, eversion_t& version, 
 			      objectrev_t crev, objectrev_t rev);
 
-  friend class C_OSD_WriteCommit;
+  friend class C_OSD_ModifyCommit;
+  friend class C_OSD_RepModifyCommit;
 
 
   // pg on-disk content
@@ -113,6 +114,13 @@ protected:
   void clean_replicas();
 
 
+  void op_stat(MOSDOp *op);
+  int op_read(MOSDOp *op);
+  void op_modify(MOSDOp *op);
+  void op_rep_modify(MOSDOp *op);
+  void op_push(MOSDOp *op);
+  void op_pull(MOSDOp *op);
+
 
 
 
@@ -123,14 +131,9 @@ public:
   { }
   ~ReplicatedPG() {}
 
-  void op_stat(MOSDOp *op);
-  int op_read(MOSDOp *op);
-  void op_modify(MOSDOp *op);
-  void op_rep_modify(MOSDOp *op);
-  void op_push(MOSDOp *op);
-  void op_pull(MOSDOp *op);
 
-  void op_reply(MOSDOpReply *r);
+  void do_op(MOSDOp *op);
+  void do_op_reply(MOSDOpReply *r);
 
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);

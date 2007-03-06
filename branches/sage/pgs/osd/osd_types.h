@@ -110,7 +110,7 @@ inline ostream& operator<<(ostream& out, pg_t pg)
     out << pg.preferred() << 'p';
   out << hex << pg.ps() << dec;
 
-  out << "=" << hex << (__uint64_t)pg << dec;
+  //out << "=" << hex << (__uint64_t)pg << dec;
   return out;
 }
 
@@ -126,7 +126,27 @@ namespace __gnu_cxx {
 }
 
 
+/** ObjectLayout
+ *
+ * describes an object's placement and layout in the storage cluster.  
+ * most importatly, which pg it belongs to.
+ * if that pg is raided, it also specifies the object's stripe_unit.
+ */
+struct ObjectLayout {
+  pg_t pgid;            // what pg do i belong to
+  int  stripe_unit;     // for object raid in raid pgs
 
+  ObjectLayout() : pgid(0), stripe_unit(0) { }
+  ObjectLayout(pg_t p, int su=0) : pgid(p), stripe_unit(su) { }
+};
+
+inline ostream& operator<<(ostream& out, const ObjectLayout &ol)
+{
+  out << "pg" << ol.pgid;
+  if (ol.stripe_unit)
+    out << ".su=" << ol.stripe_unit;
+  return out;
+}
 
 
 
@@ -173,18 +193,19 @@ class ObjectExtent {
   size_t      length;    // in object
 
   objectrev_t rev;       // which revision?
-  pg_t        pgid;      // where to find the object
+
+  ObjectLayout layout;   // object layout (pgid, etc.)
 
   map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent() : start(0), length(0), rev(0), pgid(0) {}
-  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), rev(0), pgid(0) { }
+  ObjectExtent() : start(0), length(0), rev(0) {}
+  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l), rev(0) { }
 };
 
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
-             << ex.oid << " in " << hex << ex.pgid << dec
+             << ex.oid << " in " << ex.layout
              << " " << ex.start << "~" << ex.length
              << ")";
 }

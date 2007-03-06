@@ -386,7 +386,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), &onfinish->bl,
+  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), &onfinish->bl,
                  onfinish);
 }
 
@@ -463,7 +463,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->bl,
+  tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), bh->bl,
                               onack, oncommit);
 
   // set bh last_write_tid
@@ -701,7 +701,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
     dout(10) << "readx " << *ex_it << endl;
 
     // get Object cache
-    Object *o = get_object(ex_it->oid, ino);
+    Object *o = get_object(ex_it->oid, ino, ex_it->layout);
     
     // map extent into bufferheads
     map<off_t, BufferHead*> hits, missing, rx;
@@ -826,7 +826,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
        ex_it != wr->extents.end();
        ex_it++) {
     // get object cache
-    Object *o = get_object(ex_it->oid, ino);
+    Object *o = get_object(ex_it->oid, ino, ex_it->layout);
 
     // map it all into a single bufferhead.
     BufferHead *bh = o->map_write(wr);
@@ -967,7 +967,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
     for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
          i != by_oid.end();
          i++) {
-      Object *o = get_object(i->first, ino);
+      Object *o = get_object(i->first, ino, i->second.layout);
       rdlock(o);
     }
 
@@ -1008,7 +1008,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
     // make sure we aren't already locking/locked...
     object_t oid = wr->extents.front().oid;
     Object *o = 0;
-    if (objects.count(oid)) o = get_object(oid, ino);
+    if (objects.count(oid)) o = get_object(oid, ino, wr->extents.front().layout);
     if (!o || 
         (o->lock_state != Object::LOCK_WRLOCK &&
          o->lock_state != Object::LOCK_WRLOCKING &&
@@ -1041,7 +1041,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
   for (map<object_t,ObjectExtent>::iterator i = by_oid.begin();
        i != by_oid.end();
        i++) {
-    Object *o = get_object(i->first, ino);
+    Object *o = get_object(i->first, ino, i->second.layout);
     wrlock(o);
   }
   
@@ -1085,7 +1085,7 @@ void ObjectCacher::rdlock(Object *o)
     commit->tid = 
       ack->tid = 
       o->last_write_tid = 
-      objecter->lock(OSD_OP_RDLOCK, o->get_oid(), ack, commit);
+      objecter->lock(OSD_OP_RDLOCK, o->get_oid(), o->get_layout(), ack, commit);
   }
   
   // stake our claim.
@@ -1129,7 +1129,7 @@ void ObjectCacher::wrlock(Object *o)
     commit->tid = 
       ack->tid = 
       o->last_write_tid = 
-      objecter->lock(op, o->get_oid(), ack, commit);
+      objecter->lock(op, o->get_oid(), o->get_layout(), ack, commit);
   }
   
   // stake our claim.
@@ -1173,7 +1173,7 @@ void ObjectCacher::rdunlock(Object *o)
   commit->tid = 
     lockack->tid = 
     o->last_write_tid = 
-    objecter->lock(OSD_OP_RDUNLOCK, o->get_oid(), lockack, commit);
+    objecter->lock(OSD_OP_RDUNLOCK, o->get_oid(), o->get_layout(), lockack, commit);
 }
 
 void ObjectCacher::wrunlock(Object *o)
@@ -1206,7 +1206,7 @@ void ObjectCacher::wrunlock(Object *o)
   commit->tid = 
     lockack->tid = 
     o->last_write_tid = 
-    objecter->lock(op, o->get_oid(), lockack, commit);
+    objecter->lock(op, o->get_oid(), o->get_layout(), lockack, commit);
 }
 
 

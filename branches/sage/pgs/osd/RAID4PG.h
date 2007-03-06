@@ -32,9 +32,6 @@ protected:
   void prepare_op_transaction(ObjectStore::Transaction& t, 
 			      MOSDOp *op, eversion_t& version, 
 			      objectrev_t crev, objectrev_t rev);
-  
-public:
-  RAID4PG(OSD *o, pg_t p) : PG(o,p) { }
 
   void op_stat(MOSDOp *op);
   int op_read(MOSDOp *op);
@@ -43,7 +40,13 @@ public:
   void op_push(MOSDOp *op);
   void op_pull(MOSDOp *op);
 
-  void op_reply(MOSDOpReply *r);
+
+  
+public:
+  RAID4PG(OSD *o, pg_t p) : PG(o,p) { }
+
+  void do_op(MOSDOp *op);
+  void do_op_reply(MOSDOpReply *r);
 
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
@@ -56,6 +59,14 @@ public:
 
   void on_acker_change();
   void on_role_change();
+
+  void clean_up_local(ObjectStore::Transaction& t);
+
+  void cancel_recovery();
+  bool do_recovery();
+
+  void clean_replicas();
+
 
 };
 

@@ -79,7 +79,7 @@ void Filer::_probe(Probe *probe)
        p++) {
     dout(10) << "_probe  probing " << p->oid << endl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, c);
   }
 }
 
@@ -192,7 +192,7 @@ void Filer::file_to_extents(inode_t inode,
       ex = &object_extents[oid];
       ex->oid = oid;
       ex->rev = rev;
-      ex->pgid = objecter->osdmap->object_to_pg( oid, inode.layout );
+      ex->layout = objecter->osdmap->file_to_object_layout( oid, inode.layout );
     }
     
     // map range into object
@@ -219,7 +219,7 @@ void Filer::file_to_extents(inode_t inode,
     }
     ex->buffer_extents[cur-offset] = x_len;
         
-    dout(15) << "file_to_extents  " << *ex << " in " << ex->pgid << endl;
+    dout(15) << "file_to_extents  " << *ex << " in " << ex->layout << endl;
     //cout << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << endl;
     
     left -= x_len;
