@@ -114,11 +114,9 @@ public:
 
   hash_map<int, float> peer_qlen;
 
-  // unix group cache
-  //map<gid_t, CapGroup> unix_groups;
+  // user group cache
   map<hash_t, CapGroup> user_groups;
-  //map<gid_t, list<Cond*> > update_waiter_cond;
-  map<hash_t, list<Cond*> > update_waiter_cond;
+  map<hash_t, list<Message*> >update_waiter_op;
   void handle_osd_update_reply(MOSDUpdateReply *m);
   
   // per-pg locking (serializing)
@@ -274,7 +272,7 @@ public:
 
   // security ops
   bool check_request(class MOSDOp *op, ExtCap *op_capability);
-  void update_group(entity_inst_t client, gid_t group);
+  void update_group(entity_inst_t client, hash_t group, MOSDOp *op);
   bool verify_cap(ExtCap *cap);
 
   // messages

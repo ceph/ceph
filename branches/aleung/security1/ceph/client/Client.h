@@ -30,6 +30,7 @@
 #include "messages/MOSDUpdate.h"
 #include "messages/MOSDUpdateReply.h"
 #include "messages/MClientUpdate.h"
+#include "messages/MClientUpdateReply.h"
 
 //#include "msgthread.h"
 
@@ -47,6 +48,7 @@ using namespace CryptoLib;
 
 #include "crypto/Ticket.h"
 #include "crypto/CapGroup.h"
+#include "crypto/MerkleTree.h"
 
 // stl
 #include <set>
@@ -512,7 +514,10 @@ protected:
   map<uid_t,esignPub*> user_pub_key;
   map<uid_t,esignPriv*> user_priv_key;
 
-  map<gid_t, CapGroup> groups;
+  map<hash_t, CapGroup> groups;
+  map<hash_t, set<int> > update_waiter_osd;
+  //map<hash_t, list<Cond*> > update_waiter_cond;
+  
 
   // user map
   //map<uid_t, User*> user_identity;
@@ -521,6 +526,7 @@ protected:
   void put_user_ticket(Ticket *tk);
 
   void handle_osd_update(MOSDUpdate *m);
+  void handle_client_update_reply(MClientUpdateReply *m);
 
   // friends
   friend class SyntheticClient;

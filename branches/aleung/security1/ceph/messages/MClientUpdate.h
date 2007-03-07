@@ -16,10 +16,12 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
+#include "crypto/MerkleTree.h"
 
 class MClientUpdate : public Message {
 private:
   struct {
+    hash_t user_hash;
     gid_t group;
     entity_inst_t asking_client;
   } mds_update_st;
@@ -29,8 +31,16 @@ public:
     memset(&mds_update_st, 0, sizeof(mds_update_st));
     this->mds_update_st.group = gid;
   }
+  MClientUpdate (hash_t uhash) : Message(MSG_CLIENT_UPDATE) {
+    memset(&mds_update_st, 0, sizeof(mds_update_st));
+    this->mds_update_st.user_hash = uhash;
+  }
   
+  void set_group(gid_t ngroup) { mds_update_st.group = ngroup; }
   gid_t get_group () { return mds_update_st.group; }
+  void set_user_hash(hash_t nhash) { mds_update_st.user_hash = nhash; }
+  hash_t get_user_hash() { return mds_update_st.user_hash; }
+  entity_inst_t& get_client_inst() { return mds_update_st.asking_client; }
 
   virtual void encode_payload() {
     payload.append((char*)&mds_update_st, sizeof(mds_update_st));
@@ -43,6 +53,7 @@ public:
   virtual char *get_type_name() { return "mds_update"; }
   void print(ostream& out) {
     out << "mds_update(" << mds_update_st.group
+	<< ", " << mds_update_st.user_hash
 	<< ")";
   }
 };

@@ -713,18 +713,56 @@ void Client::put_user_ticket(Ticket *tk)
 }
 
 void Client::handle_osd_update(MOSDUpdate *m) {
-  // check local cache
-  MOSDUpdateReply *reply;
-  gid_t my_group = m->get_group();
-  cout << "Received a request to resolve group " << my_group << endl;
-  // if we dont have it cached, ask mds, cache it
-  //if (groups.count(my_group) == 0) {
-  //  MClientUpdate *update = new MClientUpdate(my_group);
-  //}
-  //reply = new MOSDUpdateReply(groups[my_group].get_list());
-  reply = new MOSDUpdateReply(my_group);
 
-  messenger->send_message(reply, m->get_source_inst());
+  hash_t my_hash = m->get_hash();
+  cout << "Client::handle_osd_request Received a request to resolve group " << my_hash << endl;
+
+  // if we dont have it cached, ask mds
+  // this will lose execution control
+  if (groups.count(my_hash) == 0) {
+    MClientUpdate *update = new MClientUpdate(my_hash);
+
+    // is anyone else already waiting for this hash?
+    if (update_waiter_osd.count(my_hash) == 0) {
+      dout(10) << "mds_group_update for " << my_hash << endl;
+      // FIXME choose mds (always choose 0)
+      messenger->send_message(update, mdsmap->get_inst(0), MDS_PORT_SERVER);
+    }
+    else
+      dout(10) << "mds_group_update for " << my_hash << endl;
+
+    update_waiter_osd[my_hash].insert(m->get_source().num());
+  }
+  // we have the group, hand it back
+  else {
+    MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash,
+						 groups[my_hash].get_list());
+    messenger->send_message(reply, m->get_source_inst());
+  }
+
+  // default test option (only for debug)
+  //reply = new MOSDUpdateReply(my_hash);
+  //messenger->send_message(reply, m->get_source_inst());
+
+}
+
+void Client::handle_client_update_reply(MClientUpdateReply *m) {
+  
+  hash_t my_hash = m->get_user_hash();
+  cout << "Client::handle_client_update_reply for " << my_hash << endl;
+
+  // cache the list
+  groups[my_hash].set_list(m->get_user_list());
+
+  MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list());
+
+  // wake the waiters and send them all a reply
+  for (set<int>::iterator oi = update_waiter_osd[my_hash].begin();
+       oi != update_waiter_osd[my_hash].end();
+       ++oi) {
+    messenger->send_message(reply, osdmap->get_inst(*oi));
+  }
+  
 }
 
 // ------------------------
@@ -746,7 +784,10 @@ void Client::dispatch(Message *m)
   case MSG_OSD_UPDATE:
     handle_osd_update((MOSDUpdate*)m);
     break;
-    
+  case MSG_CLIENT_UPDATE_REPLY:
+    handle_client_update_reply((MClientUpdateReply*)m);
+    break;
+
     // client
   case MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);

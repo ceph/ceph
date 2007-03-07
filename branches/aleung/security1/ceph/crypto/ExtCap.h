@@ -24,6 +24,7 @@ using namespace std;
 #include "crypto/CryptoLib.h"
 using namespace CryptoLib;
 #include "crypto/MerkleTree.h"
+#include "crypto/CapGroup.h"
 
 #define NO_GROUP 0
 #define UNIX_GROUP 1
@@ -147,6 +148,20 @@ public:
     data.ino = n;
   }
 
+  ExtCap(int m, uid_t u, CapGroup& cg, inodeno_t n)
+  {
+    data.id.cid = 0;
+    data.id.mds_id = 0;
+    data.t_s = g_clock.now();
+    data.t_e = data.t_s;
+    data.t_e += 3600;
+    data.mode = m;
+    data.uid = u;
+    data.gid = cg.get_gid();
+    data.user_group = cg.get_root_hash();
+    data.ino = n;
+  }
+
   // capability for too many user, many named files
 
   // capability for too many user, too many files
@@ -171,11 +186,11 @@ public:
   }
   void set_type(__int8_t new_type) { data.type = new_type;}
 
-  void set_user_hash(hash_t nhash) { user_group = nhash; }
-  void set_file_hash(hash_t nhash) { file_group = nhash; }
+  void set_user_hash(hash_t nhash) { data.user_group = nhash; }
+  void set_file_hash(hash_t nhash) { data.file_group = nhash; }
 
-  hash_t get_user_hash() { return user_group; }
-  hash_t get_file_hash() { return file_group; }
+  hash_t get_user_hash() { return data.user_group; }
+  hash_t get_file_hash() { return data.file_group; }
 
   const cap_data_t* get_data() const {
     return (&data);

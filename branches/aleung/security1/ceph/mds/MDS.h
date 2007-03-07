@@ -155,9 +155,10 @@ class MDS : public Dispatcher {
 public:
   map<int,version_t> peer_mdsmap_epoch;
 
-  // user groups
+  // logical user group
   map<gid_t, CapGroup> unix_groups;
-  map<hash_t, CapGroup> user_groups;
+  // hash to group map
+  map<hash_t, CapGroup> unix_groups_byhash;
 
   void queue_waitfor_active(Context *c) { waitfor_active.push_back(c); }
 

@@ -78,6 +78,9 @@ void Server::dispatch(Message *m)
   case MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
     return;
+  case MSG_CLIENT_UPDATE:
+    handle_client_update((MClientUpdate*)m);
+    return;
 
   case MSG_MDS_HASHREADDIR:
     handle_hash_readdir((MHashReaddir*)m);
@@ -251,7 +254,16 @@ void Server::commit_request(MClientRequest *req,
   }
 }
 
+// update group operations
+void Server::handle_client_update(MClientUpdate *m)
+{
+  hash_t my_hash = m->get_user_hash();
+  dout(3) << "handle_client_update for " << my_hash << endl;
 
+  MClientUpdateReply *reply = new MClientUpdateReply(my_hash, mds->unix_groups_byhash[my_hash].get_list());
+
+  messenger->send_message(reply, m->get_source_inst());
+}
 
 /***
  * process a client request

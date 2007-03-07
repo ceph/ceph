@@ -16,41 +16,49 @@
 #include<iostream>
 using namespace std;
 
-//#include "include/types.h"
 #include "crypto/MerkleTree.h"
 
 class CapGroup {
  private:
-  //gid_t group_id;
+  gid_t group_id;
   hash_t root_hash;
+  MerkleTree mtree;
   list<uid_t> users;
 
  public:
   friend class OSD;
   friend class Locker;
   CapGroup () { }
-  //CapGroup (gid_t id) { group_id = id; }
+  CapGroup (gid_t id) { group_id = id; }
   CapGroup (hash_t rhash, list<uid_t>& ulist) :
     root_hash(rhash), users(ulist) { }
+  CapGroup (gid_t id, list<uid_t>& ulist) : group_id(id), users(ulist) {
+    // add users to MerkleTree
+    mtree = MerkleTree(users);
+    root_hash = mtree.get_root_hash();
+  }
   
-  //gid_t get_gid() { return group_id; }
-  //void set_gid(gid_t id) { group_id = id; }
+  gid_t get_gid() { return group_id; }
+  void set_gid(gid_t id) { group_id = id; }
 
   hash_t get_root_hash() { return root_hash; }
   void set_root_hash(hash_t nhash) { root_hash = nhash; }
 
   void add_user(uid_t user) {
     users.push_back(user);
+    // re-compute root-hash
+    mtree.add_user(user);
+    root_hash = mtree.get_root_hash();
   }
   void remove_user(uid_t user) {
     users.remove(user);
+    //FIXME need to re-compute hash
   }
 
   bool contains(uid_t user) {
     for (list<uid_t>::iterator ui = users.begin();
 	 ui != users.end();
 	 ui++) {
-      //uid_t test& = *ui;
       if (*ui == user)
 	return true;
     }

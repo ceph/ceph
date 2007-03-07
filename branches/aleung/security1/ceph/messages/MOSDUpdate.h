@@ -16,16 +16,19 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
+#include "crypto/MerkleTree.h"
 
 class MOSDUpdate : public Message {
 private:
   struct {
     gid_t group;
+    hash_t uhash;
     entity_inst_t client;
     entity_inst_t asker;
   } update_st;
 public:
   gid_t get_group() { return update_st.group; }
+  hash_t get_hash() { return update_st.uhash; }
   entity_inst_t get_client_inst() { return update_st.client; }
   entity_inst_t get_asker() { return update_st.asker; }
 
@@ -34,6 +37,11 @@ public:
   MOSDUpdate(gid_t upGr) : Message(MSG_OSD_UPDATE) {
     memset(&update_st,0, sizeof(update_st));
     this->update_st.group = upGr;
+  }
+
+  MOSDUpdate(hash_t h) : Message(MSG_OSD_UPDATE) {
+    memset(&update_st,0, sizeof(update_st));
+    this->update_st.uhash = h;
   }
 
   MOSDUpdate(entity_inst_t asking_osd, entity_inst_t target_client,
@@ -56,6 +64,7 @@ public:
   virtual char *get_type_name() { return "oop_update"; }
   void print(ostream& out) {
     out << "osd_update(" << update_st.group
+	<< ", " << update_st.uhash
 	<< ")";
   }
 };

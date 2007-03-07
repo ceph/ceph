@@ -83,6 +83,7 @@
 #define MSG_CLIENT_FILECAPS        63
 #define MSG_CLIENT_INODEAUTHUPDATE 64
 #define MSG_CLIENT_UPDATE          65
+#define MSG_CLIENT_UPDATE_REPLY    66
 
 #define MSG_CLIENT_BOOT            70
 #define MSG_CLIENT_MOUNT           71

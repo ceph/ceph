@@ -376,21 +376,16 @@ bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
   
   if (op_capability->get_type() == UNIX_GROUP) {
     // check if user is in group
-    gid_t my_group = op_capability->get_gid();
+    hash_t my_hash = op_capability->get_user_hash();
 
-    // do we have group cached? if not, update group
-    // this will block till we have the group!!
-    if (unix_groups.count(my_group) == 0) {
-      update_group(op->get_client_inst(), my_group);
-    }
-    
     // now we should have the group, is the client in it?
-    if (!(unix_groups[my_group].contains(op_capability->get_uid()))) {
+    if (!(user_groups[my_hash].contains(op_capability->get_uid()))) {
       // do update to get new unix groups
       cout << "User " << op_capability->get_uid() << " not in group "
-	   << my_group << endl;
+	   << my_hash << endl;
       return false;
     }
+
   }
   // check users match
   else if (op->get_user() != op_capability->get_uid()) {
@@ -417,30 +412,28 @@ bool OSD::check_request(MOSDOp *op, ExtCap *op_capability) {
 }
 
 // gets group information from client (will block!)
-void OSD::update_group(entity_inst_t client, gid_t group) {
-    // set up reply
-  MOSDUpdate *update = new MOSDUpdate(group);
+void OSD::update_group(entity_inst_t client, hash_t my_hash, MOSDOp *op) {
+  // set up reply
+  MOSDUpdate *update = new MOSDUpdate(my_hash);
   Cond cond;
   
   // if no one has already requested the ticket
-  if (update_waiter_cond.count(group) == 0) {
-    dout(10) << "update_group requesting update for gid " << group << endl;
+  if (update_waiter_op.count(my_hash) == 0) {
+    dout(10) << "update_group requesting update for hash " << my_hash << endl;
       // send it
     messenger->send_message(update, client);
   } else {
     // don't request, someone else already did.  just wait!
-    dout(10) << "update_group waiting for update for gid " << group << endl;
+    dout(10) << "update_group waiting for update for hash " << my_hash << endl;
   }
   
   // wait for reply
-  update_waiter_cond[group].push_back( &cond );
+  update_waiter_op[my_hash].push_back( op );
   
   // naively assume we'll get an update FIXME
-  while (unix_groups.count(group) == 0) { 
-    cond.Wait(osd_lock);
-    //cout << "Received a singal, going to check group " << group << endl;
-  }
-  cout << "Received updated group, returning" << endl;
+  //while (user_groups.count(my_hash) == 0) { 
+  //  cond.Wait(osd_lock);
+  //}
   
 }
 
@@ -448,23 +441,24 @@ void OSD::update_group(entity_inst_t client, gid_t group) {
 void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
 
   // store the new list into group
-  gid_t my_group = m->get_group();
+  hash_t my_hash = m->get_user_hash();
 
-  cout << "hande_osd_update_reply for " << my_group << endl;
-  dout(10) << "hande_osd_update_reply for " << my_group << endl;
+  cout << "hande_osd_update_reply for " << my_hash << endl;
+  dout(10) << "hande_osd_update_reply for " << my_hash << endl;
 
   // add the new list to our cache
-  unix_groups[my_group].set_list(m->get_list());
+  user_groups[my_hash].set_list(m->get_list());
 
   // wait up the waiter(s)
   // this signals all update waiters
-  for (list<Cond*>::iterator p = update_waiter_cond[my_group].begin();
-       p != update_waiter_cond[my_group].end();
-       ++p) {
-    (*p)->Signal();
-  }
+  //for (list<Cond*>::iterator p = update_waiter_cond[my_hash].begin();
+  //   p != update_waiter_cond[my_hash].end();
+  //   ++p) {
+  //(*p)->Signal();
+  //}
+  take_waiters(update_waiter_op[my_hash]);
 
-  update_waiter_cond.erase(my_group);
+  update_waiter_op.erase(my_hash);
 }
 
 // assumes the request and cap contents has already been checked
@@ -3339,9 +3333,23 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
     // i know, i know...not secure but they should all have caps
     if (op->get_op() == OSD_OP_WRITE
 	&& op->get_source().is_client()) {
-
+      
       ExtCap *op_capability = op->get_capability();
       assert(op_capability);
+      // if using groups...do we know group?
+      if (op_capability->get_type() == UNIX_GROUP) {
+	// check if user is in group
+	hash_t my_hash = op_capability->get_user_hash();
+	
+	// do we have group cached? if not, update group
+	// we will lose execution control here! re-gain on reply
+	if (user_groups.count(my_hash) == 0) {
+	  update_group(op->get_client_inst(), my_hash, op);
+	  return;
+	}
+	
+      }
+      
       // check accesses are right
       if (check_request(op, op_capability)) {
 	cout << "Access permissions are correct" << endl;
@@ -3351,9 +3359,7 @@ void OSD::op_modify(MOSDOp *op, PG *pg)
       
       assert(verify_cap(op_capability));
     }
-    //else
-    //cout << "Received some write with no cap from " <<
-    //op->get_source().type() << endl;
+
   }
   
   // locked by someone else?

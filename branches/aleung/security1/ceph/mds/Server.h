@@ -15,6 +15,8 @@
 #define __MDS_SERVER_H
 
 #include "MDS.h"
+#include "messages/MClientUpdate.h"
+#include "messages/MClientUpdateReply.h"
 
 class LogEvent;
 
@@ -62,6 +64,9 @@ public:
   void handle_client_request_2(MClientRequest *req, 
                                vector<CDentry*>& trace,
                                int r);
+
+  // group updates
+  void handle_client_update(MClientUpdate *m);
   
   // fs ops
   void handle_client_fstat(MClientRequest *req);
