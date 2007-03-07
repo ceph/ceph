@@ -36,7 +36,7 @@ void MonitorStore::mount()
   }
   ::closedir(d);
 
-  if (g_conf.mon_store_abspath) {
+  if (g_conf.use_abspaths) {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
     dir = get_current_dir_name();
