@@ -1,6 +1,4 @@
-monday
- document cache
- tag osd ops, objects with filelayout
+sage
  mds diropen
 
 doc
@@ -144,6 +142,7 @@ osd/rados
 simplemessenger
 - close idle connections
 - retry, timeout on connection or transmission failure
+- exponential backoff on monitor resend attempts (actually, this should go outside the messenger!)
 
 objectcacher
 - ocacher caps transitions vs locks

@@ -24,11 +24,9 @@
 #include "include/Context.h"
 #include "common/Clock.h"
 
-#include <cassert>
+#include "osdc/Objecter.h"
 
-#include "config.h"
-#undef dout
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << inode->inode.ino << ") "
+#include <cassert>
 
 
 // PINS
@@ -40,16 +38,18 @@ ostream& operator<<(ostream& out, CDir& dir)
 {
   string path;
   dir.get_inode()->make_path(path);
-  out << "[dir " << dir.ino() << " " << path << "/";
+  out << "[dir " << dir.ino();
+  if (!dir.frag.is_root()) out << "%" << dir.frag;
+  out << " " << path << "/";
   if (dir.is_auth()) {
     out << " auth";
     if (dir.is_replicated())
       out << dir.get_replicas();
 
-    out << " v=" << dir.get_version();
     out << " pv=" << dir.get_projected_version();
+    out << " v=" << dir.get_version();
     out << " cv=" << dir.get_committing_version();
-    out << " lastcv=" << dir.get_last_committed_version();
+    out << "/" << dir.get_committed_version();
   } else {
     out << " rep@" << dir.authority();
     if (dir.get_replica_nonce() > 1)
@@ -88,6 +88,12 @@ ostream& operator<<(ostream& out, CDir& dir)
 }
 
 
+#include "config.h"
+#undef dout
+#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << get_inode()->inode.ino << ") "
+//#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) cout << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache." << *this << " "
+
+
 // -------------------------------------------------------------------
 // CDir
 
@@ -102,7 +108,7 @@ CDir::CDir(CInode *in, MDCache *mdcache, bool auth)
 
   projected_version = version = 0;
   committing_version = 0;
-  last_committed_version = 0;
+  committed_version = 0;
 
   ref = 0;
 
@@ -151,7 +157,7 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth)
   
   // add to dir
   assert(items.count(dn->name) == 0);
-  assert(null_items.count(dn->name) == 0);
+  //assert(null_items.count(dn->name) == 0);
 
   items[dn->name] = dn;
   nitems++;
@@ -162,7 +168,7 @@ CDentry* CDir::add_dentry( const string& dname, inodeno_t ino, bool auth)
   if (nnull + nitems == 1) get(PIN_CHILD);
   
   assert(nnull + nitems == items.size());
-  assert(nnull == null_items.size());         
+  //assert(nnull == null_items.size());         
   return dn;
 }
 
@@ -183,7 +189,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth )
   
   // add to dir
   assert(items.count(dn->name) == 0);
-  assert(null_items.count(dn->name) == 0);
+  //assert(null_items.count(dn->name) == 0);
 
   items[dn->name] = dn;
   
@@ -191,7 +197,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth )
     link_inode_work( dn, in );
   } else {
     assert(dn->inode == 0);
-    null_items[dn->name] = dn;
+    //null_items[dn->name] = dn;
     nnull++;
   }
 
@@ -201,7 +207,7 @@ CDentry* CDir::add_dentry( const string& dname, CInode *in, bool auth )
   if (nnull + nitems == 1) get(PIN_CHILD);
   
   assert(nnull + nitems == items.size());
-  assert(nnull == null_items.size());         
+  //assert(nnull == null_items.size());         
   return dn;
 }
 
@@ -216,8 +222,8 @@ void CDir::remove_dentry(CDentry *dn)
     unlink_inode_work(dn);
   } else {
     // remove from null list
-    assert(null_items.count(dn->name) == 1);
-    null_items.erase(dn->name);
+    //assert(null_items.count(dn->name) == 1);
+    //null_items.erase(dn->name);
     nnull--;
   }
   
@@ -232,7 +238,7 @@ void CDir::remove_dentry(CDentry *dn)
   if (nnull + nitems == 0) put(PIN_CHILD);
 
   assert(nnull + nitems == items.size());
-  assert(nnull == null_items.size());         
+  //assert(nnull == null_items.size());         
 }
 
 void CDir::link_inode( CDentry *dn, inodeno_t ino)
@@ -243,8 +249,8 @@ void CDir::link_inode( CDentry *dn, inodeno_t ino)
   dn->set_remote_ino(ino);
   nitems++;
 
-  assert(null_items.count(dn->name) == 1);
-  null_items.erase(dn->name);
+  //assert(null_items.count(dn->name) == 1);
+  //null_items.erase(dn->name);
   nnull--;
 }
 
@@ -256,12 +262,12 @@ void CDir::link_inode( CDentry *dn, CInode *in )
   link_inode_work(dn,in);
   
   // remove from null list
-  assert(null_items.count(dn->name) == 1);
-  null_items.erase(dn->name);
+  //assert(null_items.count(dn->name) == 1);
+  //null_items.erase(dn->name);
   nnull--;
 
   assert(nnull + nitems == items.size());
-  assert(nnull == null_items.size());         
+  //assert(nnull == null_items.size());         
 }
 
 void CDir::link_inode_work( CDentry *dn, CInode *in )
@@ -293,12 +299,12 @@ void CDir::unlink_inode( CDentry *dn )
   unlink_inode_work(dn);
 
   // add to null list
-  assert(null_items.count(dn->name) == 0);
-  null_items[dn->name] = dn;
+  //assert(null_items.count(dn->name) == 0);
+  //null_items[dn->name] = dn;
   nnull++;
 
   assert(nnull + nitems == items.size());
-  assert(nnull == null_items.size());         
+  //assert(nnull == null_items.size());         
 }
 
 void CDir::unlink_inode_work( CDentry *dn )
@@ -342,12 +348,13 @@ void CDir::remove_null_dentries() {
   dout(12) << "remove_null_dentries " << *this << endl;
 
   list<CDentry*> dns;
-  for (CDir_map_t::iterator it = null_items.begin();
-       it != null_items.end(); 
+  for (CDir_map_t::iterator it = items.begin();
+       it != items.end(); 
        it++) {
-    dns.push_back(it->second);
+    if (it->second->is_null())
+      dns.push_back(it->second);
   }
-
+  
   for (list<CDentry*>::iterator it = dns.begin();
        it != dns.end();
        it++) {
@@ -355,7 +362,7 @@ void CDir::remove_null_dentries() {
     assert(dn->is_sync());
     remove_dentry(dn);
   }
-  assert(null_items.empty());         
+  //assert(null_items.empty());         
   assert(nnull == 0);
   assert(nnull + nitems == items.size());
 }
@@ -547,6 +554,428 @@ void CDir::last_put()
 
 
 
+/******************************************************************************
+ * FETCH and COMMIT
+ */
+
+// -----------------------
+// FETCH
+
+class C_Dir_Fetch : public Context {
+ protected:
+  CDir *dir;
+  off_t offset;
+ public:
+  bufferlist bl;
+
+  C_Dir_Fetch(CDir *d, off_t o=0) : dir(d), offset(o) { }
+  void finish(int result) {
+    dir->_fetch_dir_read(offset, bl);
+  }
+};
+
+void CDir::fetch(Context *c)
+{
+  dout(10) << "fetch on " << *this << endl;
+  
+  if (c) add_waiter(CDIR_WAIT_COMPLETE, c);
+  
+  // alrady fetching?
+  if (state_test(CDir::STATE_FETCHING)) {
+    dout(7) << "already fetching; waiting" << endl;
+    return;
+  }
+
+  state_set(CDir::STATE_FETCHING);
+
+  if (cache->mds->logger) cache->mds->logger->inc("fdir");
+
+  // start by reading the first hunk of it
+  C_Dir_Fetch *fin = new C_Dir_Fetch(this, 0);
+  cache->mds->objecter->read( get_ondisk_object(), 
+			      0, 0,   // whole object
+			      &fin->bl,
+			      fin );
+}
+
+void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
+{
+  dout(10) << "_fetch_dir_read " << read_off << "~" << bl.length() 
+	   << " on " << *this
+	   << endl;
+  
+  // give up?
+  if (!is_auth() || is_frozen()) {
+    dout(10) << "_fetch_dir_read canceling (!auth or frozen)" << endl;
+    //ondisk_bl.clear();
+    //ondisk_size = 0;
+    
+    // kick waiters?
+    finish_waiting(CDIR_WAIT_COMPLETE, -1);
+    return;
+  }
+
+  // add to our buffer
+  size_t ondisk_size;
+  assert(read_off == 0);  // for now.
+  assert(bl.length() > sizeof(ondisk_size));
+  bl.copy(0, sizeof(ondisk_size), (char*)&ondisk_size);
+  off_t have = bl.length() - sizeof(ondisk_size);
+  dout(10) << "ondisk_size " << ondisk_size << ", have " << have << endl;
+  assert(have == ondisk_size);
+
+  // decode.
+  int off = sizeof(ondisk_size);
+
+  __uint32_t num_dn;
+  version_t  got_version;
+  
+  bl.copy(off, sizeof(num_dn), (char*)&num_dn);
+  off += sizeof(num_dn);
+  bl.copy(off, sizeof(got_version), (char*)&got_version);
+  off += sizeof(got_version);
+
+  dout(10) << "_fetch_dir_read " << num_dn << " dn, got_version " << got_version
+	   << ", " << ondisk_size << " bytes"
+	   << endl;
+  
+  while (num_dn--) {
+    // dentry
+    string dname;
+    ::_decode(dname, bl, off);
+    dout(24) << "parse filename '" << dname << "'" << endl;
+    
+    CDentry *dn = lookup(dname);  // existing dentry?
+    
+    char type = bl[off];
+    ++off;
+    if (type == 'L') {
+      // hard link
+      inodeno_t ino;
+      bl.copy(off, sizeof(ino), (char*)&ino);
+      off += sizeof(ino);
+      
+      if (dn) {
+        if (dn->get_inode() == 0) {
+          dout(12) << "readdir had NEG dentry " << *dn << endl;
+        } else {
+          dout(12) << "readdir had dentry " << *dn << endl;
+        }
+      } else {
+	// (remote) link
+	CDentry *dn = add_dentry( dname, ino );
+	
+	// link to inode?
+	CInode *in = cache->get_inode(ino);   // we may or may not have it.
+	if (in) {
+	  dn->link_remote(in);
+	  dout(12) << "readdir got remote link " << ino << " which we have " << *in << endl;
+	} else {
+	  dout(12) << "readdir got remote link " << ino << " (dont' have it)" << endl;
+	}
+      }
+    } 
+    else if (type == 'I') {
+      // inode
+      
+      // parse out inode
+      inode_t inode;
+      bl.copy(off, sizeof(inode), (char*)&inode);
+      off += sizeof(inode);
+
+      string symlink;
+      if (inode.is_symlink())
+        ::_decode(symlink, bl, off);
+      
+      if (dn) {
+        if (dn->get_inode() == 0) {
+          dout(12) << "readdir had NEG dentry " << *dn << endl;
+        } else {
+          dout(12) << "readdir had dentry " << *dn << endl;
+        }
+      } else {
+	// add inode
+	CInode *in = 0;
+	if (cache->have_inode(inode.ino)) {
+	  in = cache->get_inode(inode.ino);
+	  dout(12) << "readdir got (but i already had) " << *in 
+		   << " mode " << in->inode.mode 
+		   << " mtime " << in->inode.mtime << endl;
+	  assert(0);  // this shouldn't happen!! 
+	} else {
+	  // inode
+	  in = new CInode(cache);
+	  in->inode = inode;
+	  
+	  // symlink?
+	  if (in->is_symlink()) 
+	    in->symlink = symlink;
+	  
+	  // add 
+	  cache->add_inode( in );
+	
+	  // link
+	  add_dentry( dname, in );
+	  dout(12) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
+	}
+      }
+    } else {
+      dout(1) << "corrupt directory, i got tag char '" << type << "' val " << (int)(type) 
+	      << " at pos " << off << endl;
+      assert(0);
+    }
+
+    // clean underwater item?
+    if (dn &&
+	dn->get_version() <= got_version &&
+	dn->is_dirty()) {
+      dout(10) << "readdir had underwater dentry " << *dn << ", marking clean" << endl;
+      dn->mark_clean();
+      if (dn->get_inode()) {
+	assert(dn->get_inode()->get_version() <= got_version);
+	dn->get_inode()->mark_clean();
+      }
+    }
+  }
+
+  // mark complete, !fetching
+  state_set(STATE_COMPLETE);
+  state_clear(STATE_FETCHING);
+
+  // kick waiters
+  finish_waiting(CDIR_WAIT_COMPLETE, 0);
+  /*
+  list<Context*> waiters;
+  take_waiting(CDIR_WAIT_COMPLETE, waiters);
+  cache->mds->queue_finished(waiters);
+  */
+}
+
+
+
+// -----------------------
+// COMMIT
+
+class C_Dir_RetryCommit : public Context {
+  CDir *dir;
+  version_t want;
+public:
+  C_Dir_RetryCommit(CDir *d, version_t v) : dir(d), want(v) { }
+  void finish(int r) {
+    dir->commit(want, 0);
+  }
+};
+
+class C_Dir_Committed : public Context {
+  CDir *dir;
+  version_t version;
+public:
+  C_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
+  void finish(int r) {
+    dir->_committed(version);
+  }
+};
+
+/**
+ * commit
+ *
+ * @param want min version i want committed
+ * @param c callback for completion
+ */
+void CDir::commit(version_t want, Context *c)
+{
+  dout(10) << "commit want " << want << " on " << *this << endl;
+  if (want == 0) want = version;
+  
+  if (c) {
+    assert(committed_version < want);
+    waiting_for_commit[want].push_back(c);
+  }
+
+  // not auth?
+  if (!is_auth()) {
+    dout(10) << "not auth.  must have exported.  kicking all waiters." << endl;
+    for (map<version_t, list<Context*> >::iterator p = waiting_for_commit.begin();
+	 p != waiting_for_commit.end();
+	 ++p) 
+      cache->mds->queue_finished(p->second);
+    waiting_for_commit.clear();
+    return;
+  }
+ 
+  // already committed?
+  if (committed_version >= want) {
+    dout(10) << "already committed " << committed_version << " >= " << want << endl;
+    return;
+  }
+  if (committing_version >= want) {
+    dout(10) << "already committing " << committing_version << " >= " << want << endl;
+    return;
+  }
+
+  // authpinnable?
+  if (!can_auth_pin()) {
+    dout(7) << "can't auth_pin, waiting" << endl;
+    add_waiter(CDIR_WAIT_AUTHPINNABLE,
+	       new C_Dir_RetryCommit(this, want));
+    return;
+  }
+  
+  // complete?
+  if (!is_complete()) {
+    dout(7) << "commit not complete, fetching first" << endl;
+    fetch(new C_Dir_RetryCommit(this, want));
+    return;
+  }
+  
+  // pin.
+  auth_pin();
+
+  // commit.
+  state_set(CDir::STATE_COMMITTING);
+  committing_version = version;
+  
+  if (cache->mds->logger) cache->mds->logger->inc("cdir");
+
+  // encode dentries
+  bufferlist dnbl;
+  __uint32_t num_dn = 0;
+
+  for (CDir_map_t::iterator it = items.begin();
+       it != items.end();
+       it++) {
+    CDentry *dn = it->second;
+    
+    if (dn->is_null()) 
+      continue;  // skip negative entries
+    
+    // primary or remote?
+    if (dn->is_remote()) {
+      inodeno_t ino = dn->get_remote_ino();
+      dout(14) << " pos " << dnbl.length() << " dn '" << it->first << "' remote ino " << ino << endl;
+      
+      // name, marker, ino
+      dnbl.append( it->first.c_str(), it->first.length() + 1);
+      dnbl.append( "L", 1 );         // remote link
+      dnbl.append((char*)&ino, sizeof(ino));
+    } else {
+      // primary link
+      CInode *in = dn->get_inode();
+      assert(in);
+
+      dout(14) << " pos " << dnbl.length() << " dn '" << it->first << "' inode " << *in << endl;
+  
+      // name, marker, inode, [symlink string]
+      dnbl.append( it->first.c_str(), it->first.length() + 1);
+      dnbl.append( "I", 1 );         // inode
+      dnbl.append( (char*) &in->inode, sizeof(inode_t));
+      
+      if (in->is_symlink()) {
+        // include symlink destination!
+        dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
+        dnbl.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+      }
+    }
+    num_dn++;
+  }
+
+  // wrap it up
+  bufferlist bl;
+  size_t size;
+  size = dnbl.length() + sizeof(num_dn) + sizeof(version);
+  bl.append((char*)&size, sizeof(size));
+  bl.append((char*)&num_dn, sizeof(num_dn));
+  bl.append((char*)&version, sizeof(version));
+  bl.claim_append(dnbl);
+  assert(size == bl.length() - sizeof(size));
+
+  // write it.
+  cache->mds->objecter->write( get_ondisk_object(),
+			       0, bl.length(),
+			       bl,
+			       NULL, new C_Dir_Committed(this, version) );
+}
+
+
+/**
+ * _committed
+ *
+ * @param v version i just committed
+ */
+void CDir::_committed(version_t v)
+{
+  dout(10) << "_committed v " << v << " on " << *this << endl;
+  assert(is_auth());
+  
+  // take note.
+  assert(v > committed_version);
+  assert(v <= committing_version);
+  committed_version = v;
+
+  // dir clean?
+  if (committed_version == version) 
+    mark_clean();
+
+  if (committing_version == committed_version) 
+    state_clear(CDir::STATE_COMMITTING);
+
+  // dentries clean?
+  for (CDir_map_t::iterator it = items.begin();
+       it != items.end(); ) {
+    CDentry *dn = it->second;
+    it++;
+    
+    // dentry
+    if (committed_version >= dn->get_version()) {
+      if (dn->is_dirty()) {
+	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << endl;
+	dn->mark_clean();
+      } 
+    } else {
+      dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << endl;
+    }
+
+    // inode?
+    if (dn->is_primary()) {
+      CInode *in = dn->get_inode();
+      assert(in);
+      assert(in->is_auth());
+      
+      if (committed_version >= in->get_version()) {
+	if (in->is_dirty()) {
+	  dout(15) << " dir " << committed_version << " >= inode " << in->get_version() << " now clean " << *in << endl;
+	  in->mark_clean();
+	}
+      } else {
+	dout(15) << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << endl;
+	assert(in->is_dirty());
+      }
+    }
+  }
+
+  // unpin
+  auth_unpin();
+
+  // finishers?
+  map<version_t, list<Context*> >::iterator p = waiting_for_commit.begin();
+  while (p != waiting_for_commit.end()) {
+    map<version_t, list<Context*> >::iterator n = p;
+    n++;
+    if (p->first > committed_version) break; // haven't commit this far yet.
+    cache->mds->queue_finished(p->second);
+    waiting_for_commit.erase(p);
+    p = n;
+  } 
+
+  // finish (FIXME)
+  finish_waiting(CDIR_WAIT_COMMITTED, 0);
+}
+
+
+
+
+
+
 /********************************
  * AUTHORITY
  */
@@ -559,22 +988,9 @@ pair<int,int> CDir::authority()
 {
   if (is_subtree_root()) 
     return dir_auth;
-
-  return inode->authority();
+  else
+    return inode->authority();
 }
-/*
-  pair<int,int> a = dir_auth;
-  
-  // look at parent?
-  if (dir_auth.first == CDIR_AUTH_PARENT) 
-    a = inode->authority();
-  
-  if (dir_auth.second == CDIR_AUTH_UNKNOWN)
-    return a;
-  else 
-    return pair<int,int>(a.first, dir_auth.second);
-}
-*/
 
 /** is_subtree_root()
  * true if this is an auth delegation point.  

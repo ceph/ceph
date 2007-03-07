@@ -220,17 +220,19 @@ class CDir : public MDSCacheObject {
   // my inode
   CInode          *inode;
 
+  // my frag
+  frag_t           frag;
+
  protected:
   // contents
   CDir_map_t       items;              // non-null AND null
-  CDir_map_t       null_items;        // null and foreign
-  size_t           nitems;             // non-null
-  size_t           nnull;              // null
+  size_t           nitems;             // # non-null
+  size_t           nnull;              // # null
 
   // state
   version_t       version;
   version_t       committing_version;
-  version_t       last_committed_version;   // slight lie; we bump this on import.
+  version_t       committed_version;   // slight lie; we bump this on import.
   version_t       projected_version; 
 
   // lock nesting, freeze
@@ -314,7 +316,7 @@ class CDir : public MDSCacheObject {
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
 
-  void remove_null_dentries();  // on empty, clean dir
+  void remove_null_dentries();
 
   // -- authority --
   /*
@@ -364,6 +366,7 @@ class CDir : public MDSCacheObject {
   // -- state --
   bool is_complete() { return state & STATE_COMPLETE; }
   bool is_dirty() { return state_test(STATE_DIRTY); }
+  bool is_clean() { return !state_test(STATE_DIRTY); }
 
   bool is_auth() { return state & STATE_AUTH; }
   bool is_proxy() { return state & STATE_PROXY; }
@@ -379,6 +382,26 @@ class CDir : public MDSCacheObject {
     return true;
   }
  
+  
+  // -- fetch --
+  //bufferlist ondisk_bl;
+  //size_t     ondisk_size;
+
+  object_t get_ondisk_object() {
+    return object_t(ino(), frag);
+  }  
+
+  void fetch(Context *c);
+  void _fetch_dir_read(off_t off, bufferlist &bl);
+
+  // -- commit --
+  map<version_t, list<Context*> > waiting_for_commit;
+
+  void commit_to(version_t want);
+  void commit(version_t want,Context *c);
+  void _committed(version_t v);
+  void wait_for_commit(Context *c, version_t v=0);
+
 
 
   // -- dirtyness --
@@ -387,17 +410,16 @@ class CDir : public MDSCacheObject {
   version_t get_projected_version() { return projected_version; }
   
   version_t get_committing_version() { return committing_version; }
-  version_t get_last_committed_version() { return last_committed_version; }
+  version_t get_committed_version() { return committed_version; }
   // as in, we're committing the current version.
-  void set_committing_version() { committing_version = version; }
-  void set_last_committed_version(version_t v) { last_committed_version = v; }
+  //void set_committing_version() { committing_version = version; }
+  void set_committed_version(version_t v) { committed_version = v; }
 
   version_t pre_dirty();
   void _mark_dirty();
   void mark_dirty(version_t pv);
   void mark_clean();
   void mark_complete() { state_set(STATE_COMPLETE); }
-  bool is_clean() { return !state_test(STATE_DIRTY); }
 
 
 
@@ -599,8 +621,8 @@ class CDirExport {
 
     //dir->nitems = st.nitems;
 
-    // set last_committed_version at old version
-    dir->committing_version = dir->last_committed_version = st.version;
+    // set committed_version at old version
+    dir->committing_version = dir->committed_version = st.version;
     dir->projected_version = dir->version = st.version;    // this is bumped, below, if dirty
 
     // twiddle state

@@ -123,6 +123,7 @@ public:
   }
   void decode(bufferlist& bl, int& off) {
     bl.copy(off, sizeof(version), (char*)&version);
+    off += sizeof(version);
     ::_decode(client_inst, bl, off);
     ::_decode(client_mount, bl, off);
     ::_decode(client_ref, bl, off);

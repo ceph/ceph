@@ -103,16 +103,6 @@ public:
   int get_num_inodes() { return inode_map.size(); }
   int get_num_dentries() { return lru.lru_get_size(); }
 
-  /*
-  // imports, exports, and hashes.
-  set<CDir*>             imports;                // includes root (on mds0)
-  set<CDir*>             exports;
-  set<CDir*>             hashdirs;
-  map<CDir*,set<CDir*> > nested_exports;         // exports nested under imports _or_ hashdirs
-
-  void import_subtree(CDir *root, set<CDir*>& bounds);
-  void export_subtree(CDir *root, set<CDir*>& bounds, int dest);
-  */
 
   // -- subtrees --
 protected:
@@ -157,6 +147,11 @@ protected:
   // delayed cache expire
   map<CDir*, map<int, MCacheExpire*> > delayed_expire; // import|export dir -> expire msg
 
+  // -- discover --
+  hash_map<inodeno_t, set<int> > dir_discovers;  // dirino -> mds set i'm trying to discover.
+
+
+  // -- requests --
   // active MDS requests
   hash_map<Message*, active_request_t>   active_requests;
   

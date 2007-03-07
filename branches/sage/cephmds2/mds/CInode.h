@@ -151,18 +151,29 @@ class CInode : public MDSCacheObject {
  public:
   MDCache *mdcache;
 
+  // inode contents proper
   inode_t          inode;     // the inode itself
-
-  CDir            *dir;       // directory, if we have it opened.
   string           symlink;   // symlink dest, if symlink
+  fragtree_t       dirfragtree;  // dir frag tree, if any
+
+
+  // -- cache infrastructure --
+  // old way, deprecate me!
+  CDir            *dir;       // directory, if we have it opened.
+  // new way
+  map<frag_t,CDir*> dirfrags; // cached dir fragments
+
+  void get_dirfrags(list<CDir*>& ls);
+  void get_nested_dirfrags(list<CDir*>& ls);
+  void get_subtree_dirfrags(list<CDir*>& ls);
 
  protected:
   // parent dentries in cache
-  //int              num_parents;
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
 
-  // -- distributed caching
+  // -- other --
+  // distributed caching (old)
   pair<int,int> dangling_auth;    // explicit auth, when dangling.
 
   int           num_request_pins;

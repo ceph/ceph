@@ -19,7 +19,6 @@
 #include "Migrator.h"
 #include "MDBalancer.h"
 #include "Renamer.h"
-#include "MDStore.h"
 
 #include "msg/Messenger.h"
 
@@ -406,7 +405,7 @@ void Server::handle_client_request(MClientRequest *req)
 	}
 	else if (refpath.last_bit() == ".ceph.commit") {
 	  dout(1) << "got explicit commit command on  " << *dir << endl;
-	  mds->mdstore->commit_dir(dir, 0);
+	  dir->commit(0, 0);
 	}
       }
       // </HACK>
@@ -845,7 +844,7 @@ void Server::handle_hash_readdir(MHashReaddir *m)
   // complete?
   if (!dir->is_complete()) {
     dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << endl;
-    mds->mdstore->fetch_dir(dir, new C_MDS_RetryMessage(mds, m));
+    dir->fetch(new C_MDS_RetryMessage(mds, m));
     return;
   }  
   
@@ -1002,7 +1001,7 @@ void Server::handle_client_readdir(MClientRequest *req,
   if (!dir->is_complete()) {
     // fetch
     dout(10) << " incomplete dir contents for readdir on " << *cur->dir << ", fetching" << endl;
-    mds->mdstore->fetch_dir(dir, new C_MDS_RetryRequest(mds, req, cur));
+    dir->fetch(new C_MDS_RetryRequest(mds, req, cur));
     return;
   }
 
@@ -1240,7 +1239,7 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   // make sure dir is complete
   if (!dir->is_complete()) {
     dout(7) << " incomplete dir contents for " << *dir << ", fetching" << endl;
-    mds->mdstore->fetch_dir(dir, new C_MDS_RetryRequest(mds, req, diri));
+    dir->fetch(new C_MDS_RetryRequest(mds, req, diri));
     return 0;
   }
 
@@ -1638,8 +1637,7 @@ void Server::handle_client_unlink(MClientRequest *req,
       // should be empty
       if (in->dir->get_size() == 0 && !in->dir->is_complete()) {
         dout(7) << "handle_client_rmdir on dir " << *in->dir << ", empty but not complete, fetching" << endl;
-        mds->mdstore->fetch_dir(in->dir, 
-				new C_MDS_RetryRequest(mds, req, diri));
+        in->dir->fetch(new C_MDS_RetryRequest(mds, req, diri));
         return;
       }
       if (in->dir->get_size() > 0) {
@@ -1878,8 +1876,7 @@ void Server::handle_client_rename(MClientRequest *req,
   
   if (!srcdn && !srcdir->is_complete()) {
     dout(10) << "readding incomplete dir" << endl;
-    mds->mdstore->fetch_dir(srcdir,
-			    new C_MDS_RetryRequest(mds, req, srcdiri));
+    srcdir->fetch(new C_MDS_RetryRequest(mds, req, srcdiri));
     return;
   }
   assert(srcdn && srcdn->inode);

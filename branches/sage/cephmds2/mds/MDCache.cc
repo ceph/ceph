@@ -14,7 +14,6 @@
 
 
 #include "MDCache.h"
-#include "MDStore.h"
 #include "MDS.h"
 #include "Server.h"
 #include "Locker.h"
@@ -885,6 +884,31 @@ void MDCache::handle_mds_failure(int who)
 
   // tell the migrator too.
   migrator->handle_mds_failure(who);
+
+  // kick any dir discovers that are waiting
+  hash_map<inodeno_t,set<int> >::iterator p = dir_discovers.begin();
+  while (p != dir_discovers.end()) {
+    hash_map<inodeno_t,set<int> >::iterator n = p;
+    n++;
+
+    // waiting on this mds?
+    if (p->second.count(who)) {
+      CInode *in = get_inode(p->first);
+      assert(in);
+      
+      // take waiters
+      list<Context*> waiters;
+      in->take_waiting(CINODE_WAIT_DIR, waiters);
+      mds->queue_finished(waiters);
+      dout(10) << "kicking WAIT_DIR on " << *in << endl;
+      
+      // remove from mds list
+      p->second.erase(who);
+      if (p->second.empty())
+	dir_discovers.erase(p);
+    }
+    p = n;
+  }
 
   show_subtrees();  
 }
@@ -2032,7 +2056,7 @@ bool MDCache::shutdown_pass()
         
         // commit any dirty dir that's ours
         if (in->is_dir() && in->dir && in->dir->is_auth() && in->dir->is_dirty()) {
-          mds->mdstore->commit_dir(in->dir, new C_MDC_ShutdownCommit(this));
+          in->dir->commit(0, new C_MDC_ShutdownCommit(this));
           shutdown_commits++;
         }
       }
@@ -2325,12 +2349,7 @@ int MDCache::path_traverse(filepath& origpath,
 					      want,
 					      true),  // need this dir too
 				cur->authority().first, MDS_PORT_CACHE);
-	  if (cur->authority().second >= 0) 
-	    mds->send_message_mds(new MDiscover(mds->get_nodeid(),
-						cur->ino(),
-						want,
-						true),  // need this dir too
-				  cur->authority().second, MDS_PORT_CACHE);
+	  dir_discovers[cur->ino()].insert(cur->authority().first);
         }
         cur->add_waiter(CINODE_WAIT_DIR, ondelay);
         if (onfinish) delete onfinish;
@@ -2505,7 +2524,7 @@ int MDCache::path_traverse(filepath& origpath,
         // directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << endl;
         touch_inode(cur);
-        mds->mdstore->fetch_dir(cur->dir, ondelay);
+        cur->dir->fetch(ondelay);
         
         if (mds->logger) mds->logger->inc("cmiss");
 
@@ -2619,7 +2638,7 @@ void MDCache::open_remote_dir(CInode *diri,
 				      want,
 				      true),  // need the dir open
 			diri->authority().first, MDS_PORT_CACHE);
-  
+  dir_discovers[diri->ino()].insert(diri->authority().first);
   diri->add_waiter(CINODE_WAIT_DIR, fin);
 }
 
@@ -3235,7 +3254,7 @@ void MDCache::handle_discover(MDiscover *dis)
         //mds->mdstore->fetch_dir(cur->dir, NULL); //new C_MDS_RetryMessage(mds, dis));
         //break; // send what we have so far
 
-        mds->mdstore->fetch_dir(cur->dir, new C_MDS_RetryMessage(mds, dis));
+        cur->dir->fetch(new C_MDS_RetryMessage(mds, dis));
         return;
       }
     }
@@ -3368,6 +3387,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
         // get waiters
         cur->take_waiting(CINODE_WAIT_DIR, finished);
+	dir_discovers.erase(cur->ino());
       }
     }    
 
@@ -3384,6 +3404,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       } else {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
         cur->take_waiting(CINODE_WAIT_DIR, error);
+	dir_discovers.erase(cur->ino());
       }
       break;
     }
@@ -3459,18 +3480,23 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   if (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN) {
     dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << endl;
     // let's just open it.
+    int hint = m->get_dir_auth_hint();
     filepath want;  // no dentries, i just want the dir open
     mds->send_message_mds(new MDiscover(mds->get_nodeid(),
 					cur->ino(),
 					want,
 					true),  // need the dir open
-			  m->get_dir_auth_hint(), MDS_PORT_CACHE);
+			  hint, MDS_PORT_CACHE);
+    
+    // note the dangling discover
+    dir_discovers[cur->ino()].insert(hint);
   }
   else if (m->is_flag_error_dir()) {
     // dir error at the end there?
     dout(7) << " flag_error on dir " << *cur << endl;
     assert(!cur->is_dir());
     cur->take_waiting(CINODE_WAIT_DIR, error);
+    dir_discovers.erase(cur->ino());
   }
 
 

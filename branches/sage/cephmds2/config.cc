@@ -632,7 +632,7 @@ void parse_config_options(std::vector<char*>& args)
     else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
       g_conf.mds_thrash_exports = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
-      g_conf.mds_dump_cache_on_map = 1;
+      g_conf.mds_dump_cache_on_map = true;
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;

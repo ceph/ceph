@@ -18,7 +18,6 @@
 #include "CDentry.h"
 #include "Migrator.h"
 #include "Locker.h"
-#include "MDStore.h"
 #include "Migrator.h"
 
 #include "MDBalancer.h"
@@ -198,8 +197,7 @@ void Migrator::export_empty_import(CDir *dir)
   // is it really empty?
   if (!dir->is_complete()) {
     dout(7) << "not complete, fetching." << endl;
-    mds->mdstore->fetch_dir(dir,
-                            new C_MDC_EmptyImport(this,dir));
+    dir->fetch(new C_MDC_EmptyImport(this,dir));
     return;
   }
   

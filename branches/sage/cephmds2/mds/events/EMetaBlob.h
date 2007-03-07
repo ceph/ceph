@@ -133,7 +133,7 @@ class EMetaBlob {
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
-    dirslice_t dirslice;
+    dirfrag_t  dirfrag;
     version_t  dirv;
     int state;
     int nfull, nremote, nnull;
@@ -182,7 +182,7 @@ class EMetaBlob {
     }
 
     void _encode(bufferlist& bl) {
-      bl.append((char*)&dirslice, sizeof(dirslice));
+      bl.append((char*)&dirfrag, sizeof(dirfrag));
       bl.append((char*)&dirv, sizeof(dirv));
       bl.append((char*)&state, sizeof(state));
       bl.append((char*)&nfull, sizeof(nfull));
@@ -194,7 +194,7 @@ class EMetaBlob {
       ::_encode(bnull, bl);
     }
     void _decode(bufferlist& bl, int& off) {
-      bl.copy(off, sizeof(dirslice), (char*)&dirslice);  off += sizeof(dirslice);
+      bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);  off += sizeof(dirfrag);
       bl.copy(off, sizeof(dirv), (char*)&dirv);  off += sizeof(dirv);
       bl.copy(off, sizeof(state), (char*)&state);  off += sizeof(state);
       bl.copy(off, sizeof(nfull), (char*)&nfull);  off += sizeof(nfull);

@@ -64,7 +64,6 @@ MDS_OBJS= \
 	mds/CInode.o\
 	mds/AnchorTable.o\
 	mds/AnchorClient.o\
-	mds/MDStore.o\
 	mds/LogEvent.o\
 	mds/IdAllocator.o\
 	mds/MDLog.o

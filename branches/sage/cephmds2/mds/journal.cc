@@ -30,7 +30,6 @@
 #include "MDS.h"
 #include "MDLog.h"
 #include "MDCache.h"
-#include "MDStore.h"
 #include "Migrator.h"
 
 #include "config.h"
@@ -96,7 +95,7 @@ bool EMetaBlob::has_expired(MDS *mds)
       continue;       // not our problem
     }
 
-    if (dir->get_last_committed_version() < lp->second.dirv) {
+    if (dir->get_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.has_expired need dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
       return false;  // not committed.
@@ -111,7 +110,7 @@ bool EMetaBlob::has_expired(MDS *mds)
 
 void EMetaBlob::expire(MDS *mds, Context *c)
 {
-  list<CDir*> commit;
+  map<CDir*,version_t> commit;  // dir -> version needed
   list<CDir*> waitfor_export;
   int ncommit = 0;
 
@@ -142,10 +141,10 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 	       << " for " << *dir << endl;
       continue;     // not our problem
     }
-    if (dir->get_last_committed_version() < lp->second.dirv) {
+    if (dir->get_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
 	       << ", committing " << *dir << endl;
-      commit.push_back(dir);
+      commit[dir] = MAX(commit[dir], lp->second.dirv);
       ncommit++;
     } else {
       dout(10) << "EMetaBlob.expire have dirv " << lp->second.dirv
@@ -156,19 +155,15 @@ void EMetaBlob::expire(MDS *mds, Context *c)
   // commit
   assert(!commit.empty());
 
-  if (ncommit == 1) {
-    mds->mdstore->commit_dir(commit.front(), c);
-  } else {
-    C_Gather *gather = new C_Gather(c);
-    for (list<CDir*>::iterator p = commit.begin();
-	 p != commit.end();
-	 ++p)
-      mds->mdstore->commit_dir(*p, gather->new_sub());
-    for (list<CDir*>::iterator p = waitfor_export.begin();
-	 p != waitfor_export.end();
-	 ++p) 
-      mds->mdcache->migrator->add_export_finish_waiter(*p, gather->new_sub());
-  }
+  C_Gather *gather = new C_Gather(c);
+  for (map<CDir*,version_t>::iterator p = commit.begin();
+       p != commit.end();
+       ++p)
+    p->first->commit(p->second, gather->new_sub());
+  for (list<CDir*>::iterator p = waitfor_export.begin();
+       p != waitfor_export.end();
+       ++p) 
+    mds->mdcache->migrator->add_export_finish_waiter(*p, gather->new_sub());
 }
 
 void EMetaBlob::replay(MDS *mds)

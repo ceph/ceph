@@ -12,7 +12,6 @@
  */
 
 #include "MDCache.h"
-#include "MDStore.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "MDS.h"

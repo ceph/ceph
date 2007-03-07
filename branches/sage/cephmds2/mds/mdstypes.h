@@ -45,6 +45,27 @@ using namespace std;
 
 
 // ================================================================
+// dir frag
+
+struct dirfrag_t {
+  inodeno_t ino;
+  frag_t    frag;
+
+  dirfrag_t() { }
+  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
+};
+
+inline ostream& operator<<(ostream& out, const dirfrag_t& df) {
+  return out << df.ino << "#" << df.frag;
+}
+inline bool operator<(dirfrag_t l, dirfrag_t r) {
+  if (l.ino < r.ino) return true;
+  if (l.ino == r.ino && l.frag < r.frag) return true;
+  return false;
+}
+
+
+// ================================================================
 
 /* meta_load_t
  * hierarchical load for an inode/dir and it's children
@@ -165,14 +186,6 @@ inline mds_load_t operator/( mds_load_t& a, double d )
 }
 */
 
-
-// ================================================================
-// dir slices
-
-struct dirslice_t {
-  inodeno_t ino;
-  frag_t fg;
-};
 
 
 

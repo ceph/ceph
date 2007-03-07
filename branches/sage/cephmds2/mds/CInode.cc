@@ -105,6 +105,33 @@ CInode::~CInode() {
 }
 
 
+// dirfrags
+
+void CInode::get_dirfrags(list<CDir*>& ls) 
+{
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    ls.push_back(p->second);
+}
+void CInode::get_nested_dirfrags(list<CDir*>& ls) 
+{  // same subtree
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    if (!p->second->is_subtree_root())
+      ls.push_back(p->second);
+}
+void CInode::get_subtree_dirfrags(list<CDir*>& ls) 
+{  // new subtree
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    if (p->second->is_subtree_root())
+      ls.push_back(p->second);
+}
+
+
 // pins
 
 void CInode::first_get()

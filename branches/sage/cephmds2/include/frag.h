@@ -70,7 +70,7 @@ class frag_t {
     return (sub.bits() >= bits() &&             // they are more specific than us,
 	    (sub.value() & mask()) == value()); // and they are contained by us.
   }
-  bool root() const { 
+  bool is_root() const { 
     return bits() == 0; 
   }
   frag_t parent() const {

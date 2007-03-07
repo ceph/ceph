@@ -414,10 +414,10 @@ public:
       assert(in && in->dir);
       if (in && in->dir && in->dir->is_auth()) {
         dout(7) << "CommitDirVerify: current = " << in->dir->get_version() 
-		<< ", last committed = " << in->dir->get_last_committed_version() 
+		<< ", committed = " << in->dir->get_committed_version() 
 		<< ", required = " << version << endl;
         
-        if (in->dir->get_last_committed_version() >= version) {
+        if (in->dir->get_committed_version() >= version) {
           dout(7) << "my required version is safe, done." << endl;
 	  if (c) {
 	    c->finish(0);
@@ -489,7 +489,7 @@ void MDStore::commit_dir( CDir *dir,
     dout(7) << "  current version = " << dir->get_version() << endl;
     dout(7) << "requested version = " << version << endl;
 
-    assert(version >= dir->get_last_committed_version());  // why would we request _old_ one?
+    assert(version >= dir->get_committed_version());  // why would we request _old_ one?
 
     dir->add_waiter(CDIR_WAIT_COMMITTED, 
                     new C_MDS_CommitDirVerify(mds, dir->ino(), version, c) );
@@ -548,7 +548,7 @@ void MDStore::commit_dir_2( int result,
   assert(committed_version == dir->get_committing_version());
 
   // remember which version is now safe
-  dir->set_last_committed_version(committed_version);
+  dir->set_committed_version(committed_version);
   
   // is the dir now clean?
   if (committed_version == dir->get_version())

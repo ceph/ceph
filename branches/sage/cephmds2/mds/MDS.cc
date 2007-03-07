@@ -28,7 +28,6 @@
 #include "Server.h"
 #include "Locker.h"
 #include "MDCache.h"
-#include "MDStore.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
 #include "IdAllocator.h"
@@ -81,7 +80,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   filer = new Filer(objecter);
 
   mdcache = new MDCache(this);
-  mdstore = new MDStore(this);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
@@ -117,7 +115,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
 
 MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
-  if (mdstore) { delete mdstore; mdstore = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
@@ -695,7 +692,7 @@ void MDS::boot_create()
     dir->mark_dirty(dir->pre_dirty());
     
     // save it
-    mdstore->commit_dir(dir, fin->new_sub());
+    dir->commit(0, fin->new_sub());
   }
 
   // start with a fresh journal

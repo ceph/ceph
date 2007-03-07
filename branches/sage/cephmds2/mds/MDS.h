@@ -81,7 +81,6 @@ class Locker;
 class AnchorTable;
 class AnchorClient;
 class MDCache;
-class MDStore;
 class MDLog;
 class MDBalancer;
 class IdAllocator;
@@ -122,7 +121,6 @@ class MDS : public Dispatcher {
   Server       *server;
   MDCache      *mdcache;
   Locker       *locker;
-  MDStore      *mdstore;
   MDLog        *mdlog;
   MDBalancer   *balancer;
 
@@ -195,10 +193,6 @@ class MDS : public Dispatcher {
  public:
 
   int get_req_rate() { return req_rate; }
-
- protected:
-
-  friend class MDStore;
 
  
  public:
