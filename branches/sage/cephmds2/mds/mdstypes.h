@@ -52,6 +52,7 @@ struct dirfrag_t {
   frag_t    frag;
 
   dirfrag_t() { }
+  //dirfrag_t(inodeno_t i) : ino(i) { }
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 };
 

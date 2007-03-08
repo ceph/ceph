@@ -687,7 +687,7 @@ void MDS::boot_create()
     assert(root);
     
     // force empty root dir
-    CDir *dir = root->dir;
+    CDir *dir = root->get_dirfrag(frag_t());
     dir->mark_complete();
     dir->mark_dirty(dir->pre_dirty());
     
@@ -1004,8 +1004,10 @@ void MDS::my_dispatch(Message *m)
     int n = rand() % mdcache->inode_map.size();
     hash_map<inodeno_t,CInode*>::iterator p = mdcache->inode_map.begin();
     while (n--) p++;
-    
-    CDir *dir = p->second->dir;
+
+    list<CDir*> ls;
+    p->second->get_dirfrags(ls);
+    CDir *dir = ls.front();
     if (!dir) continue;                      // must be a dir.
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
@@ -1022,6 +1024,7 @@ void MDS::my_dispatch(Message *m)
 
 
   // hack: force hash root?
+  /*
   if (false &&
       mdcache->get_root() &&
       mdcache->get_root()->dir &&
@@ -1030,7 +1033,7 @@ void MDS::my_dispatch(Message *m)
     dout(0) << "hashing root" << endl;
     mdcache->migrator->hash_dir(mdcache->get_root()->dir);
   }
-
+  */
 
 
 

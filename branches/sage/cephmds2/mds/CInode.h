@@ -36,50 +36,6 @@
 using namespace std;
 
 
-// wait reasons
-#define CINODE_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
-    // waiters: write_hard_start, read_file_start, write_file_start  (mdcache)
-    //          handle_client_chmod, handle_client_touch             (mds)
-    // trigger: (see CDIR_WAIT_UNFREEZE)
-#define CINODE_WAIT_GETREPLICA    (1<<11)  // update/replicate individual inode
-    // waiters: import_dentry_inode
-    // trigger: handle_inode_replicate_ack
-
-#define CINODE_WAIT_DIR           (1<<13)
-    // waiters: traverse_path
-    // triggers: handle_disocver_reply
-
-#define CINODE_WAIT_LINK         (1<<14)  // as in remotely nlink++
-#define CINODE_WAIT_ANCHORED     (1<<15)
-#define CINODE_WAIT_UNLINK       (1<<16)  // as in remotely nlink--
-
-#define CINODE_WAIT_HARDR        (1<<17)  // 131072
-#define CINODE_WAIT_HARDW        (1<<18)  // 262...
-#define CINODE_WAIT_HARDB        (1<<19)
-#define CINODE_WAIT_HARDRWB      (CINODE_WAIT_HARDR|CINODE_WAIT_HARDW|CINODE_WAIT_HARDB)
-#define CINODE_WAIT_HARDSTABLE   (1<<20)
-#define CINODE_WAIT_HARDNORD     (1<<21)
-#define CINODE_WAIT_FILER        (1<<22)  
-#define CINODE_WAIT_FILEW        (1<<23)
-#define CINODE_WAIT_FILEB        (1<<24)
-#define CINODE_WAIT_FILERWB      (CINODE_WAIT_FILER|CINODE_WAIT_FILEW|CINODE_WAIT_FILEB)
-#define CINODE_WAIT_FILESTABLE   (1<<25)
-#define CINODE_WAIT_FILENORD     (1<<26)
-#define CINODE_WAIT_FILENOWR     (1<<27)
-
-#define CINODE_WAIT_RENAMEACK       (1<<28)
-#define CINODE_WAIT_RENAMENOTIFYACK (1<<29)
-
-#define CINODE_WAIT_CAPS            (1<<30)
-
-#define CINODE_WAIT_ANY           0xffffffff
-
-
-
-// misc
-#define CINODE_EXPORT_NONCE      1 // nonce given to replicas created by export
-#define CINODE_HASHREPLICA_NONCE 1 // hashed inodes that are duped ???FIXME???
-
 class Context;
 class CDentry;
 class CDir;
@@ -131,7 +87,7 @@ class CInode : public MDSCacheObject {
     }
   }
 
-  // state
+  // -- state --
   static const int STATE_AUTH =       (1<<0);
   static const int STATE_ROOT =       (1<<1);
   static const int STATE_DIRTY =      (1<<2);
@@ -145,6 +101,37 @@ class CInode : public MDSCacheObject {
   //static const int STATE_RENAMING =   (1<<8);  // moving me
   //static const int STATE_RENAMINGTO = (1<<9);  // rename target (will be unlinked)
 
+  // -- waiters --
+  static const int WAIT_AUTHPINNABLE  = (1<<10);
+    // waiters: write_hard_start, read_file_start, write_file_start  (mdcache)
+    //          handle_client_chmod, handle_client_touch             (mds)
+    // trigger: (see CDIR_WAIT_UNFREEZE)
+  static const int WAIT_DIR          = (1<<13);
+    // waiters: traverse_path
+    // triggers: handle_disocver_reply
+  static const int WAIT_LINK        = (1<<14);  // as in remotely nlink++
+  static const int WAIT_ANCHORED    = (1<<15);
+  static const int WAIT_UNLINK      = (1<<16);  // as in remotely nlink--
+  static const int WAIT_HARDR       = (1<<17);  // 131072
+  static const int WAIT_HARDW       = (1<<18);  // 262...
+  static const int WAIT_HARDB       = (1<<19);
+  static const int WAIT_HARDRWB     = (WAIT_HARDR|WAIT_HARDW|WAIT_HARDB);
+  static const int WAIT_HARDSTABLE  = (1<<20);
+  static const int WAIT_HARDNORD    = (1<<21);
+  static const int WAIT_FILER       = (1<<22);
+  static const int WAIT_FILEW       = (1<<23);
+  static const int WAIT_FILEB       = (1<<24);
+  static const int WAIT_FILERWB     = (WAIT_FILER|WAIT_FILEW|WAIT_FILEB);
+  static const int WAIT_FILESTABLE  = (1<<25);
+  static const int WAIT_FILENORD    = (1<<26);
+  static const int WAIT_FILENOWR    = (1<<27);
+  static const int WAIT_RENAMEACK       =(1<<28);
+  static const int WAIT_RENAMENOTIFYACK =(1<<29);
+  static const int WAIT_CAPS            =(1<<30);
+  static const int WAIT_ANY           = 0xffffffff;
+
+  // misc
+  static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
 
 
 
@@ -163,6 +150,11 @@ class CInode : public MDSCacheObject {
   // new way
   map<frag_t,CDir*> dirfrags; // cached dir fragments
 
+  CDir* get_dirfrag(frag_t fg) {
+    // old way
+    assert(fg == 0);
+    return dir;
+  }
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
   void get_subtree_dirfrags(list<CDir*>& ls);
@@ -297,10 +289,10 @@ protected:
 
 
   bool is_hardlock_write_wanted() {
-    return waiting_for(CINODE_WAIT_HARDW);
+    return waiting_for(WAIT_HARDW);
   }
   bool is_filelock_write_wanted() {
-    return waiting_for(CINODE_WAIT_FILEW);
+    return waiting_for(WAIT_FILEW);
   }
 
   // -- caps -- (new)

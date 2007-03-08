@@ -555,9 +555,7 @@ void EPurgeFinish::replay(MDS *mds)
 
 bool EExport::has_expired(MDS *mds)
 {
-  CInode *diri = mds->mdcache->get_inode(dirino);
-  if (!diri) return true;
-  CDir *dir = diri->dir;
+  CDir *dir = mds->mdcache->get_dirfrag(base);
   if (!dir) return true;
   if (!mds->mdcache->migrator->is_exporting(dir))
     return true;
@@ -567,9 +565,7 @@ bool EExport::has_expired(MDS *mds)
 
 void EExport::expire(MDS *mds, Context *c)
 {
-  CInode *diri = mds->mdcache->get_inode(dirino);
-  assert(diri);
-  CDir *dir = diri->dir;
+  CDir *dir = mds->mdcache->get_dirfrag(base);
   assert(dir);
   assert(mds->mdcache->migrator->is_exporting(dir));
 
@@ -579,20 +575,17 @@ void EExport::expire(MDS *mds, Context *c)
 
 void EExport::replay(MDS *mds)
 {
-  dout(10) << "EExport.replay " << dirino << endl;
+  dout(10) << "EExport.replay " << base << endl;
   metablob.replay(mds);
   
-  CInode *diri = mds->mdcache->get_inode(dirino);
-  assert(diri);
-  CDir *dir = diri->dir;
+  CDir *dir = mds->mdcache->get_dirfrag(base);
   assert(dir);
   
   set<CDir*> realbounds;
-  for (set<inodeno_t>::iterator p = bounds.begin();
+  for (set<dirfrag_t>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) {
-    CInode *bdi = mds->mdcache->get_inode(*p);
-    CDir *bd = bdi->dir;
+    CDir *bd = mds->mdcache->get_dirfrag(*p);
     assert(bd);
     realbounds.insert(bd);
   }

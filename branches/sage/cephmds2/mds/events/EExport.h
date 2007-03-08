@@ -26,31 +26,31 @@ class EExport : public LogEvent {
 public:
   EMetaBlob metablob; // exported dir
 protected:
-  inodeno_t      dirino;
-  set<inodeno_t> bounds;
+  dirfrag_t      base;
+  set<dirfrag_t> bounds;
   
 public:
   EExport(CDir *dir) : LogEvent(EVENT_EXPORT),
-		       dirino(dir->ino()) { 
+		       base(dir->dirfrag()) { 
     metablob.add_dir_context(dir);
   }
   EExport() : LogEvent(EVENT_EXPORT) { }
   
-  set<inodeno_t> &get_bounds() { return bounds; }
+  set<dirfrag_t> &get_bounds() { return bounds; }
   
   void print(ostream& out) {
-    out << "export " << dirino << " " << metablob;
+    out << "export " << base << " " << metablob;
   }
 
   virtual void encode_payload(bufferlist& bl) {
     metablob._encode(bl);
-    bl.append((char*)&dirino, sizeof(dirino));
+    bl.append((char*)&base, sizeof(base));
     ::_encode(bounds, bl);
   }
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
-    bl.copy(off, sizeof(dirino), (char*)&dirino);
-    off += sizeof(dirino);
+    bl.copy(off, sizeof(base), (char*)&base);
+    off += sizeof(base);
     ::_decode(bounds, bl, off);
   }
   

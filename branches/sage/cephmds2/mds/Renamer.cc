@@ -380,7 +380,7 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
       assert(0);
 
     // set waiter on the inode (is this the best place?)
-    in->add_waiter(CINODE_WAIT_RENAMEACK, 
+    in->add_waiter(CInode::WAIT_RENAMEACK, 
                    new C_MDC_RenameAck(this, 
                                        srcdir, in, onfinish));
     return;
@@ -423,11 +423,11 @@ void Renamer::file_rename(CDentry *srcdn, CDentry *destdn, Context *onfinish)
     file_rename_notify(in, srcdir, srcname, destdir, destname, notify, mds->get_nodeid());
 
     // wait for MRenameNotifyAck's
-    in->add_waiter(CINODE_WAIT_RENAMENOTIFYACK,
+    in->add_waiter(CInode::WAIT_RENAMENOTIFYACK,
                    new C_MDC_RenameNotifyAck(this, in, mds->get_nodeid()));  // i am initiator
 
     // wait for finish
-    in->add_waiter(CINODE_WAIT_RENAMEACK,
+    in->add_waiter(CInode::WAIT_RENAMEACK,
                    new C_MDC_RenameAck(this, srcdir, in, onfinish));
   } else {
     // sweet, no notify necessary, we're done!
@@ -443,7 +443,7 @@ void Renamer::handle_rename_ack(MRenameAck *m)
   dout(7) << "handle_rename_ack on " << *in << endl;
 
   // all done!
-  in->finish_waiting(CINODE_WAIT_RENAMEACK);
+  in->finish_waiting(CInode::WAIT_RENAMEACK);
 
   delete m;
 }
@@ -560,7 +560,7 @@ void Renamer::file_rename_foreign_src(CDentry *srcdn,
 
 
   // wait for MRenameNotifyAck's
-  in->add_waiter(CINODE_WAIT_RENAMENOTIFYACK,
+  in->add_waiter(CInode::WAIT_RENAMENOTIFYACK,
                  new C_MDC_RenameNotifyAck(this, in, initiator));
 }
 
@@ -591,7 +591,7 @@ void Renamer::handle_rename_notify_ack(MRenameNotifyAck *m)
   if (rename_waiting_for_ack[in->ino()].empty()) {
     // last one!
 	rename_waiting_for_ack.erase(in->ino());
-    in->finish_waiting(CINODE_WAIT_RENAMENOTIFYACK, 0);
+    in->finish_waiting(CInode::WAIT_RENAMENOTIFYACK, 0);
   } else {
     dout(7) << "still waiting for " << rename_waiting_for_ack[in->ino()] << endl;
   }
@@ -613,7 +613,7 @@ void Renamer::file_rename_ack(CInode *in, int initiator)
   if (initiator == mds->get_nodeid()) {
     // it's me, finish
     dout(7) << "file_rename_ack i am initiator, finishing" << endl;
-    in->finish_waiting(CINODE_WAIT_RENAMEACK);
+    in->finish_waiting(CInode::WAIT_RENAMEACK);
   } else {
     // send ack
     dout(7) << "file_rename_ack sending MRenameAck to initiator " << initiator << endl;

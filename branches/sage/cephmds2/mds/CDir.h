@@ -43,71 +43,13 @@ class MDCluster;
 class Context;
 
 
+// -- authority delegation --
 // directory authority types
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_UNKNOWN  -2
-#define CDIR_AUTH_DEFAULT  pair<int,int>(CDIR_AUTH_PARENT,CDIR_AUTH_UNKNOWN)
-#define CDIR_AUTH_UNDEF    pair<int,int>(CDIR_AUTH_UNKNOWN,CDIR_AUTH_UNKNOWN)
-
-#define CDIR_NONCE_EXPORT   1
-
-
-
-
-
-
-
-
-
-
-// wait reasons
-#define CDIR_WAIT_DENTRY         1  // wait for item to be in cache
-     // waiters: path_traverse
-     // trigger: handle_discover, fetch_dir_2
-#define CDIR_WAIT_COMPLETE       2  // wait for complete dir contents
-     // waiters: fetch_dir, commit_dir
-     // trigger: fetch_dir_2
-#define CDIR_WAIT_FREEZEABLE     4  // hard_pins removed
-     // waiters: freeze, freeze_finish
-     // trigger: auth_unpin, adjust_nested_auth_pins
-#define CDIR_WAIT_UNFREEZE       8  // unfreeze
-     // waiters: path_traverse, handle_discover, handle_inode_update,
-     //           export_dir_frozen                                   (mdcache)
-     //          handle_client_readdir                                (mds)
-     // trigger: unfreeze
-#define CDIR_WAIT_AUTHPINNABLE  CDIR_WAIT_UNFREEZE
-    // waiters: commit_dir                                           (mdstore)
-    // trigger: (see CDIR_WAIT_UNFREEZE)
-#define CDIR_WAIT_COMMITTED     32  // did commit (who uses this?**)
-    // waiters: commit_dir (if already committing)
-    // trigger: commit_dir_2
-#define CDIR_WAIT_IMPORTED      64  // import finish
-    // waiters: import_dir_block
-    // triggers: handle_export_dir_finish
-
-#define CDIR_WAIT_EXPORTWARNING 8192    // on bystander.
-    // watiers: handle_export_dir_notify
-    // triggers: handle_export_dir_warning
-#define CDIR_WAIT_EXPORTPREPACK 16384
-    // waiter   export_dir
-    // trigger  handel_export_dir_prep_ack
-
-#define CDIR_WAIT_HASHED        (1<<17)  // hash finish
-#define CDIR_WAIT_THISHASHEDREADDIR (1<<18)  // current readdir lock
-#define CDIR_WAIT_NEXTHASHEDREADDIR (1<<19)  // after current readdir lock finishes
-
-#define CDIR_WAIT_DNREAD        (1<<20)
-#define CDIR_WAIT_DNLOCK        (1<<21)
-#define CDIR_WAIT_DNUNPINNED    (1<<22)
-#define CDIR_WAIT_DNPINNABLE    (CDIR_WAIT_DNREAD|CDIR_WAIT_DNUNPINNED)
-
-#define CDIR_WAIT_DNREQXLOCK    (1<<23)
-
-#define CDIR_WAIT_ANY   (0xffffffff)
-
-#define CDIR_WAIT_ATFREEZEROOT  (CDIR_WAIT_AUTHPINNABLE|\
-                                 CDIR_WAIT_UNFREEZE)      // hmm, same same
+#define CDIR_AUTH_DEFAULT pair<int,int>(-1, -2)
+#define CDIR_AUTH_UNDEF pair<int,int>(-2, -2)
 
 
 ostream& operator<<(ostream& out, class CDir& dir);
@@ -212,6 +154,38 @@ class CDir : public MDSCacheObject {
   static const int REP_LIST =     2;
 
 
+  static const int NONCE_EXPORT  = 1;
+
+
+  // -- wait masks --
+  static const int WAIT_DENTRY        = (1<<0);  // wait for item to be in cache
+     // waiters: path_traverse
+     // trigger: handle_discover, fetch_dir_2
+  static const int WAIT_COMPLETE      = (1<<1);  // wait for complete dir contents
+     // waiters: fetch_dir, commit_dir
+     // trigger: fetch_dir_2
+  static const int WAIT_FREEZEABLE    = (1<<2);  // hard_pins removed
+     // waiters: freeze, freeze_finish
+     // trigger: auth_unpin, adjust_nested_auth_pins
+  static const int WAIT_UNFREEZE      = (1<<3);  // unfreeze
+     // waiters: path_traverse, handle_discover, handle_inode_update,
+     //           export_dir_frozen                                   (mdcache)
+     //          handle_client_readdir                                (mds)
+     // trigger: unfreeze
+  static const int WAIT_AUTHPINNABLE = WAIT_UNFREEZE;
+  static const int WAIT_IMPORTED     = (1<<4);  // import finish
+  static const int WAIT_DNREAD       = (1<<20);
+  static const int WAIT_DNLOCK       = (1<<21);
+  static const int WAIT_DNUNPINNED   = (1<<22);
+  static const int WAIT_DNPINNABLE   = (WAIT_DNREAD|WAIT_DNUNPINNED);
+  static const int WAIT_DNREQXLOCK   = (1<<23);
+  
+  static const int WAIT_ANY  = (0xffffffff);
+  static const int WAIT_ATFREEZEROOT = (WAIT_AUTHPINNABLE|\
+					WAIT_UNFREEZE);      // hmm, same same
+
+
+
 
  public:
   // context
@@ -277,7 +251,9 @@ class CDir : public MDSCacheObject {
 
 
   // -- accessors --
-  inodeno_t ino()        { return inode->ino(); }
+  inodeno_t ino()     { return inode->ino(); }
+  dirfrag_t dirfrag() { return dirfrag_t(inode->ino(), frag); }
+
   CInode *get_inode()    { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
 

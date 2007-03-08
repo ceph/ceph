@@ -898,7 +898,7 @@ void MDCache::handle_mds_failure(int who)
       
       // take waiters
       list<Context*> waiters;
-      in->take_waiting(CINODE_WAIT_DIR, waiters);
+      in->take_waiting(CInode::WAIT_DIR, waiters);
       mds->queue_finished(waiters);
       dout(10) << "kicking WAIT_DIR on " << *in << endl;
       
@@ -939,7 +939,7 @@ void MDCache::handle_mds_recovery(int who)
     while (!q.empty()) {
       CDir *d = q.front();
       q.pop_front();
-      d->take_waiting(CDIR_WAIT_ANY, waiters);
+      d->take_waiting(CDir::WAIT_ANY, waiters);
 
       // inode waiters too
       for (CDir_map_t::iterator p = d->items.begin();
@@ -947,7 +947,7 @@ void MDCache::handle_mds_recovery(int who)
 	   ++p) {
 	CDentry *dn = p->second;
 	if (dn->is_primary()) {
-	  dn->get_inode()->take_waiting(CINODE_WAIT_ANY, waiters);
+	  dn->get_inode()->take_waiting(CInode::WAIT_ANY, waiters);
 	  
 	  // recurse?
 	  if (dn->get_inode()->dir &&
@@ -2329,7 +2329,7 @@ int MDCache::path_traverse(filepath& origpath,
         // parent dir frozen_dir?
         if (cur->is_frozen_dir()) {
           dout(7) << "traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << endl;
-          cur->get_parent_dir()->add_waiter(CDIR_WAIT_UNFREEZE, ondelay);
+          cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
           if (onfinish) delete onfinish;
           return 1;
         }
@@ -2339,7 +2339,7 @@ int MDCache::path_traverse(filepath& origpath,
       } else {
         // discover dir from/via inode auth
         assert(!cur->is_auth());
-        if (cur->waiting_for(CINODE_WAIT_DIR)) {
+        if (cur->waiting_for(CInode::WAIT_DIR)) {
           dout(10) << "traverse: need dir for " << *cur << ", already doing discover" << endl;
         } else {
           filepath want = path.postfixpath(depth);
@@ -2351,7 +2351,7 @@ int MDCache::path_traverse(filepath& origpath,
 				cur->authority().first, MDS_PORT_CACHE);
 	  dir_discovers[cur->ino()].insert(cur->authority().first);
         }
-        cur->add_waiter(CINODE_WAIT_DIR, ondelay);
+        cur->add_waiter(CInode::WAIT_DIR, ondelay);
         if (onfinish) delete onfinish;
         return 1;
       }
@@ -2363,7 +2363,7 @@ int MDCache::path_traverse(filepath& origpath,
       // doh!
       // FIXME: traverse is allowed?
       dout(7) << "traverse: " << *cur->dir << " is frozen, waiting" << endl;
-      cur->dir->add_waiter(CDIR_WAIT_UNFREEZE, ondelay);
+      cur->dir->add_waiter(CDir::WAIT_UNFREEZE, ondelay);
       if (onfinish) delete onfinish;
       return 1;
     }
@@ -2404,7 +2404,7 @@ int MDCache::path_traverse(filepath& origpath,
       // dentry exists.  xlocked?
       if (!noperm && dn->is_xlockedbyother(req)) {
         dout(10) << "traverse: xlocked dentry at " << *dn << endl;
-        cur->dir->add_waiter(CDIR_WAIT_DNREAD,
+        cur->dir->add_waiter(CDir::WAIT_DNREAD,
                              path[depth],
                              ondelay);
         if (onfinish) delete onfinish;
@@ -2548,7 +2548,7 @@ int MDCache::path_traverse(filepath& origpath,
         // discover
 
         filepath want = path.postfixpath(depth);
-        if (cur->dir->waiting_for(CDIR_WAIT_DENTRY, path[depth])) {
+        if (cur->dir->waiting_for(CDir::WAIT_DENTRY, path[depth])) {
           dout(7) << "traverse: already waiting for discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
         } else {
           dout(7) << "traverse: discover on " << *cur << " for " << want.get_path() << " to mds" << dauth << endl;
@@ -2573,7 +2573,7 @@ int MDCache::path_traverse(filepath& origpath,
         // delay processing of current request.
         //  delay finish vs ondelay until result of traverse, so that ENOENT can be 
         //  passed to onfinish if necessary
-        cur->dir->add_waiter(CDIR_WAIT_DENTRY, 
+        cur->dir->add_waiter(CDir::WAIT_DENTRY, 
                              path[depth], 
                              new C_MDC_TraverseDiscover(onfinish, ondelay));
         
@@ -2639,7 +2639,7 @@ void MDCache::open_remote_dir(CInode *diri,
 				      true),  // need the dir open
 			diri->authority().first, MDS_PORT_CACHE);
   dir_discovers[diri->ino()].insert(diri->authority().first);
-  diri->add_waiter(CINODE_WAIT_DIR, fin);
+  diri->add_waiter(CInode::WAIT_DIR, fin);
 }
 
 
@@ -2721,7 +2721,7 @@ bool MDCache::path_pin(vector<CDentry*>& trace,
       // wait
       if (c) {
         dout(10) << "path_pin can't pin " << *dn << ", waiting" << endl;
-        dn->dir->add_waiter(CDIR_WAIT_DNPINNABLE,   
+        dn->dir->add_waiter(CDir::WAIT_DNPINNABLE,   
                             dn->name,
                             c);
       } else {
@@ -2760,7 +2760,7 @@ void MDCache::path_unpin(vector<CDentry*>& trace,
       dn->lockstate = DN_LOCK_SYNC;
 
       // run finisher right now to give them a fair shot.
-      dn->dir->finish_waiting(CDIR_WAIT_DNUNPINNED, dn->name);
+      dn->dir->finish_waiting(CDir::WAIT_DNUNPINNED, dn->name);
     }
   }
 }
@@ -2840,7 +2840,7 @@ void MDCache::request_cleanup(Message *req)
       mds->locker->dentry_xlock_finish(dn);
       
       // queue finishers
-      dn->dir->take_waiting(CDIR_WAIT_ANY, dn->name, mds->finished_queue);
+      dn->dir->take_waiting(CDir::WAIT_ANY, dn->name, mds->finished_queue);
 
       // remove clean, null dentry?  (from a failed rename or whatever)
       if (dn->is_null() && dn->is_sync() && !dn->is_dirty()) {
@@ -2906,7 +2906,7 @@ void MDCache::request_cleanup(Message *req)
   if (g_conf.log_pins) {
     // pin
     /*
-for (int i=0; i<CINODE_NUM_PINS; i++) {
+for (int i=0; i<CInode::NUM_PINS; i++) {
       if (mds->logger2) mds->logger2->set(cinode_pin_names[i],
 					  cinode_pins[i]);
     }
@@ -2989,7 +2989,7 @@ public:
     }
 
     // trigger
-    in->finish_waiting(CINODE_WAIT_ANCHORED, r);
+    in->finish_waiting(CInode::WAIT_ANCHORED, r);
   }
 };
 
@@ -3002,7 +3002,7 @@ void MDCache::anchor_inode(CInode *in, Context *onfinish)
     dout(7) << "anchor_inode already anchoring " << *in << endl;
 
     // wait
-    in->add_waiter(CINODE_WAIT_ANCHORED,
+    in->add_waiter(CInode::WAIT_ANCHORED,
                    onfinish);
 
   } else {
@@ -3013,7 +3013,7 @@ void MDCache::anchor_inode(CInode *in, Context *onfinish)
     in->get(CInode::PIN_ANCHORING);
     
     // wait
-    in->add_waiter(CINODE_WAIT_ANCHORED,
+    in->add_waiter(CInode::WAIT_ANCHORED,
                    onfinish);
     
     // make trace
@@ -3066,7 +3066,7 @@ void MDCache::handle_inode_link_ack(MInodeLinkAck *m)
   assert(in);
 
   dout(7) << "handle_inode_link_ack success = " << m->is_success() << " on " << *in << endl;
-  in->finish_waiting(CINODE_WAIT_LINK,
+  in->finish_waiting(CInode::WAIT_LINK,
                      m->is_success() ? 1:-1);
 }
 
@@ -3132,7 +3132,7 @@ void MDCache::handle_discover(MDiscover *dis)
     // frozen_dir?
     if (!cur->dir && cur->is_frozen_dir()) {
       dout(7) << "is frozen_dir, waiting" << endl;
-      cur->get_parent_dir()->add_waiter(CDIR_WAIT_UNFREEZE, 
+      cur->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, 
                                         new C_MDS_RetryMessage(mds, dis));
       return;
     }
@@ -3209,7 +3209,7 @@ void MDCache::handle_discover(MDiscover *dis)
     /*
     if (dn && !dn->can_read()) { // xlocked?
       dout(7) << "waiting on " << *dn << endl;
-      cur->dir->add_waiter(CDIR_WAIT_DNREAD,
+      cur->dir->add_waiter(CDir::WAIT_DNREAD,
                            dn->name,
                            new C_MDS_RetryMessage(mds, dis));
       return;
@@ -3292,7 +3292,7 @@ void MDCache::handle_discover(MDiscover *dis)
     // wait for frozen dir?
     if (cur->dir->is_frozen()) {
       dout(7) << "waiting for frozen " << *cur->dir << endl;
-      cur->dir->add_waiter(CDIR_WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+      cur->dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
       return;
     } else {
       dout(7) << "i'm not auth, dropping request (+this empty reply)." << endl;
@@ -3386,7 +3386,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         dout(7) << "added " << *cur->dir << " nonce " << cur->dir->replica_nonce << endl;
 
         // get waiters
-        cur->take_waiting(CINODE_WAIT_DIR, finished);
+        cur->take_waiting(CInode::WAIT_DIR, finished);
 	dir_discovers.erase(cur->ino());
       }
     }    
@@ -3398,12 +3398,12 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       assert(cur->is_dir());
       if (cur->dir) {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dentry?" << endl;
-        cur->dir->take_waiting(CDIR_WAIT_DENTRY,
+        cur->dir->take_waiting(CDir::WAIT_DENTRY,
                                m->get_error_dentry(),
                                error);
       } else {
         dout(7) << " flag_error on dentry " << m->get_error_dentry() << ", triggering dir?" << endl;
-        cur->take_waiting(CINODE_WAIT_DIR, error);
+        cur->take_waiting(CInode::WAIT_DIR, error);
 	dir_discovers.erase(cur->ino());
       }
       break;
@@ -3428,7 +3428,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         dout(7) << "added " << *dn << endl;
       }
 
-      cur->dir->take_waiting(CDIR_WAIT_DENTRY,
+      cur->dir->take_waiting(CDir::WAIT_DENTRY,
                              m->get_dentry(i).get_dname(),
                              finished);
     }
@@ -3495,7 +3495,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     // dir error at the end there?
     dout(7) << " flag_error on dir " << *cur << endl;
     assert(!cur->is_dir());
-    cur->take_waiting(CINODE_WAIT_DIR, error);
+    cur->take_waiting(CInode::WAIT_DIR, error);
     dir_discovers.erase(cur->ino());
   }
 
@@ -3773,7 +3773,7 @@ void MDCache::dentry_unlink(CDentry *dn, Context *c)
       dn->_mark_dirty(); // fixme
 
       // add waiter
-      in->add_waiter(CINODE_WAIT_UNLINK, c);
+      in->add_waiter(CInode::WAIT_UNLINK, c);
       return;
     }
   }
@@ -3802,7 +3802,7 @@ void MDCache::dentry_unlink_finish(CDentry *dn, CDir *dir, Context *c)
     migrator->export_empty_import(dir);
 
   // wake up any waiters
-  dir->take_waiting(CDIR_WAIT_ANY, dname, mds->finished_queue);
+  dir->take_waiting(CDir::WAIT_ANY, dname, mds->finished_queue);
 
   c->finish(0);
 }
@@ -3838,8 +3838,8 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       dn->dir->remove_dentry(dn);
       
       // wake up
-      //dir->finish_waiting(CDIR_WAIT_DNREAD, dname);
-      dir->take_waiting(CDIR_WAIT_DNREAD, dname, mds->finished_queue);
+      //dir->finish_waiting(CDir::WAIT_DNREAD, dname);
+      dir->take_waiting(CDir::WAIT_DNREAD, dname, mds->finished_queue);
     }
   }
 
@@ -3903,114 +3903,8 @@ void MDCache::handle_inode_unlink_ack(MInodeUnlinkAck *m)
   assert(in);
 
   dout(7) << "handle_inode_unlink_ack on " << *in << endl;
-  in->finish_waiting(CINODE_WAIT_UNLINK, 0);
+  in->finish_waiting(CInode::WAIT_UNLINK, 0);
 }
-
-
-
-
-
-
-
-
-
-
-/*
- * some import/export helpers
- */
-
-/** con = get_auth_container(dir)
- * Returns the directory in which authority is delegated for *dir.  
- * This may be because a directory is an import, or because it is hashed
- * and we are nested underneath an inode in that dir (that hashes to us).
- * Thus do not assume result->is_auth()!  It is_auth() || is_hashed().
- */
-
-/*
-CDir *MDCache::get_auth_container(CDir *dir)
-{
-  CDir *imp = dir;  // might be *dir
-
-  // find the underlying import or hash that delegates dir
-  while (true) {
-    if (imp->is_import()) break; // import
-    imp = imp->get_parent_dir();
-    if (!imp) break;             // none
-    if (imp->is_hashed()) break; // hash
-  }
-
-  return imp;
-}
-
-CDir *MDCache::get_export_container(CDir *dir)
-{
-  CDir *ex = dir;  // might be *dir
-  assert(!ex->is_auth());
-  
-  // find the underlying import or hash that delegates dir away
-  while (true) {
-    if (ex->is_export()) break; // import
-    ex = ex->get_parent_dir();
-    assert(ex);
-    if (ex->is_hashed()) break; // hash
-  }
-
-  return ex;
-}
-
-
-void MDCache::find_nested_exports(CDir *dir, set<CDir*>& s) 
-{
-  CDir *import = get_auth_container(dir);
-  find_nested_exports_under(import, dir, s);
-}
-
-void MDCache::find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s)
-{
-  dout(10) << "find_nested_exports for " << *dir << endl;
-  dout(10) << "find_nested_exports_under import " << *import << endl;
-
-  if (import == dir) {
-    // yay, my job is easy!
-    for (set<CDir*>::iterator p = nested_exports[import].begin();
-         p != nested_exports[import].end();
-         p++) {
-      CDir *nested = *p;
-      s.insert(nested);
-      dout(10) << "find_nested_exports " << *dir << " " << *nested << endl;
-    }
-    return;
-  }
-
-  // ok, my job is annoying.
-  for (set<CDir*>::iterator p = nested_exports[import].begin();
-       p != nested_exports[import].end();
-       p++) {
-    CDir *nested = *p;
-    
-    dout(12) << "find_nested_exports checking " << *nested << endl;
-
-    // trace back to import, or dir
-    CDir *cur = nested->get_parent_dir();
-    while (!cur->is_import() || cur == dir) {
-      if (cur == dir) {
-        s.insert(nested);
-        dout(10) << "find_nested_exports " << *dir << " " << *nested << endl;
-        break;
-      } else {
-        cur = cur->get_parent_dir();
-      }
-    }
-  }
-}
-
-
-*/
-
-
-
-
-
 
 
 

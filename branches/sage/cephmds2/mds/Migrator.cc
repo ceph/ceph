@@ -746,7 +746,7 @@ void Migrator::export_go(CDir *dir)
   mds->send_message_mds(req, dest, MDS_PORT_MIGRATOR);
 
   // queue up the finisher
-  dir->add_waiter( CDIR_WAIT_UNFREEZE, fin );
+  dir->add_waiter( CDir::WAIT_UNFREEZE, fin );
 
   // stats
   if (mds->logger) mds->logger->inc("ex");
@@ -823,7 +823,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, int new_au
   // mark auth
   assert(in->is_auth());
   in->set_auth(false);
-  in->replica_nonce = CINODE_EXPORT_NONCE;
+  in->replica_nonce = CInode::EXPORT_NONCE;
   
   // *** other state too?
 
@@ -857,7 +857,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
   // mark
   assert(dir->is_auth());
   dir->state_clear(CDir::STATE_AUTH);
-  dir->replica_nonce = CDIR_NONCE_EXPORT;
+  dir->replica_nonce = CDir::NONCE_EXPORT;
 
   list<CDir*> subdirs;
 
@@ -875,7 +875,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
     
     // suck up all waiters
     list<Context*> waiting;
-    dir->take_waiting(CDIR_WAIT_ANY, waiting);    // all dir waiters
+    dir->take_waiting(CDir::WAIT_ANY, waiting);    // all dir waiters
     fin->take(waiting);
     
     // inodes
@@ -936,7 +936,7 @@ int Migrator::encode_export_dir(list<bufferlist>& dirstatelist,
       
       // waiters
       list<Context*> waiters;
-      in->take_waiting(CINODE_WAIT_ANY, waiters);
+      in->take_waiting(CInode::WAIT_ANY, waiters);
       fin->take(waiters);
     }
   }
@@ -1306,7 +1306,7 @@ void Migrator::handle_export_discover_2(MExportDirDiscover *m, CInode *in, int r
   /*
   if (in->is_frozen()) {
     dout(7) << "frozen, waiting." << endl;
-    in->add_waiter(CINODE_WAIT_AUTHPINNABLE,
+    in->add_waiter(CInode::WAIT_AUTHPINNABLE,
                    new C_MDS_RetryMessage(mds,m));
     return;
   }
@@ -1357,7 +1357,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     
     dout(7) << "handle_export_prep on " << *dir << " (opening dir)" << endl;
 
-    diri->take_waiting(CINODE_WAIT_DIR, finished);
+    diri->take_waiting(CInode::WAIT_DIR, finished);
   }
   assert(dir->is_auth() == false);
   
@@ -1412,7 +1412,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
           in->set_dir( new CDir(in, mds->mdcache, false) );
           m->get_dir(in->ino())->update_dir(in->dir);
           dout(7) << "   added " << *in->dir << endl;
-          in->take_waiting(CINODE_WAIT_DIR, finished);
+          in->take_waiting(CInode::WAIT_DIR, finished);
         }
       }
     }
@@ -1785,7 +1785,7 @@ void Migrator::import_finish(CDir *dir, bool now)
 
   // ok now finish contexts
   dout(5) << "finishing any waiters on imported data" << endl;
-  dir->finish_waiting(CDIR_WAIT_IMPORTED);
+  dir->finish_waiting(CDir::WAIT_IMPORTED);
 
   // log it
   if (mds->logger) {
@@ -1839,7 +1839,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
   
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
-  in->add_replica( oldauth, CINODE_EXPORT_NONCE );
+  in->add_replica( oldauth, CInode::EXPORT_NONCE );
   if (in->is_replica(mds->get_nodeid()))
     in->remove_replica(mds->get_nodeid());
   
@@ -1929,11 +1929,11 @@ int Migrator::decode_import_dir(bufferlist& bl,
     // a replica's presense in my cache implies/forces it's presense in authority's.
     list<Context*> waiters;
     
-    dir->take_waiting(CDIR_WAIT_ANY, waiters);
+    dir->take_waiting(CDir::WAIT_ANY, waiters);
     for (list<Context*>::iterator it = waiters.begin();
          it != waiters.end();
          it++) 
-      import_root->add_waiter(CDIR_WAIT_IMPORTED, *it);
+      import_root->add_waiter(CDir::WAIT_IMPORTED, *it);
     
     dout(15) << "doing contents" << endl;
     

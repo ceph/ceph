@@ -543,7 +543,7 @@ bool Server::try_open_dir(CInode *in, MClientRequest *req)
     // doh!
     dout(10) << " dir inode is frozen, can't open dir, waiting " << *in << endl;
     assert(in->get_parent_dir());
-    in->get_parent_dir()->add_waiter(CDIR_WAIT_UNFREEZE,
+    in->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
                                      new C_MDS_RetryRequest(mds, req, in));
     return false;
   }
@@ -861,6 +861,7 @@ void Server::handle_hash_readdir(MHashReaddir *m)
 
 void Server::handle_hash_readdir_reply(MHashReaddirReply *m)
 {
+  /*
   CInode *cur = mdcache->get_inode(m->get_ino());
   assert(cur);
 
@@ -894,7 +895,7 @@ void Server::handle_hash_readdir_reply(MHashReaddirReply *m)
   
   // do these finishers.  they'll copy the results.
   list<Context*> finished;
-  dir->take_waiting(CDIR_WAIT_THISHASHEDREADDIR, finished);
+  dir->take_waiting(CDir::WAIT_THISHASHEDREADDIR, finished);
   finish_contexts(finished);
   
   // now discard these results
@@ -912,7 +913,8 @@ void Server::handle_hash_readdir_reply(MHashReaddirReply *m)
   dir->auth_unpin();
   
   // trigger any waiters for next hashed readdir cycle
-  dir->take_waiting(CDIR_WAIT_NEXTHASHEDREADDIR, mds->finished_queue);
+  dir->take_waiting(CDir::WAIT_NEXTHASHEDREADDIR, mds->finished_queue);
+  */
 }
 
 
@@ -985,7 +987,7 @@ void Server::handle_client_readdir(MClientRequest *req,
   if (cur->dir->is_hashed() &&
       cur->dir->is_unhashing()) {
     dout(10) << "unhashing, waiting" << endl;
-    cur->dir->add_waiter(CDIR_WAIT_UNFREEZE,
+    cur->dir->add_waiter(CDir::WAIT_UNFREEZE,
                          new C_MDS_RetryRequest(mds, req, cur));
     return;
   }
@@ -1007,16 +1009,17 @@ void Server::handle_client_readdir(MClientRequest *req,
 
   if (dir->is_hashed()) {
     // HASHED
+    /*
     dout(7) << "hashed dir" << endl;
     if (!dir->can_auth_pin()) {
       dout(7) << "can't auth_pin dir " << *dir << " waiting" << endl;
-      dir->add_waiter(CDIR_WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
+      dir->add_waiter(CDir::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, req, cur));
       return;
     }
 
     if (!dir->hashed_readdir.empty()) {
       dout(7) << "another readdir gather in progres, waiting" << endl;
-      dir->add_waiter(CDIR_WAIT_NEXTHASHEDREADDIR, new C_MDS_RetryRequest(mds, req, cur));
+      dir->add_waiter(CDir::WAIT_NEXTHASHEDREADDIR, new C_MDS_RetryRequest(mds, req, cur));
       return;
     }
 
@@ -1038,8 +1041,9 @@ void Server::handle_client_readdir(MClientRequest *req,
     }
 
     // wait
-    dir->add_waiter(CDIR_WAIT_THISHASHEDREADDIR, 
+    dir->add_waiter(CDir::WAIT_THISHASHEDREADDIR, 
                     new C_MDS_HashReaddir(this, req, dir));
+    */
   } else {
     // NON-HASHED
     // build dir contents
@@ -1173,7 +1177,7 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
   // dir auth pinnable?
   if (!dir->can_auth_pin()) {
     dout(7) << "validate_new_dentry_dir: dir " << *dir << " not pinnable, waiting" << endl;
-    dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+    dir->add_waiter(CDir::WAIT_AUTHPINNABLE,
 		    new C_MDS_RetryRequest(mds, req, diri));
     return false;
   }
@@ -1181,7 +1185,7 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
   // frozen?
   if (dir->is_frozen()) {
     dout(7) << "dir is frozen " << *dir << endl;
-    dir->add_waiter(CDIR_WAIT_UNFREEZE,
+    dir->add_waiter(CDir::WAIT_UNFREEZE,
                     new C_MDS_RetryRequest(mds, req, diri));
     return false;
   }
@@ -1218,7 +1222,7 @@ int Server::prepare_mknod(MClientRequest *req, CInode *diri,
   if (*pdn) {
     if (!(*pdn)->can_read(req)) {
       dout(10) << "waiting on (existing!) dentry " << **pdn << endl;
-      dir->add_waiter(CDIR_WAIT_DNREAD, name, new C_MDS_RetryRequest(mds, req, diri));
+      dir->add_waiter(CDir::WAIT_DNREAD, name, new C_MDS_RetryRequest(mds, req, diri));
       return 0;
     }
 
@@ -1507,7 +1511,7 @@ void Server::handle_client_link_2(int r, MClientRequest *req, CInode *diri, vect
     mds->send_message_mds(new MInodeLink(targeti->ino(), mds->get_nodeid()), targeti->authority().first, MDS_PORT_CACHE);
     
     // wait
-    targeti->add_waiter(CINODE_WAIT_LINK,
+    targeti->add_waiter(CInode::WAIT_LINK,
                         new C_MDS_RemoteLink(this, req, diri, dn, targeti));
     return;
   }
@@ -1584,7 +1588,7 @@ void Server::handle_client_unlink(MClientRequest *req,
   // have it.  locked?
   if (!dn->can_read(req)) {
     dout(10) << " waiting on " << *dn << endl;
-    dir->add_waiter(CDIR_WAIT_DNREAD,
+    dir->add_waiter(CDir::WAIT_DNREAD,
                     name,
                     new C_MDS_RetryRequest(mds, req, diri));
     return;
@@ -1653,7 +1657,7 @@ void Server::handle_client_unlink(MClientRequest *req,
         // i should be exporting this now/soon, since the dir is empty.
         dout(7) << "handle_client_rmdir dir is auth, but not inode." << endl;
 	mdcache->migrator->export_empty_import(in->dir);          
-        in->dir->add_waiter(CDIR_WAIT_UNFREEZE,
+        in->dir->add_waiter(CDir::WAIT_UNFREEZE,
                             new C_MDS_RetryRequest(mds, req, diri));
         return;
       }
@@ -1861,7 +1865,7 @@ void Server::handle_client_rename(MClientRequest *req,
   // xlocked?
   if (srcdn && !srcdn->can_read(req)) {
     dout(10) << " waiting on " << *srcdn << endl;
-    srcdir->add_waiter(CDIR_WAIT_DNREAD,
+    srcdir->add_waiter(CDir::WAIT_DNREAD,
                        srcname,
                        new C_MDS_RetryRequest(mds, req, srcdiri));
     return;

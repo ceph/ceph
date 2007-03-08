@@ -396,7 +396,7 @@ void CDir::add_waiter(int tag,
 
 void CDir::add_waiter(int tag, Context *c) {
   // hierarchical?
-  if (tag & CDIR_WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
+  if (tag & WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
     if (is_freezing_tree_root() || is_frozen_tree_root() ||
         is_freezing_dir() || is_frozen_dir()) {
       // it's us, pin here.  (fall thru)
@@ -578,7 +578,7 @@ void CDir::fetch(Context *c)
 {
   dout(10) << "fetch on " << *this << endl;
   
-  if (c) add_waiter(CDIR_WAIT_COMPLETE, c);
+  if (c) add_waiter(WAIT_COMPLETE, c);
   
   // alrady fetching?
   if (state_test(CDir::STATE_FETCHING)) {
@@ -611,7 +611,7 @@ void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
     //ondisk_size = 0;
     
     // kick waiters?
-    finish_waiting(CDIR_WAIT_COMPLETE, -1);
+    finish_waiting(WAIT_COMPLETE, -1);
     return;
   }
 
@@ -743,10 +743,10 @@ void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
   state_clear(STATE_FETCHING);
 
   // kick waiters
-  finish_waiting(CDIR_WAIT_COMPLETE, 0);
+  finish_waiting(WAIT_COMPLETE, 0);
   /*
   list<Context*> waiters;
-  take_waiting(CDIR_WAIT_COMPLETE, waiters);
+  take_waiting(WAIT_COMPLETE, waiters);
   cache->mds->queue_finished(waiters);
   */
 }
@@ -816,7 +816,7 @@ void CDir::commit(version_t want, Context *c)
   // authpinnable?
   if (!can_auth_pin()) {
     dout(7) << "can't auth_pin, waiting" << endl;
-    add_waiter(CDIR_WAIT_AUTHPINNABLE,
+    add_waiter(WAIT_AUTHPINNABLE,
 	       new C_Dir_RetryCommit(this, want));
     return;
   }
@@ -966,9 +966,6 @@ void CDir::_committed(version_t v)
     waiting_for_commit.erase(p);
     p = n;
   } 
-
-  // finish (FIXME)
-  finish_waiting(CDIR_WAIT_COMMITTED, 0);
 }
 
 
@@ -1186,7 +1183,7 @@ void CDir::on_freezeable()
      particularly graceful, and might cause problems if the first one
      needs to know about other waiters.... FIXME? */
   
-  finish_waiting(CDIR_WAIT_FREEZEABLE);
+  finish_waiting(WAIT_FREEZEABLE);
 }
 
 // FREEZE TREE
@@ -1217,7 +1214,7 @@ void CDir::freeze_tree(Context *c)
     dout(10) << "freeze_tree + wait " << *this << endl;
     
     // need to wait for auth pins to expire
-    add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
+    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
   } 
 }
 
@@ -1228,7 +1225,7 @@ void CDir::freeze_tree_finish(Context *c)
     // wait again!
     dout(10) << "freeze_tree_finish still waiting " << *this << endl;
     state_set(STATE_FREEZINGTREE);
-    add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
+    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeTree(this, c));
     return;
   }
 
@@ -1271,14 +1268,14 @@ void CDir::unfreeze_tree()
       inode->auth_unpin();
 
     // waiters?
-    finish_waiting(CDIR_WAIT_UNFREEZE);
+    finish_waiting(WAIT_UNFREEZE);
   } else {
     // freezing.  stop it.
     assert(state_test(STATE_FREEZINGTREE));
     state_clear(STATE_FREEZINGTREE);
     
     // cancel freeze waiters
-    finish_waiting(CDIR_WAIT_FREEZEABLE, -1);
+    finish_waiting(WAIT_FREEZEABLE, -1);
   }
 }
 
@@ -1352,7 +1349,7 @@ void CDir::freeze_dir(Context *c)
     dout(10) << "freeze_dir + wait " << *this << endl;
     
     // need to wait for auth pins to expire
-    add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
+    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
   } 
 }
 
@@ -1381,7 +1378,7 @@ void CDir::freeze_dir_finish(Context *c)
     // wait again!
     dout(10) << "freeze_dir_finish still waiting " << *this << endl;
     state_set(STATE_FREEZINGDIR);
-    add_waiter(CDIR_WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
+    add_waiter(WAIT_FREEZEABLE, new C_MDS_FreezeDir(this, c));
   }
 }
 
@@ -1395,7 +1392,7 @@ void CDir::unfreeze_dir()
     inode->auth_unpin();
 
   // waiters?
-  finish_waiting(CDIR_WAIT_UNFREEZE);
+  finish_waiting(WAIT_UNFREEZE);
 }
 
 

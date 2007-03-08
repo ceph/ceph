@@ -413,7 +413,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   // reevaluate, waiters
   inode_file_eval(in);
-  in->finish_waiting(CINODE_WAIT_CAPS, 0);
+  in->finish_waiting(CInode::WAIT_CAPS, 0);
 
   delete m;
 }
@@ -539,7 +539,7 @@ bool Locker::inode_hard_read_try(CInode *in, Context *con)
 
   // wait!
   dout(7) << "inode_hard_read_try waiting on " << *in << endl;
-  in->add_waiter(CINODE_WAIT_HARDR, con);
+  in->add_waiter(CInode::WAIT_HARDR, con);
   return false;
 }
 
@@ -558,7 +558,7 @@ bool Locker::inode_hard_read_start(CInode *in, MClientRequest *m)
 
   // wait!
   dout(7) << "inode_hard_read_start waiting on " << *in << endl;
-  in->add_waiter(CINODE_WAIT_HARDR, new C_MDS_RetryRequest(mds, m, in));
+  in->add_waiter(CInode::WAIT_HARDR, new C_MDS_RetryRequest(mds, m, in));
   return false;
 }
 
@@ -571,7 +571,7 @@ void Locker::inode_hard_read_finish(CInode *in)
 
   dout(7) << "inode_hard_read_finish on " << *in << endl;
   
-  //if (in->hardlock.get_nread() == 0) in->finish_waiting(CINODE_WAIT_HARDNORD);
+  //if (in->hardlock.get_nread() == 0) in->finish_waiting(CInode::WAIT_HARDNORD);
 }
 
 
@@ -590,7 +590,7 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
     assert(in->is_auth());
     if (!in->can_auth_pin()) {
       dout(7) << "inode_hard_write_start waiting for authpinnable on " << *in << endl;
-      in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
+      in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
       return false;
     }
 
@@ -610,7 +610,7 @@ bool Locker::inode_hard_write_start(CInode *in, MClientRequest *m)
     }
     
     dout(7) << "inode_hard_write_start waiting on " << *in << endl;
-    in->add_waiter(CINODE_WAIT_HARDW, new C_MDS_RetryRequest(mds, m, in));
+    in->add_waiter(CInode::WAIT_HARDW, new C_MDS_RetryRequest(mds, m, in));
 
     return false;
   } else {
@@ -636,7 +636,7 @@ void Locker::inode_hard_write_finish(CInode *in)
   // others waiting?
   if (in->is_hardlock_write_wanted()) {
     // wake 'em up
-    in->take_waiting(CINODE_WAIT_HARDW, mds->finished_queue);
+    in->take_waiting(CInode::WAIT_HARDW, mds->finished_queue);
   } else {
     // auto-sync if alone.
     if (in->is_auth() &&
@@ -662,7 +662,7 @@ void Locker::inode_hard_eval(CInode *in)
       
       // waiters
       //in->hardlock.get_write();
-      in->finish_waiting(CINODE_WAIT_HARDRWB|CINODE_WAIT_HARDSTABLE);
+      in->finish_waiting(CInode::WAIT_HARDRWB|CInode::WAIT_HARDSTABLE);
       //in->hardlock.put_write();
       break;
       
@@ -713,7 +713,7 @@ void Locker::inode_hard_sync(CInode *in)
   in->hardlock.set_state(LOCK_SYNC);
   
   // waiters?
-  in->finish_waiting(CINODE_WAIT_HARDSTABLE);
+  in->finish_waiting(CInode::WAIT_HARDSTABLE);
 }
 
 void Locker::inode_hard_lock(CInode *in)
@@ -804,7 +804,7 @@ void Locker::handle_lock_inode_hard(MLock *m)
     // no need to reply
     
     // waiters
-    in->finish_waiting(CINODE_WAIT_HARDR|CINODE_WAIT_HARDSTABLE);
+    in->finish_waiting(CInode::WAIT_HARDR|CInode::WAIT_HARDSTABLE);
     break;
     
   case LOCK_AC_LOCK:
@@ -815,7 +815,7 @@ void Locker::handle_lock_inode_hard(MLock *m)
     if (lock->get_nread() > 0) {
       dout(7) << "handle_lock_inode_hard readers, waiting before ack on " << *in << endl;
       lock->set_state(LOCK_GLOCKR);
-      in->add_waiter(CINODE_WAIT_HARDNORD,
+      in->add_waiter(CInode::WAIT_HARDNORD,
                      new C_MDS_RetryMessage(mds,m));
       assert(0);  // does this ever happen?  (if so, fix hard_read_finish, and CInodeExport.update_inode!)
       return;
@@ -883,13 +883,13 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
           in->filelock.get_read();
           
           //in->filelock.get_write();
-          in->finish_waiting(CINODE_WAIT_FILERWB|CINODE_WAIT_FILESTABLE);
+          in->finish_waiting(CInode::WAIT_FILERWB|CInode::WAIT_FILESTABLE);
           //in->filelock.put_write();
           return true;
         }
       } else {
         dout(7) << "inode_file_read_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
-        in->add_waiter(CINODE_WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
         return false;
       }
     } else {
@@ -906,7 +906,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
       } else {
         // wait until stable
         dout(7) << "inode_file_read_start waiting until stable on " << *in << ", filelock=" << in->filelock << endl;
-        in->add_waiter(CINODE_WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+        in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
         return false;
       }
     }
@@ -914,7 +914,7 @@ bool Locker::inode_file_read_start(CInode *in, MClientRequest *m)
 
   // wait
   dout(7) << "inode_file_read_start waiting on " << *in << ", filelock=" << in->filelock << endl;
-  in->add_waiter(CINODE_WAIT_FILER, new C_MDS_RetryRequest(mds, m, in));
+  in->add_waiter(CInode::WAIT_FILER, new C_MDS_RetryRequest(mds, m, in));
         
   return false;
 }
@@ -929,7 +929,7 @@ void Locker::inode_file_read_finish(CInode *in)
   dout(7) << "inode_file_read_finish on " << *in << ", filelock=" << in->filelock << endl;
 
   if (in->filelock.get_nread() == 0) {
-    in->finish_waiting(CINODE_WAIT_FILENORD);
+    in->finish_waiting(CInode::WAIT_FILENORD);
     inode_file_eval(in);
   }
 }
@@ -946,7 +946,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
       if (!in->filelock.can_write_soon(in->is_auth())) {
 	if (!in->filelock.is_stable()) {
 	  dout(7) << "inode_file_write_start on auth, waiting for stable on " << *in << endl;
-	  in->add_waiter(CINODE_WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
+	  in->add_waiter(CInode::WAIT_FILESTABLE, new C_MDS_RetryRequest(mds, m, in));
 	  return false;
 	}
 	
@@ -972,7 +972,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
     assert(in->is_auth());
     if (!in->can_auth_pin()) {
       dout(7) << "inode_file_write_start waiting for authpinnable on " << *in << endl;
-      in->add_waiter(CINODE_WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
+      in->add_waiter(CInode::WAIT_AUTHPINNABLE, new C_MDS_RetryRequest(mds, m, in));
       return false;
     }
     
@@ -981,7 +981,7 @@ bool Locker::inode_file_write_start(CInode *in, MClientRequest *m)
     return true;
   } else {
     dout(7) << "inode_file_write_start on auth, waiting for write on " << *in << endl;
-    in->add_waiter(CINODE_WAIT_FILEW, new C_MDS_RetryRequest(mds, m, in));
+    in->add_waiter(CInode::WAIT_FILEW, new C_MDS_RetryRequest(mds, m, in));
     return false;
   }
 }
@@ -996,7 +996,7 @@ void Locker::inode_file_write_finish(CInode *in)
   
   // drop lock?
   if (!in->is_filelock_write_wanted()) {
-    in->finish_waiting(CINODE_WAIT_FILENOWR);
+    in->finish_waiting(CInode::WAIT_FILENOWR);
     inode_file_eval(in);
   }
 }
@@ -1031,7 +1031,7 @@ void Locker::inode_file_eval(CInode *in)
         // waiters
         in->filelock.get_read();
         //in->filelock.get_write();
-        in->finish_waiting(CINODE_WAIT_FILERWB|CINODE_WAIT_FILESTABLE);
+        in->finish_waiting(CInode::WAIT_FILERWB|CInode::WAIT_FILESTABLE);
         in->filelock.put_read();
         //in->filelock.put_write();
       }
@@ -1041,7 +1041,7 @@ void Locker::inode_file_eval(CInode *in)
     case LOCK_GMIXEDR:
       if ((issued & ~(CAP_FILE_RD)) == 0) {
         in->filelock.set_state(LOCK_MIXED);
-        in->finish_waiting(CINODE_WAIT_FILESTABLE);
+        in->finish_waiting(CInode::WAIT_FILESTABLE);
       }
       break;
 
@@ -1058,7 +1058,7 @@ void Locker::inode_file_eval(CInode *in)
 	  send_lock_message(in, LOCK_AC_MIXED, LOCK_OTYPE_IFILE, softdata);
         }
 
-        in->finish_waiting(CINODE_WAIT_FILESTABLE);
+        in->finish_waiting(CInode::WAIT_FILESTABLE);
       }
       break;
 
@@ -1066,14 +1066,14 @@ void Locker::inode_file_eval(CInode *in)
     case LOCK_GLONERR:
       if (issued == 0) {
         in->filelock.set_state(LOCK_LONER);
-        in->finish_waiting(CINODE_WAIT_FILESTABLE);
+        in->finish_waiting(CInode::WAIT_FILESTABLE);
       }
       break;
 
     case LOCK_GLONERM:
       if ((issued & ~CAP_FILE_WR) == 0) {
         in->filelock.set_state(LOCK_LONER);
-        in->finish_waiting(CINODE_WAIT_FILESTABLE);
+        in->finish_waiting(CInode::WAIT_FILESTABLE);
       }
       break;
       
@@ -1092,7 +1092,7 @@ void Locker::inode_file_eval(CInode *in)
         
         // waiters
         in->filelock.get_read();
-        in->finish_waiting(CINODE_WAIT_FILER|CINODE_WAIT_FILESTABLE);
+        in->finish_waiting(CInode::WAIT_FILER|CInode::WAIT_FILESTABLE);
         in->filelock.put_read();
       }
       break;
@@ -1551,7 +1551,7 @@ void Locker::handle_lock_inode_file(MLock *m)
     
     // waiters
     in->filelock.get_read();
-    in->finish_waiting(CINODE_WAIT_FILER|CINODE_WAIT_FILESTABLE);
+    in->finish_waiting(CInode::WAIT_FILER|CInode::WAIT_FILESTABLE);
     in->filelock.put_read();
     inode_file_eval(in);
     break;
@@ -1567,7 +1567,7 @@ void Locker::handle_lock_inode_file(MLock *m)
     }
     if (lock->get_nread() > 0) {
       dout(7) << "handle_lock_inode_file readers, waiting before ack on " << *in << endl;
-      in->add_waiter(CINODE_WAIT_FILENORD,
+      in->add_waiter(CInode::WAIT_FILENORD,
                      new C_MDS_RetryMessage(mds,m));
       lock->set_state(LOCK_GLOCKR);
       assert(0);// i am broken.. why retry message when state captures all the info i need?
@@ -1619,7 +1619,7 @@ void Locker::handle_lock_inode_file(MLock *m)
     
     // waiters
     //in->filelock.get_write();
-    in->finish_waiting(CINODE_WAIT_FILEW|CINODE_WAIT_FILESTABLE);
+    in->finish_waiting(CInode::WAIT_FILEW|CInode::WAIT_FILESTABLE);
     //in->filelock.put_write();
     inode_file_eval(in);
     break;
@@ -1718,7 +1718,7 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
 
     // not by me, wait
     dout(7) << "dentry " << *dn << " xlock by someone else" << endl;
-    dn->dir->add_waiter(CDIR_WAIT_DNREAD, dn->name,
+    dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name,
                         new C_MDS_RetryRequest(mds,m,ref));
     return false;
   }
@@ -1727,11 +1727,11 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
   if (dn->lockstate == DN_LOCK_PREXLOCK) {
     if (dn->xlockedby == m) {
       dout(7) << "dentry " << *dn << " prexlock by me" << endl;
-      dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
+      dn->dir->add_waiter(CDir::WAIT_DNLOCK, dn->name,
                           new C_MDS_RetryRequest(mds,m,ref));
     } else {
       dout(7) << "dentry " << *dn << " prexlock by someone else" << endl;
-      dn->dir->add_waiter(CDIR_WAIT_DNREAD, dn->name,
+      dn->dir->add_waiter(CDir::WAIT_DNREAD, dn->name,
                           new C_MDS_RetryRequest(mds,m,ref));
     }
     return false;
@@ -1745,7 +1745,7 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
   // dir auth pinnable?
   if (!dn->dir->can_auth_pin()) {
     dout(7) << "dentry " << *dn << " dir not pinnable, waiting" << endl;
-    dn->dir->add_waiter(CDIR_WAIT_AUTHPINNABLE,
+    dn->dir->add_waiter(CDir::WAIT_AUTHPINNABLE,
                         new C_MDS_RetryRequest(mds,m,ref));
     return false;
   }
@@ -1754,7 +1754,7 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
   if (dn->is_pinned()) {
     dout(7) << "dentry " << *dn << " pinned, waiting" << endl;
     dn->lockstate = DN_LOCK_UNPINNING;
-    dn->dir->add_waiter(CDIR_WAIT_DNUNPINNED,
+    dn->dir->add_waiter(CDir::WAIT_DNUNPINNED,
                         dn->name,
                         new C_MDS_RetryRequest(mds,m,ref));
     return false;
@@ -1813,7 +1813,7 @@ bool Locker::dentry_xlock_start(CDentry *dn, Message *m, CInode *ref)
 
     // wait
     dout(7) << "dentry_xlock_start locking, waiting for replicas " << endl;
-    dn->dir->add_waiter(CDIR_WAIT_DNLOCK, dn->name,
+    dn->dir->add_waiter(CDir::WAIT_DNLOCK, dn->name,
                         new C_MDS_RetryRequest(mds, m, ref));
     return false;
   } else {
@@ -1921,7 +1921,7 @@ void Locker::dentry_xlock_request(CDir *dir, string& dname, bool create,
   mds->send_message_mds(m, dauth, MDS_PORT_LOCKER);
   
   // add waiter
-  dir->add_waiter(CDIR_WAIT_DNREQXLOCK, dname, 
+  dir->add_waiter(CDir::WAIT_DNREQXLOCK, dname, 
                   new C_MDC_XlockRequest(this, 
                                          dir, dname, req,
                                          onfinish));
@@ -2090,7 +2090,7 @@ void Locker::handle_lock_dn(MLock *m)
 
       // wait
       dout(7) << "dn pinned, waiting " << *dn << endl;
-      dn->dir->add_waiter(CDIR_WAIT_DNUNPINNED,
+      dn->dir->add_waiter(CDir::WAIT_DNUNPINNED,
                           dn->name,
                           new C_MDS_RetryMessage(mds, m));
       return;
@@ -2105,7 +2105,7 @@ void Locker::handle_lock_dn(MLock *m)
     }
 
     // wake up waiters
-    dir->finish_waiting(CDIR_WAIT_DNLOCK, dname);   // ? will this happen on replica ? 
+    dir->finish_waiting(CDir::WAIT_DNLOCK, dname);   // ? will this happen on replica ? 
     break;
 
   case LOCK_AC_SYNC:
@@ -2120,7 +2120,7 @@ void Locker::handle_lock_dn(MLock *m)
     }
 
     // wake up waiters
-    dir->finish_waiting(CDIR_WAIT_DNREAD, dname);   // will this happen either?  YES: if a rename lock backs out
+    dir->finish_waiting(CDir::WAIT_DNREAD, dname);   // will this happen either?  YES: if a rename lock backs out
     break;
 
   case LOCK_AC_REQXLOCKACK:
@@ -2128,7 +2128,7 @@ void Locker::handle_lock_dn(MLock *m)
     {
       dout(10) << "handle_lock_dn got ack/nak on a reqxlock for " << *dn << endl;
       list<Context*> finished;
-      dir->take_waiting(CDIR_WAIT_DNREQXLOCK, m->get_dn(), finished, 1);  // TAKE ONE ONLY!
+      dir->take_waiting(CDir::WAIT_DNREQXLOCK, m->get_dn(), finished, 1);  // TAKE ONE ONLY!
       finish_contexts(finished, 
                       (m->get_action() == LOCK_AC_REQXLOCKACK) ? 1:-1);
     }
@@ -2144,7 +2144,7 @@ void Locker::handle_lock_dn(MLock *m)
       dout(7) << "handle_lock_dn finish gather, now xlock on " << *dn << endl;
       dn->lockstate = DN_LOCK_XLOCK;
       mdcache->active_requests[dn->xlockedby].xlocks.insert(dn);
-      dir->finish_waiting(CDIR_WAIT_DNLOCK, dname);
+      dir->finish_waiting(CDir::WAIT_DNLOCK, dname);
     }
     break;
 

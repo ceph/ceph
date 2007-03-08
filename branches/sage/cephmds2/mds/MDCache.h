@@ -259,12 +259,13 @@ public:
       return inode_map[ino];
     return NULL;
   }
-  CDir* get_dir(inodeno_t dirino) {
-    if (have_inode(dirino))
-      return inode_map[dirino]->dir;
-    return NULL;
+  CDir* get_dir(inodeno_t dirino) {  // deprecated
+    return get_dirfrag(dirfrag_t(dirino, frag_t()));
+  }    
+  CDir* get_dirfrag(dirfrag_t df) {
+    if (!have_inode(df.ino)) return NULL;
+    return inode_map[df.ino]->get_dirfrag(df.frag);
   }
-
 
   int hash_dentry(inodeno_t ino, const string& s) {
     return 0; // fixme

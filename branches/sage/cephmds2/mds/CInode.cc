@@ -107,6 +107,24 @@ CInode::~CInode() {
 
 // dirfrags
 
+// new interface for old way
+void CInode::get_dirfrags(list<CDir*>& ls) 
+{
+  if (dir) 
+    ls.push_back(dir);
+}
+void CInode::get_nested_dirfrags(list<CDir*>& ls) 
+{
+  if (dir && !dir->is_subtree_root())
+    ls.push_back(dir);
+}
+void CInode::get_subtree_dirfrags(list<CDir*>& ls) 
+{
+  if (dir && dir->is_subtree_root())
+    ls.push_back(dir);
+}
+
+/* new 
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -130,7 +148,7 @@ void CInode::get_subtree_dirfrags(list<CDir*>& ls)
     if (p->second->is_subtree_root())
       ls.push_back(p->second);
 }
-
+*/
 
 // pins
 
@@ -406,8 +424,12 @@ bool CInode::waiting_for(int tag)
 
 void CInode::add_waiter(int tag, Context *c) {
   // waiting on hierarchy?
-  if (tag & CDIR_WAIT_ATFREEZEROOT && (is_freezing() || is_frozen())) {  
-    parent->dir->add_waiter(tag, c);
+  if (tag & WAIT_AUTHPINNABLE) {
+    assert(tag == WAIT_AUTHPINNABLE);
+    assert(is_freezing() || is_frozen());
+
+    // wait on the directory
+    parent->dir->add_waiter(CDir::WAIT_AUTHPINNABLE, c);
     return;
   }
   

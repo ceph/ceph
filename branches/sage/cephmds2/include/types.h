@@ -223,7 +223,7 @@ namespace __gnu_cxx {
 #define INODE_MASK_PERM       2  // uid, gid, mode
 #define INODE_MASK_SIZE       4  // size, blksize, blocks
 #define INODE_MASK_CTIME      8  // ctime
-#define INODE_MASK_MTIME      16  // mtime
+#define INODE_MASK_MTIME      16 // mtime
 #define INODE_MASK_ATIME      32 // atime
 
 #define INODE_MASK_ALL_STAT  (INODE_MASK_BASE|INODE_MASK_PERM|INODE_MASK_SIZE|INODE_MASK_MTIME)
@@ -231,7 +231,7 @@ namespace __gnu_cxx {
 
 struct inode_t {
   // base (immutable)
-  inodeno_t ino;   // NOTE: ino _must_ come first for MDStore.cc to behave!!
+  inodeno_t ino;
 
   // other.
   FileLayout layout;  // ?immutable?

@@ -12,7 +12,7 @@ doc
 
 
 mds
-- bystanders should avoid contacting auth when it is ambiguous.
+- bystanders should avoid contacting auth when it is ambiguous?
   - CDIR_WAIT_UNAMBIGUOUS?
 - during export prep phase,
   - if importer is trying to open dirs on a node that fails, what happens?
@@ -20,15 +20,17 @@ mds
     2- could force a CDir replica, since it'll get rejoined into cache later.
   - is this related to solving the larger problem of discover vs mds failure?
 - locker vs node failure
-- do i need openingdir pins? won't the DIR waiter on the inode be sufficient?
 - does inode need it's own replica list?  no?
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 - failures during recovery stages (resolve, rejoin)... make sure rejoin still works!
 - fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 - incremental mdsmaps
 - client failure
-- EMetablob should return 'expired' if they have
-  higher versions (and are thus described by a newer journal entry)
+
+- EMetablob should return 'expired' if they have higher versions (and are thus described by a newer journal entry)
+- dir version/committed/etc versus migration, log expires.  
+  - DOCUMENT.
+
 - mds failure vs clients
   - clean up client op redirection
   - idempotent ops
