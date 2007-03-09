@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
   sha1(msg,digest,strlen((const char*)msg));
   toHex(digest, digestHex, SHA1DIGESTSIZE, 2*SHA1DIGESTSIZE);
   cout << "SHA-1 of " << msg << " is " << string((const char*)digestHex,2*SHA1DIGESTSIZE) << endl;
-
+ 
   // sha-256
   byte digest256[SHA256DIGESTSIZE];
   byte hex256[2*SHA256DIGESTSIZE];

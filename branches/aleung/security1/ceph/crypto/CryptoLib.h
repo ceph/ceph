@@ -67,7 +67,6 @@ namespace CryptoLib {
   cfbRC5Dec getRC5Dec(byte*, const unsigned int, byte*);
   void encryptRC5(byte*, const unsigned int, byte*, cfbRC5Enc);
   void decryptRC5(byte*, const unsigned int, byte*, cfbRC5Dec);
-  
 
   // asymmetric key generation
   esignPriv esignPrivKey(char*);

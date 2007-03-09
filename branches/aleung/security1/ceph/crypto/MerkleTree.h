@@ -43,7 +43,7 @@ inline std::ostream& operator<<(std::ostream& out, const hash_t& c)
   byte hexArray[2*SHA1DIGESTSIZE];
   memset(hexArray, 0x00, sizeof(hexArray));
   toHex(c.val, hexArray, SHA1DIGESTSIZE, 2*SHA1DIGESTSIZE);
-  out << string((const char*)hexArray);
+  out << string((const char*)hexArray, sizeof(hexArray));
   return out;
 }
 
