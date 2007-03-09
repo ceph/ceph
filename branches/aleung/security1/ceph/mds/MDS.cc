@@ -98,38 +98,45 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   // create unix_groups?
   if (g_conf.unix_group_file) {
     ifstream from(g_conf.unix_group_file);
+
     if (from.is_open()) {
-      cout << "PARSING INPUT GROUPS!" << endl;
+
       bool seen_gid = false;
       int input;
       gid_t my_gid;
       uid_t my_uid;
-      hash_t my_hash;
+      CapGroup *my_group;
       // parse file
       while (! from.eof()) {
 	from >> input;
 	if (input == -1) {
 	  seen_gid = false;
-	  cout << endl;
-	  continue;
+	  // copy hash into map
+	  unix_groups_map[my_gid] = my_group->get_root_hash();
+	  cout << " " << my_group->get_root_hash() << endl;
+	  delete my_group;
 	}
 	// first number on line is gid, rest are uids
-	if (!seen_gid) {
+	else if (!seen_gid) {
 	  // make group
 	  my_gid = input;
-	  unix_groups[my_gid].set_gid(my_gid);
-
+	  //unix_groups[my_gid].set_gid(my_gid);
+	  my_group = new CapGroup();	  
 	  seen_gid = true;
-	  cout << "gid = " << my_gid;
+	  cout << "Gid: " << my_gid;
 	}
 	else {
 	  my_uid = input;
-	  unix_groups[my_gid].add_user(my_uid);
-	  
-	  my_hash = unix_groups[my_gid].get_root_hash();
-	  unix_groups_byhash[my_hash] = unix_groups[my_gid];
+	  my_group->add_user(my_uid);
+	  //unix_groups[my_gid].add_user(my_uid);
 
-	  cout << " uid = " << my_uid;
+	  // sign the hash
+	  my_group->sign_list(myPrivKey);
+	  
+	  // update the map
+	  unix_groups_byhash[my_group->get_root_hash()] = (*my_group);
+	  
+	  cout << " uid: " << my_uid;
 	}
       }
       from.close();

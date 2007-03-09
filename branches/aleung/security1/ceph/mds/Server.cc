@@ -262,6 +262,7 @@ void Server::handle_client_update(MClientUpdate *m)
   dout(3) << "handle_client_update for " << my_hash << endl;
 
   MClientUpdateReply *reply = new MClientUpdateReply(my_hash, mds->unix_groups_byhash[my_hash].get_list());
+  reply->set_sig(mds->unix_groups_byhash[my_hash].get_sig());
 
   messenger->send_message(reply, m->get_source_inst());
 }

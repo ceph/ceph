@@ -20,29 +20,48 @@ using namespace std;
 
 class CapGroup {
  private:
-  gid_t group_id;
+  //gid_t group_id;
   hash_t root_hash;
   MerkleTree mtree;
   list<uid_t> users;
+  byte signature[ESIGNSIGSIZE];
 
  public:
   friend class OSD;
   friend class Locker;
   CapGroup () { }
-  CapGroup (gid_t id) { group_id = id; }
+  //CapGroup (gid_t id) { group_id = id; }
   CapGroup (hash_t rhash, list<uid_t>& ulist) :
     root_hash(rhash), users(ulist) { }
-  CapGroup (gid_t id, list<uid_t>& ulist) : group_id(id), users(ulist) {
-    // add users to MerkleTree
-    mtree = MerkleTree(users);
+  CapGroup (uid_t user) {
+    users.push_back(user);
+    mtree.add_user(user);
     root_hash = mtree.get_root_hash();
   }
+  //CapGroup (gid_t id, list<uid_t>& ulist) : group_id(id), users(ulist) {
+    // add users to MerkleTree
+  //  mtree = MerkleTree(users);
+  //  root_hash = mtree.get_root_hash();
+  //}
   
-  gid_t get_gid() { return group_id; }
-  void set_gid(gid_t id) { group_id = id; }
+  //gid_t get_gid() { return group_id; }
+  //void set_gid(gid_t id) { group_id = id; }
+
+  byte *get_sig() { return signature; }
 
   hash_t get_root_hash() { return root_hash; }
   void set_root_hash(hash_t nhash) { root_hash = nhash; }
+
+  void sign_list(esignPriv privKey) {
+    SigBuf sig;
+    sig = esignSig((byte*)&root_hash, sizeof(root_hash), privKey);
+    memcpy(signature, sig.data(), sig.size());
+  }
+  bool verify_list(esignPub pubKey) {
+    SigBuf sig;
+    sig.Assign(signature, sizeof(signature));
+    return esignVer((byte*)&root_hash, sizeof(root_hash), sig, pubKey);
+  }
 
   void add_user(uid_t user) {
     users.push_back(user);

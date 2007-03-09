@@ -157,7 +157,8 @@ public:
   map<int,version_t> peer_mdsmap_epoch;
 
   // logical user group
-  map<gid_t, CapGroup> unix_groups;
+  //map<gid_t, CapGroup> unix_groups;
+  map<gid_t, hash_t> unix_groups_map;
   // hash to group map
   map<hash_t, CapGroup> unix_groups_byhash;
 

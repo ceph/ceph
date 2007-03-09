@@ -148,7 +148,7 @@ public:
     data.ino = n;
   }
 
-  ExtCap(int m, uid_t u, CapGroup& cg, inodeno_t n)
+  ExtCap(int m, uid_t u, gid_t g, hash_t h, inodeno_t n)
   {
     data.id.cid = 0;
     data.id.mds_id = 0;
@@ -157,8 +157,8 @@ public:
     data.t_e += 3600;
     data.mode = m;
     data.uid = u;
-    data.gid = cg.get_gid();
-    data.user_group = cg.get_root_hash();
+    data.gid = g;
+    data.user_group = h;
     data.ino = n;
   }
 

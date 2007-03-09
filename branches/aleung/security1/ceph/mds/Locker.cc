@@ -240,22 +240,50 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     // unix grouping
     if (g_conf.mds_group == 1) {
 
-      // configure group
-      if (mds->unix_groups.count(my_group) == 0)
-	mds->unix_groups[my_group].set_gid(my_group);
+      // new group
+      if (mds->unix_groups_map.count(my_group) == 0) {
+	// make a group & add user
+	CapGroup group(my_user);
+	//group.add_user(my_user);
+
+	// sign the hash
+	group.sign_list(mds->getPrvKey());
+
+	// put it into hash
+	mds->unix_groups_byhash[group.get_root_hash()] = group;
+	// put pointer into map
+	mds->unix_groups_map[my_group] = group.get_root_hash();
+      }
 
       // add user to group if not in group
-      if (!(mds->unix_groups[my_group].contains(my_user))) {
-	mds->unix_groups[my_group].add_user(my_user);
-	hash_t temp_hash = mds->unix_groups[my_group].get_root_hash();
-	mds->unix_groups_byhash[temp_hash] = mds->unix_groups[my_group];
+      hash_t my_hash = mds->unix_groups_map[my_group];
+      if (!(mds->unix_groups_byhash[my_hash].contains(my_user))) {
+
+	// make a new group, equal to old group (keep old group around)
+	CapGroup group = mds->unix_groups_byhash[my_hash];
+
+	// add the user
+	group.add_user(my_user);
+
+	// re-compute the signature
+	group.sign_list(mds->getPrvKey());	
+
+	// get the new hash
+	hash_t new_hash = group.get_root_hash();
+	
+	// put it into the list	
+	mds->unix_groups_byhash[new_hash] = group;
+	mds->unix_groups_map[my_group] = new_hash;
+
 	cout << "User " << my_user << " added to group " << my_group << endl;
       }
       else
 	cout << "User " << my_user << " already in group " << my_group << endl;
 
-      ext_cap  = new ExtCap(my_want, my_user,
-			    mds->unix_groups[my_group], in->ino());
+      //get hash for gid
+      hash_t gid_hash = mds->unix_groups_map[my_group];
+
+      ext_cap  = new ExtCap(my_want, my_user, my_group, gid_hash, in->ino());
 
       ext_cap->set_type(1);
       
