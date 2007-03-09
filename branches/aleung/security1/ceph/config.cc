@@ -302,7 +302,7 @@ md_config_t g_conf = {
   fakeclient_op_close:    200,
 
   //security (all principals)
-  secure_io:              true,
+  secure_io:              1, /* 0=off, 1=on */
   mds_group:              0, /* 0=none, 1=unix, 2=batch, 3=def, 4=predict */
   mds_collection:         0, /* 0=none, 1=unix, 3=def */
   unix_group_file:       0,
@@ -777,8 +777,10 @@ void parse_config_options(std::vector<char*>& args)
       g_conf.tick = atoi(args[++i]);
 
     // security flag to turn off security
-    else if (strcmp(args[i], "--no_sec") == 0)
-      g_conf.secure_io = false;
+    //else if (strcmp(args[i], "--no_sec") == 0)
+    else if(strcmp(args[i], "--secure_io") == 0)
+      g_conf.secure_io = atoi(args[++i]);
+      //g_conf.secure_io = false;
     else if (strcmp(args[i], "--mds_group") == 0)
       g_conf.mds_group = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_collection") == 0)

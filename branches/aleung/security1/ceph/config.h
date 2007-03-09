@@ -291,7 +291,8 @@ struct md_config_t {
   int fakeclient_op_close;
 
   // security (all princiapls)
-  bool secure_io;
+  //bool secure_io;
+  int secure_io;
   int mds_group;
   int mds_collection;
   char *unix_group_file;
