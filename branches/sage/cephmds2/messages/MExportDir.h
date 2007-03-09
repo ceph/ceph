@@ -19,25 +19,25 @@
 
 
 class MExportDir : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
   
   list<bufferlist> dirstate; // a bl for reach dir
-  list<inodeno_t>  exports;
+  list<dirfrag_t>  exports;
 
  public:  
   MExportDir() {}
-  MExportDir(inodeno_t dirino) : 
+  MExportDir(dirfrag_t df) : 
     Message(MSG_MDS_EXPORTDIR),
-    ino(dirino) {
+    dirfrag(df) {
   }
   virtual char *get_type_name() { return "Ex"; }
   void print(ostream& o) {
-    o << "export(" << ino << ")";
+    o << "export(" << dirfrag << ")";
   }
 
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   list<bufferlist>& get_dirstate() { return dirstate; }
-  list<inodeno_t>& get_exports() { return exports; }
+  list<dirfrag_t>& get_exports() { return exports; }
 
   void add_dir(bufferlist& dir) {
     dirstate.push_back(dir);
@@ -45,19 +45,19 @@ class MExportDir : public Message {
   void set_dirstate(const list<bufferlist>& ls) {
     dirstate = ls;
   }
-  void add_export(inodeno_t dirino) { 
-    exports.push_back(dirino); 
+  void add_export(dirfrag_t df) { 
+    exports.push_back(df); 
   }
 
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
     ::_decode(exports, payload, off);
     ::_decode(dirstate, payload, off);
   }
   virtual void encode_payload() {
-    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
     ::_encode(exports, payload);
     ::_encode(dirstate, payload);
   }

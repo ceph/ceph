@@ -19,32 +19,39 @@
 #include "include/types.h"
 
 class MExportDirDiscoverAck : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
   bool success;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  inodeno_t get_ino() { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   bool is_success() { return success; }
 
   MExportDirDiscoverAck() {}
-  MExportDirDiscoverAck(inodeno_t ino, bool success=true) : 
-    Message(MSG_MDS_EXPORTDIRDISCOVERACK) {
-    this->ino = ino;
-    this->success = false;
-  }
-  virtual char *get_type_name() { return "ExDisA"; }
+  MExportDirDiscoverAck(dirfrag_t df, bool s=true) : 
+    Message(MSG_MDS_EXPORTDIRDISCOVERACK),
+    dirfrag(df),
+    success(s) { }
 
+  virtual char *get_type_name() { return "ExDisA"; }
+  void print(ostream& o) {
+    o << "export_discover_ack " << dirfrag;
+    if (success) 
+      o << " success";
+    else
+      o << " failure";
+  }
 
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
     payload.copy(off, sizeof(success), (char*)&success);
     off += sizeof(success);
   }
 
   virtual void encode_payload() {
-    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
     payload.append((char*)&success, sizeof(success));
   }
 };

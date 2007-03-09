@@ -121,8 +121,8 @@ public:
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, int a) {
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
-  void adjust_bounded_subtree_auth(CDir *dir, list<inodeno_t>& bounds, pair<int,int> auth);
-  void adjust_bounded_subtree_auth(CDir *dir, list<inodeno_t>& bounds, int a) {
+  void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, pair<int,int> auth);
+  void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, int a) {
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
   void adjust_export_state(CDir *dir);
@@ -133,7 +133,7 @@ public:
   void get_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void get_wouldbe_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
-  void verify_subtree_bounds(CDir *root, const list<inodeno_t>& boundinos);
+  void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
   void get_auth_subtrees(set<CDir*>& s);
   void get_fullauth_subtrees(set<CDir*>& s);
@@ -168,9 +168,9 @@ protected:
   // recovery
 protected:
   // from EImportStart w/o EImportFinish during journal replay
-  map<inodeno_t, list<inodeno_t> >            my_ambiguous_imports;  
+  map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
   // from MMDSImportMaps
-  map<int, map<inodeno_t, list<inodeno_t> > > other_ambiguous_imports;  
+  map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
 
   set<int> recovery_set;
   set<int> wants_import_map;   // nodes i need to send my import map to
@@ -195,10 +195,10 @@ public:
 
 
   // ambiguous imports
-  void add_ambiguous_import(inodeno_t base, list<inodeno_t>& bounds);
+  void add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds);
   void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
-  void cancel_ambiguous_import(inodeno_t dirino);
-  void finish_ambiguous_import(inodeno_t dirino);
+  void cancel_ambiguous_import(dirfrag_t dirino);
+  void finish_ambiguous_import(dirfrag_t dirino);
 
 
 
@@ -242,7 +242,9 @@ public:
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
   size_t get_cache_size() { return lru.lru_get_size(); }
   bool trim(int max = -1);   // trim cache
-  void trim_inode(CDentry *dn, CInode *in, inodeno_t conino, 
+  void trim_dirfrag(CDir *dir, dirfrag_t condf, 
+		    map<int, MCacheExpire*>& expiremap);
+  void trim_inode(CDentry *dn, CInode *in, dirfrag_t condf, 
 		  map<int,class MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 

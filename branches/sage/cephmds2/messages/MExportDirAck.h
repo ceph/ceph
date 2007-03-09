@@ -17,27 +17,27 @@
 #include "MExportDir.h"
 
 class MExportDirAck : public Message {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
 
  public:
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirAck() {}
-  MExportDirAck(inodeno_t i) :
-    Message(MSG_MDS_EXPORTDIRACK), ino(i) { }
+  MExportDirAck(dirfrag_t i) :
+    Message(MSG_MDS_EXPORTDIRACK), dirfrag(i) { }
 
   virtual char *get_type_name() { return "ExAck"; }
     void print(ostream& o) {
-    o << "export_ack(" << ino << ")";
+    o << "export_ack(" << dirfrag << ")";
   }
 
   virtual void decode_payload() {
     int off = 0;
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
   }
   virtual void encode_payload() {
-    payload.append((char*)&ino, sizeof(ino));
+    payload.append((char*)&dirfrag, sizeof(dirfrag));
   }
 
 };

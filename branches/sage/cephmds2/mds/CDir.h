@@ -48,8 +48,9 @@ class Context;
 //  >= 0 is the auth mds
 #define CDIR_AUTH_PARENT   -1   // default
 #define CDIR_AUTH_UNKNOWN  -2
-#define CDIR_AUTH_DEFAULT pair<int,int>(-1, -2)
-#define CDIR_AUTH_UNDEF pair<int,int>(-2, -2)
+#define CDIR_AUTH_DEFAULT   pair<int,int>(-1, -2)
+#define CDIR_AUTH_UNDEF     pair<int,int>(-2, -2)
+#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
 
 
 ostream& operator<<(ostream& out, class CDir& dir);
@@ -246,7 +247,7 @@ class CDir : public MDSCacheObject {
   friend class CDirExport;
 
  public:
-  CDir(CInode *in, MDCache *mdcache, bool auth);
+  CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
 
 
 
@@ -368,7 +369,7 @@ class CDir : public MDSCacheObject {
   }  
 
   void fetch(Context *c);
-  void _fetch_dir_read(off_t off, bufferlist &bl);
+  void _fetched(bufferlist &bl);
 
   // -- commit --
   map<version_t, list<Context*> > waiting_for_commit;
@@ -498,7 +499,7 @@ class CDir : public MDSCacheObject {
 // discover
 
 class CDirDiscover {
-  inodeno_t ino;
+  dirfrag_t dirfrag;
   int       nonce;
   int  dir_auth;
   int       dir_rep;
@@ -507,7 +508,7 @@ class CDirDiscover {
  public:
   CDirDiscover() {}
   CDirDiscover(CDir *dir, int nonce) {
-    ino = dir->ino();
+    dirfrag = dir->dirfrag();
     this->nonce = nonce;
     //dir_auth = dir->dir_auth.first;
     dir_rep = dir->dir_rep;
@@ -515,7 +516,7 @@ class CDirDiscover {
   }
 
   void update_dir(CDir *dir) {
-    assert(dir->ino() == ino);
+    assert(dir->dirfrag() == dirfrag);
     assert(!dir->is_auth());
 
     dir->replica_nonce = nonce;
@@ -524,11 +525,11 @@ class CDirDiscover {
     dir->dir_rep_by = rep_by;
   }
 
-  inodeno_t get_ino() { return ino; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
 
   
   void _encode(bufferlist& bl) {
-    bl.append((char*)&ino, sizeof(ino));
+    bl.append((char*)&dirfrag, sizeof(dirfrag));
     bl.append((char*)&nonce, sizeof(nonce));
     bl.append((char*)&dir_auth, sizeof(dir_auth));
     bl.append((char*)&dir_rep, sizeof(dir_rep));
@@ -536,8 +537,8 @@ class CDirDiscover {
   }
 
   void _decode(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+    bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+    off += sizeof(dirfrag);
     bl.copy(off, sizeof(nonce), (char*)&nonce);
     off += sizeof(nonce);
     bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
@@ -554,7 +555,7 @@ class CDirDiscover {
 
 class CDirExport {
   struct {
-    inodeno_t   ino;
+    dirfrag_t   dirfrag;
     long        nitems; // actual real entries
     long        nden;   // num dentries (including null ones)
     version_t   version;
@@ -573,7 +574,7 @@ class CDirExport {
 
     assert(dir->get_version() == dir->get_projected_version());
 
-    st.ino = dir->ino();
+    st.dirfrag = dir->dirfrag();
     st.nitems = dir->nitems;
     st.nden = dir->items.size();
     st.version = dir->version;
@@ -589,11 +590,11 @@ class CDirExport {
     replicas = dir->replicas;
   }
 
-  inodeno_t get_ino() { return st.ino; }
+  dirfrag_t get_dirfrag() { return st.dirfrag; }
   __uint64_t get_nden() { return st.nden; }
 
   void update_dir(CDir *dir) {
-    assert(dir->ino() == st.ino);
+    assert(dir->dirfrag() == st.dirfrag);
 
     //dir->nitems = st.nitems;
 

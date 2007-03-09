@@ -64,6 +64,9 @@ inline bool operator<(dirfrag_t l, dirfrag_t r) {
   if (l.ino == r.ino && l.frag < r.frag) return true;
   return false;
 }
+inline bool operator==(dirfrag_t l, dirfrag_t r) {
+  return l.ino == r.ino && l.frag == r.frag;
+}
 
 
 // ================================================================

@@ -51,7 +51,7 @@ public:
                       LogEvent *event,
                       LogEvent *event2 = 0);
   
-  bool try_open_dir(CInode *in, MClientRequest *req);
+  CDir *try_open_dir(CInode *in, frag_t fg, MClientRequest *req);
 
 
   // clients
@@ -86,9 +86,6 @@ public:
   int encode_dir_contents(CDir *dir, 
                           list<class InodeStat*>& inls,
                           list<string>& dnls);
-  void handle_hash_readdir(MHashReaddir *m);
-  void handle_hash_readdir_reply(MHashReaddirReply *m);
-  void finish_hash_readdir(MClientRequest *req, CDir *dir); 
 
   // namespace changes
   void handle_client_mknod(MClientRequest *req, CInode *ref);
@@ -128,7 +125,7 @@ public:
 
   CDir *validate_new_dentry_dir(MClientRequest *req, CInode *diri, string& dname);
   int prepare_mknod(MClientRequest *req, CInode *diri, 
-		    CInode **pin, CDentry **pdn, 
+		    CDir **pdir, CInode **pin, CDentry **pdn, 
 		    bool okexist=false);
 
 

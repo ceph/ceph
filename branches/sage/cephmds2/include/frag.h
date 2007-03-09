@@ -44,6 +44,8 @@
  *
  * this is conceptually analogous to an ip address and netmask.
  *
+ * a value v falls "within" fragment f iff (v & f.mask()) == f.value().
+ *
  * we write it as v/b, where v is a value and b is the number of bits.
  * 0/0 (bits==0) corresponds to the entire namespace.  if we bisect that,
  * we get 0/1 and 1/1.  quartering gives us 0/2, 1/2, 2/2, 3/2.  and so on.
@@ -58,6 +60,10 @@ class frag_t {
  public:
   frag_t() : _enc(0) { }
   frag_t(unsigned v, unsigned b) : _enc((b << 24) + v) { }
+  frag_t(unsigned e) : _enc(e) { }
+
+  // constructors
+  void from_unsigned(unsigned e) { _enc = e; }
   
   // accessors
   unsigned value() const { return _enc & 0xffffff; }
@@ -66,6 +72,9 @@ class frag_t {
   operator unsigned() const { return _enc; }
 
   // tests
+  bool contains(unsigned v) const {
+    return (v & mask()) == value();
+  }
   bool contains(frag_t sub) const {
     return (sub.bits() >= bits() &&             // they are more specific than us,
 	    (sub.value() & mask()) == value()); // and they are contained by us.
@@ -85,17 +94,17 @@ class frag_t {
   frag_t right_half() const {
     return frag_t(value() | (1<<bits()), bits()+1);
   }
-  void split(int nb, list<frag_t>& frag_tments) const {
+  void split(int nb, list<frag_t>& fragments) const {
     assert(nb > 0);
     unsigned nway = 1 << (nb-1);
     for (unsigned i=0; i<nway; i++) 
-      frag_tments.push_back( frag_t(value() | (i << (bits()+nb-1)), bits()+nb) );
+      fragments.push_back( frag_t(value() | (i << (bits()+nb-1)), bits()+nb) );
   }
 };
 
 inline ostream& operator<<(ostream& out, frag_t& hb)
 {
-  return out << "hb(" << hex << hb.value() << dec << "/" << hb.bits() << ")";
+  return out << hex << hb.value() << dec << "/" << hb.bits();
 }
 
 
@@ -112,11 +121,51 @@ class fragtree_t {
 
  public:
   // accessors
-  int get_split(frag_t hb) {
-    if (_splits.count(hb))
-      return _splits[hb];
-    else
+  bool empty() { 
+    return _splits.empty();
+  }
+  int get_split(const frag_t hb) const {
+    std::map<frag_t,int>::const_iterator p = _splits.find(hb);
+    if (p == _splits.end())
       return 0;
+    else
+      return p->second;
+  }
+  void get_leaves(list<frag_t>& ls) const {
+    list<frag_t> q;
+    q.push_back(frag_t());
+    while (!q.empty()) {
+      frag_t t = q.front();
+      q.pop_front();
+      int nb = get_split(t);
+      if (nb) 
+	t.split(nb, q);   // queue up children
+      else
+	ls.push_back(t);  // not spit, it's a leaf.
+    }
+  }
+
+  frag_t operator[](unsigned v) const {
+    frag_t t;
+    while (1) {
+      assert(t.contains(v));
+      int nb = get_split(t);
+
+      // is this a leaf?
+      if (nb == 0) return t;  // done.
+      
+      // pick appropriate child fragment.
+      unsigned nway = 1 << (nb-1);
+      unsigned i;
+      for (i=0; i<nway; i++) {
+	frag_t n(t.value() | (i << (t.bits()+nb-1)), t.bits()+nb);
+	if (n.contains(v)) {
+	  t = n;
+	  break;
+	}
+      }
+      assert(i < nway);
+    }
   }
   
   // modifiers
@@ -130,7 +179,7 @@ class fragtree_t {
   }
 
   // verify that we describe a legal partition of the namespace.
-  void verify() {
+  void verify() const {
     std::map<frag_t,int> copy;
     std::list<frag_t> q;
     q.push_back(frag_t());
@@ -155,5 +204,28 @@ class fragtree_t {
     ::_decode(_splits, bl, off);
   }
 };
+
+inline ostream& operator<<(ostream& out, fragtree_t& ft)
+{
+  out << "fragtree_t(";
+  
+  bool first = true;
+  list<frag_t> q;
+  q.push_back(frag_t());
+  while (!q.empty()) {
+    frag_t t = q.front();
+    q.pop_front();
+    int nb = ft.get_split(t);
+    if (nb) {
+      if (first) 
+	first = false;
+      else
+	out << ' ';
+      out << t << '%' << nb;
+      t.split(nb, q);   // queue up children
+    }
+  }
+  return out << ")";
+}
 
 #endif

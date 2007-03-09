@@ -139,10 +139,11 @@ class CInode : public MDSCacheObject {
   MDCache *mdcache;
 
   // inode contents proper
-  inode_t          inode;     // the inode itself
-  string           symlink;   // symlink dest, if symlink
+  inode_t          inode;        // the inode itself
+  string           symlink;      // symlink dest, if symlink
   fragtree_t       dirfragtree;  // dir frag tree, if any
 
+  frag_t pick_dirfrag(const string &dn);
 
   // -- cache infrastructure --
   // old way, deprecate me!
@@ -151,13 +152,21 @@ class CInode : public MDSCacheObject {
   map<frag_t,CDir*> dirfrags; // cached dir fragments
 
   CDir* get_dirfrag(frag_t fg) {
-    // old way
-    assert(fg == 0);
-    return dir;
+    if (1) // old
+      return dir;
+    else { // new
+      if (dirfrags.count(fg)) 
+	return dirfrags[fg];
+      else
+	return 0;
+    }
   }
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
   void get_subtree_dirfrags(list<CDir*>& ls);
+  CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
+  CDir *add_dirfrag(CDir *dir);
+  void close_dirfrag(frag_t fg);
 
  protected:
   // parent dentries in cache
@@ -228,14 +237,14 @@ protected:
   CDentry* get_parent_dn() { return parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
-  CInode *get_realm_root();   // import, hash, or root
   
-  CDir *get_or_open_dir(MDCache *mdcache);
-  CDir *set_dir(CDir *newdir);
-  void close_dir();
-  
-  bool dir_is_auth();
+  CDir *get_or_open_dir(MDCache *mdcache);  // deprecated
+  //CDir *set_dir(CDir *newdir);              // deprecated
+  //void close_dir();                         // deprecated
 
+  
+  bool dir_is_auth();   // FIXME deprecate me
+ 
 
 
   // -- misc -- 
@@ -490,6 +499,9 @@ public:
 class CInodeDiscover {
   
   inode_t    inode;
+  string     symlink;
+  fragtree_t dirfragtree;
+
   int        replica_nonce;
   
   int        hardlock_state;
@@ -499,6 +511,9 @@ class CInodeDiscover {
   CInodeDiscover() {}
   CInodeDiscover(CInode *in, int nonce) {
     inode = in->inode;
+    symlink = in->symlink;
+    dirfragtree = in->dirfragtree;
+
     replica_nonce = nonce;
 
     hardlock_state = in->hardlock.get_replica_state();
@@ -510,6 +525,8 @@ class CInodeDiscover {
 
   void update_inode(CInode *in) {
     in->inode = inode;
+    in->symlink = symlink;
+    in->dirfragtree = dirfragtree;
 
     in->replica_nonce = replica_nonce;
     in->hardlock.set_state(hardlock_state);
@@ -518,16 +535,20 @@ class CInodeDiscover {
   
   void _encode(bufferlist& bl) {
     bl.append((char*)&inode, sizeof(inode));
+    ::_encode(symlink, bl);
+    dirfragtree._encode(bl);
     bl.append((char*)&replica_nonce, sizeof(replica_nonce));
     bl.append((char*)&hardlock_state, sizeof(hardlock_state));
     bl.append((char*)&filelock_state, sizeof(filelock_state));
   }
 
   void _decode(bufferlist& bl, int& off) {
-    bl.copy(off,sizeof(inode_t), (char*)&inode);
-    off += sizeof(inode_t);
-    bl.copy(off, sizeof(int), (char*)&replica_nonce);
-    off += sizeof(int);
+    bl.copy(off,sizeof(inode), (char*)&inode);
+    off += sizeof(inode);
+    ::_decode(symlink, bl, off);
+    dirfragtree._decode(bl, off);
+    bl.copy(off, sizeof(replica_nonce), (char*)&replica_nonce);
+    off += sizeof(replica_nonce);
     bl.copy(off, sizeof(hardlock_state), (char*)&hardlock_state);
     off += sizeof(hardlock_state);
     bl.copy(off, sizeof(filelock_state), (char*)&filelock_state);
@@ -543,12 +564,16 @@ class CInodeExport {
 
   struct {
     inode_t        inode;
+
     meta_load_t    popularity_justme;
     meta_load_t    popularity_curdom;
     bool           is_dirty;       // dirty inode?
     
     int            num_caps;
   } st;
+
+  string         symlink;
+  fragtree_t     dirfragtree;
 
   map<int,int>     replicas;
   map<int,Capability>  cap_map;
@@ -560,6 +585,9 @@ public:
   CInodeExport() {}
   CInodeExport(CInode *in) {
     st.inode = in->inode;
+    symlink = in->symlink;
+    dirfragtree = in->dirfragtree;
+
     st.is_dirty = in->is_dirty();
     replicas = in->replicas;
 
@@ -582,6 +610,8 @@ public:
 
   void update_inode(CInode *in, set<int>& new_client_caps) {
     in->inode = st.inode;
+    in->symlink = symlink;
+    in->dirfragtree = dirfragtree;
 
     in->popularity[MDS_POP_JUSTME] += st.popularity_justme;
     in->popularity[MDS_POP_CURDOM] += st.popularity_curdom;
@@ -605,7 +635,9 @@ public:
   void _encode(bufferlist& bl) {
     st.num_caps = cap_map.size();
     bl.append((char*)&st, sizeof(st));
-    
+    ::_encode(symlink, bl);
+    dirfragtree._encode(bl);
+
     // cached_by + nonce
     ::_encode(replicas, bl);
 
@@ -624,6 +656,8 @@ public:
   int _decode(bufferlist& bl, int off = 0) {
     bl.copy(off, sizeof(st), (char*)&st);
     off += sizeof(st);
+    ::_decode(symlink, bl, off);
+    dirfragtree._decode(bl, off);
     
     ::_decode(replicas, bl, off);
 

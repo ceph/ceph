@@ -72,13 +72,10 @@ void EString::replay(MDS *mds)
 bool EMetaBlob::has_expired(MDS *mds)
 {
   // examine dirv's for my lumps
-  for (map<inodeno_t,dirlump>::iterator lp = lump_map.begin();
+  for (map<dirfrag_t,dirlump>::iterator lp = lump_map.begin();
        lp != lump_map.end();
        ++lp) {
-    CInode *diri = mds->mdcache->get_inode(lp->first);
-    if (!diri) 
-      continue;       // we expired it
-    CDir *dir = diri->dir;
+    CDir *dir = mds->mdcache->get_dirfrag(lp->first);
     if (!dir) 
       continue;       // we expired it
 
@@ -116,13 +113,10 @@ void EMetaBlob::expire(MDS *mds, Context *c)
 
   // examine dirv's for my lumps
   // make list of dir slices i need to commit
-  for (map<inodeno_t,dirlump>::iterator lp = lump_map.begin();
+  for (map<dirfrag_t,dirlump>::iterator lp = lump_map.begin();
        lp != lump_map.end();
        ++lp) {
-    CInode *diri = mds->mdcache->get_inode(lp->first);
-    if (!diri) 
-      continue;       // we expired it
-    CDir *dir = diri->dir;
+    CDir *dir = mds->mdcache->get_dirfrag(lp->first);
     if (!dir) 
       continue;       // we expired it
     
@@ -171,27 +165,26 @@ void EMetaBlob::replay(MDS *mds)
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << endl;
 
   // walk through my dirs (in order!)
-  for (list<inodeno_t>::iterator lp = lump_order.begin();
+  for (list<dirfrag_t>::iterator lp = lump_order.begin();
        lp != lump_order.end();
        ++lp) {
     dout(10) << "EMetaBlob.replay dir " << *lp << endl;
     dirlump &lump = lump_map[*lp];
 
     // the dir 
-    CInode *diri = mds->mdcache->get_inode(*lp);
-    CDir *dir;
-    if (!diri) {
-      assert(*lp == 1);
-      diri = mds->mdcache->create_root_inode();
-      dout(10) << "EMetaBlob.replay created root " << *diri << endl;
-    }
-    if (diri->dir) {
-      dir = diri->dir;
-      dout(20) << "EMetaBlob.replay had dir " << *dir << endl;
-    } else {
-      dir = diri->get_or_open_dir(mds->mdcache);
-      if (*lp == 1) 
-	dir->set_dir_auth(CDIR_AUTH_UNKNOWN);
+    CDir *dir = mds->mdcache->get_dirfrag(*lp);
+    if (!dir) {
+      // hmm.  do i have the inode?
+      CInode *diri = mds->mdcache->get_inode((*lp).ino);
+      if (!diri) {
+	assert((*lp).ino == 1);
+	diri = mds->mdcache->create_root_inode();
+	dout(10) << "EMetaBlob.replay created root " << *diri << endl;
+      }
+      // create the dirfrag
+      dir = diri->get_or_open_dirfrag(mds->mdcache, (*lp).frag);
+      if ((*lp).ino == 1) 
+	dir->set_dir_auth(CDIR_AUTH_UNKNOWN);  // FIXME: can root dir be fragmented?  hrm.
       dout(10) << "EMetaBlob.replay added dir " << *dir << endl;  
     }
     dir->set_version( lump.dirv );
@@ -471,11 +464,10 @@ void EImportMap::replay(MDS *mds)
     metablob.replay(mds);
     
     // restore import/export maps
-    for (set<inodeno_t>::iterator p = imports.begin();
+    for (set<dirfrag_t>::iterator p = imports.begin();
 	 p != imports.end();
 	 ++p) {
-      CInode *diri = mds->mdcache->get_inode(*p);
-      CDir *dir = diri->dir;
+      CDir *dir = mds->mdcache->get_dirfrag(*p);
       mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
     }
   }
@@ -606,17 +598,17 @@ bool EImportStart::has_expired(MDS *mds)
 
 void EImportStart::expire(MDS *mds, Context *c)
 {
-  dout(10) << "EImportStart.expire " << dirino << endl;
+  dout(10) << "EImportStart.expire " << base << endl;
   metablob.expire(mds, c);
 }
 
 void EImportStart::replay(MDS *mds)
 {
-  dout(10) << "EImportStart.replay " << dirino << endl;
+  dout(10) << "EImportStart.replay " << base << endl;
   metablob.replay(mds);
 
   // put in ambiguous import list
-  mds->mdcache->add_ambiguous_import(dirino, bounds);
+  mds->mdcache->add_ambiguous_import(base, bounds);
 }
 
 // -----------------------
@@ -633,11 +625,11 @@ void EImportFinish::expire(MDS *mds, Context *c)
 
 void EImportFinish::replay(MDS *mds)
 {
-  dout(10) << "EImportFinish.replay " << dirino << " success=" << success << endl;
+  dout(10) << "EImportFinish.replay " << base << " success=" << success << endl;
   if (success) 
-    mds->mdcache->finish_ambiguous_import(dirino);
+    mds->mdcache->finish_ambiguous_import(base);
   else
-    mds->mdcache->cancel_ambiguous_import(dirino);
+    mds->mdcache->cancel_ambiguous_import(base);
 }
 
 

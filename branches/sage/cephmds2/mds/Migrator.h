@@ -99,19 +99,21 @@ public:
   const static int IMPORT_ABORTING      = 7; // notifying bystanders of an abort before unfreezing
 
 protected:
-  map<inodeno_t,int>              import_state;
-  map<inodeno_t,int>              import_peer;
-  map<inodeno_t,list<inodeno_t> > import_bound_inos;
+  map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
+  map<dirfrag_t,int>              import_peer;
+  map<dirfrag_t,list<dirfrag_t> > import_bound_inos;
   map<CDir*,set<CDir*> >          import_bounds;
   map<CDir*,set<int> >            import_bystanders;
 
 
+
+  /*
   // -- hashing madness --
   multimap<CDir*, int>   unhash_waiting;  // nodes i am waiting for UnhashDirAck's from
   multimap<inodeno_t, inodeno_t>    import_hashed_replicate_waiting;  // nodes i am waiting to discover to complete my import of a hashed dir
   // maps frozen_dir_ino's to waiting-for-discover ino's.
   multimap<inodeno_t, inodeno_t>    import_hashed_frozen_waiting;    // dirs i froze (for the above)
-
+  */
 
 
 public:
@@ -127,12 +129,12 @@ public:
     return 0;
   }
   bool is_exporting() { return !export_state.empty(); }
-  int is_importing(inodeno_t dirino) {
-    if (import_state.count(dirino)) return import_state[dirino];
+  int is_importing(dirfrag_t df) {
+    if (import_state.count(df)) return import_state[df];
     return 0;
   }
   bool is_importing() { return !import_state.empty(); }
-  const list<inodeno_t>& get_import_bound_inos(inodeno_t base) { 
+  const list<dirfrag_t>& get_import_bound_inos(dirfrag_t base) { 
     assert(import_bound_inos.count(base));
     return import_bound_inos[base];
   }
@@ -141,13 +143,13 @@ public:
     return import_bounds[base];
   }
 
-  int get_import_state(inodeno_t dirino) {
-    assert(import_state.count(dirino));
-    return import_state[dirino];
+  int get_import_state(dirfrag_t df) {
+    assert(import_state.count(df));
+    return import_state[df];
   }
-  int get_import_peer(inodeno_t dirino) {
-    assert(import_peer.count(dirino));
-    return import_peer[dirino];
+  int get_import_peer(dirfrag_t df) {
+    assert(import_peer.count(df));
+    return import_peer[df];
   }
 
 
@@ -200,11 +202,13 @@ public:
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
 			CDir *import_root,
-			list<inodeno_t>& imported_subdirs,
+			list<dirfrag_t>& imported_subdirs,
 			EImportStart *le);
+  /*
   void got_hashed_replica(CDir *import,
                           inodeno_t dir_ino,
                           inodeno_t replica_ino);
+  */
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);
 protected:
@@ -212,8 +216,8 @@ protected:
   void import_reverse_unpin(CDir *dir);
   void import_notify_abort(CDir *dir);
   void import_logged_start(CDir *dir, int from,
-			       list<inodeno_t> &imported_subdirs,
-			       list<inodeno_t> &exports);
+			       list<dirfrag_t> &imported_subdirs,
+			       list<dirfrag_t> &exports);
   void handle_export_finish(MExportDirFinish *m);
 public:
   void import_finish(CDir *dir, bool now=false);
@@ -230,6 +234,7 @@ protected:
 
   // -- hashed directories --
 
+  /*
   // HASH
  public:
   void hash_dir(CDir *dir);  // on auth
@@ -287,7 +292,7 @@ protected:
   void handle_unhash_dir(MUnhashDir *m);
   void handle_unhash_dir_notify(MUnhashDirNotify *m);
   friend class C_MDC_UnhashPrepFreeze;
-
+  */
 
 };
 

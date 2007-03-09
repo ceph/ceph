@@ -20,9 +20,8 @@
 class EImportMap : public LogEvent {
 public:
   EMetaBlob metablob;
-  set<inodeno_t> imports;
-  //set<inodeno_t> hashdirs;
-  map<inodeno_t, set<inodeno_t> > bounds;
+  set<dirfrag_t> imports;
+  map<dirfrag_t, set<dirfrag_t> > bounds;
 
   EImportMap() : LogEvent(EVENT_IMPORTMAP) { }
   
@@ -34,7 +33,7 @@ public:
   void encode_payload(bufferlist& bl) {
     metablob._encode(bl);
     ::_encode(imports, bl);
-    for (set<inodeno_t>::iterator p = imports.begin();
+    for (set<dirfrag_t>::iterator p = imports.begin();
 	 p != imports.end();
 	 ++p) {
       ::_encode(bounds[*p], bl);
@@ -45,7 +44,7 @@ public:
   void decode_payload(bufferlist& bl, int& off) {
     metablob._decode(bl, off);
     ::_decode(imports, bl, off);
-    for (set<inodeno_t>::iterator p = imports.begin();
+    for (set<dirfrag_t>::iterator p = imports.begin();
 	 p != imports.end();
 	 ++p) {
       ::_decode(bounds[*p], bl, off);

@@ -1039,6 +1039,7 @@ void MDS::my_dispatch(Message *m)
 
   // HACK to force export to test foreign renames
   if (false && whoami == 0) {
+    /*
     static bool didit = false;
     
     // 7 to 1
@@ -1051,6 +1052,7 @@ void MDS::my_dispatch(Message *m)
         didit = true;
       }
     }
+    */
   }
 
 

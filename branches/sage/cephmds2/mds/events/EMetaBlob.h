@@ -209,8 +209,8 @@ class EMetaBlob {
   };
   
   // my lumps.  preserve the order we added them in a list.
-  list<inodeno_t>         lump_order;
-  map<inodeno_t, dirlump> lump_map;
+  list<dirfrag_t>         lump_order;
+  map<dirfrag_t, dirlump> lump_map;
 
  public:
   
@@ -267,11 +267,11 @@ class EMetaBlob {
   }
   
   dirlump& add_dir(CDir *dir, bool dirty) {
-    if (lump_map.count(dir->ino()) == 0) {
-      lump_order.push_back(dir->ino());
-      lump_map[dir->ino()].dirv = dir->get_projected_version();
+    if (lump_map.count(dir->dirfrag()) == 0) {
+      lump_order.push_back(dir->dirfrag());
+      lump_map[dir->dirfrag()].dirv = dir->get_projected_version();
     }
-    dirlump& l = lump_map[dir->ino()];
+    dirlump& l = lump_map[dir->dirfrag()];
     if (dir->is_complete()) l.mark_complete();
     //if (dir->is_import()) l.mark_import();
     if (dirty) l.mark_dirty();
@@ -280,7 +280,7 @@ class EMetaBlob {
 
   void add_dir_context(CDir *dir, bool toroot=false) {
     // already have this dir?  (we must always add in order)
-    if (lump_map.count(dir->ino())) 
+    if (lump_map.count(dir->dirfrag())) 
       return;
 
     CInode *diri = dir->get_inode();
@@ -300,7 +300,7 @@ class EMetaBlob {
   void _encode(bufferlist& bl) {
     int n = lump_map.size();
     bl.append((char*)&n, sizeof(n));
-    for (list<inodeno_t>::iterator i = lump_order.begin();
+    for (list<dirfrag_t>::iterator i = lump_order.begin();
 	 i != lump_order.end();
 	 ++i) {
       bl.append((char*)&(*i), sizeof(*i));
@@ -312,11 +312,11 @@ class EMetaBlob {
     bl.copy(off, sizeof(n), (char*)&n);  
     off += sizeof(n);
     for (int i=0; i<n; i++) {
-      inodeno_t dirino;
-      bl.copy(off, sizeof(dirino), (char*)&dirino);
-      off += sizeof(dirino);
-      lump_order.push_back(dirino);
-      lump_map[dirino]._decode(bl, off);
+      dirfrag_t dirfrag;
+      bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);
+      off += sizeof(dirfrag);
+      lump_order.push_back(dirfrag);
+      lump_map[dirfrag]._decode(bl, off);
     }
   }
   

@@ -54,13 +54,12 @@ class InodeStat {
  public:
   inode_t inode;
   string  symlink;   // symlink content (if symlink)
-
+  fragtree_t dirfragtree;
 
   // mds distribution hints
-  int      dir_auth;
-  bool     hashed, replicated;
-  bool     spec_defined;
-  set<int> dist;    // where am i replicated?
+  map<frag_t,int>       dirfrag_auth;
+  map<frag_t,set<int> > dirfrag_dist;
+  set<frag_t>           dirfrag_rep;
 
  public:
   InodeStat() {}
@@ -77,49 +76,42 @@ class InodeStat {
     // symlink content?
     if (in->is_symlink()) 
       symlink = in->symlink;
+    
+    // dirfragtree
+    dirfragtree = in->dirfragtree;
       
-    // replicated where?
-    if (in->dir && in->dir->is_auth()) {
-      spec_defined = true;
-      in->dir->get_dist_spec(this->dist, whoami);
-    } else 
-      spec_defined = false;
-
-    if (in->dir)
-      dir_auth = in->dir->get_dir_auth().first;
-    else
-      dir_auth = -1;
-
-    // dir info
-    hashed = (in->dir && in->dir->is_hashed());   // FIXME not quite right.
-    replicated = (in->dir && in->dir->is_rep());
+    // dirfrag info
+    list<CDir*> ls;
+    in->get_dirfrags(ls);
+    for (list<CDir*>::iterator p = ls.begin();
+	 p != ls.end();
+	 ++p) {
+      CDir *dir = *p;
+      dirfrag_auth[dir->dirfrag().frag] = dir->get_dir_auth().first;
+      if (dir->is_auth()) 
+	dir->get_dist_spec(dirfrag_dist[dir->dirfrag().frag], whoami);
+      if (dir->is_rep())
+	dirfrag_rep.insert(dir->dirfrag().frag);
+    }
   }
   
   void _encode(bufferlist &bl) {
     bl.append((char*)&inode, sizeof(inode));
-    bl.append((char*)&spec_defined, sizeof(spec_defined));
-    bl.append((char*)&dir_auth, sizeof(dir_auth));
-    bl.append((char*)&hashed, sizeof(hashed));
-    bl.append((char*)&replicated, sizeof(replicated));
-
+    ::_encode(dirfrag_auth, bl);
+    ::_encode(dirfrag_dist, bl);
+    ::_encode(dirfrag_rep, bl);
     ::_encode(symlink, bl);
-    ::_encode(dist, bl);    // distn
+    dirfragtree._encode(bl);
   }
   
   void _decode(bufferlist &bl, int& off) {
     bl.copy(off, sizeof(inode), (char*)&inode);
     off += sizeof(inode);
-    bl.copy(off, sizeof(spec_defined), (char*)&spec_defined);
-    off += sizeof(spec_defined);
-    bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
-    off += sizeof(dir_auth);
-    bl.copy(off, sizeof(hashed), (char*)&hashed);
-    off += sizeof(hashed);
-    bl.copy(off, sizeof(replicated), (char*)&replicated);
-    off += sizeof(replicated);
-
+    ::_decode(dirfrag_auth, bl, off);
+    ::_decode(dirfrag_dist, bl, off);
+    ::_decode(dirfrag_rep, bl, off);
     ::_decode(symlink, bl, off);
-    ::_decode(dist, bl, off);
+    dirfragtree._decode(bl, off);
   }
 };
 

@@ -97,9 +97,10 @@ ostream& operator<<(ostream& out, CDir& dir)
 // -------------------------------------------------------------------
 // CDir
 
-CDir::CDir(CInode *in, MDCache *mdcache, bool auth)
+CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
 {
   inode = in;
+  frag = fg;
   this->cache = mdcache;
   
   nitems = 0;
@@ -277,8 +278,8 @@ void CDir::link_inode_work( CDentry *dn, CInode *in )
 
   nitems++;  // adjust dir size
   
-  // set dir version
-  in->inode.version = dn->get_version();
+  // set inode version
+  //in->inode.version = dn->get_version();
   
   // clear dangling
   in->state_clear(CInode::STATE_DANGLING);
@@ -564,13 +565,12 @@ void CDir::last_put()
 class C_Dir_Fetch : public Context {
  protected:
   CDir *dir;
-  off_t offset;
  public:
   bufferlist bl;
 
-  C_Dir_Fetch(CDir *d, off_t o=0) : dir(d), offset(o) { }
+  C_Dir_Fetch(CDir *d) : dir(d) { }
   void finish(int result) {
-    dir->_fetch_dir_read(offset, bl);
+    dir->_fetched(bl);
   }
 };
 
@@ -591,22 +591,22 @@ void CDir::fetch(Context *c)
   if (cache->mds->logger) cache->mds->logger->inc("fdir");
 
   // start by reading the first hunk of it
-  C_Dir_Fetch *fin = new C_Dir_Fetch(this, 0);
+  C_Dir_Fetch *fin = new C_Dir_Fetch(this);
   cache->mds->objecter->read( get_ondisk_object(), 
 			      0, 0,   // whole object
 			      &fin->bl,
 			      fin );
 }
 
-void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
+void CDir::_fetched(bufferlist &bl)
 {
-  dout(10) << "_fetch_dir_read " << read_off << "~" << bl.length() 
+  dout(10) << "_fetched " << 0 << "~" << bl.length() 
 	   << " on " << *this
 	   << endl;
   
   // give up?
   if (!is_auth() || is_frozen()) {
-    dout(10) << "_fetch_dir_read canceling (!auth or frozen)" << endl;
+    dout(10) << "_fetched canceling (!auth or frozen)" << endl;
     //ondisk_bl.clear();
     //ondisk_size = 0;
     
@@ -617,7 +617,6 @@ void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
 
   // add to our buffer
   size_t ondisk_size;
-  assert(read_off == 0);  // for now.
   assert(bl.length() > sizeof(ondisk_size));
   bl.copy(0, sizeof(ondisk_size), (char*)&ondisk_size);
   off_t have = bl.length() - sizeof(ondisk_size);
@@ -635,7 +634,7 @@ void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
   bl.copy(off, sizeof(got_version), (char*)&got_version);
   off += sizeof(got_version);
 
-  dout(10) << "_fetch_dir_read " << num_dn << " dn, got_version " << got_version
+  dout(10) << "_fetched " << num_dn << " dn, got_version " << got_version
 	   << ", " << ondisk_size << " bytes"
 	   << endl;
   
@@ -725,17 +724,39 @@ void CDir::_fetch_dir_read(off_t read_off, bufferlist &bl)
       assert(0);
     }
 
-    // clean underwater item?
-    if (dn &&
+    /** clean underwater item?
+     * Underwater item is something that is dirty in our cache from
+     * journal replay, but was previously flushed to disk before the
+     * mds failed.
+     *
+     * We only do this is committed_version == 0. that implies either
+     * - this is a fetch after from a clean/empty CDir is created
+     *   (and has no effect, since the dn won't exist); or
+     * - this is a fetch after _recovery_, which is what we're worried 
+     *   about.  Items that are marked dirty from the journal should be
+     *   marked clean if they appear on disk.
+     */
+    if (committed_version == 0 &&     
+	dn &&
 	dn->get_version() <= got_version &&
 	dn->is_dirty()) {
       dout(10) << "readdir had underwater dentry " << *dn << ", marking clean" << endl;
       dn->mark_clean();
+
       if (dn->get_inode()) {
 	assert(dn->get_inode()->get_version() <= got_version);
+	dout(10) << "readdir had underwater inode " << *dn->get_inode() << ", marking clean" << endl;
 	dn->get_inode()->mark_clean();
       }
     }
+  }
+
+  // take the loaded version?
+  // only if we are a fresh CDir* with no prior state.
+  if (version == 0) {
+    assert(projected_version == 0);
+    assert(!state_test(STATE_COMMITTING));
+    projected_version = version = committing_version = committed_version = got_version;
   }
 
   // mark complete, !fetching

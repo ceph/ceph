@@ -265,7 +265,6 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   dout(12) << "insert_inode " << dname << " ino " << st->inode.ino 
            << "  size " << st->inode.size
            << "  mtime " << st->inode.mtime
-           << "  hashed " << st->hashed
            << endl;
   
   if (dn) {
@@ -349,20 +348,27 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
  */
 void Client::update_inode_dist(Inode *in, InodeStat *st)
 {
-  // dir info
-  in->dir_auth = st->dir_auth;
-  in->dir_hashed = st->hashed;  
-  in->dir_replicated = st->replicated;  
+  // auth
+  in->dir_auth = -1;
+  if (!st->dirfrag_auth.empty()) {        // HACK FIXME ******* FIXME FIXME FIXME FIXME dirfrag_t
+    in->dir_auth = st->dirfrag_auth.begin()->second; 
+  }
+
+  // replicated
+  in->dir_replicated = false;
+  if (!st->dirfrag_rep.empty())
+    in->dir_replicated = true;       // FIXME
   
-  // dir replication
-  if (st->spec_defined) {
-    if (st->dist.empty() && !in->dir_contacts.empty())
+  // dist
+  if (!st->dirfrag_dist.empty()) {   // FIXME
+    set<int> dist = st->dirfrag_dist.begin()->second;
+    if (dist.empty() && !in->dir_contacts.empty())
       dout(9) << "lost dist spec for " << in->inode.ino 
-              << " " << st->dist << endl;
-    if (!st->dist.empty() && in->dir_contacts.empty()) 
+              << " " << dist << endl;
+    if (!dist.empty() && in->dir_contacts.empty()) 
       dout(9) << "got dist spec for " << in->inode.ino 
-              << " " << st->dist << endl;
-    in->dir_contacts = st->dist;
+              << " " << dist << endl;
+    in->dir_contacts = dist;
   }
 }
 

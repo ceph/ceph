@@ -89,7 +89,7 @@ CInode::CInode(MDCache *c, bool auth) {
   //num_parents = 0;
   parent = NULL;
   
-  dir = NULL;     // CDir opened separately
+  dir = NULL;   // deprecated
 
   auth_pins = 0;
   nested_auth_pins = 0;
@@ -101,11 +101,26 @@ CInode::CInode(MDCache *c, bool auth) {
 }
 
 CInode::~CInode() {
-  if (dir) { delete dir; dir = 0; }
+  if (dir) 
+    delete dir;
+
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    delete p->second;
 }
 
 
 // dirfrags
+
+frag_t CInode::pick_dirfrag(const string& dn)
+{
+  if (dirfragtree.empty())
+    return frag_t();          // avoid the string hash if we can.
+
+  static hash<string> H;
+  return dirfragtree[H(dn)];
+}
 
 // new interface for old way
 void CInode::get_dirfrags(list<CDir*>& ls) 
@@ -124,7 +139,7 @@ void CInode::get_subtree_dirfrags(list<CDir*>& ls)
     ls.push_back(dir);
 }
 
-/* new 
+/* new way
 void CInode::get_dirfrags(list<CDir*>& ls) 
 {
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -220,19 +235,56 @@ bool CInode::dir_is_auth() {
 
 CDir *CInode::get_or_open_dir(MDCache *mdcache)
 {
+  return get_or_open_dirfrag(mdcache, frag_t());
+}
+
+CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
+{
   assert(is_dir());
+  if (1) { // old
+    if (!dir)
+      dir = new CDir(this, fg, mdcache, true);
+    return dir;
+  } else { // new
+    // have it?
+    CDir *dir = get_dirfrag(fg);
+    if (dir) return dir;
+    
+    // create it.
+    assert(is_auth());
+    dirfrags[fg] = new CDir(this, fg, mdcache, true);
+    return dir;
+  }
+}
 
-  if (dir) return dir;
-
-  // can't open a dir if we're frozen_dir, bc of hashing stuff.
-  assert(!is_frozen_dir());
-
-  // only auth can open dir alone.
-  assert(is_auth());
-  set_dir( new CDir(this, mdcache, true) );
+CDir *CInode::add_dirfrag(CDir *dir)
+{
+  if (1) { // old
+    assert(!this->dir);
+    this->dir = dir;
+  } else {
+    assert(dirfrags.count(dir->dirfrag().frag) == 0);
+    dirfrags[dir->dirfrag().frag] = dir;
+  }
   return dir;
 }
 
+void CInode::close_dirfrag(frag_t fg)
+{
+  if (1) { // old
+    assert(dir);
+    assert(dir->get_num_ref() == 0);
+    delete dir;
+    dir = 0;
+  } else { // new
+    assert(dirfrags.count(fg));
+    assert(dirfrags[fg]->get_num_ref() == 0);
+    delete dirfrags[fg];
+    dirfrags.erase(fg);
+  }
+}
+
+/*
 CDir *CInode::set_dir(CDir *newdir)
 {
   assert(dir == 0);
@@ -247,6 +299,7 @@ void CInode::close_dir()
   delete dir;
   dir = 0;
 }
+*/
 
 
 void CInode::set_auth(bool a) 
@@ -521,17 +574,11 @@ pair<int,int> CInode::authority()
   if (is_dangling()) 
     return dangling_auth;      // explicit
 
-  if (is_root()) {             // i am root
-    if (dir)
-      return dir->get_dir_auth();  // bit of a chicken/egg issue here!
-    else {
-      return CDIR_AUTH_UNDEF;
-    }
-  }
+  if (is_root())
+    return CDIR_AUTH_ROOTINODE;  // root _inode_ is locked to mds0.
 
-  // this is useless if we hose the hashing crap.
   if (parent)
-    return parent->dir->dentry_authority( parent->name );
+    return parent->dir->authority();
 
   return CDIR_AUTH_UNDEF;
 }

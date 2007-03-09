@@ -24,10 +24,10 @@ public:
   */
   struct realm {
     map<inodeno_t, int> inodes;
-    map<inodeno_t, int> dirs;
-    map<inodeno_t, map<string,int> > dentries;
+    map<dirfrag_t, int> dirs;
+    map<dirfrag_t, map<string,int> > dentries;
   };
-  map<inodeno_t, realm> realms;
+  map<dirfrag_t, realm> realms;
 
   int get_from() { return from; }
 
@@ -38,31 +38,27 @@ public:
 
   virtual char *get_type_name() { return "CEx";}
   
-  void add_inode(inodeno_t r, inodeno_t ino, int nonce) {
+  void add_inode(dirfrag_t r, inodeno_t ino, int nonce) {
     realms[r].inodes[ino] = nonce;
   }
-  void add_dir(inodeno_t r, inodeno_t ino, int nonce) {
-    realms[r].dirs[ino] = nonce;
+  void add_dir(dirfrag_t r, dirfrag_t df, int nonce) {
+    realms[r].dirs[df] = nonce;
   }
-  void add_dentry(inodeno_t r, inodeno_t dirino, const string& dn, int nonce) {
-    realms[r].dentries[dirino][dn] = nonce;
+  void add_dentry(dirfrag_t r, dirfrag_t df, const string& dn, int nonce) {
+    realms[r].dentries[df][dn] = nonce;
   }
-  //badbadbad
-  //void add_dentries(inodeno_t r, inodeno_t dirino, map<string,int>& dmap) {
-  //realms[r].dentries[dirino] = dmap;
-  //}
 
-  void add_realm(inodeno_t ino, realm& r) {
-    realm& myr = realms[ino];
+  void add_realm(dirfrag_t df, realm& r) {
+    realm& myr = realms[df];
     for (map<inodeno_t, int>::iterator p = r.inodes.begin();
 	 p != r.inodes.end();
 	 ++p)
       myr.inodes[p->first] = p->second;
-    for (map<inodeno_t, int>::iterator p = r.dirs.begin();
+    for (map<dirfrag_t, int>::iterator p = r.dirs.begin();
 	 p != r.dirs.end();
 	 ++p)
       myr.dirs[p->first] = p->second;
-    for (map<inodeno_t, map<string,int> >::iterator p = r.dentries.begin();
+    for (map<dirfrag_t, map<string,int> >::iterator p = r.dentries.begin();
 	 p != r.dentries.end();
 	 ++p)
       for (map<string,int>::iterator q = p->second.begin();
@@ -82,7 +78,7 @@ public:
     off += sizeof(nr);
 
     while (nr--) {
-      inodeno_t r;
+      dirfrag_t r;
       payload.copy(off, sizeof(r), (char*)&r);
       off += sizeof(r);
       
@@ -93,10 +89,10 @@ public:
       payload.copy(off, sizeof(int), (char*)&n);
       off += sizeof(int);
       for (int i=0; i<n; i++) {
-	inodeno_t ino;
-	payload.copy(off, sizeof(ino), (char*)&ino);
-	off += sizeof(ino);
-	::_decode(realms[r].dentries[ino], payload, off);
+	dirfrag_t df;
+	payload.copy(off, sizeof(df), (char*)&df);
+	off += sizeof(df);
+	::_decode(realms[r].dentries[df], payload, off);
       }
     }
   }
@@ -107,7 +103,7 @@ public:
     int nr = realms.size();
     payload.append((char*)&nr, sizeof(nr));
 
-    for (map<inodeno_t,realm>::iterator q = realms.begin();
+    for (map<dirfrag_t,realm>::iterator q = realms.begin();
 	 q != realms.end();
 	 ++q) {
       payload.append((char*)&q->first, sizeof(q->first));
@@ -117,7 +113,7 @@ public:
       
       int n = q->second.dentries.size();
       payload.append((char*)&n, sizeof(n));
-      for (map<inodeno_t, map<string,int> >::iterator p = q->second.dentries.begin();
+      for (map<dirfrag_t, map<string,int> >::iterator p = q->second.dentries.begin();
 	   p != q->second.dentries.end();
 	   ++p) {
 	payload.append((char*)&p->first, sizeof(p->first));

@@ -21,8 +21,8 @@
 
 class MMDSImportMap : public Message {
  public:
-  map<inodeno_t, list<inodeno_t> > imap;
-  map<inodeno_t, list<inodeno_t> > ambiguous_imap;
+  map<dirfrag_t, list<dirfrag_t> > imap;
+  map<dirfrag_t, list<dirfrag_t> > ambiguous_imap;
 
   MMDSImportMap() : Message(MSG_MDS_IMPORTMAP) {}
 
@@ -34,14 +34,14 @@ class MMDSImportMap : public Message {
 	<< " imports)";
   }
   
-  void add_import(inodeno_t im) {
+  void add_import(dirfrag_t im) {
     imap[im].clear();
   }
-  void add_import_export(inodeno_t im, inodeno_t ex) {
+  void add_import_export(dirfrag_t im, dirfrag_t ex) {
     imap[im].push_back(ex);
   }
 
-  void add_ambiguous_import(inodeno_t im, const list<inodeno_t>& m) {
+  void add_ambiguous_import(dirfrag_t im, const list<dirfrag_t>& m) {
     ambiguous_imap[im] = m;
   }
 

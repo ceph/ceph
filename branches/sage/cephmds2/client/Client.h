@@ -452,8 +452,7 @@ protected:
     dn->inode = 0;
     in->dn = 0;
     put_inode(in);
-    assert(!in->is_dir() || in->dir == 0);
-    
+        
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
     if (dn->dir->is_empty()) 
