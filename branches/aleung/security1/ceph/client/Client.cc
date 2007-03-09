@@ -2812,7 +2812,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 {
   client_lock.Lock();
 
-  utime_t start_time = g_clock.now();
   // fix uid/gid if not supplied                                             
   // get it from the system                                               
   if (uid == -1 || gid == -1) {
@@ -2916,8 +2915,6 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
     dout(20) << " sync write done " << onfinish << endl;
   }
-  utime_t end_time = g_clock.now();
-  cout << "Client write() time " << end_time - start_time << endl;
 
   // time
   utime_t lat = g_clock.now();
