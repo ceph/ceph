@@ -21,6 +21,7 @@
 #include <set>
 #include <map>
 #include <ostream>
+#include <fstream>
 using namespace std;
 
 #include <ext/hash_map>

@@ -258,6 +258,7 @@ void Server::commit_request(MClientRequest *req,
 void Server::handle_client_update(MClientUpdate *m)
 {
   hash_t my_hash = m->get_user_hash();
+  cout << "handle_client_update for " << my_hash << endl;
   dout(3) << "handle_client_update for " << my_hash << endl;
 
   MClientUpdateReply *reply = new MClientUpdateReply(my_hash, mds->unix_groups_byhash[my_hash].get_list());
@@ -2255,6 +2256,8 @@ void Server::handle_client_truncate(MClientRequest *req, CInode *cur)
 void Server::handle_client_open(MClientRequest *req,
 				CInode *cur)
 {
+  utime_t start_time = g_clock.now();
+  utime_t end_time;
   int flags = req->get_iarg();
   int mode = req->get_iarg2();
   //uid_t uid = req->get_caller_uid();
@@ -2310,6 +2313,8 @@ void Server::handle_client_open(MClientRequest *req,
   if (g_conf.secure_io)
     reply->set_ext_cap(ext_cap);
   
+  end_time = g_clock.now();
+  cout << "Open() request latency " << end_time - start_time << endl;
   reply_request(req, reply, cur);
 }
 

@@ -724,12 +724,15 @@ void Client::handle_osd_update(MOSDUpdate *m) {
 
     // is anyone else already waiting for this hash?
     if (update_waiter_osd.count(my_hash) == 0) {
+      cout << "mds_group_update for " << my_hash << endl;
       dout(10) << "mds_group_update for " << my_hash << endl;
       // FIXME choose mds (always choose 0)
       messenger->send_message(update, mdsmap->get_inst(0), MDS_PORT_SERVER);
     }
-    else
+    else {
+      cout << "mds_group_update for " << my_hash << endl;
       dout(10) << "mds_group_update for " << my_hash << endl;
+    }
 
     update_waiter_osd[my_hash].insert(m->get_source().num());
   }
@@ -2400,6 +2403,7 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 {
   client_lock.Lock();
 
+
   // fix uid/gid if not supplied                                   
   // get it from the system                                                    
   if (uid == -1 || gid == -1) {
@@ -2521,7 +2525,7 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
               << " seq " << reply->get_file_caps_seq() 
               << " from mds" << mds << endl;
     }
-    
+
     // put in map
     result = fh = get_fh();
     assert(fh_map.count(fh) == 0);
@@ -2806,6 +2810,7 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 {
   client_lock.Lock();
 
+  utime_t start_time = g_clock.now();
   // fix uid/gid if not supplied                                             
   // get it from the system                                               
   if (uid == -1 || gid == -1) {
@@ -2909,6 +2914,8 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
     dout(20) << " sync write done " << onfinish << endl;
   }
+  utime_t end_time = g_clock.now();
+  cout << "Client write() time " << end_time - start_time << endl;
 
   // time
   utime_t lat = g_clock.now();

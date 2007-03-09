@@ -94,6 +94,51 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) : timer(mds_lock) {
   // init keys
   myPrivKey = esignPrivKey("crypto/esig1536.dat");
   myPubKey = esignPubKey(myPrivKey);
+
+  // create unix_groups?
+  if (g_conf.unix_group_file) {
+    ifstream from(g_conf.unix_group_file);
+    if (from.is_open()) {
+      cout << "PARSING INPUT GROUPS!" << endl;
+      bool seen_gid = false;
+      int input;
+      gid_t my_gid;
+      uid_t my_uid;
+      hash_t my_hash;
+      // parse file
+      while (! from.eof()) {
+	from >> input;
+	if (input == -1) {
+	  seen_gid = false;
+	  cout << endl;
+	  continue;
+	}
+	// first number on line is gid, rest are uids
+	if (!seen_gid) {
+	  // make group
+	  my_gid = input;
+	  unix_groups[my_gid].set_gid(my_gid);
+
+	  seen_gid = true;
+	  cout << "gid = " << my_gid;
+	}
+	else {
+	  my_uid = input;
+	  unix_groups[my_gid].add_user(my_uid);
+	  
+	  my_hash = unix_groups[my_gid].get_root_hash();
+	  unix_groups_byhash[my_hash] = unix_groups[my_gid];
+
+	  cout << " uid = " << my_uid;
+	}
+      }
+      from.close();
+    }
+    else {
+      cout << "Failed to open the unix_group_file" << endl;
+      assert(0);
+    }
+  }
  
   // beacon
   beacon_last_seq = 0;

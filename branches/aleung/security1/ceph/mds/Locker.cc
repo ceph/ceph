@@ -249,7 +249,10 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 	mds->unix_groups[my_group].add_user(my_user);
 	hash_t temp_hash = mds->unix_groups[my_group].get_root_hash();
 	mds->unix_groups_byhash[temp_hash] = mds->unix_groups[my_group];
+	cout << "User " << my_user << " added to group " << my_group << endl;
       }
+      else
+	cout << "User " << my_user << " already in group " << my_group << endl;
 
       ext_cap  = new ExtCap(my_want, my_user,
 			    mds->unix_groups[my_group], in->ino());

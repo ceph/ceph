@@ -294,6 +294,7 @@ struct md_config_t {
   bool secure_io;
   int mds_group;
   int mds_collection;
+  char *unix_group_file;
   int client_aux;
   int sign_scheme;
   int hash_scheme;
