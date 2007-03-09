@@ -197,7 +197,7 @@ sub run {
 	#$e = './tcpsynobfs' if $h->{'fs'} eq 'obfs';
 	my $c = "$e";
 	$c .= " --mkfs" unless $h->{'no_mkfs'};
-	$c .= " --$h->{'fs'}";
+	$c .= " --$h->{'fs'}" if $h->{'fs'};
 	$c .= " --syn until $h->{'until'}" if $h->{'until'};
 
 	$c .= " --syn writefile $h->{'writefile_mb'} $h->{'writefile_size'}" if $h->{'writefile'};
