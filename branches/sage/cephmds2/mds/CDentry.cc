@@ -60,10 +60,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
 
   if (dn.get_num_ref()) {
     out << " |";
-    for(set<int>::iterator it = dn.get_ref_set().begin();
-        it != dn.get_ref_set().end();
-        it++)
-      out << " " << CDentry::pin_name(*it);
+    dn.print_pin_set(out);
   }
 
   out << " " << &dn;

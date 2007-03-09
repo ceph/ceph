@@ -64,9 +64,13 @@ void EString::replay(MDS *mds)
  * 
  * - been safely committed to its dirslice.
  *
- * - has been safely exported. note that !is_auth() && !is_proxy()
- * implies safely exported.  if !is_auth() && is_proxy(), we need to
- * add a waiter for the export to complete.
+ * - has been safely exported.  i.e., authority().first != us.  
+ *   in particular, auth of <us, them> is not enough, we need to
+ *   wait for <them,-2>.  
+ *
+ * note that this check is overly conservative, in that we'll
+ * try to flush the dir again if we reimport the subtree, even though
+ * later journal entries contain the same dirty data (from the import).
  *
  */
 bool EMetaBlob::has_expired(MDS *mds)
@@ -81,29 +85,35 @@ bool EMetaBlob::has_expired(MDS *mds)
 
     // FIXME: check the slice only
 
-    if (dir->is_proxy()) {
-      dout(10) << "EMetaBlob.has_expired am proxy, needed dirv " << lp->second.dirv
-	       << " for " << *dir << endl;
-      return false;      // we need to wait until the export flushes!
-    }
-    if (!dir->is_auth()) {
+    if (dir->authority().first != mds->get_nodeid()) {
       dout(10) << "EMetaBlob.has_expired not auth, needed dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
       continue;       // not our problem
+    }
+    if (dir->get_committed_version() >= lp->second.dirv) {
+      dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+      continue;       // yay
+    }
+    
+    if (dir->auth_is_ambiguous()) {
+      dout(10) << "EMetaBlob.has_expired ambiguous auth on " 
+	       << *dir << endl;
+      return false;  // not committed.
     }
 
     if (dir->get_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.has_expired need dirv " << lp->second.dirv
 	       << " for " << *dir << endl;
       return false;  // not committed.
-    } else {
-      dout(10) << "EMetaBlob.has_expired have dirv " << lp->second.dirv
-	       << " for " << *dir << endl;
     }
+
+    assert(0);  // i goofed the logic
   }
 
   return true;  // all dirlumps expired.
 }
+
 
 void EMetaBlob::expire(MDS *mds, Context *c)
 {
@@ -122,6 +132,17 @@ void EMetaBlob::expire(MDS *mds, Context *c)
     
     // FIXME: check the slice only
 
+    if (dir->authority().first != mds->get_nodeid()) {
+      dout(10) << "EMetaBlob.expire not auth, needed dirv " << lp->second.dirv
+	       << " for " << *dir << endl;
+      continue;     // not our problem
+    }
+    if (dir->get_committed_version() >= lp->second.dirv) {
+      dout(10) << "EMetaBlob.expire have dirv " << lp->second.dirv
+	       << " on " << *dir << endl;
+      continue;   // yay
+    }
+    
     if (dir->auth_is_ambiguous()) {
       // wait until export is acked (logged on remote) and committed (logged locally)
       CDir *ex = mds->mdcache->get_subtree_root(dir);
@@ -130,30 +151,33 @@ void EMetaBlob::expire(MDS *mds, Context *c)
       waitfor_export.push_back(ex);
       continue;
     }
-    if (!dir->is_auth()) {
-      dout(10) << "EMetaBlob.expire not auth, needed dirv " << lp->second.dirv
-	       << " for " << *dir << endl;
-      continue;     // not our problem
-    }
     if (dir->get_committed_version() < lp->second.dirv) {
       dout(10) << "EMetaBlob.expire need dirv " << lp->second.dirv
 	       << ", committing " << *dir << endl;
       commit[dir] = MAX(commit[dir], lp->second.dirv);
       ncommit++;
-    } else {
-      dout(10) << "EMetaBlob.expire have dirv " << lp->second.dirv
-	       << " on " << *dir << endl;
+      continue;
     }
+
+    assert(0);  // hrm
   }
 
-  // commit
-  assert(!commit.empty());
+  // commit or wait for export
+  // FIXME: what if export aborts?  need to retry!
+  assert(!commit.empty() || !waitfor_export.empty());
 
+  //C_Gather *gather = new C_Gather(new C_journal_RetryExpire(mds, this, c));
   C_Gather *gather = new C_Gather(c);
   for (map<CDir*,version_t>::iterator p = commit.begin();
        p != commit.end();
-       ++p)
-    p->first->commit(p->second, gather->new_sub());
+       ++p) {
+    if (p->first->can_auth_pin())
+      p->first->commit(p->second, gather->new_sub());
+    else
+      // pbly about to export|split|merge. 
+      // just wait for it to unfreeze, then retry
+      p->first->add_waiter(CDir::WAIT_AUTHPINNABLE, gather->new_sub());  
+  }
   for (list<CDir*>::iterator p = waitfor_export.begin();
        p != waitfor_export.end();
        ++p) 

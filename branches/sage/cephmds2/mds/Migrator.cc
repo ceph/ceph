@@ -1028,7 +1028,6 @@ void Migrator::export_reverse(CDir *dir)
   }
 
   // re-import the metadata
-  list<dirfrag_t> imported_subdirs;
   int num_imported_inodes = 0;
 
   for (list<bufferlist>::iterator p = export_data[dir].begin();
@@ -1038,7 +1037,6 @@ void Migrator::export_reverse(CDir *dir)
       decode_import_dir(*p, 
                        export_peer[dir], 
                        dir,                 // import root
-                       imported_subdirs,
 		       0);
   }
 
@@ -1404,8 +1402,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     // open export dirs/bounds?
     assert(import_bound_inos.count(dir->dirfrag()) == 0);
     import_bound_inos[dir->dirfrag()].clear();
-    for (list<dirfrag_t>::iterator it = m->get_exports().begin();
-         it != m->get_exports().end();
+    for (list<dirfrag_t>::iterator it = m->get_bounds().begin();
+         it != m->get_bounds().end();
          it++) {
       dout(7) << "  checking dir " << hex << *it << dec << endl;
       CInode *in = cache->get_inode(it->ino);
@@ -1426,19 +1424,19 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   }
   
 
-  // verify we have all exports
+  // verify we have all bounds
   int waiting_for = 0;
-  for (list<dirfrag_t>::iterator it = m->get_exports().begin();
-       it != m->get_exports().end();
+  for (list<dirfrag_t>::iterator it = m->get_bounds().begin();
+       it != m->get_bounds().end();
        it++) {
     dirfrag_t df = *it;
-    CDir *dir = cache->get_dirfrag(df);
-    if (dir) {
-      if (!dir->state_test(CDir::STATE_IMPORTBOUND)) {
-        dout(7) << "  pinning import bound " << *dir << endl;
-        dir->get(CDir::PIN_IMPORTBOUND);
-        dir->state_set(CDir::STATE_IMPORTBOUND);
-	import_bounds[dir].insert(dir);
+    CDir *bound = cache->get_dirfrag(df);
+    if (bound) {
+      if (!bound->state_test(CDir::STATE_IMPORTBOUND)) {
+        dout(7) << "  pinning import bound " << *bound << endl;
+        bound->get(CDir::PIN_IMPORTBOUND);
+        bound->state_set(CDir::STATE_IMPORTBOUND);
+	import_bounds[dir].insert(bound);
       } else {
         dout(7) << "  already pinned import bound " << *dir << endl;
       }
@@ -1485,17 +1483,12 @@ class C_MDS_ImportDirLoggedStart : public Context {
   Migrator *migrator;
   CDir *dir;
   int from;
-  list<dirfrag_t> imported_subdirs;
-  list<dirfrag_t> exports;
 public:
-  C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f, 
-			     list<dirfrag_t>& is, list<dirfrag_t>& e) :
+  C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f) :
     migrator(m), dir(d), from(f) {
-    imported_subdirs.swap(is);
-    exports.swap(e);
   }
   void finish(int r) {
-    migrator->import_logged_start(dir, from, imported_subdirs, exports);
+    migrator->import_logged_start(dir, from);
   }
 };
 
@@ -1511,7 +1504,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   cache->show_subtrees();
 
   // start the journal entry
-  EImportStart *le = new EImportStart(dir->dirfrag(), m->get_exports());
+  EImportStart *le = new EImportStart(dir->dirfrag(), m->get_bounds());
   le->metablob.add_dir_context(dir);
   
   // adjust auth (list us _first_)
@@ -1519,7 +1512,6 @@ void Migrator::handle_export_dir(MExportDir *m)
   cache->verify_subtree_bounds(dir, import_bounds[dir]);
 
   // add this crap to my cache
-  list<dirfrag_t> imported_subdirs;
   int num_imported_inodes = 0;
 
   for (list<bufferlist>::iterator p = m->get_dirstate().begin();
@@ -1529,11 +1521,9 @@ void Migrator::handle_export_dir(MExportDir *m)
       decode_import_dir(*p, 
                        oldauth, 
                        dir,                 // import root
-                       imported_subdirs,
 		       le);
   }
-  dout(10) << " " << imported_subdirs.size() << " imported subdirs" << endl;
-  dout(10) << " " << m->get_exports().size() << " imported nested exports" << endl;
+  dout(10) << " " << m->get_bounds().size() << " imported bounds" << endl;
   
   // include bounds in EImportStart
   for (set<CDir*>::iterator it = import_bounds[dir].begin();
@@ -1553,8 +1543,7 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // log it
   mds->mdlog->submit_entry(le,
-			   new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num(), 
-							  imported_subdirs, m->get_exports()));
+			   new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num()));
 
   // note state
   import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
@@ -1703,9 +1692,7 @@ void Migrator::import_reverse_unpin(CDir *dir)
 }
 
 
-void Migrator::import_logged_start(CDir *dir, int from,
-				   list<dirfrag_t> &imported_subdirs,
-				   list<dirfrag_t> &exports)
+void Migrator::import_logged_start(CDir *dir, int from) 
 {
   dout(7) << "import_logged " << *dir << endl;
 
@@ -1866,7 +1853,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int ol
 int Migrator::decode_import_dir(bufferlist& bl,
 			       int oldauth,
 			       CDir *import_root,
-			       list<dirfrag_t>& imported_subdirs,
 			       EImportStart *le)
 {
   int off = 0;
@@ -1881,10 +1867,6 @@ int Migrator::decode_import_dir(bufferlist& bl,
   assert(dir);
   
   dout(7) << "decode_import_dir " << *dir << endl;
-
-  // add to list
-  if (dir != import_root)
-    imported_subdirs.push_back(dir->dirfrag());
 
   // assimilate state
   dstate.update_dir( dir );

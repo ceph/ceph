@@ -59,15 +59,15 @@ class CInode : public MDSCacheObject {
   static const int PIN_WAITER =     6;  // waiter
   static const int PIN_CAPS =       7;  // local fh's
   static const int PIN_AUTHPIN =    8;
-  static const int PIN_IMPORTING =  9;  // multipurpose, for importing
-  static const int PIN_REQUEST =   10;  // request is logging, finishing
+  static const int PIN_IMPORTING =  -9;  // importing
+  static const int PIN_REQUEST =   -10;  // request is logging, finishing
   static const int PIN_RENAMESRC = 11;  // pinned on dest for foreign rename
   static const int PIN_ANCHORING = 12;
   static const int PIN_OPENINGDIR = 13;
   static const int PIN_REMOTEPARENT = 14;
   static const int PIN_DENTRYLOCK = 15;
 
-  static const char *pin_name(int p) {
+  const char *pin_name(int p) {
     switch (p) {
     case PIN_CACHED: return "cached";
     case PIN_DIR: return "dir";
@@ -177,7 +177,7 @@ class CInode : public MDSCacheObject {
   // distributed caching (old)
   pair<int,int> dangling_auth;    // explicit auth, when dangling.
 
-  int           num_request_pins;
+  //int           num_request_pins;
 
   // waiters
   multimap<int, Context*>  waiting;
@@ -431,13 +431,15 @@ protected:
      linked to an active_request, so they're automatically cleaned
      up when a request is finished.  pin at will! */
   void request_pin_get() {
-    if (num_request_pins == 0) get(PIN_REQUEST);
-    num_request_pins++;
+    //if (num_request_pins == 0) 
+    get(PIN_REQUEST);
+    //num_request_pins++;
   }
   void request_pin_put() {
-    num_request_pins--;
-    if (num_request_pins == 0) put(PIN_REQUEST);
-    assert(num_request_pins >= 0);
+    //num_request_pins--;
+    //if (num_request_pins == 0) 
+    put(PIN_REQUEST);
+    //assert(num_request_pins >= 0);
   }
 
   void bad_put(int by) {

@@ -22,7 +22,7 @@ class MExportDir : public Message {
   dirfrag_t dirfrag;
   
   list<bufferlist> dirstate; // a bl for reach dir
-  list<dirfrag_t>  exports;
+  list<dirfrag_t>  bounds;
 
  public:  
   MExportDir() {}
@@ -37,7 +37,7 @@ class MExportDir : public Message {
 
   dirfrag_t get_dirfrag() { return dirfrag; }
   list<bufferlist>& get_dirstate() { return dirstate; }
-  list<dirfrag_t>& get_exports() { return exports; }
+  list<dirfrag_t>& get_bounds() { return bounds; }
 
   void add_dir(bufferlist& dir) {
     dirstate.push_back(dir);
@@ -46,19 +46,19 @@ class MExportDir : public Message {
     dirstate = ls;
   }
   void add_export(dirfrag_t df) { 
-    exports.push_back(df); 
+    bounds.push_back(df); 
   }
 
   virtual void decode_payload() {
     int off = 0;
     payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
     off += sizeof(dirfrag);
-    ::_decode(exports, payload, off);
+    ::_decode(bounds, payload, off);
     ::_decode(dirstate, payload, off);
   }
   virtual void encode_payload() {
     payload.append((char*)&dirfrag, sizeof(dirfrag));
-    ::_encode(exports, payload);
+    ::_encode(bounds, payload);
     ::_encode(dirstate, payload);
   }
 

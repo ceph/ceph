@@ -84,7 +84,7 @@ class CDir : public MDSCacheObject {
   static const int PIN_DIRTY =    15;
   static const int PIN_REQUEST =  16;
   static const int PIN_LOGGINGEXPORTFINISH = 17;
-  static const char *pin_name(int p) {
+  const char *pin_name(int p) {
     switch (p) {
     case PIN_CHILD: return "child";
     case PIN_OPENED: return "opened";
@@ -192,11 +192,8 @@ class CDir : public MDSCacheObject {
   // context
   MDCache  *cache;
 
-  // my inode
-  CInode          *inode;
-
-  // my frag
-  frag_t           frag;
+  CInode          *inode;  // my inode
+  frag_t           frag;   // my frag
 
  protected:
   // contents
@@ -207,21 +204,13 @@ class CDir : public MDSCacheObject {
   // state
   version_t       version;
   version_t       committing_version;
-  version_t       committed_version;   // slight lie; we bump this on import.
+  version_t       committed_version;
   version_t       projected_version; 
 
   // lock nesting, freeze
   int        auth_pins;
   int        nested_auth_pins;
   int        request_pins;
-
-  // hashed dirs
-  set<int>   hashed_subset;  // HASHING: subset of mds's that are hashed
- public:
-  // for class MDS
-  map<int, pair< list<class InodeStat*>, list<string> > > hashed_readdir;
- protected:
-
 
 
   // waiters
@@ -252,7 +241,7 @@ class CDir : public MDSCacheObject {
 
 
   // -- accessors --
-  inodeno_t ino()     { return inode->ino(); }
+  inodeno_t ino()     { return inode->ino(); }          // deprecate me?
   dirfrag_t dirfrag() { return dirfrag_t(inode->ino(), frag); }
 
   CInode *get_inode()    { return inode; }
@@ -375,7 +364,8 @@ class CDir : public MDSCacheObject {
   map<version_t, list<Context*> > waiting_for_commit;
 
   void commit_to(version_t want);
-  void commit(version_t want,Context *c);
+  void commit(version_t want, Context *c);
+  void _commit(version_t want);
   void _committed(version_t v);
   void wait_for_commit(Context *c, version_t v=0);
 
@@ -432,7 +422,7 @@ class CDir : public MDSCacheObject {
 
 
   // -- auth pins --
-  bool can_auth_pin() { return !(is_frozen() || is_freezing()); }
+  bool can_auth_pin() { return is_auth() && !(is_frozen() || is_freezing()); }
   int is_auth_pinned() { return auth_pins; }
   int get_cum_auth_pins() { return auth_pins + nested_auth_pins; }
   int get_auth_pins() { return auth_pins; }
@@ -559,6 +549,7 @@ class CDirExport {
     long        nitems; // actual real entries
     long        nden;   // num dentries (including null ones)
     version_t   version;
+    version_t   committed_version;
     unsigned    state;
     meta_load_t popularity_justme;
     meta_load_t popularity_curdom;
@@ -578,6 +569,7 @@ class CDirExport {
     st.nitems = dir->nitems;
     st.nden = dir->items.size();
     st.version = dir->version;
+    st.committed_version = dir->committed_version;
     st.state = dir->state;
     st.dir_rep = dir->dir_rep;
 
@@ -599,8 +591,8 @@ class CDirExport {
     //dir->nitems = st.nitems;
 
     // set committed_version at old version
-    dir->committing_version = dir->committed_version = st.version;
-    dir->projected_version = dir->version = st.version;    // this is bumped, below, if dirty
+    dir->committing_version = dir->committed_version = st.committed_version;
+    dir->projected_version = dir->version = st.version;
 
     // twiddle state
     if (dir->state & CDir::STATE_HASHED) 
@@ -627,9 +619,6 @@ class CDirExport {
       dir->get(CDir::PIN_OPENED);
     if (dir->is_dirty()) {
       dir->get(CDir::PIN_DIRTY);  
-
-      // bump dir version + 1 if dirty
-      dir->projected_version = dir->version = st.version + 1;
     }
   }
 

@@ -202,7 +202,7 @@ class MDSCacheObject {
   unsigned state;     // state bits
   
   int      ref;       // reference count
-  set<int> ref_set;
+  multiset<int> ref_set;
 
   map<int,int> replicas;      // [auth] mds -> nonce
   int          replica_nonce; // [replica] defined on replica
@@ -226,19 +226,20 @@ class MDSCacheObject {
   // pins
   int get_num_ref() { return ref; }
   bool is_pinned_by(int by) { return ref_set.count(by); }
-  set<int>& get_ref_set() { return ref_set; }
+  multiset<int>& get_ref_set() { return ref_set; }
+  virtual const char *pin_name(int by) = 0;
 
   virtual void last_put() {}
   virtual void bad_put(int by) {
-	assert(ref_set.count(by) == 1);
+	assert(ref_set.count(by) > 0);
 	assert(ref > 0);
   }
   void put(int by) {
-    if (ref == 0 || ref_set.count(by) != 1) {
+    if (ref == 0 || ref_set.count(by) == 0) {
 	  bad_put(by);
     } else {
 	  ref--;
-	  ref_set.erase(by);
+	  ref_set.erase(ref_set.find(by));
 	  assert(ref == (int)ref_set.size());
 	  if (ref == 0)
 		last_put();
@@ -247,11 +248,11 @@ class MDSCacheObject {
 
   virtual void first_get() {}
   virtual void bad_get(int by) {
-	assert(ref_set.count(by) == 0);
+	assert(by < 0 || ref_set.count(by) == 0);
 	assert(0);
   }
   void get(int by) {
-    if (ref_set.count(by)) {
+    if (by >= 0 && ref_set.count(by)) {
 	  bad_get(by);
     } else {
 	  if (ref == 0) 
@@ -262,6 +263,20 @@ class MDSCacheObject {
 	}
   }
 
+  void print_pin_set(ostream& out) {
+    multiset<int>::iterator it = ref_set.begin();
+    while (it != ref_set.end()) {
+      out << " " << pin_name(*it);
+      int last = *it;
+      int c = 1;
+      do {
+		it++;
+		if (it == ref_set.end()) break;
+      } while (*it == last);
+      if (c > 1)
+		out << "*" << c;
+    }
+  }
 
 
   // --------------------------------------------

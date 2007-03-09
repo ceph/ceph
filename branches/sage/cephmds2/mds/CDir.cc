@@ -77,10 +77,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   
   if (dir.get_num_ref()) {
     out << " |";
-    for(set<int>::iterator it = dir.get_ref_set().begin();
-        it != dir.get_ref_set().end();
-        it++)
-      out << " " << CDir::pin_name(*it);
+    dir.print_pin_set(out);
   }
 
   out << " " << &dir;
@@ -111,8 +108,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
   committing_version = 0;
   committed_version = 0;
 
-  ref = 0;
-
   // dir_auth
   dir_auth = CDIR_AUTH_DEFAULT;
 
@@ -120,12 +115,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth)
   assert(in->is_dir());
   if (auth) 
     state |= STATE_AUTH;
-  /*
-  if (in->dir_is_hashed()) {
-    assert(0);                      // when does this happen?  
-    state |= STATE_HASHED;
-  }
-  */
  
   auth_pins = 0;
   nested_auth_pins = 0;
@@ -777,13 +766,46 @@ void CDir::_fetched(bufferlist &bl)
 // -----------------------
 // COMMIT
 
+/**
+ * commit
+ *
+ * @param want min version i want committed
+ * @param c callback for completion
+ */
+void CDir::commit(version_t want, Context *c)
+{
+  dout(10) << "commit want " << want << " on " << *this << endl;
+  if (want == 0) want = version;
+
+  // preconditions
+  assert(want <= version);          // can't commit the future
+  assert(committed_version < want); // the caller is stupid
+  assert(is_auth());
+  assert(can_auth_pin());
+
+  // note: queue up a noop if necessary, so that we always
+  // get an auth_pin.
+  if (!c)
+    c = new C_NoopContext;
+
+  // auth_pin on first waiter
+  if (waiting_for_commit.empty())
+    auth_pin();
+  waiting_for_commit[want].push_back(c);
+  
+  // ok.
+  _commit(want);
+}
+
+
 class C_Dir_RetryCommit : public Context {
   CDir *dir;
   version_t want;
 public:
-  C_Dir_RetryCommit(CDir *d, version_t v) : dir(d), want(v) { }
+  C_Dir_RetryCommit(CDir *d, version_t v) : 
+    dir(d), want(v) { }
   void finish(int r) {
-    dir->commit(want, 0);
+    dir->_commit(want);
   }
 };
 
@@ -797,48 +819,26 @@ public:
   }
 };
 
-/**
- * commit
- *
- * @param want min version i want committed
- * @param c callback for completion
- */
-void CDir::commit(version_t want, Context *c)
+void CDir::_commit(version_t want)
 {
-  dout(10) << "commit want " << want << " on " << *this << endl;
-  if (want == 0) want = version;
-  
-  if (c) {
-    assert(committed_version < want);
-    waiting_for_commit[want].push_back(c);
-  }
+  dout(10) << "_commit want " << want << " on " << *this << endl;
 
-  // not auth?
-  if (!is_auth()) {
-    dout(10) << "not auth.  must have exported.  kicking all waiters." << endl;
-    for (map<version_t, list<Context*> >::iterator p = waiting_for_commit.begin();
-	 p != waiting_for_commit.end();
-	 ++p) 
-      cache->mds->queue_finished(p->second);
-    waiting_for_commit.clear();
-    return;
-  }
- 
+  // we can't commit things in the future.
+  // (even the projected future.)
+  assert(want <= version);
+
+  // check pre+postconditions.
+  assert(is_auth());
+
   // already committed?
   if (committed_version >= want) {
     dout(10) << "already committed " << committed_version << " >= " << want << endl;
     return;
   }
+  // already committing >= want?
   if (committing_version >= want) {
     dout(10) << "already committing " << committing_version << " >= " << want << endl;
-    return;
-  }
-
-  // authpinnable?
-  if (!can_auth_pin()) {
-    dout(7) << "can't auth_pin, waiting" << endl;
-    add_waiter(WAIT_AUTHPINNABLE,
-	       new C_Dir_RetryCommit(this, want));
+    assert(state_test(STATE_COMMITTING));
     return;
   }
   
@@ -849,12 +849,14 @@ void CDir::commit(version_t want, Context *c)
     return;
   }
   
-  // pin.
-  auth_pin();
-
   // commit.
-  state_set(CDir::STATE_COMMITTING);
   committing_version = version;
+
+  // mark committing (if not already)
+  if (!state_test(STATE_COMMITTING)) {
+    dout(10) << "marking committing" << endl;
+    state_set(STATE_COMMITTING);
+  }
   
   if (cache->mds->logger) cache->mds->logger->inc("cdir");
 
@@ -933,12 +935,13 @@ void CDir::_committed(version_t v)
   assert(v <= committing_version);
   committed_version = v;
 
+  // _all_ commits done?
+  if (committing_version == committed_version) 
+    state_clear(CDir::STATE_COMMITTING);
+  
   // dir clean?
   if (committed_version == version) 
     mark_clean();
-
-  if (committing_version == committed_version) 
-    state_clear(CDir::STATE_COMMITTING);
 
   // dentries clean?
   for (CDir_map_t::iterator it = items.begin();
@@ -974,19 +977,23 @@ void CDir::_committed(version_t v)
     }
   }
 
-  // unpin
-  auth_unpin();
-
   // finishers?
+  bool were_waiters = !waiting_for_commit.empty();
+  
   map<version_t, list<Context*> >::iterator p = waiting_for_commit.begin();
   while (p != waiting_for_commit.end()) {
     map<version_t, list<Context*> >::iterator n = p;
     n++;
-    if (p->first > committed_version) break; // haven't commit this far yet.
+    if (p->first > committed_version) break; // haven't committed this far yet.
     cache->mds->queue_finished(p->second);
     waiting_for_commit.erase(p);
     p = n;
   } 
+
+  // unpin if we kicked the last waiter.
+  if (were_waiters &&
+      waiting_for_commit.empty())
+    auth_unpin();
 }
 
 

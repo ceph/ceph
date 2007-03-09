@@ -27,7 +27,7 @@ class MExportDirPrep : public Message {
      dentries are the links to each inode.
      dirs map includes base dir (ino)
   */
-  list<dirfrag_t>                exports;
+  list<dirfrag_t>                bounds;
 
   list<CInodeDiscover*>          inodes;
   map<inodeno_t,dirfrag_t>       inode_dirfrag;
@@ -42,7 +42,7 @@ class MExportDirPrep : public Message {
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
-  list<dirfrag_t>& get_exports() { return exports; }
+  list<dirfrag_t>& get_bounds() { return bounds; }
   list<CInodeDiscover*>& get_inodes() { return inodes; }
   list<frag_t>& get_inode_dirfrags(inodeno_t ino) { 
     return frags_by_ino[ino];
@@ -89,7 +89,7 @@ class MExportDirPrep : public Message {
   }
 
   void add_export(dirfrag_t df) {
-    exports.push_back( df );
+    bounds.push_back( df );
   }
   void add_inode(dirfrag_t df, const string& dentry, CInodeDiscover *in) {
     inodes.push_back(in);
@@ -109,7 +109,7 @@ class MExportDirPrep : public Message {
     payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
     off += sizeof(dirfrag);
     
-    ::_decode(exports, payload, off);
+    ::_decode(bounds, payload, off);
     
     // inodes
     int ni;
@@ -152,7 +152,7 @@ class MExportDirPrep : public Message {
   virtual void encode_payload() {
     payload.append((char*)&dirfrag, sizeof(dirfrag));
 
-    ::_encode(exports, payload);
+    ::_encode(bounds, payload);
 
     // inodes
     int ni = inodes.size();

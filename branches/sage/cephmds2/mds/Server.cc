@@ -527,19 +527,60 @@ void Server::dispatch_request(Message *m, CInode *ref)
 
 CDir* Server::try_open_dir(CInode *in, frag_t fg, MClientRequest *req)
 {
-  if (!in->get_dirfrag(fg) && in->is_frozen_dir()) {
-    // doh!
-    dout(10) << " dir inode is frozen, can't open dir, waiting " << *in << endl;
+  CDir *dir = in->get_dirfrag(fg);
+  if (dir) 
+    return dir; 
+
+  if (in->is_frozen_dir()) {
+    dout(10) << "try_open_dir: dir inode is frozen, waiting " << *in << endl;
     assert(in->get_parent_dir());
     in->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
                                      new C_MDS_RetryRequest(mds, req, in));
     return 0;
   }
-  
+
   return in->get_or_open_dirfrag(mds->mdcache, fg);
 }
 
+CDir* Server::try_open_auth_dir(CInode *diri, frag_t fg, MClientRequest *req)
+{
+  CDir *dir = diri->get_dirfrag(fg);
 
+  // not open and inode not mine?
+  if (!dir && !diri->is_auth()) {
+    int inauth = diri->authority().first;
+    dout(7) << "try_open_auth_dir: not open, not inode auth, fw to mds" << inauth << endl;
+    mdcache->request_forward(req, inauth);
+    return 0;
+  }
+
+  // not open and inode frozen?
+  if (!dir && diri->is_frozen_dir()) {
+    dout(10) << "try_open_dir: dir inode is frozen, waiting " << *diri << endl;
+    assert(diri->get_parent_dir());
+    diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE,
+				       new C_MDS_RetryRequest(mds, req, diri));
+    return 0;
+  }
+
+  // invent?
+  if (!dir) {
+    assert(diri->is_auth());
+    dir = diri->get_or_open_dirfrag(mds->mdcache, fg);
+  }
+  assert(dir);
+ 
+  // am i auth for the dirfrag?
+  if (!dir->is_auth()) {
+    int auth = dir->authority().first;
+    dout(7) << "try_open_auth_dir: not auth for " << *dir
+	    << ", fw to mds" << auth << endl;
+    mdcache->request_forward(req, auth);
+    return 0;
+  }
+
+  return dir;
+}
 
 
 
@@ -830,22 +871,8 @@ void Server::handle_client_readdir(MClientRequest *req,
     return;
   }
   
-  // get the dir?
-  if (!diri->get_dirfrag(fg) && !diri->is_auth()) {
-    dout(10) << "not auth for " << fg << " or the inode " << *diri << ", fwd" << endl;
-    mdcache->request_forward(req, diri->authority().first);
-    return;
-  }
-
-  CDir *dir = try_open_dir(diri, fg, req);
+  CDir *dir = try_open_auth_dir(diri, fg, req);
   if (!dir) return;
-  assert(dir);
-
-  if (!dir->is_auth()) {
-    dout(10) << "not auth for " << *dir << ", fwd" << endl;
-    mdcache->request_forward(req, dir->authority().first);
-    return;
-  }
 
   // ok!
   assert(dir->is_auth());
@@ -970,32 +997,11 @@ CDir *Server::validate_new_dentry_dir(MClientRequest *req, CInode *diri, string&
 
   // which dirfrag?
   frag_t fg = diri->pick_dirfrag(name);
-  CDir *dir = diri->get_dirfrag(fg);
 
-  // not open?
-  if (!dir && !diri->is_auth()) {
-    int dirauth = diri->authority().first;
-    dout(7) << "validate_new_dentry_dir: don't know dir auth, not open, auth is i think mds" << dirauth << endl;
-    mdcache->request_forward(req, dirauth);
-    return false;
-  }
-  
-  // not me?
-  if (dir && !dir->is_auth()) {
-    int auth = dir->authority().first;
-    dout(7) << "validate_new_dentry_dir on " << req->get_path() << ", dentry " << *dir
-	    << " dn " << name
-	    << " not mine, fw to mds" << auth << endl;
-    mdcache->request_forward(req, auth);
-    return false;
-  }
-
-  // ok, let's open it then.
-  assert(diri->is_auth());
-  dir = try_open_dir(diri, fg, req);
+  CDir *dir = try_open_auth_dir(diri, fg, req);
   if (!dir)
-    return false;
-  
+    return 0;
+
   // dir auth pinnable?
   if (!dir->can_auth_pin()) {
     dout(7) << "validate_new_dentry_dir: dir " << *dir << " not pinnable, waiting" << endl;
@@ -1386,19 +1392,12 @@ void Server::handle_client_unlink(MClientRequest *req,
     return;
   }
 
-  // am i not open, not auth?
-  frag_t fg = diri->pick_dirfrag(name);
-  if (!diri->get_dirfrag(fg) && !diri->is_auth()) {
-    int dirauth = diri->authority().first;
-    dout(7) << "don't know dir auth, not open, auth is i think " << dirauth << endl;
-    mdcache->request_forward(req, dirauth);
-    return;
-  }
-  
-  CDir *dir = try_open_dir(diri, fg, req);
+  // get the dir, if it's not frozen etc.
+  CDir *dir = validate_new_dentry_dir(req, diri, name);
   if (!dir) return;
+  // ok, it's auth, and authpinnable.
 
-  // does it exist?
+  // does the dentry exist?
   CDentry *dn = dir->lookup(name);
   if (!dn) {
     if (!dir->is_complete()) {
@@ -1676,7 +1675,7 @@ void Server::handle_client_rename(MClientRequest *req,
     return;
   }
 
-  CDir *srcdir = try_open_dir(srcdiri, srcfg, req);
+  CDir *srcdir = try_open_auth_dir(srcdiri, srcfg, req);
   if (!srcdir) return;
   dout(7) << "handle_client_rename srcdir is " << *srcdir << endl;
   

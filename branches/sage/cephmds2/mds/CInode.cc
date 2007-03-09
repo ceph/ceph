@@ -57,10 +57,7 @@ ostream& operator<<(ostream& out, CInode& in)
 
   if (in.get_num_ref()) {
     out << " |";
-    for(set<int>::iterator it = in.get_ref_set().begin();
-        it != in.get_ref_set().end();
-        it++)
-      out << " " << CInode::pin_name(*it);
+    in.print_pin_set(out);
   }
 
   // hack: spit out crap on which clients have caps
@@ -81,11 +78,10 @@ ostream& operator<<(ostream& out, CInode& in)
 
 
 // ====== CInode =======
-CInode::CInode(MDCache *c, bool auth) {
+CInode::CInode(MDCache *c, bool auth) 
+{
   mdcache = c;
 
-  ref = 0;
-  
   //num_parents = 0;
   parent = NULL;
   
@@ -93,7 +89,7 @@ CInode::CInode(MDCache *c, bool auth) {
 
   auth_pins = 0;
   nested_auth_pins = 0;
-  num_request_pins = 0;
+  //num_request_pins = 0;
 
   state = 0;  
 
@@ -242,8 +238,10 @@ CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
 {
   assert(is_dir());
   if (1) { // old
-    if (!dir)
+    if (!dir) {
+      assert(is_auth());
       dir = new CDir(this, fg, mdcache, true);
+    }
     return dir;
   } else { // new
     // have it?

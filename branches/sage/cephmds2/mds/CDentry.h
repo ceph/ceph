@@ -52,7 +52,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   static const int PIN_DIRTY = 2;      //
   static const int PIN_PROXY = 3;      //
   static const int PIN_XLOCK = 4;
-  static const char *pin_name(int p) {
+  const char *pin_name(int p) {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_REPLICATED: return "replicated";

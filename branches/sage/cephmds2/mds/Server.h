@@ -52,6 +52,7 @@ public:
                       LogEvent *event2 = 0);
   
   CDir *try_open_dir(CInode *in, frag_t fg, MClientRequest *req);
+  CDir* try_open_auth_dir(CInode *diri, frag_t, MClientRequest *req);
 
 
   // clients

@@ -417,7 +417,9 @@ void MDCache::try_subtree_merge_at(CDir *dir)
 void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth)
 {
   dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
-	  << " on " << *dir << endl;
+	  << " on " << *dir
+	  << " bounds " << bounds
+	  << endl;
 
   show_subtrees();
 
@@ -3409,7 +3411,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
         m->get_dir(i).update_dir(ndir);
 
 	// is this a dir_auth delegation boundary?
-	if (m->get_source().num() != cur->authority().first)
+	if (m->get_source().num() != cur->authority().first ||
+	    cur->ino() == 1)
 	  adjust_subtree_auth(ndir, m->get_source().num());
 	
         dout(7) << "added " << *ndir << " nonce " << ndir->replica_nonce << endl;

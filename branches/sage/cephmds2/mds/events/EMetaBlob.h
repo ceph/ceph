@@ -321,8 +321,11 @@ class EMetaBlob {
   }
   
   void print(ostream& out) const {
-    out << "[metablob " << lump_order.front()
-	<< ", " << lump_map.size() << " dirs]";
+    if (lump_order.empty())
+      out << "[metablob empty]";
+    else
+      out << "[metablob " << lump_order.front()
+	  << ", " << lump_map.size() << " dirs]";
   }
 
   bool has_expired(MDS *mds);

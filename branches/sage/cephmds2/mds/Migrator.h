@@ -202,7 +202,6 @@ public:
   int decode_import_dir(bufferlist& bl,
 			int oldauth,
 			CDir *import_root,
-			list<dirfrag_t>& imported_subdirs,
 			EImportStart *le);
   /*
   void got_hashed_replica(CDir *import,
@@ -215,9 +214,7 @@ protected:
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_unpin(CDir *dir);
   void import_notify_abort(CDir *dir);
-  void import_logged_start(CDir *dir, int from,
-			       list<dirfrag_t> &imported_subdirs,
-			       list<dirfrag_t> &exports);
+  void import_logged_start(CDir *dir, int from);
   void handle_export_finish(MExportDirFinish *m);
 public:
   void import_finish(CDir *dir, bool now=false);

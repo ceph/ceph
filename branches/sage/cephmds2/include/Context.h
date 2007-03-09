@@ -56,6 +56,12 @@ inline void finish_contexts(std::list<Context*>& finished,
   }
 }
 
+class C_NoopContext : public Context {
+public:
+  void finish(int r) { }
+};
+
+
 /*
  * C_Contexts - set of Contexts
  */

@@ -238,8 +238,14 @@ void MDLog::_did_read()
 
 void MDLog::_trimmed(LogEvent *le) 
 {
+  // successful trim?
+  if (!le->has_expired(mds)) {
+    dout(7) << "retrimming : " << le->get_start_off() << " : " << *le << endl;
+    le->expire(mds, new C_MDL_Trimmed(this, le));
+    return;
+  }
+
   dout(7) << "trimmed : " << le->get_start_off() << " : " << *le << endl;
-  assert(le->has_expired(mds));
 
   if (trimming.begin()->first == le->_end_off) {
     // we trimmed off the front!  

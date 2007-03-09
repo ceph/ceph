@@ -26,6 +26,9 @@ mds
 - fix mds initial osdmap weirdness (which will currently screw up on standby -> almost anything)
 - incremental mdsmaps
 - client failure
+- dirfrag split
+  - make sure we are freezing _before_ we fetch to complete the dirfrag, else 
+    we break commit()'s preconditions when it fetches an incomplete dir.
 
 - EMetablob should return 'expired' if they have higher versions (and are thus described by a newer journal entry)
 - dir version/committed/etc versus migration, log expires.  
@@ -48,7 +51,7 @@ mds
   - will need to ditch 10s client metadata caching before this is useful
   - implement truncate
 - statfs?
-- btree directories (for efficient large directories)
+? btree directories (for efficient large directories)
 - consistency points/snapshots
 
 - fix MExportAck and others to use dir+dentry, not inode
