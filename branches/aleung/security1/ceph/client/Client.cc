@@ -756,8 +756,10 @@ void Client::handle_client_update_reply(MClientUpdateReply *m) {
 
   // cache the list
   groups[my_hash].set_list(m->get_user_list());
+  groups[my_hash].set_root_hash(my_hash);
+  groups[my_hash].set_sig(m->get_sig());
 
-  MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list());
+  MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash, groups[my_hash].get_list(), m->get_sig());
 
   // wake the waiters and send them all a reply
   for (set<int>::iterator oi = update_waiter_osd[my_hash].begin();

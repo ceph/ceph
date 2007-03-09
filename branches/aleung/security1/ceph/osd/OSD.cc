@@ -449,6 +449,12 @@ void OSD::handle_osd_update_reply(MOSDUpdateReply *m) {
   // add the new list to our cache
   user_groups[my_hash].set_list(m->get_list());
 
+  // verify
+  if (m->verify_list(monmap->get_key()))
+    cout << "List verification succeeded" << endl;
+  else
+    cout << "List verification failed" << endl;
+
   // wait up the waiter(s)
   // this signals all update waiters
   //for (list<Cond*>::iterator p = update_waiter_cond[my_hash].begin();

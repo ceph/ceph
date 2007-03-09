@@ -48,6 +48,7 @@ class CapGroup {
   //void set_gid(gid_t id) { group_id = id; }
 
   byte *get_sig() { return signature; }
+  void set_sig(byte *sig) { memcpy(signature, sig, ESIGNSIGSIZE); }
 
   hash_t get_root_hash() { return root_hash; }
   void set_root_hash(hash_t nhash) { root_hash = nhash; }
