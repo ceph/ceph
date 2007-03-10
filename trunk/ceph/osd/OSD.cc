@@ -3435,7 +3435,7 @@ void OSD::prepare_op_transaction(ObjectStore::Transaction& t,
       struct stat st;
       int r = store->stat(oid, &st);
       if (r >= 0) {
-	if (op->get_offset() + op->get_length() >= st.st_size) {
+	if (op->get_offset() + (off_t)op->get_length() >= (off_t)st.st_size) {
 	  if (op->get_offset()) 
 	    t.truncate(oid, op->get_length() + op->get_offset());
 	  else

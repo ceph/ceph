@@ -107,7 +107,6 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   sprintf(tfn, "%s.new", fn);
 
   int fd = ::open(tfn, O_WRONLY|O_CREAT);
-  dout(0) << " fd " << fd << " tfn " << tfn << " " << errno << " " << strerror(errno) << " " << get_current_dir_name() << endl;
   assert(fd > 0);
   ::fchmod(fd, 0644);
   ::write(fd, vs, strlen(vs));
