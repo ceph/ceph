@@ -1310,7 +1310,11 @@ int Client::link(const char *existing, const char *newname,
 
   // fix uid/gid if not supplied
   // get it from the system
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1362,7 +1366,11 @@ int Client::unlink(const char *relpath, __int64_t uid, __int64_t gid)
 
   // fix uid/gid if not supplied                                                
   // get it from the system                                                     
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 102+whoami;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1420,8 +1428,12 @@ int Client::rename(const char *relfrom, const char *relto,
   client_lock.Lock();
 
   // fix uid/gid if not supplied                                              
-  // get it from the system                                               
-  if (uid == -1 || gid == -1) {
+  // get it from the system
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1477,7 +1489,11 @@ int Client::mkdir(const char *relpath, mode_t mode, __int64_t uid, __int64_t gid
 
   // fix uid/gid if not supplied
   // get it from the system
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1527,7 +1543,11 @@ int Client::rmdir(const char *relpath, __int64_t uid, __int64_t gid)
   
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1589,7 +1609,11 @@ int Client::symlink(const char *reltarget, const char *rellink,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1643,7 +1667,11 @@ int Client::readlink(const char *relpath, char *buf, off_t size,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1701,7 +1729,11 @@ int Client::_lstat(const char *path, int mask, Inode **in,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1807,7 +1839,11 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1850,7 +1886,11 @@ int Client::lstatlite(const char *relpath, struct statlite *stl,
    
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1900,7 +1940,11 @@ int Client::chmod(const char *relpath, mode_t mode,
 
   // fix uid/gid if not supplied
   // get it from the system
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -1950,7 +1994,11 @@ int Client::chown(const char *relpath, __int64_t uid, __int64_t gid)
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2003,7 +2051,11 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2060,7 +2112,11 @@ int Client::mknod(const char *relpath, mode_t mode,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2123,7 +2179,11 @@ int Client::getdir(const char *relpath, map<string,inode_t>& contents,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2408,7 +2468,11 @@ int Client::open(const char *relpath, int flags, __int64_t uid, __int64_t gid)
 
   // fix uid/gid if not supplied                                   
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2581,7 +2645,11 @@ int Client::close(fh_t fh, __int64_t uid, __int64_t gid)
 
   // fix uid/gid if not supplied                                            
   // get it from the system                                                
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2671,7 +2739,11 @@ int Client::read(fh_t fh, char *buf, off_t size, off_t offset,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2814,7 +2886,11 @@ int Client::write(fh_t fh, const char *buf, off_t size, off_t offset,
 
   // fix uid/gid if not supplied                                             
   // get it from the system                                               
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2951,7 +3027,11 @@ int Client::truncate(const char *file, off_t size, __int64_t uid, __int64_t gid)
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -2996,7 +3076,11 @@ int Client::fsync(fh_t fh, bool syncdataonly, __int64_t uid, __int64_t gid)
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -3079,7 +3163,11 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
@@ -3132,7 +3220,11 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count,
 
   // fix uid/gid if not supplied                                               
   // get it from the system                                                    
-  if (uid == -1 || gid == -1) {
+  if (g_conf.fix_client_id == 1) {
+    uid = 340+whoami;
+    gid = 1020;
+  }
+  else if (uid == -1 || gid == -1) {
     uid = getuid();
     gid = getgid();
   }
