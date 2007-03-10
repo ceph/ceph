@@ -739,7 +739,9 @@ void Client::handle_osd_update(MOSDUpdate *m) {
   // we have the group, hand it back
   else {
     MOSDUpdateReply *reply = new MOSDUpdateReply(my_hash,
-						 groups[my_hash].get_list());
+						 groups[my_hash].get_list(),
+						 groups[my_hash].get_sig());
+    
     messenger->send_message(reply, m->get_source_inst());
   }
 
