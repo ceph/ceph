@@ -186,9 +186,9 @@ protected:
   // secure capabilities
   // will be dependant based on MDS collection policy!
   map<uid_t, ExtCap>  ext_caps;
-  //ExtCap *user_cap;
-  //ExtCap *group_cap;
-  //ExtCap *world_cap;
+  ExtCap *user_cap;
+  ExtCap *group_cap;
+  ExtCap *world_cap;
 
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
@@ -403,7 +403,12 @@ protected:
       return &(ext_caps[user]);
     return 0;
   }
-
+  ExtCap* get_unix_user_cap() { return user_cap; }
+  ExtCap* get_unix_group_cap() { return group_cap; }
+  ExtCap* get_unix_world_cap() { return world_cap; }
+  void set_unix_user_cap(ExtCap* extcap) { user_cap = new ExtCap(*extcap); }
+  void set_unix_group_cap(ExtCap* extcap) { group_cap = new ExtCap(*extcap); }
+  void set_unix_world_cap(ExtCap* extcap) { world_cap = new ExtCap(*extcap); }
 
   void replicate_relax_locks() {
     assert(is_auth());

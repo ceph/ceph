@@ -233,14 +233,27 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
   my_want |= FILE_MODE_RW;
 
   // check cache
-  ExtCap *ext_cap = in->get_user_extcap(my_user);
+  ExtCap *ext_cap;
+  // unix groups
+  if (g_conf.mds_group == 1) {
+    if (my_user == in->get_uid())
+      ext_cap = in->get_unix_user_cap();
+    else if(my_group == in->get_gid())
+      ext_cap = in->get_unix_group_cap();
+    else
+      ext_cap = in->get_unix_world_cap();
+  }
+  // no grouping
+  else
+    ext_cap = in->get_user_extcap(my_user);
 
   if (!ext_cap) {
     // make new cap
     // unix grouping
     if (g_conf.mds_group == 1) {
 
-      // new group
+      // checking who is in groups
+      // is this a new group?
       if (mds->unix_groups_map.count(my_group) == 0) {
 	// make a group & add user
 	CapGroup group(my_user);
@@ -253,8 +266,8 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 	mds->unix_groups_byhash[group.get_root_hash()] = group;
 	// put pointer into map
 	mds->unix_groups_map[my_group] = group.get_root_hash();
+	cout << "New group " << my_group << " from user " << my_user << endl;
       }
-
       // add user to group if not in group
       hash_t my_hash = mds->unix_groups_map[my_group];
       if (!(mds->unix_groups_byhash[my_hash].contains(my_user))) {
@@ -277,8 +290,6 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
 
 	cout << "User " << my_user << " added to group " << my_group << endl;
       }
-      else
-	cout << "User " << my_user << " already in group " << my_group << endl;
 
       //get hash for gid
       hash_t gid_hash = mds->unix_groups_map[my_group];
@@ -296,8 +307,8 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     else
       ext_cap = new ExtCap(my_want, my_user, in->ino());
     
+    // set capability id
     ext_cap->set_id(cap_id_count, mds->get_nodeid());
-    // increment capability count
     cap_id_count++;
 
     dout(3) << "Made new " << my_want << " capability for uid: "
@@ -306,7 +317,16 @@ ExtCap* Locker::issue_new_extcaps(CInode *in, int mode, MClientRequest *req) {
     ext_cap->sign_extcap(mds->getPrvKey());
 
     // caches this capability in the inode
-    in->add_user_extcap(my_user,ext_cap);
+    if (g_conf.mds_group == 1) {
+      if (my_user == in->get_uid())
+	in->set_unix_user_cap(ext_cap);
+      else if(my_user == in->get_gid())
+	in->set_unix_group_cap(ext_cap);
+      else
+	in->set_unix_world_cap(ext_cap);
+    }
+    else
+      in->add_user_extcap(my_user,ext_cap);
 
   }
   // we want to index based on mode, so we can cache more caps
