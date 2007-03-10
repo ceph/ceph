@@ -35,11 +35,11 @@ class MExportDirDiscoverAck : public Message {
 
   virtual char *get_type_name() { return "ExDisA"; }
   void print(ostream& o) {
-    o << "export_discover_ack " << dirfrag;
+    o << "export_discover_ack(" << dirfrag;
     if (success) 
-      o << " success";
+      o << " success)";
     else
-      o << " failure";
+      o << " failure)";
   }
 
   virtual void decode_payload() {

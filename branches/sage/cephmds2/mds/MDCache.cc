@@ -3220,17 +3220,31 @@ void MDCache::handle_discover(MDiscover *dis)
       }
       
       if (!cur->dir) cur->get_or_open_dir(this);
-      
+      assert(cur->dir);
+
+      // is dir frozen?
+      if (cur->dir->is_frozen()) {
+	dout(7) << *cur->dir << " is frozen, stopping" << endl;
+	break;
+      }
+
+      // add the dir.
       reply->add_dir( new CDirDiscover( cur->dir, 
                                         cur->dir->add_replica( dis->get_asker() ) ) );
       dout(7) << "added dir " << *cur->dir << endl;
     }
     if (dis->get_want().depth() == 0) break;
+
+    // is dir frozen?
+    if (cur->dir->is_frozen()) {
+      dout(7) << *cur->dir << " is frozen, stopping" << endl;
+      break;
+    }
     
     // lookup dentry
     int dentry_auth = cur->dir->dentry_authority( dis->get_dentry(i) ).first;
     if (dentry_auth != mds->get_nodeid()) {
-      dout(7) << *cur->dir << "dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
+      dout(7) << *cur->dir << " dentry " << dis->get_dentry(i) << " auth " << dentry_auth << ", i'm done." << endl;
       break;      // that's it for us!
     }
 
@@ -3293,7 +3307,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
   // set dir_auth hint?
   if (cur->is_dir() && cur->dir && 
-      cur->is_auth() && !cur->dir->is_auth()) {
+      !cur->dir->is_auth()) {
     dout(7) << "setting dir_auth_hint for " << *cur->dir << endl;
     reply->set_dir_auth_hint(cur->dir->authority().first);
   }
@@ -3402,9 +3416,9 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
            bc, no flag to indicate a dir discover is underway, (as there is w/ a dentry one).
            this is actually good, since (dir aside) they're asking for different information.
         */
-        dout(7) << "had " << *cur->dir;
+        dout(7) << "had " << *cur->dir << endl;
         m->get_dir(i).update_dir(cur->dir);
-        dout2(7) << ", now " << *cur->dir << endl;
+        dout2(7) << "now " << *cur->dir << endl;
       } else {
         // add it (_replica_)
 	CDir *ndir = cur->add_dirfrag( new CDir(cur, frag_t(), this, false) );  // FIXME dirfrag_t

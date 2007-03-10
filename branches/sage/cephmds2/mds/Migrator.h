@@ -33,8 +33,6 @@ class MExportDirDiscover;
 class MExportDirDiscoverAck;
 class MExportDirPrep;
 class MExportDirPrepAck;
-class MExportDirWarning;
-class MExportDirWarningAck;
 class MExportDir;
 class MExportDirAck;
 class MExportDirNotify;
@@ -175,9 +173,7 @@ public:
  protected:
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
   void export_frozen(CDir *dir, int dest);
-  //void export_start_logged(CDir *dir, MExportDirPrep *prep, int dest);
   void handle_export_prep_ack(MExportDirPrepAck *m);
-  void handle_export_warning_ack(MExportDirWarningAck *m);
   void export_go(CDir *dir);
   int encode_export_dir(list<bufferlist>& dirstatelist,
                       class C_Contexts *fin,
@@ -192,7 +188,6 @@ public:
   void export_finish(CDir *dir);
 
   friend class C_MDC_ExportFreeze;
-  friend class C_MDC_ExportStartLogged;
   friend class C_MDS_ExportFinishLogged;
   // importer
   void handle_export_discover(MExportDirDiscover *m);
@@ -203,11 +198,6 @@ public:
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le);
-  /*
-  void got_hashed_replica(CDir *import,
-                          inodeno_t dir_ino,
-                          inodeno_t replica_ino);
-  */
 public:
   void import_reverse(CDir *dir, bool fix_dir_auth=true);
 protected:
@@ -225,7 +215,6 @@ protected:
   friend class C_MDS_ImportDirLoggedFinish;
 
   // bystander
-  void handle_export_warning(MExportDirWarning *m);
   void handle_export_notify(MExportDirNotify *m);
 
 

@@ -604,39 +604,30 @@ void CDir::_fetched(bufferlist &bl)
     return;
   }
 
-  // add to our buffer
-  size_t ondisk_size;
-  assert(bl.length() > sizeof(ondisk_size));
-  bl.copy(0, sizeof(ondisk_size), (char*)&ondisk_size);
-  off_t have = bl.length() - sizeof(ondisk_size);
-  dout(10) << "ondisk_size " << ondisk_size << ", have " << have << endl;
-  assert(have == ondisk_size);
-
   // decode.
-  int off = sizeof(ondisk_size);
-
-  __uint32_t num_dn;
+  int len = bl.length();
+  int off = 0;
   version_t  got_version;
   
-  bl.copy(off, sizeof(num_dn), (char*)&num_dn);
-  off += sizeof(num_dn);
   bl.copy(off, sizeof(got_version), (char*)&got_version);
   off += sizeof(got_version);
 
-  dout(10) << "_fetched " << num_dn << " dn, got_version " << got_version
-	   << ", " << ondisk_size << " bytes"
+  dout(10) << "_fetched version " << got_version
+	   << ", " << len << " bytes"
 	   << endl;
   
-  while (num_dn--) {
-    // dentry
-    string dname;
-    ::_decode(dname, bl, off);
-    dout(24) << "parse filename '" << dname << "'" << endl;
-    
-    CDentry *dn = lookup(dname);  // existing dentry?
-    
+  while (off < len) {
+    // marker
     char type = bl[off];
     ++off;
+
+    // dname
+    string dname;
+    ::_decode(dname, bl, off);
+    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname << "'" << endl;
+    
+    CDentry *dn = lookup(dname);  // existing dentry?
+
     if (type == 'L') {
       // hard link
       inodeno_t ino;
@@ -645,9 +636,9 @@ void CDir::_fetched(bufferlist &bl)
       
       if (dn) {
         if (dn->get_inode() == 0) {
-          dout(12) << "readdir had NEG dentry " << *dn << endl;
+          dout(12) << "_fetched  had NEG dentry " << *dn << endl;
         } else {
-          dout(12) << "readdir had dentry " << *dn << endl;
+          dout(12) << "_fetched  had dentry " << *dn << endl;
         }
       } else {
 	// (remote) link
@@ -657,9 +648,9 @@ void CDir::_fetched(bufferlist &bl)
 	CInode *in = cache->get_inode(ino);   // we may or may not have it.
 	if (in) {
 	  dn->link_remote(in);
-	  dout(12) << "readdir got remote link " << ino << " which we have " << *in << endl;
+	  dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << endl;
 	} else {
-	  dout(12) << "readdir got remote link " << ino << " (dont' have it)" << endl;
+	  dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << endl;
 	}
       }
     } 
@@ -674,19 +665,22 @@ void CDir::_fetched(bufferlist &bl)
       string symlink;
       if (inode.is_symlink())
         ::_decode(symlink, bl, off);
+
+      fragtree_t fragtree;
+      fragtree._decode(bl,off);
       
       if (dn) {
         if (dn->get_inode() == 0) {
-          dout(12) << "readdir had NEG dentry " << *dn << endl;
+          dout(12) << "_fetched  had NEG dentry " << *dn << endl;
         } else {
-          dout(12) << "readdir had dentry " << *dn << endl;
+          dout(12) << "_fetched  had dentry " << *dn << endl;
         }
       } else {
 	// add inode
 	CInode *in = 0;
 	if (cache->have_inode(inode.ino)) {
 	  in = cache->get_inode(inode.ino);
-	  dout(12) << "readdir got (but i already had) " << *in 
+	  dout(12) << "_fetched  got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << endl;
 	  assert(0);  // this shouldn't happen!! 
@@ -699,12 +693,15 @@ void CDir::_fetched(bufferlist &bl)
 	  if (in->is_symlink()) 
 	    in->symlink = symlink;
 	  
+	  // dirfragtree
+	  in->dirfragtree.swap(fragtree);
+
 	  // add 
 	  cache->add_inode( in );
 	
 	  // link
 	  add_dentry( dname, in );
-	  dout(12) << "readdir got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
+	  dout(12) << "_fetched  got " << *in << " mode " << in->inode.mode << " mtime " << in->inode.mtime << endl;
 	}
       }
     } else {
@@ -729,16 +726,17 @@ void CDir::_fetched(bufferlist &bl)
 	dn &&
 	dn->get_version() <= got_version &&
 	dn->is_dirty()) {
-      dout(10) << "readdir had underwater dentry " << *dn << ", marking clean" << endl;
+      dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << endl;
       dn->mark_clean();
 
       if (dn->get_inode()) {
 	assert(dn->get_inode()->get_version() <= got_version);
-	dout(10) << "readdir had underwater inode " << *dn->get_inode() << ", marking clean" << endl;
+	dout(10) << "_fetched  had underwater inode " << *dn->get_inode() << ", marking clean" << endl;
 	dn->get_inode()->mark_clean();
       }
     }
   }
+  assert(off == len);
 
   // take the loaded version?
   // only if we are a fresh CDir* with no prior state.
@@ -861,9 +859,9 @@ void CDir::_commit(version_t want)
   if (cache->mds->logger) cache->mds->logger->inc("cdir");
 
   // encode dentries
-  bufferlist dnbl;
-  __uint32_t num_dn = 0;
-
+  bufferlist bl;
+  bl.append((char*)&version, sizeof(version));
+  
   for (CDir_map_t::iterator it = items.begin();
        it != items.end();
        it++) {
@@ -875,42 +873,33 @@ void CDir::_commit(version_t want)
     // primary or remote?
     if (dn->is_remote()) {
       inodeno_t ino = dn->get_remote_ino();
-      dout(14) << " pos " << dnbl.length() << " dn '" << it->first << "' remote ino " << ino << endl;
+      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' remote ino " << ino << endl;
       
-      // name, marker, ino
-      dnbl.append( it->first.c_str(), it->first.length() + 1);
-      dnbl.append( "L", 1 );         // remote link
-      dnbl.append((char*)&ino, sizeof(ino));
+      // marker, name, ino
+      bl.append( "L", 1 );         // remote link
+      bl.append( it->first.c_str(), it->first.length() + 1);
+      bl.append((char*)&ino, sizeof(ino));
     } else {
       // primary link
       CInode *in = dn->get_inode();
       assert(in);
 
-      dout(14) << " pos " << dnbl.length() << " dn '" << it->first << "' inode " << *in << endl;
+      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' inode " << *in << endl;
   
-      // name, marker, inode, [symlink string]
-      dnbl.append( it->first.c_str(), it->first.length() + 1);
-      dnbl.append( "I", 1 );         // inode
-      dnbl.append( (char*) &in->inode, sizeof(inode_t));
+      // marker, name, inode, [symlink string]
+      bl.append( "I", 1 );         // inode
+      bl.append( it->first.c_str(), it->first.length() + 1);
+      bl.append( (char*) &in->inode, sizeof(inode_t));
       
       if (in->is_symlink()) {
         // include symlink destination!
         dout(18) << "    inlcuding symlink ptr " << in->symlink << endl;
-        dnbl.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
+        bl.append( (char*) in->symlink.c_str(), in->symlink.length() + 1);
       }
-    }
-    num_dn++;
-  }
 
-  // wrap it up
-  bufferlist bl;
-  size_t size;
-  size = dnbl.length() + sizeof(num_dn) + sizeof(version);
-  bl.append((char*)&size, sizeof(size));
-  bl.append((char*)&num_dn, sizeof(num_dn));
-  bl.append((char*)&version, sizeof(version));
-  bl.claim_append(dnbl);
-  assert(size == bl.length() - sizeof(size));
+      in->dirfragtree._encode(bl);
+    }
+  }
 
   // write it.
   cache->mds->objecter->write( get_ondisk_object(),

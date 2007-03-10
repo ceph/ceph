@@ -158,6 +158,7 @@ int fakemessenger_do_loop_2()
         dout(1) << "---- " << m->get_dest() 
 		<< " <- " << m->get_source()
                 << " ---- " << *m 
+		<< " (" << m << ")"
                 << endl;
         
         if (g_conf.fakemessenger_serialize) {
@@ -329,7 +330,10 @@ int FakeMessenger::send_message(Message *m, entity_inst_t inst, int port, int fr
     }
     dm->queue_incoming(m);
 
-    dout(1) << "--> " << get_myname() << " -> " << inst.name << " " << *m << endl;
+    dout(1) << "--> " << get_myname() << " -> " << inst.name 
+	    << " " << *m 
+	    << " (" << m << ")"
+	    << endl;
     
   }
   catch (...) {

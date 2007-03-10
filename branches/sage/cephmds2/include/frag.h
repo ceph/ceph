@@ -169,6 +169,9 @@ class fragtree_t {
   }
   
   // modifiers
+  void swap(fragtree_t& other) {
+    _splits.swap(other._splits);
+  }
   void split(frag_t hb, int b) {
     assert(_splits.count(hb) == 0);
     _splits[hb] = b;

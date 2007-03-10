@@ -491,7 +491,7 @@ class CDir : public MDSCacheObject {
 class CDirDiscover {
   dirfrag_t dirfrag;
   int       nonce;
-  int  dir_auth;
+  //int       dir_auth2;
   int       dir_rep;
   set<int>  rep_by;
 
@@ -500,7 +500,7 @@ class CDirDiscover {
   CDirDiscover(CDir *dir, int nonce) {
     dirfrag = dir->dirfrag();
     this->nonce = nonce;
-    //dir_auth = dir->dir_auth.first;
+    //dir_auth2 = dir->dir_auth.second;
     dir_rep = dir->dir_rep;
     rep_by = dir->dir_rep_by;
   }
@@ -521,7 +521,7 @@ class CDirDiscover {
   void _encode(bufferlist& bl) {
     bl.append((char*)&dirfrag, sizeof(dirfrag));
     bl.append((char*)&nonce, sizeof(nonce));
-    bl.append((char*)&dir_auth, sizeof(dir_auth));
+    //bl.append((char*)&dir_auth, sizeof(dir_auth));
     bl.append((char*)&dir_rep, sizeof(dir_rep));
     ::_encode(rep_by, bl);
   }
@@ -531,8 +531,8 @@ class CDirDiscover {
     off += sizeof(dirfrag);
     bl.copy(off, sizeof(nonce), (char*)&nonce);
     off += sizeof(nonce);
-    bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
-    off += sizeof(dir_auth);
+    //bl.copy(off, sizeof(dir_auth), (char*)&dir_auth);
+    //off += sizeof(dir_auth);
     bl.copy(off, sizeof(dir_rep), (char*)&dir_rep);
     off += sizeof(dir_rep);
     ::_decode(rep_by, bl, off);

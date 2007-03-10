@@ -39,8 +39,6 @@
 #include "messages/MExportDirDiscoverAck.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
-#include "messages/MExportDirWarning.h"
-#include "messages/MExportDirWarningAck.h"
 #include "messages/MExportDir.h"
 #include "messages/MExportDirAck.h"
 #include "messages/MExportDirNotify.h"
@@ -93,9 +91,6 @@ void Migrator::dispatch(Message *m)
   case MSG_MDS_EXPORTDIRPREPACK:
     handle_export_prep_ack((MExportDirPrepAck*)m);
     break;
-  case MSG_MDS_EXPORTDIRWARNINGACK:
-    handle_export_warning_ack((MExportDirWarningAck*)m);
-    break;
   case MSG_MDS_EXPORTDIRACK:
     handle_export_ack((MExportDirAck*)m);
     break;
@@ -104,58 +99,9 @@ void Migrator::dispatch(Message *m)
     break;    
 
     // export 3rd party (dir_auth adjustments)
-  case MSG_MDS_EXPORTDIRWARNING:
-    handle_export_warning((MExportDirWarning*)m);
-    break;
   case MSG_MDS_EXPORTDIRNOTIFY:
     handle_export_notify((MExportDirNotify*)m);
     break;
-
-
-    // hashing
-    /*
-  case MSG_MDS_HASHDIRDISCOVER:
-    handle_hash_dir_discover((MHashDirDiscover*)m);
-    break;
-  case MSG_MDS_HASHDIRDISCOVERACK:
-    handle_hash_dir_discover_ack((MHashDirDiscoverAck*)m);
-    break;
-  case MSG_MDS_HASHDIRPREP:
-    handle_hash_dir_prep((MHashDirPrep*)m);
-    break;
-  case MSG_MDS_HASHDIRPREPACK:
-    handle_hash_dir_prep_ack((MHashDirPrepAck*)m);
-    break;
-  case MSG_MDS_HASHDIR:
-    handle_hash_dir((MHashDir*)m);
-    break;
-  case MSG_MDS_HASHDIRACK:
-    handle_hash_dir_ack((MHashDirAck*)m);
-    break;
-  case MSG_MDS_HASHDIRNOTIFY:
-    handle_hash_dir_notify((MHashDirNotify*)m);
-    break;
-
-    // unhashing
-  case MSG_MDS_UNHASHDIRPREP:
-    handle_unhash_dir_prep((MUnhashDirPrep*)m);
-    break;
-  case MSG_MDS_UNHASHDIRPREPACK:
-    handle_unhash_dir_prep_ack((MUnhashDirPrepAck*)m);
-    break;
-  case MSG_MDS_UNHASHDIR:
-    handle_unhash_dir((MUnhashDir*)m);
-    break;
-  case MSG_MDS_UNHASHDIRACK:
-    handle_unhash_dir_ack((MUnhashDirAck*)m);
-    break;
-  case MSG_MDS_UNHASHDIRNOTIFY:
-    handle_unhash_dir_notify((MUnhashDirNotify*)m);
-    break;
-  case MSG_MDS_UNHASHDIRNOTIFYACK:
-    handle_unhash_dir_notify_ack((MUnhashDirNotifyAck*)m);
-    break;
-    */
 
   default:
     assert(0);
@@ -485,7 +431,7 @@ void Migrator::export_dir(CDir *dir,
 
   // send ExportDirDiscover (ask target)
   mds->send_message_mds(new MExportDirDiscover(dir), dest, MDS_PORT_MIGRATOR);
-  dir->auth_pin();   // pin dir, to hang up our freeze  (unpin on prep ack)
+  dir->auth_pin();   // pin dir, to hang up our freeze  (unpin on discover ack)
 
   // take away the popularity we're sending.   FIXME: do this later?
   mds->balancer->subtract_export(dir);
@@ -592,9 +538,10 @@ void Migrator::export_frozen(CDir *dir,
       inode_trace.push_front(cur->inode);
       dout(7) << "  will add " << *cur->inode << endl;
       
-      // include dir? note: this'll include everything except the nested exports themselves, 
-      // since someone else is obviously auth.
-      if (cur->is_auth()) {
+      // include dir?
+      // note: don't replicate ambiguous auth items!  they're
+      //    frozen anyway.
+      if (cur->is_auth() && !cur->auth_is_ambiguous()) {
         prep->add_dir( new CDirDiscover(cur, cur->add_replica(dest)) );  // yay!
         dout(7) << "  added " << *cur << endl;
       }
@@ -648,8 +595,6 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     export_warning_ack_waiting[dir].insert(p->first);
     export_notify_ack_waiting[dir].insert(p->first);  // we'll eventually get a notifyack, too!
 
-    //mds->send_message_mds(new MExportDirWarning(dir->ino(), export_peer[dir]),
-    //p->first, MDS_PORT_MIGRATOR);
     MExportDirNotify *notify = new MExportDirNotify(dir->dirfrag(), true,
 						    pair<int,int>(mds->get_nodeid(),CDIR_AUTH_UNKNOWN),
 						    pair<int,int>(mds->get_nodeid(),export_peer[dir]));
@@ -664,36 +609,6 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     export_go(dir);  // start export.
     
   // done.
-  delete m;
-}
-
-
-void Migrator::handle_export_warning_ack(MExportDirWarningAck *m)
-{
-  CInode *in = cache->get_inode(m->get_ino());
-  assert(in);
-  CDir *dir = in->dir;
-  assert(dir);
-  
-  dout(7) << "export_warning_ack " << *dir << " from " << m->get_source() << endl;
-
-  if (export_state.count(dir) == 0 ||
-      export_state[dir] != EXPORT_WARNING) {
-    // export must have aborted.  
-    dout(7) << "export must have aborted" << endl;
-    delete m;
-    return;
-  }
-
-  // process the warning_ack
-  int from = m->get_source().num();
-  assert(export_warning_ack_waiting.count(dir));
-  export_warning_ack_waiting[dir].erase(from);
-  
-  if (export_warning_ack_waiting[dir].empty()) 
-    export_go(dir);     // start export.
-    
-  // done
   delete m;
 }
 
@@ -1183,7 +1098,8 @@ void Migrator::export_finish(CDir *dir)
 
   // send finish/commit to new auth
   if (mds->mdsmap->is_active_or_stopping(export_peer[dir])) {
-    mds->send_message_mds(new MExportDirFinish(dir->ino()), export_peer[dir], MDS_PORT_MIGRATOR);
+    mds->send_message_mds(new MExportDirFinish(dir->dirfrag()), 
+			  export_peer[dir], MDS_PORT_MIGRATOR);
   } else {
     dout(7) << "not sending MExportDirFinish, dest has failed" << endl;
   }
@@ -1405,7 +1321,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     for (list<dirfrag_t>::iterator it = m->get_bounds().begin();
          it != m->get_bounds().end();
          it++) {
-      dout(7) << "  checking dir " << hex << *it << dec << endl;
+      dout(7) << "  checking bound " << hex << *it << dec << endl;
       CInode *in = cache->get_inode(it->ino);
       assert(in);
       
@@ -1438,7 +1354,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
         bound->state_set(CDir::STATE_IMPORTBOUND);
 	import_bounds[dir].insert(bound);
       } else {
-        dout(7) << "  already pinned import bound " << *dir << endl;
+        dout(7) << "  already pinned import bound " << *bound << endl;
       }
     } else {
       dout(7) << "  waiting for nested export dir on " << *cache->get_inode(df.ino) << endl;
@@ -1710,7 +1626,7 @@ void Migrator::import_logged_start(CDir *dir, int from)
 
 void Migrator::handle_export_finish(MExportDirFinish *m)
 {
-  CDir *dir = cache->get_dir(m->get_ino());
+  CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   assert(dir);
   dout(7) << "handle_export_finish on " << *dir << endl;
   import_finish(dir);
@@ -1777,9 +1693,10 @@ void Migrator::import_finish(CDir *dir, bool now)
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist& bl, int& off, int oldauth)
 {  
+  dout(15) << "decode_import_inode on " << *dn << endl;
+
   CInodeExport istate;
   off = istate._decode(bl, off);
-  dout(15) << "got a cinodeexport " << endl;
   
   bool added = false;
   CInode *in = cache->get_inode(istate.get_ino());
@@ -1914,7 +1831,6 @@ int Migrator::decode_import_dir(bufferlist& bl,
       // dentry
       string dname;
       _decode(dname, bl, off);
-      dout(15) << "dname is " << dname << endl;
 
       CDentry *dn = dir->lookup(dname);
       if (!dn)
@@ -1922,6 +1838,7 @@ int Migrator::decode_import_dir(bufferlist& bl,
 
       // decode state
       dn->decode_import_state(bl, off, oldauth, mds->get_nodeid());
+      dout(15) << "decode_import_dir got " << *dn << endl;
 
       // points to...
       char icode;
@@ -1962,31 +1879,6 @@ int Migrator::decode_import_dir(bufferlist& bl,
 
 
 // authority bystander
-
-void Migrator::handle_export_warning(MExportDirWarning *m)
-{
-  CDir *dir = cache->get_dir(m->get_ino());
-
-  int oldauth = m->get_source().num();
-  int newauth = m->get_new_dir_auth();
-  if (dir) {
-    dout(7) << "handle_export_warning mds" << oldauth
-	    << " -> mds" << newauth
-	    << " on " << *dir << endl;
-    cache->adjust_subtree_auth(dir, oldauth, newauth);
-    // verify?
-  } else {
-    dout(7) << "handle_export_warning on dir " << m->get_ino() << ", acking" << endl;
-  }
-  
-  // send the ack
-  mds->send_message_mds(new MExportDirWarningAck(m->get_ino()),
-			m->get_source().num(), MDS_PORT_MIGRATOR);
-
-  delete m;
-
-}
-
 
 void Migrator::handle_export_notify(MExportDirNotify *m)
 {
