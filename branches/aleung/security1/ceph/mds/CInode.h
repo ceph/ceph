@@ -186,8 +186,11 @@ protected:
   // secure capabilities
   // will be dependant based on MDS collection policy!
   map<uid_t, ExtCap>  ext_caps;
+  bool user_cap_set;
   ExtCap *user_cap;
+  bool group_cap_set;
   ExtCap *group_cap;
+  bool world_cap_set;
   ExtCap *world_cap;
 
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
@@ -403,12 +406,33 @@ protected:
       return &(ext_caps[user]);
     return 0;
   }
-  ExtCap* get_unix_user_cap() { return user_cap; }
-  ExtCap* get_unix_group_cap() { return group_cap; }
-  ExtCap* get_unix_world_cap() { return world_cap; }
-  void set_unix_user_cap(ExtCap* extcap) { user_cap = new ExtCap(*extcap); }
-  void set_unix_group_cap(ExtCap* extcap) { group_cap = new ExtCap(*extcap); }
-  void set_unix_world_cap(ExtCap* extcap) { world_cap = new ExtCap(*extcap); }
+  ExtCap* get_unix_user_cap() {
+    if(user_cap_set)
+      return user_cap; 
+    return 0;
+  }
+  ExtCap* get_unix_group_cap() {
+    if(group_cap_set)
+      return group_cap;
+    return 0;
+  }
+  ExtCap* get_unix_world_cap() {
+    if(world_cap_set)
+      return world_cap;
+    return 0;
+  }
+  void set_unix_user_cap(ExtCap* extcap) {
+    user_cap = new ExtCap(*extcap);
+    user_cap_set = true;
+  }
+  void set_unix_group_cap(ExtCap* extcap) {
+    group_cap = new ExtCap(*extcap);
+    group_cap_set = true;
+  }
+  void set_unix_world_cap(ExtCap* extcap) {
+    world_cap = new ExtCap(*extcap);
+    world_cap_set = true;
+  }
 
   void replicate_relax_locks() {
     assert(is_auth());
